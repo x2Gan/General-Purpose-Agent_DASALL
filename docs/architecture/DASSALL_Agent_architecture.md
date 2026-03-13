@@ -209,6 +209,10 @@
     - [ADR-002 Tool 必须经过治理层，不允许 LLM 直调高风险执行能力](#adr-002-tool-必须经过治理层不允许-llm-直调高风险执行能力)
     - [ADR-003 LLM 适配层统一抽象并支持路由](#adr-003-llm-适配层统一抽象并支持路由)
     - [ADR-004 Memory 采用多层记忆而不是单一聊天历史](#adr-004-memory-采用多层记忆而不是单一聊天历史)
+    - [ADR-005 当前架构评审结论：先冻结契约与主控边界，再展开模块设计](#adr-005-当前架构评审结论先冻结契约与主控边界再展开模块设计)
+    - [ADR-006 ContextOrchestrator 负责语义上下文，PromptComposer 负责消息装配](#adr-006-contextorchestrator-负责语义上下文promptcomposer-负责消息装配)
+    - [ADR-007 ReflectionEngine 负责失败语义判断，RecoveryManager 负责恢复执行](#adr-007-reflectionengine-负责失败语义判断recoverymanager-负责恢复执行)
+    - [ADR-008 AgentOrchestrator 负责全局主控，MultiAgentCoordinator 负责协同子域编排](#adr-008-agentorchestrator-负责全局主控multiagentcoordinator-负责协同子域编排)
   - [11. 附录](#11-附录)
     - [11.1 主控制流伪代码](#111-主控制流伪代码)
     - [11.2 后续建议拆分的详细文档](#112-后续建议拆分的详细文档)
@@ -2319,6 +2323,70 @@ Consequences：
 
 1. 可支撑长期运行和任务连续性。
 2. 需要更复杂的写回与治理策略。
+
+### ADR-005 当前架构评审结论：先冻结契约与主控边界，再展开模块设计
+
+Context：当前总体架构和工程蓝图已经较完整，但仓库实现状态仍以脚手架和占位实现为主，若直接并行展开模块设计与编码，存在接口漂移、边界重叠和主控链路返工风险。
+
+Decision：正式接受当前总体架构方向，但附带落地前置条件。下一阶段优先冻结 contracts、runtime 主控边界和关键职责划分 ADR，再进入逐模块详细设计。
+
+Alternatives：
+
+1. 直接按当前蓝图并行展开各模块详细设计。
+2. 先补功能实现，再回头统一接口与边界。
+
+Consequences：
+
+1. 能显著降低跨模块返工风险，并为测试和 Mock 建立稳定依赖面。
+2. 会延后部分功能编码启动时间，但这是必要的工程控制成本。
+
+### ADR-006 ContextOrchestrator 负责语义上下文，PromptComposer 负责消息装配
+
+Context：当前架构同时定义了 Context Orchestrator 与 Prompt Composer，但如果不明确边界，memory 与 llm 子系统会在上下文筛选、预算裁剪和最终消息装配上出现职责重叠。
+
+Decision：ContextOrchestrator 归属 memory 子系统，负责检索、筛选、压缩和预算分配，产出 ContextPacket。PromptComposer 归属 llm 子系统，负责将 PromptRelease 与 ContextPacket 装配成模型可消费的 messages。两者严格分层，互不替代。
+
+Alternatives：
+
+1. 由 ContextOrchestrator 同时负责上下文编排与最终消息装配。
+2. 由 PromptComposer 同时负责上下文拉取、排序和消息装配。
+
+Consequences：
+
+1. 能稳定区分语义预算与渲染预算，降低 contracts 返工风险。
+2. 需要额外设计 over_budget 回流机制和更清晰的中间契约对象。
+
+### ADR-007 ReflectionEngine 负责失败语义判断，RecoveryManager 负责恢复执行
+
+Context：当前架构同时定义了 ReflectionEngine 与 RecoveryManager，但如果不明确边界，cognition 与 runtime 会在失败归因、重试、重规划、补偿和恢复控制上出现职责重叠。
+
+Decision：ReflectionEngine 归属 cognition 子系统，负责分析 Observation 与 ErrorInfo，输出 retry_step、replan、abort_safe 等语义级建议。RecoveryManager 归属 runtime 子系统，负责结合预算、幂等性、熔断状态、checkpoint 与副作用信息，对这些建议进行准入裁定并执行具体恢复动作。两者严格分层，互不替代。
+
+Alternatives：
+
+1. 由 ReflectionEngine 同时负责失败分析与恢复执行。
+2. 由 RecoveryManager 同时负责错误分析与恢复执行。
+
+Consequences：
+
+1. 能稳定区分失败语义判断与恢复控制执行，降低 runtime/cognition/contracts 三方返工风险。
+2. 需要补充 ReflectionDecision 与 RecoveryOutcome 的分层契约，以及反思建议被拒绝时的审计链路。
+
+### ADR-008 AgentOrchestrator 负责全局主控，MultiAgentCoordinator 负责协同子域编排
+
+Context：当前架构同时定义了 AgentOrchestrator 与 MultiAgentCoordinator，但如果不明确边界，runtime 与 multi_agent 会在主循环、调度权、子任务协同、预算控制和最终输出权上出现职责重叠。
+
+Decision：AgentOrchestrator 归属 runtime 子系统，拥有整个请求的主循环、主状态机、全局预算、顶层 checkpoint、用户交互和最终 AgentResult 控制权。MultiAgentCoordinator 是受 AgentOrchestrator 调用的协同子域控制器，负责子任务拆分、Worker 匹配、租约、结果汇聚与局部失败回收。它可以实现于 multi_agent 模块，但不拥有第二套顶层主控权。
+
+Alternatives：
+
+1. 由 AgentOrchestrator 同时承担全部多 Agent 协同细节。
+2. 由 MultiAgentCoordinator 升级为第二个顶层 Orchestrator。
+
+Consequences：
+
+1. 能稳定区分全局主控与协同子域编排，降低 runtime/multi_agent/contracts 三方返工风险。
+2. 需要补充 MultiAgentRequest、MultiAgentResult、WorkerLease 与子任务图快照等中间契约对象。
 
 ---
 
