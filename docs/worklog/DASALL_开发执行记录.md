@@ -8,6 +8,67 @@
 
 ---
 
+## 记录 #006
+
+- 日期：2026-03-14
+- 阶段：contracts 冻结（WP-01 术语与对象地图）
+- 任务：完成 WP01-T002 至 WP01-T013，发布 M1 冻结包
+- 状态：已完成
+
+### 完成内容
+
+1. 完成术语基线收束：
+   - 术语归并、定义、消费者分层完成并形成稳定主名称集合。
+2. 完成对象地图收束：
+   - 顶层对象流图、稳定对象标注、内部/禁止外溢对象清单完成。
+3. 完成边界规则收束：
+   - 发布 contracts 边界说明 v1，固化 Stable/Blocked/Deferred 三层模型。
+4. 完成 ADR 对齐核对：
+   - ADR-006（ContextPacket 禁入字段）
+   - ADR-007（建议权与执行权分层）
+   - ADR-008（全局主控与协同子域分层）
+5. 完成整体评审与冻结发布：
+   - 形成 WP01-T012 评审纪要（有条件通过）
+   - 发布 WP01-T013 M1 冻结包并将 T013 状态更新为 Completed。
+
+### 关键产物
+
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T003-术语定义表-v1.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T004-术语消费者矩阵.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T005-顶层对象流图-v1.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T006-稳定对象标注版流图.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T007-内部对象边界清单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T008-contracts边界说明-v1.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T009-ContextPacket约束核对单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T010-恢复语义核对单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T011-协同语义核对单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T012-整体骨架评审纪要.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T013-M1冻结包.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-01-术语与对象地图TODO.md`
+
+### 验证结果
+
+1. WP01-T009、T010、T011 核对单均完成并通过一致性检查。
+2. WP01-T012 形成“可进入 WP-02”的评审结论与门禁条件。
+3. WP01-T013 冻结包发布完成，T013 已标记为 Completed。
+4. 本轮新增与更新文档均通过文件级错误检查（No errors found）。
+
+### 中断恢复点（下次会话从这里继续）
+
+- WP-01 已闭环完成（T013 Completed）
+- 下一任务建议：进入 WP-02 横切基础对象，优先冻结入口/结果/标识元数据与错误域基线
+- 建议优先顺序：
+  - `docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
+  - `contracts/include/agent/`
+  - `contracts/include/error/`
+  - `contracts/include/context/`
+
+### 风险/注意事项
+
+- Deferred 对象 `ToolRequest`、`ToolResult` 在 WP-05 前仍为阶段性不外溢，避免被误判为永久禁止或提前冻结。
+- 文档中若出现 `Orchestrator` 简称，需明确区分 `AgentOrchestrator` 与 `MultiAgentCoordinator`，避免主控权误读。
+- 学习材料中的 ContextPacket 历史示例与 ADR-006 存在旧口径偏差，不作为冻结依据，但需在文档治理任务中纠偏。
+
 ## 记录 #005
 
 - 日期：2026-03-12
