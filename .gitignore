@@ -1,0 +1,45 @@
+# Build directories
+/build/
+/build-*/
+/sysroots/
+
+# CMake generated files
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/CTestTestfile.cmake
+/Makefile
+/compile_commands.json
+
+# CTest artifacts
+/Testing/Temporary/
+
+# Common binary and library outputs
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Coverage and profiling
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# IDE/editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

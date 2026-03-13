@@ -1,0 +1,12 @@
+# type(scope): summary
+#
+# types: feat fix refactor test docs build ci chore
+#
+# Example:
+# feat(contracts): add agent request skeleton
+#
+# Why:
+#
+# Validation:
+#
+# Risk:

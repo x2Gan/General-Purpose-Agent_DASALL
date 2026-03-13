@@ -1,0 +1,6 @@
+add_subdirectory(runtime)
+add_subdirectory(cognition)
+add_subdirectory(llm)
+add_subdirectory(tools)
+add_subdirectory(memory)
+add_subdirectory(knowledge)
