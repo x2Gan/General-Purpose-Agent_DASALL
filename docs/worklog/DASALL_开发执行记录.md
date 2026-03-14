@@ -8,6 +8,63 @@
 
 ---
 
+## 记录 #007
+
+- 日期：2026-03-14
+- 阶段：contracts 冻结（WP-02 横切基础对象）
+- 任务：收束 WP02 横切基础对象冻结，发布 M2 冻结包并补齐 B1/B2 阻塞处置资产
+- 状态：进行中
+
+### 完成内容
+
+1. 完成 WP-02 冻结发布收束：
+   - 形成 WP02-T015 M2 冻结包，汇总横切错误、预算、标识、时间、事件封套、枚举规则与 M2 Gate 门禁。
+   - 更新 WP-02 TODO，将 T015 挂接到正式交付物并置为 In Review。
+2. 完成 B1 设计闭环：
+   - 识别 `timeout_seconds -> timeout_ms` 属于设计阶段的兼容性迁移问题，而非实现返工问题。
+   - 落地 B1 迁移清单，明确字段映射、冲突判定、弃用窗口和回退策略。
+3. 完成 B2 基线补齐：
+   - 落地枚举 unknown -> Unspecified 降级契约测试基线文档。
+   - 在 contracts/include 下新增最小兼容辅助头，在 tests/contract 下新增 compatibility contract test 与 CMake 接入。
+4. 完成冻结包状态校正：
+   - 将 B1 标记为 Closed。
+   - 将 B2 保持为 In Review，等待 contract test 实际执行通过后再关闭。
+
+### 关键产物
+
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T014-评审纪要.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
+- `/home/gangan/DASALL-Agent/contracts/include/dasall/contracts/CompatibilityGuards.h`
+- `/home/gangan/DASALL-Agent/tests/contract/smoke/CompatibilityContractTest.cpp`
+- `/home/gangan/DASALL-Agent/tests/contract/CMakeLists.txt`
+
+### 验证结果
+
+1. 新增与更新的文档、头文件、测试文件均通过文件级错误检查（No errors found）。
+2. 已确认 `contracts/` 当前仍无正式接口/数据结构实现，新增代码仅为兼容辅助层与契约测试基线。
+3. 已确认 `tests/contract/` 除 smoke 基线外新增 compatibility contract test 入口。
+4. CMake Tools 当前无法完成项目配置，导致 build/ctest 无法执行；因此 B2 不能标记为 Closed。
+
+### 中断恢复点（下次会话从这里继续）
+
+- WP-02 已基本收束：M2 冻结包已发布，B1 已关闭，B2 待执行验证。
+- 下一任务建议：先修复当前工作区 CMake 配置问题并执行 `dasall_contract_compatibility_test`，通过后关闭 B2。
+- 之后进入 WP-03 主链路对象的首个原子任务。
+- 建议优先顺序：
+  - `docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
+  - `docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
+  - `docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
+  - `tests/contract/smoke/CompatibilityContractTest.cpp`
+
+### 风险/注意事项
+
+- 当前最大阻塞不是语义设计，而是 CMake 配置失败；在测试未实际跑通前，B2 只能保持 In Review。
+- `timeout_seconds` 的问题是设计阶段主动暴露的兼容性风险，不代表已有大规模实现返工，但后续实现必须严格遵守迁移清单。
+- unknown 枚举值降级必须集中走兼容辅助层，避免各子域自行定义 fallback 逻辑。
+
 ## 记录 #006
 
 - 日期：2026-03-14
