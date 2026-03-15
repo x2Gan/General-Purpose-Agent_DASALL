@@ -1,6 +1,6 @@
 # WP-03 主链路对象 TODO
 
-最近更新时间：2026-03-13
+最近更新时间：2026-03-15
 
 ## 1. 工作包目标
 
@@ -16,9 +16,9 @@
 
 | ID | 状态 | 任务 | 输入依据 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|
-| WP03-T001 | Not Started | 明确主链路对象全集与依赖顺序 | WP-01、WP-02 冻结包 | 主链路对象依赖表 | 明确 AgentRequest、GoalContract、ContextPacket、Observation、ObservationDigest、BeliefState、Checkpoint、AgentResult 顺序 |
-| WP03-T002 | Not Started | 定义 AgentRequest 的最小语义范围 | 架构文档入口链路 | AgentRequest 语义说明 | 不夹带 runtime 内部状态和 provider 私有字段 |
-| WP03-T003 | Not Started | 列出 AgentRequest 必填字段和可选字段 | T002 输出、WP-02 规则 | AgentRequest 字段表 | 字段仅围绕入口请求、约束、预算和请求元数据 |
+| WP03-T001 | In Review | 明确主链路对象全集与依赖顺序 | WP-01、WP-02 冻结包 | [主链路对象依赖表](deliverables/WP03-T001-%E4%B8%BB%E9%93%BE%E8%B7%AF%E5%AF%B9%E8%B1%A1%E4%BE%9D%E8%B5%96%E8%A1%A8.md) | 明确 AgentRequest、GoalContract、ContextPacket、Observation、ObservationDigest、BeliefState、Checkpoint、AgentResult 顺序 |
+| WP03-T002 | In Review | 定义 AgentRequest 的最小语义范围 | 架构文档入口链路 | [AgentRequest 语义说明](deliverables/WP03-T002-AgentRequest%E8%AF%AD%E4%B9%89%E8%AF%B4%E6%98%8E.md) | 不夹带 runtime 内部状态和 provider 私有字段 |
+| WP03-T003 | In Review | 列出 AgentRequest 必填字段和可选字段 | T002 输出、WP-02 规则 | [AgentRequest 字段表](deliverables/WP03-T003-AgentRequest%E5%AD%97%E6%AE%B5%E8%A1%A8.md) | 字段仅围绕入口请求、约束、预算和请求元数据 |
 | WP03-T004 | Not Started | 定义 GoalContract 的职责边界 | 架构文档、计划文档 | GoalContract 语义说明 | 能表达成功判据、约束、预算、审批策略 |
 | WP03-T005 | Not Started | 列出 GoalContract 必填字段和约束表达 | T004 输出 | GoalContract 字段表 | 不依赖自然语言二次猜测解释目标 |
 | WP03-T006 | Not Started | 定义 Observation 的统一折叠语义 | 架构文档观测链路 | Observation 语义说明 | 能统一承载 tool、knowledge、human、worker 输出 |

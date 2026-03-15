@@ -8,6 +8,67 @@
 
 ---
 
+## 记录 #008
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-02 收束 + WP-03 启动）
+- 任务：修正“仅 Design 输出”偏差，补齐 Build 落地基线与执行约束
+- 状态：进行中
+
+### 完成内容
+
+1. 明确并记录决策偏差：
+   - 识别出“按强 design 约束推进时，任务可在文档层通过但缺少 build 落盘证据”的过程问题。
+   - 形成统一结论：后续任务采用“Design 先行 + 分批 Build 验证”模式，禁止全量设计后一次性回补实现。
+2. 新设计并落地两份 Build TODO 相关文档：
+   - 完成 B1 build 向文档：`WP02-T015-B1-timeout迁移清单.md`（迁移映射、冲突判定、弃用窗口、回退策略）。
+   - 完成 B2 build 向文档：`WP02-T015-B2-枚举降级契约测试基线.md`（unknown->Unspecified 证据基线）。
+3. 完成 Build 落盘与验证闭环：
+   - 新增兼容辅助代码与契约测试：`CompatibilityGuards.h`、`CompatibilityContractTest.cpp`。
+   - 清理历史 `build-ci` 缓存路径冲突后，完成构建与 contract tests 执行。
+   - `dasall_contract_compatibility_test` 执行通过，B2 由 In Review 转 Closed。
+4. 完成冻结状态同步：
+   - WP02-T015 M2 冻结包从 CONDITIONAL FREEZE 收束为 FROZEN。
+   - WP-02 看板 T015 状态更新为 Done。
+   - WP03-T001 解除 Blocked 并转 In Review（前置依赖闭环）。
+5. 新增流程模板资产：
+   - 在 `docs/development/` 新增 Build TODO 生成提示词模板，用于后续任务强制输出“代码+测试+验收命令”三件套。
+
+### 关键产物
+
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
+- `/home/gangan/DASALL-Agent/contracts/include/dasall/contracts/CompatibilityGuards.h`
+- `/home/gangan/DASALL-Agent/tests/contract/smoke/CompatibilityContractTest.cpp`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP03-T001-主链路对象依赖表.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-03-主链路对象TODO.md`
+- `/home/gangan/DASALL-Agent/docs/development/Build开发任务TODO生成提示词模板.md`
+
+### 验证结果
+
+1. `bash scripts/ci/build.sh` 通过（修复历史 cache 路径冲突后）。
+2. `bash scripts/ci/contract_tests.sh` 通过，`dasall_contract_compatibility_test` 通过并留档。
+3. 相关更新文档、头文件、测试文件均通过文件级错误检查（No errors found）。
+4. WP02-T015 与 WP03-T001 状态同步一致，无“文档结论与看板状态”漂移。
+
+### 中断恢复点（下次会话从这里继续）
+
+- WP-02 已冻结完成（M2=FROZEN，T015=Done）。
+- WP-03 已解除前置阻塞，当前从 T002/T003 继续推进“Design+Build 并行落地”。
+- 建议优先顺序：
+  - `docs/todos/contracts-freeze/WP-03-主链路对象TODO.md`
+  - `docs/todos/contracts-freeze/deliverables/WP03-T002-AgentRequest语义说明.md`
+  - `docs/todos/contracts-freeze/deliverables/WP03-T003-AgentRequest字段表.md`
+  - `tests/contract/smoke/`（同步新增 WP-03 契约测试）
+
+### 风险/注意事项
+
+- 若后续再次只产出 design 文档而不落盘 build 证据，WP-03/WP-04 将累计实现债务并放大返工成本。
+- 需将“代码+测试+验收命令”作为应有 build 任务的硬门槛，未满足不得标记 Done。
+- 新增 build 任务应继续遵守 M2 Gate，不得回退横切语义冻结结论。
+
 ## 记录 #007
 
 - 日期：2026-03-14

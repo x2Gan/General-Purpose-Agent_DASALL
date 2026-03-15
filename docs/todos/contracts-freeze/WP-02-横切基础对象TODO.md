@@ -30,7 +30,7 @@
 | WP02-T012 | In Review | 定义枚举默认值与弃用规则 | T002、T003 输出 | [枚举规范](deliverables/WP02-T012-%E6%9E%9A%E4%B8%BE%E8%A7%84%E8%8C%83.md) | 每个枚举保留 Unspecified 值，并定义 deprecate 方式 |
 | WP02-T013 | In Review | 形成横切基础对象 review checklist | T002 至 T012 输出 | [Review Checklist v1](deliverables/WP02-T013-ReviewChecklist-v1.md) | 可直接用于后续对象评审 |
 | WP02-T014 | In Review | 组织横切基础对象评审 | T004 至 T013 输出 | [评审纪要](deliverables/WP02-T014-%E8%AF%84%E5%AE%A1%E7%BA%AA%E8%A6%81.md) | 主要争议项形成决议或遗留项 |
-| WP02-T015 | In Review | 发布横切基础对象冻结版 | T014 输出 | [M2 冻结包](deliverables/WP02-T015-M2%E5%86%BB%E7%BB%93%E5%8C%85.md) | 后续子域不可再自行引入新基础语义 |
+| WP02-T015 | Done | 发布横切基础对象冻结版 | T014 输出 | [M2 冻结包](deliverables/WP02-T015-M2%E5%86%BB%E7%BB%93%E5%8C%85.md) | 后续子域不可再自行引入新基础语义 |
 
 ## 4. 推荐执行顺序
 

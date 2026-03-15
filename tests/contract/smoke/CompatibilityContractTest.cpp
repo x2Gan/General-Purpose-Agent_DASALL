@@ -66,7 +66,8 @@ void test_unknown_enum_value_falls_back_to_unspecified() {
 
   constexpr std::array<int, 3> kKnownValues{0, 1, 2};
   const auto value = fallback_unknown_enum_value<SampleStatus>(7,
-                                                               kKnownValues,
+                                                               kKnownValues.data(),
+                                                               kKnownValues.size(),
                                                                SampleStatus::Unspecified);
 
   assert_equal(0,
@@ -80,7 +81,8 @@ void test_known_enum_value_is_preserved() {
 
   constexpr std::array<int, 3> kKnownValues{0, 1, 2};
   const auto value = fallback_unknown_enum_value<SampleStatus>(1,
-                                                               kKnownValues,
+                                                               kKnownValues.data(),
+                                                               kKnownValues.size(),
                                                                SampleStatus::Unspecified);
 
   assert_equal(1,

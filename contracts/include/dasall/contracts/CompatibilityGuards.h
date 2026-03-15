@@ -1,9 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <initializer_list>
 #include <optional>
-#include <span>
 #include <string>
 
 namespace dasall::contracts {
@@ -63,8 +62,9 @@ inline TimeoutNormalizationResult normalize_timeout_fields(const TimeoutFieldSet
   return result;
 }
 
-inline bool is_known_enum_value(int raw_value, std::span<const int> known_values) {
-  for (const int known_value : known_values) {
+inline bool is_known_enum_value(int raw_value, const int* known_values, std::size_t known_value_count) {
+  for (std::size_t i = 0; i < known_value_count; ++i) {
+    const int known_value = known_values[i];
     if (raw_value == known_value) {
       return true;
     }
@@ -75,9 +75,10 @@ inline bool is_known_enum_value(int raw_value, std::span<const int> known_values
 
 template <typename Enum>
 inline Enum fallback_unknown_enum_value(int raw_value,
-                                        std::span<const int> known_values,
+                                        const int* known_values,
+                                        std::size_t known_value_count,
                                         Enum unspecified_value) {
-  if (is_known_enum_value(raw_value, known_values)) {
+  if (is_known_enum_value(raw_value, known_values, known_value_count)) {
     return static_cast<Enum>(raw_value);
   }
 
