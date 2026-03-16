@@ -88,6 +88,7 @@ DASALL-OS/
 │
 ├── contracts/                     # 跨模块稳定契约层（核心冻结对象）
 │   ├── include/
+│   │   ├── boundary/          #   WP-01 边界守卫与对象边界名册（contract gates）
 │   │   ├── agent/             #   AgentRequest, AgentResult, GoalContract
 │   │   ├── context/           #   ContextPacket, ContextAssembleRequest/Result
 │   │   ├── observation/       #   Observation, ObservationDigest, BeliefState
@@ -298,6 +299,7 @@ DASALL-OS/
 
 | 子目录 | 关键对象 |
 |---|---|
+| `boundary/` | `ObjectBoundaryCatalog`, `BoundaryGuards`, `ContextBoundaryGuards`, `RecoveryBoundaryGuards`, `MultiAgentBoundaryGuards`, `CompatibilityGuards` |
 | `agent/` | `AgentRequest`, `AgentResult`, `AgentInitConfig`, `ResumeToken` |
 | `context/` | `ContextPacket`, `ContextAssembleRequest`, `ContextAssembleResult`, `CompressionRequest`, `CompressionResult` |
 | `observation/` | `Observation`, `ObservationDigest`, `BeliefState` |
@@ -955,7 +957,10 @@ cmake --build build
 以下列出各模块主要对外暴露的接口头文件路径，这些文件是跨模块依赖的唯一合法入口：
 
 ```text
-contracts/include/dasall/contracts/
+contracts/include/
+  boundary/BoundaryGuards.h, CompatibilityGuards.h
+  boundary/ContextBoundaryGuards.h, RecoveryBoundaryGuards.h
+  boundary/MultiAgentBoundaryGuards.h, ObjectBoundaryCatalog.h
   agent/AgentRequest.h, AgentResult.h, GoalContract.h
   context/ContextPacket.h, ContextAssembleRequest.h
   observation/Observation.h, ObservationDigest.h, BeliefState.h

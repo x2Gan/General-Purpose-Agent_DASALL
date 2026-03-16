@@ -2,7 +2,7 @@
 #include <exception>
 #include <iostream>
 
-#include "dasall/contracts/CompatibilityGuards.h"
+#include "boundary/CompatibilityGuards.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

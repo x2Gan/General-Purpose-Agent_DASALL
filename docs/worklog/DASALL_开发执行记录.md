@@ -8,6 +8,539 @@
 
 ---
 
+## 记录 #020
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B007 收敛 contracts 测试入口并接入 CMake
+- 状态：已完成
+
+### 改动
+
+1. 收敛 contract 测试注册入口：
+   - `tests/contract/CMakeLists.txt`
+   - 新增 `dasall_register_contract_test(...)` 统一封装 `add_executable`、`add_test`、`LABELS=contract`。
+2. 收敛 contract 聚合目标依赖：
+   - `tests/CMakeLists.txt`
+   - `dasall_contract_tests` 改为依赖 `DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS` 统一列表，避免分散手工维护。
+3. 增加注册空列表防护（负向守卫）：
+   - 当收敛列表为空时，配置阶段 `FATAL_ERROR`，阻断“脚本通过但测试未注册”风险。
+
+### 测试
+
+1. 执行验收命令（B007 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -L contract --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 8/8 通过。
+3. 发现性正反校验（B007 证据补充）：
+   - 正例：`ctest --test-dir build-ci -N -L contract` -> `Total Tests: 8`，包含 WP01 边界测试。
+   - 负例：`ctest --test-dir build-ci -N -R DefinitelyMissingContractTest` -> `Total Tests: 0`。
+
+### 结果
+
+1. WP01-B007 达成 Done 判定：contract 测试入口已收敛，且 ctest 可发现性与标签接入可验证。
+
+### 下一步
+
+1. 若后续新增边界回归测试，同步更新门禁脚本 required tests 列表并复验 gate。
+
+### 风险
+
+1. 统一注册函数若被绕过（直接新增 add_test 且漏 label），可能导致 gate 漏检；需在评审中强制走注册函数。
+2. 当前空列表防护在 configure 阶段触发，若未来存在按 profile 裁剪测试的需求，需要同步定义白名单策略。
+
+## 记录 #019
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B009 增加协同语义回归组合测试
+- 状态：已完成
+
+### 改动
+
+1. 扩展协同语义 contract 测试：
+   - `tests/contract/smoke/MultiAgentBoundaryContractTest.cpp`
+2. 新增组合回归矩阵用例 `test_multi_agent_semantics_combination_regression_matrix`：
+   - 合法组合（3 组）：
+     - MultiAgentRequest: `goal_fragment`（允许）
+     - MultiAgentResult: `merged_result`（允许）
+     - WorkerTask: `lease_id`（允许）
+   - 非法组合（3 组）：
+     - MultiAgentRequest: `agent_request`（拒绝）
+     - MultiAgentResult: `agent_result`（拒绝）
+     - WorkerTask: `global_fsm_state`（拒绝）
+3. 断言强化：
+   - 对越权矩阵中每组样本同时断言 `allowed`、`decision`、`reason`，确保分层阻断行为可追溯。
+
+### 测试
+
+1. 执行验收命令（B009 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentBoundaryContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `MultiAgentBoundaryContractTest` 1/1 通过。
+3. 覆盖说明：
+   - 满足 B009 完成判定：Request/Result/WorkerTask 三组对象的越权矩阵断言全通过。
+
+### 结果
+
+1. WP01-B009 达成 Done 判定：协同语义“全局主控/协同子域分层”在组合场景下具备可执行回归保护。
+
+### 下一步
+
+1. 按顺序推进 WP01-B007（收敛 contracts 测试入口并接入 CMake，补齐 ctest 发现性证据）。
+
+### 风险
+
+1. 当前越权矩阵仍以字段名边界为主，若后续出现语义别名字段，需要补充矩阵覆盖。
+2. reason 断言为精确字符串匹配，若后续守卫文案规范调整，需要同步更新断言预期。
+
+## 记录 #018
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B008 增加恢复语义回归组合测试
+- 状态：已完成
+
+### 改动
+
+1. 扩展恢复语义 contract 测试：
+   - `tests/contract/smoke/RecoveryBoundaryContractTest.cpp`
+2. 新增组合回归矩阵用例 `test_recovery_semantics_combination_regression_matrix`：
+   - 合法组合（1 组）：
+     - ReflectionDecision: `decision_kind`（允许）
+     - RecoveryOutcome: `executed_action`（允许）
+   - 非法组合（3 组）：
+     - ReflectionDecision: `retry_after_ms`（拒绝）
+     - ReflectionDecision: `backoff_strategy`（拒绝）
+     - RecoveryOutcome: `failure_root_cause`（拒绝）
+3. 断言强化：
+   - 对每组组合同时断言 `allowed`、`decision`、`reason`，保证阻断行为与归一化原因文本可追溯。
+
+### 测试
+
+1. 执行验收命令（B008 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryBoundaryContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `RecoveryBoundaryContractTest` 1/1 通过。
+3. 覆盖说明：
+   - 满足 B008 完成判定：至少 1 组合法 + 3 组非法组合断言全部通过。
+
+### 结果
+
+1. WP01-B008 达成 Done 判定：恢复语义“建议权/执行权分层”在组合场景下具备可执行回归保护。
+
+### 下一步
+
+1. 按顺序推进 WP01-B009（协同语义回归组合测试）。
+
+### 风险
+
+1. 当前组合回归覆盖的是字段名边界语义；若后续引入语义等价别名字段，需同步补充矩阵样本。
+2. 目前 reason 断言为精确字符串匹配，若未来规范化文案调整，需同步更新测试预期。
+
+## 记录 #017
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B010 固化 WP01 M1 本地与 CI 门禁脚本入口
+- 状态：已完成
+
+### 改动
+
+1. 新增 WP01 门禁脚本：
+   - `scripts/ci/wp01_contract_gate.sh`
+2. 脚本职责（对齐 WP01-T013 M1 Gate）：
+   - 执行 configure：`cmake -S <root> -B <build-ci>`。
+   - 执行 build：`cmake --build <build-ci> --target dasall_contract_tests`。
+   - 执行注册校验：`ctest -N -L contract` 并强制检查关键边界测试注册存在（ContextPacketBoundaryContractTest / RecoveryBoundaryContractTest / MultiAgentBoundaryContractTest）。
+   - 执行 gate：`ctest --test-dir <build-ci> -L contract --output-on-failure`。
+3. 新增失败闭锁机制：
+   - 任一关键 contract 测试未注册时，脚本输出 missing 项并返回非 0。
+   - 支持通过环境变量 `WP01_GATE_REQUIRED_TESTS` 覆盖必需测试名列表，用于 CI 场景定制与负路径验证。
+
+### 测试
+
+1. 执行验收命令（B010 原样）：
+   - `bash scripts/ci/wp01_contract_gate.sh`
+2. 结果：
+   - configure 成功。
+   - build 成功。
+   - 注册校验通过。
+   - contract label 测试 8/8 通过。
+3. 负路径验证（失败闭锁）：
+   - 命令：`WP01_GATE_REQUIRED_TESTS=DefinitelyMissingContractTest bash scripts/ci/wp01_contract_gate.sh`
+   - 结果：脚本返回 `NEGATIVE_RC=1`，并输出 missing required contract test registration。
+
+### 结果
+
+1. WP01-B010 达成 Done 判定：脚本在正常路径返回 0，并能在边界回归缺失注册时返回非 0。
+
+### 下一步
+
+1. 按顺序推进 WP01-B008（恢复语义回归组合测试）。
+
+### 风险
+
+1. 当前关键测试注册检查聚焦 WP01 三类边界核心用例，若后续新增强制边界测试，需同步更新 `WP01_GATE_REQUIRED_TESTS` 默认列表。
+2. 在不同 CTest 版本下 `ctest -N` 输出格式可能存在细微差异，若格式变化导致解析误判，需要补充更稳健的解析规则。
+
+## 记录 #016
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B006 校验协同语义分层守卫
+- 状态：已完成
+
+### 改动
+
+1. 新增协同语义边界守卫头文件：
+   - `contracts/include/boundary/MultiAgentBoundaryGuards.h`
+   - 提供 `MultiAgentBoundaryDecision`、`MultiAgentBoundaryResult`、
+     `kMultiAgentRequestForbiddenFields`、`kMultiAgentResultForbiddenFields`、
+     `kWorkerTaskGlobalStateForbiddenFields`、
+     `evaluate_multi_agent_request_field_boundary`、
+     `evaluate_multi_agent_result_field_boundary`、
+     `evaluate_worker_task_field_boundary`。
+2. 守卫规则来源：
+   - 对齐 ADR-008 与 WP01-T011，落实三类越权阻断：
+     - MultiAgentRequest 不得复用 AgentRequest 语义。
+     - MultiAgentResult 不得替代 AgentResult 语义。
+     - WorkerTask 不得承载全局 Session/FSM 状态语义。
+3. 新增 contract 测试并接入：
+   - `tests/contract/smoke/MultiAgentBoundaryContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `MultiAgentBoundaryContractTest`
+   - `tests/CMakeLists.txt` 将 `dasall_contract_multi_agent_boundary_test` 纳入 `dasall_contract_tests` 依赖。
+
+### 测试
+
+1. 执行验收命令（B006 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentBoundaryContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `MultiAgentBoundaryContractTest` 1/1 通过。
+   - `dasall_contract_tests` 聚合链路 contract tests 8/8 通过。
+3. 正负例覆盖：
+   - 正例：`goal_fragment`、`merged_result`、`lease_id` 允许通过守卫。
+   - 负例：`agent_request`、`agent_result`、`global_fsm_state` 均被守卫拒绝。
+
+### 结果
+
+1. WP01-B006 达成 Done 判定：三类协同语义越权场景全部被自动校验阻断。
+
+### 下一步
+
+1. 按执行顺序推进 WP01-B007（收敛 contracts 测试入口并接入 CMake）。
+
+### 风险
+
+1. 当前策略为字段名边界守卫，若后续引入语义等价别名字段，需要补充规则与回归用例。
+2. 若后续通过嵌套结构隐式承载全局态，需要在 WP01-B009 组合回归阶段加强覆盖。
+
+## 记录 #015
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B005 校验恢复语义分层守卫
+- 状态：已完成
+
+### 改动
+
+1. 新增恢复语义边界守卫头文件：
+   - `contracts/include/boundary/RecoveryBoundaryGuards.h`
+   - 提供 `RecoveryBoundaryDecision`、`RecoveryBoundaryResult`、
+     `kReflectionSchedulingForbiddenFields`、`kRecoveryAttributionForbiddenFields`、
+     `evaluate_reflection_decision_field_boundary`、`evaluate_recovery_outcome_field_boundary`。
+2. 守卫规则来源：
+   - 对齐 ADR-007 与 WP01-T010，明确 ReflectionDecision 禁入运行时调度字段，RecoveryOutcome 禁入失败归因语义字段。
+3. 新增 contract 测试并接入：
+   - `tests/contract/smoke/RecoveryBoundaryContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `RecoveryBoundaryContractTest`
+   - `tests/CMakeLists.txt` 将 `dasall_contract_recovery_boundary_test` 纳入 `dasall_contract_tests` 依赖。
+
+### 测试
+
+1. 执行验收命令（B005 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryBoundaryContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `RecoveryBoundaryContractTest` 1/1 通过。
+   - `dasall_contract_tests` 聚合链路 contract tests 7/7 通过。
+3. 正负例覆盖：
+   - 正例：`decision_kind` 可进入 ReflectionDecision；`executed_action` 可进入 RecoveryOutcome。
+   - 负例：`retry_after_ms` 在 ReflectionDecision 被拒绝；`failure_root_cause` 在 RecoveryOutcome 被拒绝。
+
+### 结果
+
+1. WP01-B005 达成 Done 判定：ReflectionDecision 的调度字段误入与 RecoveryOutcome 的归因字段误入均被守卫阻断。
+
+### 下一步
+
+1. 按执行顺序推进 WP01-B006（协同语义分层守卫）。
+
+### 风险
+
+1. 当前为字段名显式黑名单策略，若后续出现语义等价别名字段，需要补充规则与回归用例。
+2. 若后续将复杂归因对象以嵌套字段形式注入 RecoveryOutcome，需要在 WP01-B008 回归阶段强化防护。
+
+## 记录 #014
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B004 校验 ContextPacket 禁入字段守卫
+- 状态：已完成
+
+### 改动
+
+1. 新增 ContextPacket 边界守卫头文件：
+   - `contracts/include/boundary/ContextBoundaryGuards.h`
+   - 提供 `ContextBoundaryDecision`（AllowField/RejectForbiddenField）、`ContextBoundaryResult`、`kForbiddenContextFields`、`evaluate_context_field_boundary`、`is_allowed_context_field`。
+2. 守卫规则来源：
+   - 对齐 ADR-006 与 WP01-T009，仅做字段名禁入校验，拒绝 `final_messages`、`provider_payload`、`rendered_prompt`，不扩张到字段级 schema 设计。
+3. 新增 contract 测试并接入：
+   - `tests/contract/smoke/ContextPacketBoundaryContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `ContextPacketBoundaryContractTest`
+   - `tests/CMakeLists.txt` 将 `dasall_contract_context_packet_boundary_test` 纳入 `dasall_contract_tests` 依赖。
+
+### 测试
+
+1. 执行验收命令（B004 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ContextPacketBoundaryContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `ContextPacketBoundaryContractTest` 1/1 通过。
+   - `dasall_contract_tests` 聚合链路 contract tests 6/6 通过。
+3. 正负例覆盖：
+   - 正例：`recent_history` 允许通过守卫。
+   - 负例：`final_messages`、`provider_payload`、`rendered_prompt` 均被守卫拒绝。
+
+### 结果
+
+1. WP01-B004 达成 Done 判定：三项禁入字段全部被阻断，合法字段未被误杀。
+
+### 下一步
+
+1. 按执行顺序推进 WP01-B005（恢复语义分层守卫）。
+
+### 风险
+
+1. 当前实现是字段名精确匹配守卫，若后续引入别名或大小写变体策略，需要在不改变 ADR 结论前提下补充统一规范与测试。
+2. 若后续把 provider 或消息层字段通过嵌套对象间接引入 ContextPacket，需要在 WP01-B007/B008 门禁中继续强化覆盖。
+
+## 记录 #013
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B003 新增 Blocked/Deferred 外溢守卫接口
+- 状态：已完成
+
+### 改动
+
+1. 新增边界守卫头文件：
+   - `contracts/include/boundary/BoundaryGuards.h`
+   - 提供 `BoundaryGuardDecision`（AllowStable/RejectBlocked/RejectDeferred）、`BoundaryGuardResult`、`evaluate_stable_boundary`、`can_enter_stable_boundary`。
+2. 守卫逻辑来源：
+   - 直接复用 `ObjectBoundaryCatalog` 的 Stable/Blocked/Deferred 分类，不新增字段级判定规则。
+3. 新增 contract 测试并接入：
+   - `tests/contract/smoke/BoundaryGuardsContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `BoundaryGuardsContractTest`
+   - `tests/CMakeLists.txt` 将 `dasall_contract_boundary_guards_test` 纳入 `dasall_contract_tests` 依赖。
+
+### 测试
+
+1. 执行验收命令（B003 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R BoundaryGuardsContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `BoundaryGuardsContractTest` 1/1 通过。
+   - `dasall_contract_tests` 聚合链路 contract tests 5/5 通过。
+3. 正负例覆盖：
+   - 正例：Stable 对象 `AgentRequest` 被允许进入 Stable 边界。
+   - 负例：Blocked 对象 `MemoryEvidence` 被拒绝，Deferred 对象 `ToolRequest` 被拒绝。
+
+### 结果
+
+1. WP01-B003 达成 Done 判定：Blocked/Deferred 对象均被守卫拒绝进入 Stable 清单。
+
+### 下一步
+
+1. 按执行顺序推进 WP01-B004（ContextPacket 禁入字段守卫）。
+
+### 风险
+
+1. 当前守卫仅覆盖对象级边界，若后续误把字段级语义塞入该守卫，会造成 WP 边界越界。
+2. Deferred 对象在 WP-05 复审后可能调整判定，需保证守卫与冻结结论同步演进。
+
+## 记录 #012
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B002 补齐 Stable 对象编译期标识与最小占位类型
+- 状态：已完成
+
+### 改动
+
+1. 新增 14 个 Stable 对象 Tag 头文件（仅命名与类型标识，不定义字段语义）：
+   - agent: `AgentRequestTag.h`、`GoalContractTag.h`、`ActionDecisionTag.h`、`AgentResultTag.h`、`MultiAgentRequestTag.h`、`MultiAgentResultTag.h`
+   - context: `ContextPacketTag.h`
+   - observation: `ObservationTag.h`、`ObservationDigestTag.h`、`ErrorInfoTag.h`
+   - checkpoint: `CheckpointTag.h`、`ReflectionDecisionTag.h`、`RecoveryOutcomeTag.h`
+   - task: `WorkerTaskTag.h`
+2. 新增 contract 测试：
+   - `tests/contract/smoke/StableTypePresenceContractTest.cpp`
+   - 覆盖正例：14 个 Stable 占位类型可 include 且为空类型，且与 Stable 名册一致。
+   - 覆盖负例：`MemoryEvidence`（Blocked）与 `ToolRequest`（Deferred）不得被判定为 Stable。
+3. 更新测试接入：
+   - `tests/contract/CMakeLists.txt` 新增 `StableTypePresenceContractTest`。
+   - `tests/CMakeLists.txt` 将 `dasall_contract_stable_type_presence_test` 加入 `dasall_contract_tests` 依赖。
+
+### 测试
+
+1. 执行验收命令（B002 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R StableTypePresenceContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - `StableTypePresenceContractTest` 1/1 通过。
+   - `dasall_contract_tests` 聚合链路中 contract tests 4/4 通过。
+
+### 结果
+
+1. WP01-B002 达成 Done 判定：14 个 Stable 名称均具备可 include 的占位类型，且未引入字段语义。
+
+### 下一步
+
+1. 按执行顺序推进 WP01-B003（Blocked/Deferred 外溢守卫接口）。
+
+### 风险
+
+1. 当前仅完成对象级 Tag，占位层与后续守卫层之间仍可能出现“名称一致但行为未绑定”的漂移风险。
+2. 若后续任务误在 Tag 头文件中添加字段，可能跨入 WP-02/03/04 范围并引入 breaking 风险；需继续以 contract tests 约束“空类型”不变式。
+
+## 记录 #011
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B001 新增对象边界名册与分类枚举（复验闭环）
+- 状态：已完成
+
+### 改动
+
+1. 沿用已落盘代码与测试产物完成复验闭环：
+   - `contracts/include/boundary/ObjectBoundaryCatalog.h`
+   - `tests/contract/smoke/ObjectBoundaryCatalogContractTest.cpp`
+2. 依赖 WP01-B011 的 CTest 兼容修复后，恢复 B001 验收命令可执行性。
+
+### 测试
+
+1. 执行验收命令（B001 定义原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -L contract --output-on-failure`
+2. 结果：
+   - contract tests 3/3 通过：
+     - `dasall_contract_smoke_test`
+     - `dasall_contract_compatibility_test`
+     - `dasall_contract_object_boundary_catalog_test`
+
+### 结果
+
+1. WP01-B001 从 Blocked 更新为 Done。
+2. 满足 B001 完成判定：14 个 Stable、13 个 Blocked、2 个 Deferred 可枚举且测试通过。
+
+### 下一步
+
+1. 按执行顺序推进 WP01-B002（Stable 对象编译期标识与最小占位类型）。
+
+### 风险
+
+1. 当前 contract 用例数量仍偏少，后续若新增边界守卫规则需同步扩展回归测试，防止边界枚举与守卫实现漂移。
+
+## 记录 #010
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B011 解阻 CMake 配置并恢复 contract tests 可执行性
+- 状态：已完成
+
+### 改动
+
+1. 新增 CTest 兼容入口文件：
+   - `CTestTestfile.cmake`
+   - 作用：适配当前环境 CTest 3.16 不支持 `--test-dir` 的行为差异，确保在仓库根目录执行 `ctest --test-dir build-ci` 时仍可回溯到 `build-ci` 的测试图。
+2. 保持最小修复边界：
+   - 未改写 ADR 结论。
+   - 未扩张到 WP-02/WP-03 任务范围。
+   - 未新增业务语义代码，仅修复测试发现路径。
+
+### 测试
+
+1. 验收命令（任务定义原样执行）：
+   - `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -L contract --output-on-failure`
+2. 正例结果：
+   - configure 成功。
+   - build 成功。
+   - ctest 执行 contract tests 3/3 通过（`dasall_contract_smoke_test`、`dasall_contract_compatibility_test`、`dasall_contract_object_boundary_catalog_test`）。
+3. 负例验证：
+   - 修复前（记录 #009 证据）同命令尾部会出现 `No tests were found!!!`，导致验收链不可闭环。
+   - 修复后同命令可稳定发现并执行 contract tests，负例场景已消失。
+
+### 结果
+
+1. WP01-B011 解阻完成，状态可从 Blocked 更新为 Done。
+2. B001~B010 的公共前置“contract tests 可执行”已恢复。
+
+### 下一步
+
+1. 回到 WP01-B001，基于已解阻环境复核并更新其状态证据。
+2. 按执行顺序推进 WP01-B002（Stable 对象编译期标识与最小占位类型）。
+
+### 风险
+
+1. 本次采用 CTest 兼容入口文件属于“工具链兼容补丁”，若后续升级到支持 `--test-dir` 的 CTest 版本，需要确认该入口不会造成重复发现或路径歧义。
+2. 若后续改变默认构建目录名称（非 `build-ci`），需同步更新该兼容入口或改为由统一脚本注入。
+
+## 记录 #009
+
+- 日期：2026-03-15
+- 阶段：contracts 冻结（WP-01 Build）
+- 任务：WP01-B001 新增对象边界名册与分类枚举
+- 状态：Blocked
+
+### 改动
+
+1. 新增对象边界名册头文件：
+   - `contracts/include/boundary/ObjectBoundaryCatalog.h`
+   - 落盘 Stable/Blocked/Deferred 三层分类与 29 个对象名册（14/13/2）。
+2. 新增契约测试：
+   - `tests/contract/smoke/ObjectBoundaryCatalogContractTest.cpp`
+   - 覆盖正例（计数与 Stable 命名）和负例（Blocked 不可误判 Stable、Deferred 不可误判 Blocked）。
+3. 更新测试注册：
+   - `tests/contract/CMakeLists.txt` 新增 `dasall_contract_object_boundary_catalog_test`。
+   - `tests/CMakeLists.txt` 更新 `dasall_contract_tests` 依赖，确保聚合目标会构建新增测试可执行文件。
+
+### 测试
+
+1. 执行验收命令：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -L contract --output-on-failure`
+2. 结果摘要：
+   - `dasall_contract_tests` 内部执行的 contract tests 为 3/3 通过（含新增 `dasall_contract_object_boundary_catalog_test`）。
+   - 随后的独立 `ctest --test-dir build-ci -L contract` 在当前环境输出 `No tests were found!!!`。
+
+### 结果
+
+1. 代码与测试实现完成，且新增测试可编译并可在聚合目标内通过。
+2. 由于验收链尾部命令在当前环境无法发现测试，按 Build TODO 规则将 WP01-B001 标记为 Blocked。
+
+### 下一步
+
+1. 先解阻 `ctest --test-dir build-ci` 可发现测试的问题（建议纳入 WP01-B011 解阻链处理）。
+2. 解阻后复跑 WP01-B001 验收命令并将状态从 Blocked 更新为 Done。
+
+### 风险
+
+1. 若忽略该环境差异直接标记 Done，会导致“同一验收命令在不同环境结果不一致”的门禁漂移。
+2. 本次为保证验收可执行性触及 `tests/CMakeLists.txt` 聚合依赖，存在轻微跨任务边界风险，后续需在 WP01-B007 统一收敛测试编排。
+
 ## 记录 #008
 
 - 日期：2026-03-15
@@ -38,7 +571,7 @@
 
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
-- `/home/gangan/DASALL-Agent/contracts/include/dasall/contracts/CompatibilityGuards.h`
+- `/home/gangan/DASALL-Agent/contracts/include/boundary/CompatibilityGuards.h`
 - `/home/gangan/DASALL-Agent/tests/contract/smoke/CompatibilityContractTest.cpp`
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
@@ -98,7 +631,7 @@
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
 - `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
-- `/home/gangan/DASALL-Agent/contracts/include/dasall/contracts/CompatibilityGuards.h`
+- `/home/gangan/DASALL-Agent/contracts/include/boundary/CompatibilityGuards.h`
 - `/home/gangan/DASALL-Agent/tests/contract/smoke/CompatibilityContractTest.cpp`
 - `/home/gangan/DASALL-Agent/tests/contract/CMakeLists.txt`
 
