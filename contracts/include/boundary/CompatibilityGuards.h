@@ -19,6 +19,7 @@ struct TimeoutNormalizationResult {
   std::optional<std::int64_t> normalized_deadline_at_ms;
   std::optional<std::uint32_t> normalized_timeout_ms;
   bool used_legacy_timeout_seconds = false;
+  bool used_deadline_priority = false;
   std::string reason;
 };
 
@@ -29,7 +30,14 @@ inline TimeoutNormalizationResult normalize_timeout_fields(const TimeoutFieldSet
 
   std::optional<std::uint32_t> effective_timeout_ms = fields.timeout_ms;
   if (fields.timeout_seconds.has_value()) {
-    const auto migrated_timeout_ms = static_cast<std::uint32_t>(*fields.timeout_seconds * 1000U);
+    constexpr std::uint32_t kMsPerSecond = 1000U;
+    constexpr std::uint32_t kMaxSafeTimeoutSeconds = UINT32_MAX / kMsPerSecond;
+    if (*fields.timeout_seconds > kMaxSafeTimeoutSeconds) {
+      result.reason = "timeout_seconds overflows timeout_ms";
+      return result;
+    }
+
+    const auto migrated_timeout_ms = static_cast<std::uint32_t>(*fields.timeout_seconds * kMsPerSecond);
     if (fields.timeout_ms.has_value() && *fields.timeout_ms != migrated_timeout_ms) {
       result.reason = "timeout_seconds and timeout_ms are inconsistent";
       return result;
@@ -40,9 +48,11 @@ inline TimeoutNormalizationResult normalize_timeout_fields(const TimeoutFieldSet
   }
 
   if (fields.deadline_at_ms.has_value()) {
+    // deadline_at_ms is the authoritative field once present.
     result.ok = true;
     result.normalized_deadline_at_ms = fields.deadline_at_ms;
     result.normalized_timeout_ms = effective_timeout_ms;
+    result.used_deadline_priority = true;
     return result;
   }
 
@@ -71,6 +81,14 @@ inline bool is_known_enum_value(int raw_value, const int* known_values, std::siz
   }
 
   return false;
+}
+
+// Unspecified sentinel is mandatory for forward-compatible unknown-value
+// downgrade. This helper is shared by lifecycle guards and compatibility tests.
+inline bool has_unspecified_enum_sentinel(const int* known_values,
+                                          std::size_t known_value_count,
+                                          int unspecified_value) {
+  return is_known_enum_value(unspecified_value, known_values, known_value_count);
 }
 
 template <typename Enum>

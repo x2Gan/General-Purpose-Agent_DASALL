@@ -8,6 +8,744 @@
 
 ---
 
+## 记录 #036
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：针对评审问题组织修复与完善（代码 + 测试 + 文档收敛）
+- 状态：已完成
+
+### 改动
+
+1. 修复 Critical（头文件 helper 重定义）：
+   - 新增公共 helper 头：[contracts/include/boundary/GuardCommon.h](contracts/include/boundary/GuardCommon.h)
+   - 去重并改为复用：
+     - [contracts/include/boundary/IdentityMetadata.h](contracts/include/boundary/IdentityMetadata.h)
+     - [contracts/include/event/EventEnvelopeGuards.h](contracts/include/event/EventEnvelopeGuards.h)
+     - [contracts/include/error/ErrorInfoGuards.h](contracts/include/error/ErrorInfoGuards.h)
+     - [contracts/include/error/ErrorSourceGuards.h](contracts/include/error/ErrorSourceGuards.h)
+2. 修复 Major（timeout 迁移溢出）：
+   - [contracts/include/boundary/CompatibilityGuards.h](contracts/include/boundary/CompatibilityGuards.h)
+   - 新增 `timeout_seconds -> timeout_ms` 上界校验，溢出时失败返回。
+3. 修复 Major（BudgetSnapshot 大数转换风险）：
+   - [contracts/include/checkpoint/BudgetSnapshotGuards.h](contracts/include/checkpoint/BudgetSnapshotGuards.h)
+   - 改为安全 remaining 计算路径，超可表示范围时返回 `remaining computation overflow`。
+4. 补充测试：
+   - [tests/contract/smoke/CompatibilityContractTest.cpp](tests/contract/smoke/CompatibilityContractTest.cpp)
+     - 新增 `test_timeout_seconds_overflow_is_rejected`。
+   - [tests/contract/checkpoint/BudgetSnapshotContractTest.cpp](tests/contract/checkpoint/BudgetSnapshotContractTest.cpp)
+     - 新增 `test_remaining_computation_overflow_is_rejected`。
+5. 文档完善收敛：
+   - [docs/todos/contracts-freeze/deliverables/WP02-T013-ReviewChecklist-v1.md](docs/todos/contracts-freeze/deliverables/WP02-T013-ReviewChecklist-v1.md) 状态更新为 Done。
+   - [docs/todos/contracts-freeze/deliverables/WP02-T014-评审纪要.md](docs/todos/contracts-freeze/deliverables/WP02-T014-评审纪要.md) 评审范围扩展到 T001-T013 并补 D0 决议。
+   - [docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md](docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md) 状态统一收敛为 Done。
+   - [docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md](docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md) 冻结资产清单补全至 T015 自包含。
+   - [docs/todos/contracts-freeze/deliverables/WP02-评审覆盖矩阵与代码审计报告-2026-03-16.md](docs/todos/contracts-freeze/deliverables/WP02-评审覆盖矩阵与代码审计报告-2026-03-16.md) 追加修复执行记录与修复后结论。
+
+### 测试
+
+1. 组合 include 编译复验：
+   - `c++ -std=c++17 -Icontracts/include -c /tmp/dup_check.cpp -o /tmp/dup_check.o`
+   - 结果：通过（无重定义错误）。
+2. 门禁复验：
+   - `bash scripts/ci/wp02_contract_gate.sh`
+   - 结果：返回 0；contract tests 20/20 通过；关键门禁测试 5/5 通过。
+
+### 结果
+
+1. 评审报告中的 1 个 Critical + 2 个 Major 代码问题已修复并通过验收。
+2. WP-02 相关评审/冻结文档状态完成一轮一致性收敛。
+3. 审计结论从 `Changes Requested` 收敛为“可合并（在保持现有 gate 前提下）”。
+
+### 下一步
+
+1. 若继续推进，建议执行一次提交前整体验证（含 gate + 关键单测）并按“代码修复/文档收敛”拆分提交。
+
+### 风险
+
+1. 当前工作区仍有较多未提交历史改动；提交前需按变更意图分组，避免把不相关改动混入同一提交。
+
+## 记录 #035
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：评审遗留项 L1/L2 闭环复验与文档一致性修复
+- 状态：已完成
+
+### 改动
+
+1. 闭环复核评审遗留项：
+   - L1（`timeout_seconds` -> `timeout_ms` 迁移一致性）对应实现与测试已在 `CompatibilityGuards` / `TimeDeadlineGuards` 落盘。
+   - L2（unknown 枚举值降级证据）对应实现与测试已在 `EnumLifecycleGuards` 落盘。
+2. 修正文档状态一致性：
+   - `WP-02-横切基础对象-Build开发TODO.md` 的 Quality Gate 从“B014 Blocked”修正为“无 Blocked”。
+   - `WP02-T014-评审纪要.md` 从 In Review 更新为 Done，并将 L1/L2 标注为 Closed。
+
+### 测试
+
+1. 执行门禁命令：
+   - `bash scripts/ci/wp02_contract_gate.sh`
+2. 结果：
+   - 返回 0。
+   - 关键门禁测试 5/5 通过：CompatibilityContractTest、TimeDeadlineContractTest、EventEnvelopeContractTest、EnumLifecycleContractTest、M2ChecklistContractTest。
+   - 全量 contract 标签测试 20/20 通过。
+
+### 结果
+
+1. 评审遗留项 L1/L2 已形成“实现 + 测试 + gate”闭环证据。
+2. WP-02 评审与 Build 文档状态一致，可作为后续冻结发布输入。
+
+### 下一步
+
+1. 进入 T015 发布准备时，复用本记录与 T014 纪要作为审计证据。
+
+### 风险
+
+1. 当前环境下 CMake Tools 扩展未能完成项目配置，暂以脚本门禁结果作为执行证据；后续建议补充一次 CMake Tools 侧复验。
+
+## 记录 #034
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B014 新增 WP-02 CI 门禁脚本并接入流水线
+- 状态：已完成
+
+### 改动
+
+1. 新增 WP-02 gate 脚本：
+   - [scripts/ci/wp02_contract_gate.sh](scripts/ci/wp02_contract_gate.sh)
+   - 脚本流程：configure -> build `dasall_contract_tests` -> 注册校验(`ctest -N -L contract`) -> 执行关键 WP02 测试 -> 执行全量 contract 标签测试。
+2. 新增可配置 required tests 列表：
+   - 默认门禁测试：CompatibilityContractTest、TimeDeadlineContractTest、EventEnvelopeContractTest、EnumLifecycleContractTest、M2ChecklistContractTest。
+   - 支持 `WP02_GATE_REQUIRED_TESTS` 覆盖，便于 CI 场景注入与诊断。
+3. 门禁失败语义落盘：
+   - 注册缺失时脚本非 0 退出并打印缺失测试名。
+
+### 测试
+
+1. 执行验收命令（B014 原样）：
+   - `bash scripts/ci/wp02_contract_gate.sh`
+2. 结果：
+   - 返回 0。
+   - 输出包含 configure/build/registration/ctest 摘要。
+   - 全量 contract 标签测试 20/20 通过。
+3. 负例校验：
+   - `WP02_GATE_REQUIRED_TESTS=DefinitelyMissingContractTest bash scripts/ci/wp02_contract_gate.sh`
+   - 返回 `NEGATIVE_RC=1`，并输出缺失注册测试名，符合“门禁失败非 0”要求。
+
+### 结果
+
+1. WP02-B014 达成 Done 判定：脚本在可配置环境返回 0，且门禁失败场景稳定返回非 0。
+
+### 下一步
+
+1. WP-02 核心原子任务 B001-B014 已完成，下一步建议转入收尾复核（同步 CI 流水线调用并执行一次端到端 dry-run）。
+
+### 风险
+
+1. 当前脚本默认 generator 为 Ninja；若 CI 机型无 Ninja，需要在流水线设置 `CMAKE_GENERATOR`。
+2. 脚本复用了 contract 标签全集执行，后续若测试规模显著增长，可考虑拆分为“关键门禁 + 全量夜跑”两级策略。
+
+## 记录 #033
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B013 新增 M2 Checklist 自动校验入口
+- 状态：已完成
+
+### 改动
+
+1. 新增 M2 Checklist 守卫头文件：
+   - [contracts/include/boundary/M2ChecklistGuards.h](contracts/include/boundary/M2ChecklistGuards.h)
+   - 定义 `M2ChecklistInputs`、`M2ChecklistResult`，并提供 `validate_m2_checklist(...)`。
+2. 新增 A-F 六组门禁程序化判定：
+   - 约束为“六组全部通过才通过”，并输出 `first_failed_gate` 便于定位。
+3. 新增合同测试并接入 smoke 组：
+   - [tests/contract/smoke/M2ChecklistContractTest.cpp](tests/contract/smoke/M2ChecklistContractTest.cpp)
+   - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `M2ChecklistContractTest`。
+
+### 测试
+
+1. 执行验收命令（B013 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R M2ChecklistContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 20/20 通过（含新增测试）。
+   - `M2ChecklistContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：A-F 六组全部通过时 checklist 通过。
+   - 负例：C 组失败时 checklist 阻断，且返回 first_failed_gate=C。
+
+### 结果
+
+1. WP02-B013 达成 Done 判定：Checklist 核心条目可程序化判定并通过测试。
+
+### 下一步
+
+1. 按顺序推进 WP02-B014（WP-02 CI 门禁脚本接入）。
+
+### 风险
+
+1. 当前 A-F 由布尔输入表示，若后续要承载更细粒度失败原因，需要在不破坏现有 API 的前提下扩展结果结构。
+2. 目前 checklist 只做“聚合判定”，不替代各单项守卫；后续若单项守卫语义变化，需要同步维护 checklist 输入映射。
+
+## 记录 #032
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B012 收敛 contract 测试编排并接入 CMake
+- 状态：已完成
+
+### 改动
+
+1. 更新 contract 测试统一注册入口：
+   - `tests/contract/CMakeLists.txt`
+   - 将 `dasall_register_contract_test(...)` 扩展为四参数形式（可接收 group_label）。
+2. 收敛四组 contract 测试编排：
+   - 显式按 smoke/error/checkpoint/event 四组注册测试。
+   - 每个测试统一打上 `contract` 与组标签（如 `contract;smoke`）。
+3. 保持既有 contract tests 目标不变，仅增强可发现性与分组可观测性。
+
+### 测试
+
+1. 执行验收命令（B012 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -L contract --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 19/19 通过。
+   - label 汇总显示：smoke=13、error=3、checkpoint=2、event=1。
+3. 负例发现校验：
+   - `ctest --test-dir build-ci -N -R DefinitelyMissingContractTest`
+   - 输出 `Total Tests: 0`，验证未注册测试不会被误发现。
+
+### 结果
+
+1. WP02-B012 达成 Done 判定：新增/既有测试均可被 ctest 发现，且 label=contract 与四组分层正确生效。
+
+### 下一步
+
+1. 按顺序推进 WP02-B013（新增 M2 Checklist 自动校验入口）。
+
+### 风险
+
+1. 当前分组标签由 CMake 注册参数维护，后续新增测试若遗漏组标签，会影响分组统计但不影响 contract 主标签执行。
+2. 若未来希望按组单独门禁（例如 `ctest -L event`），需在 CI 脚本中同步加入分组命令，避免本地与 CI 行为漂移。
+
+## 记录 #031
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B011 补齐枚举降级与弃用生命周期守卫
+- 状态：已完成
+
+### 改动
+
+1. 扩展枚举兼容辅助：
+   - `contracts/include/boundary/CompatibilityGuards.h`
+   - 新增 `has_unspecified_enum_sentinel(...)`，用于检测未知值降级路径是否具备 Unspecified 哨兵。
+2. 新增枚举生命周期守卫：
+   - `contracts/include/boundary/EnumLifecycleGuards.h`
+   - 提供 `validate_enum_lifecycle_descriptor(...)` 与 `normalize_enum_with_lifecycle(...)`，实现：
+     - 已知值保留；
+     - 未知值降级到 Unspecified；
+     - 删除 Unspecified 哨兵直接阻断；
+     - deprecated 值必须属于 known_values。
+3. 扩展/新增合同测试并接入：
+   - `tests/contract/smoke/CompatibilityContractTest.cpp`（扩展）：新增 “缺失 Unspecified 哨兵可检测” 负例。
+   - `tests/contract/smoke/EnumLifecycleContractTest.cpp`（新增）：
+     - 正例：已知值保留；
+     - 正例：未知值降级到 Unspecified；
+     - 负例：删除 Unspecified 哨兵阻断。
+   - `tests/contract/CMakeLists.txt` 注册 `EnumLifecycleContractTest`。
+
+### 测试
+
+1. 执行验收命令（B011 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R "CompatibilityContractTest|EnumLifecycleContractTest" --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 19/19 通过（含新增测试）。
+   - `CompatibilityContractTest` 与 `EnumLifecycleContractTest` 2/2 通过。
+3. 覆盖摘要：
+   - 已知值保留。
+   - 未知值降级到 Unspecified。
+   - 删除 Unspecified 哨兵被门禁阻断。
+
+### 结果
+
+1. WP02-B011 达成 Done 判定：unknown->Unspecified 稳定可测，且 Unspecified 删除动作被拦截。
+
+### 下一步
+
+1. 按顺序推进 WP02-B012（收敛 contract 测试编排并接入 CMake）。
+
+### 风险
+
+1. 当前生命周期描述符基于整数枚举值集合，若后续引入字符串枚举编码，需要新增编码层映射而非改写现有守卫语义。
+2. deprecated 值当前保留可读路径并通过标志位暴露，若后续需要“强阻断 deprecated 输入”，应通过新门禁开关实现，避免改变已落地兼容行为。
+
+## 记录 #030
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B010 新增 EventEnvelope 头部对象与白名单校验器
+- 状态：已完成
+
+### 改动
+
+1. 新增 EventEnvelope 契约对象：
+   - [contracts/include/event/EventEnvelope.h](contracts/include/event/EventEnvelope.h)
+   - 定义 `EventEnvelopeHeader` 与 `EventEnvelope`，头部仅承载公共元数据，模块私有信息保留在 payload。
+2. 新增 EventEnvelope 白名单守卫：
+   - [contracts/include/event/EventEnvelopeGuards.h](contracts/include/event/EventEnvelopeGuards.h)
+   - 提供 `validate_event_envelope(...)`，校验：
+     - 公共头字段必填（event_id/event_type/event_version/occurred_at_ms/request_id/trace_id）；
+     - payload 载体必填（payload_type/payload_json）；
+     - 头部键必须在白名单中，阻断模块私有字段上浮头部。
+3. 新增 event 合同测试并接入：
+   - [tests/contract/event/EventEnvelopeContractTest.cpp](tests/contract/event/EventEnvelopeContractTest.cpp)
+   - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `EventEnvelopeContractTest`。
+
+### 测试
+
+1. 执行验收命令（B010 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R EventEnvelopeContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 18/18 通过（含新增测试）。
+   - `EventEnvelopeContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：头部仅公共字段、payload 承载私有数据时通过。
+   - 负例：头部上浮私有字段 `worker_internal_state` 被拒绝。
+
+### 结果
+
+1. WP02-B010 达成 Done 判定：头部仅允许通用字段，payload 分层规则可自动验证。
+
+### 下一步
+
+1. 按顺序推进 WP02-B011（枚举降级与弃用生命周期守卫）。
+
+### 风险
+
+1. 当前白名单基于 header_keys 文本校验，若后续事件编解码层字段命名存在别名，需要增加别名映射层以避免误判。
+2. 当前仅校验“禁止私有字段上浮头部”，后续若需要检查 payload 结构完整性，应在后续任务新增 payload 级守卫，避免扩大本任务职责。
+
+## 记录 #029
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B009 收敛时间语义迁移与 TimeDeadline 校验器
+- 状态：已完成
+
+### 改动
+
+1. 扩展时间兼容守卫：
+   - `contracts/include/boundary/CompatibilityGuards.h`
+   - 在 `TimeoutNormalizationResult` 中新增 `used_deadline_priority`，并在 `deadline_at_ms` 存在时标记 deadline 优先路径。
+2. 新增 TimeDeadline 校验器：
+   - `contracts/include/boundary/TimeDeadlineGuards.h`
+   - 提供 `validate_time_deadline_fields(...)`：
+     - 复用 timeout 归一化；
+     - 保障 `timeout_seconds` 仅兼容迁移读取；
+     - 当 `created_at_ms + timeout_ms` 可与 `deadline_at_ms` 同时推导时，冲突即失败。
+3. 扩展/新增合同测试并接入：
+   - `tests/contract/smoke/CompatibilityContractTest.cpp`（扩展）：
+     - 新增 `timeout_ms` 与 `timeout_seconds` 双字段冲突负例；
+     - 增加 deadline 优先路径断言。
+   - `tests/contract/smoke/TimeDeadlineContractTest.cpp`（新增）：
+     - 正例：deadline 与 timeout 一致时通过；
+     - 负例：deadline 与 timeout 冲突时失败。
+   - `tests/contract/CMakeLists.txt`：
+     - compatibility 测试名对齐为 `CompatibilityContractTest`；
+     - 注册 `TimeDeadlineContractTest`。
+
+### 测试
+
+1. 执行验收命令（B009 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R "CompatibilityContractTest|TimeDeadlineContractTest" --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 17/17 通过（含新增测试）。
+   - `CompatibilityContractTest` 与 `TimeDeadlineContractTest` 2/2 通过。
+3. 覆盖摘要：
+   - 正例：`timeout_seconds -> timeout_ms` 迁移路径可用，deadline 优先路径可验证。
+   - 负例：`timeout_ms` 与 `timeout_seconds` 不一致冲突被拒绝。
+   - 负例：`deadline_at_ms` 与 `created_at_ms + timeout_ms` 冲突被拒绝。
+
+### 结果
+
+1. WP02-B009 达成 Done 判定：`timeout_seconds` 仅兼容读取、双字段冲突可失败、`deadline_at` 优先规则可自动验证。
+
+### 下一步
+
+1. 按顺序推进 WP02-B010（EventEnvelope 头部对象与白名单校验器）。
+
+### 风险
+
+1. 当前冲突判定依赖 `created_at_ms` 可用；若上游出现缺失 `created_at_ms` 但同时提供 deadline 与 timeout 的输入，系统会按“deadline 优先”通过，后续若要强约束需在新任务中显式冻结。
+2. compatibility 测试名已与 B009 验收命令对齐；若外部脚本仍依赖旧测试名，需要同步更新脚本以避免误报漏测。
+
+## 记录 #028
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B008 新增统一标识元数据对象与传播校验器
+- 状态：已完成
+
+### 改动
+
+1. 新增统一标识元数据对象与传播校验器：
+   - `contracts/include/boundary/IdentityMetadata.h`
+   - 定义 `IdentityMetadata`，统一承载 request/session/trace/task/lease 五类 ID 与 `parent_task_id`。
+   - 提供 `validate_identity_metadata(...)`，校验五类 ID 必填、child task 必须携带 `parent_task_id`、root task 禁止携带 `parent_task_id`、以及 `parent_task_id != task_id`。
+2. 新增 smoke 合同测试并接入：
+   - `tests/contract/smoke/IdentityMetadataContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `IdentityMetadataContractTest`。
+
+### 测试
+
+1. 执行验收命令（B008 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R IdentityMetadataContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 16/16 通过（含新增测试）。
+   - `IdentityMetadataContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：child task 场景下五类 ID 齐全且 parent_task_id 合法时通过。
+   - 负例：child task 缺失 `parent_task_id` 被拒绝。
+   - 负例：`parent_task_id` 与 `task_id` 自引用相等被拒绝。
+
+### 结果
+
+1. WP02-B008 达成 Done 判定：五类 ID 与 `parent_task_id` 传播关系可程序化校验且测试通过。
+
+### 下一步
+
+1. 按顺序继续推进 WP02-B009（收敛时间语义迁移与 TimeDeadline 校验器）。
+
+### 风险
+
+1. 当前传播校验依赖 `is_child_task` 语义开关，若后续系统改为通过任务拓扑自动推断父子关系，需要新增兼容入口而非改写现有字段语义。
+2. 目前仅约束 parent 直接引用关系，若后续引入多级链路完整性校验（祖先追溯），应新增独立守卫，避免放大当前最小契约责任。
+
+## 记录 #027
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B007 新增 BudgetSnapshot 契约对象与一致性校验器
+- 状态：已完成
+
+### 改动
+
+1. 新增 BudgetSnapshot 契约对象：
+   - `contracts/include/checkpoint/BudgetSnapshot.h`
+   - 定义 `BudgetType`、`BudgetSnapshotEntry`、`BudgetSnapshot`，覆盖 current/max/remaining/reject_reason 统一表达。
+2. 新增一致性校验器：
+   - `contracts/include/checkpoint/BudgetSnapshotGuards.h`
+   - 提供 `validate_budget_snapshot(...)`，校验：
+     - remaining 必须等于 max-current；
+     - reject_reason 仅在 remaining<0 时填写；
+     - 同一快照中 budget_type 唯一。
+3. 新增 checkpoint 合同测试并接入：
+   - `tests/contract/checkpoint/BudgetSnapshotContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `BudgetSnapshotContractTest`。
+
+### 测试
+
+1. 执行验收命令（B007 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R BudgetSnapshotContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 15/15 通过（含新增测试）。
+   - `BudgetSnapshotContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：合法快照通过（含非超限和超限条目）。
+   - 负例：remaining 与 max-current 不一致被拒绝。
+   - 负例：未超限却填写 reject_reason 被拒绝。
+
+### 结果
+
+1. WP02-B007 达成 Done 判定：remaining 不一致和 reject_reason 误填可被稳定拦截，合法快照通过。
+
+### 下一步
+
+1. 按顺序推进 WP02-B008（统一标识元数据对象与传播校验器）。
+
+### 风险
+
+1. 当前 `remaining` 使用有符号值表达超限（可负值）；若后续输出通道限制为无符号，需要新增兼容映射字段，避免改写当前语义。
+2. 目前只做单快照一致性约束，后续若引入连续快照趋势判断，应新增规则而非更改现有判定口径。
+
+## 记录 #026
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B006 新增 RuntimeBudget 契约对象与阈值校验器
+- 状态：已完成
+
+### 改动
+
+1. 新增 RuntimeBudget 契约对象：
+   - `contracts/include/checkpoint/RuntimeBudget.h`
+   - 冻结五维预算字段：max_tokens、max_turns、max_tool_calls、max_latency_ms、max_replan_count。
+2. 新增 RuntimeBudget 校验器：
+   - `contracts/include/checkpoint/RuntimeBudgetGuards.h`
+   - 提供 `validate_runtime_budget(...)`，校验五维必填与正阈值约束。
+3. 新增 checkpoint 合同测试并接入：
+   - `tests/contract/checkpoint/RuntimeBudgetContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `RuntimeBudgetContractTest`。
+
+### 测试
+
+1. 执行验收命令（B006 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RuntimeBudgetContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 14/14 通过（含新增测试）。
+   - `RuntimeBudgetContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：五维字段齐全且均为正值时通过。
+   - 负例：缺失 `max_turns` 被拒绝。
+   - 负例：`max_latency_ms=0`（ms 口径无效阈值）被拒绝。
+
+### 结果
+
+1. WP02-B006 达成 Done 判定：max_tokens/max_turns/max_tool_calls/max_latency_ms/max_replan_count 均可校验且测试通过。
+
+### 下一步
+
+1. 按顺序推进 WP02-B007（BudgetSnapshot 契约对象与一致性校验器）。
+
+### 风险
+
+1. 当前守卫将五维阈值统一约束为 >0；若后续存在“某维允许 0 表示禁用”的策略，需通过新增策略字段承载，避免改写既有字段语义。
+2. 历史实现若仍使用 `max_rounds` 命名，后续集成需要兼容映射层以避免命名切换带来的 breaking 风险。
+
+## 记录 #025
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B005 新增 ErrorSource 结构与引用校验器
+- 状态：已完成
+
+### 改动
+
+1. 新增 ErrorSource 引用结构：
+   - `contracts/include/error/ErrorSourceRef.h`
+   - 定义 `ErrorSourceRefEntry` 与 `ErrorSourceRefSet`，支持 primary + related 语义。
+2. 新增 ErrorSource 校验器：
+   - `contracts/include/error/ErrorSourceGuards.h`
+   - 提供 `validate_error_source_refs(...)`，校验 primary 唯一、四类 ref_type、ref_id 非空。
+3. 新增 error 合同测试并接入：
+   - `tests/contract/error/ErrorSourceContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `ErrorSourceContractTest`。
+
+### 测试
+
+1. 执行验收命令（B005 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ErrorSourceContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 13/13 通过（含新增测试）。
+   - `ErrorSourceContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：四类引用 observation/tool_call/worker_task/checkpoint 全覆盖且单 primary 通过。
+   - 负例：multiple primary 被拒绝。
+   - 负例：空 ref_id 被拒绝。
+
+### 结果
+
+1. WP02-B005 达成 Done 判定：四类引用全覆盖且非法输入可被稳定拦截。
+
+### 下一步
+
+1. 按顺序推进 WP02-B006（RuntimeBudget 契约对象与阈值校验器）。
+
+### 风险
+
+1. 当前模型允许 related 列表无序，若后续审计链路要求严格时序，需要在不破坏现有结构前提下新增序号或时间戳字段。
+2. `ErrorInfo` 仍保留 B004 最小 `source_ref` 表达，后续若对接 B005 结构化集合，需通过兼容层渐进迁移，避免直接替换造成 breaking。
+
+## 记录 #024
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B004 新增 ErrorInfo 与最小校验器
+- 状态：已完成
+
+### 改动
+
+1. 新增 ErrorInfo 契约对象：
+   - `contracts/include/error/ErrorInfo.h`
+   - 定义五个必填顶层字段对应承载：failure_type、retryable、safe_to_replan、details、source_ref。
+2. 新增最小校验器：
+   - `contracts/include/error/ErrorInfoGuards.h`
+   - 提供 `validate_error_info_required_fields(...)` 与 `is_supported_error_source_ref_type(...)`。
+3. 新增 error 合同测试并接入：
+   - `tests/contract/error/ErrorInfoContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `ErrorInfoContractTest`。
+
+### 测试
+
+1. 执行验收命令（B004 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ErrorInfoContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 12/12 通过（含新增测试）。
+   - `ErrorInfoContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：五个必填字段齐全时通过。
+   - 负例：缺失 `failure_type` 被拒绝。
+   - 负例：`source_ref.ref_type` 非法取值被拒绝。
+
+### 结果
+
+1. WP02-B004 达成 Done 判定：failure_type/retryable/safe_to_replan/details/source_ref 缺一即失败，合法样例通过。
+
+### 下一步
+
+1. 按顺序推进 WP02-B005（ErrorSource 结构与引用校验器）。
+
+### 风险
+
+1. 当前 `source_ref` 仅实现最小键约束，B005 若引入更强引用结构需保持向后兼容，避免语义重解释。
+2. `retryable` 与 `safe_to_replan` 当前只表达候选语义，后续实现层若把它们当作“已执行动作”会偏离 ADR-007，需要在集成层加门禁。
+
+## 记录 #023
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B003 新增 ResultCode 分类与判定枚举
+- 状态：已完成
+
+### 改动
+
+1. 新增 ResultCode 分类头文件：
+   - `contracts/include/error/ResultCode.h`
+   - 定义五类一级域：validation/policy/tool/provider/runtime。
+2. 新增分类判定辅助能力：
+   - `classify_result_code_segment(...)` 按编码段判定分类。
+   - `classify_result_code(...)` 对枚举值执行分类。
+   - `classify_result_code_value(...)` 对 raw code 执行 gate 友好判定（含 unknown 拒绝）。
+3. 新增 error 目录合同测试并接入：
+   - `tests/contract/error/ResultCodeContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `ResultCodeContractTest`
+
+### 测试
+
+1. 执行验收命令（B003 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ResultCodeContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 11/11 通过（含新增测试）。
+   - `ResultCodeContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - 正例：五类枚举样例稳定映射到 validation/policy/tool/provider/runtime。
+   - 边界例：3999 归 tool、4000 归 provider。
+   - 负例：7000（越界码）被拒绝并判定为 unknown。
+
+### 结果
+
+1. WP02-B003 达成 Done 判定：五类失败域判定可程序化复现且边界负例通过。
+
+### 下一步
+
+1. 按顺序推进 WP02-B004（ErrorInfo 与最小校验器）。
+
+### 风险
+
+1. 当前实现采用分段分类，后续扩展具体码值时需保持段边界稳定，避免跨段重解释导致 breaking 风险。
+2. 若未来新增一级分类，将触发兼容性重大变更，应走专门评审，不应在当前段内硬塞。
+
+## 记录 #022
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B002 新增字段演进兼容判定辅助器
+- 状态：已完成
+
+### 改动
+
+1. 新增字段演进兼容判定头文件：
+   - `contracts/include/boundary/FieldEvolutionGuards.h`
+   - 提供 `FieldEvolutionDecision`（non-breaking/review-required/breaking）与 `FieldEvolutionResult`。
+2. 新增三类字段演进判定辅助器：
+   - `classify_type_evolution(...)`（B1）
+   - `classify_optionality_evolution(...)`（B2）
+   - `classify_cardinality_evolution(...)`（B3）
+3. 新增 contract 测试并接入：
+   - `tests/contract/smoke/FieldEvolutionGuardsContractTest.cpp`
+   - `tests/contract/CMakeLists.txt` 注册 `FieldEvolutionGuardsContractTest`
+
+### 测试
+
+1. 执行验收命令（B002 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R FieldEvolutionGuardsContractTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 10/10 通过（含新增测试）。
+   - `FieldEvolutionGuardsContractTest` 1/1 通过。
+3. 覆盖摘要：
+   - non-breaking：类型并行新增字段且保留旧语义。
+   - review-required：单值扩多值但缺少消费兼容证据。
+   - breaking：既有可选字段改为强制。
+
+### 结果
+
+1. WP02-B002 达成 Done 判定：non-breaking/review-required/breaking 三类判定可程序化复现，断言全通过。
+
+### 下一步
+
+1. 按顺序推进 WP02-B003（ResultCode 分类与判定枚举）。
+
+### 风险
+
+1. 当前判定器是字段属性层规则，若后续引入“对象职责边界变化”场景，需由上层 checklist（A3/A5）补充门禁，避免误判为字段级变更。
+2. `single->multi` 的 non-breaking 依赖“消费方兼容证据”输入，若证据口径不统一，可能导致 review-required 漏判；后续可在 B013 统一证据模板。
+
+## 记录 #021
+
+- 日期：2026-03-16
+- 阶段：contracts 冻结（WP-02 Build）
+- 任务：WP02-B001 新增横切基础对象总入口头文件
+- 状态：已完成
+
+### 改动
+
+1. 新增横切基础对象聚合入口头文件：
+   - `contracts/include/boundary/CrossCuttingContracts.h`
+   - 统一暴露五类入口：error/event/checkpoint/id-time/enum。
+2. 新增 WP02-B001 对应 smoke 合同测试：
+   - `tests/contract/smoke/CrossCuttingContractsSmokeTest.cpp`
+   - 正例：聚合头可统一访问 error/event/checkpoint/time 入口并完成时间归一化。
+   - 负例：未知枚举值通过聚合入口降级到 `Unspecified`。
+3. 更新 contract 测试注册：
+   - `tests/contract/CMakeLists.txt`
+   - 新增 `CrossCuttingContractsSmokeTest` 注册，纳入 `dasall_contract_tests` 聚合链路。
+
+### 测试
+
+1. 执行验收命令（B001 原样）：
+   - `cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R CrossCuttingContractsSmokeTest --output-on-failure`
+2. 结果：
+   - build 成功。
+   - contract 标签测试 9/9 通过（含新增测试）。
+   - `CrossCuttingContractsSmokeTest` 1/1 通过。
+
+### 结果
+
+1. WP02-B001 达成 Done 判定：聚合头已覆盖 error/event/checkpoint/id-time/enum 五类入口，且测试链路可执行并通过。
+
+### 下一步
+
+1. 按 WP-02 执行顺序推进 WP02-B002（字段演进兼容判定辅助器）。
+
+### 风险
+
+1. 当前 event 入口为阶段性 marker（字段 schema 仍待 WP02-B010），后续落地 EventEnvelope 时需保持聚合入口 API 稳定。
+2. 枚举降级路径复用了 CompatibilityGuards，若后续引入生命周期守卫，需要在 WP02-B011 增补组合负例防回退。
+
 ## 记录 #020
 
 - 日期：2026-03-16
