@@ -1,55 +1,126 @@
 # WP-04 边界对象 TODO
 
-最近更新时间：2026-03-13
+最近更新时间：2026-03-18
 
 ## 1. 工作包目标
 
-把 ADR-006、ADR-007、ADR-008 的边界裁定直接落实为 contracts 对象和字段约束，避免职责重新漂移。
+从 WP-04 开始延续 WP-03 的执行纪律：每个任务必须同时具备 Design 文档交付与 Build 代码交付，确保 ADR 边界直接转化为可执行门禁。
 
-## 2. 完成标准
+## 2. 研读资料基线
 
-1. 三份 ADR 的 contracts 影响项全部由具体对象承接。
-2. 不存在一个字段同时承担两个边界主体职责。
-3. Prompt、Recovery、多 Agent 协同边界均可通过对象定义直接审查。
+1. 架构资料：docs/architecture/DASSALL_Agent_architecture.md、docs/architecture/DASALL_Engineering_Blueprint.md。
+2. 方案资料：docs/plans/DASALL_contracts冻结实施计划.md、docs/plans/DASALL_工程落地实现步骤指引.md。
+3. 决策资料：docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md、docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md、docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md。
+4. 前置冻结包：WP-01、WP-02、WP-03 交付物与 checklist。
 
-## 3. 原子任务清单
+## 3. 完成标准
 
-| ID | 状态 | 任务 | 输入依据 | 交付物 | 完成判定 |
-|---|---|---|---|---|---|
-| WP04-T001 | Not Started | 梳理 ADR-006 的对象影响项 | ADR-006 | ADR-006 对象影响清单 | 明确 ContextPacket、PromptComposeRequest、PromptComposeResult 的关系 |
-| WP04-T002 | Not Started | 定义 PromptComposeRequest 的职责边界 | ADR-006、WP-03 ContextPacket | PromptComposeRequest 语义说明 | 只能消费 ContextPacket，不替代 ContextPacket |
-| WP04-T003 | Not Started | 列出 PromptComposeRequest 的字段清单 | T002 输出 | PromptComposeRequest 字段表 | 不包含 provider_payload 或渲染结果字段 |
-| WP04-T004 | Not Started | 定义 PromptComposeResult 的职责边界 | ADR-006 | PromptComposeResult 语义说明 | 只表达渲染结果和相关元数据 |
-| WP04-T005 | Not Started | 列出 PromptComposeResult 的字段清单 | T004 输出 | PromptComposeResult 字段表 | 明确与 PromptPolicy、LLMRequest 的衔接点 |
-| WP04-T006 | Not Started | 梳理 ADR-007 的对象影响项 | ADR-007 | ADR-007 对象影响清单 | 明确 ReflectionDecision、RecoveryRequest、RecoveryOutcome 的关系 |
-| WP04-T007 | Not Started | 定义 ReflectionDecision 的职责边界 | ADR-007 | ReflectionDecision 语义说明 | 只表达语义判断和建议，不含调度细节 |
-| WP04-T008 | Not Started | 列出 ReflectionDecision 的字段清单 | T007 输出 | ReflectionDecision 字段表 | 包含 decision_kind、rationale、confidence、hint/ref，不含 retry_after_ms 等字段 |
-| WP04-T009 | Not Started | 定义 RecoveryManager 消费的恢复请求对象 | ADR-007、WP-02/03 | RecoveryRequest 语义说明 | 明确其为运行时准入输入，而非第二个反思对象 |
-| WP04-T010 | Not Started | 列出 RecoveryRequest 的字段清单 | T009 输出 | RecoveryRequest 字段表 | 至少包含 reflection_decision、error_info、checkpoint、budget、idempotency 报告 |
-| WP04-T011 | Not Started | 定义 RecoveryOutcome 的职责边界 | ADR-007 | RecoveryOutcome 语义说明 | 只表达执行结果与控制元数据 |
-| WP04-T012 | Not Started | 列出 RecoveryOutcome 的字段清单 | T011 输出 | RecoveryOutcome 字段表 | 包含 executed_action、final_runtime_state、rejection_reason、checkpoint_ref |
-| WP04-T013 | Not Started | 梳理 ADR-008 的对象影响项 | ADR-008 | ADR-008 对象影响清单 | 明确 AgentRequest 与 MultiAgentRequest 的分层关系 |
-| WP04-T014 | Not Started | 定义 MultiAgentRequest 的职责边界 | ADR-008 | MultiAgentRequest 语义说明 | 只表达协同子域请求，不复用 AgentRequest |
-| WP04-T015 | Not Started | 列出 MultiAgentRequest 的字段清单 | T014 输出 | MultiAgentRequest 字段表 | 包含 parent_request_id、goal_fragment、plan_fragment、guards、stop_conditions |
-| WP04-T016 | Not Started | 定义 MultiAgentResult 的职责边界 | ADR-008 | MultiAgentResult 语义说明 | 只表达协同结果，不承担最终 AgentResult 角色 |
-| WP04-T017 | Not Started | 列出 MultiAgentResult 的字段清单 | T016 输出 | MultiAgentResult 字段表 | 包含 subtask_results、merged_result、conflicts、worker_trace_refs、recommended_next_action |
-| WP04-T018 | Not Started | 定义 WorkerTask 的职责边界 | ADR-008 | WorkerTask 语义说明 | 只表达子任务执行单元，不携带全局 Session/FSM 语义 |
-| WP04-T019 | Not Started | 列出 WorkerTask 的字段清单 | T018 输出 | WorkerTask 字段表 | 覆盖 task_id、parent_task_id、lease_id、worker_type、allowed_tools、timeout、idempotency_key |
-| WP04-T020 | Not Started | 定义 WorkerLease 的职责边界 | ADR-008 | WorkerLease 语义说明 | 明确租约而非任务结果或调度策略 |
-| WP04-T021 | Not Started | 列出 WorkerLease 的字段清单 | T020 输出 | WorkerLease 字段表 | 覆盖 lease_id、worker_ref、deadline、renewal、release_reason |
-| WP04-T022 | Not Started | 建立 ADR 到字段级约束映射表 | T001 至 T021 输出 | ADR 字段映射表 | 每条 ADR 约束都能映射到具体对象或禁止字段 |
-| WP04-T023 | Not Started | 组织边界对象评审 | T022 输出 | 评审纪要 | 不存在双主控、双上下文主控、双恢复主控迹象 |
-| WP04-T024 | Not Started | 发布边界对象冻结版 | T023 输出 | M4 冻结包 | 可作为 prompt、runtime、multi_agent 设计基线 |
+1. 每个 WP04-Txxx 都拆分为 WP04-Txxx-D（Design）和 WP04-Txxx-B（Build）两个子任务。
+2. 每个 Build 子任务均具备代码目标、测试目标、验收命令三件套。
+3. Prompt、Recovery、多 Agent 协同边界均可由对象定义和 contract tests 直接审查。
+4. 不存在一个字段同时承担两个边界主体职责。
 
-## 4. 推荐执行顺序
+## 4. Design->Build 拆分总表
 
-1. 先做 T001 至 T005，完成 Prompt 边界。
-2. 再做 T006 至 T012，完成恢复边界。
-3. 再做 T013 至 T021，完成多 Agent 边界。
-4. 最后做 T022 至 T024，形成 M4 输出。
+| 主任务 | Design 子任务（文档交付） | Build 子任务（代码交付） | 输入依据 | 代码目标 | 测试目标 | 验收命令 |
+|---|---|---|---|---|---|---|
+| WP04-T001 | WP04-T001-D：ADR-006 对象影响清单 | WP04-T001-B：新增 PromptBoundaryContracts 聚合入口 | ADR-006 | contracts/include/prompt/PromptBoundaryContracts.h | tests/contract/smoke/PromptBoundaryContractsSmokeTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptBoundaryContractsSmokeTest --output-on-failure |
+| WP04-T002 | WP04-T002-D：PromptComposeRequest 职责边界 | WP04-T002-B：新增 PromptComposeRequest 契约对象与守卫 | ADR-006、WP-03 ContextPacket | contracts/include/prompt/PromptComposeRequest.h；contracts/include/prompt/PromptComposeRequestGuards.h | tests/contract/prompt/PromptComposeRequestContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeRequestContractTest --output-on-failure |
+| WP04-T003 | WP04-T003-D：PromptComposeRequest 字段表 | WP04-T003-B：实现 PromptComposeRequest 字段校验器 | T002-D | contracts/include/prompt/PromptComposeRequestGuards.h | tests/contract/prompt/PromptComposeRequestFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeRequestFieldContractTest --output-on-failure |
+| WP04-T004 | WP04-T004-D：PromptComposeResult 职责边界 | WP04-T004-B：新增 PromptComposeResult 契约对象与守卫 | ADR-006 | contracts/include/prompt/PromptComposeResult.h；contracts/include/prompt/PromptComposeResultGuards.h | tests/contract/prompt/PromptComposeResultContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeResultContractTest --output-on-failure |
+| WP04-T005 | WP04-T005-D：PromptComposeResult 字段表 | WP04-T005-B：实现 PromptComposeResult 字段校验器 | T004-D | contracts/include/prompt/PromptComposeResultGuards.h | tests/contract/prompt/PromptComposeResultFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeResultFieldContractTest --output-on-failure |
+| WP04-T006 | WP04-T006-D：ADR-007 对象影响清单 | WP04-T006-B：新增 RecoveryBoundaryContracts 聚合入口 | ADR-007 | contracts/include/checkpoint/RecoveryBoundaryContracts.h | tests/contract/smoke/RecoveryBoundaryContractsSmokeTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryBoundaryContractsSmokeTest --output-on-failure |
+| WP04-T007 | WP04-T007-D：ReflectionDecision 职责边界 | WP04-T007-B：新增 ReflectionDecision 契约对象与守卫 | ADR-007 | contracts/include/checkpoint/ReflectionDecision.h；contracts/include/checkpoint/ReflectionDecisionGuards.h | tests/contract/checkpoint/ReflectionDecisionContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ReflectionDecisionContractTest --output-on-failure |
+| WP04-T008 | WP04-T008-D：ReflectionDecision 字段表 | WP04-T008-B：实现 ReflectionDecision 字段校验器 | T007-D | contracts/include/checkpoint/ReflectionDecisionGuards.h | tests/contract/checkpoint/ReflectionDecisionFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ReflectionDecisionFieldContractTest --output-on-failure |
+| WP04-T009 | WP04-T009-D：RecoveryRequest 语义说明 | WP04-T009-B：新增 RecoveryRequest 契约对象与守卫 | ADR-007、WP-02/03 | contracts/include/checkpoint/RecoveryRequest.h；contracts/include/checkpoint/RecoveryRequestGuards.h | tests/contract/checkpoint/RecoveryRequestContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryRequestContractTest --output-on-failure |
+| WP04-T010 | WP04-T010-D：RecoveryRequest 字段表 | WP04-T010-B：实现 RecoveryRequest 字段校验器 | T009-D | contracts/include/checkpoint/RecoveryRequestGuards.h | tests/contract/checkpoint/RecoveryRequestFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryRequestFieldContractTest --output-on-failure |
+| WP04-T011 | WP04-T011-D：RecoveryOutcome 职责边界 | WP04-T011-B：新增 RecoveryOutcome 契约对象与守卫 | ADR-007 | contracts/include/checkpoint/RecoveryOutcome.h；contracts/include/checkpoint/RecoveryOutcomeGuards.h | tests/contract/checkpoint/RecoveryOutcomeContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryOutcomeContractTest --output-on-failure |
+| WP04-T012 | WP04-T012-D：RecoveryOutcome 字段表 | WP04-T012-B：实现 RecoveryOutcome 字段校验器 | T011-D | contracts/include/checkpoint/RecoveryOutcomeGuards.h | tests/contract/checkpoint/RecoveryOutcomeFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryOutcomeFieldContractTest --output-on-failure |
+| WP04-T013 | WP04-T013-D：ADR-008 对象影响清单 | WP04-T013-B：新增 MultiAgentBoundaryContracts 聚合入口 | ADR-008 | contracts/include/agent/MultiAgentBoundaryContracts.h | tests/contract/smoke/MultiAgentBoundaryContractsSmokeTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentBoundaryContractsSmokeTest --output-on-failure |
+| WP04-T014 | WP04-T014-D：MultiAgentRequest 职责边界 | WP04-T014-B：新增 MultiAgentRequest 契约对象与守卫 | ADR-008 | contracts/include/agent/MultiAgentRequest.h；contracts/include/agent/MultiAgentRequestGuards.h | tests/contract/agent/MultiAgentRequestContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentRequestContractTest --output-on-failure |
+| WP04-T015 | WP04-T015-D：MultiAgentRequest 字段表 | WP04-T015-B：实现 MultiAgentRequest 字段校验器 | T014-D | contracts/include/agent/MultiAgentRequestGuards.h | tests/contract/agent/MultiAgentRequestFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentRequestFieldContractTest --output-on-failure |
+| WP04-T016 | WP04-T016-D：MultiAgentResult 职责边界 | WP04-T016-B：新增 MultiAgentResult 契约对象与守卫 | ADR-008 | contracts/include/agent/MultiAgentResult.h；contracts/include/agent/MultiAgentResultGuards.h | tests/contract/agent/MultiAgentResultContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentResultContractTest --output-on-failure |
+| WP04-T017 | WP04-T017-D：MultiAgentResult 字段表 | WP04-T017-B：实现 MultiAgentResult 字段校验器 | T016-D | contracts/include/agent/MultiAgentResultGuards.h | tests/contract/agent/MultiAgentResultFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentResultFieldContractTest --output-on-failure |
+| WP04-T018 | WP04-T018-D：WorkerTask 职责边界 | WP04-T018-B：新增 WorkerTask 契约对象与守卫 | ADR-008 | contracts/include/task/WorkerTask.h；contracts/include/task/WorkerTaskGuards.h | tests/contract/task/WorkerTaskContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R WorkerTaskContractTest --output-on-failure |
+| WP04-T019 | WP04-T019-D：WorkerTask 字段表 | WP04-T019-B：实现 WorkerTask 字段校验器 | T018-D | contracts/include/task/WorkerTaskGuards.h | tests/contract/task/WorkerTaskFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R WorkerTaskFieldContractTest --output-on-failure |
+| WP04-T020 | WP04-T020-D：WorkerLease 职责边界 | WP04-T020-B：新增 WorkerLease 契约对象与守卫 | ADR-008 | contracts/include/task/WorkerLease.h；contracts/include/task/WorkerLeaseGuards.h | tests/contract/task/WorkerLeaseContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R WorkerLeaseContractTest --output-on-failure |
+| WP04-T021 | WP04-T021-D：WorkerLease 字段表 | WP04-T021-B：实现 WorkerLease 字段校验器 | T020-D | contracts/include/task/WorkerLeaseGuards.h | tests/contract/task/WorkerLeaseFieldContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R WorkerLeaseFieldContractTest --output-on-failure |
+| WP04-T022 | WP04-T022-D：ADR 到字段级约束映射表 | WP04-T022-B：新增 ADRFieldMappingGuards 自动检查 | T001-D 至 T021-D | contracts/include/boundary/ADRFieldMappingGuards.h | tests/contract/smoke/ADRFieldMappingContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ADRFieldMappingContractTest --output-on-failure |
+| WP04-T023 | WP04-T023-D：边界对象评审纪要 | WP04-T023-B：固化评审结论为 M4ChecklistGuards | T022-D | contracts/include/boundary/M4ChecklistGuards.h | tests/contract/smoke/M4ChecklistContractTest.cpp | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R M4ChecklistContractTest --output-on-failure |
+| WP04-T024 | WP04-T024-D：M4 冻结包文档 | WP04-T024-B：新增 WP04 CI 门禁脚本并接入 | T023-D、T023-B | scripts/ci/wp04_contract_gate.sh；tests/CMakeLists.txt（接入） | 复用 WP04 contract tests 全集 | bash scripts/ci/wp04_contract_gate.sh |
 
-## 5. 依赖与风险
+## 5. 原子任务状态清单（按子任务）
+
+| 子任务 ID | 状态 | 任务描述 | 交付物 | 完成判定 |
+|---|---|---|---|---|
+| WP04-T001-D | Done | 梳理 ADR-006 对象影响项 | deliverables/WP04-T001-ADR006对象影响清单.md | ✅ 覆盖 ContextPacket/PromptComposeRequest/PromptComposeResult 关系；8 项 ContextPacket 禁区字段、4 项 ComposeRequest 禁区、5 项 ComposeResult 禁区均可追溯至 ADR-006 §6.1/§6.2/§3.3 |
+| WP04-T001-B | Done | 新增 Prompt 边界聚合入口 | PromptBoundaryContracts.h + smoke test | ✅ include 可编译且测试通过；1/1 PromptBoundaryContractsSmokeTest passed（2026-03-17）；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptBoundaryContractsSmokeTest --output-on-failure |
+| WP04-T002-D | Done | 定义 PromptComposeRequest 职责边界 | deliverables/WP04-T002-PromptComposeRequest语义说明.md | ✅ 4 必填 + 7 可选字段明确；context_packet_id 引用模式不嵌入数据；4 类禁区指向 T001-D；ADR-006 §6.2 全覆盖 |
+| WP04-T002-B | Done | 新增 PromptComposeRequest 契约对象与守卫 | Request.h/Guards + contract test | ✅ 1/1 PromptComposeRequestContractTest passed（2026-03-17）；4 正 + 13 负全通过；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeRequestContractTest --output-on-failure |
+| WP04-T003-D | Done | 列出 PromptComposeRequest 字段清单 | deliverables/WP04-T003-PromptComposeRequest字段表.md | ✅ 锁定 4 必填 + 7 可选；字段规则 R1-R7 与组合规则 C1/C2 完整；不含 provider_payload / rendered_prompt / messages 等结果层字段 |
+| WP04-T003-B | Done | 实现 PromptComposeRequest 字段校验器 | Guards + field contract test | ✅ 1/1 PromptComposeRequestFieldContractTest passed（2026-03-17）；新增 request/context 一致性与 visible_tools 唯一性校验；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeRequestFieldContractTest --output-on-failure |
+| WP04-T004-D | Done | 定义 PromptComposeResult 职责边界 | deliverables/WP04-T004-PromptComposeResult语义说明.md | ✅ 锁定 4 必填 + 2 可选字段；只表达 messages/selected_prompt_id/selected_version/estimated_tokens 与裁剪/警告元数据；5 类 memory/context 写回禁区均可追溯至 ADR-006 §6.3/§3.3 |
+| WP04-T004-B | Done | 新增 PromptComposeResult 契约对象与守卫 | Result.h/Guards + contract test | ✅ 1/1 PromptComposeResultContractTest passed（2026-03-17）；必填 messages/selected_prompt_id/selected_version/estimated_tokens 全受守卫约束；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeResultContractTest --output-on-failure |
+| WP04-T005-D | Done | 列出 PromptComposeResult 字段清单 | deliverables/WP04-T005-PromptComposeResult字段表.md | ✅ 锁定 4 必填 + 2 可选；R1-R7 与 C1 完整；messages/estimated_tokens 与 PromptPolicy、LLMRequest 的衔接明确；不含 provider_payload / tool_visibility_patch / memory 写回字段 |
+| WP04-T005-B | Done | 实现 PromptComposeResult 字段校验器 | Guards + field contract test | ✅ 1/1 PromptComposeResultFieldContractTest passed（2026-03-17）；新增 pruned_sections 唯一性与可选向量 hygiene 校验；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R PromptComposeResultFieldContractTest --output-on-failure |
+| WP04-T006-D | Done | 梳理 ADR-007 对象影响项 | deliverables/WP04-T006-ADR007对象影响清单.md | ✅ 覆盖 ReflectionDecision/RecoveryRequest/RecoveryOutcome 三对象；明确 ReflectionDecision/RecoveryOutcome 禁区与 RecoveryRequest 最小输入槽位；D→B 映射锁定 RecoveryBoundaryContracts 聚合入口与 smoke gate |
+| WP04-T006-B | Done | 新增 Recovery 边界聚合入口 | RecoveryBoundaryContracts.h + smoke test | ✅ 1/1 RecoveryBoundaryContractsSmokeTest passed（2026-03-17）；聚合头复用 RecoveryBoundaryGuards 并固化 3 个 ADR-007 影响对象目录；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryBoundaryContractsSmokeTest --output-on-failure |
+| WP04-T007-D | Done | 定义 ReflectionDecision 职责边界 | deliverables/WP04-T007-ReflectionDecision语义说明.md | ✅ 锁定 3 必填 + 6 可选槽位；对象仅表达 decision_kind/rationale/confidence/hint_ref/relevant_observation_refs 等认知建议；5 项调度禁区可追溯至 ADR-007 §5.1，D→B 三件套已锁定 |
+| WP04-T007-B | Done | 新增 ReflectionDecision 契约对象与守卫 | ReflectionDecision.h/Guards + contract test | ✅ 1/1 ReflectionDecisionContractTest passed（2026-03-17）；新增 suggestion-only 对象与 required/boundary guards，并通过复用 RecoveryBoundaryGuards 拦截 retry_after_ms 等调度字段；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ReflectionDecisionContractTest --output-on-failure |
+| WP04-T008-D | Done | 列出 ReflectionDecision 字段清单 | deliverables/WP04-T008-ReflectionDecision字段表.md | ✅ 锁定 3 必填 + 6 可选字段；L1/L2/L3 分层规则闭合；新增 confidence 有限值、relevant_observation_refs 非空/唯一、tags hygiene 规则；验证 T008 只做字段规则不扩张到 RecoveryRequest |
+| WP04-T008-B | Done | 实现 ReflectionDecision 字段校验器 | Guards + field contract test | ✅ 1/1 ReflectionDecisionFieldContractTest passed（2026-03-18）；新增 confidence 有限值校验、relevant_observation_refs 非空/去重校验、tags hygiene，并复用 RecoveryBoundaryGuards 继续拦截 retry_after_ms 等调度字段；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ReflectionDecisionFieldContractTest --output-on-failure |
+| WP04-T009-D | Done | 定义 RecoveryRequest 语义 | deliverables/WP04-T009-RecoveryRequest语义说明.md | ✅ 锁定 5 必填 + 2 可选槽位；RecoveryRequest 明确为 runtime-owned admission input，复用 ReflectionDecision/ErrorInfo/Observation/Checkpoint/BudgetSnapshot，并阻断 decision_kind/executed_action/retry_after_ms 等顶层越界字段 |
+| WP04-T009-B | Done | 新增 RecoveryRequest 契约对象与守卫 | RecoveryRequest.h/Guards + contract test | ✅ 1/1 RecoveryRequestContractTest passed（2026-03-18）；新增 runtime-owned admission object、嵌套 IdempotencyAndSideEffectReport 与 required/boundary guards，阻断顶层 decision_kind/executed_action/retry_after_ms 越界；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryRequestContractTest --output-on-failure |
+| WP04-T010-D | Done | 列出 RecoveryRequest 字段清单 | deliverables/WP04-T010-RecoveryRequest字段表.md | ✅ 锁定 5 必填 + 2 可选字段及嵌套 IdempotencyAndSideEffectReport 规则；L1/L2/L3 分层闭合；新增 request_id/goal_id 对齐、error_info 镜像 latest_observation.error、source_ref 对齐与幂等键准入证据规则 |
+| WP04-T010-B | Done | 实现 RecoveryRequest 字段校验器 | Guards + field contract test | ✅ 1/1 RecoveryRequestFieldContractTest passed（2026-03-18）；新增 validate_idempotency_and_side_effect_report_field_rules 与 validate_recovery_request_field_rules，覆盖 request/goal 一致性、error/source_ref 对齐、safe replay + side effects 需 idempotency_key；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryRequestFieldContractTest --output-on-failure |
+| WP04-T011-D | Done | 定义 RecoveryOutcome 职责边界 | deliverables/WP04-T011-RecoveryOutcome语义说明.md | ✅ 锁定 2 必填 + 5 可选槽位；RecoveryOutcome 明确为 runtime-owned execution result object，只表达 executed_action/final_runtime_state/updated_retry_count/checkpoint_ref/compensation_result_ref/rejection_reason/escalation_reason，并阻断 failure_root_cause/root_cause_analysis/belief_patch/plan_patch_hint 等失败归因字段 |
+| WP04-T011-B | Done | 新增 RecoveryOutcome 契约对象与守卫 | RecoveryOutcome.h/Guards + contract test | ✅ 新增 runtime-owned RecoveryOutcome 契约对象与 required/boundary guards；复用 RecoveryBoundaryGuards 阻断 failure_root_cause/root_cause_analysis/belief_patch/plan_patch_hint 等失败归因字段；48/48 contract tests passed（含 1/1 RecoveryOutcomeContractTest，2026-03-18）；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryOutcomeContractTest --output-on-failure |
+| WP04-T012-D | Not Started | 列出 RecoveryOutcome 字段清单 | deliverables/WP04-T012-RecoveryOutcome字段表.md | 覆盖 executed_action/final_runtime_state/rejection_reason/checkpoint_ref |
+| WP04-T012-B | Not Started | 实现 RecoveryOutcome 字段校验器 | Guards + field contract test | 非法字段混入可阻断 |
+| WP04-T013-D | Not Started | 梳理 ADR-008 对象影响项 | deliverables/WP04-T013-ADR008对象影响清单.md | 覆盖 AgentRequest 与 MultiAgentRequest 分层 |
+| WP04-T013-B | Not Started | 新增 MultiAgent 边界聚合入口 | MultiAgentBoundaryContracts.h + smoke test | include 可编译且测试通过 |
+| WP04-T014-D | Not Started | 定义 MultiAgentRequest 职责边界 | deliverables/WP04-T014-MultiAgentRequest语义说明.md | 只表达协同子域请求，不复用 AgentRequest |
+| WP04-T014-B | Not Started | 新增 MultiAgentRequest 契约对象与守卫 | MultiAgentRequest.h/Guards + contract test | 复用 AgentRequest 的越界场景被阻断 |
+| WP04-T015-D | Not Started | 列出 MultiAgentRequest 字段清单 | deliverables/WP04-T015-MultiAgentRequest字段表.md | 覆盖 parent_request_id/goal_fragment/plan_fragment/guards/stop_conditions |
+| WP04-T015-B | Not Started | 实现 MultiAgentRequest 字段校验器 | Guards + field contract test | 协同字段约束可自动验证 |
+| WP04-T016-D | Not Started | 定义 MultiAgentResult 职责边界 | deliverables/WP04-T016-MultiAgentResult语义说明.md | 只表达协同结果，不承担 AgentResult |
+| WP04-T016-B | Not Started | 新增 MultiAgentResult 契约对象与守卫 | MultiAgentResult.h/Guards + contract test | 终态语义越权被阻断 |
+| WP04-T017-D | Not Started | 列出 MultiAgentResult 字段清单 | deliverables/WP04-T017-MultiAgentResult字段表.md | 覆盖 subtask_results/merged_result/conflicts/worker_trace_refs/recommended_next_action |
+| WP04-T017-B | Not Started | 实现 MultiAgentResult 字段校验器 | Guards + field contract test | 字段口径可程序化校验 |
+| WP04-T018-D | Not Started | 定义 WorkerTask 职责边界 | deliverables/WP04-T018-WorkerTask语义说明.md | 不携带全局 Session/FSM 语义 |
+| WP04-T018-B | Not Started | 新增 WorkerTask 契约对象与守卫 | WorkerTask.h/Guards + contract test | 全局语义越权被阻断 |
+| WP04-T019-D | Not Started | 列出 WorkerTask 字段清单 | deliverables/WP04-T019-WorkerTask字段表.md | 覆盖 task_id/parent_task_id/lease_id/worker_type/allowed_tools/timeout/idempotency_key |
+| WP04-T019-B | Not Started | 实现 WorkerTask 字段校验器 | Guards + field contract test | 必填缺失和类型非法可检测 |
+| WP04-T020-D | Not Started | 定义 WorkerLease 职责边界 | deliverables/WP04-T020-WorkerLease语义说明.md | 仅租约语义，不承担结果或调度策略 |
+| WP04-T020-B | Not Started | 新增 WorkerLease 契约对象与守卫 | WorkerLease.h/Guards + contract test | 租约边界可自动验证 |
+| WP04-T021-D | Not Started | 列出 WorkerLease 字段清单 | deliverables/WP04-T021-WorkerLease字段表.md | 覆盖 lease_id/worker_ref/deadline/renewal/release_reason |
+| WP04-T021-B | Not Started | 实现 WorkerLease 字段校验器 | Guards + field contract test | 字段完整性可程序化判定 |
+| WP04-T022-D | Not Started | 建立 ADR 到字段约束映射表 | deliverables/WP04-T022-ADR字段映射表.md | 每条 ADR 约束映射到对象或禁止字段 |
+| WP04-T022-B | Not Started | 新增 ADR 字段映射自动检查守卫 | ADRFieldMappingGuards.h + smoke test | ADR 映射缺口可自动识别 |
+| WP04-T023-D | Not Started | 组织边界对象评审 | deliverables/WP04-T023-评审纪要.md | 无双主控/双上下文主控/双恢复主控 |
+| WP04-T023-B | Not Started | 固化评审结论为 M4 checklist 守卫 | M4ChecklistGuards.h + smoke test | 评审决议可程序化执行 |
+| WP04-T024-D | Not Started | 发布边界对象 M4 冻结包 | deliverables/WP04-T024-M4冻结包.md | 可作为 prompt/runtime/multi_agent 基线 |
+| WP04-T024-B | Not Started | 新增并接入 WP04 CI 门禁脚本 | scripts/ci/wp04_contract_gate.sh | gate 返回码符合预期 |
+
+## 6. 推荐执行顺序
+
+1. 先做 Prompt 链路：T001-D/B -> T005-D/B。
+2. 再做 Recovery 链路：T006-D/B -> T012-D/B。
+3. 再做 MultiAgent 链路：T013-D/B -> T021-D/B。
+4. 最后做闭环与门禁：T022-D/B -> T023-D/B -> T024-D/B。
+
+## 7. 阻塞项与解阻条件
+
+1. BLK-01：只完成 ADR 边界说明，未同步落盘对象与测试。  
+解阻条件：每个 Txxx-D 进入 In Review 前，Txxx-B 至少完成代码骨架和测试骨架提交。
+2. BLK-02：WP03 主链路对象未冻结导致 WP04 边界对象字段口径不稳定。  
+解阻条件：WP03-T018-D/B 完成并发布 M3 冻结包。
+3. BLK-03：CMake/CTest 无法执行 WP04 新增 contract tests。  
+解阻条件：cmake -S . -B build-ci -G Ninja 成功，且 ctest --test-dir build-ci -L contract 可执行。
+
+## 8. 依赖与风险
 
 1. 若 ReflectionDecision 混入运行时调度字段，ADR-007 将被实质性回退。
-2. 若 MultiAgentRequest 复用 AgentRequest，ADR-008 的全局主控/协同子域分层会失效。
+2. 若 MultiAgentRequest 复用 AgentRequest，ADR-008 的全局主控/协同分层会失效。
 3. 若 PromptComposeRequest 重新承载 ContextPacket 语义，ADR-006 将被实质性回退。
+4. 若 T022/T023 缺少 Build 守卫，M4 评审结论无法形成可执行门禁。

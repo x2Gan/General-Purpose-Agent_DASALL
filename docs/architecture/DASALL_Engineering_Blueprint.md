@@ -80,13 +80,14 @@
 
 ```text
 DASALL-OS/
-├── apps/                          # 产品入口与运行壳层
-│   ├── cli/                       #   命令行交互入口
-│   ├── daemon/                    #   后台守护进程入口
-│   ├── gateway/                   #   HTTP/WebSocket/MQTT 网关入口
-│   └── simulator/                 #   桌面模拟/集成联调入口
+├── automation/                     #   项目开发循环自动化的控制面目录
+├── apps/                           #   产品入口与运行壳层
+│   ├── cli/                        #   命令行交互入口
+│   ├── daemon/                     #   后台守护进程入口
+│   ├── gateway/                    #   HTTP/WebSocket/MQTT 网关入口
+│   └── simulator/                  #   桌面模拟/集成联调入口
 │
-├── contracts/                     # 跨模块稳定契约层（核心冻结对象）
+├── contracts/                      # 跨模块稳定契约层（核心冻结对象）
 │   ├── include/
 │   │   ├── boundary/          #   WP-01 边界守卫与对象边界名册（contract gates）
 │   │   ├── agent/             #   AgentRequest, AgentResult, GoalContract

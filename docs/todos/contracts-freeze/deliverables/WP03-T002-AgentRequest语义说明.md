@@ -1,9 +1,43 @@
 # WP03-T002 AgentRequest 语义说明
 
-最近更新时间：2026-03-15
-任务状态：In Review
+最近更新时间：2026-03-17
+任务状态：Done
 任务编号：WP03-T002
 上游输入：架构文档入口链路、WP01-T013 M1 冻结包、WP02-T015 M2 冻结包
+
+## 0. Phase 0 研究学习证据链
+
+### 本地证据清单
+
+1. 架构文档 §3.8.1：AgentRequest 被定义为"统一入口，请求、会话、用户、trace 和附件信息都从这里进入"。
+2. 架构文档 §6.1-6.2：AgentRequest 由 Access Gateway 创建，传入 Runtime 处理。
+3. ADR-008 §5.1：明确 MultiAgentRequest 不复用 AgentRequest，两者层级分离。
+4. 工程蓝图 §3.1：contracts/include/agent/ 承载 AgentRequest, AgentResult, GoalContract。
+5. WP02-T009：request_id/session_id/trace_id 横切标识规范已冻结。
+6. WP02-T007：RuntimeBudget 五维预算语义已冻结。
+7. WP02-T010：时间语义（created_at/deadline_at/timeout_ms）已冻结。
+8. WP03-T001：主链路 8 对象依赖链已冻结，AgentRequest 位于链首。
+
+### 外部参考清单
+
+1. Anthropic "Building Effective Agents"（2024-12）：orchestrator-workers 模式中 central orchestrator 接收任务请求并拥有生命周期，worker 不拥有入口请求。AgentRequest 作为统一入口与此一致——入口对象不混入执行态。
+2. Microsoft Scheduler-Agent-Supervisor Pattern：Scheduler 在 state store 中记录任务初始状态，submission process 创建 task state。AgentRequest 对应 task submission boundary，只承载请求初始信息，不携带运行中间态。
+
+### 对本任务的可落地启发
+
+1. AgentRequest 作为纯入口契约对象，不承载 runtime 运行态——与 Anthropic 入口请求和 Microsoft 初始提交一致。
+2. 验证守卫应遵循 Poka-yoke 原则（Anthropic），让误用契约变得更困难。
+3. 字段验证在契约边界执行（Consumer-Driven Contracts），必填完整性 + 禁止字段渗透。
+4. 预算与超时复用已冻结 WP-02 横切基础（RuntimeBudget, TimeDeadline），不重复发明。
+5. RequestChannel 枚举遵循 WP-02 枚举生命周期规则（Unspecified 哨兵值）。
+
+## D Gate 结果
+
+- 是否达到进入 -B 条件：**是**
+- 已定义 AgentRequest 最小语义范围（入口意图/约束/预算/元数据）
+- 已明确禁止夹带 runtime 内部状态和 provider 私有字段
+- 研究证据链完整：本地 8 条 + 外部 2 条
+- 后续 T003 字段表已同步完成，可直接输入 B 阶段
 
 ## 1. 任务理解
 

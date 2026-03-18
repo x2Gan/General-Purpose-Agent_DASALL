@@ -121,6 +121,13 @@ dasall_register_contract_test(
   smoke
 )
 
+dasall_register_contract_test(
+  dasall_contract_main_flow_contracts_smoke_test
+  MainFlowContractsSmokeTest
+  smoke/MainFlowContractsSmokeTest.cpp
+  smoke
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
@@ -164,6 +171,246 @@ dasall_register_contract_test(
   EventEnvelopeContractTest
   event/EventEnvelopeContractTest.cpp
   event
+)
+
+# agent group (WP03-T002-B)
+dasall_register_contract_test(
+  dasall_contract_agent_request_test
+  AgentRequestContractTest
+  agent/AgentRequestContractTest.cpp
+  agent
+)
+
+# agent group (WP03-T003-B)
+dasall_register_contract_test(
+  dasall_contract_agent_request_field_test
+  AgentRequestFieldContractTest
+  agent/AgentRequestFieldContractTest.cpp
+  agent
+)
+
+# agent group (WP03-T004-B)
+dasall_register_contract_test(
+  dasall_contract_goal_contract_test
+  GoalContractContractTest
+  agent/GoalContractContractTest.cpp
+  agent
+)
+
+# agent group (WP03-T005-B)
+dasall_register_contract_test(
+  dasall_contract_goal_contract_field_test
+  GoalContractFieldContractTest
+  agent/GoalContractFieldContractTest.cpp
+  agent
+)
+
+# observation group (WP03-T006-B)
+dasall_register_contract_test(
+  dasall_contract_observation_test
+  ObservationContractTest
+  observation/ObservationContractTest.cpp
+  observation
+)
+
+# observation group (WP03-T007-B)
+dasall_register_contract_test(
+  dasall_contract_observation_source_test
+  ObservationSourceContractTest
+  observation/ObservationSourceContractTest.cpp
+  observation
+)
+
+# observation group (WP03-T008-B)
+dasall_register_contract_test(
+  dasall_contract_observation_digest_boundary_test
+  ObservationDigestBoundaryContractTest
+  observation/ObservationDigestBoundaryContractTest.cpp
+  observation
+)
+
+# agent group (WP03-T009-B)
+dasall_register_contract_test(
+  dasall_contract_belief_state_test
+  BeliefStateContractTest
+  agent/BeliefStateContractTest.cpp
+  agent
+)
+
+# context group (WP03-T010-B)
+dasall_register_contract_test(
+  dasall_contract_context_packet_main_flow_test
+  ContextPacketMainFlowContractTest
+  context/ContextPacketMainFlowContractTest.cpp
+  context
+)
+
+# context group (WP03-T011-B)
+dasall_register_contract_test(
+  dasall_contract_context_packet_field_test
+  ContextPacketFieldContractTest
+  context/ContextPacketFieldContractTest.cpp
+  context
+)
+
+# checkpoint group (WP03-T012-B)
+dasall_register_contract_test(
+  dasall_contract_checkpoint_test
+  CheckpointContractTest
+  checkpoint/CheckpointContractTest.cpp
+  checkpoint
+)
+
+# checkpoint group (WP03-T013-B)
+dasall_register_contract_test(
+  dasall_contract_checkpoint_field_test
+  CheckpointFieldContractTest
+  checkpoint/CheckpointFieldContractTest.cpp
+  checkpoint
+)
+
+# agent group (WP03-T014-B)
+dasall_register_contract_test(
+  dasall_contract_agent_result_test
+  AgentResultContractTest
+  agent/AgentResultContractTest.cpp
+  agent
+)
+
+# e2e group (WP03-T015-B)
+dasall_register_contract_test(
+  dasall_contract_main_flow_e2e_test
+  MainFlowContractE2ETest
+  e2e/MainFlowContractE2ETest.cpp
+  e2e
+)
+
+# smoke group (WP03-T016-B)
+dasall_register_contract_test(
+  dasall_contract_main_flow_overlap_test
+  MainFlowOverlapContractTest
+  smoke/MainFlowOverlapContractTest.cpp
+  smoke
+)
+
+# smoke group (WP03-T017-B)
+dasall_register_contract_test(
+  dasall_contract_m3_checklist_test
+  M3ChecklistContractTest
+  smoke/M3ChecklistContractTest.cpp
+  smoke
+)
+
+# smoke group (WP04-T001-B): Prompt boundary contracts aggregate entry smoke test.
+# Validates ADR-006 §6.1/§6.2/§6.3 boundary guards for ContextPacket,
+# PromptComposeRequest, and PromptComposeResult.
+dasall_register_contract_test(
+  dasall_contract_prompt_boundary_contracts_smoke_test
+  PromptBoundaryContractsSmokeTest
+  smoke/PromptBoundaryContractsSmokeTest.cpp
+  smoke
+)
+
+# prompt group (WP04-T002-B): PromptComposeRequest contract test.
+# Validates 3-layer guards (L1 required / L2 boundary / L3 field rules) for
+# PromptComposeRequest.h and PromptComposeRequestGuards.h (ADR-006 §6.2).
+dasall_register_contract_test(
+  dasall_contract_prompt_compose_request_test
+  PromptComposeRequestContractTest
+  prompt/PromptComposeRequestContractTest.cpp
+  prompt
+)
+
+# prompt group (WP04-T003-B): PromptComposeRequest field contract test.
+# Validates field-level rules and illegal combinations from the T003 field
+# table, including request/context binding and visible_tools uniqueness.
+dasall_register_contract_test(
+  dasall_contract_prompt_compose_request_field_test
+  PromptComposeRequestFieldContractTest
+  prompt/PromptComposeRequestFieldContractTest.cpp
+  prompt
+)
+
+# prompt group (WP04-T004-B): PromptComposeResult contract test.
+# Validates required compose-result fields and rejects memory/context
+# write-back semantics via the Prompt boundary catalog.
+dasall_register_contract_test(
+  dasall_contract_prompt_compose_result_test
+  PromptComposeResultContractTest
+  prompt/PromptComposeResultContractTest.cpp
+  prompt
+)
+
+# prompt group (WP04-T005-B): PromptComposeResult field contract test.
+# Validates optional metadata field rules, including pruned_sections audit-list
+# uniqueness and composition warning vector hygiene.
+dasall_register_contract_test(
+  dasall_contract_prompt_compose_result_field_test
+  PromptComposeResultFieldContractTest
+  prompt/PromptComposeResultFieldContractTest.cpp
+  prompt
+)
+
+# smoke group (WP04-T006-B): Recovery boundary contracts aggregate entry smoke
+# test. Validates ADR-007 impact-object catalog plus aggregate visibility of the
+# existing reflection/outcome boundary guards.
+dasall_register_contract_test(
+  dasall_contract_recovery_boundary_contracts_smoke_test
+  RecoveryBoundaryContractsSmokeTest
+  smoke/RecoveryBoundaryContractsSmokeTest.cpp
+  smoke
+)
+
+# checkpoint group (WP04-T007-B): ReflectionDecision contract test.
+# Validates the suggestion-only ReflectionDecision object, its required and
+# boundary guards, and the reused ADR-007 scheduling-field rejection gate.
+dasall_register_contract_test(
+  dasall_contract_reflection_decision_test
+  ReflectionDecisionContractTest
+  checkpoint/ReflectionDecisionContractTest.cpp
+  checkpoint
+)
+
+# checkpoint group (WP04-T008-B): ReflectionDecision field contract test.
+# Validates T008 field-table hygiene rules including finite confidence,
+# observation-ref vector semantics, tags hygiene, and inherited ADR-007
+# scheduling-field rejection.
+dasall_register_contract_test(
+  dasall_contract_reflection_decision_field_test
+  ReflectionDecisionFieldContractTest
+  checkpoint/ReflectionDecisionFieldContractTest.cpp
+  checkpoint
+)
+
+# checkpoint group (WP04-T009-B): RecoveryRequest contract test.
+# Validates the runtime-owned recovery-admission object, nested evidence reuse,
+# and rejection of top-level reflection/outcome semantics.
+dasall_register_contract_test(
+  dasall_contract_recovery_request_test
+  RecoveryRequestContractTest
+  checkpoint/RecoveryRequestContractTest.cpp
+  checkpoint
+)
+
+# checkpoint group (WP04-T010-B): RecoveryRequest field contract test.
+# Validates T010 field-table rules including nested evidence-bundle
+# consistency, source-ref alignment, and idempotency-key requirements when
+# safe replay is asserted after observed side-effects.
+dasall_register_contract_test(
+  dasall_contract_recovery_request_field_test
+  RecoveryRequestFieldContractTest
+  checkpoint/RecoveryRequestFieldContractTest.cpp
+  checkpoint
+)
+
+# checkpoint group (WP04-T011-B): RecoveryOutcome contract test.
+# Validates the runtime-owned recovery-result object, its required/boundary
+# guards, and the reused ADR-007 failure-attribution rejection gate.
+dasall_register_contract_test(
+  dasall_contract_recovery_outcome_test
+  RecoveryOutcomeContractTest
+  checkpoint/RecoveryOutcomeContractTest.cpp
+  checkpoint
 )
 
 # Export the converged contract test target list to tests/CMakeLists.txt.
