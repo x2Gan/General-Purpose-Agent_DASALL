@@ -413,6 +413,16 @@ dasall_register_contract_test(
   checkpoint
 )
 
+# checkpoint group (WP04-T012-B): RecoveryOutcome field contract test.
+# Validates T012 field-table rules including whitespace-only string hygiene and
+# distinct checkpoint/compensation control references.
+dasall_register_contract_test(
+  dasall_contract_recovery_outcome_field_test
+  RecoveryOutcomeFieldContractTest
+  checkpoint/RecoveryOutcomeFieldContractTest.cpp
+  checkpoint
+)
+
 # Export the converged contract test target list to tests/CMakeLists.txt.
 set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
   "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"

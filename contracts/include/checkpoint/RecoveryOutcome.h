@@ -31,9 +31,10 @@ namespace dasall::contracts {
 //   These belong to ReflectionDecision or other cognition-layer artifacts and
 //   are enforced by RecoveryBoundaryGuards / RecoveryOutcomeGuards.
 //
-// T011 scope discipline:
-//   - T011 freezes the object skeleton and required/boundary guards only.
-//   - T012 will add field-table hygiene and combination rules.
+// T011/T012 scope discipline:
+//   - T011 froze the object skeleton plus required/boundary guards.
+//   - T012 adds field-table hygiene and minimal combination rules without
+//     redefining this object's slot set.
 // ---------------------------------------------------------------------------
 struct RecoveryOutcome {
   // -----------------------------------------------------------------------
