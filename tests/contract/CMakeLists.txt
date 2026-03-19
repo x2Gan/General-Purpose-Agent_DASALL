@@ -285,6 +285,14 @@ dasall_register_contract_test(
   task
 )
 
+# task group (WP04-T020-B)
+dasall_register_contract_test(
+  dasall_contract_worker_lease_test
+  WorkerLeaseContractTest
+  task/WorkerLeaseContractTest.cpp
+  task
+)
+
 # context group (WP03-T010-B)
 dasall_register_contract_test(
   dasall_contract_context_packet_main_flow_test
