@@ -12,6 +12,16 @@ add_custom_target(dasall_contract_tests
   DEPENDS ${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}
 )
 
+add_custom_target(dasall_wp04_contract_gate
+  COMMAND ${CMAKE_COMMAND} -E env
+    BUILD_DIR=${CMAKE_BINARY_DIR}
+    WP04_GATE_SKIP_CONFIGURE=1
+    WP04_GATE_SKIP_BUILD=1
+    bash ${CMAKE_SOURCE_DIR}/scripts/ci/wp04_contract_gate.sh
+  DEPENDS dasall_contract_tests
+  USES_TERMINAL
+)
+
 if(NOT DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "dasall_contract_tests requires at least one registered contract test target")
 endif()

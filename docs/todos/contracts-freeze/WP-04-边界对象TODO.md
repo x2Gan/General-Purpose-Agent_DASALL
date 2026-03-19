@@ -99,8 +99,8 @@
 | WP04-T022-B | Done | 新增 ADR 字段映射自动检查守卫 | ADRFieldMappingGuards.h + smoke test | ✅ 新增 `ADRFieldMappingGuards.h` 与 `ADRFieldMappingContractTest`；自动检查对象 catalog 完整性、禁止字段 catalog 完整性、guard 命中和重复条目；59/59 contract tests passed（含 1/1 ADRFieldMappingContractTest，2026-03-19）；验证命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R ADRFieldMappingContractTest --output-on-failure && ctest --test-dir build-ci -L contract --output-on-failure |
 | WP04-T023-D | Done | 组织边界对象评审 | deliverables/WP04-T023-评审纪要.md | ✅ 已形成 10 对象评审纪要、10 Gate M4 冻结前评审结论表与 Design→Build 映射；明确 ADR-006/007/008 分别无双上下文主控/双恢复主控/双主控；D Gate=PASS（2026-03-19） |
 | WP04-T023-B | Done | 固化评审结论为 M4 checklist 守卫 | M4ChecklistGuards.h + smoke test | ✅ 新增 `M4ChecklistGuards.h` 与 `M4ChecklistContractTest`；固化 10 项 M4 冻结前评审 Gate，并提供首个失败 Gate 报告与 passed-gate 统计；60/60 contract tests passed（含 1/1 M4ChecklistContractTest，2026-03-19）；验证命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R M4ChecklistContractTest --output-on-failure && ctest --test-dir build-ci -L contract --output-on-failure |
-| WP04-T024-D | Not Started | 发布边界对象 M4 冻结包 | deliverables/WP04-T024-M4冻结包.md | 可作为 prompt/runtime/multi_agent 基线 |
-| WP04-T024-B | Not Started | 新增并接入 WP04 CI 门禁脚本 | scripts/ci/wp04_contract_gate.sh | gate 返回码符合预期 |
+| WP04-T024-D | Done | 发布边界对象 M4 冻结包 | deliverables/WP04-T024-M4冻结包.md | ✅ M4 冻结资产、10 Gate、23 required tests、Design→Build 映射与生效门禁已落盘；D Gate=PASS（2026-03-19） |
+| WP04-T024-B | Done | 新增并接入 WP04 CI 门禁脚本 | scripts/ci/wp04_contract_gate.sh；tests/CMakeLists.txt | ✅ 新增 `wp04_contract_gate.sh` 与 `dasall_wp04_contract_gate` target；正向命令 `bash scripts/ci/wp04_contract_gate.sh` 通过（23 required tests 注册通过、23/23 WP04 tests passed、60/60 contract tests passed）；负向命令缺失 required test 时返回 `NEGATIVE_RC=1`；接入命令 `cmake --build build-ci --target dasall_wp04_contract_gate` 通过（2026-03-19） |
 
 ## 6. 推荐执行顺序
 
