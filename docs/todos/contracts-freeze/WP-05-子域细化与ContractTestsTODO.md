@@ -1,6 +1,6 @@
 # WP-05 子域细化与 Contract Tests TODO
 
-最近更新时间：2026-03-16
+最近更新时间：2026-03-19
 
 ## 1. 工作包目标
 
@@ -50,8 +50,8 @@
 
 | 子任务 ID | 状态 | 任务描述 | 交付物 | 完成判定 |
 |---|---|---|---|---|
-| WP05-T001-D | Not Started | 制定子域推进顺序和并行边界 | deliverables/WP05-T001-子域推进顺序表.md | 覆盖 tool/prompt/memory/task/event/llm 顺序与并行限制 |
-| WP05-T001-B | Not Started | 新增子域推进顺序守卫 | DomainRolloutGuards.h + contract test | 顺序违规可自动检测 |
+| WP05-T001-D | Done | 制定子域推进顺序和并行边界 | deliverables/WP05-T001-子域推进顺序表.md | ✅ 新增四波 rollout 方案：Wave1 tool；Wave2 prompt+memory；Wave3 task+event；Wave4 llm；明确允许并行、禁止并行和越权禁区，D Gate=PASS |
+| WP05-T001-B | Done | 新增子域推进顺序守卫 | DomainRolloutGuards.h + contract test | ✅ 新增 DomainRolloutGuards.h 与 DomainRolloutContractTest；61/61 contract tests passed（含 1/1 DomainRolloutContractTest，2026-03-19）；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R DomainRolloutContractTest --output-on-failure |
 | WP05-T002-D | Not Started | 细化 ToolRequest 职责边界 | deliverables/WP05-T002-ToolRequest语义说明.md | 不重复定义 error/budget/observation |
 | WP05-T002-B | Not Started | 新增 ToolRequest 契约对象与守卫 | ToolRequest.h/Guards + contract test | 越界语义被阻断 |
 | WP05-T003-D | Not Started | 细化 ToolResult 职责边界 | deliverables/WP05-T003-ToolResult语义说明.md | 可折叠到 Observation |

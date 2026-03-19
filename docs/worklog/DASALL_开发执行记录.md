@@ -8,6 +8,58 @@
 
 ---
 
+## 记录 #037
+
+- 日期：2026-03-19
+- 阶段：contracts 冻结（WP-05 双轨执行）
+- 任务：WP05-T001 子域推进顺序与执行顺序守卫
+- 状态：已完成
+
+### 改动
+
+1. 完成 WP05-T001-D 交付：
+   - 新增 design 文档：
+     - [docs/todos/contracts-freeze/deliverables/WP05-T001-子域推进顺序表.md](docs/todos/contracts-freeze/deliverables/WP05-T001-子域推进顺序表.md)
+   - 固化四波 rollout：Wave1 `tool`；Wave2 `prompt + memory`；Wave3 `task + event`；Wave4 `llm`。
+   - 明确允许并行、禁止并行、越权禁区和 Design->Build 映射。
+2. 完成 WP05-T001-B 代码落地：
+   - 新增 header-only 守卫：
+     - [contracts/include/boundary/DomainRolloutGuards.h](contracts/include/boundary/DomainRolloutGuards.h)
+   - 提供 `DomainSubdomain`、`DomainRolloutWave`、`DomainRolloutDecision`、`DomainRolloutSnapshot`、`evaluate_domain_rollout_start()` 和完成计数 helper。
+3. 新增 smoke contract test 并接入：
+   - [tests/contract/smoke/DomainRolloutContractTest.cpp](tests/contract/smoke/DomainRolloutContractTest.cpp)
+   - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `DomainRolloutContractTest`。
+4. 回写任务状态：
+   - [docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md) 将 WP05-T001-D/B 更新为 Done，并补充验收证据。
+
+### 测试
+
+1. 聚合验收：
+   - `cmake --build build-ci --target dasall_contract_tests`
+   - 结果：通过；CMake 自动重生成后，61/61 contract tests passed，新增 `DomainRolloutContractTest` 被纳入 `contract;smoke` 标签。
+2. 指定测试验收：
+   - `ctest --test-dir build-ci -R DomainRolloutContractTest --output-on-failure`
+   - 结果：通过；1/1 test passed。
+3. 负例覆盖由新增测试内联验证：
+   - `prompt` 在 `tool` 未完成时被阻断。
+   - `prompt` 在 `task` 已启动的跨波次场景下被阻断。
+   - `llm` 在 `event` 未完成时被阻断。
+   - 已完成子域重复启动被阻断。
+
+### 结果
+
+1. WP05-T001-D/B 已完成，后续 T002-T010 可基于统一 rollout guard 继续推进。
+2. WP05 当前推荐顺序已从“文档建议”收敛为可执行的 compile-time/contracts 守卫。
+
+### 下一步
+
+1. 按顺序推进 WP05-T002-D/B（ToolRequest 职责边界与契约对象）。
+
+### 风险
+
+1. 当前 rollout wave 属于 WP05 的首版节奏守卫；若后续评审决定扩大或收缩并行窗口，需要同步修订设计文档和 `DomainRolloutGuards.h`，避免文档与守卫漂移。
+2. CMake Tools 在当前 VS Code 环境仍无法成功配置项目，构建验收暂时依赖仓库既有 `build-ci` 目录上的命令链路。
+
 ## 记录 #036
 
 - 日期：2026-03-16

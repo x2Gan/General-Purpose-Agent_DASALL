@@ -142,6 +142,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T001-B): domain rollout guard smoke test.
+# Validates the approved WP05 rollout waves, including allowed in-wave
+# parallelism and rejection of missing prerequisites or duplicate starts.
+dasall_register_contract_test(
+  dasall_contract_domain_rollout_test
+  DomainRolloutContractTest
+  smoke/DomainRolloutContractTest.cpp
+  smoke
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
