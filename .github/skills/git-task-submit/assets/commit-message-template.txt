@@ -1,0 +1,20 @@
+<type>(<scope>): <subject>
+
+Context:
+- 任务来源：<task or request>
+- 约束来源：<ADR / doc section / repo rule>
+
+Changes:
+- <change 1>
+- <change 2>
+- <change 3>
+
+Validation:
+- <command 1> + <result>
+- <command 2> + <result>
+
+Traceability:
+- TODO: <path>#Lx
+- Worklog: <path>#Lx
+
+Refs: <optional refs>
