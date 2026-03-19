@@ -361,6 +361,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP04-T013-B): Multi-agent boundary contracts aggregate entry
+# smoke test. Validates ADR-008 impact-object catalog plus aggregate visibility
+# of the existing request/result/worker-task boundary guards.
+dasall_register_contract_test(
+  dasall_contract_multi_agent_boundary_contracts_smoke_test
+  MultiAgentBoundaryContractsSmokeTest
+  smoke/MultiAgentBoundaryContractsSmokeTest.cpp
+  smoke
+)
+
 # checkpoint group (WP04-T007-B): ReflectionDecision contract test.
 # Validates the suggestion-only ReflectionDecision object, its required and
 # boundary guards, and the reused ADR-007 scheduling-field rejection gate.

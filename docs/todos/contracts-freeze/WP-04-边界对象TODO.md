@@ -1,6 +1,6 @@
 # WP-04 边界对象 TODO
 
-最近更新时间：2026-03-18
+最近更新时间：2026-03-19
 
 ## 1. 工作包目标
 
@@ -77,8 +77,8 @@
 | WP04-T011-B | Done | 新增 RecoveryOutcome 契约对象与守卫 | RecoveryOutcome.h/Guards + contract test | ✅ 新增 runtime-owned RecoveryOutcome 契约对象与 required/boundary guards；复用 RecoveryBoundaryGuards 阻断 failure_root_cause/root_cause_analysis/belief_patch/plan_patch_hint 等失败归因字段；48/48 contract tests passed（含 1/1 RecoveryOutcomeContractTest，2026-03-18）；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryOutcomeContractTest --output-on-failure |
 | WP04-T012-D | Done | 列出 RecoveryOutcome 字段清单 | deliverables/WP04-T012-RecoveryOutcome字段表.md | ✅ 锁定 2 必填 + 5 可选字段；L1/L2/L3 分层闭合；新增 whitespace hygiene 与 checkpoint_ref/compensation_result_ref 去塌缩规则；覆盖 executed_action/final_runtime_state/rejection_reason/checkpoint_ref |
 | WP04-T012-B | Done | 实现 RecoveryOutcome 字段校验器 | Guards + field contract test | ✅ 新增 `validate_recovery_outcome_field_rules`，继承 T011 required/boundary guards，并阻断 whitespace-only 字符串与 collapsed control refs；49/49 contract tests passed（含 1/1 RecoveryOutcomeFieldContractTest，2026-03-18）；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R RecoveryOutcomeFieldContractTest --output-on-failure |
-| WP04-T013-D | Not Started | 梳理 ADR-008 对象影响项 | deliverables/WP04-T013-ADR008对象影响清单.md | 覆盖 AgentRequest 与 MultiAgentRequest 分层 |
-| WP04-T013-B | Not Started | 新增 MultiAgent 边界聚合入口 | MultiAgentBoundaryContracts.h + smoke test | include 可编译且测试通过 |
+| WP04-T013-D | Done | 梳理 ADR-008 对象影响项 | deliverables/WP04-T013-ADR008对象影响清单.md | ✅ 覆盖 MultiAgentRequest/MultiAgentResult/WorkerTask/WorkerLease 四对象；明确 AgentRequest/AgentResult/顶层 checkpoint 只作为上游锚点；D→B 映射锁定 MultiAgentBoundaryContracts 聚合入口与 smoke gate |
+| WP04-T013-B | Done | 新增 MultiAgent 边界聚合入口 | MultiAgentBoundaryContracts.h + smoke test | ✅ 新增 compile-time MultiAgentBoundaryContracts 聚合头并复用 MultiAgentBoundaryGuards；固化 4 个 ADR-008 影响对象目录；50/50 contract tests passed（含 1/1 MultiAgentBoundaryContractsSmokeTest，2026-03-19）；验证命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R MultiAgentBoundaryContractsSmokeTest --output-on-failure && ctest --test-dir build-ci -L contract --output-on-failure |
 | WP04-T014-D | Not Started | 定义 MultiAgentRequest 职责边界 | deliverables/WP04-T014-MultiAgentRequest语义说明.md | 只表达协同子域请求，不复用 AgentRequest |
 | WP04-T014-B | Not Started | 新增 MultiAgentRequest 契约对象与守卫 | MultiAgentRequest.h/Guards + contract test | 复用 AgentRequest 的越界场景被阻断 |
 | WP04-T015-D | Not Started | 列出 MultiAgentRequest 字段清单 | deliverables/WP04-T015-MultiAgentRequest字段表.md | 覆盖 parent_request_id/goal_fragment/plan_fragment/guards/stop_conditions |
