@@ -1,6 +1,6 @@
 # WP-05 子域细化与 Contract Tests TODO
 
-最近更新时间：2026-03-19
+最近更新时间：2026-03-20
 
 ## 1. 工作包目标
 
@@ -52,8 +52,8 @@
 |---|---|---|---|---|
 | WP05-T001-D | Done | 制定子域推进顺序和并行边界 | deliverables/WP05-T001-子域推进顺序表.md | ✅ 新增四波 rollout 方案：Wave1 tool；Wave2 prompt+memory；Wave3 task+event；Wave4 llm；明确允许并行、禁止并行和越权禁区，D Gate=PASS |
 | WP05-T001-B | Done | 新增子域推进顺序守卫 | DomainRolloutGuards.h + contract test | ✅ 新增 DomainRolloutGuards.h 与 DomainRolloutContractTest；61/61 contract tests passed（含 1/1 DomainRolloutContractTest，2026-03-19）；验证命令：cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci -R DomainRolloutContractTest --output-on-failure |
-| WP05-T002-D | Not Started | 细化 ToolRequest 职责边界 | deliverables/WP05-T002-ToolRequest语义说明.md | 不重复定义 error/budget/observation |
-| WP05-T002-B | Not Started | 新增 ToolRequest 契约对象与守卫 | ToolRequest.h/Guards + contract test | 越界语义被阻断 |
+| WP05-T002-D | Done | 细化 ToolRequest 职责边界 | deliverables/WP05-T002-ToolRequest语义说明.md | ✅ 新增 ToolRequest 语义说明，冻结执行意图/约束复用/追溯锚点边界；明确禁止 result、error、budget snapshot、Prompt/provider、ToolDescriptor/ToolIR 语义进入请求对象；D Gate=PASS |
+| WP05-T002-B | Done | 新增 ToolRequest 契约对象与守卫 | ToolRequest.h/Guards + contract test | ✅ 新增 contracts/include/tool/ToolRequest.h、contracts/include/tool/ToolRequestGuards.h、tests/contract/tool/ToolRequestContractTest.cpp，并接入 tests/contract/CMakeLists.txt；验证证据：ctest --test-dir build-ci -N -R ToolRequestContractTest 发现 1 个测试；cmake --build build-ci --target dasall_contract_tests 通过且 62/62 contract tests passed；ctest --test-dir build-ci -R ToolRequestContractTest --output-on-failure 1/1 通过（2026-03-20） |
 | WP05-T003-D | Not Started | 细化 ToolResult 职责边界 | deliverables/WP05-T003-ToolResult语义说明.md | 可折叠到 Observation |
 | WP05-T003-B | Not Started | 新增 ToolResult 契约对象与守卫 | ToolResult.h/Guards + contract test | 与 Observation 对接语义可验证 |
 | WP05-T004-D | Not Started | 细化 ToolDescriptor 与 ToolIR 分层 | deliverables/WP05-T004-ToolDescriptor-ToolIR说明.md | 注册描述与执行请求分层清晰 |

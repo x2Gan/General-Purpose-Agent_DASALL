@@ -152,6 +152,14 @@ dasall_register_contract_test(
   smoke
 )
 
+# tool group (WP05-T002-B)
+dasall_register_contract_test(
+  dasall_contract_tool_request_test
+  ToolRequestContractTest
+  tool/ToolRequestContractTest.cpp
+  tool
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
