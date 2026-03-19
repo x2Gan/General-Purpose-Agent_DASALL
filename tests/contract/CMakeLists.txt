@@ -128,6 +128,13 @@ dasall_register_contract_test(
   smoke
 )
 
+dasall_register_contract_test(
+  dasall_contract_adr_field_mapping_test
+  ADRFieldMappingContractTest
+  smoke/ADRFieldMappingContractTest.cpp
+  smoke
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
