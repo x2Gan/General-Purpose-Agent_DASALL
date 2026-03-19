@@ -1,6 +1,11 @@
 #pragma once
 
+#include <cctype>
+#include <cstddef>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "boundary/GuardCommon.h"
 #include "boundary/MultiAgentBoundaryGuards.h"
@@ -12,6 +17,53 @@ struct WorkerTaskGuardResult {
   bool ok = false;
   std::string_view reason = "worker task validation failed";
 };
+
+inline bool worker_task_string_has_non_whitespace_content(
+    std::string_view value) {
+  for (const unsigned char ch : value) {
+    if (!std::isspace(ch)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+inline bool worker_task_optional_string_has_non_whitespace_content(
+    const std::optional<std::string>& value) {
+  return !value.has_value() ||
+         worker_task_string_has_non_whitespace_content(*value);
+}
+
+inline std::string_view worker_task_trimmed_view(std::string_view value) {
+  std::size_t begin = 0;
+  while (begin < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[begin]))) {
+    ++begin;
+  }
+
+  std::size_t end = value.size();
+  while (end > begin &&
+         std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+    --end;
+  }
+
+  return value.substr(begin, end - begin);
+}
+
+inline bool worker_task_has_duplicate_allowed_tools(
+    const std::vector<std::string>& allowed_tools) {
+  for (std::size_t index = 0; index < allowed_tools.size(); ++index) {
+    const auto current = worker_task_trimmed_view(allowed_tools[index]);
+    for (std::size_t probe = index + 1; probe < allowed_tools.size(); ++probe) {
+      if (current == worker_task_trimmed_view(allowed_tools[probe])) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
 
 // Validates the required-field rules frozen by WP04-T018:
 //   1) task_id, parent_task_id, lease_id, worker_type must be present and
@@ -106,6 +158,89 @@ inline WorkerTaskGuardResult validate_worker_task_boundary(
   return WorkerTaskGuardResult{
       .ok = true,
       .reason = "worker task boundary validation passed",
+  };
+}
+
+// Validates WP04-T019 field-table rules on top of the T018 required/boundary
+// guards:
+//   1) required string fields must contain non-whitespace content.
+//   2) allowed_tools items must be non-whitespace and unique after trimming.
+//   3) idempotency_key, if present, must contain non-whitespace content.
+//   4) task_id and parent_task_id must remain distinct after trimming.
+inline WorkerTaskGuardResult validate_worker_task_field_rules(
+    const WorkerTask& task) {
+  const auto boundary_result = validate_worker_task_boundary(task);
+  if (!boundary_result.ok) {
+    return boundary_result;
+  }
+
+  if (!worker_task_string_has_non_whitespace_content(*task.task_id)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason = "task_id must contain at least one non-whitespace character",
+    };
+  }
+
+  if (!worker_task_string_has_non_whitespace_content(*task.parent_task_id)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason =
+            "parent_task_id must contain at least one non-whitespace character",
+    };
+  }
+
+  if (!worker_task_string_has_non_whitespace_content(*task.lease_id)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason = "lease_id must contain at least one non-whitespace character",
+    };
+  }
+
+  if (!worker_task_string_has_non_whitespace_content(*task.worker_type)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason = "worker_type must contain at least one non-whitespace character",
+    };
+  }
+
+  if (worker_task_trimmed_view(*task.task_id) ==
+      worker_task_trimmed_view(*task.parent_task_id)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason =
+            "task_id and parent_task_id must remain distinct after trimming whitespace",
+    };
+  }
+
+  for (const auto& allowed_tool : *task.allowed_tools) {
+    if (!worker_task_string_has_non_whitespace_content(allowed_tool)) {
+      return WorkerTaskGuardResult{
+          .ok = false,
+          .reason =
+              "allowed_tools must not contain empty or whitespace-only items",
+      };
+    }
+  }
+
+  if (worker_task_has_duplicate_allowed_tools(*task.allowed_tools)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason = "allowed_tools must not contain duplicate items",
+    };
+  }
+
+  if (!worker_task_optional_string_has_non_whitespace_content(
+          task.idempotency_key)) {
+    return WorkerTaskGuardResult{
+        .ok = false,
+        .reason =
+            "idempotency_key must contain at least one non-whitespace character when present",
+    };
+  }
+
+  return WorkerTaskGuardResult{
+      .ok = true,
+      .reason = "worker task field rules validation passed",
   };
 }
 

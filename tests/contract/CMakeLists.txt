@@ -277,6 +277,14 @@ dasall_register_contract_test(
   task
 )
 
+# task group (WP04-T019-B)
+dasall_register_contract_test(
+  dasall_contract_worker_task_field_test
+  WorkerTaskFieldContractTest
+  task/WorkerTaskFieldContractTest.cpp
+  task
+)
+
 # context group (WP03-T010-B)
 dasall_register_contract_test(
   dasall_contract_context_packet_main_flow_test
