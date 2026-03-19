@@ -135,6 +135,13 @@ dasall_register_contract_test(
   smoke
 )
 
+dasall_register_contract_test(
+  dasall_contract_m4_checklist_test
+  M4ChecklistContractTest
+  smoke/M4ChecklistContractTest.cpp
+  smoke
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
