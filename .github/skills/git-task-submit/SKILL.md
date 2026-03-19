@@ -21,6 +21,8 @@ This skill is for project-aware submission work, not generic git help. It should
 3. Stage the current task changes and submit them.
 4. Summarize the modified files into a compliant commit title and body.
 
+It is also the default submission handler for `.github/skills/project-implementation-cycle` when that workflow reaches its submission phase.
+
 ## Required Inputs
 
 Before submitting, gather these inputs from the workspace state or the user request:
@@ -47,6 +49,7 @@ Before submitting, gather these inputs from the workspace state or the user requ
 12. Push to the repository-approved target. If the repository rule explicitly requires `master`, push `origin master`; otherwise push the validated current branch or upstream target.
 13. Run a final status check so the user can see any remaining local changes after the submission.
 14. Report the final staged scope, commit title, push target, and remaining local changes back to the user.
+15. If any submission step fails, return a `Submission Blocked` result with the exact failure command, partial progress, and the minimum recovery action.
 
 ## Decision Rules
 
@@ -60,6 +63,7 @@ Before submitting, gather these inputs from the workspace state or the user requ
 8. If the staged diff and the intended task scope do not match, stop and fix the staged set before creating a commit.
 9. Prefer the repository's formal document when the skill summary and the repo rule appear inconsistent.
 10. Do not assume `master` is always the push target; verify the current branch and repository policy first.
+11. Do not report success when commit or push has not actually completed; surface the failure as `Submission Blocked`.
 
 ## Output Expectations
 
@@ -71,6 +75,7 @@ The final response should clearly include:
 4. The push command and target branch.
 5. The remaining uncommitted changes after the commit and push attempt.
 6. Any blockers that prevented submission.
+7. If blocked, the minimum next command or action needed to recover the submission.
 
 ## References
 

@@ -1,0 +1,28 @@
+请按“WP 双轨执行模板”启动任务 {{task_id}}（来源：{{source_todo}}）。
+
+你必须严格执行以下流程：
+
+1. 先研究学习：本地文档 + 至少 1 条联网业界参考。
+2. 先完成 {{task_id}}-D，再开始 {{task_id}}-B。
+3. design 和 build 必须分开输出，先完成设计产物，再进入代码与测试落地。
+4. 全程按最小原子任务推进，不允许跨工作包扩张。
+5. 若遇到 blocker，必须明确输出 Blocked、证据和解阻条件，不得伪完成。
+6. 若 blocker 在本轮内可修复，则先完成 blocker 修复，再恢复当前任务。
+7. Build 阶段离开前，必须执行一次模板合规复核：代码注释、正负例、测试发现性、TODO/工作日志证据、提交前状态隔离。
+8. 任务完成后，回写 TODO 状态与证据。
+9. 若工作区存在 `.github/skills/git-task-submit/SKILL.md`，最后必须通过该 skill 执行提交和推送；若失败则输出 `Submission Blocked`。
+
+上下文：
+
+- 项目根目录：/home/gangan/DASALL-Agent
+- 当前任务：{{task_id}}
+- 来源文档：{{source_todo}}
+- 工作包范围：{{source_todo}}
+- 本轮目标：完成 {{task_id}} 对应的本轮可交付内容并完成提交推送
+
+执行要求：
+
+1. 主动读取 `docs/development/WP双轨任务执行提示词模板.md` 作为详细执行规范。
+2. 任务完成后，基于 `docs/development/Git提交信息规范.md` 组织 commit message。
+3. 若新增或修改的代码并非显而易见，必须补充完整详细的实现意图注释。
+4. 输出必须包含：研究结论、设计任务清单、设计交付、Build 结果、Build 合规复核结果、风险与阻塞、变更文件、验收命令、提交与推送结果。

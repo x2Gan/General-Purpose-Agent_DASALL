@@ -1,0 +1,25 @@
+请切换到 blocker 修复流程，处理当前任务 {{task_id}} 在 {{source_todo}} 中遇到的阻塞。
+
+阻塞上下文：
+
+- 项目根目录：/home/gangan/DASALL-Agent
+- 原始任务：{{task_id}}
+- 来源文档：{{source_todo}}
+- blocker 类型：{{blocker_type}}
+- blocker 证据：{{blocker_evidence}}
+
+你必须严格执行以下要求：
+
+1. 先明确 blocker 属于依赖阻塞、上下文阻塞、环境阻塞、范围阻塞或验收阻塞中的哪一类。
+2. 只定义一个最小 blocker 修复动作，不得借机扩张为新的工作包。
+3. 若 blocker 可在本轮内修复，则完成修复后立即重新判断原任务 {{task_id}} 是否恢复可执行。
+4. 若 blocker 不可在本轮内安全修复，则输出 Blocked、证据、最小解阻条件，并停止本轮。
+5. 若 blocker 修复涉及代码或文档修改，必须说明这些修改是否应与原任务同轮提交。
+
+输出必须包含：
+
+1. blocker 分类结果
+2. blocker 根因与证据
+3. 最小修复动作
+4. 修复后是否恢复原任务
+5. 若未恢复，明确解阻条件
