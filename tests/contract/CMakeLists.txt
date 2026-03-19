@@ -261,6 +261,14 @@ dasall_register_contract_test(
   agent
 )
 
+# agent group (WP04-T017-B)
+dasall_register_contract_test(
+  dasall_contract_multi_agent_result_field_test
+  MultiAgentResultFieldContractTest
+  agent/MultiAgentResultFieldContractTest.cpp
+  agent
+)
+
 # context group (WP03-T010-B)
 dasall_register_contract_test(
   dasall_contract_context_packet_main_flow_test
