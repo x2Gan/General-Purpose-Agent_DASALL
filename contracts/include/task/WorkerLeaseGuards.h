@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <array>
 #include <optional>
 #include <string>
@@ -35,6 +36,23 @@ inline constexpr std::array<std::string_view, 3>
         "final_agent_response",
         "merged_result",
 };
+
+inline bool worker_lease_string_has_non_whitespace_content(
+    std::string_view value) {
+  for (const unsigned char ch : value) {
+    if (!std::isspace(ch)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+inline bool worker_lease_optional_string_has_non_whitespace_content(
+    const std::optional<std::string>& value) {
+  return !value.has_value() ||
+         worker_lease_string_has_non_whitespace_content(*value);
+}
 
 // Validates the required-field rules frozen by WP04-T020:
 //   1) lease_id and worker_ref must be present and non-empty.
@@ -107,6 +125,47 @@ inline WorkerLeaseGuardResult validate_worker_lease_boundary(
   return WorkerLeaseGuardResult{
       .ok = true,
       .reason = "worker lease boundary validation passed",
+  };
+}
+
+// Validates WP04-T021 field-table rules on top of the T020 required/boundary
+// guards:
+//   1) lease_id and worker_ref must contain non-whitespace content.
+//   2) release_reason, if present, must contain non-whitespace content.
+//   3) renewal_deadline_at must continue respecting the frozen deadline boundary.
+inline WorkerLeaseGuardResult validate_worker_lease_field_rules(
+    const WorkerLease& lease) {
+  const auto boundary_result = validate_worker_lease_boundary(lease);
+  if (!boundary_result.ok) {
+    return boundary_result;
+  }
+
+  if (!worker_lease_string_has_non_whitespace_content(*lease.lease_id)) {
+    return WorkerLeaseGuardResult{
+        .ok = false,
+        .reason = "lease_id must contain at least one non-whitespace character",
+    };
+  }
+
+  if (!worker_lease_string_has_non_whitespace_content(*lease.worker_ref)) {
+    return WorkerLeaseGuardResult{
+        .ok = false,
+        .reason = "worker_ref must contain at least one non-whitespace character",
+    };
+  }
+
+  if (!worker_lease_optional_string_has_non_whitespace_content(
+          lease.release_reason)) {
+    return WorkerLeaseGuardResult{
+        .ok = false,
+        .reason =
+            "release_reason must contain at least one non-whitespace character when present",
+    };
+  }
+
+  return WorkerLeaseGuardResult{
+      .ok = true,
+      .reason = "worker lease field rules validation passed",
   };
 }
 
