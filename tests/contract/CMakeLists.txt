@@ -463,6 +463,16 @@ dasall_register_contract_test(
   prompt
 )
 
+# prompt group (WP05-T005-B): PromptSpec/PromptRelease contract test.
+# Validates PromptSpec selection-surface constraints and PromptRelease
+# versioned-asset constraints, including cross-layer field-boundary rejection.
+dasall_register_contract_test(
+  dasall_contract_prompt_spec_release_test
+  PromptSpecReleaseContractTest
+  prompt/PromptSpecReleaseContractTest.cpp
+  prompt
+)
+
 # smoke group (WP04-T006-B): Recovery boundary contracts aggregate entry smoke
 # test. Validates ADR-007 impact-object catalog plus aggregate visibility of the
 # existing reflection/outcome boundary guards.
