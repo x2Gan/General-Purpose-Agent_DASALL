@@ -168,6 +168,14 @@ dasall_register_contract_test(
   tool
 )
 
+# tool group (WP05-T004-B)
+dasall_register_contract_test(
+  dasall_contract_tool_descriptor_ir_test
+  ToolDescriptorIRContractTest
+  tool/ToolDescriptorIRContractTest.cpp
+  tool
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
