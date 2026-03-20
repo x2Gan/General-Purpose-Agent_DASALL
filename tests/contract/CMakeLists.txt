@@ -176,6 +176,14 @@ dasall_register_contract_test(
   tool
 )
 
+# memory group (WP05-T006-B)
+dasall_register_contract_test(
+  dasall_contract_turn_session_summary_memory_test
+  TurnSessionSummaryMemoryContractTest
+  memory/TurnSessionSummaryMemoryContractTest.cpp
+  memory
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
