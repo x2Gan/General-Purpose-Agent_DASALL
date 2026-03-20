@@ -160,6 +160,14 @@ dasall_register_contract_test(
   tool
 )
 
+# tool group (WP05-T003-B)
+dasall_register_contract_test(
+  dasall_contract_tool_result_test
+  ToolResultContractTest
+  tool/ToolResultContractTest.cpp
+  tool
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
