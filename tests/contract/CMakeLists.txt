@@ -176,6 +176,14 @@ dasall_register_contract_test(
   tool
 )
 
+# llm group (WP05-T010-B)
+dasall_register_contract_test(
+  dasall_contract_llm_request_response_test
+  LLMRequestResponseContractTest
+  llm/LLMRequestResponseContractTest.cpp
+  llm
+)
+
 # memory group (WP05-T006-B)
 dasall_register_contract_test(
   dasall_contract_turn_session_summary_memory_test
