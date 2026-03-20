@@ -237,6 +237,14 @@ dasall_register_contract_test(
   event
 )
 
+# event group (WP05-T009-B)
+dasall_register_contract_test(
+  dasall_contract_event_type_payload_test
+  EventTypePayloadContractTest
+  event/EventTypePayloadContractTest.cpp
+  event
+)
+
 # agent group (WP03-T002-B)
 dasall_register_contract_test(
   dasall_contract_agent_request_test
