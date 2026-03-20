@@ -184,6 +184,14 @@ dasall_register_contract_test(
   memory
 )
 
+# memory group (WP05-T007-B)
+dasall_register_contract_test(
+  dasall_contract_memory_fact_experience_test
+  MemoryFactExperienceContractTest
+  memory/MemoryFactExperienceContractTest.cpp
+  memory
+)
+
 # error group
 dasall_register_contract_test(
   dasall_contract_result_code_test
