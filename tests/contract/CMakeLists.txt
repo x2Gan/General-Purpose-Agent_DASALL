@@ -285,6 +285,16 @@ dasall_register_contract_test(
   event
 )
 
+# event group (WP05-T015-B): EventEnvelope compatibility test.
+# Validates core-header round-trip stability, payload extension compatibility,
+# and rejection of non-whitelisted header extensions.
+dasall_register_contract_test(
+  dasall_contract_event_envelope_compatibility_test
+  EventEnvelopeCompatibilityContractTest
+  event/EventEnvelopeCompatibilityContractTest.cpp
+  event
+)
+
 # event group (WP05-T009-B)
 dasall_register_contract_test(
   dasall_contract_event_type_payload_test
