@@ -8,6 +8,62 @@
 
 ---
 
+## 记录 #039
+
+- 日期：2026-03-21
+- 阶段：contracts 冻结（WP-05 双轨执行）
+- 任务：WP05-T012 接口准入评估单与 InterfaceAdmissionGuards
+- 状态：已完成
+
+### 改动
+
+1. 完成 WP05-T012-D 交付：
+   - 新增 design 文档：
+     - [docs/todos/contracts-freeze/deliverables/WP05-T012-接口准入评估单.md](docs/todos/contracts-freeze/deliverables/WP05-T012-%E6%8E%A5%E5%8F%A3%E5%87%86%E5%85%A5%E8%AF%84%E4%BC%B0%E5%8D%95.md)
+   - 基于 T011 目录、阶段 5 准入原则、架构依赖规则与 ADR-006/008，明确 `Admit`、`Postpone`、`Return` 三类准入结论。
+   - 固化首版结论：`IToolManager`、`ILLMAdapter` 为 Admit；其余 8 个 catalog 候选为 Postpone；目录外/元数据不完整/同模块伪依赖为 Return。
+2. 完成 WP05-T012-B 代码落地：
+   - 新增 header-only 准入守卫：
+     - [contracts/include/boundary/InterfaceAdmissionGuards.h](contracts/include/boundary/InterfaceAdmissionGuards.h)
+   - 提供 `InterfaceAdmissionDecision`、`InterfaceAdmissionResult`、metadata completeness、cross-module boundary、按条目/按名称准入评估与 admitted-count helper。
+3. 新增 smoke contract test 并接入：
+   - [tests/contract/smoke/InterfaceAdmissionContractTest.cpp](tests/contract/smoke/InterfaceAdmissionContractTest.cpp)
+   - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `InterfaceAdmissionContractTest`。
+4. 回写任务状态：
+   - [docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts-freeze/WP-05-%E5%AD%90%E5%9F%9F%E7%BB%86%E5%8C%96%E4%B8%8EContractTestsTODO.md) 将 WP05-T012-D/B 更新为 Done，并补充发现性与验收证据。
+
+### 测试
+
+1. 构建前发现性检查：
+   - `ctest --test-dir build-ci -N -R InterfaceAdmissionContractTest`
+   - 结果：`Total Tests: 0`，说明新测试在重配置前尚未被发现。
+2. 重配置：
+   - `cmake -S . -B build-ci -G Ninja`
+   - 结果：通过；build-ci 成功重新生成。
+3. 聚合验收：
+   - `cmake --build build-ci --target dasall_contract_tests`
+   - 结果：通过；72/72 contract tests passed，新增 `InterfaceAdmissionContractTest` 被纳入 `contract;smoke` 标签。
+4. 构建后发现性检查：
+   - `ctest --test-dir build-ci -N -R InterfaceAdmissionContractTest`
+   - 结果：发现 1 个测试。
+5. 指定测试验收：
+   - `ctest --test-dir build-ci -R InterfaceAdmissionContractTest --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. WP05-T012-D/B 已完成，接口准入规则已从文档结论收敛为可程序化执行的 compile-time 守卫。
+2. T013 以后若新增 shared interface，已具备可复用的 admit/postpone/return 基线。
+
+### 下一步
+
+1. 按顺序推进 WP05-T013-D/B（序列化稳定性测试矩阵与首版自动化 contract tests）。
+
+### 风险
+
+1. 当前 admission baseline 只允许 2 个接口直接准入；其余候选仍依赖 supporting contracts 继续冻结，后续任务不应绕过 `Postpone` 结论直接把它们落入 contracts。
+2. CMake Tools 在当前 VS Code 环境仍会报“无法配置项目”，本轮验收继续依赖仓库已验证的 `build-ci` 命令链路。
+
 ## 记录 #038
 
 - 日期：2026-03-21

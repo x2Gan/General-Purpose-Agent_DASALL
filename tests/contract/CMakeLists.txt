@@ -162,6 +162,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T012-B): interface-admission guard smoke test.
+# Validates admit/postpone/return decisions over the stage-5 interface catalog
+# without expanding into real interface signature design.
+dasall_register_contract_test(
+  dasall_contract_interface_admission_test
+  InterfaceAdmissionContractTest
+  smoke/InterfaceAdmissionContractTest.cpp
+  smoke
+)
+
 # tool group (WP05-T002-B)
 dasall_register_contract_test(
   dasall_contract_tool_request_test
