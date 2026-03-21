@@ -252,6 +252,16 @@ dasall_register_contract_test(
   error
 )
 
+# error group (WP05-T014-B): error-code and enum compatibility test.
+# Validates ResultCode numeric/category freeze and enum lifecycle compatibility
+# downgrade rules for unknown/deprecated values.
+dasall_register_contract_test(
+  dasall_contract_error_code_enum_compatibility_test
+  ErrorCodeEnumCompatibilityContractTest
+  error/ErrorCodeEnumCompatibilityContractTest.cpp
+  error
+)
+
 # checkpoint group
 dasall_register_contract_test(
   dasall_contract_runtime_budget_test
