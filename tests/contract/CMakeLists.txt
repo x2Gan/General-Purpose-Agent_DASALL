@@ -172,6 +172,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# serialization group (WP05-T013-B): serialization compatibility contract test.
+# Covers round-trip stability, forward unknown-field tolerance, legacy timeout
+# migration, and EventEnvelope header whitelist boundary checks.
+dasall_register_contract_test(
+  dasall_contract_serialization_compatibility_test
+  SerializationCompatibilityContractTest
+  serialization/SerializationCompatibilityContractTest.cpp
+  serialization
+)
+
 # tool group (WP05-T002-B)
 dasall_register_contract_test(
   dasall_contract_tool_request_test

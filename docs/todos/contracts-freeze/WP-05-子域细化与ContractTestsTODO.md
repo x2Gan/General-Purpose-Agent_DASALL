@@ -1,6 +1,6 @@
 # WP-05 子域细化与 Contract Tests TODO
 
-最近更新时间：2026-03-20
+最近更新时间：2026-03-21
 
 ## 1. 工作包目标
 
@@ -74,8 +74,8 @@
 | WP05-T011-B | Done | 新增 InterfaceCatalog 契约目录 | InterfaceCatalog.h + contract test | ✅ 新增 contracts/include/boundary/InterfaceCatalog.h、tests/contract/smoke/InterfaceCatalogContractTest.cpp，并接入 tests/contract/CMakeLists.txt；验证证据：构建前 `ctest --test-dir build-ci -N -R InterfaceCatalogContractTest` 返回 Total Tests: 0；`cmake -S . -B build-ci -G Ninja` 重新配置成功；`cmake --build build-ci --target dasall_contract_tests` 通过；构建后 `ctest --test-dir build-ci -N -R InterfaceCatalogContractTest` 发现 1 个测试；`ctest --test-dir build-ci -R InterfaceCatalogContractTest --output-on-failure` 1/1 通过（2026-03-21） |
 | WP05-T012-D | Done | 评估接口候选必要性和边界 | deliverables/WP05-T012-接口准入评估单.md | ✅ 新增 deliverables/WP05-T012-接口准入评估单.md，基于 T011 目录、阶段 5 准入原则、架构依赖规则与 ADR-006/008，明确 `IToolManager`/`ILLMAdapter` 为 Admit，`IPlanner`/`IMemoryStore`/`IContextOrchestrator`/`IKnowledgeService`/`IExecutionService`/`IDataService`/`IAgentRegistry`/`IResultMerger` 为 Postpone，目录外/元数据不完整/同模块伪依赖为 Return；D Gate=PASS（2026-03-21） |
 | WP05-T012-B | Done | 新增 InterfaceAdmissionGuards 准入守卫 | InterfaceAdmissionGuards.h + contract test | ✅ 新增 contracts/include/boundary/InterfaceAdmissionGuards.h、tests/contract/smoke/InterfaceAdmissionContractTest.cpp，并接入 tests/contract/CMakeLists.txt；验证证据：构建前 `ctest --test-dir build-ci -N -R InterfaceAdmissionContractTest` 返回 Total Tests: 0；`cmake -S . -B build-ci -G Ninja` 重新配置成功；`cmake --build build-ci --target dasall_contract_tests` 通过且 72/72 contract tests passed；构建后 `ctest --test-dir build-ci -N -R InterfaceAdmissionContractTest` 发现 1 个测试；`ctest --test-dir build-ci -R InterfaceAdmissionContractTest --output-on-failure` 1/1 通过（2026-03-21） |
-| WP05-T013-D | Not Started | 定义序列化稳定性测试矩阵 | deliverables/WP05-T013-序列化测试矩阵.md | 覆盖核心对象序列化兼容 |
-| WP05-T013-B | Not Started | 实现序列化兼容 contract tests | SerializationCompatibilityContractTest.cpp | round-trip 与兼容断言通过 |
+| WP05-T013-D | Done | 定义序列化稳定性测试矩阵 | deliverables/WP05-T013-序列化测试矩阵.md | ✅ 新增 deliverables/WP05-T013-序列化测试矩阵.md，锁定 AgentRequest/EventEnvelope 序列化稳定性矩阵，覆盖 round-trip、未知字段前向兼容、legacy timeout_seconds 迁移、required 缺失与 header 白名单越权负例；显式给出 Design->Build 映射、Build 三件套与 D Gate=PASS（2026-03-21） |
+| WP05-T013-B | Done | 实现序列化兼容 contract tests | SerializationCompatibilityContractTest.cpp | ✅ 新增 tests/contract/serialization/SerializationCompatibilityContractTest.cpp 与 tests/contract/CMakeLists.txt 注册项；验证证据：构建前 `ctest --test-dir build-ci -N -R SerializationCompatibilityContractTest` 返回 Total Tests: 0；`cmake --build build-ci --target dasall_contract_tests` 通过且 73/73 contract tests passed；构建后 `ctest --test-dir build-ci -R SerializationCompatibilityContractTest --output-on-failure` 1/1 通过（2026-03-21） |
 | WP05-T014-D | Not Started | 定义错误码与枚举兼容测试矩阵 | deliverables/WP05-T014-错误码枚举测试矩阵.md | 可捕获 breaking 枚举变更 |
 | WP05-T014-B | Not Started | 实现错误码/枚举兼容 contract tests | ErrorCodeEnumCompatibilityContractTest.cpp | 错误语义漂移可检测 |
 | WP05-T015-D | Not Started | 定义 EventEnvelope 兼容测试矩阵 | deliverables/WP05-T015-事件测试矩阵.md | 覆盖头部稳定与 payload 扩展约束 |
