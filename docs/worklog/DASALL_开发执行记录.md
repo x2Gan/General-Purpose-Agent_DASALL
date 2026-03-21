@@ -8,6 +8,62 @@
 
 ---
 
+## 记录 #038
+
+- 日期：2026-03-21
+- 阶段：contracts 冻结（WP-05 双轨执行）
+- 任务：WP05-T011 跨模块接口候选清单与 InterfaceCatalog
+- 状态：已完成
+
+### 改动
+
+1. 完成 WP05-T011-D 交付：
+   - 新增 design 文档：
+     - [docs/todos/contracts-freeze/deliverables/WP05-T011-接口候选清单.md](docs/todos/contracts-freeze/deliverables/WP05-T011-接口候选清单.md)
+   - 基于阶段 5 准入原则、架构 7.4 模块依赖规则、Blueprint 接口文件分布与 ADR-006/008，锁定 10 个跨模块接口候选。
+   - 明确剔除 platform/infra/protocol-internal 接口，并区分 `ReviewReady` 与 `AwaitingSupportingContracts`。
+2. 完成 WP05-T011-B 代码落地：
+   - 新增 header-only 候选目录：
+     - [contracts/include/boundary/InterfaceCatalog.h](contracts/include/boundary/InterfaceCatalog.h)
+   - 提供 `InterfaceCandidate`、owner/consumer/readiness 枚举、静态 catalog 表与查询 helper，供 T012 准入守卫复用。
+3. 新增 smoke contract test 并接入：
+   - [tests/contract/smoke/InterfaceCatalogContractTest.cpp](tests/contract/smoke/InterfaceCatalogContractTest.cpp)
+   - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `InterfaceCatalogContractTest`。
+4. 回写任务状态：
+   - [docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md) 将 WP05-T011-D/B 更新为 Done，并补充发现性与验收证据。
+
+### 测试
+
+1. 构建前发现性检查：
+   - `ctest --test-dir build-ci -N -R InterfaceCatalogContractTest`
+   - 结果：`Total Tests: 0`，说明新测试在重配置前尚未被发现。
+2. 重配置：
+   - `cmake -S . -B build-ci -G Ninja`
+   - 结果：通过；build-ci 成功重新生成。
+3. 聚合验收：
+   - `cmake --build build-ci --target dasall_contract_tests`
+   - 结果：通过；71/71 contract tests passed，新增 `InterfaceCatalogContractTest` 被纳入 `contract;smoke` 标签。
+4. 构建后发现性检查：
+   - `ctest --test-dir build-ci -N -R InterfaceCatalogContractTest`
+   - 结果：发现 1 个测试。
+5. 指定测试验收：
+   - `ctest --test-dir build-ci -R InterfaceCatalogContractTest --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. WP05-T011-D/B 已完成，T012 可直接基于 `InterfaceCatalog.h` 进入接口准入守卫实现。
+2. 接口候选集已从分散的架构文本收敛为可程序化审查的 compile-time catalog。
+
+### 下一步
+
+1. 按顺序推进 WP05-T012-D/B（接口准入评估单与 InterfaceAdmissionGuards）。
+
+### 风险
+
+1. 当前 `ReviewReady` 仅覆盖 `IToolManager` 与 `ILLMAdapter`；其余候选仍依赖 supporting contracts 继续冻结，T012 不应提前把它们直接准入。
+2. CMake Tools 在当前 VS Code 环境仍会报“无法配置项目”，本轮验收继续依赖仓库已验证的 `build-ci` 命令链路。
+
 ## 记录 #037
 
 - 日期：2026-03-19

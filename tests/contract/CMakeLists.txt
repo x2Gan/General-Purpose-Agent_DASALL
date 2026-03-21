@@ -152,6 +152,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T011-B): interface-candidate catalog smoke test.
+# Validates that only retained cross-module stable dependency surfaces enter
+# the catalog and that review-ready candidates remain queryable.
+dasall_register_contract_test(
+  dasall_contract_interface_catalog_test
+  InterfaceCatalogContractTest
+  smoke/InterfaceCatalogContractTest.cpp
+  smoke
+)
+
 # tool group (WP05-T002-B)
 dasall_register_contract_test(
   dasall_contract_tool_request_test
