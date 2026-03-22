@@ -212,6 +212,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T020-B): V1 ready checklist guard contract test.
+# Validates that WP05 review conclusions are encoded as deterministic gates and
+# that the first failed gate is reported in order.
+dasall_register_contract_test(
+  dasall_contract_v1_ready_checklist_test
+  V1ReadyChecklistContractTest
+  smoke/V1ReadyChecklistContractTest.cpp
+  smoke
+)
+
 # serialization group (WP05-T013-B): serialization compatibility contract test.
 # Covers round-trip stability, forward unknown-field tolerance, legacy timeout
 # migration, and EventEnvelope header whitelist boundary checks.
