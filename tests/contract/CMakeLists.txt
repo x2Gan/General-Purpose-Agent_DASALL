@@ -182,6 +182,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T017-B): contract-tests coverage matrix guard test.
+# Validates high-risk object to contract-test mappings and blocks coverage
+# gaps by reporting the first uncovered object in a deterministic order.
+dasall_register_contract_test(
+  dasall_contract_coverage_matrix_test
+  CoverageMatrixContractTest
+  smoke/CoverageMatrixContractTest.cpp
+  smoke
+)
+
 # serialization group (WP05-T013-B): serialization compatibility contract test.
 # Covers round-trip stability, forward unknown-field tolerance, legacy timeout
 # migration, and EventEnvelope header whitelist boundary checks.
