@@ -192,6 +192,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T018-B): version-change schema contract test.
+# Validates template-level breaking/non-breaking separation and programmatic
+# guard checks for required fields, semver format, and migration readiness.
+dasall_register_contract_test(
+  dasall_contract_version_change_schema_test
+  VersionChangeSchemaContractTest
+  smoke/VersionChangeSchemaContractTest.cpp
+  smoke
+)
+
 # serialization group (WP05-T013-B): serialization compatibility contract test.
 # Covers round-trip stability, forward unknown-field tolerance, legacy timeout
 # migration, and EventEnvelope header whitelist boundary checks.
