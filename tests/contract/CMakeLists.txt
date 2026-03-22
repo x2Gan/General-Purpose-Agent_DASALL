@@ -172,6 +172,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T016-B): ADR boundary regression contract test.
+# Validates ADR-006/007/008 boundary regression over ContextPacket,
+# ReflectionDecision, and MultiAgentResult with mapping-catalog checkpoints.
+dasall_register_contract_test(
+  dasall_contract_adr_boundary_regression_test
+  ADRBoundaryRegressionContractTest
+  smoke/ADRBoundaryRegressionContractTest.cpp
+  smoke
+)
+
 # serialization group (WP05-T013-B): serialization compatibility contract test.
 # Covers round-trip stability, forward unknown-field tolerance, legacy timeout
 # migration, and EventEnvelope header whitelist boundary checks.
