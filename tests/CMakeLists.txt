@@ -22,6 +22,18 @@ add_custom_target(dasall_wp04_contract_gate
   USES_TERMINAL
 )
 
+# WP05 gate target reuses already-built contract tests and executes the
+# dedicated M5/V1-ready gate script as a single CMake entrypoint.
+add_custom_target(dasall_wp05_contract_gate
+  COMMAND ${CMAKE_COMMAND} -E env
+    BUILD_DIR=${CMAKE_BINARY_DIR}
+    WP05_GATE_SKIP_CONFIGURE=1
+    WP05_GATE_SKIP_BUILD=1
+    bash ${CMAKE_SOURCE_DIR}/scripts/ci/wp05_contract_gate.sh
+  DEPENDS dasall_contract_tests
+  USES_TERMINAL
+)
+
 if(NOT DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "dasall_contract_tests requires at least one registered contract test target")
 endif()

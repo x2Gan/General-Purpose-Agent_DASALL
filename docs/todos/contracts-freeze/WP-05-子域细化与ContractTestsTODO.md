@@ -1,6 +1,6 @@
 # WP-05 子域细化与 Contract Tests TODO
 
-最近更新时间：2026-03-21
+最近更新时间：2026-03-22
 
 ## 1. 工作包目标
 
@@ -90,8 +90,8 @@
 | WP05-T019-B | Done | 新增 BreakingReviewGuards 门禁守卫 | BreakingReviewGuards.h + contract test | ✅ 新增 contracts/include/boundary/BreakingReviewGuards.h、tests/contract/smoke/BreakingReviewContractTest.cpp，并接入 tests/contract/CMakeLists.txt；验证证据：`cmake --build build-ci --target dasall_contract_tests` 通过；`ctest --test-dir build-ci -N -R BreakingReviewContractTest` 发现 1 个测试；`ctest --test-dir build-ci -R BreakingReviewContractTest --output-on-failure` 1/1 通过（2026-03-22） |
 | WP05-T020-D | Done | 组织子域对象与测试评审 | deliverables/WP05-T020-评审纪要.md | ✅ 新增 deliverables/WP05-T020-评审纪要.md，汇总 T001-T019 评审结论并明确不回改 WP01-WP04 结论；冻结 rollout/接口准入/兼容回归/覆盖矩阵/版本变更/breaking 评审六类门禁，显式给出 Design->Build 映射、Build 三件套与 D Gate=PASS（2026-03-22） |
 | WP05-T020-B | Done | 固化评审结论为 V1 Ready checklist 守卫 | V1ReadyChecklistGuards.h + contract test | ✅ 新增 contracts/include/boundary/V1ReadyChecklistGuards.h、tests/contract/smoke/V1ReadyChecklistContractTest.cpp，并接入 tests/contract/CMakeLists.txt；验证证据：`cmake --build build-ci --target dasall_contract_tests` 通过；`ctest --test-dir build-ci -N -R V1ReadyChecklistContractTest` 发现 1 个测试；`ctest --test-dir build-ci -R V1ReadyChecklistContractTest --output-on-failure` 1/1 通过（2026-03-22） |
-| WP05-T021-D | Not Started | 发布 contracts V1 Ready 冻结包 | deliverables/WP05-T021-M5冻结包.md | 允许后续模块以 V1 contracts 为基线 |
-| WP05-T021-B | Not Started | 新增并接入 WP05 CI 门禁脚本 | scripts/ci/wp05_contract_gate.sh | gate 返回码符合预期 |
+| WP05-T021-D | Done | 发布 contracts V1 Ready 冻结包 | deliverables/WP05-T021-M5冻结包.md | ✅ 新增 deliverables/WP05-T021-M5冻结包.md，冻结发布范围限定为 WP05 子域细化与 Contract Tests 治理收口；显式给出 Design->Build 映射、Build 三件套、阻塞项与解阻条件，并给出 D Gate=PASS（2026-03-22） |
+| WP05-T021-B | Done | 新增并接入 WP05 CI 门禁脚本 | scripts/ci/wp05_contract_gate.sh | ✅ 新增 scripts/ci/wp05_contract_gate.sh，并在 tests/CMakeLists.txt 接入 dasall_wp05_contract_gate；验证证据：`bash scripts/ci/wp05_contract_gate.sh` 通过（20 required tests found，20/20 required passed，80/80 contract passed）；`export WP05_GATE_REQUIRED_TESTS=DefinitelyMissingContractTest && bash scripts/ci/wp05_contract_gate.sh` 失败符合预期（registration check failed，NEGATIVE_RC=1）；`cmake --build build-ci --target dasall_wp05_contract_gate` 通过（2026-03-22） |
 
 ## 6. 推荐执行顺序
 
