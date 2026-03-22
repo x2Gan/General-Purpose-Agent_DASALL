@@ -202,6 +202,16 @@ dasall_register_contract_test(
   smoke
 )
 
+# smoke group (WP05-T019-B): breaking-review gate contract test.
+# Validates that breaking changes must pass dedicated approval and migration
+# evidence checks, while non-breaking changes bypass the special review gate.
+dasall_register_contract_test(
+  dasall_contract_breaking_review_test
+  BreakingReviewContractTest
+  smoke/BreakingReviewContractTest.cpp
+  smoke
+)
+
 # serialization group (WP05-T013-B): serialization compatibility contract test.
 # Covers round-trip stability, forward unknown-field tolerance, legacy timeout
 # migration, and EventEnvelope header whitelist boundary checks.
