@@ -232,6 +232,17 @@ dasall_register_contract_test(
   serialization
 )
 
+# serialization group (T001): main-flow object serialization compatibility test.
+# Covers GoalContract, Observation, ObservationDigest, BeliefState, Checkpoint,
+# and AgentResult with round-trip, forward-unknown-field, and missing-required-field
+# sub-tests. Implements DASALL_contracts验收整改TODO.md T001.
+dasall_register_contract_test(
+  dasall_contract_main_flow_serialization_test
+  MainFlowSerializationCompatibilityContractTest
+  serialization/MainFlowSerializationContractTest.cpp
+  serialization
+)
+
 # tool group (WP05-T002-B)
 dasall_register_contract_test(
   dasall_contract_tool_request_test
