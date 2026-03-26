@@ -8,6 +8,46 @@
 
 ---
 
+## 记录 #049
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-010 infra CMake 落盘入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-010-D 设计收敛：
+   - 基于 infrastructure 详细设计 7/8.1，将 dasall_infra 目标的现有真实源码收敛为 core/tracing 分组，并把公开头文件通过 `PUBLIC_HEADER` 属性显式接入目标。
+   - 保留 `src/placeholder.cpp` 作为短期 non-empty 兜底，但明确其不再是唯一真实源码入口。
+2. 完成 INF-TODO-010-B 代码落地：
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_infra`
+   - `ctest --test-dir build-ci -N`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_infra` 通过，`ninja: no work to do.`。
+   - `ctest --test-dir build-ci -N` 通过，发现 101 个测试，包含既有 infra unit 与 contract 用例。
+
+### 结果
+
+1. dasall_infra 目标已具备明确的公开头文件入口和按角色分组的真实源文件入口，后续子域可以在现有变量上增量接线，而不必继续把 CMake 收敛逻辑散落到单行 target_sources 追加中。
+2. 当前收敛仍保持 L2 边界，只整理现有已冻结对象/接口的构建入口，不提前把未冻结子域实现接进目标。
+
+### 下一步
+
+1. 按阶段 D 顺序继续推进 INF-TODO-011，复核 infra 单元测试入口与按标签执行证据。
+
+### 风险
+
+1. `PUBLIC_HEADER` 当前只覆盖已冻结公开头文件；后续新增 config/secret/ota/plugin 等头文件时，必须在任务完成时同步接入该列表，否则会再次形成构建入口漂移。
+
 ## 记录 #048
 
 - 日期：2026-03-26

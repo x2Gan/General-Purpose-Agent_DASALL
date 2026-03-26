@@ -196,7 +196,7 @@
 | INF-TODO-007 | Done | 定义 HealthSnapshot 数据结构 | 详细设计 6.5、6.8、9.1 | 详细设计 6.5 HealthSnapshot；6.8 探针超时；9.1 测试矩阵 | L2 | infra/include/ 下新增 HealthSnapshot 头文件，冻结 liveness、readiness、degraded、failed_components | HealthSnapshot | unit：健康状态三值组合校验；contract：不反向写 runtime 状态 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | 无 | failed_components 项元素类型未冻结 | 先冻结顶层状态字段与集合语义 | 数据结构头文件、单测；2026-03-26 已落盘 infra/include/HealthSnapshot.h、tests/unit/infra/HealthSnapshotTest.cpp、tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp | 仅当 HealthSnapshot 字段与状态约束一致，且测试能区分 ready/degraded/fail 时完成 |
 | INF-TODO-008 | Done | 新增 IHealthMonitor 接口 | 详细设计 6.6、6.8、9.1 | 详细设计 6.6 IHealthMonitor；6.8 异常与恢复时序 | L2 | infra/include/IHealthMonitor.h | IHealthMonitor.register_probe；IHealthMonitor.evaluate | unit：探针注册和评估接口可编译；contract：评价结果只输出 HealthSnapshot | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-007 | IHealthProbe 形状与 probe timeout 细节未冻结 | 先冻结 monitor 侧接口，不落具体 probe 抽象 | 接口头文件、编译通过证据；2026-03-26 已落盘 infra/include/IHealthMonitor.h、tests/unit/infra/HealthMonitorInterfaceTest.cpp、tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp，并确认健康评估输出边界保持为 HealthSnapshot | 仅当接口方法名、返回对象与设计一致，且不侵入 runtime 恢复判定时完成 |
 | INF-TODO-009 | Done | 定义 infra 私有错误码域 | 详细设计 6.6、6.8、9.1；编码规范 3.6 | 详细设计 6.6 错误语义；9.1 failure injection | L2 | infra/include/ 下新增 infra 私有错误码枚举，并在 infra/src/ 建立最小映射入口 | INF_E_CONFIG_INVALID、INF_E_SECRET_UNAVAILABLE、INF_E_LOG_QUEUE_FULL、INF_E_AUDIT_WRITE_FAIL、INF_E_HEALTH_PROBE_TIMEOUT、INF_E_OTA_VERIFY_FAIL、INF_E_OTA_ROLLBACK_FAIL | unit：错误码可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-002、INF-TODO-005、INF-TODO-006、INF-TODO-008 | contracts::ResultCode 细粒度映射表尚未在 infra 侧成文 | 先冻结 infra 私有码域和一对多映射规则，再补细项矩阵 | 错误码头文件、映射说明、测试；2026-03-26 已落盘 infra/include/InfraErrorCode.h、infra/src/InfraErrorCode.cpp、tests/unit/infra/InfraErrorCodeTest.cpp、tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp，并确认七个私有码仍只映射到既有 contracts 粗粒度结果码 | 仅当七个私有错误码均可追溯到设计条目，且 contract 测试阻止越权映射时完成 |
-| INF-TODO-010 | Not Started | 接线 infra CMake 落盘入口 | 详细设计 7、8.1、8.2；当前 infra/CMakeLists.txt 现状 | 详细设计 7 Design -> Build 映射；8.1 目录与文件落盘建议 | L2 | 更新 infra/CMakeLists.txt，使其不再只依赖 src/placeholder.cpp，并允许按子域增量接线 include/src 目录 | infra/CMakeLists.txt | build：dasall_infra 目标可在真实头文件存在时编译；test：为后续 unit/contract 注册提供目标依赖面 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 至 INF-TODO-009 | 真实源文件数量尚少，短期仍需保留空实现兜底 | 允许保留最小 non-empty 实现，但不能再只有 placeholder-only 入口 | CMake 改动、构建通过证据 | 仅当 infra 目标能显式包含真实头文件/源文件入口，且 placeholder 不再是唯一源文件时完成 |
+| INF-TODO-010 | Done | 接线 infra CMake 落盘入口 | 详细设计 7、8.1、8.2；当前 infra/CMakeLists.txt 现状 | 详细设计 7 Design -> Build 映射；8.1 目录与文件落盘建议 | L2 | 更新 infra/CMakeLists.txt，使其不再只依赖 src/placeholder.cpp，并允许按子域增量接线 include/src 目录 | infra/CMakeLists.txt | build：dasall_infra 目标可在真实头文件存在时编译；test：为后续 unit/contract 注册提供目标依赖面 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 至 INF-TODO-009 | 真实源文件数量尚少，短期仍需保留空实现兜底 | 允许保留最小 non-empty 实现，但不能再只有 placeholder-only 入口 | CMake 改动、构建通过证据；2026-03-26 已更新 infra/CMakeLists.txt，将 core/tracing 源文件分组与 PUBLIC_HEADER 公开头文件入口显式接入 dasall_infra，并确认 placeholder 不再是唯一源文件入口 | 仅当 infra 目标能显式包含真实头文件/源文件入口，且 placeholder 不再是唯一源文件时完成 |
 | INF-TODO-011 | Not Started | 注册 infra 单元测试入口 | 详细设计 8.1、9.1；当前 tests/unit/CMakeLists.txt 现状 | 详细设计 9.1 测试矩阵；编码规范 3.7 | L2 | 新增 tests/unit/infra/ 与 tests/unit/CMakeLists.txt 注册入口 | tests/unit/infra；tests/unit/CMakeLists.txt | unit：InfraContext、LogEvent、AuditEvent、HealthSnapshot、接口编译测试 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 至 INF-TODO-010 | 当前 unit 聚合未包含 infra 子目录 | 在 unit 顶层加入 infra 子目录并确保新增用例被发现 | 单测目录、注册入口、ctest 发现性证据 | 仅当 infra 单测可被 ctest -L unit 发现并执行时完成 |
 | INF-TODO-012 | Not Started | 注册 infra contracts 边界测试入口 | 详细设计 6.5、9.1；蓝图 4.3；当前 tests/contract/CMakeLists.txt 机制 | 详细设计 6.5 contracts 对齐关系；9.1 Contract 覆盖要求 | L2 | 在 tests/contract/ 现有注册机制下新增 infra 边界用例，并扩展必要的 smoke/compatibility 断言 | tests/contract/CMakeLists.txt；tests/contract/smoke/ | contract：标识字段不越权、错误码映射不漂移、AuditEvent 引用边界稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L contract | INF-TODO-001、INF-TODO-004、INF-TODO-009 | 具体测试文件名与首批边界断言尚未冻结 | 先沿用现有 centralized registration 模式，后补充断言细则 | 合同测试源文件、注册改动、执行记录 | 仅当新增 infra 合同测试被发现并能阻止 contracts 语义越权时完成 |
 | INF-TODO-013 | Blocked | 定义 IConfigCenter 接口骨架 | 详细设计 6.3、6.6、6.9；蓝图 3.13 | 详细设计 6.6 IConfigCenter；6.9 配置项与默认策略 | L2 | 目标文件为 infra/include/IConfigCenter.h，但在 TypedConfig/patch/schema 冻结前禁止进入实现 | IConfigCenter.load_layers；IConfigCenter.get_typed；IConfigCenter.apply_override | unit：四层合并和覆盖次序；contract：Profile 不绕过 Audit 与 Runtime 主控链路 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | INF-BLK-01：TypedConfig、patch 模型、profiles 键命名未冻结 | 先完成配置模型补设计并确认 profiles 键命名 | 接口草案、阻塞记录 | 仅当配置模型补设计完成并评审通过后，才可从 Blocked 转 Not Started |
@@ -809,5 +809,55 @@ Build 合规复核：
 1. 代码注释：本轮错误码命名和映射函数足够自解释，未引入需要长注释才能读懂的控制流。
 2. 正负例覆盖：unit 和 contract 均覆盖稳定正例与边界约束断言。
 3. 测试发现性：新增测试与源文件均已完成 CMake 注册，待 ctest 执行结果回填。
-4. TODO 证据回写：已先回写设计映射与交付物，待验收结果补全。
-5. 提交隔离：本轮提交范围限定为 infra 私有错误码域、测试与证据文档。
+4. TODO 证据回写：已完成设计映射、交付物与验收结果回写。
+5. 提交隔离：本轮提交范围限定为 infra CMake 入口收敛与对应证据文档。
+
+## 22. 本轮执行记录（2026-03-26 / INF-TODO-010）
+
+### 22.1 选中任务
+
+1. 本轮任务：INF-TODO-010。
+2. 可执行性依据：INF-TODO-001 至 INF-TODO-009 已完成，当前 infra 目标虽已不止 placeholder，但 CMake 入口仍缺少“公开头文件/真实源文件按角色显式接线”的稳定结构，适合在本轮完成最小收敛。
+
+### 22.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 7 与 8.1 要求 infra 目录具备可持续扩展的 include/src 落盘入口，而不仅是维持空库可编译。
+2. 当前 infra/CMakeLists.txt 已追加少量真实源文件，但仍以零散 target_sources 形式堆叠，尚未把公开头文件作为 target 的显式入口，也未形成按角色分组的稳定接线面。
+3. tests/unit/CMakeLists.txt 已把 infra 作为独立子目录接入，说明本轮只需收敛 dasall_infra 目标本身，不需要再拆 unit/contract 注册逻辑。
+
+外部参考：
+
+1. CMake 官方目标声明实践强调把库的公开头文件与实现源文件作为目标的一部分显式收敛，有利于后续增量接线、安装/导出和 IDE 可见性；考虑当前仓库使用的 CMake 3.16，本轮采用源文件分组加 PUBLIC_HEADER 属性的兼容写法，而不是更高版本才稳定支持的 file set 语法。
+
+D 结论：
+
+1. Design -> Build 映射：更新 infra/CMakeLists.txt，把现有真实源文件收敛为 `DASALL_INFRA_CORE_SOURCES`、`DASALL_INFRA_TRACING_SOURCES`，并新增 `DASALL_INFRA_PUBLIC_HEADERS` 列表，以 `PUBLIC_HEADER` 属性作为 dasall_infra 的显式公开入口。
+2. placeholder 本轮允许保留为最小 non-empty 实现兜底，但必须与 InfraServiceFacade、InfraErrorCode 和 tracing anchor 并列，且不再作为唯一真实源码入口。
+3. 本轮不引入新的子域 CMakeLists，也不预先接线尚未冻结的 config/secret/ota/plugin 实现文件，避免越过当前 L2 边界。
+4. Build 三件套：
+    - 代码目标：更新 infra/CMakeLists.txt。
+    - 测试目标：验证 dasall_infra 目标可编译；追加 ctest 发现性检查，确认现有 unit/contract 入口未被本轮 CMake 收敛破坏。
+    - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -N。
+5. D Gate：PASS。
+
+### 22.3 Build 交付与证据
+
+交付物：
+
+1. infra/CMakeLists.txt：新增 core/tracing 源文件分组和 `DASALL_INFRA_PUBLIC_HEADERS` 列表，并通过 `PUBLIC_HEADER` 属性把公开头文件与真实源文件一起收敛为 dasall_infra 目标的显式入口。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra`：通过，`ninja: no work to do.`，说明修复后的构建图已稳定生成。
+3. `ctest --test-dir build-ci -N`：通过，发现 101 个测试，包含既有 infra unit 与 contract 用例，说明本轮 CMake 收敛未破坏测试发现性。
+
+Build 合规复核：
+
+1. 代码注释：本轮仅以分组变量名表达 CMake 角色划分，配置本身已足够自解释，无需额外冗长注释。
+2. 正负例覆盖：本轮为构建入口任务，不新增运行时逻辑；以构建成功和测试发现性复核作为二值验收出口。
+3. 测试发现性：已通过 `ctest -N` 复核现有 unit/contract 入口不受影响。
+4. TODO 证据回写：已完成设计映射、交付物与验收结果回写。
+5. 提交隔离：本轮提交范围限定为 infra CMake 接线与证据文档。
