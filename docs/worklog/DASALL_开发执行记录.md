@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #050
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-011 注册 infra 单元测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-011-D 设计对账：
+   - 核对 `tests/unit/CMakeLists.txt` 已接入 `infra` 子目录。
+   - 核对 `tests/unit/infra/CMakeLists.txt` 已注册 9 个 infra unit 目标并统一打上 `unit` 标签。
+2. 完成 INF-TODO-011-B 证据闭环：
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci -N -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过，`ninja: no work to do.`。
+   - `ctest --test-dir build-ci -N -L unit` 通过，发现 10 个 `unit` 标签测试，其中包含 9 个 infra unit 用例。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，10/10 tests passed。
+
+### 结果
+
+1. infra unit 注册入口已经在前序任务中随测试落盘完成，本轮已完成对账并补齐正式验收证据。
+2. 阶段 D 的 unit 门已经具备稳定基线，下一轮可以继续推进 INF-TODO-012 的 contract 注册与边界执行证据。
+
+### 下一步
+
+1. 按阶段 D 顺序继续推进 INF-TODO-012，复核 infra contract 测试入口与执行证据。
+
+### 风险
+
+1. 当前 `unit` 标签集合仍包含非 infra 的 `dasall_runtime_smoke_test`；后续如果需要更细粒度门禁，应考虑为 infra unit 单独补充标签或正则筛选规则，但本轮不扩大范围。
+
 ## 记录 #049
 
 - 日期：2026-03-26
