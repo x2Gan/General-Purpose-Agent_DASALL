@@ -3,7 +3,7 @@
 评审范围：
 1. 架构与蓝图：docs/architecture/DASSALL_Agent_architecture.md、docs/architecture/DASALL_Engineering_Blueprint.md
 2. 子系统设计：docs/architecture/DASALL_infrastructure子系统详细设计.md
-3. 组件设计：infra audit/config/diagnostics/health/logging/metrics/ota/plugin/policy/secret/tracer/watchdog 详细设计
+3. 组件设计：infra audit/config/diagnostics/health/logging/metrics/ota/plugin/policy/secret/tracing/watchdog 详细设计
 4. 基础支撑：docs/architecture/DASALL_profiles模块详细设计.md、docs/architecture/platform_linux_detailed_design.md
 5. TODO：15 份 infra/platform/profiles 专项 TODO
 6. 补充：contracts 冻结计划、TODO 总表、验收报告
@@ -93,14 +93,14 @@ Step1 覆盖结论：
 
 | ID | 等级 | 类别 | 问题描述 | 证据 | 影响 | 修复建议 | Owner |
 |----|------|------|----------|------|------|----------|-------|
-| CON-01 | P1 | 线程模型依赖 | watchdog/tracer 等并发语义依赖 platform 时钟/调度抽象冻结 | docs/architecture/DASALL_infra_watchdog模块详细设计.md:439, docs/architecture/platform_linux_detailed_design.md:61 | 并发实现可能反复返工 | Phase 0 先冻结 platform monotonic clock/scheduler 抽象 | platform + watchdog |
+| CON-01 | P1 | 线程模型依赖 | watchdog/tracing 等并发语义依赖 platform 时钟/调度抽象冻结 | docs/architecture/DASALL_infra_watchdog模块详细设计.md:439, docs/architecture/platform_linux_detailed_design.md:61 | 并发实现可能反复返工 | Phase 0 先冻结 platform monotonic clock/scheduler 抽象 | platform + watchdog |
 | CON-02 | P1 | 背压策略一致性 | 多组件存在 queue overflow 策略，但统一锁顺序与背压基线未集中定义 | docs/architecture/DASALL_infrastructure子系统详细设计.md:324, docs/architecture/DASALL_infra_watchdog模块详细设计.md:294 | 高负载下策略不一致导致可预期性下降 | 新增 InfraConcurrencyPolicy.md，统一 block/overrun_oldest 选择准则 | infra 架构组 |
 | CON-03 | P2 | 死锁前置防护 | 文档强调异步与降级，但未看到跨组件锁顺序规约门禁 | 多组件设计 6.x 并发章节 | 潜在死锁风险后移到实现期暴露 | 在 unit 中加锁顺序断言与 TSAN pipeline（后续） | 质量工程组 |
 
 必须新增并发测试场景：
 1. watchdog 心跳风暴 + 事件总线不可用（降级路径）
 2. audit 主写失败 + fallback 再失败（二级故障）
-3. tracer force_flush 与 shutdown 并发调用
+3. tracing force_flush 与 shutdown 并发调用
 4. secret lease 过期回收与并发读取冲突
 5. ota confirm timeout 与 rollback 并发触发
 
@@ -178,7 +178,7 @@ Step1 覆盖结论：
 ## 8.2 依赖链
 
 1. INF-PLAT-INT-001 -> 组件 integration 解阻（AUD/CFG/DIA/HLT/MET/OTA/POL/SEC/TRC/WDG）
-2. Platform 抽象冻结 -> watchdog/tracer 并发实现
+2. Platform 抽象冻结 -> watchdog/tracing 并发实现
 3. Secret 对象冻结 -> OTA 验签 trust anchor 接入
 4. Policy schema 冻结 -> policy resolver/projector/manager 实现
 5. Core 实现完成 -> integration/failure/profile gate
