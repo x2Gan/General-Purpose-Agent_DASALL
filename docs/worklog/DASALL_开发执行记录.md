@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #052
+
+- 日期：2026-03-26
+- 阶段：platform/linux 组件专项 TODO
+- 任务：PLAT-LNX-TODO-001 定义 PlatformInitConfig 数据结构头文件
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLAT-LNX-TODO-001-D 设计收敛：
+   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-001-PlatformInitConfig设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-001-PlatformInitConfig%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、默认值、Design->Build 映射与 D Gate。
+   - 明确本轮只冻结 `target_platform/profile_name/enable_hal/queue_defaults/io_timeouts`，不提前扩张到 profile 注入键统一或工厂逻辑。
+2. 完成 PLAT-LNX-TODO-001-B 代码落地：
+   - 新增 [platform/include/linux/PlatformInitConfig.h](platform/include/linux/PlatformInitConfig.h)
+   - 新增 [tests/unit/platform/linux/PlatformInitConfigTest.cpp](tests/unit/platform/linux/PlatformInitConfigTest.cpp)
+   - 新增 [tests/unit/platform/CMakeLists.txt](tests/unit/platform/CMakeLists.txt)
+   - 新增 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_platform dasall_platform_init_config_unit_test`
+   - `ctest --test-dir build-ci -N -R PlatformInitConfigTest`
+   - `ctest --test-dir build-ci -R PlatformInitConfigTest --output-on-failure`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_platform dasall_platform_init_config_unit_test` 通过，`ninja: no work to do.`。
+   - `ctest --test-dir build-ci -N -R PlatformInitConfigTest` 通过，发现 1 个测试。
+   - `ctest --test-dir build-ci -R PlatformInitConfigTest --output-on-failure` 通过，1/1 tests passed。
+
+### 结果
+
+1. platform/linux 初始化配置对象已经以最小 header-only 形式落盘，后续 PLAT-LNX-TODO-002~010 可以直接复用该对象而无需再次猜测默认值。
+2. 本轮只为当前任务接入最小 unit 注册路径，未声称完成 PLAT-LNX-TODO-019 的完整平台注册矩阵。
+
+### 下一步
+
+1. 按依赖顺序继续推进 PLAT-LNX-TODO-002，冻结 PlatformCapabilitySet。
+
+### 风险
+
+1. `profile_name` 与 `target_platform` 当前仍为字符串；如果后续冻结为 enum 或强类型包装，必须通过接口变更评审单独处理，不能在后续任务中隐式替换。
+2. 当前 VS Code CMake Tools 仍未解析出可用 build target；后续 platform 任务在该问题未恢复前，仍应优先使用仓库已验证的 build-ci 验证链路。
+
 ## 记录 #051
 
 - 日期：2026-03-26

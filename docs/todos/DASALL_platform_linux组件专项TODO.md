@@ -162,7 +162,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PLAT-LNX-TODO-001 | Not Started | 定义 PlatformInitConfig 数据结构头文件 | platform 设计 6.5；工程规范 3.2 | 6.5 PlatformInitConfig | L3 | platform/include/linux/PlatformInitConfig.h | target_platform/profile_name/enable_hal/queue_defaults/io_timeouts | unit：字段编译与默认值断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | 无 | 无 | 无 | 头文件、编译记录 | 仅当字段集合与设计一致且 dasall_platform 构建通过时完成 |
+| PLAT-LNX-TODO-001 | Done | 定义 PlatformInitConfig 数据结构头文件 | platform 设计 6.5；工程规范 3.2 | 6.5 PlatformInitConfig | L3 | platform/include/linux/PlatformInitConfig.h | target_platform/profile_name/enable_hal/queue_defaults/io_timeouts | unit：字段编译与默认值断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | 无 | 无 | 无 | 头文件、编译记录；2026-03-26 已新增 PlatformInitConfig.h、PlatformInitConfigTest，并执行构建与定向 unit 验证 | 仅当字段集合与设计一致且 dasall_platform 构建通过时完成 |
 | PLAT-LNX-TODO-002 | Not Started | 定义 PlatformCapabilitySet 数据结构头文件 | platform 设计 6.5/6.7 | 6.5 PlatformCapabilitySet | L3 | platform/include/linux/LinuxPlatformCapabilities.h | thread/timer/queue/filesystem/network/ipc/hal 状态与 reason | unit：状态枚举与 reason 字段断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | PLAT-LNX-TODO-001 | 无 | 无 | 头文件、编译记录 | 仅当能力项与三态语义完整且可编译时完成 |
 | PLAT-LNX-TODO-003 | Not Started | 定义 PlatformError 与 PlatformResult 头文件 | platform 设计 6.5/6.8；工程规范 3.6 | 6.5 PlatformError；6.8 异常分类 | L3 | platform/include/PlatformError.h、platform/include/PlatformResult.h | code/category/retryable_hint/syscall_name/errno_value/detail | unit：PlatformErrorMappingTest（或同等映射单测） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure | 无 | PLAT-LNX-BLK-04 | ErrorInfo 映射评审通过 | 头文件、映射测试或阻塞记录 | 仅当错误字段可判定且映射测试通过（或保持 Blocked）时完成 |
 | PLAT-LNX-TODO-004 | Not Started | 定义 IThread 接口头文件 | platform 设计 6.6 | 6.6 IThread | L3 | platform/include/IThread.h | create_thread/join_thread/request_stop | unit：InterfaceSurfaceTest 覆盖 IThread | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当方法语义与错误语义对齐且接口测试通过时完成 |
@@ -279,3 +279,56 @@
 3. 当前最小可执行粒度：函数 / 接口 / 数据结构。
 4. 未达全量函数级的缺口：HAL 真实接口冻结、fallback 触发矩阵、profile 注入键入口统一、integration 顶层接线。
 5. 下一步建议：优先并行完成 PLAT-LNX-TODO-023~025 解阻，再推进 018/020/021，最后执行 022 做门禁证据收口。
+
+## 12. 本轮执行记录（2026-03-26 / PLAT-LNX-TODO-001）
+
+### 12.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-001。
+2. 可执行性依据：无前置依赖、无阻塞项、范围限定在单个数据结构头文件与最小 unit 验证，可在一轮提交内完成。
+
+### 12.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.5 明确 PlatformInitConfig 稳定字段为 target_platform、profile_name、enable_hal、queue_defaults、io_timeouts。
+2. docs/architecture/platform_linux_detailed_design.md 6.7 明确该对象由 Boot 阶段在 Profile Bind 后注入 LinuxPlatformFactory，platform 不自行加载配置文件。
+3. docs/architecture/platform_linux_detailed_design.md 6.9 明确首版默认值基线：desktop_full/cloud_full 默认关闭 HAL，queue 默认容量 1024、overflow_policy 为 reject，network connect/io timeout 默认分别为 3000/5000 ms。
+
+外部参考：
+
+1. OpenTelemetry Common Specification 要求跨组件公共属性集合保持显式、唯一且可判定，空值与默认值不能依赖隐式猜测；本任务据此把 PlatformInitConfig 保持为最小显式配置对象，并增加一致性检查方法，避免后续工厂初始化阶段吞掉非法输入。
+
+D 结论：
+
+1. Design -> Build 映射：新增 platform/include/linux/PlatformInitConfig.h，内聚 target_platform/profile_name/enable_hal 以及 queue_defaults/io_timeouts 两个子结构；通过 has_consistent_values() 固化最小负例边界。
+2. Build 三件套：
+   - 代码目标：新增 platform/include/linux/PlatformInitConfig.h。
+   - 测试目标：新增 PlatformInitConfigTest，覆盖默认值正例以及空 profile、零容量、负超时负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_init_config_unit_test && ctest --test-dir build-ci -R PlatformInitConfigTest --output-on-failure。
+3. D Gate：PASS。
+
+### 12.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/linux/PlatformInitConfig.h：新增 PlatformInitConfig、QueueDefaults、IoTimeouts 以及一致性检查入口。
+2. tests/unit/platform/linux/PlatformInitConfigTest.cpp：覆盖默认值正例和非法 profile/queue/timeout 负例。
+3. tests/unit/CMakeLists.txt、tests/unit/platform/CMakeLists.txt、tests/unit/platform/linux/CMakeLists.txt：接入 platform unit 测试最小注册路径。
+4. docs/todos/deliverables/PLAT-LNX-TODO-001-PlatformInitConfig设计收敛.md：补齐 D 阶段设计收敛与 Design->Build 映射。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_init_config_unit_test：通过，ninja: no work to do.
+3. ctest --test-dir build-ci -R PlatformInitConfigTest --output-on-failure：通过，1/1 tests passed。
+4. ctest --test-dir build-ci -N -R PlatformInitConfigTest：通过，发现 1 个测试。
+
+Build 合规复核：
+
+1. 代码注释：本轮数据结构与测试命名已自解释，未增加冗余注释。
+2. 正负例覆盖：PlatformInitConfigTest 包含 1 组默认值正例和 3 组非法输入负例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R PlatformInitConfigTest 验证新增测试可发现；完整平台测试矩阵仍属于 PLAT-LNX-TODO-019 范围。
+4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
+5. 提交隔离：本轮提交范围限定为 PlatformInitConfig、对应 unit 验证与证据文档。
+6. 环境恢复：CMake Tools 当前未解析出可用 build target，本轮按仓库既有 build-ci 命令链路完成验证。
