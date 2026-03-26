@@ -87,3 +87,18 @@ dasall_apply_common_options(dasall_logger_interface_unit_test)
 
 add_test(NAME LoggerInterfaceTest COMMAND dasall_logger_interface_unit_test)
 set_tests_properties(LoggerInterfaceTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_audit_logger_interface_unit_test
+  AuditLoggerInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_audit_logger_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_audit_logger_interface_unit_test)
+
+add_test(NAME AuditLoggerInterfaceTest COMMAND dasall_audit_logger_interface_unit_test)
+set_tests_properties(AuditLoggerInterfaceTest PROPERTIES LABELS "unit")

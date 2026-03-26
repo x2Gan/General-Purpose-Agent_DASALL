@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #046
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-006 IAuditLogger 接口
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-006-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.6 与 audit 模块详细设计 6.5/6.6/6.8，冻结 `IAuditLogger::write_audit` 与 `IAuditLogger::export_audit` 两个最小接口。
+   - 针对 `export_audit(filter)` 的未冻结细节，本轮只引入 `AuditExportFilter.opaque_selector` 占位类型，避免过早引入真实过滤模型和导出分页语义。
+   - 统一返回 `AuditWriteResult` 与 `AuditExportResult`，仅引用 contracts `ResultCode` 与 `ErrorInfo`，保持审计失败语义可观测。
+2. 完成 INF-TODO-006-B 代码落地：
+   - 新增 [infra/include/audit/IAuditLogger.h](infra/include/audit/IAuditLogger.h)
+   - 新增 [tests/unit/infra/AuditLoggerInterfaceTest.cpp](tests/unit/infra/AuditLoggerInterfaceTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp](tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，8/8 tests passed，新增 `AuditLoggerInterfaceTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，88/88 tests passed，新增 `AuditLoggerInterfaceBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. `IAuditLogger` 已与 `AuditEvent` 建立稳定的头文件级接口关系，并保持与 `ILogger` 的职责分离，为后续 AuditService 与 fallback/export 组件接线提供固定调用面。
+2. export 语义当前被严格限制在 infra 私有占位 filter 内，后续只能扩展过滤和分页细节，不能破坏本轮 contracts 对齐的返回语义。
+
+### 下一步
+
+1. 按阶段 B 顺序继续推进 INF-TODO-008，冻结 `IHealthMonitor` 接口。
+
+### 风险
+
+1. `AuditExportFilter` 当前只是最小占位类型，后续引入真实过滤窗口与分页语义时必须通过专项设计补充，不应直接把实现细节写回接口冻结层。
+
 ## 记录 #045
 
 - 日期：2026-03-26
