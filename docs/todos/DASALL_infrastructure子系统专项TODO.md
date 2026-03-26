@@ -190,7 +190,7 @@
 | INF-TODO-001 | Done | 定义 InfraContext 数据结构 | 详细设计 6.5；架构 3.8；ADR-008 | 详细设计 6.5 核心对象与 contracts 对齐关系 | L2 | infra/include/ 下新增 InfraContext 头文件，承载 request_id、session_id、trace_id、task_id、parent_task_id、lease_id | InfraContext | unit：字段默认值与 unknown 语义；contract：不越权扩写 contracts 标识语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | 无 | 无 | 无 | 数据结构头文件、基础测试、字段说明；2026-03-26 已落盘 infra/include/InfraContext.h、tests/unit/infra/InfraContextTest.cpp、tests/contract/smoke/InfraContextBoundaryContractTest.cpp | 仅当 InfraContext 字段与设计一致、编译通过、测试能验证 unknown 兜底语义时完成 |
 | INF-TODO-002 | Not Started | 新增 IInfrastructureService 接口与 Facade 生命周期骨架 | 详细设计 6.2、6.3、6.6、6.7、8.1；蓝图 3.12 | 详细设计 6.6 核心接口语义定义；6.7 主流程时序 | L2 | infra/include/IInfrastructureService.h；infra/src/ 下新增/替换 InfraServiceFacade 生命周期骨架 | IInfrastructureService；InfraServiceFacade.init/start/stop/execute | unit：生命周期顺序与空实现可编译；contract：返回 ResultCode/ErrorInfo 引用不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 | execute(command) 的命令对象签名未冻结 | 先以接口骨架落盘，不实现命令细节 | 接口头文件、骨架实现、构建通过证据 | 仅当 placeholder 不再是唯一入口、接口方法与设计一致且 dasall_infra 可编译时完成 |
 | INF-TODO-003 | Done | 定义 LogEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 LogEvent；6.10 日志点/指标 | L2 | infra/include/ 下新增 LogEvent 头文件，冻结 level、module、message、attrs、ts | LogEvent | unit：attrs 可序列化约束；contract：敏感字段脱敏边界不侵入 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 | attrs 键白名单未冻结 | 先冻结字段与基本约束，白名单细则后补 | 数据结构头文件、最小单测；2026-03-26 已落盘 infra/include/LogEvent.h、tests/unit/infra/LogEventTest.cpp、tests/contract/smoke/LogEventBoundaryContractTest.cpp | 仅当 LogEvent 字段与设计一致、测试覆盖可序列化与脱敏前置约束时完成 |
-| INF-TODO-004 | Not Started | 定义 AuditEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 AuditEvent；6.8 审计 fallback；6.10 审计覆盖点 | L2 | infra/include/ 下新增 AuditEvent 头文件，冻结 action、actor、target、evidence_ref、outcome、side_effects | AuditEvent | unit：必填字段校验；contract：ToolResult/RecoveryOutcome 引用边界校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-001 | side_effects 精确对象模型未冻结 | 先按字段级冻结引用关系，不扩写 side_effects 子结构 | 数据结构头文件、单测/契约测试 | 仅当高风险命令审计对象字段齐备、合同测试能阻止越权字段时完成 |
+| INF-TODO-004 | Done | 定义 AuditEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 AuditEvent；6.8 审计 fallback；6.10 审计覆盖点 | L2 | infra/include/ 下新增 AuditEvent 头文件，冻结 action、actor、target、evidence_ref、outcome、side_effects | AuditEvent | unit：必填字段校验；contract：ToolResult/RecoveryOutcome 引用边界校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-001 | side_effects 精确对象模型未冻结 | 先按字段级冻结引用关系，不扩写 side_effects 子结构 | 数据结构头文件、单测/契约测试；2026-03-26 已落盘 infra/include/AuditEvent.h、tests/unit/infra/AuditEventTest.cpp、tests/contract/smoke/AuditEventBoundaryContractTest.cpp | 仅当高风险命令审计对象字段齐备、合同测试能阻止越权字段时完成 |
 | INF-TODO-005 | Not Started | 新增 ILogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 ILogger；6.8 queue 满兜底 | L2 | infra/include/ILogger.h | ILogger.log；ILogger.flush | unit：普通日志与 flush 接口可编译；contract：错误失败需可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-003 | flush(deadline) 的 deadline 类型未冻结 | 先以签名占位类型/前置声明冻结接口，不进入 sink 实现 | 接口头文件、编译通过证据 | 仅当 ILogger 与 LogEvent 对接关系清晰、接口可被上层包含且 dasall_infra 编译通过时完成 |
 | INF-TODO-006 | Not Started | 新增 IAuditLogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 IAuditLogger；6.8 Audit sink 故障；6.10 高风险命令强制审计 | L2 | infra/include/audit/IAuditLogger.h | IAuditLogger.write_audit；IAuditLogger.export_audit | unit：审计写入接口可编译；contract：审计导出不越权扩写对象 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-004 | export_audit(filter) 的 filter 模型未冻结 | 先冻结接口名与职责，不落地导出过滤模型 | 接口头文件、编译通过证据 | 仅当接口与 AuditEvent 匹配，且审计职责与普通日志职责分离时完成 |
 | INF-TODO-007 | Not Started | 定义 HealthSnapshot 数据结构 | 详细设计 6.5、6.8、9.1 | 详细设计 6.5 HealthSnapshot；6.8 探针超时；9.1 测试矩阵 | L2 | infra/include/ 下新增 HealthSnapshot 头文件，冻结 liveness、readiness、degraded、failed_components | HealthSnapshot | unit：健康状态三值组合校验；contract：不反向写 runtime 状态 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | 无 | failed_components 项元素类型未冻结 | 先冻结顶层状态字段与集合语义 | 数据结构头文件、单测 | 仅当 HealthSnapshot 字段与状态约束一致，且测试能区分 ready/degraded/fail 时完成 |
@@ -458,3 +458,56 @@ Build 合规复核：
 3. 测试发现性：通过 CMake 注册进入 unit/contract 标签集合。
 4. TODO 证据回写：已记录本轮设计/构建映射与交付物。
 5. 提交隔离：本轮提交范围限定为 LogEvent 相关代码、测试与证据文档。
+
+## 15. 本轮执行记录（2026-03-26 / INF-TODO-004）
+
+### 15.1 选中任务
+
+1. 本轮任务：INF-TODO-004。
+2. 可执行性依据：仅依赖已完成的 INF-TODO-001；side_effects 细粒度对象模型虽未冻结，但不影响先收敛 action/actor/target/evidence_ref/outcome/side_effects 六字段和最小边界守卫。
+
+### 15.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.5 明确 AuditEvent 属于 infra 私有审计对象，只允许承载 action、actor、target、evidence_ref、outcome、side_effects 等字段，并要求审计记录不可静默丢失。
+2. docs/architecture/DASALL_infra_audit模块详细设计.md 6.5 与 6.8 进一步收敛了 who/what/target/outcome/evidence 的审计语义，以及主写失败时 fallback 仍需保留可观测证据的约束。
+3. contracts/include/tool/ToolResult.h、contracts/include/checkpoint/RecoveryOutcome.h 及其 guards 已冻结 execution-result 边界，适合作为本轮 AuditEvent evidence_ref 的唯一 contracts 锚点来源。
+
+外部参考：
+
+1. OWASP Logging Cheat Sheet 建议审计事件覆盖 who/what/when/where/outcome，并将审计与普通运行日志分离；本轮据此优先冻结 actor/action/target/outcome 和 evidence_ref，而不提前混入 sink 或导出实现。
+2. OpenTelemetry Logs Data Model 强调“高频且语义稳定字段放顶层、变动明细保留在 attributes/collections”；本轮据此把 outcome 与 evidence_ref 固定为顶层字段，把 side_effects 保持为最小字符串集合，不扩展为复杂子对象。
+
+D 结论：
+
+1. Design -> Build 映射：以 header-only AuditEvent 冻结六个顶层字段，并新增 AuditEvidenceKind/AuditEvidenceRef 作为 evidence_ref 的最小类型化锚点，仅允许 ToolResult 或 RecoveryOutcome 两类 contracts 结果引用。
+2. Build 三件套：
+    - 代码目标：新增 infra/include/AuditEvent.h。
+    - 测试目标：新增 unit 用例验证必填字段和 side_effects 序列化约束；新增 contract 用例验证 evidence_ref 只接受 ToolResult/RecoveryOutcome 风格引用，不嵌入 contracts 对象本体。
+    - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract。
+3. D Gate：PASS。
+
+### 15.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/AuditEvent.h：新增 AuditOutcome、AuditEvidenceKind、AuditEvidenceRef 与 AuditEvent 六字段定义，以及必填字段、contracts 引用和 side_effects 可序列化守卫。
+2. tests/unit/infra/AuditEventTest.cpp：覆盖必填字段正例、缺字段负例、side_effects 空值/重复值负例。
+3. tests/contract/smoke/AuditEventBoundaryContractTest.cpp：覆盖 ToolResult 与 RecoveryOutcome 引用边界，以及空 evidence_ref 拒绝路径。
+4. tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成新增测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，4/4 tests passed，新增 AuditEventUnitTest 被发现并执行。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，84/84 tests passed，新增 AuditEventBoundaryContractTest 被发现并执行。
+
+Build 合规复核：
+
+1. 代码注释：新增代码均为短小 header-only/测试守卫，字段与 helper 命名可直接表达语义，无需额外冗余注释。
+2. 正负例覆盖：unit 与 contract 均覆盖正例和负例路径。
+3. 测试发现性：通过 CMake 注册使新增 unit/contract 用例被 ctest 标签发现并执行。
+4. TODO 证据回写：已回写本节执行记录与主任务状态。
+5. 提交隔离：本轮提交范围限定为 AuditEvent 相关代码、测试与证据文档。

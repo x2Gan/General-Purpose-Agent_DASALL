@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #042
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-004 AuditEvent 数据结构
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-004-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.5、audit 模块详细设计 6.5/6.8 和 ToolResult/RecoveryOutcome contracts guards，冻结 AuditEvent 的 `action/actor/target/evidence_ref/outcome/side_effects` 六字段。
+   - 将 `evidence_ref` 收敛为最小类型化锚点 `AuditEvidenceRef`，仅允许 `ToolResult` 或 `RecoveryOutcome` 两类 execution-result 引用，不嵌入 contracts 对象本体。
+   - 保持 `side_effects` 为最小字符串集合，只校验可序列化、非空和无重复，不提前扩展成复杂 effect schema。
+2. 完成 INF-TODO-004-B 代码落地：
+   - 新增 [infra/include/AuditEvent.h](infra/include/AuditEvent.h)
+   - 新增 [tests/unit/infra/AuditEventTest.cpp](tests/unit/infra/AuditEventTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/AuditEventBoundaryContractTest.cpp](tests/contract/smoke/AuditEventBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，4/4 tests passed，新增 `AuditEventUnitTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，84/84 tests passed，新增 `AuditEventBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. AuditEvent 已从详细设计字段表收敛为可编译、可测试、可追溯的数据结构，为后续 IAuditLogger 和 AuditService 任务提供稳定输入对象。
+2. evidence_ref 的 contracts 边界已固定在 ToolResult/RecoveryOutcome 两类 execution-result 语义上，避免在 infra 审计对象里扩写 recovery 或 tool 的控制字段。
+
+### 下一步
+
+1. 按 audit 依赖顺序推进 INF-TODO-006，冻结 IAuditLogger 接口。
+
+### 风险
+
+1. 当前 `side_effects` 仍只是最小字符串集合，后续任务只能增加解释或导出策略，不应破坏本轮去重/非空的可序列化基线。
+2. evidence_ref 目前只覆盖 ToolResult/RecoveryOutcome；若后续确需引入其他 evidence 类型，应新增明确评审而不是顺手扩写本轮枚举。
+
 ## 记录 #041
 
 - 日期：2026-03-26
