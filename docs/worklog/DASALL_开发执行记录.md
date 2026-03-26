@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #045
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-005 ILogger 接口
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-005-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.6 与 logging 模块详细设计 6.5/6.6/6.8，冻结 `ILogger::log` 与 `ILogger::flush` 两个最小接口。
+   - 针对 `flush(deadline)` 的未冻结细节，本轮只引入 `LogFlushDeadline.timeout_ms` 占位类型，避免过早引入 scheduler 或异步队列实现细节。
+   - 统一返回 `LogWriteResult`，仅引用 contracts `ResultCode` 与 `ErrorInfo`，保持日志失败语义可观测。
+2. 完成 INF-TODO-005-B 代码落地：
+   - 新增 [infra/include/ILogger.h](infra/include/ILogger.h)
+   - 新增 [tests/unit/infra/LoggerInterfaceTest.cpp](tests/unit/infra/LoggerInterfaceTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp](tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，7/7 tests passed，新增 `LoggerInterfaceTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，87/87 tests passed，新增 `LoggerInterfaceBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. `ILogger` 已与 `LogEvent` 建立稳定的头文件级接口关系，为后续 logging facade、sink 路由和配置接线提供固定调用面。
+2. flush 语义当前被严格限制在 infra 私有占位类型内，后续只能扩展 deadline 细节，不能破坏本轮 contracts 对齐的返回语义。
+
+### 下一步
+
+1. 按阶段 B 顺序继续推进 INF-TODO-006，冻结 `IAuditLogger` 接口。
+
+### 风险
+
+1. `LogFlushDeadline` 当前只是最小占位类型，后续引入真实 deadline/scheduler 语义时必须通过专项设计补充，不应直接把实现细节写回接口冻结层。
+
 ## 记录 #044
 
 - 日期：2026-03-26

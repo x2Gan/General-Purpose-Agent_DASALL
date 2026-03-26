@@ -191,7 +191,7 @@
 | INF-TODO-002 | Done | 新增 IInfrastructureService 接口与 Facade 生命周期骨架 | 详细设计 6.2、6.3、6.6、6.7、8.1；蓝图 3.12 | 详细设计 6.6 核心接口语义定义；6.7 主流程时序 | L2 | infra/include/ 下新增 IInfrastructureService 头文件；infra/src/ 下新增 InfraServiceFacade 生命周期骨架 | IInfrastructureService；InfraServiceFacade.init/start/stop/execute | unit：生命周期顺序与空实现可编译；contract：返回 ResultCode/ErrorInfo 引用不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-001 | 无 | 无 | 接口头文件、骨架实现、单测/合同测试、构建通过证据 | 2026-03-26 已落盘 infra/include/IInfrastructureService.h、infra/src/InfraServiceFacade.cpp、tests/unit/infra/InfraServiceFacadeTest.cpp、tests/contract/smoke/InfrastructureServiceBoundaryContractTest.cpp，并确认 placeholder 不再是唯一真实入口 |
 | INF-TODO-003 | Done | 定义 LogEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 LogEvent；6.10 日志点/指标 | L2 | infra/include/ 下新增 LogEvent 头文件，冻结 level、module、message、attrs、ts | LogEvent | unit：attrs 可序列化约束；contract：敏感字段脱敏边界不侵入 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 | attrs 键白名单未冻结 | 先冻结字段与基本约束，白名单细则后补 | 数据结构头文件、最小单测；2026-03-26 已落盘 infra/include/LogEvent.h、tests/unit/infra/LogEventTest.cpp、tests/contract/smoke/LogEventBoundaryContractTest.cpp | 仅当 LogEvent 字段与设计一致、测试覆盖可序列化与脱敏前置约束时完成 |
 | INF-TODO-004 | Done | 定义 AuditEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 AuditEvent；6.8 审计 fallback；6.10 审计覆盖点 | L2 | infra/include/ 下新增 AuditEvent 头文件，冻结 action、actor、target、evidence_ref、outcome、side_effects | AuditEvent | unit：必填字段校验；contract：ToolResult/RecoveryOutcome 引用边界校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-001 | side_effects 精确对象模型未冻结 | 先按字段级冻结引用关系，不扩写 side_effects 子结构 | 数据结构头文件、单测/契约测试；2026-03-26 已落盘 infra/include/AuditEvent.h、tests/unit/infra/AuditEventTest.cpp、tests/contract/smoke/AuditEventBoundaryContractTest.cpp | 仅当高风险命令审计对象字段齐备、合同测试能阻止越权字段时完成 |
-| INF-TODO-005 | Not Started | 新增 ILogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 ILogger；6.8 queue 满兜底 | L2 | infra/include/ILogger.h | ILogger.log；ILogger.flush | unit：普通日志与 flush 接口可编译；contract：错误失败需可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-003 | flush(deadline) 的 deadline 类型未冻结 | 先以签名占位类型/前置声明冻结接口，不进入 sink 实现 | 接口头文件、编译通过证据 | 仅当 ILogger 与 LogEvent 对接关系清晰、接口可被上层包含且 dasall_infra 编译通过时完成 |
+| INF-TODO-005 | Done | 新增 ILogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 ILogger；6.8 queue 满兜底 | L2 | infra/include/ILogger.h | ILogger.log；ILogger.flush | unit：普通日志与 flush 接口可编译；contract：错误失败需可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-003 | 无 | 无 | 接口头文件、编译测试、合同测试、构建通过证据 | 2026-03-26 已落盘 infra/include/ILogger.h、tests/unit/infra/LoggerInterfaceTest.cpp、tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp，并确认 ILogger 与 LogEvent 对接保持头文件级冻结 |
 | INF-TODO-006 | Not Started | 新增 IAuditLogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 IAuditLogger；6.8 Audit sink 故障；6.10 高风险命令强制审计 | L2 | infra/include/audit/IAuditLogger.h | IAuditLogger.write_audit；IAuditLogger.export_audit | unit：审计写入接口可编译；contract：审计导出不越权扩写对象 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-004 | export_audit(filter) 的 filter 模型未冻结 | 先冻结接口名与职责，不落地导出过滤模型 | 接口头文件、编译通过证据 | 仅当接口与 AuditEvent 匹配，且审计职责与普通日志职责分离时完成 |
 | INF-TODO-007 | Done | 定义 HealthSnapshot 数据结构 | 详细设计 6.5、6.8、9.1 | 详细设计 6.5 HealthSnapshot；6.8 探针超时；9.1 测试矩阵 | L2 | infra/include/ 下新增 HealthSnapshot 头文件，冻结 liveness、readiness、degraded、failed_components | HealthSnapshot | unit：健康状态三值组合校验；contract：不反向写 runtime 状态 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | 无 | failed_components 项元素类型未冻结 | 先冻结顶层状态字段与集合语义 | 数据结构头文件、单测；2026-03-26 已落盘 infra/include/HealthSnapshot.h、tests/unit/infra/HealthSnapshotTest.cpp、tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp | 仅当 HealthSnapshot 字段与状态约束一致，且测试能区分 ready/degraded/fail 时完成 |
 | INF-TODO-008 | Not Started | 新增 IHealthMonitor 接口 | 详细设计 6.6、6.8、9.1 | 详细设计 6.6 IHealthMonitor；6.8 异常与恢复时序 | L2 | infra/include/IHealthMonitor.h | IHealthMonitor.register_probe；IHealthMonitor.evaluate | unit：探针注册和评估接口可编译；contract：评价结果只输出 HealthSnapshot | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-007 | IHealthProbe 形状与 probe timeout 细节未冻结 | 先冻结 monitor 侧接口，不落具体 probe 抽象 | 接口头文件、编译通过证据 | 仅当接口方法名、返回对象与设计一致，且不侵入 runtime 恢复判定时完成 |
@@ -611,3 +611,50 @@ Build 合规复核：
 3. 测试发现性：新增测试通过 CMake 注册并被 ctest 标签发现执行。
 4. TODO 证据回写：已回写本节执行记录与主任务状态。
 5. 提交隔离：本轮提交范围限定为 IInfrastructureService/InfraServiceFacade 相关代码、测试与证据文档。
+
+## 18. 本轮执行记录（2026-03-26 / INF-TODO-005）
+
+### 18.1 选中任务
+
+1. 本轮任务：INF-TODO-005。
+2. 可执行性依据：仅依赖已完成的 INF-TODO-003；`flush(deadline)` 的 deadline 细节虽然未冻结，但不影响先以最小占位类型冻结接口边界和 contracts 对齐的失败语义。
+
+### 18.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.6 已明确 `ILogger` 最小方法集合为 `log(event)` 与 `flush(deadline)`。
+2. docs/architecture/DASALL_infra_logging模块详细设计.md 6.5、6.6、6.8 已将 `ILogger` 与 `LogEvent` 对齐，并要求日志写入失败保持可观测。
+3. infra/include/LogEvent.h 已冻结 `level/module/message/attrs/ts` 结构，满足本轮日志接口输入对象的稳定前提。
+
+D 结论：
+
+1. Design -> Build 映射：新增 `ILogger.h`，冻结 `LogFlushDeadline` 占位类型、`LogWriteResult` 返回对象与 `ILogger` 接口。
+2. `LogFlushDeadline` 本轮仅保留 `timeout_ms` 最小字段与有效性守卫，不提前引入具体 scheduler/deadline 对象模型。
+3. `LogWriteResult` 统一暴露 contracts `ResultCode` 与 `ErrorInfo`，确保写入失败在接口层可观测且不新增共享错误对象。
+4. `ILogger` 本轮只包含 `log` 与 `flush` 两个方法，不提前冻结 `set_level` 或 sink 配置接口，避免越过主 TODO 的 L2 边界。
+5. D Gate：PASS。
+
+### 18.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/ILogger.h：新增 `LogFlushDeadline`、`LogWriteResult` 与 `ILogger` 接口定义。
+2. tests/unit/infra/LoggerInterfaceTest.cpp：通过最小 `NullLogger` 验证 `ILogger` 与 `LogEvent`/`LogFlushDeadline` 的编译与校验关系。
+3. tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp：验证 `LogWriteResult` 只引用 contracts `ResultCode/ErrorInfo`，并保持 flush deadline 为 infra 本地占位类型。
+4. tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成新增测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，7/7 tests passed，新增 `LoggerInterfaceTest` 被发现并执行。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，87/87 tests passed，新增 `LoggerInterfaceBoundaryContractTest` 被发现并执行。
+
+Build 合规复核：
+
+1. 代码注释：本轮头文件和测试命名已直接表达占位接口语义，未新增冗余注释。
+2. 正负例覆盖：unit 和 contract 均覆盖正常输入与失败可观测路径。
+3. 测试发现性：新增测试通过 CMake 注册并被 ctest 标签发现执行。
+4. TODO 证据回写：已回写本节执行记录与主任务状态。
+5. 提交隔离：本轮提交范围限定为 ILogger 接口、测试与证据文档。
