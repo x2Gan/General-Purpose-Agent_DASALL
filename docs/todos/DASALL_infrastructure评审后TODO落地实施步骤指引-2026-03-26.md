@@ -28,7 +28,7 @@
 | INF-PLAT-INT-001 | Done | 顶层接入 integration 子目录与标签规范 | 无 | tests/CMakeLists.txt 新增 add_subdirectory(integration) 与标签约定；docs/development/InfraIntegrationTopology.md 作为 SSOT | ctest -N 可发现 integration 用例 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | P0 |
 | INF-NAME-001 | Done | 统一 tracer/tracing 命名与引用 | 无 | docs/architecture 与 docs/todos 命名统一回链 | 命名扫描无冲突 | rg -n "tracer|tracing" docs/architecture docs/todos | P1 |
 | INF-CONCUR-001 | Done | 冻结并发背压与锁顺序规范 | INF-PLAT-INT-001 | 新增并发策略规范文档并被组件引用 | 并发规范检查清单可执行 | rg -n "overflow_policy|lock order|backpressure" docs | P1 |
-| INF-GATE-UNIFY-001 | Not Started | 建立 infra 统一 gate 脚本 | INF-PLAT-INT-001 | scripts/ci/infra_gate.sh 统一触发 unit/contract/integration/failure | gate 输出分类结果并可重复 | bash scripts/ci/infra_gate.sh | P1 |
+| INF-GATE-UNIFY-001 | Done | 建立 infra 统一 gate 脚本 | INF-PLAT-INT-001 | scripts/ci/infra_gate.sh 统一触发 unit/contract/integration/failure，并对未注册类别输出 skipped | gate 输出分类结果并可重复 | bash scripts/ci/infra_gate.sh | P1 |
 
 ---
 
@@ -89,14 +89,14 @@ flowchart LR
 | P0-S1 | 执行 INF-PLAT-INT-001 | 修改 tests/CMakeLists.txt 接入 integration 子目录 | ctest -N 可发现 integration 用例 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | ✅ 已完成（2026-03-26）：Test #83 infra_integration_topology_smoke 可发现且通过，1/1 Passed |
 | P0-S2 | 执行 INF-NAME-001 | 统一 tracer/tracing 命名 | 文档扫描无冲突 | rg -n "tracer|tracing" docs/architecture docs/todos | ✅ 已完成（2026-03-26）：组件级命名统一为 tracing，API 术语 ITracer/TracerProvider/get_tracer 保留 |
 | P0-S3 | 执行 INF-CONCUR-001 | 固化并发策略文档 | 组件 TODO 可引用策略条目 | rg -n "overflow_policy|lock order" docs | ✅ 已完成（2026-03-26）：新增 docs/development/InfraConcurrencyPolicy.md，logging/tracing/audit/watchdog/metrics/platform 文档已回链 |
-| P0-S4 | 执行 INF-GATE-UNIFY-001 | 新增统一 gate 脚本 | gate 能分类执行四类测试 | bash scripts/ci/infra_gate.sh | 输出含 unit/contract/integration/failure |
+| P0-S4 | 执行 INF-GATE-UNIFY-001 | 新增统一 gate 脚本 | gate 能分类执行四类测试 | bash scripts/ci/infra_gate.sh | ✅ 已完成（2026-03-26）：默认模式因 Blocked 条目按设计失败；ALLOW_BLOCKED=1 下输出 unit/contract/integration/failure 分类结果，其中 failure 当前为 0 discovered 并显式 skipped |
 
 ### 4.2 Phase 0 退出条件
 
 1. tests 顶层 integration 接线完成
 2. tracer/tracing 命名统一
 3. 并发规范文档冻结并被组件引用
-4. 统一 gate 脚本可执行
+4. 统一 gate 脚本可执行并输出 unit/contract/integration/failure 分类结果
 
 ---
 

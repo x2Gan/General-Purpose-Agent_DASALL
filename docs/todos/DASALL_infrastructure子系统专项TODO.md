@@ -321,7 +321,7 @@
 | ID | 状态 | 对应问题 | 任务描述 | 代码目标 | 测试目标 | 验收命令 | 前置依赖 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|
 | INF-TODO-020 | Not Started | ARC-01 | 在 tracing/metrics contracts 边界测试中显式增加 planning stage 标签、预算与延迟观测断言（仅补约束，不新增共享对象） | tests/contract/infra/tracing/, tests/contract/infra/metrics/, docs/todos/DASALL_infrastructure_tracing组件专项TODO.md, docs/todos/DASALL_infrastructure_metrics组件专项TODO.md | 新增 TracePlanningStageContractTest、MetricsPlanningStageBudgetContractTest，校验 stage=planning 与 budget_ms 标签可被稳定观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R "TracePlanningStageContractTest|MetricsPlanningStageBudgetContractTest" | INF-TODO-012 | 仅当两个 contract 用例可被 ctest 发现并稳定通过，且不引入 contracts 共享对象改动时完成 |
-| INF-TODO-021 | Not Started | ARC-02 | 建立并启用仓库级 infra gate，默认执行 Blocked 先解阻，禁止绕过前置设计直接推进实现 | scripts/ci/infra_gate.sh, docs/todos/DASALL_infrastructure子系统专项TODO.md | gate 脚本能检查三件套列、Blocked 条目和 integration 可发现性；默认有 Blocked 时失败 | bash scripts/ci/infra_gate.sh | 无 | 仅当 gate 脚本在默认模式拒绝含 Blocked 的推进，且允许在审批窗口通过 ALLOW_BLOCKED=1 执行例外时完成 |
+| INF-TODO-021 | Done | ARC-02 | 建立并启用仓库级 infra gate，默认执行 Blocked 先解阻，禁止绕过前置设计直接推进实现 | scripts/ci/infra_gate.sh, docs/todos/DASALL_infrastructure子系统专项TODO.md | gate 脚本能检查三件套列、Blocked 条目，并分类执行 unit/contract/integration/failure；默认有 Blocked 时失败 | bash scripts/ci/infra_gate.sh | 无 | 已完成（2026-03-26）：默认模式拒绝含 Blocked 的推进；审批窗口可通过 ALLOW_BLOCKED=1 执行分类 gate，未注册类别显式 skipped |
 
 执行说明：
 
