@@ -117,3 +117,18 @@ dasall_apply_common_options(dasall_health_monitor_interface_unit_test)
 
 add_test(NAME HealthMonitorInterfaceTest COMMAND dasall_health_monitor_interface_unit_test)
 set_tests_properties(HealthMonitorInterfaceTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_infra_error_code_unit_test
+  InfraErrorCodeTest.cpp
+)
+
+target_link_libraries(dasall_infra_error_code_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_infra_error_code_unit_test)
+
+add_test(NAME InfraErrorCodeUnitTest COMMAND dasall_infra_error_code_unit_test)
+set_tests_properties(InfraErrorCodeUnitTest PROPERTIES LABELS "unit")

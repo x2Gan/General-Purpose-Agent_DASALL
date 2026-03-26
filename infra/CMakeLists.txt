@@ -3,6 +3,7 @@ add_library(dasall_infra STATIC)
 target_sources(dasall_infra
   PRIVATE
     src/placeholder.cpp
+    src/InfraErrorCode.cpp
     src/InfraServiceFacade.cpp
     src/tracing/TracingModuleAnchor.cpp
 )

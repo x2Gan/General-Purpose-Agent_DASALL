@@ -195,7 +195,7 @@
 | INF-TODO-006 | Done | 新增 IAuditLogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 IAuditLogger；6.8 Audit sink 故障；6.10 高风险命令强制审计 | L2 | infra/include/audit/IAuditLogger.h | IAuditLogger.write_audit；IAuditLogger.export_audit | unit：审计写入接口可编译；contract：审计导出不越权扩写对象 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-004 | 无 | 无 | 接口头文件、编译测试、合同测试、构建通过证据 | 2026-03-26 已落盘 infra/include/audit/IAuditLogger.h、tests/unit/infra/AuditLoggerInterfaceTest.cpp、tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp，并确认审计职责与普通日志接口保持分离 |
 | INF-TODO-007 | Done | 定义 HealthSnapshot 数据结构 | 详细设计 6.5、6.8、9.1 | 详细设计 6.5 HealthSnapshot；6.8 探针超时；9.1 测试矩阵 | L2 | infra/include/ 下新增 HealthSnapshot 头文件，冻结 liveness、readiness、degraded、failed_components | HealthSnapshot | unit：健康状态三值组合校验；contract：不反向写 runtime 状态 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | 无 | failed_components 项元素类型未冻结 | 先冻结顶层状态字段与集合语义 | 数据结构头文件、单测；2026-03-26 已落盘 infra/include/HealthSnapshot.h、tests/unit/infra/HealthSnapshotTest.cpp、tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp | 仅当 HealthSnapshot 字段与状态约束一致，且测试能区分 ready/degraded/fail 时完成 |
 | INF-TODO-008 | Done | 新增 IHealthMonitor 接口 | 详细设计 6.6、6.8、9.1 | 详细设计 6.6 IHealthMonitor；6.8 异常与恢复时序 | L2 | infra/include/IHealthMonitor.h | IHealthMonitor.register_probe；IHealthMonitor.evaluate | unit：探针注册和评估接口可编译；contract：评价结果只输出 HealthSnapshot | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-007 | IHealthProbe 形状与 probe timeout 细节未冻结 | 先冻结 monitor 侧接口，不落具体 probe 抽象 | 接口头文件、编译通过证据；2026-03-26 已落盘 infra/include/IHealthMonitor.h、tests/unit/infra/HealthMonitorInterfaceTest.cpp、tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp，并确认健康评估输出边界保持为 HealthSnapshot | 仅当接口方法名、返回对象与设计一致，且不侵入 runtime 恢复判定时完成 |
-| INF-TODO-009 | Not Started | 定义 infra 私有错误码域 | 详细设计 6.6、6.8、9.1；编码规范 3.6 | 详细设计 6.6 错误语义；9.1 failure injection | L2 | infra/include/ 下新增 infra 私有错误码枚举，并在 infra/src/ 建立最小映射入口 | INF_E_CONFIG_INVALID、INF_E_SECRET_UNAVAILABLE、INF_E_LOG_QUEUE_FULL、INF_E_AUDIT_WRITE_FAIL、INF_E_HEALTH_PROBE_TIMEOUT、INF_E_OTA_VERIFY_FAIL、INF_E_OTA_ROLLBACK_FAIL | unit：错误码可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-002、INF-TODO-005、INF-TODO-006、INF-TODO-008 | contracts::ResultCode 细粒度映射表尚未在 infra 侧成文 | 先冻结 infra 私有码域和一对多映射规则，再补细项矩阵 | 错误码头文件、映射说明、测试 | 仅当七个私有错误码均可追溯到设计条目，且 contract 测试阻止越权映射时完成 |
+| INF-TODO-009 | Done | 定义 infra 私有错误码域 | 详细设计 6.6、6.8、9.1；编码规范 3.6 | 详细设计 6.6 错误语义；9.1 failure injection | L2 | infra/include/ 下新增 infra 私有错误码枚举，并在 infra/src/ 建立最小映射入口 | INF_E_CONFIG_INVALID、INF_E_SECRET_UNAVAILABLE、INF_E_LOG_QUEUE_FULL、INF_E_AUDIT_WRITE_FAIL、INF_E_HEALTH_PROBE_TIMEOUT、INF_E_OTA_VERIFY_FAIL、INF_E_OTA_ROLLBACK_FAIL | unit：错误码可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-002、INF-TODO-005、INF-TODO-006、INF-TODO-008 | contracts::ResultCode 细粒度映射表尚未在 infra 侧成文 | 先冻结 infra 私有码域和一对多映射规则，再补细项矩阵 | 错误码头文件、映射说明、测试；2026-03-26 已落盘 infra/include/InfraErrorCode.h、infra/src/InfraErrorCode.cpp、tests/unit/infra/InfraErrorCodeTest.cpp、tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp，并确认七个私有码仍只映射到既有 contracts 粗粒度结果码 | 仅当七个私有错误码均可追溯到设计条目，且 contract 测试阻止越权映射时完成 |
 | INF-TODO-010 | Not Started | 接线 infra CMake 落盘入口 | 详细设计 7、8.1、8.2；当前 infra/CMakeLists.txt 现状 | 详细设计 7 Design -> Build 映射；8.1 目录与文件落盘建议 | L2 | 更新 infra/CMakeLists.txt，使其不再只依赖 src/placeholder.cpp，并允许按子域增量接线 include/src 目录 | infra/CMakeLists.txt | build：dasall_infra 目标可在真实头文件存在时编译；test：为后续 unit/contract 注册提供目标依赖面 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 至 INF-TODO-009 | 真实源文件数量尚少，短期仍需保留空实现兜底 | 允许保留最小 non-empty 实现，但不能再只有 placeholder-only 入口 | CMake 改动、构建通过证据 | 仅当 infra 目标能显式包含真实头文件/源文件入口，且 placeholder 不再是唯一源文件时完成 |
 | INF-TODO-011 | Not Started | 注册 infra 单元测试入口 | 详细设计 8.1、9.1；当前 tests/unit/CMakeLists.txt 现状 | 详细设计 9.1 测试矩阵；编码规范 3.7 | L2 | 新增 tests/unit/infra/ 与 tests/unit/CMakeLists.txt 注册入口 | tests/unit/infra；tests/unit/CMakeLists.txt | unit：InfraContext、LogEvent、AuditEvent、HealthSnapshot、接口编译测试 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 至 INF-TODO-010 | 当前 unit 聚合未包含 infra 子目录 | 在 unit 顶层加入 infra 子目录并确保新增用例被发现 | 单测目录、注册入口、ctest 发现性证据 | 仅当 infra 单测可被 ctest -L unit 发现并执行时完成 |
 | INF-TODO-012 | Not Started | 注册 infra contracts 边界测试入口 | 详细设计 6.5、9.1；蓝图 4.3；当前 tests/contract/CMakeLists.txt 机制 | 详细设计 6.5 contracts 对齐关系；9.1 Contract 覆盖要求 | L2 | 在 tests/contract/ 现有注册机制下新增 infra 边界用例，并扩展必要的 smoke/compatibility 断言 | tests/contract/CMakeLists.txt；tests/contract/smoke/ | contract：标识字段不越权、错误码映射不漂移、AuditEvent 引用边界稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L contract | INF-TODO-001、INF-TODO-004、INF-TODO-009 | 具体测试文件名与首批边界断言尚未冻结 | 先沿用现有 centralized registration 模式，后补充断言细则 | 合同测试源文件、注册改动、执行记录 | 仅当新增 infra 合同测试被发现并能阻止 contracts 语义越权时完成 |
@@ -756,3 +756,58 @@ Build 合规复核：
 3. 测试发现性：新增测试已完成 CMake 注册，待 ctest 执行结果回填。
 4. TODO 证据回写：已先回写设计映射与交付物，待验收结果补全。
 5. 提交隔离：本轮提交范围限定为 IHealthMonitor 接口、测试与证据文档。
+
+## 21. 本轮执行记录（2026-03-26 / INF-TODO-009）
+
+### 21.1 选中任务
+
+1. 本轮任务：INF-TODO-009。
+2. 可执行性依据：前置依赖 INF-TODO-002、INF-TODO-005、INF-TODO-006、INF-TODO-008 已全部完成；contracts 侧虽然只有五个粗粒度 ResultCode，但不影响本轮先冻结 infra 私有码域与一对多映射规则。
+
+### 21.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.6 已显式列出 infra 错误语义和私有码域清单，其中当前轮 Build-ready 范围正对应 `INF_E_CONFIG_INVALID` 至 `INF_E_OTA_ROLLBACK_FAIL` 七项。
+2. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.8 明确配置非法、日志队列溢出、审计写入失败、健康探针超时和 OTA apply/rollback 失败都必须对上游返回明确失败码，不能吞错。
+3. contracts/include/error/ResultCode.h 当前只冻结了五个一级失败类别样本码，要求 infra 侧只能通过映射消费既有 contracts 语义，不能反向扩写共享 ResultCode。
+
+外部参考：
+
+1. OWASP Logging Cheat Sheet 强调输入校验失败、配置修改、后端连接故障和系统事件都应被一致分类并保持可观测；本轮据此把 infra 私有码域显式聚合，并限制其只映射到现有 contracts validation/provider/runtime 三类粗粒度失败语义。
+
+D 结论：
+
+1. Design -> Build 映射：新增 InfraErrorCode.h 与 InfraErrorCode.cpp，冻结七个 infra 私有错误码、稳定名字空间和最小 `map_infra_error_code` 映射入口。
+2. 映射策略本轮只做一对多粗粒度收敛：配置非法与 OTA 校验失败归入 contracts validation；密钥不可用与健康探针超时归入 contracts provider；日志队列满、审计写失败与 OTA 回滚失败归入 contracts runtime。
+3. 本轮不修改 contracts ResultCode 枚举，也不把 plugin/policy/diagnostics 扩展错误码提前并入当前 Build-ready 范围，避免越过主 TODO 的 L2 边界。
+4. Build 三件套：
+    - 代码目标：新增 infra/include/InfraErrorCode.h、infra/src/InfraErrorCode.cpp。
+    - 测试目标：新增 unit 用例验证七个私有码名称和映射稳定性；新增 contract 用例验证映射结果只落到既有 contracts ResultCode 且名字空间保持 `INF_E_*` 私有前缀。
+    - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract。
+5. D Gate：PASS。
+
+### 21.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/InfraErrorCode.h：新增七个 infra 私有码、名字查询与 contracts 映射声明。
+2. infra/src/InfraErrorCode.cpp：新增私有码到 contracts ResultCode 的最小一对多映射入口。
+3. tests/unit/infra/InfraErrorCodeTest.cpp：覆盖名称稳定性、核心映射结果和七个私有码全覆盖。
+4. tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp：验证 infra 私有码仅映射到既有 contracts ResultCode，且名字空间仍保持在 infra 私有边界。
+5. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成源码与测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，10/10 tests passed，新增 `InfraErrorCodeUnitTest` 被发现并执行。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，90/90 tests passed，新增 `InfraErrorCodeBoundaryContractTest` 被发现并执行。
+
+Build 合规复核：
+
+1. 代码注释：本轮错误码命名和映射函数足够自解释，未引入需要长注释才能读懂的控制流。
+2. 正负例覆盖：unit 和 contract 均覆盖稳定正例与边界约束断言。
+3. 测试发现性：新增测试与源文件均已完成 CMake 注册，待 ctest 执行结果回填。
+4. TODO 证据回写：已先回写设计映射与交付物，待验收结果补全。
+5. 提交隔离：本轮提交范围限定为 infra 私有错误码域、测试与证据文档。

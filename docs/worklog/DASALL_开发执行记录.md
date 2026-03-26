@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #048
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-009 infra 私有错误码域
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-009-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.6/6.8/9.1，冻结 `INF_E_CONFIG_INVALID`、`INF_E_SECRET_UNAVAILABLE`、`INF_E_LOG_QUEUE_FULL`、`INF_E_AUDIT_WRITE_FAIL`、`INF_E_HEALTH_PROBE_TIMEOUT`、`INF_E_OTA_VERIFY_FAIL`、`INF_E_OTA_ROLLBACK_FAIL` 七个 infra 私有码。
+   - 鉴于 contracts 当前只冻结五个粗粒度 `ResultCode` 样本码，本轮只建立 infra 私有码到 contracts validation/provider/runtime 三类结果码的一对多映射规则，不扩写共享 contracts 枚举。
+2. 完成 INF-TODO-009-B 代码落地：
+   - 新增 [infra/include/InfraErrorCode.h](infra/include/InfraErrorCode.h)
+   - 新增 [infra/src/InfraErrorCode.cpp](infra/src/InfraErrorCode.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 新增 [tests/unit/infra/InfraErrorCodeTest.cpp](tests/unit/infra/InfraErrorCodeTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp](tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，10/10 tests passed，新增 `InfraErrorCodeUnitTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，90/90 tests passed，新增 `InfraErrorCodeBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. infra 已获得一个独立、可测试、可追溯的私有错误码域，后续接口和组件可以先引用私有码，再通过映射稳定收敛到 contracts 粗粒度失败语义。
+2. 当前映射规则仍受 contracts 一级类别粒度限制，后续若要细化 plugin/policy/diagnostics 等错误语义，必须先走 contracts 或专项设计冻结，而不是直接扩写共享结果码。
+
+### 下一步
+
+1. 按阶段 C 顺序继续推进 INF-TODO-010，接线 infra CMake 落盘入口。
+
+### 风险
+
+1. `InfraErrorCode` 当前只覆盖主 TODO 行列出的七个 Build-ready 私有码；详细设计中 plugin/policy/diagnostics 扩展错误还未纳入本轮，不应在后续实现中越过该边界直接追加共享映射。
+
 ## 记录 #047
 
 - 日期：2026-03-26
