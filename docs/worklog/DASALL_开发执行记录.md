@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #040
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-001 InfraContext 数据结构
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-001-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.5、AgentRequest/WorkerTask/WorkerLease contracts 和架构 6.11 多 Agent 追踪要求，冻结 InfraContext 六字段。
+   - 明确 Design -> Build 映射：header-only 数据结构 + unit/contract 双测试出口。
+   - 采用 unknown 作为缺失/空字符串的统一兜底语义，避免空指针和空字符串透传到 infra 可观测链路。
+2. 完成 INF-TODO-001-B 代码落地：
+   - 新增 [infra/include/InfraContext.h](infra/include/InfraContext.h)
+   - 新增 [tests/unit/infra/InfraContextTest.cpp](tests/unit/infra/InfraContextTest.cpp)
+   - 新增 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/InfraContextBoundaryContractTest.cpp](tests/contract/smoke/InfraContextBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，2/2 tests passed，新增 `InfraContextUnitTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，82/82 tests passed，新增 `InfraContextBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. InfraContext 已从 TODO 设计条目收敛为可编译、可测试、可追溯的数据结构。
+2. INF-TODO-002 以后可直接复用该对象作为 infra 对外接口和日志/审计/健康对象的共同上下文锚点。
+
+### 下一步
+
+1. 按顺序推进 INF-TODO-002，冻结 IInfrastructureService 与 Facade 生命周期骨架。
+
+### 风险
+
+1. 当前 InfraContext 仅冻结横切标识语义，不应在后续任务中顺手加入 worker_type、span_id 或 profile_id 等未在 INF-TODO-001 范围内的字段。
+2. 如果后续接口任务要求更细的 tracing/span 传播对象，应新增专用对象而不是修改本轮已冻结的六字段表。
+
 ## 记录 #039
 
 - 日期：2026-03-21

@@ -18,9 +18,36 @@
 7. docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
 8. docs/plans/DASALL_工程落地实现步骤指引.md
 9. docs/development/DASALL_工程协作与编码规范.md
-10. docs/architecture/DASALL_infra_policy模块详细设计.md
+10. infrastructure子系统组件详细设计
+    - docs/architecture/DASALL_infra_audit模块详细设计.md
+    - docs/architecture/DASALL_infra_config模块详细设计方案.md
+    - docs/architecture/DASALL_infra_diagnostics模块详细设计.md
+    - docs/architecture/DASALL_infra_health模块详细设计.md
+    - docs/architecture/DASALL_infra_logging模块详细设计.md
+    - docs/architecture/DASALL_infra_metrics模块详细设计.md
+    - docs/architecture/DASALL_infra_OTA模块详细设计.md
+    - docs/architecture/DASALL_infra_plugin模块详细设计.md
+    - docs/architecture/DASALL_infra_policy模块详细设计.md
+    - docs/architecture/DASALL_infra_secret模块详细设计.md
+    - docs/architecture/DASALL_infra_tracing模块详细设计.md
+    - docs/architecture/DASALL_infra_watchdog模块详细设计.md
 11. 当前仓库代码与测试现状：infra/CMakeLists.txt、infra/src/placeholder.cpp、tests/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt
 12. 现有 TODO 风格基线：docs/todos/contracts-freeze/、docs/todos/foundation-stage-c/WP-C1-platform-linux-infra-logging-Build开发TODO.md
+- docs/todos/DASALL_infrastructure子系统专项TODO.md
+- docs/todos/DASALL_infrastructure_audit组件专项TODO.md
+- docs/todos/DASALL_infrastructure_config组件专项TODO.md
+- docs/todos/DASALL_infrastructure_diagnostics组件专项TODO.md
+- docs/todos/DASALL_infrastructure_health组件专项TODO.md
+- docs/todos/DASALL_infrastructure_logging组件专项TODO.md
+- docs/todos/DASALL_infrastructure_metrics组件专项TODO.md
+- docs/todos/DASALL_infrastructure_ota组件专项TODO.md
+- docs/todos/DASALL_infrastructure_plugin组件专项TODO.md
+- docs/todos/DASALL_infrastructure_policy组件专项TODO.md
+- docs/todos/DASALL_infrastructure_secret组件专项TODO.md
+- docs/todos/DASALL_infrastructure_tracing组件专项TODO.md
+- docs/todos/DASALL_infrastructure_watchdog组件专项TODO.md
+- docs/todos/DASALL_platform_linux组件专项TODO.md
+- docs/todos/DASALL_profiles子系统专项TODO.md
 
 本文档目的不是补写新架构，也不是默认推进所有 infra 子域实现，而是把已有详细设计转化为：
 
@@ -160,7 +187,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| INF-TODO-001 | Not Started | 定义 InfraContext 数据结构 | 详细设计 6.5；架构 3.8；ADR-008 | 详细设计 6.5 核心对象与 contracts 对齐关系 | L2 | infra/include/ 下新增 InfraContext 头文件，承载 request_id、session_id、trace_id、task_id、parent_task_id、lease_id | InfraContext | unit：字段默认值与 unknown 语义；contract：不越权扩写 contracts 标识语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | 无 | 无 | 无 | 数据结构头文件、基础测试、字段说明 | 仅当 InfraContext 字段与设计一致、编译通过、测试能验证 unknown 兜底语义时完成 |
+| INF-TODO-001 | Done | 定义 InfraContext 数据结构 | 详细设计 6.5；架构 3.8；ADR-008 | 详细设计 6.5 核心对象与 contracts 对齐关系 | L2 | infra/include/ 下新增 InfraContext 头文件，承载 request_id、session_id、trace_id、task_id、parent_task_id、lease_id | InfraContext | unit：字段默认值与 unknown 语义；contract：不越权扩写 contracts 标识语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | 无 | 无 | 无 | 数据结构头文件、基础测试、字段说明；2026-03-26 已落盘 infra/include/InfraContext.h、tests/unit/infra/InfraContextTest.cpp、tests/contract/smoke/InfraContextBoundaryContractTest.cpp | 仅当 InfraContext 字段与设计一致、编译通过、测试能验证 unknown 兜底语义时完成 |
 | INF-TODO-002 | Not Started | 新增 IInfrastructureService 接口与 Facade 生命周期骨架 | 详细设计 6.2、6.3、6.6、6.7、8.1；蓝图 3.12 | 详细设计 6.6 核心接口语义定义；6.7 主流程时序 | L2 | infra/include/IInfrastructureService.h；infra/src/ 下新增/替换 InfraServiceFacade 生命周期骨架 | IInfrastructureService；InfraServiceFacade.init/start/stop/execute | unit：生命周期顺序与空实现可编译；contract：返回 ResultCode/ErrorInfo 引用不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 | execute(command) 的命令对象签名未冻结 | 先以接口骨架落盘，不实现命令细节 | 接口头文件、骨架实现、构建通过证据 | 仅当 placeholder 不再是唯一入口、接口方法与设计一致且 dasall_infra 可编译时完成 |
 | INF-TODO-003 | Not Started | 定义 LogEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 LogEvent；6.10 日志点/指标 | L2 | infra/include/ 下新增 LogEvent 头文件，冻结 level、module、message、attrs、ts | LogEvent | unit：attrs 可序列化约束；contract：敏感字段脱敏边界不侵入 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 | attrs 键白名单未冻结 | 先冻结字段与基本约束，白名单细则后补 | 数据结构头文件、最小单测 | 仅当 LogEvent 字段与设计一致、测试覆盖可序列化与脱敏前置约束时完成 |
 | INF-TODO-004 | Not Started | 定义 AuditEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 AuditEvent；6.8 审计 fallback；6.10 审计覆盖点 | L2 | infra/include/ 下新增 AuditEvent 头文件，冻结 action、actor、target、evidence_ref、outcome、side_effects | AuditEvent | unit：必填字段校验；contract：ToolResult/RecoveryOutcome 引用边界校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-001 | side_effects 精确对象模型未冻结 | 先按字段级冻结引用关系，不扩写 side_effects 子结构 | 数据结构头文件、单测/契约测试 | 仅当高风险命令审计对象字段齐备、合同测试能阻止越权字段时完成 |
@@ -327,3 +354,55 @@
 
 1. INF-TODO-021 先于所有实现类任务执行，用于落实 ARC-02 的统一门禁。
 2. INF-TODO-020 在 contract 侧完成后，回写 tracing/metrics 专项 TODO 的对应任务状态。
+
+## 13. 本轮执行记录（2026-03-26）
+
+### 13.1 选中任务
+
+1. 本轮任务：INF-TODO-001。
+2. 可执行性依据：无前置依赖、无阻塞项、目标限定在单个数据结构与对应 unit/contract 测试，满足“一轮只做一个原子任务”。
+
+### 13.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.5 明确 InfraContext 六个字段，以及“缺失字段允许 unknown，不允许空指针传递”。
+2. contracts/include/agent/AgentRequest.h、contracts/include/task/WorkerTask.h、contracts/include/task/WorkerLease.h 提供 request/session/trace/task/parent_task/lease 六类既有标识语义来源。
+3. docs/architecture/DASSALL_Agent_architecture.md 6.11 要求多 Agent 链路保留 trace_id、task_id、lease_id、parent_task_id 以支持追踪与回放。
+
+外部参考：
+
+1. OpenTelemetry Overview 强调 observability signals 共享 context propagation，并要求 tracing identifiers 在跨边界传播时保持稳定关联；本任务据此保持 InfraContext 为纯标识承载层，不引入额外控制语义。
+
+D 结论：
+
+1. Design -> Build 映射：以 header-only InfraContext 冻结六个字段；通过 from_contracts 显式消费 AgentRequest/WorkerTask/WorkerLease 的既有标识；所有缺失或空字符串统一规范化为 unknown。
+2. Build 三件套：
+    - 代码目标：新增 infra/include/InfraContext.h。
+    - 测试目标：新增 unit 用例验证默认值和 normalize 规则；新增 contract 用例验证只消费现有 contracts 标识语义。
+    - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract。
+3. D Gate：PASS。
+
+### 13.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/InfraContext.h：新增 InfraContext 六字段定义、unknown 默认值和 from_contracts 映射函数。
+2. tests/unit/infra/InfraContextTest.cpp：覆盖默认 unknown、正常映射、空值归一化与 lease fallback。
+3. tests/contract/smoke/InfraContextBoundaryContractTest.cpp：覆盖 contracts 标识语义消费边界与禁止空字符串落盘。
+4. tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，2/2 tests passed，新增 InfraContextUnitTest 被发现并执行。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，82/82 tests passed，新增 InfraContextBoundaryContractTest 被发现并执行。
+
+Build 合规复核：
+
+1. 代码注释：本轮仅在不自解释的 contracts/语义来源处复用既有注释风格；新增结构本身字段命名已足够自解释，无额外冗余注释。
+2. 正负例覆盖：unit 与 contract 均包含正例和负例/归一化路径。
+3. 测试发现性：通过 CMake 注册新增 unit/contract 用例，验收阶段以 ctest 发现和执行结果为准。
+4. TODO 证据回写：已回写本节执行记录与主任务状态。
+5. 提交隔离：本轮提交范围限定为 InfraContext 相关代码、测试与证据文档。
