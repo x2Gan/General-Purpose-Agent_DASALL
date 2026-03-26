@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #047
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-008 IHealthMonitor 接口
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-008-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.6/6.8 与 health 模块详细设计 6.5/6.6，冻结 `IHealthMonitor::register_probe` 与 `IHealthMonitor::evaluate` 两个最小接口。
+   - 针对未冻结的 `IHealthProbe` 形状与 probe timeout 细节，本轮只引入 `HealthProbeRegistration` 占位类型，保留 `probe_name/probe_group/opaque_probe_ref` 三个最小字段，避免过早引入具体探针抽象与调度模型。
+   - 统一返回 `HealthMonitorRegistrationResult` 与 `HealthEvaluationResult`，仅引用 contracts `ResultCode` 与 `ErrorInfo`，保持健康评估失败语义可观测。
+2. 完成 INF-TODO-008-B 代码落地：
+   - 新增 [infra/include/IHealthMonitor.h](infra/include/IHealthMonitor.h)
+   - 新增 [tests/unit/infra/HealthMonitorInterfaceTest.cpp](tests/unit/infra/HealthMonitorInterfaceTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp](tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，9/9 tests passed，新增 `HealthMonitorInterfaceTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，89/89 tests passed，新增 `HealthMonitorInterfaceBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. `IHealthMonitor` 已与 `HealthSnapshot` 建立稳定的头文件级接口关系，为后续 health facade、probe registry 和 evaluator 接线提供固定调用面。
+2. probe 注册语义当前被严格限制在 infra 私有占位类型内，后续只能扩展具体 probe 抽象、timeout 和订阅细节，不能破坏本轮 contracts 对齐的返回语义与输出边界。
+
+### 下一步
+
+1. 按阶段 C 顺序继续推进 INF-TODO-009，冻结 infra 私有错误码域。
+
+### 风险
+
+1. `HealthProbeRegistration` 当前只是最小占位类型，后续引入真实 IHealthProbe、策略阈值与调度周期时必须通过专项设计补充，不应直接把实现细节写回接口冻结层。
+
 ## 记录 #046
 
 - 日期：2026-03-26
