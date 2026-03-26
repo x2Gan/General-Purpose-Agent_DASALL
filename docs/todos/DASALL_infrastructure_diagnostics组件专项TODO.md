@@ -1,0 +1,327 @@
+# DASALL infrastructure 子系统 diagnostics 组件专项 TODO
+
+最近更新时间：2026-03-26  
+阶段：Detailed Design -> Special TODO  
+适用范围：infra/diagnostics
+
+## 1. 文档头
+
+本文档严格基于以下输入生成：
+
+1. docs/architecture/DASALL_infra_diagnostics模块详细设计.md
+2. docs/architecture/DASALL_infrastructure子系统详细设计.md
+3. docs/architecture/DASSALL_Agent_architecture.md
+4. docs/architecture/DASALL_Engineering_Blueprint.md
+5. docs/adr/ADR-005-architecture-review-baseline.md
+6. docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
+7. docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md
+8. docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
+9. docs/plans/DASALL_工程落地实现步骤指引.md
+10. docs/development/DASALL_工程协作与编码规范.md
+11. docs/todos/DASALL_contracts冻结TODO总表.md
+12. docs/todos/DASALL_infrastructure子系统专项TODO.md
+13. docs/todos/DASALL_infrastructure_logging组件专项TODO.md
+14. docs/todos/DASALL_infrastructure_metrics组件专项TODO.md
+15. docs/todos/DASALL_infrastructure_health组件专项TODO.md
+16. docs/todos/DASALL_infrastructure_audit组件专项TODO.md
+17. docs/todos/DASALL_infrastructure_policy组件专项TODO.md
+18. 当前代码与测试现状：infra/CMakeLists.txt、infra/include/、infra/src/、tests/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt
+
+生成原则：
+
+1. 不改写 ADR-005/006/007/008 已冻结结论。
+2. 不越过 infrastructure/diagnostics 组件边界扩张到无关模块。
+3. 不把讨论事项或设计缺口伪装成 Build-ready 实现任务。
+4. 每项任务必须具备代码目标、测试目标、验收命令三件套。
+5. 若详细设计对接口请求/响应对象、桥接接口或导出策略证据不足，必须输出 Blocked 与补设计前置任务。
+
+## 2. 子系统目标与范围
+
+### 2.1 组件目标
+
+1. 提供统一诊断入口，执行白名单命令并返回可追溯的 DiagnosticsSnapshot。
+2. 提供先脱敏后落盘、可查询、可导出的诊断快照链路。
+3. 提供对 metrics、audit、logging、health 等基础信号的证据聚合，但不接管恢复裁定与调度。
+4. 在连续失败场景下进入 diagnostics_safe_mode，仅保留只读低风险诊断能力。
+
+### 2.2 范围边界
+
+纳入范围：
+
+1. diagnostics 对外接口、核心对象、错误码、配置键、主流程与异常流程。
+2. DiagnosticsServiceFacade、CommandRegistry、CommandPolicyGuard、CommandExecutor、EvidenceCollector、RedactionEngine、SnapshotAssembler、SnapshotStore、ExportManager、DiagnosticsMetricsBridge、DiagnosticsAuditBridge 的落盘拆解。
+3. diagnostics 的 CMake 接线、unit/contract/integration/failure-injection 测试注册点、质量门与阻塞项。
+
+不纳入范围：
+
+1. runtime 主状态机推进、恢复执行裁定、retry/replan/rollback 决策。
+2. contracts 公共语义对象扩写或重定义。
+3. metrics/audit/health/security_policy 具体实现细节，仅允许依赖其冻结接口或抽象。
+4. sidecar 诊断代理、远程多目标断点续传等 v2 演进项。
+
+## 3. 输入依据与约束清单
+
+### 3.1 约束清单（Step 1：约束与边界抽取输出）
+
+| ID | 来源 | 类型 | 约束内容 | 对 diagnostics TODO 的影响 |
+|---|---|---|---|---|
+| DIA-TC001 | diagnostics 设计 1.1；架构 9.5 | Must | diagnostics 必须提供线程状态、队列积压、错误码统计、工具失败明细、模型与服务健康状态等最低诊断能力 | 任务必须覆盖命令域、快照对象、证据聚合与导出 |
+| DIA-TC002 | 架构 3.7；蓝图 4.2 | Must | 依赖方向单向，diagnostics 不反向依赖 runtime/cognition/tools 实现 | 代码目标仅限 infra/tests/docs/cmake 路径 |
+| DIA-TC003 | 蓝图 4.3；infrastructure 设计 2.1 | Must | 跨模块调用通过 contracts 或冻结抽象，不直连实现类 | PolicyGuard、MetricsBridge、AuditBridge 只能依赖抽象接口 |
+| DIA-TC004 | ADR-005；contracts 冻结总表 M5 | Must | 共享语义与边界冻结优先，新增字段优先 optional 与向后兼容 | 对象任务必须先冻结字段，再推进实现 |
+| DIA-TC005 | ADR-006 | Must-Not | diagnostics 不承担 ContextPacket 组装与 Prompt 渲染职责 | 禁止在任务中引入上下文装配逻辑 |
+| DIA-TC006 | ADR-007 | Must-Not | diagnostics 不做失败语义判定与恢复裁定，仅输出证据与建议引用 | Recovery 相关任务不得出现执行动作 |
+| DIA-TC007 | ADR-008 | Must | diagnostics 不拥有全局调度权，仅服务主控链路 | DiagnosticsServiceFacade 只做入口与生命周期管理 |
+| DIA-TC008 | diagnostics 设计 2.1、6.5；contracts 冻结约束 | Must-Not | 命令执行器、采样线程、导出后端等实现细节不得写入 contracts | 接口与对象任务只能冻结 diagnostics 私有抽象 |
+| DIA-TC009 | diagnostics 设计 6.5/6.8/6.10；工程规范 3.6 | Must | 快照必须脱敏、失败不可吞没、高风险动作必须可审计 | 红线任务必须覆盖错误码、审计、指标与日志出口 |
+| DIA-TC010 | 工程规范 3.7 | Should | 新增公共接口同步增加至少一个 unit 或 contract 测试 | 每个接口/对象任务必须绑定测试 |
+| DIA-TC011 | diagnostics 设计 6.9；蓝图 5.1 | Must | Profile 只能裁剪能力，不得绕过 audit 与 runtime 主控链路 | 配置与导出任务必须体现 remote 默认禁用与 safe_mode 约束 |
+| DIA-TC012 | 落地步骤指引 阶段 C | Must | infra 底座先行且每阶段必须可测试 | 执行顺序需先接口对象，再主链路，再门禁 |
+| DIA-TC013 | diagnostics 设计 3.1、11.1；infra 专项 TODO INF-BLK-08 | Must | 命令白名单、脱敏规则、导出格式与 integration 拓扑存在阻塞项 | 必须显式输出 Blocked 与解阻动作 |
+
+### 3.2 代码现状证据
+
+| 证据对象 | 当前状态 | 结论 |
+|---|---|---|
+| infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | diagnostics 尚未接入构建 |
+| infra/include/ | 空目录 | diagnostics 对外接口与对象未落盘 |
+| infra/src/ | 仅有 config/health/logging/metrics/ota/secret/tracing 目录与 placeholder | diagnostics 实现目录尚未存在 |
+| tests/CMakeLists.txt | 仅接入 mocks/unit/contract | integration 顶层未接入，diagnostics 集成测试暂不可发现 |
+| tests/unit/CMakeLists.txt | 未接入 infra 子目录 | diagnostics unit 发现性缺失 |
+| tests/contract/CMakeLists.txt | 已有 centralized registration 机制 | 可承载 diagnostics 边界 contract 测试 |
+| tests/integration/ | 目录已存在但顶层未 add_subdirectory | diagnostics integration 只能先标记为 Blocked |
+
+## 4. 粒度可行性评估
+
+### 4.1 粒度结论
+
+结论：可直接生成 L3/L2 混合专项 TODO；当前最小可执行粒度为数据结构/接口/单链路骨架级，局部实现任务受设计缺口约束需先补设计。
+
+证据：
+
+1. 已有明确核心接口名与方法语义：IDiagnosticsService、IDiagnosticsCommandRegistry、IDiagnosticsPolicyGuard 及其方法集合在 diagnostics 设计 6.6 明确。
+2. 已有明确核心对象字段：DiagnosticsCommand、CommandDecision、EvidenceBundle、DiagnosticsSnapshot、SnapshotExportResult 在 diagnostics 设计 6.5 明确。
+3. 已有主流程与异常流程：6.7 正常 9 步、6.8 异常分类/恢复动作/兜底策略完整。
+4. 已有错误码域、配置项、文件落点与测试出口：6.6、6.9、7、8.1、9.1 已给出。
+5. 存在明确证据缺口：SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult、CommandCatalog、ValidationResult 未在 6.5 对象表中定义；metrics/audit 桥接接口签名未冻结；导出格式与远程目标白名单仍在 11.1 阻塞表中。
+
+### 4.2 粒度可行性评估表（Step 2：详细设计可执行性扫描输出）
+
+| 设计对象 | 设计锚点 | 当前粒度等级 | 已具备证据 | 缺失证据 | TODO 拆解策略 |
+|---|---|---|---|---|---|
+| DiagnosticsCommand | diagnostics 设计 6.5 | L3 | 字段、白名单约束、actor_ref 语义明确 | args 的 schema 细节未冻结 | 直接拆数据结构冻结任务；参数 schema 另列阻塞 |
+| CommandDecision | diagnostics 设计 6.5/6.6 | L3 | allowed/reason_code/policy_ref/denied_rule_id 完整 | reason_code 到 contracts 映射矩阵未成文 | 直接拆对象任务，并补错误映射测试 |
+| EvidenceBundle | diagnostics 设计 6.5 | L3 | logs_ref/metrics_ref/health_ref/errors_ref/artifacts 字段明确 | artifacts 子元素结构未展开 | 直接拆对象任务，内部聚合细节后置 |
+| DiagnosticsSnapshot | diagnostics 设计 6.5/6.7/6.8 | L3 | 字段、脱敏、可导出、evidence_refs 约束明确 | get_snapshot 查询对象未定义 | 直接拆对象任务；查询对象另列补设计 |
+| SnapshotExportResult | diagnostics 设计 6.5 | L3 | 字段、失败语义、导出约束明确 | format 枚举与 checksum 算法未展开 | 直接拆对象任务 |
+| IDiagnosticsPolicyGuard | diagnostics 设计 6.6 | L3 | authorize 输入输出完整，依赖抽象边界明确 | PolicySnapshot 结构未冻结，但不影响接口名与最小签名 | 直接拆接口任务 |
+| IDiagnosticsService | diagnostics 设计 6.6 | L2 | 方法名与职责明确 | SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult 未定义 | 先补请求/返回对象设计，再冻结接口 |
+| IDiagnosticsCommandRegistry | diagnostics 设计 6.6 | L2 | 方法名与职责明确 | CommandCatalog、ValidationResult 未定义 | 先补对象设计，再冻结接口 |
+| CommandRegistry | diagnostics 设计 6.2/6.3/6.7 | L2 | 白名单职责、输入输出路径明确 | allowed_commands 参数 schema 未冻结 | 先补 schema，再做骨架任务 |
+| CommandPolicyGuard | diagnostics 设计 6.2/6.3/6.4 | L2 | 准入职责、deny 必带策略引用明确 | security policy snapshot 最小字段未回链 | 直接拆骨架任务，前置依赖 security policy 抽象 |
+| CommandExecutor | diagnostics 设计 6.2/6.3/6.7/6.8 | L2 | 执行职责、超时/异常结构化返回明确 | 执行结果内部对象未命名 | 直接拆类级骨架任务，备注无法细化到函数级 |
+| EvidenceCollector | diagnostics 设计 6.2/6.3/6.7 | L2 | 聚合日志/指标/健康/错误摘要职责明确 | artifacts 聚合对象与来源接口未冻结 | 直接拆类级骨架任务，依赖相邻组件接口 |
+| RedactionEngine | diagnostics 设计 6.2/6.3/6.8/6.9 | L2 | 脱敏职责、失败策略、配置键明确 | 脱敏规则矩阵未冻结 | 先解阻 D-BLK-02，再做骨架任务 |
+| SnapshotAssembler | diagnostics 设计 6.2/6.7 | L2 | 输入输出、snapshot_id 唯一性约束明确 | snapshot_id 生成策略未展开 | 直接拆骨架任务 |
+| SnapshotStore | diagnostics 设计 6.2/6.3/6.7/6.9 | L2 | 持久化、索引、保留窗口职责明确 | 存储后端首版形态未冻结 | 直接拆骨架任务，先按最小本地存储实现 |
+| ExportManager | diagnostics 设计 6.2/6.3/6.8/6.9；11.1 | L2 | 本地/远程导出职责、远程默认禁用明确 | 导出格式、target 白名单、远程目标模型未冻结 | 先解阻 D-BLK-03，再做骨架任务 |
+| DiagnosticsMetricsBridge | diagnostics 设计 6.2/6.10；11.1 | L1 | 指标名清单与桥接职责明确 | metrics 侧桥接接口签名未冻结 | 先补桥接接口设计，再实现 |
+| DiagnosticsAuditBridge | diagnostics 设计 6.2/6.10；11.1 | L1 | 高风险动作审计字段与职责明确 | audit 侧桥接接口签名未冻结 | 先补桥接接口设计，再实现 |
+| tests/integration/infra/diagnostics | diagnostics 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在 | tests 顶层未接入 integration | 先解阻测试拓扑 |
+
+## 5. Design -> TODO 映射表
+
+### 5.1 映射总表（Step 3 输出）
+
+| Design 项 | 设计锚点 | TODO 类型 | 对应任务 ID | 映射说明 |
+|---|---|---|---|---|
+| DiagnosticsCommand / CommandDecision / EvidenceBundle / DiagnosticsSnapshot / SnapshotExportResult 冻结 | diagnostics 设计 6.5 | 数据结构 | DIA-TODO-001、DIA-TODO-002、DIA-TODO-003、DIA-TODO-004、DIA-TODO-005 | 先稳定字段与兼容边界，再进入实现 |
+| diagnostics 私有错误码域 | diagnostics 设计 6.6/6.8；工程规范 3.6 | 错误处理 | DIA-TODO-006 | 拒绝、超时、脱敏、存储、导出失败都需可判定 |
+| SnapshotQuery / SnapshotExportRequest / DiagnosticsSnapshotResult | diagnostics 设计 6.6 | 接口前置补设计 | DIA-BLK-001、DIA-TODO-007 | IDiagnosticsService 方法已给出，但请求/返回对象未定义，必须先补设计 |
+| CommandCatalog / ValidationResult | diagnostics 设计 6.6 | 接口前置补设计 | DIA-BLK-002、DIA-TODO-008 | IDiagnosticsCommandRegistry 不能在缺少对象模型时直接落盘 |
+| IDiagnosticsPolicyGuard 接口冻结 | diagnostics 设计 6.6 | 接口 | DIA-TODO-009 | 其输入输出对象已足够，可直接冻结 |
+| IDiagnosticsService / IDiagnosticsCommandRegistry 接口冻结 | diagnostics 设计 6.6 | 接口 | DIA-TODO-010、DIA-TODO-011 | 分别依赖请求/返回对象补齐与目录对象补齐 |
+| DiagnosticsServiceFacade 生命周期与 safe_mode | diagnostics 设计 6.2/6.7/6.8/6.9 | 生命周期/初始化 | DIA-TODO-012 | 主入口与 safe_mode 单独拆出，避免与执行器耦合 |
+| CommandRegistry / CommandPolicyGuard 准入链路 | diagnostics 设计 6.2/6.3/6.4/6.7 | 流程 | DIA-TODO-013、DIA-TODO-014 | 白名单校验与策略准入拆分单目标 |
+| CommandExecutor / EvidenceCollector / SnapshotAssembler | diagnostics 设计 6.2/6.3/6.7/6.8 | 流程 | DIA-TODO-015、DIA-TODO-016、DIA-TODO-017 | 执行、聚合、组装拆分后更易独立验收 |
+| RedactionEngine / SnapshotStore / ExportManager | diagnostics 设计 6.2/6.8/6.9/11.1 | 流程/配置 | DIA-TODO-018、DIA-TODO-019、DIA-TODO-020 | 脱敏、落盘、导出各自单独 gate |
+| Metrics/Audit Bridge | diagnostics 设计 6.10/11.1 | 适配器/桥接 | DIA-TODO-021、DIA-TODO-022 | 桥接接口未冻结，必须受阻塞约束 |
+| CMake 与测试门禁接线 | diagnostics 设计 7、8.1、9.1；代码现状 | 测试/门禁 | DIA-TODO-023、DIA-TODO-024、DIA-TODO-025 | 构建、unit/contract 可先做，integration 先阻塞 |
+| 文档与交付证据回写 | diagnostics 设计 8.3 DIA-T010；9.2；11.1 | 文档/交付证据 | DIA-TODO-026 | 对 INF-TODO-018、INF-BLK-08 的执行证据做收口 |
+
+### 5.2 映射覆盖性检查
+
+| 类型 | 是否覆盖 | 说明 |
+|---|---|---|
+| 接口定义类任务 | 是 | DIA-TODO-009、010、011 |
+| 数据结构定义类任务 | 是 | DIA-TODO-001~005 |
+| 生命周期与初始化类任务 | 是 | DIA-TODO-012 |
+| 适配器/桥接类任务 | 是 | DIA-TODO-021、022 |
+| 异常与错误处理类任务 | 是 | DIA-TODO-006、018、020 |
+| 配置与 Profile 裁剪类任务 | 是 | DIA-TODO-013、018、019、020 |
+| 测试与门禁类任务 | 是 | DIA-TODO-023、024、025 |
+| 文档/交付证据回写类任务 | 是 | DIA-TODO-026 |
+
+## 6. 原子任务清单
+
+### 6.1 原子任务表（Step 4 输出）
+
+| ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| DIA-TODO-001 | Not Started | 定义 DiagnosticsCommand 数据结构 | diagnostics 设计 6.5；架构 9.5 | 6.5 DiagnosticsCommand | L3 | infra/include/diagnostics/DiagnosticsTypes.h | DiagnosticsCommand | unit：DiagnosticsTypesTest；contract：DiagnosticsBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsTypesTest|DiagnosticsBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | DiagnosticsTypes.h、对象测试 | 仅当 command_id、command_name、args、request_scope、timeout_ms、actor_ref 字段齐备且 command_name 白名单约束可由测试断言时完成 |
+| DIA-TODO-002 | Not Started | 定义 CommandDecision 数据结构 | diagnostics 设计 6.5/6.6 | 6.5 CommandDecision；6.6 错误语义 | L3 | infra/include/diagnostics/DiagnosticsTypes.h | CommandDecision | unit：DiagnosticsTypesTest；contract：DiagnosticsErrorMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsTypesTest|DiagnosticsErrorMappingContractTest" --output-on-failure | 无 | 无 | 无 | DiagnosticsTypes.h、对象测试 | 仅当 allowed、reason_code、policy_ref、denied_rule_id 字段齐备，且 deny 路径映射 contracts 语义可测时完成 |
+| DIA-TODO-003 | Not Started | 定义 EvidenceBundle 数据结构 | diagnostics 设计 6.5；infrastructure 设计 6.5 | 6.5 EvidenceBundle | L3 | infra/include/diagnostics/DiagnosticsTypes.h | EvidenceBundle | unit：DiagnosticsTypesTest；contract：DiagnosticsBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsTypesTest|DiagnosticsBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | DiagnosticsTypes.h、对象测试 | 仅当 logs_ref、metrics_ref、health_ref、errors_ref、artifacts 字段齐备，且对象只保存引用与必要摘要时完成 |
+| DIA-TODO-004 | Not Started | 定义 DiagnosticsSnapshot 数据结构 | diagnostics 设计 6.5/6.7/6.8；infra 专项 TODO INF-TODO-018 | 6.5 DiagnosticsSnapshot | L3 | infra/include/diagnostics/DiagnosticsTypes.h | DiagnosticsSnapshot | unit：DiagnosticsSnapshotExportTest；contract：DiagnosticsBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsSnapshotExportTest|DiagnosticsBoundaryContractTest" --output-on-failure | DIA-TODO-001、DIA-TODO-003 | 无 | 无 | DiagnosticsTypes.h、对象测试 | 仅当 snapshot_id、command、collected_at、summary、evidence_refs、redaction_profile、exporter_hint 字段齐备，且脱敏前置语义可测试时完成 |
+| DIA-TODO-005 | Not Started | 定义 SnapshotExportResult 数据结构 | diagnostics 设计 6.5/6.8 | 6.5 SnapshotExportResult | L3 | infra/include/diagnostics/DiagnosticsTypes.h | SnapshotExportResult | unit：DiagnosticsSnapshotExportTest；contract：DiagnosticsErrorMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsSnapshotExportTest|DiagnosticsErrorMappingContractTest" --output-on-failure | DIA-TODO-004 | 无 | 无 | DiagnosticsTypes.h、对象测试 | 仅当 export_id、target、format、size_bytes、checksum、created_at 字段齐备，且失败路径绑定错误码时完成 |
+| DIA-TODO-006 | Not Started | 定义 DiagnosticsErrors 错误码域 | diagnostics 设计 6.6/6.8；工程规范 3.6 | 6.6 错误语义；6.8 异常分类 | L3 | infra/include/diagnostics/DiagnosticsErrors.h | INF_E_DIAG_COMMAND_DENIED、INF_E_DIAG_COMMAND_INVALID、INF_E_DIAG_EXEC_TIMEOUT、INF_E_DIAG_EXEC_FAIL、INF_E_DIAG_REDACTION_FAIL、INF_E_DIAG_SNAPSHOT_STORE_FAIL、INF_E_DIAG_EXPORT_FAIL、INF_E_DIAG_REMOTE_EXPORT_DISABLED | contract：DiagnosticsErrorMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R DiagnosticsErrorMappingContractTest --output-on-failure | DIA-TODO-002、DIA-TODO-005 | 无 | 无 | DiagnosticsErrors.h、映射测试 | 仅当 8 个错误码全部可追溯到 6.6/6.8 条目且映射测试可阻止漂移时完成 |
+| DIA-TODO-007 | Blocked | 补齐 IDiagnosticsService 请求与返回对象设计 | diagnostics 设计 6.6；硬约束 5 | 6.6 IDiagnosticsService | L0 | docs/architecture/DASALL_infra_diagnostics模块详细设计.md | SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult | contract：对象边界补齐后可进入 DiagnosticsBoundaryContractTest | rg -n "SnapshotQuery|SnapshotExportRequest|DiagnosticsSnapshotResult" docs/architecture/DASALL_infra_diagnostics模块详细设计.md | 无 | DIA-BLK-001 | 在详细设计 6.5 或附录中补齐三类对象字段表与错误语义 | 设计补充记录、评审结论 | 仅当三类对象具备字段、输入输出语义与错误约束，且不需依赖实现细节时完成 |
+| DIA-TODO-008 | Blocked | 补齐 CommandRegistry 目录与校验返回对象设计 | diagnostics 设计 6.6；硬约束 5 | 6.6 IDiagnosticsCommandRegistry | L0 | docs/architecture/DASALL_infra_diagnostics模块详细设计.md | CommandCatalog、ValidationResult | contract：对象边界补齐后可进入 DiagnosticsCommandRegistryTest | rg -n "CommandCatalog|ValidationResult" docs/architecture/DASALL_infra_diagnostics模块详细设计.md | 无 | DIA-BLK-002 | 在详细设计中补齐目录对象、校验结果对象及参数 schema 返回语义 | 设计补充记录、评审结论 | 仅当目录对象与校验结果对象字段冻结且与白名单约束一致时完成 |
+| DIA-TODO-009 | Not Started | 定义 IDiagnosticsPolicyGuard 接口头文件 | diagnostics 设计 6.6；infrastructure 设计 6.6 | 6.6 IDiagnosticsPolicyGuard | L3 | infra/include/diagnostics/IDiagnosticsPolicyGuard.h | authorize(const DiagnosticsCommand&, const InfraContext&) -> CommandDecision | unit：DiagnosticsServiceInterfaceTest；contract：DiagnosticsBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|DiagnosticsBoundaryContractTest" --output-on-failure | DIA-TODO-001、DIA-TODO-002 | 无 | 无 | IDiagnosticsPolicyGuard.h、编译测试 | 仅当接口签名与 6.6 一致、只依赖抽象类型且不暴露策略实现细节时完成 |
+| DIA-TODO-010 | Blocked | 定义 IDiagnosticsService 接口头文件 | diagnostics 设计 6.6；infra 专项 TODO INF-TODO-018 | 6.6 IDiagnosticsService | L2 | infra/include/diagnostics/IDiagnosticsService.h | execute、get_snapshot、export_snapshot | unit：DiagnosticsServiceInterfaceTest；contract：DiagnosticsBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|DiagnosticsBoundaryContractTest" --output-on-failure | DIA-TODO-001、DIA-TODO-004、DIA-TODO-005、DIA-TODO-007 | DIA-BLK-001 | 先补齐 SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult 对象 | IDiagnosticsService.h、编译测试或阻塞记录 | 仅当三类请求/返回对象冻结后接口可无占位别名落盘时完成 |
+| DIA-TODO-011 | Blocked | 定义 IDiagnosticsCommandRegistry 接口头文件 | diagnostics 设计 6.6 | 6.6 IDiagnosticsCommandRegistry | L2 | infra/include/diagnostics/IDiagnosticsCommandRegistry.h | list_commands、validate | unit：DiagnosticsServiceInterfaceTest；unit：DiagnosticsCommandRegistryTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest" --output-on-failure | DIA-TODO-001、DIA-TODO-008 | DIA-BLK-002 | 先补齐 CommandCatalog、ValidationResult 对象 | IDiagnosticsCommandRegistry.h、编译测试或阻塞记录 | 仅当目录与校验对象字段冻结后接口可落盘时完成 |
+| DIA-TODO-012 | Blocked | 实现 DiagnosticsServiceFacade 生命周期与 safe_mode 骨架 | diagnostics 设计 6.2/6.7/6.8/6.9 | 6.2 DiagnosticsServiceFacade；6.8 兜底策略；6.9 safe_mode.failure_threshold | L2 | infra/src/diagnostics/DiagnosticsServiceFacade.cpp | DiagnosticsServiceFacade | unit：DiagnosticsServiceInterfaceTest；failure：InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|InfraDiagnosticsSmokeTest" --output-on-failure | DIA-TODO-010 | DIA-BLK-001 | 先冻结 IDiagnosticsService 请求/返回对象，再实现主入口骨架 | DiagnosticsServiceFacade.cpp、骨架测试或阻塞记录 | 仅当 execute/get/export 生命周期、safe_mode 进入条件与失败可观测路径可二值判定时完成 |
+| DIA-TODO-013 | Blocked | 实现 CommandRegistry 白名单治理骨架 | diagnostics 设计 6.2/6.3/6.7；11.1 | 6.2 CommandRegistry；7 Design->Build；11.1 D-BLK-01 | L2 | infra/src/diagnostics/CommandRegistry.cpp | CommandRegistry | unit：DiagnosticsCommandRegistryTest；unit：DiagnosticsCommandPolicyTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest" --output-on-failure | DIA-TODO-011 | DIA-BLK-002、DIA-BLK-003 | 先冻结 CommandCatalog、ValidationResult 与 allowed_commands 参数 schema | CommandRegistry.cpp、单测或阻塞记录 | 仅当非白名单命令拒绝、参数非法路径可判定且不依赖未冻结 schema 时完成 |
+| DIA-TODO-014 | Not Started | 实现 CommandPolicyGuard 准入骨架 | diagnostics 设计 6.2/6.3/6.4/6.7 | 6.2 CommandPolicyGuard；6.4 依赖关系 | L2 | infra/src/diagnostics/CommandPolicyGuard.cpp | CommandPolicyGuard | unit：DiagnosticsCommandPolicyTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R DiagnosticsCommandPolicyTest --output-on-failure | DIA-TODO-002、DIA-TODO-009 | 无 | 无 | CommandPolicyGuard.cpp、单测 | 仅当 allow/deny 双路径都能返回 policy_ref，且实现只依赖 ISecurityPolicyManager 抽象时完成 |
+| DIA-TODO-015 | Not Started | 实现 CommandExecutor 执行骨架 | diagnostics 设计 6.2/6.3/6.7/6.8 | 6.2 CommandExecutor；6.8 执行失败 | L2 | infra/src/diagnostics/CommandExecutor.cpp | CommandExecutor | unit：DiagnosticsCommandPolicyTest；failure：InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsCommandPolicyTest|InfraDiagnosticsSmokeTest" --output-on-failure | DIA-TODO-014 | 无 | 无 | CommandExecutor.cpp、执行测试 | 仅当超时、执行失败、资源不可用三类错误可结构化返回且不越权执行变更型命令时完成 |
+| DIA-TODO-016 | Not Started | 实现 EvidenceCollector 证据聚合骨架 | diagnostics 设计 6.2/6.3/6.7；架构 9.5 | 6.2 EvidenceCollector；6.7 步骤 5 | L2 | infra/src/diagnostics/EvidenceCollector.cpp | EvidenceCollector | unit：DiagnosticsTypesTest；integration：InfraDiagnosticsIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsTypesTest|InfraDiagnosticsIntegrationTest" --output-on-failure | DIA-TODO-003、DIA-TODO-015 | 无 | 无 | EvidenceCollector.cpp、聚合测试 | 仅当日志、指标、健康、错误摘要四类引用可进入 EvidenceBundle，且不引入相邻组件实现依赖时完成 |
+| DIA-TODO-017 | Not Started | 实现 SnapshotAssembler 快照组装骨架 | diagnostics 设计 6.2/6.7 | 6.2 SnapshotAssembler；6.7 步骤 7 | L2 | infra/src/diagnostics/SnapshotAssembler.cpp | SnapshotAssembler | unit：DiagnosticsSnapshotExportTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R DiagnosticsSnapshotExportTest --output-on-failure | DIA-TODO-004、DIA-TODO-016 | 无 | 无 | SnapshotAssembler.cpp、快照测试 | 仅当 snapshot_id 生成、summary 组装、evidence_refs 引用绑定都可重复验证时完成 |
+| DIA-TODO-018 | Blocked | 实现 RedactionEngine 脱敏骨架 | diagnostics 设计 6.2/6.3/6.8/6.9；11.1 | 6.2 RedactionEngine；6.8 脱敏失败；11.1 D-BLK-02 | L2 | infra/src/diagnostics/RedactionEngine.cpp | RedactionEngine | unit：DiagnosticsRedactionTest；failure：DiagnosticsRedactionFailureTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsRedactionTest|DiagnosticsRedactionFailureTest" --output-on-failure | DIA-TODO-017 | DIA-BLK-004 | 先冻结字段分级、redaction.profile 语义和 deny-list 规则矩阵 | RedactionEngine.cpp、脱敏测试或阻塞记录 | 仅当敏感字段不落盘、脱敏失败阻断导出且测试可验证时完成 |
+| DIA-TODO-019 | Not Started | 实现 SnapshotStore 持久化骨架 | diagnostics 设计 6.2/6.3/6.7/6.9 | 6.2 SnapshotStore；6.7 步骤 8；6.9 retention 配置 | L2 | infra/src/diagnostics/SnapshotStore.cpp | SnapshotStore | unit：DiagnosticsSnapshotStoreTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R DiagnosticsSnapshotStoreTest --output-on-failure | DIA-TODO-004、DIA-TODO-017 | 无 | 无 | SnapshotStore.cpp、存储测试 | 仅当快照可持久化、可按 retention_days/max_count 清理且失败返回 INF_E_DIAG_SNAPSHOT_STORE_FAIL 时完成 |
+| DIA-TODO-020 | Blocked | 实现 ExportManager 导出骨架 | diagnostics 设计 6.2/6.3/6.8/6.9；11.1 | 6.2 ExportManager；6.8 导出失败；11.1 D-BLK-03 | L2 | infra/src/diagnostics/ExportManager.cpp | ExportManager | unit：DiagnosticsExportTest；integration：InfraDiagnosticsIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsExportTest|InfraDiagnosticsIntegrationTest" --output-on-failure | DIA-TODO-005、DIA-TODO-018、DIA-TODO-019 | DIA-BLK-005 | 先冻结 format/checksum/target 白名单，并明确 remote.enabled=false 的默认门禁 | ExportManager.cpp、导出测试或阻塞记录 | 仅当本地导出可成功、远程未启用时强制拒绝、失败返回可判定错误码时完成 |
+| DIA-TODO-021 | Blocked | 实现 DiagnosticsMetricsBridge 指标桥接骨架 | diagnostics 设计 6.2/6.10；11.1 | 6.2 DiagnosticsMetricsBridge；6.10 指标清单；11.1 D-BLK-04 | L1 | infra/src/diagnostics/DiagnosticsMetricsBridge.cpp | DiagnosticsMetricsBridge | unit：DiagnosticsMetricsAuditBridgeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R DiagnosticsMetricsAuditBridgeTest --output-on-failure | DIA-TODO-014、DIA-TODO-015、DIA-TODO-020 | DIA-BLK-006 | metrics 侧最小桥接接口与标签白名单冻结 | DiagnosticsMetricsBridge.cpp 或阻塞记录 | 仅当 infra_diag_command_total 等指标可按设计上报且桥接失败可观测时完成 |
+| DIA-TODO-022 | Blocked | 实现 DiagnosticsAuditBridge 审计桥接骨架 | diagnostics 设计 6.2/6.10；11.1 | 6.2 DiagnosticsAuditBridge；6.10 审计字段；11.1 D-BLK-06 | L1 | infra/src/diagnostics/DiagnosticsAuditBridge.cpp | DiagnosticsAuditBridge | unit：DiagnosticsMetricsAuditBridgeTest；integration：InfraDiagnosticsIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsMetricsAuditBridgeTest|InfraDiagnosticsIntegrationTest" --output-on-failure | DIA-TODO-014、DIA-TODO-020 | DIA-BLK-006 | audit 侧 write_audit 最小适配接口冻结并明确失败返回语义 | DiagnosticsAuditBridge.cpp 或阻塞记录 | 仅当远程导出、扩展命令执行等高风险动作可写审计，且审计失败不可静默时完成 |
+| DIA-TODO-023 | Not Started | 注册 diagnostics 源码到 infra CMake | diagnostics 设计 7、8.1；代码现状 | 8.1 文件落盘建议；7 Design->Build 映射 | L2 | infra/CMakeLists.txt、infra/src/diagnostics/ | diagnostics include/src 文件接线 | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | DIA-TODO-001~DIA-TODO-022 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 diagnostics 文件进入 dasall_infra 构建图时完成 |
+| DIA-TODO-024 | Not Started | 注册 diagnostics 的 unit 与 contract 测试入口 | diagnostics 设计 7、8.1、9.1；工程规范 3.7 | 8.1 tests 路径；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/diagnostics/、tests/contract/CMakeLists.txt、tests/contract/infra/diagnostics/ | unit：DiagnosticsTypesTest、DiagnosticsServiceInterfaceTest、DiagnosticsCommandRegistryTest、DiagnosticsCommandPolicyTest、DiagnosticsRedactionTest、DiagnosticsSnapshotStoreTest、DiagnosticsExportTest；contract：DiagnosticsBoundaryContractTest、DiagnosticsErrorMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | DIA-TODO-023 | 无 | 无 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 diagnostics unit/contract 测试可被 ctest -N 发现并执行时完成 |
+| DIA-TODO-025 | Blocked | 注册 diagnostics integration 测试入口 | diagnostics 设计 8.1、9.1；tests 现状；11.1 | 8.1 tests/integration/infra/diagnostics；9.1 Integration；11.1 D-BLK-05 | L0 | tests/integration/infra/diagnostics/、tests/CMakeLists.txt | integration：InfraDiagnosticsIntegrationTest、InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest" --output-on-failure | DIA-TODO-020、DIA-TODO-021、DIA-TODO-022、DIA-TODO-023 | DIA-BLK-007 | tests 顶层接入 integration 子目录并冻结标签规范 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且 diagnostics 集成用例可被 ctest 发现后，状态才可由 Blocked 转为 Not Started |
+| DIA-TODO-026 | Not Started | 回写 diagnostics 质量门与交付证据 | diagnostics 设计 8.3 DIA-T010；9.2；11.1；infra 专项 TODO INF-TODO-018 | 8.3 DIA-T010；9.2 Gate；11.1 阻塞 | L2 | docs/todos/DASALL_infrastructure_diagnostics组件专项TODO.md、docs/todos/DASALL_infrastructure子系统专项TODO.md | process test：门禁结论、INF-TODO-018 与 INF-BLK-08 状态变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | DIA-TODO-024 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁具备通过/失败结论及命令证据，并回链 INF-TODO-018/INF-BLK-08 时完成 |
+
+### 6.2 当前 Blocked 任务索引
+
+| 任务 ID | 对应阻塞项 |
+|---|---|
+| DIA-TODO-007 | DIA-BLK-001 |
+| DIA-TODO-008 | DIA-BLK-002 |
+| DIA-TODO-010 | DIA-BLK-001 |
+| DIA-TODO-011 | DIA-BLK-002 |
+| DIA-TODO-012 | DIA-BLK-001 |
+| DIA-TODO-013 | DIA-BLK-002、DIA-BLK-003 |
+| DIA-TODO-018 | DIA-BLK-004 |
+| DIA-TODO-020 | DIA-BLK-005 |
+| DIA-TODO-021 | DIA-BLK-006 |
+| DIA-TODO-022 | DIA-BLK-006 |
+| DIA-TODO-025 | DIA-BLK-007 |
+
+## 7. 执行顺序建议
+
+### 7.1 串并行编排（Step 5 输出）
+
+| 阶段 | 任务 ID | 串并行建议 | 说明 |
+|---|---|---|---|
+| A 对象与错误码冻结 | DIA-TODO-001~006 | 可并行 | 先冻结核心对象与错误语义，避免实现期字段漂移 |
+| B 接口前置补设计 | DIA-TODO-007、DIA-TODO-008 | 可并行 | 补齐 service/request-response 与 registry/catalog 设计缺口 |
+| C 接口冻结 | DIA-TODO-009、DIA-TODO-010、DIA-TODO-011 | 可并行，但依赖 A-B | PolicyGuard 可先行，Service/Registry 依赖补设计完成 |
+| D 主链路骨架 | DIA-TODO-012、DIA-TODO-013、DIA-TODO-014、DIA-TODO-015、DIA-TODO-016、DIA-TODO-017 | 串行 | Facade -> Registry/Policy -> Executor -> Evidence -> Assembler |
+| E 脱敏/落盘/导出 | DIA-TODO-018、DIA-TODO-019、DIA-TODO-020 | 串行按阻塞项解锁 | 先脱敏，再存储，再导出 |
+| F 桥接与门禁 | DIA-TODO-021、DIA-TODO-022、DIA-TODO-023、DIA-TODO-024、DIA-TODO-025 | 可并行，但 integration 仍阻塞 | 指标/审计桥接依赖相邻组件接口与 integration 拓扑 |
+| G 证据收口 | DIA-TODO-026 | 串行 | 回写质量门、阻塞变化与 INF-TODO-018 状态 |
+
+### 7.2 必过门禁表
+
+| Gate ID | 门禁项 | 触发时机 | 通过标准 | 不通过后动作 |
+|---|---|---|---|---|
+| DIA-GATE-01 | 对象冻结门 | 进入接口任务前 | DiagnosticsTypes 与 DiagnosticsErrors 落盘且 contract 测试可承载边界断言 | 回退到对象定义任务 |
+| DIA-GATE-02 | 接口补设计门 | 推进 IDiagnosticsService / IDiagnosticsCommandRegistry 前 | SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult、CommandCatalog、ValidationResult 已冻结 | 未补齐则维持 Blocked |
+| DIA-GATE-03 | 准入链路门 | 推进执行器前 | 白名单校验与策略准入双路径测试通过 | 回退 CommandRegistry / PolicyGuard |
+| DIA-GATE-04 | 脱敏安全门 | 推进 ExportManager 前 | 脱敏规则冻结，DiagnosticsRedactionTest 与 DiagnosticsRedactionFailureTest 通过 | 回退 RedactionEngine |
+| DIA-GATE-05 | 导出安全门 | 推进远程导出路径前 | remote.enabled 默认 false，target 白名单与格式约束冻结 | 未通过则禁止远程导出 |
+| DIA-GATE-06 | 桥接接口门 | 推进 Metrics/Audit Bridge 前 | metrics 与 audit 最小桥接接口签名冻结 | 未通过则维持 Blocked |
+| DIA-GATE-07 | 构建接线门 | 推进测试注册前 | dasall_infra 构建通过且 diagnostics 文件入图 | 修复 CMake 接线 |
+| DIA-GATE-08 | 测试发现性门 | 提交前 | ctest -N 能发现新增 diagnostics unit/contract 测试 | 修复 tests 注册 |
+| DIA-GATE-09 | integration 准入门 | 推进 DIA-TODO-025 前 | tests 顶层完成 integration 接线并定义标签规范 | 未通过前禁止 integration 验收 |
+| DIA-GATE-10 | breaking 评审门 | 任意公共对象或错误映射变更前 | 已明确 breaking 风险、迁移窗口与回退方案 | 未评审不得推进 |
+
+## 8. 阻塞项与解阻条件
+
+| 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
+|---|---|---|---|---|---|
+| DIA-BLK-001 | IDiagnosticsService 所需 SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult 未在对象表中定义 | DIA-TODO-007、010、012 | 在详细设计 6.5 或附录中补齐三类对象字段、返回语义与错误约束 | 补一张请求/返回对象表并完成评审 | IDiagnosticsService 暂不落盘，只保留对象冻结任务 |
+| DIA-BLK-002 | IDiagnosticsCommandRegistry 所需 CommandCatalog、ValidationResult 未定义 | DIA-TODO-008、011、013 | 在详细设计中补齐目录对象、校验结果对象与最小字段 | 补目录对象/校验对象表并回链 6.6 方法语义 | Registry 接口与实现均保持 Blocked |
+| DIA-BLK-003 | allowed_commands 参数 schema 未冻结，无法安全完成 validate 语义 | DIA-TODO-013 | 冻结只读命令子集及每个命令的参数 schema | 先冻结 health.snapshot、queue.stats、thread.dump 三个只读命令 schema | 禁止所有变更型命令，仅保留查询命令 |
+| DIA-BLK-004 | RedactionEngine 字段分级、deny-list 与 redaction.profile 规则矩阵未冻结 | DIA-TODO-018 | 明确 strict/compat 规则、字段级别与失败兜底 | 在详细设计中补齐脱敏矩阵与 profile 差异表 | 导出仅允许摘要，不允许原始输出 |
+| DIA-BLK-005 | 导出格式、checksum 规则与 remote allowed_targets 白名单未冻结 | DIA-TODO-020 | 明确 format/checksum/target 白名单与 local/remote 行为约束 | 首先冻结本地 jsonl 导出与远程禁用策略 | 禁用远程导出，仅保留本地导出 |
+| DIA-BLK-006 | metrics/audit 最小桥接接口签名未冻结 | DIA-TODO-021、DIA-TODO-022 | metrics 与 audit 组件给出最小桥接接口和失败返回语义 | 在 metrics/audit 专项 TODO 或详细设计中补桥接接口章节 | 降级为日志 + 错误码观测，不宣称桥接可用 |
+| DIA-BLK-007 | tests 顶层未接入 integration 子目录，无法稳定注册 diagnostics 集成测试 | DIA-TODO-025 | tests/CMakeLists.txt 接入 integration 并定义标签规范 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，仅执行 unit/contract |
+
+## 9. 验收与质量门
+
+### 9.1 验收命令基线
+
+| 用途 | 命令 |
+|---|---|
+| 配置构建目录 | cmake -S . -B build-ci -G Ninja |
+| 构建 infra | cmake --build build-ci --target dasall_infra |
+| 执行 unit 套件 | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit |
+| 执行 contract 套件 | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract |
+| 检查测试发现性 | ctest --test-dir build-ci -N |
+
+说明：
+
+1. integration 命令本轮不纳入必过基线，原因见 DIA-BLK-007。
+2. 每个可执行任务至少包含 1 条构建命令与 1 条测试命令；Block 任务保留解阻后的验收命令。
+3. 对于来自详细设计的命名测试项，应优先使用 DiagnosticsTypesTest、DiagnosticsBoundaryContractTest、DiagnosticsCommandPolicyTest、DiagnosticsRedactionTest、DiagnosticsRedactionFailureTest、DiagnosticsSnapshotStoreTest、DiagnosticsExportTest、DiagnosticsMetricsAuditBridgeTest、InfraDiagnosticsIntegrationTest、InfraDiagnosticsSmokeTest。
+
+### 9.2 质量门逐项回答
+
+1. 是否给出 Design -> TODO 映射，而非仅任务标题：是。
+2. 是否明确当前最细可达到粒度：是，L3/L2 混合，受阻项为 L0/L1。
+3. 是否所有任务具备代码目标 + 测试目标 + 验收命令：是。
+4. 是否所有 Blocked 项具备证据与解阻条件：是。
+5. 是否所有任务具备可二值判定完成标准：是。
+6. 是否避免跨子系统范围扩张：是。
+7. 若要求函数/数据结构级，是否真正落到对象：是；无法细化处已标注证据缺口。
+
+## 10. 风险与回退策略
+
+| 风险 | 等级 | 触发条件 | 监测信号 | 回退策略 |
+|---|---|---|---|---|
+| 命令越权执行风险 | High | 未冻结白名单就实现执行链路 | 出现非只读命令进入 CommandExecutor | 立即回退到 D-BLK-003，禁止所有非查询命令 |
+| 脱敏失效风险 | High | RedactionEngine 规则缺失或绕过 | 导出内容含敏感字段、DiagnosticsRedactionFailureTest 失败 | 立即禁用导出，仅保留摘要快照 |
+| 远程导出误开风险 | High | remote.enabled 默认门禁失效 | 未授权 target 出现导出尝试 | 回退为本地导出 only，并强制审计告警 |
+| 边界越权风险 | High | diagnostics 输出恢复执行动作或依赖 runtime 实现 | 出现 retry/replan/rollback 调用或 runtime 具体 include | 回退到证据输出模式，仅保留错误码与 evidence_ref |
+| 桥接接口漂移风险 | Medium | metrics/audit 抽象未冻结即接线 | DiagnosticsMetricsAuditBridgeTest 无法稳定复现 | 降级为日志 + 错误码观测 |
+| 集成门禁过早推进风险 | Medium | tests 顶层未接 integration 即写集成验收 | ctest -N 无法发现 diagnostics integration 用例 | 暂停 integration，保留 unit/contract 作为执行基线 |
+
+## 11. 可行性结论
+
+### 11.1 结论
+
+可直接生成接口/数据结构级专项 TODO，并可对部分主链路生成类级骨架任务；不能无补设计地直接生成完整函数级专项 TODO。
+
+### 11.2 原因
+
+1. DiagnosticsCommand、CommandDecision、EvidenceBundle、DiagnosticsSnapshot、SnapshotExportResult 已具备字段级证据，可安全拆到 L3。
+2. IDiagnosticsPolicyGuard 的输入输出对象完整，可直接冻结到接口级。
+3. IDiagnosticsService 与 IDiagnosticsCommandRegistry 虽有方法名，但缺少 SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult、CommandCatalog、ValidationResult 等对象定义，不能伪造接口细节。
+4. RedactionEngine、ExportManager、Metrics/Audit Bridge 的规则矩阵或桥接接口仍受 11.1 阻塞项约束，必须先补设计或冻结相邻接口。
+5. tests/integration 顶层尚未接线，导致 integration 级任务只能保持 Blocked。
+
+### 11.3 当前最小可执行粒度
+
+1. 数据结构：函数/字段级可执行。
+2. 接口：IDiagnosticsPolicyGuard 可到方法级；IDiagnosticsService 与 IDiagnosticsCommandRegistry 当前只能到接口级前置补设计。
+3. 实现：CommandPolicyGuard、CommandExecutor、EvidenceCollector、SnapshotAssembler、SnapshotStore 当前可到类级骨架。
+
+### 11.4 若未达到函数级，还缺哪些设计信息
+
+1. IDiagnosticsService 的请求/返回对象字段定义。
+2. IDiagnosticsCommandRegistry 的目录对象与校验结果对象字段定义。
+3. allowed_commands 参数 schema 与脱敏规则矩阵。
+4. 导出格式、checksum 规则、远程目标白名单。
+5. metrics/audit 最小桥接接口签名与 tests/integration 顶层接线策略。
+
+### 11.5 下一步建议
+
+1. 先执行 DIA-TODO-001 至 DIA-TODO-006，冻结 diagnostics 核心对象与错误码域。
+2. 并行解掉 DIA-BLK-001 与 DIA-BLK-002，再推进 DIA-TODO-010、DIA-TODO-011、DIA-TODO-012、DIA-TODO-013。
+3. 在只读命令 schema、脱敏矩阵、导出格式冻结后，再推进 DIA-TODO-018、DIA-TODO-020。
+4. 将 DIA-TODO-026 与 INF-TODO-018 联动回写，确保 diagnostics 专项执行证据回链到 infrastructure 总 TODO。

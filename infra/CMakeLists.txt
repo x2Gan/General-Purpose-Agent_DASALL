@@ -3,6 +3,7 @@ add_library(dasall_infra STATIC)
 target_sources(dasall_infra
   PRIVATE
     src/placeholder.cpp
+    src/tracing/TracingModuleAnchor.cpp
 )
 
 target_compile_features(dasall_infra PUBLIC cxx_std_20)

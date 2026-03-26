@@ -1,6 +1,7 @@
 add_subdirectory(mocks)
 add_subdirectory(unit)
 add_subdirectory(contract)
+add_subdirectory(integration)
 
 add_custom_target(dasall_unit_tests
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L unit
@@ -10,6 +11,10 @@ add_custom_target(dasall_unit_tests
 add_custom_target(dasall_contract_tests
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L contract
   DEPENDS ${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}
+)
+
+add_custom_target(dasall_integration_tests
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L integration
 )
 
 add_custom_target(dasall_wp04_contract_gate
