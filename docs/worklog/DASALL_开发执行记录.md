@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #041
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-003 LogEvent 数据结构
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-003-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.5 与 logging 模块详细设计 6.5/6.7，冻结 LogEvent 的 `level/module/message/attrs/ts` 五字段。
+   - 明确 attrs 白名单尚未冻结，因此本轮只收敛为可序列化字符串键值映射，不提前做复杂 schema 或 sink 约束。
+   - 采用最小 redaction helper 约束 token/secret/password/authorization 等敏感 attr 键，确保明文不直接进入后续 pipeline。
+2. 完成 INF-TODO-003-B 代码落地：
+   - 新增 [infra/include/LogEvent.h](infra/include/LogEvent.h)
+   - 新增 [tests/unit/infra/LogEventTest.cpp](tests/unit/infra/LogEventTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/LogEventBoundaryContractTest.cpp](tests/contract/smoke/LogEventBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，3/3 tests passed，新增 `LogEventUnitTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，83/83 tests passed，新增 `LogEventBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. LogEvent 已从设计字段表收敛为可编译、可测试、可追溯的数据结构，并为后续 ILogger/formatter/redaction 任务提供稳定输入对象。
+2. `module` 作为顶层稳定字段冻结，同时提供 `category()` 访问别名，避免 logging 组件任务在术语层面引入破坏式改动。
+
+### 下一步
+
+1. 按依赖顺序推进 INF-TODO-004，冻结 AuditEvent 数据结构。
+
+### 风险
+
+1. attrs 键白名单仍未冻结，后续任务只能扩展规则，不应破坏本轮字符串键值映射的可序列化基线。
+2. 当前 redaction helper 只覆盖最小敏感键片段，真正 ruleset 热更新和 formatter/sink 脱敏仍应留给 logging 组件后续任务。
+
 ## 记录 #040
 
 - 日期：2026-03-26

@@ -189,7 +189,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | INF-TODO-001 | Done | 定义 InfraContext 数据结构 | 详细设计 6.5；架构 3.8；ADR-008 | 详细设计 6.5 核心对象与 contracts 对齐关系 | L2 | infra/include/ 下新增 InfraContext 头文件，承载 request_id、session_id、trace_id、task_id、parent_task_id、lease_id | InfraContext | unit：字段默认值与 unknown 语义；contract：不越权扩写 contracts 标识语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | 无 | 无 | 无 | 数据结构头文件、基础测试、字段说明；2026-03-26 已落盘 infra/include/InfraContext.h、tests/unit/infra/InfraContextTest.cpp、tests/contract/smoke/InfraContextBoundaryContractTest.cpp | 仅当 InfraContext 字段与设计一致、编译通过、测试能验证 unknown 兜底语义时完成 |
 | INF-TODO-002 | Not Started | 新增 IInfrastructureService 接口与 Facade 生命周期骨架 | 详细设计 6.2、6.3、6.6、6.7、8.1；蓝图 3.12 | 详细设计 6.6 核心接口语义定义；6.7 主流程时序 | L2 | infra/include/IInfrastructureService.h；infra/src/ 下新增/替换 InfraServiceFacade 生命周期骨架 | IInfrastructureService；InfraServiceFacade.init/start/stop/execute | unit：生命周期顺序与空实现可编译；contract：返回 ResultCode/ErrorInfo 引用不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 | execute(command) 的命令对象签名未冻结 | 先以接口骨架落盘，不实现命令细节 | 接口头文件、骨架实现、构建通过证据 | 仅当 placeholder 不再是唯一入口、接口方法与设计一致且 dasall_infra 可编译时完成 |
-| INF-TODO-003 | Not Started | 定义 LogEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 LogEvent；6.10 日志点/指标 | L2 | infra/include/ 下新增 LogEvent 头文件，冻结 level、module、message、attrs、ts | LogEvent | unit：attrs 可序列化约束；contract：敏感字段脱敏边界不侵入 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 | attrs 键白名单未冻结 | 先冻结字段与基本约束，白名单细则后补 | 数据结构头文件、最小单测 | 仅当 LogEvent 字段与设计一致、测试覆盖可序列化与脱敏前置约束时完成 |
+| INF-TODO-003 | Done | 定义 LogEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 LogEvent；6.10 日志点/指标 | L2 | infra/include/ 下新增 LogEvent 头文件，冻结 level、module、message、attrs、ts | LogEvent | unit：attrs 可序列化约束；contract：敏感字段脱敏边界不侵入 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 | attrs 键白名单未冻结 | 先冻结字段与基本约束，白名单细则后补 | 数据结构头文件、最小单测；2026-03-26 已落盘 infra/include/LogEvent.h、tests/unit/infra/LogEventTest.cpp、tests/contract/smoke/LogEventBoundaryContractTest.cpp | 仅当 LogEvent 字段与设计一致、测试覆盖可序列化与脱敏前置约束时完成 |
 | INF-TODO-004 | Not Started | 定义 AuditEvent 数据结构 | 详细设计 6.5、6.8、6.10；蓝图 3.12 | 详细设计 6.5 AuditEvent；6.8 审计 fallback；6.10 审计覆盖点 | L2 | infra/include/ 下新增 AuditEvent 头文件，冻结 action、actor、target、evidence_ref、outcome、side_effects | AuditEvent | unit：必填字段校验；contract：ToolResult/RecoveryOutcome 引用边界校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-001 | side_effects 精确对象模型未冻结 | 先按字段级冻结引用关系，不扩写 side_effects 子结构 | 数据结构头文件、单测/契约测试 | 仅当高风险命令审计对象字段齐备、合同测试能阻止越权字段时完成 |
 | INF-TODO-005 | Not Started | 新增 ILogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 ILogger；6.8 queue 满兜底 | L2 | infra/include/ILogger.h | ILogger.log；ILogger.flush | unit：普通日志与 flush 接口可编译；contract：错误失败需可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-003 | flush(deadline) 的 deadline 类型未冻结 | 先以签名占位类型/前置声明冻结接口，不进入 sink 实现 | 接口头文件、编译通过证据 | 仅当 ILogger 与 LogEvent 对接关系清晰、接口可被上层包含且 dasall_infra 编译通过时完成 |
 | INF-TODO-006 | Not Started | 新增 IAuditLogger 接口 | 详细设计 6.6、6.8、6.10；编码规范 3.6 | 详细设计 6.6 IAuditLogger；6.8 Audit sink 故障；6.10 高风险命令强制审计 | L2 | infra/include/audit/IAuditLogger.h | IAuditLogger.write_audit；IAuditLogger.export_audit | unit：审计写入接口可编译；contract：审计导出不越权扩写对象 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-004 | export_audit(filter) 的 filter 模型未冻结 | 先冻结接口名与职责，不落地导出过滤模型 | 接口头文件、编译通过证据 | 仅当接口与 AuditEvent 匹配，且审计职责与普通日志职责分离时完成 |
@@ -406,3 +406,55 @@ Build 合规复核：
 3. 测试发现性：通过 CMake 注册新增 unit/contract 用例，验收阶段以 ctest 发现和执行结果为准。
 4. TODO 证据回写：已回写本节执行记录与主任务状态。
 5. 提交隔离：本轮提交范围限定为 InfraContext 相关代码、测试与证据文档。
+
+## 14. 本轮执行记录（2026-03-26 / INF-TODO-003）
+
+### 14.1 选中任务
+
+1. 本轮任务：INF-TODO-003。
+2. 可执行性依据：仅依赖已完成的 INF-TODO-001；attrs 白名单尚未冻结，但不影响字段级数据结构与最小脱敏边界 helper 的落盘。
+
+### 14.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.5 明确 LogEvent 稳定字段为 level、module、message、attrs、ts，且 attrs 必须可序列化、敏感字段先脱敏。
+2. docs/architecture/DASALL_infra_logging模块详细设计.md 6.5 补充 message 可空、attrs 必须可序列化，并要求敏感值不可明文落盘。
+3. docs/architecture/DASALL_infra_logging模块详细设计.md 6.7 明确脱敏发生在 formatter/sink 之前，因此本轮仅冻结 LogEvent 本体与最小 redaction helper，不进入 sink/formatter 实现。
+
+外部参考：
+
+1. OpenTelemetry Logs Data Model 要求高频稳定语义使用顶层字段，补充信息进入 Attributes 集合，且 Attributes 应保持可序列化与语义可逆；本轮据此将 attrs 冻结为稳定字符串键值映射。
+
+D 结论：
+
+1. Design -> Build 映射：新增 header-only LogEvent，冻结 level/module/message/attrs/ts；用 `module` 作为顶层稳定分类字段，并提供 `category()` 访问别名兼容 logging 子模块文档术语。
+2. Build 三件套：
+    - 代码目标：新增 infra/include/LogEvent.h。
+    - 测试目标：unit 覆盖 attrs 可序列化、空 key 负例、敏感字段脱敏；contract 覆盖 contracts 标识语义仅以 plain attrs 消费且不触发共享对象扩写。
+    - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract。
+3. D Gate：PASS。
+
+### 14.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/LogEvent.h：新增 LogLevel、LogEvent、attrs 可序列化检查与最小 redaction helper。
+2. tests/unit/infra/LogEventTest.cpp：覆盖 message 可空、attrs 可序列化、空 key 负例、敏感字段脱敏。
+3. tests/contract/smoke/LogEventBoundaryContractTest.cpp：覆盖 contracts 标识作为 plain attrs 消费以及脱敏边界不侵入 contracts。
+4. tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，3/3 tests passed，新增 LogEventUnitTest 被发现并执行。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，83/83 tests passed，新增 LogEventBoundaryContractTest 被发现并执行。
+
+Build 合规复核：
+
+1. 代码注释：字段和 helper 语义可由命名直接判读，本轮不补冗余注释。
+2. 正负例覆盖：unit/contract 均包含正例和负例路径。
+3. 测试发现性：通过 CMake 注册进入 unit/contract 标签集合。
+4. TODO 证据回写：已记录本轮设计/构建映射与交付物。
+5. 提交隔离：本轮提交范围限定为 LogEvent 相关代码、测试与证据文档。
