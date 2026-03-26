@@ -57,3 +57,18 @@ dasall_apply_common_options(dasall_health_snapshot_unit_test)
 
 add_test(NAME HealthSnapshotUnitTest COMMAND dasall_health_snapshot_unit_test)
 set_tests_properties(HealthSnapshotUnitTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_infra_service_facade_unit_test
+  InfraServiceFacadeTest.cpp
+)
+
+target_link_libraries(dasall_infra_service_facade_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_infra_service_facade_unit_test)
+
+add_test(NAME InfraServiceFacadeTest COMMAND dasall_infra_service_facade_unit_test)
+set_tests_properties(InfraServiceFacadeTest PROPERTIES LABELS "unit")

@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #044
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-002 IInfrastructureService 接口与 Facade 生命周期骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-002-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.6/6.7，将基础设施统一入口收敛为 `init/start/stop/execute` 四个最小生命周期方法。
+   - 鉴于 `execute(command)` 的 payload 与 config 细节尚未冻结，本轮仅保留 `InfrastructureConfig.profile` 与 `InfraCommandRequest.name` 两个最小骨架字段，避免过早侵入 diagnostics、ota 等子域对象。
+   - 统一返回 `InfraOperationResult`，仅引用 contracts 既有 `ResultCode` 与 `ErrorInfo` 作为错误语义出口，保持接口边界稳定。
+2. 完成 INF-TODO-002-B 代码落地：
+   - 新增 [infra/include/IInfrastructureService.h](infra/include/IInfrastructureService.h)
+   - 新增 [infra/src/InfraServiceFacade.cpp](infra/src/InfraServiceFacade.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 新增 [tests/unit/infra/InfraServiceFacadeTest.cpp](tests/unit/infra/InfraServiceFacadeTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/InfrastructureServiceBoundaryContractTest.cpp](tests/contract/smoke/InfrastructureServiceBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，6/6 tests passed，新增 `InfraServiceFacadeTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，86/86 tests passed，新增 `InfrastructureServiceBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. placeholder 不再是 infra 唯一真实源码入口，统一生命周期主控点已经以可编译骨架形式落盘。
+2. 基础设施服务返回语义已固定为 contracts `ResultCode/ErrorInfo`，为后续 `ILogger`、`IAuditLogger`、`IHealthMonitor` 与私有错误码域任务保留稳定边界。
+
+### 下一步
+
+1. 按阶段 B 顺序继续推进 INF-TODO-005，冻结 `ILogger` 接口。
+
+### 风险
+
+1. `InfrastructureConfig` 和 `InfraCommandRequest` 目前都是最小占位形状，后续扩展必须来自专项设计补充，不能直接在实现层面自行膨胀。
+
 ## 记录 #043
 
 - 日期：2026-03-26
