@@ -261,7 +261,7 @@ AuditService 非职责：
 | infra.audit.storage.primary | file_append | Profile/部署 | 主存储后端 |
 | infra.audit.storage.fallback | ringbuffer | Profile/部署 | 降级后端 |
 | infra.audit.queue.size | 4096 | Profile/部署 | 审计队列容量 |
-| infra.audit.queue.overflow_policy | block | Profile/部署 | block/overrun_oldest |
+| infra.audit.queue.overflow_policy | block | Profile/部署 | block/overrun_oldest；选择规则遵循 docs/development/InfraConcurrencyPolicy.md |
 | infra.audit.export.enabled | true | Profile/部署 | 导出能力开关 |
 | infra.audit.export.max_window_sec | 86400 | Profile/部署 | 最大导出窗口 |
 | infra.audit.retention.days | 30 | Profile/部署 | 保留天数 |

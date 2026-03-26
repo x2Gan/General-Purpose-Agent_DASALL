@@ -213,7 +213,7 @@ platform/linux 不负责：
 | PlatformError | code, category, retryable_hint, syscall_name, errno_value, detail | 只表达平台事实，不表达业务失败归因 | 上层将其映射到 ErrorInfo/Observation；platform 不直接产出 contracts ErrorInfo |
 | ThreadOptions | name, stack_size_kb, detach_policy, affinity_hint | affinity_hint 为建议值，失败不默认致命 | 与 contracts 无直接对齐 |
 | TimerSpec | mode, interval_ms, initial_delay_ms, clock_kind | 周期误差通过 stats 暴露 | 与 Checkpoint/RuntimeBudget 仅通过 timeout 数值间接对齐 |
-| QueueOptions | capacity, overflow_policy, shutdown_policy | overflow_policy 仅是平台内部策略，不升格为 contracts 字段 | 与上层 budget 仅通过容量/超时值消费 |
+| QueueOptions | capacity, overflow_policy, shutdown_policy | overflow_policy 仅是平台内部策略，不升格为 contracts 字段；选择规则遵循 docs/development/InfraConcurrencyPolicy.md | 与上层 budget 仅通过容量/超时值消费 |
 | SocketEndpoint | host/path, port, transport, abstract_namespace | 统一描述网络/IPC 端点 | 与 services 请求对象分离，不进入共享 contracts |
 | PlatformHealthSnapshot | queue_depths, timer_drift_ms, fd_in_use, io_failures, hal_state | 供 infra/diagnostics 或 tests 消费 | 作为诊断事实，不作为 contracts 共享语义 |
 
@@ -320,7 +320,7 @@ platform/linux 不负责：
 | platform.linux.thread.default_stack_kb | 512 | 默认/Profile | 默认线程栈大小 |
 | platform.linux.thread.max_threads | 64 | Profile/部署 | 平台层允许创建的线程上限 |
 | platform.linux.queue.default_capacity | 1024 | 默认/Profile | 队列默认容量 |
-| platform.linux.queue.overflow_policy | reject | Profile/部署 | reject 或 block；建议平台默认 reject |
+| platform.linux.queue.overflow_policy | reject | Profile/部署 | reject 或 block；建议平台默认 reject，例外规则遵循 docs/development/InfraConcurrencyPolicy.md |
 | platform.linux.timer.min_granularity_ms | 10 | Profile | 最小定时粒度 |
 | platform.linux.fs.atomic_write_tmp_suffix | .tmp | 默认/部署 | 原子写入临时文件后缀 |
 | platform.linux.fs.root_prefix | /var/lib/dasall | Profile/部署 | 受控文件系统根前缀 |

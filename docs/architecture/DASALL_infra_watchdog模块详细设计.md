@@ -291,7 +291,7 @@ watchdog 非职责：
 | infra.watchdog.consecutive_miss_threshold | 3 | Profile/部署 | 连续丢失阈值 |
 | infra.watchdog.timeout.level.policy | warn_then_critical | Profile/部署 | 超时升级策略 |
 | infra.watchdog.event.queue_size | 2048 | Profile/部署 | 事件队列容量 |
-| infra.watchdog.event.overflow_policy | block | Profile/部署 | block/overrun_oldest |
+| infra.watchdog.event.overflow_policy | block | Profile/部署 | block/overrun_oldest；选择规则遵循 docs/development/InfraConcurrencyPolicy.md |
 | infra.watchdog.recovery_hint.enabled | true | 默认/Profile | 是否发送恢复建议 |
 | infra.watchdog.audit.required | true | 默认/Profile | 关键超时必须审计 |
 | infra.watchdog.max_entities | 1024 | Profile/部署 | 监督实体上限 |

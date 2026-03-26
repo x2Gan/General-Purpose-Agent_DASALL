@@ -306,7 +306,7 @@ metrics 非职责：
 | metrics.exporter.timeout_ms | 30000 | 默认/Profile/部署 | 导出超时 |
 | metrics.aggregation.temporality | cumulative | 默认/Profile | cumulative/delta |
 | metrics.queue.max_size | 4096 | Profile/部署 | 导出队列上限 |
-| metrics.queue.overflow_policy | drop_oldest | Profile/部署 | block/drop_oldest |
+| metrics.queue.overflow_policy | drop_oldest | Profile/部署 | block/drop_oldest；选择规则遵循 docs/development/InfraConcurrencyPolicy.md |
 | metrics.labels.allowlist | module,stage,profile,outcome,error_code | 默认/Profile/部署 | 允许标签集合 |
 | metrics.labels.max_cardinality_per_metric | 200 | Profile/部署 | 单指标标签组合上限 |
 | metrics.histogram.default_buckets_seconds | 0.005,0.01,0.025,0.05,0.1,0.2,0.3,0.5,1,2,5 | 默认/Profile | 延迟类默认桶 |

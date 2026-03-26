@@ -261,7 +261,7 @@ logging 非职责：
 | logging.format | json_line | 默认/Profile/部署 | 结构化格式 |
 | logging.async.enabled | true | 默认/Profile | 是否异步 |
 | logging.async.queue_size | 8192 | Profile/部署 | 队列容量 |
-| logging.async.overflow_policy | block | Profile/部署 | block 或 overrun_oldest |
+| logging.async.overflow_policy | block | Profile/部署 | block 或 overrun_oldest；选择规则遵循 docs/development/InfraConcurrencyPolicy.md |
 | logging.file.path | logs/runtime.log | 部署/运行时 | 普通日志路径 |
 | logging.file.rotate.max_size_mb | 50 | Profile/部署 | 轮转阈值 |
 | logging.file.rotate.max_files | 10 | Profile/部署 | 保留份数 |
@@ -410,7 +410,7 @@ tests/
 
 | 风险 | 等级 | 触发条件 | 监测信号 | 处置策略 |
 |---|---|---|---|---|
-| 异步队列阻塞主流程 | High | 高峰期写入暴涨 | queue_depth 持续高水位 | 调整 queue_size/overflow_policy |
+| 异步队列阻塞主流程 | High | 高峰期写入暴涨 | queue_depth 持续高水位 | 调整 queue_size/overflow_policy，并按 docs/development/InfraConcurrencyPolicy.md 收敛 backpressure |
 | 审计日志丢失 | High | audit sink 持续失败 | audit_fail_total 增长 | 强制 fallback + alert |
 | 日志噪声过高 | Medium | level 配置过低 | 日志吞吐激增 | Profile 分层级别收敛 |
 | 敏感信息泄漏 | High | 脱敏规则缺失 | 脱敏检测告警 | 扩展 ruleset 并加阻断测试 
