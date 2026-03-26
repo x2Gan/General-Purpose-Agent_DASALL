@@ -198,7 +198,7 @@
 | INF-TODO-009 | Done | 定义 infra 私有错误码域 | 详细设计 6.6、6.8、9.1；编码规范 3.6 | 详细设计 6.6 错误语义；9.1 failure injection | L2 | infra/include/ 下新增 infra 私有错误码枚举，并在 infra/src/ 建立最小映射入口 | INF_E_CONFIG_INVALID、INF_E_SECRET_UNAVAILABLE、INF_E_LOG_QUEUE_FULL、INF_E_AUDIT_WRITE_FAIL、INF_E_HEALTH_PROBE_TIMEOUT、INF_E_OTA_VERIFY_FAIL、INF_E_OTA_ROLLBACK_FAIL | unit：错误码可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L "unit|contract" | INF-TODO-002、INF-TODO-005、INF-TODO-006、INF-TODO-008 | contracts::ResultCode 细粒度映射表尚未在 infra 侧成文 | 先冻结 infra 私有码域和一对多映射规则，再补细项矩阵 | 错误码头文件、映射说明、测试；2026-03-26 已落盘 infra/include/InfraErrorCode.h、infra/src/InfraErrorCode.cpp、tests/unit/infra/InfraErrorCodeTest.cpp、tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp，并确认七个私有码仍只映射到既有 contracts 粗粒度结果码 | 仅当七个私有错误码均可追溯到设计条目，且 contract 测试阻止越权映射时完成 |
 | INF-TODO-010 | Done | 接线 infra CMake 落盘入口 | 详细设计 7、8.1、8.2；当前 infra/CMakeLists.txt 现状 | 详细设计 7 Design -> Build 映射；8.1 目录与文件落盘建议 | L2 | 更新 infra/CMakeLists.txt，使其不再只依赖 src/placeholder.cpp，并允许按子域增量接线 include/src 目录 | infra/CMakeLists.txt | build：dasall_infra 目标可在真实头文件存在时编译；test：为后续 unit/contract 注册提供目标依赖面 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-001 至 INF-TODO-009 | 真实源文件数量尚少，短期仍需保留空实现兜底 | 允许保留最小 non-empty 实现，但不能再只有 placeholder-only 入口 | CMake 改动、构建通过证据；2026-03-26 已更新 infra/CMakeLists.txt，将 core/tracing 源文件分组与 PUBLIC_HEADER 公开头文件入口显式接入 dasall_infra，并确认 placeholder 不再是唯一源文件入口 | 仅当 infra 目标能显式包含真实头文件/源文件入口，且 placeholder 不再是唯一源文件时完成 |
 | INF-TODO-011 | Done | 注册 infra 单元测试入口 | 详细设计 8.1、9.1；当前 tests/unit/CMakeLists.txt 现状 | 详细设计 9.1 测试矩阵；编码规范 3.7 | L2 | 新增 tests/unit/infra/ 与 tests/unit/CMakeLists.txt 注册入口 | tests/unit/infra；tests/unit/CMakeLists.txt | unit：InfraContext、LogEvent、AuditEvent、HealthSnapshot、接口编译测试 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L unit | INF-TODO-001 至 INF-TODO-010 | 当前 unit 聚合未包含 infra 子目录 | 在 unit 顶层加入 infra 子目录并确保新增用例被发现 | 单测目录、注册入口、ctest 发现性证据；2026-03-26 已确认 tests/unit/CMakeLists.txt 接入 infra，tests/unit/infra/CMakeLists.txt 注册 9 个 infra unit 目标，`ctest -N -L unit` 可发现、`ctest -L unit` 执行 10/10 通过 | 仅当 infra 单测可被 ctest -L unit 发现并执行时完成 |
-| INF-TODO-012 | Not Started | 注册 infra contracts 边界测试入口 | 详细设计 6.5、9.1；蓝图 4.3；当前 tests/contract/CMakeLists.txt 机制 | 详细设计 6.5 contracts 对齐关系；9.1 Contract 覆盖要求 | L2 | 在 tests/contract/ 现有注册机制下新增 infra 边界用例，并扩展必要的 smoke/compatibility 断言 | tests/contract/CMakeLists.txt；tests/contract/smoke/ | contract：标识字段不越权、错误码映射不漂移、AuditEvent 引用边界稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L contract | INF-TODO-001、INF-TODO-004、INF-TODO-009 | 具体测试文件名与首批边界断言尚未冻结 | 先沿用现有 centralized registration 模式，后补充断言细则 | 合同测试源文件、注册改动、执行记录 | 仅当新增 infra 合同测试被发现并能阻止 contracts 语义越权时完成 |
+| INF-TODO-012 | Done | 注册 infra contracts 边界测试入口 | 详细设计 6.5、9.1；蓝图 4.3；当前 tests/contract/CMakeLists.txt 机制 | 详细设计 6.5 contracts 对齐关系；9.1 Contract 覆盖要求 | L2 | 在 tests/contract/ 现有注册机制下新增 infra 边界用例，并扩展必要的 smoke/compatibility 断言 | tests/contract/CMakeLists.txt；tests/contract/smoke/ | contract：标识字段不越权、错误码映射不漂移、AuditEvent 引用边界稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L contract | INF-TODO-001、INF-TODO-004、INF-TODO-009 | 具体测试文件名与首批边界断言尚未冻结 | 先沿用现有 centralized registration 模式，后补充断言细则 | 合同测试源文件、注册改动、执行记录；2026-03-26 已确认 tests/contract/CMakeLists.txt 集中注册 9 个 infra 边界 contract 用例，`ctest -N -L contract` 可发现、`ctest -L contract` 执行 90/90 通过 | 仅当新增 infra 合同测试被发现并能阻止 contracts 语义越权时完成 |
 | INF-TODO-013 | Blocked | 定义 IConfigCenter 接口骨架 | 详细设计 6.3、6.6、6.9；蓝图 3.13 | 详细设计 6.6 IConfigCenter；6.9 配置项与默认策略 | L2 | 目标文件为 infra/include/IConfigCenter.h，但在 TypedConfig/patch/schema 冻结前禁止进入实现 | IConfigCenter.load_layers；IConfigCenter.get_typed；IConfigCenter.apply_override | unit：四层合并和覆盖次序；contract：Profile 不绕过 Audit 与 Runtime 主控链路 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | INF-BLK-01：TypedConfig、patch 模型、profiles 键命名未冻结 | 先完成配置模型补设计并确认 profiles 键命名 | 接口草案、阻塞记录 | 仅当配置模型补设计完成并评审通过后，才可从 Blocked 转 Not Started |
 | INF-TODO-014 | Blocked | 定义 ISecretManager 接口骨架 | 详细设计 6.3、6.6、6.9 | 详细设计 6.6 ISecretManager；6.9 secret.backend | L1 | 目标文件为 infra/include/ISecretManager.h，但在 SecretHandle/back-end 模型冻结前禁止进入实现 | ISecretManager.get_secret；ISecretManager.rotate | unit：明文不落盘；contract：审计记录必须存在 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | INF-BLK-02：SecretHandle、RotationRequest、权限模型未冻结 | 先完成 secret 对象与权限边界补设计 | 接口草案、阻塞记录 | 仅当 secret 对象模型冻结并完成安全评审后，才可解除阻塞 |
 | INF-TODO-015 | Blocked | 定义 IOTAManager 接口骨架与 UpgradeOutcome 对接点 | 详细设计 6.5、6.6、6.8、6.9 | 详细设计 6.5 UpgradeOutcome；6.6 IOTAManager；6.8 OTA 失败回滚 | L1 | 目标文件为 infra/include/IOTAManager.h 与 UpgradeOutcome 对接头文件；在 package/signature/token 模式冻结前禁止实现 | IOTAManager.precheck；IOTAManager.apply；IOTAManager.rollback；UpgradeOutcome | unit：回滚结果二值判定；integration：升级失败触发回滚 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-009 | INF-BLK-05：UpgradePlan、Package、rollback token、签名与存储规范未冻结 | 先冻结 OTA 输入输出对象与签名/存储规范 | 接口草案、对象草案、阻塞记录 | 仅当 OTA 补设计完成并明确失败回滚输入输出后，才可解除阻塞 |
@@ -908,3 +908,50 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -L unit` 证明 infra unit 用例处于 `unit` 标签集合内。
 4. TODO 证据回写：已完成主任务状态和本节执行记录回写。
 5. 提交隔离：本轮提交范围限定为 INF-TODO-011 的证据闭环文档。
+
+## 24. 本轮执行记录（2026-03-26 / INF-TODO-012）
+
+### 24.1 选中任务
+
+1. 本轮任务：INF-TODO-012。
+2. 可执行性依据：INF-TODO-001、INF-TODO-004、INF-TODO-009 已完成；当前仓库中的 `tests/contract/CMakeLists.txt` 已具备 centralized registration 机制，并已接入首批 infra 边界 contract 用例，本轮只需完成设计约束对账、发现性验证和执行证据闭环。
+
+### 24.2 研究与 Design 结论
+
+本地证据：
+
+1. `tests/contract/CMakeLists.txt` 已通过 `dasall_register_contract_test(...)` 集中注册 infra 边界用例，包含 `InfraContextBoundaryContractTest`、`LogEventBoundaryContractTest`、`AuditEventBoundaryContractTest`、`HealthSnapshotBoundaryContractTest`、`InfrastructureServiceBoundaryContractTest`、`LoggerInterfaceBoundaryContractTest`、`AuditLoggerInterfaceBoundaryContractTest`、`HealthMonitorInterfaceBoundaryContractTest`、`InfraErrorCodeBoundaryContractTest`。
+2. 上述 9 个 infra contract 目标均显式链接 `dasall_infra`，并在 CTest 中统一标记为 `contract;smoke`，满足当前阶段的 centralized registration 策略。
+3. 详细设计 6.5 与 9.1 对本轮的核心要求是“contracts 边界测试注册稳定存在并可阻止语义越权”，而不是在已有注册入口之上重写 contract 测试框架。
+
+D 结论：
+
+1. Design -> Build 映射：本轮不新增 contract 测试代码；以现有 `tests/contract/CMakeLists.txt` 和已落盘的 infra 边界测试源文件作为 contract 注册入口，对账其是否满足专项 TODO 中的 contracts 边界测试要求。
+2. Build 三件套：
+    - 代码目标：确认 `tests/contract/CMakeLists.txt` 已集中注册现有 infra contract 用例，并为其补齐 `dasall_infra` 依赖。
+    - 测试目标：验证带 `contract` 标签的测试可发现、可执行，并包含现有 infra 边界用例。
+    - 验收命令：`cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N -L contract && ctest --test-dir build-ci --output-on-failure -L contract`。
+3. D Gate：PASS。
+
+### 24.3 Build 交付与证据
+
+交付物：
+
+1. `tests/contract/CMakeLists.txt`：确认 centralized registration 机制已接入 9 个 infra 边界 contract 用例，并为相关目标补齐 `dasall_infra` 依赖。
+2. `tests/contract/smoke/`：确认现有 infra 边界测试源文件已落盘并纳入 `contract` 标签集合。
+3. 本文档与开发执行记录：回写 INF-TODO-012 的验证结论和验收证据。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过，`ninja: no work to do.`。
+3. `ctest --test-dir build-ci -N -L contract`：通过，发现 90 个 `contract` 标签测试，其中包含 `InfraContextBoundaryContractTest`、`LogEventBoundaryContractTest`、`AuditEventBoundaryContractTest`、`HealthSnapshotBoundaryContractTest`、`InfrastructureServiceBoundaryContractTest`、`LoggerInterfaceBoundaryContractTest`、`AuditLoggerInterfaceBoundaryContractTest`、`HealthMonitorInterfaceBoundaryContractTest`、`InfraErrorCodeBoundaryContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，90/90 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮未新增代码，只对现有 contract 注册入口和边界用例集合进行约束对账与证据回写。
+2. 正负例覆盖：本轮不新增逻辑；以现有 contract 测试集合完整发现和稳定执行作为验收出口。
+3. 测试发现性：已通过 `ctest -N -L contract` 证明 infra 边界用例处于 `contract` 标签集合内。
+4. TODO 证据回写：已完成主任务状态和本节执行记录回写。
+5. 提交隔离：本轮提交范围限定为 INF-TODO-012 的证据闭环文档。

@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #051
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-012 注册 infra contracts 边界测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-012-D 设计对账：
+   - 核对 `tests/contract/CMakeLists.txt` 已通过 centralized registration 机制接入 9 个 infra 边界 contract 用例。
+   - 核对相关 infra contract 目标已显式链接 `dasall_infra`，并统一打上 `contract` 标签。
+2. 完成 INF-TODO-012-B 证据闭环：
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci -N -L contract`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过，`ninja: no work to do.`。
+   - `ctest --test-dir build-ci -N -L contract` 通过，发现 90 个 `contract` 标签测试，其中包含 9 个 infra 边界 contract 用例。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，90/90 tests passed。
+
+### 结果
+
+1. infra contract 注册入口已经在前序对象/接口/错误码任务落盘时同步接通，本轮已完成对账并补齐正式验收证据。
+2. 阶段 D 的 contract 门已经具备稳定基线，后续可以进入阶段 E 的审计组件骨架与策略/诊断接口冻结任务。
+
+### 下一步
+
+1. 按阶段 E 顺序继续推进 INF-TODO-016，建立 AuditService 独立组件骨架。
+
+### 风险
+
+1. 当前 `contract` 标签集合覆盖全仓 contracts 基线而不是 infra 专属子集；后续如果需要更细粒度门禁，应考虑补充 infra 专属标签或命名筛选规则，但本轮不扩大范围。
+
 ## 记录 #050
 
 - 日期：2026-03-26
