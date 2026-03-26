@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #043
+
+- 日期：2026-03-26
+- 阶段：infrastructure 子系统专项 TODO
+- 任务：INF-TODO-007 HealthSnapshot 数据结构
+- 状态：已完成
+
+### 改动
+
+1. 完成 INF-TODO-007-D 设计收敛：
+   - 基于 infrastructure 详细设计 6.5、health 模块详细设计 6.5/6.8 和 Azure Health Endpoint Monitoring 模式，冻结 HealthSnapshot 的 `liveness/readiness/degraded/failed_components` 四字段。
+   - 采用最小一致性守卫区分 ready、degraded、failed 三类状态，并禁止非存活快照继续标记 ready/degraded。
+   - 将 `failed_components` 收敛为最小字符串集合，并显式拒绝空值、重复项以及 `final_runtime_state` 等 runtime-state 保留字段名，避免健康快照越权回写 runtime 状态。
+2. 完成 INF-TODO-007-B 代码落地：
+   - 新增 [infra/include/HealthSnapshot.h](infra/include/HealthSnapshot.h)
+   - 新增 [tests/unit/infra/HealthSnapshotTest.cpp](tests/unit/infra/HealthSnapshotTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 新增 [tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp](tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci` 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，5/5 tests passed，新增 `HealthSnapshotUnitTest` 被发现并执行。
+   - `ctest --test-dir build-ci --output-on-failure -L contract` 通过，85/85 tests passed，新增 `HealthSnapshotBoundaryContractTest` 被发现并执行。
+
+### 结果
+
+1. HealthSnapshot 已从详细设计字段表收敛为可编译、可测试、可追溯的数据结构，为后续 IHealthMonitor 与 probe policy 任务提供稳定输出对象。
+2. 健康三态与 runtime state 的边界已经固定在 infra 私有布尔位与组件列表上，后续任务不能把 recovery/runtime 状态字段直接并入健康快照。
+
+### 下一步
+
+1. 按依赖顺序推进 INF-TODO-008，冻结 IHealthMonitor 接口。
+
+### 风险
+
+1. 当前 `failed_components` 仍是最小字符串集合，后续任务只能增加解释或策略映射，不应破坏本轮去重/非空的可序列化基线。
+2. HealthSnapshot 目前未引入 version/ts 等扩展字段；若后续需要回放窗口信息，应新增专用对象或单独评审，而不是直接扩写本轮四字段表。
+
 ## 记录 #042
 
 - 日期：2026-03-26
