@@ -18,6 +18,8 @@ enum class PlatformErrorCode {
   ConnectionRefused,
   Disconnected,
   AddressInUse,
+  PeerClosed,
+  PayloadTooLarge,
   InternalFailure,
 };
 

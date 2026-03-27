@@ -170,7 +170,7 @@
 | PLAT-LNX-TODO-006 | Done | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IQueue.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
 | PLAT-LNX-TODO-007 | Done | 定义 IFileSystem 接口头文件 | platform 设计 6.6 | 6.6 IFileSystem | L3 | platform/include/IFileSystem.h | read_file/write_atomic/ensure_directory/stat | unit：InterfaceSurfaceTest 覆盖 IFileSystem | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IFileSystem.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 NotFound/PermissionDenied/NoSpace 语义可判定时完成 |
 | PLAT-LNX-TODO-008 | Done | 定义 INetwork 接口头文件 | platform 设计 6.6/6.9 | 6.6 INetwork | L3 | platform/include/INetwork.h | connect/send/receive/shutdown | unit：InterfaceSurfaceTest 覆盖 INetwork | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | PLAT-LNX-BLK-03（仅影响 provider 实现，接口层已最小解阻） | fallback 策略补设计通过评审（影响 PLAT-LNX-TODO-016） | 接口头文件、接口单测；2026-03-27 已新增 INetwork.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当接口语义冻结且 fallback 边界不冲突时完成 |
-| PLAT-LNX-TODO-009 | Not Started | 定义 IIPC 接口头文件 | platform 设计 6.6/6.9 | 6.6 IIPC | L3 | platform/include/IIPC.h | listen/accept/connect/send/receive/close | unit：InterfaceSurfaceTest 覆盖 IIPC | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 AddressInUse/PeerClosed/PayloadTooLarge 路径可判定时完成 |
+| PLAT-LNX-TODO-009 | Done | 定义 IIPC 接口头文件 | platform 设计 6.6/6.9 | 6.6 IIPC | L3 | platform/include/IIPC.h | listen/accept/connect/send/receive/close | unit：InterfaceSurfaceTest 覆盖 IIPC | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IIPC.h、扩展 PlatformErrorCode（PeerClosed/PayloadTooLarge）、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 AddressInUse/PeerClosed/PayloadTooLarge 路径可判定时完成 |
 | PLAT-LNX-TODO-010 | Not Started | 实现 LinuxPlatformFactory create(config) 骨架 | platform 设计 6.2/6.3/6.7；架构 9.2 | 6.7 初始化主流程 | L3 | platform/include/linux/LinuxPlatformFactory.h、platform/src/linux/LinuxPlatformFactory.cpp | create(config) | unit：LinuxPlatformFactoryTest（初始化顺序、必需能力缺失阻断） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R LinuxPlatformFactoryTest --output-on-failure | PLAT-LNX-TODO-001~009 | PLAT-LNX-BLK-02 | profile 注入键与输入结构统一 | 工厂代码、单测或阻塞记录 | 仅当初始化顺序符合 Profile Bind 后置条件且失败路径可判定时完成 |
 | PLAT-LNX-TODO-011 | Not Started | 实现 CapabilityRegistry 状态登记骨架 | platform 设计 6.2/6.3/6.7 | 6.3 CapabilityRegistry | L3 | platform/src/linux/CapabilityRegistry.cpp | set_capability/get_capability/snapshot | unit：LinuxPlatformFactoryTest 或独立 CapabilityRegistryTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R "LinuxPlatformFactoryTest|CapabilityRegistryTest" --output-on-failure | PLAT-LNX-TODO-002、010 | 无 | 无 | 实现代码、单测 | 仅当 enabled/disabled/degraded 与 reason 可重复断言时完成 |
 | PLAT-LNX-TODO-012 | Not Started | 实现 PosixThreadProvider 骨架 | platform 设计 6.2/6.6 | 6.2 PosixThreadProvider；6.6 IThread | L3 | platform/src/linux/PosixThreadProvider.cpp | create_thread/join_thread/request_stop | unit：PosixThreadProviderTest（create/join/timeout） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PosixThreadProviderTest --output-on-failure | PLAT-LNX-TODO-004、003 | 无 | 无 | 实现代码、单测 | 仅当 ResourceExhausted/Timeout 路径均可复现并断言通过时完成 |
@@ -548,6 +548,62 @@ Build 合规复核：
 3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
 4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
 5. 提交隔离：预期提交范围限定为 ITimer 接口、对应 unit 验证与证据文档。
+6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
+
+## 20. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-009）
+
+### 20.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-009。
+2. 可执行性依据：前置依赖 PLAT-LNX-TODO-003 已完成，当前无 blocker，范围收敛于单一接口头文件、PlatformErrorCode 扩展与最小 unit 验证。
+
+### 20.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IIPC 接口包含 listen/accept/connect/send/receive/close。
+2. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IIPC 错误语义应对齐 AddressInUse、PathTooLong（可由 InvalidArgument 承接）、PeerClosed、PayloadTooLarge。
+3. docs/architecture/platform_linux_detailed_design.md 6.9 明确 platform.linux.ipc.socket_dir 默认 /tmp/dasall、max_payload_bytes 默认 1048576；本轮据此设置 ListenOptions 默认值。
+4. TODO-009 完成判定：AddressInUse/PeerClosed/PayloadTooLarge 路径可判定。PeerClosed 和 PayloadTooLarge 在 PlatformErrorCode 中缺失，需补充以确保错误路径可判定。
+
+外部参考：
+
+1. Linux Unix Domain Socket 文档确认 bind(2) 在路径已存在时返回 EADDRINUSE，对应 AddressInUse；send(2) 在消息超过 SO_SNDBUF 时返回 EMSGSIZE，对应 PayloadTooLarge；read(2) 返回 0 表示 peer 关闭，对应 PeerClosed。
+2. POSIX listen(2) 文档明确 backlog 参数的最小有效值为 1；本轮据此在 ListenOptions.has_consistent_values() 中拒绝零 backlog。
+
+D 结论：
+
+1. Design -> Build 映射：
+   - 扩展 platform/include/PlatformError.h：补充 PeerClosed 与 PayloadTooLarge 错误码。
+   - 新增 platform/include/IIPC.h：冻结 IpcEndpoint、ListenOptions、IpcListenerHandle、IpcChannelHandle、IpcPayload、IpcSendResult、IpcReceiveResult 与 IIPC 六方法签名。
+2. Build 三件套：
+   - 代码目标：新增 IIPC 接口头文件 + 补充 PlatformErrorCode 两个 IPC 错误码。
+   - 测试目标：扩展 InterfaceSurfaceTest，覆盖签名稳定性、IpcEndpoint/ListenOptions 默认值正例与非法输入负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure。
+3. D Gate：PASS。
+
+### 20.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/PlatformError.h：补充 PeerClosed、PayloadTooLarge 至 PlatformErrorCode 枚举。
+2. platform/include/IIPC.h：新增 IpcEndpoint、ListenOptions、IpcListenerHandle、IpcChannelHandle、IpcPayload、IpcSendResult、IpcReceiveResult、IIPC 接口定义。
+3. tests/unit/platform/linux/InterfaceSurfaceTest.cpp：扩展 IIPC surface 测试，覆盖默认值正例、一致性负例与方法签名静态断言。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test：通过。
+3. ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure：通过，1/1 tests passed。
+4. ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure：通过，1/1 tests passed（既有测试不受 ErrorCode 扩展影响）。
+
+Build 合规复核：
+
+1. 代码注释：接口与对象命名自解释，未增加冗余注释。
+2. 正负例覆盖：InterfaceSurfaceTest 增补 IpcEndpoint/ListenOptions 默认值正例，以及 empty-socket-path、zero-backlog、zero-max-payload 负例，以及 peer-closed-with-data 不一致负例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
+4. TODO 证据回写：已回写主任务状态与本节执行记录。
+5. 提交隔离：本轮提交范围限定为 IIPC 接口、PlatformErrorCode 扩展、对应 unit 验证扩展与 TODO 回写。
 6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
 
 ## 19. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-008）

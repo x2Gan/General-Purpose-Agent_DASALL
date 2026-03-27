@@ -4,6 +4,7 @@
 
 #include "IFileSystem.h"
 #include "INetwork.h"
+#include "IIPC.h"
 #include "IQueue.h"
 #include "ITimer.h"
 #include "IThread.h"
@@ -486,6 +487,134 @@ void test_inetwork_interface_surface_stays_stable() {
   assert_true(std::is_abstract_v<INetwork>, "INetwork should remain an abstract interface");
 }
 
+void test_ipc_endpoint_and_listen_options_consistency() {
+  using dasall::platform::IpcEndpoint;
+  using dasall::platform::ListenOptions;
+  using dasall::tests::support::assert_true;
+
+  const IpcEndpoint empty_path{};
+  const IpcEndpoint valid_socket_path{
+      .socket_path = "/tmp/dasall/agent.sock",
+      .use_abstract_namespace = false,
+  };
+  const IpcEndpoint valid_abstract_path{
+      .socket_path = "dasall-agent",
+      .use_abstract_namespace = true,
+  };
+
+  assert_true(!empty_path.has_consistent_values(),
+              "ipc endpoint should reject empty socket path");
+  assert_true(valid_socket_path.has_consistent_values(),
+              "ipc endpoint should accept valid filesystem socket path");
+  assert_true(valid_abstract_path.has_consistent_values(),
+              "ipc endpoint should accept valid abstract namespace path");
+
+  const ListenOptions default_options;
+
+  assert_true(default_options.backlog == 5U,
+              "listen options should default to backlog of 5");
+  assert_true(default_options.max_payload_bytes == 1048576U,
+              "listen options should default to 1 MiB max payload");
+  assert_true(default_options.has_consistent_values(),
+              "default listen options should remain internally consistent");
+
+  ListenOptions invalid_backlog;
+  invalid_backlog.backlog = 0;
+
+  ListenOptions invalid_payload;
+  invalid_payload.max_payload_bytes = 0;
+
+  assert_true(!invalid_backlog.has_consistent_values(),
+              "listen options should reject zero backlog");
+  assert_true(!invalid_payload.has_consistent_values(),
+              "listen options should reject zero max payload bytes");
+}
+
+void test_ipc_surface_rejects_inconsistent_ipc_inputs() {
+  using dasall::platform::IpcChannelHandle;
+  using dasall::platform::IpcListenerHandle;
+  using dasall::platform::IpcPayload;
+  using dasall::platform::IpcReceiveResult;
+  using dasall::tests::support::assert_true;
+
+  const IpcListenerHandle invalid_listener{};
+  const IpcListenerHandle valid_listener{
+      .native_fd = 10,
+  };
+  const IpcChannelHandle invalid_channel{};
+  const IpcChannelHandle valid_channel{
+      .native_fd = 11,
+  };
+
+  const IpcReceiveResult invalid_receive_peer_closed_with_data{
+      .data = IpcPayload{0xBBU},
+      .peer_closed = true,
+  };
+  const IpcReceiveResult valid_receive_with_data{
+      .data = IpcPayload{0x01U, 0x02U},
+      .peer_closed = false,
+  };
+  const IpcReceiveResult valid_receive_peer_closed{
+      .data = {},
+      .peer_closed = true,
+  };
+
+  assert_true(!invalid_listener.has_consistent_values(),
+              "ipc listener handle should reject zero native fd");
+  assert_true(valid_listener.has_consistent_values(),
+              "ipc listener handle should accept non-zero native fd");
+  assert_true(!invalid_channel.has_consistent_values(),
+              "ipc channel handle should reject zero native fd");
+  assert_true(valid_channel.has_consistent_values(),
+              "ipc channel handle should accept non-zero native fd");
+  assert_true(!invalid_receive_peer_closed_with_data.has_consistent_values(),
+              "ipc receive result should reject non-empty data when peer_closed is true");
+  assert_true(valid_receive_with_data.has_consistent_values(),
+              "ipc receive result should accept data when peer is open");
+  assert_true(valid_receive_peer_closed.has_consistent_values(),
+              "ipc receive result should accept empty data when peer_closed is true");
+}
+
+void test_iipc_interface_surface_stays_stable() {
+  using dasall::platform::IIPC;
+  using dasall::platform::IpcChannelHandle;
+  using dasall::platform::IpcEndpoint;
+  using dasall::platform::IpcListenerHandle;
+  using dasall::platform::IpcPayload;
+  using dasall::platform::IpcReceiveResult;
+  using dasall::platform::IpcSendResult;
+  using dasall::platform::ListenOptions;
+  using dasall::platform::PlatformResult;
+  using dasall::tests::support::assert_true;
+
+  using ListenSignature =
+      PlatformResult<IpcListenerHandle> (IIPC::*)(const IpcEndpoint&, const ListenOptions&);
+  using AcceptSignature =
+      PlatformResult<IpcChannelHandle> (IIPC::*)(const IpcListenerHandle&, std::int32_t);
+  using ConnectSignature =
+      PlatformResult<IpcChannelHandle> (IIPC::*)(const IpcEndpoint&, std::int32_t);
+  using SendSignature =
+      PlatformResult<IpcSendResult> (IIPC::*)(const IpcChannelHandle&, const IpcPayload&);
+  using ReceiveSignature =
+      PlatformResult<IpcReceiveResult> (IIPC::*)(const IpcChannelHandle&, std::int32_t);
+  using CloseSignature = PlatformResult<bool> (IIPC::*)(const IpcChannelHandle&);
+
+  static_assert(std::is_same_v<decltype(&IIPC::listen), ListenSignature>,
+                "IIPC::listen signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IIPC::accept), AcceptSignature>,
+                "IIPC::accept signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IIPC::connect), ConnectSignature>,
+                "IIPC::connect signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IIPC::send), SendSignature>,
+                "IIPC::send signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IIPC::receive), ReceiveSignature>,
+                "IIPC::receive signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IIPC::close), CloseSignature>,
+                "IIPC::close signature should remain stable");
+
+  assert_true(std::is_abstract_v<IIPC>, "IIPC should remain an abstract interface");
+}
+
 }  // namespace
 
 int main() {
@@ -505,7 +634,10 @@ int main() {
     test_socket_endpoint_default_values_and_consistency();
     test_network_surface_rejects_inconsistent_network_inputs();
     test_inetwork_interface_surface_stays_stable();
-  } catch (const std::exception& ex) {
+        test_ipc_endpoint_and_listen_options_consistency();
+        test_ipc_surface_rejects_inconsistent_ipc_inputs();
+        test_iipc_interface_surface_stays_stable();
+    } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
   }
