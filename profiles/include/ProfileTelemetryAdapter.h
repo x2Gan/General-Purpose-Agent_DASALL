@@ -1,0 +1,60 @@
+#pragma once
+
+#include <string_view>
+
+#include "ILogger.h"
+#include "audit/IAuditLogger.h"
+
+namespace dasall::profiles {
+
+struct ProfileTelemetryDispatchResult {
+  infra::LogWriteResult log_result;
+  infra::audit::AuditWriteResult audit_result;
+
+  [[nodiscard]] bool ok() const {
+    return log_result.ok && audit_result.ok;
+  }
+
+  [[nodiscard]] bool references_only_contract_error_types() const {
+    return log_result.references_only_contract_error_types() &&
+           audit_result.references_only_contract_error_types();
+  }
+};
+
+class ProfileTelemetryAdapter {
+ public:
+  ProfileTelemetryAdapter(infra::ILogger& logger, infra::audit::IAuditLogger& audit_logger);
+
+  [[nodiscard]] ProfileTelemetryDispatchResult record_activation_success(
+      std::string_view requested_profile_id,
+      std::string_view effective_profile_id,
+      std::string_view activation_mode,
+      std::string_view actor = "profiles.telemetry");
+
+  [[nodiscard]] ProfileTelemetryDispatchResult record_reload_rejected(
+      std::string_view profile_id,
+      std::string_view reason_code,
+      std::string_view actor = "profiles.telemetry");
+
+  [[nodiscard]] ProfileTelemetryDispatchResult record_fallback_lkg(
+      std::string_view requested_profile_id,
+      std::string_view effective_profile_id,
+      std::string_view reason_code,
+      std::string_view actor = "profiles.telemetry");
+
+ private:
+  [[nodiscard]] ProfileTelemetryDispatchResult emit_event(
+      std::string_view action,
+      std::string_view requested_profile_id,
+      std::string_view effective_profile_id,
+      std::string_view activation_mode,
+      std::string_view reason_code,
+      std::string_view actor,
+      infra::LogLevel level,
+      infra::AuditOutcome outcome);
+
+  infra::ILogger& logger_;
+  infra::audit::IAuditLogger& audit_logger_;
+};
+
+}  // namespace dasall::profiles

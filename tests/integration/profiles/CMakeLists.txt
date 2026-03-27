@@ -12,3 +12,18 @@ dasall_apply_common_options(dasall_profiles_build_runtime_integration_test)
 
 add_test(NAME ProfilesBuildRuntimeIntegrationTest COMMAND dasall_profiles_build_runtime_integration_test)
 set_tests_properties(ProfilesBuildRuntimeIntegrationTest PROPERTIES LABELS "integration")
+
+add_executable(dasall_profile_observability_integration_test
+  ProfileObservabilityIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_profile_observability_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_profile_observability_integration_test)
+
+add_test(NAME ProfileObservabilityIntegrationTest COMMAND dasall_profile_observability_integration_test)
+set_tests_properties(ProfileObservabilityIntegrationTest PROPERTIES LABELS "integration")

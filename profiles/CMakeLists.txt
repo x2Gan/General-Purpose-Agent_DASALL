@@ -8,6 +8,7 @@ target_sources(dasall_profiles
     src/RuntimePolicyProvider.cpp
     src/ProfileCompatibilityValidator.cpp
     src/LastKnownGoodStore.cpp
+    src/ProfileTelemetryAdapter.cpp
     src/placeholder.cpp
 )
 
@@ -21,6 +22,7 @@ target_compile_features(dasall_profiles PUBLIC cxx_std_20)
 target_link_libraries(dasall_profiles
   PUBLIC
     dasall_contracts
+    dasall_infra
 )
 
 dasall_apply_common_options(dasall_profiles)

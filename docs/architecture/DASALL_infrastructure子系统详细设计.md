@@ -402,6 +402,11 @@ override 输入对象最小契约：
 1. 高风险命令（secret rotate、ota apply、ota rollback、plugin load/unload、policy patch）强制审计。
 2. 审计字段必须包含 actor、action、target、outcome、evidence_ref。
 
+Profiles sink contract（v1）：
+1. infra 对 profiles 暴露的可观测 sink v1 仅包括 `ILogger` 与 `audit::IAuditLogger` 两个接口，供 `ProfileTelemetryAdapter` 写入结构化日志与审计事件。
+2. profiles 侧只能依赖上述接口和已冻结事件对象，不得直接依赖 tracing/metrics exporter 或内部队列实现。
+3. metrics/tracing 在当前阶段仍停留在 infra 内部能力与后续桥接任务；若未来补充跨子域桥接，必须以追加可选 sink 的方式演进，不得破坏 v1 logger/audit 契约。
+
 ### 6.11 独立组件化建议
 
 组件化建议分级：
