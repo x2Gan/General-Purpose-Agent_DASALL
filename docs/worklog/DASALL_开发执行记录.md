@@ -8,6 +8,52 @@
 
 ---
 
+## 记录 #054
+
+- 日期：2026-03-27
+- 阶段：platform/linux 组件专项 TODO
+- 任务：PLAT-LNX-TODO-003 定义 PlatformError 与 PlatformResult 头文件
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLAT-LNX-TODO-003-D 设计收敛：
+   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-003-PlatformError设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-003-PlatformError%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、最小 contracts 映射锚点、Design->Build 映射与 D Gate。
+   - 针对 BLK-04，采用“冻结 category->contracts 一级失败域映射 + 单测”完成最小解阻，不提前扩张细粒度 ErrorInfo 映射评审范围。
+2. 完成 PLAT-LNX-TODO-003-B 代码落地：
+   - 新增 [platform/include/PlatformError.h](platform/include/PlatformError.h)
+   - 新增 [platform/include/PlatformResult.h](platform/include/PlatformResult.h)
+   - 新增 [tests/unit/platform/linux/PlatformErrorMappingTest.cpp](tests/unit/platform/linux/PlatformErrorMappingTest.cpp)
+   - 更新 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_platform dasall_platform_error_mapping_unit_test`
+   - `ctest --test-dir build-ci -N -R PlatformErrorMappingTest`
+   - `ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_platform dasall_platform_error_mapping_unit_test` 通过，`ninja: no work to do.`。
+   - `ctest --test-dir build-ci -N -R PlatformErrorMappingTest` 通过，发现 1 个测试。
+   - `ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure` 通过，1/1 tests passed。
+
+### 结果
+
+1. platform/linux 错误模型已具备可编译、可测试的最小落地形态，后续接口和 provider 任务可以复用统一错误事实结构。
+2. BLK-04 在本轮以最小映射锚点完成解阻；更细粒度 ErrorInfo 评审可在后续任务中增量推进。
+
+### 下一步
+
+1. 按依赖顺序继续推进 PLAT-LNX-TODO-004，冻结 IThread 接口头文件。
+
+### 风险
+
+1. 当前 category 映射只覆盖 contracts 一级失败域，未扩展到更细粒度错误语义；后续扩展需保证现有映射测试稳定。
+2. 当前前台终端输出回传偶发失败；若后续复现，应继续使用后台终端 + 输出回读链路保证验收证据完整。
+
 ## 记录 #053
 
 - 日期：2026-03-27

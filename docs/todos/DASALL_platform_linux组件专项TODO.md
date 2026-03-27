@@ -164,7 +164,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | PLAT-LNX-TODO-001 | Done | 定义 PlatformInitConfig 数据结构头文件 | platform 设计 6.5；工程规范 3.2 | 6.5 PlatformInitConfig | L3 | platform/include/linux/PlatformInitConfig.h | target_platform/profile_name/enable_hal/queue_defaults/io_timeouts | unit：字段编译与默认值断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | 无 | 无 | 无 | 头文件、编译记录；2026-03-26 已新增 PlatformInitConfig.h、PlatformInitConfigTest，并执行构建与定向 unit 验证 | 仅当字段集合与设计一致且 dasall_platform 构建通过时完成 |
 | PLAT-LNX-TODO-002 | Done | 定义 PlatformCapabilitySet 数据结构头文件 | platform 设计 6.5/6.7 | 6.5 PlatformCapabilitySet | L3 | platform/include/linux/LinuxPlatformCapabilities.h | thread/timer/queue/filesystem/network/ipc/hal 状态与 reason | unit：状态枚举与 reason 字段断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | PLAT-LNX-TODO-001 | 无 | 无 | 头文件、编译记录；2026-03-27 已新增 LinuxPlatformCapabilities.h、LinuxPlatformCapabilitiesTest，并执行构建与定向 unit 验证 | 仅当能力项与三态语义完整且可编译时完成 |
-| PLAT-LNX-TODO-003 | Not Started | 定义 PlatformError 与 PlatformResult 头文件 | platform 设计 6.5/6.8；工程规范 3.6 | 6.5 PlatformError；6.8 异常分类 | L3 | platform/include/PlatformError.h、platform/include/PlatformResult.h | code/category/retryable_hint/syscall_name/errno_value/detail | unit：PlatformErrorMappingTest（或同等映射单测） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure | 无 | PLAT-LNX-BLK-04 | ErrorInfo 映射评审通过 | 头文件、映射测试或阻塞记录 | 仅当错误字段可判定且映射测试通过（或保持 Blocked）时完成 |
+| PLAT-LNX-TODO-003 | Done | 定义 PlatformError 与 PlatformResult 头文件 | platform 设计 6.5/6.8；工程规范 3.6 | 6.5 PlatformError；6.8 异常分类 | L3 | platform/include/PlatformError.h、platform/include/PlatformResult.h | code/category/retryable_hint/syscall_name/errno_value/detail | unit：PlatformErrorMappingTest（或同等映射单测） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure | 无 | PLAT-LNX-BLK-04 | ErrorInfo 映射评审通过 | 头文件、映射测试；2026-03-27 已新增 PlatformError.h/PlatformResult.h、PlatformErrorMappingTest，并以一级失败域映射锚点完成 BLK-04 最小解阻 | 仅当错误字段可判定且映射测试通过（或保持 Blocked）时完成 |
 | PLAT-LNX-TODO-004 | Not Started | 定义 IThread 接口头文件 | platform 设计 6.6 | 6.6 IThread | L3 | platform/include/IThread.h | create_thread/join_thread/request_stop | unit：InterfaceSurfaceTest 覆盖 IThread | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当方法语义与错误语义对齐且接口测试通过时完成 |
 | PLAT-LNX-TODO-005 | Not Started | 定义 ITimer 接口头文件 | platform 设计 6.6 | 6.6 ITimer | L3 | platform/include/ITimer.h | start_once/start_periodic/cancel | unit：InterfaceSurfaceTest 覆盖 ITimer | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当方法语义、错误语义与超时约束可二值判定时完成 |
 | PLAT-LNX-TODO-006 | Not Started | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
@@ -386,3 +386,58 @@ Build 合规复核：
 4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
 5. 提交隔离：本轮提交范围限定为 LinuxPlatformCapabilities、对应 unit 验证与证据文档。
 6. 环境恢复：本轮继续使用仓库既有 build-ci 命令链路完成验证，未依赖当前不可用的 CMake Tools target 解析。
+
+## 14. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-003）
+
+### 14.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-003。
+2. 可执行性依据：无前置依赖；PLAT-LNX-BLK-04 可通过“冻结最小 category 映射锚点 + 单测”在本轮内最小解阻。
+
+### 14.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.5 明确 PlatformError 字段为 code/category/retryable_hint/syscall_name/errno_value/detail。
+2. docs/architecture/platform_linux_detailed_design.md 6.8 明确平台失败必须可判定，不允许吞错。
+3. docs/architecture/platform_linux_detailed_design.md 7 映射表要求新增 PlatformError.h、PlatformResult.h 与 PlatformErrorMappingTest。
+4. docs/architecture/platform_linux_detailed_design.md 11.1 指出 ErrorInfo 映射评审未完成，允许先冻结最小码集与映射锚点。
+
+外部参考：
+
+1. OpenTelemetry Common Specification 对可观测字段 machine-readable 稳定性的要求，支持本轮先冻结平台私有错误类别及最小映射锚点，再由后续评审扩展细粒度语义。
+
+D 结论：
+
+1. Design -> Build 映射：新增 platform/include/PlatformError.h、platform/include/PlatformResult.h；通过 map_platform_error_category_to_contracts 固化最小一级失败域映射。
+2. Build 三件套：
+   - 代码目标：新增 PlatformError/PlatformResult 头文件。
+   - 测试目标：新增 PlatformErrorMappingTest，覆盖映射正例、字段一致性负例和 result 互斥负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_error_mapping_unit_test && ctest --test-dir build-ci -N -R PlatformErrorMappingTest && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure。
+3. D Gate：PASS。
+
+### 14.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/PlatformError.h：新增 PlatformErrorCode、PlatformErrorCategory、PlatformError 及最小 category 映射函数。
+2. platform/include/PlatformResult.h：新增 PlatformResult 模板，冻结 success/failure 互斥约束。
+3. tests/unit/platform/linux/PlatformErrorMappingTest.cpp：覆盖映射与字段/结果一致性正负例。
+4. tests/unit/platform/linux/CMakeLists.txt：接入 PlatformErrorMappingTest。
+5. docs/todos/deliverables/PLAT-LNX-TODO-003-PlatformError设计收敛.md：补齐 D 阶段设计收敛与 BLK-04 最小解阻证据。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_error_mapping_unit_test：通过，ninja: no work to do.
+3. ctest --test-dir build-ci -N -R PlatformErrorMappingTest：通过，发现 1 个测试。
+4. ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：类型命名与字段含义自解释，未增加冗余注释。
+2. 正负例覆盖：PlatformErrorMappingTest 包含映射正例、字段一致性负例和 result 互斥负例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R PlatformErrorMappingTest 验证新增测试可发现，完整平台注册矩阵仍属于 PLAT-LNX-TODO-019 范围。
+4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
+5. 提交隔离：本轮提交范围限定为 PlatformError/PlatformResult、对应 unit 验证与证据文档。
+6. 环境恢复：前台终端回传异常，本轮通过后台终端执行+输出回读完成验收，不影响结果可追溯性。
