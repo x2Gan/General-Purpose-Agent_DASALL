@@ -5,6 +5,11 @@ target_sources(dasall_profiles
     src/placeholder.cpp
 )
 
+target_include_directories(dasall_profiles
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 target_compile_features(dasall_profiles PUBLIC cxx_std_20)
 
 target_link_libraries(dasall_profiles
