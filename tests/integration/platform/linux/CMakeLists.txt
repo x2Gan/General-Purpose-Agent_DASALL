@@ -1,0 +1,14 @@
+add_executable(dasall_linux_platform_bootstrap_integration_test
+  LinuxPlatformBootstrapIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_linux_platform_bootstrap_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_linux_platform_bootstrap_integration_test)
+
+add_test(NAME LinuxPlatformBootstrapIntegrationTest COMMAND dasall_linux_platform_bootstrap_integration_test)
+set_tests_properties(LinuxPlatformBootstrapIntegrationTest PROPERTIES LABELS "integration")
