@@ -118,6 +118,21 @@ dasall_apply_common_options(dasall_audit_service_fallback_unit_test)
 add_test(NAME AuditServiceFallbackTest COMMAND dasall_audit_service_fallback_unit_test)
 set_tests_properties(AuditServiceFallbackTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_snapshot_compatibility_unit_test
+  PolicySnapshotCompatibilityTest.cpp
+)
+
+target_link_libraries(dasall_policy_snapshot_compatibility_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_snapshot_compatibility_unit_test)
+
+add_test(NAME PolicySnapshotCompatibilityTest COMMAND dasall_policy_snapshot_compatibility_unit_test)
+set_tests_properties(PolicySnapshotCompatibilityTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_monitor_interface_unit_test
   HealthMonitorInterfaceTest.cpp
 )
