@@ -133,6 +133,21 @@ dasall_apply_common_options(dasall_policy_snapshot_compatibility_unit_test)
 add_test(NAME PolicySnapshotCompatibilityTest COMMAND dasall_policy_snapshot_compatibility_unit_test)
 set_tests_properties(PolicySnapshotCompatibilityTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_diagnostics_snapshot_export_unit_test
+  DiagnosticsSnapshotExportTest.cpp
+)
+
+target_link_libraries(dasall_diagnostics_snapshot_export_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_diagnostics_snapshot_export_unit_test)
+
+add_test(NAME DiagnosticsSnapshotExportTest COMMAND dasall_diagnostics_snapshot_export_unit_test)
+set_tests_properties(DiagnosticsSnapshotExportTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_monitor_interface_unit_test
   HealthMonitorInterfaceTest.cpp
 )

@@ -13,6 +13,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/AuditEvent.h
   include/HealthSnapshot.h
   include/IHealthMonitor.h
+  include/IDiagnosticsService.h
   include/IInfrastructureService.h
   include/ILogger.h
   include/InfraContext.h
@@ -20,6 +21,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/LogEvent.h
   include/audit/AuditService.h
   include/audit/IAuditLogger.h
+  include/diagnostics/DiagnosticsTypes.h
   include/policy/ISecurityPolicyManager.h
   include/policy/PolicyBundle.h
   include/policy/PolicyDecisionRef.h
