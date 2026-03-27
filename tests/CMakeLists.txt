@@ -5,7 +5,7 @@ add_subdirectory(integration)
 
 add_custom_target(dasall_unit_tests
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L unit
-  DEPENDS dasall_runtime_smoke_test
+  DEPENDS ${DASALL_UNIT_TEST_EXECUTABLE_TARGETS}
 )
 
 add_custom_target(dasall_contract_tests
@@ -41,4 +41,8 @@ add_custom_target(dasall_wp05_contract_gate
 
 if(NOT DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "dasall_contract_tests requires at least one registered contract test target")
+endif()
+
+if(NOT DASALL_UNIT_TEST_EXECUTABLE_TARGETS)
+  message(FATAL_ERROR "dasall_unit_tests requires at least one registered unit test target")
 endif()

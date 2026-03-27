@@ -104,6 +104,26 @@ add_test(NAME ProfileCompatibilityValidatorTest
          COMMAND dasall_profile_compatibility_validator_unit_test)
 set_tests_properties(ProfileCompatibilityValidatorTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_profile_matrix_consistency_unit_test
+  ProfileMatrixConsistencyTest.cpp
+)
+
+target_link_libraries(dasall_profile_matrix_consistency_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+target_include_directories(dasall_profile_matrix_consistency_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/profiles/src
+)
+
+dasall_apply_common_options(dasall_profile_matrix_consistency_unit_test)
+
+add_test(NAME ProfileMatrixConsistencyTest COMMAND dasall_profile_matrix_consistency_unit_test)
+set_tests_properties(ProfileMatrixConsistencyTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_validation_report_unit_test
   ValidationReportTest.cpp
 )
