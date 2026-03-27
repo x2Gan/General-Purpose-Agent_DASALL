@@ -185,9 +185,9 @@
 | PRF-TODO-013 | Done | 补齐 5 档 runtime_policy.yaml 最小 schema 与策略域 | 详细设计 3.1/6.9/8.3 | 6.9 配置逻辑域；8.3 PRF-T002 | L2 | profiles/*/runtime_policy.yaml | profile_meta/enabled_modules/runtime_budget/model_profile/token_budget_policy/prompt_policy/capability_cache_policy/degrade_policy/timeout_policy/execution_policy/ops_policy | contract：schema 结构稳定性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -L contract | 无 | 无 | 无 | 5 个 runtime_policy.yaml、ProfileRuntimePolicySchemaContractTest.cpp、schema 冻结设计补丁、contract 通过记录；2026-03-27 已通过 | 仅当 5 档均通过 schema 检查且字段集合一致时完成 |
 | PRF-TODO-014 | Done | 新增 profiles 模块 CMake 接线 | 详细设计 8.1；代码现状 | 8.1 路径建议 | L0 | CMakeLists.txt（根）；profiles/CMakeLists.txt（新增）；profiles/src/placeholder.cpp（新增） | add_subdirectory(profiles) 与 profiles 静态库目标注册 | build：profiles 目标可被构建图识别 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci；cmake --build build-ci --target dasall_profiles | 无 | 无 | 无 | CMake 改动、构建记录；2026-03-27 已执行 configure/build 成功，dasall_profiles 目标可单独构建 | 仅当 profiles 模块进入构建图并可独立编译时完成 |
 | PRF-TODO-015 | Done | 注册 profiles unit 测试目录与目标 | 详细设计 8.1/9.1；工程规范 3.7 | 9.1 单元测试范围 | L2 | tests/unit/CMakeLists.txt；tests/unit/profiles/ | unit 发现性注册 | unit：ProfileCatalog/Resolver/Provider/Validator/LKG | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N | PRF-TODO-014 | 无 | 无 | tests/unit/CMakeLists.txt、tests/unit/profiles/CMakeLists.txt、ctest -N 发现记录；2026-03-27 已发现 ProfileCatalogInterfaceTest | 仅当 ctest -N 可发现至少 1 个 profiles unit 测试并纳入 build-ci 时完成 |
-| PRF-TODO-016 | Done | 注册 profiles integration 测试目录与目标 | 详细设计 8.1/9.1/9.4；代码现状 | 9.4 集成路径 | L0 | tests/CMakeLists.txt；tests/integration/profiles/ | integration 发现性注册 | integration：Build->Runtime 一致性冒烟 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | PRF-TODO-014 | 无 | 无 | tests/integration/CMakeLists.txt、tests/integration/profiles/CMakeLists.txt、ProfilesBuildRuntimeIntegrationTest.cpp、ctest -N 发现记录；2026-03-27 已新增 ProfilesBuildRuntimeIntegrationTest 并纳入 build-ci | 仅当 integration 测试可被发现后解阻 |
+| PRF-TODO-016 | Done | 注册 profiles integration 测试目录与目标 | 详细设计 8.1/9.1/9.4；代码现状 | 9.4 集成路径 | L0 | tests/CMakeLists.txt；tests/integration/profiles/ | integration 发现性注册 | integration：Build->Runtime 一致性冒烟 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | PRF-TODO-014 | 无 | 无 | tests/integration/CMakeLists.txt、tests/integration/profiles/CMakeLists.txt、ProfilesBuildRuntimeIntegrationTest.cpp、ctest -N 发现记录；2026-03-27 已新增 ProfilesBuildRuntimeIntegrationTest 并纳入 build-ci | 仅当 integration 测试可被发现并纳入 build-ci 时完成 |
 | PRF-TODO-017 | Done | 实现 ProfileTelemetryAdapter 最小观测链路 | 详细设计 6.2/6.10/9.6；工程规范 3.6 | 6.10 可观测性；9.6 质量门 | L2 | profiles/src/ProfileTelemetryAdapter.cpp | activation/rejected/fallback 事件输出 | integration：激活/拒绝/回退事件可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | PRF-TODO-014、016 | 无 | 无 | profiles/include/ProfileTelemetryAdapter.h、profiles/src/ProfileTelemetryAdapter.cpp、tests/integration/profiles/ProfileObservabilityIntegrationTest.cpp、integration 执行记录；2026-03-27 已冻结 logger/audit v1 sink 契约并覆盖 success/rejected/fallback/invalid-input | 仅当三类事件都有可验证输出且不吞错时完成 |
-| PRF-TODO-018 | Not Started | 回写 profiles 专项 Gate 与交付证据 | 详细设计 9.6/11.1；本专项 TODO | 9.6 Gate 清单；11.1 阻塞管理 | L2 | docs/todos/DASALL_profiles子系统专项TODO.md | process test：门禁与阻塞状态一致性 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | PRF-TODO-014~017 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个 Gate 均有通过/失败结论和命令证据时完成 |
+| PRF-TODO-018 | Done | 回写 profiles 专项 Gate 与交付证据 | 详细设计 9.6/11.1；本专项 TODO | 9.6 Gate 清单；11.1 阻塞管理 | L2 | docs/todos/DASALL_profiles子系统专项TODO.md | process test：门禁与阻塞状态一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration | PRF-TODO-014~017 | 无 | 无 | 更新后的 TODO 证据段、Gate/阻塞收口记录；2026-03-27 已执行 configure/build/discoverability/unit/contract/integration 并全部通过 | 仅当每个 Gate 均有通过/失败结论和命令证据时完成 |
 | PRF-TODO-019 | Done | 补齐模块标识与适配器命名冻结表 | 详细设计 8.3 阻塞项；蓝图 5.1 | 11.1 模块标识未统一 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | enabled_modules 与 enabled_adapters 命名表 | process test：评审门 | rg -n "enabled_modules|adapter|模块矩阵" docs/architecture/DASALL_profiles模块详细设计.md docs/architecture/DASALL_Engineering_Blueprint.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 6.9 命名冻结表补丁，并回链 PRF-TODO-007/010/PRF-BLK-03 | 仅当命名表冻结并回链 PRF-TODO-007/010 时完成 |
 | PRF-TODO-020 | Done | 补齐 overlay 输入契约与来源合法性设计 | 详细设计 6.3/6.7/11.1；infra 详细设计 | 11.1 override 接口未冻结 | L0 | docs/architecture/DASALL_profiles模块详细设计.md；docs/architecture/DASALL_infrastructure子系统详细设计.md | deployment_override/runtime_override 输入对象与合法性规则 | process test：跨文档一致性评审 | rg -n "override|Overlay|ConfigCenter|四层" docs/architecture/DASALL_profiles模块详细设计.md docs/architecture/DASALL_infrastructure子系统详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 profiles 6.9 与 infra 6.6/6.9 契约冻结补丁，并回链 PRF-TODO-009/PRF-BLK-02 | 仅当 overlay 输入契约冻结并回链 PRF-TODO-009 时完成 |
 | PRF-TODO-021 | Done | 补齐 LKG 存储介质与失效语义设计 | 详细设计 6.2/6.8/11.1 | 11.1 LKG 存储介质未定 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | file/sqlite/in-memory 选型与失效策略 | process test：评审门 | rg -n "LastKnownGood|LKG|fallback" docs/architecture/DASALL_profiles模块详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 6.8 介质选型与失效语义补丁，并回链 PRF-TODO-012/PRF-BLK-05 | 仅当介质策略冻结并回链 PRF-TODO-012 时完成 |
@@ -202,8 +202,8 @@
 | B 接口与对象冻结 | PRF-TODO-001~005 | 可并行 | 接口与对象弱依赖，可并行收敛 |
 | C 资产冻结 | PRF-TODO-013 | 串行（与 B 并行可行） | RuntimeProvider 依赖 schema 资产 |
 | D 主链实现 | PRF-TODO-006~008、010、012 | 分段并行 | Catalog/Resolver/Provider/Validator/LKG 可按依赖推进 |
-| E 测试门禁接线 | PRF-TODO-015、016 | 串行（016 当前 Blocked） | 先 unit 注册，再 integration 接线 |
-| F 一致性与观测 | PRF-TODO-011、017 | 串行（017 当前 Blocked） | 一致性测试可先做，观测依赖 infra 接口冻结 |
+| E 测试门禁接线 | PRF-TODO-015、016 | 串行 | 先 unit 注册，再 integration 接线；现已完成 |
+| F 一致性与观测 | PRF-TODO-011、017 | 串行 | 一致性测试与最小观测链路均已完成，证据由 PRF-TODO-018 收口 |
 | G 证据收口 | PRF-TODO-018 | 串行 | 收敛 Gate 证据与阻塞状态 |
 | H 补设计解阻 | PRF-TODO-019~021 | 可并行 | 反哺 D/E/F 阶段阻塞项 |
 
@@ -232,6 +232,8 @@
 | PRF-BLK-06 | 已解除：tests 顶层已纳入 integration 子目录，profiles integration 冒烟目标已注册（2026-03-27 完成 tests/integration/profiles 接线与发现性验证） | PRF-TODO-017 | tests/CMakeLists 集成接线完成 | 无 | 集成验证继续作为非发布必过门，但已可被发现与独立执行 |
 | PRF-BLK-07 | 已解除：profiles 已冻结 ProfileTelemetryAdapter v1 sink 契约，限定为 ILogger + IAuditLogger，metrics/tracing 后置为追加桥接（2026-03-27 完成 profiles 6.10 补丁与 integration 验证） | 无 | 与 infra logging/metrics/tracing/audit 接口对齐冻结 | 无 | v1 先用 logger/audit 保证显式可观测，后续再追加 metrics/tracing 可选 sink |
 
+当前活跃阻塞项：无。PRF-BLK-01 至 PRF-BLK-07 已全部解除，且与对应任务/回链状态一致。
+
 ## 9. 验收与质量门
 
 ### 9.1 验收命令基线
@@ -250,7 +252,7 @@
 
 说明：
 
-1. 在 PRF-BLK-06 解阻前，integration 不作为必过基线。
+1. PRF-BLK-06 已于 2026-03-27 解阻，integration 已恢复为本专项必过基线，并在 PRF-TODO-018 中执行通过。
 2. 所有 Build-ready 任务都绑定至少 1 条构建命令与 1 条测试命令或发现性命令。
 
 ### 9.2 质量门逐项回答
@@ -262,6 +264,25 @@
 5. 是否所有任务都具备可二值判定完成标准：是。  
 6. 是否避免跨子系统范围扩张：是。  
 7. 若要求函数/数据结构级任务，是否真正落到了这些对象：是（接口方法与对象字段来自 6.5/6.6 明确定义）。
+
+### 9.3 PRF-TODO-018 Gate 执行证据（2026-03-27）
+
+| Gate ID | 结论 | 命令证据 | 结果摘要 |
+|---|---|---|---|
+| PRF-GATE-01 | PASS | cmake -S . -B build-ci -G Ninja；cmake --build build-ci | configure/generate 成功；build-ci 完成 17 个 profiles 相关目标重编译，profiles 静态库与 unit/integration 目标均成功链接 |
+| PRF-GATE-02 | PASS | ctest --test-dir build-ci --output-on-failure -L unit | ProfileCatalogInterfaceTest、RuntimePolicyProviderTest、ProfileCompatibilityValidatorTest、LastKnownGoodStoreTest 等 35 个 unit 全部通过，接口冻结状态与实现状态一致 |
+| PRF-GATE-03 | PASS | ctest --test-dir build-ci --output-on-failure -L contract | 91 个 contract 全部通过，其中 ProfileRuntimePolicySchemaContractTest 通过，5 档 runtime_policy.yaml schema 与字段集合保持稳定 |
+| PRF-GATE-04 | PASS | ctest --test-dir build-ci --output-on-failure -L unit | ProfileMatrixConsistencyTest 通过，BuildManifest 与 RuntimeSnapshot 模块矩阵一致性维持 |
+| PRF-GATE-05 | PASS | ctest --test-dir build-ci -N | 共发现 130 个测试，包含 ProfileCatalogTest、ProfilesBuildRuntimeIntegrationTest、ProfileObservabilityIntegrationTest，profiles unit/integration 入口均可见 |
+| PRF-GATE-06 | PASS | ctest --test-dir build-ci --output-on-failure -L integration | 4 个 integration 全部通过，其中 ProfilesBuildRuntimeIntegrationTest 与 ProfileObservabilityIntegrationTest 通过，激活/拒绝/回退观测链路闭环成立 |
+| PRF-GATE-07 | PASS | ctest --test-dir build-ci --output-on-failure -L contract | 本轮仅收口专项 TODO 证据，不新增 Context/Recovery/Orchestrator 越界实现；contract 套件保持全绿，ADR 边界未被破坏 |
+| PRF-GATE-08 | PASS | git diff -- docs/todos/DASALL_profiles子系统专项TODO.md | 本轮仅更新文档证据与状态，不涉及公共接口签名或 schema 语义变更，无 breaking 评审门触发 |
+
+### 9.4 阻塞变化与回退记录
+
+1. PRF-BLK-01 至 PRF-BLK-07 已全部解除，本轮未新增 profiles 子系统 blocker。
+2. 本轮证据采集期间，CMake Tools 无法在当前工作区完成配置与测试枚举；已按仓库验证路径回退到 build-ci 命令链路执行 configure/build/ctest，未影响 Gate 判定结论。
+3. 本轮未触发功能回退路径；回退证据沿用 PRF-TODO-012、PRF-TODO-017 已有 unit/integration 结果，并在本轮 integration 基线中再次保持通过。
 
 ## 10. 风险与回退策略
 
@@ -284,14 +305,7 @@
    - 当前主要缺口是工程接线与跨子系统输入冻结，不是接口语义空白。
    - ADR 边界明确，可作为越界阻断门禁。
 3. 当前最小可执行粒度：函数 / 接口 / 数据结构。
-4. 未达全量函数级的缺口：
-   - profiles 模块 CMake 尚未接入；
-   - overlay 输入契约未冻结；
-   - schema_version 与字段必填规则未冻结；
-   - integration 顶层测试接线缺失；
-   - telemetry 对接 infra 接口签名未冻结。
-5. 下一步建议：
-   - 先执行 PRF-TODO-014、015、013 打通接线与资产冻结；
-   - 并行推进 PRF-TODO-001~005 与 PRF-TODO-006~008、010；
-   - 同步完成 PRF-TODO-019~021 解阻；
-   - 解阻后推进 PRF-TODO-009、016、017，并由 PRF-TODO-018 收口门禁证据。
+4. 当前专项 TODO 相关阻塞与接线缺口已完成收敛；本专项范围内无未解阻的 Build-ready 缺口。
+5. 后续演进建议：
+   - 如需追加 metrics/tracing sink，新增独立原子任务扩展 ProfileTelemetryAdapter，可不回退当前 v1 完成态。
+   - 如需扩大 profile schema 或公共接口语义，重新走 PRF-GATE-08 breaking 评审门，而不是在本专项 TODO 内隐式扩张。
