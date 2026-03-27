@@ -190,7 +190,7 @@
 | PRF-TODO-018 | Not Started | 回写 profiles 专项 Gate 与交付证据 | 详细设计 9.6/11.1；本专项 TODO | 9.6 Gate 清单；11.1 阻塞管理 | L2 | docs/todos/DASALL_profiles子系统专项TODO.md | process test：门禁与阻塞状态一致性 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | PRF-TODO-014~017 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个 Gate 均有通过/失败结论和命令证据时完成 |
 | PRF-TODO-019 | Done | 补齐模块标识与适配器命名冻结表 | 详细设计 8.3 阻塞项；蓝图 5.1 | 11.1 模块标识未统一 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | enabled_modules 与 enabled_adapters 命名表 | process test：评审门 | rg -n "enabled_modules|adapter|模块矩阵" docs/architecture/DASALL_profiles模块详细设计.md docs/architecture/DASALL_Engineering_Blueprint.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 6.9 命名冻结表补丁，并回链 PRF-TODO-007/010/PRF-BLK-03 | 仅当命名表冻结并回链 PRF-TODO-007/010 时完成 |
 | PRF-TODO-020 | Done | 补齐 overlay 输入契约与来源合法性设计 | 详细设计 6.3/6.7/11.1；infra 详细设计 | 11.1 override 接口未冻结 | L0 | docs/architecture/DASALL_profiles模块详细设计.md；docs/architecture/DASALL_infrastructure子系统详细设计.md | deployment_override/runtime_override 输入对象与合法性规则 | process test：跨文档一致性评审 | rg -n "override|Overlay|ConfigCenter|四层" docs/architecture/DASALL_profiles模块详细设计.md docs/architecture/DASALL_infrastructure子系统详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 profiles 6.9 与 infra 6.6/6.9 契约冻结补丁，并回链 PRF-TODO-009/PRF-BLK-02 | 仅当 overlay 输入契约冻结并回链 PRF-TODO-009 时完成 |
-| PRF-TODO-021 | Not Started | 补齐 LKG 存储介质与失效语义设计 | 详细设计 6.2/6.8/11.1 | 11.1 LKG 存储介质未定 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | file/sqlite/in-memory 选型与失效策略 | process test：评审门 | rg -n "LastKnownGood|LKG|fallback" docs/architecture/DASALL_profiles模块详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录 | 仅当介质策略冻结并回链 PRF-TODO-012 时完成 |
+| PRF-TODO-021 | Done | 补齐 LKG 存储介质与失效语义设计 | 详细设计 6.2/6.8/11.1 | 11.1 LKG 存储介质未定 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | file/sqlite/in-memory 选型与失效策略 | process test：评审门 | rg -n "LastKnownGood|LKG|fallback" docs/architecture/DASALL_profiles模块详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 6.8 介质选型与失效语义补丁，并回链 PRF-TODO-012/PRF-BLK-05 | 仅当介质策略冻结并回链 PRF-TODO-012 时完成 |
 
 ## 7. 执行顺序建议
 
@@ -228,7 +228,7 @@
 | PRF-BLK-02 | 已解除：Overlay 输入契约已与 infra/config 冻结对齐（2026-03-27 完成 profiles 6.9、infra 6.6/6.9 补丁与 TODO 回链） | PRF-TODO-009 | 补齐跨文档覆盖输入契约 | 完成 PRF-TODO-020 | 初版仍保持 runtime override 白名单与 TTL 受限，不开放任意热改 |
 | PRF-BLK-03 | 已解除：validator 中已冻结 enabled_modules 最小命名子集并已在详细设计 6.9 补齐命名冻结表（2026-03-27 完成 ProfileCompatibilityValidator.*、命名表补丁与回链） | PRF-TODO-007、010 | 命名表评审通过 | 完成 PRF-TODO-019 | validator 先校验冻结子集 |
 | PRF-BLK-04 | 已解除：runtime_policy.yaml v1 已冻结 schema_version=1、必填逻辑域与显式布尔开关规则（2026-03-27 完成详细设计补丁、5 档资产补齐与 contract 校验） | PRF-TODO-008、013 | schema 规则冻结并评审通过 | 在详细设计补齐 schema 约束段 | 暂以最小字段运行，不宣称全域策略可用 |
-| PRF-BLK-05 | 已解除：LKG 最小实现冻结为进程内内存介质，并在 RuntimePolicyProvider 激活/加载路径接入 save/load fallback（2026-03-27 完成实现与单测） | PRF-TODO-012 | 介质策略与失效语义冻结 | 完成 PRF-TODO-021 | 先用进程内临时 LKG，不宣称持久化能力 |
+| PRF-BLK-05 | 已解除：LKG 最小实现冻结为进程内内存介质，并在详细设计 6.8 补齐 save/load/fallback 失效语义（2026-03-27 完成实现、单测与设计回链） | PRF-TODO-012 | 介质策略与失效语义冻结 | 完成 PRF-TODO-021 | 先用进程内临时 LKG，不宣称持久化能力 |
 | PRF-BLK-06 | tests 顶层未纳入 integration 子目录 | PRF-TODO-016、017 | tests/CMakeLists 集成接线完成 | 先跑 unit/contract 门禁，integration 保持 Blocked | 集成验证不作为当前必过发布门 |
 | PRF-BLK-07 | ProfileTelemetryAdapter 对接 infra observability 接口签名未冻结 | PRF-TODO-017 | 与 infra logging/metrics/tracing/audit 接口对齐冻结 | 先输出标准日志事件占位并保留适配层 | 若接口未冻，观测任务保持 Blocked |
 

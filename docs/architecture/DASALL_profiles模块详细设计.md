@@ -451,6 +451,46 @@ profiles 模块非职责：
 2. 不允许显式 profile 请求静默切换到其他档位。
 3. 所有回退都必须产生 ProfileActivationRecord 与审计日志。
 
+#### LKG 存储介质与失效语义冻结（v1）
+
+选型结论：`LastKnownGoodStore` 的 v1 介质冻结为进程内内存引用存储，不引入文件或 sqlite 持久化。当前目标是先保证“同一进程内的启动失败/热更新失败可回退”，而不是跨重启恢复；跨进程持久化保留为后续版本演进项，不影响现有接口语义。
+
+选型对比：
+
+| 方案 | 结论 | 当前取舍理由 | 暂不采纳原因 |
+|---|---|---|---|
+| 进程内内存引用 | 采纳 | 与现有 `LastKnownGoodStore.cpp` 最小实现一致；无外部依赖；可立即支撑同进程 fallback_lkg 路径验证 | 进程重启后状态丢失 |
+| 文件持久化 | 暂不采纳 | 可作为后续边缘设备启动期 fallback 方案 | 需要定义文件格式、校验和损坏恢复；当前尚无统一 Config/LKG 持久化策略 |
+| sqlite 轻量存储 | 暂不采纳 | 便于版本化与回滚查询 | 引入后端治理、并发和 schema 演进成本，超出本轮补设计范围 |
+
+v1 介质语义：
+1. 存储单元为已通过校验的 `RuntimePolicySnapshot` 不可变引用，按 `effective_profile_id` 键控。
+2. 只允许在 `ProfileCompatibilityValidator` 通过且激活提交前后更新 LKG；失败候选快照、被拒绝 override、半成品快照均不得写入。
+3. 同一 profile 的新快照写入时覆盖旧引用；不维护多版本历史链。
+4. 进程退出、服务重启、二进制升级或内存状态丢失后，LKG 视为不存在；v1 不承诺跨进程恢复。
+
+load/save 语义冻结：
+1. `save(snapshot_ref)` 的前置条件是 `snapshot_ref` 非空且 `has_consistent_values()` 为真；否则返回 `PRF_E_LAST_KNOWN_GOOD_UNAVAILABLE`。
+2. `load(profile_id)` 只尝试返回同一 `profile_id` 的最近一次成功快照；不得跨 profile 复用 LKG。
+3. `load(profile_id)` 未命中时返回 `PRF_E_LAST_KNOWN_GOOD_UNAVAILABLE`；调用方保持显式失败，不得隐式切换到其他档位。
+4. LKG 返回的快照继续保持不可变语义，消费方只能整体替换，不能原地修改。
+
+失效与回退语义：
+1. 运行时 override 被拒绝时：保持当前 active snapshot，不更新 LKG，也不清除既有 LKG。
+2. 基线加载失败、profile 目录缺失或 schema 解析失败时：允许尝试加载同 profile 的进程内 LKG；若不存在，则返回 `PRF_E_LAST_KNOWN_GOOD_UNAVAILABLE`。
+3. 显式 profile 请求失败时：只允许回退到同名 profile 的 LKG，不允许回退到默认 profile 或其他档位。
+4. 若当前 active snapshot 已损坏且同 profile 存在 LKG：可切换到 `fallback_lkg` 模式，并把 `activation_mode` 标记为 `fallback_lkg`。
+5. 若 LKG 本身不可用：保持失败显式可见，交由 runtime 依据降级策略处理上层行为，但 profiles 不得伪造成功激活。
+
+后续演进约束：
+1. 当未来引入文件或 sqlite 持久化时，`ILastKnownGoodStore` 接口保持不变，只扩展后端实现与损坏恢复策略。
+2. 持久化版 LKG 若落盘，必须至少补齐 `profile_id`、`schema_version`、`generation`、checksum 与 `saved_at` 元数据，再讨论跨重启自动恢复。
+3. 在持久化方案冻结前，测试与对外承诺均以“进程内内存 LKG”表述，禁止宣称重启后仍可恢复。
+
+评审依据：
+1. 本地证据：`LastKnownGoodStore.cpp` 当前已按 `effective_profile_id` 保存不可变快照引用；`RuntimePolicyProvider.cpp` 已在基线加载失败和激活路径中接入 `load_from_last_known_good()` 与 `save()`。
+2. 外部参考：Azure External Configuration Store 模式建议在启动无法获取实时配置时提供 last known values 作为 fallback，但前提是版本与接口可控；这与 v1 先冻结进程内 LKG、后续再扩展持久化后端的路径一致。
+
 ### 6.9 配置项与默认策略
 
 #### 配置分层原则
@@ -864,7 +904,7 @@ profiles 模块非职责：
 | 已解除：infra/config 与 profiles 已对齐 deployment/runtime override 输入契约、来源元数据与拒绝规则（2026-03-27） | PRF-T006 | 明确 ConfigCenter 提供的覆盖输入形式 | 在 profiles 6.9 与 infra 6.6/6.9 增补 typed override 契约 | 初版仍保持 runtime override 白名单与 TTL 受限，不开放任意热改 |
 | YAML/schema 校验库选型未定 | PRF-T002 / PRF-T005 | 确认复用现有配置解析能力或引入新依赖 | 先用最小字段手写校验器 | 先不支持复杂继承语法 |
 | 统一构建入口尚未标准化 | PRF-T009 | 确定 CMake 版本下限与 preset 策略 | 先用 cmake/ProfilePresets.cmake 封装 | 暂保留现有 -DDASALL_PROFILE 命令方式 |
-| LKG 存储介质未定 | PRF-T007 | 确定由文件、sqlite 还是内存引用承载 | 初版先用本地文件或内存快照 | 若无法持久化，则只支持进程内 LKG |
+| 已解除：LKG 介质已冻结为进程内内存引用，并补齐失效/回退语义（2026-03-27） | PRF-T007 | 确定由文件、sqlite 还是内存引用承载 | 在 6.8 增补介质选型表与失效语义 | 继续禁止宣称跨重启恢复，持久化后端后置 |
 
 ### 11.2 主要风险
 
@@ -890,7 +930,7 @@ profiles 模块非职责：
 
 1. Build 真源是否收敛为 CMakePresets.json，还是继续以 profile.cmake 为主、Preset 为封装层。
 2. 后续若引入更上层模块注册表，如何在不重命名既有冻结键的前提下维护“展示名 -> 冻结键 -> 注册表实体”的映射层。
-3. LKG 是采用文件持久化、sqlite 轻量存储，还是仅进程内缓存。
+3. LKG v1 已冻结为进程内内存介质；后续仅剩持久化后端升级路径问题，即文件与 sqlite 何者更适合作为跨重启恢复介质。
 4. runtime override 的对象契约已冻结；后续只剩入口传输通道选型，需在不改变 typed override 结构的前提下决定由 infra/config 直出还是由 apps/daemon 代理。
 5. edge_minimal 是否需要单独支持“编译期固化 profile”以减少启动期开销。
 
