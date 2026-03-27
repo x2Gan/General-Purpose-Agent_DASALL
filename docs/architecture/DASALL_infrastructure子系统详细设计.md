@@ -254,6 +254,7 @@ Infrastructure 非职责：
 	- load_layers(): 加载四层配置。
 	- get_typed(path): 获取强类型配置。
 	- apply_override(patch): 运行时覆盖。
+	- 语义补充：`load_layers()` 只接受 defaults/profile/deployment 三类受管来源；`apply_override(patch)` 只接受带来源元数据、作用域与 TTL 的 runtime override patch，不接受业务模块私有自由字典。
 
 8. IHealthMonitor
 	- register_probe(name, probe): 注册探针。
@@ -316,6 +317,42 @@ Infrastructure 非职责：
 2. 对上游返回明确失败码，禁止隐藏失败。
 
 ### 6.9 配置项与默认策略
+
+#### ConfigCenter 四层来源与 override 契约（v1）
+
+冻结结论：ConfigCenter 的四层来源固定为 `defaults`、`profile`、`deployment_override`、`runtime_override`。其中前两层属于静态基线；后两层属于受管覆盖层。ConfigCenter 必须在读取或接收 patch 阶段完成来源鉴别、作用域检查和 typed 结构化校验，再把合格输入交给合并器；不允许把任意 JSON、YAML 或 HTTP 参数直接下沉到合并层。
+
+| 层级 | 载入入口 | 来源类型 | 允许写入者 | 生命周期 | 说明 |
+|---|---|---|---|---|---|
+| `defaults` | `load_default()` | 仓库内默认配置 | 开发与构建阶段 | 随版本发布 | 最低默认值，不携带环境差异 |
+| `profile` | `load_profile()` | profiles 基线资产 | profile 设计与发布流程 | 随 profile 版本发布 | 表达 Build/Profile 固定差异 |
+| `deployment_override` | `load_deploy()` | 站点/设备/环境受管配置快照 | 发布流水线、站点运维 | 随部署版本或站点包更新 | 允许环境适配，不得改 profile 身份 |
+| `runtime_override` | `apply_override()` / `load_runtime_overlay()` | 受鉴权运行时 patch | 受控运维、诊断窗口、自动化测试 | 临时，需 TTL 或 rollback | 只允许白名单键，必须可审计可回滚 |
+
+override 输入对象最小契约：
+1. `override_id`、`source_kind`、`source_id`、`issued_by`、`target_scope`、`base_version`、`reason_code`、`patches` 为必填字段。
+2. `runtime_override` 必须额外带 `expires_at` 或等价 TTL；超时后由 ConfigCenter 自动失效或要求显式 rollback。
+3. `patches` 中每个条目至少包含 `path`、`op`、`value`；`op` 首版仅允许 `replace` 与显式 `remove` 白名单子集，禁止脚本化表达式。
+
+来源与权限规则：
+1. `deployment_override` 只能来自受管部署产物、本地站点包、设备包或外置配置存储的已版本化快照；不得来自终端用户请求或业务模块自行写文件。
+2. `runtime_override` 只能来自 ConfigCenter 受鉴权 API、诊断入口或自动化测试通道；不得来自普通业务流量、未签名参数、cookie、query string 或未经授权的环境变量热改。
+3. ConfigCenter 需区分读权限与写权限；写入 runtime override 的主体必须可审计，且能映射到 actor/session/ticket。
+
+白名单与拒绝规则：
+1. 允许动态覆盖的键必须显式白名单化；默认拒绝所有未声明路径。
+2. 禁止覆盖 `schema_version`、`profile_meta.*`、`enabled_modules.*` 以及会改变安全或审计硬门槛的关键键。
+3. 对高风险键只允许收紧不允许放宽；例如确认门槛、安全模式、审计等级只能维持或增强。
+4. patch 的 `base_version` 与当前快照版本不匹配时必须拒绝，以避免 stale write。
+
+与 profiles 的边界约定：
+1. ConfigCenter 负责校验来源、权限、TTL 与 typed patch 结构；ProfileOverlayComposer 负责消费已校验的 deployment/runtime override 对象。
+2. ConfigCenter 不理解具体 profile 业务语义，只保证 override 对象满足来源与结构契约；最终语义接受由 profiles validator 和下游模块校验共同完成。
+3. 合并失败或 patch 被拒绝时，ConfigCenter 返回明确配置错误并保留当前快照，不得写入半成品状态。
+
+评审依据：
+1. 本地证据：infra 详细设计已冻结四层模型与 `IConfigCenter.apply_override(patch)` 入口；profiles 详细设计要求 OverlayComposer 只处理 Profile 层与 deployment/runtime override 的受管合并。
+2. 外部参考：Azure External Configuration Store 模式要求配置接口暴露 typed/structured 数据、版本与作用域控制，并为启动失败保留 fallback；Martin Fowler 将 runtime override 视为高风险但必要的运维能力，建议与静态配置分开治理，并限制在受控路径使用。
 
 | 配置项 | 默认值 | 覆盖层级 | 说明 |
 |---|---|---|---|

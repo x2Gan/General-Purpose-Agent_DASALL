@@ -460,6 +460,51 @@ profiles 模块非职责：
 3. 部署覆盖：由 infra/config 提供环境、站点、设备级覆盖。
 4. 运行时覆盖：由受控运维命令或诊断入口注入。
 
+#### overlay 输入契约与来源合法性（v1）
+
+冻结结论：ProfileOverlayComposer 只接受两类外部输入对象，分别为 `deployment_override` 与 `runtime_override`。两者都不是任意 YAML 片段或自由字典，而是带来源元数据、作用域、版本和 patch 列表的 typed 覆盖对象；未满足来源合法性、路径白名单或风险门禁的输入，在进入合并前即按 `PRF_E_OVERRIDE_INVALID` 拒绝。
+
+| 输入对象 | 生成时机 | 合法来源 | 生命周期 | 典型用途 | 非法来源示例 |
+|---|---|---|---|---|---|
+| `deployment_override` | 启动前或部署切换时 | infra ConfigCenter 读取的站点/设备/环境配置快照；发布流水线产物；受管外置配置存储快照 | 随部署版本存续，直至被下一版部署层替换 | 站点级超时、设备级日志粒度、已批准的后端地址或容量参数 | 终端用户请求参数、未签名临时文件、业务模块自行直读本地 YAML |
+| `runtime_override` | 运行中 | 受控运维命令、诊断入口、受鉴权的 ConfigCenter apply_override API | 有 TTL 或显式 rollback，默认短时生效 | 诊断增强、临时降噪、限流/预算收紧、故障绕行 | 未鉴权 HTTP 参数、普通业务请求、绕过 ConfigCenter 的模块私有热更新 |
+
+覆盖对象最小字段：
+1. `override_id`：唯一标识，供审计与回滚引用。
+2. `source_kind`：`deployment_bundle`、`site_bundle`、`device_bundle`、`runtime_command`、`diagnostic_session`、`external_store_snapshot` 中之一。
+3. `source_id`：来源快照、命令会话、站点包或设备包的稳定标识。
+4. `issued_by`：发布流水线、运维身份或诊断会话主体；不得为空。
+5. `target_scope`：`fleet`、`site`、`device`、`process` 中之一；运行时覆盖不得超出 `device/process`。
+6. `base_version`：声明该 patch 期望作用的基线版本或 generation，防止对未知快照盲写。
+7. `expires_at`：`runtime_override` 必填；`deployment_override` 可空。
+8. `patches`：有序 patch 列表，每项至少包含 `path`、`op`、`value`。
+9. `reason_code`：说明变更原因，如 `site-calibration`、`incident-mitigation`、`diagnostics-window`。
+
+路径白名单与禁区：
+1. `deployment_override` 允许覆盖 `runtime_budget.*`、`timeout_policy.*`、`ops_policy.*`、`model_profile.*.fallback_route`、`capability_cache_policy.*`、`degrade_policy.*` 等环境适配型策略域。
+2. `runtime_override` 仅允许覆盖 `runtime_budget.*`、`timeout_policy.*`、`ops_policy.log_level`、`ops_policy.trace_sample_ratio`、`ops_policy.remote_diagnostics_enabled`、`capability_cache_policy.*` 中明确定义为运行期可调的键。
+3. 两类 override 都禁止修改 `profile_meta.profile_id`、`profile_meta.target_platform`、`profile_meta.support_level`、`schema_version`。
+4. 两类 override 都禁止直接修改 `enabled_modules.*` 与由其派生的 adapter 开关；模块启停与 adapter 选择只能通过 profile 基线和 BuildResolver 收敛。
+5. `execution_policy.requires_high_risk_confirmation`、`execution_policy.safe_mode_enabled`、`execution_policy.audit_level` 只允许等价收紧，不允许放宽。
+
+合法性判定规则：
+1. 来源合法：输入必须由 ConfigCenter 暴露的受管加载或 apply_override 路径产生，ProfileOverlayComposer 不接受业务模块私有构造的 patch。
+2. 作用域合法：站点级 patch 不得覆盖 fleet 全局键；运行时 patch 不得跨进程、跨设备扩散。
+3. 版本合法：`base_version` 与当前快照 generation 不兼容时拒绝，避免陈旧 patch 覆盖新基线。
+4. 类型合法：patch 后值必须满足对应策略域类型、范围与枚举约束；不允许把布尔域写成字符串语义值。
+5. 风险合法：任何导致高风险确认门槛放宽、审计等级降低到设计下限以下、或绕过安全模式的 patch 一律拒绝。
+6. 生命周期合法：`runtime_override` 超出 TTL 或缺少 `reason_code`/`issued_by` 时拒绝生效。
+
+实现接口约束：
+1. `RuntimePolicyProvider.load_snapshot()` 只负责读取 Profile 基线，不负责拼接 deployment/runtime patch 原始来源。
+2. `ProfileOverlayComposer.compose(base, deployment_override, runtime_override)` 只接受已通过 ConfigCenter 来源校验的 typed override 输入；不得自己解析 HTTP header、cookie、CLI 参数或业务模块私有环境变量。
+3. `ProfileCompatibilityValidator` 负责语义接受与拒绝，OverlayComposer 只做有序合并和结构化冲突探测。
+4. 非法 override 不得产生“部分字段生效”的候选快照；当前生效快照保持不变，且必须输出拒绝原因与审计事件。
+
+评审依据：
+1. 本地证据：profiles 详细设计已冻结四层顺序和 `PRF_E_OVERRIDE_INVALID`；infra 详细设计与 config 专项 TODO 已冻结 ConfigCenter 四层模型与 `apply_override(patch)` 入口。
+2. 外部参考：Azure External Configuration Store 模式强调配置接口应提供 typed/structured 数据、版本化、作用域控制和启动期 fallback；Martin Fowler 强调 environment-specific override 与 per-request override 必须区分治理方式，运行时 override 是高风险工具，应只暴露给受控运维/测试路径。
+
 #### 建议的 runtime_policy.yaml 逻辑域
 
 | 逻辑域 | 说明 | 默认策略 |
@@ -816,7 +861,7 @@ profiles 模块非职责：
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
 | 已解除：enabled_modules 与 enabled_adapters 命名表已按蓝图 5.1、五档 runtime_policy 资产与 validator 最小子集冻结（2026-03-27） | PRF-T002 ~ PRF-T004 | 完成命名表冻结并回链 BuildResolver/Validator | 在 6.9 增补命名冻结表并统一文档/YAML/测试术语 | validator 继续仅校验已冻结子集，新增键走追加评审 |
-| infra/config 的 deployment/runtime override 接口未冻结 | PRF-T006 | 明确 ConfigCenter 提供的覆盖输入形式 | 先定义本地文件/内存 patch 抽象接口 | 初版只支持 Profile 基线，不开放运行时 override |
+| 已解除：infra/config 与 profiles 已对齐 deployment/runtime override 输入契约、来源元数据与拒绝规则（2026-03-27） | PRF-T006 | 明确 ConfigCenter 提供的覆盖输入形式 | 在 profiles 6.9 与 infra 6.6/6.9 增补 typed override 契约 | 初版仍保持 runtime override 白名单与 TTL 受限，不开放任意热改 |
 | YAML/schema 校验库选型未定 | PRF-T002 / PRF-T005 | 确认复用现有配置解析能力或引入新依赖 | 先用最小字段手写校验器 | 先不支持复杂继承语法 |
 | 统一构建入口尚未标准化 | PRF-T009 | 确定 CMake 版本下限与 preset 策略 | 先用 cmake/ProfilePresets.cmake 封装 | 暂保留现有 -DDASALL_PROFILE 命令方式 |
 | LKG 存储介质未定 | PRF-T007 | 确定由文件、sqlite 还是内存引用承载 | 初版先用本地文件或内存快照 | 若无法持久化，则只支持进程内 LKG |
@@ -846,7 +891,7 @@ profiles 模块非职责：
 1. Build 真源是否收敛为 CMakePresets.json，还是继续以 profile.cmake 为主、Preset 为封装层。
 2. 后续若引入更上层模块注册表，如何在不重命名既有冻结键的前提下维护“展示名 -> 冻结键 -> 注册表实体”的映射层。
 3. LKG 是采用文件持久化、sqlite 轻量存储，还是仅进程内缓存。
-4. runtime override 的权限入口由 infra/config 暴露，还是由 apps/daemon 诊断入口统一代理。
+4. runtime override 的对象契约已冻结；后续只剩入口传输通道选型，需在不改变 typed override 结构的前提下决定由 infra/config 直出还是由 apps/daemon 代理。
 5. edge_minimal 是否需要单独支持“编译期固化 profile”以减少启动期开销。
 
 ### 12.2 后续任务建议
