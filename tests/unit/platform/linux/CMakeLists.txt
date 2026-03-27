@@ -147,3 +147,18 @@ dasall_apply_common_options(dasall_linux_file_system_provider_unit_test)
 
 add_test(NAME LinuxFileSystemProviderTest COMMAND dasall_linux_file_system_provider_unit_test)
 set_tests_properties(LinuxFileSystemProviderTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_linux_network_provider_unit_test
+  LinuxNetworkProviderTest.cpp
+)
+
+target_link_libraries(dasall_linux_network_provider_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_linux_network_provider_unit_test)
+
+add_test(NAME LinuxNetworkProviderTest COMMAND dasall_linux_network_provider_unit_test)
+set_tests_properties(LinuxNetworkProviderTest PROPERTIES LABELS "unit")

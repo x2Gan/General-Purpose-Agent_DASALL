@@ -338,6 +338,23 @@ platform/linux 不负责：
 3. edge_minimal：保持最小线程和队列预算，禁用非必要网络与诊断能力。
 4. factory_test：启用 HAL、IPC 与诊断快照，保留严格超时和错误暴露。
 
+#### 6.9.1 epoll -> poll/select fallback 触发矩阵（冻结）
+
+为避免隐式重试和语义漂移，LinuxNetworkProvider 首版冻结以下触发条件：
+
+| 场景 | 触发条件 | 行为 | 错误语义 |
+|---|---|---|---|
+| A. 正常 epoll 路径 | `platform.linux.enable_epoll=true` 且 epoll/eventfd 初始化成功 | 使用 epoll/eventfd 后端处理 I/O | 保持原错误语义 |
+| B. 初始化阶段 fallback | `enable_epoll=true` 且 `epoll_create1`/`eventfd` 失败，errno 属于 `ENOSYS`、`EINVAL`、`EMFILE`、`ENFILE` | 本次连接切换到 poll 后端，记录 degraded reason=`EpollInitFailedFallbackToPoll` | 不自动重试 connect；按当前失败或后续 I/O 结果返回 Timeout/ConnectionRefused/Disconnected |
+| C. 配置显式关闭 epoll | `enable_epoll=false` | 直接使用 poll/select；不尝试 epoll | 不产生 fallback 事件 |
+| D. 非冻结范围 | 运行期收到普通 I/O 错误（如 `ECONNRESET`、`EPIPE`） | 不触发后端切换，不做隐式重连 | 直接返回 Disconnected/ConnectionRefused |
+
+冻结规则：
+
+1. fallback 只允许发生在后端初始化阶段，不允许在业务 I/O 中动态切换后端。
+2. 任意失败路径不得执行隐式重试；所有重试由上层 runtime/services 决策。
+3. fallback 仅记录为能力降级事实，不改变 INetwork 接口语义与 contracts 边界。
+
 ### 6.10 可观测性（日志/指标/追踪/审计）
 
 由于 platform 不依赖 infra，platform/linux 只输出可消费的观测事实，不直接持有 infra logger/exporter：

@@ -5,6 +5,7 @@ target_sources(dasall_platform
     src/linux/BlockingQueueProvider.cpp
     src/linux/CapabilityRegistry.cpp
     src/linux/LinuxFileSystemProvider.cpp
+    src/linux/LinuxNetworkProvider.cpp
     src/linux/LinuxPlatformFactory.cpp
     src/linux/PosixThreadProvider.cpp
     src/linux/PosixTimerProvider.cpp
