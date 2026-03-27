@@ -5,6 +5,7 @@ target_sources(dasall_profiles
     src/ProfileYamlParser.cpp
     src/ProfileCatalog.cpp
     src/BuildProfileResolver.cpp
+    src/RuntimePolicyProvider.cpp
     src/placeholder.cpp
 )
 
