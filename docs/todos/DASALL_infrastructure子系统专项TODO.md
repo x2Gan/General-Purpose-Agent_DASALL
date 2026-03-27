@@ -202,7 +202,7 @@
 | INF-TODO-013 | Blocked | 定义 IConfigCenter 接口骨架 | 详细设计 6.3、6.6、6.9；蓝图 3.13 | 详细设计 6.6 IConfigCenter；6.9 配置项与默认策略 | L2 | 目标文件为 infra/include/IConfigCenter.h，但在 TypedConfig/patch/schema 冻结前禁止进入实现 | IConfigCenter.load_layers；IConfigCenter.get_typed；IConfigCenter.apply_override | unit：四层合并和覆盖次序；contract：Profile 不绕过 Audit 与 Runtime 主控链路 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | INF-BLK-01：TypedConfig、patch 模型、profiles 键命名未冻结 | 先完成配置模型补设计并确认 profiles 键命名 | 接口草案、阻塞记录 | 仅当配置模型补设计完成并评审通过后，才可从 Blocked 转 Not Started |
 | INF-TODO-014 | Blocked | 定义 ISecretManager 接口骨架 | 详细设计 6.3、6.6、6.9 | 详细设计 6.6 ISecretManager；6.9 secret.backend | L1 | 目标文件为 infra/include/ISecretManager.h，但在 SecretHandle/back-end 模型冻结前禁止进入实现 | ISecretManager.get_secret；ISecretManager.rotate | unit：明文不落盘；contract：审计记录必须存在 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | INF-BLK-02：SecretHandle、RotationRequest、权限模型未冻结 | 先完成 secret 对象与权限边界补设计 | 接口草案、阻塞记录 | 仅当 secret 对象模型冻结并完成安全评审后，才可解除阻塞 |
 | INF-TODO-015 | Blocked | 定义 IOTAManager 接口骨架与 UpgradeOutcome 对接点 | 详细设计 6.5、6.6、6.8、6.9 | 详细设计 6.5 UpgradeOutcome；6.6 IOTAManager；6.8 OTA 失败回滚 | L1 | 目标文件为 infra/include/IOTAManager.h 与 UpgradeOutcome 对接头文件；在 package/signature/token 模式冻结前禁止实现 | IOTAManager.precheck；IOTAManager.apply；IOTAManager.rollback；UpgradeOutcome | unit：回滚结果二值判定；integration：升级失败触发回滚 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-009 | INF-BLK-05：UpgradePlan、Package、rollback token、签名与存储规范未冻结 | 先冻结 OTA 输入输出对象与签名/存储规范 | 接口草案、对象草案、阻塞记录 | 仅当 OTA 补设计完成并明确失败回滚输入输出后，才可解除阻塞 |
-| INF-TODO-016 | Not Started | 新增 AuditService 独立组件骨架 | 详细设计 6.2、6.3、6.6、6.11；架构 8.8 | 详细设计 6.11 独立组件化建议；6.8 审计失败兜底 | L2 | infra/src/audit/ 组件骨架与 audit 生命周期接线；保持 logging/audit 目录分离 | AuditService.init/write/export/fallback | unit：AuditServiceFallbackTest；contract：AuditEvent 引用边界稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -R "AuditServiceFallbackTest|contract" | INF-TODO-004、INF-TODO-006、INF-TODO-010 | 无 | 先落最小组件骨架，不实现复杂存储策略 | audit 目录骨架、测试与构建证据 | 仅当审计组件与 logging 目录分离且 fallback 失败路径可测试时完成 |
+| INF-TODO-016 | Done | 新增 AuditService 独立组件骨架 | 详细设计 6.2、6.3、6.6、6.11；架构 8.8 | 详细设计 6.11 独立组件化建议；6.8 审计失败兜底 | L2 | infra/src/audit/ 组件骨架与 audit 生命周期接线；保持 logging/audit 目录分离 | AuditService.init/write/export/fallback | unit：AuditServiceFallbackTest；contract：AuditEvent 引用边界稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N -R "AuditServiceFallbackTest|AuditServiceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "AuditServiceFallbackTest|AuditServiceBoundaryContractTest" | INF-TODO-004、INF-TODO-006、INF-TODO-010 | 无 | 先落最小组件骨架，不实现复杂存储策略 | audit 目录骨架、测试与构建证据；2026-03-27 已落盘 infra/include/audit/AuditService.h、infra/src/audit/AuditService.cpp、tests/unit/infra/AuditServiceFallbackTest.cpp、tests/contract/smoke/AuditServiceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当审计组件与 logging 目录分离且 fallback 失败路径可测试时完成 |
 | INF-TODO-017 | Not Started | 冻结 SecurityPolicyManager 接口与策略对象 | 详细设计 6.2、6.5、6.6、6.11；架构 5.10/8.8；DASALL_infra_policy模块详细设计.md | 详细设计 6.5 SecurityPolicySet；6.6 ISecurityPolicyManager；policy 模块设计 6.5/6.6 | L2 | infra/include/policy/ISecurityPolicyManager.h、PolicyBundle/PolicyPatch/PolicySnapshot/PolicyDecisionRef 对象头文件 | load_policy/apply_patch/dry_run_patch/snapshot/rollback/evaluate | unit：PolicySnapshotCompatibilityTest；contract：PolicyDecisionBoundaryTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -R "PolicySnapshotCompatibilityTest|PolicyDecisionBoundaryTest" | INF-TODO-010 | INF-BLK-07：策略规则 schema 与冲突裁定顺序未冻结 | 先冻结最小规则集合、快照版本语义与 decision 引用边界 | 接口头文件、对象头文件、边界测试 | 仅当策略对象可版本化、可回滚且契约边界测试通过时完成 |
 | INF-TODO-018 | Not Started | 冻结 DiagnosticsSnapshot 与 IDiagnosticsService 接口 | 详细设计 6.2、6.5、6.6、6.11；架构 9.5 | 详细设计 6.5 DiagnosticsSnapshot；6.6 IDiagnosticsService | L2 | infra/include/IDiagnosticsService.h、DiagnosticsSnapshot 对象与最小导出接口 | execute/export_snapshot；DiagnosticsSnapshot | unit：DiagnosticsSnapshotExportTest；integration：InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci --output-on-failure -R "DiagnosticsSnapshotExportTest|InfraDiagnosticsSmokeTest" | INF-TODO-010、INF-TODO-012 | INF-BLK-08：命令白名单与脱敏规则未冻结 | 先支持只读诊断命令与本地导出 | 接口头文件、对象头文件、最小 smoke 测试 | 仅当诊断命令执行与导出链路可测且包含脱敏前置校验时完成 |
 | INF-TODO-019 | Blocked | 冻结 PluginDescriptor 与 IPluginManager 接口 | 详细设计 6.2、6.5、6.6、6.11；架构 5.10/7.5 | 详细设计 6.5 PluginDescriptor；6.6 IPluginManager | L1 | 目标文件为 infra/include/IPluginManager.h 与 PluginDescriptor 头文件；在 ABI/signature 未冻结前禁止实现装载逻辑 | discover/validate/load/unload；PluginDescriptor | unit：PluginManifestValidationTest；contract：不扩写 Tool/Skill 契约 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | INF-TODO-010 | INF-BLK-09：plugin manifest、ABI 兼容矩阵、签名链路未冻结 | 先冻结 plugin manifest 最小字段与兼容语义 | 接口草案、对象草案、阻塞记录 | 仅当插件 ABI 与签名规范冻结并评审通过后，才可解除阻塞 |
@@ -955,3 +955,56 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -L contract` 证明 infra 边界用例处于 `contract` 标签集合内。
 4. TODO 证据回写：已完成主任务状态和本节执行记录回写。
 5. 提交隔离：本轮提交范围限定为 INF-TODO-012 的证据闭环文档。
+
+## 25. 本轮执行记录（2026-03-27 / INF-TODO-016）
+
+### 25.1 选中任务
+
+1. 本轮任务：INF-TODO-016。
+2. 可执行性依据：前置依赖 INF-TODO-004、INF-TODO-006、INF-TODO-010 已完成；当前仓库仅缺 AuditService 独立组件骨架、失败兜底路径和对应测试出口，不存在前置 blocker。
+
+### 25.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.2、6.3、6.6、6.8、6.11 已明确 AuditService 必须作为独立于 LoggingService 的组件存在，并承担写入、导出、失败兜底和降级状态输出。
+2. docs/architecture/DASALL_infra_audit模块详细设计.md 6.2、6.3、6.5、6.6、6.8 已把 AuditServiceFacade、主写管线、fallback 管线、导出接口以及“审计失败不可静默丢失”约束收敛到 L2，可直接映射到最小骨架实现。
+3. infra/include/AuditEvent.h、infra/include/audit/IAuditLogger.h 与 infra/CMakeLists.txt 已分别冻结 AuditEvent 边界、IAuditLogger 接口和 infra 公开头文件接线，满足本轮组件落盘前提。
+
+外部参考：
+
+1. OWASP Logging Cheat Sheet 强调审计/安全日志应与普通运行日志分离，并要求记录 who/what/when/where/outcome，同时验证日志失败场景和降级路径；本轮据此将 AuditService 保持为独立组件，并把 fallback exhaustion 作为显式测试出口。
+
+D 结论：
+
+1. Design -> Build 映射：新增 infra/include/audit/AuditService.h 与 infra/src/audit/AuditService.cpp，冻结 AuditService.init/start/stop/write_audit/export_audit 的最小组件骨架，并以内存主写入 + fallback 缓冲的方式覆盖失败兜底。
+2. Build 三件套：
+    - 代码目标：新增 audit 独立组件头文件和源文件，并把其接入 infra/CMakeLists.txt 的公开头文件/源文件集合。
+    - 测试目标：新增 AuditServiceFallbackTest 覆盖主写入降级与 fallback exhaustion；新增 AuditServiceBoundaryContractTest 验证导出边界仍保持为 AuditEvent 且 evidence_ref 不越权。
+    - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N -R "AuditServiceFallbackTest|AuditServiceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "AuditServiceFallbackTest|AuditServiceBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 25.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/audit/AuditService.h：新增 AuditServiceConfig 与 AuditService 生命周期、导出和降级状态骨架。
+2. infra/src/audit/AuditService.cpp：新增最小主写入/导出/fallback 实现，显式暴露 degraded 状态和 fallback exhaustion 失败路径。
+3. tests/unit/infra/AuditServiceFallbackTest.cpp：覆盖主路径写入、fallback 激活和 fallback exhaustion 负例。
+4. tests/contract/smoke/AuditServiceBoundaryContractTest.cpp：覆盖导出记录仍为 AuditEvent，且非 contracts evidence 引用会被拒绝。
+5. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成源码与测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci`：通过。
+3. `ctest --test-dir build-ci -N -R "AuditServiceFallbackTest|AuditServiceBoundaryContractTest"`：通过，发现 2 个测试，分别为 `AuditServiceFallbackTest` 与 `AuditServiceBoundaryContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "AuditServiceFallbackTest|AuditServiceBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮新增类和测试命名已直接表达组件骨架、降级与边界语义，无需补充冗余注释。
+2. 正负例覆盖：unit 覆盖主写入正例与 fallback exhaustion 负例；contract 覆盖边界正例与非 contracts evidence 拒绝负例。
+3. 测试发现性：已通过 `ctest -N -R ...` 验证新增 unit/contract 测试均进入 CTest 图。
+4. TODO 证据回写：已完成主任务状态、交付物、验收命令和结果摘要回写。
+5. 提交隔离：本轮提交范围限定为 AuditService 组件、测试、CMake 注册和专项 TODO 证据文档。

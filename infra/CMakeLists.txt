@@ -2,6 +2,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/placeholder.cpp
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
+  src/audit/AuditService.cpp
 )
 
 set(DASALL_INFRA_TRACING_SOURCES
@@ -17,6 +18,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/InfraContext.h
   include/InfraErrorCode.h
   include/LogEvent.h
+  include/audit/AuditService.h
   include/audit/IAuditLogger.h
 )
 
