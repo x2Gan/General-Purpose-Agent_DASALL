@@ -3,6 +3,7 @@
 #include <type_traits>
 
 #include "IFileSystem.h"
+#include "INetwork.h"
 #include "IQueue.h"
 #include "ITimer.h"
 #include "IThread.h"
@@ -373,6 +374,118 @@ void test_ifilesystem_interface_surface_stays_stable() {
   assert_true(std::is_abstract_v<IFileSystem>, "IFileSystem should remain an abstract interface");
 }
 
+void test_socket_endpoint_default_values_and_consistency() {
+  using dasall::platform::ConnectOptions;
+  using dasall::platform::NetworkTransport;
+  using dasall::platform::SocketEndpoint;
+  using dasall::tests::support::assert_true;
+
+  const ConnectOptions default_options;
+
+  assert_true(default_options.connect_timeout_ms == 3000,
+              "connect options should default to 3000 ms connect timeout");
+  assert_true(!default_options.reuse_address,
+              "connect options should not reuse address by default");
+  assert_true(default_options.has_consistent_values(),
+              "default connect options should remain internally consistent");
+
+  const SocketEndpoint empty_host{};
+  const SocketEndpoint zero_port{
+      .host = "localhost",
+      .port = 0,
+      .transport = NetworkTransport::Tcp,
+  };
+  const SocketEndpoint valid_tcp_endpoint{
+      .host = "127.0.0.1",
+      .port = 8080,
+      .transport = NetworkTransport::Tcp,
+  };
+  const SocketEndpoint valid_udp_endpoint{
+      .host = "192.168.1.1",
+      .port = 1234,
+      .transport = NetworkTransport::Udp,
+  };
+
+  assert_true(!empty_host.has_consistent_values(),
+              "socket endpoint should reject empty host");
+  assert_true(!zero_port.has_consistent_values(),
+              "socket endpoint should reject zero port");
+  assert_true(valid_tcp_endpoint.has_consistent_values(),
+              "socket endpoint should accept valid tcp endpoint");
+  assert_true(valid_udp_endpoint.has_consistent_values(),
+              "socket endpoint should accept valid udp endpoint");
+}
+
+void test_network_surface_rejects_inconsistent_network_inputs() {
+  using dasall::platform::ConnectionHandle;
+  using dasall::platform::NetworkBuffer;
+  using dasall::platform::NetworkReceiveResult;
+  using dasall::tests::support::assert_true;
+
+  const ConnectionHandle invalid_handle{};
+  const ConnectionHandle valid_handle{
+      .native_fd = 5,
+  };
+
+  const NetworkReceiveResult invalid_receive_result{
+      .data = NetworkBuffer{0x01U, 0x02U},
+      .peer_closed = true,
+  };
+  const NetworkReceiveResult valid_receive_result_with_data{
+      .data = NetworkBuffer{0xAAU},
+      .peer_closed = false,
+  };
+  const NetworkReceiveResult valid_receive_result_peer_closed{
+      .data = {},
+      .peer_closed = true,
+  };
+
+  assert_true(!invalid_handle.has_consistent_values(),
+              "connection handle should reject zero native fd");
+  assert_true(valid_handle.has_consistent_values(),
+              "connection handle should accept non-zero native fd");
+  assert_true(!invalid_receive_result.has_consistent_values(),
+              "network receive result should reject non-empty data when peer_closed is true");
+  assert_true(valid_receive_result_with_data.has_consistent_values(),
+              "network receive result should accept non-empty data when peer is open");
+  assert_true(valid_receive_result_peer_closed.has_consistent_values(),
+              "network receive result should accept empty data when peer_closed is true");
+}
+
+void test_inetwork_interface_surface_stays_stable() {
+  using dasall::platform::ConnectOptions;
+  using dasall::platform::ConnectionHandle;
+  using dasall::platform::INetwork;
+  using dasall::platform::NetworkBuffer;
+  using dasall::platform::NetworkReceiveResult;
+  using dasall::platform::NetworkSendResult;
+  using dasall::platform::PlatformResult;
+  using dasall::platform::SocketEndpoint;
+  using dasall::tests::support::assert_true;
+
+  using ConnectSignature =
+      PlatformResult<ConnectionHandle> (INetwork::*)(const SocketEndpoint&,
+                                                     const ConnectOptions&);
+  using SendSignature =
+      PlatformResult<NetworkSendResult> (INetwork::*)(const ConnectionHandle&,
+                                                      const NetworkBuffer&, std::int32_t);
+  using ReceiveSignature =
+      PlatformResult<NetworkReceiveResult> (INetwork::*)(const ConnectionHandle&,
+                                                         std::int32_t);
+  using ShutdownSignature = PlatformResult<bool> (INetwork::*)(const ConnectionHandle&);
+
+  static_assert(std::is_same_v<decltype(&INetwork::connect), ConnectSignature>,
+                "INetwork::connect signature should remain stable");
+  static_assert(std::is_same_v<decltype(&INetwork::send), SendSignature>,
+                "INetwork::send signature should remain stable");
+  static_assert(std::is_same_v<decltype(&INetwork::receive), ReceiveSignature>,
+                "INetwork::receive signature should remain stable");
+  static_assert(std::is_same_v<decltype(&INetwork::shutdown), ShutdownSignature>,
+                "INetwork::shutdown signature should remain stable");
+
+  assert_true(std::is_abstract_v<INetwork>, "INetwork should remain an abstract interface");
+}
+
 }  // namespace
 
 int main() {
@@ -389,6 +502,9 @@ int main() {
     test_file_write_options_default_values_match_linux_filesystem_baseline();
     test_file_surface_rejects_inconsistent_filesystem_inputs();
     test_ifilesystem_interface_surface_stays_stable();
+    test_socket_endpoint_default_values_and_consistency();
+    test_network_surface_rejects_inconsistent_network_inputs();
+    test_inetwork_interface_surface_stays_stable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

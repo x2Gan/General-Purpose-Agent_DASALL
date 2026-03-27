@@ -169,7 +169,7 @@
 | PLAT-LNX-TODO-005 | Done | 定义 ITimer 接口头文件 | platform 设计 6.6 | 6.6 ITimer | L3 | platform/include/ITimer.h | start_once/start_periodic/cancel | unit：InterfaceSurfaceTest 覆盖 ITimer | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 ITimer.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当方法语义、错误语义与超时约束可二值判定时完成 |
 | PLAT-LNX-TODO-006 | Done | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IQueue.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
 | PLAT-LNX-TODO-007 | Done | 定义 IFileSystem 接口头文件 | platform 设计 6.6 | 6.6 IFileSystem | L3 | platform/include/IFileSystem.h | read_file/write_atomic/ensure_directory/stat | unit：InterfaceSurfaceTest 覆盖 IFileSystem | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IFileSystem.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 NotFound/PermissionDenied/NoSpace 语义可判定时完成 |
-| PLAT-LNX-TODO-008 | Not Started | 定义 INetwork 接口头文件 | platform 设计 6.6/6.9 | 6.6 INetwork | L3 | platform/include/INetwork.h | connect/send/receive/shutdown | unit：InterfaceSurfaceTest 覆盖 INetwork | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | PLAT-LNX-BLK-03 | fallback 策略补设计通过评审 | 接口头文件、接口单测或阻塞记录 | 仅当接口语义冻结且 fallback 边界不冲突时完成 |
+| PLAT-LNX-TODO-008 | Done | 定义 INetwork 接口头文件 | platform 设计 6.6/6.9 | 6.6 INetwork | L3 | platform/include/INetwork.h | connect/send/receive/shutdown | unit：InterfaceSurfaceTest 覆盖 INetwork | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | PLAT-LNX-BLK-03（仅影响 provider 实现，接口层已最小解阻） | fallback 策略补设计通过评审（影响 PLAT-LNX-TODO-016） | 接口头文件、接口单测；2026-03-27 已新增 INetwork.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当接口语义冻结且 fallback 边界不冲突时完成 |
 | PLAT-LNX-TODO-009 | Not Started | 定义 IIPC 接口头文件 | platform 设计 6.6/6.9 | 6.6 IIPC | L3 | platform/include/IIPC.h | listen/accept/connect/send/receive/close | unit：InterfaceSurfaceTest 覆盖 IIPC | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 AddressInUse/PeerClosed/PayloadTooLarge 路径可判定时完成 |
 | PLAT-LNX-TODO-010 | Not Started | 实现 LinuxPlatformFactory create(config) 骨架 | platform 设计 6.2/6.3/6.7；架构 9.2 | 6.7 初始化主流程 | L3 | platform/include/linux/LinuxPlatformFactory.h、platform/src/linux/LinuxPlatformFactory.cpp | create(config) | unit：LinuxPlatformFactoryTest（初始化顺序、必需能力缺失阻断） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R LinuxPlatformFactoryTest --output-on-failure | PLAT-LNX-TODO-001~009 | PLAT-LNX-BLK-02 | profile 注入键与输入结构统一 | 工厂代码、单测或阻塞记录 | 仅当初始化顺序符合 Profile Bind 后置条件且失败路径可判定时完成 |
 | PLAT-LNX-TODO-011 | Not Started | 实现 CapabilityRegistry 状态登记骨架 | platform 设计 6.2/6.3/6.7 | 6.3 CapabilityRegistry | L3 | platform/src/linux/CapabilityRegistry.cpp | set_capability/get_capability/snapshot | unit：LinuxPlatformFactoryTest 或独立 CapabilityRegistryTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R "LinuxPlatformFactoryTest|CapabilityRegistryTest" --output-on-failure | PLAT-LNX-TODO-002、010 | 无 | 无 | 实现代码、单测 | 仅当 enabled/disabled/degraded 与 reason 可重复断言时完成 |
@@ -548,6 +548,58 @@ Build 合规复核：
 3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
 4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
 5. 提交隔离：预期提交范围限定为 ITimer 接口、对应 unit 验证与证据文档。
+6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
+
+## 19. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-008）
+
+### 19.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-008。
+2. 可执行性依据：前置依赖 PLAT-LNX-TODO-003 已完成；PLAT-LNX-BLK-03（epoll/poll fallback）属于 provider 实现层面，不阻塞接口签名冻结；按最小解阻原则先冻结接口，provider 实现保持 Blocked。
+
+### 19.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.6 明确 INetwork 接口包含 connect/send/receive/shutdown。
+2. docs/architecture/platform_linux_detailed_design.md 6.6 明确 INetwork 错误语义应对齐 Timeout、Disconnected、ConnectionRefused、WouldBlock（已在 PlatformErrorCode 枚举中覆盖）。
+3. docs/architecture/platform_linux_detailed_design.md 6.5 明确 SocketEndpoint 字段为 host/path、port、transport、abstract_namespace；本轮面向 Linux 通用网络场景，冻结 host/port/transport 三字段。
+4. docs/architecture/platform_linux_detailed_design.md 6.9 明确 platform.linux.net.connect_timeout_ms 默认 3000、io_timeout_ms 默认 5000；本轮据此设置 ConnectOptions 默认值。
+
+外部参考：
+
+1. POSIX connect(2)/send(2)/recv(2)/shutdown(2) 文档确认四方法语义稳定；本轮接口签名与 POSIX 原语一一对应，避免过度抽象。
+2. PLAT-LNX-BLK-03 的 epoll->poll fallback 仅影响 LinuxNetworkProvider 内部策略，不影响调用方可见接口；因此接口可在 blocker 未解阻时先行冻结。
+
+D 结论：
+
+1. Design -> Build 映射：新增 platform/include/INetwork.h，冻结 NetworkTransport、SocketEndpoint、ConnectOptions、ConnectionHandle、NetworkBuffer、NetworkSendResult、NetworkReceiveResult 与 INetwork 四方法签名。
+2. Build 三件套：
+   - 代码目标：新增 INetwork 接口头文件。
+   - 测试目标：扩展 InterfaceSurfaceTest，覆盖签名稳定性、SocketEndpoint/ConnectOptions 默认值正例与非法输入负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure。
+3. D Gate：PASS（接口层解阻，provider 实现仍 Blocked 于 BLK-03）。
+
+### 19.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/INetwork.h：新增 NetworkTransport、SocketEndpoint、ConnectOptions、ConnectionHandle、NetworkBuffer、NetworkSendResult、NetworkReceiveResult、INetwork 接口定义。
+2. tests/unit/platform/linux/InterfaceSurfaceTest.cpp：扩展 INetwork surface 测试，覆盖默认值正例、一致性负例与方法签名静态断言。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test：通过。
+3. ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：接口与对象命名自解释，未增加冗余注释。
+2. 正负例覆盖：InterfaceSurfaceTest 增补 ConnectOptions 默认值正例，以及 empty-host、zero-port 负例，以及 peer-closed-with-data 不一致负例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
+4. TODO 证据回写：已回写主任务状态（并注明 BLK-03 影响范围仅限 provider 实现）与本节执行记录。
+5. 提交隔离：本轮提交范围限定为 INetwork 接口、对应 unit 验证扩展与 TODO 回写。
 6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
 
 ## 17. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-006）
