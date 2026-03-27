@@ -486,6 +486,44 @@ profiles 模块非职责：
 6. `prompt_policy`、`capability_cache_policy`、`degrade_policy`、`execution_policy`、`ops_policy` 中的必填键不得依赖运行时推断；新增字段只允许追加，不允许在 `schema_version: 1` 内重解释既有字段语义。
 7. `multi_agent`、`tools_mcp`、`llm_cloud_adapter` 等蓝图中标注为“可选”的能力，在具体档位资产中也必须冻结为显式基线值；若后续需要放开，只能通过新增字段或更高版本 schema 处理。
 
+#### enabled_modules 与 enabled_adapters 命名冻结表（v1）
+
+冻结结论：`runtime_policy.yaml` 中的 `enabled_modules` 继续作为唯一真源；`enabled_adapters` 不单独出现在 YAML 中，而是由 `BuildProfileResolver` 从 `enabled_modules` 中满足 `_adapter` 后缀规则的键派生，用于 `BuildProfileManifest.enabled_adapters` 与环境适配器可用性校验。
+
+冻结规则：
+1. `enabled_modules` 键名统一使用小写蛇形命名，语义固定为“稳定能力键”，禁止混入目录路径、类名或平台条件表达式。
+2. 带 `_adapter` 后缀的键同时属于 `enabled_modules` 与 `enabled_adapters` 派生集合；不带该后缀的键只能作为模块能力键。
+3. 蓝图 5.1 中的展示名只作为文档别名，落盘资产、Resolver、Validator、测试断言统一使用下表中的冻结键名。
+4. 新增能力键只能追加，禁止在 `schema_version: 1` 内重命名、复用旧键承载新语义，或把冻结键迁入 contracts。
+5. 若后续引入更上层模块注册表，只允许增加“展示名 -> 冻结键”的映射层，不允许直接替换下表键名。
+
+| 蓝图 5.1 展示名 | 冻结键名 | 类别 | 归属集合 | 说明 |
+|---|---|---|---|---|
+| `runtime/` | `runtime` | module | `enabled_modules` | 主控运行时，五档位必开 |
+| `cognition/` | `cognition` | module | `enabled_modules` | 认知主链能力，五档位必开 |
+| `llm/` (cloud adapter) | `llm_cloud_adapter` | adapter | `enabled_modules` + `enabled_adapters` | 云侧模型路由能力 |
+| `llm/` (LAN adapter) | `llm_lan_adapter` | adapter | `enabled_modules` + `enabled_adapters` | 局域网模型适配器 |
+| `llm/` (local adapter) | `llm_local_adapter` | adapter | `enabled_modules` + `enabled_adapters` | 本地模型适配器 |
+| `tools/` (builtin) | `tools_builtin` | module | `enabled_modules` | 内建工具集，不视为 adapter |
+| `tools/` (MCP) | `tools_mcp` | module | `enabled_modules` | MCP 通道能力，保留模块键语义 |
+| `memory/` (vector) | `memory_vector` | module | `enabled_modules` | 向量检索链路 |
+| `memory/` (experience) | `memory_experience` | module | `enabled_modules` | 经验记忆链路 |
+| `knowledge/` | `knowledge` | module | `enabled_modules` | 知识检索能力 |
+| `multi_agent/` | `multi_agent` | module | `enabled_modules` | 多 Agent 协同能力 |
+| `platform/` HAL | `platform_hal` | module | `enabled_modules` | 平台 HAL 接口族 |
+| `infra/` (full obs) | `infra_observability` | module | `enabled_modules` | 观测能力总开关；具体 logging/metrics/tracing 仍留在 infra 内部 |
+
+实现约束：
+1. `BuildProfileResolver` 只从冻结键派生 `BuildProfileManifest.enabled_modules` 与 `enabled_adapters`，不得自行发明别名。
+2. `ProfileCompatibilityValidator` 的最小冻结子集以上表为准；未知键统一视为 `ModuleIncompatible`，避免静默放行。
+3. `runtime_policy.yaml` 五档位资产、单元测试夹具与 contract 检查脚本必须共享同一键集，禁止“文档一个名字、YAML 一个名字、测试另一个名字”。
+4. `tools_mcp` 维持模块键而非 adapter 键，是因为它表达的是工具治理通道是否启用，而非单一后端实例是否可用；具体 MCP 服务端可用性仍由运行时与 infra 做二次判定。
+5. `infra_observability` 维持聚合模块键，避免把 logging/metrics/tracing/audit 的内部实现细节上推为 profile 公共命名表。
+
+评审依据：
+1. 本地证据：蓝图 5.1 已给出档位矩阵；现有五档 `runtime_policy.yaml` 与 `ProfileCompatibilityValidator` 已落盘同一最小键集。
+2. 外部参考：OpenFeature 强调 flag key 作为稳定字符串标识，评估侧必须以显式键和值运行，异常时返回默认值而不是推断缺省语义；Martin Fowler 的 Feature Toggle 实践强调 toggle 配置宜用结构化、源代码管理的稳定命名，避免把决策逻辑散落为魔法字符串。
+
 #### 各参考档位默认意图
 
 | Profile | 默认策略摘要 |
@@ -777,7 +815,7 @@ profiles 模块非职责：
 
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
-| 模块标识集合尚未统一命名 | PRF-T002 ~ PRF-T004 | 冻结 enabled_modules 与 adapter 命名表 | 先基于蓝图 5.1 形成最小枚举表 | 在 validator 中暂仅校验已冻结子集 |
+| 已解除：enabled_modules 与 enabled_adapters 命名表已按蓝图 5.1、五档 runtime_policy 资产与 validator 最小子集冻结（2026-03-27） | PRF-T002 ~ PRF-T004 | 完成命名表冻结并回链 BuildResolver/Validator | 在 6.9 增补命名冻结表并统一文档/YAML/测试术语 | validator 继续仅校验已冻结子集，新增键走追加评审 |
 | infra/config 的 deployment/runtime override 接口未冻结 | PRF-T006 | 明确 ConfigCenter 提供的覆盖输入形式 | 先定义本地文件/内存 patch 抽象接口 | 初版只支持 Profile 基线，不开放运行时 override |
 | YAML/schema 校验库选型未定 | PRF-T002 / PRF-T005 | 确认复用现有配置解析能力或引入新依赖 | 先用最小字段手写校验器 | 先不支持复杂继承语法 |
 | 统一构建入口尚未标准化 | PRF-T009 | 确定 CMake 版本下限与 preset 策略 | 先用 cmake/ProfilePresets.cmake 封装 | 暂保留现有 -DDASALL_PROFILE 命令方式 |
@@ -806,7 +844,7 @@ profiles 模块非职责：
 ### 12.1 未决问题
 
 1. Build 真源是否收敛为 CMakePresets.json，还是继续以 profile.cmake 为主、Preset 为封装层。
-2. enabled_modules / adapter 标识是否由 profiles 私有枚举承载，还是复用更上层模块注册表中的稳定名称。
+2. 后续若引入更上层模块注册表，如何在不重命名既有冻结键的前提下维护“展示名 -> 冻结键 -> 注册表实体”的映射层。
 3. LKG 是采用文件持久化、sqlite 轻量存储，还是仅进程内缓存。
 4. runtime override 的权限入口由 infra/config 暴露，还是由 apps/daemon 诊断入口统一代理。
 5. edge_minimal 是否需要单独支持“编译期固化 profile”以减少启动期开销。
