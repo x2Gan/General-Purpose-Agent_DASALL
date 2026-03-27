@@ -4,8 +4,8 @@
 #include <optional>
 #include <string_view>
 
-#include "dasall/profiles/ProfileError.h"
-#include "dasall/profiles/RuntimePolicySnapshot.h"
+#include "ProfileError.h"
+#include "RuntimePolicySnapshot.h"
 
 namespace dasall::profiles {
 

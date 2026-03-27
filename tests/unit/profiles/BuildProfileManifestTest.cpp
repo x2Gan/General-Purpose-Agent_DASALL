@@ -1,7 +1,7 @@
 #include <exception>
 #include <iostream>
 
-#include "dasall/profiles/BuildProfileManifest.h"
+#include "BuildProfileManifest.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

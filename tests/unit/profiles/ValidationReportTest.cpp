@@ -3,7 +3,7 @@
 #include <iostream>
 #include <set>
 
-#include "dasall/profiles/ValidationReport.h"
+#include "ValidationReport.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

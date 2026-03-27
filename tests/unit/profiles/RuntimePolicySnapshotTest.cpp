@@ -2,7 +2,7 @@
 #include <iostream>
 #include <type_traits>
 
-#include "dasall/profiles/RuntimePolicySnapshot.h"
+#include "RuntimePolicySnapshot.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

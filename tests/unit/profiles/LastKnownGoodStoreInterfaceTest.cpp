@@ -4,7 +4,7 @@
 #include <type_traits>
 #include <unordered_map>
 
-#include "dasall/profiles/ILastKnownGoodStore.h"
+#include "ILastKnownGoodStore.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

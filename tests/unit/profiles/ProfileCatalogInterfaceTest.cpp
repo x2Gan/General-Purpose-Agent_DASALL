@@ -3,7 +3,7 @@
 #include <string_view>
 #include <type_traits>
 
-#include "dasall/profiles/IProfileCatalog.h"
+#include "IProfileCatalog.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

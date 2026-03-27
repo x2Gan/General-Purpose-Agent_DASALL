@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "dasall/profiles/ProfileError.h"
+#include "ProfileError.h"
 
 namespace dasall::profiles {
 

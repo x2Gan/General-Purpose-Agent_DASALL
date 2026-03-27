@@ -335,7 +335,7 @@ profiles 模块非职责：
 
 ### 6.6 核心接口语义定义
 
-建议头文件分布：profiles/include/dasall/profiles/
+建议头文件分布：profiles/include/
 
 #### IProfileCatalog
 
@@ -546,7 +546,7 @@ profiles 模块非职责：
 
 | Design结论 | Build目标 | 映射说明 | 代码目标 | 测试目标 | 验收命令 | 依赖/阻塞 |
 |---|---|---|---|---|---|---|
-| 建立统一 ProfileCatalog | 新增 profile 资产发现与注册层 | 先统一 profile 真源，后续 Build/Runtime 共享 | 新增 profiles/include/dasall/profiles/IProfileCatalog.h、ProfileDescriptor.h；新增 profiles/src/ProfileCatalog.cpp | 新增 tests/unit/profiles/ProfileCatalogTest.cpp | cmake -S . -B build-ci -DDASALL_PROFILE=desktop_full && cmake --build build-ci | 依赖 profiles 模块 CMake 接线 |
+| 建立统一 ProfileCatalog | 新增 profile 资产发现与注册层 | 先统一 profile 真源，后续 Build/Runtime 共享 | 新增 profiles/include/IProfileCatalog.h、ProfileDescriptor.h；新增 profiles/src/ProfileCatalog.cpp | 新增 tests/unit/profiles/ProfileCatalogTest.cpp | cmake -S . -B build-ci -DDASALL_PROFILE=desktop_full && cmake --build build-ci | 依赖 profiles 模块 CMake 接线 |
 | Build 与 Runtime 共享同一模块矩阵 | 新增 BuildProfileResolver + Matrix 校验器 | 防止 CMake 与 YAML 双源漂移 | 新增 IBuildProfileResolver.h、BuildProfileManifest.h、ProfileCompatibilityValidator.h 与对应实现 | 新增 tests/unit/profiles/BuildProfileResolverTest.cpp、ProfileMatrixValidatorTest.cpp | ctest --test-dir build-ci -L unit --output-on-failure | 依赖模块标识命名收敛 |
 | Runtime 使用不可变策略快照 | 新增 RuntimePolicyProvider 与 RuntimePolicySnapshot | 避免各模块自行解析 YAML | 新增 IRuntimePolicyProvider.h、RuntimePolicySnapshot.h、RuntimePolicyProvider.cpp | 新增 tests/unit/profiles/RuntimePolicyProviderTest.cpp | ctest --test-dir build-ci -R RuntimePolicyProviderTest --output-on-failure | 依赖 YAML/配置解析库选型 |
 | 配置分层与 infra 对齐 | 新增 ProfileOverlayComposer | Profile 作为 ConfigCenter 的 Profile 层输入 | 新增 ProfileOverlayComposer.h/.cpp | 新增 tests/unit/profiles/ProfileOverlayComposerTest.cpp | ctest --test-dir build-ci -R ProfileOverlayComposerTest --output-on-failure | 依赖 infra/config 覆盖接口冻结 |
@@ -569,13 +569,13 @@ profiles 模块非职责：
 
 | 路径 | 类型 | 作用 |
 |---|---|---|
-| profiles/include/dasall/profiles/IProfileCatalog.h | include | profile 资产发现接口 |
-| profiles/include/dasall/profiles/IBuildProfileResolver.h | include | Build 解析接口 |
-| profiles/include/dasall/profiles/IRuntimePolicyProvider.h | include | Runtime 策略加载接口 |
-| profiles/include/dasall/profiles/ProfileDescriptor.h | include | profile 私有元对象 |
-| profiles/include/dasall/profiles/BuildProfileManifest.h | include | Build 解析结果对象 |
-| profiles/include/dasall/profiles/RuntimePolicySnapshot.h | include | 运行时不可变策略快照 |
-| profiles/include/dasall/profiles/ProfileCompatibilityValidator.h | include | 校验接口 |
+| profiles/include/IProfileCatalog.h | include | profile 资产发现接口 |
+| profiles/include/IBuildProfileResolver.h | include | Build 解析接口 |
+| profiles/include/IRuntimePolicyProvider.h | include | Runtime 策略加载接口 |
+| profiles/include/ProfileDescriptor.h | include | profile 私有元对象 |
+| profiles/include/BuildProfileManifest.h | include | Build 解析结果对象 |
+| profiles/include/RuntimePolicySnapshot.h | include | 运行时不可变策略快照 |
+| profiles/include/ProfileCompatibilityValidator.h | include | 校验接口 |
 | profiles/src/ProfileCatalog.cpp | src | 资产发现与注册 |
 | profiles/src/BuildProfileResolver.cpp | src | Build 解析与导出 |
 | profiles/src/RuntimePolicyProvider.cpp | src | YAML 加载与快照生成 |

@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-#include "dasall/profiles/ProfileDescriptor.h"
+#include "ProfileDescriptor.h"
 
 namespace dasall::profiles {
 
