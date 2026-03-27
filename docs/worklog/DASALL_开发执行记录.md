@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #053
+
+- 日期：2026-03-27
+- 阶段：platform/linux 组件专项 TODO
+- 任务：PLAT-LNX-TODO-002 定义 PlatformCapabilitySet 数据结构头文件
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLAT-LNX-TODO-002-D 设计收敛：
+   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-002-LinuxPlatformCapabilities设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-002-LinuxPlatformCapabilities%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化能力三态、reason 约束、Design->Build 映射与 D Gate。
+   - 明确本轮只冻结状态三态和 reason 文本，不提前扩张独立 reason_code 域或 CapabilityRegistry 行为。
+2. 完成 PLAT-LNX-TODO-002-B 代码落地：
+   - 新增 [platform/include/linux/LinuxPlatformCapabilities.h](platform/include/linux/LinuxPlatformCapabilities.h)
+   - 新增 [tests/unit/platform/linux/LinuxPlatformCapabilitiesTest.cpp](tests/unit/platform/linux/LinuxPlatformCapabilitiesTest.cpp)
+   - 更新 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_platform dasall_linux_platform_capabilities_unit_test`
+   - `ctest --test-dir build-ci -N -R LinuxPlatformCapabilitiesTest`
+   - `ctest --test-dir build-ci -R LinuxPlatformCapabilitiesTest --output-on-failure`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_platform dasall_linux_platform_capabilities_unit_test` 通过。
+   - `ctest --test-dir build-ci -N -R LinuxPlatformCapabilitiesTest` 通过，发现 1 个测试。
+   - `ctest --test-dir build-ci -R LinuxPlatformCapabilitiesTest --output-on-failure` 通过，1/1 tests passed。
+
+### 结果
+
+1. platform/linux 能力表对象已经以最小 header-only 形式落盘，后续 CapabilityRegistry 和 LinuxPlatformFactory 可以直接复用统一的三态与 reason 约束。
+2. 本轮只接入当前任务所需的定向 unit 测试，不声称完成 PLAT-LNX-TODO-019 的完整平台注册矩阵。
+
+### 下一步
+
+1. 按依赖顺序继续推进 PLAT-LNX-TODO-003，冻结 PlatformError 与 PlatformResult。
+
+### 风险
+
+1. `NotProbed` 当前作为默认 reason 文本使用；如果后续 reason 规范评审要求更严格的 token 词典，应在不改变三态语义的前提下局部替换。
+2. 当前 VS Code CMake Tools target 解析仍不可用；后续 platform 任务在该问题未恢复前，仍应优先使用仓库已验证的 build-ci 验证链路。
+
 ## 记录 #052
 
 - 日期：2026-03-26
