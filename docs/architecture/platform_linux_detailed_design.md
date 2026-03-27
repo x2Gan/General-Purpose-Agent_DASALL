@@ -385,6 +385,48 @@ platform/linux 不负责：
 2. 评审约束：禁止在运行期 I/O 错误上触发后端切换，禁止任何隐式重试。
 3. 回链任务：PLAT-LNX-TODO-008（接口冻结边界）、PLAT-LNX-TODO-016（provider 实现边界）、PLAT-LNX-TODO-024（收口与证据回写）。
 
+#### 6.9.2 profile 注入键全集、入口与覆盖优先级冻结（2026-03-27）
+
+冻结结论：platform.linux.* 首版键名全集、注入入口和覆盖优先级在本节收敛，不再作为设计阻塞项。
+
+键名全集（首版冻结）：
+
+1. platform.linux.enable_epoll
+2. platform.linux.require_hal
+3. platform.linux.thread.default_stack_kb
+4. platform.linux.thread.max_threads
+5. platform.linux.queue.default_capacity
+6. platform.linux.queue.overflow_policy
+7. platform.linux.timer.min_granularity_ms
+8. platform.linux.fs.atomic_write_tmp_suffix
+9. platform.linux.fs.root_prefix
+10. platform.linux.net.connect_timeout_ms
+11. platform.linux.net.io_timeout_ms
+12. platform.linux.ipc.socket_dir
+13. platform.linux.ipc.max_payload_bytes
+14. platform.linux.health.sample_interval_ms
+15. platform.linux.diag.enable_procfs_snapshot
+
+注入入口冻结：
+
+1. 仅允许在 Boot 阶段显式构造 PlatformInitConfig 并传入 LinuxPlatformFactory::create(config)。
+2. 平台层不直接读取 profile 文件，不直接解析部署配置键值。
+3. integration 测试允许通过 fixture 显式构造 PlatformInitConfig，语义等同于 Boot 注入。
+
+覆盖优先级冻结：
+
+1. 默认值 < profile < 部署。
+2. 同层冲突遵循最后写入生效，并在 bootstrap 合并阶段生成最终 PlatformInitConfig。
+3. 平台层只消费合并后的结构体，不再参与优先级裁定。
+
+PlatformInitConfig 缺失字段补充计划：
+
+1. 现状：PlatformInitConfig 已冻结字段为 target_platform/profile_name/enable_hal/queue_defaults/io_timeouts，可支撑当前工厂与测试路径。
+2. 缺口：enable_epoll、require_hal、ipc.socket_dir、ipc.max_payload_bytes、thread.default_stack_kb 等仍由上层合并后间接传入 provider，尚未全部进入结构体显式字段。
+3. 补充计划：在 R-4/R-5 前以最小增量补齐 LinuxRuntimeTuning 聚合字段（或等效扩展），保证 021 集成测试对键名到结构体映射可二值断言。
+
+回链：PLAT-LNX-TODO-010、PLAT-LNX-TODO-021、PLAT-LNX-TODO-025。
+
 ### 6.10 可观测性（日志/指标/追踪/审计）
 
 由于 platform 不依赖 infra，platform/linux 只输出可消费的观测事实，不直接持有 infra logger/exporter：
@@ -536,7 +578,7 @@ tests/
 | 已解阻：platform/include 公共接口与 unit 测试均已落盘（专项 TODO-001~019 已完成 2026-03-27） | 无活跃影响任务 | 已完成 | 2026-03-27 全部接口落盘并可编译 | N/A |
 | tests/integration/platform/linux 目录未注册（tests 顶层 add_subdirectory(integration) 已就绪） | 专项 TODO-020（T010 集成测试） | 新增 tests/integration/platform/linux/CMakeLists.txt 并注册 integration 标签目标 | 先补 platform/linux 集成子目录注册，不需要改顶层 CMake | 用例发现性验证前不宣称集成门禁就绪 |
 | HAL 最小探测接口已冻结并完成文档补票（HalProbe.h + HalStub + HalAvailabilityBridge；见 6.6.1，2026-03-27） | 后续 edge 真实驱动任务（不阻塞本轮） | 冻结 GPIO/UART/I2C/SPI/CAN 驱动接口（后续版本） | 维持 probe_hal_availability + HalProbeResult 最小接口；真实驱动单列后续版本任务 | 本轮只交付最小探测桥接；真实驱动留后续版本 |
-| Profile 配置键名与注入路径未统一（profile 目录无 platform.linux.* 键；PlatformInitConfig 未含 enable_epoll/require_hal/ipc 等字段） | 专项 TODO-021/025 | 冻结 platform.linux.* 键名全集与注入入口（Boot 阶段显式构造 PlatformInitConfig；默认<profile<部署优先级） | 先在测试 fixture 中固定配置键；工厂仅接受结构体配置 | 若短期无法统一，工厂仅接受结构体输入，不直接解析键值 |
+| Profile 键名全集与注入入口已冻结（见 6.9.2，2026-03-27） | 专项 TODO-021（仍受集成目录注册/工厂 HAL 接线影响） | 完成 R-4 工厂 HAL 接线 + R-3 integration 目录注册 | 已固定默认<profile<部署优先级与 Boot 显式注入；允许 fixture 等价注入 | 在字段扩展完成前，保持“工厂只接受结构体输入”并禁止平台层直接解析键值 |
 | 上层 ErrorInfo 映射规范已最小解阻（PlatformError.code 集与一级 category 映射已冻结 2026-03-27）；细粒度评审待完成 | 后续细粒度错误码扩展任务 | 评审完整 PlatformError -> ErrorInfo 映射表 | 已冻结 PlatformError.code 集与一级映射锚点（PlatformErrorMappingTest 通过） | 限制错误码数量；延后更多细分直至评审通过 |
 
 ### 11.2 风险清单
