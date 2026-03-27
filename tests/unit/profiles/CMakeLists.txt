@@ -42,3 +42,18 @@ dasall_apply_common_options(dasall_runtime_policy_snapshot_unit_test)
 
 add_test(NAME RuntimePolicySnapshotTest COMMAND dasall_runtime_policy_snapshot_unit_test)
 set_tests_properties(RuntimePolicySnapshotTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_validation_report_unit_test
+  ValidationReportTest.cpp
+)
+
+target_link_libraries(dasall_validation_report_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_validation_report_unit_test)
+
+add_test(NAME ValidationReportTest COMMAND dasall_validation_report_unit_test)
+set_tests_properties(ValidationReportTest PROPERTIES LABELS "unit")
