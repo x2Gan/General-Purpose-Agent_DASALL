@@ -259,6 +259,30 @@ platform/linux 不负责：
    - send/receive/close
    - 错误语义：AddressInUse、PathTooLong、PeerClosed、PayloadTooLarge
 
+#### 6.6.1 HAL 最小探测接口冻结（2026-03-27）
+
+本轮仅冻结 availability probe，不冻结 GPIO/UART/I2C/SPI/CAN 等真实驱动接口。
+
+最小接口清单：
+
+1. HalAvailabilityBridge::probe_hal_availability(config):
+   - 输入：PlatformInitConfig（含 target_platform、profile_name、enable_hal 及相关默认超时/队列基线）
+   - 输出：HalProbeResult
+   - 语义：
+     - desktop_full/cloud_full 且 enable_hal=false：返回 DisabledByProfile（非故障）
+     - edge_* 或 require_hal=true 且仅 Stub 可用：返回 DegradedStubOnly（可判定降级）
+     - require_hal=true 且探测失败：返回 RequiredButUnavailable（初始化失败）
+
+2. HalProbeResult（platform/include/hal/HalProbe.h）
+   - 冻结字段：availability_state、reason_code、detail
+   - 冻结边界：仅表达可用性事实，不承载真实驱动句柄或设备寄存器语义
+
+3. HalStub（platform/src/arm/hal/HalStub.cpp）
+   - 角色：在真实驱动缺失时提供可判定 fallback 目标
+   - 约束：仅用于可用性探测与降级语义，不对外宣称真实外设控制能力
+
+回链：PLAT-LNX-TODO-018、PLAT-LNX-TODO-023。
+
 7. ILinuxPlatformBundleFactory（模块内部或受限对外）
    - create(config): 返回聚合后的 LinuxPlatformBundle
    - 语义：单次启动时构造能力集合；不在运行中隐式重建全部 provider
@@ -511,7 +535,7 @@ tests/
 |---|---|---|---|---|
 | 已解阻：platform/include 公共接口与 unit 测试均已落盘（专项 TODO-001~019 已完成 2026-03-27） | 无活跃影响任务 | 已完成 | 2026-03-27 全部接口落盘并可编译 | N/A |
 | tests/integration/platform/linux 目录未注册（tests 顶层 add_subdirectory(integration) 已就绪） | 专项 TODO-020（T010 集成测试） | 新增 tests/integration/platform/linux/CMakeLists.txt 并注册 integration 标签目标 | 先补 platform/linux 集成子目录注册，不需要改顶层 CMake | 用例发现性验证前不宣称集成门禁就绪 |
-| HAL 最小探测接口已冻结（HalProbe.h + HalStub + HalAvailabilityBridge 已落地 2026-03-27）；真实驱动接口本轮超出范围 | 后续 edge 真实驱动任务；专项 TODO-023 补文档 | 冻结 GPIO/UART/I2C/SPI/CAN 驱动接口（后续版本） | probe_hal_availability + HalProbeResult 最小探测接口已落地；文档补丁见专项 TODO-023 | 本轮只交付最小探测桥接；真实驱动留后续版本 |
+| HAL 最小探测接口已冻结并完成文档补票（HalProbe.h + HalStub + HalAvailabilityBridge；见 6.6.1，2026-03-27） | 后续 edge 真实驱动任务（不阻塞本轮） | 冻结 GPIO/UART/I2C/SPI/CAN 驱动接口（后续版本） | 维持 probe_hal_availability + HalProbeResult 最小接口；真实驱动单列后续版本任务 | 本轮只交付最小探测桥接；真实驱动留后续版本 |
 | Profile 配置键名与注入路径未统一（profile 目录无 platform.linux.* 键；PlatformInitConfig 未含 enable_epoll/require_hal/ipc 等字段） | 专项 TODO-021/025 | 冻结 platform.linux.* 键名全集与注入入口（Boot 阶段显式构造 PlatformInitConfig；默认<profile<部署优先级） | 先在测试 fixture 中固定配置键；工厂仅接受结构体配置 | 若短期无法统一，工厂仅接受结构体输入，不直接解析键值 |
 | 上层 ErrorInfo 映射规范已最小解阻（PlatformError.code 集与一级 category 映射已冻结 2026-03-27）；细粒度评审待完成 | 后续细粒度错误码扩展任务 | 评审完整 PlatformError -> ErrorInfo 映射表 | 已冻结 PlatformError.code 集与一级映射锚点（PlatformErrorMappingTest 通过） | 限制错误码数量；延后更多细分直至评审通过 |
 

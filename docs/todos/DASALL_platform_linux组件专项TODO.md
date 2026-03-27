@@ -184,7 +184,7 @@
 | PLAT-LNX-TODO-020 | Blocked | 注册 platform integration 测试目录与目标 | platform 设计 8.1/9.1；代码现状 | 9.1 Integration 覆盖 | L0 | tests/CMakeLists.txt、tests/integration/platform/linux/ | integration：LinuxPlatformBootstrapIntegrationTest 发现性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N -R LinuxPlatformBootstrapIntegrationTest | PLAT-LNX-TODO-019 | PLAT-LNX-BLK-05 | tests 顶层 integration 接线冻结 | CMake 改动或阻塞记录 | 仅当 integration 用例可被 ctest 发现后解阻 |
 | PLAT-LNX-TODO-021 | Blocked | 验证平台初始化集成路径 | platform 设计 6.7/9.1/9.2；架构 9.2 | 6.7 初始化步骤 1~7 | L2 | tests/integration/platform/linux/LinuxPlatformBootstrapIntegrationTest.cpp | integration：desktop_full 与 edge_balanced 主/降级路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure | PLAT-LNX-TODO-010、011、018、020 | PLAT-LNX-BLK-02、PLAT-LNX-BLK-05 | profile 注入键统一 + integration 接线完成 | 集成测试与执行记录 | 仅当两档 profile 初始化结果均可二值断言时完成 |
 | PLAT-LNX-TODO-022 | Not Started | 回写 platform/linux 门禁与交付证据 | platform 设计 9.2/11.1 | 9.2 Gate；11.1 阻塞管理 | L2 | docs/todos/DASALL_platform_linux组件专项TODO.md | process test：门禁结果、阻塞变更、回退触发记录 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -R LinuxPlatformBootstrapIntegrationTest | PLAT-LNX-TODO-019~021 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个 Gate 都有通过/失败结论与命令证据时完成 |
-| PLAT-LNX-TODO-023 | Not Started | 补齐 HAL 最小接口设计前置 | platform 设计 11.1 | 11.1 HAL 真实接口未冻结 | L0 | docs/architecture/platform_linux_detailed_design.md | Hal 最小桥接接口（方法、返回码、能力探测边界） | process test：设计评审门 | rg -n "HAL|HalAvailabilityBridge|HalStub|接口" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-018 | 设计补丁、评审记录、回链记录 | 仅当 HAL 最小接口清单冻结且评审通过时完成 |
+| PLAT-LNX-TODO-023 | Done | 补齐 HAL 最小接口设计前置 | platform 设计 11.1 | 11.1 HAL 真实接口未冻结 | L0 | docs/architecture/platform_linux_detailed_design.md | Hal 最小桥接接口（方法、返回码、能力探测边界） | process test：设计评审门 | rg -n "HAL|HalAvailabilityBridge|HalStub|接口" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-018 | 设计补丁、评审记录、回链记录；2026-03-27 已新增 6.6.1「HAL 最小探测接口冻结」并回链 TODO-018/023，明确本轮仅冻结 availability probe | 仅当 HAL 最小接口清单冻结且评审通过时完成 |
 | PLAT-LNX-TODO-024 | Done | 补齐网络 fallback 策略前置设计 | platform 设计 6.9/11.1 | 6.9 enable_epoll；11.1 未决项 | L0 | docs/architecture/platform_linux_detailed_design.md | epoll/eventfd 失败触发 poll/select 的条件与错误语义 | process test：设计评审门 | rg -n "enable_epoll|poll|select|fallback" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-008、016 | 设计补丁、评审记录、回链记录；2026-03-27 已补充 6.9.1 评审结论与回链段落，冻结 A/B/C/D 触发矩阵且明确禁止隐式重试 | 仅当 fallback 条件可判定且不引入隐式重试时完成 |
 | PLAT-LNX-TODO-025 | Not Started | 补齐 profile 注入键与入口设计前置 | platform 设计 6.9/11.1；架构 7.5 | 6.9 配置项；11.1 注入路径未统一 | L0 | docs/architecture/platform_linux_detailed_design.md、profiles/ | platform.linux.* 键名、注入入口、覆盖层级矩阵 | process test：配置评审门 | rg -n "platform.linux|profile|覆盖层级|注入" docs/architecture/platform_linux_detailed_design.md profiles -g "**/*" | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-010、021 | 设计补丁、评审记录、回链记录 | 仅当键名/入口/覆盖优先级三项冻结时完成 |
 
@@ -200,7 +200,7 @@
 | D provider 落地 | PLAT-LNX-TODO-012~018 | 可并行分组 | 并发组(012~014)与 I/O 组(015~017)并行，HAL 桥接独立 |
 | E 测试接线与发现性 | PLAT-LNX-TODO-019~020 | 串行（019 已完成；020 blocked 于 tests/integration/platform/linux 目录注册） | 019 已完成；020 的真正卡点为 platform/linux 集成子目录未注册，顶层 integration 已就绪 |
 | F 集成门禁 | PLAT-LNX-TODO-021 | 串行（Blocked） | 依赖 BLK-02（profile 配置键）、BLK-05（integration 目录注册）与隐含前置 R-4（工厂调用 HalAvailabilityBridge） |
-| G 补设计收敛 | PLAT-LNX-TODO-023~025 | 可并行；024 最先收口 | 024 设计已冻结待收口；023 补最小 HAL 探测接口文档；025 冻结 platform.linux.* 键名与注入入口 |
+| G 补设计收敛 | PLAT-LNX-TODO-023~025 | 023/024 已完成；025 待收口 | 024 fallback 矩阵与 023 HAL 最小探测接口已冻结并回链；025 仍需冻结 platform.linux.* 键名与注入入口 |
 | H 证据回写 | PLAT-LNX-TODO-022 | 串行 | 收敛 Gate、阻塞、回退执行证据；同步修正 BLK-01/03/04/05 状态描述 |
 
 ### 7.2 必过门禁表
@@ -223,7 +223,7 @@
 | 步骤 | 任务 | 类别 | 前置条件 | 执行说明 | 完成标志 |
 |---|---|---|---|---|---|
 | R-1 | PLAT-LNX-TODO-024 | 文档收口（Done） | 无（已执行） | 已在 6.9.1 补 fallback 触发矩阵评审记录并回链 TODO-008/016/024；任务状态已更新为 Done | fallback 矩阵评审记录落盘，回链记录可查 |
-| R-2a | PLAT-LNX-TODO-023 | 设计补票 | 无（与 R-2b 并行） | 把 HalProbe.h + HalStub 最小接口正式回写到 platform_linux_detailed_design.md；明确本轮只冻结 availability probe，GPIO/UART/I2C 等真实驱动留后续版本；修正 BLK-01 状态描述 | 设计文档补丁落盘，BLK-01 状态已修正 |
+| R-2a | PLAT-LNX-TODO-023 | 设计补票（Done） | 无（与 R-2b 并行） | 已回写 HalProbe.h + HalStub 最小接口到 platform_linux_detailed_design.md 6.6.1；已明确本轮仅冻结 availability probe，真实驱动留后续版本；已修正 BLK-01 状态描述 | 6.6.1 段落与 BLK-01 状态已落盘 |
 | R-2b | PLAT-LNX-TODO-025 | 设计前置 | 无（与 R-2a 并行） | 冻结 platform.linux.* 键名全集（enable_epoll/require_hal/queue.default_capacity/net.connect_timeout_ms/ipc.socket_dir 等）；冻结注入入口为 Boot 阶段显式构造 PlatformInitConfig；确认覆盖优先级（默认 < profile < 部署）；明确 PlatformInitConfig 缺失字段补充计划 | 设计冻结段落落盘，BLK-02 状态已修正 |
 | R-3 | PLAT-LNX-TODO-020 | 测试接线 | R-2b 通过或明确接受 fixture 代替 profile 文件解析 | 新增 tests/integration/platform/CMakeLists.txt 与 tests/integration/platform/linux/CMakeLists.txt；注册 LinuxPlatformBootstrapIntegrationTest 目标（set_tests_properties LABELS "integration"）；验证命令：ctest --test-dir build-ci -N -R LinuxPlatformBootstrapIntegrationTest | ctest -N -R LinuxPlatformBootstrapIntegrationTest 可发现用例 |
 | R-4 | 工厂 HAL 接线（021 隐含前置） | 代码补丁 | R-2a 完成 | 将 LinuxPlatformFactory::detect_capabilities 中 HAL 判定改为调用 HalAvailabilityBridge::probe_hal_availability，而非直接读 config.enable_hal 布尔值；使 edge_balanced + enable_hal=true 路径可产生 degraded/HalStubOnly 语义 | edge_balanced 配置下工厂产出 HAL degraded 状态（而非 enabled） |
@@ -240,7 +240,7 @@
 
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
-| PLAT-LNX-BLK-01 | ARM HAL 真实驱动接口未冻结（最小探测接口 HalProbe.h + HalStub 已冻结） | PLAT-LNX-TODO-018（已最小解阻）；真实驱动仍影响后续 edge profile 扩展 | 冻结 GPIO/UART/I2C/SPI/CAN 等真实 ARM HAL 驱动接口与错误码边界（本轮超出范围） | probe_hal_availability + HalProbeResult 最小探测接口已落地（2026-03-27）；补文档见 PLAT-LNX-TODO-023 | 本轮只交付最小探测桥接；edge profile 真实驱动留后续版本 |
+| PLAT-LNX-BLK-01 | HAL 最小探测接口已冻结且文档补票完成（6.6.1；2026-03-27）；真实驱动接口仍未冻结 | 不再阻塞 PLAT-LNX-TODO-018；仅影响后续 edge 真实驱动扩展 | 冻结 GPIO/UART/I2C/SPI/CAN 等真实 ARM HAL 驱动接口与错误码边界（后续版本） | 维持 probe_hal_availability + HalProbeResult 最小探测接口；文档回链 PLAT-LNX-TODO-023 | 本轮只交付最小探测桥接；真实驱动留后续版本 |
 | PLAT-LNX-BLK-02 | profile 配置键注入路径未统一 | PLAT-LNX-TODO-021（PLAT-LNX-TODO-010 已最小解阻） | 冻结 platform.linux.* 键名与注入入口 | 在测试 fixture 固定注入结构体 | 工厂先只接受结构体输入 |
 | PLAT-LNX-BLK-03 | epoll/eventfd fallback 触发矩阵评审记录与回链已在 6.9.1 补齐并收口（见 PLAT-LNX-TODO-024） | PLAT-LNX-TODO-016（已最小解阻）；PLAT-LNX-TODO-008 接口层已完成，不再受阻 | fallback 矩阵评审记录落盘并回链 PLAT-LNX-TODO-008/016/024 | 2026-03-27 已在 6.9.1 冻结 A/B/C/D 四档触发矩阵并补齐评审记录；不再阻塞接口与 provider 推进 | 保持 6.9.1 冻结结论；禁止未经评审扩展回退逻辑 |
 | PLAT-LNX-BLK-04 | PlatformError->ErrorInfo 映射评审未完成 | PLAT-LNX-TODO-003 | 映射表评审通过并有记录 | 先冻结 PlatformError 字段和码集 | 延后细粒度错误码扩展 |
@@ -831,3 +831,52 @@ Build 合规复核：
 4. TODO 证据回写：已回写 024 状态、R-1 状态、BLK-03 收口状态与本节执行记录。
 5. 提交隔离：本轮提交范围限定为 platform/linux fallback 设计文档和对应 TODO 回写。
 6. 环境恢复：无需额外环境恢复动作。
+
+## 22. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-023）
+
+### 22.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-023。
+2. 可执行性依据：无前置依赖、无 blocker；属于文档补票任务，可在单轮内以 process test 完成闭环。
+
+### 22.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/todos/DASALL_platform_linux组件专项TODO.md 7.3 R-2a 要求将 HalProbe.h + HalStub 最小接口正式回写设计文档并修正 BLK-01。
+2. docs/architecture/platform_linux_detailed_design.md 既有内容已描述 HAL 桥接职责，但缺少“冻结到字段/返回码边界”的显式段落。
+3. docs/todos/DASALL_platform_linux组件专项TODO.md 8 中 BLK-01 已写“最小探测接口已冻结”，但缺少在设计文档中的显式锚点。
+
+外部参考：
+
+1. Linux HAL 分层实践强调先冻结 capability probe 面，再在后续版本分批引入 GPIO/UART/I2C 等具体驱动；本轮据此将 HAL 设计冻结范围收敛到 availability probe，避免过度承诺。
+
+D 结论：
+
+1. Design -> Build 映射：在 docs/architecture/platform_linux_detailed_design.md 新增 6.6.1「HAL 最小探测接口冻结（2026-03-27）」，冻结 HalAvailabilityBridge::probe_hal_availability、HalProbeResult 最小字段与 HalStub 角色边界。
+2. Build 三件套：
+   - 代码目标：更新 docs/architecture/platform_linux_detailed_design.md（6.6.1、11.1 阻塞状态语义对齐）。
+   - 测试目标：process test，确保 HAL/桥接/接口关键字与回链在设计文档可检索。
+   - 验收命令：rg -n "HAL|HalAvailabilityBridge|HalStub|接口" docs/architecture/platform_linux_detailed_design.md。
+3. D Gate：PASS。
+
+### 22.3 Build 交付与证据
+
+交付物：
+
+1. docs/architecture/platform_linux_detailed_design.md：新增 6.6.1 段，冻结 HAL availability probe 最小接口；在 11.1 阻塞表同步 BLK-01 状态描述。
+2. docs/todos/DASALL_platform_linux组件专项TODO.md：PLAT-LNX-TODO-023 更新为 Done；R-2a 更新为 Done；BLK-01 状态描述更新为“文档补票已完成、真实驱动留后续版本”。
+
+验收结果：
+
+1. rg -n "HAL|HalAvailabilityBridge|HalStub|接口" docs/architecture/platform_linux_detailed_design.md：通过，可命中 6.6.1 冻结段落与回链语句。
+
+Build 合规复核：
+
+1. 代码注释：本轮为文档任务，无代码注释变更。
+2. 正负例覆盖：本轮为 process test，正例为关键锚点可检索；负例约束为“真实 GPIO/UART/I2C 不在本轮冻结范围”已在 6.6.1 明确。
+3. 测试发现性：通过 rg 命令验证关键术语与回链记录可发现。
+4. TODO 证据回写：已回写任务状态、R-2a 和 BLK-01。
+5. 提交隔离：本轮提交仅包含 023 相关设计文档与 TODO 证据更新。
+6. 环境恢复：无需额外环境恢复动作。
+
