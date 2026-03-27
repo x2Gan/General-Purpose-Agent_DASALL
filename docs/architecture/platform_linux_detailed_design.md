@@ -355,6 +355,12 @@ platform/linux 不负责：
 2. 任意失败路径不得执行隐式重试；所有重试由上层 runtime/services 决策。
 3. fallback 仅记录为能力降级事实，不改变 INetwork 接口语义与 contracts 边界。
 
+评审记录与回链（2026-03-27）：
+
+1. 评审结论：通过。A/B/C/D 四档触发矩阵冻结为 LinuxNetworkProvider 首版唯一后端选择规则。
+2. 评审约束：禁止在运行期 I/O 错误上触发后端切换，禁止任何隐式重试。
+3. 回链任务：PLAT-LNX-TODO-008（接口冻结边界）、PLAT-LNX-TODO-016（provider 实现边界）、PLAT-LNX-TODO-024（收口与证据回写）。
+
 ### 6.10 可观测性（日志/指标/追踪/审计）
 
 由于 platform 不依赖 infra，platform/linux 只输出可消费的观测事实，不直接持有 infra logger/exporter：
@@ -374,10 +380,10 @@ platform/linux 不负责：
 | Linux 工厂负责统一装配与能力探测 | 新增 LinuxPlatformFactory 与 CapabilityRegistry | 把 profile 差异收敛到工厂与能力表，而非散落在上层 | platform/include/linux/LinuxPlatformFactory.h, LinuxPlatformCapabilities.h; platform/src/linux/LinuxPlatformFactory.cpp | tests/unit/platform/linux/LinuxPlatformFactoryTest.cpp | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R LinuxPlatformFactoryTest --output-on-failure | 依赖：Profile 配置键名确认 |
 | 并发原语由平台统一提供 | 新增 PosixThreadProvider / PosixTimerProvider / BlockingQueueProvider | 为 infra、services 和后续 watchdog/worker 提供稳定底座 | platform/src/linux/PosixThreadProvider.cpp, PosixTimerProvider.cpp, BlockingQueueProvider.cpp | tests/unit/platform/linux/PosixThreadProviderTest.cpp, PosixTimerProviderTest.cpp, BlockingQueueProviderTest.cpp | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R "PosixThreadProviderTest|PosixTimerProviderTest|BlockingQueueProviderTest" --output-on-failure | 无 |
 | 文件、网络、IPC 通过独立 provider 落地 | 新增 LinuxFileSystemProvider / LinuxNetworkProvider / UnixIpcProvider | 保持能力解耦，避免 God Object | platform/src/linux/LinuxFileSystemProvider.cpp, LinuxNetworkProvider.cpp, UnixIpcProvider.cpp | tests/unit/platform/linux/LinuxFileSystemProviderTest.cpp, LinuxNetworkProviderTest.cpp, UnixIpcProviderTest.cpp | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R "LinuxFileSystemProviderTest|LinuxNetworkProviderTest|UnixIpcProviderTest" --output-on-failure | 依赖：测试桩与临时目录能力 |
-| HAL 仅通过受控桥接接入 | 新增 HalAvailabilityBridge 与空实现桩 | 保证 desktop/cloud profile 不因 HAL 缺失失败，同时给 edge profile 留入口 | platform/src/linux/HalAvailabilityBridge.cpp, platform/src/arm/hal/HalStub.cpp | tests/unit/platform/linux/HalAvailabilityBridgeTest.cpp | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R HalAvailabilityBridgeTest --output-on-failure | 阻塞：ARM HAL 具体接口尚未定义 |
+| HAL 仅通过受控桥接接入（已完成） | HalAvailabilityBridge + HalStub + HalProbe.h 已落地（2026-03-27） | 保证 desktop/cloud profile 不因 HAL 缺失失败，同时给 edge profile 留入口；最小探测接口已冻结 | platform/src/linux/HalAvailabilityBridge.cpp, platform/src/arm/hal/HalStub.cpp, platform/include/hal/HalProbe.h | tests/unit/platform/linux/HalAvailabilityBridgeTest.cpp（2026-03-27 已通过） | ctest --test-dir build-ci -R HalAvailabilityBridgeTest --output-on-failure | 最小解阻完成；真实 ARM HAL 驱动接口（GPIO/UART/I2C/SPI/CAN）留后续版本；文档补丁见专项 TODO-023 |
 | 平台错误需可映射到上层 ErrorInfo | 新增 PlatformError/PlatformResult | 统一错误码和恢复事实，为上层做 contracts 映射预留锚点 | platform/include/PlatformError.h, PlatformResult.h | tests/unit/platform/linux/PlatformErrorMappingTest.cpp | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure | 依赖：上层 ErrorInfo 映射约定评审 |
 | 观测事实通过快照与事件输出 | 新增 PlatformHealthCollector 与 PlatformEvent | 满足可诊断要求，同时不引入 infra 反向依赖 | platform/include/linux/PlatformHealthSnapshot.h; platform/src/linux/PlatformHealthCollector.cpp | tests/unit/platform/linux/PlatformHealthCollectorTest.cpp | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformHealthCollectorTest --output-on-failure | 无 |
-| 平台初始化必须有集成验证 | 新增初始化与降级路径集成测试 | 验证 boot 注入配置 -> 工厂装配 -> capability set 的主路径 | tests/integration/platform/linux/LinuxPlatformBootstrapIntegrationTest.cpp | integration：desktop_full 与 edge_balanced 两档 | cmake --build build-ci && ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure | 阻塞：tests CMake 注册与 profile fixture |
+| 平台初始化必须有集成验证 | 新增初始化与降级路径集成测试 | 验证 boot 注入配置 -> 工厂装配 -> capability set 的主路径 | tests/integration/platform/linux/LinuxPlatformBootstrapIntegrationTest.cpp | integration：desktop_full 与 edge_balanced 两档 | cmake --build build-ci && ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure | 阻塞：tests/integration/platform/linux 目录注册（tests 顶层已就绪，见专项 TODO-020）；profile fixture 使用显式 PlatformInitConfig 结构体绕过 profile 文件解析 |
 | 无法映射项：真实 ARM HAL 驱动实现 | 标记为后续版本任务 | 当前 Detailed Design 只定义接入点，不承诺本轮完成具体 GPIO/UART/I2C 驱动 | N/A | N/A | N/A | 阻塞：HAL 设备模型、sysroot、板级依赖未冻结 |
 
 ---
@@ -503,11 +509,11 @@ tests/
 
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
-| platform/include 公共接口尚未存在 | PLAT-LNX-T001~T010 | 明确 public header 列表并通过设计评审 | 先提交接口骨架与空实现，冻结命名和目录 | 如评审未通过，保持 placeholder，不扩散实现 |
-| tests 对 platform/linux 的 CMake 注册缺失 | PLAT-LNX-T009/T010 | 增加 tests/unit/platform/linux 与 tests/integration/platform/linux 注册 | 先补测试目标发现性 | 无法注册时先保留 unit stub，不宣称完成 |
-| HAL 真实接口未冻结 | PLAT-LNX-T008 | 明确 HAL 最小桥接接口或保留空实现策略 | 先落地 HalStub + CapabilityRegistry reason code | 本轮不接真实驱动，只保留 NotSupported 路径 |
-| Profile 配置键名与注入路径未统一 | PLAT-LNX-T006/T010 | 明确 platform.linux.* 配置键与注入入口 | 先在测试 fixture 中固定配置键 | 若短期无法统一，工厂仅接受结构体配置，不直接解析键值 |
-| 上层 ErrorInfo 映射规范尚未评审 | PLAT-LNX-T002/T005 | 评审 PlatformError -> ErrorInfo 映射表 | 先冻结 PlatformError.code 集 | 若未评审通过，限制错误码数量并延后更多细分 |
+| 已解阻：platform/include 公共接口与 unit 测试均已落盘（专项 TODO-001~019 已完成 2026-03-27） | 无活跃影响任务 | 已完成 | 2026-03-27 全部接口落盘并可编译 | N/A |
+| tests/integration/platform/linux 目录未注册（tests 顶层 add_subdirectory(integration) 已就绪） | 专项 TODO-020（T010 集成测试） | 新增 tests/integration/platform/linux/CMakeLists.txt 并注册 integration 标签目标 | 先补 platform/linux 集成子目录注册，不需要改顶层 CMake | 用例发现性验证前不宣称集成门禁就绪 |
+| HAL 最小探测接口已冻结（HalProbe.h + HalStub + HalAvailabilityBridge 已落地 2026-03-27）；真实驱动接口本轮超出范围 | 后续 edge 真实驱动任务；专项 TODO-023 补文档 | 冻结 GPIO/UART/I2C/SPI/CAN 驱动接口（后续版本） | probe_hal_availability + HalProbeResult 最小探测接口已落地；文档补丁见专项 TODO-023 | 本轮只交付最小探测桥接；真实驱动留后续版本 |
+| Profile 配置键名与注入路径未统一（profile 目录无 platform.linux.* 键；PlatformInitConfig 未含 enable_epoll/require_hal/ipc 等字段） | 专项 TODO-021/025 | 冻结 platform.linux.* 键名全集与注入入口（Boot 阶段显式构造 PlatformInitConfig；默认<profile<部署优先级） | 先在测试 fixture 中固定配置键；工厂仅接受结构体配置 | 若短期无法统一，工厂仅接受结构体输入，不直接解析键值 |
+| 上层 ErrorInfo 映射规范已最小解阻（PlatformError.code 集与一级 category 映射已冻结 2026-03-27）；细粒度评审待完成 | 后续细粒度错误码扩展任务 | 评审完整 PlatformError -> ErrorInfo 映射表 | 已冻结 PlatformError.code 集与一级映射锚点（PlatformErrorMappingTest 通过） | 限制错误码数量；延后更多细分直至评审通过 |
 
 ### 11.2 风险清单
 
