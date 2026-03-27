@@ -9,6 +9,7 @@ target_sources(dasall_platform
     src/linux/LinuxPlatformFactory.cpp
     src/linux/PosixThreadProvider.cpp
     src/linux/PosixTimerProvider.cpp
+    src/linux/UnixIpcProvider.cpp
     src/placeholder.cpp
 )
 
