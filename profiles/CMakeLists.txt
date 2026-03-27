@@ -2,6 +2,8 @@ add_library(dasall_profiles STATIC)
 
 target_sources(dasall_profiles
   PRIVATE
+    src/ProfileYamlParser.cpp
+    src/ProfileCatalog.cpp
     src/placeholder.cpp
 )
 
