@@ -2,8 +2,10 @@ add_library(dasall_platform STATIC)
 
 target_sources(dasall_platform
   PRIVATE
+    src/arm/hal/HalStub.cpp
     src/linux/BlockingQueueProvider.cpp
     src/linux/CapabilityRegistry.cpp
+    src/linux/HalAvailabilityBridge.cpp
     src/linux/LinuxFileSystemProvider.cpp
     src/linux/LinuxNetworkProvider.cpp
     src/linux/LinuxPlatformFactory.cpp
