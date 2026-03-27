@@ -88,6 +88,22 @@ dasall_apply_common_options(dasall_runtime_policy_provider_unit_test)
 add_test(NAME RuntimePolicyProviderTest COMMAND dasall_runtime_policy_provider_unit_test)
 set_tests_properties(RuntimePolicyProviderTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_profile_compatibility_validator_unit_test
+  ProfileCompatibilityValidatorTest.cpp
+)
+
+target_link_libraries(dasall_profile_compatibility_validator_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_profile_compatibility_validator_unit_test)
+
+add_test(NAME ProfileCompatibilityValidatorTest
+         COMMAND dasall_profile_compatibility_validator_unit_test)
+set_tests_properties(ProfileCompatibilityValidatorTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_validation_report_unit_test
   ValidationReportTest.cpp
 )
