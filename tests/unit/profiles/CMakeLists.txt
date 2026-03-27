@@ -133,3 +133,18 @@ dasall_apply_common_options(dasall_last_known_good_store_unit_test)
 
 add_test(NAME LastKnownGoodStoreInterfaceTest COMMAND dasall_last_known_good_store_unit_test)
 set_tests_properties(LastKnownGoodStoreInterfaceTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_last_known_good_store_impl_unit_test
+  LastKnownGoodStoreTest.cpp
+)
+
+target_link_libraries(dasall_last_known_good_store_impl_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_last_known_good_store_impl_unit_test)
+
+add_test(NAME LastKnownGoodStoreTest COMMAND dasall_last_known_good_store_impl_unit_test)
+set_tests_properties(LastKnownGoodStoreTest PROPERTIES LABELS "unit")

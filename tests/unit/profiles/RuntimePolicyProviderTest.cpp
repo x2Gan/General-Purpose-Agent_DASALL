@@ -3,7 +3,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 
+#include "LastKnownGoodStore.h"
 #include "ProfileCatalog.h"
 #include "ProfileError.h"
 #include "RuntimePolicyProvider.h"
@@ -63,8 +65,8 @@ void test_runtime_policy_provider_rejects_unknown_profile_requests() {
 
   assert_true(!load_result.ok(), "runtime policy provider should reject unknown profile ids");
   assert_true(load_result.error_code.has_value(), "unknown profile should include error code");
-  assert_true(*load_result.error_code == ProfileErrorCode::ProfileNotFound,
-              "unknown profile should map to profile-not-found error");
+  assert_true(*load_result.error_code == ProfileErrorCode::LastKnownGoodUnavailable,
+              "unknown profile should map to last-known-good-unavailable when no fallback exists");
 }
 
 void test_runtime_policy_provider_rejects_invalid_schema_content() {
@@ -93,8 +95,48 @@ void test_runtime_policy_provider_rejects_invalid_schema_content() {
 
   assert_true(!load_result.ok(), "runtime policy provider should reject schema-incomplete snapshots");
   assert_true(load_result.error_code.has_value(), "schema-incomplete snapshot should include error code");
-  assert_true(*load_result.error_code == ProfileErrorCode::SchemaInvalid,
-              "schema-incomplete snapshot should map to schema-invalid error");
+  assert_true(*load_result.error_code == ProfileErrorCode::LastKnownGoodUnavailable,
+              "schema-incomplete snapshot should map to lkg-unavailable when fallback is absent");
+
+  std::filesystem::remove_all(temp_root);
+}
+
+void test_runtime_policy_provider_uses_last_known_good_fallback_when_schema_invalid() {
+  using dasall::profiles::LastKnownGoodStore;
+  using dasall::profiles::ProfileCatalog;
+  using dasall::profiles::RuntimePolicyProvider;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const auto lkg_store = std::make_shared<LastKnownGoodStore>();
+
+  const ProfileCatalog baseline_catalog(repository_root() / "profiles");
+  RuntimePolicyProvider baseline_provider(baseline_catalog, lkg_store);
+  const auto baseline_loaded = baseline_provider.load_snapshot({.profile_id = "desktop_full"});
+  assert_true(baseline_loaded.ok(), "precondition: baseline snapshot should load before lkg fallback");
+  const auto activated =
+      baseline_provider.activate_snapshot({.snapshot = baseline_loaded.snapshot});
+  assert_true(activated.ok(), "precondition: baseline snapshot should be persisted into lkg store");
+
+  const std::filesystem::path temp_root = make_temp_directory();
+  const std::filesystem::path broken_profile = temp_root / "desktop_full";
+  std::filesystem::create_directories(broken_profile);
+
+  write_file(broken_profile / "profile.cmake", "set(DASALL_PROFILE_NAME \"desktop_full\")\n");
+  write_file(broken_profile / "runtime_policy.yaml",
+             "schema_version: 1\n"
+             "profile_meta:\n"
+             "\tprofile_id: desktop_full\n"
+             "\ttarget_platform: linux-x86_64-workstation\n"
+             "\tsupport_level: ga\n");
+
+  const ProfileCatalog broken_catalog(temp_root);
+  const RuntimePolicyProvider fallback_provider(broken_catalog, lkg_store);
+  const auto fallback_loaded = fallback_provider.load_snapshot({.profile_id = "desktop_full"});
+
+  assert_true(fallback_loaded.ok(), "provider should fallback to last-known-good snapshot on schema failure");
+  assert_equal(std::string("desktop_full"), fallback_loaded.snapshot->effective_profile_id(),
+               "fallback snapshot should preserve requested profile id");
 
   std::filesystem::remove_all(temp_root);
 }
@@ -126,6 +168,7 @@ int main() {
     test_runtime_policy_provider_loads_snapshot_for_valid_profile();
     test_runtime_policy_provider_rejects_unknown_profile_requests();
     test_runtime_policy_provider_rejects_invalid_schema_content();
+    test_runtime_policy_provider_uses_last_known_good_fallback_when_schema_invalid();
     test_runtime_policy_provider_activates_loaded_snapshot();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

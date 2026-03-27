@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "LastKnownGoodStore.h"
 #include "ProfileError.h"
 #include "ProfileYamlParser.h"
 
@@ -300,7 +301,12 @@ template <typename T>
 
 }  // namespace
 
-RuntimePolicyProvider::RuntimePolicyProvider(const IProfileCatalog& catalog) : catalog_(catalog) {}
+RuntimePolicyProvider::RuntimePolicyProvider(const IProfileCatalog& catalog)
+    : RuntimePolicyProvider(catalog, std::make_shared<LastKnownGoodStore>()) {}
+
+RuntimePolicyProvider::RuntimePolicyProvider(const IProfileCatalog& catalog,
+                                             std::shared_ptr<ILastKnownGoodStore> lkg_store)
+    : catalog_(catalog), lkg_store_(std::move(lkg_store)) {}
 
 RuntimePolicyLoadResult RuntimePolicyProvider::load_snapshot(
     const RuntimePolicyLoadRequest& request) const {
@@ -313,27 +319,33 @@ RuntimePolicyLoadResult RuntimePolicyProvider::load_snapshot(
 
   const ProfileCatalogLookupResult profile_lookup = catalog_.get_profile(request.profile_id);
   if (!profile_lookup.ok()) {
-    return RuntimePolicyLoadResult{
-        .snapshot = nullptr,
-        .error_code = profile_lookup.error_code,
-    };
+        const RuntimePolicyLoadResult from_lkg = load_from_last_known_good(request.profile_id);
+        if (from_lkg.ok()) {
+            return from_lkg;
+        }
+
+        return RuntimePolicyLoadResult{.snapshot = nullptr, .error_code = from_lkg.error_code};
   }
 
   const ParsedProfileYaml parsed_yaml =
       parse_profile_yaml_file(profile_lookup.profile->asset_paths.runtime_policy_path);
   if (!parsed_yaml.ok) {
-    return RuntimePolicyLoadResult{
-        .snapshot = nullptr,
-        .error_code = ProfileErrorCode::SchemaInvalid,
-    };
+        const RuntimePolicyLoadResult from_lkg = load_from_last_known_good(request.profile_id);
+        if (from_lkg.ok()) {
+            return from_lkg;
+        }
+
+        return RuntimePolicyLoadResult{.snapshot = nullptr, .error_code = from_lkg.error_code};
   }
 
   const auto snapshot = build_snapshot(request.profile_id, parsed_yaml);
   if (!snapshot.has_value()) {
-    return RuntimePolicyLoadResult{
-        .snapshot = nullptr,
-        .error_code = ProfileErrorCode::SchemaInvalid,
-    };
+        const RuntimePolicyLoadResult from_lkg = load_from_last_known_good(request.profile_id);
+        if (from_lkg.ok()) {
+            return from_lkg;
+        }
+
+        return RuntimePolicyLoadResult{.snapshot = nullptr, .error_code = from_lkg.error_code};
   }
 
   return RuntimePolicyLoadResult{
@@ -351,6 +363,21 @@ RuntimePolicyActivateResult RuntimePolicyProvider::activate_snapshot(
     };
   }
 
+    if (!lkg_store_) {
+        return RuntimePolicyActivateResult{
+                .activated_generation = 0U,
+                .error_code = ProfileErrorCode::LastKnownGoodUnavailable,
+        };
+    }
+
+    const LastKnownGoodSaveResult save_result = lkg_store_->save(request.snapshot);
+    if (!save_result.ok()) {
+        return RuntimePolicyActivateResult{
+                .activated_generation = 0U,
+                .error_code = save_result.error_code,
+        };
+    }
+
   std::lock_guard<std::mutex> lock(active_snapshot_mutex_);
   active_snapshot_ = request.snapshot;
 
@@ -363,6 +390,29 @@ RuntimePolicyActivateResult RuntimePolicyProvider::activate_snapshot(
 std::shared_ptr<const RuntimePolicySnapshot> RuntimePolicyProvider::active_snapshot() const {
   std::lock_guard<std::mutex> lock(active_snapshot_mutex_);
   return active_snapshot_;
+}
+
+RuntimePolicyLoadResult RuntimePolicyProvider::load_from_last_known_good(
+        const std::string& profile_id) const {
+    if (!lkg_store_) {
+        return RuntimePolicyLoadResult{
+                .snapshot = nullptr,
+                .error_code = ProfileErrorCode::LastKnownGoodUnavailable,
+        };
+    }
+
+    const LastKnownGoodLoadResult lkg_result = lkg_store_->load(profile_id);
+    if (!lkg_result.ok()) {
+        return RuntimePolicyLoadResult{
+                .snapshot = nullptr,
+                .error_code = lkg_result.error_code,
+        };
+    }
+
+    return RuntimePolicyLoadResult{
+            .snapshot = lkg_result.snapshot,
+            .error_code = std::nullopt,
+    };
 }
 
 }  // namespace dasall::profiles

@@ -7,6 +7,7 @@ target_sources(dasall_profiles
     src/BuildProfileResolver.cpp
     src/RuntimePolicyProvider.cpp
     src/ProfileCompatibilityValidator.cpp
+    src/LastKnownGoodStore.cpp
     src/placeholder.cpp
 )
 

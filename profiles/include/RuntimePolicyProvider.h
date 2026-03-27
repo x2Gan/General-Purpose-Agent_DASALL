@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+#include "ILastKnownGoodStore.h"
 #include "IProfileCatalog.h"
 #include "RuntimePolicySnapshot.h"
 
@@ -59,6 +60,8 @@ struct RuntimePolicyActivateResult {
 class RuntimePolicyProvider {
  public:
   explicit RuntimePolicyProvider(const IProfileCatalog& catalog);
+  RuntimePolicyProvider(const IProfileCatalog& catalog,
+                        std::shared_ptr<ILastKnownGoodStore> lkg_store);
 
   [[nodiscard]] RuntimePolicyLoadResult load_snapshot(const RuntimePolicyLoadRequest& request) const;
   [[nodiscard]] RuntimePolicyActivateResult activate_snapshot(
@@ -66,7 +69,11 @@ class RuntimePolicyProvider {
   [[nodiscard]] std::shared_ptr<const RuntimePolicySnapshot> active_snapshot() const;
 
  private:
+  [[nodiscard]] RuntimePolicyLoadResult load_from_last_known_good(
+      const std::string& profile_id) const;
+
   const IProfileCatalog& catalog_;
+  std::shared_ptr<ILastKnownGoodStore> lkg_store_;
 
   mutable std::mutex active_snapshot_mutex_;
   std::shared_ptr<const RuntimePolicySnapshot> active_snapshot_;
