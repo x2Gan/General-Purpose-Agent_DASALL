@@ -3,6 +3,8 @@
 #include <array>
 #include <string>
 
+#include "linux/HalAvailabilityBridge.h"
+
 namespace dasall::platform::linux {
 
 bool LinuxPlatformBundle::has_consistent_values() const {
@@ -114,8 +116,8 @@ PlatformCapabilitySet LinuxPlatformFactory::detect_capabilities(
     capabilities.ipc = PlatformCapability::disabled("UnsupportedTargetPlatform");
   }
 
-  capabilities.hal = config.enable_hal ? PlatformCapability::enabled()
-                                       : PlatformCapability::disabled("DisabledByProfile");
+  const HalAvailabilityBridge hal_bridge;
+  capabilities.hal = hal_bridge.probe_hal_availability(config);
   return capabilities;
 }
 

@@ -182,7 +182,7 @@
 | PLAT-LNX-TODO-018 | Done | 实现 HalAvailabilityBridge 与 HalStub 桩 | platform 设计 6.2/6.8/11.1；蓝图 5.1 | 6.2 HalAvailabilityBridge；8.1 HalStub.cpp | L2 | platform/include/linux/HalAvailabilityBridge.h、platform/include/hal/HalProbe.h、platform/src/linux/HalAvailabilityBridge.cpp、platform/src/arm/hal/HalStub.cpp | probe_hal_availability（桥接语义） | unit：HalAvailabilityBridgeTest（desktop 关闭、edge 可判定） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_hal_availability_bridge_unit_test && ctest --test-dir build-ci -R HalAvailabilityBridgeTest --output-on-failure | PLAT-LNX-TODO-010、011 | PLAT-LNX-BLK-01（已按“仅 stub 交付”最小解阻） | HAL 最小接口冻结或确认仅 stub 交付 | 实现代码、单测；2026-03-27 已新增 HalAvailabilityBridge/HalProbe/HalStub 与 HalAvailabilityBridgeTest，验证 desktop 禁用与 edge 可判定降级路径 | 仅当 desktop/edge 两档行为都可二值判定时完成 |
 | PLAT-LNX-TODO-019 | Done | 注册 platform unit 测试目录与目标 | platform 设计 8.1/9.1；工程规范 3.7 | 8.1 目录建议；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/platform/linux/ | unit：InterfaceSurface/Factory/Provider/HAL 测试发现性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N -R "Platform|Linux" | PLAT-LNX-TODO-004~018 | 无 | 无 | CMake 变更、测试注册记录；2026-03-27 已验证 dasall_unit_tests 通过，且 ctest -N -R "Platform|Linux" 可发现 PlatformInitConfig/LinuxPlatformCapabilities/PlatformErrorMapping/LinuxPlatformFactory/LinuxFileSystemProvider/LinuxNetworkProvider 等用例 | 仅当 ctest -N 可发现新增 platform unit 测试时完成 |
 | PLAT-LNX-TODO-020 | Done | 注册 platform integration 测试目录与目标 | platform 设计 8.1/9.1；代码现状 | 9.1 Integration 覆盖 | L0 | tests/CMakeLists.txt、tests/integration/platform/linux/ | integration：LinuxPlatformBootstrapIntegrationTest 发现性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N -R LinuxPlatformBootstrapIntegrationTest | PLAT-LNX-TODO-019 | 无（PLAT-LNX-BLK-05 已解阻） | 无 | CMake 改动、测试注册记录；2026-03-27 已新增 tests/integration/platform/CMakeLists.txt、tests/integration/platform/linux/CMakeLists.txt 与 LinuxPlatformBootstrapIntegrationTest.cpp，并通过 ctest 发现性验收 | 仅当 integration 用例可被 ctest 发现后完成 |
-| PLAT-LNX-TODO-021 | Blocked | 验证平台初始化集成路径 | platform 设计 6.7/9.1/9.2；架构 9.2 | 6.7 初始化步骤 1~7 | L2 | tests/integration/platform/linux/LinuxPlatformBootstrapIntegrationTest.cpp | integration：desktop_full 与 edge_balanced 主/降级路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure | PLAT-LNX-TODO-010、011、018、020 | R-4（工厂 HAL 接线） | 工厂 HAL 判定切换到 HalAvailabilityBridge 并覆盖 edge_balanced degraded 路径 | 集成测试与执行记录 | 仅当两档 profile 初始化结果均可二值断言时完成 |
+| PLAT-LNX-TODO-021 | Blocked | 验证平台初始化集成路径 | platform 设计 6.7/9.1/9.2；架构 9.2 | 6.7 初始化步骤 1~7 | L2 | tests/integration/platform/linux/LinuxPlatformBootstrapIntegrationTest.cpp | integration：desktop_full 与 edge_balanced 主/降级路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure | PLAT-LNX-TODO-010、011、018、020 | 无（R-4 已完成） | R-4 已完成（2026-03-27），工厂 HAL 判定已切换到 HalAvailabilityBridge | 集成测试与执行记录 | 仅当两档 profile 初始化结果均可二值断言时完成 |
 | PLAT-LNX-TODO-022 | Not Started | 回写 platform/linux 门禁与交付证据 | platform 设计 9.2/11.1 | 9.2 Gate；11.1 阻塞管理 | L2 | docs/todos/DASALL_platform_linux组件专项TODO.md | process test：门禁结果、阻塞变更、回退触发记录 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -R LinuxPlatformBootstrapIntegrationTest | PLAT-LNX-TODO-019~021 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个 Gate 都有通过/失败结论与命令证据时完成 |
 | PLAT-LNX-TODO-023 | Done | 补齐 HAL 最小接口设计前置 | platform 设计 11.1 | 11.1 HAL 真实接口未冻结 | L0 | docs/architecture/platform_linux_detailed_design.md | Hal 最小桥接接口（方法、返回码、能力探测边界） | process test：设计评审门 | rg -n "HAL|HalAvailabilityBridge|HalStub|接口" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-018 | 设计补丁、评审记录、回链记录；2026-03-27 已新增 6.6.1「HAL 最小探测接口冻结」并回链 TODO-018/023，明确本轮仅冻结 availability probe | 仅当 HAL 最小接口清单冻结且评审通过时完成 |
 | PLAT-LNX-TODO-024 | Done | 补齐网络 fallback 策略前置设计 | platform 设计 6.9/11.1 | 6.9 enable_epoll；11.1 未决项 | L0 | docs/architecture/platform_linux_detailed_design.md | epoll/eventfd 失败触发 poll/select 的条件与错误语义 | process test：设计评审门 | rg -n "enable_epoll|poll|select|fallback" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-008、016 | 设计补丁、评审记录、回链记录；2026-03-27 已补充 6.9.1 评审结论与回链段落，冻结 A/B/C/D 触发矩阵且明确禁止隐式重试 | 仅当 fallback 条件可判定且不引入隐式重试时完成 |
@@ -226,7 +226,7 @@
 | R-2a | PLAT-LNX-TODO-023 | 设计补票（Done） | 无（与 R-2b 并行） | 已回写 HalProbe.h + HalStub 最小接口到 platform_linux_detailed_design.md 6.6.1；已明确本轮仅冻结 availability probe，真实驱动留后续版本；已修正 BLK-01 状态描述 | 6.6.1 段落与 BLK-01 状态已落盘 |
 | R-2b | PLAT-LNX-TODO-025 | 设计前置（Done） | 无（与 R-2a 并行） | 已冻结 platform.linux.* 键名全集、Boot 显式注入入口与默认 < profile < 部署优先级；已补 PlatformInitConfig 缺失字段计划；已修正 BLK-02 状态描述 | 6.9.2 段落与 BLK-02 状态已落盘 |
 | R-3 | PLAT-LNX-TODO-020 | 测试接线（Done） | R-2b 通过或明确接受 fixture 代替 profile 文件解析 | 已新增 tests/integration/platform/CMakeLists.txt 与 tests/integration/platform/linux/CMakeLists.txt；已注册 LinuxPlatformBootstrapIntegrationTest（LABELS=integration）；已新增最小用例实体并完成发现性验证 | ctest -N -R LinuxPlatformBootstrapIntegrationTest 可发现用例（已通过） |
-| R-4 | 工厂 HAL 接线（021 隐含前置） | 代码补丁 | R-2a 完成 | 将 LinuxPlatformFactory::detect_capabilities 中 HAL 判定改为调用 HalAvailabilityBridge::probe_hal_availability，而非直接读 config.enable_hal 布尔值；使 edge_balanced + enable_hal=true 路径可产生 degraded/HalStubOnly 语义 | edge_balanced 配置下工厂产出 HAL degraded 状态（而非 enabled） |
+| R-4 | 工厂 HAL 接线（Done） | 代码补丁 | R-2a 完成 | 已将 LinuxPlatformFactory::detect_capabilities 中 HAL 判定改为调用 HalAvailabilityBridge::probe_hal_availability（2026-03-27）；新增 #include "linux/HalAvailabilityBridge.h"；23 项 unit 测试全部通过，desktop_full/enable_hal=false 返回 DisabledByProfile，edge_balanced/enable_hal=true 返回 degraded/HalStubOnly | edge_balanced 配置下工厂产出 HAL degraded 状态（已验证） |
 | R-5 | PLAT-LNX-TODO-021 | 集成测试 | R-3、R-4 完成 | 用 fixture 显式构造 PlatformInitConfig（不依赖 profile 文件解析），分 desktop_full 主路径与 edge_balanced HAL degraded 路径两档；各档断言均可二值判定 | ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure 通过（两档用例） |
 | R-6 | PLAT-LNX-TODO-022 | 证据回写 | R-1~R-5 完成或 Blocked 结论明确 | 更新 BLK-01/03/04/05 状态；回写 LinuxPlatformBootstrapIntegrationTest 执行证据；修正 section 10 与 section 11 过时描述 | 每个 Gate 都有通过/失败结论与命令证据 |
 
@@ -241,7 +241,7 @@
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
 | PLAT-LNX-BLK-01 | HAL 最小探测接口已冻结且文档补票完成（6.6.1；2026-03-27）；真实驱动接口仍未冻结 | 不再阻塞 PLAT-LNX-TODO-018；仅影响后续 edge 真实驱动扩展 | 冻结 GPIO/UART/I2C/SPI/CAN 等真实 ARM HAL 驱动接口与错误码边界（后续版本） | 维持 probe_hal_availability + HalProbeResult 最小探测接口；文档回链 PLAT-LNX-TODO-023 | 本轮只交付最小探测桥接；真实驱动留后续版本 |
-| PLAT-LNX-BLK-02 | profile 键名全集与注入入口已冻结（6.9.2；2026-03-27） | PLAT-LNX-TODO-021 设计前置已解阻；当前主要受 R-4 影响 | 完成 R-4（工厂 HAL 接线）以进入 021 执行 | 统一遵循默认 < profile < 部署；Boot 显式构造 PlatformInitConfig；fixture 注入与 Boot 注入等价 | 在字段扩展完成前，工厂继续只接受结构体输入，不直接解析键值 |
+| PLAT-LNX-BLK-02 | profile 键名全集与注入入口已冻结（6.9.2；2026-03-27）；R-4 工厂 HAL 接线已完成（2026-03-27） | PLAT-LNX-TODO-021 前置全部解阻，可进入 R-5 执行 | R-5 需用 fixture 构造 edge_balanced + enable_hal=true 配置并断言 HAL degraded 路径 | 统一遵循默认 < profile < 部署；Boot 显式构造 PlatformInitConfig；fixture 注入与 Boot 注入等价 | 在字段扩展完成前，工厂继续只接受结构体输入，不直接解析键值 |
 | PLAT-LNX-BLK-03 | epoll/eventfd fallback 触发矩阵评审记录与回链已在 6.9.1 补齐并收口（见 PLAT-LNX-TODO-024） | PLAT-LNX-TODO-016（已最小解阻）；PLAT-LNX-TODO-008 接口层已完成，不再受阻 | fallback 矩阵评审记录落盘并回链 PLAT-LNX-TODO-008/016/024 | 2026-03-27 已在 6.9.1 冻结 A/B/C/D 四档触发矩阵并补齐评审记录；不再阻塞接口与 provider 推进 | 保持 6.9.1 冻结结论；禁止未经评审扩展回退逻辑 |
 | PLAT-LNX-BLK-04 | PlatformError->ErrorInfo 映射评审未完成 | PLAT-LNX-TODO-003 | 映射表评审通过并有记录 | 先冻结 PlatformError 字段和码集 | 延后细粒度错误码扩展 |
 | PLAT-LNX-BLK-05 | 已解阻：tests/integration/platform/linux 已注册且 LinuxPlatformBootstrapIntegrationTest 已落地（2026-03-27） | 不再阻塞 PLAT-LNX-TODO-020；021 可进入执行准备 | ctest -N -R LinuxPlatformBootstrapIntegrationTest 可发现用例（已满足） | 已新增 integration/platform 子目录 CMake 与测试实体，并通过发现性验收 | 保持 integration 标签与用例名稳定，避免门禁漂移 |
@@ -972,5 +972,52 @@ Build 合规复核：
 3. 测试发现性：已按验收命令完成 ctest discoverability 验证。
 4. TODO 证据回写：已更新 020 状态、R-3 完成态、BLK-05 解阻状态与本节执行记录。
 5. 提交隔离：本轮提交仅包含 R-3 所需 CMake/测试接线与 TODO 证据回写。
+6. 环境恢复：沿用 build-ci 命令链路，无额外恢复动作。
+
+## 25. 本轮执行记录（2026-03-27 / R-4 工厂 HAL 接线）
+
+### 25.1 选中任务
+
+1. 本轮任务：R-4（工厂 HAL 接线，PLAT-LNX-TODO-021 隐含代码前置）。
+2. 可执行性依据：前置依赖 R-2a（PLAT-LNX-TODO-023）已完成，HalAvailabilityBridge::probe_hal_availability 接口已冻结并实现；R-3（PLAT-LNX-TODO-020）已完成，集成测试目录已注册；BLK-02 设计前置已解阻。
+
+### 25.2 研究与 Design 结论
+
+本地证据：
+
+1. platform/src/linux/LinuxPlatformFactory.cpp::detect_capabilities 中 HAL 能力直接读取 `config.enable_hal` 布尔值，不经过 HalAvailabilityBridge，导致 `edge_balanced + enable_hal=true` 路径无法产生 degraded/HalStubOnly 语义。
+2. platform/src/linux/HalAvailabilityBridge.cpp 已实现完整探测逻辑：enable_hal=false → disabled；unsupported target → disabled；HalStub → available=false、reason="HalStubOnly"；profile 以 "edge_" 开头 → degraded(reason)；其余 → disabled(reason)。
+3. 解阻动作最小：仅需将 detect_capabilities 中的直接布尔判断替换为 `HalAvailabilityBridge hal_bridge; capabilities.hal = hal_bridge.probe_hal_availability(config);` 并在 LinuxPlatformFactory.cpp 中补充 include。
+
+D 结论：
+
+1. Design -> Build 映射：修改 platform/src/linux/LinuxPlatformFactory.cpp，新增 `#include "linux/HalAvailabilityBridge.h"` 并将 HAL 能力探测代理到 HalAvailabilityBridge。
+2. Build 三件套：
+   - 代码目标：修改 LinuxPlatformFactory::detect_capabilities，删除直接布尔判断，改调 probe_hal_availability。
+   - 测试目标：LinuxPlatformFactoryTest（enable_hal=false → DisabledByProfile）+ HalAvailabilityBridgeTest 全量运行；全部 23 项 unit 测试通过。
+   - 验收命令：cmake --build build-ci --target dasall_platform dasall_linux_platform_factory_unit_test && ctest --test-dir build-ci -R LinuxPlatformFactoryTest --output-on-failure && ctest --test-dir build-ci --output-on-failure -L unit。
+3. D Gate：PASS。
+
+### 25.3 Build 交付与证据
+
+交付物：
+
+1. platform/src/linux/LinuxPlatformFactory.cpp：新增 `#include "linux/HalAvailabilityBridge.h"`；将 detect_capabilities 末尾直接布尔判断替换为 HalAvailabilityBridge::probe_hal_availability 调用。
+2. docs/todos/DASALL_platform_linux组件专项TODO.md：更新 PLAT-LNX-TODO-021 阻塞项、R-4 完成标志、BLK-02 状态。
+
+验收结果：
+
+1. cmake --build build-ci --target dasall_platform dasall_linux_platform_factory_unit_test：通过（3/3 Linking 完成）。
+2. ctest --test-dir build-ci -R LinuxPlatformFactoryTest --output-on-failure：通过，1/1 tests passed。
+3. ctest --test-dir build-ci -R "HalAvailabilityBridgeTest|LinuxPlatformBootstrapIntegrationTest" --output-on-failure：通过，2/2 tests passed。
+4. ctest --test-dir build-ci --output-on-failure -L unit：通过，23/23 tests passed（无回归）。
+
+Build 合规复核：
+
+1. 代码注释：修改范围最小，仅替换一行逻辑与补充 include，无冗余注释。
+2. 正负例覆盖：LinuxPlatformFactoryTest 覆盖 enable_hal=false 路径（DisabledByProfile）；HalAvailabilityBridgeTest 覆盖 edge 路径（degraded/HalStubOnly）；两档行为均可二值判定。
+3. 测试发现性：沿用已注册的测试目标，无新增注册需求。
+4. TODO 证据回写：已回写 R-4 完成状态、TODO-021 阻塞清零、BLK-02 状态更新与本节执行记录。
+5. 提交隔离：本轮提交范围限定为 LinuxPlatformFactory.cpp 代码补丁与 TODO 证据回写。
 6. 环境恢复：沿用 build-ci 命令链路，无额外恢复动作。
 
