@@ -165,7 +165,7 @@
 | PLAT-LNX-TODO-001 | Done | 定义 PlatformInitConfig 数据结构头文件 | platform 设计 6.5；工程规范 3.2 | 6.5 PlatformInitConfig | L3 | platform/include/linux/PlatformInitConfig.h | target_platform/profile_name/enable_hal/queue_defaults/io_timeouts | unit：字段编译与默认值断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | 无 | 无 | 无 | 头文件、编译记录；2026-03-26 已新增 PlatformInitConfig.h、PlatformInitConfigTest，并执行构建与定向 unit 验证 | 仅当字段集合与设计一致且 dasall_platform 构建通过时完成 |
 | PLAT-LNX-TODO-002 | Done | 定义 PlatformCapabilitySet 数据结构头文件 | platform 设计 6.5/6.7 | 6.5 PlatformCapabilitySet | L3 | platform/include/linux/LinuxPlatformCapabilities.h | thread/timer/queue/filesystem/network/ipc/hal 状态与 reason | unit：状态枚举与 reason 字段断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform | PLAT-LNX-TODO-001 | 无 | 无 | 头文件、编译记录；2026-03-27 已新增 LinuxPlatformCapabilities.h、LinuxPlatformCapabilitiesTest，并执行构建与定向 unit 验证 | 仅当能力项与三态语义完整且可编译时完成 |
 | PLAT-LNX-TODO-003 | Done | 定义 PlatformError 与 PlatformResult 头文件 | platform 设计 6.5/6.8；工程规范 3.6 | 6.5 PlatformError；6.8 异常分类 | L3 | platform/include/PlatformError.h、platform/include/PlatformResult.h | code/category/retryable_hint/syscall_name/errno_value/detail | unit：PlatformErrorMappingTest（或同等映射单测） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure | 无 | PLAT-LNX-BLK-04 | ErrorInfo 映射评审通过 | 头文件、映射测试；2026-03-27 已新增 PlatformError.h/PlatformResult.h、PlatformErrorMappingTest，并以一级失败域映射锚点完成 BLK-04 最小解阻 | 仅当错误字段可判定且映射测试通过（或保持 Blocked）时完成 |
-| PLAT-LNX-TODO-004 | Not Started | 定义 IThread 接口头文件 | platform 设计 6.6 | 6.6 IThread | L3 | platform/include/IThread.h | create_thread/join_thread/request_stop | unit：InterfaceSurfaceTest 覆盖 IThread | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当方法语义与错误语义对齐且接口测试通过时完成 |
+| PLAT-LNX-TODO-004 | Done | 定义 IThread 接口头文件 | platform 设计 6.6 | 6.6 IThread | L3 | platform/include/IThread.h | create_thread/join_thread/request_stop | unit：InterfaceSurfaceTest 覆盖 IThread | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IThread.h、InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当方法语义与错误语义对齐且接口测试通过时完成 |
 | PLAT-LNX-TODO-005 | Not Started | 定义 ITimer 接口头文件 | platform 设计 6.6 | 6.6 ITimer | L3 | platform/include/ITimer.h | start_once/start_periodic/cancel | unit：InterfaceSurfaceTest 覆盖 ITimer | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当方法语义、错误语义与超时约束可二值判定时完成 |
 | PLAT-LNX-TODO-006 | Not Started | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
 | PLAT-LNX-TODO-007 | Not Started | 定义 IFileSystem 接口头文件 | platform 设计 6.6 | 6.6 IFileSystem | L3 | platform/include/IFileSystem.h | read_file/write_atomic/ensure_directory/stat | unit：InterfaceSurfaceTest 覆盖 IFileSystem | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 NotFound/PermissionDenied/NoSpace 语义可判定时完成 |
@@ -441,3 +441,57 @@ Build 合规复核：
 4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
 5. 提交隔离：本轮提交范围限定为 PlatformError/PlatformResult、对应 unit 验证与证据文档。
 6. 环境恢复：前台终端回传异常，本轮通过后台终端执行+输出回读完成验收，不影响结果可追溯性。
+
+## 15. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-004）
+
+### 15.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-004。
+2. 可执行性依据：前置依赖 PLAT-LNX-TODO-003 已完成，当前无 blocker，范围收敛于单一接口头文件与最小 unit 验证。
+
+### 15.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.5 明确 ThreadOptions 字段为 name、stack_size_kb、detach_policy、affinity_hint。
+2. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IThread 接口包含 create_thread/join_thread/request_stop。
+3. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IThread 错误语义应对齐 InvalidArgument、Timeout、ResourceExhausted、InternalFailure。
+4. docs/architecture/platform_linux_detailed_design.md 7 映射表要求通过 InterfaceSurfaceTest 固化接口调用面。
+
+外部参考：
+
+1. C++ Core Guidelines 对抽象接口稳定性的实践建议：接口基类应聚焦最小契约并通过显式返回类型承载错误通道。本轮据此将 IThread 定义为纯抽象接口，并复用 PlatformResult 统一错误语义入口。
+
+D 结论：
+
+1. Design -> Build 映射：新增 platform/include/IThread.h，冻结 ThreadOptions/ThreadHandle 与 IThread 三方法签名。
+2. Build 三件套：
+   - 代码目标：新增 IThread 接口头文件。
+   - 测试目标：新增 InterfaceSurfaceTest，覆盖签名稳定性与 ThreadOptions/ThreadHandle 正负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test && ctest --test-dir build-ci -N -R InterfaceSurfaceTest && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure。
+3. D Gate：PASS。
+
+### 15.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/IThread.h：新增 ThreadDetachPolicy、ThreadOptions、ThreadHandle、ThreadJoinResult、IThread 接口定义。
+2. tests/unit/platform/linux/InterfaceSurfaceTest.cpp：新增 IThread surface 测试，覆盖默认值正例、一致性负例与方法签名静态断言。
+3. tests/unit/platform/linux/CMakeLists.txt：接入 InterfaceSurfaceTest。
+4. docs/todos/deliverables/PLAT-LNX-TODO-004-IThread设计收敛.md：补齐 D 阶段设计收敛与 Design->Build 映射。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test：通过。
+3. ctest --test-dir build-ci -N -R InterfaceSurfaceTest：通过，发现 1 个测试。
+4. ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：接口与对象命名自解释，未增加冗余注释。
+2. 正负例覆盖：InterfaceSurfaceTest 包含 ThreadOptions/ThreadHandle 默认值正例与非法输入负例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 验证新增测试可发现。
+4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
+5. 提交隔离：本轮提交范围限定为 IThread 接口、对应 unit 验证与证据文档。
+6. 环境恢复：沿用仓库 build-ci 命令链路完成验证，无额外环境阻塞。

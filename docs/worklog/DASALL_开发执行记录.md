@@ -8,6 +8,49 @@
 
 ---
 
+## 记录 #055
+
+- 日期：2026-03-27
+- 阶段：platform/linux 组件专项 TODO
+- 任务：PLAT-LNX-TODO-004 定义 IThread 接口头文件
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLAT-LNX-TODO-004-D 设计收敛：
+   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-004-IThread设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-004-IThread%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化 IThread 调用面、ThreadOptions 字段边界、Design->Build 映射与 D Gate。
+2. 完成 PLAT-LNX-TODO-004-B 代码落地：
+   - 新增 [platform/include/IThread.h](platform/include/IThread.h)
+   - 新增 [tests/unit/platform/linux/InterfaceSurfaceTest.cpp](tests/unit/platform/linux/InterfaceSurfaceTest.cpp)
+   - 更新 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
+   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test`
+   - `ctest --test-dir build-ci -N -R InterfaceSurfaceTest`
+   - `ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test` 通过。
+   - `ctest --test-dir build-ci -N -R InterfaceSurfaceTest` 通过，发现 1 个测试。
+   - `ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure` 通过，1/1 tests passed。
+
+### 结果
+
+1. platform/linux 线程接口调用面已冻结，后续 PosixThreadProvider 与 LinuxPlatformFactory 可以复用统一接口契约。
+2. 当前只完成 IThread 单接口冻结，ITimer/IQueue/IFileSystem/INetwork/IIPC 将按后续原子任务继续推进。
+
+### 下一步
+
+1. 按依赖顺序继续推进 PLAT-LNX-TODO-005，冻结 ITimer 接口头文件。
+
+### 风险
+
+1. 目前 ThreadJoinResult 只承载 joined 最小事实，若后续实现需要扩展 join 统计信息，应先经过接口评审避免隐式 breaking。
+
 ## 记录 #054
 
 - 日期：2026-03-27
