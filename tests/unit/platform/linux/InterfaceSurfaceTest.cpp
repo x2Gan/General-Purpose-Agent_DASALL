@@ -2,6 +2,7 @@
 #include <iostream>
 #include <type_traits>
 
+#include "ITimer.h"
 #include "IThread.h"
 #include "dasall/tests/support/TestAssertions.h"
 
@@ -78,6 +79,101 @@ void test_ithread_interface_surface_stays_stable() {
   assert_true(std::is_abstract_v<IThread>, "IThread should remain an abstract interface");
 }
 
+void test_timer_spec_default_values_match_linux_timer_baseline() {
+  using dasall::platform::TimerClockKind;
+  using dasall::platform::TimerMode;
+  using dasall::platform::TimerSpec;
+  using dasall::tests::support::assert_true;
+
+  const TimerSpec spec;
+
+  assert_true(spec.mode == TimerMode::OneShot,
+              "timer spec should default to one-shot mode");
+  assert_true(spec.interval_ms == 0U,
+              "one-shot timer spec should default to zero repeat interval");
+  assert_true(spec.initial_delay_ms == 0U,
+              "timer spec should allow immediate first fire by default");
+  assert_true(spec.clock_kind == TimerClockKind::Monotonic,
+              "timer spec should default to monotonic clock");
+  assert_true(spec.has_consistent_values(),
+              "default timer spec should remain internally consistent");
+}
+
+void test_timer_surface_rejects_inconsistent_timer_inputs() {
+  using dasall::platform::TimerCancelResult;
+  using dasall::platform::TimerDriftStats;
+  using dasall::platform::TimerHandle;
+  using dasall::platform::TimerMode;
+  using dasall::platform::TimerSpec;
+  using dasall::tests::support::assert_true;
+
+  TimerSpec invalid_periodic_spec;
+  invalid_periodic_spec.mode = TimerMode::Periodic;
+
+  TimerSpec valid_periodic_spec;
+  valid_periodic_spec.mode = TimerMode::Periodic;
+  valid_periodic_spec.interval_ms = 100U;
+
+  const TimerHandle invalid_handle{};
+  const TimerHandle valid_handle{
+      .native_id = 7,
+  };
+
+  const TimerDriftStats invalid_drift_stats{
+      .expiration_count = 0,
+      .last_drift_ms = 1,
+  };
+  const TimerDriftStats valid_drift_stats{
+      .expiration_count = 3,
+      .last_drift_ms = 4,
+      .max_drift_ms = 9,
+  };
+  const TimerCancelResult cancel_result{
+      .cancelled = true,
+      .drift_stats = valid_drift_stats,
+  };
+
+  assert_true(!invalid_periodic_spec.has_consistent_values(),
+              "periodic timer spec should reject zero repeat interval");
+  assert_true(valid_periodic_spec.has_consistent_values(),
+              "periodic timer spec should accept positive repeat interval");
+  assert_true(!invalid_handle.has_consistent_values(),
+              "timer handle should reject zero native timer id");
+  assert_true(valid_handle.has_consistent_values(),
+              "timer handle should accept non-zero native timer id");
+  assert_true(!invalid_drift_stats.has_consistent_values(),
+              "timer drift stats should reject drift without expirations");
+  assert_true(valid_drift_stats.has_consistent_values(),
+              "timer drift stats should accept monotonic drift snapshots");
+  assert_true(cancel_result.has_consistent_values(),
+              "timer cancel result should remain consistent when drift stats are valid");
+}
+
+void test_itimer_interface_surface_stays_stable() {
+  using dasall::platform::ITimer;
+  using dasall::platform::PlatformResult;
+  using dasall::platform::TimerCallback;
+  using dasall::platform::TimerCancelResult;
+  using dasall::platform::TimerHandle;
+  using dasall::platform::TimerSpec;
+  using dasall::tests::support::assert_true;
+
+  using StartOnceSignature =
+      PlatformResult<TimerHandle> (ITimer::*)(const TimerSpec&, TimerCallback);
+  using StartPeriodicSignature =
+      PlatformResult<TimerHandle> (ITimer::*)(const TimerSpec&, TimerCallback);
+  using CancelSignature = PlatformResult<TimerCancelResult> (ITimer::*)(const TimerHandle&);
+
+  static_assert(std::is_same_v<decltype(&ITimer::start_once), StartOnceSignature>,
+                "ITimer::start_once signature should remain stable");
+  static_assert(std::is_same_v<decltype(&ITimer::start_periodic), StartPeriodicSignature>,
+                "ITimer::start_periodic signature should remain stable");
+  static_assert(std::is_same_v<decltype(&ITimer::cancel), CancelSignature>,
+                "ITimer::cancel signature should remain stable");
+
+  assert_true(std::is_abstract_v<ITimer>, "ITimer should remain an abstract interface");
+}
+
 }  // namespace
 
 int main() {
@@ -85,6 +181,9 @@ int main() {
     test_thread_options_default_values_match_linux_thread_baseline();
     test_thread_surface_rejects_inconsistent_thread_inputs();
     test_ithread_interface_surface_stays_stable();
+    test_timer_spec_default_values_match_linux_timer_baseline();
+    test_timer_surface_rejects_inconsistent_timer_inputs();
+    test_itimer_interface_surface_stays_stable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
