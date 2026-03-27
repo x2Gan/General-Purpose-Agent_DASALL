@@ -168,7 +168,7 @@
 | PLAT-LNX-TODO-004 | Done | 定义 IThread 接口头文件 | platform 设计 6.6 | 6.6 IThread | L3 | platform/include/IThread.h | create_thread/join_thread/request_stop | unit：InterfaceSurfaceTest 覆盖 IThread | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IThread.h、InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当方法语义与错误语义对齐且接口测试通过时完成 |
 | PLAT-LNX-TODO-005 | Done | 定义 ITimer 接口头文件 | platform 设计 6.6 | 6.6 ITimer | L3 | platform/include/ITimer.h | start_once/start_periodic/cancel | unit：InterfaceSurfaceTest 覆盖 ITimer | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 ITimer.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当方法语义、错误语义与超时约束可二值判定时完成 |
 | PLAT-LNX-TODO-006 | Done | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IQueue.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
-| PLAT-LNX-TODO-007 | Not Started | 定义 IFileSystem 接口头文件 | platform 设计 6.6 | 6.6 IFileSystem | L3 | platform/include/IFileSystem.h | read_file/write_atomic/ensure_directory/stat | unit：InterfaceSurfaceTest 覆盖 IFileSystem | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 NotFound/PermissionDenied/NoSpace 语义可判定时完成 |
+| PLAT-LNX-TODO-007 | Done | 定义 IFileSystem 接口头文件 | platform 设计 6.6 | 6.6 IFileSystem | L3 | platform/include/IFileSystem.h | read_file/write_atomic/ensure_directory/stat | unit：InterfaceSurfaceTest 覆盖 IFileSystem | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IFileSystem.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 NotFound/PermissionDenied/NoSpace 语义可判定时完成 |
 | PLAT-LNX-TODO-008 | Not Started | 定义 INetwork 接口头文件 | platform 设计 6.6/6.9 | 6.6 INetwork | L3 | platform/include/INetwork.h | connect/send/receive/shutdown | unit：InterfaceSurfaceTest 覆盖 INetwork | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | PLAT-LNX-BLK-03 | fallback 策略补设计通过评审 | 接口头文件、接口单测或阻塞记录 | 仅当接口语义冻结且 fallback 边界不冲突时完成 |
 | PLAT-LNX-TODO-009 | Not Started | 定义 IIPC 接口头文件 | platform 设计 6.6/6.9 | 6.6 IIPC | L3 | platform/include/IIPC.h | listen/accept/connect/send/receive/close | unit：InterfaceSurfaceTest 覆盖 IIPC | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 AddressInUse/PeerClosed/PayloadTooLarge 路径可判定时完成 |
 | PLAT-LNX-TODO-010 | Not Started | 实现 LinuxPlatformFactory create(config) 骨架 | platform 设计 6.2/6.3/6.7；架构 9.2 | 6.7 初始化主流程 | L3 | platform/include/linux/LinuxPlatformFactory.h、platform/src/linux/LinuxPlatformFactory.cpp | create(config) | unit：LinuxPlatformFactoryTest（初始化顺序、必需能力缺失阻断） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R LinuxPlatformFactoryTest --output-on-failure | PLAT-LNX-TODO-001~009 | PLAT-LNX-BLK-02 | profile 注入键与输入结构统一 | 工厂代码、单测或阻塞记录 | 仅当初始化顺序符合 Profile Bind 后置条件且失败路径可判定时完成 |
@@ -602,4 +602,56 @@ Build 合规复核：
 3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
 4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
 5. 提交隔离：预期提交范围限定为 IQueue 接口、对应 unit 验证与证据文档。
+6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
+
+## 18. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-007）
+
+### 18.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-007。
+2. 可执行性依据：前置依赖 PLAT-LNX-TODO-003 已完成，当前无 blocker，范围收敛于单一接口头文件与最小 unit 验证。
+
+### 18.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IFileSystem 接口包含 read_file/write_atomic/ensure_directory/stat。
+2. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IFileSystem 错误语义应对齐 NotFound、PermissionDenied、NoSpace、IOFailure（已在 PlatformErrorCode 枚举中覆盖）。
+3. docs/architecture/platform_linux_detailed_design.md 6.2/6.3 明确 LinuxFileSystemProvider 输入为 FileOpenOptions、PathSpec、Buffer，输出为 FileResult、FileMetadata，并要求原子写入、权限失败、空间不足等事实可判定。
+4. docs/architecture/platform_linux_detailed_design.md 6.9 明确 platform.linux.fs.atomic_write_tmp_suffix 默认为 ".tmp"，platform.linux.fs.root_prefix 为 /var/lib/dasall。
+
+外部参考：
+
+1. POSIX rename(2) 文档明确在同一文件系统内 rename 是原子操作；本轮据此把临时文件后缀固化到 FileWriteOptions.tmp_suffix，以支撑 LinuxFileSystemProvider 的原子写逻辑。
+2. POSIX stat(2) 文档明确 struct stat 各字段语义；本轮据此冻结 FileStatResult 的 exists/is_regular_file/is_directory/size_bytes/last_modified_ms 字段，并固化相互排斥约束。
+
+D 结论：
+
+1. Design -> Build 映射：新增 platform/include/IFileSystem.h，冻结 FileWriteMode、FileWriteOptions、FileStatResult、FileBuffer 与 IFileSystem 四方法签名。
+2. Build 三件套：
+   - 代码目标：新增 IFileSystem 接口头文件。
+   - 测试目标：扩展 InterfaceSurfaceTest，覆盖签名稳定性、FileWriteOptions 默认值正例、空 tmp_suffix 与 FileStatResult 各约束违反负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure。
+3. D Gate：PASS。
+
+### 18.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/IFileSystem.h：新增 FileWriteMode、FileWriteOptions、FileStatResult、FileBuffer、IFileSystem 接口定义。
+2. tests/unit/platform/linux/InterfaceSurfaceTest.cpp：扩展 IFileSystem surface 测试，覆盖默认值正例、一致性负例与方法签名静态断言。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test：通过。
+3. ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：接口与对象命名自解释，未增加冗余注释。
+2. 正负例覆盖：InterfaceSurfaceTest 增补 FileWriteOptions 默认值正例，以及空 tmp_suffix、nonexistent-with-type、both-types、nonexistent-with-size 负例，以及有效文件与目录正例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
+4. TODO 证据回写：已回写主任务状态与本节执行记录。
+5. 提交隔离：本轮提交范围限定为 IFileSystem 接口、对应 unit 验证扩展与 TODO 回写。
 6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。

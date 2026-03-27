@@ -2,6 +2,7 @@
 #include <iostream>
 #include <type_traits>
 
+#include "IFileSystem.h"
 #include "IQueue.h"
 #include "ITimer.h"
 #include "IThread.h"
@@ -262,6 +263,116 @@ void test_iqueue_interface_surface_stays_stable() {
   assert_true(std::is_abstract_v<IQueue>, "IQueue should remain an abstract interface");
 }
 
+void test_file_write_options_default_values_match_linux_filesystem_baseline() {
+  using dasall::platform::FileWriteMode;
+  using dasall::platform::FileWriteOptions;
+  using dasall::tests::support::assert_true;
+
+  const FileWriteOptions options;
+
+  assert_true(options.mode == FileWriteMode::Overwrite,
+              "file write options should default to overwrite mode");
+  assert_true(!options.sync_on_write,
+              "file write options should not force sync by default");
+  assert_true(options.tmp_suffix == ".tmp",
+              "file write options should use .tmp suffix for atomic write by default");
+  assert_true(options.has_consistent_values(),
+              "default file write options should remain internally consistent");
+}
+
+void test_file_surface_rejects_inconsistent_filesystem_inputs() {
+  using dasall::platform::FileStatResult;
+  using dasall::platform::FileWriteOptions;
+  using dasall::tests::support::assert_true;
+
+  FileWriteOptions invalid_options;
+  invalid_options.tmp_suffix.clear();
+
+  const FileStatResult nonexistent_file{};
+
+  const FileStatResult invalid_stat_nonexistent_but_typed{
+      .exists = false,
+      .is_regular_file = true,
+      .is_directory = false,
+      .size_bytes = 0,
+      .last_modified_ms = 0,
+  };
+  const FileStatResult invalid_stat_both_types{
+      .exists = true,
+      .is_regular_file = true,
+      .is_directory = true,
+      .size_bytes = 0,
+      .last_modified_ms = 0,
+  };
+  const FileStatResult invalid_stat_nonexistent_with_size{
+      .exists = false,
+      .is_regular_file = false,
+      .is_directory = false,
+      .size_bytes = 100,
+      .last_modified_ms = 0,
+  };
+  const FileStatResult valid_stat_regular_file{
+      .exists = true,
+      .is_regular_file = true,
+      .is_directory = false,
+      .size_bytes = 4096,
+      .last_modified_ms = 1000,
+  };
+  const FileStatResult valid_stat_directory{
+      .exists = true,
+      .is_regular_file = false,
+      .is_directory = true,
+      .size_bytes = 0,
+      .last_modified_ms = 500,
+  };
+
+  assert_true(!invalid_options.has_consistent_values(),
+              "file write options should reject empty tmp suffix");
+  assert_true(nonexistent_file.has_consistent_values(),
+              "file stat result should accept nonexistent file with all defaults");
+  assert_true(!invalid_stat_nonexistent_but_typed.has_consistent_values(),
+              "file stat result should reject is_regular_file=true when file does not exist");
+  assert_true(!invalid_stat_both_types.has_consistent_values(),
+              "file stat result should reject both is_regular_file and is_directory set");
+  assert_true(!invalid_stat_nonexistent_with_size.has_consistent_values(),
+              "file stat result should reject nonzero size when file does not exist");
+  assert_true(valid_stat_regular_file.has_consistent_values(),
+              "file stat result should accept valid regular file stat");
+  assert_true(valid_stat_directory.has_consistent_values(),
+              "file stat result should accept valid directory stat");
+}
+
+void test_ifilesystem_interface_surface_stays_stable() {
+  using dasall::platform::FileBuffer;
+  using dasall::platform::FileStatResult;
+  using dasall::platform::FileWriteOptions;
+  using dasall::platform::IFileSystem;
+  using dasall::platform::PlatformResult;
+  using dasall::tests::support::assert_true;
+
+  using ReadFileSignature =
+      PlatformResult<FileBuffer> (IFileSystem::*)(const std::string&, std::int32_t);
+  using WriteAtomicSignature =
+      PlatformResult<bool> (IFileSystem::*)(const std::string&, const FileBuffer&,
+                                            const FileWriteOptions&);
+  using EnsureDirectorySignature =
+      PlatformResult<bool> (IFileSystem::*)(const std::string&);
+  using StatSignature =
+      PlatformResult<FileStatResult> (IFileSystem::*)(const std::string&);
+
+  static_assert(std::is_same_v<decltype(&IFileSystem::read_file), ReadFileSignature>,
+                "IFileSystem::read_file signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IFileSystem::write_atomic), WriteAtomicSignature>,
+                "IFileSystem::write_atomic signature should remain stable");
+  static_assert(
+      std::is_same_v<decltype(&IFileSystem::ensure_directory), EnsureDirectorySignature>,
+      "IFileSystem::ensure_directory signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IFileSystem::stat), StatSignature>,
+                "IFileSystem::stat signature should remain stable");
+
+  assert_true(std::is_abstract_v<IFileSystem>, "IFileSystem should remain an abstract interface");
+}
+
 }  // namespace
 
 int main() {
@@ -275,6 +386,9 @@ int main() {
     test_queue_options_default_values_match_linux_queue_baseline();
     test_queue_surface_rejects_inconsistent_queue_inputs();
     test_iqueue_interface_surface_stays_stable();
+    test_file_write_options_default_values_match_linux_filesystem_baseline();
+    test_file_surface_rejects_inconsistent_filesystem_inputs();
+    test_ifilesystem_interface_surface_stays_stable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
