@@ -57,3 +57,18 @@ dasall_apply_common_options(dasall_validation_report_unit_test)
 
 add_test(NAME ValidationReportTest COMMAND dasall_validation_report_unit_test)
 set_tests_properties(ValidationReportTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_last_known_good_store_unit_test
+  LastKnownGoodStoreInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_last_known_good_store_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_last_known_good_store_unit_test)
+
+add_test(NAME LastKnownGoodStoreInterfaceTest COMMAND dasall_last_known_good_store_unit_test)
+set_tests_properties(LastKnownGoodStoreInterfaceTest PROPERTIES LABELS "unit")
