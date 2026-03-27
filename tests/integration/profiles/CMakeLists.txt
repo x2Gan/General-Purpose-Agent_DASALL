@@ -1,0 +1,14 @@
+add_executable(dasall_profiles_build_runtime_integration_test
+  ProfilesBuildRuntimeIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_profiles_build_runtime_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_profiles_build_runtime_integration_test)
+
+add_test(NAME ProfilesBuildRuntimeIntegrationTest COMMAND dasall_profiles_build_runtime_integration_test)
+set_tests_properties(ProfilesBuildRuntimeIntegrationTest PROPERTIES LABELS "integration")
