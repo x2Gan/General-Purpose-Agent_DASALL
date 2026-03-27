@@ -4,6 +4,7 @@ target_sources(dasall_profiles
   PRIVATE
     src/ProfileYamlParser.cpp
     src/ProfileCatalog.cpp
+    src/BuildProfileResolver.cpp
     src/placeholder.cpp
 )
 
