@@ -1,3 +1,91 @@
-profile: edge_balanced
-enabled_modules: []
-runtime_budget: {}
+schema_version: 1
+profile_meta:
+	profile_id: edge_balanced
+	target_platform: linux-arm64-embedded
+	support_level: ga
+enabled_modules:
+	runtime: true
+	cognition: true
+	llm_cloud_adapter: true
+	llm_lan_adapter: true
+	llm_local_adapter: true
+	tools_builtin: true
+	tools_mcp: true
+	memory_vector: true
+	memory_experience: true
+	knowledge: true
+	multi_agent: false
+	platform_hal: true
+	infra_observability: true
+runtime_budget:
+	worker_threads: 6
+	max_memory_mb: 2048
+	max_tokens: 24000
+	max_turns: 12
+	max_tool_calls: 10
+	max_latency_ms: 7000
+	max_replan_count: 2
+model_profile:
+	planner:
+		route: lan.general
+		fallback_route: cloud.reasoning
+		streaming_enabled: false
+	responder:
+		route: lan.general
+		fallback_route: local.small
+		streaming_enabled: true
+token_budget_policy:
+	max_input_tokens: 8000
+	max_output_tokens: 2000
+	max_history_turns: 10
+	compression_threshold: 6000
+prompt_policy:
+	allowed_prompt_releases:
+		- stable
+	trusted_sources:
+		- profiles
+		- infra_config
+	tool_visibility_rules:
+		- builtin:all
+		- mcp:trusted
+capability_cache_policy:
+	refresh_interval_ms: 15000
+	expire_after_ms: 120000
+	stale_read_allowed: true
+	failure_backoff_ms: 3000
+degrade_policy:
+	fallback_chain:
+		- local.small
+		- builtin_only
+	allow_model_failover: true
+	allow_budget_degrade: true
+timeout_policy:
+	llm:
+		timeout_ms: 2500
+		retry_budget: 1
+		circuit_breaker_threshold: 4
+	tool:
+		timeout_ms: 1800
+		retry_budget: 1
+		circuit_breaker_threshold: 3
+	mcp:
+		timeout_ms: 1500
+		retry_budget: 0
+		circuit_breaker_threshold: 2
+	workflow:
+		timeout_ms: 4000
+		retry_budget: 1
+		circuit_breaker_threshold: 2
+execution_policy:
+	requires_high_risk_confirmation: true
+	safe_mode_enabled: true
+	audit_level: standard
+	allowed_tool_domains:
+		- builtin
+		- mcp
+ops_policy:
+	log_level: info
+	metrics_granularity: partial
+	trace_sample_ratio: 0.08
+	remote_diagnostics_enabled: true
+	upgrade_strategy: canary

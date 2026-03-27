@@ -476,6 +476,16 @@ profiles 模块非职责：
 | execution_policy | 确认门、安全模式、审计等级、允许工具域 | 任何档位都不得放宽高风险确认门槛 |
 | ops_policy | 日志等级、指标粒度、trace 抽样、远程诊断开关、升级策略 | factory_test 诊断更强，edge_minimal 最小化 |
 
+#### runtime_policy.yaml v1 冻结规则
+
+1. 当前冻结版本固定为 `schema_version: 1`；未显式声明或声明为其他版本的配置，在进入 overlay 合并前即拒绝。
+2. `schema_version: 1` 的顶层逻辑域固定为 `profile_meta`、`enabled_modules`、`runtime_budget`、`model_profile`、`token_budget_policy`、`prompt_policy`、`capability_cache_policy`、`degrade_policy`、`timeout_policy`、`execution_policy`、`ops_policy`；不得省略任一域。
+3. `profile_meta` 必填键固定为 `profile_id`、`target_platform`、`support_level`；`enabled_modules` 中所有模块与 adapter 开关必须显式声明为布尔值，不允许用“缺省即关闭”表示可选能力。
+4. `runtime_budget` 必填键固定为 `worker_threads`、`max_memory_mb`、`max_tokens`、`max_turns`、`max_tool_calls`、`max_latency_ms`、`max_replan_count`；所有值必须为正整数，且档位越低越保守。
+5. `model_profile` 至少冻结 `planner` 与 `responder` 两个 stage，且每个 stage 必须显式给出 `route`、`fallback_route`、`streaming_enabled`；`timeout_policy` 必须同时覆盖 `llm`、`tool`、`mcp`、`workflow` 四类预算。
+6. `prompt_policy`、`capability_cache_policy`、`degrade_policy`、`execution_policy`、`ops_policy` 中的必填键不得依赖运行时推断；新增字段只允许追加，不允许在 `schema_version: 1` 内重解释既有字段语义。
+7. `multi_agent`、`tools_mcp`、`llm_cloud_adapter` 等蓝图中标注为“可选”的能力，在具体档位资产中也必须冻结为显式基线值；若后续需要放开，只能通过新增字段或更高版本 schema 处理。
+
 #### 各参考档位默认意图
 
 | Profile | 默认策略摘要 |

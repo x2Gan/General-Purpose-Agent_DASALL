@@ -87,6 +87,18 @@ dasall_register_contract_test(
 )
 
 dasall_register_contract_test(
+  dasall_contract_profile_runtime_policy_schema_test
+  ProfileRuntimePolicySchemaContractTest
+  smoke/ProfileRuntimePolicySchemaContractTest.cpp
+  smoke
+)
+
+target_compile_definitions(dasall_contract_profile_runtime_policy_schema_test
+  PRIVATE
+    DASALL_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+dasall_register_contract_test(
   dasall_contract_field_evolution_guards_test
   FieldEvolutionGuardsContractTest
   smoke/FieldEvolutionGuardsContractTest.cpp

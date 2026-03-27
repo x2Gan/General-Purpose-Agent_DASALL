@@ -1,3 +1,89 @@
-profile: factory_test
-enabled_modules: []
-runtime_budget: {}
+schema_version: 1
+profile_meta:
+	profile_id: factory_test
+	target_platform: linux-arm64-factory
+	support_level: diagnostic
+enabled_modules:
+	runtime: true
+	cognition: true
+	llm_cloud_adapter: false
+	llm_lan_adapter: true
+	llm_local_adapter: true
+	tools_builtin: true
+	tools_mcp: false
+	memory_vector: false
+	memory_experience: false
+	knowledge: false
+	multi_agent: false
+	platform_hal: true
+	infra_observability: true
+runtime_budget:
+	worker_threads: 4
+	max_memory_mb: 1024
+	max_tokens: 12000
+	max_turns: 8
+	max_tool_calls: 8
+	max_latency_ms: 6000
+	max_replan_count: 2
+model_profile:
+	planner:
+		route: lan.diagnostic
+		fallback_route: local.small
+		streaming_enabled: false
+	responder:
+		route: local.small
+		fallback_route: lan.diagnostic
+		streaming_enabled: true
+token_budget_policy:
+	max_input_tokens: 4000
+	max_output_tokens: 1200
+	max_history_turns: 6
+	compression_threshold: 2500
+prompt_policy:
+	allowed_prompt_releases:
+		- stable
+	trusted_sources:
+		- profiles
+		- factory_console
+	tool_visibility_rules:
+		- builtin:all
+capability_cache_policy:
+	refresh_interval_ms: 12000
+	expire_after_ms: 60000
+	stale_read_allowed: true
+	failure_backoff_ms: 1500
+degrade_policy:
+	fallback_chain:
+		- local.small
+		- builtin_only
+	allow_model_failover: true
+	allow_budget_degrade: true
+timeout_policy:
+	llm:
+		timeout_ms: 2200
+		retry_budget: 1
+		circuit_breaker_threshold: 3
+	tool:
+		timeout_ms: 1500
+		retry_budget: 1
+		circuit_breaker_threshold: 2
+	mcp:
+		timeout_ms: 1200
+		retry_budget: 0
+		circuit_breaker_threshold: 1
+	workflow:
+		timeout_ms: 3000
+		retry_budget: 0
+		circuit_breaker_threshold: 2
+execution_policy:
+	requires_high_risk_confirmation: true
+	safe_mode_enabled: true
+	audit_level: elevated
+	allowed_tool_domains:
+		- builtin
+ops_policy:
+	log_level: debug
+	metrics_granularity: full
+	trace_sample_ratio: 0.5
+	remote_diagnostics_enabled: true
+	upgrade_strategy: hold

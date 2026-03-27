@@ -1,3 +1,87 @@
-profile: edge_minimal
-enabled_modules: []
-runtime_budget: {}
+schema_version: 1
+profile_meta:
+	profile_id: edge_minimal
+	target_platform: linux-arm64-embedded
+	support_level: constrained
+enabled_modules:
+	runtime: true
+	cognition: true
+	llm_cloud_adapter: false
+	llm_lan_adapter: false
+	llm_local_adapter: true
+	tools_builtin: true
+	tools_mcp: false
+	memory_vector: false
+	memory_experience: false
+	knowledge: false
+	multi_agent: false
+	platform_hal: true
+	infra_observability: true
+runtime_budget:
+	worker_threads: 2
+	max_memory_mb: 512
+	max_tokens: 8000
+	max_turns: 6
+	max_tool_calls: 4
+	max_latency_ms: 5000
+	max_replan_count: 1
+model_profile:
+	planner:
+		route: local.small
+		fallback_route: builtin_only
+		streaming_enabled: false
+	responder:
+		route: local.small
+		fallback_route: builtin_only
+		streaming_enabled: true
+token_budget_policy:
+	max_input_tokens: 3000
+	max_output_tokens: 800
+	max_history_turns: 4
+	compression_threshold: 2000
+prompt_policy:
+	allowed_prompt_releases:
+		- stable
+	trusted_sources:
+		- profiles
+	tool_visibility_rules:
+		- builtin:essential
+capability_cache_policy:
+	refresh_interval_ms: 10000
+	expire_after_ms: 90000
+	stale_read_allowed: true
+	failure_backoff_ms: 2000
+degrade_policy:
+	fallback_chain:
+		- builtin_only
+	allow_model_failover: false
+	allow_budget_degrade: true
+timeout_policy:
+	llm:
+		timeout_ms: 1800
+		retry_budget: 0
+		circuit_breaker_threshold: 3
+	tool:
+		timeout_ms: 1200
+		retry_budget: 0
+		circuit_breaker_threshold: 2
+	mcp:
+		timeout_ms: 1000
+		retry_budget: 0
+		circuit_breaker_threshold: 1
+	workflow:
+		timeout_ms: 2500
+		retry_budget: 0
+		circuit_breaker_threshold: 2
+execution_policy:
+	requires_high_risk_confirmation: true
+	safe_mode_enabled: true
+	audit_level: minimal
+	allowed_tool_domains:
+		- builtin
+ops_policy:
+	log_level: warn
+	metrics_granularity: minimal
+	trace_sample_ratio: 0.02
+	remote_diagnostics_enabled: false
+	upgrade_strategy: manual

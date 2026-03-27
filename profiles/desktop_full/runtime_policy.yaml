@@ -1,3 +1,92 @@
-profile: desktop_full
-enabled_modules: []
-runtime_budget: {}
+schema_version: 1
+profile_meta:
+	profile_id: desktop_full
+	target_platform: linux-x86_64-workstation
+	support_level: ga
+enabled_modules:
+	runtime: true
+	cognition: true
+	llm_cloud_adapter: true
+	llm_lan_adapter: true
+	llm_local_adapter: true
+	tools_builtin: true
+	tools_mcp: true
+	memory_vector: true
+	memory_experience: true
+	knowledge: true
+	multi_agent: true
+	platform_hal: false
+	infra_observability: true
+runtime_budget:
+	worker_threads: 12
+	max_memory_mb: 8192
+	max_tokens: 64000
+	max_turns: 24
+	max_tool_calls: 24
+	max_latency_ms: 8000
+	max_replan_count: 3
+model_profile:
+	planner:
+		route: cloud.reasoning
+		fallback_route: lan.general
+		streaming_enabled: false
+	responder:
+		route: cloud.general
+		fallback_route: local.small
+		streaming_enabled: true
+token_budget_policy:
+	max_input_tokens: 16000
+	max_output_tokens: 4000
+	max_history_turns: 18
+	compression_threshold: 12000
+prompt_policy:
+	allowed_prompt_releases:
+		- stable
+		- canary
+	trusted_sources:
+		- profiles
+		- infra_config
+	tool_visibility_rules:
+		- builtin:all
+		- mcp:trusted
+capability_cache_policy:
+	refresh_interval_ms: 30000
+	expire_after_ms: 180000
+	stale_read_allowed: false
+	failure_backoff_ms: 5000
+degrade_policy:
+	fallback_chain:
+		- lan.general
+		- local.small
+	allow_model_failover: true
+	allow_budget_degrade: true
+timeout_policy:
+	llm:
+		timeout_ms: 3500
+		retry_budget: 2
+		circuit_breaker_threshold: 5
+	tool:
+		timeout_ms: 2500
+		retry_budget: 1
+		circuit_breaker_threshold: 4
+	mcp:
+		timeout_ms: 2000
+		retry_budget: 1
+		circuit_breaker_threshold: 3
+	workflow:
+		timeout_ms: 5000
+		retry_budget: 1
+		circuit_breaker_threshold: 3
+execution_policy:
+	requires_high_risk_confirmation: true
+	safe_mode_enabled: true
+	audit_level: full
+	allowed_tool_domains:
+		- builtin
+		- mcp
+ops_policy:
+	log_level: info
+	metrics_granularity: full
+	trace_sample_ratio: 0.2
+	remote_diagnostics_enabled: true
+	upgrade_strategy: staged
