@@ -2,6 +2,7 @@
 #include <iostream>
 #include <type_traits>
 
+#include "IQueue.h"
 #include "ITimer.h"
 #include "IThread.h"
 #include "dasall/tests/support/TestAssertions.h"
@@ -174,6 +175,93 @@ void test_itimer_interface_surface_stays_stable() {
   assert_true(std::is_abstract_v<ITimer>, "ITimer should remain an abstract interface");
 }
 
+void test_queue_options_default_values_match_linux_queue_baseline() {
+  using dasall::platform::QueueOptions;
+  using dasall::platform::QueueOverflowPolicy;
+  using dasall::platform::QueueShutdownPolicy;
+  using dasall::tests::support::assert_true;
+
+  const QueueOptions options;
+
+  assert_true(options.capacity == 1024U,
+              "queue options should keep default capacity from linux baseline");
+  assert_true(options.overflow_policy == QueueOverflowPolicy::Reject,
+              "queue options should default to reject overflow policy");
+  assert_true(options.shutdown_policy == QueueShutdownPolicy::Drain,
+              "queue options should default to drain shutdown policy");
+  assert_true(options.has_consistent_values(),
+              "default queue options should remain internally consistent");
+}
+
+void test_queue_surface_rejects_inconsistent_queue_inputs() {
+  using dasall::platform::QueueHandle;
+  using dasall::platform::QueueItem;
+  using dasall::platform::QueueOptions;
+  using dasall::platform::QueuePopResult;
+  using dasall::tests::support::assert_true;
+
+  QueueOptions invalid_options;
+  invalid_options.capacity = 0;
+
+  const QueueHandle invalid_handle{};
+  const QueueHandle valid_handle{
+      .native_id = 9,
+  };
+
+  const QueuePopResult invalid_pop_result{
+      .has_item = false,
+      .item = QueueItem{1U, 2U, 3U},
+      .queue_depth = 0,
+  };
+  const QueuePopResult valid_pop_result{
+      .has_item = true,
+      .item = QueueItem{7U},
+      .queue_depth = 1,
+  };
+
+  assert_true(!invalid_options.has_consistent_values(),
+              "queue options should reject zero capacity");
+  assert_true(!invalid_handle.has_consistent_values(),
+              "queue handle should reject zero native queue id");
+  assert_true(valid_handle.has_consistent_values(),
+              "queue handle should accept non-zero native queue id");
+  assert_true(!invalid_pop_result.has_consistent_values(),
+              "queue pop result should reject payload when has_item is false");
+  assert_true(valid_pop_result.has_consistent_values(),
+              "queue pop result should accept payload when has_item is true");
+}
+
+void test_iqueue_interface_surface_stays_stable() {
+  using dasall::platform::IQueue;
+  using dasall::platform::PlatformResult;
+  using dasall::platform::QueueCloseResult;
+  using dasall::platform::QueueHandle;
+  using dasall::platform::QueueItem;
+  using dasall::platform::QueueOptions;
+  using dasall::platform::QueuePopResult;
+  using dasall::platform::QueuePushResult;
+  using dasall::tests::support::assert_true;
+
+  using CreateQueueSignature = PlatformResult<QueueHandle> (IQueue::*)(const QueueOptions&);
+  using PushSignature =
+      PlatformResult<QueuePushResult> (IQueue::*)(const QueueHandle&, const QueueItem&,
+                                                  std::int32_t);
+  using PopSignature =
+      PlatformResult<QueuePopResult> (IQueue::*)(const QueueHandle&, std::int32_t);
+  using CloseSignature = PlatformResult<QueueCloseResult> (IQueue::*)(const QueueHandle&);
+
+  static_assert(std::is_same_v<decltype(&IQueue::create_queue), CreateQueueSignature>,
+                "IQueue::create_queue signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IQueue::push), PushSignature>,
+                "IQueue::push signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IQueue::pop), PopSignature>,
+                "IQueue::pop signature should remain stable");
+  static_assert(std::is_same_v<decltype(&IQueue::close), CloseSignature>,
+                "IQueue::close signature should remain stable");
+
+  assert_true(std::is_abstract_v<IQueue>, "IQueue should remain an abstract interface");
+}
+
 }  // namespace
 
 int main() {
@@ -184,6 +272,9 @@ int main() {
     test_timer_spec_default_values_match_linux_timer_baseline();
     test_timer_surface_rejects_inconsistent_timer_inputs();
     test_itimer_interface_surface_stays_stable();
+    test_queue_options_default_values_match_linux_queue_baseline();
+    test_queue_surface_rejects_inconsistent_queue_inputs();
+    test_iqueue_interface_surface_stays_stable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

@@ -167,7 +167,7 @@
 | PLAT-LNX-TODO-003 | Done | 定义 PlatformError 与 PlatformResult 头文件 | platform 设计 6.5/6.8；工程规范 3.6 | 6.5 PlatformError；6.8 异常分类 | L3 | platform/include/PlatformError.h、platform/include/PlatformResult.h | code/category/retryable_hint/syscall_name/errno_value/detail | unit：PlatformErrorMappingTest（或同等映射单测） | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R PlatformErrorMappingTest --output-on-failure | 无 | PLAT-LNX-BLK-04 | ErrorInfo 映射评审通过 | 头文件、映射测试；2026-03-27 已新增 PlatformError.h/PlatformResult.h、PlatformErrorMappingTest，并以一级失败域映射锚点完成 BLK-04 最小解阻 | 仅当错误字段可判定且映射测试通过（或保持 Blocked）时完成 |
 | PLAT-LNX-TODO-004 | Done | 定义 IThread 接口头文件 | platform 设计 6.6 | 6.6 IThread | L3 | platform/include/IThread.h | create_thread/join_thread/request_stop | unit：InterfaceSurfaceTest 覆盖 IThread | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IThread.h、InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当方法语义与错误语义对齐且接口测试通过时完成 |
 | PLAT-LNX-TODO-005 | Done | 定义 ITimer 接口头文件 | platform 设计 6.6 | 6.6 ITimer | L3 | platform/include/ITimer.h | start_once/start_periodic/cancel | unit：InterfaceSurfaceTest 覆盖 ITimer | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 ITimer.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当方法语义、错误语义与超时约束可二值判定时完成 |
-| PLAT-LNX-TODO-006 | Not Started | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
+| PLAT-LNX-TODO-006 | Done | 定义 IQueue 接口头文件 | platform 设计 6.6 | 6.6 IQueue | L3 | platform/include/IQueue.h | create_queue/push/pop/close | unit：InterfaceSurfaceTest 覆盖 IQueue | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测；2026-03-27 已新增 IQueue.h、扩展 InterfaceSurfaceTest 并完成定向构建与单测验证 | 仅当 QueueClosed/ResourceExhausted 语义可测试断言时完成 |
 | PLAT-LNX-TODO-007 | Not Started | 定义 IFileSystem 接口头文件 | platform 设计 6.6 | 6.6 IFileSystem | L3 | platform/include/IFileSystem.h | read_file/write_atomic/ensure_directory/stat | unit：InterfaceSurfaceTest 覆盖 IFileSystem | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 NotFound/PermissionDenied/NoSpace 语义可判定时完成 |
 | PLAT-LNX-TODO-008 | Not Started | 定义 INetwork 接口头文件 | platform 设计 6.6/6.9 | 6.6 INetwork | L3 | platform/include/INetwork.h | connect/send/receive/shutdown | unit：InterfaceSurfaceTest 覆盖 INetwork | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | PLAT-LNX-BLK-03 | fallback 策略补设计通过评审 | 接口头文件、接口单测或阻塞记录 | 仅当接口语义冻结且 fallback 边界不冲突时完成 |
 | PLAT-LNX-TODO-009 | Not Started | 定义 IIPC 接口头文件 | platform 设计 6.6/6.9 | 6.6 IIPC | L3 | platform/include/IIPC.h | listen/accept/connect/send/receive/close | unit：InterfaceSurfaceTest 覆盖 IIPC | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure | PLAT-LNX-TODO-003 | 无 | 无 | 接口头文件、接口单测 | 仅当 AddressInUse/PeerClosed/PayloadTooLarge 路径可判定时完成 |
@@ -548,4 +548,58 @@ Build 合规复核：
 3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
 4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
 5. 提交隔离：预期提交范围限定为 ITimer 接口、对应 unit 验证与证据文档。
+6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
+
+## 17. 本轮执行记录（2026-03-27 / PLAT-LNX-TODO-006）
+
+### 17.1 选中任务
+
+1. 本轮任务：PLAT-LNX-TODO-006。
+2. 可执行性依据：前置依赖 PLAT-LNX-TODO-003 已完成，当前无 blocker，范围收敛于单一接口头文件与最小 unit 验证。
+
+### 17.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/platform_linux_detailed_design.md 6.5 明确 QueueOptions 字段为 capacity、overflow_policy、shutdown_policy。
+2. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IQueue 接口包含 create_queue/push/pop/close。
+3. docs/architecture/platform_linux_detailed_design.md 6.6 明确 IQueue 错误语义应对齐 Timeout、QueueClosed、ResourceExhausted。
+4. docs/architecture/platform_linux_detailed_design.md 6.2/6.5 明确 BlockingQueueProvider 输出 QueueHandle、QueueStats，且超时/关闭/容量耗尽需可判定。
+
+外部参考：
+
+1. Linux POSIX message queue 文档将 queue descriptor 生命周期与 send/receive/close 分离，本轮据此保留 QueueHandle + create/push/pop/close 的接口面。
+2. Linux POSIX message queue 文档强调队列容量受系统资源上限约束，本轮据此固定 QueueOptions.capacity 与 overflow_policy，并保持 ResourceExhausted 错误语义入口。
+
+D 结论：
+
+1. Design -> Build 映射：新增 platform/include/IQueue.h，冻结 QueueOptions/QueueHandle/QueuePushResult/QueuePopResult/QueueCloseResult 与 IQueue 四方法签名。
+2. Build 三件套：
+   - 代码目标：新增 IQueue 接口头文件。
+   - 测试目标：扩展 InterfaceSurfaceTest，覆盖签名稳定性、QueueOptions 默认值正例、零容量与不一致 pop 结果负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test && ctest --test-dir build-ci -N -R InterfaceSurfaceTest && ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure。
+3. D Gate：PASS。
+
+### 17.3 Build 交付与证据
+
+交付物：
+
+1. platform/include/IQueue.h：新增 QueueOverflowPolicy、QueueShutdownPolicy、QueueOptions、QueueHandle、QueuePushResult、QueuePopResult、QueueCloseResult、IQueue 接口定义。
+2. tests/unit/platform/linux/InterfaceSurfaceTest.cpp：扩展 IQueue surface 测试，覆盖默认值正例、一致性负例与方法签名静态断言。
+3. docs/todos/deliverables/PLAT-LNX-TODO-006-IQueue设计收敛.md：补齐 D 阶段设计收敛与 Design->Build 映射。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_platform dasall_platform_interface_surface_unit_test：通过。
+3. ctest --test-dir build-ci -N -R InterfaceSurfaceTest：通过，发现 1 个测试。
+4. ctest --test-dir build-ci -R InterfaceSurfaceTest --output-on-failure：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：接口与对象命名自解释，未增加冗余注释。
+2. 正负例覆盖：InterfaceSurfaceTest 增补 QueueOptions 默认值正例，以及零容量、不一致 pop 结果、零句柄负例。
+3. 测试发现性：已通过 ctest --test-dir build-ci -N -R InterfaceSurfaceTest 复核新增测试可发现。
+4. TODO 证据回写：已回写主任务状态、本节执行记录和 D 阶段交付文档路径。
+5. 提交隔离：预期提交范围限定为 IQueue 接口、对应 unit 验证与证据文档。
 6. 环境恢复：沿用仓库 build-ci 命令链路执行验证。
