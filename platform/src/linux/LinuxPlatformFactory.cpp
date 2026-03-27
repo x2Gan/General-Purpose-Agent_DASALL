@@ -33,18 +33,48 @@ PlatformResult<LinuxPlatformBundle> LinuxPlatformFactory::create(
       detect_capabilities(config, &trace);
   trace.emplace_back("CapabilitiesResolved");
 
-  if (!has_required_capabilities(detected_capabilities)) {
+  CapabilityRegistry registry;
+  const bool registry_ok =
+      registry.set_capability(LinuxCapabilityKind::Thread, detected_capabilities.thread) &&
+      registry.set_capability(LinuxCapabilityKind::Timer, detected_capabilities.timer) &&
+      registry.set_capability(LinuxCapabilityKind::Queue, detected_capabilities.queue) &&
+      registry.set_capability(LinuxCapabilityKind::FileSystem,
+                              detected_capabilities.filesystem) &&
+      registry.set_capability(LinuxCapabilityKind::Network, detected_capabilities.network) &&
+      registry.set_capability(LinuxCapabilityKind::IPC, detected_capabilities.ipc) &&
+      registry.set_capability(LinuxCapabilityKind::HAL, detected_capabilities.hal);
+
+  if (!registry_ok) {
     return PlatformResult<LinuxPlatformBundle>::failure(
-        make_error(PlatformErrorCode::ResourceExhausted,
-                   PlatformErrorCategory::Resource,
-                   "required platform capability is unavailable"));
+        make_error(PlatformErrorCode::InternalFailure,
+                   PlatformErrorCategory::Internal,
+                   "capability registry rejected detected capability state"));
+  }
+
+  const std::array<LinuxCapabilityKind, 6> required_capabilities = {
+      LinuxCapabilityKind::Thread,
+      LinuxCapabilityKind::Timer,
+      LinuxCapabilityKind::Queue,
+      LinuxCapabilityKind::FileSystem,
+      LinuxCapabilityKind::Network,
+      LinuxCapabilityKind::IPC,
+  };
+
+  for (const LinuxCapabilityKind kind : required_capabilities) {
+    const std::optional<PlatformCapability> capability = registry.get_capability(kind);
+    if (!capability.has_value() || !capability->is_enabled()) {
+      return PlatformResult<LinuxPlatformBundle>::failure(
+          make_error(PlatformErrorCode::ResourceExhausted,
+                     PlatformErrorCategory::Resource,
+                     "required platform capability is unavailable"));
+    }
   }
 
   trace.emplace_back("ReadyForServiceInit");
 
   LinuxPlatformBundle bundle;
   bundle.config = config;
-  bundle.capabilities = detected_capabilities;
+  bundle.capabilities = registry.snapshot();
   bundle.initialization_trace = std::move(trace);
 
   if (!bundle.has_consistent_values()) {
@@ -87,26 +117,6 @@ PlatformCapabilitySet LinuxPlatformFactory::detect_capabilities(
   capabilities.hal = config.enable_hal ? PlatformCapability::enabled()
                                        : PlatformCapability::disabled("DisabledByProfile");
   return capabilities;
-}
-
-bool LinuxPlatformFactory::has_required_capabilities(
-    const PlatformCapabilitySet& capabilities) const {
-  const std::array<const PlatformCapability*, 6> required_capabilities = {
-      &capabilities.thread,
-      &capabilities.timer,
-      &capabilities.queue,
-      &capabilities.filesystem,
-      &capabilities.network,
-      &capabilities.ipc,
-  };
-
-  for (const PlatformCapability* capability : required_capabilities) {
-    if (capability == nullptr || !capability->is_enabled()) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 PlatformError LinuxPlatformFactory::make_error(PlatformErrorCode code,

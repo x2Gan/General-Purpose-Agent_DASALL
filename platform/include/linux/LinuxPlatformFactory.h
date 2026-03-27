@@ -11,6 +11,7 @@
 #include "IThread.h"
 #include "ITimer.h"
 #include "PlatformResult.h"
+#include "linux/CapabilityRegistry.h"
 #include "linux/LinuxPlatformCapabilities.h"
 #include "linux/PlatformInitConfig.h"
 
@@ -41,7 +42,6 @@ class LinuxPlatformFactory {
   [[nodiscard]] PlatformCapabilitySet detect_capabilities(
       const PlatformInitConfig& config,
       std::vector<std::string>* initialization_trace) const;
-    [[nodiscard]] bool has_required_capabilities(const PlatformCapabilitySet& capabilities) const;
   [[nodiscard]] PlatformError make_error(PlatformErrorCode code,
                                          PlatformErrorCategory category,
                                          std::string detail) const;

@@ -2,6 +2,7 @@ add_library(dasall_platform STATIC)
 
 target_sources(dasall_platform
   PRIVATE
+    src/linux/CapabilityRegistry.cpp
     src/linux/LinuxPlatformFactory.cpp
     src/placeholder.cpp
 )
