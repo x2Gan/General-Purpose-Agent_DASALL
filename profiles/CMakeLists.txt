@@ -6,6 +6,7 @@ target_sources(dasall_profiles
     src/ProfileCatalog.cpp
     src/BuildProfileResolver.cpp
     src/RuntimePolicyProvider.cpp
+    src/ProfileOverlayComposer.cpp
     src/ProfileCompatibilityValidator.cpp
     src/LastKnownGoodStore.cpp
     src/ProfileTelemetryAdapter.cpp

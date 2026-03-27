@@ -124,6 +124,21 @@ dasall_apply_common_options(dasall_profile_matrix_consistency_unit_test)
 add_test(NAME ProfileMatrixConsistencyTest COMMAND dasall_profile_matrix_consistency_unit_test)
 set_tests_properties(ProfileMatrixConsistencyTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_profile_overlay_composer_unit_test
+  ProfileOverlayComposerTest.cpp
+)
+
+target_link_libraries(dasall_profile_overlay_composer_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_profile_overlay_composer_unit_test)
+
+add_test(NAME ProfileOverlayComposerTest COMMAND dasall_profile_overlay_composer_unit_test)
+set_tests_properties(ProfileOverlayComposerTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_validation_report_unit_test
   ValidationReportTest.cpp
 )
