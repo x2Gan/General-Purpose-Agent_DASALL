@@ -1,39 +1,61 @@
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
+#include <type_traits>
 
 #include "audit/IAuditLogger.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
 
+dasall::infra::AuditContext make_context() {
+  return dasall::infra::AuditContext{};
+}
+
+dasall::infra::ExportQuery make_query() {
+  return dasall::infra::ExportQuery{
+      .start_ts = 1711785602000,
+      .end_ts = 1711785602600,
+      .actor = std::string("runtime"),
+      .action = std::string("tool.execute"),
+      .target = std::string("shell"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
+      .page_token = std::string(),
+  };
+}
+
 class NullAuditLogger final : public dasall::infra::audit::IAuditLogger {
  public:
-  dasall::infra::audit::AuditWriteResult write_audit(
-      const dasall::infra::AuditEvent& event) override {
-    if (!event.has_required_fields() || !event.side_effects_are_serializable()) {
-      return dasall::infra::audit::AuditWriteResult::failure(
-          dasall::contracts::ResultCode::ValidationFieldMissing,
-          "audit event must stay valid and serializable",
-          "audit.write",
-          "NullAuditLogger");
+  dasall::infra::AuditWriteOutcome write_audit(
+      const dasall::infra::AuditEvent& event,
+      const dasall::infra::AuditContext& context) override {
+    if (!event.has_required_fields() || !event.side_effects_are_serializable() ||
+        !context.has_non_empty_fields()) {
+      return dasall::infra::AuditWriteOutcome{
+          .accepted = false,
+          .persisted = false,
+          .fallback_used = false,
+          .error_code = dasall::contracts::ResultCode::ValidationFieldMissing,
+      };
     }
 
-    return dasall::infra::audit::AuditWriteResult::success();
+    return dasall::infra::AuditWriteOutcome{
+        .accepted = true,
+        .persisted = true,
+        .fallback_used = false,
+      .error_code = std::nullopt,
+    };
   }
 
-  dasall::infra::audit::AuditExportResult export_audit(
-      const dasall::infra::audit::AuditExportFilter& filter) override {
-    if (!filter.is_specified()) {
-      return dasall::infra::audit::AuditExportResult::failure(
-          dasall::contracts::ResultCode::ValidationFieldMissing,
-          "audit export filter must stay explicitly specified",
-          "audit.export",
-          "NullAuditLogger");
+  dasall::infra::ExportResult export_audit(
+      const dasall::infra::ExportQuery& query) override {
+    if (!query.has_ordered_window()) {
+      return dasall::infra::ExportResult{};
     }
 
-    return dasall::infra::audit::AuditExportResult::success(
-        {dasall::infra::AuditEvent{
+    return dasall::infra::ExportResult{
+        .records = {dasall::infra::AuditEvent{
       .event_id = std::string("audit-event-export-001"),
             .action = std::string("tool.execute"),
             .actor = std::string("runtime"),
@@ -43,16 +65,29 @@ class NullAuditLogger final : public dasall::infra::audit::IAuditLogger {
                              .ref = std::string("tool-call-001")},
             .side_effects = {"wrote_file"},
       .timestamp = 1711785602000,
-        }});
+        }},
+        .next_page_token = std::string(),
+        .truncated = false,
+        .checksum = std::string("null-audit-export"),
+    };
   }
 };
 
-void test_audit_logger_interface_accepts_audit_event_and_placeholder_export_filter() {
+void test_audit_logger_interface_freezes_write_and_export_signatures() {
   using dasall::infra::AuditEvent;
+  using dasall::infra::AuditContext;
   using dasall::infra::AuditEvidenceKind;
   using dasall::infra::AuditOutcome;
-  using dasall::infra::audit::AuditExportFilter;
+  using dasall::infra::AuditWriteOutcome;
+  using dasall::infra::ExportQuery;
+  using dasall::infra::ExportResult;
+  using dasall::infra::audit::IAuditLogger;
   using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IAuditLogger::write_audit),
+                               AuditWriteOutcome (IAuditLogger::*)(const AuditEvent&, const AuditContext&)>);
+  static_assert(std::is_same_v<decltype(&IAuditLogger::export_audit),
+                               ExportResult (IAuditLogger::*)(const ExportQuery&)>);
 
   NullAuditLogger logger;
 
@@ -68,21 +103,21 @@ void test_audit_logger_interface_accepts_audit_event_and_placeholder_export_filt
       .timestamp = 1711785602100,
   };
 
-  const auto write_result = logger.write_audit(event);
-  assert_true(write_result.ok,
-              "IAuditLogger skeleton should accept a valid AuditEvent after AuditEvent freeze");
+  const auto write_result = logger.write_audit(event, make_context());
+  assert_true(write_result.is_success(),
+              "IAuditLogger interface should accept a valid AuditEvent/AuditContext pair after the 6.6 freeze");
 
-  const auto export_result = logger.export_audit(AuditExportFilter{.opaque_selector = "last-hour"});
-  assert_true(export_result.ok,
-              "IAuditLogger skeleton should accept a specified placeholder export filter");
+  const auto export_result = logger.export_audit(make_query());
   assert_true(export_result.records.size() == 1,
-              "placeholder export should prove that AuditEvent remains the export payload boundary");
+              "IAuditLogger export should keep AuditEvent as the retained export payload boundary");
+  assert_true(export_result.has_checksum() && export_result.is_complete_page(),
+              "IAuditLogger export should surface the frozen ExportResult pagination and checksum fields");
 }
 
-void test_audit_logger_interface_reports_validation_failures_observably() {
+void test_audit_logger_interface_rejects_invalid_event_or_context_on_write_path() {
   using dasall::infra::AuditEvent;
+  using dasall::infra::AuditContext;
   using dasall::infra::AuditOutcome;
-  using dasall::infra::audit::AuditExportFilter;
   using dasall::tests::support::assert_true;
 
   NullAuditLogger logger;
@@ -98,25 +133,29 @@ void test_audit_logger_interface_reports_validation_failures_observably() {
       .timestamp = 1711785602200,
   };
 
-  const auto write_result = logger.write_audit(invalid_event);
-  assert_true(!write_result.ok,
-              "IAuditLogger skeleton should reject incomplete audit events");
-  assert_true(write_result.references_only_contract_error_types(),
-              "audit write validation failures should stay within contracts error types");
+  const AuditContext invalid_context{
+      .request_id = std::string("req-001"),
+      .session_id = std::string("session-001"),
+      .trace_id = std::string("trace-001"),
+      .task_id = std::string(),
+      .parent_task_id = std::string("parent-task-001"),
+      .lease_id = std::string("lease-001"),
+      .worker_type = std::string("runtime"),
+  };
 
-  const auto export_result = logger.export_audit(AuditExportFilter{});
-  assert_true(!export_result.ok,
-              "IAuditLogger skeleton should reject an unspecified export filter placeholder");
-  assert_true(export_result.references_only_contract_error_types(),
-              "audit export validation failures should stay within contracts error types");
+  const auto write_result = logger.write_audit(invalid_event, invalid_context);
+  assert_true(write_result.has_consistent_state() && write_result.is_failure(),
+              "IAuditLogger write path should expose invalid event/context input as a consistent AuditWriteOutcome failure");
+  assert_true(write_result.error_code == dasall::contracts::ResultCode::ValidationFieldMissing,
+              "IAuditLogger write validation failures should stay mapped to existing contracts result codes");
 }
 
 }  // namespace
 
 int main() {
   try {
-    test_audit_logger_interface_accepts_audit_event_and_placeholder_export_filter();
-    test_audit_logger_interface_reports_validation_failures_observably();
+    test_audit_logger_interface_freezes_write_and_export_signatures();
+    test_audit_logger_interface_rejects_invalid_event_or_context_on_write_path();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

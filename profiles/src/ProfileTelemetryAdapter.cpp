@@ -16,11 +16,12 @@ namespace {
           std::string(detail),
           std::string(stage),
           "ProfileTelemetryAdapter"),
-      .audit_result = infra::audit::AuditWriteResult::failure(
-          contracts::ResultCode::ValidationFieldMissing,
-          std::string(detail),
-          std::string(stage),
-          "ProfileTelemetryAdapter"),
+          .audit_result = infra::AuditWriteOutcome{
+            .accepted = false,
+            .persisted = false,
+            .fallback_used = false,
+            .error_code = contracts::ResultCode::ValidationFieldMissing,
+          },
   };
 }
 
@@ -126,9 +127,13 @@ ProfileTelemetryDispatchResult ProfileTelemetryAdapter::emit_event(
       .timestamp = 1,
   };
 
+      const infra::AuditContext audit_context{
+        .worker_type = std::string(actor),
+      };
+
   return ProfileTelemetryDispatchResult{
       .log_result = logger_.log(log_event),
-      .audit_result = audit_logger_.write_audit(audit_event),
+        .audit_result = audit_logger_.write_audit(audit_event, audit_context),
   };
 }
 

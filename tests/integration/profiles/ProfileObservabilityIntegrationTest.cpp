@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,31 +45,40 @@ class RecordingLogger final : public dasall::infra::ILogger {
 
 class RecordingAuditLogger final : public dasall::infra::audit::IAuditLogger {
  public:
-  dasall::infra::audit::AuditWriteResult write_audit(
-      const dasall::infra::AuditEvent& event) override {
-    if (!event.has_required_fields() || !event.side_effects_are_serializable()) {
-      return dasall::infra::audit::AuditWriteResult::failure(
-          dasall::contracts::ResultCode::ValidationFieldMissing,
-          "audit event must keep required fields and side effects valid",
-          "profiles.telemetry.audit",
-          "RecordingAuditLogger");
+  dasall::infra::AuditWriteOutcome write_audit(
+      const dasall::infra::AuditEvent& event,
+      const dasall::infra::AuditContext& context) override {
+    if (!event.has_required_fields() || !event.side_effects_are_serializable() ||
+        !context.has_non_empty_fields()) {
+      return dasall::infra::AuditWriteOutcome{
+          .accepted = false,
+          .persisted = false,
+          .fallback_used = false,
+          .error_code = dasall::contracts::ResultCode::ValidationFieldMissing,
+      };
     }
 
     records.push_back(event);
-    return dasall::infra::audit::AuditWriteResult::success();
+    return dasall::infra::AuditWriteOutcome{
+        .accepted = true,
+        .persisted = true,
+        .fallback_used = false,
+      .error_code = std::nullopt,
+    };
   }
 
-  dasall::infra::audit::AuditExportResult export_audit(
-      const dasall::infra::audit::AuditExportFilter& filter) override {
-    if (!filter.is_specified()) {
-      return dasall::infra::audit::AuditExportResult::failure(
-          dasall::contracts::ResultCode::ValidationFieldMissing,
-          "filter must be specified",
-          "profiles.telemetry.export",
-          "RecordingAuditLogger");
+  dasall::infra::ExportResult export_audit(
+      const dasall::infra::ExportQuery& query) override {
+    if (!query.has_ordered_window()) {
+      return dasall::infra::ExportResult{};
     }
 
-    return dasall::infra::audit::AuditExportResult::success(records);
+    return dasall::infra::ExportResult{
+        .records = records,
+        .next_page_token = std::string(),
+        .truncated = false,
+        .checksum = std::string("profile-telemetry-export"),
+    };
   }
 
   std::vector<dasall::infra::AuditEvent> records;

@@ -1,9 +1,9 @@
 #include "audit/AuditService.h"
 
+#include <optional>
 #include <string>
+#include <vector>
 #include <utility>
-
-#include "InfraErrorCode.h"
 
 namespace dasall::infra::audit {
 
@@ -11,14 +11,24 @@ namespace {
 
 constexpr std::string_view kAuditServiceSourceRef = "AuditService";
 
-AuditWriteResult make_audit_write_failure(std::string message,
-                                          std::string stage,
-                                          bool fallback_used = false) {
-  return AuditWriteResult::failure(map_infra_error_code(InfraErrorCode::AuditWriteFail).result_code,
-                                   std::move(message),
-                                   std::move(stage),
-                                   std::string(kAuditServiceSourceRef),
-                                   fallback_used);
+AuditWriteOutcome make_audit_write_failure(contracts::ResultCode error_code,
+                                           bool accepted = false,
+                                           bool fallback_used = false) {
+  return AuditWriteOutcome{
+      .accepted = accepted,
+      .persisted = false,
+      .fallback_used = fallback_used,
+      .error_code = error_code,
+  };
+}
+
+std::string make_export_checksum(const std::vector<AuditEvent>& records) {
+  if (records.empty()) {
+    return "audit-export:empty";
+  }
+
+  return std::string("audit-export:") + records.front().event_id + ":" +
+         records.back().event_id + ":" + std::to_string(records.size());
 }
 
 }  // namespace
@@ -61,53 +71,61 @@ InfraOperationResult AuditService::stop() {
   return InfraOperationResult::success();
 }
 
-AuditWriteResult AuditService::write_audit(const AuditEvent& event) {
+AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
+                                            const AuditContext& context) {
   if (lifecycle_state_ != LifecycleState::Started) {
-    return make_audit_write_failure("audit service must be started before accepting events",
-                                    "audit.lifecycle");
+    return make_audit_write_failure(contracts::ResultCode::RuntimeRetryExhausted);
   }
 
   if (!event.has_required_fields() || !event.side_effects_are_serializable() ||
-      !event.references_contract_outcome()) {
-    return AuditWriteResult::failure(contracts::ResultCode::ValidationFieldMissing,
-                                     "audit event must stay valid, serializable, and aligned to contracts references",
-                                     "audit.validate",
-                                     std::string(kAuditServiceSourceRef));
+      !event.references_contract_outcome() || !context.has_non_empty_fields()) {
+    return make_audit_write_failure(contracts::ResultCode::ValidationFieldMissing);
   }
 
   if (primary_records_.size() < config_.primary_capacity) {
     primary_records_.push_back(event);
-    return AuditWriteResult::success(false);
+    return AuditWriteOutcome{
+        .accepted = true,
+        .persisted = true,
+        .fallback_used = false,
+      .error_code = std::nullopt,
+    };
   }
 
   degraded_ = true;
   if (fallback_records_.size() < config_.fallback_capacity) {
     fallback_records_.push_back(event);
-    return AuditWriteResult::success(true);
+    return AuditWriteOutcome{
+        .accepted = true,
+        .persisted = true,
+        .fallback_used = true,
+      .error_code = std::nullopt,
+    };
   }
 
-  return make_audit_write_failure(
-      "audit fallback pipeline exhausted after primary write path became unavailable",
-      "audit.fallback",
-      true);
+  return make_audit_write_failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                  true,
+                                  true);
 }
 
-AuditExportResult AuditService::export_audit(const AuditExportFilter& filter) {
+ExportResult AuditService::export_audit(const ExportQuery& query) {
   if (lifecycle_state_ != LifecycleState::Started) {
-    return AuditExportResult::failure(map_infra_error_code(InfraErrorCode::AuditWriteFail).result_code,
-                                      "audit service must be started before exporting records",
-                                      "audit.lifecycle",
-                                      std::string(kAuditServiceSourceRef));
+    return ExportResult{};
   }
 
-  if (!filter.is_specified()) {
-    return AuditExportResult::failure(contracts::ResultCode::ValidationFieldMissing,
-                                      "audit export filter must stay explicitly specified",
-                                      "audit.export",
-                                      std::string(kAuditServiceSourceRef));
+  if (!query.has_ordered_window()) {
+    return ExportResult{};
   }
 
-  return AuditExportResult::success(select_records(filter.opaque_selector), false);
+  auto records = select_records(query);
+  auto checksum = make_export_checksum(records);
+
+  return ExportResult{
+      .records = std::move(records),
+      .next_page_token = std::string(),
+      .truncated = false,
+      .checksum = std::move(checksum),
+  };
 }
 
 std::string_view AuditService::lifecycle_state_name() const {
@@ -137,17 +155,45 @@ InfraOperationResult AuditService::invalid_transition(
       std::string(kAuditServiceSourceRef));
 }
 
-std::vector<AuditEvent> AuditService::select_records(std::string_view selector) const {
-  if (selector == "primary") {
-    return primary_records_;
+std::vector<AuditEvent> AuditService::select_records(const ExportQuery& query) const {
+  std::vector<AuditEvent> records;
+
+  const auto matches = [&query](const AuditEvent& event) {
+    if (event.timestamp < query.start_ts || event.timestamp > query.end_ts) {
+      return false;
+    }
+
+    if (!query.actor.empty() && event.actor != query.actor) {
+      return false;
+    }
+
+    if (!query.action.empty() && event.action != query.action) {
+      return false;
+    }
+
+    if (!query.target.empty() && event.target != query.target) {
+      return false;
+    }
+
+    if (query.filters_on_outcome() && event.outcome != query.outcome) {
+      return false;
+    }
+
+    return true;
+  };
+
+  for (const auto& event : primary_records_) {
+    if (matches(event)) {
+      records.push_back(event);
+    }
   }
 
-  if (selector == "fallback") {
-    return fallback_records_;
+  for (const auto& event : fallback_records_) {
+    if (matches(event)) {
+      records.push_back(event);
+    }
   }
 
-  std::vector<AuditEvent> records = primary_records_;
-  records.insert(records.end(), fallback_records_.begin(), fallback_records_.end());
   return records;
 }
 

@@ -23,8 +23,23 @@ dasall::infra::AuditEvent make_event(std::string ref_suffix) {
   };
 }
 
+dasall::infra::AuditContext make_context() {
+  return dasall::infra::AuditContext{};
+}
+
+dasall::infra::ExportQuery make_query() {
+  return dasall::infra::ExportQuery{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785605000,
+      .actor = std::string(),
+      .action = std::string(),
+      .target = std::string(),
+      .outcome = dasall::infra::AuditOutcome::Unspecified,
+      .page_token = std::string(),
+  };
+}
+
 void test_audit_service_uses_fallback_when_primary_path_is_unavailable() {
-  using dasall::infra::audit::AuditExportFilter;
   using dasall::infra::audit::AuditService;
   using dasall::infra::audit::AuditServiceConfig;
   using dasall::tests::support::assert_true;
@@ -37,25 +52,25 @@ void test_audit_service_uses_fallback_when_primary_path_is_unavailable() {
   assert_true(service.start().ok,
               "audit service should start after successful initialization");
 
-  const auto primary_write = service.write_audit(make_event("tool-call-001"));
-  assert_true(primary_write.ok && !primary_write.fallback_used,
+  const auto primary_write = service.write_audit(make_event("tool-call-001"), make_context());
+  assert_true(primary_write.is_success() && !primary_write.fallback_used,
               "first audit event should stay on the primary path");
   assert_true(service.primary_record_count() == 1,
               "primary pipeline should retain the first audit record");
 
-  const auto fallback_write = service.write_audit(make_event("tool-call-002"));
-  assert_true(fallback_write.ok && fallback_write.fallback_used,
+  const auto fallback_write = service.write_audit(make_event("tool-call-002"), make_context());
+  assert_true(fallback_write.is_degraded_success() && fallback_write.fallback_used,
               "second audit event should fall back when the primary path reaches capacity");
   assert_true(service.is_degraded(),
               "fallback use should mark the audit service as degraded");
   assert_true(service.fallback_record_count() == 1,
               "fallback pipeline should retain the degraded-path record");
 
-  const auto export_result = service.export_audit(AuditExportFilter{.opaque_selector = "all"});
-  assert_true(export_result.ok,
-              "audit service should export retained records after fallback activation");
+  const auto export_result = service.export_audit(make_query());
   assert_true(export_result.records.size() == 2,
               "export should surface both primary and fallback audit records");
+  assert_true(export_result.has_checksum() && export_result.is_complete_page(),
+              "audit service export should return a checksum and explicit final-page semantics");
 }
 
 void test_audit_service_makes_fallback_exhaustion_observable() {
@@ -71,17 +86,17 @@ void test_audit_service_makes_fallback_exhaustion_observable() {
   assert_true(service.start().ok,
               "audit service should start before fallback failure-path testing");
 
-  const auto first_write = service.write_audit(make_event("tool-call-010"));
-  assert_true(first_write.ok && first_write.fallback_used,
+  const auto first_write = service.write_audit(make_event("tool-call-010"), make_context());
+  assert_true(first_write.is_degraded_success() && first_write.fallback_used,
               "fallback-only configuration should persist the first record through fallback");
 
-  const auto second_write = service.write_audit(make_event("tool-call-011"));
-  assert_true(!second_write.ok,
+  const auto second_write = service.write_audit(make_event("tool-call-011"), make_context());
+  assert_true(second_write.is_failure(),
               "audit service should surface an explicit failure when fallback capacity is exhausted");
   assert_true(second_write.fallback_used,
               "audit service should mark that fallback was attempted on exhaustion");
-  assert_true(second_write.references_only_contract_error_types(),
-              "audit fallback failures should remain observable through contracts error types only");
+  assert_true(second_write.error_code == dasall::contracts::ResultCode::RuntimeRetryExhausted,
+              "audit fallback failures should remain observable through existing contracts runtime result codes");
 }
 
 }  // namespace

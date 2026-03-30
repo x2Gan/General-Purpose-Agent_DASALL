@@ -177,7 +177,7 @@
 | AUD-TODO-003 | Done | 定义 AuditWriteOutcome 数据结构 | audit 设计 6.5/6.6；编码规范 3.6 | 6.5 AuditWriteOutcome；6.6 错误语义 | L3 | infra/include/audit/AuditTypes.h | AuditWriteOutcome | unit：AuditTypesTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 accepted/persisted/fallback_used/error_code 四字段齐备且错误码映射可测时完成 |
 | AUD-TODO-004 | Done | 定义 ExportQuery 数据结构 | audit 设计 6.5；11.1 阻塞项 | 6.5 ExportQuery | L3 | infra/include/audit/AuditExporterTypes.h | ExportQuery | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 无 | 无 | 无 | AuditExporterTypes.h、过滤测试 | 仅当 start_ts/end_ts/actor/action/target/outcome/page_token 字段落盘，且时间窗必填语义可由测试验证时完成 |
 | AUD-TODO-005 | Done | 定义 ExportResult 数据结构 | audit 设计 6.5 | 6.5 ExportResult | L3 | infra/include/audit/AuditExporterTypes.h | ExportResult | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | AUD-TODO-004 | 无 | 无 | AuditExporterTypes.h、导出测试 | 仅当 records/next_page_token/truncated/checksum 字段齐备，且 truncated 显式语义可测试时完成 |
-| AUD-TODO-006 | Not Started | 定义 IAuditLogger 接口头文件 | audit 设计 6.6；编码规范 3.7 | 6.6 IAuditLogger | L3 | infra/include/audit/IAuditLogger.h | IAuditLogger::write_audit；IAuditLogger::export_audit | unit：AuditInterfaceCompileTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-003、AUD-TODO-004、AUD-TODO-005 | 无 | 无 | IAuditLogger.h、编译测试 | 仅当接口签名与 6.6 一致、职责只覆盖写入与导出，且不暴露 sink/线程池等实现细节时完成 |
+| AUD-TODO-006 | Done | 定义 IAuditLogger 接口头文件 | audit 设计 6.6；编码规范 3.7 | 6.6 IAuditLogger | L3 | infra/include/audit/IAuditLogger.h | IAuditLogger::write_audit；IAuditLogger::export_audit | unit：AuditInterfaceCompileTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-003、AUD-TODO-004、AUD-TODO-005 | 无 | 无 | IAuditLogger.h、编译测试 | 仅当接口签名与 6.6 一致、职责只覆盖写入与导出，且不暴露 sink/线程池等实现细节时完成 |
 | AUD-TODO-007 | Not Started | 定义 AuditErrors 错误码域 | audit 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义；6.8 异常恢复 | L3 | infra/include/audit/AuditErrors.h | INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL | contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraErrorCodeMappingContractTest --output-on-failure | AUD-TODO-003 | 无 | 无 | AuditErrors.h、映射测试 | 仅当 6 个错误码均可追溯到设计条目，且 contract 测试能阻止漂移时完成 |
 | AUD-TODO-008 | Not Started | 实现 AuditValidator 字段校验骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditValidator；6.3 输入输出；6.8 输入异常 | L2 | infra/src/audit/AuditValidator.cpp | AuditValidator（字段完整性与边界校验） | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-007 | 无 | 无 | AuditValidator.cpp、校验证据 | 仅当必填字段缺失、越权字段、非法时间窗三类输入异常都能返回可判定失败时完成 |
 | AUD-TODO-009 | Not Started | 实现 AuditPipeline 主写骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditPipeline；6.7 正常路径第 3 步；6.8 主写失败 | L2 | infra/src/audit/AuditPipeline.cpp | AuditPipeline（append-only 主写链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-008 | 无 | 无 | AuditPipeline.cpp、主写测试 | 仅当验证通过事件能进入 append-only 主写路径，且主写失败可被上层捕获时完成 |
@@ -524,3 +524,49 @@ Build 合规复核：
 3. 测试发现性：沿用 AUD-TODO-004 已注册的 AuditExportFilterTest，无需新增测试目标即可稳定命中。
 4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
 5. 提交隔离：本轮只冻结 ExportResult 和同一测试文件，不提前切换 IAuditLogger/AuditService 的旧导出结果类型。
+
+### 12.6 AUD-TODO-006
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-006。
+2. 可执行性依据：AUD-TODO-001 至 005 已冻结 AuditEvent、AuditContext、AuditWriteOutcome、ExportQuery、ExportResult；6.6 已明确 IAuditLogger 仅暴露 write_audit/export_audit 两个方法，当前不存在依赖未满足的 blocker。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.6 明确 `write_audit(const AuditEvent&, const AuditContext&) -> AuditWriteOutcome` 与 `export_audit(const ExportQuery&) -> ExportResult`；后置条件要求成功或失败都具备可观测证据，但接口层不得暴露 sink/线程池等实现细节。
+2. 外部参考：OWASP Logging Cheat Sheet 强调安全事件日志必须保留 when/where/who/what 及结果状态，并且审计与普通日志通常应分离；OpenTelemetry Logs Data Model 强调频繁出现且语义稳定的字段应提升为类型化顶层字段，而不是继续保留模糊占位属性。
+
+D 结论：
+
+1. Design -> Build 映射：将 `infra/include/audit/IAuditLogger.h` 从旧的 `AuditExportFilter/AuditWriteResult/AuditExportResult` 占位接口，收敛为直接消费 `AuditEvent/AuditContext/ExportQuery`、返回 `AuditWriteOutcome/ExportResult` 的 6.6 签名；保留 `audit` 命名空间，仅冻结接口，不引入 retention/health/fallback 控制方法。
+2. Build 三件套：
+	- 代码目标：切换 IAuditLogger、AuditService 和直接调用方到新签名，并把 ExportQuery/ExportResult 的最小语义接到现有 AuditService 骨架上。
+	- 测试目标：将 unit 名称收敛为 AuditInterfaceCompileTest，覆盖接口精确签名、正例写入/导出和负例写入失败；扩展 AuditBoundaryContractTest 验证 IAuditLogger 仅依赖冻结对象，不再接受 `opaque_selector` 旧占位输入；补跑 AuditService/ProfileTelemetry 兼容回归。
+	- 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_audit_logger_interface_unit_test dasall_audit_service_fallback_unit_test dasall_contract_audit_event_boundary_test dasall_contract_audit_logger_interface_boundary_test dasall_contract_audit_service_boundary_test dasall_profile_observability_integration_test && ctest --test-dir build-ci -N -R "AuditInterfaceCompileTest|AuditBoundaryContractTest" && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditServiceFallbackTest|AuditBoundaryContractTest|AuditLoggerInterfaceBoundaryContractTest|AuditServiceBoundaryContractTest|ProfileObservabilityIntegrationTest" --output-on-failure。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/include/audit/IAuditLogger.h：冻结为 6.6 新签名，只暴露 write_audit/export_audit 两个接口方法。
+2. infra/include/audit/AuditService.h、infra/src/audit/AuditService.cpp：同步到新接口，最小接入 AuditContext 与 ExportQuery/ExportResult，不提前引入 exporter/fallback 控制接口扩张。
+3. tests/unit/infra/AuditLoggerInterfaceTest.cpp、tests/unit/infra/CMakeLists.txt：将 unit 名称收敛为 AuditInterfaceCompileTest，并覆盖新签名的正负例。
+4. tests/contract/smoke/AuditBoundaryContractTest.cpp、tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp、tests/contract/smoke/AuditServiceBoundaryContractTest.cpp：补齐 IAuditLogger 的边界静态断言和 AuditService 新边界回归。
+5. profiles/include/ProfileTelemetryAdapter.h、profiles/src/ProfileTelemetryAdapter.cpp、tests/integration/profiles/ProfileObservabilityIntegrationTest.cpp：完成直接调用方兼容切换，避免 profiles 继续绑定旧占位接口语义。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_infra dasall_audit_logger_interface_unit_test dasall_audit_service_fallback_unit_test dasall_contract_audit_event_boundary_test dasall_contract_audit_logger_interface_boundary_test dasall_contract_audit_service_boundary_test dasall_profile_observability_integration_test：通过。
+3. ctest --test-dir build-ci -N -R "AuditInterfaceCompileTest|AuditBoundaryContractTest"：通过，发现 2 个测试。
+4. ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditServiceFallbackTest|AuditBoundaryContractTest|AuditLoggerInterfaceBoundaryContractTest|AuditServiceBoundaryContractTest|ProfileObservabilityIntegrationTest" --output-on-failure：通过，6/6 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮以类型命名和 helper 语义表达接口约束，无需新增注释；未引入实现细节注释噪音。
+2. 正负例覆盖：AuditInterfaceCompileTest 覆盖新签名正例和 event/context 负例；AuditBoundaryContractTest/AuditLoggerInterfaceBoundaryContractTest 覆盖边界静态断言；AuditServiceFallbackTest 与 ProfileObservabilityIntegrationTest 作为直接兼容回归补充。
+3. 测试发现性：新增 ctest 名称 AuditInterfaceCompileTest 已通过 `ctest -N -R` 命中；contract 目标 AuditBoundaryContractTest 保持可发现。
+4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
+5. 提交隔离：本轮只做 IAuditLogger 接口冻结及直接兼容修复，不提前实现 AuditErrors、AuditValidator 或 AuditExporter 细粒度逻辑。

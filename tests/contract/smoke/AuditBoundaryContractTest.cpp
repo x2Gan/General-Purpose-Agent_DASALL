@@ -5,6 +5,8 @@
 #include <string>
 #include <type_traits>
 
+#include "audit/AuditExporterTypes.h"
+#include "audit/IAuditLogger.h"
 #include "audit/AuditTypes.h"
 #include "checkpoint/RecoveryOutcomeGuards.h"
 #include "task/WorkerTask.h"
@@ -57,6 +59,11 @@ concept HasCheckpointRefMember = requires {
 template <typename T>
 concept HasGlobalFsmStateMember = requires {
   &T::global_fsm_state;
+};
+
+template <typename T>
+concept HasOpaqueSelectorMember = requires {
+  &T::opaque_selector;
 };
 
 void test_audit_event_accepts_tool_result_boundary_reference() {
@@ -265,6 +272,39 @@ void test_audit_context_rejects_empty_strings_when_unknown_semantics_are_bypasse
               "AuditContext should reject empty-string anchors when callers bypass the frozen unknown placeholder semantics");
 }
 
+void test_audit_logger_interface_uses_frozen_audit_boundary_objects_only() {
+  using dasall::infra::AuditContext;
+  using dasall::infra::AuditEvent;
+  using dasall::infra::AuditWriteOutcome;
+  using dasall::infra::ExportQuery;
+  using dasall::infra::ExportResult;
+  using dasall::infra::audit::IAuditLogger;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IAuditLogger::write_audit),
+                               AuditWriteOutcome (IAuditLogger::*)(const AuditEvent&, const AuditContext&)>);
+  static_assert(std::is_same_v<decltype(&IAuditLogger::export_audit),
+                               ExportResult (IAuditLogger::*)(const ExportQuery&)>);
+  static_assert(std::is_same_v<decltype(ExportResult{}.records), std::vector<AuditEvent>>);
+  static_assert(!HasOpaqueSelectorMember<ExportQuery>);
+
+  const AuditContext context{};
+  const ExportQuery query{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785609000,
+      .actor = std::string(),
+      .action = std::string(),
+      .target = std::string(),
+      .outcome = dasall::infra::AuditOutcome::Unspecified,
+      .page_token = std::string(),
+  };
+
+  assert_true(context.uses_unknown_defaults(),
+              "IAuditLogger should accept the frozen AuditContext unknown-default semantics without reintroducing nullable placeholders");
+  assert_true(query.has_ordered_window() && !query.requests_page_resume(),
+              "IAuditLogger export input should stay bound to the frozen ExportQuery time-window shape rather than the retired opaque selector placeholder");
+}
+
 }  // namespace
 
 int main() {
@@ -275,6 +315,7 @@ int main() {
     test_audit_event_rejects_unspecified_evidence_boundary();
     test_audit_context_keeps_correlation_fields_as_non_optional_strings();
     test_audit_context_rejects_empty_strings_when_unknown_semantics_are_bypassed();
+    test_audit_logger_interface_uses_frozen_audit_boundary_objects_only();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

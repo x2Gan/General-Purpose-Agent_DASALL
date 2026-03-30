@@ -26,8 +26,9 @@ class AuditService final : public IAuditLogger {
   InfraOperationResult start();
   InfraOperationResult stop();
 
-  AuditWriteResult write_audit(const AuditEvent& event) override;
-  AuditExportResult export_audit(const AuditExportFilter& filter) override;
+  AuditWriteOutcome write_audit(const AuditEvent& event,
+                                const AuditContext& context) override;
+  ExportResult export_audit(const ExportQuery& query) override;
 
   [[nodiscard]] bool is_degraded() const {
     return degraded_;
@@ -55,7 +56,7 @@ class AuditService final : public IAuditLogger {
       std::string_view operation,
       std::string_view expected_state) const;
 
-  [[nodiscard]] std::vector<AuditEvent> select_records(std::string_view selector) const;
+  [[nodiscard]] std::vector<AuditEvent> select_records(const ExportQuery& query) const;
 
   AuditServiceConfig config_{};
   LifecycleState lifecycle_state_ = LifecycleState::Created;

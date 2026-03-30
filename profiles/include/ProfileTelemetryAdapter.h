@@ -9,15 +9,18 @@ namespace dasall::profiles {
 
 struct ProfileTelemetryDispatchResult {
   infra::LogWriteResult log_result;
-  infra::audit::AuditWriteResult audit_result;
+  infra::AuditWriteOutcome audit_result;
 
   [[nodiscard]] bool ok() const {
-    return log_result.ok && audit_result.ok;
+    return log_result.ok &&
+           (audit_result.is_success() || audit_result.is_degraded_success());
   }
 
   [[nodiscard]] bool references_only_contract_error_types() const {
     return log_result.references_only_contract_error_types() &&
-           audit_result.references_only_contract_error_types();
+           (!audit_result.error_code.has_value() ||
+            contracts::classify_result_code(*audit_result.error_code) !=
+                contracts::ResultCodeCategory::Unknown);
   }
 };
 
