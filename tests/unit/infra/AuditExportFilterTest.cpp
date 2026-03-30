@@ -72,12 +72,82 @@ void test_export_query_rejects_missing_or_inverted_time_window() {
               "export query should reject end_ts values that move backward before start_ts");
 }
 
+void test_export_result_freezes_records_checksum_and_resume_fields() {
+  using dasall::infra::AuditEvidenceKind;
+  using dasall::infra::AuditEvent;
+  using dasall::infra::AuditOutcome;
+  using dasall::infra::ExportResult;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(ExportResult{}.records), std::vector<AuditEvent>>);
+  static_assert(std::is_same_v<decltype(ExportResult{}.next_page_token), std::string>);
+  static_assert(std::is_same_v<decltype(ExportResult{}.truncated), bool>);
+  static_assert(std::is_same_v<decltype(ExportResult{}.checksum), std::string>);
+
+  const ExportResult partial_page{
+      .records = {AuditEvent{
+          .event_id = std::string("audit-export-001"),
+          .action = std::string("diagnostics.export"),
+          .actor = std::string("ops-user"),
+          .target = std::string("support-bundle"),
+          .outcome = AuditOutcome::Succeeded,
+          .evidence_ref = {.kind = AuditEvidenceKind::ToolResult,
+                           .ref = std::string("tool-call-017")},
+          .side_effects = {"bundle_written"},
+          .timestamp = 1711785603000,
+      }},
+      .next_page_token = std::string("cursor-003"),
+      .truncated = true,
+      .checksum = std::string("sha256:abc123"),
+  };
+
+  const ExportResult final_page{
+      .records = {},
+      .next_page_token = std::string(),
+      .truncated = false,
+      .checksum = std::string("sha256:def456"),
+  };
+
+  assert_true(partial_page.has_checksum(),
+              "export result should expose an explicit checksum once the output object is frozen");
+  assert_true(partial_page.has_consistent_pagination(),
+              "truncated export pages should carry a resume token so pagination remains stable");
+  assert_true(final_page.is_complete_page(),
+              "non-truncated export pages should represent an explicit final page without a resume token");
+}
+
+void test_export_result_rejects_inconsistent_truncation_state() {
+  using dasall::infra::ExportResult;
+  using dasall::tests::support::assert_true;
+
+  const ExportResult missing_resume_token{
+      .records = {},
+      .next_page_token = std::string(),
+      .truncated = true,
+      .checksum = std::string("sha256:ghi789"),
+  };
+
+  const ExportResult unexpected_resume_token{
+      .records = {},
+      .next_page_token = std::string("cursor-004"),
+      .truncated = false,
+      .checksum = std::string("sha256:jkl012"),
+  };
+
+  assert_true(!missing_resume_token.has_consistent_pagination(),
+              "truncated export results should not omit the next_page_token needed to resume paging");
+  assert_true(!unexpected_resume_token.has_consistent_pagination(),
+              "final export pages should not advertise a resume token when truncated is false");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_export_query_freezes_time_window_and_filter_fields();
     test_export_query_rejects_missing_or_inverted_time_window();
+    test_export_result_freezes_records_checksum_and_resume_fields();
+    test_export_result_rejects_inconsistent_truncation_state();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

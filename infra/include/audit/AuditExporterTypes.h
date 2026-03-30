@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "audit/AuditTypes.h"
 
@@ -30,6 +31,27 @@ struct ExportQuery {
 
   [[nodiscard]] bool filters_on_outcome() const {
     return outcome != AuditOutcome::Unspecified;
+  }
+};
+
+struct ExportResult {
+  using Records = std::vector<AuditEvent>;
+
+  Records records;
+  std::string next_page_token;
+  bool truncated = false;
+  std::string checksum;
+
+  [[nodiscard]] bool has_checksum() const {
+    return !checksum.empty();
+  }
+
+  [[nodiscard]] bool has_consistent_pagination() const {
+    return truncated == !next_page_token.empty();
+  }
+
+  [[nodiscard]] bool is_complete_page() const {
+    return has_consistent_pagination() && !truncated;
   }
 };
 

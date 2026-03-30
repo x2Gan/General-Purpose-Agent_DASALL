@@ -176,7 +176,7 @@
 | AUD-TODO-002 | Done | 定义 AuditContext 数据结构 | audit 设计 6.5；ADR-008 | 6.5 AuditContext | L3 | infra/include/audit/AuditTypes.h | AuditContext | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type 字段齐备，且缺失语义为 unknown 而非空指针时完成 |
 | AUD-TODO-003 | Done | 定义 AuditWriteOutcome 数据结构 | audit 设计 6.5/6.6；编码规范 3.6 | 6.5 AuditWriteOutcome；6.6 错误语义 | L3 | infra/include/audit/AuditTypes.h | AuditWriteOutcome | unit：AuditTypesTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 accepted/persisted/fallback_used/error_code 四字段齐备且错误码映射可测时完成 |
 | AUD-TODO-004 | Done | 定义 ExportQuery 数据结构 | audit 设计 6.5；11.1 阻塞项 | 6.5 ExportQuery | L3 | infra/include/audit/AuditExporterTypes.h | ExportQuery | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 无 | 无 | 无 | AuditExporterTypes.h、过滤测试 | 仅当 start_ts/end_ts/actor/action/target/outcome/page_token 字段落盘，且时间窗必填语义可由测试验证时完成 |
-| AUD-TODO-005 | Not Started | 定义 ExportResult 数据结构 | audit 设计 6.5 | 6.5 ExportResult | L3 | infra/include/audit/AuditExporterTypes.h | ExportResult | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | AUD-TODO-004 | 无 | 无 | AuditExporterTypes.h、导出测试 | 仅当 records/next_page_token/truncated/checksum 字段齐备，且 truncated 显式语义可测试时完成 |
+| AUD-TODO-005 | Done | 定义 ExportResult 数据结构 | audit 设计 6.5 | 6.5 ExportResult | L3 | infra/include/audit/AuditExporterTypes.h | ExportResult | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | AUD-TODO-004 | 无 | 无 | AuditExporterTypes.h、导出测试 | 仅当 records/next_page_token/truncated/checksum 字段齐备，且 truncated 显式语义可测试时完成 |
 | AUD-TODO-006 | Not Started | 定义 IAuditLogger 接口头文件 | audit 设计 6.6；编码规范 3.7 | 6.6 IAuditLogger | L3 | infra/include/audit/IAuditLogger.h | IAuditLogger::write_audit；IAuditLogger::export_audit | unit：AuditInterfaceCompileTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-003、AUD-TODO-004、AUD-TODO-005 | 无 | 无 | IAuditLogger.h、编译测试 | 仅当接口签名与 6.6 一致、职责只覆盖写入与导出，且不暴露 sink/线程池等实现细节时完成 |
 | AUD-TODO-007 | Not Started | 定义 AuditErrors 错误码域 | audit 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义；6.8 异常恢复 | L3 | infra/include/audit/AuditErrors.h | INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL | contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraErrorCodeMappingContractTest --output-on-failure | AUD-TODO-003 | 无 | 无 | AuditErrors.h、映射测试 | 仅当 6 个错误码均可追溯到设计条目，且 contract 测试能阻止漂移时完成 |
 | AUD-TODO-008 | Not Started | 实现 AuditValidator 字段校验骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditValidator；6.3 输入输出；6.8 输入异常 | L2 | infra/src/audit/AuditValidator.cpp | AuditValidator（字段完整性与边界校验） | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-007 | 无 | 无 | AuditValidator.cpp、校验证据 | 仅当必填字段缺失、越权字段、非法时间窗三类输入异常都能返回可判定失败时完成 |
@@ -482,3 +482,45 @@ Build 合规复核：
 3. 测试发现性：AuditExportFilterTest 已加入 tests/unit/infra/CMakeLists.txt，并能被 ctest -R 命中执行。
 4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
 5. 提交隔离：本轮只冻结 ExportQuery 和测试入口，不提前定义 ExportResult 或切换旧导出接口签名。
+
+### 12.5 AUD-TODO-005
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-005。
+2. 可执行性依据：AUD-TODO-004 已落盘 AuditExporterTypes.h 和 AuditExportFilterTest，本轮只需在同一头文件中补齐 ExportResult，并复用现有测试目标扩展输出边界覆盖。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.5 明确 ExportResult 字段为 records/next_page_token/truncated/checksum，其中 truncated 必须显式表达。
+2. 约束边界：records 的最终序列化形态仍未成文，因此本轮仅冻结 records 容器边界为 AuditEvent 列表，不提前引入额外 DTO 或导出格式枚举。
+
+D 结论：
+
+1. Design -> Build 映射：在 infra/include/audit/AuditExporterTypes.h 中新增 ExportResult，并通过 helper 固化 checksum 存在性、分页 token 与 truncated 的一致性，以及 final page 的显式语义。
+2. Build 三件套：
+	- 代码目标：新增 ExportResult 四字段与最小分页 helper，保持新旧导出结果对象并存。
+	- 测试目标：扩展 AuditExportFilterTest 覆盖 records 类型冻结、checksum 字段、truncated=true 时必须存在 next_page_token，以及 final page 不得携带恢复 token 的负例。
+	- 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_audit_export_filter_unit_test && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/include/audit/AuditExporterTypes.h：新增 ExportResult、checksum helper 和分页一致性 helper。
+2. tests/unit/infra/AuditExportFilterTest.cpp：新增 ExportResult 正例与 truncated 负例覆盖。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_audit_export_filter_unit_test：通过。
+3. ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：ExportResult helper 命名已直接表达分页与完整性语义，无需额外注释。
+2. 正负例覆盖：unit 覆盖 records/next_page_token/truncated/checksum 四字段冻结、partial page/final page 正例，以及 truncated/token 失配负例。
+3. 测试发现性：沿用 AUD-TODO-004 已注册的 AuditExportFilterTest，无需新增测试目标即可稳定命中。
+4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
+5. 提交隔离：本轮只冻结 ExportResult 和同一测试文件，不提前切换 IAuditLogger/AuditService 的旧导出结果类型。
