@@ -20,6 +20,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/InfraErrorCode.h
   include/audit/AuditTypes.h
   include/audit/AuditExporterTypes.h
+  include/audit/AuditErrors.h
   include/LogEvent.h
   include/audit/AuditService.h
   include/audit/IAuditLogger.h

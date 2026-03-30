@@ -1,4 +1,5 @@
 #include "audit/AuditService.h"
+#include "audit/AuditErrors.h"
 
 #include <optional>
 #include <string>
@@ -11,14 +12,14 @@ namespace {
 
 constexpr std::string_view kAuditServiceSourceRef = "AuditService";
 
-AuditWriteOutcome make_audit_write_failure(contracts::ResultCode error_code,
+AuditWriteOutcome make_audit_write_failure(AuditErrorCode error_code,
                                            bool accepted = false,
                                            bool fallback_used = false) {
   return AuditWriteOutcome{
       .accepted = accepted,
       .persisted = false,
       .fallback_used = fallback_used,
-      .error_code = error_code,
+      .error_code = map_audit_error_code(error_code).result_code,
   };
 }
 
@@ -74,12 +75,12 @@ InfraOperationResult AuditService::stop() {
 AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
                                             const AuditContext& context) {
   if (lifecycle_state_ != LifecycleState::Started) {
-    return make_audit_write_failure(contracts::ResultCode::RuntimeRetryExhausted);
+    return make_audit_write_failure(AuditErrorCode::WriteFail);
   }
 
   if (!event.has_required_fields() || !event.side_effects_are_serializable() ||
       !event.references_contract_outcome() || !context.has_non_empty_fields()) {
-    return make_audit_write_failure(contracts::ResultCode::ValidationFieldMissing);
+    return make_audit_write_failure(AuditErrorCode::InvalidEvent);
   }
 
   if (primary_records_.size() < config_.primary_capacity) {
@@ -103,7 +104,7 @@ AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
     };
   }
 
-  return make_audit_write_failure(contracts::ResultCode::RuntimeRetryExhausted,
+  return make_audit_write_failure(AuditErrorCode::FallbackFail,
                                   true,
                                   true);
 }
