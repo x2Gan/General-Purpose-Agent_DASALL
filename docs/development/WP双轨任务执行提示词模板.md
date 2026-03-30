@@ -1,7 +1,7 @@
 # WP 双轨任务执行提示词模板（-D + -B）
 
 最近更新时间：2026-03-19  
-适用范围：docs/todos/contracts-freeze/WP-03、WP-04、WP-05 及后续同结构工作包；兼容 .github/skills/project-implementation-cycle 自动调用
+适用范围：docs/todos/contracts/WP-03、WP-04、WP-05 及后续同结构工作包；兼容 .github/skills/project-implementation-cycle 自动调用
 
 ## 1. 文档定位
 
@@ -41,7 +41,7 @@
 ### 3.1 人工直启最小输入
 
 1. task_id：例如 WP03-T009
-2. source_todo：例如 docs/todos/contracts-freeze/WP-03-主链路对象TODO.md
+2. source_todo：例如 docs/todos/contracts/WP-03-主链路对象TODO.md
 3. project_root：默认 /home/gangan/DASALL-Agent，可省略
 
 ### 3.2 SKILL 自动执行最小输入
@@ -114,7 +114,7 @@
 3. 相关架构文档：docs/architecture/DASSALL_Agent_architecture.md、docs/architecture/DASALL_Engineering_Blueprint.md
 4. 相关计划文档：docs/plans/DASALL_contracts冻结实施计划.md、docs/plans/DASALL_工程落地实现步骤指引.md
 5. 相关 ADR：按任务实际边界读取，不得猜文件名；优先读取 ADR-006、ADR-007、ADR-008 及任务直接引用项
-6. 前序工作包交付物：docs/todos/contracts-freeze/deliverables/
+6. 前序工作包交付物：docs/todos/contracts/deliverables/
 7. 若由 SKILL 驱动：额外读取 .github/skills/project-implementation-cycle/SKILL.md 及其任务选择、阻塞恢复、提交交接引用文件
 8. 若本轮需提交：读取 docs/development/Git提交信息规范.md
 
@@ -336,17 +336,17 @@ SKILL 调用本模板时必须额外满足：
 输入：
 
 - task_id：WP03-T009
-- source_todo：docs/todos/contracts-freeze/WP-03-主链路对象TODO.md
+- source_todo：docs/todos/contracts/WP-03-主链路对象TODO.md
 
 启动语句：
 
-请按“WP 双轨执行模板”启动任务 WP03-T009（来源：docs/todos/contracts-freeze/WP-03-主链路对象TODO.md）。先完成研究学习，再完成 WP03-T009-D，D Gate 通过后再完成 WP03-T009-B；若受阻则输出 Blocked、证据与解阻条件，并回写 TODO 状态与证据。
+请按“WP 双轨执行模板”启动任务 WP03-T009（来源：docs/todos/contracts/WP-03-主链路对象TODO.md）。先完成研究学习，再完成 WP03-T009-D，D Gate 通过后再完成 WP03-T009-B；若受阻则输出 Blocked、证据与解阻条件，并回写 TODO 状态与证据。
 
 ### 10.2 SKILL 自动执行示例
 
 输入：
 
-- source_todo：docs/todos/contracts-freeze/WP-04-边界对象TODO.md
+- source_todo：docs/todos/contracts/WP-04-边界对象TODO.md
 - preferred_task_id：WP04-T024
 
 装配后的启动语句：
@@ -354,7 +354,7 @@ SKILL 调用本模板时必须额外满足：
 请按“WP 双轨执行模板”启动本轮任务。
 
 - 项目根目录：/home/gangan/DASALL-Agent
-- 来源 TODO：docs/todos/contracts-freeze/WP-04-边界对象TODO.md
+- 来源 TODO：docs/todos/contracts/WP-04-边界对象TODO.md
 - 本轮选中任务：WP04-T024
 - 任务选择依据：该任务是当前最小可执行原子任务，且前序 D/B 依赖已满足
 - 本轮范围：WP-04

@@ -59,27 +59,27 @@
 - docs/architecture/platform_linux_detailed_design.md
 
 # TODO文档（多个）
-- docs/todos/DASALL_infrastructure子系统专项TODO.md
-- docs/todos/DASALL_infrastructure_audit组件专项TODO.md
-- docs/todos/DASALL_infrastructure_config组件专项TODO.md
-- docs/todos/DASALL_infrastructure_diagnostics组件专项TODO.md
-- docs/todos/DASALL_infrastructure_health组件专项TODO.md
-- docs/todos/DASALL_infrastructure_logging组件专项TODO.md
-- docs/todos/DASALL_infrastructure_metrics组件专项TODO.md
-- docs/todos/DASALL_infrastructure_ota组件专项TODO.md
-- docs/todos/DASALL_infrastructure_plugin组件专项TODO.md
-- docs/todos/DASALL_infrastructure_policy组件专项TODO.md
-- docs/todos/DASALL_infrastructure_secret组件专项TODO.md
-- docs/todos/DASALL_infrastructure_tracing组件专项TODO.md
-- docs/todos/DASALL_infrastructure_watchdog组件专项TODO.md
-- docs/todos/DASALL_platform_linux组件专项TODO.md
-- docs/todos/DASALL_profiles子系统专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md
+- docs/todos/platform/DASALL_platform_linux组件专项TODO.md
+- docs/todos/profiles/DASALL_profiles子系统专项TODO.md
 
 # 可选补充（推荐）
 - docs/architecture/DASALL_contracts目录设计说明.md
 - docs/plans/DASALL_contracts冻结实施计划.md
-- docs/todos/DASALL_contracts冻结TODO总表.md
-- docs/todos/contracts-freeze/deliverables/DASALL_contracts交付验收报告-2026-03-23.md
+- docs/todos/contracts/DASALL_contracts冻结TODO总表.md
+- docs/todos/contracts/deliverables/DASALL_contracts交付验收报告-2026-03-23.md
 
 ---
 

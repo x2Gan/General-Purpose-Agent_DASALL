@@ -199,7 +199,7 @@
 - <ARCH_DOC_PATHS> = docs/architecture/DASSALL_Agent_architecture.md
 - <BLUEPRINT_DOC_PATHS> = docs/architecture/DASALL_Engineering_Blueprint.md
 - <ADR_PATHS> = docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md; docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md; docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
-- <CONTRACTS_PLAN_AND_TODOS> = docs/plans/DASALL_contracts冻结实施计划.md; docs/todos/DASALL_contracts冻结TODO总表.md
+- <CONTRACTS_PLAN_AND_TODOS> = docs/plans/DASALL_contracts冻结实施计划.md; docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 - <DEV_RULES_PATH> = docs/development/DASALL_工程协作与编码规范.md
 - <MODULE_CODE_PATHS> = runtime/include; runtime/src; tests/unit/runtime; tests/integration
 

@@ -1533,6 +1533,82 @@ edge_minimal 和 factory_test 这类场景应优先采取：
 | DASALL_infrastructure子系统详细设计 | 4.13、9、10、11、13、15 | 配置、安全、观测、诊断、插件、OTA 基线 |
 | DASALL_infra_* 专项详细设计 | 4.13、10、13 | infrastructure 子组件展开依据 |
 
+### 16.2.1 Contracts 交付资产导航
+
+| 层级 | 文档路径 | 作用 |
+|---|---|---|
+| 设计 | [docs/architecture/DASALL_contracts目录设计说明.md](docs/architecture/DASALL_contracts目录设计说明.md) | contracts 目录、对象域和边界定义 |
+| 计划 | [docs/plans/DASALL_contracts冻结实施计划.md](docs/plans/DASALL_contracts冻结实施计划.md) | contracts 冻结推进顺序和里程碑 |
+| TODO 总表 | [docs/todos/contracts/DASALL_contracts冻结TODO总表.md](docs/todos/contracts/DASALL_contracts冻结TODO总表.md) | contracts 冻结任务总入口 |
+| TODO 分包 | [docs/todos/contracts](docs/todos/contracts) | WP-01 ~ WP-05 分包 TODO 任务集合 |
+| 交付物 | [docs/todos/contracts/deliverables](docs/todos/contracts/deliverables) | contracts 冻结过程资产与验收材料 |
+| 整改 | [docs/todos/contracts/DASALL_contracts验收整改TODO.md](docs/todos/contracts/DASALL_contracts验收整改TODO.md) | 验收后整改闭环任务 |
+
+### 16.2.2 Platform Linux 交付资产导航
+
+| 层级 | 文档路径 | 作用 |
+|---|---|---|
+| 设计 | [docs/architecture/platform_linux_detailed_design.md](docs/architecture/platform_linux_detailed_design.md) | Linux 平台抽象、能力切片、HAL availability 基线 |
+| TODO | [docs/todos/platform/DASALL_platform_linux组件专项TODO.md](docs/todos/platform/DASALL_platform_linux组件专项TODO.md) | Platform Linux 组件落地任务入口 |
+| 交付物总目录 | [docs/todos/platform](docs/todos/platform) | Platform Linux 设计收敛交付集合 |
+| 交付物 | [docs/todos/platform/PLAT-LNX-TODO-001-PlatformInitConfig设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-001-PlatformInitConfig设计收敛.md) | 平台初始化配置对象收敛 |
+| 交付物 | [docs/todos/platform/PLAT-LNX-TODO-002-LinuxPlatformCapabilities设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-002-LinuxPlatformCapabilities设计收敛.md) | 平台能力集合对象收敛 |
+| 交付物 | [docs/todos/platform/PLAT-LNX-TODO-003-PlatformError设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-003-PlatformError设计收敛.md) | 平台错误语义收敛 |
+| 交付物 | [docs/todos/platform/PLAT-LNX-TODO-004-IThread设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-004-IThread设计收敛.md) | 线程抽象接口收敛 |
+| 交付物 | [docs/todos/platform/PLAT-LNX-TODO-005-ITimer设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-005-ITimer设计收敛.md) | 定时器抽象接口收敛 |
+| 交付物 | [docs/todos/platform/PLAT-LNX-TODO-006-IQueue设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-006-IQueue设计收敛.md) | 队列抽象接口收敛 |
+
+### 16.2.3 Infrastructure 交付资产导航
+
+| 层级 | 文档路径 | 作用 |
+|---|---|---|
+| 子系统设计 | [docs/architecture/DASALL_infrastructure子系统详细设计.md](docs/architecture/DASALL_infrastructure子系统详细设计.md) | Infrastructure 子系统总体设计基线 |
+| 工程评审 | [docs/architecture/DASALL_infrastructure子系统工程评审报告-2026-03-26.md](docs/architecture/DASALL_infrastructure子系统工程评审报告-2026-03-26.md) | 子系统级评审结论与整改输入 |
+| 组件设计 | [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit模块详细设计.md) | Audit 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_config模块详细设计方案.md](docs/architecture/DASALL_infra_config模块详细设计方案.md) | Config 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](docs/architecture/DASALL_infra_diagnostics模块详细设计.md) | Diagnostics 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_health模块详细设计.md](docs/architecture/DASALL_infra_health模块详细设计.md) | Health 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging模块详细设计.md) | Logging 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_metrics模块详细设计.md](docs/architecture/DASALL_infra_metrics模块详细设计.md) | Metrics 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_OTA模块详细设计.md](docs/architecture/DASALL_infra_OTA模块详细设计.md) | OTA 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_plugin模块详细设计.md](docs/architecture/DASALL_infra_plugin模块详细设计.md) | Plugin 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_policy模块详细设计.md](docs/architecture/DASALL_infra_policy模块详细设计.md) | Policy 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_secret模块详细设计.md](docs/architecture/DASALL_infra_secret模块详细设计.md) | Secret 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_tracing模块详细设计.md](docs/architecture/DASALL_infra_tracing模块详细设计.md) | Tracing 组件设计 |
+| 组件设计 | [docs/architecture/DASALL_infra_watchdog模块详细设计.md](docs/architecture/DASALL_infra_watchdog模块详细设计.md) | Watchdog 组件设计 |
+| TODO 总表 | [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md) | Infrastructure 子系统任务总入口 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md) | Audit 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md) | Config 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) | Diagnostics 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md) | Health 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md) | Logging 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md) | Metrics 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) | OTA 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md) | Plugin 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md) | Policy 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md) | Secret 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) | Tracing 组件任务 |
+| TODO | [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md) | Watchdog 组件任务 |
+
+### 16.2.4 Profiles 交付资产导航
+
+| 层级 | 文档路径 | 作用 |
+|---|---|---|
+| 设计 | [docs/architecture/DASALL_profiles模块详细设计.md](docs/architecture/DASALL_profiles模块详细设计.md) | Profile Catalog、Build/Runtime 双平面治理基线 |
+| TODO | [docs/todos/profiles/DASALL_profiles子系统专项TODO.md](docs/todos/profiles/DASALL_profiles子系统专项TODO.md) | Profiles 子系统落地任务入口 |
+
+### 16.2.5 从总架构深入细节的推荐阅读路径
+
+为便于后续评审、实现和回归，建议固定按以下路径阅读和追溯：
+
+1. 总架构章节（本文件 4.* / 5.* / 7.* / 11.*）确认边界和治理约束。
+2. 对应子系统详细设计（contracts/platform/infrastructure/profiles）确认组件边界与对象语义。
+3. 对应 TODO 总表与组件专项 TODO 确认 Design -> Build 任务映射。
+4. 对应 deliverables 目录核对冻结证据、评审纪要和验收材料。
+5. 进入代码与测试目标前，先用 TODO 三件套（代码目标、测试目标、验收命令）完成可执行性检查。
+
+附录约束：新增或变更交付资产时，必须同步更新本节导航表，确保总架构始终保持“可一跳追溯”。
+
 ### 16.3 ADR 关联矩阵
 
 | ADR | 本文中的落点 |

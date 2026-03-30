@@ -2,8 +2,8 @@
 
 最近更新时间：2026-03-15
 适用范围：
-1. docs/todos/contracts-freeze/WP-01-术语与对象地图-Build开发TODO.md
-2. docs/todos/contracts-freeze/WP-02-横切基础对象-Build开发TODO.md
+1. docs/todos/contracts/WP-01-术语与对象地图-Build开发TODO.md
+2. docs/todos/contracts/WP-02-横切基础对象-Build开发TODO.md
 
 ## 模板 A：单原子任务推进（推荐）
 
@@ -14,8 +14,8 @@
 - 项目根目录：/home/gangan/DASALL-Agent
 - 当前日期：{{today}}
 - 推进范围仅限以下两份 Build TODO：
-  1. docs/todos/contracts-freeze/WP-01-术语与对象地图-Build开发TODO.md
-  2. docs/todos/contracts-freeze/WP-02-横切基础对象-Build开发TODO.md
+  1. docs/todos/contracts/WP-01-术语与对象地图-Build开发TODO.md
+  2. docs/todos/contracts/WP-02-横切基础对象-Build开发TODO.md
 - 工作日志：docs/worklog/DASALL_开发执行记录.md
 
 ### 本次目标
@@ -56,8 +56,8 @@
 
 ### 输入
 - Build TODO 文档：
-  1. docs/todos/contracts-freeze/WP-01-术语与对象地图-Build开发TODO.md
-  2. docs/todos/contracts-freeze/WP-02-横切基础对象-Build开发TODO.md
+  1. docs/todos/contracts/WP-01-术语与对象地图-Build开发TODO.md
+  2. docs/todos/contracts/WP-02-横切基础对象-Build开发TODO.md
 - 工作日志：docs/worklog/DASALL_开发执行记录.md
 
 ### 选择规则
@@ -88,4 +88,4 @@
 
 - today：2026-03-15
 - task_id：WP02-B003
-- wp_doc_path：docs/todos/contracts-freeze/WP-02-横切基础对象-Build开发TODO.md
+- wp_doc_path：docs/todos/contracts/WP-02-横切基础对象-Build开发TODO.md

@@ -42,7 +42,7 @@
 4. [ADR-006-context-orchestrator-vs-prompt-composer.md](/home/gangan/DASALL-Agent/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md)
 5. [ADR-007-reflection-engine-vs-recovery-manager.md](/home/gangan/DASALL-Agent/docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md)
 6. [ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md](/home/gangan/DASALL-Agent/docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md)
-7. [DASALL_工程落地实现步骤指引.md](/home/gangan/DASALL-Agent/docs/todos/DASALL_工程落地实现步骤指引.md)
+7. [DASALL_工程落地实现步骤指引.md](/home/gangan/DASALL-Agent/docs/plans/DASALL_工程落地实现步骤指引.md)
 8. [DASALL_工程协作与编码规范.md](/home/gangan/DASALL-Agent/docs/development/DASALL_工程协作与编码规范.md)
 
 ### 3.2 行业资料依据

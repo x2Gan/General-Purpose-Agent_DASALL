@@ -100,21 +100,21 @@
 7. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 8. 可选行业参考方向：联网搜索行业内实践方案
 9. 现有 TODO/交付记录：
-- docs/todos/contracts-freeze
-- docs/todos/DASALL_infrastructure子系统专项TODO.md
-- docs/todos/DASALL_infrastructure_logging组件专项TODO.md
-- docs/todos/DASALL_infrastructure_tracing组件专项TODO.md
-- docs/todos/DASALL_infrastructure_metrics组件专项TODO.md
-- docs/todos/DASALL_infrastructure_config组件专项TODO.md
-- docs/todos/DASALL_infrastructure_secret组件专项TODO.md
-- docs/todos/DASALL_infrastructure_health组件专项TODO.md
-- docs/todos/DASALL_infrastructure_watchdog组件专项TODO.md
-- docs/todos/DASALL_infrastructure_ota组件专项TODO.md
-- docs/todos/DASALL_platform_linux组件专项TODO.md
-- docs/todos/DASALL_profiles子系统专项TODO.md
-- docs/todos/DASALL_infrastructure_audit组件专项TODO.md
-- docs/todos/DASALL_infrastructure_policy组件专项TODO.md
-- docs/todos/DASALL_infrastructure_diagnostics组件专项TODO.md
+- docs/todos/contracts
+- docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md
+- docs/todos/platform/DASALL_platform_linux组件专项TODO.md
+- docs/todos/profiles/DASALL_profiles子系统专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md
+- docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md
 
 
 ### 4.4 Task

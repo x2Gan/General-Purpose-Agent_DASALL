@@ -32,7 +32,7 @@ infra/health 属于 Infrastructure Layer（Layer 1），负责基础健康状态
 5. docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md
 6. docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
 7. docs/plans/DASALL_contracts冻结实施计划.md
-8. docs/todos/DASALL_contracts冻结TODO总表.md
+8. docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 9. docs/architecture/DASALL_infrastructure子系统详细设计.md（已给出 HealthMonitor 入口语义）
 10. docs/development/DASALL_工程协作与编码规范.md
 11. 代码现状：infra/CMakeLists.txt、infra/src/placeholder.cpp、infra/src/health/（空目录）

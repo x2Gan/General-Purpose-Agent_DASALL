@@ -18,12 +18,12 @@
 ### 改动
 
 1. 完成 PLAT-LNX-TODO-004-D 设计收敛：
-   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-004-IThread设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-004-IThread%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化 IThread 调用面、ThreadOptions 字段边界、Design->Build 映射与 D Gate。
+   - 新增 [docs/todos/platform/PLAT-LNX-TODO-004-IThread设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-004-IThread%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化 IThread 调用面、ThreadOptions 字段边界、Design->Build 映射与 D Gate。
 2. 完成 PLAT-LNX-TODO-004-B 代码落地：
    - 新增 [platform/include/IThread.h](platform/include/IThread.h)
    - 新增 [tests/unit/platform/linux/InterfaceSurfaceTest.cpp](tests/unit/platform/linux/InterfaceSurfaceTest.cpp)
    - 更新 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/platform/DASALL_platform_linux组件专项TODO.md](docs/todos/platform/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -61,14 +61,14 @@
 ### 改动
 
 1. 完成 PLAT-LNX-TODO-003-D 设计收敛：
-   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-003-PlatformError设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-003-PlatformError%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、最小 contracts 映射锚点、Design->Build 映射与 D Gate。
+   - 新增 [docs/todos/platform/PLAT-LNX-TODO-003-PlatformError设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-003-PlatformError%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、最小 contracts 映射锚点、Design->Build 映射与 D Gate。
    - 针对 BLK-04，采用“冻结 category->contracts 一级失败域映射 + 单测”完成最小解阻，不提前扩张细粒度 ErrorInfo 映射评审范围。
 2. 完成 PLAT-LNX-TODO-003-B 代码落地：
    - 新增 [platform/include/PlatformError.h](platform/include/PlatformError.h)
    - 新增 [platform/include/PlatformResult.h](platform/include/PlatformResult.h)
    - 新增 [tests/unit/platform/linux/PlatformErrorMappingTest.cpp](tests/unit/platform/linux/PlatformErrorMappingTest.cpp)
    - 更新 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/platform/DASALL_platform_linux组件专项TODO.md](docs/todos/platform/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -107,13 +107,13 @@
 ### 改动
 
 1. 完成 PLAT-LNX-TODO-002-D 设计收敛：
-   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-002-LinuxPlatformCapabilities设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-002-LinuxPlatformCapabilities%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化能力三态、reason 约束、Design->Build 映射与 D Gate。
+   - 新增 [docs/todos/platform/PLAT-LNX-TODO-002-LinuxPlatformCapabilities设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-002-LinuxPlatformCapabilities%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化能力三态、reason 约束、Design->Build 映射与 D Gate。
    - 明确本轮只冻结状态三态和 reason 文本，不提前扩张独立 reason_code 域或 CapabilityRegistry 行为。
 2. 完成 PLAT-LNX-TODO-002-B 代码落地：
    - 新增 [platform/include/linux/LinuxPlatformCapabilities.h](platform/include/linux/LinuxPlatformCapabilities.h)
    - 新增 [tests/unit/platform/linux/LinuxPlatformCapabilitiesTest.cpp](tests/unit/platform/linux/LinuxPlatformCapabilitiesTest.cpp)
    - 更新 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/platform/DASALL_platform_linux组件专项TODO.md](docs/todos/platform/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -152,7 +152,7 @@
 ### 改动
 
 1. 完成 PLAT-LNX-TODO-001-D 设计收敛：
-   - 新增 [docs/todos/deliverables/PLAT-LNX-TODO-001-PlatformInitConfig设计收敛.md](docs/todos/deliverables/PLAT-LNX-TODO-001-PlatformInitConfig%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、默认值、Design->Build 映射与 D Gate。
+   - 新增 [docs/todos/platform/PLAT-LNX-TODO-001-PlatformInitConfig设计收敛.md](docs/todos/platform/PLAT-LNX-TODO-001-PlatformInitConfig%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、默认值、Design->Build 映射与 D Gate。
    - 明确本轮只冻结 `target_platform/profile_name/enable_hal/queue_defaults/io_timeouts`，不提前扩张到 profile 注入键统一或工厂逻辑。
 2. 完成 PLAT-LNX-TODO-001-B 代码落地：
    - 新增 [platform/include/linux/PlatformInitConfig.h](platform/include/linux/PlatformInitConfig.h)
@@ -160,7 +160,7 @@
    - 新增 [tests/unit/platform/CMakeLists.txt](tests/unit/platform/CMakeLists.txt)
    - 新增 [tests/unit/platform/linux/CMakeLists.txt](tests/unit/platform/linux/CMakeLists.txt)
    - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_platform_linux组件专项TODO.md](docs/todos/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/platform/DASALL_platform_linux组件专项TODO.md](docs/todos/platform/DASALL_platform_linux%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -202,7 +202,7 @@
    - 核对 `tests/contract/CMakeLists.txt` 已通过 centralized registration 机制接入 9 个 infra 边界 contract 用例。
    - 核对相关 infra contract 目标已显式链接 `dasall_infra`，并统一打上 `contract` 标签。
 2. 完成 INF-TODO-012-B 证据闭环：
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -243,7 +243,7 @@
    - 核对 `tests/unit/CMakeLists.txt` 已接入 `infra` 子目录。
    - 核对 `tests/unit/infra/CMakeLists.txt` 已注册 9 个 infra unit 目标并统一打上 `unit` 标签。
 2. 完成 INF-TODO-011-B 证据闭环：
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -285,7 +285,7 @@
    - 保留 `src/placeholder.cpp` 作为短期 non-empty 兜底，但明确其不再是唯一真实源码入口。
 2. 完成 INF-TODO-010-B 代码落地：
    - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -331,7 +331,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp](tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -378,7 +378,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp](tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -425,7 +425,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp](tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -472,7 +472,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp](tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -521,7 +521,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/InfrastructureServiceBoundaryContractTest.cpp](tests/contract/smoke/InfrastructureServiceBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -568,7 +568,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp](tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -616,7 +616,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/AuditEventBoundaryContractTest.cpp](tests/contract/smoke/AuditEventBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -664,7 +664,7 @@
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/LogEventBoundaryContractTest.cpp](tests/contract/smoke/LogEventBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -713,7 +713,7 @@
    - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
    - 新增 [tests/contract/smoke/InfraContextBoundaryContractTest.cpp](tests/contract/smoke/InfraContextBoundaryContractTest.cpp)
    - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
-   - 回写 [docs/todos/DASALL_infrastructure子系统专项TODO.md](docs/todos/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
 
 ### 测试
 
@@ -753,7 +753,7 @@
 
 1. 完成 WP05-T012-D 交付：
    - 新增 design 文档：
-     - [docs/todos/contracts-freeze/deliverables/WP05-T012-接口准入评估单.md](docs/todos/contracts-freeze/deliverables/WP05-T012-%E6%8E%A5%E5%8F%A3%E5%87%86%E5%85%A5%E8%AF%84%E4%BC%B0%E5%8D%95.md)
+     - [docs/todos/contracts/deliverables/WP05-T012-接口准入评估单.md](docs/todos/contracts/deliverables/WP05-T012-%E6%8E%A5%E5%8F%A3%E5%87%86%E5%85%A5%E8%AF%84%E4%BC%B0%E5%8D%95.md)
    - 基于 T011 目录、阶段 5 准入原则、架构依赖规则与 ADR-006/008，明确 `Admit`、`Postpone`、`Return` 三类准入结论。
    - 固化首版结论：`IToolManager`、`ILLMAdapter` 为 Admit；其余 8 个 catalog 候选为 Postpone；目录外/元数据不完整/同模块伪依赖为 Return。
 2. 完成 WP05-T012-B 代码落地：
@@ -764,7 +764,7 @@
    - [tests/contract/smoke/InterfaceAdmissionContractTest.cpp](tests/contract/smoke/InterfaceAdmissionContractTest.cpp)
    - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `InterfaceAdmissionContractTest`。
 4. 回写任务状态：
-   - [docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts-freeze/WP-05-%E5%AD%90%E5%9F%9F%E7%BB%86%E5%8C%96%E4%B8%8EContractTestsTODO.md) 将 WP05-T012-D/B 更新为 Done，并补充发现性与验收证据。
+   - [docs/todos/contracts/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts/WP-05-%E5%AD%90%E5%9F%9F%E7%BB%86%E5%8C%96%E4%B8%8EContractTestsTODO.md) 将 WP05-T012-D/B 更新为 Done，并补充发现性与验收证据。
 
 ### 测试
 
@@ -809,7 +809,7 @@
 
 1. 完成 WP05-T011-D 交付：
    - 新增 design 文档：
-     - [docs/todos/contracts-freeze/deliverables/WP05-T011-接口候选清单.md](docs/todos/contracts-freeze/deliverables/WP05-T011-接口候选清单.md)
+     - [docs/todos/contracts/deliverables/WP05-T011-接口候选清单.md](docs/todos/contracts/deliverables/WP05-T011-接口候选清单.md)
    - 基于阶段 5 准入原则、架构 7.4 模块依赖规则、Blueprint 接口文件分布与 ADR-006/008，锁定 10 个跨模块接口候选。
    - 明确剔除 platform/infra/protocol-internal 接口，并区分 `ReviewReady` 与 `AwaitingSupportingContracts`。
 2. 完成 WP05-T011-B 代码落地：
@@ -820,7 +820,7 @@
    - [tests/contract/smoke/InterfaceCatalogContractTest.cpp](tests/contract/smoke/InterfaceCatalogContractTest.cpp)
    - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `InterfaceCatalogContractTest`。
 4. 回写任务状态：
-   - [docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md) 将 WP05-T011-D/B 更新为 Done，并补充发现性与验收证据。
+   - [docs/todos/contracts/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts/WP-05-子域细化与ContractTestsTODO.md) 将 WP05-T011-D/B 更新为 Done，并补充发现性与验收证据。
 
 ### 测试
 
@@ -865,7 +865,7 @@
 
 1. 完成 WP05-T001-D 交付：
    - 新增 design 文档：
-     - [docs/todos/contracts-freeze/deliverables/WP05-T001-子域推进顺序表.md](docs/todos/contracts-freeze/deliverables/WP05-T001-子域推进顺序表.md)
+     - [docs/todos/contracts/deliverables/WP05-T001-子域推进顺序表.md](docs/todos/contracts/deliverables/WP05-T001-子域推进顺序表.md)
    - 固化四波 rollout：Wave1 `tool`；Wave2 `prompt + memory`；Wave3 `task + event`；Wave4 `llm`。
    - 明确允许并行、禁止并行、越权禁区和 Design->Build 映射。
 2. 完成 WP05-T001-B 代码落地：
@@ -876,7 +876,7 @@
    - [tests/contract/smoke/DomainRolloutContractTest.cpp](tests/contract/smoke/DomainRolloutContractTest.cpp)
    - [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 注册 `DomainRolloutContractTest`。
 4. 回写任务状态：
-   - [docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts-freeze/WP-05-子域细化与ContractTestsTODO.md) 将 WP05-T001-D/B 更新为 Done，并补充验收证据。
+   - [docs/todos/contracts/WP-05-子域细化与ContractTestsTODO.md](docs/todos/contracts/WP-05-子域细化与ContractTestsTODO.md) 将 WP05-T001-D/B 更新为 Done，并补充验收证据。
 
 ### 测试
 
@@ -934,11 +934,11 @@
    - [tests/contract/checkpoint/BudgetSnapshotContractTest.cpp](tests/contract/checkpoint/BudgetSnapshotContractTest.cpp)
      - 新增 `test_remaining_computation_overflow_is_rejected`。
 5. 文档完善收敛：
-   - [docs/todos/contracts-freeze/deliverables/WP02-T013-ReviewChecklist-v1.md](docs/todos/contracts-freeze/deliverables/WP02-T013-ReviewChecklist-v1.md) 状态更新为 Done。
-   - [docs/todos/contracts-freeze/deliverables/WP02-T014-评审纪要.md](docs/todos/contracts-freeze/deliverables/WP02-T014-评审纪要.md) 评审范围扩展到 T001-T013 并补 D0 决议。
-   - [docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md](docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md) 状态统一收敛为 Done。
-   - [docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md](docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md) 冻结资产清单补全至 T015 自包含。
-   - [docs/todos/contracts-freeze/deliverables/WP02-评审覆盖矩阵与代码审计报告-2026-03-16.md](docs/todos/contracts-freeze/deliverables/WP02-评审覆盖矩阵与代码审计报告-2026-03-16.md) 追加修复执行记录与修复后结论。
+   - [docs/todos/contracts/deliverables/WP02-T013-ReviewChecklist-v1.md](docs/todos/contracts/deliverables/WP02-T013-ReviewChecklist-v1.md) 状态更新为 Done。
+   - [docs/todos/contracts/deliverables/WP02-T014-评审纪要.md](docs/todos/contracts/deliverables/WP02-T014-评审纪要.md) 评审范围扩展到 T001-T013 并补 D0 决议。
+   - [docs/todos/contracts/WP-02-横切基础对象TODO.md](docs/todos/contracts/WP-02-横切基础对象TODO.md) 状态统一收敛为 Done。
+   - [docs/todos/contracts/deliverables/WP02-T015-M2冻结包.md](docs/todos/contracts/deliverables/WP02-T015-M2冻结包.md) 冻结资产清单补全至 T015 自包含。
+   - [docs/todos/contracts/deliverables/WP02-评审覆盖矩阵与代码审计报告-2026-03-16.md](docs/todos/contracts/deliverables/WP02-评审覆盖矩阵与代码审计报告-2026-03-16.md) 追加修复执行记录与修复后结论。
 
 ### 测试
 
@@ -2205,14 +2205,14 @@
 
 ### 关键产物
 
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T015-B1-timeout迁移清单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
 - `/home/gangan/DASALL-Agent/contracts/include/boundary/CompatibilityGuards.h`
 - `/home/gangan/DASALL-Agent/tests/contract/smoke/CompatibilityContractTest.cpp`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP03-T001-主链路对象依赖表.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-03-主链路对象TODO.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T015-M2冻结包.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/WP-02-横切基础对象TODO.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP03-T001-主链路对象依赖表.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/WP-03-主链路对象TODO.md`
 - `/home/gangan/DASALL-Agent/docs/development/Build开发任务TODO生成提示词模板.md`
 
 ### 验证结果
@@ -2227,9 +2227,9 @@
 - WP-02 已冻结完成（M2=FROZEN，T015=Done）。
 - WP-03 已解除前置阻塞，当前从 T002/T003 继续推进“Design+Build 并行落地”。
 - 建议优先顺序：
-  - `docs/todos/contracts-freeze/WP-03-主链路对象TODO.md`
-  - `docs/todos/contracts-freeze/deliverables/WP03-T002-AgentRequest语义说明.md`
-  - `docs/todos/contracts-freeze/deliverables/WP03-T003-AgentRequest字段表.md`
+  - `docs/todos/contracts/WP-03-主链路对象TODO.md`
+  - `docs/todos/contracts/deliverables/WP03-T002-AgentRequest语义说明.md`
+  - `docs/todos/contracts/deliverables/WP03-T003-AgentRequest字段表.md`
   - `tests/contract/smoke/`（同步新增 WP-03 契约测试）
 
 ### 风险/注意事项
@@ -2262,11 +2262,11 @@
 
 ### 关键产物
 
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T014-评审纪要.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T014-评审纪要.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T015-M2冻结包.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T015-B1-timeout迁移清单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/WP-02-横切基础对象TODO.md`
 - `/home/gangan/DASALL-Agent/contracts/include/boundary/CompatibilityGuards.h`
 - `/home/gangan/DASALL-Agent/tests/contract/smoke/CompatibilityContractTest.cpp`
 - `/home/gangan/DASALL-Agent/tests/contract/CMakeLists.txt`
@@ -2284,9 +2284,9 @@
 - 下一任务建议：先修复当前工作区 CMake 配置问题并执行 `dasall_contract_compatibility_test`，通过后关闭 B2。
 - 之后进入 WP-03 主链路对象的首个原子任务。
 - 建议优先顺序：
-  - `docs/todos/contracts-freeze/deliverables/WP02-T015-M2冻结包.md`
-  - `docs/todos/contracts-freeze/deliverables/WP02-T015-B1-timeout迁移清单.md`
-  - `docs/todos/contracts-freeze/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
+  - `docs/todos/contracts/deliverables/WP02-T015-M2冻结包.md`
+  - `docs/todos/contracts/deliverables/WP02-T015-B1-timeout迁移清单.md`
+  - `docs/todos/contracts/deliverables/WP02-T015-B2-枚举降级契约测试基线.md`
   - `tests/contract/smoke/CompatibilityContractTest.cpp`
 
 ### 风险/注意事项
@@ -2320,18 +2320,18 @@
 
 ### 关键产物
 
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T003-术语定义表-v1.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T004-术语消费者矩阵.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T005-顶层对象流图-v1.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T006-稳定对象标注版流图.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T007-内部对象边界清单.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T008-contracts边界说明-v1.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T009-ContextPacket约束核对单.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T010-恢复语义核对单.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T011-协同语义核对单.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T012-整体骨架评审纪要.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/deliverables/WP01-T013-M1冻结包.md`
-- `/home/gangan/DASALL-Agent/docs/todos/contracts-freeze/WP-01-术语与对象地图TODO.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T003-术语定义表-v1.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T004-术语消费者矩阵.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T005-顶层对象流图-v1.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T006-稳定对象标注版流图.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T007-内部对象边界清单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T008-contracts边界说明-v1.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T009-ContextPacket约束核对单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T010-恢复语义核对单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T011-协同语义核对单.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T012-整体骨架评审纪要.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/deliverables/WP01-T013-M1冻结包.md`
+- `/home/gangan/DASALL-Agent/docs/todos/contracts/WP-01-术语与对象地图TODO.md`
 
 ### 验证结果
 
@@ -2345,7 +2345,7 @@
 - WP-01 已闭环完成（T013 Completed）
 - 下一任务建议：进入 WP-02 横切基础对象，优先冻结入口/结果/标识元数据与错误域基线
 - 建议优先顺序：
-  - `docs/todos/contracts-freeze/WP-02-横切基础对象TODO.md`
+  - `docs/todos/contracts/WP-02-横切基础对象TODO.md`
   - `contracts/include/agent/`
   - `contracts/include/error/`
   - `contracts/include/context/`
@@ -2603,7 +2603,7 @@
 
 - 根构建文件：/home/gangan/DASALL-OS/CMakeLists.txt
 - 模块构建文件：/home/gangan/DASALL-OS/*/CMakeLists.txt
-- 执行指引：/home/gangan/DASALL-OS/docs/todos/DASALL_工程落地实现步骤指引.md
+- 执行指引：/home/gangan/DASALL-Agent/docs/plans/DASALL_工程落地实现步骤指引.md
 
 ### 验证结果
 

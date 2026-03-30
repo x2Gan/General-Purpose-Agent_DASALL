@@ -88,7 +88,7 @@
 1. 架构文档：docs/architecture/DASSALL_Agent_architecture.md
 2. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
 3. 相关 ADR：docs/adr
-4. contracts 计划与 TODO：docs/plans/DASALL_contracts冻结实施计划.md，docs/todos/DASALL_contracts冻结TODO总表.md
+4. contracts 计划与 TODO：docs/plans/DASALL_contracts冻结实施计划.md，docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 5. infrastructure 子系统详细设计：docs/architecture/DASALL_infrastructure子系统详细设计.md
 6. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 7. 当前模块代码骨架：N/A
@@ -103,7 +103,7 @@
 3. 明确异常语义、恢复路径、可观测性与配置策略。
 4. 输出可映射到 Build 的实施分解建议。
 5. 输出测试策略、质量门、风险与回退策略。
-6. 检查并对齐到DASALL_infrastructure子系统详细设计.md和docs/todos/DASALL_infrastructure子系统专项TODO.md
+6. 检查并对齐到DASALL_infrastructure子系统详细设计.md和docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
 
 ### 4.5 约束策略
 
@@ -401,7 +401,7 @@
 - <ARCH_DOC_PATHS> = docs/architecture/DASSALL_Agent_architecture.md
 - <BLUEPRINT_DOC_PATHS> = docs/architecture/DASALL_Engineering_Blueprint.md
 - <ADR_PATHS> = docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md; docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md; docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
-- <CONTRACTS_PLAN_AND_TODOS> = docs/plans/DASALL_contracts冻结实施计划.md; docs/todos/DASALL_contracts冻结TODO总表.md
+- <CONTRACTS_PLAN_AND_TODOS> = docs/plans/DASALL_contracts冻结实施计划.md; docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 - <DEV_RULES_PATH> = docs/development/DASALL_工程协作与编码规范.md
 - <MODULE_CODE_PATHS> = runtime/include; runtime/src; tests/unit/runtime; tests/integration
 - <OUTPUT_DOC_PATH> = docs/architecture/runtime_模块详细设计方案.md

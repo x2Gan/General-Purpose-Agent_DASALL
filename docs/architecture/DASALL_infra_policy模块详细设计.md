@@ -17,7 +17,7 @@ infra/policy 属于 Infrastructure Layer（Layer 1），负责安全策略的装
 1. docs/architecture/DASSALL_Agent_architecture.md（3.4.7、5.10、8.8、8.10）
 2. docs/architecture/DASALL_Engineering_Blueprint.md（3.12、4.1、4.2、4.3、5.1）
 3. docs/architecture/DASALL_infrastructure子系统详细设计.md（6.2、6.3、6.4、6.5、6.6、6.8、6.9、6.10、6.11、7、8）
-4. docs/todos/DASALL_infrastructure子系统专项TODO.md（INF-TODO-017、INF-BLK-07）
+4. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md（INF-TODO-017、INF-BLK-07）
 
 ### 1.2 模块目标
 
@@ -76,7 +76,7 @@ infra/policy 属于 Infrastructure Layer（Layer 1），负责安全策略的装
 2. infra/include 为空，未落盘 ISecurityPolicyManager、PolicySnapshot 等接口/对象。
 3. file_search 结果显示 infra 真实代码仅有 infra/src/placeholder.cpp，未见 security_policy 目录与实现。
 4. docs/architecture/DASALL_infrastructure子系统详细设计.md 已明确 SecurityPolicyManager 为 Must 独立组件，并进入 Design -> Build 映射。
-5. docs/todos/DASALL_infrastructure子系统专项TODO.md 已将 INF-TODO-017 标记为可执行 L2 任务，同时指出 INF-BLK-07：规则 schema 与冲突裁定顺序未冻结。
+5. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md 已将 INF-TODO-017 标记为可执行 L2 任务，同时指出 INF-BLK-07：规则 schema 与冲突裁定顺序未冻结。
 
 ### 3.2 现状-目标差距表
 

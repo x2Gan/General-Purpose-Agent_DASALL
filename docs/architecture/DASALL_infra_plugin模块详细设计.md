@@ -15,7 +15,7 @@ plugin 组件属于 Layer 1 Infrastructure Layer，在 DASALL 中承担“插件
 1. docs/architecture/DASSALL_Agent_architecture.md（3.4.7、5.10.1、5.10.2、8.8、8.9）
 2. docs/architecture/DASALL_Engineering_Blueprint.md（3.12、4.2、4.3、5.1、5.2）
 3. docs/architecture/DASALL_infrastructure子系统详细设计.md（6.2、6.3、6.4、6.5、6.6、6.8、6.9、6.10、7、8）
-4. docs/todos/DASALL_infrastructure子系统专项TODO.md（INF-TODO-019、INF-BLK-09）
+4. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md（INF-TODO-019、INF-BLK-09）
 
 ### 1.2 目标
 
@@ -78,7 +78,7 @@ Must-Not：越权调度、越权语义扩写、越界依赖业务实现。
 
 证据：
 1. docs/architecture/DASALL_infrastructure子系统详细设计.md（PluginManager 条目与阻塞）
-2. docs/todos/DASALL_infrastructure子系统专项TODO.md（INF-TODO-019 Blocked，INF-BLK-09）
+2. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md（INF-TODO-019 Blocked，INF-BLK-09）
 3. infra/src 当前目录无 plugin 子目录
 
 ### 3.2 现状-目标冲突

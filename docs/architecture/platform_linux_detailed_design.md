@@ -25,7 +25,7 @@ platform/linux 属于 Platform Abstraction Layer（Layer 2），负责提供 Lin
 1. 架构文档：docs/architecture/DASSALL_Agent_architecture.md（3.4.6、3.7、7.4、7.5、9.2）
 2. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md（3.11、4.2、5、6、7）
 3. ADR：docs/adr/ADR-005-architecture-review-baseline.md、ADR-006、ADR-007、ADR-008
-4. contracts 计划/TODO：docs/plans/DASALL_contracts冻结实施计划.md、docs/todos/DASALL_contracts冻结TODO总表.md
+4. contracts 计划/TODO：docs/plans/DASALL_contracts冻结实施计划.md、docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 5. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 6. 代码现状：platform/CMakeLists.txt、platform/src/placeholder.cpp、platform/src/linux/（空）、platform/src/x86/（空）、platform/src/arm/hal/（空）
 7. 行业参考方向：POSIX/pthread + epoll/eventfd 的能力切片模式、libuv/Boost.Asio 的事件循环统一模式、嵌入式 Linux 平台 HAL 分层模式（仅作为候选方案参考，不作为硬约束来源）

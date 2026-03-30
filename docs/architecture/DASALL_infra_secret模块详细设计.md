@@ -23,7 +23,7 @@ infra/secret 属于 Layer 1 Infrastructure Layer，负责为 runtime、apps、to
 1. docs/architecture/DASSALL_Agent_architecture.md 5.10、8.8、8.10
 2. docs/architecture/DASALL_Engineering_Blueprint.md 3.12、4.1、4.2、4.3、5.1
 3. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.2、6.3、6.6、6.9、8.2
-4. docs/todos/DASALL_infrastructure子系统专项TODO.md 中 SecretManager 阻塞记录
+4. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md 中 SecretManager 阻塞记录
 
 ### 1.2 边界定义
 
@@ -112,7 +112,7 @@ Must-Not：不改写 ADR、不把 backend 细节写入 contracts、不越权到 
 1. infra/CMakeLists.txt 仅编译 src/placeholder.cpp。
 2. infra/src/placeholder.cpp 为 keep_library_non_empty 占位实现。
 3. docs/architecture/DASALL_infrastructure子系统详细设计.md 对 SecretManager 仅有职责、I/O 与接口名摘要。
-4. docs/todos/DASALL_infrastructure子系统专项TODO.md 将 ISecretManager 标记为 Blocked，阻塞点为 SecretHandle、RotationRequest、权限模型未冻结。
+4. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md 将 ISecretManager 标记为 Blocked，阻塞点为 SecretHandle、RotationRequest、权限模型未冻结。
 
 ### 3.2 现状-目标冲突
 

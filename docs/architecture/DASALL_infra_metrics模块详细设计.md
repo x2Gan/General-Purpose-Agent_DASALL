@@ -497,7 +497,7 @@ metrics 非职责：
 1. 架构与分层：docs/architecture/DASSALL_Agent_architecture.md
 2. 工程目录与依赖规则：docs/architecture/DASALL_Engineering_Blueprint.md
 3. ADR 边界：docs/adr/ADR-005-architecture-review-baseline.md、ADR-006-context-orchestrator-vs-prompt-composer.md、ADR-007-reflection-engine-vs-recovery-manager.md、ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
-4. contracts 冻结策略：docs/plans/DASALL_contracts冻结实施计划.md、docs/todos/DASALL_contracts冻结TODO总表.md
+4. contracts 冻结策略：docs/plans/DASALL_contracts冻结实施计划.md、docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 5. infra 子系统基线：docs/architecture/DASALL_infrastructure子系统详细设计.md、docs/architecture/DASALL_infra_logging模块详细设计.md、docs/architecture/DASALL_infra_tracing模块详细设计.md
 6. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 7. 现状代码：infra/CMakeLists.txt、infra/src/placeholder.cpp、infra/src/metrics/

@@ -127,7 +127,7 @@
 - <TASK_TITLE> = 标记每个术语所属层级和主要消费者
 - <MODE> = Design
 - <TASK_GOAL> = 输出术语消费者矩阵，区分顶层共享对象与模块内部术语
-- <TASK_DELIVERABLE> = docs/todos/contracts-freeze/WP-01 配套评审草案
+- <TASK_DELIVERABLE> = docs/todos/contracts/WP-01 配套评审草案
 - <TASK_DONE_CRITERIA> = 每个核心术语可映射到至少一个主消费者且无跨层歧义
 
 ---

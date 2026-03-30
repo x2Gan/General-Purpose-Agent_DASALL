@@ -25,7 +25,7 @@
 | ID | 等级 | 类别 | 问题描述 | 证据 | 影响 | 修复建议 | Owner |
 |----|------|------|----------|------|------|----------|-------|
 | ARC-01 | P1 | 架构覆盖 | Planning 语义在顶层架构中存在，但在 infra 追溯链未以独立边界建模，跨域可观测规则对 Planning 阶段约束不够显式 | docs/architecture/DASSALL_Agent_architecture.md:1637, docs/architecture/DASSALL_Agent_architecture.md:1990, docs/architecture/DASALL_infrastructure子系统详细设计.md:24 | Planning 阶段故障定位和预算治理可能在跨域排障时被并入 Cognition 泛化处理 | 在 infra/tracing、infra/metrics 的 contracts 边界测试中增加 Planning stage 标签与预算观测项（不新增共享对象，仅补约束） | 架构组 + tracing/metrics 负责人 |
-| ARC-02 | P2 | 职责漂移风险 | Infra 文档明确“非职责”，但多个组件 TODO 中仍存在“先实现后补设计”的冲动，需要更强门禁统一 | docs/architecture/DASALL_infrastructure子系统详细设计.md:35, docs/todos/DASALL_infrastructure_policy组件专项TODO.md:35 | 易出现越权实现与返工 | 统一执行“Blocked 先解阻”门禁，禁止绕过前置设计进入实现 | Infra PMO |
+| ARC-02 | P2 | 职责漂移风险 | Infra 文档明确“非职责”，但多个组件 TODO 中仍存在“先实现后补设计”的冲动，需要更强门禁统一 | docs/architecture/DASALL_infrastructure子系统详细设计.md:35, docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md:35 | 易出现越权实现与返工 | 统一执行“Blocked 先解阻”门禁，禁止绕过前置设计进入实现 | Infra PMO |
 
 Step1 覆盖结论：
 1. Cognition：覆盖（顶层明确）
@@ -46,7 +46,7 @@ Step1 覆盖结论：
 | 子系统 -> 组件映射 | 是否有职责未落地 | 通过 | docs/architecture/DASALL_infrastructure子系统详细设计.md:46 | 12 个 infra 子域均有详细设计文档 |
 | 组件 -> TODO 映射 | 是否存在设计未实现 | 通过 | 各组件 TODO 文档第 6 章任务表 | 映射存在，但大量 Not Started/Blocked |
 | TODO -> Design 追溯 | 是否存在野任务 | 通过 | 各 TODO 表“来源依据/设计锚点”列 | 抽样未发现无锚点任务 |
-| 命名一致性 | 名词/接口/模块命名是否统一 | 已修复 | docs/architecture/DASALL_infra_tracing模块详细设计.md:6, docs/todos/DASALL_infrastructure_tracing组件专项TODO.md:1 | tracer vs tracing 已统一为 tracing |
+| 命名一致性 | 名词/接口/模块命名是否统一 | 已修复 | docs/architecture/DASALL_infra_tracing模块详细设计.md:6, docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md:1 | tracer vs tracing 已统一为 tracing |
 | Design -> Build 映射 | 是否有实现与测试入口 | 已修复 | infra/CMakeLists.txt:1, tests/CMakeLists.txt:1, tests/integration/CMakeLists.txt:1 | 构建入口已纳入 tracing 最小源文件，tests 顶层已接线 integration 且具备可发现 smoke 用例 |
 
 ## 2.2 额外输出
@@ -80,7 +80,7 @@ Step1 覆盖结论：
 | CMP-01 | P0 | 接口契约 | 多组件接口已在设计中定义，但代码未落盘（include 为空或骨架不足） | 例：docs/architecture/DASALL_infra_secret模块详细设计.md:103, docs/architecture/DASALL_infra_watchdog模块详细设计.md:81 | 下游无法稳定依赖抽象，联调被阻断 | 先做接口冻结里程碑（M1），后做实现里程碑（M2+） | 各组件负责人 |
 | CMP-02 | P1 | 生命周期状态机 | OTA/secret/watchdog 设计中状态机明确，但跨组件状态协同仍依赖阻塞项解锁 | docs/architecture/DASALL_infra_OTA模块详细设计.md:111, docs/architecture/DASALL_infra_secret模块详细设计.md:519, docs/architecture/DASALL_infra_watchdog模块详细设计.md:265 | 状态跃迁测试无法全链跑通 | 在 Phase 1 先冻结状态对象与转移表，再推进集成测试 | OTA/Secret/Watchdog |
 | CMP-03 | P1 | 所有权与内存安全 | Secret 明文生命周期（zeroize）方向正确，但尚未进入实现验证 | docs/architecture/DASALL_infra_secret模块详细设计.md:165, docs/architecture/DASALL_infra_secret模块详细设计.md:517 | 安全承诺停留在设计层 | 将 zeroize 测试纳入强制 gate | secret 负责人 |
-| CMP-04 | P1 | 可替换性 | 插件、策略、导出器等均强调接口化，但真实适配层尚未入图 | docs/architecture/DASALL_infra_plugin模块详细设计.md, docs/todos/DASALL_infrastructure_plugin组件专项TODO.md:250 | 替换性设计难以被验证 | 优先落 I* 接口 + mock adapter + unit | plugin/policy 负责人 |
+| CMP-04 | P1 | 可替换性 | 插件、策略、导出器等均强调接口化，但真实适配层尚未入图 | docs/architecture/DASALL_infra_plugin模块详细设计.md, docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md:250 | 替换性设计难以被验证 | 优先落 I* 接口 + mock adapter + unit | plugin/policy 负责人 |
 
 组件级可测试性缺口：
 1. integration 发现性缺口（全组件共性）
@@ -116,9 +116,9 @@ Step1 覆盖结论：
 
 | ID | 等级 | 类别 | 问题描述 | 证据 | 影响 | 修复建议 | Owner |
 |----|------|------|----------|------|------|----------|-------|
-| EXT-01 | P1 | 插件化 | plugin 的 ABI/签名兼容矩阵仍是阻塞前提 | docs/todos/DASALL_infrastructure_plugin组件专项TODO.md:250 | 动态扩展能力无法实证 | 先冻结 ABI 兼容矩阵，再开装载路径 | plugin 负责人 |
+| EXT-01 | P1 | 插件化 | plugin 的 ABI/签名兼容矩阵仍是阻塞前提 | docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md:250 | 动态扩展能力无法实证 | 先冻结 ABI 兼容矩阵，再开装载路径 | plugin 负责人 |
 | EXT-02 | P1 | 多 Provider | secret/ota 的 backend/provider 设计存在但多后端未入图 | docs/architecture/DASALL_infra_secret模块详细设计.md:461, docs/architecture/DASALL_infra_OTA模块详细设计.md:525 | Provider 切换风险后置 | 先落 mock/file 统一接口，KMS/远程适配后置 | secret/ota |
-| EXT-03 | P2 | 版本迁移 | contracts 兼容策略清晰，但组件对迁移脚本/灰度证据模板不统一 | docs/todos/contracts-freeze/deliverables/DASALL_contracts交付验收报告-2026-03-23.md:372 | 演进成本增加 | 统一组件迁移模板并纳入 gate | 架构治理组 |
+| EXT-03 | P2 | 版本迁移 | contracts 兼容策略清晰，但组件对迁移脚本/灰度证据模板不统一 | docs/todos/contracts/deliverables/DASALL_contracts交付验收报告-2026-03-23.md:372 | 演进成本增加 | 统一组件迁移模板并纳入 gate | 架构治理组 |
 
 ---
 
@@ -138,7 +138,7 @@ Step1 覆盖结论：
 
 | ID | 等级 | 类别 | 问题描述 | 证据 | 影响 | 修复建议 | Owner |
 |----|------|------|----------|------|------|----------|-------|
-| TD-MIS-01 | P1 | 跨组件治理 | 缺少“仓库级 integration 顶层接线”单一主任务，当前分散在多个组件 Blocked 条目中 | docs/todos/DASALL_infrastructure子系统专项TODO.md:226, tests/CMakeLists.txt:1 | 重复阻塞、协同成本高 | 新增仓库级任务 INF-PLAT-INT-001，统一解阻后批量解除组件 Blocked | 测试平台组 |
+| TD-MIS-01 | P1 | 跨组件治理 | 缺少“仓库级 integration 顶层接线”单一主任务，当前分散在多个组件 Blocked 条目中 | docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md:226, tests/CMakeLists.txt:1 | 重复阻塞、协同成本高 | 新增仓库级任务 INF-PLAT-INT-001，统一解阻后批量解除组件 Blocked | 测试平台组 |
 | TD-MIS-02 | P1 | 并发策略 | 缺少跨组件统一锁顺序/背压策略任务 | 多组件仅局部描述 | 并发一致性风险 | 新增 INF-CONCUR-001 标准任务 | infra 架构组 |
 
 ## 7.4 建议新增 TODO（原子粒度，三件套）

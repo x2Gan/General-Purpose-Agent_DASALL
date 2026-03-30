@@ -13,7 +13,7 @@
 ### 上下文
 - 项目根目录：/home/gangan/DASALL-Agent
 - 当前日期：2026-3-17
-- 评审范围：docs/todos/contracts-freeze/WP-03-主链路对象TODO.md所有交付内容
+- 评审范围：docs/todos/contracts/WP-03-主链路对象TODO.md所有交付内容
 - 权威约束来源（必须遵循）：
 1. 架构与方案设计文档
 2. 任务规划文档
@@ -22,7 +22,7 @@
 ### 本次评审对象
 - 方案文档：docs/plans/DASALL_contracts冻结实施计划.md
 - 代码改动：git status
-- 任务来源：docs/todos/DASALL_contracts冻结TODO总表.md
+- 任务来源：docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 - 验收命令：{{自行推理}}
 
 ### 评审要求
@@ -91,7 +91,7 @@
 
 - project_root：/home/gangan/DASALL-Agent
 - today：2026-03-16
-- scope_docs_or_paths：docs/todos/contracts-freeze/WP-01-术语与对象地图-Build开发TODO.md
+- scope_docs_or_paths：docs/todos/contracts/WP-01-术语与对象地图-Build开发TODO.md
 - adr_and_design_docs：docs/adr/ADR-006-*.md, docs/adr/ADR-007-*.md, docs/adr/ADR-008-*.md
 - worklog_path：docs/worklog/DASALL_开发执行记录.md
 - task_id：WP01-B007

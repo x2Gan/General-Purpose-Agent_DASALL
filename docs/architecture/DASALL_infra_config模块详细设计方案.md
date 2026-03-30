@@ -24,7 +24,7 @@
 6. docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md
 7. docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
 8. docs/plans/DASALL_contracts冻结实施计划.md
-9. docs/todos/DASALL_contracts冻结TODO总表.md
+9. docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 10. docs/development/DASALL_工程协作与编码规范.md
 
 ## 2. 约束清单
