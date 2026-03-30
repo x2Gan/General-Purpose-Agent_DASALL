@@ -119,6 +119,61 @@ void test_audit_event_rejects_empty_or_duplicate_side_effects() {
               "empty side_effects should be rejected by the minimal serializable guard");
 }
 
+void test_audit_context_defaults_missing_identifiers_to_unknown() {
+  using dasall::infra::AuditContext;
+  using dasall::infra::kAuditContextUnknown;
+  using dasall::tests::support::assert_true;
+
+  const AuditContext context{};
+
+  assert_true(context.uses_unknown_defaults(),
+              "audit context should default missing correlation identifiers to unknown instead of null semantics");
+  assert_true(context.has_non_empty_fields(),
+              "audit context should keep all correlation anchors non-empty after default construction");
+  assert_true(context.request_id == kAuditContextUnknown &&
+                  context.session_id == kAuditContextUnknown &&
+                  context.trace_id == kAuditContextUnknown,
+              "request/session/trace identifiers should use the frozen unknown placeholder when absent");
+}
+
+void test_audit_context_preserves_supplied_correlation_identifiers() {
+  using dasall::infra::AuditContext;
+  using dasall::tests::support::assert_true;
+
+  const AuditContext context{
+      .request_id = std::string("req-001"),
+      .session_id = std::string("session-001"),
+      .trace_id = std::string("trace-001"),
+      .task_id = std::string("task-001"),
+      .parent_task_id = std::string("parent-task-001"),
+      .lease_id = std::string("lease-001"),
+      .worker_type = std::string("tool-worker"),
+  };
+
+  assert_true(context.has_non_empty_fields(),
+              "explicitly supplied audit context identifiers should remain non-empty");
+  assert_true(!context.uses_unknown_defaults(),
+              "explicit identifiers should not collapse back to the unknown placeholder set");
+}
+
+void test_audit_context_rejects_empty_strings_when_callers_bypass_unknown_defaults() {
+  using dasall::infra::AuditContext;
+  using dasall::tests::support::assert_true;
+
+  const AuditContext invalid_context{
+      .request_id = std::string(),
+      .session_id = std::string("session-001"),
+      .trace_id = std::string("trace-001"),
+      .task_id = std::string("task-001"),
+      .parent_task_id = std::string("parent-task-001"),
+      .lease_id = std::string("lease-001"),
+      .worker_type = std::string("tool-worker"),
+  };
+
+  assert_true(!invalid_context.has_non_empty_fields(),
+              "callers that bypass unknown defaults with empty strings should fail the non-empty guard");
+}
+
 }  // namespace
 
 int main() {
@@ -126,6 +181,9 @@ int main() {
     test_audit_event_accepts_required_fields_and_contract_evidence_ref();
     test_audit_event_rejects_missing_required_fields();
     test_audit_event_rejects_empty_or_duplicate_side_effects();
+        test_audit_context_defaults_missing_identifiers_to_unknown();
+        test_audit_context_preserves_supplied_correlation_identifiers();
+        test_audit_context_rejects_empty_strings_when_callers_bypass_unknown_defaults();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

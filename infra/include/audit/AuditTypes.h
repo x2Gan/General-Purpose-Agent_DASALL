@@ -7,6 +7,8 @@
 
 namespace dasall::infra {
 
+inline constexpr char kAuditContextUnknown[] = "unknown";
+
 enum class AuditOutcome {
   Unspecified = 0,
   Succeeded = 1,
@@ -81,6 +83,30 @@ struct AuditEvent {
     }
 
     return true;
+  }
+};
+
+struct AuditContext {
+  std::string request_id = std::string(kAuditContextUnknown);
+  std::string session_id = std::string(kAuditContextUnknown);
+  std::string trace_id = std::string(kAuditContextUnknown);
+  std::string task_id = std::string(kAuditContextUnknown);
+  std::string parent_task_id = std::string(kAuditContextUnknown);
+  std::string lease_id = std::string(kAuditContextUnknown);
+  std::string worker_type = std::string(kAuditContextUnknown);
+
+  [[nodiscard]] bool has_non_empty_fields() const {
+    return !request_id.empty() && !session_id.empty() && !trace_id.empty() &&
+           !task_id.empty() && !parent_task_id.empty() && !lease_id.empty() &&
+           !worker_type.empty();
+  }
+
+  [[nodiscard]] bool uses_unknown_defaults() const {
+    return has_non_empty_fields() && request_id == kAuditContextUnknown &&
+           session_id == kAuditContextUnknown && trace_id == kAuditContextUnknown &&
+           task_id == kAuditContextUnknown &&
+           parent_task_id == kAuditContextUnknown &&
+           lease_id == kAuditContextUnknown && worker_type == kAuditContextUnknown;
   }
 };
 

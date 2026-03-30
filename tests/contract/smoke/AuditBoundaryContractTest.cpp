@@ -44,6 +44,21 @@ concept HasWorkerTaskMember = requires {
   &T::worker_task;
 };
 
+template <typename T>
+concept HasGoalIdMember = requires {
+  &T::goal_id;
+};
+
+template <typename T>
+concept HasCheckpointRefMember = requires {
+  &T::checkpoint_ref;
+};
+
+template <typename T>
+concept HasGlobalFsmStateMember = requires {
+  &T::global_fsm_state;
+};
+
 void test_audit_event_accepts_tool_result_boundary_reference() {
   using dasall::contracts::ToolResult;
   using dasall::contracts::validate_tool_result_field_rules;
@@ -206,6 +221,50 @@ void test_audit_event_rejects_unspecified_evidence_boundary() {
               "AuditEvent must not admit empty evidence refs for high-risk audit records");
 }
 
+void test_audit_context_keeps_correlation_fields_as_non_optional_strings() {
+  using dasall::infra::AuditContext;
+  using dasall::infra::kAuditContextUnknown;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(AuditContext{}.request_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditContext{}.session_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditContext{}.trace_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditContext{}.task_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditContext{}.parent_task_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditContext{}.lease_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditContext{}.worker_type), std::string>);
+  static_assert(!HasGoalIdMember<AuditContext>);
+  static_assert(!HasCheckpointRefMember<AuditContext>);
+  static_assert(!HasGlobalFsmStateMember<AuditContext>);
+
+  const AuditContext context{};
+
+  assert_true(context.uses_unknown_defaults(),
+              "AuditContext should default to unknown placeholders instead of optional null semantics");
+  assert_true(context.request_id == kAuditContextUnknown &&
+                  context.parent_task_id == kAuditContextUnknown &&
+                  context.worker_type == kAuditContextUnknown,
+              "AuditContext should keep all missing correlation anchors pinned to the frozen unknown placeholder");
+}
+
+void test_audit_context_rejects_empty_strings_when_unknown_semantics_are_bypassed() {
+  using dasall::infra::AuditContext;
+  using dasall::tests::support::assert_true;
+
+  const AuditContext invalid_context{
+      .request_id = std::string("req-001"),
+      .session_id = std::string("session-001"),
+      .trace_id = std::string("trace-001"),
+      .task_id = std::string(),
+      .parent_task_id = std::string("parent-task-001"),
+      .lease_id = std::string("lease-001"),
+      .worker_type = std::string("tool-worker"),
+  };
+
+  assert_true(!invalid_context.has_non_empty_fields(),
+              "AuditContext should reject empty-string anchors when callers bypass the frozen unknown placeholder semantics");
+}
+
 }  // namespace
 
 int main() {
@@ -214,6 +273,8 @@ int main() {
     test_audit_event_accepts_recovery_outcome_boundary_reference();
     test_audit_event_accepts_worker_task_boundary_reference_without_embedding_task_object();
     test_audit_event_rejects_unspecified_evidence_boundary();
+    test_audit_context_keeps_correlation_fields_as_non_optional_strings();
+    test_audit_context_rejects_empty_strings_when_unknown_semantics_are_bypassed();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

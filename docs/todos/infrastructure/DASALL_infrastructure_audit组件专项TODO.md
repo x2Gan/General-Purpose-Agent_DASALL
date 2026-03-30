@@ -173,7 +173,7 @@
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | AUD-TODO-001 | Done | 定义 AuditEvent 数据结构 | audit 设计 6.5；ADR-008；编码规范 3.7 | 6.5 AuditEvent | L3 | infra/include/audit/AuditTypes.h | AuditEvent | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 event_id/action/actor/target/outcome/evidence_ref/side_effects/timestamp 与设计一致，且 contract 测试可阻止越权字段时完成 |
-| AUD-TODO-002 | Not Started | 定义 AuditContext 数据结构 | audit 设计 6.5；ADR-008 | 6.5 AuditContext | L3 | infra/include/audit/AuditTypes.h | AuditContext | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type 字段齐备，且缺失语义为 unknown 而非空指针时完成 |
+| AUD-TODO-002 | Done | 定义 AuditContext 数据结构 | audit 设计 6.5；ADR-008 | 6.5 AuditContext | L3 | infra/include/audit/AuditTypes.h | AuditContext | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type 字段齐备，且缺失语义为 unknown 而非空指针时完成 |
 | AUD-TODO-003 | Not Started | 定义 AuditWriteOutcome 数据结构 | audit 设计 6.5/6.6；编码规范 3.6 | 6.5 AuditWriteOutcome；6.6 错误语义 | L3 | infra/include/audit/AuditTypes.h | AuditWriteOutcome | unit：AuditTypesTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 accepted/persisted/fallback_used/error_code 四字段齐备且错误码映射可测时完成 |
 | AUD-TODO-004 | Not Started | 定义 ExportQuery 数据结构 | audit 设计 6.5；11.1 阻塞项 | 6.5 ExportQuery | L3 | infra/include/audit/AuditExporterTypes.h | ExportQuery | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 无 | 无 | 无 | AuditExporterTypes.h、过滤测试 | 仅当 start_ts/end_ts/actor/action/target/outcome/page_token 字段落盘，且时间窗必填语义可由测试验证时完成 |
 | AUD-TODO-005 | Not Started | 定义 ExportResult 数据结构 | audit 设计 6.5 | 6.5 ExportResult | L3 | infra/include/audit/AuditExporterTypes.h | ExportResult | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | AUD-TODO-004 | 无 | 无 | AuditExporterTypes.h、导出测试 | 仅当 records/next_page_token/truncated/checksum 字段齐备，且 truncated 显式语义可测试时完成 |
@@ -354,3 +354,46 @@ Build 合规复核：
 3. 测试发现性：已补充 ctest -N -R 证据，确认新注册名称可被发现。
 4. TODO 证据回写：已完成任务状态、交付物、发现性和验收结果回写。
 5. 提交隔离：本轮提交范围限定为 AuditEvent 类型冻结、测试收敛、CMake 命名调整及直接兼容修复，不扩张到 AuditContext/ExportQuery 等后续任务。
+
+### 12.2 AUD-TODO-002
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-002。
+2. 可执行性依据：AUD-TODO-001 已完成，AuditTypes.h 和 AuditBoundaryContractTest 已落盘；本轮只需在同一类型头中补充 AuditContext，并扩展现有测试覆盖 unknown 兜底语义。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.5 明确 AuditContext 字段为 request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type，且缺失语义必须是 unknown 而不是 null 指针。
+2. 外部参考：OTel Logs Data Model 建议保留 trace 关联字段为结构化字段；OWASP Logging 对高风险审计要求保留 who/what/when/where/outcome 之外的追踪锚点，支撑后续追责与关联分析。
+
+D 结论：
+
+1. Design -> Build 映射：在 infra/include/audit/AuditTypes.h 中新增 AuditContext，并冻结 unknown 常量占位语义，避免把内部相关标识做成 optional/null 语义。
+2. Build 三件套：
+	- 代码目标：新增 AuditContext 与 non-empty/unknown helper，保持其为 audit 私有对象，不扩写 goal_id/checkpoint_ref/global_fsm_state 等越界字段。
+	- 测试目标：扩展 AuditTypesTest 覆盖 unknown 默认值、显式相关标识保留和空字符串负例；扩展 AuditBoundaryContractTest 覆盖字段类型、越界字段缺失和 empty-string 负例。
+	- 验收命令：cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest" && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/include/audit/AuditTypes.h：新增 AuditContext 和 kAuditContextUnknown，占位语义固定为 unknown。
+2. tests/unit/infra/AuditTypesTest.cpp：新增 AuditContext 默认 unknown、显式标识保留和空字符串负例覆盖。
+3. tests/contract/smoke/AuditBoundaryContractTest.cpp：新增 AuditContext 字段类型和越界字段缺失断言，确保不把 goal/checkpoint/global_fsm 状态带入 audit context。
+
+验收结果：
+
+1. cmake --build build-ci --target dasall_unit_tests dasall_contract_tests：通过。
+2. ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest"：通过，发现 2 个测试，分别为 AuditTypesTest 与 AuditBoundaryContractTest。
+3. ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：AuditContext 字段和 helper 命名已足够表达 unknown 兜底语义，无需额外注释。
+2. 正负例覆盖：unit 覆盖 unknown 默认值、显式相关标识保留和空 request_id 负例；contract 覆盖字段非 optional 字符串、禁止越界字段和空 task_id 负例。
+3. 测试发现性：沿用 001 已建立的 AuditTypesTest/AuditBoundaryContractTest 注册名，并再次用 ctest -N -R 回填发现性证据。
+4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
+5. 提交隔离：本轮只改 AuditContext 与同名测试，不提前引入 AuditWriteOutcome/ExportQuery 语义。
