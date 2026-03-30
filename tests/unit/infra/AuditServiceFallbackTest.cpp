@@ -8,14 +8,18 @@
 namespace {
 
 dasall::infra::AuditEvent make_event(std::string ref_suffix) {
+  const auto event_id = std::string("audit-event-") + ref_suffix;
+
   return dasall::infra::AuditEvent{
+      .event_id = event_id,
       .action = std::string("tool.execute"),
       .actor = std::string("runtime"),
       .target = std::string("diagnostics.export"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
       .evidence_ref = {.kind = dasall::infra::AuditEvidenceKind::ToolResult,
                        .ref = std::move(ref_suffix)},
-      .outcome = dasall::infra::AuditOutcome::Succeeded,
       .side_effects = {"snapshot_exported"},
+      .timestamp = 1711785603000,
   };
 }
 

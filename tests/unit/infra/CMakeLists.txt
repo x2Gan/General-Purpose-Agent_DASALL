@@ -29,7 +29,7 @@ add_test(NAME LogEventUnitTest COMMAND dasall_log_event_unit_test)
 set_tests_properties(LogEventUnitTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_audit_event_unit_test
-  AuditEventTest.cpp
+  AuditTypesTest.cpp
 )
 
 target_link_libraries(dasall_audit_event_unit_test
@@ -40,8 +40,8 @@ target_link_libraries(dasall_audit_event_unit_test
 
 dasall_apply_common_options(dasall_audit_event_unit_test)
 
-add_test(NAME AuditEventUnitTest COMMAND dasall_audit_event_unit_test)
-set_tests_properties(AuditEventUnitTest PROPERTIES LABELS "unit")
+add_test(NAME AuditTypesTest COMMAND dasall_audit_event_unit_test)
+set_tests_properties(AuditTypesTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_health_snapshot_unit_test
   HealthSnapshotTest.cpp

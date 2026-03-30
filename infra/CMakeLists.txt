@@ -18,6 +18,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/ILogger.h
   include/InfraContext.h
   include/InfraErrorCode.h
+  include/audit/AuditTypes.h
   include/LogEvent.h
   include/audit/AuditService.h
   include/audit/IAuditLogger.h

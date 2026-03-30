@@ -34,13 +34,15 @@ class NullAuditLogger final : public dasall::infra::audit::IAuditLogger {
 
     return dasall::infra::audit::AuditExportResult::success(
         {dasall::infra::AuditEvent{
+      .event_id = std::string("audit-event-export-001"),
             .action = std::string("tool.execute"),
             .actor = std::string("runtime"),
             .target = std::string("shell"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
             .evidence_ref = {.kind = dasall::infra::AuditEvidenceKind::ToolResult,
                              .ref = std::string("tool-call-001")},
-            .outcome = dasall::infra::AuditOutcome::Succeeded,
             .side_effects = {"wrote_file"},
+      .timestamp = 1711785602000,
         }});
   }
 };
@@ -55,13 +57,15 @@ void test_audit_logger_interface_accepts_audit_event_and_placeholder_export_filt
   NullAuditLogger logger;
 
   const AuditEvent event{
+      .event_id = std::string("audit-event-020"),
       .action = std::string("policy.patch"),
       .actor = std::string("runtime"),
       .target = std::string("policy-bundle-v2"),
+      .outcome = AuditOutcome::Succeeded,
       .evidence_ref = {.kind = AuditEvidenceKind::ToolResult,
                        .ref = std::string("tool-call-002")},
-      .outcome = AuditOutcome::Succeeded,
       .side_effects = {"policy_reloaded"},
+      .timestamp = 1711785602100,
   };
 
   const auto write_result = logger.write_audit(event);
@@ -84,12 +88,14 @@ void test_audit_logger_interface_reports_validation_failures_observably() {
   NullAuditLogger logger;
 
   const AuditEvent invalid_event{
+      .event_id = std::string("audit-event-021"),
       .action = std::string(),
       .actor = std::string("runtime"),
       .target = std::string("deployment"),
-      .evidence_ref = {},
       .outcome = AuditOutcome::Failed,
+      .evidence_ref = {},
       .side_effects = {"rollback_requested"},
+      .timestamp = 1711785602200,
   };
 
   const auto write_result = logger.write_audit(invalid_event);

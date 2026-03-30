@@ -1,8 +1,10 @@
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <string>
+#include <type_traits>
 
-#include "AuditEvent.h"
+#include "audit/AuditTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -13,24 +15,29 @@ void test_audit_event_accepts_required_fields_and_contract_evidence_ref() {
   using dasall::infra::AuditOutcome;
   using dasall::tests::support::assert_true;
 
+  static_assert(std::is_same_v<decltype(AuditEvent{}.event_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditEvent{}.timestamp), std::int64_t>);
+
   const AuditEvent event{
+      .event_id = std::string("audit-event-001"),
       .action = std::string("tool.execute"),
       .actor = std::string("runtime"),
       .target = std::string("shell_tool"),
+      .outcome = AuditOutcome::Succeeded,
       .evidence_ref = {
           .kind = AuditEvidenceKind::ToolResult,
           .ref = std::string("tool-call-001"),
       },
-      .outcome = AuditOutcome::Succeeded,
       .side_effects = {"wrote_file", "spawned_process"},
+      .timestamp = 1711785600000,
   };
 
   assert_true(event.has_required_fields(),
-              "audit event should require who/what/target/evidence/outcome before admission");
-  assert_true(event.references_contract_outcome(),
-              "audit evidence should stay anchored to frozen contract outcome kinds");
+              "audit event should require identity, who/what/where/outcome, evidence, and timestamp before admission");
+  assert_true(event.references_contract_boundary(),
+              "audit evidence should stay anchored to frozen contract boundary kinds");
   assert_true(event.side_effects_are_serializable(),
-              "string side effects should stay serializable at L2 freeze");
+              "string side effects should stay serializable at L3 type freeze");
 }
 
 void test_audit_event_rejects_missing_required_fields() {
@@ -38,20 +45,38 @@ void test_audit_event_rejects_missing_required_fields() {
   using dasall::infra::AuditEvent;
   using dasall::tests::support::assert_true;
 
-  const AuditEvent event{
+  const AuditEvent missing_event_id{
+      .event_id = std::string(),
       .action = std::string("tool.execute"),
-      .actor = std::string(),
+      .actor = std::string("runtime"),
       .target = std::string("shell_tool"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
       .evidence_ref = {
           .kind = AuditEvidenceKind::ToolResult,
           .ref = std::string("tool-call-001"),
       },
-      .outcome = dasall::infra::AuditOutcome::Unspecified,
       .side_effects = {},
+      .timestamp = 1711785600000,
   };
 
-  assert_true(!event.has_required_fields(),
-              "missing actor or unspecified outcome should fail audit required-field validation");
+  const AuditEvent invalid_timestamp{
+      .event_id = std::string("audit-event-002"),
+      .action = std::string("tool.execute"),
+      .actor = std::string("runtime"),
+      .target = std::string("shell_tool"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
+      .evidence_ref = {
+          .kind = AuditEvidenceKind::ToolResult,
+          .ref = std::string("tool-call-002"),
+      },
+      .side_effects = {},
+      .timestamp = 0,
+  };
+
+  assert_true(!missing_event_id.has_required_fields(),
+              "missing event_id should fail audit required-field validation");
+  assert_true(!invalid_timestamp.has_required_fields(),
+              "non-positive timestamp should fail audit required-field validation");
 }
 
 void test_audit_event_rejects_empty_or_duplicate_side_effects() {
@@ -61,27 +86,31 @@ void test_audit_event_rejects_empty_or_duplicate_side_effects() {
   using dasall::tests::support::assert_true;
 
   const AuditEvent duplicate_side_effects{
+      .event_id = std::string("audit-event-003"),
       .action = std::string("ota.apply"),
       .actor = std::string("operator"),
       .target = std::string("device-profile"),
+      .outcome = AuditOutcome::Escalated,
       .evidence_ref = {
           .kind = AuditEvidenceKind::RecoveryOutcome,
           .ref = std::string("checkpoint-001"),
       },
-      .outcome = AuditOutcome::Escalated,
       .side_effects = {"restarted_service", "restarted_service"},
+      .timestamp = 1711785600100,
   };
 
   const AuditEvent empty_side_effect{
+      .event_id = std::string("audit-event-004"),
       .action = std::string("ota.apply"),
       .actor = std::string("operator"),
       .target = std::string("device-profile"),
-      .evidence_ref = {
-          .kind = AuditEvidenceKind::RecoveryOutcome,
-          .ref = std::string("checkpoint-002"),
-      },
       .outcome = AuditOutcome::Failed,
+      .evidence_ref = {
+          .kind = AuditEvidenceKind::WorkerTask,
+          .ref = std::string("task-001"),
+      },
       .side_effects = {""},
+      .timestamp = 1711785600200,
   };
 
   assert_true(!duplicate_side_effects.side_effects_are_serializable(),

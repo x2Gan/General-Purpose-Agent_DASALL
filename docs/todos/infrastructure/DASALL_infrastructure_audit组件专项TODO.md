@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 audit 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-03-30  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/audit
 
@@ -172,7 +172,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| AUD-TODO-001 | Not Started | 定义 AuditEvent 数据结构 | audit 设计 6.5；ADR-008；编码规范 3.7 | 6.5 AuditEvent | L3 | infra/include/audit/AuditTypes.h | AuditEvent | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 event_id/action/actor/target/outcome/evidence_ref/side_effects/timestamp 与设计一致，且 contract 测试可阻止越权字段时完成 |
+| AUD-TODO-001 | Done | 定义 AuditEvent 数据结构 | audit 设计 6.5；ADR-008；编码规范 3.7 | 6.5 AuditEvent | L3 | infra/include/audit/AuditTypes.h | AuditEvent | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 event_id/action/actor/target/outcome/evidence_ref/side_effects/timestamp 与设计一致，且 contract 测试可阻止越权字段时完成 |
 | AUD-TODO-002 | Not Started | 定义 AuditContext 数据结构 | audit 设计 6.5；ADR-008 | 6.5 AuditContext | L3 | infra/include/audit/AuditTypes.h | AuditContext | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type 字段齐备，且缺失语义为 unknown 而非空指针时完成 |
 | AUD-TODO-003 | Not Started | 定义 AuditWriteOutcome 数据结构 | audit 设计 6.5/6.6；编码规范 3.6 | 6.5 AuditWriteOutcome；6.6 错误语义 | L3 | infra/include/audit/AuditTypes.h | AuditWriteOutcome | unit：AuditTypesTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 accepted/persisted/fallback_used/error_code 四字段齐备且错误码映射可测时完成 |
 | AUD-TODO-004 | Not Started | 定义 ExportQuery 数据结构 | audit 设计 6.5；11.1 阻塞项 | 6.5 ExportQuery | L3 | infra/include/audit/AuditExporterTypes.h | ExportQuery | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 无 | 无 | 无 | AuditExporterTypes.h、过滤测试 | 仅当 start_ts/end_ts/actor/action/target/outcome/page_token 字段落盘，且时间窗必填语义可由测试验证时完成 |
@@ -305,3 +305,52 @@
 
 1. 先执行 AUD-TODO-001 至 AUD-TODO-011、AUD-TODO-016、AUD-TODO-017，建立 audit 的对象、接口、主写/降级最小闭环与测试发现性。
 2. 并行补齐 AUD-BLK-001 至 AUD-BLK-005 对应设计缺口，再推进导出、retention、健康/指标桥接与 integration。
+
+## 12. 本轮执行记录（2026-03-30）
+
+### 12.1 AUD-TODO-001
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-001。
+2. 可执行性依据：无前置依赖；audit 设计 6.5 已冻结 AuditEvent 字段表；当前仓库已有 audit 骨架和测试入口，可在一轮内完成字段收敛、边界测试和兼容修复。
+
+研究学习：
+
+1. 本地证据：docs/architecture/DASALL_infra_audit模块详细设计.md 6.5/6.6 已明确 AuditEvent 字段为 event_id/action/actor/target/outcome/evidence_ref/side_effects/timestamp，且 contracts 边界仅允许引用 ToolResult、RecoveryOutcome、WorkerTask 标识语义。
+2. 外部参考：OTel Logs Data Model 强调时间戳与 trace 关联字段应保留为结构化顶层字段；OWASP Logging Cheat Sheet 要求审计字段覆盖 who/what/when/where/outcome 且与普通日志链路隔离。
+
+D 结论：
+
+1. Design -> Build 映射：新增 infra/include/audit/AuditTypes.h 冻结 AuditEvent/AuditEvidenceRef/AuditOutcome/AuditEvidenceKind；保留 infra/include/AuditEvent.h 作为兼容 include，避免后续实现阶段重复分叉字段。
+2. Build 三件套：
+	- 代码目标：新增 AuditTypes.h，收敛旧 AuditEvent.h，补齐受影响 AuditEvent 构造点并更新 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+	- 测试目标：新增 tests/unit/infra/AuditTypesTest.cpp 与 tests/contract/smoke/AuditBoundaryContractTest.cpp；同步 unit/contract 注册名为 AuditTypesTest、AuditBoundaryContractTest。
+	- 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure；补充 cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest"。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/include/audit/AuditTypes.h：新增 AuditEvent 冻结字段、AuditEvidenceRef 和审计枚举；evidence kind 扩展到 WorkerTask，满足 ADR-008 协同标识引用要求。
+2. infra/include/AuditEvent.h：改为兼容 include，避免旧引用路径继续分叉定义。
+3. tests/unit/infra/AuditTypesTest.cpp、tests/contract/smoke/AuditBoundaryContractTest.cpp：分别覆盖 AuditEvent 必填字段、timestamp/side_effects 守卫和 contracts 引用边界。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成新头文件和测试命名收敛。
+5. tests/unit/infra/AuditLoggerInterfaceTest.cpp、tests/unit/infra/AuditServiceFallbackTest.cpp、tests/contract/smoke/AuditServiceBoundaryContractTest.cpp、profiles/src/ProfileTelemetryAdapter.cpp：完成 AuditEvent 新字段引入后的直接兼容修复，保证现有调用面继续可编译。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure：通过，目标测试 2/2 通过。
+3. cmake --build build-ci --target dasall_unit_tests dasall_contract_tests：通过；unit 40/40、contract 95/95 全部通过。
+4. ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest"：通过，发现 2 个测试，分别为 AuditTypesTest 与 AuditBoundaryContractTest。
+5. ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮新增对象与守卫语义可由命名直接表达，无需额外注释。
+2. 正负例覆盖：unit 覆盖合法 AuditEvent、缺失 event_id、非法 timestamp、重复或空 side_effects；contract 覆盖 ToolResult/RecoveryOutcome/WorkerTask 三条正例和 unspecified evidence 负例。
+3. 测试发现性：已补充 ctest -N -R 证据，确认新注册名称可被发现。
+4. TODO 证据回写：已完成任务状态、交付物、发现性和验收结果回写。
+5. 提交隔离：本轮提交范围限定为 AuditEvent 类型冻结、测试收敛、CMake 命名调整及直接兼容修复，不扩张到 AuditContext/ExportQuery 等后续任务。

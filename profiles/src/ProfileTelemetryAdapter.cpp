@@ -112,15 +112,18 @@ ProfileTelemetryDispatchResult ProfileTelemetryAdapter::emit_event(
   };
 
   const infra::AuditEvent audit_event{
+      .event_id = std::string("profile-audit-") + std::string(action) + "-" +
+            std::string(effective_profile_id),
       .action = std::string(action),
       .actor = std::string(actor),
       .target = "profile:" + std::string(effective_profile_id),
+      .outcome = outcome,
       .evidence_ref = {.kind = infra::AuditEvidenceKind::RecoveryOutcome,
                        .ref = std::string(action) + ":" + std::string(reason_code)},
-      .outcome = outcome,
       .side_effects = {"activation_mode:" + std::string(activation_mode),
                        "reason_code:" + std::string(reason_code),
                        "requested_profile_id:" + std::string(requested_profile_id)},
+      .timestamp = 1,
   };
 
   return ProfileTelemetryDispatchResult{

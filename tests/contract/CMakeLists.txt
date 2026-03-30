@@ -148,8 +148,8 @@ target_link_libraries(dasall_contract_log_event_boundary_test
 
 dasall_register_contract_test(
   dasall_contract_audit_event_boundary_test
-  AuditEventBoundaryContractTest
-  smoke/AuditEventBoundaryContractTest.cpp
+  AuditBoundaryContractTest
+  smoke/AuditBoundaryContractTest.cpp
   smoke
 )
 

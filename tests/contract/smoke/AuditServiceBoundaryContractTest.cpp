@@ -10,14 +10,18 @@
 namespace {
 
 dasall::infra::AuditEvent make_contract_aligned_event(std::string ref_suffix) {
+  const auto event_id = std::string("audit-event-") + ref_suffix;
+
   return dasall::infra::AuditEvent{
+      .event_id = event_id,
       .action = std::string("tool.execute"),
       .actor = std::string("runtime"),
       .target = std::string("secret.rotate"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
       .evidence_ref = {.kind = dasall::infra::AuditEvidenceKind::ToolResult,
                        .ref = std::move(ref_suffix)},
-      .outcome = dasall::infra::AuditOutcome::Succeeded,
       .side_effects = {"secret_rotated"},
+      .timestamp = 1711785604000,
   };
 }
 
@@ -67,12 +71,14 @@ void test_audit_service_rejects_non_contract_audit_evidence() {
               "audit service should start before boundary rejection checks");
 
   const AuditEvent invalid_event{
+      .event_id = std::string("audit-event-invalid-001"),
       .action = std::string("tool.execute"),
       .actor = std::string("runtime"),
       .target = std::string("shell"),
-      .evidence_ref = {.kind = AuditEvidenceKind::Unspecified, .ref = std::string("opaque")},
       .outcome = dasall::infra::AuditOutcome::Failed,
+      .evidence_ref = {.kind = AuditEvidenceKind::Unspecified, .ref = std::string("opaque")},
       .side_effects = {"command_denied"},
+      .timestamp = 1711785604100,
   };
 
   const auto write_result = service.write_audit(invalid_event);
