@@ -7,3 +7,11 @@ add_subdirectory(infra)
 add_subdirectory(profiles)
 add_subdirectory(platform)
 
+set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
+	dasall_infra_diagnostics_smoke_integration_test
+	dasall_profiles_build_runtime_integration_test
+	dasall_profile_observability_integration_test
+	dasall_linux_platform_bootstrap_integration_test
+	PARENT_SCOPE
+)
+

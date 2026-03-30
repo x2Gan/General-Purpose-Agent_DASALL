@@ -197,7 +197,7 @@
 |---|---|---|---|---|---|
 | TRC-BLK-001 | metrics 子域桥接接口未冻结，TraceMetricsBridge 无法稳定对接 | TRC-TODO-015 | metrics 侧提供最小 bridge 接口与标签约束 | 在 metrics 详细设计补“tracing bridge 接口”章节 | 暂时仅在 tracing 内部维护计数快照 |
 | TRC-BLK-002 | audit 子域写入接口未冻结，TraceAuditBridge 无法稳定落盘 | TRC-TODO-015 | audit 侧冻结写入接口与最小事件模型 | 在 infra/audit 或 logging 设计补桥接接口定义 | 暂时只记录本地告警日志，不写审计管线 |
-| TRC-BLK-003 | tests 顶层未接入 integration 子目录，无法注册 tracing integration 用例 | 后续 tracing integration 任务 | tests/CMakeLists.txt 接入 integration 并定义标签规范 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，仅执行 unit/contract/failure |
+| TRC-BLK-003 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；tracing integration 是否可执行改由组件自身落盘负责 | 后续 tracing integration 任务 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | TRC-BLK-004 | OTLP exporter 首版是否启用未冻结，外部依赖与部署策略未定 | OTLP 相关任务 | 冻结 exporter 组合（noop/file/otlp）与依赖策略 | 先以 noop/file 形成可运行闭环，OTLP 后置评审 | 保持 exporter.type 默认 noop |
 
 ## 9. 验收与质量门
@@ -214,7 +214,7 @@
 
 说明：
 
-1. integration 验收命令暂不纳入首轮 Gate，原因见 TRC-BLK-003。
+1. integration 验收命令暂不纳入首轮 Gate，原因是 tracing integration 用例尚未落盘；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项任务至少包含 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答（第 7 章要求）

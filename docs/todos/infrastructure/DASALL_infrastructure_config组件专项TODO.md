@@ -118,7 +118,7 @@
 | ConfigMerger | config 设计 6.2/6.7 | L3 | 后层覆盖前层 + 来源追踪明确 | 冲突细则优先级例外未成文 | 先按线性优先级实现 |
 | ConfigAuditBridge | config 设计 6.2/6.10 | L1 | 审计字段清单明确 | 审计写入接口签名未冻结 | 标记 Blocked，先补桥接接口 |
 | SecretRefResolver | config 设计 6.2/6.4/6.8 | L1 | secret:// 解析职责明确 | secret 侧接口模型未冻结 | 标记 Blocked，先补 secret 接口对齐 |
-| tests/integration 注册点 | config 设计 8.1/9；tests 现状 | L0 | 设计建议存在 | tests 顶层未接入 integration | 先解阻测试拓扑再拆 integration 任务 |
+| tests/integration 注册点 | config 设计 8.1/9；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | config integration 用例尚未落盘 | 直接拆 integration 注册任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -171,7 +171,7 @@
 | CFG-TODO-013 | Blocked | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | CFG-BLK-001 | 先冻结事件总线最小抽象与订阅语义 | 发布骨架或阻塞记录 | 仅当事件总线抽象冻结后，状态才可由 Blocked 改为 Not Started |
 | CFG-TODO-014 | Not Started | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 初期源文件渐进落盘 | 保留最小 non-empty 源文件过渡 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Not Started | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
-| CFG-TODO-016 | Blocked | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | CFG-BLK-004 | 在 tests 顶层纳入 integration 并确定标签规范 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
+| CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 CFG-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
 | CFG-TODO-017 | Not Started | 回写 config 质量门与交付证据 | config 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md | process test：门禁结论、阻塞变化、回退执行证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论与对应命令证据时完成 |
 
 ## 7. 执行顺序建议
@@ -205,7 +205,7 @@
 | CFG-BLK-001 | 事件总线最小抽象未冻结，ConfigPublisher 订阅发布语义无法稳定实现 | CFG-TODO-013 | 冻结发布/订阅最小接口与命名空间过滤语义 | 在 config 设计补充事件抽象章节与接口表 | 暂时禁用运行时发布，仅保留静态加载 |
 | CFG-BLK-002 | 审计桥接接口未冻结，ConfigAuditBridge 无法稳定落盘 | 后续 ConfigAuditBridge 任务 | 冻结 audit 写入接口与最小字段集合 | 在 infra logging/audit 设计补桥接签名 | 暂时仅记录本地日志与指标，不写审计管线 |
 | CFG-BLK-003 | secret 接口模型未冻结，SecretRefResolver 无法稳定实现 | 后续 SecretRefResolver 任务 | 冻结 ISecretManager 最小 get/rotate 语义与句柄模型 | 在 secret 设计补接口与错误映射 | 暂时拒绝 secret://，返回 INF_CFG_E_SECRET_RESOLVE_FAIL |
-| CFG-BLK-004 | tests 顶层未接入 integration，config integration 用例无法发现 | CFG-TODO-016 | tests/CMakeLists.txt 接入 integration 并定义标签规则 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，仅执行 unit/contract |
+| CFG-BLK-004 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；config integration 用例是否可执行改由组件自身落盘负责 | CFG-TODO-016 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | CFG-BLK-005 | 快照持久化后端未冻结（sqlite/file） | 后续持久化任务 | 冻结持久化后端策略与恢复语义 | 先完成内存快照版本并补策略评审 | 回退为进程内回滚，不承诺重启后版本恢复 |
 
 ## 9. 验收与质量门
@@ -223,7 +223,7 @@
 
 说明：
 
-1. integration 验收命令当前不纳入首轮 Gate，原因见 CFG-BLK-004。
+1. integration 验收命令当前不纳入首轮 Gate，原因是 CFG-TODO-016 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项任务至少需要一条构建命令与一条测试命令。
 
 ### 9.2 质量门逐项回答

@@ -120,7 +120,7 @@
 | SecretAuditBridge | secret 设计 6.2/6.10 | L2 | 审计事件集合明确 | IAuditLogger 注册点细节未冻结 | 先落桥接骨架，注册点为前置依赖 |
 | SecretHealthProbe | secret 设计 6.2/6.10 | L2 | 健康指标与 degraded 信号明确 | IHealthMonitor 接口对接细节未冻结 | 先落 secret 私有健康快照出口 |
 | KmsSecretBackend | secret 设计 6.2/8.2 | L1 | 仅有占位职责和演进方向 | 身份、限流、超时、测试夹具缺失 | 标记 Blocked，先补设计 |
-| tests/integration 注册点 | secret 设计 8.1/9；tests 现状 | L0 | 设计建议存在 | tests 顶层未接入 integration | 先解阻测试拓扑再推进 |
+| tests/integration 注册点 | secret 设计 8.1/9；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | secret integration 用例尚未落盘 | 直接拆 integration 注册任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -173,7 +173,7 @@
 | SEC-TODO-013 | Not Started | 实现 SecretHealthProbe 健康出口骨架 | secret 设计 6.2/6.10 | 6.10 健康指标与 degraded | L2 | infra/src/secret/SecretHealthProbe.cpp | sample_secret_health | unit：backend down、rotation backlog、cache stale 三路径 | ctest --test-dir build-ci -L unit | SEC-TODO-002、SEC-TODO-009、SEC-TODO-010 | 无 | 无 | 健康探针骨架、单测 | 仅当三类风险均可映射到健康状态并可重复验证时完成 |
 | SEC-TODO-014 | Not Started | 接线 infra/secret 到 CMake | secret 设计 8.1；代码现状 | 8.1 落盘建议 | L2 | infra/CMakeLists.txt、infra/include/secret/、infra/src/secret/ | 注册 secret 源文件与头文件入口 | build：dasall_infra 编译通过 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | SEC-TODO-001~SEC-TODO-013 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且 secret 文件入图时完成 |
 | SEC-TODO-015 | Not Started | 注册 secret unit 与 contract 测试入口 | secret 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/secret/、tests/contract/CMakeLists.txt | unit：类型、接口、访问、lease、轮换、审计、健康；contract：边界与错误映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | SEC-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
-| SEC-TODO-016 | Blocked | 注册 secret integration 与故障注入入口 | secret 设计 8.1/9.1；tests 现状 | integration 建议目录与用例 | L0 | tests/CMakeLists.txt、tests/integration/infra/secret/ | integration：SecretRotationWorkflowTest、SecretFailureInjectionTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -L integration | SEC-TODO-015 | SEC-BLK-005 | tests 顶层接入 integration 并定义标签规范 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并执行时完成 |
+| SEC-TODO-016 | Not Started | 注册 secret integration 与故障注入入口 | secret 设计 8.1/9.1；tests 现状 | integration 建议目录与用例 | L0 | tests/CMakeLists.txt、tests/integration/infra/secret/ | integration：SecretRotationWorkflowTest、SecretFailureInjectionTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -L integration | SEC-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 SEC-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并执行时完成 |
 | SEC-TODO-017 | Not Started | 回写 secret 质量门与交付证据 | secret 设计 9.2/11 | Gate 与风险回退章节 | L2 | docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | SEC-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论和命令证据时完成 |
 
 ## 7. 执行顺序建议
@@ -209,7 +209,7 @@
 | SEC-BLK-002 | dual-slot 轮换验证规则未冻结 | SEC-TODO-010 | 冻结 rotation.validation 与 grace_period 语义 | 增加轮换验证器最小接口定义 | 禁用 rotate，保留 get/materialize/release |
 | SEC-BLK-003 | KMS 身份、限流、超时和测试夹具未冻结 | 后续 KMS 真实接入任务 | 冻结 identity/retry/timeout/quota 策略并补夹具 | 先仅保留 KmsSecretBackend 接口占位 | 禁止真实 KMS SDK 接入 |
 | SEC-BLK-004 | 审计注册点细节未统一 | SEC-TODO-012 | 冻结 IAuditLogger 接线和事件字段映射 | 先以 mock audit logger 打通断言 | 审计桥保留缓存，不宣称生产可用 |
-| SEC-BLK-005 | tests 顶层未接入 integration | SEC-TODO-016 | tests/CMakeLists.txt 增加 integration 子目录和标签规范 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，仅执行 unit/contract |
+| SEC-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；secret integration 用例是否可执行改由组件自身落盘负责 | SEC-TODO-016 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 
 ## 9. 验收与质量门
 
@@ -226,7 +226,7 @@
 
 说明：
 
-1. integration 命令当前不纳入首轮 Gate，原因见 SEC-BLK-005。
+1. integration 命令当前不纳入首轮 Gate，原因是 SEC-TODO-016 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项任务至少需要 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答

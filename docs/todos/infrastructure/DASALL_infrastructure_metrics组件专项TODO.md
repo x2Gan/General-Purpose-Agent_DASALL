@@ -100,7 +100,7 @@
 3. 已有主流程与异常流程：正常流程 7 步、异常分类 4 类与恢复动作 4 类（metrics 设计 6.7/6.8）。
 4. 已有错误码域：MET_E_PROVIDER_NOT_READY、MET_E_IDENTITY_INVALID、MET_E_LABEL_CARDINALITY_EXCEEDED、MET_E_QUEUE_FULL、MET_E_EXPORT_FAILURE、MET_E_EXPORT_TIMEOUT、MET_E_CONFIG_INVALID（metrics 设计 6.6）。
 5. 已有落盘建议与测试出口：infra/include/metrics、infra/src/metrics、tests/unit/infra/metrics、tests/integration/infra/metrics（metrics 设计 8.1/7）。
-6. 当前 tests 顶层未接入 integration，且 logging/health/audit 接口签名未统一，导致部分任务必须 Blocked。
+6. 当前 tests 顶层已接入 integration，但 metrics 的 logging/health/audit 桥接接口签名仍未统一，且组件自身 integration 用例尚未落盘，导致部分任务仍需 Blocked。
 
 当前最小可执行粒度：函数/接口/数据结构级（L3 为主，局部 L2/L1）。
 
@@ -120,7 +120,7 @@
 | CardinalityGuard | metrics 设计 6.2/6.3/6.8 | L3 | 白名单 + 高基数拦截 + 失败可观测语义完整 | 领域标签 taxonomy 未最终评审 | 先实现核心白名单并计数拒绝 |
 | MetricReaderScheduler + MetricsExporterAdapter | metrics 设计 6.2/6.7/6.8/6.9 | L2 | 调度与导出语义完整 | OTLP 依赖、退避参数未冻结 | 先实现 noop/prom_text 导出链路 |
 | MetricsAuditBridge + MetricsLoggingBridge | metrics 设计 6.2/6.10 | L1 | 审计事件清单、日志事件语义明确 | audit/logging 写入接口签名未冻结 | 标记 Blocked，先补桥接接口设计 |
-| tests/integration metrics 注册点 | metrics 设计 8.1/9.1；tests 现状 | L0 | 设计建议存在 | tests 顶层无 integration 注册 | 先解阻测试拓扑再拆 integration 任务 |
+| tests/integration metrics 注册点 | metrics 设计 8.1/9.1；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | metrics integration 用例尚未落盘 | 直接拆 integration 注册任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -215,7 +215,7 @@
 
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
-| MET-BLK-001 | tests 顶层未接入 integration 子目录，无法稳定注册 metrics integration 用例 | 后续 metrics integration 任务 | tests/CMakeLists.txt 接入 integration 并定义标签策略 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，仅执行 unit/contract/failure |
+| MET-BLK-001 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；metrics integration 是否可执行改由组件自身落盘负责 | 后续 metrics integration 任务 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | MET-BLK-002 | audit 子域写入接口未冻结，MetricsAuditBridge 无法稳定落盘 | MET-TODO-019 | audit 侧冻结最小写入接口与事件字段约束 | 在 infra/audit 或 logging 设计补桥接接口章节 | 暂时仅记录本地故障日志，不写审计管线 |
 | MET-BLK-003 | Profile 中 metrics 配置键尚未统一，跨档位覆盖规则不稳定 | MET-TODO-016 | 冻结 enabled/exporter/interval/labels/queue/buckets 键集合 | 先冻结最小键集合并在 profile 文档回写 | 暂时禁用运行时动态覆盖 |
 | MET-BLK-004 | logging 子域错误日志写入接口未冻结，MetricsLoggingBridge 无法稳定接线 | MET-TODO-019 | logging 侧冻结最小写入接口与字段要求 | 在 logging 设计补 bridge 接口段并评审 | 暂时仅保留 metrics 内部计数与快照 |
@@ -235,7 +235,7 @@
 
 说明：
 
-1. integration 命令暂不纳入首轮验收基线，原因见 MET-BLK-001。
+1. integration 命令暂不纳入首轮验收基线，原因是 metrics integration 用例尚未落盘；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项任务至少包含 1 条构建命令和 1 条测试命令。
 
 ### 9.2 质量门逐项回答

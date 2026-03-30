@@ -15,6 +15,7 @@ add_custom_target(dasall_contract_tests
 
 add_custom_target(dasall_integration_tests
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L integration
+  DEPENDS ${DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 )
 
 add_custom_target(dasall_wp04_contract_gate
@@ -45,4 +46,8 @@ endif()
 
 if(NOT DASALL_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "dasall_unit_tests requires at least one registered unit test target")
+endif()
+
+if(NOT DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS)
+  message(FATAL_ERROR "dasall_integration_tests requires at least one registered integration test target")
 endif()

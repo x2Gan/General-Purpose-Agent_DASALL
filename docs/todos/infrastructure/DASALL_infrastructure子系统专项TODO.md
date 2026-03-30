@@ -102,7 +102,7 @@
 | INF-C011 | 编码规范 3.6 | Must | 失败不可吞没，必须可观测 | 错误码域、审计失败、queue overflow 等必须有测试出口 |
 | INF-C012 | 编码规范 3.7；蓝图 7 | Should | 公共接口应同步新增 unit/contract/integration 测试 | TODO 必须附测试目标与命令 |
 | INF-C013 | 蓝图 3.13/5.1 | Must | Profile 只能裁剪能力和替换实现，不得绕过 Audit 与 Runtime 主控链路 | config 相关任务必须受 profile 冻结约束 |
-| INF-C014 | 当前代码现状 | Must | infra 仍是 placeholder-only，tests 顶层未注册 integration | 需要把 CMake/test 注册作为显式任务，而不是隐含前提 |
+| INF-C014 | 当前代码现状 | Must | tests 顶层已注册 integration，但 integration 聚合 gate 必须显式依赖已注册测试可执行文件 | 需要把 CMake/test 注册与聚合依赖维护作为显式任务，而不是隐含前提 |
 
 ### 3.2 现状证据
 
@@ -111,7 +111,7 @@
 | infra/CMakeLists.txt | 仅构建 src/placeholder.cpp | infra 尚未形成真实能力落盘入口 |
 | infra/src/placeholder.cpp | 仅维持空库可编译 | 所有真实子域都仍未落盘 |
 | infra/include/ | 当前无对外接口头文件 | 接口级任务必须先行 |
-| tests/CMakeLists.txt | 仅接入 mocks、unit、contract | integration 测试拓扑尚未进入顶层构建 |
+| tests/CMakeLists.txt | 已接入 mocks、unit、contract、integration，并提供 dasall_integration_tests 聚合入口 | integration 测试拓扑已进入顶层构建，但聚合 gate 必须显式依赖 integration 可执行目标 |
 | tests/unit/CMakeLists.txt | 无 infra 子目录 | infra unit 注册点缺失 |
 | tests/contract/CMakeLists.txt | 已有 contracts 边界测试注册机制 | infra 与 contracts 的边界校验可复用现有 contract 测试模式 |
 
@@ -157,7 +157,7 @@
 | TracingService | 详细设计 6.2、6.3、6.10 | L1 | 组件职责、输入输出、trace_id/span_id 关联 | 核心接口、Span 对象、导出策略、测试出口 | 先补设计，当前不拆 Build 任务 |
 | MetricsService | 详细设计 6.2、6.3、6.10 | L1 | 组件职责、指标名样例、导出周期配置 | 指标对象模型、exporter 接口、标签白名单细则 | 先补设计，当前不拆 Build 任务 |
 | WatchdogAgent | 详细设计 6.2、6.3、6.8、6.9 | L1 | 组件职责、超时阈值、动作说明 | 心跳接口、线程模型、与 runtime 事件对接对象 | 先补设计，当前不拆 Build 任务 |
-| infra CMake / tests 注册点 | 详细设计 7、8、9；当前代码现状 | L2 | 目录建议、阶段里程碑、测试矩阵、现有 CMake 骨架 | integration 顶层接入规则、infra unit 子目录 | 直接拆注册任务 |
+| infra CMake / tests 注册点 | 详细设计 7、8、9；当前代码现状 | L2 | 目录建议、阶段里程碑、测试矩阵、现有 CMake 骨架 | integration 聚合 target 与 executable 依赖需要持续同步维护 | 直接拆注册任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -250,10 +250,16 @@
 | INF-BLK-03 | Tracing/Metrics 只有组件职责，没有接口名、对象模型、导出策略与测试出口 | tracing/metrics 子域 | 后续专项 TODO | 明确 Span/Metric 对象、导出器接口、标签白名单与失败语义 | 新增 tracing/metrics 子模块详细设计 |
 | INF-BLK-04 | Watchdog 缺少心跳对象、超时事件模型、与 runtime 恢复建议事件的边界 | health/watchdog 子域 | 后续专项 TODO | 明确心跳输入、deadline 模型、事件输出对象 | 新增 watchdog 详细设计或补章 |
 | INF-BLK-05 | OTA 缺少 UpgradePlan、Package、rollback token、签名算法与存储规范 | ota 子域 | INF-TODO-015 | 冻结 OTA 输入输出对象与签名/存储规范 | 新增 OTA 输入输出表与包规范表 |
-| INF-BLK-06 | tests 顶层未接入 integration，现有门禁只有 unit/contract | 测试门禁 | tracing/metrics/watchdog/ota 集成任务 | 明确 tests/integration 接入方式并提供 CMake 注册点 | 在 tests/CMakeLists.txt 中纳入 integration 子目录并建立发现规则 |
+| INF-BLK-06 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与 dasall_integration_tests 聚合依赖已补齐，原阻塞为“顶层未接入 integration/聚合 gate 未依赖已注册测试可执行文件” | 测试门禁 | tracing/metrics/watchdog/ota 集成任务 | 无；后续仅需按组件落盘具体 integration 用例 | 证据回链到本节 8.1 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt |
 | INF-BLK-07 | 安全策略规则 schema 与冲突裁定顺序未冻结（2026-03-27 已通过 policy 模块详细设计 6.5/6.8 与 INF-TODO-017 头文件冻结解阻） | security policy 子域 | INF-TODO-017 | 明确规则对象、domain/effect、优先级、冲突裁定与回滚窗口 | 在 DASALL_infra_policy模块详细设计.md 基础上完成 schema 评审与裁定矩阵冻结 |
 | INF-BLK-08 | 诊断命令白名单与脱敏规则未冻结（2026-03-27 已通过 diagnostics 模块详细设计 6.5/6.9 与 INF-TODO-018 对象冻结解阻） | diagnostics 子域 | INF-TODO-018 | 明确命令域、输出脱敏规则、导出格式 | 在详细设计中补齐诊断命令域与脱敏矩阵 |
 | INF-BLK-09 | 插件 manifest、ABI 兼容矩阵与签名链路未冻结 | plugin 子域 | INF-TODO-019 | 明确 manifest 字段、ABI 兼容规则、签名校验流程 | 在详细设计中补齐插件对象表与校验流程 |
+
+### 8.1 阻塞台账校准记录
+
+| 阻塞项 ID | 当前状态 | 校准时间 | 证据 | 影响调整 |
+|---|---|---|---|---|
+| INF-BLK-06 | Resolved | 2026-03-30 | tests/CMakeLists.txt 已纳入 integration 聚合并显式依赖 integration 可执行目标；tests/integration/CMakeLists.txt 已回传 integration 可执行目标清单；`cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N -L integration` 发现 5 个 integration 测试，`ctest --test-dir build-ci --output-on-failure -L integration` 执行 5/5 通过 | 下游以“tests 顶层未接入 integration”为唯一阻塞原因的任务应转回 Not Started，gate 不再把该项计为当前 Blocked |
 
 ## 9. 验收与质量门
 
@@ -292,7 +298,7 @@
 | infra 越权依赖上层模块 | High | 为了联调方便直接 include runtime/cognition/llm 实现头文件 | 立即回退到 contracts 接口；新增 contract 边界断言 |
 | 错误码语义漂移 | High | 在 infra 私有码域里重新定义 contracts 共享失败语义 | 回退到映射层，不修改 contracts 公共对象 |
 | 审计链路和普通日志混用 | Medium | 直接让 ILogger 承担 AuditEvent 写入 | 回退到 ILogger/IAuditLogger 双接口分离 |
-| integration 任务过早推进 | Medium | tests 顶层未接入 integration 就开始写集成门禁 | 暂停 integration 任务，仅保留 unit/contract |
+| integration 任务过早推进 | Medium | 顶层 integration 拓扑未校准或聚合 gate 未依赖 integration 可执行目标时就开始写集成门禁 | 先修复 tests 顶层接线或聚合依赖，再推进 integration |
 | Profile 配置提前编码 | Medium | ConfigCenter 在 schema 未冻结前直接落实现 | 回退到 Blocked，先冻结配置模型 |
 
 ## 11. 可行性结论
@@ -331,7 +337,7 @@
 1. 多数接口没有完整的输入输出对象和签名。
 2. config/secret/ota 缺少关键对象模型。
 3. tracing/metrics/watchdog 只有职责，没有接口与测试出口。
-4. integration 拓扑尚未进入 tests 顶层注册。
+4. 顶层 integration 拓扑虽已进入 tests 构建图，但各组件 integration 用例仍需各自落盘并保持与聚合 target 的依赖清单同步。
 
 ### 11.3 后续建议
 

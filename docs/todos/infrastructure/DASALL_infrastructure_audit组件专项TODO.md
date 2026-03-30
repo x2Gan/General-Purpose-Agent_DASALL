@@ -92,7 +92,7 @@
 | infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | audit 尚未接入构建 |
 | infra/include/ | 空目录 | audit 对外接口与对象未落盘 |
 | infra/src/ | 仅有 config/health/logging/metrics/ota/secret/tracing 空目录与 placeholder | audit 实现目录尚未存在 |
-| tests/CMakeLists.txt | 仅接入 mocks/unit/contract | integration 顶层未接入，audit 集成测试暂不可发现 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration，且提供 dasall_integration_tests 聚合入口 | audit 集成测试已可被顶层发现，但具体用例仍需随组件任务落盘 |
 | tests/unit/CMakeLists.txt | 未接入 infra 子目录 | audit unit 发现性缺失 |
 | tests/contract/CMakeLists.txt | 已有 centralized registration 机制 | 可承载 audit contracts 边界测试 |
 
@@ -189,7 +189,7 @@
 | AUD-TODO-015 | Blocked | 实现 AuditMetricsBridge 指标桥接骨架 | audit 设计 6.2/6.3/6.10；11.1 | 6.2 AuditMetricsBridge；6.10 指标清单；11.1 桥接阻塞 | L1 | infra/src/audit/AuditMetricsBridge.cpp | AuditMetricsBridge（audit_write_total 等指标桥接） | integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | AUD-TODO-011 | AUD-BLK-004 | metrics 侧桥接接口、标签白名单与上报失败语义冻结 | AuditMetricsBridge.cpp 或阻塞记录 | 仅当指标桥接接口冻结且 integration 接线具备后，状态才可从 Blocked 转为 Not Started |
 | AUD-TODO-016 | Not Started | 注册 audit 源码到 infra CMake | audit 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | audit include/src 文件接线 | build：dasall_infra 可编译；unit：AuditInterfaceCompileTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditInterfaceCompileTest --output-on-failure | AUD-TODO-001 至 AUD-TODO-011 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 audit 文件进入 dasall_infra 构建图时完成 |
 | AUD-TODO-017 | Not Started | 注册 audit 的 unit 与 contract 测试入口 | audit 设计 8.1、9.1；编码规范 3.7；tests 现状 | 8.1 路径建议；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/audit/、tests/contract/CMakeLists.txt、tests/contract/infra/ | unit：AuditTypesTest、AuditInterfaceCompileTest、AuditServiceFallbackTest、AuditExportFilterTest；contract：AuditBoundaryContractTest、InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | AUD-TODO-016 | 无 | 无 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 audit unit/contract 测试可被 ctest -N 发现并执行时完成 |
-| AUD-TODO-018 | Blocked | 注册 audit integration 测试入口 | audit 设计 8.1、9.1；tests 现状；11.1 | 8.1 tests/integration/infra；9.1 Integration；11.1 integration 阻塞 | L0 | tests/integration/infra/、tests/CMakeLists.txt | integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -N && ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | AUD-TODO-014、AUD-TODO-015、AUD-TODO-016 | AUD-BLK-005 | tests 顶层接入 integration 子目录并定义 integration 标签规范 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且用例可被 ctest 发现后，状态才可从 Blocked 转为 Not Started |
+| AUD-TODO-018 | Not Started | 注册 audit integration 测试入口 | audit 设计 8.1、9.1；tests 现状；11.1 | 8.1 tests/integration/infra；9.1 Integration；11.1 integration 阻塞 | L0 | tests/integration/infra/、tests/CMakeLists.txt | integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -N && ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | AUD-TODO-014、AUD-TODO-015、AUD-TODO-016 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 AUD-TODO-014、015、016 完成后落盘具体 integration 用例 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
 | AUD-TODO-019 | Not Started | 回写 audit 质量门与交付证据 | audit 设计 9.2、11.1 | 9.2 Gate；11.1 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | AUD-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁都具备通过/失败结论和命令证据时完成 |
 
 ### 6.2 当前 Blocked 任务索引
@@ -200,7 +200,6 @@
 | AUD-TODO-013 | AUD-BLK-002 |
 | AUD-TODO-014 | AUD-BLK-003 |
 | AUD-TODO-015 | AUD-BLK-004 |
-| AUD-TODO-018 | AUD-BLK-005 |
 
 ## 7. 执行顺序建议
 
@@ -237,7 +236,7 @@
 | AUD-BLK-002 | RetentionOutcome 字段、归档动作对象、自动清理证据语义未冻结 | AUD-TODO-013 | 补齐 retention 输出对象与归档/清理的二值判定字段 | 在 audit 设计文档补 retention 输出对象表与清理痕迹规则 | 暂停自动清理，仅保留 retention.days=30 的手动清理策略 |
 | AUD-BLK-003 | AuditHealthStatus 字段未冻结，无法安全定义 IAuditHealthProbe 返回对象 | AUD-TODO-014 | 冻结 ready/degraded/unavailable 状态对象及最近失败原因字段 | 在 audit 设计文档补健康状态对象表 | 暂时仅在 audit 内部记录 degraded 本地状态，不对外暴露探针接口 |
 | AUD-BLK-004 | metrics/health 桥接接口、标签白名单与上报失败语义未冻结 | AUD-TODO-015 | metrics 与 health 侧给出最小桥接接口和标签约束 | 在 infra/metrics 与 infra/health 详细设计补桥接接口章节 | 暂时保留本地计数和错误日志，不宣称生产级桥接 |
-| AUD-BLK-005 | tests 顶层未接入 integration 子目录，无法稳定注册 InfraAuditHealthIntegrationTest | AUD-TODO-018 | tests/CMakeLists.txt 接入 integration 并定义标签规范 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，仅执行 unit/contract |
+| AUD-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；audit integration 是否可执行改由组件自身落盘负责 | AUD-TODO-018 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 
 ## 9. 验收与质量门
 
@@ -253,7 +252,7 @@
 
 说明：
 
-1. integration 命令本轮不纳入必过基线，原因见 AUD-BLK-005。
+1. integration 命令本轮不纳入必过基线，原因是 AUD-TODO-018 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每个可执行任务至少包含 1 条构建命令与 1 条测试命令；Block 任务保留解阻后的验收命令。
 
 ### 9.2 质量门逐项回答

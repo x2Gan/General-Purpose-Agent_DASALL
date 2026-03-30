@@ -90,7 +90,7 @@
 | infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | policy 尚未进入构建图 |
 | infra/include/ | 当前为空 | policy 对外接口与对象未落盘 |
 | infra/src/ | 仅存在 placeholder 与少量空子目录 | policy 实现目录尚未存在 |
-| tests/CMakeLists.txt | 仅接入 mocks、unit、contract | integration 顶层尚未接线 |
+| tests/CMakeLists.txt | 已接入 mocks、unit、contract、integration，且提供 dasall_integration_tests 聚合入口 | policy integration 拓扑已进入顶层构建，具体用例是否可执行取决于组件任务落盘 |
 | tests/unit/CMakeLists.txt | 未接入 infra 子目录 | policy unit 发现性缺失 |
 | tests/contract/CMakeLists.txt | centralized registration 已存在 | 可承载 policy 语义边界与错误码映射测试 |
 | contracts/include/policy/* | 当前检索不到文件 | 不能把共享 policy 对象当作现成依赖 |
@@ -187,10 +187,10 @@
 | POL-TODO-015 | Not Started | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | POL-BLK-001、POL-BLK-006 | schema/裁定矩阵与 ConfigCenter 最小接口冻结 | SecurityPolicyManager.cpp、主链测试 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
 | POL-TODO-016 | Not Started | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
 | POL-TODO-017 | Not Started | 注册 policy 的 unit 与 contract 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/unit/infra/policy、tests/contract/infra；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/policy/、tests/contract/CMakeLists.txt、tests/contract/smoke/ | unit：对象、接口、loader/store/manager 基础路径；contract：decision 语义、错误码映射、contracts 边界 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-016 | POL-BLK-002 | 共享对象缺失时采用语义映射 catalog 并冻结 contract 断言口径 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 policy unit/contract 用例可被 ctest -N 发现并执行时完成 |
-| POL-TODO-018 | Blocked | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | POL-BLK-005 | tests 顶层接入 integration 子目录并定义 integration 标签规范 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Blocked 转为 Not Started |
+| POL-TODO-018 | Not Started | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 POL-TODO-015、POL-TODO-017 完成后落盘具体 integration/failure 用例 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
 | POL-TODO-019 | Blocked | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | POL-BLK-003 | audit 侧最小写入接口和字段集合完成冻结 | PolicyAuditBridge.cpp 或阻塞记录 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
 | POL-TODO-020 | Blocked | 实现 PolicyMetricsBridge 指标桥接骨架 | policy 设计 6.2/6.10；metrics TODO | 6.2 PolicyMetricsBridge；6.10 指标清单 | L1 | infra/src/policy/PolicyMetricsBridge.cpp | PolicyMetricsBridge（reload_total、invalid_total、patch_total、deny_total、rollback_total、active_generation、safe_mode_total） | unit：计数与 gauge 输出；contract：标签不过度暴露实现细节 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-015 | POL-BLK-004 | metrics 侧桥接接口和标签白名单完成冻结 | PolicyMetricsBridge.cpp 或阻塞记录 | 仅当指标集合与设计一致，且 active_generation/safe_mode 语义可被测试稳定判定时完成 |
-| POL-TODO-021 | Blocked | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015 | POL-BLK-004、POL-BLK-005 | health 侧探针接口冻结且 integration 接线完成 | PolicyHealthProbe.cpp 或阻塞记录 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
+| POL-TODO-021 | Blocked | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015 | POL-BLK-004 | health 侧探针接口冻结且 integration 接线完成 | PolicyHealthProbe.cpp 或阻塞记录 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
 | POL-TODO-022 | Not Started | 回写 policy 质量门与交付证据 | policy 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md | process test：gate 结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个质量门都有通过/失败结论和对应命令证据时完成 |
 
 ### 6.2 当前 Blocked 任务索引
@@ -208,10 +208,9 @@
 | POL-TODO-014 | POL-BLK-001、POL-BLK-002 |
 | POL-TODO-015 | POL-BLK-001、POL-BLK-006 |
 | POL-TODO-017 | POL-BLK-002 |
-| POL-TODO-018 | POL-BLK-005 |
 | POL-TODO-019 | POL-BLK-003 |
 | POL-TODO-020 | POL-BLK-004 |
-| POL-TODO-021 | POL-BLK-004、POL-BLK-005 |
+| POL-TODO-021 | POL-BLK-004 |
 
 ## 7. 执行顺序建议
 
@@ -248,7 +247,7 @@
 | POL-BLK-002 | contracts 侧缺少可直接引用的 PolicyDecision 共享对象，当前仅有术语与整改 TODO | POL-TODO-004、005、014、017 | 完成 shared object 冻结，或形成正式 mapping catalog 并通过 contract gate | 承接 contracts-freeze T010，明确语义映射和禁止越权字段 | 在共享对象未冻结前，仅输出 infra 私有 PolicyDecisionRef，不对外宣称 shared type 可用 |
 | POL-BLK-003 | audit 最小写入接口与字段集合尚未冻结 | POL-TODO-019 | audit 侧 IAuditLogger/AuditEvent 边界冻结并通过评审 | 以 audit 组件专项 TODO 的对象与接口冻结结果为前置 | 暂只记录本地错误与返回码，不接审计桥 |
 | POL-BLK-004 | metrics/health 桥接接口、标签白名单、探针状态对象未冻结 | POL-TODO-020、POL-TODO-021 | metrics 与 health 侧最小桥接接口完成冻结 | 承接 metrics/health 专项 TODO 的接口冻结任务 | 暂只在 manager 内部保留计数与状态，不对外暴露桥接输出 |
-| POL-BLK-005 | tests 顶层尚未接入 integration 子目录，policy 集成与 failure injection 无法被 ctest 发现 | POL-TODO-018、021 | tests/CMakeLists.txt 接入 integration 并定义标签规范 | 新增 add_subdirectory(integration) 与 integration 标签约定 | integration 验收延期，首轮只跑 unit/contract |
+| POL-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；policy integration/failure 是否可执行改由组件自身落盘负责 | POL-TODO-018、021 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | POL-BLK-006 | ConfigCenter 与 profiles 侧的 policy 最小配置读取接口尚未落盘 | POL-TODO-007、010、015 | config 组件完成最小 load_layers/get_typed 接口冻结，profiles 侧 policy 键名冻结 | 承接 config 与 profiles 专项 TODO 的接口/资产冻结任务 | loader 首版只保留接口，不实现真实配置读取 |
 
 ## 9. 验收与质量门
@@ -267,7 +266,7 @@
 
 说明：
 
-1. integration 相关命令当前不纳入首轮 Gate，原因见 POL-BLK-005。
+1. integration 相关命令当前不纳入首轮 Gate，原因是 POL-TODO-018 尚未落盘具体 integration/failure 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 若 contracts 共享 policy 对象仍未冻结，contract 验收以“语义映射 catalog + contract 测试”作为准入条件。
 3. 每个任务至少需要一条构建命令与一条测试命令，禁止只以文档结论判定完成。
 

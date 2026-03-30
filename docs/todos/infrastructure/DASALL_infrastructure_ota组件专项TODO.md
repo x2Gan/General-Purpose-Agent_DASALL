@@ -177,7 +177,7 @@
 | OTA-TODO-014 | Not Started | 实现 OTAHealthProbe 骨架 | OTA 设计 6.2/6.11 | 6.2 OTAHealthProbe；6.11 健康信号 | L3 | infra/src/ota/OTAHealthProbe.cpp | probe(backlog,last_failure,pending_confirm) | unit：degraded 条件可判定；unit：pending_confirm 计数准确 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | OTA-TODO-001、011、012 | 无 | 无 | 骨架实现、unit 测试 | 仅当关键健康信号可查询且与失败路径一致时完成 |
 | OTA-TODO-015 | Not Started | 接线 ota 到 infra CMake 构建入口 | OTA 设计 7/8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/ota/ | ota 源文件纳入 dasall_infra | build：dasall_infra 可编译；test：后续 unit 目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | OTA-TODO-001~014（可分批） | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 ota 文件入图时完成 |
 | OTA-TODO-016 | Not Started | 注册 ota 的 unit 与 contract 测试入口 | OTA 设计 9.1/9.2；规范 3.7 | 9.1 测试矩阵；9.2 gate | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/ota/、tests/contract/CMakeLists.txt | unit：precheck/verify/install/switch/rollback；contract：边界与错误映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | OTA-TODO-015 | 无 | 无 | 测试注册改动、执行记录 | 仅当新增 ota 测试可被 ctest -N 发现并在 unit/contract 标签下执行时完成 |
-| OTA-TODO-017 | Blocked | 注册 ota integration/failure 测试入口 | OTA 设计 9.1/9.2；代码现状 | 9.1 Integration/Failure 覆盖 | L0 | tests/CMakeLists.txt、tests/integration/infra/ota/、tests/stress/ | integration：apply->confirm->success；failure：verify_fail/confirm_timeout/rollback_fail | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | OTA-TODO-015、016 | OTA-BLK-04 | tests 顶层接入 integration 并冻结标签规范 | 测试注册改动或阻塞记录 | 仅当 tests 顶层接线完成并可发现 ota integration 后可解阻 |
+| OTA-TODO-017 | Not Started | 注册 ota integration/failure 测试入口 | OTA 设计 9.1/9.2；代码现状 | 9.1 Integration/Failure 覆盖 | L0 | tests/CMakeLists.txt、tests/integration/infra/ota/、tests/stress/ | integration：apply->confirm->success；failure：verify_fail/confirm_timeout/rollback_fail | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | OTA-TODO-015、016 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 OTA-TODO-015、016 完成后落盘具体 integration/failure 用例 | 测试注册改动或阻塞记录 | 仅当 tests 顶层接线完成并可发现 ota integration 后可解阻 |
 | OTA-TODO-018 | Not Started | 补齐 rollback token 生命周期与持久化设计 | OTA 设计 12.1 问题 3/4；11.1 阻塞管理 | 12.1 未决问题；11.1 阻塞管理 | L0 | docs/architecture/DASALL_infra_OTA模块详细设计.md | RollbackToken 存储位置、过期策略、重启恢复规则 | process test：设计评审门；contract：对象边界不越权 | rg -n "RollbackToken|rollback token|expires_at|持久化" docs/architecture/DASALL_infra_OTA模块详细设计.md | 无 | 无 | 评审通过并回链到 OTA-TODO-012 | 设计补丁、评审记录、回链记录 | 仅当 token 生命周期表具备字段、状态、过期与恢复语义时完成 |
 | OTA-TODO-019 | Not Started | 补齐签名算法与 trust anchor 接口设计 | OTA 设计 12.1 问题 4；6.10 配置键 | 12.1 未决问题；6.10 signature_algorithm | L0 | docs/architecture/DASALL_infra_OTA模块详细设计.md、docs/architecture/DASALL_infrastructure子系统详细设计.md | signature_algorithm 允许集、trust anchor 读取接口与错误映射 | process test：安全评审门；unit 入口：verifier 依赖接口稳定性 | rg -n "signature_algorithm|trust anchor|验签|PackageVerifier" docs/architecture/DASALL_infra_OTA模块详细设计.md docs/architecture/DASALL_infrastructure子系统详细设计.md | 无 | 无 | 安全评审通过并回链到 OTA-TODO-003、007 | 设计补丁、评审记录、回链记录 | 仅当算法选择与 anchor 接口边界冻结且不进入 contracts 时完成 |
 | OTA-TODO-020 | Not Started | 补齐 boot confirm 成功判据设计 | OTA 设计 12.1 问题 5；6.9 confirm 语义 | 12.1 未决问题；6.9 启动确认失败 | L0 | docs/architecture/DASALL_infra_OTA模块详细设计.md | confirm 成功条件、超时处理、watchdog/health 联动条件 | process test：门禁评审；failure：超时默认失败规则可验证 | rg -n "confirm|启动确认|BootConfirmationMonitor|timeout" docs/architecture/DASALL_infra_OTA模块详细设计.md | 无 | 无 | 评审通过并回链到 OTA-TODO-011 | 设计补丁、评审记录、回链记录 | 仅当成功判据与失败兜底均可二值判定时完成 |
@@ -215,7 +215,7 @@
 | OTA-BLK-01 | rollback token 生命周期与持久化位置未冻结 | OTA-TODO-012 | 明确 token 存储位置、过期策略、重启恢复规则 | 完成 OTA-TODO-018 |
 | OTA-BLK-02 | 签名算法与 trust anchor 接口未冻结 | OTA-TODO-003、007 | 冻结 signature_algorithm 允许集与 anchor 读取接口 | 完成 OTA-TODO-019 |
 | OTA-BLK-03 | boot confirm 成功判据未冻结 | OTA-TODO-011 | 明确 success 判据与超时失败默认规则 | 完成 OTA-TODO-020 |
-| OTA-BLK-04 | tests 顶层未接入 integration | OTA-TODO-017 | tests/CMakeLists.txt 纳入 integration 并固化标签 | 完成 tests 顶层接线后再推进 017 |
+| OTA-BLK-04 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；ota integration/failure 是否可执行改由组件自身落盘负责 | OTA-TODO-017 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt |
 | OTA-BLK-05 | profile 键命名与覆盖优先级未最终收敛 | OTA-TODO-006、011（部分） | infra.ota.* 键命名冻结且跨 profile 一致 | 完成 OTA-TODO-021 |
 
 ## 9. 验收与质量门
@@ -233,7 +233,7 @@
 
 说明：
 
-1. 在 OTA-BLK-04 解阻前，integration/failure 不列为必过基线。
+1. integration/failure 当前不列为必过基线，原因是 OTA-TODO-017 尚未落盘具体 integration/failure 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 所有 Build-ready 任务均绑定至少 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答

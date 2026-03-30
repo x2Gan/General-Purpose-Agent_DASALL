@@ -122,7 +122,7 @@
 | HealthEvaluator | health 设计 6.2/6.7/6.8 | L3 | 结果聚合、阈值判定、三态输出明确 | hysteresis 细节未成文 | 直接拆评估策略任务 |
 | HealthEventPublisher | health 设计 6.2/6.8/10 | L2 | 状态变化才发事件、发布失败语义明确 | event bus 最小接口未冻结 | 先补接口设计后实现 |
 | RecoveryHintEmitter | health 设计 6.2/6.8；ADR-007 | L2 | 输出建议且不执行动作边界明确 | contract 模板缺失 | 先补模板再进实现 |
-| tests/integration/infra/health | health 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在 | tests 顶层未接入 integration | 先解阻测试拓扑再拆集成任务 |
+| tests/integration/infra/health | health 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在，且 tests 顶层 integration 拓扑已接入 | health integration 用例尚未落盘 | 直接拆集成任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -176,7 +176,7 @@
 | HLT-TODO-014 | Blocked | 定义 HealthConfigPolicy 配置模型与覆盖策略 | health 设计 6.9/11.1；蓝图 5.1 | 6.9 配置项表 | L2 | infra/src/health/HealthConfigPolicy.cpp | merge(default/profile/deploy), validate_thresholds() | unit：默认值与覆盖优先级；failure：非法阈值拒绝 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005 | HLT-BLK-003 | profiles 下 infra.health 键命名冻结 | 配置策略代码或阻塞记录 | 仅当配置键命名冻结后可由 Blocked 转 Not Started |
 | HLT-TODO-015 | Blocked | 实现 RecoveryHintEmitter 边界守卫骨架 | health 设计 6.2/6.8；ADR-007；11.1 | 6.2 RecoveryHintEmitter | L2 | infra/src/health/RecoveryHintEmitter.cpp | emit_hint(snapshot,reason), sanitize_hint_payload() | contract：建议与执行分离；unit：evidence_ref 完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-006、HLT-TODO-011 | HLT-BLK-004 | 复用的 RecoveryHint 边界 contract 模板冻结 | 发射器代码或阻塞记录 | 仅当 contract 模板冻结后方可推进 |
 | HLT-TODO-016 | Not Started | 注册 health 源码到 infra CMake | health 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/health/ | health 源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001~015 | 源文件分批落盘导致阶段性空实现 | 保留最小 non-empty health 源文件 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 health 源码入图时完成 |
-| HLT-TODO-017 | Blocked | 注册 health 的 unit/contract/integration 测试入口 | health 设计 7/8/9；工程规范 3.7；tests 现状 | 7 映射；8.1 路径；9.1 测试矩阵 | L0 | tests/unit/CMakeLists.txt、tests/unit/infra/health/、tests/contract/CMakeLists.txt、tests/integration/infra/health/ | unit/contract/failure 注入先行，integration 发现性门禁 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-016 | HLT-BLK-005 | tests 顶层纳入 integration 子目录并定义标签规范 | 测试注册改动或阻塞记录 | 仅当 health 新增测试可被 ctest -N 发现；integration 门禁未解阻前维持 Blocked |
+| HLT-TODO-017 | Not Started | 注册 health 的 unit/contract/integration 测试入口 | health 设计 7/8/9；工程规范 3.7；tests 现状 | 7 映射；8.1 路径；9.1 测试矩阵 | L0 | tests/unit/CMakeLists.txt、tests/unit/infra/health/、tests/contract/CMakeLists.txt、tests/integration/infra/health/ | unit/contract/failure 注入先行，integration 发现性门禁 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-016 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 HLT-TODO-016 完成后落盘具体 integration 用例 | 测试注册改动或阻塞记录 | 仅当 health 新增测试可被 ctest -N 发现；integration 用例可被发现并执行时完成 |
 | HLT-TODO-018 | Not Started | 回写 health 质量门与交付证据 | health 设计 9.2/11；工程规范 6.2 | 9.2 Gate；11 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁有通过/失败结论及命令证据时完成 |
 
 ### 6.2 当前 Blocked 任务索引
@@ -187,7 +187,6 @@
 | HLT-TODO-012 | HLT-BLK-002 |
 | HLT-TODO-014 | HLT-BLK-003 |
 | HLT-TODO-015 | HLT-BLK-004 |
-| HLT-TODO-017 | HLT-BLK-005 |
 
 ## 7. 执行顺序建议
 
@@ -224,7 +223,7 @@
 | HLT-BLK-002 | 事件总线发布接口未冻结 | HLT-TODO-012 | event publish 最小接口与 EventEnvelope 约束冻结 | 先定义最小 publish_transition API 与失败返回语义 | 先仅记录日志/指标并缓存状态转移，不对外发总线事件 |
 | HLT-BLK-003 | profiles 下 infra.health 键命名未冻结 | HLT-TODO-014、HLT-TODO-011（部分） | 冻结 infra.health.* 键名与覆盖优先级 | 在 profile 文档补齐键名并评审 | 暂停运行时覆盖，仅保留默认+部署层 |
 | HLT-BLK-004 | RecoveryHint 边界 contract 模板缺失 | HLT-TODO-006、HLT-TODO-015 | 提供可复用边界测试模板并冻结断言项 | 在 tests/contract 增补建议/执行分离模板 | 发射器仅本地构造对象，不宣称 contract ready |
-| HLT-BLK-005 | tests 顶层未接入 integration 子目录 | HLT-TODO-017 及后续 integration 任务 | tests/CMakeLists.txt 接入 integration 并明确标签规范 | 新增 add_subdirectory(integration) 并固化 integration 标签 | integration 验收延期，仅执行 unit/contract/failure-injection |
+| HLT-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；health integration 是否可执行改由组件自身落盘负责 | HLT-TODO-017 及后续 integration 任务 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 
 ## 9. 验收与质量门
 
@@ -240,7 +239,7 @@
 
 说明：
 
-1. integration 验收命令本轮不纳入必过基线，原因见 HLT-BLK-005。
+1. integration 验收命令本轮不纳入必过基线，原因是 HLT-TODO-017 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项 Build-ready 任务至少包含 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答
