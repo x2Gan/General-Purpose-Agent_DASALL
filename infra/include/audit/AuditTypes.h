@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
+
+#include "error/ResultCode.h"
 
 namespace dasall::infra {
 
@@ -107,6 +110,49 @@ struct AuditContext {
            task_id == kAuditContextUnknown &&
            parent_task_id == kAuditContextUnknown &&
            lease_id == kAuditContextUnknown && worker_type == kAuditContextUnknown;
+  }
+};
+
+struct AuditWriteOutcome {
+  bool accepted = false;
+  bool persisted = false;
+  bool fallback_used = false;
+  std::optional<contracts::ResultCode> error_code;
+
+  [[nodiscard]] bool has_consistent_state() const {
+    if (persisted && !accepted) {
+      return false;
+    }
+
+    if (error_code.has_value() &&
+        contracts::classify_result_code(*error_code) ==
+            contracts::ResultCodeCategory::Unknown) {
+      return false;
+    }
+
+    if (persisted && error_code.has_value()) {
+      return false;
+    }
+
+    if (!accepted && fallback_used) {
+      return false;
+    }
+
+    return true;
+  }
+
+  [[nodiscard]] bool is_success() const {
+    return has_consistent_state() && accepted && persisted && !fallback_used &&
+           !error_code.has_value();
+  }
+
+  [[nodiscard]] bool is_degraded_success() const {
+    return has_consistent_state() && accepted && persisted && fallback_used &&
+           !error_code.has_value();
+  }
+
+  [[nodiscard]] bool is_failure() const {
+    return has_consistent_state() && !persisted && error_code.has_value();
   }
 };
 

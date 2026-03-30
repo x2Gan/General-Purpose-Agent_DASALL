@@ -318,7 +318,7 @@ target_link_libraries(dasall_contract_health_monitor_interface_boundary_test
 
 dasall_register_contract_test(
   dasall_contract_infra_error_code_boundary_test
-  InfraErrorCodeBoundaryContractTest
+  InfraErrorCodeMappingContractTest
   smoke/InfraErrorCodeBoundaryContractTest.cpp
   smoke
 )

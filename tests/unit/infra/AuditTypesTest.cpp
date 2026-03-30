@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <type_traits>
 
@@ -174,6 +175,79 @@ void test_audit_context_rejects_empty_strings_when_callers_bypass_unknown_defaul
               "callers that bypass unknown defaults with empty strings should fail the non-empty guard");
 }
 
+void test_audit_write_outcome_accepts_primary_and_fallback_success_paths() {
+  using dasall::infra::AuditWriteOutcome;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(AuditWriteOutcome{}.accepted), bool>);
+  static_assert(std::is_same_v<decltype(AuditWriteOutcome{}.persisted), bool>);
+  static_assert(std::is_same_v<decltype(AuditWriteOutcome{}.fallback_used), bool>);
+  static_assert(std::is_same_v<decltype(AuditWriteOutcome{}.error_code),
+                               std::optional<dasall::contracts::ResultCode>>);
+
+  const AuditWriteOutcome primary_success{
+      .accepted = true,
+      .persisted = true,
+      .fallback_used = false,
+      .error_code = std::nullopt,
+  };
+
+  const AuditWriteOutcome fallback_success{
+      .accepted = true,
+      .persisted = true,
+      .fallback_used = true,
+      .error_code = std::nullopt,
+  };
+
+  assert_true(primary_success.is_success(),
+              "accepted and persisted audit writes should be treated as primary success when fallback is not used");
+  assert_true(fallback_success.is_degraded_success(),
+              "accepted and persisted audit writes should be treated as degraded success when fallback is used");
+}
+
+void test_audit_write_outcome_accepts_observable_failure_mapping() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::AuditWriteOutcome;
+  using dasall::tests::support::assert_true;
+
+  const AuditWriteOutcome failure{
+      .accepted = true,
+      .persisted = false,
+      .fallback_used = true,
+      .error_code = ResultCode::RuntimeRetryExhausted,
+  };
+
+  assert_true(failure.has_consistent_state(),
+              "fallback write failures should remain consistent when they expose a mapped contracts result code");
+  assert_true(failure.is_failure(),
+              "non-persisted outcomes with mapped error codes should stay observable as failures");
+}
+
+void test_audit_write_outcome_rejects_inconsistent_combinations() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::AuditWriteOutcome;
+  using dasall::tests::support::assert_true;
+
+  const AuditWriteOutcome persisted_without_acceptance{
+      .accepted = false,
+      .persisted = true,
+      .fallback_used = false,
+      .error_code = std::nullopt,
+  };
+
+  const AuditWriteOutcome persisted_with_error_code{
+      .accepted = true,
+      .persisted = true,
+      .fallback_used = false,
+      .error_code = ResultCode::ValidationFieldMissing,
+  };
+
+  assert_true(!persisted_without_acceptance.has_consistent_state(),
+              "persisted outcomes must not bypass the accepted admission bit");
+  assert_true(!persisted_with_error_code.has_consistent_state(),
+              "persisted outcomes must not also carry an error code");
+}
+
 }  // namespace
 
 int main() {
@@ -184,6 +258,9 @@ int main() {
         test_audit_context_defaults_missing_identifiers_to_unknown();
         test_audit_context_preserves_supplied_correlation_identifiers();
         test_audit_context_rejects_empty_strings_when_callers_bypass_unknown_defaults();
+        test_audit_write_outcome_accepts_primary_and_fallback_success_paths();
+        test_audit_write_outcome_accepts_observable_failure_mapping();
+        test_audit_write_outcome_rejects_inconsistent_combinations();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

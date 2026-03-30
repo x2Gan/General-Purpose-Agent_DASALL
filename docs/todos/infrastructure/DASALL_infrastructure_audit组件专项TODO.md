@@ -174,7 +174,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | AUD-TODO-001 | Done | 定义 AuditEvent 数据结构 | audit 设计 6.5；ADR-008；编码规范 3.7 | 6.5 AuditEvent | L3 | infra/include/audit/AuditTypes.h | AuditEvent | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 event_id/action/actor/target/outcome/evidence_ref/side_effects/timestamp 与设计一致，且 contract 测试可阻止越权字段时完成 |
 | AUD-TODO-002 | Done | 定义 AuditContext 数据结构 | audit 设计 6.5；ADR-008 | 6.5 AuditContext | L3 | infra/include/audit/AuditTypes.h | AuditContext | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type 字段齐备，且缺失语义为 unknown 而非空指针时完成 |
-| AUD-TODO-003 | Not Started | 定义 AuditWriteOutcome 数据结构 | audit 设计 6.5/6.6；编码规范 3.6 | 6.5 AuditWriteOutcome；6.6 错误语义 | L3 | infra/include/audit/AuditTypes.h | AuditWriteOutcome | unit：AuditTypesTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 accepted/persisted/fallback_used/error_code 四字段齐备且错误码映射可测时完成 |
+| AUD-TODO-003 | Done | 定义 AuditWriteOutcome 数据结构 | audit 设计 6.5/6.6；编码规范 3.6 | 6.5 AuditWriteOutcome；6.6 错误语义 | L3 | infra/include/audit/AuditTypes.h | AuditWriteOutcome | unit：AuditTypesTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure | 无 | 无 | 无 | AuditTypes.h、对象测试 | 仅当 accepted/persisted/fallback_used/error_code 四字段齐备且错误码映射可测时完成 |
 | AUD-TODO-004 | Not Started | 定义 ExportQuery 数据结构 | audit 设计 6.5；11.1 阻塞项 | 6.5 ExportQuery | L3 | infra/include/audit/AuditExporterTypes.h | ExportQuery | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 无 | 无 | 无 | AuditExporterTypes.h、过滤测试 | 仅当 start_ts/end_ts/actor/action/target/outcome/page_token 字段落盘，且时间窗必填语义可由测试验证时完成 |
 | AUD-TODO-005 | Not Started | 定义 ExportResult 数据结构 | audit 设计 6.5 | 6.5 ExportResult | L3 | infra/include/audit/AuditExporterTypes.h | ExportResult | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | AUD-TODO-004 | 无 | 无 | AuditExporterTypes.h、导出测试 | 仅当 records/next_page_token/truncated/checksum 字段齐备，且 truncated 显式语义可测试时完成 |
 | AUD-TODO-006 | Not Started | 定义 IAuditLogger 接口头文件 | audit 设计 6.6；编码规范 3.7 | 6.6 IAuditLogger | L3 | infra/include/audit/IAuditLogger.h | IAuditLogger::write_audit；IAuditLogger::export_audit | unit：AuditInterfaceCompileTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-003、AUD-TODO-004、AUD-TODO-005 | 无 | 无 | IAuditLogger.h、编译测试 | 仅当接口签名与 6.6 一致、职责只覆盖写入与导出，且不暴露 sink/线程池等实现细节时完成 |
@@ -397,3 +397,45 @@ Build 合规复核：
 3. 测试发现性：沿用 001 已建立的 AuditTypesTest/AuditBoundaryContractTest 注册名，并再次用 ctest -N -R 回填发现性证据。
 4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
 5. 提交隔离：本轮只改 AuditContext 与同名测试，不提前引入 AuditWriteOutcome/ExportQuery 语义。
+
+### 12.3 AUD-TODO-003
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-003。
+2. 可执行性依据：AUD-TODO-001、002 已冻结输入与上下文对象；当前仓库已有 infra 错误码映射 contract 测试，可直接承载 AuditWriteOutcome 的 error_code 约束。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.5/6.6 要求 AuditWriteOutcome 仅包含 accepted/persisted/fallback_used/error_code 四字段，且 error_code 必须映射到既有 contracts::ResultCode，不新增共享码域。
+2. 外部参考：OWASP Logging 对高风险链路要求失败必须可观测；OTel 语义建议把错误状态做成结构化字段，而不是依赖模糊文本消息。
+
+D 结论：
+
+1. Design -> Build 映射：在 infra/include/audit/AuditTypes.h 中新增 AuditWriteOutcome，以 optional contracts::ResultCode 承载失败错误码，避免使用伪成功码或新增 success sentinel。
+2. Build 三件套：
+	- 代码目标：新增 AuditWriteOutcome 与一致性 helper，明确 primary success、fallback degraded success 和 failure 三种可二值判定状态。
+	- 测试目标：扩展 AuditTypesTest 覆盖 success/degraded success/failure 与不一致组合；扩展 infra 错误码 contract 测试覆盖 AuditWriteOutcome::error_code 类型与映射约束，并将 ctest 名称收敛为 InfraErrorCodeMappingContractTest。
+	- 验收命令：cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/include/audit/AuditTypes.h：新增 AuditWriteOutcome、状态一致性校验和 success/failure helper。
+2. tests/unit/infra/AuditTypesTest.cpp：新增 primary success、fallback degraded success、mapped failure 和不一致组合负例覆盖。
+3. tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp、tests/contract/CMakeLists.txt：新增 AuditWriteOutcome error_code contract 约束，并把 ctest 名称更新为 InfraErrorCodeMappingContractTest。
+
+验收结果：
+
+1. cmake --build build-ci --target dasall_infra dasall_contract_tests：通过。
+2. ctest --test-dir build-ci -R "AuditTypesTest|InfraErrorCodeMappingContractTest" --output-on-failure：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：AuditWriteOutcome helper 命名已直接表达状态机语义，无需补注释。
+2. 正负例覆盖：unit 覆盖 success、degraded success、failure 和 persisted-with-error 等负例；contract 覆盖 error_code 只能落在既有 contracts::ResultCode 范围。
+3. 测试发现性：ctest 名称已收敛为 InfraErrorCodeMappingContractTest，并在目标命令中被显式命中。
+4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
+5. 提交隔离：本轮只冻结输出对象与映射测试，不提前引入 ExportQuery/ExportResult 对象。
