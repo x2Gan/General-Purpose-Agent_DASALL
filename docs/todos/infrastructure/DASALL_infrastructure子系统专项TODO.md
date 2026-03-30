@@ -252,7 +252,7 @@
 | INF-BLK-05 | OTA 缺少 UpgradePlan、Package、rollback token、签名算法与存储规范 | ota 子域 | INF-TODO-015 | 冻结 OTA 输入输出对象与签名/存储规范 | 新增 OTA 输入输出表与包规范表 |
 | INF-BLK-06 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与 dasall_integration_tests 聚合依赖已补齐，原阻塞为“顶层未接入 integration/聚合 gate 未依赖已注册测试可执行文件” | 测试门禁 | tracing/metrics/watchdog/ota 集成任务 | 无；后续仅需按组件落盘具体 integration 用例 | 证据回链到本节 8.1 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt |
 | INF-BLK-07 | 已解阻（2026-03-30 校准）：policy 规则 schema、patch 操作白名单与冲突裁定顺序已由 policy 模块详细设计、INF-TODO-017 头文件落盘与边界测试共同固化 | security policy 子域 | INF-TODO-017 | 无；后续仅需保持 policy 详细设计、头文件与边界测试口径同步 | 证据回链到本节 8.1 校准记录，以及 infra/include/policy/*、tests/unit/infra/PolicySnapshotCompatibilityTest.cpp、tests/contract/smoke/PolicyDecisionBoundaryTest.cpp |
-| INF-BLK-08 | 诊断命令白名单与脱敏规则未冻结（2026-03-27 已通过 diagnostics 模块详细设计 6.5/6.9 与 INF-TODO-018 对象冻结解阻） | diagnostics 子域 | INF-TODO-018 | 明确命令域、输出脱敏规则、导出格式 | 在详细设计中补齐诊断命令域与脱敏矩阵 |
+| INF-BLK-08 | 已解阻（2026-03-30 校准）：INF-TODO-018 已落盘 IDiagnosticsService.h、DiagnosticsTypes.h 与首批 smoke/unit 证据，诊断命令白名单、请求/返回对象与远程导出默认门禁已有代码/测试回链 | diagnostics 子域 | INF-TODO-018 | 无；后续仅需继续推进 diagnostics 组件内剩余的 registry、脱敏矩阵、导出细则与桥接接口阻塞 | 证据回链到本节 8.1 校准记录，以及 infra/include/IDiagnosticsService.h、infra/include/diagnostics/DiagnosticsTypes.h、tests/unit/infra/DiagnosticsSnapshotExportTest.cpp、tests/integration/infra/InfraDiagnosticsSmokeTest.cpp |
 | INF-BLK-09 | 插件 manifest、ABI 兼容矩阵与签名链路未冻结 | plugin 子域 | INF-TODO-019 | 明确 manifest 字段、ABI 兼容规则、签名校验流程 | 在详细设计中补齐插件对象表与校验流程 |
 
 ### 8.1 阻塞台账校准记录
@@ -261,6 +261,7 @@
 |---|---|---|---|---|
 | INF-BLK-06 | Resolved | 2026-03-30 | tests/CMakeLists.txt 已纳入 integration 聚合并显式依赖 integration 可执行目标；tests/integration/CMakeLists.txt 已回传 integration 可执行目标清单；`cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N -L integration` 发现 5 个 integration 测试，`ctest --test-dir build-ci --output-on-failure -L integration` 执行 5/5 通过 | 下游以“tests 顶层未接入 integration”为唯一阻塞原因的任务应转回 Not Started，gate 不再把该项计为当前 Blocked |
 | INF-BLK-07 | Resolved | 2026-03-30 | docs/architecture/DASALL_infra_policy模块详细设计.md 6.5/6.9 已明确 PolicyRuleDescriptor 的 domain/effect/priority、PolicyPatch 的 operations 白名单与 priority_order；infra/include/policy/ISecurityPolicyManager.h、PolicyBundle.h、PolicyPatch.h、PolicySnapshot.h、PolicyDecisionRef.h 已落盘；`ctest --test-dir build-ci -N -R "PolicySnapshotCompatibilityTest|PolicyDecisionBoundaryTest"` 发现 2 个测试，`ctest --test-dir build-ci --output-on-failure -R "PolicySnapshotCompatibilityTest|PolicyDecisionBoundaryTest"` 执行 2/2 通过 | policy 专项中仅因 POL-BLK-001 被标记为 Blocked 的任务应回到 Not Started，gate 不再把 INF-BLK-07 视为当前阻塞 |
+| INF-BLK-08 | Resolved | 2026-03-30 | docs/architecture/DASALL_infra_diagnostics模块详细设计.md 6.6/6.9 已明确 IDiagnosticsService 语义、allowed_commands 与 remote.enabled 默认关闭；infra/include/IDiagnosticsService.h 与 infra/include/diagnostics/DiagnosticsTypes.h 已落盘 SnapshotQuery、SnapshotExportRequest、DiagnosticsSnapshotResult 与只读命令白名单；`ctest --test-dir build-ci -N -R "DiagnosticsSnapshotExportTest|InfraDiagnosticsSmokeTest"` 发现 2 个测试，`ctest --test-dir build-ci --output-on-failure -R "DiagnosticsSnapshotExportTest|InfraDiagnosticsSmokeTest"` 执行 2/2 通过 | diagnostics 专项中仅因 DIA-BLK-001 被标记为 Blocked 的任务应完成或转回 Not Started；DIA-BLK-002/004/005/006 继续保留为当前阻塞 |
 
 ## 9. 验收与质量门
 
