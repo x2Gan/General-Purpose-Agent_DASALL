@@ -251,7 +251,7 @@
 | INF-BLK-04 | Watchdog 缺少心跳对象、超时事件模型、与 runtime 恢复建议事件的边界 | health/watchdog 子域 | 后续专项 TODO | 明确心跳输入、deadline 模型、事件输出对象 | 新增 watchdog 详细设计或补章 |
 | INF-BLK-05 | OTA 缺少 UpgradePlan、Package、rollback token、签名算法与存储规范 | ota 子域 | INF-TODO-015 | 冻结 OTA 输入输出对象与签名/存储规范 | 新增 OTA 输入输出表与包规范表 |
 | INF-BLK-06 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与 dasall_integration_tests 聚合依赖已补齐，原阻塞为“顶层未接入 integration/聚合 gate 未依赖已注册测试可执行文件” | 测试门禁 | tracing/metrics/watchdog/ota 集成任务 | 无；后续仅需按组件落盘具体 integration 用例 | 证据回链到本节 8.1 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt |
-| INF-BLK-07 | 安全策略规则 schema 与冲突裁定顺序未冻结（2026-03-27 已通过 policy 模块详细设计 6.5/6.8 与 INF-TODO-017 头文件冻结解阻） | security policy 子域 | INF-TODO-017 | 明确规则对象、domain/effect、优先级、冲突裁定与回滚窗口 | 在 DASALL_infra_policy模块详细设计.md 基础上完成 schema 评审与裁定矩阵冻结 |
+| INF-BLK-07 | 已解阻（2026-03-30 校准）：policy 规则 schema、patch 操作白名单与冲突裁定顺序已由 policy 模块详细设计、INF-TODO-017 头文件落盘与边界测试共同固化 | security policy 子域 | INF-TODO-017 | 无；后续仅需保持 policy 详细设计、头文件与边界测试口径同步 | 证据回链到本节 8.1 校准记录，以及 infra/include/policy/*、tests/unit/infra/PolicySnapshotCompatibilityTest.cpp、tests/contract/smoke/PolicyDecisionBoundaryTest.cpp |
 | INF-BLK-08 | 诊断命令白名单与脱敏规则未冻结（2026-03-27 已通过 diagnostics 模块详细设计 6.5/6.9 与 INF-TODO-018 对象冻结解阻） | diagnostics 子域 | INF-TODO-018 | 明确命令域、输出脱敏规则、导出格式 | 在详细设计中补齐诊断命令域与脱敏矩阵 |
 | INF-BLK-09 | 插件 manifest、ABI 兼容矩阵与签名链路未冻结 | plugin 子域 | INF-TODO-019 | 明确 manifest 字段、ABI 兼容规则、签名校验流程 | 在详细设计中补齐插件对象表与校验流程 |
 
@@ -260,6 +260,7 @@
 | 阻塞项 ID | 当前状态 | 校准时间 | 证据 | 影响调整 |
 |---|---|---|---|---|
 | INF-BLK-06 | Resolved | 2026-03-30 | tests/CMakeLists.txt 已纳入 integration 聚合并显式依赖 integration 可执行目标；tests/integration/CMakeLists.txt 已回传 integration 可执行目标清单；`cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N -L integration` 发现 5 个 integration 测试，`ctest --test-dir build-ci --output-on-failure -L integration` 执行 5/5 通过 | 下游以“tests 顶层未接入 integration”为唯一阻塞原因的任务应转回 Not Started，gate 不再把该项计为当前 Blocked |
+| INF-BLK-07 | Resolved | 2026-03-30 | docs/architecture/DASALL_infra_policy模块详细设计.md 6.5/6.9 已明确 PolicyRuleDescriptor 的 domain/effect/priority、PolicyPatch 的 operations 白名单与 priority_order；infra/include/policy/ISecurityPolicyManager.h、PolicyBundle.h、PolicyPatch.h、PolicySnapshot.h、PolicyDecisionRef.h 已落盘；`ctest --test-dir build-ci -N -R "PolicySnapshotCompatibilityTest|PolicyDecisionBoundaryTest"` 发现 2 个测试，`ctest --test-dir build-ci --output-on-failure -R "PolicySnapshotCompatibilityTest|PolicyDecisionBoundaryTest"` 执行 2/2 通过 | policy 专项中仅因 POL-BLK-001 被标记为 Blocked 的任务应回到 Not Started，gate 不再把 INF-BLK-07 视为当前阻塞 |
 
 ## 9. 验收与质量门
 
@@ -344,7 +345,7 @@
 1. 先执行 INF-TODO-001 至 INF-TODO-012，完成 infrastructure 的 L2 冻结与测试入口接线。
 2. 并行执行 INF-TODO-016、INF-TODO-017、INF-TODO-018，完成 audit/security policy/diagnostics 缺口补齐。
 3. 并行补齐 INF-BLK-01 至 INF-BLK-09 对应设计缺口。
-4. 基于 DASALL_infra_policy模块详细设计.md，为 security policy 生成组件级专项 TODO，并优先解掉 INF-BLK-07。
+4. 基于 DASALL_infra_policy模块详细设计.md，持续同步 security policy 组件专项 TODO 与 INF-BLK-07 校准结论，并优先推进 POL-BLK-002、POL-BLK-006 的剩余解阻。
 5. 仅在 Blocker 解消后，再生成 config、secret、ota、plugin、tracing、metrics、watchdog 的下一轮专项 TODO。
 
 ## 12. ARC 修复增量（2026-03-26）
