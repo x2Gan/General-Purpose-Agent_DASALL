@@ -80,12 +80,12 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 已接入真实源文件与 PUBLIC_HEADER，但未纳入 config 子域 | config 尚未接入构建 |
-| infra/include/ | 已有 infra 公共头文件，但无 config/ 子目录 | config 对外接口仍未落盘 |
+| infra/CMakeLists.txt | 已接入 config PUBLIC_HEADER，但暂无 config 源文件 | config 接口已接入构建，具体实现未落盘 |
+| infra/include/ | 已有 config/ 子目录，并已落盘 ConfigTypes/IConfigCenter 头文件 | config 对外接口冻结已启动 |
 | infra/src/config/ | 目录尚未落盘 | config 实现未落盘 |
 | tests/CMakeLists.txt | 已含 mocks/unit/contract/integration，且 integration 聚合已接线 | config 可直接落盘 integration 用例，不再受顶层拓扑阻塞 |
-| tests/unit/CMakeLists.txt | 已接入 infra 子目录，但尚无 config 测试目标 | config unit 发现性待补齐 |
-| tests/contract/CMakeLists.txt | centralized registration 已存在，并已承载其他 infra contract 用例 | 可直接承载 config contract 边界测试 |
+| tests/unit/CMakeLists.txt | 已接入 infra 子目录，并已纳入 ConfigTypes/ConfigCenter unit 目标 | config unit 发现性已接线 |
+| tests/contract/CMakeLists.txt | centralized registration 已接入 ConfigTypes/ConfigCenter contract 用例 | config contract 发现性已接线 |
 
 ## 4. 粒度可行性评估
 
@@ -156,7 +156,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| CFG-TODO-001 | Not Started | 定义 IConfigCenter 接口头文件 | config 设计 6.6；编码规范 3.7 | 6.6 IConfigCenter | L2 | infra/include/config/IConfigCenter.h | load_layers(startup_context), get_typed(key_path), apply_override(config_patch), rollback(rollback_token), subscribe(namespace_filter, callback) | unit：接口可编译；contract：错误语义入口可映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录 | 仅当 5 个方法与 6.6 一致且不引入业务依赖时完成 |
+| CFG-TODO-001 | Done | 定义 IConfigCenter 接口头文件 | config 设计 6.6；编码规范 3.7 | 6.6 IConfigCenter | L2 | infra/include/config/IConfigCenter.h | load_layers(startup_context), get_typed(query), apply_override(config_patch), rollback(rollback_token), subscribe(subscription_request) | unit：接口占位对象与查询/回滚/订阅守卫可编译；contract：错误语义入口可映射，且 runtime override 不越过 profile 保护键 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" | 无 | 无 | 无 | 接口头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/IConfigCenter.h、tests/unit/infra/ConfigCenterInterfaceTest.cpp、tests/contract/smoke/ConfigCenterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 5 个方法与 6.6 一致、返回边界不引入业务依赖且测试通过时完成 |
 | CFG-TODO-002 | Not Started | 定义 IConfigLoader 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigLoader | L3 | infra/include/config/IConfigLoader.h | load_default, load_profile, load_deploy, load_runtime_overlay | unit：四层入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 外置源协议未冻结 | 首版仅约束本地源入口，外置源后置 | 接口头文件、编译记录 | 仅当四层加载方法齐全且命名与锚点一致时完成 |
 | CFG-TODO-003 | Not Started | 定义 IConfigValidator 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigValidator | L3 | infra/include/config/IConfigValidator.h | validate(snapshot), validate_patch(current_snapshot, patch) | unit：接口可编译；contract：校验失败可映射错误码 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 规则 DSL 未冻结 | 首版仅定义最小规则集入口 | 接口头文件、编译记录 | 仅当校验接口覆盖完整且可编译时完成 |
 | CFG-TODO-004 | Not Started | 定义 IConfigSnapshotStore 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigSnapshotStore | L2 | infra/include/config/IConfigSnapshotStore.h | commit, get_current, get_by_version, get_last_known_good | unit：版本读写入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 持久化后端未定 | 首版以内存快照语义冻结接口 | 接口头文件、编译记录 | 仅当 4 个方法完整且不泄露后端细节时完成 |
@@ -258,7 +258,7 @@
 3. 当前最小可执行粒度：接口 / 数据结构（L2），局部函数骨架（L3）。
 4. 未达到全量函数级的缺口：事件总线抽象、secret 对齐接口、持久化后端、config integration 用例落盘。
 5. 下一步建议：
-   - 先执行 CFG-TODO-001~012、014~015 建立可编译可测试骨架。
+   - 继续执行 CFG-TODO-002~005、007~012、014~015 建立可编译可测试骨架。
    - 并行推进 CFG-BLK-001/004 解阻，完成发布与 integration 准入。
    - 阻塞解除后再推进 CFG-TODO-013 与后续桥接任务，最后执行 CFG-TODO-017 证据收口。
 
@@ -314,3 +314,55 @@ Build 合规复核：
 3. 测试发现性：本轮显式要求 `ctest -N -R ...` 回填发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物、发现性结果与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 config 类型对象、测试、CMake 注册与 blocker 校准文档。
+
+## 13. 本轮执行记录（2026-03-30 / CFG-TODO-001）
+
+### 13.1 选中任务
+
+1. 本轮任务：CFG-TODO-001。
+2. 可执行性依据：CFG-TODO-006 已完成，TypedConfig/patch/schema/profile 键名已冻结，IConfigCenter 可直接落到接口头文件级且不越过实现边界。
+
+### 13.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.6 已明确 IConfigCenter 的五个核心入口。
+2. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.6/6.9 已明确 runtime override 仅接受受管 patch，并受 profile 保护键约束。
+3. infra/include/config/ConfigTypes.h 已冻结 ConfigQuery、ConfigPatch、ConfigDiff 与 ConfigApplyResult，可直接复用为 IConfigCenter typed 契约。
+
+外部参考：
+
+1. Azure External Configuration Store 模式要求配置接口提供 typed/structured 读取、版本控制和变更通知；本轮据此冻结 startup context、typed lookup、rollback token 与 namespace-filtered subscription 的最小接口形状。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IConfigCenter.h，冻结 ConfigStartupContext、ConfigRollbackToken、ConfigSubscriptionRequest、ConfigSubscriptionHandle 与 IConfigCenter 接口。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/IConfigCenter.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 ConfigCenterInterfaceTest 与 ConfigCenterInterfaceBoundaryContractTest。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 13.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/IConfigCenter.h：新增 startup context、rollback token、subscription request/handle 与 IConfigCenter 五个接口入口。
+2. tests/unit/infra/ConfigCenterInterfaceTest.cpp：覆盖 load_layers/get_typed/apply_override/rollback/subscribe 的最小正负例。
+3. tests/contract/smoke/ConfigCenterInterfaceBoundaryContractTest.cpp：覆盖接口签名、typed lookup 边界与受保护 profile 键拒绝路径。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`：通过；unit 40/40、contract 95/95 全部通过。
+3. `ctest --test-dir build-ci -N -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest"`：通过，发现 2 个测试，分别为 `ConfigCenterInterfaceTest` 与 `ConfigCenterInterfaceBoundaryContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：新增接口和占位对象命名已直接表达语义，无需冗余注释。
+2. 正负例覆盖：unit 将覆盖合法 startup/query/subscription 正例与非法 load/override/rollback 负例；contract 将覆盖签名边界与受保护 profile 键拒绝路径。
+3. 测试发现性：本轮显式要求 `ctest -N -R ...` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物、发现性结果与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 IConfigCenter 头文件、测试、CMake 注册和 INF-TODO-013 证据文档。

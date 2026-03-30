@@ -163,6 +163,21 @@ dasall_apply_common_options(dasall_config_types_unit_test)
 add_test(NAME ConfigTypesTest COMMAND dasall_config_types_unit_test)
 set_tests_properties(ConfigTypesTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_config_center_interface_unit_test
+  ConfigCenterInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_config_center_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_center_interface_unit_test)
+
+add_test(NAME ConfigCenterInterfaceTest COMMAND dasall_config_center_interface_unit_test)
+set_tests_properties(ConfigCenterInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_monitor_interface_unit_test
   HealthMonitorInterfaceTest.cpp
 )

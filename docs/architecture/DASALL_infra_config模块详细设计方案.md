@@ -197,10 +197,12 @@ patch 结构冻结：
 
 1. IConfigCenter
 - load_layers(startup_context)
-- get_typed(key_path)
+- get_typed(query)
 - apply_override(config_patch)
 - rollback(rollback_token)
-- subscribe(namespace_filter, callback)
+- subscribe(subscription_request)
+
+说明：`startup_context` 首版最小字段固定为 `requested_profile_id`、`deployment_source_ref`、`runtime_overlay_source_ref`、`actor_ref`；`query` 复用 6.5 的 `ConfigQuery`；`subscription_request` 固定为 `namespace_filter`、`subscriber_id` 与 `callback` 三元组，不提前冻结跨进程事件总线细节。
 
 1. IConfigLoader
 - load_default()
