@@ -1,7 +1,7 @@
 # infra/config 模块详细设计方案
 
-文档版本：v1.0
-日期：2026-03-24
+文档版本：v1.1
+日期：2026-03-30
 状态：Draft
 
 ## 1. 模块概览
@@ -145,14 +145,51 @@ infra/config 不负责：
 
 | 核心对象 | 关键字段 | 约束 | 与 contracts 对齐关系 |
 |---|---|---|---|
-| ConfigQuery | key_path, expected_type, default_policy | key_path 必须非空 | 失败映射 ResultCode/ErrorInfo |
-| ConfigPatch | op, key_path, value, actor, reason | 仅允许白名单路径 | 操作事件映射 EventEnvelope |
-| ConfigSnapshot | version, checksum, created_at, data, source_chain | version 单调递增 | 不写入 contracts 公共对象 |
-| ConfigDiff | from_version, to_version, changes | changes 必须可审计 | 用于事件与审计，不污染业务语义 |
+| TypedConfig | key_path, value_type, serialized_value, schema_version, source_kind, source_id | key_path 必须非空；schema_version 仅允许受支持版本 | infra/config 私有 typed 对象，不进入 contracts |
+| ConfigQuery | key_path, expected_type, default_policy, fallback_serialized_value | key_path 必须非空；fallback 仅在 fallback policy 下允许 | 失败映射 ResultCode/ErrorInfo |
+| ConfigPatch | patch_id, source_kind, source_id, actor, target_scope, base_version, reason_code, expires_at, patches | runtime_override 必须带 expires_at/TTL；patches 只允许白名单路径与受支持 op | 操作事件映射 EventEnvelope |
+| ConfigSnapshot | version, checksum, created_at, data, source_chain | version 单调递增；source_chain 最多四层且来源唯一 | 不写入 contracts 公共对象 |
+| ConfigDiff | from_version, to_version, changes | changes 必须可审计且保持 key_path 粒度 | 用于事件与审计，不污染业务语义 |
 | ValidationIssue | key_path, code, severity, message | issue 可定位可修复 | code 映射统一错误域 |
-| ConfigApplyResult | applied, rollback_token, warnings, error_info | applied=false 必有 error_info | 兼容 contracts 错误语义 |
+| ConfigApplyResult | applied, rollback_token, warnings, result_code, error_info | applied=false 必有 error_info | 兼容 contracts 错误语义 |
 
 说明：以上对象均为 infra/config 私有对象或模块接口对象，不新增到 contracts 共享语义层。
+
+#### 6.5.1 TypedConfig / patch / schema / profiles 键名冻结（v1）
+
+冻结结论：ConfigCenter v1 的 typed 配置输入固定由 `TypedConfig`、`ConfigPatch`、`ConfigPatchEntry`、`ConfigLayerRef` 共同表达；`defaults/profile` 只接受 `runtime_policy.yaml` 风格 YAML 文档，`deployment_override` 只接受受管 overlay YAML 文档，`runtime_override` 只接受结构化 patch 对象，不接受业务模块私有自由字典。
+
+schema_version 与来源格式：
+
+1. `schema_version` 当前冻结为字符串 `1`；未显式声明或声明为其他版本时，ConfigCenter 必须在 merge 前拒绝。
+2. `defaults`、`profile` 两层的输入格式固定为 `runtime_policy.yaml`（YAML v1）。
+3. `deployment_override` 输入格式固定为受管 overlay YAML v1，仅允许站点/设备/发布流水线产物提供。
+4. `runtime_override` 输入格式固定为结构化 patch v1，仅允许 ConfigCenter 受鉴权入口、诊断窗口或自动化测试通道提供。
+
+profile_id 与逻辑域命名冻结：
+
+1. 当前支持的 `profile_id` 固定为 `desktop_full`、`cloud_full`、`edge_balanced`、`edge_minimal`、`factory_test` 五档，不得在 v1 中重命名。
+2. `schema_version: 1` 的 Profile 顶层逻辑域固定为 `profile_meta`、`enabled_modules`、`runtime_budget`、`model_profile`、`token_budget_policy`、`prompt_policy`、`capability_cache_policy`、`degrade_policy`、`timeout_policy`、`execution_policy`、`ops_policy`。
+3. `profile_meta` 必填键固定为 `profile_id`、`schema_version`、`target_platform`、`support_level`；缺失任一键即拒绝。
+4. `enabled_modules` 继续作为唯一稳定能力真源，命名冻结沿用 profiles 详细设计 6.9，不允许 ConfigCenter 发明别名。
+
+patch 结构冻结：
+
+1. `ConfigPatch` 必填元数据固定为 `patch_id`、`source_kind`、`source_id`、`actor`、`target_scope`、`base_version`、`reason_code`、`patches`。
+2. `runtime_override` 必须额外提供 `expires_at` 或等价 TTL；`deployment_override` 可以省略该字段。
+3. `patches` 中每个条目至少包含 `op`、`key_path`、`value`；`op` 首版仅允许 `replace` 与 `remove`。
+4. `replace` 要求 `value.key_path` 与 patch `key_path` 一致；`remove` 不允许携带 value。
+
+受保护路径与拒绝规则：
+
+1. `runtime_override` 禁止修改 `schema_version`、`profile_meta.*`、`enabled_modules.*` 与 `enabled_adapters.*`。
+2. 任意 patch 的 `base_version` 与当前快照不匹配时必须拒绝，以避免 stale write。
+3. 对高风险键只允许收紧不允许放宽；实现细则继续由 validator 与 profiles validator 共同收敛。
+
+评审依据：
+
+1. 本地证据：infra 详细设计 6.6/6.9 已冻结四层来源与 override 契约；profiles 详细设计 6.9 已冻结 `schema_version: 1` 的顶层逻辑域、`profile_meta` 必填键与 `enabled_modules` 命名表。
+2. 外部参考：Azure External Configuration Store 模式要求配置接口暴露 typed/structured 数据、版本与作用域控制，并为启动失败保留 last-known-good fallback；12-Factor Config 要求把随部署变化的配置与代码分离，并避免无边界的环境分组爆炸。
 
 ### 6.6 核心接口语义定义
 

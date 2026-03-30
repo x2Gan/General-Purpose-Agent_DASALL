@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 config 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-03-30  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/config
 
@@ -80,12 +80,12 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | config 尚未接入构建 |
-| infra/include/ | 当前为空 | config 对外接口未落盘 |
-| infra/src/config/ | 目录存在但未见实现文件 | config 实现未落盘 |
-| tests/CMakeLists.txt | 仅含 mocks/unit/contract | integration 顶层未接线 |
-| tests/unit/CMakeLists.txt | 未接入 infra 子目录 | config unit 发现性缺失 |
-| tests/contract/CMakeLists.txt | centralized registration 已存在 | 可承载 config contract 边界测试 |
+| infra/CMakeLists.txt | 已接入真实源文件与 PUBLIC_HEADER，但未纳入 config 子域 | config 尚未接入构建 |
+| infra/include/ | 已有 infra 公共头文件，但无 config/ 子目录 | config 对外接口仍未落盘 |
+| infra/src/config/ | 目录尚未落盘 | config 实现未落盘 |
+| tests/CMakeLists.txt | 已含 mocks/unit/contract/integration，且 integration 聚合已接线 | config 可直接落盘 integration 用例，不再受顶层拓扑阻塞 |
+| tests/unit/CMakeLists.txt | 已接入 infra 子目录，但尚无 config 测试目标 | config unit 发现性待补齐 |
+| tests/contract/CMakeLists.txt | centralized registration 已存在，并已承载其他 infra contract 用例 | 可直接承载 config contract 边界测试 |
 
 ## 4. 粒度可行性评估
 
@@ -100,7 +100,7 @@
 3. 已有主流程与异常流程：启动加载、运行时覆盖、回滚与降级路径。
 4. 已有错误语义：INF_CFG_E_NOT_FOUND、INF_CFG_E_TYPE_MISMATCH、INF_CFG_E_INVALID_SCHEMA、INF_CFG_E_CONFLICT、INF_CFG_E_SOURCE_UNAVAILABLE、INF_CFG_E_SECRET_RESOLVE_FAIL、INF_CFG_E_APPLY_REJECTED、INF_CFG_E_ROLLBACK_FAILED。
 5. 已有落盘建议：infra/include/config、infra/src/config、tests/unit/infra/config、tests/integration/infra/config、tests/contract/infra。
-6. 缺口仍在：外置配置适配器协议、事件总线最小抽象、快照持久化后端与 integration 顶层接线。
+6. 缺口仍在：外置配置适配器协议、事件总线最小抽象、快照持久化后端与 config integration 用例落盘。
 
 当前最小可执行粒度：接口/数据结构级（L2），局部函数级（L3）仅限已明确语义的方法骨架。
 
@@ -161,7 +161,7 @@
 | CFG-TODO-003 | Not Started | 定义 IConfigValidator 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigValidator | L3 | infra/include/config/IConfigValidator.h | validate(snapshot), validate_patch(current_snapshot, patch) | unit：接口可编译；contract：校验失败可映射错误码 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 规则 DSL 未冻结 | 首版仅定义最小规则集入口 | 接口头文件、编译记录 | 仅当校验接口覆盖完整且可编译时完成 |
 | CFG-TODO-004 | Not Started | 定义 IConfigSnapshotStore 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigSnapshotStore | L2 | infra/include/config/IConfigSnapshotStore.h | commit, get_current, get_by_version, get_last_known_good | unit：版本读写入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 持久化后端未定 | 首版以内存快照语义冻结接口 | 接口头文件、编译记录 | 仅当 4 个方法完整且不泄露后端细节时完成 |
 | CFG-TODO-005 | Not Started | 定义 IConfigPublisher 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigPublisher | L2 | infra/include/config/IConfigPublisher.h | publish_config_changed(diff) | unit：发布接口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 事件总线抽象未冻结 | 首版定义进程内发布接口语义 | 接口头文件、编译记录 | 仅当发布语义与配置 diff 对齐时完成 |
-| CFG-TODO-006 | Not Started | 定义 ConfigTypes 核心对象 | config 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/config/ConfigTypes.h | ConfigQuery, ConfigPatch, ConfigSnapshot, ConfigDiff, ValidationIssue, ConfigApplyResult | unit：字段完整性与默认语义；contract：不污染 contracts 对象 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | 无 | 无 | 无 | 对象头文件、单测 | 仅当 6 个对象字段与 6.5 一致且测试通过时完成 |
+| CFG-TODO-006 | Done | 定义 ConfigTypes 核心对象 | config 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/config/ConfigTypes.h | TypedConfig、ConfigQuery、ConfigPatchEntry、ConfigPatch、ConfigLayerRef、ConfigSnapshot、ConfigDiff、ValidationIssue、ConfigApplyResult | unit：字段完整性、schema/profile 键名与 patch 守卫；contract：ConfigApplyResult 仅使用 contracts 错误语义，其他对象不污染 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" | 无 | 无 | 无 | 对象头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/ConfigTypes.h、tests/unit/infra/ConfigTypesTest.cpp、tests/contract/smoke/ConfigTypesBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 TypedConfig/patch/schema/profile 键名冻结与 unit/contract 证据一致时完成 |
 | CFG-TODO-007 | Not Started | 实现 ConfigCenterFacade 生命周期骨架 | config 设计 6.2/6.7；设计映射 7 | 6.2 ConfigCenterFacade；6.7 启动流程 | L2 | infra/src/config/ConfigCenterFacade.cpp | load_layers 主链、get_typed 查询入口、apply_override/rollback 入口 | unit：未初始化/初始化后路径；contract：错误码映射入口 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest | CFG-TODO-001、CFG-TODO-006 | startup_context 类型细节未冻结 | 首版使用最小上下文结构占位 | Facade 骨架、测试 | 仅当主链入口可走通且失败路径可判定时完成 |
 | CFG-TODO-008 | Not Started | 实现 ConfigLoader 四层读取骨架 | config 设计 6.2/6.7/6.9 | 6.7 启动流程第 2 步；6.9 配置层级 | L3 | infra/src/config/ConfigLoader.cpp | load_default/load_profile/load_deploy/load_runtime_overlay | unit：四层读取顺序与 source_id/version | ctest --test-dir build-ci -R ConfigLoaderTest | CFG-TODO-002、CFG-TODO-006 | profiles 键空间规范待确认 | 先按既有键名前缀读取，保留映射层 | Loader 骨架、单测 | 仅当四层均可加载且顺序符合锚点时完成 |
 | CFG-TODO-009 | Not Started | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
@@ -256,8 +256,61 @@
    - 已具备落盘目录与测试出口建议。
    - 事件总线、secret 接口、integration 拓扑仍有关键缺口。
 3. 当前最小可执行粒度：接口 / 数据结构（L2），局部函数骨架（L3）。
-4. 未达到全量函数级的缺口：事件总线抽象、secret 对齐接口、持久化后端、integration 顶层接线。
+4. 未达到全量函数级的缺口：事件总线抽象、secret 对齐接口、持久化后端、config integration 用例落盘。
 5. 下一步建议：
    - 先执行 CFG-TODO-001~012、014~015 建立可编译可测试骨架。
    - 并行推进 CFG-BLK-001/004 解阻，完成发布与 integration 准入。
    - 阻塞解除后再推进 CFG-TODO-013 与后续桥接任务，最后执行 CFG-TODO-017 证据收口。
+
+## 12. 本轮执行记录（2026-03-30 / CFG-TODO-006）
+
+### 12.1 选中任务
+
+1. 本轮任务：CFG-TODO-006。
+2. 可执行性依据：无前置依赖，且 INF-BLK-01 对应的 TypedConfig/patch/schema/profile 键名冻结缺口可由该任务最小闭环修复。
+
+### 12.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.5 原有对象表已冻结 ConfigQuery/ConfigPatch/ConfigSnapshot 等对象，但未把 TypedConfig、ConfigLayerRef、配置格式和 profile 键名落到代码级契约。
+2. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.6/6.9 已明确四层来源、runtime override 的 TTL/base_version、以及 `schema_version`、`profile_meta.*`、`enabled_modules.*` 的受保护边界。
+3. docs/architecture/DASALL_profiles模块详细设计.md 6.9 已冻结五档 `profile_id`、`profile_meta` 必填键、`enabled_modules` 命名表和 schema_version=1。
+
+外部参考：
+
+1. Azure External Configuration Store 模式要求配置接口暴露 typed/structured 数据、版本、作用域与 last-known-good fallback；本轮据此把 source format、schema_version 与 source_chain 一并冻结。
+2. 12-Factor Config 强调 deploy-time config 与代码分离、运行期配置按正交变量治理；本轮据此把五档 profile_id 与 runtime override 的受保护路径固定为不可热改边界。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigTypes.h，冻结 TypedConfig、ConfigPatchEntry、ConfigLayerRef 与六个核心对象的最小 typed 契约。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigTypes.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 ConfigTypesTest 覆盖 schema/profile 键名与 patch 守卫；新增 ConfigTypesBoundaryContractTest 覆盖 contracts 错误语义边界。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigTypesTest|ConfigTypesBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 12.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigTypes.h：新增 TypedConfig、ConfigPatchEntry、ConfigLayerRef 和 ConfigApplyResult 等对象，冻结 schema_version=1、五档 profile_id 与 runtime override 受保护路径。
+2. tests/unit/infra/ConfigTypesTest.cpp：覆盖 typed config/query、patch 元数据与受保护路径、四层 source_chain 唯一性。
+3. tests/contract/smoke/ConfigTypesBoundaryContractTest.cpp：覆盖 ConfigApplyResult 的 contracts 错误语义边界与 profile 保护路径不外溢。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成 config 头文件与测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`：通过；unit 39/39、contract 94/94 全部通过。
+3. `ctest --test-dir build-ci -N -R "ConfigTypesTest|ConfigTypesBoundaryContractTest"`：通过，发现 2 个测试，分别为 `ConfigTypesTest` 与 `ConfigTypesBoundaryContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "ConfigTypesTest|ConfigTypesBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：新增对象与守卫语义可由命名直接表达，无需冗余注释。
+2. 正负例覆盖：unit 覆盖合法 typed/query/patch/source_chain 正例与 schema/path/duplicate layer 负例；contract 覆盖 contracts 错误边界与 profile 保护路径。
+3. 测试发现性：本轮显式要求 `ctest -N -R ...` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物、发现性结果与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 config 类型对象、测试、CMake 注册与 blocker 校准文档。

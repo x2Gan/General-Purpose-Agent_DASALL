@@ -21,6 +21,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/LogEvent.h
   include/audit/AuditService.h
   include/audit/IAuditLogger.h
+  include/config/ConfigTypes.h
   include/diagnostics/DiagnosticsTypes.h
   include/policy/ISecurityPolicyManager.h
   include/policy/PolicyBundle.h
