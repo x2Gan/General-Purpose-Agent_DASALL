@@ -4,7 +4,7 @@
 #include <string>
 #include <type_traits>
 
-#include "../../../infra/include/ILogger.h"
+#include "../../../infra/include/logging/ILogger.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -13,10 +13,15 @@ void test_logger_interface_result_uses_contract_error_types_only() {
   using dasall::contracts::ErrorInfo;
   using dasall::contracts::ResultCode;
   using dasall::infra::LogWriteResult;
+  using BaseLogger = dasall::infra::ILogger;
+  using LoggingLogger = dasall::infra::logging::ILogger;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(LogWriteResult{}.result_code), ResultCode>);
   static_assert(std::is_same_v<decltype(LogWriteResult{}.error), std::optional<ErrorInfo>>);
+  static_assert(std::is_base_of_v<BaseLogger, LoggingLogger>);
+  static_assert(std::is_same_v<decltype(&LoggingLogger::set_level),
+                               void (LoggingLogger::*)(dasall::infra::LogLevel)>);
 
   const auto failure = LogWriteResult::failure(ResultCode::ValidationFieldMissing,
                                                "attrs must be serializable",
