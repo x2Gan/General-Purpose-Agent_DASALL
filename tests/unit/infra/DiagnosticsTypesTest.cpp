@@ -57,12 +57,69 @@ void test_diagnostics_command_rejects_missing_fields_and_non_whitelisted_names()
               "diagnostics command should reject execution when command_name is outside the frozen read-only whitelist");
 }
 
+void test_command_decision_freezes_allow_and_deny_semantics() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::diagnostics::CommandDecision;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const CommandDecision allowed{
+      .allowed = true,
+      .reason_code = std::string(),
+      .policy_ref = std::string("policy://diagnostics/readonly"),
+      .denied_rule_id = std::string(),
+  };
+  assert_true(allowed.is_valid(),
+              "command decision should allow an explicit allow path without deny-only fields");
+  assert_true(!allowed.mapped_result_code().has_value(),
+              "allowed command decisions should not force a contracts denial result code");
+
+  const CommandDecision denied{
+      .allowed = false,
+      .reason_code = std::string("diag_command_denied"),
+      .policy_ref = std::string("policy://diagnostics/readonly"),
+      .denied_rule_id = std::string("readonly-only"),
+  };
+  assert_true(denied.is_valid(),
+              "command decision should keep reason_code, policy_ref, and denied_rule_id for deny paths");
+  assert_true(denied.mapped_result_code().has_value(),
+              "diagnostics deny decisions should expose a contracts result code mapping");
+  assert_equal(static_cast<int>(ResultCode::PolicyDenied),
+               static_cast<int>(*denied.mapped_result_code()),
+               "diagnostics deny decisions should stay inside contracts policy semantics");
+}
+
+void test_command_decision_rejects_unknown_reason_codes_and_allow_path_deny_fields() {
+  using dasall::infra::diagnostics::CommandDecision;
+  using dasall::tests::support::assert_true;
+
+  const CommandDecision allowed_with_deny_field{
+      .allowed = true,
+      .reason_code = std::string(),
+      .policy_ref = std::string(),
+      .denied_rule_id = std::string("readonly-only"),
+  };
+  assert_true(!allowed_with_deny_field.is_valid(),
+              "allow decisions should reject denied_rule_id because it is deny-only state");
+
+  const CommandDecision unknown_reason{
+      .allowed = false,
+      .reason_code = std::string("diag_unknown"),
+      .policy_ref = std::string("policy://diagnostics/readonly"),
+      .denied_rule_id = std::string("readonly-only"),
+  };
+  assert_true(!unknown_reason.is_valid(),
+              "deny decisions should reject reason_code values that cannot be mapped into contracts semantics");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_diagnostics_command_freezes_required_fields_and_read_only_whitelist();
     test_diagnostics_command_rejects_missing_fields_and_non_whitelisted_names();
+    test_command_decision_freezes_allow_and_deny_semantics();
+    test_command_decision_rejects_unknown_reason_codes_and_allow_path_deny_fields();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

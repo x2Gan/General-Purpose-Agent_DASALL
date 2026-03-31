@@ -72,12 +72,30 @@ struct CommandDecision {
   std::string policy_ref;
   std::string denied_rule_id;
 
-  [[nodiscard]] bool is_valid() const {
-    if (allowed) {
-      return reason_code.empty() || !policy_ref.empty();
+  [[nodiscard]] static std::optional<contracts::ResultCode> map_reason_code_to_result_code(
+      std::string_view reason_code) {
+    if (reason_code == "diag_command_denied") {
+      return contracts::ResultCode::PolicyDenied;
     }
 
-    return !reason_code.empty() && !policy_ref.empty();
+    if (reason_code == "diag_command_invalid") {
+      return contracts::ResultCode::ValidationFieldMissing;
+    }
+
+    return std::nullopt;
+  }
+
+  [[nodiscard]] bool is_valid() const {
+    if (allowed) {
+      return denied_rule_id.empty() && (reason_code.empty() || !policy_ref.empty());
+    }
+
+    return !reason_code.empty() && !policy_ref.empty() &&
+           map_reason_code_to_result_code(reason_code).has_value();
+  }
+
+  [[nodiscard]] std::optional<contracts::ResultCode> mapped_result_code() const {
+    return map_reason_code_to_result_code(reason_code);
   }
 };
 
