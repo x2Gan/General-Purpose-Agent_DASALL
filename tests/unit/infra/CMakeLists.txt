@@ -328,6 +328,21 @@ dasall_apply_common_options(dasall_health_policy_interface_unit_test)
 add_test(NAME HealthPolicyInterfaceTest COMMAND dasall_health_policy_interface_unit_test)
 set_tests_properties(HealthPolicyInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_health_probe_types_unit_test
+  health/ProbeTypesTest.cpp
+)
+
+target_link_libraries(dasall_health_probe_types_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_health_probe_types_unit_test)
+
+add_test(NAME ProbeTypesUnitTest COMMAND dasall_health_probe_types_unit_test)
+set_tests_properties(ProbeTypesUnitTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_infra_error_code_unit_test
   InfraErrorCodeTest.cpp
 )

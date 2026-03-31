@@ -1,8 +1,8 @@
 #pragma once
 
-namespace dasall::infra {
+#include "health/ProbeTypes.h"
 
-struct ProbeResult;
+namespace dasall::infra {
 
 class IHealthProbe {
  public:
