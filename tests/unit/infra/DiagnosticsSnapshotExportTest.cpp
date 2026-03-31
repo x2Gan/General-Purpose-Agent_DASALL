@@ -36,6 +36,8 @@ void test_diagnostics_types_freeze_read_only_command_and_local_export_contract()
       .redaction_profile = RedactionProfile::Strict,
       .exporter_hint = std::string("local_file"),
   };
+  assert_true(snapshot.is_redaction_ready(),
+              "diagnostics snapshot should require whitelisted command, evidence refs, and explicit redaction profile before export");
   assert_true(snapshot.is_valid(),
               "diagnostics snapshot should remain valid once command, evidence refs, and redaction profile are frozen");
 
@@ -51,8 +53,10 @@ void test_diagnostics_types_freeze_read_only_command_and_local_export_contract()
 
 void test_diagnostics_types_reject_non_whitelisted_or_remote_unsafe_requests() {
   using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::DiagnosticsSnapshot;
   using dasall::infra::diagnostics::ExportFormat;
   using dasall::infra::diagnostics::ExportTarget;
+  using dasall::infra::diagnostics::RedactionProfile;
   using dasall::infra::diagnostics::SnapshotExportRequest;
   using dasall::tests::support::assert_true;
 
@@ -66,6 +70,20 @@ void test_diagnostics_types_reject_non_whitelisted_or_remote_unsafe_requests() {
   };
   assert_true(!invalid_command.is_read_only_whitelisted(),
               "diagnostics command should reject names outside the frozen read-only whitelist");
+
+  const DiagnosticsSnapshot invalid_snapshot{
+      .snapshot_id = std::string("snapshot-invalid"),
+      .command = invalid_command,
+      .collected_at = std::string("2026-03-27T11:05:00Z"),
+      .summary = std::string("raw diagnostic output"),
+      .evidence_refs = {"logs://diag/invalid"},
+      .redaction_profile = RedactionProfile::Compatibility,
+      .exporter_hint = std::string("local_file"),
+  };
+  assert_true(!invalid_snapshot.is_redaction_ready(),
+              "diagnostics snapshot should reject redaction readiness when command is not in the read-only whitelist");
+  assert_true(!invalid_snapshot.is_valid(),
+              "diagnostics snapshot should reject exportable state before the read-only command constraint is satisfied");
 
   const SnapshotExportRequest invalid_export{
       .snapshot_id = std::string("snapshot-remote"),

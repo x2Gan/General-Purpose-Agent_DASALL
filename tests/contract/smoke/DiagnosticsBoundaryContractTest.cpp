@@ -81,6 +81,40 @@ void test_evidence_bundle_keeps_reference_only_payload_inside_infra_boundary() {
               "diagnostics boundary should keep EvidenceBundle limited to references and lightweight artifact summaries");
 }
 
+void test_diagnostics_snapshot_keeps_redaction_preconditions_inside_infra_boundary() {
+  using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::DiagnosticsSnapshot;
+  using dasall::infra::diagnostics::RedactionProfile;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.snapshot_id), std::string>);
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.command), DiagnosticsCommand>);
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.collected_at), std::string>);
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.summary), std::string>);
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.evidence_refs), std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.redaction_profile), RedactionProfile>);
+  static_assert(std::is_same_v<decltype(DiagnosticsSnapshot{}.exporter_hint), std::string>);
+
+  const DiagnosticsSnapshot snapshot{
+      .snapshot_id = std::string("snapshot-boundary-001"),
+      .command = DiagnosticsCommand{
+          .command_id = std::string("diag-cmd-boundary-003"),
+          .command_name = std::string("health.snapshot"),
+          .args = {},
+          .request_scope = std::string("runtime"),
+          .timeout_ms = 3000,
+          .actor_ref = std::string("ops-user"),
+      },
+      .collected_at = std::string("2026-03-31T09:00:00Z"),
+      .summary = std::string("diagnostics snapshot summary"),
+      .evidence_refs = {std::string("logs://diagnostics/snapshot")},
+      .redaction_profile = RedactionProfile::Strict,
+      .exporter_hint = std::string("local_file"),
+  };
+  assert_true(snapshot.is_redaction_ready() && snapshot.is_valid(),
+              "diagnostics boundary should require explicit redaction readiness before a snapshot becomes exportable");
+}
+
 }  // namespace
 
 int main() {
@@ -88,6 +122,7 @@ int main() {
     test_diagnostics_command_keeps_private_field_types_inside_infra_boundary();
     test_diagnostics_command_boundary_keeps_allowlist_frozen();
     test_evidence_bundle_keeps_reference_only_payload_inside_infra_boundary();
+    test_diagnostics_snapshot_keeps_redaction_preconditions_inside_infra_boundary();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

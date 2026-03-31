@@ -121,10 +121,13 @@ struct DiagnosticsSnapshot {
   RedactionProfile redaction_profile = RedactionProfile::Unspecified;
   std::string exporter_hint;
 
+  [[nodiscard]] bool is_redaction_ready() const {
+    return command.is_read_only_whitelisted() && !collected_at.empty() && !summary.empty() &&
+           !evidence_refs.empty() && redaction_profile != RedactionProfile::Unspecified;
+  }
+
   [[nodiscard]] bool is_valid() const {
-    return !snapshot_id.empty() && command.has_required_fields() && !collected_at.empty() &&
-           !summary.empty() && !evidence_refs.empty() &&
-           redaction_profile != RedactionProfile::Unspecified && !exporter_hint.empty();
+    return !snapshot_id.empty() && is_redaction_ready() && !exporter_hint.empty();
   }
 };
 
