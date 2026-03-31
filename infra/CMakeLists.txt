@@ -12,6 +12,7 @@ set(DASALL_INFRA_TRACING_SOURCES
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/AuditEvent.h
   include/HealthSnapshot.h
+  include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
   include/health/IHealthPolicy.h
   include/health/ProbeTypes.h
