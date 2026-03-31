@@ -43,6 +43,21 @@ dasall_apply_common_options(dasall_audit_event_unit_test)
 add_test(NAME AuditTypesTest COMMAND dasall_audit_event_unit_test)
 set_tests_properties(AuditTypesTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_health_probe_interface_unit_test
+  health/HealthProbeInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_health_probe_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_health_probe_interface_unit_test)
+
+add_test(NAME HealthProbeInterfaceTest COMMAND dasall_health_probe_interface_unit_test)
+set_tests_properties(HealthProbeInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_snapshot_unit_test
   HealthSnapshotTest.cpp
 )

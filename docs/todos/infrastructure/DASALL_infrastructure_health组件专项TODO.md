@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 health 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-03-31  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/health
 
@@ -160,7 +160,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| HLT-TODO-001 | Not Started | 定义 IHealthProbe 接口头文件 | health 设计 6.6；编码规范 3.7 | 6.6 IHealthProbe | L3 | infra/include/health/IHealthProbe.h | probe(): ProbeResult | unit：接口可编译；contract：错误语义入口可映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录 | 仅当接口签名与 6.6 一致且不依赖业务实现时完成 |
+| HLT-TODO-001 | Done | 定义 IHealthProbe 接口头文件 | health 设计 6.6；编码规范 3.7 | 6.6 IHealthProbe | L3 | infra/include/health/IHealthProbe.h | probe(): ProbeResult | unit：接口可编译；contract：错误语义入口可映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/health/IHealthProbe.h、tests/unit/infra/health/HealthProbeInterfaceTest.cpp，并通过 `cmake --build build-ci --target dasall_infra dasall_unit_tests` 与 `ctest --test-dir build-ci --output-on-failure -R HealthProbeInterfaceTest` 验证接口签名可编译且未吸收 monitor 职责 | 仅当接口签名与 6.6 一致且不依赖业务实现时完成 |
 | HLT-TODO-002 | Not Started | 定义 IHealthMonitor 接口头文件 | health 设计 6.6/6.7 | 6.6 IHealthMonitor | L3 | infra/include/health/IHealthMonitor.h | register_probe(name,group,probe), evaluate_now(), get_snapshot(), subscribe(listener) | unit：接口可编译；contract：快照边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001 | listener 类型细节未冻结 | 先冻结最小 listener 抽象占位 | 接口头文件、编译记录 | 仅当四个方法语义与 6.6 一致且可编译时完成 |
 | HLT-TODO-003 | Not Started | 定义 IHealthPolicy 接口头文件 | health 设计 6.6/6.9 | 6.6 IHealthPolicy；6.9 策略配置 | L3 | infra/include/health/IHealthPolicy.h | evaluate(results): HealthSnapshot | unit：接口可编译；unit：阈值输入输出可约束 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-002 | policy version 规范未成文 | 先用字符串版本占位并保留扩展点 | 接口头文件、编译记录 | 仅当策略接口可承载三态评估输入输出时完成 |
 | HLT-TODO-004 | Not Started | 定义 ProbeTypes 数据结构 | health 设计 6.5 | 6.5 ProbeDescriptor/ProbeResult | L3 | infra/include/health/ProbeTypes.h | ProbeDescriptor, ProbeResult | unit：字段完整性与状态枚举覆盖 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001 | 无 | 无 | 数据结构头文件、单测 | 仅当字段与状态集合与 6.5 一致且默认语义可测试时完成 |

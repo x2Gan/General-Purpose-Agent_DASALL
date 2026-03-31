@@ -13,6 +13,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_infra_context_unit_test
 	dasall_log_event_unit_test
 	dasall_audit_event_unit_test
+	dasall_health_probe_interface_unit_test
 	dasall_health_snapshot_unit_test
 	dasall_infra_service_facade_unit_test
 	dasall_logger_interface_unit_test
