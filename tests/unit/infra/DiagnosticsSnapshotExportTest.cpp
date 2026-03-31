@@ -13,6 +13,7 @@ void test_diagnostics_types_freeze_read_only_command_and_local_export_contract()
   using dasall::infra::diagnostics::ExportFormat;
   using dasall::infra::diagnostics::ExportTarget;
   using dasall::infra::diagnostics::RedactionProfile;
+  using dasall::infra::diagnostics::SnapshotExportResult;
   using dasall::infra::diagnostics::SnapshotExportRequest;
   using dasall::tests::support::assert_true;
 
@@ -49,14 +50,25 @@ void test_diagnostics_types_freeze_read_only_command_and_local_export_contract()
   };
   assert_true(request.is_valid(),
               "local diagnostics export request should remain valid for the minimal export contract");
+
+  const auto export_result = SnapshotExportResult::success(std::string("export-001"),
+                                                           ExportTarget::LocalFile,
+                                                           ExportFormat::Json,
+                                                           256,
+                                                           std::string("sha256:diag-export-001"),
+                                                           std::string("2026-03-27T11:01:00Z"));
+  assert_true(export_result.is_valid(),
+              "snapshot export result should remain valid once export metadata and checksum are frozen");
 }
 
 void test_diagnostics_types_reject_non_whitelisted_or_remote_unsafe_requests() {
+  using dasall::contracts::ResultCode;
   using dasall::infra::diagnostics::DiagnosticsCommand;
   using dasall::infra::diagnostics::DiagnosticsSnapshot;
   using dasall::infra::diagnostics::ExportFormat;
   using dasall::infra::diagnostics::ExportTarget;
   using dasall::infra::diagnostics::RedactionProfile;
+  using dasall::infra::diagnostics::SnapshotExportResult;
   using dasall::infra::diagnostics::SnapshotExportRequest;
   using dasall::tests::support::assert_true;
 
@@ -93,6 +105,15 @@ void test_diagnostics_types_reject_non_whitelisted_or_remote_unsafe_requests() {
   };
   assert_true(!invalid_export.is_valid(),
               "diagnostics export request should reject unspecified format and empty remote target references");
+
+  const auto export_failure = SnapshotExportResult::failure(ResultCode::ProviderTimeout,
+                                                            "diagnostics export target is unavailable",
+                                                            "diagnostics.export",
+                                                            "InMemoryDiagnosticsService");
+  assert_true(export_failure.is_valid(),
+              "snapshot export failure should remain valid only when it carries a contracts error binding");
+  assert_true(export_failure.references_only_contract_error_types(),
+              "snapshot export failure should stay inside contracts ResultCode/ErrorInfo types");
 }
 
 }  // namespace

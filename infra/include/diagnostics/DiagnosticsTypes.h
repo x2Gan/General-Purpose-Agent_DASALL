@@ -266,6 +266,16 @@ struct SnapshotExportResult {
     };
   }
 
+  [[nodiscard]] bool is_valid() const {
+    if (ok) {
+      return !export_id.empty() && target != ExportTarget::Unspecified &&
+             format != ExportFormat::Unspecified && size_bytes > 0 && !checksum.empty() &&
+             !created_at.empty() && !error.has_value();
+    }
+
+    return error.has_value() && references_only_contract_error_types();
+  }
+
   [[nodiscard]] bool references_only_contract_error_types() const {
     if (!error.has_value()) {
       return ok;
