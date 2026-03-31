@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "../../../infra/include/audit/IAuditLogger.h"
+#include "../../../infra/include/logging/IAuditLinkAdapter.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -13,6 +14,16 @@ namespace {
 template <typename T>
 concept HasOpaqueSelectorMember = requires {
   &T::opaque_selector;
+};
+
+template <typename T>
+concept HasWriteAuditMember = requires {
+  &T::write_audit;
+};
+
+template <typename T>
+concept HasExportAuditMember = requires {
+  &T::export_audit;
 };
 
 void test_audit_logger_interface_signatures_use_frozen_audit_objects() {
@@ -41,6 +52,28 @@ void test_audit_logger_interface_signatures_use_frozen_audit_objects() {
 
   assert_true(write_failure.has_consistent_state() && write_failure.is_failure(),
               "IAuditLogger write path should remain representable with the frozen AuditWriteOutcome failure semantics");
+}
+
+void test_audit_link_adapter_stays_separate_from_audit_storage_interface() {
+  using dasall::infra::LogEvent;
+  using dasall::infra::LogWriteResult;
+  using dasall::infra::logging::AuditRef;
+  using dasall::infra::logging::IAuditLinkAdapter;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IAuditLinkAdapter::attach_audit_ref),
+                               LogWriteResult (IAuditLinkAdapter::*)(LogEvent&, const AuditRef&)>);
+  static_assert(std::is_same_v<decltype(&IAuditLinkAdapter::report_link_failure),
+                               void (IAuditLinkAdapter::*)(std::string_view)>);
+  static_assert(!HasWriteAuditMember<IAuditLinkAdapter>);
+  static_assert(!HasExportAuditMember<IAuditLinkAdapter>);
+
+  const auto failure = LogWriteResult::failure(dasall::contracts::ResultCode::ValidationFieldMissing,
+                                               "audit ref placeholder missing",
+                                               "logging.attach_audit_ref",
+                                               "IAuditLinkAdapter");
+  assert_true(!failure.ok && failure.references_only_contract_error_types(),
+              "IAuditLinkAdapter should keep link-failure observability inside the existing contracts error domain without taking over audit persistence methods");
 }
 
 void test_audit_logger_keeps_export_query_private_to_infra_boundary() {
@@ -77,6 +110,7 @@ void test_audit_logger_keeps_export_query_private_to_infra_boundary() {
 int main() {
   try {
     test_audit_logger_interface_signatures_use_frozen_audit_objects();
+    test_audit_link_adapter_stays_separate_from_audit_storage_interface();
     test_audit_logger_keeps_export_query_private_to_infra_boundary();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

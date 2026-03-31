@@ -2,9 +2,11 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "audit/IAuditLogger.h"
+#include "logging/IAuditLinkAdapter.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -72,6 +74,47 @@ class NullAuditLogger final : public dasall::infra::audit::IAuditLogger {
     };
   }
 };
+
+class NullAuditLinkAdapter final : public dasall::infra::logging::IAuditLinkAdapter {
+ public:
+  dasall::infra::LogWriteResult attach_audit_ref(
+      dasall::infra::LogEvent& event,
+      const dasall::infra::logging::AuditRef& audit_ref) override {
+    static_cast<void>(&audit_ref);
+    event.attrs.insert_or_assign("audit_ref_pending", "true");
+    return dasall::infra::LogWriteResult::success();
+  }
+
+  void report_link_failure(std::string_view reason) override {
+    last_failure_reason_ = std::string(reason);
+  }
+
+  [[nodiscard]] const std::string& last_failure_reason() const {
+    return last_failure_reason_;
+  }
+
+ private:
+  std::string last_failure_reason_;
+};
+
+void test_audit_link_adapter_freezes_placeholder_linking_interface() {
+  using dasall::infra::LogEvent;
+  using dasall::infra::LogWriteResult;
+  using dasall::infra::logging::AuditRef;
+  using dasall::infra::logging::IAuditLinkAdapter;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IAuditLinkAdapter::attach_audit_ref),
+                               LogWriteResult (IAuditLinkAdapter::*)(LogEvent&, const AuditRef&)>);
+  static_assert(std::is_same_v<decltype(&IAuditLinkAdapter::report_link_failure),
+                               void (IAuditLinkAdapter::*)(std::string_view)>);
+
+  NullAuditLinkAdapter adapter;
+  adapter.report_link_failure("missing audit ref placeholder");
+
+  assert_true(adapter.last_failure_reason() == "missing audit ref placeholder",
+              "IAuditLinkAdapter should expose an explicit failure-reporting outlet while AuditRef remains a placeholder boundary");
+}
 
 void test_audit_logger_interface_freezes_write_and_export_signatures() {
   using dasall::infra::AuditEvent;
@@ -154,6 +197,7 @@ void test_audit_logger_interface_rejects_invalid_event_or_context_on_write_path(
 
 int main() {
   try {
+    test_audit_link_adapter_freezes_placeholder_linking_interface();
     test_audit_logger_interface_freezes_write_and_export_signatures();
     test_audit_logger_interface_rejects_invalid_event_or_context_on_write_path();
   } catch (const std::exception& ex) {
