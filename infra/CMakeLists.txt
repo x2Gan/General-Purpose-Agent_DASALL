@@ -13,6 +13,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/AuditEvent.h
   include/HealthSnapshot.h
   include/health/IHealthMonitor.h
+  include/health/IHealthPolicy.h
   include/IHealthMonitor.h
   include/IDiagnosticsService.h
   include/IInfrastructureService.h
