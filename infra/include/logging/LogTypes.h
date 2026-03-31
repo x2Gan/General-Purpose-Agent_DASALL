@@ -8,6 +8,8 @@
 namespace dasall::infra::logging {
 
 using LogContext = ::dasall::infra::InfraContext;
+using LogLevel = ::dasall::infra::LogLevel;
+using LogEvent = ::dasall::infra::LogEvent;
 using AuditEvidenceRef = ::dasall::infra::AuditEvidenceRef;
 
 struct AuditRef {
