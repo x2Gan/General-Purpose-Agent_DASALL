@@ -159,7 +159,7 @@
 | CFG-TODO-001 | Done | 定义 IConfigCenter 接口头文件 | config 设计 6.6；编码规范 3.7 | 6.6 IConfigCenter | L2 | infra/include/config/IConfigCenter.h | load_layers(startup_context), get_typed(query), apply_override(config_patch), rollback(rollback_token), subscribe(subscription_request) | unit：接口占位对象与查询/回滚/订阅守卫可编译；contract：错误语义入口可映射，且 runtime override 不越过 profile 保护键 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" | 无 | 无 | 无 | 接口头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/IConfigCenter.h、tests/unit/infra/ConfigCenterInterfaceTest.cpp、tests/contract/smoke/ConfigCenterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 5 个方法与 6.6 一致、返回边界不引入业务依赖且测试通过时完成 |
 | CFG-TODO-002 | Done | 定义 IConfigLoader 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigLoader | L3 | infra/include/config/IConfigLoader.h | load_default, load_profile, load_deploy, load_runtime_overlay | unit：四层入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 外置源协议未冻结 | 首版仅约束本地源入口，外置源后置 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/config/IConfigLoader.h、tests/unit/infra/ConfigLoaderInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当四层加载方法齐全且命名与锚点一致时完成 |
 | CFG-TODO-003 | Done | 定义 IConfigValidator 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigValidator | L3 | infra/include/config/IConfigValidator.h | validate(snapshot), validate_patch(current_snapshot, patch) | unit：接口可编译；contract：校验失败可映射错误码 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 规则 DSL 未冻结 | 首版仅定义最小规则集入口 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/config/IConfigValidator.h、tests/unit/infra/ConfigValidatorInterfaceTest.cpp、tests/contract/smoke/ConfigValidatorInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当校验接口覆盖完整且可编译时完成 |
-| CFG-TODO-004 | Not Started | 定义 IConfigSnapshotStore 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigSnapshotStore | L2 | infra/include/config/IConfigSnapshotStore.h | commit, get_current, get_by_version, get_last_known_good | unit：版本读写入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 持久化后端未定 | 首版以内存快照语义冻结接口 | 接口头文件、编译记录 | 仅当 4 个方法完整且不泄露后端细节时完成 |
+| CFG-TODO-004 | Done | 定义 IConfigSnapshotStore 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigSnapshotStore | L2 | infra/include/config/IConfigSnapshotStore.h | commit, get_current, get_by_version, get_last_known_good | unit：版本读写入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 持久化后端未定 | 首版以内存快照语义冻结接口 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/config/IConfigSnapshotStore.h、tests/unit/infra/ConfigSnapshotStoreInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当 4 个方法完整且不泄露后端细节时完成 |
 | CFG-TODO-005 | Not Started | 定义 IConfigPublisher 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigPublisher | L2 | infra/include/config/IConfigPublisher.h | publish_config_changed(diff) | unit：发布接口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 事件总线抽象未冻结 | 首版定义进程内发布接口语义 | 接口头文件、编译记录 | 仅当发布语义与配置 diff 对齐时完成 |
 | CFG-TODO-006 | Done | 定义 ConfigTypes 核心对象 | config 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/config/ConfigTypes.h | TypedConfig、ConfigQuery、ConfigPatchEntry、ConfigPatch、ConfigLayerRef、ConfigSnapshot、ConfigDiff、ValidationIssue、ConfigApplyResult | unit：字段完整性、schema/profile 键名与 patch 守卫；contract：ConfigApplyResult 仅使用 contracts 错误语义，其他对象不污染 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" | 无 | 无 | 无 | 对象头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/ConfigTypes.h、tests/unit/infra/ConfigTypesTest.cpp、tests/contract/smoke/ConfigTypesBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 TypedConfig/patch/schema/profile 键名冻结与 unit/contract 证据一致时完成 |
 | CFG-TODO-007 | Not Started | 实现 ConfigCenterFacade 生命周期骨架 | config 设计 6.2/6.7；设计映射 7 | 6.2 ConfigCenterFacade；6.7 启动流程 | L2 | infra/src/config/ConfigCenterFacade.cpp | load_layers 主链、get_typed 查询入口、apply_override/rollback 入口 | unit：未初始化/初始化后路径；contract：错误码映射入口 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest | CFG-TODO-001、CFG-TODO-006 | startup_context 类型细节未冻结 | 首版使用最小上下文结构占位 | Facade 骨架、测试 | 仅当主链入口可走通且失败路径可判定时完成 |
@@ -475,3 +475,54 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R ...` 回填 unit/contract 发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 IConfigValidator 头文件、unit/contract 测试、CMake 注册与 TODO 证据文档。
+
+## 16. 本轮执行记录（2026-03-31 / CFG-TODO-004）
+
+### 16.1 选中任务
+
+1. 本轮任务：CFG-TODO-004。
+2. 可执行性依据：CFG-TODO-006 已冻结 ConfigSnapshot，CFG-TODO-004 仅需冻结 commit/current/history/LKG 的接口边界，不依赖持久化后端选型。
+
+### 16.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.3 已明确 ConfigSnapshotStore 输出 current、history 与 LKG，并要求支持原子切换。
+2. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.6 已冻结 commit(snapshot)、get_current()、get_by_version(version)、get_last_known_good() 四个入口。
+3. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.7/6.8 已明确校验通过后快照会标记为 current 与 LKG，失败路径需可回退到 LKG。
+
+外部参考：
+
+1. Azure App Configuration point-in-time snapshot 文档强调配置历史需可按时间线回看、恢复旧值并支持回滚预览；本轮据此把 SnapshotStore 结果收敛为 current_version 与 last_known_good_version 的最小版本语义，而不提前冻结具体持久化后端。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IConfigSnapshotStore.h，冻结 ConfigSnapshotCommitResult 与 IConfigSnapshotStore 四个快照存取入口。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/IConfigSnapshotStore.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 ConfigSnapshotStoreInterfaceTest，覆盖 commit/get_current/get_by_version/get_last_known_good 的最小正负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci -N -R ConfigSnapshotStoreInterfaceTest && ctest --test-dir build-ci --output-on-failure -R ConfigSnapshotStoreInterfaceTest。
+3. D Gate：PASS。
+
+### 16.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/IConfigSnapshotStore.h：新增 ConfigSnapshotCommitResult 与四个快照存取接口。
+2. tests/unit/infra/ConfigSnapshotStoreInterfaceTest.cpp：覆盖版本单调递增、history 查询与 LKG 读取正例，以及 invalid snapshot/non-monotonic commit 负例。
+3. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成头文件与 unit 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests`：通过；unit 44/44 全部通过。
+3. `ctest --test-dir build-ci -N -R ConfigSnapshotStoreInterfaceTest`：通过，发现 1 个测试：`ConfigSnapshotStoreInterfaceTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R ConfigSnapshotStoreInterfaceTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：新增接口与提交结果对象命名已直接表达 current/LKG/version 语义，无需额外注释。
+2. 正负例覆盖：unit 覆盖 commit/history/LKG 正例与 invalid snapshot/non-monotonic commit 负例。
+3. 测试发现性：已通过 `ctest -N -R ConfigSnapshotStoreInterfaceTest` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 IConfigSnapshotStore 头文件、unit 测试、CMake 注册与 TODO 证据文档。
