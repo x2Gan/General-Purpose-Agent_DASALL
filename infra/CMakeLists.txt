@@ -31,6 +31,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/config/IConfigValidator.h
   include/config/IConfigSnapshotStore.h
   include/config/IConfigPublisher.h
+  include/diagnostics/DiagnosticsErrors.h
   include/diagnostics/DiagnosticsTypes.h
   include/policy/ISecurityPolicyManager.h
   include/policy/PolicyBundle.h
