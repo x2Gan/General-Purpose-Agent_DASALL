@@ -99,6 +99,19 @@ struct CommandDecision {
   }
 };
 
+struct EvidenceBundle {
+  std::string logs_ref;
+  std::string metrics_ref;
+  std::string health_ref;
+  std::string errors_ref;
+  std::vector<std::string> artifacts;
+
+  [[nodiscard]] bool is_valid() const {
+    return !logs_ref.empty() && !metrics_ref.empty() && !health_ref.empty() &&
+           !errors_ref.empty();
+  }
+};
+
 struct DiagnosticsSnapshot {
   std::string snapshot_id;
   DiagnosticsCommand command;

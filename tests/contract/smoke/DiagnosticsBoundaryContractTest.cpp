@@ -60,12 +60,34 @@ void test_diagnostics_command_boundary_keeps_allowlist_frozen() {
                "diagnostics boundary should keep the allowlist cardinality stable");
 }
 
+void test_evidence_bundle_keeps_reference_only_payload_inside_infra_boundary() {
+  using dasall::infra::diagnostics::EvidenceBundle;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(EvidenceBundle{}.logs_ref), std::string>);
+  static_assert(std::is_same_v<decltype(EvidenceBundle{}.metrics_ref), std::string>);
+  static_assert(std::is_same_v<decltype(EvidenceBundle{}.health_ref), std::string>);
+  static_assert(std::is_same_v<decltype(EvidenceBundle{}.errors_ref), std::string>);
+  static_assert(std::is_same_v<decltype(EvidenceBundle{}.artifacts), std::vector<std::string>>);
+
+  const EvidenceBundle bundle{
+      .logs_ref = std::string("logs://diagnostics/boundary"),
+      .metrics_ref = std::string("metrics://diagnostics/boundary"),
+      .health_ref = std::string("health://diagnostics/boundary"),
+      .errors_ref = std::string("errors://diagnostics/boundary"),
+      .artifacts = {std::string("artifact://diagnostics/summary.json")},
+  };
+  assert_true(bundle.is_valid(),
+              "diagnostics boundary should keep EvidenceBundle limited to references and lightweight artifact summaries");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_diagnostics_command_keeps_private_field_types_inside_infra_boundary();
     test_diagnostics_command_boundary_keeps_allowlist_frozen();
+    test_evidence_bundle_keeps_reference_only_payload_inside_infra_boundary();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
