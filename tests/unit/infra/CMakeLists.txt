@@ -253,6 +253,21 @@ dasall_apply_common_options(dasall_config_publisher_interface_unit_test)
 add_test(NAME ConfigPublisherInterfaceTest COMMAND dasall_config_publisher_interface_unit_test)
 set_tests_properties(ConfigPublisherInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_config_errors_unit_test
+  ConfigErrorsTest.cpp
+)
+
+target_link_libraries(dasall_config_errors_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_errors_unit_test)
+
+add_test(NAME ConfigErrorsTest COMMAND dasall_config_errors_unit_test)
+set_tests_properties(ConfigErrorsTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_monitor_interface_unit_test
   HealthMonitorInterfaceTest.cpp
 )

@@ -25,6 +25,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/audit/AuditService.h
   include/audit/IAuditLogger.h
   include/config/ConfigTypes.h
+  include/config/ConfigErrors.h
   include/config/IConfigCenter.h
   include/config/IConfigLoader.h
   include/config/IConfigValidator.h

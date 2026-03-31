@@ -167,7 +167,7 @@
 | CFG-TODO-009 | Not Started | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
 | CFG-TODO-010 | Not Started | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试 | 仅当非法配置被拒绝且错误可定位时完成 |
 | CFG-TODO-011 | Not Started | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测 | 仅当失败时可回退到 LKG 且测试通过时完成 |
-| CFG-TODO-012 | Not Started | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
+| CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
 | CFG-TODO-013 | Blocked | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | CFG-BLK-001 | 先冻结事件总线最小抽象与订阅语义 | 发布骨架或阻塞记录 | 仅当事件总线抽象冻结后，状态才可由 Blocked 改为 Not Started |
 | CFG-TODO-014 | Not Started | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 初期源文件渐进落盘 | 保留最小 non-empty 源文件过渡 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Not Started | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
@@ -577,3 +577,56 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R ConfigPublisherInterfaceTest` 回填发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 IConfigPublisher 头文件、unit 测试、CMake 注册与 TODO 证据文档。
+
+## 18. 本轮执行记录（2026-03-31 / CFG-TODO-012）
+
+### 18.1 选中任务
+
+1. 本轮任务：CFG-TODO-012。
+2. 可执行性依据：CFG-TODO-001 与 CFG-TODO-003 已冻结 config 边界与校验接口，CFG-TODO-012 仅需补齐本地错误码域和映射矩阵，可通过 contract 测试直接固化。
+
+### 18.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.6 已明确 8 个建议错误码，6.8 已明确读取故障、语义故障、安全故障、应用故障四类异常语义。
+2. infra/include/InfraErrorCode.h 与 infra/src/InfraErrorCode.cpp 已冻结 infra 私有错误码的映射模式：本地 enum + mapping struct + 名称函数 + contracts::ResultCode 映射函数。
+3. tests/unit/infra/InfraErrorCodeTest.cpp 与 tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp 已提供“名称稳定 + contract 映射冻结”的最小可执行样板。
+
+外部参考：
+
+1. Azure App Configuration REST 文档明确配置读取会返回 404 Not Found，条件更新/锁定场景会返回 409 Conflict；本轮据此将缺失键与冲突语义冻结为独立本地错误码，而不是混入实现细节。
+2. JSON Schema type/reference 文档明确 `type` 关键字用于约束实例类型且类型不匹配会导致校验失败；本轮据此将 TYPE_MISMATCH 与 INVALID_SCHEMA 收敛到 contracts 验证类结果码。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigErrors.h，冻结 ConfigErrorCode、ConfigErrorMapping、config_error_code_name 与 map_config_error_code。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigErrors.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 ConfigErrorsTest 覆盖 8 个错误码名称稳定性与映射覆盖；新增 ConfigErrorMappingContractTest 逐项固化映射矩阵与命名边界。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigErrorsTest|ConfigErrorMappingContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigErrorsTest|ConfigErrorMappingContractTest"。
+3. D Gate：PASS。
+
+### 18.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigErrors.h：新增 8 个 config 私有错误码、名称函数与 contracts::ResultCode 映射函数。
+2. tests/unit/infra/ConfigErrorsTest.cpp：覆盖错误码名称稳定性、映射覆盖完整性与 reason 非空约束。
+3. tests/contract/smoke/ConfigErrorMappingContractTest.cpp：逐项冻结 8 个错误码到既有 contracts::ResultCode 的映射矩阵，并校验命名仍留在 INF_CFG_E_* 本地命名域。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与 unit/contract 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`：通过；unit 46/46、contract 97/97 全部通过，新增 `ConfigErrorsTest` 与 `ConfigErrorMappingContractTest` 均被编译并执行。
+3. `ctest --test-dir build-ci -N -R "ConfigErrorsTest|ConfigErrorMappingContractTest"`：通过，发现 2 个测试，分别为 `ConfigErrorsTest` 与 `ConfigErrorMappingContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "ConfigErrorsTest|ConfigErrorMappingContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：错误码命名和 mapping reason 已直接表达异常语义，无需新增冗余注释。
+2. 正负例覆盖：unit 覆盖 8 个冻结错误码名称与映射覆盖；contract 逐项冻结映射矩阵并校验边界命名空间。
+3. 测试发现性：已通过 `ctest -N -R "ConfigErrorsTest|ConfigErrorMappingContractTest"` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物、发现性结果与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 ConfigErrors 头文件、unit/contract 测试、CMake 注册与 TODO 证据文档。
