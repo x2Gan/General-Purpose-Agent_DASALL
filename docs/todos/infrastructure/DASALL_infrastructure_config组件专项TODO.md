@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 config 组件专项 TODO
 
-最近更新时间：2026-03-30  
+最近更新时间：2026-03-31  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/config
 
@@ -157,7 +157,7 @@
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | CFG-TODO-001 | Done | 定义 IConfigCenter 接口头文件 | config 设计 6.6；编码规范 3.7 | 6.6 IConfigCenter | L2 | infra/include/config/IConfigCenter.h | load_layers(startup_context), get_typed(query), apply_override(config_patch), rollback(rollback_token), subscribe(subscription_request) | unit：接口占位对象与查询/回滚/订阅守卫可编译；contract：错误语义入口可映射，且 runtime override 不越过 profile 保护键 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigCenterInterfaceTest|ConfigCenterInterfaceBoundaryContractTest" | 无 | 无 | 无 | 接口头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/IConfigCenter.h、tests/unit/infra/ConfigCenterInterfaceTest.cpp、tests/contract/smoke/ConfigCenterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 5 个方法与 6.6 一致、返回边界不引入业务依赖且测试通过时完成 |
-| CFG-TODO-002 | Not Started | 定义 IConfigLoader 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigLoader | L3 | infra/include/config/IConfigLoader.h | load_default, load_profile, load_deploy, load_runtime_overlay | unit：四层入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 外置源协议未冻结 | 首版仅约束本地源入口，外置源后置 | 接口头文件、编译记录 | 仅当四层加载方法齐全且命名与锚点一致时完成 |
+| CFG-TODO-002 | Done | 定义 IConfigLoader 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigLoader | L3 | infra/include/config/IConfigLoader.h | load_default, load_profile, load_deploy, load_runtime_overlay | unit：四层入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 外置源协议未冻结 | 首版仅约束本地源入口，外置源后置 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/config/IConfigLoader.h、tests/unit/infra/ConfigLoaderInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当四层加载方法齐全且命名与锚点一致时完成 |
 | CFG-TODO-003 | Not Started | 定义 IConfigValidator 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigValidator | L3 | infra/include/config/IConfigValidator.h | validate(snapshot), validate_patch(current_snapshot, patch) | unit：接口可编译；contract：校验失败可映射错误码 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 规则 DSL 未冻结 | 首版仅定义最小规则集入口 | 接口头文件、编译记录 | 仅当校验接口覆盖完整且可编译时完成 |
 | CFG-TODO-004 | Not Started | 定义 IConfigSnapshotStore 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigSnapshotStore | L2 | infra/include/config/IConfigSnapshotStore.h | commit, get_current, get_by_version, get_last_known_good | unit：版本读写入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 持久化后端未定 | 首版以内存快照语义冻结接口 | 接口头文件、编译记录 | 仅当 4 个方法完整且不泄露后端细节时完成 |
 | CFG-TODO-005 | Not Started | 定义 IConfigPublisher 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigPublisher | L2 | infra/include/config/IConfigPublisher.h | publish_config_changed(diff) | unit：发布接口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 事件总线抽象未冻结 | 首版定义进程内发布接口语义 | 接口头文件、编译记录 | 仅当发布语义与配置 diff 对齐时完成 |
@@ -366,3 +366,60 @@ Build 合规复核：
 3. 测试发现性：本轮显式要求 `ctest -N -R ...` 回填发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物、发现性结果与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 IConfigCenter 头文件、测试、CMake 注册和 INF-TODO-013 证据文档。
+
+## 14. 本轮执行记录（2026-03-31 / CFG-TODO-002）
+
+### 14.1 选中任务
+
+1. 本轮任务：CFG-TODO-002。
+2. 可执行性依据：CFG-TODO-001 已完成，IConfigCenter/ConfigTypes 已冻结，且 CFG-TODO-002 仅需补 IConfigLoader 接口边界，不依赖外置配置协议落地。
+
+### 14.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.3 已明确 ConfigLoader 输出原始层配置文档，且至少包含 source_id 与 version。
+2. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.6 已冻结 IConfigLoader 四个入口：load_default、load_profile(profile_id)、load_deploy(source_ref)、load_runtime_overlay()。
+3. docs/architecture/DASALL_infrastructure子系统详细设计.md 6.6/6.9 已明确 defaults/profile/deployment/runtime 四层来源、格式和治理边界。
+
+外部参考：
+
+1. Azure App Configuration keys and values 文档强调配置键采用层次化命名，且通过 label/version 组织不同来源与版本；本轮据此把 Loader 输出收敛为带 source_id、version_ref 的最小 layer document，而不提前冻结远端适配细节。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IConfigLoader.h，冻结 ConfigLayerDocument、ConfigLoadResult 与 IConfigLoader 四层加载接口。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/IConfigLoader.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 ConfigLoaderInterfaceTest，覆盖四层入口正例，以及非法 profile/source_ref/runtime overlay 负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci -N -R ConfigLoaderInterfaceTest && ctest --test-dir build-ci --output-on-failure -R ConfigLoaderInterfaceTest。
+3. D Gate：PASS。
+
+### 14.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/IConfigLoader.h：新增 ConfigLayerDocument、ConfigLoadResult 与 IConfigLoader 四层入口。
+2. tests/unit/infra/ConfigLoaderInterfaceTest.cpp：覆盖 defaults/profile/deploy/runtime 四层入口正例，以及非法 profile/source_ref/runtime overlay 负例。
+3. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成头文件、unit 测试注册与 unit 聚合目标接线。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests`：通过；unit 42/42 全部通过。
+3. `ctest --test-dir build-ci -N -R ConfigLoaderInterfaceTest`：通过，发现 1 个测试：`ConfigLoaderInterfaceTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R ConfigLoaderInterfaceTest`：通过，1/1 tests passed。
+
+Blocker 修复记录：
+
+1. 首次执行 `cmake --build build-ci --target dasall_infra dasall_unit_tests` 时，`ConfigLoaderInterfaceTest` 已被 CTest 发现，但 `dasall_config_loader_interface_unit_test` 未被 `tests/unit/CMakeLists.txt` 的 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS` 聚合列表纳入，导致测试可执行文件未构建。
+2. 本轮内最小解阻动作：补充 `tests/unit/CMakeLists.txt` 中的 `dasall_config_loader_interface_unit_test` 聚合依赖后重跑 configure/build/test。
+3. 解阻结论：Blocker cleared，同轮恢复 CFG-TODO-002 并完成验收。
+
+Build 合规复核：
+
+1. 代码注释：新增接口与结果对象命名已直接表达 source_id/version/document_format 语义，无需额外注释。
+2. 正负例覆盖：unit 覆盖四层入口正例与非法 profile/source_ref/runtime overlay 负例。
+3. 测试发现性：已通过 `ctest -N -R ConfigLoaderInterfaceTest` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物、blocker 修复与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 IConfigLoader 头文件、unit 测试、CMake 注册与 TODO 证据文档。

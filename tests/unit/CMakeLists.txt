@@ -19,6 +19,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_audit_logger_interface_unit_test
 	dasall_config_types_unit_test
 	dasall_config_center_interface_unit_test
+	dasall_config_loader_interface_unit_test
 	dasall_health_monitor_interface_unit_test
 	dasall_infra_error_code_unit_test
 	dasall_platform_init_config_unit_test
