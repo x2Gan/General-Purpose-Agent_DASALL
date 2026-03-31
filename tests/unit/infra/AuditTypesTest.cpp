@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "audit/AuditTypes.h"
+#include "logging/LogTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -248,6 +249,46 @@ void test_audit_write_outcome_rejects_inconsistent_combinations() {
               "persisted outcomes must not also carry an error code");
 }
 
+void test_logging_audit_aliases_preserve_required_fields_and_multi_agent_context() {
+  using LoggingAuditContext = dasall::infra::logging::AuditContext;
+  using LoggingAuditEvent = dasall::infra::logging::AuditEvent;
+  using LoggingAuditEvidenceKind = dasall::infra::logging::AuditEvidenceKind;
+  using LoggingAuditOutcome = dasall::infra::logging::AuditOutcome;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<LoggingAuditEvent, dasall::infra::AuditEvent>);
+  static_assert(std::is_same_v<LoggingAuditContext, dasall::infra::AuditContext>);
+
+  const LoggingAuditEvent event{
+      .event_id = std::string("audit-event-logging-005"),
+      .action = std::string("worker.dispatch"),
+      .actor = std::string("multi_agent_coordinator"),
+      .target = std::string("tool-worker"),
+      .outcome = LoggingAuditOutcome::Succeeded,
+      .evidence_ref = {
+          .kind = LoggingAuditEvidenceKind::WorkerTask,
+          .ref = std::string("task-logging-005"),
+      },
+      .side_effects = {"worker_scheduled"},
+      .timestamp = 1711785600300,
+  };
+
+  const LoggingAuditContext context{
+      .request_id = std::string("req-005"),
+      .session_id = std::string("session-005"),
+      .trace_id = std::string("trace-005"),
+      .task_id = std::string("task-logging-005"),
+      .parent_task_id = std::string("parent-task-005"),
+      .lease_id = std::string("lease-005"),
+      .worker_type = std::string("tool-worker"),
+  };
+
+  assert_true(event.has_required_fields() && event.side_effects_are_serializable(),
+              "logging::AuditEvent should preserve the required-field and side_effects guards from the frozen audit boundary");
+  assert_true(context.has_non_empty_fields() && !context.uses_unknown_defaults(),
+              "logging::AuditContext should preserve the explicit multi-agent correlation anchors required by ADR-008");
+}
+
 }  // namespace
 
 int main() {
@@ -261,6 +302,7 @@ int main() {
         test_audit_write_outcome_accepts_primary_and_fallback_success_paths();
         test_audit_write_outcome_accepts_observable_failure_mapping();
         test_audit_write_outcome_rejects_inconsistent_combinations();
+        test_logging_audit_aliases_preserve_required_fields_and_multi_agent_context();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

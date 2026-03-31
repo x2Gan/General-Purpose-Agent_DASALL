@@ -8,6 +8,7 @@
 #include "audit/AuditExporterTypes.h"
 #include "audit/IAuditLogger.h"
 #include "audit/AuditTypes.h"
+#include "logging/LogTypes.h"
 #include "checkpoint/RecoveryOutcomeGuards.h"
 #include "task/WorkerTask.h"
 #include "task/WorkerTaskGuards.h"
@@ -59,6 +60,21 @@ concept HasCheckpointRefMember = requires {
 template <typename T>
 concept HasGlobalFsmStateMember = requires {
   &T::global_fsm_state;
+};
+
+template <typename T>
+concept HasParentTaskIdMember = requires {
+  &T::parent_task_id;
+};
+
+template <typename T>
+concept HasLeaseIdMember = requires {
+  &T::lease_id;
+};
+
+template <typename T>
+concept HasWorkerTypeMember = requires {
+  &T::worker_type;
 };
 
 template <typename T>
@@ -305,6 +321,55 @@ void test_audit_logger_interface_uses_frozen_audit_boundary_objects_only() {
               "IAuditLogger export input should stay bound to the frozen ExportQuery time-window shape rather than the retired opaque selector placeholder");
 }
 
+  void test_logging_audit_aliases_keep_multi_agent_context_outside_event_top_level() {
+    using LoggingAuditContext = dasall::infra::logging::AuditContext;
+    using LoggingAuditEvent = dasall::infra::logging::AuditEvent;
+    using LoggingAuditEvidenceKind = dasall::infra::logging::AuditEvidenceKind;
+    using LoggingAuditOutcome = dasall::infra::logging::AuditOutcome;
+    using dasall::tests::support::assert_true;
+
+    static_assert(std::is_same_v<LoggingAuditEvent, dasall::infra::AuditEvent>);
+    static_assert(std::is_same_v<LoggingAuditContext, dasall::infra::AuditContext>);
+    static_assert(!HasParentTaskIdMember<LoggingAuditEvent>);
+    static_assert(!HasLeaseIdMember<LoggingAuditEvent>);
+    static_assert(!HasWorkerTypeMember<LoggingAuditEvent>);
+    static_assert(HasParentTaskIdMember<LoggingAuditContext>);
+    static_assert(HasLeaseIdMember<LoggingAuditContext>);
+    static_assert(HasWorkerTypeMember<LoggingAuditContext>);
+
+    const LoggingAuditEvent event{
+      .event_id = std::string("audit-event-logging-ctx-005"),
+      .action = std::string("worker.dispatch"),
+      .actor = std::string("multi_agent_coordinator"),
+      .target = std::string("tool-worker"),
+      .outcome = LoggingAuditOutcome::Succeeded,
+      .evidence_ref = {
+        .kind = LoggingAuditEvidenceKind::WorkerTask,
+        .ref = std::string("task-ctx-005"),
+      },
+      .side_effects = {"worker_scheduled"},
+      .timestamp = 1711785601400,
+    };
+
+    const LoggingAuditContext context{
+      .request_id = std::string("req-ctx-005"),
+      .session_id = std::string("session-ctx-005"),
+      .trace_id = std::string("trace-ctx-005"),
+      .task_id = std::string("task-ctx-005"),
+      .parent_task_id = std::string("parent-task-ctx-005"),
+      .lease_id = std::string("lease-ctx-005"),
+      .worker_type = std::string("tool-worker"),
+    };
+
+    assert_true(event.has_required_fields(),
+          "logging::AuditEvent should keep only the frozen audit fact fields at top level");
+    assert_true(context.has_non_empty_fields() &&
+            context.parent_task_id == "parent-task-ctx-005" &&
+            context.lease_id == "lease-ctx-005" &&
+            context.worker_type == "tool-worker",
+          "logging::AuditContext should retain ADR-008 multi-agent chain identifiers without pushing them into AuditEvent top-level fields");
+  }
+
 }  // namespace
 
 int main() {
@@ -316,6 +381,7 @@ int main() {
     test_audit_context_keeps_correlation_fields_as_non_optional_strings();
     test_audit_context_rejects_empty_strings_when_unknown_semantics_are_bypassed();
     test_audit_logger_interface_uses_frozen_audit_boundary_objects_only();
+    test_logging_audit_aliases_keep_multi_agent_context_outside_event_top_level();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

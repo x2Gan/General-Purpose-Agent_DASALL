@@ -3,6 +3,7 @@
 #include <string>
 
 #include <InfraContext.h>
+#include <LogEvent.h>
 #include <audit/AuditTypes.h>
 
 namespace dasall::infra::logging {
@@ -10,6 +11,10 @@ namespace dasall::infra::logging {
 using LogContext = ::dasall::infra::InfraContext;
 using LogLevel = ::dasall::infra::LogLevel;
 using LogEvent = ::dasall::infra::LogEvent;
+using AuditOutcome = ::dasall::infra::AuditOutcome;
+using AuditEvidenceKind = ::dasall::infra::AuditEvidenceKind;
+using AuditEvent = ::dasall::infra::AuditEvent;
+using AuditContext = ::dasall::infra::AuditContext;
 using AuditEvidenceRef = ::dasall::infra::AuditEvidenceRef;
 
 struct AuditRef {
