@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "error/ErrorInfo.h"
@@ -56,8 +57,12 @@ struct DiagnosticsCommand {
            timeout_ms > 0 && !actor_ref.empty();
   }
 
+  [[nodiscard]] bool has_whitelisted_command_name() const {
+    return is_read_only_command_whitelisted(command_name);
+  }
+
   [[nodiscard]] bool is_read_only_whitelisted() const {
-    return has_required_fields() && is_read_only_command_whitelisted(command_name);
+    return has_required_fields() && has_whitelisted_command_name();
   }
 };
 
