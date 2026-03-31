@@ -1,14 +1,26 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <type_traits>
 
 #include "agent/AgentRequestGuards.h"
 #include "task/WorkerLease.h"
 #include "task/WorkerTask.h"
 #include "../../../infra/include/InfraContext.h"
+#include "../../../infra/include/logging/LogTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
+
+template <typename T>
+concept HasRequestIdMember = requires {
+  &T::request_id;
+};
+
+template <typename T>
+concept HasSessionIdMember = requires {
+  &T::session_id;
+};
 
 dasall::contracts::AgentRequest make_agent_request(
     std::optional<std::string> request_id,
@@ -119,12 +131,35 @@ void test_infra_context_never_emits_empty_identifier_strings() {
                "InfraContext should use WorkerLease as fallback lease anchor");
 }
 
+void test_logging_log_context_and_audit_ref_keep_boundary_shape() {
+  using dasall::infra::InfraContext;
+  using dasall::infra::logging::AuditRef;
+  using dasall::infra::logging::LogContext;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<LogContext, InfraContext>);
+  static_assert(std::is_same_v<decltype(AuditRef{}.trace_id), std::string>);
+  static_assert(std::is_same_v<decltype(AuditRef{}.task_id), std::string>);
+  static_assert(!HasRequestIdMember<AuditRef>);
+  static_assert(!HasSessionIdMember<AuditRef>);
+
+  const LogContext context{};
+  const AuditRef audit_ref{};
+
+  assert_true(context.request_id == InfraContext::kUnknownIdentifier &&
+                  context.lease_id == InfraContext::kUnknownIdentifier,
+              "logging::LogContext should keep the frozen unknown placeholder semantics from InfraContext");
+  assert_true(!audit_ref.has_value() && audit_ref.uses_unknown_defaults(),
+              "AuditRef should default to unknown correlation anchors without embedding request/session level fields");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_infra_context_consumes_only_existing_contract_identifiers();
     test_infra_context_never_emits_empty_identifier_strings();
+    test_logging_log_context_and_audit_ref_keep_boundary_shape();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

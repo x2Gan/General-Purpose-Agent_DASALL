@@ -1,8 +1,10 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <type_traits>
 
 #include "InfraContext.h"
+#include "logging/LogTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -117,6 +119,31 @@ void test_from_contracts_normalizes_missing_or_empty_identifiers_to_unknown() {
                "WorkerLease lease_id should backfill unknown lease anchors");
 }
 
+void test_logging_log_context_alias_preserves_unknown_defaults() {
+  using LoggingContext = dasall::infra::logging::LogContext;
+  using dasall::infra::AuditEvidenceKind;
+  using dasall::infra::logging::AuditRef;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<LoggingContext, dasall::infra::InfraContext>);
+
+  const LoggingContext context{};
+  const AuditRef audit_ref{
+      .evidence_ref = {
+          .kind = AuditEvidenceKind::ToolResult,
+          .ref = std::string("tool-call-ctx-001"),
+      },
+  };
+
+  assert_equal("unknown", context.request_id,
+               "logging::LogContext should reuse InfraContext unknown defaults for request_id");
+  assert_equal("unknown", context.parent_task_id,
+               "logging::LogContext should reuse InfraContext unknown defaults for parent_task_id");
+  assert_true(audit_ref.has_value() && audit_ref.uses_unknown_defaults(),
+              "AuditRef should keep trace_id/task_id on the frozen unknown placeholder until callers provide concrete correlation anchors");
+}
+
 }  // namespace
 
 int main() {
@@ -124,6 +151,7 @@ int main() {
     test_default_context_uses_unknown_identifiers();
     test_from_contracts_maps_request_task_and_lease_identifiers();
     test_from_contracts_normalizes_missing_or_empty_identifiers_to_unknown();
+    test_logging_log_context_alias_preserves_unknown_defaults();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
