@@ -40,6 +40,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_infra_error_code_unit_test
 	dasall_ota_types_unit_test
 	dasall_ota_manager_interface_unit_test
+	dasall_ota_package_verifier_interface_unit_test
 	dasall_platform_init_config_unit_test
 	dasall_diagnostics_types_unit_test
 	dasall_diagnostics_snapshot_export_unit_test
