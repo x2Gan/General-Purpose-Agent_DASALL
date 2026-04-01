@@ -38,6 +38,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_health_probe_types_unit_test
 	dasall_health_recovery_hint_unit_test
 	dasall_infra_error_code_unit_test
+	dasall_ota_types_unit_test
 	dasall_platform_init_config_unit_test
 	dasall_diagnostics_types_unit_test
 	dasall_diagnostics_snapshot_export_unit_test
