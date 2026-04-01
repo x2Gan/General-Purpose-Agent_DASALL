@@ -55,6 +55,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/ota/OTATypes.h
   include/policy/IPolicyLoader.h
   include/policy/IPolicySchemaValidator.h
+  include/policy/IPolicySnapshotStore.h
   include/policy/ISecurityPolicyManager.h
   include/policy/PolicyErrors.h
   include/policy/PolicyTypes.h
