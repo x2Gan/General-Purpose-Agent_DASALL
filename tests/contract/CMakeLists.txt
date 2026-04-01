@@ -283,6 +283,23 @@ target_link_libraries(dasall_contract_secret_manager_interface_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_secret_type_boundary_test
+  SecretTypeBoundaryContractTest
+  smoke/SecretTypeBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_secret_type_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_secret_type_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_ota_type_boundary_test
   OTATypeBoundaryTest
   smoke/OTATypeBoundaryContractTest.cpp

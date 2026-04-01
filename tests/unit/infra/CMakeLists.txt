@@ -208,6 +208,21 @@ dasall_apply_common_options(dasall_secret_manager_interface_unit_test)
 add_test(NAME SecretManagerInterfaceTest COMMAND dasall_secret_manager_interface_unit_test)
 set_tests_properties(SecretManagerInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_secret_types_unit_test
+  SecretTypesTest.cpp
+)
+
+target_link_libraries(dasall_secret_types_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_secret_types_unit_test)
+
+add_test(NAME SecretTypesTest COMMAND dasall_secret_types_unit_test)
+set_tests_properties(SecretTypesTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_metrics_provider_interface_unit_test
   MetricsProviderInterfaceTest.cpp
 )

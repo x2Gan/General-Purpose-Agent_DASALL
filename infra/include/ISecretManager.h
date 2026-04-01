@@ -2,21 +2,9 @@
 
 #include <string_view>
 
+#include "secret/SecretTypes.h"
+
 namespace dasall::infra::secret {
-
-struct SecretQuery;
-struct SecretAccessContext;
-struct SecretDescriptor;
-struct SecretHandle;
-struct SecretLease;
-struct SecureBuffer;
-struct RotationRequest;
-struct RotationResult;
-
-struct SecretHandleResult;
-struct SecretMaterializationResult;
-struct SecretInspectionResult;
-struct SecretLifecycleResult;
 
 class ISecretManager {
  public:
