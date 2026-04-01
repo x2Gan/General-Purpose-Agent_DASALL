@@ -32,6 +32,12 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/secret/SecretTypes.h
   include/InfraContext.h
   include/InfraErrorCode.h
+  include/tracing/ITracerProvider.h
+  include/tracing/ITracer.h
+  include/tracing/ISpan.h
+  include/tracing/ITraceContextPropagator.h
+  include/tracing/TraceTypes.h
+  include/tracing/TraceErrors.h
   include/metrics/IMetricConfigPolicy.h
   include/metrics/IMetricExporter.h
   include/metrics/IMeter.h
