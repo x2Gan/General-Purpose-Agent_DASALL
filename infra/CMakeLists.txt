@@ -25,6 +25,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/IInfrastructureService.h
   include/ILogger.h
   include/health/IHealthProbe.h
+  include/secret/ISecretHealthSource.h
   include/InfraContext.h
   include/InfraErrorCode.h
   include/metrics/IMetricConfigPolicy.h
