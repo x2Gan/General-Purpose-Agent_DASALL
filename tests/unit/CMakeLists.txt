@@ -23,6 +23,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_metric_types_unit_test
 	dasall_trace_types_unit_test
 	dasall_span_interface_unit_test
+	dasall_trace_context_propagator_interface_unit_test
 	dasall_infra_service_facade_unit_test
 	dasall_secret_backend_interface_unit_test
 	dasall_secret_errors_unit_test

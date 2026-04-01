@@ -2,6 +2,7 @@
 #include "tracing/ITracerProvider.h"
 #include "tracing/ITracer.h"
 #include "tracing/ISpan.h"
+#include "tracing/ITraceContextPropagator.h"
 #include "tracing/TraceTypes.h"
 
 namespace dasall::infra::tracing {
