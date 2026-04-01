@@ -202,7 +202,7 @@ Infrastructure 非职责：
 4. AuditService 与 LoggingService 逻辑分离，仅通过 ContextCorrelationAdapter 共享关联字段。
 5. SecurityPolicyManager 依赖 ConfigCenter 加载策略层，向 SecretManager/PluginManager/DiagnosticsService 输出策略快照。
 6. PluginManager 依赖 SecurityPolicyManager 做签名和来源校验，依赖 DiagnosticsService 输出故障证据。
-7. OTAManager 依赖 ConfigCenter 与 HealthMonitor 做发布前后检查。
+7. OTAManager 依赖 ConfigCenter、HealthMonitor 与 SecretManager 做发布前后检查与 trust anchor 读取；SecretManager 仅提供只读 trust anchor 引用，不承载 OTA 主流程。
 
 ### 6.5 核心对象与 contracts 对齐关系
 
@@ -263,6 +263,7 @@ Infrastructure 非职责：
 9. ISecretManager
 	- get_secret(key): 返回 SecretHandle。
 	- rotate(key): 触发轮换并审计。
+	- get_trust_anchor(anchor_purpose, algorithm): 返回只读 TrustAnchorMaterial，仅供 OTA/Plugin 验签读取。
 
 10. IOTAManager
 	- precheck(plan): 发布前检查。

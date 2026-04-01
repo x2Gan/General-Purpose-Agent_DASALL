@@ -461,7 +461,7 @@ infra/ota 非职责：
 | infra.ota.enabled | false | Profile/部署 | 默认关闭，按设备能力启用 |
 | infra.ota.mode | dry_run | 默认/Profile/部署 | dry_run 或 apply_enabled |
 | infra.ota.package.verify_required | true | 默认/Profile | 是否强制验签与 hash 校验 |
-| infra.ota.package.signature_algorithm | ed25519_placeholder | 默认/部署 | 本轮仅冻结配置键，不冻结实现库 |
+| infra.ota.package.signature_algorithm | ed25519 | 默认/部署 | 首版允许值固定为 ed25519、ecdsa-p256-sha256；未知值直接拒绝 |
 | infra.ota.precheck.min_free_space_mb | 256 | Profile/部署 | 最低可用空间阈值 |
 | infra.ota.precheck.max_cpu_load_pct | 80 | Profile/部署 | 升级前 CPU 阈值 |
 | infra.ota.precheck.require_health_ready | true | 默认/Profile | 是否要求 readiness 为 true |
@@ -477,6 +477,17 @@ infra/ota 非职责：
 1. edge_minimal 默认仅支持 validate_only 与 repo_bound 工件升级，slot_bound apply 需显式打开。
 2. edge_balanced 支持 slot_bound apply，但强制单工件串行安装。
 3. desktop_full 可支持更大的 staging 空间与更长 confirm 窗口。
+
+#### 6.10.1 签名算法与 trust anchor 读取接口冻结
+
+1. 首版 `signature_algorithm` 允许集固定为 `ed25519` 与 `ecdsa-p256-sha256`，默认值固定为 `ed25519`；运行时不再接受 `*_placeholder` 或空值。
+2. 当 `infra.ota.package.verify_required=true` 时，算法配置为空、未知，或与 manifest 声明不一致，PackageVerifier 必须短路失败，不得降级为 hash-only 校验。
+3. secret 子域向 OTA 暴露只读 `ITrustAnchorProvider` 适配面：
+   - `load_active_anchor(anchor_purpose, algorithm) -> TrustAnchorMaterial`
+   - `TrustAnchorMaterial = { anchor_id, algorithm, key_format, public_key_ref, version_ref, not_after }`
+4. `anchor_purpose` 本轮冻结为 `ota.package.verify`；OTA 只读取 trust anchor，不负责持久化、轮换、撤销与权限策略。
+5. 当 trust anchor 缺失、读取失败、内容为空或算法不匹配时，PackageVerifier 对外统一映射到已冻结的 `INF_E_OTA_VERIFY_FAIL`；细分原因仅通过日志、审计和 `source_ref` 留痕，不新增 contracts 字段。
+6. `SignatureVerifierAdapter` 继续作为实现抽象占位，但其输入必须被 `signature_algorithm + TrustAnchorMaterial + signed_metadata_ref` 约束；输出仍只承载 `signature_ok/hash_set/release_counter` 等 OTA 私有语义。
 
 ### 6.11 可观测性设计
 
@@ -622,7 +633,7 @@ infra/ota 非职责：
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
 | OTA 包 manifest 字段未冻结 | OTA-M1、OTA-M2 | 明确 package_id、artifact 列表、hash、release_counter、hardware_selector 最小字段 | 先冻结 OTATypes 与 manifest 最小字段表 | 未解阻前只允许 dry_run verify，不允许真实 apply |
-| 签名算法与 trust anchor 接口未冻结 | OTA-M2 | 明确签名算法配置键与 secret 提供的 trust anchor 读取接口 | 先用 SignatureVerifierAdapter 抽象占位 | 保留 verify 接口占位，禁用生产验签实现 |
+| 签名算法与 trust anchor 接口已解阻（2026-04-01） | OTA-M2 | signature_algorithm 允许集与 secret 提供的 ITrustAnchorProvider.load_active_anchor(...) 读取接口已冻结 | 后续按冻结边界实现 IOTAPackageVerifier/PackageVerifier | 若具体密码库暂不可用，继续保留 SignatureVerifierAdapter 占位并维持 verify_required gate |
 | platform boot control adapter 未具备 | OTA-M3、OTA-M4 | 明确 get_active_target、set_next_boot、mark_boot_success/failed 四个动作 | 先用 mock boot control 走单测和集成夹具 | 未解阻前只支持 repo_bound 工件升级与 dry_run |
 | tests integration 顶层注册未稳定 | OTA-M5 | tests/CMakeLists.txt 接入 integration 子目录并建立发现规则 | 先完成 unit/contract/failure-injection 局部测试 | 未解阻前不得宣告 OTA 全链路 gate 完成 |
 | rollback token 生命周期与持久化位置未冻结 | OTA-M3、OTA-M4 | 明确 token 存储位置、过期策略与重启恢复规则 | 先冻结 token 字段和内存态流程 | 无法解阻时仅支持同进程内模拟回滚验证 |
@@ -644,7 +655,7 @@ infra/ota 非职责：
 1. UpgradePlan 的 target_scope 是否允许跨进程组件批量升级，还是仅支持单设备局部范围。
 2. repo_bound 工件的原子指针切换由 config 模块提供通用发布能力，还是由 OTA 内部实现私有切换器。
 3. rollback token 需要持久化到本地文件、sqlite，还是先保留 platform 抽象存储。
-4. 签名算法首版是 Ed25519、ECDSA 还是仅通过 adapter 抽象占位。
+4. 已于 2026-04-01 收敛：首版允许 `ed25519` 与 `ecdsa-p256-sha256` 两种算法；具体密码库继续通过 adapter 注入，trust anchor 由 secret 子域只读接口提供。
 5. boot confirm 成功条件是否只依赖 health ready，还是还要包含指定进程心跳与版本报告。
 
 ### 12.2 后续任务建议
