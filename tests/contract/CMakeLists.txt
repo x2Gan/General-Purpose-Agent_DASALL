@@ -317,6 +317,23 @@ target_link_libraries(dasall_contract_secret_backend_contract_smoke_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_secret_error_mapping_test
+  SecretErrorMappingContractTest
+  smoke/SecretErrorMappingContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_secret_error_mapping_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_secret_error_mapping_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_ota_type_boundary_test
   OTATypeBoundaryTest
   smoke/OTATypeBoundaryContractTest.cpp

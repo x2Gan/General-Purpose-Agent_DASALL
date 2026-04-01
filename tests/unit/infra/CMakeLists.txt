@@ -193,6 +193,21 @@ dasall_apply_common_options(dasall_secret_backend_interface_unit_test)
 add_test(NAME SecretBackendInterfaceTest COMMAND dasall_secret_backend_interface_unit_test)
 set_tests_properties(SecretBackendInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_secret_errors_unit_test
+  SecretErrorsTest.cpp
+)
+
+target_link_libraries(dasall_secret_errors_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_secret_errors_unit_test)
+
+add_test(NAME SecretErrorsTest COMMAND dasall_secret_errors_unit_test)
+set_tests_properties(SecretErrorsTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_secret_health_source_interface_unit_test
   SecretHealthSourceInterfaceTest.cpp
 )
