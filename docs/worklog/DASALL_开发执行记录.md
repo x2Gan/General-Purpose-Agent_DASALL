@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #057
+
+- 日期：2026-04-01
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-002 定义 PluginCatalog 数据结构
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLG-TODO-002-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/PLG-TODO-002-PluginCatalog设计收敛.md](docs/todos/infrastructure/PLG-TODO-002-PluginCatalog%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化 discovered/rejected 双集合、RejectedPluginRecord、Design->Build 映射与 D Gate。
+   - 对原任务验收命令做最小 blocker-fix：显式构建新增 unit/contract 测试目标，避免 CTest 在未生成可执行文件时误判失败。
+2. 完成 PLG-TODO-002-B 代码落地：
+   - 新增 [infra/include/plugin/PluginCatalog.h](infra/include/plugin/PluginCatalog.h)
+   - 新增 [tests/unit/infra/plugin/PluginCatalogTest.cpp](tests/unit/infra/plugin/PluginCatalogTest.cpp)
+   - 新增 [tests/contract/smoke/PluginCatalogBoundaryContractTest.cpp](tests/contract/smoke/PluginCatalogBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_catalog_unit_test dasall_contract_plugin_catalog_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_catalog_unit_test dasall_contract_plugin_catalog_boundary_test` 通过。
+   - `ctest --test-dir build-ci -N -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"` 通过，发现 2 个测试。
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"` 通过，2/2 tests passed。
+
+### 结果
+
+1. PluginCatalog 已以最小 discovery result 对象落盘，后续 discover() 和 validation pipeline 可以直接复用统一的发现/拒绝聚合结构。
+2. 本轮仅冻结 discovery result 及其 evidence_ref 对齐约束，不提前扩张到 validation report、load result 或 active set。
+
+### 下一步
+
+1. 继续推进 PLG-TODO-007，定义 plugin 私有错误码域。
+
+### 风险
+
+1. 当前 rejected_plugins 仅冻结 reason_code/evidence_ref 两个追踪锚点；若后续设计要求承载 richer report 引用，应以增量字段方式追加，避免破坏现有 catalog 契约。
+
 ## 记录 #056
 
 - 日期：2026-04-01

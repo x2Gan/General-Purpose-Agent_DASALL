@@ -57,6 +57,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/policy/PolicyDecisionRef.h
   include/policy/PolicyPatch.h
   include/policy/PolicySnapshot.h
+  include/plugin/PluginCatalog.h
   include/plugin/PluginDescriptor.h
 )
 

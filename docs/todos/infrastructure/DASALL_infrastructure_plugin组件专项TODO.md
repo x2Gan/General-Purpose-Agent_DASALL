@@ -145,7 +145,7 @@
 | Design 项 | 设计锚点 | TODO 类型 | 优先级 | 状态 | 对应任务 ID 范围 | 映射说明 |
 |---|---|---|---|---|---|---|
 | PluginDescriptor 字段与约束冻结 | 详设 6.5；infra 系统 6.5 | 数据结构 | P0 | Done | PLG-TODO-001 | 该对象字段清单齐备，可直接落 L2 |
-| PluginCatalog 结构定义 | 详设 6.5、6.3 | 数据结构 | P0 | Not Started | PLG-TODO-002 | discovered_plugins[] + rejected_plugins[] 清晰，可直接拆 |
+| PluginCatalog 结构定义 | 详设 6.5、6.3 | 数据结构 | P0 | Done | PLG-TODO-002 | discovered_plugins[] + rejected_plugins[] 清晰，可直接拆 |
 | IPluginManager 接口冻结与骨架 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Not Started | PLG-TODO-003 | 方法名与输入输出完整，先定义再实现空体 |
 | IPluginPolicyGate 接口定义 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Not Started | PLG-TODO-004 | evaluate 方法与返回约束清晰，但依赖 INF-TODO-017 实现 |
 | SignatureReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Blocked | PLG-BLK-01 | verified/signer/chain_status/reason 可定义，但 trust_store 细节阻塞 |
@@ -172,7 +172,7 @@
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度 | 代码目标 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | PLG-TODO-001 | Done | 定义 PluginDescriptor 数据结构 | 详设 6.5；infra 系统 6.5 | 详设 6.5 核心对象与 contracts 对齐 | L2 | infra/include/plugin/PluginDescriptor.h，承载 plugin_id、version、abi、trust_level、status、source 字段 | unit：字段默认值与 unknown 兜底；contract：不越权扩写标识语义 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_descriptor_unit_test dasall_contract_plugin_descriptor_boundary_test && ctest --test-dir build-ci -N -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest"` | 无 | 无 | 无 | 数据结构头文件、基础单测、字段说明文档 | 已完成（2026-04-01）：PluginDescriptor.h、PluginDescriptorFieldTest、PluginDescriptorBoundaryContractTest 落盘；空值统一收敛为 unknown，ctest 发现 2 个用例并全部通过 |
-| PLG-TODO-002 | Not Started | 定义 PluginCatalog 数据结构 | 详设 6.5、6.3 | 详设 6.5 对象、6.3 发现结果语义 | L2 | infra/include/plugin/PluginCatalog.h，承载 discovered_plugins[]、rejected_plugins[] 字段，拒绝原因可追溯 | unit：空 catalog、全发现、全拒绝三种状态；contract：与 Observation evidence_ref 关联性测试 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L "unit|contract" -R "PluginCatalog"` | PLG-TODO-001 | 无 | 无 | 数据结构头文件、单测与合约测试 | 仅当 PluginCatalog 可聚合发现与拒绝结果，且合约测试不越权时完成 |
+| PLG-TODO-002 | Done | 定义 PluginCatalog 数据结构 | 详设 6.5、6.3 | 详设 6.5 对象、6.3 发现结果语义 | L2 | infra/include/plugin/PluginCatalog.h，承载 discovered_plugins[]、rejected_plugins[] 字段，拒绝原因可追溯 | unit：空 catalog、全发现、全拒绝三种状态；contract：与 Observation evidence_ref 关联性测试 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_catalog_unit_test dasall_contract_plugin_catalog_boundary_test && ctest --test-dir build-ci -N -R "PluginCatalogTest|PluginCatalogBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"` | PLG-TODO-001 | 无 | 无 | 数据结构头文件、单测与合约测试 | 已完成（2026-04-01）：PluginCatalog.h、PluginCatalogTest、PluginCatalogBoundaryContractTest 落盘；空 catalog/全发现/全拒绝和 evidence_ref 边界均已覆盖，ctest 发现 2 个用例并全部通过 |
 | PLG-TODO-003 | Not Started | 新增 IPluginManager 接口与骨架实现 | 详设 6.6；infra 系统 6.6 | 详设 6.6 核心接口、6.7 主流程时序 | L2 | infra/include/plugin/IPluginManager.h 与 infra/src/plugin/PluginManager.cpp 骨架，包含 discover()、validate()、load()、unload()、list_active() 五个方法 | unit：接口编译与返回对象类型；contract：ResultCode 引用不越权 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginManagerInterfaceCompileTest"` | PLG-TODO-001、PLG-TODO-002 | 无 | 无 | 接口头文件、空壳实现、编译与单测证据 | 仅当 IPluginManager 方法名与详设 6.6 一致、编译通过、接口可被 infra facade 包含时完成 |
 | PLG-TODO-004 | Not Started | 新增 IPluginPolicyGate 接口 | 详设 6.6；infra 系统 6.6 | 详设 6.6 IPluginPolicyGate、6.3 策略决策 | L2 | infra/include/plugin/IPluginPolicyGate.h，包含 evaluate(manifest, policy_snapshot, profile) 方法，返回 PolicyDecisionRef | unit：接口编译；contract：不越权扩写策略对象 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest"` | PLG-TODO-001、INF-TODO-017（SecurityPolicyManager） | 无 | 无 | 接口头文件、编译证据 | 仅当接口定义与详设 6.6 一致且编译通过时完成 |
 | PLG-TODO-005 | Not Started | 建立 PluginValidationPipeline 骨架与三检流程 | 详设 6.3、6.7、6.8 | 详设 6.7 主流程、6.8 异常流程、6.3 子组件依赖 | L2 | infra/src/plugin/PluginValidationPipeline.cpp（or PluginValidatorImpl.cpp），骨架实现 policy->signature->compat 三检流程，失败时返回对应 Report | unit：三检失败分支可区分；contract：聚合 Report 语义稳定 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginValidationPipelineTest"` | PLG-TODO-003、PLG-TODO-004、PLG-TODO-001、PLG-TODO-002（以及 INF-TODO-017） | 无 | 无 | pipeline 实现、单测 | 仅当三检流程失败可判定（拒绝可溯源）且编译通过时完成 |
@@ -508,12 +508,72 @@ Build 合规复核：
 
 ---
 
+## 15. 本轮执行记录（2026-04-01 / PLG-TODO-002）
+
+### 15.1 选中任务
+
+1. 本轮任务：PLG-TODO-002。
+2. 可执行性依据：PLG-TODO-001 已完成，PluginCatalog 的 discovered/rejected 双集合边界在详细设计 6.5/6.3 中已冻结，且本轮可在单次提交内完成“对象头文件 + 定向 unit/contract + 文档证据”闭环。
+
+### 15.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_plugin模块详细设计.md 6.5 明确 PluginCatalog 固定为 discovered_plugins[] 与 rejected_plugins[]，并要求“发现与拒绝原因必须可解释”。
+2. docs/architecture/DASALL_infra_plugin模块详细设计.md 6.3/6.7 明确 catalog 只表达 discovery result，不含激活结论。
+3. docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md 中 PLG-TODO-002 明确 rejected_plugins 需与 Observation evidence_ref 引用语义对齐。
+4. infra/include/policy/PolicyDecisionRef.h 与 infra/include/diagnostics/DiagnosticsTypes.h 已提供 reason_code/evidence_ref 的现有 infra 侧引用模式，可直接复用为 rejected_plugins 的最小追踪锚点。
+
+外部参考：
+
+1. Microsoft MSDN Magazine《Writing, Loading, and Accessing Plug-Ins》将插件管理器描述为“扫描目录、收集候选插件并维护结果列表”的独立阶段。本轮据此把 PluginCatalog 收敛为 discovery result 对象，不引入 load handle、执行结果或 runtime 调度语义。
+
+D 结论：
+
+1. 新增 docs/todos/infrastructure/PLG-TODO-002-PluginCatalog设计收敛.md，冻结 RejectedPluginRecord、evidence_ref 对齐策略与 Design->Build 映射。
+2. Build 三件套锁定为：
+        - 代码目标：infra/include/plugin/PluginCatalog.h。
+        - 测试目标：PluginCatalogTest、PluginCatalogBoundaryContractTest。
+        - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_catalog_unit_test dasall_contract_plugin_catalog_boundary_test && ctest --test-dir build-ci -N -R "PluginCatalogTest|PluginCatalogBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 15.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/plugin/PluginCatalog.h：新增 PluginCatalog 与 RejectedPluginRecord，冻结 discovered_plugins/rejected_plugins 两个结果集合、reason_code/evidence_ref 锚点，以及 empty()/has_traceable_rejections()/has_consistent_entries() 三个判定出口。
+2. tests/unit/infra/plugin/PluginCatalogTest.cpp：覆盖空 catalog、全发现、全拒绝和不带 evidence_ref/重复 plugin_id 的负例。
+3. tests/contract/smoke/PluginCatalogBoundaryContractTest.cpp：覆盖 rejected_plugins 只复用 reason_code/evidence_ref，不直接持有 Observation/ErrorInfo 的边界约束。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与定向测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_plugin_catalog_unit_test dasall_contract_plugin_catalog_boundary_test`：通过。
+3. `ctest --test-dir build-ci -N -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"`：通过，发现 2 个测试。
+4. `ctest --test-dir build-ci --output-on-failure -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：新增对象和方法命名已直接表达 discovery/result/evidence 语义，无需额外冗余注释。
+2. 正负例覆盖：unit 覆盖空 catalog、全发现、全拒绝正例，以及 evidence_ref 缺失和 plugin_id 重复负例；contract 覆盖 Observation/ErrorInfo ownership 禁区。
+3. 测试发现性：已通过 `ctest -N -R ...` 验证新增 unit/contract 用例进入 CTest 图。
+4. TODO 证据回写：已完成任务状态、验收命令与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 PluginCatalog 对象、测试、CMake 注册、设计收敛文档与专项 TODO/工作日志证据。
+
+阻塞修复：
+
+1. 原任务行的验收命令未显式构建新增测试目标，无法稳定支撑 ctest 执行；本轮已将验收命令修正为显式构建对应 unit/contract 目标，作为最小 validation blocker fix。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
 |---|---|---|---|
 | v1.0 | 2026-03-25 | 初稿：完整 TODO 框架、粒度评估、映射与拆解、阻塞管理 | （待评审） |
 | v1.1 | 2026-04-01 | 回写 PLG-TODO-001 设计/构建证据，修正该任务验收命令中的测试目标构建缺口 | （待评审） |
+| v1.2 | 2026-04-01 | 回写 PLG-TODO-002 设计/构建证据，修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 
 ---
 

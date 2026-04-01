@@ -582,3 +582,18 @@ dasall_apply_common_options(dasall_plugin_descriptor_unit_test)
 
 add_test(NAME PluginDescriptorFieldTest COMMAND dasall_plugin_descriptor_unit_test)
 set_tests_properties(PluginDescriptorFieldTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_plugin_catalog_unit_test
+  plugin/PluginCatalogTest.cpp
+)
+
+target_link_libraries(dasall_plugin_catalog_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_plugin_catalog_unit_test)
+
+add_test(NAME PluginCatalogTest COMMAND dasall_plugin_catalog_unit_test)
+set_tests_properties(PluginCatalogTest PROPERTIES LABELS "unit")
