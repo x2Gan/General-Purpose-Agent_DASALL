@@ -1,5 +1,6 @@
 // Keep tracing public headers in the infra build graph as they are frozen.
 #include "tracing/ITracerProvider.h"
+#include "tracing/ITracer.h"
 
 namespace dasall::infra::tracing {
 
