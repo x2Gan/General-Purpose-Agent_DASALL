@@ -283,6 +283,23 @@ target_link_libraries(dasall_contract_install_executor_interface_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_boot_control_adapter_interface_boundary_test
+  BootControlAdapterInterfaceBoundaryContractTest
+  smoke/BootControlAdapterInterfaceBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_boot_control_adapter_interface_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_boot_control_adapter_interface_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_logger_interface_boundary_test
   LoggerInterfaceBoundaryContractTest
   smoke/LoggerInterfaceBoundaryContractTest.cpp
