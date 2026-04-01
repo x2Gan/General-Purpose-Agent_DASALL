@@ -3,11 +3,11 @@
 #include <functional>
 #include <memory>
 
+#include "tracing/TraceTypes.h"
+
 namespace dasall::infra::tracing {
 
 class ISpan;
-struct SpanDescriptor;
-struct TraceContext;
 
 using ActiveSpanCallback = std::function<void()>;
 

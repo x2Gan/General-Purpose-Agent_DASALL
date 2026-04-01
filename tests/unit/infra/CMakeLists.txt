@@ -163,6 +163,21 @@ dasall_apply_common_options(dasall_metric_types_unit_test)
 add_test(NAME MetricTypesTest COMMAND dasall_metric_types_unit_test)
 set_tests_properties(MetricTypesTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_trace_types_unit_test
+  tracing/TraceTypesTest.cpp
+)
+
+target_link_libraries(dasall_trace_types_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_trace_types_unit_test)
+
+add_test(NAME TraceTypesTest COMMAND dasall_trace_types_unit_test)
+set_tests_properties(TraceTypesTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_infra_service_facade_unit_test
   InfraServiceFacadeTest.cpp
 )
