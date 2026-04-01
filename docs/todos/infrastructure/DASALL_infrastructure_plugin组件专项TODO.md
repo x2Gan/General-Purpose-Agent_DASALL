@@ -147,7 +147,7 @@
 | PluginDescriptor 字段与约束冻结 | 详设 6.5；infra 系统 6.5 | 数据结构 | P0 | Done | PLG-TODO-001 | 该对象字段清单齐备，可直接落 L2 |
 | PluginCatalog 结构定义 | 详设 6.5、6.3 | 数据结构 | P0 | Done | PLG-TODO-002 | discovered_plugins[] + rejected_plugins[] 清晰，可直接拆 |
 | IPluginManager 接口冻结与骨架 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Done | PLG-TODO-003 | 已通过最小 request/result 边界收敛修复签名缺口，接口与 skeleton 可直接编译验证 |
-| IPluginPolicyGate 接口定义 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Not Started | PLG-TODO-004 | evaluate 方法与返回约束清晰，但依赖 INF-TODO-017 实现 |
+| IPluginPolicyGate 接口定义 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Done | PLG-TODO-004 | 已通过最小 PluginPolicyRequest 收敛 manifest/profile 缺口，并复用已冻结的 PolicySnapshot/PolicyDecisionRef 边界 |
 | SignatureReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Blocked | PLG-BLK-01 | verified/signer/chain_status/reason 可定义，但 trust_store 细节阻塞 |
 | CompatibilityReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Blocked | PLG-BLK-02 | abi_ok/api_ok/dependency_ok 可定义，但 ABI 规则阻塞 |
 | IPluginSignatureVerifier 接口 | 详设 6.6 | 接口 | P1 | Blocked | PLG-BLK-03 | 接口名存在，但实现依赖 trust_store 与链验规范冻结 |
@@ -174,7 +174,7 @@
 | PLG-TODO-001 | Done | 定义 PluginDescriptor 数据结构 | 详设 6.5；infra 系统 6.5 | 详设 6.5 核心对象与 contracts 对齐 | L2 | infra/include/plugin/PluginDescriptor.h，承载 plugin_id、version、abi、trust_level、status、source 字段 | unit：字段默认值与 unknown 兜底；contract：不越权扩写标识语义 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_descriptor_unit_test dasall_contract_plugin_descriptor_boundary_test && ctest --test-dir build-ci -N -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest"` | 无 | 无 | 无 | 数据结构头文件、基础单测、字段说明文档 | 已完成（2026-04-01）：PluginDescriptor.h、PluginDescriptorFieldTest、PluginDescriptorBoundaryContractTest 落盘；空值统一收敛为 unknown，ctest 发现 2 个用例并全部通过 |
 | PLG-TODO-002 | Done | 定义 PluginCatalog 数据结构 | 详设 6.5、6.3 | 详设 6.5 对象、6.3 发现结果语义 | L2 | infra/include/plugin/PluginCatalog.h，承载 discovered_plugins[]、rejected_plugins[] 字段，拒绝原因可追溯 | unit：空 catalog、全发现、全拒绝三种状态；contract：与 Observation evidence_ref 关联性测试 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_catalog_unit_test dasall_contract_plugin_catalog_boundary_test && ctest --test-dir build-ci -N -R "PluginCatalogTest|PluginCatalogBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginCatalogTest|PluginCatalogBoundaryContractTest"` | PLG-TODO-001 | 无 | 无 | 数据结构头文件、单测与合约测试 | 已完成（2026-04-01）：PluginCatalog.h、PluginCatalogTest、PluginCatalogBoundaryContractTest 落盘；空 catalog/全发现/全拒绝和 evidence_ref 边界均已覆盖，ctest 发现 2 个用例并全部通过 |
 | PLG-TODO-003 | Done | 新增 IPluginManager 接口与骨架实现 | 详设 6.6；infra 系统 6.6 | 详设 6.6 核心接口、6.7 主流程时序 | L2 | infra/include/plugin/IPluginManager.h 与 infra/src/plugin/PluginManager.cpp 骨架，包含 discover()、validate()、load()、unload()、list_active() 五个方法 | unit：接口编译与返回对象类型；contract：ResultCode 引用不越权 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_manager_interface_unit_test dasall_contract_plugin_manager_boundary_test && ctest --test-dir build-ci -N -R "PluginManagerInterfaceCompileTest|PluginManagerBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginManagerInterfaceCompileTest|PluginManagerBoundaryContractTest"` | PLG-TODO-001、PLG-TODO-002 | 无 | 无 | 接口头文件、空壳实现、编译与单测证据 | 已完成（2026-04-01）：IPluginManager.h、PluginManager.cpp、PluginManagerInterfaceCompileTest、PluginManagerBoundaryContractTest 落盘；最小 request/result 边界已在同轮收敛，ctest 发现 2 个用例并全部通过 |
-| PLG-TODO-004 | Not Started | 新增 IPluginPolicyGate 接口 | 详设 6.6；infra 系统 6.6 | 详设 6.6 IPluginPolicyGate、6.3 策略决策 | L2 | infra/include/plugin/IPluginPolicyGate.h，包含 evaluate(manifest, policy_snapshot, profile) 方法，返回 PolicyDecisionRef | unit：接口编译；contract：不越权扩写策略对象 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest"` | PLG-TODO-001、INF-TODO-017（SecurityPolicyManager） | 无 | 无 | 接口头文件、编译证据 | 仅当接口定义与详设 6.6 一致且编译通过时完成 |
+| PLG-TODO-004 | Done | 新增 IPluginPolicyGate 接口 | 详设 6.6；infra 系统 6.6 | 详设 6.6 IPluginPolicyGate、6.3 策略决策 | L2 | infra/include/plugin/IPluginPolicyGate.h，包含 evaluate(manifest, policy_snapshot, profile) 方法，返回 PolicyDecisionRef | unit：接口编译；contract：不越权扩写策略对象 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_policy_gate_interface_unit_test dasall_contract_plugin_policy_gate_boundary_test && ctest --test-dir build-ci -N -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"` | PLG-TODO-001、INF-TODO-017（SecurityPolicyManager） | 无 | 无 | 接口头文件、编译证据 | 已完成（2026-04-01）：IPluginPolicyGate.h、PluginPolicyGateInterfaceCompileTest、PluginPolicyGateBoundaryContractTest 落盘；最小 PluginPolicyRequest 已在同轮收敛，ctest 发现 2 个用例并全部通过 |
 | PLG-TODO-005 | Not Started | 建立 PluginValidationPipeline 骨架与三检流程 | 详设 6.3、6.7、6.8 | 详设 6.7 主流程、6.8 异常流程、6.3 子组件依赖 | L2 | infra/src/plugin/PluginValidationPipeline.cpp（or PluginValidatorImpl.cpp），骨架实现 policy->signature->compat 三检流程，失败时返回对应 Report | unit：三检失败分支可区分；contract：聚合 Report 语义稳定 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginValidationPipelineTest"` | PLG-TODO-003、PLG-TODO-004、PLG-TODO-001、PLG-TODO-002（以及 INF-TODO-017） | 无 | 无 | pipeline 实现、单测 | 仅当三检流程失败可判定（拒绝可溯源）且编译通过时完成 |
 | PLG-TODO-006 | Not Started | 新增 PluginAuditAdapter 适配器 | 详设 6.10；infra 系统 6.10 | 详设 6.10 审计点与字段清单 | L2 | infra/src/plugin/PluginAuditAdapter.cpp，负责生成 plugin load/unload 与 policy deny 的 AuditEvent，含 actor、action、target、outcome、evidence_ref、reason_code | unit：AuditEvent 必填字段校验；integration：审计写入与导出可追踪 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L "unit|integration" -R "PluginAudit"` | PLG-TODO-001、INF-TODO-016（AuditService） | 无 | 无 | adapter 实现、单测与集成测试 | 仅当高风险动作（load/unload/policy deny）有审计记录，且 evidence_ref 可解引时完成 |
 | PLG-TODO-007 | Done | 定义 plugin 私有错误码域 | 详设 6.6、9.1 | 详设 6.6 错误语义、9.1 failure injection 场景 | L2 | infra/include/InfraErrorCode.h（or 新增 plugin/PluginErrorCode.h），定义六个 INF_E_PLUGIN_* 错误码并在 infra facade 侧建立映射入口 | unit：码值可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test && ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"` | 无 | 无 | 无 | 错误码头文件、映射说明、单测与合约测试 | 已完成（2026-04-01）：PluginErrorCode.h、PluginErrorCodeTest、PluginErrorCodeBoundaryContractTest 落盘；六个 `INF_E_PLUGIN_*` 码名已在设计收敛文档中冻结并全部通过 unit/contract 验证 |
@@ -691,6 +691,68 @@ Build 合规复核：
 
 ---
 
+## 18. 本轮执行记录（2026-04-01 / PLG-TODO-004）
+
+### 18.1 选中任务
+
+1. 本轮任务：PLG-TODO-004。
+2. 可执行性依据：INF-TODO-017 已完成，PolicySnapshot/PolicyDecisionRef/ISecurityPolicyManager 边界均已冻结；当前唯一缺口是 manifest 仍被 INF-BLK-09 阻塞，但可以在本轮内通过最小 request 收敛修复。
+
+### 18.2 Blocker 修复与 Design 结论
+
+阻塞证据：
+
+1. docs/architecture/DASALL_infra_plugin模块详细设计.md 6.6 将 IPluginPolicyGate 描述为 evaluate(manifest, policy_snapshot, profile)，但 PluginManifest 仍处于 INF-BLK-09 阻塞链上，不能在本轮伪造完整对象。
+2. 同一设计 6.3 说明 PluginPolicyGate 的真实输入语义是 PolicySnapshot、allowlist 和 trust policy；当前这些细节并没有独立公共对象，若强拆会和已冻结的 PolicySnapshot 边界重复。
+3. PLG-TODO-004 本身是 L2 接口任务，要求的是接口冻结和编译/边界验证，而不是策略引擎实现。
+
+最小 blocker-fix：
+
+1. 新增 docs/todos/infrastructure/PLG-TODO-004-IPluginPolicyGate设计收敛.md，定义 PluginPolicyRequest，以已冻结的 PluginDescriptor 承接治理字段，并用 manifest_ref/profile_id 两个 ref 锚点承接未解阻的 manifest 与 profile 细节。
+2. evaluate 统一冻结为 evaluate(request, policy_snapshot)，输出继续复用已冻结的 PolicyDecisionRef，不新增 plugin 私有决策对象。
+
+D 结论：
+
+1. IPluginPolicyGate 只冻结一个 evaluate 入口，职责限定为插件准入判定，不承担策略快照获取、patch、rollback 或 runtime 恢复。
+2. PluginPolicyRequest 只暴露 descriptor、manifest_ref、profile_id 三个边界字段，不持有完整 PluginManifest、PolicyBundle 或 ErrorInfo。
+3. Build 三件套锁定为：
+        - 代码目标：infra/include/plugin/IPluginPolicyGate.h。
+        - 测试目标：PluginPolicyGateInterfaceCompileTest、PluginPolicyGateBoundaryContractTest。
+        - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_policy_gate_interface_unit_test dasall_contract_plugin_policy_gate_boundary_test && ctest --test-dir build-ci -N -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"。
+4. D Gate：PASS。
+
+### 18.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/plugin/IPluginPolicyGate.h：新增 IPluginPolicyGate 与 PluginPolicyRequest，冻结策略判定入口及最小输入边界。
+2. tests/unit/infra/plugin/PluginPolicyGateInterfaceTest.cpp：覆盖 evaluate 签名、有效输入 allow 决策与无效输入 deny 决策。
+3. tests/contract/smoke/PluginPolicyGateBoundaryContractTest.cpp：覆盖 request 仅持有 PluginDescriptor + ref，不拥有 blocked manifest 或 policy bundle 对象的边界约束。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成 public header 与定向 unit/contract 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_plugin_policy_gate_interface_unit_test dasall_contract_plugin_policy_gate_boundary_test`：通过。
+3. `ctest --test-dir build-ci -N -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"`：通过，发现 2 个测试。
+4. `ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：接口和 request 命名已直接表达准入判定边界，无需额外冗余注释。
+2. 正负例覆盖：unit 覆盖 evaluate 签名与 allow/deny 两条输入路径；contract 覆盖 request 不越权拥有 blocked manifest/policy 对象。
+3. 测试发现性：已通过 `ctest -N -R ...` 验证新增 unit/contract 用例进入 CTest 图。
+4. TODO 证据回写：已完成 blocker 说明、任务状态、验收命令与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 IPluginPolicyGate 接口、PluginPolicyRequest、定向 unit/contract 测试、设计收敛文档与专项 TODO/工作日志证据。
+
+阻塞修复：
+
+1. 原任务直接依赖未冻结的 PluginManifest；本轮先用 PluginPolicyRequest 的 manifest_ref/profile_id 收敛接口边界，再冻结 evaluate 入口。
+2. allowlist/trust policy 当前没有独立对象；本轮保持它们继续内聚在已冻结的 PolicySnapshot 语义内，不额外拆散边界。
+3. 原任务行的验收命令只构建 `dasall_infra`，无法保证新增测试目标可执行；本轮已同步修正为显式构建 unit/contract 目标。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -700,6 +762,7 @@ Build 合规复核：
 | v1.2 | 2026-04-01 | 回写 PLG-TODO-002 设计/构建证据，修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 | v1.3 | 2026-04-01 | 回写 PLG-TODO-007 的 blocker 修复、设计/构建证据，并修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 | v1.4 | 2026-04-01 | 回写 PLG-TODO-003 的接口边界 blocker 修复、设计/构建证据，并修正该任务验收命令中的测试目标构建缺口 | （待评审） |
+| v1.5 | 2026-04-01 | 回写 PLG-TODO-004 的 manifest 输入边界 blocker 修复、设计/构建证据，并修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 
 ---
 

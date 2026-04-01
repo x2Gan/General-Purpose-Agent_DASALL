@@ -627,3 +627,18 @@ dasall_apply_common_options(dasall_plugin_manager_interface_unit_test)
 
 add_test(NAME PluginManagerInterfaceCompileTest COMMAND dasall_plugin_manager_interface_unit_test)
 set_tests_properties(PluginManagerInterfaceCompileTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_plugin_policy_gate_interface_unit_test
+  plugin/PluginPolicyGateInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_plugin_policy_gate_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_plugin_policy_gate_interface_unit_test)
+
+add_test(NAME PluginPolicyGateInterfaceCompileTest COMMAND dasall_plugin_policy_gate_interface_unit_test)
+set_tests_properties(PluginPolicyGateInterfaceCompileTest PROPERTIES LABELS "unit")

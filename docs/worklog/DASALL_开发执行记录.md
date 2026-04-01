@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #060
+
+- 日期：2026-04-01
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-004 新增 IPluginPolicyGate 接口
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLG-TODO-004-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/PLG-TODO-004-IPluginPolicyGate设计收敛.md](docs/todos/infrastructure/PLG-TODO-004-IPluginPolicyGate%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 manifest 输入缺口收敛为 PluginPolicyRequest，并记录 evaluate(request, policy_snapshot) 的签名收敛结论。
+   - 对原任务验收命令做最小 blocker-fix：显式构建新增 unit/contract 测试目标，避免 CTest 在未生成可执行文件时误判失败。
+2. 完成 PLG-TODO-004-B 代码落地：
+   - 新增 [infra/include/plugin/IPluginPolicyGate.h](infra/include/plugin/IPluginPolicyGate.h)
+   - 新增 [tests/unit/infra/plugin/PluginPolicyGateInterfaceTest.cpp](tests/unit/infra/plugin/PluginPolicyGateInterfaceTest.cpp)
+   - 新增 [tests/contract/smoke/PluginPolicyGateBoundaryContractTest.cpp](tests/contract/smoke/PluginPolicyGateBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_policy_gate_interface_unit_test dasall_contract_plugin_policy_gate_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_policy_gate_interface_unit_test dasall_contract_plugin_policy_gate_boundary_test` 通过。
+   - `ctest --test-dir build-ci -N -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"` 通过，发现 2 个测试。
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest|PluginPolicyGateBoundaryContractTest"` 通过，2/2 tests passed。
+
+### 结果
+
+1. IPluginPolicyGate 已以最小 request + PolicyDecisionRef 形式落盘，后续 validation pipeline 可以直接复用统一的准入判定边界。
+2. 本轮先修复了 manifest 输入对象仍未冻结的 blocker，再落到接口与定向 unit/contract 测试，未越界到 Manifest/PolicyBundle 的完整对象冻结或策略引擎实现。
+
+### 下一步
+
+1. Phase 2 的两个核心接口冻结任务已经完成；若继续按专项 TODO 推进，直接后继应进入 PLG-TODO-005/006 或 Phase 3 接线/基线完善任务。
+
+### 风险
+
+1. PluginPolicyRequest 当前只承接 descriptor、manifest_ref、profile_id；待 PluginManifest 解阻后，如果策略判定需要 richer manifest 视图，应通过增量 request 扩展承接，而不是替换现有接口边界。
+
 ## 记录 #059
 
 - 日期：2026-04-01
