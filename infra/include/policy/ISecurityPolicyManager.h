@@ -2,7 +2,6 @@
 
 #include <string>
 
-#include "PolicyDecisionRef.h"
 #include "PolicyTypes.h"
 
 namespace dasall::infra::policy {
