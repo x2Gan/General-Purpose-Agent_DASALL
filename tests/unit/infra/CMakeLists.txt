@@ -103,6 +103,21 @@ dasall_apply_common_options(dasall_metrics_provider_interface_unit_test)
 add_test(NAME MetricsProviderInterfaceTest COMMAND dasall_metrics_provider_interface_unit_test)
 set_tests_properties(MetricsProviderInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_meter_interface_unit_test
+  MetricsMeterInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_meter_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_meter_interface_unit_test)
+
+add_test(NAME MetricsMeterInterfaceTest COMMAND dasall_meter_interface_unit_test)
+set_tests_properties(MetricsMeterInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_logger_interface_unit_test
   LoggerInterfaceTest.cpp
 )

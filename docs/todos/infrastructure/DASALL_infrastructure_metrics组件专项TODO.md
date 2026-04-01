@@ -159,7 +159,7 @@
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | MET-TODO-001 | Done | 定义 IMetricsProvider 接口头文件 | metrics 设计 6.6；编码规范 3.7 | 6.6 IMetricsProvider | L3 | infra/include/metrics/IMetricsProvider.h | init(config), get_meter(scope), force_flush(timeout_ms), shutdown(timeout_ms) | unit：接口可编译；contract：错误语义入口可对接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" | 无 | 无 | 无 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricsProvider.h、tests/unit/infra/MetricsProviderInterfaceTest.cpp、tests/contract/smoke/MetricsProviderInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当方法签名与 6.6 一致、边界仅暴露 contracts 错误语义且测试通过时完成 |
-| MET-TODO-002 | Not Started | 定义 IMeter 接口头文件 | metrics 设计 6.6/6.7 | 6.6 IMeter；6.7 主流程 | L3 | infra/include/metrics/IMeter.h | create_counter, create_gauge, create_histogram, record | unit：record 入口可编译；contract：采样对象语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001 | 无 | 无 | 接口头文件、编译记录 | 仅当接口能覆盖 6.7 正常流程输入时完成 |
+| MET-TODO-002 | Done | 定义 IMeter 接口头文件 | metrics 设计 6.6/6.7 | 6.6 IMeter；6.7 主流程 | L3 | infra/include/metrics/IMeter.h | create_counter, create_gauge, create_histogram, record | unit：record 入口可编译；contract：采样对象语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" | MET-TODO-001 | 无 | 无 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMeter.h、tests/unit/infra/MetricsMeterInterfaceTest.cpp、tests/contract/smoke/MetricsMeterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当接口能覆盖 6.7 正常流程输入、保持与后续 MetricTypes 前置声明兼容且测试通过时完成 |
 | MET-TODO-003 | Not Started | 定义 IMetricExporter 接口头文件 | metrics 设计 6.6/6.8 | 6.6 IMetricExporter；6.8 导出异常 | L3 | infra/include/metrics/IMetricExporter.h | export_batch(batch), force_flush(timeout_ms), shutdown(timeout_ms) | unit：导出成功/失败调用面可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001 | OTLP 首版启用未冻结 | 首版仅约束 noop/prom_text 语义 | 接口头文件、编译记录 | 仅当导出接口语义覆盖成功/失败/超时三路径时完成 |
 | MET-TODO-004 | Not Started | 定义 IMetricConfigPolicy 接口头文件 | metrics 设计 6.6/6.9 | 6.6 IMetricConfigPolicy；6.9 配置项表 | L3 | infra/include/metrics/IMetricConfigPolicy.h | validate_identity, normalize_labels, should_accept | unit：identity 与 labels 策略入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-002、MET-TODO-006 | 标签 taxonomy 未全局评审 | 先冻结核心 allowlist 键集合 | 接口头文件、编译记录 | 仅当策略接口与 6.9 配置键一致时完成 |
 | MET-TODO-005 | Not Started | 定义 IMetricsHealthProbe 接口头文件 | metrics 设计 6.6/6.10 | 6.6 IMetricsHealthProbe；6.10 健康观测 | L2 | infra/include/metrics/IMetricsHealthProbe.h | snapshot() | unit：健康快照出口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-007 | 与 infra/health 统一探针签名未冻结 | 先输出 metrics 私有快照对象 | 接口头文件、编译记录 | 仅当 snapshot 返回对象能承载 queue/degraded/exporter_state 时完成 |
@@ -344,3 +344,56 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R ...` 回填 2 个新增测试的发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物、环境 blocker 恢复与验收摘要。
 5. 提交隔离：本轮提交范围限定为 IMetricsProvider 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
+
+## 14. 本轮执行记录（2026-04-01 / MET-TODO-002）
+
+### 14.1 选中任务
+
+1. 本轮任务：MET-TODO-002。
+2. 可执行性依据：MET-TODO-001 已完成，IMetricsProvider 已冻结 provider/config/scope/error surface；metrics 设计 6.6/6.7 已明确 IMeter 负责创建 Counter/Gauge/Histogram 并接收 record(sample) 调用，可直接收敛为接口头文件任务。
+
+### 14.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6 已冻结 IMeter 的 `create_counter`、`create_gauge`、`create_histogram`、`record` 四个入口。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.7 已明确主流程为“先取 meter 与 instrument，再写入 MetricSample”，说明 IMeter 不应提前承担聚合或配置职责。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 4.2 粒度评估指出 InstrumentHandle 具体类型约束未完全成文，因此本轮只冻结最小 handle 占位，不把实现期 registry 细节泄露到边界。
+4. MET-TODO-006 尚未完成，MetricIdentity/MetricSample 还未正式落盘；为避免后续返工，本轮接口直接依赖前置声明而不重复定义临时对象模型。
+
+外部参考：
+
+1. OpenTelemetry Metrics API（stable）要求 Meter 提供创建 Counter/Gauge/Histogram 的能力，且明确 Meter 不负责配置；据此本轮将 IMeter 限定为 instrument 创建与 sample 录入边界，不引入配置、聚合或导出职责。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IMeter.h，冻结 `InstrumentHandle` 最小占位，以及依赖 `MetricIdentity`、`MetricSample` 前置声明的四个接口签名。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/metrics/IMeter.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 MetricsMeterInterfaceTest 与 MetricsMeterInterfaceBoundaryContractTest。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 14.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/metrics/IMeter.h：新增 InstrumentHandle 最小占位，并冻结 create_counter/create_gauge/create_histogram/record 四个入口。
+2. tests/unit/infra/MetricsMeterInterfaceTest.cpp：覆盖编译期签名检查、InstrumentHandle 正负例与 record 错误面 contract 约束。
+3. tests/contract/smoke/MetricsMeterInterfaceBoundaryContractTest.cpp：覆盖 IMeter 仅依赖本地前置声明对象和 contracts 错误面的边界断言。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与 unit/contract 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`：通过；聚合执行结果为 unit 53/53、contract 102/102 全部通过，新增 `MetricsMeterInterfaceBoundaryContractTest` 已编入 contract 聚合目标。
+3. `ctest --test-dir build-ci -N -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest"`：通过，发现 2 个测试，分别为 `MetricsMeterInterfaceTest` 与 `MetricsMeterInterfaceBoundaryContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：接口与占位类型命名已直接表达职责，无新增实现细节，故未补充冗余注释。
+2. 正负例覆盖：unit 覆盖 InstrumentHandle 正负例与错误面负例；contract 覆盖本地前置声明边界与 contracts 错误面约束。
+3. 测试发现性：已用 `ctest -N -R ...` 回填 2 个新增测试的发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物与验收摘要。
+5. 提交隔离：本轮提交范围限定为 IMeter 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
