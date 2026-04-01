@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 policy 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-04-01  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/policy
 
@@ -170,7 +170,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| POL-TODO-001 | Not Started | 定义 PolicyBundle 与 PolicyRuleDescriptor 数据结构 | policy 设计 6.5；架构 5.10；编码规范 3.7 | 6.5 核心对象表 | L3 | infra/include/policy/PolicyTypes.h | PolicyBundle、PolicyRuleDescriptor | unit：对象字段完整性；contract：effect/domain 仅做语义映射不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | 无 | 无 | 无 | PolicyTypes.h、基础对象测试 | 仅当 bundle_id/schema_version/source/checksum/rules 与 rule_id/domain/effect/priority/mode/conditions/reason_code 全部落盘，且不引入业务依赖时完成 |
+| POL-TODO-001 | Done (2026-04-01) | 定义 PolicyBundle 与 PolicyRuleDescriptor 数据结构 | policy 设计 6.5；架构 5.10；编码规范 3.7 | 6.5 核心对象表 | L3 | infra/include/policy/PolicyTypes.h | PolicyBundle、PolicyRuleDescriptor | unit：对象字段完整性；contract：effect/domain 仅做语义映射不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | 无 | 无 | 无 | PolicyTypes.h、PolicyBundle.h 兼容转发、PolicyTypesRuleBundleTest、PolicyTypesBoundaryContractTest；2026-04-01 已落盘并完成 CTest 注册与验收 | 仅当 bundle_id/schema_version/source/checksum/rules 与 rule_id/domain/effect/priority/mode/conditions/reason_code 全部落盘，且不引入业务依赖时完成 |
 | POL-TODO-002 | Not Started | 定义 PolicyPatch 与 ValidationReport 数据结构 | policy 设计 6.5/6.6 | 6.5 核心对象表；6.6 validate_patch 语义 | L3 | infra/include/policy/PolicyTypes.h | PolicyPatch、ValidationReport | unit：patch 基础字段与 report 阻断语义；contract：错误原因只映射 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结的 operations 白名单与 field_path 约束推进 | PolicyTypes.h、对象测试 | 仅当 patch_id/base_generation/operations/actor/reason 与 blocking_errors/warnings/invalid_rule_ids/field_paths 全部落盘，且阻断语义可二值判定时完成 |
 | POL-TODO-003 | Not Started | 定义 PolicySnapshot 与 PolicyOpResult 数据结构 | policy 设计 6.5/6.8 | 6.5 核心对象表；6.8 回滚兜底 | L3 | infra/include/policy/PolicyTypes.h | PolicySnapshot、PolicyOpResult | unit：generation 单调与 LKG 引用语义；contract：错误结果不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001 | 无 | 无 | PolicyTypes.h、对象测试 | 仅当 snapshot_id/generation/version/mode/effective_rules/source_chain/lkg_ref 与 applied/rolled_back/dry_run/snapshot_id/generation/error_info 全部落盘，且 generation 语义可测试时完成 |
 | POL-TODO-004 | Not Started | 定义 PolicyQueryContext 与 PolicyDecisionRef 数据结构 | policy 设计 6.5/6.7；contracts-freeze 术语表 | 6.5 核心对象表；6.7 查询流程 | L3 | infra/include/policy/PolicyTypes.h | PolicyQueryContext、PolicyDecisionRef | unit：上下文字段 unknown 兜底；contract：decision 只对齐 allow/deny/require_confirmation 语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001 | POL-BLK-002 | 完成 contracts 语义映射 catalog 或共享对象冻结结论 | PolicyTypes.h、contract 边界测试 | 仅当 module/operation/target_type/target_ref/actor_ref/request_id/session_id/trace_id/task_id/profile_id 与 decision/reason_code/matched_rule_ids/snapshot_id/generation/evidence_ref/warnings 全部落盘，且 decision 语义无越权时完成 |
@@ -307,3 +307,59 @@
    - 并行推动 POL-BLK-002、POL-BLK-006 解阻，再进入 validator/resolver/manager 主链。
    - 在 audit、metrics、health 接口冻结前，不把桥接任务误写成 Build-ready。
    - 首轮验收只以 dasall_infra、unit、contract 为准，不把 integration 作为伪完成条件。
+
+## 12. 本轮执行记录（2026-04-01 / POL-TODO-001）
+
+### 12.1 选中任务
+
+1. 本轮任务：POL-TODO-001。
+2. 可执行性依据：该任务无前置依赖和阻塞项；当前仓库虽已存在 PolicyBundle.h，但仍缺少本专项 TODO 要求的 PolicyTypes.h 统一冻结入口，适合在不触及 patch/snapshot/query/error 的前提下完成最小收敛。
+
+### 12.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_policy模块详细设计.md 6.5 已冻结 policy 规则域、effect、mode、PolicyRuleDescriptor 与 PolicyBundle 的字段边界。
+2. docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md 5.1、6.1、7.1 明确要求阶段 A 先收敛 PolicyTypes，再推进 patch/snapshot/error 与接口冻结。
+3. 当前仓库仅有 infra/include/policy/PolicyBundle.h、PolicyPatch.h、PolicySnapshot.h、PolicyDecisionRef.h、ISecurityPolicyManager.h 分散落盘，尚无 PolicyTypes.h 统一入口，且 tests 侧也缺少直接面向 PolicyTypes 的对象冻结测试。
+
+外部参考：
+
+1. OPA FAQ 的 conflict resolution 与 secure policy authoring 建议强调，策略系统需要显式定义决策语义与冲突优先级，并优先采用 default deny 或 deny override 风格；本轮据此保留 deny-first precedence helper，并把 domain/effect 的字符串映射显式冻结到 PolicyTypes.h，而不把共享 contracts 对象提前引入 infra/policy。
+
+D 结论：
+
+1. Design -> Build 映射：新增 infra/include/policy/PolicyTypes.h 作为 PolicyDomain、PolicyEffect、PolicyMode、PolicyRuleDescriptor、PolicyBundle 的统一冻结入口；既有 infra/include/policy/PolicyBundle.h 退化为兼容转发头，避免破坏现有 include 面。
+2. Build 三件套：
+   - 代码目标：新增 PolicyTypes.h，并把 PolicyBundle.h 改为兼容转发，同时更新 infra/CMakeLists.txt 公开头文件注册。
+   - 测试目标：新增 tests/unit/infra/PolicyTypesRuleBundleTest.cpp 覆盖对象字段完整性正负例；新增 tests/contract/smoke/PolicyTypesBoundaryContractTest.cpp 覆盖 domain/effect 语义映射与 deny-first precedence。
+   - 验收命令：优先尝试 Build_CMakeTools；若工作区无法配置，则回退到 cmake -S . -B build-ci -G Ninja、cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests、ctest --test-dir build-ci -N -R "PolicyTypesRuleBundleTest|PolicySnapshotCompatibilityTest|PolicyTypesBoundaryContractTest|PolicyDecisionBoundaryTest"、ctest --test-dir build-ci --output-on-failure -L contract。
+3. D Gate：PASS。
+
+### 12.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/policy/PolicyTypes.h：新增 policy 统一类型入口，冻结 domain/effect/mode、rule descriptor、bundle 与 effect precedence helper。
+2. infra/include/policy/PolicyBundle.h：改为兼容转发，保持既有 include 路径稳定。
+3. infra/CMakeLists.txt：把 PolicyTypes.h 纳入 dasall_infra 公共头文件清单。
+4. tests/unit/infra/PolicyTypesRuleBundleTest.cpp、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：新增并注册 unit 测试与聚合目标。
+5. tests/contract/smoke/PolicyTypesBoundaryContractTest.cpp、tests/contract/CMakeLists.txt：新增并注册 contract 边界测试。
+
+验收结果：
+
+1. Build_CMakeTools：失败，返回“无法配置项目”；按仓库既定回退策略改用 build-ci 命令链，不视为任务阻塞。
+2. cmake -S . -B build-ci -G Ninja：通过。
+3. cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests：通过。
+4. ctest --test-dir build-ci -N -R "PolicyTypesRuleBundleTest|PolicySnapshotCompatibilityTest|PolicyTypesBoundaryContractTest|PolicyDecisionBoundaryTest"：通过，发现 4 个测试。
+5. ctest --test-dir build-ci --output-on-failure -R "PolicyTypesRuleBundleTest|PolicySnapshotCompatibilityTest|PolicyTypesBoundaryContractTest|PolicyDecisionBoundaryTest"：通过，4/4 tests passed。
+6. ctest --test-dir build-ci --output-on-failure -L contract：通过，116/116 tests passed。
+7. ctest --test-dir build-ci --output-on-failure -R "PolicyTypesRuleBundleTest|PolicySnapshotCompatibilityTest"：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮新增类型头与兼容转发结构命名已足够自解释，无需额外冗余注释。
+2. 正负例覆盖：unit 覆盖合法 rule/bundle 正例与缺失 reason_code/checksum 负例；contract 覆盖 domain/effect 语义映射正例与 deny-first precedence 负例守卫。
+3. 测试发现性：已通过 ctest -N 验证新增 unit/contract 测试进入 CTest 图。
+4. TODO 证据回写：已完成主任务状态、交付物和验收结果回写。
+5. 提交隔离：本轮提交范围限定为 PolicyTypes 头文件、兼容转发、测试注册与本专项 TODO 文档。
