@@ -6,12 +6,11 @@
 #include <string>
 #include <utility>
 
+#include "secret/SecureBuffer.h"
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 
 namespace dasall::infra::secret {
-
-struct SecureBuffer;
 
 enum class SecretAccessMode {
   Unspecified = 0,

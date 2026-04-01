@@ -26,6 +26,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/ILogger.h
   include/health/IHealthProbe.h
   include/secret/ISecretHealthSource.h
+  include/secret/SecureBuffer.h
   include/secret/SecretTypes.h
   include/InfraContext.h
   include/InfraErrorCode.h
