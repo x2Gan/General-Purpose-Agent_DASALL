@@ -537,3 +537,18 @@ dasall_apply_common_options(dasall_ota_package_verifier_interface_unit_test)
 
 add_test(NAME OTAPackageVerifierInterfaceTest COMMAND dasall_ota_package_verifier_interface_unit_test)
 set_tests_properties(OTAPackageVerifierInterfaceTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_install_executor_interface_unit_test
+  InstallExecutorInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_install_executor_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_install_executor_interface_unit_test)
+
+add_test(NAME InstallExecutorInterfaceTest COMMAND dasall_install_executor_interface_unit_test)
+set_tests_properties(InstallExecutorInterfaceTest PROPERTIES LABELS "unit")

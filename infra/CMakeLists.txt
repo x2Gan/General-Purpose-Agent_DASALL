@@ -48,6 +48,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/config/IConfigPublisher.h
   include/diagnostics/DiagnosticsErrors.h
   include/diagnostics/DiagnosticsTypes.h
+  include/ota/IInstallExecutor.h
   include/ota/IOTAPackageVerifier.h
   include/ota/OTATypes.h
   include/policy/ISecurityPolicyManager.h
