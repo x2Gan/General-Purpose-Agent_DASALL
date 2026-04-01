@@ -28,9 +28,9 @@
 | 状态 | 数量 | 说明 |
 |---|---|---|
 | Implemented | 28 | 已形成对象定义并进入现有 contracts 基线 |
-| Replaced / Partial | 1 | 已有替代对象或部分实现，但与 blueprint 不完全一致 |
+| Replaced / Partial | 2 | 已有替代对象或部分实现，但与 blueprint 不完全一致 |
 | Deferred | 0 | 逐对象矩阵当前未单列 Deferred 项，延期信息主要体现在 supporting contracts 与 interface admission 证据 |
-| Missing | 15 | 当前未见对象定义或正式替代关系 |
+| Missing | 14 | 当前未见对象定义或正式替代关系 |
 
 说明：上述计数以 blueprint 对象表为基准，不含 guards、tag、catalog、checklist 等辅助资产。
 
@@ -71,7 +71,7 @@
 | prompt | PromptRelease | Implemented | [contracts/include/prompt/PromptRelease.h](contracts/include/prompt/PromptRelease.h) | 已落地 | 保持 |
 | prompt | PromptComposeRequest | Implemented | [contracts/include/prompt/PromptComposeRequest.h](contracts/include/prompt/PromptComposeRequest.h) | 已落地 | 保持 |
 | prompt | PromptComposeResult | Implemented | [contracts/include/prompt/PromptComposeResult.h](contracts/include/prompt/PromptComposeResult.h) | 已落地 | 保持 |
-| policy | PolicyDecision | Missing | 当前未见同名对象 | policy 决策尚未形成共享对象 | 新增对象 |
+| policy | PolicyDecision | Replaced / Partial | [infra/include/policy/PolicyDecisionRef.h](infra/include/policy/PolicyDecisionRef.h)、[contracts/include/boundary/PolicyDecisionMappingCatalog.h](contracts/include/boundary/PolicyDecisionMappingCatalog.h)、[tests/contract/smoke/PolicyDecisionMappingCatalogContractTest.cpp](tests/contract/smoke/PolicyDecisionMappingCatalogContractTest.cpp) | 共享对象仍缺失，但已形成正式替代映射 catalog，冻结 allow/deny/require_confirmation 语义与 infra 私有 trace 字段边界 | 维持替代映射 catalog，待 PromptPolicyDecision 与 T010 统一评审后再决定是否新增共享对象 |
 | policy | PromptPolicyDecision | Missing | 当前未见同名对象 | prompt policy 决策尚未形成共享对象 | 新增对象 |
 | policy | ReflectionDecision | Implemented | [contracts/include/checkpoint/ReflectionDecision.h](contracts/include/checkpoint/ReflectionDecision.h) | 对象已落地，但目录位于 `checkpoint/` 非 `policy/` | 需在映射中注明目录漂移 |
 | task | TaskRequest | Missing | 当前未见同名对象 | 顶层任务请求对象未显式化 | 新增对象 |
