@@ -50,15 +50,17 @@ void test_policy_operation_failures_stay_inside_contract_error_types() {
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(PolicyOpResult{}.result_code), ResultCode>);
-  static_assert(std::is_same_v<decltype(PolicyOpResult{}.error), std::optional<ErrorInfo>>);
+  static_assert(std::is_same_v<decltype(PolicyOpResult{}.error_info), std::optional<ErrorInfo>>);
 
   const auto failure = PolicyOpResult::failure(ResultCode::ValidationFieldMissing,
                                                "policy bundle is invalid",
                                                "policy.load",
                                                "ISecurityPolicyManager");
 
-  assert_true(!failure.ok,
+  assert_true(!failure.applied,
               "policy operation failures should remain explicit failures");
+  assert_true(failure.error_info.has_value(),
+              "policy operation failures should only carry contracts ErrorInfo on the failure path");
   assert_true(failure.references_only_contract_error_types(),
               "policy operation failures should remain within contracts ResultCode/ErrorInfo types");
 }

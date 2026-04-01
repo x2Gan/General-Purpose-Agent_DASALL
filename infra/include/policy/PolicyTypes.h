@@ -4,7 +4,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
+
+#include "error/ErrorInfo.h"
+#include "error/ResultCode.h"
 
 namespace dasall::infra::policy {
 
@@ -210,6 +214,99 @@ struct PolicyPatch {
     }
 
     return true;
+  }
+};
+
+struct PolicySnapshot {
+  std::string snapshot_id;
+  std::uint64_t generation = 0;
+  std::string version;
+  PolicyMode mode = PolicyMode::Unspecified;
+  std::vector<PolicyRuleDescriptor> effective_rules;
+  std::string created_at;
+  std::vector<std::string> source_chain;
+  std::string last_known_good_ref;
+
+  [[nodiscard]] bool is_valid() const {
+    if (snapshot_id.empty() || generation == 0 || version.empty() ||
+        mode == PolicyMode::Unspecified || created_at.empty() || effective_rules.empty() ||
+        source_chain.empty()) {
+      return false;
+    }
+
+    for (const auto& rule : effective_rules) {
+      if (!rule.is_valid()) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  [[nodiscard]] bool can_roll_back() const {
+    return is_valid() && !last_known_good_ref.empty();
+  }
+};
+
+struct PolicyOpResult {
+  bool applied = false;
+  bool rolled_back = false;
+  bool dry_run = false;
+  std::string snapshot_id;
+  std::uint64_t generation = 0;
+  contracts::ResultCode result_code = contracts::ResultCode::RuntimeRetryExhausted;
+  std::optional<contracts::ErrorInfo> error_info;
+
+  [[nodiscard]] static PolicyOpResult success(std::string snapshot_id,
+                                              std::uint64_t generation,
+                                              bool rolled_back = false,
+                                              bool dry_run = false) {
+    return PolicyOpResult{
+        .applied = true,
+        .rolled_back = rolled_back,
+        .dry_run = dry_run,
+        .snapshot_id = std::move(snapshot_id),
+        .generation = generation,
+        .result_code = contracts::ResultCode::RuntimeRetryExhausted,
+        .error_info = std::nullopt,
+    };
+  }
+
+  [[nodiscard]] static PolicyOpResult failure(contracts::ResultCode result_code,
+                                              std::string message,
+                                              std::string stage,
+                                              std::string source_ref) {
+    return PolicyOpResult{
+        .applied = false,
+        .rolled_back = false,
+        .dry_run = false,
+        .snapshot_id = {},
+        .generation = 0,
+        .result_code = result_code,
+        .error_info = contracts::ErrorInfo{
+            .failure_type = contracts::classify_result_code(result_code),
+            .retryable = false,
+            .safe_to_replan = false,
+            .details = contracts::ErrorDetails{
+                .code = static_cast<int>(result_code),
+                .message = std::move(message),
+                .stage = std::move(stage),
+            },
+            .source_ref = contracts::ErrorSourceRefMinimal{
+                .ref_type = "infra.policy",
+                .ref_id = std::move(source_ref),
+            },
+        },
+    };
+  }
+
+  [[nodiscard]] bool references_only_contract_error_types() const {
+    if (!error_info.has_value()) {
+      return applied;
+    }
+
+    return error_info->failure_type.has_value() &&
+           *error_info->failure_type == contracts::classify_result_code(result_code);
   }
 };
 

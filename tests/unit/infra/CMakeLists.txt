@@ -313,6 +313,21 @@ dasall_apply_common_options(dasall_policy_patch_validation_types_unit_test)
 add_test(NAME PolicyPatchValidationTypesTest COMMAND dasall_policy_patch_validation_types_unit_test)
 set_tests_properties(PolicyPatchValidationTypesTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_snapshot_op_result_types_unit_test
+  PolicySnapshotOpResultTypesTest.cpp
+)
+
+target_link_libraries(dasall_policy_snapshot_op_result_types_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_snapshot_op_result_types_unit_test)
+
+add_test(NAME PolicySnapshotOpResultTypesTest COMMAND dasall_policy_snapshot_op_result_types_unit_test)
+set_tests_properties(PolicySnapshotOpResultTypesTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_diagnostics_types_unit_test
   DiagnosticsTypesTest.cpp
 )
