@@ -487,6 +487,23 @@ target_link_libraries(dasall_contract_metrics_error_mapping_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_trace_error_mapping_test
+  TraceErrorMappingContractTest
+  smoke/TraceErrorMappingContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_trace_error_mapping_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_trace_error_mapping_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_metric_exporter_interface_boundary_test
   MetricsExporterInterfaceBoundaryContractTest
   smoke/MetricsExporterInterfaceBoundaryContractTest.cpp
