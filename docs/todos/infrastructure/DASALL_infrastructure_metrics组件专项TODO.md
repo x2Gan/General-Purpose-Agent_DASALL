@@ -163,7 +163,7 @@
 | MET-TODO-003 | Done | 定义 IMetricExporter 接口头文件 | metrics 设计 6.6/6.8 | 6.6 IMetricExporter；6.8 导出异常 | L3 | infra/include/metrics/IMetricExporter.h | export_batch(batch), force_flush(timeout_ms), shutdown(timeout_ms) | unit：导出成功/失败调用面可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" | MET-TODO-001 | OTLP 首版启用未冻结 | 首版仅约束 noop/prom_text 语义 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricExporter.h、tests/unit/infra/MetricsExporterInterfaceTest.cpp、tests/contract/smoke/MetricsExporterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当导出接口语义覆盖成功/失败/超时三路径、保持 exporter 可插拔且测试通过时完成 |
 | MET-TODO-004 | Not Started | 定义 IMetricConfigPolicy 接口头文件 | metrics 设计 6.6/6.9 | 6.6 IMetricConfigPolicy；6.9 配置项表 | L3 | infra/include/metrics/IMetricConfigPolicy.h | validate_identity, normalize_labels, should_accept | unit：identity 与 labels 策略入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-002、MET-TODO-006 | 标签 taxonomy 未全局评审 | 先冻结核心 allowlist 键集合 | 接口头文件、编译记录 | 仅当策略接口与 6.9 配置键一致时完成 |
 | MET-TODO-005 | Not Started | 定义 IMetricsHealthProbe 接口头文件 | metrics 设计 6.6/6.10 | 6.6 IMetricsHealthProbe；6.10 健康观测 | L2 | infra/include/metrics/IMetricsHealthProbe.h | snapshot() | unit：健康快照出口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-007 | 与 infra/health 统一探针签名未冻结 | 先输出 metrics 私有快照对象 | 接口头文件、编译记录 | 仅当 snapshot 返回对象能承载 queue/degraded/exporter_state 时完成 |
-| MET-TODO-006 | Not Started | 定义 MetricTypes 核心对象头文件 | metrics 设计 6.5 | 6.5 MetricIdentity/MetricSample/MetricLabels/HistogramConfig | L3 | infra/include/metrics/MetricTypes.h | 上述 4 类对象字段定义 | unit：字段完整性与默认语义验证 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | 无 | 无 | 无 | 对象头文件、单测 | 仅当字段与 6.5 对齐且默认值可二值判定时完成 |
+| MET-TODO-006 | Done | 定义 MetricTypes 核心对象头文件 | metrics 设计 6.5 | 6.5 MetricIdentity/MetricSample/MetricLabels/HistogramConfig | L3 | infra/include/metrics/MetricTypes.h | 上述 4 类对象字段定义 | unit：字段完整性与默认语义验证 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N -R MetricTypesTest && ctest --test-dir build-ci --output-on-failure -R MetricTypesTest | 无 | 无 | 无 | 对象头文件、单测；2026-04-01 已落盘 infra/include/metrics/MetricTypes.h、tests/unit/infra/MetricTypesTest.cpp，并完成 infra/tests CMake 注册 | 仅当字段与 6.5 对齐、可二值判定的 guard 完整且单测通过时完成 |
 | MET-TODO-007 | Not Started | 定义 MetricsSnapshots 对象头文件 | metrics 设计 6.5/6.10 | 6.5 ExportBatchReport/MetricsModuleSnapshot；6.10 指标清单 | L3 | infra/include/metrics/MetricsSnapshots.h | ExportBatchReport, MetricsModuleSnapshot | unit：导出与健康快照字段一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006 | 无 | 无 | 对象头文件、单测 | 仅当快照字段可覆盖成功/失败/队列/降级语义时完成 |
 | MET-TODO-008 | Not Started | 定义 MetricsErrors 错误码域 | metrics 设计 6.6；工程规范 3.6 | 6.6 错误语义 | L3 | infra/include/metrics/MetricsErrors.h | MET_E_PROVIDER_NOT_READY...MET_E_CONFIG_INVALID | contract：映射 contracts::ResultCode；unit：枚举稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-001 | contracts 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试 | 仅当 7 个错误码均有来源锚点且映射测试通过时完成 |
 | MET-TODO-009 | Not Started | 实现 MetricsFacade 初始化与写入骨架 | metrics 设计 6.2/6.7 | 6.2 MetricsFacade；6.7 步骤 1/2 | L3 | infra/src/metrics/MetricsFacade.cpp | init/get_meter/record 入口骨架 | unit：未初始化/已初始化两路径；failure：非法 identity 路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-001、MET-TODO-002、MET-TODO-006、MET-TODO-008 | 无 | 无 | Facade 骨架、单测 | 仅当初始化状态机与错误码路径可二值判定时完成 |
@@ -450,3 +450,59 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R ...` 回填 2 个新增测试的发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物与验收摘要。
 5. 提交隔离：本轮提交范围限定为 IMetricExporter 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
+
+## 16. 本轮执行记录（2026-04-01 / MET-TODO-006）
+
+### 16.1 选中任务
+
+1. 本轮任务：MET-TODO-006。
+2. 选择原因：MET-TODO-004 依赖 MET-TODO-006，尚不可执行；按 blocker-first 规则先完成最小 blocker fix，用 MetricTypes 冻结解开后续 config policy 与 meter/sample 语义依赖。
+
+### 16.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.5 已冻结 MetricIdentity、MetricSample、MetricLabels、HistogramConfig 四类对象及其核心字段。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 已给出默认 histogram buckets 和 label allowlist，可直接下沉为默认值与静态 guard。
+3. MET-TODO-002 已把 IMeter 收敛为前置声明 `MetricIdentity`/`MetricSample` 的接口，说明对象头文件现在是后续 004/009/010/011 的共同前置。
+4. 当前仓库尚无 metrics 对象定义，因此本轮可以一次性锁定字段与默认 guard，而不会与现有实现冲突。
+
+外部参考：
+
+1. OpenTelemetry Metrics API 对 instrument name 规定了首字符必须是字母、仅允许 ASCII 字母数字与 `_.-/`，并把 unit 视为受限长度的 ASCII 字符串；据此本轮把 MetricIdentity 的 name/unit guard 明确成可程序化校验。
+
+D 结论：
+
+1. Design -> Build 映射：新增 MetricTypes.h，冻结 `MetricType`、`MetricTemporality`、`MetricIdentity`、`MetricLabels`、`MetricSample`、`HistogramConfig` 及最小 allowlist 常量。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/metrics/MetricTypes.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 MetricTypesTest，覆盖 identity/sample/labels/histogram 的正负例。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N -R MetricTypesTest && ctest --test-dir build-ci --output-on-failure -R MetricTypesTest。
+3. D Gate：PASS。
+
+### 16.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/metrics/MetricTypes.h：新增 MetricType/MetricTemporality 枚举、MetricIdentity、MetricLabels、MetricSample、HistogramConfig 与 allowlist 常量。
+2. tests/unit/infra/MetricTypesTest.cpp：覆盖 name/unit guard、labels 必填 guard、counter sample 非负约束与 histogram bucket 单调性。
+3. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成头文件与 unit 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_unit_tests`：通过；聚合执行结果为 unit 55/55 全部通过，新增 `MetricTypesTest` 已编入 unit 聚合目标。
+3. `ctest --test-dir build-ci -N -R MetricTypesTest`：通过，发现 1 个测试：`MetricTypesTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R MetricTypesTest`：通过，1/1 tests passed。
+
+Blocker 恢复结论：
+
+1. MET-TODO-004 的关键前置依赖已由本轮解除，后续可以基于 MetricIdentity/MetricLabels 继续冻结 IMetricConfigPolicy，而不必再引入一次性占位对象。
+
+Build 合规复核：
+
+1. 代码注释：对象字段和 guard 函数命名已直接表达语义，无需重复注释。
+2. 正负例覆盖：unit 覆盖 identity/sample 正例，以及非法 name/unit、缺失 labels、非单调 buckets、counter 负值等负例。
+3. 测试发现性：已用 `ctest -N -R MetricTypesTest` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物与 blocker 恢复结论。
+5. 提交隔离：本轮提交范围限定为 MetricTypes 头文件、对应 unit 测试、CMake 注册与本 TODO 证据更新。

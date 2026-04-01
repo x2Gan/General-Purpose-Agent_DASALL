@@ -27,6 +27,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/metrics/IMetricExporter.h
   include/metrics/IMeter.h
   include/metrics/IMetricsProvider.h
+  include/metrics/MetricTypes.h
   include/audit/AuditTypes.h
   include/audit/AuditExporterTypes.h
   include/audit/AuditErrors.h
