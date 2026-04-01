@@ -171,7 +171,7 @@
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | POL-TODO-001 | Done (2026-04-01) | 定义 PolicyBundle 与 PolicyRuleDescriptor 数据结构 | policy 设计 6.5；架构 5.10；编码规范 3.7 | 6.5 核心对象表 | L3 | infra/include/policy/PolicyTypes.h | PolicyBundle、PolicyRuleDescriptor | unit：对象字段完整性；contract：effect/domain 仅做语义映射不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | 无 | 无 | 无 | PolicyTypes.h、PolicyBundle.h 兼容转发、PolicyTypesRuleBundleTest、PolicyTypesBoundaryContractTest；2026-04-01 已落盘并完成 CTest 注册与验收 | 仅当 bundle_id/schema_version/source/checksum/rules 与 rule_id/domain/effect/priority/mode/conditions/reason_code 全部落盘，且不引入业务依赖时完成 |
-| POL-TODO-002 | Not Started | 定义 PolicyPatch 与 ValidationReport 数据结构 | policy 设计 6.5/6.6 | 6.5 核心对象表；6.6 validate_patch 语义 | L3 | infra/include/policy/PolicyTypes.h | PolicyPatch、ValidationReport | unit：patch 基础字段与 report 阻断语义；contract：错误原因只映射 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结的 operations 白名单与 field_path 约束推进 | PolicyTypes.h、对象测试 | 仅当 patch_id/base_generation/operations/actor/reason 与 blocking_errors/warnings/invalid_rule_ids/field_paths 全部落盘，且阻断语义可二值判定时完成 |
+| POL-TODO-002 | Done (2026-04-01) | 定义 PolicyPatch 与 ValidationReport 数据结构 | policy 设计 6.5/6.6 | 6.5 核心对象表；6.6 validate_patch 语义 | L3 | infra/include/policy/PolicyTypes.h | PolicyPatch、ValidationReport | unit：patch 基础字段与 report 阻断语义；contract：错误原因只映射 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结的 operations 白名单与 field_path 约束推进 | PolicyTypes.h、PolicyPatch.h 兼容转发、ISecurityPolicyManager.h 收敛、PolicyPatchValidationTypesTest、PolicyPatchValidationBoundaryContractTest；2026-04-01 已落盘并完成 CTest 注册与验收 | 仅当 patch_id/base_generation/operations/actor/reason 与 blocking_errors/warnings/invalid_rule_ids/field_paths 全部落盘，且阻断语义可二值判定时完成 |
 | POL-TODO-003 | Not Started | 定义 PolicySnapshot 与 PolicyOpResult 数据结构 | policy 设计 6.5/6.8 | 6.5 核心对象表；6.8 回滚兜底 | L3 | infra/include/policy/PolicyTypes.h | PolicySnapshot、PolicyOpResult | unit：generation 单调与 LKG 引用语义；contract：错误结果不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001 | 无 | 无 | PolicyTypes.h、对象测试 | 仅当 snapshot_id/generation/version/mode/effective_rules/source_chain/lkg_ref 与 applied/rolled_back/dry_run/snapshot_id/generation/error_info 全部落盘，且 generation 语义可测试时完成 |
 | POL-TODO-004 | Not Started | 定义 PolicyQueryContext 与 PolicyDecisionRef 数据结构 | policy 设计 6.5/6.7；contracts-freeze 术语表 | 6.5 核心对象表；6.7 查询流程 | L3 | infra/include/policy/PolicyTypes.h | PolicyQueryContext、PolicyDecisionRef | unit：上下文字段 unknown 兜底；contract：decision 只对齐 allow/deny/require_confirmation 语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001 | POL-BLK-002 | 完成 contracts 语义映射 catalog 或共享对象冻结结论 | PolicyTypes.h、contract 边界测试 | 仅当 module/operation/target_type/target_ref/actor_ref/request_id/session_id/trace_id/task_id/profile_id 与 decision/reason_code/matched_rule_ids/snapshot_id/generation/evidence_ref/warnings 全部落盘，且 decision 语义无越权时完成 |
 | POL-TODO-005 | Not Started | 定义 PolicyErrors 错误码域 | policy 设计 6.6/6.8；contracts-freeze ResultCode 分类表 | 6.6 错误语义；6.8 异常与恢复时序 | L3 | infra/include/policy/PolicyErrors.h | INF_E_POLICY_BUNDLE_INVALID、INF_E_POLICY_SCHEMA_UNSUPPORTED、INF_E_POLICY_CONFLICT_UNRESOLVED、INF_E_POLICY_PATCH_BASE_MISMATCH、INF_E_POLICY_SNAPSHOT_NOT_FOUND、INF_E_POLICY_ROLLBACK_FAILED、INF_E_POLICY_QUERY_DENIED、INF_E_POLICY_SOURCE_UNAVAILABLE、INF_E_POLICY_STORE_COMMIT_FAILED、INF_E_POLICY_DRYRUN_REJECTED | contract：错误码映射保持 policy 失败域；unit：错误码稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | 无 | POL-BLK-002 | 明确与 contracts::ResultCode 的映射 catalog 或替代映射说明 | PolicyErrors.h、映射测试 | 仅当 10 个错误码都可追溯到设计锚点，且不把 validation/tool/runtime 失败误归入 policy 域时完成 |
@@ -363,3 +363,60 @@ Build 合规复核：
 3. 测试发现性：已通过 ctest -N 验证新增 unit/contract 测试进入 CTest 图。
 4. TODO 证据回写：已完成主任务状态、交付物和验收结果回写。
 5. 提交隔离：本轮提交范围限定为 PolicyTypes 头文件、兼容转发、测试注册与本专项 TODO 文档。
+
+## 13. 本轮执行记录（2026-04-01 / POL-TODO-002）
+
+### 13.1 选中任务
+
+1. 本轮任务：POL-TODO-002。
+2. 可执行性依据：前置依赖 POL-TODO-001 已完成，且 POL-BLK-001 已在 2026-03-30 校准解阻；当前只需把分散在 PolicyPatch.h 与 ISecurityPolicyManager.h 的 patch/report 类型收敛回 PolicyTypes.h，并补足直接面向该冻结面的测试。
+
+### 13.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_policy模块详细设计.md 6.5、6.6 已冻结 PolicyPatch 的 patch_id、base_generation、operations、actor、reason，以及 ValidationReport 的 blocking_errors、warnings、invalid_rule_ids、field_paths。
+2. docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md 6.1 明确 POL-TODO-002 的代码目标是把 PolicyPatch 与 ValidationReport 统一落到 PolicyTypes.h，而不是继续分散在独立头文件或接口头中。
+3. 当前仓库中 PolicyPatch 仍独立定义在 infra/include/policy/PolicyPatch.h，ValidationReport 仍位于 infra/include/policy/ISecurityPolicyManager.h，尚未满足本专项 TODO 的类型收敛要求。
+
+外部参考：
+
+1. RFC 6902 指出 patch 文档是按顺序执行的一组显式 operation，operation 类型必须来自受控白名单，且一旦任一 operation 失败，整份 patch 不应被视为成功；本轮据此保持 add_rule/replace_rule/remove_rule/update_mode 的显式白名单，并要求 operation 形状可二值判定。
+2. Kubernetes API dry-run 语义强调修改请求在持久化前仍应完整经过校验与 merge 冲突检查，但不得产生存储副作用；本轮据此把 ValidationReport 保持为本地字符串报告结构，而不是提前扩展为共享 contracts 对象。
+
+D 结论：
+
+1. Design -> Build 映射：把 ValidationReport、PolicyPatchOperationType、PolicyPatchOperation、PolicyPatch 并入 infra/include/policy/PolicyTypes.h；infra/include/policy/PolicyPatch.h 退化为兼容转发头；infra/include/policy/ISecurityPolicyManager.h 仅保留接口与 PolicyOpResult，不再内嵌 ValidationReport。
+2. Build 三件套：
+   - 代码目标：更新 PolicyTypes.h、PolicyPatch.h、ISecurityPolicyManager.h，完成 patch/report 类型收敛。
+   - 测试目标：新增 tests/unit/infra/PolicyPatchValidationTypesTest.cpp 覆盖 patch 元数据、operation 白名单和 report 阻断语义；新增 tests/contract/smoke/PolicyPatchValidationBoundaryContractTest.cpp 覆盖 patch operation 语义映射和本地报告边界。
+   - 验收命令：沿用 build-ci 回退链路执行 cmake -S . -B build-ci -G Ninja、cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests、ctest --test-dir build-ci -N -R "PolicyPatchValidationTypesTest|PolicySnapshotCompatibilityTest|PolicyPatchValidationBoundaryContractTest|PolicyDecisionBoundaryTest"、ctest --test-dir build-ci --output-on-failure -R "PolicyPatchValidationTypesTest|PolicySnapshotCompatibilityTest|PolicyPatchValidationBoundaryContractTest|PolicyDecisionBoundaryTest"、ctest --test-dir build-ci --output-on-failure -L contract。
+3. D Gate：PASS。
+
+### 13.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/policy/PolicyTypes.h：新增 ValidationReport、PolicyPatchOperationType、PolicyPatchOperation、PolicyPatch，并补充 operation 名称 helper。
+2. infra/include/policy/PolicyPatch.h：改为兼容转发，保持既有 include 路径稳定。
+3. infra/include/policy/ISecurityPolicyManager.h：删除内嵌 ValidationReport 定义，使接口头只引用统一类型入口。
+4. tests/unit/infra/PolicyPatchValidationTypesTest.cpp、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：新增并注册 patch/report unit 测试与聚合目标。
+5. tests/contract/smoke/PolicyPatchValidationBoundaryContractTest.cpp、tests/contract/CMakeLists.txt：新增并注册 patch/report contract 边界测试。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests：通过。
+3. ctest --test-dir build-ci -N -R "PolicyPatchValidationTypesTest|PolicySnapshotCompatibilityTest|PolicyPatchValidationBoundaryContractTest|PolicyDecisionBoundaryTest"：通过，发现 4 个测试，分别为 PolicySnapshotCompatibilityTest、PolicyPatchValidationTypesTest、PolicyPatchValidationBoundaryContractTest、PolicyDecisionBoundaryTest。
+4. ctest --test-dir build-ci --output-on-failure -R "PolicyPatchValidationTypesTest|PolicySnapshotCompatibilityTest|PolicyPatchValidationBoundaryContractTest|PolicyDecisionBoundaryTest"：通过，4/4 tests passed。
+5. ctest --test-dir build-ci --output-on-failure -L contract：通过，117/117 tests passed。
+6. ctest --test-dir build-ci --output-on-failure -R "PolicyPatchValidationTypesTest|PolicySnapshotCompatibilityTest"：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮新增类型和兼容转发命名直接对应 patch/report 冻结语义，无需额外冗余注释。
+2. 正负例覆盖：unit 覆盖合法 add_rule patch 正例、非法 update_mode 负例，以及 ValidationReport 的 warning/blocking 分离；contract 覆盖 patch operation 名称映射正例与非法 remove_rule 负例。
+3. 测试发现性：已通过 ctest -N 验证新增 patch/report unit 与 contract 用例进入 CTest 图。
+4. TODO 证据回写：已完成 POL-TODO-002 状态、交付物和验收结果回写。
+5. 提交隔离：本轮提交范围限定为 patch/report 类型头文件、兼容转发、测试注册与本专项 TODO 文档。
+

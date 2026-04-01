@@ -15,17 +15,6 @@
 
 namespace dasall::infra::policy {
 
-struct ValidationReport {
-  std::vector<std::string> blocking_errors;
-  std::vector<std::string> warnings;
-  std::vector<std::string> invalid_rule_ids;
-  std::vector<std::string> field_paths;
-
-  [[nodiscard]] bool has_blocking_errors() const {
-    return !blocking_errors.empty();
-  }
-};
-
 struct PolicyOpResult {
   bool ok = false;
   bool rolled_back = false;

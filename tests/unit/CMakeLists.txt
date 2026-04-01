@@ -27,6 +27,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_logger_interface_unit_test
 	dasall_audit_logger_interface_unit_test
 	dasall_policy_types_rule_bundle_unit_test
+	dasall_policy_patch_validation_types_unit_test
 	dasall_config_types_unit_test
 	dasall_config_center_interface_unit_test
 	dasall_config_loader_interface_unit_test

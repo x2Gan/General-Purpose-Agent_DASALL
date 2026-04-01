@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -122,6 +123,88 @@ struct PolicyBundle {
 
     for (const auto& rule : rules) {
       if (!rule.is_valid()) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+};
+
+struct ValidationReport {
+  std::vector<std::string> blocking_errors;
+  std::vector<std::string> warnings;
+  std::vector<std::string> invalid_rule_ids;
+  std::vector<std::string> field_paths;
+
+  [[nodiscard]] bool has_blocking_errors() const {
+    return !blocking_errors.empty();
+  }
+};
+
+enum class PolicyPatchOperationType {
+  Unspecified = 0,
+  AddRule = 1,
+  ReplaceRule = 2,
+  RemoveRule = 3,
+  UpdateMode = 4,
+};
+
+[[nodiscard]] inline std::string_view to_string(PolicyPatchOperationType operation) {
+  switch (operation) {
+    case PolicyPatchOperationType::AddRule:
+      return "add_rule";
+    case PolicyPatchOperationType::ReplaceRule:
+      return "replace_rule";
+    case PolicyPatchOperationType::RemoveRule:
+      return "remove_rule";
+    case PolicyPatchOperationType::UpdateMode:
+      return "update_mode";
+    case PolicyPatchOperationType::Unspecified:
+      break;
+  }
+
+  return "unspecified";
+}
+
+struct PolicyPatchOperation {
+  PolicyPatchOperationType operation = PolicyPatchOperationType::Unspecified;
+  std::string rule_id;
+  std::optional<PolicyRuleDescriptor> rule;
+  PolicyMode mode = PolicyMode::Unspecified;
+
+  [[nodiscard]] bool is_valid() const {
+    switch (operation) {
+      case PolicyPatchOperationType::AddRule:
+      case PolicyPatchOperationType::ReplaceRule:
+        return rule.has_value() && rule->is_valid();
+      case PolicyPatchOperationType::RemoveRule:
+        return !rule_id.empty();
+      case PolicyPatchOperationType::UpdateMode:
+        return mode != PolicyMode::Unspecified;
+      case PolicyPatchOperationType::Unspecified:
+        break;
+    }
+
+    return false;
+  }
+};
+
+struct PolicyPatch {
+  std::string patch_id;
+  std::uint64_t base_generation = 0;
+  std::vector<PolicyPatchOperation> operations;
+  std::string actor;
+  std::string reason;
+
+  [[nodiscard]] bool is_valid() const {
+    if (patch_id.empty() || base_generation == 0 || operations.empty() || actor.empty() ||
+        reason.empty()) {
+      return false;
+    }
+
+    for (const auto& operation : operations) {
+      if (!operation.is_valid()) {
         return false;
       }
     }

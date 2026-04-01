@@ -198,6 +198,23 @@ target_link_libraries(dasall_contract_policy_types_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_policy_patch_validation_boundary_test
+  PolicyPatchValidationBoundaryContractTest
+  smoke/PolicyPatchValidationBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_policy_patch_validation_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_policy_patch_validation_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_recovery_hint_boundary_test
   RecoveryHintBoundaryContractTest
   smoke/RecoveryHintBoundaryContractTest.cpp
