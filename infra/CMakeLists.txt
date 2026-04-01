@@ -24,6 +24,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/IHealthProbe.h
   include/InfraContext.h
   include/InfraErrorCode.h
+  include/metrics/IMetricConfigPolicy.h
   include/metrics/IMetricExporter.h
   include/metrics/IMeter.h
   include/metrics/IMetricsProvider.h

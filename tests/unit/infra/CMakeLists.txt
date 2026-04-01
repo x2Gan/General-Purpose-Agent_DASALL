@@ -88,6 +88,21 @@ dasall_apply_common_options(dasall_metric_exporter_interface_unit_test)
 add_test(NAME MetricsExporterInterfaceTest COMMAND dasall_metric_exporter_interface_unit_test)
 set_tests_properties(MetricsExporterInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_metrics_config_policy_interface_unit_test
+  MetricsConfigPolicyInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_metrics_config_policy_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_metrics_config_policy_interface_unit_test)
+
+add_test(NAME MetricsConfigPolicyInterfaceTest COMMAND dasall_metrics_config_policy_interface_unit_test)
+set_tests_properties(MetricsConfigPolicyInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_metric_types_unit_test
   MetricTypesTest.cpp
 )

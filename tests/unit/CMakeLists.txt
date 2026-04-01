@@ -15,6 +15,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_audit_event_unit_test
 	dasall_health_probe_interface_unit_test
 	dasall_health_snapshot_unit_test
+	dasall_metrics_config_policy_interface_unit_test
 	dasall_metric_exporter_interface_unit_test
 	dasall_metric_types_unit_test
 	dasall_infra_service_facade_unit_test
