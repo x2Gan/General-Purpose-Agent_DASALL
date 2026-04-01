@@ -1,3 +1,6 @@
+// Keep tracing public headers in the infra build graph as they are frozen.
+#include "tracing/ITracerProvider.h"
+
 namespace dasall::infra::tracing {
 
 // Minimal anchor source to ensure tracing module participates in build graph.
