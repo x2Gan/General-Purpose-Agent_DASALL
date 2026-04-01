@@ -162,7 +162,7 @@
 | MET-TODO-002 | Done | 定义 IMeter 接口头文件 | metrics 设计 6.6/6.7 | 6.6 IMeter；6.7 主流程 | L3 | infra/include/metrics/IMeter.h | create_counter, create_gauge, create_histogram, record | unit：record 入口可编译；contract：采样对象语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" | MET-TODO-001 | 无 | 无 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMeter.h、tests/unit/infra/MetricsMeterInterfaceTest.cpp、tests/contract/smoke/MetricsMeterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当接口能覆盖 6.7 正常流程输入、保持与后续 MetricTypes 前置声明兼容且测试通过时完成 |
 | MET-TODO-003 | Done | 定义 IMetricExporter 接口头文件 | metrics 设计 6.6/6.8 | 6.6 IMetricExporter；6.8 导出异常 | L3 | infra/include/metrics/IMetricExporter.h | export_batch(batch), force_flush(timeout_ms), shutdown(timeout_ms) | unit：导出成功/失败调用面可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" | MET-TODO-001 | OTLP 首版启用未冻结 | 首版仅约束 noop/prom_text 语义 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricExporter.h、tests/unit/infra/MetricsExporterInterfaceTest.cpp、tests/contract/smoke/MetricsExporterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当导出接口语义覆盖成功/失败/超时三路径、保持 exporter 可插拔且测试通过时完成 |
 | MET-TODO-004 | Done | 定义 IMetricConfigPolicy 接口头文件 | metrics 设计 6.6/6.9 | 6.6 IMetricConfigPolicy；6.9 配置项表 | L3 | infra/include/metrics/IMetricConfigPolicy.h | validate_identity, normalize_labels, should_accept | unit：identity 与 labels 策略入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsConfigPolicyInterfaceTest|MetricsConfigPolicyInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsConfigPolicyInterfaceTest|MetricsConfigPolicyInterfaceBoundaryContractTest" | MET-TODO-002、MET-TODO-006 | 标签 taxonomy 未全局评审 | 先冻结核心 allowlist 键集合 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricConfigPolicy.h、tests/unit/infra/MetricsConfigPolicyInterfaceTest.cpp、tests/contract/smoke/MetricsConfigPolicyInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当策略接口与 6.9 配置键一致、边界不泄露动态标签实现且测试通过时完成 |
-| MET-TODO-005 | Not Started | 定义 IMetricsHealthProbe 接口头文件 | metrics 设计 6.6/6.10 | 6.6 IMetricsHealthProbe；6.10 健康观测 | L2 | infra/include/metrics/IMetricsHealthProbe.h | snapshot() | unit：健康快照出口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-007 | 与 infra/health 统一探针签名未冻结 | 先输出 metrics 私有快照对象 | 接口头文件、编译记录 | 仅当 snapshot 返回对象能承载 queue/degraded/exporter_state 时完成 |
+| MET-TODO-005 | Done | 定义 IMetricsHealthProbe 接口头文件 | metrics 设计 6.6/6.10 | 6.6 IMetricsHealthProbe；6.10 健康观测 | L2 | infra/include/metrics/IMetricsHealthProbe.h | snapshot() | unit：健康快照出口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-007 | 与 infra/health 统一探针签名未冻结 | 先输出 metrics 私有快照对象 | 接口头文件、编译记录；2026-04-01 已落盘 infra/include/metrics/IMetricsHealthProbe.h、tests/unit/infra/MetricsHealthProbeInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当 snapshot 返回对象能承载 queue/degraded/exporter_state 时完成 |
 | MET-TODO-006 | Done | 定义 MetricTypes 核心对象头文件 | metrics 设计 6.5 | 6.5 MetricIdentity/MetricSample/MetricLabels/HistogramConfig | L3 | infra/include/metrics/MetricTypes.h | 上述 4 类对象字段定义 | unit：字段完整性与默认语义验证 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N -R MetricTypesTest && ctest --test-dir build-ci --output-on-failure -R MetricTypesTest | 无 | 无 | 无 | 对象头文件、单测；2026-04-01 已落盘 infra/include/metrics/MetricTypes.h、tests/unit/infra/MetricTypesTest.cpp，并完成 infra/tests CMake 注册 | 仅当字段与 6.5 对齐、可二值判定的 guard 完整且单测通过时完成 |
 | MET-TODO-007 | Done | 定义 MetricsSnapshots 对象头文件 | metrics 设计 6.5/6.10 | 6.5 ExportBatchReport/MetricsModuleSnapshot；6.10 指标清单 | L3 | infra/include/metrics/MetricsSnapshots.h | ExportBatchReport, MetricsModuleSnapshot | unit：导出与健康快照字段一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006 | 无 | 无 | 对象头文件、单测；2026-04-01 已落盘 infra/include/metrics/MetricsSnapshots.h、tests/unit/infra/MetricsSnapshotsTest.cpp，并完成 infra/tests CMake 注册 | 仅当快照字段可覆盖成功/失败/队列/降级语义时完成 |
 | MET-TODO-008 | Not Started | 定义 MetricsErrors 错误码域 | metrics 设计 6.6；工程规范 3.6 | 6.6 错误语义 | L3 | infra/include/metrics/MetricsErrors.h | MET_E_PROVIDER_NOT_READY...MET_E_CONFIG_INVALID | contract：映射 contracts::ResultCode；unit：枚举稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-001 | contracts 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试 | 仅当 7 个错误码均有来源锚点且映射测试通过时完成 |
@@ -607,3 +607,51 @@ Build 合规复核：
 3. 测试发现性：已用 ctest -N -R MetricsSnapshotsTest 回填新增 unit 用例发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物与对 MET-TODO-005 的解阻前置说明。
 5. 提交隔离：本轮提交范围限定为 MetricsSnapshots 对象头文件、对应 unit 测试、CMake 注册与本 TODO 证据更新。
+
+## 19. 本轮执行记录（2026-04-01 / MET-TODO-005）
+
+### 19.1 选中任务
+
+1. 本轮任务：MET-TODO-005。
+2. 可执行性依据：MET-TODO-007 已在上一轮冻结 MetricsModuleSnapshot，当前可以直接落 IMetricsHealthProbe 的 snapshot() 边界；阻塞项里提到的 infra/health 统一探针签名仍未冻结，因此本轮只输出 metrics 私有快照接口，不复用通用 probe 合同。
+
+### 19.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6 已把 IMetricsHealthProbe 收敛为单一 snapshot() 接口，没有额外 monitor/register 语义。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.10 已把 queue_depth、guard_reject_total、exporter_state、degraded_mode 列为 metrics 健康观测最小集合，因此返回值必须直接承载这些字段。
+3. 专项 TODO 中 MET-TODO-005 的阻塞说明明确指出与 infra/health 统一探针签名尚未冻结，所以本轮必须避免把 metrics 健康探针耦合到通用 IHealthProbe/ProbeResult 合同。
+4. MET-TODO-007 已提供 MetricsModuleSnapshot，对 queue/degraded/exporter_state 语义已有冻结对象，本轮无需再引入临时占位类型。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IMetricsHealthProbe.h，只保留 snapshot() const 一个出口，并直接返回 MetricsModuleSnapshot，保证 metrics 私有健康语义不泄漏到通用 infra/health 合同。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/metrics/IMetricsHealthProbe.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 MetricsHealthProbeInterfaceTest，验证 snapshot() 签名、抽象边界与“不吸收通用 probe() 语义”这两个约束。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci -N -R MetricsHealthProbeInterfaceTest && ctest --test-dir build-ci --output-on-failure -R MetricsHealthProbeInterfaceTest。
+3. D Gate：PASS。
+
+### 19.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/metrics/IMetricsHealthProbe.h：新增 metrics 私有健康探针接口，冻结 snapshot() const -> MetricsModuleSnapshot 边界。
+2. tests/unit/infra/MetricsHealthProbeInterfaceTest.cpp：覆盖 snapshot 签名、抽象接口、快照字段可达与不复用通用 probe() 语义的正负例。
+3. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成头文件与 unit 测试注册。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_infra dasall_unit_tests：通过；聚合执行结果为 unit 58/58 全部通过，新增 MetricsHealthProbeInterfaceTest 已编入 unit 聚合目标。
+3. ctest --test-dir build-ci -N -R MetricsHealthProbeInterfaceTest：通过，发现 1 个测试，为 MetricsHealthProbeInterfaceTest。
+4. ctest --test-dir build-ci --output-on-failure -R MetricsHealthProbeInterfaceTest：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 边界收敛：接口仅暴露 snapshot()，没有引入 probe/register/evaluate 等通用 health monitor 语义。
+2. 正负例覆盖：unit 已覆盖有效 snapshot 返回、抽象接口约束与禁用通用 probe() 入口这三类检查。
+3. 测试发现性：已用 ctest -N -R MetricsHealthProbeInterfaceTest 回填新增 unit 用例发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物与由 MET-TODO-007 解阻后的恢复执行摘要。
+5. 提交隔离：本轮提交范围限定为 IMetricsHealthProbe 头文件、对应 unit 测试、CMake 注册与本 TODO 证据更新。
