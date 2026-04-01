@@ -73,6 +73,21 @@ dasall_apply_common_options(dasall_health_snapshot_unit_test)
 add_test(NAME HealthSnapshotUnitTest COMMAND dasall_health_snapshot_unit_test)
 set_tests_properties(HealthSnapshotUnitTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_metric_exporter_interface_unit_test
+  MetricsExporterInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_metric_exporter_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_metric_exporter_interface_unit_test)
+
+add_test(NAME MetricsExporterInterfaceTest COMMAND dasall_metric_exporter_interface_unit_test)
+set_tests_properties(MetricsExporterInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_infra_service_facade_unit_test
   InfraServiceFacadeTest.cpp
 )

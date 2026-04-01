@@ -160,7 +160,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | MET-TODO-001 | Done | 定义 IMetricsProvider 接口头文件 | metrics 设计 6.6；编码规范 3.7 | 6.6 IMetricsProvider | L3 | infra/include/metrics/IMetricsProvider.h | init(config), get_meter(scope), force_flush(timeout_ms), shutdown(timeout_ms) | unit：接口可编译；contract：错误语义入口可对接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" | 无 | 无 | 无 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricsProvider.h、tests/unit/infra/MetricsProviderInterfaceTest.cpp、tests/contract/smoke/MetricsProviderInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当方法签名与 6.6 一致、边界仅暴露 contracts 错误语义且测试通过时完成 |
 | MET-TODO-002 | Done | 定义 IMeter 接口头文件 | metrics 设计 6.6/6.7 | 6.6 IMeter；6.7 主流程 | L3 | infra/include/metrics/IMeter.h | create_counter, create_gauge, create_histogram, record | unit：record 入口可编译；contract：采样对象语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsMeterInterfaceTest|MetricsMeterInterfaceBoundaryContractTest" | MET-TODO-001 | 无 | 无 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMeter.h、tests/unit/infra/MetricsMeterInterfaceTest.cpp、tests/contract/smoke/MetricsMeterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当接口能覆盖 6.7 正常流程输入、保持与后续 MetricTypes 前置声明兼容且测试通过时完成 |
-| MET-TODO-003 | Not Started | 定义 IMetricExporter 接口头文件 | metrics 设计 6.6/6.8 | 6.6 IMetricExporter；6.8 导出异常 | L3 | infra/include/metrics/IMetricExporter.h | export_batch(batch), force_flush(timeout_ms), shutdown(timeout_ms) | unit：导出成功/失败调用面可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001 | OTLP 首版启用未冻结 | 首版仅约束 noop/prom_text 语义 | 接口头文件、编译记录 | 仅当导出接口语义覆盖成功/失败/超时三路径时完成 |
+| MET-TODO-003 | Done | 定义 IMetricExporter 接口头文件 | metrics 设计 6.6/6.8 | 6.6 IMetricExporter；6.8 导出异常 | L3 | infra/include/metrics/IMetricExporter.h | export_batch(batch), force_flush(timeout_ms), shutdown(timeout_ms) | unit：导出成功/失败调用面可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" | MET-TODO-001 | OTLP 首版启用未冻结 | 首版仅约束 noop/prom_text 语义 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricExporter.h、tests/unit/infra/MetricsExporterInterfaceTest.cpp、tests/contract/smoke/MetricsExporterInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当导出接口语义覆盖成功/失败/超时三路径、保持 exporter 可插拔且测试通过时完成 |
 | MET-TODO-004 | Not Started | 定义 IMetricConfigPolicy 接口头文件 | metrics 设计 6.6/6.9 | 6.6 IMetricConfigPolicy；6.9 配置项表 | L3 | infra/include/metrics/IMetricConfigPolicy.h | validate_identity, normalize_labels, should_accept | unit：identity 与 labels 策略入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-002、MET-TODO-006 | 标签 taxonomy 未全局评审 | 先冻结核心 allowlist 键集合 | 接口头文件、编译记录 | 仅当策略接口与 6.9 配置键一致时完成 |
 | MET-TODO-005 | Not Started | 定义 IMetricsHealthProbe 接口头文件 | metrics 设计 6.6/6.10 | 6.6 IMetricsHealthProbe；6.10 健康观测 | L2 | infra/include/metrics/IMetricsHealthProbe.h | snapshot() | unit：健康快照出口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-007 | 与 infra/health 统一探针签名未冻结 | 先输出 metrics 私有快照对象 | 接口头文件、编译记录 | 仅当 snapshot 返回对象能承载 queue/degraded/exporter_state 时完成 |
 | MET-TODO-006 | Not Started | 定义 MetricTypes 核心对象头文件 | metrics 设计 6.5 | 6.5 MetricIdentity/MetricSample/MetricLabels/HistogramConfig | L3 | infra/include/metrics/MetricTypes.h | 上述 4 类对象字段定义 | unit：字段完整性与默认语义验证 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | 无 | 无 | 无 | 对象头文件、单测 | 仅当字段与 6.5 对齐且默认值可二值判定时完成 |
@@ -397,3 +397,56 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R ...` 回填 2 个新增测试的发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物与验收摘要。
 5. 提交隔离：本轮提交范围限定为 IMeter 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
+
+## 15. 本轮执行记录（2026-04-01 / MET-TODO-003）
+
+### 15.1 选中任务
+
+1. 本轮任务：MET-TODO-003。
+2. 可执行性依据：MET-TODO-001 已完成，MetricsOperationStatus 和 lifecycle deadline 已冻结；metrics 设计 6.6/6.8 已明确 exporter 需要提供 export/flush/shutdown 三个出口，而 OTLP 依赖仍未冻结，适合先收敛接口头文件。
+
+### 15.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6 已冻结 IMetricExporter 的 `export_batch(batch)`、`force_flush(timeout_ms)`、`shutdown(timeout_ms)` 三个入口。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.8 已明确导出异常分为远端不可达、超时、协议错误，并要求失败保持可观测与可降级。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 4.2 已指出 OTLP 首版是否启用未冻结，因此本轮只应冻结可插拔 exporter 边界，不承诺具体协议实现。
+4. 当前 TODO 的阻塞项 MET-BLK-005 也要求 OTLP 依赖后置，说明接口必须兼容 noop/prom_text 等最小导出实现。
+
+外部参考：
+
+1. OpenTelemetry Metrics Exporters 规范将 In-memory、OTLP、Prometheus、Stdout 并列为 exporter 族，表明 exporter 接口需要先抽象“可插拔导出通道”，而不是把某一种协议细节直接写死在边界上。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IMetricExporter.h，冻结 `MetricExportBatch` 最小批次占位，以及 export_batch/force_flush/shutdown 三个方法签名。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/metrics/IMetricExporter.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 MetricsExporterInterfaceTest 与 MetricsExporterInterfaceBoundaryContractTest。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 15.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/metrics/IMetricExporter.h：新增 MetricExportBatch 占位，并冻结 export_batch/force_flush/shutdown 三个入口。
+2. tests/unit/infra/MetricsExporterInterfaceTest.cpp：覆盖有效 batch/exporter lifecycle 正例，以及空 batch/零超时负例。
+3. tests/contract/smoke/MetricsExporterInterfaceBoundaryContractTest.cpp：覆盖 exporter 仅暴露本地 batch 占位与 contracts 错误面。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与 unit/contract 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`：通过；聚合执行结果为 unit 54/54、contract 103/103 全部通过，新增 `MetricsExporterInterfaceBoundaryContractTest` 已编入 contract 聚合目标。
+3. `ctest --test-dir build-ci -N -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest"`：通过，发现 2 个测试，分别为 `MetricsExporterInterfaceTest` 与 `MetricsExporterInterfaceBoundaryContractTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "MetricsExporterInterfaceTest|MetricsExporterInterfaceBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：exporter 接口与 batch 占位命名已直接表达导出职责与边界，无需附加实现注释。
+2. 正负例覆盖：unit 覆盖有效 batch/exporter lifecycle 正例与空 batch/零超时负例；contract 覆盖 batch guard 与 contracts 错误面约束。
+3. 测试发现性：已用 `ctest -N -R ...` 回填 2 个新增测试的发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物与验收摘要。
+5. 提交隔离：本轮提交范围限定为 IMetricExporter 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
