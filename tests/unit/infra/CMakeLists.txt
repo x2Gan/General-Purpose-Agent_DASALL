@@ -283,6 +283,21 @@ dasall_apply_common_options(dasall_policy_snapshot_compatibility_unit_test)
 add_test(NAME PolicySnapshotCompatibilityTest COMMAND dasall_policy_snapshot_compatibility_unit_test)
 set_tests_properties(PolicySnapshotCompatibilityTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_manager_interface_unit_test
+  PolicyManagerInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_policy_manager_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_manager_interface_unit_test)
+
+add_test(NAME PolicyManagerInterfaceTest COMMAND dasall_policy_manager_interface_unit_test)
+set_tests_properties(PolicyManagerInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_policy_types_rule_bundle_unit_test
   PolicyTypesRuleBundleTest.cpp
 )
