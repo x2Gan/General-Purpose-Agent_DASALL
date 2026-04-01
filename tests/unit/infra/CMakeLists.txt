@@ -507,3 +507,18 @@ dasall_apply_common_options(dasall_ota_types_unit_test)
 
 add_test(NAME OTATypesCompileTest COMMAND dasall_ota_types_unit_test)
 set_tests_properties(OTATypesCompileTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_ota_manager_interface_unit_test
+  IOTAManagerInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_ota_manager_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_ota_manager_interface_unit_test)
+
+add_test(NAME OTAInterfaceCompileTest COMMAND dasall_ota_manager_interface_unit_test)
+set_tests_properties(OTAInterfaceCompileTest PROPERTIES LABELS "unit")
