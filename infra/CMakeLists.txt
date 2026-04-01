@@ -3,6 +3,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
   src/audit/AuditService.cpp
+  src/plugin/PluginManager.cpp
 )
 
 set(DASALL_INFRA_TRACING_SOURCES
@@ -60,6 +61,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/plugin/PluginCatalog.h
   include/plugin/PluginDescriptor.h
   include/plugin/PluginErrorCode.h
+  include/plugin/IPluginManager.h
 )
 
 add_library(dasall_infra STATIC)

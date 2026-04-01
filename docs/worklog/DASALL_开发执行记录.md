@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #059
+
+- 日期：2026-04-01
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-003 新增 IPluginManager 接口与骨架实现
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLG-TODO-003-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/PLG-TODO-003-IPluginManager设计收敛.md](docs/todos/infrastructure/PLG-TODO-003-IPluginManager%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 ValidationResult/LoadOptions/UnloadResult/ActivePluginSet 的缺口收敛为六个最小边界对象，并记录 discover/profile 与 load/load_options 的签名收敛结论。
+   - 对原任务验收命令做最小 blocker-fix：显式构建新增 unit/contract 测试目标，避免 CTest 在未生成可执行文件时误判失败。
+2. 完成 PLG-TODO-003-B 代码落地：
+   - 新增 [infra/include/plugin/IPluginManager.h](infra/include/plugin/IPluginManager.h)
+   - 新增 [infra/src/plugin/PluginManager.cpp](infra/src/plugin/PluginManager.cpp)
+   - 新增 [tests/unit/infra/plugin/PluginManagerInterfaceTest.cpp](tests/unit/infra/plugin/PluginManagerInterfaceTest.cpp)
+   - 新增 [tests/contract/smoke/PluginManagerBoundaryContractTest.cpp](tests/contract/smoke/PluginManagerBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_manager_interface_unit_test dasall_contract_plugin_manager_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginManagerInterfaceCompileTest|PluginManagerBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginManagerInterfaceCompileTest|PluginManagerBoundaryContractTest"`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_manager_interface_unit_test dasall_contract_plugin_manager_boundary_test` 通过。
+   - `ctest --test-dir build-ci -N -R "PluginManagerInterfaceCompileTest|PluginManagerBoundaryContractTest"` 通过，发现 2 个测试。
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginManagerInterfaceCompileTest|PluginManagerBoundaryContractTest"` 通过，2/2 tests passed。
+
+### 结果
+
+1. IPluginManager 已以最小 request/result + skeleton 形式落盘，后续 validation pipeline、lifecycle manager 和 audit adapter 可以直接复用统一的管理器边界。
+2. 本轮先修复了接口边界对象缺失与签名粒度不一致的 context blocker，再落到接口、skeleton 与定向 unit/contract 测试，未越界到 Manifest/Signature/Compatibility 的完整对象冻结。
+
+### 下一步
+
+1. 继续推进 PLG-TODO-004，冻结 IPluginPolicyGate 接口，并与本轮的 PolicyDecisionRef / profile-aware 边界保持一致。
+
+### 风险
+
+1. validate 当前只冻结 manifest_ref、signature_report_ref、compatibility_report_ref 三个 ref 锚点；待 INF-BLK-09 解阻后，如果需要 richer report 对象，应通过增量对象承接而不是替换现有接口边界。
+
 ## 记录 #058
 
 - 日期：2026-04-01
