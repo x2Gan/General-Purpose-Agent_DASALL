@@ -158,7 +158,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| MET-TODO-001 | Not Started | 定义 IMetricsProvider 接口头文件 | metrics 设计 6.6；编码规范 3.7 | 6.6 IMetricsProvider | L3 | infra/include/metrics/IMetricsProvider.h | init(config), get_meter(scope), force_flush(timeout_ms), shutdown(timeout_ms) | unit：接口可编译；contract：错误语义入口可对接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录 | 仅当方法签名与 6.6 一致且无业务实现依赖时完成 |
+| MET-TODO-001 | Done | 定义 IMetricsProvider 接口头文件 | metrics 设计 6.6；编码规范 3.7 | 6.6 IMetricsProvider | L3 | infra/include/metrics/IMetricsProvider.h | init(config), get_meter(scope), force_flush(timeout_ms), shutdown(timeout_ms) | unit：接口可编译；contract：错误语义入口可对接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" | 无 | 无 | 无 | 接口头文件、unit/contract 测试；2026-04-01 已落盘 infra/include/metrics/IMetricsProvider.h、tests/unit/infra/MetricsProviderInterfaceTest.cpp、tests/contract/smoke/MetricsProviderInterfaceBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当方法签名与 6.6 一致、边界仅暴露 contracts 错误语义且测试通过时完成 |
 | MET-TODO-002 | Not Started | 定义 IMeter 接口头文件 | metrics 设计 6.6/6.7 | 6.6 IMeter；6.7 主流程 | L3 | infra/include/metrics/IMeter.h | create_counter, create_gauge, create_histogram, record | unit：record 入口可编译；contract：采样对象语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001 | 无 | 无 | 接口头文件、编译记录 | 仅当接口能覆盖 6.7 正常流程输入时完成 |
 | MET-TODO-003 | Not Started | 定义 IMetricExporter 接口头文件 | metrics 设计 6.6/6.8 | 6.6 IMetricExporter；6.8 导出异常 | L3 | infra/include/metrics/IMetricExporter.h | export_batch(batch), force_flush(timeout_ms), shutdown(timeout_ms) | unit：导出成功/失败调用面可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001 | OTLP 首版启用未冻结 | 首版仅约束 noop/prom_text 语义 | 接口头文件、编译记录 | 仅当导出接口语义覆盖成功/失败/超时三路径时完成 |
 | MET-TODO-004 | Not Started | 定义 IMetricConfigPolicy 接口头文件 | metrics 设计 6.6/6.9 | 6.6 IMetricConfigPolicy；6.9 配置项表 | L3 | infra/include/metrics/IMetricConfigPolicy.h | validate_identity, normalize_labels, should_accept | unit：identity 与 labels 策略入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-002、MET-TODO-006 | 标签 taxonomy 未全局评审 | 先冻结核心 allowlist 键集合 | 接口头文件、编译记录 | 仅当策略接口与 6.9 配置键一致时完成 |
@@ -284,3 +284,63 @@
 |---|---|---|---|---|---|---|---|---|
 | MET-TODO-021 | Not Started | ARC-01 | 在 metrics contract 边界增加 planning 阶段预算观测约束：stage=planning 标签与 planning_budget_ms 指标必须可追踪 | tests/contract/infra/metrics/MetricsPlanningStageBudgetContractTest.cpp, infra/include/metrics/MetricTypes.h | contract：MetricsPlanningStageBudgetContractTest 校验 planning 阶段标签、预算字段和退化路径统计的一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R MetricsPlanningStageBudgetContractTest | MET-TODO-006、MET-TODO-018 | 仅当 planning 标签与预算观测在 contract 测试中被稳定约束，且不改动 contracts 公共对象时完成 |
 | MET-TODO-022 | Not Started | ARC-02 | 将 metrics 任务纳入仓库级 Blocked-first gate 流程，禁止绕过前置解阻直接推进实现 | scripts/ci/infra_gate.sh, docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | process test：默认执行 gate 时存在 Blocked 即失败；审批窗口通过 ALLOW_BLOCKED=1 执行例外 | bash scripts/ci/infra_gate.sh | MET-TODO-018 | 仅当 metrics 执行流程与 gate 绑定，并形成可重复执行记录时完成 |
+
+## 13. 本轮执行记录（2026-04-01 / MET-TODO-001）
+
+### 13.1 选中任务
+
+1. 本轮任务：MET-TODO-001。
+2. 可执行性依据：这是 metrics A 阶段的首个原子任务，无前置依赖；metrics 设计 6.6 已明确 IMetricsProvider 的四个方法语义，当前仓库尚无 metrics 公共头文件，不存在兼容面冲突。
+
+### 13.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6 已冻结 IMetricsProvider 的 `init(config)`、`get_meter(scope)`、`force_flush(timeout_ms)`、`shutdown(timeout_ms)` 四个入口。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 已给出 provider/exporter/interval/timeout 的最小配置键与默认值，可支撑 provider config 占位对象。
+3. infra/CMakeLists.txt 当前尚未暴露 metrics 头文件；tests/unit/CMakeLists.txt 与 tests/contract/CMakeLists.txt 已提供可复用的 unit/contract 集中注册骨架。
+4. contracts/include/error/ResultCode.h 已冻结 ResultCode/ErrorInfo 语义，满足本轮“错误语义入口可对接”的边界要求。
+
+外部参考：
+
+1. OpenTelemetry Metrics API（stable）指出 MeterProvider 是 Metrics API 入口，Get a Meter 必须接受 `name`，并可选接受 `version` 与 `schema_url`；据此本轮将 `MeterScope` 冻结为 `name/version/schema_url` 三字段最小占位，而不提前承诺更重的 instrumentation attributes。
+
+D 结论：
+
+1. Design -> Build 映射：新增 IMetricsProvider.h，冻结 `MetricsProviderConfig`、`MeterScope`、`MetricsCallDeadline`、`MetricsOperationStatus` 与 IMetricsProvider 四个方法签名。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/metrics/IMetricsProvider.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 MetricsProviderInterfaceTest 与 MetricsProviderInterfaceBoundaryContractTest。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest"。
+3. D Gate：PASS。
+
+### 13.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/metrics/IMetricsProvider.h：新增 provider config、meter scope、lifecycle deadline、operation status 与 IMetricsProvider 四个入口。
+2. tests/unit/infra/MetricsProviderInterfaceTest.cpp：覆盖有效 init/get_meter/force_flush/shutdown 正例，以及非法 config/timeout 的负例。
+3. tests/contract/smoke/MetricsProviderInterfaceBoundaryContractTest.cpp：覆盖错误面仅暴露 contracts::ResultCode/ErrorInfo、meter scope 守卫与 deadline 守卫。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与 unit/contract 测试注册。
+
+验收结果：
+
+1. Build_CMakeTools：失败，报错“无法配置项目”；按仓库既定回退策略改用 build-ci 命令链继续验收。
+2. `cmake -S . -B build-ci -G Ninja`：通过。
+3. `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`：通过；聚合执行结果为 unit 52/52、contract 101/101 全部通过，新增 `MetricsProviderInterfaceBoundaryContractTest` 已编入 contract 聚合目标。
+4. `ctest --test-dir build-ci -N -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest"`：通过，发现 2 个测试，分别为 `MetricsProviderInterfaceTest` 与 `MetricsProviderInterfaceBoundaryContractTest`。
+5. `ctest --test-dir build-ci --output-on-failure -R "MetricsProviderInterfaceTest|MetricsProviderInterfaceBoundaryContractTest"`：通过，2/2 tests passed。
+
+Blocker 修复记录：
+
+1. 环境阻塞：VS Code CMake Tools 当前无法为本仓库建立配置上下文，导致 Build_CMakeTools 不能直接用于验证。
+2. 本轮最小解阻动作：回退到仓库已验证的 build-ci 命令链 `cmake -S . -B build-ci -G Ninja`、`cmake --build build-ci ...` 与 `ctest --test-dir build-ci ...`。
+3. 解阻结论：Blocker cleared，同轮完成 MET-TODO-001，不扩大到其他 metrics 任务。
+
+Build 合规复核：
+
+1. 代码注释：新增类型命名已直接表达 provider/config/scope/deadline/error surface 语义，无需重复性注释。
+2. 正负例覆盖：unit 覆盖有效生命周期调用正例与非法 config/timeout 负例；contract 覆盖错误面边界与局部 guard 二值行为。
+3. 测试发现性：已用 `ctest -N -R ...` 回填 2 个新增测试的发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物、环境 blocker 恢复与验收摘要。
+5. 提交隔离：本轮提交范围限定为 IMetricsProvider 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
