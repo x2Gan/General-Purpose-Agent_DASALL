@@ -165,7 +165,7 @@
 | MET-TODO-005 | Done | 定义 IMetricsHealthProbe 接口头文件 | metrics 设计 6.6/6.10 | 6.6 IMetricsHealthProbe；6.10 健康观测 | L2 | infra/include/metrics/IMetricsHealthProbe.h | snapshot() | unit：健康快照出口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-007 | 与 infra/health 统一探针签名未冻结 | 先输出 metrics 私有快照对象 | 接口头文件、编译记录；2026-04-01 已落盘 infra/include/metrics/IMetricsHealthProbe.h、tests/unit/infra/MetricsHealthProbeInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当 snapshot 返回对象能承载 queue/degraded/exporter_state 时完成 |
 | MET-TODO-006 | Done | 定义 MetricTypes 核心对象头文件 | metrics 设计 6.5 | 6.5 MetricIdentity/MetricSample/MetricLabels/HistogramConfig | L3 | infra/include/metrics/MetricTypes.h | 上述 4 类对象字段定义 | unit：字段完整性与默认语义验证 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N -R MetricTypesTest && ctest --test-dir build-ci --output-on-failure -R MetricTypesTest | 无 | 无 | 无 | 对象头文件、单测；2026-04-01 已落盘 infra/include/metrics/MetricTypes.h、tests/unit/infra/MetricTypesTest.cpp，并完成 infra/tests CMake 注册 | 仅当字段与 6.5 对齐、可二值判定的 guard 完整且单测通过时完成 |
 | MET-TODO-007 | Done | 定义 MetricsSnapshots 对象头文件 | metrics 设计 6.5/6.10 | 6.5 ExportBatchReport/MetricsModuleSnapshot；6.10 指标清单 | L3 | infra/include/metrics/MetricsSnapshots.h | ExportBatchReport, MetricsModuleSnapshot | unit：导出与健康快照字段一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006 | 无 | 无 | 对象头文件、单测；2026-04-01 已落盘 infra/include/metrics/MetricsSnapshots.h、tests/unit/infra/MetricsSnapshotsTest.cpp，并完成 infra/tests CMake 注册 | 仅当快照字段可覆盖成功/失败/队列/降级语义时完成 |
-| MET-TODO-008 | Not Started | 定义 MetricsErrors 错误码域 | metrics 设计 6.6；工程规范 3.6 | 6.6 错误语义 | L3 | infra/include/metrics/MetricsErrors.h | MET_E_PROVIDER_NOT_READY...MET_E_CONFIG_INVALID | contract：映射 contracts::ResultCode；unit：枚举稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-001 | contracts 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试 | 仅当 7 个错误码均有来源锚点且映射测试通过时完成 |
+| MET-TODO-008 | Done | 定义 MetricsErrors 错误码域 | metrics 设计 6.6；工程规范 3.6 | 6.6 错误语义 | L3 | infra/include/metrics/MetricsErrors.h | MET_E_PROVIDER_NOT_READY...MET_E_CONFIG_INVALID | contract：映射 contracts::ResultCode；unit：枚举稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-001 | contracts 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-04-01 已落盘 infra/include/metrics/MetricsErrors.h、tests/unit/infra/MetricsErrorsTest.cpp、tests/contract/smoke/MetricsErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 7 个错误码均有来源锚点且映射测试通过时完成 |
 | MET-TODO-009 | Not Started | 实现 MetricsFacade 初始化与写入骨架 | metrics 设计 6.2/6.7 | 6.2 MetricsFacade；6.7 步骤 1/2 | L3 | infra/src/metrics/MetricsFacade.cpp | init/get_meter/record 入口骨架 | unit：未初始化/已初始化两路径；failure：非法 identity 路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-001、MET-TODO-002、MET-TODO-006、MET-TODO-008 | 无 | 无 | Facade 骨架、单测 | 仅当初始化状态机与错误码路径可二值判定时完成 |
 | MET-TODO-010 | Not Started | 实现 InstrumentRegistry 唯一性管理骨架 | metrics 设计 6.2/6.3 | 6.2 InstrumentRegistry；6.3 同名同语义唯一 | L3 | infra/src/metrics/InstrumentRegistry.cpp | register_identity/find_identity | unit：同名冲突与重复注册路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-008 | 无 | 无 | Registry 骨架、单测 | 仅当重复注册冲突返回可判定错误并可观测时完成 |
 | MET-TODO-011 | Not Started | 实现 AggregationEngine 聚合骨架 | metrics 设计 6.2/6.7 | 6.2 AggregationEngine；6.7 步骤 5 | L3 | infra/src/metrics/AggregationEngine.cpp | aggregate_counter, aggregate_gauge, aggregate_histogram, snapshot | unit：Counter/Gauge/Histogram 聚合断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-007、MET-TODO-010 | 并发参数未冻结 | 先落单线程可测实现 | 聚合骨架、单测 | 仅当三类聚合行为均可重复验证时完成 |
@@ -655,3 +655,52 @@ Build 合规复核：
 3. 测试发现性：已用 ctest -N -R MetricsHealthProbeInterfaceTest 回填新增 unit 用例发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物与由 MET-TODO-007 解阻后的恢复执行摘要。
 5. 提交隔离：本轮提交范围限定为 IMetricsHealthProbe 头文件、对应 unit 测试、CMake 注册与本 TODO 证据更新。
+
+## 20. 本轮执行记录（2026-04-01 / MET-TODO-008）
+
+### 20.1 选中任务
+
+1. 本轮任务：MET-TODO-008。
+2. 可执行性依据：MET-TODO-001 已冻结 metrics 对外 contracts 错误面，当前可以把 metrics 私有错误码域稳定映射到既有 contracts::ResultCode；后续 009、010、012、014、015、016 也都依赖这组错误码来返回可判定失败。
+
+### 20.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6 已冻结 metrics 私有错误语义集合：provider_not_ready、identity_invalid、label_cardinality_exceeded、queue_full、export_failure、export_timeout、config_invalid，共 7 个错误码。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.8 把标签异常、队列异常、导出异常、配置异常四类失败路径拆开，说明错误码既要区分来源，也要能向上映射到稳定 contracts 失败域。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 给出了配置项表，因此 config_invalid 需要有独立来源锚点，而不是混入通用运行时错误。
+4. 专项 TODO 中 MET-TODO-008 的阻塞说明明确指出 contracts 映射矩阵未成文，因此本轮除了头文件，还必须用 contract 测试把映射矩阵固化下来。
+
+D 结论：
+
+1. Design -> Build 映射：新增 MetricsErrors.h，冻结 MetricsErrorCode 枚举、metrics_error_code_name() 与 map_metrics_error_code()，并让每个错误码都携带 source_anchor 与 reason，满足来源锚点可追溯要求。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/metrics/MetricsErrors.h，并接入 infra/CMakeLists.txt 的 PUBLIC_HEADER。
+   - 测试目标：新增 MetricsErrorsTest 与 MetricsErrorMappingContractTest，分别固化枚举稳定性和 contracts 映射矩阵。
+   - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "MetricsErrorsTest|MetricsErrorMappingContractTest" && ctest --test-dir build-ci --output-on-failure -R "MetricsErrorsTest|MetricsErrorMappingContractTest"。
+3. D Gate：PASS。
+
+### 20.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/metrics/MetricsErrors.h：新增 7 个 metrics 私有错误码、稳定名称表、contracts 映射表与 source_anchor/reason 元数据。
+2. tests/unit/infra/MetricsErrorsTest.cpp：覆盖枚举值与名称稳定性，以及 7 个错误码来源锚点非空检查。
+3. tests/contract/smoke/MetricsErrorMappingContractTest.cpp：覆盖 7 个错误码到 contracts::ResultCode 的精确映射矩阵、来源锚点与 MET_E_* 本地域名约束。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件、unit 测试、contract 测试注册。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_unit_tests dasall_contract_tests：通过；dasall_unit_tests 与 dasall_contract_tests 均成功完成，新增 MetricsErrorsTest 与 MetricsErrorMappingContractTest 已编入聚合目标。
+3. ctest --test-dir build-ci -N -R "MetricsErrorsTest|MetricsErrorMappingContractTest"：通过，发现 2 个测试，分别为 MetricsErrorsTest 与 MetricsErrorMappingContractTest。
+4. ctest --test-dir build-ci --output-on-failure -R "MetricsErrorsTest|MetricsErrorMappingContractTest"：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 错误码冻结：7 个错误码的枚举值与名称均由 unit 固化，防止后续重排或改名。
+2. 来源锚点：7 个错误码都带有非空 source_anchor 与 reason，满足 TODO 的来源追溯判定。
+3. 合同边界：contract 测试已固化全部映射矩阵，确保 metrics 私有错误域只向上暴露既有 contracts::ResultCode。
+4. 测试发现性：已用 ctest -N -R "MetricsErrorsTest|MetricsErrorMappingContractTest" 回填 unit/contract 双测试发现性证据。
+5. 提交隔离：本轮提交范围限定为 MetricsErrors 头文件、对应 unit/contract 测试、CMake 注册与本 TODO 证据更新。
