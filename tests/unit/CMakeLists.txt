@@ -22,6 +22,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_metric_exporter_interface_unit_test
 	dasall_metric_types_unit_test
 	dasall_infra_service_facade_unit_test
+	dasall_secret_manager_interface_unit_test
 	dasall_meter_interface_unit_test
 	dasall_metrics_provider_interface_unit_test
 	dasall_logger_interface_unit_test

@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 secret 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-04-01  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/secret
 
@@ -158,7 +158,7 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SEC-TODO-001 | Not Started | 定义 ISecretManager 接口头文件 | secret 设计 6.6；编码规范 3.7 | 6.6 ISecretManager | L3 | infra/include/ISecretManager.h | get_secret, materialize, release, rotate, revoke, inspect | unit：接口可编译；contract：边界语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录 | 仅当 6 个方法与锚点一致且编译通过时完成 |
+| SEC-TODO-001 | Completed | 定义 ISecretManager 接口头文件 | secret 设计 6.6；编码规范 3.7 | 6.6 ISecretManager | L3 | infra/include/ISecretManager.h | get_secret, materialize, release, rotate, revoke, inspect | unit：接口可编译；contract：边界语义不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录 | 仅当 6 个方法与锚点一致且编译通过时完成 |
 | SEC-TODO-002 | Not Started | 定义 ISecretHealthSource 接口头文件 | secret 设计 6.6 | 6.6 ISecretHealthSource | L2 | infra/include/secret/ISecretHealthSource.h | sample_secret_health | unit：接口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录 | 仅当健康采样接口落盘且可编译时完成 |
 | SEC-TODO-003 | Not Started | 定义 SecretTypes 对象模型 | secret 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/secret/SecretTypes.h | SecretQuery, SecretAccessContext, SecretDescriptor, SecretHandle, SecretLease, RotationRequest, RotationResult, SecretAuditEvent | unit：字段完整性；contract：不写入 contracts 共享对象 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L unit | 无 | 无 | 无 | 对象头文件、单测 | 仅当对象字段与 6.5 对齐且无明文字段时完成 |
 | SEC-TODO-004 | Not Started | 定义 SecureBuffer 语义与约束 | secret 设计 6.5/6.7 | 6.5 SecureBuffer；6.7 release 语义 | L3 | infra/include/secret/SecureBuffer.h | zeroize_on_release, 禁止隐式拷贝约束 | unit：零化与访问失效断言 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L unit | SEC-TODO-003 | 平台零化实现策略未定 | 先冻结接口和语义，不绑定平台实现 | 头文件、单测 | 仅当 release 后不可访问且零化断言通过时完成 |
@@ -238,6 +238,12 @@
 5. 是否所有任务都具备可二值判定的完成标准：是。
 6. 是否避免跨子系统范围扩张：是。
 7. 是否真正落到接口/数据结构级对象：是。
+
+### 9.3 已完成任务证据
+
+| 任务 ID | 完成时间 | 代码交付物 | 验证证据 |
+|---|---|---|---|
+| SEC-TODO-001 | 2026-04-01 | infra/include/ISecretManager.h；tests/unit/infra/SecretManagerInterfaceTest.cpp；tests/contract/smoke/SecretManagerInterfaceBoundaryContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_secret_manager_interface_unit_test dasall_contract_secret_manager_interface_boundary_test` 通过；`ctest --test-dir build-ci -R "SecretManagerInterfaceTest|SecretManagerInterfaceBoundaryContractTest" --output-on-failure` 通过（2/2） |
 
 ## 10. 风险与回退策略
 
