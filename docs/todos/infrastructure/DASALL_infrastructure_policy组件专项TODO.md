@@ -177,7 +177,7 @@
 | POL-TODO-005 | Done (2026-04-01) | 定义 PolicyErrors 错误码域 | policy 设计 6.6/6.8；contracts-freeze ResultCode 分类表 | 6.6 错误语义；6.8 异常与恢复时序 | L3 | infra/include/policy/PolicyErrors.h | INF_E_POLICY_BUNDLE_INVALID、INF_E_POLICY_SCHEMA_UNSUPPORTED、INF_E_POLICY_CONFLICT_UNRESOLVED、INF_E_POLICY_PATCH_BASE_MISMATCH、INF_E_POLICY_SNAPSHOT_NOT_FOUND、INF_E_POLICY_ROLLBACK_FAILED、INF_E_POLICY_QUERY_DENIED、INF_E_POLICY_SOURCE_UNAVAILABLE、INF_E_POLICY_STORE_COMMIT_FAILED、INF_E_POLICY_DRYRUN_REJECTED | contract：错误码映射保持 policy 失败域；unit：错误码稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | 无 | 无（2026-04-01 已明确采用 mapping catalog 作为替代路径） | 无；可直接冻结 policy 失败域与 contracts 映射说明 | PolicyErrors.h、PolicyErrorsTest、PolicyErrorMappingContractTest；2026-04-01 已完成错误码域冻结、CMake 入图与 CTest 验收 | 仅当 10 个错误码都可追溯到设计锚点，且不把 validation/tool/runtime 失败误归入 policy 域时完成 |
 | POL-TODO-006 | Done (2026-04-01) | 定义 ISecurityPolicyManager 接口头文件 | policy 设计 6.6；infrastructure 设计 6.6 | 6.6 ISecurityPolicyManager | L3 | infra/include/policy/ISecurityPolicyManager.h | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate | unit：接口编译；contract：返回对象与 decision 语义边界 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001、POL-TODO-002、POL-TODO-003、POL-TODO-004、POL-TODO-005 | 无 | 无 | ISecurityPolicyManager.h、PolicyManagerInterfaceTest、PolicyDecisionBoundaryTest；2026-04-01 已完成 nodiscard 收敛、unit 接口冻结测试与 contract 边界校验 | 仅当 6 个方法签名与设计一致，且接口不暴露规则引擎实现细节时完成 |
 | POL-TODO-007 | Done (2026-04-01) | 定义 IPolicyLoader 接口头文件 | policy 设计 6.6/6.9；config TODO | 6.6 IPolicyLoader；6.9 配置项与默认策略 | L3 | infra/include/policy/IPolicyLoader.h | load_from_sources | unit：接口编译；unit：source_id/version/checksum 字段对接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001、POL-TODO-006 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小 load_layers/get_typed 接口与 profiles 侧 policy 键名已冻结 | IPolicyLoader.h、PolicyLoaderInterfaceTest、build-ci unit 验证记录；2026-04-01 已完成 | 仅当 loader 只暴露 PolicyBundle 输出，不泄露 ConfigCenter 内部实现时完成 |
-| POL-TODO-008 | Not Started | 定义 IPolicySchemaValidator 接口头文件 | policy 设计 6.6/6.8 | 6.6 IPolicySchemaValidator；6.8 输入异常 | L2 | infra/include/policy/IPolicySchemaValidator.h | validate_bundle、validate_patch | unit：接口编译；contract：blocking_errors 只对齐错误域不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001、POL-TODO-002 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结 schema 字段与兼容矩阵推进 | IPolicySchemaValidator.h、编译记录 | 仅当接口只暴露校验结果，不预埋 DSL 执行模型时完成 |
+| POL-TODO-008 | Done (2026-04-01) | 定义 IPolicySchemaValidator 接口头文件 | policy 设计 6.6/6.8 | 6.6 IPolicySchemaValidator；6.8 输入异常 | L2 | infra/include/policy/IPolicySchemaValidator.h | validate_bundle、validate_patch | unit：接口编译；contract：blocking_errors 只对齐错误域不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001、POL-TODO-002 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结 schema 字段与兼容矩阵推进 | IPolicySchemaValidator.h、PolicySchemaValidatorInterfaceTest、PolicySchemaValidatorInterfaceBoundaryContractTest、build-ci unit/contract 验证记录；2026-04-01 已完成 | 仅当接口只暴露校验结果，不预埋 DSL 执行模型时完成 |
 | POL-TODO-009 | Not Started | 定义 IPolicySnapshotStore 接口头文件 | policy 设计 6.6/6.8 | 6.6 IPolicySnapshotStore；6.8 存储异常 | L3 | infra/include/policy/IPolicySnapshotStore.h | commit、current、last_known_good、get_by_id | unit：接口编译；unit：LKG 与 generation 语义检查 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003 | 无 | 无 | IPolicySnapshotStore.h、编译记录 | 仅当 4 个方法齐全，且接口不泄露具体持久化后端时完成 |
 | POL-TODO-010 | Not Started | 实现 PolicyLoader 配置读取骨架 | policy 设计 6.3/6.7/6.9；config TODO；profiles TODO | 6.3 PolicyLoader 输入输出；6.7 正常加载流程第 2 步；6.9 配置项表 | L2 | infra/src/policy/PolicyLoader.cpp | PolicyLoader（默认/Profile/部署层读取与 source_id/checksum 装配） | unit：strict/compat、hot_reload、default_effect 等配置读取；contract：Profile 裁剪不绕过 Audit/Runtime 主控链路 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001、POL-TODO-007 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 具备最小 load_layers/get_typed 能力且 profiles 侧键名冻结 | PolicyLoader.cpp、配置读取测试 | 仅当 loader 能按设计读取 enabled/mode/hot_reload/max_history/default_effect/priority_order 等策略键，且 source 链可追溯时完成 |
 | POL-TODO-011 | Not Started | 实现 PolicySchemaValidator 最小校验骨架 | policy 设计 6.3/6.7/6.8 | 6.3 ValidationReport；6.7 正常加载流程第 3 步；6.8 输入异常 | L2 | infra/src/policy/PolicySchemaValidator.cpp | validate_bundle、validate_patch | unit：缺字段、未知 domain、非法 effect、base_generation 不匹配；contract：错误归类保持 policy 域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-002、POL-TODO-005、POL-TODO-008 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结 domain/effect/conditions 白名单、schema_version 兼容矩阵与 patch operation 集合推进 | PolicySchemaValidator.cpp 或阻塞记录 | 仅当四类非法输入都能返回明确 ValidationReport 且不激活快照时，状态才可从 Not Started 转为 Done |
@@ -721,4 +721,55 @@ Build 合规复核：
 3. 测试发现性：已通过 ctest -N 验证 PolicyLoaderInterfaceTest 进入 CTest 图，并可单独执行。
 4. TODO 证据回写：已完成 POL-TODO-007 状态、POL-BLK-006 解阻状态与受影响任务阻塞显示的同步回写。
 5. 提交隔离：本轮提交范围限定为 IPolicyLoader 头文件、对应 unit 测试与本专项 TODO 文档。
+
+## 20. 本轮执行记录（2026-04-01 / POL-TODO-008）
+
+### 20.1 选中任务
+
+1. 本轮任务：POL-TODO-008。
+2. 可执行性依据：POL-TODO-001、POL-TODO-002 已完成，且 POL-TODO-008 无阻塞项；当前最小闭环不是提前实现 PolicySchemaValidator.cpp，而是先冻结 validate_bundle、validate_patch 两个校验入口及其 ValidationReport 边界，确保后续实现不会把错误结果扩写成 contracts 共享结构或执行模型。
+
+### 20.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_policy模块详细设计.md 6.6 已明确 IPolicySchemaValidator 只暴露 validate_bundle(const PolicyBundle&) 与 validate_patch(const PolicySnapshot&, const PolicyPatch&) 两个方法。
+2. docs/architecture/DASALL_infra_policy模块详细设计.md 6.8 把 validator 的职责限制为输入异常与 patch/base_generation 之类的结构性校验，而非执行、投影或提交。
+3. infra/include/config/IConfigValidator.h 已在仓库内提供现成先例：纯校验接口使用 const 方法、返回本地 validation report，并把 contracts::ResultCode/ErrorInfo 留在更外层 orchestrator 边界。
+4. tests/unit/infra/PolicyPatchValidationTypesTest.cpp 与 tests/contract/smoke/PolicyPatchValidationBoundaryContractTest.cpp 已冻结 ValidationReport 的 blocking_errors/warnings/invalid_rule_ids/field_paths 四个字段与局部字符串报告语义。
+
+D 结论：
+
+1. Design -> Build 映射：新增 pure abstract 的 IPolicySchemaValidator，使用 const 方法表达“校验不产生状态副作用”；接口只返回 ValidationReport，不引入 ResultCode/ErrorInfo，也不预埋 DSL 执行或快照提交入口。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/policy/IPolicySchemaValidator.h，并纳入 infra 公共头导出。
+   - 测试目标：新增 tests/unit/infra/PolicySchemaValidatorInterfaceTest.cpp，冻结两个方法签名、抽象性、virtual destructor、bundle/patch 正负例与“不吸收 loader/store/manager 方法”的边界；新增 tests/contract/smoke/PolicySchemaValidatorInterfaceBoundaryContractTest.cpp，直接验证 ValidationReport 仍只保留本地字符串向量字段，不扩写 ResultCode/ErrorInfo。
+   - 验收命令：执行 cmake -S . -B build-ci -G Ninja、cmake --build build-ci --target dasall_infra、cmake --build build-ci --target dasall_unit_tests dasall_contract_tests、ctest --test-dir build-ci -N -R "PolicySchemaValidatorInterface(Test|BoundaryContractTest)"、ctest --test-dir build-ci --output-on-failure -R "PolicySchemaValidatorInterface(Test|BoundaryContractTest)"，并复核 unit/contract 全量门禁。
+3. D Gate：PASS。008 仅冻结校验入口与报告边界，不进入 PolicySchemaValidator.cpp 骨架。
+
+### 20.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/policy/IPolicySchemaValidator.h：新增纯抽象 validator 边界，固定 validate_bundle、validate_patch 两个 const 入口与 ValidationReport 返回面。
+2. tests/unit/infra/PolicySchemaValidatorInterfaceTest.cpp、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：新增并注册 unit 接口冻结测试，覆盖签名、抽象性、正负例与 boundary leakage 守卫。
+3. tests/contract/smoke/PolicySchemaValidatorInterfaceBoundaryContractTest.cpp、tests/contract/CMakeLists.txt：新增并注册 contract 边界测试，验证 blocking_errors 仍停留在 policy 私有 ValidationReport 中。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G Ninja：通过。
+2. cmake --build build-ci --target dasall_infra：通过。
+3. cmake --build build-ci --target dasall_unit_tests dasall_contract_tests：通过；构建过程中 unit 聚合目标附带执行，77/77 unit tests passed；contract 聚合目标附带执行，120/120 contract tests passed。
+4. ctest --test-dir build-ci -N -R "PolicySchemaValidatorInterface(Test|BoundaryContractTest)"：通过，发现 2 个测试，分别为 PolicySchemaValidatorInterfaceTest、PolicySchemaValidatorInterfaceBoundaryContractTest。
+5. ctest --test-dir build-ci --output-on-failure -R "PolicySchemaValidatorInterface(Test|BoundaryContractTest)"：通过，2/2 tests passed。
+6. unit 全量门禁复核：通过，77/77 tests passed。
+7. contract 全量门禁复核：通过，120/120 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮接口与测试命名已足够自解释，无需额外注释。
+2. 正负例覆盖：unit 覆盖 bundle/patch 的通过与阻断路径，contract 覆盖 ValidationReport 仅保留本地字符串报告的边界。
+3. 测试发现性：已通过 ctest -N 验证 PolicySchemaValidatorInterfaceTest 与 PolicySchemaValidatorInterfaceBoundaryContractTest 同时进入 CTest 图，并可定向执行。
+4. TODO 证据回写：已完成 POL-TODO-008 状态、交付物与验收结果回写。
+5. 提交隔离：本轮提交范围限定为 IPolicySchemaValidator 头文件、对应 unit/contract 测试与本专项 TODO 文档。
 
