@@ -343,6 +343,21 @@ dasall_apply_common_options(dasall_policy_query_decision_ref_types_unit_test)
 add_test(NAME PolicyQueryDecisionRefTypesTest COMMAND dasall_policy_query_decision_ref_types_unit_test)
 set_tests_properties(PolicyQueryDecisionRefTypesTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_errors_unit_test
+  PolicyErrorsTest.cpp
+)
+
+target_link_libraries(dasall_policy_errors_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_errors_unit_test)
+
+add_test(NAME PolicyErrorsTest COMMAND dasall_policy_errors_unit_test)
+set_tests_properties(PolicyErrorsTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_diagnostics_types_unit_test
   DiagnosticsTypesTest.cpp
 )

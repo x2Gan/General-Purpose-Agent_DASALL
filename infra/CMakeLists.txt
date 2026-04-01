@@ -54,6 +54,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/ota/IOTAPackageVerifier.h
   include/ota/OTATypes.h
   include/policy/ISecurityPolicyManager.h
+  include/policy/PolicyErrors.h
   include/policy/PolicyTypes.h
   include/policy/PolicyBundle.h
   include/policy/PolicyDecisionRef.h
