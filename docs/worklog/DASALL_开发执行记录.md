@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #058
+
+- 日期：2026-04-01
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-007 定义 plugin 私有错误码域
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLG-TODO-007-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/PLG-TODO-007-PluginErrorCode设计收敛.md](docs/todos/infrastructure/PLG-TODO-007-PluginErrorCode%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，将 6.6 的 validate/load 锚点与 6.8/9.1 的失败类别收敛为六个冻结 `INF_E_PLUGIN_*` 码名，并给出 blocker 修复说明、Design->Build 映射与 D Gate。
+   - 对原任务验收命令做最小 blocker-fix：显式构建新增 unit/contract 测试目标，避免 CTest 在未生成可执行文件时误判失败。
+2. 完成 PLG-TODO-007-B 代码落地：
+   - 新增 [infra/include/plugin/PluginErrorCode.h](infra/include/plugin/PluginErrorCode.h)
+   - 新增 [tests/unit/infra/plugin/PluginErrorCodeTest.cpp](tests/unit/infra/plugin/PluginErrorCodeTest.cpp)
+   - 新增 [tests/contract/smoke/PluginErrorCodeBoundaryContractTest.cpp](tests/contract/smoke/PluginErrorCodeBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test` 通过。
+   - `ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"` 通过，发现 2 个测试。
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"` 通过，2/2 tests passed。
+
+### 结果
+
+1. plugin 私有错误码域已以最小 header-only 形式落盘，后续 validation/lifecycle/audit 任务可直接复用统一的 `INF_E_PLUGIN_*` 名称与一级 contracts 映射。
+2. 本轮先完成了“六个错误码名未完整冻结”的 blocker 修复，再落到代码与测试，未越界扩张到签名链、ABI 规则或 facade 实现。
+
+### 下一步
+
+1. Phase 1 的三个基础对象冻结任务已经完成；若继续按专项 TODO 推进，下一个直接后继应进入 PLG-TODO-003/004 或 Phase 3 接线任务。
+
+### 风险
+
+1. `SIGNATURE_FAIL` 与 `COMPATIBILITY_FAIL` 目前只冻结到一级 contracts 映射；待 INF-BLK-09 解阻后，若需要更细粒度语义，应通过增量设计承接而非替换现有码名。
+
 ## 记录 #057
 
 - 日期：2026-04-01

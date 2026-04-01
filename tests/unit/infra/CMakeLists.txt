@@ -597,3 +597,18 @@ dasall_apply_common_options(dasall_plugin_catalog_unit_test)
 
 add_test(NAME PluginCatalogTest COMMAND dasall_plugin_catalog_unit_test)
 set_tests_properties(PluginCatalogTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_plugin_error_code_unit_test
+  plugin/PluginErrorCodeTest.cpp
+)
+
+target_link_libraries(dasall_plugin_error_code_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_plugin_error_code_unit_test)
+
+add_test(NAME PluginErrorCodeTest COMMAND dasall_plugin_error_code_unit_test)
+set_tests_properties(PluginErrorCodeTest PROPERTIES LABELS "unit")

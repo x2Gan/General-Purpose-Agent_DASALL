@@ -35,6 +35,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_config_errors_unit_test
 	dasall_plugin_catalog_unit_test
 	dasall_plugin_descriptor_unit_test
+	dasall_plugin_error_code_unit_test
 	dasall_health_monitor_interface_unit_test
 	dasall_health_policy_interface_unit_test
 	dasall_health_probe_types_unit_test

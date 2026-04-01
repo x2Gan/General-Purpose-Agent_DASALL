@@ -155,7 +155,7 @@
 | PluginManifest 对象冻结 | 详设 6.5；INF-BLK-09 | 数据结构 | P0 | Blocked | PLG-BLK-05 | schema_version 版本化，但字段集与扩展模型未冻结 → INF-BLK-09 |
 | PluginValidationPipeline 建立 | 详设 6.3、6.7/6.8 | 流程 | P0 | Not Started | PLG-TODO-005 | 三检顺序明确，可先拆骨架，不进完整实现 |
 | PluginAuditAdapter 建立 | 详设 6.10；infra 系统 6.10 | 适配器 | P0 | Not Started | PLG-TODO-006 | 审计字段列表清晰，但依赖 INF-TODO-016 AuditService |
-| plugin 私有错误码域 | 详设 6.6、9.1 | 错误码 | P0 | Not Started | PLG-TODO-007 | 六个错误码已列，可直接定义 |
+| plugin 私有错误码域 | 详设 6.6、9.1 | 错误码 | P0 | Done | PLG-TODO-007 | 六个错误码已列，可直接定义 |
 | CMake 与 test 注册点 | 详设 8.1、8.2 | 构建/测试 | P0 | Not Started | PLG-TODO-008、PLG-TODO-009 | 目录建议明确，可直接接线 |
 | 单元测试基线 | 详设 9.1 | 测试 | P0 | Not Started | PLG-TODO-010 | 测试矩阵完整，可在接口/对象确定后编写 |
 | 合约边界测试 | contracts 冻结策略；蓝图 4.3 | 测试 | P0 | Not Started | PLG-TODO-011 | plugin 标识可复用 contracts，需 boundary 测试 |
@@ -177,7 +177,7 @@
 | PLG-TODO-004 | Not Started | 新增 IPluginPolicyGate 接口 | 详设 6.6；infra 系统 6.6 | 详设 6.6 IPluginPolicyGate、6.3 策略决策 | L2 | infra/include/plugin/IPluginPolicyGate.h，包含 evaluate(manifest, policy_snapshot, profile) 方法，返回 PolicyDecisionRef | unit：接口编译；contract：不越权扩写策略对象 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginPolicyGateInterfaceCompileTest"` | PLG-TODO-001、INF-TODO-017（SecurityPolicyManager） | 无 | 无 | 接口头文件、编译证据 | 仅当接口定义与详设 6.6 一致且编译通过时完成 |
 | PLG-TODO-005 | Not Started | 建立 PluginValidationPipeline 骨架与三检流程 | 详设 6.3、6.7、6.8 | 详设 6.7 主流程、6.8 异常流程、6.3 子组件依赖 | L2 | infra/src/plugin/PluginValidationPipeline.cpp（or PluginValidatorImpl.cpp），骨架实现 policy->signature->compat 三检流程，失败时返回对应 Report | unit：三检失败分支可区分；contract：聚合 Report 语义稳定 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -R "PluginValidationPipelineTest"` | PLG-TODO-003、PLG-TODO-004、PLG-TODO-001、PLG-TODO-002（以及 INF-TODO-017） | 无 | 无 | pipeline 实现、单测 | 仅当三检流程失败可判定（拒绝可溯源）且编译通过时完成 |
 | PLG-TODO-006 | Not Started | 新增 PluginAuditAdapter 适配器 | 详设 6.10；infra 系统 6.10 | 详设 6.10 审计点与字段清单 | L2 | infra/src/plugin/PluginAuditAdapter.cpp，负责生成 plugin load/unload 与 policy deny 的 AuditEvent，含 actor、action、target、outcome、evidence_ref、reason_code | unit：AuditEvent 必填字段校验；integration：审计写入与导出可追踪 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L "unit|integration" -R "PluginAudit"` | PLG-TODO-001、INF-TODO-016（AuditService） | 无 | 无 | adapter 实现、单测与集成测试 | 仅当高风险动作（load/unload/policy deny）有审计记录，且 evidence_ref 可解引时完成 |
-| PLG-TODO-007 | Not Started | 定义 plugin 私有错误码域 | 详设 6.6、9.1 | 详设 6.6 错误语义、9.1 failure injection 场景 | L2 | infra/include/InfraErrorCode.h（or 新增 plugin/PluginErrorCode.h），定义六个 INF_E_PLUGIN_* 错误码并在 infra facade 侧建立映射入口 | unit：码值可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L "unit|contract" -R "ErrorCode"` | 无 | 无 | 无 | 错误码头文件、映射说明、单测与合约测试 | 仅当六个私有错误码均可追溯到详设，且 contract 测试阻止越权映射时完成 |
+| PLG-TODO-007 | Done | 定义 plugin 私有错误码域 | 详设 6.6、9.1 | 详设 6.6 错误语义、9.1 failure injection 场景 | L2 | infra/include/InfraErrorCode.h（or 新增 plugin/PluginErrorCode.h），定义六个 INF_E_PLUGIN_* 错误码并在 infra facade 侧建立映射入口 | unit：码值可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test && ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"` | 无 | 无 | 无 | 错误码头文件、映射说明、单测与合约测试 | 已完成（2026-04-01）：PluginErrorCode.h、PluginErrorCodeTest、PluginErrorCodeBoundaryContractTest 落盘；六个 `INF_E_PLUGIN_*` 码名已在设计收敛文档中冻结并全部通过 unit/contract 验证 |
 | PLG-TODO-008 | Not Started | 接线 infra/src/plugin 与 infra/include/plugin CMake 目标 | 详设 8.1；当前 CMake 现状 | 详设 8.1 目录落盘建议、8.2 分阶段实施 | L2 | 更新 infra/CMakeLists.txt，新增 plugin 子目录与源文件列表（允许仅添加头文件与空实现入口） | build：dasall_infra 目标可编译且包含 plugin 真实头文件 | `cmake -S . -B build-ci && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_infra 2>&1 \| grep -E "plugin|Plugin"` | PLG-TODO-001 至 PLG-TODO-007 | 无 | 无 | infra/CMakeLists.txt 改动、构建输出 | 仅当 plugin 源文件被显式列在 CMake 中（不再只有 placeholder）且 dasall_infra 编译通过时完成 |
 | PLG-TODO-009 | Not Started | 注册 tests/unit/infra/plugin 单元测试入口 | 详设 9.1；编码规范 3.7 | 详设 9.1 测试矩阵、编码规范 3.7 | L2 | 新增 tests/unit/infra/plugin/ 目录与 PluginDescriptorTest.cpp/PluginCatalogTest.cpp 等，在 tests/unit/CMakeLists.txt 中注册 plugin 子目录 | unit：用例被 ctest -L unit 发现 | `cmake -S . -B build-ci && ctest --test-dir build-ci -N \| grep -i plugin` | PLG-TODO-001 至 PLG-TODO-005 | 无 | 无 | tests/unit/infra/plugin 目录与 CMakeLists.txt、ctest 发现证据 | 仅当 plugin 单元测试可被 ctest -L unit 发现并执行时完成 |
 | PLG-TODO-010 | Not Started | 注册 tests/contract/infra/plugin 合约边界测试入口 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 详设 6.5 contracts 对齐关系、9.1 contract 覆盖目标 | L2 | 在 tests/contract/ 现有注册机制下新增 plugin 边界用例，例如 PluginObjectBoundaryTest 检查标识字段不越权、ErrorCodeMappingTest 检查码映射稳定 | contract：标识字段、错误码、AuditEvent 引用不越权 | `cmake -S . -B build-ci && ctest --test-dir build-ci -L contract --output-on-failure -R "Plugin"` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-007 | 无 | 无 | tests/contract/plugin/ 源文件、contract 执行记录 | 仅当新增 contract 测试被发现且能阻止 contracts 语义越权时完成 |
@@ -567,6 +567,65 @@ Build 合规复核：
 
 ---
 
+## 16. 本轮执行记录（2026-04-01 / PLG-TODO-007）
+
+### 16.1 选中任务
+
+1. 本轮任务：PLG-TODO-007。
+2. 可执行性依据：该任务无代码前置依赖，目标限定在 plugin 私有错误码枚举与映射规则；唯一风险是“六个 INF_E_PLUGIN_*”在原始设计中未显式完整列名，属于可在本轮内通过设计收敛修复的 context blocker。
+
+### 16.2 Blocker 修复与 Design 结论
+
+阻塞证据：
+
+1. docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md 声称“六个 INF_E_PLUGIN_* 错误码已列”，但 docs/architecture/DASALL_infra_plugin模块详细设计.md 6.6 只显式给出 `INF_E_PLUGIN_VALIDATE_FAIL` 与 `INF_E_PLUGIN_LOAD_FAIL` 两个名字。
+2. 同一详细设计 6.8/9.1 虽已冻结策略拒绝、签名失败、兼容失败、卸载失败等失败类别，但未把这四类失败收敛成显式 `INF_E_PLUGIN_*` 名称，导致 007 无法直接满足“六个私有错误码均可追溯到详设”的完成判定。
+
+最小 blocker-fix：
+
+1. 新增 docs/todos/infrastructure/PLG-TODO-007-PluginErrorCode设计收敛.md，把 6.6 的 validate/load 锚点与 6.8/9.1 的失败类别收敛为六个冻结码名：`INF_E_PLUGIN_VALIDATE_FAIL`、`INF_E_PLUGIN_POLICY_DENIED`、`INF_E_PLUGIN_SIGNATURE_FAIL`、`INF_E_PLUGIN_COMPATIBILITY_FAIL`、`INF_E_PLUGIN_LOAD_FAIL`、`INF_E_PLUGIN_UNLOAD_FAIL`。
+
+D 结论：
+
+1. PluginErrorCode 采用 plugin 私有 header-only 错误码定义，不把实现细节提前耦合进 InfraErrorCode 顶层枚举。
+2. 映射规则只允许落入 contracts 已冻结的 Validation / Policy / Runtime 三类 ResultCode，不新增共享错误语义。
+3. Build 三件套锁定为：
+        - 代码目标：infra/include/plugin/PluginErrorCode.h。
+        - 测试目标：PluginErrorCodeTest、PluginErrorCodeBoundaryContractTest。
+        - 验收命令：cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test && ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"。
+4. D Gate：PASS。
+
+### 16.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/plugin/PluginErrorCode.h：新增 PluginErrorCode、PluginErrorMapping、plugin_error_code_name() 与 map_plugin_error_code()，冻结六个 plugin 私有错误码及其一级 contracts 映射。
+2. tests/unit/infra/plugin/PluginErrorCodeTest.cpp：覆盖六个名字稳定性与 Validation/Policy/Runtime 映射。
+3. tests/contract/smoke/PluginErrorCodeBoundaryContractTest.cpp：覆盖“只映射到现有 contracts ResultCode”和“名字保持在 `INF_E_PLUGIN_*` 私有命名空间”的边界约束。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成头文件与定向测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G Ninja`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test`：通过。
+3. `ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"`：通过，发现 2 个测试。
+4. `ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：新增 enum 和映射函数命名已直接表达阶段与失败域语义，无需额外冗余注释。
+2. 正负例覆盖：unit 覆盖名字稳定性和一级映射正例；contract 覆盖共享 ResultCode 不越权与命名空间边界守卫。
+3. 测试发现性：已通过 `ctest -N -R ...` 验证新增 unit/contract 用例进入 CTest 图。
+4. TODO 证据回写：已完成 blocker 说明、任务状态、验收命令与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 PluginErrorCode 对象、测试、CMake 注册、设计收敛文档与专项 TODO/工作日志证据。
+
+阻塞修复：
+
+1. 原任务的设计锚点未显式完整列出六个 `INF_E_PLUGIN_*` 名字；本轮先通过设计收敛文档完成最小 blocker-fix，再落盘代码与测试。
+2. 原任务行的验收命令未显式构建新增测试目标，无法稳定支撑 ctest 执行；本轮已同步修正为显式构建对应 unit/contract 目标。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -574,6 +633,7 @@ Build 合规复核：
 | v1.0 | 2026-03-25 | 初稿：完整 TODO 框架、粒度评估、映射与拆解、阻塞管理 | （待评审） |
 | v1.1 | 2026-04-01 | 回写 PLG-TODO-001 设计/构建证据，修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 | v1.2 | 2026-04-01 | 回写 PLG-TODO-002 设计/构建证据，修正该任务验收命令中的测试目标构建缺口 | （待评审） |
+| v1.3 | 2026-04-01 | 回写 PLG-TODO-007 的 blocker 修复、设计/构建证据，并修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 
 ---
 

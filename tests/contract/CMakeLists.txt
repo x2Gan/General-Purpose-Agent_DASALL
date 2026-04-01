@@ -623,6 +623,23 @@ target_link_libraries(dasall_contract_plugin_catalog_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_plugin_error_code_boundary_test
+  PluginErrorCodeBoundaryContractTest
+  smoke/PluginErrorCodeBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_plugin_error_code_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_plugin_error_code_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_time_deadline_test
   TimeDeadlineContractTest
   smoke/TimeDeadlineContractTest.cpp

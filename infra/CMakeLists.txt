@@ -59,6 +59,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/policy/PolicySnapshot.h
   include/plugin/PluginCatalog.h
   include/plugin/PluginDescriptor.h
+  include/plugin/PluginErrorCode.h
 )
 
 add_library(dasall_infra STATIC)
