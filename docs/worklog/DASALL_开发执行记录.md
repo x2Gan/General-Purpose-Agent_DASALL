@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #056
+
+- 日期：2026-04-01
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-001 定义 PluginDescriptor 数据结构
+- 状态：已完成
+
+### 改动
+
+1. 完成 PLG-TODO-001-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/PLG-TODO-001-PluginDescriptor设计收敛.md](docs/todos/infrastructure/PLG-TODO-001-PluginDescriptor%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固化字段集合、unknown 归一化、Design->Build 映射与 D Gate。
+   - 对原任务验收命令做最小 blocker-fix：显式构建新增 unit/contract 测试目标，避免 CTest 在未生成可执行文件时误判失败。
+2. 完成 PLG-TODO-001-B 代码落地：
+   - 新增 [infra/include/plugin/PluginDescriptor.h](infra/include/plugin/PluginDescriptor.h)
+   - 新增 [tests/unit/infra/plugin/PluginDescriptorTest.cpp](tests/unit/infra/plugin/PluginDescriptorTest.cpp)
+   - 新增 [tests/contract/smoke/PluginDescriptorBoundaryContractTest.cpp](tests/contract/smoke/PluginDescriptorBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G Ninja`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_descriptor_unit_test dasall_contract_plugin_descriptor_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest"`
+2. 结果：
+   - `cmake -S . -B build-ci -G Ninja` 通过。
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_descriptor_unit_test dasall_contract_plugin_descriptor_boundary_test` 通过。
+   - `ctest --test-dir build-ci -N -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest"` 通过，发现 2 个测试。
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginDescriptorFieldTest|PluginDescriptorBoundaryContractTest"` 通过，2/2 tests passed。
+
+### 结果
+
+1. PluginDescriptor 已以最小 header-only 治理对象落盘，后续 PluginCatalog、IPluginManager 和 ValidationPipeline 可以复用统一字段与 unknown 归一化规则。
+2. 本轮仅冻结 PluginDescriptor 字段与边界测试，不提前扩张到 manifest、签名、ABI 或 lifecycle 实现。
+
+### 下一步
+
+1. 按依赖顺序继续推进 PLG-TODO-002，定义 PluginCatalog 数据结构。
+
+### 风险
+
+1. trust_level/status 当前仅冻结最小枚举；若后续评审要求新增状态或细化等级，需通过单独评审保持兼容演进。
+
 ## 记录 #055
 
 - 日期：2026-03-27
