@@ -823,6 +823,21 @@ dasall_apply_common_options(dasall_watchdog_snapshot_unit_test)
 add_test(NAME WatchdogSnapshotTest COMMAND dasall_watchdog_snapshot_unit_test)
 set_tests_properties(WatchdogSnapshotTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_watchdog_recovery_hint_request_unit_test
+  watchdog/RecoveryHintRequestTest.cpp
+)
+
+target_link_libraries(dasall_watchdog_recovery_hint_request_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_watchdog_recovery_hint_request_unit_test)
+
+add_test(NAME RecoveryHintRequestTest COMMAND dasall_watchdog_recovery_hint_request_unit_test)
+set_tests_properties(RecoveryHintRequestTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )
