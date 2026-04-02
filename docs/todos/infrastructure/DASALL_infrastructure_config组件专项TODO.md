@@ -169,7 +169,7 @@
 | CFG-TODO-011 | Done | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigSnapshotStore.h、infra/src/config/ConfigSnapshotStore.cpp、tests/unit/infra/ConfigSnapshotStoreTest.cpp，并完成 infra/tests CMake 注册 | 仅当失败时可回退到 LKG 且测试通过时完成 |
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
 | CFG-TODO-013 | Done | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | 无（2026-04-02 已由 CFG-BLK-001 解阻） | v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义 | 发布骨架、单测、integration；2026-04-02 已落盘 infra/include/config/ConfigPublisher.h、infra/src/config/ConfigPublisher.cpp、tests/unit/infra/ConfigPublisherTest.cpp、tests/integration/infra/ConfigRuntimePatchIntegrationTest.cpp，并完成 infra/tests CMake 注册 | 仅当 ConfigChanged 发布与命名空间过滤订阅均可被 integration 用例验证时完成 |
-| CFG-TODO-014 | Not Started | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 初期源文件渐进落盘 | 保留最小 non-empty 源文件过渡 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
+| CFG-TODO-014 | Done | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 无 | 保留最小 non-empty 源文件过渡 | CMake 接线、构建记录；2026-04-02 已确认 infra/CMakeLists.txt 纳入 ConfigCenterFacade/Publisher/Loader/Merger/Validator/SnapshotStore 源文件与对应 public headers，并完成 dasall_infra 构建验收 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Not Started | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
 | CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 CFG-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
 | CFG-TODO-017 | Not Started | 回写 config 质量门与交付证据 | config 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md | process test：门禁结论、阻塞变化、回退执行证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论与对应命令证据时完成 |
@@ -997,3 +997,52 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R "ConfigPublisherTest|ConfigPublisherInterfaceTest|ConfigCenterFacadeTest|ConfigRuntimePatchIntegrationTest"` 回填新增测试发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物路径、验收命令与边界说明。
 5. 提交隔离：本轮提交范围限定为 ConfigPublisher 代码、受影响 Facade 改动、unit/integration 测试、CMake 注册与 TODO 证据文档，不混入 016 或 observability 后续任务。
+
+## 26. 本轮执行记录（2026-04-02 / CFG-TODO-014）
+
+### 26.1 选中任务
+
+1. 本轮任务：CFG-TODO-014。
+2. 可执行性依据：CFG-TODO-001~013 已完成，config 实现类与 public headers 已随各骨架任务逐步落盘；014 当前只需核对 infra/CMakeLists.txt 的聚合状态并完成独立验收与证据收口。
+
+### 26.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 8.1 已建议 config 代码落盘到 infra/include/config 与 infra/src/config，并由 infra/CMakeLists.txt 统一纳入 dasall_infra。
+2. infra/CMakeLists.txt 当前已经纳入 ConfigCenterFacade、ConfigPublisher、ConfigLoader、ConfigMerger、ConfigValidator、ConfigSnapshotStore 六个 config 源文件，以及对应 public headers。
+3. 007~013 的执行记录已逐轮证明 config 实现文件均已实际落盘，014 的剩余工作是把“增量接线”正式收束为单独 CMake 任务的完成证据。
+
+D 结论：
+
+1. Design -> Build 映射：014 不新增新的 config 源码，而是确认 infra/CMakeLists.txt 已从“仅接口/占位”状态升级为承载 config 具体实现的构建入口，并以独立 build 验收收口。
+2. Build 三件套：
+   - 代码目标：无新增代码；验证 infra/CMakeLists.txt 中 config 源文件与 public headers 已全部接入 dasall_infra。
+   - 测试目标：执行 dasall_infra 构建验收，证明 placeholder 已不再是唯一功能入口。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_infra`。
+3. D Gate：PASS。
+
+边界说明：
+
+1. 本轮不重复修改前序任务已落盘的 CMake 列表，只做 build 验收与 TODO 证据回写。
+2. unit/contract 聚合与 integration 拓扑分别留给 015/016 单独收口，避免扩大 014 范围。
+
+### 26.3 Build 交付与证据
+
+交付物：
+
+1. infra/CMakeLists.txt：已确认接入 ConfigCenterFacade、ConfigPublisher、ConfigLoader、ConfigMerger、ConfigValidator、ConfigSnapshotStore 源文件与对应 public headers。
+2. docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md：将 CFG-TODO-014 状态更新为 Done，并回写本轮 CMake 验收记录。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过；刷新当前 build-ci 构建图。
+2. `cmake --build build-ci --target dasall_infra`：通过；确认 config 代码已由 infra/CMakeLists.txt 正式纳入 dasall_infra，且可独立完成构建。
+
+Build 合规复核：
+
+1. 代码注释：本轮不涉及代码改动。
+2. 正负例覆盖：014 是 build 接线任务，不额外引入新的正负例；其完成判定由构建结果二值化保证。
+3. 测试发现性：本轮不触及测试聚合入口；发现性门禁留待 015/016 验证。
+4. TODO 证据回写：已回写任务状态、交付物与构建验收结果。
+5. 提交隔离：本轮提交范围限定为 TODO 证据收口，不混入 015/016 的测试注册与 integration 改动。
