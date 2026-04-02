@@ -763,6 +763,21 @@ dasall_apply_common_options(dasall_timeout_policy_interface_unit_test)
 add_test(NAME TimeoutPolicyInterfaceTest COMMAND dasall_timeout_policy_interface_unit_test)
 set_tests_properties(TimeoutPolicyInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_watched_entity_descriptor_unit_test
+  watchdog/WatchedEntityDescriptorTest.cpp
+)
+
+target_link_libraries(dasall_watched_entity_descriptor_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_watched_entity_descriptor_unit_test)
+
+add_test(NAME WatchedEntityDescriptorTest COMMAND dasall_watched_entity_descriptor_unit_test)
+set_tests_properties(WatchedEntityDescriptorTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )
