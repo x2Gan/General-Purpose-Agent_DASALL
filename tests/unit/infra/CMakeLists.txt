@@ -793,6 +793,21 @@ dasall_apply_common_options(dasall_heartbeat_sample_unit_test)
 add_test(NAME HeartbeatSampleTest COMMAND dasall_heartbeat_sample_unit_test)
 set_tests_properties(HeartbeatSampleTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_timeout_decision_unit_test
+  watchdog/TimeoutDecisionTest.cpp
+)
+
+target_link_libraries(dasall_timeout_decision_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_timeout_decision_unit_test)
+
+add_test(NAME TimeoutDecisionTest COMMAND dasall_timeout_decision_unit_test)
+set_tests_properties(TimeoutDecisionTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )

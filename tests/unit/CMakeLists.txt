@@ -63,6 +63,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_timeout_policy_interface_unit_test
 	dasall_watched_entity_descriptor_unit_test
 	dasall_heartbeat_sample_unit_test
+	dasall_timeout_decision_unit_test
 	dasall_health_policy_interface_unit_test
 	dasall_health_probe_types_unit_test
 	dasall_health_recovery_hint_unit_test
