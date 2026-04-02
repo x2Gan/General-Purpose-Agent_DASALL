@@ -164,7 +164,7 @@
 | CFG-TODO-006 | Done | 定义 ConfigTypes 核心对象 | config 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/config/ConfigTypes.h | TypedConfig、ConfigQuery、ConfigPatchEntry、ConfigPatch、ConfigLayerRef、ConfigSnapshot、ConfigDiff、ValidationIssue、ConfigApplyResult | unit：字段完整性、schema/profile 键名与 patch 守卫；contract：ConfigApplyResult 仅使用 contracts 错误语义，其他对象不污染 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" | 无 | 无 | 无 | 对象头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/ConfigTypes.h、tests/unit/infra/ConfigTypesTest.cpp、tests/contract/smoke/ConfigTypesBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 TypedConfig/patch/schema/profile 键名冻结与 unit/contract 证据一致时完成 |
 | CFG-TODO-007 | Done | 实现 ConfigCenterFacade 生命周期骨架 | config 设计 6.2/6.7；设计映射 7 | 6.2 ConfigCenterFacade；6.7 启动流程 | L2 | infra/src/config/ConfigCenterFacade.cpp | load_layers 主链、get_typed 查询入口、apply_override/rollback 入口 | unit：未初始化/初始化后路径；contract：错误码映射入口 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest | CFG-TODO-001、CFG-TODO-006 | startup_context 类型细节未冻结 | 首版使用最小上下文结构占位 | Facade 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigCenterFacade.h、infra/src/config/ConfigCenterFacade.cpp、tests/unit/infra/ConfigCenterFacadeTest.cpp，并完成 infra/tests CMake 注册 | 仅当主链入口可走通且失败路径可判定时完成 |
 | CFG-TODO-008 | Done | 实现 ConfigLoader 四层读取骨架 | config 设计 6.2/6.7/6.9 | 6.7 启动流程第 2 步；6.9 配置层级 | L3 | infra/src/config/ConfigLoader.cpp | load_default/load_profile/load_deploy/load_runtime_overlay | unit：四层读取顺序与 source_id/version | ctest --test-dir build-ci -R ConfigLoaderTest | CFG-TODO-002、CFG-TODO-006 | profiles 键空间规范待确认 | 先按既有键名前缀读取，保留映射层 | Loader 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigLoader.h、infra/src/config/ConfigLoader.cpp、tests/unit/infra/ConfigLoaderTest.cpp，并完成 infra/tests CMake 注册 | 仅当四层均可加载且顺序符合锚点时完成 |
-| CFG-TODO-009 | Not Started | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
+| CFG-TODO-009 | Done | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigMerger.h、infra/src/config/ConfigMerger.cpp、tests/unit/infra/ConfigMergerTest.cpp，并完成 infra/tests CMake 注册 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
 | CFG-TODO-010 | Not Started | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试 | 仅当非法配置被拒绝且错误可定位时完成 |
 | CFG-TODO-011 | Not Started | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测 | 仅当失败时可回退到 LKG 且测试通过时完成 |
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
@@ -733,3 +733,54 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R ConfigLoaderTest` 回填新增测试注册证据。
 4. TODO 证据回写：已回写任务状态、交付物与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 ConfigLoader 代码、测试、CMake 注册与 TODO 证据文档，不混入后续 009~011 改动。
+
+## 21. 本轮执行记录（2026-04-02 / CFG-TODO-009）
+
+### 21.1 选中任务
+
+1. 本轮任务：CFG-TODO-009。
+2. 可执行性依据：CFG-TODO-006、CFG-TODO-008 已完成，ConfigTypes 已冻结 ConfigLayerDocument/ConfigSnapshot/source_chain 语义，且四层 loader 已可提供真实输入文档，足以在本轮落最小覆盖与来源追踪骨架。
+
+### 21.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.7 已明确启动主链在 ConfigLoader 之后进入 ConfigMerger，要求“按优先级合并，并记录 source_chain”。
+2. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.9 已冻结四层覆盖模型：defaults -> profile -> deploy -> runtime override。
+3. infra/include/config/ConfigTypes.h 已冻结 ConfigSnapshot 的有效性要求：version 单调正值、source_chain 来源唯一且最多四层，data/source_chain 均不能为空。
+
+外部参考：
+
+1. Azure Architecture Center 的 External Configuration Store pattern 提到配置接口需要支持作用域与继承控制，并允许多来源配置按既定优先级收敛为应用侧可消费的统一视图；本轮据此把 ConfigMerger 收敛为“线性优先级覆盖 + ordered source_chain + 定位冲突 key_path”的最小合并骨架，而不提前扩张到复杂例外策略。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigMerger.h/ConfigMerger.cpp，落 merge result、四层优先级校验、后层覆盖前层、source_chain 保序与冲突定位骨架。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigMerger.h、infra/src/config/ConfigMerger.cpp，并接入 infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/ConfigMergerTest.cpp，覆盖四层线性覆盖/source_chain 正例，以及 type mismatch conflict 负例。
+   - 验收命令：cmake --build build-ci --target dasall_config_merger_unit_test && ctest --test-dir build-ci -R ConfigMergerTest。
+3. D Gate：PASS。
+
+### 21.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigMerger.h：新增 ConfigMergeResult 与 ConfigMerger 实现类头文件。
+2. infra/src/config/ConfigMerger.cpp：实现四层优先级顺序检查、后层覆盖前层、source_chain 保序与冲突 key_path 定位逻辑。
+3. tests/unit/infra/ConfigMergerTest.cpp：覆盖 defaults/profile/deploy/runtime 四层线性覆盖正例，以及同 key_path 不同 value_type 的 conflict 负例。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成 ConfigMerger 源文件、public header 与 unit 测试注册。
+
+验收结果：
+
+1. `cmake --build build-ci --target dasall_config_merger_unit_test`：通过；新增 ConfigMerger.cpp 与 ConfigMergerTest 均编译成功。
+2. `ctest --test-dir build-ci -N -R ConfigMergerTest`：通过，发现 1 个测试：`ConfigMergerTest`。
+3. `ctest --test-dir build-ci --output-on-failure -R ConfigMergerTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：实现只保留对象命名驱动，无需新增冗余注释；冲突与顺序语义由 result/message 和 source_chain 类型直接表达。
+2. 正负例覆盖：unit 覆盖四层覆盖/source_chain 正例，以及冲突 key_path 可定位的负例。
+3. 测试发现性：已通过 `ctest -N -R ConfigMergerTest` 回填新增测试注册证据。
+4. TODO 证据回写：已回写任务状态、交付物与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 ConfigMerger 代码、测试、CMake 注册与 TODO 证据文档，不混入后续 010~011 改动。

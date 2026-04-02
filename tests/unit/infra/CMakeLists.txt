@@ -673,6 +673,21 @@ dasall_apply_common_options(dasall_config_loader_unit_test)
 add_test(NAME ConfigLoaderTest COMMAND dasall_config_loader_unit_test)
 set_tests_properties(ConfigLoaderTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_config_merger_unit_test
+  ConfigMergerTest.cpp
+)
+
+target_link_libraries(dasall_config_merger_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_merger_unit_test)
+
+add_test(NAME ConfigMergerTest COMMAND dasall_config_merger_unit_test)
+set_tests_properties(ConfigMergerTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_config_validator_interface_unit_test
   ConfigValidatorInterfaceTest.cpp
 )
