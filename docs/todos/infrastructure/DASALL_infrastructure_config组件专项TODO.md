@@ -170,7 +170,7 @@
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
 | CFG-TODO-013 | Done | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | 无（2026-04-02 已由 CFG-BLK-001 解阻） | v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义 | 发布骨架、单测、integration；2026-04-02 已落盘 infra/include/config/ConfigPublisher.h、infra/src/config/ConfigPublisher.cpp、tests/unit/infra/ConfigPublisherTest.cpp、tests/integration/infra/ConfigRuntimePatchIntegrationTest.cpp，并完成 infra/tests CMake 注册 | 仅当 ConfigChanged 发布与命名空间过滤订阅均可被 integration 用例验证时完成 |
 | CFG-TODO-014 | Done | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 无 | 保留最小 non-empty 源文件过渡 | CMake 接线、构建记录；2026-04-02 已确认 infra/CMakeLists.txt 纳入 ConfigCenterFacade/Publisher/Loader/Merger/Validator/SnapshotStore 源文件与对应 public headers，并完成 dasall_infra 构建验收 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
-| CFG-TODO-015 | Not Started | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
+| CFG-TODO-015 | Done | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 顶层 unit/contract 注册入口、执行记录；2026-04-02 已补齐 dasall_config_publisher_unit_test 到 tests/unit/CMakeLists.txt，确认 config unit/contract 入口可发现并通过聚合验收 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
 | CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 CFG-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
 | CFG-TODO-017 | Not Started | 回写 config 质量门与交付证据 | config 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md | process test：门禁结论、阻塞变化、回退执行证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论与对应命令证据时完成 |
 
@@ -1046,3 +1046,61 @@ Build 合规复核：
 3. 测试发现性：本轮不触及测试聚合入口；发现性门禁留待 015/016 验证。
 4. TODO 证据回写：已回写任务状态、交付物与构建验收结果。
 5. 提交隔离：本轮提交范围限定为 TODO 证据收口，不混入 015/016 的测试注册与 integration 改动。
+
+## 27. 本轮执行记录（2026-04-02 / CFG-TODO-015）
+
+### 27.1 选中任务
+
+1. 本轮任务：CFG-TODO-015。
+2. 可执行性依据：CFG-TODO-014 已完成，config 的 unit/contract 测试文件早已随 001~013 分轮落盘；当前剩余工作是确认顶层 tests/unit 与 tests/contract 聚合入口完整，并补齐遗漏的 publisher unit 聚合注册。
+
+### 27.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 8.1/9.1 已要求 config 组件不仅有测试文件落盘，还要保证 unit/contract 入口在顶层聚合目标可发现、可执行。
+2. tests/contract/CMakeLists.txt 当前已注册 ConfigTypesBoundaryContractTest、ConfigCenterInterfaceBoundaryContractTest、ConfigValidatorInterfaceBoundaryContractTest、ConfigErrorMappingContractTest，config contract 入口已经具备。
+3. tests/unit/CMakeLists.txt 当前已聚合 ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore 等 config unit 目标，但缺少 013 新增的 dasall_config_publisher_unit_test，导致顶层 dasall_unit_tests 还未完整覆盖现有 config 单测集合。
+
+D 结论：
+
+1. Design -> Build 映射：015 只需修正 tests/unit/CMakeLists.txt 的聚合列表，并通过顶层 build + ctest 标签验证 unit/contract 入口已经闭环；tests/contract/CMakeLists.txt 仅作为现状证据，无需新增条目。
+2. Build 三件套：
+   - 代码目标：将 dasall_config_publisher_unit_test 纳入 tests/unit/CMakeLists.txt 的 DASALL_UNIT_TEST_EXECUTABLE_TARGETS 聚合列表。
+   - 测试目标：验证 config unit/contract 测试在 ctest -N 下可发现，并执行 `-L unit` / `-L contract` 聚合套件。
+   - 验收命令：`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci -N -R "ConfigCenterFacadeTest|ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigSnapshotStoreTest|ConfigPublisherTest|ConfigTypesBoundaryContractTest|ConfigCenterInterfaceBoundaryContractTest|ConfigValidatorInterfaceBoundaryContractTest|ConfigErrorMappingContractTest"`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`。
+3. D Gate：PASS。
+
+边界说明：
+
+1. 本轮不新增新的 unit/contract 测试文件，只收口顶层聚合入口。
+2. integration 拓扑与 ConfigObservabilityIntegrationTest 仍留给 016 与其 blocker 处理。
+
+### 27.3 Build 交付与证据
+
+交付物：
+
+1. tests/unit/CMakeLists.txt：补齐 dasall_config_publisher_unit_test 到顶层 unit 聚合列表。
+2. tests/contract/CMakeLists.txt：作为现状证据，确认 config contract 边界与错误映射测试入口已齐备。
+3. docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md：将 CFG-TODO-015 状态更新为 Done，并回写本轮发现性与聚合验收记录。
+
+验收结果：
+
+1. `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`：首轮失败，暴露顶层 unit 聚合遗漏 `dasall_audit_service_fallback_unit_test`、`dasall_audit_export_filter_unit_test`、`dasall_policy_snapshot_compatibility_unit_test` 三个已注册目标；补齐 tests/unit/CMakeLists.txt 后重跑通过，unit 102/102、contract 127/127 全部通过。
+2. `ctest --test-dir build-ci -N -R "ConfigCenterFacadeTest|ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigSnapshotStoreTest|ConfigPublisherTest|ConfigTypesBoundaryContractTest|ConfigCenterInterfaceBoundaryContractTest|ConfigValidatorInterfaceBoundaryContractTest|ConfigErrorMappingContractTest"`：通过，发现 10 个 config 相关 unit/contract 测试入口。
+3. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，102/102 tests passed。
+4. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，127/127 tests passed。
+
+Blocker 修复记录：
+
+1. 首轮 `dasall_unit_tests` 失败并非来自 config 测试本身，而是顶层 tests/unit/CMakeLists.txt 未聚合三个已经在 tests/unit/infra/CMakeLists.txt 注册的 unit 可执行目标。
+2. 同轮最小修复动作：在 tests/unit/CMakeLists.txt 中补齐 `dasall_audit_service_fallback_unit_test`、`dasall_audit_export_filter_unit_test`、`dasall_policy_snapshot_compatibility_unit_test` 与 `dasall_config_publisher_unit_test`。
+3. 修复后重跑聚合 build 与 ctest 标签命令，015 验收恢复通过。
+
+Build 合规复核：
+
+1. 代码注释：本轮仅修改 CMake 聚合列表，不涉及代码注释。
+2. 正负例覆盖：本轮不新增测试逻辑，复用既有 config unit 正负例与 contract 边界矩阵。
+3. 测试发现性：将通过 `ctest -N -R ...` 与 `-L unit/-L contract` 聚合命令回填发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物、blocker 修复记录与最终验收结果。
+5. 提交隔离：本轮提交范围限定为顶层 unit 聚合注册与 TODO 证据文档，不混入 016/017 的后续工作。
