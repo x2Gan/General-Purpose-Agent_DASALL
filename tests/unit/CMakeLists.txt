@@ -54,6 +54,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_config_validator_interface_unit_test
 	dasall_config_validator_unit_test
 	dasall_config_snapshot_store_interface_unit_test
+	dasall_config_snapshot_store_unit_test
 	dasall_config_publisher_interface_unit_test
 	dasall_config_errors_unit_test
 	dasall_plugin_catalog_unit_test

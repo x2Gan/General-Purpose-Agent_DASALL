@@ -166,7 +166,7 @@
 | CFG-TODO-008 | Done | 实现 ConfigLoader 四层读取骨架 | config 设计 6.2/6.7/6.9 | 6.7 启动流程第 2 步；6.9 配置层级 | L3 | infra/src/config/ConfigLoader.cpp | load_default/load_profile/load_deploy/load_runtime_overlay | unit：四层读取顺序与 source_id/version | ctest --test-dir build-ci -R ConfigLoaderTest | CFG-TODO-002、CFG-TODO-006 | profiles 键空间规范待确认 | 先按既有键名前缀读取，保留映射层 | Loader 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigLoader.h、infra/src/config/ConfigLoader.cpp、tests/unit/infra/ConfigLoaderTest.cpp，并完成 infra/tests CMake 注册 | 仅当四层均可加载且顺序符合锚点时完成 |
 | CFG-TODO-009 | Done | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigMerger.h、infra/src/config/ConfigMerger.cpp、tests/unit/infra/ConfigMergerTest.cpp，并完成 infra/tests CMake 注册 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
 | CFG-TODO-010 | Done | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigValidator.h、infra/src/config/ConfigValidator.cpp、tests/unit/infra/ConfigValidatorTest.cpp，并完成 infra/tests CMake 注册 | 仅当非法配置被拒绝且错误可定位时完成 |
-| CFG-TODO-011 | Not Started | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测 | 仅当失败时可回退到 LKG 且测试通过时完成 |
+| CFG-TODO-011 | Done | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigSnapshotStore.h、infra/src/config/ConfigSnapshotStore.cpp、tests/unit/infra/ConfigSnapshotStoreTest.cpp，并完成 infra/tests CMake 注册 | 仅当失败时可回退到 LKG 且测试通过时完成 |
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
 | CFG-TODO-013 | Blocked | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | CFG-BLK-001 | 先冻结事件总线最小抽象与订阅语义 | 发布骨架或阻塞记录 | 仅当事件总线抽象冻结后，状态才可由 Blocked 改为 Not Started |
 | CFG-TODO-014 | Not Started | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 初期源文件渐进落盘 | 保留最小 non-empty 源文件过渡 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
@@ -840,3 +840,59 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R "ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigErrorMappingContractTest"` 回填发现性证据。
 4. TODO 证据回写：已回写任务状态、命名空间修正动作与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 ConfigValidator 代码、相关回归修正、测试、CMake 注册与 TODO 证据文档，不混入后续 011 改动。
+
+## 23. 本轮执行记录（2026-04-02 / CFG-TODO-011）
+
+### 23.1 选中任务
+
+1. 本轮任务：CFG-TODO-011。
+2. 可执行性依据：CFG-TODO-004、CFG-TODO-006 已完成，IConfigSnapshotStore 与 ConfigSnapshot 对象已冻结，且当前阶段只需要首版内存快照/LKG 语义，不依赖持久化后端最终定型。
+
+### 23.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.7 已明确 ConfigSnapshotStore 在校验通过后负责 commit current 与 LKG。
+2. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.8 已明确读取/应用故障需要依赖 LKG 完成回退与兜底。
+3. infra/include/config/IConfigSnapshotStore.h 已冻结 commit/get_current/get_by_version/get_last_known_good 四个入口，以及 current_version/last_known_good_version 提交回执语义。
+
+外部参考：
+
+1. Azure Architecture Center 的 External Configuration Store pattern 明确指出应用在启动期无法访问 live configuration 时，需要依赖 last known configuration values 作为 fallback；本轮据此把 SnapshotStore 收敛为“内存历史 + current + LKG”的最小可执行骨架，而不提前扩张到磁盘持久化后端。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigSnapshotStore.h/ConfigSnapshotStore.cpp，落 commit/history/current/LKG 骨架，并用互斥锁保证最小原子切换。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigSnapshotStore.h、infra/src/config/ConfigSnapshotStore.cpp，并接入 infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/ConfigSnapshotStoreTest.cpp，覆盖 commit/history/LKG 正例与 invalid/non-monotonic 负例。
+   - 验收命令：ctest --test-dir build-ci -R ConfigSnapshotStoreTest。
+3. D Gate：PASS。
+
+边界说明：
+
+1. 按原子任务边界，本轮不重写 ConfigCenterFacade 的装配路径；011 只负责 SnapshotStore 与 LKG 回退骨架本体，避免把本轮扩大成新的集成任务。
+
+### 23.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigSnapshotStore.h：新增 ConfigSnapshotStore 实现类头文件。
+2. infra/src/config/ConfigSnapshotStore.cpp：实现 commit、按版本历史读取、current 与 last-known-good 语义。
+3. tests/unit/infra/ConfigSnapshotStoreTest.cpp：覆盖 commit/history/LKG 正例，以及 invalid snapshot、non-monotonic commit、LKG 保持负例。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成 ConfigSnapshotStore 源文件、public header 与 unit 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过；用于刷新 Makefiles 构建图中的新测试目标。
+2. `cmake --build build-ci --target dasall_config_snapshot_store_unit_test`：通过；新增 ConfigSnapshotStore.cpp 与 ConfigSnapshotStoreTest 均编译成功。
+3. `ctest --test-dir build-ci -N -R ConfigSnapshotStoreTest`：通过，发现 1 个测试：`ConfigSnapshotStoreTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R ConfigSnapshotStoreTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：store 的 current/history/LKG 语义可由接口命名和 commit 回执直接表达，无需新增冗余注释。
+2. 正负例覆盖：unit 覆盖 commit/history/current/LKG 正例，以及 invalid snapshot、non-monotonic commit、LKG 保持负例。
+3. 测试发现性：已通过 `ctest -N -R ConfigSnapshotStoreTest` 回填新增测试注册证据。
+4. TODO 证据回写：已回写任务状态、原子边界说明与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 ConfigSnapshotStore 代码、测试、CMake 注册与 TODO 证据文档，不混入额外集成改动。

@@ -733,6 +733,21 @@ dasall_apply_common_options(dasall_config_snapshot_store_interface_unit_test)
 add_test(NAME ConfigSnapshotStoreInterfaceTest COMMAND dasall_config_snapshot_store_interface_unit_test)
 set_tests_properties(ConfigSnapshotStoreInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_config_snapshot_store_unit_test
+  ConfigSnapshotStoreTest.cpp
+)
+
+target_link_libraries(dasall_config_snapshot_store_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_snapshot_store_unit_test)
+
+add_test(NAME ConfigSnapshotStoreTest COMMAND dasall_config_snapshot_store_unit_test)
+set_tests_properties(ConfigSnapshotStoreTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_config_publisher_interface_unit_test
   ConfigPublisherInterfaceTest.cpp
 )
