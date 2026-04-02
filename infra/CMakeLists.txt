@@ -19,6 +19,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/ProbeTypes.h
   include/health/RecoveryHint.h
   include/watchdog/IHeartbeatSource.h
+  include/watchdog/ITimeoutPolicy.h
   include/watchdog/IWatchdogService.h
   include/IHealthMonitor.h
   include/IDiagnosticsService.h
