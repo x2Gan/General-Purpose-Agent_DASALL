@@ -55,10 +55,10 @@ void test_audit_logger_interface_signatures_use_frozen_audit_objects() {
 }
 
 void test_audit_link_adapter_stays_separate_from_audit_storage_interface() {
-  using dasall::infra::LogEvent;
-  using dasall::infra::LogWriteResult;
   using dasall::infra::logging::AuditRef;
   using dasall::infra::logging::IAuditLinkAdapter;
+  using dasall::infra::logging::LogEvent;
+  using dasall::infra::logging::LogWriteResult;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(&IAuditLinkAdapter::attach_audit_ref),

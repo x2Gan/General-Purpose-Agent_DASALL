@@ -85,10 +85,10 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 仅 src/placeholder.cpp | ota 尚未入构建图 |
-| infra/include/ | 为空目录 | ota 对外接口未落盘 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | ota 公共接口已落盘，但 ota 具体实现尚未入构建图 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，ota/ 子目录已落盘接口与对象 | ota public headers 已冻结，后续差距集中在升级/回滚实现闭环 |
 | infra/src/ota/ | 目录存在但无源文件 | ota 实现主链未落盘 |
-| tests/CMakeLists.txt | 仅 unit/contract 聚合，integration 顶层未接入 | integration/failure 全链路门禁暂不可执行 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration/failure 门禁拓扑已可承载 OTA 用例，后续只需补 OTA 具体集成/故障测试 |
 | build-ci/build.ninja | 有 dasall_infra/dasall_unit_tests/dasall_contract_tests 目标 | 可用统一构建与标签测试命令 |
 
 ## 4. 粒度可行性评估
@@ -123,7 +123,7 @@
 | BootConfirmationMonitor | OTA 设计 6.2/6.8/6.9 | L2 | confirm 窗口与超时失败明确 | confirm 成功判据未冻结 | 先补设计再进实现 |
 | RollbackController | OTA 设计 6.2/6.9 | L3 | rollback 路径和失败可观测约束明确 | token 持久化细节未冻结 | 直接拆实现任务，持久化先 Blocked |
 | OTAAuditBridge/OTAHealthProbe | OTA 设计 6.2/6.11 | L3 | 审计字段与健康信号清单明确 | 审计 fallback 优先级细节 | 直接拆桥接任务 |
-| tests/integration/infra/ota | OTA 设计 8.1/9.1 | L0 | 测试层与关键用例明确 | tests 顶层 integration 未接线 | 先 Blocked，再推进集成门禁 |
+| tests/integration/infra/ota | OTA 设计 8.1/9.1 | L0 | 测试层与关键用例明确 | tests 顶层 integration 已接线，缺口转为 OTA 具体集成用例尚未落盘 | 直接拆 OTA integration/failure 任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -162,7 +162,7 @@
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | OTA-TODO-001 | Done | 定义 OTATypes 核心对象头文件组 | OTA 设计 6.5/6.6 | 6.5 核心对象表 | L3 | infra/include/ota/OTATypes.h | UpgradePlan/PackageDescriptor/ArtifactDescriptor/VerifiedPackageManifest/RollbackToken/InstallEvidence/UpgradeOutcome/OTAStatusSnapshot | unit：对象字段完整性；contract：仅复用 ResultCode/ErrorInfo/ID 语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | 无 | 无 | 无 | 头文件、字段说明、contract 测试记录；2026-04-01 已落盘 infra/include/ota/OTATypes.h、tests/unit/infra/OTATypesTest.cpp、tests/contract/smoke/OTATypeBoundaryContractTest.cpp，并更新 infra/tests CMake 注册；已通过 cmake --build build-ci --target dasall_ota_types_unit_test dasall_contract_ota_type_boundary_test 与 ctest --test-dir build-ci --output-on-failure -R "OTATypesCompileTest|OTATypeBoundaryTest" | 仅当对象字段与 6.5 一致且 contract 测试未发现越权字段时完成 |
-| OTA-TODO-002 | Done | 定义 IOTAManager 接口头文件 | OTA 设计 6.7 | 6.7 IOTAManager | L3 | infra/include/IOTAManager.h | precheck/apply/rollback/query_status | unit：接口可编译；contract：返回对象不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | OTA-TODO-001 | 无 | 无 | 接口头文件、编译记录；2026-04-01 已落盘 infra/include/IOTAManager.h、tests/unit/infra/IOTAManagerInterfaceTest.cpp、tests/contract/smoke/OTAManagerInterfaceBoundaryContractTest.cpp，并更新 infra/tests CMake 注册；已通过 cmake --build build-ci --target dasall_ota_manager_interface_unit_test dasall_contract_ota_manager_interface_boundary_test 与 ctest --test-dir build-ci --output-on-failure -R "OTAInterfaceCompileTest|OTAManagerInterfaceBoundaryContractTest" | 仅当方法集合、输入输出与 6.7 一致且可编译时完成 |
+| OTA-TODO-002 | Done | 定义 IOTAManager 接口头文件 | OTA 设计 6.7 | 6.7 IOTAManager | L3 | infra/include/ota/IOTAManager.h | precheck/apply/rollback/query_status | unit：接口可编译；contract：返回对象不扩写 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | OTA-TODO-001 | 无 | 无 | 接口头文件、编译记录；2026-04-01 已落盘 infra/include/ota/IOTAManager.h、tests/unit/infra/IOTAManagerInterfaceTest.cpp、tests/contract/smoke/OTAManagerInterfaceBoundaryContractTest.cpp，并更新 infra/tests CMake 注册；已通过 cmake --build build-ci --target dasall_ota_manager_interface_unit_test dasall_contract_ota_manager_interface_boundary_test 与 ctest --test-dir build-ci --output-on-failure -R "OTAInterfaceCompileTest|OTAManagerInterfaceBoundaryContractTest" | 仅当方法集合、输入输出与 6.7 一致且可编译时完成 |
 | OTA-TODO-003 | Done | 定义 IOTAPackageVerifier 接口头文件 | OTA 设计 6.7/6.9 | 6.7 IOTAPackageVerifier | L3 | infra/include/ota/IOTAPackageVerifier.h | verify_package/verify_artifact | unit：接口编译；failure：签名失败路径可表达 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | OTA-TODO-001 | 无（2026-04-01 已由 OTA-TODO-019 解阻） | 无 | 接口头文件、阻塞记录或编译记录；2026-04-01 已落盘 infra/include/ota/IOTAPackageVerifier.h、tests/unit/infra/OTAPackageVerifierInterfaceTest.cpp、tests/contract/smoke/OTAPackageVerifierInterfaceBoundaryContractTest.cpp，并更新 infra/tests CMake 注册；已通过 cmake --build build-ci --target dasall_ota_package_verifier_interface_unit_test dasall_contract_ota_package_verifier_interface_boundary_test 与 ctest --test-dir build-ci --output-on-failure -R "OTAPackageVerifierInterfaceTest|OTAPackageVerifierInterfaceBoundaryContractTest" | 仅当接口签名稳定且签名依赖边界已说明时完成 |
 | OTA-TODO-004 | Done | 定义 IInstallExecutor 接口头文件 | OTA 设计 6.7/6.8 | 6.7 IInstallExecutor | L3 | infra/include/ota/IInstallExecutor.h | stage_artifact/activate_plan/revert_install | unit：接口可编译；unit：InstallEvidence 绑定关系校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | OTA-TODO-001 | 无 | 无 | 接口头文件、编译记录；2026-04-01 已落盘 infra/include/ota/IInstallExecutor.h、tests/unit/infra/InstallExecutorInterfaceTest.cpp、tests/contract/smoke/InstallExecutorInterfaceBoundaryContractTest.cpp，并更新 infra/tests CMake 注册；已通过 cmake --build build-ci --target dasall_install_executor_interface_unit_test dasall_contract_install_executor_interface_boundary_test 与 ctest --test-dir build-ci --output-on-failure -R "InstallExecutorInterfaceTest|InstallExecutorInterfaceBoundaryContractTest" | 仅当安装与回退动作被明确解耦且接口可编译时完成 |
 | OTA-TODO-005 | Done | 定义 IBootControlAdapter 接口头文件 | OTA 设计 6.7/6.8 | 6.7 IBootControlAdapter | L3 | infra/include/ota/IBootControlAdapter.h | get_active_target/set_next_boot/mark_boot_success/mark_boot_failed | unit：接口可编译；integration：可被 mock 适配器替换 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | OTA-TODO-001 | 无 | 无 | 接口头文件、编译记录；2026-04-01 已落盘 infra/include/ota/IBootControlAdapter.h、tests/unit/infra/BootControlAdapterInterfaceTest.cpp、tests/contract/smoke/BootControlAdapterInterfaceBoundaryContractTest.cpp，并更新 infra/tests CMake 注册；已通过 cmake --build build-ci --target dasall_boot_control_adapter_interface_unit_test dasall_contract_boot_control_adapter_interface_boundary_test 与 ctest --test-dir build-ci --output-on-failure -R "BootControlAdapterInterfaceTest|BootControlAdapterInterfaceBoundaryContractTest"；mock 可替换性通过 BootControlAdapterInterfaceTest 中基类引用驱动流程验证 | 仅当 4 个动作完整且不依赖具体 bootloader 头文件时完成 |
@@ -205,7 +205,7 @@
 | OTA-GATE-03 | 回滚可观测门 | 提交前 | rollback_success/rollback_fail 均可观测并有证据 | 修复 012/013/014 |
 | OTA-GATE-04 | 构建门 | 任务 015 后 | cmake --build build-ci --target dasall_infra 通过 | 修复 CMake 接线 |
 | OTA-GATE-05 | unit/contract 发现性门 | 任务 016 后 | ctest -N 可发现 ota 新增测试并可按标签执行 | 修复 tests 注册 |
-| OTA-GATE-06 | integration 准入门 | 任务 017 前 | tests 顶层 integration 接线与标签规范冻结 | 未通过则 017 保持 Blocked |
+| OTA-GATE-06 | integration 准入门 | 任务 017 前 | tests 顶层 integration 接线与标签规范已冻结，且 ota 组件 integration/failure 用例已落盘 | 未通过前补齐 ota 组件 integration/failure 用例与注册 |
 | OTA-GATE-07 | breaking 评审门 | 任意边界变更前 | 评审结论包含风险、迁移窗口、回退策略 | 未评审不得推进 |
 
 ## 8. 阻塞项与解阻条件

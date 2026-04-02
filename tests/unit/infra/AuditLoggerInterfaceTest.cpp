@@ -77,12 +77,12 @@ class NullAuditLogger final : public dasall::infra::audit::IAuditLogger {
 
 class NullAuditLinkAdapter final : public dasall::infra::logging::IAuditLinkAdapter {
  public:
-  dasall::infra::LogWriteResult attach_audit_ref(
-      dasall::infra::LogEvent& event,
+  dasall::infra::logging::LogWriteResult attach_audit_ref(
+      dasall::infra::logging::LogEvent& event,
       const dasall::infra::logging::AuditRef& audit_ref) override {
     static_cast<void>(&audit_ref);
     event.attrs.insert_or_assign("audit_ref_pending", "true");
-    return dasall::infra::LogWriteResult::success();
+    return dasall::infra::logging::LogWriteResult::success();
   }
 
   void report_link_failure(std::string_view reason) override {
@@ -98,10 +98,10 @@ class NullAuditLinkAdapter final : public dasall::infra::logging::IAuditLinkAdap
 };
 
 void test_audit_link_adapter_freezes_placeholder_linking_interface() {
-  using dasall::infra::LogEvent;
-  using dasall::infra::LogWriteResult;
   using dasall::infra::logging::AuditRef;
   using dasall::infra::logging::IAuditLinkAdapter;
+  using dasall::infra::logging::LogEvent;
+  using dasall::infra::logging::LogWriteResult;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(&IAuditLinkAdapter::attach_audit_ref),

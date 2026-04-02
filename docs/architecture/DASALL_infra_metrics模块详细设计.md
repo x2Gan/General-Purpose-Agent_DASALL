@@ -83,20 +83,20 @@ Must-Not：
 
 | 设计目标 | 当前状态 | 差距描述 | 风险等级 | 修复优先级 |
 |---|---|---|---|---|
-| infra/metrics 目录可编译可运行 | 缺失 | 目录存在但无代码文件 | High | P0 |
-| metrics 对外接口（IMetrics*） | 缺失 | infra/include 为空，调用面未冻结 | High | P0 |
-| 计数器/仪表/直方图采样 | 缺失 | 无采样 API 与聚合器 | High | P0 |
-| 指标导出（pull/push） | 缺失 | 无 exporter 与 reader 抽象 | High | P0 |
-| 配置与 profile 策略 | 缺失 | 无聚合窗口、桶、标签白名单配置 | Medium | P1 |
-| 降级与恢复策略 | 缺失 | 队列满/导出失败无兜底路径 | High | P0 |
-| 测试基线（unit/integration/failure） | 缺失 | 无任何 metrics 相关测试 | High | P0 |
+| infra/metrics 目录可编译可运行 | 部分实现 | 公共接口与对象已冻结并通过编译测试，运行时实现目录仍为空 | High | P0 |
+| metrics 对外接口（IMetrics*） | 部分实现 | infra/include/metrics 已落盘 IMeter/IMetricsProvider/IMetricExporter 等接口，调用面已冻结 | High | P0 |
+| 计数器/仪表/直方图采样 | 部分实现 | MetricTypes、IMeter 与 provider 接口已冻结，采样器与聚合器实现仍待补齐 | High | P0 |
+| 指标导出（pull/push） | 部分实现 | IMetricExporter 已冻结，reader/exporter 运行时实现仍待补齐 | High | P0 |
+| 配置与 profile 策略 | 部分实现 | IMetricConfigPolicy 已落盘，窗口/桶/标签白名单执行链仍待补齐 | Medium | P1 |
+| 降级与恢复策略 | 部分实现 | MetricsErrors 与 IMetricsHealthProbe 已冻结，运行时兜底路径仍待实现 | High | P0 |
+| 测试基线（unit/integration/failure） | 部分实现 | unit/contract 基线已接入，integration/failure 仍待补齐 | Medium | P0 |
 | 与 logging/tracing/health 协同 | 缺失 | 三信号联动未建立 | Medium | P1 |
 
 证据：
 1. infra/src/metrics/ 为空目录。
-2. infra/include/ 为空目录。
-3. infra/CMakeLists.txt 仅编译 src/placeholder.cpp。
-4. infra/src/placeholder.cpp 仅保留 keep_library_non_empty。
+2. infra/include/metrics 已落盘 IMeter、IMetricsProvider、IMetricExporter、IMetricConfigPolicy、IMetricsHealthProbe 与对象头文件。
+3. infra/CMakeLists.txt 已接入 core/audit/plugin/tracing 等真实源码。
+4. infra 当前不再依赖 placeholder-only 构建；metrics 缺口集中在 metrics 实现目录。
 
 ### 3.2 风险冲突识别
 
@@ -500,5 +500,5 @@ metrics 非职责：
 4. contracts 冻结策略：docs/plans/DASALL_contracts冻结实施计划.md、docs/todos/contracts/DASALL_contracts冻结TODO总表.md
 5. infra 子系统基线：docs/architecture/DASALL_infrastructure子系统详细设计.md、docs/architecture/DASALL_infra_logging模块详细设计.md、docs/architecture/DASALL_infra_tracing模块详细设计.md
 6. 工程规范：docs/development/DASALL_工程协作与编码规范.md
-7. 现状代码：infra/CMakeLists.txt、infra/src/placeholder.cpp、infra/src/metrics/
+7. 现状代码：infra/CMakeLists.txt、infra/include/metrics/、infra/src/{InfraServiceFacade.cpp,InfraErrorCode.cpp,audit/,plugin/,tracing/}、infra/src/metrics/
 8. 行业实践：OpenTelemetry Metrics Spec、Prometheus practices（naming/histograms）、Google SRE Monitoring Principles

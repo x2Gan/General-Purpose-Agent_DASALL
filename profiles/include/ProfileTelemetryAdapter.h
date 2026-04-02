@@ -2,13 +2,13 @@
 
 #include <string_view>
 
-#include "ILogger.h"
 #include "audit/IAuditLogger.h"
+#include "logging/ILogger.h"
 
 namespace dasall::profiles {
 
 struct ProfileTelemetryDispatchResult {
-  infra::LogWriteResult log_result;
+  infra::logging::LogWriteResult log_result;
   infra::AuditWriteOutcome audit_result;
 
   [[nodiscard]] bool ok() const {
@@ -26,7 +26,8 @@ struct ProfileTelemetryDispatchResult {
 
 class ProfileTelemetryAdapter {
  public:
-  ProfileTelemetryAdapter(infra::ILogger& logger, infra::audit::IAuditLogger& audit_logger);
+  ProfileTelemetryAdapter(infra::logging::ILogger& logger,
+                          infra::audit::IAuditLogger& audit_logger);
 
   [[nodiscard]] ProfileTelemetryDispatchResult record_activation_success(
       std::string_view requested_profile_id,
@@ -56,7 +57,7 @@ class ProfileTelemetryAdapter {
       infra::LogLevel level,
       infra::AuditOutcome outcome);
 
-  infra::ILogger& logger_;
+  infra::logging::ILogger& logger_;
   infra::audit::IAuditLogger& audit_logger_;
 };
 

@@ -87,7 +87,7 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | policy 尚未进入构建图 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | policy 接口与对象已落盘，但 policy 具体实现仍未进入构建图 |
 | infra/include/ | 已落盘 policy/ISecurityPolicyManager.h、PolicyBundle.h、PolicyPatch.h、PolicySnapshot.h、PolicyDecisionRef.h | policy 对外接口与基础对象已冻结，后续主要承接 contracts/config 侧剩余阻塞 |
 | infra/src/ | 仅存在 placeholder 与少量空子目录 | policy 实现目录尚未存在 |
 | tests/CMakeLists.txt | 已接入 mocks、unit、contract、integration，且提供 dasall_integration_tests 聚合入口 | policy integration 拓扑已进入顶层构建，具体用例是否可执行取决于组件任务落盘 |
@@ -131,7 +131,7 @@
 | PolicyAuditBridge | policy 设计 6.2/6.10 | L1 | 强制审计事件范围明确 | audit 最小写入接口与导出字段尚未冻结 | 先阻塞，等待 audit 侧解阻 |
 | PolicyMetricsBridge | policy 设计 6.2/6.10 | L1 | 指标名清单明确 | metrics 桥接接口与标签白名单未冻结 | 先阻塞，等待 metrics 侧解阻 |
 | PolicyHealthProbe | policy 设计 6.2/6.10 | L1 | ready/degraded/unavailable 与最近失败原因语义明确 | health 侧探针接口与状态对象未冻结 | 先阻塞，等待 health 侧解阻 |
-| tests/integration/infra/policy | policy 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在 | 顶层 tests 未接入 integration | 先解阻测试拓扑，再拆集成任务 |
+| tests/integration/infra/policy | policy 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在，且顶层 tests 已接入 integration | policy integration/failure 用例尚未落盘 | 直接拆组件集成任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -225,7 +225,7 @@
 | POL-GATE-04 | contracts 语义边界门 | 阶段 D 与 E 前 | PolicyDecision 只做语义对齐；若共享对象仍缺失，则 mapping catalog 和 contract 测试通过 | 维持 POL-BLK-002，禁止对外暴露 shared dependency |
 | POL-GATE-05 | 观测桥接门 | 进入 bridge 实现前 | audit、metrics、health 最小桥接接口冻结 | 维持 POL-BLK-003/POL-BLK-004 |
 | POL-GATE-06 | 测试发现性门 | 阶段 E 前 | ctest --test-dir build-ci -N 能发现新增 policy unit/contract 用例 | 修复 tests 注册，不推进后续 |
-| POL-GATE-07 | integration 拓扑门 | 进入 integration 验收前 | tests 顶层已接入 integration，且标签规范明确 | 维持 POL-BLK-005 |
+| POL-GATE-07 | integration 拓扑门 | 进入 integration 验收前 | tests 顶层已接入 integration，且 policy 组件用例与标签规范明确 | 补齐 policy integration/failure 用例与注册，不再回退到仓库级阻塞 |
 | POL-GATE-08 | breaking review 门 | 任意共享语义或接口签名变化前 | 明确 breaking 风险、迁移窗口、回退策略和评审结论 | 未评审不得推进 |
 
 ## 8. 阻塞项与解阻条件
@@ -279,7 +279,7 @@
 | commit 失败导致 current 污染 | High | 提交失败后 current 已切换 | generation/LKG 测试失败 | 回退 SnapshotStore 变更，只允许旧快照继续服务 |
 | hot_reload 绕过 dry-run 或审计 | High | apply_patch 未强制 dry_run 或未记录审计 | patch 路径无审计事件或无拒绝原因 | 关闭 hot_reload，回退到只读静态加载 |
 | safe_mode 不可复现 | Medium | 连续失败阈值、退出条件和健康状态不稳定 | unit 用例无法稳定复现 safe_mode 进入/退出 | 回退为“只进不出”的只读模式，待阈值模型冻结后再恢复 |
-| integration 长期未接线 | Medium | tests 顶层持续不接入 integration | ctest -N 看不到 integration 用例 | 保持 integration 任务 Blocked，不将其纳入 Done-ready |
+| integration 长期未落盘 | Medium | policy 组件 integration/failure 用例长期未注册 | ctest -N 看不到 policy integration 用例 | 保持 integration 任务为 Not Started，并优先补组件用例 |
 
 ## 11. 可行性结论
 

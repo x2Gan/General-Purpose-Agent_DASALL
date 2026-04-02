@@ -523,7 +523,7 @@
 
 1. 完成 INF-TODO-010-D 设计收敛：
    - 基于 infrastructure 详细设计 7/8.1，将 dasall_infra 目标的现有真实源码收敛为 core/tracing 分组，并把公开头文件通过 `PUBLIC_HEADER` 属性显式接入目标。
-   - 保留 `src/placeholder.cpp` 作为短期 non-empty 兜底，但明确其不再是唯一真实源码入口。
+   - 当时保留 `src/placeholder.cpp` 作为过渡期 non-empty 兜底；当前已完成真实源文件入图，该说明仅保留为阶段性记录，不再代表现行基线。
 2. 完成 INF-TODO-010-B 代码落地：
    - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
    - 回写 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)
@@ -614,7 +614,7 @@
    - 针对未冻结的 `IHealthProbe` 形状与 probe timeout 细节，本轮只引入 `HealthProbeRegistration` 占位类型，保留 `probe_name/probe_group/opaque_probe_ref` 三个最小字段，避免过早引入具体探针抽象与调度模型。
    - 统一返回 `HealthMonitorRegistrationResult` 与 `HealthEvaluationResult`，仅引用 contracts `ResultCode` 与 `ErrorInfo`，保持健康评估失败语义可观测。
 2. 完成 INF-TODO-008-B 代码落地：
-   - 新增 [infra/include/IHealthMonitor.h](infra/include/IHealthMonitor.h)
+   - 当时新增健康监视入口；当前 canonical 头文件已统一为 [infra/include/health/IHealthMonitor.h](infra/include/health/IHealthMonitor.h)，旧根层路径已退出
    - 新增 [tests/unit/infra/HealthMonitorInterfaceTest.cpp](tests/unit/infra/HealthMonitorInterfaceTest.cpp)
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp](tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp)
@@ -708,7 +708,7 @@
    - 针对 `flush(deadline)` 的未冻结细节，本轮只引入 `LogFlushDeadline.timeout_ms` 占位类型，避免过早引入 scheduler 或异步队列实现细节。
    - 统一返回 `LogWriteResult`，仅引用 contracts `ResultCode` 与 `ErrorInfo`，保持日志失败语义可观测。
 2. 完成 INF-TODO-005-B 代码落地：
-   - 新增 [infra/include/ILogger.h](infra/include/ILogger.h)
+   - 当时新增日志入口；当前 canonical 头文件已统一为 [infra/include/logging/ILogger.h](infra/include/logging/ILogger.h)，旧根层路径已退出
    - 新增 [tests/unit/infra/LoggerInterfaceTest.cpp](tests/unit/infra/LoggerInterfaceTest.cpp)
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp](tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp)
@@ -804,7 +804,7 @@
    - 采用最小一致性守卫区分 ready、degraded、failed 三类状态，并禁止非存活快照继续标记 ready/degraded。
    - 将 `failed_components` 收敛为最小字符串集合，并显式拒绝空值、重复项以及 `final_runtime_state` 等 runtime-state 保留字段名，避免健康快照越权回写 runtime 状态。
 2. 完成 INF-TODO-007-B 代码落地：
-   - 新增 [infra/include/HealthSnapshot.h](infra/include/HealthSnapshot.h)
+   - 当时冻结健康快照对象；当前 canonical 入口已统一收敛到 [infra/include/health/HealthStateTypes.h](infra/include/health/HealthStateTypes.h)，不再使用根层 HealthSnapshot 头文件
    - 新增 [tests/unit/infra/HealthSnapshotTest.cpp](tests/unit/infra/HealthSnapshotTest.cpp)
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp](tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp)
@@ -852,7 +852,7 @@
    - 将 `evidence_ref` 收敛为最小类型化锚点 `AuditEvidenceRef`，仅允许 `ToolResult` 或 `RecoveryOutcome` 两类 execution-result 引用，不嵌入 contracts 对象本体。
    - 保持 `side_effects` 为最小字符串集合，只校验可序列化、非空和无重复，不提前扩展成复杂 effect schema。
 2. 完成 INF-TODO-004-B 代码落地：
-   - 新增 [infra/include/AuditEvent.h](infra/include/AuditEvent.h)
+   - 当时冻结审计事件对象；当前 canonical 入口已统一收敛到 [infra/include/audit/AuditTypes.h](infra/include/audit/AuditTypes.h)，不再使用根层 AuditEvent 头文件
    - 新增 [tests/unit/infra/AuditEventTest.cpp](tests/unit/infra/AuditEventTest.cpp)
    - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
    - 新增 [tests/contract/smoke/AuditEventBoundaryContractTest.cpp](tests/contract/smoke/AuditEventBoundaryContractTest.cpp)

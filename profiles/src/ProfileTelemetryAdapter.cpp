@@ -11,7 +11,7 @@ namespace {
 [[nodiscard]] ProfileTelemetryDispatchResult invalid_input_result(std::string_view stage,
                                                                   std::string_view detail) {
   return ProfileTelemetryDispatchResult{
-      .log_result = infra::LogWriteResult::failure(
+    .log_result = infra::logging::LogWriteResult::failure(
           contracts::ResultCode::ValidationFieldMissing,
           std::string(detail),
           std::string(stage),
@@ -37,7 +37,7 @@ namespace {
 
 }  // namespace
 
-ProfileTelemetryAdapter::ProfileTelemetryAdapter(infra::ILogger& logger,
+ProfileTelemetryAdapter::ProfileTelemetryAdapter(infra::logging::ILogger& logger,
                                                  infra::audit::IAuditLogger& audit_logger)
     : logger_(logger), audit_logger_(audit_logger) {}
 

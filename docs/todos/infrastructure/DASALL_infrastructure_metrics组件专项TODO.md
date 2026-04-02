@@ -22,7 +22,7 @@
 12. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
 13. docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md
 14. docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md
-15. 当前代码现状：infra/CMakeLists.txt、infra/src/placeholder.cpp、infra/include/、infra/src/metrics/、tests/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt
+15. 当前代码现状：infra/CMakeLists.txt、infra/include/、infra/src/{InfraServiceFacade.cpp,InfraErrorCode.cpp,audit/,plugin/,tracing/}、infra/src/metrics/、tests/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt
 
 生成原则：
 
@@ -81,17 +81,17 @@
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
 | infra/src/metrics/ | 目录为空 | metrics 实现尚未落盘 |
-| infra/include/ | 目录为空 | metrics 接口与对象尚未冻结 |
-| infra/CMakeLists.txt | 仅包含 src/placeholder.cpp | metrics 尚未接入构建目标 |
-| tests/CMakeLists.txt | 仅接入 mocks/unit/contract | integration 顶层未接线 |
-| tests/unit/CMakeLists.txt | 未接入 infra 子目录 | metrics unit 发现性缺失 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，metrics/ 子目录已落盘接口与对象 | metrics public headers 已冻结，后续差距集中在运行时实现 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | metrics 公共接口已落盘，但 metrics 服务实现尚未接入构建目标 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration 拓扑已接入顶层，后续只需补 metrics 具体集成/故障用例 |
+| tests/unit/CMakeLists.txt | 已接入 infra 子目录 | metrics unit 发现性已建立，后续只需补具体用例 |
 | tests/contract/CMakeLists.txt | centralized registration 已存在 | 可复用承载 metrics contract 边界测试 |
 
 ## 4. 粒度可行性评估
 
 ### 4.1 粒度结论
 
-结论：本轮可生成 L3/L2 混合专项 TODO。接口、对象、错误语义、主/异常流程可细化到 L3；跨子域桥接、integration 拓扑、OTLP 依赖属于外部约束，需降为 L2/L1 或 Blocked。
+结论：本轮可生成 L3/L2 混合专项 TODO。接口、对象、错误语义、主/异常流程可细化到 L3；跨子域桥接、组件 integration/failure 用例与 OTLP 依赖属于外部约束，需降为 L2/L1 或 Blocked。
 
 支撑证据：
 
@@ -135,7 +135,7 @@
 | 标签治理与高基数防护 | metrics 设计 6.3/6.8/6.9 | 适配器/治理 | MET-TODO-012 | 独立治理任务，单独验证拒绝语义 |
 | 导出调度与可插拔导出 | metrics 设计 6.2/6.7/6.8/6.9 | 适配器/流程 | MET-TODO-013、MET-TODO-014 | 调度与导出拆分；OTLP 延后 |
 | 配置与 Profile 裁剪 | metrics 设计 6.9；架构 7.5.1 | 配置 | MET-TODO-016、MET-BLK-003 | 四层覆盖与回退策略单列任务 |
-| CMake 与测试门禁 | metrics 设计 7/8/9；当前代码现状 | 测试/门禁 | MET-TODO-017、MET-TODO-018、MET-BLK-001 | 构建接线、unit/contract 先行，integration 解阻后推进 |
+| CMake 与测试门禁 | metrics 设计 7/8/9；当前代码现状 | 测试/门禁 | MET-TODO-017、MET-TODO-018 | 构建接线、unit/contract 先行，integration 用例待组件后续落盘 |
 | logging/audit/health 桥接 | metrics 设计 6.10 | 桥接 | MET-TODO-019、MET-BLK-002、MET-BLK-004 | 外部接口未冻结，必须先补设计 |
 | 交付证据回写 | metrics 设计 9.2/11 | 文档/门禁 | MET-TODO-020 | 回写质量门、阻塞变化、回退执行证据 |
 
@@ -149,7 +149,7 @@
 | 适配器/桥接类任务 | 是 | MET-TODO-012~014、019 |
 | 异常与错误处理类任务 | 是 | MET-TODO-008、015 |
 | 配置与 Profile 裁剪类任务 | 是 | MET-TODO-016（含阻塞 MET-BLK-003） |
-| 测试与门禁类任务 | 是 | MET-TODO-017~018（含阻塞 MET-BLK-001） |
+| 测试与门禁类任务 | 是 | MET-TODO-017~018 |
 | 文档/交付证据回写类任务 | 是 | MET-TODO-020 |
 
 ## 6. 原子任务清单
@@ -175,7 +175,7 @@
 | MET-TODO-015 | Not Started | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试 | 仅当降级进入/退出两路径均可二值判定时完成 |
 | MET-TODO-016 | Not Started | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测 | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
 | MET-TODO-017 | Not Started | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
-| MET-TODO-018 | Not Started | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | integration 顶层未接线 | integration 相关验收延后到 MET-BLK-001 解阻后 | 测试代码、注册入口、执行记录 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
+| MET-TODO-018 | Not Started | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册入口、执行记录 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
 | MET-TODO-019 | Blocked | 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架 | metrics 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 审计/日志事件 | L1 | infra/src/metrics/MetricsAuditBridge.cpp, infra/src/metrics/MetricsLoggingBridge.cpp | bridge_write_audit_event, bridge_write_log_event | contract：审计字段完整；unit：桥接调用可达 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-007、MET-TODO-008、MET-TODO-015 | MET-BLK-002、MET-BLK-004 | 冻结 audit/logging 最小写入接口与字段约束 | 桥接代码或阻塞记录 | 仅当外部接口冻结后，状态才可从 Blocked 改为 Not Started |
 | MET-TODO-020 | Not Started | 回写 metrics 质量门与交付证据 | metrics 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | Gate 执行结果、阻塞变化、回退记录回写 | process test：门禁记录可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-018 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个门禁项都有通过/失败结论与证据命令时完成 |
 
@@ -209,7 +209,7 @@
 | MET-GATE-04 | 构建接线门 | dasall_infra 构建通过且 metrics 源码入图 | 修复 CMake 接线 |
 | MET-GATE-05 | 测试发现性门 | ctest -N 可见 metrics 新增 unit/contract 用例 | 修复 tests 注册 |
 | MET-GATE-06 | breaking 评审门 | 任何接口签名或错误码映射变化都有评审结论 | 未评审不得合入 |
-| MET-GATE-07 | integration 准入门 | tests 顶层接入 integration 子目录并定义标签规范 | 未通过前禁止推进 metrics integration 验收 |
+| MET-GATE-07 | integration 准入门 | tests 顶层已接入 integration 子目录并定义标签规范，且 metrics 组件用例已落盘 | 未通过前补齐 metrics integration/failure 用例与注册 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -267,15 +267,15 @@
    - metrics 详细设计已明确核心对象字段、主流程与异常流程。
    - metrics 详细设计已明确错误码域、配置项与默认策略。
    - 已给出建议落盘目录/文件与测试出口，且可映射到现有 CMake 结构。
-   - 当前阻塞集中在跨子域桥接、integration 拓扑与 OTLP 依赖，不阻断 metrics 本地闭环落地。
+   - 当前阻塞集中在跨子域桥接、组件 integration/failure 用例与 OTLP 依赖，不阻断 metrics 本地闭环落地。
 3. 当前最小可执行粒度：函数/接口/数据结构。
 4. 若未达到全域函数级的缺失信息：
    - logging/audit/health 的最小桥接接口签名。
-   - tests integration 顶层接线与标签规范。
+   - metrics 组件 integration/failure 用例与标签落盘。
    - OTLP exporter 依赖与构建策略冻结结论。
 5. 下一步建议：
    - 先执行 MET-TODO-001~018，完成 metrics 本地闭环与构建/测试门禁。
-   - 并行推进 MET-BLK-001~005 解阻。
+   - 并行推进 MET-BLK-002~005 解阻；MET-BLK-001 已完成仓库级解阻。
    - 解阻后执行 MET-TODO-019 与 integration 验收，不跳过 breaking 评审门禁。
 
 ## 12. ARC 修复增量（2026-03-26）

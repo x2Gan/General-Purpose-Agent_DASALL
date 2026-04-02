@@ -77,9 +77,9 @@
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
 | infra/src/tracing/ | 空目录 | tracing 组件尚未落盘实现 |
-| infra/include/ | 空目录 | tracing 接口与对象尚未冻结 |
-| infra/CMakeLists.txt | 仅 src/placeholder.cpp | tracing 尚未接入构建目标 |
-| tests/CMakeLists.txt | 仅 mocks/unit/contract | integration 顶层未接线 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，tracing/ 子目录已落盘接口与对象 | tracing public headers 与对象已冻结，后续差距集中在运行时实现 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | tracing 接口与锚点已接入构建，具体 tracing 服务实现仍未接入构建目标 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration 拓扑已接入顶层，后续只需补 tracing 具体集成/故障用例 |
 | tests/unit/CMakeLists.txt | 无 infra 子目录 | tracing unit 发现性待补 |
 | tests/contract/CMakeLists.txt | 已有 centralized registration 机制 | 可承载 tracing-contract 边界测试 |
 
@@ -96,7 +96,7 @@
 3. 已有主流程与异常流程：正常流程 7 步、异常分类 4 类与恢复动作（tracing 设计 6.7/6.8）。
 4. 已有错误码域：TRC_E_PROVIDER_NOT_READY、TRC_E_INVALID_CONTEXT、TRC_E_QUEUE_FULL、TRC_E_EXPORT_TIMEOUT、TRC_E_EXPORT_FAILURE、TRC_E_SHUTDOWN_TIMEOUT、TRC_E_CONFIG_INVALID（tracing 设计 6.6）。
 5. 已有落盘建议与测试出口：infra/include/tracing、infra/src/tracing、tests/unit/infra/tracing、tests/integration/infra/tracing（tracing 设计 8.1、7）。
-6. 但 integration 顶层 CMake 未注册、metrics/audit 适配接口未冻结，导致部分任务必须 Blocked。
+6. 但 tracing 组件 integration/failure 用例尚未落盘、metrics/audit 适配接口未冻结，导致部分任务仍必须 Blocked。
 
 当前最小可执行粒度：函数/接口/数据结构级（以 L3 为主，局部受阻降为 L2/L1）。
 
@@ -115,7 +115,7 @@
 | SpanExporterAdapter | tracing 设计 6.2/6.3/6.9 | L2 | noop/file/otlp 预留与失败语义明确 | OTLP 首版是否启用未冻结 | 先做 noop/file，OTLP 标记 Blocked |
 | TraceMetricsBridge | tracing 设计 6.2/6.10 | L1 | 指标名清单完整 | metrics 接口签名未冻结 | 标记 Blocked，先补桥接接口设计 |
 | TraceAuditBridge | tracing 设计 6.2/6.10 | L1 | 审计事件清单明确 | audit 写入接口签名未冻结 | 标记 Blocked，先补桥接接口设计 |
-| tests/integration tracing 注册点 | tracing 设计 8.1/9.1；tests 现状 | L0 | 设计建议存在 | tests 顶层无 integration 注册路径 | 先补测试拓扑后再拆集成任务 |
+| tests/integration tracing 注册点 | tracing 设计 8.1/9.1；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | tracing integration/failure 用例尚未落盘 | 直接拆组件集成任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -131,7 +131,7 @@
 | 批处理导出管线 | tracing 设计 6.2/6.7/6.8/6.9 | 流程 | TRC-TODO-012、TRC-TODO-013 | queue 与 exporter 分任务，避免过载 |
 | 异常降级与可观测 | tracing 设计 6.8/6.10 | 错误处理/门禁 | TRC-TODO-014、TRC-TODO-015 | 失败注入与降级路径独立验收 |
 | 配置与 Profile 裁剪 | tracing 设计 6.9；蓝图 5 | 配置 | TRC-TODO-016 | 键名、默认值、覆盖层级明确落盘 |
-| CMake 与测试门禁 | tracing 设计 7/8/9；当前代码现状 | 测试/门禁 | TRC-TODO-017、TRC-TODO-018、TRC-BLK-003 | 构建接线与 unit/contract 可先做，integration 先解阻 |
+| CMake 与测试门禁 | tracing 设计 7/8/9；当前代码现状 | 测试/门禁 | TRC-TODO-017、TRC-TODO-018 | 构建接线与 unit/contract 可先做，integration 用例待组件后续落盘 |
 | metrics/audit 桥接 | tracing 设计 6.10 | 桥接/门禁 | TRC-BLK-001、TRC-BLK-002 | 外部接口未冻结，必须先补设计 |
 | OTLP 导出 | tracing 设计 6.9/7/11 | 导出 | TRC-BLK-004 | 首版导出器选型未冻结，不默认推进 |
 
@@ -158,7 +158,7 @@
 | TRC-TODO-015 | Blocked | 实现 TraceMetricsBridge 与 TraceAuditBridge 桥接骨架 | tracing 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 指标/审计清单 | L1 | infra/src/tracing/TraceMetricsBridge.cpp, infra/src/tracing/TraceAuditBridge.cpp | 指标与审计桥接写入 | integration：桥接调用可达；contract：审计事件字段完整 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L contract | TRC-TODO-005、TRC-TODO-006 | TRC-BLK-001、TRC-BLK-002 | 冻结 metrics/audit 最小接口签名 | 桥接代码或阻塞记录 | 仅当外部接口冻结后，状态才可从 Blocked 改为 Not Started |
 | TRC-TODO-016 | Not Started | 定义 tracing 配置模型与默认策略 | tracing 设计 6.9；蓝图 5 | 6.9 配置项表 | L3 | infra/include/tracing/TraceConfig.h | tracing.enabled/provider/sampler/batch/exporter/overflow/force_flush_on_stop | unit：默认值与覆盖优先级校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | TRC-TODO-005 | 无 | 无 | 配置模型、单测 | 仅当配置键名与默认值与 6.9 表一致且覆盖顺序可测试时完成 |
 | TRC-TODO-017 | Not Started | 注册 tracing 源码到 infra CMake | tracing 设计 8.1；infra 现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/src/tracing/ | tracing 源文件纳入 dasall_infra | build：dasall_infra 持续可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | TRC-TODO-008~TRC-TODO-014、TRC-TODO-016 | 无 | 无 | CMake 接线、构建记录 | 仅当 placeholder 不再是唯一编译源且 tracing 源文件入图时完成 |
-| TRC-TODO-018 | Not Started | 注册 tracing 的 unit 与 contract 测试入口 | tracing 设计 7/8/9；编码规范 3.7 | 7 映射表、8.1 目录建议、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/tracing/, tests/contract/CMakeLists.txt | 新增 tracing 标签测试注册 | unit+contract：ctest 可发现并执行 tracing 新增用例 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | TRC-TODO-017 | integration 顶层未接线 | integration 相关验收延后到解阻后 | 测试代码、注册改动、执行记录 | 仅当 tracing 测试在 ctest -N 可见并执行通过时完成 |
+| TRC-TODO-018 | Not Started | 注册 tracing 的 unit 与 contract 测试入口 | tracing 设计 7/8/9；编码规范 3.7 | 7 映射表、8.1 目录建议、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/tracing/, tests/contract/CMakeLists.txt | 新增 tracing 标签测试注册 | unit+contract：ctest 可发现并执行 tracing 新增用例 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | TRC-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册改动、执行记录 | 仅当 tracing 测试在 ctest -N 可见并执行通过时完成 |
 
 ### 6.2 Blocked 任务与阻塞索引
 
@@ -189,7 +189,7 @@
 | TRC-GATE-04 | 构建接线门 | dasall_infra 构建通过且 tracing 源码入图 | 修复 CMake 入口 |
 | TRC-GATE-05 | 测试发现性门 | ctest -N 可见 tracing 新增 unit/contract 用例 | 修复 tests 注册 |
 | TRC-GATE-06 | breaking 评审门 | 任何接口签名/错误映射变更均有评审结论 | 未评审不得合入 |
-| TRC-GATE-07 | integration 准入门 | tests 顶层接入 integration 子目录并明确标签策略 | 未通过前禁止推进 tracing integration 任务 |
+| TRC-GATE-07 | integration 准入门 | tests 顶层已接入 integration 子目录并明确标签策略，且 tracing 组件用例已落盘 | 未通过前补齐 tracing integration/failure 用例与注册 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -248,10 +248,10 @@
    - 已给出落盘目录、建议文件与测试出口。
    - 当前阻塞主要集中在跨子域桥接与 integration 拓扑，不影响核心 tracing 闭环落地。
 3. 当前最小可执行粒度：函数/接口/数据结构。
-4. 未完全达到全域函数级的缺口：metrics/audit 桥接接口未冻结，tests integration 顶层接线未完成，OTLP 首版启用策略未冻结。
+4. 未完全达到全域函数级的缺口：metrics/audit 桥接接口未冻结，tracing integration/failure 用例尚未落盘，OTLP 首版启用策略未冻结。
 5. 下一步建议：
    - 先执行 TRC-TODO-001~TRC-TODO-014、TRC-TODO-016~TRC-TODO-018 完成 tracing 本地闭环。
-   - 并行推进 TRC-BLK-001~004 解阻，再进入桥接与集成验收。
+   - 并行推进 TRC-BLK-001、TRC-BLK-002、TRC-BLK-004 解阻；TRC-BLK-003 已完成仓库级解阻，再进入桥接与集成验收。
 
 ## 12. ARC 修复增量（2026-03-26）
 

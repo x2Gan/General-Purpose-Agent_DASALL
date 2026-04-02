@@ -99,20 +99,20 @@ Must-Not：不改写 ADR、不把 backend 细节写入 contracts、不越权到 
 
 | 设计目标 | 当前状态 | 差距描述 | 风险等级 | 修复优先级 |
 |---|---|---|---|---|
-| infra/secret 目录与源码落盘 | 缺失 | 当前 infra/ 仅有 CMakeLists.txt 与 src/placeholder.cpp，secret 子目录尚不存在 | High | P0 |
-| ISecretManager 接口头文件 | 缺失 | 蓝图要求存在 ISecretManager.h，但当前 infra/include 为空 | High | P0 |
-| SecretHandle / RotationRequest / 权限模型 | 缺失 | 子系统设计只给出方法名，专项 TODO 已将其列为阻塞项 | High | P0 |
-| secret backend 抽象 | 缺失 | file/kms/mock 仅停留在配置项层，没有统一后端协议 | High | P0 |
+| infra/secret 目录与源码落盘 | 部分实现 | secret public headers 已落盘，secret 源码子目录与实现骨架仍待接入 | High | P0 |
+| ISecretManager 接口头文件 | 部分实现 | infra/include/secret/ISecretManager.h 已落盘，后续差距集中在 manager 实现骨架 | High | P0 |
+| SecretHandle / RotationRequest / 权限模型 | 部分实现 | SecretTypes 已冻结对象与最小权限边界，执行链与生产后端约束仍待补齐 | High | P0 |
+| secret backend 抽象 | 部分实现 | ISecretBackend/ISecretHealthSource 已落盘，file/kms/mock 运行时适配器仍待实现 | High | P0 |
 | secret 审计与健康探针 | 缺失 | 明文不落盘与审计留痕只有文档约束，没有实现与测试出口 | High | P0 |
-| secret 测试基线 | 缺失 | tests/ 下不存在 infra/secret 相关 unit、contract、integration 用例 | High | P0 |
-| secret 模块详细设计文档 | 缺失 | 当前只有 infra 子系统总设计与专项 TODO，secret 子域尚未单独成文 | Medium | P0 |
+| secret 测试基线 | 部分实现 | unit/contract 基线已接入，integration 用例仍待补齐 | Medium | P0 |
+| secret 模块详细设计文档 | 已实现 | 本模块详细设计已成文，后续需与头文件和测试持续同步 | Low | P1 |
 
 证据：
 
-1. infra/CMakeLists.txt 仅编译 src/placeholder.cpp。
-2. infra/src/placeholder.cpp 为 keep_library_non_empty 占位实现。
+1. infra/CMakeLists.txt 已接入 core/audit/plugin/tracing 等真实源码。
+2. secret 当前不再依赖 placeholder-only 构建；缺口集中在 secret 源码子目录与实现骨架。
 3. docs/architecture/DASALL_infrastructure子系统详细设计.md 对 SecretManager 仅有职责、I/O 与接口名摘要。
-4. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md 将 ISecretManager 标记为 Blocked，阻塞点为 SecretHandle、RotationRequest、权限模型未冻结。
+4. docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md 已完成 ISecretManager、SecretTypes、ISecretBackend 与首批 unit/contract 基线；当前阻塞集中在 secret 实现骨架、backend 适配器与 integration 用例。
 
 ### 3.2 现状-目标冲突
 
@@ -310,7 +310,7 @@ Secret 模块非职责：
 
 建议头文件分布：
 
-1. infra/include/ISecretManager.h
+1. infra/include/secret/ISecretManager.h
 2. infra/include/secret/SecretTypes.h
 3. infra/include/secret/ISecretBackend.h
 4. infra/include/secret/SecretErrors.h
@@ -457,7 +457,7 @@ Secret 模块非职责：
 
 | Design结论 | Build目标 | 映射说明 | 代码目标 | 测试目标 | 验收命令 | 依赖/阻塞 |
 |---|---|---|---|---|---|---|
-| 建立 SecretManager 对外稳定入口 | 新增 ISecretManager 与 SecretTypes | 先冻结接口与对象，解除专项 TODO 的模型阻塞 | infra/include/ISecretManager.h; infra/include/secret/SecretTypes.h | unit: SecretInterfaceCompileTest; contract: SecretTypeBoundaryTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "SecretInterfaceCompileTest|SecretTypeBoundaryTest" | 阻塞：SecretHandle、RotationRequest、权限模型需先冻结 |
+| 建立 SecretManager 对外稳定入口 | 新增 ISecretManager 与 SecretTypes | 先冻结接口与对象，解除专项 TODO 的模型阻塞 | infra/include/secret/ISecretManager.h; infra/include/secret/SecretTypes.h | unit: SecretInterfaceCompileTest; contract: SecretTypeBoundaryTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "SecretInterfaceCompileTest|SecretTypeBoundaryTest" | 阻塞：SecretHandle、RotationRequest、权限模型需先冻结 |
 | 建立多 backend 统一抽象 | 新增 ISecretBackend 与 file/mock 适配器骨架 | 先打通 file/mock，KMS 保留接口位 | infra/include/secret/ISecretBackend.h; infra/src/secret/backends/* | unit: SecretBackendAdapterTest | ctest --test-dir build-ci -R SecretBackendAdapterTest | 阻塞：platform 文件/时间接口接线策略 |
 | 建立句柄化访问与 lease 生命周期 | 新增 SecretLeaseRegistry 与 SecureBuffer | 解决明文暴露窗口与 release/zeroize 可验证性 | infra/src/secret/SecretLeaseRegistry.cpp; infra/src/secret/SecureBuffer.cpp | unit: SecretLeaseLifecycleTest; failure: SecretZeroizeTest | ctest --test-dir build-ci -R "SecretLeaseLifecycleTest|SecretZeroizeTest" | 依赖：对象模型冻结 |
 | 建立轮换最小闭环 | 新增 SecretRotationCoordinator | 支撑 create/test/promote/revoke 四阶段流程 | infra/src/secret/SecretRotationCoordinator.cpp | unit: SecretRotationCoordinatorTest; integration: SecretRotationWorkflowTest | ctest --test-dir build-ci -R "SecretRotationCoordinatorTest|SecretRotationWorkflowTest" | 阻塞：双槽策略与验证规则需冻结 |
@@ -477,7 +477,7 @@ Secret 模块非职责：
 
 建议目录：
 
-1. infra/include/ISecretManager.h
+1. infra/include/secret/ISecretManager.h
 2. infra/include/secret/SecretTypes.h
 3. infra/include/secret/ISecretBackend.h
 4. infra/include/secret/SecretErrors.h
@@ -509,7 +509,7 @@ Secret 模块非职责：
 | ID | 状态 | 任务描述 | 输入依据 | 代码目标 | 测试目标 | 验收命令 | 完成判定 |
 |---|---|---|---|---|---|---|---|
 | SEC-T001 | Not Started | 新增 SecretTypes 头文件并冻结 SecretQuery/SecretHandle/SecretLease | 本文 6.5 | infra/include/secret/SecretTypes.h | SecretTypeBoundaryTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R SecretTypeBoundaryTest | 对象字段与约束完整、无明文字段 |
-| SEC-T002 | Not Started | 新增 ISecretManager 接口骨架 | 本文 6.6 | infra/include/ISecretManager.h | SecretInterfaceCompileTest | cmake --build build-ci --target dasall_infra | 方法签名、错误语义与对象依赖一致 |
+| SEC-T002 | Not Started | 新增 ISecretManager 接口骨架 | 本文 6.6 | infra/include/secret/ISecretManager.h | SecretInterfaceCompileTest | cmake --build build-ci --target dasall_infra | 方法签名、错误语义与对象依赖一致 |
 | SEC-T003 | Not Started | 新增 ISecretBackend 统一后端接口 | 本文 6.2、6.6 | infra/include/secret/ISecretBackend.h | SecretBackendContractSmokeTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R SecretBackendContractSmokeTest | file/mock/kms 可共享同一协议 |
 | SEC-T004 | Not Started | 新增 SecretManagerFacade 最小骨架并替换 placeholder-only 接线 | 本文 6.2、6.7 | infra/src/secret/SecretManagerFacade.cpp; infra/CMakeLists.txt | SecretInterfaceCompileTest | cmake --build build-ci --target dasall_infra | infra 不再只有 placeholder 作为唯一入口 |
 | SEC-T005 | Not Started | 新增 MockSecretBackend 与固定夹具 | 本文 6.2、6.3 | infra/src/secret/backends/MockSecretBackend.cpp | SecretBackendAdapterTest | ctest --test-dir build-ci -R SecretBackendAdapterTest | 支持成功、未命中、拒绝、backend down 四类路径 |

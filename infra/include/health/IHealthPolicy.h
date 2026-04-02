@@ -6,9 +6,9 @@
 #include <string_view>
 #include <utility>
 
-#include "HealthSnapshot.h"
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
+#include "health/HealthStateTypes.h"
 
 namespace dasall::infra {
 

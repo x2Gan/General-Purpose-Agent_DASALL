@@ -4,7 +4,7 @@
 #include <string_view>
 #include <vector>
 
-#include "../IInfrastructureService.h"
+#include "IInfrastructureService.h"
 #include "IAuditLogger.h"
 
 namespace dasall::infra::audit {

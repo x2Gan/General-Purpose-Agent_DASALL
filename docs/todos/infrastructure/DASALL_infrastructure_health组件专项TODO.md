@@ -84,11 +84,11 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/include/ | 空目录 | health 接口未落盘 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，health/ 子目录已落盘接口与对象 | health public headers 已冻结，后续差距集中在服务实现 |
 | infra/src/health/ | 空目录 | health 实现未落盘 |
-| infra/CMakeLists.txt | 仅 src/placeholder.cpp | health 未接入构建 |
-| tests/CMakeLists.txt | 仅 mocks/unit/contract | integration 顶层未接入 |
-| tests/unit/CMakeLists.txt | 未接入 infra 子目录 | health unit 发现性缺失 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | health 公共接口已落盘，但 health 服务实现仍未接入构建 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration 拓扑已接入顶层，后续只需补 health 具体集成/故障用例 |
+| tests/unit/CMakeLists.txt | 已接入 infra 子目录 | health unit 发现性已建立，后续只需补具体用例 |
 | tests/contract/CMakeLists.txt | centralized registration 已存在 | 可承载 health 边界 contract 测试 |
 
 ## 4. 粒度可行性评估
@@ -138,7 +138,7 @@
 | 事件发布与错误处理 | health 设计 6.8/6.10 | 异常/错误处理 | HLT-TODO-012、HLT-TODO-013 | 发布逻辑与错误码域拆分，避免任务过大 |
 | 配置与 Profile 裁剪 | health 设计 6.9 | 配置 | HLT-TODO-014、HLT-BLK-003 | 键命名未冻结，先补设计再实现 |
 | RecoveryHint 边界守卫 | health 设计 6.8；ADR-007 | 适配器/边界 | HLT-TODO-015、HLT-BLK-004 | 明确建议与执行分离并 contract 化 |
-| CMake 与测试门禁接线 | health 设计 7/8/9；代码现状 | 测试/门禁 | HLT-TODO-016、HLT-TODO-017、HLT-BLK-005 | 构建和 unit/contract 可先做，integration 先阻塞 |
+| CMake 与测试门禁接线 | health 设计 7/8/9；代码现状 | 测试/门禁 | HLT-TODO-016、HLT-TODO-017 | 构建和 unit/contract 可先做，integration 用例待组件后续落盘 |
 | 文档与证据回写 | health 设计 9.2/11 | 文档/交付证据 | HLT-TODO-018 | 对 gate、阻塞、回退证据做收口 |
 
 ### 5.2 映射覆盖性检查
@@ -151,7 +151,7 @@
 | 适配器/桥接类任务 | 是 | HLT-TODO-015 |
 | 异常与错误处理类任务 | 是 | HLT-TODO-012~013 |
 | 配置与 Profile 裁剪类任务 | 是 | HLT-TODO-014（含 HLT-BLK-003） |
-| 测试与门禁类任务 | 是 | HLT-TODO-016~017（含 HLT-BLK-005） |
+| 测试与门禁类任务 | 是 | HLT-TODO-016~017 |
 | 文档/交付证据回写类任务 | 是 | HLT-TODO-018 |
 
 ## 6. 原子任务清单
@@ -161,10 +161,10 @@
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | HLT-TODO-001 | Done | 定义 IHealthProbe 接口头文件 | health 设计 6.6；编码规范 3.7 | 6.6 IHealthProbe | L3 | infra/include/health/IHealthProbe.h | probe(): ProbeResult | unit：接口可编译；contract：错误语义入口可映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/health/IHealthProbe.h、tests/unit/infra/health/HealthProbeInterfaceTest.cpp，并通过 `cmake --build build-ci --target dasall_infra dasall_unit_tests` 与 `ctest --test-dir build-ci --output-on-failure -R HealthProbeInterfaceTest` 验证接口签名可编译且未吸收 monitor 职责 | 仅当接口签名与 6.6 一致且不依赖业务实现时完成 |
-| HLT-TODO-002 | Done | 定义 IHealthMonitor 接口头文件 | health 设计 6.6/6.7 | 6.6 IHealthMonitor | L3 | infra/include/health/IHealthMonitor.h | register_probe(name,group,probe), evaluate_now(), get_snapshot(), subscribe(listener) | unit：接口可编译；contract：快照边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001 | listener 类型细节未冻结 | 先冻结最小 listener 抽象占位 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/health/IHealthMonitor.h，并将 legacy 入口收敛为 infra/include/IHealthMonitor.h wrapper；同步更新 tests/unit/infra/HealthMonitorInterfaceTest.cpp、tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp，通过 `cmake --build build-ci --target dasall_infra dasall_health_monitor_interface_unit_test dasall_contract_health_monitor_interface_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthMonitorInterfaceTest|HealthMonitorInterfaceBoundaryContractTest"` 验证四方法边界与快照输出边界 | 仅当四个方法语义与 6.6 一致且可编译时完成 |
+| HLT-TODO-002 | Done | 定义 IHealthMonitor 接口头文件 | health 设计 6.6/6.7 | 6.6 IHealthMonitor | L3 | infra/include/health/IHealthMonitor.h | register_probe(name,group,probe), evaluate_now(), get_snapshot(), subscribe(listener) | unit：接口可编译；contract：快照边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001 | listener 类型细节未冻结 | 先冻结最小 listener 抽象占位 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/health/IHealthMonitor.h，并移除 legacy 根层 wrapper，统一 tests/unit/infra/HealthMonitorInterfaceTest.cpp、tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp 的入口语义；通过 `cmake --build build-ci --target dasall_infra dasall_health_monitor_interface_unit_test dasall_contract_health_monitor_interface_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthMonitorInterfaceTest|HealthMonitorInterfaceBoundaryContractTest"` 验证四方法边界与快照输出边界 | 仅当四个方法语义与 6.6 一致且可编译时完成 |
 | HLT-TODO-003 | Done | 定义 IHealthPolicy 接口头文件 | health 设计 6.6/6.9 | 6.6 IHealthPolicy；6.9 策略配置 | L3 | infra/include/health/IHealthPolicy.h | evaluate(results): HealthSnapshot | unit：接口可编译；unit：阈值输入输出可约束 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-002 | policy version 规范未成文 | 先用字符串版本占位并保留扩展点 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/health/IHealthPolicy.h、tests/unit/infra/health/HealthPolicyInterfaceTest.cpp，并通过 `cmake --build build-ci --target dasall_infra dasall_health_policy_interface_unit_test` 与 `ctest --test-dir build-ci --output-on-failure -R HealthPolicyInterfaceTest` 验证 ProbeResultView 输入约束、HealthSnapshot 输出边界与 `policy_version()` 字符串占位扩展点 | 仅当策略接口可承载三态评估输入输出时完成 |
 | HLT-TODO-004 | Done | 定义 ProbeTypes 数据结构 | health 设计 6.5 | 6.5 ProbeDescriptor/ProbeResult | L3 | infra/include/health/ProbeTypes.h | ProbeDescriptor, ProbeResult | unit：字段完整性与状态枚举覆盖 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001 | 无 | 无 | 数据结构头文件、单测；2026-03-31 已落盘 infra/include/health/ProbeTypes.h、tests/unit/infra/health/ProbeTypesTest.cpp，并将 IHealthProbe 对 ProbeResult 的前置声明收敛为实际对象依赖；通过 `cmake --build build-ci --target dasall_infra dasall_health_probe_interface_unit_test dasall_health_probe_types_unit_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthProbeInterfaceTest|ProbeTypesUnitTest"` 验证字段完整性、状态枚举和失败细节守卫 | 仅当字段与状态集合与 6.5 一致且默认语义可测试时完成 |
-| HLT-TODO-005 | Done | 定义 HealthStateTypes 数据结构 | health 设计 6.5/6.7 | 6.5 HealthSnapshot/HealthTransition | L3 | infra/include/health/HealthStateTypes.h | HealthSnapshot, HealthTransition | unit：version 单调与状态转移字段校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004 | 历史持久化策略未冻结 | 先仅实现进程内窗口语义 | 数据结构头文件、单测；2026-03-31 已落盘 infra/include/health/HealthStateTypes.h，并将 infra/include/HealthSnapshot.h 收敛为 wrapper；同步扩展 tests/unit/infra/HealthSnapshotTest.cpp 与 tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp，通过 `cmake --build build-ci --target dasall_infra dasall_health_snapshot_unit_test dasall_contract_health_snapshot_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest"` 验证 version 元数据、状态枚举和 HealthTransition 字段守卫 | 仅当快照与转移对象字段覆盖设计约束并通过测试时完成 |
+| HLT-TODO-005 | Done | 定义 HealthStateTypes 数据结构 | health 设计 6.5/6.7 | 6.5 HealthSnapshot/HealthTransition | L3 | infra/include/health/HealthStateTypes.h | HealthSnapshot, HealthTransition | unit：version 单调与状态转移字段校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004 | 历史持久化策略未冻结 | 先仅实现进程内窗口语义 | 数据结构头文件、单测；2026-03-31 已落盘 infra/include/health/HealthStateTypes.h，并将 HealthSnapshot 入口统一收敛到 infra/include/health/HealthStateTypes.h、移除根层 wrapper；同步扩展 tests/unit/infra/HealthSnapshotTest.cpp 与 tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp，通过 `cmake --build build-ci --target dasall_infra dasall_health_snapshot_unit_test dasall_contract_health_snapshot_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest"` 验证 version 元数据、状态枚举和 HealthTransition 字段守卫 | 仅当快照与转移对象字段覆盖设计约束并通过测试时完成 |
 | HLT-TODO-006 | Done | 定义 RecoveryHint 数据结构 | health 设计 6.5/6.8；ADR-007 | 6.5 RecoveryHint；6.8 恢复动作 | L2 | infra/include/health/RecoveryHint.h | RecoveryHint{reason_code,severity,suggested_action,evidence_ref} | contract：不含执行句柄字段；unit：字段完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-005 | 已解阻（2026-03-31） | 已通过 RecoveryHintBoundaryContractTest 冻结最小边界模板 | 对象头文件、contract 测试；2026-03-31 已落盘 infra/include/health/RecoveryHint.h、tests/unit/infra/health/RecoveryHintTest.cpp、tests/contract/smoke/RecoveryHintBoundaryContractTest.cpp，并在 tests/contract/CMakeLists.txt 注册模板；通过 `cmake --build build-ci --target dasall_infra dasall_health_recovery_hint_unit_test dasall_contract_recovery_hint_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "RecoveryHintUnitTest|RecoveryHintBoundaryContractTest"` 验证 advisory 字段完整性与无执行句柄边界，且 `ctest --test-dir build-ci -N` 可发现 RecoveryHintUnitTest / RecoveryHintBoundaryContractTest | 仅当 contract 测试能阻止执行字段进入 RecoveryHint 时完成 |
 | HLT-TODO-007 | Not Started | 实现 HealthMonitorFacade 生命周期骨架 | health 设计 6.2/6.7 | 6.2 HealthMonitorFacade；6.7 正常流程 | L3 | infra/src/health/HealthMonitorFacade.cpp | register_probe, evaluate_now, get_snapshot | unit：未初始化/已初始化路径；failure：safe_observe_mode | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-002、HLT-TODO-005 | 无 | 无 | Facade 骨架、单测 | 仅当主入口路径可判定成功/失败且 safe_observe_mode 可触发时完成 |
 | HLT-TODO-008 | Not Started | 实现 ProbeRegistry 注册治理骨架 | health 设计 6.2/6.3/6.7 | 6.2 ProbeRegistry；6.3 输入输出 | L3 | infra/src/health/ProbeRegistry.cpp | register_probe, unregister_probe, list_by_group | unit：重复注册拒绝、分组查询 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004、HLT-TODO-007 | 无 | 无 | Registry 骨架、单测 | 仅当重复注册返回可判定失败且分组查询一致时完成 |
@@ -212,7 +212,7 @@
 | HLT-GATE-06 | 构建接线门 | 推进测试注册前 | dasall_infra 构建通过且 health 文件入图 | 修复 CMake 接线 |
 | HLT-GATE-07 | 测试发现性门 | 提交前 | ctest -N 可见新增 health unit/contract | 修复 tests 注册 |
 | HLT-GATE-08 | breaking 评审门 | 任意接口签名/错误映射变更前 | 评审结论明确风险、迁移窗口、回退方案 | 未评审不得推进 |
-| HLT-GATE-09 | integration 准入门 | 进入 integration 任务前 | tests 顶层完成 integration 接线并定义标签规范 | 未通过前 integration 任务保持 Blocked |
+| HLT-GATE-09 | integration 准入门 | 进入 integration 任务前 | tests 顶层已完成 integration 接线并定义标签规范，且 health 组件用例已落盘 | 未通过前补齐 health integration 用例与注册 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -260,7 +260,7 @@
 | 状态抖动风险 | Medium | 阈值过小导致状态频繁跳变 | transition_total 高频抖动 | 回退为提高阈值与引入连续失败计数 |
 | 事件发布失败被吞没 | High | 发布失败无计数与日志 | event_publish_fail_total 不增长但事件缺失 | 回退为日志+指标双写并阻断事件路径 |
 | 配置漂移风险 | Medium | profile 键命名变更未评审 | 不同 profile 行为不一致 | 回退到默认键集合并禁用运行时覆盖 |
-| 测试拓扑不完整风险 | Medium | integration 未接线即推进集成验收 | ctest -N 无 integration 用例 | 延迟 integration 任务，保留 unit/contract 门禁 |
+| integration 用例缺失风险 | Medium | health 组件用例未落盘即推进集成验收 | ctest -N 无 health integration 用例 | 延迟 integration 任务，保留 unit/contract 门禁 |
 
 ## 11. 可行性结论
 
@@ -272,8 +272,8 @@
    - 已识别并量化 5 项阻塞，解阻动作可最小执行。
    - ADR 边界对 RecoveryHint 与调度权归属约束清晰，可直接转为门禁断言。
 3. 当前最小可执行粒度：函数 / 接口 / 数据结构（L3），受阻链路为 L2/L0。
-4. 未达到全量函数级的缺口：平台线程抽象、事件总线最小接口、profile 键命名、integration 顶层接线。
+4. 未达到全量函数级的缺口：平台线程抽象、事件总线最小接口、profile 键命名、health 组件 integration 用例落盘。
 5. 下一步建议：
    - 先执行 HLT-TODO-001~008、010~011、013、016 完成接口对象与主链骨架。
-   - 并行推进 HLT-BLK-001~005 的解阻动作。
+   - 并行推进 HLT-BLK-001~003 的解阻动作；HLT-BLK-004/005 已完成解阻。
    - 解阻后再推进 HLT-TODO-009、012、014、015、017，最后执行 HLT-TODO-018 收口证据。

@@ -4,20 +4,21 @@
 #include <string>
 #include <vector>
 
-#include "AuditEvent.h"
-#include "ILogger.h"
 #include "LogEvent.h"
 #include "ProfileTelemetryAdapter.h"
+#include "audit/AuditTypes.h"
 #include "audit/IAuditLogger.h"
+#include "logging/ILogger.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
 
-class RecordingLogger final : public dasall::infra::ILogger {
+class RecordingLogger final : public dasall::infra::logging::ILogger {
  public:
-  dasall::infra::LogWriteResult log(const dasall::infra::LogEvent& event) override {
+  dasall::infra::logging::LogWriteResult log(
+      const dasall::infra::logging::LogEvent& event) override {
     if (event.module.empty() || !event.attrs_are_serializable()) {
-      return dasall::infra::LogWriteResult::failure(
+      return dasall::infra::logging::LogWriteResult::failure(
           dasall::contracts::ResultCode::ValidationFieldMissing,
           "log event must keep module and attrs valid",
           "profiles.telemetry.log",
@@ -25,22 +26,30 @@ class RecordingLogger final : public dasall::infra::ILogger {
     }
 
     records.push_back(event);
-    return dasall::infra::LogWriteResult::success();
+    return dasall::infra::logging::LogWriteResult::success();
   }
 
-  dasall::infra::LogWriteResult flush(const dasall::infra::LogFlushDeadline& deadline) override {
+  dasall::infra::logging::LogWriteResult flush(
+      const dasall::infra::logging::LogFlushDeadline& deadline) override {
     if (!deadline.is_valid()) {
-      return dasall::infra::LogWriteResult::failure(
+      return dasall::infra::logging::LogWriteResult::failure(
           dasall::contracts::ResultCode::ValidationFieldMissing,
           "flush deadline must be positive",
           "profiles.telemetry.flush",
           "RecordingLogger");
     }
 
-    return dasall::infra::LogWriteResult::success();
+    return dasall::infra::logging::LogWriteResult::success();
+  }
+
+  void set_level(dasall::infra::logging::LogLevel level) override {
+    level_ = level;
   }
 
   std::vector<dasall::infra::LogEvent> records;
+
+ private:
+  dasall::infra::logging::LogLevel level_ = dasall::infra::logging::LogLevel::Info;
 };
 
 class RecordingAuditLogger final : public dasall::infra::audit::IAuditLogger {

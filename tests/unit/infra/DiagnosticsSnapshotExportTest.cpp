@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "IDiagnosticsService.h"
+#include "diagnostics/IDiagnosticsService.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

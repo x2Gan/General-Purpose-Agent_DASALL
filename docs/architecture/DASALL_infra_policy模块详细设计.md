@@ -72,9 +72,9 @@ infra/policy 属于 Infrastructure Layer（Layer 1），负责安全策略的装
 ### 3.1 当前实现状态识别
 
 代码与工程现状证据：
-1. infra/CMakeLists.txt 当前仅编译 src/placeholder.cpp。
-2. infra/include 为空，未落盘 ISecurityPolicyManager、PolicySnapshot 等接口/对象。
-3. file_search 结果显示 infra 真实代码仅有 infra/src/placeholder.cpp，未见 security_policy 目录与实现。
+1. infra/CMakeLists.txt 当前已接入 core/audit/plugin/tracing 等真实源码。
+2. infra/include/policy 已落盘 ISecurityPolicyManager、PolicyBundle、PolicyPatch、PolicySnapshot、PolicyDecisionRef 与 PolicyTypes；根目录仅保留 infra 子系统级共享契约。
+3. 当前 infra 已存在多组真实源码与 policy public headers；缺口集中在 security policy 实现目录与服务骨架。
 4. docs/architecture/DASALL_infrastructure子系统详细设计.md 已明确 SecurityPolicyManager 为 Must 独立组件，并进入 Design -> Build 映射。
 5. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md 已将 INF-TODO-017 标记为可执行 L2 任务，同时指出 INF-BLK-07：规则 schema 与冲突裁定顺序未冻结。
 
@@ -82,14 +82,14 @@ infra/policy 属于 Infrastructure Layer（Layer 1），负责安全策略的装
 
 | 设计目标 | 当前状态 | 差距描述 | 风险等级 | 修复优先级 |
 |---|---|---|---|---|
-| policy 对外接口冻结 | 缺失 | 无 ISecurityPolicyManager，调用方无法稳定接入 | High | P0 |
-| 核心策略对象冻结 | 缺失 | PolicyBundle/PolicyPatch/PolicySnapshot/RuleDescriptor 未定义 | High | P0 |
-| 规则 schema | 缺失 | 无规则类型、匹配条件、动作语义、优先级模型 | High | P0 |
-| 策略冲突裁定顺序 | 缺失 | allow/deny/compat/fallback 缺乏稳定优先级 | High | P0 |
-| 策略热更新与回滚 | 缺失 | 无版本链、无 last-known-good、无 apply_patch 流程 | High | P0 |
+| policy 对外接口冻结 | 部分实现 | ISecurityPolicyManager 与 policy 头文件已落盘，manager 主链实现仍待接入 | High | P0 |
+| 核心策略对象冻结 | 部分实现 | PolicyBundle/PolicyPatch/PolicySnapshot/PolicyDecisionRef/PolicyTypes 已冻结，执行骨架仍待补齐 | High | P0 |
+| 规则 schema | 部分实现 | 基础规则对象、priority_order 与 patch 白名单已冻结，schema validator 实现仍待补齐 | High | P0 |
+| 策略冲突裁定顺序 | 部分实现 | deny-first 与优先级模型已成文，冲突裁定执行链仍待实现 | High | P0 |
+| 策略热更新与回滚 | 部分实现 | apply_patch/snapshot/rollback 接口与对象已冻结，版本链与 LKG 实现仍待补齐 | High | P0 |
 | 可观测性与审计 | 缺失 | 策略加载、拒绝、回滚、dry-run 无日志/指标/审计出口 | High | P0 |
-| 测试基线 | 缺失 | 无 unit/contract/integration/failure injection 用例 | High | P0 |
-| 与子系统设计和 TODO 对齐 | 部分存在 | 仅有 SecurityPolicyManager 名称和任务锚点，未落模块级文档 | Medium | P0 |
+| 测试基线 | 部分实现 | unit/contract 基线已接入，integration/failure injection 仍待补齐 | Medium | P0 |
+| 与子系统设计和 TODO 对齐 | 已实现 | 模块级文档、接口/对象冻结与专项 TODO 已形成回链 | Low | P1 |
 
 ### 3.3 风险冲突识别
 
@@ -235,6 +235,8 @@ infra/policy 不负责：
 ### 6.6 核心接口语义定义
 
 建议头文件位置：infra/include/policy/
+
+头文件落盘规则：根目录只保留 infra 子系统级共享契约；policy 组件 public headers 统一放在 infra/include/policy/，不保留根层重复入口或纯转发 wrapper。
 
 1. ISecurityPolicyManager
    - load_policy(const PolicyBundle&) -> PolicyOpResult
@@ -384,7 +386,7 @@ infra/policy 不负责：
 | 建立 snapshot 与回滚闭环 | 新增 PolicySnapshotStore | 支撑 generation/LKG/history | infra/src/policy/PolicySnapshotStore.cpp | unit: PolicySnapshotStoreTest; failure: PolicyRollbackFailureTest | ctest --test-dir build-ci -R "PolicySnapshotStoreTest|PolicyRollbackFailureTest" | 依赖 LKG 存储策略 |
 | 建立 manager 主链 | 新增 SecurityPolicyManager | 打通 load/apply_patch/dry_run/evaluate | infra/src/policy/SecurityPolicyManager.cpp | unit: SecurityPolicyManagerTest; integration: InfraPolicyLifecycleTest | ctest --test-dir build-ci -R "SecurityPolicyManagerTest|InfraPolicyLifecycleTest" | 依赖测试 integration 拓扑 |
 | 建立可观测与审计桥接 | 新增 PolicyAuditBridge/PolicyMetricsBridge/PolicyHealthProbe | 将失败与高风险操作转成可观测信号 | infra/src/policy/PolicyAuditBridge.cpp; infra/src/policy/PolicyMetricsBridge.cpp | unit: PolicyAuditBridgeTest; unit: PolicyMetricsBridgeTest | ctest --test-dir build-ci -R "PolicyAuditBridgeTest|PolicyMetricsBridgeTest" | 依赖 audit/metrics/health 最小接口 |
-| 建立 policy 测试与 Gate | 新增 tests/unit/infra/policy 与 contract/integration 用例 | 把模块级约束转成自动门禁 | tests/unit/infra/policy/*; tests/contract/infra/* | unit/contract/integration/failure injection | ctest --test-dir build-ci -L "unit|contract" | 阻塞：tests 顶层 integration 尚未接线 |
+| 建立 policy 测试与 Gate | 新增 tests/unit/infra/policy 与 contract/integration 用例 | 把模块级约束转成自动门禁 | tests/unit/infra/policy/*; tests/contract/infra/* | unit/contract/integration/failure injection | ctest --test-dir build-ci -L "unit|contract" | 依赖 policy integration/failure 用例落盘 |
 
 不可立即映射项：
 1. 通用 DSL/解释执行引擎接入：当前不是最小交付，列为 v2。
@@ -485,7 +487,7 @@ infra/policy 不负责：
 |---|---|---|---|---|
 | B-POL-01 规则 domain 与 effect 枚举未冻结 | POL-T001、POL-T004、POL-T005 | 冻结 domain/effect 名单与语义 | 在本模块设计评审中确认 secret_access/plugin_load/diagnostics_command/ota_* | 首版仅支持冻结子集 |
 | B-POL-02 冲突裁定顺序未评审通过 | POL-T005、POL-T007 | 明确 priority_order 与 deny-first 规则 | 在 detailed design 评审中冻结裁定矩阵 | 默认 deny-first，禁止热更新 |
-| B-POL-03 tests 顶层 integration 未接线 | POL-M4、POL-T009 | tests/CMakeLists 接入 integration | 新增 integration 注册规则 | integration 延后，仅保留 unit/contract |
+| B-POL-03 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐 | POL-M4、POL-T009 | 无；后续按组件落盘 policy integration/failure 用例 | 证据回链到 tests/CMakeLists.txt、tests/integration/CMakeLists.txt 与 infra 专项 TODO INF-BLK-06 | 若集成拓扑或聚合 gate 回退，则重新转为 Blocked |
 | B-POL-04 audit/metrics/health 最小接口未冻结 | POL-M5 | 桥接接口签名冻结 | 先以 stub/logger 占位 | 仅保留本地日志和内部计数 |
 | B-POL-05 LKG 持久化介质未冻结 | POL-M3 | 冻结 file/memory 方案 | 首版以内存 LKG 落地 | 重启后不承诺 LKG 持久化 |
 

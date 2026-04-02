@@ -678,7 +678,7 @@ load/save 语义冻结：
 冻结结论：`ProfileTelemetryAdapter` 的 v1 输出契约只绑定 infra 已冻结的 `ILogger` 与 `IAuditLogger` 两个 sink；metrics 与 tracing 在 v1 中不作为强依赖接口，先通过日志属性与审计记录保证“激活/拒绝/回退”三类高影响事件可观测。这样可以消除 `PRF-BLK-07` 对 metrics/tracing 接口未定的阻塞，同时不把 infra exporter 细节抬升为 profiles 公共依赖。
 
 v1 接口边界：
-1. `ProfileTelemetryAdapter` 构造时接收 `infra::ILogger` 与 `infra::audit::IAuditLogger` 引用；profiles 不直接依赖 logging/audit 具体实现类。
+1. `ProfileTelemetryAdapter` 构造时接收 `infra::logging::ILogger` 与 `infra::audit::IAuditLogger` 引用；profiles 不直接依赖 logging/audit 具体实现类。
 2. 首批冻结事件固定为 `runtime_policy_activated`、`runtime_policy_reload_rejected`、`runtime_policy_fallback_lkg`。
 3. 每个事件都必须同时尝试写入 log 和 audit；任一通道失败都通过返回结果显式暴露，不允许静默吞错。
 4. v1 不直接写指标和 trace span；`profile_id`、`activation_mode`、`reason_code` 统一进入日志 attrs 与审计 side_effects/evidence_ref，供后续桥接层消费。

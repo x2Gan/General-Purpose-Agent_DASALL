@@ -63,8 +63,8 @@ Step1 覆盖结论：
 
 | ID | 等级 | 类别 | 问题描述 | 证据 | 影响 | 修复建议 | Owner |
 |----|------|------|----------|------|------|----------|-------|
-| SUB-01 | P0 | 分层落地 | 子系统设计要求完整能力面，但当前 infra 构建仍是 placeholder-only | docs/architecture/DASALL_infrastructure子系统详细设计.md:75, infra/CMakeLists.txt:1 | 无法进入真实联调与门禁闭环 | Phase 0 先完成“真实源文件入图 + 占位退出条件” | infra 构建负责人 |
-| SUB-02 | P0 | 测试门禁 | 子系统要求 unit/contract/integration/failure 注入，但顶层 tests 未接入 integration | docs/architecture/DASALL_infrastructure子系统详细设计.md:84, tests/CMakeLists.txt:1 | 所有 integration 相关验收无法闭环 | 新增仓库级 Integration Topology TODO（统一一次解阻） | 测试平台组 |
+| SUB-01 | P0（已解消） | 分层落地 | 历史问题：评审时 infra 构建仍是 placeholder-only；截至 2026-03-30 已完成真实源文件入图与占位退出条件收敛 | docs/architecture/DASALL_infrastructure子系统详细设计.md:75, infra/CMakeLists.txt:1 | 当前不再构成子系统级准入阻塞，仅需防止回退到 placeholder-only | 持续在组件专项 TODO 中跟踪真实文件入图，禁止回退到 placeholder-only | infra 构建负责人 |
+| SUB-02 | P0（已解消） | 测试门禁 | 历史问题：评审时顶层 tests 未接入 integration；截至 2026-03-30 已完成 integration 拓扑与聚合 gate 接线 | docs/architecture/DASALL_infrastructure子系统详细设计.md:84, tests/CMakeLists.txt:1 | 当前不再构成子系统级准入阻塞；后续缺口转为各组件 integration/failure 用例落盘 | 保持仓库级 integration 拓扑为统一证据源，并在组件 TODO 中跟踪具体用例落盘 | 测试平台组 |
 | SUB-03 | P1 | 错误传播与降级 | 文档中降级策略明确，但跨组件降级事件字段未形成统一断言模板 | docs/architecture/DASALL_infrastructure子系统详细设计.md:315 | 降级状态可观测一致性不足 | 提供 Infra 降级 contract 测试模板并复用到组件 | infra 质量组 |
 
 建议重构边界：
@@ -227,21 +227,21 @@ flowchart LR
 
 # 10. 结论
 
-结论：不通过（当前不可进入“全面开发阶段”，仅可进入“按 Phase 0/1 的受控开发”）
+结论：原始 2026-03-26 评审结论为“不通过”；截至 2026-04-02 复核，SUB-01/SUB-02 已解消，当前口径调整为“可按组件专项 TODO 与 Gate 受控推进”，本报告不再作为当前阶段的子系统级 P0 否决依据。
 
 量化依据：
-1. 准入门槛“无 P0 未闭环问题”：不满足（infra placeholder-only、integration 顶层未接线）。
-2. Design -> Component -> TODO -> Build/Test 可追溯：基本满足（映射完整），但 Build/Test 落地入口未完全满足。
+1. 准入门槛“无子系统级 P0 未闭环问题”：满足（原 SUB-01/SUB-02 已解消；剩余实施项转入组件专项 TODO/Gate）。
+2. Design -> Component -> TODO -> Build/Test 可追溯：满足（映射完整，Build/Test 入口已补齐）。
 3. TODO 三件套完整率 >=95%：满足（15/15 文档含三件套，100%）。
-4. 可执行关键路径与验收命令集：部分满足（命令齐备，但受阻塞前置影响执行闭环）。
+4. 可执行关键路径与验收命令集：满足（命令齐备，当前以 build-ci 与组件 Gate 闭环验收）。
 
-P0 问题：
-1. SUB-01：infra 仍 placeholder-only，尚未进入真实能力入图。
-2. SUB-02：tests 顶层未接入 integration，导致多组件关键任务长期 Blocked。
-3. CMP-01：核心接口与对象尚未在代码层批量冻结落地。
+当前关注项：
+1. SUB-01：已解消；需持续防止 infra 构建回退到 placeholder-only。
+2. SUB-02：已解消；后续仅需在组件内继续落盘 integration/failure 用例。
+3. CMP-01：已转入组件专项 TODO 管理，按各组件 Gate 推进接口与实现闭环。
 
 P1 建议：
-1. 建立仓库级 integration 解阻单任务，替代组件内重复阻塞描述。
+1. 继续以仓库级 integration 解阻记录作为统一证据源，避免组件文档回退为“顶层未接线”的旧口径。
 2. 统一 tracer/tracing 命名。
 3. 建立跨组件并发策略与 gate 模板。
 

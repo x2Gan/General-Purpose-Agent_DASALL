@@ -4,9 +4,9 @@
 #include <string>
 #include <utility>
 
-#include "HealthSnapshot.h"
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
+#include "health/HealthStateTypes.h"
 #include "health/IHealthProbe.h"
 
 namespace dasall::infra {

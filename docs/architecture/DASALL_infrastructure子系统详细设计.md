@@ -72,22 +72,22 @@ Must-Not：不改 ADR、不污染 contracts、不越权到业务主控。
 
 | 设计目标 | 当前状态 | 差距描述 | 风险等级 | 修复优先级 |
 |---|---|---|---|---|
-| infra 顶层模块可编译 | 已实现（骨架） | 仅 placeholder，未承载真实能力 | Medium | P1 |
-| infra 接口头文件体系 | 缺失 | infra/include 为空，缺少 IXxx 接口 | High | P0 |
-| logging/tracing/metrics/config/secret/health/ota 实现 | 缺失（目录占位） | 目录存在但无实现与测试 | High | P0 |
-| audit 独立组件化 | 缺失（仅接口与对象） | IAuditLogger 与 AuditEvent 已定义，但无 AuditService 独立组件与独立目录 | High | P0 |
-| security policy 子域设计 | 缺失 | 架构要求存在安全策略能力，但无 SecurityPolicyManager 与规则对象模型 | High | P0 |
-| plugin manager 子域设计 | 缺失 | 架构要求 OTA/Plugin Manager，但当前仅有 OTAManager | High | P0 |
-| diagnostics 子域设计 | 缺失 | 仅有 execute(command) 统一入口，缺少 DiagnosticsService 命令域与输出模型 | High | P0 |
-| logging 详细设计文档 | 已实现（设计） | 仅 logging 子域有详细设计，其余子域缺失 | Medium | P1 |
-| contracts 对齐输入 | 已实现（可用） | 需要消费 V1 已冻结对象，不可反向扩写 | Medium | P0 |
-| infra 测试基线 | 缺失 | 无 unit/integration/failure injection 覆盖 | High | P0 |
+| infra 顶层模块可编译 | 已实现（真实骨架） | core/audit/plugin/tracing 已接入构建；其余子域仍以接口/对象冻结为主 | Medium | P1 |
+| infra 接口头文件体系 | 已实现（首批公共契约已冻结） | 已形成“根目录共享契约 + 组件目录公共接口”布局，后续需持续防止根层 wrapper 回流 | Medium | P0 |
+| logging/tracing/metrics/config/secret/health/ota 实现 | 部分实现（以 public contract 为主） | 已完成首批接口/对象/错误语义与测试冻结，但多数服务骨架尚未全部落盘 | Medium | P1 |
+| audit 独立组件化 | 已实现（最小骨架） | AuditService 已独立落盘并接入构建，但存储/导出策略仍为最小实现 | Medium | P1 |
+| security policy 子域设计 | 已实现（接口与对象冻结） | 策略对象与 ISecurityPolicyManager 已冻结，后续实现骨架待持续推进 | Medium | P1 |
+| plugin manager 子域设计 | 已实现（接口与对象冻结） | IPluginManager 与对象已冻结，装载/校验流程仍为 skeleton | Medium | P1 |
+| diagnostics 子域设计 | 已实现（接口与类型冻结） | IDiagnosticsService 与快照导出对象已冻结，registry/脱敏矩阵等实现仍待补齐 | Medium | P1 |
+| logging 详细设计文档 | 已实现（设计+接口冻结） | sink/queue/exporter 等运行时实现仍待后续补齐 | Low | P1 |
+| contracts 对齐输入 | 已实现（可用） | 继续保持只消费 V1 已冻结对象，不反向扩写 | Low | P0 |
+| infra 测试基线 | 已实现（unit/contract/integration 基线已接入） | 故障注入与更多组件级集成覆盖仍需补齐 | Medium | P1 |
 
 证据：
-1. infra/CMakeLists.txt（仅 src/placeholder.cpp）
-2. infra/src/placeholder.cpp
-3. infra/include 为空目录
-4. docs/architecture/DASALL_infra_logging模块详细设计.md（仅 logging 子域已有详细设计）
+1. infra/CMakeLists.txt（已接入 core/audit/plugin/tracing 源文件与 PUBLIC_HEADER）
+2. infra/include（已形成根目录共享契约与组件目录公共接口布局）
+3. tests/unit/infra、tests/contract/smoke、tests/integration/infra
+4. docs/architecture/DASALL_infra_*模块详细设计.md（logging/health/diagnostics/ota/secret/policy 等子域均已有设计输入）
 
 ### 3.2 现状-目标冲突
 
@@ -221,51 +221,57 @@ Infrastructure 非职责：
 
 建议头文件分布（蓝图一致）：infra/include/。
 
-1. IInfrastructureService
+头文件布局规则：
+1. 根目录只放 infra 子系统级共享契约，例如 IInfrastructureService.h、InfraContext.h、InfraErrorCode.h、LogEvent.h。
+2. 组件独有 public API 必须放在对应组件目录，例如 logging/ILogger.h、audit/IAuditLogger.h、health/IHealthMonitor.h、diagnostics/IDiagnosticsService.h、secret/ISecretManager.h、ota/IOTAManager.h、config/IConfigCenter.h、policy/ISecurityPolicyManager.h、plugin/IPluginManager.h。
+3. 不再保留根层重复入口、兼容 include 或纯转发 wrapper；若对象或接口属于组件，则消费者直接包含对应组件目录头文件。
+
+1. IInfrastructureService（include/IInfrastructureService.h）
 	- init(config): 初始化 Infra 各子域。
 	- start(): 启动后台线程与导出器。
 	- stop(timeout_ms): 优雅停机与 flush。
 	- execute(command): 统一基础命令入口（诊断/导出/升级触发）。
 
-2. ILogger
+2. ILogger（include/logging/ILogger.h）
 	- log(event): 写普通日志。
 	- flush(deadline): 刷新缓冲。
+ 	- set_level(level): 提供最小运行级别控制面。
 
-3. IAuditLogger
+3. IAuditLogger（include/audit/IAuditLogger.h）
 	- write_audit(event): 写审计日志。
 	- export_audit(filter): 导出审计片段。
 
-4. ISecurityPolicyManager
+4. ISecurityPolicyManager（include/policy/ISecurityPolicyManager.h）
 	- load_policy(bundle): 装载并校验安全策略。
 	- apply_patch(patch): 热更新策略并生成新快照。
 	- snapshot(): 返回当前策略快照与版本。
 
-5. IDiagnosticsService
+5. IDiagnosticsService（include/diagnostics/IDiagnosticsService.h）
 	- execute(command): 执行诊断命令并返回快照。
 	- export_snapshot(snapshot_id): 导出故障证据。
 
-6. IPluginManager
+6. IPluginManager（include/plugin/IPluginManager.h）
 	- discover(): 发现可用插件清单。
 	- validate(manifest): 执行签名与兼容校验。
 	- load(plugin_id): 装载插件并返回 LoadResult。
 	- unload(plugin_id): 卸载插件并释放资源。
 
-7. IConfigCenter
+7. IConfigCenter（include/config/IConfigCenter.h）
 	- load_layers(): 加载四层配置。
 	- get_typed(path): 获取强类型配置。
 	- apply_override(patch): 运行时覆盖。
 	- 语义补充：`load_layers()` 只接受 defaults/profile/deployment 三类受管来源；`apply_override(patch)` 只接受带来源元数据、作用域与 TTL 的 runtime override patch，不接受业务模块私有自由字典。
 
-8. IHealthMonitor
+8. IHealthMonitor（include/health/IHealthMonitor.h）
 	- register_probe(name, probe): 注册探针。
 	- evaluate(): 生成 HealthSnapshot。
 
-9. ISecretManager
+9. ISecretManager（include/secret/ISecretManager.h）
 	- get_secret(key): 返回 SecretHandle。
 	- rotate(key): 触发轮换并审计。
 	- get_trust_anchor(anchor_purpose, algorithm): 返回只读 TrustAnchorMaterial，仅供 OTA/Plugin 验签读取。
 
-10. IOTAManager
+10. IOTAManager（include/ota/IOTAManager.h）
 	- precheck(plan): 发布前检查。
 	- apply(plan): 执行升级。
 	- rollback(token): 回退版本。
@@ -432,14 +438,14 @@ Profiles sink contract（v1）：
 | Design结论 | Build目标 | 映射说明 | 代码目标 | 测试目标 | 验收命令 | 依赖/阻塞 |
 |---|---|---|---|---|---|---|
 | 建立 infra 统一入口与生命周期管理 | 新增 InfraServiceFacade 与 IInfrastructureService | 将设计主控点收敛为单入口，避免模块分散初始化 | infra/include/IInfrastructureService.h; infra/src/InfraServiceFacade.cpp | unit: InfraServiceFacadeTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraServiceFacadeTest | 依赖 contracts ResultCode/ErrorInfo |
-| 建立 logging 通道 | 新增 LoggingService | 满足普通运行日志可观测要求 | infra/include/ILogger.h; infra/src/logging/* | unit: LoggingServiceTest | ctest --test-dir build-ci -R LoggingServiceTest | 阻塞：third_party/spdlog 接入策略 |
+| 建立 logging 通道 | 新增 LoggingService | 满足普通运行日志可观测要求 | infra/include/logging/ILogger.h; infra/src/logging/* | unit: LoggingServiceTest | ctest --test-dir build-ci -R LoggingServiceTest | 阻塞：third_party/spdlog 接入策略 |
 | 建立 audit 独立通道 | 新增 AuditService 与 IAuditLogger | 满足审计独立存储、导出与失败兜底 | infra/include/audit/IAuditLogger.h; infra/src/audit/* | unit: AuditServiceTest; integration: InfraAuditIntegrationTest | ctest --test-dir build-ci -R "AuditServiceTest|InfraAuditIntegrationTest" | 阻塞：审计导出过滤模型与存储保留策略待冻结 |
-| 建立配置四层合并能力 | 新增 ConfigCenter | 支撑 Profile 与运行时覆盖 | infra/include/IConfigCenter.h; infra/src/config/* | unit: ConfigMergePolicyTest | ctest --test-dir build-ci -R ConfigMergePolicyTest | 依赖 profiles/* 配置格式统一 |
-| 建立安全策略治理能力 | 新增 SecurityPolicyManager | 支撑策略装载、校验、热更新与回滚 | infra/include/ISecurityPolicyManager.h; infra/src/security_policy/* | unit: SecurityPolicyManagerTest; contract: SecurityPolicyContractTest | ctest --test-dir build-ci -R "SecurityPolicyManagerTest|SecurityPolicyContractTest" | 阻塞：策略规则 schema 与冲突裁定顺序待冻结 |
-| 建立诊断命令与快照能力 | 新增 DiagnosticsService | 满足诊断命令执行与证据导出 | infra/include/IDiagnosticsService.h; infra/src/diagnostics/* | unit: DiagnosticsServiceTest; integration: InfraDiagnosticsIntegrationTest | ctest --test-dir build-ci -R "DiagnosticsServiceTest|InfraDiagnosticsIntegrationTest" | 阻塞：诊断命令域与脱敏规则待冻结 |
-| 建立健康检查与 watchdog | 新增 HealthMonitor/WatchdogAgent | 形成 liveness/readiness 与超时事件 | infra/include/IHealthMonitor.h; infra/src/health/* | unit: HealthProbeTest; integration: InfraHealthLoopTest | ctest --test-dir build-ci -R "HealthProbeTest|InfraHealthLoopTest" | 阻塞：线程模型参数待 runtime 对齐 |
-| 建立 OTA 最小闭环 | 新增 IOTAManager + 回滚流程 | 满足升级与回退可验证要求 | infra/include/IOTAManager.h; infra/src/ota/* | unit: OTARollbackTest; integration: OTAWorkflowTest | ctest --test-dir build-ci -R "OTARollbackTest|OTAWorkflowTest" | 阻塞：包签名与存储后端未确定 |
-| 建立插件治理能力 | 新增 PluginManager | 满足插件发现、校验、装载与兼容治理 | infra/include/IPluginManager.h; infra/src/plugin/* | unit: PluginManagerTest; integration: InfraPluginLifecycleTest | ctest --test-dir build-ci -R "PluginManagerTest|InfraPluginLifecycleTest" | 阻塞：插件 ABI/签名规范与兼容矩阵待冻结 |
+| 建立配置四层合并能力 | 新增 ConfigCenter | 支撑 Profile 与运行时覆盖 | infra/include/config/IConfigCenter.h; infra/src/config/* | unit: ConfigMergePolicyTest | ctest --test-dir build-ci -R ConfigMergePolicyTest | 依赖 profiles/* 配置格式统一 |
+| 建立安全策略治理能力 | 新增 SecurityPolicyManager | 支撑策略装载、校验、热更新与回滚 | infra/include/policy/ISecurityPolicyManager.h; infra/src/policy/* | unit: SecurityPolicyManagerTest; contract: SecurityPolicyContractTest | ctest --test-dir build-ci -R "SecurityPolicyManagerTest|SecurityPolicyContractTest" | 阻塞：策略规则 schema 与冲突裁定顺序待冻结 |
+| 建立诊断命令与快照能力 | 新增 DiagnosticsService | 满足诊断命令执行与证据导出 | infra/include/diagnostics/IDiagnosticsService.h; infra/src/diagnostics/* | unit: DiagnosticsServiceTest; integration: InfraDiagnosticsIntegrationTest | ctest --test-dir build-ci -R "DiagnosticsServiceTest|InfraDiagnosticsIntegrationTest" | 阻塞：诊断命令域与脱敏规则待冻结 |
+| 建立健康检查与 watchdog | 新增 HealthMonitor/WatchdogAgent | 形成 liveness/readiness 与超时事件 | infra/include/health/IHealthMonitor.h; infra/src/health/* | unit: HealthProbeTest; integration: InfraHealthLoopTest | ctest --test-dir build-ci -R "HealthProbeTest|InfraHealthLoopTest" | 阻塞：线程模型参数待 runtime 对齐 |
+| 建立 OTA 最小闭环 | 新增 IOTAManager + 回滚流程 | 满足升级与回退可验证要求 | infra/include/ota/IOTAManager.h; infra/src/ota/* | unit: OTARollbackTest; integration: OTAWorkflowTest | ctest --test-dir build-ci -R "OTARollbackTest|OTAWorkflowTest" | 阻塞：包签名与存储后端未确定 |
+| 建立插件治理能力 | 新增 PluginManager | 满足插件发现、校验、装载与兼容治理 | infra/include/plugin/IPluginManager.h; infra/src/plugin/* | unit: PluginManagerTest; integration: InfraPluginLifecycleTest | ctest --test-dir build-ci -R "PluginManagerTest|InfraPluginLifecycleTest" | 阻塞：插件 ABI/签名规范与兼容矩阵待冻结 |
 | 建立 Infra 测试基线与 Gate | 新增 tests/unit/infra + tests/integration/infra | 将设计约束转化为自动化门禁 | tests/unit/infra/*; tests/integration/infra/*; tests/CMakeLists.txt | unit/contract/integration/failure injection | ctest --test-dir build-ci -L "unit|integration|contract" | 依赖测试标签标准化 |
 
 不可立即映射项：
@@ -484,16 +490,16 @@ Profiles sink contract（v1）：
 | ID | 状态 | 任务描述 | 输入依据 | 代码目标 | 测试目标 | 验收命令 | 完成判定 |
 |---|---|---|---|---|---|---|---|
 | INF-T001 | Not Started | 新增 IInfrastructureService 接口并替换占位入口 | Blueprint 6 | infra/include/IInfrastructureService.h | InterfaceCompileTest | cmake --build build-ci --target dasall_infra | 编译通过且无 placeholder 依赖 |
-| INF-T002 | Not Started | 新增 ILogger 与基础实现 | 架构 5.10 + logging 详细设计 | infra/include/ILogger.h; infra/src/logging/* | LoggingServiceTest | ctest --test-dir build-ci -R LoggingServiceTest | 支持结构化运行日志 |
+| INF-T002 | Not Started | 新增 ILogger 与基础实现 | 架构 5.10 + logging 详细设计 | infra/include/logging/ILogger.h; infra/src/logging/* | LoggingServiceTest | ctest --test-dir build-ci -R LoggingServiceTest | 支持结构化运行日志 |
 | INF-T003 | Not Started | 新增 IAuditLogger 与 AuditService 最小实现 | 架构 5.10 + 8.8 | infra/include/audit/IAuditLogger.h; infra/src/audit/* | AuditServiceTest | ctest --test-dir build-ci -R AuditServiceTest | 审计链路独立且失败可观测 |
 | INF-T004 | Not Started | 新增 IConfigCenter 四层合并策略 | 架构 8.6 | infra/src/config/* | ConfigMergePolicyTest | ctest --test-dir build-ci -R ConfigMergePolicyTest | 四层覆盖结果可重复验证 |
 | INF-T005 | Not Started | 新增 IHealthMonitor 与 WatchdogAgent | 架构 8.7 | infra/src/health/* | HealthProbeTest | ctest --test-dir build-ci -R HealthProbeTest | 支持 liveness/readiness + 超时上报 |
 | INF-T006 | Not Started | 新增 ISecretManager 最小后端（file/mock） | 架构 8.8 | infra/src/secret/* | SecretManagerTest | ctest --test-dir build-ci -R SecretManagerTest | 明文不落盘且审计可查 |
 | INF-T007 | Not Started | 新增 IOTAManager 预检与回滚流程 | 架构 8.9 | infra/src/ota/* | OTARollbackTest | ctest --test-dir build-ci -R OTARollbackTest | apply 失败后 rollback 成功 |
 | INF-T008 | Not Started | 新增 infra 集成测试与故障注入用例 | 工程规范 3.7 | tests/integration/infra/* | InfraFailureInjectionTest | ctest --test-dir build-ci -R InfraFailureInjectionTest | 至少覆盖3类故障注入 |
-| INF-T009 | Not Started | 新增 ISecurityPolicyManager 与策略快照对象 | 架构 5.10 + 8.8 | infra/include/ISecurityPolicyManager.h; infra/src/security_policy/* | SecurityPolicyManagerTest | ctest --test-dir build-ci -R SecurityPolicyManagerTest | 策略加载/回滚可验证 |
-| INF-T010 | Not Started | 新增 IDiagnosticsService 与诊断快照导出 | 架构 5.10 + 9.5 | infra/include/IDiagnosticsService.h; infra/src/diagnostics/* | DiagnosticsServiceTest | ctest --test-dir build-ci -R DiagnosticsServiceTest | 诊断命令与导出链路可验证 |
-| INF-T011 | Not Started | 新增 IPluginManager 与插件校验/装载最小闭环 | 架构 5.10 + 7.5 | infra/include/IPluginManager.h; infra/src/plugin/* | PluginManagerTest | ctest --test-dir build-ci -R PluginManagerTest | 插件签名或兼容失败时拒绝激活 |
+| INF-T009 | Not Started | 新增 ISecurityPolicyManager 与策略快照对象 | 架构 5.10 + 8.8 | infra/include/policy/ISecurityPolicyManager.h; infra/src/policy/* | SecurityPolicyManagerTest | ctest --test-dir build-ci -R SecurityPolicyManagerTest | 策略加载/回滚可验证 |
+| INF-T010 | Not Started | 新增 IDiagnosticsService 与诊断快照导出 | 架构 5.10 + 9.5 | infra/include/diagnostics/IDiagnosticsService.h; infra/src/diagnostics/* | DiagnosticsServiceTest | ctest --test-dir build-ci -R DiagnosticsServiceTest | 诊断命令与导出链路可验证 |
+| INF-T011 | Not Started | 新增 IPluginManager 与插件校验/装载最小闭环 | 架构 5.10 + 7.5 | infra/include/plugin/IPluginManager.h; infra/src/plugin/* | PluginManagerTest | ctest --test-dir build-ci -R PluginManagerTest | 插件签名或兼容失败时拒绝激活 |
 
 ---
 

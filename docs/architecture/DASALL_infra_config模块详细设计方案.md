@@ -51,18 +51,18 @@
 
 | 设计目标 | 当前状态 | 差距描述 | 风险等级 | 修复优先级 |
 |---|---|---|---|---|
-| infra/config 模块可用实现 | 缺失 | 仅 infra/src/placeholder.cpp，占位实现不具备配置能力 | High | P0 |
-| 对外配置接口 | 缺失 | infra/include 为空，缺少 IConfigCenter 等接口 | High | P0 |
+| infra/config 模块可用实现 | 部分实现 | config 公共接口与类型已落盘，但 config 服务实现仍待接入 | High | P0 |
+| 对外配置接口 | 部分实现 | infra/include/config 已落盘 IConfigCenter/IConfigLoader/IConfigValidator/IConfigPublisher 等接口 | High | P0 |
 | 四层配置合并 | 缺失 | 当前无默认/Profile/部署/运行时覆盖合并链路 | High | P0 |
 | 配置热更新与分发 | 缺失 | 无变更监听、无快照版本、无订阅回调 | Medium | P1 |
-| 配置校验与错误语义 | 缺失 | 无 schema 级校验、无错误码映射策略 | High | P0 |
+| 配置校验与错误语义 | 部分实现 | IConfigValidator 与 ConfigErrors 已冻结，schema 级执行链仍待补齐 | High | P0 |
 | 可观测与审计 | 缺失 | 配置读写无 trace/metric/audit 事件 | High | P0 |
-| 测试基线 | 缺失 | tests 下无 unit/integration 的 infra 配置测试 | High | P0 |
+| 测试基线 | 部分实现 | unit/contract 基线已接入，integration 仍待补齐 | Medium | P0 |
 
 现状证据：
-1. infra/CMakeLists.txt 仅编译 src/placeholder.cpp。
-2. infra/src/placeholder.cpp 仅 keep_library_non_empty 占位函数。
-3. infra/include 目录为空。
+1. infra/CMakeLists.txt 已接入 core/audit/plugin/tracing 等真实源码。
+2. infra 当前不再依赖 placeholder-only 构建；config 缺口集中在实现目录与服务骨架。
+3. infra/include/config 已落盘 IConfigCenter、ConfigTypes、ConfigErrors 与相关 validator/loader/publisher 头文件。
 
 ## 4. 候选方案对比
 

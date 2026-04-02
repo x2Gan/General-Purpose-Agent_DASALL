@@ -4,7 +4,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "IOTAManager.h"
+#include "ota/IOTAManager.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

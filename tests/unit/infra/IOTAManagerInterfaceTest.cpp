@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "IOTAManager.h"
+#include "ota/IOTAManager.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

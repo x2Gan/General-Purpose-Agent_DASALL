@@ -23,7 +23,7 @@
 13. docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md
 14. docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md
 15. docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md
-16. 当前代码现状：infra/CMakeLists.txt、infra/include/、infra/src/placeholder.cpp、infra/src/config/、tests/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt
+16. 当前代码现状：infra/CMakeLists.txt、infra/include/、infra/src/{InfraServiceFacade.cpp,InfraErrorCode.cpp,audit/,plugin/,tracing/}、infra/src/config/、tests/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt
 
 生成原则：
 
@@ -245,7 +245,7 @@
 | 错误码语义漂移 | High | ConfigErrors 与 contracts 映射不一致 | Contract 测试失败 | 回退错误映射并冻结变更 |
 | LKG 回退不可用 | High | 快照提交失败后无法 rollback | SnapshotStoreTest 失败 | 回退到上一稳定版本并仅允许只读查询 |
 | 审计桥接长期阻塞 | Medium | CFG-BLK-002 长期未解 | 高风险键变更无审计证据 | 暂时提高日志与指标等级并限制高风险键变更 |
-| integration 门禁缺失导致质量盲区 | Medium | tests 顶层持续未接线 integration | ctest -N 无 integration 用例 | 将 integration 任务保持 Blocked 并不纳入 Done-ready |
+| integration 用例缺失导致质量盲区 | Medium | config 组件 integration 用例长期未落盘 | ctest -N 无 config integration 用例 | 将 integration 任务保持 Not Started，并优先补齐组件用例 |
 
 ## 11. 可行性结论
 
@@ -254,7 +254,7 @@
    - 已具备核心接口清单与对象字段定义。
    - 已具备主流程、异常流程和错误码语义。
    - 已具备落盘目录与测试出口建议。
-   - 事件总线、secret 接口、integration 拓扑仍有关键缺口。
+   - 事件总线、secret 接口、config integration 用例落盘仍有关键缺口。
 3. 当前最小可执行粒度：接口 / 数据结构（L2），局部函数骨架（L3）。
 4. 未达到全量函数级的缺口：事件总线抽象、secret 对齐接口、持久化后端、config integration 用例落盘。
 5. 下一步建议：

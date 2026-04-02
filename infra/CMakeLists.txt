@@ -1,5 +1,4 @@
 set(DASALL_INFRA_CORE_SOURCES
-  src/placeholder.cpp
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
   src/audit/AuditService.cpp
@@ -11,8 +10,6 @@ set(DASALL_INFRA_TRACING_SOURCES
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
-  include/AuditEvent.h
-  include/HealthSnapshot.h
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
   include/health/IHealthPolicy.h
@@ -26,14 +23,15 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/watchdog/TimeoutDecision.h
   include/watchdog/WatchedEntityDescriptor.h
   include/watchdog/WatchdogSnapshot.h
-  include/IHealthMonitor.h
-  include/IDiagnosticsService.h
-  include/IOTAManager.h
-  include/ISecretManager.h
   include/IInfrastructureService.h
-  include/ILogger.h
   include/health/IHealthProbe.h
+  include/diagnostics/IDiagnosticsService.h
+  include/logging/IAuditLinkAdapter.h
+  include/logging/ILogger.h
+  include/logging/LogTypes.h
+  include/ota/IOTAManager.h
   include/secret/ISecretBackend.h
+  include/secret/ISecretManager.h
   include/secret/ISecretHealthSource.h
   include/secret/SecureBuffer.h
   include/secret/SecretErrors.h

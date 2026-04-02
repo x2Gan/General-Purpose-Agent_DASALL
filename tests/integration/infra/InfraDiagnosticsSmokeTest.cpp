@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "IDiagnosticsService.h"
+#include "diagnostics/IDiagnosticsService.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

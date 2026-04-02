@@ -247,7 +247,7 @@ PLG-TODO-011
 | **PLG-BLK-02** | ABI 兼容矩阵与 Host ABI 识别机制未定 | 依赖 INF-BLK-09 同步冻结 + 需确认 platform 层的 ABI 能力 | PLG-TODO-016 | plugin 组件负责人 + platform 组件负责人 | P0 | M2 | 拆分 PLG-TODO-016-A（接口定义） + PLG-TODO-016-B（兼容检查框架） |
 | **PLG-BLK-03** | 签名校验与信任链规范未定 | 依赖 INF-BLK-09 同步冻结 + 安全策略与审计链路对齐 | PLG-TODO-015 | plugin 组件负责人 + security policy 组件负责人 | P0 | M2 | 拆分 PLG-TODO-015-A（接口定义） + PLG-TODO-015-B（验证流程） |
 | **PLG-BLK-04** | PluginRuntimeBridge 与平台动态库接口的约定不完整 | platform 层 HAL 与 plugin 侧的契约需联合冻结 | PLG-TODO-011（PluginLifecycleManager）、后续装载实现 | platform 组件负责人 + plugin 组件负责人 | P1（可先用 mock bridge） | M3 | 先用 mock bridge 跑通单元与失败注入，后补平台集成 |
-| **PLG-BLK-05** | tests/integration 顶层注册未稳定 | 当前 tests/CMakeLists.txt 未接入 integration 子目录 | PLG-TODO-012/013 | infra 系统负责人 + tests 架构负责人 | P1 | M4 | 解阻后才能打开 integration gate |
+| **PLG-BLK-05** | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；plugin integration/failure 是否可执行改由组件自身落盘负责 | 仓库级 tests integration 拓扑已稳定，当前缺口转为 plugin 组件具体用例与观测链落盘 | PLG-TODO-012/013 | infra 系统负责人 + tests 架构负责人 | P1 | M4 | 后续按组件落盘 plugin failure/profile/integration 用例并执行 gate |
 
 ### 8.2 与上游依赖关系（INF-BLK-09 解阻路径）
 

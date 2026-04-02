@@ -89,11 +89,11 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | audit 尚未接入构建 |
-| infra/include/ | 空目录 | audit 对外接口与对象未落盘 |
-| infra/src/ | 仅有 config/health/logging/metrics/ota/secret/tracing 空目录与 placeholder | audit 实现目录尚未存在 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | audit 最小骨架已接入构建，后续缺口转为存储/导出策略实现 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，audit/ 子目录已落盘接口与对象 | audit public headers 已冻结，后续差距集中在存储/导出策略 |
+| infra/src/ | 已接入 InfraServiceFacade、InfraErrorCode、audit/、plugin/、tracing/ 等真实源码目录 | audit 最小实现骨架已存在，后续需继续补齐策略与桥接 |
 | tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration，且提供 dasall_integration_tests 聚合入口 | audit 集成测试已可被顶层发现，但具体用例仍需随组件任务落盘 |
-| tests/unit/CMakeLists.txt | 未接入 infra 子目录 | audit unit 发现性缺失 |
+| tests/unit/CMakeLists.txt | 已接入 infra 子目录 | audit unit 发现性已建立，后续只需补具体用例 |
 | tests/contract/CMakeLists.txt | 已有 centralized registration 机制 | 可承载 audit contracts 边界测试 |
 
 ## 4. 粒度可行性评估
@@ -109,7 +109,7 @@
 3. 已有主流程与异常流程：主写链路 6 步、异常分类 3 类、恢复动作 4 类。
 4. 已有错误码域：INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL。
 5. 已有落盘路径与测试出口：infra/include/audit、infra/src/audit、tests/unit/infra/audit、tests/contract/infra、tests/integration/infra，以及 AuditTypesTest、AuditInterfaceCompileTest、AuditServiceFallbackTest、AuditExportFilterTest、AuditBoundaryContractTest、InfraErrorCodeMappingContractTest、InfraAuditHealthIntegrationTest。
-6. 仍有证据缺口：RetentionOutcome 字段未定义、AuditHealthStatus 字段未定义、导出过滤细粒度模型未冻结、metrics/health 桥接接口未冻结、tests 顶层 integration 未接线。
+6. 仍有证据缺口：RetentionOutcome 字段未定义、AuditHealthStatus 字段未定义、导出过滤细粒度模型未冻结、metrics/health 桥接接口未冻结；tests 顶层 integration 已接线，后续只需补 audit 具体 integration 用例。
 
 ### 4.2 粒度可行性评估表（Step 2：详细设计可执行性扫描输出）
 
@@ -131,7 +131,7 @@
 | AuditRetentionManager | audit 设计 6.2/6.3/6.6；11.1 | L0 | 保留期与归档职责明确 | RetentionOutcome、归档/清理动作对象未定义 | 先补设计 |
 | AuditMetricsBridge | audit 设计 6.2/6.3/6.10；11.1 | L1 | 指标名清单与桥接职责明确 | metrics 侧桥接接口与标签白名单未冻结 | 先解阻再实现 |
 | AuditHealthProbe 组件 | audit 设计 6.2/6.3/6.10；11.1 | L1 | ready/degraded/unavailable 语义明确 | 健康状态对象与 health 侧接口未冻结 | 先补对象设计再实现 |
-| tests/integration/infra | audit 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在 | tests 顶层未 add_subdirectory(integration) | 先解阻测试拓扑 |
+| tests/integration/infra | audit 设计 8.1/9.1；tests 现状 | L0 | 路径与用例建议存在，且 tests 顶层 integration 已接入 | audit integration 用例尚未落盘 | 直接拆组件集成任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -150,7 +150,7 @@
 | IAuditRetention 与 retention 管理 | audit 设计 6.2/6.6；11.1 | 接口/流程 | AUD-TODO-013、AUD-BLK-002 | 因 RetentionOutcome 缺失，先补对象设计 |
 | IAuditHealthProbe 与健康状态 | audit 设计 6.2/6.6；11.1 | 接口/适配器 | AUD-TODO-014、AUD-BLK-003 | 因 AuditHealthStatus 缺失，先补对象设计 |
 | AuditMetricsBridge 指标桥接 | audit 设计 6.2/6.10；11.1 | 适配器/集成 | AUD-TODO-015、AUD-BLK-004 | 依赖 metrics 侧桥接接口冻结 |
-| audit 构建接线与测试发现性 | audit 设计 7、8.1、9.1；代码现状 | 测试/门禁 | AUD-TODO-016、AUD-TODO-017、AUD-TODO-018、AUD-BLK-005 | 构建、unit/contract 可先做，integration 先阻塞 |
+| audit 构建接线与测试发现性 | audit 设计 7、8.1、9.1；代码现状 | 测试/门禁 | AUD-TODO-016、AUD-TODO-017、AUD-TODO-018 | 构建、unit/contract 可先做，integration 用例待组件后续落盘 |
 | 质量门与交付证据回写 | audit 设计 9.2、11.1 | 文档/交付证据 | AUD-TODO-019 | 对 gate、阻塞变化与回退证据做收口 |
 
 ### 5.2 映射覆盖性检查
@@ -225,7 +225,7 @@
 | AUD-GATE-05 | 导出边界门 | 推进 AUD-TODO-012 前 | ExportQuery 最小过滤模型冻结并经评审 | 未冻结则维持 Blocked |
 | AUD-GATE-06 | retention 设计门 | 推进 AUD-TODO-013 前 | RetentionOutcome 与归档/清理动作对象冻结 | 未冻结则维持 Blocked |
 | AUD-GATE-07 | 健康/指标桥接门 | 推进 AUD-TODO-014/AUD-TODO-015 前 | AuditHealthStatus 与 metrics/health 桥接接口冻结 | 未冻结则维持 Blocked |
-| AUD-GATE-08 | integration 准入门 | 推进 AUD-TODO-018 前 | tests 顶层完成 integration 接线并定义标签规范 | 未通过前禁止 integration 验收 |
+| AUD-GATE-08 | integration 准入门 | 推进 AUD-TODO-018 前 | tests 顶层已完成 integration 接线并定义标签规范，且 audit 组件用例已落盘 | 未通过前补齐 audit integration 用例与注册 |
 | AUD-GATE-09 | breaking 评审门 | 任意公共对象或错误映射变更前 | 已明确 breaking 风险、迁移窗口与回退方案 | 未评审不得推进 |
 
 ## 8. 阻塞项与解阻条件
@@ -299,12 +299,12 @@
 1. AuditValidator、AuditPipeline、AuditFallbackPipeline、AuditServiceFacade 的精确方法签名与返回对象。
 2. RetentionOutcome 与 AuditHealthStatus 的字段定义。
 3. AuditExporter 的最小过滤语义与脱敏边界。
-4. metrics/health 桥接接口及 integration 顶层接线规则。
+4. metrics/health 桥接接口及 audit integration 用例边界。
 
 ### 11.5 下一步建议
 
 1. 先执行 AUD-TODO-001 至 AUD-TODO-011、AUD-TODO-016、AUD-TODO-017，建立 audit 的对象、接口、主写/降级最小闭环与测试发现性。
-2. 并行补齐 AUD-BLK-001 至 AUD-BLK-005 对应设计缺口，再推进导出、retention、健康/指标桥接与 integration。
+2. 并行补齐 AUD-BLK-001 至 AUD-BLK-004 对应设计缺口；AUD-BLK-005 已完成仓库级解阻，再推进导出、retention、健康/指标桥接与 integration。
 
 ## 12. 本轮执行记录（2026-03-30）
 
@@ -322,7 +322,7 @@
 
 D 结论：
 
-1. Design -> Build 映射：新增 infra/include/audit/AuditTypes.h 冻结 AuditEvent/AuditEvidenceRef/AuditOutcome/AuditEvidenceKind；保留 infra/include/AuditEvent.h 作为兼容 include，避免后续实现阶段重复分叉字段。
+1. Design -> Build 映射：新增 infra/include/audit/AuditTypes.h 冻结 AuditEvent/AuditEvidenceRef/AuditOutcome/AuditEvidenceKind；AuditEvent 统一由 audit/AuditTypes.h 暴露，不再保留根层兼容 include。
 2. Build 三件套：
 	- 代码目标：新增 AuditTypes.h，收敛旧 AuditEvent.h，补齐受影响 AuditEvent 构造点并更新 infra/CMakeLists.txt 的 PUBLIC_HEADER。
 	- 测试目标：新增 tests/unit/infra/AuditTypesTest.cpp 与 tests/contract/smoke/AuditBoundaryContractTest.cpp；同步 unit/contract 注册名为 AuditTypesTest、AuditBoundaryContractTest。
@@ -334,7 +334,7 @@ Build 交付与证据：
 交付物：
 
 1. infra/include/audit/AuditTypes.h：新增 AuditEvent 冻结字段、AuditEvidenceRef 和审计枚举；evidence kind 扩展到 WorkerTask，满足 ADR-008 协同标识引用要求。
-2. infra/include/AuditEvent.h：改为兼容 include，避免旧引用路径继续分叉定义。
+2. 受影响消费者与测试统一直接包含 infra/include/audit/AuditTypes.h，不再保留 infra/include/AuditEvent.h 根层入口。
 3. tests/unit/infra/AuditTypesTest.cpp、tests/contract/smoke/AuditBoundaryContractTest.cpp：分别覆盖 AuditEvent 必填字段、timestamp/side_effects 守卫和 contracts 引用边界。
 4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：完成新头文件和测试命名收敛。
 5. tests/unit/infra/AuditLoggerInterfaceTest.cpp、tests/unit/infra/AuditServiceFallbackTest.cpp、tests/contract/smoke/AuditServiceBoundaryContractTest.cpp、profiles/src/ProfileTelemetryAdapter.cpp：完成 AuditEvent 新字段引入后的直接兼容修复，保证现有调用面继续可编译。

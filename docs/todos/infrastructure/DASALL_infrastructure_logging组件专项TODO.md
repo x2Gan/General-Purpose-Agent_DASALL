@@ -77,11 +77,11 @@ logging 组件目标固定为：
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 仅编译 src/placeholder.cpp | logging 尚未接入构建 |
-| infra/include/ | 空目录 | logging 对外接口未落盘 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | logging 公共接口已落盘，但 logging 服务实现尚未接入构建 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，logging/ 子目录已落盘接口与对象 | logging public headers 已冻结，后续差距集中在运行时实现 |
 | infra/src/logging/ | 目录存在但空 | 仅有设计，无实现 |
-| tests/CMakeLists.txt | 仅 add_subdirectory(mocks/unit/contract) | integration 尚未纳入顶层注册 |
-| tests/unit/CMakeLists.txt | 未注册 infra 子目录 | logging unit 发现性缺失 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration 拓扑已接入顶层，后续只需补 logging 具体集成用例 |
+| tests/unit/CMakeLists.txt | 已注册 infra 子目录 | logging unit 发现性已建立，后续只需补具体用例 |
 | tests/contract/CMakeLists.txt | 已有 centralized registration 机制 | 可复用为 logging contract 边界校验入口 |
 
 ## 4. 粒度可行性评估
@@ -118,7 +118,7 @@ logging 组件目标固定为：
 | LoggingMetricsBridge | logging 设计 6.2、6.10 | L1 | 指标名清单 | 指标上报接口与标签约束 | 先补 metrics 适配接口设计 |
 | LoggingHealthProbe | logging 设计 6.2、6.8 | L1 | degraded 语义与恢复信号 | IHealthProbe 接口形状、超时策略对象 | 先补 health 探针接口设计 |
 | LogQueryService | logging 设计 6.9、8.3 | L1 | 诊断导出需求明确 | query 对象、权限边界、索引策略 | 标记 Blocked，先补设计 |
-| tests/integration 注册点 | logging 设计 8.1、9.1；tests/CMakeLists.txt 现状 | L0 | 设计建议存在 | 顶层 CMake 未 add_subdirectory(integration) | 先解阻测试拓扑再拆集成任务 |
+| tests/integration 注册点 | logging 设计 8.1、9.1；tests/CMakeLists.txt 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | logging integration 用例尚未落盘 | 直接拆组件集成任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -134,7 +134,7 @@ logging 组件目标固定为：
 | 异常与错误处理 | logging 设计 6.6、6.8 | 错误处理 | LOG-TODO-010、LOG-TODO-011 | 错误码与故障降级拆开，便于二值验收 |
 | 配置与 Profile 裁剪 | logging 设计 6.9；蓝图 5.1 | 配置 | LOG-TODO-012、LOG-BLK-001 | 先补配置模型再接入适配器 |
 | metrics/health 桥接 | logging 设计 6.2、6.10 | 适配器 | LOG-TODO-013、LOG-BLK-002、LOG-BLK-003 | 设计证据不足，先定义边界再实现 |
-| CMake 与测试门禁 | logging 设计 8.1、9.1；当前 CMake 现状 | 门禁/测试 | LOG-TODO-014、LOG-TODO-015、LOG-BLK-004 | 构建注册与 unit/contract 可先做，integration 先解阻 |
+| CMake 与测试门禁 | logging 设计 8.1、9.1；当前 CMake 现状 | 门禁/测试 | LOG-TODO-014、LOG-TODO-015 | 构建注册与 unit/contract 可先做，integration 用例待组件后续落盘 |
 | 交付证据回写 | logging 设计 9.2、11.1 | 文档/证据 | LOG-TODO-016 | 将 gate 结果与阻塞处理记录回写专项 TODO |
 
 ### 5.2 映射覆盖性检查
@@ -147,7 +147,7 @@ logging 组件目标固定为：
 | 适配器/桥接类任务 | 是 | LOG-TODO-007/008/013 |
 | 异常与错误处理类任务 | 是 | LOG-TODO-010/011 |
 | 配置与 Profile 裁剪类任务 | 是 | LOG-TODO-012（含阻塞 LOG-BLK-001） |
-| 测试与门禁类任务 | 是 | LOG-TODO-014/015（含阻塞 LOG-BLK-004） |
+| 测试与门禁类任务 | 是 | LOG-TODO-014/015 |
 | 文档/交付证据回写类任务 | 是 | LOG-TODO-016 |
 
 ## 6. 原子任务清单
@@ -156,7 +156,7 @@ logging 组件目标固定为：
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| LOG-TODO-001 | Done | 定义 ILogger 接口头文件 | logging 设计 6.6；编码规范 3.7 | 6.6 核心接口语义定义 | L2 | infra/include/logging/ILogger.h | ILogger::log(event), ILogger::flush(timeout_ms), ILogger::set_level(level) | unit：接口可编译；contract：失败语义可映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、最小编译测试；2026-03-31 已落盘 infra/include/logging/ILogger.h、tests/unit/infra/LoggerInterfaceTest.cpp、tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp，并确认 logging::ILogger 在保留 infra::ILogger 输入/返回语义的同时新增 set_level(level) 控制面 | 仅当接口方法、命名、职责与 6.6 一致且编译通过时完成 |
+| LOG-TODO-001 | Done | 定义 ILogger 接口头文件 | logging 设计 6.6；编码规范 3.7 | 6.6 核心接口语义定义 | L2 | infra/include/logging/ILogger.h | ILogger::log(event), ILogger::flush(timeout_ms), ILogger::set_level(level) | unit：接口可编译；contract：失败语义可映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无 | 无 | 接口头文件、最小编译测试；2026-03-31 已落盘 infra/include/logging/ILogger.h、tests/unit/infra/LoggerInterfaceTest.cpp、tests/contract/smoke/LoggerInterfaceBoundaryContractTest.cpp，并确认 logging::ILogger 作为唯一 canonical 日志入口，同时提供 log/flush 与最小 set_level(level) 控制面 | 仅当接口方法、命名、职责与 6.6 一致且编译通过时完成 |
 | LOG-TODO-002 | Done | 定义 IAuditLinkAdapter 接口头文件 | logging 设计 6.6、6.10；架构 8.8 | 6.6 IAuditLinkAdapter；6.10 evidence_ref 关联要求 | L2 | infra/include/logging/IAuditLinkAdapter.h | IAuditLinkAdapter::attach_audit_ref(log_event), IAuditLinkAdapter::report_link_failure(reason) | unit：接口可编译；contract：审计关联字段不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | 无 | 无（2026-03-31 已通过 AuditRef 前置声明占位解阻） | 已完成：先以前置声明/占位类型冻结接口，后续在 LOG-TODO-003 补全 AuditRef/LogTypes 具体结构 | 接口头文件、编译证据；2026-03-31 已落盘 infra/include/logging/IAuditLinkAdapter.h、tests/unit/infra/AuditLoggerInterfaceTest.cpp、tests/contract/smoke/AuditLoggerInterfaceBoundaryContractTest.cpp，并确认审计关联接口不暴露 write_audit/export_audit 审计存储职责 | 仅当审计关联接口与普通日志接口职责分离且编译通过时完成 |
 | LOG-TODO-003 | Done | 定义 LogContext 数据结构 | logging 设计 6.5；架构 8.5 | 6.5 LogContext 字段约束 | L3 | infra/include/logging/LogTypes.h | LogContext{request_id,session_id,trace_id,task_id,parent_task_id,lease_id} | unit：unknown 兜底与非空语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | LOG-TODO-001 | 无 | 无 | 结构体定义、单测；2026-03-31 已落盘 infra/include/logging/LogTypes.h、tests/unit/infra/InfraContextTest.cpp、tests/contract/smoke/InfraContextBoundaryContractTest.cpp，并以 LogContext=InfraContext 兼容别名冻结 request/session/trace/task/parent_task/lease 六个标识字段，同时补齐最小 AuditRef 以解掉 002 的占位入参 | 仅当字段齐全、unknown 兜底被测试覆盖时完成 |
 | LOG-TODO-004 | Done | 定义 LogEvent 数据结构 | logging 设计 6.5、6.10 | 6.5 LogEvent；6.10 结构化字段最小集合 | L2 | infra/include/logging/LogTypes.h | LogEvent{level,category,message,attrs,timestamp} | unit：attrs 可序列化；contract：不扩写 contracts 语义 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | LOG-TODO-003 | 无（attrs 键白名单保持后续补设计，不阻塞最小字段冻结） | 已完成：以 logging::LogEvent=infra::LogEvent 兼容别名冻结最小字段集合，继续通过 category() / has_timestamp() 维持 logging 设计术语，不重定义第二份日志对象布局 | 结构体定义、单测；2026-03-31 已更新 infra/include/logging/LogTypes.h、tests/unit/infra/LogEventTest.cpp、tests/contract/smoke/LogEventBoundaryContractTest.cpp，并确认 request/trace 等标识仍只作为 attrs 传递、不提升为顶层 contracts 字段 | 仅当最小字段集合与 6.10 一致且测试通过时完成 |
@@ -202,7 +202,7 @@ logging 组件目标固定为：
 | LOG-GATE-03 | 异常可观测门 | queue/sink/format/config 失败路径有错误码和计数出口 | 补齐错误处理后再提测 |
 | LOG-GATE-04 | 测试发现性门 | ctest -N 能看到 logging 新增 unit/contract 测试 | 修复 CMake 注册 |
 | LOG-GATE-05 | breaking 评审门 | 任何接口签名/contracts 映射变化均有评审结论 | 未评审不得合入 |
-| LOG-GATE-06 | integration 准入门 | tests 顶层完成 integration 注册策略 | 未通过前禁止开集成验收任务 |
+| LOG-GATE-06 | integration 准入门 | tests 顶层已完成 integration 注册策略，且 logging 组件用例已落盘 | 未通过前补齐 logging 组件 integration 用例与标签注册 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -211,7 +211,7 @@ logging 组件目标固定为：
 | LOG-BLK-001 | logging config 模型未冻结：apply(config) 的 config 结构、冲突裁定规则、运行时 patch 形状不明确 | LOG-TODO-012 | 完成 ILogConfigurator 配置对象补设计评审 | 在 logging 设计文档补充配置对象表与合并规则表 | 暂时固定静态配置，禁用运行时覆盖 |
 | LOG-BLK-002 | metrics 子域接口未冻结：指标出口接口、标签白名单、上报失败语义缺失 | LOG-TODO-013 | metrics 侧提供最小 IMetricSink/bridge 接口 | 在 infra/metrics 详细设计补接口章节 | 暂时仅保留内存计数，不对外导出 |
 | LOG-BLK-003 | health 探针接口未冻结：LoggingHealthProbe 输出对象和超时语义不明确 | 后续 LoggingHealthProbe 任务 | health 子域给出 IHealthProbe 统一签名 | 在 infra/health 详细设计补探针对象定义 | 暂时仅记录 degraded 本地状态 |
-| LOG-BLK-004 | tests 顶层未纳入 integration 子目录，无法稳定注册 logging integration 用例 | 后续 integration 任务 | tests/CMakeLists.txt 接入 integration 并定义标签约定 | 新增 add_subdirectory(integration) 与 integration 标签规范 | integration 验收延期，仅执行 unit/contract |
+| LOG-BLK-004 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；logging integration 是否可执行改由组件自身落盘负责 | 后续 integration 任务 | 无；后续仅需按组件落盘 logging integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | LOG-BLK-005 | LogQueryService 查询模型与权限边界未冻结 | 后续 LogQueryService 任务 | 定义 query 对象、授权策略、导出约束 | 在 logging 设计文档补 query schema 与权限表 | 仅保留文件级导出，不开放按 trace/session 检索 API |
 
 ## 9. 验收与质量门
@@ -228,7 +228,7 @@ logging 组件目标固定为：
 
 说明：
 
-1. integration 命令当前不纳入验收基线，原因见 LOG-BLK-004。
+1. integration 命令当前不纳入验收基线，原因是 logging integration 用例尚未落盘；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项任务验收最少需要一条 build 命令和一条 test 命令。
 
 ### 9.2 质量门逐项回答（第 7 章要求）
@@ -261,8 +261,8 @@ logging 组件目标固定为：
 ### 11.2 支撑证据
 
 1. logging 设计已明确接口名、对象字段、错误语义、主异常流程与目录落点。
-2. 当前仓库中 logging 代码与 include 为空，必须先接口与对象冻结。
-3. tests 顶层未纳入 integration，集成任务存在工程级阻塞。
+2. 当前仓库中 logging 已完成接口与对象冻结，后续重点转向 facade/dispatcher/queue/recovery 等骨架实现。
+3. tests 顶层 integration 已接入，当前集成缺口转为 logging 组件用例尚未落盘。
 4. metrics/health/config 的 logging 侧接入点存在签名缺口，不满足安全 L3 条件。
 5. ADR-005/006/007/008 对边界限制明确，禁止越权扩张。
 

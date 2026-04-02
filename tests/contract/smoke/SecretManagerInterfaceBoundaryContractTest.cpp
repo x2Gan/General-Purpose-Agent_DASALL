@@ -3,7 +3,7 @@
 #include <string_view>
 #include <type_traits>
 
-#include "../../../infra/include/ISecretManager.h"
+#include "../../../infra/include/secret/ISecretManager.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {

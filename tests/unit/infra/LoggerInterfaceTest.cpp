@@ -10,58 +10,60 @@ namespace {
 
 class NullLogger final : public dasall::infra::logging::ILogger {
  public:
-  dasall::infra::LogWriteResult log(const dasall::infra::LogEvent& event) override {
+  dasall::infra::logging::LogWriteResult log(
+      const dasall::infra::logging::LogEvent& event) override {
     if (!event.attrs_are_serializable()) {
-      return dasall::infra::LogWriteResult::failure(
+      return dasall::infra::logging::LogWriteResult::failure(
           dasall::contracts::ResultCode::ValidationFieldMissing,
           "log event attrs must stay serializable",
           "logging.log",
           "NullLogger");
     }
 
-    return dasall::infra::LogWriteResult::success();
+    return dasall::infra::logging::LogWriteResult::success();
   }
 
-  dasall::infra::LogWriteResult flush(
-      const dasall::infra::LogFlushDeadline& deadline) override {
+  dasall::infra::logging::LogWriteResult flush(
+      const dasall::infra::logging::LogFlushDeadline& deadline) override {
     if (!deadline.is_valid()) {
-      return dasall::infra::LogWriteResult::failure(
+      return dasall::infra::logging::LogWriteResult::failure(
           dasall::contracts::ResultCode::ValidationFieldMissing,
           "flush deadline must be greater than zero",
           "logging.flush",
           "NullLogger");
     }
 
-    return dasall::infra::LogWriteResult::success();
+    return dasall::infra::logging::LogWriteResult::success();
   }
 
   void set_level(dasall::infra::logging::LogLevel level) override {
     current_level_ = level;
   }
 
-  [[nodiscard]] dasall::infra::LogLevel current_level() const {
+  [[nodiscard]] dasall::infra::logging::LogLevel current_level() const {
     return current_level_;
   }
 
  private:
-  dasall::infra::LogLevel current_level_ = dasall::infra::LogLevel::Info;
+  dasall::infra::logging::LogLevel current_level_ =
+      dasall::infra::logging::LogLevel::Info;
 };
 
-void test_logging_component_logger_extends_base_interface_with_level_control() {
-  using dasall::infra::ILogger;
-  using dasall::infra::LogEvent;
-  using dasall::infra::LogLevel;
+void test_logging_component_logger_exposes_single_canonical_interface() {
+  using dasall::infra::logging::ILogger;
+  using dasall::infra::logging::LogEvent;
+  using dasall::infra::logging::LogLevel;
   using dasall::tests::support::assert_true;
 
-  static_assert(std::is_base_of_v<ILogger, dasall::infra::logging::ILogger>);
+  static_assert(std::is_same_v<decltype(&ILogger::set_level), void (ILogger::*)(LogLevel)>);
 
   NullLogger logger;
-  logger.set_level(dasall::infra::logging::LogLevel::Error);
+  ILogger& interface = logger;
+  interface.set_level(LogLevel::Error);
 
   assert_true(logger.current_level() == LogLevel::Error,
-              "logging::ILogger should freeze dynamic level adjustment without changing the base logger contract");
+              "logging::ILogger should expose dynamic level adjustment from its canonical interface");
 
-  ILogger& base_logger = logger;
   const LogEvent event{
       .level = LogLevel::Error,
       .module = std::string("logging"),
@@ -70,15 +72,15 @@ void test_logging_component_logger_extends_base_interface_with_level_control() {
       .ts = 200,
   };
 
-  const auto log_result = base_logger.log(event);
+  const auto log_result = interface.log(event);
   assert_true(log_result.ok,
-              "logging::ILogger should remain substitutable for the frozen base infra::ILogger log contract");
+              "logging::ILogger should retain the frozen log contract on its canonical interface");
 }
 
 void test_logger_interface_accepts_log_event_and_placeholder_deadline() {
-  using dasall::infra::LogEvent;
-  using dasall::infra::LogFlushDeadline;
-  using dasall::infra::LogLevel;
+  using dasall::infra::logging::LogEvent;
+  using dasall::infra::logging::LogFlushDeadline;
+  using dasall::infra::logging::LogLevel;
   using dasall::tests::support::assert_true;
 
   NullLogger logger;
@@ -101,9 +103,9 @@ void test_logger_interface_accepts_log_event_and_placeholder_deadline() {
 }
 
 void test_logger_interface_reports_validation_failures_observably() {
-  using dasall::infra::LogEvent;
-  using dasall::infra::LogFlushDeadline;
-  using dasall::infra::LogLevel;
+  using dasall::infra::logging::LogEvent;
+  using dasall::infra::logging::LogFlushDeadline;
+  using dasall::infra::logging::LogLevel;
   using dasall::tests::support::assert_true;
 
   NullLogger logger;
@@ -133,7 +135,7 @@ void test_logger_interface_reports_validation_failures_observably() {
 
 int main() {
   try {
-    test_logging_component_logger_extends_base_interface_with_level_control();
+    test_logging_component_logger_exposes_single_canonical_interface();
     test_logger_interface_accepts_log_event_and_placeholder_deadline();
     test_logger_interface_reports_validation_failures_observably();
   } catch (const std::exception& ex) {

@@ -12,16 +12,18 @@ namespace {
 void test_logger_interface_result_uses_contract_error_types_only() {
   using dasall::contracts::ErrorInfo;
   using dasall::contracts::ResultCode;
-  using dasall::infra::LogWriteResult;
-  using BaseLogger = dasall::infra::ILogger;
-  using LoggingLogger = dasall::infra::logging::ILogger;
+  using Logger = dasall::infra::logging::ILogger;
+  using dasall::infra::logging::LogEvent;
+  using dasall::infra::logging::LogLevel;
+  using dasall::infra::logging::LogWriteResult;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(LogWriteResult{}.result_code), ResultCode>);
   static_assert(std::is_same_v<decltype(LogWriteResult{}.error), std::optional<ErrorInfo>>);
-  static_assert(std::is_base_of_v<BaseLogger, LoggingLogger>);
-  static_assert(std::is_same_v<decltype(&LoggingLogger::set_level),
-                               void (LoggingLogger::*)(dasall::infra::LogLevel)>);
+  static_assert(std::is_same_v<decltype(&Logger::log),
+                               LogWriteResult (Logger::*)(const LogEvent&)>);
+  static_assert(std::is_same_v<decltype(&Logger::set_level),
+                               void (Logger::*)(LogLevel)>);
 
   const auto failure = LogWriteResult::failure(ResultCode::ValidationFieldMissing,
                                                "attrs must be serializable",
@@ -35,7 +37,7 @@ void test_logger_interface_result_uses_contract_error_types_only() {
 }
 
 void test_logger_interface_keeps_flush_deadline_as_local_placeholder_type() {
-  using dasall::infra::LogFlushDeadline;
+  using dasall::infra::logging::LogFlushDeadline;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(LogFlushDeadline{}.timeout_ms), std::uint32_t>);

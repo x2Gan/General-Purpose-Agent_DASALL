@@ -83,11 +83,11 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 仅 src/placeholder.cpp | watchdog 尚未接入构建 |
-| infra/include/ | 空目录 | watchdog 对外接口未落盘 |
+| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | watchdog 公共接口已落盘，但 watchdog 服务实现尚未接入构建 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，watchdog/ 子目录已落盘接口与对象 | watchdog public headers 已冻结，后续差距集中在服务实现 |
 | infra/src/ | 无 watchdog 子目录实现 | watchdog 主链路未落盘 |
-| tests/CMakeLists.txt | 仅 mocks/unit/contract | integration 顶层未接入 |
-| tests/unit/CMakeLists.txt | 未接入 infra 子目录 | watchdog unit 发现性缺失 |
+| tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration 拓扑已接入顶层，后续只需补 watchdog 具体集成/故障用例 |
+| tests/unit/CMakeLists.txt | 已接入 infra 子目录 | watchdog unit 发现性已建立，后续只需补具体用例 |
 | tests/contract/CMakeLists.txt | centralized registration 已可复用 | watchdog contract 边界可接入 |
 
 ## 4. 粒度可行性评估
@@ -126,7 +126,7 @@
 | WatchdogAuditBridge | watchdog 设计 6.2/6.8/6.10 | L3 | critical/fatal 必审计，失败兜底明确 | 审计 sink 多路策略细节 | 直接拆实现骨架任务 |
 | WatchdogMetricsBridge | watchdog 设计 6.2/6.10 | L3 | 指标清单和标签方向明确 | 指标标签白名单细则 | 直接拆指标桥接任务 |
 | RecoveryRequestEmitter | watchdog 设计 6.2/6.8；ADR-007 | L2 | 建议-执行分离语义明确 | runtime 恢复建议对象冻结不足 | 先 Blocked，再进实现 |
-| tests/integration/failure/profile | watchdog 设计 9.1/9.2；代码现状 | L0 | 用例与 gate 已给出 | tests 顶层 integration 未接线 | 先解阻测试拓扑，再推进 |
+| tests/integration/failure/profile | watchdog 设计 9.1/9.2；代码现状 | L0 | 用例与 gate 已给出 | tests 顶层 integration 已接线，缺口转为 watchdog 具体用例尚未落盘 | 直接拆集成与故障用例任务 |
 
 ## 5. Design -> TODO 映射表
 
@@ -147,7 +147,7 @@
 | 私有错误码与映射 | 6.6/9.1 | 错误处理 | WDG-TODO-019 | 错误可观测与映射稳定门禁 |
 | CMake 接线 | 7/8.1；现状 | 注册点 | WDG-TODO-020 | watchdog 代码先进入构建图 |
 | unit/contract 测试注册 | 9.1/9.2 | 测试与门禁 | WDG-TODO-021 | 先建可发现性与边界守卫 |
-| integration/failure/profile 测试注册 | 9.1/9.2；现状 | 测试与门禁 | WDG-TODO-022 | tests 顶层 integration 解阻后推进 |
+| integration/failure/profile 测试注册 | 9.1/9.2；现状 | 测试与门禁 | WDG-TODO-022 | 顶层 integration 已解阻，待 watchdog 具体 integration/failure/profile 用例落盘 |
 | 交付证据回写 | 9.2/11.1 | 文档/证据 | WDG-TODO-023 | 把 gate、阻塞、回退证据闭环记录 |
 
 ### 5.2 映射覆盖性检查
@@ -190,7 +190,7 @@
 | WDG-TODO-019 | Not Started | 定义 WatchdogErrors 私有错误码域与映射 | watchdog 设计 6.6/9.1；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/watchdog/WatchdogErrors.h | 7 个 INF_E_WATCHDOG_* 错误码与映射入口 | contract：映射 contracts::ResultCode 稳定；unit：枚举稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | WDG-TODO-001、006 | 无 | 无 | 错误码头文件、映射测试 | 仅当 7 个错误码均可追溯到设计条目且 contract 测试通过时完成 |
 | WDG-TODO-020 | Not Started | 接线 watchdog 到 infra CMake 构建入口 | watchdog 设计 7/8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/watchdog/ | watchdog 源文件纳入 dasall_infra | build：dasall_infra 可编译；test：新增单测目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | WDG-TODO-001~019 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 watchdog 文件入图时完成 |
 | WDG-TODO-021 | Not Started | 注册 watchdog 的 unit 与 contract 测试入口 | watchdog 设计 9.1/9.2；工程规范 3.7 | 9.1 测试矩阵；9.2 gate | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/watchdog/、tests/contract/CMakeLists.txt | unit：Registry/Ingestor/Policy；contract：边界与错误映射 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | WDG-TODO-019、020 | 无 | 无 | 测试注册改动、执行记录 | 仅当新增测试可被 ctest -N 发现并在 unit/contract 标签下执行时完成 |
-| WDG-TODO-022 | Blocked | 注册 watchdog integration/failure/profile 测试入口 | watchdog 设计 9.1/9.2；代码现状 | 9.1 Integration/Failure/Compatibility | L0 | tests/CMakeLists.txt、tests/integration/infra/watchdog/、tests/stress/ | integration：超时闭环；failure：发布失败/扫描滞后/心跳风暴；profile：差异一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | WDG-TODO-020、021 | WDG-BLK-05 | tests 顶层 integration 接线与标签规范冻结 | 测试注册改动或阻塞记录 | 仅当 tests 顶层接入 integration 并可发现 watchdog 测试后可解阻 |
+| WDG-TODO-022 | Not Started | 注册 watchdog integration/failure/profile 测试入口 | watchdog 设计 9.1/9.2；代码现状 | 9.1 Integration/Failure/Compatibility | L0 | tests/CMakeLists.txt、tests/integration/infra/watchdog/、tests/stress/ | integration：超时闭环；failure：发布失败/扫描滞后/心跳风暴；profile：差异一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci && ctest --test-dir build-ci -N | WDG-TODO-020、021 | 无（2026-03-30 已由 WDG-BLK-05 integration 顶层拓扑校准解阻） | 无；待 WDG-TODO-020、021 完成后落盘具体 watchdog integration/failure/profile 用例 | 测试注册改动或阻塞记录 | 仅当 watchdog integration/failure/profile 用例可被 ctest 发现并执行时完成 |
 | WDG-TODO-023 | Not Started | 回写 watchdog 门禁结果与交付证据 | watchdog 设计 9.2/11.1；规范 6.2 | 9.2 Gate；11 风险阻塞 | L2 | docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md | process test：门禁状态、阻塞变化、回退执行证据 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | WDG-TODO-021 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个 Gate 有通过/失败结论及对应命令证据时完成 |
 
 ## 7. 执行顺序建议
@@ -203,7 +203,7 @@
 | B 主链骨架闭环 | WDG-TODO-009~011、013、015、016、019 | 串行优先：009->010->011->013；其余可并行 | 先有注册采集与判级，再做观测桥接 |
 | C 受阻项解锁推进 | WDG-TODO-012、014、017、018 | 串行按阻塞项解锁 | 时钟/总线/建议结构/profile 键名依赖明确 |
 | D 构建与测试接线 | WDG-TODO-020、021 | 可并行但建议先 020 后 021 | 先保证源码入图，再保证测试发现性 |
-| E 集成与兼容门禁 | WDG-TODO-022 | 串行 | integration 拓扑解阻后再推进 |
+| E 集成与兼容门禁 | WDG-TODO-022 | 串行 | 待 watchdog 组件具体 integration/failure/profile 用例落盘后推进 |
 | F 证据收口 | WDG-TODO-023 | 串行 | 收敛 Gate 与阻塞变化记录 |
 
 ### 7.2 必过门禁表
@@ -227,7 +227,7 @@
 | WDG-BLK-02 | 事件总线最小发布接口未统一 | WDG-TODO-014 | publish_timeout 的输入输出与失败语义冻结 | 先定义最小 publish 接口与失败返回码 |
 | WDG-BLK-03 | 已解阻（2026-04-02）：RecoveryHintRequest 边界 contract 模板已冻结到 tests/contract/smoke/WatchdogRecoveryHintRequestBoundaryContractTest.cpp | WDG-TODO-017 | 无；后续可直接复用 WatchdogRecoveryHintRequestBoundaryContractTest | 证据回链到 infra/include/watchdog/RecoveryHintRequest.h、tests/unit/infra/watchdog/RecoveryHintRequestTest.cpp、tests/contract/CMakeLists.txt | 若建议/执行分离模板被回退，则重新转为 Blocked |
 | WDG-BLK-04 | profile 中 watchdog 键名与覆盖优先级未冻结 | WDG-TODO-018 | infra.watchdog.* 键命名冻结并评审通过 | 先补 profile 键名规范，再落配置合并逻辑 |
-| WDG-BLK-05 | tests 顶层 integration 未接线 | WDG-TODO-022 | tests/CMakeLists.txt 纳入 integration 并固化标签 | 新增 add_subdirectory(integration) 与标签规范 |
+| WDG-BLK-05 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；watchdog integration/failure/profile 是否可执行改由组件自身落盘负责 | WDG-TODO-022 | 无；后续按组件落盘 watchdog integration/failure/profile 用例 | 证据回链到 tests/CMakeLists.txt、tests/integration/CMakeLists.txt 与 infra 专项 TODO INF-BLK-06 |
 
 ## 9. 验收与质量门
 
@@ -244,7 +244,7 @@
 
 说明：
 
-1. integration/failure/profile 门禁在 WDG-BLK-05 解阻前不作为必过基线。
+1. integration/failure/profile 门禁当前不纳入必过基线，原因是 WDG-TODO-022 尚未落盘具体 watchdog 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
 2. 每项任务均有代码目标、测试目标、验收命令三件套。
 
 ### 9.2 质量门逐项回答
@@ -283,8 +283,8 @@
    - 事件总线最小发布接口。
    - runtime RecoveryHintRequest 输入结构与边界 contract 模板。
    - profile 下 watchdog 键名与覆盖优先级冻结。
-   - tests 顶层 integration 接线与标签规范。
+   - watchdog 具体 integration/failure/profile 用例与标签落盘。
 5. 下一步建议：
    - 先执行 WDG-TODO-001~011、013、015、016、019、020、021 完成接口对象和主链骨架。
-   - 并行解阻 WDG-BLK-01~05。
+   - 并行解阻 WDG-BLK-01~04；WDG-BLK-05 已完成仓库级解阻。
    - 解阻后执行 WDG-TODO-012、014、017、018、022，最后执行 WDG-TODO-023 收口证据。
