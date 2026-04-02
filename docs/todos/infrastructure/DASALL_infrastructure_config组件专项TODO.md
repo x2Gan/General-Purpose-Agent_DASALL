@@ -116,7 +116,7 @@
 | ConfigSnapshot/ConfigDiff | config 设计 6.5 | L3 | 字段、版本语义、source_chain 明确 | checksum 算法策略未定 | 直接拆数据结构任务 |
 | ConfigPatch/ConfigApplyResult | config 设计 6.5/6.8 | L2 | 字段与白名单约束明确 | patch value 类型范围未成文 | 先冻结字段与拒绝语义 |
 | ConfigMerger | config 设计 6.2/6.7 | L3 | 后层覆盖前层 + 来源追踪明确 | 冲突细则优先级例外未成文 | 先按线性优先级实现 |
-| ConfigAuditBridge | config 设计 6.2/6.10 | L1 | 审计字段清单明确 | 审计写入接口签名未冻结 | 标记 Blocked，先补桥接接口 |
+| ConfigAuditBridge | config 设计 6.2/6.10 | L2 | 审计字段清单、logger/audit sink 契约已明确 | metrics/tracing 仍为后续扩展 | 可进入 bridge/integration 落盘 |
 | SecretRefResolver | config 设计 6.2/6.4/6.8 | L1 | secret:// 解析职责明确 | secret 侧接口模型未冻结 | 标记 Blocked，先补 secret 接口对齐 |
 | tests/integration 注册点 | config 设计 8.1/9；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | config integration 用例尚未落盘 | 直接拆 integration 注册任务 |
 
@@ -134,7 +134,7 @@
 | 运行时覆盖与发布订阅 | config 设计 6.6/6.7/6.8 | 接口/流程 | CFG-TODO-005、CFG-TODO-013 | 覆盖 apply 与发布订阅拆分 |
 | 配置对象模型 | config 设计 6.5 | 数据结构 | CFG-TODO-006 | 冻结 Query/Patch/Snapshot/Diff/Issue/ApplyResult |
 | CMake 与测试注册 | config 设计 7/8.1/9.1；工程现状 | 门禁/测试 | CFG-TODO-014、CFG-TODO-015、CFG-TODO-016 | 构建接线、unit/contract 注册、integration 解阻 |
-| 可观测与审计桥接 | config 设计 6.10 | 桥接/门禁 | CFG-BLK-002 | 外部接口未冻结，先阻塞 |
+| 可观测与审计桥接 | config 设计 6.10 | 桥接/门禁 | CFG-BLK-002 | v1 sink 契约已冻结，可继续 bridge/integration 落盘 |
 | secret 引用解析 | config 设计 6.2/6.4/6.8 | 适配器/门禁 | CFG-BLK-003 | secret 接口未冻结，先阻塞 |
 
 ### 5.2 映射覆盖性检查
@@ -171,7 +171,7 @@
 | CFG-TODO-013 | Done | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | 无（2026-04-02 已由 CFG-BLK-001 解阻） | v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义 | 发布骨架、单测、integration；2026-04-02 已落盘 infra/include/config/ConfigPublisher.h、infra/src/config/ConfigPublisher.cpp、tests/unit/infra/ConfigPublisherTest.cpp、tests/integration/infra/ConfigRuntimePatchIntegrationTest.cpp，并完成 infra/tests CMake 注册 | 仅当 ConfigChanged 发布与命名空间过滤订阅均可被 integration 用例验证时完成 |
 | CFG-TODO-014 | Done | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 无 | 保留最小 non-empty 源文件过渡 | CMake 接线、构建记录；2026-04-02 已确认 infra/CMakeLists.txt 纳入 ConfigCenterFacade/Publisher/Loader/Merger/Validator/SnapshotStore 源文件与对应 public headers，并完成 dasall_infra 构建验收 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Done | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 顶层 unit/contract 注册入口、执行记录；2026-04-02 已补齐 dasall_config_publisher_unit_test 到 tests/unit/CMakeLists.txt，确认 config unit/contract 入口可发现并通过聚合验收 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
-| CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 CFG-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
+| CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-04-02 已由 CFG-BLK-002 解阻；INF-BLK-06 已先行清理顶层拓扑） | v1 observability sink 已冻结为 logger+audit 必选、metrics/tracing 后续扩展 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
 | CFG-TODO-017 | Not Started | 回写 config 质量门与交付证据 | config 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md | process test：门禁结论、阻塞变化、回退执行证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论与对应命令证据时完成 |
 
 ## 7. 执行顺序建议
@@ -203,7 +203,7 @@
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
 | CFG-BLK-001 | 已解阻（2026-04-02）：ConfigPublisher v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义，`event_id`、交付计数和前缀过滤规则已入设计 | CFG-TODO-013 | 无 | 已在 config 设计补充事件抽象章节与接口表，并将 CFG-TODO-013 恢复为 Not Started | 若后续需要跨进程 broker/重放能力，则升级为 v2 设计任务 |
-| CFG-BLK-002 | 审计桥接接口未冻结，ConfigAuditBridge 无法稳定落盘 | 后续 ConfigAuditBridge 任务 | 冻结 audit 写入接口与最小字段集合 | 在 infra logging/audit 设计补桥接签名 | 暂时仅记录本地日志与指标，不写审计管线 |
+| CFG-BLK-002 | 已解阻（2026-04-02）：ConfigAuditBridge v1 已冻结为 `logging::ILogger + audit::IAuditLogger` 必选 sink，日志 attrs 与审计字段最小集合已入设计 | CFG-TODO-016 | 无 | 已在 config 设计补充 6.10.1 sink 契约章节，并将 016 的 observability 前置条件恢复为可执行 | metrics/tracing 若暂未接入，保留为后续 bridge 扩展，不阻塞 016 |
 | CFG-BLK-003 | secret 接口模型未冻结，SecretRefResolver 无法稳定实现 | 后续 SecretRefResolver 任务 | 冻结 ISecretManager 最小 get/rotate 语义与句柄模型 | 在 secret 设计补接口与错误映射 | 暂时拒绝 secret://，返回 INF_CFG_E_SECRET_RESOLVE_FAIL |
 | CFG-BLK-004 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；config integration 用例是否可执行改由组件自身落盘负责 | CFG-TODO-016 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | CFG-BLK-005 | 快照持久化后端未冻结（sqlite/file） | 后续持久化任务 | 冻结持久化后端策略与恢复语义 | 先完成内存快照版本并补策略评审 | 回退为进程内回滚，不承诺重启后版本恢复 |
@@ -1104,3 +1104,50 @@ Build 合规复核：
 3. 测试发现性：将通过 `ctest -N -R ...` 与 `-L unit/-L contract` 聚合命令回填发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物、blocker 修复记录与最终验收结果。
 5. 提交隔离：本轮提交范围限定为顶层 unit 聚合注册与 TODO 证据文档，不混入 016/017 的后续工作。
+
+## 28. 本轮执行记录（2026-04-02 / CFG-BLK-002）
+
+### 28.1 选中任务
+
+1. 本轮任务：CFG-BLK-002。
+2. 可执行性依据：CFG-TODO-016 的剩余缺口已收敛到 ConfigObservabilityIntegrationTest 缺少稳定 sink 契约，而 infra 侧 logger/audit/metrics/tracing 接口与 audit/log 事件对象均已落盘，可通过单轮设计冻结完成最小解阻。
+
+### 28.2 研究与 Design 结论
+
+本地证据：
+
+1. `audit::IAuditLogger`、`logging::ILogger`、`metrics::IMetricsProvider`、`tracing::ITracerProvider` 与 `AuditEvent`/`AuditContext`/`LogEvent` 已在 infra 侧冻结，CFG-BLK-002 中“audit 写入接口未冻结”的原始阻塞描述已不再成立。
+2. config 详细设计 6.10 已列出日志、指标、追踪、审计四类观测目标，但未明确 v1 哪些 sink 为必选、哪些属于后续扩展，因此 ConfigAuditBridge 的最小实现范围仍不稳定。
+3. infra 子系统详设 6.10 已给出 profiles v1 可观测 sink 合同：仅 `ILogger` 与 `audit::IAuditLogger` 为跨子域稳定输出口，metrics/tracing 继续留在 infra 内部演进。
+
+外部参考：
+
+1. OpenTelemetry Logs Data Model 强调稳定 top-level 字段、显式 trace context 字段与 attributes 承载扩展上下文；本轮据此把 config 桥接收敛为“固定动作名 + 必选 log/audit sink + attrs 承载差异细节”的 v1 契约。
+
+D 结论：
+
+1. Design -> Build 映射：在 config 设计文档补充 6.10.1，冻结 ConfigAuditBridge v1 必选 sink 为 `logging::ILogger` 与 `audit::IAuditLogger`，并明确 metrics/tracing 为后续扩展点；同时将设计映射表与 blocker 台账同步更新。
+2. Build 三件套：
+   - 代码目标：无代码实现；本轮仅更新设计文档与 TODO blocker 台账。
+   - 测试目标：文档证据校验，确认 6.10.1 sink 契约、CFG-BLK-002 解阻记录与 CFG-TODO-016 前置条件变化均已落盘。
+   - 验收命令：`grep -nE "ConfigAuditBridge v1 可观测 sink 冻结|ILogger|IAuditLogger|CFG-BLK-002|CFG-TODO-016" docs/architecture/DASALL_infra_config模块详细设计方案.md docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md`。
+3. D Gate：PASS；CFG-TODO-016 已达到进入实现轮条件。
+
+### 28.3 Build 交付与证据
+
+交付物：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md：新增 6.10.1 `ConfigAuditBridge v1 可观测 sink 冻结` 章节，明确 logger/audit 必选 sink、log attrs 与 audit 字段最小集合、失败语义与 v1 验收边界。
+2. docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md：将 CFG-BLK-002 标记为已解阻，并更新 CFG-TODO-016 的前置条件说明。
+
+验收结果：
+
+1. `grep -nE "ConfigAuditBridge v1 可观测 sink 冻结|ILogger|IAuditLogger|CFG-BLK-002|CFG-TODO-016" docs/architecture/DASALL_infra_config模块详细设计方案.md docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md`：预期应命中 6.10.1 冻结章节、blocker 解阻记录和 016 前置条件回写。
+
+Build 合规复核：
+
+1. 代码注释：本轮为 blocker 设计冻结，无代码改动。
+2. 正负例覆盖：本轮为文档解阻，不适用代码正负例；通过显式冻结“日志/审计必选、metrics/tracing 后置、sink 失败可判定”的三条语义替代原有模糊口径。
+3. 测试发现性：本轮不涉及测试注册。
+4. TODO 证据回写：已回写 blocker 解阻证据和 016 前置条件变化。
+5. 提交隔离：本轮提交范围限定为 config 设计文档与 TODO 阻塞台账，不混入 016 的代码与 integration 注册改动。

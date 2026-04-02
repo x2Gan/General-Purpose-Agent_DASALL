@@ -138,7 +138,7 @@ infra/config 不负责：
 1. ConfigCenterFacade 依赖 ConfigLoader、ConfigMerger、ConfigValidator、ConfigSnapshotStore、ConfigPublisher。
 2. ConfigLoader 可选依赖外置配置适配器，不直接依赖业务模块。
 3. ConfigValidator 仅依赖规则库与 contracts 错误语义，不依赖业务实现。
-4. ConfigPublisher 与 ConfigAuditBridge 依赖 infra/logging、infra/metrics、infra/tracing。
+4. ConfigPublisher 依赖 config 内部事件对象；ConfigAuditBridge v1 必选依赖 infra/logging::ILogger 与 infra/audit::IAuditLogger，metrics/tracing 在 v1 仅保留桥接扩展点，不作为首版强制 sink。
 5. SecretRefResolver 依赖 infra/secret 抽象接口。
 
 ### 6.5 核心对象与 contracts 对齐关系
@@ -340,6 +340,34 @@ patch 结构冻结：
 1. 高风险键变更必须审计（执行策略、模型路由、权限门槛）。
 2. 审计字段包含 actor、action、key_path、before_version、after_version、outcome、evidence_ref。
 
+#### 6.10.1 ConfigAuditBridge v1 可观测 sink 冻结
+
+冻结结论：为解开 CFG-BLK-002，ConfigAuditBridge v1 不再等待新的 audit/logging/metrics/tracing 统一桥接总线；首版直接冻结为 config 组件内部可观测桥接器，必选 sink 仅包括 `logging::ILogger` 与 `audit::IAuditLogger`。`metrics::IMetricsProvider` 与 `tracing::ITracerProvider` 在 v1 只保留扩展点和后续桥接任务入口，不作为 `ConfigObservabilityIntegrationTest` 的前置依赖。
+
+最小 sink 契约：
+
+1. 日志 sink 复用 `logging::ILogger::log(const LogEvent&)`，ConfigAuditBridge 必须输出结构化 `LogEvent`，其中 `module` 冻结为 `infra.config`，`message` 采用稳定动作名，配置差异与版本信息进入 `attrs`。
+2. 审计 sink 复用 `audit::IAuditLogger::write_audit(const AuditEvent&, const AuditContext&)`，不新增 config 私有审计写入口。
+3. metrics/tracing 在 v1 只要求保留命名与字段映射扩展位：后续可以把 `infra_config_apply_total`、`infra_config_apply_fail_total` 与 `load_layers/apply_override/rollback` span 补到桥接实现中，但当前不会阻塞 bridge 骨架或 integration 注册。
+
+字段映射语义：
+
+1. `AuditEvent.action` 冻结为配置动作名，如 `config.apply_override`、`config.rollback`、`config.publish_rejected`；`target` 采用 `key_path` 或快照版本范围的可读标识。
+2. `AuditEvent.evidence_ref` 继续复用已冻结 `AuditEvidenceRef`，v1 对 config 变更固定使用可追踪字符串引用，不引入新的 contracts 对象嵌入。
+3. `AuditContext` 至少保留已有 `request_id`、`trace_id`、`task_id`、`actor` 对应的链路归因语义；当 config 侧拿不到显式链路值时，可使用冻结的 unknown 默认值，但不得输出空字段。
+4. `LogEvent.attrs` 至少包含 `key_path`、`from_version`、`to_version`、`outcome`、`evidence_ref`；如存在 `reason_code`、`subscriber_id` 等附加上下文，进入 attrs 而非重新扩张顶层字段。
+
+失败语义：
+
+1. `ILogger` 写入失败不得吞错；ConfigAuditBridge 必须返回可观测失败状态，并保留继续执行审计 sink 的能力。
+2. `IAuditLogger` 写入失败不得反向伪装为“观测成功”；v1 允许降级为“日志成功、审计失败”的部分成功状态，但必须显式暴露 outcome。
+3. `ConfigObservabilityIntegrationTest` 的 v1 验收范围固定为：有效 config 变更同时产生日志与审计记录；无效 payload 不产生部分 side effect；日志/审计至少一侧失败时返回可判定失败结果。
+
+评审依据：
+
+1. 本地证据：`audit::IAuditLogger`、`logging::ILogger`、`metrics::IMetricsProvider`、`tracing::ITracerProvider` 与 `AuditEvent`/`AuditContext`/`LogEvent` 均已在 infra 侧冻结；profiles 详设 6.10 也已采用 `ILogger + IAuditLogger` 作为 v1 可观测 sink 契约。
+2. 外部参考：OpenTelemetry Logs Data Model 强调稳定的顶层字段、显式 `TraceId`/`SpanId` 关联与结构化 attributes 承载附加上下文；v1 因此将 config 桥接收敛为“稳定动作名 + top-level log/audit 必选字段 + attrs 承载差异细节”的最小可执行契约。
+
 ## 7. Design -> Build 映射（建议级）
 
 | Design结论 | Build目标 | 映射说明 | 代码目标 | 测试目标 | 验收命令 | 依赖/阻塞 |
@@ -349,7 +377,7 @@ patch 结构冻结：
 | 建立配置校验与错误语义 | 新增 IConfigValidator + RuleSet | 保证配置失败可判定 | infra/src/config/ConfigValidator.cpp | unit: ConfigValidatorTest; contract: ConfigErrorMappingContractTest | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | 依赖错误码映射表 |
 | 建立快照与回滚 | 新增 ConfigSnapshotStore | 实现 LKG 与回退机制 | infra/src/config/ConfigSnapshotStore.cpp | unit: ConfigSnapshotStoreTest | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | 阻塞：快照持久化后端未定 |
 | 建立运行时覆盖与发布 | 新增 ConfigPublisher + subscribe API | 支持动态更新与事件分发；v1 冻结为进程内 publish + namespace-filtered subscribe 抽象 | infra/src/config/ConfigPublisher.cpp | integration: ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | 无（2026-04-02 已完成 CFG-BLK-001 解阻） |
-| 建立配置观测与审计 | 接入 logging/metrics/tracing/audit | 满足可观测与治理要求 | infra/src/config/ConfigAuditBridge.cpp | integration: ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -R ConfigObservabilityIntegrationTest | 阻塞：审计字段规范冻结 |
+| 建立配置观测与审计 | 接入 logging/metrics/tracing/audit | v1 冻结为 logger+audit 必选 sink，metrics/tracing 为后续扩展点 | infra/src/config/ConfigAuditBridge.cpp | integration: ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -R ConfigObservabilityIntegrationTest | 无（2026-04-02 已完成 CFG-BLK-002 解阻） |
 
 无法立即映射项：
 1. 外置配置中心高可用集群能力：当前阶段先保留 IExternalConfigAdapter，不纳入首批交付。
@@ -424,7 +452,7 @@ Gate 建议：
 |---|---|---|---|---|
 | B-CFG-01 Profile 键空间未冻结 | CFG-T002/T003/T006 | profiles 的 config 键命名评审通过 | 先用临时命名映射层 | 暂停运行时覆盖，仅启用 defaults+profile |
 | B-CFG-02 外置配置源协议未定 | CFG-T002/T005 | IExternalConfigAdapter 最小接口冻结 | 先实现 file/env 两类本地源 | 关闭 external.enabled，使用本地配置 |
-| B-CFG-03 审计字段规范未定 | CFG-T008 | 审计字段最小集合冻结 | 先记录核心 6 字段 | 缺省写入降级审计 sink |
+| B-CFG-03 已解阻（2026-04-02） | CFG-T008 | ConfigAuditBridge v1 sink 契约已冻结为 `ILogger + IAuditLogger`，并明确日志 attrs / 审计字段最小集合 | 无 | metrics/tracing 若未接入则保留为后续 bridge 扩展 |
 | B-CFG-04 快照持久化后端未定 | CFG-T005 | 持久化策略评审通过 | 先内存快照 + 启动导入 | 保留仅进程内回滚能力 |
 | B-CFG-05 运行时覆盖安全边界未定 | CFG-T006 | 白名单前缀与审批策略冻结 | 先禁用高风险键覆盖 | 关闭 runtime_patch.enabled |
 
