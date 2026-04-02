@@ -13,17 +13,4 @@ dasall_apply_common_options(dasall_infra_diagnostics_smoke_integration_test)
 add_test(NAME InfraDiagnosticsSmokeTest COMMAND dasall_infra_diagnostics_smoke_integration_test)
 set_tests_properties(InfraDiagnosticsSmokeTest PROPERTIES LABELS "integration")
 
-add_executable(dasall_config_runtime_patch_integration_test
-  ConfigRuntimePatchIntegrationTest.cpp
-)
-
-target_link_libraries(dasall_config_runtime_patch_integration_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_config_runtime_patch_integration_test)
-
-add_test(NAME ConfigRuntimePatchIntegrationTest COMMAND dasall_config_runtime_patch_integration_test)
-set_tests_properties(ConfigRuntimePatchIntegrationTest PROPERTIES LABELS "integration")
+add_subdirectory(config)

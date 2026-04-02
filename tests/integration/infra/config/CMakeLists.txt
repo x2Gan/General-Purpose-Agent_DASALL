@@ -1,0 +1,29 @@
+add_executable(dasall_config_runtime_patch_integration_test
+  ../ConfigRuntimePatchIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_config_runtime_patch_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_runtime_patch_integration_test)
+
+add_test(NAME ConfigRuntimePatchIntegrationTest COMMAND dasall_config_runtime_patch_integration_test)
+set_tests_properties(ConfigRuntimePatchIntegrationTest PROPERTIES LABELS "integration")
+
+add_executable(dasall_config_observability_integration_test
+  ConfigObservabilityIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_config_observability_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_observability_integration_test)
+
+add_test(NAME ConfigObservabilityIntegrationTest COMMAND dasall_config_observability_integration_test)
+set_tests_properties(ConfigObservabilityIntegrationTest PROPERTIES LABELS "integration")
