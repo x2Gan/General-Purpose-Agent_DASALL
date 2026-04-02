@@ -168,7 +168,7 @@
 | CFG-TODO-010 | Done | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigValidator.h、infra/src/config/ConfigValidator.cpp、tests/unit/infra/ConfigValidatorTest.cpp，并完成 infra/tests CMake 注册 | 仅当非法配置被拒绝且错误可定位时完成 |
 | CFG-TODO-011 | Done | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigSnapshotStore.h、infra/src/config/ConfigSnapshotStore.cpp、tests/unit/infra/ConfigSnapshotStoreTest.cpp，并完成 infra/tests CMake 注册 | 仅当失败时可回退到 LKG 且测试通过时完成 |
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
-| CFG-TODO-013 | Blocked | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | CFG-BLK-001 | 先冻结事件总线最小抽象与订阅语义 | 发布骨架或阻塞记录 | 仅当事件总线抽象冻结后，状态才可由 Blocked 改为 Not Started |
+| CFG-TODO-013 | Not Started | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | 无（2026-04-02 已由 CFG-BLK-001 解阻） | v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义 | 发布骨架或阻塞记录 | 仅当 ConfigChanged 发布与命名空间过滤订阅均可被 integration 用例验证时完成 |
 | CFG-TODO-014 | Not Started | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 初期源文件渐进落盘 | 保留最小 non-empty 源文件过渡 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Not Started | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
 | CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 CFG-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
@@ -202,7 +202,7 @@
 
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
-| CFG-BLK-001 | 事件总线最小抽象未冻结，ConfigPublisher 订阅发布语义无法稳定实现 | CFG-TODO-013 | 冻结发布/订阅最小接口与命名空间过滤语义 | 在 config 设计补充事件抽象章节与接口表 | 暂时禁用运行时发布，仅保留静态加载 |
+| CFG-BLK-001 | 已解阻（2026-04-02）：ConfigPublisher v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义，`event_id`、交付计数和前缀过滤规则已入设计 | CFG-TODO-013 | 无 | 已在 config 设计补充事件抽象章节与接口表，并将 CFG-TODO-013 恢复为 Not Started | 若后续需要跨进程 broker/重放能力，则升级为 v2 设计任务 |
 | CFG-BLK-002 | 审计桥接接口未冻结，ConfigAuditBridge 无法稳定落盘 | 后续 ConfigAuditBridge 任务 | 冻结 audit 写入接口与最小字段集合 | 在 infra logging/audit 设计补桥接签名 | 暂时仅记录本地日志与指标，不写审计管线 |
 | CFG-BLK-003 | secret 接口模型未冻结，SecretRefResolver 无法稳定实现 | 后续 SecretRefResolver 任务 | 冻结 ISecretManager 最小 get/rotate 语义与句柄模型 | 在 secret 设计补接口与错误映射 | 暂时拒绝 secret://，返回 INF_CFG_E_SECRET_RESOLVE_FAIL |
 | CFG-BLK-004 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；config integration 用例是否可执行改由组件自身落盘负责 | CFG-TODO-016 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
@@ -896,3 +896,50 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R ConfigSnapshotStoreTest` 回填新增测试注册证据。
 4. TODO 证据回写：已回写任务状态、原子边界说明与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 ConfigSnapshotStore 代码、测试、CMake 注册与 TODO 证据文档，不混入额外集成改动。
+
+## 24. 本轮执行记录（2026-04-02 / CFG-BLK-001）
+
+### 24.1 选中任务
+
+1. 本轮任务：CFG-BLK-001。
+2. 可执行性依据：CFG-TODO-013 的唯一 blocker 已在 TODO 中明确为“事件总线最小抽象未冻结”，且最小解阻动作已经限定为“在 config 设计补充事件抽象章节与接口表”，属于单轮可闭环的 blocker recovery。
+
+### 24.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.3/6.7 已要求 ConfigPublisher 面向 ConfigChanged 事件分发订阅通知，但 6.6 之前只冻结了 `publish_config_changed(diff)` 单向入口，没有定义订阅与过滤语义。
+2. docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md 中 CFG-TODO-013 明确因 CFG-BLK-001 被 Blocked，解阻条件就是“冻结发布/订阅最小接口与命名空间过滤语义”。
+3. infra/include/config/IConfigCenter.h 已冻结 `ConfigSubscriptionRequest`、`ConfigSubscriptionHandle` 与 `ConfigChangedCallback`，可直接复用为 v1 订阅边界，无需另起第二套对象模型。
+
+外部参考：
+
+1. Azure Publisher-Subscriber pattern 指出 publisher 与 subscriber 应通过中介解耦，并允许按主题或内容子集过滤事件；本轮据此将 v1 收敛为进程内最小事件抽象，同时冻结前缀匹配过滤与 publisher 不因单个 subscriber 失败而整体回滚的语义。
+
+D 结论：
+
+1. Design -> Build 映射：在 config 设计文档补充 6.6.1 事件抽象冻结章节，明确 `ConfigPublisher` 本身就是 v1 最小事件抽象，冻结 publish、subscribe、namespace_filter、event_id、delivery count 语义。
+2. Build 三件套：
+   - 代码目标：无代码实现；本轮仅更新设计文档和 TODO 阻塞台账。
+   - 测试目标：文档证据校验，确认 6.6.1 冻结章节和 TODO 中 blocker/013 状态回写均已落盘。
+   - 验收命令：`grep -nE "ConfigPublisher v1 事件抽象冻结|namespace_filter|config-event://diff|CFG-BLK-001|CFG-TODO-013 \| Not Started" docs/architecture/DASALL_infra_config模块详细设计方案.md docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md`。
+3. D Gate：PASS；CFG-TODO-013 已达到进入实现轮条件。
+
+### 24.3 Build 交付与证据
+
+交付物：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md：新增 6.6.1 `ConfigPublisher v1 事件抽象冻结` 章节，明确最小发布/订阅抽象、命名空间过滤、event_id 和交付语义。
+2. docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md：将 CFG-BLK-001 标记为已解阻，并把 CFG-TODO-013 从 Blocked 调整为 Not Started。
+
+验收结果：
+
+1. `grep -nE "ConfigPublisher v1 事件抽象冻结|namespace_filter|config-event://diff|CFG-BLK-001|CFG-TODO-013 \| Not Started" docs/architecture/DASALL_infra_config模块详细设计方案.md docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md`：已命中设计冻结章节、TODO 解阻记录和 013 状态回写。
+
+Build 合规复核：
+
+1. 代码注释：本轮为 blocker 设计冻结，无代码改动。
+2. 正负例覆盖：本轮为文档解阻，不适用代码正负例；通过显式冻结“命中订阅投递 / 未命中不投递 / 回调失败不反向拒绝发布”的三条语义替代模糊设计口径。
+3. 测试发现性：本轮不涉及测试注册。
+4. TODO 证据回写：已回写 blocker 解阻证据和 CFG-TODO-013 状态变化。
+5. 提交隔离：本轮提交范围限定为 config 架构设计与 TODO 阻塞台账，不混入 013 实现代码。

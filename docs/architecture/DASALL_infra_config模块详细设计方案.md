@@ -223,6 +223,39 @@ patch 结构冻结：
 1. IConfigPublisher
 - publish_config_changed(diff)
 
+#### 6.6.1 ConfigPublisher v1 事件抽象冻结
+
+冻结结论：为解开 CFG-BLK-001，ConfigPublisher v1 不再等待独立跨进程事件总线设计；首版直接把 `ConfigPublisher` 冻结为 config 组件内部最小事件抽象，负责 `ConfigChanged` 事件发布、订阅登记和命名空间过滤投递。跨进程 broker、持久化 topic、dead-letter 与重放能力不纳入 v1。
+
+最小接口边界：
+
+1. 发布入口继续沿用 `IConfigPublisher::publish_config_changed(diff)`，输入保持 `ConfigDiff`，避免把快照对象直接暴露给订阅回调。
+2. 订阅入口复用 `IConfigCenter` 中已冻结的 `ConfigSubscriptionRequest` 与 `ConfigSubscriptionHandle`，不新增第二套订阅对象。
+3. v1 不引入独立 `unsubscribe()` 契约；取消订阅仍由句柄生命周期和后续 Facade/Broker 演进任务补齐。
+
+命名空间过滤语义：
+
+1. `namespace_filter` 必须非空，且采用 key_path 前缀匹配，判断条件为“任一 `ConfigDiffEntry.key_path` 以 `namespace_filter` 开头”。
+2. v1 不支持通配符、正则或多命名空间并集；需要多个前缀时，调用方应注册多个订阅。
+3. `ConfigChanged` 事件只投递给命中的订阅者；未命中订阅不应收到空事件或 no-op 回调。
+
+发布与交付语义：
+
+1. `ConfigPublishResult.event_id` 冻结为 `config-event://diff/<to_version>` 格式，便于追踪与集成测试断言。
+2. `delivered_subscriber_count` 仅统计成功执行回调的订阅者数量；未命中订阅和回调失败订阅都不计入。
+3. 订阅回调失败不得反向使 publisher 拒绝已验证的 diff；v1 采用进程内 at-most-once 分发，发布成功与订阅者自身处理成功解耦。
+4. 订阅回调失败必须保留可观测钩子：至少能在 v1 skeleton 中通过交付计数差异与后续日志/指标接入点暴露，不允许静默吞没为“全部成功”。
+
+事件类型边界：
+
+1. CFG-TODO-013 的实现范围只覆盖运行时覆盖路径的 `ConfigChanged` 事件。
+2. `ConfigLoaded` 仍保留为设计中的后续扩展事件名，但不纳入本轮 blocker fix 与 013 的验收面，避免把当前任务扩张到新的启动期事件工作包。
+
+评审依据：
+
+1. 本地证据：config 详细设计 6.3/6.7 已要求 ConfigPublisher 面向已通过校验的新快照或差异内容发出订阅事件，且 TODO 中 013 的唯一 blocker 为“事件总线最小抽象未冻结”。
+2. 外部参考：Azure Publisher-Subscriber pattern 强调 publisher 与 subscriber 应通过 broker/事件总线解耦，并支持按主题或内容过滤投递；v1 先冻结为进程内最小抽象，同时保留未来升级到独立 broker 的演进空间。
+
 错误语义（建议）：
 - INF_CFG_E_NOT_FOUND
 - INF_CFG_E_TYPE_MISMATCH
@@ -315,7 +348,7 @@ patch 结构冻结：
 | 建立四层加载与合并 | 新增 ConfigLoader + ConfigMerger | 落地蓝图四层模型 | infra/src/config/ConfigLoader.cpp; infra/src/config/ConfigMerger.cpp | unit: ConfigLoaderTest, ConfigMergerTest | ctest --test-dir build-ci -R "ConfigLoaderTest|ConfigMergerTest" | 阻塞：profiles 键空间规范待确认 |
 | 建立配置校验与错误语义 | 新增 IConfigValidator + RuleSet | 保证配置失败可判定 | infra/src/config/ConfigValidator.cpp | unit: ConfigValidatorTest; contract: ConfigErrorMappingContractTest | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | 依赖错误码映射表 |
 | 建立快照与回滚 | 新增 ConfigSnapshotStore | 实现 LKG 与回退机制 | infra/src/config/ConfigSnapshotStore.cpp | unit: ConfigSnapshotStoreTest | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | 阻塞：快照持久化后端未定 |
-| 建立运行时覆盖与发布 | 新增 ConfigPublisher + subscribe API | 支持动态更新与事件分发 | infra/src/config/ConfigPublisher.cpp | integration: ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | 依赖事件总线最小抽象 |
+| 建立运行时覆盖与发布 | 新增 ConfigPublisher + subscribe API | 支持动态更新与事件分发；v1 冻结为进程内 publish + namespace-filtered subscribe 抽象 | infra/src/config/ConfigPublisher.cpp | integration: ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | 无（2026-04-02 已完成 CFG-BLK-001 解阻） |
 | 建立配置观测与审计 | 接入 logging/metrics/tracing/audit | 满足可观测与治理要求 | infra/src/config/ConfigAuditBridge.cpp | integration: ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -R ConfigObservabilityIntegrationTest | 阻塞：审计字段规范冻结 |
 
 无法立即映射项：
