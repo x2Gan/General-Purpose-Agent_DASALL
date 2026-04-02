@@ -703,6 +703,21 @@ dasall_apply_common_options(dasall_config_validator_interface_unit_test)
 add_test(NAME ConfigValidatorInterfaceTest COMMAND dasall_config_validator_interface_unit_test)
 set_tests_properties(ConfigValidatorInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_config_validator_unit_test
+  ConfigValidatorTest.cpp
+)
+
+target_link_libraries(dasall_config_validator_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_config_validator_unit_test)
+
+add_test(NAME ConfigValidatorTest COMMAND dasall_config_validator_unit_test)
+set_tests_properties(ConfigValidatorTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_config_snapshot_store_interface_unit_test
   ConfigSnapshotStoreInterfaceTest.cpp
 )

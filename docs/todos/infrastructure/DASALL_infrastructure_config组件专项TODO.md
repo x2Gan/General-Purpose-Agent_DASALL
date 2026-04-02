@@ -165,7 +165,7 @@
 | CFG-TODO-007 | Done | 实现 ConfigCenterFacade 生命周期骨架 | config 设计 6.2/6.7；设计映射 7 | 6.2 ConfigCenterFacade；6.7 启动流程 | L2 | infra/src/config/ConfigCenterFacade.cpp | load_layers 主链、get_typed 查询入口、apply_override/rollback 入口 | unit：未初始化/初始化后路径；contract：错误码映射入口 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest | CFG-TODO-001、CFG-TODO-006 | startup_context 类型细节未冻结 | 首版使用最小上下文结构占位 | Facade 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigCenterFacade.h、infra/src/config/ConfigCenterFacade.cpp、tests/unit/infra/ConfigCenterFacadeTest.cpp，并完成 infra/tests CMake 注册 | 仅当主链入口可走通且失败路径可判定时完成 |
 | CFG-TODO-008 | Done | 实现 ConfigLoader 四层读取骨架 | config 设计 6.2/6.7/6.9 | 6.7 启动流程第 2 步；6.9 配置层级 | L3 | infra/src/config/ConfigLoader.cpp | load_default/load_profile/load_deploy/load_runtime_overlay | unit：四层读取顺序与 source_id/version | ctest --test-dir build-ci -R ConfigLoaderTest | CFG-TODO-002、CFG-TODO-006 | profiles 键空间规范待确认 | 先按既有键名前缀读取，保留映射层 | Loader 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigLoader.h、infra/src/config/ConfigLoader.cpp、tests/unit/infra/ConfigLoaderTest.cpp，并完成 infra/tests CMake 注册 | 仅当四层均可加载且顺序符合锚点时完成 |
 | CFG-TODO-009 | Done | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigMerger.h、infra/src/config/ConfigMerger.cpp、tests/unit/infra/ConfigMergerTest.cpp，并完成 infra/tests CMake 注册 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
-| CFG-TODO-010 | Not Started | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试 | 仅当非法配置被拒绝且错误可定位时完成 |
+| CFG-TODO-010 | Done | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigValidator.h、infra/src/config/ConfigValidator.cpp、tests/unit/infra/ConfigValidatorTest.cpp，并完成 infra/tests CMake 注册 | 仅当非法配置被拒绝且错误可定位时完成 |
 | CFG-TODO-011 | Not Started | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测 | 仅当失败时可回退到 LKG 且测试通过时完成 |
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
 | CFG-TODO-013 | Blocked | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | CFG-BLK-001 | 先冻结事件总线最小抽象与订阅语义 | 发布骨架或阻塞记录 | 仅当事件总线抽象冻结后，状态才可由 Blocked 改为 Not Started |
@@ -784,3 +784,59 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R ConfigMergerTest` 回填新增测试注册证据。
 4. TODO 证据回写：已回写任务状态、交付物与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 ConfigMerger 代码、测试、CMake 注册与 TODO 证据文档，不混入后续 010~011 改动。
+
+## 22. 本轮执行记录（2026-04-02 / CFG-TODO-010）
+
+### 22.1 选中任务
+
+1. 本轮任务：CFG-TODO-010。
+2. 可执行性依据：CFG-TODO-003、CFG-TODO-006 已完成，IConfigValidator 与 ConfigErrors 已冻结，且 008/009 已提供可复用的 key 路径与合并输出载体，足以在本轮落最小规则集与 patch 守卫。
+
+### 22.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.7 已明确 ConfigValidator 位于 merge 之后、commit 之前，负责 snapshot 规则校验与 validate_patch 先验校验。
+2. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.9 已冻结 infra.config.* 默认策略键：watch、cache、validation、runtime_patch、rollback、source.external。
+3. infra/include/config/IConfigValidator.h 已冻结 validate(snapshot) 与 validate_patch(current_snapshot, patch) 两个入口，以及 ConfigValidationReport/Result 的 locatable issue 契约。
+
+外部参考：
+
+1. Azure Architecture Center 的 External Configuration Store pattern 提醒配置接口需要在 typed/structured 数据之上对错误、缺失和作用域冲突给出可判定反馈；本轮据此把 ConfigValidator 收敛为“类型、范围、互斥 + allowlist patch 守卫”的最小规则集，而不提前引入 DSL 或复杂策略编排。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigValidator.h/ConfigValidator.cpp，落 validate/validate_patch、规则 issue 报告、错误码映射选择；同时将 defaults fallback 键名校正到冻结的 infra.config 命名空间，保证后续规则校验可直接复用。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigValidator.h、infra/src/config/ConfigValidator.cpp，并接入 infra/CMakeLists.txt；同步校正 infra/src/config/ConfigLoader.cpp 的 defaults fallback 键路径。
+   - 测试目标：新增 tests/unit/infra/ConfigValidatorTest.cpp，覆盖 snapshot 类型/范围/互斥校验与 patch allowlist/type 守卫；回归执行 ConfigLoaderTest、ConfigMergerTest；contract 执行 ConfigErrorMappingContractTest。
+   - 验收命令：ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest"。
+3. D Gate：PASS。
+
+### 22.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigValidator.h：新增 ConfigValidator 实现类头文件。
+2. infra/src/config/ConfigValidator.cpp：实现类型、范围、互斥规则校验与 runtime patch allowlist/protected path/base_version 守卫。
+3. tests/unit/infra/ConfigValidatorTest.cpp：覆盖合法 snapshot/patch 正例，以及类型、范围、互斥、allowlist 拒绝负例。
+4. infra/src/config/ConfigLoader.cpp：将 built-in defaults fallback 键名修正为冻结的 infra.config 命名空间，并补齐 watch/cache/runtime_patch/rollback/source.external 默认键。
+5. tests/unit/infra/ConfigMergerTest.cpp：同步回归到 infra.config 命名空间键路径。
+6. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成 ConfigValidator 源文件、public header 与 unit 测试注册。
+
+验收结果：
+
+1. `cmake --build build-ci --target dasall_config_loader_unit_test`：通过。
+2. `cmake --build build-ci --target dasall_config_merger_unit_test`：通过。
+3. `cmake --build build-ci --target dasall_config_validator_unit_test`：通过。
+4. `cmake --build build-ci --target dasall_contract_config_error_mapping_test`：通过。
+5. `ctest --test-dir build-ci -N -R "ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigErrorMappingContractTest"`：通过，发现 4 个测试。
+6. `ctest --test-dir build-ci --output-on-failure -R "ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigErrorMappingContractTest"`：通过，4/4 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：仅保留 defaults fallback 的必要实现说明；validator 规则与 issue 语义由 key/code 命名直接表达，无需额外冗余注释。
+2. 正负例覆盖：unit 覆盖 snapshot 正例、类型/范围/互斥负例、patch allowlist 拒绝负例；contract 回归覆盖 ConfigErrors 映射冻结。
+3. 测试发现性：已通过 `ctest -N -R "ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigErrorMappingContractTest"` 回填发现性证据。
+4. TODO 证据回写：已回写任务状态、命名空间修正动作与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 ConfigValidator 代码、相关回归修正、测试、CMake 注册与 TODO 证据文档，不混入后续 011 改动。

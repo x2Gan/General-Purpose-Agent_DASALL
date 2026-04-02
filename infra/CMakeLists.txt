@@ -5,6 +5,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/config/ConfigCenterFacade.cpp
   src/config/ConfigLoader.cpp
   src/config/ConfigMerger.cpp
+  src/config/ConfigValidator.cpp
   src/plugin/PluginManager.cpp
 )
 
@@ -69,6 +70,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/config/ConfigLoader.h
   include/config/ConfigMerger.h
   include/config/IConfigValidator.h
+  include/config/ConfigValidator.h
   include/config/IConfigSnapshotStore.h
   include/config/IConfigPublisher.h
   include/diagnostics/DiagnosticsErrors.h

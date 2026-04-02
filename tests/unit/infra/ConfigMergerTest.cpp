@@ -83,17 +83,19 @@ void test_config_merger_applies_linear_priority_and_records_source_chain() {
   write_text_file(deploy_path,
                   "ops_policy:\n"
                   "  log_level: debug\n"
-                  "infra_config:\n"
-                  "  watch:\n"
-                  "    debounce_ms: 750\n");
+                  "infra:\n"
+                  "  config:\n"
+                  "    watch:\n"
+                  "      debounce_ms: 750\n");
 
   const std::filesystem::path runtime_overlay_path = workspace_root / "runtime" / "overlay.yaml";
   write_text_file(runtime_overlay_path,
                   "ops_policy:\n"
                   "  log_level: error\n"
-                  "infra_config:\n"
-                  "  watch:\n"
-                  "    enabled: false\n");
+                  "infra:\n"
+                  "  config:\n"
+                  "    watch:\n"
+                  "      enabled: false\n");
 
   ConfigLoader loader(ConfigLoaderOptions{
       .repository_root = repository_root(),
@@ -129,7 +131,7 @@ void test_config_merger_applies_linear_priority_and_records_source_chain() {
                   profile_id_entry->source_kind == ConfigSourceKind::Profile,
               "ConfigMerger should keep profile-only keys in the merged snapshot data");
 
-  const auto* debounce_entry = find_entry(merged.snapshot.data, "infra_config.watch.debounce_ms");
+  const auto* debounce_entry = find_entry(merged.snapshot.data, "infra.config.watch.debounce_ms");
   assert_true(debounce_entry != nullptr && debounce_entry->serialized_value == "750" &&
                   debounce_entry->source_kind == ConfigSourceKind::DeploymentOverride,
               "ConfigMerger should retain deployment overrides for keys not replaced by runtime overlay");

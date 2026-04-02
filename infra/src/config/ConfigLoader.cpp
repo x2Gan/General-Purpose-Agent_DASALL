@@ -339,9 +339,27 @@ struct ParsedYamlDocument {
 [[nodiscard]] ConfigLoadResult parse_default_layer() {
   // Repo-scoped defaults assets are not frozen yet, so v1 keeps a minimal built-in defaults layer.
   std::istringstream defaults_stream(R"(schema_version: 1
-infra_config:
-  validation:
-    strict: true
+infra:
+  config:
+    watch:
+      enabled: true
+      debounce_ms: 500
+    cache:
+      ttl_ms: 30000
+      stale_read_allowed: true
+    validation:
+      strict: true
+    runtime_patch:
+      enabled: true
+      allowlist:
+        - infra.config.watch.
+        - ops_policy.log_level
+    rollback:
+      enabled: true
+    source:
+      external:
+        enabled: false
+        timeout_ms: 1000
 ops_policy:
   log_level: warn
 runtime_budget:
