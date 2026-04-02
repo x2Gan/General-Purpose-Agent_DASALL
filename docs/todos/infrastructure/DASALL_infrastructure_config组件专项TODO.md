@@ -172,7 +172,7 @@
 | CFG-TODO-014 | Done | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 无 | 保留最小 non-empty 源文件过渡 | CMake 接线、构建记录；2026-04-02 已确认 infra/CMakeLists.txt 纳入 ConfigCenterFacade/Publisher/Loader/Merger/Validator/SnapshotStore 源文件与对应 public headers，并完成 dasall_infra 构建验收 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Done | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 顶层 unit/contract 注册入口、执行记录；2026-04-02 已补齐 dasall_config_publisher_unit_test 到 tests/unit/CMakeLists.txt，确认 config unit/contract 入口可发现并通过聚合验收 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
 | CFG-TODO-016 | Done | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-04-02 已由 CFG-BLK-002 解阻；INF-BLK-06 已先行清理顶层拓扑） | v1 observability sink 已冻结为 logger+audit 必选、metrics/tracing 后续扩展 | config integration 拓扑、observability integration、执行记录；2026-04-02 已落盘 tests/integration/infra/config/CMakeLists.txt、tests/integration/infra/config/ConfigObservabilityIntegrationTest.cpp，并完成顶层 integration 目标注册 | 仅当 integration 用例可发现并可执行时完成 |
-| CFG-TODO-017 | Not Started | 回写 config 质量门与交付证据 | config 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md | process test：门禁结论、阻塞变化、回退执行证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论与对应命令证据时完成 |
+| CFG-TODO-017 | Done | 回写 config 质量门与交付证据 | config 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md | process test：门禁结论、阻塞变化、回退执行证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-015 | 无 | 无 | 质量门结论、风险/回退更新、执行记录；2026-04-02 已回写 9.1/9.2/10/11 与本轮执行记录，汇总 config unit/contract/integration 证据和 blocker 变化 | 仅当每个门禁项都有通过/失败结论与对应命令证据时完成 |
 
 ## 7. 执行顺序建议
 
@@ -214,27 +214,36 @@
 
 | 用途 | 命令 |
 |---|---|
-| 配置构建目录 | cmake -S . -B build-ci -G Ninja |
+| 配置构建目录 | cmake -S . -B build-ci -G "Unix Makefiles" |
 | 构建 infra | cmake --build build-ci --target dasall_infra |
 | 执行 unit 套件 | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit |
 | 执行 contract 套件 | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract |
 | 检查测试发现性 | ctest --test-dir build-ci -N |
 | 点测 config 测试（设计建议） | ctest --test-dir build-ci -R "ConfigCenterFacadeTest|ConfigLoaderTest|ConfigMergerTest|ConfigValidatorTest|ConfigSnapshotStoreTest|ConfigErrorMappingContractTest" |
+| 点测 config integration（016 已回填） | ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" |
 
 说明：
 
-1. integration 验收命令当前不纳入首轮 Gate，原因是 CFG-TODO-016 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
-2. 每项任务至少需要一条构建命令与一条测试命令。
+1. integration 验收命令已由 CFG-TODO-016 在 29.3 回填；017 保留 `ctest --test-dir build-ci -N` 作为总发现性门，并通过顶层发现清单确认两条 config integration 用例仍处于可见状态。
+2. CFG-TODO-017 的总 gate 命令为 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`；integration 执行结果回链到 29.3。
+3. 每项任务至少需要一条构建命令与一条测试命令。
 
-### 9.2 质量门逐项回答
+### 9.2 质量门逐项回答（2026-04-02 收口）
 
-1. 是否给出 Design -> TODO 映射，而不是仅列标题：是。
-2. 是否明确当前最细可达到粒度等级：是（L2 为主，局部 L3）。
-3. 是否所有任务都具备代码目标 + 测试目标 + 验收命令：是。
-4. 是否所有 Blocked 项都带证据与解阻条件：是。
-5. 是否所有任务都具备可二值判定完成标准：是。
-6. 是否避免跨子系统扩张：是。
-7. 是否真正落到接口/数据结构级对象：是。
+| Gate ID | 当前结论 | 证据命令 | 证据摘要 |
+|---|---|---|---|
+| CFG-GATE-01 | Pass | `cmake --build build-ci --target dasall_infra`（见 26.3） | IConfigCenter/IConfigLoader/IConfigValidator/IConfigSnapshotStore/IConfigPublisher、ConfigTypes 与 config 主链实现均已落盘，并通过 infra 构建验收。 |
+| CFG-GATE-02 | Pass | `ctest --test-dir build-ci --output-on-failure -L unit` | unit 102/102 通过；其中 ConfigLoaderTest、ConfigMergerTest 均在本轮 gate 扫描中通过，四层覆盖顺序仍受回归保护。 |
+| CFG-GATE-03 | Pass | `ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract` | ConfigValidatorTest、ConfigErrorsTest、ConfigErrorMappingContractTest 均通过；ConfigObservabilityIntegrationTest 已在 29.3 验证 logger+audit 可观测链路。 |
+| CFG-GATE-04 | Pass | `ctest --test-dir build-ci --output-on-failure -L unit` | ConfigSnapshotStoreTest 与 ConfigCenterFacadeTest 在 102 个 unit 中通过，LKG 与 rollback token 路径具备回归证据。 |
+| CFG-GATE-05 | Pass | `ctest --test-dir build-ci -N` | 顶层发现性为 236 个测试；其中 config 相关测试共 19 个，包含 13 个 unit、4 个 contract、2 个 integration。 |
+| CFG-GATE-06 | Pass | 文档复核 + 28.3/29.3 交付记录 | CFG-TODO-014~017 与 CFG-BLK-002 收口过程中未变更公开接口签名和 contracts 映射；本轮仅回写 gate/风险/证据文档。 |
+| CFG-GATE-07 | Pass | `ctest --test-dir build-ci -N` + 29.3 的 `ctest --test-dir build-ci --output-on-failure -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest"` | ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest 已进入顶层发现清单，并在 29.3 完成 2/2 通过。 |
+
+补充结论：
+
+1. Blocker 变化：CFG-BLK-001、CFG-BLK-002、CFG-BLK-004 均已解阻并有独立执行记录；CFG-BLK-003（secret 接口）与 CFG-BLK-005（持久化后端）仍为后续设计/实现缺口，但不阻塞 001~017 当前 gate。
+2. 交付证据：截至本轮，config 组件已形成接口/对象、主链实现、unit/contract/integration 拓扑与 gate 证据闭环。
 
 ## 10. 风险与回退策略
 
@@ -244,23 +253,21 @@
 | 运行时覆盖越权 | High | 非白名单键被允许 apply | apply_override 失败率异常或审计缺失 | 立即关闭 runtime_patch.enabled，回退到部署层 |
 | 错误码语义漂移 | High | ConfigErrors 与 contracts 映射不一致 | Contract 测试失败 | 回退错误映射并冻结变更 |
 | LKG 回退不可用 | High | 快照提交失败后无法 rollback | SnapshotStoreTest 失败 | 回退到上一稳定版本并仅允许只读查询 |
-| 审计桥接长期阻塞 | Medium | CFG-BLK-002 长期未解 | 高风险键变更无审计证据 | 暂时提高日志与指标等级并限制高风险键变更 |
-| integration 用例缺失导致质量盲区 | Medium | config 组件 integration 用例长期未落盘 | ctest -N 无 config integration 用例 | 将 integration 任务保持 Not Started，并优先补齐组件用例 |
+| v1 observability sink 扩展滞后 | Medium | 后续任务把 metrics/tracing 当作 v1 必选 sink 强行接入 | ConfigObservabilityIntegrationTest 只覆盖 logger+audit，且 6.10.1 扩展点定义被绕过 | 保持 logger+audit 为 v1 稳定合同；metrics/tracing 单独作为后续 bridge 扩展推进 |
+| integration 注册回退导致质量盲区 | Medium | config integration 目标从顶层发现清单消失 | `ctest --test-dir build-ci -N` 不再出现 ConfigRuntimePatchIntegrationTest 或 ConfigObservabilityIntegrationTest | 回退到 tests/integration/infra/config 最近稳定拓扑并重跑 29.3 的 integration 命令 |
 
 ## 11. 可行性结论
 
-1. 结论：可直接生成并执行接口/数据结构级专项 TODO，局部可进入函数骨架级；不建议在本轮全面进入细节函数实现级。
-2. 原因：
-   - 已具备核心接口清单与对象字段定义。
-   - 已具备主流程、异常流程和错误码语义。
-   - 已具备落盘目录与测试出口建议。
-   - 事件总线、secret 接口、config integration 用例落盘仍有关键缺口。
-3. 当前最小可执行粒度：接口 / 数据结构（L2），局部函数骨架（L3）。
-4. 未达到全量函数级的缺口：事件总线抽象、secret 对齐接口、持久化后端、config integration 用例落盘。
+1. 结论：截至 2026-04-02，config 组件 CFG-TODO-001~017 已形成可编译、可测试、可发现、可回退的 v1 骨架闭环；014~017 已全部完成，不再存在阻塞当前收口的前置缺口。
+2. 当前已闭环能力：
+   - 接口、对象、错误码、ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore/Publisher 全部落盘。
+   - infra、unit、contract、integration 注册入口全部接线；`ctest --test-dir build-ci -N` 可发现 236 个测试，其中 config 相关 19 个，包含 2 个 integration 用例。
+   - unit 102/102、contract 127/127、config integration 2/2 均已通过。
+3. 当前剩余缺口：CFG-BLK-003 对应的 secret:// 解析接口仍未冻结；CFG-BLK-005 对应的持久化后端策略仍待设计；metrics/tracing 仍是 ConfigAuditBridge v1 之后的扩展项。
+4. 当前最小稳定交付粒度：L2/L3 骨架 + config integration 拓扑 + gate 证据回写。
 5. 下一步建议：
-   - 继续执行 CFG-TODO-002~005、007~012、014~015 建立可编译可测试骨架。
-   - 并行推进 CFG-BLK-001/004 解阻，完成发布与 integration 准入。
-   - 阻塞解除后再推进 CFG-TODO-013 与后续桥接任务，最后执行 CFG-TODO-017 证据收口。
+   - 若继续推进 config v2，优先解 CFG-BLK-003 与 CFG-BLK-005，再补 SecretRefResolver 与持久化后端实现。
+   - 若继续推进 observability bridge，保持 logger+audit v1 合同稳定，再单独引入 metrics/tracing 扩展，不回改 016 的 gate 定义。
 
 ## 12. 本轮执行记录（2026-03-30 / CFG-TODO-006）
 
@@ -1204,3 +1211,51 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest"` 回填新增 integration 用例发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物路径与验收结果。
 5. 提交隔离：本轮提交范围限定为 integration 目录/CMake 改动、observability integration 用例与 TODO 证据文档，不混入 017 的质量门收口。
+
+## 30. 本轮执行记录（2026-04-02 / CFG-TODO-017）
+
+### 30.1 选中任务
+
+1. 本轮任务：CFG-TODO-017。
+2. 可执行性依据：CFG-TODO-015 已完成 unit/contract 聚合，CFG-TODO-016 已完成 integration 拓扑与用例落盘，当前只需把最终质量门、阻塞变化和回退证据回写到 TODO 文档即可完成收口。
+
+### 30.2 研究与 Design 结论
+
+本地证据：
+
+1. 7.2 已定义 CFG-GATE-01~07 七个 config 必过门禁，但 9.2 仍停留在初版“是否覆盖”回答，尚未回写当前通过/失败结论。
+2. 29.3 已给出 ConfigRuntimePatchIntegrationTest 与 ConfigObservabilityIntegrationTest 的 discoverable + executable 证据，可作为 CFG-GATE-07 的回链来源。
+3. 10/11 仍保留 CFG-BLK-002 未解、integration 用例未落盘阶段的风险与可行性表述，需要和当前代码现实同步。
+
+D 结论：
+
+1. Design -> Build 映射：CFG-TODO-017 只修改本 TODO 文档，回写 9.1 验收命令基线、9.2 门禁逐项结论、10 风险与回退策略、11 当前可行性结论，以及本轮执行记录。
+2. Process 三件套：
+   - 文档目标：更新 docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md 的 gate、风险、结论与执行记录。
+   - 验证目标：执行 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`，并回链 29.3 的 config integration 结果。
+   - 完成标准：每个 gate 均具备 Pass/Fail 结论、命令证据和 blocker/rollback 说明。
+3. D Gate：PASS。
+
+### 30.3 Build/Process 交付与证据
+
+交付物：
+
+1. 9.1：修正当前可执行的构建目录基线，并补充 config integration 点测命令与 016/017 的证据分工。
+2. 9.2：按 CFG-GATE-01~07 回写逐项门禁结论、命令证据与摘要。
+3. 10：把已过期的“审计桥接长期阻塞”“integration 用例缺失”风险更新为当前残余风险。
+4. 11：把初版可行性结论更新为截至 2026-04-02 的 config v1 骨架闭环结论。
+
+验收结果：
+
+1. `ctest --test-dir build-ci -N`：通过；顶层共发现 236 个测试，其中 config 相关测试 19 个，包含 13 个 unit、4 个 contract、2 个 integration。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，102/102 tests passed；其中 ConfigCenterInterfaceTest、ConfigCenterFacadeTest、ConfigLoaderTest、ConfigMergerTest、ConfigValidatorTest、ConfigSnapshotStoreTest、ConfigPublisherTest、ConfigErrorsTest 均在本轮 gate 中通过。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，127/127 tests passed；其中 ConfigTypesBoundaryContractTest、ConfigCenterInterfaceBoundaryContractTest、ConfigValidatorInterfaceBoundaryContractTest、ConfigErrorMappingContractTest 均在本轮 gate 中通过。
+4. integration 回链：29.3 已验证 ConfigRuntimePatchIntegrationTest 与 ConfigObservabilityIntegrationTest 2/2 通过，本轮 `ctest --test-dir build-ci -N` 继续确认二者仍在顶层发现清单中。
+
+Build/Process 合规复核：
+
+1. 门禁覆盖：CFG-GATE-01~07 均已给出明确 Pass 结论和对应证据命令。
+2. 阻塞变化：CFG-BLK-001、CFG-BLK-002、CFG-BLK-004 已解除；CFG-BLK-003、CFG-BLK-005 仍保留为后续设计/实现缺口，但已从当前 gate 阻塞集中移除。
+3. 回退证据：ConfigSnapshotStoreTest 与 ConfigCenterFacadeTest 已在本轮 unit gate 中通过，可支撑 LKG/rollback token 回退路径；若后续 gate 回退，则按 10 节策略关闭 runtime patch 或回退到上一稳定 snapshot。
+4. TODO 证据回写：已同步更新任务状态、门禁结果、风险表和当前可行性结论。
+5. 提交隔离：本轮应保持 docs-only 提交，不混入任何代码或测试实现改动。
