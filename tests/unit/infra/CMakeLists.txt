@@ -718,6 +718,21 @@ dasall_apply_common_options(dasall_health_monitor_interface_unit_test)
 add_test(NAME HealthMonitorInterfaceTest COMMAND dasall_health_monitor_interface_unit_test)
 set_tests_properties(HealthMonitorInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_watchdog_service_interface_unit_test
+  watchdog/WatchdogServiceInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_watchdog_service_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_watchdog_service_interface_unit_test)
+
+add_test(NAME WatchdogServiceInterfaceTest COMMAND dasall_watchdog_service_interface_unit_test)
+set_tests_properties(WatchdogServiceInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )
