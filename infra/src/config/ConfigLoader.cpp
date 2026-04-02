@@ -48,7 +48,7 @@ struct ParsedYamlDocument {
 }
 
 [[nodiscard]] std::string join_path(const std::vector<std::pair<std::size_t, std::string>>& path,
-                                    std::string_view leaf_key) {
+                                    const std::string_view& leaf_key) {
   std::ostringstream stream;
   bool first = true;
 
@@ -154,7 +154,7 @@ struct ParsedYamlDocument {
                                    std::move(source_ref));
 }
 
-[[nodiscard]] bool is_signed_integer(std::string_view value) {
+[[nodiscard]] bool is_signed_integer(const std::string_view& value) {
   if (value.empty()) {
     return false;
   }
@@ -172,15 +172,15 @@ struct ParsedYamlDocument {
                      [](unsigned char ch) { return std::isdigit(ch) != 0; });
 }
 
-[[nodiscard]] bool is_unsigned_integer(std::string_view value) {
+[[nodiscard]] bool is_unsigned_integer(const std::string_view& value) {
   return !value.empty() &&
          std::all_of(value.begin(), value.end(), [](unsigned char ch) {
            return std::isdigit(ch) != 0;
          });
 }
 
-[[nodiscard]] ConfigValueType infer_value_type(std::string_view key_path,
-                                               std::string_view serialized_value,
+[[nodiscard]] ConfigValueType infer_value_type(const std::string_view& key_path,
+                                               const std::string_view& serialized_value,
                                                bool is_list) {
   if (is_list) {
     return ConfigValueType::StringList;
@@ -253,14 +253,14 @@ struct ParsedYamlDocument {
 
 [[nodiscard]] ConfigLayerDocument make_layer_document(ConfigSourceKind source_kind,
                                                       ConfigDocumentFormat document_format,
-                                                      std::string source_id,
+                            const std::string& source_id,
                                                       std::string version_ref,
                                                       std::vector<TypedConfig> entries) {
   return ConfigLayerDocument{
       .layer_ref = ConfigLayerRef{
           .source_kind = source_kind,
           .document_format = document_format,
-          .source_id = source_id,
+      .source_id = source_id,
           .version_ref = std::move(version_ref),
           .schema_version = std::string(kConfigSchemaVersionV1),
       },
@@ -270,7 +270,7 @@ struct ParsedYamlDocument {
 
 [[nodiscard]] std::optional<std::filesystem::path> try_resolve_source_path(
     const std::filesystem::path& repository_root,
-    std::string_view source_ref) {
+    const std::string_view& source_ref) {
   if (source_ref.empty()) {
     return std::nullopt;
   }

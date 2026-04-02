@@ -23,8 +23,8 @@ constexpr std::string_view kPublisherSourceRef = "ConfigPublisher";
 
 }  // namespace
 
-bool ConfigPublisher::matches_namespace_filter(std::string_view key_path,
-                                               std::string_view namespace_filter) {
+bool ConfigPublisher::matches_namespace_filter(const std::string_view& key_path,
+                                               const std::string_view& namespace_filter) {
   return key_path.starts_with(namespace_filter);
 }
 

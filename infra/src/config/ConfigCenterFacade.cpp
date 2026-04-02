@@ -14,7 +14,8 @@ constexpr std::string_view kFacadeSourceRef = "ConfigCenterFacade";
 constexpr std::string_view kSnapshotTimestamp = "2026-04-02T00:00:00Z";
 constexpr std::string_view kFallbackSourceId = "config://fallback";
 
-[[nodiscard]] std::string make_layer_version_ref(std::string_view prefix, std::uint64_t version) {
+[[nodiscard]] std::string make_layer_version_ref(const std::string_view& prefix,
+                                                 std::uint64_t version) {
   return std::string(prefix) + "@" + std::to_string(version);
 }
 
@@ -134,7 +135,7 @@ constexpr std::string_view kFallbackSourceId = "config://fallback";
 
 [[nodiscard]] std::vector<TypedConfig>::const_iterator find_config_entry(
     const ConfigSnapshot& snapshot,
-    std::string_view key_path,
+    const std::string_view& key_path,
     ConfigValueType expected_type) {
   return std::find_if(snapshot.data.begin(), snapshot.data.end(), [&](const TypedConfig& entry) {
     return entry.key_path == key_path && entry.value_type == expected_type;

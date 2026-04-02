@@ -24,8 +24,8 @@ class ConfigPublisher final : public IConfigPublisher {
     ConfigChangedCallback callback;
   };
 
-  [[nodiscard]] static bool matches_namespace_filter(std::string_view key_path,
-                                                     std::string_view namespace_filter);
+  [[nodiscard]] static bool matches_namespace_filter(const std::string_view& key_path,
+                                                     const std::string_view& namespace_filter);
 
   std::uint64_t next_subscription_id_ = 1;
   std::vector<SubscriptionRecord> subscriptions_;

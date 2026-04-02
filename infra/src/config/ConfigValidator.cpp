@@ -39,7 +39,7 @@ void append_issue(ConfigValidationReport& report,
   });
 }
 
-[[nodiscard]] std::optional<ConfigValueType> expected_type_for_key(std::string_view key_path) {
+[[nodiscard]] std::optional<ConfigValueType> expected_type_for_key(const std::string_view& key_path) {
   if (key_path == "infra.config.watch.enabled" ||
       key_path == "infra.config.cache.stale_read_allowed" ||
       key_path == "infra.config.validation.strict" ||
@@ -61,7 +61,7 @@ void append_issue(ConfigValidationReport& report,
   return std::nullopt;
 }
 
-[[nodiscard]] std::optional<bool> parse_bool(std::string_view serialized_value) {
+[[nodiscard]] std::optional<bool> parse_bool(const std::string_view& serialized_value) {
   if (serialized_value == "true") {
     return true;
   }
@@ -73,7 +73,8 @@ void append_issue(ConfigValidationReport& report,
   return std::nullopt;
 }
 
-[[nodiscard]] std::optional<std::uint64_t> parse_unsigned_integer(std::string_view serialized_value) {
+[[nodiscard]] std::optional<std::uint64_t> parse_unsigned_integer(
+    const std::string_view& serialized_value) {
   std::uint64_t value = 0;
   const auto* begin = serialized_value.data();
   const auto* end = serialized_value.data() + serialized_value.size();
@@ -85,7 +86,7 @@ void append_issue(ConfigValidationReport& report,
   return value;
 }
 
-[[nodiscard]] std::vector<std::string> parse_string_list(std::string_view serialized_value) {
+[[nodiscard]] std::vector<std::string> parse_string_list(const std::string_view& serialized_value) {
   std::vector<std::string> values;
   if (serialized_value.size() < 2U || serialized_value.front() != '[' ||
       serialized_value.back() != ']') {
@@ -117,7 +118,8 @@ void append_issue(ConfigValidationReport& report,
   return values;
 }
 
-[[nodiscard]] const TypedConfig* find_entry(const ConfigSnapshot& snapshot, std::string_view key_path) {
+[[nodiscard]] const TypedConfig* find_entry(const ConfigSnapshot& snapshot,
+                                            const std::string_view& key_path) {
   const auto entry = std::find_if(snapshot.data.begin(), snapshot.data.end(), [&](const TypedConfig& candidate) {
     return candidate.key_path == key_path;
   });
@@ -128,7 +130,7 @@ void append_issue(ConfigValidationReport& report,
   return &(*entry);
 }
 
-[[nodiscard]] ConfigErrorCode error_code_for_issue(std::string_view issue_code) {
+[[nodiscard]] ConfigErrorCode error_code_for_issue(const std::string_view& issue_code) {
   if (issue_code.starts_with("cfg_type_")) {
     return ConfigErrorCode::TypeMismatch;
   }
@@ -198,7 +200,7 @@ void validate_mutual_exclusion(const ConfigSnapshot& snapshot, ConfigValidationR
   }
 }
 
-[[nodiscard]] bool key_matches_allowlist(std::string_view key_path,
+[[nodiscard]] bool key_matches_allowlist(const std::string_view& key_path,
                                          const std::vector<std::string>& allowlist) {
   if (allowlist.empty()) {
     return false;
