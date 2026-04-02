@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "config/ConfigPublisher.h"
 #include "config/IConfigCenter.h"
 
 namespace dasall::infra::config {
@@ -31,19 +32,13 @@ class ConfigCenterFacade final : public IConfigCenter {
     ConfigSnapshot snapshot;
   };
 
-  struct SubscriptionRecord {
-    ConfigSubscriptionHandle handle;
-    ConfigChangedCallback callback;
-  };
-
   [[nodiscard]] bool is_ready() const;
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   std::uint64_t next_version_ = 1;
-  std::uint64_t next_subscription_id_ = 1;
   ConfigSnapshot current_snapshot_;
   std::vector<RollbackRecord> rollback_records_;
-  std::vector<SubscriptionRecord> subscriptions_;
+  ConfigPublisher publisher_;
 };
 
 }  // namespace dasall::infra::config

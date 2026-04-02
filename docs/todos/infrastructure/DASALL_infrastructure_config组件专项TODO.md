@@ -168,7 +168,7 @@
 | CFG-TODO-010 | Done | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigValidator.h、infra/src/config/ConfigValidator.cpp、tests/unit/infra/ConfigValidatorTest.cpp，并完成 infra/tests CMake 注册 | 仅当非法配置被拒绝且错误可定位时完成 |
 | CFG-TODO-011 | Done | 实现 ConfigSnapshotStore 快照与 LKG 骨架 | config 设计 6.2/6.7/6.8 | 6.7 提交 current 与 LKG；6.8 回退动作 | L2 | infra/src/config/ConfigSnapshotStore.cpp | commit/get_current/get_by_version/get_last_known_good | unit：版本单调递增、LKG 可回退 | ctest --test-dir build-ci -R ConfigSnapshotStoreTest | CFG-TODO-004、CFG-TODO-006 | 持久化后端未定 | 首版实现内存快照与启动导入 | SnapshotStore 骨架、单测；2026-04-02 已落盘 infra/include/config/ConfigSnapshotStore.h、infra/src/config/ConfigSnapshotStore.cpp、tests/unit/infra/ConfigSnapshotStoreTest.cpp，并完成 infra/tests CMake 注册 | 仅当失败时可回退到 LKG 且测试通过时完成 |
 | CFG-TODO-012 | Done | 定义 ConfigErrors 错误码域与映射 | config 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/config/ConfigErrors.h | INF_CFG_E_NOT_FOUND, INF_CFG_E_TYPE_MISMATCH, INF_CFG_E_INVALID_SCHEMA, INF_CFG_E_CONFLICT, INF_CFG_E_SOURCE_UNAVAILABLE, INF_CFG_E_SECRET_RESOLVE_FAIL, INF_CFG_E_APPLY_REJECTED, INF_CFG_E_ROLLBACK_FAILED | contract：映射 contracts::ResultCode；unit：错误码稳定 | ctest --test-dir build-ci -R ConfigErrorMappingContractTest | CFG-TODO-001、CFG-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-03-31 已落盘 infra/include/config/ConfigErrors.h、tests/unit/infra/ConfigErrorsTest.cpp、tests/contract/smoke/ConfigErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 8 个错误码均有锚点且映射测试通过时完成 |
-| CFG-TODO-013 | Not Started | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | 无（2026-04-02 已由 CFG-BLK-001 解阻） | v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义 | 发布骨架或阻塞记录 | 仅当 ConfigChanged 发布与命名空间过滤订阅均可被 integration 用例验证时完成 |
+| CFG-TODO-013 | Done | 实现 ConfigPublisher 运行时覆盖发布骨架 | config 设计 6.2/6.7/6.8；设计映射 7 | 6.7 运行时覆盖与 ConfigChanged 事件 | L2 | infra/src/config/ConfigPublisher.cpp | publish_config_changed(diff), namespace filter subscribe | integration：ConfigRuntimePatchIntegrationTest | ctest --test-dir build-ci -R ConfigRuntimePatchIntegrationTest | CFG-TODO-005、CFG-TODO-006、CFG-TODO-010、CFG-TODO-011 | 无（2026-04-02 已由 CFG-BLK-001 解阻） | v1 事件抽象已冻结为进程内 publish + namespace-filtered subscribe 语义 | 发布骨架、单测、integration；2026-04-02 已落盘 infra/include/config/ConfigPublisher.h、infra/src/config/ConfigPublisher.cpp、tests/unit/infra/ConfigPublisherTest.cpp、tests/integration/infra/ConfigRuntimePatchIntegrationTest.cpp，并完成 infra/tests CMake 注册 | 仅当 ConfigChanged 发布与命名空间过滤订阅均可被 integration 用例验证时完成 |
 | CFG-TODO-014 | Not Started | 注册 config 代码到 infra CMake | config 设计 8.1；工程现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/include/config/、infra/src/config/ | 将 config 头文件与源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001~CFG-TODO-012 | 初期源文件渐进落盘 | 保留最小 non-empty 源文件过渡 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且构建通过时完成 |
 | CFG-TODO-015 | Not Started | 注册 config unit 与 contract 测试入口 | config 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/config/、tests/contract/CMakeLists.txt | unit：ConfigCenterFacade/Loader/Merger/Validator/SnapshotStore；contract：错误码与边界映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | CFG-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
 | CFG-TODO-016 | Not Started | 补齐 config integration 注册拓扑 | config 设计 8.1/9.1；tests 现状 | tests/integration 落盘建议 | L0 | tests/CMakeLists.txt、tests/integration/infra/config/ | integration：ConfigRuntimePatchIntegrationTest、ConfigObservabilityIntegrationTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "ConfigRuntimePatchIntegrationTest|ConfigObservabilityIntegrationTest" | CFG-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 CFG-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并可执行时完成 |
@@ -183,7 +183,7 @@
 | A 接口与对象冻结 | CFG-TODO-001~006、CFG-TODO-012 | 可并行（接口组/对象组/错误码组） | 先冻结边界，减少实现返工 |
 | B 主链路骨架 | CFG-TODO-007~011 | 串行 | facade -> loader -> merger -> validator -> snapshot |
 | C 构建与测试接线 | CFG-TODO-014~015 | 可并行 | CMake 与测试注册可同步推进 |
-| D 发布与集成 | CFG-TODO-013、CFG-TODO-016 | 串行且当前 Blocked | 先事件总线抽象，再 integration 注册 |
+| D 发布与集成 | CFG-TODO-013、CFG-TODO-016 | 串行 | 先完成 013 发布骨架，再继续 016 的后续 integration/observability 接线 |
 | E 证据收口 | CFG-TODO-017 | 串行 | 回写 gate、阻塞、回退证据 |
 
 ### 7.2 必过门禁表
@@ -943,3 +943,57 @@ Build 合规复核：
 3. 测试发现性：本轮不涉及测试注册。
 4. TODO 证据回写：已回写 blocker 解阻证据和 CFG-TODO-013 状态变化。
 5. 提交隔离：本轮提交范围限定为 config 架构设计与 TODO 阻塞台账，不混入 013 实现代码。
+
+## 25. 本轮执行记录（2026-04-02 / CFG-TODO-013）
+
+### 25.1 选中任务
+
+1. 本轮任务：CFG-TODO-013。
+2. 可执行性依据：CFG-BLK-001 已在上一轮解阻，6.6.1 已冻结 ConfigPublisher v1 为进程内 publish + namespace-filtered subscribe 抽象；CFG-TODO-005/006/010/011 已完成，运行时 diff、订阅请求、校验与快照边界均已就绪。
+
+### 25.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.6.1 已冻结 ConfigPublisher v1 需要负责 ConfigChanged 发布、订阅登记、命名空间前缀过滤，以及 `config-event://diff/<to_version>` 事件 ID 语义。
+2. infra/include/config/IConfigPublisher.h 只冻结了 `publish_config_changed(diff)` 发布回执契约，而 infra/include/config/IConfigCenter.h 已冻结 `ConfigSubscriptionRequest` 与 `ConfigSubscriptionHandle`，因此本轮无需扩大接口面，只需落具体实现类并在 Facade 中转发。
+3. infra/src/config/ConfigCenterFacade.cpp 之前在 `apply_override` 内直接维护订阅向量并做 namespace filter 回调，发布逻辑与 Facade 生命周期耦合；本轮应将该逻辑收束到独立 ConfigPublisher，以匹配 6.6.1 的最小事件抽象。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigPublisher.h/ConfigPublisher.cpp 承担订阅登记与 ConfigChanged 投递；ConfigCenterFacade 保留运行时 patch/snapshot 主链，只转发 `subscribe()` 与 `publish_config_changed()`。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigPublisher.h、infra/src/config/ConfigPublisher.cpp，并将 ConfigCenterFacade 改为依赖具体 publisher；同时更新 infra/tests integration CMake 注册。
+   - 测试目标：新增 tests/unit/infra/ConfigPublisherTest.cpp 覆盖 namespace filter、回调失败隔离与 invalid diff 负例；新增 tests/integration/infra/ConfigRuntimePatchIntegrationTest.cpp 覆盖 runtime patch -> ConfigChanged publish 主链。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_config_publisher_unit_test dasall_config_publisher_interface_unit_test dasall_config_center_facade_unit_test dasall_config_runtime_patch_integration_test`、`ctest --test-dir build-ci -N -R "ConfigPublisherTest|ConfigPublisherInterfaceTest|ConfigCenterFacadeTest|ConfigRuntimePatchIntegrationTest"`、`ctest --test-dir build-ci --output-on-failure -R "ConfigPublisherTest|ConfigPublisherInterfaceTest|ConfigCenterFacadeTest|ConfigRuntimePatchIntegrationTest"`。
+3. D Gate：PASS。
+
+边界说明：
+
+1. 本轮不引入跨进程 broker、重放、dead-letter 或独立 observability 事件；这些仍留给 v2 / CFG-TODO-016 之后的任务。
+2. 本轮不改动 IConfigPublisher 的冻结接口，只新增具体 ConfigPublisher 实现与测试，避免重新打开接口冻结任务。
+
+### 25.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigPublisher.h、infra/src/config/ConfigPublisher.cpp：新增 ConfigPublisher 具体类，实现订阅登记、namespace 前缀过滤、事件 ID 回执与回调失败隔离。
+2. infra/include/config/ConfigCenterFacade.h、infra/src/config/ConfigCenterFacade.cpp：将订阅状态与发布动作转发到 ConfigPublisher，保留现有 runtime patch/snapshot 主链。
+3. tests/unit/infra/ConfigPublisherTest.cpp：覆盖匹配/不匹配订阅、throwing callback 隔离、invalid subscription 与 invalid diff 负例。
+4. tests/integration/infra/ConfigRuntimePatchIntegrationTest.cpp：覆盖 runtime patch 触发 ConfigChanged 事件、命名空间过滤生效、throwing subscriber 不影响 apply_override 成功。
+5. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/integration/infra/CMakeLists.txt、tests/integration/CMakeLists.txt：完成 ConfigPublisher 源文件、public header、unit test 与 integration test 注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过；用于刷新新增 ConfigPublisher 与 integration 目标的构建图。
+2. `cmake --build build-ci --target dasall_config_publisher_unit_test dasall_config_publisher_interface_unit_test dasall_config_center_facade_unit_test dasall_config_runtime_patch_integration_test`：通过；新增 publisher 代码、受影响 Facade 与 integration 目标均编译成功。
+3. `ctest --test-dir build-ci -N -R "ConfigPublisherTest|ConfigPublisherInterfaceTest|ConfigCenterFacadeTest|ConfigRuntimePatchIntegrationTest"`：通过，发现 4 个测试：ConfigCenterFacadeTest、ConfigPublisherInterfaceTest、ConfigPublisherTest、ConfigRuntimePatchIntegrationTest。
+4. `ctest --test-dir build-ci --output-on-failure -R "ConfigPublisherTest|ConfigPublisherInterfaceTest|ConfigCenterFacadeTest|ConfigRuntimePatchIntegrationTest"`：通过，4/4 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：publisher 语义可由 `publish_config_changed`、`subscribe` 与测试名直接表达，无需引入额外注释噪音。
+2. 正负例覆盖：unit 覆盖命名空间命中/未命中、throwing callback 隔离、invalid subscription、invalid diff；integration 覆盖 runtime patch 主链与 subscriber failure isolation。
+3. 测试发现性：已通过 `ctest -N -R "ConfigPublisherTest|ConfigPublisherInterfaceTest|ConfigCenterFacadeTest|ConfigRuntimePatchIntegrationTest"` 回填新增测试发现性证据。
+4. TODO 证据回写：已回写任务状态、交付物路径、验收命令与边界说明。
+5. 提交隔离：本轮提交范围限定为 ConfigPublisher 代码、受影响 Facade 改动、unit/integration 测试、CMake 注册与 TODO 证据文档，不混入 016 或 observability 后续任务。

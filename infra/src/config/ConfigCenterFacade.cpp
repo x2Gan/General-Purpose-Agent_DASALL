@@ -175,7 +175,7 @@ void upsert_source_chain_layer(std::vector<ConfigLayerRef>& source_chain,
   ConfigDiff diff{
       .from_version = before.version,
       .to_version = after.version,
-    .changes = {},
+      .changes = {},
   };
 
   diff.changes.reserve(patch.patches.size());
@@ -206,12 +206,6 @@ void upsert_source_chain_layer(std::vector<ConfigLayerRef>& source_chain,
 
   return diff;
 }
-
-[[nodiscard]] bool matches_namespace_filter(std::string_view key_path,
-                                            std::string_view namespace_filter) {
-  return key_path.starts_with(namespace_filter);
-}
-
 }  // namespace
 
 bool ConfigCenterFacade::is_ready() const {
@@ -387,18 +381,7 @@ ConfigApplyResult ConfigCenterFacade::apply_override(const ConfigPatch& config_p
   ++next_version_;
 
   if (diff.is_valid()) {
-    for (const auto& subscription : subscriptions_) {
-      const bool should_deliver = std::any_of(diff.changes.begin(),
-                                              diff.changes.end(),
-                                              [&](const ConfigDiffEntry& change) {
-                                                return matches_namespace_filter(change.key_path,
-                                                                                subscription.handle
-                                                                                    .namespace_filter);
-                                              });
-      if (should_deliver) {
-        subscription.callback(diff);
-      }
-    }
+    (void)publisher_.publish_config_changed(diff);
   }
 
   return ConfigApplyResult::success(rollback_token);
@@ -436,21 +419,7 @@ ConfigApplyResult ConfigCenterFacade::rollback(const ConfigRollbackToken& rollba
 
 std::optional<ConfigSubscriptionHandle> ConfigCenterFacade::subscribe(
     const ConfigSubscriptionRequest& subscription_request) {
-  if (!subscription_request.is_valid()) {
-    return std::nullopt;
-  }
-
-  ConfigSubscriptionHandle handle{
-      .subscription_id = "subscription://config/" + std::to_string(next_subscription_id_++),
-      .namespace_filter = subscription_request.namespace_filter,
-      .subscriber_id = subscription_request.subscriber_id,
-      .active = true,
-  };
-  subscriptions_.push_back(SubscriptionRecord{
-      .handle = handle,
-      .callback = subscription_request.callback,
-  });
-  return handle;
+  return publisher_.subscribe(subscription_request);
 }
 
 }  // namespace dasall::infra::config

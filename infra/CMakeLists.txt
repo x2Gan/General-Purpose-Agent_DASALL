@@ -3,6 +3,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/InfraServiceFacade.cpp
   src/audit/AuditService.cpp
   src/config/ConfigCenterFacade.cpp
+  src/config/ConfigPublisher.cpp
   src/config/ConfigLoader.cpp
   src/config/ConfigMerger.cpp
   src/config/ConfigValidator.cpp
@@ -67,6 +68,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/config/ConfigErrors.h
   include/config/IConfigCenter.h
   include/config/ConfigCenterFacade.h
+  include/config/ConfigPublisher.h
   include/config/IConfigLoader.h
   include/config/ConfigLoader.h
   include/config/ConfigMerger.h
