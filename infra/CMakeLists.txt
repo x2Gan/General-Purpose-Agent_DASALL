@@ -2,6 +2,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
   src/audit/AuditService.cpp
+  src/config/ConfigCenterFacade.cpp
   src/plugin/PluginManager.cpp
 )
 
@@ -61,6 +62,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/config/ConfigTypes.h
   include/config/ConfigErrors.h
   include/config/IConfigCenter.h
+  include/config/ConfigCenterFacade.h
   include/config/IConfigLoader.h
   include/config/IConfigValidator.h
   include/config/IConfigSnapshotStore.h

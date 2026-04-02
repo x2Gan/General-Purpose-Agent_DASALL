@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 config 组件专项 TODO
 
-最近更新时间：2026-03-31  
+最近更新时间：2026-04-02  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/config
 
@@ -162,7 +162,7 @@
 | CFG-TODO-004 | Done | 定义 IConfigSnapshotStore 接口头文件 | config 设计 6.6/6.8 | 6.6 IConfigSnapshotStore | L2 | infra/include/config/IConfigSnapshotStore.h | commit, get_current, get_by_version, get_last_known_good | unit：版本读写入口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 持久化后端未定 | 首版以内存快照语义冻结接口 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/config/IConfigSnapshotStore.h、tests/unit/infra/ConfigSnapshotStoreInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当 4 个方法完整且不泄露后端细节时完成 |
 | CFG-TODO-005 | Done | 定义 IConfigPublisher 接口头文件 | config 设计 6.6/6.7 | 6.6 IConfigPublisher | L2 | infra/include/config/IConfigPublisher.h | publish_config_changed(diff) | unit：发布接口可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | CFG-TODO-001 | 事件总线抽象未冻结 | 首版定义进程内发布接口语义 | 接口头文件、编译记录；2026-03-31 已落盘 infra/include/config/IConfigPublisher.h、tests/unit/infra/ConfigPublisherInterfaceTest.cpp，并完成 infra/tests CMake 注册 | 仅当发布语义与配置 diff 对齐时完成 |
 | CFG-TODO-006 | Done | 定义 ConfigTypes 核心对象 | config 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/config/ConfigTypes.h | TypedConfig、ConfigQuery、ConfigPatchEntry、ConfigPatch、ConfigLayerRef、ConfigSnapshot、ConfigDiff、ValidationIssue、ConfigApplyResult | unit：字段完整性、schema/profile 键名与 patch 守卫；contract：ConfigApplyResult 仅使用 contracts 错误语义，其他对象不污染 contracts | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "ConfigTypesTest|ConfigTypesBoundaryContractTest" | 无 | 无 | 无 | 对象头文件、unit/contract 测试；2026-03-30 已落盘 infra/include/config/ConfigTypes.h、tests/unit/infra/ConfigTypesTest.cpp、tests/contract/smoke/ConfigTypesBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 TypedConfig/patch/schema/profile 键名冻结与 unit/contract 证据一致时完成 |
-| CFG-TODO-007 | Not Started | 实现 ConfigCenterFacade 生命周期骨架 | config 设计 6.2/6.7；设计映射 7 | 6.2 ConfigCenterFacade；6.7 启动流程 | L2 | infra/src/config/ConfigCenterFacade.cpp | load_layers 主链、get_typed 查询入口、apply_override/rollback 入口 | unit：未初始化/初始化后路径；contract：错误码映射入口 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest | CFG-TODO-001、CFG-TODO-006 | startup_context 类型细节未冻结 | 首版使用最小上下文结构占位 | Facade 骨架、测试 | 仅当主链入口可走通且失败路径可判定时完成 |
+| CFG-TODO-007 | Done | 实现 ConfigCenterFacade 生命周期骨架 | config 设计 6.2/6.7；设计映射 7 | 6.2 ConfigCenterFacade；6.7 启动流程 | L2 | infra/src/config/ConfigCenterFacade.cpp | load_layers 主链、get_typed 查询入口、apply_override/rollback 入口 | unit：未初始化/初始化后路径；contract：错误码映射入口 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest | CFG-TODO-001、CFG-TODO-006 | startup_context 类型细节未冻结 | 首版使用最小上下文结构占位 | Facade 骨架、测试；2026-04-02 已落盘 infra/include/config/ConfigCenterFacade.h、infra/src/config/ConfigCenterFacade.cpp、tests/unit/infra/ConfigCenterFacadeTest.cpp，并完成 infra/tests CMake 注册 | 仅当主链入口可走通且失败路径可判定时完成 |
 | CFG-TODO-008 | Not Started | 实现 ConfigLoader 四层读取骨架 | config 设计 6.2/6.7/6.9 | 6.7 启动流程第 2 步；6.9 配置层级 | L3 | infra/src/config/ConfigLoader.cpp | load_default/load_profile/load_deploy/load_runtime_overlay | unit：四层读取顺序与 source_id/version | ctest --test-dir build-ci -R ConfigLoaderTest | CFG-TODO-002、CFG-TODO-006 | profiles 键空间规范待确认 | 先按既有键名前缀读取，保留映射层 | Loader 骨架、单测 | 仅当四层均可加载且顺序符合锚点时完成 |
 | CFG-TODO-009 | Not Started | 实现 ConfigMerger 覆盖与来源追踪骨架 | config 设计 6.2/6.7 | 6.7 启动流程第 3 步 | L3 | infra/src/config/ConfigMerger.cpp | merge(layers) 产生 merged tree + source_chain | unit：后层覆盖前层；冲突可定位 | ctest --test-dir build-ci -R ConfigMergerTest | CFG-TODO-006、CFG-TODO-008 | 冲突例外策略未成文 | 首版仅支持线性优先级覆盖 | Merger 骨架、单测 | 仅当覆盖顺序与来源追踪都可测试验证时完成 |
 | CFG-TODO-010 | Not Started | 实现 ConfigValidator 规则校验骨架 | config 设计 6.2/6.7/6.8 | 6.7 启动流程第 4 步；6.8 语义故障 | L3 | infra/src/config/ConfigValidator.cpp | validate, validate_patch | unit：类型/范围/互斥校验；contract：错误码映射 | ctest --test-dir build-ci -R "ConfigValidatorTest|ConfigErrorMappingContractTest" | CFG-TODO-003、CFG-TODO-006 | 规则 DSL 未冻结 | 首版落最小规则集（类型/范围/互斥） | Validator 骨架、测试 | 仅当非法配置被拒绝且错误可定位时完成 |
@@ -630,3 +630,55 @@ Build 合规复核：
 3. 测试发现性：已通过 `ctest -N -R "ConfigErrorsTest|ConfigErrorMappingContractTest"` 回填发现性证据。
 4. TODO 证据回写：已回写任务状态、交付物、发现性结果与验收结果摘要。
 5. 提交隔离：本轮提交范围限定为 ConfigErrors 头文件、unit/contract 测试、CMake 注册与 TODO 证据文档。
+
+## 19. 本轮执行记录（2026-04-02 / CFG-TODO-007）
+
+### 19.1 选中任务
+
+1. 本轮任务：CFG-TODO-007。
+2. 可执行性依据：CFG-TODO-001、CFG-TODO-006 已完成，IConfigCenter 与 ConfigTypes 已冻结，可在不提前实现 Loader/Merger/Validator/SnapshotStore 的前提下先落 Facade 生命周期骨架，并用最小 startup context 占位满足 6.7 主链入口。
+
+### 19.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_config模块详细设计方案.md 6.2/6.7 已明确 ConfigCenterFacade 是统一配置入口，职责是串接启动加载、类型化查询、运行期覆盖与回滚入口。
+2. infra/include/config/IConfigCenter.h 已冻结 load_layers、get_typed、apply_override、rollback、subscribe 五个入口，以及 startup context、rollback token、subscription request/handle 的最小边界。
+3. infra/include/config/ConfigTypes.h 与 infra/include/config/ConfigErrors.h 已冻结 TypedConfig、ConfigSnapshot、ConfigPatch、ConfigDiff、ConfigApplyResult 及 config 错误映射，足以支撑 Facade 先落单体骨架并保持 contracts 错误语义不外溢。
+
+外部参考：
+
+1. Azure Architecture Center 的 External Configuration Store pattern 强调配置访问层应提供一致、易用的接口，暴露 typed/structured 配置、支持多版本与缓存/回退，并在启动期无法访问外部配置时提供 last known values fallback；本轮据此把 Facade 收敛为“内存 bootstrap snapshot + typed lookup + runtime override + rollback token”的最小可执行骨架，而不提前冻结外部源适配细节。
+
+D 结论：
+
+1. Design -> Build 映射：新增 ConfigCenterFacade.h/ConfigCenterFacade.cpp，落最小 bootstrap snapshot、typed query、runtime override、rollback 与 namespace-filtered subscription 骨架。
+2. Build 三件套：
+   - 代码目标：新增 infra/include/config/ConfigCenterFacade.h、infra/src/config/ConfigCenterFacade.cpp，并接入 infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/ConfigCenterFacadeTest.cpp，覆盖未初始化路径、最小 bootstrap 链路、runtime override/rollback 闭环，以及 stale base_version 冲突负例。
+   - 验收命令：cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R ConfigCenterFacadeTest。
+3. D Gate：PASS。
+
+### 19.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/config/ConfigCenterFacade.h：新增 ConfigCenterFacade public header，承接 IConfigCenter 并定义最小 lifecycle state、rollback record 与 subscription record。
+2. infra/src/config/ConfigCenterFacade.cpp：实现 bootstrap snapshot 主链、typed lookup、runtime override、rollback 与 namespace filter 通知骨架，失败路径统一走 ConfigErrors 到 contracts::ResultCode 的映射。
+3. tests/unit/infra/ConfigCenterFacadeTest.cpp：覆盖未初始化拒绝路径、bootstrap 成功路径、runtime override/rollback 正例，以及 stale base_version conflict 负例。
+4. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：完成 config facade 源文件、public header 与 unit 测试注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。说明：本轮先清理了前次失败遗留的 Ninja 缓存，并使用当前环境可用的 Makefiles 生成器恢复 build-ci。
+2. `cmake --build build-ci --target dasall_infra dasall_unit_tests`：通过；新增 ConfigCenterFacade.cpp 与 ConfigCenterFacadeTest 均编译成功。
+3. `ctest --test-dir build-ci -N -R ConfigCenterFacadeTest`：通过，发现 1 个测试：`ConfigCenterFacadeTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R ConfigCenterFacadeTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：Facade 状态、快照与 patch/rollback 语义可由对象命名与边界类型直接表达，无需新增冗余注释。
+2. 正负例覆盖：unit 覆盖 bootstrap/query/override/rollback 正例，以及未初始化、invalid startup context、stale base_version、invalid rollback token 负例。
+3. 测试发现性：已通过 `ctest -N -R ConfigCenterFacadeTest` 回填新增测试注册证据。
+4. TODO 证据回写：已回写任务状态、交付物、环境恢复动作与验收结果摘要。
+5. 提交隔离：本轮提交范围限定为 ConfigCenterFacade 代码、测试、CMake 注册与 TODO 证据文档，不混入后续 008~011 改动。

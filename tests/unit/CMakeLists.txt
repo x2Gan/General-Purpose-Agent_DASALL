@@ -47,6 +47,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_policy_errors_unit_test
 	dasall_config_types_unit_test
 	dasall_config_center_interface_unit_test
+	dasall_config_center_facade_unit_test
 	dasall_config_loader_interface_unit_test
 	dasall_config_validator_interface_unit_test
 	dasall_config_snapshot_store_interface_unit_test
