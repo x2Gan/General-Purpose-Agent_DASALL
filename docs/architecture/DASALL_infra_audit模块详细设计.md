@@ -196,6 +196,9 @@ AuditService 非职责：
 | ExportQuery | start_ts, end_ts, actor, action, target, outcome, page_token | 时间窗必填；actor/action 为主过滤轴；target/outcome 只允许缩窄结果集；分页 token 必须稳定 | 与 contracts 无耦合，infra 私有 |
 | ExportResult | records, next_page_token, truncated, checksum | records 只允许承载 AuditEvent；truncated 必须显式 | 与 contracts 无耦合，infra 私有 |
 | AuditWriteOutcome | accepted, persisted, fallback_used, error_code | 二值可判定 | 映射 contracts::ResultCode，不新增共享码域 |
+| AuditArchiveAction | archive_ref, archived_records, archived_through_ts, checksum | 只承接结构化 archive 引用与摘要；不得返回原始文件路径 | 与 contracts 无耦合，infra 私有 |
+| AuditCleanupEvidence | trigger, cleanup_ref, archive_ref, deleted_records, deleted_through_ts | 每次删除都必须保留 cleanup 痕迹并绑定 archive_ref；trigger 只允许 Manual/Scheduled | 与 contracts 无耦合，infra 私有 |
+| RetentionOutcome | completed, cutoff_ts, scanned_records, archived_records, deleted_records, detail_ref, error_code, archive_action, cleanup_evidence | completed/error_code 必须二值可判定；删除动作必须可追溯到 cleanup_evidence | 仅复用 contracts::ResultCode，不新增共享码域 |
 | AuditHealthStatus | state, last_failure_reason, detail_ref, error_code, sampled_at_unix_ms, fallback_active, metrics_bridge_degraded | state 只允许 Ready/Degraded/Unavailable；非 Ready 必须带最近失败原因 | 仅复用 contracts::ResultCode，不新增共享状态对象 |
 
 ### 6.5.1 ExportQuery 最小过滤与导出边界冻结（AUD-BLK-001）
@@ -268,6 +271,57 @@ AuditService 非职责：
   - 不重置失败计数。
   - 不代替 `infra/health` 的通用 `IHealthProbe`/`ProbeResult` 调度职责。
 7. audit 与通用 health 的对齐关系冻结为：audit 侧先输出 `AuditHealthStatus`，若后续需要桥接到 `infra/health`，只能通过适配器把三态映射到 `ProbeResult.status`，不得直接把 audit 私有对象泄露到 health 公共接口。
+
+### 6.6.2 RetentionOutcome 与归档/清理证据冻结（AUD-BLK-002）
+
+为解掉 `AUD-BLK-002`，冻结 audit retention v1 的输出对象、归档动作对象与自动清理证据语义如下：
+
+1. `IAuditRetention::apply_retention(now_ts)` 保持单一变更入口：
+  - `now_ts` 必须是正整数毫秒时间戳。
+  - 方法职责只覆盖 retention 截断、归档动作和清理结果回传，不暴露底层文件句柄、数据库游标或调度器控制接口。
+2. `AuditArchiveAction` 的最小字段冻结为：
+  - `archive_ref`
+  - `archived_records`
+  - `archived_through_ts`
+  - `checksum`
+3. `AuditArchiveAction` 约束：
+  - `archive_ref` 只允许承接结构化引用，例如 `diag://infra/audit/retention/archive/batch-001`，不得返回原始文件路径、bucket URL、挂载点或 secret-bearing URI。
+  - `archived_records` 必须大于 0，`archived_through_ts` 必须与 retention 本轮的 `cutoff_ts` 对齐，`checksum` 必须非空。
+4. `AuditCleanupEvidence` 的最小字段冻结为：
+  - `trigger`
+  - `cleanup_ref`
+  - `archive_ref`
+  - `deleted_records`
+  - `deleted_through_ts`
+5. `AuditCleanupEvidence` 约束：
+  - `trigger` 只允许 `Manual`、`Scheduled` 两态；v1 不引入自由文本调度原因。
+  - 每次删除都必须生成 `cleanup_ref`，并绑定非空 `archive_ref`，确保 cleanup 可回溯到先前或同轮归档证据。
+  - `deleted_records` 必须大于 0，`deleted_through_ts` 必须与本轮 `cutoff_ts` 对齐。
+6. `RetentionOutcome` 的最小字段冻结为：
+  - `completed`
+  - `cutoff_ts`
+  - `scanned_records`
+  - `archived_records`
+  - `deleted_records`
+  - `detail_ref`
+  - `error_code`
+  - `archive_action`
+  - `cleanup_evidence`
+7. `RetentionOutcome` 状态约束：
+  - `completed=true` 时 `error_code` 必须为空；`completed=false` 时 `error_code` 必须存在且仍映射到既有 `contracts::ResultCode`。
+  - `detail_ref` 必须落在 `diag://infra/audit/retention/...` 命名空间内，例如 `diag://infra/audit/retention/noop`、`diag://infra/audit/retention/manual_cleanup`、`diag://infra/audit/retention/failure`。
+  - `scanned_records` 必须大于等于 `archived_records` 与 `deleted_records`。
+  - `archived_records>0` 时必须携带合法 `archive_action`，且其 `archived_records`、`archived_through_ts` 必须与 outcome 对齐。
+  - `deleted_records>0` 时必须携带合法 `cleanup_evidence`，且其 `deleted_records`、`deleted_through_ts` 必须与 outcome 对齐；若同轮也产生 `archive_action`，则 `cleanup_evidence.archive_ref` 必须与 `archive_action.archive_ref` 一致。
+8. 自动清理证据语义冻结为：
+  - `trigger=Scheduled` 表示自动清理；即使是自动清理，也不能跳过 `cleanup_evidence`。
+  - 若当前没有可追溯的 `archive_ref`，v1 retention 只能返回 archive-only 或 failure/no-op 结果，不能执行静默 hard-delete。
+  - cleanup 证据对象不承接 access token、session id、原始文件路径或用户可识别高敏感数据。
+9. v1 明确不支持：
+  - direct hard-delete without `cleanup_evidence`
+  - 直接返回 archive 物理路径或第三方存储凭据
+  - 按 actor/target/outcome 的差异化 retention policy
+  - 多阶段 archive compaction / tiering 结果对象
 
 前置条件：
 1. AuditService 已 init/start。
@@ -461,7 +515,7 @@ tests/
 |---|---|---|---|---|
 | 导出扩展过滤模式（target_pattern/outcome_reason）待定 | 后续导出增强 | v1 最小过滤模型与导出边界已冻结 | 维持时间窗+actor+action 主过滤与 target/outcome 精确匹配 | 超出 v1 的模式过滤需求回退到单独设计评审 |
 | tests/integration 顶层接线不完整 | M4 集成测试 | 顶层 CMake 注册 integration 子目录 | 先执行 unit+contract，integration 标记 Blocked | 回退到 unit/contract gate-only |
-| 审计存储保留策略未冻结 | M3/M4 retention 验证 | 明确保留天数、归档周期、清理策略 | 先固定 retention.days=30 与手动清理 | 暂停自动清理，只做归档标记 |
+| retention 输出对象与证据语义已冻结，但接口/manager 尚未落盘 | M3/M4 retention 验证 | `IAuditRetention` 头文件与 compile tests 落盘 | 先冻结 RetentionOutcome、AuditArchiveAction、AuditCleanupEvidence 与 cleanup trace 规则 | 暂停真实 manager 调度，只推进对象/接口层 |
 | metrics/health 桥接接口细节待定 | M4 协同测试 | 冻结桥接接口签名与标签白名单 | 先用 mock bridge 完成接口测试 | 回退桥接为本地计数，不宣称生产可观测 |
 
 ### 11.2 风险清单

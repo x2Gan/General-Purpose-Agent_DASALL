@@ -8,6 +8,41 @@
 
 ---
 
+## 记录 #089
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-BLK-002 RetentionOutcome 与 cleanup 证据语义解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-BLK-002-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome设计收敛.md](docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 blocker 根因收敛为“audit 未冻结 RetentionOutcome、archive action 与 cleanup trace 的最小协议”，并给出直达 `AUD-TODO-013` 的交接约束。
+   - 更新 [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，补齐 retention 对象表，并新增 `6.6.2 RetentionOutcome 与归档/清理证据冻结（AUD-BLK-002）`，固定 `completed/error_code`、`archive_ref`/`cleanup_ref` 与 Manual/Scheduled cleanup trace 规则。
+2. 完成 blocker 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-BLK-002` 标记为已解阻，并把 `AUD-TODO-013` 从 Blocked 迁移到 Not Started；同时将 `AUD-GATE-06` 切换为 PASS，并把下一步切换到 `AUD-TODO-013` 的接口落盘轮。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "6\.6\.2 RetentionOutcome 与归档/清理证据冻结|AUD-BLK-002|AUD-TODO-013" docs/architecture/DASALL_infra_audit模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome设计收敛.md`
+2. 结果：
+   - retention 冻结章节、TODO 解阻状态和 blocker 交付件均已可定位追溯，`AUD-TODO-013` 已具备进入接口落盘轮的前置条件。
+
+### 结果
+
+1. `AUD-BLK-002` 已把 retention 输出对象、archive action 与 cleanup trace 的最小协议冻结完成。
+2. audit 子域当前下一执行入口已切换到 `AUD-TODO-013`，后续应直接落盘 `IAuditRetention.h` 与 compile tests。
+
+### 下一步
+
+1. 进入 `AUD-TODO-013`，按已冻结的 completed/error_code、archive action 与 cleanup evidence 规则落盘 `IAuditRetention`。
+
+### 风险
+
+1. 若后续 retention 实现允许无 `cleanup_evidence` 的删除成功结果，或把 archive 物理路径/第三方存储地址暴露到公共对象，本轮边界需要重新评审。
+
 ## 记录 #088
 
 - 日期：2026-04-03

@@ -105,11 +105,11 @@
 证据：
 
 1. 已有明确核心接口清单：IAuditLogger、IAuditRetention、IAuditHealthProbe。
-2. 已有明确核心对象字段：AuditEvent、AuditContext、ExportQuery、ExportResult、AuditWriteOutcome。
+2. 已有明确核心对象字段：AuditEvent、AuditContext、ExportQuery、ExportResult、AuditWriteOutcome、AuditArchiveAction、AuditCleanupEvidence、RetentionOutcome。
 3. 已有主流程与异常流程：主写链路 6 步、异常分类 3 类、恢复动作 4 类。
 4. 已有错误码域：INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL。
 5. 已有落盘路径与测试出口：infra/include/audit、infra/src/audit、tests/unit/infra/audit、tests/contract/infra、tests/integration/infra，以及 AuditTypesTest、AuditInterfaceCompileTest、AuditServiceFallbackTest、AuditExportFilterTest、AuditBoundaryContractTest、InfraErrorCodeMappingContractTest、InfraAuditHealthIntegrationTest。
-6. 仍有证据缺口：RetentionOutcome 字段未定义，归档/清理动作对象与自动清理证据语义仍未冻结；AuditExporter 骨架、tests 顶层 integration 接线与 audit metrics/health 桥接协议已于 2026-04-03 落盘，后续进入 retention 解阻轮。
+6. 仍有证据缺口：`IAuditRetention` public header 与 compile tests 尚未落盘；RetentionOutcome、归档/清理动作对象与自动清理证据语义已于 2026-04-03 冻结，后续进入接口落盘轮。
 
 ### 4.2 粒度可行性评估表（Step 2：详细设计可执行性扫描输出）
 
@@ -118,17 +118,17 @@
 | AuditEvent | audit 设计 6.5 | L3 | 字段、必填约束、contracts 对齐关系明确 | side_effects 子结构细项未展开 | 直接拆数据结构冻结任务 |
 | AuditContext | audit 设计 6.5 | L3 | 字段与 unknown 兜底语义明确 | 字段类型别名未成文 | 直接拆数据结构冻结任务 |
 | AuditWriteOutcome | audit 设计 6.5/6.6 | L3 | accepted/persisted/fallback_used/error_code 四字段明确 | error_code 精细映射矩阵未成文 | 直接拆数据结构冻结任务 |
-| ExportQuery | audit 设计 6.5 | L3 | 字段、时间窗必填、分页稳定约束明确 | target/outcome 细粒度过滤语义未冻结 | 直接拆数据结构冻结任务 |
+| ExportQuery | audit 设计 6.5 | L3 | 字段、时间窗必填、target/outcome 扩展规则与分页稳定约束明确 | 无 | 已完成数据结构冻结任务 |
 | ExportResult | audit 设计 6.5 | L3 | records/next_page_token/truncated/checksum 字段明确 | records 元素序列化形态未成文 | 直接拆数据结构冻结任务 |
 | IAuditLogger | audit 设计 6.6 | L3 | write_audit/export_audit 方法名、输入输出、后置条件明确 | 无 | 直接拆接口冻结任务 |
-| IAuditRetention | audit 设计 6.6 | L1 | 方法名与职责明确 | RetentionOutcome 字段未定义 | 先补对象设计，再进接口任务 |
+| IAuditRetention | audit 设计 6.6 | L2 | `apply_retention(now_ts)` 签名、RetentionOutcome/AuditArchiveAction/AuditCleanupEvidence 字段与 cleanup trace 规则已冻结 | public header 尚未落盘 | 直接拆接口冻结任务 |
 | IAuditHealthProbe | audit 设计 6.6 | L3 | public header、状态对象与 `evaluate() const` 签名已落盘 | 后续仅需与 metrics bridge 场景保持状态映射一致 | 已完成接口冻结任务 |
 | AuditValidator | audit 设计 6.2/6.3/6.7/6.8 | L2 | 输入输出、必填校验、非法输入语义明确 | 函数签名与校验结果对象未成文 | 直接拆字段校验骨架任务 |
 | AuditPipeline | audit 设计 6.2/6.3/6.7/6.8 | L2 | append-only 主写链路与失败动作明确 | 存储抽象接口未冻结 | 直接拆主写骨架任务 |
 | AuditFallbackPipeline | audit 设计 6.2/6.3/6.8 | L2 | ringbuffer/file 降级职责与 degraded 语义明确 | fallback 存储抽象接口未冻结 | 直接拆降级骨架任务 |
 | AuditServiceFacade | audit 设计 6.2/6.3/6.4/6.7 | L2 | 生命周期管理、统一错误映射、调用关系明确 | init/start 方法签名未成文 | 直接拆入口骨架任务 |
 | AuditExporter | audit 设计 6.2/6.3/6.5；11.1 | L3 | internal exporter、稳定 resume token、AuditEvent-only 导出边界与 unit/contract tests 已落盘 | 无 | 转入 retention 解阻轮 |
-| AuditRetentionManager | audit 设计 6.2/6.3/6.6；11.1 | L0 | 保留期与归档职责明确 | RetentionOutcome、归档/清理动作对象未定义 | 先补设计 |
+| AuditRetentionManager | audit 设计 6.2/6.3/6.6；11.1 | L1 | retention 输出对象、archive action 与 cleanup trace 规则已冻结 | 真实 manager 调度与存储动作仍未落盘 | 先落接口头文件，再进 manager 设计/实现 |
 | AuditMetricsBridge | audit 设计 6.2/6.3/6.10；11.1 | L3 | internal bridge、七指标注册、真实 integration 用例与 `integration;audit` discoverability 已落盘 | 无 | 进入 quality gate 证据收口 |
 | AuditHealthProbe 组件 | audit 设计 6.2/6.3/6.10；11.1 | L3 | public interface、真实 metrics bridge 协同与 `integration;audit` discoverability 已落盘 | 无 | 进入 quality gate 证据收口 |
 | tests/integration/infra | audit 设计 8.1/9.1；tests 现状 | L3 | `tests/integration/infra/audit/` 子目录、顶层 target 聚合与 `integration;audit` 标签已收口 | 无 | 进入 quality gate 证据收口 |
@@ -147,7 +147,7 @@
 | AuditPipeline/AuditFallbackPipeline 主异常链路 | audit 设计 6.2/6.3/6.7/6.8 | 流程 | AUD-TODO-009、AUD-TODO-010 | 主写与降级各自单目标，避免任务过大 |
 | AuditServiceFacade 统一入口 | audit 设计 6.2/6.3/6.4/6.7 | 生命周期/初始化 | AUD-TODO-011 | 用统一入口串起 validator/pipeline/fallback |
 | AuditExporter 导出与脱敏 | audit 设计 6.2/6.3/6.5；11.1 | 流程/测试 | AUD-TODO-012（AUD-BLK-001 已于 2026-04-03 解阻） | v1 导出过滤/分页/脱敏骨架已落盘，可直接转向 retention 解阻 |
-| IAuditRetention 与 retention 管理 | audit 设计 6.2/6.6；11.1 | 接口/流程 | AUD-TODO-013、AUD-BLK-002 | 因 RetentionOutcome 缺失，先补对象设计 |
+| IAuditRetention 与 retention 管理 | audit 设计 6.2/6.6；11.1 | 接口/流程 | AUD-TODO-013（AUD-BLK-002 已于 2026-04-03 解阻） | RetentionOutcome、AuditArchiveAction 与 AuditCleanupEvidence 已冻结，可直接推进接口头文件 |
 | IAuditHealthProbe 与健康状态 | audit 设计 6.2/6.6；11.1 | 接口/适配器 | AUD-TODO-014（AUD-BLK-003 已于 2026-04-03 解阻） | AuditHealthStatus 三态与最近失败原因字段已冻结，可直接推进接口落盘 |
 | AuditMetricsBridge 指标桥接 | audit 设计 6.2/6.10；11.1 | 适配器/集成 | AUD-TODO-015（AUD-BLK-004 已于 2026-04-03 解阻） | meter scope、七指标对象表、五元标签白名单与 non-recursive failure 语义已冻结，可直接推进桥接骨架 |
 | audit 构建接线与测试发现性 | audit 设计 7、8.1、9.1；代码现状 | 测试/门禁 | AUD-TODO-016、AUD-TODO-017、AUD-TODO-018 | 构建、unit/contract 可先做，integration 用例待组件后续落盘 |
@@ -162,7 +162,7 @@
 | 生命周期与初始化类任务 | 是 | AUD-TODO-011 |
 | 适配器/桥接类任务 | 是 | AUD-TODO-014、AUD-TODO-015 |
 | 异常与错误处理类任务 | 是 | AUD-TODO-007、AUD-TODO-009、AUD-TODO-010 |
-| 配置与 Profile 裁剪类任务 | 是 | AUD-TODO-012、AUD-TODO-013、AUD-TODO-014（仅 AUD-TODO-013 仍受阻塞项约束） |
+| 配置与 Profile 裁剪类任务 | 是 | AUD-TODO-012、AUD-TODO-013、AUD-TODO-014 |
 | 测试与门禁类任务 | 是 | AUD-TODO-016、AUD-TODO-017、AUD-TODO-018 |
 | 文档/交付证据回写类任务 | 是 | AUD-TODO-019 |
 
@@ -184,7 +184,7 @@
 | AUD-TODO-010 | Done | 实现 AuditFallbackPipeline 降级骨架 | audit 设计 6.2/6.3/6.8 | 6.2 AuditFallbackPipeline；6.8 恢复动作 1/2 | L2 | infra/src/audit/AuditFallbackPipeline.cpp | AuditFallbackPipeline（ringbuffer/file 降级链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-007、AUD-TODO-009 | 无 | 无 | AuditFallbackPipeline.cpp、降级测试 | 仅当主写失败可触发 fallback_used=true，且 fallback 失败返回 INF_E_AUDIT_FALLBACK_FAIL 时完成 |
 | AUD-TODO-011 | Done | 实现 AuditServiceFacade 入口骨架 | audit 设计 6.2/6.3/6.4/6.7 | 6.2 AuditServiceFacade；6.4 依赖关系；6.7 主流程 | L2 | infra/src/audit/AuditService.cpp | AuditServiceFacade（审计入口、生命周期管理、统一错误映射） | unit：AuditServiceFallbackTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-008、AUD-TODO-009、AUD-TODO-010 | 无 | 无 | AuditService.cpp、主链路测试 | 仅当 write_audit 主链路可串起 validator/pipeline/fallback，且返回结果可二值判定时完成 |
 | AUD-TODO-012 | Done | 实现 AuditExporter 导出与脱敏骨架 | audit 设计 6.2/6.3/6.5；11.1 | 6.2 AuditExporter；6.3 导出语义；6.5.1 导出过滤与边界语义 | L2 | infra/src/audit/AuditExporter.cpp、infra/src/audit/AuditExporter.h、infra/src/audit/AuditService.cpp | AuditExporter（过滤、分页、脱敏） | unit：AuditExportFilterTest；contract：AuditBoundaryContractTest；regression：AuditServiceFallbackTest | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_audit_export_filter_unit_test dasall_audit_service_fallback_unit_test dasall_contract_audit_event_boundary_test && ctest --test-dir build-ci -N -R "AuditExportFilterTest|AuditBoundaryContractTest|AuditServiceFallbackTest" && ctest --test-dir build-ci --output-on-failure -R "AuditExportFilterTest|AuditBoundaryContractTest|AuditServiceFallbackTest" && cmake --build build-ci --target dasall_audit_event_unit_test dasall_audit_logger_interface_unit_test dasall_audit_service_fallback_unit_test dasall_audit_export_filter_unit_test dasall_contract_audit_event_boundary_test dasall_contract_audit_logger_interface_boundary_test dasall_contract_audit_service_boundary_test dasall_contract_infra_error_code_boundary_test dasall_infra_audit_health_integration_test && ctest --test-dir build-ci -N -L audit && ctest --test-dir build-ci --output-on-failure -L audit | AUD-TODO-004、AUD-TODO-005、AUD-TODO-006 | 无 | 无 | AuditExporter.cpp、AuditExportFilterTest、AuditBoundaryContractTest、交付件 | 仅当 exporter 从 AuditService 内联筛选中收敛为独立 internal 组件，并按已冻结的窗口+actor+action 主过滤、target/outcome 扩展规则、稳定分页与 AuditEvent-only 导出边界通过 unit/contract/audit gate 验证时完成 |
-| AUD-TODO-013 | Blocked | 定义 IAuditRetention 接口与 RetentionOutcome 对象 | audit 设计 6.6；11.1 | 6.6 IAuditRetention；11.1 retention 阻塞 | L1 | infra/include/audit/IAuditRetention.h | IAuditRetention::apply_retention；RetentionOutcome | unit：AuditInterfaceCompileTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-007 | AUD-BLK-002 | 补齐 RetentionOutcome 的字段与自动清理/归档动作对象后再冻结接口 | IAuditRetention.h 或阻塞记录 | 仅当 retention 输出对象具备可二值判定字段且评审通过后，状态才可从 Blocked 转为 Not Started |
+| AUD-TODO-013 | Not Started | 定义 IAuditRetention 接口与 RetentionOutcome 对象 | audit 设计 6.6；11.1 | 6.6 IAuditRetention；6.6.2 retention 输出对象与 cleanup 证据语义 | L1 | infra/include/audit/IAuditRetention.h | IAuditRetention::apply_retention；RetentionOutcome；AuditArchiveAction；AuditCleanupEvidence | unit：AuditInterfaceCompileTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_audit_logger_interface_unit_test dasall_contract_infra_error_code_boundary_test && ctest --test-dir build-ci -N -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest" && ctest --test-dir build-ci --output-on-failure -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest" | AUD-TODO-007 | 无（2026-04-03 已由 AUD-BLK-002 通过 RetentionOutcome、AuditArchiveAction、AuditCleanupEvidence 与 cleanup trace 规则冻结解阻） | 无 | IAuditRetention.h、接口编译测试或交付件 | 仅当 retention 接口按已冻结的 completed/error_code 二值判定、archive action 与 cleanup evidence 规则落盘，并通过 unit/contract 验证时完成 |
 | AUD-TODO-014 | Done | 定义 IAuditHealthProbe 接口与 AuditHealthStatus 对象 | audit 设计 6.6；11.1 | 6.6 IAuditHealthProbe；6.3/6.10 健康状态语义 | L1 | infra/include/audit/IAuditHealthProbe.h | IAuditHealthProbe::evaluate；AuditHealthStatus | unit：AuditInterfaceCompileTest；integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|InfraAuditHealthIntegrationTest" --output-on-failure | AUD-TODO-007 | 无（2026-04-03 已由 AUD-BLK-003 通过 AuditHealthStatus 三态与最近失败原因字段冻结解阻） | 无 | IAuditHealthProbe.h、接口编译测试、InfraAuditHealthIntegrationTest | 仅当 AuditHealthStatus 字段与状态机语义冻结后，状态才可从 Blocked 转为 Not Started |
 | AUD-TODO-015 | Done | 实现 AuditMetricsBridge 指标桥接骨架 | audit 设计 6.2/6.3/6.10；11.1 | 6.2 AuditMetricsBridge；6.10 指标清单；11.1 桥接阻塞 | L1 | infra/src/audit/AuditMetricsBridge.cpp、infra/src/audit/AuditMetricsBridge.h | AuditMetricsBridge（audit_write_total 等指标桥接） | integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | AUD-TODO-011 | 无（2026-04-03 已由 AUD-BLK-004 通过 audit meter scope、七指标对象表、五元标签白名单与 non-recursive failure 语义冻结解阻） | 无 | AuditMetricsBridge.cpp、InfraAuditHealthIntegrationTest、交付件 | 仅当 bridge 通过 `IMetricsProvider/IMeter` 注册七指标对象表、保留 degraded/no-op 语义，且 integration 用例验证 metrics bridge degraded 不反噬 audit 主结果时完成 |
 | AUD-TODO-016 | Done | 注册 audit 源码到 infra CMake | audit 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | audit include/src 文件接线 | build：dasall_infra 可编译；unit：AuditInterfaceCompileTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditInterfaceCompileTest --output-on-failure | AUD-TODO-001 至 AUD-TODO-011 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 audit 文件进入 dasall_infra 构建图时完成 |
@@ -196,7 +196,7 @@
 
 | 任务 ID | 对应阻塞项 |
 |---|---|
-| AUD-TODO-013 | AUD-BLK-002 |
+| 无 | 无 |
 
 ## 7. 执行顺序建议
 
@@ -208,7 +208,7 @@
 | B 接口与错误语义冻结 | AUD-TODO-006、AUD-TODO-007 | 可并行 | 稳定 IAuditLogger 与错误码域，阻断直接绑实现 |
 | C 主链路骨架 | AUD-TODO-008、AUD-TODO-009、AUD-TODO-010、AUD-TODO-011 | 串行 | validator -> pipeline -> fallback -> facade |
 | D 构建与测试接线 | AUD-TODO-016、AUD-TODO-017 | 可并行 | 代码入图与测试发现性都依赖 A-C，但互不阻塞 |
-| E 受阻能力补齐 | AUD-TODO-012、AUD-TODO-013、AUD-TODO-014、AUD-TODO-015、AUD-TODO-018 | 串行按阻塞项解锁 | 导出 -> retention -> health 状态 -> metrics 桥接 -> integration |
+| E 受阻能力补齐 | AUD-TODO-012、AUD-TODO-013、AUD-TODO-014、AUD-TODO-015、AUD-TODO-018 | 串行 | 导出/retention/health/metrics/integration 已按 blocker 顺序推进，当前只剩 `AUD-TODO-013` 接口落盘 |
 | F 证据收口 | AUD-TODO-019 | 串行 | 统一回写 gate、阻塞变化与回退证据 |
 
 ### 7.2 必过门禁表
@@ -230,7 +230,7 @@
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
 | AUD-BLK-001 | 已解阻（2026-04-03）：audit 详细设计 6.5/6.5.1 已冻结 ExportQuery 的时间窗+actor+action 主过滤、target/outcome 扩展规则、稳定 resume token 边界与 AuditEvent-only 导出面；后续 AuditExporter 只需按该模型落盘 | AUD-TODO-012 | 无；后续仅需保持 ExportQuery/ExportResult、AuditExporter 实现与 AuditBoundaryContractTest 的过滤/边界语义一致 | 证据回链到 docs/architecture/DASALL_infra_audit模块详细设计.md 6.5/6.5.1 与 docs/todos/infrastructure/deliverables/AUD-BLK-001-ExportQuery过滤语义设计收敛.md | 若 ExportQuery 回退为 pattern/wildcard 查询、让 page_token 脱离过滤元组复用，或把 AuditContext 直接并入 ExportResult，则重新转为 Blocked |
-| AUD-BLK-002 | RetentionOutcome 字段、归档动作对象、自动清理证据语义未冻结 | AUD-TODO-013 | 补齐 retention 输出对象与归档/清理的二值判定字段 | 在 audit 设计文档补 retention 输出对象表与清理痕迹规则 | 暂停自动清理，仅保留 retention.days=30 的手动清理策略 |
+| AUD-BLK-002 | 已解阻（2026-04-03）：audit 详细设计 6.5/6.6.2 已冻结 `RetentionOutcome` 的 completed/error_code 二值判定、`AuditArchiveAction` 的结构化 archive 引用与 checksum、`AuditCleanupEvidence` 的 Manual/Scheduled trigger 与 archive-ref 绑定；后续 `IAuditRetention` 只需按该模型落盘 | AUD-TODO-013 | 无；后续仅需保持 `IAuditRetention`、RetentionOutcome 与 `InfraErrorCodeMappingContractTest` 的错误码语义一致 | 证据回链到 docs/architecture/DASALL_infra_audit模块详细设计.md 6.5/6.6.2 与 docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome设计收敛.md | 若 retention 重新允许无证据 hard-delete、把 archive 物理路径暴露到公共对象，或让 cleanup_evidence 脱离 archive_ref，则重新转为 Blocked |
 | AUD-BLK-003 | 已解阻（2026-04-03）：audit 详细设计 6.5/6.6.1 已冻结 `AuditHealthStatus` 的 Ready/Degraded/Unavailable 三态、最近失败原因字段与只读 evaluate 语义；后续 `IAuditHealthProbe` 只需按该对象边界落盘 | AUD-TODO-014 | 无；后续仅需保持 `IAuditHealthProbe`、`AuditHealthStatus` 与 integration 用例状态映射一致 | 证据回链到 docs/architecture/DASALL_infra_audit模块详细设计.md 6.5/6.6.1 与 docs/todos/infrastructure/deliverables/AUD-BLK-003-AuditHealthProbe设计收敛.md | 若 audit 重新引入自由文本 failure reason、把私有状态对象直接泄露到 health 公共接口，或回退三态定义，则重新转为 Blocked |
 | AUD-BLK-004 | 已解阻（2026-04-03）：metrics 详细设计 6.6.2/6.8.2 已冻结 audit bridge 的 IMetricsProvider/IMeter 接入协议、七指标对象表、五元标签白名单与 non-recursive failure semantics；audit 详细设计 6.10.1 已补齐 bridge degraded 与 AuditHealthStatus 的对齐规则 | AUD-TODO-015 | 无；后续仅需保持 metrics/audit 设计、bridge 实现与 integration 用例的标签/失败语义同步 | 证据回链到 docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6.2/6.8.2、docs/architecture/DASALL_infra_audit模块详细设计.md 6.10.1 与 docs/todos/infrastructure/deliverables/AUD-BLK-004-AuditMetricsBridge设计收敛.md | 若 IMeter、MetricLabels、MetricsErrors 或 audit bridge 的 degraded 语义回退，则重新转为 Blocked |
 | AUD-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；audit integration 是否可执行改由组件自身落盘负责 | AUD-TODO-018 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
@@ -272,8 +272,8 @@
 | AUD-GATE-02 | PASS | `AuditServiceFallbackTest` 已纳入 `ctest -L audit`，并随本轮 9/9 通过 | 主写失败 -> fallback 闭环已可验证 |
 | AUD-GATE-03 | PASS | `AuditBoundaryContractTest` 与 `InfraErrorCodeMappingContractTest` 随本轮 9/9 通过 | contracts 边界与错误码映射稳定 |
 | AUD-GATE-04 | PASS | `ctest --test-dir build-ci -N -L audit` 发现 9 个测试 | discoverability 已覆盖 unit/contract/integration |
-| AUD-GATE-05 | BLOCKED | `AUD-BLK-001` 仍在，`AUD-TODO-012` 未解阻 | 导出 filter 语义仍未冻结 |
-| AUD-GATE-06 | BLOCKED | `AUD-BLK-002` 仍在，`AUD-TODO-013` 未解阻 | retention 输出对象仍未冻结 |
+| AUD-GATE-05 | PASS | `AUD-BLK-001` 已解阻，`AUD-TODO-012` 已完成并随当前 audit gate 9/9 通过 | 导出 filter 与边界语义已稳定 |
+| AUD-GATE-06 | PASS | `AUD-BLK-002` 已解阻，audit 设计 6.5/6.6.2 与 blocker 交付件已冻结 retention 输出对象和 cleanup trace 规则 | `AUD-TODO-013` 已恢复为可执行状态 |
 | AUD-GATE-07 | PASS | `AUD-TODO-014`、`AUD-TODO-015` 完成，`InfraAuditHealthIntegrationTest` 随本轮 9/9 通过 | 健康状态与 metrics bridge 协同已稳定 |
 | AUD-GATE-08 | PASS | `AUD-TODO-018` 完成，`InfraAuditHealthIntegrationTest` 可被 `ctest -N -L audit` 命中 | integration 子目录、标签与聚合已收口 |
 | AUD-GATE-09 | PASS | 当前轮未新增公共 breaking 变更；无新增迁移窗口需求 | 维持未触发状态 |
@@ -300,8 +300,8 @@
 1. 已有明确核心接口清单与方法语义，足以冻结 IAuditLogger 与相关对象。
 2. 已有核心对象字段、主流程、异常流程和错误码域，足以拆出 AuditEvent、AuditContext、AuditWriteOutcome、ExportQuery、ExportResult 与主写/降级骨架任务。
 3. 已有文件落盘建议、测试名称与验收命令基线，足以让任务具备代码目标、测试目标、验收命令三件套。
-4. 但 RetentionOutcome 与归档/清理动作对象仍缺失，不能安全伪造完整 retention 实现任务。
-5. AuditExporter skeleton 已在 `AUD-TODO-012` 落盘，并经 `AuditExportFilterTest`、`AuditBoundaryContractTest` 与完整 audit gate 验证；retention 证据规则仍需先解阻再推进 `AUD-TODO-013`。
+4. `RetentionOutcome`、`AuditArchiveAction`、`AuditCleanupEvidence` 与 cleanup trace 规则已冻结，`AUD-TODO-013` 进入可直接落盘接口头文件的阶段。
+5. AuditExporter skeleton 已在 `AUD-TODO-012` 落盘，并经 `AuditExportFilterTest`、`AuditBoundaryContractTest` 与完整 audit gate 验证；下一步聚焦 `IAuditRetention` 头文件与 compile tests。
 
 ### 11.3 当前最小可执行粒度
 
@@ -309,13 +309,56 @@
 
 ### 11.4 若未达到函数级，还缺哪些设计信息
 
-1. RetentionOutcome 的字段定义。
-2. 归档/清理动作对象与自动清理证据语义。
+1. `IAuditRetention` public header 的具体声明与 compile tests。
+2. retention manager 的真实调度与存储动作实现。
 
 ### 11.5 下一步建议
 
-1. 下一执行入口应切换到 `AUD-BLK-002`，补齐 RetentionOutcome 与归档/清理动作对象，恢复 `AUD-TODO-013` 的可执行性。
+1. 下一执行入口应切换到 `AUD-TODO-013`，按已冻结的 completed/error_code、archive action 与 cleanup evidence 规则落盘 `IAuditRetention` 头文件。
 2. 当前 audit 专项 gate 基线继续复用 `ctest --test-dir build-ci -N -L audit` 与 `ctest --test-dir build-ci --output-on-failure -L audit`，后续 retention 相关测试也必须保持该证据链稳定。
+
+### 12.19 AUD-BLK-002
+
+选中任务：
+
+1. 任务 ID：AUD-BLK-002。
+2. 可执行性依据：`AUD-TODO-012` 已完成，audit 当前唯一剩余 blocker 已明确收缩到 retention 输出对象与 cleanup trace 语义；仓库中 `INF_E_AUDIT_RETENTION_FAIL`、`IAuditRetention::apply_retention(now_ts)` 方法名和 `retention.days=30` 默认策略都已存在设计锚点，缺的是可编译对象模型。
+
+研究学习：
+
+1. 本地证据：当前 [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 6.2/6.3/6.6 只声明了 `IAuditRetention::apply_retention(now_ts)` 与 retention.days=30，但没有定义 `RetentionOutcome`、archive action 或 cleanup evidence 的最小字段，因此 `AUD-TODO-013` 虽然知道接口名，却无法安全冻结返回对象。
+2. 本地证据：当前 [infra/include/audit/AuditErrors.h](infra/include/audit/AuditErrors.h) 已冻结 `INF_E_AUDIT_RETENTION_FAIL`，说明 blocker 不在错误码域，而在“成功/失败怎样二值判定、删除动作如何保留 trace”这一层。
+3. 外部参考：OWASP Logging Cheat Sheet 明确把 data export、data deletion 与 disposal of logs 纳入 audit trail / disposal 生命周期，并要求防止未授权删除、对日志访问/修改/删除进行记录；NIST SP 800-92 将 log management 归入 Audit and Accountability 范畴，这支持 DASALL 以结构化 outcome 固定 archive/cleanup 证据，而不是返回裸布尔值。
+
+D 结论：
+
+1. Design -> Build 映射：在 audit 详细设计中补齐 `AuditArchiveAction`、`AuditCleanupEvidence`、`RetentionOutcome` 三个 retention 私有对象，并新增 `6.6.2 RetentionOutcome 与归档/清理证据冻结（AUD-BLK-002）`，作为 [infra/include/audit/IAuditRetention.h](infra/include/audit/IAuditRetention.h) 的直接输入契约。
+2. Build 三件套：
+	- 代码目标：本轮不落盘代码，仅冻结 `apply_retention(now_ts)` 的最小输入输出协议、`completed/error_code` 二值判定、`archive_ref`/`cleanup_ref`/`detail_ref` 的结构化引用边界。
+	- 测试目标：通过文档 traceability 确认 architecture、TODO 与 blocker deliverable 对 `AUD-BLK-002` 的解阻状态和 013 交接约束一致。
+	- 验收命令：`rg -n "6\.6\.2 RetentionOutcome 与归档/清理证据冻结|AUD-BLK-002|AUD-TODO-013" docs/architecture/DASALL_infra_audit模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome设计收敛.md`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)：补齐 retention 对象表，并新增 `6.6.2 RetentionOutcome 与归档/清理证据冻结（AUD-BLK-002）`。
+2. [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)：将 `AUD-BLK-002` 标记为已解阻，把 `AUD-TODO-013` 从 Blocked 迁移到 Not Started，并把下一步切换到接口落盘轮。
+3. [docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome设计收敛.md](docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)：补齐 blocker 根因、外部参考、设计结论与交接约束。
+
+验收结果：
+
+1. `rg -n "6\.6\.2 RetentionOutcome 与归档/清理证据冻结|AUD-BLK-002|AUD-TODO-013" docs/architecture/DASALL_infra_audit模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md docs/todos/infrastructure/deliverables/AUD-BLK-002-RetentionOutcome设计收敛.md`：通过。
+2. traceability 结果显示：architecture 的 retention 冻结章节、TODO 的解阻状态与 blocker deliverable 均已可定位回链，`AUD-TODO-013` 已恢复为可执行状态。
+
+Build 合规复核：
+
+1. 代码注释：本轮只做 retention 设计解阻，不落盘代码实现。
+2. 正负例覆盖：本轮用文档 traceability 覆盖 blocker 解除与交接条件；真正的编译/接口验证留给 `AUD-TODO-013`。
+3. 测试发现性：不新增测试 target，本轮保持 audit gate 基线不变。
+4. TODO 证据回写：已完成 blocker 状态、gate 结论与下一步建议回写。
+5. 提交隔离：本轮只处理 retention 设计解阻，不提前落盘 `IAuditRetention.h` 或 retention manager 实现。
 
 ## 12. 本轮执行记录（2026-03-30）
 
