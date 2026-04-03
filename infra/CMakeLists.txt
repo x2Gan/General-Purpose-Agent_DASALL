@@ -21,6 +21,7 @@ set(DASALL_INFRA_LOGGING_SOURCES
   src/logging/LoggingConfigAdapter.cpp
   src/logging/LoggingFacade.cpp
   src/logging/LoggingHealthProbe.cpp
+  src/logging/LogQueryService.cpp
   src/logging/LoggingMetricsBridge.cpp
   src/logging/LoggingRecovery.cpp
   src/logging/SinkDispatcher.cpp

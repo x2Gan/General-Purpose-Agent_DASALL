@@ -21,6 +21,7 @@ set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_logging_config_merge_unit_test
 	dasall_logging_metrics_bridge_unit_test
 	dasall_logging_health_probe_unit_test
+	dasall_log_query_service_unit_test
 	dasall_audit_logger_interface_unit_test
 )
 

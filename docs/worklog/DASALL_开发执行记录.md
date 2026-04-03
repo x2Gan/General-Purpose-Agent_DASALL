@@ -8,6 +8,56 @@
 
 ---
 
+## 记录 #074
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-019 实现 LogQueryService 受控查询与本地 artifact 导出骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-019-D/B 收敛：
+   - 更新 [docs/todos/infrastructure/deliverables/LOG-TODO-019-LogQueryService骨架收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-019-LogQueryService骨架收敛.md)，将状态从“D Gate Pass，Build 进行中”回写为“已完成”，补齐 Build 落地结果、定向/标签验收证据与结论。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md)，将 `LOG-TODO-019` 标记为 Done，并同步更新 Gate 快照、logging/integration/unit 测试计数、blocker 说明与下一步建议。
+2. 完成 LOG-TODO-019-B 受控查询骨架落地：
+   - 新增 [infra/src/logging/LogQueryService.h](infra/src/logging/LogQueryService.h) 与 [infra/src/logging/LogQueryService.cpp](infra/src/logging/LogQueryService.cpp)，收敛 `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult`、internal `ILogQueryRecordReader` 与 local artifact 摘要生成逻辑。
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `LogQueryService.cpp` 纳入 `dasall_infra`。
+   - 新增 [tests/unit/infra/logging/LogQueryServiceTest.cpp](tests/unit/infra/logging/LogQueryServiceTest.cpp)，覆盖 request 形态非法、allow proof 缺失/非 Allow、`enable_diag_pull` gate、缺少 local record reader 与 trace selector 正例。
+   - 新增 [tests/integration/infra/logging/LogQueryIntegrationTest.cpp](tests/integration/infra/logging/LogQueryIntegrationTest.cpp)，通过 `LoggingFacade` 富化 `trace_id` / `session_id` 后验证 trace/session 查询命中、`max_records` 截断与 local artifact 摘要字段。
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)、[tests/integration/infra/logging/CMakeLists.txt](tests/integration/infra/logging/CMakeLists.txt) 与 [tests/integration/CMakeLists.txt](tests/integration/CMakeLists.txt)，把新增 unit/integration 目标纳入 `logging` 标签与顶层聚合目标。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_log_query_service_unit_test dasall_log_query_integration_test dasall_unit_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci -N -R "(LogQueryServiceTest|LogQueryIntegrationTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(LogQueryServiceTest|LogQueryIntegrationTest)"`
+   - `ctest --test-dir build-ci -N -L integration`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+   - `ctest --test-dir build-ci -N -L logging`
+   - `ctest --test-dir build-ci --output-on-failure -L logging`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `LogQueryServiceTest` 与 `LogQueryIntegrationTest` 定向发现 2 个，执行 2/2 通过。
+   - integration 套件发现 10 个，执行 10/10 通过，其中 logging integration 3/3 通过。
+   - logging 标签测试发现 26 个，执行 26/26 通过。
+   - unit 套件 112/112 通过；全量发现更新为 254 个测试。
+
+### 结果
+
+1. `LogQueryService` 已从“边界冻结”推进到“精确 selector + allow proof 校验 + local artifact 摘要导出骨架已落盘并可测”。
+2. 本轮没有新增 public query/export 接口，也没有把 remote export 或二次授权带回 logging 子域；当前 logging 专项 TODO 的 001~019 原子任务已全部完成。
+
+### 下一步
+
+1. 若继续推进 logging 子域，应新开围绕 retention、真实索引或运行时 wiring 的后续原子任务，而不是回退当前骨架边界。
+
+### 风险
+
+1. 本轮仍只提供 internal record reader + local artifact 摘要骨架，尚未实现真实运行时索引与 retention 清理；后续扩展必须继续保持 local-only、allow-proof-required 与 diagnostics remote export 分层边界。
+
 ## 记录 #073
 
 - 日期：2026-04-03

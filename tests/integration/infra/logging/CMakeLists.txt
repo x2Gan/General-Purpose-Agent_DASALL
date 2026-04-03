@@ -31,3 +31,9 @@ dasall_register_logging_integration_test(
   LoggingAuditLinkIntegrationTest
   LoggingAuditLinkIntegrationTest.cpp
 )
+
+dasall_register_logging_integration_test(
+  dasall_log_query_integration_test
+  LogQueryIntegrationTest
+  LogQueryIntegrationTest.cpp
+)

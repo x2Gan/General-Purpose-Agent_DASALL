@@ -176,7 +176,7 @@ logging 组件目标固定为：
 | LOG-TODO-016 | Done | 回写 logging 质量门与交付证据 | logging 设计 9.2、11.1；工程规范 6.2 | 9.2 Gate-LOG-01~05 | L2 | docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md | Gate 执行结论、阻塞变化、回退执行记录 | process test：门禁记录与执行结果可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | LOG-TODO-015 | 无（2026-04-03 已完成 Gate-LOG-01~06 与 blocker 快照回写；当前仅保留 LOG-GATE-06 未通过结论，不构成 014~016 的执行阻塞） | 无 | 已完成：在本文件新增 9.3/9.4/9.5 执行快照，统一记录 Gate-LOG-01~06 结论、LOG-BLK-001~005 当前状态、CMake Tools 工具态异常与“未触发代码回退”记录；交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-016-LoggingGate回写收敛.md | 仅当每个门禁都有通过/失败结论与证据命令时完成 |
 | LOG-TODO-017 | Done | 实现 LoggingHealthProbe 健康探针骨架 | logging 设计 6.2、6.8、6.10.1；health 设计 6.5、6.6 | 6.10.1 health probe descriptor 与状态映射 | L2 | infra/src/logging/LoggingHealthProbe.cpp | `IHealthProbe::probe()`；descriptor 合法性；Healthy/Degraded/Unhealthy 三态映射 | unit：descriptor 与状态映射可判定；failure：timeout failure 结构化返回 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_logging_health_probe_unit_test dasall_unit_tests && ctest --test-dir build-ci -N -R "LoggingHealthProbeTest" && ctest --test-dir build-ci --output-on-failure -R "LoggingHealthProbeTest" && ctest --test-dir build-ci -N -L logging && ctest --test-dir build-ci --output-on-failure -L logging && ctest --test-dir build-ci --output-on-failure -L unit | LOG-TODO-011 | 无（2026-04-03 已由 LOG-BLK-003 通过 `IHealthProbe`/`ProbeResult`、descriptor 固定值与 timeout 语义冻结解阻） | 无 | 已完成：新增 internal `ILoggingHealthSignalProvider` / `LoggingHealthSample` 与 `LoggingHealthProbe`，以 queue 高水位阈值、drop delta、recovery degraded/fallback、unrecoverable failure、metrics bridge degraded 汇聚 logging 本地信号，并在 unit 测试中验证 Healthy/Degraded/Unhealthy 与 timeout failure；交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-017-LoggingHealthProbe骨架收敛.md，`ctest -N -R "LoggingHealthProbeTest"` 发现 1 个定向测试且 1/1 通过，`ctest -N -L logging` 发现 24 个 logging 测试且 24/24 通过 | 仅当 probe descriptor 合法、三态映射稳定且 timeout failure 可结构化返回时完成 |
 | LOG-TODO-018 | Done | 落盘 logging integration 用例与标签注册 | logging 设计 8.1、9.1；Gate-LOG-06 | 8.1 integration 落点；9.1 集成测试矩阵 | L2 | tests/integration/infra/logging/, tests/integration/infra/CMakeLists.txt, tests/integration/CMakeLists.txt | LoggingFacade/SinkDispatcher/AsyncQueueController/AuditLinkAdapter 跨组件 smoke 与 failure integration | build + integration：logging integration 用例可发现、可执行，并纳入 `integration;logging` 标签 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_logging_pipeline_integration_test dasall_logging_audit_link_integration_test dasall_integration_tests && ctest --test-dir build-ci -N -R "(LoggingPipelineIntegrationTest|LoggingAuditLinkIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "(LoggingPipelineIntegrationTest|LoggingAuditLinkIntegrationTest)" && ctest --test-dir build-ci -N -L integration && ctest --test-dir build-ci --output-on-failure -L integration | LOG-TODO-014、LOG-TODO-015 | 无（2026-04-03 tests 顶层 integration 拓扑已解阻，当前只需补组件级 logging 用例与标签） | 无 | 已完成：新增 `tests/integration/infra/logging/`、`LoggingPipelineIntegrationTest` 与 `LoggingAuditLinkIntegrationTest`，并在 integration CMake 中统一注册 `integration;logging` 标签；交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-018-Logging集成用例收敛.md，Gate-LOG-06 已转为 Pass | 仅当 logging integration 用例在 ctest -N/-L integration 可见且执行通过时完成 |
-| LOG-TODO-019 | Not Started | 实现 LogQueryService 受控查询与本地 artifact 导出骨架 | logging 设计 6.9、6.10.2、8.3；架构 13.3；diagnostics 设计 6.6/6.8/6.9 | 6.10.2 query schema、allow proof 与 local artifact 约束 | L2 | infra/src/logging/LogQueryService.cpp | `query(const LogQueryRequest&, const LogQueryAccessContext&)`；trace/session 精确 selector；local artifact_ref 生成 | unit：query 参数、allow proof 与 config gate 可判定；integration：trace/session 查询命中与本地 artifact 导出可执行 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_log_query_service_unit_test dasall_log_query_integration_test && ctest --test-dir build-ci -N -R "(LogQueryServiceTest|LogQueryIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "(LogQueryServiceTest|LogQueryIntegrationTest)" | LOG-TODO-012、LOG-TODO-018 | 无（2026-04-03 已由 LOG-BLK-005 通过 query schema、PolicyGate allow proof 与本地 artifact 导出约束冻结解阻） | 无 | LogQueryService 源码、unit/integration 测试、执行记录 | 仅当 trace/session 精确 selector、`PolicyDenied`/`ValidationFieldMissing` 负例与本地 artifact 导出正例都可稳定判定时完成 |
+| LOG-TODO-019 | Done | 实现 LogQueryService 受控查询与本地 artifact 导出骨架 | logging 设计 6.9、6.10.2、8.3；架构 13.3；diagnostics 设计 6.6/6.8/6.9 | 6.10.2 query schema、allow proof 与 local artifact 约束 | L2 | infra/src/logging/LogQueryService.cpp | `query(const LogQueryRequest&, const LogQueryAccessContext&)`；trace/session 精确 selector；local artifact_ref 生成 | unit：query 参数、allow proof 与 config gate 可判定；integration：trace/session 查询命中与本地 artifact 导出可执行 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_log_query_service_unit_test dasall_log_query_integration_test dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N -R "(LogQueryServiceTest|LogQueryIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "(LogQueryServiceTest|LogQueryIntegrationTest)" && ctest --test-dir build-ci -N -L integration && ctest --test-dir build-ci --output-on-failure -L integration && ctest --test-dir build-ci -N -L logging && ctest --test-dir build-ci --output-on-failure -L logging && ctest --test-dir build-ci --output-on-failure -L unit | LOG-TODO-012、LOG-TODO-018 | 无（2026-04-03 已由 LOG-BLK-005 通过 query schema、PolicyGate allow proof 与本地 artifact 导出约束冻结解阻） | 无 | 已完成：新增 internal `LogQueryService` / `ILogQueryRecordReader` 与 unit/integration 覆盖，交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-019-LogQueryService骨架收敛.md；`ctest -N -R "(LogQueryServiceTest|LogQueryIntegrationTest)"` 发现 2 个定向测试且 2/2 通过，`ctest -N -L integration` 发现 10 个 integration 测试且 10/10 通过，`ctest -N -L logging` 发现 26 个 logging 测试且 26/26 通过 | 仅当 trace/session 精确 selector、`PolicyDenied`/`ValidationFieldMissing` 负例与本地 artifact 导出正例都可稳定判定时完成 |
 
 ### 6.2 Blocked 任务对应阻塞项索引
 
@@ -253,10 +253,10 @@ logging 组件目标固定为：
 |---|---|---|---|
 | LOG-GATE-01 | Pass | LOG-TODO-001/002/003/010 已完成；`ctest --test-dir build-ci --output-on-failure -L logging` 覆盖 `ILogger` / `IAuditLinkAdapter` / `LogEvent` / `LoggingErrors` 边界测试 | logging public boundary 已冻结并保持可编译、可验证 |
 | LOG-GATE-02 | Pass | LOG-TODO-009 已完成；`AuditLinkAdapterTest` 与 `AuditLinkAdapterBoundaryContractTest` 在 logging 标签测试面内通过 | 审计关联与普通日志主链分离仍有测试证明 |
-| LOG-GATE-03 | Pass | LOG-TODO-010~017 已完成；`ctest --test-dir build-ci --output-on-failure -L unit` 111/111 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 132/132 通过 | queue/sink/config/metrics/health failure 路径维持错误码与可观测出口 |
-| LOG-GATE-04 | Pass | `ctest --test-dir build-ci -N` 发现 252 个测试；`ctest --test-dir build-ci -N -L logging` 发现 24 个 logging 测试，已覆盖 unit/contract/integration 三类标签面 | logging 测试发现性已独立收敛 |
-| LOG-GATE-05 | Pass | LOG-TODO-014~018、LOG-BLK-005 解阻轮次与 LOG-TODO-017 实现轮次仅修改 internal 源码、CMake、测试标签、TODO、设计交付物与 worklog；未改 public headers 或 contracts 映射 | 当前无 breaking change，评审门未被触发 |
-| LOG-GATE-06 | Pass | `tests/integration/infra/logging/` 已落盘，`ctest --test-dir build-ci -N -R "(LoggingPipelineIntegrationTest|LoggingAuditLinkIntegrationTest)"` 与 `ctest --test-dir build-ci --output-on-failure -L integration` 通过 | logging 组件已具备 integration 用例与标签注册，integration 准入门关闭 |
+| LOG-GATE-03 | Pass | LOG-TODO-010~019 已完成；`ctest --test-dir build-ci --output-on-failure -L unit` 112/112 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 132/132 通过，`ctest --test-dir build-ci --output-on-failure -L integration` 10/10 通过 | queue/sink/config/metrics/health/log query failure 路径维持错误码与可观测出口 |
+| LOG-GATE-04 | Pass | `ctest --test-dir build-ci -N` 发现 254 个测试；`ctest --test-dir build-ci -N -L logging` 发现 26 个 logging 测试，已覆盖 unit/contract/integration 三类标签面 | logging 测试发现性已独立收敛 |
+| LOG-GATE-05 | Pass | LOG-TODO-014~019 与 LOG-BLK-005 解阻轮次仅修改 internal 源码、CMake、测试标签、TODO、设计交付物与 worklog；未改 public headers 或 contracts 映射 | 当前无 breaking change，评审门未被触发 |
+| LOG-GATE-06 | Pass | `tests/integration/infra/logging/` 已落盘，`ctest --test-dir build-ci -N -R "(LoggingPipelineIntegrationTest|LoggingAuditLinkIntegrationTest|LogQueryIntegrationTest)"` 与 `ctest --test-dir build-ci --output-on-failure -L integration` 通过 | logging 组件已具备 integration 用例与标签注册，integration 准入门关闭 |
 
 ### 9.4 2026-04-03 Blocker 状态快照
 
@@ -266,19 +266,21 @@ logging 组件目标固定为：
 | LOG-BLK-002 | Resolved | 否 | metrics bridge 接入协议已冻结并支撑 LOG-TODO-013 |
 | LOG-BLK-003 | Resolved | 否 | `LoggingHealthProbe` 已对齐通用 `IHealthProbe`/`ProbeResult` 且实现骨架已落盘；后续仅需在同一 internal provider 边界上扩展真实运行时 wiring |
 | LOG-BLK-004 | Resolved | 否 | 顶层 integration 拓扑与 logging 组件用例均已落盘，后续只需维护场景扩展与标签聚合 |
-| LOG-BLK-005 | Resolved | 否 | `LogQueryService` 查询对象、allow proof 与本地 artifact 约束已冻结，当前只剩实现任务 LOG-TODO-019 |
+| LOG-BLK-005 | Resolved | 否 | `LogQueryService` 查询对象、allow proof 与本地 artifact 约束已冻结，且 LOG-TODO-019 骨架已按同一 local-only 边界落盘 |
 
 ### 9.5 验证与回退记录
 
-1. `ctest --test-dir build-ci -N`：发现 252 个测试。
-2. `ctest --test-dir build-ci --output-on-failure -L unit`：111/111 通过。
+1. `ctest --test-dir build-ci -N`：发现 254 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：112/112 通过。
 3. `ctest --test-dir build-ci --output-on-failure -L contract`：132/132 通过。
-4. `ctest --test-dir build-ci --output-on-failure -L integration`：9/9 通过，其中 logging integration 2/2 通过。
-5. `ctest --test-dir build-ci -N -L logging`：发现 24 个 logging 测试。
-6. `Build_CMakeTools` 与 `RunCtest_CMakeTools` 仍报“无法配置项目”，本阶段实际验收继续沿用显式 `cmake`/`ctest` 链路。
-7. `ctest --test-dir build-ci -N -R "LoggingHealthProbeTest"`：发现 1 个定向测试，`ctest --test-dir build-ci --output-on-failure -R "LoggingHealthProbeTest"` 1/1 通过。
-8. 014~018 与 017 未触发代码回退；`LOG-GATE-06` 已转为 Pass。
-9. `grep -n "LogQueryService\|LogQueryRequest\|LogQueryAccessContext\|diag://infra/logging/query\|LOG-TODO-019" docs/architecture/DASALL_infra_logging模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md`：可定位 query schema、allow proof、本地 artifact 约束与 TODO 回写证据。
+4. `ctest --test-dir build-ci --output-on-failure -L integration`：10/10 通过，其中 logging integration 3/3 通过。
+5. `ctest --test-dir build-ci -N -L logging`：发现 26 个 logging 测试。
+6. `ctest --test-dir build-ci --output-on-failure -L logging`：26/26 通过。
+7. `Build_CMakeTools` 与 `RunCtest_CMakeTools` 仍报“无法配置项目”，本阶段实际验收继续沿用显式 `cmake`/`ctest` 链路。
+8. `ctest --test-dir build-ci -N -R "LoggingHealthProbeTest"`：发现 1 个定向测试，`ctest --test-dir build-ci --output-on-failure -R "LoggingHealthProbeTest"` 1/1 通过。
+9. `ctest --test-dir build-ci -N -R "(LogQueryServiceTest|LogQueryIntegrationTest)"`：发现 2 个定向测试，`ctest --test-dir build-ci --output-on-failure -R "(LogQueryServiceTest|LogQueryIntegrationTest)"` 2/2 通过。
+10. 014~019 未触发代码回退；`LOG-GATE-06` 维持 Pass。
+11. `grep -n "LogQueryService\|LogQueryRequest\|LogQueryAccessContext\|diag://infra/logging/query\|LOG-TODO-019" docs/architecture/DASALL_infra_logging模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md`：可定位 query schema、allow proof、本地 artifact 约束与 TODO 回写证据。
 
 ## 10. 风险与回退策略
 
@@ -312,9 +314,10 @@ logging 组件目标固定为：
 ### 11.4 未达全量函数级的缺失信息
 
 1. LogQueryService 的本地索引增量维护与 artifact retention/清理策略实现。
+2. `LogQueryService` 当前仍通过 internal record reader 抽象承接本地扫描，尚未接入真实运行时索引或持久保留策略。
 
 ### 11.5 下一步建议
 
-1. 当前专项 TODO 的下一轮执行入口应转入 `LOG-TODO-019`，而不是重复回做已完成的构建、unit/contract/integration 或 health probe 骨架任务。
-2. `LOG-BLK-003`、`LOG-BLK-005` 已解阻且 `LOG-GATE-06` 已关闭；当前 logging 专项剩余最高优先原子任务为 `LOG-TODO-019`。
+1. 当前专项 TODO 已完成 001~019 的全部原子任务；若继续推进 logging 子域，应新开围绕 retention、真实索引或运行时 wiring 的后续原子任务，而不是回退已完成骨架。
+2. `LOG-BLK-003`、`LOG-BLK-005` 已解阻且 `LOG-GATE-06` 已关闭；当前 logging 专项没有遗留 blocker。
 3. 后续若新增 logging integration 场景，应沿用 `tests/integration/infra/logging/` 与 `integration;logging` 标签，不再回退到顶层无组件归属的 smoke 用例。

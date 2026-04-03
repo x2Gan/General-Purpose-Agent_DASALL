@@ -458,6 +458,12 @@ dasall_register_logging_unit_test(
   logging/LoggingHealthProbeTest.cpp
 )
 
+dasall_register_logging_unit_test(
+  dasall_log_query_service_unit_test
+  LogQueryServiceTest
+  logging/LogQueryServiceTest.cpp
+)
+
 add_executable(dasall_audit_logger_interface_unit_test
   AuditLoggerInterfaceTest.cpp
 )
