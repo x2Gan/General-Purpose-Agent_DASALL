@@ -8,6 +8,41 @@
 
 ---
 
+## 记录 #063
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-BLK-001 logging config 模型解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-BLK-001 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-BLK-001-LoggingConfig设计收敛.md](docs/todos/infrastructure/deliverables/LOG-BLK-001-LoggingConfig%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 `ILogConfigurator` 的输入对象、结果对象、frozen key set 与 per-key 层级接受规则收敛为正式设计证据。
+   - 在 [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 6.6/6.9 补齐 LoggingConfig/LoggingConfigApplyResult 对象表、`infra.logging.*` 命名空间、runtime override 白名单与 `infra.audit.required` 准入门。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-BLK-001 标记为已解阻，并将 LOG-TODO-012 从 Blocked 迁移到 Not Started。
+
+### 测试
+
+1. 验证命令：
+   - `grep -n "ILogConfigurator\|infra.logging.level\|infra.audit.required" docs/architecture/DASALL_infra_logging模块详细设计.md docs/todos/infrastructure/deliverables/LOG-BLK-001-LoggingConfig设计收敛.md`
+   - `grep -n "LOG-BLK-001\|LOG-TODO-012" docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md`
+2. 结果：
+   - 设计文档、交付物与 TODO 回写均可定位到新增的 LoggingConfig 对象表、键域冻结与解阻状态。
+
+### 结果
+
+1. LOG-TODO-012 已从 Blocked 转为 Not Started，后续实现可以直接复用 ConfigCenter typed config，而无需再发明 logging 私有 patch 模型。
+2. logging 配置键域已与 infra/config 对齐到 `infra.logging.*`，并明确 `infra.audit.required` 不可被 profile/deployment/runtime 配置关闭。
+
+### 下一步
+
+1. 直接进入 LOG-TODO-012，落 ILogConfigurator + LoggingConfigAdapter 骨架、unit/contract 测试和验收命令。
+
+### 风险
+
+1. 若后续 infra/config 的 key 域或 ConfigSourceKind 契约回退，logging 本地的 per-key 接受规则需要同步 review，否则 LOG-BLK-001 应重新挂起。
+
 ## 记录 #062
 
 - 日期：2026-04-03

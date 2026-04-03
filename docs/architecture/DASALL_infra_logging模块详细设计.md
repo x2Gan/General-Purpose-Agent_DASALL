@@ -213,6 +213,41 @@ logging 非职责：
 4. IAuditLinkAdapter
    - attach_audit_ref(log_event): 为高风险日志关联 evidence_ref
 
+ILogConfigurator 对象冻结补充（v1）：
+
+1. `ILogConfigurator` 只接受已经过 ConfigCenter 结构校验的 `LoggingConfig` 对象，不直接接受 YAML/JSON/free-form patch。
+2. `LoggingConfig` 最小字段冻结为：`level`、`format`、`async_enabled`、`queue_size`、`overflow_policy`、`file_path`、`rotate_max_size_mb`、`rotate_max_files`、`redaction_enabled`、`redaction_ruleset`、`enable_diag_pull`、`audit_required`、`source_entries`。
+3. `source_entries` 复用 `config::TypedConfig` 保存当前生效 key 的来源层、来源标识和值类型，用于 logging 本地执行每个 key 的层级接受校验，而不是发明第二套 provenance 模型。
+4. `ILogConfigurator::apply(config)` 返回 `LoggingConfigApplyResult`，结果对象只允许暴露 `contracts::ResultCode` 与 `contracts::ErrorInfo` 作为错误边界，不新增 logging 私有错误对象。
+
+`LoggingConfig` 对象表：
+
+| 字段 | 类型 | 默认值 | 约束 |
+|---|---|---|---|
+| `level` | `LogLevel` | `Info` | 支持 TRACE/DEBUG/INFO/WARN/ERROR/FATAL；允许 runtime override |
+| `format` | `LoggingFormat` | `JsonLine` | 首版只接受 `json_line` / `key_value`；不允许 runtime override |
+| `async_enabled` | `bool` | `true` | 只允许默认/Profile |
+| `queue_size` | `uint32_t` | `8192` | 必须大于 0；运行期不允许热改 |
+| `overflow_policy` | `LoggingOverflowPolicy` | `Block` | 只允许 `block` / `overrun_oldest`；运行期不允许热改 |
+| `file_path` | `string` | `logs/runtime.log` | 不能为空；允许 deployment/runtime override |
+| `rotate_max_size_mb` | `uint32_t` | `50` | 必须大于 0 |
+| `rotate_max_files` | `uint32_t` | `10` | 必须大于 0 |
+| `redaction_enabled` | `bool` | `true` | 只允许默认/Profile |
+| `redaction_ruleset` | `string` | `default_v1` | 非空；允许 deployment/runtime override |
+| `enable_diag_pull` | `bool` | `true` | 允许默认/Profile/部署；不允许 runtime override |
+| `audit_required` | `bool` | `true` | 只接受 `true`；任何 `false` 都视为绕过 audit 主链 |
+| `source_entries` | `vector<TypedConfig>` | N/A | 必须覆盖 frozen key set，且所有 entry 满足 schema/source validity |
+
+`LoggingConfigApplyResult` 对象表：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `applied` | `bool` | 是否已成为当前生效 logging 配置 |
+| `runtime_override_active` | `bool` | 当前生效配置中是否存在 runtime override 来源 |
+| `rejected_keys` | `vector<string>` | 因局部层级规则或 audit 主链保护被拒绝的 key |
+| `result_code` | `contracts::ResultCode` | 失败时只落入 contracts 已冻结错误域 |
+| `error_info` | `optional<contracts::ErrorInfo>` | 可观测失败信息 |
+
 前置条件：
 
 - logger 已 init；配置已加载。
@@ -255,19 +290,29 @@ logging 非职责：
 
 ### 6.9 配置项与默认策略
 
+冻结补充：logging 不自行定义 runtime patch 结构，也不直接消费自由字典。四层覆盖顺序仍由 ConfigCenter 统一完成；LoggingConfigAdapter 只消费当前生效的 typed config，并在本地执行 logging 私有的 key 级接受规则。
+
+key 域冻结规则：
+
+1. 所有 logging 私有键统一使用 `infra.logging.*` 前缀，不再保留无命名空间的 `logging.*` 裸键。
+2. `infra.audit.required` 虽属于跨组件键，但 logging adapter 必须将其作为配置准入门的一部分读取，以阻止任何 profile/override 绕过 audit 主链。
+3. runtime override 只允许用于安全 tunable 键：`infra.logging.level`、`infra.logging.file.path`、`infra.logging.redaction.ruleset`。
+4. ConfigCenter 负责四层全局顺序与 patch 结构校验；LoggingConfigAdapter 负责 key 本地语义接受和 audit gate，拒绝后必须保留当前稳定配置，不写入部分成功状态。
+
 | 配置项 | 默认值 | 覆盖层级 | 说明 |
 |---|---|---|---|
-| logging.level | INFO | 默认/Profile/部署/运行时 | 全局最小日志级别 |
-| logging.format | json_line | 默认/Profile/部署 | 结构化格式 |
-| logging.async.enabled | true | 默认/Profile | 是否异步 |
-| logging.async.queue_size | 8192 | Profile/部署 | 队列容量 |
-| logging.async.overflow_policy | block | Profile/部署 | block 或 overrun_oldest；选择规则遵循 docs/development/InfraConcurrencyPolicy.md |
-| logging.file.path | logs/runtime.log | 部署/运行时 | 普通日志路径 |
-| logging.file.rotate.max_size_mb | 50 | Profile/部署 | 轮转阈值 |
-| logging.file.rotate.max_files | 10 | Profile/部署 | 保留份数 |
-| logging.redaction.enabled | true | 默认/Profile | 敏感信息脱敏 |
-| logging.redaction.ruleset | default_v1 | 部署/运行时 | 规则集版本 |
-| logging.export.enable_diag_pull | true | Profile/部署 | 是否允许按 trace/session 导出 |
+| infra.logging.level | INFO | 默认/Profile/部署/运行时 | 全局最小日志级别 |
+| infra.logging.format | json_line | 默认/Profile/部署 | 结构化格式 |
+| infra.logging.async.enabled | true | 默认/Profile | 是否异步 |
+| infra.logging.async.queue_size | 8192 | 默认/Profile/部署 | 队列容量 |
+| infra.logging.async.overflow_policy | block | 默认/Profile/部署 | block 或 overrun_oldest；选择规则遵循 docs/development/InfraConcurrencyPolicy.md |
+| infra.logging.file.path | logs/runtime.log | 默认/部署/运行时 | 普通日志路径 |
+| infra.logging.file.rotate.max_size_mb | 50 | 默认/Profile/部署 | 轮转阈值 |
+| infra.logging.file.rotate.max_files | 10 | 默认/Profile/部署 | 保留份数 |
+| infra.logging.redaction.enabled | true | 默认/Profile | 敏感信息脱敏 |
+| infra.logging.redaction.ruleset | default_v1 | 默认/部署/运行时 | 规则集版本 |
+| infra.logging.export.enable_diag_pull | true | 默认/Profile/部署 | 是否允许按 trace/session 导出 |
+| infra.audit.required | true | 默认/Profile | 审计主链不可关闭；logging 仅允许降级，不允许旁路 |
 
 ### 6.10 可观测性（日志/指标/追踪/审计）
 
@@ -288,7 +333,7 @@ logging 非职责：
 | 审计协同 | 新增 AuditLinkAdapter 对接路径 | 明确 logging 不重复建设审计存储 | infra/src/logging/AuditLinkAdapter.cpp | tests/integration/infra/logging/AuditLinkIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R AuditLinkIntegrationTest --output-on-failure | 依赖 infra/audit IAuditLogger |
 | 脱敏治理 | 新增 RedactionFilter 与规则配置 | 防止敏感数据明文落盘 | infra/src/logging/RedactionFilter.cpp | tests/unit/infra/logging/RedactionFilterTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R RedactionFilterTest --output-on-failure | 需规则样例 |
 | sink 故障降级 | 新增 fallback + degraded 状态机 | 保证写入失败可恢复 | infra/src/logging/LoggingRecovery.cpp | tests/integration/infra/logging/SinkFailureRecoveryIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R SinkFailureRecoveryIntegrationTest --output-on-failure | 需故障注入桩 |
-| 四层配置覆盖 | 接入 ILogConfigurator + ConfigCenter | 与 infra/config 一致 | infra/src/logging/LoggingConfigAdapter.cpp | tests/unit/infra/logging/LoggingConfigMergeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LoggingConfigMergeTest --output-on-failure | 依赖 infra/config 接口 |
+| 四层配置覆盖 | 接入 ILogConfigurator + ConfigCenter | 与 infra/config 一致，并由 logging 本地守住 audit 主链与 per-key 层级接受规则 | infra/include/logging/ILogConfigurator.h; infra/src/logging/LoggingConfigAdapter.cpp | tests/unit/infra/logging/LoggingConfigMergeTest.cpp; tests/contract/smoke/LogConfiguratorBoundaryContractTest.cpp | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -R "(LoggingConfigMergeTest|LogConfiguratorBoundaryContractTest)" --output-on-failure | 依赖 infra/config 接口 |
 | 可观测指标桥接 | 新增 LoggingMetricsBridge | 保证 logging 自可观测 | infra/src/logging/LoggingMetricsBridge.cpp | tests/unit/infra/logging/LoggingMetricsBridgeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LoggingMetricsBridgeTest --output-on-failure | 依赖 infra/metrics 接口 |
 | 诊断导出能力 | 新增按 trace/session 拉取接口 | 对齐 9.4 运维要求 | infra/src/logging/LogQueryService.cpp | tests/integration/infra/logging/LogQueryIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R LogQueryIntegrationTest --output-on-failure | 需查询索引策略 |
 | 无法映射项：OTel exporter 直连 | 标记为后续版本任务 | 当前阶段先做字段兼容，不引入完整 OTel SDK | N/A | N/A | N/A | 阻塞：OTel SDK 依赖与部署链路尚未冻结 |
