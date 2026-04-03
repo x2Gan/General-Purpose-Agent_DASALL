@@ -559,6 +559,29 @@ target_link_libraries(dasall_contract_log_configurator_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_logging_metrics_bridge_boundary_test
+  LoggingMetricsBridgeBoundaryContractTest
+  smoke/LoggingMetricsBridgeBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_logging_metrics_bridge_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_sources(dasall_contract_logging_metrics_bridge_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingMetricsBridge.cpp
+)
+
+target_link_libraries(dasall_contract_logging_metrics_bridge_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_metrics_provider_interface_boundary_test
   MetricsProviderInterfaceBoundaryContractTest
   smoke/MetricsProviderInterfaceBoundaryContractTest.cpp

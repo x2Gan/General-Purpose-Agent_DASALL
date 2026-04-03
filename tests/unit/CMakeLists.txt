@@ -42,6 +42,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_audit_link_adapter_unit_test
 	dasall_logging_recovery_unit_test
 	dasall_logging_config_merge_unit_test
+	dasall_logging_metrics_bridge_unit_test
 	dasall_audit_logger_interface_unit_test
 	dasall_audit_service_fallback_unit_test
 	dasall_audit_export_filter_unit_test

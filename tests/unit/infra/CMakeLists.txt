@@ -519,6 +519,27 @@ dasall_apply_common_options(dasall_logging_config_merge_unit_test)
 add_test(NAME LoggingConfigMergeTest COMMAND dasall_logging_config_merge_unit_test)
 set_tests_properties(LoggingConfigMergeTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_logging_metrics_bridge_unit_test
+  logging/LoggingMetricsBridgeTest.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingMetricsBridge.cpp
+)
+
+target_include_directories(dasall_logging_metrics_bridge_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_logging_metrics_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_logging_metrics_bridge_unit_test)
+
+add_test(NAME LoggingMetricsBridgeTest COMMAND dasall_logging_metrics_bridge_unit_test)
+set_tests_properties(LoggingMetricsBridgeTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_audit_logger_interface_unit_test
   AuditLoggerInterfaceTest.cpp
 )

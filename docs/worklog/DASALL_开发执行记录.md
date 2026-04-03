@@ -8,6 +8,56 @@
 
 ---
 
+## 记录 #066
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-013 实现 LoggingMetricsBridge 指标桥接骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-013-B 代码落地：
+   - 新增 [infra/src/logging/LoggingMetricsBridge.h](infra/src/logging/LoggingMetricsBridge.h)
+   - 新增 [infra/src/logging/LoggingMetricsBridge.cpp](infra/src/logging/LoggingMetricsBridge.cpp)
+   - 新增 [tests/unit/infra/logging/LoggingMetricsBridgeTest.cpp](tests/unit/infra/logging/LoggingMetricsBridgeTest.cpp)
+   - 新增 [tests/contract/smoke/LoggingMetricsBridgeBoundaryContractTest.cpp](tests/contract/smoke/LoggingMetricsBridgeBoundaryContractTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+2. 完成 LOG-TODO-013-D/B 证据收口：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-013-LoggingMetricsBridge设计收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-013-LoggingMetricsBridge%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 bridge skeleton 的 provider/meter/sample 入口、本地白名单校验与 non-recursive failure 结果对象收敛为正式交付物。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-TODO-013 标记为 Done，并补齐定向/聚合验证证据。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_logging_metrics_bridge_unit_test dasall_contract_logging_metrics_bridge_boundary_test`
+   - `ctest --test-dir build-ci -N -R "(LoggingMetricsBridgeTest|LoggingMetricsBridgeBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(LoggingMetricsBridgeTest|LoggingMetricsBridgeBoundaryContractTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - 定向目标构建通过，CTest 发现 2 个新增测试。
+   - `LoggingMetricsBridgeTest` 与 `LoggingMetricsBridgeBoundaryContractTest` 全部通过。
+   - 聚合 `unit` 套件 110/110 通过。
+   - 聚合 `contract` 套件 132/132 通过。
+
+### 结果
+
+1. logging 组件已具备最小 `LoggingMetricsBridge` skeleton，可以在不依赖 metrics runtime/exporter 实现的前提下，通过 provider/meter/sample 边界稳定发射五个 frozen metric family。
+2. bridge failure 已被收敛到 `MetricsErrorCode` + `MetricsOperationStatus`，并通过 local degraded/no-op 语义阻止 metrics 失败递归反噬 logging 主链。
+
+### 下一步
+
+1. 若继续按专项 TODO 推进，可进入 LOG-TODO-014 或 LOG-TODO-015，完成 logging 源码与测试注册的构建接线收口。
+
+### 风险
+
+1. 本轮只完成 bridge skeleton，尚未把 bridge 接到 LoggingFacade / SinkDispatcher 主链，也未接入 `dasall_infra` 静态库源码列表；后续 wiring 任务需要显式接线，不能默认假定主链已自动产出 metrics。
+
 ## 记录 #065
 
 - 日期：2026-04-03
