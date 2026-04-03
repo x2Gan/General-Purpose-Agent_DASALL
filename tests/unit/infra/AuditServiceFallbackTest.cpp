@@ -104,6 +104,39 @@ void test_audit_service_uses_fallback_when_primary_path_is_unavailable() {
               "audit service export should return a checksum and explicit final-page semantics");
 }
 
+void test_audit_service_keeps_fallback_pipeline_append_order_after_primary_exhaustion() {
+  using dasall::infra::audit::AuditService;
+  using dasall::infra::audit::AuditServiceConfig;
+  using dasall::tests::support::assert_true;
+
+  AuditService service;
+
+  const auto init_result = service.init(AuditServiceConfig{.primary_capacity = 1, .fallback_capacity = 2});
+  assert_true(init_result.ok,
+              "audit service should initialize before fallback append-order testing");
+  assert_true(service.start().ok,
+              "audit service should start before fallback append-order testing");
+
+  const auto primary_write = service.write_audit(make_event("tool-call-fallback-001"), make_context());
+  const auto first_fallback_write = service.write_audit(make_event("tool-call-fallback-002"), make_context());
+  const auto second_fallback_write = service.write_audit(make_event("tool-call-fallback-003"), make_context());
+
+  assert_true(primary_write.is_success(),
+              "the first audit event should occupy the primary pipeline before fallback is needed");
+  assert_true(first_fallback_write.is_degraded_success() &&
+                  second_fallback_write.is_degraded_success(),
+              "audit service should route subsequent records into fallback while degraded");
+  assert_true(service.fallback_record_count() == 2,
+              "fallback pipeline should retain every degraded record until fallback capacity is reached");
+
+  const auto export_result = service.export_audit(make_query());
+  assert_true(export_result.records.size() == 3,
+              "export should surface the retained primary and fallback audit records together");
+  assert_true(export_result.records[1].event_id == "audit-event-tool-call-fallback-002" &&
+                  export_result.records[2].event_id == "audit-event-tool-call-fallback-003",
+              "fallback pipeline should preserve append order for degraded records after primary exhaustion");
+}
+
 void test_audit_service_makes_fallback_exhaustion_observable() {
   using dasall::infra::audit::AuditService;
   using dasall::infra::audit::AuditServiceConfig;
@@ -136,6 +169,7 @@ int main() {
   try {
     test_audit_service_keeps_primary_pipeline_append_only_order();
     test_audit_service_uses_fallback_when_primary_path_is_unavailable();
+    test_audit_service_keeps_fallback_pipeline_append_order_after_primary_exhaustion();
     test_audit_service_makes_fallback_exhaustion_observable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

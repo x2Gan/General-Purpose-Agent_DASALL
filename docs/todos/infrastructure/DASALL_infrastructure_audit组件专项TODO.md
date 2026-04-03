@@ -181,7 +181,7 @@
 | AUD-TODO-007 | Done | 定义 AuditErrors 错误码域 | audit 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义；6.8 异常恢复 | L3 | infra/include/audit/AuditErrors.h | INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL | contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraErrorCodeMappingContractTest --output-on-failure | AUD-TODO-003 | 无 | 无 | AuditErrors.h、映射测试 | 仅当 6 个错误码均可追溯到设计条目，且 contract 测试能阻止漂移时完成 |
 | AUD-TODO-008 | Done | 实现 AuditValidator 字段校验骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditValidator；6.3 输入输出；6.8 输入异常 | L2 | infra/src/audit/AuditValidator.cpp | AuditValidator（字段完整性与边界校验） | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-007 | 无 | 无 | AuditValidator.cpp、校验证据 | 仅当必填字段缺失、越权字段、非法时间窗三类输入异常都能返回可判定失败时完成 |
 | AUD-TODO-009 | Done | 实现 AuditPipeline 主写骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditPipeline；6.7 正常路径第 3 步；6.8 主写失败 | L2 | infra/src/audit/AuditPipeline.cpp | AuditPipeline（append-only 主写链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-008 | 无 | 无 | AuditPipeline.cpp、主写测试 | 仅当验证通过事件能进入 append-only 主写路径，且主写失败可被上层捕获时完成 |
-| AUD-TODO-010 | Not Started | 实现 AuditFallbackPipeline 降级骨架 | audit 设计 6.2/6.3/6.8 | 6.2 AuditFallbackPipeline；6.8 恢复动作 1/2 | L2 | infra/src/audit/AuditFallbackPipeline.cpp | AuditFallbackPipeline（ringbuffer/file 降级链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-007、AUD-TODO-009 | 无 | 无 | AuditFallbackPipeline.cpp、降级测试 | 仅当主写失败可触发 fallback_used=true，且 fallback 失败返回 INF_E_AUDIT_FALLBACK_FAIL 时完成 |
+| AUD-TODO-010 | Done | 实现 AuditFallbackPipeline 降级骨架 | audit 设计 6.2/6.3/6.8 | 6.2 AuditFallbackPipeline；6.8 恢复动作 1/2 | L2 | infra/src/audit/AuditFallbackPipeline.cpp | AuditFallbackPipeline（ringbuffer/file 降级链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-007、AUD-TODO-009 | 无 | 无 | AuditFallbackPipeline.cpp、降级测试 | 仅当主写失败可触发 fallback_used=true，且 fallback 失败返回 INF_E_AUDIT_FALLBACK_FAIL 时完成 |
 | AUD-TODO-011 | Not Started | 实现 AuditServiceFacade 入口骨架 | audit 设计 6.2/6.3/6.4/6.7 | 6.2 AuditServiceFacade；6.4 依赖关系；6.7 主流程 | L2 | infra/src/audit/AuditService.cpp | AuditServiceFacade（审计入口、生命周期管理、统一错误映射） | unit：AuditServiceFallbackTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-008、AUD-TODO-009、AUD-TODO-010 | 无 | 无 | AuditService.cpp、主链路测试 | 仅当 write_audit 主链路可串起 validator/pipeline/fallback，且返回结果可二值判定时完成 |
 | AUD-TODO-012 | Blocked | 实现 AuditExporter 导出与脱敏骨架 | audit 设计 6.2/6.3/6.5；11.1 | 6.2 AuditExporter；6.3 导出语义；11.1 导出 filter 阻塞 | L2 | infra/src/audit/AuditExporter.cpp | AuditExporter（过滤、分页、脱敏） | unit：AuditExportFilterTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditExportFilterTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-004、AUD-TODO-005、AUD-TODO-006 | AUD-BLK-001 | 冻结 ExportQuery 的最小过滤语义，并明确时间窗+actor+action 三键的 contract 边界 | AuditExporter.cpp 或阻塞记录 | 仅当最小过滤模型冻结并通过评审后，状态才可由 Blocked 转为 Not Started |
 | AUD-TODO-013 | Blocked | 定义 IAuditRetention 接口与 RetentionOutcome 对象 | audit 设计 6.6；11.1 | 6.6 IAuditRetention；11.1 retention 阻塞 | L1 | infra/include/audit/IAuditRetention.h | IAuditRetention::apply_retention；RetentionOutcome | unit：AuditInterfaceCompileTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-007 | AUD-BLK-002 | 补齐 RetentionOutcome 的字段与自动清理/归档动作对象后再冻结接口 | IAuditRetention.h 或阻塞记录 | 仅当 retention 输出对象具备可二值判定字段且评审通过后，状态才可从 Blocked 转为 Not Started |
@@ -705,3 +705,48 @@ Build 合规复核：
 3. 测试发现性：`AuditServiceFallbackTest` 已通过 `ctest -N -R` 命中，未引入新的 discoverability 缺口。
 4. TODO 证据回写：已完成 009 状态、交付物、验收结果与执行记录回写。
 5. 提交隔离：本轮只拆主写路径，不提前实现 `AuditFallbackPipeline` 或 facade 统一入口。
+
+### 12.10 AUD-TODO-010
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-010。
+2. 可执行性依据：`AUD-TODO-009` 已完成主写 `AuditPipeline` 骨架，fallback 仍堆在 `AuditService` 中，且 010 不依赖任何 Blocked 项。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.2/6.3/6.8 要求 `AuditFallbackPipeline` 只承接主写失败后的降级写入，不可静默丢失，失败要维持 `INF_E_AUDIT_FALLBACK_FAIL` 可观测。
+2. 外部参考：OWASP Logging Cheat Sheet 要求显式测试日志写入故障、容量耗尽和存储异常场景，这支持把 fallback 容量耗尽单独建模成结构化失败，而不是 service 内的隐式分支。
+
+D 结论：
+
+1. Design -> Build 映射：新增 internal `infra/src/audit/AuditFallbackPipeline.h/.cpp`，定义降级 append-only `AuditFallbackPipeline` 与 `AuditFallbackWriteResult`；`AuditService` 在主写失败后改为委托 fallback pipeline。
+2. Build 三件套：
+	- 代码目标：落盘 `AuditFallbackPipeline` internal header/source，并最小更新 `AuditService.cpp` 与 `infra/CMakeLists.txt`。
+	- 测试目标：扩展 `AuditServiceFallbackTest`，新增 fallback append 顺序正例，并继续复用 fallback exhaustion 负例。
+	- 验收命令：`cmake --build build-ci --target dasall_infra dasall_audit_service_fallback_unit_test && ctest --test-dir build-ci -N -R "AuditServiceFallbackTest" && ctest --test-dir build-ci -R "AuditServiceFallbackTest" --output-on-failure`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. `infra/src/audit/AuditFallbackPipeline.h`、`infra/src/audit/AuditFallbackPipeline.cpp`：新增 internal `AuditFallbackWriteResult` 与 `AuditFallbackPipeline`，收敛降级写入骨架。
+2. `infra/src/audit/AuditService.cpp`：主写失败后的降级 append 由 service 直接 vector/capacity 判断切为委托 fallback pipeline。
+3. `infra/CMakeLists.txt`：最小新增 `AuditFallbackPipeline.cpp` 到 `dasall_infra` 构建图。
+4. `tests/unit/infra/AuditServiceFallbackTest.cpp`：新增 fallback append 顺序正例，继续保留 fallback exhaustion 负例。
+5. `docs/todos/infrastructure/deliverables/AUD-TODO-010-AuditFallbackPipeline骨架收敛.md`：补齐 D/B 收敛、外部参考、Design -> Build 映射与验收结果。
+
+验收结果：
+
+1. `cmake --build build-ci --target dasall_infra dasall_audit_service_fallback_unit_test`：通过。
+2. `ctest --test-dir build-ci -N -R "AuditServiceFallbackTest"`：通过，发现 1 个定向测试。
+3. `ctest --test-dir build-ci -R "AuditServiceFallbackTest" --output-on-failure`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：fallback pipeline/result 命名已能直接表达降级 append 语义，无需新增注释。
+2. 正负例覆盖：`AuditServiceFallbackTest` 新增 fallback append 顺序正例，继续复用 fallback exhaustion 负例。
+3. 测试发现性：`AuditServiceFallbackTest` 已通过 `ctest -N -R` 命中，未引入新的 discoverability 缺口。
+4. TODO 证据回写：已完成 010 状态、交付物、验收结果与执行记录回写。
+5. 提交隔离：本轮只拆降级写入路径，不提前实现 facade 统一入口。

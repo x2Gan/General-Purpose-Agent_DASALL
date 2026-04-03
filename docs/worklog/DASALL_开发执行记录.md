@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #077
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-010 实现 AuditFallbackPipeline 降级骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-010-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-010-AuditFallbackPipeline骨架收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-010-AuditFallbackPipeline%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，补齐本地证据、OWASP 外部参考、Design->Build 映射与 D Gate 结果。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-010` 标记为 Done，并追加 12.10 执行记录与验收证据。
+2. 完成 AUD-TODO-010-B 降级骨架落地：
+   - 新增 [infra/src/audit/AuditFallbackPipeline.h](infra/src/audit/AuditFallbackPipeline.h) 与 [infra/src/audit/AuditFallbackPipeline.cpp](infra/src/audit/AuditFallbackPipeline.cpp)，定义 internal `AuditFallbackWriteResult` 与降级 `AuditFallbackPipeline`。
+   - 更新 [infra/src/audit/AuditService.cpp](infra/src/audit/AuditService.cpp)，将主写失败后的降级 append 改为委托 fallback pipeline。
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `AuditFallbackPipeline.cpp` 纳入 `dasall_infra`。
+   - 更新 [tests/unit/infra/AuditServiceFallbackTest.cpp](tests/unit/infra/AuditServiceFallbackTest.cpp)，补充 fallback append 顺序正例，同时保持 fallback exhaustion 回归断言。
+
+### 测试
+
+1. 验收命令：
+   - `cmake --build build-ci --target dasall_infra dasall_audit_service_fallback_unit_test`
+   - `ctest --test-dir build-ci -N -R "AuditServiceFallbackTest"`
+   - `ctest --test-dir build-ci -R "AuditServiceFallbackTest" --output-on-failure`
+2. 结果：
+   - `AuditServiceFallbackTest` 定向发现 1 个，执行 1/1 通过。
+   - 新增 fallback append 顺序断言通过，既有 fallback exhaustion 回归保持通过。
+
+### 结果
+
+1. `AuditFallbackPipeline` 已从“设计存在但实现缺失”推进到“独立 internal fallback pipeline + service 接线 + 单测回归已落盘”。
+2. 本轮没有提前实现 facade 统一入口；audit 主链继续保持 validator -> pipeline -> fallback -> facade 的串行推进顺序。
+
+### 下一步
+
+1. 进入 `AUD-TODO-011`，将 validator/pipeline/fallback 串成统一的 AuditServiceFacade 入口骨架。
+
+### 风险
+
+1. 当前 fallback pipeline 仍以 internal helper 直接操作现有 degraded record store；后续在 011 做 facade 收敛时，要避免破坏 010 已建立的 fallback append 顺序与 exhaustion 语义。
+
 ## 记录 #076
 
 - 日期：2026-04-03

@@ -1,5 +1,6 @@
 #include "audit/AuditService.h"
 #include "audit/AuditErrors.h"
+#include "AuditFallbackPipeline.h"
 #include "AuditPipeline.h"
 #include "AuditValidator.h"
 
@@ -102,8 +103,10 @@ AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
   }
 
   degraded_ = true;
-  if (fallback_records_.size() < config_.fallback_capacity) {
-    fallback_records_.push_back(event);
+  AuditFallbackPipeline fallback_pipeline(&fallback_records_,
+                                          config_.fallback_capacity);
+  const auto fallback_result = fallback_pipeline.append(event);
+  if (fallback_result.ok) {
     return AuditWriteOutcome{
         .accepted = true,
         .persisted = true,
@@ -112,7 +115,7 @@ AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
     };
   }
 
-  return make_audit_write_failure(AuditErrorCode::FallbackFail,
+  return make_audit_write_failure(fallback_result.error_code,
                                   true,
                                   true);
 }
