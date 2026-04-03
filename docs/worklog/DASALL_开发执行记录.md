@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #062
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-011 实现 LoggingRecovery 故障降级骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-011-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-011-LoggingRecovery设计收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-011-LoggingRecovery%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 6.8 的 sink IO/format failure/fallback/retry 约束收敛为内部恢复骨架。
+   - 将原 blocker“失败注入桩不足”最小化为 internal `ILogRecoverySink` 注入接口，避免真实 IO 成为单测前提。
+   - 明确 Design -> Build 映射：内部 sink 接口 + degraded 状态机 + failure-injection 单测，不越界到真实 audit/health bridge。
+2. 完成 LOG-TODO-011-B 代码落地：
+   - 新增 [infra/src/logging/LoggingRecovery.h](infra/src/logging/LoggingRecovery.h)
+   - 新增 [infra/src/logging/LoggingRecovery.cpp](infra/src/logging/LoggingRecovery.cpp)
+   - 新增 [tests/unit/infra/logging/LoggingRecoveryTest.cpp](tests/unit/infra/logging/LoggingRecoveryTest.cpp)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_logging_recovery_unit_test`
+   - `ctest --test-dir build-ci -N -R "LoggingRecoveryTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"` 通过。
+   - `cmake --build build-ci --target dasall_logging_recovery_unit_test` 通过。
+   - `ctest --test-dir build-ci -N -R "LoggingRecoveryTest"` 通过，发现 1 个测试。
+   - `cmake --build build-ci --target dasall_unit_tests` 通过，108/108 unit tests passed。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 通过，108/108 unit tests passed。
+
+### 结果
+
+1. logging 组件已经具备最小可测的故障降级状态机，后续真实 sink adapter 可以直接挂到 `ILogRecoverySink` 注入点而不重写恢复判定。
+2. sink IO、format failure、retry success、retry failure 四条路径都进入 unit failure-injection 覆盖面，为后续 health/metrics bridge 留出稳定入口。
+
+### 下一步
+
+1. 若继续按专项 TODO 推进，直接后继应进入 LOG-TODO-014/015 的构建与测试接线，或在解阻后再进入 LOG-TODO-012/013。
+
+### 风险
+
+1. `LoggingRecovery` 当前只保留 internal state 与 fallback 路径，不接入真实 recovery 审计或健康探针；后续扩展应走 adapter/bridge，不要把跨子系统逻辑压回恢复骨架。
+
 ## 记录 #061
 
 - 日期：2026-04-03
