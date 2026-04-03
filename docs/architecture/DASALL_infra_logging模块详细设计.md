@@ -332,6 +332,23 @@ key 域冻结规则：
 5. 追踪：记录 trace_id/span_id 兼容字段（若可获得 span_id 则写入）。
 6. 审计协同：关键动作日志需附 evidence_ref，并通过 IAuditLinkAdapter 关联至 infra/audit。
 
+### 6.10.1 LoggingHealthProbe 契约冻结
+
+`LoggingHealthProbe` 不定义 logging 私有 health result，也不扩写 infra/health 通用接口；其唯一对外边界固定为 `dasall::infra::IHealthProbe::probe() -> ProbeResult`。
+
+| 项目 | 冻结结论 |
+|---|---|
+| 对外接口 | 直接实现 `IHealthProbe`，不新增第二套 logging health interface |
+| 固定 descriptor | `probe_name = "infra.logging.pipeline"`、`group = "readiness"`、`criticality = Critical`、`interval_ms = 5000`、`timeout_ms = 100` |
+| 输入信号 | `queue_depth`、`dropped_total_delta`、`recovery_degraded`、`fallback_active`、`unrecoverable_failure_total`、`metrics_bridge_degraded` |
+| Healthy 条件 | 无降级、无未恢复失败、队列未越高水位、无新增 drop |
+| Degraded 条件 | fallback 已启用，或 recovery/metrics bridge degraded，或队列高水位/新增 drop 被观测到 |
+| Unhealthy 条件 | 主/降级写入链都不可用，或存在未恢复的不可恢复失败 |
+| timeout 语义 | `probe()` 只做本地只读采样；若无法在 `timeout_ms` 内完成，返回结构化失败 `ProbeResult`，不得阻塞 LoggingFacade 主链 |
+| detail_ref 约束 | 统一落到 `diag://infra/logging/health/...` 命名空间，供 diagnostics/log query 后续复用 |
+
+冻结结果：LOG-BLK-003 只需要 logging 侧补齐 descriptor、状态映射和 timeout 语义文档，不需要再等待 health 子域补新的接口对象。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

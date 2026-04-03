@@ -8,6 +8,42 @@
 
 ---
 
+## 记录 #070
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-BLK-003 LoggingHealthProbe 接口边界解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-BLK-003-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-BLK-003-LoggingHealthProbe设计收敛.md](docs/todos/infrastructure/deliverables/LOG-BLK-003-LoggingHealthProbe%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 blocker 根因收敛为“logging 未把 health 通用 probe 契约映射成自身 descriptor/status 设计”，并冻结 `LoggingHealthProbe` 的 descriptor、输入信号、三态映射与 timeout 语义。
+   - 更新 [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging模块详细设计.md)，新增 6.10.1，明确 `LoggingHealthProbe` 直接实现 `IHealthProbe`，不再引入 logging 私有 health result。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-BLK-003 标记为已解阻，并新增后续执行任务 `LOG-TODO-017`。
+
+### 测试
+
+1. 验证命令：
+   - `grep -n "IHealthProbe\|ProbeDescriptor\|ProbeResult\|timeout_ms" docs/architecture/DASALL_infra_health模块详细设计.md infra/include/health/IHealthProbe.h infra/include/health/ProbeTypes.h`
+   - `grep -n "infra.logging.pipeline\|LoggingHealthProbe\|readiness\|unrecoverable_failure_total" docs/architecture/DASALL_infra_logging模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md docs/todos/infrastructure/deliverables/LOG-BLK-003-LoggingHealthProbe设计收敛.md`
+2. 结果：
+   - health 通用 probe 契约和 logging 侧 descriptor/status mapping 已能在文档与头文件中双向定位。
+   - LOG-TODO-017 已具备可执行的代码目标、测试目标与验收命令，不再依赖额外 health blocker。
+
+### 结果
+
+1. `LoggingHealthProbe` 的接口边界已从 L1 提升到 L2，后续实现只需围绕本地状态 provider 与三态映射落代码，不需要再等待 health 子域补新对象。
+2. `LOG-BLK-003` 已不再阻塞 logging 子域继续推进；下一轮可以直接进入 logging integration 用例，随后再处理 `LOG-BLK-005`。
+
+### 下一步
+
+1. 进入 logging integration 用例与标签注册任务，补齐 `tests/integration/infra/logging/` 并关闭 `LOG-GATE-06`。
+
+### 风险
+
+1. 本轮只冻结 `LoggingHealthProbe` 边界，尚未实现 state provider 与阈值逻辑；若后续实现试图绕开 `IHealthProbe` 重新定义私有结果对象，应立即回退并重新审查边界。
+
 ## 记录 #069
 
 - 日期：2026-04-03
