@@ -8,6 +8,46 @@
 
 ---
 
+## 记录 #079
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-016 注册 audit 源码到 infra CMake
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-016-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-016-Audit构建接线收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-016-Audit%E6%9E%84%E5%BB%BA%E6%8E%A5%E7%BA%BF%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design->Build 映射与 D Gate 结果。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-016` 标记为 Done，并追加 12.12 执行记录与验收证据。
+2. 完成 AUD-TODO-016-B 构建接线收口：
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，新增 `DASALL_INFRA_AUDIT_SOURCES`，把 `AuditValidator.cpp`、`AuditPipeline.cpp`、`AuditFallbackPipeline.cpp`、`AuditService.cpp` 从通用 core 列表抽成独立 audit 构建入口。
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，新增 `DASALL_INFRA_AUDIT_PUBLIC_HEADERS`，把 audit public headers 从通用 header 列表抽成独立导出入口。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_audit_logger_interface_unit_test`
+   - `ctest --test-dir build-ci -N -R "AuditInterfaceCompileTest"`
+   - `ctest --test-dir build-ci -R "AuditInterfaceCompileTest" --output-on-failure`
+2. 结果：
+   - `AuditInterfaceCompileTest` 定向发现 1 个，执行 1/1 通过。
+   - `dasall_infra` 与 audit public header 接线在独立 CMake 变量下保持通过。
+
+### 结果
+
+1. audit source/header 已从“顺手挂进 core/public 列表”推进到“在 infra CMake 中具备独立可追踪的专项入口”。
+2. 本轮没有扩张到测试标签和 discoverability 收口；这些后续由 `AUD-TODO-017` 单独处理。
+
+### 下一步
+
+1. 进入 `AUD-TODO-017`，收口 audit unit/contract 测试注册与 discoverability 标签面。
+
+### 风险
+
+1. 当前 `AuditInterfaceCompileTest` 仍带有历史 `logging` 标签，若不在 017 中修正，audit 测试 discoverability 仍然不够清晰。
+
 ## 记录 #078
 
 - 日期：2026-04-03

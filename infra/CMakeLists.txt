@@ -1,10 +1,6 @@
 set(DASALL_INFRA_CORE_SOURCES
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
-  src/audit/AuditFallbackPipeline.cpp
-  src/audit/AuditPipeline.cpp
-  src/audit/AuditValidator.cpp
-  src/audit/AuditService.cpp
   src/config/ConfigCenterFacade.cpp
   src/config/ConfigPublisher.cpp
   src/config/ConfigLoader.cpp
@@ -12,6 +8,13 @@ set(DASALL_INFRA_CORE_SOURCES
   src/config/ConfigValidator.cpp
   src/config/ConfigSnapshotStore.cpp
   src/plugin/PluginManager.cpp
+)
+
+set(DASALL_INFRA_AUDIT_SOURCES
+  src/audit/AuditFallbackPipeline.cpp
+  src/audit/AuditPipeline.cpp
+  src/audit/AuditValidator.cpp
+  src/audit/AuditService.cpp
 )
 
 set(DASALL_INFRA_TRACING_SOURCES
@@ -75,12 +78,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/metrics/IMetricsProvider.h
   include/metrics/MetricsSnapshots.h
   include/metrics/MetricTypes.h
-  include/audit/AuditTypes.h
-  include/audit/AuditExporterTypes.h
-  include/audit/AuditErrors.h
   include/LogEvent.h
-  include/audit/AuditService.h
-  include/audit/IAuditLogger.h
   include/config/ConfigTypes.h
   include/config/ConfigErrors.h
   include/config/IConfigCenter.h
@@ -117,17 +115,26 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/plugin/IPluginPolicyGate.h
 )
 
+set(DASALL_INFRA_AUDIT_PUBLIC_HEADERS
+  include/audit/AuditTypes.h
+  include/audit/AuditExporterTypes.h
+  include/audit/AuditErrors.h
+  include/audit/AuditService.h
+  include/audit/IAuditLogger.h
+)
+
 add_library(dasall_infra STATIC)
 
 target_sources(dasall_infra
   PRIVATE
     ${DASALL_INFRA_CORE_SOURCES}
+    ${DASALL_INFRA_AUDIT_SOURCES}
     ${DASALL_INFRA_LOGGING_SOURCES}
     ${DASALL_INFRA_TRACING_SOURCES}
 )
 
 set_target_properties(dasall_infra PROPERTIES
-  PUBLIC_HEADER "${DASALL_INFRA_PUBLIC_HEADERS}"
+  PUBLIC_HEADER "${DASALL_INFRA_PUBLIC_HEADERS};${DASALL_INFRA_AUDIT_PUBLIC_HEADERS}"
 )
 
 target_compile_features(dasall_infra PUBLIC cxx_std_20)
