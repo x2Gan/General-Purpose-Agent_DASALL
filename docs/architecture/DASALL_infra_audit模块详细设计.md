@@ -307,6 +307,20 @@ AuditService 非职责：
 3. 追踪：write/export 操作带 trace_id/span_id 关联字段。
 4. 审计：高风险动作（secret.rotate、ota.apply/rollback、plugin.load/unload、policy.patch、diagnostics.export）强制入审计。
 
+### 6.10.1 AuditMetricsBridge 协议冻结（AUD-BLK-004）
+
+为解掉 `AUD-BLK-004`，冻结 audit 指标桥接的最小协议如下：
+
+1. `AuditMetricsBridge` 只通过 `metrics::IMetricsProvider` / `metrics::IMeter` 发射指标，不直连 exporter，不声明第二套 audit 私有 metrics sink。
+2. meter scope 固定为 `infra.audit@v1`，所有指标 family 与标签白名单对齐 [docs/architecture/DASALL_infra_metrics模块详细设计.md](docs/architecture/DASALL_infra_metrics模块详细设计.md) 6.6.2。
+3. audit bridge 只允许发射 `audit_write_total`、`audit_write_fail_total`、`audit_fallback_total`、`audit_fallback_fail_total`、`audit_export_total`、`audit_export_fail_total`、`audit_queue_depth` 七个 frozen metric family。
+4. bridge 标签只允许 `module/stage/profile/outcome/error_code` 五元组；`actor`、`target`、`trace_id`、`request_id`、`evidence_ref` 等高基数字段不得进入 metrics label。
+5. bridge 失败语义冻结为：
+  - provider/exporter 问题只把 bridge 标记为 degraded，不反噬 audit 主写/导出主结果；
+  - `QueueFull` 只丢弃本次观测样本；
+  - `IdentityInvalid`/`ConfigInvalid` 让 bridge 回退为 no-op，并把 `metrics_bridge_degraded=true` 暴露给 `AuditHealthStatus`。
+6. health 对齐关系冻结为：metrics bridge degraded 只能把 `AuditHealthStatus.state` 推到 `Degraded`，不能直接把 audit 置为 `Unavailable`；只有主写/fallback 都无法继续承接时，health 才允许升级到 `Unavailable`。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

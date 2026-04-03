@@ -8,6 +8,41 @@
 
 ---
 
+## 记录 #082
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-BLK-004 AuditMetricsBridge 协议解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-BLK-004-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-BLK-004-AuditMetricsBridge设计收敛.md](docs/todos/infrastructure/deliverables/AUD-BLK-004-AuditMetricsBridge%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 blocker 根因收敛为“audit 未冻结 metrics provider/meter 接入协议、七指标对象表、标签白名单与 non-recursive failure 语义”，并给出直达 `AUD-TODO-015` 的交接约束。
+   - 更新 [docs/architecture/DASALL_infra_metrics模块详细设计.md](docs/architecture/DASALL_infra_metrics模块详细设计.md)，新增 `6.6.2` 与 `6.8.2`，冻结 audit bridge 的 meter scope、七指标对象表、五元标签白名单和失败语义。
+   - 更新 [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit模块详细设计.md)，新增 `6.10.1 AuditMetricsBridge 协议冻结（AUD-BLK-004）`，补齐 bridge degraded 到 `AuditHealthStatus` 的对齐规则。
+2. 完成 blocker 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-BLK-004` 标记为已解阻，并把 `AUD-TODO-015` 从 Blocked 迁移到 Not Started；同时清理 TODO 中仍残留的旧 blocker 话术，保证对象扫描、风险和下一步建议与当前状态一致。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "6\\.6\\.2 跨模块指标桥接协议（audit v1）|6\\.8\\.2 audit 指标桥接失败语义|6\\.10\\.1 AuditMetricsBridge 协议冻结|AUD-BLK-004|AUD-TODO-015" docs/architecture/DASALL_infra_metrics模块详细设计.md docs/architecture/DASALL_infra_audit模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md docs/todos/infrastructure/deliverables/AUD-BLK-004-AuditMetricsBridge设计收敛.md`
+2. 结果：
+   - audit bridge 的协议冻结章节、TODO 解阻状态和 blocker 交付件均已可定位追溯，`AUD-TODO-015` 已具备进入实现轮的前置条件。
+
+### 结果
+
+1. `AUD-BLK-004` 已不再阻塞 audit 子域继续推进；后续可按依赖顺序进入 `AUD-TODO-014` 与 `AUD-TODO-015` 的接口/桥接实现轮。
+
+### 下一步
+
+1. 进入 `AUD-TODO-014`，按已冻结的 `AuditHealthStatus` 三态与只读 evaluate 语义落盘 `IAuditHealthProbe.h`，再继续推进 `AUD-TODO-015`。
+
+### 风险
+
+1. 若后续 audit bridge 回退为动态 metric family、引入高基数标签，或把 bridge degraded 直接映射为 `Unavailable`，本 blocker 需要重新转为 Blocked。
+
 ## 记录 #081
 
 - 日期：2026-04-03

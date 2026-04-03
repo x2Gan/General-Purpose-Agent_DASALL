@@ -301,6 +301,42 @@ logging bridge 标签填充规则：
 2. logging_write_total、logging_write_fail_total、logging_drop_total 保持 _total 后缀；logging_flush_latency_ms 保持当前 v1 命名冻结，若后续 Prometheus exporter 需要 seconds 基准换算，只能在 exporter 适配层完成，不回改 bridge API。
 3. MetricSample.identity_ref 的 name、type、unit 必须与上表一致；运行期不允许按 sink/path 动态改 metric family。
 
+### 6.6.2 跨模块指标桥接协议（audit v1）
+
+为解掉 audit 侧 `AUD-BLK-004`，冻结 audit -> metrics 的最小桥接协议如下：
+
+1. `AuditMetricsBridge` 只允许依赖 `IMetricsProvider` 与 `IMeter`；不得直连 `IMetricExporter`、exporter 配置对象或 metrics 内部队列。
+2. meter 获取路径固定为 `get_meter(MeterScope{.name = "infra.audit", .version = "v1"})`；provider 继续负责配置与生命周期，保持与 OpenTelemetry `MeterProvider -> Meter -> Instrument` 的分层一致。
+3. audit v1 指标只允许通过 `create_counter`/`create_gauge` + `record(sample)` 建立和发射，不新增 audit 私有 `IMetricSink` 或第二套 bridge 接口。
+
+audit v1 指标对象冻结表：
+
+| 指标名 | Instrument 类型 | unit | 创建接口 | 说明 |
+|---|---|---|---|---|
+| audit_write_total | Counter | 1 | IMeter::create_counter | 审计写入成功总数 |
+| audit_write_fail_total | Counter | 1 | IMeter::create_counter | 审计写入失败总数 |
+| audit_fallback_total | Counter | 1 | IMeter::create_counter | fallback 承接成功总数 |
+| audit_fallback_fail_total | Counter | 1 | IMeter::create_counter | fallback 承接失败总数 |
+| audit_export_total | Counter | 1 | IMeter::create_counter | 导出成功总数 |
+| audit_export_fail_total | Counter | 1 | IMeter::create_counter | 导出失败总数 |
+| audit_queue_depth | Gauge | 1 | IMeter::create_gauge | 当前 audit 队列/存储保留深度 |
+
+audit bridge 标签填充规则：
+
+| 标签 | 取值规则 | 约束 |
+|---|---|---|
+| module | 固定为 audit | 不允许复用其他模块名 |
+| stage | 仅允许 write、fallback、export、retention、health | 不允许透传 actor、target、文件路径等动态值 |
+| profile | 当前 active profile_id；缺失填 unknown | 不暴露部署自由文本 |
+| outcome | 仅允许 success、failure、degraded | 与桥接失败/降级语义对齐 |
+| error_code | 仅允许 none、INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL | 不允许透传 errno、request/session/trace/task 等高基数标识 |
+
+补充约束：
+
+1. `AuditMetricsBridge` 不得把 `request_id`、`session_id`、`trace_id`、`task_id`、`evidence_ref.ref` 作为 metric label；这些标识只保留在日志/追踪/审计记录中。
+2. `audit_write_total`、`audit_write_fail_total`、`audit_fallback_total`、`audit_fallback_fail_total`、`audit_export_total`、`audit_export_fail_total` 保持 `_total` 后缀；`audit_queue_depth` 继续冻结为 Gauge，后续若 exporter 需要单位换算，只能在 exporter 适配层完成，不回改 bridge API。
+3. `MetricSample.identity_ref` 的 `name`、`type`、`unit` 必须与上表一致；运行期不允许按 actor/target/action 动态改 metric family。
+
 ### 6.7 主流程时序（正常路径）
 
 1. 上游模块通过 MetricsFacade 获取 meter 与 instrument。
@@ -338,6 +374,16 @@ logging bridge 标签填充规则：
 3. MetricsErrorCode::ProviderNotReady、ExportFailure、ExportTimeout 归类为 provider/exporter degraded：桥接进入 best-effort 模式，但原始 logging 主链继续执行。
 4. MetricsErrorCode::QueueFull 归类为观测样本丢弃：仅丢弃本次指标观测，不把 backpressure 反推给日志主写入路径。
 5. MetricsErrorCode::IdentityInvalid 与 ConfigInvalid 归类为 bridge 初始化失败：LoggingMetricsBridge 必须回退到 no-op bridge，并把问题暴露给 health/audit 侧，而不是带着部分初始化状态继续发射。
+
+### 6.8.2 audit 指标桥接失败语义
+
+为避免 audit 与 metrics 之间形成递归失败链，冻结 `AuditMetricsBridge` 的失败语义如下：
+
+1. `create_counter`/`create_gauge` 或 `record(sample)` 失败时，只允许把 bridge 自身标记为 degraded，不得覆盖本次 audit write/export 的主结果。
+2. bridge 失败时必须保留本地内存态的最近错误与失败计数，供 `AuditHealthStatus.metrics_bridge_degraded` 与后续诊断读取；不得反向调用 `IAuditLogger` 或额外写一条“metrics failed”审计记录。
+3. `MetricsErrorCode::ProviderNotReady`、`ExportFailure`、`ExportTimeout` 归类为 provider/exporter degraded：桥接进入 best-effort 模式，但 audit 主写链继续执行。
+4. `MetricsErrorCode::QueueFull` 归类为观测样本丢弃：仅丢弃本次指标观测，不把 backpressure 反推给 audit 主写或 fallback 路径。
+5. `MetricsErrorCode::IdentityInvalid` 与 `ConfigInvalid` 归类为 bridge 初始化失败：`AuditMetricsBridge` 必须回退到 no-op bridge，并把问题暴露给 health 侧，而不是带着部分初始化状态继续发射。
 
 ### 6.9 配置项与默认策略
 
