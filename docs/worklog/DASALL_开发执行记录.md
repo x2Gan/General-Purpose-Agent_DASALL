@@ -8,6 +8,40 @@
 
 ---
 
+## 记录 #081
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-BLK-003 AuditHealthProbe 接口边界解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-BLK-003-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-BLK-003-AuditHealthProbe设计收敛.md](docs/todos/infrastructure/deliverables/AUD-BLK-003-AuditHealthProbe%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 blocker 根因收敛为“audit 未把健康三态和最近失败原因冻结成私有状态对象”，并明确 `Ready/Degraded/Unavailable` 三态、reason allowlist 与只读 evaluate 语义。
+   - 更新 [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit模块详细设计.md)，新增 `AuditHealthStatus` 对象表与 6.6.1 状态冻结段。
+2. 完成 blocker 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-BLK-003` 标记为已解阻，并把 `AUD-TODO-014` 从 Blocked 迁移到 Not Started。
+
+### 测试
+
+1. 验证命令：
+   - `grep -n "AuditHealthStatus\|6.6.1 AuditHealthStatus 状态冻结\|AUD-BLK-003\|AUD-TODO-014" docs/architecture/DASALL_infra_audit模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md docs/todos/infrastructure/deliverables/AUD-BLK-003-AuditHealthProbe设计收敛.md`
+2. 结果：
+   - `AuditHealthStatus` 三态、最近失败原因字段和 `AUD-TODO-014` 的解阻状态均已可定位追溯。
+
+### 结果
+
+1. `AUD-BLK-003` 已不再阻塞 audit 子域继续推进；下一轮可直接进入 `AUD-TODO-014` 的 public interface 落盘。
+
+### 下一步
+
+1. 进入 `AUD-BLK-004`，冻结 audit metrics bridge 的 IMetricsProvider/IMeter 接入协议、指标名清单、标签白名单与 non-recursive failure 语义。
+
+### 风险
+
+1. 若后续 `AuditHealthStatus` 回退成自由文本对象，或试图直接暴露 `infra/health` 公共对象替代 audit 私有状态，本 blocker 需要重新转为 Blocked。
+
 ## 记录 #080
 
 - 日期：2026-04-03

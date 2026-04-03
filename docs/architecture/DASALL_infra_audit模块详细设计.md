@@ -196,6 +196,7 @@ AuditService 非职责：
 | ExportQuery | start_ts, end_ts, actor, action, target, outcome, page_token | 时间窗必填；分页稳定 | 与 contracts 无耦合，infra 私有 |
 | ExportResult | records, next_page_token, truncated, checksum | truncated 必须显式 | 与 contracts 无耦合，infra 私有 |
 | AuditWriteOutcome | accepted, persisted, fallback_used, error_code | 二值可判定 | 映射 contracts::ResultCode，不新增共享码域 |
+| AuditHealthStatus | state, last_failure_reason, detail_ref, error_code, sampled_at_unix_ms, fallback_active, metrics_bridge_degraded | state 只允许 Ready/Degraded/Unavailable；非 Ready 必须带最近失败原因 | 仅复用 contracts::ResultCode，不新增共享状态对象 |
 
 ### 6.6 核心接口语义定义
 
@@ -210,6 +211,37 @@ AuditService 非职责：
 
 3. IAuditHealthProbe
    - evaluate() -> AuditHealthStatus
+
+### 6.6.1 AuditHealthStatus 状态冻结（AUD-BLK-003）
+
+为解掉 `AUD-BLK-003`，冻结 audit 对外健康状态对象与探针语义如下：
+
+1. `AuditHealthStatus.state` 只允许三态：`Ready`、`Degraded`、`Unavailable`。
+2. `AuditHealthStatus` 的最小字段冻结为：
+  - `state`
+  - `last_failure_reason`
+  - `detail_ref`
+  - `error_code`
+  - `sampled_at_unix_ms`
+  - `fallback_active`
+  - `metrics_bridge_degraded`
+3. 状态对象约束：
+  - `Ready`：`last_failure_reason` 必须为空，`error_code` 为空，表示 audit 主链当前可写且未暴露活跃故障。
+  - `Degraded`：允许主写失败后 fallback 继续承接，或 metrics bridge 进入 best-effort 模式；`last_failure_reason` 与 `detail_ref` 必须非空。
+  - `Unavailable`：表示 audit 当前无法保证主写/降级链路继续承接；`last_failure_reason`、`detail_ref` 与 `error_code` 必须同时具备。
+4. `last_failure_reason` 冻结为最近一次失败原因码，不使用自由文本；v1 允许集固定为：
+  - `primary_capacity_exhausted`
+  - `fallback_active`
+  - `metrics_bridge_degraded`
+  - `fallback_unavailable`
+  - `service_not_started`
+  - `service_stopped`
+5. `detail_ref` 只承接 audit 本地可追溯引用，例如 `diag://infra/audit/health/degraded/fallback_active`，不透传 exporter URL、文件路径或高基数 request/session 标识。
+6. `IAuditHealthProbe::evaluate()` 保持只读快照语义：
+  - 不直接触发恢复动作。
+  - 不重置失败计数。
+  - 不代替 `infra/health` 的通用 `IHealthProbe`/`ProbeResult` 调度职责。
+7. audit 与通用 health 的对齐关系冻结为：audit 侧先输出 `AuditHealthStatus`，若后续需要桥接到 `infra/health`，只能通过适配器把三态映射到 `ProbeResult.status`，不得直接把 audit 私有对象泄露到 health 公共接口。
 
 前置条件：
 1. AuditService 已 init/start。
