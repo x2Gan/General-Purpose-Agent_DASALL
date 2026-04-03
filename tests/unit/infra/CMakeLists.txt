@@ -390,9 +390,6 @@ set_tests_properties(LoggingErrorsTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_logging_facade_unit_test
   logging/LoggingFacadeTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingFacade.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_include_directories(dasall_logging_facade_unit_test
@@ -413,8 +410,6 @@ set_tests_properties(LoggingFacadeTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_sink_dispatcher_unit_test
   logging/SinkDispatcherTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_include_directories(dasall_sink_dispatcher_unit_test
@@ -435,7 +430,6 @@ set_tests_properties(SinkDispatcherTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_async_queue_controller_unit_test
   logging/AsyncQueueControllerTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_include_directories(dasall_async_queue_controller_unit_test
@@ -456,9 +450,6 @@ set_tests_properties(AsyncQueueControllerTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_audit_link_adapter_unit_test
   logging/AuditLinkAdapterTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/AuditLinkAdapter.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_include_directories(dasall_audit_link_adapter_unit_test
@@ -479,7 +470,6 @@ set_tests_properties(AuditLinkAdapterTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_logging_recovery_unit_test
   logging/LoggingRecoveryTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingRecovery.cpp
 )
 
 target_include_directories(dasall_logging_recovery_unit_test
@@ -500,7 +490,6 @@ set_tests_properties(LoggingRecoveryTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_logging_config_merge_unit_test
   logging/LoggingConfigMergeTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingConfigAdapter.cpp
 )
 
 target_include_directories(dasall_logging_config_merge_unit_test
@@ -521,7 +510,6 @@ set_tests_properties(LoggingConfigMergeTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_logging_metrics_bridge_unit_test
   logging/LoggingMetricsBridgeTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingMetricsBridge.cpp
 )
 
 target_include_directories(dasall_logging_metrics_bridge_unit_test

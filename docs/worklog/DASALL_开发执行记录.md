@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #067
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-014 注册 logging 构建落点到 infra CMake
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-014-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-014-Logging构建接线收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-014-Logging%E6%9E%84%E5%BB%BA%E6%8E%A5%E7%BA%BF%E6%94%B6%E6%95%9B.md)，明确 logging skeleton 必须成为 `dasall_infra` 正式源码，而不是继续由测试目标各自直编一份实现副本。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-TODO-014 标记为 Done，并补齐显式 build/discovery/test 验收链路。
+2. 完成 LOG-TODO-014-B 构建接线：
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，新增 `DASALL_INFRA_LOGGING_SOURCES` 并把 `AsyncQueueController.cpp`、`AuditLinkAdapter.cpp`、`LoggingConfigAdapter.cpp`、`LoggingFacade.cpp`、`LoggingMetricsBridge.cpp`、`LoggingRecovery.cpp`、`SinkDispatcher.cpp` 接入 `dasall_infra`。
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt) 与 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)，移除 logging 测试目标对同一批 logging `.cpp` 的重复编译，保留 internal header include path 并统一改为链接 `dasall_infra`。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_logging_facade_unit_test dasall_sink_dispatcher_unit_test dasall_async_queue_controller_unit_test dasall_audit_link_adapter_unit_test dasall_logging_recovery_unit_test dasall_logging_config_merge_unit_test dasall_logging_metrics_bridge_unit_test dasall_contract_sink_dispatcher_boundary_test dasall_contract_audit_link_adapter_boundary_test dasall_contract_log_configurator_boundary_test dasall_contract_logging_metrics_bridge_boundary_test`
+   - `ctest --test-dir build-ci -N -R "(LoggingFacadeTest|SinkDispatcherTest|AsyncQueueControllerTest|AuditLinkAdapterTest|LoggingRecoveryTest|LoggingConfigMergeTest|LoggingMetricsBridgeTest|SinkDispatcherBoundaryContractTest|AuditLinkAdapterBoundaryContractTest|LogConfiguratorBoundaryContractTest|LoggingMetricsBridgeBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(LoggingFacadeTest|SinkDispatcherTest|AsyncQueueControllerTest|AuditLinkAdapterTest|LoggingRecoveryTest|LoggingConfigMergeTest|LoggingMetricsBridgeTest|SinkDispatcherBoundaryContractTest|AuditLinkAdapterBoundaryContractTest|LogConfiguratorBoundaryContractTest|LoggingMetricsBridgeBoundaryContractTest)"`
+2. 结果：
+   - `dasall_infra` 与 11 个受影响的 logging unit/contract 目标均可成功构建和链接。
+   - CTest 可发现 11 个受影响测试，且 11/11 全部通过。
+   - `Build_CMakeTools` / `RunCtest_CMakeTools` 仍报“无法配置项目”，本轮实际验收继续使用仓库既有显式 CMake/CTest 链路。
+
+### 结果
+
+1. logging 运行时骨架首次成为 `dasall_infra` 的正式构建产物，后续主链接线不再依赖测试目标临时拼装实现。
+2. unit/contract 目标与主库源码列表已解耦成单一真实来源，后续可以在不引入重复定义风险的前提下继续做测试注册与 gate 收口。
+
+### 下一步
+
+1. 进入 LOG-TODO-015，收敛 logging unit/contract 测试注册和 discoverability 标签。
+
+### 风险
+
+1. 当前 CMake Tools 仍无法返回可用 target/test，后续门禁文档需要明确“IDE 工具态异常不等于仓库构建失败”，并保留显式 cmake/ctest 作为实际验收证据。
+
 ## 记录 #066
 
 - 日期：2026-04-03

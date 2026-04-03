@@ -15,6 +15,16 @@ set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/TracingModuleAnchor.cpp
 )
 
+set(DASALL_INFRA_LOGGING_SOURCES
+  src/logging/AsyncQueueController.cpp
+  src/logging/AuditLinkAdapter.cpp
+  src/logging/LoggingConfigAdapter.cpp
+  src/logging/LoggingFacade.cpp
+  src/logging/LoggingMetricsBridge.cpp
+  src/logging/LoggingRecovery.cpp
+  src/logging/SinkDispatcher.cpp
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
@@ -107,6 +117,7 @@ add_library(dasall_infra STATIC)
 target_sources(dasall_infra
   PRIVATE
     ${DASALL_INFRA_CORE_SOURCES}
+    ${DASALL_INFRA_LOGGING_SOURCES}
     ${DASALL_INFRA_TRACING_SOURCES}
 )
 
