@@ -10,6 +10,8 @@
 #include "secret/ISecretBackend.h"
 #include "secret/ISecretManager.h"
 
+#include "SecretLeaseRegistry.h"
+
 namespace dasall::infra::secret {
 
 struct SecretManagerFacadeOptions {
@@ -55,17 +57,12 @@ class SecretManagerFacade final : public ISecretManager {
     std::string backend_ref;
   };
 
-  struct ActiveLeaseEntry {
-    std::string secret_name;
-    SecretLease lease;
-  };
-
   [[nodiscard]] bool backend_ready() const;
 
   std::shared_ptr<ISecretBackend> backend_;
   SecretManagerFacadeOptions options_;
+  SecretLeaseRegistry lease_registry_;
   std::map<std::string, CachedSecretMetadata> cached_secrets_;
-  std::map<std::string, ActiveLeaseEntry> active_leases_;
 };
 
 }  // namespace dasall::infra::secret

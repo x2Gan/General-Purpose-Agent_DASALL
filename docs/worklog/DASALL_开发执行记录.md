@@ -8,6 +8,50 @@
 
 ---
 
+## 记录 #095
+
+- 日期：2026-04-03
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-009 SecretLeaseRegistry 生命周期管理
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-009-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-009-SecretLeaseRegistry生命周期收敛.md，补齐本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 infra/src/secret/SecretLeaseRegistry.h 与 infra/src/secret/SecretLeaseRegistry.cpp，落盘 create/validate/expire/release 最小生命周期与按 secret 批量失效能力。
+2. 完成 facade 生命周期接线：
+   - 更新 infra/src/secret/SecretManagerFacade.h 与 infra/src/secret/SecretManagerFacade.cpp，移除临时 active lease map，把 materialize/release/revoke 改为委托 registry，并在 materialize 上补 stale handle 明确错误码。
+3. 完成测试与接线收口：
+   - 新增 tests/unit/infra/secret/SecretLeaseRegistryTest.cpp，覆盖 lease 创建、过期、释放和 rotation epoch 漂移导致的 stale 句柄。
+   - 更新 tests/unit/infra/secret/SecretManagerFacadeTest.cpp，补充 backend 版本轮换后的 stale handle materialize 拒绝回归。
+   - 更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，将 registry 源码和 unit test target 纳入构建图。
+4. 完成 TODO 回链：
+   - 回写 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-009 标记为 Completed，并把下一入口切换到 SEC-BLK-002 -> SEC-TODO-010。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_lease_registry_unit_test dasall_contract_secret_manager_facade_boundary_test`
+   - `ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretLeaseRegistryTest|SecretManagerFacadeBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretLeaseRegistryTest|SecretManagerFacadeBoundaryContractTest"`
+2. 结果：
+   - configure/build 通过；`SecretManagerFacadeTest`、`SecretLeaseRegistryTest` 与 `SecretManagerFacadeBoundaryContractTest` 可被发现，并定向执行 3/3 通过。
+
+### 结果
+
+1. SEC-TODO-009 已把 secret 生命周期从“manager 内部临时 map”推进到“独立 registry + facade 委托”，为后续轮换链路提供稳定 lease 状态基线。
+2. secret 子域当前下一执行入口已切换到 SEC-BLK-002，之后再推进 SEC-TODO-010 的轮换骨架。
+
+### 下一步
+
+1. 处理 SEC-BLK-002，冻结 dual-slot 验证器最小接口与 `rotation.validation` / `grace_period` 语义，再进入 SEC-TODO-010。
+
+### 风险
+
+1. 若后续 rotation coordinator 改写 `rotation_epoch` 语义或让 stale handle 重新退化为 backend 未命中，本轮 lifecycle contract 需要重新评审。
+
 ## 记录 #094
 
 - 日期：2026-04-03

@@ -108,21 +108,6 @@ constexpr std::string_view kSecretManagerFacadeSourceRef = "SecretManagerFacade"
   return fallback_message;
 }
 
-[[nodiscard]] std::string resolve_secret_name_from_handle_id(std::string_view handle_id) {
-  const auto scheme_separator = handle_id.find("://");
-  if (scheme_separator == std::string_view::npos) {
-    return handle_id.empty() ? std::string("unresolved-secret") : std::string(handle_id);
-  }
-
-  const auto secret_begin = scheme_separator + 3U;
-  const auto version_separator = handle_id.rfind('/');
-  if (version_separator == std::string_view::npos || version_separator <= secret_begin) {
-    return std::string(handle_id.substr(secret_begin));
-  }
-
-  return std::string(handle_id.substr(secret_begin, version_separator - secret_begin));
-}
-
 }  // namespace
 
 SecretManagerFacade::SecretManagerFacade(std::shared_ptr<ISecretBackend> backend,
@@ -134,7 +119,7 @@ void SecretManagerFacade::set_backend(std::shared_ptr<ISecretBackend> backend) {
 }
 
 std::size_t SecretManagerFacade::active_lease_count() const {
-  return active_leases_.size();
+  return lease_registry_.active_lease_count();
 }
 
 bool SecretManagerFacade::has_cached_descriptor(std::string_view secret_name) const {
@@ -198,7 +183,7 @@ SecretMaterializationResult SecretManagerFacade::materialize(
   }
 
   const auto fetched = backend_->fetch_record(make_query(handle.secret_name,
-                                                         handle.version,
+                                                         {},
                                                          "materialize",
                                                          SecretAccessMode::Materialize));
   if (!fetched.ok) {
@@ -208,6 +193,12 @@ SecretMaterializationResult SecretManagerFacade::materialize(
                               "secret backend fetch failed during materialize"),
         "secret.materialize",
         std::string(kSecretManagerFacadeSourceRef));
+  }
+
+  if (fetched.record.version != handle.version) {
+    return make_materialization_failure(SecretErrorCode::VersionStale,
+                                        "secret handle version is stale and must be reacquired before materialize",
+                                        "secret.materialize");
   }
 
   const auto materialized = backend_->materialize_record(fetched.record, access_context);
@@ -220,39 +211,31 @@ SecretMaterializationResult SecretManagerFacade::materialize(
         std::string(kSecretManagerFacadeSourceRef));
   }
 
-  active_leases_[materialized.lease.lease_id] = ActiveLeaseEntry{
-      .secret_name = fetched.record.descriptor.secret_name,
-      .lease = materialized.lease,
-  };
+  const auto lease_result = lease_registry_.create_lease(
+      handle,
+      access_context.consumer_module,
+      materialized.lease.rotation_epoch,
+      std::min(handle.expires_at_ms, materialized.lease.expires_at_ms));
+  if (!lease_result.ok) {
+    return SecretMaterializationResult::failure(
+        lease_result.result_code.value_or(contracts::ResultCode::RuntimeRetryExhausted),
+        extract_error_message(lease_result.error_info,
+                              "secret lease registry rejected the materialized handle"),
+        "secret.materialize",
+        std::string(kSecretManagerFacadeSourceRef));
+  }
+
   cached_secrets_[fetched.record.descriptor.secret_name] = CachedSecretMetadata{
       .descriptor = fetched.record.descriptor,
       .version = fetched.record.version,
       .backend_ref = fetched.record.backend_ref,
   };
-  return materialized;
+  return SecretMaterializationResult::success(materialized.materialized_secret,
+                                              lease_result.lease);
 }
 
 SecretLifecycleResult SecretManagerFacade::release(const SecretLease& lease) {
-  if (!lease.is_valid()) {
-    return SecretLifecycleResult::failure(resolve_secret_name_from_handle_id(lease.handle_id),
-                                          contracts::ResultCode::ValidationFieldMissing,
-                                          "secret manager release requires a valid lease",
-                                          "secret.release",
-                                          std::string(kSecretManagerFacadeSourceRef));
-  }
-
-  const auto lease_it = active_leases_.find(lease.lease_id);
-  if (lease_it == active_leases_.end()) {
-    return make_lifecycle_failure(std::string(),
-                                  SecretErrorCode::LeaseExpired,
-                                  "secret lease is no longer active during release",
-                                  "secret.release",
-                                  lease.lease_id);
-  }
-
-  const std::string secret_name = lease_it->second.secret_name;
-  active_leases_.erase(lease_it);
-  return SecretLifecycleResult::success(secret_name, std::string(lease.lease_id));
+  return lease_registry_.release_lease(lease);
 }
 
 RotationResult SecretManagerFacade::rotate(const RotationRequest& request) {
@@ -336,13 +319,7 @@ SecretLifecycleResult SecretManagerFacade::revoke(std::string_view secret_name,
   }
 
   cached_secrets_.erase(std::string(secret_name));
-  for (auto lease_it = active_leases_.begin(); lease_it != active_leases_.end();) {
-    if (lease_it->second.secret_name == secret_name) {
-      lease_it = active_leases_.erase(lease_it);
-      continue;
-    }
-    ++lease_it;
-  }
+  lease_registry_.expire_secret_leases(secret_name, SecretLeaseState::Revoked);
 
   return SecretLifecycleResult::success(std::string(secret_name));
 }

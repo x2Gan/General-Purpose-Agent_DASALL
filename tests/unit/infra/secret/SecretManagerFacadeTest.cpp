@@ -127,12 +127,39 @@ void test_secret_manager_facade_rejects_expired_handles_before_backend_materiali
               "SecretManagerFacade should reject expired handles before attempting backend materialization and should not register an active lease");
 }
 
+void test_secret_manager_facade_rejects_stale_handles_when_backend_version_has_rotated() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::secret::MockSecretBackend;
+  using dasall::infra::secret::SecretManagerFacade;
+  using dasall::tests::support::assert_true;
+
+  auto backend = std::make_shared<MockSecretBackend>();
+  backend->upsert_secret(make_secret_record());
+
+  SecretManagerFacade manager(backend);
+  const auto handle_result = manager.get_secret(make_query(), make_access_context());
+
+  auto rotated_record = make_secret_record();
+  rotated_record.record.version = std::string("v4");
+  rotated_record.record.cipher_ref = std::string("cipher://mock/db/root/v4");
+  rotated_record.materialized_text = std::string("root-password-v4");
+  backend->upsert_secret(std::move(rotated_record));
+
+  const auto materialized_result = manager.materialize(handle_result.handle, make_access_context());
+
+  assert_true(!materialized_result.ok && materialized_result.is_valid() &&
+                  materialized_result.result_code == ResultCode::RuntimeRetryExhausted &&
+                  manager.active_lease_count() == 0U,
+              "SecretManagerFacade should reject stale handles when the backend version has rotated and require callers to reacquire a fresh handle");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_secret_manager_facade_walks_get_materialize_release_and_inspect_chain();
     test_secret_manager_facade_rejects_expired_handles_before_backend_materialization();
+    test_secret_manager_facade_rejects_stale_handles_when_backend_version_has_rotated();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
