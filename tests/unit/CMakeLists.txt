@@ -35,6 +35,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_meter_interface_unit_test
 	dasall_metrics_provider_interface_unit_test
 	dasall_logger_interface_unit_test
+	dasall_logging_facade_unit_test
 	dasall_audit_logger_interface_unit_test
 	dasall_audit_service_fallback_unit_test
 	dasall_audit_export_filter_unit_test
