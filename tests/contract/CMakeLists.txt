@@ -22,6 +22,17 @@ function(dasall_register_contract_test executable_target_name ctest_name source_
   set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}" PARENT_SCOPE)
 endfunction()
 
+function(dasall_register_logging_contract_test executable_target_name ctest_name source_file)
+  dasall_register_contract_test(
+    ${executable_target_name}
+    ${ctest_name}
+    ${source_file}
+    smoke
+  )
+
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;logging")
+endfunction()
+
 # smoke group
 dasall_register_contract_test(
   dasall_contract_smoke_test
@@ -129,11 +140,10 @@ target_link_libraries(dasall_contract_infra_context_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_log_event_boundary_test
   LogEventBoundaryContractTest
   smoke/LogEventBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_log_event_boundary_test
@@ -146,11 +156,10 @@ target_link_libraries(dasall_contract_log_event_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_sink_dispatcher_boundary_test
   SinkDispatcherBoundaryContractTest
   smoke/SinkDispatcherBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_sink_dispatcher_boundary_test
@@ -164,11 +173,10 @@ target_link_libraries(dasall_contract_sink_dispatcher_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_audit_link_adapter_boundary_test
   AuditLinkAdapterBoundaryContractTest
   smoke/AuditLinkAdapterBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_audit_link_adapter_boundary_test
@@ -182,11 +190,10 @@ target_link_libraries(dasall_contract_audit_link_adapter_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_audit_event_boundary_test
   AuditBoundaryContractTest
   smoke/AuditBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_audit_event_boundary_test
@@ -488,11 +495,10 @@ target_link_libraries(dasall_contract_boot_control_adapter_interface_boundary_te
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_logger_interface_boundary_test
   LoggerInterfaceBoundaryContractTest
   smoke/LoggerInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_logger_interface_boundary_test
@@ -505,11 +511,10 @@ target_link_libraries(dasall_contract_logger_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_logging_errors_boundary_test
   LoggingErrorsBoundaryContractTest
   smoke/LoggingErrorsBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_logging_errors_boundary_test
@@ -522,11 +527,10 @@ target_link_libraries(dasall_contract_logging_errors_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_log_configurator_boundary_test
   LogConfiguratorBoundaryContractTest
   smoke/LogConfiguratorBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_log_configurator_boundary_test
@@ -540,11 +544,10 @@ target_link_libraries(dasall_contract_log_configurator_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_logging_metrics_bridge_boundary_test
   LoggingMetricsBridgeBoundaryContractTest
   smoke/LoggingMetricsBridgeBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_logging_metrics_bridge_boundary_test
@@ -660,11 +663,10 @@ target_link_libraries(dasall_contract_meter_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_logging_contract_test(
   dasall_contract_audit_logger_interface_boundary_test
   AuditLoggerInterfaceBoundaryContractTest
   smoke/AuditLoggerInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_audit_logger_interface_boundary_test

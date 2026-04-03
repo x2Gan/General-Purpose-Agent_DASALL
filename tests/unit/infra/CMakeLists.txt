@@ -26,7 +26,7 @@ target_link_libraries(dasall_log_event_unit_test
 dasall_apply_common_options(dasall_log_event_unit_test)
 
 add_test(NAME LogEventUnitTest COMMAND dasall_log_event_unit_test)
-set_tests_properties(LogEventUnitTest PROPERTIES LABELS "unit")
+set_tests_properties(LogEventUnitTest PROPERTIES LABELS "unit;logging")
 
 add_executable(dasall_audit_event_unit_test
   AuditTypesTest.cpp
@@ -41,7 +41,7 @@ target_link_libraries(dasall_audit_event_unit_test
 dasall_apply_common_options(dasall_audit_event_unit_test)
 
 add_test(NAME AuditTypesTest COMMAND dasall_audit_event_unit_test)
-set_tests_properties(AuditTypesTest PROPERTIES LABELS "unit")
+set_tests_properties(AuditTypesTest PROPERTIES LABELS "unit;logging")
 
 add_executable(dasall_health_probe_interface_unit_test
   health/HealthProbeInterfaceTest.cpp
@@ -371,7 +371,7 @@ target_link_libraries(dasall_logger_interface_unit_test
 dasall_apply_common_options(dasall_logger_interface_unit_test)
 
 add_test(NAME LoggerInterfaceTest COMMAND dasall_logger_interface_unit_test)
-set_tests_properties(LoggerInterfaceTest PROPERTIES LABELS "unit")
+set_tests_properties(LoggerInterfaceTest PROPERTIES LABELS "unit;logging")
 
 add_executable(dasall_logging_errors_unit_test
   LoggingErrorsTest.cpp
@@ -386,147 +386,71 @@ target_link_libraries(dasall_logging_errors_unit_test
 dasall_apply_common_options(dasall_logging_errors_unit_test)
 
 add_test(NAME LoggingErrorsTest COMMAND dasall_logging_errors_unit_test)
-set_tests_properties(LoggingErrorsTest PROPERTIES LABELS "unit")
+set_tests_properties(LoggingErrorsTest PROPERTIES LABELS "unit;logging")
 
-add_executable(dasall_logging_facade_unit_test
+function(dasall_register_logging_unit_test executable_target_name ctest_name source_file)
+  add_executable(${executable_target_name}
+    ${source_file}
+  )
+
+  target_include_directories(${executable_target_name}
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/infra/src
+  )
+
+  target_link_libraries(${executable_target_name}
+    PRIVATE
+      dasall_test_support
+      dasall_infra
+  )
+
+  dasall_apply_common_options(${executable_target_name})
+
+  add_test(NAME ${ctest_name} COMMAND ${executable_target_name})
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "unit;logging")
+endfunction()
+
+dasall_register_logging_unit_test(
+  dasall_logging_facade_unit_test
+  LoggingFacadeTest
   logging/LoggingFacadeTest.cpp
 )
 
-target_include_directories(dasall_logging_facade_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_logging_facade_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_logging_facade_unit_test)
-
-add_test(NAME LoggingFacadeTest COMMAND dasall_logging_facade_unit_test)
-set_tests_properties(LoggingFacadeTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_sink_dispatcher_unit_test
+dasall_register_logging_unit_test(
+  dasall_sink_dispatcher_unit_test
+  SinkDispatcherTest
   logging/SinkDispatcherTest.cpp
 )
 
-target_include_directories(dasall_sink_dispatcher_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_sink_dispatcher_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_sink_dispatcher_unit_test)
-
-add_test(NAME SinkDispatcherTest COMMAND dasall_sink_dispatcher_unit_test)
-set_tests_properties(SinkDispatcherTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_async_queue_controller_unit_test
+dasall_register_logging_unit_test(
+  dasall_async_queue_controller_unit_test
+  AsyncQueueControllerTest
   logging/AsyncQueueControllerTest.cpp
 )
 
-target_include_directories(dasall_async_queue_controller_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_async_queue_controller_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_async_queue_controller_unit_test)
-
-add_test(NAME AsyncQueueControllerTest COMMAND dasall_async_queue_controller_unit_test)
-set_tests_properties(AsyncQueueControllerTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_audit_link_adapter_unit_test
+dasall_register_logging_unit_test(
+  dasall_audit_link_adapter_unit_test
+  AuditLinkAdapterTest
   logging/AuditLinkAdapterTest.cpp
 )
 
-target_include_directories(dasall_audit_link_adapter_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_audit_link_adapter_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_audit_link_adapter_unit_test)
-
-add_test(NAME AuditLinkAdapterTest COMMAND dasall_audit_link_adapter_unit_test)
-set_tests_properties(AuditLinkAdapterTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_logging_recovery_unit_test
+dasall_register_logging_unit_test(
+  dasall_logging_recovery_unit_test
+  LoggingRecoveryTest
   logging/LoggingRecoveryTest.cpp
 )
 
-target_include_directories(dasall_logging_recovery_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_logging_recovery_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_logging_recovery_unit_test)
-
-add_test(NAME LoggingRecoveryTest COMMAND dasall_logging_recovery_unit_test)
-set_tests_properties(LoggingRecoveryTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_logging_config_merge_unit_test
+dasall_register_logging_unit_test(
+  dasall_logging_config_merge_unit_test
+  LoggingConfigMergeTest
   logging/LoggingConfigMergeTest.cpp
 )
 
-target_include_directories(dasall_logging_config_merge_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_logging_config_merge_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_logging_config_merge_unit_test)
-
-add_test(NAME LoggingConfigMergeTest COMMAND dasall_logging_config_merge_unit_test)
-set_tests_properties(LoggingConfigMergeTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_logging_metrics_bridge_unit_test
+dasall_register_logging_unit_test(
+  dasall_logging_metrics_bridge_unit_test
+  LoggingMetricsBridgeTest
   logging/LoggingMetricsBridgeTest.cpp
 )
-
-target_include_directories(dasall_logging_metrics_bridge_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_logging_metrics_bridge_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_logging_metrics_bridge_unit_test)
-
-add_test(NAME LoggingMetricsBridgeTest COMMAND dasall_logging_metrics_bridge_unit_test)
-set_tests_properties(LoggingMetricsBridgeTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_audit_logger_interface_unit_test
   AuditLoggerInterfaceTest.cpp
@@ -541,7 +465,7 @@ target_link_libraries(dasall_audit_logger_interface_unit_test
 dasall_apply_common_options(dasall_audit_logger_interface_unit_test)
 
 add_test(NAME AuditInterfaceCompileTest COMMAND dasall_audit_logger_interface_unit_test)
-set_tests_properties(AuditInterfaceCompileTest PROPERTIES LABELS "unit")
+set_tests_properties(AuditInterfaceCompileTest PROPERTIES LABELS "unit;logging")
 
 add_executable(dasall_audit_service_fallback_unit_test
   AuditServiceFallbackTest.cpp

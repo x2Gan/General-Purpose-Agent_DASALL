@@ -8,6 +8,49 @@
 
 ---
 
+## 记录 #068
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-015 注册 logging 单元与契约测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-015-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-015-Logging测试注册收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-015-Logging%E6%B5%8B%E8%AF%95%E6%B3%A8%E5%86%8C%E6%94%B6%E6%95%9B.md)，将 logging 测试从“分散落点”收敛为“显式 target 分组 + 统一 discoverability 标签”。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-TODO-015 标记为 Done，并补齐 `ctest -N -L logging` 与 `ctest -L logging` 作为发现性验收证据。
+2. 完成 LOG-TODO-015-B 测试注册收敛：
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)，新增 `DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS`，把 logging 组件的 unit 目标显式归组到顶层 unit 列表中。
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)，新增 `dasall_register_logging_unit_test(...)` 并统一 `unit;logging` 标签。
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)，新增 `dasall_register_logging_contract_test(...)` 并统一 `contract;smoke;logging` 标签。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -L logging`
+   - `ctest --test-dir build-ci --output-on-failure -L logging`
+2. 结果：
+   - 聚合 `unit` 套件 110/110 通过。
+   - 聚合 `contract` 套件 132/132 通过。
+   - `ctest -N -L logging` 发现 21 个 logging 标签测试。
+   - `ctest -L logging` 执行 21/21 通过，其中 unit 12 个、contract 9 个。
+
+### 结果
+
+1. logging 组件首次具备独立的测试发现面，后续可以直接用 `ctest -L logging` 做组件级回归，而不必从全量 unit/contract 输出里手工筛选。
+2. logging 相关 unit/contract 入口已经形成统一注册模式，后续追加 health/integration/log query 测试时可以沿用相同结构继续扩展。
+
+### 下一步
+
+1. 进入 LOG-TODO-016，统一回写 Gate-LOG-01~06、已解阻 blocker 和实际验收链路。
+
+### 风险
+
+1. `logging` 标签目前覆盖 unit 与 smoke contract，但 integration 用例尚未落盘，因此 `LOG-GATE-06` 仍需在下一轮文档回写中保持未通过或受限说明。
+
 ## 记录 #067
 
 - 日期：2026-04-03
