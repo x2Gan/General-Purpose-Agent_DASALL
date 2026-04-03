@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #093
+
+- 日期：2026-04-03
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-007 FileSecretBackend 骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-007-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-007-FileSecretBackend骨架收敛.md，补齐 blocker 解阻承接、本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 infra/src/secret/backends/FileSecretBackend.h 与 infra/src/secret/backends/FileSecretBackend.cpp，落盘 root_dir 安全解析、key=value fixture 读取、`ciphertext_hex` 解码、backend unavailable/status 和最小 skeleton lifecycle 语义。
+2. 完成测试与接线收口：
+   - 新增 tests/unit/infra/secret/FileSecretBackendTest.cpp，覆盖成功路径、缺失路径、backend unavailable，并断言 materialize 不创建额外明文文件。
+   - 更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，将 file backend 源码和 unit test target 纳入构建图与 `dasall_unit_tests` 聚合目标。
+3. 完成 TODO 回链：
+   - 回写 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-007 标记为 Completed，并把下一入口切换到 SEC-TODO-008。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_file_secret_backend_unit_test`
+   - `ctest --test-dir build-ci -N -R FileSecretBackendTest`
+   - `ctest --test-dir build-ci --output-on-failure -R FileSecretBackendTest`
+2. 结果：
+   - configure/build 通过；`FileSecretBackendTest` 可被 `ctest -N -R` 发现，并定向执行 1/1 通过。
+
+### 结果
+
+1. SEC-TODO-007 已把 secret backend 骨架扩展到 file，实现了 root_dir/encrypt_at_rest 约束下的最小本地读取链路。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-008，随后再推进 SEC-TODO-009。
+
+### 下一步
+
+1. 进入 SEC-TODO-008，基于 mock/file backend 落盘 SecretManagerFacade 的 get/materialize/release/inspect 主链。
+
+### 风险
+
+1. 若后续 file backend 真实加密接入改变当前 `ciphertext_hex` fixture 语义，需要以追加实现替换当前占位格式，不能回退 root_dir/encrypt_at_rest 的最小策略边界。
+
 ## 记录 #092
 
 - 日期：2026-04-03

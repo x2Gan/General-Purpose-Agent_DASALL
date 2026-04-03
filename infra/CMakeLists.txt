@@ -37,6 +37,7 @@ set(DASALL_INFRA_LOGGING_SOURCES
 
 set(DASALL_INFRA_SECRET_SOURCES
   src/secret/backends/MockSecretBackend.cpp
+  src/secret/backends/FileSecretBackend.cpp
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
