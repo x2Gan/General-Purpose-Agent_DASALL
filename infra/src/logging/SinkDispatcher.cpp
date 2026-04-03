@@ -1,6 +1,5 @@
 #include "SinkDispatcher.h"
 
-#include <algorithm>
 #include <string>
 
 namespace dasall::infra::logging {
@@ -17,15 +16,20 @@ bool has_audit_link_attr(const LogEvent& event) {
 
 }  // namespace
 
-std::string_view sink_route_name(SinkRoute route) {
+SinkDispatcher::SinkDispatcher() = default;
+
+SinkDispatcher::SinkDispatcher(AsyncQueueOptions queue_options)
+    : queue_controller_(queue_options) {}
+
+std::size_t SinkDispatcher::dispatched_record_count(SinkRoute route) const {
   switch (route) {
     case SinkRoute::BasicFile:
-      return "basic_file";
+      return basic_route_dispatch_count_;
     case SinkRoute::Audit:
-      return "audit";
+      return audit_route_dispatch_count_;
   }
 
-  return "unknown";
+  return 0U;
 }
 
 LogWriteResult SinkDispatcher::dispatch(const LogEvent& event) {
@@ -37,33 +41,29 @@ LogWriteResult SinkDispatcher::dispatch(const LogEvent& event) {
         std::string(kSinkDispatcherSourceRef));
   }
 
-  records_.push_back(RoutedLogRecord{
+  const RoutedLogRecord record{
       .route = select_route(event),
       .event = event,
-  });
-  return LogWriteResult::success();
+  };
+
+  const auto result = queue_controller_.enqueue(record);
+  if (!result.ok) {
+    return result;
+  }
+
+  last_record_ = record;
+  ++dispatched_record_count_;
+  if (record.route == SinkRoute::Audit) {
+    ++audit_route_dispatch_count_;
+  } else {
+    ++basic_route_dispatch_count_;
+  }
+
+  return result;
 }
 
 LogWriteResult SinkDispatcher::flush(const LogFlushDeadline& deadline) {
-  if (!deadline.is_valid()) {
-    return LogWriteResult::failure(
-        contracts::ResultCode::ValidationFieldMissing,
-        "sink dispatcher flush deadline must be greater than zero",
-        "logging.flush",
-        std::string(kSinkDispatcherSourceRef));
-  }
-
-  last_flush_timeout_ms_ = deadline.timeout_ms;
-  return LogWriteResult::success();
-}
-
-std::size_t SinkDispatcher::dispatched_record_count(SinkRoute route) const {
-  return static_cast<std::size_t>(std::count_if(
-      records_.begin(),
-      records_.end(),
-      [route](const RoutedLogRecord& record) {
-        return record.route == route;
-      }));
+  return queue_controller_.flush(deadline);
 }
 
 SinkRoute SinkDispatcher::select_route(const LogEvent& event) {

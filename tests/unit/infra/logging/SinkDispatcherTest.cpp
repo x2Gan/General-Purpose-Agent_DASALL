@@ -35,6 +35,9 @@ void test_sink_dispatcher_routes_runtime_events_to_basic_file_path() {
   assert_equal(1,
                static_cast<int>(dispatcher.dispatched_record_count(SinkRoute::BasicFile)),
                "basic route counter should advance for runtime events");
+  assert_equal(1,
+               static_cast<int>(dispatcher.queue_depth()),
+               "runtime route should enqueue exactly one record into the async queue skeleton");
 }
 
 void test_sink_dispatcher_routes_audit_events_without_mutating_attrs() {
@@ -56,6 +59,9 @@ void test_sink_dispatcher_routes_audit_events_without_mutating_attrs() {
   assert_equal(1,
                static_cast<int>(dispatcher.dispatched_record_count(SinkRoute::Audit)),
                "audit route counter should advance for audit-tagged events");
+  assert_equal(0,
+               static_cast<int>(dispatcher.dropped_total()),
+               "audit routing should not report dropped records while capacity is available");
   assert_true(dispatcher.last_record().event.attrs.at("evidence_ref") == "audit-ev-007",
               "sink dispatcher should preserve audit evidence attrs while routing");
 }

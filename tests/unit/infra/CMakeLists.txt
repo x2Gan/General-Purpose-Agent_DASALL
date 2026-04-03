@@ -377,6 +377,7 @@ add_executable(dasall_logging_facade_unit_test
   logging/LoggingFacadeTest.cpp
   ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingFacade.cpp
   ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_include_directories(dasall_logging_facade_unit_test
@@ -398,6 +399,7 @@ set_tests_properties(LoggingFacadeTest PROPERTIES LABELS "unit")
 add_executable(dasall_sink_dispatcher_unit_test
   logging/SinkDispatcherTest.cpp
   ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_include_directories(dasall_sink_dispatcher_unit_test
@@ -415,6 +417,27 @@ dasall_apply_common_options(dasall_sink_dispatcher_unit_test)
 
 add_test(NAME SinkDispatcherTest COMMAND dasall_sink_dispatcher_unit_test)
 set_tests_properties(SinkDispatcherTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_async_queue_controller_unit_test
+  logging/AsyncQueueControllerTest.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
+)
+
+target_include_directories(dasall_async_queue_controller_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_async_queue_controller_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_async_queue_controller_unit_test)
+
+add_test(NAME AsyncQueueControllerTest COMMAND dasall_async_queue_controller_unit_test)
+set_tests_properties(AsyncQueueControllerTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_audit_logger_interface_unit_test
   AuditLoggerInterfaceTest.cpp

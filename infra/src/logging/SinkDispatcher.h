@@ -1,58 +1,60 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
-#include <string_view>
-#include <vector>
+#include <optional>
 
+#include "AsyncQueueController.h"
 #include "LoggingFacade.h"
+#include "LoggingPipelineTypes.h"
 
 namespace dasall::infra::logging {
 
-enum class SinkRoute {
-  BasicFile,
-  Audit,
-};
-
-[[nodiscard]] std::string_view sink_route_name(SinkRoute route);
-
-struct RoutedLogRecord {
-  SinkRoute route = SinkRoute::BasicFile;
-  LogEvent event;
-};
-
 class SinkDispatcher final : public ILogDispatchBackend {
  public:
+  SinkDispatcher();
+  explicit SinkDispatcher(AsyncQueueOptions queue_options);
+
   LogWriteResult dispatch(const LogEvent& event) override;
   LogWriteResult flush(const LogFlushDeadline& deadline) override;
 
   [[nodiscard]] bool has_last_record() const {
-    return !records_.empty();
+    return last_record_.has_value();
   }
 
   [[nodiscard]] const RoutedLogRecord& last_record() const {
-    return records_.back();
+    return *last_record_;
   }
 
   [[nodiscard]] SinkRoute last_route() const {
-    return has_last_record() ? records_.back().route : SinkRoute::BasicFile;
+    return has_last_record() ? last_record_->route : SinkRoute::BasicFile;
   }
 
   [[nodiscard]] std::size_t dispatched_record_count() const {
-    return records_.size();
+    return dispatched_record_count_;
   }
 
   [[nodiscard]] std::size_t dispatched_record_count(SinkRoute route) const;
 
-  [[nodiscard]] std::uint32_t last_flush_timeout_ms() const {
-    return last_flush_timeout_ms_;
+  [[nodiscard]] std::size_t queue_depth() const {
+    return queue_controller_.queue_depth();
+  }
+
+  [[nodiscard]] std::uint64_t dropped_total() const {
+    return queue_controller_.dropped_total();
+  }
+
+  [[nodiscard]] std::uint64_t blocked_write_attempt_total() const {
+    return queue_controller_.blocked_write_attempt_total();
   }
 
  private:
   [[nodiscard]] static SinkRoute select_route(const LogEvent& event);
 
-  std::vector<RoutedLogRecord> records_;
-  std::uint32_t last_flush_timeout_ms_ = 0;
+  AsyncQueueController queue_controller_;
+  std::optional<RoutedLogRecord> last_record_;
+  std::size_t dispatched_record_count_ = 0;
+  std::size_t basic_route_dispatch_count_ = 0;
+  std::size_t audit_route_dispatch_count_ = 0;
 };
 
 }  // namespace dasall::infra::logging

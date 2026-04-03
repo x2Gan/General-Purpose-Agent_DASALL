@@ -162,6 +162,7 @@ target_include_directories(dasall_contract_sink_dispatcher_boundary_test
 target_sources(dasall_contract_sink_dispatcher_boundary_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
+    ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
 )
 
 target_link_libraries(dasall_contract_sink_dispatcher_boundary_test
