@@ -8,6 +8,52 @@
 
 ---
 
+## 记录 #073
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-017 实现 LoggingHealthProbe 健康探针骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-017-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-017-LoggingHealthProbe骨架收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-017-LoggingHealthProbe骨架收敛.md)，补齐本地证据、Kubernetes probe 外部参考、Design->Build 映射与 D Gate 结果。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md)，将 `LOG-TODO-017` 标记为 Done，并同步更新 logging/unit 发现计数、Gate 快照与下一步建议。
+2. 完成 LOG-TODO-017-B 健康探针骨架落地：
+   - 新增 [infra/src/logging/LoggingHealthProbe.h](infra/src/logging/LoggingHealthProbe.h) 与 [infra/src/logging/LoggingHealthProbe.cpp](infra/src/logging/LoggingHealthProbe.cpp)，以 internal `ILoggingHealthSignalProvider` 收敛 queue 高水位、drop delta、recovery degraded/fallback、unrecoverable failure 与 metrics bridge degraded 等本地健康信号。
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `LoggingHealthProbe.cpp` 纳入 `dasall_infra`。
+   - 新增 [tests/unit/infra/logging/LoggingHealthProbeTest.cpp](tests/unit/infra/logging/LoggingHealthProbeTest.cpp)，覆盖 descriptor 冻结值、Healthy/Degraded/Unhealthy 三态映射与 timeout failure。
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)，把 `LoggingHealthProbeTest` 纳入 `unit;logging` 标签与 unit 聚合目标。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_logging_health_probe_unit_test dasall_unit_tests`
+   - `ctest --test-dir build-ci -N -R "LoggingHealthProbeTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "LoggingHealthProbeTest"`
+   - `ctest --test-dir build-ci -N -L logging`
+   - `ctest --test-dir build-ci --output-on-failure -L logging`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `LoggingHealthProbeTest` 定向发现 1 个，执行 1/1 通过。
+   - logging 标签测试发现 24 个，执行 24/24 通过。
+   - unit 套件 111/111 通过；全量发现更新为 252 个测试。
+
+### 结果
+
+1. `LoggingHealthProbe` 已从“仅有设计冻结”推进到“internal provider + frozen descriptor + 三态映射 + timeout failure 骨架已落盘并可测”。
+2. 本轮没有新增 public health interface，也没有改动 contracts 映射；logging 专项当前剩余未完成原子任务收敛到 `LOG-TODO-019`。
+
+### 下一步
+
+1. 进入 `LOG-TODO-019`，实现 `LogQueryService` 的受控查询与本地 artifact 导出骨架。
+
+### 风险
+
+1. 本轮只完成 `LoggingHealthProbe` 的 internal provider 骨架与单测，还未把真实运行时 wiring 接到服务组合层；后续扩展必须继续沿用 `IHealthProbe` + internal provider 边界，不能回退到 logging 私有 health result。
+
 ## 记录 #072
 
 - 日期：2026-04-03
