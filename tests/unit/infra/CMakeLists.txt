@@ -291,6 +291,26 @@ dasall_apply_common_options(dasall_file_secret_backend_unit_test)
 add_test(NAME FileSecretBackendTest COMMAND dasall_file_secret_backend_unit_test)
 set_tests_properties(FileSecretBackendTest PROPERTIES LABELS "unit;secret")
 
+add_executable(dasall_secret_manager_facade_unit_test
+  secret/SecretManagerFacadeTest.cpp
+)
+
+target_include_directories(dasall_secret_manager_facade_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_secret_manager_facade_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_secret_manager_facade_unit_test)
+
+add_test(NAME SecretManagerFacadeTest COMMAND dasall_secret_manager_facade_unit_test)
+set_tests_properties(SecretManagerFacadeTest PROPERTIES LABELS "unit;secret")
+
 add_executable(dasall_secret_backend_interface_unit_test
   SecretBackendInterfaceTest.cpp
 )

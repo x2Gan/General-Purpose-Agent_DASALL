@@ -8,6 +8,48 @@
 
 ---
 
+## 记录 #094
+
+- 日期：2026-04-03
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-008 SecretManagerFacade 访问骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-008-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-008-SecretManagerFacade访问骨架收敛.md，补齐本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 infra/src/secret/SecretManagerFacade.h 与 infra/src/secret/SecretManagerFacade.cpp，落盘 get/materialize/release/inspect 主链，以及 rotate deferred failure 和 revoke 最小 backend 委托。
+2. 完成测试与接线收口：
+   - 新增 tests/unit/infra/secret/SecretManagerFacadeTest.cpp，覆盖访问链正向和 expired handle 负向路径。
+   - 新增 tests/contract/smoke/SecretManagerFacadeBoundaryContractTest.cpp，固化 handle/lease 不吸收 request/task/session 字段，以及 validation failure 只引用 contracts error payload 的边界。
+   - 更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt，将 manager facade 源码和 unit/contract test target 纳入构建图。
+3. 完成 TODO 回链：
+   - 回写 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-008 标记为 Completed，并把下一入口切换到 SEC-TODO-009。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_contract_secret_manager_facade_boundary_test`
+   - `ctest --test-dir build-ci -N -R "SecretManagerFacade(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacade(Test|BoundaryContractTest)"`
+2. 结果：
+   - configure/build 通过；`SecretManagerFacadeTest` 与 `SecretManagerFacadeBoundaryContractTest` 可被发现，并定向执行 2/2 通过。
+
+### 结果
+
+1. SEC-TODO-008 已把 secret manager 从“只有 public interface”推进到“存在可验证的访问骨架 + contract 边界守卫”。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-009，随后再推进 lease 生命周期与轮换链路。
+
+### 下一步
+
+1. 进入 SEC-TODO-009，将当前 facade 内部的 active lease 映射收敛为独立 SecretLeaseRegistry，并覆盖创建/过期/释放/陈旧句柄路径。
+
+### 风险
+
+1. 若后续 SecretLeaseRegistry 抽取时改变现有 handle/lease 字段或把 request/task/session 复制进返回对象，本轮 contract 边界需要重新评审。
+
 ## 记录 #093
 
 - 日期：2026-04-03

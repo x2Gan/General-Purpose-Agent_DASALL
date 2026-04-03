@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 secret 组件专项 TODO
 
-最近更新时间：2026-04-01  
+最近更新时间：2026-04-03  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/secret
 
@@ -165,7 +165,7 @@
 | SEC-TODO-005 | Completed | 定义 ISecretBackend 统一协议 | secret 设计 6.6/7 | 6.6 ISecretBackend | L2 | infra/include/secret/ISecretBackend.h | fetch_record, materialize_record, promote_version, revoke_version, get_backend_status | unit：接口可编译；contract：协议稳定性检查 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L contract | SEC-TODO-003 | KMS 协议细节未冻结 | 先冻结公共协议，不落 KMS 细节 | 接口头文件、编译/合同检查 | 仅当 file/mock 可共享同协议且编译通过时完成 |
 | SEC-TODO-006 | Completed | 实现 MockSecretBackend 骨架 | secret 设计 6.2/8.3 | 6.2 MockSecretBackend | L3 | infra/src/secret/backends/MockSecretBackend.cpp | fetch_record/materialize_record/revoke_version 最小实现 | unit：成功/未命中/拒绝/backend down 四路径 | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无 | 无 | Mock 后端实现、单测、交付件 | 仅当四类路径可二值判定时完成 |
 | SEC-TODO-007 | Completed | 实现 FileSecretBackend 最小骨架 | secret 设计 6.2/6.9 | 6.2 FileSecretBackend；6.9 file 配置项 | L2 | infra/src/secret/backends/FileSecretBackend.cpp | fetch_record/materialize_record 最小实现 | unit：本地路径读取与错误路径；failure：backend unavailable | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无（2026-04-03 已由 SEC-BLK-001 通过 secret 设计 6.9 的 file.root_dir/encrypt_at_rest 策略冻结解阻） | 无 | File 后端骨架、测试、交付件 | 仅当不写明文临时文件且错误路径可判定时完成 |
-| SEC-TODO-008 | Not Started | 实现 SecretManagerFacade 访问骨架 | secret 设计 6.2/6.7 | 6.7 正常流程 1-4 步 | L3 | infra/src/secret/SecretManagerFacade.cpp | get_secret, materialize, release, inspect | unit：访问链路可走通；contract：上下文字段复用边界 | ctest --test-dir build-ci -L unit && ctest --test-dir build-ci -L contract | SEC-TODO-001、SEC-TODO-003、SEC-TODO-005、SEC-TODO-006 | 无 | 无 | Facade 骨架、测试 | 仅当 get->materialize->release 路径可稳定验证时完成 |
+| SEC-TODO-008 | Completed | 实现 SecretManagerFacade 访问骨架 | secret 设计 6.2/6.7 | 6.7 正常流程 1-4 步 | L3 | infra/src/secret/SecretManagerFacade.cpp | get_secret, materialize, release, inspect | unit：访问链路可走通；contract：上下文字段复用边界 | ctest --test-dir build-ci -L unit && ctest --test-dir build-ci -L contract | SEC-TODO-001、SEC-TODO-003、SEC-TODO-005、SEC-TODO-006 | 无 | 无 | Facade 骨架、测试、交付件 | 仅当 get->materialize->release 路径可稳定验证时完成 |
 | SEC-TODO-009 | Not Started | 实现 SecretLeaseRegistry 生命周期管理 | secret 设计 6.2/6.3/6.7 | 6.7 lease 创建/过期 | L3 | infra/src/secret/SecretLeaseRegistry.cpp | create_lease, validate_lease, expire_lease, release_lease | unit：创建/过期/释放/陈旧句柄 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-008 | 无 | 无 | Lease 注册实现、单测 | 仅当过期后 materialize 被拒绝并返回明确错误码时完成 |
 | SEC-TODO-010 | Not Started | 实现 SecretRotationCoordinator 轮换骨架 | secret 设计 6.2/6.8/6.9 | 6.8 轮换与回退 | L2 | infra/src/secret/SecretRotationCoordinator.cpp | rotate(request), promote_version, revoke_version, rollback | unit：验证失败回退；failure injection：rollback fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-005、SEC-TODO-009 | SEC-BLK-002 | 冻结 dual-slot 验证器最小接口 | 轮换骨架、测试 | 仅当 create/test/promote/revoke 路径与回退路径可判定时完成 |
 | SEC-TODO-011 | Completed | 定义 SecretErrors 错误码域与映射 | secret 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/secret/SecretErrors.h | INF_E_SECRET_NOT_FOUND, INF_E_SECRET_ACCESS_DENIED, INF_E_SECRET_BACKEND_UNAVAILABLE, INF_E_SECRET_LEASE_EXPIRED, INF_E_SECRET_VERSION_STALE, INF_E_SECRET_MATERIALIZE_FAILED, INF_E_SECRET_ROTATION_VALIDATION_FAILED, INF_E_SECRET_ROTATION_ROLLBACK_FAILED, INF_E_SECRET_AUDIT_WRITE_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定性 | ctest --test-dir build-ci -L contract | SEC-TODO-001 | 映射矩阵未成文 | 在 contract 测试中固化映射矩阵 | 错误码头文件、映射测试 | 仅当 9 个错误码都可追溯且映射测试通过时完成 |
@@ -250,6 +250,7 @@
 | SEC-TODO-005 | 2026-04-01 | infra/include/secret/ISecretBackend.h；tests/unit/infra/SecretBackendInterfaceTest.cpp；tests/contract/smoke/SecretBackendContractSmokeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_backend_interface_unit_test dasall_contract_secret_backend_contract_smoke_test` 通过；`ctest --test-dir build-ci -R "SecretBackendInterfaceTest|SecretBackendContractSmokeTest" --output-on-failure` 通过（2/2） |
 | SEC-TODO-006 | 2026-04-03 | infra/src/secret/backends/MockSecretBackend.h；infra/src/secret/backends/MockSecretBackend.cpp；tests/unit/infra/secret/MockSecretBackendTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-006-MockSecretBackend骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_mock_secret_backend_unit_test` 通过；`ctest --test-dir build-ci -N -R MockSecretBackendTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R MockSecretBackendTest` 通过（1/1） |
 | SEC-TODO-007 | 2026-04-03 | infra/src/secret/backends/FileSecretBackend.h；infra/src/secret/backends/FileSecretBackend.cpp；tests/unit/infra/secret/FileSecretBackendTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-007-FileSecretBackend骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_file_secret_backend_unit_test` 通过；`ctest --test-dir build-ci -N -R FileSecretBackendTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R FileSecretBackendTest` 通过（1/1） |
+| SEC-TODO-008 | 2026-04-03 | infra/src/secret/SecretManagerFacade.h；infra/src/secret/SecretManagerFacade.cpp；tests/unit/infra/secret/SecretManagerFacadeTest.cpp；tests/contract/smoke/SecretManagerFacadeBoundaryContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-008-SecretManagerFacade访问骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_contract_secret_manager_facade_boundary_test` 通过；`ctest --test-dir build-ci -N -R "SecretManagerFacade(Test|BoundaryContractTest)"` 发现 2 个测试；`ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacade(Test|BoundaryContractTest)"` 通过（2/2） |
 | SEC-TODO-011 | 2026-04-01 | infra/include/secret/SecretErrors.h；tests/unit/infra/SecretErrorsTest.cpp；tests/contract/smoke/SecretErrorMappingContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_errors_unit_test dasall_contract_secret_error_mapping_test` 通过；`ctest --test-dir build-ci -R "SecretErrorsTest|SecretErrorMappingContractTest" --output-on-failure` 通过（2/2） |
 
 ## 10. 风险与回退策略
@@ -275,7 +276,7 @@
 4. 未达到全量函数级的缺口：KMS 真实接入策略、dual-slot 验证器细节、integration 顶层注册。
 5. 下一步建议：
    - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 继续按顺序执行 SEC-TODO-008 -> SEC-TODO-009；其中 backend 骨架已具备 mock/file 两类最小实现，SEC-BLK-002 仍保留给轮换链路。
+   - 继续按顺序执行 SEC-TODO-009 -> SEC-TODO-010；其中 SecretManagerFacade 访问骨架已完成，下一轮应把 lease 生命周期从 facade 内部映射收敛为独立 SecretLeaseRegistry。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
 
 ## 12. 本轮执行记录（2026-04-03）
@@ -412,3 +413,50 @@ Build 合规复核：
 3. 测试发现性：已补 `ctest -N -R FileSecretBackendTest` 证据，确认新 target 可发现。
 4. TODO 证据回写：已完成状态、交付物和验收结果回写。
 5. 提交隔离：本轮只处理 file backend、单测和最小接线，不提前进入 SecretManagerFacade 或 LeaseRegistry。
+
+### 12.4 SEC-TODO-008
+
+选中任务：
+
+1. 任务 ID：SEC-TODO-008。
+2. 可执行性依据：Mock/File backend、ISecretManager、SecretTypes 和 SecretErrors 已全部落盘，当前缺口只剩 manager 主链实现与访问边界验收，因此 008 是 backend 与访问链骨架阶段下一最小、可提交的原子任务。
+
+研究学习：
+
+1. 本地证据：现有 SecretManagerInterfaceBoundaryContractTest 只冻结接口签名和“不吸收 backend/health 协议”，并不覆盖 access_context 在访问链中的复用边界，因此 008 需要新增独立 contract test，而不是复用旧测试。
+2. 本地证据：MockSecretBackend 已具备 fetch/materialize/status 和 permission-domain 守卫，足以作为 manager facade 的正负例夹具，无需本轮再引入额外 backend 变体。
+3. 外部参考：OWASP Secrets Management Cheat Sheet 强调 secrets materialization 的最小暴露窗口和审计锚点；Azure Key Vault best practices 强调访问令牌、lease 与 materialized value 边界分离，这支持 DASALL 继续保持 metadata-only handle/lease，不复制 request/task/session 字段。
+
+D 结论：
+
+1. Design -> Build 映射：新增 internal SecretManagerFacade 头/源，实现 get_secret、materialize、release、inspect 主链；rotate 保持 deferred failure，revoke 做最小 backend 委托；新增 unit/contract tests 与最小 CMake 接线。
+2. Build 三件套：
+   - 代码目标：新增 infra/src/secret/SecretManagerFacade.h、infra/src/secret/SecretManagerFacade.cpp，并更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/secret/SecretManagerFacadeTest.cpp，覆盖访问链正向和 expired handle 负向；新增 tests/contract/smoke/SecretManagerFacadeBoundaryContractTest.cpp，覆盖 access_context 字段边界与错误载荷边界。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_contract_secret_manager_facade_boundary_test && ctest --test-dir build-ci -N -R "SecretManagerFacade(Test|BoundaryContractTest)" && ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacade(Test|BoundaryContractTest)"`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/src/secret/SecretManagerFacade.h、infra/src/secret/SecretManagerFacade.cpp：新增 manager access-chain skeleton，收敛 get/materialize/release/inspect 主链，以及最小 revoke/rotate 边界。
+2. tests/unit/infra/secret/SecretManagerFacadeTest.cpp：新增访问链正向与 expired handle 负向单测。
+3. tests/contract/smoke/SecretManagerFacadeBoundaryContractTest.cpp：新增上下文字段复用边界 contract 守卫。
+4. infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt：接入 manager facade 源码与 unit/contract test targets。
+5. docs/todos/infrastructure/deliverables/SEC-TODO-008-SecretManagerFacade访问骨架收敛.md：补齐本轮 D/B 收敛、研究结论和验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_contract_secret_manager_facade_boundary_test`：通过。
+3. `ctest --test-dir build-ci -N -R "SecretManagerFacade(Test|BoundaryContractTest)"`：通过，发现 2 个定向测试。
+4. `ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacade(Test|BoundaryContractTest)"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：类名、方法名和测试断言已足够表达 manager skeleton 边界，本轮未增加额外注释噪音。
+2. 正负例覆盖：已覆盖 get->materialize->release->inspect 正向链路、expired handle 负向路径，以及 access_context 字段边界 contract 守卫。
+3. 测试发现性：已补 `ctest -N -R "SecretManagerFacade(Test|BoundaryContractTest)"` 证据，确认 unit/contract 新 target 可发现。
+4. TODO 证据回写：已完成状态、交付物和验收结果回写。
+5. 提交隔离：本轮只处理 SecretManagerFacade skeleton、对应 unit/contract 与最小 CMake 接线，不提前抽取 SecretLeaseRegistry 或推进 rotation coordinator。
