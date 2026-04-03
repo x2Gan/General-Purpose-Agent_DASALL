@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -8,6 +9,7 @@
 
 #include "audit/IAuditHealthProbe.h"
 #include "audit/IAuditLogger.h"
+#include "audit/IAuditRetention.h"
 #include "logging/IAuditLinkAdapter.h"
 #include "dasall/tests/support/TestAssertions.h"
 
@@ -88,6 +90,26 @@ class NullAuditHealthProbe final : public dasall::infra::audit::IAuditHealthProb
 
  private:
   dasall::infra::AuditHealthStatus snapshot_;
+};
+
+class NullAuditRetention final : public dasall::infra::audit::IAuditRetention {
+ public:
+  explicit NullAuditRetention(dasall::infra::RetentionOutcome outcome)
+      : outcome_(std::move(outcome)) {}
+
+  [[nodiscard]] dasall::infra::RetentionOutcome apply_retention(
+      std::int64_t now_ts) override {
+    last_now_ts_ = now_ts;
+    return outcome_;
+  }
+
+  [[nodiscard]] std::int64_t last_now_ts() const {
+    return last_now_ts_;
+  }
+
+ private:
+  dasall::infra::RetentionOutcome outcome_;
+  std::int64_t last_now_ts_ = 0;
 };
 
 class NullAuditLinkAdapter final : public dasall::infra::logging::IAuditLinkAdapter {
@@ -218,6 +240,16 @@ concept HasRegisterProbeMethod = requires {
   &T::register_probe;
 };
 
+template <typename T>
+concept HasArchiveMethod = requires {
+  &T::archive;
+};
+
+template <typename T>
+concept HasCleanupMethod = requires {
+  &T::cleanup;
+};
+
 void test_audit_health_probe_interface_freezes_evaluate_signature() {
   using dasall::infra::AuditHealthState;
   using dasall::infra::AuditHealthStatus;
@@ -311,6 +343,90 @@ void test_audit_health_status_rejects_invalid_ready_and_reason_combinations() {
               "AuditHealthStatus should reject degraded snapshots that use non-frozen failure reasons");
 }
 
+  void test_audit_retention_interface_freezes_apply_signature_and_outcome_shape() {
+    using dasall::infra::AuditArchiveAction;
+    using dasall::infra::AuditCleanupEvidence;
+    using dasall::infra::AuditCleanupTrigger;
+    using dasall::infra::RetentionOutcome;
+    using dasall::infra::audit::IAuditRetention;
+    using dasall::tests::support::assert_true;
+
+    static_assert(std::is_same_v<decltype(&IAuditRetention::apply_retention),
+                   RetentionOutcome (IAuditRetention::*)(std::int64_t)>);
+    static_assert(std::is_same_v<decltype(RetentionOutcome{}.archive_action),
+                   std::optional<AuditArchiveAction>>);
+    static_assert(std::is_same_v<decltype(RetentionOutcome{}.cleanup_evidence),
+                   std::optional<AuditCleanupEvidence>>);
+    static_assert(std::is_abstract_v<IAuditRetention>);
+    static_assert(!HasArchiveMethod<IAuditRetention>);
+    static_assert(!HasCleanupMethod<IAuditRetention>);
+
+    const std::int64_t cutoff_ts = 1712304000000;
+    NullAuditRetention retention(RetentionOutcome{
+      .completed = true,
+      .cutoff_ts = cutoff_ts,
+      .scanned_records = 12,
+      .archived_records = 12,
+      .deleted_records = 12,
+      .detail_ref = std::string("diag://infra/audit/retention/manual_cleanup"),
+      .error_code = std::nullopt,
+      .archive_action = AuditArchiveAction{
+        .archive_ref = std::string("diag://infra/audit/retention/archive/batch-001"),
+        .archived_records = 12,
+        .archived_through_ts = cutoff_ts,
+        .checksum = std::string("audit-retention-batch-001"),
+      },
+      .cleanup_evidence = AuditCleanupEvidence{
+        .trigger = AuditCleanupTrigger::Manual,
+        .cleanup_ref = std::string("diag://infra/audit/retention/cleanup/run-001"),
+        .archive_ref = std::string("diag://infra/audit/retention/archive/batch-001"),
+        .deleted_records = 12,
+        .deleted_through_ts = cutoff_ts,
+      },
+    });
+
+    const auto outcome = retention.apply_retention(cutoff_ts + 60000);
+    assert_true(std::has_virtual_destructor_v<IAuditRetention>,
+          "IAuditRetention should remain a pure virtual boundary with a virtual destructor");
+    assert_true(retention.last_now_ts() == cutoff_ts + 60000 && outcome.is_success(),
+          "IAuditRetention should keep retention execution behind a single apply_retention(now_ts) entrypoint and return a success outcome with aligned archive/cleanup evidence");
+  }
+
+  void test_retention_outcome_accepts_failure_and_rejects_cleanup_without_trace() {
+    using dasall::contracts::ResultCode;
+    using dasall::infra::RetentionOutcome;
+    using dasall::tests::support::assert_true;
+
+    const std::int64_t cutoff_ts = 1712307600000;
+    const RetentionOutcome failure{
+      .completed = false,
+      .cutoff_ts = cutoff_ts,
+      .scanned_records = 4,
+      .archived_records = 0,
+      .deleted_records = 0,
+      .detail_ref = std::string("diag://infra/audit/retention/failure"),
+      .error_code = ResultCode::RuntimeRetryExhausted,
+      .archive_action = std::nullopt,
+      .cleanup_evidence = std::nullopt,
+    };
+    const RetentionOutcome invalid_cleanup{
+      .completed = true,
+      .cutoff_ts = cutoff_ts,
+      .scanned_records = 3,
+      .archived_records = 0,
+      .deleted_records = 1,
+      .detail_ref = std::string("diag://infra/audit/retention/manual_cleanup"),
+      .error_code = std::nullopt,
+      .archive_action = std::nullopt,
+      .cleanup_evidence = std::nullopt,
+    };
+
+    assert_true(failure.is_failure(),
+          "RetentionOutcome should keep retention failures representable with existing contracts result codes only");
+    assert_true(!invalid_cleanup.has_consistent_state(),
+          "RetentionOutcome should reject delete results that do not carry cleanup_evidence and an archive-linked trace");
+  }
+
 }  // namespace
 
 int main() {
@@ -321,6 +437,8 @@ int main() {
     test_audit_health_probe_interface_freezes_evaluate_signature();
     test_audit_health_status_accepts_degraded_and_unavailable_snapshots();
     test_audit_health_status_rejects_invalid_ready_and_reason_combinations();
+    test_audit_retention_interface_freezes_apply_signature_and_outcome_shape();
+    test_retention_outcome_accepts_failure_and_rejects_cleanup_without_trace();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

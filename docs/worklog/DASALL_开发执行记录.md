@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #090
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-013 IAuditRetention 接口与 RetentionOutcome 对象
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-013-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-013-IAuditRetention接口冻结.md](docs/todos/infrastructure/deliverables/AUD-TODO-013-IAuditRetention%E6%8E%A5%E5%8F%A3%E5%86%BB%E7%BB%93.md)，补齐本地证据、Design -> Build 映射与验收结果。
+   - 新增 [infra/include/audit/IAuditRetention.h](infra/include/audit/IAuditRetention.h)，冻结 `AuditCleanupTrigger`、`AuditArchiveAction`、`AuditCleanupEvidence`、`RetentionOutcome` 与 `IAuditRetention::apply_retention(now_ts)` 边界，并把 completed/error_code、archive action、cleanup evidence 的一致性检查收敛到 header-only 对象方法。
+2. 完成测试出口收口：
+   - 更新 [tests/unit/infra/AuditLoggerInterfaceTest.cpp](tests/unit/infra/AuditLoggerInterfaceTest.cpp)，新增 retention interface compile/success/failure 断言，验证 single-entry boundary 与 cleanup trace 负例。
+   - 更新 [tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp](tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp)，新增 retention success/failure object 仍只映射既有 `contracts::ResultCode` 的 contract 守卫。
+3. 完成 TODO 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-013` 标记为 Done，并把 audit 组件专项 TODO 结论切换为“当前列表已全部完成”。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_audit_logger_interface_unit_test dasall_contract_infra_error_code_boundary_test`
+   - `ctest --test-dir build-ci -N -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest"`
+   - `cmake --build build-ci --target dasall_audit_event_unit_test dasall_audit_logger_interface_unit_test dasall_audit_service_fallback_unit_test dasall_audit_export_filter_unit_test dasall_contract_audit_event_boundary_test dasall_contract_audit_logger_interface_boundary_test dasall_contract_audit_service_boundary_test dasall_contract_infra_error_code_boundary_test dasall_infra_audit_health_integration_test`
+   - `ctest --test-dir build-ci -N -L audit`
+   - `ctest --test-dir build-ci --output-on-failure -L audit`
+2. 结果：
+   - 定向 `AuditInterfaceCompileTest`、`InfraErrorCodeMappingContractTest` 2/2 通过。
+   - audit 标签下 9 个测试全部通过，覆盖 4 个 unit、4 个 contract、1 个 integration。
+
+### 结果
+
+1. `AUD-TODO-013` 已把 retention 公共接口从“设计冻结”推进到“header + unit/contract + audit gate”落盘完成。
+2. 当前 audit 组件专项 TODO 列表内的原子任务已经全部完成；后续若继续推进，应另起 retention manager / archive backend / 自动清理调度的新任务范围。
+
+### 下一步
+
+1. 若继续推进 audit retention 执行层，新增 manager/调度类 TODO，并保持现有 `IAuditRetention` 边界不漂移。
+
+### 风险
+
+1. 若后续 retention 执行层绕过 `RetentionOutcome` 的 completed/error_code、archive action 或 cleanup evidence 一致性检查，本轮公共接口边界需要重新评审。
+
 ## 记录 #089
 
 - 日期：2026-04-03

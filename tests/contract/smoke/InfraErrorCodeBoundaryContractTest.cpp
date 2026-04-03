@@ -7,6 +7,7 @@
 
 #include "../../../infra/include/InfraErrorCode.h"
 #include "../../../infra/include/audit/AuditErrors.h"
+#include "../../../infra/include/audit/IAuditRetention.h"
 #include "../../../infra/include/audit/AuditTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
@@ -143,6 +144,60 @@ void test_audit_write_outcome_error_code_stays_inside_existing_contract_result_c
               "audit write runtime failures should remain representable with existing contracts result codes only");
 }
 
+  void test_retention_outcome_error_code_stays_inside_existing_contract_result_codes() {
+    using dasall::contracts::ResultCode;
+    using dasall::infra::AuditArchiveAction;
+    using dasall::infra::AuditCleanupEvidence;
+    using dasall::infra::AuditCleanupTrigger;
+    using dasall::infra::RetentionOutcome;
+    using dasall::infra::audit::AuditErrorCode;
+    using dasall::infra::audit::map_audit_error_code;
+    using dasall::tests::support::assert_true;
+
+    static_assert(std::is_same_v<decltype(RetentionOutcome{}.error_code),
+                   std::optional<ResultCode>>);
+
+    const std::int64_t cutoff_ts = 1712304000000;
+    const RetentionOutcome success{
+      .completed = true,
+      .cutoff_ts = cutoff_ts,
+      .scanned_records = 7,
+      .archived_records = 7,
+      .deleted_records = 7,
+      .detail_ref = std::string("diag://infra/audit/retention/scheduled_cleanup"),
+      .error_code = std::nullopt,
+      .archive_action = AuditArchiveAction{
+        .archive_ref = std::string("diag://infra/audit/retention/archive/batch-013"),
+        .archived_records = 7,
+        .archived_through_ts = cutoff_ts,
+        .checksum = std::string("retention-batch-013"),
+      },
+      .cleanup_evidence = AuditCleanupEvidence{
+        .trigger = AuditCleanupTrigger::Scheduled,
+        .cleanup_ref = std::string("diag://infra/audit/retention/cleanup/run-013"),
+        .archive_ref = std::string("diag://infra/audit/retention/archive/batch-013"),
+        .deleted_records = 7,
+        .deleted_through_ts = cutoff_ts,
+      },
+    };
+    const RetentionOutcome failure{
+      .completed = false,
+      .cutoff_ts = cutoff_ts,
+      .scanned_records = 7,
+      .archived_records = 0,
+      .deleted_records = 0,
+      .detail_ref = std::string("diag://infra/audit/retention/failure"),
+      .error_code = map_audit_error_code(AuditErrorCode::RetentionFail).result_code,
+      .archive_action = std::nullopt,
+      .cleanup_evidence = std::nullopt,
+    };
+
+    assert_true(success.has_consistent_state() && success.is_success(),
+          "retention success outcomes should remain representable without introducing new cross-contract error codes");
+    assert_true(failure.has_consistent_state() && failure.is_failure(),
+          "retention failure outcomes should stay mapped to existing contracts result codes only");
+  }
+
 }  // namespace
 
 int main() {
@@ -152,6 +207,7 @@ int main() {
     test_audit_error_code_maps_only_to_existing_contract_result_codes();
     test_audit_error_code_names_stay_private_to_audit_boundary();
     test_audit_write_outcome_error_code_stays_inside_existing_contract_result_codes();
+    test_retention_outcome_error_code_stays_inside_existing_contract_result_codes();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
