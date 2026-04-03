@@ -267,6 +267,40 @@ metrics 非职责：
 后置条件：
 1. 样本写入成功，或返回可判定错误并更新失败计数。
 
+### 6.6.1 跨模块指标桥接协议（logging v1）
+
+为解掉 logging 侧 LOG-BLK-002，冻结 logging -> metrics 的最小桥接协议如下：
+
+1. LoggingMetricsBridge 只允许依赖 IMetricsProvider 与 IMeter；不得直连 IMetricExporter、导出配置对象或 exporter 内部队列。
+2. meter 获取路径固定为 get_meter(MeterScope{.name = "infra.logging", .version = "v1"})；provider 继续负责配置与生命周期，保持与 OpenTelemetry MeterProvider -> Meter -> Instrument 的分层一致。
+3. logging v1 指标只允许通过 create_counter/create_gauge/create_histogram + record(sample) 建立和发射，不新增 logging 私有 IMetricSink 或第二套 bridge 接口。
+
+logging v1 指标对象冻结表：
+
+| 指标名 | Instrument 类型 | unit | 创建接口 | 说明 |
+|---|---|---|---|---|
+| logging_write_total | Counter | 1 | IMeter::create_counter | 普通写入成功总数 |
+| logging_write_fail_total | Counter | 1 | IMeter::create_counter | 普通写入失败总数 |
+| logging_drop_total | Counter | 1 | IMeter::create_counter | 队列溢出或降级丢弃总数 |
+| logging_queue_depth | Gauge | 1 | IMeter::create_gauge | 当前异步队列深度 |
+| logging_flush_latency_ms | Histogram | ms | IMeter::create_histogram | flush 延迟分布 |
+
+logging bridge 标签填充规则：
+
+| 标签 | 取值规则 | 约束 |
+|---|---|---|
+| module | 固定为 logging | 不允许复用其他模块名 |
+| stage | 仅允许 write、queue、flush、recovery | 不允许透传 sink 名称、文件路径等动态值 |
+| profile | 当前 active profile_id；缺失填 unknown | 不暴露部署细节自由文本 |
+| outcome | 仅允许 success、failure、degraded | 与桥接失败/降级语义对齐 |
+| error_code | 仅允许 none、LOG_E_QUEUE_FULL、LOG_E_SINK_IO、LOG_E_FORMAT_INVALID、LOG_E_CONFIG_INVALID | 不允许透传 errno、路径或 request/session/trace 等高基数标识 |
+
+补充约束：
+
+1. LoggingMetricsBridge 不得把 request_id、session_id、trace_id、task_id 作为 metric label；这些标识只保留在日志/追踪信号中。
+2. logging_write_total、logging_write_fail_total、logging_drop_total 保持 _total 后缀；logging_flush_latency_ms 保持当前 v1 命名冻结，若后续 Prometheus exporter 需要 seconds 基准换算，只能在 exporter 适配层完成，不回改 bridge API。
+3. MetricSample.identity_ref 的 name、type、unit 必须与上表一致；运行期不允许按 sink/path 动态改 metric family。
+
 ### 6.7 主流程时序（正常路径）
 
 1. 上游模块通过 MetricsFacade 获取 meter 与 instrument。
@@ -295,6 +329,16 @@ metrics 非职责：
 1. 连续 N 次导出失败进入 metrics_degraded_mode。
 2. degraded_mode 下保留本地聚合与健康指标，不中断主业务流程。
 
+### 6.8.1 logging 指标桥接失败语义
+
+为避免 logging 与 metrics 之间形成递归失败链，冻结 LoggingMetricsBridge 的失败语义如下：
+
+1. create_counter/create_gauge/create_histogram 或 record(sample) 失败时，只允许把 bridge 自身标记为 degraded，不得覆盖本次日志写入主结果。
+2. bridge 失败时必须保留本地内存态的最近错误与失败计数，供 LoggingHealthProbe 或后续诊断读取；不得反向调用 LoggingFacade 再写一条“metrics failed”日志。
+3. MetricsErrorCode::ProviderNotReady、ExportFailure、ExportTimeout 归类为 provider/exporter degraded：桥接进入 best-effort 模式，但原始 logging 主链继续执行。
+4. MetricsErrorCode::QueueFull 归类为观测样本丢弃：仅丢弃本次指标观测，不把 backpressure 反推给日志主写入路径。
+5. MetricsErrorCode::IdentityInvalid 与 ConfigInvalid 归类为 bridge 初始化失败：LoggingMetricsBridge 必须回退到 no-op bridge，并把问题暴露给 health/audit 侧，而不是带着部分初始化状态继续发射。
+
 ### 6.9 配置项与默认策略
 
 | 配置项 | 默认值 | 覆盖层级 | 说明 |
@@ -317,6 +361,7 @@ metrics 非职责：
 日志：
 1. provider init/reconfigure/flush/shutdown 生命周期。
 2. guard 拒绝、队列溢出、导出失败、降级切换事件。
+3. logging bridge 只允许记录 bridge 初始化失败、连续 export failure 与 degraded 切换，不记录每次 record(sample) 的成功明细，避免递归噪声。
 
 指标（模块自观测）：
 1. metrics_samples_total

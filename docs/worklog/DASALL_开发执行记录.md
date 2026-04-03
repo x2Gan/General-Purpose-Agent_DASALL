@@ -8,6 +8,43 @@
 
 ---
 
+## 记录 #065
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-BLK-002 metrics 接口冻结解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-BLK-002-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-BLK-002-LoggingMetricsBridge设计收敛.md](docs/todos/infrastructure/deliverables/LOG-BLK-002-LoggingMetricsBridge%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 blocker 根因收敛为“跨模块桥接协议未成文”，并冻结 provider/meter/sample 唯一路径、五指标对象表、MetricLabels 取值规则与 non-recursive failure 语义。
+   - 更新 [docs/architecture/DASALL_infra_metrics模块详细设计.md](docs/architecture/DASALL_infra_metrics%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，新增 6.6.1 与 6.8.1，明确 logging 只能通过 IMetricsProvider/IMeter 发射指标，且 record 失败不得递归反噬 logging 主链。
+   - 更新 [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 6.10，把 LoggingMetricsBridge 的五指标、标签规则和失败语义回链到 metrics 侧冻结结论。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-BLK-002 标记为已解阻，并把 LOG-TODO-013 从 Blocked 迁移到 Not Started，同时把测试出口收敛为可执行的 unit/contract 边界验证。
+
+### 测试
+
+1. 验证命令：
+   - `grep -n "6.6.1 跨模块指标桥接协议\|6.8.1 logging 指标桥接失败语义\|logging_write_total\|logging_flush_latency_ms" docs/architecture/DASALL_infra_metrics模块详细设计.md docs/architecture/DASALL_infra_logging模块详细设计.md docs/todos/infrastructure/deliverables/LOG-BLK-002-LoggingMetricsBridge设计收敛.md`
+   - `grep -n "LOG-BLK-002\|LOG-TODO-013\|Not Started\|已解阻" docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md`
+2. 结果：
+   - metrics 设计、logging 设计、交付物与专项 TODO 均已能定位到 provider/meter/sample 接入协议、标签治理与 non-recursive failure 语义。
+   - LOG-TODO-013 已具备可执行的代码目标、测试目标与验收命令，不再依赖额外 metrics blocker。
+
+### 结果
+
+1. LOG-BLK-002 已从“metrics 接口未冻结”转为已解阻，logging bridge skeleton 可以直接复用现有 metrics public headers 推进实现。
+2. LOG-TODO-013 的最小粒度已从 L1 收敛到 L2，后续实现只需关注 bridge skeleton 与定向 unit/contract 验证，不必等待 metrics runtime/exporter 先落盘。
+
+### 下一步
+
+1. 直接进入 LOG-TODO-013，实现 LoggingMetricsBridge 骨架、测试与验收回写。
+
+### 风险
+
+1. metrics 运行时实现仍为空，因此 LOG-TODO-013 只能先以接口驱动的 fake provider/meter 测试收敛桥接边界；真实 exporter 联通需由 metrics 子域后续任务继续承接。
+
 ## 记录 #064
 
 - 日期：2026-04-03

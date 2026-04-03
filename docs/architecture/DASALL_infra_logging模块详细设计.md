@@ -177,7 +177,7 @@ logging 非职责：
 | AsyncQueueController | 记录写入请求 | 异步投递状态 | 支持 block/overrun_oldest |
 | RedactionFilter | 原始 message/attrs | 脱敏后记录 | 敏感值不可明文落盘 |
 | LoggingHealthProbe | 写入状态、错误计数 | HealthStatus | 反映 degraded 状态 |
-| LoggingMetricsBridge | 管线统计 | metrics exporter | 指标名与标签稳定 |
+| LoggingMetricsBridge | 管线统计 | IMetricsProvider/IMeter | 只经由 MetricSample 发射五个 frozen 指标 |
 
 ### 6.4 子组件依赖关系
 
@@ -317,9 +317,20 @@ key 域冻结规则：
 ### 6.10 可观测性（日志/指标/追踪/审计）
 
 1. 日志：结构化字段至少含 timestamp、level、module、message、request_id、session_id、trace_id。
-2. 指标：logging_write_total、logging_write_fail_total、logging_drop_total、logging_queue_depth、logging_flush_latency_ms。
-3. 追踪：记录 trace_id/span_id 兼容字段（若可获得 span_id 则写入）。
-4. 审计协同：关键动作日志需附 evidence_ref，并通过 IAuditLinkAdapter 关联至 infra/audit。
+2. 指标：LoggingMetricsBridge 通过 IMetricsProvider::get_meter(MeterScope{.name = "infra.logging", .version = "v1"}) 获取 meter，并只经由 IMeter::record(MetricSample) 发射下列五个指标：
+
+| 指标名 | 类型 | unit | stage | 说明 |
+|---|---|---|---|---|
+| logging_write_total | Counter | 1 | write | 普通写入成功总数 |
+| logging_write_fail_total | Counter | 1 | write/recovery | 普通写入失败总数 |
+| logging_drop_total | Counter | 1 | queue | 队列溢出或降级丢弃总数 |
+| logging_queue_depth | Gauge | 1 | queue | 当前异步队列深度 |
+| logging_flush_latency_ms | Histogram | ms | flush | flush 延迟分布 |
+
+3. 标签约束：复用 metrics::MetricLabels 五元组，module 固定 logging，stage 仅允许 write、queue、flush、recovery，profile 缺失填 unknown，outcome 仅允许 success、failure、degraded，error_code 仅允许 none 或四个 LOG_E_*。
+4. 指标桥接失败只允许把 LoggingMetricsBridge 标记为 degraded，并通过 health/audit 或非递归 failure hook 暴露；不得递归调用 LoggingFacade 再写失败日志。
+5. 追踪：记录 trace_id/span_id 兼容字段（若可获得 span_id 则写入）。
+6. 审计协同：关键动作日志需附 evidence_ref，并通过 IAuditLinkAdapter 关联至 infra/audit。
 
 ---
 
