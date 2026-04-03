@@ -171,6 +171,31 @@ target_link_libraries(dasall_contract_sink_dispatcher_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_audit_link_adapter_boundary_test
+  AuditLinkAdapterBoundaryContractTest
+  smoke/AuditLinkAdapterBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_audit_link_adapter_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_sources(dasall_contract_audit_link_adapter_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src/logging/AuditLinkAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
+    ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
+)
+
+target_link_libraries(dasall_contract_audit_link_adapter_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_audit_event_boundary_test
   AuditBoundaryContractTest
   smoke/AuditBoundaryContractTest.cpp

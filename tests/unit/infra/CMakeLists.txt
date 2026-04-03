@@ -439,6 +439,29 @@ dasall_apply_common_options(dasall_async_queue_controller_unit_test)
 add_test(NAME AsyncQueueControllerTest COMMAND dasall_async_queue_controller_unit_test)
 set_tests_properties(AsyncQueueControllerTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_audit_link_adapter_unit_test
+  logging/AuditLinkAdapterTest.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/AuditLinkAdapter.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/SinkDispatcher.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/logging/AsyncQueueController.cpp
+)
+
+target_include_directories(dasall_audit_link_adapter_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_audit_link_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_audit_link_adapter_unit_test)
+
+add_test(NAME AuditLinkAdapterTest COMMAND dasall_audit_link_adapter_unit_test)
+set_tests_properties(AuditLinkAdapterTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_audit_logger_interface_unit_test
   AuditLoggerInterfaceTest.cpp
 )
