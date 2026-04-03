@@ -1,10 +1,10 @@
-#include "logging/LoggingFacade.h"
+#include "LoggingFacade.h"
 
-#include <cstdint>
+#include "SinkDispatcher.h"
+
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace dasall::infra::logging {
 
@@ -12,25 +12,8 @@ namespace {
 
 constexpr std::string_view kLoggingFacadeSourceRef = "LoggingFacade";
 
-class InMemoryDispatchBackend final : public ILogDispatchBackend {
- public:
-  LogWriteResult dispatch(const LogEvent& event) override {
-    records_.push_back(event);
-    return LogWriteResult::success();
-  }
-
-  LogWriteResult flush(const LogFlushDeadline& deadline) override {
-    last_flush_timeout_ms_ = deadline.timeout_ms;
-    return LogWriteResult::success();
-  }
-
- private:
-  std::vector<LogEvent> records_;
-  std::uint32_t last_flush_timeout_ms_ = 0;
-};
-
 std::unique_ptr<ILogDispatchBackend> make_default_dispatch_backend() {
-  return std::make_unique<InMemoryDispatchBackend>();
+  return std::make_unique<SinkDispatcher>();
 }
 
 std::string normalize_identifier(std::string value) {
