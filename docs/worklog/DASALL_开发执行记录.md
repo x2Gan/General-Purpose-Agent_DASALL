@@ -8,6 +8,46 @@
 
 ---
 
+## 记录 #069
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-016 回写 logging 质量门与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-016-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-016-LoggingGate回写收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-016-LoggingGate%E5%9B%9E%E5%86%99%E6%94%B6%E6%95%9B.md)，把 Gate-LOG-01~06 结论、blocker 快照、工具态异常与“未触发代码回退”统一收敛为正式交付物。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 LOG-TODO-016 标记为 Done，并新增 9.3/9.4/9.5 执行快照。
+2. 更新专项 TODO 尾部建议：
+   - 将 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md) 11.5 从“先执行 001~011、014~016”改为“001~016 已完成，后续转入 integration/health/log query 的下一轮拆解”，消除过期执行指引。
+
+### 测试
+
+1. 验收命令：
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - CTest 全量发现 249 个测试。
+   - `unit` 套件 110/110 通过。
+   - `contract` 套件 132/132 通过。
+   - `tests/integration/infra/logging/` 仍无用例文件，因此 Gate-LOG-06 明确保持 Blocked。
+
+### 结果
+
+1. logging 专项 TODO 已具备可评审的 gate/blocker 当前态，不再需要从多轮 worklog 和提交历史中人工拼接质量门结论。
+2. 014~016 的执行状态已经统一封口：构建接线完成、测试注册完成、gate 与 blocker 状态完成回写，且 remote `origin/master` 与本地一致。
+
+### 下一步
+
+1. 若继续推进 logging 子域，应优先围绕 `LOG-BLK-003`、`LOG-BLK-005` 和 logging integration 用例生成新一轮任务，而不是重复打开 014~016。
+
+### 风险
+
+1. 由于 `tests/integration/infra/logging/` 仍为空，任何声称 logging 组件已通过 integration gate 的结论都应视为不成立，直到组件级 integration 用例实际落盘并纳入标签注册。
+
 ## 记录 #068
 
 - 日期：2026-04-03

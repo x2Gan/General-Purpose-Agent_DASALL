@@ -171,7 +171,7 @@ logging 组件目标固定为：
 | LOG-TODO-013 | Done | 实现 LoggingMetricsBridge 指标桥接骨架 | logging 设计 6.2、6.10；架构 8.7；metrics 设计 6.6.1、6.8.1 | 6.10 指标清单与 label/failure contract | L2 | infra/src/logging/LoggingMetricsBridge.cpp | logging_write_total, logging_write_fail_total, logging_drop_total, logging_queue_depth, logging_flush_latency_ms | unit：指标发射成功/失败降级；contract：bridge 不直连 exporter 且不透传高基数标签 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_logging_metrics_bridge_unit_test dasall_contract_logging_metrics_bridge_boundary_test && ctest --test-dir build-ci -N -R "(LoggingMetricsBridgeTest|LoggingMetricsBridgeBoundaryContractTest)" && ctest --test-dir build-ci --output-on-failure -R "(LoggingMetricsBridgeTest|LoggingMetricsBridgeBoundaryContractTest)" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | LOG-TODO-010 | 无（2026-04-03 已由 LOG-BLK-002 通过 IMeter::record 协议、MetricLabels 五元组填充表与 non-recursive failure 语义冻结解阻） | 无 | 已完成：新增 internal `LoggingMetricsBridge` / `LoggingMetricSignal` / `LoggingMetricsEmitResult`，首次 emit 预注册五个 frozen metric family，并在本地拒绝非白名单 stage/outcome/error_code；provider/meter 失败被归一到 `MetricsErrorCode` + `MetricsOperationStatus`，确保 bridge failure 不递归反噬 logging 主链 | 指标桥接骨架、定向/聚合 unit/contract 证据；2026-04-03 已落盘 infra/src/logging/LoggingMetricsBridge.h、infra/src/logging/LoggingMetricsBridge.cpp、tests/unit/infra/logging/LoggingMetricsBridgeTest.cpp、tests/contract/smoke/LoggingMetricsBridgeBoundaryContractTest.cpp，并更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt；验收以 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_logging_metrics_bridge_unit_test dasall_contract_logging_metrics_bridge_boundary_test、ctest --test-dir build-ci -N -R "(LoggingMetricsBridgeTest|LoggingMetricsBridgeBoundaryContractTest)"、ctest --test-dir build-ci --output-on-failure -R "(LoggingMetricsBridgeTest|LoggingMetricsBridgeBoundaryContractTest)"、cmake --build build-ci --target dasall_unit_tests dasall_contract_tests、ctest --test-dir build-ci --output-on-failure -L unit、ctest --test-dir build-ci --output-on-failure -L contract 完成，110 个 unit 与 132 个 contract 测试全部通过 | 仅当五个 frozen 指标经 IMetricsProvider/IMeter 发射且上报失败不反噬 logging 主链时完成 |
 | LOG-TODO-014 | Done | 注册 logging 构建落点到 infra CMake | logging 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | 新增 include/logging 与 src/logging 源文件接线 | build：dasall_infra 可编译；unit：新增测试目标可链接 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_logging_facade_unit_test dasall_sink_dispatcher_unit_test dasall_async_queue_controller_unit_test dasall_audit_link_adapter_unit_test dasall_logging_recovery_unit_test dasall_logging_config_merge_unit_test dasall_logging_metrics_bridge_unit_test dasall_contract_sink_dispatcher_boundary_test dasall_contract_audit_link_adapter_boundary_test dasall_contract_log_configurator_boundary_test dasall_contract_logging_metrics_bridge_boundary_test && ctest --test-dir build-ci -N -R "(LoggingFacadeTest|SinkDispatcherTest|AsyncQueueControllerTest|AuditLinkAdapterTest|LoggingRecoveryTest|LoggingConfigMergeTest|LoggingMetricsBridgeTest|SinkDispatcherBoundaryContractTest|AuditLinkAdapterBoundaryContractTest|LogConfiguratorBoundaryContractTest|LoggingMetricsBridgeBoundaryContractTest)" && ctest --test-dir build-ci --output-on-failure -R "(LoggingFacadeTest|SinkDispatcherTest|AsyncQueueControllerTest|AuditLinkAdapterTest|LoggingRecoveryTest|LoggingConfigMergeTest|LoggingMetricsBridgeTest|SinkDispatcherBoundaryContractTest|AuditLinkAdapterBoundaryContractTest|LogConfiguratorBoundaryContractTest|LoggingMetricsBridgeBoundaryContractTest)" | LOG-TODO-001 至 LOG-TODO-011 | 无（2026-04-03 已将 logging skeleton 正式纳入 `dasall_infra`，并移除 unit/contract 目标对同一批 logging 实现的重复编译） | 无 | 已完成：新增 `DASALL_INFRA_LOGGING_SOURCES`，将 AsyncQueueController/AuditLinkAdapter/LoggingConfigAdapter/LoggingFacade/LoggingMetricsBridge/LoggingRecovery/SinkDispatcher 正式接入 `dasall_infra`，并回收 logging 测试目标中的本地 `.cpp` 直编路径；交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-014-Logging构建接线收敛.md，定向构建与 11 个受影响测试均通过 | 仅当 placeholder 不再是唯一源码入口且目标编译通过时完成 |
 | LOG-TODO-015 | Done | 注册 logging 单元与契约测试入口 | logging 设计 8.1、9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/logging/, tests/contract/CMakeLists.txt | 新增 logging 相关 unit/contract 测试注册 | unit + contract：ctest 可发现并执行新增用例 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -L logging && ctest --test-dir build-ci --output-on-failure -L logging | LOG-TODO-003、LOG-TODO-005、LOG-TODO-010 | 无（2026-04-03 已将散落的 logging unit/contract 入口收敛为显式 target 分组与 `logging` 标签 discoverability） | 无 | 已完成：新增 `DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS`、`dasall_register_logging_unit_test(...)` 与 `dasall_register_logging_contract_test(...)`，将 12 个 unit 与 9 个 contract 用例统一纳入 logging 标签面；交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-015-Logging测试注册收敛.md，`ctest -N -L logging` 发现 21 个测试且 21/21 通过 | 仅当新增测试在 ctest -N 可见且执行通过时完成 |
-| LOG-TODO-016 | Not Started | 回写 logging 质量门与交付证据 | logging 设计 9.2、11.1；工程规范 6.2 | 9.2 Gate-LOG-01~05 | L2 | docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md | Gate 执行结论、阻塞变化、回退执行记录 | process test：门禁记录与执行结果可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | LOG-TODO-015 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个门禁都有通过/失败结论与证据命令时完成 |
+| LOG-TODO-016 | Done | 回写 logging 质量门与交付证据 | logging 设计 9.2、11.1；工程规范 6.2 | 9.2 Gate-LOG-01~05 | L2 | docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md | Gate 执行结论、阻塞变化、回退执行记录 | process test：门禁记录与执行结果可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | LOG-TODO-015 | 无（2026-04-03 已完成 Gate-LOG-01~06 与 blocker 快照回写；当前仅保留 LOG-GATE-06 未通过结论，不构成 014~016 的执行阻塞） | 无 | 已完成：在本文件新增 9.3/9.4/9.5 执行快照，统一记录 Gate-LOG-01~06 结论、LOG-BLK-001~005 当前状态、CMake Tools 工具态异常与“未触发代码回退”记录；交付物见 docs/todos/infrastructure/deliverables/LOG-TODO-016-LoggingGate回写收敛.md | 仅当每个门禁都有通过/失败结论与证据命令时完成 |
 
 ### 6.2 Blocked 任务对应阻塞项索引
 
@@ -240,6 +240,35 @@ logging 组件目标固定为：
 6. 是否避免跨子系统范围扩张：是。
 7. 是否真正落到接口/数据结构级对象：是。
 
+### 9.3 2026-04-03 Gate 执行快照
+
+| Gate ID | 当前状态 | 证据 | 结论 |
+|---|---|---|---|
+| LOG-GATE-01 | Pass | LOG-TODO-001/002/003/010 已完成；`ctest --test-dir build-ci --output-on-failure -L logging` 覆盖 `ILogger` / `IAuditLinkAdapter` / `LogEvent` / `LoggingErrors` 边界测试 | logging public boundary 已冻结并保持可编译、可验证 |
+| LOG-GATE-02 | Pass | LOG-TODO-009 已完成；`AuditLinkAdapterTest` 与 `AuditLinkAdapterBoundaryContractTest` 在 logging 标签测试面内通过 | 审计关联与普通日志主链分离仍有测试证明 |
+| LOG-GATE-03 | Pass | LOG-TODO-010~013 已完成；`ctest --test-dir build-ci --output-on-failure -L unit` 110/110 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 132/132 通过 | queue/sink/config/metrics failure 路径维持错误码与可观测出口 |
+| LOG-GATE-04 | Pass | `ctest --test-dir build-ci -N` 发现 249 个测试；`ctest --test-dir build-ci -N -L logging` 发现 21 个 logging 测试 | logging 测试发现性已独立收敛 |
+| LOG-GATE-05 | Pass | LOG-TODO-014~016 仅修改 CMake、测试标签、TODO、交付物与 worklog；未改 public headers 或 contracts 映射 | 本轮无 breaking change，评审门未被触发 |
+| LOG-GATE-06 | Blocked | `tests/integration/infra/logging/` 仍为空；LOG-BLK-004 仅解除了 integration 拓扑，不代表 logging 组件用例已落盘 | integration 准入门仍未通过，后续需补 logging integration 用例与标签注册 |
+
+### 9.4 2026-04-03 Blocker 状态快照
+
+| Blocker ID | 当前状态 | 是否影响 LOG-TODO-014~016 | 说明 |
+|---|---|---|---|
+| LOG-BLK-001 | Resolved | 否 | LoggingConfig / source acceptance / audit gate 已冻结并支撑 LOG-TODO-012 |
+| LOG-BLK-002 | Resolved | 否 | metrics bridge 接入协议已冻结并支撑 LOG-TODO-013 |
+| LOG-BLK-003 | Deferred | 否 | 仅影响后续 LoggingHealthProbe，当前不阻塞 014~016 |
+| LOG-BLK-004 | Resolved | 否 | 顶层 integration 拓扑已解阻，但组件用例仍未落盘，因此只影响 LOG-GATE-06 |
+| LOG-BLK-005 | Deferred | 否 | 仅影响后续 LogQueryService，当前不阻塞 014~016 |
+
+### 9.5 验证与回退记录
+
+1. `ctest --test-dir build-ci -N`：发现 249 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：110/110 通过。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：132/132 通过。
+4. `Build_CMakeTools` 与 `RunCtest_CMakeTools` 仍报“无法配置项目”，本阶段实际验收继续沿用显式 `cmake`/`ctest` 链路。
+5. 014~016 未触发代码回退；当前仅保留 `LOG-GATE-06` 未通过结论。
+
 ## 10. 风险与回退策略
 
 | 风险 | 等级 | 触发条件 | 监测信号 | 回退策略 |
@@ -278,6 +307,6 @@ logging 组件目标固定为：
 
 ### 11.5 下一步建议
 
-1. 先执行 LOG-TODO-001~011、014~016，完成 logging L2 冻结与构建/测试接线。
-2. 并行推进 LOG-BLK-001~005 的补设计解阻。
-3. 解阻后再生成 logging 集成与桥接的下一轮专项 TODO，不跳过评审门禁。
+1. 当前专项 TODO 的 LOG-TODO-001~016 已全部完成；若继续推进，应转入 logging integration 用例、LoggingHealthProbe 与 LogQueryService 的下一轮任务拆解。
+2. 下一优先补设计点是 LOG-BLK-003 与 LOG-BLK-005，而不是重复回做已完成的构建/测试接线任务。
+3. 在 logging integration 用例落盘前，继续保持 `LOG-GATE-06 = Blocked`，不要把顶层 integration 拓扑已解阻误判为组件 integration 已完成。
