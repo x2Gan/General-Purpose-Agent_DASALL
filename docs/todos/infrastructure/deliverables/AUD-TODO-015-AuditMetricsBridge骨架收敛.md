@@ -16,7 +16,7 @@
 ### 2.1 本地证据
 
 1. [infra/src/logging/LoggingMetricsBridge.h](infra/src/logging/LoggingMetricsBridge.h) / [infra/src/logging/LoggingMetricsBridge.cpp](infra/src/logging/LoggingMetricsBridge.cpp) 已提供仓内先例：bridge 通过 `IMetricsProvider -> IMeter -> record(sample)` 分层工作，并把 provider/exporter 故障限制在 bridge 自身 degraded 状态内。
-2. [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp) 在本轮前已经验证 audit health 的 Ready/Degraded/Unavailable 基线，但 metrics degraded 场景仍依赖 test-local 布尔值，缺少真实 bridge 驱动的 ground truth。
+2. [tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp) 在本轮前已经验证 audit health 的 Ready/Degraded/Unavailable 基线，但 metrics degraded 场景仍依赖 test-local 布尔值，缺少真实 bridge 驱动的 ground truth。
 3. [infra/CMakeLists.txt](infra/CMakeLists.txt) 已具备独立 audit source 列表，适合以最小增量接入 `AuditMetricsBridge.cpp`，而无需扩张 public API。
 
 ### 2.2 外部参考
@@ -44,7 +44,7 @@
 | Design 结论 | Build 落地 |
 |---|---|
 | audit v1 bridge 保持 internal provider/meter-only 分层 | 新增 [infra/src/audit/AuditMetricsBridge.h](infra/src/audit/AuditMetricsBridge.h) 与 [infra/src/audit/AuditMetricsBridge.cpp](infra/src/audit/AuditMetricsBridge.cpp) |
-| 七指标对象表、五标签白名单与 degraded/no-op 语义需要自动化校验 | 扩展 [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp) |
+| 七指标对象表、五标签白名单与 degraded/no-op 语义需要自动化校验 | 扩展 [tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp) |
 | 现有根级 integration 继续作为当前轮验收出口 | 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt) 添加 `infra/src` include path |
 
 ### 4.2 Build 三件套
@@ -71,7 +71,7 @@
 1. 新增 [infra/src/audit/AuditMetricsBridge.h](infra/src/audit/AuditMetricsBridge.h) 与 [infra/src/audit/AuditMetricsBridge.cpp](infra/src/audit/AuditMetricsBridge.cpp)，冻结 `AuditMetricKind`、`AuditMetricSignal`、`AuditMetricsEmitResult`、`infra.audit@v1` meter scope、七指标 family 与五元标签白名单，并实现 provider degraded / config-invalid no-op 回退逻辑。
 2. 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `AuditMetricsBridge.cpp` 纳入 `DASALL_INFRA_AUDIT_SOURCES`。
 3. 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt)，为现有 `dasall_infra_audit_health_integration_test` 增加 `infra/src` include path，允许测试直接消费 internal bridge。
-4. 更新 [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp)，新增 fake `RecordingMetricsProvider` / `RecordingMeter`，把 `AuditServiceBackedHealthProbe` 改为读取真实 `AuditMetricsBridge::is_degraded()`，并断言 `infra.audit@v1` scope、七指标注册与 provider timeout -> `MetricsErrorCode::ExportFailure` 的映射。
+4. 更新 [tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp)，新增 fake `RecordingMetricsProvider` / `RecordingMeter`，把 `AuditServiceBackedHealthProbe` 改为读取真实 `AuditMetricsBridge::is_degraded()`，并断言 `infra.audit@v1` scope、七指标注册与 provider timeout -> `MetricsErrorCode::ExportFailure` 的映射。
 
 ## 6. 验证结果
 

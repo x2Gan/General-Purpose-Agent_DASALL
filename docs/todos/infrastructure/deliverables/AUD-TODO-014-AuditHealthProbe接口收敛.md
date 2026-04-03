@@ -45,7 +45,7 @@
 |---|---|
 | `IAuditHealthProbe` 保持只读 evaluate 边界 | 新增 [infra/include/audit/IAuditHealthProbe.h](infra/include/audit/IAuditHealthProbe.h) |
 | `AuditHealthStatus` 自带状态/原因一致性守卫 | 扩展 [tests/unit/infra/AuditLoggerInterfaceTest.cpp](tests/unit/infra/AuditLoggerInterfaceTest.cpp) |
-| 最小 integration ground truth 只验证健康协同语义，不收口拓扑 | 新增 [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp) 与 root-level 注册 |
+| 最小 integration ground truth 只验证健康协同语义，不收口拓扑 | 新增 [tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp) 与 root-level 注册 |
 
 ### 4.2 Build 三件套
 
@@ -71,7 +71,7 @@
 1. 新增 [infra/include/audit/IAuditHealthProbe.h](infra/include/audit/IAuditHealthProbe.h)，在 `dasall::infra` 中冻结 `AuditHealthState`、`AuditHealthStatus`、degraded/unavailable failure reason allowlist 和 `has_consistent_state()` 守卫，在 `dasall::infra::audit` 中定义只读 `IAuditHealthProbe::evaluate() const`。
 2. 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `IAuditHealthProbe.h` 纳入 `DASALL_INFRA_AUDIT_PUBLIC_HEADERS`。
 3. 更新 [tests/unit/infra/AuditLoggerInterfaceTest.cpp](tests/unit/infra/AuditLoggerInterfaceTest.cpp)，新增 `IAuditHealthProbe` 签名冻结、`AuditHealthStatus` 正负例断言与“不得吸收 `probe/register_probe` 职责”的静态校验。
-4. 新增 [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp)，用 test-local `AuditServiceBackedHealthProbe` 组合 `AuditService` 的生命周期与 degraded 信号，验证 Ready、fallback degraded、metrics bridge degraded 与 stopped unavailable 四类协同场景。
+4. 新增 [tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp)，用 test-local `AuditServiceBackedHealthProbe` 组合 `AuditService` 的生命周期与 degraded 信号，验证 Ready、fallback degraded、metrics bridge degraded 与 stopped unavailable 四类协同场景。
 5. 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt)，新增根级 `dasall_infra_audit_health_integration_test` 与 `InfraAuditHealthIntegrationTest` 的最小注册，为当前轮提供可执行验收出口。
 
 ## 6. 验证结果

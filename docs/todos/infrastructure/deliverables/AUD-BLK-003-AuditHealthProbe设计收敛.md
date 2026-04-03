@@ -58,7 +58,7 @@
 | 冻结 `AuditHealthStatus` 对象字段与三态 | infra/include/audit/IAuditHealthProbe.h |
 | 冻结 `IAuditHealthProbe::evaluate()` 只读边界 | infra/include/audit/IAuditHealthProbe.h |
 | 固化 failure reason allowlist 与 detail_ref 约束 | tests/unit/infra/AuditLoggerInterfaceTest.cpp |
-| 验证三态可被集成场景承接 | tests/integration/infra/InfraAuditHealthIntegrationTest.cpp |
+| 验证三态可被集成场景承接 | tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp |
 
 ## 5. 对 AUD-TODO-014 的直接交接
 

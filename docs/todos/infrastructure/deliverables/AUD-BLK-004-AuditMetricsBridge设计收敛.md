@@ -53,7 +53,7 @@
 | 冻结 `IMetricsProvider`/`IMeter` 接入路径、meter scope 与七指标对象表 | infra/src/audit/AuditMetricsBridge.cpp |
 | 冻结五元标签白名单与 no-op/degraded 回退语义 | infra/src/audit/AuditMetricsBridge.cpp |
 | 冻结 bridge degraded 到 `AuditHealthStatus` 的对齐关系 | infra/include/audit/IAuditHealthProbe.h |
-| 验证桥接失败不反噬主链、且 integration 侧能观测降级状态 | tests/integration/infra/InfraAuditHealthIntegrationTest.cpp |
+| 验证桥接失败不反噬主链、且 integration 侧能观测降级状态 | tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp |
 
 ## 5. 对 AUD-TODO-015 的直接交接
 
