@@ -130,7 +130,7 @@
 |---|---|---|---|---|
 | SecretManager 对外稳定入口 | secret 设计 6.6/7 | 接口 | SEC-TODO-001、SEC-TODO-002 | 先冻结调用面，解除对象模型阻塞 |
 | Secret 对象模型冻结 | secret 设计 6.5 | 数据结构 | SEC-TODO-003、SEC-TODO-004 | 先固化字段与不变量，防止实现漂移 |
-| backend 统一抽象 | secret 设计 6.2/6.6/7 | 适配器 | SEC-TODO-005、SEC-TODO-006、SEC-TODO-007 | 抽象与 file/mock 分拆，保持单目标 |
+| backend 统一抽象 | secret 设计 6.2/6.6/7 | 适配器 | SEC-TODO-005、SEC-TODO-006、SEC-TODO-007（SEC-BLK-001 已于 2026-04-03 解阻） | 抽象与 file/mock 分拆，保持单目标 |
 | get/materialize/release 生命周期 | secret 设计 6.7 | 生命周期/流程 | SEC-TODO-008、SEC-TODO-009 | 将访问链与零化链拆分验收 |
 | 轮换闭环与回退 | secret 设计 6.8/6.9/7 | 流程/异常处理 | SEC-TODO-010 | 轮换状态机单独任务 |
 | 错误语义映射 | secret 设计 6.6 | 错误处理 | SEC-TODO-011 | 错误码域与 contracts 映射单列 |
@@ -164,7 +164,7 @@
 | SEC-TODO-004 | Completed | 定义 SecureBuffer 语义与约束 | secret 设计 6.5/6.7 | 6.5 SecureBuffer；6.7 release 语义 | L3 | infra/include/secret/SecureBuffer.h | zeroize_on_release, 禁止隐式拷贝约束 | unit：零化与访问失效断言 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L unit | SEC-TODO-003 | 平台零化实现策略未定 | 先冻结接口和语义，不绑定平台实现 | 头文件、单测 | 仅当 release 后不可访问且零化断言通过时完成 |
 | SEC-TODO-005 | Completed | 定义 ISecretBackend 统一协议 | secret 设计 6.6/7 | 6.6 ISecretBackend | L2 | infra/include/secret/ISecretBackend.h | fetch_record, materialize_record, promote_version, revoke_version, get_backend_status | unit：接口可编译；contract：协议稳定性检查 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L contract | SEC-TODO-003 | KMS 协议细节未冻结 | 先冻结公共协议，不落 KMS 细节 | 接口头文件、编译/合同检查 | 仅当 file/mock 可共享同协议且编译通过时完成 |
 | SEC-TODO-006 | Not Started | 实现 MockSecretBackend 骨架 | secret 设计 6.2/8.3 | 6.2 MockSecretBackend | L3 | infra/src/secret/backends/MockSecretBackend.cpp | fetch_record/materialize_record/revoke_version 最小实现 | unit：成功/未命中/拒绝/backend down 四路径 | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无 | 无 | Mock 后端实现、单测 | 仅当四类路径可二值判定时完成 |
-| SEC-TODO-007 | Not Started | 实现 FileSecretBackend 最小骨架 | secret 设计 6.2/6.9 | 6.2 FileSecretBackend；6.9 file 配置项 | L2 | infra/src/secret/backends/FileSecretBackend.cpp | fetch_record/materialize_record 最小实现 | unit：本地路径读取与错误路径；failure：backend unavailable | ctest --test-dir build-ci -L unit | SEC-TODO-005 | SEC-BLK-001 | 冻结 file.root_dir 与 encrypt_at_rest 最小策略 | File 后端骨架、测试 | 仅当不写明文临时文件且错误路径可判定时完成 |
+| SEC-TODO-007 | Not Started | 实现 FileSecretBackend 最小骨架 | secret 设计 6.2/6.9 | 6.2 FileSecretBackend；6.9 file 配置项 | L2 | infra/src/secret/backends/FileSecretBackend.cpp | fetch_record/materialize_record 最小实现 | unit：本地路径读取与错误路径；failure：backend unavailable | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无（2026-04-03 已由 SEC-BLK-001 通过 secret 设计 6.9 的 file.root_dir/encrypt_at_rest 策略冻结解阻） | 无 | File 后端骨架、测试 | 仅当不写明文临时文件且错误路径可判定时完成 |
 | SEC-TODO-008 | Not Started | 实现 SecretManagerFacade 访问骨架 | secret 设计 6.2/6.7 | 6.7 正常流程 1-4 步 | L3 | infra/src/secret/SecretManagerFacade.cpp | get_secret, materialize, release, inspect | unit：访问链路可走通；contract：上下文字段复用边界 | ctest --test-dir build-ci -L unit && ctest --test-dir build-ci -L contract | SEC-TODO-001、SEC-TODO-003、SEC-TODO-005、SEC-TODO-006 | 无 | 无 | Facade 骨架、测试 | 仅当 get->materialize->release 路径可稳定验证时完成 |
 | SEC-TODO-009 | Not Started | 实现 SecretLeaseRegistry 生命周期管理 | secret 设计 6.2/6.3/6.7 | 6.7 lease 创建/过期 | L3 | infra/src/secret/SecretLeaseRegistry.cpp | create_lease, validate_lease, expire_lease, release_lease | unit：创建/过期/释放/陈旧句柄 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-008 | 无 | 无 | Lease 注册实现、单测 | 仅当过期后 materialize 被拒绝并返回明确错误码时完成 |
 | SEC-TODO-010 | Not Started | 实现 SecretRotationCoordinator 轮换骨架 | secret 设计 6.2/6.8/6.9 | 6.8 轮换与回退 | L2 | infra/src/secret/SecretRotationCoordinator.cpp | rotate(request), promote_version, revoke_version, rollback | unit：验证失败回退；failure injection：rollback fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-005、SEC-TODO-009 | SEC-BLK-002 | 冻结 dual-slot 验证器最小接口 | 轮换骨架、测试 | 仅当 create/test/promote/revoke 路径与回退路径可判定时完成 |
@@ -205,7 +205,7 @@
 
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
-| SEC-BLK-001 | file backend 加密与根目录策略未冻结 | SEC-TODO-007 | 冻结 infra.secret.file.root_dir 与 encrypt_at_rest 最小策略 | 在部署与 profile 文档中补齐策略约束 | 暂停 file backend，仅保留 mock backend |
+| SEC-BLK-001 | 已解阻（2026-04-03）：secret 详细设计 6.9 已冻结 `infra.secret.file.root_dir = secrets/`（部署层）与 `infra.secret.file.encrypt_at_rest = true`（默认/Profile）；后续 FileSecretBackend 只需按该最小策略落盘 | SEC-TODO-007 | 无；后续仅需保持 FileSecretBackend 实现、TODO 与单测对 root_dir/encrypt_at_rest 语义一致 | 证据回链到 docs/architecture/DASALL_infra_secret模块详细设计.md 6.9 与 docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md | 若 file backend 回退为明文存储、允许越过 root_dir 访问任意路径，或把 encrypt_at_rest 默认值改为 false，则重新转为 Blocked |
 | SEC-BLK-002 | dual-slot 轮换验证规则未冻结 | SEC-TODO-010 | 冻结 rotation.validation 与 grace_period 语义 | 增加轮换验证器最小接口定义 | 禁用 rotate，保留 get/materialize/release |
 | SEC-BLK-003 | KMS 身份、限流、超时和测试夹具未冻结 | 后续 KMS 真实接入任务 | 冻结 identity/retry/timeout/quota 策略并补夹具 | 先仅保留 KmsSecretBackend 接口占位 | 禁止真实 KMS SDK 接入 |
 | SEC-BLK-004 | 审计注册点细节未统一 | SEC-TODO-012 | 冻结 IAuditLogger 接线和事件字段映射 | 先以 mock audit logger 打通断言 | 审计桥保留缓存，不宣称生产可用 |
@@ -273,5 +273,48 @@
 4. 未达到全量函数级的缺口：KMS 真实接入策略、dual-slot 验证器细节、integration 顶层注册。
 5. 下一步建议：
    - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 并行解阻 SEC-BLK-001/002；SEC-BLK-005 已完成仓库级解阻，再推进 SEC-TODO-016。
+   - 继续按顺序执行 SEC-TODO-006 -> SEC-TODO-007 -> SEC-TODO-008 -> SEC-TODO-009；其中 SEC-BLK-001 已解阻，SEC-BLK-002 仍保留给轮换链路。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
+
+## 12. 本轮执行记录（2026-04-03）
+
+### 12.1 SEC-BLK-001
+
+选中任务：
+
+1. 任务 ID：SEC-BLK-001。
+2. 可执行性依据：SEC-TODO-007 当前唯一阻塞项是 file backend 的 root_dir/encrypt_at_rest 最小策略；仓库内 secret 详细设计 6.9 已经给出这两个配置项的默认值与覆盖层级，因此本轮可以作为 blocker recovery 独立收口。
+
+研究学习：
+
+1. 本地证据：docs/architecture/DASALL_infra_secret模块详细设计.md 6.9 已冻结 `infra.secret.file.root_dir = secrets/` 与 `infra.secret.file.encrypt_at_rest = true`，并明确覆盖层级分别为部署与默认/Profile。
+2. 本地证据：docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md 仍把 SEC-BLK-001 记为“策略未冻结”，与现有设计文档状态不一致，导致 SEC-TODO-007 在 TODO 视图里被错误阻塞。
+3. 外部参考：OWASP Secrets Management Cheat Sheet 强调 secrets at rest 应受加密保护，并尽量缩短 plaintext in memory 的暴露窗口；Azure Key Vault best practices 强调 secret 存储不应退化为普通配置存储，这支持 DASALL 将 root_dir/encrypt_at_rest 保持为 secret 专属最小策略。
+
+D 结论：
+
+1. Design -> Build 映射：不新增代码实现，仅把 secret 详细设计 6.9 的 file backend 配置冻结结果回链到 TODO 与 blocker deliverable，作为 SEC-TODO-007 的直接输入约束。
+2. Build 三件套：
+	- 代码目标：新增 docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md，并更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md 的 blocker 状态与 SEC-TODO-007 前置说明。
+	- 测试目标：通过文档 traceability 确认 architecture、TODO 与 blocker deliverable 对 SEC-BLK-001 的解阻状态和 007 交接约束一致。
+	- 验收命令：`rg -n "SEC-BLK-001|infra\.secret\.file\.root_dir|infra\.secret\.file\.encrypt_at_rest|SEC-TODO-007" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md：补齐 blocker 根因、外部参考、设计结论与对 SEC-TODO-007 的交接约束。
+2. docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md：将 SEC-BLK-001 标记为已解阻，把 SEC-TODO-007 的 blocker 列迁移为已解阻说明，并把下一步建议切换到 006->007->008->009 的串行入口。
+
+验收结果：
+
+1. `rg -n "SEC-BLK-001|infra\.secret\.file\.root_dir|infra\.secret\.file\.encrypt_at_rest|SEC-TODO-007" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md`：通过；命中 secret 设计 6.9 的 file 配置项、TODO 中的解阻状态与执行记录，以及 blocker deliverable 的交接约束，三处证据已可回链。
+
+Build 合规复核：
+
+1. 代码注释：本轮不落盘实现代码，只做 blocker 设计/状态收口。
+2. 正负例覆盖：本轮以文档 traceability 覆盖“已解阻/若回退则重新 Blocked”的二值状态；真正的编译与功能正负例留给 SEC-TODO-007。
+3. 测试发现性：不新增测试目标，不改变现有 ctest 发现性。
+4. TODO 证据回写：已完成 blocker 状态、交付物与下一步入口回写。
+5. 提交隔离：本轮只处理 SEC-BLK-001 文档解阻，不提前落盘 Mock/File backend 代码。

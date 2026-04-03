@@ -8,6 +8,41 @@
 
 ---
 
+## 记录 #091
+
+- 日期：2026-04-03
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-BLK-001 FileSecretBackend 配置解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-BLK-001-D 设计解阻：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md，把 blocker 根因收敛为“TODO 状态未回链到已存在的 file backend 配置冻结证据”，并固定 root_dir/encrypt_at_rest 的最小策略和对 SEC-TODO-007 的交接约束。
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-BLK-001 标记为已解阻，并把 SEC-TODO-007 的 blocker 列迁移为“已由 secret 设计 6.9 解阻”。
+2. 完成执行入口切换：
+   - 在 secret 专项 TODO 中新增本轮执行记录，并把下一步建议切换为按顺序推进 SEC-TODO-006 -> SEC-TODO-007 -> SEC-TODO-008 -> SEC-TODO-009。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "SEC-BLK-001|infra\.secret\.file\.root_dir|infra\.secret\.file\.encrypt_at_rest|SEC-TODO-007" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md`
+2. 结果：
+   - 已通过；命中 secret 设计 6.9 的 file 配置项、secret TODO 的解阻状态与执行记录，以及 blocker deliverable 的交接约束，architecture、TODO 与交付件三处证据已一致回链。
+
+### 结果
+
+1. SEC-BLK-001 已不再阻塞 secret backend 链路；FileSecretBackend 的 root_dir/encrypt_at_rest 最小策略已具备直接实现条件。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-006，后续应按 006 -> 007 -> 008 -> 009 的顺序串行推进并逐轮提交。
+
+### 下一步
+
+1. 进入 SEC-TODO-006，落盘 MockSecretBackend 骨架与四路径单测。
+
+### 风险
+
+1. 若后续 FileSecretBackend 实现绕过 root_dir 边界、默认关闭 encrypt_at_rest，或把物理路径细节暴露到公共对象，本 blocker 需要重新转为 Blocked。
+
 ## 记录 #090
 
 - 日期：2026-04-03
