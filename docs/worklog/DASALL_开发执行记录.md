@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #071
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-018 落盘 logging integration 用例与标签注册
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-018-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-018-Logging集成用例收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-018-Logging%E9%9B%86%E6%88%90%E7%94%A8%E4%BE%8B%E6%94%B6%E6%95%9B.md)，把 logging integration 落点、标签与 Gate-06 关闭证据收敛为正式交付物。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，新增完成任务 `LOG-TODO-018`，并将 `LOG-GATE-06` 从 Blocked 更新为 Pass。
+2. 完成 LOG-TODO-018-B 集成用例落地：
+   - 新增 [tests/integration/infra/logging/CMakeLists.txt](tests/integration/infra/logging/CMakeLists.txt)，统一注册 `integration;logging` 标签。
+   - 新增 [tests/integration/infra/logging/LoggingPipelineIntegrationTest.cpp](tests/integration/infra/logging/LoggingPipelineIntegrationTest.cpp)，覆盖主链写入成功与 block policy 回压失败路径。
+   - 新增 [tests/integration/infra/logging/LoggingAuditLinkIntegrationTest.cpp](tests/integration/infra/logging/LoggingAuditLinkIntegrationTest.cpp)，覆盖 audit link 成功路由与不完整 ref 拒绝路径。
+   - 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt) 与 [tests/integration/CMakeLists.txt](tests/integration/CMakeLists.txt)，将两个 logging integration target 纳入顶层聚合入口。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_logging_pipeline_integration_test dasall_logging_audit_link_integration_test dasall_integration_tests`
+   - `ctest --test-dir build-ci -N -R "(LoggingPipelineIntegrationTest|LoggingAuditLinkIntegrationTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(LoggingPipelineIntegrationTest|LoggingAuditLinkIntegrationTest)"`
+   - `ctest --test-dir build-ci -N -L integration`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - logging integration 用例发现 2 个，执行 2/2 通过。
+   - 全量 integration 套件发现 9 个，执行 9/9 通过。
+   - logging 组件现已具备 `integration;logging` 标签 discoverability，可与 unit/contract 标签面并行存在。
+
+### 结果
+
+1. `tests/integration/infra/logging/` 已从空目录变成正式的组件测试落点，`LOG-GATE-06` 可以关闭。
+2. logging 子域现在同时具备 unit、contract、integration 三类测试发现面，后续只需在同一目录和标签面上扩展新的场景。
+
+### 下一步
+
+1. 进入 `LOG-BLK-005`，冻结 `LogQueryService` 的 query 对象、授权边界与导出约束。
+
+### 风险
+
+1. 当前 integration 用例只覆盖已落盘骨架的主链与 audit link，尚未覆盖 `LoggingHealthProbe` 或 `LogQueryService`；后续扩展不要把这些未实现能力伪装成“已通过集成门禁”。
+
 ## 记录 #070
 
 - 日期：2026-04-03

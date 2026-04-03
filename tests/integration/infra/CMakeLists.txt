@@ -14,3 +14,4 @@ add_test(NAME InfraDiagnosticsSmokeTest COMMAND dasall_infra_diagnostics_smoke_i
 set_tests_properties(InfraDiagnosticsSmokeTest PROPERTIES LABELS "integration")
 
 add_subdirectory(config)
+add_subdirectory(logging)
