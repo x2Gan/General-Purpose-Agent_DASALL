@@ -8,6 +8,49 @@
 
 ---
 
+## 记录 #085
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-018 Audit integration 测试入口收口
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-018-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-018-AuditIntegration测试接线收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-018-AuditIntegration%E6%B5%8B%E8%AF%95%E6%8E%A5%E7%BA%BF%E6%94%B6%E6%95%9B.md)，补齐本地证据、discoverability 结论、Design -> Build 映射与验收结果。
+   - 新增 [tests/integration/infra/audit/CMakeLists.txt](tests/integration/infra/audit/CMakeLists.txt)，定义 `dasall_register_audit_integration_test`，统一 `integration;audit` 标签与 `infra/src` include path。
+   - 将现有用例迁移到 [tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp)，保持 015 已落盘的 health/metrics 协同断言不变。
+2. 完成顶层 integration 聚合收口：
+   - 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt)，移除 root-level audit 直连注册，改为 `add_subdirectory(audit)`。
+   - 更新 [tests/integration/CMakeLists.txt](tests/integration/CMakeLists.txt)，将 `dasall_infra_audit_health_integration_test` 纳入 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`，补齐顶层 integration gate 聚合边界。
+3. 完成 TODO 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-018` 标记为 Done，并把下一步切换到 `AUD-TODO-019` 的质量门证据收口。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra_audit_health_integration_test`
+   - `ctest --test-dir build-ci -N -R "InfraAuditHealthIntegrationTest"`
+   - `ctest --test-dir build-ci -N -L audit -R "InfraAuditHealthIntegrationTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "InfraAuditHealthIntegrationTest"`
+2. 结果：
+   - `InfraAuditHealthIntegrationTest` 可被名字与 `audit` 标签同时发现，并稳定执行 1/1 通过。
+
+### 结果
+
+1. `AUD-TODO-018` 已将 audit integration 入口从“根级临时注册”推进到“audit 子目录 + integration;audit 标签 + 顶层 target 聚合”的稳定 discoverability 形态。
+2. `AUD-TODO-019` 现在可以只聚焦 quality gate、阻塞变化与回退证据回写。
+
+### 下一步
+
+1. 进入 `AUD-TODO-019`，统一回写 unit/contract/integration 质量门、阻塞变化与回退证据，完成 audit 专项 TODO 当前轮收口。
+
+### 风险
+
+1. 若后续 tests 顶层 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS` 或 `integration;audit` 标签发生回退，audit integration discoverability 需要重新校准。
+
 ## 记录 #084
 
 - 日期：2026-04-03

@@ -9,6 +9,7 @@ add_subdirectory(platform)
 
 set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_infra_diagnostics_smoke_integration_test
+	dasall_infra_audit_health_integration_test
 	dasall_config_runtime_patch_integration_test
 	dasall_config_observability_integration_test
 	dasall_logging_pipeline_integration_test
