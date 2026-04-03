@@ -33,6 +33,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/IHealthProbe.h
   include/diagnostics/IDiagnosticsService.h
   include/logging/IAuditLinkAdapter.h
+  include/logging/ILogConfigurator.h
   include/logging/ILogger.h
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h

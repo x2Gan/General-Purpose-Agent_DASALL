@@ -8,6 +8,59 @@
 
 ---
 
+## 记录 #064
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-012 实现 LoggingConfigAdapter 四层配置适配
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-012-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-012-LoggingConfigAdapter设计收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-012-LoggingConfigAdapter%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，明确 `ILogConfigurator` 只暴露 `LoggingConfig`/`LoggingConfigApplyResult`，`LoggingConfigAdapter` 只消费 ConfigCenter active typed config 并执行本地 key 接受规则。
+   - 把原任务行中过弱的验收命令升级为“显式构建新增 unit/contract 目标 + CTest 发现性 + 聚合 unit/contract”的完整闭环，作为最小 validation blocker fix。
+2. 完成 LOG-TODO-012-B 代码落地：
+   - 新增 [infra/include/logging/ILogConfigurator.h](infra/include/logging/ILogConfigurator.h)
+   - 新增 [infra/src/logging/LoggingConfigAdapter.h](infra/src/logging/LoggingConfigAdapter.h)
+   - 新增 [infra/src/logging/LoggingConfigAdapter.cpp](infra/src/logging/LoggingConfigAdapter.cpp)
+   - 新增 [tests/unit/infra/logging/LoggingConfigMergeTest.cpp](tests/unit/infra/logging/LoggingConfigMergeTest.cpp)
+   - 新增 [tests/contract/smoke/LogConfiguratorBoundaryContractTest.cpp](tests/contract/smoke/LogConfiguratorBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_logging_config_merge_unit_test dasall_contract_log_configurator_boundary_test`
+   - `ctest --test-dir build-ci -N -R "(LoggingConfigMergeTest|LogConfiguratorBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(LoggingConfigMergeTest|LogConfiguratorBoundaryContractTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - 定向目标构建通过，CTest 发现 2 个新增测试。
+   - `LoggingConfigMergeTest` 与 `LogConfiguratorBoundaryContractTest` 全部通过。
+   - 聚合 `unit` 套件 109/109 通过。
+   - 聚合 `contract` 套件 131/131 通过。
+
+### 结果
+
+1. logging 组件已具备最小 public config surface：`ILogConfigurator`、`LoggingConfig` 与 `LoggingConfigApplyResult` 可以稳定承接四层 active config。
+2. `LoggingConfigAdapter` 已复用 ConfigCenter typed config，并在 logging 本地固化 runtime tunable 白名单、per-key source acceptance 与 `infra.audit.required` 审计主链保护。
+
+### 下一步
+
+1. 若继续按专项 TODO 推进，后继可进入 LOG-TODO-013 或 LOG-TODO-014/015，具体取决于是否优先做 bridge 还是构建/测试接线收口。
+
+### 风险
+
+1. `LoggingConfigAdapter` 当前不订阅 ConfigChanged 事件；若后续需要自动刷新，应在现有 config surface 之外追加 bridge，不要回退到 logging 私有 patch 模型。
+
 ## 记录 #063
 
 - 日期：2026-04-03
