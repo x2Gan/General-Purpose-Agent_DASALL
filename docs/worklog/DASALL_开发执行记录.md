@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #080
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-017 注册 audit 的 unit 与 contract 测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-017-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-017-Audit测试接线收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-017-Audit%E6%B5%8B%E8%AF%95%E6%8E%A5%E7%BA%BF%E6%94%B6%E6%95%9B.md)，补齐本地证据、Design->Build 映射与 discoverability 验收结果。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-017` 标记为 Done，并追加 12.13 执行记录与验收证据。
+2. 完成 AUD-TODO-017-B 测试注册收口：
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)，新增 `dasall_register_audit_unit_test`，统一 audit unit 测试的注册与 `unit;audit` 标签。
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)，新增 `DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS`，把 audit unit target 从 logging 与通用列表中抽出。
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)，新增 `dasall_register_audit_contract_test`，统一 audit contract 测试的 `contract;smoke;audit` 标签。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+   - `ctest --test-dir build-ci -N -L audit`
+   - `ctest --test-dir build-ci --output-on-failure -L audit`
+2. 结果：
+   - `ctest -N` 发现总计 254 个测试，其中 audit 标签下可发现 8 个测试。
+   - `ctest -L unit` 112/112 通过，`ctest -L contract` 132/132 通过。
+   - `ctest -L audit` 8/8 通过，覆盖 4 个 unit + 4 个 contract。
+
+### 结果
+
+1. audit 测试已从“分散在 logging/通用注册路径”推进到“具备独立 audit helper、顶层分组和模块级 discoverability 标签”。
+2. 本轮没有搬迁测试源码目录，避免为接线任务引入不必要的路径级重构。
+
+### 下一步
+
+1. 进入 `AUD-TODO-018`，评估 audit integration 测试入口接线是否已具备最小可执行条件。
+
+### 风险
+
+1. `AUD-TODO-018` 仍取决于 integration 侧具体用例是否已经具备稳定落点；若 audit health/metrics 相关实现仍未冻结，可能只能先完成入口级收口而非完整业务覆盖。
+
 ## 记录 #079
 
 - 日期：2026-04-03

@@ -10,7 +10,6 @@ add_subdirectory(profiles)
 
 set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_log_event_unit_test
-	dasall_audit_event_unit_test
 	dasall_logger_interface_unit_test
 	dasall_logging_errors_unit_test
 	dasall_logging_facade_unit_test
@@ -22,13 +21,20 @@ set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_logging_metrics_bridge_unit_test
 	dasall_logging_health_probe_unit_test
 	dasall_log_query_service_unit_test
+)
+
+set(DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS
+	dasall_audit_event_unit_test
 	dasall_audit_logger_interface_unit_test
+	dasall_audit_service_fallback_unit_test
+	dasall_audit_export_filter_unit_test
 )
 
 set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_smoke_test
 	dasall_infra_context_unit_test
 	${DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS}
+	${DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_health_probe_interface_unit_test
 	dasall_health_snapshot_unit_test
 	dasall_metrics_config_policy_interface_unit_test
@@ -50,8 +56,6 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_secret_types_unit_test
 	dasall_meter_interface_unit_test
 	dasall_metrics_provider_interface_unit_test
-	dasall_audit_service_fallback_unit_test
-	dasall_audit_export_filter_unit_test
 	dasall_policy_snapshot_compatibility_unit_test
 	dasall_policy_types_rule_bundle_unit_test
 	dasall_policy_patch_validation_types_unit_test

@@ -33,6 +33,17 @@ function(dasall_register_logging_contract_test executable_target_name ctest_name
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;logging")
 endfunction()
 
+function(dasall_register_audit_contract_test executable_target_name ctest_name source_file)
+  dasall_register_contract_test(
+    ${executable_target_name}
+    ${ctest_name}
+    ${source_file}
+    smoke
+  )
+
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;audit")
+endfunction()
+
 # smoke group
 dasall_register_contract_test(
   dasall_contract_smoke_test
@@ -190,7 +201,7 @@ target_link_libraries(dasall_contract_audit_link_adapter_boundary_test
     dasall_infra
 )
 
-dasall_register_logging_contract_test(
+dasall_register_audit_contract_test(
   dasall_contract_audit_event_boundary_test
   AuditBoundaryContractTest
   smoke/AuditBoundaryContractTest.cpp
@@ -663,7 +674,7 @@ target_link_libraries(dasall_contract_meter_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_logging_contract_test(
+dasall_register_audit_contract_test(
   dasall_contract_audit_logger_interface_boundary_test
   AuditLoggerInterfaceBoundaryContractTest
   smoke/AuditLoggerInterfaceBoundaryContractTest.cpp
@@ -679,11 +690,10 @@ target_link_libraries(dasall_contract_audit_logger_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_audit_contract_test(
   dasall_contract_audit_service_boundary_test
   AuditServiceBoundaryContractTest
   smoke/AuditServiceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_audit_service_boundary_test
@@ -866,11 +876,10 @@ target_link_libraries(dasall_contract_diagnostics_error_mapping_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_audit_contract_test(
   dasall_contract_infra_error_code_boundary_test
   InfraErrorCodeMappingContractTest
   smoke/InfraErrorCodeBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_infra_error_code_boundary_test

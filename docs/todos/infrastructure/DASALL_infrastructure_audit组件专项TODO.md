@@ -188,7 +188,7 @@
 | AUD-TODO-014 | Blocked | 定义 IAuditHealthProbe 接口与 AuditHealthStatus 对象 | audit 设计 6.6；11.1 | 6.6 IAuditHealthProbe；6.3/6.10 健康状态语义 | L1 | infra/include/audit/IAuditHealthProbe.h | IAuditHealthProbe::evaluate；AuditHealthStatus | unit：AuditInterfaceCompileTest；integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|InfraAuditHealthIntegrationTest" --output-on-failure | AUD-TODO-007 | AUD-BLK-003 | 补齐 ready/degraded/unavailable 状态对象与最近失败原因字段后再冻结接口 | IAuditHealthProbe.h 或阻塞记录 | 仅当 AuditHealthStatus 字段与状态机语义冻结后，状态才可从 Blocked 转为 Not Started |
 | AUD-TODO-015 | Blocked | 实现 AuditMetricsBridge 指标桥接骨架 | audit 设计 6.2/6.3/6.10；11.1 | 6.2 AuditMetricsBridge；6.10 指标清单；11.1 桥接阻塞 | L1 | infra/src/audit/AuditMetricsBridge.cpp | AuditMetricsBridge（audit_write_total 等指标桥接） | integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | AUD-TODO-011 | AUD-BLK-004 | metrics 侧桥接接口、标签白名单与上报失败语义冻结 | AuditMetricsBridge.cpp 或阻塞记录 | 仅当指标桥接接口冻结且 integration 接线具备后，状态才可从 Blocked 转为 Not Started |
 | AUD-TODO-016 | Done | 注册 audit 源码到 infra CMake | audit 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | audit include/src 文件接线 | build：dasall_infra 可编译；unit：AuditInterfaceCompileTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditInterfaceCompileTest --output-on-failure | AUD-TODO-001 至 AUD-TODO-011 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 audit 文件进入 dasall_infra 构建图时完成 |
-| AUD-TODO-017 | Not Started | 注册 audit 的 unit 与 contract 测试入口 | audit 设计 8.1、9.1；编码规范 3.7；tests 现状 | 8.1 路径建议；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/audit/、tests/contract/CMakeLists.txt、tests/contract/infra/ | unit：AuditTypesTest、AuditInterfaceCompileTest、AuditServiceFallbackTest、AuditExportFilterTest；contract：AuditBoundaryContractTest、InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | AUD-TODO-016 | 无 | 无 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 audit unit/contract 测试可被 ctest -N 发现并执行时完成 |
+| AUD-TODO-017 | Done | 注册 audit 的 unit 与 contract 测试入口 | audit 设计 8.1、9.1；编码规范 3.7；tests 现状 | 8.1 路径建议；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/audit/、tests/contract/CMakeLists.txt、tests/contract/infra/ | unit：AuditTypesTest、AuditInterfaceCompileTest、AuditServiceFallbackTest、AuditExportFilterTest；contract：AuditBoundaryContractTest、InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | AUD-TODO-016 | 无 | 无 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 audit unit/contract 测试可被 ctest -N 发现并执行时完成 |
 | AUD-TODO-018 | Not Started | 注册 audit integration 测试入口 | audit 设计 8.1、9.1；tests 现状；11.1 | 8.1 tests/integration/infra；9.1 Integration；11.1 integration 阻塞 | L0 | tests/integration/infra/、tests/CMakeLists.txt | integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -N && ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | AUD-TODO-014、AUD-TODO-015、AUD-TODO-016 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 AUD-TODO-014、015、016 完成后落盘具体 integration 用例 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
 | AUD-TODO-019 | Not Started | 回写 audit 质量门与交付证据 | audit 设计 9.2、11.1 | 9.2 Gate；11.1 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | AUD-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁都具备通过/失败结论和命令证据时完成 |
 
@@ -838,3 +838,52 @@ Build 合规复核：
 3. 测试发现性：`AuditInterfaceCompileTest` 已通过 `ctest -N -R` 命中。
 4. TODO 证据回写：已完成 016 状态、交付物与验收结果回写。
 5. 提交隔离：本轮只处理 audit 构建入口收敛，不提前处理测试标签/注册问题，该部分留给 `AUD-TODO-017`。
+
+### 12.13 AUD-TODO-017
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-017。
+2. 可执行性依据：`AUD-TODO-016` 已完成，audit 源码构建图稳定，当前剩余问题只在 tests 注册与标签 discoverability，未见前置 blocker。
+
+研究学习：
+
+1. 本地证据：[tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt) 中 `AuditTypesTest`、`AuditInterfaceCompileTest` 仍挂在历史 `logging` 标签上，而 `AuditServiceFallbackTest`、`AuditExportFilterTest` 只带通用 `unit` 标签；[tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt) 也把 audit targets 分散在 logging 与通用列表中。
+2. 本地证据：[tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 中 `AuditBoundaryContractTest`、`AuditLoggerInterfaceBoundaryContractTest` 仍通过 logging helper 注册，`AuditServiceBoundaryContractTest` 与 `InfraErrorCodeMappingContractTest` 缺少 audit discoverability 标签。
+3. 外部参考：CTest label 机制适合在不重排整体 target 拓扑的前提下，为模块建立稳定 discoverability 入口。
+
+D 结论：
+
+1. Design -> Build 映射：在 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt) 中新增 `dasall_register_audit_unit_test`，统一给 4 个 audit unit 测试设置 `unit;audit`；在 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt) 中新增 `DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS`；在 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt) 中新增 `dasall_register_audit_contract_test`，统一给 4 个 audit contract 测试设置 `contract;smoke;audit`。
+2. Build 三件套：
+	- 代码目标：收敛 audit unit/contract 的注册 helper、顶层聚合分组和标签边界。
+	- 测试目标：确保 4 个 audit unit 与 4 个 audit contract 测试既能被 `ctest -L unit/contract` 覆盖，也能被 `ctest -L audit` 定向发现。
+	- 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci -N -L audit && ctest --test-dir build-ci --output-on-failure -L audit`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)：新增 `dasall_register_audit_unit_test`，统一注册 `AuditTypesTest`、`AuditInterfaceCompileTest`、`AuditServiceFallbackTest`、`AuditExportFilterTest`。
+2. [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)：新增 `DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS`，把 audit unit targets 从 logging 与通用列表中抽出。
+3. [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)：新增 `dasall_register_audit_contract_test`，收敛 `AuditBoundaryContractTest`、`AuditLoggerInterfaceBoundaryContractTest`、`AuditServiceBoundaryContractTest`、`InfraErrorCodeMappingContractTest` 的 audit discoverability。
+4. [docs/todos/infrastructure/deliverables/AUD-TODO-017-Audit测试接线收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-017-Audit%E6%B5%8B%E8%AF%95%E6%8E%A5%E7%BA%BF%E6%94%B6%E6%95%9B.md)：补齐 D/B 收敛、设计结论与验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`：通过。
+3. `ctest --test-dir build-ci -N`：通过，发现总计 254 个测试。
+4. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，112/112 tests passed，标签摘要中 `audit = 4 tests`。
+5. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，132/132 tests passed，标签摘要中 `audit = 4 tests`。
+6. `ctest --test-dir build-ci -N -L audit`：通过，发现 8 个测试。
+7. `ctest --test-dir build-ci --output-on-failure -L audit`：通过，8/8 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮为 CMake 注册与标签收敛，无新增逻辑注释需求。
+2. 正负例覆盖：本轮不新增测试逻辑，通过 existing audit unit/contract 测试矩阵验证 discoverability 与执行闭环。
+3. 测试发现性：`ctest -N`、`ctest -L unit`、`ctest -L contract` 与 `ctest -L audit` 均已补齐证据。
+4. TODO 证据回写：已完成 017 状态、交付物与验收结果回写。
+5. 提交隔离：本轮只处理 audit 测试注册/标签收敛，不提前推进 `AUD-TODO-018` integration 接线。

@@ -28,7 +28,26 @@ dasall_apply_common_options(dasall_log_event_unit_test)
 add_test(NAME LogEventUnitTest COMMAND dasall_log_event_unit_test)
 set_tests_properties(LogEventUnitTest PROPERTIES LABELS "unit;logging")
 
-add_executable(dasall_audit_event_unit_test
+function(dasall_register_audit_unit_test executable_target_name ctest_name source_file)
+  add_executable(${executable_target_name}
+    ${source_file}
+  )
+
+  target_link_libraries(${executable_target_name}
+    PRIVATE
+      dasall_test_support
+      dasall_infra
+  )
+
+  dasall_apply_common_options(${executable_target_name})
+
+  add_test(NAME ${ctest_name} COMMAND ${executable_target_name})
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "unit;audit")
+endfunction()
+
+dasall_register_audit_unit_test(
+  dasall_audit_event_unit_test
+  AuditTypesTest
   AuditTypesTest.cpp
 )
 
@@ -36,17 +55,6 @@ target_include_directories(dasall_audit_event_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/src
 )
-
-target_link_libraries(dasall_audit_event_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_audit_event_unit_test)
-
-add_test(NAME AuditTypesTest COMMAND dasall_audit_event_unit_test)
-set_tests_properties(AuditTypesTest PROPERTIES LABELS "unit;logging")
 
 add_executable(dasall_health_probe_interface_unit_test
   health/HealthProbeInterfaceTest.cpp
@@ -469,50 +477,23 @@ dasall_register_logging_unit_test(
   logging/LogQueryServiceTest.cpp
 )
 
-add_executable(dasall_audit_logger_interface_unit_test
+dasall_register_audit_unit_test(
+  dasall_audit_logger_interface_unit_test
+  AuditInterfaceCompileTest
   AuditLoggerInterfaceTest.cpp
 )
 
-target_link_libraries(dasall_audit_logger_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_audit_logger_interface_unit_test)
-
-add_test(NAME AuditInterfaceCompileTest COMMAND dasall_audit_logger_interface_unit_test)
-set_tests_properties(AuditInterfaceCompileTest PROPERTIES LABELS "unit;logging")
-
-add_executable(dasall_audit_service_fallback_unit_test
+dasall_register_audit_unit_test(
+  dasall_audit_service_fallback_unit_test
+  AuditServiceFallbackTest
   AuditServiceFallbackTest.cpp
 )
 
-target_link_libraries(dasall_audit_service_fallback_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_audit_service_fallback_unit_test)
-
-add_test(NAME AuditServiceFallbackTest COMMAND dasall_audit_service_fallback_unit_test)
-set_tests_properties(AuditServiceFallbackTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_audit_export_filter_unit_test
+dasall_register_audit_unit_test(
+  dasall_audit_export_filter_unit_test
+  AuditExportFilterTest
   AuditExportFilterTest.cpp
 )
-
-target_link_libraries(dasall_audit_export_filter_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_audit_export_filter_unit_test)
-
-add_test(NAME AuditExportFilterTest COMMAND dasall_audit_export_filter_unit_test)
-set_tests_properties(AuditExportFilterTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_policy_snapshot_compatibility_unit_test
   PolicySnapshotCompatibilityTest.cpp
