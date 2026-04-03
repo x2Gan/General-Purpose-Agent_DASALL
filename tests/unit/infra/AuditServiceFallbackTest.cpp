@@ -39,6 +39,37 @@ dasall::infra::ExportQuery make_query() {
   };
 }
 
+void test_audit_service_keeps_primary_pipeline_append_only_order() {
+  using dasall::infra::audit::AuditService;
+  using dasall::infra::audit::AuditServiceConfig;
+  using dasall::tests::support::assert_true;
+
+  AuditService service;
+
+  const auto init_result = service.init(AuditServiceConfig{.primary_capacity = 2, .fallback_capacity = 1});
+  assert_true(init_result.ok,
+              "audit service should initialize before append-only primary path testing");
+  assert_true(service.start().ok,
+              "audit service should start before append-only primary path testing");
+
+  const auto first_write = service.write_audit(make_event("tool-call-append-001"), make_context());
+  const auto second_write = service.write_audit(make_event("tool-call-append-002"), make_context());
+
+  assert_true(first_write.is_success() && second_write.is_success(),
+              "validated audit events should append to the primary pipeline until capacity is reached");
+  assert_true(service.primary_record_count() == 2 && service.fallback_record_count() == 0,
+              "append-only primary writes should not spill into fallback before the primary capacity is exhausted");
+  assert_true(!service.is_degraded(),
+              "primary append-only success should keep the service out of degraded mode");
+
+  const auto export_result = service.export_audit(make_query());
+  assert_true(export_result.records.size() == 2,
+              "append-only primary writes should be exported as retained records");
+  assert_true(export_result.records[0].event_id == "audit-event-tool-call-append-001" &&
+                  export_result.records[1].event_id == "audit-event-tool-call-append-002",
+              "primary pipeline should preserve append-only insertion order during export");
+}
+
 void test_audit_service_uses_fallback_when_primary_path_is_unavailable() {
   using dasall::infra::audit::AuditService;
   using dasall::infra::audit::AuditServiceConfig;
@@ -103,6 +134,7 @@ void test_audit_service_makes_fallback_exhaustion_observable() {
 
 int main() {
   try {
+    test_audit_service_keeps_primary_pipeline_append_only_order();
     test_audit_service_uses_fallback_when_primary_path_is_unavailable();
     test_audit_service_makes_fallback_exhaustion_observable();
   } catch (const std::exception& ex) {

@@ -1,5 +1,6 @@
 #include "audit/AuditService.h"
 #include "audit/AuditErrors.h"
+#include "AuditPipeline.h"
 #include "AuditValidator.h"
 
 #include <optional>
@@ -89,8 +90,9 @@ AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
     return make_audit_write_failure(validation_result.error_code);
   }
 
-  if (primary_records_.size() < config_.primary_capacity) {
-    primary_records_.push_back(event);
+  AuditPipeline primary_pipeline(&primary_records_, config_.primary_capacity);
+  const auto pipeline_result = primary_pipeline.append(event);
+  if (pipeline_result.ok) {
     return AuditWriteOutcome{
         .accepted = true,
         .persisted = true,

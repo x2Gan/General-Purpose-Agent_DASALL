@@ -1,6 +1,7 @@
 set(DASALL_INFRA_CORE_SOURCES
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
+  src/audit/AuditPipeline.cpp
   src/audit/AuditValidator.cpp
   src/audit/AuditService.cpp
   src/config/ConfigCenterFacade.cpp
