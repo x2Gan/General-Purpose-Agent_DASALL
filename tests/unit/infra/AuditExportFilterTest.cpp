@@ -3,11 +3,33 @@
 #include <iostream>
 #include <string>
 #include <type_traits>
+#include <vector>
 
+#include "audit/AuditExporter.h"
 #include "audit/AuditExporterTypes.h"
+#include "audit/AuditTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
+
+dasall::infra::AuditEvent make_event(std::string event_id,
+                                     std::string actor,
+                                     std::string action,
+                                     std::string target,
+                                     dasall::infra::AuditOutcome outcome,
+                                     std::int64_t timestamp) {
+  return dasall::infra::AuditEvent{
+      .event_id = std::move(event_id),
+      .action = std::move(action),
+      .actor = std::move(actor),
+      .target = std::move(target),
+      .outcome = outcome,
+      .evidence_ref = {.kind = dasall::infra::AuditEvidenceKind::ToolResult,
+                       .ref = std::string("tool-ref")},
+      .side_effects = {"effect-recorded"},
+      .timestamp = timestamp,
+  };
+}
 
 void test_export_query_freezes_time_window_and_filter_fields() {
   using dasall::infra::AuditOutcome;
@@ -140,6 +162,184 @@ void test_export_result_rejects_inconsistent_truncation_state() {
               "final export pages should not advertise a resume token when truncated is false");
 }
 
+void test_audit_exporter_applies_primary_and_extension_filters() {
+  using dasall::infra::AuditOutcome;
+  using dasall::infra::ExportQuery;
+  using dasall::infra::audit::AuditExporter;
+  using dasall::tests::support::assert_true;
+
+  const std::vector<dasall::infra::AuditEvent> primary_records{
+      make_event("audit-export-001",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785601000),
+      make_event("audit-export-002",
+                 "runtime",
+                 "diagnostics.export",
+                 "policy-bundle",
+                 AuditOutcome::Failed,
+                 1711785602000),
+      make_event("audit-export-003",
+                 "runtime",
+                 "tool.execute",
+                 "shell",
+                 AuditOutcome::Succeeded,
+                 1711785603000),
+  };
+  const std::vector<dasall::infra::AuditEvent> fallback_records{
+      make_event("audit-export-004",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785604000),
+  };
+
+  const AuditExporter exporter(&primary_records, &fallback_records);
+  const ExportQuery query{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785605000,
+      .actor = std::string("runtime"),
+      .action = std::string("diagnostics.export"),
+      .target = std::string("support-bundle"),
+      .outcome = AuditOutcome::Succeeded,
+      .page_token = std::string(),
+  };
+
+  const auto result = exporter.export_records(query);
+  assert_true(result.records.size() == 2,
+              "AuditExporter should combine primary and fallback records, then keep only records that satisfy the frozen window+actor+action primary filters plus target/outcome narrowers");
+  assert_true(result.records.front().event_id == "audit-export-001" &&
+                  result.records.back().event_id == "audit-export-004",
+              "AuditExporter should preserve stable timestamp/event_id ordering across primary and fallback records");
+  assert_true(result.is_complete_page() && result.has_checksum(),
+              "single-page exporter results should expose explicit final-page semantics and a checksum");
+}
+
+void test_audit_exporter_emits_resume_token_for_truncated_pages() {
+  using dasall::infra::AuditOutcome;
+  using dasall::infra::ExportQuery;
+  using dasall::infra::audit::AuditExporter;
+  using dasall::tests::support::assert_true;
+
+  const std::vector<dasall::infra::AuditEvent> primary_records{
+      make_event("audit-export-page-001",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785601000),
+      make_event("audit-export-page-002",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785602000),
+      make_event("audit-export-page-003",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785603000),
+  };
+
+  const AuditExporter exporter(&primary_records, nullptr, 2U);
+  const ExportQuery first_page_query{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785605000,
+      .actor = std::string("runtime"),
+      .action = std::string("diagnostics.export"),
+      .target = std::string("support-bundle"),
+      .outcome = AuditOutcome::Succeeded,
+      .page_token = std::string(),
+  };
+
+  const auto first_page = exporter.export_records(first_page_query);
+  assert_true(first_page.records.size() == 2 && first_page.truncated,
+              "AuditExporter should emit a truncated first page when the internal page size is smaller than the matching record set");
+  assert_true(!first_page.next_page_token.empty(),
+              "truncated exporter pages should carry an opaque resume token");
+
+  const ExportQuery second_page_query{
+      .start_ts = first_page_query.start_ts,
+      .end_ts = first_page_query.end_ts,
+      .actor = first_page_query.actor,
+      .action = first_page_query.action,
+      .target = first_page_query.target,
+      .outcome = first_page_query.outcome,
+      .page_token = first_page.next_page_token,
+  };
+
+  const auto second_page = exporter.export_records(second_page_query);
+  assert_true(second_page.records.size() == 1,
+              "resuming with the exporter token should continue from the next stable record position");
+  assert_true(second_page.records.front().event_id == "audit-export-page-003",
+              "the resume token should point to the first record strictly after the previous page boundary");
+  assert_true(second_page.is_complete_page(),
+              "the resumed page should close the export once no more records remain");
+}
+
+void test_audit_exporter_rejects_resume_token_reuse_across_filter_shapes() {
+  using dasall::infra::AuditOutcome;
+  using dasall::infra::ExportQuery;
+  using dasall::infra::audit::AuditExporter;
+  using dasall::tests::support::assert_true;
+
+  const std::vector<dasall::infra::AuditEvent> primary_records{
+      make_event("audit-export-token-001",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785601000),
+      make_event("audit-export-token-002",
+                 "runtime",
+                 "diagnostics.export",
+                 "support-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785602000),
+      make_event("audit-export-token-003",
+                 "runtime",
+                 "diagnostics.export",
+                 "policy-bundle",
+                 AuditOutcome::Succeeded,
+                 1711785603000),
+  };
+
+  const AuditExporter exporter(&primary_records, nullptr, 1U);
+  const ExportQuery first_page_query{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785605000,
+      .actor = std::string("runtime"),
+      .action = std::string("diagnostics.export"),
+      .target = std::string("support-bundle"),
+      .outcome = AuditOutcome::Succeeded,
+      .page_token = std::string(),
+  };
+
+  const auto first_page = exporter.export_records(first_page_query);
+  assert_true(!first_page.next_page_token.empty(),
+              "the first page should provide a token that is bound to the original filter tuple");
+
+  const ExportQuery mismatched_query{
+      .start_ts = first_page_query.start_ts,
+      .end_ts = first_page_query.end_ts,
+      .actor = std::string("runtime"),
+      .action = std::string("diagnostics.export"),
+      .target = std::string("policy-bundle"),
+      .outcome = AuditOutcome::Succeeded,
+      .page_token = first_page.next_page_token,
+  };
+
+  const auto mismatched_result = exporter.export_records(mismatched_query);
+  assert_true(mismatched_result.records.empty(),
+              "resume tokens should not be reusable across different target/outcome filter tuples");
+  assert_true(mismatched_result.is_complete_page() && mismatched_result.has_checksum(),
+              "token mismatches should collapse to an explicit empty final page rather than silently widening the export shape");
+}
+
 }  // namespace
 
 int main() {
@@ -148,6 +348,9 @@ int main() {
     test_export_query_rejects_missing_or_inverted_time_window();
     test_export_result_freezes_records_checksum_and_resume_fields();
     test_export_result_rejects_inconsistent_truncation_state();
+    test_audit_exporter_applies_primary_and_extension_filters();
+    test_audit_exporter_emits_resume_token_for_truncated_pages();
+    test_audit_exporter_rejects_resume_token_reuse_across_filter_shapes();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

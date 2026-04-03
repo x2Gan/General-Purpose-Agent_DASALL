@@ -495,6 +495,11 @@ dasall_register_audit_unit_test(
   AuditExportFilterTest.cpp
 )
 
+target_include_directories(dasall_audit_export_filter_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 add_executable(dasall_policy_snapshot_compatibility_unit_test
   PolicySnapshotCompatibilityTest.cpp
 )

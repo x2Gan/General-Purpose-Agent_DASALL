@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #088
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-012 AuditExporter 导出与脱敏骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-012-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-012-AuditExporter骨架收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-012-AuditExporter%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 [infra/src/audit/AuditExporter.h](infra/src/audit/AuditExporter.h) 与 [infra/src/audit/AuditExporter.cpp](infra/src/audit/AuditExporter.cpp)，把导出过滤、稳定排序、opaque resume token 与 AuditEvent-only 导出边界收口成独立 internal exporter。
+   - 更新 [infra/src/audit/AuditService.cpp](infra/src/audit/AuditService.cpp)，将导出逻辑从 service 内联筛选切换为委托 `AuditExporter::export_records()`。
+2. 完成测试与接线收口：
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `AuditExporter.cpp` 纳入 `dasall_infra` 构建图。
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt) 与 [tests/unit/infra/AuditExportFilterTest.cpp](tests/unit/infra/AuditExportFilterTest.cpp)，为 exporter unit 测试补 `infra/src` include path，并新增主过滤、分页 token 与 token 失配负例覆盖。
+   - 更新 [tests/contract/smoke/AuditBoundaryContractTest.cpp](tests/contract/smoke/AuditBoundaryContractTest.cpp)，固定“不引入 `target_pattern`/`outcome_reason`，不把 `AuditContext` 合并进导出载荷”的 contract 边界。
+3. 完成 TODO 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-012` 标记为 Done，并把下一步切换到 `AUD-BLK-002` 的 retention 设计解阻。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_audit_export_filter_unit_test dasall_audit_service_fallback_unit_test dasall_contract_audit_event_boundary_test`
+   - `ctest --test-dir build-ci -N -R "AuditExportFilterTest|AuditBoundaryContractTest|AuditServiceFallbackTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "AuditExportFilterTest|AuditBoundaryContractTest|AuditServiceFallbackTest"`
+   - `cmake --build build-ci --target dasall_audit_event_unit_test dasall_audit_logger_interface_unit_test dasall_audit_service_fallback_unit_test dasall_audit_export_filter_unit_test dasall_contract_audit_event_boundary_test dasall_contract_audit_logger_interface_boundary_test dasall_contract_audit_service_boundary_test dasall_contract_infra_error_code_boundary_test dasall_infra_audit_health_integration_test`
+   - `ctest --test-dir build-ci -N -L audit`
+   - `ctest --test-dir build-ci --output-on-failure -L audit`
+2. 结果：
+   - 定向 `AuditExportFilterTest`、`AuditBoundaryContractTest`、`AuditServiceFallbackTest` 3/3 通过。
+   - audit 标签下 9 个测试全部通过，覆盖 4 个 unit、4 个 contract、1 个 integration。
+
+### 结果
+
+1. `AUD-TODO-012` 已把导出逻辑从 service 内联筛选推进为独立 internal exporter，并落盘了 v1 的过滤、分页与导出边界骨架。
+2. audit 子域当前下一执行入口已切换到 `AUD-BLK-002`，后续应先补齐 RetentionOutcome 与归档/清理动作对象。
+
+### 下一步
+
+1. 进入 `AUD-BLK-002`，冻结 RetentionOutcome 与归档/清理动作对象，再恢复 `AUD-TODO-013`。
+
+### 风险
+
+1. 若后续 exporter 试图扩张到 `target_pattern`、free-text reason、AuditContext payload 或未绑定过滤元组的 page token，本轮边界需要重新评审。
+
 ## 记录 #087
 
 - 日期：2026-04-03

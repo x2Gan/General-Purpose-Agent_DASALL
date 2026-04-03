@@ -11,6 +11,7 @@ set(DASALL_INFRA_CORE_SOURCES
 )
 
 set(DASALL_INFRA_AUDIT_SOURCES
+  src/audit/AuditExporter.cpp
   src/audit/AuditMetricsBridge.cpp
   src/audit/AuditFallbackPipeline.cpp
   src/audit/AuditPipeline.cpp

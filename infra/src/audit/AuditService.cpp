@@ -1,11 +1,11 @@
 #include "audit/AuditService.h"
 #include "audit/AuditErrors.h"
+#include "AuditExporter.h"
 #include "AuditFallbackPipeline.h"
 #include "AuditPipeline.h"
 #include "AuditValidator.h"
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 #include <utility>
@@ -34,15 +34,6 @@ AuditWriteOutcome make_audit_write_success(bool fallback_used) {
       .fallback_used = fallback_used,
       .error_code = std::nullopt,
   };
-}
-
-std::string make_export_checksum(const std::vector<AuditEvent>& records) {
-  if (records.empty()) {
-    return "audit-export:empty";
-  }
-
-  return std::string("audit-export:") + records.front().event_id + ":" +
-         records.back().event_id + ":" + std::to_string(records.size());
 }
 
 }  // namespace
@@ -132,15 +123,8 @@ class AuditServiceFacade {
       return ExportResult{};
     }
 
-    auto records = select_records(query);
-    auto checksum = make_export_checksum(records);
-
-    return ExportResult{
-        .records = std::move(records),
-        .next_page_token = std::string(),
-        .truncated = false,
-        .checksum = std::move(checksum),
-    };
+    AuditExporter exporter(&primary_records_, &fallback_records_);
+    return exporter.export_records(query);
   }
 
   [[nodiscard]] bool is_degraded() const {
@@ -189,49 +173,6 @@ class AuditServiceFacade {
             std::string(lifecycle_state_name()),
         "audit.lifecycle",
         std::string(kAuditServiceSourceRef));
-  }
-
-  [[nodiscard]] std::vector<AuditEvent> select_records(
-      const ExportQuery& query) const {
-    std::vector<AuditEvent> records;
-
-    const auto matches = [&query](const AuditEvent& event) {
-      if (event.timestamp < query.start_ts || event.timestamp > query.end_ts) {
-        return false;
-      }
-
-      if (!query.actor.empty() && event.actor != query.actor) {
-        return false;
-      }
-
-      if (!query.action.empty() && event.action != query.action) {
-        return false;
-      }
-
-      if (!query.target.empty() && event.target != query.target) {
-        return false;
-      }
-
-      if (query.filters_on_outcome() && event.outcome != query.outcome) {
-        return false;
-      }
-
-      return true;
-    };
-
-    for (const auto& event : primary_records_) {
-      if (matches(event)) {
-        records.push_back(event);
-      }
-    }
-
-    for (const auto& event : fallback_records_) {
-      if (matches(event)) {
-        records.push_back(event);
-      }
-    }
-
-    return records;
   }
 
   AuditServiceConfig config_{};

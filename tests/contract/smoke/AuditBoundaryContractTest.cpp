@@ -82,6 +82,16 @@ concept HasOpaqueSelectorMember = requires {
   &T::opaque_selector;
 };
 
+template <typename T>
+concept HasTargetPatternMember = requires {
+  &T::target_pattern;
+};
+
+template <typename T>
+concept HasOutcomeReasonMember = requires {
+  &T::outcome_reason;
+};
+
 void test_audit_event_accepts_tool_result_boundary_reference() {
   using dasall::contracts::ToolResult;
   using dasall::contracts::validate_tool_result_field_rules;
@@ -321,6 +331,31 @@ void test_audit_logger_interface_uses_frozen_audit_boundary_objects_only() {
               "IAuditLogger export input should stay bound to the frozen ExportQuery time-window shape rather than the retired opaque selector placeholder");
 }
 
+void test_export_query_keeps_exact_match_filter_shape_and_event_only_export_payload() {
+  using dasall::infra::AuditEvent;
+  using dasall::infra::AuditOutcome;
+  using dasall::infra::ExportQuery;
+  using dasall::infra::ExportResult;
+  using dasall::tests::support::assert_true;
+
+  static_assert(!HasTargetPatternMember<ExportQuery>);
+  static_assert(!HasOutcomeReasonMember<ExportQuery>);
+  static_assert(std::is_same_v<ExportResult::Records::value_type, AuditEvent>);
+
+  const ExportQuery query{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785609000,
+      .actor = std::string("runtime"),
+      .action = std::string("diagnostics.export"),
+      .target = std::string("support-bundle"),
+      .outcome = AuditOutcome::Succeeded,
+      .page_token = std::string(),
+  };
+
+  assert_true(query.has_ordered_window() && query.filters_on_outcome(),
+              "ExportQuery should keep target/outcome as exact-match narrowers on top of the frozen time-window+actor+action shape, without reintroducing pattern or free-text reason filters");
+}
+
   void test_logging_audit_aliases_keep_multi_agent_context_outside_event_top_level() {
     using LoggingAuditContext = dasall::infra::logging::AuditContext;
     using LoggingAuditEvent = dasall::infra::logging::AuditEvent;
@@ -381,6 +416,7 @@ int main() {
     test_audit_context_keeps_correlation_fields_as_non_optional_strings();
     test_audit_context_rejects_empty_strings_when_unknown_semantics_are_bypassed();
     test_audit_logger_interface_uses_frozen_audit_boundary_objects_only();
+    test_export_query_keeps_exact_match_filter_shape_and_event_only_export_payload();
     test_logging_audit_aliases_keep_multi_agent_context_outside_event_top_level();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
