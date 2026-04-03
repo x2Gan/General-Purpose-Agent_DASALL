@@ -8,6 +8,46 @@
 
 ---
 
+## 记录 #078
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-011 实现 AuditServiceFacade 入口骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-011-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-011-AuditServiceFacade骨架收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-011-AuditServiceFacade%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，补齐本地证据、OWASP 外部参考、Design->Build 映射与 D Gate 结果。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-011` 标记为 Done，并追加 12.11 执行记录与验收证据。
+2. 完成 AUD-TODO-011-B facade 骨架落地：
+   - 更新 [infra/include/audit/AuditService.h](infra/include/audit/AuditService.h)，让 `AuditService` 收敛为 thin wrapper，持有 internal facade 指针，并显式声明构造、析构、拷贝、移动语义。
+   - 更新 [infra/src/audit/AuditService.cpp](infra/src/audit/AuditService.cpp)，新增 internal `AuditServiceFacade`，统一处理生命周期、validator/pipeline/fallback 串接、export 选择和错误映射。
+   - 更新 [tests/unit/infra/AuditServiceFallbackTest.cpp](tests/unit/infra/AuditServiceFallbackTest.cpp)，补充 lifecycle state 与 pre-start write gate 回归测试。
+
+### 测试
+
+1. 验收命令：
+   - `cmake --build build-ci --target dasall_infra dasall_audit_service_fallback_unit_test dasall_contract_infra_error_code_boundary_test dasall_contract_audit_service_boundary_test`
+   - `ctest --test-dir build-ci -N -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest|AuditServiceBoundaryContractTest"`
+   - `ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest|AuditServiceBoundaryContractTest" --output-on-failure`
+2. 结果：
+   - `AuditServiceFallbackTest`、`InfraErrorCodeMappingContractTest`、`AuditServiceBoundaryContractTest` 定向发现 3 个，执行 3/3 通过。
+   - facade 化后，lifecycle/pre-start gate、错误码映射和 service 边界回归均保持通过。
+
+### 结果
+
+1. `AuditServiceFacade` 已从“设计职责存在但未显式收口”推进到“internal facade + public wrapper + lifecycle/write/export 串接已落盘并可测”。
+2. 本轮没有引入新的 public audit interface，也没有扩张到 exporter/retention/metrics/health；`AUD-TODO-008` 到 `AUD-TODO-011` 的主链路骨架已全部完成。
+
+### 下一步
+
+1. 进入 `AUD-TODO-016` 与 `AUD-TODO-017`，正式收口 audit 源码接线与 unit/contract 测试发现性证据。
+
+### 风险
+
+1. facade 化当前仍以内嵌 internal class 直接持有本地 record store；后续若继续扩展 exporter/retention 能力，需要继续守住 public wrapper 不扩张、internal facade 不泄露的边界。
+
 ## 记录 #077
 
 - 日期：2026-04-03

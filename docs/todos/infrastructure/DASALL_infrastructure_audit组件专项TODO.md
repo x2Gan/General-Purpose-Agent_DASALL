@@ -182,7 +182,7 @@
 | AUD-TODO-008 | Done | 实现 AuditValidator 字段校验骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditValidator；6.3 输入输出；6.8 输入异常 | L2 | infra/src/audit/AuditValidator.cpp | AuditValidator（字段完整性与边界校验） | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-007 | 无 | 无 | AuditValidator.cpp、校验证据 | 仅当必填字段缺失、越权字段、非法时间窗三类输入异常都能返回可判定失败时完成 |
 | AUD-TODO-009 | Done | 实现 AuditPipeline 主写骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditPipeline；6.7 正常路径第 3 步；6.8 主写失败 | L2 | infra/src/audit/AuditPipeline.cpp | AuditPipeline（append-only 主写链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-008 | 无 | 无 | AuditPipeline.cpp、主写测试 | 仅当验证通过事件能进入 append-only 主写路径，且主写失败可被上层捕获时完成 |
 | AUD-TODO-010 | Done | 实现 AuditFallbackPipeline 降级骨架 | audit 设计 6.2/6.3/6.8 | 6.2 AuditFallbackPipeline；6.8 恢复动作 1/2 | L2 | infra/src/audit/AuditFallbackPipeline.cpp | AuditFallbackPipeline（ringbuffer/file 降级链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-007、AUD-TODO-009 | 无 | 无 | AuditFallbackPipeline.cpp、降级测试 | 仅当主写失败可触发 fallback_used=true，且 fallback 失败返回 INF_E_AUDIT_FALLBACK_FAIL 时完成 |
-| AUD-TODO-011 | Not Started | 实现 AuditServiceFacade 入口骨架 | audit 设计 6.2/6.3/6.4/6.7 | 6.2 AuditServiceFacade；6.4 依赖关系；6.7 主流程 | L2 | infra/src/audit/AuditService.cpp | AuditServiceFacade（审计入口、生命周期管理、统一错误映射） | unit：AuditServiceFallbackTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-008、AUD-TODO-009、AUD-TODO-010 | 无 | 无 | AuditService.cpp、主链路测试 | 仅当 write_audit 主链路可串起 validator/pipeline/fallback，且返回结果可二值判定时完成 |
+| AUD-TODO-011 | Done | 实现 AuditServiceFacade 入口骨架 | audit 设计 6.2/6.3/6.4/6.7 | 6.2 AuditServiceFacade；6.4 依赖关系；6.7 主流程 | L2 | infra/src/audit/AuditService.cpp | AuditServiceFacade（审计入口、生命周期管理、统一错误映射） | unit：AuditServiceFallbackTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-008、AUD-TODO-009、AUD-TODO-010 | 无 | 无 | AuditService.cpp、主链路测试 | 仅当 write_audit 主链路可串起 validator/pipeline/fallback，且返回结果可二值判定时完成 |
 | AUD-TODO-012 | Blocked | 实现 AuditExporter 导出与脱敏骨架 | audit 设计 6.2/6.3/6.5；11.1 | 6.2 AuditExporter；6.3 导出语义；11.1 导出 filter 阻塞 | L2 | infra/src/audit/AuditExporter.cpp | AuditExporter（过滤、分页、脱敏） | unit：AuditExportFilterTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditExportFilterTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-004、AUD-TODO-005、AUD-TODO-006 | AUD-BLK-001 | 冻结 ExportQuery 的最小过滤语义，并明确时间窗+actor+action 三键的 contract 边界 | AuditExporter.cpp 或阻塞记录 | 仅当最小过滤模型冻结并通过评审后，状态才可由 Blocked 转为 Not Started |
 | AUD-TODO-013 | Blocked | 定义 IAuditRetention 接口与 RetentionOutcome 对象 | audit 设计 6.6；11.1 | 6.6 IAuditRetention；11.1 retention 阻塞 | L1 | infra/include/audit/IAuditRetention.h | IAuditRetention::apply_retention；RetentionOutcome | unit：AuditInterfaceCompileTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-007 | AUD-BLK-002 | 补齐 RetentionOutcome 的字段与自动清理/归档动作对象后再冻结接口 | IAuditRetention.h 或阻塞记录 | 仅当 retention 输出对象具备可二值判定字段且评审通过后，状态才可从 Blocked 转为 Not Started |
 | AUD-TODO-014 | Blocked | 定义 IAuditHealthProbe 接口与 AuditHealthStatus 对象 | audit 设计 6.6；11.1 | 6.6 IAuditHealthProbe；6.3/6.10 健康状态语义 | L1 | infra/include/audit/IAuditHealthProbe.h | IAuditHealthProbe::evaluate；AuditHealthStatus | unit：AuditInterfaceCompileTest；integration：InfraAuditHealthIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|InfraAuditHealthIntegrationTest" --output-on-failure | AUD-TODO-007 | AUD-BLK-003 | 补齐 ready/degraded/unavailable 状态对象与最近失败原因字段后再冻结接口 | IAuditHealthProbe.h 或阻塞记录 | 仅当 AuditHealthStatus 字段与状态机语义冻结后，状态才可从 Blocked 转为 Not Started |
@@ -750,3 +750,47 @@ Build 合规复核：
 3. 测试发现性：`AuditServiceFallbackTest` 已通过 `ctest -N -R` 命中，未引入新的 discoverability 缺口。
 4. TODO 证据回写：已完成 010 状态、交付物、验收结果与执行记录回写。
 5. 提交隔离：本轮只拆降级写入路径，不提前实现 facade 统一入口。
+
+### 12.11 AUD-TODO-011
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-011。
+2. 可执行性依据：`AUD-TODO-008`、`009`、`010` 已完成，validator/pipeline/fallback 三段骨架均已落盘；当前唯一缺口是统一入口与生命周期管理尚未收敛为 facade。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.2/6.3/6.4/6.7 要求 `AuditServiceFacade` 统一负责生命周期管理、错误映射和对子组件的串接，但不越权进入 exporter/retention/metrics/health。
+2. 外部参考：OWASP Logging Cheat Sheet 建议实现应用范围内可复用、可测试的统一日志处理模块，并保持日志故障显式、不可静默吞掉；这支持把 audit 的 orchestrate 逻辑集中到 internal facade 中。
+
+D 结论：
+
+1. Design -> Build 映射：在 `infra/src/audit/AuditService.cpp` 内新增 internal `AuditServiceFacade`，统一持有 config、lifecycle、record store、degraded 状态和 validator，并让 public `AuditService` 变成 thin wrapper。
+2. Build 三件套：
+	- 代码目标：更新 `infra/include/audit/AuditService.h` 与 `infra/src/audit/AuditService.cpp`，让 `AuditServiceFacade` 串起 `AuditValidator -> AuditPipeline -> AuditFallbackPipeline`，同时补回 public `AuditService` 的深拷贝语义。
+	- 测试目标：扩展 `AuditServiceFallbackTest` 覆盖 lifecycle state 与 pre-start write gate；补跑 `InfraErrorCodeMappingContractTest` 和 `AuditServiceBoundaryContractTest` 回归。
+	- 验收命令：`cmake --build build-ci --target dasall_infra dasall_audit_service_fallback_unit_test dasall_contract_infra_error_code_boundary_test dasall_contract_audit_service_boundary_test && ctest --test-dir build-ci -N -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest|AuditServiceBoundaryContractTest" && ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest|AuditServiceBoundaryContractTest" --output-on-failure`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. `infra/include/audit/AuditService.h`：`AuditService` 收敛为 thin wrapper，持有 internal facade 指针，并显式提供构造、析构、拷贝、移动语义。
+2. `infra/src/audit/AuditService.cpp`：新增 internal `AuditServiceFacade`，统一处理 `init/start/stop/write_audit/export_audit`，并收拢 validator/pipeline/fallback 串接与错误映射。
+3. `tests/unit/infra/AuditServiceFallbackTest.cpp`：新增 lifecycle state 与 pre-start write gate 回归测试。
+4. `docs/todos/infrastructure/deliverables/AUD-TODO-011-AuditServiceFacade骨架收敛.md`：补齐 D/B 收敛、外部参考、Design -> Build 映射与验收结果。
+
+验收结果：
+
+1. `cmake --build build-ci --target dasall_infra dasall_audit_service_fallback_unit_test dasall_contract_infra_error_code_boundary_test dasall_contract_audit_service_boundary_test`：通过。
+2. `ctest --test-dir build-ci -N -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest|AuditServiceBoundaryContractTest"`：通过，发现 3 个定向测试。
+3. `ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest|AuditServiceBoundaryContractTest" --output-on-failure`：通过，3/3 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：facade、wrapper 与 clone 语义均可由命名直接表达，无需新增注释。
+2. 正负例覆盖：`AuditServiceFallbackTest` 新增 lifecycle/pre-start 负例与状态推进正例；contract 继续覆盖错误码映射与 service 边界。
+3. 测试发现性：`AuditServiceFallbackTest`、`InfraErrorCodeMappingContractTest`、`AuditServiceBoundaryContractTest` 已通过 `ctest -N -R` 命中，未引入 discoverability 缺口。
+4. TODO 证据回写：已完成 011 状态、交付物、验收结果与执行记录回写。
+5. 提交隔离：本轮只收敛统一入口与生命周期管理，不提前推进 `AUD-TODO-016`、`017` 或 exporter/retention 能力。

@@ -39,6 +39,40 @@ dasall::infra::ExportQuery make_query() {
   };
 }
 
+void test_audit_service_facade_tracks_lifecycle_and_write_gate() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::audit::AuditService;
+  using dasall::infra::audit::AuditServiceConfig;
+  using dasall::tests::support::assert_true;
+
+  AuditService service;
+
+  assert_true(service.lifecycle_state_name() == "created",
+              "audit service facade should start in the created lifecycle state");
+
+  const auto prestart_write = service.write_audit(make_event("tool-call-prestart-001"),
+                                                  make_context());
+  assert_true(prestart_write.is_failure() &&
+                  prestart_write.error_code == ResultCode::RuntimeRetryExhausted,
+              "audit service facade should keep writes observable when callers bypass init/start ordering");
+
+  const auto init_result = service.init(AuditServiceConfig{.primary_capacity = 1, .fallback_capacity = 1});
+  assert_true(init_result.ok,
+              "audit service facade should initialize once with valid capacities");
+  assert_true(service.lifecycle_state_name() == "initialized",
+              "audit service facade should expose the initialized lifecycle state after init");
+
+  assert_true(service.start().ok,
+              "audit service facade should enter the started lifecycle state after start");
+  assert_true(service.lifecycle_state_name() == "started",
+              "audit service facade should expose the started lifecycle state after start");
+
+  assert_true(service.stop().ok,
+              "audit service facade should stop cleanly after start");
+  assert_true(service.lifecycle_state_name() == "stopped",
+              "audit service facade should expose the stopped lifecycle state after stop");
+}
+
 void test_audit_service_keeps_primary_pipeline_append_only_order() {
   using dasall::infra::audit::AuditService;
   using dasall::infra::audit::AuditServiceConfig;
@@ -167,6 +201,7 @@ void test_audit_service_makes_fallback_exhaustion_observable() {
 
 int main() {
   try {
+    test_audit_service_facade_tracks_lifecycle_and_write_gate();
     test_audit_service_keeps_primary_pipeline_append_only_order();
     test_audit_service_uses_fallback_when_primary_path_is_unavailable();
     test_audit_service_keeps_fallback_pipeline_append_order_after_primary_exhaustion();
