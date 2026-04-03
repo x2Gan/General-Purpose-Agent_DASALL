@@ -251,6 +251,26 @@ dasall_apply_common_options(dasall_infra_service_facade_unit_test)
 add_test(NAME InfraServiceFacadeTest COMMAND dasall_infra_service_facade_unit_test)
 set_tests_properties(InfraServiceFacadeTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_mock_secret_backend_unit_test
+  secret/MockSecretBackendTest.cpp
+)
+
+target_include_directories(dasall_mock_secret_backend_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_mock_secret_backend_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_mock_secret_backend_unit_test)
+
+add_test(NAME MockSecretBackendTest COMMAND dasall_mock_secret_backend_unit_test)
+set_tests_properties(MockSecretBackendTest PROPERTIES LABELS "unit;secret")
+
 add_executable(dasall_secret_backend_interface_unit_test
   SecretBackendInterfaceTest.cpp
 )

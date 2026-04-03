@@ -163,7 +163,7 @@
 | SEC-TODO-003 | Completed | 定义 SecretTypes 对象模型 | secret 设计 6.5 | 6.5 核心对象表 | L3 | infra/include/secret/SecretTypes.h | SecretQuery, SecretAccessContext, SecretDescriptor, SecretHandle, SecretLease, RotationRequest, RotationResult, SecretAuditEvent | unit：字段完整性；contract：不写入 contracts 共享对象 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L unit | 无 | 无 | 无 | 对象头文件、单测 | 仅当对象字段与 6.5 对齐且无明文字段时完成 |
 | SEC-TODO-004 | Completed | 定义 SecureBuffer 语义与约束 | secret 设计 6.5/6.7 | 6.5 SecureBuffer；6.7 release 语义 | L3 | infra/include/secret/SecureBuffer.h | zeroize_on_release, 禁止隐式拷贝约束 | unit：零化与访问失效断言 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L unit | SEC-TODO-003 | 平台零化实现策略未定 | 先冻结接口和语义，不绑定平台实现 | 头文件、单测 | 仅当 release 后不可访问且零化断言通过时完成 |
 | SEC-TODO-005 | Completed | 定义 ISecretBackend 统一协议 | secret 设计 6.6/7 | 6.6 ISecretBackend | L2 | infra/include/secret/ISecretBackend.h | fetch_record, materialize_record, promote_version, revoke_version, get_backend_status | unit：接口可编译；contract：协议稳定性检查 | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -L contract | SEC-TODO-003 | KMS 协议细节未冻结 | 先冻结公共协议，不落 KMS 细节 | 接口头文件、编译/合同检查 | 仅当 file/mock 可共享同协议且编译通过时完成 |
-| SEC-TODO-006 | Not Started | 实现 MockSecretBackend 骨架 | secret 设计 6.2/8.3 | 6.2 MockSecretBackend | L3 | infra/src/secret/backends/MockSecretBackend.cpp | fetch_record/materialize_record/revoke_version 最小实现 | unit：成功/未命中/拒绝/backend down 四路径 | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无 | 无 | Mock 后端实现、单测 | 仅当四类路径可二值判定时完成 |
+| SEC-TODO-006 | Completed | 实现 MockSecretBackend 骨架 | secret 设计 6.2/8.3 | 6.2 MockSecretBackend | L3 | infra/src/secret/backends/MockSecretBackend.cpp | fetch_record/materialize_record/revoke_version 最小实现 | unit：成功/未命中/拒绝/backend down 四路径 | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无 | 无 | Mock 后端实现、单测、交付件 | 仅当四类路径可二值判定时完成 |
 | SEC-TODO-007 | Not Started | 实现 FileSecretBackend 最小骨架 | secret 设计 6.2/6.9 | 6.2 FileSecretBackend；6.9 file 配置项 | L2 | infra/src/secret/backends/FileSecretBackend.cpp | fetch_record/materialize_record 最小实现 | unit：本地路径读取与错误路径；failure：backend unavailable | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无（2026-04-03 已由 SEC-BLK-001 通过 secret 设计 6.9 的 file.root_dir/encrypt_at_rest 策略冻结解阻） | 无 | File 后端骨架、测试 | 仅当不写明文临时文件且错误路径可判定时完成 |
 | SEC-TODO-008 | Not Started | 实现 SecretManagerFacade 访问骨架 | secret 设计 6.2/6.7 | 6.7 正常流程 1-4 步 | L3 | infra/src/secret/SecretManagerFacade.cpp | get_secret, materialize, release, inspect | unit：访问链路可走通；contract：上下文字段复用边界 | ctest --test-dir build-ci -L unit && ctest --test-dir build-ci -L contract | SEC-TODO-001、SEC-TODO-003、SEC-TODO-005、SEC-TODO-006 | 无 | 无 | Facade 骨架、测试 | 仅当 get->materialize->release 路径可稳定验证时完成 |
 | SEC-TODO-009 | Not Started | 实现 SecretLeaseRegistry 生命周期管理 | secret 设计 6.2/6.3/6.7 | 6.7 lease 创建/过期 | L3 | infra/src/secret/SecretLeaseRegistry.cpp | create_lease, validate_lease, expire_lease, release_lease | unit：创建/过期/释放/陈旧句柄 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-008 | 无 | 无 | Lease 注册实现、单测 | 仅当过期后 materialize 被拒绝并返回明确错误码时完成 |
@@ -248,6 +248,7 @@
 | SEC-TODO-003 | 2026-04-01 | infra/include/secret/SecretTypes.h；infra/include/secret/ISecretManager.h；tests/unit/infra/SecretTypesTest.cpp；tests/contract/smoke/SecretTypeBoundaryContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_types_unit_test dasall_contract_secret_type_boundary_test` 通过；`ctest --test-dir build-ci -R "SecretTypesTest|SecretTypeBoundaryContractTest" --output-on-failure` 通过（2/2） |
 | SEC-TODO-004 | 2026-04-01 | infra/include/secret/SecureBuffer.h；infra/include/secret/SecretTypes.h；tests/unit/infra/SecureBufferTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_secure_buffer_unit_test` 通过；`ctest --test-dir build-ci -R SecureBufferTest --output-on-failure` 通过（1/1） |
 | SEC-TODO-005 | 2026-04-01 | infra/include/secret/ISecretBackend.h；tests/unit/infra/SecretBackendInterfaceTest.cpp；tests/contract/smoke/SecretBackendContractSmokeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_backend_interface_unit_test dasall_contract_secret_backend_contract_smoke_test` 通过；`ctest --test-dir build-ci -R "SecretBackendInterfaceTest|SecretBackendContractSmokeTest" --output-on-failure` 通过（2/2） |
+| SEC-TODO-006 | 2026-04-03 | infra/src/secret/backends/MockSecretBackend.h；infra/src/secret/backends/MockSecretBackend.cpp；tests/unit/infra/secret/MockSecretBackendTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-006-MockSecretBackend骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_mock_secret_backend_unit_test` 通过；`ctest --test-dir build-ci -N -R MockSecretBackendTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R MockSecretBackendTest` 通过（1/1） |
 | SEC-TODO-011 | 2026-04-01 | infra/include/secret/SecretErrors.h；tests/unit/infra/SecretErrorsTest.cpp；tests/contract/smoke/SecretErrorMappingContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_errors_unit_test dasall_contract_secret_error_mapping_test` 通过；`ctest --test-dir build-ci -R "SecretErrorsTest|SecretErrorMappingContractTest" --output-on-failure` 通过（2/2） |
 
 ## 10. 风险与回退策略
@@ -273,7 +274,7 @@
 4. 未达到全量函数级的缺口：KMS 真实接入策略、dual-slot 验证器细节、integration 顶层注册。
 5. 下一步建议：
    - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 继续按顺序执行 SEC-TODO-006 -> SEC-TODO-007 -> SEC-TODO-008 -> SEC-TODO-009；其中 SEC-BLK-001 已解阻，SEC-BLK-002 仍保留给轮换链路。
+   - 继续按顺序执行 SEC-TODO-007 -> SEC-TODO-008 -> SEC-TODO-009；其中 SEC-BLK-001 已解阻，SEC-BLK-002 仍保留给轮换链路。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
 
 ## 12. 本轮执行记录（2026-04-03）
@@ -318,3 +319,49 @@ Build 合规复核：
 3. 测试发现性：不新增测试目标，不改变现有 ctest 发现性。
 4. TODO 证据回写：已完成 blocker 状态、交付物与下一步入口回写。
 5. 提交隔离：本轮只处理 SEC-BLK-001 文档解阻，不提前落盘 Mock/File backend 代码。
+
+### 12.2 SEC-TODO-006
+
+选中任务：
+
+1. 任务 ID：SEC-TODO-006。
+2. 可执行性依据：ISecretBackend、SecretTypes 和 SecretErrors 已全部冻结；当前仓库缺的是 secret backend 的第一个可运行实现与对应 unit 验收出口，因此 006 是 backend 与访问链骨架阶段最早、最小且可提交的原子任务。
+
+研究学习：
+
+1. 本地证据：infra/include/secret/ISecretBackend.h 已固定 fetch/materialize/promote/revoke/status 五个入口，说明 mock backend 首轮需要把完整协议落盘，而不能只做半个 fetch stub。
+2. 本地证据：fetch_record 不接收 access_context，因此“拒绝”路径应放在 materialize_record 结合 permission_domain 判定，而不是把权限逻辑硬塞进 fetch。
+3. 外部参考：OWASP Secrets Management Cheat Sheet 强调最小权限和受控 materialize；Azure Key Vault best practices 强调 secret 数据面不应退化为普通配置面，这支持 MockSecretBackend 继续只暴露 metadata record + SecureBuffer，不向公共对象泄露实现细节。
+
+D 结论：
+
+1. Design -> Build 映射：新增 internal MockSecretBackend 头/源，提供 seeded secret fixture、backend availability 状态和 permission-domain 守卫；新增 MockSecretBackendTest 与最小 CMake 接线。
+2. Build 三件套：
+   - 代码目标：新增 infra/src/secret/backends/MockSecretBackend.h、infra/src/secret/backends/MockSecretBackend.cpp，并更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/secret/MockSecretBackendTest.cpp，覆盖成功、未命中、拒绝和 backend down 四路径，并验证 ctest discoverability。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_mock_secret_backend_unit_test && ctest --test-dir build-ci -N -R MockSecretBackendTest && ctest --test-dir build-ci --output-on-failure -R MockSecretBackendTest`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/src/secret/backends/MockSecretBackend.h、infra/src/secret/backends/MockSecretBackend.cpp：新增 internal mock backend 实现，支持 seeded record、materialize lease、状态查询和最小 rotation/revoke 语义。
+2. tests/unit/infra/secret/MockSecretBackendTest.cpp：新增四路径单测。
+3. infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：接入 mock backend 源码与 unit test target。
+4. docs/todos/infrastructure/deliverables/SEC-TODO-006-MockSecretBackend骨架收敛.md：补齐本轮 D/B 收敛、研究结论和验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_mock_secret_backend_unit_test`：通过。
+3. `ctest --test-dir build-ci -N -R MockSecretBackendTest`：通过，发现 1 个定向测试。
+4. `ctest --test-dir build-ci --output-on-failure -R MockSecretBackendTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮新增类和测试命名已足够自解释，无需额外注释扩张。
+2. 正负例覆盖：已覆盖成功、未命中、权限拒绝和 backend down 四条任务要求路径。
+3. 测试发现性：已补 `ctest -N -R MockSecretBackendTest` 证据，确认新 target 可发现。
+4. TODO 证据回写：已完成状态、交付物和验收结果回写。
+5. 提交隔离：本轮只处理 mock backend、单测和最小接线，不提前进入 file backend、manager 或 lease registry。

@@ -35,6 +35,10 @@ set(DASALL_INFRA_LOGGING_SOURCES
   src/logging/SinkDispatcher.cpp
 )
 
+set(DASALL_INFRA_SECRET_SOURCES
+  src/secret/backends/MockSecretBackend.cpp
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
@@ -133,6 +137,7 @@ target_sources(dasall_infra
     ${DASALL_INFRA_CORE_SOURCES}
     ${DASALL_INFRA_AUDIT_SOURCES}
     ${DASALL_INFRA_LOGGING_SOURCES}
+    ${DASALL_INFRA_SECRET_SOURCES}
     ${DASALL_INFRA_TRACING_SOURCES}
 )
 
