@@ -8,6 +8,48 @@
 
 ---
 
+## 记录 #083
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-014 IAuditHealthProbe 接口落盘
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-014-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-014-AuditHealthProbe接口收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-014-AuditHealthProbe%E6%8E%A5%E5%8F%A3%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 [infra/include/audit/IAuditHealthProbe.h](infra/include/audit/IAuditHealthProbe.h)，冻结 `AuditHealthState`、`AuditHealthStatus`、reason allowlist 与只读 `evaluate() const` 边界，并更新 [infra/CMakeLists.txt](infra/CMakeLists.txt) 将其纳入 audit public headers。
+   - 更新 [tests/unit/infra/AuditLoggerInterfaceTest.cpp](tests/unit/infra/AuditLoggerInterfaceTest.cpp)，补齐 `IAuditHealthProbe` 签名冻结、`AuditHealthStatus` 正负例一致性断言。
+2. 完成最小 integration ground truth：
+   - 新增 [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp)，用 test-local `AuditServiceBackedHealthProbe` 验证 Ready、fallback degraded、metrics bridge degraded 与 stopped unavailable 四类状态映射。
+   - 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt)，新增根级 `InfraAuditHealthIntegrationTest` 注册，作为当前轮可执行验收出口；audit 专项目录、顶层 target 聚合与 `integration;audit` 标签收口仍留给 `AUD-TODO-018`。
+3. 完成 TODO 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-014` 标记为 Done，并把 `AUD-TODO-018` 的描述更新为“已有根级用例，待目录/标签拓扑收口”。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_audit_logger_interface_unit_test dasall_infra_audit_health_integration_test`
+   - `ctest --test-dir build-ci -N -R "AuditInterfaceCompileTest|InfraAuditHealthIntegrationTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "AuditInterfaceCompileTest|InfraAuditHealthIntegrationTest"`
+2. 结果：
+   - `AuditInterfaceCompileTest` 与 `InfraAuditHealthIntegrationTest` 共发现 2 个定向测试，执行 2/2 通过。
+
+### 结果
+
+1. `AUD-TODO-014` 已从“设计冻结”推进到“public interface + 状态对象守卫 + 最小 integration ground truth”全部落盘。
+2. `AUD-TODO-015` 现在可以直接复用 `InfraAuditHealthIntegrationTest` 扩展 metrics degraded 场景；`AUD-TODO-018` 保留为 integration 目录/标签拓扑收口任务。
+
+### 下一步
+
+1. 进入 `AUD-TODO-015`，沿已冻结的 meter scope、七指标对象表、五元标签白名单与 non-recursive failure 语义落盘 `AuditMetricsBridge` 骨架，并复用现有 `InfraAuditHealthIntegrationTest` 补 metrics bridge degraded 断言。
+
+### 风险
+
+1. 若后续 `AuditHealthStatus` 被回退为自由文本对象、把 `metrics_bridge_degraded` 提升为 `Unavailable` 触发器，或让 `IAuditHealthProbe` 吸收 `probe/register_probe` 等额外职责，本轮接口冻结需要重新评审。
+
 ## 记录 #082
 
 - 日期：2026-04-03

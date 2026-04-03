@@ -119,6 +119,7 @@ set(DASALL_INFRA_AUDIT_PUBLIC_HEADERS
   include/audit/AuditTypes.h
   include/audit/AuditExporterTypes.h
   include/audit/AuditErrors.h
+  include/audit/IAuditHealthProbe.h
   include/audit/AuditService.h
   include/audit/IAuditLogger.h
 )

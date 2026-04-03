@@ -4,7 +4,9 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
+#include "audit/IAuditHealthProbe.h"
 #include "audit/IAuditLogger.h"
 #include "logging/IAuditLinkAdapter.h"
 #include "dasall/tests/support/TestAssertions.h"
@@ -73,6 +75,19 @@ class NullAuditLogger final : public dasall::infra::audit::IAuditLogger {
         .checksum = std::string("null-audit-export"),
     };
   }
+};
+
+class NullAuditHealthProbe final : public dasall::infra::audit::IAuditHealthProbe {
+ public:
+  explicit NullAuditHealthProbe(dasall::infra::AuditHealthStatus snapshot)
+      : snapshot_(std::move(snapshot)) {}
+
+  [[nodiscard]] dasall::infra::AuditHealthStatus evaluate() const override {
+    return snapshot_;
+  }
+
+ private:
+  dasall::infra::AuditHealthStatus snapshot_;
 };
 
 class NullAuditLinkAdapter final : public dasall::infra::logging::IAuditLinkAdapter {
@@ -193,6 +208,109 @@ void test_audit_logger_interface_rejects_invalid_event_or_context_on_write_path(
               "IAuditLogger write validation failures should stay mapped to existing contracts result codes");
 }
 
+template <typename T>
+concept HasProbeMethod = requires {
+  &T::probe;
+};
+
+template <typename T>
+concept HasRegisterProbeMethod = requires {
+  &T::register_probe;
+};
+
+void test_audit_health_probe_interface_freezes_evaluate_signature() {
+  using dasall::infra::AuditHealthState;
+  using dasall::infra::AuditHealthStatus;
+  using dasall::infra::audit::IAuditHealthProbe;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IAuditHealthProbe::evaluate),
+                               AuditHealthStatus (IAuditHealthProbe::*)() const>);
+  static_assert(std::is_abstract_v<IAuditHealthProbe>);
+
+  NullAuditHealthProbe probe(AuditHealthStatus{
+      .state = AuditHealthState::Ready,
+      .last_failure_reason = std::string(),
+      .detail_ref = std::string("diag://infra/audit/health/ready"),
+      .error_code = std::nullopt,
+      .sampled_at_unix_ms = 1712217600100,
+      .fallback_active = false,
+      .metrics_bridge_degraded = false,
+  });
+
+  const auto snapshot = probe.evaluate();
+  assert_true(std::has_virtual_destructor_v<IAuditHealthProbe>,
+              "IAuditHealthProbe should remain a pure virtual boundary with a virtual destructor");
+  assert_true(snapshot.state == AuditHealthState::Ready && snapshot.has_consistent_state(),
+              "IAuditHealthProbe should expose a read-only AuditHealthStatus snapshot with the frozen Ready semantics");
+}
+
+void test_audit_health_status_accepts_degraded_and_unavailable_snapshots() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::AuditHealthState;
+  using dasall::infra::AuditHealthStatus;
+  using dasall::tests::support::assert_true;
+
+  const AuditHealthStatus degraded_snapshot{
+      .state = AuditHealthState::Degraded,
+      .last_failure_reason = std::string("fallback_active"),
+      .detail_ref = std::string("diag://infra/audit/health/degraded/fallback_active"),
+      .error_code = std::nullopt,
+      .sampled_at_unix_ms = 1712217600200,
+      .fallback_active = true,
+      .metrics_bridge_degraded = false,
+  };
+  const AuditHealthStatus unavailable_snapshot{
+      .state = AuditHealthState::Unavailable,
+      .last_failure_reason = std::string("service_stopped"),
+      .detail_ref = std::string("diag://infra/audit/health/unavailable/service_stopped"),
+      .error_code = ResultCode::RuntimeRetryExhausted,
+      .sampled_at_unix_ms = 1712217600300,
+      .fallback_active = false,
+      .metrics_bridge_degraded = false,
+  };
+
+  assert_true(degraded_snapshot.has_consistent_state(),
+              "AuditHealthStatus should admit a degraded snapshot when fallback remains active and observable");
+  assert_true(unavailable_snapshot.has_consistent_state(),
+              "AuditHealthStatus should admit an unavailable snapshot only when it carries error_code and failure evidence");
+}
+
+void test_audit_health_status_rejects_invalid_ready_and_reason_combinations() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::AuditHealthState;
+  using dasall::infra::AuditHealthStatus;
+  using dasall::infra::audit::IAuditHealthProbe;
+  using dasall::tests::support::assert_true;
+
+  static_assert(!HasProbeMethod<IAuditHealthProbe>);
+  static_assert(!HasRegisterProbeMethod<IAuditHealthProbe>);
+
+  const AuditHealthStatus ready_with_failure_bits{
+      .state = AuditHealthState::Ready,
+      .last_failure_reason = std::string(),
+      .detail_ref = std::string("diag://infra/audit/health/ready"),
+      .error_code = ResultCode::RuntimeRetryExhausted,
+      .sampled_at_unix_ms = 1712217600400,
+      .fallback_active = false,
+      .metrics_bridge_degraded = false,
+  };
+  const AuditHealthStatus degraded_with_unknown_reason{
+      .state = AuditHealthState::Degraded,
+      .last_failure_reason = std::string("freeform_reason"),
+      .detail_ref = std::string("diag://infra/audit/health/degraded/freeform_reason"),
+      .error_code = std::nullopt,
+      .sampled_at_unix_ms = 1712217600500,
+      .fallback_active = false,
+      .metrics_bridge_degraded = false,
+  };
+
+  assert_true(!ready_with_failure_bits.has_consistent_state(),
+              "AuditHealthStatus should reject Ready snapshots that still carry failure bits");
+  assert_true(!degraded_with_unknown_reason.has_consistent_state(),
+              "AuditHealthStatus should reject degraded snapshots that use non-frozen failure reasons");
+}
+
 }  // namespace
 
 int main() {
@@ -200,6 +318,9 @@ int main() {
     test_audit_link_adapter_freezes_placeholder_linking_interface();
     test_audit_logger_interface_freezes_write_and_export_signatures();
     test_audit_logger_interface_rejects_invalid_event_or_context_on_write_path();
+    test_audit_health_probe_interface_freezes_evaluate_signature();
+    test_audit_health_status_accepts_degraded_and_unavailable_snapshots();
+    test_audit_health_status_rejects_invalid_ready_and_reason_combinations();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
