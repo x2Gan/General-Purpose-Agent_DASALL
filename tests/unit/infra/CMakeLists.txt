@@ -373,6 +373,21 @@ dasall_apply_common_options(dasall_logger_interface_unit_test)
 add_test(NAME LoggerInterfaceTest COMMAND dasall_logger_interface_unit_test)
 set_tests_properties(LoggerInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_logging_errors_unit_test
+  LoggingErrorsTest.cpp
+)
+
+target_link_libraries(dasall_logging_errors_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_logging_errors_unit_test)
+
+add_test(NAME LoggingErrorsTest COMMAND dasall_logging_errors_unit_test)
+set_tests_properties(LoggingErrorsTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_logging_facade_unit_test
   logging/LoggingFacadeTest.cpp
   ${CMAKE_SOURCE_DIR}/infra/src/logging/LoggingFacade.cpp

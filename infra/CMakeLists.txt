@@ -34,6 +34,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/diagnostics/IDiagnosticsService.h
   include/logging/IAuditLinkAdapter.h
   include/logging/ILogger.h
+  include/logging/LoggingErrors.h
   include/logging/LogTypes.h
   include/ota/IOTAManager.h
   include/secret/ISecretBackend.h

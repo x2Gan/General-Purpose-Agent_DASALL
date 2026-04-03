@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #061
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-TODO-010 定义 LoggingErrors 错误码域
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-TODO-010-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-TODO-010-LoggingErrors设计收敛.md](docs/todos/infrastructure/deliverables/LOG-TODO-010-LoggingErrors%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 6.6/6.8 中分散的 queue full、sink IO、format invalid、config invalid 收敛为四个冻结 `LOG_E_*` 私有错误码。
+   - 在设计文档中补齐 logging 私有码到 `contracts::ResultCode` 的映射矩阵，解决“与 contracts 映射矩阵未成文”的 context blocker。
+   - 对齐仓库既有模式，明确 010 采用 header-only 子域错误码，不扩张共享 contracts 枚举，也不提前把 logging 错误合并到 `InfraErrorCode`。
+2. 完成 LOG-TODO-010-B 代码落地：
+   - 新增 [infra/include/logging/LoggingErrors.h](infra/include/logging/LoggingErrors.h)
+   - 新增 [tests/unit/infra/LoggingErrorsTest.cpp](tests/unit/infra/LoggingErrorsTest.cpp)
+   - 新增 [tests/contract/smoke/LoggingErrorsBoundaryContractTest.cpp](tests/contract/smoke/LoggingErrorsBoundaryContractTest.cpp)
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)
+   - 更新 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)
+   - 更新 [tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)
+   - 更新 [tests/contract/CMakeLists.txt](tests/contract/CMakeLists.txt)
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_logging_errors_unit_test dasall_contract_logging_errors_boundary_test`
+   - `ctest --test-dir build-ci -N -R "LoggingErrorsTest|LoggingErrorsBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "LoggingErrorsTest|LoggingErrorsBoundaryContractTest"`
+2. 结果：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"` 通过。
+   - `cmake --build build-ci --target dasall_logging_errors_unit_test dasall_contract_logging_errors_boundary_test` 通过。
+   - `ctest --test-dir build-ci -N -R "LoggingErrorsTest|LoggingErrorsBoundaryContractTest"` 通过，发现 2 个测试。
+   - `ctest --test-dir build-ci --output-on-failure -R "LoggingErrorsTest|LoggingErrorsBoundaryContractTest"` 通过，2/2 tests passed。
+
+### 结果
+
+1. logging 组件已具备独立、可追溯的私有错误码域，后续 011 恢复骨架可以直接复用统一的错误语义而不再散落使用通用 contracts 码值。
+2. 四个错误码的名字、数值、来源锚点和一级 contracts 映射已经进入 unit/contract 测试保护面。
+
+### 下一步
+
+1. 按专项 TODO 的串行顺序推进 LOG-TODO-011，把 sink IO/format 异常恢复骨架切到 LoggingErrors 与可注入 failure path 上。
+
+### 风险
+
+1. `LOG_E_CONFIG_INVALID` 当前只冻结到 validation 类别；若 012 后续要求更细粒度配置差异，只能通过 reason 或配置诊断对象扩展，不能直接改写 010 的码名和映射。
+
 ## 记录 #060
 
 - 日期：2026-04-01
