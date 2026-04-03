@@ -8,6 +8,48 @@
 
 ---
 
+## 记录 #084
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-015 AuditMetricsBridge 指标桥接骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-015-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-015-AuditMetricsBridge骨架收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-015-AuditMetricsBridge%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 [infra/src/audit/AuditMetricsBridge.h](infra/src/audit/AuditMetricsBridge.h) 与 [infra/src/audit/AuditMetricsBridge.cpp](infra/src/audit/AuditMetricsBridge.cpp)，冻结 `infra.audit@v1` meter scope、七指标 family、五元标签白名单，以及 provider degraded / config-invalid no-op 回退语义。
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，将 `AuditMetricsBridge.cpp` 纳入 `dasall_infra` 构建图。
+2. 完成现有 integration ground truth 扩展：
+   - 更新 [tests/integration/infra/CMakeLists.txt](tests/integration/infra/CMakeLists.txt)，为现有 audit integration 测试补 `infra/src` include path。
+   - 更新 [tests/integration/infra/InfraAuditHealthIntegrationTest.cpp](tests/integration/infra/InfraAuditHealthIntegrationTest.cpp)，新增 fake `RecordingMetricsProvider` / `RecordingMeter`，把 health probe 改为读取真实 `AuditMetricsBridge::is_degraded()`，并验证 `audit_write_total` 成功发射、fallback 路径、provider timeout -> bridge degraded 与 stopped unavailable 四类场景。
+3. 完成 TODO 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-015` 标记为 Done，并将下一步切换到 `AUD-TODO-018` 的 integration 注册收口。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_infra_audit_health_integration_test`
+   - `ctest --test-dir build-ci -N -R "InfraAuditHealthIntegrationTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "InfraAuditHealthIntegrationTest"`
+2. 结果：
+   - `InfraAuditHealthIntegrationTest` 共发现 1 个定向测试，执行 1/1 通过。
+
+### 结果
+
+1. `AUD-TODO-015` 已从“设计冻结”推进到“internal bridge + 真实 metrics degraded 协同 ground truth”全部落盘。
+2. `AUD-TODO-018` 现在可以只聚焦 integration 子目录、顶层 target 聚合与 `integration;audit` 标签 discoverability 收口，不再承担 bridge 语义落盘。
+
+### 下一步
+
+1. 进入 `AUD-TODO-018`，把现有根级 `InfraAuditHealthIntegrationTest` 收口到 `tests/integration/infra/audit/` 子目录、顶层 integration target 聚合与 `integration;audit` 标签。
+
+### 风险
+
+1. 若后续 audit bridge 回退为动态 metric family、允许高基数标签，或把 bridge degraded 直接升级为 `Unavailable`，本轮 bridge 骨架需要重新评审。
+
 ## 记录 #083
 
 - 日期：2026-04-03
