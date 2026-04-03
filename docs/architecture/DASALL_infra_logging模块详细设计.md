@@ -164,6 +164,7 @@ logging 非职责：
 | RedactionFilter | 敏感字段遮蔽（token/secret/path 等） |
 | LoggingHealthProbe | 暴露健康状态与降级状态给 infra/health |
 | LoggingMetricsBridge | 输出 logging 自身指标给 infra/metrics |
+| LogQueryService | 按 trace_id/session_id 生成受控 diagnostics artifact |
 
 ### 6.3 子组件输入/输出
 
@@ -178,6 +179,7 @@ logging 非职责：
 | RedactionFilter | 原始 message/attrs | 脱敏后记录 | 敏感值不可明文落盘 |
 | LoggingHealthProbe | 写入状态、错误计数 | HealthStatus | 反映 degraded 状态 |
 | LoggingMetricsBridge | 管线统计 | IMetricsProvider/IMeter | 只经由 MetricSample 发射五个 frozen 指标 |
+| LogQueryService | LogQueryRequest + LogQueryAccessContext | diagnostics/local artifact consumer | 只接受 trace/session 精确 selector，并输出本地 artifact_ref |
 
 ### 6.4 子组件依赖关系
 
@@ -185,6 +187,7 @@ logging 非职责：
 - LoggingFacade -> AuditLinkAdapter（通过 IAuditLogger 协同，不承载审计存储）
 - SinkDispatcher -> AsyncQueueController -> sink adapters
 - SinkDispatcher/AsyncQueueController -> LoggingMetricsBridge/LoggingHealthProbe
+- LogQueryService -> 本地已脱敏日志文件/索引 -> diagnostics/export consumer
 
 依赖约束：全部通过 infra 内部接口连接，不直接依赖 runtime/cognition 实现类。
 
@@ -197,6 +200,9 @@ logging 非职责：
 | AuditRef | evidence_ref, trace_id, task_id | 用于日志与审计关联，不定义审计对象本体 | 引用 infra/audit 的 AuditEvent 语义 |
 | SinkRoutePolicy | level->sink map, audit route | Profile 可覆盖 | 不进入 contracts |
 | RedactionPolicy | ruleset_version, pattern_set | 配置可热更新 | 不进入 contracts |
+| LogQueryRequest | query_id, selector_kind, selector_value, start_ts_ms, end_ts_ms, max_records | selector_kind 仅允许 TraceId/SessionId，必须带有序时间窗，禁止自由查询语法 | 只消费 LogContext 已冻结标识语义，不新增 contracts 对象 |
+| LogQueryAccessContext | actor_ref, consumer_module, policy_decision_ref, infra_context | actor/consumer 必须可审计，policy_decision_ref 必须证明 Allow | 复用 InfraContext 与 policy::PolicyDecisionRef，不扩写 contracts |
+| LogQueryResult | artifact_ref, match_count, truncated, checksum, created_at | 只返回本地 artifact 引用与摘要，不直接暴露可变记录集合 | 失败边界只使用 contracts::ResultCode/ErrorInfo |
 
 ### 6.6 核心接口语义定义
 
@@ -212,6 +218,8 @@ logging 非职责：
    - apply(config): 应用四层合并后的配置
 4. IAuditLinkAdapter
    - attach_audit_ref(log_event): 为高风险日志关联 evidence_ref
+5. ILogQueryService
+  - query(request, access_context): 在通过权限证明与配置 gate 后生成本地诊断 artifact
 
 ILogConfigurator 对象冻结补充（v1）：
 
@@ -251,10 +259,12 @@ ILogConfigurator 对象冻结补充（v1）：
 前置条件：
 
 - logger 已 init；配置已加载。
+- `LogQueryService` 额外要求 `infra.logging.export.enable_diag_pull == true`，且 access context 持有来自 Policy Gate 的 allow 决策证明。
 
 后置条件：
 
 - 成功写入或返回可判定失败码，并更新写入指标。
+- `LogQueryService` 成功时必须产出本地 `artifact_ref` 或结构化失败；不得返回未脱敏的原始记录容器。
 
 错误语义：
 
@@ -262,6 +272,12 @@ ILogConfigurator 对象冻结补充（v1）：
 - LOG_E_SINK_IO
 - LOG_E_FORMAT_INVALID
 - LOG_E_CONFIG_INVALID
+
+`LogQueryService` 失败边界冻结补充：
+
+1. query 对象非法：`contracts::ResultCode::ValidationFieldMissing`
+2. policy/config gate 拒绝：`contracts::ResultCode::PolicyDenied`
+3. 本地 artifact 生成失败：`contracts::ResultCode::ToolExecutionFailed`
 
 ### 6.7 主流程时序（正常路径）
 
@@ -349,6 +365,25 @@ key 域冻结规则：
 
 冻结结果：LOG-BLK-003 只需要 logging 侧补齐 descriptor、状态映射和 timeout 语义文档，不需要再等待 health 子域补新的接口对象。
 
+### 6.10.2 LogQueryService 查询与权限边界冻结
+
+`LogQueryService` 的职责限定为“在本地已脱敏日志中，按 `trace_id` 或 `session_id` 生成受控 diagnostics artifact”。它不是通用检索引擎，不提供远程上传、全文搜索、任意 attr 扫描或跨模块二次授权。
+
+| 项目 | 冻结结论 |
+|---|---|
+| 对外接口 | `query(const LogQueryRequest&, const LogQueryAccessContext&) -> LogQueryResult` |
+| 查询对象 | `LogQueryRequest` 必填 `query_id`、`selector_kind`、`selector_value`、`start_ts_ms`、`end_ts_ms`、`max_records`；`selector_kind` 首版仅允许 `TraceId` 或 `SessionId`，且必须二选一 |
+| 输入限制 | 只接受精确 selector + 有序时间窗；禁止 regex、全文检索、任意 attr filter、sort expression、cursor DSL 等自由查询语法 |
+| 授权边界 | logging 不自行判定主体权限；调用方必须提供来自 `ISecurityPolicyManager`/Policy Gate 的 allow 证明，并在 access context 中携带 `actor_ref`、`consumer_module`、`policy_decision_ref` 与 `InfraContext` |
+| 最小允许动作 | 仅接受 `PolicyDecision::Allow`；`RequireConfirmation` 与 `Deny` 均在 logging 边界外拒绝，不在本模块内二次确认或升级 |
+| 配置 gate | 仅当 `infra.logging.export.enable_diag_pull == true` 时允许执行；该键只接受 默认/Profile/部署，runtime override 不可开启 |
+| 返回结果 | `LogQueryResult` 只暴露 `artifact_ref`、`match_count`、`truncated`、`checksum`、`created_at`，失败只通过 `contracts::ResultCode` + `ErrorInfo` 暴露 |
+| 导出约束 | 首版只生成本地 `diag://infra/logging/query/<query_id>` 或等价本地文件引用；不提供远程上传、长连接 streaming、跨文件游标分页或直接返回原始记录容器 |
+| 与 diagnostics 关系 | diagnostics/export 若需远程导出，必须消费 `LogQueryResult.artifact_ref`；remote target allowlist 与导出格式策略继续由 diagnostics 子域持有 |
+| 与 audit 关系 | 只复用日志中已存在的 `evidence_ref`/`audit_*` 关联字段，不开放对 audit 主存储的 join/export API |
+
+冻结结果：LOG-BLK-005 的真实缺口是 query schema、allow 证明和导出限制未写成正式设计，而不是“按 trace/session 诊断拉取”能力本身不成立；后续实现可直接按 `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult` 边界推进。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）
@@ -363,7 +398,7 @@ key 域冻结规则：
 | sink 故障降级 | 新增 fallback + degraded 状态机 | 保证写入失败可恢复 | infra/src/logging/LoggingRecovery.cpp | tests/integration/infra/logging/SinkFailureRecoveryIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R SinkFailureRecoveryIntegrationTest --output-on-failure | 需故障注入桩 |
 | 四层配置覆盖 | 接入 ILogConfigurator + ConfigCenter | 与 infra/config 一致，并由 logging 本地守住 audit 主链与 per-key 层级接受规则 | infra/include/logging/ILogConfigurator.h; infra/src/logging/LoggingConfigAdapter.cpp | tests/unit/infra/logging/LoggingConfigMergeTest.cpp; tests/contract/smoke/LogConfiguratorBoundaryContractTest.cpp | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -R "(LoggingConfigMergeTest|LogConfiguratorBoundaryContractTest)" --output-on-failure | 依赖 infra/config 接口 |
 | 可观测指标桥接 | 新增 LoggingMetricsBridge | 保证 logging 自可观测 | infra/src/logging/LoggingMetricsBridge.cpp | tests/unit/infra/logging/LoggingMetricsBridgeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LoggingMetricsBridgeTest --output-on-failure | 依赖 infra/metrics 接口 |
-| 诊断导出能力 | 新增按 trace/session 拉取接口 | 对齐 9.4 运维要求 | infra/src/logging/LogQueryService.cpp | tests/integration/infra/logging/LogQueryIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R LogQueryIntegrationTest --output-on-failure | 需查询索引策略 |
+| 诊断拉取能力 | 新增受控 LogQueryService 查询骨架 | 对齐 13.3 运维要求，首版只生成本地 artifact | infra/src/logging/LogQueryService.cpp | tests/unit/infra/logging/LogQueryServiceTest.cpp; tests/integration/infra/logging/LogQueryIntegrationTest.cpp | cmake --build build-ci --target dasall_log_query_service_unit_test dasall_log_query_integration_test && ctest --test-dir build-ci -R "(LogQueryServiceTest|LogQueryIntegrationTest)" --output-on-failure | 依赖 LOG-BLK-005 已解阻；远程导出仍由 diagnostics 持有 |
 | 无法映射项：OTel exporter 直连 | 标记为后续版本任务 | 当前阶段先做字段兼容，不引入完整 OTel SDK | N/A | N/A | N/A | 阻塞：OTel SDK 依赖与部署链路尚未冻结 |
 
 ---

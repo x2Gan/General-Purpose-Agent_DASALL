@@ -8,6 +8,44 @@
 
 ---
 
+## 记录 #072
+
+- 日期：2026-04-03
+- 阶段：logging 组件专项 TODO
+- 任务：LOG-BLK-005 LogQueryService 查询模型与权限边界解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 LOG-BLK-005-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md](docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md)，把 blocker 根因收敛为“缺 query schema、allow 证明与本地 artifact 导出限制”，而不是否定 trace/session 诊断拉取能力本身。
+   - 更新 [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging模块详细设计.md)，新增 6.10.2，并补齐 `LogQueryService` 在 6.2/6.3/6.5/6.6 的子组件、对象与接口语义。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md)，将 LOG-BLK-005 标记为已解阻，并新增后续执行任务 `LOG-TODO-019`。
+2. 同步修正专项 TODO 中与 integration/gate 快照相关的过期描述，确保 `LOG-GATE-06`、LOG-BLK-004 与下一步执行建议保持一致。
+
+### 测试
+
+1. 验证命令：
+   - `grep -n "结构化日志抓取和按 trace/session 检索" docs/architecture/DASALL_架构设计文档.md`
+   - `grep -n "IDiagnosticsPolicyGuard\|remote 默认关闭\|导出" docs/architecture/DASALL_infra_diagnostics模块详细设计.md`
+   - `grep -n "LogQueryService\|LogQueryRequest\|LogQueryAccessContext\|diag://infra/logging/query\|LOG-TODO-019" docs/architecture/DASALL_infra_logging模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md`
+2. 结果：
+   - trace/session 诊断拉取的上层架构要求、diagnostics 的 policy/export 边界，以及 logging 侧 query schema/allow proof/local artifact 约束已可双向定位。
+   - `LOG-TODO-019` 已具备明确的代码目标、测试目标与验收命令，不再依赖额外设计 blocker。
+
+### 结果
+
+1. `LogQueryService` 的粒度已从 L1 提升到 L2；后续实现只需围绕本地索引、artifact retention 与 allow/deny 路径落代码。
+2. logging 子域继续保留按 trace/session 的受控诊断拉取能力，同时把 remote export、目标白名单与上传策略留在 diagnostics 子域，避免越权扩张。
+
+### 下一步
+
+1. 进入 `LOG-TODO-019`，实现 `LogQueryService` 的受控查询与本地 artifact 导出骨架。
+
+### 风险
+
+1. 本轮只冻结 `LogQueryService` 边界，尚未实现本地索引与 retention 清理；后续若实现试图直接返回原始记录容器、绕过 Policy Gate allow 证明或自行持有 remote export，应立即回退并重新审查。
+
 ## 记录 #071
 
 - 日期：2026-04-03
