@@ -8,6 +8,40 @@
 
 ---
 
+## 记录 #087
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-BLK-001 AuditExporter 过滤语义解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-BLK-001-D 设计解阻：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-BLK-001-ExportQuery过滤语义设计收敛.md](docs/todos/infrastructure/deliverables/AUD-BLK-001-ExportQuery%E8%BF%87%E6%BB%A4%E8%AF%AD%E4%B9%89%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，把 blocker 根因收敛为“audit 未冻结 ExportQuery 的主过滤轴、target/outcome 扩展规则、稳定 resume token 与导出边界”，并给出直达 `AUD-TODO-012` 的交接约束。
+   - 更新 [docs/architecture/DASALL_infra_audit模块详细设计.md](docs/architecture/DASALL_infra_audit模块详细设计.md)，新增 `6.5.1 ExportQuery 最小过滤与导出边界冻结（AUD-BLK-001）`，补齐窗口+actor+action 主过滤、target/outcome exact-match 扩展、稳定排序/分页与 AuditEvent-only 导出边界。
+2. 完成 blocker 回链：
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-BLK-001` 标记为已解阻，并把 `AUD-TODO-012` 从 Blocked 迁移到 Not Started；同时清理当前态中仍残留的旧 blocker 话术，保证粒度扫描、可行性结论与下一步建议和当前状态一致。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "6\.5\.1 ExportQuery 最小过滤与导出边界冻结|AUD-BLK-001|AUD-TODO-012" docs/architecture/DASALL_infra_audit模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md docs/todos/infrastructure/deliverables/AUD-BLK-001-ExportQuery过滤语义设计收敛.md`
+2. 结果：
+   - ExportQuery 过滤/边界冻结章节、TODO 解阻状态和 blocker 交付件均已可定位追溯，`AUD-TODO-012` 已具备进入实现轮的前置条件。
+
+### 结果
+
+1. `AUD-BLK-001` 已不再阻塞 audit 子域继续推进；下一轮可直接进入 `AUD-TODO-012` 的 exporter 过滤/分页/脱敏骨架落盘。
+
+### 下一步
+
+1. 进入 `AUD-TODO-012`，按已冻结的窗口+actor+action 主过滤、target/outcome 扩展规则与 AuditEvent-only 导出边界落盘 `AuditExporter`。
+
+### 风险
+
+1. 若后续 `ExportQuery` 回退为 pattern/wildcard 查询、让 page token 脱离过滤元组复用，或把 `AuditContext` 直接并入导出结果，本 blocker 需要重新转为 Blocked。
+
 ## 记录 #086
 
 - 日期：2026-04-03

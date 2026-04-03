@@ -193,10 +193,36 @@ AuditService 非职责：
 |---|---|---|---|
 | AuditEvent | event_id, action, actor, target, outcome, evidence_ref, side_effects, timestamp | 必填字段不能为空；outcome 需可判定 | 仅引用 ToolResult/RecoveryOutcome/WorkerTask 标识语义 |
 | AuditContext | request_id, session_id, trace_id, task_id, parent_task_id, lease_id, worker_type | 缺失允许 unknown，不允许 null 指针语义 | 对齐 AgentRequest/WorkerLease 标识，不扩写 |
-| ExportQuery | start_ts, end_ts, actor, action, target, outcome, page_token | 时间窗必填；分页稳定 | 与 contracts 无耦合，infra 私有 |
-| ExportResult | records, next_page_token, truncated, checksum | truncated 必须显式 | 与 contracts 无耦合，infra 私有 |
+| ExportQuery | start_ts, end_ts, actor, action, target, outcome, page_token | 时间窗必填；actor/action 为主过滤轴；target/outcome 只允许缩窄结果集；分页 token 必须稳定 | 与 contracts 无耦合，infra 私有 |
+| ExportResult | records, next_page_token, truncated, checksum | records 只允许承载 AuditEvent；truncated 必须显式 | 与 contracts 无耦合，infra 私有 |
 | AuditWriteOutcome | accepted, persisted, fallback_used, error_code | 二值可判定 | 映射 contracts::ResultCode，不新增共享码域 |
 | AuditHealthStatus | state, last_failure_reason, detail_ref, error_code, sampled_at_unix_ms, fallback_active, metrics_bridge_degraded | state 只允许 Ready/Degraded/Unavailable；非 Ready 必须带最近失败原因 | 仅复用 contracts::ResultCode，不新增共享状态对象 |
+
+### 6.5.1 ExportQuery 最小过滤与导出边界冻结（AUD-BLK-001）
+
+为解掉 `AUD-BLK-001`，冻结 audit v1 的导出过滤、分页与边界语义如下：
+
+1. `ExportQuery` 的基准过滤轴固定为 `start_ts/end_ts/actor/action`：
+  - `start_ts` / `end_ts` 必填，时间窗按闭区间 `[start_ts, end_ts]` 解释。
+  - `actor`、`action` 为空表示“不启用该轴过滤”；非空时只允许 exact-match，并与时间窗采用 AND 组合。
+2. `target` 与 `outcome` 固定为 v1 扩展过滤轴：
+  - 二者都只能在时间窗+actor+action 基础上继续缩窄结果集，不能放宽窗口或绕过主过滤轴。
+  - `target` 只允许 exact-match，不引入 `target_pattern`、wildcard 或 regex。
+  - `outcome` 只允许复用 `AuditOutcome` 既有枚举值，不新增 `outcome_reason` 自由文本过滤。
+3. 导出结果排序与分页语义冻结为：
+  - 匹配记录按 `timestamp ASC, event_id ASC` 稳定排序。
+  - `page_token` 是 exporter 生成的 opaque resume token，必须绑定标准化过滤元组和最后一条已返回记录的位置。
+  - 若过滤元组发生变化，旧 token 不得复用到新查询。
+4. 导出脱敏边界冻结为：
+  - `ExportResult.records` 只允许承载已冻结的 `AuditEvent`，不附带 `AuditContext` 及其中的 `request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type` 等关联锚点。
+  - exporter 不新增 request/response body、prompt/context、secret payload 等扩展字段；任何未来扩展都必须走单独评审。
+  - `target`、`evidence_ref.ref`、`side_effects` 在 v1 仅承接结构化标识或 effect 名称，不得承载 access token、password、session id、原始文件路径或其他高敏感原文。
+5. v1 明确不支持：
+  - `target_pattern`
+  - `outcome_reason`
+  - fuzzy/substring matching
+  - full-text body export
+  - `AuditContext` 作为导出载荷
 
 ### 6.6 核心接口语义定义
 
@@ -433,7 +459,7 @@ tests/
 
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
-| 导出 filter 模型未冻结 | M3 导出与 contract 门禁 | 冻结 ExportQuery 最小字段集合 | 先支持时间窗+actor+action 三键过滤 | 导出功能降级为只读全量（受限环境） |
+| 导出扩展过滤模式（target_pattern/outcome_reason）待定 | 后续导出增强 | v1 最小过滤模型与导出边界已冻结 | 维持时间窗+actor+action 主过滤与 target/outcome 精确匹配 | 超出 v1 的模式过滤需求回退到单独设计评审 |
 | tests/integration 顶层接线不完整 | M4 集成测试 | 顶层 CMake 注册 integration 子目录 | 先执行 unit+contract，integration 标记 Blocked | 回退到 unit/contract gate-only |
 | 审计存储保留策略未冻结 | M3/M4 retention 验证 | 明确保留天数、归档周期、清理策略 | 先固定 retention.days=30 与手动清理 | 暂停自动清理，只做归档标记 |
 | metrics/health 桥接接口细节待定 | M4 协同测试 | 冻结桥接接口签名与标签白名单 | 先用 mock bridge 完成接口测试 | 回退桥接为本地计数，不宣称生产可观测 |
@@ -453,7 +479,7 @@ tests/
 
 ### 12.1 未决问题
 
-1. ExportQuery 是否需要 target_pattern 与 outcome_reason 细粒度过滤。
+1. ExportQuery 的 `target_pattern` 与 `outcome_reason` 细粒度过滤仍保留为 v2 问题；当前 v1 只冻结时间窗+actor+action 主过滤和 target/outcome exact-match 扩展。
 2. 审计记录完整性校验采用 checksum 还是链式 hash（v2 可选）。
 3. edge_minimal 档位的最小保留策略是否允许仅 ringbuffer + 周期上送。
 4. integration 顶层接线何时并入默认 CI。
@@ -465,6 +491,6 @@ tests/
 | AUD-T001 | Not Started | 新增 AuditTypes 头文件并冻结字段 | 6.5 + AUD-C007 | infra/include/audit/AuditTypes.h | AuditTypesTest | ctest --test-dir build-ci -R AuditTypesTest --output-on-failure | 字段齐备且不越权 |
 | AUD-T002 | Not Started | 新增 IAuditLogger 接口骨架 | 6.6 + AUD-C003 | infra/include/audit/IAuditLogger.h | AuditInterfaceCompileTest | ctest --test-dir build-ci -R AuditInterfaceCompileTest --output-on-failure | 接口可编译且职责分离 |
 | AUD-T003 | Not Started | 新增 AuditService 主写与 fallback 骨架 | 6.2/6.8 + AUD-C010 | infra/src/audit/AuditService.cpp | AuditServiceFallbackTest | ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | 主写失败可触发 fallback |
-| AUD-T004 | Blocked | 冻结 ExportQuery 并实现导出过滤 | 6.3 + 11.1 阻塞项 | infra/include/audit/AuditExporterTypes.h, infra/src/audit/AuditExporter.cpp | AuditExportFilterTest | ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 过滤语义评审通过并测试通过 |
+| AUD-T004 | Not Started | 按已冻结 ExportQuery v1 语义实现导出过滤 | 6.3 + 6.5.1 | infra/include/audit/AuditExporterTypes.h, infra/src/audit/AuditExporter.cpp | AuditExportFilterTest | ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | 最小过滤模型落盘并测试通过 |
 | AUD-T005 | Not Started | 补齐审计 contract 边界测试 | 2.1 + 9.1 | tests/contract/infra/AuditBoundaryContractTest.cpp | AuditBoundaryContractTest | ctest --test-dir build-ci -R AuditBoundaryContractTest --output-on-failure | 可阻止 contracts 越权 |
 | AUD-T006 | Blocked | 接入 integration 健康桥接测试 | 9.1 + 11.1 阻塞项 | tests/integration/infra/audit/InfraAuditHealthIntegrationTest.cpp | InfraAuditHealthIntegrationTest | ctest --test-dir build-ci -R InfraAuditHealthIntegrationTest --output-on-failure | integration 接线完成且用例通过 |
