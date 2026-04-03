@@ -8,6 +8,48 @@
 
 ---
 
+## 记录 #075
+
+- 日期：2026-04-03
+- 阶段：audit 组件专项 TODO
+- 任务：AUD-TODO-008 实现 AuditValidator 字段校验骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 AUD-TODO-008-D/B 收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/AUD-TODO-008-AuditValidator骨架收敛.md](docs/todos/infrastructure/deliverables/AUD-TODO-008-AuditValidator%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，补齐本地证据、OWASP/OTel 外部参考、Design->Build 映射与 D Gate 结果。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_audit%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `AUD-TODO-008` 标记为 Done，并追加 12.8 执行记录与验收证据。
+2. 完成 AUD-TODO-008-B validator 骨架落地：
+   - 新增 [infra/src/audit/AuditValidator.h](infra/src/audit/AuditValidator.h) 与 [infra/src/audit/AuditValidator.cpp](infra/src/audit/AuditValidator.cpp)，定义 internal `AuditValidationResult` 与 `AuditValidator`，统一收敛 write/export 输入校验。
+   - 更新 [infra/src/audit/AuditService.cpp](infra/src/audit/AuditService.cpp)，将 `write_audit()` / `export_audit()` 的输入校验改为委托 validator。
+   - 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)，最小接入 `AuditValidator.cpp` 到 `dasall_infra` 构建图。
+   - 更新 [tests/unit/infra/AuditTypesTest.cpp](tests/unit/infra/AuditTypesTest.cpp) 与 [tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)，为既有 `AuditTypesTest` 增补 validator 正负例，并给该 test target 增加 `infra/src` include path。
+
+### 测试
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_audit_event_unit_test dasall_contract_audit_event_boundary_test dasall_audit_service_fallback_unit_test`
+   - `ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest"`
+   - `ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest|AuditServiceFallbackTest" --output-on-failure`
+2. 结果：
+   - `AuditTypesTest` 与 `AuditBoundaryContractTest` 定向发现 2 个，3 个相关测试执行 3/3 通过。
+   - `AuditServiceFallbackTest` 回归通过，说明 validator 下沉后未破坏现有 service 主写/fallback 语义。
+
+### 结果
+
+1. `AuditValidator` 已从“设计存在但实现缺失”推进到“internal validator + 统一校验结果 + service 接线 + 正负例验证已落盘”。
+2. 本轮没有引入新的 public audit contract，也没有提前落地 pipeline/fallback/facade 后续职责；audit 主链依旧保持 008 -> 009 -> 010 -> 011 的串行推进顺序。
+
+### 下一步
+
+1. 进入 `AUD-TODO-009`，把 append-only 主写逻辑从 `AuditService` 拆分到独立 `AuditPipeline`。
+
+### 风险
+
+1. 本轮只完成 validator 骨架和最小 CMake 接线；`AUD-TODO-016` 的完整 audit 源码接线收敛仍未关闭，后续继续新增 audit internal 源文件时需要保持 source graph 与 discoverability 一致。
+
 ## 记录 #074
 
 - 日期：2026-04-03

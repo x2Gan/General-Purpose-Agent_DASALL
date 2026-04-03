@@ -5,11 +5,41 @@
 #include <string>
 #include <type_traits>
 
+#include "audit/AuditExporterTypes.h"
 #include "audit/AuditTypes.h"
+#include "audit/AuditValidator.h"
 #include "logging/LogTypes.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
+
+dasall::infra::AuditEvent make_valid_audit_event() {
+    return dasall::infra::AuditEvent{
+            .event_id = std::string("audit-event-validator-001"),
+            .action = std::string("tool.execute"),
+            .actor = std::string("runtime"),
+            .target = std::string("shell_tool"),
+            .outcome = dasall::infra::AuditOutcome::Succeeded,
+            .evidence_ref = {
+                    .kind = dasall::infra::AuditEvidenceKind::ToolResult,
+                    .ref = std::string("tool-call-validator-001"),
+            },
+            .side_effects = {"wrote_file"},
+            .timestamp = 1711785600400,
+    };
+}
+
+dasall::infra::AuditContext make_valid_audit_context() {
+    return dasall::infra::AuditContext{
+            .request_id = std::string("req-validator-001"),
+            .session_id = std::string("session-validator-001"),
+            .trace_id = std::string("trace-validator-001"),
+            .task_id = std::string("task-validator-001"),
+            .parent_task_id = std::string("parent-validator-001"),
+            .lease_id = std::string("lease-validator-001"),
+            .worker_type = std::string("tool-worker"),
+    };
+}
 
 void test_audit_event_accepts_required_fields_and_contract_evidence_ref() {
   using dasall::infra::AuditEvidenceKind;
@@ -249,6 +279,76 @@ void test_audit_write_outcome_rejects_inconsistent_combinations() {
               "persisted outcomes must not also carry an error code");
 }
 
+void test_audit_validator_accepts_well_formed_write_and_export_inputs() {
+  using dasall::infra::ExportQuery;
+  using dasall::infra::audit::AuditValidator;
+  using dasall::tests::support::assert_true;
+
+  const AuditValidator validator;
+  const auto write_validation =
+      validator.validate_write_input(make_valid_audit_event(), make_valid_audit_context());
+  assert_true(write_validation.ok,
+              "audit validator should admit well-formed audit event/context pairs");
+
+  const auto export_validation = validator.validate_export_query(ExportQuery{
+      .start_ts = 1711785600000,
+      .end_ts = 1711785600900,
+      .actor = std::string("runtime"),
+      .action = std::string("tool.execute"),
+      .target = std::string("shell_tool"),
+      .outcome = dasall::infra::AuditOutcome::Succeeded,
+      .page_token = std::string(),
+  });
+  assert_true(export_validation.ok,
+              "audit validator should admit ordered export time windows");
+}
+
+void test_audit_validator_rejects_missing_fields_and_boundary_drift() {
+  using dasall::infra::audit::AuditErrorCode;
+  using dasall::infra::audit::AuditValidator;
+  using dasall::tests::support::assert_true;
+
+  const AuditValidator validator;
+
+  auto missing_field_event = make_valid_audit_event();
+  missing_field_event.event_id.clear();
+  const auto missing_field_validation =
+      validator.validate_write_input(missing_field_event, make_valid_audit_context());
+  assert_true(!missing_field_validation.ok &&
+                  missing_field_validation.error_code == AuditErrorCode::InvalidEvent,
+              "audit validator should reject events that miss required fields");
+
+  auto boundary_drift_event = make_valid_audit_event();
+  boundary_drift_event.evidence_ref = {};
+  const auto boundary_drift_validation =
+      validator.validate_write_input(boundary_drift_event, make_valid_audit_context());
+  assert_true(!boundary_drift_validation.ok &&
+                  boundary_drift_validation.error_code == AuditErrorCode::InvalidEvent,
+              "audit validator should reject audit events that fall outside the frozen contract evidence boundary");
+}
+
+void test_audit_validator_rejects_invalid_export_time_windows() {
+  using dasall::infra::ExportQuery;
+  using dasall::infra::audit::AuditErrorCode;
+  using dasall::infra::audit::AuditValidator;
+  using dasall::tests::support::assert_true;
+
+  const AuditValidator validator;
+  const auto invalid_window_validation = validator.validate_export_query(ExportQuery{
+      .start_ts = 1711785600900,
+      .end_ts = 1711785600000,
+      .actor = std::string(),
+      .action = std::string(),
+      .target = std::string(),
+      .outcome = dasall::infra::AuditOutcome::Unspecified,
+      .page_token = std::string(),
+  });
+
+  assert_true(!invalid_window_validation.ok &&
+                  invalid_window_validation.error_code == AuditErrorCode::InvalidEvent,
+              "audit validator should reject export queries whose end timestamp precedes the start timestamp");
+}
+
 void test_logging_audit_aliases_preserve_required_fields_and_multi_agent_context() {
   using LoggingAuditContext = dasall::infra::logging::AuditContext;
   using LoggingAuditEvent = dasall::infra::logging::AuditEvent;
@@ -302,6 +402,9 @@ int main() {
         test_audit_write_outcome_accepts_primary_and_fallback_success_paths();
         test_audit_write_outcome_accepts_observable_failure_mapping();
         test_audit_write_outcome_rejects_inconsistent_combinations();
+                test_audit_validator_accepts_well_formed_write_and_export_inputs();
+                test_audit_validator_rejects_missing_fields_and_boundary_drift();
+                test_audit_validator_rejects_invalid_export_time_windows();
         test_logging_audit_aliases_preserve_required_fields_and_multi_agent_context();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

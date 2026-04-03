@@ -1,5 +1,6 @@
 #include "audit/AuditService.h"
 #include "audit/AuditErrors.h"
+#include "AuditValidator.h"
 
 #include <optional>
 #include <string>
@@ -11,6 +12,11 @@ namespace dasall::infra::audit {
 namespace {
 
 constexpr std::string_view kAuditServiceSourceRef = "AuditService";
+
+const AuditValidator& audit_validator() {
+  static const AuditValidator validator;
+  return validator;
+}
 
 AuditWriteOutcome make_audit_write_failure(AuditErrorCode error_code,
                                            bool accepted = false,
@@ -78,9 +84,9 @@ AuditWriteOutcome AuditService::write_audit(const AuditEvent& event,
     return make_audit_write_failure(AuditErrorCode::WriteFail);
   }
 
-  if (!event.has_required_fields() || !event.side_effects_are_serializable() ||
-      !event.references_contract_outcome() || !context.has_non_empty_fields()) {
-    return make_audit_write_failure(AuditErrorCode::InvalidEvent);
+  const auto validation_result = audit_validator().validate_write_input(event, context);
+  if (!validation_result.ok) {
+    return make_audit_write_failure(validation_result.error_code);
   }
 
   if (primary_records_.size() < config_.primary_capacity) {
@@ -114,7 +120,8 @@ ExportResult AuditService::export_audit(const ExportQuery& query) {
     return ExportResult{};
   }
 
-  if (!query.has_ordered_window()) {
+  const auto validation_result = audit_validator().validate_export_query(query);
+  if (!validation_result.ok) {
     return ExportResult{};
   }
 

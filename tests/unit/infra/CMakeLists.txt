@@ -32,6 +32,11 @@ add_executable(dasall_audit_event_unit_test
   AuditTypesTest.cpp
 )
 
+target_include_directories(dasall_audit_event_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 target_link_libraries(dasall_audit_event_unit_test
   PRIVATE
     dasall_test_support

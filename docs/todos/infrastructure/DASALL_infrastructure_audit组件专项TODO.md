@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 audit 组件专项 TODO
 
-最近更新时间：2026-03-30  
+最近更新时间：2026-04-03  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/audit
 
@@ -179,7 +179,7 @@
 | AUD-TODO-005 | Done | 定义 ExportResult 数据结构 | audit 设计 6.5 | 6.5 ExportResult | L3 | infra/include/audit/AuditExporterTypes.h | ExportResult | unit：AuditExportFilterTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditExportFilterTest --output-on-failure | AUD-TODO-004 | 无 | 无 | AuditExporterTypes.h、导出测试 | 仅当 records/next_page_token/truncated/checksum 字段齐备，且 truncated 显式语义可测试时完成 |
 | AUD-TODO-006 | Done | 定义 IAuditLogger 接口头文件 | audit 设计 6.6；编码规范 3.7 | 6.6 IAuditLogger | L3 | infra/include/audit/IAuditLogger.h | IAuditLogger::write_audit；IAuditLogger::export_audit | unit：AuditInterfaceCompileTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditInterfaceCompileTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-003、AUD-TODO-004、AUD-TODO-005 | 无 | 无 | IAuditLogger.h、编译测试 | 仅当接口签名与 6.6 一致、职责只覆盖写入与导出，且不暴露 sink/线程池等实现细节时完成 |
 | AUD-TODO-007 | Done | 定义 AuditErrors 错误码域 | audit 设计 6.6/6.8；编码规范 3.6 | 6.6 错误语义；6.8 异常恢复 | L3 | infra/include/audit/AuditErrors.h | INF_E_AUDIT_INVALID_EVENT、INF_E_AUDIT_WRITE_FAIL、INF_E_AUDIT_FALLBACK_FAIL、INF_E_AUDIT_EXPORT_DENIED、INF_E_AUDIT_EXPORT_FAIL、INF_E_AUDIT_RETENTION_FAIL | contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R InfraErrorCodeMappingContractTest --output-on-failure | AUD-TODO-003 | 无 | 无 | AuditErrors.h、映射测试 | 仅当 6 个错误码均可追溯到设计条目，且 contract 测试能阻止漂移时完成 |
-| AUD-TODO-008 | Not Started | 实现 AuditValidator 字段校验骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditValidator；6.3 输入输出；6.8 输入异常 | L2 | infra/src/audit/AuditValidator.cpp | AuditValidator（字段完整性与边界校验） | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-007 | 无 | 无 | AuditValidator.cpp、校验证据 | 仅当必填字段缺失、越权字段、非法时间窗三类输入异常都能返回可判定失败时完成 |
+| AUD-TODO-008 | Done | 实现 AuditValidator 字段校验骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditValidator；6.3 输入输出；6.8 输入异常 | L2 | infra/src/audit/AuditValidator.cpp | AuditValidator（字段完整性与边界校验） | unit：AuditTypesTest；contract：AuditBoundaryContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest" --output-on-failure | AUD-TODO-001、AUD-TODO-002、AUD-TODO-007 | 无 | 无 | AuditValidator.cpp、校验证据 | 仅当必填字段缺失、越权字段、非法时间窗三类输入异常都能返回可判定失败时完成 |
 | AUD-TODO-009 | Not Started | 实现 AuditPipeline 主写骨架 | audit 设计 6.2/6.3/6.7/6.8 | 6.2 AuditPipeline；6.7 正常路径第 3 步；6.8 主写失败 | L2 | infra/src/audit/AuditPipeline.cpp | AuditPipeline（append-only 主写链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-008 | 无 | 无 | AuditPipeline.cpp、主写测试 | 仅当验证通过事件能进入 append-only 主写路径，且主写失败可被上层捕获时完成 |
 | AUD-TODO-010 | Not Started | 实现 AuditFallbackPipeline 降级骨架 | audit 设计 6.2/6.3/6.8 | 6.2 AuditFallbackPipeline；6.8 恢复动作 1/2 | L2 | infra/src/audit/AuditFallbackPipeline.cpp | AuditFallbackPipeline（ringbuffer/file 降级链路） | unit：AuditServiceFallbackTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R AuditServiceFallbackTest --output-on-failure | AUD-TODO-007、AUD-TODO-009 | 无 | 无 | AuditFallbackPipeline.cpp、降级测试 | 仅当主写失败可触发 fallback_used=true，且 fallback 失败返回 INF_E_AUDIT_FALLBACK_FAIL 时完成 |
 | AUD-TODO-011 | Not Started | 实现 AuditServiceFacade 入口骨架 | audit 设计 6.2/6.3/6.4/6.7 | 6.2 AuditServiceFacade；6.4 依赖关系；6.7 主流程 | L2 | infra/src/audit/AuditService.cpp | AuditServiceFacade（审计入口、生命周期管理、统一错误映射） | unit：AuditServiceFallbackTest；contract：InfraErrorCodeMappingContractTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "AuditServiceFallbackTest|InfraErrorCodeMappingContractTest" --output-on-failure | AUD-TODO-008、AUD-TODO-009、AUD-TODO-010 | 无 | 无 | AuditService.cpp、主链路测试 | 仅当 write_audit 主链路可串起 validator/pipeline/fallback，且返回结果可二值判定时完成 |
@@ -614,3 +614,49 @@ Build 合规复核：
 3. 测试发现性：沿用已收敛的 InfraErrorCodeMappingContractTest 名称，无需新增测试注册即可稳定命中。
 4. TODO 证据回写：已完成任务状态、交付物和验收结果回写。
 5. 提交隔离：本轮只冻结 audit 私有码域及直接映射使用点，不提前推进 AuditValidator、AuditPipeline 或 retention/export 细节实现。
+
+### 12.8 AUD-TODO-008
+
+选中任务：
+
+1. 任务 ID：AUD-TODO-008。
+2. 可执行性依据：AUD-TODO-001、002、007 已完成，`AuditEvent` / `AuditContext` / `AuditErrors` 边界已冻结；当前仓库尚无 `AuditValidator` 实体，不存在额外 blocker。
+
+研究学习：
+
+1. 本地证据：audit 设计 6.2/6.3/6.7/6.8 要求 `AuditValidator` 只负责字段完整性、边界语义和输入拒绝，不承担主写、fallback、恢复裁定或导出执行。
+2. 外部参考：OWASP Logging Cheat Sheet 要求输入校验失败保持显式、可观测且不能被静默吞掉；OpenTelemetry Logs Data Model 强调稳定高频字段应保持类型化顶层字段，而不是退回为模糊文本，这支持 validator 直接消费冻结的 `AuditEvent` / `AuditContext` / `ExportQuery`。
+
+D 结论：
+
+1. Design -> Build 映射：新增 internal `infra/src/audit/AuditValidator.h/.cpp`，用统一 `AuditValidationResult` 收敛 write/export 输入校验，并让 `AuditService` 只消费 validator 结果，不再复制字段判断。
+2. Build 三件套：
+	- 代码目标：落盘 `AuditValidator` internal header/source，把 `AuditService::write_audit()` / `export_audit()` 改为委托 validator，并最小接线 `infra/CMakeLists.txt`。
+	- 测试目标：扩展 `AuditTypesTest` 覆盖 validator 正例、缺字段负例、边界漂移负例与非法时间窗负例；保持 `AuditBoundaryContractTest` 与 `AuditServiceFallbackTest` 回归通过。
+	- 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_audit_event_unit_test dasall_contract_audit_event_boundary_test dasall_audit_service_fallback_unit_test && ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest" && ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest|AuditServiceFallbackTest" --output-on-failure`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. `infra/src/audit/AuditValidator.h`、`infra/src/audit/AuditValidator.cpp`：新增 internal `AuditValidationResult` 与 `AuditValidator`，覆盖 write 输入和 export query 两条校验入口。
+2. `infra/src/audit/AuditService.cpp`：移除内联字段判断，改为委托 validator，保持 `AuditService` 只消费统一校验结果。
+3. `infra/CMakeLists.txt`：最小新增 `AuditValidator.cpp` 到 `dasall_infra` 构建图，支撑本轮真实编译验证。
+4. `tests/unit/infra/AuditTypesTest.cpp`、`tests/unit/infra/CMakeLists.txt`：为既有 `AuditTypesTest` 增补 validator 正负例，并给该 target 添加 `infra/src` include path。
+5. `docs/todos/infrastructure/deliverables/AUD-TODO-008-AuditValidator骨架收敛.md`：补齐 D/B 收敛、外部参考、Design -> Build 映射与验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。由于当前 `build-ci` 已锁定为 Unix Makefiles，本轮沿用现有生成器执行验证。
+2. `cmake --build build-ci --target dasall_infra dasall_audit_event_unit_test dasall_contract_audit_event_boundary_test dasall_audit_service_fallback_unit_test`：通过。
+3. `ctest --test-dir build-ci -N -R "AuditTypesTest|AuditBoundaryContractTest"`：通过，发现 2 个定向测试。
+4. `ctest --test-dir build-ci -R "AuditTypesTest|AuditBoundaryContractTest|AuditServiceFallbackTest" --output-on-failure`：通过，3/3 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮内部类型与方法命名已能直接表达校验职责，无需新增注释噪音。
+2. 正负例覆盖：`AuditTypesTest` 新增 validator 正例、缺字段负例、边界漂移负例和非法时间窗负例；`AuditServiceFallbackTest` 作为 service 回归补充。
+3. 测试发现性：`AuditTypesTest` 与 `AuditBoundaryContractTest` 已通过 `ctest -N -R` 命中，未引入新的 discoverability 缺口。
+4. TODO 证据回写：已完成 008 状态、交付物、验收结果与执行记录回写。
+5. 提交隔离：本轮只推进 validator 校验骨架及其最小测试/CMake 支撑，不提前实现 `AuditPipeline`、`AuditFallbackPipeline` 或 `AuditServiceFacade`。
