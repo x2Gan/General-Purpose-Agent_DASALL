@@ -173,8 +173,8 @@
 | SEC-TODO-013 | Completed | 实现 SecretHealthProbe 健康出口骨架 | secret 设计 6.2/6.10 | 6.10 健康指标与 degraded | L2 | infra/src/secret/SecretHealthProbe.cpp | sample_secret_health | unit：backend down、rotation backlog、cache stale 三路径 | ctest --test-dir build-ci -L unit | SEC-TODO-002、SEC-TODO-009、SEC-TODO-010 | 无 | 无 | 健康探针骨架、单测、交付件 | 仅当三类风险均可映射到健康状态并可重复验证时完成 |
 | SEC-TODO-014 | Completed | 接线 infra/secret 到 CMake | secret 设计 8.1；代码现状 | 8.1 落盘建议 | L2 | infra/CMakeLists.txt、infra/include/secret/、infra/src/secret/ | 注册 secret 源文件与头文件入口 | build：dasall_infra 编译通过 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra | SEC-TODO-001~SEC-TODO-013 | 无 | 无 | CMake 改动、构建记录、交付件 | 仅当 placeholder 不再是唯一功能入口且 secret 文件入图时完成 |
 | SEC-TODO-015 | Completed | 注册 secret unit 与 contract 测试入口 | secret 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/secret/、tests/contract/CMakeLists.txt | unit：类型、接口、访问、lease、轮换、审计、健康；contract：边界与错误映射 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | SEC-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录、交付件 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
-| SEC-TODO-016 | Not Started | 注册 secret integration 与故障注入入口 | secret 设计 8.1/9.1；tests 现状 | integration 建议目录与用例 | L0 | tests/CMakeLists.txt、tests/integration/infra/secret/ | integration：SecretRotationWorkflowTest、SecretFailureInjectionTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -L integration | SEC-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 SEC-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并执行时完成 |
-| SEC-TODO-017 | Not Started | 回写 secret 质量门与交付证据 | secret 设计 9.2/11 | Gate 与风险回退章节 | L2 | docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | SEC-TODO-015 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有通过/失败结论和命令证据时完成 |
+| SEC-TODO-016 | Completed | 注册 secret integration 与故障注入入口 | secret 设计 8.1/9.1；tests 现状 | integration 建议目录与用例 | L0 | tests/CMakeLists.txt、tests/integration/infra/secret/ | integration：SecretRotationWorkflowTest、SecretFailureInjectionTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -L integration | SEC-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无 | CMake 改动、integration tests、交付件 | 仅当 integration 用例可发现并执行时完成 |
+| SEC-TODO-017 | Not Started | 回写 secret 质量门与交付证据 | secret 设计 9.2/11 | Gate 与风险回退章节 | L2 | docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md | process test：unit/contract/integration 门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration | SEC-TODO-016 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁项都有 unit/contract/integration 通过/失败结论和命令证据时完成 |
 
 ## 7. 执行顺序建议
 
@@ -186,7 +186,7 @@
 | B backend 与访问链骨架 | SEC-TODO-006~009 | 串行 | backend -> facade -> lease |
 | C 轮换、审计、健康 | SEC-TODO-010、SEC-TODO-012、SEC-TODO-013 | 串行为主，12/13 可局部并行 | 先轮换再桥接更稳妥 |
 | D 构建与测试接线 | SEC-TODO-014、SEC-TODO-015 | 可并行 | CMake 接线与测试注册同步推进 |
-| E 集成与证据收口 | SEC-TODO-016、SEC-TODO-017 | 串行（016 当前 Blocked） | 先解阻 integration，再做最终证据回写 |
+| E 集成与证据收口 | SEC-TODO-016、SEC-TODO-017 | 串行 | 016 已完成 integration 入口落盘，下一步做最终证据回写 |
 
 ### 7.2 必过门禁表
 
@@ -221,12 +221,13 @@
 | 构建 infra | cmake --build build-ci --target dasall_infra |
 | 执行 unit 套件 | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit |
 | 执行 contract 套件 | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract |
+| 执行 integration 套件 | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration |
 | 检查测试发现性 | ctest --test-dir build-ci -N |
 | 点测 secret（若已注册） | ctest --test-dir build-ci -R "SecretInterfaceCompileTest|SecretTypeBoundaryTest|SecretBackendAdapterTest|SecretLeaseLifecycleTest|SecretRotationCoordinatorTest|SecretAuditBridgeTest|SecretHealthProbeTest" |
 
 说明：
 
-1. integration 命令当前不纳入首轮 Gate，原因是 SEC-TODO-016 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
+1. integration discoverability 已于 2026-04-04 由 SEC-TODO-016 落盘；最终是否纳入 secret gate 汇总结论，由 SEC-TODO-017 统一回写。
 2. 每项任务至少需要 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答
@@ -258,6 +259,7 @@
 | SEC-TODO-013 | 2026-04-04 | infra/src/secret/SecretHealthProbe.h；infra/src/secret/SecretHealthProbe.cpp；tests/unit/infra/secret/SecretHealthProbeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-013-SecretHealthProbe健康出口收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_health_probe_unit_test` 通过；`ctest --test-dir build-ci -N -R SecretHealthProbeTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R SecretHealthProbeTest` 通过（1/1） |
 | SEC-TODO-014 | 2026-04-04 | infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-014-CMake收口基线确认.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra` 通过 |
 | SEC-TODO-015 | 2026-04-04 | tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-015-Secret测试入口注册收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests` 通过；`ctest --test-dir build-ci --output-on-failure -L unit` 通过（119/119）；`ctest --test-dir build-ci --output-on-failure -L contract` 通过（133/133） |
+| SEC-TODO-016 | 2026-04-04 | tests/integration/CMakeLists.txt；tests/integration/infra/CMakeLists.txt；tests/integration/infra/secret/CMakeLists.txt；tests/integration/infra/secret/SecretRotationWorkflowTest.cpp；tests/integration/infra/secret/SecretFailureInjectionTest.cpp；docs/todos/infrastructure/deliverables/SEC-TODO-016-Secret集成与故障注入入口收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_integration_tests` 通过；`ctest --test-dir build-ci -N` 发现 `SecretRotationWorkflowTest` 与 `SecretFailureInjectionTest`；`ctest --test-dir build-ci --output-on-failure -L integration` 通过（13/13，`secret` 标签 2 个测试） |
 
 ## 10. 风险与回退策略
 
@@ -272,17 +274,17 @@
 
 ## 11. 可行性结论
 
-1. 结论：可直接生成并执行接口/数据结构级专项 TODO，并可局部进入函数骨架级；当前不建议推进 KMS 真实接入与 integration 全量验收。
+1. 结论：可继续推进到文档/证据级 gate 回写；当前不建议推进 KMS 真实接入与 integration 全量业务覆盖。
 2. 原因：
    - 已具备核心接口清单、对象字段和错误语义。
-   - 已具备主流程/异常流程与配置项策略。
+   - 已具备主流程/异常流程、配置项策略与最小 integration 用例入口。
    - 已具备落盘目录、测试矩阵与 Design -> Build 映射。
-   - KMS 身份策略与 secret integration 用例落盘仍存在关键缺口。
+   - KMS 身份策略与最终 gate 证据回写仍存在关键缺口。
 3. 当前最小可执行粒度：接口 / 数据结构（L2），局部函数骨架（L3）。
-4. 未达到全量函数级的缺口：KMS 真实接入策略、integration 顶层注册。
+4. 未达到全量函数级的缺口：KMS 真实接入策略、integration 全量业务覆盖。
 5. 下一步建议：
-   - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 继续按顺序处理 SEC-TODO-016；其中访问链、lease 生命周期、轮换骨架、审计桥、健康探针、CMake 收口和 unit/contract 测试入口已完成，下一缺口转到 integration 与 failure injection 用例落盘。
+   - 先执行 SEC-TODO-001~016 完成接口/对象/主链/门禁与最小 integration 骨架。
+   - 继续按顺序处理 SEC-TODO-017；其中访问链、lease 生命周期、轮换骨架、审计桥、健康探针、CMake 收口、unit/contract 测试入口，以及 integration 与 failure injection 用例已完成，下一缺口转到质量门与交付证据回写。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
 
 ## 12. 本轮执行记录（2026-04-03 ~ 2026-04-04）
@@ -827,3 +829,50 @@ Build 合规复核：
 3. 测试发现性：已通过 top-level aggregated targets 和 `ctest -L unit/contract` 双重验证。
 4. TODO 证据回写：已完成状态、交付物和验收结果回写。
 5. 提交隔离：本轮只处理 secret 测试入口收口，不提前进入 integration/failure injection 或最终 gate 回写。
+
+### 12.13 SEC-TODO-016
+
+选中任务：
+
+1. 任务 ID：SEC-TODO-016。
+2. 可执行性依据：SEC-TODO-015 已把 secret 的 unit/contract 测试入口与标签收口完成；当前缺口只剩 integration 侧缺少 secret 子目录、目标注册和 failure injection 用例，因此 016 可以独立完成并提交。
+
+研究学习：
+
+1. 本地证据：`tests/integration/CMakeLists.txt` 已提供 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS` 聚合列表，说明 016 的关键是把 secret integration targets 接入现有 top-level matrix，而不是新建 gate。
+2. 本地证据：`tests/integration/infra/CMakeLists.txt` 当前只有 audit、config、logging 子目录，secret 组件此前在 integration 子树中完全缺位。
+3. 可落地启发：基于 `MockSecretBackend`、`SecretManagerFacade` 与 `SecretAuditBridge` 已有 skeleton，可以用 `SecretRotationWorkflowTest` 和 `SecretFailureInjectionTest` 收敛最小主链与 failure injection 入口。
+
+D 结论：
+
+1. Design -> Build 映射：新增 `tests/integration/infra/secret/` 子目录和 `dasall_register_secret_integration_test(...)` helper；新增 `SecretRotationWorkflowTest.cpp` 与 `SecretFailureInjectionTest.cpp`；更新 `tests/integration/infra/CMakeLists.txt` 与 `tests/integration/CMakeLists.txt` 接入顶层聚合。
+2. Build 三件套：
+   - 代码目标：新增 `tests/integration/infra/secret/CMakeLists.txt`、`tests/integration/infra/secret/SecretRotationWorkflowTest.cpp`、`tests/integration/infra/secret/SecretFailureInjectionTest.cpp`，并更新 `tests/integration/infra/CMakeLists.txt`、`tests/integration/CMakeLists.txt`。
+   - 测试目标：验证 `ctest -N` 可发现 `SecretRotationWorkflowTest` 与 `SecretFailureInjectionTest`，并执行 `ctest -L integration` 确认 secret 已纳入聚合集成矩阵。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L integration`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. tests/integration/infra/secret/CMakeLists.txt：新增 secret integration helper，统一 executable 注册与 `integration;secret` 标签。
+2. tests/integration/infra/secret/SecretRotationWorkflowTest.cpp：新增 dual-slot rotation workflow 集成用例，验证旧 handle stale 与 `v4` 重新获取。
+3. tests/integration/infra/secret/SecretFailureInjectionTest.cpp：新增 backend unavailable 与 audit sink failure 的 failure injection 集成用例。
+4. tests/integration/infra/CMakeLists.txt、tests/integration/CMakeLists.txt：接入 secret 子目录与 top-level aggregated targets。
+5. docs/todos/infrastructure/deliverables/SEC-TODO-016-Secret集成与故障注入入口收敛.md：补齐本轮 integration 入口收敛结论与验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_integration_tests`：通过。
+3. `ctest --test-dir build-ci -N`：通过；发现 `SecretRotationWorkflowTest` 与 `SecretFailureInjectionTest`。
+4. `ctest --test-dir build-ci --output-on-failure -L integration`：通过，13/13 tests passed，`secret` 标签下 2 个测试。
+
+Build 合规复核：
+
+1. 代码注释：本轮新增 helper 与 integration tests 的命名已足够表达意图，无需额外注释扩张。
+2. 正负例覆盖：已覆盖 dual-slot rotation 主链、backend unavailable 与 audit sink failure 三类集成路径。
+3. 测试发现性：已通过 `ctest -N` 与 `ctest -L integration` 双重验证 secret integration discoverability。
+4. TODO 证据回写：已完成状态、交付物和验收结果回写。
+5. 提交隔离：本轮只处理 secret integration/failure injection 入口收口，不提前进入最终 gate 回写。
