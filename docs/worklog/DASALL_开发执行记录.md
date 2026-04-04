@@ -8,6 +8,42 @@
 
 ---
 
+## 记录 #101
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-014 infra/secret CMake 收口
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-014-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-014-CMake收口基线确认.md，补齐本地证据、CMake 收口策略和验收结果。
+   - 更新 infra/CMakeLists.txt，新增 `DASALL_INFRA_SECRET_PUBLIC_HEADERS` 与 `DASALL_INFRA_SECRET_PRIVATE_HEADERS`，并把 private headers 纳入 `target_sources(dasall_infra ...)`。
+2. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-014 标记为 Completed，并把下一入口切换到 SEC-TODO-015。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra`
+2. 结果：
+   - configure/build 通过；secret public/private header 与 source 的集中入图未影响 `dasall_infra` 构建。
+
+### 结果
+
+1. SEC-TODO-014 已把 infra/secret 从“逐任务增量接入”推进到“集中声明、整树入图”的 CMake 基线。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-015，随后可进入 unit/contract 测试入口的集中注册与矩阵收口。
+
+### 下一步
+
+1. 执行 SEC-TODO-015，收口 secret unit 与 contract 测试入口、矩阵标签和聚合构建基线。
+
+### 风险
+
+1. 若后续 `infra/CMakeLists.txt` 再次把 secret 头/源拆回零散声明，或遗漏新增长的 secret 子树文件，本轮 CMake 收口结论需要重新评审。
+
 ## 记录 #100
 
 - 日期：2026-04-04

@@ -45,6 +45,26 @@ set(DASALL_INFRA_SECRET_SOURCES
   src/secret/backends/FileSecretBackend.cpp
 )
 
+set(DASALL_INFRA_SECRET_PUBLIC_HEADERS
+  include/secret/ISecretBackend.h
+  include/secret/ISecretManager.h
+  include/secret/ISecretHealthSource.h
+  include/secret/SecureBuffer.h
+  include/secret/SecretErrors.h
+  include/secret/SecretTypes.h
+)
+
+set(DASALL_INFRA_SECRET_PRIVATE_HEADERS
+  src/secret/SecretAuditBridge.h
+  src/secret/SecretHealthProbe.h
+  src/secret/SecretLeaseRegistry.h
+  src/secret/SecretManagerFacade.h
+  src/secret/SecretRotationCoordinator.h
+  src/secret/SecretRotationValidator.h
+  src/secret/backends/FileSecretBackend.h
+  src/secret/backends/MockSecretBackend.h
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
@@ -68,12 +88,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h
   include/ota/IOTAManager.h
-  include/secret/ISecretBackend.h
-  include/secret/ISecretManager.h
-  include/secret/ISecretHealthSource.h
-  include/secret/SecureBuffer.h
-  include/secret/SecretErrors.h
-  include/secret/SecretTypes.h
+  ${DASALL_INFRA_SECRET_PUBLIC_HEADERS}
   include/InfraContext.h
   include/InfraErrorCode.h
   include/tracing/ITracerProvider.h
@@ -144,6 +159,7 @@ target_sources(dasall_infra
     ${DASALL_INFRA_AUDIT_SOURCES}
     ${DASALL_INFRA_LOGGING_SOURCES}
     ${DASALL_INFRA_SECRET_SOURCES}
+    ${DASALL_INFRA_SECRET_PRIVATE_HEADERS}
     ${DASALL_INFRA_TRACING_SOURCES}
 )
 
