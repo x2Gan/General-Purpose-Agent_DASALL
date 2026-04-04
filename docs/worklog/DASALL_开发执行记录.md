@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #099
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-012 SecretAuditBridge 审计桥骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-012-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-012-SecretAuditBridge审计桥收敛.md，补齐 blocker 承接、本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 infra/src/secret/SecretAuditBridge.h 与 infra/src/secret/SecretAuditBridge.cpp，落盘通用 `emit_event`、动作 wrapper、AuditEvent/AuditContext 映射、status 跟踪，以及 audit write failure 的 secret 错误码归一。
+2. 完成测试与接线收口：
+   - 新增 tests/unit/infra/secret/SecretAuditBridgeTest.cpp，覆盖 access/rotate/revoke 完整性、AccessDenied/ Fallback 特殊 outcome，以及 audit write hard failure。
+   - 更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，将 bridge 源码和 unit test target 纳入构建图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-012 标记为 Completed，并把下一入口切换到 SEC-TODO-013。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_secret_audit_bridge_unit_test`
+   - `ctest --test-dir build-ci -N -R SecretAuditBridgeTest`
+   - `ctest --test-dir build-ci --output-on-failure -R SecretAuditBridgeTest`
+2. 结果：
+   - configure/build 通过；`SecretAuditBridgeTest` 可被发现，并定向执行 1/1 通过。
+
+### 结果
+
+1. SEC-TODO-012 已把 secret 审计链路从“设计冻结但未编码”推进到“存在 IAuditLogger bridge + 字段映射 + failure 归一 + unit evidence 的可验证骨架”。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-013，随后可进入健康探针的 degraded 聚合与快照出口实现。
+
+### 下一步
+
+1. 执行 SEC-TODO-013，落盘 SecretHealthProbe 健康出口骨架、单测与最小 CMake 接线。
+
+### 风险
+
+1. 若后续 SecretAuditBridge 偏离 6.10.1 的字段映射、把 `AccessDenied` / `Fallback` 的 AuditOutcome 语义改回布尔直传，或静默吞掉 write failure，本轮审计桥骨架与回归测试需要重新评审。
+
 ## 记录 #098
 
 - 日期：2026-04-04
