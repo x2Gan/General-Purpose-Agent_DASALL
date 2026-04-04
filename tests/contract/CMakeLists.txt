@@ -44,6 +44,17 @@ function(dasall_register_audit_contract_test executable_target_name ctest_name s
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;audit")
 endfunction()
 
+function(dasall_register_secret_contract_test executable_target_name ctest_name source_file)
+  dasall_register_contract_test(
+    ${executable_target_name}
+    ${ctest_name}
+    ${source_file}
+    smoke
+  )
+
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;secret")
+endfunction()
+
 # smoke group
 dasall_register_contract_test(
   dasall_contract_smoke_test
@@ -353,11 +364,10 @@ target_link_libraries(dasall_contract_infrastructure_service_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_secret_contract_test(
   dasall_contract_secret_manager_interface_boundary_test
   SecretManagerInterfaceBoundaryContractTest
   smoke/SecretManagerInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_secret_manager_interface_boundary_test
@@ -370,11 +380,10 @@ target_link_libraries(dasall_contract_secret_manager_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_secret_contract_test(
   dasall_contract_secret_manager_facade_boundary_test
   SecretManagerFacadeBoundaryContractTest
   smoke/SecretManagerFacadeBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_secret_manager_facade_boundary_test
@@ -388,11 +397,10 @@ target_link_libraries(dasall_contract_secret_manager_facade_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_secret_contract_test(
   dasall_contract_secret_type_boundary_test
   SecretTypeBoundaryContractTest
   smoke/SecretTypeBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_secret_type_boundary_test
@@ -405,11 +413,10 @@ target_link_libraries(dasall_contract_secret_type_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_secret_contract_test(
   dasall_contract_secret_backend_contract_smoke_test
   SecretBackendContractSmokeTest
   smoke/SecretBackendContractSmokeTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_secret_backend_contract_smoke_test
@@ -422,11 +429,10 @@ target_link_libraries(dasall_contract_secret_backend_contract_smoke_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_secret_contract_test(
   dasall_contract_secret_error_mapping_test
   SecretErrorMappingContractTest
   smoke/SecretErrorMappingContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_secret_error_mapping_test

@@ -8,6 +8,46 @@
 
 ---
 
+## 记录 #102
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-015 Secret 测试入口注册
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-015-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-015-Secret测试入口注册收敛.md，补齐本地证据、测试入口收口策略和验收结果。
+   - 更新 tests/unit/CMakeLists.txt，新增 `DASALL_SECRET_UNIT_TEST_EXECUTABLE_TARGETS` 并接入顶层 unit 聚合列表。
+   - 更新 tests/unit/infra/CMakeLists.txt，为 secret interface/type unit tests 补齐 `unit;secret` 标签。
+   - 更新 tests/contract/CMakeLists.txt，新增 `dasall_register_secret_contract_test(...)`，并把 secret contract tests 统一切到 `contract;smoke;secret`。
+2. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-015 标记为 Completed，并把下一入口切换到 SEC-TODO-016。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - 全部通过；unit 119/119、contract 133/133，secret 相关 tests 现已可通过统一 `secret` 标签和聚合 target 过滤。
+
+### 结果
+
+1. SEC-TODO-015 已把 secret 的 unit/contract 测试入口从“可运行但分散”推进到“按域聚合、统一标签、可直接 gate”的收口状态。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-016，随后可进入 integration 与 failure injection 用例落盘。
+
+### 下一步
+
+1. 执行 SEC-TODO-016，补齐 secret integration 与 failure injection 注册入口并验证用例 discoverability。
+
+### 风险
+
+1. 若后续新增 secret tests 未纳入 `DASALL_SECRET_UNIT_TEST_EXECUTABLE_TARGETS` 或未带 `secret` 标签，本轮测试入口收口结论需要重新评审。
+
 ## 记录 #101
 
 - 日期：2026-04-04
