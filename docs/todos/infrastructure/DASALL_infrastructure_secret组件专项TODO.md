@@ -167,7 +167,7 @@
 | SEC-TODO-007 | Completed | 实现 FileSecretBackend 最小骨架 | secret 设计 6.2/6.9 | 6.2 FileSecretBackend；6.9 file 配置项 | L2 | infra/src/secret/backends/FileSecretBackend.cpp | fetch_record/materialize_record 最小实现 | unit：本地路径读取与错误路径；failure：backend unavailable | ctest --test-dir build-ci -L unit | SEC-TODO-005 | 无（2026-04-03 已由 SEC-BLK-001 通过 secret 设计 6.9 的 file.root_dir/encrypt_at_rest 策略冻结解阻） | 无 | File 后端骨架、测试、交付件 | 仅当不写明文临时文件且错误路径可判定时完成 |
 | SEC-TODO-008 | Completed | 实现 SecretManagerFacade 访问骨架 | secret 设计 6.2/6.7 | 6.7 正常流程 1-4 步 | L3 | infra/src/secret/SecretManagerFacade.cpp | get_secret, materialize, release, inspect | unit：访问链路可走通；contract：上下文字段复用边界 | ctest --test-dir build-ci -L unit && ctest --test-dir build-ci -L contract | SEC-TODO-001、SEC-TODO-003、SEC-TODO-005、SEC-TODO-006 | 无 | 无 | Facade 骨架、测试、交付件 | 仅当 get->materialize->release 路径可稳定验证时完成 |
 | SEC-TODO-009 | Completed | 实现 SecretLeaseRegistry 生命周期管理 | secret 设计 6.2/6.3/6.7 | 6.7 lease 创建/过期 | L3 | infra/src/secret/SecretLeaseRegistry.cpp | create_lease, validate_lease, expire_lease, release_lease | unit：创建/过期/释放/陈旧句柄 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-008 | 无 | 无 | Lease 注册实现、单测、交付件 | 仅当过期后 materialize 被拒绝并返回明确错误码时完成 |
-| SEC-TODO-010 | Not Started | 实现 SecretRotationCoordinator 轮换骨架 | secret 设计 6.2/6.8/6.9 | 6.8 轮换与回退 | L2 | infra/src/secret/SecretRotationCoordinator.cpp | rotate(request), promote_version, revoke_version, rollback | unit：验证失败回退；failure injection：rollback fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-005、SEC-TODO-009 | 无（2026-04-04 已由 SEC-BLK-002 通过 secret 设计 6.8.1 / 6.9 的 dual-slot validator / grace period 语义冻结解阻） | 无 | 轮换骨架、测试 | 仅当 create/test/promote/revoke 路径与回退路径可判定时完成 |
+| SEC-TODO-010 | Completed | 实现 SecretRotationCoordinator 轮换骨架 | secret 设计 6.2/6.8/6.9 | 6.8 轮换与回退 | L2 | infra/src/secret/SecretRotationCoordinator.cpp | rotate(request), promote_version, revoke_version, rollback | unit：验证失败回退；failure injection：rollback fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-005、SEC-TODO-009 | 无（2026-04-04 已由 SEC-BLK-002 通过 secret 设计 6.8.1 / 6.9 的 dual-slot validator / grace period 语义冻结解阻） | 无 | 轮换骨架、测试、交付件 | 仅当 create/test/promote/revoke 路径与回退路径可判定时完成 |
 | SEC-TODO-011 | Completed | 定义 SecretErrors 错误码域与映射 | secret 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/secret/SecretErrors.h | INF_E_SECRET_NOT_FOUND, INF_E_SECRET_ACCESS_DENIED, INF_E_SECRET_BACKEND_UNAVAILABLE, INF_E_SECRET_LEASE_EXPIRED, INF_E_SECRET_VERSION_STALE, INF_E_SECRET_MATERIALIZE_FAILED, INF_E_SECRET_ROTATION_VALIDATION_FAILED, INF_E_SECRET_ROTATION_ROLLBACK_FAILED, INF_E_SECRET_AUDIT_WRITE_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定性 | ctest --test-dir build-ci -L contract | SEC-TODO-001 | 映射矩阵未成文 | 在 contract 测试中固化映射矩阵 | 错误码头文件、映射测试 | 仅当 9 个错误码都可追溯且映射测试通过时完成 |
 | SEC-TODO-012 | Not Started | 实现 SecretAuditBridge 审计桥骨架 | secret 设计 6.2/6.10 | 6.10 审计事件清单 | L2 | infra/src/secret/SecretAuditBridge.cpp | emit_access_granted, emit_access_denied, emit_rotate, emit_revoke, emit_fallback | unit：事件完整性；failure：audit write fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-011 | SEC-BLK-004 | 冻结 IAuditLogger 注册点与事件字段映射 | 审计桥骨架、测试 | 仅当关键事件不丢失且失败路径返回明确错误码时完成 |
 | SEC-TODO-013 | Not Started | 实现 SecretHealthProbe 健康出口骨架 | secret 设计 6.2/6.10 | 6.10 健康指标与 degraded | L2 | infra/src/secret/SecretHealthProbe.cpp | sample_secret_health | unit：backend down、rotation backlog、cache stale 三路径 | ctest --test-dir build-ci -L unit | SEC-TODO-002、SEC-TODO-009、SEC-TODO-010 | 无 | 无 | 健康探针骨架、单测 | 仅当三类风险均可映射到健康状态并可重复验证时完成 |
@@ -252,6 +252,7 @@
 | SEC-TODO-007 | 2026-04-03 | infra/src/secret/backends/FileSecretBackend.h；infra/src/secret/backends/FileSecretBackend.cpp；tests/unit/infra/secret/FileSecretBackendTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-007-FileSecretBackend骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_file_secret_backend_unit_test` 通过；`ctest --test-dir build-ci -N -R FileSecretBackendTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R FileSecretBackendTest` 通过（1/1） |
 | SEC-TODO-008 | 2026-04-03 | infra/src/secret/SecretManagerFacade.h；infra/src/secret/SecretManagerFacade.cpp；tests/unit/infra/secret/SecretManagerFacadeTest.cpp；tests/contract/smoke/SecretManagerFacadeBoundaryContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-008-SecretManagerFacade访问骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_contract_secret_manager_facade_boundary_test` 通过；`ctest --test-dir build-ci -N -R "SecretManagerFacade(Test|BoundaryContractTest)"` 发现 2 个测试；`ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacade(Test|BoundaryContractTest)"` 通过（2/2） |
 | SEC-TODO-009 | 2026-04-03 | infra/src/secret/SecretLeaseRegistry.h；infra/src/secret/SecretLeaseRegistry.cpp；infra/src/secret/SecretManagerFacade.h；infra/src/secret/SecretManagerFacade.cpp；tests/unit/infra/secret/SecretLeaseRegistryTest.cpp；tests/unit/infra/secret/SecretManagerFacadeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-009-SecretLeaseRegistry生命周期收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_lease_registry_unit_test dasall_contract_secret_manager_facade_boundary_test` 通过；`ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretLeaseRegistryTest|SecretManagerFacadeBoundaryContractTest"` 发现 3 个测试；`ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretLeaseRegistryTest|SecretManagerFacadeBoundaryContractTest"` 通过（3/3） |
+| SEC-TODO-010 | 2026-04-04 | infra/src/secret/SecretRotationValidator.h；infra/src/secret/SecretRotationCoordinator.h；infra/src/secret/SecretRotationCoordinator.cpp；infra/src/secret/SecretManagerFacade.h；infra/src/secret/SecretManagerFacade.cpp；tests/unit/infra/secret/SecretRotationCoordinatorTest.cpp；tests/unit/infra/secret/SecretManagerFacadeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-010-SecretRotationCoordinator轮换骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_rotation_coordinator_unit_test` 通过；`ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"` 发现 2 个测试；`ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"` 通过（2/2） |
 | SEC-TODO-011 | 2026-04-01 | infra/include/secret/SecretErrors.h；tests/unit/infra/SecretErrorsTest.cpp；tests/contract/smoke/SecretErrorMappingContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_errors_unit_test dasall_contract_secret_error_mapping_test` 通过；`ctest --test-dir build-ci -R "SecretErrorsTest|SecretErrorMappingContractTest" --output-on-failure` 通过（2/2） |
 
 ## 10. 风险与回退策略
@@ -277,7 +278,7 @@
 4. 未达到全量函数级的缺口：KMS 真实接入策略、integration 顶层注册。
 5. 下一步建议：
    - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 继续按顺序处理 SEC-TODO-010；其中访问链与 lease 生命周期骨架已完成，dual-slot 验证器与 grace period 语义也已解阻，轮换链路可直接进入实现。
+   - 继续按顺序处理 SEC-BLK-004 -> SEC-TODO-012；其中访问链、lease 生命周期和轮换骨架已完成，下一缺口转到审计桥的 `IAuditLogger` 接线与事件字段映射冻结。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
 
 ## 12. 本轮执行记录（2026-04-03 ~ 2026-04-04）
@@ -551,3 +552,52 @@ Build 合规复核：
 3. 测试发现性：不新增测试目标，不改变现有 ctest 发现性。
 4. TODO 证据回写：已完成 blocker 状态、交付物与下一步入口回写。
 5. 提交隔离：本轮只处理 SEC-BLK-002 设计解阻，不提前落盘 SecretRotationCoordinator 或相关测试实现。
+
+### 12.7 SEC-TODO-010
+
+选中任务：
+
+1. 任务 ID：SEC-TODO-010。
+2. 可执行性依据：SEC-BLK-002 已完成解阻，internal validator、candidate version 推导与 grace period 语义已冻结；当前仓库缺口只剩 rotation coordinator 骨架、manager rotate 委托与 unit 验收出口，因此 010 可以作为下一原子任务独立完成并提交。
+
+研究学习：
+
+1. 本地证据：secret 详细设计 6.8.1 已明确 `RotationRequest` 不扩写 candidate version 字段，而是由 coordinator 内部推导，因此本轮实现必须保持 public headers 不变。
+2. 本地证据：MockSecretBackend 已具备最小 `promote_version` / `revoke_version` 协议，SecretManagerFacade 仍然把 `rotate` 保持为 deferred failure，说明 010 的最小闭环是 internal coordinator + facade delegation，而不是新增第三种 backend。
+3. 外部参考：OWASP Secrets Management Cheat Sheet 建议自动化轮换采用 create / set / test / finish 多阶段流程，并支持“新版本写、旧版本读”的渐进切换；Azure Key Vault secrets best practices 建议零停机轮换使用 dual credentials，并在轮换后刷新缓存与监控 lifecycle events，这支持 DASALL 将 dual-slot backlog、rollback ready 与 rollback fail 作为显式状态建模。
+
+D 结论：
+
+1. Design -> Build 映射：新增 internal `SecretRotationValidator` 与 `SecretRotationCoordinator`，实现 validate / promote / revoke / rollback 最小骨架；更新 `SecretManagerFacade.rotate` 从 deferred failure 切到真实委托；新增 unit tests 和最小 CMake 接线。
+2. Build 三件套：
+   - 代码目标：新增 infra/src/secret/SecretRotationValidator.h、infra/src/secret/SecretRotationCoordinator.h、infra/src/secret/SecretRotationCoordinator.cpp，并更新 infra/src/secret/SecretManagerFacade.h、infra/src/secret/SecretManagerFacade.cpp、infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/secret/SecretRotationCoordinatorTest.cpp，覆盖 dual-slot backlog、validator reject、rollback success、rollback fail；更新 tests/unit/infra/secret/SecretManagerFacadeTest.cpp，补 manager rotate delegation 回归。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_rotation_coordinator_unit_test && ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest" && ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/src/secret/SecretRotationValidator.h：新增 internal validator 上下文与 decision 模型，冻结 validate_candidate 最小接口。
+2. infra/src/secret/SecretRotationCoordinator.h、infra/src/secret/SecretRotationCoordinator.cpp：新增轮换状态机骨架，实现 candidate version 推导、validate-only、promote、deferred revoke backlog、rollback 与 rollback fail 计数。
+3. infra/src/secret/SecretManagerFacade.h、infra/src/secret/SecretManagerFacade.cpp：新增 rotation validator 注入与 status 读取，并让 `rotate` 正式委托 coordinator。
+4. tests/unit/infra/secret/SecretRotationCoordinatorTest.cpp：新增 dual-slot backlog、validator reject、rollback success 与 rollback fail 四路径单测。
+5. tests/unit/infra/secret/SecretManagerFacadeTest.cpp：新增 facade rotate delegation 回归。
+6. infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：接入 coordinator 源码与 unit test target。
+7. docs/todos/infrastructure/deliverables/SEC-TODO-010-SecretRotationCoordinator轮换骨架收敛.md：补齐本轮 D/B 收敛、研究结论和验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_rotation_coordinator_unit_test`：通过。
+3. `ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"`：通过，发现 2 个定向测试。
+4. `ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：类型名、状态字段和测试断言已足够表达 coordinator skeleton 边界，本轮未增加额外注释噪音。
+2. 正负例覆盖：已覆盖 dual-slot backlog 正向、validator reject、rollback success、rollback fail 与 facade rotate delegation 回归。
+3. 测试发现性：已补 `ctest -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"` 证据，确认新增 unit target 可发现。
+4. TODO 证据回写：已完成状态、交付物和验收结果回写。
+5. 提交隔离：本轮只处理 SecretRotationCoordinator、internal validator、facade rotate 委托和对应 unit tests，不提前进入审计桥、健康探针或 integration。

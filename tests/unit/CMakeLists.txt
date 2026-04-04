@@ -56,6 +56,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_secret_health_source_interface_unit_test
 	dasall_secret_manager_interface_unit_test
 	dasall_secret_lease_registry_unit_test
+	dasall_secret_rotation_coordinator_unit_test
 	dasall_secret_secure_buffer_unit_test
 	dasall_secret_types_unit_test
 	dasall_meter_interface_unit_test

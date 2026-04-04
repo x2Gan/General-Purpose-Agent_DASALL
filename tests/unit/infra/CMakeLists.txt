@@ -331,6 +331,26 @@ dasall_apply_common_options(dasall_secret_lease_registry_unit_test)
 add_test(NAME SecretLeaseRegistryTest COMMAND dasall_secret_lease_registry_unit_test)
 set_tests_properties(SecretLeaseRegistryTest PROPERTIES LABELS "unit;secret")
 
+add_executable(dasall_secret_rotation_coordinator_unit_test
+  secret/SecretRotationCoordinatorTest.cpp
+)
+
+target_include_directories(dasall_secret_rotation_coordinator_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_secret_rotation_coordinator_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_secret_rotation_coordinator_unit_test)
+
+add_test(NAME SecretRotationCoordinatorTest COMMAND dasall_secret_rotation_coordinator_unit_test)
+set_tests_properties(SecretRotationCoordinatorTest PROPERTIES LABELS "unit;secret")
+
 add_executable(dasall_secret_backend_interface_unit_test
   SecretBackendInterfaceTest.cpp
 )

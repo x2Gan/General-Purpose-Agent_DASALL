@@ -8,6 +8,50 @@
 
 ---
 
+## 记录 #097
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-010 SecretRotationCoordinator 轮换骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-010-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-010-SecretRotationCoordinator轮换骨架收敛.md，补齐 blocker 承接、本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 infra/src/secret/SecretRotationValidator.h、infra/src/secret/SecretRotationCoordinator.h 与 infra/src/secret/SecretRotationCoordinator.cpp，落盘 internal validator、candidate version 推导、promote/revoke/rollback skeleton 与 backlog status。
+2. 完成 facade 轮换接线：
+   - 更新 infra/src/secret/SecretManagerFacade.h 与 infra/src/secret/SecretManagerFacade.cpp，新增 rotation validator 注入与 rotation status 读取，并把 `rotate` 从 deferred failure 切到 coordinator 委托。
+3. 完成测试与接线收口：
+   - 新增 tests/unit/infra/secret/SecretRotationCoordinatorTest.cpp，覆盖 dual-slot backlog、validator reject、rollback success、rollback fail 四路径。
+   - 更新 tests/unit/infra/secret/SecretManagerFacadeTest.cpp，补 manager rotate delegation 回归。
+   - 更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，将 coordinator 源码和 unit test target 纳入构建图。
+4. 完成 TODO 回链：
+   - 回写 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-010 标记为 Completed，并把下一入口切换到 SEC-BLK-004 -> SEC-TODO-012。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_rotation_coordinator_unit_test`
+   - `ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"`
+2. 结果：
+   - configure/build 通过；`SecretManagerFacadeTest` 与 `SecretRotationCoordinatorTest` 可被发现，并定向执行 2/2 通过。
+
+### 结果
+
+1. SEC-TODO-010 已把 secret 轮换能力从“占位 deferred failure”推进到“存在 internal validator + coordinator + manager delegation 的可验证骨架”。
+2. secret 子域当前下一执行入口已切换到 SEC-BLK-004，之后再推进 SEC-TODO-012 的审计桥骨架。
+
+### 下一步
+
+1. 处理 SEC-BLK-004，冻结 `IAuditLogger` 接线与 SecretAuditEvent -> AuditEvent 的最小字段映射，再进入 SEC-TODO-012。
+
+### 风险
+
+1. 若后续 audit bridge 或 health probe 重写 coordinator 的 backlog / rollback failure 语义，或让 facade rotate 再次退化为 placeholder，本轮轮换骨架与回归测试需要重新评审。
+
 ## 记录 #096
 
 - 日期：2026-04-04

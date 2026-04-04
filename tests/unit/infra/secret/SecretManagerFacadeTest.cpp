@@ -6,6 +6,7 @@
 #include <string>
 
 #include "secret/SecretManagerFacade.h"
+#include "secret/SecureBuffer.h"
 #include "secret/backends/MockSecretBackend.h"
 #include "dasall/tests/support/TestAssertions.h"
 
@@ -130,7 +131,11 @@ void test_secret_manager_facade_rejects_expired_handles_before_backend_materiali
 void test_secret_manager_facade_rejects_stale_handles_when_backend_version_has_rotated() {
   using dasall::contracts::ResultCode;
   using dasall::infra::secret::MockSecretBackend;
+  using dasall::infra::secret::RotationRequest;
+  using dasall::infra::secret::RotationStrategy;
   using dasall::infra::secret::SecretManagerFacade;
+  using dasall::infra::secret::SecretQuery;
+  using dasall::infra::secret::SecretAccessMode;
   using dasall::tests::support::assert_true;
 
   auto backend = std::make_shared<MockSecretBackend>();
@@ -153,6 +158,40 @@ void test_secret_manager_facade_rejects_stale_handles_when_backend_version_has_r
               "SecretManagerFacade should reject stale handles when the backend version has rotated and require callers to reacquire a fresh handle");
 }
 
+  void test_secret_manager_facade_delegates_rotate_to_rotation_coordinator() {
+    using dasall::infra::secret::MockSecretBackend;
+    using dasall::infra::secret::RotationRequest;
+    using dasall::infra::secret::RotationStrategy;
+    using dasall::infra::secret::SecretManagerFacade;
+    using dasall::infra::secret::SecretQuery;
+    using dasall::infra::secret::SecretAccessMode;
+    using dasall::tests::support::assert_true;
+
+    auto backend = std::make_shared<MockSecretBackend>();
+    backend->upsert_secret(make_secret_record());
+
+    SecretManagerFacade manager(backend);
+    const auto rotation_result = manager.rotate(RotationRequest{
+      .secret_name = std::string("db/root"),
+      .requested_by = std::string("ops-user"),
+      .reason_code = std::string("scheduled_rotation"),
+        .strategy = RotationStrategy::DualSlot,
+      .validate_only = false,
+    });
+
+    const auto rotated_record = backend->fetch_record(SecretQuery{
+      .secret_name = std::string("db/root"),
+      .version_hint = std::string("v4"),
+      .purpose = std::string("rotate"),
+      .access_mode = SecretAccessMode::Rotate,
+    });
+
+    assert_true(rotation_result.rotated && rotation_result.is_valid() &&
+              rotation_result.current_version == "v4" && rotation_result.rollback_ready &&
+              rotated_record.ok && manager.rotation_status().rotation_backlog == 1,
+          "SecretManagerFacade should delegate rotate requests to SecretRotationCoordinator instead of returning the old deferred failure placeholder");
+  }
+
 }  // namespace
 
 int main() {
@@ -160,6 +199,7 @@ int main() {
     test_secret_manager_facade_walks_get_materialize_release_and_inspect_chain();
     test_secret_manager_facade_rejects_expired_handles_before_backend_materialization();
     test_secret_manager_facade_rejects_stale_handles_when_backend_version_has_rotated();
+    test_secret_manager_facade_delegates_rotate_to_rotation_coordinator();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

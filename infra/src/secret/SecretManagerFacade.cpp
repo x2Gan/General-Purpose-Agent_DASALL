@@ -21,6 +21,15 @@ constexpr std::string_view kSecretManagerFacadeSourceRef = "SecretManagerFacade"
   return map_secret_error_code(error_code);
 }
 
+[[nodiscard]] SecretRotationCoordinatorOptions make_rotation_options(
+    const SecretManagerFacadeOptions& options) {
+  return SecretRotationCoordinatorOptions{
+      .dual_slot_enabled = options.dual_slot_enabled,
+      .validation_required = options.rotation_validation_required,
+      .grace_period_sec = options.rotation_grace_period_sec,
+  };
+}
+
 [[nodiscard]] SecretHandleResult make_handle_failure(SecretErrorCode error_code,
                                                      std::string message,
                                                      std::string stage) {
@@ -112,10 +121,17 @@ constexpr std::string_view kSecretManagerFacadeSourceRef = "SecretManagerFacade"
 
 SecretManagerFacade::SecretManagerFacade(std::shared_ptr<ISecretBackend> backend,
                                          SecretManagerFacadeOptions options)
-    : backend_(std::move(backend)), options_(std::move(options)) {}
+    : backend_(std::move(backend)),
+      options_(std::move(options)),
+      rotation_coordinator_(make_rotation_options(options_)) {}
 
 void SecretManagerFacade::set_backend(std::shared_ptr<ISecretBackend> backend) {
   backend_ = std::move(backend);
+}
+
+void SecretManagerFacade::set_rotation_validator(
+    std::shared_ptr<ISecretRotationValidator> validator) {
+  rotation_coordinator_.set_validator(std::move(validator));
 }
 
 std::size_t SecretManagerFacade::active_lease_count() const {
@@ -124,6 +140,10 @@ std::size_t SecretManagerFacade::active_lease_count() const {
 
 bool SecretManagerFacade::has_cached_descriptor(std::string_view secret_name) const {
   return cached_secrets_.find(std::string(secret_name)) != cached_secrets_.end();
+}
+
+SecretRotationCoordinatorStatus SecretManagerFacade::rotation_status() const {
+  return rotation_coordinator_.get_status();
 }
 
 SecretHandleResult SecretManagerFacade::get_secret(
@@ -265,15 +285,9 @@ RotationResult SecretManagerFacade::rotate(const RotationRequest& request) {
                                    false);
   }
 
-  return RotationResult::failure(request.secret_name,
-                                 {},
-                                 {},
-                                 "audit://secret/rotate/deferred",
-                                 contracts::ResultCode::ToolExecutionFailed,
-                                 "secret rotation is intentionally deferred until SEC-TODO-010",
-                                 "secret.rotate",
-                                 std::string(kSecretManagerFacadeSourceRef),
-                                 false);
+  const RotationResult rotation_result = rotation_coordinator_.rotate(*backend_, request);
+  cached_secrets_.erase(request.secret_name);
+  return rotation_result;
 }
 
 SecretLifecycleResult SecretManagerFacade::revoke(std::string_view secret_name,

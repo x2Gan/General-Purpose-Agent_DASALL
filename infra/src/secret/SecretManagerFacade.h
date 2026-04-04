@@ -11,12 +11,16 @@
 #include "secret/ISecretManager.h"
 
 #include "SecretLeaseRegistry.h"
+#include "SecretRotationCoordinator.h"
 
 namespace dasall::infra::secret {
 
 struct SecretManagerFacadeOptions {
   std::int64_t handle_ttl_ms = 60000;
   std::string redaction_prefix = "redacted://secret/";
+    bool dual_slot_enabled = true;
+    bool rotation_validation_required = true;
+    std::int64_t rotation_grace_period_sec = 600;
 };
 
 class SecretManagerFacade final : public ISecretManager {
@@ -25,9 +29,11 @@ class SecretManagerFacade final : public ISecretManager {
                                SecretManagerFacadeOptions options = {});
 
   void set_backend(std::shared_ptr<ISecretBackend> backend);
+    void set_rotation_validator(std::shared_ptr<ISecretRotationValidator> validator);
 
   [[nodiscard]] std::size_t active_lease_count() const;
   [[nodiscard]] bool has_cached_descriptor(std::string_view secret_name) const;
+    [[nodiscard]] SecretRotationCoordinatorStatus rotation_status() const;
 
   [[nodiscard]] SecretHandleResult get_secret(
       const SecretQuery& query,
@@ -62,6 +68,7 @@ class SecretManagerFacade final : public ISecretManager {
   std::shared_ptr<ISecretBackend> backend_;
   SecretManagerFacadeOptions options_;
   SecretLeaseRegistry lease_registry_;
+    SecretRotationCoordinator rotation_coordinator_;
   std::map<std::string, CachedSecretMetadata> cached_secrets_;
 };
 
