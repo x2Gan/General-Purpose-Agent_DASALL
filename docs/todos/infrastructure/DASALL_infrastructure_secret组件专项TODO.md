@@ -117,7 +117,7 @@
 | SecureBuffer | secret 设计 6.5/6.7/6.8 | L3 | zeroize_on_release、禁隐式拷贝语义明确 | 平台零化实现策略细节未定 | 直接拆 release/zeroize 原子任务 |
 | SecretLeaseRegistry | secret 设计 6.2/6.3/6.7 | L3 | lease 生命周期与过期语义明确 | 与轮换宽限窗口交互细节需验证 | 直接拆生命周期任务 |
 | SecretRotationCoordinator | secret 设计 6.2/6.8/6.9 | L2 | create/test/promote/revoke 与回退语义明确，且 6.8.1 已冻结最小验证器接口、candidate_version 推导与 grace period 规则 | 无 | 直接拆轮换状态机骨架 |
-| SecretAuditBridge | secret 设计 6.2/6.10 | L2 | 审计事件集合明确 | IAuditLogger 注册点细节未冻结 | 先落桥接骨架，注册点为前置依赖 |
+| SecretAuditBridge | secret 设计 6.2/6.10 | L2 | 审计事件集合明确，且 6.10.1 已冻结 IAuditLogger v1 sink 合同与 SecretAuditEvent -> AuditEvent/AuditContext 字段映射 | 无 | 直接拆桥接骨架与失败路径验证 |
 | SecretHealthProbe | secret 设计 6.2/6.10 | L2 | 健康指标与 degraded 信号明确 | IHealthMonitor 接口对接细节未冻结 | 先落 secret 私有健康快照出口 |
 | KmsSecretBackend | secret 设计 6.2/8.2 | L1 | 仅有占位职责和演进方向 | 身份、限流、超时、测试夹具缺失 | 标记 Blocked，先补设计 |
 | tests/integration 注册点 | secret 设计 8.1/9；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | secret integration 用例尚未落盘 | 直接拆 integration 注册任务 |
@@ -134,7 +134,7 @@
 | get/materialize/release 生命周期 | secret 设计 6.7 | 生命周期/流程 | SEC-TODO-008、SEC-TODO-009 | 将访问链与零化链拆分验收 |
 | 轮换闭环与回退 | secret 设计 6.8/6.9/7 | 流程/异常处理 | SEC-TODO-010（SEC-BLK-002 已于 2026-04-04 解阻） | 轮换状态机单独任务 |
 | 错误语义映射 | secret 设计 6.6 | 错误处理 | SEC-TODO-011 | 错误码域与 contracts 映射单列 |
-| 审计与健康出口 | secret 设计 6.10/7 | 适配器/门禁 | SEC-TODO-012、SEC-TODO-013 | 审计与健康拆分，避免任务过大 |
+| 审计与健康出口 | secret 设计 6.10/7 | 适配器/门禁 | SEC-TODO-012（SEC-BLK-004 已于 2026-04-04 解阻）、SEC-TODO-013 | 审计与健康拆分，避免任务过大 |
 | CMake 与测试注册 | secret 设计 8.1/9.1 | 测试/门禁 | SEC-TODO-014、SEC-TODO-015、SEC-TODO-016 | 构建接线、unit/contract、integration 解阻 |
 | 文档与交付证据回写 | secret 设计 9.2/11 | 文档/门禁 | SEC-TODO-017 | gate 证据和阻塞状态回写 |
 | KMS 真实接入 | secret 设计 4/8.2/11 | 配置/流程 | SEC-BLK-003 | 缺测试夹具和身份策略，先阻塞 |
@@ -169,7 +169,7 @@
 | SEC-TODO-009 | Completed | 实现 SecretLeaseRegistry 生命周期管理 | secret 设计 6.2/6.3/6.7 | 6.7 lease 创建/过期 | L3 | infra/src/secret/SecretLeaseRegistry.cpp | create_lease, validate_lease, expire_lease, release_lease | unit：创建/过期/释放/陈旧句柄 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-008 | 无 | 无 | Lease 注册实现、单测、交付件 | 仅当过期后 materialize 被拒绝并返回明确错误码时完成 |
 | SEC-TODO-010 | Completed | 实现 SecretRotationCoordinator 轮换骨架 | secret 设计 6.2/6.8/6.9 | 6.8 轮换与回退 | L2 | infra/src/secret/SecretRotationCoordinator.cpp | rotate(request), promote_version, revoke_version, rollback | unit：验证失败回退；failure injection：rollback fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-005、SEC-TODO-009 | 无（2026-04-04 已由 SEC-BLK-002 通过 secret 设计 6.8.1 / 6.9 的 dual-slot validator / grace period 语义冻结解阻） | 无 | 轮换骨架、测试、交付件 | 仅当 create/test/promote/revoke 路径与回退路径可判定时完成 |
 | SEC-TODO-011 | Completed | 定义 SecretErrors 错误码域与映射 | secret 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/secret/SecretErrors.h | INF_E_SECRET_NOT_FOUND, INF_E_SECRET_ACCESS_DENIED, INF_E_SECRET_BACKEND_UNAVAILABLE, INF_E_SECRET_LEASE_EXPIRED, INF_E_SECRET_VERSION_STALE, INF_E_SECRET_MATERIALIZE_FAILED, INF_E_SECRET_ROTATION_VALIDATION_FAILED, INF_E_SECRET_ROTATION_ROLLBACK_FAILED, INF_E_SECRET_AUDIT_WRITE_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定性 | ctest --test-dir build-ci -L contract | SEC-TODO-001 | 映射矩阵未成文 | 在 contract 测试中固化映射矩阵 | 错误码头文件、映射测试 | 仅当 9 个错误码都可追溯且映射测试通过时完成 |
-| SEC-TODO-012 | Not Started | 实现 SecretAuditBridge 审计桥骨架 | secret 设计 6.2/6.10 | 6.10 审计事件清单 | L2 | infra/src/secret/SecretAuditBridge.cpp | emit_access_granted, emit_access_denied, emit_rotate, emit_revoke, emit_fallback | unit：事件完整性；failure：audit write fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-011 | SEC-BLK-004 | 冻结 IAuditLogger 注册点与事件字段映射 | 审计桥骨架、测试 | 仅当关键事件不丢失且失败路径返回明确错误码时完成 |
+| SEC-TODO-012 | Not Started | 实现 SecretAuditBridge 审计桥骨架 | secret 设计 6.2/6.10 | 6.10 审计事件清单 | L2 | infra/src/secret/SecretAuditBridge.cpp | emit_access_granted, emit_access_denied, emit_rotate, emit_revoke, emit_fallback | unit：事件完整性；failure：audit write fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-011 | 无（2026-04-04 已由 SEC-BLK-004 通过 secret 设计 6.10.1 的 IAuditLogger v1 sink 合同与字段映射冻结解阻） | 无 | 审计桥骨架、测试 | 仅当关键事件不丢失且失败路径返回明确错误码时完成 |
 | SEC-TODO-013 | Not Started | 实现 SecretHealthProbe 健康出口骨架 | secret 设计 6.2/6.10 | 6.10 健康指标与 degraded | L2 | infra/src/secret/SecretHealthProbe.cpp | sample_secret_health | unit：backend down、rotation backlog、cache stale 三路径 | ctest --test-dir build-ci -L unit | SEC-TODO-002、SEC-TODO-009、SEC-TODO-010 | 无 | 无 | 健康探针骨架、单测 | 仅当三类风险均可映射到健康状态并可重复验证时完成 |
 | SEC-TODO-014 | Not Started | 接线 infra/secret 到 CMake | secret 设计 8.1；代码现状 | 8.1 落盘建议 | L2 | infra/CMakeLists.txt、infra/include/secret/、infra/src/secret/ | 注册 secret 源文件与头文件入口 | build：dasall_infra 编译通过 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | SEC-TODO-001~SEC-TODO-013 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且 secret 文件入图时完成 |
 | SEC-TODO-015 | Not Started | 注册 secret unit 与 contract 测试入口 | secret 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/secret/、tests/contract/CMakeLists.txt | unit：类型、接口、访问、lease、轮换、审计、健康；contract：边界与错误映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | SEC-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
@@ -208,7 +208,7 @@
 | SEC-BLK-001 | 已解阻（2026-04-03）：secret 详细设计 6.9 已冻结 `infra.secret.file.root_dir = secrets/`（部署层）与 `infra.secret.file.encrypt_at_rest = true`（默认/Profile）；后续 FileSecretBackend 只需按该最小策略落盘 | SEC-TODO-007 | 无；后续仅需保持 FileSecretBackend 实现、TODO 与单测对 root_dir/encrypt_at_rest 语义一致 | 证据回链到 docs/architecture/DASALL_infra_secret模块详细设计.md 6.9 与 docs/todos/infrastructure/deliverables/SEC-BLK-001-FileSecretBackend配置解阻.md | 若 file backend 回退为明文存储、允许越过 root_dir 访问任意路径，或把 encrypt_at_rest 默认值改为 false，则重新转为 Blocked |
 | SEC-BLK-002 | 已解阻（2026-04-04）：secret 详细设计 6.8.1 / 6.9 已冻结 internal SecretRotationValidator 最小接口、candidate_version 推导、`validation_required` 与 `grace_period_sec` 语义；后续 SecretRotationCoordinator 只需按该最小策略落盘 | SEC-TODO-010 | 无；后续仅需保持 coordinator 实现、TODO 与单测对 validator / grace window 语义一致 | 证据回链到 docs/architecture/DASALL_infra_secret模块详细设计.md 6.8.1 / 6.9 与 docs/todos/infrastructure/deliverables/SEC-BLK-002-SecretRotationValidator最小接口解阻.md | 若 rotation coordinator 回退为静默跳过验证、把 dual-slot 请求降级为 inplace promote，或忽略 grace period / rollback 语义，则重新转为 Blocked |
 | SEC-BLK-003 | KMS 身份、限流、超时和测试夹具未冻结 | 后续 KMS 真实接入任务 | 冻结 identity/retry/timeout/quota 策略并补夹具 | 先仅保留 KmsSecretBackend 接口占位 | 禁止真实 KMS SDK 接入 |
-| SEC-BLK-004 | 审计注册点细节未统一 | SEC-TODO-012 | 冻结 IAuditLogger 接线和事件字段映射 | 先以 mock audit logger 打通断言 | 审计桥保留缓存，不宣称生产可用 |
+| SEC-BLK-004 | 已解阻（2026-04-04）：secret 详细设计 6.10.1 已冻结 `audit::IAuditLogger` 为 v1 唯一必选 sink，并明确 SecretAuditEvent -> AuditEvent/AuditContext 的 action、actor、target、evidence_ref、side_effects 与 request/task/worker context 映射；后续 SecretAuditBridge 只需按该最小合同落盘 | SEC-TODO-012 | 无；后续仅需保持 audit bridge 实现、TODO 与单测对字段映射和 write failure 语义一致 | 证据回链到 docs/architecture/DASALL_infra_secret模块详细设计.md 6.10.1 与 docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md | 若 audit bridge 回退为静默吞掉 write failure、绕过 `audit::IAuditLogger` 直接写自定义 sink，或擅自改写 6.10.1 的字段映射/required 语义，则重新转为 Blocked |
 | SEC-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；secret integration 用例是否可执行改由组件自身落盘负责 | SEC-TODO-016 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 
 ## 9. 验收与质量门
@@ -278,7 +278,7 @@
 4. 未达到全量函数级的缺口：KMS 真实接入策略、integration 顶层注册。
 5. 下一步建议：
    - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 继续按顺序处理 SEC-BLK-004 -> SEC-TODO-012；其中访问链、lease 生命周期和轮换骨架已完成，下一缺口转到审计桥的 `IAuditLogger` 接线与事件字段映射冻结。
+   - 继续按顺序处理 SEC-TODO-012；其中访问链、lease 生命周期和轮换骨架已完成，`IAuditLogger` 接线与事件字段映射已由 SEC-BLK-004 冻结，下一缺口转到审计桥骨架与 write failure 路径。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
 
 ## 12. 本轮执行记录（2026-04-03 ~ 2026-04-04）
@@ -601,3 +601,45 @@ Build 合规复核：
 3. 测试发现性：已补 `ctest -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"` 证据，确认新增 unit target 可发现。
 4. TODO 证据回写：已完成状态、交付物和验收结果回写。
 5. 提交隔离：本轮只处理 SecretRotationCoordinator、internal validator、facade rotate 委托和对应 unit tests，不提前进入审计桥、健康探针或 integration。
+
+### 12.8 SEC-BLK-004
+
+选中任务：
+
+1. 任务 ID：SEC-BLK-004。
+2. 可执行性依据：SEC-TODO-012 当前唯一阻塞项是 `audit::IAuditLogger` 接线与 SecretAuditEvent -> AuditEvent/AuditContext 的字段映射尚未冻结；现有仓库已具备 audit 类型、写入接口与 secret 审计事件模型，因此本轮可以作为 blocker recovery 独立收口。
+
+研究学习：
+
+1. 本地证据：profiles/src/ProfileTelemetryAdapter.cpp 与 infra/src/config/ConfigCenterFacade.cpp 已形成 `AuditEvent` + `AuditContext` + `IAuditLogger` 的现有写入模式，说明 secret 审计桥首轮不需要再引入第二套 sink 抽象。
+2. 本地证据：secret 详细设计 6.10 已列出 access_granted/access_denied/rotate/revoke/fallback 事件集合，但未明确 `consumer_module`、`reason_code`、`version`、`request_id`、`task_id`、`worker_type` 的落点，因此 012 仍缺最小可编码合同。
+3. 外部参考：OWASP Secrets Management Cheat Sheet 强调 secrets access/rotation 关键事件必须可审计且失败不可静默吞掉；Azure Key Vault secrets best practices 强调 secret lifecycle event 应与请求上下文和轮换结果联动留痕，这支持 DASALL 在 v1 明确 required sink 和 write failure 快返语义。
+
+D 结论：
+
+1. Design -> Build 映射：在 secret 详细设计新增 6.10.1，冻结 `audit::IAuditLogger` 为 v1 唯一必选 sink、action 名与 side_effects/context 字段映射，以及 required sink 的失败处理；同步新增 blocker deliverable，并更新 secret TODO 的 blocker 状态与 SEC-TODO-012 前置说明。
+2. Build 三件套：
+   - 代码目标：更新 docs/architecture/DASALL_infra_secret模块详细设计.md，并新增 docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md；同步更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md 的 blocker 状态与后续执行入口。
+   - 测试目标：通过文档 traceability 确认 architecture、TODO 与 blocker deliverable 对 SEC-BLK-004 的解阻状态以及对 SEC-TODO-012 的交接约束一致。
+   - 验收命令：`rg -n "SecretAuditBridge v1|IAuditLogger|AuditEvent|AuditContext|consumer_module|SEC-BLK-004|SEC-TODO-012" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. docs/architecture/DASALL_infra_secret模块详细设计.md：新增 6.10.1，冻结 `audit::IAuditLogger` v1 sink 合同、SecretAuditEvent -> AuditEvent/AuditContext 字段映射，以及 required sink 的失败语义。
+2. docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md：补齐 blocker 根因、外部参考、设计结论与对 SEC-TODO-012 的交接约束。
+3. docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md：将 SEC-BLK-004 标记为已解阻，把 SEC-TODO-012 的 blocker 列迁移为已解阻说明，并将下一步建议切换到直接推进 SEC-TODO-012。
+
+验收结果：
+
+1. `rg -n "SecretAuditBridge v1|IAuditLogger|AuditEvent|AuditContext|consumer_module|SEC-BLK-004|SEC-TODO-012" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md`：通过；命中 secret 设计 6.10.1 的 sink 合同与字段映射、TODO 中的解阻状态与执行记录，以及 blocker deliverable 的交接约束，三处证据已可回链。
+
+Build 合规复核：
+
+1. 代码注释：本轮不落盘实现代码，只做 blocker 设计/状态收口。
+2. 正负例覆盖：本轮以文档 traceability 覆盖“已解阻/若回退则重新 Blocked”的二值状态；真正的 audit write success/failure 正负例留给 SEC-TODO-012。
+3. 测试发现性：不新增测试目标，不改变现有 ctest 发现性。
+4. TODO 证据回写：已完成 blocker 状态、交付物与下一步入口回写。
+5. 提交隔离：本轮只处理 SEC-BLK-004 设计解阻，不提前落盘 SecretAuditBridge 或相关测试实现。

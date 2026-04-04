@@ -8,6 +8,42 @@
 
 ---
 
+## 记录 #098
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-BLK-004 SecretAuditBridge 接线解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-BLK-004-D 设计解阻：
+   - 更新 docs/architecture/DASALL_infra_secret模块详细设计.md，新增 6.10.1，冻结 `audit::IAuditLogger` 为 v1 唯一必选 sink，并明确 SecretAuditEvent -> AuditEvent/AuditContext 的 action、side_effects 与 request/task/worker context 字段映射。
+   - 新增 docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md，把 blocker 根因收敛为“6.10 已有事件集合，但尚未冻结可直接编码的 sink contract 和字段映射”，并固定 required sink 的失败处理约束。
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-BLK-004 标记为已解阻，并把 SEC-TODO-012 的 blocker 列迁移为已解阻说明。
+2. 完成执行入口切换：
+   - 在 secret 专项 TODO 中新增本轮执行记录，并把下一步建议切换为直接推进 SEC-TODO-012。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "SecretAuditBridge v1|IAuditLogger|AuditEvent|AuditContext|consumer_module|SEC-BLK-004|SEC-TODO-012" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-004-SecretAuditBridge接线解阻.md`
+2. 结果：
+   - 已通过；命中 secret 设计 6.10.1 的 sink 合同与字段映射、secret TODO 的解阻状态与执行记录，以及 blocker deliverable 的交接约束，三处证据已一致回链。
+
+### 结果
+
+1. SEC-BLK-004 已不再阻塞 secret audit 链路；`audit::IAuditLogger` 接线、SecretAuditEvent -> AuditEvent/AuditContext 字段映射，以及 required sink 的失败语义已具备直接编码条件。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-012，随后可进入审计桥骨架实现与 write failure 路径验证。
+
+### 下一步
+
+1. 执行 SEC-TODO-012，落盘 SecretAuditBridge 审计桥骨架、单测与最小 CMake 接线。
+
+### 风险
+
+1. 若后续 SecretAuditBridge 偏离 6.10.1 的 sink contract、静默吞掉 write failure，或把 required sink 降级为可选，本轮 blocker 解阻结论需要重新评审。
+
 ## 记录 #097
 
 - 日期：2026-04-04

@@ -467,6 +467,36 @@ Secret 模块非职责：
 2. 审计字段必须包含 actor、action、target_secret、consumer_module、outcome、reason_code、request_id、evidence_ref。
 3. 审计记录与普通日志分通道保存，满足架构文档“独立保存并可导出”的要求。
 
+### 6.10.1 SecretAuditBridge v1 sink 合同与字段映射
+
+为解除 SecretAuditBridge 的实现阻塞，v1 明确冻结以下最小接线语义：
+
+1. SecretAuditBridge v1 的唯一必选 sink 是 `audit::IAuditLogger`；不得把 `logging::ILogger`、metrics 或 tracing 作为 012 的前置依赖。
+2. `SecretAuditEvent` -> `AuditEvent` 的字段映射固定为：
+   - `actor` -> `AuditEvent.actor`
+   - `target_secret` -> `AuditEvent.target = "secret:" + target_secret`
+   - `evidence_ref` -> `AuditEvent.evidence_ref = { kind = ToolResult, ref = evidence_ref }`
+   - `consumer_module`、`reason_code`、`version` 以唯一 side_effects 形式写入：`consumer_module:<value>`、`reason_code:<value>`、`version:<value>`
+3. `SecretAuditAction` -> `AuditEvent.action` 的最小动作名固定为：
+   - `AccessGranted` -> `secret.access_granted`
+   - `AccessDenied` -> `secret.access_denied`
+   - `Materialized` -> `secret.materialized`
+   - `Rotated` -> `secret.rotated`
+   - `Revoked` -> `secret.revoked`
+   - `Fallback` -> `secret.fallback`
+   - `ExpiredAccess` -> `secret.expired_access`
+4. `SecretAuditEvent.outcome` 与动作的组合映射到 `AuditOutcome`：
+   - `AccessDenied` 固定映射 `Rejected`
+   - `Fallback` 固定映射 `Escalated`
+   - 其余动作在 `outcome=true` 时映射 `Succeeded`，在 `outcome=false` 时映射 `Failed`
+5. `SecretAuditEvent` -> `AuditContext` 的字段映射固定为：
+   - `request_id` -> `AuditContext.request_id`，缺失时回落到 `kAuditContextUnknown`
+   - `task_id` -> `AuditContext.task_id`，缺失时回落到 `kAuditContextUnknown`
+   - `consumer_module` -> `AuditContext.worker_type`
+   - `session_id`、`trace_id`、`parent_task_id`、`lease_id` 在 v1 均保持 `kAuditContextUnknown`
+6. SecretAuditBridge 只把 `AuditWriteOutcome.is_success()` 与 `AuditWriteOutcome.is_degraded_success()` 视为成功写入；其余任何 accepted / persisted 组合或 `error_code` 都必须返回 `INF_E_SECRET_AUDIT_WRITE_FAIL`，不得静默成功。
+7. `infra.secret.audit.required = true` 在 v1 继续保持强制语义：当 audit sink 写入失败时，bridge 只能快返错误并保留失败证据，不能降级为“仅打日志继续成功”。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）
