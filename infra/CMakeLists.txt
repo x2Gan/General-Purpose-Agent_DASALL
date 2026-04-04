@@ -37,6 +37,7 @@ set(DASALL_INFRA_LOGGING_SOURCES
 
 set(DASALL_INFRA_SECRET_SOURCES
   src/secret/SecretAuditBridge.cpp
+  src/secret/SecretHealthProbe.cpp
   src/secret/SecretManagerFacade.cpp
   src/secret/SecretLeaseRegistry.cpp
   src/secret/SecretRotationCoordinator.cpp

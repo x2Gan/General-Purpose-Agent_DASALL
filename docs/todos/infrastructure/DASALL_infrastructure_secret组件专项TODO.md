@@ -170,7 +170,7 @@
 | SEC-TODO-010 | Completed | 实现 SecretRotationCoordinator 轮换骨架 | secret 设计 6.2/6.8/6.9 | 6.8 轮换与回退 | L2 | infra/src/secret/SecretRotationCoordinator.cpp | rotate(request), promote_version, revoke_version, rollback | unit：验证失败回退；failure injection：rollback fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-005、SEC-TODO-009 | 无（2026-04-04 已由 SEC-BLK-002 通过 secret 设计 6.8.1 / 6.9 的 dual-slot validator / grace period 语义冻结解阻） | 无 | 轮换骨架、测试、交付件 | 仅当 create/test/promote/revoke 路径与回退路径可判定时完成 |
 | SEC-TODO-011 | Completed | 定义 SecretErrors 错误码域与映射 | secret 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/secret/SecretErrors.h | INF_E_SECRET_NOT_FOUND, INF_E_SECRET_ACCESS_DENIED, INF_E_SECRET_BACKEND_UNAVAILABLE, INF_E_SECRET_LEASE_EXPIRED, INF_E_SECRET_VERSION_STALE, INF_E_SECRET_MATERIALIZE_FAILED, INF_E_SECRET_ROTATION_VALIDATION_FAILED, INF_E_SECRET_ROTATION_ROLLBACK_FAILED, INF_E_SECRET_AUDIT_WRITE_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定性 | ctest --test-dir build-ci -L contract | SEC-TODO-001 | 映射矩阵未成文 | 在 contract 测试中固化映射矩阵 | 错误码头文件、映射测试 | 仅当 9 个错误码都可追溯且映射测试通过时完成 |
 | SEC-TODO-012 | Completed | 实现 SecretAuditBridge 审计桥骨架 | secret 设计 6.2/6.10 | 6.10 审计事件清单 | L2 | infra/src/secret/SecretAuditBridge.cpp | emit_access_granted, emit_access_denied, emit_rotate, emit_revoke, emit_fallback | unit：事件完整性；failure：audit write fail 路径 | ctest --test-dir build-ci -L unit | SEC-TODO-003、SEC-TODO-011 | 无（2026-04-04 已由 SEC-BLK-004 通过 secret 设计 6.10.1 的 IAuditLogger v1 sink 合同与字段映射冻结解阻） | 无 | 审计桥骨架、测试、交付件 | 仅当关键事件不丢失且失败路径返回明确错误码时完成 |
-| SEC-TODO-013 | Not Started | 实现 SecretHealthProbe 健康出口骨架 | secret 设计 6.2/6.10 | 6.10 健康指标与 degraded | L2 | infra/src/secret/SecretHealthProbe.cpp | sample_secret_health | unit：backend down、rotation backlog、cache stale 三路径 | ctest --test-dir build-ci -L unit | SEC-TODO-002、SEC-TODO-009、SEC-TODO-010 | 无 | 无 | 健康探针骨架、单测 | 仅当三类风险均可映射到健康状态并可重复验证时完成 |
+| SEC-TODO-013 | Completed | 实现 SecretHealthProbe 健康出口骨架 | secret 设计 6.2/6.10 | 6.10 健康指标与 degraded | L2 | infra/src/secret/SecretHealthProbe.cpp | sample_secret_health | unit：backend down、rotation backlog、cache stale 三路径 | ctest --test-dir build-ci -L unit | SEC-TODO-002、SEC-TODO-009、SEC-TODO-010 | 无 | 无 | 健康探针骨架、单测、交付件 | 仅当三类风险均可映射到健康状态并可重复验证时完成 |
 | SEC-TODO-014 | Not Started | 接线 infra/secret 到 CMake | secret 设计 8.1；代码现状 | 8.1 落盘建议 | L2 | infra/CMakeLists.txt、infra/include/secret/、infra/src/secret/ | 注册 secret 源文件与头文件入口 | build：dasall_infra 编译通过 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | SEC-TODO-001~SEC-TODO-013 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一功能入口且 secret 文件入图时完成 |
 | SEC-TODO-015 | Not Started | 注册 secret unit 与 contract 测试入口 | secret 设计 8.1/9.1；编码规范 3.7 | 9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/secret/、tests/contract/CMakeLists.txt | unit：类型、接口、访问、lease、轮换、审计、健康；contract：边界与错误映射 | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | SEC-TODO-014 | 无 | 无 | 测试代码、注册入口、执行记录 | 仅当新增测试在 ctest -N 可见并执行通过时完成 |
 | SEC-TODO-016 | Not Started | 注册 secret integration 与故障注入入口 | secret 设计 8.1/9.1；tests 现状 | integration 建议目录与用例 | L0 | tests/CMakeLists.txt、tests/integration/infra/secret/ | integration：SecretRotationWorkflowTest、SecretFailureInjectionTest | ctest --test-dir build-ci -N && ctest --test-dir build-ci -L integration | SEC-TODO-015 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 SEC-TODO-015 完成后落盘具体 integration 用例 | CMake 改动或阻塞记录 | 仅当 integration 用例可发现并执行时完成 |
@@ -255,6 +255,7 @@
 | SEC-TODO-010 | 2026-04-04 | infra/src/secret/SecretRotationValidator.h；infra/src/secret/SecretRotationCoordinator.h；infra/src/secret/SecretRotationCoordinator.cpp；infra/src/secret/SecretManagerFacade.h；infra/src/secret/SecretManagerFacade.cpp；tests/unit/infra/secret/SecretRotationCoordinatorTest.cpp；tests/unit/infra/secret/SecretManagerFacadeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-010-SecretRotationCoordinator轮换骨架收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_manager_facade_unit_test dasall_secret_rotation_coordinator_unit_test` 通过；`ctest --test-dir build-ci -N -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"` 发现 2 个测试；`ctest --test-dir build-ci --output-on-failure -R "SecretManagerFacadeTest|SecretRotationCoordinatorTest"` 通过（2/2） |
 | SEC-TODO-011 | 2026-04-01 | infra/include/secret/SecretErrors.h；tests/unit/infra/SecretErrorsTest.cpp；tests/contract/smoke/SecretErrorMappingContractTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt | `cmake --build build-ci --target dasall_infra dasall_secret_errors_unit_test dasall_contract_secret_error_mapping_test` 通过；`ctest --test-dir build-ci -R "SecretErrorsTest|SecretErrorMappingContractTest" --output-on-failure` 通过（2/2） |
 | SEC-TODO-012 | 2026-04-04 | infra/src/secret/SecretAuditBridge.h；infra/src/secret/SecretAuditBridge.cpp；tests/unit/infra/secret/SecretAuditBridgeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-012-SecretAuditBridge审计桥收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_audit_bridge_unit_test` 通过；`ctest --test-dir build-ci -N -R SecretAuditBridgeTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R SecretAuditBridgeTest` 通过（1/1） |
+| SEC-TODO-013 | 2026-04-04 | infra/src/secret/SecretHealthProbe.h；infra/src/secret/SecretHealthProbe.cpp；tests/unit/infra/secret/SecretHealthProbeTest.cpp；infra/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；docs/todos/infrastructure/deliverables/SEC-TODO-013-SecretHealthProbe健康出口收敛.md | `cmake -S . -B build-ci -G "Unix Makefiles"` 通过；`cmake --build build-ci --target dasall_infra dasall_secret_health_probe_unit_test` 通过；`ctest --test-dir build-ci -N -R SecretHealthProbeTest` 发现 1 个测试；`ctest --test-dir build-ci --output-on-failure -R SecretHealthProbeTest` 通过（1/1） |
 
 ## 10. 风险与回退策略
 
@@ -279,7 +280,7 @@
 4. 未达到全量函数级的缺口：KMS 真实接入策略、integration 顶层注册。
 5. 下一步建议：
    - 先执行 SEC-TODO-001~015 完成接口/对象/主链/门禁骨架。
-   - 继续按顺序处理 SEC-TODO-013；其中访问链、lease 生命周期、轮换骨架和审计桥已完成，下一缺口转到健康探针的 degraded 快照与风险聚合出口。
+   - 继续按顺序处理 SEC-TODO-014；其中访问链、lease 生命周期、轮换骨架、审计桥和健康探针已完成，下一缺口转到 infra/secret 的集中 CMake 收口与构建基线确认。
    - KMS 真实接入保持 Blocked，待策略与测试夹具冻结后单独建 v2 专项 TODO。
 
 ## 12. 本轮执行记录（2026-04-03 ~ 2026-04-04）
@@ -690,3 +691,49 @@ Build 合规复核：
 3. 测试发现性：已补 `ctest -N -R SecretAuditBridgeTest` 证据，确认新增 unit target 可发现。
 4. TODO 证据回写：已完成状态、交付物和验收结果回写。
 5. 提交隔离：本轮只处理 SecretAuditBridge skeleton、对应 unit tests 和最小 CMake 接线，不提前进入 health probe、contract 或 integration 扩张。
+
+### 12.10 SEC-TODO-013
+
+选中任务：
+
+1. 任务 ID：SEC-TODO-013。
+2. 可执行性依据：ISecretHealthSource 已冻结 `sample_secret_health()` 为 secret 私有健康出口，且 lease / rotation / audit 骨架均已完成；当前仓库缺口只剩 SecretHealthProbe 聚合层、单测与最小 CMake 接线，因此 013 可以独立完成并提交。
+
+研究学习：
+
+1. 本地证据：SecretHealthSnapshot 已冻结 `backend_available`、`cache_stale`、`active_lease_count`、`rotation_backlog` 和 `degraded` 五个字段，说明 013 不需要再扩展健康对象模型。
+2. 本地证据：LoggingHealthProbe 已形成 signal provider + 私有聚合 + unit 回归的稳定模式，适合 SecretHealthProbe 直接复用到 backend down / backlog / stale 三类路径。
+3. 外部参考：OWASP 与 Azure secret 最佳实践都要求 secret store 可用性、轮换滞留与缓存新鲜度可观测，这支持 DASALL 先在 secret 私有层输出健康快照，再留待后续门禁任务消费。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `SecretHealthProbe`、`ISecretHealthSignalProvider` 和 signal 聚合结构，落盘 backend availability / degraded 规则、rotation backlog 聚合，以及 cache stale 到 snapshot 的映射；新增 unit test 与最小 CMake 接线。
+2. Build 三件套：
+   - 代码目标：新增 infra/src/secret/SecretHealthProbe.h、infra/src/secret/SecretHealthProbe.cpp，并更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/secret/SecretHealthProbeTest.cpp，覆盖 healthy、backend down、rotation backlog 与 cache stale 四路径。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_secret_health_probe_unit_test && ctest --test-dir build-ci -N -R SecretHealthProbeTest && ctest --test-dir build-ci --output-on-failure -R SecretHealthProbeTest`。
+3. D Gate：PASS。
+
+Build 交付与证据：
+
+交付物：
+
+1. infra/src/secret/SecretHealthProbe.h、infra/src/secret/SecretHealthProbe.cpp：新增 provider 聚合和 `sample_secret_health()` 实现，收敛 backend down、rotation backlog 和 cache stale 到 secret 私有 snapshot。
+2. tests/unit/infra/secret/SecretHealthProbeTest.cpp：新增 healthy、backend down、rotation backlog 与 cache stale 四路径回归。
+3. infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：接入 probe 源码和 unit test target。
+4. docs/todos/infrastructure/deliverables/SEC-TODO-013-SecretHealthProbe健康出口收敛.md：补齐本轮 D/B 收敛、研究结论和验收结果。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_secret_health_probe_unit_test`：通过。
+3. `ctest --test-dir build-ci -N -R SecretHealthProbeTest`：通过，发现 1 个定向测试。
+4. `ctest --test-dir build-ci --output-on-failure -R SecretHealthProbeTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：类型名、signals 结构和测试断言已足够表达健康出口 skeleton 边界，本轮未增加额外注释噪音。
+2. 正负例覆盖：已覆盖 healthy、backend down、rotation backlog 和 cache stale 四类快照路径。
+3. 测试发现性：已补 `ctest -N -R SecretHealthProbeTest` 证据，确认新增 unit target 可发现。
+4. TODO 证据回写：已完成状态、交付物和验收结果回写。
+5. 提交隔离：本轮只处理 SecretHealthProbe skeleton、对应 unit tests 和最小 CMake 接线，不提前进入 contract、integration 或 gate 汇总。

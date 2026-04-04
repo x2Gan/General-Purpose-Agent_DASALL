@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #100
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-013 SecretHealthProbe 健康出口骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-013-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-013-SecretHealthProbe健康出口收敛.md，补齐本地证据、外部参考、Design -> Build 映射与验收结果。
+   - 新增 infra/src/secret/SecretHealthProbe.h 与 infra/src/secret/SecretHealthProbe.cpp，落盘 secret 私有 signal provider 聚合和 `sample_secret_health()` 实现，收敛 backend down、rotation backlog 与 cache stale 到健康快照。
+2. 完成测试与接线收口：
+   - 新增 tests/unit/infra/secret/SecretHealthProbeTest.cpp，覆盖 healthy、backend down、rotation backlog 与 cache stale 四路径。
+   - 更新 infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，将 probe 源码和 unit test target 纳入构建图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-TODO-013 标记为 Completed，并把下一入口切换到 SEC-TODO-014。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_secret_health_probe_unit_test`
+   - `ctest --test-dir build-ci -N -R SecretHealthProbeTest`
+   - `ctest --test-dir build-ci --output-on-failure -R SecretHealthProbeTest`
+2. 结果：
+   - configure/build 通过；`SecretHealthProbeTest` 可被发现，并定向执行 1/1 通过。
+
+### 结果
+
+1. SEC-TODO-013 已把 secret 健康链路从“接口已冻结但无实现”推进到“存在 provider 聚合 + 私有 snapshot + unit evidence 的可验证骨架”。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-014，随后可进入 infra/secret 的集中 CMake 收口与构建基线确认。
+
+### 下一步
+
+1. 执行 SEC-TODO-014，收口 infra/secret 的 CMake 与文件入图基线，并验证 placeholder 不再是唯一入口。
+
+### 风险
+
+1. 若后续 SecretHealthProbe 直接吸收通用 `IHealthMonitor` 契约、遗漏 rotation backlog / cache stale 信号，或把 backend unavailable 重新解释为 healthy，本轮健康出口骨架与回归测试需要重新评审。
+
 ## 记录 #099
 
 - 日期：2026-04-04
