@@ -1,7 +1,7 @@
 # DASALL infra/secret 模块详细设计（Detailed Design）
 
 版本：v1.0
-日期：2026-03-24
+日期：2026-04-04
 阶段：Detailed Design
 适用模块：infra/secret
 
@@ -268,6 +268,7 @@ Secret 模块非职责：
 | SecretCache | 句柄级元数据缓存与短期 materialized lease 缓存 |
 | SecretLeaseRegistry | 跟踪 lease、版本、到期时间、持有者与释放状态 |
 | SecretRotationCoordinator | 管理轮换状态机、双槽切换、验证与回退 |
+| SecretRotationValidator | 在 promote 前执行候选版本最小验证并生成 evidence_ref |
 | SecretAuditBridge | 将访问、拒绝、轮换、吊销、过期事件送入独立审计链路 |
 | SecretHealthProbe | 汇总 backend 连通性、缓存命中率、轮换失败数和过期积压 |
 
@@ -281,6 +282,7 @@ Secret 模块非职责：
 | SecretCache | SecretHandle、version、ttl | CacheEntry、stale 标记 | 缓存不得绕过轮换版本检查 |
 | SecretLeaseRegistry | SecretHandle、consumer_ref、deadline | lease_id、expires_at、release status | lease 过期后句柄不得继续 materialize |
 | SecretRotationCoordinator | RotationRequest、backend 状态、验证结果 | RotationResult、rollback evidence | 支持 create/test/promote/revoke 四阶段 |
+| SecretRotationValidator | RotationValidationContext | validate_only 结论、reason_code、evidence_ref | 只冻结最小验证输入/输出，不吸收业务审批 |
 | SecretAuditBridge | SecretAuditEvent | IAuditLogger | 审计失败必须上报，不允许静默丢弃 |
 | SecretHealthProbe | backend 指标、队列状态、轮换失败计数 | HealthSnapshot 子域数据 | 只输出事实状态，不触发恢复裁定 |
 
@@ -288,7 +290,7 @@ Secret 模块非职责：
 
 1. SecretManagerFacade -> SecretPolicyEvaluator、SecretBackendAdapter、SecretCache、SecretLeaseRegistry、SecretRotationCoordinator、SecretAuditBridge、SecretHealthProbe。
 2. SecretBackendAdapter <- FileSecretBackend / MockSecretBackend / KmsSecretBackend。
-3. SecretRotationCoordinator -> SecretBackendAdapter、SecretPolicyEvaluator、SecretAuditBridge。
+3. SecretRotationCoordinator -> SecretBackendAdapter、SecretRotationValidator、SecretPolicyEvaluator、SecretAuditBridge。
 4. SecretHealthProbe 只依赖各子组件公开状态接口，不依赖内部实现细节。
 5. SecretAuditBridge 只向 IAuditLogger 写入事件，不反向依赖 logging 实现类。
 
@@ -393,6 +395,18 @@ Secret 模块非职责：
 2. 对高风险 secret 禁止使用降级缓存，直接失败快返。
 3. 连续 N 次 backend 不可用后，HealthProbe 输出 degraded，交由 runtime/ops 处理，不在 secret 内自行切换业务路径。
 
+### 6.8.1 dual-slot 验证与宽限窗口最小冻结
+
+为解除 SecretRotationCoordinator 的实现阻塞，轮换链路在 v1 明确冻结以下最小 internal 语义：
+
+1. `RotationRequest` 保持现有 public 形状不变，不追加 `candidate_version` 字段；`candidate_version` 由 coordinator 内部根据当前版本推导：若当前版本匹配 `v<整数>`，则递增数值；否则追加 `.candidate` 后缀。
+2. coordinator 在进入 promote 前必须构造 internal `RotationValidationContext`，最小字段包含 `secret_name`、`previous_version`、`candidate_version`、`strategy`、`requested_by`、`reason_code`、`validation_required`、`dual_slot_enabled`、`grace_period_sec`。
+3. internal `ISecretRotationValidator` 仅冻结一个最小入口：`validate_candidate(context)`；返回值至少包含 `accepted`、`reason_code`、`evidence_ref` 和 `rollback_ready`，用于支持 `validate_only`、失败快返和回退证据。
+4. 当 `infra.secret.rotation.validation_required = true` 时，coordinator 必须先调用 validator，再决定是否 promote；当该配置为 `false` 时，允许跳过 validator，但仍必须生成显式 `validation_skipped` evidence_ref，不得静默跳过验证阶段。
+5. 当 `request.strategy = DualSlot` 且 `infra.secret.rotation.dual_slot_enabled = false` 时，coordinator 必须返回 `INF_E_SECRET_ROTATION_VALIDATION_FAILED`，不得降级为 inplace promote。
+6. 当 `request.strategy = DualSlot` 且 `infra.secret.rotation.grace_period_sec > 0` 时，promote 成功后旧版本进入 rollback-ready 宽限窗口，立即 revoke 被延后到宽限期后；当宽限窗口为 `0` 或策略不是 `DualSlot` 时，promote 后必须立即执行旧版本 revoke。
+7. 若旧版本 revoke 或其后的收口步骤失败，coordinator 必须尝试 rollback，把 candidate 重新切回 previous；若 rollback 自身失败，则返回 `INF_E_SECRET_ROTATION_ROLLBACK_FAILED`，并把失败证据写入 `RotationResult.evidence_ref`。
+
 ### 6.9 配置项与默认策略
 
 | 配置项 | 默认值 | 覆盖层级 | 说明 |
@@ -418,6 +432,8 @@ Secret 模块非职责：
 1. backend 类型和缓存策略由 Profile 与部署层裁剪。
 2. 普通配置项仍由 ConfigCenter 管理，secret 仅存储敏感值和必要元数据引用。
 3. 不允许通过运行时 patch 直接下发 secret 明文；运行时 patch 仅允许修改 backend 行为与策略参数。
+4. `infra.secret.rotation.validation_required` 仅控制是否必须经过 `ISecretRotationValidator`；关闭验证时不能改变 `DualSlot` / rollback 语义。
+5. `infra.secret.rotation.grace_period_sec` 只在 `DualSlot` promote 成功后生效，用于界定旧版本 revoke 的延后窗口；不得被 reinterpret 为普通 cache ttl。
 
 ### 6.10 可观测性设计
 

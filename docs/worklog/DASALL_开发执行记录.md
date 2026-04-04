@@ -8,6 +8,42 @@
 
 ---
 
+## 记录 #096
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-BLK-002 SecretRotationValidator 最小接口解阻
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-BLK-002-D 设计解阻：
+   - 更新 docs/architecture/DASALL_infra_secret模块详细设计.md，新增 6.8.1，冻结 internal `RotationValidationContext` / `ISecretRotationValidator` 最小接口、candidate version 推导和 dual-slot / grace period / rollback 的最小时序规则。
+   - 新增 docs/todos/infrastructure/deliverables/SEC-BLK-002-SecretRotationValidator最小接口解阻.md，把 blocker 根因收敛为“配置项已存在但尚未映射为 coordinator 可编码的最小执行语义”，并固定 validator / grace window / rollback 的交接约束。
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 SEC-BLK-002 标记为已解阻，并把 SEC-TODO-010 的 blocker 列迁移为“已由 secret 设计 6.8.1 / 6.9 解阻”。
+2. 完成执行入口切换：
+   - 在 secret 专项 TODO 中新增本轮执行记录，并把下一步建议切换为直接推进 SEC-TODO-010。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "SecretRotationValidator|validation_required|grace_period_sec|SEC-BLK-002|SEC-TODO-010" docs/architecture/DASALL_infra_secret模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/deliverables/SEC-BLK-002-SecretRotationValidator最小接口解阻.md`
+2. 结果：
+   - 已通过；命中 secret 设计 6.8.1 / 6.9 的 validator 与宽限窗口语义、secret TODO 的解阻状态与执行记录，以及 blocker deliverable 的交接约束，architecture、TODO 与交付件三处证据已一致回链。
+
+### 结果
+
+1. SEC-BLK-002 已不再阻塞 secret rotation 链路；`validation_required` / `dual_slot_enabled` / `grace_period_sec` 的最小执行语义已具备直接编码条件。
+2. secret 子域当前下一执行入口已切换到 SEC-TODO-010，后续应进入 SecretRotationCoordinator 轮换骨架实现与单测验收。
+
+### 下一步
+
+1. 进入 SEC-TODO-010，落盘 SecretRotationCoordinator 与 internal SecretRotationValidator 最小骨架，覆盖 validate_only、validation fail、promote/revoke 和 rollback fail 路径。
+
+### 风险
+
+1. 若后续 SecretRotationCoordinator 直接绕过 `validation_required`、把 dual-slot 请求静默降级为 inplace promote，或忽略 `grace_period_sec` / rollback 语义，本 blocker 需要重新转为 Blocked。
+
 ## 记录 #095
 
 - 日期：2026-04-03
