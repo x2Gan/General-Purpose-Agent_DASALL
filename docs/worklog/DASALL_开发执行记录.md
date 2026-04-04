@@ -8,6 +8,48 @@
 
 ---
 
+## 记录 #104
+
+- 日期：2026-04-04
+- 阶段：secret 组件专项 TODO
+- 任务：SEC-TODO-017 Secret 质量门与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 完成 SEC-TODO-017-D/B 收敛：
+   - 新增 docs/todos/infrastructure/deliverables/SEC-TODO-017-Secret质量门与证据收口.md，补齐本地证据、gate 收口策略和验收结果。
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md，将 `ctest -L secret` 固化为当前 secret 专项 gate，并新增 gate 结论表、blocker/rollback 摘要和新的下一步建议。
+2. 完成执行记录回链：
+   - 更新 docs/worklog/DASALL_开发执行记录.md，新增本轮质量门与交付证据收口记录。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+   - `ctest --test-dir build-ci -N -L secret`
+   - `ctest --test-dir build-ci --output-on-failure -L secret`
+2. 结果：
+   - 全部通过；unit 119/119、contract 133/133、integration 13/13，`ctest -N -L secret` 发现 20 个测试，`ctest -L secret` 20/20 通过。
+
+### 结果
+
+1. SEC-TODO-017 已把 secret 的当前轮收口为“统一 secret gate 基线 + 8 个 gate 结论 + blocker/rollback 摘要”的可追溯状态。
+2. 当前 secret 组件专项 TODO 中 001~017 已全部完成；残余 blocker 仅剩 `SEC-BLK-003` 的 KMS 真实接入前置条件。
+
+### 下一步
+
+1. 若继续推进 secret 子域，应先处理 `SEC-BLK-003`，冻结 KMS 身份、限流、超时和测试夹具策略，再另起 v2 原子任务。
+
+### 风险
+
+1. 若后续新增 secret tests 未继续挂入 `secret` 标签，或在未解阻 `SEC-BLK-003` 前直接接入真实 KMS SDK，本轮 gate 结论需要重新评审。
+
 ## 记录 #103
 
 - 日期：2026-04-04
