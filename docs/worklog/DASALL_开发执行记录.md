@@ -8,6 +8,44 @@
 
 ---
 
+## 记录 #114
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-BLK-003 解阻校准
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-BLK-003 证据核验：
+   - 复核 audit 组件专项 TODO 中 `AUD-TODO-006`、`AUD-TODO-014`、`AUD-TODO-015` 与 `AUD-BLK-003/AUD-BLK-004` 的完成状态，确认 policy 所需的最小审计写入接口、核心字段与 health/metrics 协同语义已冻结。
+   - 复核 infra/include/audit/IAuditLogger.h 与 infra/include/audit/AuditTypes.h，确认 `IAuditLogger`、`AuditEvent`、`AuditContext`、`AuditWriteOutcome` 已在当前代码树中稳定存在。
+2. 完成 policy 台账校准：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 `POL-BLK-003` 标记为已解阻，并将 `POL-TODO-019` 从 Blocked 校准为 Not Started。
+   - 同步刷新“当前 Blocked 任务索引”和阶段 F 的顺序说明，使后续 019 可以作为可执行原子任务继续推进。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N -L audit`
+   - `ctest --test-dir build-ci --output-on-failure -L audit`
+2. 结果：
+   - audit gate 当前发现 9 个测试。
+   - `ctest -L audit` 通过，9/9 tests passed。
+
+### 结果
+
+1. POL-BLK-003 已从“policy 文档中的历史阻塞项”校准为“已由 audit 组件专项和当前 gate 实质解阻”的状态。
+2. `POL-TODO-019` 现在可以作为下一轮可执行原子任务继续推进。
+
+### 下一步
+
+1. 实现 `POL-TODO-019`，落盘 PolicyAuditBridge 审计桥接骨架，并补 unit/contract 验证。
+
+### 风险
+
+1. 若 audit 侧最小写入接口、核心字段或 health/metrics 协同语义未来回退，`POL-BLK-003` 需要重新转回 Blocked；当前解阻结论依赖 audit 专项 TODO 与 `ctest -L audit` 的持续有效性。
+
 ## 记录 #113
 
 - 日期：2026-04-05
