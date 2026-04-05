@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #117
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-020 实现 PolicyMetricsBridge 指标桥接骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-020-D/B 落盘：
+   - 新增 infra/src/policy/PolicyMetricsBridge.h 与 infra/src/policy/PolicyMetricsBridge.cpp，落盘 `PolicyMetricKind` 七个冻结指标族、`PolicyMetricSignal` 样本约束、固定 `infra.policy/v1` meter scope 与 `module/stage/profile/outcome/error_code` 标签白名单。
+   - 复用 metrics 冻结接口与错误语义，把 bridge 失败统一收敛到既有 `MetricsErrorCode`，并保持 `active_generation` 为 gauge、其余 family 为 counter。
+2. 完成 020 的 CMake/test 接线：
+   - 更新 infra/CMakeLists.txt，把 PolicyMetricsBridge 私有实现纳入 dasall_infra。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，注册 `PolicyMetricsBridgeTest` 与 `PolicyMetricsBridgeBoundaryContractTest` 并纳入聚合目标。
+3. 完成 unit/contract 门禁落盘：
+   - 新增 tests/unit/infra/PolicyMetricsBridgeTest.cpp，覆盖计数器/gauge 发射、provider/meter 失败降级与非法 stage 预拒绝。
+   - 新增 tests/contract/smoke/PolicyMetricsBridgeBoundaryContractTest.cpp，验证 policy metrics bridge 只注册七个冻结 metric family，且标签维持在既有 allowlist 内。
+4. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-020 标记为 Done，并补齐本轮执行记录、build-ci 定向测试结果与标签级验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_policy_metrics_bridge_unit_test dasall_contract_policy_metrics_bridge_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PolicyMetricsBridge(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicyMetricsBridge(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - build-ci 配置成功，`dasall_infra`、`dasall_policy_metrics_bridge_unit_test`、`dasall_contract_policy_metrics_bridge_boundary_test` 构建通过。
+   - `ctest -N -R "PolicyMetricsBridge(Test|BoundaryContractTest)"` 发现 2 个目标测试。
+   - 定向执行通过，2/2 tests passed。
+   - `ctest -L unit` 通过，127/127 tests passed；`ctest -L contract` 通过，139/139 tests passed。
+
+### 结果
+
+1. POL-TODO-020 已从“metrics/health 依赖已解阻但 policy metrics bridge 未落盘”推进到“存在可编译、可测试、保持 frozen metrics boundary 的 PolicyMetricsBridge 最小实现”。
+2. policy 的观测桥接阶段现已完成 audit 与 metrics 两个分支；后续只剩 021 的 health probe 实现与最终 022 证据收口。
+
+### 下一步
+
+1. 实现 `POL-TODO-021`，落盘 PolicyHealthProbe 健康探针骨架，并补 unit/integration 验证。
+
+### 风险
+
+1. 当前 PolicyMetricsBridge 仍是私有 bridge 骨架，尚未接入 SecurityPolicyManager 主链；在 021 与后续 022 未闭环前，不应把未接线状态误判为缺失设计边界。
+
 ## 记录 #116
 
 - 日期：2026-04-05
