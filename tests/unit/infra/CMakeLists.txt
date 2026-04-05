@@ -685,6 +685,26 @@ dasall_apply_common_options(dasall_policy_loader_interface_unit_test)
 add_test(NAME PolicyLoaderInterfaceTest COMMAND dasall_policy_loader_interface_unit_test)
 set_tests_properties(PolicyLoaderInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_loader_config_read_unit_test
+  PolicyLoaderConfigReadTest.cpp
+)
+
+target_include_directories(dasall_policy_loader_config_read_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_policy_loader_config_read_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_loader_config_read_unit_test)
+
+add_test(NAME PolicyLoaderConfigReadTest COMMAND dasall_policy_loader_config_read_unit_test)
+set_tests_properties(PolicyLoaderConfigReadTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_policy_schema_validator_interface_unit_test
   PolicySchemaValidatorInterfaceTest.cpp
 )

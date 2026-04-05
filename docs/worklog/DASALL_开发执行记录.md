@@ -8,6 +8,50 @@
 
 ---
 
+## 记录 #105
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-010 PolicyLoader 配置读取骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-010-D/B 收敛：
+   - 新增 infra/src/policy/PolicyLoader.h 与 infra/src/policy/PolicyLoader.cpp，落盘基于 IConfigCenter 的最小配置读取骨架，兼容 infra.security_policy.* 与历史 alias infra.security.policy.*，并把缺失/非法值回退到 frozen defaults。
+   - 新增 tests/unit/infra/PolicyLoaderConfigReadTest.cpp 与 tests/contract/smoke/PolicyLoaderBoundaryContractTest.cpp，分别覆盖 strict/compat、alias key、hot_reload 关闭、default fallback，以及 Profile 裁剪不越出 PolicyAdmin 域的 fail-closed 边界。
+2. 完成最小接线：
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，把 loader 私有实现与新增 unit/contract tests 纳入构建图与 CTest 图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-010 标记为 Done，并补齐本轮执行记录、回退链路与验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -R "PolicyLoader(ConfigReadTest|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicyLoader(ConfigReadTest|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - CMake Tools 仍无法配置项目，已按仓库回退链路切换到 build-ci；修正一次私有头 include 路径后，构建全通过。
+   - 新增 `PolicyLoaderConfigReadTest` 与 `PolicyLoaderBoundaryContractTest` 可被发现并定向执行，2/2 通过；unit 120/120、contract 134/134 全部通过。
+
+### 结果
+
+1. POL-TODO-010 已把 policy 阶段 C 的第一步从“接口已冻结但无真实读取路径”推进到“存在最小 loader 骨架、source/checksum trace、fail-closed skeleton rule 与可验证 tests”的状态。
+2. 当前 policy 组件专项 TODO 已具备继续进入 POL-TODO-013 的前提，可按 7.1 的顺序转入快照存储 generation/LKG 骨架。
+
+### 下一步
+
+1. 执行 POL-TODO-013，落盘内存版 PolicySnapshotStore，补齐 generation/history/LKG 与 commit failure 不切 current 的最小闭环。
+
+### 风险
+
+1. infra.security_policy.* 与 infra.security.policy.* 的键域仍存在历史口径漂移；若 config/profiles 后续只保留一侧命名，需要同步回收 alias 与相关测试。
+2. 工作区的 CMake Tools 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 policy 实现任务仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #104
 
 - 日期：2026-04-04

@@ -65,6 +65,14 @@ set(DASALL_INFRA_SECRET_PRIVATE_HEADERS
   src/secret/backends/MockSecretBackend.h
 )
 
+set(DASALL_INFRA_POLICY_SOURCES
+  src/policy/PolicyLoader.cpp
+)
+
+set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
+  src/policy/PolicyLoader.h
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
@@ -158,6 +166,8 @@ target_sources(dasall_infra
     ${DASALL_INFRA_CORE_SOURCES}
     ${DASALL_INFRA_AUDIT_SOURCES}
     ${DASALL_INFRA_LOGGING_SOURCES}
+    ${DASALL_INFRA_POLICY_SOURCES}
+    ${DASALL_INFRA_POLICY_PRIVATE_HEADERS}
     ${DASALL_INFRA_SECRET_SOURCES}
     ${DASALL_INFRA_SECRET_PRIVATE_HEADERS}
     ${DASALL_INFRA_TRACING_SOURCES}
