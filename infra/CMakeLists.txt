@@ -67,10 +67,12 @@ set(DASALL_INFRA_SECRET_PRIVATE_HEADERS
 
 set(DASALL_INFRA_POLICY_SOURCES
   src/policy/PolicyLoader.cpp
+  src/policy/PolicySnapshotStore.cpp
 )
 
 set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
   src/policy/PolicyLoader.h
+  src/policy/PolicySnapshotStore.h
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS

@@ -735,6 +735,26 @@ dasall_apply_common_options(dasall_policy_snapshot_store_interface_unit_test)
 add_test(NAME PolicySnapshotStoreInterfaceTest COMMAND dasall_policy_snapshot_store_interface_unit_test)
 set_tests_properties(PolicySnapshotStoreInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_snapshot_store_impl_unit_test
+  PolicySnapshotStoreTest.cpp
+)
+
+target_include_directories(dasall_policy_snapshot_store_impl_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_policy_snapshot_store_impl_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_snapshot_store_impl_unit_test)
+
+add_test(NAME PolicySnapshotStoreTest COMMAND dasall_policy_snapshot_store_impl_unit_test)
+set_tests_properties(PolicySnapshotStoreTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_policy_types_rule_bundle_unit_test
   PolicyTypesRuleBundleTest.cpp
 )

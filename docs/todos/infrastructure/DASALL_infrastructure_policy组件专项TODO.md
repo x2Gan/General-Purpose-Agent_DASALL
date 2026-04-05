@@ -182,7 +182,7 @@
 | POL-TODO-010 | Done (2026-04-05) | 实现 PolicyLoader 配置读取骨架 | policy 设计 6.3/6.7/6.9；config TODO；profiles TODO | 6.3 PolicyLoader 输入输出；6.7 正常加载流程第 2 步；6.9 配置项表 | L2 | infra/src/policy/PolicyLoader.cpp | PolicyLoader（默认/Profile/部署层读取与 source_id/checksum 装配） | unit：strict/compat、hot_reload、default_effect 等配置读取；contract：Profile 裁剪不绕过 Audit/Runtime 主控链路 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001、POL-TODO-007 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 具备最小 load_layers/get_typed 能力且 profiles 侧键名冻结 | PolicyLoader.h/.cpp、PolicyLoaderConfigReadTest、PolicyLoaderBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当 loader 能按设计读取 enabled/mode/hot_reload/max_history/default_effect/priority_order 等策略键，且 source 链可追溯时完成 |
 | POL-TODO-011 | Not Started | 实现 PolicySchemaValidator 最小校验骨架 | policy 设计 6.3/6.7/6.8 | 6.3 ValidationReport；6.7 正常加载流程第 3 步；6.8 输入异常 | L2 | infra/src/policy/PolicySchemaValidator.cpp | validate_bundle、validate_patch | unit：缺字段、未知 domain、非法 effect、base_generation 不匹配；contract：错误归类保持 policy 域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-002、POL-TODO-005、POL-TODO-008 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结 domain/effect/conditions 白名单、schema_version 兼容矩阵与 patch operation 集合推进 | PolicySchemaValidator.cpp 或阻塞记录 | 仅当四类非法输入都能返回明确 ValidationReport 且不激活快照时，状态才可从 Not Started 转为 Done |
 | POL-TODO-012 | Not Started | 实现 PolicyConflictResolver 冲突裁定骨架 | policy 设计 6.3/6.7/6.8/6.9 | 6.3 EffectivePolicySet 输出；6.7 正常加载流程第 4 步；6.9 priority_order | L2 | infra/src/policy/PolicyConflictResolver.cpp | PolicyConflictResolver（deny-first 与 explicit-priority 裁定路径） | unit：deny-first 与 explicit-priority 两档裁定；failure：冲突未决拒绝激活 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001、POL-TODO-008、POL-TODO-010 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结冲突裁定矩阵、同优先级 tie-break 与 compat 模式降级规则推进 | PolicyConflictResolver.cpp 或阻塞记录 | 仅当两档裁定都可被稳定验证，且冲突未决时返回显式拒绝而非静默覆盖时完成 |
-| POL-TODO-013 | Not Started | 实现 PolicySnapshotStore generation/LKG 骨架 | policy 设计 6.3/6.7/6.8 | 6.3 PolicySnapshotStore；6.7 正常加载流程第 5 步；6.8 commit 失败回退 | L2 | infra/src/policy/PolicySnapshotStore.cpp | commit、current、last_known_good、get_by_id | unit：generation 单调、自增、LKG 回退；failure：commit 失败后 current 不切换 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003、POL-TODO-009 | 无 | 无 | PolicySnapshotStore.cpp、回退测试 | 仅当新快照提交成功后 generation 自增，提交失败后 current/LKG 保持旧值且错误可判定时完成 |
+| POL-TODO-013 | Done (2026-04-05) | 实现 PolicySnapshotStore generation/LKG 骨架 | policy 设计 6.3/6.7/6.8 | 6.3 PolicySnapshotStore；6.7 正常加载流程第 5 步；6.8 commit 失败回退 | L2 | infra/src/policy/PolicySnapshotStore.cpp | commit、current、last_known_good、get_by_id | unit：generation 单调、自增、LKG 回退；failure：commit 失败后 current 不切换 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003、POL-TODO-009 | 无 | 无 | PolicySnapshotStore.h/.cpp、PolicySnapshotStoreTest、policy CMake/unit 接线；2026-04-05 已落盘并完成 build-ci unit 验收 | 仅当新快照提交成功后 generation 自增，提交失败后 current/LKG 保持旧值且错误可判定时完成 |
 | POL-TODO-014 | Not Started | 实现 PolicyDecisionProjector 查询投影骨架 | policy 设计 6.3/6.5/6.7；contracts-freeze T010 | 6.3 投影输出；6.5 PolicyDecisionRef；6.7 查询流程 | L2 | infra/src/policy/PolicyDecisionProjector.cpp | PolicyDecisionProjector（domain -> target_selector -> priority -> effect 投影路径） | unit：命中、未命中、require_confirmation、deny 四类投影；contract：decision 语义与 evidence_ref 映射 catalog | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-004、POL-TODO-012、POL-TODO-013 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；共享对象缺失时的映射 catalog 已固定 | PolicyDecisionProjector.cpp 或阻塞记录 | 仅当投影结果只输出引用和原因，不泄露规则实现细节，且 contract 门禁通过时完成 |
 | POL-TODO-015 | Not Started | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小接口冻结 | SecurityPolicyManager.cpp、主链测试 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
 | POL-TODO-016 | Not Started | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
@@ -879,4 +879,59 @@ Build 合规复核：
 4. 回退链路：CMake Tools 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
 5. TODO 证据回写：已完成 POL-TODO-010 状态、交付物与验收结果回写。
 6. 提交隔离：本轮提交范围限定为 PolicyLoader 私有实现、CMake/test 接线与本专项 TODO 文档。
+
+## 23. 本轮执行记录（2026-04-05 / POL-TODO-013）
+
+### 23.1 选中任务
+
+1. 本轮任务：POL-TODO-013。
+2. 可执行性依据：POL-TODO-003、POL-TODO-009 已完成，且 POL-TODO-010 已在上一轮完成并推送；根据 7.1 的阶段 C 串行要求，当前应在“先读取配置”之后补齐快照存储 generation/LKG 底座，再进入 validator/resolver/manager 主链。
+
+### 23.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_policy模块详细设计.md 6.3、6.7、6.8 已冻结 PolicySnapshotStore 的 commit/current/last_known_good/get_by_id 四个入口，并要求 load/apply_patch 成功后生成新 generation 快照，commit 失败时 current/LKG 保持旧值。
+2. infra/include/policy/IPolicySnapshotStore.h 与 tests/unit/infra/PolicySnapshotStoreInterfaceTest.cpp 已冻结纯抽象接口、generation 单调、history 按 snapshot_id 可读和 commit failure 不切 current 的边界。
+3. infra/src/config/ConfigSnapshotStore.cpp 与 tests/unit/infra/ConfigSnapshotStoreTest.cpp 已给出仓库认可的最小 store 骨架模式：内存态 history + current/LKG + 单调版本约束 + 失败不污染已有状态；policy snapshot store 可沿用该收敛方式，而不提前引入持久化后端。
+4. POL-TODO-010 已落盘 PolicyLoader skeleton，并输出可追溯 source/checksum 的 PolicyBundle；本轮只需承接 snapshot lifecycle，不应越界进入 manager、audit、metrics 或 health 桥接职责。
+
+外部参考：
+
+1. Kubernetes API Concepts 对 resourceVersion 的说明强调，快照版本应作为单调递增的一致性锚点，失败写入不能破坏当前可读状态；本轮据此把 generation 单调、history 可读和 commit failure 不切 current/LKG 固化到 PolicySnapshotStore 骨架与 unit 测试中。
+
+D 结论：
+
+1. Design -> Build 映射：新增 infra/src/policy/PolicySnapshotStore.h/.cpp 私有实现，提供内存版 current/history/LKG 存储、generation 单调校验、缺省 last_known_good_ref 回填，以及可控的 commit failure 注入；不引入外部持久化介质或 rollback 主链实现。
+2. Build 三件套：
+   - 代码目标：落盘 PolicySnapshotStore 私有实现，完成 commit/current/last_known_good/get_by_id、bounded history trim 和 fail-next-commit test seam。
+   - 测试目标：新增 tests/unit/infra/PolicySnapshotStoreTest.cpp，覆盖成功提交、generation 自增、history trim、last_known_good linkage 和 injected commit failure 不切 current/LKG；同步更新 infra/tests unit CMake 接线。
+   - 验收命令：优先尝试 CMake Tools / RunCtest；若工作区仍无法配置，则按仓库既定回退链路执行 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_infra dasall_unit_tests、ctest --test-dir build-ci -N -R "PolicySnapshotStore(InterfaceTest|Test)"、ctest --test-dir build-ci --output-on-failure -R "PolicySnapshotStore(InterfaceTest|Test)"、ctest --test-dir build-ci --output-on-failure -L unit。
+3. D Gate：PASS。
+
+### 23.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/policy/PolicySnapshotStore.h、infra/src/policy/PolicySnapshotStore.cpp：新增 PolicySnapshotStore 私有实现，提供内存版 current/history/LKG 存储、generation 单调校验、bounded history trim 与 injected commit failure seam。
+2. infra/CMakeLists.txt：把 PolicySnapshotStore.cpp 与对应私有头纳入 dasall_infra 构建图。
+3. tests/unit/infra/PolicySnapshotStoreTest.cpp、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：新增并注册 unit 测试与聚合目标，覆盖 generation 自增、history trim、LKG linkage 与 commit failure 保持旧状态。
+
+验收结果：
+
+1. CMake Tools / RunCtest：失败，返回“无法配置项目”且未列出可用 targets/tests；按仓库既定回退策略改用 build-ci 命令链，不视为任务阻塞。
+2. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+3. cmake --build build-ci --target dasall_infra dasall_unit_tests：通过；构建过程中 unit 聚合目标附带执行，121/121 unit tests passed。
+4. ctest --test-dir build-ci -N -R "PolicySnapshotStore(InterfaceTest|Test)"：通过，发现 2 个测试，分别为 PolicySnapshotStoreInterfaceTest 与 PolicySnapshotStoreTest。
+5. ctest --test-dir build-ci --output-on-failure -R "PolicySnapshotStore(InterfaceTest|Test)"：通过，2/2 tests passed。
+6. ctest --test-dir build-ci --output-on-failure -L unit：通过，121/121 tests passed。
+
+Build 合规复核：
+
+1. 生命周期边界：PolicySnapshotStore 仍只承接 snapshot persistence 语义，不吸收 loader、validator、manager、audit 或 rollback orchestrator 职责。
+2. 正负例覆盖：unit 覆盖成功提交、generation 单调、history trim、缺省 LKG linkage、invalid snapshot、non-monotonic commit 与 injected commit failure 七类路径。
+3. 测试发现性：已通过 ctest -N 与定向执行验证 PolicySnapshotStoreInterfaceTest、PolicySnapshotStoreTest 均进入 CTest 图，并补充 unit 标签级全量门禁复核。
+4. 回退链路：CMake Tools / RunCtest 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
+5. TODO 证据回写：已完成 POL-TODO-013 状态、交付物与验收结果回写。
+6. 提交隔离：本轮提交范围限定为 PolicySnapshotStore 私有实现、unit/CMake 接线与本专项 TODO 文档。
 

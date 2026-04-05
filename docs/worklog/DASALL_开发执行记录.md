@@ -8,6 +8,49 @@
 
 ---
 
+## 记录 #106
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-013 PolicySnapshotStore generation/LKG 骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-013-D/B 收敛：
+   - 新增 infra/src/policy/PolicySnapshotStore.h 与 infra/src/policy/PolicySnapshotStore.cpp，落盘内存版 current/history/LKG store、generation 单调校验、缺省 last_known_good_ref 回填和 injected commit failure seam。
+   - 新增 tests/unit/infra/PolicySnapshotStoreTest.cpp，覆盖成功提交、history trim、generation 自增、LKG linkage、invalid/non-monotonic commit 与 forced commit failure 保持旧状态。
+2. 完成最小接线：
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，把 snapshot store 私有实现与新增 unit test 纳入构建图与 CTest 图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-013 标记为 Done，并补齐本轮执行记录、回退链路与验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_unit_tests`
+   - `ctest --test-dir build-ci -N -R "PolicySnapshotStore(InterfaceTest|Test)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicySnapshotStore(InterfaceTest|Test)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - CMake Tools / RunCtest 仍无法配置项目，已按仓库回退链路切换到 build-ci。
+   - 新增 `PolicySnapshotStoreTest` 与既有 `PolicySnapshotStoreInterfaceTest` 可被发现并定向执行，2/2 通过；unit 121/121 全部通过。
+
+### 结果
+
+1. POL-TODO-013 已把 policy 阶段 C 的第二步从“接口已冻结但无真实快照存储实现”推进到“存在最小内存版 snapshot store、generation/history/LKG 骨架与 commit failure test seam”的状态。
+2. 当前 policy 组件专项 TODO 的阶段 C 已闭环，后续可转入 POL-TODO-011 / POL-TODO-012 的 validator 与 conflict resolver 主链。
+
+### 下一步
+
+1. 若继续推进 policy 主链，优先执行 POL-TODO-011，实现 PolicySchemaValidator 最小校验骨架并承接阶段 D 起点。
+
+### 风险
+
+1. 当前 PolicySnapshotStore 仍是内存版骨架，尚未接入真实持久化介质；后续 manager/rollback 任务不得把它误判为 durable store。
+2. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 policy 实现任务仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #105
 
 - 日期：2026-04-05
