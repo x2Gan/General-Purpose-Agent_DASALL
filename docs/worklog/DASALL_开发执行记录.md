@@ -8,6 +8,45 @@
 
 ---
 
+## 记录 #116
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-BLK-004 解阻校准
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-BLK-004 证据核验：
+   - 复核 metrics 组件专项 TODO 中 `MET-TODO-001`~`MET-TODO-008` 的完成状态，确认 `IMetricsProvider`、`IMeter`、`IMetricConfigPolicy`、`IMetricsHealthProbe`、`MetricTypes`、`MetricsSnapshots`、`MetricsErrors` 已冻结。
+   - 复核 health 组件专项 TODO 中 `HLT-TODO-001`~`HLT-TODO-006` 的完成状态，确认 `IHealthProbe`、`IHealthMonitor`、`IHealthPolicy`、`HealthStateTypes`、`RecoveryHint` 已冻结。
+   - 复核 tests/unit/infra/MetricTypesTest.cpp、tests/contract/smoke/MetricsConfigPolicyInterfaceBoundaryContractTest.cpp、tests/unit/infra/HealthSnapshotTest.cpp、tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp、tests/contract/smoke/HealthMonitorInterfaceBoundaryContractTest.cpp，确认 policy 所需的标签白名单和健康状态对象边界已有可执行门禁。
+2. 完成 policy 台账校准：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 `POL-BLK-004` 标记为已解阻，并将 `POL-TODO-020`、`POL-TODO-021` 从 Blocked 校准为 Not Started。
+   - 同步刷新“当前 Blocked 任务索引”和阶段 F 的顺序说明，使后续 020/021 可以继续串行推进。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N -R "(MetricsProviderInterfaceTest|MetricsMeterInterfaceTest|MetricsConfigPolicyInterfaceTest|MetricsHealthProbeInterfaceTest|MetricTypesTest|MetricsProviderInterfaceBoundaryContractTest|MetricsMeterInterfaceBoundaryContractTest|MetricsConfigPolicyInterfaceBoundaryContractTest|HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest|HealthMonitorInterfaceBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsProviderInterfaceTest|MetricsMeterInterfaceTest|MetricsConfigPolicyInterfaceTest|MetricsHealthProbeInterfaceTest|MetricTypesTest|MetricsProviderInterfaceBoundaryContractTest|MetricsMeterInterfaceBoundaryContractTest|MetricsConfigPolicyInterfaceBoundaryContractTest|HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest|HealthMonitorInterfaceBoundaryContractTest)"`
+2. 结果：
+   - 相关 metrics/health gate 当前发现 11 个测试。
+   - 定向执行通过，11/11 tests passed。
+
+### 结果
+
+1. POL-BLK-004 已从“policy 文档中的历史阻塞项”校准为“已由 metrics/health 接口冻结与边界门禁实质解阻”的状态。
+2. `POL-TODO-020` 与 `POL-TODO-021` 现在可以作为下一轮可执行原子任务继续推进。
+
+### 下一步
+
+1. 实现 `POL-TODO-020`，落盘 PolicyMetricsBridge 指标桥接骨架，并补 unit/contract 验证。
+
+### 风险
+
+1. 若 metrics 标签白名单、provider/meter 接口或 health 状态对象边界未来回退，`POL-BLK-004` 需要重新转回 Blocked；当前解阻结论依赖 metrics/health 专项 TODO 与 build-ci 定向 gate 的持续有效性。
+
 ## 记录 #115
 
 - 日期：2026-04-05
