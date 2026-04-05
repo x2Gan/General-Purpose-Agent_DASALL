@@ -333,6 +333,24 @@ target_link_libraries(dasall_contract_policy_schema_validator_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_policy_decision_projector_boundary_test
+  PolicyDecisionProjectorBoundaryContractTest
+  smoke/PolicyDecisionProjectorBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_policy_decision_projector_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_contract_policy_decision_projector_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_recovery_hint_boundary_test
   RecoveryHintBoundaryContractTest
   smoke/RecoveryHintBoundaryContractTest.cpp

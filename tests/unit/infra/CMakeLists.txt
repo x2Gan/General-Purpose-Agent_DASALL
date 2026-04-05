@@ -725,6 +725,26 @@ dasall_apply_common_options(dasall_policy_conflict_resolver_unit_test)
 add_test(NAME PolicyConflictResolverTest COMMAND dasall_policy_conflict_resolver_unit_test)
 set_tests_properties(PolicyConflictResolverTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_decision_projector_unit_test
+  PolicyDecisionProjectorTest.cpp
+)
+
+target_include_directories(dasall_policy_decision_projector_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_policy_decision_projector_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_decision_projector_unit_test)
+
+add_test(NAME PolicyDecisionProjectorTest COMMAND dasall_policy_decision_projector_unit_test)
+set_tests_properties(PolicyDecisionProjectorTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_policy_schema_validator_interface_unit_test
   PolicySchemaValidatorInterfaceTest.cpp
 )

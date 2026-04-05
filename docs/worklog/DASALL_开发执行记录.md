@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #109
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-014 PolicyDecisionProjector 查询投影骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-014-D/B 收敛：
+   - 新增 infra/src/policy/PolicyDecisionProjector.h 与 infra/src/policy/PolicyDecisionProjector.cpp，落盘 query module -> domain 映射、target_selector specificity 优先、default_effect fallback、observe -> allow 告警映射和 evidence_ref 锚点生成。
+   - 新增 tests/unit/infra/PolicyDecisionProjectorTest.cpp，覆盖 direct allow hit、default deny miss、require_confirmation 与 specificity-first deny 四类投影。
+   - 新增 tests/contract/smoke/PolicyDecisionProjectorBoundaryContractTest.cpp，验证 projector 输出仍受 decision semantic catalog 与 evidence_ref private-field catalog 约束。
+2. 完成最小接线：
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，把 projector 私有实现与新增 unit/contract tests 纳入构建图与 CTest 图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-014 标记为 Done，并补齐本轮执行记录、回退链路与验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -R "PolicyDecisionProjector(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicyDecisionProjector(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - CMake Tools / RunCtest 仍无法配置项目，且 ListBuildTargets/ListTests 为空；已按仓库回退链路切换到 build-ci。
+   - 新增 `PolicyDecisionProjectorTest` 与 `PolicyDecisionProjectorBoundaryContractTest` 可被发现并定向执行，2/2 通过；unit 124/124、contract 136/136 全部通过。
+
+### 结果
+
+1. POL-TODO-014 已把 policy 阶段 D 的第三步从“只有 PolicyDecisionRef 与 mapping catalog 边界”推进到“存在可执行的最小查询投影骨架、default_effect fail-closed 回退和 decision/evidence_ref contract 证据”的状态。
+2. 当前 policy 组件专项 TODO 已具备继续进入 POL-TODO-015 的前提，可按串行顺序转入 SecurityPolicyManager 主链骨架。
+
+### 下一步
+
+1. 执行 POL-TODO-015，实现 SecurityPolicyManager 最小主链骨架，并串接 loader、validator、resolver、snapshot store、projector 五段闭环。
+
+### 风险
+
+1. 当前 projector 仍保持私有实现面，且 default miss 依赖 loader 生成的 `evaluate_default` 规则作为最小兜底；若后续需要共享 DecisionTrace 或 richer evidence 对象，应单独冻结边界而不是在本轮实现里隐式扩张。
+2. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 policy 实现任务仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #108
 
 - 日期：2026-04-05
