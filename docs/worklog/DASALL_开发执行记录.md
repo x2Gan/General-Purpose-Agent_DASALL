@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #110
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-015 SecurityPolicyManager 主链骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-015-D/B 收敛：
+   - 新增 infra/src/policy/SecurityPolicyManager.h 与 infra/src/policy/SecurityPolicyManager.cpp，落盘 bundle validate/resolve/commit、patch dry-run gate、apply fail-closed、rollback clone-commit、query projector 转发，以及连续 patch 失败进入 safe_mode 的最小状态机。
+   - 复用并串接 PolicySchemaValidator、PolicyConflictResolver、PolicySnapshotStore、PolicyDecisionProjector 四个已完成组件，保持 manager 只做 orchestration，不吸收 audit/metrics/health 职责。
+   - 从 admin patch gate rule.conditions 解析 `dry_run_required` 与 `safe_mode_threshold`，避免为 manager 主链新增额外公共配置入口。
+2. 完成最小接线：
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，把 manager 私有实现与新增 unit/contract tests 纳入构建图与 CTest 图。
+3. 完成测试与契约落盘：
+   - 新增 tests/unit/infra/SecurityPolicyManagerTest.cpp，覆盖正常 load+evaluate、patch reject 不切 current、dry_run+apply 后 rollback 成功、连续失败进入 safe_mode。
+   - 新增 tests/contract/smoke/SecurityPolicyManagerFailureContractTest.cpp，验证 dry-run reject 与 safe_mode reject 继续停留在 policy failure domain。
+4. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-015 标记为 Done，并补齐本轮执行记录、回退链路与验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -R "SecurityPolicyManager(Test|FailureContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "SecurityPolicyManager(Test|FailureContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - CMake Tools / RunCtest 仍无法配置项目，且 ListBuildTargets/ListTests 为空；已按仓库回退链路切换到 build-ci。
+   - 新增 `SecurityPolicyManagerTest` 与 `SecurityPolicyManagerFailureContractTest` 可被发现并定向执行，2/2 通过；unit 125/125、contract 137/137 全部通过。
+
+### 结果
+
+1. POL-TODO-015 已把 policy 阶段 D 的第四步从“只有分散子组件骨架”推进到“存在可运行的 manager 主链、patch fail-closed gate、rollback 闭环和 safe_mode 失败阈值控制”的状态。
+2. 用户指定的规则治理主链原子任务 POL-TODO-011、POL-TODO-012、POL-TODO-014、POL-TODO-015 已全部完成并各自独立提交推送。
+
+### 下一步
+
+1. 若继续推进 policy TODO，可先校准 POL-TODO-016、POL-TODO-017 的状态与交付范围，再决定是否转入 POL-TODO-018 integration 接线或 019~020 的桥接类任务。
+
+### 风险
+
+1. 当前 manager 仍只覆盖最小 orchestration 语义，safe_mode 也只冻结到“连续 patch 失败后拒绝后续 apply_patch”；若后续要引入自恢复、审计告警或更细粒度失败分类，应单独扩展状态机而不是在当前轮次内隐式加复杂度。
+2. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 policy 实现任务仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #109
 
 - 日期：2026-04-05

@@ -70,6 +70,7 @@ set(DASALL_INFRA_POLICY_SOURCES
   src/policy/PolicyConflictResolver.cpp
   src/policy/PolicyLoader.cpp
   src/policy/PolicySchemaValidator.cpp
+  src/policy/SecurityPolicyManager.cpp
   src/policy/PolicySnapshotStore.cpp
 )
 
@@ -78,6 +79,7 @@ set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
   src/policy/PolicyConflictResolver.h
   src/policy/PolicyLoader.h
   src/policy/PolicySchemaValidator.h
+  src/policy/SecurityPolicyManager.h
   src/policy/PolicySnapshotStore.h
 )
 

@@ -184,7 +184,7 @@
 | POL-TODO-012 | Done (2026-04-05) | 实现 PolicyConflictResolver 冲突裁定骨架 | policy 设计 6.3/6.7/6.8/6.9 | 6.3 EffectivePolicySet 输出；6.7 正常加载流程第 4 步；6.9 priority_order | L2 | infra/src/policy/PolicyConflictResolver.cpp | PolicyConflictResolver（deny-first 与 explicit-priority 裁定路径） | unit：deny-first 与 explicit-priority 两档裁定；failure：冲突未决拒绝激活 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001、POL-TODO-008、POL-TODO-010 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结冲突裁定矩阵、同优先级 tie-break 与 compat 模式降级规则推进 | PolicyConflictResolver.h/.cpp、PolicyConflictResolverTest、policy CMake/unit 接线；2026-04-05 已落盘并完成 build-ci unit 验收 | 仅当两档裁定都可被稳定验证，且冲突未决时返回显式拒绝而非静默覆盖时完成 |
 | POL-TODO-013 | Done (2026-04-05) | 实现 PolicySnapshotStore generation/LKG 骨架 | policy 设计 6.3/6.7/6.8 | 6.3 PolicySnapshotStore；6.7 正常加载流程第 5 步；6.8 commit 失败回退 | L2 | infra/src/policy/PolicySnapshotStore.cpp | commit、current、last_known_good、get_by_id | unit：generation 单调、自增、LKG 回退；failure：commit 失败后 current 不切换 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003、POL-TODO-009 | 无 | 无 | PolicySnapshotStore.h/.cpp、PolicySnapshotStoreTest、policy CMake/unit 接线；2026-04-05 已落盘并完成 build-ci unit 验收 | 仅当新快照提交成功后 generation 自增，提交失败后 current/LKG 保持旧值且错误可判定时完成 |
 | POL-TODO-014 | Done (2026-04-05) | 实现 PolicyDecisionProjector 查询投影骨架 | policy 设计 6.3/6.5/6.7；contracts-freeze T010 | 6.3 投影输出；6.5 PolicyDecisionRef；6.7 查询流程 | L2 | infra/src/policy/PolicyDecisionProjector.cpp | PolicyDecisionProjector（domain -> target_selector -> priority -> effect 投影路径） | unit：命中、未命中、require_confirmation、deny 四类投影；contract：decision 语义与 evidence_ref 映射 catalog | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-004、POL-TODO-012、POL-TODO-013 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；共享对象缺失时的映射 catalog 已固定 | PolicyDecisionProjector.h/.cpp、PolicyDecisionProjectorTest、PolicyDecisionProjectorBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当投影结果只输出引用和原因，不泄露规则实现细节，且 contract 门禁通过时完成 |
-| POL-TODO-015 | Not Started | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小接口冻结 | SecurityPolicyManager.cpp、主链测试 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
+| POL-TODO-015 | Done (2026-04-05) | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小接口冻结 | SecurityPolicyManager.h/.cpp、SecurityPolicyManagerTest、SecurityPolicyManagerFailureContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
 | POL-TODO-016 | Not Started | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
 | POL-TODO-017 | Not Started | 注册 policy 的 unit 与 contract 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/unit/infra/policy、tests/contract/infra；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/policy/、tests/contract/CMakeLists.txt、tests/contract/smoke/ | unit：对象、接口、loader/store/manager 基础路径；contract：decision 语义、错误码映射、contracts 边界 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-016 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；可直接按已冻结 mapping catalog 与 contract 口径推进 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 policy unit/contract 用例可被 ctest -N 发现并执行时完成 |
 | POL-TODO-018 | Not Started | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 POL-TODO-015、POL-TODO-017 完成后落盘具体 integration/failure 用例 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
@@ -1104,4 +1104,62 @@ Build 合规复核：
 4. 回退链路：CMake Tools / RunCtest 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
 5. TODO 证据回写：已完成 POL-TODO-014 状态、交付物与验收结果回写。
 6. 提交隔离：本轮提交范围限定为 PolicyDecisionProjector 私有实现、unit/contract/CMake 接线与本专项 TODO 文档。
+
+## 27. 本轮执行记录（2026-04-05 / POL-TODO-015）
+
+### 27.1 选中任务
+
+1. 本轮任务：POL-TODO-015。
+2. 可执行性依据：POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 已完成，且 7.1 阶段 D 的串行主链已推进至 manager 主控节点；当前可以在不扩张公共接口的前提下闭合 load/dry_run/apply/query/rollback/safe_mode 最小主链。
+
+### 27.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_policy模块详细设计.md 6.2、6.4、6.7、6.8 已冻结 SecurityPolicyManager 的职责边界：它是对外统一入口，负责串接 validator、resolver、snapshot store 与 projector，并在 load/apply_patch/rollback 失败时保持 current/LKG 稳定。
+2. infra/include/policy/ISecurityPolicyManager.h 与 tests/unit/infra/PolicyManagerInterfaceTest.cpp 已冻结 manager 只暴露六个入口：load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate；不允许吸收 loader、commit 或内部规则集公共接口。
+3. POL-TODO-010 的 loader skeleton 已把 `dry_run_required` 和 `safe_mode_threshold` 固化进 admin patch gate rule.conditions；本轮可直接从激活后的 effective rules 解析这两个治理开关，而不引入新的配置入口。
+4. POL-TODO-011 至 POL-TODO-014 已分别落盘 validator、resolver、snapshot store、projector；本轮只负责 orchestrate 它们，不提前吸收 audit/metrics/health 桥接职责。
+
+外部参考：
+
+1. Martin Fowler 的 Circuit Breaker 说明强调：当失败次数达到阈值后，应立即打开断路并让后续调用 fail-fast，直到显式恢复或重置；本轮据此把连续 patch 失败后的 safe_mode 收敛为“拒绝后续 apply_patch、保留只读 query 路径”的最小 fail-fast 语义。
+
+D 结论：
+
+1. Design -> Build 映射：新增 infra/src/policy/SecurityPolicyManager.h/.cpp 私有实现，围绕 validator、resolver、snapshot store、projector 构建 load_policy、dry_run_patch、apply_patch、rollback、evaluate 主链，并维护连续 patch 失败计数与 safe_mode 状态。
+2. Build 三件套：
+   - 代码目标：落盘 SecurityPolicyManager 私有实现，完成 bundle validate/resolve/commit、patch dry-run gate、apply fail-closed、rollback clone-commit、query projector 转发，以及从 patch gate rule 解析 dry_run_required/safe_mode_threshold。
+   - 测试目标：新增 tests/unit/infra/SecurityPolicyManagerTest.cpp，覆盖正常 load+evaluate、patch 失败不切 current、dry_run+apply 后 rollback 成功、连续失败进入 safe_mode；新增 tests/contract/smoke/SecurityPolicyManagerFailureContractTest.cpp，验证 dry-run reject 与 safe_mode reject 仍映射到冻结的 policy failure domain。
+   - 验收命令：优先尝试 CMake Tools；若工作区仍无法配置，则按仓库既定回退链路执行 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests、ctest --test-dir build-ci -N -R "SecurityPolicyManager(Test|FailureContractTest)"、ctest --test-dir build-ci --output-on-failure -R "SecurityPolicyManager(Test|FailureContractTest)"、ctest --test-dir build-ci --output-on-failure -L unit、ctest --test-dir build-ci --output-on-failure -L contract。
+3. D Gate：PASS。
+
+### 27.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/policy/SecurityPolicyManager.h、infra/src/policy/SecurityPolicyManager.cpp：新增 SecurityPolicyManager 私有实现，完成 load_policy、dry_run_patch、apply_patch、snapshot、rollback、evaluate 六条主链和连续 patch 失败进入 safe_mode 的最小状态机。
+2. infra/CMakeLists.txt：把 SecurityPolicyManager.cpp 与对应私有头纳入 dasall_infra 构建图。
+3. tests/unit/infra/SecurityPolicyManagerTest.cpp、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：新增并注册 unit 测试与聚合目标，覆盖 load+evaluate、patch reject 不切 current、rollback 成功、连续失败进入 safe_mode 四类路径。
+4. tests/contract/smoke/SecurityPolicyManagerFailureContractTest.cpp、tests/contract/CMakeLists.txt：新增并注册 contract smoke test，验证 apply_patch 拒绝结果仍停留在 contracts 的 policy failure domain。
+
+验收结果：
+
+1. ListBuildTargets_CMakeTools / ListTests_CMakeTools：返回空 targets/tests；工作区 IDE 工具态仍未恢复。
+2. Build_CMakeTools / RunCtest_CMakeTools：失败，返回“生成失败: 无法配置项目”；按仓库既定回退策略改用 build-ci 命令链，不视为任务阻塞。
+3. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+4. cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests：通过；构建过程中 unit 聚合目标附带执行，125/125 unit tests passed；contract 聚合目标附带执行，137/137 contract tests passed。
+5. ctest --test-dir build-ci -N -R "SecurityPolicyManager(Test|FailureContractTest)"：通过，发现 2 个测试，分别为 SecurityPolicyManagerTest 与 SecurityPolicyManagerFailureContractTest。
+6. ctest --test-dir build-ci --output-on-failure -R "SecurityPolicyManager(Test|FailureContractTest)"：通过，2/2 tests passed。
+7. ctest --test-dir build-ci --output-on-failure -L unit：通过，125/125 tests passed。
+8. ctest --test-dir build-ci --output-on-failure -L contract：通过，137/137 tests passed。
+
+Build 合规复核：
+
+1. 主控边界：manager 仍保持对外六入口和私有 orchestration 角色，没有新增 load_from_sources、commit 或 EffectivePolicySet 等公共泄露面。
+2. 正负例覆盖：unit 覆盖 load+evaluate、dry-run gate 导致 patch reject 且 current 稳定、apply 后 rollback 恢复历史语义、连续失败触发 safe_mode；contract 覆盖 dry-run reject 与 safe_mode reject 继续停留在 policy failure domain。
+3. 测试发现性：已通过 ctest -N 与定向执行验证新增 manager unit/contract 用例进入 CTest 图，并补充 unit/contract 标签级全量门禁复核。
+4. 回退链路：CMake Tools / RunCtest 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
+5. TODO 证据回写：已完成 POL-TODO-015 状态、交付物与验收结果回写。
+6. 提交隔离：本轮提交范围限定为 SecurityPolicyManager 私有实现、unit/contract/CMake 接线与本专项 TODO 文档。
 
