@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #112
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-017 注册 policy 的 unit 与 contract 测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-017-D/B 校准：
+   - 核验 tests/unit/infra/CMakeLists.txt 已注册 16 个 policy 核心 unit 入口，覆盖对象、接口、loader、resolver、projector、snapshot store、manager 与错误语义基础路径。
+   - 核验 tests/unit/CMakeLists.txt 已把上述 policy unit targets 纳入 DASALL_UNIT_TEST_EXECUTABLE_TARGETS 聚合。
+   - 核验 tests/contract/CMakeLists.txt 已注册 10 个 policy 核心 contract 入口，覆盖 decision 语义、错误码映射、schema/interface 边界、loader/projector/manager 契约与 mapping catalog 门禁。
+2. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-017 从 Not Started 校准为 Done，并补齐本轮执行记录、工具态说明、ctest 发现性与标签级验收结果。
+3. 完成本轮工作日志补记：
+   - 在当前文件顶部追加 017 的执行记录，保持后续 018 integration 接线与 022 质量门回写可以直接复用本轮验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `RunCtest_CMakeTools`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -R "^(Policy|SecurityPolicyManager)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - RunCtest_CMakeTools 仍返回“生成失败: 无法配置项目”，工作区 IDE 测试工具态未恢复。
+   - build-ci 下 `dasall_unit_tests` 与 `dasall_contract_tests` 构建成功。
+   - `ctest -N -R "^(Policy|SecurityPolicyManager)"` 发现 26 个 policy 核心测试，其中 unit 16 个、contract 10 个。
+   - `ctest -L unit` 通过，125/125 tests passed；`ctest -L contract` 通过，137/137 tests passed。
+
+### 结果
+
+1. POL-TODO-017 已完成从“测试入口已落盘但 TODO 仍未回写”到“ctest 发现性、unit/contract 门禁与台账状态全部闭环”的校准。
+2. policy 构建与测试接线任务 016/017 现已全部完成，并为后续 POL-TODO-018 integration 接线与 POL-TODO-022 质量门回写提供直接证据。
+
+### 下一步
+
+1. 若继续推进 policy TODO，优先进入 POL-TODO-018，围绕 load -> snapshot -> evaluate -> patch -> rollback 闭环补 integration 入口与发现性证据。
+
+### 风险
+
+1. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 018/022 仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #111
 
 - 日期：2026-04-05
