@@ -8,6 +8,49 @@
 
 ---
 
+## 记录 #108
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-012 PolicyConflictResolver 冲突裁定骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-012-D/B 收敛：
+   - 新增 infra/src/policy/PolicyConflictResolver.h 与 infra/src/policy/PolicyConflictResolver.cpp，落盘私有 `ConflictResolutionResult`、scope grouping、deny-first / explicit-priority 裁定、compat downgrade warning 和 unresolved tie reject。
+   - 新增 tests/unit/infra/PolicyConflictResolverTest.cpp，覆盖 deny-first、explicit-priority、enforced unresolved reject 和 compatibility-only downgrade warning。
+2. 完成最小接线：
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，把 conflict resolver 私有实现与新增 unit test 纳入构建图与 CTest 图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-012 标记为 Done，并补齐本轮执行记录、回退链路与验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_unit_tests`
+   - `ctest --test-dir build-ci -N -R PolicyConflictResolverTest`
+   - `ctest --test-dir build-ci --output-on-failure -R PolicyConflictResolverTest`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - CMake Tools / RunCtest 仍无法配置项目，已按仓库回退链路切换到 build-ci。
+   - 首次 unit 聚合暴露了同-rank 冲突夹具设置不准确的问题；修正测试后，`PolicyConflictResolverTest` 可被发现并定向执行，1/1 通过；unit 123/123 全部通过。
+
+### 结果
+
+1. POL-TODO-012 已把 policy 阶段 D 的第二步从“priority_order 只存在设计和 loader 条件里”推进到“存在最小冲突裁定骨架、两档顺序语义和 unresolved/compat 边界证据”的状态。
+2. 当前 policy 组件专项 TODO 已具备继续进入 POL-TODO-014 的前提，可按串行顺序转入查询投影骨架。
+
+### 下一步
+
+1. 执行 POL-TODO-014，实现 PolicyDecisionProjector 最小查询投影骨架，并固定 decision/evidence_ref 输出边界。
+
+### 风险
+
+1. 当前 resolver 仍保持私有返回面，且 same-rank tie 的处理只冻结到“enforced reject / compat downgrade”；若后续需要跨模块共享 EffectivePolicySet，需要单独做对象冻结而不是在当前轮次内隐式扩张。
+2. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 policy 实现任务仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #107
 
 - 日期：2026-04-05

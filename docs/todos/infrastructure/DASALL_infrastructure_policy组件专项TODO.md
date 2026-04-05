@@ -181,7 +181,7 @@
 | POL-TODO-009 | Done (2026-04-01) | 定义 IPolicySnapshotStore 接口头文件 | policy 设计 6.6/6.8 | 6.6 IPolicySnapshotStore；6.8 存储异常 | L3 | infra/include/policy/IPolicySnapshotStore.h | commit、current、last_known_good、get_by_id | unit：接口编译；unit：LKG 与 generation 语义检查 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003 | 无 | 无 | IPolicySnapshotStore.h、PolicySnapshotStoreInterfaceTest、build-ci unit 验证记录；2026-04-01 已完成 | 仅当 4 个方法齐全，且接口不泄露具体持久化后端时完成 |
 | POL-TODO-010 | Done (2026-04-05) | 实现 PolicyLoader 配置读取骨架 | policy 设计 6.3/6.7/6.9；config TODO；profiles TODO | 6.3 PolicyLoader 输入输出；6.7 正常加载流程第 2 步；6.9 配置项表 | L2 | infra/src/policy/PolicyLoader.cpp | PolicyLoader（默认/Profile/部署层读取与 source_id/checksum 装配） | unit：strict/compat、hot_reload、default_effect 等配置读取；contract：Profile 裁剪不绕过 Audit/Runtime 主控链路 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-001、POL-TODO-007 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 具备最小 load_layers/get_typed 能力且 profiles 侧键名冻结 | PolicyLoader.h/.cpp、PolicyLoaderConfigReadTest、PolicyLoaderBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当 loader 能按设计读取 enabled/mode/hot_reload/max_history/default_effect/priority_order 等策略键，且 source 链可追溯时完成 |
 | POL-TODO-011 | Done (2026-04-05) | 实现 PolicySchemaValidator 最小校验骨架 | policy 设计 6.3/6.7/6.8 | 6.3 ValidationReport；6.7 正常加载流程第 3 步；6.8 输入异常 | L2 | infra/src/policy/PolicySchemaValidator.cpp | validate_bundle、validate_patch | unit：缺字段、未知 domain、非法 effect、base_generation 不匹配；contract：错误归类保持 policy 域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-002、POL-TODO-005、POL-TODO-008 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结 domain/effect/conditions 白名单、schema_version 兼容矩阵与 patch operation 集合推进 | PolicySchemaValidator.h/.cpp、PolicySchemaValidatorTest、PolicySchemaValidatorBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当四类非法输入都能返回明确 ValidationReport 且不激活快照时，状态才可从 Not Started 转为 Done |
-| POL-TODO-012 | Not Started | 实现 PolicyConflictResolver 冲突裁定骨架 | policy 设计 6.3/6.7/6.8/6.9 | 6.3 EffectivePolicySet 输出；6.7 正常加载流程第 4 步；6.9 priority_order | L2 | infra/src/policy/PolicyConflictResolver.cpp | PolicyConflictResolver（deny-first 与 explicit-priority 裁定路径） | unit：deny-first 与 explicit-priority 两档裁定；failure：冲突未决拒绝激活 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001、POL-TODO-008、POL-TODO-010 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结冲突裁定矩阵、同优先级 tie-break 与 compat 模式降级规则推进 | PolicyConflictResolver.cpp 或阻塞记录 | 仅当两档裁定都可被稳定验证，且冲突未决时返回显式拒绝而非静默覆盖时完成 |
+| POL-TODO-012 | Done (2026-04-05) | 实现 PolicyConflictResolver 冲突裁定骨架 | policy 设计 6.3/6.7/6.8/6.9 | 6.3 EffectivePolicySet 输出；6.7 正常加载流程第 4 步；6.9 priority_order | L2 | infra/src/policy/PolicyConflictResolver.cpp | PolicyConflictResolver（deny-first 与 explicit-priority 裁定路径） | unit：deny-first 与 explicit-priority 两档裁定；failure：冲突未决拒绝激活 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-001、POL-TODO-008、POL-TODO-010 | 无（2026-03-30 已由 INF-BLK-07 校准解阻） | 无；可直接按已冻结冲突裁定矩阵、同优先级 tie-break 与 compat 模式降级规则推进 | PolicyConflictResolver.h/.cpp、PolicyConflictResolverTest、policy CMake/unit 接线；2026-04-05 已落盘并完成 build-ci unit 验收 | 仅当两档裁定都可被稳定验证，且冲突未决时返回显式拒绝而非静默覆盖时完成 |
 | POL-TODO-013 | Done (2026-04-05) | 实现 PolicySnapshotStore generation/LKG 骨架 | policy 设计 6.3/6.7/6.8 | 6.3 PolicySnapshotStore；6.7 正常加载流程第 5 步；6.8 commit 失败回退 | L2 | infra/src/policy/PolicySnapshotStore.cpp | commit、current、last_known_good、get_by_id | unit：generation 单调、自增、LKG 回退；failure：commit 失败后 current 不切换 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003、POL-TODO-009 | 无 | 无 | PolicySnapshotStore.h/.cpp、PolicySnapshotStoreTest、policy CMake/unit 接线；2026-04-05 已落盘并完成 build-ci unit 验收 | 仅当新快照提交成功后 generation 自增，提交失败后 current/LKG 保持旧值且错误可判定时完成 |
 | POL-TODO-014 | Not Started | 实现 PolicyDecisionProjector 查询投影骨架 | policy 设计 6.3/6.5/6.7；contracts-freeze T010 | 6.3 投影输出；6.5 PolicyDecisionRef；6.7 查询流程 | L2 | infra/src/policy/PolicyDecisionProjector.cpp | PolicyDecisionProjector（domain -> target_selector -> priority -> effect 投影路径） | unit：命中、未命中、require_confirmation、deny 四类投影；contract：decision 语义与 evidence_ref 映射 catalog | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-004、POL-TODO-012、POL-TODO-013 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；共享对象缺失时的映射 catalog 已固定 | PolicyDecisionProjector.cpp 或阻塞记录 | 仅当投影结果只输出引用和原因，不泄露规则实现细节，且 contract 门禁通过时完成 |
 | POL-TODO-015 | Not Started | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小接口冻结 | SecurityPolicyManager.cpp、主链测试 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
@@ -991,4 +991,59 @@ Build 合规复核：
 4. 回退链路：CMake Tools / RunCtest 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
 5. TODO 证据回写：已完成 POL-TODO-011 状态、交付物与验收结果回写。
 6. 提交隔离：本轮提交范围限定为 PolicySchemaValidator 私有实现、unit/contract/CMake 接线与本专项 TODO 文档。
+
+## 25. 本轮执行记录（2026-04-05 / POL-TODO-012）
+
+### 25.1 选中任务
+
+1. 本轮任务：POL-TODO-012。
+2. 可执行性依据：POL-TODO-001、POL-TODO-008、POL-TODO-010 已完成，且 POL-BLK-001 已于 2026-03-30 解阻；根据 7.1 阶段 D 的串行要求，当前应先把 deny-first / explicit-priority 冲突裁定最小闭环落地，再进入 014 的查询投影骨架。
+
+### 25.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_policy模块详细设计.md 6.3、6.7、6.8、6.9 已冻结 PolicyConflictResolver 的职责边界：输入是通过校验的规则集合，输出是 EffectivePolicySet，必须满足 deny 优先、优先级显式、冲突可解释。
+2. POL-TODO-010 已在 loader skeleton 中把 `priority_order` 固化进规则 conditions，且区分了 `deny-first` 与 `explicit-priority` 两档，这为 resolver 提供了当前最小可读的顺序输入。
+3. docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md 6.1 已把 012 的完成判定锁定为“两档裁定可稳定验证，且冲突未决时返回显式拒绝而非静默覆盖”。
+4. 当前仓库仍无 public EffectivePolicySet 类型，因此本轮应保持私有返回面，不新增公共接口或 shared contracts 依赖，只为后续 manager/projector 提供最小私有骨架。
+
+外部参考：
+
+1. Apache Casbin Priority Model 文档明确说明：显式优先级模式下数值越小优先级越高，而 `priority(...) || deny` 的效果模型允许在多条规则命中时以优先级优先并保留 deny 兜底；本轮据此把 explicit-priority 落成“先比 priority，再比 effect precedence”，并保留 deny-first 模式作为单独分支。
+
+D 结论：
+
+1. Design -> Build 映射：新增 infra/src/policy/PolicyConflictResolver.h/.cpp 私有实现，输入 `PolicyBundle`，输出私有 `ConflictResolutionResult`，提供 deny-first、explicit-priority、compat tie downgrade 和 unresolved tie reject 四类最小结果。
+2. Build 三件套：
+   - 代码目标：落盘 PolicyConflictResolver 私有实现，按 scope key 分组规则，并基于 `priority_order` 计算排序与 unresolved tie 检测。
+   - 测试目标：新增 tests/unit/infra/PolicyConflictResolverTest.cpp，覆盖 deny-first 优先 deny、explicit-priority 优先小数值 priority、enforced same-rank unresolved reject，以及 compatibility-only same-rank downgrade warning。
+   - 验收命令：优先尝试 CMake Tools；若工作区仍无法配置，则按仓库既定回退链路执行 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_infra dasall_unit_tests、ctest --test-dir build-ci -N -R PolicyConflictResolverTest、ctest --test-dir build-ci --output-on-failure -R PolicyConflictResolverTest、ctest --test-dir build-ci --output-on-failure -L unit。
+3. D Gate：PASS。
+
+### 25.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/policy/PolicyConflictResolver.h、infra/src/policy/PolicyConflictResolver.cpp：新增 PolicyConflictResolver 私有实现与私有 `ConflictResolutionResult`，支持按 scope key 分组的 deny-first / explicit-priority 冲突裁定、compat downgrade warning 和 unresolved tie reject。
+2. infra/CMakeLists.txt：把 PolicyConflictResolver.cpp 与对应私有头纳入 dasall_infra 构建图。
+3. tests/unit/infra/PolicyConflictResolverTest.cpp、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt：新增并注册 unit 测试与聚合目标，覆盖两档裁定路径与 unresolved/compat 两类边界。
+
+验收结果：
+
+1. CMake Tools / RunCtest：失败，返回“无法配置项目”且未列出可用 targets/tests；按仓库既定回退策略改用 build-ci 命令链，不视为任务阻塞。
+2. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+3. cmake --build build-ci --target dasall_infra dasall_unit_tests：通过；修正一次同-rank 测试夹具后，unit 聚合目标最终通过，123/123 unit tests passed。
+4. ctest --test-dir build-ci -N -R PolicyConflictResolverTest：通过，发现 1 个测试，即 PolicyConflictResolverTest。
+5. ctest --test-dir build-ci --output-on-failure -R PolicyConflictResolverTest：通过，1/1 tests passed。
+6. ctest --test-dir build-ci --output-on-failure -L unit：通过，123/123 tests passed。
+
+Build 合规复核：
+
+1. 私有边界：resolver 仍保持私有返回面，没有引入新的 public EffectivePolicySet 类型或 shared contracts 依赖。
+2. 正负例覆盖：unit 覆盖 deny-first、explicit-priority 两条正例，以及 enforced unresolved reject 与 compat downgrade warning 两条负/降级路径。
+3. 测试发现性：已通过 ctest -N 验证 PolicyConflictResolverTest 进入 CTest 图，并补充定向执行与 unit 标签级全量门禁复核。
+4. 回退链路：CMake Tools / RunCtest 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
+5. TODO 证据回写：已完成 POL-TODO-012 状态、交付物与验收结果回写。
+6. 提交隔离：本轮提交范围限定为 PolicyConflictResolver 私有实现、unit/CMake 接线与本专项 TODO 文档。
 
