@@ -25,3 +25,9 @@ dasall_register_policy_integration_test(
   PolicyLifecycleIntegrationTest
   PolicyLifecycleIntegrationTest.cpp
 )
+
+dasall_register_policy_integration_test(
+  dasall_policy_health_integration_test
+  PolicyHealthIntegrationTest
+  PolicyHealthIntegrationTest.cpp
+)

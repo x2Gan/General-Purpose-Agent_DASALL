@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #118
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-021 实现 PolicyHealthProbe 健康探针骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-021-D/B 落盘：
+   - 新增 infra/src/policy/PolicyHealthProbe.h 与 infra/src/policy/PolicyHealthProbe.cpp，落盘 `PolicyHealthSignals`、`PolicyHealthSample`、`IPolicyHealthSignalProvider` 与 `PolicyHealthProbe`，把 current/LKG snapshot、最近失败原因、safe_mode 与 bridge degraded 事实映射到 `Healthy/Degraded/Unhealthy`。
+   - 固定 probe descriptor 为 `infra.policy.snapshot` / `readiness` / `Critical`，并把 detail_ref 收敛到 `status://policy/health/...` 命名空间，同时在 ready/degraded 分支编码 snapshot generation。
+2. 完成 021 的 CMake/test 接线：
+   - 更新 infra/CMakeLists.txt，把 PolicyHealthProbe 私有实现纳入 dasall_infra。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/integration/infra/policy/CMakeLists.txt、tests/integration/CMakeLists.txt，注册 `PolicyHealthProbeTest` 与 `PolicyHealthIntegrationTest` 并纳入聚合目标。
+3. 完成 unit/integration 门禁落盘：
+   - 新增 tests/unit/infra/PolicyHealthProbeTest.cpp，覆盖 frozen descriptor、ready/degraded/unavailable 映射与 timeout 结构化失败。
+   - 新增 tests/integration/infra/policy/PolicyHealthIntegrationTest.cpp，使用真实 SecurityPolicyManager + PolicySnapshotStore 验证 commit fail 保持旧 generation 的 degraded readiness，以及 repeated patch failure 进入 safe_mode 后的 degraded readiness。
+4. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-021 标记为 Done，并补齐本轮执行记录、build-ci 定向测试结果与标签级验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_policy_health_probe_unit_test dasall_policy_health_integration_test`
+   - `ctest --test-dir build-ci -N -R "PolicyHealth(Probe|Integration)Test"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicyHealth(Probe|Integration)Test"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - build-ci 配置成功，`dasall_infra`、`dasall_policy_health_probe_unit_test`、`dasall_policy_health_integration_test` 构建通过。
+   - `ctest -N -R "PolicyHealth(Probe|Integration)Test"` 发现 2 个目标测试。
+   - 定向执行通过，2/2 tests passed。
+   - `ctest -L unit` 通过，128/128 tests passed；`ctest -L integration` 通过，15/15 tests passed。
+
+### 结果
+
+1. POL-TODO-021 已从“metrics/health 依赖已解阻但 policy health probe 未落盘”推进到“存在可编译、可测试、保持 frozen health boundary 的 PolicyHealthProbe 最小实现”。
+2. policy 的观测桥接与集成阶段现已完成 018、019、020、021 四个原子任务；后续只剩 022 的质量门与交付证据收口。
+
+### 下一步
+
+1. 实现 `POL-TODO-022`，回写 policy 专项质量门、阻塞变化与交付证据，完成本专项 TODO 收口。
+
+### 风险
+
+1. 当前 PolicyHealthProbe 仍通过私有 signal provider 采样 manager/store 状态，尚未把审计/指标 bridge 的真实状态接入主链；在 022 收口前，不应把这种最小接线误判为缺失设计边界。
+
 ## 记录 #117
 
 - 日期：2026-04-05

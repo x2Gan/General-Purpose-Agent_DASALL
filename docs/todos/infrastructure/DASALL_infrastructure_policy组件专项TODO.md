@@ -148,7 +148,7 @@
 | 查询投影与 contracts 语义边界 | policy 设计 6.5/6.7；contracts-freeze T010 | 适配器 / contract | POL-TODO-014 | 只做 decision 引用与语义映射，不直接扩写 contracts |
 | Manager 主链与 safe_mode | policy 设计 6.7/6.8 | 生命周期 / 流程 | POL-TODO-015 | 把 load/apply/dry_run/evaluate/rollback 收束到统一入口 |
 | 构建与测试注册 | policy 设计 7、8.1、9.1；代码现状 | 测试 / 门禁 | POL-TODO-016、POL-TODO-017、POL-TODO-018 | CMake、unit/contract、integration 分拆，避免任务过大 |
-| 审计、指标、健康桥接 | policy 设计 6.10；audit/metrics/health TODO | 适配器 / 门禁 | POL-TODO-019、POL-TODO-020、POL-TODO-021 | audit/metrics 桥接已完成；health 依赖已解阻可执行 |
+| 审计、指标、健康桥接 | policy 设计 6.10；audit/metrics/health TODO | 适配器 / 门禁 | POL-TODO-019、POL-TODO-020、POL-TODO-021 | audit/metrics/health 桥接已完成；仅剩 022 证据收口 |
 | 交付证据回写 | policy 设计 9.2/11；工程规范 6.2 | 文档 / 质量门 | POL-TODO-022 | 对 gate、阻塞变化、回退证据做收口 |
 
 ### 5.2 映射覆盖性检查
@@ -190,7 +190,7 @@
 | POL-TODO-018 | Done (2026-04-05) | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；已落盘 policy integration 子目录、CTest 注册与 lifecycle/failure 注入用例 | tests/integration/infra/policy/CMakeLists.txt、PolicyLifecycleIntegrationTest.cpp、integration 聚合接线与 ctest 发现性证据；2026-04-05 已完成 build-ci integration 验收 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
 | POL-TODO-019 | Done (2026-04-05) | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | 无（2026-04-05 已由 AUD-TODO-006、AUD-TODO-014、AUD-TODO-015 与 audit gate 9/9 解阻） | 无 | PolicyAuditBridge.h/.cpp、PolicyAuditBridgeTest、PolicyAuditBridgeBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/contract 验收 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
 | POL-TODO-020 | Done (2026-04-05) | 实现 PolicyMetricsBridge 指标桥接骨架 | policy 设计 6.2/6.10；metrics TODO | 6.2 PolicyMetricsBridge；6.10 指标清单 | L1 | infra/src/policy/PolicyMetricsBridge.cpp | PolicyMetricsBridge（reload_total、invalid_total、patch_total、deny_total、rollback_total、active_generation、safe_mode_total） | unit：计数与 gauge 输出；contract：标签不过度暴露实现细节 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-015 | 无（2026-04-05 已由 metrics/health 接口冻结、标签白名单与状态对象边界测试解阻） | 无 | PolicyMetricsBridge.h/.cpp、PolicyMetricsBridgeTest、PolicyMetricsBridgeBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/contract 验收 | 仅当指标集合与设计一致，且 active_generation/safe_mode 语义可被测试稳定判定时完成 |
-| POL-TODO-021 | Not Started | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015 | 无（2026-04-05 已由 metrics/health 接口冻结、标签白名单与状态对象边界测试解阻） | 无 | PolicyHealthProbe.cpp 或阻塞记录 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
+| POL-TODO-021 | Done (2026-04-05) | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_policy_health_probe_unit_test dasall_policy_health_integration_test && ctest --test-dir build-ci --output-on-failure -R "PolicyHealth(Probe|Integration)Test" && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration | POL-TODO-015 | 无（2026-04-05 已由 metrics/health 接口冻结、标签白名单与状态对象边界测试解阻） | 无 | PolicyHealthProbe.h/.cpp、PolicyHealthProbeTest、PolicyHealthIntegrationTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/integration 验收 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
 | POL-TODO-022 | Not Started | 回写 policy 质量门与交付证据 | policy 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md | process test：gate 结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个质量门都有通过/失败结论和对应命令证据时完成 |
 
 ### 6.2 当前 Blocked 任务索引
@@ -210,7 +210,7 @@
 | C 配置与快照底座 | POL-TODO-010、POL-TODO-013 | 串行 | 先读取配置，再形成快照存储基础 |
 | D 规则治理主链 | POL-TODO-011、POL-TODO-012、POL-TODO-014、POL-TODO-015 | 串行 | INF-BLK-07 已完成校准；POL-BLK-006 已由 config/profiles 接口与 schema 冻结解阻，decision 语义缺口已由 mapping catalog 解阻 |
 | E 构建与测试接线 | POL-TODO-016、POL-TODO-017 | 可并行 | 代码入图与 unit/contract 发现性可同步推进；contracts 语义映射缺口已由 mapping catalog 补齐 |
-| F 观测桥接与集成 | POL-TODO-018~021 | 串行 | 018、019、020 已完成；021 已解阻可继续串行推进 |
+| F 观测桥接与集成 | POL-TODO-018~021 | 串行 | 018、019、020、021 已完成；022 可继续串行推进 |
 | G 证据收口 | POL-TODO-022 | 串行 | 回写质量门、阻塞变化与回退证据 |
 
 ### 7.2 必过门禁表
@@ -236,6 +236,53 @@
 | POL-BLK-004 | 已解阻（2026-04-05）：metrics 组件专项 TODO 已完成 `MET-TODO-001`~`MET-TODO-008`，冻结 `IMetricsProvider`、`IMeter`、`IMetricConfigPolicy`、`IMetricsHealthProbe`、`MetricTypes`、`MetricsSnapshots`、`MetricsErrors`；health 组件专项 TODO 已完成 `HLT-TODO-001`~`HLT-TODO-006`，冻结 `IHealthProbe`、`IHealthMonitor`、`IHealthPolicy`、`HealthStateTypes`、`RecoveryHint`。当前 `ctest --test-dir build-ci -R "(MetricsProviderInterfaceTest|MetricsMeterInterfaceTest|MetricsConfigPolicyInterfaceTest|MetricsHealthProbeInterfaceTest|MetricTypesTest|MetricsProviderInterfaceBoundaryContractTest|MetricsMeterInterfaceBoundaryContractTest|MetricsConfigPolicyInterfaceBoundaryContractTest|HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest|HealthMonitorInterfaceBoundaryContractTest)"` 已 11/11 通过，说明 policy 所需的 metrics bridge 接口、标签白名单与 health 状态对象都已稳定 | POL-TODO-020、POL-TODO-021 | 无；后续仅需保持 `IMetricsProvider/IMeter/IMetricConfigPolicy/IMetricsHealthProbe`、`MetricLabels` allowlist 与 `HealthSnapshot/HealthTransition` 语义一致 | 证据回链到 metrics 组件专项 TODO 的 MET-TODO-001~008、health 组件专项 TODO 的 HLT-TODO-001~006，以及 tests/unit/infra/MetricTypesTest.cpp、tests/contract/smoke/MetricsConfigPolicyInterfaceBoundaryContractTest.cpp、tests/unit/infra/HealthSnapshotTest.cpp、tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp | 若 metrics 标签白名单、provider/meter 接口或 health 状态对象边界未来回退，则重新转为 Blocked |
 | POL-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；policy integration/failure 是否可执行改由组件自身落盘负责 | POL-TODO-018、021 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | POL-BLK-006 | 已解阻（2026-04-01）：config 组件已落盘 IConfigCenter 最小 load_layers/get_typed 接口与对应 unit/contract 边界，profiles 侧已冻结 runtime_policy.yaml policy 键域并落盘 RuntimePolicyProvider 最小加载流程 | POL-TODO-007、010、015 | 无；后续仅需保持 ConfigCenter 接口、profiles schema 与 policy loader 读取键口径同步 | 证据回链到 config TODO 的 CFG-TODO-001，以及 profiles TODO 的 PRF-TODO-008、PRF-TODO-013 与相关 unit/contract 测试 | 若 IConfigCenter 接口回退、runtime_policy.yaml 键域漂移或 schema 校验失效，则重新转为 Blocked |
+
+## 35. 本轮执行记录（2026-04-05 / POL-TODO-021）
+
+### 35.1 选中任务
+
+1. 本轮任务：POL-TODO-021。
+2. 可执行性依据：`POL-BLK-004` 已在前一轮完成解阻校准，health 组件已冻结 `IHealthProbe`、`ProbeTypes`、`HealthStateTypes` 与 `RecoveryHint`；因此 policy 侧可以在不扩写 health 公共对象的前提下落盘最小健康探针骨架。
+
+### 35.2 研究与 Design 结论
+
+本地证据：
+
+1. infra/src/logging/LoggingHealthProbe.h/.cpp 与 infra/src/secret/SecretHealthProbe.h/.cpp 已提供仓库内 health probe 模式：私有 probe 复用冻结 `IHealthProbe/ProbeDescriptor/ProbeResult` 边界，通过内部 signal provider 采样，再把组件事实映射到 `Healthy/Degraded/Unhealthy`。
+2. docs/architecture/DASALL_infra_policy模块详细设计.md 6.2/6.3/6.10 已固定 `PolicyHealthProbe` 输入为 current snapshot + recent failures，输出只允许 ready/degraded/unavailable、最近失败原因与快照代次，不允许把 runtime 状态机或恢复裁定透传到 health。
+3. SecurityPolicyManager 与 PolicySnapshotStore 已经稳定提供 `safe_mode` 触发条件、current/LKG snapshot 语义和 commit fail 后保持旧 generation 的行为，能够支撑 health probe 通过私有 signal provider 观测 policy readiness，而无需扩写公共 manager 接口。
+4. 新增 tests/unit/infra/PolicyHealthProbeTest.cpp 与 tests/integration/infra/policy/PolicyHealthIntegrationTest.cpp 分别约束 frozen descriptor、ready/degraded/unavailable 映射、timeout 结构化失败，以及 commit fail 与 safe_mode 两条真实 manager 主链降级路径。
+
+D 结论：
+
+1. `PolicyHealthProbe` 作为 infra/policy 私有实现落盘在 infra/src/policy/，对外只复用 health 冻结接口 `IHealthProbe/ProbeDescriptor/ProbeResult`；输入由私有 `IPolicyHealthSignalProvider` 采样 `current_snapshot`、`last_known_good_snapshot`、最近失败原因与 safe_mode 事实，不新增 health 公共对象。
+2. detail_ref 固定收敛到 `status://policy/health/...` 命名空间，并把 active generation 编入路径，例如 `ready/generation/<n>`、`degraded/recent_failure/<POLICY_ERROR>/generation/<n>`、`degraded/safe_mode/generation/<n>`；无 snapshot 且无 LKG 时映射为 `unavailable/no_snapshot`。
+3. probe 执行失败仅保留 provider 缺失、timeout、invalid sample 三类结构化错误；commit fail、连续 patch fail、safe_mode 与 bridge degraded 都作为健康事实映射，不伪造新的 `ResultCode` 域。
+4. D Gate：PASS。
+
+### 35.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/policy/PolicyHealthProbe.h、infra/src/policy/PolicyHealthProbe.cpp：新增 policy 健康探针私有实现，冻结 probe descriptor、采样信号结构、ready/degraded/unavailable 映射与 generation/detail_ref 规则。
+2. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/integration/infra/policy/CMakeLists.txt、tests/integration/CMakeLists.txt：完成 021 所需源码、unit 与 integration 目标接线。
+3. tests/unit/infra/PolicyHealthProbeTest.cpp、tests/integration/infra/policy/PolicyHealthIntegrationTest.cpp：新增 unit/integration 门禁，验证 descriptor 冻结、状态映射、timeout 结构化失败、commit fail 降级与 safe_mode 降级。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+2. cmake --build build-ci --target dasall_infra dasall_policy_health_probe_unit_test dasall_policy_health_integration_test：通过。
+3. ctest --test-dir build-ci -N -R "PolicyHealth(Probe|Integration)Test"：通过，发现 2 个目标测试。
+4. ctest --test-dir build-ci --output-on-failure -R "PolicyHealth(Probe|Integration)Test"：通过，2/2 tests passed。
+5. ctest --test-dir build-ci --output-on-failure -L unit：通过，128/128 tests passed。
+6. ctest --test-dir build-ci --output-on-failure -L integration：通过，15/15 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接补齐 policy 对 health 的私有 readiness probe 缺口，而不是把健康状态旁路进 manager 公共接口或 runtime 状态机。
+2. 边界保持：probe 只复用 health 冻结接口与 policy 既有快照/错误对象，不引入新的 public health types，也不外泄 runtime 恢复语义。
+3. 测试闭环：定向、unit、integration 三层 gate 都已覆盖，既验证静态映射，也验证真实 manager/store 的 commit fail 与 safe_mode 降级路径。
+4. 提交隔离：本轮提交范围限定为 `POL-TODO-021` 的 policy health probe 实现、CMake/test 接线和 TODO/worklog 证据，不混入 `POL-TODO-022`。
 
 ## 34. 本轮执行记录（2026-04-05 / POL-TODO-020）
 

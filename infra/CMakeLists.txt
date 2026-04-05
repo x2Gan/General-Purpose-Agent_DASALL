@@ -67,6 +67,7 @@ set(DASALL_INFRA_SECRET_PRIVATE_HEADERS
 
 set(DASALL_INFRA_POLICY_SOURCES
   src/policy/PolicyAuditBridge.cpp
+  src/policy/PolicyHealthProbe.cpp
   src/policy/PolicyMetricsBridge.cpp
   src/policy/PolicyDecisionProjector.cpp
   src/policy/PolicyConflictResolver.cpp
@@ -78,6 +79,7 @@ set(DASALL_INFRA_POLICY_SOURCES
 
 set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
   src/policy/PolicyAuditBridge.h
+  src/policy/PolicyHealthProbe.h
   src/policy/PolicyMetricsBridge.h
   src/policy/PolicyDecisionProjector.h
   src/policy/PolicyConflictResolver.h
