@@ -187,7 +187,7 @@
 | POL-TODO-015 | Done (2026-04-05) | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小接口冻结 | SecurityPolicyManager.h/.cpp、SecurityPolicyManagerTest、SecurityPolicyManagerFailureContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
 | POL-TODO-016 | Done (2026-04-05) | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | infra/CMakeLists.txt 中 DASALL_INFRA_POLICY_SOURCES/PRIVATE_HEADERS 已纳入 dasall_infra；2026-04-05 已完成 build-ci 构建验收 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
 | POL-TODO-017 | Done (2026-04-05) | 注册 policy 的 unit 与 contract 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/unit/infra/policy、tests/contract/infra；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/policy/、tests/contract/CMakeLists.txt、tests/contract/smoke/ | unit：对象、接口、loader/store/manager 基础路径；contract：decision 语义、错误码映射、contracts 边界 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-016 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；可直接按已冻结 mapping catalog 与 contract 口径推进 | tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt 已完成注册；2026-04-05 ctest -N 发现 26 个 policy 核心用例，unit 125/125、contract 137/137 通过 | 仅当新增 policy unit/contract 用例可被 ctest -N 发现并执行时完成 |
-| POL-TODO-018 | Not Started | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 POL-TODO-015、POL-TODO-017 完成后落盘具体 integration/failure 用例 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
+| POL-TODO-018 | Done (2026-04-05) | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；已落盘 policy integration 子目录、CTest 注册与 lifecycle/failure 注入用例 | tests/integration/infra/policy/CMakeLists.txt、PolicyLifecycleIntegrationTest.cpp、integration 聚合接线与 ctest 发现性证据；2026-04-05 已完成 build-ci integration 验收 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
 | POL-TODO-019 | Blocked | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | POL-BLK-003 | audit 侧最小写入接口和字段集合完成冻结 | PolicyAuditBridge.cpp 或阻塞记录 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
 | POL-TODO-020 | Blocked | 实现 PolicyMetricsBridge 指标桥接骨架 | policy 设计 6.2/6.10；metrics TODO | 6.2 PolicyMetricsBridge；6.10 指标清单 | L1 | infra/src/policy/PolicyMetricsBridge.cpp | PolicyMetricsBridge（reload_total、invalid_total、patch_total、deny_total、rollback_total、active_generation、safe_mode_total） | unit：计数与 gauge 输出；contract：标签不过度暴露实现细节 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-015 | POL-BLK-004 | metrics 侧桥接接口和标签白名单完成冻结 | PolicyMetricsBridge.cpp 或阻塞记录 | 仅当指标集合与设计一致，且 active_generation/safe_mode 语义可被测试稳定判定时完成 |
 | POL-TODO-021 | Blocked | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015 | POL-BLK-004 | health 侧探针接口冻结且 integration 接线完成 | PolicyHealthProbe.cpp 或阻塞记录 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
@@ -1256,4 +1256,55 @@ Build 合规复核：
 3. 回退链路：RunCtest_CMakeTools 仍报“无法配置项目”；本轮按仓库既定 build-ci 回退路径保留完整发现性与执行证据。
 4. TODO 证据回写：已完成 POL-TODO-017 状态、交付物与验收结果回写。
 5. 提交隔离：本轮提交范围限定为 POL-TODO-017 的 TODO/worklog 证据同步，不混入 018 integration 接线或其他 bridge 任务。
+
+## 30. 本轮执行记录（2026-04-05 / POL-TODO-018）
+
+### 30.1 选中任务
+
+1. 本轮任务：POL-TODO-018。
+2. 可执行性依据：POL-TODO-015 已完成 manager 主链，POL-TODO-017 已完成 unit/contract 发现性；POL-BLK-005 也已于 2026-03-30 解阻，tests 顶层 integration 拓扑已接入，可直接补 policy integration 子目录与 CTest 注册。
+
+### 30.2 研究与 Design 结论
+
+本地证据：
+
+1. tests/CMakeLists.txt 已提供 `dasall_integration_tests` 聚合目标，并依赖 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`；tests/integration/CMakeLists.txt 与 tests/integration/infra/CMakeLists.txt 已采用“顶层聚合列表 + 组件子目录注册”的统一 integration 接线模式。
+2. 当前 tests/integration/infra/ 下已有 audit/config/logging/secret 子目录，但尚无 tests/integration/infra/policy/；因此 018 的根因不是 manager 不可测试，而是 policy integration 子目录、target 与 discoverability 尚未落盘。
+3. SecurityPolicyManager 当前公开入口从 `PolicyBundle` / `PolicyPatch` 起步，PolicyLoader 对缺失配置键采取 frozen defaults 回退，因此 `source unavailable` 在现有 loader-manager 边界下不适合作为稳定 integration 注入点；本轮将 integration 范围收敛为真实可验证的 lifecycle 闭环，以及 commit fail / safe_mode 两类 failure injection。
+
+D 结论：
+
+1. Design -> Build 映射：新增 tests/integration/infra/policy/CMakeLists.txt 与 PolicyLifecycleIntegrationTest.cpp，并把 policy 子目录接入 tests/integration/infra/CMakeLists.txt 与 tests/integration/CMakeLists.txt 的 integration 聚合图。
+2. Build 三件套：
+   - 代码目标：新增 policy integration 子目录与 `dasall_policy_lifecycle_integration_test`，覆盖 load -> snapshot -> evaluate -> patch -> rollback 闭环，以及 store commit fail / safe_mode failure injection。
+   - 测试目标：验证新增 policy integration 用例可被 CTest 发现、定向执行，并与现有 integration 标签套件兼容。
+   - 验收命令：沿用仓库回退链路执行 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_policy_lifecycle_integration_test、ctest --test-dir build-ci -N -R "PolicyLifecycleIntegrationTest|infra_integration_topology_smoke"、ctest --test-dir build-ci --output-on-failure -R PolicyLifecycleIntegrationTest、ctest --test-dir build-ci --output-on-failure -L integration；同时记录 ListTests_CMakeTools / RunCtest_CMakeTools 的当前坏工具态。
+3. D Gate：PASS。
+
+### 30.3 Build 交付与证据
+
+交付物：
+
+1. tests/integration/infra/policy/CMakeLists.txt：新增 policy integration 注册函数与 `PolicyLifecycleIntegrationTest` 的 CTest 入口，标签为 `integration;policy`。
+2. tests/integration/infra/policy/PolicyLifecycleIntegrationTest.cpp：新增 policy 生命周期集成测试，覆盖 load -> snapshot -> evaluate -> patch -> rollback 闭环，以及 snapshot store commit fail 和 safe_mode failure injection。
+3. tests/integration/infra/CMakeLists.txt、tests/integration/CMakeLists.txt：把 policy 子目录与 `dasall_policy_lifecycle_integration_test` 纳入顶层 integration 聚合图。
+4. docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md：将 POL-TODO-018 标记为 Done，并补齐本轮执行记录、工具态说明与 integration 发现性证据。
+
+验收结果：
+
+1. ListTests_CMakeTools：返回空 tests；工作区 IDE 测试工具态仍未恢复。
+2. RunCtest_CMakeTools：失败，返回“生成失败: 无法配置项目”；按仓库既定回退链路切换到 build-ci，不视为任务阻塞。
+3. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+4. cmake --build build-ci --target dasall_policy_lifecycle_integration_test：通过，新增 policy integration executable 成功编译链接。
+5. ctest --test-dir build-ci -N -R "PolicyLifecycleIntegrationTest|infra_integration_topology_smoke"：通过，发现 2 个测试，分别为顶层 integration topology smoke 与 PolicyLifecycleIntegrationTest。
+6. ctest --test-dir build-ci --output-on-failure -R PolicyLifecycleIntegrationTest：通过，1/1 tests passed。
+7. ctest --test-dir build-ci --output-on-failure -L integration：通过，14/14 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：018 的完成判据是“tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现”；本轮通过新增 policy 子目录、聚合 target 注册与 discoverability/执行证据直接闭环。
+2. 覆盖保持：integration 用例已覆盖 lifecycle 主闭环、commit fail 与 safe_mode 两类 failure injection；`source unavailable` 由于当前 loader 对缺失输入默认回退、manager 入口直接接受 PolicyBundle，暂不伪造不稳定注入点，不影响 018 的 discoverability 完成判据。
+3. 回退链路：ListTests_CMakeTools 仍为空、RunCtest_CMakeTools 仍报“无法配置项目”；本轮按仓库既定 build-ci 回退路径保留完整 integration 发现性与回归证据。
+4. TODO 证据回写：已完成 POL-TODO-018 状态、交付物与验收结果回写。
+5. 提交隔离：本轮提交范围限定为 POL-TODO-018 的 integration 接线、测试落盘与 TODO/worklog 证据同步，不混入 019~021 的 bridge 代码或 blocker 校准。
 

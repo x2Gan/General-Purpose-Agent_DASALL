@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #113
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-018 注册 policy integration 测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-018-D/B 落盘：
+   - 新增 tests/integration/infra/policy/CMakeLists.txt，注册 `dasall_policy_lifecycle_integration_test`，并统一打上 `integration;policy` 标签。
+   - 新增 tests/integration/infra/policy/PolicyLifecycleIntegrationTest.cpp，覆盖 load -> snapshot -> evaluate -> patch -> rollback 闭环，以及 snapshot store commit fail 和 safe_mode failure injection。
+   - 更新 tests/integration/infra/CMakeLists.txt 与 tests/integration/CMakeLists.txt，把 policy 子目录与新增 executable target 纳入顶层 integration 聚合图。
+2. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-018 从 Not Started 标记为 Done，并补齐本轮执行记录、工具态说明与 integration 发现性证据。
+3. 保持范围约束：
+   - 本轮只推进 integration 接线与测试落盘，没有提前混入 PolicyAuditBridge / PolicyMetricsBridge / PolicyHealthProbe 的实现。
+
+### 测试
+
+1. 验证命令：
+   - `ListTests_CMakeTools`
+   - `RunCtest_CMakeTools`
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_policy_lifecycle_integration_test`
+   - `ctest --test-dir build-ci -N -R "PolicyLifecycleIntegrationTest|infra_integration_topology_smoke"`
+   - `ctest --test-dir build-ci --output-on-failure -R PolicyLifecycleIntegrationTest`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - ListTests_CMakeTools 仍返回空 tests；RunCtest_CMakeTools 仍报“生成失败: 无法配置项目”。
+   - build-ci 配置成功，`dasall_policy_lifecycle_integration_test` 构建通过。
+   - `ctest -N -R "PolicyLifecycleIntegrationTest|infra_integration_topology_smoke"` 发现 2 个测试，其中 policy 新增用例为 `PolicyLifecycleIntegrationTest`。
+   - `ctest -R PolicyLifecycleIntegrationTest` 通过，1/1 tests passed。
+   - `ctest -L integration` 通过，14/14 tests passed。
+
+### 结果
+
+1. POL-TODO-018 已完成从“顶层 integration 拓扑已具备但 policy 子目录未落盘”到“policy integration 入口已注册、可被 CTest 发现并通过执行”的闭环。
+2. 当前 integration 用例已覆盖 lifecycle 主闭环、commit fail 与 safe_mode；`source unavailable` 由于现有 loader-manager 边界会对缺失输入回退到 frozen defaults，暂不作为稳定 integration 注入点。
+
+### 下一步
+
+1. 进入 blocker 校准，核实 POL-BLK-003 与 POL-BLK-004 是否已被 audit/metrics/health 侧接口冻结任务实质解阻，再决定是否推进 019~021 的桥接实现。
+
+### 风险
+
+1. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / tests 为空”的工具态；后续 019~021 仍应默认保留 build-ci 回退链路证据。
+2. `source unavailable` 失败注入目前不适合在现有 loader-manager 边界下伪造；若后续需要补齐该路径，应优先通过 loader/manager 组合接口而不是在 integration 测试中硬编码异常分支。
+
 ## 记录 #112
 
 - 日期：2026-04-05
