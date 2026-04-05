@@ -8,6 +8,50 @@
 
 ---
 
+## 记录 #107
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-011 PolicySchemaValidator 最小校验骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-011-D/B 收敛：
+   - 新增 infra/src/policy/PolicySchemaValidator.h 与 infra/src/policy/PolicySchemaValidator.cpp，落盘 bundle/rule/patch operation 三层最小校验骨架，覆盖缺字段、未知 domain、非法 effect、unsupported schema_version 与 base_generation mismatch。
+   - 新增 tests/unit/infra/PolicySchemaValidatorTest.cpp 与 tests/contract/smoke/PolicySchemaValidatorBoundaryContractTest.cpp，分别覆盖实现正负例和实现边界仍只输出本地 ValidationReport 字符串字段。
+2. 完成最小接线：
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，把 validator 私有实现与新增 unit/contract tests 纳入构建图与 CTest 图。
+3. 完成 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-011 标记为 Done，并补齐本轮执行记录、回退链路与验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -R "PolicySchemaValidator(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicySchemaValidator(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - CMake Tools / RunCtest 仍无法配置项目，已按仓库回退链路切换到 build-ci。
+   - 新增 `PolicySchemaValidatorTest` 与 `PolicySchemaValidatorBoundaryContractTest` 可被发现并定向执行，2/2 通过；unit 122/122、contract 135/135 全部通过。
+
+### 结果
+
+1. POL-TODO-011 已把 policy 阶段 D 的第一步从“接口已冻结但无真实校验实现”推进到“存在可定位 field_paths 的最小 validator 骨架和 unit/contract 证据”的状态。
+2. 当前 policy 组件专项 TODO 已具备继续进入 POL-TODO-012 的前提，可按串行顺序转入 conflict resolver。
+
+### 下一步
+
+1. 执行 POL-TODO-012，实现 PolicyConflictResolver 最小冲突裁定骨架，固定 deny-first 与 explicit-priority 两档行为。
+
+### 风险
+
+1. 当前 validator 只覆盖最小字段/shape 校验，尚未把更细粒度的条件白名单和 source checksum 语义升级为独立规则矩阵；后续 resolver/manager 不应把它误当成完整策略 DSL 校验器。
+2. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 policy 实现任务仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #106
 
 - 日期：2026-04-05

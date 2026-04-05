@@ -720,6 +720,26 @@ dasall_apply_common_options(dasall_policy_schema_validator_interface_unit_test)
 add_test(NAME PolicySchemaValidatorInterfaceTest COMMAND dasall_policy_schema_validator_interface_unit_test)
 set_tests_properties(PolicySchemaValidatorInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_schema_validator_unit_test
+  PolicySchemaValidatorTest.cpp
+)
+
+target_include_directories(dasall_policy_schema_validator_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_policy_schema_validator_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_schema_validator_unit_test)
+
+add_test(NAME PolicySchemaValidatorTest COMMAND dasall_policy_schema_validator_unit_test)
+set_tests_properties(PolicySchemaValidatorTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_policy_snapshot_store_interface_unit_test
   PolicySnapshotStoreInterfaceTest.cpp
 )
