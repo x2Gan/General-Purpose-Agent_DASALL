@@ -148,7 +148,7 @@
 | 查询投影与 contracts 语义边界 | policy 设计 6.5/6.7；contracts-freeze T010 | 适配器 / contract | POL-TODO-014 | 只做 decision 引用与语义映射，不直接扩写 contracts |
 | Manager 主链与 safe_mode | policy 设计 6.7/6.8 | 生命周期 / 流程 | POL-TODO-015 | 把 load/apply/dry_run/evaluate/rollback 收束到统一入口 |
 | 构建与测试注册 | policy 设计 7、8.1、9.1；代码现状 | 测试 / 门禁 | POL-TODO-016、POL-TODO-017、POL-TODO-018 | CMake、unit/contract、integration 分拆，避免任务过大 |
-| 审计、指标、健康桥接 | policy 设计 6.10；audit/metrics/health TODO | 适配器 / 门禁 | POL-TODO-019、POL-TODO-020、POL-TODO-021 | 桥接依赖尚未冻结，必须显式 Blocked |
+| 审计、指标、健康桥接 | policy 设计 6.10；audit/metrics/health TODO | 适配器 / 门禁 | POL-TODO-019、POL-TODO-020、POL-TODO-021 | audit 桥接已完成；metrics/health 依赖仍需显式 Blocked |
 | 交付证据回写 | policy 设计 9.2/11；工程规范 6.2 | 文档 / 质量门 | POL-TODO-022 | 对 gate、阻塞变化、回退证据做收口 |
 
 ### 5.2 映射覆盖性检查
@@ -188,7 +188,7 @@
 | POL-TODO-016 | Done (2026-04-05) | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | infra/CMakeLists.txt 中 DASALL_INFRA_POLICY_SOURCES/PRIVATE_HEADERS 已纳入 dasall_infra；2026-04-05 已完成 build-ci 构建验收 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
 | POL-TODO-017 | Done (2026-04-05) | 注册 policy 的 unit 与 contract 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/unit/infra/policy、tests/contract/infra；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/policy/、tests/contract/CMakeLists.txt、tests/contract/smoke/ | unit：对象、接口、loader/store/manager 基础路径；contract：decision 语义、错误码映射、contracts 边界 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-016 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；可直接按已冻结 mapping catalog 与 contract 口径推进 | tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt 已完成注册；2026-04-05 ctest -N 发现 26 个 policy 核心用例，unit 125/125、contract 137/137 通过 | 仅当新增 policy unit/contract 用例可被 ctest -N 发现并执行时完成 |
 | POL-TODO-018 | Done (2026-04-05) | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；已落盘 policy integration 子目录、CTest 注册与 lifecycle/failure 注入用例 | tests/integration/infra/policy/CMakeLists.txt、PolicyLifecycleIntegrationTest.cpp、integration 聚合接线与 ctest 发现性证据；2026-04-05 已完成 build-ci integration 验收 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
-| POL-TODO-019 | Not Started | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | 无（2026-04-05 已由 AUD-TODO-006、AUD-TODO-014、AUD-TODO-015 与 audit gate 9/9 解阻） | 无 | PolicyAuditBridge.cpp 或阻塞记录 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
+| POL-TODO-019 | Done (2026-04-05) | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | 无（2026-04-05 已由 AUD-TODO-006、AUD-TODO-014、AUD-TODO-015 与 audit gate 9/9 解阻） | 无 | PolicyAuditBridge.h/.cpp、PolicyAuditBridgeTest、PolicyAuditBridgeBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/contract 验收 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
 | POL-TODO-020 | Blocked | 实现 PolicyMetricsBridge 指标桥接骨架 | policy 设计 6.2/6.10；metrics TODO | 6.2 PolicyMetricsBridge；6.10 指标清单 | L1 | infra/src/policy/PolicyMetricsBridge.cpp | PolicyMetricsBridge（reload_total、invalid_total、patch_total、deny_total、rollback_total、active_generation、safe_mode_total） | unit：计数与 gauge 输出；contract：标签不过度暴露实现细节 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-015 | POL-BLK-004 | metrics 侧桥接接口和标签白名单完成冻结 | PolicyMetricsBridge.cpp 或阻塞记录 | 仅当指标集合与设计一致，且 active_generation/safe_mode 语义可被测试稳定判定时完成 |
 | POL-TODO-021 | Blocked | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015 | POL-BLK-004 | health 侧探针接口冻结且 integration 接线完成 | PolicyHealthProbe.cpp 或阻塞记录 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
 | POL-TODO-022 | Not Started | 回写 policy 质量门与交付证据 | policy 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md | process test：gate 结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个质量门都有通过/失败结论和对应命令证据时完成 |
@@ -211,7 +211,7 @@
 | C 配置与快照底座 | POL-TODO-010、POL-TODO-013 | 串行 | 先读取配置，再形成快照存储基础 |
 | D 规则治理主链 | POL-TODO-011、POL-TODO-012、POL-TODO-014、POL-TODO-015 | 串行 | INF-BLK-07 已完成校准；POL-BLK-006 已由 config/profiles 接口与 schema 冻结解阻，decision 语义缺口已由 mapping catalog 解阻 |
 | E 构建与测试接线 | POL-TODO-016、POL-TODO-017 | 可并行 | 代码入图与 unit/contract 发现性可同步推进；contracts 语义映射缺口已由 mapping catalog 补齐 |
-| F 观测桥接与集成 | POL-TODO-018~021 | 串行且局部受阻 | 018 已完成；019 已由 audit 接口冻结解阻可执行；020/021 仍受 POL-BLK-004 约束 |
+| F 观测桥接与集成 | POL-TODO-018~021 | 串行且局部受阻 | 018、019 已完成；020/021 仍受 POL-BLK-004 约束 |
 | G 证据收口 | POL-TODO-022 | 串行 | 回写质量门、阻塞变化与回退证据 |
 
 ### 7.2 必过门禁表
@@ -237,6 +237,53 @@
 | POL-BLK-004 | metrics/health 桥接接口、标签白名单、探针状态对象未冻结 | POL-TODO-020、POL-TODO-021 | metrics 与 health 侧最小桥接接口完成冻结 | 承接 metrics/health 专项 TODO 的接口冻结任务 | 暂只在 manager 内部保留计数与状态，不对外暴露桥接输出 |
 | POL-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；policy integration/failure 是否可执行改由组件自身落盘负责 | POL-TODO-018、021 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | POL-BLK-006 | 已解阻（2026-04-01）：config 组件已落盘 IConfigCenter 最小 load_layers/get_typed 接口与对应 unit/contract 边界，profiles 侧已冻结 runtime_policy.yaml policy 键域并落盘 RuntimePolicyProvider 最小加载流程 | POL-TODO-007、010、015 | 无；后续仅需保持 ConfigCenter 接口、profiles schema 与 policy loader 读取键口径同步 | 证据回链到 config TODO 的 CFG-TODO-001，以及 profiles TODO 的 PRF-TODO-008、PRF-TODO-013 与相关 unit/contract 测试 | 若 IConfigCenter 接口回退、runtime_policy.yaml 键域漂移或 schema 校验失效，则重新转为 Blocked |
+
+## 32. 本轮执行记录（2026-04-05 / POL-TODO-019）
+
+### 32.1 选中任务
+
+1. 本轮任务：POL-TODO-019。
+2. 可执行性依据：POL-BLK-003 已在上一轮完成解阻校准；audit 组件专项已冻结 `IAuditLogger`、`AuditEvent`、`AuditContext`、`AuditWriteOutcome`，因此 policy 侧可以在不扩写公共审计对象的前提下落盘最小审计桥接骨架。
+
+### 32.2 研究与 Design 结论
+
+本地证据：
+
+1. infra/include/audit/IAuditLogger.h 与 infra/include/audit/AuditTypes.h 已冻结最小审计写入接口与事件边界，当前 policy bridge 只能复用既有 `AuditEvent/AuditContext/AuditWriteOutcome`，不能另起审计对象。
+2. infra/src/secret/SecretAuditBridge.h/.cpp 已提供仓库内桥接实现样式：私有 bridge 只依赖 `std::shared_ptr<audit::IAuditLogger>`，并通过 side_effects 携带稳定事实，不把内部实现细节外泄到公共 payload。
+3. tests/contract/smoke/AuditBoundaryContractTest.cpp 与新增 tests/contract/smoke/PolicyAuditBridgeBoundaryContractTest.cpp 共同约束 policy bridge 的事件必须停留在既有 `AuditEvidenceKind::ToolResult` 边界内，且不得泄露 `matched_rule_ids`、`effective_rules` 等 policy 内部结构。
+4. 新增 tests/unit/infra/PolicyAuditBridgeTest.cpp 以高风险 deny 与 patch failure 两条路径覆盖 `reason_code`、`snapshot_id`、`generation`、`detail_ref` 等稳定审计事实组装，保证四个强制审计点可以沿同一 event 装配模型扩展。
+
+D 结论：
+
+1. `PolicyAuditBridge` 作为 infra/policy 私有实现落盘在 infra/src/policy/，只承接 `load/apply_patch/rollback/high_risk_deny` 四类审计发射，不接管 manager 主链或 audit 子系统职责。
+2. 审计证据统一保持在 `AuditEvidenceKind::ToolResult` 范围内，并把 `reason_code/snapshot_id/generation/detail_ref` 收敛到可序列化的 side_effects，避免新增 public payload 成员。
+3. `PolicyAuditBridgeStatus` 只暴露发射计数、降级态、最后错误码和 detail_ref，满足最小可观测性而不引入 metrics/health 的外部桥接语义。
+4. D Gate：PASS。
+
+### 32.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/policy/PolicyAuditBridge.h、infra/src/policy/PolicyAuditBridge.cpp：新增 policy 审计桥接私有实现，覆盖 load、apply_patch、rollback 与 deny 事件组装与发射。
+2. infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt：完成 019 所需源码与 unit/contract 目标接线。
+3. tests/unit/infra/PolicyAuditBridgeTest.cpp、tests/contract/smoke/PolicyAuditBridgeBoundaryContractTest.cpp：新增 unit/contract 门禁，验证事件事实组装和 audit 边界不越权。
+
+验收结果：
+
+1. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+2. cmake --build build-ci --target dasall_infra dasall_policy_audit_bridge_unit_test dasall_contract_policy_audit_bridge_boundary_test：通过。
+3. ctest --test-dir build-ci -N -R "PolicyAuditBridge(Test|BoundaryContractTest)"：通过，发现 2 个目标测试。
+4. ctest --test-dir build-ci --output-on-failure -R "PolicyAuditBridge(Test|BoundaryContractTest)"：通过，2/2 tests passed。
+5. ctest --test-dir build-ci --output-on-failure -L unit：通过，126/126 tests passed。
+6. ctest --test-dir build-ci --output-on-failure -L contract：通过，138/138 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接补齐 policy 对 audit 的私有桥接缺口，而不是在 manager 或公共接口层做旁路埋点。
+2. 边界保持：bridge 只复用 audit 冻结对象和 logger 接口，不新增跨子系统公共头，也不引入 metrics/health 语义越权。
+3. 测试闭环：定向、unit、contract 三层 gate 都已覆盖，既验证事件装配正确，也验证不泄露 policy 内部结构。
+4. 提交隔离：本轮提交范围限定为 `POL-TODO-019` 的 policy bridge 实现、CMake/test 接线和 TODO/worklog 证据，不混入 `POL-BLK-004`、`POL-TODO-020`、`POL-TODO-021`。
 
 ## 31. 本轮执行记录（2026-04-05 / POL-BLK-003 解阻校准）
 

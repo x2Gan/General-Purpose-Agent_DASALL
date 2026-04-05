@@ -351,6 +351,24 @@ target_link_libraries(dasall_contract_policy_decision_projector_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_policy_audit_bridge_boundary_test
+  PolicyAuditBridgeBoundaryContractTest
+  smoke/PolicyAuditBridgeBoundaryContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_policy_audit_bridge_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_contract_policy_audit_bridge_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_security_policy_manager_failure_test
   SecurityPolicyManagerFailureContractTest
   smoke/SecurityPolicyManagerFailureContractTest.cpp

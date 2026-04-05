@@ -745,6 +745,26 @@ dasall_apply_common_options(dasall_policy_decision_projector_unit_test)
 add_test(NAME PolicyDecisionProjectorTest COMMAND dasall_policy_decision_projector_unit_test)
 set_tests_properties(PolicyDecisionProjectorTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_policy_audit_bridge_unit_test
+  PolicyAuditBridgeTest.cpp
+)
+
+target_include_directories(dasall_policy_audit_bridge_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_policy_audit_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_policy_audit_bridge_unit_test)
+
+add_test(NAME PolicyAuditBridgeTest COMMAND dasall_policy_audit_bridge_unit_test)
+set_tests_properties(PolicyAuditBridgeTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_security_policy_manager_unit_test
   SecurityPolicyManagerTest.cpp
 )

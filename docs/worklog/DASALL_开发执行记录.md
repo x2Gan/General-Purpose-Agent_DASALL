@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #115
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-019 实现 PolicyAuditBridge 审计桥接骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-019-D/B 落盘：
+   - 新增 infra/src/policy/PolicyAuditBridge.h 与 infra/src/policy/PolicyAuditBridge.cpp，落盘 `emit_load_result`、`emit_patch_result`、`emit_rollback_result`、`emit_high_risk_deny` 四类审计桥接路径，并维持 `AuditEvidenceKind::ToolResult` 与 `side_effects` 事实输出边界。
+   - 新增 `PolicyAuditBridgeStatus` 与 `PolicyAuditEmitResult`，把 bridge 自身可观测性收敛到发射计数、失败计数、最后错误码和 detail_ref，不扩写 metrics/health 公共接口。
+2. 完成 019 的 CMake/test 接线：
+   - 更新 infra/CMakeLists.txt，把 PolicyAuditBridge 私有实现纳入 dasall_infra。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，注册 `PolicyAuditBridgeTest` 与 `PolicyAuditBridgeBoundaryContractTest` 并纳入聚合目标。
+3. 完成 unit/contract 门禁落盘：
+   - 新增 tests/unit/infra/PolicyAuditBridgeTest.cpp，覆盖高风险 deny 事件和 patch failure 事件的稳定事实组装。
+   - 新增 tests/contract/smoke/PolicyAuditBridgeBoundaryContractTest.cpp，验证 policy bridge 保持在冻结 AuditEvent/AuditContext 边界内，且不泄露 `matched_rule_ids`、`effective_rules` 等 policy 内部结构。
+4. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-019 标记为 Done，并补齐本轮执行记录、build-ci 定向测试结果与标签级验收结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_policy_audit_bridge_unit_test dasall_contract_policy_audit_bridge_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PolicyAuditBridge(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PolicyAuditBridge(Test|BoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - build-ci 配置成功，`dasall_infra`、`dasall_policy_audit_bridge_unit_test`、`dasall_contract_policy_audit_bridge_boundary_test` 构建通过。
+   - `ctest -N -R "PolicyAuditBridge(Test|BoundaryContractTest)"` 发现 2 个目标测试。
+   - 定向执行通过，2/2 tests passed。
+   - `ctest -L unit` 通过，126/126 tests passed；`ctest -L contract` 通过，138/138 tests passed。
+
+### 结果
+
+1. POL-TODO-019 已从“audit 侧已解阻但 policy bridge 未落盘”推进到“存在可编译、可测试、保持 frozen audit boundary 的 PolicyAuditBridge 最小实现”。
+2. policy 的观测桥接阶段现已完成 audit 分支；后续只剩受 POL-BLK-004 约束的 metrics/health 两条桥接任务。
+
+### 下一步
+
+1. 核验 POL-BLK-004 是否仍为真实阻塞；若 metrics/health 专项已完成最小桥接接口冻结，则先做 blocker recovery，再推进 POL-TODO-020 与 POL-TODO-021。
+
+### 风险
+
+1. 当前 PolicyAuditBridge 仅覆盖 policy 侧最小审计桥接，不承担 metrics/health 状态输出；在 POL-BLK-004 未解阻前，不应把 bridge 状态直接暴露为外部健康或指标协议。
+
 ## 记录 #114
 
 - 日期：2026-04-05
