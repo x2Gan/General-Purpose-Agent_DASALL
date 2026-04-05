@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #111
+
+- 日期：2026-04-05
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-016 注册 policy 源码到 infra CMake
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-016-D/B 校准：
+   - 核验 infra/CMakeLists.txt 已通过 DASALL_INFRA_POLICY_SOURCES 与 DASALL_INFRA_POLICY_PRIVATE_HEADERS 收录 PolicyLoader、PolicySchemaValidator、PolicyConflictResolver、PolicySnapshotStore、PolicyDecisionProjector、SecurityPolicyManager 六个 policy 私有实现及对应私有头。
+   - 确认 dasall_infra 的 target_sources 已消费上述集合，说明 policy 实现不再停留在 placeholder 状态，而是已统一进入 infra 构建图。
+2. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 POL-TODO-016 从 Not Started 校准为 Done，并补齐本轮执行记录、工具态说明与构建验收结果。
+3. 完成本轮工作日志补记：
+   - 在当前文件顶部追加 016 的执行记录，保持后续 017 与 018 可按最新构建图状态继续推进。
+
+### 测试
+
+1. 验证命令：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra`
+2. 结果：
+   - ListBuildTargets/ListTests 仍返回空 targets/tests，工作区 IDE 工具态未恢复。
+   - build-ci 配置成功，`dasall_infra` 增量构建成功并链接 `libdasall_infra.a`，证明 policy 私有实现已进入 infra 构建图。
+
+### 结果
+
+1. POL-TODO-016 已完成从“旧台账仍显示 Not Started”到“构建图已核验、证据已回写、状态已校准”的闭环。
+2. POL-TODO-017 现在可以直接在同一 build-ci 图上验证 unit/contract 入口发现性，而无需再补 build wiring 前置改动。
+
+### 下一步
+
+1. 推进 POL-TODO-017，核验 policy unit 与 contract 测试入口的 ctest 发现性、标签级执行结果与专项 TODO 状态。
+
+### 风险
+
+1. 工作区的 CMake Tools / RunCtest 仍处于“无法配置项目 / targets/tests 为空”的工具态；后续 017/018 仍应默认保留 build-ci 回退链路证据。
+
 ## 记录 #110
 
 - 日期：2026-04-05

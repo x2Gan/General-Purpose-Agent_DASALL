@@ -185,7 +185,7 @@
 | POL-TODO-013 | Done (2026-04-05) | 实现 PolicySnapshotStore generation/LKG 骨架 | policy 设计 6.3/6.7/6.8 | 6.3 PolicySnapshotStore；6.7 正常加载流程第 5 步；6.8 commit 失败回退 | L2 | infra/src/policy/PolicySnapshotStore.cpp | commit、current、last_known_good、get_by_id | unit：generation 单调、自增、LKG 回退；failure：commit 失败后 current 不切换 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-003、POL-TODO-009 | 无 | 无 | PolicySnapshotStore.h/.cpp、PolicySnapshotStoreTest、policy CMake/unit 接线；2026-04-05 已落盘并完成 build-ci unit 验收 | 仅当新快照提交成功后 generation 自增，提交失败后 current/LKG 保持旧值且错误可判定时完成 |
 | POL-TODO-014 | Done (2026-04-05) | 实现 PolicyDecisionProjector 查询投影骨架 | policy 设计 6.3/6.5/6.7；contracts-freeze T010 | 6.3 投影输出；6.5 PolicyDecisionRef；6.7 查询流程 | L2 | infra/src/policy/PolicyDecisionProjector.cpp | PolicyDecisionProjector（domain -> target_selector -> priority -> effect 投影路径） | unit：命中、未命中、require_confirmation、deny 四类投影；contract：decision 语义与 evidence_ref 映射 catalog | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-004、POL-TODO-012、POL-TODO-013 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；共享对象缺失时的映射 catalog 已固定 | PolicyDecisionProjector.h/.cpp、PolicyDecisionProjectorTest、PolicyDecisionProjectorBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当投影结果只输出引用和原因，不泄露规则实现细节，且 contract 门禁通过时完成 |
 | POL-TODO-015 | Done (2026-04-05) | 实现 SecurityPolicyManager 主链骨架 | policy 设计 6.2/6.4/6.7/6.8 | 6.2 SecurityPolicyManager；6.4 依赖关系；6.7/6.8 主异常流程 | L2 | infra/src/policy/SecurityPolicyManager.cpp | load_policy、apply_patch、dry_run_patch、snapshot、rollback、evaluate、safe_mode 进入条件 | unit：正常加载、patch 失败不切 current、rollback 成功、连续失败进入 safe_mode；contract：拒绝结果保持 policy 失败域 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-006、POL-TODO-010、POL-TODO-011、POL-TODO-012、POL-TODO-013、POL-TODO-014 | 无（2026-04-01 已由 config/profiles 接口与 schema 冻结解阻） | 无；ConfigCenter 最小接口冻结 | SecurityPolicyManager.h/.cpp、SecurityPolicyManagerTest、SecurityPolicyManagerFailureContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci unit/contract 验收 | 仅当 load/dry_run/apply/query/rollback 五条路径都能被二值验证，且 safe_mode 触发条件可复现时完成 |
-| POL-TODO-016 | Not Started | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
+| POL-TODO-016 | Done (2026-04-05) | 注册 policy 源码到 infra CMake | policy 设计 7、8.1；代码现状 | 7 Design -> Build 映射；8.1 文件落盘建议 | L2 | infra/CMakeLists.txt | policy include/src 文件纳入 dasall_infra | build：dasall_infra 可编译；unit：policy 接口编译可进入构建图 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | POL-TODO-001 至 POL-TODO-009 | 无 | 无 | infra/CMakeLists.txt 中 DASALL_INFRA_POLICY_SOURCES/PRIVATE_HEADERS 已纳入 dasall_infra；2026-04-05 已完成 build-ci 构建验收 | 仅当 placeholder 不再是唯一源码入口，且 policy 文件进入 dasall_infra 构建图时完成 |
 | POL-TODO-017 | Not Started | 注册 policy 的 unit 与 contract 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/unit/infra/policy、tests/contract/infra；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/policy/、tests/contract/CMakeLists.txt、tests/contract/smoke/ | unit：对象、接口、loader/store/manager 基础路径；contract：decision 语义、错误码映射、contracts 边界 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-016 | 无（2026-04-01 已由 PolicyDecisionMappingCatalog 解阻） | 无；可直接按已冻结 mapping catalog 与 contract 口径推进 | 测试源文件、注册入口、ctest 发现性证据 | 仅当新增 policy unit/contract 用例可被 ctest -N 发现并执行时完成 |
 | POL-TODO-018 | Not Started | 注册 policy integration 测试入口 | policy 设计 8.1/9.1；tests 现状 | 8.1 tests/integration/infra/policy；9.1 Integration/Failure Injection | L0 | tests/CMakeLists.txt、tests/integration/infra/policy/ | integration：load -> snapshot -> evaluate -> patch -> rollback 闭环；failure：source unavailable、commit fail、safe_mode | cmake -S . -B build-ci -G Ninja && ctest --test-dir build-ci -N | POL-TODO-015、POL-TODO-017 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 POL-TODO-015、POL-TODO-017 完成后落盘具体 integration/failure 用例 | integration 注册改动或阻塞记录 | 仅当 tests 顶层完成 integration 接线且 policy 集成用例可被 ctest 发现后，状态才可从 Not Started 转为 Done |
 | POL-TODO-019 | Blocked | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | POL-BLK-003 | audit 侧最小写入接口和字段集合完成冻结 | PolicyAuditBridge.cpp 或阻塞记录 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
@@ -1162,4 +1162,49 @@ Build 合规复核：
 4. 回退链路：CMake Tools / RunCtest 的“无法配置项目”属于仓库已知工具态问题；本轮已按 build-ci 回退链路保留完整构建与测试证据。
 5. TODO 证据回写：已完成 POL-TODO-015 状态、交付物与验收结果回写。
 6. 提交隔离：本轮提交范围限定为 SecurityPolicyManager 私有实现、unit/contract/CMake 接线与本专项 TODO 文档。
+
+## 28. 本轮执行记录（2026-04-05 / POL-TODO-016）
+
+### 28.1 选中任务
+
+1. 本轮任务：POL-TODO-016。
+2. 可执行性依据：POL-TODO-001 至 POL-TODO-015 已把 policy 对象、接口、loader、validator、resolver、snapshot store、projector、manager 骨架逐步落盘；当前只需核验 infra/CMake 是否已把这些既有实现纳入 dasall_infra 构建图，并将专项 TODO 状态校准到实际交付。
+
+### 28.2 研究与 Design 结论
+
+本地证据：
+
+1. infra/CMakeLists.txt 已存在 DASALL_INFRA_POLICY_SOURCES 与 DASALL_INFRA_POLICY_PRIVATE_HEADERS，且明确收录 PolicyLoader、PolicySchemaValidator、PolicyConflictResolver、PolicySnapshotStore、PolicyDecisionProjector、SecurityPolicyManager 六个 policy 私有实现及对应私有头。
+2. dasall_infra 的 target_sources 已直接消费上述两个集合，说明 016 的技术目标“policy 源码进入 infra 构建图”已在 011-015 的多轮实现中落地，当前差异主要是专项 TODO 仍停留在 Not Started。
+3. TODO 3.2 中“policy 具体实现仍未进入构建图”的旧结论已经被后续实现覆盖；本轮不再新增占位式 CMake 代码，而是校准台账、保留构建证据并完成独立提交。
+
+D 结论：
+
+1. Design -> Build 映射：不新增新的 CMake 入口，直接以 infra/CMakeLists.txt 中既有 DASALL_INFRA_POLICY_SOURCES / DASALL_INFRA_POLICY_PRIVATE_HEADERS 作为 016 的交付落点，并通过 dasall_infra 增量构建验证接线有效。
+2. Build 三件套：
+   - 代码目标：核验 policy 私有实现源码与私有头已纳入 dasall_infra target_sources，不再由 placeholder 代表 policy 实现。
+   - 测试目标：执行 dasall_infra 定向构建，确认 policy 接口与实现可以进入 infra 构建图并完成编译链接。
+   - 验收命令：先观察 ListBuildTargets_CMakeTools / ListTests_CMakeTools 当前工具态；若仍为空，则按仓库回退链路执行 cmake -S . -B build-ci -G "Unix Makefiles" 与 cmake --build build-ci --target dasall_infra。
+3. D Gate：PASS。
+
+### 28.3 Build 交付与证据
+
+交付物：
+
+1. infra/CMakeLists.txt：已存在 DASALL_INFRA_POLICY_SOURCES / DASALL_INFRA_POLICY_PRIVATE_HEADERS，并通过 target_sources 纳入 dasall_infra；本轮核验确认 016 的构建接线已实质完成。
+2. docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md：将 POL-TODO-016 标记为 Done，并补齐本轮执行记录、工具态说明与构建验收结果。
+
+验收结果：
+
+1. ListBuildTargets_CMakeTools / ListTests_CMakeTools：返回空 targets/tests；工作区 IDE 工具态仍未恢复，不能作为 016 完成证据。
+2. cmake -S . -B build-ci -G "Unix Makefiles"：通过。
+3. cmake --build build-ci --target dasall_infra：通过；增量构建命中 SecurityPolicyManager.cpp 并成功链接 libdasall_infra.a，证明 policy 源码已在 dasall_infra 构建图内。
+
+Build 合规复核：
+
+1. 根因闭环：016 的完成判据是“policy 源码进入 dasall_infra 构建图”，本轮通过 target_sources 静态核验与定向增量编译直接闭环，不重复制造无效 CMake 改动。
+2. 边界保持：本轮不扩张公共接口、不提前吸收测试接线或 integration 职责，保持 016 只收敛 build wiring。
+3. 回退链路：CMake Tools targets/tests 仍为空；本轮按仓库既定 build-ci 回退路径保留构建证据，不将 IDE 工具态问题误判为任务阻塞。
+4. TODO 证据回写：已完成 POL-TODO-016 状态、交付物与验收结果回写。
+5. 提交隔离：本轮提交范围限定为 POL-TODO-016 的 TODO/worklog 证据同步，不混入 017 的测试接线回写。
 
