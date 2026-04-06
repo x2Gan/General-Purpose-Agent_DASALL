@@ -1,11 +1,11 @@
 #include "tracing/TracerProviderImpl.h"
 
-#include <functional>
 #include <string>
 #include <utility>
 
 #include "tracing/ITracer.h"
 #include "tracing/TraceErrors.h"
+#include "tracing/TracerImpl.h"
 
 namespace dasall::infra::tracing {
 namespace {
@@ -23,36 +23,6 @@ constexpr std::string_view kTracerProviderSourceRef = "TracerProviderImpl";
                                        std::string(kTracerProviderSourceRef) + ":" +
                                            std::string(trace_error_code_name(code)));
 }
-
-class NoopTracer final : public ITracer {
- public:
-  explicit NoopTracer(TracerScope scope)
-      : scope_(std::move(scope)) {}
-
-  [[nodiscard]] std::shared_ptr<ISpan> start_span(
-      const SpanDescriptor& descriptor,
-      const TraceContext* parent) override {
-    (void)descriptor;
-    (void)parent;
-    return {};
-  }
-
-  void with_active_span(
-      const std::shared_ptr<ISpan>& span,
-      const ActiveSpanCallback& fn) override {
-    (void)span;
-    if (fn) {
-      fn();
-    }
-  }
-
-  [[nodiscard]] TraceContext current_context() const override {
-    return TraceContext::noop();
-  }
-
- private:
-  TracerScope scope_;
-};
 
 }  // namespace
 
@@ -91,7 +61,7 @@ std::shared_ptr<ITracer> TracerProviderImpl::get_tracer(const TracerScope& scope
     return existing->second;
   }
 
-  auto tracer = std::make_shared<NoopTracer>(scope);
+  auto tracer = std::make_shared<TracerImpl>(scope);
   tracers_.emplace(scope_key, tracer);
   last_scope_ = scope;
   return tracer;

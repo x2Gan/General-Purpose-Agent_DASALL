@@ -23,6 +23,10 @@ set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/TracingModuleAnchor.cpp
   src/tracing/TracerProviderImpl.cpp
   src/tracing/TracerProviderImpl.h
+  src/tracing/TracerImpl.cpp
+  src/tracing/TracerImpl.h
+  src/tracing/SpanImpl.cpp
+  src/tracing/SpanImpl.h
 )
 
 set(DASALL_INFRA_METRICS_SOURCES

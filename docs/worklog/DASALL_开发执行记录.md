@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #142
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-009 实现 TracerImpl 与 SpanImpl 生命周期闭环
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-009-D/B 主链落盘：
+   - 新增 infra/src/tracing/TracerImpl.h 与 infra/src/tracing/TracerImpl.cpp，落盘 `start_span()`、`with_active_span()`、`current_context()`、thread-local active context 恢复，以及 root/child span 的 trace_id/span_id 生成逻辑。
+   - 新增 infra/src/tracing/SpanImpl.h 与 infra/src/tracing/SpanImpl.cpp，落盘属性写入、事件计数、`set_status()` 的 OTel 状态优先级、`end()` 幂等终态与 parent context 保留。
+2. 完成 provider 与 tracer 链路收口：
+   - 将 TracerProviderImpl 的 scope cache 从 `NoopTracer` 占位切换为真实 `TracerImpl`，使 TRC-TODO-008 的 provider 生命周期骨架直接承接 009 的 tracer/span 主链，而不需要新增中间 facade。
+3. 完成生命周期单测与接线：
+   - 新增 tests/unit/infra/tracing/TracerSpanLifecycleTest.cpp，覆盖 root span、active scope child span、nested `with_active_span()` 恢复、terminal state 冻结与 `Ok > Error > Unset` 状态优先级。
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，使 tracer/span 运行时代码与单测进入 `dasall_infra`、`dasall_unit_tests` 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_tracer_span_lifecycle_unit_test`
+   - `ctest --test-dir build-ci -N -R TracerSpanLifecycleTest`
+   - `ctest --test-dir build-ci --output-on-failure -R "TracerProviderImplTest|TracerSpanLifecycleTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_tracer_span_lifecycle_unit_test` 构建通过，说明 tracer/span 运行时代码已成功进入现有 infra 构建图。
+   - `ctest -N -R TracerSpanLifecycleTest` 发现 1 个新增 tracing 生命周期单测入口。
+   - `TracerProviderImplTest` 与 `TracerSpanLifecycleTest` 定向执行通过，确认 008 provider 链路与 009 tracer/span 生命周期组合后仍成立。
+   - `ctest -L unit` 通过，146/146 tests passed；本轮未新增构建警告，仍保持仓库既有 metrics 告警口径不变。
+
+### 结果
+
+1. TRC-TODO-009 已完成，tracing 现在具备 provider -> tracer -> span 的最小本地生命周期闭环，root/child 关系、active context 切换与 terminal state 都已有二值化测试覆盖。
+2. TRC-TODO-010 现在可以在现有生命周期主链上直接补 `inject/extract` 与 invalid/noop fallback，不必再承担 tracer/span 基础行为收口。
+
+### 下一步
+
+1. 执行 `TRC-TODO-010`，补齐 `ContextPropagationAdapter` 的 `inject/extract`、traceparent 解析、invalid/noop fallback 与 TRC_E_INVALID_CONTEXT 可观测路径。
+
+### 风险
+
+1. 当前 trace_id/span_id 生成仍是本地单进程原子计数骨架，只满足生命周期闭环与测试稳定性；后续进入采样/传播阶段时，需要结合 010/011 的设计把 ID 生成策略与 W3C/OTel 兼容性继续收口。
+
 ## 记录 #141
 
 - 日期：2026-04-06
