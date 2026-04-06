@@ -109,6 +109,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_probe_registry_unit_test
 	dasall_probe_executor_unit_test
 	dasall_health_evaluator_unit_test
+	dasall_recovery_hint_emitter_unit_test
 	dasall_health_errors_unit_test
 	dasall_watchdog_service_interface_unit_test
 	dasall_heartbeat_source_interface_unit_test

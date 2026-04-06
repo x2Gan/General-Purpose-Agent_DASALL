@@ -174,7 +174,7 @@
 | HLT-TODO-012 | Blocked | 实现 HealthEventPublisher 状态事件发布骨架 | health 设计 6.2/6.8/6.10；11.1 | 6.2 HealthEventPublisher；6.10 状态转移事件 | L2 | infra/src/health/HealthEventPublisher.cpp | publish_transition(from,to,reason), publish_probe_failure(result) | unit：仅状态变化时发布；failure：发布失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-005、HLT-TODO-011 | HLT-BLK-002 | event bus 最小发布接口冻结 | 发布骨架或阻塞记录 | 仅当 event bus 最小接口冻结后可解除阻塞 |
 | HLT-TODO-013 | Done (2026-04-06) | 定义 HealthErrors 错误码域与映射 | health 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/health/HealthErrors.h | INF_E_HEALTH_PROBE_TIMEOUT、INF_E_HEALTH_PROBE_EXCEPTION、INF_E_HEALTH_PROBE_NOT_FOUND、INF_E_HEALTH_POLICY_INVALID、INF_E_HEALTH_EVENT_PUBLISH_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-001、HLT-TODO-003 | 无 | 无 | 错误码头文件、unit/contract 测试；2026-04-06 已落盘 infra/include/health/HealthErrors.h、tests/unit/infra/health/HealthErrorsTest.cpp、tests/contract/smoke/HealthErrorMappingContractTest.cpp，并更新 infra/CMakeLists.txt、infra/src/health/ProbeRegistry.cpp、infra/src/health/ProbeExecutor.cpp、infra/src/health/HealthEvaluator.cpp、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt 与 tests/unit/infra/health/HealthEvaluatorTest.cpp，使 health 私有错误语义收敛到统一映射矩阵；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_health_errors_unit_test dasall_contract_health_error_mapping_test dasall_health_evaluator_unit_test dasall_probe_executor_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(HealthErrorsTest|HealthErrorMappingContractTest|HealthEvaluatorTest|ProbeExecutorTest)"`、`ctest --test-dir build-ci -N -R "(HealthErrorsTest|HealthErrorMappingContractTest)"` 与 `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests` 验证映射矩阵冻结、发现性与回归，unit 标签 133/133 通过，contract 标签 140/140 通过 | 仅当 5 个错误码可追溯且映射测试通过时完成 |
 | HLT-TODO-014 | Blocked | 定义 HealthConfigPolicy 配置模型与覆盖策略 | health 设计 6.9/11.1；蓝图 5.1 | 6.9 配置项表 | L2 | infra/src/health/HealthConfigPolicy.cpp | merge(default/profile/deploy), validate_thresholds() | unit：默认值与覆盖优先级；failure：非法阈值拒绝 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005 | HLT-BLK-003 | profiles 下 infra.health 键命名冻结 | 配置策略代码或阻塞记录 | 仅当配置键命名冻结后可由 Blocked 转 Not Started |
-| HLT-TODO-015 | Not Started | 实现 RecoveryHintEmitter 边界守卫骨架 | health 设计 6.2/6.8；ADR-007；11.1 | 6.2 RecoveryHintEmitter | L2 | infra/src/health/RecoveryHintEmitter.cpp | emit_hint(snapshot,reason), sanitize_hint_payload() | contract：建议与执行分离；unit：evidence_ref 完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-006、HLT-TODO-011 | 无（2026-03-31 已由 HLT-TODO-006 解阻；待 HLT-TODO-011 完成后进入实现） | RecoveryHint 边界 contract 模板已冻结，可在评估器完成后直接复用 | 发射器代码或阻塞记录 | 仅当 contract 模板冻结后方可推进 |
+| HLT-TODO-015 | Done (2026-04-06) | 实现 RecoveryHintEmitter 边界守卫骨架 | health 设计 6.2/6.8；ADR-007；11.1 | 6.2 RecoveryHintEmitter | L2 | infra/src/health/RecoveryHintEmitter.cpp | emit_hint(snapshot,reason), sanitize_hint_payload() | contract：建议与执行分离；unit：evidence_ref 完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-006、HLT-TODO-011 | 无 | 无 | 发射器代码、unit/contract 验证；2026-04-06 已落盘 infra/src/health/RecoveryHintEmitter.h、infra/src/health/RecoveryHintEmitter.cpp、tests/unit/infra/health/RecoveryHintEmitterTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `RecoveryHintEmitterTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_recovery_hint_emitter_unit_test dasall_contract_recovery_hint_boundary_test`、`ctest --test-dir build-ci --output-on-failure -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`、`ctest --test-dir build-ci -N -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 验证建议/执行分离、evidence_ref 完整性与回归，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当 contract 模板冻结后方可推进 |
 | HLT-TODO-016 | Not Started | 注册 health 源码到 infra CMake | health 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/health/ | health 源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001~015 | 源文件分批落盘导致阶段性空实现 | 保留最小 non-empty health 源文件 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 health 源码入图时完成 |
 | HLT-TODO-017 | Not Started | 注册 health 的 unit/contract/integration 测试入口 | health 设计 7/8/9；工程规范 3.7；tests 现状 | 7 映射；8.1 路径；9.1 测试矩阵 | L0 | tests/unit/CMakeLists.txt、tests/unit/infra/health/、tests/contract/CMakeLists.txt、tests/integration/infra/health/ | unit/contract/failure 注入先行，integration 发现性门禁 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-016 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 HLT-TODO-016 完成后落盘具体 integration 用例 | 测试注册改动或阻塞记录 | 仅当 health 新增测试可被 ctest -N 发现；integration 用例可被发现并执行时完成 |
 | HLT-TODO-018 | Not Started | 回写 health 质量门与交付证据 | health 设计 9.2/11；工程规范 6.2 | 9.2 Gate；11 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁有通过/失败结论及命令证据时完成 |
@@ -507,3 +507,50 @@ Build 合规复核：
 2. 边界保持：实现停留在 infra/health 本地错误域与既有 contracts `ResultCode` 之间，未扩写 contracts 共享枚举，也未越权补 `HLT-TODO-012` 的事件发布实现。
 3. 测试闭环：新增用例同时覆盖枚举值稳定、名称稳定、映射矩阵稳定、source anchor 可观察性，以及 evaluator/executor 的回归路径，并补了发现性验证。
 4. 提交隔离：本轮提交范围限定为 `HLT-TODO-013` 的错误码域、映射接线、unit/contract 测试与 TODO/worklog 证据，不混入后续 `HLT-TODO-015` 或解阻任务。
+
+## 17. 本轮执行记录（2026-04-06 / HLT-TODO-015）
+
+### 17.1 选中任务
+
+1. 本轮任务：HLT-TODO-015。
+2. 可执行性依据：`HLT-TODO-006` 已冻结 `RecoveryHint` 边界对象与 contract 模板，`HLT-TODO-011` 已提供可消费的三态 `HealthSnapshot` 输出，因此 015 当前无 Blocked 依赖，可以直接补齐“只发建议、不带执行句柄”的边界守卫骨架。
+
+### 17.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_health模块详细设计.md 6.3/6.4 已明确 `RecoveryHintEmitter` 的输入是 Degraded/Failed 快照，输出是建议事件 `RecoveryHint`，且依赖方向是 `HealthEvaluator -> RecoveryHintEmitter`，不允许反向进入 runtime/cognition 实现。
+2. docs/architecture/DASALL_infra_health模块详细设计.md 6.5 已冻结 `RecoveryHint{reason_code,severity,suggested_action,evidence_ref}`，明确“仅建议，不包含执行句柄”；docs/architecture/DASALL_infra_health模块详细设计.md 6.8 进一步要求持续失败路径“输出 RecoveryHint”，但不执行恢复动作。
+3. tests/contract/smoke/RecoveryHintBoundaryContractTest.cpp 已将 `RecoveryHint` 的 advisory-only 边界固化为 contract，因此 015 应复用既有模板，并把实现重点放在建议级别、reason_code 和 `evidence_ref` 的结构化输出，而不是重复扩写对象字段。
+4. 外部参考：Kubernetes `Liveness, Readiness, and Startup Probes` 文档指出探针负责持续报告状态，而 kubelet 根据 probe 结果执行重启或摘流等动作；该分层说明“状态信号输出”和“恢复动作执行”应保持分离，本轮据此把 `RecoveryHintEmitter` 限制为 advisory output，不承担执行动作。
+
+D 结论：
+
+1. `RecoveryHintEmitter` 作为 infra/health 私有实现落盘在 infra/src/health，提供 `emit_hint(snapshot, reason)` 与 `sanitize_hint_payload()`，只接受 `Degraded` / `Unhealthy` 快照，拒绝 `Healthy`/`Unknown` 输入。
+2. 建议对象沿用已冻结的 `RecoveryHint`：degraded 快照映射为 `ProviderTimeout + Warning + observe_and_retry_later`，unhealthy 快照映射为 `RuntimeRetryExhausted + Critical + escalate_for_runtime_recovery_review`；建议动作仅为字符串建议，不引入任何执行句柄或 runtime 回调。
+3. `evidence_ref` 统一锚定到 `audit://health/recovery_hint/`，并纳入状态、snapshot version、failed_components 与 sanitize 后的 reason，确保后续 audit/publisher 接线前已经具备稳定审计锚点。
+4. D Gate：PASS。
+
+### 17.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/health/RecoveryHintEmitter.h、infra/src/health/RecoveryHintEmitter.cpp：新增 `RecoveryHintEmitter` 私有实现，落盘 `RecoveryHintEmissionResult`、`emit_hint`、`sanitize_hint_payload` 与基于 snapshot state 的建议级别/证据锚点生成逻辑。
+2. tests/unit/infra/health/RecoveryHintEmitterTest.cpp：新增 unit 测试，覆盖 degraded hint、unhealthy hint 与 healthy snapshot 拒绝路径，同时固定 `evidence_ref` 前缀与 sanitize 行为。
+3. tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：注册 `dasall_recovery_hint_emitter_unit_test` 与 `RecoveryHintEmitterTest`，保证 unit 标签可发现。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_recovery_hint_emitter_unit_test dasall_contract_recovery_hint_boundary_test`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`：通过，2/2 tests passed。
+4. `ctest --test-dir build-ci -N -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`：通过，发现 2 个目标测试。
+5. `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`：通过；后续全量执行结果为 unit 标签 134/134 tests passed、contract 标签 140/140 tests passed。
+6. `ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`：通过。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接补齐 RecoveryHint 的结构化建议输出与 evidence_ref 守卫，而不是把建议逻辑散落到 evaluator 或未来 runtime 恢复链路中。
+2. 边界保持：实现停留在 `HealthSnapshot -> RecoveryHint` 的 advisory-only 映射内，未扩写 `RecoveryHint` 公共对象，也未越权补执行动作或 runtime 回调。
+3. 测试闭环：新增用例覆盖正例、负例和 sanitize 路径，并复用了已冻结的 `RecoveryHintBoundaryContractTest` 做边界守卫验证。
+4. 提交隔离：本轮提交范围限定为 `HLT-TODO-015` 的 emitter 实现、unit 接线与 TODO/worklog 证据，不混入后续 `HLT-TODO-016`、`HLT-TODO-017`、`HLT-TODO-018`。

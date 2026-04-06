@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #125
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-015 实现 RecoveryHintEmitter 边界守卫骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-015-D/B 落盘：
+   - 新增 infra/src/health/RecoveryHintEmitter.h 与 infra/src/health/RecoveryHintEmitter.cpp，落盘 `RecoveryHintEmissionResult`、`emit_hint` 与 `sanitize_hint_payload`，把三态快照收敛为 advisory-only `RecoveryHint` 输出。
+   - 使用 `audit://health/recovery_hint/` 作为稳定 evidence_ref 锚点，把状态、snapshot version、failed_components 与 sanitize 后的 reason 写入建议证据，确保后续审计桥接前已有稳定引用面。
+2. 完成 015 的 unit/CMake 接线：
+   - 新增 tests/unit/infra/health/RecoveryHintEmitterTest.cpp，覆盖 degraded/unhealthy advisory 输出、healthy snapshot 拒绝与 sanitize 路径。
+   - 更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，注册 `dasall_recovery_hint_emitter_unit_test` 与 `RecoveryHintEmitterTest`。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-015` 标记为 Done，并补齐本轮执行记录、发现性、全量 gate 与提交隔离证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_recovery_hint_emitter_unit_test dasall_contract_recovery_hint_boundary_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`
+   - `ctest --test-dir build-ci -N -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - build-ci 配置成功，定向 unit/contract 目标构建通过。
+   - `RecoveryHintEmitterTest` 与 `RecoveryHintBoundaryContractTest` 定向执行通过，2/2 tests passed。
+   - `RecoveryHintEmitterTest` 与 `RecoveryHintBoundaryContractTest` 被 ctest 发现并完成注册。
+   - `dasall_unit_tests` 通过，unit 标签 134/134 tests passed；`dasall_contract_tests` 通过，contract 标签 140/140 tests passed。
+
+### 结果
+
+1. HLT-TODO-015 已从“只有 RecoveryHint 对象和 contract 模板”推进到“存在可编译、可测试、带审计锚点的 RecoveryHintEmitter 最小实现”。
+2. `HLT-TODO-016` 现在具备把 health 私有源码整体注册进 `dasall_infra` 的前提条件，下一步可以收口 health 源码入图与测试去重。
+
+### 下一步
+
+1. 实现 `HLT-TODO-016`，把当前 health 私有源码统一接入 infra CMake，并同步调整 health unit 目标，避免源文件重复编译。
+
+### 风险
+
+1. 当前 `RecoveryHintEmitter` 仍是独立骨架，尚未与 `HealthEvaluator` 或未来事件发布链直接接线；后续推进 016/017 时需要保持“建议输出”和“恢复执行”分层，不得因为源码入图而绕过 ADR-007。
+
 ## 记录 #124
 
 - 日期：2026-04-06
