@@ -8,6 +8,47 @@
 
 ---
 
+## 记录 #119
+
+- 日期：2026-04-06
+- 阶段：policy 组件专项 TODO
+- 任务：POL-TODO-022 回写 policy 质量门与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 完成 POL-TODO-022 的专项 TODO 收口：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md，将 `POL-TODO-022` 标记为 Done，并同步刷新阶段 G、验收命令基线、Gate 执行快照、Blocker 状态快照、验证/回退记录与维护态结论。
+   - 新增 `## 36. 本轮执行记录（2026-04-06 / POL-TODO-022）`，把 022 的 Design 结论、最终 gate 统计与提交隔离要求回写到专项 TODO。
+2. 完成专项质量门口径修正：
+   - 移除“integration 尚未落盘”的过时表述，改为显式回链 `POL-TODO-018` 与 `POL-TODO-021` 的 integration 证据。
+   - 将 policy 第 9 章补齐到 `POL-GATE-01`~`POL-GATE-08`、`POL-BLK-001`~`POL-BLK-006` 全量快照，确保 gate 结论与当前仓库状态一致。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `ctest -N` 发现 267 个测试。
+   - `ctest -L unit` 通过，128/128 tests passed。
+   - `ctest -L contract` 通过，139/139 tests passed。
+   - integration 证据沿用上一轮 `POL-TODO-021` 的聚合验收结果：`ctest --test-dir build-ci --output-on-failure -L integration` 15/15 通过。
+
+### 结果
+
+1. POL-TODO-022 已完成，policy 组件专项 TODO 的 `POL-TODO-001`~`POL-TODO-022` 现已全部 Done，`POL-BLK-001`~`POL-BLK-006` 全部为 Resolved。
+2. policy 专项 TODO 的第 9 章现已与当前 build-ci gate、integration 交付和 blocker 状态同步，不再保留阶段 F 完成后的旧口径。
+
+### 下一步
+
+1. policy 组件专项 TODO 已收口；后续仅在 shared semantic、public boundary 或新的 integration/failure 场景出现时再新开原子任务。
+
+### 风险
+
+1. 若后续引入新的 policy public boundary、shared `PolicyDecision` 对象或 bridge 语义扩展，必须重新开任务并重跑 gate，不能直接沿用本次收口结论。
+
 ## 记录 #118
 
 - 日期：2026-04-05

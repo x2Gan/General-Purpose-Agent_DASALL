@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 policy 组件专项 TODO
 
-最近更新时间：2026-04-05  
+最近更新时间：2026-04-06  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/policy
 
@@ -148,8 +148,8 @@
 | 查询投影与 contracts 语义边界 | policy 设计 6.5/6.7；contracts-freeze T010 | 适配器 / contract | POL-TODO-014 | 只做 decision 引用与语义映射，不直接扩写 contracts |
 | Manager 主链与 safe_mode | policy 设计 6.7/6.8 | 生命周期 / 流程 | POL-TODO-015 | 把 load/apply/dry_run/evaluate/rollback 收束到统一入口 |
 | 构建与测试注册 | policy 设计 7、8.1、9.1；代码现状 | 测试 / 门禁 | POL-TODO-016、POL-TODO-017、POL-TODO-018 | CMake、unit/contract、integration 分拆，避免任务过大 |
-| 审计、指标、健康桥接 | policy 设计 6.10；audit/metrics/health TODO | 适配器 / 门禁 | POL-TODO-019、POL-TODO-020、POL-TODO-021 | audit/metrics/health 桥接已完成；仅剩 022 证据收口 |
-| 交付证据回写 | policy 设计 9.2/11；工程规范 6.2 | 文档 / 质量门 | POL-TODO-022 | 对 gate、阻塞变化、回退证据做收口 |
+| 审计、指标、健康桥接 | policy 设计 6.10；audit/metrics/health TODO | 适配器 / 门禁 | POL-TODO-019、POL-TODO-020、POL-TODO-021 | audit/metrics/health 桥接已完成，并由 022 完成最终证据收口 |
+| 交付证据回写 | policy 设计 9.2/11；工程规范 6.2 | 文档 / 质量门 | POL-TODO-022 | 对 gate、阻塞变化、回退证据做最终收口 |
 
 ### 5.2 映射覆盖性检查
 
@@ -191,7 +191,7 @@
 | POL-TODO-019 | Done (2026-04-05) | 实现 PolicyAuditBridge 审计桥接骨架 | policy 设计 6.2/6.10；audit TODO | 6.2 PolicyAuditBridge；6.10 强制审计点 | L1 | infra/src/policy/PolicyAuditBridge.cpp | PolicyAuditBridge（load/apply_patch/rollback/deny 事件桥接） | unit：高风险 deny 与 patch failure 事件组装；contract：AuditEvent 引用边界不越权 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-015 | 无（2026-04-05 已由 AUD-TODO-006、AUD-TODO-014、AUD-TODO-015 与 audit gate 9/9 解阻） | 无 | PolicyAuditBridge.h/.cpp、PolicyAuditBridgeTest、PolicyAuditBridgeBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/contract 验收 | 仅当 bridge 只输出审计事实，不重新定义审计对象，且事件覆盖四个强制审计点时完成 |
 | POL-TODO-020 | Done (2026-04-05) | 实现 PolicyMetricsBridge 指标桥接骨架 | policy 设计 6.2/6.10；metrics TODO | 6.2 PolicyMetricsBridge；6.10 指标清单 | L1 | infra/src/policy/PolicyMetricsBridge.cpp | PolicyMetricsBridge（reload_total、invalid_total、patch_total、deny_total、rollback_total、active_generation、safe_mode_total） | unit：计数与 gauge 输出；contract：标签不过度暴露实现细节 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | POL-TODO-015 | 无（2026-04-05 已由 metrics/health 接口冻结、标签白名单与状态对象边界测试解阻） | 无 | PolicyMetricsBridge.h/.cpp、PolicyMetricsBridgeTest、PolicyMetricsBridgeBoundaryContractTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/contract 验收 | 仅当指标集合与设计一致，且 active_generation/safe_mode 语义可被测试稳定判定时完成 |
 | POL-TODO-021 | Done (2026-04-05) | 实现 PolicyHealthProbe 健康探针骨架 | policy 设计 6.2/6.10；health TODO | 6.2 PolicyHealthProbe；6.10 ready/degraded/unavailable | L1 | infra/src/policy/PolicyHealthProbe.cpp | PolicyHealthProbe（ready/degraded/unavailable 与最近失败原因输出） | unit：状态切换；integration：commit fail 或连续 patch fail 后 health 降级 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_policy_health_probe_unit_test dasall_policy_health_integration_test && ctest --test-dir build-ci --output-on-failure -R "PolicyHealth(Probe|Integration)Test" && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration | POL-TODO-015 | 无（2026-04-05 已由 metrics/health 接口冻结、标签白名单与状态对象边界测试解阻） | 无 | PolicyHealthProbe.h/.cpp、PolicyHealthProbeTest、PolicyHealthIntegrationTest、policy CMake/test 接线；2026-04-05 已落盘并完成 build-ci 定向/unit/integration 验收 | 仅当健康状态与最近失败原因能被稳定输出，并且不侵入 runtime 状态机时完成 |
-| POL-TODO-022 | Not Started | 回写 policy 质量门与交付证据 | policy 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md | process test：gate 结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个质量门都有通过/失败结论和对应命令证据时完成 |
+| POL-TODO-022 | Done (2026-04-06) | 回写 policy 质量门与交付证据 | policy 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md、docs/worklog/DASALL_开发执行记录.md | process test：gate 结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | POL-TODO-017 | 无 | 无 | 更新后的 TODO 文档质量门快照、Blocker 状态快照、验证/回退记录与 worklog #119；2026-04-06 已完成 build-ci gate 收口 | 仅当每个质量门都有通过/失败结论和对应命令证据时完成 |
 
 ### 6.2 当前 Blocked 任务索引
 
@@ -210,8 +210,8 @@
 | C 配置与快照底座 | POL-TODO-010、POL-TODO-013 | 串行 | 先读取配置，再形成快照存储基础 |
 | D 规则治理主链 | POL-TODO-011、POL-TODO-012、POL-TODO-014、POL-TODO-015 | 串行 | INF-BLK-07 已完成校准；POL-BLK-006 已由 config/profiles 接口与 schema 冻结解阻，decision 语义缺口已由 mapping catalog 解阻 |
 | E 构建与测试接线 | POL-TODO-016、POL-TODO-017 | 可并行 | 代码入图与 unit/contract 发现性可同步推进；contracts 语义映射缺口已由 mapping catalog 补齐 |
-| F 观测桥接与集成 | POL-TODO-018~021 | 串行 | 018、019、020、021 已完成；022 可继续串行推进 |
-| G 证据收口 | POL-TODO-022 | 串行 | 回写质量门、阻塞变化与回退证据 |
+| F 观测桥接与集成 | POL-TODO-018~021 | 串行 | 018、019、020、021 已完成，integration 与观测桥接基线已落盘 |
+| G 证据收口 | POL-TODO-022 | 串行 | 022 已完成；质量门、阻塞变化与回退证据已收口 |
 
 ### 7.2 必过门禁表
 
@@ -236,6 +236,50 @@
 | POL-BLK-004 | 已解阻（2026-04-05）：metrics 组件专项 TODO 已完成 `MET-TODO-001`~`MET-TODO-008`，冻结 `IMetricsProvider`、`IMeter`、`IMetricConfigPolicy`、`IMetricsHealthProbe`、`MetricTypes`、`MetricsSnapshots`、`MetricsErrors`；health 组件专项 TODO 已完成 `HLT-TODO-001`~`HLT-TODO-006`，冻结 `IHealthProbe`、`IHealthMonitor`、`IHealthPolicy`、`HealthStateTypes`、`RecoveryHint`。当前 `ctest --test-dir build-ci -R "(MetricsProviderInterfaceTest|MetricsMeterInterfaceTest|MetricsConfigPolicyInterfaceTest|MetricsHealthProbeInterfaceTest|MetricTypesTest|MetricsProviderInterfaceBoundaryContractTest|MetricsMeterInterfaceBoundaryContractTest|MetricsConfigPolicyInterfaceBoundaryContractTest|HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest|HealthMonitorInterfaceBoundaryContractTest)"` 已 11/11 通过，说明 policy 所需的 metrics bridge 接口、标签白名单与 health 状态对象都已稳定 | POL-TODO-020、POL-TODO-021 | 无；后续仅需保持 `IMetricsProvider/IMeter/IMetricConfigPolicy/IMetricsHealthProbe`、`MetricLabels` allowlist 与 `HealthSnapshot/HealthTransition` 语义一致 | 证据回链到 metrics 组件专项 TODO 的 MET-TODO-001~008、health 组件专项 TODO 的 HLT-TODO-001~006，以及 tests/unit/infra/MetricTypesTest.cpp、tests/contract/smoke/MetricsConfigPolicyInterfaceBoundaryContractTest.cpp、tests/unit/infra/HealthSnapshotTest.cpp、tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp | 若 metrics 标签白名单、provider/meter 接口或 health 状态对象边界未来回退，则重新转为 Blocked |
 | POL-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；policy integration/failure 是否可执行改由组件自身落盘负责 | POL-TODO-018、021 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | POL-BLK-006 | 已解阻（2026-04-01）：config 组件已落盘 IConfigCenter 最小 load_layers/get_typed 接口与对应 unit/contract 边界，profiles 侧已冻结 runtime_policy.yaml policy 键域并落盘 RuntimePolicyProvider 最小加载流程 | POL-TODO-007、010、015 | 无；后续仅需保持 ConfigCenter 接口、profiles schema 与 policy loader 读取键口径同步 | 证据回链到 config TODO 的 CFG-TODO-001，以及 profiles TODO 的 PRF-TODO-008、PRF-TODO-013 与相关 unit/contract 测试 | 若 IConfigCenter 接口回退、runtime_policy.yaml 键域漂移或 schema 校验失效，则重新转为 Blocked |
+
+## 36. 本轮执行记录（2026-04-06 / POL-TODO-022）
+
+### 36.1 选中任务
+
+1. 本轮任务：POL-TODO-022。
+2. 可执行性依据：`POL-TODO-018`~`POL-TODO-021` 已全部完成，当前 Blocked 索引为空；剩余差异只在于 policy 专项 TODO 的第 9 章仍保留“integration 尚未落盘”的旧口径，未同步当前仓库状态与最终 gate 结果。
+
+### 36.2 研究与 Design 结论
+
+本地证据：
+
+1. `docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md` 的 `9.1` 仍写明 integration 不纳入首轮 Gate，原因是 `POL-TODO-018` 尚未落盘；该表述已经与 `POL-TODO-018` 和 `POL-TODO-021` 的完成事实冲突。
+2. 本轮执行 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`，分别得到 267 个测试发现、unit 128/128 通过、contract 139/139 通过，可作为 022 的最终收口证据。
+3. `POL-BLK-001`~`POL-BLK-006` 已全部转为已解阻，且阶段 F 的 audit/metrics/health bridge 与 integration 生命周期闭环已经由 018~021 落盘并在各自执行记录中留存验收证据。
+4. `POL-TODO-018` 已落盘 `PolicyLifecycleIntegrationTest`，`POL-TODO-021` 已落盘 `PolicyHealthIntegrationTest`，最近一次 `ctest --test-dir build-ci --output-on-failure -L integration` 验收为 15/15 通过，说明 integration 证据已从“缺口”转为“既有交付”。
+
+D 结论：
+
+1. `POL-TODO-022` 不新增 policy 代码，而是把 gate、blocker、回退与 integration 证据同步回专项 TODO 和 worklog，消除文档口径滞后。
+2. 最终 Gate 需要同时保留两层证据：一层是 022 任务定义要求的 `ctest -N`、`-L unit`、`-L contract` 收口命令；另一层是 018/021 已完成并可追溯的 integration 验收记录，避免把阶段 F 的集成成果误写回“尚未落盘”。
+3. 完成本轮后，policy 专项 TODO 的阶段 G 可判定为 Done，专项文档进入维护态，后续如有 shared semantic 或 public boundary 变化，应新开原子任务而不是回退本次收口。
+4. D Gate：PASS。
+
+### 36.3 Build 交付与证据
+
+交付物：
+
+1. docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md：将 `POL-TODO-022` 标记为 Done，并同步更新阶段 G、质量门快照、Blocker 状态快照、验证与回退记录、风险与维护结论。
+2. docs/worklog/DASALL_开发执行记录.md：新增记录 #119，回写 022 的最终 gate 结果与专项 TODO 收口结论。
+
+验收结果：
+
+1. `ctest --test-dir build-ci -N`：通过，发现 267 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，128/128 tests passed。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，139/139 tests passed。
+4. integration 证据沿用 `POL-TODO-021` 最近一次聚合验收：`ctest --test-dir build-ci --output-on-failure -L integration` 通过，15/15 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：本轮修复的是专项 TODO 第 9 章与实际仓库状态不一致的问题，而不是重复新增 bridge 或 integration 实现。
+2. 边界保持：本轮仅更新 docs/worklog，不修改 policy、contracts、audit、metrics、health 的实现或公共边界。
+3. TODO 证据回写：已完成 022 状态、Gate 结论、Blocker 快照、验证记录与维护态结论回写。
+4. 提交隔离：本轮提交范围限定为 `POL-TODO-022` 的文档收口，不混入 018~021 的实现改动。
 
 ## 35. 本轮执行记录（2026-04-05 / POL-TODO-021）
 
@@ -471,11 +515,12 @@ Build 合规复核：
 | 查看测试发现性 | ctest --test-dir build-ci -N |
 | 执行 unit 标签 | ctest --test-dir build-ci --output-on-failure -L unit |
 | 执行 contract 标签 | ctest --test-dir build-ci --output-on-failure -L contract |
+| 执行 integration 标签（扩展验收） | ctest --test-dir build-ci --output-on-failure -L integration |
 
 说明：
 
-1. integration 相关命令当前不纳入首轮 Gate，原因是 POL-TODO-018 尚未落盘具体 integration/failure 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
-2. 若 contracts 共享 policy 对象仍未冻结，contract 验收以“语义映射 catalog + contract 测试”作为准入条件。
+1. `POL-TODO-018` 与 `POL-TODO-021` 已分别落盘 `PolicyLifecycleIntegrationTest` 与 `PolicyHealthIntegrationTest`；integration 已不再是历史缺口，但 `POL-TODO-022` 的最小收口命令仍按任务定义聚焦 `ctest -N`、`ctest -L unit`、`ctest -L contract`。
+2. 若 contracts 共享 policy 对象仍未冻结，contract 验收继续以“语义映射 catalog + contract 测试”作为准入条件。
 3. 每个任务至少需要一条构建命令与一条测试命令，禁止只以文档结论判定完成。
 
 ### 9.2 质量门逐项回答
@@ -486,7 +531,42 @@ Build 合规复核：
 4. 是否所有 Blocked 项都带有明确证据和解阻条件：是。
 5. 是否所有任务都具备可二值判定完成标准：是。
 6. 是否避免跨子系统范围扩张：是。
-7. 若要求函数/数据结构级原子任务，输出是否真正落到这些对象：是，已落到 PolicyTypes、PolicyErrors、接口与单链路骨架。
+7. 若要求函数/数据结构级原子任务，输出是否真正落到这些对象：是，已落到 PolicyTypes、PolicyErrors、四类接口、主链骨架、三类观测 bridge 与 integration 用例。
+
+### 9.3 2026-04-06 Gate 执行快照
+
+| Gate ID | 当前状态 | 证据 | 结论 |
+|---|---|---|---|
+| POL-GATE-01 | Pass | `POL-BLK-001` 已解阻；`POL-TODO-002/008/011/012/014/015` 已完成，schema/domain/effect/patch operations 白名单与冲突裁定顺序已由头文件、unit/contract 测试固化 | validator/resolver/projector/manager 依赖的 schema 不再漂移 |
+| POL-GATE-02 | Pass | `POL-TODO-001`~`POL-TODO-009` 全部完成；`PolicyTypes`、`PolicyErrors` 与四个接口头文件均已冻结并纳入 build-ci | policy public boundary 已闭环 |
+| POL-GATE-03 | Pass | `POL-TODO-013`、`POL-TODO-015` 已完成；`PolicySnapshotStoreTest` 与 `SecurityPolicyManagerTest` 已覆盖 generation/LKG/rollback 路径；`ctest --test-dir build-ci --output-on-failure -L unit` 当前 128/128 通过 | 快照提交失败不污染 current，回滚路径保持可验证 |
+| POL-GATE-04 | Pass | `contracts/include/boundary/PolicyDecisionMappingCatalog.h` 与相关 contract 测试持续生效；`ctest --test-dir build-ci --output-on-failure -L contract` 当前 139/139 通过 | contracts 侧继续通过 mapping catalog 闭合 policy 语义边界，无 shared dependency 越权 |
+| POL-GATE-05 | Pass | `POL-BLK-003/004` 已解阻；`POL-TODO-019/020/021` 已完成；`PolicyAuditBridge`、`PolicyMetricsBridge`、`PolicyHealthProbe` 已入图并具备 unit/contract/integration 证据 | 审计、指标、健康 bridge 依赖和最小实现均已稳定 |
+| POL-GATE-06 | Pass | `ctest --test-dir build-ci -N` 当前发现 267 个测试；policy unit/contract/integration 用例均已注册到 build-ci 图 | policy 测试发现性已持续存在，不再依赖临时定向命令 |
+| POL-GATE-07 | Pass | `POL-TODO-018` 已落盘 `PolicyLifecycleIntegrationTest`，`POL-TODO-021` 已落盘 `PolicyHealthIntegrationTest`；最近一次 `ctest --test-dir build-ci --output-on-failure -L integration` 验收为 15/15 通过 | integration 拓扑、生命周期闭环和 health 降级路径均已进入聚合 gate |
+| POL-GATE-08 | Pass | `POL-TODO-018`~`POL-TODO-021` 仅新增 internal policy 源码、测试、CMake 接线与文档回链；`POL-TODO-022` 仅回写 docs/worklog，未改 contracts 或 public headers | 当前无待评审 breaking change |
+
+### 9.4 2026-04-06 Blocker 状态快照
+
+| Blocker ID | 当前状态 | 是否影响 POL-TODO-022 | 说明 |
+|---|---|---|---|
+| POL-BLK-001 | Resolved | 否 | schema/domain/effect/patch operations 白名单与冲突裁定矩阵已由设计、头文件与边界测试共同固化 |
+| POL-BLK-002 | Resolved | 否 | PolicyDecision 共享对象缺口已通过 mapping catalog 与 contract 测试替代闭合 |
+| POL-BLK-003 | Resolved | 否 | audit 最小写入接口、字段集合与相关 gate 已冻结，可支撑 PolicyAuditBridge |
+| POL-BLK-004 | Resolved | 否 | metrics/health 最小 bridge 接口、标签白名单与状态对象已冻结，可支撑 PolicyMetricsBridge/PolicyHealthProbe |
+| POL-BLK-005 | Resolved | 否 | tests 顶层 integration 拓扑与聚合 gate 已补齐，policy integration 用例已落盘 |
+| POL-BLK-006 | Resolved | 否 | config/profiles 的最小读取接口与 policy 键域已冻结，可支撑 loader/manager 主链 |
+
+### 9.5 验证与回退记录
+
+1. `ctest --test-dir build-ci -N`：发现 267 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：128/128 通过。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：139/139 通过。
+4. `ctest --test-dir build-ci --output-on-failure -L integration`：最近一次聚合验收 15/15 通过，证据回链到 `POL-TODO-021`。
+5. `ctest --test-dir build-ci -N -R "PolicyLifecycleIntegrationTest|infra_integration_topology_smoke"`：在 `POL-TODO-018` 验收中发现 2 个测试；`ctest --test-dir build-ci --output-on-failure -R PolicyLifecycleIntegrationTest`：1/1 通过。
+6. `ctest --test-dir build-ci -N -R "PolicyHealth(Probe|Integration)Test"`：在 `POL-TODO-021` 验收中发现 2 个测试；`ctest --test-dir build-ci --output-on-failure -R "PolicyHealth(Probe|Integration)Test"`：2/2 通过。
+7. `POL-TODO-018`~`POL-TODO-021` 未触发代码回退；`POL-TODO-022` 为文档收口任务，本轮无代码回退。
+8. 当前 policy 专项 gate 与 blocker 已全部收口；若后续 schema/public boundary/bridge 接口语义回退，应分别按 `POL-GATE-01/04/05` 重新开阻塞项。
 
 ## 10. 风险与回退策略
 
@@ -498,27 +578,20 @@ Build 合规复核：
 | commit 失败导致 current 污染 | High | 提交失败后 current 已切换 | generation/LKG 测试失败 | 回退 SnapshotStore 变更，只允许旧快照继续服务 |
 | hot_reload 绕过 dry-run 或审计 | High | apply_patch 未强制 dry_run 或未记录审计 | patch 路径无审计事件或无拒绝原因 | 关闭 hot_reload，回退到只读静态加载 |
 | safe_mode 不可复现 | Medium | 连续失败阈值、退出条件和健康状态不稳定 | unit 用例无法稳定复现 safe_mode 进入/退出 | 回退为“只进不出”的只读模式，待阈值模型冻结后再恢复 |
-| integration 长期未落盘 | Medium | policy 组件 integration/failure 用例长期未注册 | ctest -N 看不到 policy integration 用例 | 保持 integration 任务为 Not Started，并优先补组件用例 |
+| integration 场景与聚合 gate 脱节 | Medium | 新增 policy 主链或 bridge 场景但未同步扩充 integration/failure 用例 | `ctest --test-dir build-ci -L integration` 长期为绿但 policy 新路径无对应用例 | 新开增量 TODO，先补 `tests/integration/infra/policy/` 再合入新功能 |
 
 ## 11. 可行性结论
 
-1. 结论：可直接生成并执行接口/数据结构级专项 TODO，局部可进入方法骨架级；当前不应整体进入函数级实现。
-2. 原因：
-   - 已具备核心接口清单、对象字段、主异常流程、错误语义、配置项和落盘建议。
-   - infra/policy 的职责边界已被架构文档、蓝图和 ADR 明确约束。
-   - INF-TODO-017 已完成，INF-BLK-07 也已完成台账校准。
-   - 当前前置阻塞主要收敛到 contracts 共享对象缺口与 config/profile 配置读取接口。
-   - contracts 共享 policy 对象代码仍未落盘，只能先做语义对齐而不能直接绑定共享头文件。
-3. 当前最小可执行粒度：数据结构 / 接口级，局部方法骨架级。
-4. 若未达到全面函数级，还缺哪些设计信息：
-   - contracts/shared PolicyDecision 的正式冻结结论或 mapping catalog。
-   - audit、metrics、health 的最小桥接接口。
-   - ConfigCenter 与 profiles 侧 policy 配置键的最终冻结。
-5. 下一步建议：
-   - 先执行 POL-TODO-001~009，完成对象、错误码与接口冻结。
-   - 并行推动 POL-BLK-002、POL-BLK-006 解阻，再进入 validator/resolver/manager 主链。
-   - 在 audit、metrics、health 接口冻结前，不把桥接任务误写成 Build-ready。
-   - 首轮验收只以 dasall_infra、unit、contract 为准，不把 integration 作为伪完成条件。
+1. 结论：policy 组件专项 TODO 已完成并进入维护态；对象、接口、主链、观测 bridge、integration 与质量门证据均已收口。
+2. 依据：
+   - `POL-TODO-001`~`POL-TODO-022` 全部完成，当前 Blocked 索引为空。
+   - `PolicyTypes`、`PolicyErrors`、四类接口、loader/validator/resolver/store/manager 主链、audit/metrics/health bridge 与 policy integration 用例均已落盘。
+   - 2026-04-06 收口验收显示：`ctest --test-dir build-ci -N` 发现 267 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 128/128 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 139/139 通过；integration 最近一次聚合验收 15/15 通过。
+3. 后续若出现以下变化，应新开原子任务而不是回退本专项收口：
+   - contracts 共享 `PolicyDecision` 正式冻结并替代 mapping catalog；
+   - policy 审计/指标/健康 bridge 的字段、指标族或状态语义发生扩展；
+   - 新增 policy integration/failure injection 场景且当前聚合 gate 尚未覆盖。
+4. 当前维护粒度：以 L2/L3 增量任务为主，不需要重开本专项的对象/接口冻结基线。
 
 ## 12. 本轮执行记录（2026-04-01 / POL-TODO-001）
 
