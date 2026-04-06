@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #143
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-010 实现 ContextPropagationAdapter 注入提取
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-010-D/B 落盘：
+   - 新增 infra/src/tracing/ContextPropagationAdapter.h 与 infra/src/tracing/ContextPropagationAdapter.cpp，落盘 `inject()`、`extract()`、最近一次传播状态快照与 `invalid_context_total` 计数。
+   - `inject()` 现在支持 valid active context 的 `traceparent`/`tracestate` 注入、explicit noop 的 header 清理、invalid context 的失败状态记录。
+   - `extract()` 现在支持 W3C Trace Context `00-trace-id-parent-id-trace-flags` 的最小解析、大小写不敏感 carrier 键匹配、missing traceparent -> noop、malformed traceparent -> invalid + TRC_E_INVALID_CONTEXT 计数，并在 `traceparent` 缺失时丢弃孤立 `tracestate`。
+2. 保持任务边界清晰：
+   - 首版仍只支持 in-process 键值 carrier，不提前扩到跨线程载体协议或更上层 propagator 组合栈，保持与 TRC-TODO-010 的 L3 范围一致。
+3. 完成传播单测与接线：
+   - 新增 tests/unit/infra/tracing/ContextPropagationAdapterTest.cpp，覆盖 valid round-trip、noop clear/extract、malformed traceparent -> invalid 三条路径。
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，使 propagation 代码与单测进入 `dasall_infra` 与 `dasall_unit_tests` 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_context_propagation_adapter_unit_test`
+   - `ctest --test-dir build-ci -N -R ContextPropagationAdapterTest`
+   - `ctest --test-dir build-ci --output-on-failure -R "TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_context_propagation_adapter_unit_test` 构建通过，说明 propagation 实现已成功进入现有 infra 构建图。
+   - `ctest -N -R ContextPropagationAdapterTest` 发现 1 个新增 propagation 单测入口。
+   - `TracerProviderImplTest`、`TracerSpanLifecycleTest` 与 `ContextPropagationAdapterTest` 定向执行通过，确认 008/009/010 的 provider -> tracer/span -> propagation 串联后仍成立。
+   - `ctest -L unit` 通过，147/147 tests passed；本轮未新增构建警告。
+
+### 结果
+
+1. TRC-TODO-010 已完成，tracing 当前已经形成 provider -> tracer/span -> propagation 的本地生命周期与上下文闭环。
+2. 后续 tracing 可以从当前闭环继续进入 011/012/013 的采样、缓冲与导出链路，而不再被基本上下文传播语义阻塞。
+
+### 下一步
+
+1. 若继续推进 tracing，应执行 `TRC-TODO-011`，补齐本地采样策略并把当前 root/child/context 行为接入采样决策面。
+
+### 风险
+
+1. 当前传播器仅支持 W3C Trace Context `00` 版本和单值 carrier，尚未实现高版本兼容解析、tracestate 精细校验与跨线程载体抽象；后续推进 011/012 时需要保持这种最小承诺，不要让传播器提前膨胀成多协议适配层。
+
 ## 记录 #142
 
 - 日期：2026-04-06

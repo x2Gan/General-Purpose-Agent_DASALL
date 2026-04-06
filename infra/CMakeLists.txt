@@ -27,6 +27,8 @@ set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/TracerImpl.h
   src/tracing/SpanImpl.cpp
   src/tracing/SpanImpl.h
+  src/tracing/ContextPropagationAdapter.cpp
+  src/tracing/ContextPropagationAdapter.h
 )
 
 set(DASALL_INFRA_METRICS_SOURCES
