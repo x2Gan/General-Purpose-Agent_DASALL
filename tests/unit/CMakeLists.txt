@@ -81,6 +81,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_trace_context_propagator_interface_unit_test
 	dasall_trace_errors_unit_test
 	dasall_tracer_provider_impl_unit_test
+	dasall_sampling_policy_unit_test
 	dasall_tracer_span_lifecycle_unit_test
 	dasall_context_propagation_adapter_unit_test
 	dasall_infra_service_facade_unit_test

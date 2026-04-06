@@ -13,14 +13,19 @@ std::atomic<std::int64_t> g_span_end_timestamp_seed{1712448000000};
 
 }  // namespace
 
-SpanImpl::SpanImpl(SpanDescriptor descriptor, TraceContext context, TraceContext parent_context)
+SpanImpl::SpanImpl(SpanDescriptor descriptor,
+                   TraceContext context,
+                   TraceContext parent_context,
+                   SamplingDecision sampling_decision)
     : descriptor_(std::move(descriptor)),
       context_(std::move(context)),
       parent_context_(std::move(parent_context)),
-      attrs_(descriptor_.attrs) {}
+      sampling_decision_(std::move(sampling_decision)),
+      recording_(sampling_decision_.decision != SamplingDecisionKind::Drop),
+      attrs_(recording_ ? descriptor_.attrs : TraceAttributeMap{}) {}
 
 void SpanImpl::set_attribute(std::string_view key, const TraceAttributeValue& value) {
-  if (ended_) {
+  if (ended_ || !recording_) {
     return;
   }
 
@@ -33,7 +38,7 @@ void SpanImpl::set_attribute(std::string_view key, const TraceAttributeValue& va
 }
 
 void SpanImpl::add_event(std::string_view name, const TraceAttributeMap& attrs) {
-  if (ended_ || name.empty() || !is_printable_ascii(name) ||
+  if (ended_ || !recording_ || name.empty() || !is_printable_ascii(name) ||
       !trace_attributes_are_serializable(attrs)) {
     return;
   }
@@ -42,7 +47,8 @@ void SpanImpl::add_event(std::string_view name, const TraceAttributeMap& attrs) 
 }
 
 void SpanImpl::set_status(SpanStatusCode code, std::string_view message) {
-  if (ended_ || code == SpanStatusCode::Unset || status_code_ == SpanStatusCode::Ok) {
+  if (ended_ || !recording_ || code == SpanStatusCode::Unset ||
+      status_code_ == SpanStatusCode::Ok) {
     return;
   }
 
@@ -101,6 +107,18 @@ SpanStatusCode SpanImpl::status_code() const {
 
 const std::string& SpanImpl::status_message() const {
   return status_message_;
+}
+
+const SamplingDecision& SpanImpl::sampling_decision() const {
+  return sampling_decision_;
+}
+
+bool SpanImpl::is_recording() const {
+  return recording_;
+}
+
+bool SpanImpl::is_sampled() const {
+  return sampling_decision_.decision == SamplingDecisionKind::RecordAndSample;
 }
 
 }  // namespace dasall::infra::tracing

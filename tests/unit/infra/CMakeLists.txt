@@ -391,6 +391,26 @@ dasall_apply_common_options(dasall_tracer_provider_impl_unit_test)
 add_test(NAME TracerProviderImplTest COMMAND dasall_tracer_provider_impl_unit_test)
 set_tests_properties(TracerProviderImplTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_sampling_policy_unit_test
+  tracing/SamplingPolicyTest.cpp
+)
+
+target_include_directories(dasall_sampling_policy_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_sampling_policy_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_sampling_policy_unit_test)
+
+add_test(NAME SamplingPolicyTest COMMAND dasall_sampling_policy_unit_test)
+set_tests_properties(SamplingPolicyTest PROPERTIES LABELS "unit;tracing")
+
 add_executable(dasall_tracer_span_lifecycle_unit_test
   tracing/TracerSpanLifecycleTest.cpp
 )

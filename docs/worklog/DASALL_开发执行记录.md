@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #145
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-011 实现 SamplingPolicyEngine 本地采样策略
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-011-D/B 采样引擎落盘：
+   - 新增 infra/src/tracing/SamplingPolicyEngine.h 与 infra/src/tracing/SamplingPolicyEngine.cpp，定义 `SamplingInput` 与 `SamplingPolicyEngine::should_sample()`，覆盖 `always_on`、`always_off`、`parent_based_always_on`、`ratio` 四类本地采样策略。
+   - ratio 采样当前按 trace_id 末 16 位十六进制后缀做确定性阈值比较，保证同一 trace_id 的采样决策可重复，不提前引入远程采样或更高阶 probability sampler 语义。
+2. 完成采样策略与 tracer/span 主链收口：
+   - 更新 infra/src/tracing/TracerImpl.{h,cpp}，让 `start_span()` 在生成/继承 trace_id 后先执行采样决策，再据此设置 sampled flag 与 span 记录行为。
+   - 更新 infra/src/tracing/SpanImpl.{h,cpp}，为 span 增加 sampling decision、recording/sample 状态访问面；Drop span 现在仍保留有效 unsampled TraceContext，但会丢弃 descriptor attrs 与后续 attribute/event/status 写入。
+   - 更新 infra/src/tracing/TracerProviderImpl.cpp，使 provider 缓存出来的 TracerImpl 直接带上公开 TraceConfig，从而让 016 的配置模型真正驱动 011 的运行时行为。
+3. 完成构建与测试接线：
+   - 更新 infra/CMakeLists.txt，把 SamplingPolicyEngine 纳入 `dasall_infra`。
+   - 新增 tests/unit/infra/tracing/SamplingPolicyTest.cpp，覆盖 always_on、always_off、parent_based、ratio 的决策断言，以及 `TracerImpl` 对 Drop span 的实际应用。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，使 `SamplingPolicyTest` 进入 unit 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_sampling_policy_unit_test dasall_tracer_provider_impl_unit_test dasall_tracer_span_lifecycle_unit_test dasall_context_propagation_adapter_unit_test`
+   - `ctest --test-dir build-ci -N -R "SamplingPolicyTest|TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "SamplingPolicyTest|TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_sampling_policy_unit_test` 与受影响 tracing 单测目标构建通过，说明采样引擎与 tracer/span 采样接线已进入现有 infra 构建图。
+   - `ctest -N -R "SamplingPolicyTest|TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"` 发现 4 个 tracing 相关用例，证明 011 新增测试和 008~010 既有 tracing 回归入口都可发现。
+   - 定向执行 `SamplingPolicyTest`、`TracerProviderImplTest`、`TracerSpanLifecycleTest`、`ContextPropagationAdapterTest` 通过，确认采样接入没有破坏 provider/span/context 既有闭环。
+   - `ctest -L unit` 通过，149/149 tests passed；本轮未引入新增告警。
+
+### 结果
+
+1. TRC-TODO-011 已完成，tracing 现在具备稳定的本地采样决策面，且采样结果已经进入现有 tracer/span 生命周期主链，而不是停留在独立工具类。
+2. TRC-TODO-012 现在可以直接基于 `SpanImpl::is_recording()/is_sampled()` 与采样后的 TraceContext 语义，实现队列与导出触发，而无需再补采样前置逻辑。
+
+### 下一步
+
+1. 执行 TRC-TODO-012，落盘 BatchSpanBuffer 的 queue/backpressure/flush 语义，并把当前 sampled/unsampled span 行为接入队列策略。
+
+### 风险
+
+1. 当前 ratio 采样采用仓库内本地确定性后缀算法，只保证单仓实现内的稳定性；它刻意不承诺跨语言 OTel ProbabilitySampler 一致性，以避免在 v1 闭环阶段过早扩张到远程/跨 SDK 概率采样兼容面。
+
 ## 记录 #144
 
 - 日期：2026-04-06

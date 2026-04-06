@@ -55,8 +55,10 @@ thread_local std::optional<TraceContext> g_active_context;
 
 }  // namespace
 
-TracerImpl::TracerImpl(TracerScope scope)
-    : scope_(std::move(scope)) {}
+TracerImpl::TracerImpl(TracerScope scope, TraceConfig config)
+    : scope_(std::move(scope)),
+      config_(std::move(config)),
+      sampling_policy_(config_.sampler) {}
 
 std::shared_ptr<ISpan> TracerImpl::start_span(
     const SpanDescriptor& descriptor,
@@ -68,11 +70,32 @@ std::shared_ptr<ISpan> TracerImpl::start_span(
   const auto resolved_parent = resolve_parent_context(parent);
   const auto parent_is_active =
       resolved_parent.state == TraceContextState::Active && resolved_parent.is_valid();
+  const auto trace_id = parent_is_active ? resolved_parent.trace_id : next_trace_id();
+  const auto decision = config_.enabled
+                            ? sampling_policy_.should_sample(SamplingInput{
+                                  .trace_id = trace_id,
+                                  .span_name = descriptor.name,
+                                  .span_kind = descriptor.kind,
+                                  .attrs = descriptor.attrs,
+                                  .parent_context = resolved_parent,
+                              })
+                            : SamplingDecision{
+                                  .decision = SamplingDecisionKind::Drop,
+                                  .reason = "tracing_disabled",
+                                  .sampler_desc = "TracingDisabled",
+                              };
+
+  std::uint8_t trace_flags = parent_is_active ? resolved_parent.trace_flags : 0U;
+  if (decision.decision == SamplingDecisionKind::RecordAndSample) {
+    trace_flags |= 0x01U;
+  } else {
+    trace_flags &= static_cast<std::uint8_t>(~0x01U);
+  }
 
   TraceContext context{
-      .trace_id = parent_is_active ? resolved_parent.trace_id : next_trace_id(),
+      .trace_id = trace_id,
       .span_id = next_span_id(),
-      .trace_flags = parent_is_active ? resolved_parent.trace_flags : static_cast<std::uint8_t>(0x01),
+      .trace_flags = trace_flags,
       .trace_state = parent_is_active ? resolved_parent.trace_state : std::string(),
       .parent_span_id = parent_is_active ? resolved_parent.span_id : std::string(),
       .state = TraceContextState::Active,
@@ -80,7 +103,7 @@ std::shared_ptr<ISpan> TracerImpl::start_span(
   };
 
   last_started_context_ = context;
-  return std::make_shared<SpanImpl>(descriptor, context, resolved_parent);
+  return std::make_shared<SpanImpl>(descriptor, context, resolved_parent, decision);
 }
 
 void TracerImpl::with_active_span(

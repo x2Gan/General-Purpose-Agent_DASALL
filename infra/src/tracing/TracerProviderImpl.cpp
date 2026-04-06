@@ -57,7 +57,7 @@ std::shared_ptr<ITracer> TracerProviderImpl::get_tracer(const TracerScope& scope
     return existing->second;
   }
 
-  auto tracer = std::make_shared<TracerImpl>(scope);
+  auto tracer = std::make_shared<TracerImpl>(scope, last_config_.value_or(TraceConfig{}));
   tracers_.emplace(scope_key, tracer);
   last_scope_ = scope;
   return tracer;

@@ -11,7 +11,10 @@ namespace dasall::infra::tracing {
 
 class SpanImpl final : public ISpan {
  public:
-  SpanImpl(SpanDescriptor descriptor, TraceContext context, TraceContext parent_context);
+  SpanImpl(SpanDescriptor descriptor,
+           TraceContext context,
+           TraceContext parent_context,
+           SamplingDecision sampling_decision);
 
   void set_attribute(std::string_view key, const TraceAttributeValue& value) override;
   void add_event(std::string_view name, const TraceAttributeMap& attrs) override;
@@ -26,11 +29,16 @@ class SpanImpl final : public ISpan {
   [[nodiscard]] std::size_t accepted_event_count() const;
   [[nodiscard]] SpanStatusCode status_code() const;
   [[nodiscard]] const std::string& status_message() const;
+  [[nodiscard]] const SamplingDecision& sampling_decision() const;
+  [[nodiscard]] bool is_recording() const;
+  [[nodiscard]] bool is_sampled() const;
 
  private:
   SpanDescriptor descriptor_;
   TraceContext context_;
   TraceContext parent_context_;
+  SamplingDecision sampling_decision_;
+  bool recording_ = true;
   bool ended_ = false;
   TraceAttributeMap attrs_;
   std::size_t event_count_ = 0;
