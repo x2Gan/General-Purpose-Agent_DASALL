@@ -173,7 +173,7 @@
 | MET-TODO-013 | Not Started | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测 | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
 | MET-TODO-014 | Not Started | 实现 MetricsExporterAdapter 首版导出骨架 | metrics 设计 6.2/6.7/6.8/6.9 | 6.2 MetricsExporterAdapter；6.8 导出异常；6.9 exporter.type | L2 | infra/src/metrics/MetricsExporterAdapter.cpp | export_batch(noop/prom_text), fallback_to_noop | unit：导出成功/失败/超时；failure：export_failure_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-003、MET-TODO-007、MET-TODO-008、MET-TODO-013 | OTLP 依赖未冻结 | 首版仅 noop/prom_text，OTLP 后置评审 | 导出骨架、单测 | 仅当成功/失败/超时三路径均有可观测结果且不阻塞主流程时完成 |
 | MET-TODO-015 | Not Started | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试 | 仅当降级进入/退出两路径均可二值判定时完成 |
-| MET-TODO-016 | Not Started | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测 | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
+| MET-TODO-016 | Done | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测；2026-04-06 已落盘 infra/src/metrics/MetricsConfigPolicy.{h,cpp}、tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsConfigMergeTest | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
 | MET-TODO-017 | Not Started | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
 | MET-TODO-018 | Not Started | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册入口、执行记录 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
 | MET-TODO-019 | Blocked | 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架 | metrics 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 审计/日志事件 | L1 | infra/src/metrics/MetricsAuditBridge.cpp, infra/src/metrics/MetricsLoggingBridge.cpp | bridge_write_audit_event, bridge_write_log_event | contract：审计字段完整；unit：桥接调用可达 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-007、MET-TODO-008、MET-TODO-015 | MET-BLK-002、MET-BLK-004 | 冻结 audit/logging 最小写入接口与字段约束 | 桥接代码或阻塞记录 | 仅当外部接口冻结后，状态才可从 Blocked 改为 Not Started |
@@ -933,3 +933,57 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"` 验证 guard 新测与主链回归用例均可发现。
 4. TODO 证据回写：已回写任务状态、guard->facade 接线策略、Build_CMakeTools 回退记录与验收摘要。
 5. 提交隔离：本轮提交范围限定为 CardinalityGuard 私有源码、MetricsFacade guard 接线、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 25. 本轮执行记录（2026-04-06 / MET-TODO-016）
+
+### 25.1 选中任务
+
+1. 本轮任务：MET-TODO-016。
+2. 选择原因：`MET-TODO-013` 明确依赖 `MET-TODO-016`，因此按 blocker-first/依赖先行规则，本轮先冻结 metrics 的最小配置模型与默认策略，为 reader interval / exporter timeout 等导出调度语义提供稳定输入。
+
+### 25.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 已冻结 metrics 的默认配置表：`enabled=true`、`provider.type=internal`、`reader.interval_ms=5000`、`exporter.type=noop`、`exporter.timeout_ms=30000`、固定 allowlist 与默认 histogram buckets。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.7 已把 reader/exporter 放在 `AggregationEngine` 之后，说明 013/014 的实现必须先拿到稳定的 interval/exporter timeout/exporter type 默认值，而不能把这些值散落在 scheduler/exporter 私有常量中。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 同时要求支持 default/Profile/部署/运行时 四层覆盖，因此 016 的最小实现应直接固化 merge 顺序，而不是提前接入 ConfigCenter 或 profile 文件解析。
+4. infra/include/metrics/IMetricConfigPolicy.h 已在 `MET-TODO-004` 冻结 `validate_identity`、`normalize_labels`、`should_accept` 接口，说明本轮应在不改动公共边界的前提下新增 private `MetricsConfigPolicy` 实现类。
+5. tests/unit/infra/MetricsConfigPolicyInterfaceTest.cpp 已把 `module/stage/profile/outcome` 必填、空 `error_code -> none` 归一化等接口语义固化，因此本轮私有实现必须与既有接口测试保持一致。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `MetricsConfigPolicy.h/.cpp`，实现 `MetricsConfigPatch`、`MetricsResolvedConfig`、`merge(default/profile/deploy/runtime)` 与 `validate_histogram_buckets`，并由 `MetricsConfigPolicy` 具体实现既有 `IMetricConfigPolicy`。
+2. 最小冻结范围：本轮只冻结 `enabled/provider/exporter/reader_interval/exporter_timeout/labels/histogram_buckets/audit_on_policy_change` 这组 scheduler/exporter 即将消费的最小字段，不提前引入 profile 文档解析、ConfigCenter 订阅或动态回滚链路。
+3. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/MetricsConfigPolicy.h、infra/src/metrics/MetricsConfigPolicy.cpp。
+   - 测试目标：新增 tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 注册 `MetricsConfigMergeTest`；同时保留 `MetricsConfigPolicyInterfaceTest` 做接口回归。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_metrics_config_merge_unit_test dasall_metrics_config_policy_interface_unit_test`、`ctest --test-dir build-ci -N -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"`、`cmake --build build-ci --target dasall_unit_tests`、`ctest --test-dir build-ci --output-on-failure -L unit`。
+4. D Gate：PASS。
+
+### 25.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/MetricsConfigPolicy.h：新增 `MetricsConfigPatch`、`MetricsResolvedConfig` 与 `MetricsConfigPolicy` 私有声明，冻结 metrics 配置模型、默认值与四层覆盖入口。
+2. infra/src/metrics/MetricsConfigPolicy.cpp：新增 default/profile/deploy/runtime 覆盖顺序、固定 allowlist 校验、默认 histogram buckets 校验，以及与既有 `IMetricConfigPolicy` 一致的 identity/labels 接口实现。
+3. tests/unit/infra/metrics/MetricsConfigMergeTest.cpp：覆盖 6.9 默认值、覆盖优先级与非单调 histogram bucket 拒绝三类断言。
+4. tests/unit/infra/CMakeLists.txt：新增 `dasall_metrics_config_merge_unit_test` 与 `MetricsConfigMergeTest` 注册。
+
+验收结果：
+
+1. Build_CMakeTools：失败，报错“生成失败：无法配置项目”；按仓库既定回退策略改用 build-ci 命令链继续验收。
+2. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+3. `cmake --build build-ci --target dasall_metrics_config_merge_unit_test dasall_metrics_config_policy_interface_unit_test`：通过；经二次收口后，本轮新增 `MetricsConfigPatch` 单测不再产生缺省字段初始化告警。
+4. `ctest --test-dir build-ci -N -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"`：通过，发现 2 个测试：`MetricsConfigPolicyInterfaceTest`、`MetricsConfigMergeTest`。
+5. `ctest --test-dir build-ci --output-on-failure -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"`：通过，2/2 tests passed。
+6. `cmake --build build-ci --target dasall_unit_tests`：通过。
+7. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 139/139 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：配置 patch、resolved config 与 merge 顺序命名已直接表达语义，无需附加注释。
+2. 正负例覆盖：本轮新增单测已覆盖默认值、覆盖优先级与桶单调性校验三类 016 验收点；既有 `MetricsConfigPolicyInterfaceTest` 继续作为接口边界回归。
+3. 测试发现性：已用 `ctest -N -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"` 验证新旧两个配置相关单测均可发现。
+4. TODO 证据回写：已回写任务状态、配置模型冻结范围、Build_CMakeTools 回退记录与 unit gate 结果。
+5. 提交隔离：本轮提交范围限定为 MetricsConfigPolicy 私有源码、对应单测、CMake 注册、专项 TODO 与 worklog 证据更新。

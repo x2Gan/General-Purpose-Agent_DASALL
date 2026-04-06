@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #133
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-016 定义 MetricsConfigPolicy 配置模型与默认策略
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-016-D/B 落盘：
+   - 新增 infra/src/metrics/MetricsConfigPolicy.h 与 infra/src/metrics/MetricsConfigPolicy.cpp，落盘 `MetricsConfigPatch`、`MetricsResolvedConfig`、`merge(default/profile/deploy/runtime)` 与 `validate_histogram_buckets`，冻结 metrics 的最小配置模型、默认值和四层覆盖顺序。
+   - 在不改动公共接口的前提下，让 private `MetricsConfigPolicy` 具体实现既有 `IMetricConfigPolicy`，保持 `validate_identity`、`normalize_labels`、`should_accept` 与已冻结接口门禁一致。
+2. 完成 016 的 unit/CMake 收口：
+   - 新增 tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，覆盖默认值、覆盖优先级与非单调 histogram bucket 拒绝。
+   - 更新 tests/unit/infra/CMakeLists.txt，新增 `dasall_metrics_config_merge_unit_test` 与 `MetricsConfigMergeTest` 注册，并保留 `MetricsConfigPolicyInterfaceTest` 做接口回归。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-016` 标记为 Done，并补齐本轮 Design->Build 映射、Build_CMakeTools 回退记录与 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_config_merge_unit_test dasall_metrics_config_policy_interface_unit_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `Build_CMakeTools` 再次失败，错误为“生成失败：无法配置项目”；已按仓库既定回退策略切回 build-ci 命令链。
+   - build-ci 重新配置成功，`dasall_metrics_config_merge_unit_test` 与 `dasall_metrics_config_policy_interface_unit_test` 构建通过。
+   - `MetricsConfigPolicyInterfaceTest` 与 `MetricsConfigMergeTest` 被 ctest 发现并定向执行通过，2/2 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 139/139 tests passed。
+   - 本轮初版单测里 `MetricsConfigPatch` 的部分指定初始化曾触发新告警，已在同轮收口为显式 patch 变量初始化，最终验证输出不再包含该告警。
+
+### 结果
+
+1. MET-TODO-016 已为 metrics 后续的 scheduler/exporter 冻结 `enabled/provider/exporter/reader_interval/exporter_timeout/labels/histogram_buckets` 最小配置模型和覆盖顺序。
+2. `MET-TODO-013` 的前置依赖已解除，下一轮可以直接实现 MetricReaderScheduler 的调度骨架。
+
+### 下一步
+
+1. 执行 `MET-TODO-013`，把 AggregationEngine 的快照读取与周期调度批次骨架落盘，并消费 016 已冻结的 reader interval / exporter timeout 默认值。
+
+### 风险
+
+1. 当前 MetricsConfigPolicy 只冻结了最小 patch/resolved config 结构，并未接入 ConfigCenter、Profile 文档解析或运行时回滚；后续推进 013/014 时必须把它视为局部策略骨架，而不是完整配置子系统桥接层。
+
 ## 记录 #132
 
 - 日期：2026-04-06
