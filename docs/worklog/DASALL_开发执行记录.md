@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #124
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-013 定义 HealthErrors 错误码域与映射
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-013-D/B 落盘：
+   - 新增 infra/include/health/HealthErrors.h，冻结 `HealthErrorCode`、`HealthErrorMapping`、`health_error_code_name` 与 `map_health_error_code`，把 6.6 中 5 个 health 私有错误码固定到统一映射矩阵。
+   - 更新 infra/CMakeLists.txt，将 `HealthErrors.h` 纳入 infra 公共头集合，确保错误语义进入对外边界清单。
+2. 完成 013 对现有失败路径的统一接线：
+   - 调整 infra/src/health/ProbeRegistry.cpp、infra/src/health/ProbeExecutor.cpp、infra/src/health/HealthEvaluator.cpp，使 missing probe、probe timeout、probe exception、policy invalid 等路径统一走 `HealthErrors` 映射，不再散落硬编码 `ResultCode`。
+   - 同步更新 tests/unit/infra/health/HealthEvaluatorTest.cpp，使 invalid input 断言与新的 policy failure 映射一致。
+3. 完成 013 的 unit/contract/CMake 接线：
+   - 新增 tests/unit/infra/health/HealthErrorsTest.cpp，冻结枚举值、名称与 source anchor 可观察性。
+   - 新增 tests/contract/smoke/HealthErrorMappingContractTest.cpp，冻结 health 私有错误码到 contracts `ResultCode` 的映射矩阵。
+   - 更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt，注册 `dasall_health_errors_unit_test`、`HealthErrorsTest` 与 `dasall_contract_health_error_mapping_test`。
+4. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-013` 标记为 Done，并补齐本轮执行记录、发现性、全量 unit/contract gate 与提交隔离证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_health_errors_unit_test dasall_contract_health_error_mapping_test dasall_health_evaluator_unit_test dasall_probe_executor_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "(HealthErrorsTest|HealthErrorMappingContractTest|HealthEvaluatorTest|ProbeExecutorTest)"`
+   - `ctest --test-dir build-ci -N -R "(HealthErrorsTest|HealthErrorMappingContractTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+2. 结果：
+   - build-ci 配置成功，上述定向 unit/contract 目标全部构建通过。
+   - `HealthErrorsTest`、`HealthErrorMappingContractTest`、`HealthEvaluatorTest`、`ProbeExecutorTest` 定向执行通过，4/4 tests passed。
+   - `HealthErrorsTest` 与 `HealthErrorMappingContractTest` 被 ctest 发现并完成注册。
+   - `dasall_unit_tests` 通过，unit 标签 133/133 tests passed；`dasall_contract_tests` 通过，contract 标签 140/140 tests passed。
+
+### 结果
+
+1. HLT-TODO-013 已从“health 私有错误语义只存在于设计文档”推进到“存在可编译、可测试、可追溯的 `HealthErrors` 公共头与统一映射矩阵”。
+2. health 当前已具备 façade、registry、executor、evaluator 与 error mapping 的最小闭环，后续可以在不改写错误语义的前提下继续推进 `HLT-TODO-015` 或解阻 009/012/014。
+
+### 下一步
+
+1. 优先实现 `HLT-TODO-015`，补齐 RecoveryHintEmitter 边界守卫骨架，并复用已冻结的 `RecoveryHintBoundaryContractTest` 与当前 health 三态/错误语义输出。
+
+### 风险
+
+1. `INF_E_HEALTH_EVENT_PUBLISH_FAIL` 已冻结名称与映射，但 `HLT-TODO-012` 仍阻塞于事件总线最小接口未冻结；后续实现 publisher 时必须严格复用本轮已固化的映射矩阵，避免引入第二套失败语义。
+
 ## 记录 #123
 
 - 日期：2026-04-06

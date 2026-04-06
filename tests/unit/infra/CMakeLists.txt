@@ -1461,6 +1461,21 @@ dasall_apply_common_options(dasall_health_recovery_hint_unit_test)
 add_test(NAME RecoveryHintUnitTest COMMAND dasall_health_recovery_hint_unit_test)
 set_tests_properties(RecoveryHintUnitTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_health_errors_unit_test
+  health/HealthErrorsTest.cpp
+)
+
+target_link_libraries(dasall_health_errors_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_health_errors_unit_test)
+
+add_test(NAME HealthErrorsTest COMMAND dasall_health_errors_unit_test)
+set_tests_properties(HealthErrorsTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_infra_error_code_unit_test
   InfraErrorCodeTest.cpp
 )

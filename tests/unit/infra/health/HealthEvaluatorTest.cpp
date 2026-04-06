@@ -34,7 +34,7 @@ void test_health_evaluator_classifies_healthy_degraded_and_unhealthy_snapshots()
   const auto invalid = evaluator.evaluate(ProbeResultView{.data = nullptr, .size = 1});
   assert_true(!invalid.ok && invalid.references_only_contract_error_types() &&
                   invalid.result_code.has_value() &&
-                  *invalid.result_code == ResultCode::ValidationFieldMissing,
+                  *invalid.result_code == ResultCode::PolicyDenied,
               "HealthEvaluator should reject invalid or empty ProbeResultView inputs explicitly");
 
   const std::vector<dasall::infra::ProbeResult> healthy_results = {

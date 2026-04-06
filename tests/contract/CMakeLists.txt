@@ -246,6 +246,23 @@ target_link_libraries(dasall_contract_health_snapshot_boundary_test
 )
 
 dasall_register_contract_test(
+  dasall_contract_health_error_mapping_test
+  HealthErrorMappingContractTest
+  smoke/HealthErrorMappingContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_health_error_mapping_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_health_error_mapping_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_contract_test(
   dasall_contract_policy_types_boundary_test
   PolicyTypesBoundaryContractTest
   smoke/PolicyTypesBoundaryContractTest.cpp

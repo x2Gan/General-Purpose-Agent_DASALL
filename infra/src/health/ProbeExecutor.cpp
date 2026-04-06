@@ -1,5 +1,7 @@
 #include "health/ProbeExecutor.h"
 
+#include "health/HealthErrors.h"
+
 #include <chrono>
 #include <exception>
 #include <string_view>
@@ -76,11 +78,12 @@ std::size_t ProbeExecutor::consecutive_failure_count(std::string_view probe_name
 
 ProbeResult ProbeExecutor::make_missing_probe_result(
     const ProbeDescriptor& descriptor) const {
+  const auto mapping = map_health_error_code(HealthErrorCode::ProbeNotFound);
   return ProbeResult{
       .probe_name = descriptor.probe_name,
       .status = ProbeStatus::Unhealthy,
       .latency_ms = 0,
-      .error_code = contracts::ResultCode::ValidationFieldMissing,
+      .error_code = mapping.result_code,
       .detail_ref = std::string(kMissingDetailPrefix) + descriptor.probe_name,
       .timestamp = current_time_unix_ms(),
   };
@@ -90,12 +93,13 @@ ProbeResult ProbeExecutor::make_timeout_result(const ProbeDescriptor& descriptor
                                                std::int64_t latency_ms) {
   auto& failure_count = consecutive_failures_[descriptor.probe_name];
   ++failure_count;
+  const auto mapping = map_health_error_code(HealthErrorCode::ProbeTimeout);
 
   return ProbeResult{
       .probe_name = descriptor.probe_name,
       .status = resolve_failure_status(descriptor.probe_name),
       .latency_ms = latency_ms,
-      .error_code = contracts::ResultCode::ProviderTimeout,
+      .error_code = mapping.result_code,
       .detail_ref = std::string(kTimeoutDetailPrefix) + descriptor.probe_name,
       .timestamp = current_time_unix_ms(),
   };
@@ -105,12 +109,13 @@ ProbeResult ProbeExecutor::make_exception_result(const ProbeDescriptor& descript
                                                  std::string detail_suffix) {
   auto& failure_count = consecutive_failures_[descriptor.probe_name];
   ++failure_count;
+  const auto mapping = map_health_error_code(HealthErrorCode::ProbeException);
 
   return ProbeResult{
       .probe_name = descriptor.probe_name,
       .status = resolve_failure_status(descriptor.probe_name),
       .latency_ms = 0,
-      .error_code = contracts::ResultCode::ToolExecutionFailed,
+      .error_code = mapping.result_code,
       .detail_ref = std::string(kExceptionDetailPrefix) + descriptor.probe_name + "/" +
                     std::move(detail_suffix),
       .timestamp = current_time_unix_ms(),
@@ -136,7 +141,7 @@ ProbeResult ProbeExecutor::normalize_result(const ProbeDescriptor& descriptor,
   ++failure_count;
   result.status = resolve_failure_status(descriptor.probe_name);
   if (!result.error_code.has_value()) {
-    result.error_code = contracts::ResultCode::ToolExecutionFailed;
+    result.error_code = map_health_error_code(HealthErrorCode::ProbeException).result_code;
   }
   if (result.detail_ref.empty()) {
     result.detail_ref = std::string(kExceptionDetailPrefix) + descriptor.probe_name + "/result_failure";

@@ -90,6 +90,7 @@ set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
+  include/health/HealthErrors.h
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h
   include/health/IHealthPolicy.h

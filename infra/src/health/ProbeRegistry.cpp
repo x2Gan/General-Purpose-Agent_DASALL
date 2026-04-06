@@ -1,5 +1,7 @@
 #include "health/ProbeRegistry.h"
 
+#include "health/HealthErrors.h"
+
 #include <algorithm>
 #include <string_view>
 #include <utility>
@@ -98,8 +100,9 @@ ProbeRegistryRemoveResult ProbeRegistry::unregister_probe(std::string_view probe
 
   const auto entry = entries_.find(std::string(probe_name));
   if (entry == entries_.end()) {
+    const auto mapping = map_health_error_code(HealthErrorCode::ProbeNotFound);
     return make_remove_failure(
-        contracts::ResultCode::ValidationFieldMissing,
+        mapping.result_code,
         "probe registry cannot unregister an unknown probe_name",
         "health.registry.unregister");
   }

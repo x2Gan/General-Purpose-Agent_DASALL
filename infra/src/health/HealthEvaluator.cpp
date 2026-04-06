@@ -1,5 +1,6 @@
 #include "health/HealthEvaluator.h"
 
+#include "health/HealthErrors.h"
 #include "health/ProbeTypes.h"
 
 #include <algorithm>
@@ -24,8 +25,9 @@ HealthEvaluator::HealthEvaluator(HealthEvaluatorOptions options)
 
 HealthPolicyEvaluationResult HealthEvaluator::evaluate(ProbeResultView results) const {
   if (!results.is_valid() || results.empty()) {
+    const auto mapping = map_health_error_code(HealthErrorCode::PolicyInvalid);
     return HealthPolicyEvaluationResult::failure(
-        contracts::ResultCode::ValidationFieldMissing,
+        mapping.result_code,
         "health evaluator requires a non-empty, valid ProbeResultView",
         "health.evaluate",
         "HealthEvaluator");
