@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #146
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-012 实现 BatchSpanBuffer 队列与导出触发
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-012-D/B 队列骨架落盘：
+   - 新增 infra/src/tracing/BatchSpanBuffer.h 与 infra/src/tracing/BatchSpanBuffer.cpp，落盘 `enqueue()`、`dequeue_batch()`、`force_flush()`、`export_trigger()`、`should_export_now()` 与 `mark_export_cycle_complete()`。
+   - BatchSpanBuffer 当前只负责 L2 队列状态与导出触发判定，不直接执行 exporter I/O；这保证了 tracing queue/buffer 路径符合 SSOT 规定的“持 L2 时不得进入 exporter/sink 调用”。
+   - 触发语义分成两类：队列达到 `max_export_batch_size` 时走 QueueThreshold；未达阈值但 oldest pending span end_ts 超过 `schedule_delay_ms` 时走 ScheduleDelay。
+2. 完成 backpressure 与 failure 可观测面：
+   - 首版按 TraceConfig 默认 `drop_oldest` 工作，并支持 `block`。`drop_oldest` 路径会替换最旧 span 并递增 `dropped_total`；`block` 路径返回 TRC_E_QUEUE_FULL，同时递增 `blocked_enqueue_total`。
+   - buffer 只接受 ended recording span，避免把 011 已明确 Drop 的 non-recording span 混入后续导出队列。
+3. 为后续 013 补齐 ended span 读取面：
+   - 更新 infra/src/tracing/SpanImpl.{h,cpp}，新增 `attributes()` 与 `end_result()` 只读访问面，使 pipeline/exporter 可以直接读取已结束 span 的属性和结束快照，而不再反向修改 span。
+4. 完成构建与测试接线：
+   - 更新 infra/CMakeLists.txt，把 BatchSpanBuffer 纳入 `dasall_infra`。
+   - 新增 tests/unit/infra/tracing/BatchSpanBufferTest.cpp，覆盖 queue threshold 导出触发、block 溢出、drop_oldest 替换、schedule delay 触发四条路径。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，使 `BatchSpanBufferTest` 进入 unit/failure 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_batch_span_buffer_unit_test dasall_sampling_policy_unit_test dasall_tracer_span_lifecycle_unit_test dasall_context_propagation_adapter_unit_test`
+   - `ctest --test-dir build-ci -N -R "BatchSpanBufferTest|SamplingPolicyTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "BatchSpanBufferTest|SamplingPolicyTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_batch_span_buffer_unit_test` 与受影响 tracing 单测目标构建通过，说明 BatchSpanBuffer 与 SpanImpl 读取面已成功进入 tracing 构建图。
+   - `ctest -N -R "BatchSpanBufferTest|SamplingPolicyTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"` 发现 4 个 tracing 相关用例，证明 012 新增队列测试与 010/011 既有 tracing 回归入口都可发现。
+   - 定向执行 `BatchSpanBufferTest`、`SamplingPolicyTest`、`TracerSpanLifecycleTest`、`ContextPropagationAdapterTest` 通过，确认 012 没有破坏采样、生命周期和传播既有闭环。
+   - `ctest -L unit` 通过，150/150 tests passed；本轮未引入新增告警。
+
+### 结果
+
+1. TRC-TODO-012 已完成，tracing 现在具备可二值化验证的 batch queue/backpressure/schedule 语义，012 不再阻塞 013 的 pipeline/exporter 首版实现。
+2. 013 现在可以直接基于 BatchSpanBuffer 的 `export_trigger()` / `dequeue_batch()` 和 SpanImpl 的只读 ended span 访问面，接上 noop/file exporter，而不需要再补队列层语义。
+
+### 下一步
+
+1. 执行 TRC-TODO-013，落盘 SpanProcessorPipeline 与 SpanExporterAdapter 首版，把 ended sampled span 送入 batch -> export 闭环。
+
+### 风险
+
+1. 当前 BatchSpanBuffer 仍未引入真实后台调度线程，只提供同步触发判定与 batch drain 语义；这是有意保持在线程池参数未冻结前不扩张执行模型，013/014 需继续沿着这个边界推进。
+
 ## 记录 #145
 
 - 日期：2026-04-06

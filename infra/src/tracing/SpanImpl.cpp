@@ -121,4 +121,12 @@ bool SpanImpl::is_sampled() const {
   return sampling_decision_.decision == SamplingDecisionKind::RecordAndSample;
 }
 
+const TraceAttributeMap& SpanImpl::attributes() const {
+  return attrs_;
+}
+
+const SpanEndResult& SpanImpl::end_result() const {
+  return end_result_;
+}
+
 }  // namespace dasall::infra::tracing

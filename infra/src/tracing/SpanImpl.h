@@ -32,6 +32,8 @@ class SpanImpl final : public ISpan {
   [[nodiscard]] const SamplingDecision& sampling_decision() const;
   [[nodiscard]] bool is_recording() const;
   [[nodiscard]] bool is_sampled() const;
+  [[nodiscard]] const TraceAttributeMap& attributes() const;
+  [[nodiscard]] const SpanEndResult& end_result() const;
 
  private:
   SpanDescriptor descriptor_;
