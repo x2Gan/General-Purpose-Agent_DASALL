@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 
+#include "metrics/AggregationEngine.h"
 #include "metrics/IMeter.h"
 #include "metrics/IMetricsProvider.h"
 #include "metrics/InstrumentRegistry.h"
@@ -23,6 +24,7 @@ class MetricsFacade final : public IMetricsProvider {
   MetricsOperationStatus force_flush(const MetricsCallDeadline& timeout) override;
   MetricsOperationStatus shutdown(const MetricsCallDeadline& timeout) override;
 
+  [[nodiscard]] AggregationSnapshot aggregation_snapshot() const;
   [[nodiscard]] std::string_view lifecycle_state_name() const;
   [[nodiscard]] std::size_t record_attempt_count() const;
   [[nodiscard]] const std::optional<MetricSample>& last_recorded_sample() const;
@@ -50,6 +52,7 @@ class MetricsFacade final : public IMetricsProvider {
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   MetricsProviderConfig config_{};
+  AggregationEngine aggregation_engine_{};
   InstrumentRegistry registry_;
   MeterMap meters_;
   std::optional<MeterScope> last_scope_;

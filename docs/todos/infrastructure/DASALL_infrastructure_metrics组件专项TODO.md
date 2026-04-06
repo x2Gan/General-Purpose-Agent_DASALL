@@ -168,7 +168,7 @@
 | MET-TODO-008 | Done | 定义 MetricsErrors 错误码域 | metrics 设计 6.6；工程规范 3.6 | 6.6 错误语义 | L3 | infra/include/metrics/MetricsErrors.h | MET_E_PROVIDER_NOT_READY...MET_E_CONFIG_INVALID | contract：映射 contracts::ResultCode；unit：枚举稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-001 | contracts 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-04-01 已落盘 infra/include/metrics/MetricsErrors.h、tests/unit/infra/MetricsErrorsTest.cpp、tests/contract/smoke/MetricsErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 7 个错误码均有来源锚点且映射测试通过时完成 |
 | MET-TODO-009 | Done | 实现 MetricsFacade 初始化与写入骨架 | metrics 设计 6.2/6.7 | 6.2 MetricsFacade；6.7 步骤 1/2 | L3 | infra/src/metrics/MetricsFacade.cpp | init/get_meter/record 入口骨架 | unit：未初始化/已初始化两路径；failure：非法 identity 路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-001、MET-TODO-002、MET-TODO-006、MET-TODO-008 | 无 | 无 | Facade 骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricsFacade.{h,cpp}、tests/unit/infra/metrics/MetricsFacadeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中以临时直编私有源码方式注册 MetricsFacadeTest | 仅当初始化状态机与错误码路径可二值判定时完成 |
 | MET-TODO-010 | Done | 实现 InstrumentRegistry 唯一性管理骨架 | metrics 设计 6.2/6.3 | 6.2 InstrumentRegistry；6.3 同名同语义唯一 | L3 | infra/src/metrics/InstrumentRegistry.cpp | register_identity/find_identity | unit：同名冲突与重复注册路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-008 | 无 | 无 | Registry 骨架、单测；2026-04-06 已落盘 infra/src/metrics/InstrumentRegistry.{h,cpp}、tests/unit/infra/metrics/InstrumentRegistryTest.cpp，并将 MetricsFacade 的 instrument 创建/record 路径切到 registry 骨架 | 仅当重复注册冲突返回可判定错误并可观测时完成 |
-| MET-TODO-011 | Not Started | 实现 AggregationEngine 聚合骨架 | metrics 设计 6.2/6.7 | 6.2 AggregationEngine；6.7 步骤 5 | L3 | infra/src/metrics/AggregationEngine.cpp | aggregate_counter, aggregate_gauge, aggregate_histogram, snapshot | unit：Counter/Gauge/Histogram 聚合断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-007、MET-TODO-010 | 并发参数未冻结 | 先落单线程可测实现 | 聚合骨架、单测 | 仅当三类聚合行为均可重复验证时完成 |
+| MET-TODO-011 | Done | 实现 AggregationEngine 聚合骨架 | metrics 设计 6.2/6.7 | 6.2 AggregationEngine；6.7 步骤 5 | L3 | infra/src/metrics/AggregationEngine.cpp | aggregate_counter, aggregate_gauge, aggregate_histogram, snapshot | unit：Counter/Gauge/Histogram 聚合断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-007、MET-TODO-010 | 并发参数未冻结 | 先落单线程可测实现 | 聚合骨架、单测；2026-04-06 已落盘 infra/src/metrics/AggregationEngine.{h,cpp}、tests/unit/infra/metrics/MetricsAggregationTest.cpp，并将 MetricsFacade 的 record 路径接到 aggregation engine | 仅当三类聚合行为均可重复验证时完成 |
 | MET-TODO-012 | Not Started | 实现 CardinalityGuard 标签治理骨架 | metrics 设计 6.2/6.3/6.8/6.9 | 6.2 CardinalityGuard；6.8 标签异常；6.9 allowlist | L3 | infra/src/metrics/CardinalityGuard.cpp | validate_labels, reject_with_reason | unit：allowlist/超阈值拒绝；failure：reject_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | 标签 taxonomy 全局评审未完成 | 先冻结 module/stage/profile/outcome/error_code | Guard 骨架、单测 | 仅当未知标签与高基数路径均可二值判定时完成 |
 | MET-TODO-013 | Not Started | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测 | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
 | MET-TODO-014 | Not Started | 实现 MetricsExporterAdapter 首版导出骨架 | metrics 设计 6.2/6.7/6.8/6.9 | 6.2 MetricsExporterAdapter；6.8 导出异常；6.9 exporter.type | L2 | infra/src/metrics/MetricsExporterAdapter.cpp | export_batch(noop/prom_text), fallback_to_noop | unit：导出成功/失败/超时；failure：export_failure_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-003、MET-TODO-007、MET-TODO-008、MET-TODO-013 | OTLP 依赖未冻结 | 首版仅 noop/prom_text，OTLP 后置评审 | 导出骨架、单测 | 仅当成功/失败/超时三路径均有可观测结果且不阻塞主流程时完成 |
@@ -819,3 +819,61 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R "(InstrumentRegistryTest|MetricsFacadeTest)"` 验证新增 registry 测试与 façade 回归测试均可发现。
 4. TODO 证据回写：已回写任务状态、registry->facade 接线策略与验收摘要。
 5. 提交隔离：本轮提交范围限定为 InstrumentRegistry 私有源码、MetricsFacade 接线变更、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 23. 本轮执行记录（2026-04-06 / MET-TODO-011）
+
+### 23.1 选中任务
+
+1. 本轮任务：MET-TODO-011。
+2. 可执行性依据：MET-TODO-010 已完成 registry 骨架，主链路顺序表要求本轮进入 `facade -> registry -> aggregation` 的最后一段；TODO 已明确并发参数未冻结，因此本轮可以单线程可测实现推进，不需要先解阻其他 Blocked 任务。
+
+### 23.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.2 已冻结 AggregationEngine 的职责为“执行 Counter/Gauge/Histogram 聚合与窗口滚动”。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.3 已明确 AggregationEngine 的输入是采样事件流，输出是聚合快照，约束为“线程安全、无锁优先”；结合专项 TODO 的粒度说明，本轮先落单线程可测骨架，不提前承诺并发实现细节。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.4 已给出依赖顺序 `MetricsFacade -> InstrumentRegistry -> AggregationEngine`，因此本轮需要把 façade 的 record 路径正式接到 aggregation，而不是继续停留在 registry-only 检查。
+4. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.7 已冻结步骤 5：AggregationEngine 聚合样本并维护窗口，这是本轮最小闭环锚点。
+5. 专项 TODO 4.2 与 6.1 已明确本任务的最小策略是“先落单线程可测实现”，说明 histogram bucket/window 先保留默认配置，不在本轮扩张到 ConfigCenter/reader/exporter。
+
+外部参考：
+
+1. OpenTelemetry Metrics API（stable）明确 Counter 记录非负增量、Gauge 记录当前绝对值、Histogram 记录数值样本并支持显式 bucket boundaries；据此本轮将 Counter 聚合为累计值，Gauge 聚合为最新值并保留观测 extrema，Histogram 聚合为 count/sum/min/max + explicit bucket counters。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `AggregationEngine.h/.cpp`，实现 `aggregate_counter`、`aggregate_gauge`、`aggregate_histogram`、`aggregate` 与 `snapshot`。
+2. 主链接线：给 `MetricsFacade` 增加 `AggregationEngine` 成员与 `aggregation_snapshot()` 私有观测口，把 `record()` 从“registry 通过后直接成功”推进到“registry 检查后进入 aggregation”。
+3. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/AggregationEngine.h、infra/src/metrics/AggregationEngine.cpp，并调整 infra/src/metrics/MetricsFacade.{h,cpp}。
+   - 测试目标：新增 tests/unit/infra/metrics/MetricsAggregationTest.cpp，并在 tests/unit/infra/CMakeLists.txt 注册 `MetricsAggregationTest`；同时让 `MetricsFacadeTest` 直编 `AggregationEngine.cpp` 做回归。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_instrument_registry_unit_test dasall_metrics_aggregation_unit_test`、`cmake --build build-ci --target dasall_unit_tests`、`ctest --test-dir build-ci -N -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"`、`ctest --test-dir build-ci --output-on-failure -L unit`。
+4. D Gate：PASS。
+
+### 23.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/AggregationEngine.h：新增 `AggregatedMetricValue`、`AggregationSnapshot` 与 `AggregationEngine` 私有声明。
+2. infra/src/metrics/AggregationEngine.cpp：新增 Counter/Gauge/Histogram/UpDownCounter 单线程聚合逻辑、显式 bucket 计数、same-name semantic guard 与快照输出。
+3. infra/src/metrics/MetricsFacade.h、infra/src/metrics/MetricsFacade.cpp：新增 `aggregation_snapshot()` 观测口，并把 `record()` 接到 `AggregationEngine::aggregate()`。
+4. tests/unit/infra/metrics/MetricsAggregationTest.cpp：覆盖 Counter 累计、Gauge 最新值、Histogram bucket 计数，以及 `record -> registry -> aggregation` 主链路断言。
+5. tests/unit/infra/CMakeLists.txt：为 `MetricsFacadeTest` 增编 `AggregationEngine.cpp`，并新增 `dasall_metrics_aggregation_unit_test` 与 `MetricsAggregationTest` 注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_instrument_registry_unit_test dasall_metrics_aggregation_unit_test`：通过；仅出现仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+3. `ctest --test-dir build-ci -N -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"`：通过，发现 3 个测试：`MetricsFacadeTest`、`InstrumentRegistryTest`、`MetricsAggregationTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"`：通过，3/3 tests passed。
+5. `cmake --build build-ci --target dasall_unit_tests`：通过。
+6. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 137/137 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：聚合对象字段、bucket 计数与 façade 桥接方法命名已直接表达语义，无需附加解释性注释。
+2. 正负例覆盖：本轮 `MetricsAggregationTest` 覆盖三类聚合正例；负例语义由既有 `MetricsFacadeTest` 与 `InstrumentRegistryTest` 继续回归，确保 main-chain 聚合没有破坏前两轮错误面。
+3. 测试发现性：已用 `ctest -N -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"` 验证三条 metrics 主链 unit 用例均可发现。
+4. TODO 证据回写：已回写任务状态、aggregation 接线策略与验收摘要。
+5. 提交隔离：本轮提交范围限定为 AggregationEngine 私有源码、MetricsFacade 聚合接线、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。

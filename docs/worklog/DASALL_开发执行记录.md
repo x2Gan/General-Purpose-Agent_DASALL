@@ -8,6 +8,52 @@
 
 ---
 
+## 记录 #131
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-011 实现 AggregationEngine 聚合骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-011-D/B 落盘：
+   - 新增 infra/src/metrics/AggregationEngine.h 与 infra/src/metrics/AggregationEngine.cpp，落盘 `aggregate_counter`、`aggregate_gauge`、`aggregate_histogram`、`aggregate` 与 `snapshot`，把 Counter/Gauge/Histogram 的单线程可测聚合语义固定下来。
+   - 为 Histogram 增加默认 explicit bucket 计数，为 Counter/Gauge/UpDownCounter 固定累计值/最新值语义，并对 same-name semantic drift 保持 `IdentityInvalid` 错误面。
+2. 完成 011 的 façade 接线与 unit/CMake 收口：
+   - 调整 infra/src/metrics/MetricsFacade.h 与 infra/src/metrics/MetricsFacade.cpp，新增 `AggregationEngine` 成员和 `aggregation_snapshot()` 观测口，把 `record()` 从 registry-only 检查推进到 registry + aggregation 主链。
+   - 新增 tests/unit/infra/metrics/MetricsAggregationTest.cpp，覆盖 Counter/Gauge/Histogram 聚合断言与 `record -> registry -> aggregation` 主链；同步更新 tests/unit/infra/CMakeLists.txt，为 `MetricsFacadeTest` 增编 `AggregationEngine.cpp` 并注册 `MetricsAggregationTest`。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-011` 标记为 Done，并补齐本轮 Design->Build 映射、discoverability、unit gate 与主链闭环证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_instrument_registry_unit_test dasall_metrics_aggregation_unit_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - build-ci 重新配置成功，`dasall_metrics_facade_unit_test`、`dasall_instrument_registry_unit_test`、`dasall_metrics_aggregation_unit_test` 构建通过。
+   - `MetricsFacadeTest`、`InstrumentRegistryTest`、`MetricsAggregationTest` 被 ctest 发现并定向执行通过，3/3 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 137/137 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 011 新引入的问题。
+
+### 结果
+
+1. MET-TODO-011 已把 metrics 主链推进到 `record -> registry -> aggregation` 的最小闭环，Counter/Gauge/Histogram 三类聚合行为现在均可稳定回归。
+2. 用户要求的主链路骨架 `MET-TODO-009~011` 已按顺序全部落盘并各自独立提交到远端。
+
+### 下一步
+
+1. 若继续推进 metrics，实现 `MET-TODO-012`，把标签治理和高基数防护接到当前 façade->registry->aggregation 主链上。
+
+### 风险
+
+1. 当前 `AggregationEngine` 仍是单线程、私有快照实现，尚未落窗口滚动、reader/exporter 对接和并发保护；后续推进 `MET-TODO-012~014` 时必须保持这一前提，不得把当前实现误判为最终性能形态。
+
 ## 记录 #130
 
 - 日期：2026-04-06

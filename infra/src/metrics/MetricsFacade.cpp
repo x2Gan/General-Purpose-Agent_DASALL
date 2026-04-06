@@ -85,6 +85,7 @@ MetricsOperationStatus MetricsFacade::init(const MetricsProviderConfig& config) 
   }
 
   config_ = config;
+  aggregation_engine_ = AggregationEngine{};
   registry_ = InstrumentRegistry{};
   meters_.clear();
   last_scope_.reset();
@@ -146,9 +147,14 @@ MetricsOperationStatus MetricsFacade::shutdown(const MetricsCallDeadline& timeou
   }
 
   lifecycle_state_ = LifecycleState::Stopped;
+  aggregation_engine_ = AggregationEngine{};
   registry_ = InstrumentRegistry{};
   meters_.clear();
   return MetricsOperationStatus::success("metrics-facade://stopped");
+}
+
+AggregationSnapshot MetricsFacade::aggregation_snapshot() const {
+  return aggregation_engine_.snapshot();
 }
 
 std::string_view MetricsFacade::lifecycle_state_name() const {
@@ -210,6 +216,11 @@ MetricsOperationStatus MetricsFacade::record_sample(const MeterScope& scope,
         MetricsErrorCode::IdentityInvalid,
         "metrics facade record() requires a registered instrument identity before write",
         "metrics.record");
+  }
+
+  const auto aggregate_result = aggregation_engine_.aggregate(sample);
+  if (!aggregate_result.ok) {
+    return aggregate_result;
   }
 
   last_scope_ = scope;
