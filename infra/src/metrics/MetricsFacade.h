@@ -9,6 +9,7 @@
 
 #include "metrics/IMeter.h"
 #include "metrics/IMetricsProvider.h"
+#include "metrics/InstrumentRegistry.h"
 #include "metrics/MetricTypes.h"
 
 namespace dasall::infra::metrics {
@@ -49,6 +50,7 @@ class MetricsFacade final : public IMetricsProvider {
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   MetricsProviderConfig config_{};
+  InstrumentRegistry registry_;
   MeterMap meters_;
   std::optional<MeterScope> last_scope_;
   std::optional<MetricSample> last_recorded_sample_;

@@ -8,6 +8,52 @@
 
 ---
 
+## 记录 #130
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-010 实现 InstrumentRegistry 唯一性管理骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-010-D/B 落盘：
+   - 新增 infra/src/metrics/InstrumentRegistry.h 与 infra/src/metrics/InstrumentRegistry.cpp，落盘 `register_identity`、`find_identity`、`size` 与 `InstrumentRegistrationResult`，把 `MetricIdentity(name/type/unit/description)` 固化为 canonical identity 判定面。
+   - 实现“同 identity 幂等返回同一 handle、同名异义拒绝注册”的最小唯一性约束，并统一复用 `MetricsErrors::IdentityInvalid` 错误面。
+2. 完成 010 的 façade 接线与 unit/CMake 收口：
+   - 调整 infra/src/metrics/MetricsFacade.h 与 infra/src/metrics/MetricsFacade.cpp，把 `FacadeMeter::create_*` 路径切到 registry，并要求 record 仅接受已注册 identity。
+   - 新增 tests/unit/infra/metrics/InstrumentRegistryTest.cpp，覆盖重复注册正例与同名冲突负例；同时更新 tests/unit/infra/CMakeLists.txt，为 `MetricsFacadeTest` 补编 `InstrumentRegistry.cpp` 并新增 `InstrumentRegistryTest` 注册。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-010` 标记为 Done，并补齐本轮 Design->Build 映射、discoverability、unit gate 与 façade->registry 接线证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_instrument_registry_unit_test`
+   - `ctest --test-dir build-ci -N -R "(InstrumentRegistryTest|MetricsFacadeTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(InstrumentRegistryTest|MetricsFacadeTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - build-ci 重新配置成功，`dasall_metrics_facade_unit_test` 与 `dasall_instrument_registry_unit_test` 构建通过。
+   - `MetricsFacadeTest` 与 `InstrumentRegistryTest` 被 ctest 发现并定向执行通过，2/2 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 136/136 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 010 新引入的问题。
+
+### 结果
+
+1. MET-TODO-010 已把 metrics 主链从“只有 façade 占位”推进到“façade + registry 唯一性约束已可编译、可测试、可回归”的状态。
+2. `MET-TODO-011` 现在可以在 registry 已稳定产出 canonical handle 的前提下，继续把 sample 写入推进到 `AggregationEngine` 的 Counter/Gauge/Histogram 聚合骨架。
+
+### 下一步
+
+1. 实现 `MET-TODO-011`，新增 `AggregationEngine` 私有实现与聚合单测，并把 `MetricsFacade` 的 record 路径从“只做 registry 检查”推进到“registry + aggregation”最小闭环。
+
+### 风险
+
+1. 当前 `InstrumentRegistry` 仅覆盖 canonical registration 和 lookup，没有落 remove/lifecycle cleanup，也未建模 scope 级冲突；在后续 exporter/scheduler/health 接线前，不应把它视为完整生命周期管理器。
+
 ## 记录 #129
 
 - 日期：2026-04-06

@@ -167,7 +167,7 @@
 | MET-TODO-007 | Done | 定义 MetricsSnapshots 对象头文件 | metrics 设计 6.5/6.10 | 6.5 ExportBatchReport/MetricsModuleSnapshot；6.10 指标清单 | L3 | infra/include/metrics/MetricsSnapshots.h | ExportBatchReport, MetricsModuleSnapshot | unit：导出与健康快照字段一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006 | 无 | 无 | 对象头文件、单测；2026-04-01 已落盘 infra/include/metrics/MetricsSnapshots.h、tests/unit/infra/MetricsSnapshotsTest.cpp，并完成 infra/tests CMake 注册 | 仅当快照字段可覆盖成功/失败/队列/降级语义时完成 |
 | MET-TODO-008 | Done | 定义 MetricsErrors 错误码域 | metrics 设计 6.6；工程规范 3.6 | 6.6 错误语义 | L3 | infra/include/metrics/MetricsErrors.h | MET_E_PROVIDER_NOT_READY...MET_E_CONFIG_INVALID | contract：映射 contracts::ResultCode；unit：枚举稳定性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-001 | contracts 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试；2026-04-01 已落盘 infra/include/metrics/MetricsErrors.h、tests/unit/infra/MetricsErrorsTest.cpp、tests/contract/smoke/MetricsErrorMappingContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 7 个错误码均有来源锚点且映射测试通过时完成 |
 | MET-TODO-009 | Done | 实现 MetricsFacade 初始化与写入骨架 | metrics 设计 6.2/6.7 | 6.2 MetricsFacade；6.7 步骤 1/2 | L3 | infra/src/metrics/MetricsFacade.cpp | init/get_meter/record 入口骨架 | unit：未初始化/已初始化两路径；failure：非法 identity 路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-001、MET-TODO-002、MET-TODO-006、MET-TODO-008 | 无 | 无 | Facade 骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricsFacade.{h,cpp}、tests/unit/infra/metrics/MetricsFacadeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中以临时直编私有源码方式注册 MetricsFacadeTest | 仅当初始化状态机与错误码路径可二值判定时完成 |
-| MET-TODO-010 | Not Started | 实现 InstrumentRegistry 唯一性管理骨架 | metrics 设计 6.2/6.3 | 6.2 InstrumentRegistry；6.3 同名同语义唯一 | L3 | infra/src/metrics/InstrumentRegistry.cpp | register_identity/find_identity | unit：同名冲突与重复注册路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-008 | 无 | 无 | Registry 骨架、单测 | 仅当重复注册冲突返回可判定错误并可观测时完成 |
+| MET-TODO-010 | Done | 实现 InstrumentRegistry 唯一性管理骨架 | metrics 设计 6.2/6.3 | 6.2 InstrumentRegistry；6.3 同名同语义唯一 | L3 | infra/src/metrics/InstrumentRegistry.cpp | register_identity/find_identity | unit：同名冲突与重复注册路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-008 | 无 | 无 | Registry 骨架、单测；2026-04-06 已落盘 infra/src/metrics/InstrumentRegistry.{h,cpp}、tests/unit/infra/metrics/InstrumentRegistryTest.cpp，并将 MetricsFacade 的 instrument 创建/record 路径切到 registry 骨架 | 仅当重复注册冲突返回可判定错误并可观测时完成 |
 | MET-TODO-011 | Not Started | 实现 AggregationEngine 聚合骨架 | metrics 设计 6.2/6.7 | 6.2 AggregationEngine；6.7 步骤 5 | L3 | infra/src/metrics/AggregationEngine.cpp | aggregate_counter, aggregate_gauge, aggregate_histogram, snapshot | unit：Counter/Gauge/Histogram 聚合断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-007、MET-TODO-010 | 并发参数未冻结 | 先落单线程可测实现 | 聚合骨架、单测 | 仅当三类聚合行为均可重复验证时完成 |
 | MET-TODO-012 | Not Started | 实现 CardinalityGuard 标签治理骨架 | metrics 设计 6.2/6.3/6.8/6.9 | 6.2 CardinalityGuard；6.8 标签异常；6.9 allowlist | L3 | infra/src/metrics/CardinalityGuard.cpp | validate_labels, reject_with_reason | unit：allowlist/超阈值拒绝；failure：reject_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | 标签 taxonomy 全局评审未完成 | 先冻结 module/stage/profile/outcome/error_code | Guard 骨架、单测 | 仅当未知标签与高基数路径均可二值判定时完成 |
 | MET-TODO-013 | Not Started | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测 | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
@@ -761,3 +761,61 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R MetricsFacadeTest` 验证新增测试在当前 CMake 注册下可发现。
 4. TODO 证据回写：已回写任务状态、交付物、临时直编策略与验收摘要。
 5. 提交隔离：本轮提交范围限定为 MetricsFacade 私有源码、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 22. 本轮执行记录（2026-04-06 / MET-TODO-010）
+
+### 22.1 选中任务
+
+1. 本轮任务：MET-TODO-010。
+2. 可执行性依据：MET-TODO-006 与 MET-TODO-008 已完成，且 MET-TODO-009 已落下 MetricsFacade 最小入口骨架；根据 7.1 顺序编排，registry 是主链路骨架阶段中紧随 façade 的下一原子任务，当前无前置 Blocked 任务需要先处理。
+
+### 22.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.2 已冻结 InstrumentRegistry 的职责为“管理 Instrument 定义、唯一性与生命周期”。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.3 已明确 InstrumentRegistry 的输入是 instrument 定义请求，输出是 InstrumentHandle，语义契约是“同名同语义唯一”。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.4 已给出 `MetricsFacade -> InstrumentRegistry -> AggregationEngine` 依赖顺序，因此本轮应把 façade 的 instrument 创建路径切到 registry，而不是继续在 façade 内部扩张唯一性逻辑。
+4. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.5 已冻结 `MetricIdentity` 的 `name/type/unit/description` 语义面，可直接作为 registry 判定“同名同语义”的最小比较集合。
+5. MET-TODO-009 当前已存在 `FacadeMeter` 占位和 record 骨架，本轮可以在不引入 aggregation 的前提下，把“必须先创建 instrument 再 record”收敛成 registry 可测约束。
+
+外部参考：
+
+1. OpenTelemetry Metrics API（stable）将 instrument 的 identifying fields 定义为 `name`、`kind`、`unit`、`description`，且所有 identifying fields 相等时才视为 identical；据此本轮把 registry 的 canonical identity 判定收敛到 `MetricIdentity(name/type/unit/description)`，相同语义返回同一 handle，语义冲突则拒绝注册。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `InstrumentRegistry.h/.cpp`，实现 `register_identity`、`find_identity`、`size` 与 `InstrumentRegistrationResult`。
+2. 接线策略：将 `MetricsFacade` 的 `FacadeMeter::create_*` 路径切到 `InstrumentRegistry::register_identity()`，并让 `record()` 仅接受已完成 instrument 注册的 sample identity。
+3. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/InstrumentRegistry.h、infra/src/metrics/InstrumentRegistry.cpp，并调整 infra/src/metrics/MetricsFacade.{h,cpp}。
+   - 测试目标：新增 tests/unit/infra/metrics/InstrumentRegistryTest.cpp，并把 MetricsFacadeTest 保留为 registry 接线回归。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_instrument_registry_unit_test`、`cmake --build build-ci --target dasall_unit_tests`、`ctest --test-dir build-ci -N -R "(InstrumentRegistryTest|MetricsFacadeTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(InstrumentRegistryTest|MetricsFacadeTest)"`、`ctest --test-dir build-ci --output-on-failure -L unit`。
+4. D Gate：PASS。
+
+### 22.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/InstrumentRegistry.h：新增 registration result、registry entry 与 `register_identity/find_identity/size` 私有声明。
+2. infra/src/metrics/InstrumentRegistry.cpp：新增同 identity 幂等注册、同名异义拒绝与 canonical handle 生成逻辑，并统一复用 `MetricsErrors::IdentityInvalid` 错误面。
+3. infra/src/metrics/MetricsFacade.h、infra/src/metrics/MetricsFacade.cpp：把 façade 的 instrument 创建路径与 record 前置检查切到 registry 骨架，不再在 façade 内部直接生成 handle。
+4. tests/unit/infra/metrics/InstrumentRegistryTest.cpp：覆盖同 identity 重复注册正例、同名异义冲突负例。
+5. tests/unit/infra/CMakeLists.txt：为 `MetricsFacadeTest` 补编 `InstrumentRegistry.cpp`，并新增 `dasall_instrument_registry_unit_test` 与 `InstrumentRegistryTest` 注册。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_instrument_registry_unit_test`：通过；仅出现仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+3. `ctest --test-dir build-ci -N -R "(InstrumentRegistryTest|MetricsFacadeTest)"`：通过，发现 2 个测试：`MetricsFacadeTest`、`InstrumentRegistryTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "(InstrumentRegistryTest|MetricsFacadeTest)"`：通过，2/2 tests passed。
+5. `cmake --build build-ci --target dasall_unit_tests`：通过。
+6. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 136/136 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：registry 结果对象、canonical handle 与 conflict 路径命名已直接表达语义，无需补充重复性注释。
+2. 正负例覆盖：unit 已覆盖同 identity 幂等正例、同名异义冲突负例，以及 MetricsFacade 对 registry 接线的回归正例。
+3. 测试发现性：已用 `ctest -N -R "(InstrumentRegistryTest|MetricsFacadeTest)"` 验证新增 registry 测试与 façade 回归测试均可发现。
+4. TODO 证据回写：已回写任务状态、registry->facade 接线策略与验收摘要。
+5. 提交隔离：本轮提交范围限定为 InstrumentRegistry 私有源码、MetricsFacade 接线变更、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。

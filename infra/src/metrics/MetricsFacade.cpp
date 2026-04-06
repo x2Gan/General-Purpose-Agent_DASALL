@@ -53,13 +53,17 @@ class MetricsFacade::FacadeMeter final : public IMeter {
       const MetricIdentity& identity,
       MetricType expected_type,
       std::string_view prefix) const {
+    (void)prefix;
     if (!identity.is_valid() || identity.type != expected_type) {
       return std::nullopt;
     }
 
-    return InstrumentHandle{
-        .instrument_key = std::string(prefix) + "://" + scope_.name + "/" + identity.name,
-    };
+    const auto registration = owner_.registry_.register_identity(identity);
+    if (!registration.ok) {
+      return std::nullopt;
+    }
+
+    return registration.handle;
   }
 
   MetricsFacade& owner_;
@@ -81,6 +85,7 @@ MetricsOperationStatus MetricsFacade::init(const MetricsProviderConfig& config) 
   }
 
   config_ = config;
+  registry_ = InstrumentRegistry{};
   meters_.clear();
   last_scope_.reset();
   last_recorded_sample_.reset();
@@ -141,6 +146,7 @@ MetricsOperationStatus MetricsFacade::shutdown(const MetricsCallDeadline& timeou
   }
 
   lifecycle_state_ = LifecycleState::Stopped;
+  registry_ = InstrumentRegistry{};
   meters_.clear();
   return MetricsOperationStatus::success("metrics-facade://stopped");
 }
@@ -196,6 +202,13 @@ MetricsOperationStatus MetricsFacade::record_sample(const MeterScope& scope,
     return make_metrics_failure(
         MetricsErrorCode::IdentityInvalid,
         "metrics facade record() requires a valid meter scope and metric sample identity",
+        "metrics.record");
+  }
+
+  if (!registry_.find_identity(sample.identity_ref.name).has_value()) {
+    return make_metrics_failure(
+        MetricsErrorCode::IdentityInvalid,
+        "metrics facade record() requires a registered instrument identity before write",
         "metrics.record");
   }
 

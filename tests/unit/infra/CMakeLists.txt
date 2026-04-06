@@ -499,6 +499,7 @@ set_tests_properties(MetricsProviderInterfaceTest PROPERTIES LABELS "unit")
 add_executable(dasall_metrics_facade_unit_test
   metrics/MetricsFacadeTest.cpp
   ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsFacade.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/metrics/InstrumentRegistry.cpp
 )
 
 target_include_directories(dasall_metrics_facade_unit_test
@@ -516,6 +517,27 @@ dasall_apply_common_options(dasall_metrics_facade_unit_test)
 
 add_test(NAME MetricsFacadeTest COMMAND dasall_metrics_facade_unit_test)
 set_tests_properties(MetricsFacadeTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_instrument_registry_unit_test
+  metrics/InstrumentRegistryTest.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/metrics/InstrumentRegistry.cpp
+)
+
+target_include_directories(dasall_instrument_registry_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_instrument_registry_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_instrument_registry_unit_test)
+
+add_test(NAME InstrumentRegistryTest COMMAND dasall_instrument_registry_unit_test)
+set_tests_properties(InstrumentRegistryTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_meter_interface_unit_test
   MetricsMeterInterfaceTest.cpp
