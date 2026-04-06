@@ -177,7 +177,7 @@
 | HLT-TODO-015 | Done (2026-04-06) | 实现 RecoveryHintEmitter 边界守卫骨架 | health 设计 6.2/6.8；ADR-007；11.1 | 6.2 RecoveryHintEmitter | L2 | infra/src/health/RecoveryHintEmitter.cpp | emit_hint(snapshot,reason), sanitize_hint_payload() | contract：建议与执行分离；unit：evidence_ref 完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-006、HLT-TODO-011 | 无 | 无 | 发射器代码、unit/contract 验证；2026-04-06 已落盘 infra/src/health/RecoveryHintEmitter.h、infra/src/health/RecoveryHintEmitter.cpp、tests/unit/infra/health/RecoveryHintEmitterTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `RecoveryHintEmitterTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_recovery_hint_emitter_unit_test dasall_contract_recovery_hint_boundary_test`、`ctest --test-dir build-ci --output-on-failure -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`、`ctest --test-dir build-ci -N -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 验证建议/执行分离、evidence_ref 完整性与回归，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当 contract 模板冻结后方可推进 |
 | HLT-TODO-016 | Done (2026-04-06) | 注册 health 源码到 infra CMake | health 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/health/ | health 源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001~015 | 无 | 无 | CMake 改动、构建记录；2026-04-06 已在 infra/CMakeLists.txt 新增 `DASALL_INFRA_HEALTH_SOURCES`、`DASALL_INFRA_HEALTH_PRIVATE_HEADERS` 与 `dasall_infra` 的 PRIVATE `src` include 路径，并同步调整 tests/unit/infra/CMakeLists.txt 使 health unit 目标不再直接编译 health 源文件；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_infra dasall_health_monitor_facade_unit_test dasall_probe_registry_unit_test dasall_probe_executor_unit_test dasall_health_evaluator_unit_test dasall_recovery_hint_emitter_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(HealthMonitorFacadeTest|ProbeRegistryTest|ProbeExecutorTest|HealthEvaluatorTest|RecoveryHintEmitterTest)"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 验证 health 源码入图、health unit 去重与全量回归，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当 placeholder 不再是唯一源码入口且 health 源码入图时完成 |
 | HLT-TODO-017 | Done (2026-04-06) | 注册 health 的 unit/contract/integration 测试入口 | health 设计 7/8/9；工程规范 3.7；tests 现状 | 7 映射；8.1 路径；9.1 测试矩阵 | L0 | tests/unit/CMakeLists.txt、tests/unit/infra/health/、tests/contract/CMakeLists.txt、tests/integration/infra/health/ | unit/contract/failure 注入先行，integration 发现性门禁 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-016 | 无 | 无 | 测试注册改动、integration wiring smoke 与发现性证据；2026-04-06 已更新 tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt、tests/integration/CMakeLists.txt、tests/integration/infra/CMakeLists.txt，并新增 tests/integration/infra/health/CMakeLists.txt、tests/integration/infra/health/HealthWiringIntegrationTest.cpp，使 health unit/contract 测试统一挂载 `health` 标签并补齐最小 integration 入口；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests dasall_health_wiring_integration_test`、`ctest --test-dir build-ci -N -L health`、`ctest --test-dir build-ci --output-on-failure -R HealthWiringIntegrationTest`、`ctest --test-dir build-ci --output-on-failure -L health`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 验证 discoverability、health integration smoke 与全量回归，health 标签 17/17 通过，integration 1/1 通过，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当 health 新增测试可被 ctest -N 发现；integration 用例可被发现并执行时完成 |
-| HLT-TODO-018 | Not Started | 回写 health 质量门与交付证据 | health 设计 9.2/11；工程规范 6.2 | 9.2 Gate；11 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁有通过/失败结论及命令证据时完成 |
+| HLT-TODO-018 | Done (2026-04-06) | 回写 health 质量门与交付证据 | health 设计 9.2/11；工程规范 6.2 | 9.2 Gate；11 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段；2026-04-06 已同步修正 9.1 基线说明、10 风险与回退策略、11 可行性结论下一步口径，并新增本轮 gate/blocked/rollback 回写记录；通过 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 复核 discoverability、unit/contract gate，总测试 290 可发现，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当每个门禁有通过/失败结论及命令证据时完成 |
 
 ### 6.2 当前 Blocked 任务索引
 
@@ -238,7 +238,7 @@
 
 说明：
 
-1. integration 验收命令本轮不纳入必过基线，原因是 HLT-TODO-017 尚未落盘具体 integration 用例；顶层 integration 拓扑已于 2026-03-30 解阻。
+1. 截至 2026-04-06，health 已通过 HLT-TODO-017 落盘最小 integration wiring 用例；全组件通用基线仍以 unit/contract 为主，health integration 的 discoverability 与 smoke 结果在 HLT-TODO-017/018 证据中单独追踪。
 2. 每项 Build-ready 任务至少包含 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答
@@ -260,7 +260,7 @@
 | 状态抖动风险 | Medium | 阈值过小导致状态频繁跳变 | transition_total 高频抖动 | 回退为提高阈值与引入连续失败计数 |
 | 事件发布失败被吞没 | High | 发布失败无计数与日志 | event_publish_fail_total 不增长但事件缺失 | 回退为日志+指标双写并阻断事件路径 |
 | 配置漂移风险 | Medium | profile 键命名变更未评审 | 不同 profile 行为不一致 | 回退到默认键集合并禁用运行时覆盖 |
-| integration 用例缺失风险 | Medium | health 组件用例未落盘即推进集成验收 | ctest -N 无 health integration 用例 | 延迟 integration 任务，保留 unit/contract 门禁 |
+| integration 覆盖不足风险 | Medium | 当前只有最小 wiring smoke，blocked 链路尚未纳入 integration | `ctest -L health` 仅包含 `HealthWiringIntegrationTest` 作为 integration 用例 | 在 blocked 解阻前保留 unit/contract + minimal integration 双轨 gate；解阻后补 failure/profile/integration 用例 |
 
 ## 11. 可行性结论
 
@@ -272,11 +272,11 @@
    - 已识别并量化 5 项阻塞，解阻动作可最小执行。
    - ADR 边界对 RecoveryHint 与调度权归属约束清晰，可直接转为门禁断言。
 3. 当前最小可执行粒度：函数 / 接口 / 数据结构（L3），受阻链路为 L2/L0。
-4. 未达到全量函数级的缺口：平台线程抽象、事件总线最小接口、profile 键命名、health 组件 integration 用例落盘。
+4. 未达到全量函数级的缺口：平台线程抽象、事件总线最小接口、profile 键命名，以及对应 blocked 链路的扩展 integration/failure/profile 用例。
 5. 下一步建议：
-   - 先执行 HLT-TODO-001~008、010~011、013、016 完成接口对象与主链骨架。
-   - 并行推进 HLT-BLK-001~003 的解阻动作；HLT-BLK-004/005 已完成解阻。
-   - 解阻后再推进 HLT-TODO-009、012、014、015、017，最后执行 HLT-TODO-018 收口证据。
+   - 当前 health 可执行主链 `HLT-TODO-007/008/010/011/013/015/016/017/018` 已完成，可作为 watchdog 与 diagnostics 的事实输入基线。
+   - 后续仅剩 `HLT-TODO-009`、`HLT-TODO-012`、`HLT-TODO-014` 三条 blocked 链路，需分别等待 `HLT-BLK-001`、`HLT-BLK-002`、`HLT-BLK-003` 解阻后再推进。
+   - 在解阻前维持当前回退口径：同步 `evaluate_now` 主链、默认阈值策略、无事件总线发布、minimal integration smoke。
 
 ## 12. 本轮执行记录（2026-04-06 / HLT-TODO-007）
 
@@ -646,3 +646,59 @@ Build 合规复核：
 2. 边界保持：新增 integration 用例只复用既有 health 私有实现和 public contracts，不扩写新的生产能力，也未越权碰 `HLT-TODO-009/012/014` 的 blocked 领域。
 3. 测试闭环：同时证明了三件事：health 标签可统一发现、integration 用例可独立执行、全量 unit/contract gate 未受影响。
 4. 提交隔离：本轮提交范围限定为 `HLT-TODO-017` 的测试注册、标签收敛、integration wiring smoke 与 TODO/worklog 证据，不混入后续 `HLT-TODO-018` 的质量门收口。
+
+## 20. 本轮执行记录（2026-04-06 / HLT-TODO-018）
+
+### 20.1 选中任务
+
+1. 本轮任务：HLT-TODO-018。
+2. 可执行性依据：`HLT-TODO-017` 已完成，health 主链、错误语义、建议输出、源码入图、测试发现性与最小 integration wiring 均已落盘；当前唯一缺口是把 gate 结果、blocked 现状与回退边界统一收口到 health 专项 TODO。
+
+### 20.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_health模块详细设计.md 9.2 要求 gate 可验证、可回写，11 章要求阻塞项、风险与回退策略具备持续更新的证据面，因此 018 的职责是证据收口，而不是继续新增实现代码。
+2. `HLT-TODO-007/008/010/011/013/015/016/017` 已分别完成 façade、registry、executor、evaluator、error mapping、recovery hint、CMake 接线和测试 discoverability，说明 018 需要把这些结果映射回 `HLT-GATE-01/02/03/05/06/07/09`，同时保留 `HLT-GATE-04` 对应 event bus blocked 状态。
+3. 本轮 process tests 已复核 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract`，当前总 discoverability 为 290 个测试，unit gate 134/134 通过，contract gate 140/140 通过。
+4. `HLT-BLK-001/002/003` 仍未解阻，分别对应 scheduler、event publisher、config policy 三条链路；因此 018 需要明确“当前可执行主链已闭环，但 blocked 链路仍保持回退口径”。
+
+D 结论：
+
+1. 018 只更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md 与开发执行记录，不新增任何生产代码或测试实现。
+2. gate 回写按二值结论收口：`HLT-GATE-01/02/03/05/06/07/09 = PASS`，`HLT-GATE-04` 仍受 `HLT-BLK-002` 约束而维持 blocked 前置口径，`HLT-GATE-08` 本轮未触发 breaking change 评审条件。
+3. 风险与回退口径同步修正到当前状态：integration 已不再“缺失”，但仍属于 minimal smoke；blocked 链路继续回退到同步评估、默认阈值和无事件发布路径。
+4. D Gate：PASS。
+
+### 20.3 Build 交付与证据
+
+交付物：
+
+1. docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md：更新 `HLT-TODO-018` 状态，修正 9.1 基线说明、10 风险与回退策略、11 当前下一步口径，并追加本轮执行记录。
+2. docs/worklog/DASALL_开发执行记录.md：新增记录 #128，回写本轮 gate 复核、blocked 台账与后续推进建议。
+
+验收结果：
+
+1. `ctest --test-dir build-ci -N`：通过，总 discoverability 为 290 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 134/134 tests passed。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，contract 标签 140/140 tests passed。
+
+Gate/Blocked 收口结论：
+
+1. `HLT-GATE-01`：PASS。health 接口与对象冻结已由 `HLT-TODO-001~006` 落盘并保持可编译。
+2. `HLT-GATE-02`：PASS。`HLT-TODO-007/008/010/011` 已证明 register -> execute -> evaluate 主链可运行且回归通过。
+3. `HLT-GATE-03`：PASS。`HLT-TODO-013` 已冻结 5 个 health 错误码与 contracts 映射，contract 回归通过。
+4. `HLT-GATE-04`：维持 blocked 前置。`HLT-TODO-012` 仍受 `HLT-BLK-002` 限制，事件总线最小接口未冻结。
+5. `HLT-GATE-05`：PASS。`HLT-TODO-015` 与 `RecoveryHintBoundaryContractTest` 已守住 advisory-only 边界。
+6. `HLT-GATE-06`：PASS。`HLT-TODO-016` 已把 health 源码纳入 `dasall_infra`，health unit 去重成功。
+7. `HLT-GATE-07`：PASS。`HLT-TODO-017` 已让 health 测试通过 `ctest -N -L health` 与 `ctest -L health` 统一发现和执行。
+8. `HLT-GATE-08`：本轮未触发。015~018 未引入新的接口签名或错误映射 breaking change。
+9. `HLT-GATE-09`：PASS。health integration 子目录与 `HealthWiringIntegrationTest` 已落盘并可执行。
+10. 当前未解阻台账保持不变：`HLT-TODO-009 -> HLT-BLK-001`、`HLT-TODO-012 -> HLT-BLK-002`、`HLT-TODO-014 -> HLT-BLK-003`。
+
+Build 合规复核：
+
+1. 根因闭环：本轮没有继续追加实现代码，而是把已完成主链的 gate、blocked 和 fallback 证据统一收口，避免 health TODO 留下过时口径。
+2. 边界保持：文档明确维持当前回退策略，不因为主链完成就越权标记 event/config blocked 链路为 done。
+3. 证据闭环：discoverability、unit、contract 三类 process tests 都已重跑并写回；017 的 health 标签与 integration smoke 结果也已被纳入本轮结论。
+4. 提交隔离：本轮提交范围限定为 `HLT-TODO-018` 的文档质量门收口与 worklog 证据，不混入新的代码或测试实现。

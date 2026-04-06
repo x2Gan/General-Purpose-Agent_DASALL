@@ -8,6 +8,46 @@
 
 ---
 
+## 记录 #128
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-018 回写 health 质量门与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-018-D/B 落盘：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-018` 标记为 Done，并补齐本轮 gate/blocked/rollback 收口记录。
+   - 同步修正 9.1 的 integration 基线说明、10 的风险与回退策略，以及 11 的下一步建议，去除 `HLT-TODO-017` 完成前遗留的过时口径。
+2. 完成 018 的 gate 证据归档：
+   - 将 `HLT-GATE-01/02/03/05/06/07/09` 回写为 PASS，把 `HLT-GATE-04` 保持为 blocked 前置 gate，把 `HLT-GATE-08` 标记为本轮未触发。
+   - 明确当前未解阻台账仍为 `HLT-TODO-009 -> HLT-BLK-001`、`HLT-TODO-012 -> HLT-BLK-002`、`HLT-TODO-014 -> HLT-BLK-003`。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `ctest -N` 通过，总 discoverability 为 290 个测试。
+   - `ctest -L unit` 通过，unit 标签 134/134 tests passed。
+   - `ctest -L contract` 通过，contract 标签 140/140 tests passed。
+
+### 结果
+
+1. HLT-TODO-018 已把 health 当前可执行主链的 gate、blocked 现状与回退边界统一收口到专项 TODO。
+2. health 当前已完成 façade、registry、executor、evaluator、error mapping、recovery hint、源码入图、测试发现性与质量证据闭环；后续只剩 009/012/014 三条 blocked 链路待解阻后继续推进。
+
+### 下一步
+
+1. 等待 `HLT-BLK-001`、`HLT-BLK-002`、`HLT-BLK-003` 解阻后，分别推进 `HLT-TODO-009`、`HLT-TODO-012`、`HLT-TODO-014`。
+
+### 风险
+
+1. 当前 health integration 仍只覆盖 minimal wiring smoke；即使主链 gate 已闭环，scheduler/event/config 三条 blocked 链路仍未进入 integration/failure/profile 范围，后续解阻后必须补齐对应用例，避免质量门出现“主链通过但扩展链路无证据”的断层。
+
 ## 记录 #127
 
 - 日期：2026-04-06
