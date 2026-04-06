@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #140
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-020 回写 metrics 质量门与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-020 的专项 TODO 收口：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-020` 标记为 Done，并同步刷新阶段 G、`9.1`~`9.5`、可行性结论与 `## 32. 本轮执行记录（2026-04-06 / MET-TODO-020）`。
+   - 将 metrics 专项 TODO 的质量门从原则性描述收口为当前快照，补齐 `MET-GATE-01`~`MET-GATE-07` 的 Pass/Fail 结论、blocker 当前态与验证/回退记录。
+2. 完成 gate 口径校正：
+   - 保留 `MET-GATE-01`~`MET-GATE-06` 为通过态，并明确 `MET-GATE-07` 当前仍为 Fail，因为顶层 integration 拓扑虽然已存在，但 metrics 组件自身 integration/failure 用例尚未落盘。
+   - 将 `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-004` 回写为已解阻，同时保留 `MET-BLK-003`、`MET-BLK-005` 为 profile/OTLP 扩展残余阻塞，避免把旧 blocker 表述简单抹平。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`
+2. 结果：
+   - `ctest -N` 发现 301 个测试。
+   - `ctest -L unit` 通过，144/144 tests passed，标签摘要中 `metrics=10 tests`、`failure=5 tests`。
+   - `ctest -L contract` 通过，141/141 tests passed，标签摘要中 `metrics=6 tests`、`failure=1 test`。
+   - 定向 discoverability 当前发现 24 个 metrics 组件自身的 unit/contract 测试；当前无 metrics integration/failure 测试入口。
+
+### 结果
+
+1. MET-TODO-020 已完成，metrics 专项 TODO 现已具备可审计的 gate 快照、blocker 当前态与回退记录，不再需要从多轮执行记录中手工拼接质量门结论。
+2. metrics 主专项 `MET-TODO-001`~`MET-TODO-020` 当前均已完成，但 `MET-GATE-07` 仍明确为 Fail，`MET-BLK-003` 与 `MET-BLK-005` 仍作为 profile/OTLP 扩展残余阻塞保留。
+
+### 下一步
+
+1. 若继续推进 metrics，应优先补齐 metrics integration/failure 原子任务，先消除 `MET-GATE-07` 的失败项，再进入 `MET-TODO-021` 与 `MET-TODO-022`。
+
+### 风险
+
+1. 当前文档已真实暴露 integration 准入缺口；后续若在未补用例的情况下直接宣称 metrics 全量 gate 通过，会重新造成 gate 结论与仓库状态脱节。
+
 ## 记录 #139
 
 - 日期：2026-04-06

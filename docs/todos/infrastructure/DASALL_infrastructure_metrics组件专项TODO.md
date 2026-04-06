@@ -177,7 +177,7 @@
 | MET-TODO-017 | Done | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录；2026-04-06 已更新 infra/CMakeLists.txt，将 MetricsFacade/Registry/Aggregation/Guard/Config/Scheduler/Exporter/Recovery 全量源码与私有头纳入 dasall_infra | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
 | MET-TODO-018 | Done | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册入口、执行记录；2026-04-06 已更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt，完成 metrics unit 聚合总表、metrics contract 标签与 failure 标签收口 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
 | MET-TODO-019 | Done | 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架 | metrics 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 审计/日志事件 | L1 | infra/src/metrics/MetricsBridgeEvent.h, infra/src/metrics/MetricsAuditBridge.cpp, infra/src/metrics/MetricsLoggingBridge.cpp | bridge_write_audit_event, bridge_write_log_event, MetricsBridgeEvent | contract：审计字段完整；unit：桥接调用可达 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-007、MET-TODO-008、MET-TODO-015 | 无 | 2026-04-06 已由 infra/include/audit/IAuditLogger.h、infra/include/audit/AuditTypes.h、infra/include/logging/ILogger.h、infra/include/LogEvent.h 解阻 | 桥接代码、unit/contract 测试、CMake 注册与执行记录；2026-04-06 已落盘 infra/src/metrics/Metrics{BridgeEvent,AuditBridge,LoggingBridge}*、tests/unit/infra/metrics/Metrics{Audit,Logging}BridgeTest.cpp、tests/contract/smoke/MetricsAuditBridgeBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 MetricsRecovery 的 logging hook 可由 MetricsLoggingBridge best-effort 承接、MetricsAuditBridge 输出完整 AuditEvent/AuditContext 且 unit/contract 门禁通过时完成 |
-| MET-TODO-020 | Not Started | 回写 metrics 质量门与交付证据 | metrics 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | Gate 执行结果、阻塞变化、回退记录回写 | process test：门禁记录可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-018 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个门禁项都有通过/失败结论与证据命令时完成 |
+| MET-TODO-020 | Done (2026-04-06) | 回写 metrics 质量门与交付证据 | metrics 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md、docs/worklog/DASALL_开发执行记录.md | process test：gate 结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-018 | 无 | 无 | 更新后的 TODO 文档质量门快照、Blocker 状态快照、验证/回退记录与 worklog #140；2026-04-06 已完成 build-ci gate 收口 | 仅当每个门禁项都有通过/失败结论和对应命令证据时完成 |
 
 ### 6.2 Blocked 任务索引
 
@@ -197,7 +197,7 @@
 | D 配置与恢复 | MET-TODO-015~016 | 可并行 | 恢复策略与配置模型并行推进 |
 | E 构建与测试接线 | MET-TODO-017~018 | 可并行 | CMake 接线与测试注册同步收口 |
 | F 解阻后桥接 | MET-TODO-019 | 串行 | 依赖 logging/audit 接口冻结 |
-| G 证据收口 | MET-TODO-020 | 串行 | 统一回写质量门和阻塞变化 |
+| G 证据收口 | MET-TODO-020 | 串行 | 020 已完成；质量门、阻塞变化与回退记录已回写，integration 准入缺口保留为显式失败项 |
 
 ### 7.2 必过门禁
 
@@ -235,8 +235,9 @@
 
 说明：
 
-1. integration 命令暂不纳入首轮验收基线，原因是 metrics integration 用例尚未落盘；顶层 integration 拓扑已于 2026-03-30 解阻。
+1. integration 命令暂不纳入 `MET-TODO-020` 的最小验收基线。tests 顶层 integration 拓扑已于 2026-03-30 解阻，但当前 `ctest --test-dir build-ci -N` 发现的 integration 测试中仍无 metrics 组件用例，且 `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前仅发现 24 个 metrics 组件 unit/contract 测试，因此 `MET-GATE-07` 在本轮保持 Fail。
 2. 每项任务至少包含 1 条构建命令和 1 条测试命令。
+3. `MET-TODO-020` 的 gate 收口命令聚焦 `ctest -N`、`ctest -L unit`、`ctest -L contract`；构建接线证据回链到 `MET-TODO-017`~`MET-TODO-019` 的执行记录，不重复扩写代码验收。
 
 ### 9.2 质量门逐项回答
 
@@ -247,6 +248,37 @@
 5. 是否所有任务都有可二值判定完成标准：是。
 6. 是否避免跨子系统范围扩张：是。
 7. 若要求函数/数据结构级拆分，是否真正落到对象：是。
+
+### 9.3 2026-04-06 Gate 执行快照
+
+| Gate ID | 当前状态 | 证据 | 结论 |
+|---|---|---|---|
+| MET-GATE-01 | Pass | `MET-TODO-001`~`MET-TODO-008` 已全部完成；`IMetricsProvider`、`IMeter`、`IMetricExporter`、`IMetricConfigPolicy`、`IMetricsHealthProbe`、`MetricTypes`、`MetricsErrors`、`MetricsSnapshots` 均已落盘并进入 build-ci 测试图 | metrics 公共接口、对象与错误面已经冻结，不再依赖 placeholder 边界 |
+| MET-GATE-02 | Pass | `MET-TODO-009`~`MET-TODO-015` 已完成；`ctest --test-dir build-ci --output-on-failure -L unit` 当前 144/144 通过，覆盖 `MetricsFacadeTest`、`InstrumentRegistryTest`、`MetricsAggregationTest`、`MetricsCardinalityGuardTest`、`MetricsRecoveryTest` 等主链用例 | `record -> aggregate -> snapshot` 主链与 degraded/recover 闭环保持稳定 |
+| MET-GATE-03 | Pass | `MetricsCardinalityGuardTest`、`MetricsExporterAdapterTest`、`MetricsRecoveryTest`、`MetricsSnapshotsTest`、`MetricsErrorMappingContractTest` 均已落盘；当前 unit 144/144、contract 141/141 继续通过 | label reject、queue full/error surface、export failure、config invalid 均保留错误码与观测输出边界 |
+| MET-GATE-04 | Pass | `MET-TODO-017` 与 `MET-TODO-019` 已完成 `infra/CMakeLists.txt`、unit/contract CMake 与 bridge 代码接线；相关执行记录已验证 `dasall_infra` 与新增 bridge 测试目标可构建 | metrics 源码与 bridge 代码已稳定进入构建图 |
+| MET-GATE-05 | Pass | `ctest --test-dir build-ci -N` 当前发现 301 个测试；`ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 24 个 metrics 组件 unit/contract 测试 | metrics 测试发现性稳定存在，不再依赖临时定向构建 |
+| MET-GATE-06 | Pass | `MET-TODO-001`~`MET-TODO-008` 已完成接口与错误码冻结；`MET-TODO-019` 仅新增 private bridge，`MET-TODO-020` 仅回写 docs/worklog | 当前无未评审的 metrics 公共接口或错误码 breaking change |
+| MET-GATE-07 | Fail | `ctest --test-dir build-ci -N` 显示顶层 integration 测试已存在，但当前列表中无 metrics 组件 integration/failure 用例；`ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 仅发现 unit/contract 测试 | tests 顶层 integration 拓扑已解阻，但 metrics 组件自身的 integration/failure 准入尚未落盘 |
+
+### 9.4 2026-04-06 Blocker 状态快照
+
+| Blocker ID | 当前状态 | 是否影响 MET-TODO-020 | 说明 |
+|---|---|---|---|
+| MET-BLK-001 | Resolved | 否 | tests 顶层 integration 拓扑与聚合 gate 已补齐；当前仅剩 metrics 组件自身 integration/failure 用例未落盘，不再属于仓库级阻塞 |
+| MET-BLK-002 | Resolved | 否 | audit 已冻结 `IAuditLogger::write_audit(...)` 与 `AuditEvent/AuditContext`，`MET-TODO-019` 已完成 MetricsAuditBridge 接线 |
+| MET-BLK-003 | Open | 否 | `MET-TODO-016` 已在 `MetricsConfigPolicy` 内冻结 default/profile/deploy/runtime 最小键集合，但 profiles 资产仍未显式落盘 metrics 专项键域；该 blocker 当前只保留给后续 profile 对接/动态覆盖扩展 |
+| MET-BLK-004 | Resolved | 否 | logging 已冻结 `ILogger::log(const LogEvent&)` 与 `LogEvent`，`MET-TODO-019` 已完成 MetricsLoggingBridge 接线 |
+| MET-BLK-005 | Open | 否 | OTLP exporter 依赖与构建策略仍未冻结；当前 metrics 范围继续以 `noop/prom_text` 为边界，不影响 020 的证据收口 |
+
+### 9.5 验证与回退记录
+
+1. `ctest --test-dir build-ci -N`：通过，发现 301 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，144/144 tests passed；标签摘要中 `metrics=10 tests`、`failure=5 tests`。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，141/141 tests passed；标签摘要中 `metrics=6 tests`、`failure=1 test`。
+4. `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`：通过，发现 24 个 metrics 组件自身的 unit/contract 测试；当前无 metrics integration/failure 测试入口。
+5. `MET-TODO-017`~`MET-TODO-019` 在各自执行记录中已完成构建接线、bridge 验收与 blocker-first 回写；`MET-TODO-020` 为文档收口任务，本轮未触发代码回退。
+6. 若后续引入 metrics integration/failure 用例、profile 键域冻结或 OTLP 依赖接入，应分别重新评估 `MET-GATE-07`、`MET-BLK-003`、`MET-BLK-005`，并以新的原子任务回写证据。
 
 ## 10. 风险与回退策略
 
@@ -261,22 +293,18 @@
 
 ## 11. 可行性结论
 
-1. 结论：可直接生成并执行函数/数据结构级专项 TODO（L3/L2 混合）。
-2. 原因：
-   - metrics 详细设计已明确核心接口清单与方法语义。
-   - metrics 详细设计已明确核心对象字段、主流程与异常流程。
-   - metrics 详细设计已明确错误码域、配置项与默认策略。
-   - 已给出建议落盘目录/文件与测试出口，且可映射到现有 CMake 结构。
-   - 当前阻塞集中在跨子域桥接、组件 integration/failure 用例与 OTLP 依赖，不阻断 metrics 本地闭环落地。
-3. 当前最小可执行粒度：函数/接口/数据结构。
-4. 若未达到全域函数级的缺失信息：
-   - logging/audit/health 的最小桥接接口签名。
-   - metrics 组件 integration/failure 用例与标签落盘。
-   - OTLP exporter 依赖与构建策略冻结结论。
-5. 下一步建议：
-   - 先执行 MET-TODO-001~018，完成 metrics 本地闭环与构建/测试门禁。
-   - 并行推进 MET-BLK-002~005 解阻；MET-BLK-001 已完成仓库级解阻。
-   - 解阻后执行 MET-TODO-019 与 integration 验收，不跳过 breaking 评审门禁。
+1. 结论：metrics 主专项 `MET-TODO-001`~`MET-TODO-020` 已完成到 unit/contract 与 bridge 证据收口阶段，但尚未进入完全维护态；`MET-GATE-07` 仍未通过，ARC 增量 `MET-TODO-021`、`MET-TODO-022` 仍待执行。
+2. 依据：
+   - `MET-TODO-001`~`MET-TODO-020` 当前均已完成，当前 Blocked 任务索引为空。
+   - 2026-04-06 收口结果显示：`ctest --test-dir build-ci -N` 发现 301 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 144/144 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 141/141 通过。
+   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 24 个 metrics 组件 unit/contract 测试，说明 discoverability 已稳定存在。
+   - `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-004` 已解阻，但 `MET-BLK-003`、`MET-BLK-005` 仍作为 profile/OTLP 扩展残余阻塞保留。
+   - 顶层 integration 拓扑虽已存在，但 metrics 自身 integration/failure 用例尚未落盘，因此 `MET-GATE-07` 目前明确为 Fail，而不是隐式忽略。
+3. 当前维护粒度：以 L2/L3 增量任务为主；后续若继续推进，应优先以 integration/failure、contract 增量或 gate 流程收口任务进入下一轮，而非回退已有接口/主链基线。
+4. 下一步建议：
+   - 优先补齐 metrics integration/failure 原子任务，消除 `MET-GATE-07` 失败项。
+   - 随后执行 `MET-TODO-021`，补 planning 阶段预算观测的 contract 约束。
+   - 最后执行 `MET-TODO-022`，把 metrics 任务纳入仓库级 blocked-first gate 流程。
 
 ## 12. ARC 修复增量（2026-03-26）
 
@@ -1323,3 +1351,48 @@ Build 合规复核：
 3. blocker-first：`MET-BLK-002` 与 `MET-BLK-004` 经当前仓库公共接口复核后同轮解阻，并已在第 8 节阻塞表回写证据，不再作为 019 前置阻塞。
 4. 测试发现性：新增 3 个 metrics bridge 测试入口已通过 `ctest -N -R ...` 回填发现性证据，并纳入顶层 unit/contract 聚合。
 5. 提交隔离：本轮提交范围限定为 metrics bridge 私有源码、对应 unit/contract 测试、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 32. 本轮执行记录（2026-04-06 / MET-TODO-020）
+
+### 32.1 选中任务
+
+1. 本轮任务：MET-TODO-020。
+2. 可执行性依据：`MET-TODO-001`~`MET-TODO-019` 已全部完成，当前 Blocked 任务索引为空；剩余差异集中在 metrics 专项 TODO 第 9 章仍缺少 019 之后的 gate 快照、blocker 当前态与回退记录，需要在不改动代码的前提下完成文档收口。
+
+### 32.2 研究与 Design 结论
+
+本地证据：
+
+1. metrics 专项 TODO 的 `9.1`~`9.2` 仍只保留原则性表述，尚未同步 `MET-TODO-019` 完成后的 gate 结果、blocker 变化与 bridge 验收事实。
+2. 本轮执行 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`，分别得到 301 个测试发现、unit 144/144 通过、contract 141/141 通过，可作为 020 的现时收口证据。
+3. 本轮补充执行 `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`，当前发现 24 个 metrics 组件自身的 unit/contract 测试；顶层 integration 测试虽存在，但列表中仍无 metrics integration/failure 用例，因此 `MET-GATE-07` 必须显式记为 Fail。
+4. blocker 状态已经发生变化：`MET-BLK-001`、`MET-BLK-002`、`MET-BLK-004` 已解阻；`MET-BLK-003`、`MET-BLK-005` 仍仅作为 profile/OTLP 扩展残余阻塞保留，不影响 020 收口本身。
+
+D 结论：
+
+1. `MET-TODO-020` 不新增 metrics 代码，而是把质量门快照、blocker 当前态、验证/回退记录和可行性结论同步回专项 TODO 与 worklog，修正文档口径滞后。
+2. gate 回写必须区分真实的 Pass/Fail，而不能因为 `ctest -L unit` 与 `ctest -L contract` 全绿就默认 integration 准入也已通过。
+3. 回退记录需明确两件事：一是 `MET-TODO-017`~`MET-TODO-019` 的构建与 bridge 证据仍然有效；二是 `MET-TODO-020` 本轮仅改文档，不触发任何代码回退。
+4. D Gate：PASS。
+
+### 32.3 Build 交付与证据
+
+交付物：
+
+1. docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md：将 `MET-TODO-020` 标记为 Done，并同步更新阶段 G、`9.1`~`9.5`、可行性结论与 `## 32` 执行记录。
+2. docs/worklog/DASALL_开发执行记录.md：新增记录 #140，回写 020 的 gate 统计、blocker 快照与后续风险。
+
+验收结果：
+
+1. `ctest --test-dir build-ci -N`：通过，发现 301 个测试。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，144/144 tests passed；标签摘要中 `metrics=10 tests`、`failure=5 tests`。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，141/141 tests passed；标签摘要中 `metrics=6 tests`、`failure=1 test`。
+4. `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`：通过，发现 24 个 metrics 组件自身的 unit/contract 测试；当前无 metrics integration/failure 测试入口。
+
+Build 合规复核：
+
+1. 根因闭环：本轮修复的是 metrics 专项 TODO 第 9 章与当前仓库状态不一致的问题，而不是重复新增实现代码。
+2. 边界保持：本轮只更新 docs/worklog，不修改 metrics、logging、audit、profiles 或 contracts 的代码和公共边界。
+3. gate 诚实性：已把 `MET-GATE-07` 显式标记为 Fail，避免把“顶层 integration 拓扑已存在”误写成“metrics integration 已完成”。
+4. 回退可追溯：已把 blocker 变化、当前 gate 结论与“本轮无代码回退”统一回写；后续如扩张 profile/OTLP/integration 范围，应新开原子任务继续推进。
+5. 提交隔离：本轮提交范围限定为 `MET-TODO-020` 的文档收口，不混入任何实现或测试改动。
