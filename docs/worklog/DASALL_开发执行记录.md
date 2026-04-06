@@ -8,6 +8,52 @@
 
 ---
 
+## 记录 #129
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-009 实现 MetricsFacade 初始化与写入骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-009-D/B 落盘：
+   - 新增 infra/src/metrics/MetricsFacade.h 与 infra/src/metrics/MetricsFacade.cpp，落盘 `MetricsFacade` lifecycle、meter cache、last sample 观测面，以及以内嵌 `FacadeMeter` 承担的 `create_counter/create_gauge/create_histogram/record` 最小代理语义。
+   - 使用已冻结 `MetricsErrors` 映射 `ProviderNotReady`、`ConfigInvalid`、`IdentityInvalid` 三类失败路径，保证未初始化、无效 deadline/config、非法 sample/identity 均返回可判定 contracts 错误面。
+2. 完成 009 的 unit/CMake 接线：
+   - 新增 tests/unit/infra/metrics/MetricsFacadeTest.cpp，覆盖未初始化拒绝、同 scope meter 缓存与有效 record 正例、非法 identity 负例。
+   - 更新 tests/unit/infra/CMakeLists.txt，注册 `dasall_metrics_facade_unit_test` 与 `MetricsFacadeTest`；在 `MET-TODO-017` 完成前，暂由 unit target 直接编译 private `MetricsFacade.cpp`，不提前把 metrics 源码接入 `dasall_infra`。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-009` 标记为 Done，并补齐本轮 Design->Build 映射、discoverability、unit gate 与提交隔离证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_facade_unit_test`
+   - `ctest --test-dir build-ci -N -R MetricsFacadeTest`
+   - `ctest --test-dir build-ci --output-on-failure -R MetricsFacadeTest`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - build-ci 重新配置成功，`dasall_metrics_facade_unit_test` 构建通过。
+   - `MetricsFacadeTest` 被 ctest 发现并定向执行通过，1/1 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 135/135 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 009 新引入的问题。
+
+### 结果
+
+1. MET-TODO-009 已从“metrics 无运行时源码”推进到“存在可编译、可测试、可观测的 MetricsFacade 最小主链入口骨架”。
+2. `MET-TODO-010` 现在可以在不改写 provider/meter 错误面的前提下，继续把仪表唯一性管理从 façade 内部占位推进到独立 `InstrumentRegistry`。
+
+### 下一步
+
+1. 实现 `MET-TODO-010`，新增 `InstrumentRegistry` 私有实现与同名同语义唯一性单测，并把 `MetricsFacade` 的 instrument 创建路径切到 registry 骨架。
+
+### 风险
+
+1. 当前 `MetricsFacade` 的 instrument 管理仍是 façade 内部最小占位，尚未具备 6.3 要求的“同名同语义唯一”判定；在 `MET-TODO-010` 完成前，不能把当前 meter handle 缓存误判为 registry 已落地。
+
 ## 记录 #128
 
 - 日期：2026-04-06
