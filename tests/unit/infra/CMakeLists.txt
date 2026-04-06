@@ -196,6 +196,46 @@ dasall_apply_common_options(dasall_metrics_recovery_unit_test)
 add_test(NAME MetricsRecoveryTest COMMAND dasall_metrics_recovery_unit_test)
 set_tests_properties(MetricsRecoveryTest PROPERTIES LABELS "unit;metrics;failure")
 
+add_executable(dasall_metrics_logging_bridge_unit_test
+  metrics/MetricsLoggingBridgeTest.cpp
+)
+
+target_include_directories(dasall_metrics_logging_bridge_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_metrics_logging_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_metrics_logging_bridge_unit_test)
+
+add_test(NAME MetricsLoggingBridgeTest COMMAND dasall_metrics_logging_bridge_unit_test)
+set_tests_properties(MetricsLoggingBridgeTest PROPERTIES LABELS "unit;metrics;failure")
+
+add_executable(dasall_metrics_audit_bridge_unit_test
+  metrics/MetricsAuditBridgeTest.cpp
+)
+
+target_include_directories(dasall_metrics_audit_bridge_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_metrics_audit_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_metrics_audit_bridge_unit_test)
+
+add_test(NAME MetricsAuditBridgeTest COMMAND dasall_metrics_audit_bridge_unit_test)
+set_tests_properties(MetricsAuditBridgeTest PROPERTIES LABELS "unit;metrics;failure")
+
 add_executable(dasall_metrics_errors_unit_test
   MetricsErrorsTest.cpp
 )

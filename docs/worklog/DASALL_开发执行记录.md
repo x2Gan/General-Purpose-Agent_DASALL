@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #139
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-019 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-019-D/B 落盘：
+   - 新增 infra/src/metrics/MetricsBridgeEvent.h，统一冻结 metrics recovery/config 治理事件的最小字段约束。
+   - 新增 infra/src/metrics/MetricsLoggingBridge.{h,cpp}，对接 `ILogger` 并实现 `IMetricsRecoveryLogHook`，把 recovery 事件转为结构化 `LogEvent`，同时保持 best-effort 本地降级语义。
+   - 新增 infra/src/metrics/MetricsAuditBridge.{h,cpp}，对接 `IAuditLogger`，把 recovery/config 治理事件收敛到 `AuditEvent` 与 `AuditContext`。
+2. 完成 blocker-first 解阻回写：
+   - 复核确认 `IAuditLogger::write_audit(...)`、`AuditEvent/AuditContext`、`ILogger::log(...)` 与 `LogEvent` 已在当前代码中冻结，因此 `MET-BLK-002`、`MET-BLK-004` 同轮解阻，无需单独等待外部子域补设计。
+   - 在 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md 中把 `MET-TODO-019` 标记为 Done，并同步回写两个 blocker 的解阻证据。
+3. 完成测试与聚合接线：
+   - 新增 tests/unit/infra/metrics/MetricsLoggingBridgeTest.cpp、MetricsAuditBridgeTest.cpp 与 tests/contract/smoke/MetricsAuditBridgeBoundaryContractTest.cpp。
+   - 更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt，使新的 metrics bridge 源码和测试进入 `dasall_infra`、`dasall_unit_tests`、`dasall_contract_tests`。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_metrics_logging_bridge_unit_test dasall_metrics_audit_bridge_unit_test dasall_contract_metrics_audit_bridge_boundary_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsLoggingBridgeTest|MetricsAuditBridgeTest|MetricsAuditBridgeBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsLoggingBridgeTest|MetricsAuditBridgeTest|MetricsAuditBridgeBoundaryContractTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - build-ci 重新配置与 `dasall_infra`/新增 bridge 测试目标构建均通过，仅保留仓库既有 `IMetricsProvider.h` 缺省初始化告警。
+   - 定向 discoverability 发现 3 个新增 metrics bridge 测试入口，定向执行 3/3 tests passed。
+   - `ctest -L unit` 通过，unit 标签 144/144 tests passed，标签摘要中 `metrics=10 tests`、`failure=5 tests`。
+   - `ctest -L contract` 通过，contract 标签 141/141 tests passed，标签摘要中 `metrics=6 tests`、`failure=1 test`。
+
+### 结果
+
+1. MET-TODO-019 已完成，metrics 现在具备到 logging/audit 的最小治理事件桥接骨架，`MET-TODO-015` 的 recovery log hook 不再只是测试占位。
+2. `MET-BLK-002` 与 `MET-BLK-004` 已在 metrics 专项 TODO 中同步回写为解阻状态，后续 metrics 不再因最小 logging/audit 写入接口缺失而阻塞。
+
+### 下一步
+
+1. 若继续推进 metrics，下一任务应转向 `MET-TODO-020`，统一回写 quality gate、阻塞变化与回退证据。
+
+### 风险
+
+1. 当前 bridge 仍停留在治理事件骨架层，尚未与配置发布链或更高层 orchestration 做运行时装配；后续若 audit/logging 公共接口发生 breaking 变化，需重新评估 019 的边界假设。
+
 ## 记录 #138
 
 - 日期：2026-04-06

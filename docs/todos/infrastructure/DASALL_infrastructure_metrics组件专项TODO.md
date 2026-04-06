@@ -176,14 +176,14 @@
 | MET-TODO-016 | Done | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测；2026-04-06 已落盘 infra/src/metrics/MetricsConfigPolicy.{h,cpp}、tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsConfigMergeTest | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
 | MET-TODO-017 | Done | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录；2026-04-06 已更新 infra/CMakeLists.txt，将 MetricsFacade/Registry/Aggregation/Guard/Config/Scheduler/Exporter/Recovery 全量源码与私有头纳入 dasall_infra | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
 | MET-TODO-018 | Done | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册入口、执行记录；2026-04-06 已更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt，完成 metrics unit 聚合总表、metrics contract 标签与 failure 标签收口 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
-| MET-TODO-019 | Blocked | 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架 | metrics 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 审计/日志事件 | L1 | infra/src/metrics/MetricsAuditBridge.cpp, infra/src/metrics/MetricsLoggingBridge.cpp | bridge_write_audit_event, bridge_write_log_event | contract：审计字段完整；unit：桥接调用可达 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-007、MET-TODO-008、MET-TODO-015 | MET-BLK-002、MET-BLK-004 | 冻结 audit/logging 最小写入接口与字段约束 | 桥接代码或阻塞记录 | 仅当外部接口冻结后，状态才可从 Blocked 改为 Not Started |
+| MET-TODO-019 | Done | 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架 | metrics 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 审计/日志事件 | L1 | infra/src/metrics/MetricsBridgeEvent.h, infra/src/metrics/MetricsAuditBridge.cpp, infra/src/metrics/MetricsLoggingBridge.cpp | bridge_write_audit_event, bridge_write_log_event, MetricsBridgeEvent | contract：审计字段完整；unit：桥接调用可达 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-007、MET-TODO-008、MET-TODO-015 | 无 | 2026-04-06 已由 infra/include/audit/IAuditLogger.h、infra/include/audit/AuditTypes.h、infra/include/logging/ILogger.h、infra/include/LogEvent.h 解阻 | 桥接代码、unit/contract 测试、CMake 注册与执行记录；2026-04-06 已落盘 infra/src/metrics/Metrics{BridgeEvent,AuditBridge,LoggingBridge}*、tests/unit/infra/metrics/Metrics{Audit,Logging}BridgeTest.cpp、tests/contract/smoke/MetricsAuditBridgeBoundaryContractTest.cpp，并完成 infra/tests CMake 注册 | 仅当 MetricsRecovery 的 logging hook 可由 MetricsLoggingBridge best-effort 承接、MetricsAuditBridge 输出完整 AuditEvent/AuditContext 且 unit/contract 门禁通过时完成 |
 | MET-TODO-020 | Not Started | 回写 metrics 质量门与交付证据 | metrics 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | Gate 执行结果、阻塞变化、回退记录回写 | process test：门禁记录可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-018 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个门禁项都有通过/失败结论与证据命令时完成 |
 
 ### 6.2 Blocked 任务索引
 
 | 任务 ID | 对应阻塞项 |
 |---|---|
-| MET-TODO-019 | MET-BLK-002、MET-BLK-004 |
+| 无 | 无 |
 
 ## 7. 执行顺序建议
 
@@ -216,9 +216,9 @@
 | 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|---|
 | MET-BLK-001 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；metrics integration 是否可执行改由组件自身落盘负责 | 后续 metrics integration 任务 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
-| MET-BLK-002 | audit 子域写入接口未冻结，MetricsAuditBridge 无法稳定落盘 | MET-TODO-019 | audit 侧冻结最小写入接口与事件字段约束 | 在 infra/audit 或 logging 设计补桥接接口章节 | 暂时仅记录本地故障日志，不写审计管线 |
+| MET-BLK-002 | 已解阻（2026-04-06）：audit 子域已冻结 `IAuditLogger::write_audit(const AuditEvent&, const AuditContext&)` 与 `AuditEvent/AuditContext` 最小写入边界，MetricsAuditBridge 可稳定落盘 | MET-TODO-019 | 无 | 证据回链到 infra/include/audit/IAuditLogger.h、infra/include/audit/AuditTypes.h 与本 TODO 第 31 节执行记录 | 若 audit 写入接口出现未评审 breaking 变更，则重新转为 Blocked |
 | MET-BLK-003 | Profile 中 metrics 配置键尚未统一，跨档位覆盖规则不稳定 | MET-TODO-016 | 冻结 enabled/exporter/interval/labels/queue/buckets 键集合 | 先冻结最小键集合并在 profile 文档回写 | 暂时禁用运行时动态覆盖 |
-| MET-BLK-004 | logging 子域错误日志写入接口未冻结，MetricsLoggingBridge 无法稳定接线 | MET-TODO-019 | logging 侧冻结最小写入接口与字段要求 | 在 logging 设计补 bridge 接口段并评审 | 暂时仅保留 metrics 内部计数与快照 |
+| MET-BLK-004 | 已解阻（2026-04-06）：logging 子域已冻结 `ILogger::log(const LogEvent&)` 与 `LogEvent` 结构化写入边界，MetricsLoggingBridge 可稳定接线 | MET-TODO-019 | 无 | 证据回链到 infra/include/logging/ILogger.h、infra/include/LogEvent.h 与本 TODO 第 31 节执行记录 | 若 logging 写入接口出现未评审 breaking 变更，则重新转为 Blocked |
 | MET-BLK-005 | OTLP exporter 依赖与构建方式未冻结 | OTLP 相关扩展任务 | 明确 third_party 接入策略与版本 | 首版只实现 noop/prom_text，OTLP 延后 | 默认 exporter.type 维持 noop |
 
 ## 9. 验收与质量门
@@ -1261,3 +1261,65 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R ...` 回填 13 个 metrics 相关 unit/contract 测试入口的统一 discoverability 证据。
 4. TODO 证据回写：已回写任务状态、聚合清单收口、contract 标签与 unit/contract 门禁结果。
 5. 提交隔离：本轮提交范围限定为 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt、专项 TODO 与 worklog 证据更新。
+
+## 31. 本轮执行记录（2026-04-06 / MET-TODO-019）
+
+### 31.1 选中任务
+
+1. 本轮任务：MET-TODO-019。
+2. 可执行性依据：按 blocker-first 先核对 `MET-BLK-002` 与 `MET-BLK-004`；当前仓库已存在 `infra/include/audit/IAuditLogger.h`、`infra/include/audit/AuditTypes.h`、`infra/include/logging/ILogger.h` 与 `infra/include/LogEvent.h`，最小 audit/logging 写入接口与字段边界已经冻结，因此 019 无需再等待外部设计补齐，可直接进入 bridge 落盘。
+
+### 31.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.10 已冻结 metrics 的日志/审计观测面：需记录配置变更、连续导出失败触发 degraded 与恢复 healthy 事件。
+2. infra/src/metrics/MetricsRecovery.{h,cpp} 已在 `MET-TODO-015` 落下 `IMetricsRecoveryLogHook` 占位，说明本轮应把该占位对接到真实的 logging bridge，而不是继续停留在测试桩。
+3. infra/include/audit/IAuditLogger.h 与 infra/include/audit/AuditTypes.h 已冻结 `write_audit(const AuditEvent&, const AuditContext&)`、`AuditEvent`、`AuditContext` 与 `AuditWriteOutcome`，满足 metrics audit bridge 的最小落盘前提。
+4. infra/include/logging/ILogger.h 与 infra/include/LogEvent.h 已冻结 `log(const LogEvent&)` 与结构化 `LogEvent` 载荷，满足 metrics logging bridge 的最小落盘前提。
+5. infra/src/secret/SecretAuditBridge.cpp 与 infra/src/policy/PolicyAuditBridge.cpp 已验证“bridge 仅依赖稳定 sink 接口 + 本地状态缓存”的实现模式，适合作为 metrics 审计桥接的最小参考；infra/src/logging/LoggingMetricsBridge.cpp 已验证“冻结标签/字段边界 + best-effort 降级”的桥接模式。
+
+外部参考：
+
+1. 常见 SRE/OTel 实践要求恢复与配置治理事件保持 best-effort 外部观测，但不得反向阻断主业务链路；据此本轮把 metrics bridge 固定为“记录治理事件，不接管恢复裁定”。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `MetricsBridgeEvent.h` 统一承载 recovery/config 治理事件；新增 private `MetricsLoggingBridge.h/.cpp` 与 `MetricsAuditBridge.h/.cpp`，分别对接 `ILogger` 与 `IAuditLogger`。
+2. logging bridge 策略：`MetricsLoggingBridge` 实现 `IMetricsRecoveryLogHook`，把 recovery 事件转换为结构化 `LogEvent`，并坚持 best-effort 语义，即 sink 失败只在 bridge 本地记账，不反向打断 `MetricsRecovery`。
+3. audit bridge 策略：`MetricsAuditBridge` 把 recovery/config 治理事件转换为 `AuditEvent` + `AuditContext`，证据引用统一落在既有 `ToolResult` reference class 内，不新增 contracts 类型。
+4. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/MetricsBridgeEvent.h、MetricsLoggingBridge.{h,cpp}、MetricsAuditBridge.{h,cpp}，并更新 infra/CMakeLists.txt。
+   - 测试目标：新增 tests/unit/infra/metrics/MetricsLoggingBridgeTest.cpp、MetricsAuditBridgeTest.cpp 与 tests/contract/smoke/MetricsAuditBridgeBoundaryContractTest.cpp，并更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/contract/CMakeLists.txt。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_infra dasall_metrics_logging_bridge_unit_test dasall_metrics_audit_bridge_unit_test dasall_contract_metrics_audit_bridge_boundary_test`、`ctest --test-dir build-ci -N -R "(MetricsLoggingBridgeTest|MetricsAuditBridgeTest|MetricsAuditBridgeBoundaryContractTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(MetricsLoggingBridgeTest|MetricsAuditBridgeTest|MetricsAuditBridgeBoundaryContractTest)"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`。
+5. D Gate：PASS。
+
+### 31.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/MetricsBridgeEvent.h：新增 `MetricsBridgeEventKind`、`MetricsBridgeEventOutcome`、`MetricsBridgeContext` 与 `MetricsBridgeEvent`，冻结 recovery/config 治理事件的最小字段约束。
+2. infra/src/metrics/MetricsLoggingBridge.{h,cpp}：新增结构化日志桥接，实现 `write_log_event()` 与 `IMetricsRecoveryLogHook::write_recovery_event()`，并保留 best-effort 本地状态记录。
+3. infra/src/metrics/MetricsAuditBridge.{h,cpp}：新增治理事件审计桥接，实现 `write_audit_event()` / `write_recovery_event()`，把 metrics recovery/config 事件收敛到 `AuditEvent` 与 `AuditContext`。
+4. tests/unit/infra/metrics/MetricsLoggingBridgeTest.cpp：覆盖 recovery hook 可达、无效 payload 拒绝、logger sink 失败仍保持 best-effort 三条路径。
+5. tests/unit/infra/metrics/MetricsAuditBridgeTest.cpp：覆盖 recovery 审计 payload 完整性与 audit sink 失败状态保留。
+6. tests/contract/smoke/MetricsAuditBridgeBoundaryContractTest.cpp：固化 metrics 审计桥接只使用既有 `AuditEvent/AuditContext` 边界，不把 request/trace 等相关字段泄漏到 `side_effects`。
+7. infra/tests CMake：将新的 metrics bridge 源码、unit 测试与 contract 测试接入 `dasall_infra`、`dasall_unit_tests`、`dasall_contract_tests` 聚合。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_metrics_logging_bridge_unit_test dasall_metrics_audit_bridge_unit_test dasall_contract_metrics_audit_bridge_boundary_test`：通过；仅保留仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+3. `ctest --test-dir build-ci -N -R "(MetricsLoggingBridgeTest|MetricsAuditBridgeTest|MetricsAuditBridgeBoundaryContractTest)"`：通过，发现 3 个新增 metrics bridge 测试入口。
+4. `ctest --test-dir build-ci --output-on-failure -R "(MetricsLoggingBridgeTest|MetricsAuditBridgeTest|MetricsAuditBridgeBoundaryContractTest)"`：通过，3/3 tests passed。
+5. `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`：通过；顶层构建日志显示 `dasall_metrics_logging_bridge_unit_test`、`dasall_metrics_audit_bridge_unit_test` 与 `dasall_contract_metrics_audit_bridge_boundary_test` 已进入聚合目标。
+6. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 144/144 tests passed，标签摘要中 `metrics=10 tests`、`failure=5 tests`。
+7. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，contract 标签 141/141 tests passed，标签摘要中 `metrics=6 tests`、`failure=1 test`。
+
+Build 合规复核：
+
+1. 代码注释：本轮 bridge 结构体、状态对象与字段命名已直接表达 recovery/config 治理语义，无需补充重复性注释。
+2. 正负例覆盖：unit 已覆盖 recovery hook 正例、bridge payload guard、sink failure best-effort；contract 已覆盖 audit payload 边界与相关字段收敛。
+3. blocker-first：`MET-BLK-002` 与 `MET-BLK-004` 经当前仓库公共接口复核后同轮解阻，并已在第 8 节阻塞表回写证据，不再作为 019 前置阻塞。
+4. 测试发现性：新增 3 个 metrics bridge 测试入口已通过 `ctest -N -R ...` 回填发现性证据，并纳入顶层 unit/contract 聚合。
+5. 提交隔离：本轮提交范围限定为 metrics bridge 私有源码、对应 unit/contract 测试、CMake 注册、专项 TODO 与 worklog 证据更新。

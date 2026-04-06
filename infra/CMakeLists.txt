@@ -32,6 +32,8 @@ set(DASALL_INFRA_METRICS_SOURCES
   src/metrics/MetricReaderScheduler.cpp
   src/metrics/MetricsExporterAdapter.cpp
   src/metrics/MetricsRecovery.cpp
+  src/metrics/MetricsLoggingBridge.cpp
+  src/metrics/MetricsAuditBridge.cpp
 )
 
 set(DASALL_INFRA_METRICS_PRIVATE_HEADERS
@@ -43,6 +45,9 @@ set(DASALL_INFRA_METRICS_PRIVATE_HEADERS
   src/metrics/MetricReaderScheduler.h
   src/metrics/MetricsExporterAdapter.h
   src/metrics/MetricsRecovery.h
+  src/metrics/MetricsBridgeEvent.h
+  src/metrics/MetricsLoggingBridge.h
+  src/metrics/MetricsAuditBridge.h
 )
 
 set(DASALL_INFRA_LOGGING_SOURCES
