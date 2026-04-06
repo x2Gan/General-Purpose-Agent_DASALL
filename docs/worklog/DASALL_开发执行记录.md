@@ -8,6 +8,54 @@
 
 ---
 
+## 记录 #135
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-014 实现 MetricsExporterAdapter 首版导出骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-014-D/B 落盘：
+   - 新增 infra/src/metrics/MetricsExporterAdapter.h 与 infra/src/metrics/MetricsExporterAdapter.cpp，落盘 `export_batch(noop/prom_text)`、`fallback_to_noop`、`last_report()`、`module_snapshot()`、`last_rendered_text()` 与成功/失败计数骨架。
+   - 固定首版导出策略只支持 `noop` 和 `prom_text`；对 unsupported exporter 或 prom_text timeout 明确回退到 `noop`，并保留 `export_failure_total`、`exporter_state`、`degraded` 三个可观测输出。
+2. 完成 014 的 unit/CMake 收口：
+   - 新增 tests/unit/infra/metrics/MetricsExporterAdapterTest.cpp，覆盖 prom_text 成功、unsupported exporter 失败回退、timeout 回退三类断言，并通过 `MetricReaderScheduler` 产出的 batch 做链路回归。
+   - 更新 tests/unit/infra/CMakeLists.txt，新增 `dasall_metrics_exporter_adapter_unit_test` 与 `MetricsExporterAdapterTest` 注册，并保留 `MetricsReaderSchedulerTest`、`MetricsConfigMergeTest` 作为依赖回归。
+3. 完成同轮编译错误修复与专项 TODO 回链：
+   - 首轮构建暴露 `MetricsExporterAdapter.h` 缺失 `MetricsErrorCode` 声明来源；已在同轮补充 `#include "metrics/MetricsErrors.h"` 并完成重建。
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-014` 标记为 Done，并补齐本轮 Design->Build 映射、编译错误修复记录、Build_CMakeTools 回退记录与 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_exporter_adapter_unit_test dasall_metrics_reader_scheduler_unit_test dasall_metrics_config_merge_unit_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsExporterAdapterTest|MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsExporterAdapterTest|MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `Build_CMakeTools` 再次失败，错误为“生成失败：无法配置项目”；已按仓库既定回退策略切回 build-ci 命令链。
+   - build-ci 重新配置成功；014 首轮构建暴露头文件缺失 `MetricsErrorCode` 声明来源，已在同轮修复并重建通过。
+   - `MetricsConfigMergeTest`、`MetricsReaderSchedulerTest`、`MetricsExporterAdapterTest` 被 ctest 发现并定向执行通过，3/3 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 141/141 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 014 新引入的问题。
+
+### 结果
+
+1. MET-TODO-014 已把 metrics 主链推进到 `aggregation -> reader scheduler -> exporter`，首版 noop/prom_text 导出链路现已可测试、可回退、可观测。
+2. 用户要求的治理与导出阶段 `MET-TODO-012~014` 已按顺序完成并具备独立提交与远端推送条件。
+
+### 下一步
+
+1. 若继续推进 metrics，可进入 `MET-TODO-015`，把 exporter 失败累计与当前 `degraded` 状态接到恢复骨架上。
+
+### 风险
+
+1. 当前 MetricsExporterAdapter 仍是首版骨架：timeout 采用本地模拟、queue depth 尚未回写到统一健康快照、OTLP 仍后置；后续推进 015/017 时必须维持“导出器只负责导出与回退，不承担 reader 调度与恢复裁定”的边界。
+
 ## 记录 #134
 
 - 日期：2026-04-06
