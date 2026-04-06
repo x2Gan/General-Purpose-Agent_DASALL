@@ -70,7 +70,13 @@ class MetricsFacade::FacadeMeter final : public IMeter {
   MeterScope scope_;
 };
 
-MetricsFacade::MetricsFacade() = default;
+MetricsFacade::MetricsFacade(std::size_t max_cardinality_per_metric)
+    : max_cardinality_per_metric_(max_cardinality_per_metric > 0U
+                                      ? max_cardinality_per_metric
+                                      : 200U),
+      cardinality_guard_(max_cardinality_per_metric_) {
+  module_snapshot_.exporter_state = "uninitialized";
+}
 
 MetricsOperationStatus MetricsFacade::init(const MetricsProviderConfig& config) {
   if (lifecycle_state_ != LifecycleState::Created) {
@@ -86,11 +92,18 @@ MetricsOperationStatus MetricsFacade::init(const MetricsProviderConfig& config) 
 
   config_ = config;
   aggregation_engine_ = AggregationEngine{};
+  cardinality_guard_ = CardinalityGuard{max_cardinality_per_metric_};
   registry_ = InstrumentRegistry{};
   meters_.clear();
   last_scope_.reset();
   last_recorded_sample_.reset();
   record_attempt_count_ = 0;
+  module_snapshot_ = MetricsModuleSnapshot{
+      .queue_depth = 0,
+      .guard_reject_total = 0,
+      .exporter_state = config_.exporter_type,
+      .degraded = false,
+  };
   lifecycle_state_ = LifecycleState::Initialized;
   return MetricsOperationStatus::success("metrics-facade://initialized");
 }
@@ -148,13 +161,24 @@ MetricsOperationStatus MetricsFacade::shutdown(const MetricsCallDeadline& timeou
 
   lifecycle_state_ = LifecycleState::Stopped;
   aggregation_engine_ = AggregationEngine{};
+  cardinality_guard_ = CardinalityGuard{max_cardinality_per_metric_};
   registry_ = InstrumentRegistry{};
   meters_.clear();
+  module_snapshot_ = MetricsModuleSnapshot{
+      .queue_depth = 0,
+      .guard_reject_total = 0,
+      .exporter_state = "stopped",
+      .degraded = false,
+  };
   return MetricsOperationStatus::success("metrics-facade://stopped");
 }
 
 AggregationSnapshot MetricsFacade::aggregation_snapshot() const {
   return aggregation_engine_.snapshot();
+}
+
+MetricsModuleSnapshot MetricsFacade::module_snapshot() const {
+  return module_snapshot_;
 }
 
 std::string_view MetricsFacade::lifecycle_state_name() const {
@@ -218,13 +242,28 @@ MetricsOperationStatus MetricsFacade::record_sample(const MeterScope& scope,
         "metrics.record");
   }
 
-  const auto aggregate_result = aggregation_engine_.aggregate(sample);
+  const auto guard_result =
+      cardinality_guard_.validate_labels(sample.identity_ref.name, sample.labels);
+  module_snapshot_.guard_reject_total = cardinality_guard_.reject_total();
+  if (!guard_result.accepted) {
+    return MetricsOperationStatus{
+        .ok = false,
+        .result_code = guard_result.result_code,
+        .error = guard_result.error,
+        .state_ref = "metrics-facade://guard-rejected",
+    };
+  }
+
+  auto guarded_sample = sample;
+  guarded_sample.labels = guard_result.labels;
+
+  const auto aggregate_result = aggregation_engine_.aggregate(guarded_sample);
   if (!aggregate_result.ok) {
     return aggregate_result;
   }
 
   last_scope_ = scope;
-  last_recorded_sample_ = sample;
+  last_recorded_sample_ = guarded_sample;
   return MetricsOperationStatus::success("metrics-facade://recorded");
 }
 

@@ -169,7 +169,7 @@
 | MET-TODO-009 | Done | 实现 MetricsFacade 初始化与写入骨架 | metrics 设计 6.2/6.7 | 6.2 MetricsFacade；6.7 步骤 1/2 | L3 | infra/src/metrics/MetricsFacade.cpp | init/get_meter/record 入口骨架 | unit：未初始化/已初始化两路径；failure：非法 identity 路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-001、MET-TODO-002、MET-TODO-006、MET-TODO-008 | 无 | 无 | Facade 骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricsFacade.{h,cpp}、tests/unit/infra/metrics/MetricsFacadeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中以临时直编私有源码方式注册 MetricsFacadeTest | 仅当初始化状态机与错误码路径可二值判定时完成 |
 | MET-TODO-010 | Done | 实现 InstrumentRegistry 唯一性管理骨架 | metrics 设计 6.2/6.3 | 6.2 InstrumentRegistry；6.3 同名同语义唯一 | L3 | infra/src/metrics/InstrumentRegistry.cpp | register_identity/find_identity | unit：同名冲突与重复注册路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-008 | 无 | 无 | Registry 骨架、单测；2026-04-06 已落盘 infra/src/metrics/InstrumentRegistry.{h,cpp}、tests/unit/infra/metrics/InstrumentRegistryTest.cpp，并将 MetricsFacade 的 instrument 创建/record 路径切到 registry 骨架 | 仅当重复注册冲突返回可判定错误并可观测时完成 |
 | MET-TODO-011 | Done | 实现 AggregationEngine 聚合骨架 | metrics 设计 6.2/6.7 | 6.2 AggregationEngine；6.7 步骤 5 | L3 | infra/src/metrics/AggregationEngine.cpp | aggregate_counter, aggregate_gauge, aggregate_histogram, snapshot | unit：Counter/Gauge/Histogram 聚合断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-007、MET-TODO-010 | 并发参数未冻结 | 先落单线程可测实现 | 聚合骨架、单测；2026-04-06 已落盘 infra/src/metrics/AggregationEngine.{h,cpp}、tests/unit/infra/metrics/MetricsAggregationTest.cpp，并将 MetricsFacade 的 record 路径接到 aggregation engine | 仅当三类聚合行为均可重复验证时完成 |
-| MET-TODO-012 | Not Started | 实现 CardinalityGuard 标签治理骨架 | metrics 设计 6.2/6.3/6.8/6.9 | 6.2 CardinalityGuard；6.8 标签异常；6.9 allowlist | L3 | infra/src/metrics/CardinalityGuard.cpp | validate_labels, reject_with_reason | unit：allowlist/超阈值拒绝；failure：reject_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | 标签 taxonomy 全局评审未完成 | 先冻结 module/stage/profile/outcome/error_code | Guard 骨架、单测 | 仅当未知标签与高基数路径均可二值判定时完成 |
+| MET-TODO-012 | Done | 实现 CardinalityGuard 标签治理骨架 | metrics 设计 6.2/6.3/6.8/6.9 | 6.2 CardinalityGuard；6.8 标签异常；6.9 allowlist | L3 | infra/src/metrics/CardinalityGuard.cpp | validate_labels, reject_with_reason | unit：allowlist/超阈值拒绝；failure：reject_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | 标签 taxonomy 全局评审未完成 | 先冻结 module/stage/profile/outcome/error_code | Guard 骨架、单测；2026-04-06 已落盘 infra/src/metrics/CardinalityGuard.{h,cpp}、tests/unit/infra/metrics/MetricsCardinalityGuardTest.cpp，并将 MetricsFacade 的 record 路径接到 CardinalityGuard，新增 module_snapshot() 暴露 guard_reject_total | 仅当未知标签与高基数路径均可二值判定时完成 |
 | MET-TODO-013 | Not Started | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测 | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
 | MET-TODO-014 | Not Started | 实现 MetricsExporterAdapter 首版导出骨架 | metrics 设计 6.2/6.7/6.8/6.9 | 6.2 MetricsExporterAdapter；6.8 导出异常；6.9 exporter.type | L2 | infra/src/metrics/MetricsExporterAdapter.cpp | export_batch(noop/prom_text), fallback_to_noop | unit：导出成功/失败/超时；failure：export_failure_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-003、MET-TODO-007、MET-TODO-008、MET-TODO-013 | OTLP 依赖未冻结 | 首版仅 noop/prom_text，OTLP 后置评审 | 导出骨架、单测 | 仅当成功/失败/超时三路径均有可观测结果且不阻塞主流程时完成 |
 | MET-TODO-015 | Not Started | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试 | 仅当降级进入/退出两路径均可二值判定时完成 |
@@ -201,7 +201,7 @@
 
 ### 7.2 必过门禁
 
-| Gate ID | 门禁项 | 通过标准 | 失败处置 |
+| Gate ID | 门禁项 | 通过标准 | 失败处置 |000002.14
 |---|---|---|---|
 | MET-GATE-01 | 接口冻结门 | IMetricsProvider/IMeter/IMetricExporter/MetricTypes/MetricsErrors 全部落盘并编译通过 | 回退到接口定义阶段，不推进实现 |
 | MET-GATE-02 | 主链路闭环门 | record -> aggregate -> snapshot 单测通过 | 回退 MET-TODO-009~011 |
@@ -877,3 +877,59 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R "(MetricsAggregationTest|InstrumentRegistryTest|MetricsFacadeTest)"` 验证三条 metrics 主链 unit 用例均可发现。
 4. TODO 证据回写：已回写任务状态、aggregation 接线策略与验收摘要。
 5. 提交隔离：本轮提交范围限定为 AggregationEngine 私有源码、MetricsFacade 聚合接线、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 24. 本轮执行记录（2026-04-06 / MET-TODO-012）
+
+### 24.1 选中任务
+
+1. 本轮任务：MET-TODO-012。
+2. 可执行性依据：MET-TODO-004、MET-TODO-006、MET-TODO-008 已完成，且 `MET-TODO-009~011` 已把主链推进到 `record -> registry -> aggregation`；当前不存在要求先完成的前置 Blocked 任务，可直接把标签治理插入主链。
+
+### 24.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.2 已冻结 CardinalityGuard 的职责为“标签白名单与高基数拦截/降级”。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.3 已明确 CardinalityGuard 的输入是标签集合，输出是“通过/拒绝/降级结果”，且拒绝必须可观测。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.7 已把 guard 固定在 `MetricContextEnricher` 之后、`AggregationEngine` 之前，因此本轮应把 guard 接到 MetricsFacade 的 record 路径，而不是停留为独立工具类。
+4. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.8 已冻结标签异常恢复语义：拒绝该样本并累计 `guard_reject_total`，同时保留 sampling_drop 原因。
+5. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 已冻结 allowlist 初版为 `module/stage/profile/outcome/error_code`，因此虽然 taxonomy 全局评审尚未完成，本轮仍可按专项 TODO 的解阻条件先实现这五个稳定标签键。
+6. tests/unit/infra/MetricTypesTest.cpp 与 tests/unit/infra/MetricsConfigPolicyInterfaceTest.cpp 已把 `module/stage/profile/outcome` 必填、空 `error_code` 归一化为 `none` 的边界固化为既有门禁，可直接复用到 guard 骨架。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `CardinalityGuard.h/.cpp`，实现 `validate_labels` 与 `reject_with_reason`，固定 allowlist 校验、空 `error_code -> none` 归一化，以及按 metric name 维度的 label signature cardinality 上限控制。
+2. 主链接线：调整 `MetricsFacade`，把 `record()` 从 `registry -> aggregation` 推进到 `registry -> guard -> aggregation`，并通过 `module_snapshot()` 暴露 `guard_reject_total`。
+3. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/CardinalityGuard.h、infra/src/metrics/CardinalityGuard.cpp，并调整 infra/src/metrics/MetricsFacade.{h,cpp}。
+   - 测试目标：新增 tests/unit/infra/metrics/MetricsCardinalityGuardTest.cpp，并在 tests/unit/infra/CMakeLists.txt 注册 `MetricsCardinalityGuardTest`；同时让 `MetricsFacadeTest` 与 `MetricsAggregationTest` 直编 `CardinalityGuard.cpp` 做回归。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_metrics_cardinality_guard_unit_test dasall_metrics_aggregation_unit_test`、`ctest --test-dir build-ci -N -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"`、`cmake --build build-ci --target dasall_unit_tests`、`ctest --test-dir build-ci --output-on-failure -L unit`。
+4. D Gate：PASS。
+
+### 24.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/CardinalityGuard.h：新增 `MetricLabelEntry`、`CardinalityGuardDecision` 与 `CardinalityGuard` 私有声明，冻结 allowlist 判定、reject_total 与 per-metric cardinality 观察面。
+2. infra/src/metrics/CardinalityGuard.cpp：新增空 `error_code` 归一化、未知标签拒绝、重复 label key 拒绝、per-metric label signature 上限控制，以及统一复用 `MetricsErrors::LabelCardinalityExceeded` 错误面。
+3. infra/src/metrics/MetricsFacade.h、infra/src/metrics/MetricsFacade.cpp：新增 `module_snapshot()` 观测口，把 `record()` 路径接到 CardinalityGuard，并保证拒绝样本不会进入 AggregationEngine。
+4. tests/unit/infra/metrics/MetricsCardinalityGuardTest.cpp：覆盖 allowlist 正例、未知标签拒绝、高基数拒绝，以及 `MetricsFacade` 对 `guard_reject_total` 的主链集成断言。
+5. tests/unit/infra/CMakeLists.txt：新增 `dasall_metrics_cardinality_guard_unit_test`，并为 `MetricsFacadeTest`、`MetricsAggregationTest` 补编 `CardinalityGuard.cpp`。
+
+验收结果：
+
+1. Build_CMakeTools：失败，报错“生成失败：无法配置项目”；按仓库既定回退策略改用 build-ci 命令链继续验收。
+2. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+3. `cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_metrics_cardinality_guard_unit_test dasall_metrics_aggregation_unit_test`：通过；仅出现仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+4. `ctest --test-dir build-ci -N -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"`：通过，发现 3 个测试：`MetricsFacadeTest`、`MetricsCardinalityGuardTest`、`MetricsAggregationTest`。
+5. `ctest --test-dir build-ci --output-on-failure -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"`：通过，3/3 tests passed。
+6. `cmake --build build-ci --target dasall_unit_tests`：通过。
+7. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 138/138 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：guard 决策对象、allowlist 结果与 façade 模块快照命名已直接表达语义，无需附加解释性注释。
+2. 正负例覆盖：本轮新增单测已覆盖 allowlist 正例、未知标签拒绝、高基数拒绝与 façade 集成回归四条路径。
+3. 测试发现性：已用 `ctest -N -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"` 验证 guard 新测与主链回归用例均可发现。
+4. TODO 证据回写：已回写任务状态、guard->facade 接线策略、Build_CMakeTools 回退记录与验收摘要。
+5. 提交隔离：本轮提交范围限定为 CardinalityGuard 私有源码、MetricsFacade guard 接线、对应 unit 测试、CMake 注册、专项 TODO 与 worklog 证据更新。

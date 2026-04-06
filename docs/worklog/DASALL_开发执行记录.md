@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #132
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-012 实现 CardinalityGuard 标签治理骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-012-D/B 落盘：
+   - 新增 infra/src/metrics/CardinalityGuard.h 与 infra/src/metrics/CardinalityGuard.cpp，落盘 `validate_labels`、`reject_with_reason`、空 `error_code -> none` 归一化、未知标签拒绝与 per-metric label signature cardinality 上限控制，并统一复用 `MetricsErrors::LabelCardinalityExceeded` 错误面。
+   - 通过 `MetricLabelEntry` 与 `CardinalityGuardDecision` 固定 allowlist 输入/输出语义，使“未知标签”与“高基数超阈值”两类拒绝路径都可二值判定。
+2. 完成 012 的 façade 接线与 unit/CMake 收口：
+   - 调整 infra/src/metrics/MetricsFacade.h 与 infra/src/metrics/MetricsFacade.cpp，把 `record()` 从 `registry -> aggregation` 推进到 `registry -> guard -> aggregation`，并新增 `module_snapshot()` 暴露 `guard_reject_total`。
+   - 新增 tests/unit/infra/metrics/MetricsCardinalityGuardTest.cpp，覆盖 allowlist 正例、未知标签拒绝、高基数拒绝与 façade 集成回归；同步更新 tests/unit/infra/CMakeLists.txt，为 `MetricsFacadeTest`、`MetricsAggregationTest` 补编 `CardinalityGuard.cpp` 并新增 `MetricsCardinalityGuardTest` 注册。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-012` 标记为 Done，并补齐本轮 Design->Build 映射、Build_CMakeTools 回退记录、discoverability 与 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_facade_unit_test dasall_metrics_cardinality_guard_unit_test dasall_metrics_aggregation_unit_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsCardinalityGuardTest|MetricsFacadeTest|MetricsAggregationTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `Build_CMakeTools` 再次失败，错误为“生成失败：无法配置项目”；已按仓库既定回退策略切回 build-ci 命令链。
+   - build-ci 重新配置成功，`dasall_metrics_facade_unit_test`、`dasall_metrics_cardinality_guard_unit_test`、`dasall_metrics_aggregation_unit_test` 构建通过。
+   - `MetricsFacadeTest`、`MetricsCardinalityGuardTest`、`MetricsAggregationTest` 被 ctest 发现并定向执行通过，3/3 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 138/138 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 012 新引入的问题。
+
+### 结果
+
+1. MET-TODO-012 已把 metrics 主链推进到 `record -> registry -> guard -> aggregation`，拒绝样本现在会在进入聚合前被拦截，并把 `guard_reject_total` 暴露到模块快照。
+2. `MET-TODO-013` 仍依赖 `MET-TODO-016` 的配置模型，因此下一轮需要先执行 016 作为 scheduler 的前置解组任务。
+
+### 下一步
+
+1. 执行 `MET-TODO-016`，冻结 metrics 最小配置模型与默认策略，为 `MET-TODO-013` 的 reader interval / exporter timeout 语义提供稳定输入。
+
+### 风险
+
+1. 当前 CardinalityGuard 只覆盖固定 allowlist 与 per-metric signature 计数，还没有引入 context enricher、queue overflow 或动态 taxonomy 扩展；后续推进 013~015 时必须维持这一最小边界，不得把它误用为完整的治理中心。
+
 ## 记录 #131
 
 - 日期：2026-04-06
