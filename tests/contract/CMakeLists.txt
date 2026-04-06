@@ -245,6 +245,8 @@ target_link_libraries(dasall_contract_health_snapshot_boundary_test
     dasall_infra
 )
 
+set_tests_properties(HealthSnapshotBoundaryContractTest PROPERTIES LABELS "contract;smoke;health")
+
 dasall_register_contract_test(
   dasall_contract_health_error_mapping_test
   HealthErrorMappingContractTest
@@ -261,6 +263,8 @@ target_link_libraries(dasall_contract_health_error_mapping_test
   PRIVATE
     dasall_infra
 )
+
+set_tests_properties(HealthErrorMappingContractTest PROPERTIES LABELS "contract;smoke;health")
 
 dasall_register_contract_test(
   dasall_contract_policy_types_boundary_test
@@ -437,6 +441,8 @@ target_link_libraries(dasall_contract_recovery_hint_boundary_test
   PRIVATE
     dasall_infra
 )
+
+set_tests_properties(RecoveryHintBoundaryContractTest PROPERTIES LABELS "contract;smoke;health")
 
 dasall_register_contract_test(
   dasall_contract_watchdog_timeout_decision_boundary_test
@@ -990,6 +996,8 @@ target_link_libraries(dasall_contract_health_monitor_interface_boundary_test
   PRIVATE
     dasall_infra
 )
+
+set_tests_properties(HealthMonitorInterfaceBoundaryContractTest PROPERTIES LABELS "contract;smoke;health")
 
 dasall_register_contract_test(
   dasall_contract_diagnostics_boundary_test

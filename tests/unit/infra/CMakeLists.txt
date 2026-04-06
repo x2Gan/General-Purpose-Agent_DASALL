@@ -69,7 +69,7 @@ target_link_libraries(dasall_health_probe_interface_unit_test
 dasall_apply_common_options(dasall_health_probe_interface_unit_test)
 
 add_test(NAME HealthProbeInterfaceTest COMMAND dasall_health_probe_interface_unit_test)
-set_tests_properties(HealthProbeInterfaceTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthProbeInterfaceTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_health_snapshot_unit_test
   HealthSnapshotTest.cpp
@@ -84,7 +84,7 @@ target_link_libraries(dasall_health_snapshot_unit_test
 dasall_apply_common_options(dasall_health_snapshot_unit_test)
 
 add_test(NAME HealthSnapshotUnitTest COMMAND dasall_health_snapshot_unit_test)
-set_tests_properties(HealthSnapshotUnitTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthSnapshotUnitTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_metric_exporter_interface_unit_test
   MetricsExporterInterfaceTest.cpp
@@ -1208,7 +1208,7 @@ target_link_libraries(dasall_health_monitor_interface_unit_test
 dasall_apply_common_options(dasall_health_monitor_interface_unit_test)
 
 add_test(NAME HealthMonitorInterfaceTest COMMAND dasall_health_monitor_interface_unit_test)
-set_tests_properties(HealthMonitorInterfaceTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthMonitorInterfaceTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_health_monitor_facade_unit_test
   health/HealthMonitorFacadeTest.cpp
@@ -1228,7 +1228,7 @@ target_link_libraries(dasall_health_monitor_facade_unit_test
 dasall_apply_common_options(dasall_health_monitor_facade_unit_test)
 
 add_test(NAME HealthMonitorFacadeTest COMMAND dasall_health_monitor_facade_unit_test)
-set_tests_properties(HealthMonitorFacadeTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthMonitorFacadeTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_probe_registry_unit_test
   health/ProbeRegistryTest.cpp
@@ -1248,7 +1248,7 @@ target_link_libraries(dasall_probe_registry_unit_test
 dasall_apply_common_options(dasall_probe_registry_unit_test)
 
 add_test(NAME ProbeRegistryTest COMMAND dasall_probe_registry_unit_test)
-set_tests_properties(ProbeRegistryTest PROPERTIES LABELS "unit")
+set_tests_properties(ProbeRegistryTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_probe_executor_unit_test
   health/ProbeExecutorTest.cpp
@@ -1268,7 +1268,7 @@ target_link_libraries(dasall_probe_executor_unit_test
 dasall_apply_common_options(dasall_probe_executor_unit_test)
 
 add_test(NAME ProbeExecutorTest COMMAND dasall_probe_executor_unit_test)
-set_tests_properties(ProbeExecutorTest PROPERTIES LABELS "unit")
+set_tests_properties(ProbeExecutorTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_health_evaluator_unit_test
   health/HealthEvaluatorTest.cpp
@@ -1288,7 +1288,7 @@ target_link_libraries(dasall_health_evaluator_unit_test
 dasall_apply_common_options(dasall_health_evaluator_unit_test)
 
 add_test(NAME HealthEvaluatorTest COMMAND dasall_health_evaluator_unit_test)
-set_tests_properties(HealthEvaluatorTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthEvaluatorTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_recovery_hint_emitter_unit_test
   health/RecoveryHintEmitterTest.cpp
@@ -1308,7 +1308,7 @@ target_link_libraries(dasall_recovery_hint_emitter_unit_test
 dasall_apply_common_options(dasall_recovery_hint_emitter_unit_test)
 
 add_test(NAME RecoveryHintEmitterTest COMMAND dasall_recovery_hint_emitter_unit_test)
-set_tests_properties(RecoveryHintEmitterTest PROPERTIES LABELS "unit")
+set_tests_properties(RecoveryHintEmitterTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_watchdog_service_interface_unit_test
   watchdog/WatchdogServiceInterfaceTest.cpp
@@ -1443,7 +1443,7 @@ target_link_libraries(dasall_health_policy_interface_unit_test
 dasall_apply_common_options(dasall_health_policy_interface_unit_test)
 
 add_test(NAME HealthPolicyInterfaceTest COMMAND dasall_health_policy_interface_unit_test)
-set_tests_properties(HealthPolicyInterfaceTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthPolicyInterfaceTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_health_probe_types_unit_test
   health/ProbeTypesTest.cpp
@@ -1458,7 +1458,7 @@ target_link_libraries(dasall_health_probe_types_unit_test
 dasall_apply_common_options(dasall_health_probe_types_unit_test)
 
 add_test(NAME ProbeTypesUnitTest COMMAND dasall_health_probe_types_unit_test)
-set_tests_properties(ProbeTypesUnitTest PROPERTIES LABELS "unit")
+set_tests_properties(ProbeTypesUnitTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_health_recovery_hint_unit_test
   health/RecoveryHintTest.cpp
@@ -1473,7 +1473,7 @@ target_link_libraries(dasall_health_recovery_hint_unit_test
 dasall_apply_common_options(dasall_health_recovery_hint_unit_test)
 
 add_test(NAME RecoveryHintUnitTest COMMAND dasall_health_recovery_hint_unit_test)
-set_tests_properties(RecoveryHintUnitTest PROPERTIES LABELS "unit")
+set_tests_properties(RecoveryHintUnitTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_health_errors_unit_test
   health/HealthErrorsTest.cpp
@@ -1488,7 +1488,7 @@ target_link_libraries(dasall_health_errors_unit_test
 dasall_apply_common_options(dasall_health_errors_unit_test)
 
 add_test(NAME HealthErrorsTest COMMAND dasall_health_errors_unit_test)
-set_tests_properties(HealthErrorsTest PROPERTIES LABELS "unit")
+set_tests_properties(HealthErrorsTest PROPERTIES LABELS "unit;health")
 
 add_executable(dasall_infra_error_code_unit_test
   InfraErrorCodeTest.cpp

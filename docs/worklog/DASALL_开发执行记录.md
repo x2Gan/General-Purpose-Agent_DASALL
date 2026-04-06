@@ -8,6 +8,55 @@
 
 ---
 
+## 记录 #127
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-017 注册 health 的 unit/contract/integration 测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-017-D/B 落盘：
+   - 更新 tests/unit/infra/CMakeLists.txt 与 tests/contract/CMakeLists.txt，为现有 health unit/contract 测试补齐 `health` 标签，形成组件级 discoverability 入口。
+   - 更新 tests/integration/CMakeLists.txt 与 tests/integration/infra/CMakeLists.txt，把 `dasall_health_wiring_integration_test` 纳入 integration 聚合目标并接入 health 子目录。
+   - 新增 tests/integration/infra/health/CMakeLists.txt 与 tests/integration/infra/health/HealthWiringIntegrationTest.cpp，落盘 health 最小 wiring smoke，验证 registry/executor/evaluator/recovery hint 的可执行主链。
+2. 完成 017 的测试收敛：
+   - `HealthWiringIntegrationTest` 覆盖 all-healthy snapshot 与 repeated failure -> critical recovery hint 两条主路径。
+   - 现有 health unit/contract 用例在保留 `unit`、`contract`、`smoke` 原标签的同时新增 `health` 标签，保证组件级定向回归不会影响全仓既有 gate。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-017` 标记为 Done，并补齐本轮执行记录、discoverability、integration smoke 与全量 gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests dasall_health_wiring_integration_test`
+   - `ctest --test-dir build-ci -N -L health`
+   - `ctest --test-dir build-ci --output-on-failure -R HealthWiringIntegrationTest`
+   - `ctest --test-dir build-ci --output-on-failure -L health`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - build-ci 配置成功，health integration 目标与 unit/contract 聚合目标构建通过。
+   - `ctest -N -L health` 发现 17 个带 `health` 标签的测试。
+   - `HealthWiringIntegrationTest` 定向执行通过，1/1 tests passed。
+   - `ctest -L health` 通过，health 标签 17/17 tests passed。
+   - `ctest -L unit` 通过，unit 标签 134/134 tests passed；`ctest -L contract` 通过，contract 标签 140/140 tests passed。
+
+### 结果
+
+1. HLT-TODO-017 已从“health 测试存在但缺少统一 discoverability 与 integration 入口”推进到“health unit/contract/integration 测试可按组件统一发现并执行”。
+2. `HLT-TODO-018` 现在可以基于稳定的 health 标签与 gate 结果，专门收口 health 质量门、阻塞台账与交付证据，而不必再兼顾测试注册实现。
+
+### 下一步
+
+1. 实现 `HLT-TODO-018`，回写 health 质量门、integration 准入变化、阻塞现状与交付证据，完成本轮 health 可执行主链收口。
+
+### 风险
+
+1. 当前 health integration 仍是最小 wiring smoke，并未覆盖 scheduler/event/config blocked 领域；后续推进 `HLT-TODO-009`、`HLT-TODO-012`、`HLT-TODO-014` 时，需要继续保持 `health` 标签下的 smoke 与 blocked 链路分离，避免把未解阻实现混入现有 discoverability 结果。
+
 ## 记录 #126
 
 - 日期：2026-04-06
