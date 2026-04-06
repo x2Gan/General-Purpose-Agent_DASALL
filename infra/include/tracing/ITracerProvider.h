@@ -3,12 +3,12 @@
 #include <cstdint>
 #include <memory>
 
+#include "tracing/TraceConfig.h"
 #include "tracing/TraceTypes.h"
 
 namespace dasall::infra::tracing {
 
 class ITracer;
-struct TraceConfig;
 
 class ITracerProvider {
  public:

@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #144
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-016 定义 tracing 配置模型与默认策略
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-016-D/B 配置收口：
+   - 新增 infra/include/tracing/TraceConfig.h，公开冻结 `tracing.enabled`、`provider`、`sampler`、`batch`、`export_timeout_ms`、`exporter`、`overflow_policy`、`force_flush_on_stop` 的首版配置模型。
+   - `TraceConfig` 现已显式落盘 6.9 默认值：`internal` provider、`parent_based_always_on` sampler、`ratio=0.1`、`batch 2048/512/5000ms`、`export timeout 30000ms`、`noop exporter`、`drop_oldest` overflow、`force_flush_on_stop=true`。
+   - 新增 `TraceConfigPatch` 与嵌套 patch 结构，固定 default -> profile -> deploy -> runtime 覆盖顺序，保持与 infra/config 子域的 overlay 语义一致。
+2. 完成 008 临时 blocker-fix 的公开收口：
+   - 更新 infra/include/tracing/ITracerProvider.h，改为直接包含公开 TraceConfig 头文件。
+   - 更新 infra/src/tracing/TracerProviderImpl.{h,cpp}，删除私有最小 `TraceConfig` 占位定义，provider 生命周期骨架改为直接消费公开配置模型，避免私有配置长期滞留在实现层。
+3. 完成构建与测试接线：
+   - 更新 infra/CMakeLists.txt，把 TraceConfig.h 纳入 `dasall_infra` 公开头集合。
+   - 新增 tests/unit/infra/tracing/TraceConfigTest.cpp，覆盖默认值冻结、default/profile/deploy/runtime 覆盖顺序、batch 约束非法组合三条路径。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，使 `TraceConfigTest` 进入 unit 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_trace_config_unit_test dasall_tracer_provider_impl_unit_test dasall_tracer_span_lifecycle_unit_test`
+   - `ctest --test-dir build-ci -N -R "TraceConfigTest|TracerProviderImplTest|TracerSpanLifecycleTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "TraceConfigTest|TracerProviderImplTest|TracerSpanLifecycleTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_trace_config_unit_test`、`dasall_tracer_provider_impl_unit_test`、`dasall_tracer_span_lifecycle_unit_test` 构建通过，说明公开配置模型已成功进入现有 tracing 构建图。
+   - `ctest -N -R "TraceConfigTest|TracerProviderImplTest|TracerSpanLifecycleTest"` 发现 3 个 tracing 相关用例，证明新旧 tracing 配置/生命周期测试入口均可发现。
+   - 定向执行 `TraceConfigTest`、`TracerProviderImplTest`、`TracerSpanLifecycleTest` 通过，确认 016 收口未破坏 008/009 的 provider 与 tracer/span 闭环。
+   - `ctest -L unit` 通过，148/148 tests passed；本轮未引入新增告警。
+
+### 结果
+
+1. TRC-TODO-016 已完成，TRC-TODO-011 的配置前置依赖已解除，后续采样/缓冲/导出三轮可直接复用公开 TraceConfig 输入面。
+2. tracing 配置覆盖顺序已与 infra/config 子域的 default/profile/deploy/runtime 语义对齐，避免后续 011~013 再引入独立 overlay 规则。
+
+### 下一步
+
+1. 执行 TRC-TODO-011，落盘 SamplingPolicyEngine 本地采样策略，并把当前 tracer/span 主链接入采样决策。
+
+### 风险
+
+1. 当前 TraceConfig 仍只冻结 v1 本地闭环所需字段，尚未引入 span limits 或远程采样 polling 等 v2 配置；推进 011/013 时必须继续守住“不提前扩写 OTLP/remote sampling”边界。
+
 ## 记录 #143
 
 - 日期：2026-04-06

@@ -251,6 +251,21 @@ dasall_apply_common_options(dasall_metrics_errors_unit_test)
 add_test(NAME MetricsErrorsTest COMMAND dasall_metrics_errors_unit_test)
 set_tests_properties(MetricsErrorsTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_trace_config_unit_test
+  tracing/TraceConfigTest.cpp
+)
+
+target_link_libraries(dasall_trace_config_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_trace_config_unit_test)
+
+add_test(NAME TraceConfigTest COMMAND dasall_trace_config_unit_test)
+set_tests_properties(TraceConfigTest PROPERTIES LABELS "unit;tracing")
+
 add_executable(dasall_metrics_snapshots_unit_test
   MetricsSnapshotsTest.cpp
 )

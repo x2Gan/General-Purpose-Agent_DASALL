@@ -171,6 +171,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/tracing/ITracer.h
   include/tracing/ISpan.h
   include/tracing/ITraceContextPropagator.h
+  include/tracing/TraceConfig.h
   include/tracing/TraceTypes.h
   include/tracing/TraceErrors.h
   include/metrics/IMetricConfigPolicy.h

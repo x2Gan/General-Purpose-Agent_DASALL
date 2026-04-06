@@ -11,14 +11,6 @@
 
 namespace dasall::infra::tracing {
 
-struct TraceConfig {
-  bool enabled = true;
-  std::string provider_type = "internal";
-  bool force_flush_on_stop = true;
-
-  [[nodiscard]] bool is_valid() const;
-};
-
 class TracerProviderImpl final : public ITracerProvider {
  public:
   TracerProviderImpl() = default;

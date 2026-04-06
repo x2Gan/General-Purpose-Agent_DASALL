@@ -26,10 +26,6 @@ constexpr std::string_view kTracerProviderSourceRef = "TracerProviderImpl";
 
 }  // namespace
 
-bool TraceConfig::is_valid() const {
-  return !provider_type.empty() && is_printable_ascii(provider_type);
-}
-
 TraceOperationStatus TracerProviderImpl::init(const TraceConfig& config) {
   if (lifecycle_state_ != LifecycleState::Created) {
     return invalid_transition("init", "created");

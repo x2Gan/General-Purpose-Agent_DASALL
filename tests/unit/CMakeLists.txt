@@ -75,6 +75,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_health_probe_interface_unit_test
 	dasall_health_snapshot_unit_test
 	${DASALL_METRICS_UNIT_TEST_EXECUTABLE_TARGETS}
+	dasall_trace_config_unit_test
 	dasall_trace_types_unit_test
 	dasall_span_interface_unit_test
 	dasall_trace_context_propagator_interface_unit_test
