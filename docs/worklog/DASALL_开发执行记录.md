@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #121
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-008 实现 ProbeRegistry 注册治理骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-008-D/B 落盘：
+   - 新增 infra/src/health/ProbeRegistry.h 与 infra/src/health/ProbeRegistry.cpp，落盘 `ProbeRegistry`、`ProbeRegistryRegisterResult`、`ProbeRegistryRemoveResult`，覆盖同名唯一校验、按组查询、descriptor 查找与注销路径。
+   - 按 health 详细设计 6.9 的默认周期/超时为 `ProbeDescriptor` 补齐最小默认值，并在 profile critical group 尚未冻结前将 `criticality` 保持为 `NonCritical` 占位，避免伪造运行策略。
+2. 完成 008 对 007 的直接接线：
+   - 调整 infra/src/health/HealthMonitorFacade.h 与 infra/src/health/HealthMonitorFacade.cpp，使 façade 的注册治理委托 `ProbeRegistry`，不再自行维护内部 map。
+3. 完成 008 的 unit/CMake 接线：
+   - 新增 tests/unit/infra/health/ProbeRegistryTest.cpp，覆盖重复注册拒绝、分组查询与注销一致性。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，注册 `dasall_probe_registry_unit_test`，并把 `ProbeRegistry.cpp` 纳入 `HealthMonitorFacadeTest` 回归编译链路。
+4. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-008` 标记为 Done，并补齐本轮执行记录、外部参考、发现性和 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_probe_registry_unit_test dasall_health_monitor_facade_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "(ProbeRegistryTest|HealthMonitorFacadeTest)"`
+   - `ctest --test-dir build-ci -N -R ProbeRegistryTest`
+   - `cmake --build build-ci --target dasall_unit_tests`
+2. 结果：
+   - build-ci 配置成功，`dasall_probe_registry_unit_test` 与 `dasall_health_monitor_facade_unit_test` 构建通过。
+   - `ProbeRegistryTest` 与 `HealthMonitorFacadeTest` 定向执行通过，2/2 tests passed。
+   - `ProbeRegistryTest` 被 ctest 发现并注册到 unit 标签。
+   - `dasall_unit_tests` 通过，unit 标签 130/130 tests passed。
+
+### 结果
+
+1. HLT-TODO-008 已从“health façade 内部占位注册逻辑”推进到“存在独立 ProbeRegistry 注册治理骨架，并由 façade 直接委托”。
+2. `HLT-TODO-010` 现在可以直接复用 `ProbeRegistry` 的 descriptor/probe 查询能力，继续实现执行骨架，而不必再重建注册存储。
+
+### 下一步
+
+1. 实现 `HLT-TODO-010`，落盘 `ProbeExecutor` 执行骨架，并补超时/异常结构化返回与批量执行 unit 验证。
+
+### 风险
+
+1. 当前 `ProbeRegistry` 仅填充默认 interval/timeout 与 `NonCritical` criticality，占位服务于执行链打通；待 profile 键命名与 critical group 策略冻结后，仍需由后续任务把默认值切换为真实配置驱动。
+
 ## 记录 #120
 
 - 日期：2026-04-06

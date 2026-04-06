@@ -46,15 +46,21 @@ HealthMonitorRegistrationResult HealthMonitorFacade::register_probe(
         "health.register_probe");
   }
 
-  const bool replaced_existing = registrations_.find(registration.probe_name) !=
-                                 registrations_.end();
-  registrations_[registration.probe_name] = registration;
+  const auto registry_result = registry_.register_probe(registration);
+  if (!registry_result.ok) {
+    return HealthMonitorRegistrationResult{
+        .ok = false,
+        .result_code = registry_result.result_code,
+        .error = registry_result.error,
+        .replaced_existing = false,
+    };
+  }
 
   if (lifecycle_state_ == LifecycleState::Created) {
     lifecycle_state_ = LifecycleState::Ready;
   }
 
-  return HealthMonitorRegistrationResult::success(replaced_existing);
+  return HealthMonitorRegistrationResult::success();
 }
 
 HealthSnapshotResult HealthMonitorFacade::evaluate_now() {
@@ -65,7 +71,7 @@ HealthSnapshotResult HealthMonitorFacade::evaluate_now() {
         "health.evaluate_now");
   }
 
-  if (registrations_.empty()) {
+  if (registry_.size() == 0U) {
     return make_snapshot_failure(
         contracts::ResultCode::ValidationFieldMissing,
         "health monitor requires at least one registered probe before evaluate_now",
@@ -114,7 +120,7 @@ bool HealthMonitorFacade::is_in_safe_observe_mode() const {
 }
 
 std::size_t HealthMonitorFacade::registered_probe_count() const {
-  return registrations_.size();
+  return registry_.size();
 }
 
 std::size_t HealthMonitorFacade::listener_count() const {

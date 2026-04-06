@@ -2,12 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include "health/IHealthMonitor.h"
+#include "health/ProbeRegistry.h"
 
 namespace dasall::infra {
 
@@ -40,7 +39,7 @@ class HealthMonitorFacade final : public IHealthMonitor {
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   std::uint64_t next_snapshot_version_ = 1;
-  std::map<std::string, HealthProbeRegistration> registrations_;
+  ProbeRegistry registry_;
   std::vector<IHealthStateListener*> listeners_;
   std::optional<HealthSnapshot> latest_snapshot_;
   std::optional<std::string> safe_observe_reason_;
