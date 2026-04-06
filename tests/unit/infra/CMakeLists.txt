@@ -118,7 +118,6 @@ set_tests_properties(MetricsConfigPolicyInterfaceTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_metrics_config_merge_unit_test
   metrics/MetricsConfigMergeTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsConfigPolicy.cpp
 )
 
 target_include_directories(dasall_metrics_config_merge_unit_test
@@ -135,12 +134,10 @@ target_link_libraries(dasall_metrics_config_merge_unit_test
 dasall_apply_common_options(dasall_metrics_config_merge_unit_test)
 
 add_test(NAME MetricsConfigMergeTest COMMAND dasall_metrics_config_merge_unit_test)
-set_tests_properties(MetricsConfigMergeTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsConfigMergeTest PROPERTIES LABELS "unit;metrics")
 
 add_executable(dasall_metrics_reader_scheduler_unit_test
   metrics/MetricsReaderSchedulerTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricReaderScheduler.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsConfigPolicy.cpp
 )
 
 target_include_directories(dasall_metrics_reader_scheduler_unit_test
@@ -157,13 +154,10 @@ target_link_libraries(dasall_metrics_reader_scheduler_unit_test
 dasall_apply_common_options(dasall_metrics_reader_scheduler_unit_test)
 
 add_test(NAME MetricsReaderSchedulerTest COMMAND dasall_metrics_reader_scheduler_unit_test)
-set_tests_properties(MetricsReaderSchedulerTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsReaderSchedulerTest PROPERTIES LABELS "unit;metrics")
 
 add_executable(dasall_metrics_exporter_adapter_unit_test
   metrics/MetricsExporterAdapterTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsExporterAdapter.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricReaderScheduler.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsConfigPolicy.cpp
 )
 
 target_include_directories(dasall_metrics_exporter_adapter_unit_test
@@ -180,13 +174,10 @@ target_link_libraries(dasall_metrics_exporter_adapter_unit_test
 dasall_apply_common_options(dasall_metrics_exporter_adapter_unit_test)
 
 add_test(NAME MetricsExporterAdapterTest COMMAND dasall_metrics_exporter_adapter_unit_test)
-set_tests_properties(MetricsExporterAdapterTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsExporterAdapterTest PROPERTIES LABELS "unit;metrics;failure")
 
 add_executable(dasall_metrics_recovery_unit_test
   metrics/MetricsRecoveryTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsRecovery.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsExporterAdapter.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsConfigPolicy.cpp
 )
 
 target_include_directories(dasall_metrics_recovery_unit_test
@@ -203,7 +194,7 @@ target_link_libraries(dasall_metrics_recovery_unit_test
 dasall_apply_common_options(dasall_metrics_recovery_unit_test)
 
 add_test(NAME MetricsRecoveryTest COMMAND dasall_metrics_recovery_unit_test)
-set_tests_properties(MetricsRecoveryTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsRecoveryTest PROPERTIES LABELS "unit;metrics;failure")
 
 add_executable(dasall_metrics_errors_unit_test
   MetricsErrorsTest.cpp
@@ -587,10 +578,6 @@ set_tests_properties(MetricsProviderInterfaceTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_metrics_facade_unit_test
   metrics/MetricsFacadeTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsFacade.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/InstrumentRegistry.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/AggregationEngine.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/CardinalityGuard.cpp
 )
 
 target_include_directories(dasall_metrics_facade_unit_test
@@ -607,11 +594,10 @@ target_link_libraries(dasall_metrics_facade_unit_test
 dasall_apply_common_options(dasall_metrics_facade_unit_test)
 
 add_test(NAME MetricsFacadeTest COMMAND dasall_metrics_facade_unit_test)
-set_tests_properties(MetricsFacadeTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsFacadeTest PROPERTIES LABELS "unit;metrics")
 
 add_executable(dasall_instrument_registry_unit_test
   metrics/InstrumentRegistryTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/InstrumentRegistry.cpp
 )
 
 target_include_directories(dasall_instrument_registry_unit_test
@@ -628,14 +614,10 @@ target_link_libraries(dasall_instrument_registry_unit_test
 dasall_apply_common_options(dasall_instrument_registry_unit_test)
 
 add_test(NAME InstrumentRegistryTest COMMAND dasall_instrument_registry_unit_test)
-set_tests_properties(InstrumentRegistryTest PROPERTIES LABELS "unit")
+set_tests_properties(InstrumentRegistryTest PROPERTIES LABELS "unit;metrics")
 
 add_executable(dasall_metrics_cardinality_guard_unit_test
   metrics/MetricsCardinalityGuardTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsFacade.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/InstrumentRegistry.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/AggregationEngine.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/CardinalityGuard.cpp
 )
 
 target_include_directories(dasall_metrics_cardinality_guard_unit_test
@@ -652,14 +634,10 @@ target_link_libraries(dasall_metrics_cardinality_guard_unit_test
 dasall_apply_common_options(dasall_metrics_cardinality_guard_unit_test)
 
 add_test(NAME MetricsCardinalityGuardTest COMMAND dasall_metrics_cardinality_guard_unit_test)
-set_tests_properties(MetricsCardinalityGuardTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsCardinalityGuardTest PROPERTIES LABELS "unit;metrics;failure")
 
 add_executable(dasall_metrics_aggregation_unit_test
   metrics/MetricsAggregationTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsFacade.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/InstrumentRegistry.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/AggregationEngine.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/metrics/CardinalityGuard.cpp
 )
 
 target_include_directories(dasall_metrics_aggregation_unit_test
@@ -676,7 +654,7 @@ target_link_libraries(dasall_metrics_aggregation_unit_test
 dasall_apply_common_options(dasall_metrics_aggregation_unit_test)
 
 add_test(NAME MetricsAggregationTest COMMAND dasall_metrics_aggregation_unit_test)
-set_tests_properties(MetricsAggregationTest PROPERTIES LABELS "unit")
+set_tests_properties(MetricsAggregationTest PROPERTIES LABELS "unit;metrics")
 
 add_executable(dasall_meter_interface_unit_test
   MetricsMeterInterfaceTest.cpp

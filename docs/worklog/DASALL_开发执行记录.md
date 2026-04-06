@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #138
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-018 注册 metrics 的 unit 与 contract 测试入口
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-018-D/B 落盘：
+   - 更新 tests/unit/CMakeLists.txt，新增 `DASALL_METRICS_UNIT_TEST_EXECUTABLE_TARGETS`，把 metrics 接口测试与私有 runtime 单测统一纳入 `dasall_unit_tests` 顶层依赖清单。
+   - 更新 tests/unit/infra/CMakeLists.txt，把 metrics 私有单测从直编 runtime `.cpp` 收口为链接 `dasall_infra`，并补齐 `metrics`/`failure` 标签。
+   - 更新 tests/contract/CMakeLists.txt，新增 `dasall_register_metrics_contract_test`，为 metrics contract 测试补齐模块标签，并为错误映射测试补充 `failure` 标签。
+2. 完成 discoverability 与门禁收口：
+   - `ctest -N` 现在可统一发现 13 个 metrics 相关 unit/contract 测试入口。
+   - `dasall_unit_tests` 与 `dasall_contract_tests` 现在都能在顶层聚合目标里直接覆盖 metrics 新增测试，不再依赖手工定向构建。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-018` 标记为 Done，并补齐聚合清单、标签体系与门禁证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -R "(MetricsFacadeTest|InstrumentRegistryTest|MetricsCardinalityGuardTest|MetricsAggregationTest|MetricsConfigMergeTest|MetricsReaderSchedulerTest|MetricsExporterAdapterTest|MetricsRecoveryTest|MetricsProviderInterfaceBoundaryContractTest|MetricsConfigPolicyInterfaceBoundaryContractTest|MetricsErrorMappingContractTest|MetricsExporterInterfaceBoundaryContractTest|MetricsMeterInterfaceBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - build-ci 重新配置成功，`dasall_unit_tests` 构建日志已显式链接 8 个 metrics 私有 unit 目标。
+   - `ctest -N -R ...` 发现 13 个 metrics 相关 unit/contract 测试入口。
+   - `ctest -L unit` 通过，unit 标签 142/142 tests passed，标签摘要中 `metrics=8 tests`、`failure=3 tests`。
+   - `ctest -L contract` 通过，contract 标签 140/140 tests passed，标签摘要中 `metrics=5 tests`、`failure=1 test`。
+
+### 结果
+
+1. MET-TODO-018 已完成 metrics 测试入口的统一收口，顶层 unit/contract 门禁现在都能直接覆盖 metrics 新增测试。
+2. `MET-TODO-015~018` 至此全部完成，metrics 当前阶段已形成“配置/恢复 + 构建接线 + 测试门禁”闭环。
+
+### 下一步
+
+1. 若继续推进 metrics，下一任务应转向 `MET-TODO-020` 统一回写质量门与阻塞变化，或进入 ARC 修复增量中的 `MET-TODO-021` 与 `MET-TODO-022`。
+
+### 风险
+
+1. 当前 metrics 仍未落 integration 用例，contract 标签与 unit 聚合虽已收口，但 integration/failure 的跨组件准入仍要依赖后续任务继续补齐。
+
 ## 记录 #137
 
 - 日期：2026-04-06

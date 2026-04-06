@@ -55,6 +55,17 @@ function(dasall_register_secret_contract_test executable_target_name ctest_name 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;secret")
 endfunction()
 
+function(dasall_register_metrics_contract_test executable_target_name ctest_name source_file)
+  dasall_register_contract_test(
+    ${executable_target_name}
+    ${ctest_name}
+    ${source_file}
+    smoke
+  )
+
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;metrics")
+endfunction()
+
 # smoke group
 dasall_register_contract_test(
   dasall_contract_smoke_test
@@ -727,11 +738,10 @@ target_link_libraries(dasall_contract_logging_metrics_bridge_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_metrics_contract_test(
   dasall_contract_metrics_provider_interface_boundary_test
   MetricsProviderInterfaceBoundaryContractTest
   smoke/MetricsProviderInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_metrics_provider_interface_boundary_test
@@ -744,11 +754,10 @@ target_link_libraries(dasall_contract_metrics_provider_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_metrics_contract_test(
   dasall_contract_metrics_config_policy_interface_boundary_test
   MetricsConfigPolicyInterfaceBoundaryContractTest
   smoke/MetricsConfigPolicyInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_metrics_config_policy_interface_boundary_test
@@ -761,11 +770,10 @@ target_link_libraries(dasall_contract_metrics_config_policy_interface_boundary_t
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_metrics_contract_test(
   dasall_contract_metrics_error_mapping_test
   MetricsErrorMappingContractTest
   smoke/MetricsErrorMappingContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_metrics_error_mapping_test
@@ -777,6 +785,8 @@ target_link_libraries(dasall_contract_metrics_error_mapping_test
   PRIVATE
     dasall_infra
 )
+
+set_tests_properties(MetricsErrorMappingContractTest PROPERTIES LABELS "contract;smoke;metrics;failure")
 
 dasall_register_contract_test(
   dasall_contract_trace_error_mapping_test
@@ -795,11 +805,10 @@ target_link_libraries(dasall_contract_trace_error_mapping_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_metrics_contract_test(
   dasall_contract_metric_exporter_interface_boundary_test
   MetricsExporterInterfaceBoundaryContractTest
   smoke/MetricsExporterInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_metric_exporter_interface_boundary_test
@@ -812,11 +821,10 @@ target_link_libraries(dasall_contract_metric_exporter_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_metrics_contract_test(
   dasall_contract_meter_interface_boundary_test
   MetricsMeterInterfaceBoundaryContractTest
   smoke/MetricsMeterInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_meter_interface_boundary_test
