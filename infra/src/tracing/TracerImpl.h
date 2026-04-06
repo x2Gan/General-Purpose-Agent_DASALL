@@ -8,9 +8,13 @@
 
 namespace dasall::infra::tracing {
 
+class SpanProcessorPipeline;
+
 class TracerImpl final : public ITracer {
  public:
-    explicit TracerImpl(TracerScope scope, TraceConfig config = {});
+  explicit TracerImpl(TracerScope scope,
+                      TraceConfig config = {},
+                      std::shared_ptr<SpanProcessorPipeline> pipeline = {});
 
   [[nodiscard]] std::shared_ptr<ISpan> start_span(
       const SpanDescriptor& descriptor,
@@ -27,8 +31,9 @@ class TracerImpl final : public ITracer {
   [[nodiscard]] TraceContext resolve_parent_context(const TraceContext* parent) const;
 
   TracerScope scope_;
-    TraceConfig config_;
-    SamplingPolicyEngine sampling_policy_;
+  TraceConfig config_;
+  SamplingPolicyEngine sampling_policy_;
+  std::shared_ptr<SpanProcessorPipeline> pipeline_;
   std::optional<TraceContext> last_started_context_;
 };
 

@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "tracing/ITracer.h"
+#include "tracing/SpanProcessorPipeline.h"
 #include "tracing/TraceErrors.h"
 #include "tracing/TracerImpl.h"
 
@@ -41,6 +42,7 @@ TraceOperationStatus TracerProviderImpl::init(const TraceConfig& config) {
   last_config_ = config;
   last_scope_.reset();
   tracers_.clear();
+  pipeline_ = std::make_shared<SpanProcessorPipeline>(config);
   lifecycle_state_ = LifecycleState::Initialized;
   return TraceOperationStatus::success("tracing-provider://initialized");
 }
@@ -57,7 +59,9 @@ std::shared_ptr<ITracer> TracerProviderImpl::get_tracer(const TracerScope& scope
     return existing->second;
   }
 
-  auto tracer = std::make_shared<TracerImpl>(scope, last_config_.value_or(TraceConfig{}));
+  auto tracer = std::make_shared<TracerImpl>(scope,
+                                             last_config_.value_or(TraceConfig{}),
+                                             pipeline_);
   tracers_.emplace(scope_key, tracer);
   last_scope_ = scope;
   return tracer;
@@ -78,7 +82,11 @@ TraceOperationStatus TracerProviderImpl::force_flush(std::uint32_t timeout_ms) {
         "tracing.force_flush");
   }
 
-  return TraceOperationStatus::success("tracing-provider://flushed");
+  if (!pipeline_) {
+    return TraceOperationStatus::success("tracing-provider://flushed");
+  }
+
+  return pipeline_->force_flush(timeout_ms);
 }
 
 TraceOperationStatus TracerProviderImpl::shutdown(std::uint32_t timeout_ms) {
@@ -94,6 +102,15 @@ TraceOperationStatus TracerProviderImpl::shutdown(std::uint32_t timeout_ms) {
         TraceErrorCode::ShutdownTimeout,
         "tracing provider shutdown() timed out before processors/exporters completed",
         "tracing.shutdown");
+  }
+
+  if (pipeline_) {
+    const auto shutdown_status = pipeline_->shutdown(
+        timeout_ms,
+        last_config_.value_or(TraceConfig{}).force_flush_on_stop);
+    if (!shutdown_status.ok) {
+      return shutdown_status;
+    }
   }
 
   tracers_.clear();
@@ -124,6 +141,38 @@ const std::optional<TracerScope>& TracerProviderImpl::last_scope() const {
 
 std::size_t TracerProviderImpl::tracer_count() const {
   return tracers_.size();
+}
+
+TraceOperationStatus TracerProviderImpl::last_pipeline_status() const {
+  return pipeline_ ? pipeline_->last_status()
+                   : TraceOperationStatus::success("trace-pipeline://idle");
+}
+
+ExportBatchReport TracerProviderImpl::last_export_report() const {
+  return pipeline_ ? pipeline_->exporter().last_report() : ExportBatchReport{};
+}
+
+TraceModuleSnapshot TracerProviderImpl::module_snapshot() const {
+  if (pipeline_) {
+    return pipeline_->module_snapshot();
+  }
+
+  return TraceModuleSnapshot{.queue_depth = 0U,
+                             .dropped_total = 0U,
+                             .exporter_state = "uninitialized",
+                             .degraded = false};
+}
+
+std::uint64_t TracerProviderImpl::export_success_total() const {
+  return pipeline_ ? pipeline_->exporter().export_success_total() : 0U;
+}
+
+std::uint64_t TracerProviderImpl::export_failure_total() const {
+  return pipeline_ ? pipeline_->exporter().export_failure_total() : 0U;
+}
+
+std::string TracerProviderImpl::last_rendered_output() const {
+  return pipeline_ ? pipeline_->exporter().last_rendered_output() : std::string();
 }
 
 TraceOperationStatus TracerProviderImpl::invalid_transition(

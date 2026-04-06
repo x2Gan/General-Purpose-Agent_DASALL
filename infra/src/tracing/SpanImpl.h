@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -9,12 +11,16 @@
 
 namespace dasall::infra::tracing {
 
-class SpanImpl final : public ISpan {
+class SpanImpl;
+using SpanEndHook = std::function<void(const std::shared_ptr<SpanImpl>&)>;
+
+class SpanImpl final : public ISpan, public std::enable_shared_from_this<SpanImpl> {
  public:
   SpanImpl(SpanDescriptor descriptor,
            TraceContext context,
            TraceContext parent_context,
-           SamplingDecision sampling_decision);
+           SamplingDecision sampling_decision,
+           SpanEndHook end_hook = {});
 
   void set_attribute(std::string_view key, const TraceAttributeValue& value) override;
   void add_event(std::string_view name, const TraceAttributeMap& attrs) override;
@@ -32,6 +38,7 @@ class SpanImpl final : public ISpan {
   [[nodiscard]] const SamplingDecision& sampling_decision() const;
   [[nodiscard]] bool is_recording() const;
   [[nodiscard]] bool is_sampled() const;
+  [[nodiscard]] const SpanDescriptor& descriptor() const;
   [[nodiscard]] const TraceAttributeMap& attributes() const;
   [[nodiscard]] const SpanEndResult& end_result() const;
 
@@ -48,6 +55,7 @@ class SpanImpl final : public ISpan {
   std::string status_message_;
   std::uint32_t dropped_attr_count_ = 0;
   SpanEndResult end_result_{};
+  SpanEndHook end_hook_;
 };
 
 }  // namespace dasall::infra::tracing

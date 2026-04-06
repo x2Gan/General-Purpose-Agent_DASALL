@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #147
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-013 实现 SpanProcessorPipeline 与 ExporterAdapter 首版
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-013-D/B pipeline/exporter 主链落盘：
+   - 新增 infra/src/tracing/SpanProcessorPipeline.h 与 infra/src/tracing/SpanProcessorPipeline.cpp，落盘 `on_end()`、`force_flush()`、`shutdown()`、`flush_pending_buffer()` 与 queue/export 快照同步逻辑。
+   - 新增 infra/src/tracing/SpanExporterAdapter.h 与 infra/src/tracing/SpanExporterAdapter.cpp，落盘 `export_batch()`、`force_flush()`、`shutdown()` 与 `fallback_to_noop()`；首版支持 `noop` 和 `file` 两类 exporter，OTLP 暂按阻塞项走可观测失败路径。
+2. 完成 provider -> tracer -> span.end -> batch/export 闭环接线：
+   - 更新 infra/src/tracing/TracerProviderImpl.{h,cpp}，在 init() 时持有共享 SpanProcessorPipeline，并让 `force_flush()`/`shutdown()` 真正委托到 pipeline/exporter，而不再停留在 provider skeleton。
+   - 更新 infra/src/tracing/TracerImpl.{h,cpp}，给新建 SpanImpl 注入 end hook，使 ended span 在首次 `end()` 时自动进入 pipeline；这保证了 011 的采样结果、012 的 batch queue 和 013 的 exporter 可以在同一主链内收口。
+   - 更新 infra/src/tracing/SpanImpl.{h,cpp}，增加 `SpanEndHook`、`descriptor()` 只读访问面，并在首次 end 后通过 `shared_from_this()` 触发 pipeline 回调；重复 end 仍保持幂等，不重复进入导出链。
+3. 完成导出策略与 failure 可观测面：
+   - pipeline 在 hot path 上只执行 non-recording 过滤、buffer enqueue 与触发判定；真正 exporter 调用发生在 `dequeue_batch()` 之后，继续守住“不在 L2 持有期做 exporter I/O/渲染”的边界。
+   - `file` exporter 生成 line-oriented rendered output，供单测验证 trace_id/span_id/span name 等关键字段；`noop` exporter 只更新 ExportBatchReport 与 TraceModuleSnapshot。
+   - `file` exporter 超时会返回 TRC_E_EXPORT_TIMEOUT，unsupported `otlp` exporter 会返回 TRC_E_EXPORT_FAILURE；两条失败路径都会 fallback 到 noop，并把 degraded/export_failure_total/last_report 暴露为可观测结果。
+4. 完成构建与测试接线：
+   - 更新 infra/CMakeLists.txt，把 SpanProcessorPipeline 与 SpanExporterAdapter 纳入 `dasall_infra`。
+   - 新增 tests/unit/infra/tracing/BatchExportTest.cpp，覆盖 buffered noop force_flush、batch.disabled 下 file 即时导出、file timeout、unsupported otlp failure 四条路径。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，使 `BatchExportTest` 进入 unit/failure 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_batch_export_unit_test dasall_tracer_provider_impl_unit_test dasall_batch_span_buffer_unit_test dasall_sampling_policy_unit_test dasall_tracer_span_lifecycle_unit_test dasall_context_propagation_adapter_unit_test`
+   - `ctest --test-dir build-ci -N -R "BatchExportTest|BatchSpanBufferTest|SamplingPolicyTest|TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "BatchExportTest|BatchSpanBufferTest|SamplingPolicyTest|TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - 受影响 tracing 单测目标构建通过，说明 pipeline/exporter 代码、provider 接线和 end hook 改动已成功进入 tracing 构建图。
+   - `ctest -N -R "BatchExportTest|BatchSpanBufferTest|SamplingPolicyTest|TracerProviderImplTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"` 发现 6 个 tracing 相关用例，证明 013 新增导出闭环测试和 008~012 既有 tracing 回归入口均可发现。
+   - 定向执行 `BatchExportTest`、`BatchSpanBufferTest`、`SamplingPolicyTest`、`TracerProviderImplTest`、`TracerSpanLifecycleTest`、`ContextPropagationAdapterTest` 通过，确认 013 没有破坏 provider 生命周期、采样、buffer 和上下文传播既有闭环。
+   - `ctest -L unit` 通过，151/151 tests passed；本轮未引入新增告警。
+
+### 结果
+
+1. TRC-TODO-013 已完成，tracing 现在具备 ended sampled span -> batch queue -> exporter 的首版可判定闭环，011~013 用户要求的 sampler -> buffer -> pipeline/exporter 主链已全部落盘并验证。
+2. OTLP 仍未在本轮启用真实导出，但已经被明确收口为可观测阻塞失败路径，不再是静默缺口；后续可以在不改动现有主链的前提下补上真实 OTLP/export health 能力。
+
+### 下一步
+
+1. 执行 TRC-TODO-014，围绕 013 已暴露的 degraded/export_failure_total/queue_depth 快照实现 TraceHealthProbe 首版降级与恢复判定。
+
+### 风险
+
+1. 当前 file exporter 只输出可测试的 rendered text，不落真实文件路径；这是因为 file sink/path 配置尚未冻结，本轮刻意先把 exporter 语义与 failure 可观测面落稳，再留给后续迭代补文件落盘细节。
+
 ## 记录 #146
 
 - 日期：2026-04-06

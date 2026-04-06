@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "tracing/SpanProcessorPipeline.h"
 #include "tracing/SpanImpl.h"
 
 namespace dasall::infra::tracing {
@@ -55,10 +56,13 @@ thread_local std::optional<TraceContext> g_active_context;
 
 }  // namespace
 
-TracerImpl::TracerImpl(TracerScope scope, TraceConfig config)
+TracerImpl::TracerImpl(TracerScope scope,
+                       TraceConfig config,
+                       std::shared_ptr<SpanProcessorPipeline> pipeline)
     : scope_(std::move(scope)),
       config_(std::move(config)),
-      sampling_policy_(config_.sampler) {}
+      sampling_policy_(config_.sampler),
+      pipeline_(std::move(pipeline)) {}
 
 std::shared_ptr<ISpan> TracerImpl::start_span(
     const SpanDescriptor& descriptor,
@@ -103,7 +107,15 @@ std::shared_ptr<ISpan> TracerImpl::start_span(
   };
 
   last_started_context_ = context;
-  return std::make_shared<SpanImpl>(descriptor, context, resolved_parent, decision);
+  return std::make_shared<SpanImpl>(descriptor,
+                                    context,
+                                    resolved_parent,
+                                    decision,
+                                    [pipeline = pipeline_](const std::shared_ptr<SpanImpl>& span) {
+                                      if (pipeline) {
+                                        (void)pipeline->on_end(span);
+                                      }
+                                    });
 }
 
 void TracerImpl::with_active_span(

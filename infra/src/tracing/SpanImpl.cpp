@@ -16,13 +16,15 @@ std::atomic<std::int64_t> g_span_end_timestamp_seed{1712448000000};
 SpanImpl::SpanImpl(SpanDescriptor descriptor,
                    TraceContext context,
                    TraceContext parent_context,
-                   SamplingDecision sampling_decision)
+                   SamplingDecision sampling_decision,
+                   SpanEndHook end_hook)
     : descriptor_(std::move(descriptor)),
       context_(std::move(context)),
       parent_context_(std::move(parent_context)),
       sampling_decision_(std::move(sampling_decision)),
       recording_(sampling_decision_.decision != SamplingDecisionKind::Drop),
-      attrs_(recording_ ? descriptor_.attrs : TraceAttributeMap{}) {}
+      attrs_(recording_ ? descriptor_.attrs : TraceAttributeMap{}),
+      end_hook_(std::move(end_hook)) {}
 
 void SpanImpl::set_attribute(std::string_view key, const TraceAttributeValue& value) {
   if (ended_ || !recording_) {
@@ -76,6 +78,13 @@ SpanEndResult SpanImpl::end(std::optional<std::int64_t> end_ts_unix_ms) {
         .status_message = status_message_,
         .dropped_attr_count = dropped_attr_count_,
     };
+
+    if (end_hook_) {
+      try {
+        end_hook_(shared_from_this());
+      } catch (...) {
+      }
+    }
   }
 
   return end_result_;
@@ -119,6 +128,10 @@ bool SpanImpl::is_recording() const {
 
 bool SpanImpl::is_sampled() const {
   return sampling_decision_.decision == SamplingDecisionKind::RecordAndSample;
+}
+
+const SpanDescriptor& SpanImpl::descriptor() const {
+  return descriptor_;
 }
 
 const TraceAttributeMap& SpanImpl::attributes() const {

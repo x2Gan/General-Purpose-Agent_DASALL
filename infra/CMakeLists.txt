@@ -33,6 +33,10 @@ set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/ContextPropagationAdapter.h
   src/tracing/BatchSpanBuffer.cpp
   src/tracing/BatchSpanBuffer.h
+  src/tracing/SpanExporterAdapter.cpp
+  src/tracing/SpanExporterAdapter.h
+  src/tracing/SpanProcessorPipeline.cpp
+  src/tracing/SpanProcessorPipeline.h
 )
 
 set(DASALL_INFRA_METRICS_SOURCES
