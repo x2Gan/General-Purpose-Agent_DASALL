@@ -170,7 +170,7 @@
 | HLT-TODO-008 | Done (2026-04-06) | 实现 ProbeRegistry 注册治理骨架 | health 设计 6.2/6.3/6.7 | 6.2 ProbeRegistry；6.3 输入输出 | L3 | infra/src/health/ProbeRegistry.cpp | register_probe, unregister_probe, list_by_group | unit：重复注册拒绝、分组查询 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004、HLT-TODO-007 | 无 | 无 | Registry 私有头/源、单测；2026-04-06 已落盘 infra/src/health/ProbeRegistry.h、infra/src/health/ProbeRegistry.cpp、tests/unit/infra/health/ProbeRegistryTest.cpp，并调整 infra/src/health/HealthMonitorFacade.h、infra/src/health/HealthMonitorFacade.cpp 与 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，使 façade 注册路径委托 `ProbeRegistry`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_probe_registry_unit_test dasall_health_monitor_facade_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(ProbeRegistryTest|HealthMonitorFacadeTest)"`、`ctest --test-dir build-ci -N -R ProbeRegistryTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证重复注册拒绝、分组查询与 façade 回归，unit 标签 130/130 通过 | 仅当重复注册返回可判定失败且分组查询一致时完成 |
 | HLT-TODO-009 | Blocked | 实现 ProbeScheduler 调度骨架 | health 设计 6.2/6.7；11.1 | 6.2 ProbeScheduler；6.7 步骤 3 | L2 | infra/src/health/ProbeScheduler.cpp | start(periods), stop(), tick_once() | unit：周期触发与超时路由；failure：调度线程故障退化 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-008 | HLT-BLK-001 | platform 线程/定时抽象接口冻结 | 调度骨架或阻塞记录 | 仅当平台抽象冻结后状态由 Blocked 转 Not Started |
 | HLT-TODO-010 | Done (2026-04-06) | 实现 ProbeExecutor 执行骨架 | health 设计 6.2/6.7/6.8 | 6.2 ProbeExecutor；6.8 探针超时/异常 | L3 | infra/src/health/ProbeExecutor.cpp | execute_once(descriptor), execute_batch(group) | unit：超时/异常结构化返回；failure：探针持续失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001、HLT-TODO-004、HLT-TODO-008 | 无 | 无 | Executor 私有头/源、单测；2026-04-06 已落盘 infra/src/health/ProbeExecutor.h、infra/src/health/ProbeExecutor.cpp、tests/unit/infra/health/ProbeExecutorTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `ProbeExecutorTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_probe_executor_unit_test dasall_probe_registry_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(ProbeExecutorTest|ProbeRegistryTest)"`、`ctest --test-dir build-ci -N -R ProbeExecutorTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证超时/异常结构化返回、批量执行与连续失败计数，unit 标签 131/131 通过 | 仅当超时与异常都映射明确错误码且测试通过时完成 |
-| HLT-TODO-011 | Not Started | 实现 HealthEvaluator 三态评估骨架 | health 设计 6.2/6.7/6.8/6.9 | 6.2 HealthEvaluator；6.8 异常分类；6.9 阈值配置 | L3 | infra/src/health/HealthEvaluator.cpp | evaluate(results), evaluate_transition(previous,current) | unit：Healthy/Degraded/Unhealthy 判定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005、HLT-TODO-010 | profile 键命名未冻结（部分） | 阈值先按默认键实现，运行时覆盖后置 | Evaluator 骨架、单测 | 仅当三态判定与连续失败阈值行为可重复验证时完成 |
+| HLT-TODO-011 | Done (2026-04-06) | 实现 HealthEvaluator 三态评估骨架 | health 设计 6.2/6.7/6.8/6.9 | 6.2 HealthEvaluator；6.8 异常分类；6.9 阈值配置 | L3 | infra/src/health/HealthEvaluator.cpp | evaluate(results), evaluate_transition(previous,current) | unit：Healthy/Degraded/Unhealthy 判定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005、HLT-TODO-010 | profile 键命名未冻结（部分） | 阈值先按默认键实现，运行时覆盖后置 | Evaluator 私有头/源、单测；2026-04-06 已落盘 infra/src/health/HealthEvaluator.h、infra/src/health/HealthEvaluator.cpp、tests/unit/infra/health/HealthEvaluatorTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `HealthEvaluatorTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_health_evaluator_unit_test`、`ctest --test-dir build-ci --output-on-failure -R HealthEvaluatorTest`、`ctest --test-dir build-ci -N -R HealthEvaluatorTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证 Healthy/Degraded/Unhealthy 判定与状态转移，unit 标签 132/132 通过 | 仅当三态判定与连续失败阈值行为可重复验证时完成 |
 | HLT-TODO-012 | Blocked | 实现 HealthEventPublisher 状态事件发布骨架 | health 设计 6.2/6.8/6.10；11.1 | 6.2 HealthEventPublisher；6.10 状态转移事件 | L2 | infra/src/health/HealthEventPublisher.cpp | publish_transition(from,to,reason), publish_probe_failure(result) | unit：仅状态变化时发布；failure：发布失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-005、HLT-TODO-011 | HLT-BLK-002 | event bus 最小发布接口冻结 | 发布骨架或阻塞记录 | 仅当 event bus 最小接口冻结后可解除阻塞 |
 | HLT-TODO-013 | Not Started | 定义 HealthErrors 错误码域与映射 | health 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/health/HealthErrors.h | INF_E_HEALTH_PROBE_TIMEOUT、INF_E_HEALTH_PROBE_EXCEPTION、INF_E_HEALTH_PROBE_NOT_FOUND、INF_E_HEALTH_POLICY_INVALID、INF_E_HEALTH_EVENT_PUBLISH_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-001、HLT-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试 | 仅当 5 个错误码可追溯且映射测试通过时完成 |
 | HLT-TODO-014 | Blocked | 定义 HealthConfigPolicy 配置模型与覆盖策略 | health 设计 6.9/11.1；蓝图 5.1 | 6.9 配置项表 | L2 | infra/src/health/HealthConfigPolicy.cpp | merge(default/profile/deploy), validate_thresholds() | unit：默认值与覆盖优先级；failure：非法阈值拒绝 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005 | HLT-BLK-003 | profiles 下 infra.health 键命名冻结 | 配置策略代码或阻塞记录 | 仅当配置键命名冻结后可由 Blocked 转 Not Started |
@@ -415,3 +415,49 @@ Build 合规复核：
 2. 边界保持：实现停留在同步执行骨架和既有 contracts 错误类型内，未越权进入 scheduler/blocker 009 的线程抽象范围。
 3. 测试闭环：新增用例覆盖 timeout、exception、batch 和 repeated failure escalation，并保留对 `ProbeRegistry` 的回归验证。
 4. 提交隔离：本轮提交范围限定为 `HLT-TODO-010` 的 executor 实现、unit CMake/test 接线与 TODO/worklog 证据，不混入 `HLT-TODO-011`、`HLT-TODO-013`。
+
+## 15. 本轮执行记录（2026-04-06 / HLT-TODO-011）
+
+### 15.1 选中任务
+
+1. 本轮任务：HLT-TODO-011。
+2. 可执行性依据：`HLT-TODO-003`、`HLT-TODO-005`、`HLT-TODO-010` 已完成，当前仓库已有 `IHealthPolicy`、`HealthSnapshot/HealthTransition` 与 `ProbeExecutor` 输出；`HLT-BLK-003` 只影响 profile 键命名和运行时覆盖，本轮可按 6.9 默认阈值先落最小 evaluator。
+
+### 15.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_health模块详细设计.md 6.2/6.7/6.8 已明确 `HealthEvaluator` 负责基于 probe 结果聚合出三态快照，并输出状态转移对象，不承担事件发布或恢复执行。
+2. docs/architecture/DASALL_infra_health模块详细设计.md 6.9 已冻结默认阈值：`degraded.threshold=1`、`unhealthy.consecutive_failures=3`；当前 profile 键命名未冻结，因此 evaluator 只能先固化默认值，不引入运行时覆盖。
+3. `HLT-TODO-010` 已让 repeated failure 在 `ProbeResult.status` 上体现为 `Unhealthy`，因此 evaluator 可以在不新增执行依赖的前提下，根据结果状态完成 Healthy/Degraded/Unhealthy 收敛。
+4. 外部参考：Kubernetes 官方文档 `Liveness, Readiness, and Startup Probes` 将 readiness/liveness 失败区分为可降级与需恢复两类；本轮 evaluator 沿用这一原则，把单次失败聚合为 `Degraded`，把执行器已判定的 `Unhealthy` 结果聚合为 failed snapshot。
+
+D 结论：
+
+1. `HealthEvaluator` 作为 infra/health 私有实现落盘在 infra/src/health，实现 `IHealthPolicy::evaluate` 和 `evaluate_transition(previous,current)`，固定三态输出与状态转移边界。
+2. 在 profile 键命名与 critical group 规则尚未冻结前，evaluator 采用默认策略：任一 `Unhealthy` 结果触发 failed snapshot；否则只要失败计数达到默认 degraded threshold 即输出 degraded snapshot；全健康则输出 ready snapshot。
+3. evaluator 只消费 `ProbeResultView`，不反向依赖 registry/executor 实现类，也不提前接入事件总线或状态存储。
+4. D Gate：PASS。
+
+### 15.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/health/HealthEvaluator.h、infra/src/health/HealthEvaluator.cpp：新增 `HealthEvaluator` 私有实现，落盘默认三态聚合、稳定 `policy_version()` 与 `evaluate_transition`。
+2. tests/unit/infra/health/HealthEvaluatorTest.cpp：新增 unit 测试，覆盖 invalid input 失败、Healthy/Degraded/Unhealthy 判定与状态转移输出。
+3. tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：注册 `dasall_health_evaluator_unit_test` 与 `HealthEvaluatorTest`。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_health_evaluator_unit_test`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -R HealthEvaluatorTest`：通过，1/1 tests passed。
+4. `ctest --test-dir build-ci -N -R HealthEvaluatorTest`：通过，发现 1 个目标测试。
+5. `cmake --build build-ci --target dasall_unit_tests`：通过，unit 标签 132/132 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接补齐健康三态聚合与状态转移骨架，而不是把判定逻辑散落在 executor 或 façade 中。
+2. 边界保持：实现停留在 `IHealthPolicy` 冻结接口和默认阈值策略内，未越权进入 profile 覆盖、event publisher 或 recovery hint 领域。
+3. 测试闭环：新增用例覆盖 invalid input、三态分类和 transition 输出，并补了发现性验证。
+4. 提交隔离：本轮提交范围限定为 `HLT-TODO-011` 的 evaluator 实现、unit CMake/test 接线与 TODO/worklog 证据，不混入 `HLT-TODO-013`。

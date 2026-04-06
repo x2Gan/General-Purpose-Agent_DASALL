@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #123
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-011 实现 HealthEvaluator 三态评估骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-011-D/B 落盘：
+   - 新增 infra/src/health/HealthEvaluator.h 与 infra/src/health/HealthEvaluator.cpp，落盘 `HealthEvaluator`、`policy_version()`、`evaluate` 与 `evaluate_transition`，固定默认三态收敛与状态转移输出。
+   - 在 `HLT-BLK-003` 未解阻前，仅按 6.9 默认阈值实现最小策略，不引入 profile 覆盖；任一 `Unhealthy` 结果直接进入 failed snapshot，其余失败先收敛为 degraded snapshot。
+2. 完成 011 的 unit/CMake 接线：
+   - 新增 tests/unit/infra/health/HealthEvaluatorTest.cpp，覆盖 invalid input 失败、Healthy/Degraded/Unhealthy 判定与 transition 输出。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，注册 `dasall_health_evaluator_unit_test` 与 `HealthEvaluatorTest`。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-011` 标记为 Done，并补齐本轮执行记录、外部参考、发现性和 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_health_evaluator_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R HealthEvaluatorTest`
+   - `ctest --test-dir build-ci -N -R HealthEvaluatorTest`
+   - `cmake --build build-ci --target dasall_unit_tests`
+2. 结果：
+   - build-ci 配置成功，`dasall_health_evaluator_unit_test` 构建通过。
+   - `HealthEvaluatorTest` 定向执行通过，1/1 tests passed。
+   - `HealthEvaluatorTest` 被 ctest 发现并注册到 unit 标签。
+   - `dasall_unit_tests` 通过，unit 标签 132/132 tests passed。
+
+### 结果
+
+1. HLT-TODO-011 已从“ProbeResult 已可执行但无统一三态聚合策略”推进到“存在可编译、可测试、保持 `IHealthPolicy` 边界的 HealthEvaluator 最小实现”。
+2. `HLT-TODO-013` 现在可以基于已落盘的 executor/evaluator 失败路径，冻结 health 私有错误码域与 contracts 映射矩阵。
+
+### 下一步
+
+1. 实现 `HLT-TODO-013`，冻结 `HealthErrors` 错误码域与映射测试，完成本轮“评估与错误语义”收口。
+
+### 风险
+
+1. 当前 evaluator 只按 `ProbeResult.status` 做默认三态聚合，尚未纳入 profile 驱动的 critical group 与运行时覆盖；待 `HLT-BLK-003` 解阻后，需要再评估是否补充更细的 readiness/liveness 差异策略。
+
 ## 记录 #122
 
 - 日期：2026-04-06
