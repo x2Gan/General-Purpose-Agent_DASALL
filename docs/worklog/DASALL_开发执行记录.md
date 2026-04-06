@@ -8,6 +8,50 @@
 
 ---
 
+## 记录 #120
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-007 实现 HealthMonitorFacade 生命周期骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-007-D/B 落盘：
+   - 新增 infra/src/health/HealthMonitorFacade.h 与 infra/src/health/HealthMonitorFacade.cpp，落盘 `HealthMonitorFacade` 私有实现，覆盖 `register_probe`、`evaluate_now`、`get_snapshot`、`subscribe` 与 `enter_safe_observe_mode_for_test` 生命周期骨架。
+   - 将 `evaluate_now` 收敛为 007 阶段允许的占位快照输出：仅在存在已注册 probe 时返回带 version/timestamp 的 `HealthSnapshot`，在 `safe_observe_mode` 下拒绝新评估并保留最近一次成功快照，不越权进入 registry/executor/evaluator 主链。
+2. 完成 007 的 unit/CMake 接线：
+   - 新增 tests/unit/infra/health/HealthMonitorFacadeTest.cpp，覆盖未初始化失败、注册后成功求值与 `safe_observe_mode` 失败分支。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，注册 `dasall_health_monitor_facade_unit_test` 与 `HealthMonitorFacadeTest`，保证新用例进入 unit 聚合目标。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-007` 标记为 Done，并补齐本轮执行记录、外部参考、发现性和 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_health_monitor_facade_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R HealthMonitorFacadeTest`
+   - `ctest --test-dir build-ci -N -R HealthMonitorFacadeTest`
+   - `cmake --build build-ci --target dasall_unit_tests`
+2. 结果：
+   - build-ci 配置成功，`dasall_health_monitor_facade_unit_test` 构建通过。
+   - `HealthMonitorFacadeTest` 被 ctest 发现并定向执行通过，1/1 tests passed。
+   - `dasall_unit_tests` 通过，unit 标签 129/129 tests passed。
+
+### 结果
+
+1. HLT-TODO-007 已从“health 无服务实现”推进到“存在可编译、可测试、保持 frozen `IHealthMonitor` 边界的 façade 生命周期骨架”。
+2. `HLT-TODO-008` 现在可以在不重改 public API 的前提下继续把注册治理从 façade 内部占位逻辑抽离到独立 `ProbeRegistry`。
+
+### 下一步
+
+1. 实现 `HLT-TODO-008`，落盘 `ProbeRegistry` 注册治理骨架，并补重复注册拒绝与分组查询 unit 验证。
+
+### 风险
+
+1. 当前 `HealthMonitorFacade` 仍通过占位快照固定主入口语义，尚未接入 `ProbeRegistry`、`ProbeExecutor` 与 `HealthEvaluator`；在 `HLT-TODO-008/010/011` 完成前，不应把 007 的最小实现误判为主链闭环已完成。
+
 ## 记录 #119
 
 - 日期：2026-04-06

@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 health 组件专项 TODO
 
-最近更新时间：2026-03-31  
+最近更新时间：2026-04-06  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/health
 
@@ -166,7 +166,7 @@
 | HLT-TODO-004 | Done | 定义 ProbeTypes 数据结构 | health 设计 6.5 | 6.5 ProbeDescriptor/ProbeResult | L3 | infra/include/health/ProbeTypes.h | ProbeDescriptor, ProbeResult | unit：字段完整性与状态枚举覆盖 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001 | 无 | 无 | 数据结构头文件、单测；2026-03-31 已落盘 infra/include/health/ProbeTypes.h、tests/unit/infra/health/ProbeTypesTest.cpp，并将 IHealthProbe 对 ProbeResult 的前置声明收敛为实际对象依赖；通过 `cmake --build build-ci --target dasall_infra dasall_health_probe_interface_unit_test dasall_health_probe_types_unit_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthProbeInterfaceTest|ProbeTypesUnitTest"` 验证字段完整性、状态枚举和失败细节守卫 | 仅当字段与状态集合与 6.5 一致且默认语义可测试时完成 |
 | HLT-TODO-005 | Done | 定义 HealthStateTypes 数据结构 | health 设计 6.5/6.7 | 6.5 HealthSnapshot/HealthTransition | L3 | infra/include/health/HealthStateTypes.h | HealthSnapshot, HealthTransition | unit：version 单调与状态转移字段校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004 | 历史持久化策略未冻结 | 先仅实现进程内窗口语义 | 数据结构头文件、单测；2026-03-31 已落盘 infra/include/health/HealthStateTypes.h，并将 HealthSnapshot 入口统一收敛到 infra/include/health/HealthStateTypes.h、移除根层 wrapper；同步扩展 tests/unit/infra/HealthSnapshotTest.cpp 与 tests/contract/smoke/HealthSnapshotBoundaryContractTest.cpp，通过 `cmake --build build-ci --target dasall_infra dasall_health_snapshot_unit_test dasall_contract_health_snapshot_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "HealthSnapshotUnitTest|HealthSnapshotBoundaryContractTest"` 验证 version 元数据、状态枚举和 HealthTransition 字段守卫 | 仅当快照与转移对象字段覆盖设计约束并通过测试时完成 |
 | HLT-TODO-006 | Done | 定义 RecoveryHint 数据结构 | health 设计 6.5/6.8；ADR-007 | 6.5 RecoveryHint；6.8 恢复动作 | L2 | infra/include/health/RecoveryHint.h | RecoveryHint{reason_code,severity,suggested_action,evidence_ref} | contract：不含执行句柄字段；unit：字段完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-005 | 已解阻（2026-03-31） | 已通过 RecoveryHintBoundaryContractTest 冻结最小边界模板 | 对象头文件、contract 测试；2026-03-31 已落盘 infra/include/health/RecoveryHint.h、tests/unit/infra/health/RecoveryHintTest.cpp、tests/contract/smoke/RecoveryHintBoundaryContractTest.cpp，并在 tests/contract/CMakeLists.txt 注册模板；通过 `cmake --build build-ci --target dasall_infra dasall_health_recovery_hint_unit_test dasall_contract_recovery_hint_boundary_test` 与 `ctest --test-dir build-ci --output-on-failure -R "RecoveryHintUnitTest|RecoveryHintBoundaryContractTest"` 验证 advisory 字段完整性与无执行句柄边界，且 `ctest --test-dir build-ci -N` 可发现 RecoveryHintUnitTest / RecoveryHintBoundaryContractTest | 仅当 contract 测试能阻止执行字段进入 RecoveryHint 时完成 |
-| HLT-TODO-007 | Not Started | 实现 HealthMonitorFacade 生命周期骨架 | health 设计 6.2/6.7 | 6.2 HealthMonitorFacade；6.7 正常流程 | L3 | infra/src/health/HealthMonitorFacade.cpp | register_probe, evaluate_now, get_snapshot | unit：未初始化/已初始化路径；failure：safe_observe_mode | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-002、HLT-TODO-005 | 无 | 无 | Facade 骨架、单测 | 仅当主入口路径可判定成功/失败且 safe_observe_mode 可触发时完成 |
+| HLT-TODO-007 | Done (2026-04-06) | 实现 HealthMonitorFacade 生命周期骨架 | health 设计 6.2/6.7 | 6.2 HealthMonitorFacade；6.7 正常流程 | L3 | infra/src/health/HealthMonitorFacade.cpp | register_probe, evaluate_now, get_snapshot | unit：未初始化/已初始化路径；failure：safe_observe_mode | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-002、HLT-TODO-005 | 无 | 无 | Facade 私有头/源、单测；2026-04-06 已落盘 infra/src/health/HealthMonitorFacade.h、infra/src/health/HealthMonitorFacade.cpp、tests/unit/infra/health/HealthMonitorFacadeTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `HealthMonitorFacadeTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_health_monitor_facade_unit_test`、`ctest --test-dir build-ci --output-on-failure -R HealthMonitorFacadeTest`、`ctest --test-dir build-ci -N -R HealthMonitorFacadeTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证未初始化/已初始化路径与 safe_observe_mode 失败语义，unit 标签 129/129 通过 | 仅当主入口路径可判定成功/失败且 safe_observe_mode 可触发时完成 |
 | HLT-TODO-008 | Not Started | 实现 ProbeRegistry 注册治理骨架 | health 设计 6.2/6.3/6.7 | 6.2 ProbeRegistry；6.3 输入输出 | L3 | infra/src/health/ProbeRegistry.cpp | register_probe, unregister_probe, list_by_group | unit：重复注册拒绝、分组查询 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004、HLT-TODO-007 | 无 | 无 | Registry 骨架、单测 | 仅当重复注册返回可判定失败且分组查询一致时完成 |
 | HLT-TODO-009 | Blocked | 实现 ProbeScheduler 调度骨架 | health 设计 6.2/6.7；11.1 | 6.2 ProbeScheduler；6.7 步骤 3 | L2 | infra/src/health/ProbeScheduler.cpp | start(periods), stop(), tick_once() | unit：周期触发与超时路由；failure：调度线程故障退化 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-008 | HLT-BLK-001 | platform 线程/定时抽象接口冻结 | 调度骨架或阻塞记录 | 仅当平台抽象冻结后状态由 Blocked 转 Not Started |
 | HLT-TODO-010 | Not Started | 实现 ProbeExecutor 执行骨架 | health 设计 6.2/6.7/6.8 | 6.2 ProbeExecutor；6.8 探针超时/异常 | L3 | infra/src/health/ProbeExecutor.cpp | execute_once(descriptor), execute_batch(group) | unit：超时/异常结构化返回；failure：探针持续失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001、HLT-TODO-004、HLT-TODO-008 | 无 | 无 | Executor 骨架、单测 | 仅当超时与异常都映射明确错误码且测试通过时完成 |
@@ -277,3 +277,49 @@
    - 先执行 HLT-TODO-001~008、010~011、013、016 完成接口对象与主链骨架。
    - 并行推进 HLT-BLK-001~003 的解阻动作；HLT-BLK-004/005 已完成解阻。
    - 解阻后再推进 HLT-TODO-009、012、014、015、017，最后执行 HLT-TODO-018 收口证据。
+
+## 12. 本轮执行记录（2026-04-06 / HLT-TODO-007）
+
+### 12.1 选中任务
+
+1. 本轮任务：HLT-TODO-007。
+2. 可执行性依据：`HLT-TODO-002` 与 `HLT-TODO-005` 已完成，且 `HLT-TODO-007` 当前无 Blocked 依赖；当前代码缺口集中在 `HealthMonitorFacade` 生命周期骨架与最小 unit gate，而非 registry/executor/evaluator 主链实现。
+
+### 12.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_health模块详细设计.md 6.2/6.7/6.8 已明确 `HealthMonitorFacade` 只负责统一入口、生命周期与查询；`safe_observe_mode` 需要“保留最近快照并拒绝新评估请求”，不能越权承担恢复执行。
+2. infra/include/health/IHealthMonitor.h 已冻结 `register_probe`、`evaluate_now`、`get_snapshot`、`subscribe` 四个方法及 contracts `ResultCode/ErrorInfo` 错误边界，说明 007 只能在现有接口上补最小实现，不能改写 public API。
+3. tests/unit/infra/ConfigCenterFacadeTest.cpp 与 tests/unit/infra/secret/SecretManagerFacadeTest.cpp 已给出当前仓库的私有实现模式：私有 façade 放在 infra/src，单测通过 `tests/unit/infra/CMakeLists.txt` 引入 `infra/src` 私有头进行验证。
+4. 外部参考：Kubernetes 官方文档 `Liveness, Readiness, and Startup Probes` 指出 readiness 适用于初始化与临时故障期间的流量摘除，liveness 用于“应用无法继续前进”时的恢复判定；本轮据此保持 `safe_observe_mode` 仅阻断新评估、保留最近快照，而不在 health 内直接执行恢复动作。
+
+D 结论：
+
+1. `HealthMonitorFacade` 作为 infra/health 私有实现落盘在 infra/src/health，仅承接生命周期骨架，不提前吸收 `ProbeRegistry`、`ProbeExecutor`、`HealthEvaluator` 的职责。
+2. 在 `HLT-TODO-008/010/011` 尚未完成前，`evaluate_now` 只生成占位 `HealthSnapshot`，用于固定主入口成功/失败语义与版本化快照出口，不提前执行真实探针。
+3. `safe_observe_mode` 本轮只作为 façade 生命周期失败分支：拒绝新的 `evaluate_now`，同时保留最近一次成功快照供 `get_snapshot` 返回。
+4. D Gate：PASS。
+
+### 12.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/health/HealthMonitorFacade.h、infra/src/health/HealthMonitorFacade.cpp：新增 `HealthMonitorFacade` 私有实现，落盘 `register_probe`、`evaluate_now`、`get_snapshot`、`subscribe` 及 `safe_observe_mode` 测试钩子。
+2. tests/unit/infra/health/HealthMonitorFacadeTest.cpp：新增 unit 测试，覆盖未初始化失败、注册后成功求值、最近快照回读与 `safe_observe_mode` 失败语义。
+3. tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：注册 `dasall_health_monitor_facade_unit_test` 与 `HealthMonitorFacadeTest`，保证 unit 标签可发现。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_health_monitor_facade_unit_test`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -R HealthMonitorFacadeTest`：通过，1/1 tests passed。
+4. `ctest --test-dir build-ci -N -R HealthMonitorFacadeTest`：通过，发现 1 个目标测试。
+5. `cmake --build build-ci --target dasall_unit_tests`：通过，unit 标签 129/129 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接补齐 `HealthMonitorFacade` 主入口生命周期骨架，而不是把 registry/executor/evaluator 提前混入 007。
+2. 边界保持：实现停留在 `IHealthMonitor` 冻结接口和 contracts 错误边界内，未扩写 public headers，也未越权进入恢复执行链路。
+3. 测试闭环：新增用例包含正例、负例与 `safe_observe_mode` 失败分支，并补了发现性验证。
+4. 提交隔离：本轮提交范围限定为 `HLT-TODO-007` 的 health façade 实现、unit CMake/test 接线与 TODO/worklog 证据，不混入 `HLT-TODO-008`、`HLT-TODO-010`、`HLT-TODO-011`、`HLT-TODO-013`。
