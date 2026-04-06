@@ -169,7 +169,7 @@
 | HLT-TODO-007 | Done (2026-04-06) | 实现 HealthMonitorFacade 生命周期骨架 | health 设计 6.2/6.7 | 6.2 HealthMonitorFacade；6.7 正常流程 | L3 | infra/src/health/HealthMonitorFacade.cpp | register_probe, evaluate_now, get_snapshot | unit：未初始化/已初始化路径；failure：safe_observe_mode | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-002、HLT-TODO-005 | 无 | 无 | Facade 私有头/源、单测；2026-04-06 已落盘 infra/src/health/HealthMonitorFacade.h、infra/src/health/HealthMonitorFacade.cpp、tests/unit/infra/health/HealthMonitorFacadeTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `HealthMonitorFacadeTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_health_monitor_facade_unit_test`、`ctest --test-dir build-ci --output-on-failure -R HealthMonitorFacadeTest`、`ctest --test-dir build-ci -N -R HealthMonitorFacadeTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证未初始化/已初始化路径与 safe_observe_mode 失败语义，unit 标签 129/129 通过 | 仅当主入口路径可判定成功/失败且 safe_observe_mode 可触发时完成 |
 | HLT-TODO-008 | Done (2026-04-06) | 实现 ProbeRegistry 注册治理骨架 | health 设计 6.2/6.3/6.7 | 6.2 ProbeRegistry；6.3 输入输出 | L3 | infra/src/health/ProbeRegistry.cpp | register_probe, unregister_probe, list_by_group | unit：重复注册拒绝、分组查询 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-004、HLT-TODO-007 | 无 | 无 | Registry 私有头/源、单测；2026-04-06 已落盘 infra/src/health/ProbeRegistry.h、infra/src/health/ProbeRegistry.cpp、tests/unit/infra/health/ProbeRegistryTest.cpp，并调整 infra/src/health/HealthMonitorFacade.h、infra/src/health/HealthMonitorFacade.cpp 与 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt，使 façade 注册路径委托 `ProbeRegistry`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_probe_registry_unit_test dasall_health_monitor_facade_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(ProbeRegistryTest|HealthMonitorFacadeTest)"`、`ctest --test-dir build-ci -N -R ProbeRegistryTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证重复注册拒绝、分组查询与 façade 回归，unit 标签 130/130 通过 | 仅当重复注册返回可判定失败且分组查询一致时完成 |
 | HLT-TODO-009 | Blocked | 实现 ProbeScheduler 调度骨架 | health 设计 6.2/6.7；11.1 | 6.2 ProbeScheduler；6.7 步骤 3 | L2 | infra/src/health/ProbeScheduler.cpp | start(periods), stop(), tick_once() | unit：周期触发与超时路由；failure：调度线程故障退化 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-008 | HLT-BLK-001 | platform 线程/定时抽象接口冻结 | 调度骨架或阻塞记录 | 仅当平台抽象冻结后状态由 Blocked 转 Not Started |
-| HLT-TODO-010 | Not Started | 实现 ProbeExecutor 执行骨架 | health 设计 6.2/6.7/6.8 | 6.2 ProbeExecutor；6.8 探针超时/异常 | L3 | infra/src/health/ProbeExecutor.cpp | execute_once(descriptor), execute_batch(group) | unit：超时/异常结构化返回；failure：探针持续失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001、HLT-TODO-004、HLT-TODO-008 | 无 | 无 | Executor 骨架、单测 | 仅当超时与异常都映射明确错误码且测试通过时完成 |
+| HLT-TODO-010 | Done (2026-04-06) | 实现 ProbeExecutor 执行骨架 | health 设计 6.2/6.7/6.8 | 6.2 ProbeExecutor；6.8 探针超时/异常 | L3 | infra/src/health/ProbeExecutor.cpp | execute_once(descriptor), execute_batch(group) | unit：超时/异常结构化返回；failure：探针持续失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-001、HLT-TODO-004、HLT-TODO-008 | 无 | 无 | Executor 私有头/源、单测；2026-04-06 已落盘 infra/src/health/ProbeExecutor.h、infra/src/health/ProbeExecutor.cpp、tests/unit/infra/health/ProbeExecutorTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `ProbeExecutorTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_probe_executor_unit_test dasall_probe_registry_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(ProbeExecutorTest|ProbeRegistryTest)"`、`ctest --test-dir build-ci -N -R ProbeExecutorTest` 与 `cmake --build build-ci --target dasall_unit_tests` 验证超时/异常结构化返回、批量执行与连续失败计数，unit 标签 131/131 通过 | 仅当超时与异常都映射明确错误码且测试通过时完成 |
 | HLT-TODO-011 | Not Started | 实现 HealthEvaluator 三态评估骨架 | health 设计 6.2/6.7/6.8/6.9 | 6.2 HealthEvaluator；6.8 异常分类；6.9 阈值配置 | L3 | infra/src/health/HealthEvaluator.cpp | evaluate(results), evaluate_transition(previous,current) | unit：Healthy/Degraded/Unhealthy 判定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005、HLT-TODO-010 | profile 键命名未冻结（部分） | 阈值先按默认键实现，运行时覆盖后置 | Evaluator 骨架、单测 | 仅当三态判定与连续失败阈值行为可重复验证时完成 |
 | HLT-TODO-012 | Blocked | 实现 HealthEventPublisher 状态事件发布骨架 | health 设计 6.2/6.8/6.10；11.1 | 6.2 HealthEventPublisher；6.10 状态转移事件 | L2 | infra/src/health/HealthEventPublisher.cpp | publish_transition(from,to,reason), publish_probe_failure(result) | unit：仅状态变化时发布；failure：发布失败计数 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-005、HLT-TODO-011 | HLT-BLK-002 | event bus 最小发布接口冻结 | 发布骨架或阻塞记录 | 仅当 event bus 最小接口冻结后可解除阻塞 |
 | HLT-TODO-013 | Not Started | 定义 HealthErrors 错误码域与映射 | health 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/health/HealthErrors.h | INF_E_HEALTH_PROBE_TIMEOUT、INF_E_HEALTH_PROBE_EXCEPTION、INF_E_HEALTH_PROBE_NOT_FOUND、INF_E_HEALTH_POLICY_INVALID、INF_E_HEALTH_EVENT_PUBLISH_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-001、HLT-TODO-003 | 映射矩阵未成文 | 在 contract 测试固化映射矩阵 | 错误码头文件、映射测试 | 仅当 5 个错误码可追溯且映射测试通过时完成 |
@@ -369,3 +369,49 @@ Build 合规复核：
 2. 边界保持：`ProbeRegistry` 仅依赖现有 health public headers 与 contracts 错误类型，未扩写 public API，也未越权承担调度或恢复职责。
 3. 测试闭环：新增用例同时覆盖重复注册负例、按组查询正例、注销后一致性和 façade 回归。
 4. 提交隔离：本轮提交范围限定为 `HLT-TODO-008` 的 registry 实现、与 façade 的直接对接、unit CMake/test 接线及 TODO/worklog 证据，不混入 `HLT-TODO-010`、`HLT-TODO-011`、`HLT-TODO-013`。
+
+## 14. 本轮执行记录（2026-04-06 / HLT-TODO-010）
+
+### 14.1 选中任务
+
+1. 本轮任务：HLT-TODO-010。
+2. 可执行性依据：`HLT-TODO-001`、`HLT-TODO-004`、`HLT-TODO-008` 已完成，当前仓库已经具备 `IHealthProbe`、`ProbeDescriptor/ProbeResult` 与 `ProbeRegistry`；缺口集中在同步执行、错误结构化返回和连续失败计数。
+
+### 14.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_health模块详细设计.md 6.2/6.7/6.8 已明确 `ProbeExecutor` 只负责执行 probe、隔离超时/异常并把结果写回窗口，不承担调度线程与 evaluator 职责。
+2. `HLT-TODO-008` 已冻结 `ProbeRegistry` 的 descriptor/probe 查询能力，因此 010 可以复用 registry 做批量分组执行，而不再内嵌注册状态。
+3. `HLT-TODO-009` 仍因线程/定时抽象阻塞而未开始，说明 010 只能采用同步执行骨架，以“执行时长后验判定 timeout”的方式固定错误语义，不能提前引入线程取消机制。
+4. 外部参考：Kubernetes 官方文档 `Liveness, Readiness, and Startup Probes` 将 readiness/liveness 失败区分为临时故障与不可继续前进两类；本轮据此把单次 timeout/exception 先映射为 `Degraded`，连续失败达到阈值后再提升为 `Unhealthy`。
+
+D 结论：
+
+1. `ProbeExecutor` 作为 infra/health 私有实现落盘在 infra/src/health，通过 `ProbeRegistry` 查找 probe 并同步执行 `execute_once` / `execute_batch`。
+2. timeout 采用执行后 `latency_ms > timeout_ms` 的后验判定，异常通过 catch 结构化为失败 `ProbeResult`；两类失败分别映射到 contracts `ProviderTimeout` 与 `ToolExecutionFailed`，为后续 013 的私有错误码域冻结保留稳定落点。
+3. 执行结果统一绑定 `descriptor.probe_name`，并维护逐 probe 的连续失败计数；健康结果清零计数，失败达到默认 3 次后提升状态为 `Unhealthy`。
+4. D Gate：PASS。
+
+### 14.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/health/ProbeExecutor.h、infra/src/health/ProbeExecutor.cpp：新增 `ProbeExecutor` 私有实现，落盘同步执行、批量执行、timeout/exception 结构化返回与连续失败计数。
+2. tests/unit/infra/health/ProbeExecutorTest.cpp：新增 unit 测试，覆盖 timeout、exception、批量执行与连续失败升级语义。
+3. tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt：注册 `dasall_probe_executor_unit_test` 与 `ProbeExecutorTest`。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_probe_executor_unit_test dasall_probe_registry_unit_test`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -R "(ProbeExecutorTest|ProbeRegistryTest)"`：通过，2/2 tests passed。
+4. `ctest --test-dir build-ci -N -R ProbeExecutorTest`：通过，发现 1 个目标测试。
+5. `cmake --build build-ci --target dasall_unit_tests`：通过，unit 标签 131/131 tests passed。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接补齐 probe 执行、timeout/exception 结构化返回与失败计数，而不是把执行逻辑散落到 façade 或 evaluator。
+2. 边界保持：实现停留在同步执行骨架和既有 contracts 错误类型内，未越权进入 scheduler/blocker 009 的线程抽象范围。
+3. 测试闭环：新增用例覆盖 timeout、exception、batch 和 repeated failure escalation，并保留对 `ProbeRegistry` 的回归验证。
+4. 提交隔离：本轮提交范围限定为 `HLT-TODO-010` 的 executor 实现、unit CMake/test 接线与 TODO/worklog 证据，不混入 `HLT-TODO-011`、`HLT-TODO-013`。

@@ -8,6 +8,51 @@
 
 ---
 
+## 记录 #122
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-010 实现 ProbeExecutor 执行骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-010-D/B 落盘：
+   - 新增 infra/src/health/ProbeExecutor.h 与 infra/src/health/ProbeExecutor.cpp，落盘 `ProbeExecutor`、`execute_once`、`execute_batch`、连续失败计数查询，以及 timeout/exception/missing probe 的结构化失败路径。
+   - 保持 010 为同步执行骨架：不引入线程取消或调度抽象，而是通过执行耗时后验判定 timeout，并把单次失败映射为 `Degraded`、连续失败达到阈值后提升为 `Unhealthy`。
+2. 完成 010 的 unit/CMake 接线：
+   - 新增 tests/unit/infra/health/ProbeExecutorTest.cpp，覆盖 timeout、异常、批量执行与 repeated failure escalation。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，注册 `dasall_probe_executor_unit_test` 与 `ProbeExecutorTest`。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-010` 标记为 Done，并补齐本轮执行记录、外部参考、发现性和 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_probe_executor_unit_test dasall_probe_registry_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "(ProbeExecutorTest|ProbeRegistryTest)"`
+   - `ctest --test-dir build-ci -N -R ProbeExecutorTest`
+   - `cmake --build build-ci --target dasall_unit_tests`
+2. 结果：
+   - build-ci 配置成功，`dasall_probe_executor_unit_test` 与 `dasall_probe_registry_unit_test` 构建通过。
+   - `ProbeExecutorTest` 与 `ProbeRegistryTest` 定向执行通过，2/2 tests passed。
+   - `ProbeExecutorTest` 被 ctest 发现并注册到 unit 标签。
+   - `dasall_unit_tests` 通过，unit 标签 131/131 tests passed。
+
+### 结果
+
+1. HLT-TODO-010 已从“registry 已具备但执行链为空”推进到“存在可编译、可测试的同步 ProbeExecutor 执行骨架”。
+2. `HLT-TODO-011` 现在可以直接消费 `ProbeResult` 序列和连续失败语义，继续实现三态评估骨架。
+
+### 下一步
+
+1. 实现 `HLT-TODO-011`，落盘 `HealthEvaluator` 三态评估骨架，并补 Healthy/Degraded/Unhealthy 判定与状态转移 unit 验证。
+
+### 风险
+
+1. 当前 timeout 仍采用同步执行后的后验判定，不具备线程级提前中断能力；待 `HLT-TODO-009` 解阻后，需要再评估是否将 timeout 检测升级为真实调度超时控制。
+
 ## 记录 #121
 
 - 日期：2026-04-06

@@ -1253,6 +1253,28 @@ dasall_apply_common_options(dasall_probe_registry_unit_test)
 add_test(NAME ProbeRegistryTest COMMAND dasall_probe_registry_unit_test)
 set_tests_properties(ProbeRegistryTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_probe_executor_unit_test
+  health/ProbeExecutorTest.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/health/ProbeExecutor.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/health/ProbeRegistry.cpp
+)
+
+target_include_directories(dasall_probe_executor_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_probe_executor_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_probe_executor_unit_test)
+
+add_test(NAME ProbeExecutorTest COMMAND dasall_probe_executor_unit_test)
+set_tests_properties(ProbeExecutorTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_watchdog_service_interface_unit_test
   watchdog/WatchdogServiceInterfaceTest.cpp
 )
