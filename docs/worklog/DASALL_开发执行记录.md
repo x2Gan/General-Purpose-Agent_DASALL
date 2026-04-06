@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #141
+
+- 日期：2026-04-06
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-008 实现 TracerProviderImpl 生命周期骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 TRC-TODO-008-D/B 最小闭环：
+   - 新增 infra/src/tracing/TracerProviderImpl.h 与 infra/src/tracing/TracerProviderImpl.cpp，落盘 `TracerProviderImpl` 生命周期状态机、最小 `TraceConfig` 私有定义、`get_tracer()` scope cache、`force_flush()` 与 `shutdown()` 错误面。
+   - provider 当前返回按 scope 缓存的 `NoopTracer` 占位实例，只承担 TRC-TODO-008 所需的 provider 生命周期闭环，不提前进入 TRC-TODO-009 的 Span 主链实现。
+2. 完成同轮 blocker-fix 并保持范围不扩张：
+   - 识别 `infra/include/tracing/ITracerProvider.h` 中 `TraceConfig` 仅有前置声明，导致 provider `init(const TraceConfig&)` 缺乏可实例化类型。
+   - 按 blocker-recovery 规则在同轮补入私有最小 `TraceConfig`，仅承载 `enabled`、`provider_type`、`force_flush_on_stop` 三个骨架字段，作为 008 的直接解阻动作；未把 TRC-TODO-016 的公开配置模型与覆盖策略一并推进。
+3. 完成构建与测试接线：
+   - 更新 infra/CMakeLists.txt，使 `TracerProviderImpl` 进入 `dasall_infra`。
+   - 更新 tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt，新增 `dasall_tracer_provider_impl_unit_test` 与 `TracerProviderImplTest`，并把 `infra/src` 加入该测试的私有 include 路径。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_tracer_provider_impl_unit_test`
+   - `ctest --test-dir build-ci -N -R TracerProviderImplTest`
+   - `ctest --test-dir build-ci --output-on-failure -R TracerProviderImplTest`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_tracer_provider_impl_unit_test` 构建通过，说明 provider 实现与私有 `TraceConfig` 骨架可成功进入现有 `dasall_infra` 构建图。
+   - `ctest -N -R TracerProviderImplTest` 发现 1 个新增 tracing provider 单测入口。
+   - `TracerProviderImplTest` 定向执行通过，覆盖未初始化 provider-not-ready、已初始化 tracer cache + force_flush、shutdown 超时三条路径。
+   - `ctest -L unit` 通过，145/145 tests passed；构建阶段仅保留仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新引入问题。
+
+### 结果
+
+1. TRC-TODO-008 已完成，tracing 从“只有冻结接口”推进到 provider 生命周期骨架可运行、可测试、可观测的状态。
+2. TRC-TODO-009 现在具备明确前置：provider 已能稳定提供 tracer 占位与 shutdown/flush 生命周期出口，下一轮可以专注进入 tracer/span 主链实现，而不再被 provider 初始化与错误面卡住。
+
+### 下一步
+
+1. 执行 `TRC-TODO-009`，在当前 provider 骨架之上补齐 `TracerImpl` 与 `SpanImpl` 的 start/end/context/parent-child 生命周期闭环。
+
+### 风险
+
+1. 当前 `TraceConfig` 仍是私有最小占位，尚未形成 public tracing 配置模型；推进 `TRC-TODO-016` 时必须把该类型收口到公开头文件并补齐覆盖层级校验，避免私有定义长期滞留。
+
 ## 记录 #140
 
 - 日期：2026-04-06

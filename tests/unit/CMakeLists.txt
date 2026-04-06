@@ -79,6 +79,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_span_interface_unit_test
 	dasall_trace_context_propagator_interface_unit_test
 	dasall_trace_errors_unit_test
+	dasall_tracer_provider_impl_unit_test
 	dasall_infra_service_facade_unit_test
 	${DASALL_SECRET_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_policy_snapshot_compatibility_unit_test

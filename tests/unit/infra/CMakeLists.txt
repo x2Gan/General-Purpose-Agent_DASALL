@@ -356,6 +356,26 @@ dasall_apply_common_options(dasall_trace_errors_unit_test)
 add_test(NAME TraceErrorsTest COMMAND dasall_trace_errors_unit_test)
 set_tests_properties(TraceErrorsTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_tracer_provider_impl_unit_test
+  tracing/TracerProviderImplTest.cpp
+)
+
+target_include_directories(dasall_tracer_provider_impl_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_tracer_provider_impl_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_tracer_provider_impl_unit_test)
+
+add_test(NAME TracerProviderImplTest COMMAND dasall_tracer_provider_impl_unit_test)
+set_tests_properties(TracerProviderImplTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_infra_service_facade_unit_test
   InfraServiceFacadeTest.cpp
 )

@@ -21,6 +21,8 @@ set(DASALL_INFRA_AUDIT_SOURCES
 
 set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/TracingModuleAnchor.cpp
+  src/tracing/TracerProviderImpl.cpp
+  src/tracing/TracerProviderImpl.h
 )
 
 set(DASALL_INFRA_METRICS_SOURCES
