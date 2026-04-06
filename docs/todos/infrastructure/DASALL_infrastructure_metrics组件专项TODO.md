@@ -170,7 +170,7 @@
 | MET-TODO-010 | Done | 实现 InstrumentRegistry 唯一性管理骨架 | metrics 设计 6.2/6.3 | 6.2 InstrumentRegistry；6.3 同名同语义唯一 | L3 | infra/src/metrics/InstrumentRegistry.cpp | register_identity/find_identity | unit：同名冲突与重复注册路径 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-008 | 无 | 无 | Registry 骨架、单测；2026-04-06 已落盘 infra/src/metrics/InstrumentRegistry.{h,cpp}、tests/unit/infra/metrics/InstrumentRegistryTest.cpp，并将 MetricsFacade 的 instrument 创建/record 路径切到 registry 骨架 | 仅当重复注册冲突返回可判定错误并可观测时完成 |
 | MET-TODO-011 | Done | 实现 AggregationEngine 聚合骨架 | metrics 设计 6.2/6.7 | 6.2 AggregationEngine；6.7 步骤 5 | L3 | infra/src/metrics/AggregationEngine.cpp | aggregate_counter, aggregate_gauge, aggregate_histogram, snapshot | unit：Counter/Gauge/Histogram 聚合断言 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-006、MET-TODO-007、MET-TODO-010 | 并发参数未冻结 | 先落单线程可测实现 | 聚合骨架、单测；2026-04-06 已落盘 infra/src/metrics/AggregationEngine.{h,cpp}、tests/unit/infra/metrics/MetricsAggregationTest.cpp，并将 MetricsFacade 的 record 路径接到 aggregation engine | 仅当三类聚合行为均可重复验证时完成 |
 | MET-TODO-012 | Done | 实现 CardinalityGuard 标签治理骨架 | metrics 设计 6.2/6.3/6.8/6.9 | 6.2 CardinalityGuard；6.8 标签异常；6.9 allowlist | L3 | infra/src/metrics/CardinalityGuard.cpp | validate_labels, reject_with_reason | unit：allowlist/超阈值拒绝；failure：reject_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | 标签 taxonomy 全局评审未完成 | 先冻结 module/stage/profile/outcome/error_code | Guard 骨架、单测；2026-04-06 已落盘 infra/src/metrics/CardinalityGuard.{h,cpp}、tests/unit/infra/metrics/MetricsCardinalityGuardTest.cpp，并将 MetricsFacade 的 record 路径接到 CardinalityGuard，新增 module_snapshot() 暴露 guard_reject_total | 仅当未知标签与高基数路径均可二值判定时完成 |
-| MET-TODO-013 | Not Started | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测 | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
+| MET-TODO-013 | Done | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricReaderScheduler.{h,cpp}、tests/unit/infra/metrics/MetricsReaderSchedulerTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsReaderSchedulerTest | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
 | MET-TODO-014 | Not Started | 实现 MetricsExporterAdapter 首版导出骨架 | metrics 设计 6.2/6.7/6.8/6.9 | 6.2 MetricsExporterAdapter；6.8 导出异常；6.9 exporter.type | L2 | infra/src/metrics/MetricsExporterAdapter.cpp | export_batch(noop/prom_text), fallback_to_noop | unit：导出成功/失败/超时；failure：export_failure_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-003、MET-TODO-007、MET-TODO-008、MET-TODO-013 | OTLP 依赖未冻结 | 首版仅 noop/prom_text，OTLP 后置评审 | 导出骨架、单测 | 仅当成功/失败/超时三路径均有可观测结果且不阻塞主流程时完成 |
 | MET-TODO-015 | Not Started | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试 | 仅当降级进入/退出两路径均可二值判定时完成 |
 | MET-TODO-016 | Done | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测；2026-04-06 已落盘 infra/src/metrics/MetricsConfigPolicy.{h,cpp}、tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsConfigMergeTest | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
@@ -987,3 +987,57 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R "(MetricsConfigMergeTest|MetricsConfigPolicyInterfaceTest)"` 验证新旧两个配置相关单测均可发现。
 4. TODO 证据回写：已回写任务状态、配置模型冻结范围、Build_CMakeTools 回退记录与 unit gate 结果。
 5. 提交隔离：本轮提交范围限定为 MetricsConfigPolicy 私有源码、对应单测、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 26. 本轮执行记录（2026-04-06 / MET-TODO-013）
+
+### 26.1 选中任务
+
+1. 本轮任务：MET-TODO-013。
+2. 可执行性依据：`MET-TODO-011` 已完成 AggregationEngine 聚合骨架，`MET-TODO-016` 已冻结 reader interval / exporter type / exporter timeout 等最小配置模型，因此本轮可以直接落 MetricReaderScheduler 的单工作线程调度骨架。
+
+### 26.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.2 已冻结 MetricReaderScheduler 的职责为“周期读取快照并触发导出”。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.3 已明确其输入来自时间触发、输出去向为导出批次，且必须支持 flush/shutdown。
+3. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.4 已给出依赖链 `AggregationEngine -> MetricReaderScheduler -> MetricsExporterAdapter`，说明本轮应先让 scheduler 对 `AggregationSnapshot` 形成 `MetricExportBatch` 队列，而不是提前把导出逻辑写进 scheduler 内部。
+4. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.7 已冻结步骤 6：ReaderScheduler 周期触发导出批次，因此本轮最小闭环是“到点生成 batch / shutdown 强制 flush”。
+5. `MET-TODO-016` 已提供 `MetricsResolvedConfig`，可直接为 scheduler 提供 `reader_interval_ms` 与 `exporter_type` 默认值，避免把这些配置散落在调度器私有常量中。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `MetricReaderScheduler.h/.cpp`，实现 `schedule_tick`、`flush_on_shutdown`、`pop_next_batch` 与批次队列观测面。
+2. 首版策略：按专项 TODO 约束先采用单工作线程/单队列骨架，不提前扩张到线程池、queue overflow policy 或 exporter 重试；scheduler 只负责“何时出 batch”，不负责“如何导出 batch”。
+3. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/MetricReaderScheduler.h、infra/src/metrics/MetricReaderScheduler.cpp。
+   - 测试目标：新增 tests/unit/infra/metrics/MetricsReaderSchedulerTest.cpp，并在 tests/unit/infra/CMakeLists.txt 注册 `MetricsReaderSchedulerTest`；同时保留 `MetricsConfigMergeTest` 作为 016 依赖回归。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_metrics_reader_scheduler_unit_test dasall_metrics_config_merge_unit_test`、`ctest --test-dir build-ci -N -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`、`cmake --build build-ci --target dasall_unit_tests`、`ctest --test-dir build-ci --output-on-failure -L unit`。
+4. D Gate：PASS。
+
+### 26.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/MetricReaderScheduler.h：新增 `MetricReaderTickResult` 与 `MetricReaderScheduler` 私有声明，冻结调度结果、pending queue、last batch 与 last tick 观测口。
+2. infra/src/metrics/MetricReaderScheduler.cpp：新增首个 interval gating、shutdown 强制 flush、batch 入队与 `pop_next_batch` 语义，并统一复用 `MetricsErrors::ConfigInvalid` 处理非法时间戳或空批次请求。
+3. tests/unit/infra/metrics/MetricsReaderSchedulerTest.cpp：覆盖周期触发与 shutdown flush 两条 013 验收路径，并通过 `MetricsConfigPolicy` 提供的 merged config 驱动 interval/exporter type。
+4. tests/unit/infra/CMakeLists.txt：新增 `dasall_metrics_reader_scheduler_unit_test` 与 `MetricsReaderSchedulerTest` 注册。
+
+验收结果：
+
+1. Build_CMakeTools：失败，报错“生成失败：无法配置项目”；按仓库既定回退策略改用 build-ci 命令链继续验收。
+2. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+3. `cmake --build build-ci --target dasall_metrics_reader_scheduler_unit_test dasall_metrics_config_merge_unit_test`：通过；仅出现仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+4. `ctest --test-dir build-ci -N -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`：通过，发现 2 个测试：`MetricsConfigMergeTest`、`MetricsReaderSchedulerTest`。
+5. `ctest --test-dir build-ci --output-on-failure -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`：通过，2/2 tests passed。
+6. `cmake --build build-ci --target dasall_unit_tests`：通过。
+7. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 140/140 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：scheduler 结果对象、pending queue 与 flush 语义命名已直接表达意图，无需额外注释。
+2. 正负例覆盖：本轮新增单测已覆盖 interval 未到不触发、到点触发 batch、shutdown 强制 flush 三条关键路径；`MetricsConfigMergeTest` 继续回归 016 配置输入。
+3. 测试发现性：已用 `ctest -N -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"` 验证 scheduler 新测与配置依赖回归均可发现。
+4. TODO 证据回写：已回写任务状态、单工作线程调度策略、Build_CMakeTools 回退记录与 unit gate 结果。
+5. 提交隔离：本轮提交范围限定为 MetricReaderScheduler 私有源码、对应单测、CMake 注册、专项 TODO 与 worklog 证据更新。

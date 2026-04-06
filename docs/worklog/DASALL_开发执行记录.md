@@ -8,6 +8,53 @@
 
 ---
 
+## 记录 #134
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-013 实现 MetricReaderScheduler 调度骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-013-D/B 落盘：
+   - 新增 infra/src/metrics/MetricReaderScheduler.h 与 infra/src/metrics/MetricReaderScheduler.cpp，落盘 `schedule_tick`、`flush_on_shutdown`、`pop_next_batch`、pending queue 与 last batch 观测面。
+   - 通过 `MetricsResolvedConfig` 消费 016 已冻结的 `reader_interval_ms` 与 `exporter_type` 默认值，把 scheduler 固定为“到点生成 batch / shutdown 强制 flush”的单工作线程骨架，而不提前掺入 exporter 逻辑。
+2. 完成 013 的 unit/CMake 收口：
+   - 新增 tests/unit/infra/metrics/MetricsReaderSchedulerTest.cpp，覆盖 interval gating 与 shutdown flush 两条关键路径。
+   - 更新 tests/unit/infra/CMakeLists.txt，新增 `dasall_metrics_reader_scheduler_unit_test` 与 `MetricsReaderSchedulerTest` 注册，并保留 `MetricsConfigMergeTest` 作为依赖回归。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-013` 标记为 Done，并补齐本轮 Design->Build 映射、Build_CMakeTools 回退记录与 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_reader_scheduler_unit_test dasall_metrics_config_merge_unit_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsReaderSchedulerTest|MetricsConfigMergeTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `Build_CMakeTools` 再次失败，错误为“生成失败：无法配置项目”；已按仓库既定回退策略切回 build-ci 命令链。
+   - build-ci 重新配置成功，`dasall_metrics_reader_scheduler_unit_test` 与 `dasall_metrics_config_merge_unit_test` 构建通过。
+   - `MetricsConfigMergeTest` 与 `MetricsReaderSchedulerTest` 被 ctest 发现并定向执行通过，2/2 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 140/140 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 013 新引入的问题。
+
+### 结果
+
+1. MET-TODO-013 已把 metrics 主链推进到 `aggregation -> reader scheduler`，AggregationSnapshot 现在可以按配置间隔形成待导出 batch，并在 shutdown 时强制 flush。
+2. `MET-TODO-014` 现在可以直接消费 scheduler 产出的 `MetricExportBatch` 队列，实现 noop/prom_text 首版导出骨架。
+
+### 下一步
+
+1. 执行 `MET-TODO-014`，实现 `MetricsExporterAdapter` 的 noop/prom_text 导出、失败回退与 exporter 状态观测，并与 013 的 batch 队列连通。
+
+### 风险
+
+1. 当前 MetricReaderScheduler 只覆盖单队列调度骨架，没有线程模型、队列上限或 overflow policy；后续推进 014/015 时必须维持“调度器只决定何时出 batch，不承担恢复与退避策略”的边界。
+
 ## 记录 #133
 
 - 日期：2026-04-06
