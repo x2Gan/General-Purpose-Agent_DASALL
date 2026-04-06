@@ -182,6 +182,29 @@ dasall_apply_common_options(dasall_metrics_exporter_adapter_unit_test)
 add_test(NAME MetricsExporterAdapterTest COMMAND dasall_metrics_exporter_adapter_unit_test)
 set_tests_properties(MetricsExporterAdapterTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_metrics_recovery_unit_test
+  metrics/MetricsRecoveryTest.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsRecovery.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsExporterAdapter.cpp
+  ${CMAKE_SOURCE_DIR}/infra/src/metrics/MetricsConfigPolicy.cpp
+)
+
+target_include_directories(dasall_metrics_recovery_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_metrics_recovery_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_metrics_recovery_unit_test)
+
+add_test(NAME MetricsRecoveryTest COMMAND dasall_metrics_recovery_unit_test)
+set_tests_properties(MetricsRecoveryTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_metrics_errors_unit_test
   MetricsErrorsTest.cpp
 )

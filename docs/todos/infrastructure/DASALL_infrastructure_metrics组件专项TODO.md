@@ -172,7 +172,7 @@
 | MET-TODO-012 | Done | 实现 CardinalityGuard 标签治理骨架 | metrics 设计 6.2/6.3/6.8/6.9 | 6.2 CardinalityGuard；6.8 标签异常；6.9 allowlist | L3 | infra/src/metrics/CardinalityGuard.cpp | validate_labels, reject_with_reason | unit：allowlist/超阈值拒绝；failure：reject_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | 标签 taxonomy 全局评审未完成 | 先冻结 module/stage/profile/outcome/error_code | Guard 骨架、单测；2026-04-06 已落盘 infra/src/metrics/CardinalityGuard.{h,cpp}、tests/unit/infra/metrics/MetricsCardinalityGuardTest.cpp，并将 MetricsFacade 的 record 路径接到 CardinalityGuard，新增 module_snapshot() 暴露 guard_reject_total | 仅当未知标签与高基数路径均可二值判定时完成 |
 | MET-TODO-013 | Done | 实现 MetricReaderScheduler 调度骨架 | metrics 设计 6.2/6.7/6.9 | 6.2 MetricReaderScheduler；6.7 步骤 6；6.9 interval 配置 | L2 | infra/src/metrics/MetricReaderScheduler.cpp | schedule_tick, flush_on_shutdown | unit：周期触发与 shutdown flush 行为 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-011、MET-TODO-016 | 线程模型细节未冻结 | 首版采用单工作线程策略 | 调度骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricReaderScheduler.{h,cpp}、tests/unit/infra/metrics/MetricsReaderSchedulerTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsReaderSchedulerTest | 仅当 tick 触发与 shutdown flush 均可稳定复现时完成 |
 | MET-TODO-014 | Done | 实现 MetricsExporterAdapter 首版导出骨架 | metrics 设计 6.2/6.7/6.8/6.9 | 6.2 MetricsExporterAdapter；6.8 导出异常；6.9 exporter.type | L2 | infra/src/metrics/MetricsExporterAdapter.cpp | export_batch(noop/prom_text), fallback_to_noop | unit：导出成功/失败/超时；failure：export_failure_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-003、MET-TODO-007、MET-TODO-008、MET-TODO-013 | OTLP 依赖未冻结 | 首版仅 noop/prom_text，OTLP 后置评审 | 导出骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricsExporterAdapter.{h,cpp}、tests/unit/infra/metrics/MetricsExporterAdapterTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsExporterAdapterTest | 仅当成功/失败/超时三路径均有可观测结果且不阻塞主流程时完成 |
-| MET-TODO-015 | Not Started | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试 | 仅当降级进入/退出两路径均可二值判定时完成 |
+| MET-TODO-015 | Done | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试；2026-04-06 已落盘 infra/src/metrics/MetricsRecovery.{h,cpp}、tests/unit/infra/metrics/MetricsRecoveryTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsRecoveryTest | 仅当降级进入/退出两路径均可二值判定时完成 |
 | MET-TODO-016 | Done | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测；2026-04-06 已落盘 infra/src/metrics/MetricsConfigPolicy.{h,cpp}、tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsConfigMergeTest | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
 | MET-TODO-017 | Not Started | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
 | MET-TODO-018 | Not Started | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册入口、执行记录 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
@@ -1095,3 +1095,60 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R "(MetricsExporterAdapterTest|MetricsReaderSchedulerTest|MetricsConfigMergeTest)"` 验证 exporter 新测和依赖回归均可发现。
 4. TODO 证据回写：已回写任务状态、同轮编译错误修复、Build_CMakeTools 回退记录与 unit gate 结果。
 5. 提交隔离：本轮提交范围限定为 MetricsExporterAdapter 私有源码、对应单测、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 28. 本轮执行记录（2026-04-06 / MET-TODO-015）
+
+### 28.1 选中任务
+
+1. 本轮任务：MET-TODO-015。
+2. 可执行性依据：`MET-TODO-008` 与 `MET-TODO-014` 已完成，导出失败错误码域和 exporter 的 degraded 信号均已具备；health/logging 的统一桥接接口虽未冻结，但本任务的最小解阻条件就是先输出 metrics 私有健康快照与日志钩子占位，因此无需转 Blocked。
+
+### 28.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.8 已冻结 metrics 的恢复动作要求：导出失败进入 degraded，恢复成功后回清，并保留可观测证据。
+2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.10 已把 degraded_mode 纳入 metrics 健康快照最小集合，说明恢复骨架应直接消费并维护 `MetricsModuleSnapshot`。
+3. infra/src/metrics/MetricsExporterAdapter.{h,cpp} 已在上一轮落下 `module_snapshot()`、`export_failure_total()` 与 fallback-to-noop 行为，可直接作为 015 的失败注入来源。
+4. infra/src/logging/LoggingRecovery.{h,cpp} 已验证“私有恢复状态机 + 可替换 fallback/log hook”这种模式在 infra 子系统内可测、可回归，适合作为 metrics 恢复骨架的最小实现参考。
+5. 当前 logging/audit bridge 接口尚未冻结，因此 015 不能直接耦合 `ILogger` 或健康总线，只能先产出 metrics 自有的恢复事件钩子占位。
+
+外部参考：
+
+1. OpenTelemetry 与常见 SRE 恢复实践都要求导出器故障与恢复状态可观测，且恢复判定应独立于 exporter 的瞬时失败结果，避免一次抖动就永久切换运行模式；据此本轮把 metrics recovery 收敛为“连续失败阈值 + 显式恢复回清”的私有状态机。
+
+D 结论：
+
+1. Design -> Build 映射：新增 private `MetricsRecovery.h/.cpp`，冻结 `MetricsRecoveryEvent`、`IMetricsRecoveryLogHook`、`observe_export_result`、`enter_degraded`、`recover_to_healthy` 与 `emit_recovery_event`。
+2. 最小恢复策略：首版只消费 exporter 的 `MetricsOperationStatus` 与 `MetricsModuleSnapshot`，以连续失败阈值触发 degraded，并在成功导出后回清；不提前扩张到 health 总线、logging bridge 或 runtime 裁定链路。
+3. Build 三件套：
+   - 代码目标：新增 infra/src/metrics/MetricsRecovery.h、infra/src/metrics/MetricsRecovery.cpp。
+   - 测试目标：新增 tests/unit/infra/metrics/MetricsRecoveryTest.cpp，并在 tests/unit/infra/CMakeLists.txt 注册 `MetricsRecoveryTest`。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_metrics_recovery_unit_test dasall_metrics_exporter_adapter_unit_test`、`ctest --test-dir build-ci -N -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"`、`ctest --test-dir build-ci --output-on-failure -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"`、`cmake --build build-ci --target dasall_unit_tests`、`ctest --test-dir build-ci --output-on-failure -L unit`。
+4. D Gate：PASS。
+
+### 28.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/metrics/MetricsRecovery.h：新增 `MetricsRecoveryEvent`、`IMetricsRecoveryLogHook` 与 `MetricsRecovery` 私有声明，冻结连续失败计数、degraded 进入次数、恢复成功次数与模块快照观测口。
+2. infra/src/metrics/MetricsRecovery.cpp：新增 exporter 结果观测、连续失败阈值判定、`enter_degraded`、`recover_to_healthy`、`emit_recovery_event` 与错误码推断逻辑。
+3. tests/unit/infra/metrics/MetricsRecoveryTest.cpp：覆盖连续失败触发 degraded、成功导出回清 healthy，以及非法恢复输入拒绝三条 015 验收路径。
+4. tests/unit/infra/CMakeLists.txt：新增 `dasall_metrics_recovery_unit_test` 与 `MetricsRecoveryTest` 注册，并保留 exporter/config 私有源码直编策略，等待 017 统一接入 `dasall_infra`。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_metrics_recovery_unit_test dasall_metrics_exporter_adapter_unit_test`：通过；仅出现仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+3. `ctest --test-dir build-ci -N -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"`：通过，发现 2 个测试：`MetricsExporterAdapterTest`、`MetricsRecoveryTest`。
+4. `ctest --test-dir build-ci --output-on-failure -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"`：通过，2/2 tests passed。
+5. `cmake --build build-ci --target dasall_unit_tests`：通过。
+6. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，unit 标签 142/142 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：恢复事件、日志钩子与状态机入口命名已直接表达 degraded/healthy 转换意图，无需补充重复性注释。
+2. 正负例覆盖：本轮新增单测已覆盖连续失败降级、成功恢复回清与非法输入拒绝三条路径。
+3. 测试发现性：已用 `ctest -N -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"` 验证恢复新测与 exporter 回归均可发现。
+4. TODO 证据回写：已回写任务状态、Design -> Build 映射、定向与全量 unit 验证结果。
+5. 提交隔离：本轮提交范围限定为 MetricsRecovery 私有源码、对应单测、CMake 注册、专项 TODO 与 worklog 证据更新。

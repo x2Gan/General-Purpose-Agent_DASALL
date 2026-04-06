@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #136
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-015 实现 MetricsRecovery 降级与恢复骨架
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-015-D/B 落盘：
+   - 新增 infra/src/metrics/MetricsRecovery.h 与 infra/src/metrics/MetricsRecovery.cpp，落盘 `MetricsRecoveryEvent`、`IMetricsRecoveryLogHook`、`observe_export_result`、`enter_degraded`、`recover_to_healthy` 与 `emit_recovery_event`。
+   - 将恢复策略固定为“连续失败阈值触发 degraded，成功导出回清 healthy”，并把恢复事件暂存为 metrics 私有日志钩子占位，不提前耦合 logging/health bridge。
+2. 完成 015 的 unit/CMake 收口：
+   - 新增 tests/unit/infra/metrics/MetricsRecoveryTest.cpp，覆盖连续失败降级、成功恢复回清与非法输入拒绝。
+   - 更新 tests/unit/infra/CMakeLists.txt，新增 `dasall_metrics_recovery_unit_test` 与 `MetricsRecoveryTest` 注册，并复用 exporter/config 私有源码直编策略。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-015` 标记为 Done，并补齐本轮 Design -> Build 映射、故障注入验证与 unit gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_recovery_unit_test dasall_metrics_exporter_adapter_unit_test`
+   - `ctest --test-dir build-ci -N -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - build-ci 重新配置成功，`dasall_metrics_recovery_unit_test` 与 `dasall_metrics_exporter_adapter_unit_test` 构建通过。
+   - `MetricsExporterAdapterTest` 与 `MetricsRecoveryTest` 被 ctest 发现并定向执行通过，2/2 tests passed。
+   - `dasall_unit_tests` 聚合目标构建通过；`ctest -L unit` 通过，unit 标签 142/142 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 015 新引入的问题。
+
+### 结果
+
+1. MET-TODO-015 已为 metrics 导出链路补齐独立的恢复状态机，exporter 的连续失败现在可以稳定触发 degraded，并在后续成功后回清。
+2. metrics 本地闭环已经具备配置、调度、导出、恢复四段私有运行时骨架，下一轮可以进入 017 的 `dasall_infra` 源码入图收口。
+
+### 下一步
+
+1. 执行 `MET-TODO-017`，把 metrics 私有运行时代码统一接入 infra/CMakeLists.txt 与 `dasall_infra`，结束当前“测试直编私有源码”的过渡形态。
+
+### 风险
+
+1. 当前 MetricsRecovery 仍是首版骨架：失败阈值为本地静态策略，恢复事件只进入 metrics 私有钩子，还没有对接 health/logging 总线；推进 017 和 018 时必须保持这一边界，不把恢复器扩张成跨子系统编排器。
+
 ## 使用说明
 
 - 目的：用于在每次会话开始时快速回溯中断点，并继续推进实施计划。
