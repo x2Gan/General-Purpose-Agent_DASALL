@@ -65,6 +65,22 @@ set(DASALL_INFRA_SECRET_PRIVATE_HEADERS
   src/secret/backends/MockSecretBackend.h
 )
 
+set(DASALL_INFRA_HEALTH_SOURCES
+  src/health/HealthMonitorFacade.cpp
+  src/health/ProbeRegistry.cpp
+  src/health/ProbeExecutor.cpp
+  src/health/HealthEvaluator.cpp
+  src/health/RecoveryHintEmitter.cpp
+)
+
+set(DASALL_INFRA_HEALTH_PRIVATE_HEADERS
+  src/health/HealthMonitorFacade.h
+  src/health/ProbeRegistry.h
+  src/health/ProbeExecutor.h
+  src/health/HealthEvaluator.h
+  src/health/RecoveryHintEmitter.h
+)
+
 set(DASALL_INFRA_POLICY_SOURCES
   src/policy/PolicyAuditBridge.cpp
   src/policy/PolicyHealthProbe.cpp
@@ -182,6 +198,8 @@ target_sources(dasall_infra
   PRIVATE
     ${DASALL_INFRA_CORE_SOURCES}
     ${DASALL_INFRA_AUDIT_SOURCES}
+    ${DASALL_INFRA_HEALTH_SOURCES}
+    ${DASALL_INFRA_HEALTH_PRIVATE_HEADERS}
     ${DASALL_INFRA_LOGGING_SOURCES}
     ${DASALL_INFRA_POLICY_SOURCES}
     ${DASALL_INFRA_POLICY_PRIVATE_HEADERS}
@@ -199,6 +217,8 @@ target_compile_features(dasall_infra PUBLIC cxx_std_20)
 target_include_directories(dasall_infra
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(dasall_infra

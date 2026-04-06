@@ -175,7 +175,7 @@
 | HLT-TODO-013 | Done (2026-04-06) | 定义 HealthErrors 错误码域与映射 | health 设计 6.6；编码规范 3.6 | 6.6 错误语义 | L3 | infra/include/health/HealthErrors.h | INF_E_HEALTH_PROBE_TIMEOUT、INF_E_HEALTH_PROBE_EXCEPTION、INF_E_HEALTH_PROBE_NOT_FOUND、INF_E_HEALTH_POLICY_INVALID、INF_E_HEALTH_EVENT_PUBLISH_FAIL | contract：映射 contracts::ResultCode；unit：枚举稳定 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-001、HLT-TODO-003 | 无 | 无 | 错误码头文件、unit/contract 测试；2026-04-06 已落盘 infra/include/health/HealthErrors.h、tests/unit/infra/health/HealthErrorsTest.cpp、tests/contract/smoke/HealthErrorMappingContractTest.cpp，并更新 infra/CMakeLists.txt、infra/src/health/ProbeRegistry.cpp、infra/src/health/ProbeExecutor.cpp、infra/src/health/HealthEvaluator.cpp、tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/contract/CMakeLists.txt 与 tests/unit/infra/health/HealthEvaluatorTest.cpp，使 health 私有错误语义收敛到统一映射矩阵；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_health_errors_unit_test dasall_contract_health_error_mapping_test dasall_health_evaluator_unit_test dasall_probe_executor_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(HealthErrorsTest|HealthErrorMappingContractTest|HealthEvaluatorTest|ProbeExecutorTest)"`、`ctest --test-dir build-ci -N -R "(HealthErrorsTest|HealthErrorMappingContractTest)"` 与 `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests` 验证映射矩阵冻结、发现性与回归，unit 标签 133/133 通过，contract 标签 140/140 通过 | 仅当 5 个错误码可追溯且映射测试通过时完成 |
 | HLT-TODO-014 | Blocked | 定义 HealthConfigPolicy 配置模型与覆盖策略 | health 设计 6.9/11.1；蓝图 5.1 | 6.9 配置项表 | L2 | infra/src/health/HealthConfigPolicy.cpp | merge(default/profile/deploy), validate_thresholds() | unit：默认值与覆盖优先级；failure：非法阈值拒绝 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | HLT-TODO-003、HLT-TODO-005 | HLT-BLK-003 | profiles 下 infra.health 键命名冻结 | 配置策略代码或阻塞记录 | 仅当配置键命名冻结后可由 Blocked 转 Not Started |
 | HLT-TODO-015 | Done (2026-04-06) | 实现 RecoveryHintEmitter 边界守卫骨架 | health 设计 6.2/6.8；ADR-007；11.1 | 6.2 RecoveryHintEmitter | L2 | infra/src/health/RecoveryHintEmitter.cpp | emit_hint(snapshot,reason), sanitize_hint_payload() | contract：建议与执行分离；unit：evidence_ref 完整性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-006、HLT-TODO-011 | 无 | 无 | 发射器代码、unit/contract 验证；2026-04-06 已落盘 infra/src/health/RecoveryHintEmitter.h、infra/src/health/RecoveryHintEmitter.cpp、tests/unit/infra/health/RecoveryHintEmitterTest.cpp，并更新 tests/unit/CMakeLists.txt、tests/unit/infra/CMakeLists.txt 以注册 `RecoveryHintEmitterTest`；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_recovery_hint_emitter_unit_test dasall_contract_recovery_hint_boundary_test`、`ctest --test-dir build-ci --output-on-failure -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`、`ctest --test-dir build-ci -N -R "(RecoveryHintEmitterTest|RecoveryHintBoundaryContractTest)"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 验证建议/执行分离、evidence_ref 完整性与回归，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当 contract 模板冻结后方可推进 |
-| HLT-TODO-016 | Not Started | 注册 health 源码到 infra CMake | health 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/health/ | health 源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001~015 | 源文件分批落盘导致阶段性空实现 | 保留最小 non-empty health 源文件 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码入口且 health 源码入图时完成 |
+| HLT-TODO-016 | Done (2026-04-06) | 注册 health 源码到 infra CMake | health 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/health/ | health 源文件纳入 dasall_infra | build：dasall_infra 可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | HLT-TODO-001~015 | 无 | 无 | CMake 改动、构建记录；2026-04-06 已在 infra/CMakeLists.txt 新增 `DASALL_INFRA_HEALTH_SOURCES`、`DASALL_INFRA_HEALTH_PRIVATE_HEADERS` 与 `dasall_infra` 的 PRIVATE `src` include 路径，并同步调整 tests/unit/infra/CMakeLists.txt 使 health unit 目标不再直接编译 health 源文件；通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_infra dasall_health_monitor_facade_unit_test dasall_probe_registry_unit_test dasall_probe_executor_unit_test dasall_health_evaluator_unit_test dasall_recovery_hint_emitter_unit_test`、`ctest --test-dir build-ci --output-on-failure -R "(HealthMonitorFacadeTest|ProbeRegistryTest|ProbeExecutorTest|HealthEvaluatorTest|RecoveryHintEmitterTest)"`、`cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L contract` 验证 health 源码入图、health unit 去重与全量回归，unit 标签 134/134 通过，contract 标签 140/140 通过 | 仅当 placeholder 不再是唯一源码入口且 health 源码入图时完成 |
 | HLT-TODO-017 | Not Started | 注册 health 的 unit/contract/integration 测试入口 | health 设计 7/8/9；工程规范 3.7；tests 现状 | 7 映射；8.1 路径；9.1 测试矩阵 | L0 | tests/unit/CMakeLists.txt、tests/unit/infra/health/、tests/contract/CMakeLists.txt、tests/integration/infra/health/ | unit/contract/failure 注入先行，integration 发现性门禁 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-016 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无；待 HLT-TODO-016 完成后落盘具体 integration 用例 | 测试注册改动或阻塞记录 | 仅当 health 新增测试可被 ctest -N 发现；integration 用例可被发现并执行时完成 |
 | HLT-TODO-018 | Not Started | 回写 health 质量门与交付证据 | health 设计 9.2/11；工程规范 6.2 | 9.2 Gate；11 阻塞与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md | process test：门禁结论、阻塞变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | HLT-TODO-017 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁有通过/失败结论及命令证据时完成 |
 
@@ -554,3 +554,48 @@ Build 合规复核：
 2. 边界保持：实现停留在 `HealthSnapshot -> RecoveryHint` 的 advisory-only 映射内，未扩写 `RecoveryHint` 公共对象，也未越权补执行动作或 runtime 回调。
 3. 测试闭环：新增用例覆盖正例、负例和 sanitize 路径，并复用了已冻结的 `RecoveryHintBoundaryContractTest` 做边界守卫验证。
 4. 提交隔离：本轮提交范围限定为 `HLT-TODO-015` 的 emitter 实现、unit 接线与 TODO/worklog 证据，不混入后续 `HLT-TODO-016`、`HLT-TODO-017`、`HLT-TODO-018`。
+
+## 18. 本轮执行记录（2026-04-06 / HLT-TODO-016）
+
+### 18.1 选中任务
+
+1. 本轮任务：HLT-TODO-016。
+2. 可执行性依据：`HLT-TODO-001~015` 已完成，health 私有源码已经全部落盘于 infra/src/health，但仍停留在“单测直编源文件、库目标未入图”的过渡状态；016 当前无 Blocked 依赖，且完成标准可以通过 `dasall_infra` 构建与 health 回归测试二值判定。
+
+### 18.2 研究与 Design 结论
+
+本地证据：
+
+1. infra/CMakeLists.txt 当前只把 health 公共头纳入 `DASALL_INFRA_PUBLIC_HEADERS`，并未把 `HealthMonitorFacade`、`ProbeRegistry`、`ProbeExecutor`、`HealthEvaluator`、`RecoveryHintEmitter` 纳入 `dasall_infra` 源文件集合，说明 health 仍处于“源码未入图”的临时状态。
+2. tests/unit/infra/CMakeLists.txt 里 health 单测当前通过 `${CMAKE_SOURCE_DIR}/infra/src/health/*.cpp` 直接编译实现文件；如果 016 只把 health 源码加入 `dasall_infra` 而不调整 unit 目标，就会形成重复符号与双路径编译风险。
+3. docs/architecture/DASALL_infra_health模块详细设计.md 8.1 已将 `infra/src/health/` 列为正式落盘目录，并把 health 测试门禁映射到独立目录和聚合 gate，说明 016 的职责是把这些已存在源码从“测试私用”提升为“库内正式成员”。
+4. 外部参考：CMake `target_sources` 与 `target_include_directories` 文档都强调源码和 include 路径应通过目标级 `PRIVATE/PUBLIC` 作用域附着到目标自身，而不是由下游目标重复携带实现文件；本轮据此把 health 源码统一挂到 `dasall_infra`，并把 `infra/src` 作为库的 PRIVATE include 路径，只保留 health 单测对私有头的 include 能力。
+
+D 结论：
+
+1. 在 infra/CMakeLists.txt 中新增 `DASALL_INFRA_HEALTH_SOURCES` 与 `DASALL_INFRA_HEALTH_PRIVATE_HEADERS`，把 health 私有实现和私有头统一并入 `dasall_infra` 的 `target_sources(PRIVATE ...)`。
+2. 为了让 `#include "health/..."` 的私有头路径在库内可解析，需要为 `dasall_infra` 增加 PRIVATE `src` include 路径，而不是扩散到 PUBLIC 接口面。
+3. tests/unit/infra/CMakeLists.txt 中 health 相关 unit 目标改为“只编测试文件 + link `dasall_infra`”，保留 `${CMAKE_SOURCE_DIR}/infra/src` 作为测试目标 PRIVATE include 路径，以读取私有头但不再重复编译实现。
+4. D Gate：PASS。
+
+### 18.3 Build 交付与证据
+
+交付物：
+
+1. infra/CMakeLists.txt：新增 `DASALL_INFRA_HEALTH_SOURCES`、`DASALL_INFRA_HEALTH_PRIVATE_HEADERS`，并把 `infra/src` 作为 `dasall_infra` 的 PRIVATE include 路径，使 health 私有源码正式入图。
+2. tests/unit/infra/CMakeLists.txt：将 `dasall_health_monitor_facade_unit_test`、`dasall_probe_registry_unit_test`、`dasall_probe_executor_unit_test`、`dasall_health_evaluator_unit_test`、`dasall_recovery_hint_emitter_unit_test` 从“直编实现文件”改为“只编测试文件并链接 `dasall_infra`”。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_health_monitor_facade_unit_test dasall_probe_registry_unit_test dasall_probe_executor_unit_test dasall_health_evaluator_unit_test dasall_recovery_hint_emitter_unit_test`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -R "(HealthMonitorFacadeTest|ProbeRegistryTest|ProbeExecutorTest|HealthEvaluatorTest|RecoveryHintEmitterTest)"`：通过，5/5 tests passed。
+4. `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`：通过；后续全量执行结果为 unit 标签 134/134 tests passed、contract 标签 140/140 tests passed。
+5. `ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`：通过。
+
+Build 合规复核：
+
+1. 根因闭环：本轮直接消除了“health 源码未入 `dasall_infra`”和“health 单测重复编译实现文件”两个根因，而不是继续叠加新的测试目标或临时 include 路径。
+2. 边界保持：`infra/src` 只作为 `dasall_infra` 的 PRIVATE include 路径引入，没有把 health 私有头暴露到 PUBLIC 接口面。
+3. 测试闭环：定向 health 构建回归和全量 unit/contract gate 均通过，证明源码入图没有破坏既有库或边界测试。
+4. 提交隔离：本轮提交范围限定为 `HLT-TODO-016` 的 CMake 接线与 unit 去重，不混入后续 `HLT-TODO-017`、`HLT-TODO-018` 的 integration/文档收口。

@@ -8,6 +8,50 @@
 
 ---
 
+## 记录 #126
+
+- 日期：2026-04-06
+- 阶段：health 组件专项 TODO
+- 任务：HLT-TODO-016 注册 health 源码到 infra CMake
+- 状态：已完成
+
+### 改动
+
+1. 完成 HLT-TODO-016-D/B 落盘：
+   - 更新 infra/CMakeLists.txt，新增 `DASALL_INFRA_HEALTH_SOURCES`、`DASALL_INFRA_HEALTH_PRIVATE_HEADERS`，把 health 私有实现统一纳入 `dasall_infra`。
+   - 为 `dasall_infra` 增加 PRIVATE `src` include 路径，保证 health 私有头在库内按 `health/...` 路径可解析，同时不外泄到 public include 面。
+2. 完成 016 对 health unit 目标的去重：
+   - 更新 tests/unit/infra/CMakeLists.txt，使 health 相关 unit 目标不再直接编译 `infra/src/health/*.cpp`，改为只编测试文件并链接 `dasall_infra`，消除源码入图后的重复符号风险。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md，将 `HLT-TODO-016` 标记为 Done，并补齐本轮执行记录、定向 health build 回归与全量 gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_health_monitor_facade_unit_test dasall_probe_registry_unit_test dasall_probe_executor_unit_test dasall_health_evaluator_unit_test dasall_recovery_hint_emitter_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "(HealthMonitorFacadeTest|ProbeRegistryTest|ProbeExecutorTest|HealthEvaluatorTest|RecoveryHintEmitterTest)"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `dasall_infra` 与 5 个 health unit 目标构建通过，health 源码正式入图后未出现重复符号或 include 路径错误。
+   - 5 个定向 health unit 测试通过，5/5 tests passed。
+   - `dasall_unit_tests` 通过，unit 标签 134/134 tests passed；`dasall_contract_tests` 通过，contract 标签 140/140 tests passed。
+
+### 结果
+
+1. HLT-TODO-016 已从“health 仅靠单测直编实现文件”推进到“health 私有源码正式成为 `dasall_infra` 的库内成员”。
+2. `HLT-TODO-017` 现在可以在库接线稳定的前提下补齐 health 的 integration 注册与测试发现性，不必再兼顾源码重复编译问题。
+
+### 下一步
+
+1. 实现 `HLT-TODO-017`，新增 `tests/integration/infra/health/` 目录与 health integration 目标，并完成 unit/contract/integration 发现性验证。
+
+### 风险
+
+1. 当前 build 输出仍会看到仓库既有的 `IMetricsProvider.h` missing initializer warning；这不是 016 新引入的问题，但后续若要收紧 `-Werror` 门禁，需要单独处理该基线告警。
+
 ## 记录 #125
 
 - 日期：2026-04-06

@@ -1212,8 +1212,6 @@ set_tests_properties(HealthMonitorInterfaceTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_health_monitor_facade_unit_test
   health/HealthMonitorFacadeTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/HealthMonitorFacade.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/ProbeRegistry.cpp
 )
 
 target_include_directories(dasall_health_monitor_facade_unit_test
@@ -1234,7 +1232,6 @@ set_tests_properties(HealthMonitorFacadeTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_probe_registry_unit_test
   health/ProbeRegistryTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/ProbeRegistry.cpp
 )
 
 target_include_directories(dasall_probe_registry_unit_test
@@ -1255,8 +1252,6 @@ set_tests_properties(ProbeRegistryTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_probe_executor_unit_test
   health/ProbeExecutorTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/ProbeExecutor.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/ProbeRegistry.cpp
 )
 
 target_include_directories(dasall_probe_executor_unit_test
@@ -1277,7 +1272,6 @@ set_tests_properties(ProbeExecutorTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_health_evaluator_unit_test
   health/HealthEvaluatorTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/HealthEvaluator.cpp
 )
 
 target_include_directories(dasall_health_evaluator_unit_test
@@ -1298,7 +1292,6 @@ set_tests_properties(HealthEvaluatorTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_recovery_hint_emitter_unit_test
   health/RecoveryHintEmitterTest.cpp
-  ${CMAKE_SOURCE_DIR}/infra/src/health/RecoveryHintEmitter.cpp
 )
 
 target_include_directories(dasall_recovery_hint_emitter_unit_test
