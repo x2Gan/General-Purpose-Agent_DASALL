@@ -23,6 +23,28 @@ set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/TracingModuleAnchor.cpp
 )
 
+set(DASALL_INFRA_METRICS_SOURCES
+  src/metrics/MetricsFacade.cpp
+  src/metrics/InstrumentRegistry.cpp
+  src/metrics/AggregationEngine.cpp
+  src/metrics/CardinalityGuard.cpp
+  src/metrics/MetricsConfigPolicy.cpp
+  src/metrics/MetricReaderScheduler.cpp
+  src/metrics/MetricsExporterAdapter.cpp
+  src/metrics/MetricsRecovery.cpp
+)
+
+set(DASALL_INFRA_METRICS_PRIVATE_HEADERS
+  src/metrics/MetricsFacade.h
+  src/metrics/InstrumentRegistry.h
+  src/metrics/AggregationEngine.h
+  src/metrics/CardinalityGuard.h
+  src/metrics/MetricsConfigPolicy.h
+  src/metrics/MetricReaderScheduler.h
+  src/metrics/MetricsExporterAdapter.h
+  src/metrics/MetricsRecovery.h
+)
+
 set(DASALL_INFRA_LOGGING_SOURCES
   src/logging/AsyncQueueController.cpp
   src/logging/AuditLinkAdapter.cpp
@@ -205,6 +227,8 @@ target_sources(dasall_infra
     ${DASALL_INFRA_POLICY_PRIVATE_HEADERS}
     ${DASALL_INFRA_SECRET_SOURCES}
     ${DASALL_INFRA_SECRET_PRIVATE_HEADERS}
+    ${DASALL_INFRA_METRICS_SOURCES}
+    ${DASALL_INFRA_METRICS_PRIVATE_HEADERS}
     ${DASALL_INFRA_TRACING_SOURCES}
 )
 

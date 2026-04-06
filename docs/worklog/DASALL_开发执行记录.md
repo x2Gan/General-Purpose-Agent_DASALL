@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #137
+
+- 日期：2026-04-06
+- 阶段：metrics 组件专项 TODO
+- 任务：MET-TODO-017 注册 metrics 代码到 infra CMake
+- 状态：已完成
+
+### 改动
+
+1. 完成 MET-TODO-017-D/B 落盘：
+   - 更新 infra/CMakeLists.txt，新增 `DASALL_INFRA_METRICS_SOURCES` 与 `DASALL_INFRA_METRICS_PRIVATE_HEADERS`。
+   - 将 MetricsFacade、InstrumentRegistry、AggregationEngine、CardinalityGuard、MetricsConfigPolicy、MetricReaderScheduler、MetricsExporterAdapter、MetricsRecovery 全量接入 `dasall_infra`，结束 metrics 运行时代码“未入库目标”的状态。
+2. 保持任务边界清晰：
+   - 本轮只做源码入图，不提前把 tests/unit 聚合总表、contract discoverability 与 failure 测试注册混入 017。
+   - 保留现有 metrics 私有测试直编桥接，等待 018 单独收口。
+3. 完成专项 TODO 回链：
+   - 更新 docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md，将 `MET-TODO-017` 标记为 Done，并补齐 metrics 源码入图范围、构建记录与 018 边界说明。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_metrics_recovery_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R MetricsRecoveryTest`
+2. 结果：
+   - build-ci 重新配置成功，`dasall_infra` 已开始单独编译 `src/metrics/*.cpp`，metrics 源码正式进入库目标构建图。
+   - `dasall_metrics_recovery_unit_test` 构建通过，说明 metrics 源码入图后现有私有单测目标仍可成功链接。
+   - `MetricsRecoveryTest` 定向执行通过，1/1 tests passed。
+   - 构建过程中仍存在仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是 017 新引入的问题。
+
+### 结果
+
+1. MET-TODO-017 已完成 metrics 运行时代码到 `dasall_infra` 的正式接线，metrics 不再是仅靠 tests 侧直编私有源码维持的例外模块。
+2. 018 现在可以专注于 unit/contract/failure 测试入口与 discoverability 收口，而不再承担库目标入图职责。
+
+### 下一步
+
+1. 执行 `MET-TODO-018`，把 metrics 私有 unit 目标纳入 tests/unit 聚合清单，并补齐 metrics contract/discoverability 的统一门禁证据。
+
+### 风险
+
+1. 当前 metrics 私有单测仍保留直编源码桥接，虽然 017 后链接仍可工作，但这只是过渡状态；若 018 不及时收口，后续维护会继续存在“库目标入图”和“测试桥接”双轨并存的复杂度。
+
 ## 记录 #136
 
 - 日期：2026-04-06

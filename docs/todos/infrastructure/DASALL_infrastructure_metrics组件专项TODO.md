@@ -174,7 +174,7 @@
 | MET-TODO-014 | Done | 实现 MetricsExporterAdapter 首版导出骨架 | metrics 设计 6.2/6.7/6.8/6.9 | 6.2 MetricsExporterAdapter；6.8 导出异常；6.9 exporter.type | L2 | infra/src/metrics/MetricsExporterAdapter.cpp | export_batch(noop/prom_text), fallback_to_noop | unit：导出成功/失败/超时；failure：export_failure_total 可观测 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-003、MET-TODO-007、MET-TODO-008、MET-TODO-013 | OTLP 依赖未冻结 | 首版仅 noop/prom_text，OTLP 后置评审 | 导出骨架、单测；2026-04-06 已落盘 infra/src/metrics/MetricsExporterAdapter.{h,cpp}、tests/unit/infra/metrics/MetricsExporterAdapterTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsExporterAdapterTest | 仅当成功/失败/超时三路径均有可观测结果且不阻塞主流程时完成 |
 | MET-TODO-015 | Done | 实现 MetricsRecovery 降级与恢复骨架 | metrics 设计 6.8/6.10；工程规范 3.6 | 6.8 恢复动作；6.10 degraded_mode | L2 | infra/src/metrics/MetricsRecovery.cpp | enter_degraded, recover_to_healthy, emit_recovery_event | failure-injection：连续失败触发降级与恢复回清 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-008、MET-TODO-014 | health/logging 接口签名未统一 | 先输出 metrics 私有健康快照与日志钩子占位 | 恢复骨架、故障注入测试；2026-04-06 已落盘 infra/src/metrics/MetricsRecovery.{h,cpp}、tests/unit/infra/metrics/MetricsRecoveryTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsRecoveryTest | 仅当降级进入/退出两路径均可二值判定时完成 |
 | MET-TODO-016 | Done | 定义 MetricsConfigPolicy 配置模型与默认策略 | metrics 设计 6.9；架构 7.5.1 | 6.9 配置项表 | L3 | infra/src/metrics/MetricsConfigPolicy.cpp | merge(default/profile/deploy/runtime), validate_histogram_buckets | unit：默认值、覆盖优先级、桶单调性校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | MET-TODO-004、MET-TODO-006、MET-TODO-008 | Profile 键一致性未冻结 | 先冻结最小键集合：enabled/exporter/interval/labels | 配置策略实现、单测；2026-04-06 已落盘 infra/src/metrics/MetricsConfigPolicy.{h,cpp}、tests/unit/infra/metrics/MetricsConfigMergeTest.cpp，并在 tests/unit/infra/CMakeLists.txt 中注册 MetricsConfigMergeTest | 仅当覆盖顺序与默认值与 6.9 完全一致时完成 |
-| MET-TODO-017 | Not Started | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录 | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
+| MET-TODO-017 | Done | 注册 metrics 代码到 infra CMake | metrics 设计 8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/include/metrics/, infra/src/metrics/ | 将 metrics 源码与头文件纳入 dasall_infra | build：dasall_infra 可编译；unit：新增目标可链接 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | MET-TODO-001~MET-TODO-016 | 初期源文件可能为空 | 保留最小 non-empty 源文件并分批接线 | CMake 改动、构建记录；2026-04-06 已更新 infra/CMakeLists.txt，将 MetricsFacade/Registry/Aggregation/Guard/Config/Scheduler/Exporter/Recovery 全量源码与私有头纳入 dasall_infra | 仅当 placeholder 不再是唯一源码且 metrics 文件入图时完成 |
 | MET-TODO-018 | Not Started | 注册 metrics 的 unit 与 contract 测试入口 | metrics 设计 7/8/9；工程规范 3.7 | 7 映射、8.1 目录、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/metrics/, tests/contract/CMakeLists.txt | 新增 metrics 相关 unit/contract/failure 测试注册 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册入口、执行记录 | 仅当 metrics 新增测试在 ctest -N 可见并执行通过时完成 |
 | MET-TODO-019 | Blocked | 接线 MetricsAuditBridge 与 MetricsLoggingBridge 骨架 | metrics 设计 6.2/6.10 | 6.2 Bridge 组件；6.10 审计/日志事件 | L1 | infra/src/metrics/MetricsAuditBridge.cpp, infra/src/metrics/MetricsLoggingBridge.cpp | bridge_write_audit_event, bridge_write_log_event | contract：审计字段完整；unit：桥接调用可达 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-007、MET-TODO-008、MET-TODO-015 | MET-BLK-002、MET-BLK-004 | 冻结 audit/logging 最小写入接口与字段约束 | 桥接代码或阻塞记录 | 仅当外部接口冻结后，状态才可从 Blocked 改为 Not Started |
 | MET-TODO-020 | Not Started | 回写 metrics 质量门与交付证据 | metrics 设计 9.2/11；工程规范 6.2 | 9.2 Gate 建议；11 风险与回退 | L2 | docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | Gate 执行结果、阻塞变化、回退记录回写 | process test：门禁记录可追溯 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | MET-TODO-018 | 无 | 无 | 更新后的 TODO 证据段 | 仅当每个门禁项都有通过/失败结论与证据命令时完成 |
@@ -1152,3 +1152,55 @@ Build 合规复核：
 3. 测试发现性：已用 `ctest -N -R "(MetricsRecoveryTest|MetricsExporterAdapterTest)"` 验证恢复新测与 exporter 回归均可发现。
 4. TODO 证据回写：已回写任务状态、Design -> Build 映射、定向与全量 unit 验证结果。
 5. 提交隔离：本轮提交范围限定为 MetricsRecovery 私有源码、对应单测、CMake 注册、专项 TODO 与 worklog 证据更新。
+
+## 29. 本轮执行记录（2026-04-06 / MET-TODO-017）
+
+### 29.1 选中任务
+
+1. 本轮任务：MET-TODO-017。
+2. 可执行性依据：`MET-TODO-001~016` 已全部完成，metrics 私有运行时代码已落盘但仍停留在 tests 侧直编过渡形态；当前不存在要求先解的 Blocked 任务，适合先把源码正式接入 `dasall_infra`，为 018 的测试总表收口提供稳定链接面。
+
+### 29.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_metrics模块详细设计.md 8.1 已给出 metrics 的落盘建议目录，明确 runtime 源码应归属于 infra/src/metrics 并由 infra CMake 统一管理。
+2. infra/CMakeLists.txt 当前已采用“模块 sources + private headers 分组”模式管理 audit、health、logging、policy、secret 等私有实现，metrics 尚未入图，是当前唯一的例外路径。
+3. `MET-TODO-009~015` 已实际产出 MetricsFacade、InstrumentRegistry、AggregationEngine、CardinalityGuard、MetricsConfigPolicy、MetricReaderScheduler、MetricsExporterAdapter 与 MetricsRecovery，这些源码不再是 placeholder，可一次性纳入 `dasall_infra`。
+4. tests/unit/infra/CMakeLists.txt 目前仍通过直编私有源码维持 metrics 单测可执行，说明 017 的职责应是先让库目标入图，测试总表与去桥接工作留给 018 单独收口。
+
+外部参考：
+
+1. 常见 CMake 分层实践要求运行时代码优先归属于正式库目标，再由测试目标复用该库或在必要时做局部直编；据此本轮先解决“metrics 不在库图中”的根问题，而不把测试总表收口和 discoverability 修复混入同一提交。
+
+D 结论：
+
+1. Design -> Build 映射：更新 infra/CMakeLists.txt，新增 `DASALL_INFRA_METRICS_SOURCES` 与 `DASALL_INFRA_METRICS_PRIVATE_HEADERS`，并把全量 metrics runtime 源码正式纳入 `dasall_infra`。
+2. 最小接线范围：本轮只调整 infra 库目标的源码图，不提前修改 tests/unit/CMakeLists.txt 的聚合注册，避免把 018 的测试入口收口与 017 的源码入图混为一轮。
+3. Build 三件套：
+   - 代码目标：更新 infra/CMakeLists.txt，把 metrics 私有运行时代码与头文件接入 `dasall_infra`。
+   - 测试目标：验证 `dasall_metrics_recovery_unit_test` 在源码入图后仍可成功链接执行，作为 017 的最小 unit 链接证据。
+   - 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_infra dasall_metrics_recovery_unit_test`、`ctest --test-dir build-ci --output-on-failure -R MetricsRecoveryTest`。
+4. D Gate：PASS。
+
+### 29.3 Build 交付与证据
+
+交付物：
+
+1. infra/CMakeLists.txt：新增 `DASALL_INFRA_METRICS_SOURCES` 与 `DASALL_INFRA_METRICS_PRIVATE_HEADERS`，将 MetricsFacade/Registry/Aggregation/Guard/Config/Scheduler/Exporter/Recovery 全量源码与私有头接入 `dasall_infra`。
+2. build-ci 构建记录：确认 `dasall_infra` 现在会单独编译 metrics 源码对象，而不再只依赖 tests 侧直编过渡路径。
+3. `dasall_metrics_recovery_unit_test` 链接回归：验证库目标入图后，现有 metrics 私有单测目标仍能成功链接并执行，为 018 的测试总表收口保留安全过渡面。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_metrics_recovery_unit_test`：通过；构建日志显示 `dasall_infra` 已开始单独编译 `src/metrics/*.cpp`，仅保留仓库既有 `IMetricsProvider.h` 缺省初始化告警，不是本轮新增问题。
+3. `ctest --test-dir build-ci --output-on-failure -R MetricsRecoveryTest`：通过，1/1 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮仅调整 CMake 源码图，不引入新的实现逻辑，无需新增注释。
+2. 正负例覆盖：017 本质是构建接线任务，测试证据采用“库目标编译 + 现有 recovery 单测链接回归”的组合，不额外扩张到 018 的 discoverability 收口。
+3. 测试发现性：本轮不修改测试总表，discoverability 与 contract 注册留待 018 统一完成，避免跨任务混改。
+4. TODO 证据回写：已回写任务状态、metrics 源码入图范围与构建验证结果。
+5. 提交隔离：本轮提交范围限定为 infra/CMakeLists.txt、专项 TODO 与 worklog 证据更新。
