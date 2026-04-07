@@ -422,6 +422,45 @@ target / format / gate 矩阵：
 1. 高风险动作（远程导出、扩展命令执行）强制审计。
 2. 审计字段至少包含 actor、action、target、outcome、evidence_ref。
 
+### 6.10.1 Metrics / Audit bridge sink contract 冻结
+
+Metrics bridge 冻结原则：
+1. `DiagnosticsMetricsBridge` v1 只允许依赖 `std::shared_ptr<metrics::IMetricsProvider>`，并通过 `IMetricsProvider -> IMeter -> record(MetricSample)` 发射指标；diagnostics 不得直连 `IMetricExporter`、provider 具体实现或再造第二套私有 exporter sink。
+2. meter scope 固定为 `infra.diagnostics` / `v1`；`MetricLabels` 继续严格受 metrics 子域五元标签白名单约束，只允许 `module/stage/profile/outcome/error_code`。
+3. diagnostics 设计 6.10 中的 `{command}`、`{reason}`、`{target}` 维度在 v1 统一投影到现有 allowlist：命令与导出目标投影到 `labels.stage`，拒绝原因与 diagnostics 错误码投影到 `labels.error_code`；不新增 `command`、`reason`、`target` 自定义标签。
+4. `labels.module` 固定为 `diagnostics`；`labels.profile` 复用当前 diagnostics profile id；`labels.outcome` v1 只允许 `success`、`failure`、`rejected`、`degraded`。
+5. `labels.stage` v1 只允许以下固定值：`execute.health_snapshot`、`execute.queue_stats`、`execute.thread_dump`、`authorize`、`redaction`、`store`、`export.local_file`、`export.remote_upload`、`safe_mode`。
+6. `labels.error_code` v1 只允许 `none`、`diag_command_denied`，以及 diagnostics 错误码名 `INF_E_DIAG_COMMAND_DENIED`、`INF_E_DIAG_COMMAND_INVALID`、`INF_E_DIAG_EXEC_TIMEOUT`、`INF_E_DIAG_EXEC_FAIL`、`INF_E_DIAG_REDACTION_FAIL`、`INF_E_DIAG_SNAPSHOT_STORE_FAIL`、`INF_E_DIAG_EXPORT_FAIL`、`INF_E_DIAG_REMOTE_EXPORT_DISABLED`。
+7. metrics bridge failure 继续遵循现有 infra bridge 模式：provider not ready、identity invalid、config invalid、export failure / timeout 进入 `bridge_degraded`；label/cardinality/queue 类失败只做 best-effort 可观测，不递归反噬 diagnostics 主链结果。
+
+### 6.10.1.1 Diagnostics metrics family 映射
+
+| metric family | type | stage 投影 | outcome 语义 | error_code 投影 |
+|---|---|---|---|---|
+| `infra_diag_command_total` | Counter | `execute.<command>` | `success` / `failure` / `rejected` | 成功为 `none`；拒绝/失败时投影 diagnostics 错误码 |
+| `infra_diag_command_denied_total` | Counter | `authorize` | `rejected` | 投影 `diag_command_denied` |
+| `infra_diag_exec_latency_ms` | Histogram | `execute.<command>` | `success` / `failure` | 成功为 `none`；失败时投影 `INF_E_DIAG_EXEC_TIMEOUT` 或 `INF_E_DIAG_EXEC_FAIL` |
+| `infra_diag_snapshot_store_fail_total` | Counter | `store` | `failure` | 固定 `INF_E_DIAG_SNAPSHOT_STORE_FAIL` |
+| `infra_diag_export_total` | Counter | `export.local_file` / `export.remote_upload` | `success` / `failure` / `rejected` | 成功为 `none`；拒绝/失败时投影导出相关 diagnostics 错误码 |
+| `infra_diag_redaction_fail_total` | Counter | `redaction` | `failure` | 固定 `INF_E_DIAG_REDACTION_FAIL` |
+| `infra_diag_safe_mode_enter_total` | Counter | `safe_mode` | `degraded` | `none` |
+
+Audit bridge 冻结原则：
+1. `DiagnosticsAuditBridge` v1 只允许依赖 `std::shared_ptr<audit::IAuditLogger>`，并复用既有 `AuditEvent`、`AuditContext`、`AuditWriteOutcome`；diagnostics 不新增 bridge 专属公共审计对象。
+2. v1 强制审计动作固定为 `diagnostics.remote_export` 与 `diagnostics.command_extension`；前者对应 `RemoteUpload` 请求，后者为未来非白名单扩展命令预留，不允许在 022 中扩张为新的执行器能力。
+3. `AuditEvent.action` 固定使用上述 action 名；`AuditEvent.target` 分别映射为 `diagnostics.export:<target_ref>` 与 `diagnostics.command:<command_name>`；`AuditEvent.actor` 默认使用 `actor://redacted` 或调用方显式传入的受控 actor ref，不恢复未脱敏身份。
+4. `AuditEvent.evidence_ref.kind` 固定为 `AuditEvidenceKind::ToolResult`；`ref` 对 remote export 使用 `snapshot://<snapshot_id>`，对扩展命令使用 `command://<command_id>`。
+5. `AuditEvent.side_effects` v1 只允许可序列化稳定事实：`target_ref:<...>`、`format:json`、`result_code:<...>`、`detail_ref:<...>`、`request_scope:<...>`；不得写入原始 payload、secret、query string 或 diagnostics 内部对象 dump。
+6. `AuditContext` 只复用现有 `request_id/session_id/trace_id/task_id/parent_task_id/lease_id/worker_type`；未知值继续填 `unknown`，不要求 diagnostics 自己发明第二套上下文容器。
+7. audit failure semantics 固定为 required sink：缺少 `IAuditLogger`、`write_audit()` 返回失败或不一致状态时，`DiagnosticsAuditBridge` 必须返回显式 failure，并阻断对应高风险动作；不得降级为“继续执行但只写日志”。
+
+### 6.10.1.2 Diagnostics audit action / outcome 映射
+
+| 高风险动作 | action | target | outcome 映射 | evidence_ref |
+|---|---|---|---|---|
+| `RemoteUpload` 导出请求 | `diagnostics.remote_export` | `diagnostics.export:<target_ref>` | 远程 gate 拒绝 -> `Rejected`；远程写出成功 -> `Succeeded`；导出 backend / checksum / target 校验失败 -> `Failed` | `snapshot://<snapshot_id>` |
+| 非白名单扩展命令执行请求 | `diagnostics.command_extension` | `diagnostics.command:<command_name>` | policy / capability gate 拒绝 -> `Rejected`；执行成功 -> `Succeeded`；执行器或审计前置失败 -> `Failed` | `command://<command_id>` |
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

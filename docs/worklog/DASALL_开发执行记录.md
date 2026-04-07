@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #170
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-BLK-006 桥接接口冻结
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 仍把 `DIA-TODO-021`、`DIA-TODO-022` 标记为 `Blocked`，根因是 diagnostics 侧尚未把 metrics/audit 已冻结的最小 sink 合同正式回链成自己的 bridge 设计。
+2. 在实现 021/022 之前先收口 `DIA-BLK-006`，可以避免把 metrics 标签投影、audit action/target 映射和 required sink failure 语义散落进代码，导致后续 bridge 单测缺少权威锚点。
+
+### 改动
+
+1. 冻结 diagnostics bridge sink contract：
+   - 更新 [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_diagnostics模块详细设计.md)，新增 `6.10.1 Metrics / Audit bridge sink contract 冻结`。
+   - 该章节把 `DiagnosticsMetricsBridge` 固定到 `IMetricsProvider -> IMeter -> record(sample)`、`infra.diagnostics@v1` meter scope、七指标族，以及 `module/stage/profile/outcome/error_code` 五元标签 allowlist；同时把命令/拒绝原因/导出目标投影到 `stage` / `error_code`。
+   - 同章节把 `DiagnosticsAuditBridge` 固定到 `IAuditLogger::write_audit`，并冻结 `diagnostics.remote_export` / `diagnostics.command_extension` 的 action、target、evidence_ref、side_effects、context 和 required sink failure semantics。
+2. 新增 blocker deliverable：
+   - 新增 [docs/todos/infrastructure/deliverables/DIA-BLK-006-桥接接口收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/DIA-BLK-006-桥接接口收敛.md)，记录本地证据、外部参考、Design -> Build 映射和对 021/022 的直接交接。
+3. 回写台账：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md)，把 `DIA-BLK-006` 标记为已解阻，并将 `DIA-TODO-021`、`DIA-TODO-022` 从 `Blocked` 校准为 `Not Started`。
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md)，同步 diagnostics 在 INF-BLK-08 校准记录中的 bridge blocker 状态。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci --output-on-failure -R "(MetricsProviderInterfaceTest|MetricsMeterInterfaceTest|MetricTypesTest|AuditInterfaceCompileTest|AuditBoundaryContractTest)"`
+   - `rg -n "6.10.1|infra.diagnostics|diagnostics.remote_export|DIA-BLK-006|DIA-TODO-021|DIA-TODO-022" docs/architecture/DASALL_infra_diagnostics模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+2. 结果：
+   - metrics/audit 相关接口 gate 测试通过，说明 diagnostics 复用的最小 sink 合同在当前仓库状态下有效。
+   - diagnostics 详细设计、diagnostics 专项 TODO、infrastructure 总 TODO 与本轮 worklog 对 `DIA-BLK-006` / `DIA-TODO-021` / `DIA-TODO-022` 的状态保持一致。
+
+### 结果
+
+1. `DIA-BLK-006` 已解阻，diagnostics 的 metrics/audit bridge 不再依赖外部“待确认接口”，而是直接受 6.10.1 的固定 sink contract 约束。
+2. `DIA-TODO-021` 与 `DIA-TODO-022` 现在都具备进入实现轮的前置条件，下一步可以按用户要求继续串行推进 metrics bridge，再推进 audit bridge。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-021`，落盘 `DiagnosticsMetricsBridge`。
+2. 021 完成并提交后，再进入 `DIA-TODO-022`。
+
+### 风险
+
+1. diagnostics 设计 6.10 原始指标维度使用了 `{command}`、`{reason}`、`{target}` 表达，本轮已把它们收敛到 metrics 五元标签 allowlist 的 `stage` / `error_code` 投影；若后续实现重新引入自定义标签，会直接破坏 metrics 子域冻结边界。
+2. audit bridge 当前只冻结 remote export 与扩展命令执行两个高风险动作；若后续把普通只读 execute/get 路径也升级为 required audit，必须通过新的设计评审，而不是在 022 里顺手扩张。
+
 ## 记录 #169
 
 - 日期：2026-04-07
