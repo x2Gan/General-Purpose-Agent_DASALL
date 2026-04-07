@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #164
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-017 SnapshotAssembler 快照组装骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-017` 的前置 `DIA-TODO-004`、`DIA-TODO-016` 已完成，因此本轮最小原子任务就是把 facade 内仍残留的 snapshot 组装逻辑拆到独立 `SnapshotAssembler`。
+2. 017 的验收锚点是 `DiagnosticsSnapshotExportTest`，但 facade 已经承接 execute/get/export 闭环；因此本轮既要补一个真实 assembler 单测入口，也要补跑 smoke/integration，确保主链拆分后无行为回归。
+
+### 改动
+
+1. 新增 diagnostics snapshot assembler 私有实现：
+   - 新增 [infra/src/diagnostics/SnapshotAssembler.h](/home/gangan/DASALL/infra/src/diagnostics/SnapshotAssembler.h) 与 [infra/src/diagnostics/SnapshotAssembler.cpp](/home/gangan/DASALL/infra/src/diagnostics/SnapshotAssembler.cpp)，实现 `EvidenceBundle + execution metadata -> DiagnosticsSnapshot` 的最小组装逻辑。
+   - 该骨架当前负责生成稳定 `diag-snapshot-<n>` 前缀的 `snapshot_id`，并把 `summary`、`collected_at`、四类 canonical evidence refs 与 artifacts 收敛进最终 snapshot。
+2. 收口 facade 的 snapshot 拼装职责：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.h) 与 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，移除 facade 私有 `build_snapshot()`，改为持有真实 `SnapshotAssembler` 并在 executor/evidence 之后调用。
+   - 这样 diagnostics 主链骨架正式收敛为 `Facade -> Registry -> PolicyGuard -> Executor -> EvidenceCollector -> SnapshotAssembler`。
+3. 扩展 assembler 的 unit 证据：
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，为 `DiagnosticsSnapshotExportTest` 增加 `infra/src` include path，使其可直接命中私有 assembler。
+   - 更新 [tests/unit/infra/DiagnosticsSnapshotExportTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsSnapshotExportTest.cpp)，新增 assembler 骨架用例，验证 `snapshot_id` 唯一生成、`summary`/`collected_at` 保持执行器锚点、`evidence_refs` 绑定四类 canonical refs 与 artifacts。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_diagnostics_snapshot_export_unit_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsSnapshotExportTest|InfraDiagnosticsSmokeTest|InfraDiagnosticsIntegrationTest"`
+2. 结果：
+   - `dasall_diagnostics_snapshot_export_unit_test`、`dasall_infra_diagnostics_smoke_integration_test`、`dasall_infra_diagnostics_integration_test` 构建通过。
+   - `DiagnosticsSnapshotExportTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 共 3/3 通过。
+3. 说明：
+   - 由于本轮新增了 diagnostics 私有源文件 `SnapshotAssembler.cpp`，先显式执行了一次 `cmake -S . -B build-ci` 刷新生成图，再进行增量构建和定向测试。
+
+### 结果
+
+1. `DIA-TODO-017` 已完成，diagnostics 主链 D 阶段现在具备真实 `Facade -> Registry -> PolicyGuard -> Executor -> EvidenceCollector -> SnapshotAssembler` 六段骨架。
+2. facade 不再直接拼装 snapshot，后续可以把剩余工作转入 E 阶段的脱敏、存储和导出骨架，而不再继续把主链组装逻辑堆回 facade。
+
+### 下一步
+
+1. 若按安全顺序推进，先解 `DIA-BLK-004`，再落 `DIA-TODO-018` 的 `RedactionEngine` 骨架。
+2. 在不突破当前边界的前提下，评估 `DIA-TODO-019` 的 `SnapshotStore` 最小持久化骨架与 retention 约束是否可独立推进。
+
+### 风险
+
+1. 当前 `SnapshotAssembler` 的 `snapshot_id` 仍是进程内单调序号骨架，尚未接入跨进程/跨持久化后端的全局唯一策略；后续 `SnapshotStore` 落盘时不能直接把这个 skeleton 误判为完整唯一性方案。
+2. 脱敏链路仍未落盘，assembler 当前直接组装 executor/evidence 输出；在 `RedactionEngine` 完成前，不应扩大可导出内容面或引入原始敏感字段。
+
 ## 记录 #163
 
 - 日期：2026-04-07

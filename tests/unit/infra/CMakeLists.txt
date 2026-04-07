@@ -1444,6 +1444,11 @@ add_executable(dasall_diagnostics_snapshot_export_unit_test
   DiagnosticsSnapshotExportTest.cpp
 )
 
+target_include_directories(dasall_diagnostics_snapshot_export_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 target_link_libraries(dasall_diagnostics_snapshot_export_unit_test
   PRIVATE
     dasall_test_support

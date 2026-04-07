@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "diagnostics/IDiagnosticsService.h"
+#include "diagnostics/SnapshotAssembler.h"
 
 namespace dasall::infra::diagnostics {
 
@@ -37,15 +38,14 @@ class DiagnosticsServiceFacade final : public IDiagnosticsService {
   };
 
   [[nodiscard]] bool allows_command_in_current_mode(const DiagnosticsCommand& command) const;
-  [[nodiscard]] DiagnosticsSnapshot build_snapshot(const DiagnosticsCommand& command);
   void note_failure(std::string reason);
   void reset_failures();
 
   DiagnosticsServiceFacadeOptions options_{};
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   std::uint32_t consecutive_failures_ = 0;
-  std::uint64_t next_snapshot_index_ = 1;
   std::optional<std::string> safe_mode_reason_;
+  SnapshotAssembler snapshot_assembler_{};
   std::unordered_map<std::string, DiagnosticsSnapshot> snapshots_;
 };
 

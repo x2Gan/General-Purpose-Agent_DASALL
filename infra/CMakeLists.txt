@@ -159,6 +159,7 @@ set(DASALL_INFRA_DIAGNOSTICS_SOURCES
   src/diagnostics/CommandPolicyGuard.cpp
   src/diagnostics/CommandExecutor.cpp
   src/diagnostics/EvidenceCollector.cpp
+  src/diagnostics/SnapshotAssembler.cpp
   src/diagnostics/DiagnosticsServiceFacade.cpp
 )
 
@@ -167,6 +168,7 @@ set(DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS
   src/diagnostics/CommandPolicyGuard.h
   src/diagnostics/CommandExecutor.h
   src/diagnostics/EvidenceCollector.h
+  src/diagnostics/SnapshotAssembler.h
   src/diagnostics/DiagnosticsServiceFacade.h
 )
 

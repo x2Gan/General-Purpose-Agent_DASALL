@@ -127,16 +127,7 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
 
   const EvidenceCollector collector;
   const auto evidence = collector.collect(command, execution);
-  auto snapshot = build_snapshot(command);
-  snapshot.collected_at = execution.executed_at;
-  snapshot.summary = execution.summary;
-  snapshot.evidence_refs = {evidence.logs_ref,
-                            evidence.metrics_ref,
-                            evidence.health_ref,
-                            evidence.errors_ref};
-  snapshot.evidence_refs.insert(snapshot.evidence_refs.end(),
-                                evidence.artifacts.begin(),
-                                evidence.artifacts.end());
+  auto snapshot = snapshot_assembler_.assemble(command, execution, evidence);
   snapshots_[snapshot.snapshot_id] = snapshot;
   reset_failures();
   return DiagnosticsSnapshotResult::success(
@@ -219,19 +210,6 @@ bool DiagnosticsServiceFacade::allows_command_in_current_mode(
   }
 
   return command.command_name == "health.snapshot";
-}
-
-DiagnosticsSnapshot DiagnosticsServiceFacade::build_snapshot(const DiagnosticsCommand& command) {
-  return DiagnosticsSnapshot{
-      .snapshot_id = std::string("diag-snapshot-") + std::to_string(next_snapshot_index_++),
-      .command = command,
-      .collected_at = current_time_rfc3339_stub(),
-  .summary = std::string("diagnostics executor skeleton snapshot"),
-      .evidence_refs = {std::string("logs://diagnostics/facade"),
-                        std::string("health://diagnostics/facade")},
-      .redaction_profile = RedactionProfile::Strict,
-      .exporter_hint = std::string("local_file"),
-  };
 }
 
 void DiagnosticsServiceFacade::note_failure(std::string reason) {
