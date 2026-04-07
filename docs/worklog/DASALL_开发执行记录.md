@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #201
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-014 PluginManifest 对象与 schema 冻结
+- 状态：已完成
+
+### 任务选择
+
+1. INF-BLK-09 在上一轮已解阻后，`PLG-TODO-014` 成为 015~017 的最小前置对象任务。
+2. 014 的边界已经收敛为“public header + unit/contract 守卫”，不需要在本轮提前扩张到 parser、registry 或 manager/pipeline 改签名。
+
+### 改动
+
+1. 新增 [infra/include/plugin/PluginManifest.h](../../infra/include/plugin/PluginManifest.h)，定义 `PluginManifest`、`PluginManifestExtension` 以及 schema_version、SemVer、`required_abi`、extension namespace 的一致性检查 helper。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `PluginManifest.h` 纳入 plugin public header 列表。
+3. 更新 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt)，注册 `dasall_plugin_manifest_unit_test`。
+4. 新增 [tests/unit/infra/plugin/PluginManifestTest.cpp](../../tests/unit/infra/plugin/PluginManifestTest.cpp)，覆盖默认 unknown、有效 v1 schema 正例，以及 reserved extension owner / malformed `required_abi` 负例。
+5. 更新 [tests/contract/plugin/CMakeLists.txt](../../tests/contract/plugin/CMakeLists.txt)，注册 `dasall_contract_plugin_manifest_boundary_test`。
+6. 新增 [tests/contract/smoke/PluginManifestBoundaryContractTest.cpp](../../tests/contract/smoke/PluginManifestBoundaryContractTest.cpp)，验证 manifest 不吸收 request/trace/task/tool/skill 等外域语义。
+7. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-014-PluginManifest设计收敛.md](../todos/infrastructure/deliverables/PLG-TODO-014-PluginManifest%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，记录设计结论、Design -> Build 映射与风险边界。
+8. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-014` 回写为 Done，并补充本轮执行记录与版本记录 v1.15。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_manifest_unit_test dasall_contract_plugin_manifest_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginManifestSchemaTest|PluginManifestBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginManifestSchemaTest|PluginManifestBoundaryContractTest"`
+2. 结果：
+   - `dasall_infra`、`dasall_plugin_manifest_unit_test` 与 `dasall_contract_plugin_manifest_boundary_test` 全部构建通过。
+   - `PluginManifestSchemaTest` 与 `PluginManifestBoundaryContractTest` 都已进入 CTest 图。
+   - 两个用例 2/2 通过。
+
+### 结果
+
+1. plugin public boundary 现在拥有可直接复用的 PluginManifest v1.0 对象，schema_version、`required_abi` 与 extension namespace 不再只存在于文档层。
+2. 014 保持在最小对象冻结粒度，没有提前触发 manager/pipeline public signature 变化，为后续 015/016 的接口轮次保留了清晰边界。
+
+### 下一步
+
+1. 进入 `PLG-TODO-015`，按已冻结 trust policy 落盘 IPluginSignatureVerifier public boundary 与签名相关输入输出对象。
+
+### 风险
+
+1. 014 当前只冻结对象与静态 helper；manifest parser/serialization 仍未落盘，后续若 registry 需要真实编解码，应另起原子任务完成。
+
 ## 记录 #200
 
 - 日期：2026-04-07

@@ -32,6 +32,12 @@ dasall_register_plugin_unit_test(
 )
 
 dasall_register_plugin_unit_test(
+  dasall_plugin_manifest_unit_test
+  PluginManifestSchemaTest
+  PluginManifestTest.cpp
+)
+
+dasall_register_plugin_unit_test(
   dasall_plugin_catalog_unit_test
   PluginCatalogTest
   PluginCatalogTest.cpp

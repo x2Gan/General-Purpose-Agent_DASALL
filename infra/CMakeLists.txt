@@ -229,6 +229,7 @@ set(DASALL_INFRA_PLUGIN_PRIVATE_HEADERS
 set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
   include/plugin/PluginCatalog.h
   include/plugin/PluginDescriptor.h
+  include/plugin/PluginManifest.h
   include/plugin/PluginErrorCode.h
   include/plugin/IPluginManager.h
   include/plugin/IPluginPolicyGate.h

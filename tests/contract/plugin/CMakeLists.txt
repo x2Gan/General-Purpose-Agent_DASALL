@@ -27,6 +27,12 @@ dasall_register_plugin_contract_test(
 )
 
 dasall_register_plugin_contract_test(
+  dasall_contract_plugin_manifest_boundary_test
+  PluginManifestBoundaryContractTest
+  ../smoke/PluginManifestBoundaryContractTest.cpp
+)
+
+dasall_register_plugin_contract_test(
   dasall_contract_plugin_catalog_boundary_test
   PluginCatalogBoundaryContractTest
   ../smoke/PluginCatalogBoundaryContractTest.cpp
