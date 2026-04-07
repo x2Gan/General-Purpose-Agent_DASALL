@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #194
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-010 plugin 合约边界测试入口注册
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-009` 已完成并推送后，`PLG-TODO-010` 成为用户指定串行范围中的最后一个可执行原子任务。
+2. 五个 plugin contract 用例已经存在，010 的唯一缺口是注册入口仍停留在 tests/contract/CMakeLists.txt 主文件中，因此本轮只做入口收口、helper 对齐与 contract discoverability 验证，不改 contract 用例源码。
+
+### 改动
+
+1. 新增 [tests/contract/plugin/CMakeLists.txt](../../tests/contract/plugin/CMakeLists.txt)，提供 `dasall_register_plugin_contract_test(...)` helper，统一五个 plugin contract executable、`contract;smoke;plugin` 标签以及 infra include/link 接线。
+2. 更新 [tests/contract/CMakeLists.txt](../../tests/contract/CMakeLists.txt)，删除主文件内联的五段 plugin contract 注册片段，改为 `add_subdirectory(plugin)`。
+3. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-010-plugin合约边界测试入口注册收敛.md](../todos/infrastructure/deliverables/PLG-TODO-010-plugin%E5%90%88%E7%BA%A6%E8%BE%B9%E7%95%8C%E6%B5%8B%E8%AF%95%E5%85%A5%E5%8F%A3%E6%B3%A8%E5%86%8C%E6%94%B6%E6%95%9B.md)，记录 010 的输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+4. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 PLG-TODO-010 回写为 Done，并补充本轮执行记录。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_contract_plugin_descriptor_boundary_test dasall_contract_plugin_catalog_boundary_test dasall_contract_plugin_error_code_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_policy_gate_boundary_test`
+   - `ctest --test-dir build-ci -N -L contract | grep -i Plugin`
+   - `ctest --test-dir build-ci --output-on-failure -L contract -R "Plugin"`
+2. 结果：
+   - 五个 plugin contract 目标全部构建通过。
+   - `ctest -N -L contract` 可发现 5 个 plugin contract 入口；`ctest -L contract -R "Plugin"` 5/5 通过。
+
+### 结果
+
+1. plugin contract 边界测试现在通过 tests/contract/plugin/CMakeLists.txt 统一注册，并带有稳定的 `contract;smoke;plugin` 标签。
+2. 至此 PLG-TODO-008/009/010 已全部完成并推送，plugin Phase 3 的 build、unit、contract 三类入口都已按组件级路径收口。
+
+### 下一步
+
+1. 若继续沿 plugin 专项 TODO 推进，直接后继应进入 PLG-TODO-005，开始 PluginValidationPipeline 骨架与三检流程任务。
+2. 若要保持 Phase 4 对称推进，也可评估与 PLG-TODO-006 并行的审计适配入口收口，但不得绕开 005 的最小前置。
+
+### 风险
+
+1. 010 只收敛了 contract 注册入口；更深的失败注入与 profile 矩阵验证仍需等 Phase 4/5 的实现与测试任务继续补齐。
+
 ## 记录 #193
 
 - 日期：2026-04-07
