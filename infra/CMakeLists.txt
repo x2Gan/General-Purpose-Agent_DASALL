@@ -185,11 +185,13 @@ set(DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS
 set(DASALL_INFRA_OTA_SOURCES
   src/ota/OTAPrecheckService.cpp
   src/ota/PackageVerifier.cpp
+  src/ota/ArtifactCompatibilityEvaluator.cpp
 )
 
 set(DASALL_INFRA_OTA_PRIVATE_HEADERS
   src/ota/OTAPrecheckService.h
   src/ota/PackageVerifier.h
+  src/ota/ArtifactCompatibilityEvaluator.h
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS

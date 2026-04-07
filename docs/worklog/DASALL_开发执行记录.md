@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #179
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-008 ArtifactCompatibilityEvaluator 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-008` 是在 007 完成后的直接后继任务，前置 `OTA-TODO-007` 已完成，因此可以继续沿着 verify -> compatibility 顺序推进。
+2. 008 的边界只要求把 manifest/profile/hardware/dependency 冲突转成 compatibility report，不需要提前进入 install/switch，因此可以保持为纯 evaluator 骨架。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-008-ArtifactCompatibilityEvaluator骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-008-ArtifactCompatibilityEvaluator骨架收敛.md)，固化 008 的研究结论、Design->Build 映射、Build 合规复核与验证证据。
+2. 新增 [infra/src/ota/ArtifactCompatibilityEvaluator.h](/home/gangan/DASALL/infra/src/ota/ArtifactCompatibilityEvaluator.h) 与 [infra/src/ota/ArtifactCompatibilityEvaluator.cpp](/home/gangan/DASALL/infra/src/ota/ArtifactCompatibilityEvaluator.cpp)，冻结 capability/profile snapshot 与 compatibility report 语义，并实现 `evaluate(verified_manifest, capability, profile)`。
+3. 新增 [tests/unit/infra/ota/ArtifactCompatibilityEvaluatorTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/ArtifactCompatibilityEvaluatorTest.cpp)，覆盖 success、hardware conflict、profile conflict、dependency conflict 四类路径。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 evaluator 骨架和 `ArtifactCompatibilityEvaluatorTest` 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-008` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_artifact_compatibility_evaluator_unit_test`
+   - `ctest --test-dir build-ci -N -R "ArtifactCompatibilityEvaluatorTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "ArtifactCompatibilityEvaluatorTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `ArtifactCompatibilityEvaluatorTest` 1 项。
+   - OTA 定向执行：`ArtifactCompatibilityEvaluatorTest` 1/1 通过。
+   - 仓库级 unit 门：165/165 通过。
+
+### 结果
+
+1. `OTA-TODO-008` 已完成，OTA 现在具备可执行的 compatibility evaluator 骨架，能够在 install 前拒绝 hardware/profile/dependency_refs 冲突。
+2. compatibility failure 现在会清空 accepted artifacts 并返回 contract-shaped blocking reasons，为 009 的安装执行器提供明确输入。
+
+### 下一步
+
+1. 进入 `OTA-TODO-009`，实现 InstallExecutor 骨架，把 repo_bound/slot_bound staging 与 InstallEvidence 输出接到 precheck + verify + compatibility 之后。
+2. 009 完成后再进入 `OTA-TODO-010`，实现 SlotSwitchCoordinator 骨架，把 inactive slot 选择和 rollback token 生成接到 install 之后。
+
+### 风险
+
+1. 当前 evaluator 把 `available_dependency_refs + artifact_id` 组合作为最小依赖可用集，这是为了给 008 建立 install 前阻断能力的骨架；后续若 dependency 语义需要区分“已装依赖”和“同批工件依赖”，应在 OTA 私有域细化，而不是修改 contracts。
+2. 当前 compatibility failure 统一映射到 contracts 既有 ErrorInfo/ResultCodeCategory；如后续需要更细粒度 compatibility 观测，应继续通过 message/stage/source_ref 扩展，而不是新增共享错误模型。
+
 ## 记录 #178
 
 - 日期：2026-04-07
