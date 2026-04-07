@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #173
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-023 diagnostics 源码构建接线门禁收口
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-023` 的完成条件是“diagnostics 文件进入 `dasall_infra` 构建图且 placeholder 不再是唯一源码入口”。
+2. 由于 012~022 每个原子实现已经把对应 diagnostics 私有源码逐步接入 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，023 本轮不需要再造额外代码；本轮目标是以独立 gate 证据正式确认构建图已经收口，并与 TODO / worklog 状态同步。
+
+### 改动
+
+1. 回查 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt) 的 `DASALL_INFRA_DIAGNOSTICS_SOURCES`，确认 `CommandRegistry`、`CommandPolicyGuard`、`CommandExecutor`、`DiagnosticsMetricsBridge`、`DiagnosticsAuditBridge`、`EvidenceCollector`、`SnapshotAssembler`、`RedactionEngine`、`SnapshotStore`、`ExportManager` 与 `DiagnosticsServiceFacade` 均已进入 diagnostics 私有源集。
+2. 执行 `cmake --build build-ci --target dasall_infra`，验证 `DiagnosticsAuditBridge.cpp`、`DiagnosticsServiceFacade.cpp` 等 diagnostics 源码确已参与 `dasall_infra` 目标编译与链接。
+3. 更新 diagnostics 专项 TODO、infrastructure 总 TODO 与本轮 worklog，把 023 从 “待收口” 转成 `Done`，并把下一步焦点切到 024 的 unit / contract 发现性门禁。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_infra`
+2. 结果：
+   - `dasall_infra` 构建通过；日志显示 diagnostics 私有源集继续参与目标编译与静态库链接，满足 023 的构建图收口条件。
+
+### 结果
+
+1. `DIA-TODO-023` 已完成，diagnostics 私有实现源码已全部进入 `dasall_infra` 构建图，构建门禁不再依赖 placeholder 或“后续统一接线”假设。
+2. F 阶段剩余门禁已收敛到 `DIA-TODO-024` 与 `DIA-TODO-025` 的测试注册 / 发现性证据收口。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-024`，用 `ctest -N` / `-L` 证据收口 diagnostics unit 与 contract 测试入口。
+2. 024 完成后继续推进 `DIA-TODO-025`，完成 diagnostics integration 发现性闭环。
+
+### 风险
+
+1. 023 本轮是构建 gate closeout，而不是新增源码轮；若后续有人在 diagnostics 下新增实现文件但未同步 `DASALL_INFRA_DIAGNOSTICS_SOURCES`，这个门禁会再次失效，因此 024/025 的测试发现性仍需独立收口。
+
 ## 记录 #172
 
 - 日期：2026-04-07
