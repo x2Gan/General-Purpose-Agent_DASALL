@@ -161,6 +161,7 @@ set(DASALL_INFRA_DIAGNOSTICS_SOURCES
   src/diagnostics/EvidenceCollector.cpp
   src/diagnostics/SnapshotAssembler.cpp
   src/diagnostics/RedactionEngine.cpp
+  src/diagnostics/SnapshotStore.cpp
   src/diagnostics/DiagnosticsServiceFacade.cpp
 )
 
@@ -171,6 +172,7 @@ set(DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS
   src/diagnostics/EvidenceCollector.h
   src/diagnostics/SnapshotAssembler.h
   src/diagnostics/RedactionEngine.h
+  src/diagnostics/SnapshotStore.h
   src/diagnostics/DiagnosticsServiceFacade.h
 )
 

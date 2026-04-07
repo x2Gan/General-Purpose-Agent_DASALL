@@ -1,17 +1,20 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_map>
 
 #include "diagnostics/IDiagnosticsService.h"
 #include "diagnostics/SnapshotAssembler.h"
+#include "diagnostics/SnapshotStore.h"
 
 namespace dasall::infra::diagnostics {
 
 struct DiagnosticsServiceFacadeOptions {
   std::uint32_t safe_mode_failure_threshold = 5;
+  std::uint32_t snapshot_retention_days = 7;
+  std::size_t snapshot_max_count = 500;
 };
 
 class DiagnosticsServiceFacade final : public IDiagnosticsService {
@@ -25,6 +28,7 @@ class DiagnosticsServiceFacade final : public IDiagnosticsService {
   [[nodiscard]] bool is_in_safe_mode() const;
   [[nodiscard]] std::uint32_t consecutive_failures() const;
   [[nodiscard]] std::optional<std::string> safe_mode_reason() const;
+  void inject_snapshot_store_commit_failure_for_test(std::string reason);
 
   [[nodiscard]] DiagnosticsSnapshotResult execute(const DiagnosticsCommand& command) override;
   [[nodiscard]] DiagnosticsSnapshotResult get_snapshot(const SnapshotQuery& query) override;
@@ -46,7 +50,7 @@ class DiagnosticsServiceFacade final : public IDiagnosticsService {
   std::uint32_t consecutive_failures_ = 0;
   std::optional<std::string> safe_mode_reason_;
   SnapshotAssembler snapshot_assembler_{};
-  std::unordered_map<std::string, DiagnosticsSnapshot> snapshots_;
+  SnapshotStore snapshot_store_;
 };
 
 }  // namespace dasall::infra::diagnostics

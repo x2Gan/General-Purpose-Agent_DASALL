@@ -1500,6 +1500,26 @@ dasall_apply_common_options(dasall_diagnostics_redaction_failure_unit_test)
 add_test(NAME DiagnosticsRedactionFailureTest COMMAND dasall_diagnostics_redaction_failure_unit_test)
 set_tests_properties(DiagnosticsRedactionFailureTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_diagnostics_snapshot_store_unit_test
+  DiagnosticsSnapshotStoreTest.cpp
+)
+
+target_include_directories(dasall_diagnostics_snapshot_store_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_diagnostics_snapshot_store_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_diagnostics_snapshot_store_unit_test)
+
+add_test(NAME DiagnosticsSnapshotStoreTest COMMAND dasall_diagnostics_snapshot_store_unit_test)
+set_tests_properties(DiagnosticsSnapshotStoreTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_config_types_unit_test
   ConfigTypesTest.cpp
 )

@@ -38,7 +38,9 @@ constexpr std::string_view kDiagnosticsServiceFacadeSourceRef = "DiagnosticsServ
 }  // namespace
 
 DiagnosticsServiceFacade::DiagnosticsServiceFacade(DiagnosticsServiceFacadeOptions options)
-    : options_(options) {}
+    : options_(options),
+      snapshot_store_(SnapshotStoreOptions{.retention_days = options.snapshot_retention_days,
+                                           .max_snapshot_count = options.snapshot_max_count}) {}
 
 bool DiagnosticsServiceFacade::start() {
   if (lifecycle_state_ == LifecycleState::Created) {
@@ -68,6 +70,10 @@ std::uint32_t DiagnosticsServiceFacade::consecutive_failures() const {
 
 std::optional<std::string> DiagnosticsServiceFacade::safe_mode_reason() const {
   return safe_mode_reason_;
+}
+
+void DiagnosticsServiceFacade::inject_snapshot_store_commit_failure_for_test(std::string reason) {
+  snapshot_store_.inject_commit_failure_for_test(std::move(reason));
 }
 
 DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCommand& command) {
@@ -148,7 +154,24 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
   }
 
   snapshot = std::move(redaction.snapshot);
-  snapshots_[snapshot.snapshot_id] = snapshot;
+  const auto store_result = snapshot_store_.store(snapshot);
+  if (!store_result.stored) {
+    note_failure("snapshot_store_failed");
+    return DiagnosticsSnapshotResult::failure(
+        store_result.result_code,
+        store_result.error.has_value() ? store_result.error->details.message
+                                       : std::string("diagnostics snapshot persistence failed"),
+        store_result.error.has_value() ? store_result.error->details.stage
+                                       : std::string("diagnostics.store_snapshot"),
+        std::string(kDiagnosticsServiceFacadeSourceRef),
+        CommandDecision{
+            .allowed = true,
+            .reason_code = std::string(),
+            .policy_ref = std::string("policy://diagnostics/readonly"),
+            .denied_rule_id = std::string(),
+        });
+  }
+
   reset_failures();
   return DiagnosticsSnapshotResult::success(
       std::move(snapshot),
@@ -173,14 +196,14 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::get_snapshot(const SnapshotQ
                                  "diagnostics.get_snapshot");
   }
 
-  const auto iterator = snapshots_.find(query.snapshot_id);
-  if (iterator == snapshots_.end()) {
+  const auto snapshot = snapshot_store_.get(query.snapshot_id);
+  if (!snapshot.has_value()) {
     return make_snapshot_failure(contracts::ResultCode::ValidationFieldMissing,
                                  "snapshot_id must resolve to a retained diagnostics snapshot",
                                  "diagnostics.get_snapshot");
   }
 
-  return DiagnosticsSnapshotResult::success(iterator->second,
+  return DiagnosticsSnapshotResult::success(*snapshot,
                                             CommandDecision{
                                                 .allowed = true,
                                                 .reason_code = {},
@@ -209,7 +232,7 @@ SnapshotExportResult DiagnosticsServiceFacade::export_snapshot(
                                "diagnostics.export_snapshot");
   }
 
-  if (!snapshots_.contains(request.snapshot_id)) {
+  if (!snapshot_store_.contains(request.snapshot_id)) {
     return make_export_failure(contracts::ResultCode::ValidationFieldMissing,
                                "diagnostics export requires an existing retained snapshot",
                                "diagnostics.export_snapshot");

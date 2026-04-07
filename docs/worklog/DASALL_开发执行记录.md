@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #167
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-019 SnapshotStore 持久化骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 已把 `DIA-TODO-018` 标记完成，因此本轮按既定顺序直接进入 `DIA-TODO-019`，目标是把 facade 里临时 retained map 收口到真实 `SnapshotStore`。
+2. 019 的验收不只是一条 store 单测；由于 get/export 现在都要通过 store 取快照，本轮还需要补跑 smoke/integration，确认 execute/get/export 的最小闭环未被 store 接线破坏。
+
+### 改动
+
+1. 新增 diagnostics snapshot store 私有实现：
+   - 新增 [infra/src/diagnostics/SnapshotStore.h](/home/gangan/DASALL/infra/src/diagnostics/SnapshotStore.h) 与 [infra/src/diagnostics/SnapshotStore.cpp](/home/gangan/DASALL/infra/src/diagnostics/SnapshotStore.cpp)，定义 `SnapshotStoreOptions`、`SnapshotStoreResult` 与 `SnapshotStore::store/get/contains`。
+   - 当前骨架使用内存 map + history deque 持有 redacted snapshot，并按 `retention_days`、`max_snapshot_count` 执行清理；非法快照、重复 snapshot_id、注入式持久化失败都统一映射到 `INF_E_DIAG_SNAPSHOT_STORE_FAIL`。
+2. 把 facade 的 retained map 收口到 SnapshotStore：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.h) 与 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，让 execute success path 在 redaction 之后调用 `snapshot_store_.store()`。
+   - `get_snapshot()` 与 `export_snapshot()` 现在都改为走 `SnapshotStore` 查询；store failure 会回传 `INF_E_DIAG_SNAPSHOT_STORE_FAIL`，而不再把临时 map 写入视作永远成功。
+3. 新增 SnapshotStore 单测：
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，注册 `DiagnosticsSnapshotStoreTest`。
+   - 新增 [tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp)，覆盖 redacted snapshot 持久化、`max_snapshot_count` 修剪、`retention_days` 修剪、注入式 store failure，以及 facade 对 store failure 的透传。
+4. 构建图接线：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 `SnapshotStore.cpp/.h` 接入 diagnostics 私有源集。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_diagnostics_snapshot_store_unit_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsSnapshotStoreTest|InfraDiagnosticsSmokeTest|InfraDiagnosticsIntegrationTest"`
+2. 结果：
+   - `DiagnosticsSnapshotStoreTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 共 3/3 通过。
+3. 说明：
+   - `build-ci` 目录当前固定为 Unix Makefiles，因此本轮沿用现有生成器执行验证，没有切换到 Ninja。
+
+### 结果
+
+1. `DIA-TODO-019` 已完成，diagnostics execute/get/export 主链现在通过真实 `SnapshotStore` 管理 retained snapshot，而不再依赖 facade 临时 map。
+2. `retention_days`、`max_snapshot_count` 和 store failure 映射已具备最小可验证骨架，为 020 的导出管理器提供了稳定的 snapshot lookup 前提。
+
+### 下一步
+
+1. 直接进入 `DIA-BLK-005`，冻结导出格式、checksum 与 allowed_targets 白名单。
+2. `DIA-BLK-005` 解阻后再进入 `DIA-TODO-020 ExportManager`。
+
+### 风险
+
+1. 当前 `SnapshotStore` 仍是内存后端骨架，不覆盖跨进程/重启恢复；后续若要持久到文件或 sqlite，必须保持现有 `INF_E_DIAG_SNAPSHOT_STORE_FAIL` 映射与 retention 语义不漂移。
+2. retention 清理当前依赖 `collected_at` 的 RFC3339 UTC 格式；若后续 `SnapshotAssembler` 修改时间格式而未同步 store 解析器，持久化会被明确阻断而不是静默退化。
+
 ## 记录 #166
 
 - 日期：2026-04-07
