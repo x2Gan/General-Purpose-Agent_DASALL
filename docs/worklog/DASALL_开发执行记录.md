@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #149
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-017 注册 tracing 源码到 infra CMake
+- 状态：已完成
+
+### 任务选择
+
+1. 本轮按 project-implementation-cycle 重新检查 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 后，确认 `TRC-TODO-017` 是用户点名范围内最小且依赖全部满足的原子任务；`TRC-TODO-018` 仍显式依赖 017，因此必须先完成 017 的证据闭环。
+2. 核查现有仓库状态后，发现 tracing 实现源码已在前序 008~014、016 轮次中逐步纳入 `infra/CMakeLists.txt`，因此本轮不再重复改造实现，而是收口 TODO/worklog 证据并补做独立构建验收。
+
+### 改动
+
+1. 完成 TRC-TODO-017 证据回写：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md)，将 `TRC-TODO-017` 从 Not Started 改为 Done，并补充 `DASALL_INFRA_TRACING_SOURCES` 已纳入的 tracing 源文件清单与独立构建证据。
+   - 更新 [docs/worklog/DASALL_开发执行记录.md](/home/gangan/DASALL/docs/worklog/DASALL_开发执行记录.md)，把本轮作为单独原子任务记录，确保 017 与后续 018 的提交边界、验收命令和追溯链分离。
+2. 完成源码接线核查：
+   - 核查 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt) 中 `DASALL_INFRA_TRACING_SOURCES`，确认 tracing 源集合已覆盖 `TracingModuleAnchor`、`TracerProviderImpl`、`SamplingPolicyEngine`、`TracerImpl`、`SpanImpl`、`ContextPropagationAdapter`、`BatchSpanBuffer`、`SpanExporterAdapter`、`SpanProcessorPipeline`、`TraceHealthProbe`。
+   - 由此确认 017 的完成条件已满足：placeholder 不再是 tracing 的唯一编译源，所有当前 tracing 实现均已进入 `dasall_infra` 构建图。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_infra`
+2. 结果：
+   - `dasall_infra` 构建通过，说明 tracing 源码接线在当前 `build-ci` 配置下持续可编译。
+   - 本轮未新增实现代码，仅对 017 的构建证据与追溯文档做收口，因此无需追加更大范围的回归执行。
+
+### 结果
+
+1. TRC-TODO-017 已完成，tracing 现有源码已被明确追溯到 `infra/CMakeLists.txt` 的公开构建图中，TODO 状态与仓库实际实现状态现已一致。
+2. 018 之后可以专注于 tracing 测试标签与 contract 入口的独立接线，而不再需要反复核查源码是否已入 `dasall_infra`。
+
+### 下一步
+
+1. 执行 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中的 `TRC-TODO-018`，补齐 tracing 的 unit/contract 标签注册与 `ctest -L tracing` 发现面。
+
+### 风险
+
+1. 017 本轮属于“证据闭环”而非新增实现；若后续继续新增 tracing 源文件但未同步更新 `DASALL_INFRA_TRACING_SOURCES`，仍需在后继实现轮次重新补回构建图审计。
+
 ## 记录 #148
 
 - 日期：2026-04-07
