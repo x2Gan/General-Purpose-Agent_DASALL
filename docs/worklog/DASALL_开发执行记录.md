@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #191
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-021 OTA profile 键命名与覆盖优先级
+- 状态：已完成
+
+### 任务选择
+
+1. 用户点名 `OTA-TODO-018~021`，但 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-018`、`019`、`020` 已完成并推送，因此按 project-implementation-cycle 的“一轮只做 1 个可执行原子任务”规则，本轮选中 `OTA-TODO-021`。
+2. 021 的职责边界是冻结 `infra.ota.*` keyspace、Profile/部署覆盖优先级与五档 Profile 默认矩阵，解除 `OTA-BLK-05` 对 006/011 的残余设计歧义；不扩张到 profiles v1 顶层 schema 重构，也不新增 OTA 运行时代码。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-021-OTA-profile键命名与覆盖优先级收敛.md](../todos/infrastructure/deliverables/OTA-TODO-021-OTA-profile键命名与覆盖优先级收敛.md)，记录 021 的输入依据、外部参考、阻塞解锁映射与验证结果。
+2. 更新 [docs/architecture/DASALL_infra_OTA模块详细设计.md](../architecture/DASALL_infra_OTA模块详细设计.md)，冻结 `infra.ota.*` 前缀、二级域命名、deployment override allowlist、runtime override 禁区、五档 Profile 默认矩阵与对 `OTAPrecheckService` / `BootConfirmationMonitor` / `RollbackController` 的实现回链。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-021` 回写为 `Done`，同步把 `OTA-BLK-05` 更新为已解阻，并修正高层可行性结论中的过时阻塞描述。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "infra\.ota\.|runtime override|upgrade_strategy|OTA-BLK-05" docs/architecture/DASALL_infra_OTA模块详细设计.md docs/architecture/DASALL_profiles模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md profiles/**/runtime_policy.yaml`
+2. 结果：
+   - OTA 详细设计中已存在统一 `infra.ota.*` 命名、deployment override allowlist、runtime override 禁区与五档 Profile 默认矩阵。
+   - Profiles 详细设计与现有五档 `runtime_policy.yaml` 的 `ops_policy.upgrade_strategy` 基线可作为 OTA rollout intent 参考，不需要破坏 profiles v1 已冻结的顶层逻辑域。
+   - `OTA-BLK-05` 已解除，`OTA-TODO-006` / `OTA-TODO-011` 的 profile/config 歧义已完成回链说明。
+
+### 结果
+
+1. OTA 的 Profile 配置面现在明确区分了“ConfigCenter 四层顺序”和“OTA 本地接受规则”：全局仍是四层，组件本地只接受 `defaults < profile < deployment_override`，对 `infra.ota.*` 不开放 runtime patch。
+2. OTA 详细设计与 profiles/config v1 约束不再冲突；后续实现可以直接按冻结的 typed keyspace 绑定，而不是再在 `runtime_policy.yaml` 中发明新的 `infra` 顶层域。
+
+### 下一步
+
+1. OTA 组件专项 TODO 的 001~021 已全部完成，建议回到 infrastructure 总 TODO 或阶段计划文档做子项收口。
+2. 若继续深化 OTA 设计，可把 12.1 中剩余的 `UpgradePlan.target_scope` 批量语义与 repo_bound 原子指针职责归属转入后续 ADR/专项评审。
+
+### 风险
+
+1. 021 只冻结了 OTA typed keyspace 与接受规则；ConfigLoader/Adapter 的实际投影代码后续必须严格复用本文矩阵，不能再次在 profile 资产里引入第二套裸键名。
+
 ## 记录 #190
 
 - 日期：2026-04-07

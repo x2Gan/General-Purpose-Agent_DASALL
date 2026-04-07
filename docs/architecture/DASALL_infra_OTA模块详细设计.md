@@ -456,6 +456,15 @@ infra/ota 非职责：
 
 ### 6.10 配置项与默认策略
 
+冻结补充：OTA 不自行定义 runtime patch 结构，也不直接解析 profile/runtime YAML 原始来源。四层来源顺序继续由 ConfigCenter 统一负责；OTA 只消费当前生效的 typed config，并在本地执行 ota 私有的 key 级接受规则。
+
+key 域冻结规则：
+
+1. 所有 OTA 私有键统一使用 `infra.ota.*` 前缀，不再保留 `ota.*`、`upgrade.*` 或无命名空间裸键。
+2. 二级分组仅允许 `package`、`precheck`、`install`、`slot`、`rollback`、`repo_switch`、`audit` 七类；根级键只保留 `enabled`、`mode`、`allow_downgrade`。
+3. 叶子键统一使用小写蛇形命名，单位直接体现在键名后缀中，例如 `_sec`、`_mb`、`_pct`；不得混用 `timeout` 与 `timeout_ms`、`parallel` 与 `parallelism` 等别名。
+4. 新增 OTA 键只能追加，禁止在 v1 中重命名、复用旧键承载新语义，或把 ota 私有键上推到 contracts 与 profiles 公共命名表。
+
 | 配置项 | 默认值 | 覆盖层级 | 说明 |
 |---|---|---|---|
 | infra.ota.enabled | false | Profile/部署 | 默认关闭，按设备能力启用 |
@@ -478,6 +487,59 @@ infra/ota 非职责：
 1. edge_minimal 默认仅支持 validate_only 与 repo_bound 工件升级，slot_bound apply 需显式打开。
 2. edge_balanced 支持 slot_bound apply，但强制单工件串行安装。
 3. desktop_full 可支持更大的 staging 空间与更长 confirm 窗口。
+
+#### OTA profile 键命名与覆盖优先级冻结（2026-04-07）
+
+1. `infra.ota.*` 的全局顺序继续服从 ConfigCenter 四层模型，但 OTA v1 的本地接受顺序固定为 `defaults < profile < deployment_override`；`runtime_override` 对 `infra.ota.*` 一律拒绝，不允许通过运行时 patch 放宽升级门槛、确认判据或审计要求。
+2. OTA 不直接把 `profiles/*/runtime_policy.yaml` 扩写为新的顶层 `infra` 逻辑域；Profile 层只提供档位意图与 rollout baseline，后续 ConfigLoader/Adapter 必须把 OTA 默认矩阵投影为 `infra.ota.*` typed config，而不是在 profile YAML 中发明第二套裸键名。
+3. `ops_policy.upgrade_strategy` 继续作为 Profile 侧“发布/灰度意图”信号，只允许影响 rollout 节奏，不是 `infra.ota.mode`、`infra.ota.rollback.*` 或 `infra.ota.slot.*` 的别名。
+4. `deployment_override` 允许覆盖的 OTA 键固定为：
+   - `infra.ota.enabled`
+   - `infra.ota.mode`
+   - `infra.ota.precheck.min_free_space_mb`
+   - `infra.ota.precheck.max_cpu_load_pct`
+   - `infra.ota.install.max_parallel_artifacts`
+   - `infra.ota.slot.confirm_timeout_sec`
+   - `infra.ota.rollback.token_ttl_sec`
+   - `infra.ota.allow_downgrade`
+5. `deployment_override` 的受保护键与约束固定为：
+   - `infra.ota.package.verify_required` 只允许保持 `true`，不得降为 `false`
+   - `infra.ota.package.signature_algorithm` 只允许在 `ed25519` 与 `ecdsa-p256-sha256` 允许集内切换
+   - `infra.ota.rollback.auto_on_confirm_fail` 只允许保持 `true`
+   - `infra.ota.repo_switch.atomic_required` 只允许保持 `true`
+   - `infra.ota.audit.required` 只允许保持 `true`
+6. 任意 `deployment_override` 必须同时满足：
+   - `infra.ota.rollback.token_ttl_sec >= infra.ota.slot.confirm_timeout_sec + 60`
+   - 若 `infra.ota.mode=apply_enabled`，则 `infra.ota.enabled=true`
+   - 若 Profile 基线为 `dry_run`，deployment 只能在该 Profile 的 rollout intent 明确允许真实发布时提升为 `apply_enabled`
+7. 运行时 patch、诊断命令、CLI 临时参数、环境变量直读、业务模块私有 YAML 都不得直接改写 `infra.ota.*`；如需临时冻结 OTA，只能通过受管 `deployment_override` 或关闭 `infra.ota.enabled` 的新部署版本完成。
+
+跨档位固定 invariants：
+
+1. `infra.ota.package.verify_required=true`
+2. `infra.ota.package.signature_algorithm=ed25519`
+3. `infra.ota.precheck.require_health_ready=true`
+4. `infra.ota.rollback.auto_on_confirm_fail=true`
+5. `infra.ota.repo_switch.atomic_required=true`
+6. `infra.ota.allow_downgrade=false`
+7. `infra.ota.audit.required=true`
+
+各 Profile 的 OTA 默认矩阵冻结如下：
+
+| Profile | rollout intent（来自 `ops_policy.upgrade_strategy`） | infra.ota.enabled | infra.ota.mode | infra.ota.precheck.min_free_space_mb | infra.ota.slot.confirm_timeout_sec | infra.ota.rollback.token_ttl_sec | infra.ota.install.max_parallel_artifacts | 说明 |
+|---|---|---|---|---|---|---|---|---|
+| edge_minimal | manual | true | dry_run | 256 | 120 | 600 | 1 | 默认仅允许 precheck / verify / repo_bound validate；slot_bound apply 需 deployment gate 显式打开 |
+| edge_balanced | canary | true | apply_enabled | 512 | 180 | 900 | 1 | 支持 slot_bound apply，但继续保持单工件串行与保守资源阈值 |
+| desktop_full | staged | true | apply_enabled | 1024 | 300 | 1200 | 1 | 支持更大的 staging 空间与更长 confirm 窗口 |
+| cloud_full | rolling | true | apply_enabled | 2048 | 300 | 1200 | 2 | 允许更高 staging 预算与有限并行工件安装 |
+| factory_test | hold | true | dry_run | 512 | 90 | 600 | 1 | 默认仅做包校验、预检与人工确认，不做自动切槽 |
+
+实现回链：
+
+1. `OTAPrecheckService` 只读取 `infra.ota.enabled`、`infra.ota.mode`、`infra.ota.precheck.*` 与 `infra.ota.allow_downgrade`，不得再猜测 profile 名称。
+2. `PackageVerifier` 只读取 `infra.ota.package.*`，并把算法/anchor 失败统一映射到已冻结的 verify fail outward 语义。
+3. `InstallExecutor` 与 `SlotSwitchCoordinator` 只读取 `infra.ota.install.*`、`infra.ota.slot.*`、`infra.ota.repo_switch.*`，不得从 `ops_policy.upgrade_strategy` 直接推导 install 细节。
+4. `BootConfirmationMonitor` 与 `RollbackController` 只读取 `infra.ota.slot.confirm_timeout_sec`、`infra.ota.rollback.*` 与 `infra.ota.audit.required`；运行时 patch 不得绕过 020 已冻结的 success/fail 判据。
 
 #### 6.10.1 签名算法与 trust anchor 读取接口冻结
 
@@ -701,6 +763,7 @@ infra/ota 非职责：
 3. 已于 2026-04-07 收敛：V1 固定使用 platform 文件系统抽象上的单 active token 原子文件 `ota/rollback/active-token.json`；不引入 sqlite，后续若扩展 backend 只能保持现有生命周期语义不变。
 4. 已于 2026-04-01 收敛：首版允许 `ed25519` 与 `ecdsa-p256-sha256` 两种算法；具体密码库继续通过 adapter 注入，trust anchor 由 secret 子域只读接口提供。
 5. 已于 2026-04-07 收敛：boot confirm success 必须同时满足显式 self-check success、health liveness+readiness、required heartbeat freshness 与 slot-bound version report 一致；未收到明确成功标记一律按 confirm_timeout 失败处理。
+6. 已于 2026-04-07 收敛：OTA v1 keyspace 统一为 `infra.ota.*`；ConfigCenter 继续负责四层来源顺序，OTA 本地只接受 `defaults < profile < deployment_override`，`runtime_override` 对 OTA 键一律拒绝；各 Profile 的 rollout intent 继续沿用 `ops_policy.upgrade_strategy`，并映射到本文冻结的 OTA 默认矩阵。
 
 ### 12.2 后续任务建议
 

@@ -105,7 +105,7 @@
 3. 有主流程与异常流程：正常 apply 时序、validate_only 时序、五类异常与恢复动作（OTA 设计 6.8/6.9）。
 4. 有错误语义与配置约束：错误码建议清单、配置键与默认策略（OTA 设计 6.7/6.10）。
 5. 有落盘建议与测试门：目录、Design->Build 映射、测试矩阵与 Gate（OTA 设计 7/8/9）。
-6. 仍有阻塞：rollback token 持久化策略、签名算法首版选择、confirm 成功准则、tests integration 顶层接线（OTA 设计 12.1 + 当前代码现状）。
+6. 原始设计阻塞项已由 OTA-TODO-018~021 与 INF-BLK-06 收敛；当前仅剩 UpgradePlan `target_scope` 批量语义与 repo_bound 原子指针职责归属两项演进问题，不阻塞现有 V1 实现与测试接线。
 
 ### 4.2 粒度可行性评估表（Step 2 输出）
 
@@ -181,7 +181,7 @@
 | OTA-TODO-018 | Done | 补齐 rollback token 生命周期与持久化设计 | OTA 设计 12.1 问题 3/4；11.1 阻塞管理 | 12.1 未决问题；11.1 阻塞管理 | L0 | docs/architecture/DASALL_infra_OTA模块详细设计.md | RollbackToken 存储位置、过期策略、重启恢复规则 | process test：设计评审门；contract：对象边界不越权 | rg -n "RollbackToken|rollback token|expires_at|持久化" docs/architecture/DASALL_infra_OTA模块详细设计.md | 无 | 无 | 评审通过并回链到 OTA-TODO-012；2026-04-07 已在 OTA 详细设计冻结单 active token 文件路径 `ota/rollback/active-token.json`、`infra.ota.rollback.token_ttl_sec` 默认值与下界、prepared/armed/consumed/expired/invalid 生命周期状态及重启恢复矩阵；已落盘 docs/todos/infrastructure/deliverables/OTA-TODO-018-rollback-token生命周期与持久化设计收敛.md，并同步解阻 OTA-TODO-012 与 OTA-BLK-01 | 设计补丁、评审记录、回链记录 | 仅当 token 生命周期表具备字段、状态、过期与恢复语义时完成 |
 | OTA-TODO-019 | Done | 补齐签名算法与 trust anchor 接口设计 | OTA 设计 12.1 问题 4；6.10 配置键 | 12.1 未决问题；6.10 signature_algorithm | L0 | docs/architecture/DASALL_infra_OTA模块详细设计.md、docs/architecture/DASALL_infrastructure子系统详细设计.md | signature_algorithm 允许集、trust anchor 读取接口与错误映射 | process test：安全评审门；unit 入口：verifier 依赖接口稳定性 | rg -n "signature_algorithm|trust anchor|验签|PackageVerifier" docs/architecture/DASALL_infra_OTA模块详细设计.md docs/architecture/DASALL_infrastructure子系统详细设计.md | 无 | 无 | 安全评审通过并回链到 OTA-TODO-003、007 | 设计补丁、评审记录、回链记录；2026-04-01 已在 OTA 详细设计冻结 `ed25519` / `ecdsa-p256-sha256` 允许集、`ITrustAnchorProvider.load_active_anchor(...)` 只读接口与 `INF_E_OTA_VERIFY_FAIL` outward 映射，并在 infra 子系统设计补齐 SecretManager trust anchor 读取职责；已同步解阻 OTA-TODO-003、007 与 OTA-BLK-02 | 仅当算法选择与 anchor 接口边界冻结且不进入 contracts 时完成 |
 | OTA-TODO-020 | Done | 补齐 boot confirm 成功判据设计 | OTA 设计 12.1 问题 5；6.9 confirm 语义 | 12.1 未决问题；6.9 启动确认失败 | L0 | docs/architecture/DASALL_infra_OTA模块详细设计.md | confirm 成功条件、超时处理、watchdog/health 联动条件 | process test：门禁评审；failure：超时默认失败规则可验证 | rg -n "confirm|启动确认|BootConfirmationMonitor|timeout" docs/architecture/DASALL_infra_OTA模块详细设计.md | 无 | 无 | 评审通过并回链到 OTA-TODO-011；2026-04-07 已在 OTA 详细设计冻结 boot confirm 的显式成功信号、health/watchdog/version report 组合判据、timeout/即时失败分流与 mark_boot_success/failed 顺序；已落盘 docs/todos/infrastructure/deliverables/OTA-TODO-020-boot-confirm成功判据设计收敛.md，并同步解阻 OTA-TODO-011 与 OTA-BLK-03 | 设计补丁、评审记录、回链记录 | 仅当成功判据与失败兜底均可二值判定时完成 |
-| OTA-TODO-021 | Not Started | 补齐 ota profile 键命名与覆盖优先级收敛 | OTA 设计 6.10；蓝图 5.1 | 6.10 配置表 | L2 | docs/architecture/DASALL_infra_OTA模块详细设计.md、profiles/*/ | infra.ota.* 键命名与默认/Profile/部署覆盖次序 | process test：profile 评审门；unit：配置键一致性校验入口 | rg -n "infra\.ota\.|Profile|覆盖层级" docs/architecture/DASALL_infra_OTA模块详细设计.md profiles/** | OTA-TODO-018~020（建议） | 无 | 配置评审通过并回链到 OTA-TODO-006/011 | 配置键名清单、评审记录、回链记录 | 仅当配置键与覆盖次序冻结并可被实现引用时完成 |
+| OTA-TODO-021 | Done | 补齐 ota profile 键命名与覆盖优先级收敛 | OTA 设计 6.10；蓝图 5.1 | 6.10 配置表 | L2 | docs/architecture/DASALL_infra_OTA模块详细设计.md、profiles/*/ | infra.ota.* 键命名与默认/Profile/部署覆盖次序 | process test：profile 评审门；unit：配置键一致性校验入口 | rg -n "infra\.ota\.|runtime override|upgrade_strategy|OTA-BLK-05" docs/architecture/DASALL_infra_OTA模块详细设计.md docs/architecture/DASALL_profiles模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md profiles/**/runtime_policy.yaml | OTA-TODO-018~020（建议） | 无 | 配置评审通过并回链到 OTA-TODO-006/011；2026-04-07 已在 docs/architecture/DASALL_infra_OTA模块详细设计.md 冻结 `infra.ota.*` 前缀、二级域命名、deployment override allowlist、runtime override 禁区与五档 Profile 默认矩阵，并明确 OTA v1 只接受 `defaults < profile < deployment_override`；已落盘 docs/todos/infrastructure/deliverables/OTA-TODO-021-OTA-profile键命名与覆盖优先级收敛.md，并同步解阻 OTA-BLK-05 | 配置键名清单、评审记录、回链记录；2026-04-07 已通过 `rg -n "infra\.ota\.|runtime override|upgrade_strategy|OTA-BLK-05" docs/architecture/DASALL_infra_OTA模块详细设计.md docs/architecture/DASALL_profiles模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md profiles/**/runtime_policy.yaml` 验证命名、覆盖优先级与 profile rollout 基线引用 | 仅当配置键与覆盖次序冻结并可被实现引用时完成 |
 
 ## 7. 执行顺序建议
 
@@ -216,7 +216,7 @@
 | OTA-BLK-02 | 已解阻（2026-04-01）：signature_algorithm 允许集与 trust anchor 读取接口已冻结，并约束 outward 映射为 INF_E_OTA_VERIFY_FAIL | OTA-TODO-003、007 | 无；后续按冻结边界实现 verifier 接口与骨架 | 证据回链到 OTA-TODO-019 与 docs/architecture/DASALL_infra_OTA模块详细设计.md、docs/architecture/DASALL_infrastructure子系统详细设计.md |
 | OTA-BLK-03 | 已解阻（2026-04-07）：boot confirm success 已冻结为显式 self-check success + health liveness/readiness + required heartbeat freshness + slot-bound version report 一致，缺省成功标记一律按 confirm_timeout 失败 | OTA-TODO-011 | 无；后续按冻结边界实现 BootConfirmationMonitor | 证据回链到 OTA-TODO-020 与 docs/architecture/DASALL_infra_OTA模块详细设计.md |
 | OTA-BLK-04 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；ota integration/failure 是否可执行改由组件自身落盘负责 | OTA-TODO-017 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt |
-| OTA-BLK-05 | profile 键命名与覆盖优先级未最终收敛 | OTA-TODO-006、011（部分） | infra.ota.* 键命名冻结且跨 profile 一致 | 完成 OTA-TODO-021 |
+| OTA-BLK-05 | 已解阻（2026-04-07）：OTA v1 keyspace 已统一为 `infra.ota.*`，并冻结为 `defaults < profile < deployment_override`；`runtime_override` 对 OTA 键一律拒绝，五档 Profile rollout intent 通过 `ops_policy.upgrade_strategy` 与 OTA 默认矩阵回链 | OTA-TODO-006、011（部分） | 无；后续按冻结边界实现 OTA typed config 读取与 profile 基线投影 | 证据回链到 OTA-TODO-021 与 docs/architecture/DASALL_infra_OTA模块详细设计.md |
 
 ## 9. 验收与质量门
 
@@ -264,10 +264,9 @@
 - OTA 详细设计已给出接口清单、对象字段、主异常流程、错误语义与落盘建议。
 - 设计中已包含 Design->Build 映射、测试矩阵和门禁建议。
 - 当前代码虽为空实现，但构建目标与 unit/contract 聚合目标已存在，可承接增量落地。
-- 仍存在 12.1 未决项与 tests integration 顶层接线缺口，必须前置补齐。
+- 12.1 中与 token/signature/confirm/profile keyspace 以及 tests integration 拓扑相关的阻塞已全部收敛；当前剩余仅为不阻塞 V1 的演进问题。
 3. 当前最小可执行粒度：函数 / 接口 / 数据结构（受阻项为组件级补设计）。  
-4. 未达到全量函数级的缺口：token 持久化、签名算法与 anchor 接口、confirm 成功判据、integration 顶层接线。  
+4. 未达到全量函数级的剩余缺口：UpgradePlan `target_scope` 的批量升级边界，以及 repo_bound 原子指针切换职责最终归属。
 5. 下一步建议：
-- 先执行 OTA-TODO-001~016，完成对象/接口/核心骨架与 unit/contract 门禁；
-- 并行完成 OTA-TODO-018~021 消除设计阻塞；
-- 解阻后再推进 OTA-TODO-011 与 OTA-TODO-017，进入完整集成验证阶段。
+- OTA 组件专项 TODO 的 001~021 已全部完成，可回到 infrastructure 总 TODO 收口 ota 子项与阶段性验收；
+- 若要继续演进 OTA 设计，建议把 12.1 中剩余两项转入后续 ADR/专项设计评审，而不是继续阻塞现有 V1 实现。
