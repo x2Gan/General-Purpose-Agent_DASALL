@@ -210,9 +210,27 @@ DiagnosticsService 非职责：
 |---|---|---|---|
 | DiagnosticsCommand | command_id, command_name, args, request_scope, timeout_ms, actor_ref | command_name 必须白名单命中 | actor_ref 对齐 AgentRequest/WorkerTask 标识 |
 | CommandDecision | allowed, reason_code, policy_ref, denied_rule_id | deny 必含 reason_code | reason_code 映射 ResultCode/ErrorInfo |
+| CommandCatalog | catalog_id, profile_id, schema_version, entries, generated_at | schema_version 固定为 "1"；entries 仅返回当前 profile 生效白名单；每条 entry 至少包含 command_name、request_scope、arg_schema_ref、arg_schema_summary、read_only | infra 私有目录对象，不进入 contracts |
+| ValidationResult | accepted, catalog_ref, matched_command_ref, schema_ref, normalized_command, blocking_errors, warnings, field_paths, result_code | accepted=true 时 normalized_command 必须可直接下传 PolicyGuard；accepted=false 时必须返回 blocking_errors 或 field_paths，且 result_code 仅使用 INF_E_DIAG_COMMAND_INVALID | result_code 映射 ResultCode/ErrorInfo，不新增共享校验对象 |
 | EvidenceBundle | logs_ref, metrics_ref, health_ref, errors_ref, artifacts | 仅保存引用与必要摘要 | 引用 Observation 证据语义，不扩写 |
 | DiagnosticsSnapshot | snapshot_id, command, collected_at, summary, evidence_refs, redaction_profile, exporter_hint | 必须脱敏、可导出、可追溯 | 与 infra 总设 6.5 对齐，evidence_ref 兼容 |
 | SnapshotExportResult | export_id, target, format, size_bytes, checksum, created_at | 失败需明确错误与重试建议 | infra 私有对象，不进入 contracts |
+
+### 6.5.1 CommandCatalog / ValidationResult 补充定义
+
+CommandCatalog.entries 的最小公开字段：
+1. command_name：与 DiagnosticsCommand.command_name 一致；v1 仅允许 `health.snapshot`、`queue.stats`、`thread.dump` 三个只读命令。
+2. request_scope：与 DiagnosticsCommand.request_scope 对齐，用于声明命令适用的 subsystem/instance 范围。
+3. arg_schema_ref：指向 profile/config 中的参数 schema 资产或内建 schema 锚点。
+4. arg_schema_summary：仅公开 `type`、`required`、`enum`、`default` 等摘要性注解，不内联完整 schema 内容。
+5. read_only：v1 固定为 `true`；若出现 `false`，视为未通过 diagnostics design gate。
+
+ValidationResult 的返回语义：
+1. `validate()` 只负责白名单命中与参数 schema 静态校验，不承担 PolicyGuard、AuditBridge 或执行器副作用。
+2. `accepted=true` 时必须返回 `catalog_ref`、`matched_command_ref`、`schema_ref` 与 `normalized_command`；其中 `normalized_command` 只允许做 `args`、`request_scope`、`timeout_ms` 的规范化，不引入执行结果元数据。
+3. `accepted=false` 时必须返回 `blocking_errors` 和/或 `field_paths`；`field_paths` 使用稳定定位符，如 `command_name`、`request_scope`、`timeout_ms`、`args[0]`。
+4. `warnings` 只作为非阻断注解，不得单独把 `accepted` 置为 `false`。
+5. `result_code` 固定落在 diagnostics 私有错误域，并映射到 contracts::ResultCode::ValidationFieldMissing，不新增共享校验语义对象。
 
 ### 6.6 核心接口语义定义
 
@@ -329,6 +347,7 @@ DiagnosticsService 非职责：
 |---|---|---|---|---|---|---|
 | 冻结诊断统一入口 | 新增 IDiagnosticsService 接口 | 先锁定边界，避免实现漂移 | infra/include/diagnostics/IDiagnosticsService.h | unit: DiagnosticsServiceInterfaceTest | cmake --build build-ci --target dasall_infra | 依赖 INF-M1 接口冻结 |
 | 冻结快照对象 | 新增 DiagnosticsSnapshot 与命令对象 | 先对象后实现，满足 contracts 边界 | infra/include/diagnostics/DiagnosticsTypes.h | unit: DiagnosticsTypesTest; contract: DiagnosticsBoundaryContractTest | ctest --test-dir build-ci -R "DiagnosticsTypesTest|DiagnosticsBoundaryContractTest" | 依赖 contracts V1 Ready |
+| 冻结 registry 目录与校验返回边界 | 补齐 CommandCatalog 与 ValidationResult 设计 | 先锁定 list_commands/validate 的结果语义，再推进 IDiagnosticsCommandRegistry 头文件 | docs/architecture/DASALL_infra_diagnostics模块详细设计.md；后续 infra/include/diagnostics/IDiagnosticsCommandRegistry.h | process gate: DiagnosticsCommandRegistryTest | rg -n "CommandCatalog|ValidationResult|arg_schema_ref|field_paths" docs/architecture/DASALL_infra_diagnostics模块详细设计.md | 依赖只读命令白名单已完成；完整 allowed_commands 参数 schema 仍由 D-BLK-01 约束 |
 | 建立命令准入链路 | 新增 CommandRegistry + PolicyGuard 骨架 | 解决 INF-BLK-08 的白名单与准入问题 | infra/src/diagnostics/CommandRegistry.cpp; infra/src/diagnostics/CommandPolicyGuard.cpp | unit: DiagnosticsCommandPolicyTest | ctest --test-dir build-ci -R DiagnosticsCommandPolicyTest | 阻塞：策略 schema 冻结 |
 | 建立证据与脱敏链路 | 新增 EvidenceCollector + RedactionEngine | 满足“先脱敏再存储导出”硬约束 | infra/src/diagnostics/EvidenceCollector.cpp; infra/src/diagnostics/RedactionEngine.cpp | unit: DiagnosticsRedactionTest; failure: DiagnosticsRedactionFailureTest | ctest --test-dir build-ci -R "DiagnosticsRedactionTest|DiagnosticsRedactionFailureTest" | 阻塞：脱敏规则冻结 |
 | 建立快照存储与导出 | 新增 SnapshotStore + ExportManager | 形成可验证导出闭环 | infra/src/diagnostics/SnapshotStore.cpp; infra/src/diagnostics/ExportManager.cpp | unit: DiagnosticsSnapshotStoreTest; integration: InfraDiagnosticsIntegrationTest | ctest --test-dir build-ci -R "DiagnosticsSnapshotStoreTest|InfraDiagnosticsIntegrationTest" | 阻塞：导出格式与目标白名单 |
@@ -476,7 +495,7 @@ DiagnosticsService 非职责：
 
 ### 12.2 后续任务建议
 
-1. 在 docs/todos 下新增 diagnostics 组件专项 TODO，回链 DIA-T001~DIA-T010，并映射 INF-TODO-018。
-2. 优先推进 DIA-M1 与 DIA-M2，先完成边界冻结和准入链路。
+1. 继续按 diagnostics 组件专项 TODO 推进 DIA-TODO-009 与 DIA-TODO-011，先完成公开接口收口。
+2. 在 DIA-TODO-011 完成后，再以 DIA-TODO-013 处理 CommandRegistry 实现，但完整 allowed_commands 参数 schema 仍需单独解阻。
 3. 在 edge_balanced/edge_minimal 做一次资源预算压测，确认快照大小与保留窗口默认值。
 4. 补齐 tests/integration/infra/diagnostics 最小链路用例后，再开启远程导出能力评审。

@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #155
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-008 CommandRegistry 目录与校验返回对象设计收敛
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-008` 是用户点名任务，且它是 `DIA-TODO-011` 与 `DIA-TODO-013` 的共同前置。当前诊断对象、错误码、`IDiagnosticsService` 已完成冻结，因此 008 是 diagnostics 剩余最小且必须先行的 design blocker 收敛项。
+2. 代码现状表明 blocker 可在本轮最小修复：仓库内已经存在 [infra/include/diagnostics/DiagnosticsTypes.h](/home/gangan/DASALL/infra/include/diagnostics/DiagnosticsTypes.h) 与 [infra/include/diagnostics/IDiagnosticsService.h](/home/gangan/DASALL/infra/include/diagnostics/IDiagnosticsService.h) 作为对象/接口样板，缺口只剩 `CommandCatalog`、`ValidationResult` 与 registry 的 schema return semantics；这属于典型 context blocker，而不是环境或范围阻塞。
+
+### 改动
+
+1. 收敛 diagnostics 详细设计中的 registry/catalog 对象与校验返回语义：
+   - 更新 [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_diagnostics模块详细设计.md)，在 6.5 核心对象表中补齐 `CommandCatalog`、`ValidationResult`，并新增 6.5.1 细化 `CommandCatalog.entries` 的最小公开字段、`validate()` 成功/失败路径、`field_paths` 稳定定位符，以及 `arg_schema_ref`/`arg_schema_summary` 的 ref+summary 语义。
+   - 同时在 7 节补加 Design -> Build 映射，明确 008 的产出直接支撑后续 `IDiagnosticsCommandRegistry.h` 落盘，而完整 `allowed_commands` 参数 schema 仍保留在 `DIA-BLK-003`，避免本轮把实现期细节伪装成已冻结对象。
+2. 新增 008 的设计交付物与外部参考：
+   - 新增 [docs/todos/infrastructure/deliverables/DIA-TODO-008-CommandRegistry目录与校验语义收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/DIA-TODO-008-CommandRegistry%E7%9B%AE%E5%BD%95%E4%B8%8E%E6%A0%A1%E9%AA%8C%E8%AF%AD%E4%B9%89%E6%94%B6%E6%95%9B.md)，记录本地证据、blocker 分类、最小修复动作、Design -> Build 映射，以及 JSON Schema Validation / OpenAPI 3.1.1 的设计参考。
+   - 外部参考的作用不是引入新协议，而是约束 diagnostics registry 继续采用“权威 schema + discoverability annotation”的边界：`list_commands()` 只暴露 schema ref/summary，`validate()` 只返回 machine-locatable 校验结果。
+3. 回写 diagnostics TODO 与 infrastructure 总 TODO：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `DIA-TODO-008` 由 `Blocked` 改为 `Done`，将 `DIA-TODO-011` 由 `Blocked` 改为 `Not Started`，并把 `DIA-TODO-013` 的 blocker 收口为仅剩 `DIA-BLK-003`。
+   - 同步更新 Gate、阻塞表、当前 blocked 索引、可行性结论和下一步建议，使 diagnostics 专项文档不再把 `CommandCatalog/ValidationResult` 视为未定义缺口。
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 中 `INF-BLK-08` 的 diagnostics 摘录，移除“DIA-BLK-002 仍保留”的过时描述，避免后续按总 TODO 选任务时重复把 011 判成 blocked。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "CommandCatalog|ValidationResult|arg_schema_ref|field_paths" docs/architecture/DASALL_infra_diagnostics模块详细设计.md`
+   - `rg -n "DIA-TODO-008|DIA-BLK-002|DIA-TODO-011" docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md`
+2. 结果：
+   - diagnostics 详细设计已可检索到 `CommandCatalog`、`ValidationResult`、`arg_schema_ref` 与 `field_paths` 锚点，说明 registry 返回对象与 schema return semantics 已进入 source of truth。
+   - diagnostics 专项 TODO 与 infrastructure 总 TODO 中，`DIA-TODO-008` 已完成、`DIA-TODO-011` 已解阻、`DIA-BLK-002` 已转为 resolved evidence，文档间口径一致。
+3. 说明：
+   - 本轮为 design/documentation 任务，不涉及 C++ 代码或测试目标新增，因此未运行构建与单测；验收以任务表中定义的 `rg` 命令和 TODO/worklog 追溯闭环为准。
+
+### 结果
+
+1. `DIA-TODO-008` 已完成，diagnostics registry 的剩余设计缺口已从“对象未定义”收敛为“对象已定义，完整 allowed_commands 参数 schema 仍待单列冻结”，`DIA-BLK-002` 正式解除。
+2. `DIA-TODO-011` 现已恢复可执行，`DIA-TODO-013` 只剩 `DIA-BLK-003`；这使 diagnostics 的后续顺序重新收敛为“先接口头文件，再 registry 实现”，而不是继续停留在对象级 blocker。
+
+### 下一步
+
+1. 继续执行 `DIA-TODO-011`，把 `IDiagnosticsCommandRegistry` 头文件按已冻结的 `CommandCatalog` / `ValidationResult` 边界落盘。
+2. 若要推进 `DIA-TODO-013`，需要先单独完成 `DIA-BLK-003`，冻结 `health.snapshot`、`queue.stats`、`thread.dump` 三个只读命令的完整参数 schema。
+
+### 风险
+
+1. 当前只冻结了 `arg_schema_ref` / `arg_schema_summary` 返回语义，没有冻结完整 `allowed_commands` schema 内容；若后续实现直接把完整 schema 内联进 catalog/result，会越过 `DIA-BLK-003` 并放大 profile/config 资产的 breaking 风险。
+2. 当前 `ValidationResult` 明确不承接 policy/audit 决策；若后续接口实现把 `PolicyGuard` 判定或桥接失败结果混入该对象，会重新破坏 diagnostics 与 policy/audit 的职责边界。
+
 ## 记录 #154
 
 - 日期：2026-04-07
