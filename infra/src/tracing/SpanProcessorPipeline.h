@@ -5,6 +5,7 @@
 
 #include "tracing/BatchSpanBuffer.h"
 #include "tracing/SpanExporterAdapter.h"
+#include "tracing/TraceHealthProbe.h"
 
 namespace dasall::infra::tracing {
 
@@ -18,6 +19,8 @@ class SpanProcessorPipeline {
 
   [[nodiscard]] const BatchSpanBuffer& buffer() const;
   [[nodiscard]] const SpanExporterAdapter& exporter() const;
+  [[nodiscard]] const TraceHealthProbe& health_probe() const;
+  [[nodiscard]] const TraceHealthSnapshot& health_snapshot() const;
   [[nodiscard]] const TraceOperationStatus& last_status() const;
   [[nodiscard]] const TraceModuleSnapshot& module_snapshot() const;
   [[nodiscard]] std::uint64_t processed_span_total() const;
@@ -30,10 +33,12 @@ class SpanProcessorPipeline {
                                                          std::string message,
                                                          std::string stage);
   void refresh_snapshot();
+  void observe_health_state();
 
   TraceConfig config_;
   BatchSpanBuffer buffer_;
   SpanExporterAdapter exporter_;
+  TraceHealthProbe health_probe_{};
   TraceOperationStatus last_status_ = TraceOperationStatus::success("trace-pipeline://idle");
   TraceModuleSnapshot module_snapshot_{.exporter_state = "uninitialized"};
   std::uint64_t processed_span_total_ = 0;

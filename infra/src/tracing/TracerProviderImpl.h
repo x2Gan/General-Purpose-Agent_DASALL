@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "tracing/ITracerProvider.h"
+#include "tracing/TraceHealthProbe.h"
 
 namespace dasall::infra::tracing {
 
@@ -29,6 +30,7 @@ class TracerProviderImpl final : public ITracerProvider {
   [[nodiscard]] TraceOperationStatus last_pipeline_status() const;
   [[nodiscard]] ExportBatchReport last_export_report() const;
   [[nodiscard]] TraceModuleSnapshot module_snapshot() const;
+  [[nodiscard]] TraceHealthSnapshot health_snapshot() const;
   [[nodiscard]] std::uint64_t export_success_total() const;
   [[nodiscard]] std::uint64_t export_failure_total() const;
   [[nodiscard]] std::string last_rendered_output() const;

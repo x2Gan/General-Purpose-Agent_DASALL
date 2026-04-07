@@ -37,6 +37,8 @@ set(DASALL_INFRA_TRACING_SOURCES
   src/tracing/SpanExporterAdapter.h
   src/tracing/SpanProcessorPipeline.cpp
   src/tracing/SpanProcessorPipeline.h
+  src/tracing/TraceHealthProbe.cpp
+  src/tracing/TraceHealthProbe.h
 )
 
 set(DASALL_INFRA_METRICS_SOURCES

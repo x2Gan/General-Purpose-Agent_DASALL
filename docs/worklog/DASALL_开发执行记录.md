@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #148
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-014 实现 TraceHealthProbe 降级与恢复判定骨架
+- 状态：已完成
+
+### 任务选择
+
+1. 本轮按 project-implementation-cycle 重新检查 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 后，确认用户点名的 `TRC-TODO-016` 已在前一轮完成，当前状态为 Done，且最近 tracing 提交链包含 `3fc9cec feat(tracing): add public trace config model`，因此 016 不是本轮可执行候选。
+2. 在 016 已满足的前提下，014 成为本轮唯一未完成且依赖满足的原子任务；其 blocker 说明也明确要求“先输出 tracing 私有快照对象”，因此本轮不越界接统一 health 注册接口，只在 tracing 私域内补齐降级状态机与健康快照。
+
+### 改动
+
+1. 完成 TRC-TODO-014-D 设计收敛：
+   - 新增 [docs/todos/infrastructure/deliverables/TRC-TODO-014-TraceHealthProbe骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/TRC-TODO-014-TraceHealthProbe骨架收敛.md)，收敛 014 的本地证据、外部参考、Design->Build 映射与 D Gate。
+   - 设计上明确采用“私有 tracing health snapshot 先行”的路径：保留 `TraceModuleSnapshot` 作为 exporter/buffer 事实快照，新增 `TraceHealthSnapshot` 作为 tracing 健康判定对象，避免在统一 health 接口尚未冻结时把 tracing 强绑到 `IHealthProbe`。
+   - 外部参考采用 Microsoft Azure Health Endpoint Monitoring pattern，吸收“组件级状态 + 低开销快照输出 + 不阻塞主流程”的实现约束。
+2. 完成 TRC-TODO-014-B 降级状态机与快照骨架落盘：
+   - 新增 [infra/src/tracing/TraceHealthProbe.h](/home/gangan/DASALL/infra/src/tracing/TraceHealthProbe.h) 与 [infra/src/tracing/TraceHealthProbe.cpp](/home/gangan/DASALL/infra/src/tracing/TraceHealthProbe.cpp)，落盘 `TraceHealthSnapshot`、`observe_result()`、`enter_degraded()`、`recover_to_healthy()` 与错误码推断逻辑。
+   - 首版固定连续失败阈值为 2，延续 metrics recovery 已验证模式：首次失败仅累计 `consecutive_failure_total`，达到阈值才进入 `degraded_mode`；后续出现 `status.ok && !module_snapshot.degraded` 的健康路径时回清 degraded 并归零连续失败计数。
+   - `TraceHealthSnapshot` 显式暴露 `degraded_mode`、`consecutive_failure_total`、`degrade_enter_total`、`recovery_success_total`、`last_error_code`、`last_failure_reason` 与 `detail_ref`，而 `TraceModuleSnapshot` 继续保留 `queue_depth`、`dropped_total`、`exporter_state`、`degraded` 等事实字段。
+3. 完成 pipeline/provider 私有接线：
+   - 更新 [infra/src/tracing/SpanProcessorPipeline.h](/home/gangan/DASALL/infra/src/tracing/SpanProcessorPipeline.h) 与 [infra/src/tracing/SpanProcessorPipeline.cpp](/home/gangan/DASALL/infra/src/tracing/SpanProcessorPipeline.cpp)，把 `TraceHealthProbe` 作为 pipeline 私有成员，并在 `on_end()`、`export_batch()`、`force_flush()`、`shutdown()` 后用 `last_status + module_snapshot` 进行 best-effort 健康观察。
+   - 该接线保证 health 判定只观察 tracing 主链结果，不反向修改主链返回值，也不在 queue/buffer 热路径上引入额外 I/O。
+   - 更新 [infra/src/tracing/TracerProviderImpl.h](/home/gangan/DASALL/infra/src/tracing/TracerProviderImpl.h) 与 [infra/src/tracing/TracerProviderImpl.cpp](/home/gangan/DASALL/infra/src/tracing/TracerProviderImpl.cpp)，新增 `health_snapshot()` 只读出口，供当前 failure 单测和后续 015/统一 health 接口收敛前消费。
+4. 完成构建与测试接线：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 TraceHealthProbe 纳入 `dasall_infra` tracing 源集合。
+   - 新增 [tests/unit/infra/tracing/TraceHealthProbeTest.cpp](/home/gangan/DASALL/tests/unit/infra/tracing/TraceHealthProbeTest.cpp)，覆盖阈值降级、成功恢复、非法输入拒绝以及 provider 私有快照读取四条路径。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt)，使 `TraceHealthProbeTest` 进入 unit/failure 聚合目标。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_trace_health_probe_unit_test dasall_batch_export_unit_test dasall_tracer_provider_impl_unit_test`
+   - `ctest --test-dir build-ci -N -R "TraceHealthProbeTest|BatchExportTest|TracerProviderImplTest|BatchSpanBufferTest|SamplingPolicyTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "TraceHealthProbeTest|BatchExportTest|TracerProviderImplTest|BatchSpanBufferTest|SamplingPolicyTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - 受影响 tracing 目标构建通过，说明 014 新增的 health skeleton、pipeline 接线与 provider 读取口已成功进入 tracing 构建图。
+   - `ctest -N -R "TraceHealthProbeTest|BatchExportTest|TracerProviderImplTest|BatchSpanBufferTest|SamplingPolicyTest|TracerSpanLifecycleTest|ContextPropagationAdapterTest"` 发现 7 个 tracing 相关用例，证明 014 新增 failure 回归入口和 008~013 既有 tracing 回归入口都可发现。
+   - 定向执行上述 7 个 tracing 用例全部通过，确认 014 没有破坏 provider 生命周期、采样、buffer、exporter 与传播既有闭环。
+   - `ctest -L unit` 通过，152/152 tests passed；本轮未引入新增告警。
+
+### 结果
+
+1. TRC-TODO-014 已完成，tracing 现在具备私有健康状态机与快照对象，能够对连续失败做阈值降级判定，并在后续健康结果出现时回清 degraded。
+2. tracing 的健康输出已经从 013 的 exporter facts 扩展为 014 的 `TraceHealthSnapshot`，后续 015 或统一 health 接口冻结后可以直接在不重写状态机的前提下补桥接层。
+3. 用户请求中的 `TRC-TODO-016` 经核查已在前一轮完成，因此本轮没有重复执行或重复提交 016，只在工作日志中补充了任务选择依据。
+
+### 下一步
+
+1. 若继续沿 tracing 专项 TODO 推进，下一可执行任务是 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中的 `TRC-TODO-017`，用于把 tracing 源码接线状态进一步收口到显式源码/构建证据。
+
+### 风险
+
+1. 当前 TraceHealthProbe 仍是 tracing 私有对象，尚未接入统一 `IHealthProbe` 注册与聚合；这是有意遵守 TODO 中“health 统一接口未冻结”的边界，而不是功能遗漏。
+2. 连续失败阈值当前固定为 2，尚未外露成 tracing 配置键；若后续 016/配置模型扩展 health 子键，需要单独评审其兼容策略，而不是在本轮隐式扩张。
+
 ## 记录 #147
 
 - 日期：2026-04-06

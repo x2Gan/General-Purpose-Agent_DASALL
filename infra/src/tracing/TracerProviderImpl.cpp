@@ -163,6 +163,14 @@ TraceModuleSnapshot TracerProviderImpl::module_snapshot() const {
                              .degraded = false};
 }
 
+TraceHealthSnapshot TracerProviderImpl::health_snapshot() const {
+  if (pipeline_) {
+    return pipeline_->health_snapshot();
+  }
+
+  return TraceHealthSnapshot{};
+}
+
 std::uint64_t TracerProviderImpl::export_success_total() const {
   return pipeline_ ? pipeline_->exporter().export_success_total() : 0U;
 }

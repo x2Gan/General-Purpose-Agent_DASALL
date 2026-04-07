@@ -24,6 +24,7 @@ TraceOperationStatus SpanProcessorPipeline::on_end(const std::shared_ptr<SpanImp
                                 "span processor pipeline requires an ended span",
                                 "tracing.pipeline.on_end");
     refresh_snapshot();
+    observe_health_state();
     return last_status_;
   }
 
@@ -31,6 +32,7 @@ TraceOperationStatus SpanProcessorPipeline::on_end(const std::shared_ptr<SpanImp
     ++ignored_span_total_;
     last_status_ = TraceOperationStatus::success("trace-pipeline://ignored-non-recording");
     refresh_snapshot();
+    observe_health_state();
     return last_status_;
   }
 
@@ -39,6 +41,7 @@ TraceOperationStatus SpanProcessorPipeline::on_end(const std::shared_ptr<SpanImp
   refresh_snapshot();
   if (!enqueue_result.status.ok) {
     last_status_ = enqueue_result.status;
+    observe_health_state();
     return last_status_;
   }
 
@@ -48,6 +51,7 @@ TraceOperationStatus SpanProcessorPipeline::on_end(const std::shared_ptr<SpanImp
   }
 
   last_status_ = TraceOperationStatus::success("trace-pipeline://buffered");
+  observe_health_state();
   return last_status_;
 }
 
@@ -57,6 +61,7 @@ TraceOperationStatus SpanProcessorPipeline::force_flush(std::uint32_t timeout_ms
                                 "span processor pipeline force_flush() timed out before export completed",
                                 "tracing.pipeline.force_flush");
     refresh_snapshot();
+    observe_health_state();
     return last_status_;
   }
 
@@ -67,6 +72,7 @@ TraceOperationStatus SpanProcessorPipeline::force_flush(std::uint32_t timeout_ms
 
   last_status_ = exporter_.force_flush(timeout_ms);
   refresh_snapshot();
+  observe_health_state();
   return last_status_;
 }
 
@@ -77,6 +83,7 @@ TraceOperationStatus SpanProcessorPipeline::shutdown(std::uint32_t timeout_ms,
                                 "span processor pipeline shutdown() timed out before exporter stopped",
                                 "tracing.pipeline.shutdown");
     refresh_snapshot();
+    observe_health_state();
     return last_status_;
   }
 
@@ -86,12 +93,14 @@ TraceOperationStatus SpanProcessorPipeline::shutdown(std::uint32_t timeout_ms,
       (void)exporter_.shutdown(timeout_ms);
       refresh_snapshot();
       last_status_ = flush_status;
+      observe_health_state();
       return last_status_;
     }
   }
 
   last_status_ = exporter_.shutdown(timeout_ms);
   refresh_snapshot();
+  observe_health_state();
   return last_status_;
 }
 
@@ -101,6 +110,14 @@ const BatchSpanBuffer& SpanProcessorPipeline::buffer() const {
 
 const SpanExporterAdapter& SpanProcessorPipeline::exporter() const {
   return exporter_;
+}
+
+const TraceHealthProbe& SpanProcessorPipeline::health_probe() const {
+  return health_probe_;
+}
+
+const TraceHealthSnapshot& SpanProcessorPipeline::health_snapshot() const {
+  return health_probe_.snapshot();
 }
 
 const TraceOperationStatus& SpanProcessorPipeline::last_status() const {
@@ -131,6 +148,7 @@ TraceOperationStatus SpanProcessorPipeline::export_batch(SpanExporterAdapter::Sp
     buffer_.mark_export_cycle_complete(batch.back()->end_result().end_ts_unix_ms.value_or(0));
   }
   refresh_snapshot();
+  observe_health_state();
   return last_status_;
 }
 
@@ -142,8 +160,10 @@ TraceOperationStatus SpanProcessorPipeline::flush_pending_buffer() {
     }
   }
 
+  last_status_ = TraceOperationStatus::success("trace-pipeline://drained");
   refresh_snapshot();
-  return TraceOperationStatus::success("trace-pipeline://drained");
+  observe_health_state();
+  return last_status_;
 }
 
 TraceOperationStatus SpanProcessorPipeline::make_failure(TraceErrorCode code,
@@ -163,6 +183,10 @@ void SpanProcessorPipeline::refresh_snapshot() {
   module_snapshot_.dropped_total = buffer_.dropped_total();
   module_snapshot_.exporter_state = exporter_.module_snapshot().exporter_state;
   module_snapshot_.degraded = exporter_.module_snapshot().degraded;
+}
+
+void SpanProcessorPipeline::observe_health_state() {
+  (void)health_probe_.observe_result(last_status_, module_snapshot_);
 }
 
 }  // namespace dasall::infra::tracing

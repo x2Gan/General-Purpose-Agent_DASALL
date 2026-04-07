@@ -84,6 +84,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_sampling_policy_unit_test
 	dasall_batch_span_buffer_unit_test
 	dasall_batch_export_unit_test
+	dasall_trace_health_probe_unit_test
 	dasall_tracer_span_lifecycle_unit_test
 	dasall_context_propagation_adapter_unit_test
 	dasall_infra_service_facade_unit_test
