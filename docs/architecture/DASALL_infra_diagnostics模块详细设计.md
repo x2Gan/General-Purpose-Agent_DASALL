@@ -261,6 +261,35 @@ ValidationResult 的返回语义：
    - `queue.stats`: `type=array;minItems=0;maxItems=1;token=--queue=<queue_id>;pattern=[a-z0-9._-]{1,32};default=--queue=main`
    - `thread.dump`: `type=array;minItems=0;maxItems=1;token=--limit=<1..32>;default=--limit=5`
 
+### 6.5.3 Redaction profile / deny-list 冻结
+
+冻结原则：
+1. `RedactionEngine` 的首版职责限定为“对可落盘/可导出的 diagnostics snapshot 执行字段过滤与字符串脱敏”，不引入新的 contracts 对象，也不让 store/export 组件各自复制脱敏逻辑。
+2. `infra.diagnostics.redaction.profile` 在 v1 仅允许 `strict` 与 `compat` 两档；未命中这两档的 profile 视为配置错误，必须返回 `INF_E_DIAG_REDACTION_FAIL`。
+3. v1 deny-list 以不区分大小写的 ASCII token 匹配为准，最小集合冻结为：`secret`、`password`、`token`、`authorization`、`cookie`、`apikey`、`credential`。
+4. deny-list 只作用于 string/string-like 字段：`command.actor_ref`、`command.args[*]`、`summary`、`exporter_hint` 与 `evidence_refs[*]` 的尾部片段；scheme 本身如 `logs://`、`metrics://`、`health://`、`errors://`、`command://`、`snapshot://`、`export://`、`error://` 不参与敏感词判定。
+5. 若 `evidence_refs` 中出现 `raw://`、`inline://`、`data:` 这类携带原始内容的引用，或发现未知 scheme，v1 一律按 redaction failure 处理，而不是尝试“猜测性脱敏”。
+
+字段分级矩阵：
+
+| 字段 | 字段等级 | strict | compat | 失败条件 |
+|---|---|---|---|---|
+| `snapshot_id` | S0 结构锚点 | 保留原值 | 保留原值 | 空值不属于 redaction failure，由对象校验处理 |
+| `command.command_name` | S0 结构锚点 | 保留原值 | 保留原值 | 非白名单命令不进入 redaction success 路径 |
+| `command.request_scope` / `command.timeout_ms` / `command.command_id` | S0 结构锚点 | 保留原值 | 保留原值 | 无 |
+| `command.actor_ref` | S2 身份敏感 | 固定写成 `actor://redacted` | 固定写成 `actor://redacted` | 若字段缺失则直接写固定占位，不单独失败 |
+| `command.args` | S1 操作上下文 | 仅保留 schema 默认值或安全 flag：`health.snapshot -> ["--summary"]`、`queue.stats -> ["--queue=redacted"]`、`thread.dump -> ["--limit=5"]` | 保留已通过 schema 校验的 token；若 token 命中 deny-list，则把 value 部分替换为 `redacted` | 出现 positional arg、未知 key 或 deny-list 命中后无法稳定重写时失败 |
+| `summary` | S1 可分享摘要 | 固定重写为命令级 canonical summary：`health.snapshot -> diagnostics redacted health snapshot`、`queue.stats -> diagnostics redacted queue stats`、`thread.dump -> diagnostics redacted thread dump` | 保留 executor summary；若命中 deny-list，命中片段替换为 `[REDACTED]` | summary 为空或替换后仍残留 deny-list token 时失败 |
+| `evidence_refs` | S0/S1 引用锚点 | 仅允许保留受控 scheme 的 ref；不改 scheme，只允许对尾部敏感 token 做 `[REDACTED]` 替换 | 与 strict 相同 | 出现 `raw://`、`inline://`、`data:` 或未知 scheme 时失败 |
+| `redaction_profile` | S0 策略锚点 | 固定写 `strict` | 固定写 `compat` | profile 非 strict/compat 时失败 |
+| `exporter_hint` | S1 导出提示 | 仅允许 `local_file` | 仅允许 `local_file` | 任意 remote/export target hint 直接失败 |
+
+补充约束：
+1. `strict` 的目标是把可共享输出收敛到命令级摘要与受控 ref，因此不允许把 queue 名、actor 身份或原始 summary 片段原样落盘。
+2. `compat` 的目标是保持调试可用性，但只能在已通过白名单 schema 的参数面内保留 token；它不是“跳过脱敏”。
+3. `RedactionEngine` 失败时不得降级为“未脱敏继续落盘”；主链必须返回 `INF_E_DIAG_REDACTION_FAIL`，并阻断 store/export。
+4. `DiagnosticsSnapshot.redaction_profile` 继续作为最终 snapshot 的权威落盘值；若 redaction 成功，该值必须与实际应用的 profile 一致。
+
 ### 6.6 核心接口语义定义
 
 建议头文件分布：infra/include/diagnostics/
@@ -497,7 +526,7 @@ ValidationResult 的返回语义：
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
 | D-BLK-01 已解阻（2026-04-07）：6.5.2 已冻结 `health.snapshot`、`queue.stats`、`thread.dump` 的 schema_ref、`request_scope=runtime`、args token grammar 与 normalized default；Profile 只允许裁剪命令集合，不允许改写参数 schema | DIA-T004/T005 | 无；后续仅需保持 diagnostics 详细设计、专项 TODO 与 deliverable 口径同步 | 证据回链到 6.5.2 与 docs/todos/infrastructure/deliverables/DIA-BLK-003-allowed_commands参数schema收敛.md | 若后续实现重新允许 profile 内联 schema、放开变更型命令或改变 v1 参数结构，则重新转为 Blocked |
-| D-BLK-02 脱敏规则未冻结 | DIA-T006/T007 | 明确字段分级与脱敏策略版本 | 先落 strict 规则与 deny-list | 导出功能仅限摘要，禁原始内容 |
+| D-BLK-02 已解阻（2026-04-07）：6.5.3 已冻结 strict/compat、字段分级矩阵、deny-list 与 redaction failure 兜底；RedactionEngine 可直接按该矩阵实现最小骨架 | DIA-T006/T007 | 无；后续仅需保持详细设计、deliverable 与 TODO/worklog 口径同步 | 证据回链到 6.5.3 与 docs/todos/infrastructure/deliverables/DIA-BLK-004-Redaction规则矩阵收敛.md | 若后续实现允许未脱敏 snapshot 落盘、放开未知 evidence scheme，或把 compat 扩成“原样透传”，则重新转为 Blocked |
 | D-BLK-03 导出格式与目标策略未冻结 | DIA-T007 | 明确 format/checksum/target 白名单 | 先支持本地 jsonl 导出 | 禁用远程导出 |
 | D-BLK-04 metrics/audit 最小接口未冻结 | DIA-T007/T009 | metrics/audit 桥接接口签名冻结 | 先使用最小适配器接口 | 降级为日志+错误码观测 |
 | D-BLK-05 tests/integration 拓扑未稳 | DIA-T009 | tests 顶层集成注册策略明确 | 先保证 unit/contract gate | 延后 integration gate 到下一迭代 |

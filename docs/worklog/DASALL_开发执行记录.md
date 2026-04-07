@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #165
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-BLK-004 Redaction 规则矩阵解阻
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-018` 仍被 `DIA-BLK-004` 阻塞，且阻塞根因已经收敛到“strict/compat、字段分级矩阵与 deny-list 未冻结”，因此本轮最小原子任务就是先完成 blocker recovery。
+2. 该 blocker 属于典型 context blocker：代码主链已可执行，但如果继续直接实现 RedactionEngine，就会把字段处置策略写死在代码里，后续 store/export 将无法判定安全边界。
+
+### 改动
+
+1. 补齐 diagnostics 详细设计的 redaction 权威章节：
+   - 更新 [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_diagnostics模块详细设计.md)，新增 `6.5.3 Redaction profile / deny-list 冻结`，明确 `strict` / `compat`、字段分级矩阵、受控 evidence scheme 与 redaction failure 兜底。
+2. 新增 blocker deliverable：
+   - 新增 [docs/todos/infrastructure/deliverables/DIA-BLK-004-Redaction规则矩阵收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/DIA-BLK-004-Redaction规则矩阵收敛.md)，记录本地证据、外部参考、设计结论、Design -> Build 映射与对 `DIA-TODO-018` 的直接交接。
+3. 同步台账状态：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md)，把 `DIA-BLK-004` 标记为已解阻，并把 `DIA-TODO-018` 从 `Blocked` 切回 `Not Started`。
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md)，同步 INF-BLK-08 摘录与校准记录。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "### 6.5.3|actor://redacted|raw://|inline://|data:" docs/architecture/DASALL_infra_diagnostics模块详细设计.md`
+   - `rg -n "DIA-BLK-004|DIA-TODO-018|已解阻|Not Started" docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+2. 结果：
+   - diagnostics 详细设计中已能定位 `6.5.3` 的 strict/compat 规则矩阵与 raw/inline/data 失败约束。
+   - diagnostics 专项 TODO、infrastructure 总 TODO 与本轮 worklog 对 `DIA-BLK-004` / `DIA-TODO-018` 的状态已保持一致。
+
+### 结果
+
+1. `DIA-BLK-004` 已解阻，`DIA-TODO-018` 现可直接进入实现，不再需要猜测 redaction profile、deny-list 或 failure fallback。
+2. diagnostics E 阶段现在可以继续按顺序推进 `RedactionEngine -> SnapshotStore -> ExportManager`。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-018`，落盘 `RedactionEngine` 骨架，并把 redaction failure 接到 facade 主链。
+2. 018 完成并通过 gate 后，再推进 `DIA-TODO-019` 的 `SnapshotStore` 最小持久化骨架。
+
+### 风险
+
+1. 当前解阻只冻结了 v1 redaction matrix，并未引入热更新或策略管理集成；后续若要让 SecurityPolicyManager 驱动 redaction 规则，必须单独评审，而不是在 018 里顺手扩张。
+2. 若后续实现把 compat profile 误做成“原样透传”，会直接破坏本轮冻结的安全边界，需要回退到 blocker 重新评审。
+
 ## 记录 #164
 
 - 日期：2026-04-07
