@@ -308,7 +308,7 @@ infra/ota 非职责：
 | ArtifactCompatibilityEvaluator | VerifiedPackageManifest、设备能力、Profile | CompatibilityReport | 兼容性失败不得进入安装 |
 | InstallExecutor | Verified artifacts、安装目标、slot plan | InstallResult、InstallEvidence | 安装结果必须与 artifact 一一对应 |
 | SlotSwitchCoordinator | SlotPlan、boot control adapter | BootSwitchResult、RollbackToken | 仅允许切到 inactive target |
-| BootConfirmationMonitor | 启动确认信号、self-check 结果、超时配置 | BootConfirmationResult | 超时必须视为失败路径 |
+| BootConfirmationMonitor | 启动确认信号、self-check 结果、HealthSnapshot、watchdog 心跳新鲜度、slot-bound 版本报告、超时配置 | BootConfirmationResult | 只有显式成功标记才允许 mark_boot_success |
 | RollbackController | RollbackToken、InstallEvidence、当前 boot 状态 | RollbackResult、RollbackEvidence | 回滚失败必须单独可观测 |
 | OTAAuditBridge | 阶段结果、actor、evidence_ref | audit event | 高风险动作强制审计 |
 | OTAHealthProbe | 历史结果、当前 backlog、confirm state | ProbeResult | 只提供事实，不裁定恢复策略 |
@@ -421,7 +421,7 @@ infra/ota 非职责：
 7. InstallExecutor 将 slot_bound 工件写入 target slot，记录 InstallEvidence。
 8. SlotSwitchCoordinator 写入 next boot target。
 9. 系统进入重启或切换窗口。
-10. BootConfirmationMonitor 在 confirm_deadline 内等待 self-check 与 health gate 通过。
+10. BootConfirmationMonitor 在 confirm_deadline 内等待显式成功信号：self-check 成功、health gate 通过、required heartbeat 未 stale，且 slot-bound 版本报告与当前计划一致。
 11. 成功后 IBootControlAdapter.mark_boot_success，repo_bound 工件切换主指针，OTAAuditBridge 写完成事件。
 12. 返回 UpgradeOutcome，状态为 success，rollback_applied 为 false。
 
@@ -437,7 +437,7 @@ infra/ota 非职责：
 1. 预检失败：磁盘不足、健康不达标、策略禁用、版本回退风险。
 2. 验签失败：签名不合法、hash 不匹配、manifest 缺失字段、release_counter 回退。
 3. 安装失败：写入错误、slot 不可用、staging materialization 失败。
-4. 启动确认失败：自检失败、confirm 超时、watchdog reset、健康门未通过。
+4. 启动确认失败：自检失败、version report 不匹配、required heartbeat stale、watchdog reset、confirm 超时、健康门未通过。
 5. 回滚失败：旧 boot target 不可恢复、旧工件缺失、rollback token 无效或过期。
 
 #### 6.9.2 恢复动作
@@ -445,7 +445,7 @@ infra/ota 非职责：
 1. 预检失败：立即返回，不产生副作用，记录 audit 和指标。
 2. 验签失败：清理临时 staging 区，保留失败证据，不进入安装。
 3. 安装失败：若未发生 boot switch，则删除新写入目标；若已生成 rollback token，则执行 rollback 前置恢复。
-4. 启动确认失败：RollbackController 调用 set_next_boot(previous_boot_target)，恢复 repo_bound 主指针并标记 boot failed。
+4. 启动确认失败：`self_check=false`、version report 不匹配、required heartbeat stale 或 watchdog reset 时立即失败；health gate 未通过则在 confirm_deadline 前保持 pending，超时或未收到明确成功标记后执行 rollback，并标记 boot failed。
 5. 回滚失败：上报 critical 级审计与健康事件，系统进入 ota_degraded 状态，禁止继续 apply。
 
 #### 6.9.3 失败兜底
@@ -515,6 +515,23 @@ infra/ota 非职责：
 
 7. RollbackController 只消费 `armed` 且未过期的 token；`expired`/`invalid` token 只能进入人工恢复路径，不得再触发自动 `set_next_boot(previous_boot_target)`。
 8. 该冻结结论直接解阻 `OTA-BLK-01` 与 `OTA-TODO-012`；后续若需要从单文件演进到 sqlite 或更强状态存储，只能作为向后兼容的新 backend，不能改变现有生命周期语义。
+
+#### 6.10.3 boot confirm 成功判据冻结（2026-04-07）
+
+1. V1 BootConfirmationMonitor 只有在 `confirm_deadline` 内同时满足以下条件时，才允许调用 `IBootControlAdapter.mark_boot_success(target_slot)`：
+   - 当前 boot target 仍等于 `SlotPlan.target_slot`，且对应 rollback token 状态为 `armed`；
+   - 收到显式 `self_check_ok=true` 启动确认信号；缺省、缺失或仅“未报错”都不算成功；
+   - `HealthSnapshot.liveness=true` 且 `HealthSnapshot.readiness=true`；若 `degraded=true`，则 `failed_components` 不得与 confirm critical set 交集；
+   - confirm critical set 中每个实体都在当前 `infra.watchdog.timeout_ms` 窗口内存在新鲜 heartbeat，且启动期间未发生 watchdog reset；
+   - version report 必须包含当前 `package_id` 与本轮 `slot_bound` 工件的目标版本集合；`repo_bound` 工件因尚未切主指针，不参与 confirm success 判据。
+2. confirm critical set 在 V1 固定为“当前 OTA plan 明确要求的 self-check 进程 + boot/agent 主进程 heartbeat”；具体实体 ID 作为 BootConfirmationMonitor 私有 policy snapshot 输入，不新增 public contracts。
+3. timeout 与失败处理冻结为：
+   - `self_check=false`、version mismatch、watchdog reset、required heartbeat stale：立即判定 `confirm_fail`，不继续等待；
+   - health gate 未通过时，仅在 `confirm_deadline` 前保持 pending；到期仍未满足则统一判定 `INF_E_OTA_BOOT_CONFIRM_TIMEOUT`；
+   - 未收到明确成功标记也视为超时失败，不允许乐观放行。
+4. 成功路径固定顺序为：记录 `ota.boot.confirm.success` -> `mark_boot_success(target_slot)` -> 写 `ota.mark_boot_success` 审计 -> repo_bound 指针切换 -> 消费 rollback token。
+5. 失败路径固定顺序为：记录 `ota.boot.confirm.timeout` 或 `ota.boot.confirm.fail` -> `mark_boot_failed(target_slot)` -> 若 `infra.ota.rollback.auto_on_confirm_fail=true` 则调用 RollbackController；否则冻结 apply 通道并要求人工恢复。
+6. 该冻结结论直接解阻 `OTA-BLK-03` 与 `OTA-TODO-011`；011 后续只需按此判据实现 signal provider / version reporter / heartbeat freshness 适配面，不得重新扩张 public header。
 
 ### 6.11 可观测性设计
 
@@ -683,7 +700,7 @@ infra/ota 非职责：
 2. repo_bound 工件的原子指针切换由 config 模块提供通用发布能力，还是由 OTA 内部实现私有切换器。
 3. 已于 2026-04-07 收敛：V1 固定使用 platform 文件系统抽象上的单 active token 原子文件 `ota/rollback/active-token.json`；不引入 sqlite，后续若扩展 backend 只能保持现有生命周期语义不变。
 4. 已于 2026-04-01 收敛：首版允许 `ed25519` 与 `ecdsa-p256-sha256` 两种算法；具体密码库继续通过 adapter 注入，trust anchor 由 secret 子域只读接口提供。
-5. boot confirm 成功条件是否只依赖 health ready，还是还要包含指定进程心跳与版本报告。
+5. 已于 2026-04-07 收敛：boot confirm success 必须同时满足显式 self-check success、health liveness+readiness、required heartbeat freshness 与 slot-bound version report 一致；未收到明确成功标记一律按 confirm_timeout 失败处理。
 
 ### 12.2 后续任务建议
 

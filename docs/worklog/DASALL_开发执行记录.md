@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #185
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-020 boot confirm 成功判据设计
+- 状态：已完成
+
+### 任务选择
+
+1. `OTA-TODO-014` 依赖 `OTA-TODO-011`，而 011 仍被 `OTA-BLK-03` 阻塞，因此必须先执行 `OTA-TODO-020` 解阻，符合用户要求的 blocker recovery 顺序。
+2. 020 的职责边界是冻结 boot confirm success/fail 判据与动作顺序，不提前实现 BootConfirmationMonitor 代码，也不扩张到 runtime 全局恢复裁定。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-020-boot-confirm成功判据设计收敛.md](../todos/infrastructure/deliverables/OTA-TODO-020-boot-confirm成功判据设计收敛.md)，记录 020 的设计输入、收敛结论、阻塞解锁映射与过程验证。
+2. 更新 [docs/architecture/DASALL_infra_OTA模块详细设计.md](../architecture/DASALL_infra_OTA模块详细设计.md)，冻结：
+   - BootConfirmationMonitor 的 health/watchdog/version report 组合 success 判据；
+   - health pending 与 watchdog/version mismatch 即时失败的分流规则；
+   - `mark_boot_success / mark_boot_failed / repo switch / rollback` 的固定顺序；
+   - 12.1 未决问题 #5 的收敛结论。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-020` 回写为 `Done`，并同步把 `OTA-TODO-011` 状态从 `Blocked` 调整为 `Not Started`，以及把 `OTA-BLK-03` 更新为已解阻。
+
+### 测试
+
+1. 过程验证命令：
+   - `rg -n "confirm|启动确认|BootConfirmationMonitor|timeout" docs/architecture/DASALL_infra_OTA模块详细设计.md`
+2. 结果：
+   - OTA 详细设计中已存在显式 boot confirm success 判据、timeout/即时失败分流，以及 health/watchdog/version report 联动条件。
+   - `OTA-TODO-011` 已解除 `OTA-BLK-03` 阻塞，可进入实现轮次。
+
+### 结果
+
+1. `OTA-TODO-020` 已完成，BootConfirmationMonitor 后续不再需要重新讨论“只看 health ready 是否足够”，可以直接按冻结判据实现。
+2. `OTA-BLK-03` 已被设计补丁解阻，014 的前置链现在从“020 解阻”推进到了“011 可实现”。
+
+### 下一步
+
+1. 进入 `OTA-TODO-011`，实现 BootConfirmationMonitor 骨架，消费本轮冻结的 success/fail 判据。
+2. 011 完成后再进入 `OTA-TODO-014`，把 backlog / pending_confirm / last_failure 等健康信号收敛为 OTAHealthProbe。
+
+### 风险
+
+1. 本轮只冻结了 V1 confirm success 判据；required heartbeat entity 的具体实体 ID 仍保持在 BootConfirmationMonitor 私有 policy snapshot 中，不进入 public contracts。
+2. repo_bound 工件 version report 被明确排除在 confirm success 判据之外，这要求 011/014 后续保持“先 confirm 成功，再切 repo 指针”的动作顺序。
+
 ## 记录 #184
 
 - 日期：2026-04-07
