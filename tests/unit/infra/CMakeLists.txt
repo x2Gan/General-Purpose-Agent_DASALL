@@ -324,7 +324,7 @@ target_link_libraries(dasall_trace_types_unit_test
 dasall_apply_common_options(dasall_trace_types_unit_test)
 
 add_test(NAME TraceTypesTest COMMAND dasall_trace_types_unit_test)
-set_tests_properties(TraceTypesTest PROPERTIES LABELS "unit")
+set_tests_properties(TraceTypesTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_span_interface_unit_test
   tracing/SpanInterfaceTest.cpp
@@ -339,7 +339,7 @@ target_link_libraries(dasall_span_interface_unit_test
 dasall_apply_common_options(dasall_span_interface_unit_test)
 
 add_test(NAME SpanInterfaceTest COMMAND dasall_span_interface_unit_test)
-set_tests_properties(SpanInterfaceTest PROPERTIES LABELS "unit")
+set_tests_properties(SpanInterfaceTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_trace_context_propagator_interface_unit_test
   tracing/TraceContextPropagatorInterfaceTest.cpp
@@ -354,7 +354,7 @@ target_link_libraries(dasall_trace_context_propagator_interface_unit_test
 dasall_apply_common_options(dasall_trace_context_propagator_interface_unit_test)
 
 add_test(NAME TraceContextPropagatorInterfaceTest COMMAND dasall_trace_context_propagator_interface_unit_test)
-set_tests_properties(TraceContextPropagatorInterfaceTest PROPERTIES LABELS "unit")
+set_tests_properties(TraceContextPropagatorInterfaceTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_trace_errors_unit_test
   tracing/TraceErrorsTest.cpp
@@ -369,7 +369,7 @@ target_link_libraries(dasall_trace_errors_unit_test
 dasall_apply_common_options(dasall_trace_errors_unit_test)
 
 add_test(NAME TraceErrorsTest COMMAND dasall_trace_errors_unit_test)
-set_tests_properties(TraceErrorsTest PROPERTIES LABELS "unit")
+set_tests_properties(TraceErrorsTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_tracer_provider_impl_unit_test
   tracing/TracerProviderImplTest.cpp
@@ -389,7 +389,7 @@ target_link_libraries(dasall_tracer_provider_impl_unit_test
 dasall_apply_common_options(dasall_tracer_provider_impl_unit_test)
 
 add_test(NAME TracerProviderImplTest COMMAND dasall_tracer_provider_impl_unit_test)
-set_tests_properties(TracerProviderImplTest PROPERTIES LABELS "unit")
+set_tests_properties(TracerProviderImplTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_sampling_policy_unit_test
   tracing/SamplingPolicyTest.cpp
@@ -489,7 +489,7 @@ target_link_libraries(dasall_tracer_span_lifecycle_unit_test
 dasall_apply_common_options(dasall_tracer_span_lifecycle_unit_test)
 
 add_test(NAME TracerSpanLifecycleTest COMMAND dasall_tracer_span_lifecycle_unit_test)
-set_tests_properties(TracerSpanLifecycleTest PROPERTIES LABELS "unit")
+set_tests_properties(TracerSpanLifecycleTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_context_propagation_adapter_unit_test
   tracing/ContextPropagationAdapterTest.cpp
@@ -509,7 +509,7 @@ target_link_libraries(dasall_context_propagation_adapter_unit_test
 dasall_apply_common_options(dasall_context_propagation_adapter_unit_test)
 
 add_test(NAME ContextPropagationAdapterTest COMMAND dasall_context_propagation_adapter_unit_test)
-set_tests_properties(ContextPropagationAdapterTest PROPERTIES LABELS "unit")
+set_tests_properties(ContextPropagationAdapterTest PROPERTIES LABELS "unit;tracing")
 
 add_executable(dasall_infra_service_facade_unit_test
   InfraServiceFacadeTest.cpp

@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #150
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-018 注册 tracing 的 unit 与 contract 测试入口
+- 状态：已完成
+
+### 任务选择
+
+1. 本轮承接 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中已完成的 `TRC-TODO-017`，继续按 project-implementation-cycle 只执行下一个依赖满足的原子任务 `TRC-TODO-018`。
+2. 核查现状后确认 top-level [tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 已聚合全部 tracing unit target，018 的真实缺口不在 target 缺失，而在 tracing 标签族与 contract 入口发现面不完整，因此本轮聚焦标签注册而不重复扩写测试实现。
+
+### 改动
+
+1. 完成 tracing unit 标签收口：
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，为 `TraceTypesTest`、`SpanInterfaceTest`、`TraceContextPropagatorInterfaceTest`、`TraceErrorsTest`、`TracerProviderImplTest`、`TracerSpanLifecycleTest`、`ContextPropagationAdapterTest` 补齐 `unit;tracing` 标签。
+   - 保持 [tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 现有聚合不变，因为 tracing target 早已入 `dasall_unit_tests`；本轮只修正 discoverability，而不制造新的聚合入口。
+2. 完成 tracing contract 标签收口：
+   - 更新 [tests/contract/CMakeLists.txt](/home/gangan/DASALL/tests/contract/CMakeLists.txt)，新增 `dasall_register_tracing_contract_test()` helper，和 logging/audit/metrics/secret 一样把 tracing contract 注册集中到专用标签族。
+   - 将现有 `TraceErrorMappingContractTest` 改为通过 tracing helper 注册，并显式标记为 `contract;smoke;tracing;failure`，确保 tracing contract 用例可被 `ctest -L tracing` 单独发现。
+3. 完成 tracing gate 收口：
+   - 本轮没有新增测试源码文件，而是将已有 tracing unit 12 个用例与 contract 1 个用例统一收口到 `tracing` 标签。
+   - 这使 [docs/architecture/DASALL_infra_tracing模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_tracing模块详细设计.md) 中“CI Gate: `ctest --test-dir build-ci -L tracing`”的约束首次具备可执行、可追溯的仓库接线。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -L tracing`
+   - `ctest --test-dir build-ci --output-on-failure -L tracing`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `ctest -N -L tracing` 发现 13 个 tracing 用例，其中 unit 12 个、contract 1 个（`TraceErrorMappingContractTest`）。
+   - `ctest -L tracing` 13/13 通过，证明 tracing 标签族已可独立执行。
+   - `ctest -L unit` 152/152 通过，`ctest -L contract` 141/141 通过，说明 018 的标签接线没有破坏现有全量测试矩阵。
+
+### 结果
+
+1. TRC-TODO-018 已完成，tracing 测试现在具备独立的 `tracing` 标签入口，既能覆盖现有 unit 回归，也能纳入现有 contract 约束。
+2. 后续 tracing contract/integration 扩展可以直接复用 `dasall_register_tracing_contract_test()`，不必再手工补标签，减少后续 `ctest -L tracing` 漏检风险。
+
+### 下一步
+
+1. tracing 专项 TODO 在 017/018 之后，若继续推进实现链，需先重新评估 `TRC-TODO-015` 的 blocker 是否可解；若用户继续推进 contract 约束增强，则可直接进入 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中的 `TRC-TODO-020`。
+
+### 风险
+
+1. 当前 tracing contract 标签族仍只有 1 个已注册用例，虽然足以满足 018 的入口接线要求，但 planning stage、预算观测等更细粒度 contract 约束仍需后续任务继续扩展。
+
 ## 记录 #149
 
 - 日期：2026-04-07
