@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #200
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：INF-BLK-09 shared blocker recovery
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-013` 推送完成后，plugin 专项中阻断 014~017 的唯一前置只剩 INF-BLK-09。
+2. 该 blocker 的根因不是缺代码，而是 manifest/signature/ABI 三项规则尚未同步冻结；因此本轮选择先做最小设计解阻，而不是直接伪造对象或接口实现。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_infra_plugin模块详细设计.md](../../docs/architecture/DASALL_infra_plugin%E6%A8%A1%E5%9D%97%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，新增 6.5.1 PluginManifest schema v1.0、6.5.2 SignatureReport/CompatibilityReport v1 与 6.6.1 签名信任链 / ABI 兼容规则冻结。
+2. 新增 [docs/todos/infrastructure/deliverables/PLG-BLK-01-03-INF-BLK-09-plugin对象与校验链路冻结.md](../../docs/todos/infrastructure/deliverables/PLG-BLK-01-03-INF-BLK-09-plugin%E5%AF%B9%E8%B1%A1%E4%B8%8E%E6%A0%A1%E9%AA%8C%E9%93%BE%E8%B7%AF%E5%86%BB%E7%BB%93.md)，记录本地证据、外部参考、冻结结论与 014~017 的 Design -> Build 映射。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](../../docs/todos/infrastructure/DASALL_infrastructure%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 INF-BLK-09 从当前阻塞迁移为 Resolved，并在阻塞台账校准记录中补充 2026-04-07 的证据回链。
+4. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../../docs/todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 PLG-BLK-01~03 与 014~017 的状态从 Blocked 调整为 Not Started，并新增本轮执行记录与版本记录 v1.14。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "schema_version|required_abi|ed25519|ecdsa-p256-sha256|trust_level_too_low|rollback_rejected|strict_mode=false|platform_tag" docs/architecture/DASALL_infra_plugin模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md`
+   - `rg -n "INF-BLK-09|PLG-TODO-014|PLG-TODO-015|PLG-TODO-016|PLG-TODO-017" docs/worklog/DASALL_开发执行记录.md docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md`
+2. 结果：
+   - plugin 详细设计中的 manifest/signature/ABI 冻结条目均可检索。
+   - infra 总 TODO 与 plugin 专项 TODO 都已将 014~017 恢复为可执行任务。
+
+### 结果
+
+1. INF-BLK-09 已不再是 plugin 子域的当前 blocker，014~017 现在可以按顺序进入对象与接口冻结轮次。
+2. 本轮没有改 public code signature，因此后续若 017 触及 aggregation public boundary，仍需单独走 breaking review gate。
+
+### 下一步
+
+1. 进入 `PLG-TODO-014`，按已冻结 schema 落盘 PluginManifest 对象与对应 unit/contract 守卫。
+
+### 风险
+
+1. PluginRuntimeBridge 平台装载细节仍未冻结；这不会阻塞 014~017，但会继续阻塞完整 load/runtime 集成实现。
+
 ## 记录 #199
 
 - 日期：2026-04-07

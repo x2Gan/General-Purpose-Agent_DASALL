@@ -195,6 +195,38 @@ plugin 组件非职责：
 | CompatibilityReport | abi_ok, api_ok, dependency_ok, reasons[] | 任一检查失败则 reject | 以 ResultCode + ErrorInfo 对外暴露 |
 | LoadResult | plugin_id, phase, result, handle_ref, evidence_ref | 失败必须含 reason/evidence_ref | 与 AgentResult 分层，不混用 |
 
+### 6.5.1 PluginManifest Schema v1.0 冻结
+
+| 字段 | 类型 | 必填 | 冻结规则 |
+|---|---|---|---|
+| schema_version | string | 是 | 首版固定 `1.0.0`，采用 SemVer；已发布版本不得原地改写 |
+| plugin_id | string | 是 | 采用小写 ASCII slug，允许 `.`、`-`、`_`；不得为 `unknown` |
+| version | string | 是 | 使用 `MAJOR.MINOR.PATCH[-prerelease][+build]` |
+| entry | string | 是 | 插件入口标识；必须非空且不允许空白字符 |
+| required_abi | string | 是 | 格式固定为 `<platform_tag>@<MAJOR>.<MINOR>.<PATCH>` |
+| capabilities | vector<string> | 是 | 集合唯一且元素非空，使用小写点分 token |
+| signature_ref | string | 是 | v1 默认 profile 基线下必须非空，指向签名元数据或签名工件 |
+| extensions[] | 可选键值列表 | 否 | key 必须使用 `x.<owner>.<name>`；禁止复用 `infra.`、`contracts.`、`profile.`、`runtime.`、`tool.`、`skill.`、`plugin.` 保留前缀 |
+
+冻结补充：
+
+1. `required_abi` 只表达 host ABI 需求，不复用 `PluginDescriptor.version` 或 runtime capability 字段。
+2. `capabilities` 只表达 plugin 暴露能力，不反向映射 Tool/Skill contracts。
+3. 远程下载、仓库签名和 sandbox 细节继续留在 v2 演进项，v1 schema 不承载这些实现字段。
+
+### 6.5.2 SignatureReport 与 CompatibilityReport v1 冻结
+
+| 对象 | 字段 | 冻结规则 |
+|---|---|---|
+| SignatureReport | verified, signer, algorithm, chain_status, inferred_trust_level, reason_code, evidence_ref | `chain_status` 只允许 `verified`、`anchor_missing`、`algorithm_unsupported`、`signature_invalid`、`certificate_expired`、`trust_level_too_low`、`rollback_rejected` |
+| CompatibilityReport | abi_ok, api_ok, dependency_ok, reason_codes[], resolved_platform_tag, required_abi, evidence_ref | `reason_codes[]` 仅承载 plugin 私有兼容性原因码；任一检查失败即拒绝 load |
+
+冻结补充：
+
+1. SignatureReport/CompatibilityReport 保持 plugin 私有语义对象，不新增 contracts 公共错误对象。
+2. 对外统一错误出口继续通过 ResultCode + ErrorInfo；细分原因通过 `reason_code(s)`、审计与 evidence_ref 留痕。
+3. `api_ok` 保留为 runtime bridge handshake 预留位；在当前阶段也必须显式出现在 CompatibilityReport 中，避免后续再次 breaking 扩写对象。
+
 ### 6.6 核心接口语义定义
 
 建议头文件：infra/include/plugin/
@@ -223,6 +255,23 @@ plugin 组件非职责：
 
 前置条件：discover/validate/load 均要求 infra 已完成 init/start。  
 后置条件：load/unload 必须产生日志、指标、审计三类观测记录。
+
+### 6.6.1 签名信任链与 ABI 兼容规则冻结
+
+签名链冻结：
+
+1. plugin v1 允许的签名算法固定为 `ed25519` 与 `ecdsa-p256-sha256`；未知算法直接拒绝。
+2. trust anchor 只通过 infra 已冻结的只读 trust anchor 读取职责获取，`anchor_purpose` 固定为 `plugin.package.verify`；plugin 不负责持久化、轮换、撤销和授权策略。
+3. trust level 顺序固定为 `untrusted < external < vendor < internal`，`infra.plugin.trust.min_level` 只允许在该序中上调门槛。
+4. 同一 `plugin_id` 的签名元数据不得回退到已见更旧版本；rollback / freeze 类失败只通过 `reason_code`、审计与 evidence_ref 留痕。
+
+ABI 兼容冻结：
+
+1. `platform_tag` 采用 GNU triplet 风格，首版允许 `x86_64-linux-gnu`、`aarch64-linux-gnu`、`armv7-linux-gnueabihf`。
+2. host ABI 快照最小字段固定为 `platform_tag` 与 `abi_version`，其中 `abi_version` 使用 SemVer。
+3. `infra.plugin.abi.strict_mode=true` 时：`platform_tag` 必须完全一致，`MAJOR` 与 `MINOR` 必须完全一致，host patch 必须大于等于 required patch。
+4. `infra.plugin.abi.strict_mode=false` 时：`platform_tag` 必须完全一致，`MAJOR` 必须一致，host `MINOR.PATCH` 允许前向覆盖 plugin 所需版本。
+5. 无论 strict mode 是否关闭，都禁止跨 `platform_tag` 激活，也禁止 `MAJOR` 版本不匹配时继续 load。
 
 ### 6.7 主流程时序（正常）
 
@@ -298,8 +347,8 @@ plugin 组件非职责：
 
 | Design结论 | Build目标 | 映射说明 | 代码目标 | 测试目标 | 验收命令 | 依赖/阻塞 |
 |---|---|---|---|---|---|---|
-| 冻结插件接口边界 | 新增 IPluginManager 与子接口骨架 | 先完成 L2 冻结，避免实现漂移 | infra/include/plugin/IPluginManager.h, IPluginPolicyGate.h, IPluginSignatureVerifier.h, IPluginCompatibilityEngine.h | unit: PluginInterfaceCompileTest; contract: PluginContractBoundaryTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "PluginInterfaceCompileTest|PluginContractBoundaryTest" | 阻塞：INF-BLK-09 |
-| 冻结核心对象模型 | 新增 PluginDescriptor/Manifest/Catalog/Report 对象 | 先让输入输出可测与可审查 | infra/include/plugin/PluginDescriptor.h; PluginManifest.h; PluginCatalog.h; PluginReports.h | unit: PluginManifestSchemaTest; contract: PluginObjectBoundaryTest | ctest --test-dir build-ci -R "PluginManifestSchemaTest|PluginObjectBoundaryTest" | 阻塞：manifest 字段冻结 |
+| 冻结插件接口边界 | 新增 IPluginManager 与子接口骨架 | 先完成 L2 冻结，避免实现漂移 | infra/include/plugin/IPluginManager.h, IPluginPolicyGate.h, IPluginSignatureVerifier.h, IPluginCompatibilityEngine.h | unit: PluginInterfaceCompileTest; contract: PluginContractBoundaryTest | cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "PluginInterfaceCompileTest|PluginContractBoundaryTest" | 已于 2026-04-07 解阻，可按 015 -> 016 顺序推进 |
+| 冻结核心对象模型 | 新增 PluginDescriptor/Manifest/Catalog/Report 对象 | 先让输入输出可测与可审查 | infra/include/plugin/PluginDescriptor.h; PluginManifest.h; PluginCatalog.h; PluginReports.h | unit: PluginManifestSchemaTest; contract: PluginObjectBoundaryTest | ctest --test-dir build-ci -R "PluginManifestSchemaTest|PluginObjectBoundaryTest" | 已于 2026-04-07 解阻，可按 014 -> 017 顺序推进 |
 | 建立校验管线 | 新增 validate 聚合流程骨架 | 把 policy/signature/compat 三检收敛到同一出口 | infra/src/plugin/PluginValidationPipeline.cpp | unit: PluginValidationPipelineTest | ctest --test-dir build-ci -R PluginValidationPipelineTest | 依赖 SecurityPolicy snapshot |
 | 建立生命周期骨架 | 新增 PluginLifecycleManager skeleton | 提供 load/unload 状态机最小闭环 | infra/src/plugin/PluginLifecycleManager.cpp | unit: PluginLifecycleStateTest; integration: InfraPluginLifecycleTest | ctest --test-dir build-ci -R "PluginLifecycleStateTest|InfraPluginLifecycleTest" | 阻塞：runtime bridge 细节 |
 | 建立可观测与审计接线 | 新增 plugin 日志/指标/审计适配器 | 满足失败可观测与合规留痕 | infra/src/plugin/PluginAuditAdapter.cpp; PluginMetricsAdapter.cpp | integration: PluginAuditTraceIntegrationTest | ctest --test-dir build-ci -R PluginAuditTraceIntegrationTest | 依赖 AuditService 可用 |
@@ -391,11 +440,11 @@ plugin 组件非职责：
 
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
-| B-PLG-01 manifest 字段未冻结 | PLG-T002~PLG-T005 | 冻结最小 manifest schema（id/version/entry/abi/signature_ref） | 先定义 v1 schema 并加版本号 | 禁止 load，只保留 discover + validate dry-run |
-| B-PLG-02 ABI 兼容矩阵未冻结 | PLG-T004~PLG-T005 | 明确 host ABI 与插件 ABI 匹配规则 | 先支持主版本严格匹配 | 禁用跨 ABI 激活 |
-| B-PLG-03 签名信任链未冻结 | PLG-T004~PLG-T006 | 明确信任锚、证书轮换、失败码映射 | 先本地 trust store + 离线验签 | 禁用 remote plugin |
+| B-PLG-01 已解阻（2026-04-07）：PluginManifest schema v1.0 已冻结 | PLG-T002~PLG-T005 | schema_version、required_abi、extensions namespace 已在 6.5.1 成文 | 后续按冻结字段落盘 PluginManifest.h | 若编码期发现字段越权，回退到 6.5.1 重新评审 |
+| B-PLG-02 已解阻（2026-04-07）：ABI 兼容矩阵已冻结 | PLG-T004~PLG-T005 | host ABI、platform tag 与 strict/non-strict 规则已在 6.6.1 成文 | 后续按冻结规则落盘 compatibility engine 与测试 | 若实现与矩阵不一致，回退到 6.6.1 校正 |
+| B-PLG-03 已解阻（2026-04-07）：签名信任链已冻结 | PLG-T004~PLG-T006 | trust anchor 读取职责、允许算法、trust level 次序与 chain_status 已在 6.5.2/6.6.1 成文 | 后续按冻结边界落盘 signature verifier 与 report 对象 | 若验签实现试图扩写 contracts，回退到私有对象边界 |
 | B-PLG-04 runtime bridge 细节未定 | PLG-T005 | 固定最小桥接接口（load_symbol/unload） | 先提供 mock bridge 跑通状态机测试 | 暂停真实动态库加载 |
-| B-PLG-05 integration 拓扑不稳定 | PLG-T008 | tests/integration 注册稳定、依赖 mock 完整 | 先跑 unit+contract 门禁 | 延后 integration gate 到下一迭代 |
+| B-PLG-05 已解阻（2026-03-30）：integration 拓扑已稳定 | PLG-T008 | tests 顶层 integration 注册与聚合依赖已完成校准 | 后续只需按组件补齐具体 integration 用例 | 若新增用例未注册，回退到组件级 CMake 接线 |
 
 ### 11.2 风险清单
 
@@ -412,15 +461,12 @@ plugin 组件非职责：
 
 ### 12.1 未决问题
 
-1. PluginManifest 的最终字段集合和扩展字段命名空间策略。
-2. ABI 兼容矩阵是否采用“主版本严格 + 次版本可配置”模式。
-3. 签名信任根来源（内置、部署注入、硬件信任区）及轮换窗口。
-4. PluginRuntimeBridge 是否需要强制沙箱能力声明。
-5. 远程插件能力的供应链审计最小闭环何时纳入。
+1. PluginRuntimeBridge 是否需要强制沙箱能力声明，以及 sandbox hint 是否进入 v1 public boundary。
+2. `api_ok` 在 runtime bridge handshake 落地后是否需要扩展为更细的 capability compatibility 结果对象。
+3. 远程插件能力的供应链审计最小闭环何时纳入。
 
 ### 12.2 后续任务建议
 
-1. 在 docs/todos 下新增 plugin 组件专项 TODO，承接 PLG-T001~PLG-T008。
-2. 优先解 INF-BLK-09，再从 Blocked 迁移 INF-TODO-019 到 Not Started。
-3. 与 security policy 组件联合冻结 policy->plugin 准入决策对象。
-4. 先完成 unit/contract 门禁，再打开 integration 与 profile 兼容门禁。
+1. 先按 PLG-TODO-014 -> 015 -> 016 -> 017 顺序推进对象与接口冻结，不再回到 shared blocker 分支。
+2. 在 017 轮评审 `PluginValidationResult` 是否需要从 ref-only 聚合演进到对象聚合，并单独记录 breaking review 结论。
+3. 保持 unit/contract 先于 integration 的门禁顺序，避免在 runtime bridge 未定前提前扩张 load 实现。
