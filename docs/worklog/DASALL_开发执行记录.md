@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #161
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-014 CommandPolicyGuard 准入骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-014` 的前置 `DIA-TODO-002`、`DIA-TODO-009` 已完成，且 `DIA-TODO-013` 刚刚落盘真实 registry，因此本轮最小原子任务就是把 normalized command 接到真实 `CommandPolicyGuard`。
+2. 014 的目标只限于准入骨架：依赖必须停留在 `ISecurityPolicyManager` 抽象，输出必须继续收敛到 `CommandDecision`，不能提前把 executor、evidence 或 facade 链路一起改造。
+
+### 改动
+
+1. 新增 diagnostics policy guard 私有实现：
+   - 新增 [infra/src/diagnostics/CommandPolicyGuard.h](/home/gangan/DASALL/infra/src/diagnostics/CommandPolicyGuard.h) 与 [infra/src/diagnostics/CommandPolicyGuard.cpp](/home/gangan/DASALL/infra/src/diagnostics/CommandPolicyGuard.cpp)，实现 `authorize()`、`PolicyQueryContext` 投影以及 `PolicyDecisionRef -> CommandDecision` 的 allow/deny 映射。
+   - 当前骨架显式区分三类路径：输入不完整返回 `diag_command_invalid`、缺少 request context 的本地 deny guard、以及真实 policy manager evaluate 后的 allow/deny 结果翻译。
+2. 把 policy guard 接入 diagnostics 构建图：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 `CommandPolicyGuard.cpp` 与私有头纳入 `dasall_infra` 的 diagnostics source/header 列表。
+3. 让现有 policy unit 命中真实实现：
+   - 更新 [tests/unit/infra/DiagnosticsCommandPolicyTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsCommandPolicyTest.cpp)，移除本地 stub `IDiagnosticsPolicyGuard`，改为真实 `CommandPolicyGuard` + stub `ISecurityPolicyManager`。
+   - 新测试现在覆盖 policy query 投影、unknown request context 的短路 deny，以及 policy manager deny 决策向稳定 `CommandDecision` 的翻译。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_diagnostics_command_policy_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest"`
+2. 结果：
+   - `dasall_diagnostics_command_policy_unit_test` 构建通过。
+   - `DiagnosticsCommandRegistryTest`、`DiagnosticsCommandPolicyTest` 共 2/2 通过。
+3. 说明：
+   - 继续沿用 `build-ci` 显式构建/ctest 路径验收，因为当前会话内 VS Code CMake Tools 仍无法直接配置该项目。
+
+### 结果
+
+1. `DIA-TODO-014` 已完成，diagnostics 主链现在具备真实 `Registry -> PolicyGuard` 两级骨架，`CommandDecision` 不再只依赖测试 stub。
+2. 下一步可以直接进入 `DIA-TODO-015`，把 registry/policy 已冻结的准入链接到真实 `CommandExecutor` 执行骨架。
+
+### 下一步
+
+1. 进入 `DIA-TODO-015`，实现 `CommandExecutor` 的只读命令执行骨架，并把 policy 通过后的命令变成结构化执行结果。
+2. 015 完成后继续串行推进 `DIA-TODO-016`、`DIA-TODO-017`，补齐 evidence collect 与 snapshot assemble。
+
+### 风险
+
+1. 当前 `CommandPolicyGuard` 只把 `ISecurityPolicyManager` 的决策翻译为 diagnostics 侧的 allow/deny 结果，还没有引入真实 snapshot store 或策略刷新链路；后续实现不能把这些职责塞回 guard 本身。
+2. `PolicyDecision::RequireConfirmation` 当前按 deny 面处理，以保证 diagnostics v1 只暴露 allow/deny 语义；如果后续设计要求引入第三态，必须先回写 diagnostics 详细设计与接口边界。
+
 ## 记录 #160
 
 - 日期：2026-04-07
