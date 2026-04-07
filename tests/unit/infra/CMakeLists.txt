@@ -1540,6 +1540,26 @@ dasall_apply_common_options(dasall_diagnostics_export_unit_test)
 add_test(NAME DiagnosticsExportTest COMMAND dasall_diagnostics_export_unit_test)
 set_tests_properties(DiagnosticsExportTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_diagnostics_metrics_audit_bridge_unit_test
+  DiagnosticsMetricsAuditBridgeTest.cpp
+)
+
+target_include_directories(dasall_diagnostics_metrics_audit_bridge_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_diagnostics_metrics_audit_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_diagnostics_metrics_audit_bridge_unit_test)
+
+add_test(NAME DiagnosticsMetricsAuditBridgeTest COMMAND dasall_diagnostics_metrics_audit_bridge_unit_test)
+set_tests_properties(DiagnosticsMetricsAuditBridgeTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_config_types_unit_test
   ConfigTypesTest.cpp
 )

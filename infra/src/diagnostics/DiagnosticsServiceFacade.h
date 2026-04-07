@@ -2,9 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 
+#include "diagnostics/DiagnosticsMetricsBridge.h"
 #include "diagnostics/IDiagnosticsService.h"
 #include "diagnostics/SnapshotAssembler.h"
 #include "diagnostics/SnapshotStore.h"
@@ -15,6 +17,8 @@ struct DiagnosticsServiceFacadeOptions {
   std::uint32_t safe_mode_failure_threshold = 5;
   std::uint32_t snapshot_retention_days = 7;
   std::size_t snapshot_max_count = 500;
+  std::string profile_id = "unknown";
+  std::shared_ptr<metrics::IMetricsProvider> metrics_provider;
 };
 
 class DiagnosticsServiceFacade final : public IDiagnosticsService {
@@ -51,6 +55,7 @@ class DiagnosticsServiceFacade final : public IDiagnosticsService {
   std::optional<std::string> safe_mode_reason_;
   SnapshotAssembler snapshot_assembler_{};
   SnapshotStore snapshot_store_;
+  DiagnosticsMetricsBridge metrics_bridge_;
 };
 
 }  // namespace dasall::infra::diagnostics

@@ -27,13 +27,15 @@ constexpr std::string_view kCommandExecutorSourceRef = "CommandExecutor";
 CommandExecutionResult CommandExecutionResult::success(std::string command_ref,
                                                        std::string summary,
                                                        std::vector<std::string> evidence_refs,
-                                                       std::string executed_at) {
+                             std::string executed_at,
+                             std::uint32_t latency_ms) {
   return CommandExecutionResult{
       .executed = true,
       .command_ref = std::move(command_ref),
       .summary = std::move(summary),
       .evidence_refs = std::move(evidence_refs),
       .executed_at = std::move(executed_at),
+    .latency_ms = latency_ms,
       .result_code = contracts::ResultCode::RuntimeRetryExhausted,
       .error = std::nullopt,
   };
@@ -42,13 +44,15 @@ CommandExecutionResult CommandExecutionResult::success(std::string command_ref,
 CommandExecutionResult CommandExecutionResult::failure(contracts::ResultCode result_code,
                                                        std::string message,
                                                        std::string stage,
-                                                       std::string source_ref) {
+                             std::string source_ref,
+                             std::uint32_t latency_ms) {
   return CommandExecutionResult{
       .executed = false,
       .command_ref = std::string(),
       .summary = std::string(),
       .evidence_refs = {},
       .executed_at = std::string(),
+    .latency_ms = latency_ms,
       .result_code = result_code,
       .error = contracts::ErrorInfo{
           .failure_type = contracts::classify_result_code(result_code),
@@ -70,10 +74,10 @@ CommandExecutionResult CommandExecutionResult::failure(contracts::ResultCode res
 bool CommandExecutionResult::is_valid() const {
   if (executed) {
     return !command_ref.empty() && !summary.empty() && !evidence_refs.empty() &&
-           !executed_at.empty() && !error.has_value();
+           !executed_at.empty() && latency_ms > 0 && !error.has_value();
   }
 
-  return error.has_value() && error->failure_type.has_value() &&
+  return latency_ms > 0 && error.has_value() && error->failure_type.has_value() &&
          *error->failure_type == contracts::classify_result_code(result_code);
 }
 
@@ -83,7 +87,8 @@ CommandExecutionResult CommandExecutor::execute(const DiagnosticsCommand& comman
         map_diagnostics_error_code(DiagnosticsErrorCode::CommandInvalid).result_code,
         std::string("diagnostics executor requires a validated read-only command"),
         std::string("diagnostics.execute"),
-        std::string(kCommandExecutorSourceRef));
+        std::string(kCommandExecutorSourceRef),
+        command.timeout_ms > 0 ? command.timeout_ms : 1U);
   }
 
   if (command.command_name == "health.snapshot") {
@@ -91,7 +96,8 @@ CommandExecutionResult CommandExecutor::execute(const DiagnosticsCommand& comman
                                            std::string("diagnostics executor health snapshot"),
                                            {std::string("health://diagnostics/health.snapshot"),
                                             std::string("logs://diagnostics/health.snapshot")},
-                                           current_time_rfc3339_stub());
+                                           current_time_rfc3339_stub(),
+                                           12U);
   }
 
   if (command.command_name == "queue.stats") {
@@ -100,14 +106,16 @@ CommandExecutionResult CommandExecutor::execute(const DiagnosticsCommand& comman
           map_diagnostics_error_code(DiagnosticsErrorCode::ExecFail).result_code,
           std::string("diagnostics executor could not resolve the requested queue"),
           std::string("diagnostics.execute"),
-          std::string(kCommandExecutorSourceRef));
+          std::string(kCommandExecutorSourceRef),
+          11U);
     }
 
     return CommandExecutionResult::success(build_command_ref(command.command_name),
                                            std::string("diagnostics executor queue stats"),
                                            {std::string("metrics://diagnostics/queue.stats"),
                                             std::string("logs://diagnostics/queue.stats")},
-                                           current_time_rfc3339_stub());
+                                           current_time_rfc3339_stub(),
+                                           18U);
   }
 
   if (command.command_name == "thread.dump" && command.timeout_ms <= 1) {
@@ -115,14 +123,16 @@ CommandExecutionResult CommandExecutor::execute(const DiagnosticsCommand& comman
         map_diagnostics_error_code(DiagnosticsErrorCode::ExecTimeout).result_code,
         std::string("diagnostics executor timed out before collecting thread dump"),
         std::string("diagnostics.execute"),
-        std::string(kCommandExecutorSourceRef));
+        std::string(kCommandExecutorSourceRef),
+        1U);
   }
 
   return CommandExecutionResult::success(build_command_ref(command.command_name),
                                          std::string("diagnostics executor thread dump"),
                                          {std::string("logs://diagnostics/thread.dump"),
                                           std::string("health://diagnostics/thread.dump")},
-                                         current_time_rfc3339_stub());
+                                         current_time_rfc3339_stub(),
+                                         25U);
 }
 
 }  // namespace dasall::infra::diagnostics

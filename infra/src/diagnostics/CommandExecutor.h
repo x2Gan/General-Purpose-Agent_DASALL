@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -14,17 +15,20 @@ struct CommandExecutionResult {
   std::string summary;
   std::vector<std::string> evidence_refs;
   std::string executed_at;
+  std::uint32_t latency_ms = 0;
   contracts::ResultCode result_code = contracts::ResultCode::RuntimeRetryExhausted;
   std::optional<contracts::ErrorInfo> error;
 
   [[nodiscard]] static CommandExecutionResult success(std::string command_ref,
                                                       std::string summary,
                                                       std::vector<std::string> evidence_refs,
-                                                      std::string executed_at);
+                                                      std::string executed_at,
+                                                      std::uint32_t latency_ms);
   [[nodiscard]] static CommandExecutionResult failure(contracts::ResultCode result_code,
                                                       std::string message,
                                                       std::string stage,
-                                                      std::string source_ref);
+                                                      std::string source_ref,
+                                                      std::uint32_t latency_ms);
   [[nodiscard]] bool is_valid() const;
 };
 

@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #171
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-021 DiagnosticsMetricsBridge 指标桥接骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 已在上一轮把 `DIA-BLK-006` 解阻，因此本轮最小原子任务就是按 6.10.1 落盘 `DiagnosticsMetricsBridge`。
+2. 021 的验收不只是一条 bridge 单测；因为本轮把 metrics 以 best-effort 方式接进 `DiagnosticsServiceFacade` 的 execute/export/safe_mode 路径，所以还必须补跑 service-interface、export、smoke 和 integration，确认观测桥接不会递归打断 diagnostics 主链。
+
+### 改动
+
+1. 新增 diagnostics metrics bridge 私有实现：
+   - 新增 [infra/src/diagnostics/DiagnosticsMetricsBridge.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsMetricsBridge.h) 与 [infra/src/diagnostics/DiagnosticsMetricsBridge.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsMetricsBridge.cpp)，定义七个 frozen metric family、`infra.diagnostics@v1` meter scope、`stage/outcome/error_code` allowlist 与 degraded / best-effort failure 语义。
+2. 把 bridge 以 best-effort 方式接到 facade 主链：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.h) 与 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，让 execute/export/safe_mode 关键转折点发射 command / deny / export / redaction / store / safe_mode 指标，同时明确 provider-not-ready 不反噬 diagnostics 主结果。
+   - 为 `infra_diag_exec_latency_ms` 提供最小可测样本来源，更新 [infra/src/diagnostics/CommandExecutor.h](/home/gangan/DASALL/infra/src/diagnostics/CommandExecutor.h) 与 [infra/src/diagnostics/CommandExecutor.cpp](/home/gangan/DASALL/infra/src/diagnostics/CommandExecutor.cpp)，在内部 `CommandExecutionResult` 上补齐 skeleton `latency_ms`。
+3. 新增 bridge 单测与接线：
+   - 新增 [tests/unit/infra/DiagnosticsMetricsAuditBridgeTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsMetricsAuditBridgeTest.cpp)，覆盖七指标族注册、scope/label 投影、非法 stage 拒绝，以及 provider-not-ready 的 local degraded 语义。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt) 与 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把新 bridge 源码和 unit 目标接入当前 diagnostics 构建图。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_diagnostics_metrics_audit_bridge_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_service_interface_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_export_unit_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsMetricsAuditBridgeTest|DiagnosticsServiceInterfaceTest|DiagnosticsExportTest|InfraDiagnosticsSmokeTest|InfraDiagnosticsIntegrationTest"`
+2. 结果：
+   - `DiagnosticsMetricsAuditBridgeTest`、`DiagnosticsServiceInterfaceTest`、`DiagnosticsExportTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 共 5/5 通过。
+
+### 结果
+
+1. `DIA-TODO-021` 已完成，diagnostics 现在具备最小七指标 bridge，并且 execute/export/safe_mode 关键路径可以以 best-effort 方式上报 metrics，而不会把 provider/meter 故障递归放大成 diagnostics 主链失败。
+2. F 阶段当前剩余的 bridge 任务已收敛到 `DIA-TODO-022`，下一步可直接推进强制审计桥接。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-022`，实现 `DiagnosticsAuditBridge`，把 remote export / command extension 的 required audit 接到 diagnostics 主链。
+2. 022 完成后再继续 023/024/025 的 CMake、测试注册与 integration 发现性收口。
+
+### 风险
+
+1. `CommandExecutionResult.latency_ms` 当前仍是 skeleton 样本值，用来支撑 021 的固定 histogram family 和回归测试；若后续要上报真实时延，必须在不破坏 `infra_diag_exec_latency_ms` family/label 合同的前提下替换为真实测量值。
+2. 本轮只落了 metrics bridge，remote export / command extension 的 required audit 仍未实现；在 022 完成前，高风险动作的强制审计语义仍停留在设计冻结层，而非运行期代码路径。
+
 ## 记录 #170
 
 - 日期：2026-04-07
