@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #168
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-BLK-005 导出格式与目标策略冻结
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-020` 仍被 `DIA-BLK-005` 阻塞，根因已经收敛到“format/checksum/allowed_targets 与 local/remote 行为约束未冻结”。
+2. 在 020 之前先做 blocker recovery，可以避免 ExportManager 骨架把 `.json`/`.jsonl`、`sha256` 语义和 remote allow-list 判定硬编码成一次性实现细节。
+
+### 改动
+
+1. 冻结 diagnostics 导出设计边界：
+   - 更新 [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_diagnostics模块详细设计.md)，新增 `6.5.4 Export format / checksum / allowed_targets 冻结`。
+   - 该章节把 diagnostics v1 的 `ExportFormat::Json` 语义固定为 UTF-8 JSON Lines（`.jsonl`），并明确 `ExportFormat::TextArchive` 在 v1 必须返回 `INF_E_DIAG_EXPORT_FAIL`。
+2. 冻结 checksum 与 target allow-list 规则：
+   - `SnapshotExportResult.checksum` 固定为对最终导出字节串计算的 `sha256:<64 lowercase hex>`。
+   - 本地 `target_ref` 固定为 `local://diagnostics/<artifact_name>.jsonl`；远程 `allowed_targets` 固定为 exact-match `https://` endpoint ref，不允许 wildcard、query、fragment 或内嵌凭据。
+3. 回写 blocker 台账：
+   - 新增 [docs/todos/infrastructure/deliverables/DIA-BLK-005-导出格式与目标策略冻结.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/DIA-BLK-005-导出格式与目标策略冻结.md)，记录本地证据、外部参考、设计结论与对 020 的直接交接。
+   - 更新 diagnostics 专项 TODO 与 infrastructure 总 TODO，把 `DIA-BLK-005` 标记为已解阻，并把 `DIA-TODO-020` 从 `Blocked` 切回 `Not Started`。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "### 6.5.4|sha256:<64hex>|local://diagnostics/<artifact_name>.jsonl|D-BLK-03 已解阻" docs/architecture/DASALL_infra_diagnostics模块详细设计.md`
+   - `rg -n "DIA-BLK-005|DIA-TODO-020|Not Started|已解阻" docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+2. 结果：
+   - diagnostics 详细设计、diagnostics 专项 TODO、infrastructure 总 TODO 与本轮 worklog 对 `DIA-BLK-005` / `DIA-TODO-020` 的状态保持一致。
+
+### 结果
+
+1. `DIA-BLK-005` 已解阻，`DIA-TODO-020` 现可直接进入实现，不再需要猜测 `Json` 的导出载体、checksum 前缀或 remote allow-list 判定规则。
+2. diagnostics 主链当前已经完成“先脱敏，再存储”，导出路径也具备了足够明确的 format/checksum/target 边界，可继续落 ExportManager 骨架。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-020`，实现本地 jsonl 导出、sha256 checksum 与 remote disabled gate。
+2. 020 完成后再处理 `DIA-BLK-006`，推进 metrics/audit bridge 的最小接口冻结。
+
+### 风险
+
+1. diagnostics v1 把 `ExportFormat::Json` 映射到 JSON Lines 只是模块内冻结语义；若后续跨模块把同名枚举理解为“普通单对象 JSON 文件”，必须通过新的设计评审消除歧义，不能在 020 里自行改写。
+2. 远程 `allowed_targets` 当前冻结为 exact-match `https://` endpoint ref；若未来改成 prefix/wildcard，会直接扩大导出攻击面，必须经过新的 gate 和回归测试。
+
 ## 记录 #167
 
 - 日期：2026-04-07

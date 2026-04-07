@@ -214,7 +214,7 @@ DiagnosticsService 非职责：
 | ValidationResult | accepted, catalog_ref, matched_command_ref, schema_ref, normalized_command, blocking_errors, warnings, field_paths, result_code | accepted=true 时 normalized_command 必须可直接下传 PolicyGuard；accepted=false 时必须返回 blocking_errors 或 field_paths，且 result_code 仅使用 INF_E_DIAG_COMMAND_INVALID | result_code 映射 ResultCode/ErrorInfo，不新增共享校验对象 |
 | EvidenceBundle | logs_ref, metrics_ref, health_ref, errors_ref, artifacts | 仅保存引用与必要摘要 | 引用 Observation 证据语义，不扩写 |
 | DiagnosticsSnapshot | snapshot_id, command, collected_at, summary, evidence_refs, redaction_profile, exporter_hint | 必须脱敏、可导出、可追溯 | 与 infra 总设 6.5 对齐，evidence_ref 兼容 |
-| SnapshotExportResult | export_id, target, format, size_bytes, checksum, created_at | 失败需明确错误与重试建议 | infra 私有对象，不进入 contracts |
+| SnapshotExportResult | export_id, target, format, size_bytes, checksum, created_at | v1 仅允许 LocalFile + ExportFormat::Json 成功；checksum 固定为 `sha256:<64hex>`；remote 需显式 allow-list | infra 私有对象，不进入 contracts |
 
 ### 6.5.1 CommandCatalog / ValidationResult 补充定义
 
@@ -289,6 +289,31 @@ ValidationResult 的返回语义：
 2. `compat` 的目标是保持调试可用性，但只能在已通过白名单 schema 的参数面内保留 token；它不是“跳过脱敏”。
 3. `RedactionEngine` 失败时不得降级为“未脱敏继续落盘”；主链必须返回 `INF_E_DIAG_REDACTION_FAIL`，并阻断 store/export。
 4. `DiagnosticsSnapshot.redaction_profile` 继续作为最终 snapshot 的权威落盘值；若 redaction 成功，该值必须与实际应用的 profile 一致。
+
+### 6.5.4 Export format / checksum / allowed_targets 冻结
+
+冻结原则：
+1. 不新增新的公开导出枚举；v1 继续使用已冻结的 `ExportTarget` / `ExportFormat`。其中 `ExportFormat::Json` 在 diagnostics 导出语义上固定映射为 UTF-8 JSON Lines（`.jsonl`）输出，而不是任意 JSON blob；`ExportFormat::TextArchive` 保留枚举值，但在 v1 必须返回 `INF_E_DIAG_EXPORT_FAIL`。
+2. 本地导出是 v1 唯一允许成功的路径：`request.target == LocalFile`、`request.format == Json`、`request.target_ref` 命中受控本地目标规则后，`ExportManager` 才能生成导出产物。
+3. JSON Lines 约束冻结为：UTF-8 编码、每一行都是合法 JSON value、以 `\n` 作为行终止符；对 diagnostics v1，本地导出产物固定为单 snapshot 对象一行，因此推荐并要求 `.jsonl` 后缀。
+4. `SnapshotExportResult.checksum` 的 v1 语义固定为对“最终写出的确切字节串”计算 `sha256`，并以 `sha256:<64 lowercase hex>` 返回；不允许 `md5`、`sha1` 或无算法前缀摘要。
+5. 远程导出仍保留在公开请求模型中，但主链必须先过 gate：当 `infra.diagnostics.remote.enabled=false` 时，任何 `RemoteUpload` 请求都必须在发起网络 IO 前返回 `INF_E_DIAG_REMOTE_EXPORT_DISABLED`；当显式启用远程导出时，`request.target_ref` 还必须与 `infra.diagnostics.remote.allowed_targets` 中的某个条目做 exact match。
+6. `infra.diagnostics.remote.allowed_targets` 的 v1 条目固定为完全限定的 `https://` endpoint ref；不允许 wildcard、prefix match、查询串、fragment、内嵌凭据或运行时拼接 host/path。Gatekeeper/ExportManager 只做“是否精确命中 allow-list”的判定，不做宽松匹配。
+
+target / format / gate 矩阵：
+
+| target | format | v1 结果 | 约束 |
+|---|---|---|---|
+| `LocalFile` | `Json` | 允许成功 | `target_ref` 必须匹配 `local://diagnostics/<artifact_name>.jsonl`；`artifact_name` 仅允许 `[a-z0-9._-]{1,128}` |
+| `LocalFile` | `TextArchive` | 拒绝 | 返回 `INF_E_DIAG_EXPORT_FAIL`；v1 不支持 tar/zip/text bundle |
+| `RemoteUpload` | `Json` | 默认拒绝 | `remote.enabled=false` 时返回 `INF_E_DIAG_REMOTE_EXPORT_DISABLED`；启用后仍需 exact-match `allowed_targets` |
+| `RemoteUpload` | `TextArchive` | 拒绝 | v1 不支持 |
+
+补充约束：
+1. 本地 `target_ref` 只接受 `local://diagnostics/` scheme；不允许 `..`、重复斜杠、query、fragment 或隐式路径跳转。
+2. `ExportManager` 在写出本地产物前必须先从 `SnapshotStore` 读取已脱敏 snapshot，再按固定 JSON Lines 编码序列化；不得直接从 executor/evidence 原始输出拼装导出文件。
+3. 远程导出即便在未来启用，也必须沿用“先 exact-match allow-list，再上传”的 gatekeeper 语义；`allowed_targets` 是发布时冻结的 endpoint ref 列表，不是用户可自由拼接的 URL 模板。
+4. diagnostics v1 的 `ExportFormat::Json` 与 `.jsonl` 映射只对 diagnostics 模块生效；若未来需要普通 `.json` 单对象文件或压缩包格式，应通过新的 design gate 扩展，而不是改写现有 `Json` 语义。
 
 ### 6.6 核心接口语义定义
 
@@ -367,9 +392,9 @@ ValidationResult 的返回语义：
 | infra.diagnostics.redaction.profile | strict | Profile/部署 | strict/compat |
 | infra.diagnostics.snapshot.retention_days | 7 | Profile/部署 | 快照保留 |
 | infra.diagnostics.snapshot.max_count | 500 | Profile/部署 | 快照数量上限 |
-| infra.diagnostics.export.local.enabled | true | 默认/Profile | 本地导出开关 |
+| infra.diagnostics.export.local.enabled | true | 默认/Profile | 本地导出开关；v1 仅允许 `ExportFormat::Json`，并固定写为 UTF-8 JSON Lines |
 | infra.diagnostics.remote.enabled | false | Profile/部署 | 远程导出开关 |
-| infra.diagnostics.remote.allowed_targets | [] | Profile/部署 | 远程导出目标白名单 |
+| infra.diagnostics.remote.allowed_targets | [] | Profile/部署 | 远程导出目标白名单；v1 条目必须为 exact-match `https://` endpoint ref，不允许 wildcard/query/fragment/内嵌凭据 |
 | infra.diagnostics.safe_mode.failure_threshold | 5 | Profile/部署 | 连续失败阈值 |
 
 ### 6.10 可观测性设计
@@ -527,7 +552,7 @@ ValidationResult 的返回语义：
 |---|---|---|---|---|
 | D-BLK-01 已解阻（2026-04-07）：6.5.2 已冻结 `health.snapshot`、`queue.stats`、`thread.dump` 的 schema_ref、`request_scope=runtime`、args token grammar 与 normalized default；Profile 只允许裁剪命令集合，不允许改写参数 schema | DIA-T004/T005 | 无；后续仅需保持 diagnostics 详细设计、专项 TODO 与 deliverable 口径同步 | 证据回链到 6.5.2 与 docs/todos/infrastructure/deliverables/DIA-BLK-003-allowed_commands参数schema收敛.md | 若后续实现重新允许 profile 内联 schema、放开变更型命令或改变 v1 参数结构，则重新转为 Blocked |
 | D-BLK-02 已解阻（2026-04-07）：6.5.3 已冻结 strict/compat、字段分级矩阵、deny-list 与 redaction failure 兜底；RedactionEngine 可直接按该矩阵实现最小骨架 | DIA-T006/T007 | 无；后续仅需保持详细设计、deliverable 与 TODO/worklog 口径同步 | 证据回链到 6.5.3 与 docs/todos/infrastructure/deliverables/DIA-BLK-004-Redaction规则矩阵收敛.md | 若后续实现允许未脱敏 snapshot 落盘、放开未知 evidence scheme，或把 compat 扩成“原样透传”，则重新转为 Blocked |
-| D-BLK-03 导出格式与目标策略未冻结 | DIA-T007 | 明确 format/checksum/target 白名单 | 先支持本地 jsonl 导出 | 禁用远程导出 |
+| D-BLK-03 已解阻（2026-04-07）：6.5.4 已冻结 `ExportFormat::Json -> UTF-8 JSON Lines`、`checksum=sha256:<64hex>`、本地 `target_ref` 规则与 remote exact-match `allowed_targets`；`ExportManager` 可直接按该矩阵实现最小骨架 | DIA-T007 | 无；后续仅需保持详细设计、deliverable 与 TODO/worklog 口径同步 | 证据回链到 6.5.4 与 docs/todos/infrastructure/deliverables/DIA-BLK-005-导出格式与目标策略冻结.md | 若后续实现放开 `TextArchive`、接受非 `sha256` checksum，或把 remote allow-list 做成 prefix/wildcard，则重新转为 Blocked |
 | D-BLK-04 metrics/audit 最小接口未冻结 | DIA-T007/T009 | metrics/audit 桥接接口签名冻结 | 先使用最小适配器接口 | 降级为日志+错误码观测 |
 | D-BLK-05 tests/integration 拓扑未稳 | DIA-T009 | tests 顶层集成注册策略明确 | 先保证 unit/contract gate | 延后 integration gate 到下一迭代 |
 
