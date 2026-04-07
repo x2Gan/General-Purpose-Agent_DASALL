@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #156
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-009 IDiagnosticsPolicyGuard 接口头文件冻结
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-009` 是当前最小可执行接口任务：其前置 `DIA-TODO-001`、`DIA-TODO-002` 已完成，且 diagnostics 设计 6.6 已明确 `authorize(const DiagnosticsCommand&, const InfraContext&) -> CommandDecision` 的最小签名。
+2. 本轮不需要进入 blocker recovery：`IDiagnosticsPolicyGuard` 只依赖已落盘的 [infra/include/diagnostics/DiagnosticsTypes.h](/home/gangan/DASALL/infra/include/diagnostics/DiagnosticsTypes.h) 与 [infra/include/InfraContext.h](/home/gangan/DASALL/infra/include/InfraContext.h)，不存在像 registry 那样的对象级未定义缺口。
+
+### 改动
+
+1. 冻结 diagnostics 的 PolicyGuard 公开接口：
+   - 新增 [infra/include/diagnostics/IDiagnosticsPolicyGuard.h](/home/gangan/DASALL/infra/include/diagnostics/IDiagnosticsPolicyGuard.h)，仅暴露 `authorize(const DiagnosticsCommand&, const InfraContext&) -> CommandDecision`，保持接口只依赖抽象类型，不吸收策略实现细节。
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，将 `IDiagnosticsPolicyGuard.h` 纳入 infra public headers，避免 diagnostics 组件对外头文件面遗漏。
+2. 补齐 interface/unit 证据：
+   - 新增 [tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp)，以最小 stub 验证 `IDiagnosticsService` 与 `IDiagnosticsPolicyGuard` 的方法签名、成功路径与失败路径仍保持在冻结对象边界内。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，注册 `DiagnosticsServiceInterfaceTest`，确保 diagnostics 的接口冻结不再只停留在头文件存在性。
+3. 补齐 boundary contract 证据：
+   - 更新 [tests/contract/smoke/DiagnosticsBoundaryContractTest.cpp](/home/gangan/DASALL/tests/contract/smoke/DiagnosticsBoundaryContractTest.cpp)，新增 `IDiagnosticsPolicyGuard` 的签名断言，明确 `authorize()` 只消费 `DiagnosticsCommand` 与 `InfraContext`，只输出 `CommandDecision`。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md)，将 `DIA-TODO-009` 标记为 `Done`，并把接口冻结阶段状态收口到只剩 `DIA-TODO-011`。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_infra dasall_diagnostics_service_interface_unit_test dasall_contract_diagnostics_boundary_test`
+   - `ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|DiagnosticsBoundaryContractTest" --output-on-failure`
+2. 结果：
+   - `dasall_infra`、`dasall_diagnostics_service_interface_unit_test` 与 `dasall_contract_diagnostics_boundary_test` 构建通过。
+   - `DiagnosticsServiceInterfaceTest`、`DiagnosticsBoundaryContractTest` 共 2/2 通过。
+3. 说明：
+   - VS Code CMake Tools 仍无法在当前会话中配置项目；本轮沿用仓库既有 `build-ci` 目录完成最小构建与测试，不影响验收结论。
+
+### 结果
+
+1. `DIA-TODO-009` 已完成，diagnostics 的准入边界已具备独立 public header 与可执行的 unit/contract 证据，后续 `DIA-TODO-014` 可以直接基于该接口进入实现骨架。
+2. diagnostics 接口冻结阶段现已完成 `IDiagnosticsPolicyGuard` 与 `IDiagnosticsService`，本工作包的下一个最小任务收敛为 `DIA-TODO-011`。
+
+### 下一步
+
+1. 继续执行 `DIA-TODO-011`，补齐 `IDiagnosticsCommandRegistry.h`，并把 `CommandCatalog` / `ValidationResult` 最小对象定义落到可编译的 diagnostics 类型层。
+2. `DIA-TODO-011` 完成后，若继续推进 registry 实现，仍需先处理 `DIA-BLK-003`，冻结只读命令的完整参数 schema。
+
+### 风险
+
+1. 当前 `IDiagnosticsPolicyGuard` 只冻结了接口签名，没有绑定具体 `ISecurityPolicyManager` 查询上下文；后续实现不得在未补设计前私自扩张输入参数或返回侧带字段。
+2. `DiagnosticsServiceInterfaceTest` 当前只验证冻结边界与最小可观测失败路径，不等于 `DiagnosticsServiceFacade` 生命周期或 safe_mode 已可用；这部分仍留给 `DIA-TODO-012`。
+
 ## 记录 #155
 
 - 日期：2026-04-07

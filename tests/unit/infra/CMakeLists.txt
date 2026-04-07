@@ -1380,6 +1380,21 @@ dasall_apply_common_options(dasall_diagnostics_types_unit_test)
 add_test(NAME DiagnosticsTypesTest COMMAND dasall_diagnostics_types_unit_test)
 set_tests_properties(DiagnosticsTypesTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_diagnostics_service_interface_unit_test
+  DiagnosticsServiceInterfaceTest.cpp
+)
+
+target_link_libraries(dasall_diagnostics_service_interface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_diagnostics_service_interface_unit_test)
+
+add_test(NAME DiagnosticsServiceInterfaceTest COMMAND dasall_diagnostics_service_interface_unit_test)
+set_tests_properties(DiagnosticsServiceInterfaceTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_diagnostics_snapshot_export_unit_test
   DiagnosticsSnapshotExportTest.cpp
 )

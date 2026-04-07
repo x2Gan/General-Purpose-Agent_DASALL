@@ -5,7 +5,9 @@
 #include <type_traits>
 #include <vector>
 
+#include "../../../infra/include/InfraContext.h"
 #include "../../../infra/include/diagnostics/DiagnosticsTypes.h"
+#include "../../../infra/include/diagnostics/IDiagnosticsPolicyGuard.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
@@ -115,6 +117,20 @@ void test_diagnostics_snapshot_keeps_redaction_preconditions_inside_infra_bounda
               "diagnostics boundary should require explicit redaction readiness before a snapshot becomes exportable");
 }
 
+void test_diagnostics_policy_guard_keeps_authorize_boundary_minimal() {
+  using dasall::infra::InfraContext;
+  using dasall::infra::diagnostics::CommandDecision;
+  using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::IDiagnosticsPolicyGuard;
+
+  static_assert(std::is_same_v<decltype(&IDiagnosticsPolicyGuard::authorize),
+                               CommandDecision (IDiagnosticsPolicyGuard::*)(
+                                   const DiagnosticsCommand&, const InfraContext&)>);
+  static_assert(std::is_abstract_v<IDiagnosticsPolicyGuard>);
+  static_assert(std::is_same_v<decltype(InfraContext{}.request_id), std::string>);
+  static_assert(std::is_same_v<decltype(CommandDecision{}.policy_ref), std::string>);
+}
+
 }  // namespace
 
 int main() {
@@ -123,6 +139,7 @@ int main() {
     test_diagnostics_command_boundary_keeps_allowlist_frozen();
     test_evidence_bundle_keeps_reference_only_payload_inside_infra_boundary();
     test_diagnostics_snapshot_keeps_redaction_preconditions_inside_infra_boundary();
+    test_diagnostics_policy_guard_keeps_authorize_boundary_minimal();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
