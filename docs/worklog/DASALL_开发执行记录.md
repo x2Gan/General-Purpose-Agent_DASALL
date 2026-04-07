@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #152
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-015 实现 TraceMetricsBridge 与 TraceAuditBridge 桥接骨架
+- 状态：已完成
+
+### 任务选择
+
+1. 上一轮 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中 `TRC-BLK-001`、`TRC-BLK-002` 已完成解阻并单独提交，因此本轮直接执行用户点名的 `TRC-TODO-015`，不再重复 blocker recovery。
+2. 代码考古后确认 tracing bridge 不需要新扩张 cross-module 接口：metrics 侧已有 [infra/include/metrics/IMetricsProvider.h](/home/gangan/DASALL/infra/include/metrics/IMetricsProvider.h) / [infra/include/metrics/IMeter.h](/home/gangan/DASALL/infra/include/metrics/IMeter.h)，audit 侧已有 [infra/include/audit/IAuditLogger.h](/home/gangan/DASALL/infra/include/audit/IAuditLogger.h)，且 logging/policy/metrics/secret 子域已有成熟 bridge 模式可直接复用。
+
+### 改动
+
+1. 完成 tracing metrics bridge 骨架落盘：
+   - 新增 [infra/src/tracing/TraceMetricsBridge.h](/home/gangan/DASALL/infra/src/tracing/TraceMetricsBridge.h) 与 [infra/src/tracing/TraceMetricsBridge.cpp](/home/gangan/DASALL/infra/src/tracing/TraceMetricsBridge.cpp)，定义 `TraceMetricSignal`、`TraceMetricsEmitResult` 与 `TraceMetricsBridge::emit()`。
+   - 按 tracing 设计 6.10 冻结 8 个指标族：`trace_span_started_total`、`trace_span_ended_total`、`trace_span_dropped_total`、`trace_export_success_total`、`trace_export_failure_total`、`trace_export_latency_ms`、`trace_batch_queue_depth`、`trace_context_invalid_total`。
+   - bridge 内部固定 meter scope 为 `infra.tracing/v1`，并把 label allowlist 收口为 `module=tracing`、`stage in {span,queue,export,context}`、`outcome in {success,failure,degraded}`、`error_code in {none,TRC_E_*}`，避免把高基数 tracing 事实泄露到 metrics 公共边界。
+2. 完成 tracing audit bridge 骨架落盘：
+   - 新增 [infra/src/tracing/TraceAuditBridge.h](/home/gangan/DASALL/infra/src/tracing/TraceAuditBridge.h) 与 [infra/src/tracing/TraceAuditBridge.cpp](/home/gangan/DASALL/infra/src/tracing/TraceAuditBridge.cpp)，定义 `TraceAuditEvent`、`TraceAuditWriteResult`、`TraceAuditBridgeStatus` 与 `TraceAuditBridge::write_audit_event()`。
+   - 首版冻结 3 类治理审计事件：采样策略变更、连续导出失败进入 degraded、shutdown 失败触发 fallback；对应 action 固定为 `sampler_changed`、`enter_degraded`/`degraded_still_active`/`recover_to_healthy`、`shutdown_force_fallback`。
+   - bridge 只把治理事实写入 `AuditEvent.side_effects`，并把 request/session/trace/task/lease 等关联字段留在 `AuditContext`，继续遵守现有 audit contract，不新增 tracing 专属公共 payload。
+3. 完成 tracing bridge 构建与测试接线：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 TraceMetricsBridge / TraceAuditBridge 纳入 `DASALL_INFRA_TRACING_SOURCES`。
+   - 新增 [tests/unit/infra/tracing/TraceMetricsBridgeTest.cpp](/home/gangan/DASALL/tests/unit/infra/tracing/TraceMetricsBridgeTest.cpp) 与 [tests/unit/infra/tracing/TraceAuditBridgeTest.cpp](/home/gangan/DASALL/tests/unit/infra/tracing/TraceAuditBridgeTest.cpp)，覆盖成功发射、provider/logger 缺失、label contract 拒绝等路径。
+   - 新增 [tests/contract/smoke/TraceMetricsBridgeBoundaryContractTest.cpp](/home/gangan/DASALL/tests/contract/smoke/TraceMetricsBridgeBoundaryContractTest.cpp) 与 [tests/contract/smoke/TraceAuditBridgeBoundaryContractTest.cpp](/home/gangan/DASALL/tests/contract/smoke/TraceAuditBridgeBoundaryContractTest.cpp)，固化 tracing bridge 不能突破现有 Metrics/Audit 公共边界。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt)、[tests/contract/CMakeLists.txt](/home/gangan/DASALL/tests/contract/CMakeLists.txt)，使 4 个新用例进入 `unit;tracing` / `contract;smoke;tracing` 标签图。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_trace_metrics_bridge_unit_test dasall_trace_audit_bridge_unit_test dasall_contract_trace_metrics_bridge_boundary_test dasall_contract_trace_audit_bridge_boundary_test`
+   - `ctest --test-dir build-ci --output-on-failure -R 'Trace(MetricsBridgeBoundaryContractTest|AuditBridgeBoundaryContractTest|MetricsBridgeTest|AuditBridgeTest)$'`
+   - `ctest --test-dir build-ci --output-on-failure -L tracing`
+2. 结果：
+   - 受影响目标全部构建通过；新增 warning 仅清理到本轮自增测试初始化项，未引入新的编译错误。
+   - 新增 4 个 tracing bridge 用例全部通过。
+   - `ctest -L tracing` 17/17 通过，说明 015 没有破坏 008~018 已落地的 tracing 主链与 contract 约束。
+3. 说明：
+   - 本轮未新增 `tests/integration/infra/tracing`。原因不是遗漏，而是仓库当前尚无 tracing integration 子拓扑；015 首版 bridge reachability 先由专项 unit+contract gate 收口，待后续真实 provider/pipeline wiring 需要跨模块编排时再单列 integration 原子任务推进。
+
+### 结果
+
+1. TRC-TODO-015 已完成，tracing 现在具备与 metrics/audit 子系统对接的最小桥接骨架，且不需要新增公共接口即可承接后续 provider/pipeline 调用点接线。
+2. tracing 观测面首次在代码里具备冻结的 metrics family 与 governance audit event 语义，后续如需把 `TraceHealthProbe` / `TracerProviderImpl` 的快照推送到观测系统，可直接复用本轮桥接类型而不再重定义契约。
+
+### 下一步
+
+1. 若继续推进 tracing 专项 TODO，可转向把现有 pipeline/provider 状态与 015 bridge 实际接线，或补独立 `tests/integration/infra/tracing` 拓扑，以完成 bridge 从 skeleton 到运行链闭环的下一层验收。
+
+### 风险
+
+1. 015 当前仍是 bridge skeleton：它冻结了输入信号、指标名、audit governance 事件与 contract 边界，但尚未把 `SpanProcessorPipeline` / `TracerProviderImpl` 的实际状态变迁主动推送到 bridge；该 wiring 应在后续独立原子任务中完成，避免本轮越界改动 013/014 已稳定主链。
+
 ## 记录 #151
 
 - 日期：2026-04-07

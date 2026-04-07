@@ -817,6 +817,40 @@ target_link_libraries(dasall_contract_trace_error_mapping_test
 
 set_tests_properties(TraceErrorMappingContractTest PROPERTIES LABELS "contract;smoke;tracing;failure")
 
+dasall_register_tracing_contract_test(
+  dasall_contract_trace_metrics_bridge_boundary_test
+  TraceMetricsBridgeBoundaryContractTest
+  smoke/TraceMetricsBridgeBoundaryContractTest.cpp
+)
+
+target_include_directories(dasall_contract_trace_metrics_bridge_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_contract_trace_metrics_bridge_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_tracing_contract_test(
+  dasall_contract_trace_audit_bridge_boundary_test
+  TraceAuditBridgeBoundaryContractTest
+  smoke/TraceAuditBridgeBoundaryContractTest.cpp
+)
+
+target_include_directories(dasall_contract_trace_audit_bridge_boundary_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_contract_trace_audit_bridge_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
 dasall_register_metrics_contract_test(
   dasall_contract_metric_exporter_interface_boundary_test
   MetricsExporterInterfaceBoundaryContractTest
