@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #174
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-024 diagnostics unit / contract 测试入口收口
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-024` 的完成条件是 diagnostics unit / contract 测试既要被 ctest 发现，也要能在 `unit` / `contract` 标签下执行。
+2. 由于相关测试源码与注册入口此前已随对象、接口、主链和 bridge 任务逐步落盘，024 本轮的核心是独立验证“测试入口已经收口”，而不是再次新增测试文件。
+
+### 改动
+
+1. 构建聚合测试目标：执行 `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`，确认 diagnostics 测试已经进入仓库级 unit / contract 聚合图。
+2. 补充 diagnostics 标签发现性证据：
+   - `ctest --test-dir build-ci -N -L unit -R "DiagnosticsTypesTest|DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest|DiagnosticsRedactionTest|DiagnosticsSnapshotStoreTest|DiagnosticsExportTest"` 发现 7 个 diagnostics unit 测试。
+   - `ctest --test-dir build-ci -N -L contract -R "DiagnosticsBoundaryContractTest|DiagnosticsErrorMappingContractTest"` 发现 2 个 diagnostics contract 测试。
+3. 补充 diagnostics 标签执行证据：
+   - `ctest --test-dir build-ci --output-on-failure -L unit -R "DiagnosticsTypesTest|DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest|DiagnosticsRedactionTest|DiagnosticsSnapshotStoreTest|DiagnosticsExportTest"` 执行 7/7 通过。
+   - `ctest --test-dir build-ci --output-on-failure -L contract -R "DiagnosticsBoundaryContractTest|DiagnosticsErrorMappingContractTest"` 执行 2/2 通过。
+4. 更新 diagnostics 专项 TODO、infrastructure 总 TODO 与本轮 worklog，把 024 从测试入口待收口转成 `Done`，并把下一步焦点切到 025 的 integration 发现性门禁。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -L unit -R "DiagnosticsTypesTest|DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest|DiagnosticsRedactionTest|DiagnosticsSnapshotStoreTest|DiagnosticsExportTest"`
+   - `ctest --test-dir build-ci -N -L contract -R "DiagnosticsBoundaryContractTest|DiagnosticsErrorMappingContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L unit -R "DiagnosticsTypesTest|DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest|DiagnosticsRedactionTest|DiagnosticsSnapshotStoreTest|DiagnosticsExportTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L contract -R "DiagnosticsBoundaryContractTest|DiagnosticsErrorMappingContractTest"`
+2. 结果：
+   - diagnostics 7 个 unit 测试与 2 个 contract 测试均可被标签发现并全部通过。
+
+### 结果
+
+1. `DIA-TODO-024` 已完成，diagnostics 的 unit / contract 测试入口已经进入统一聚合目标与标签发现性门禁，不再依赖零散的目标名记忆。
+2. F 阶段剩余门禁只剩 `DIA-TODO-025` 的 integration 发现性闭环。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-025`，补齐 diagnostics integration 测试入口的 `ctest -N` / 执行证据。
+2. 025 完成后再执行 `DIA-TODO-026`，统一回写 diagnostics 质量门结论。
+
+### 风险
+
+1. 024 本轮验证的是测试入口与标签发现性，不等于完整 integration 已收口；若后续有人修改 integration 顶层注册而不更新 diagnostics 用例发现性，仍会在 025 暴露缺口。
+
 ## 记录 #173
 
 - 日期：2026-04-07
