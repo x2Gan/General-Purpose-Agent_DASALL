@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #193
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-009 plugin 单元测试入口注册
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-008` 已完成并推送后，`PLG-TODO-009` 成为用户指定串行范围中的下一个可执行原子任务。
+2. plugin 单测源码已经存在，009 的唯一缺口是注册入口仍留在 tests/unit/infra/CMakeLists.txt 与 tests/unit/CMakeLists.txt 的父级聚合层，因此本轮只做入口收口与 discoverability 验证，不改测试断言本身。
+
+### 改动
+
+1. 新增 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt)，提供 `dasall_register_plugin_unit_test(...)` helper，统一五个 plugin unit executable、ctest 名称与 `unit;plugin` 标签。
+2. 更新 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，删除父级内联的五段 plugin unit 注册代码，改为 `add_subdirectory(plugin)` 并向上导出 `DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS`。
+3. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，用 `${DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS}` 替代硬编码的五个 plugin target 名称，使顶层 unit 聚合消费组件级输出列表。
+4. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-009-plugin单元测试入口注册收敛.md](../todos/infrastructure/deliverables/PLG-TODO-009-plugin%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95%E5%85%A5%E5%8F%A3%E6%B3%A8%E5%86%8C%E6%94%B6%E6%95%9B.md)，记录 009 的输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 PLG-TODO-009 回写为 Done，并补充本轮执行记录。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_plugin_descriptor_unit_test dasall_plugin_catalog_unit_test dasall_plugin_error_code_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_policy_gate_interface_unit_test`
+   - `ctest --test-dir build-ci -N -L unit | grep -i plugin`
+   - `ctest --test-dir build-ci --output-on-failure -L plugin`
+2. 结果：
+   - 五个 plugin unit 目标全部构建通过。
+   - `ctest -N -L unit` 可发现 5 个 plugin 单测入口；`ctest -L plugin` 5/5 通过。
+
+### 结果
+
+1. plugin unit 测试现在通过 tests/unit/infra/plugin/CMakeLists.txt 统一注册，并以组件级列表接入顶层 unit 聚合。
+2. 009 完成后，后续新增 plugin 单测不需要再同时修改 tests/unit/infra/CMakeLists.txt 和 tests/unit/CMakeLists.txt 的散点条目。
+
+### 下一步
+
+1. 进入 PLG-TODO-010，把 plugin contract 边界测试从 tests/contract/CMakeLists.txt 收敛到 plugin 专属 helper/入口，并验证 contract discoverability。
+
+### 风险
+
+1. 009 只收敛了 unit 入口；contract 边界测试仍在 tests/contract/CMakeLists.txt 主文件中直列，010 未完成前 plugin 测试入口仍未完全对称。
+
 ## 记录 #192
 
 - 日期：2026-04-07

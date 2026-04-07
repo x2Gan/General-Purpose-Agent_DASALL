@@ -157,7 +157,7 @@
 | PluginAuditAdapter 建立 | 详设 6.10；infra 系统 6.10 | 适配器 | P0 | Not Started | PLG-TODO-006 | 审计字段列表清晰，但依赖 INF-TODO-016 AuditService |
 | plugin 私有错误码域 | 详设 6.6、9.1 | 错误码 | P0 | Done | PLG-TODO-007 | 六个错误码已列，可直接定义 |
 | plugin 构建入口接线 | 详设 8.1、8.2 | 构建/测试 | P0 | Done | PLG-TODO-008 | plugin source/public header 已按组件收敛到 infra CMake 入口 |
-| plugin 单元测试入口注册 | 详设 9.1；编码规范 3.7 | 测试 | P0 | Not Started | PLG-TODO-009 | tests/unit/infra/plugin 已有用例，仍需把注册逻辑下沉到子目录入口 |
+| plugin 单元测试入口注册 | 详设 9.1；编码规范 3.7 | 测试 | P0 | Done | PLG-TODO-009 | plugin unit 注册逻辑已下沉到 tests/unit/infra/plugin 子目录，并以组件级列表接入顶层聚合 |
 | plugin 合约边界测试入口注册 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 测试 | P0 | Not Started | PLG-TODO-010 | tests/contract 已有 plugin 边界用例，仍需收敛 helper 与 discoverability |
 | PluginLifecycleManager 状态机 | 详设 6.7/6.8 | 流程 | P1 | Not Started | PLG-TODO-011 | 状态机与故障恢复图存在，仅提供骨架与状态转移测试 |
 | 失败注入测试与指标验证 | 详设 9.1、9.2 | 测试 | P1 | Not Started | PLG-TODO-012 | 关键失败场景可测，但需要实现才能注入 |
@@ -179,7 +179,7 @@
 | PLG-TODO-006 | Not Started | 新增 PluginAuditAdapter 适配器 | 详设 6.10；infra 系统 6.10 | 详设 6.10 审计点与字段清单 | L2 | infra/src/plugin/PluginAuditAdapter.cpp，负责生成 plugin load/unload 与 policy deny 的 AuditEvent，含 actor、action、target、outcome、evidence_ref、reason_code | unit：AuditEvent 必填字段校验；integration：审计写入与导出可追踪 | `cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci --output-on-failure -L "unit|integration" -R "PluginAudit"` | PLG-TODO-001、INF-TODO-016（AuditService） | 无 | 无 | adapter 实现、单测与集成测试 | 仅当高风险动作（load/unload/policy deny）有审计记录，且 evidence_ref 可解引时完成 |
 | PLG-TODO-007 | Done | 定义 plugin 私有错误码域 | 详设 6.6、9.1 | 详设 6.6 错误语义、9.1 failure injection 场景 | L2 | infra/include/InfraErrorCode.h（or 新增 plugin/PluginErrorCode.h），定义六个 INF_E_PLUGIN_* 错误码并在 infra facade 侧建立映射入口 | unit：码值可判定；contract：映射 contracts::ResultCode 时不新增共享语义 | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra dasall_plugin_error_code_unit_test dasall_contract_plugin_error_code_boundary_test && ctest --test-dir build-ci -N -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginErrorCodeTest|PluginErrorCodeBoundaryContractTest"` | 无 | 无 | 无 | 错误码头文件、映射说明、单测与合约测试 | 已完成（2026-04-01）：PluginErrorCode.h、PluginErrorCodeTest、PluginErrorCodeBoundaryContractTest 落盘；六个 `INF_E_PLUGIN_*` 码名已在设计收敛文档中冻结并全部通过 unit/contract 验证 |
 | PLG-TODO-008 | Done | 接线 infra/src/plugin 与 infra/include/plugin CMake 目标 | 详设 8.1；当前 CMake 现状 | 详设 8.1 目录落盘建议、8.2 分阶段实施 | L2 | 更新 infra/CMakeLists.txt，新增 plugin 子目录与源文件列表（允许仅添加头文件与空实现入口） | build：dasall_infra 目标可编译且包含 plugin 真实头文件 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra && rg -n "DASALL_INFRA_PLUGIN_(SOURCES|PUBLIC_HEADERS)" infra/CMakeLists.txt` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007 | 无 | 无 | infra/CMakeLists.txt 改动、构建输出 | 已完成（2026-04-07）：infra/CMakeLists.txt 新增 `DASALL_INFRA_PLUGIN_SOURCES` 与 `DASALL_INFRA_PLUGIN_PUBLIC_HEADERS`，plugin 源与公开头不再散落在全局清单中，`dasall_infra` 构建通过 |
-| PLG-TODO-009 | Not Started | 注册 tests/unit/infra/plugin 单元测试入口 | 详设 9.1；编码规范 3.7 | 详设 9.1 测试矩阵、编码规范 3.7 | L2 | 新增 tests/unit/infra/plugin/ 目录与 PluginDescriptorTest.cpp/PluginCatalogTest.cpp 等，在 tests/unit/CMakeLists.txt 中注册 plugin 子目录 | unit：用例被 ctest -L unit 发现 | `cmake -S . -B build-ci -G "Unix Makefiles" && ctest --test-dir build-ci -N -L unit \| grep -i plugin` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008 | 无 | 无 | tests/unit/infra/plugin 目录与 CMakeLists.txt、ctest 发现证据 | 仅当 plugin 单元测试可被 ctest -L unit 发现并执行时完成 |
+| PLG-TODO-009 | Done | 注册 tests/unit/infra/plugin 单元测试入口 | 详设 9.1；编码规范 3.7 | 详设 9.1 测试矩阵、编码规范 3.7 | L2 | 新增 tests/unit/infra/plugin/ 目录与 PluginDescriptorTest.cpp/PluginCatalogTest.cpp 等，在 tests/unit/CMakeLists.txt 中注册 plugin 子目录 | unit：用例被 ctest -L unit 发现 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_plugin_descriptor_unit_test dasall_plugin_catalog_unit_test dasall_plugin_error_code_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_policy_gate_interface_unit_test && ctest --test-dir build-ci -N -L unit \| grep -i plugin && ctest --test-dir build-ci --output-on-failure -L plugin` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008 | 无 | 无 | tests/unit/infra/plugin 目录与 CMakeLists.txt、ctest 发现证据 | 已完成（2026-04-07）：新增 tests/unit/infra/plugin/CMakeLists.txt，并把 plugin unit 注册从父级 CMake 下沉到子目录入口；`ctest -N -L unit` 可发现 5 个 plugin 用例，`ctest -L plugin` 5/5 通过 |
 | PLG-TODO-010 | Not Started | 注册 tests/contract/infra/plugin 合约边界测试入口 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 详设 6.5 contracts 对齐关系、9.1 contract 覆盖目标 | L2 | 在 tests/contract/ 现有注册机制下新增 plugin 边界用例，例如 PluginObjectBoundaryTest 检查标识字段不越权、ErrorCodeMappingTest 检查码映射稳定 | contract：标识字段、错误码、AuditEvent 引用不越权 | `cmake -S . -B build-ci -G "Unix Makefiles" && ctest --test-dir build-ci -L contract --output-on-failure -R "Plugin"` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008、PLG-TODO-009 | 无 | 无 | tests/contract/plugin/ 源文件、contract 执行记录 | 仅当新增 contract 测试被发现且能阻止 contracts 语义越权时完成 |
 | PLG-TODO-011 | Not Started | 新增 PluginLifecycleManager 状态机与转移测试 | 详设 6.7、6.8 | 详设 6.7 主流程、6.8 异常与恢复时序 | L2 | infra/src/plugin/PluginLifecycleManager.cpp（skeleton），包含 load/unload/enable/disable 四个方法与内部状态转移，不进入实际 dlopen/dlsym 实现 | unit：状态机转移枚举测试（loaded->active、loaded->disabled、failed->cleanup）；contract：LoadResult/UnloadResult 返回值稳定 | `ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest"` | PLG-TODO-003、PLG-TODO-006 | 无 | 无 | lifecycle 骨架实现、状态转移单测 | 仅当状态机转移可预测、失败路径可审计时完成 |
 | PLG-TODO-012 | Not Started | 编写 plugin 失败注入与可观测性测试 | 详设 9.1、9.2 | 详设 9.1 failure injection 场景、9.2 quality gates | L2 | tests/ 下新增 PluginSignatureFailureTest、PluginCompatibilityFailureTest、PluginLoadTimeoutTest 等，验证失败路径有日志/审计/指标 | integration：当 validate fail 时有 AuditEvent、当 load fail 时有 CompatibilityReport | `ctest --test-dir build-ci -L integration --output-on-failure -R "PluginFailure\|PluginObservability"` | PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 | 无 | 无 | 失败注入测试源文件、执行记录 | 仅当关键失败路径（签名失败、兼容失败、load 超时）均有可观测证据时完成 |
@@ -811,6 +811,67 @@ Build 合规复核：
 
 ---
 
+## 20. 本轮执行记录（2026-04-07 / PLG-TODO-009）
+
+### 20.1 选中任务
+
+1. 本轮任务：PLG-TODO-009。
+2. 可执行性依据：PLG-TODO-008 已完成，plugin 测试源码也已在 tests/unit/infra/plugin 落盘；当前剩余缺口仅是 unit 注册入口仍停留在父级 CMakeLists 中，可在单轮内完成“子目录入口收口 + discoverability 验证 + TODO/工作日志回写”。
+
+### 20.2 研究与 Design 结论
+
+本地证据：
+
+1. tests/unit/infra/plugin 目录已存在五个 plugin 单测源文件，说明 009 的问题不是缺测试，而是缺少子目录级注册入口。
+2. tests/unit/infra/CMakeLists.txt 当前直接定义五个 plugin unit executable，与 health/watchdog 等其他组件混排，不利于后续组件级维护。
+3. tests/unit/CMakeLists.txt 直接硬编码五个 plugin target 名称，顶层聚合尚未真正消费组件级输出列表。
+
+外部参考：
+
+1. CMake 官方 add_subdirectory 文档说明，子目录会立即纳入当前构建图；本轮据此把 plugin unit 注册逻辑收敛到 tests/unit/infra/plugin/CMakeLists.txt。
+2. CMake 官方 add_test / set_tests_properties 文档说明，测试应在创建目录内注册并设置标签；本轮据此统一赋予 plugin unit 用例 `unit;plugin` 标签，保证 discoverability 与组件过滤一致。
+
+D 结论：
+
+1. 新增 docs/todos/infrastructure/deliverables/PLG-TODO-009-plugin单元测试入口注册收敛.md，冻结子目录入口、顶层聚合列表和 discoverability 验证链路。
+2. Build 三件套锁定为：
+        - 代码目标：tests/unit/infra/plugin/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt。
+        - 测试目标：五个 plugin unit 用例可被 unit 视图发现，且 plugin 标签子集可直接执行。
+        - 验收命令：cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_plugin_descriptor_unit_test dasall_plugin_catalog_unit_test dasall_plugin_error_code_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_policy_gate_interface_unit_test && ctest --test-dir build-ci -N -L unit | grep -i plugin && ctest --test-dir build-ci --output-on-failure -L plugin。
+3. D Gate：PASS。
+
+### 20.3 Build 交付与证据
+
+交付物：
+
+1. tests/unit/infra/plugin/CMakeLists.txt：新增 dasall_register_plugin_unit_test(...) helper，统一五个 plugin unit 用例的 add_executable / add_test / labels。
+2. tests/unit/infra/CMakeLists.txt：移除父级内联的 plugin unit 注册片段，改为 add_subdirectory(plugin) 并向上导出 DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS。
+3. tests/unit/CMakeLists.txt：改为消费 ${DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS}，不再硬编码五个 plugin unit target。
+4. docs/todos/infrastructure/deliverables/PLG-TODO-009-plugin单元测试入口注册收敛.md：记录输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+5. docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md：将 PLG-TODO-009 回写为 Done，并补充本轮执行记录。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_plugin_descriptor_unit_test dasall_plugin_catalog_unit_test dasall_plugin_error_code_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_policy_gate_interface_unit_test`：通过。
+3. `ctest --test-dir build-ci -N -L unit | grep -i plugin`：通过，可发现 5 个 plugin 单测入口。
+4. `ctest --test-dir build-ci --output-on-failure -L plugin`：通过，5/5 tests passed。
+
+Build 合规复核：
+
+1. 代码注释：本轮只做 CMake 注册入口收口，helper 与列表命名已直接表达 plugin unit 归属，无需新增冗余注释。
+2. 正负例覆盖：复用既有五个 plugin unit 测试的正负例覆盖，本轮不重写测试断言。
+3. 测试发现性：已同时验证 `ctest -N -L unit` 的发现性和 `ctest -L plugin` 的可执行性。
+4. TODO 证据回写：已完成任务状态、交付物路径与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 plugin unit 注册入口收口、设计收敛文档、专项 TODO 与工作日志证据。
+
+阻塞修复：
+
+1. 当前仓库已有 plugin unit 用例，但注册入口仍留在父级 CMakeLists，导致 009 的“目录与入口注册”目标未闭环；本轮通过新增子目录 CMake 完成最小收口，而不改测试语义。
+2. 顶层 unit 聚合此前直接硬编码五个 plugin target 名称；本轮改为消费组件级列表，避免后续新增 plugin 测试时重复在多处手工补点。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -822,6 +883,7 @@ Build 合规复核：
 | v1.4 | 2026-04-01 | 回写 PLG-TODO-003 的接口边界 blocker 修复、设计/构建证据，并修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 | v1.5 | 2026-04-01 | 回写 PLG-TODO-004 的 manifest 输入边界 blocker 修复、设计/构建证据，并修正该任务验收命令中的测试目标构建缺口 | （待评审） |
 | v1.6 | 2026-04-07 | 回写 PLG-TODO-008 的构建入口收口与验证证据，并修正 008/009/010 在映射表与前置依赖中的元数据错位 | （待评审） |
+| v1.7 | 2026-04-07 | 回写 PLG-TODO-009 的 unit 注册入口收口与 discoverability 证据，使顶层 unit 聚合改为消费 plugin 组件级测试列表 | （待评审） |
 
 ---
 

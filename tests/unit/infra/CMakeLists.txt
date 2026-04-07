@@ -2173,77 +2173,9 @@ dasall_register_ota_unit_test(
   BootControlAdapterInterfaceTest.cpp
 )
 
-add_executable(dasall_plugin_descriptor_unit_test
-  plugin/PluginDescriptorTest.cpp
+add_subdirectory(plugin)
+
+set(DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS
+  "${DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS}"
+  PARENT_SCOPE
 )
-
-target_link_libraries(dasall_plugin_descriptor_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_plugin_descriptor_unit_test)
-
-add_test(NAME PluginDescriptorFieldTest COMMAND dasall_plugin_descriptor_unit_test)
-set_tests_properties(PluginDescriptorFieldTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_plugin_catalog_unit_test
-  plugin/PluginCatalogTest.cpp
-)
-
-target_link_libraries(dasall_plugin_catalog_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_plugin_catalog_unit_test)
-
-add_test(NAME PluginCatalogTest COMMAND dasall_plugin_catalog_unit_test)
-set_tests_properties(PluginCatalogTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_plugin_error_code_unit_test
-  plugin/PluginErrorCodeTest.cpp
-)
-
-target_link_libraries(dasall_plugin_error_code_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_plugin_error_code_unit_test)
-
-add_test(NAME PluginErrorCodeTest COMMAND dasall_plugin_error_code_unit_test)
-set_tests_properties(PluginErrorCodeTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_plugin_manager_interface_unit_test
-  plugin/PluginManagerInterfaceTest.cpp
-)
-
-target_link_libraries(dasall_plugin_manager_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_plugin_manager_interface_unit_test)
-
-add_test(NAME PluginManagerInterfaceCompileTest COMMAND dasall_plugin_manager_interface_unit_test)
-set_tests_properties(PluginManagerInterfaceCompileTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_plugin_policy_gate_interface_unit_test
-  plugin/PluginPolicyGateInterfaceTest.cpp
-)
-
-target_link_libraries(dasall_plugin_policy_gate_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_plugin_policy_gate_interface_unit_test)
-
-add_test(NAME PluginPolicyGateInterfaceCompileTest COMMAND dasall_plugin_policy_gate_interface_unit_test)
-set_tests_properties(PluginPolicyGateInterfaceCompileTest PROPERTIES LABELS "unit")
