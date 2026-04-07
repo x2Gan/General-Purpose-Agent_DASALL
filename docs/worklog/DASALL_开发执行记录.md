@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #175
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-025 diagnostics integration 测试入口收口
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-025` 的完成条件是 diagnostics integration 用例要进入顶层 `integration` 聚合图，并能在 `integration` 标签下被发现和执行。
+2. 当前 diagnostics integration 用例和顶层注册入口此前已随 smoke / integration skeleton 分步落盘，因此 025 本轮的重点是独立验证 discoverability 与执行证据，而不是再改一次测试文件布局。
+
+### 改动
+
+1. 构建 integration 聚合目标：执行 `cmake --build build-ci --target dasall_integration_tests`，确认 diagnostics integration 用例已经进入顶层 integration 目标与聚合执行链。
+2. 补充 diagnostics integration 发现性证据：
+   - `ctest --test-dir build-ci -N -L integration -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest"` 发现 2 个 diagnostics integration 测试。
+3. 补充 diagnostics integration 执行证据：
+   - `ctest --test-dir build-ci --output-on-failure -L integration -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest"` 执行 2/2 通过。
+4. 更新 diagnostics 专项 TODO、infrastructure 总 TODO 与本轮 worklog，把 025 从 integration 入口待收口转成 `Done`，并把下一步焦点切到 026 的质量门与交付证据统一回写。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_integration_tests`
+   - `ctest --test-dir build-ci -N -L integration -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L integration -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest"`
+2. 结果：
+   - diagnostics 2 个 integration 测试均可被 `integration` 标签发现并全部通过；顶层 integration 聚合目标整体也构建、执行通过。
+
+### 结果
+
+1. `DIA-TODO-025` 已完成，diagnostics 的 integration 测试入口已进入统一 integration 聚合图与标签发现性门禁。
+2. F 阶段桥接与门禁任务已经全部完成，下一步只剩 `DIA-TODO-026` 的质量门与交付证据统一回写。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-026`，统一回写 diagnostics 的 unit / contract / integration 门禁结论与交付证据。
+2. 保持现有 diagnostics integration 目标与标签注册稳定，避免在证据收口前重新打开 discoverability 缺口。
+
+### 风险
+
+1. 025 本轮验证的是 integration discoverability 与执行门禁，不改变 diagnostics integration 用例当前仍位于 [tests/integration/infra/CMakeLists.txt](/home/gangan/DASALL/tests/integration/infra/CMakeLists.txt) 的现实；若未来仓库统一迁移到更细粒度子目录，必须同步维护 `integration` 标签和聚合目标，而不是只移动文件路径。
+
 ## 记录 #174
 
 - 日期：2026-04-07
