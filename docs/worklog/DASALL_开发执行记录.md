@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #183
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-012 RollbackController 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `OTA-BLK-01` 已在上一个轮次通过 `OTA-TODO-018` 解阻，因此 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中的 `OTA-TODO-012` 已成为当前可执行的下一个核心链路任务。
+2. 012 的职责边界聚焦在 rollback controller 本体：恢复 boot target、恢复 repo pointer、输出 evidence；不再回退到 token 存储设计讨论。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-012-RollbackController骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-012-RollbackController骨架收敛.md)，记录 012 的设计依据、Design->Build 映射、Build 合规复核与验证证据。
+2. 新增 [infra/src/ota/RollbackController.h](/home/gangan/DASALL/infra/src/ota/RollbackController.h) 与 [infra/src/ota/RollbackController.cpp](/home/gangan/DASALL/infra/src/ota/RollbackController.cpp)，冻结 rollback 私有依赖边界，并实现 `rollback / restore_boot_target / recover_repo_pointer`。
+3. 新增 [tests/unit/infra/ota/RollbackControllerTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/RollbackControllerTest.cpp)，覆盖 rollback success、expired token fail、repo recovery fail 与 helper 边界透传。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 RollbackController 源码和 RollbackControllerTest 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-012` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_rollback_controller_unit_test`
+   - `ctest --test-dir build-ci -N -R "RollbackControllerTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "RollbackControllerTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `RollbackControllerTest` 1 项。
+   - OTA 定向执行：`RollbackControllerTest` 1/1 通过。
+   - 仓库级 unit 门：168/168 通过。
+
+### 结果
+
+1. `OTA-TODO-012` 已完成，OTA 现在具备 RollbackController 骨架，能够在 token 未过期时恢复旧 boot target、恢复 repo pointer 并返回 evidence ref。
+2. rollback_fail 现在拥有独立的 contract-shaped 失败通道，可与 precheck/verify/install/switch 失败区分。
+
+### 下一步
+
+1. 若继续推进 OTA 闭环，优先处理 `OTA-TODO-020` 解阻 `OTA-TODO-011`，再补 BootConfirmationMonitor。
+2. 之后进入 `OTA-TODO-013/014` 与 `OTA-TODO-017`，把审计、健康和 integration/failure 门补齐。
+
+### 风险
+
+1. 当前 rollback controller 只冻结了骨架与边界，没有落真实 token state store / audit writer / repo pointer backend；这些仍需后续集成任务接线。
+2. token 过期、invalid 与人工恢复的运维入口已在 018 设计冻结，但 CLI/daemon 的恢复操作面尚未在本轮实现。
+
 ## 记录 #182
 
 - 日期：2026-04-07
