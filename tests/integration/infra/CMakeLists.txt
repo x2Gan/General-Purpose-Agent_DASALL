@@ -8,6 +8,11 @@ target_link_libraries(dasall_infra_diagnostics_smoke_integration_test
     dasall_infra
 )
 
+target_include_directories(dasall_infra_diagnostics_smoke_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 dasall_apply_common_options(dasall_infra_diagnostics_smoke_integration_test)
 
 add_test(NAME InfraDiagnosticsSmokeTest COMMAND dasall_infra_diagnostics_smoke_integration_test)

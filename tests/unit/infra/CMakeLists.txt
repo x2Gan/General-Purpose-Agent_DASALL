@@ -1390,6 +1390,11 @@ target_link_libraries(dasall_diagnostics_service_interface_unit_test
     dasall_infra
 )
 
+target_include_directories(dasall_diagnostics_service_interface_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 dasall_apply_common_options(dasall_diagnostics_service_interface_unit_test)
 
 add_test(NAME DiagnosticsServiceInterfaceTest COMMAND dasall_diagnostics_service_interface_unit_test)

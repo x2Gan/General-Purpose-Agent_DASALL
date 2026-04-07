@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #158
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-012 DiagnosticsServiceFacade 生命周期与 safe_mode 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-012` 是当前最小无阻塞的主链路骨架任务：其唯一前置 `DIA-TODO-010` 已完成，且不需要等待 `DIA-BLK-003`。
+2. 先完成 facade skeleton 的原因是它可以尽早把 diagnostics 从“只有接口/测试 stub”推进到真实 `infra/src/diagnostics` 源码层，并为后续 Registry/Policy/Executor/Evidence/Assembler 接入提供固定生命周期壳体。
+
+### 改动
+
+1. 新增 diagnostics facade 私有实现：
+   - 新增 [infra/src/diagnostics/DiagnosticsServiceFacade.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.h) 与 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，实现 `start()`、`execute()`、`get_snapshot()`、`export_snapshot()` 以及 safe_mode 计数与测试辅助入口。
+   - 当前 facade 仍是主链路壳体：其 `execute()` 先以白名单和 safe_mode 门禁生成 placeholder snapshot，不宣称已经完成 registry/policy/executor/evidence/assembler 的真实协作逻辑。
+2. 把 diagnostics 源码接入 infra build graph：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，新增 diagnostics private source/header 列表，并把 `DiagnosticsServiceFacade.cpp` 纳入 `dasall_infra`。
+   - 这属于实现 012 的直接构建接线，不等于 `DIA-TODO-023` 已整体完成，因为 registry/policy/executor/evidence/assembler 等其余 diagnostics 源码仍未全部入图。
+3. 让现有 unit/smoke 证据改为命中真实 facade：
+   - 更新 [tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp)，新增真实 `DiagnosticsServiceFacade` 的 start/safe_mode 断言。
+   - 更新 [tests/integration/infra/InfraDiagnosticsSmokeTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsSmokeTest.cpp)，从内存 stub 切到真实 facade，覆盖 execute/get/export 的 smoke 路径。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt) 与 [tests/integration/infra/CMakeLists.txt](/home/gangan/DASALL/tests/integration/infra/CMakeLists.txt)，为上述测试加上 `infra/src` 私有头搜索路径。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_infra dasall_diagnostics_service_interface_unit_test dasall_infra_diagnostics_smoke_integration_test`
+   - `ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|InfraDiagnosticsSmokeTest" --output-on-failure`
+2. 结果：
+   - `dasall_infra`、`dasall_diagnostics_service_interface_unit_test` 与 `dasall_infra_diagnostics_smoke_integration_test` 构建通过。
+   - `DiagnosticsServiceInterfaceTest`、`InfraDiagnosticsSmokeTest` 共 2/2 通过。
+3. 说明：
+   - 依旧沿用 `build-ci` 显式构建路径完成验收；当前会话中的 VS Code CMake Tools 配置态问题未影响本轮验证。
+
+### 结果
+
+1. `DIA-TODO-012` 已完成，diagnostics 现在拥有真实的 `infra/src/diagnostics/DiagnosticsServiceFacade.cpp` 生命周期壳体，而不再只依赖 test stub。
+2. 下一步若要推进 `DIA-TODO-013`，仍必须先处理 `DIA-BLK-003`，因为 facade skeleton 并没有替代 registry 参数 schema 的设计冻结。
+
+### 下一步
+
+1. 进入 blocker recovery，处理 `DIA-BLK-003`，冻结 `health.snapshot`、`queue.stats`、`thread.dump` 三个只读命令的完整参数 schema。
+2. blocker 解开后再推进 `DIA-TODO-013`，把 facade 从 placeholder gate 过渡到真实 registry validate 路径。
+
+### 风险
+
+1. 当前 facade 仍然直接生成 placeholder snapshot；如果后续把这个占位逻辑误当作最终执行链，就会掩盖 Registry/Policy/Executor/Evidence/Assembler 尚未接入的事实。
+2. safe_mode 目前只冻结了“失败计数触发”和“仅保留 health.snapshot”的骨架语义；阈值来源与恢复条件后续仍需与真实执行链联动验证。
+
 ## 记录 #157
 
 - 日期：2026-04-07

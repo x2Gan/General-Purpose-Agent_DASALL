@@ -1,105 +1,24 @@
 #include <exception>
 #include <iostream>
 #include <string>
-#include <unordered_map>
 
+#include "diagnostics/DiagnosticsServiceFacade.h"
 #include "diagnostics/IDiagnosticsService.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
 
-class InMemoryDiagnosticsService final : public dasall::infra::diagnostics::IDiagnosticsService {
- public:
-  dasall::infra::diagnostics::DiagnosticsSnapshotResult execute(
-      const dasall::infra::diagnostics::DiagnosticsCommand& command) override {
-    using dasall::contracts::ResultCode;
-    using dasall::infra::diagnostics::CommandDecision;
-    using dasall::infra::diagnostics::DiagnosticsSnapshot;
-    using dasall::infra::diagnostics::DiagnosticsSnapshotResult;
-    using dasall::infra::diagnostics::RedactionProfile;
-
-    if (!command.is_read_only_whitelisted()) {
-      return DiagnosticsSnapshotResult::failure(
-          ResultCode::ValidationFieldMissing,
-          "diagnostics command must be read-only and whitelisted",
-          "diagnostics.execute",
-          "InMemoryDiagnosticsService",
-          CommandDecision{
-              .allowed = false,
-              .reason_code = std::string("diag_command_denied"),
-              .policy_ref = std::string("policy://diagnostics/readonly"),
-              .denied_rule_id = std::string("readonly-only"),
-          });
-    }
-
-    DiagnosticsSnapshot snapshot{
-        .snapshot_id = std::string("snapshot-") + command.command_id,
-        .command = command,
-        .collected_at = std::string("2026-03-27T11:30:00Z"),
-        .summary = std::string("collected read-only diagnostics evidence"),
-        .evidence_refs = {"logs://diag/summary", "health://diag/health"},
-        .redaction_profile = RedactionProfile::Strict,
-        .exporter_hint = std::string("local_file"),
-    };
-    snapshots.emplace(snapshot.snapshot_id, snapshot);
-    return DiagnosticsSnapshotResult::success(std::move(snapshot));
-  }
-
-  dasall::infra::diagnostics::DiagnosticsSnapshotResult get_snapshot(
-      const dasall::infra::diagnostics::SnapshotQuery& query) override {
-    using dasall::contracts::ResultCode;
-    using dasall::infra::diagnostics::DiagnosticsSnapshotResult;
-
-    const auto iterator = snapshots.find(query.snapshot_id);
-    if (iterator == snapshots.end()) {
-      return DiagnosticsSnapshotResult::failure(ResultCode::ValidationFieldMissing,
-                                                "snapshot_id must resolve to a retained diagnostics snapshot",
-                                                "diagnostics.get_snapshot",
-                                                "InMemoryDiagnosticsService");
-    }
-
-    return DiagnosticsSnapshotResult::success(iterator->second);
-  }
-
-  dasall::infra::diagnostics::SnapshotExportResult export_snapshot(
-      const dasall::infra::diagnostics::SnapshotExportRequest& request) override {
-    using dasall::contracts::ResultCode;
-    using dasall::infra::diagnostics::ExportTarget;
-    using dasall::infra::diagnostics::SnapshotExportResult;
-
-    if (!request.is_valid() || request.target != ExportTarget::LocalFile) {
-      return SnapshotExportResult::failure(ResultCode::ValidationFieldMissing,
-                                           "diagnostics export must stay local and fully specified in the minimal skeleton",
-                                           "diagnostics.export",
-                                           "InMemoryDiagnosticsService");
-    }
-
-    if (snapshots.find(request.snapshot_id) == snapshots.end()) {
-      return SnapshotExportResult::failure(ResultCode::ValidationFieldMissing,
-                                           "diagnostics export requires an existing retained snapshot",
-                                           "diagnostics.export",
-                                           "InMemoryDiagnosticsService");
-    }
-
-    return SnapshotExportResult::success(std::string("export-") + request.snapshot_id,
-                                         request.target,
-                                         request.format,
-                                         256,
-                                         "sha256:diag-export-001",
-                                         "2026-03-27T11:31:00Z");
-  }
-
- private:
-  std::unordered_map<std::string, dasall::infra::diagnostics::DiagnosticsSnapshot> snapshots;
-};
-
 void test_diagnostics_smoke_execute_get_and_export_round_trip() {
   using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::DiagnosticsServiceFacade;
   using dasall::infra::diagnostics::ExportFormat;
   using dasall::infra::diagnostics::ExportTarget;
   using dasall::tests::support::assert_true;
 
-  InMemoryDiagnosticsService service;
+  DiagnosticsServiceFacade service;
+  assert_true(service.start(),
+              "diagnostics smoke flow should start the facade before execute/get/export");
+
   const DiagnosticsCommand command{
       .command_id = std::string("001"),
       .command_name = std::string("health.snapshot"),
@@ -118,7 +37,7 @@ void test_diagnostics_smoke_execute_get_and_export_round_trip() {
   const auto get_result = service.get_snapshot({.snapshot_id = execute_result.snapshot.snapshot_id});
   assert_true(get_result.ok,
               "diagnostics smoke flow should read back the retained snapshot");
-  assert_true(get_result.snapshot.summary == "collected read-only diagnostics evidence",
+  assert_true(get_result.snapshot.summary == "diagnostics facade placeholder snapshot",
               "diagnostics smoke flow should keep the snapshot summary stable across retrieval");
 
   const auto export_result = service.export_snapshot({
@@ -133,9 +52,13 @@ void test_diagnostics_smoke_execute_get_and_export_round_trip() {
 
 void test_diagnostics_smoke_rejects_non_whitelisted_command() {
   using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::DiagnosticsServiceFacade;
   using dasall::tests::support::assert_true;
 
-  InMemoryDiagnosticsService service;
+  DiagnosticsServiceFacade service;
+  assert_true(service.start(),
+              "diagnostics smoke denial path should start the facade before execute");
+
   const auto execute_result = service.execute(DiagnosticsCommand{
       .command_id = std::string("002"),
       .command_name = std::string("secret.dump"),

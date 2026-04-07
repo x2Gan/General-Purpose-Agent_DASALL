@@ -3,6 +3,7 @@
 #include <string>
 #include <type_traits>
 
+#include "diagnostics/DiagnosticsServiceFacade.h"
 #include "InfraContext.h"
 #include "diagnostics/IDiagnosticsPolicyGuard.h"
 #include "diagnostics/IDiagnosticsService.h"
@@ -230,6 +231,64 @@ void test_diagnostics_service_and_policy_guard_failures_remain_observable() {
               "IDiagnosticsService failure path should remain inside contracts ResultCode and ErrorInfo semantics");
 }
 
+void test_diagnostics_service_facade_enforces_startup_and_safe_mode_skeleton() {
+  using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::DiagnosticsServiceFacade;
+  using dasall::infra::diagnostics::DiagnosticsServiceFacadeOptions;
+  using dasall::tests::support::assert_true;
+
+  DiagnosticsServiceFacade facade(DiagnosticsServiceFacadeOptions{
+      .safe_mode_failure_threshold = 2,
+  });
+
+  const auto before_start = facade.execute(DiagnosticsCommand{
+      .command_id = std::string("diag-cmd-facade-001"),
+      .command_name = std::string("health.snapshot"),
+      .args = {},
+      .request_scope = std::string("runtime"),
+      .timeout_ms = 3000,
+      .actor_ref = std::string("ops-user"),
+  });
+  assert_true(!before_start.ok,
+              "DiagnosticsServiceFacade should reject execute before lifecycle start");
+
+  assert_true(facade.start() && facade.is_ready(),
+              "DiagnosticsServiceFacade should become ready after start()");
+
+  const auto invalid_result = facade.execute(DiagnosticsCommand{
+      .command_id = std::string("diag-cmd-facade-002"),
+      .command_name = std::string("secret.dump"),
+      .args = {},
+      .request_scope = std::string("runtime"),
+      .timeout_ms = 3000,
+      .actor_ref = std::string("ops-user"),
+  });
+  assert_true(!invalid_result.ok && facade.is_in_safe_mode(),
+              "DiagnosticsServiceFacade should enter safe_mode after reaching the failure threshold");
+
+  const auto restricted = facade.execute(DiagnosticsCommand{
+      .command_id = std::string("diag-cmd-facade-003"),
+      .command_name = std::string("queue.stats"),
+      .args = {},
+      .request_scope = std::string("runtime"),
+      .timeout_ms = 3000,
+      .actor_ref = std::string("ops-user"),
+  });
+  assert_true(!restricted.ok,
+              "DiagnosticsServiceFacade safe_mode should keep only the lowest-risk health.snapshot command path open");
+
+  const auto allowed = facade.execute(DiagnosticsCommand{
+      .command_id = std::string("diag-cmd-facade-004"),
+      .command_name = std::string("health.snapshot"),
+      .args = {},
+      .request_scope = std::string("runtime"),
+      .timeout_ms = 3000,
+      .actor_ref = std::string("ops-user"),
+  });
+  assert_true(allowed.ok && allowed.snapshot.is_valid(),
+              "DiagnosticsServiceFacade safe_mode should still allow health.snapshot as the low-risk fallback path");
+}
+
 }  // namespace
 
 int main() {
@@ -237,6 +296,7 @@ int main() {
     test_diagnostics_service_and_policy_guard_keep_frozen_entrypoints();
     test_diagnostics_service_keeps_snapshot_and_export_boundaries_stable();
     test_diagnostics_service_and_policy_guard_failures_remain_observable();
+    test_diagnostics_service_facade_enforces_startup_and_safe_mode_skeleton();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

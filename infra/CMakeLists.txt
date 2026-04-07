@@ -154,6 +154,14 @@ set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
   src/policy/PolicySnapshotStore.h
 )
 
+set(DASALL_INFRA_DIAGNOSTICS_SOURCES
+  src/diagnostics/DiagnosticsServiceFacade.cpp
+)
+
+set(DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS
+  src/diagnostics/DiagnosticsServiceFacade.h
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthErrors.h
   include/health/HealthStateTypes.h
@@ -255,6 +263,8 @@ target_sources(dasall_infra
     ${DASALL_INFRA_LOGGING_SOURCES}
     ${DASALL_INFRA_POLICY_SOURCES}
     ${DASALL_INFRA_POLICY_PRIVATE_HEADERS}
+    ${DASALL_INFRA_DIAGNOSTICS_SOURCES}
+    ${DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS}
     ${DASALL_INFRA_SECRET_SOURCES}
     ${DASALL_INFRA_SECRET_PRIVATE_HEADERS}
     ${DASALL_INFRA_METRICS_SOURCES}
