@@ -35,6 +35,10 @@ constexpr std::string_view kPluginAuditAdapterSourceRef = "PluginAuditAdapter";
       return "unload";
     case PluginAuditAdapter::EventKind::PolicyDeny:
       return "policy_deny";
+    case PluginAuditAdapter::EventKind::SignatureFail:
+      return "signature_fail";
+    case PluginAuditAdapter::EventKind::CompatibilityFail:
+      return "compatibility_fail";
   }
 
   return "load";
@@ -46,7 +50,9 @@ constexpr std::string_view kPluginAuditAdapterSourceRef = "PluginAuditAdapter";
 
 [[nodiscard]] AuditOutcome map_outcome(PluginAuditAdapter::EventKind kind,
                                        bool succeeded) {
-  if (kind == PluginAuditAdapter::EventKind::PolicyDeny) {
+  if (kind == PluginAuditAdapter::EventKind::PolicyDeny ||
+      kind == PluginAuditAdapter::EventKind::SignatureFail ||
+      kind == PluginAuditAdapter::EventKind::CompatibilityFail) {
     return AuditOutcome::Rejected;
   }
 
@@ -129,6 +135,16 @@ PluginAuditEmitResult PluginAuditAdapter::write_unload_audit(PluginAuditRecord r
 PluginAuditEmitResult PluginAuditAdapter::write_policy_deny_audit(
     PluginAuditRecord record) {
   return emit_event(std::move(record), EventKind::PolicyDeny);
+}
+
+PluginAuditEmitResult PluginAuditAdapter::write_signature_fail_audit(
+    PluginAuditRecord record) {
+  return emit_event(std::move(record), EventKind::SignatureFail);
+}
+
+PluginAuditEmitResult PluginAuditAdapter::write_compatibility_fail_audit(
+    PluginAuditRecord record) {
+  return emit_event(std::move(record), EventKind::CompatibilityFail);
 }
 
 PluginAuditAdapterStatus PluginAuditAdapter::get_status() const {

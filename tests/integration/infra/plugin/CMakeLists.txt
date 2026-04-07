@@ -25,3 +25,9 @@ dasall_register_plugin_integration_test(
   PluginAuditTraceIntegrationTest
   PluginAuditTraceIntegrationTest.cpp
 )
+
+dasall_register_plugin_integration_test(
+  dasall_plugin_failure_observability_integration_test
+  PluginFailureObservabilityIntegrationTest
+  PluginFailureObservabilityIntegrationTest.cpp
+)

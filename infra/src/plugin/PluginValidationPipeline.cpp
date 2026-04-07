@@ -3,6 +3,8 @@
 #include <string_view>
 #include <utility>
 
+#include "plugin/PluginAuditAdapter.h"
+
 namespace dasall::infra::plugin {
 namespace {
 
@@ -119,11 +121,15 @@ PluginValidationPipeline::PluginValidationPipeline(
     const policy::ISecurityPolicyManager* security_policy_manager,
     const IPluginPolicyGate* policy_gate,
     PluginValidationStageCallback signature_stage,
-    PluginValidationStageCallback compatibility_stage)
+    PluginValidationStageCallback compatibility_stage,
+    PluginAuditAdapter* audit_adapter,
+    std::string audit_actor_ref)
     : security_policy_manager_(security_policy_manager),
       policy_gate_(policy_gate),
       signature_stage_(std::move(signature_stage)),
-      compatibility_stage_(std::move(compatibility_stage)) {}
+      compatibility_stage_(std::move(compatibility_stage)),
+      audit_adapter_(audit_adapter),
+      audit_actor_ref_(normalized_or_unknown(std::move(audit_actor_ref))) {}
 
 PluginValidationResult PluginValidationPipeline::validate(
     const PluginValidationRequest& request) const {
@@ -191,6 +197,7 @@ PluginValidationResult PluginValidationPipeline::validate(
   }
 
   if (policy_decision.decision != policy::PolicyDecision::Allow) {
+    emit_policy_deny_audit(request, policy_decision);
     return make_failure_result(
         PluginErrorCode::PolicyDenied,
         request,
@@ -218,6 +225,7 @@ PluginValidationResult PluginValidationPipeline::validate(
   }
 
   if (!signature_result.passed) {
+    emit_stage_failure_audit(request, signature_result);
     return make_failure_result(PluginErrorCode::SignatureFail,
                                request,
                                signature_result.message,
@@ -243,6 +251,7 @@ PluginValidationResult PluginValidationPipeline::validate(
   }
 
   if (!compatibility_result.passed) {
+    emit_stage_failure_audit(request, compatibility_result);
     return make_failure_result(PluginErrorCode::CompatibilityFail,
                                request,
                                compatibility_result.message,
@@ -293,6 +302,65 @@ PluginValidationStageResult PluginValidationPipeline::run_compatibility_stage(
   }
 
   return default_compatibility_stage(request);
+}
+
+void PluginValidationPipeline::emit_policy_deny_audit(
+    const PluginValidationRequest& request,
+    const policy::PolicyDecisionRef& policy_decision) const {
+  if (audit_adapter_ == nullptr || !policy_decision.is_valid()) {
+    return;
+  }
+
+  PluginAuditRecord record{
+      .actor_ref = audit_actor_ref_,
+      .plugin_id = request.plugin_id,
+      .succeeded = false,
+      .evidence_ref = policy_decision.evidence_ref,
+      .reason_code = policy_decision.reason_code.empty()
+                         ? std::string("plugin_policy_denied")
+                         : policy_decision.reason_code,
+      .result_code = map_plugin_error_code(PluginErrorCode::PolicyDenied).result_code,
+      .request_id = std::nullopt,
+      .trace_id = std::nullopt,
+      .task_id = std::nullopt,
+  };
+  static_cast<void>(audit_adapter_->write_policy_deny_audit(std::move(record)));
+}
+
+void PluginValidationPipeline::emit_stage_failure_audit(
+    const PluginValidationRequest& request,
+    const PluginValidationStageResult& stage_result) const {
+  if (audit_adapter_ == nullptr || stage_result.passed || !stage_result.is_valid()) {
+    return;
+  }
+
+  PluginAuditRecord record{
+      .actor_ref = audit_actor_ref_,
+      .plugin_id = request.plugin_id,
+      .succeeded = false,
+      .evidence_ref = stage_result.evidence_ref,
+      .reason_code = stage_result.reason_code.empty()
+                         ? std::string(plugin_error_code_name(stage_result.error_code))
+                         : stage_result.reason_code,
+      .result_code = map_plugin_error_code(stage_result.error_code).result_code,
+      .request_id = std::nullopt,
+      .trace_id = std::nullopt,
+      .task_id = std::nullopt,
+  };
+
+  switch (stage_result.error_code) {
+    case PluginErrorCode::SignatureFail:
+      static_cast<void>(audit_adapter_->write_signature_fail_audit(std::move(record)));
+      return;
+    case PluginErrorCode::CompatibilityFail:
+      static_cast<void>(audit_adapter_->write_compatibility_fail_audit(std::move(record)));
+      return;
+    case PluginErrorCode::ValidateFail:
+    case PluginErrorCode::PolicyDenied:
+    case PluginErrorCode::LoadFail:
+    case PluginErrorCode::UnloadFail:
+      return;
+  }
 }
 
 }  // namespace dasall::infra::plugin

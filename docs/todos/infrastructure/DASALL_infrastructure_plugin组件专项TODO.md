@@ -160,7 +160,7 @@
 | plugin 单元测试入口注册 | 详设 9.1；编码规范 3.7 | 测试 | P0 | Done | PLG-TODO-009 | plugin unit 注册逻辑已下沉到 tests/unit/infra/plugin 子目录，并以组件级列表接入顶层聚合 |
 | plugin 合约边界测试入口注册 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 测试 | P0 | Done | PLG-TODO-010 | plugin contract 注册逻辑已下沉到 tests/contract/plugin 子目录，并统一收敛 helper 与 discoverability |
 | PluginLifecycleManager 状态机 | 详设 6.7/6.8 | 流程 | P1 | Done | PLG-TODO-011 | 已落盘生命周期骨架，并通过 unit/contract 验证关键状态转移、failed cleanup 与公共结果边界稳定 |
-| 失败注入测试与指标验证 | 详设 9.1、9.2 | 测试 | P1 | Not Started | PLG-TODO-012 | 关键失败场景可测，但需要实现才能注入 |
+| 失败注入测试与指标验证 | 详设 9.1、9.2 | 测试 | P1 | Done | PLG-TODO-012 | 已通过 integration 验证 signature fail、compatibility fail、load timeout 三条失败路径的 report/audit 证据链，并补齐 validation failure audit 接线 |
 | Profile 插件治理行为矩阵测试 | 蓝图 5.1/5.2；详设 6.9 | 测试 | P1 | Not Started | PLG-TODO-013 | 配置项与默认值已列表，可写行为组合测试 |
 
 ---
@@ -182,7 +182,7 @@
 | PLG-TODO-009 | Done | 注册 tests/unit/infra/plugin 单元测试入口 | 详设 9.1；编码规范 3.7 | 详设 9.1 测试矩阵、编码规范 3.7 | L2 | 新增 tests/unit/infra/plugin/ 目录与 PluginDescriptorTest.cpp/PluginCatalogTest.cpp 等，在 tests/unit/CMakeLists.txt 中注册 plugin 子目录 | unit：用例被 ctest -L unit 发现 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_plugin_descriptor_unit_test dasall_plugin_catalog_unit_test dasall_plugin_error_code_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_policy_gate_interface_unit_test && ctest --test-dir build-ci -N -L unit \| grep -i plugin && ctest --test-dir build-ci --output-on-failure -L plugin` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008 | 无 | 无 | tests/unit/infra/plugin 目录与 CMakeLists.txt、ctest 发现证据 | 已完成（2026-04-07）：新增 tests/unit/infra/plugin/CMakeLists.txt，并把 plugin unit 注册从父级 CMake 下沉到子目录入口；`ctest -N -L unit` 可发现 5 个 plugin 用例，`ctest -L plugin` 5/5 通过 |
 | PLG-TODO-010 | Done | 注册 tests/contract/infra/plugin 合约边界测试入口 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 详设 6.5 contracts 对齐关系、9.1 contract 覆盖目标 | L2 | 在 tests/contract/ 现有注册机制下新增 plugin 边界用例，例如 PluginObjectBoundaryTest 检查标识字段不越权、ErrorCodeMappingTest 检查码映射稳定 | contract：标识字段、错误码、AuditEvent 引用不越权 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_plugin_descriptor_boundary_test dasall_contract_plugin_catalog_boundary_test dasall_contract_plugin_error_code_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_policy_gate_boundary_test && ctest --test-dir build-ci -N -L contract | grep -i Plugin && ctest --test-dir build-ci --output-on-failure -L contract -R "Plugin"` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008、PLG-TODO-009 | 无 | 无 | tests/contract/plugin/ 源文件、contract 执行记录 | 已完成（2026-04-07）：新增 tests/contract/plugin/CMakeLists.txt，并把 plugin contract 注册从主文件下沉到子目录入口；`ctest -N -L contract` 可发现 5 个 plugin contract 用例，`ctest -L contract -R Plugin` 5/5 通过 |
 | PLG-TODO-011 | Done | 新增 PluginLifecycleManager 状态机与转移测试 | 详设 6.7、6.8 | 详设 6.7 主流程、6.8 异常与恢复时序 | L2 | infra/src/plugin/PluginLifecycleManager.cpp（skeleton），包含 load/unload/enable/disable 四个方法与内部状态转移，不进入实际 dlopen/dlsym 实现 | unit：状态机转移枚举测试（loaded->active、loaded->disabled、failed->cleanup）；contract：LoadResult/UnloadResult 返回值稳定 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_manager_boundary_test && ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest|PluginManagerBoundaryContractTest"` | PLG-TODO-003、PLG-TODO-006 | 无 | 无 | lifecycle 骨架实现、状态转移单测 | 已完成（2026-04-07）：新增 PluginLifecycleManager.h/.cpp 与 PluginLifecycleStateTest，并将 PluginManager.load/unload/list_active 接入生命周期骨架，验证关键状态转移、failed cleanup 与合约边界稳定 |
-| PLG-TODO-012 | Not Started | 编写 plugin 失败注入与可观测性测试 | 详设 9.1、9.2 | 详设 9.1 failure injection 场景、9.2 quality gates | L2 | tests/ 下新增 PluginSignatureFailureTest、PluginCompatibilityFailureTest、PluginLoadTimeoutTest 等，验证失败路径有日志/审计/指标 | integration：当 validate fail 时有 AuditEvent、当 load fail 时有 CompatibilityReport | `ctest --test-dir build-ci -L integration --output-on-failure -R "PluginFailure\|PluginObservability"` | PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 | 无 | 无 | 失败注入测试源文件、执行记录 | 仅当关键失败路径（签名失败、兼容失败、load 超时）均有可观测证据时完成 |
+| PLG-TODO-012 | Done | 编写 plugin 失败注入与可观测性测试 | 详设 9.1、9.2 | 详设 9.1 failure injection 场景、9.2 quality gates | L2 | tests/ 下新增 PluginSignatureFailureTest、PluginCompatibilityFailureTest、PluginLoadTimeoutTest 等，验证失败路径有日志/审计/指标 | integration：当 validate fail 时有 AuditEvent、当 load fail 时有 CompatibilityReport | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_failure_observability_integration_test && ctest --test-dir build-ci -N -L integration | grep -E "Plugin(AuditTraceIntegrationTest|FailureObservabilityIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginFailureObservabilityIntegrationTest"` | PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 | 无 | 无 | 失败注入测试源文件、执行记录 | 已完成（2026-04-07）：新增 PluginFailureObservabilityIntegrationTest，并把 PluginValidationPipeline 接入 signature/compatibility failure audit；定向 build、discoverability 与 ctest 验证通过 |
 | PLG-TODO-013 | Not Started | 编写 Profile 插件治理行为矩阵测试 | 蓝图 5.1、5.2；详设 6.9 | 详设 6.9 配置项与默认策略、蓝图 3.13 profile 机制 | L2 | tests/ 下新增 ProfilePluginMatrixTest.cpp，覆盖 desktop_full/edge_balanced/edge_minimal 三档 profile 下 plugin 配置项的行为差异验证 | compatibility：三档 profile 下 plugin.allowlist、infra.plugin.signature.required、infra.plugin.abi.strict_mode 等行为一致性检查 | `ctest --test-dir build-ci --output-on-failure -R "ProfilePluginMatrix"` | 详设 9.1 里程碑 M4（all 标准对象与接口冻结） | 无 | 无 | profile 矩阵测试源文件、行为表 | 仅当三档 profile 下 plugin 行为无意外偏差时完成 |
 
 ### 6.2 Blocked 阻塞任务（需先解除前置）
@@ -1119,6 +1119,69 @@ Build 合规复核：
 
 ---
 
+## 25. 本轮执行记录（2026-04-07 / PLG-TODO-012）
+
+### 25.1 选中任务
+
+1. 本轮任务：PLG-TODO-012。
+2. 可执行性依据：PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 已完成，validation stage callback、runtime load callback 与 AuditService 导出链路均已具备；当前唯一缺口是 validation failure 的统一审计出口和对应 integration discoverability。
+
+### 25.2 Design 结论
+
+阻塞证据：
+
+1. plugin 详细设计 6.8/6.10/9.1 要求 signature fail、compatibility fail 与 load timeout 具备可观测证据，但当前代码只对 load/unload/policy deny 落了审计适配。
+2. tests/integration/infra/plugin/CMakeLists.txt 在本轮前只有 PluginAuditTraceIntegrationTest，导致 failure injection 即使补齐也没有独立 integration 入口。
+3. 本轮修改了 plugin integration 注册，必须同步验证 discoverability，不能只跑定向可执行文件。
+
+最小 blocker-fix：
+
+1. 扩展 PluginAuditAdapter，为 validation failure 冻结 `plugin.signature_fail` 与 `plugin.compatibility_fail` 两个私有审计动作。
+2. 在 PluginValidationPipeline 中增加可选 PluginAuditAdapter 注入，把 policy deny / signature fail / compatibility fail 三类 validation rejection 接入统一审计出口。
+3. 新增 PluginFailureObservabilityIntegrationTest，并把它接入 plugin integration 子目录注册。
+
+D 结论：
+
+1. 012 继续保持 public plugin interface 不变，所有新接线均限制在 infra/src/plugin 私有实现。
+2. load timeout 仍通过 011 已冻结的 runtime callback 注入复现，不引入真实 PluginRuntimeBridge。
+3. Build 三件套锁定为：
+        - 代码目标：infra/src/plugin/PluginAuditAdapter.h/.cpp、PluginValidationPipeline.h/.cpp、tests/integration/infra/plugin/CMakeLists.txt。
+        - 测试目标：PluginAuditAdapterTest、PluginFailureObservabilityIntegrationTest。
+        - 验收命令：cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_failure_observability_integration_test && ctest --test-dir build-ci -N -L integration | grep -E "Plugin(AuditTraceIntegrationTest|FailureObservabilityIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginFailureObservabilityIntegrationTest"。
+4. D Gate：PASS。
+
+### 25.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/plugin/PluginAuditAdapter.h、PluginAuditAdapter.cpp：新增 `plugin.signature_fail` 与 `plugin.compatibility_fail` 两个私有审计动作，并保持 rejected outcome 与 side_effects 语义稳定。
+2. infra/src/plugin/PluginValidationPipeline.h、PluginValidationPipeline.cpp：新增可选 PluginAuditAdapter 注入，把 policy deny、signature fail、compatibility fail 三类 validation rejection 接入统一审计出口。
+3. tests/unit/infra/plugin/PluginAuditAdapterTest.cpp：新增 validation failure action 的 unit 守卫。
+4. tests/integration/infra/plugin/CMakeLists.txt、tests/integration/infra/plugin/PluginFailureObservabilityIntegrationTest.cpp：注册并验证 signature fail、compatibility fail、load timeout 三条 failure injection 路径的 report/audit 证据链。
+5. docs/todos/infrastructure/deliverables/PLG-TODO-012-plugin失败注入与可观测性测试收敛.md：记录输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_failure_observability_integration_test`：通过。
+3. `ctest --test-dir build-ci -N -L integration | grep -E "Plugin(AuditTraceIntegrationTest|FailureObservabilityIntegrationTest)"`：通过，可发现 2 个 plugin integration 用例。
+4. `ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginFailureObservabilityIntegrationTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 边界：没有新增任何 public plugin interface；validation failure 的审计接线仅存在于私有 pipeline/adapter。
+2. 正负例覆盖：unit 覆盖新增 validation-failure audit action；integration 覆盖 signature fail、compatibility fail、load timeout 三类失败路径。
+3. 测试发现性：新增 integration 用例已通过 `ctest -N -L integration` 进入 CTest 图。
+4. TODO 证据回写：已完成任务状态、验收命令、交付物路径与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 012 的 failure-observability 接线、对应 unit/integration 测试与文档证据，不混入 013 的 profile 资产改动。
+
+阻塞修复：
+
+1. 012 的真实 blocker 不是“缺测试模板”，而是 validation failure 的统一审计出口未落盘；本轮已用 PluginAuditAdapter 最小扩展修复该根因。
+2. 012 同时补齐了 plugin integration discoverability，避免新增 failure injection 用例只存在于显式 target 构建路径而无法被 CTest 图发现。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -1135,6 +1198,7 @@ Build 合规复核：
 | v1.9 | 2026-04-07 | 回写 PLG-TODO-005 的 validation pipeline 骨架与失败枝条验证证据，并修复 plugin 私有源文件未真正进入 dasall_infra 的构建接线缺口 | （待评审） |
 | v1.10 | 2026-04-07 | 回写 PLG-TODO-006 的 PluginAuditAdapter 审计适配层、unit/integration 验证证据，并同步修正已完成上游依赖状态 | （待评审） |
 | v1.11 | 2026-04-07 | 回写 PLG-TODO-011 的生命周期骨架、safe_mode/failed cleanup 状态机验证证据，并修正 LifecycleManager 粒度与 runtime bridge 依赖描述 | （待评审） |
+| v1.12 | 2026-04-07 | 回写 PLG-TODO-012 的 failure injection/observability 验证证据，补齐 validation failure audit 接线与 plugin integration discoverability | （待评审） |
 
 ---
 

@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #198
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-012 plugin 失败注入与可观测性测试
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-011` 已完成并推送后，`PLG-TODO-012` 成为 Phase 5 中第一个满足前置依赖的可执行原子任务。
+2. `PluginValidationPipeline` 的 stage callback、`PluginLifecycleManager` 的 runtime callback 与 `PluginAuditAdapter`/`AuditService` 导出链路均已冻结，因此本轮只需补足 validation failure 的审计接线和 failure-observability integration 出口。
+
+### 改动
+
+1. 更新 [infra/src/plugin/PluginAuditAdapter.h](../../infra/src/plugin/PluginAuditAdapter.h) 与 [infra/src/plugin/PluginAuditAdapter.cpp](../../infra/src/plugin/PluginAuditAdapter.cpp)，新增 `plugin.signature_fail` 与 `plugin.compatibility_fail` 两个私有审计动作及对应 emit 入口。
+2. 更新 [infra/src/plugin/PluginValidationPipeline.h](../../infra/src/plugin/PluginValidationPipeline.h) 与 [infra/src/plugin/PluginValidationPipeline.cpp](../../infra/src/plugin/PluginValidationPipeline.cpp)，引入可选 PluginAuditAdapter 注入，把 policy deny、signature fail、compatibility fail 三类 validation rejection 接入统一审计出口。
+3. 更新 [tests/unit/infra/plugin/PluginAuditAdapterTest.cpp](../../tests/unit/infra/plugin/PluginAuditAdapterTest.cpp)，把 validation failure action 纳入 unit 守卫。
+4. 更新 [tests/integration/infra/plugin/CMakeLists.txt](../../tests/integration/infra/plugin/CMakeLists.txt)，注册 `PluginFailureObservabilityIntegrationTest`。
+5. 新增 [tests/integration/infra/plugin/PluginFailureObservabilityIntegrationTest.cpp](../../tests/integration/infra/plugin/PluginFailureObservabilityIntegrationTest.cpp)，覆盖 signature fail、compatibility fail、load timeout 三条 failure injection 路径的 report/audit 证据链。
+6. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-012-plugin失败注入与可观测性测试收敛.md](../todos/infrastructure/deliverables/PLG-TODO-012-plugin%E5%A4%B1%E8%B4%A5%E6%B3%A8%E5%85%A5%E4%B8%8E%E5%8F%AF%E8%A7%82%E6%B5%8B%E6%80%A7%E6%B5%8B%E8%AF%95%E6%94%B6%E6%95%9B.md)，记录 012 的输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+7. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-012` 回写为 Done，并补充本轮执行记录与版本记录 v1.12。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_failure_observability_integration_test`
+   - `ctest --test-dir build-ci -N -L integration | grep -E "Plugin(AuditTraceIntegrationTest|FailureObservabilityIntegrationTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginFailureObservabilityIntegrationTest"`
+2. 结果：
+   - `dasall_infra`、`dasall_plugin_audit_adapter_unit_test` 与 `dasall_plugin_failure_observability_integration_test` 全部构建通过。
+   - `PluginAuditTraceIntegrationTest` 与 `PluginFailureObservabilityIntegrationTest` 都已进入 CTest integration 图。
+   - `PluginAuditAdapterTest` 与 `PluginFailureObservabilityIntegrationTest` 2/2 通过。
+
+### 结果
+
+1. plugin 现在对 signature fail、compatibility fail、load timeout 三条关键失败路径都具备稳定的 report 或 audit 证据链。
+2. validation rejection 的审计 action 已在 plugin 私有适配层冻结，后续 failure regression 只需复用现有 integration 入口扩展即可。
+
+### 下一步
+
+1. 进入 `PLG-TODO-013`，确认 profile 层是否已冻结 `infra.plugin.*` 配置面；若未冻结，先做最小 blocker-fix，再补齐三档 profile 的 plugin 行为矩阵测试。
+
+### 风险
+
+1. 012 本轮只补齐了 report/audit 级 observability；plugin metrics bridge 尚未落盘，若后续需要把 `infra_plugin_*` 指标纳入运行时导出，应另起独立任务完成。
+
 ## 记录 #197
 
 - 日期：2026-04-07

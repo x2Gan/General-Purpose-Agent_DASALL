@@ -10,6 +10,8 @@
 
 namespace dasall::infra::plugin {
 
+class PluginAuditAdapter;
+
 struct PluginValidationStageResult {
   bool passed = false;
   std::string report_ref;
@@ -42,7 +44,9 @@ class PluginValidationPipeline {
       const policy::ISecurityPolicyManager* security_policy_manager = nullptr,
       const IPluginPolicyGate* policy_gate = nullptr,
       PluginValidationStageCallback signature_stage = {},
-      PluginValidationStageCallback compatibility_stage = {});
+      PluginValidationStageCallback compatibility_stage = {},
+      PluginAuditAdapter* audit_adapter = nullptr,
+      std::string audit_actor_ref = "runtime");
 
   [[nodiscard]] PluginValidationResult validate(
       const PluginValidationRequest& request) const;
@@ -54,11 +58,17 @@ class PluginValidationPipeline {
       const PluginValidationRequest& request) const;
   [[nodiscard]] PluginValidationStageResult run_compatibility_stage(
       const PluginValidationRequest& request) const;
+    void emit_policy_deny_audit(const PluginValidationRequest& request,
+                                                            const policy::PolicyDecisionRef& policy_decision) const;
+    void emit_stage_failure_audit(const PluginValidationRequest& request,
+                                                                const PluginValidationStageResult& stage_result) const;
 
   const policy::ISecurityPolicyManager* security_policy_manager_;
   const IPluginPolicyGate* policy_gate_;
   PluginValidationStageCallback signature_stage_;
   PluginValidationStageCallback compatibility_stage_;
+    PluginAuditAdapter* audit_adapter_;
+    std::string audit_actor_ref_;
 };
 
 }  // namespace dasall::infra::plugin

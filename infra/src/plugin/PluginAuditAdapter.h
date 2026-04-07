@@ -147,6 +147,8 @@ class PluginAuditAdapter {
     Load = 0,
     Unload,
     PolicyDeny,
+    SignatureFail,
+    CompatibilityFail,
   };
 
   explicit PluginAuditAdapter(
@@ -162,6 +164,10 @@ class PluginAuditAdapter {
   [[nodiscard]] PluginAuditEmitResult write_load_audit(PluginAuditRecord record);
   [[nodiscard]] PluginAuditEmitResult write_unload_audit(PluginAuditRecord record);
   [[nodiscard]] PluginAuditEmitResult write_policy_deny_audit(
+      PluginAuditRecord record);
+    [[nodiscard]] PluginAuditEmitResult write_signature_fail_audit(
+      PluginAuditRecord record);
+    [[nodiscard]] PluginAuditEmitResult write_compatibility_fail_audit(
       PluginAuditRecord record);
 
   [[nodiscard]] PluginAuditAdapterStatus get_status() const;

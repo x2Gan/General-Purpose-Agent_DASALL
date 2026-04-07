@@ -38,6 +38,13 @@ dasall::infra::plugin::PluginAuditRecord make_policy_deny_record() {
   return record;
 }
 
+dasall::infra::plugin::PluginAuditRecord make_validation_failure_record(
+    std::string reason_code) {
+  auto record = make_record(std::move(reason_code), false);
+  record.result_code = dasall::contracts::ResultCode::ValidationFieldMissing;
+  return record;
+}
+
 class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
  public:
   dasall::infra::AuditWriteOutcome write_audit(
@@ -70,7 +77,7 @@ class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
   std::vector<dasall::infra::AuditContext> contexts;
 };
 
-void test_plugin_audit_adapter_emits_load_unload_and_policy_deny_events() {
+void test_plugin_audit_adapter_emits_load_unload_policy_and_validation_failure_events() {
   using dasall::infra::AuditOutcome;
   using dasall::infra::plugin::PluginAuditAdapter;
   using dasall::tests::support::assert_equal;
@@ -84,6 +91,10 @@ void test_plugin_audit_adapter_emits_load_unload_and_policy_deny_events() {
   const auto unload_result = adapter.write_unload_audit(
       make_record(std::string("plugin_unload_succeeded"), true));
   const auto deny_result = adapter.write_policy_deny_audit(make_policy_deny_record());
+    const auto signature_fail_result = adapter.write_signature_fail_audit(
+      make_validation_failure_record(std::string("plugin_signature_failed")));
+    const auto compatibility_fail_result = adapter.write_compatibility_fail_audit(
+      make_validation_failure_record(std::string("plugin_abi_incompatible")));
   const auto status = adapter.get_status();
 
   assert_true(load_result.emitted && load_result.is_valid(),
@@ -92,15 +103,21 @@ void test_plugin_audit_adapter_emits_load_unload_and_policy_deny_events() {
               "PluginAuditAdapter should emit a valid audit payload for plugin.unload");
   assert_true(deny_result.emitted && deny_result.is_valid(),
               "PluginAuditAdapter should emit a valid audit payload for plugin.policy_deny");
-  assert_true(status.is_valid() && status.emitted_total == 3 && !status.degraded,
-              "PluginAuditAdapter should keep a healthy status after successful load/unload/policy deny emissions");
-  assert_equal(3, static_cast<int>(logger->events.size()),
+  assert_true(signature_fail_result.emitted && signature_fail_result.is_valid(),
+              "PluginAuditAdapter should emit a valid audit payload for plugin.signature_fail");
+  assert_true(compatibility_fail_result.emitted && compatibility_fail_result.is_valid(),
+              "PluginAuditAdapter should emit a valid audit payload for plugin.compatibility_fail");
+  assert_true(status.is_valid() && status.emitted_total == 5 && !status.degraded,
+              "PluginAuditAdapter should keep a healthy status after successful high-risk plugin emissions");
+  assert_equal(5, static_cast<int>(logger->events.size()),
                "PluginAuditAdapter should dispatch one AuditEvent per high-risk plugin action");
 
   const auto& load_event = logger->events[0];
   const auto& unload_event = logger->events[1];
   const auto& deny_event = logger->events[2];
-  const auto& deny_context = logger->contexts[2];
+  const auto& signature_fail_event = logger->events[3];
+  const auto& compatibility_fail_event = logger->events[4];
+  const auto& compatibility_fail_context = logger->contexts[4];
 
   assert_equal(std::string("plugin.load"), load_event.action,
                "PluginAuditAdapter should map load emissions to the frozen plugin.load action");
@@ -108,21 +125,35 @@ void test_plugin_audit_adapter_emits_load_unload_and_policy_deny_events() {
                "PluginAuditAdapter should map unload emissions to the frozen plugin.unload action");
   assert_equal(std::string("plugin.policy_deny"), deny_event.action,
                "PluginAuditAdapter should map policy denials to the frozen plugin.policy_deny action");
+    assert_equal(std::string("plugin.signature_fail"), signature_fail_event.action,
+           "PluginAuditAdapter should map signature failures to the frozen plugin.signature_fail action");
+    assert_equal(std::string("plugin.compatibility_fail"), compatibility_fail_event.action,
+           "PluginAuditAdapter should map compatibility failures to the frozen plugin.compatibility_fail action");
   assert_equal(std::string("plugin:plugin.echo"), deny_event.target,
                "PluginAuditAdapter should encode plugin ids inside the frozen plugin: audit target namespace");
   assert_true(load_event.outcome == AuditOutcome::Succeeded &&
                   unload_event.outcome == AuditOutcome::Succeeded &&
-                  deny_event.outcome == AuditOutcome::Rejected,
-              "PluginAuditAdapter should map load/unload success and policy deny rejection to stable audit outcomes");
+            deny_event.outcome == AuditOutcome::Rejected &&
+            signature_fail_event.outcome == AuditOutcome::Rejected &&
+            compatibility_fail_event.outcome == AuditOutcome::Rejected,
+          "PluginAuditAdapter should map high-risk plugin actions to stable audit outcomes");
   assert_true(has_side_effect(load_event, "reason_code:plugin_load_succeeded") &&
                   has_side_effect(unload_event, "reason_code:plugin_unload_succeeded") &&
                   has_side_effect(deny_event, "reason_code:plugin_policy_denied") &&
-                  has_side_effect(deny_event, "result_code:PolicyDenied"),
+            has_side_effect(deny_event, "result_code:PolicyDenied") &&
+            has_side_effect(signature_fail_event,
+                    "reason_code:plugin_signature_failed") &&
+            has_side_effect(signature_fail_event,
+                    "result_code:ValidationFieldMissing") &&
+            has_side_effect(compatibility_fail_event,
+                    "reason_code:plugin_abi_incompatible") &&
+            has_side_effect(compatibility_fail_event,
+                    "result_code:ValidationFieldMissing"),
               "PluginAuditAdapter should serialize the frozen plugin audit reason_code and optional result_code facts");
-  assert_true(deny_context.request_id == "req-plugin-001" &&
-                  deny_context.trace_id == "trace-plugin-001" &&
-                  deny_context.task_id == "task-plugin-001" &&
-                  deny_context.worker_type == "plugin",
+    assert_true(compatibility_fail_context.request_id == "req-plugin-001" &&
+            compatibility_fail_context.trace_id == "trace-plugin-001" &&
+            compatibility_fail_context.task_id == "task-plugin-001" &&
+            compatibility_fail_context.worker_type == "plugin",
               "PluginAuditAdapter should project request, trace, task, and worker_type into AuditContext");
 }
 
@@ -171,7 +202,7 @@ void test_plugin_audit_adapter_requires_audit_logger_for_high_risk_actions() {
 
 int main() {
   try {
-    test_plugin_audit_adapter_emits_load_unload_and_policy_deny_events();
+    test_plugin_audit_adapter_emits_load_unload_policy_and_validation_failure_events();
     test_plugin_audit_adapter_rejects_invalid_records_before_emit();
     test_plugin_audit_adapter_requires_audit_logger_for_high_risk_actions();
   } catch (const std::exception& ex) {
