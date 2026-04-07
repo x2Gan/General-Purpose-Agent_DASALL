@@ -1,78 +1,44 @@
+#include <algorithm>
 #include <exception>
 #include <iostream>
 #include <string>
 #include <type_traits>
+#include <vector>
 
+#include "diagnostics/CommandRegistry.h"
 #include "diagnostics/IDiagnosticsCommandRegistry.h"
 #include "dasall/tests/support/TestAssertions.h"
 
 namespace {
 
-class StaticDiagnosticsCommandRegistry final
-    : public dasall::infra::diagnostics::IDiagnosticsCommandRegistry {
- public:
-  [[nodiscard]] dasall::infra::diagnostics::CommandCatalog list_commands() override {
-    return dasall::infra::diagnostics::CommandCatalog{
-        .catalog_id = std::string("diag-catalog-001"),
-        .profile_id = std::string("desktop_full"),
-        .schema_version = std::string(dasall::infra::diagnostics::kDiagnosticsCatalogSchemaVersion),
-        .entries = {
-            dasall::infra::diagnostics::CommandCatalogEntry{
-                .command_name = std::string("health.snapshot"),
-                .request_scope = std::string("runtime"),
-                .arg_schema_ref = std::string("schema://diagnostics/health.snapshot"),
-                .arg_schema_summary = std::string("type=object;required=scope;default=runtime"),
-                .read_only = true,
-            },
-            dasall::infra::diagnostics::CommandCatalogEntry{
-                .command_name = std::string("queue.stats"),
-                .request_scope = std::string("runtime"),
-                .arg_schema_ref = std::string("schema://diagnostics/queue.stats"),
-                .arg_schema_summary = std::string("type=object;required=queue;default=main"),
-                .read_only = true,
-            },
-            dasall::infra::diagnostics::CommandCatalogEntry{
-                .command_name = std::string("thread.dump"),
-                .request_scope = std::string("runtime"),
-                .arg_schema_ref = std::string("schema://diagnostics/thread.dump"),
-                .arg_schema_summary = std::string("type=object;required=limit;default=5"),
-                .read_only = true,
-            },
-        },
-        .generated_at = std::string("2026-04-07T12:00:00Z"),
-    };
-  }
+using dasall::infra::diagnostics::CommandCatalog;
+using dasall::infra::diagnostics::CommandRegistry;
+using dasall::infra::diagnostics::CommandRegistryOptions;
+using dasall::infra::diagnostics::DiagnosticsCommand;
+using dasall::infra::diagnostics::IDiagnosticsCommandRegistry;
+using dasall::infra::diagnostics::ValidationResult;
 
-  [[nodiscard]] dasall::infra::diagnostics::ValidationResult validate(
-      const dasall::infra::diagnostics::DiagnosticsCommand& command) override {
-    if (!command.has_required_fields()) {
-      return dasall::infra::diagnostics::ValidationResult::failure(
-          {std::string("diagnostics command metadata is incomplete")},
-          {std::string("command_id"), std::string("timeout_ms"), std::string("actor_ref")},
-          std::string("diag-catalog-001"));
-    }
+[[nodiscard]] DiagnosticsCommand make_command(std::string command_name,
+                                              std::vector<std::string> args = {},
+                                              std::uint32_t timeout_ms = 3000,
+                                              std::string request_scope = "runtime") {
+  return DiagnosticsCommand{
+      .command_id = std::string("diag-cmd-registry-001"),
+      .command_name = std::move(command_name),
+      .args = std::move(args),
+      .request_scope = std::move(request_scope),
+      .timeout_ms = timeout_ms,
+      .actor_ref = std::string("ops-user"),
+  };
+}
 
-    if (!command.has_whitelisted_command_name()) {
-      return dasall::infra::diagnostics::ValidationResult::failure(
-          {std::string("command_name is outside the frozen read-only whitelist")},
-          {std::string("command_name")},
-          std::string("diag-catalog-001"));
-    }
-
-    return dasall::infra::diagnostics::ValidationResult::success(
-        std::string("diag-catalog-001"),
-        std::string("command://diagnostics/") + command.command_name,
-        std::string("schema://diagnostics/") + command.command_name,
-        command,
-        {std::string("timeout_ms retained from caller input")});
-  }
-};
+[[nodiscard]] bool catalog_contains(const CommandCatalog& catalog, std::string_view command_name) {
+  return std::any_of(catalog.entries.begin(), catalog.entries.end(), [&](const auto& entry) {
+    return entry.command_name == command_name;
+  });
+}
 
 void test_command_registry_interface_keeps_frozen_entrypoints() {
-  using dasall::infra::diagnostics::CommandCatalog;
-  using dasall::infra::diagnostics::DiagnosticsCommand;
-  using dasall::infra::diagnostics::IDiagnosticsCommandRegistry;
-  using dasall::infra::diagnostics::ValidationResult;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(&IDiagnosticsCommandRegistry::list_commands),
@@ -85,59 +51,73 @@ void test_command_registry_interface_keeps_frozen_entrypoints() {
                                std::vector<dasall::infra::diagnostics::CommandCatalogEntry>>);
   static_assert(std::is_same_v<decltype(ValidationResult{}.field_paths), std::vector<std::string>>);
 
-  StaticDiagnosticsCommandRegistry registry;
+  CommandRegistry registry;
   const auto catalog = registry.list_commands();
   assert_true(catalog.is_valid(),
-              "IDiagnosticsCommandRegistry should keep list_commands constrained to a valid read-only command catalog");
+              "CommandRegistry should keep list_commands constrained to a valid diagnostics read-only catalog");
 }
 
-void test_command_registry_catalog_preserves_discoverability_only_fields() {
+void test_command_registry_catalog_respects_profile_capability_gate() {
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
-  StaticDiagnosticsCommandRegistry registry;
-  const auto catalog = registry.list_commands();
+  CommandRegistry registry(CommandRegistryOptions{
+      .profile_id = std::string("edge_balanced"),
+      .catalog_id = std::string("diag-catalog-edge"),
+      .generated_at = std::string("2026-04-07T16:00:00Z"),
+      .timeout_cap_ms = 3000,
+      .allowed_commands = {std::string("health.snapshot"), std::string("thread.dump")},
+  });
 
-  assert_equal(3,
+  const auto catalog = registry.list_commands();
+  assert_equal(2,
                static_cast<int>(catalog.entries.size()),
-               "diagnostics catalog should keep the frozen three-command read-only surface");
-  assert_true(catalog.entries.front().read_only,
-              "diagnostics catalog entries should remain read-only in v1");
-  assert_true(!catalog.entries.front().arg_schema_ref.empty() &&
-                  !catalog.entries.front().arg_schema_summary.empty(),
-              "diagnostics catalog entries should expose schema discoverability through ref and summary only");
+               "profile capability gate should prune disabled diagnostics commands from the catalog");
+  assert_true(catalog_contains(catalog, "health.snapshot") &&
+                  catalog_contains(catalog, "thread.dump") &&
+                  !catalog_contains(catalog, "queue.stats"),
+              "catalog should expose only enabled diagnostics commands in whitelist order");
+
+  const auto rejection = registry.validate(make_command("queue.stats"));
+  assert_true(!rejection.accepted && rejection.is_valid() && rejection.field_paths.size() == 1 &&
+                  rejection.field_paths.front() == "command_name",
+              "disabled diagnostics commands should fail validation on command_name before schema-specific checks");
 }
 
-void test_command_registry_validation_results_keep_success_and_failure_boundaries() {
-  using dasall::infra::diagnostics::DiagnosticsCommand;
+void test_command_registry_validation_normalizes_empty_args() {
+  using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
-  StaticDiagnosticsCommandRegistry registry;
+  CommandRegistry registry;
+  const auto result = registry.validate(make_command("queue.stats"));
 
-  const auto success = registry.validate(DiagnosticsCommand{
-      .command_id = std::string("diag-cmd-registry-001"),
-      .command_name = std::string("health.snapshot"),
-      .args = {std::string("--summary")},
-      .request_scope = std::string("runtime"),
-      .timeout_ms = 3000,
-      .actor_ref = std::string("ops-user"),
-  });
-  assert_true(success.accepted && success.is_valid() &&
-                  success.normalized_command.is_read_only_whitelisted(),
-              "registry validation success path should return a normalized read-only command and stable refs");
+  assert_true(result.accepted && result.is_valid(),
+              "queue.stats should validate successfully when registry applies the frozen default args");
+  assert_equal("schema://diagnostics/queue.stats/v1",
+               result.schema_ref,
+               "queue.stats should keep the frozen schema ref in validation results");
+  assert_equal(1,
+               static_cast<int>(result.normalized_command.args.size()),
+               "queue.stats normalization should produce a single default token");
+  assert_equal("--queue=main",
+               result.normalized_command.args.front(),
+               "queue.stats normalization should default to the frozen main queue token");
+}
 
-  const auto failure = registry.validate(DiagnosticsCommand{
-      .command_id = std::string("diag-cmd-registry-002"),
-      .command_name = std::string("secret.dump"),
-      .args = {},
-      .request_scope = std::string("runtime"),
-      .timeout_ms = 3000,
-      .actor_ref = std::string("ops-user"),
-  });
-  assert_true(!failure.accepted && failure.is_valid() && failure.has_blocking_findings(),
-              "registry validation failure path should remain machine-locatable through blocking_errors and field_paths");
-  assert_true(failure.field_paths.size() == 1 && failure.field_paths.front() == "command_name",
-              "registry validation failure path should keep stable field path identifiers for locateable rejections");
+void test_command_registry_validation_rejects_invalid_thread_dump_limit() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  CommandRegistry registry;
+  const auto result = registry.validate(make_command("thread.dump", {std::string("--limit=64")}));
+
+  assert_true(!result.accepted && result.is_valid() && result.has_blocking_findings(),
+              "thread.dump should reject limits outside the frozen v1 range");
+  assert_equal("schema://diagnostics/thread.dump/v1",
+               result.schema_ref,
+               "thread.dump rejections should still point to the matched frozen schema ref");
+  assert_true(result.field_paths.size() == 1 && result.field_paths.front() == "args[0]",
+              "thread.dump limit failures should remain machine-locatable through args[0]");
 }
 
 }  // namespace
@@ -145,8 +125,9 @@ void test_command_registry_validation_results_keep_success_and_failure_boundarie
 int main() {
   try {
     test_command_registry_interface_keeps_frozen_entrypoints();
-    test_command_registry_catalog_preserves_discoverability_only_fields();
-    test_command_registry_validation_results_keep_success_and_failure_boundaries();
+    test_command_registry_catalog_respects_profile_capability_gate();
+    test_command_registry_validation_normalizes_empty_args();
+    test_command_registry_validation_rejects_invalid_thread_dump_limit();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

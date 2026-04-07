@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #160
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-013 CommandRegistry 白名单治理骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-013` 已在上一轮由 `DIA-BLK-003` 解阻，且唯一前置 `DIA-TODO-011` 已完成，因此本轮最小原子任务就是把 6.5.2 冻结的 schema 落到真实 `CommandRegistry` 源码与单测。
+2. 013 的边界要求很明确：`infra.diagnostics.allowed_commands` 只能做 capability gate，不能让 profile 注入新 schema；所以本轮只做 registry validate/list 命中真实逻辑，并用 policy handoff 测试验证输出边界，不提前把 014 的真实策略实现混进来。
+
+### 改动
+
+1. 新增 diagnostics registry 私有实现：
+   - 新增 [infra/src/diagnostics/CommandRegistry.h](/home/gangan/DASALL/infra/src/diagnostics/CommandRegistry.h) 与 [infra/src/diagnostics/CommandRegistry.cpp](/home/gangan/DASALL/infra/src/diagnostics/CommandRegistry.cpp)，实现 `CommandRegistryOptions`、`list_commands()`、`validate()`、schema ref/summary 构造以及三条只读命令的 token grammar 校验。
+   - `validate()` 现已显式覆盖 required fields、capability gate、`request_scope=runtime`、`timeout_ms` cap、`health.snapshot`/`queue.stats`/`thread.dump` 的 schema 检查，并对空 `args` 执行 `--summary`、`--queue=main`、`--limit=5` 规范化。
+2. 把 registry 与单测接入构建图：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 `CommandRegistry.cpp` 与私有头纳入 `dasall_infra`。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，为 registry/policy 单测补上 `infra/src` 私有头搜索路径，并新增 `dasall_diagnostics_command_policy_unit_test` 目标。
+3. 让 unit 证据命中真实 registry：
+   - 重写 [tests/unit/infra/DiagnosticsCommandRegistryTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsCommandRegistryTest.cpp)，从静态 stub 改为真实 `CommandRegistry`，覆盖 catalog capability gate、空 args 规范化与 `thread.dump` 非法 limit 拒绝路径。
+   - 新增 [tests/unit/infra/DiagnosticsCommandPolicyTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsCommandPolicyTest.cpp)，用最小 stub `IDiagnosticsPolicyGuard` 验证 registry 的 normalized command 能稳定交给 policy handoff，且 deny 路径继续保持 `CommandDecision` 可观测边界。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_diagnostics_command_registry_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_command_policy_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest"`
+2. 结果：
+   - `dasall_diagnostics_command_registry_unit_test` 与 `dasall_diagnostics_command_policy_unit_test` 均构建通过。
+   - `DiagnosticsCommandRegistryTest`、`DiagnosticsCommandPolicyTest` 共 2/2 通过。
+3. 说明：
+   - 当前会话内 VS Code CMake Tools 仍无法直接配置项目，因此继续沿用 `build-ci` 显式构建/ctest 路径完成本轮验收；不影响 013 的代码与测试闭环。
+
+### 结果
+
+1. `DIA-TODO-013` 已完成，`CommandRegistry` 不再停留在接口冻结阶段，而是具备真实 `list_commands()` 与 `validate()` 骨架，并把 6.5.2 冻结的 schema 落到了代码层。
+2. diagnostics 主链已从 `Facade -> Registry` 进入下一阶段，后续可以直接推进 `DIA-TODO-014` 的 `CommandPolicyGuard` allow/deny 骨架。
+
+### 下一步
+
+1. 进入 `DIA-TODO-014`，实现真实 `CommandPolicyGuard`，把 registry 的 normalized command 接到 `ISecurityPolicyManager` 抽象侧的 allow/deny 决策。
+2. 014 完成后继续串行推进 `DIA-TODO-015`、`DIA-TODO-016`、`DIA-TODO-017`，补齐 executor、evidence、assembler 主链骨架。
+
+### 风险
+
+1. 本轮 registry 只允许 profile 裁剪 `allowed_commands`，不允许 profile 改写 token grammar 或 schema ref；若后续 014/015 重新把 schema 注入到 profile 层，会直接破坏 `DIA-BLK-003` 的冻结边界。
+2. `DiagnosticsCommandPolicyTest` 目前只验证 handoff 边界和 deny surface，可作为 014 的回归基线，但不应被误解为真实策略实现已经完成。
+
 ## 记录 #159
 
 - 日期：2026-04-07

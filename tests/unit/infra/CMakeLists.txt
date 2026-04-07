@@ -1404,6 +1404,11 @@ add_executable(dasall_diagnostics_command_registry_unit_test
   DiagnosticsCommandRegistryTest.cpp
 )
 
+target_include_directories(dasall_diagnostics_command_registry_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 target_link_libraries(dasall_diagnostics_command_registry_unit_test
   PRIVATE
     dasall_test_support
@@ -1414,6 +1419,26 @@ dasall_apply_common_options(dasall_diagnostics_command_registry_unit_test)
 
 add_test(NAME DiagnosticsCommandRegistryTest COMMAND dasall_diagnostics_command_registry_unit_test)
 set_tests_properties(DiagnosticsCommandRegistryTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_diagnostics_command_policy_unit_test
+  DiagnosticsCommandPolicyTest.cpp
+)
+
+target_include_directories(dasall_diagnostics_command_policy_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_diagnostics_command_policy_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_diagnostics_command_policy_unit_test)
+
+add_test(NAME DiagnosticsCommandPolicyTest COMMAND dasall_diagnostics_command_policy_unit_test)
+set_tests_properties(DiagnosticsCommandPolicyTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_diagnostics_snapshot_export_unit_test
   DiagnosticsSnapshotExportTest.cpp
