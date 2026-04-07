@@ -83,6 +83,27 @@ execution_policy:
 	allowed_tool_domains:
 		- builtin
 		- mcp
+infra:
+	plugin:
+		enabled: true
+		allowlist:
+			- plugin.echo
+			- plugin.edge.telemetry
+		search_paths:
+			- ./plugins
+			- ./plugins/edge
+		load_timeout_ms: 2500
+		max_active: 8
+		signature:
+			required: true
+		trust:
+			min_level: internal
+		abi:
+			strict_mode: true
+		remote_fetch:
+			enabled: false
+		safe_mode:
+			fail_threshold: 2
 ops_policy:
 	log_level: info
 	metrics_granularity: partial

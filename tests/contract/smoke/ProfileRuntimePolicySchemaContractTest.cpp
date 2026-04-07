@@ -201,6 +201,23 @@ ValidationResult validate_required_paths(const std::string& document) {
       "execution_policy.safe_mode_enabled",
       "execution_policy.audit_level",
       "execution_policy.allowed_tool_domains",
+      "infra",
+      "infra.plugin",
+      "infra.plugin.enabled",
+      "infra.plugin.allowlist",
+      "infra.plugin.search_paths",
+      "infra.plugin.load_timeout_ms",
+      "infra.plugin.max_active",
+      "infra.plugin.signature",
+      "infra.plugin.signature.required",
+      "infra.plugin.trust",
+      "infra.plugin.trust.min_level",
+      "infra.plugin.abi",
+      "infra.plugin.abi.strict_mode",
+      "infra.plugin.remote_fetch",
+      "infra.plugin.remote_fetch.enabled",
+      "infra.plugin.safe_mode",
+      "infra.plugin.safe_mode.fail_threshold",
       "ops_policy",
       "ops_policy.log_level",
       "ops_policy.metrics_granularity",
@@ -275,14 +292,22 @@ void test_profile_matrix_freeze_matches_blueprint_baselines() {
               "edge_balanced must keep LAN adapter enabled");
   assert_true(contains_text(edge_balanced, "multi_agent: false"),
               "edge_balanced baseline freezes multi_agent off until optional path is implemented");
+  assert_true(contains_text(edge_balanced, "plugin.edge.telemetry"),
+              "edge_balanced must keep the edge telemetry plugin in the allowlist baseline");
   assert_true(contains_text(edge_minimal, "llm_cloud_adapter: false"),
               "edge_minimal must keep cloud adapter disabled");
   assert_true(contains_text(edge_minimal, "tools_mcp: false"),
               "edge_minimal must keep MCP tools disabled");
+  assert_true(contains_text(edge_minimal, "plugin.echo"),
+              "edge_minimal must keep a single minimal plugin allowlist baseline");
   assert_true(contains_text(factory_test, "platform_hal: true"),
               "factory_test must keep HAL enabled");
   assert_true(contains_text(factory_test, "remote_diagnostics_enabled: true"),
               "factory_test must keep remote diagnostics enabled");
+  assert_true(contains_text(desktop_full, "plugin.tools.bridge"),
+              "desktop_full must keep the desktop bridge plugin in the allowlist baseline");
+  assert_true(contains_text(cloud_full, "plugin.remote.fetch"),
+              "cloud_full must keep the remote fetch plugin id reserved in the allowlist baseline");
 }
 
 void test_missing_required_fields_are_rejected() {

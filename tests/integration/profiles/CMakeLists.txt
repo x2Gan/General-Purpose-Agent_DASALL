@@ -27,3 +27,18 @@ dasall_apply_common_options(dasall_profile_observability_integration_test)
 
 add_test(NAME ProfileObservabilityIntegrationTest COMMAND dasall_profile_observability_integration_test)
 set_tests_properties(ProfileObservabilityIntegrationTest PROPERTIES LABELS "integration")
+
+add_executable(dasall_profile_plugin_matrix_integration_test
+  ProfilePluginMatrixIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_profile_plugin_matrix_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_profile_plugin_matrix_integration_test)
+
+add_test(NAME ProfilePluginMatrixIntegrationTest COMMAND dasall_profile_plugin_matrix_integration_test)
+set_tests_properties(ProfilePluginMatrixIntegrationTest PROPERTIES LABELS "integration")

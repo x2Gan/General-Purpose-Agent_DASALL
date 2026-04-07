@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #199
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-013 Profile 插件治理行为矩阵测试
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-012` 推送完成后，`PLG-TODO-013` 成为下一项可直接推进的 P1 测试任务。
+2. 分析发现 013 的真实 blocker 是五档 runtime_policy.yaml 尚未冻结 `infra.plugin.*` 配置面，因此本轮先做最小 schema 收敛，再补三档 profile 的行为矩阵验证。
+
+### 改动
+
+1. 更新 [profiles/desktop_full/runtime_policy.yaml](../../profiles/desktop_full/runtime_policy.yaml)、[profiles/cloud_full/runtime_policy.yaml](../../profiles/cloud_full/runtime_policy.yaml)、[profiles/edge_balanced/runtime_policy.yaml](../../profiles/edge_balanced/runtime_policy.yaml)、[profiles/edge_minimal/runtime_policy.yaml](../../profiles/edge_minimal/runtime_policy.yaml)、[profiles/factory_test/runtime_policy.yaml](../../profiles/factory_test/runtime_policy.yaml)，统一新增 `infra.plugin.*` schema，并按 profile 冻结 allowlist、search_paths、load_timeout_ms、max_active 与 safe_mode.fail_threshold。
+2. 更新 [tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp](../../tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp)，把 `infra.plugin.*` 纳入 required path 集合，并补充 plugin allowlist 基线断言。
+3. 更新 [tests/integration/profiles/CMakeLists.txt](../../tests/integration/profiles/CMakeLists.txt)，注册 `ProfilePluginMatrixIntegrationTest`。
+4. 新增 [tests/integration/profiles/ProfilePluginMatrixIntegrationTest.cpp](../../tests/integration/profiles/ProfilePluginMatrixIntegrationTest.cpp)，使用 ConfigLoader.load_profile() 验证 desktop_full / edge_balanced / edge_minimal 三档 profile 的 plugin typed config 行为矩阵与来源追溯。
+5. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-013-profile插件治理矩阵验证.md](../todos/infrastructure/deliverables/PLG-TODO-013-profile%E6%8F%92%E4%BB%B6%E6%B2%BB%E7%90%86%E7%9F%A9%E9%98%B5%E9%AA%8C%E8%AF%81.md)，记录 blocker 识别、Design->Build 映射、合规复核与验证结果。
+6. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-013` 回写为 Done，并补充本轮执行记录与版本记录 v1.13。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_contract_profile_runtime_policy_schema_test dasall_profile_plugin_matrix_integration_test`
+   - `ctest --test-dir build-ci -N | grep -E "Profile(RuntimePolicySchemaContractTest|PluginMatrixIntegrationTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "ProfileRuntimePolicySchemaContractTest|ProfilePluginMatrixIntegrationTest"`
+2. 结果：
+   - `dasall_contract_profile_runtime_policy_schema_test` 与 `dasall_profile_plugin_matrix_integration_test` 全部构建通过。
+   - `ProfileRuntimePolicySchemaContractTest` 与 `ProfilePluginMatrixIntegrationTest` 都已进入 CTest 图。
+   - 两个用例 2/2 通过。
+
+### 结果
+
+1. profile runtime_policy 资产现在正式承载 `infra.plugin.*` 配置面，plugin 治理不再依赖未落盘的默认值或测试内构造对象。
+2. desktop_full / edge_balanced / edge_minimal 三档 profile 的 plugin allowlist、search_paths、load_timeout_ms、max_active、safe_mode.fail_threshold 与安全基线已通过真实 YAML 加载链冻结。
+
+### 下一步
+
+1. 进入 `PLG-TODO-014` 或按专项 TODO 重新评估 plugin 后续 P1 任务的可执行性；若需要推进 ABI/compatibility 相关项，应先确认 016 的 blocker 是否仍然存在。
+
+### 风险
+
+1. 本轮只冻结了 profile 资产与 loader 读取链，RuntimePolicySnapshot 尚未暴露 plugin policy 域；若未来需要在 profiles 运行时 API 中直接消费这些值，应另起原子任务显式扩写 snapshot/model。
+
 ## 记录 #198
 
 - 日期：2026-04-07

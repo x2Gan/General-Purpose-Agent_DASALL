@@ -79,6 +79,26 @@ execution_policy:
 	audit_level: minimal
 	allowed_tool_domains:
 		- builtin
+infra:
+	plugin:
+		enabled: true
+		allowlist:
+			- plugin.echo
+		search_paths:
+			- ./plugins
+			- ./plugins/minimal
+		load_timeout_ms: 1800
+		max_active: 4
+		signature:
+			required: true
+		trust:
+			min_level: internal
+		abi:
+			strict_mode: true
+		remote_fetch:
+			enabled: false
+		safe_mode:
+			fail_threshold: 1
 ops_policy:
 	log_level: warn
 	metrics_granularity: minimal

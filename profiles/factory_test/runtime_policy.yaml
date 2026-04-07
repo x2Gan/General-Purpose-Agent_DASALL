@@ -81,6 +81,27 @@ execution_policy:
 	audit_level: elevated
 	allowed_tool_domains:
 		- builtin
+infra:
+	plugin:
+		enabled: true
+		allowlist:
+			- plugin.echo
+			- plugin.factory.diagnostics
+		search_paths:
+			- ./plugins
+			- ./plugins/factory
+		load_timeout_ms: 2200
+		max_active: 6
+		signature:
+			required: true
+		trust:
+			min_level: internal
+		abi:
+			strict_mode: true
+		remote_fetch:
+			enabled: false
+		safe_mode:
+			fail_threshold: 2
 ops_policy:
 	log_level: debug
 	metrics_granularity: full

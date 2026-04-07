@@ -161,7 +161,7 @@
 | plugin 合约边界测试入口注册 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 测试 | P0 | Done | PLG-TODO-010 | plugin contract 注册逻辑已下沉到 tests/contract/plugin 子目录，并统一收敛 helper 与 discoverability |
 | PluginLifecycleManager 状态机 | 详设 6.7/6.8 | 流程 | P1 | Done | PLG-TODO-011 | 已落盘生命周期骨架，并通过 unit/contract 验证关键状态转移、failed cleanup 与公共结果边界稳定 |
 | 失败注入测试与指标验证 | 详设 9.1、9.2 | 测试 | P1 | Done | PLG-TODO-012 | 已通过 integration 验证 signature fail、compatibility fail、load timeout 三条失败路径的 report/audit 证据链，并补齐 validation failure audit 接线 |
-| Profile 插件治理行为矩阵测试 | 蓝图 5.1/5.2；详设 6.9 | 测试 | P1 | Not Started | PLG-TODO-013 | 配置项与默认值已列表，可写行为组合测试 |
+| Profile 插件治理行为矩阵测试 | 蓝图 5.1/5.2；详设 6.9 | 测试 | P1 | Done | PLG-TODO-013 | 已补齐五档 profile 的 infra.plugin.* schema，并通过 ConfigLoader + contract/integration 冻结三档 profile 的治理矩阵 |
 
 ---
 
@@ -183,7 +183,7 @@
 | PLG-TODO-010 | Done | 注册 tests/contract/infra/plugin 合约边界测试入口 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 详设 6.5 contracts 对齐关系、9.1 contract 覆盖目标 | L2 | 在 tests/contract/ 现有注册机制下新增 plugin 边界用例，例如 PluginObjectBoundaryTest 检查标识字段不越权、ErrorCodeMappingTest 检查码映射稳定 | contract：标识字段、错误码、AuditEvent 引用不越权 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_plugin_descriptor_boundary_test dasall_contract_plugin_catalog_boundary_test dasall_contract_plugin_error_code_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_policy_gate_boundary_test && ctest --test-dir build-ci -N -L contract | grep -i Plugin && ctest --test-dir build-ci --output-on-failure -L contract -R "Plugin"` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008、PLG-TODO-009 | 无 | 无 | tests/contract/plugin/ 源文件、contract 执行记录 | 已完成（2026-04-07）：新增 tests/contract/plugin/CMakeLists.txt，并把 plugin contract 注册从主文件下沉到子目录入口；`ctest -N -L contract` 可发现 5 个 plugin contract 用例，`ctest -L contract -R Plugin` 5/5 通过 |
 | PLG-TODO-011 | Done | 新增 PluginLifecycleManager 状态机与转移测试 | 详设 6.7、6.8 | 详设 6.7 主流程、6.8 异常与恢复时序 | L2 | infra/src/plugin/PluginLifecycleManager.cpp（skeleton），包含 load/unload/enable/disable 四个方法与内部状态转移，不进入实际 dlopen/dlsym 实现 | unit：状态机转移枚举测试（loaded->active、loaded->disabled、failed->cleanup）；contract：LoadResult/UnloadResult 返回值稳定 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_manager_boundary_test && ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest|PluginManagerBoundaryContractTest"` | PLG-TODO-003、PLG-TODO-006 | 无 | 无 | lifecycle 骨架实现、状态转移单测 | 已完成（2026-04-07）：新增 PluginLifecycleManager.h/.cpp 与 PluginLifecycleStateTest，并将 PluginManager.load/unload/list_active 接入生命周期骨架，验证关键状态转移、failed cleanup 与合约边界稳定 |
 | PLG-TODO-012 | Done | 编写 plugin 失败注入与可观测性测试 | 详设 9.1、9.2 | 详设 9.1 failure injection 场景、9.2 quality gates | L2 | tests/ 下新增 PluginSignatureFailureTest、PluginCompatibilityFailureTest、PluginLoadTimeoutTest 等，验证失败路径有日志/审计/指标 | integration：当 validate fail 时有 AuditEvent、当 load fail 时有 CompatibilityReport | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_failure_observability_integration_test && ctest --test-dir build-ci -N -L integration | grep -E "Plugin(AuditTraceIntegrationTest|FailureObservabilityIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginFailureObservabilityIntegrationTest"` | PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 | 无 | 无 | 失败注入测试源文件、执行记录 | 已完成（2026-04-07）：新增 PluginFailureObservabilityIntegrationTest，并把 PluginValidationPipeline 接入 signature/compatibility failure audit；定向 build、discoverability 与 ctest 验证通过 |
-| PLG-TODO-013 | Not Started | 编写 Profile 插件治理行为矩阵测试 | 蓝图 5.1、5.2；详设 6.9 | 详设 6.9 配置项与默认策略、蓝图 3.13 profile 机制 | L2 | tests/ 下新增 ProfilePluginMatrixTest.cpp，覆盖 desktop_full/edge_balanced/edge_minimal 三档 profile 下 plugin 配置项的行为差异验证 | compatibility：三档 profile 下 plugin.allowlist、infra.plugin.signature.required、infra.plugin.abi.strict_mode 等行为一致性检查 | `ctest --test-dir build-ci --output-on-failure -R "ProfilePluginMatrix"` | 详设 9.1 里程碑 M4（all 标准对象与接口冻结） | 无 | 无 | profile 矩阵测试源文件、行为表 | 仅当三档 profile 下 plugin 行为无意外偏差时完成 |
+| PLG-TODO-013 | Done | 编写 Profile 插件治理行为矩阵测试 | 蓝图 5.1、5.2；详设 6.9 | 详设 6.9 配置项与默认策略、蓝图 3.13 profile 机制 | L2 | tests/ 下新增 ProfilePluginMatrixTest.cpp，覆盖 desktop_full/edge_balanced/edge_minimal 三档 profile 下 plugin 配置项的行为差异验证 | compatibility：三档 profile 下 plugin.allowlist、infra.plugin.signature.required、infra.plugin.abi.strict_mode 等行为一致性检查 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_profile_runtime_policy_schema_test dasall_profile_plugin_matrix_integration_test && ctest --test-dir build-ci -N | grep -E "Profile(RuntimePolicySchemaContractTest|PluginMatrixIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "ProfileRuntimePolicySchemaContractTest|ProfilePluginMatrixIntegrationTest"` | 详设 9.1 里程碑 M4（all 标准对象与接口冻结） | 无 | 无 | profile 矩阵测试源文件、行为表 | 已完成（2026-04-07）：补齐五档 profile 的 infra.plugin.* schema，新增 ProfilePluginMatrixIntegrationTest，并通过 schema contract + integration 冻结三档 profile 的治理矩阵 |
 
 ### 6.2 Blocked 阻塞任务（需先解除前置）
 
@@ -1182,6 +1182,68 @@ Build 合规复核：
 
 ---
 
+## 26. 本轮执行记录（2026-04-07 / PLG-TODO-013）
+
+### 26.1 选中任务
+
+1. 本轮任务：PLG-TODO-013。
+2. 可执行性依据：012 完成后，plugin 失败注入与审计证据已稳定，接下来最短路径是把 profile 维度的 plugin 治理配置面冻结下来，并建立三档 profile 的行为矩阵测试。
+
+### 26.2 Design 结论
+
+阻塞证据：
+
+1. 五档 runtime_policy.yaml 在本轮前都没有 `infra.plugin.*` 键，因此 013 的实际 blocker 是 profile 资产缺少 plugin 治理 schema，而不是“测试尚未编写”。
+2. RuntimePolicySnapshot 当前不承载 plugin policy 域，如果直接扩写 snapshot，会把 013 扩成 profiles 公共对象改造任务，偏离原子粒度。
+3. ProfileRuntimePolicySchemaContractTest 要求五档 profile 顶层 key 集合保持一致，因此不能只改 desktop_full/edge_balanced/edge_minimal 三档。
+
+最小 blocker-fix：
+
+1. 在五档 runtime_policy.yaml 中统一新增 `infra.plugin.*` schema，并为 cloud_full/factory_test 同步冻结占位策略值。
+2. 在 ProfileRuntimePolicySchemaContractTest 中把 `infra.plugin.*` 纳入 required path 集合。
+3. 新增 ProfilePluginMatrixIntegrationTest，直接用 ConfigLoader.load_profile() 读取真实 YAML，并验证三档 profile 的 typed config 行为矩阵。
+
+D 结论：
+
+1. 013 不修改 RuntimePolicySnapshot / RuntimePolicyProvider，保持 profiles 公共对象边界不变。
+2. 013 采用“contract 锁结构 + integration 锁值语义”的双轨验证。
+3. Build 三件套锁定为：
+        - 代码目标：五档 runtime_policy.yaml、ProfileRuntimePolicySchemaContractTest.cpp、tests/integration/profiles/CMakeLists.txt。
+        - 测试目标：ProfileRuntimePolicySchemaContractTest、ProfilePluginMatrixIntegrationTest。
+        - 验收命令：cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_profile_runtime_policy_schema_test dasall_profile_plugin_matrix_integration_test && ctest --test-dir build-ci -N | grep -E "Profile(RuntimePolicySchemaContractTest|PluginMatrixIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "ProfileRuntimePolicySchemaContractTest|ProfilePluginMatrixIntegrationTest"。
+4. D Gate：PASS。
+
+### 26.3 Build 交付与证据
+
+交付物：
+
+1. profiles/desktop_full/runtime_policy.yaml、profiles/cloud_full/runtime_policy.yaml、profiles/edge_balanced/runtime_policy.yaml、profiles/edge_minimal/runtime_policy.yaml、profiles/factory_test/runtime_policy.yaml：统一补齐 `infra.plugin.*` 配置域，并按 profile 冻结 allowlist、search_paths、load_timeout_ms、max_active、safe_mode.fail_threshold。
+2. tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp：新增 `infra.plugin.*` required paths，并补充 profile plugin allowlist 基线断言。
+3. tests/integration/profiles/CMakeLists.txt、tests/integration/profiles/ProfilePluginMatrixIntegrationTest.cpp：注册并验证 desktop_full / edge_balanced / edge_minimal 三档 profile 的 plugin typed config 行为矩阵。
+4. docs/todos/infrastructure/deliverables/PLG-TODO-013-profile插件治理矩阵验证.md：记录 blocker 识别、schema 收敛、Design->Build 映射与合规复核。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_contract_profile_runtime_policy_schema_test dasall_profile_plugin_matrix_integration_test`：通过。
+3. `ctest --test-dir build-ci -N | grep -E "Profile(RuntimePolicySchemaContractTest|PluginMatrixIntegrationTest)"`：通过，发现 2 个相关用例。
+4. `ctest --test-dir build-ci --output-on-failure -R "ProfileRuntimePolicySchemaContractTest|ProfilePluginMatrixIntegrationTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 边界：没有修改 RuntimePolicySnapshot 或 PluginValidation/Lifecycle public interface；013 仍限制在 profile 资产与 tests。
+2. 根因处理：直接修复了 `infra.plugin.*` schema 缺失的根因，而不是在测试中构造虚拟配置对象。
+3. 结构与值：contract 保证五档 profile 结构对齐，integration 保证三档执行 profile 的治理矩阵值稳定。
+4. 来源追溯：ProfilePluginMatrixIntegrationTest 同时验证 typed config 的 `source_kind=Profile` 与 `source_id=profiles/<profile>/runtime_policy.yaml`。
+5. 提交隔离：本轮只包含 013 的 profile 资产、contract/integration 测试与文档证据，不混入后续 ABI/compatibility 子任务实现。
+
+阻塞修复：
+
+1. 013 的隐藏 blocker 已通过五档 schema 对齐消除；后续任何 profile 漂移都会先在 contract 层暴露。
+2. 013 不再依赖 RuntimePolicySnapshot 扩写，因此保持了原子任务最小化。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -1199,6 +1261,7 @@ Build 合规复核：
 | v1.10 | 2026-04-07 | 回写 PLG-TODO-006 的 PluginAuditAdapter 审计适配层、unit/integration 验证证据，并同步修正已完成上游依赖状态 | （待评审） |
 | v1.11 | 2026-04-07 | 回写 PLG-TODO-011 的生命周期骨架、safe_mode/failed cleanup 状态机验证证据，并修正 LifecycleManager 粒度与 runtime bridge 依赖描述 | （待评审） |
 | v1.12 | 2026-04-07 | 回写 PLG-TODO-012 的 failure injection/observability 验证证据，补齐 validation failure audit 接线与 plugin integration discoverability | （待评审） |
+| v1.13 | 2026-04-07 | 回写 PLG-TODO-013 的 profile plugin schema 收敛与三档治理矩阵验证证据，补齐五档 runtime_policy 对齐与 contract/integration 守卫 | （待评审） |
 
 ---
 

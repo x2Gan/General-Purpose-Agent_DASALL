@@ -84,6 +84,28 @@ execution_policy:
 	allowed_tool_domains:
 		- builtin
 		- mcp
+infra:
+	plugin:
+		enabled: true
+		allowlist:
+			- plugin.echo
+			- plugin.metrics
+			- plugin.tools.bridge
+		search_paths:
+			- ./plugins
+			- ./plugins/desktop
+		load_timeout_ms: 3000
+		max_active: 16
+		signature:
+			required: true
+		trust:
+			min_level: internal
+		abi:
+			strict_mode: true
+		remote_fetch:
+			enabled: false
+		safe_mode:
+			fail_threshold: 3
 ops_policy:
 	log_level: info
 	metrics_granularity: full
