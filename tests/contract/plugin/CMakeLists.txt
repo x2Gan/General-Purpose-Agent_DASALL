@@ -11,6 +11,7 @@ function(dasall_register_plugin_contract_test executable_target_name ctest_name 
   target_include_directories(${executable_target_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/infra/include
+      ${CMAKE_SOURCE_DIR}/infra/src
   )
 
   target_link_libraries(${executable_target_name}
@@ -47,6 +48,12 @@ dasall_register_plugin_contract_test(
   dasall_contract_plugin_policy_gate_boundary_test
   PluginPolicyGateBoundaryContractTest
   ../smoke/PluginPolicyGateBoundaryContractTest.cpp
+)
+
+dasall_register_plugin_contract_test(
+  dasall_contract_plugin_validation_pipeline_boundary_test
+  PluginValidationPipelineBoundaryContractTest
+  ../smoke/PluginValidationPipelineBoundaryContractTest.cpp
 )
 
 set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS

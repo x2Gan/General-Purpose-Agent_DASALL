@@ -7,7 +7,6 @@ set(DASALL_INFRA_CORE_SOURCES
   src/config/ConfigMerger.cpp
   src/config/ConfigValidator.cpp
   src/config/ConfigSnapshotStore.cpp
-  ${DASALL_INFRA_PLUGIN_SOURCES}
 )
 
 set(DASALL_INFRA_AUDIT_SOURCES
@@ -216,6 +215,11 @@ set(DASALL_INFRA_OTA_PUBLIC_HEADERS
 
 set(DASALL_INFRA_PLUGIN_SOURCES
   src/plugin/PluginManager.cpp
+  src/plugin/PluginValidationPipeline.cpp
+)
+
+set(DASALL_INFRA_PLUGIN_PRIVATE_HEADERS
+  src/plugin/PluginValidationPipeline.h
 )
 
 set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
@@ -313,6 +317,8 @@ add_library(dasall_infra STATIC)
 target_sources(dasall_infra
   PRIVATE
     ${DASALL_INFRA_CORE_SOURCES}
+    ${DASALL_INFRA_PLUGIN_SOURCES}
+    ${DASALL_INFRA_PLUGIN_PRIVATE_HEADERS}
     ${DASALL_INFRA_AUDIT_SOURCES}
     ${DASALL_INFRA_HEALTH_SOURCES}
     ${DASALL_INFRA_HEALTH_PRIVATE_HEADERS}

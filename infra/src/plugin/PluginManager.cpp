@@ -1,4 +1,5 @@
 #include "plugin/IPluginManager.h"
+#include "plugin/PluginValidationPipeline.h"
 
 namespace dasall::infra::plugin {
 
@@ -13,23 +14,8 @@ class PluginManager final : public IPluginManager {
 
   [[nodiscard]] PluginValidationResult validate(
       const PluginValidationRequest& request) const override {
-    if (!request.is_valid()) {
-      return PluginValidationResult::failure(
-          contracts::ResultCode::ValidationFieldMissing,
-          request.plugin_id,
-          "plugin validation request requires plugin_id, manifest_ref, package_ref, and profile_id",
-          "plugin.validate",
-          "PluginManager",
-          "plugin.validation.invalid-request");
-    }
-
-    return PluginValidationResult::failure(
-        contracts::ResultCode::RuntimeRetryExhausted,
-        request.plugin_id,
-        "plugin validation skeleton is frozen but not implemented",
-        "plugin.validate",
-        "PluginManager",
-        "plugin.validation.skeleton");
+    const PluginValidationPipeline pipeline;
+    return pipeline.validate(request);
   }
 
   PluginLoadResult load(std::string_view plugin_id,

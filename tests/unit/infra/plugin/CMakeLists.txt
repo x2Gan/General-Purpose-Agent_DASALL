@@ -11,6 +11,11 @@ function(dasall_register_plugin_unit_test executable_target_name ctest_name sour
       dasall_infra
   )
 
+  target_include_directories(${executable_target_name}
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/infra/src
+  )
+
   dasall_apply_common_options(${executable_target_name})
 
   add_test(NAME ${ctest_name} COMMAND ${executable_target_name})
@@ -48,6 +53,12 @@ dasall_register_plugin_unit_test(
   dasall_plugin_policy_gate_interface_unit_test
   PluginPolicyGateInterfaceCompileTest
   PluginPolicyGateInterfaceTest.cpp
+)
+
+dasall_register_plugin_unit_test(
+  dasall_plugin_validation_pipeline_unit_test
+  PluginValidationPipelineTest
+  PluginValidationPipelineTest.cpp
 )
 
 set(DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS

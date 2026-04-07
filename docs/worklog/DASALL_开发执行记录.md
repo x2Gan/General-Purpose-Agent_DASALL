@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #195
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-005 plugin 校验管线骨架
+- 状态：已完成
+
+### 任务选择
+
+1. Phase 3 的 PLG-TODO-008/009/010 已全部完成并推送后，PLG-TODO-005 成为用户指定 Phase 4 串行范围中的首个可执行原子任务。
+2. INF-TODO-017 已完成，PolicySnapshot/PolicyDecisionRef/IPluginPolicyGate 边界均已冻结；本轮唯一需要处理的是 validation request 到 policy request 的最小归一化缺口，以及 plugin 私有源文件尚未真正进入 dasall_infra 的构建接线问题。
+
+### 改动
+
+1. 新增 [infra/src/plugin/PluginValidationPipeline.h](../../infra/src/plugin/PluginValidationPipeline.h) 与 [infra/src/plugin/PluginValidationPipeline.cpp](../../infra/src/plugin/PluginValidationPipeline.cpp)，实现 policy -> signature -> compatibility 三检骨架、stage callback 注入点以及统一的 traceable validation 结果出口。
+2. 更新 [infra/src/plugin/PluginManager.cpp](../../infra/src/plugin/PluginManager.cpp)，把 validate() 从统一 skeleton message 改为委托 PluginValidationPipeline。
+3. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `${DASALL_INFRA_PLUGIN_SOURCES}` 显式追加到 `target_sources(dasall_infra ...)`，修复 plugin 私有源文件此前只存在于列表变量但未实际参与链接的问题，并注册 PluginValidationPipeline.h 为私有头。
+4. 更新 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt) 与 [tests/contract/plugin/CMakeLists.txt](../../tests/contract/plugin/CMakeLists.txt)，为 plugin 测试统一追加 infra/src 私有头路径，并注册新的 pipeline unit/contract 目标。
+5. 新增 [tests/unit/infra/plugin/PluginValidationPipelineTest.cpp](../../tests/unit/infra/plugin/PluginValidationPipelineTest.cpp) 与 [tests/contract/smoke/PluginValidationPipelineBoundaryContractTest.cpp](../../tests/contract/smoke/PluginValidationPipelineBoundaryContractTest.cpp)，分别覆盖三类失败枝条与 ref-only 边界语义。
+6. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-005-plugin校验管线骨架收敛.md](../todos/infrastructure/deliverables/PLG-TODO-005-plugin%E6%A0%A1%E9%AA%8C%E7%AE%A1%E7%BA%BF%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，记录 005 的输入依据、外部参考、Design->Build 映射与 blocker 修复。
+7. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 PLG-TODO-005 回写为 Done，并补充本轮执行记录与版本记录 v1.9。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_validation_pipeline_unit_test dasall_contract_plugin_validation_pipeline_boundary_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginValidationPipelineTest|PluginValidationPipelineBoundaryContractTest"`
+2. 结果：
+   - `dasall_infra` 与两个新增 pipeline 测试目标均构建通过。
+   - `PluginValidationPipelineTest` 与 `PluginValidationPipelineBoundaryContractTest` 2/2 通过。
+
+### 结果
+
+1. plugin validate 入口现在拥有统一的 validation pipeline 骨架，policy deny、signature fail、compatibility fail 三类失败枝条均可稳定判定并回传 traceable refs。
+2. 本轮同时修复了 plugin 私有源文件未真正接入 dasall_infra 的构建根因，为后续 006 和 011 的 plugin 私有实现提供了真实可链接的基线。
+
+### 下一步
+
+1. 继续进入 PLG-TODO-006，把 plugin load/unload/policy deny 的审计事件收敛到独立 PluginAuditAdapter，并补齐 unit + integration 证据。
+
+### 风险
+
+1. 005 仍然只提供 skeleton stage callback；真实签名链验证与 ABI 兼容规则要等 PLG-TODO-015/016 解除阻塞后再替换占位实现。
+
 ## 记录 #194
 
 - 日期：2026-04-07
