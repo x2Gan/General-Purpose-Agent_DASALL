@@ -7,7 +7,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/config/ConfigMerger.cpp
   src/config/ConfigValidator.cpp
   src/config/ConfigSnapshotStore.cpp
-  src/plugin/PluginManager.cpp
+  ${DASALL_INFRA_PLUGIN_SOURCES}
 )
 
 set(DASALL_INFRA_AUDIT_SOURCES
@@ -214,6 +214,18 @@ set(DASALL_INFRA_OTA_PUBLIC_HEADERS
   include/ota/OTATypes.h
 )
 
+set(DASALL_INFRA_PLUGIN_SOURCES
+  src/plugin/PluginManager.cpp
+)
+
+set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
+  include/plugin/PluginCatalog.h
+  include/plugin/PluginDescriptor.h
+  include/plugin/PluginErrorCode.h
+  include/plugin/IPluginManager.h
+  include/plugin/IPluginPolicyGate.h
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthErrors.h
   include/health/HealthStateTypes.h
@@ -240,6 +252,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h
   ${DASALL_INFRA_OTA_PUBLIC_HEADERS}
+  ${DASALL_INFRA_PLUGIN_PUBLIC_HEADERS}
   ${DASALL_INFRA_SECRET_PUBLIC_HEADERS}
   include/InfraContext.h
   include/InfraErrorCode.h
@@ -284,11 +297,6 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/policy/PolicyDecisionRef.h
   include/policy/PolicyPatch.h
   include/policy/PolicySnapshot.h
-  include/plugin/PluginCatalog.h
-  include/plugin/PluginDescriptor.h
-  include/plugin/PluginErrorCode.h
-  include/plugin/IPluginManager.h
-  include/plugin/IPluginPolicyGate.h
 )
 
 set(DASALL_INFRA_AUDIT_PUBLIC_HEADERS

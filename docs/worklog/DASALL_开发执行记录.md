@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #192
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-008 plugin 构建入口接线
+- 状态：已完成
+
+### 任务选择
+
+1. 用户点名要求串行推进 PLG-TODO-008/009/010；按 project-implementation-cycle 的“一轮只做 1 个可执行原子任务”规则，本轮先执行 Phase 3 起点任务 PLG-TODO-008。
+2. Phase 1-2 的 PLG-TODO-001/002/003/004/007 已完成，008 的唯一缺口是 infra/plugin 构建入口尚未按组件级列表收口；任务表里对 008/009 的前置依赖存在过宽写法，但可在本轮以最小 blocker-fix 修正，不需要插入额外 blocker 任务。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-008-plugin构建入口接线收敛.md](../todos/infrastructure/deliverables/PLG-TODO-008-plugin%E6%9E%84%E5%BB%BA%E5%85%A5%E5%8F%A3%E6%8E%A5%E7%BA%BF%E6%94%B6%E6%95%9B.md)，记录 008 的输入依据、外部参考、Design->Build 映射、依赖元数据 blocker 修复与 Build 合规复核。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，新增 DASALL_INFRA_PLUGIN_SOURCES 与 DASALL_INFRA_PLUGIN_PUBLIC_HEADERS，把 plugin 源文件与公开头文件从全局散点清单收敛为组件级构建入口。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 PLG-TODO-008 回写为 Done，并同步修正 008/009/010 在映射表与前置依赖中的元数据错位。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra`
+   - `rg -n "DASALL_INFRA_PLUGIN_(SOURCES|PUBLIC_HEADERS)" infra/CMakeLists.txt`
+2. 结果：
+   - `dasall_infra` 构建通过，说明 plugin 构建入口收口未破坏 infra 静态库目标。
+   - `infra/CMakeLists.txt` 可稳定检索到 plugin 专属 source/header 列表，plugin 入口不再散落在全局清单中。
+
+### 结果
+
+1. plugin 现在具备清晰的组件级构建入口，后续新增 plugin 文件只需要在 plugin 专属列表中补点，不必继续在全局清单里散落维护。
+2. 008 完成后，009 可以专注把 tests/unit/infra/plugin 的注册逻辑下沉到子目录入口；010 再单独处理 contract helper 与 discoverability。
+
+### 下一步
+
+1. 进入 PLG-TODO-009，把 unit 测试注册从 tests/unit/infra/CMakeLists.txt 下沉到 tests/unit/infra/plugin/CMakeLists.txt，并补 plugin 专属 discoverability 验证。
+
+### 风险
+
+1. 008 只收敛了 build 入口，没有动 unit/contract 注册；如果 009/010 不继续收口，plugin 测试入口仍会保留“已存在但缺少组件级注册面”的维护噪音。
+
 ## 记录 #191
 
 - 日期：2026-04-07
