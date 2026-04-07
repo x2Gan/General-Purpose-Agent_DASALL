@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "audit/IAuditLogger.h"
+#include "diagnostics/DiagnosticsAuditBridge.h"
 #include "diagnostics/DiagnosticsMetricsBridge.h"
 #include "dasall/tests/support/TestAssertions.h"
 
@@ -92,6 +94,37 @@ class ScriptedProvider final : public dasall::infra::metrics::IMetricsProvider {
   std::shared_ptr<ScriptedMeter> meter_;
 };
 
+class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
+ public:
+  dasall::infra::AuditWriteOutcome write_audit(
+      const dasall::infra::AuditEvent& event,
+      const dasall::infra::AuditContext& context) override {
+    events.push_back(event);
+    contexts.push_back(context);
+    if (!scripted_outcomes.empty()) {
+      const auto outcome = scripted_outcomes.front();
+      scripted_outcomes.pop_front();
+      return outcome;
+    }
+
+    return dasall::infra::AuditWriteOutcome{
+        .accepted = true,
+        .persisted = true,
+        .fallback_used = false,
+        .error_code = std::nullopt,
+    };
+  }
+
+  dasall::infra::ExportResult export_audit(
+      const dasall::infra::ExportQuery&) override {
+    return dasall::infra::ExportResult{};
+  }
+
+  std::deque<dasall::infra::AuditWriteOutcome> scripted_outcomes;
+  std::vector<dasall::infra::AuditEvent> events;
+  std::vector<dasall::infra::AuditContext> contexts;
+};
+
 [[nodiscard]] bool has_identity(std::vector<dasall::infra::metrics::MetricIdentity> identities,
                                 std::string_view name,
                                 dasall::infra::metrics::MetricType type,
@@ -99,6 +132,13 @@ class ScriptedProvider final : public dasall::infra::metrics::IMetricsProvider {
   return std::any_of(identities.begin(), identities.end(), [&](const auto& identity) {
     return identity.name == name && identity.type == type && identity.unit == unit;
   });
+}
+
+[[nodiscard]] bool has_side_effect(const dasall::infra::AuditEvent& event,
+                                   const std::string& expected) {
+  return std::find(event.side_effects.begin(),
+                   event.side_effects.end(),
+                   expected) != event.side_effects.end();
 }
 
 void test_diagnostics_metrics_bridge_emits_frozen_metric_families_with_scope_and_labels() {
@@ -220,6 +260,179 @@ void test_diagnostics_metrics_bridge_surfaces_provider_failures_without_recursiv
               "DiagnosticsMetricsBridge should retain provider-not-ready in bridge-local status instead of fabricating a successful emit");
 }
 
+  void test_diagnostics_audit_bridge_emits_rejected_remote_export_payload() {
+    using dasall::contracts::ResultCode;
+    using dasall::infra::AuditEvidenceKind;
+    using dasall::infra::AuditOutcome;
+    using dasall::infra::diagnostics::DiagnosticsAuditBridge;
+    using dasall::infra::diagnostics::DiagnosticsSnapshot;
+    using dasall::infra::diagnostics::DiagnosticsCommand;
+    using dasall::infra::diagnostics::ExportFormat;
+    using dasall::infra::diagnostics::ExportTarget;
+    using dasall::infra::diagnostics::RedactionProfile;
+    using dasall::infra::diagnostics::SnapshotExportRequest;
+    using dasall::infra::diagnostics::SnapshotExportResult;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    auto logger = std::make_shared<ScriptedAuditLogger>();
+    DiagnosticsAuditBridge bridge(logger);
+    const auto result = bridge.write_remote_export_event(
+      DiagnosticsSnapshot{
+        .snapshot_id = std::string("diag-snapshot-022"),
+        .command = DiagnosticsCommand{
+          .command_id = std::string("diag-command-022"),
+          .command_name = std::string("health.snapshot"),
+          .args = {},
+          .request_scope = std::string("runtime"),
+          .timeout_ms = 3000,
+          .actor_ref = std::string("actor://redacted"),
+        },
+        .collected_at = std::string("2026-04-07T13:00:00Z"),
+        .summary = std::string("diagnostics redacted health snapshot"),
+        .evidence_refs = {std::string("health://snapshot/diag-snapshot-022")},
+        .redaction_profile = RedactionProfile::Strict,
+        .exporter_hint = std::string("local_file"),
+      },
+      SnapshotExportRequest{
+        .snapshot_id = std::string("diag-snapshot-022"),
+        .target = ExportTarget::RemoteUpload,
+        .format = ExportFormat::Json,
+        .target_ref = std::string("https://diagnostics.example.test/upload"),
+      },
+      SnapshotExportResult::failure(ResultCode::PolicyDenied,
+                    std::string("INF_E_DIAG_REMOTE_EXPORT_DISABLED: remote export disabled"),
+                    std::string("diagnostics.export_snapshot"),
+                    std::string("https://diagnostics.example.test/upload")));
+    const auto status = bridge.get_status();
+
+    assert_true(result.emitted && result.is_valid(),
+          "DiagnosticsAuditBridge should emit a required-sink audit payload for rejected remote export requests");
+    assert_true(status.is_valid() && status.emitted_total == 1 && !status.degraded,
+          "DiagnosticsAuditBridge should remain healthy after persisting the rejected remote export audit event");
+
+    const auto& event = logger->events.back();
+    const auto& context = logger->contexts.back();
+    assert_equal(std::string("diagnostics.remote_export"),
+           event.action,
+           "DiagnosticsAuditBridge should map remote export requests to the frozen diagnostics.remote_export action");
+    assert_equal(std::string("diagnostics.export:https://diagnostics.example.test/upload"),
+           event.target,
+           "DiagnosticsAuditBridge should keep remote export audit targets inside the frozen diagnostics.export namespace");
+    assert_true(event.outcome == AuditOutcome::Rejected,
+          "DiagnosticsAuditBridge should map remote export gate rejections to AuditOutcome::Rejected");
+    assert_true(event.evidence_ref.kind == AuditEvidenceKind::ToolResult &&
+            event.evidence_ref.ref == "snapshot://diag-snapshot-022",
+          "DiagnosticsAuditBridge should reference retained snapshots through ToolResult evidence refs");
+    assert_true(event.actor == "actor://redacted" &&
+            has_side_effect(event, "target_ref:https://diagnostics.example.test/upload") &&
+            has_side_effect(event, "format:json") &&
+            has_side_effect(event, "result_code:PolicyDenied") &&
+            has_side_effect(event, "request_scope:runtime"),
+          "DiagnosticsAuditBridge should keep actors redacted and serialize only the frozen stable side effects");
+    assert_equal(std::string("infra.diagnostics"),
+           context.worker_type,
+           "DiagnosticsAuditBridge should pin worker_type=infra.diagnostics on emitted audit contexts");
+  }
+
+  void test_diagnostics_audit_bridge_blocks_when_required_sink_is_missing() {
+    using dasall::contracts::ResultCode;
+    using dasall::infra::diagnostics::DiagnosticsAuditBridge;
+    using dasall::infra::diagnostics::DiagnosticsSnapshot;
+    using dasall::infra::diagnostics::DiagnosticsCommand;
+    using dasall::infra::diagnostics::ExportFormat;
+    using dasall::infra::diagnostics::ExportTarget;
+    using dasall::infra::diagnostics::RedactionProfile;
+    using dasall::infra::diagnostics::SnapshotExportRequest;
+    using dasall::infra::diagnostics::SnapshotExportResult;
+    using dasall::tests::support::assert_true;
+
+    DiagnosticsAuditBridge bridge;
+    const auto result = bridge.write_remote_export_event(
+      DiagnosticsSnapshot{
+        .snapshot_id = std::string("diag-snapshot-023"),
+        .command = DiagnosticsCommand{
+          .command_id = std::string("diag-command-023"),
+          .command_name = std::string("queue.stats"),
+          .args = {std::string("--queue=redacted")},
+          .request_scope = std::string("runtime"),
+          .timeout_ms = 3000,
+          .actor_ref = std::string("actor://redacted"),
+        },
+        .collected_at = std::string("2026-04-07T13:00:00Z"),
+        .summary = std::string("diagnostics redacted queue stats"),
+        .evidence_refs = {std::string("metrics://queue/diag-snapshot-023")},
+        .redaction_profile = RedactionProfile::Strict,
+        .exporter_hint = std::string("local_file"),
+      },
+      SnapshotExportRequest{
+        .snapshot_id = std::string("diag-snapshot-023"),
+        .target = ExportTarget::RemoteUpload,
+        .format = ExportFormat::Json,
+        .target_ref = std::string("https://diagnostics.example.test/upload"),
+      },
+      SnapshotExportResult::failure(ResultCode::PolicyDenied,
+                    std::string("INF_E_DIAG_REMOTE_EXPORT_DISABLED: remote export disabled"),
+                    std::string("diagnostics.export_snapshot"),
+                    std::string("https://diagnostics.example.test/upload")));
+    const auto status = bridge.get_status();
+
+    assert_true(!result.emitted && result.is_valid(),
+          "DiagnosticsAuditBridge should surface missing audit sinks as explicit failures instead of silently allowing remote export");
+    assert_true(result.result_code == ResultCode::RuntimeRetryExhausted &&
+            result.references_only_contract_error_types(),
+          "DiagnosticsAuditBridge should normalize missing required sinks to RuntimeRetryExhausted within contracts error semantics");
+    assert_true(status.is_valid() && status.degraded && status.emit_failures == 1 &&
+            status.last_error_code == ResultCode::RuntimeRetryExhausted,
+          "DiagnosticsAuditBridge should retain the last missing-sink failure for follow-up health and retry decisions");
+  }
+
+  void test_diagnostics_audit_bridge_maps_command_extension_to_redacted_command_namespace() {
+    using dasall::contracts::ResultCode;
+    using dasall::infra::AuditEvidenceKind;
+    using dasall::infra::AuditOutcome;
+    using dasall::infra::diagnostics::DiagnosticsAuditBridge;
+    using dasall::infra::diagnostics::DiagnosticsAuditEventOutcome;
+    using dasall::infra::diagnostics::DiagnosticsCommand;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    auto logger = std::make_shared<ScriptedAuditLogger>();
+    DiagnosticsAuditBridge bridge(logger);
+    const auto result = bridge.write_command_extension_event(
+      DiagnosticsCommand{
+        .command_id = std::string("diag-extension-001"),
+        .command_name = std::string("vendor.secret.inspect"),
+        .args = {std::string("--scope=minimal")},
+        .request_scope = std::string("runtime"),
+        .timeout_ms = 3000,
+        .actor_ref = std::string("ops-user"),
+      },
+      DiagnosticsAuditEventOutcome::Rejected,
+      ResultCode::PolicyDenied,
+      std::string("command://diag-extension-001/denied"));
+
+    assert_true(result.emitted && result.is_valid(),
+          "DiagnosticsAuditBridge should support the reserved command-extension audit contract without widening the executor surface");
+
+    const auto& event = logger->events.back();
+    assert_equal(std::string("diagnostics.command_extension"),
+           event.action,
+           "DiagnosticsAuditBridge should map reserved extension events to the frozen diagnostics.command_extension action");
+    assert_equal(std::string("diagnostics.command:vendor.secret.inspect"),
+           event.target,
+           "DiagnosticsAuditBridge should keep extension audit targets inside the diagnostics.command namespace");
+    assert_true(event.outcome == AuditOutcome::Rejected &&
+            event.evidence_ref.kind == AuditEvidenceKind::ToolResult &&
+            event.evidence_ref.ref == "command://diag-extension-001" &&
+            event.actor == "actor://redacted",
+          "DiagnosticsAuditBridge should keep extension evidence inside ToolResult refs and normalize non-controlled actors to actor://redacted");
+    assert_true(has_side_effect(event, "result_code:PolicyDenied") &&
+            has_side_effect(event, "detail_ref:command://diag-extension-001/denied") &&
+            has_side_effect(event, "request_scope:runtime"),
+          "DiagnosticsAuditBridge should serialize only the frozen result/detail/request_scope facts for extension events");
+  }
+
 }  // namespace
 
 int main() {
@@ -227,6 +440,9 @@ int main() {
     test_diagnostics_metrics_bridge_emits_frozen_metric_families_with_scope_and_labels();
     test_diagnostics_metrics_bridge_rejects_non_whitelist_stage_and_error_code();
     test_diagnostics_metrics_bridge_surfaces_provider_failures_without_recursive_blocking();
+    test_diagnostics_audit_bridge_emits_rejected_remote_export_payload();
+    test_diagnostics_audit_bridge_blocks_when_required_sink_is_missing();
+    test_diagnostics_audit_bridge_maps_command_extension_to_redacted_command_namespace();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

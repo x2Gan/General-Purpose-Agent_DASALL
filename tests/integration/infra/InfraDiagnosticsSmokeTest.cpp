@@ -1,7 +1,9 @@
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 
+#include "audit/IAuditLogger.h"
 #include "diagnostics/DiagnosticsErrors.h"
 #include "diagnostics/DiagnosticsServiceFacade.h"
 #include "diagnostics/IDiagnosticsService.h"
@@ -9,14 +11,37 @@
 
 namespace {
 
+class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
+ public:
+  dasall::infra::AuditWriteOutcome write_audit(
+      const dasall::infra::AuditEvent&,
+      const dasall::infra::AuditContext&) override {
+    return dasall::infra::AuditWriteOutcome{
+        .accepted = true,
+        .persisted = true,
+        .fallback_used = false,
+        .error_code = std::nullopt,
+    };
+  }
+
+  dasall::infra::ExportResult export_audit(
+      const dasall::infra::ExportQuery&) override {
+    return dasall::infra::ExportResult{};
+  }
+};
+
 void test_diagnostics_smoke_execute_get_and_export_round_trip() {
   using dasall::infra::diagnostics::DiagnosticsCommand;
   using dasall::infra::diagnostics::DiagnosticsServiceFacade;
+  using dasall::infra::diagnostics::DiagnosticsServiceFacadeOptions;
   using dasall::infra::diagnostics::ExportFormat;
   using dasall::infra::diagnostics::ExportTarget;
   using dasall::tests::support::assert_true;
 
-  DiagnosticsServiceFacade service;
+  DiagnosticsServiceFacade service(DiagnosticsServiceFacadeOptions{
+      .metrics_provider = nullptr,
+      .audit_logger = std::make_shared<ScriptedAuditLogger>(),
+  });
   assert_true(service.start(),
               "diagnostics smoke flow should start the facade before execute/get/export");
 

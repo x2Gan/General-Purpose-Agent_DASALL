@@ -83,6 +83,7 @@ DiagnosticsServiceFacade::DiagnosticsServiceFacade(DiagnosticsServiceFacadeOptio
     : options_(std::move(options)),
       snapshot_store_(SnapshotStoreOptions{.retention_days = options.snapshot_retention_days,
                                            .max_snapshot_count = options.snapshot_max_count}),
+  audit_bridge_(options_.audit_logger),
       metrics_bridge_(options_.metrics_provider, options_.profile_id) {}
 
 bool DiagnosticsServiceFacade::start() {
@@ -378,8 +379,25 @@ SnapshotExportResult DiagnosticsServiceFacade::export_snapshot(
   }
 
   const ExportManager export_manager;
-  const auto result = export_manager.export_snapshot(*snapshot, request);
+  auto result = export_manager.export_snapshot(*snapshot, request);
   const auto stage = export_stage_for_target(request.target);
+  if (request.target == ExportTarget::RemoteUpload) {
+    const auto audit_result = audit_bridge_.write_remote_export_event(*snapshot, request, result);
+    if (!audit_result.emitted) {
+      result = SnapshotExportResult::failure(
+          audit_result.result_code.value_or(contracts::ResultCode::RuntimeRetryExhausted),
+          audit_result.error_info.has_value()
+              ? audit_result.error_info->details.message
+              : std::string("diagnostics audit bridge blocked remote export"),
+          audit_result.error_info.has_value()
+              ? audit_result.error_info->details.stage
+              : std::string("diagnostics.audit_remote_export"),
+          audit_result.error_info.has_value()
+              ? audit_result.error_info->source_ref.ref_id
+              : std::string(kDiagnosticsServiceFacadeSourceRef));
+    }
+  }
+
   if (result.ok) {
     (void)metrics_bridge_.emit(DiagnosticsMetricSignal{
         .kind = DiagnosticsMetricKind::ExportTotal,

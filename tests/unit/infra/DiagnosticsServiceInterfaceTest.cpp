@@ -239,6 +239,8 @@ void test_diagnostics_service_facade_enforces_startup_and_safe_mode_skeleton() {
 
   DiagnosticsServiceFacade facade(DiagnosticsServiceFacadeOptions{
       .safe_mode_failure_threshold = 2,
+      .metrics_provider = nullptr,
+      .audit_logger = nullptr,
   });
 
   const auto before_start = facade.execute(DiagnosticsCommand{

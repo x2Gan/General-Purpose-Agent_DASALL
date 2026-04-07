@@ -6,6 +6,8 @@
 #include <optional>
 #include <string>
 
+#include "audit/IAuditLogger.h"
+#include "diagnostics/DiagnosticsAuditBridge.h"
 #include "diagnostics/DiagnosticsMetricsBridge.h"
 #include "diagnostics/IDiagnosticsService.h"
 #include "diagnostics/SnapshotAssembler.h"
@@ -19,6 +21,7 @@ struct DiagnosticsServiceFacadeOptions {
   std::size_t snapshot_max_count = 500;
   std::string profile_id = "unknown";
   std::shared_ptr<metrics::IMetricsProvider> metrics_provider;
+  std::shared_ptr<audit::IAuditLogger> audit_logger;
 };
 
 class DiagnosticsServiceFacade final : public IDiagnosticsService {
@@ -55,6 +58,7 @@ class DiagnosticsServiceFacade final : public IDiagnosticsService {
   std::optional<std::string> safe_mode_reason_;
   SnapshotAssembler snapshot_assembler_{};
   SnapshotStore snapshot_store_;
+  DiagnosticsAuditBridge audit_bridge_;
   DiagnosticsMetricsBridge metrics_bridge_;
 };
 

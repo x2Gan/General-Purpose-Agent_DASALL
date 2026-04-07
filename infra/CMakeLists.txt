@@ -158,6 +158,7 @@ set(DASALL_INFRA_DIAGNOSTICS_SOURCES
   src/diagnostics/CommandRegistry.cpp
   src/diagnostics/CommandPolicyGuard.cpp
   src/diagnostics/CommandExecutor.cpp
+  src/diagnostics/DiagnosticsAuditBridge.cpp
   src/diagnostics/DiagnosticsMetricsBridge.cpp
   src/diagnostics/EvidenceCollector.cpp
   src/diagnostics/SnapshotAssembler.cpp
@@ -171,6 +172,7 @@ set(DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS
   src/diagnostics/CommandRegistry.h
   src/diagnostics/CommandPolicyGuard.h
   src/diagnostics/CommandExecutor.h
+  src/diagnostics/DiagnosticsAuditBridge.h
   src/diagnostics/DiagnosticsMetricsBridge.h
   src/diagnostics/EvidenceCollector.h
   src/diagnostics/SnapshotAssembler.h

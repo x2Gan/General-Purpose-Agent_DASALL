@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #172
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-022 DiagnosticsAuditBridge 审计桥接骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 已在上一轮完成 `DIA-TODO-021`，因此本轮按顺序直接进入 `DIA-TODO-022`，把 6.10.1 冻结的 required sink 审计合同接到 diagnostics 主链。
+2. 022 的验收不只是一条 bridge 单测；因为 remote export 现在必须先满足强制审计，再返回 remote-disabled / failure 结果，所以还必须补跑 service-interface、smoke 和 integration，确认审计桥接不会把非高风险路径打断，同时高风险路径的缺失 sink 不再静默放行。
+
+### 改动
+
+1. 新增 diagnostics audit bridge 私有实现：
+   - 新增 [infra/src/diagnostics/DiagnosticsAuditBridge.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsAuditBridge.h) 与 [infra/src/diagnostics/DiagnosticsAuditBridge.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsAuditBridge.cpp)，冻结 `diagnostics.remote_export` / `diagnostics.command_extension` 两类审计事件、`diagnostics.export:<target_ref>` / `diagnostics.command:<command_name>` target 映射、`snapshot://<snapshot_id>` / `command://<command_id>` evidence ref，以及 `target_ref`、`format`、`result_code`、`detail_ref`、`request_scope` 五类 side_effect。
+   - bridge 采用 required sink 语义：缺少 `audit::IAuditLogger`、生成的审计 payload 非法，或 `write_audit()` 返回失败/不一致状态时，统一返回显式 failure，并保持错误信息仍停留在 contracts `ResultCode`/`ErrorInfo` 边界内。
+2. 把 remote export 接入 diagnostics 主链：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.h](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.h) 与 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，在 `DiagnosticsServiceFacadeOptions` 中加入 `audit_logger`，并在 `export_snapshot()` 的 `RemoteUpload` 路径上先执行 `DiagnosticsAuditBridge`。
+   - 当审计 sink 缺失或写审计失败时，facade 现在返回显式 `RuntimeRetryExhausted` 样式失败，而不是继续把高风险 remote export 请求当作普通 remote-disabled 分支静默放行。
+3. 扩展 bridge / facade 回归测试：
+   - 更新 [tests/unit/infra/DiagnosticsMetricsAuditBridgeTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsMetricsAuditBridgeTest.cpp)，在原有 metrics bridge 覆盖之外新增 DiagnosticsAuditBridge 的 remote export rejection、missing sink failure、command extension target/actor/evidence 映射测试。
+   - 更新 [tests/integration/infra/InfraDiagnosticsIntegrationTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsIntegrationTest.cpp) 与 [tests/integration/infra/InfraDiagnosticsSmokeTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsSmokeTest.cpp)，补充 remote export 需要审计 sink 的运行时验证，并让 smoke round-trip 通过显式注入 `audit_logger` 保持 remote-disabled 语义稳定。
+   - 更新 [tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp)，补齐新增 facade options 字段的显式初始化，避免本轮新增字段引入无意义告警。
+4. 构建图接线：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 `DiagnosticsAuditBridge.cpp/.h` 接入 diagnostics 私有源集。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_diagnostics_metrics_audit_bridge_unit_test dasall_diagnostics_service_interface_unit_test dasall_infra_diagnostics_smoke_integration_test dasall_infra_diagnostics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsMetricsAuditBridgeTest|DiagnosticsServiceInterfaceTest|InfraDiagnosticsSmokeTest|InfraDiagnosticsIntegrationTest"`
+2. 结果：
+   - `DiagnosticsMetricsAuditBridgeTest`、`DiagnosticsServiceInterfaceTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 共 4/4 通过。
+
+### 结果
+
+1. `DIA-TODO-022` 已完成，diagnostics 现在具备 required sink 审计桥接，remote export 请求会先落 `diagnostics.remote_export` 审计，再返回 remote-disabled / failure 结果；若缺少 audit sink，则高风险动作会被显式阻断，而不再静默继续。
+2. F 阶段的 bridge 任务已全部完成，下一步可以转入 `DIA-TODO-023`、`DIA-TODO-024`、`DIA-TODO-025`，收口 diagnostics 的构建接线、测试注册与 integration 发现性门禁。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-023`，确认 diagnostics 私有源码与新 bridge 已全部进入 `dasall_infra` 构建图。
+2. 023 完成后继续推进 `DIA-TODO-024` 与 `DIA-TODO-025`，完成 unit/contract/integration 发现性收口。
+
+### 风险
+
+1. `DiagnosticsAuditBridge` 当前只接了 remote export 的真实运行时路径，command extension 仍保持为 bridge 级预留合同；若未来真的开放扩展命令执行，必须在不扩大白名单执行面前提下沿用当前 action/target/evidence 合同，而不是在 Facade 中绕过 bridge。
+2. remote export 目前仍停留在 remote-disabled / backend-not-implemented skeleton；022 保证了高风险请求一定可审计或被审计失败阻断，但不改变 020 已冻结的 remote gate 与 `INF_E_DIAG_REMOTE_EXPORT_DISABLED` 行为边界。
+
 ## 记录 #171
 
 - 日期：2026-04-07
