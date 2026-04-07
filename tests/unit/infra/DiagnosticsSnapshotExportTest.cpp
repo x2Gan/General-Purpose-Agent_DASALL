@@ -144,7 +144,8 @@ void test_snapshot_assembler_generates_unique_snapshot_ids_and_binds_evidence_re
       std::string("diagnostics executor health snapshot"),
       {std::string("health://diagnostics/health.snapshot"),
        std::string("logs://diagnostics/health.snapshot")},
-      std::string("2026-04-07T20:00:00Z"));
+      std::string("2026-04-07T20:00:00Z"),
+      17);
   assert_true(execution.is_valid(),
               "snapshot assembler test requires a structurally valid execution result");
 

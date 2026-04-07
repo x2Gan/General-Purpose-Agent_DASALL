@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #177
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-006 OTAPrecheckService 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-006` 是 OTA 核心链路骨架阶段的首个未完成原子任务，且其前置仅有 `OTA-TODO-001/002`，两者均已完成，因此 006 是当前最小可执行项。
+2. 006 的边界只要求把 precheck 的 health/resource/policy gate 显式化，不需要提前进入 verifier/install/switch/rollback，实现上可以保持在 `infra/src/ota` 与 `tests/unit/infra/ota` 范围内。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-006-OTAPrecheckService骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-006-OTAPrecheckService骨架收敛.md)，固化 006 的研究结论、Design->Build 映射、Build 合规复核与 direct blocker fix 说明。
+2. 新增 [infra/src/ota/OTAPrecheckService.h](/home/gangan/DASALL/infra/src/ota/OTAPrecheckService.h) 与 [infra/src/ota/OTAPrecheckService.cpp](/home/gangan/DASALL/infra/src/ota/OTAPrecheckService.cpp)，冻结 OTAMode、health/resource/policy snapshot/provider 边界，并实现 `compatibility/health/resource/policy` 四维 precheck gate。
+3. 新增 [tests/unit/infra/ota/OTAPrecheckServiceTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/OTAPrecheckServiceTest.cpp)，覆盖 ready apply、validate_only、invalid plan、health fail、resource fail、policy fail 六条路径。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 OTA precheck 骨架和单测接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 在聚合 `unit` 验收中发现 direct validation blocker：diagnostics 单测仍按旧签名调用 `CommandExecutionResult::success(...)`。同轮最小修复 [tests/unit/infra/DiagnosticsSnapshotExportTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsSnapshotExportTest.cpp)，补齐 `latency_ms` 参数，使 `dasall_unit_tests` 能继续构建和执行。
+6. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-006` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_infra dasall_ota_precheck_service_unit_test`
+   - `ctest --test-dir build-ci -N -R "OTAPrecheckServiceTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "OTAPrecheckServiceTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `OTAPrecheckServiceTest` 1 项。
+   - OTA 定向执行：`OTAPrecheckServiceTest` 1/1 通过。
+   - 仓库级 unit 门：163/163 通过。
+
+### 结果
+
+1. `OTA-TODO-006` 已完成，OTA 现在具备 side-effect-free 的 precheck 骨架，能够在 apply 前按 health/resource/policy/plan validity 四个维度返回二值可判定结果。
+2. 为满足 006 绑定的 `dasall_unit_tests` 聚合验收，本轮同步清除了一个 direct validation blocker：diagnostics snapshot export 单测的过期 success 签名调用。
+
+### 下一步
+
+1. 进入 `OTA-TODO-007`，落盘 PackageVerifier 骨架，把签名/hash/release_counter 失败路径接到 006 已完成的 precheck 之后。
+2. 007 完成后继续推进 `OTA-TODO-008`，把 artifact compatibility gate 从 precheck 输入完整性扩展到 manifest/profile/hardware 冲突判定。
+
+### 风险
+
+1. `OTAPrecheckService` 当前把 plan 结构合法性承接到 `compatibility_ok`，这是 006 为维持 precheck 二值出口做的最小占位；等 `OTA-TODO-008` 完成后，需要把真正的 artifact compatibility 语义接管该 gate，而不是长期停留在 plan-level validation。
+2. VS Code CMake Tools 在本轮依旧表现为空 targets/tests 且无法配置项目，因此验收继续使用仓库已验证的 `build-ci` 命令链；若 IDE 工具态恢复，后续可再切回集成入口。
+
 ## 记录 #176
 
 - 日期：2026-04-07
