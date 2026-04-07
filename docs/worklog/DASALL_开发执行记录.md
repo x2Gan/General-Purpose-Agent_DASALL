@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #180
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-009 InstallExecutor 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-009` 是 verify + compatibility 之后的直接后继任务，且前置 `OTA-TODO-004`、`OTA-TODO-008` 已完成，因此可以继续推进 install skeleton。
+2. 009 的验收边界聚焦在 repo_bound/slot_bound 分支区分与写入失败 cleanup，不要求提前实现 inactive slot 选择或 rollback token 生命周期，因此本轮保持在 InstallExecutor 私有域收敛。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-009-InstallExecutor骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-009-InstallExecutor骨架收敛.md)，记录 009 的设计依据、Design->Build 映射、Build 合规复核与验证证据。
+2. 新增 [infra/src/ota/InstallExecutor.h](/home/gangan/DASALL/infra/src/ota/InstallExecutor.h) 与 [infra/src/ota/InstallExecutor.cpp](/home/gangan/DASALL/infra/src/ota/InstallExecutor.cpp)，冻结安装写入、cleanup、activation、revert 的私有依赖边界，并实现 `stage_artifact / activate_plan / revert_install`。
+3. 新增 [tests/unit/infra/ota/InstallExecutorTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/InstallExecutorTest.cpp)，覆盖 repo_bound/slot_bound 双分支、materialization fail cleanup 路径，以及 activation/revert 边界透传。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 InstallExecutor 源码和 InstallExecutorTest 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-009` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_install_executor_unit_test`
+   - `ctest --test-dir build-ci -N -R "InstallExecutorTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "InstallExecutorTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `InstallExecutorTest` 1 项。
+   - OTA 定向执行：`InstallExecutorTest` 1/1 通过。
+   - 仓库级 unit 门：166/166 通过。
+
+### 结果
+
+1. `OTA-TODO-009` 已完成，OTA 现在具备 InstallExecutor 骨架，能够对 repo_bound 与 slot_bound 工件走显式分支，并在写入失败时强制进入 cleanup。
+2. activation/revert 继续保持在 contract-shaped boundary 内，为 010 的 slot switch 和 012 的 rollback controller 保留稳定接口，不需要回改 public header。
+
+### 下一步
+
+1. 进入 `OTA-TODO-010`，实现 SlotSwitchCoordinator 骨架，把 inactive slot 选择、rollback token 生成和 next boot 设置接到 install 之后。
+2. 010 完成后重新检查 `OTA-BLK-01` 是否仍阻断 012；若仍阻断，则先执行 blocker recovery 再进入 rollback controller。
+
+### 风险
+
+1. 当前 InstallExecutor 只冻结了内部 writer/cleanup/activation/revert 边界，尚未绑定真实平台文件系统或块设备写入；这符合 009 的骨架目标，但 010/012 之后仍需在 integration 层验证真实 wiring。
+2. `activate_plan` 目前是边界透传而非 slot switch 主实现，这是刻意保留职责分离，避免 009 与 010 交叉修改同一责任面。
+
 ## 记录 #179
 
 - 日期：2026-04-07
