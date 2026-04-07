@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #189
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-016 OTA 测试入口注册
+- 状态：已完成
+
+### 任务选择
+
+1. `OTA-TODO-015` 已完成并推送后，`OTA-TODO-016` 成为 `OTA-TODO-015~016` 串行范围中的最后一个可执行原子任务。
+2. 016 的职责边界是统一 OTA 的 unit/contract 测试注册入口、聚合列表和 `ota` 标签，不改动测试语义与断言本身。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-016-OTA测试入口注册收敛.md](../todos/infrastructure/deliverables/OTA-TODO-016-OTA测试入口注册收敛.md)，记录 016 的输入依据、Design->Build 映射、Build 合规复核与验证结果。
+2. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，新增 `DASALL_OTA_UNIT_TEST_EXECUTABLE_TARGETS`，把 OTA unit 目标从总清单中收敛成组件级聚合列表。
+3. 更新 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，新增 `dasall_register_ota_unit_test(...)` helper，统一 OTA unit/interface 测试的可执行目标、私有 include、link 依赖与 `unit;ota` 标签。
+4. 更新 [tests/contract/CMakeLists.txt](../../tests/contract/CMakeLists.txt)，新增 `dasall_register_ota_contract_test(...)` helper，统一 OTA contract smoke 测试的注册和 `contract;smoke;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 的 016 回写证据，将状态更新为 `Done`。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -N -L ota`
+   - `ctest --test-dir build-ci --output-on-failure -L ota`
+2. 结果：
+   - unit/contract 聚合门通过，说明 OTA 注册收口未破坏仓库现有测试矩阵。
+   - `ctest -N -L ota` 可发现 OTA 专属测试入口，`ctest -L ota` 可直接执行 OTA 子集。
+
+### 结果
+
+1. OTA 的 unit 和 contract 测试入口现在都通过专属 helper 和组件级聚合列表维护，新增 OTA 测试不需要再在多处手工复制注册模板。
+2. OTA interface 编译测试与 contract 边界测试现在拥有一致的 `ota` 标签，组件级 discoverability 与定向执行出口已经建立。
+
+### 下一步
+
+1. 若继续推进 OTA 测试闭环，可进入 `OTA-TODO-017`，在现有 discoverability 基础上补 integration/failure 用例入口。
+2. 若要继续清理配置面风险，可并行评估 `OTA-TODO-021` 的 profile 键命名与覆盖优先级收敛。
+
+### 风险
+
+1. 016 只统一了 unit/contract 入口，未新增 integration/failure 用例；OTA 跨组件时序回归仍要等 017 落盘。
+
 ## 记录 #188
 
 - 日期：2026-04-07

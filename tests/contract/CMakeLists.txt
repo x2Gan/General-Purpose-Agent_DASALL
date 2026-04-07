@@ -77,6 +77,17 @@ function(dasall_register_tracing_contract_test executable_target_name ctest_name
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;tracing")
 endfunction()
 
+function(dasall_register_ota_contract_test executable_target_name ctest_name source_file)
+  dasall_register_contract_test(
+    ${executable_target_name}
+    ${ctest_name}
+    ${source_file}
+    smoke
+  )
+
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;ota")
+endfunction()
+
 # smoke group
 dasall_register_contract_test(
   dasall_contract_smoke_test
@@ -598,11 +609,10 @@ target_link_libraries(dasall_contract_secret_error_mapping_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_ota_contract_test(
   dasall_contract_ota_type_boundary_test
   OTATypeBoundaryTest
   smoke/OTATypeBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_ota_type_boundary_test
@@ -615,11 +625,10 @@ target_link_libraries(dasall_contract_ota_type_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_ota_contract_test(
   dasall_contract_ota_manager_interface_boundary_test
   OTAManagerInterfaceBoundaryContractTest
   smoke/OTAManagerInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_ota_manager_interface_boundary_test
@@ -632,11 +641,10 @@ target_link_libraries(dasall_contract_ota_manager_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_ota_contract_test(
   dasall_contract_ota_package_verifier_interface_boundary_test
   OTAPackageVerifierInterfaceBoundaryContractTest
   smoke/OTAPackageVerifierInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_ota_package_verifier_interface_boundary_test
@@ -649,11 +657,10 @@ target_link_libraries(dasall_contract_ota_package_verifier_interface_boundary_te
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_ota_contract_test(
   dasall_contract_install_executor_interface_boundary_test
   InstallExecutorInterfaceBoundaryContractTest
   smoke/InstallExecutorInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_install_executor_interface_boundary_test
@@ -666,11 +673,10 @@ target_link_libraries(dasall_contract_install_executor_interface_boundary_test
     dasall_infra
 )
 
-dasall_register_contract_test(
+dasall_register_ota_contract_test(
   dasall_contract_boot_control_adapter_interface_boundary_test
   BootControlAdapterInterfaceBoundaryContractTest
   smoke/BootControlAdapterInterfaceBoundaryContractTest.cpp
-  smoke
 )
 
 target_include_directories(dasall_contract_boot_control_adapter_interface_boundary_test

@@ -2065,260 +2065,113 @@ dasall_apply_common_options(dasall_infra_error_code_unit_test)
 add_test(NAME InfraErrorCodeUnitTest COMMAND dasall_infra_error_code_unit_test)
 set_tests_properties(InfraErrorCodeUnitTest PROPERTIES LABELS "unit")
 
-add_executable(dasall_ota_types_unit_test
+function(dasall_register_ota_unit_test executable_target_name ctest_name source_file)
+  add_executable(${executable_target_name}
+    ${source_file}
+  )
+
+  if(source_file MATCHES "^ota/")
+    target_include_directories(${executable_target_name}
+      PRIVATE
+        ${CMAKE_SOURCE_DIR}/infra/src
+    )
+  endif()
+
+  target_link_libraries(${executable_target_name}
+    PRIVATE
+      dasall_test_support
+      dasall_infra
+  )
+
+  dasall_apply_common_options(${executable_target_name})
+
+  add_test(NAME ${ctest_name} COMMAND ${executable_target_name})
+  set_tests_properties(${ctest_name} PROPERTIES LABELS "unit;ota")
+endfunction()
+
+dasall_register_ota_unit_test(
+  dasall_ota_types_unit_test
+  OTATypesCompileTest
   OTATypesTest.cpp
 )
 
-target_link_libraries(dasall_ota_types_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_types_unit_test)
-
-add_test(NAME OTATypesCompileTest COMMAND dasall_ota_types_unit_test)
-set_tests_properties(OTATypesCompileTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_ota_manager_interface_unit_test
+dasall_register_ota_unit_test(
+  dasall_ota_manager_interface_unit_test
+  OTAInterfaceCompileTest
   IOTAManagerInterfaceTest.cpp
 )
 
-target_link_libraries(dasall_ota_manager_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_manager_interface_unit_test)
-
-add_test(NAME OTAInterfaceCompileTest COMMAND dasall_ota_manager_interface_unit_test)
-set_tests_properties(OTAInterfaceCompileTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_ota_precheck_service_unit_test
+dasall_register_ota_unit_test(
+  dasall_ota_precheck_service_unit_test
+  OTAPrecheckServiceTest
   ota/OTAPrecheckServiceTest.cpp
 )
 
-target_include_directories(dasall_ota_precheck_service_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_ota_precheck_service_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_precheck_service_unit_test)
-
-add_test(NAME OTAPrecheckServiceTest COMMAND dasall_ota_precheck_service_unit_test)
-set_tests_properties(OTAPrecheckServiceTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_ota_package_verifier_unit_test
+dasall_register_ota_unit_test(
+  dasall_ota_package_verifier_unit_test
+  OTAPackageVerifierTest
   ota/PackageVerifierTest.cpp
 )
 
-target_include_directories(dasall_ota_package_verifier_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_ota_package_verifier_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_package_verifier_unit_test)
-
-add_test(NAME OTAPackageVerifierTest COMMAND dasall_ota_package_verifier_unit_test)
-set_tests_properties(OTAPackageVerifierTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_artifact_compatibility_evaluator_unit_test
+dasall_register_ota_unit_test(
+  dasall_artifact_compatibility_evaluator_unit_test
+  ArtifactCompatibilityEvaluatorTest
   ota/ArtifactCompatibilityEvaluatorTest.cpp
 )
 
-target_include_directories(dasall_artifact_compatibility_evaluator_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_artifact_compatibility_evaluator_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_artifact_compatibility_evaluator_unit_test)
-
-add_test(NAME ArtifactCompatibilityEvaluatorTest COMMAND dasall_artifact_compatibility_evaluator_unit_test)
-set_tests_properties(ArtifactCompatibilityEvaluatorTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_install_executor_unit_test
+dasall_register_ota_unit_test(
+  dasall_install_executor_unit_test
+  InstallExecutorTest
   ota/InstallExecutorTest.cpp
 )
 
-target_include_directories(dasall_install_executor_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_install_executor_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_install_executor_unit_test)
-
-add_test(NAME InstallExecutorTest COMMAND dasall_install_executor_unit_test)
-set_tests_properties(InstallExecutorTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_slot_switch_coordinator_unit_test
+dasall_register_ota_unit_test(
+  dasall_slot_switch_coordinator_unit_test
+  SlotSwitchCoordinatorTest
   ota/SlotSwitchCoordinatorTest.cpp
 )
 
-target_include_directories(dasall_slot_switch_coordinator_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_slot_switch_coordinator_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_slot_switch_coordinator_unit_test)
-
-add_test(NAME SlotSwitchCoordinatorTest COMMAND dasall_slot_switch_coordinator_unit_test)
-set_tests_properties(SlotSwitchCoordinatorTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_boot_confirmation_monitor_unit_test
+dasall_register_ota_unit_test(
+  dasall_boot_confirmation_monitor_unit_test
+  BootConfirmationMonitorTest
   ota/BootConfirmationMonitorTest.cpp
 )
 
-target_include_directories(dasall_boot_confirmation_monitor_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_boot_confirmation_monitor_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_boot_confirmation_monitor_unit_test)
-
-add_test(NAME BootConfirmationMonitorTest COMMAND dasall_boot_confirmation_monitor_unit_test)
-set_tests_properties(BootConfirmationMonitorTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_rollback_controller_unit_test
+dasall_register_ota_unit_test(
+  dasall_rollback_controller_unit_test
+  RollbackControllerTest
   ota/RollbackControllerTest.cpp
 )
 
-target_include_directories(dasall_rollback_controller_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_rollback_controller_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_rollback_controller_unit_test)
-
-add_test(NAME RollbackControllerTest COMMAND dasall_rollback_controller_unit_test)
-set_tests_properties(RollbackControllerTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_ota_audit_bridge_unit_test
+dasall_register_ota_unit_test(
+  dasall_ota_audit_bridge_unit_test
+  OTAAuditBridgeTest
   ota/OTAAuditBridgeTest.cpp
 )
 
-target_include_directories(dasall_ota_audit_bridge_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_ota_audit_bridge_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_audit_bridge_unit_test)
-
-add_test(NAME OTAAuditBridgeTest COMMAND dasall_ota_audit_bridge_unit_test)
-set_tests_properties(OTAAuditBridgeTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_ota_health_probe_unit_test
+dasall_register_ota_unit_test(
+  dasall_ota_health_probe_unit_test
+  OTAHealthProbeTest
   ota/OTAHealthProbeTest.cpp
 )
 
-target_include_directories(dasall_ota_health_probe_unit_test
-  PRIVATE
-    ${CMAKE_SOURCE_DIR}/infra/src
-)
-
-target_link_libraries(dasall_ota_health_probe_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_health_probe_unit_test)
-
-add_test(NAME OTAHealthProbeTest COMMAND dasall_ota_health_probe_unit_test)
-set_tests_properties(OTAHealthProbeTest PROPERTIES LABELS "unit;ota")
-
-add_executable(dasall_ota_package_verifier_interface_unit_test
+dasall_register_ota_unit_test(
+  dasall_ota_package_verifier_interface_unit_test
+  OTAPackageVerifierInterfaceTest
   OTAPackageVerifierInterfaceTest.cpp
 )
 
-target_link_libraries(dasall_ota_package_verifier_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_ota_package_verifier_interface_unit_test)
-
-add_test(NAME OTAPackageVerifierInterfaceTest COMMAND dasall_ota_package_verifier_interface_unit_test)
-set_tests_properties(OTAPackageVerifierInterfaceTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_install_executor_interface_unit_test
+dasall_register_ota_unit_test(
+  dasall_install_executor_interface_unit_test
+  InstallExecutorInterfaceTest
   InstallExecutorInterfaceTest.cpp
 )
 
-target_link_libraries(dasall_install_executor_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_install_executor_interface_unit_test)
-
-add_test(NAME InstallExecutorInterfaceTest COMMAND dasall_install_executor_interface_unit_test)
-set_tests_properties(InstallExecutorInterfaceTest PROPERTIES LABELS "unit")
-
-add_executable(dasall_boot_control_adapter_interface_unit_test
+dasall_register_ota_unit_test(
+  dasall_boot_control_adapter_interface_unit_test
+  BootControlAdapterInterfaceTest
   BootControlAdapterInterfaceTest.cpp
 )
-
-target_link_libraries(dasall_boot_control_adapter_interface_unit_test
-  PRIVATE
-    dasall_test_support
-    dasall_infra
-)
-
-dasall_apply_common_options(dasall_boot_control_adapter_interface_unit_test)
-
-add_test(NAME BootControlAdapterInterfaceTest COMMAND dasall_boot_control_adapter_interface_unit_test)
-set_tests_properties(BootControlAdapterInterfaceTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_plugin_descriptor_unit_test
   plugin/PluginDescriptorTest.cpp
