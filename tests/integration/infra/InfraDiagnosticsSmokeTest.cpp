@@ -37,8 +37,10 @@ void test_diagnostics_smoke_execute_get_and_export_round_trip() {
   const auto get_result = service.get_snapshot({.snapshot_id = execute_result.snapshot.snapshot_id});
   assert_true(get_result.ok,
               "diagnostics smoke flow should read back the retained snapshot");
-  assert_true(get_result.snapshot.summary == "diagnostics executor health snapshot",
-              "diagnostics smoke flow should keep the executor-produced snapshot summary stable across retrieval");
+  assert_true(get_result.snapshot.summary == "diagnostics redacted health snapshot",
+              "diagnostics smoke flow should keep the strict redaction summary stable across retrieval");
+  assert_true(get_result.snapshot.command.actor_ref == "actor://redacted",
+              "diagnostics smoke flow should retain only the redacted actor reference after execute/get round trip");
 
   const auto export_result = service.export_snapshot({
       .snapshot_id = execute_result.snapshot.snapshot_id,

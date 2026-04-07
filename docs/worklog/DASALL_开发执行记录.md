@@ -1,5 +1,62 @@
 # DASALL 开发执行记录
 
+## 记录 #166
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-018 RedactionEngine 脱敏骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-BLK-004` 已在上一轮解阻，因此本轮最小原子任务就是按 6.5.3 的 strict/compat 矩阵落盘真实 `RedactionEngine`。
+2. 018 的验收不只是两条 unit；因为 redaction 现在进入 facade 主链，所以本轮还需要补跑 smoke/integration，确认“先脱敏再存储”的顺序不会打断现有 diagnostics execute/get/export skeleton。
+
+### 改动
+
+1. 新增 diagnostics redaction 私有实现：
+   - 新增 [infra/src/diagnostics/RedactionEngine.h](/home/gangan/DASALL/infra/src/diagnostics/RedactionEngine.h) 与 [infra/src/diagnostics/RedactionEngine.cpp](/home/gangan/DASALL/infra/src/diagnostics/RedactionEngine.cpp)，定义 `RedactionOutcome` 与 `RedactionEngine::redact()`。
+   - 当前骨架按 6.5.3 执行 strict/compat 两档脱敏：`actor_ref` 固定收敛到 `actor://redacted`，strict summary 改写为 canonical summary，compat 对 deny-list token 做 `[REDACTED]` 替换，并把 `raw://`、`inline://`、`data:` 与非 `local_file` exporter hint 统一视为 redaction failure。
+2. 把 redaction gate 接到 facade 主链：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，让 execute success path 在 assembler 之后、持久化前进入 `RedactionEngine`。
+   - redaction failure 现在直接返回 `INF_E_DIAG_REDACTION_FAIL` 对应的 contracts 错误，并阻断 snapshot 落入 facade 当前的 retained map。
+3. 新增 redaction 正负例测试：
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，注册 `DiagnosticsRedactionTest` 与 `DiagnosticsRedactionFailureTest`。
+   - 新增 [tests/unit/infra/DiagnosticsRedactionTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsRedactionTest.cpp)，覆盖 strict/compat 成功路径。
+   - 新增 [tests/unit/infra/DiagnosticsRedactionFailureTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsRedactionFailureTest.cpp)，覆盖 raw evidence scheme 与 non-local exporter hint 的失败路径。
+4. 更新 smoke 锚点：
+   - 更新 [tests/integration/infra/InfraDiagnosticsSmokeTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsSmokeTest.cpp)，把 execute/get round-trip 的 summary 锚点切到 strict redaction 输出，并新增 actor_ref 已 redacted 的断言。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_diagnostics_redaction_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_redaction_failure_unit_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsRedactionTest|DiagnosticsRedactionFailureTest|InfraDiagnosticsSmokeTest|InfraDiagnosticsIntegrationTest"`
+2. 结果：
+   - 两个 redaction unit target 与两个 diagnostics integration target 构建通过。
+   - `DiagnosticsRedactionTest`、`DiagnosticsRedactionFailureTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 共 4/4 通过。
+3. 说明：
+   - 本轮继续沿用 `build-ci` 显式配置/构建/ctest 链路，避免依赖当前不稳定的 IDE CMake 配置态。
+
+### 结果
+
+1. `DIA-TODO-018` 已完成，diagnostics 主链现在真正具备 redaction gate，snapshot 在 retained 之前已进入 strict/compat 脱敏路径。
+2. 导出路径仍未实现，但 020 之前需要的 `DIA-GATE-04` 已有最小 redaction 代码与测试锚点，可以继续推进 019 的持久化骨架。
+
+### 下一步
+
+1. 直接进入 `DIA-TODO-019`，把 facade 当前的 retained snapshot map 收口到真实 `SnapshotStore`。
+2. 019 完成后再解 `DIA-BLK-005`，为 `ExportManager` 冻结 format/checksum/target 白名单。
+
+### 风险
+
+1. 当前 compat redaction 仍是最小 token 级改写骨架，尚未引入更细粒度的字段级 policy；如果后续把更多原始执行内容塞进 summary/evidence tail，必须同步扩展 deny-list 与测试，而不能默认为兼容路径自动安全。
+2. 由于 019 尚未落盘，redaction 通过后的 retained snapshot 仍由 facade 内存 map 持有；后续引入 `SnapshotStore` 时必须保持“未脱敏不入库”的主链顺序不变。
+
 ## 记录 #165
 
 - 日期：2026-04-07

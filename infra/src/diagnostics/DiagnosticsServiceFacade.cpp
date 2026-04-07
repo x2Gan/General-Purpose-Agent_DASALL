@@ -6,6 +6,7 @@
 
 #include "diagnostics/CommandExecutor.h"
 #include "diagnostics/EvidenceCollector.h"
+#include "diagnostics/RedactionEngine.h"
 
 namespace dasall::infra::diagnostics {
 namespace {
@@ -128,6 +129,25 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
   const EvidenceCollector collector;
   const auto evidence = collector.collect(command, execution);
   auto snapshot = snapshot_assembler_.assemble(command, execution, evidence);
+  const RedactionEngine redaction_engine;
+  const auto redaction = redaction_engine.redact(std::move(snapshot));
+  if (!redaction.redacted) {
+    note_failure("redaction_failed");
+    return DiagnosticsSnapshotResult::failure(
+        redaction.result_code,
+        redaction.error.has_value() ? redaction.error->details.message
+                                    : std::string("diagnostics redaction failed"),
+        std::string("diagnostics.redact"),
+        std::string(kDiagnosticsServiceFacadeSourceRef),
+        CommandDecision{
+            .allowed = true,
+            .reason_code = std::string(),
+            .policy_ref = std::string("policy://diagnostics/readonly"),
+            .denied_rule_id = std::string(),
+        });
+  }
+
+  snapshot = std::move(redaction.snapshot);
   snapshots_[snapshot.snapshot_id] = snapshot;
   reset_failures();
   return DiagnosticsSnapshotResult::success(
