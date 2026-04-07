@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #178
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-007 PackageVerifier 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-007` 是在 006 完成后的直接后继任务，前置 `OTA-TODO-003` 和 `OTA-TODO-006` 均已完成，且 `OTA-BLK-02` 已由 `OTA-TODO-019` 解阻。
+2. 007 的职责边界只要求把 package/artifact verify gate 从接口推进到骨架，不需要提前进入 compatibility/install/switch，因此可以继续限定在 `infra/src/ota`、`tests/unit/infra/ota` 和文档回写范围内。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-007-PackageVerifier骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-007-PackageVerifier骨架收敛.md)，固化 007 的研究结论、Design->Build 映射、Build 合规复核与验证证据。
+2. 新增 [infra/src/ota/PackageVerifier.h](/home/gangan/DASALL/infra/src/ota/PackageVerifier.h) 与 [infra/src/ota/PackageVerifier.cpp](/home/gangan/DASALL/infra/src/ota/PackageVerifier.cpp)，冻结 trust anchor / policy / signature verifier adapter 三面依赖，并实现 `verify_package/verify_artifact` 骨架。
+3. 新增 [tests/unit/infra/ota/PackageVerifierTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/PackageVerifierTest.cpp)，覆盖 success、signature fail、hash fail、release_counter rollback、artifact hash fail 五类路径。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 PackageVerifier 骨架和 `OTAPackageVerifierTest` 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-007` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_infra dasall_ota_package_verifier_unit_test`
+   - `ctest --test-dir build-ci -N -R "OTAPackageVerifierTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "OTAPackageVerifierTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `OTAPackageVerifierTest` 1 项。
+   - OTA 定向执行：`OTAPackageVerifierTest` 1/1 通过。
+   - 仓库级 unit 门：164/164 通过。
+
+### 结果
+
+1. `OTA-TODO-007` 已完成，OTA 现在具备可注入 trust anchor / policy / signature adapter 的 PackageVerifier 骨架，能够在 install 前拒绝 signature fail、hash fail 和 release_counter rollback。
+2. artifact verify 入口也已具备显式 hash failure 路径，后续 008 可在这一骨架上继续追加 hardware/profile/dependency_refs compatibility gate。
+
+### 下一步
+
+1. 进入 `OTA-TODO-008`，实现 ArtifactCompatibilityEvaluator 骨架，把 manifest/profile/hardware/dependency_refs 冲突从 verify 后的事实面推进到安装前的 compatibility gate。
+2. 008 完成后再进入 `OTA-TODO-009`，把 repo_bound/slot_bound 安装动作和 InstallEvidence 输出接到 verify + compatibility 之后。
+
+### 风险
+
+1. `PackageVerifier` 当前仍通过 internal adapter 占位信任链和哈希校验，尚未绑定真实密码库；这符合 019 的“adapter 注入”边界，但后续接入真实 crypto/file provider 时必须保持 outward 结果仍只落到 `INF_E_OTA_VERIFY_FAIL`。
+2. 当前 `PackageVerifierPolicy` 只冻结了 verify_required、signature_algorithm、minimum_release_counter 和 allow_downgrade 四个最小字段；如后续需要 profile 级更多验证策略，应在 OTA 私有域扩展而不是倒灌到 contracts。
+
 ## 记录 #177
 
 - 日期：2026-04-07

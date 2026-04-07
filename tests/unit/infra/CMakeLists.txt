@@ -2115,6 +2115,26 @@ dasall_apply_common_options(dasall_ota_precheck_service_unit_test)
 add_test(NAME OTAPrecheckServiceTest COMMAND dasall_ota_precheck_service_unit_test)
 set_tests_properties(OTAPrecheckServiceTest PROPERTIES LABELS "unit;ota")
 
+add_executable(dasall_ota_package_verifier_unit_test
+  ota/PackageVerifierTest.cpp
+)
+
+target_include_directories(dasall_ota_package_verifier_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_ota_package_verifier_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_ota_package_verifier_unit_test)
+
+add_test(NAME OTAPackageVerifierTest COMMAND dasall_ota_package_verifier_unit_test)
+set_tests_properties(OTAPackageVerifierTest PROPERTIES LABELS "unit;ota")
+
 add_executable(dasall_ota_package_verifier_interface_unit_test
   OTAPackageVerifierInterfaceTest.cpp
 )
