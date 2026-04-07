@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #151
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-015 blocker recovery（TRC-BLK-001、TRC-BLK-002）
+- 状态：已完成
+
+### 任务选择
+
+1. 本轮按 project-implementation-cycle 检查 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 后，确认用户点名任务 `TRC-TODO-015` 仍被 `TRC-BLK-001`、`TRC-BLK-002` 阻塞，因此必须先进入 blocker recovery，而不能直接改 tracing bridge 代码。
+2. 核查当前仓库现状后发现，阻塞说明已经落后于实现：metrics 侧 `IMetricsProvider/IMeter` 与 audit 侧 `IAuditLogger` 已被 logging/policy/metrics/secret 等 bridge 实现稳定消费，并且 contract 测试里已有 `LoggingMetricsBridgeBoundaryContractTest`、`PolicyMetricsBridgeBoundaryContractTest`、`MetricsAuditBridgeBoundaryContractTest`、`PolicyAuditBridgeBoundaryContractTest` 等边界样板，因此 blocker 的“接口未冻结”前提不再成立。
+
+### 改动
+
+1. 完成 TRC-BLK-001/TRC-BLK-002 解阻回写：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md)，将 `TRC-TODO-015` 从 `Blocked` 调整为 `Not Started`，并补充 metrics/audit 最小桥接接口已冻结的证据说明。
+   - 同时将 blocker 表中的 `TRC-BLK-001`、`TRC-BLK-002` 标记为“已解阻（2026-04-07）”，明确解阻依据来自 metrics/audit 设计文档、公共接口头文件，以及现有 bridge 落地实现与 contract 样板。
+2. 完成最小接口冻结证据核查：
+   - metrics 侧确认 [infra/include/metrics/IMetricsProvider.h](/home/gangan/DASALL/infra/include/metrics/IMetricsProvider.h) 与 [infra/include/metrics/IMeter.h](/home/gangan/DASALL/infra/include/metrics/IMeter.h) 已稳定冻结 `get_meter`、`create_counter`/`create_gauge`/`create_histogram` 与 `record(sample)` 路径。
+   - audit 侧确认 [infra/include/audit/IAuditLogger.h](/home/gangan/DASALL/infra/include/audit/IAuditLogger.h) 已稳定冻结 `write_audit(event, context)` / `export_audit(query)` 写入与导出入口。
+   - tracing 侧桥接设计所依赖的指标名与审计事件锚点已在 [docs/architecture/DASALL_infra_tracing模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_tracing模块详细设计.md) 的 6.10 节冻结：`trace_span_started_total`、`trace_export_failure_total`、`trace_batch_queue_depth` 等指标，以及“采样策略变更 / 连续导出失败触发 degraded / shutdown 失败回退”三类审计事件。
+
+### 测试
+
+1. 本轮为 blocker recovery 文档收口，不新增实现代码。
+2. 由于解阻依据来自已存在并长期通过的公共接口与 bridge 样板，当前轮次以代码/设计证据核查作为完成标准，不单独重复执行大规模测试门禁；真正的构建与 contract 验收将在下一轮 `TRC-TODO-015` 实现提交中执行。
+
+### 结果
+
+1. `TRC-BLK-001`、`TRC-BLK-002` 已解除，`TRC-TODO-015` 现已进入可执行状态。
+2. 下一轮可以直接落 `TraceMetricsBridge` 与 `TraceAuditBridge` 骨架，而无需再为 metrics/audit 最小接口补设计占位。
+
+### 下一步
+
+1. 执行 `TRC-TODO-015`，新增 tracing metrics/audit bridge 骨架、单测、contract 边界测试与 CMake 接线。
+
+### 风险
+
+1. 当前解阻基于仓库内现有稳定接口与已通过的 bridge 模式；若后续 metrics/audit 公共接口发生 breaking change，需重新将 015 退回 blocked 并更新 tracing bridge 设计映射。
+
 ## 记录 #150
 
 - 日期：2026-04-07
