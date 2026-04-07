@@ -41,6 +41,7 @@ set_tests_properties(InfraDiagnosticsIntegrationTest PROPERTIES LABELS "integrat
 add_subdirectory(audit)
 add_subdirectory(config)
 add_subdirectory(logging)
+add_subdirectory(plugin)
 add_subdirectory(policy)
 add_subdirectory(secret)
 add_subdirectory(health)

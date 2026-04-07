@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #196
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-006 plugin 审计适配器
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-005` 已完成并推送后，`PLG-TODO-006` 成为用户指定 Phase 4 串行范围中的下一个可执行原子任务。
+2. `INF-TODO-016` 已完成，AuditService 与 `audit::IAuditLogger` 边界可直接复用；本轮唯一需要补齐的是 plugin 高风险动作的统一审计适配层，以及 plugin integration 入口尚未覆盖 AuditService 导出验证的问题。
+
+### 改动
+
+1. 新增 [infra/src/plugin/PluginAuditAdapter.h](../../infra/src/plugin/PluginAuditAdapter.h) 与 [infra/src/plugin/PluginAuditAdapter.cpp](../../infra/src/plugin/PluginAuditAdapter.cpp)，实现 `plugin.load`、`plugin.unload`、`plugin.policy_deny` 三类高风险动作的 AuditEvent/AuditContext 投影、write outcome 处理与适配器状态回传。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 PluginAuditAdapter.h/.cpp 纳入 plugin 私有源/头清单，确保 006 的适配器真实进入 `dasall_infra` 构建图。
+3. 更新 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt)，注册 `dasall_plugin_audit_adapter_unit_test` 目标。
+4. 新增 [tests/unit/infra/plugin/PluginAuditAdapterTest.cpp](../../tests/unit/infra/plugin/PluginAuditAdapterTest.cpp)，覆盖 load/unload/policy deny 成功 emit、invalid record 拒绝、缺失 audit logger 失败三类路径。
+5. 更新 [tests/integration/infra/CMakeLists.txt](../../tests/integration/infra/CMakeLists.txt)，新增 `add_subdirectory(plugin)`；同时新增 [tests/integration/infra/plugin/CMakeLists.txt](../../tests/integration/infra/plugin/CMakeLists.txt) 与 [tests/integration/infra/plugin/PluginAuditTraceIntegrationTest.cpp](../../tests/integration/infra/plugin/PluginAuditTraceIntegrationTest.cpp)，验证 plugin 审计事件经 AuditService 写入并可按 action 导出追踪。
+6. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-006-plugin审计适配器收敛.md](../todos/infrastructure/deliverables/PLG-TODO-006-plugin%E5%AE%A1%E8%AE%A1%E9%80%82%E9%85%8D%E5%99%A8%E6%94%B6%E6%95%9B.md)，记录 006 的输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+7. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-006` 回写为 Done，并补充本轮执行记录、版本记录 v1.10 与上游依赖状态修正。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_audit_trace_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginAuditTraceIntegrationTest"`
+2. 结果：
+   - `dasall_infra`、`dasall_plugin_audit_adapter_unit_test` 与 `dasall_plugin_audit_trace_integration_test` 全部构建通过。
+   - `PluginAuditAdapterTest` 与 `PluginAuditTraceIntegrationTest` 2/2 通过。
+
+### 结果
+
+1. plugin load/unload/policy deny 三类高风险动作现在拥有统一的 PluginAuditAdapter 适配层，审计 action、target、outcome、reason_code 与可选 result_code 语义已冻结。
+2. plugin integration 测试现在具备独立入口，可直接验证事件经 AuditService 写入、导出并按 `plugin.policy_deny` 动作过滤的链路。
+
+### 下一步
+
+1. 继续进入 `PLG-TODO-011`，补齐 PluginLifecycleManager 状态机骨架，并把 006 已冻结的审计适配层作为生命周期失败路径的观测出口复用。
+
+### 风险
+
+1. 006 目前只冻结了审计适配层和导出验证，实际 load/unload 调用点的接线仍需在 011 的 lifecycle skeleton 中落盘；在那之前，adapter 仍属于“可被调用但尚未接入主流程”的基础设施能力。
+
 ## 记录 #195
 
 - 日期：2026-04-07

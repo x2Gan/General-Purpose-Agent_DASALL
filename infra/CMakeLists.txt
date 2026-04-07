@@ -214,11 +214,13 @@ set(DASALL_INFRA_OTA_PUBLIC_HEADERS
 )
 
 set(DASALL_INFRA_PLUGIN_SOURCES
+  src/plugin/PluginAuditAdapter.cpp
   src/plugin/PluginManager.cpp
   src/plugin/PluginValidationPipeline.cpp
 )
 
 set(DASALL_INFRA_PLUGIN_PRIVATE_HEADERS
+  src/plugin/PluginAuditAdapter.h
   src/plugin/PluginValidationPipeline.h
 )
 
