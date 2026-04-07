@@ -189,6 +189,7 @@ set(DASALL_INFRA_OTA_SOURCES
   src/ota/InstallExecutor.cpp
   src/ota/SlotSwitchCoordinator.cpp
   src/ota/RollbackController.cpp
+  src/ota/OTAAuditBridge.cpp
 )
 
 set(DASALL_INFRA_OTA_PRIVATE_HEADERS
@@ -198,6 +199,7 @@ set(DASALL_INFRA_OTA_PRIVATE_HEADERS
   src/ota/InstallExecutor.h
   src/ota/SlotSwitchCoordinator.h
   src/ota/RollbackController.h
+  src/ota/OTAAuditBridge.h
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS

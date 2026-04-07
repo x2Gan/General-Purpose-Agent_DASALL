@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #184
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-013 OTAAuditBridge 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-013` 是当前最早的可执行观测出口任务，前置 `OTA-TODO-001`、`OTA-TODO-012` 均已完成，因此可直接进入 OTAAuditBridge 骨架。
+2. 013 的职责边界只要求收敛 precheck/apply/rollback 的统一审计桥；health probe 与 boot confirm 判定分别留给 014 和 011，不在本轮混入。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-013-OTAAuditBridge骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-013-OTAAuditBridge骨架收敛.md)，记录 013 的设计依据、Design->Build 映射、Build 合规复核与验证证据。
+2. 新增 [infra/src/ota/OTAAuditBridge.h](/home/gangan/DASALL/infra/src/ota/OTAAuditBridge.h) 与 [infra/src/ota/OTAAuditBridge.cpp](/home/gangan/DASALL/infra/src/ota/OTAAuditBridge.cpp)，冻结 OTA 审计私有事件、emit result、bridge status 和 `write_precheck_audit / write_apply_audit / write_rollback_audit` 三个入口。
+3. 新增 [tests/unit/infra/ota/OTAAuditBridgeTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/OTAAuditBridgeTest.cpp)，覆盖完整事件字段、precheck/apply/rollback outcome 映射、mandatory audit sink 和 sink write failure 两类负例。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 OTAAuditBridge 源码和 OTAAuditBridgeTest 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-013` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_ota_audit_bridge_unit_test`
+   - `ctest --test-dir build-ci -N -R "OTAAuditBridgeTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "OTAAuditBridgeTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `OTAAuditBridgeTest` 1 项。
+   - OTA 定向执行：`OTAAuditBridgeTest` 1/1 通过。
+   - 仓库级 unit 门：169/169 通过。
+
+### 结果
+
+1. `OTA-TODO-013` 已完成，OTA 现在具备统一审计桥骨架，能够对 `ota.precheck / ota.apply / ota.rollback` 生成稳定 action 和完整审计字段。
+2. mandatory audit sink 缺失和 audit sink 写失败都已变成显式、contract-shaped 失败，不再被静默吞没。
+
+### 下一步
+
+1. 若继续推进 OTA 健康出口，必须先执行 `OTA-TODO-020` 解阻 `OTA-TODO-011`，再进入 BootConfirmationMonitor。
+2. 011 完成后进入 `OTA-TODO-014`，把 backlog / pending_confirm / last_failure 等信号收敛为 OTAHealthProbe。
+
+### 风险
+
+1. 当前 OTAAuditBridge 只冻结了骨架与状态对象，还没有接入真实的 apply coordinator 或 rollback controller wiring；这属于后续集成任务范围。
+2. `ota.switch_boot_target`、`ota.mark_boot_success` 与 `ota.freeze_apply_channel` 仍是设计中列出的后续审计动作，当前轮次未提前扩张实现。
+
 ## 记录 #183
 
 - 日期：2026-04-07
