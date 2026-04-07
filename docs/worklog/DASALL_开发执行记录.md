@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #190
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-017 OTA 集成与故障注入测试入口
+- 状态：已完成
+
+### 任务选择
+
+1. 用户点名 `OTA-TODO-011、017`，但 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-011` 已完成且已推送，因此按 project-implementation-cycle 的“一轮只做 1 个可执行原子任务”规则，本轮选中 `OTA-TODO-017`。
+2. `OTA-TODO-015`、`OTA-TODO-016` 已完成，`OTA-BLK-04` 也已解阻；017 当前唯一缺口是 `tests/integration/infra/ota/` 目录和 OTA integration/failure 用例尚未落盘。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-017-OTA集成与故障注入测试入口收敛.md](../todos/infrastructure/deliverables/OTA-TODO-017-OTA集成与故障注入测试入口收敛.md)，记录 017 的输入依据、Design->Build 映射、Build 合规复核与验证结果。
+2. 新增 [tests/integration/infra/ota/CMakeLists.txt](../../tests/integration/infra/ota/CMakeLists.txt)，引入 `dasall_register_ota_integration_test(...)` helper，统一 OTA integration/failure 目标的 include、link 和 `integration;ota` 标签。
+3. 新增 [tests/integration/infra/ota/OTAWorkflowTest.cpp](../../tests/integration/infra/ota/OTAWorkflowTest.cpp)，串联 PackageVerifier、ArtifactCompatibilityEvaluator、InstallExecutor、SlotSwitchCoordinator 与 BootConfirmationMonitor，覆盖 `apply -> switch -> confirm -> success` 的最小闭环。
+4. 新增 [tests/integration/infra/ota/OTAFailureInjectionTest.cpp](../../tests/integration/infra/ota/OTAFailureInjectionTest.cpp)，覆盖 `verify_fail`、`confirm_timeout`、`rollback_fail` 三类失败注入路径。
+5. 更新 [tests/integration/CMakeLists.txt](../../tests/integration/CMakeLists.txt) 与 [tests/integration/infra/CMakeLists.txt](../../tests/integration/infra/CMakeLists.txt)，把 OTA integration 目标纳入顶层 discoverability 和 `dasall_integration_tests` 聚合门。
+6. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 的 017 回写证据，将状态更新为 `Done`。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_integration_tests`
+   - `ctest --test-dir build-ci -N -L integration`
+   - `ctest --test-dir build-ci -N -L ota`
+   - `ctest --test-dir build-ci --output-on-failure -L ota`
+2. 结果：
+   - `dasall_integration_tests` 聚合门通过，20/20 integration tests passed。
+   - `ctest -N -L integration` 可发现 20 个 integration 测试，其中包含 `OTAWorkflowTest` 与 `OTAFailureInjectionTest`。
+   - `ctest -N -L ota` 可发现 21 个 OTA 标签测试入口；`ctest -L ota` 通过，21/21 tests passed，其中新增的 integration 入口为 `OTAWorkflowTest` 与 `OTAFailureInjectionTest`。
+
+### 结果
+
+1. OTA 现在具备独立的 integration/failure 入口，仓库级 discoverability 不再停留在 unit/contract 层。
+2. `verify_fail`、`confirm_timeout`、`rollback_fail` 三类关键失败路径已进入自动化 OTA 子集，可为后续更高层时序回归提供基线。
+
+### 下一步
+
+1. 若继续推进 OTA 设计阻塞面，可进入 `OTA-TODO-021`，收敛 `infra.ota.*` profile 键命名与覆盖优先级。
+2. 若要继续增强 OTA 集成深度，可在后续轮次把 mock boot control 场景扩展到真实 platform adapter 接线。
+
+### 风险
+
+1. 017 当前仍以 mock adapter/provider 驱动 OTA integration；真实 platform adapter 的跨重启行为还需后续轮次补实机或平台集成验证。
+
 ## 记录 #189
 
 - 日期：2026-04-07
