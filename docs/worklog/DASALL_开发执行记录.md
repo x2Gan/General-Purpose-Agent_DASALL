@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #163
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-016 EvidenceCollector 证据聚合骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-016` 的前置 `DIA-TODO-003`、`DIA-TODO-015` 已完成，因此本轮最小原子任务就是把 executor 输出聚合成真实 `EvidenceBundle`。
+2. 016 必须开始形成独立 integration 证据，但又不能提前做 017 的 snapshot assembler；因此本轮只把 facade 的 success path 接到 `EvidenceCollector`，再用新的 diagnostics integration test 验证 evidence refs 的结构。
+
+### 改动
+
+1. 新增 diagnostics evidence collector 私有实现：
+   - 新增 [infra/src/diagnostics/EvidenceCollector.h](/home/gangan/DASALL/infra/src/diagnostics/EvidenceCollector.h) 与 [infra/src/diagnostics/EvidenceCollector.cpp](/home/gangan/DASALL/infra/src/diagnostics/EvidenceCollector.cpp)，实现 `CommandExecutionResult -> EvidenceBundle` 的聚合逻辑。
+   - 聚合规则保持引用语义：优先复用 executor 已给出的 `logs://`、`metrics://`、`health://` 引用；缺失时回退到 diagnostics 内建 ref；`errors_ref` 保持 success/failure 都可追踪。
+2. 把 evidence collector 接到 facade success path：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，让 executor 成功后先进入 `EvidenceCollector`，再把 `logs_ref`、`metrics_ref`、`health_ref`、`errors_ref` 与 artifact refs 回填进 snapshot。
+3. 新增 diagnostics integration 证据：
+   - 更新 [tests/integration/infra/CMakeLists.txt](/home/gangan/DASALL/tests/integration/infra/CMakeLists.txt)，注册 `dasall_infra_diagnostics_integration_test` / `InfraDiagnosticsIntegrationTest`。
+   - 新增 [tests/integration/infra/InfraDiagnosticsIntegrationTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsIntegrationTest.cpp)，验证真实 facade pipeline 产出的 `snapshot.evidence_refs` 同时包含 logs/metrics/health/errors 四类可追踪引用。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_integration_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsTypesTest|InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest"`
+2. 结果：
+   - `dasall_infra_diagnostics_integration_test` 与 `dasall_infra_diagnostics_smoke_integration_test` 构建通过。
+   - `DiagnosticsTypesTest`、`InfraDiagnosticsIntegrationTest`、`InfraDiagnosticsSmokeTest` 共 3/3 通过。
+3. 说明：
+   - 由于 `build-ci` 里之前还没有新的 integration target，本轮先显式执行了一次 `cmake -S . -B build-ci` 刷新生成图，再继续增量构建。
+
+### 结果
+
+1. `DIA-TODO-016` 已完成，diagnostics 主链现在具备真实 `Registry -> PolicyGuard -> Executor -> EvidenceCollector` 四段骨架，EvidenceBundle 不再停留在纯对象定义层。
+2. 下一步可以直接进入 `DIA-TODO-017`，把 snapshot 组装从 facade 中拆到真实 `SnapshotAssembler`。
+
+### 下一步
+
+1. 进入 `DIA-TODO-017`，实现 `SnapshotAssembler`，把 snapshot_id、summary、evidence_refs 组装从 facade 提炼到独立组件。
+2. 017 完成后回看 diagnostics 主链阶段是否还残留不应继续留在 facade 的 placeholder 逻辑。
+
+### 风险
+
+1. 当前 `EvidenceCollector` 仍使用内建 fallback ref，而没有接真实 logging/metrics/health/error 提供者；后续如果直接把具体实现塞进 collector，会破坏其聚合职责边界。
+2. facade 仍然暂时负责 snapshot 对象填充，直到 017 把 assembler 提炼出来；在那之前不应继续往 facade 增加更多快照字段拼装逻辑。
+
 ## 记录 #162
 
 - 日期：2026-04-07

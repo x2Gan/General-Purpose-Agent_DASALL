@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "diagnostics/CommandExecutor.h"
+#include "diagnostics/EvidenceCollector.h"
 
 namespace dasall::infra::diagnostics {
 namespace {
@@ -124,10 +125,18 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
         });
   }
 
+  const EvidenceCollector collector;
+  const auto evidence = collector.collect(command, execution);
   auto snapshot = build_snapshot(command);
   snapshot.collected_at = execution.executed_at;
   snapshot.summary = execution.summary;
-  snapshot.evidence_refs = execution.evidence_refs;
+  snapshot.evidence_refs = {evidence.logs_ref,
+                            evidence.metrics_ref,
+                            evidence.health_ref,
+                            evidence.errors_ref};
+  snapshot.evidence_refs.insert(snapshot.evidence_refs.end(),
+                                evidence.artifacts.begin(),
+                                evidence.artifacts.end());
   snapshots_[snapshot.snapshot_id] = snapshot;
   reset_failures();
   return DiagnosticsSnapshotResult::success(
