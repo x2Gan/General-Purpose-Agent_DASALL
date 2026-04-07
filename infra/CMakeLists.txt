@@ -171,6 +171,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/watchdog/WatchdogSnapshot.h
   include/IInfrastructureService.h
   include/health/IHealthProbe.h
+  include/diagnostics/IDiagnosticsCommandRegistry.h
   include/diagnostics/IDiagnosticsPolicyGuard.h
   include/diagnostics/IDiagnosticsService.h
   include/logging/IAuditLinkAdapter.h

@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #157
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-011 IDiagnosticsCommandRegistry 接口头文件冻结
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-011` 是当前唯一剩余的 interface freeze 任务；其设计 blocker `DIA-BLK-002` 已在 `记录 #155` 中解阻，因此本轮应直接完成头文件落盘而不是继续停留在设计态。
+2. 真正的实现前提不是新的 TODO blocker，而是代码级对象缺口：虽然设计文档已冻结 `CommandCatalog` / `ValidationResult` 语义，但 [infra/include/diagnostics/DiagnosticsTypes.h](/home/gangan/DASALL/infra/include/diagnostics/DiagnosticsTypes.h) 中还没有这两个类型定义。若忽略这一点，`IDiagnosticsCommandRegistry.h` 只能停留在前向声明层，后续 `DiagnosticsCommandRegistryTest` 和 `DIA-TODO-013` 都无法可靠编译。
+
+### 改动
+
+1. 补齐 registry 公开接口的直接代码依赖：
+   - 更新 [infra/include/diagnostics/DiagnosticsTypes.h](/home/gangan/DASALL/infra/include/diagnostics/DiagnosticsTypes.h)，新增 `CommandCatalogEntry`、`CommandCatalog`、`ValidationResult` 与 `kDiagnosticsCatalogSchemaVersion`，把 design 阶段已冻结的 discoverability/validation 语义落成最小可编译对象。
+   - 这些新增对象只覆盖 `catalog_id/profile_id/schema_version/entries/generated_at` 和 `accepted/catalog_ref/matched_command_ref/schema_ref/normalized_command/blocking_errors/warnings/field_paths/result_code`，没有提前内联完整 `allowed_commands` 参数 schema，因此没有越过 `DIA-BLK-003`。
+2. 冻结 registry 公开头文件与构建入口：
+   - 新增 [infra/include/diagnostics/IDiagnosticsCommandRegistry.h](/home/gangan/DASALL/infra/include/diagnostics/IDiagnosticsCommandRegistry.h)，仅暴露 `list_commands() -> CommandCatalog` 与 `validate(const DiagnosticsCommand&) -> ValidationResult`。
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，将 `IDiagnosticsCommandRegistry.h` 纳入 diagnostics public headers。
+3. 补齐 registry unit 证据并回写任务台账：
+   - 新增 [tests/unit/infra/DiagnosticsCommandRegistryTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsCommandRegistryTest.cpp)，用静态目录 stub 冻结三类能力：catalog discoverability、validate 成功路径、validate 失败时的 `blocking_errors` / `field_paths` 可定位语义。
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，注册 `DiagnosticsCommandRegistryTest`。
+   - 回写 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md)，将 `DIA-TODO-011` 标记为 `Done`，并把接口冻结阶段收口为已完成。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_infra dasall_diagnostics_service_interface_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_command_registry_unit_test`
+   - `ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest" --output-on-failure`
+2. 结果：
+   - `dasall_infra`、`dasall_diagnostics_service_interface_unit_test` 与 `dasall_diagnostics_command_registry_unit_test` 构建通过。
+   - `DiagnosticsServiceInterfaceTest`、`DiagnosticsCommandRegistryTest` 共 2/2 通过。
+3. 说明：
+   - 本轮在一次多 target 构建里遇到 `dasall_diagnostics_command_registry_unit_test` 解析异常，但 build graph 中 target 已正常生成；随后单独构建该目标并重新执行 ctest 后通过，因此问题属于命令层噪声，不影响任务完成性。
+
+### 结果
+
+1. `DIA-TODO-011` 已完成，diagnostics 的三类公开接口 `IDiagnosticsService`、`IDiagnosticsPolicyGuard`、`IDiagnosticsCommandRegistry` 已全部冻结到可编译头文件层。
+2. diagnostics 后续顺序进一步收敛：`DIA-TODO-012` 与 `DIA-TODO-014` 可直接推进；`DIA-TODO-013` 仍必须等待 `DIA-BLK-003`，不能把当前最小 `ValidationResult` 代码定义误当成完整 schema 冻结。
+
+### 下一步
+
+1. 若继续串行推进 diagnostics，优先候选是 `DIA-TODO-012` 或 `DIA-TODO-014`，两者都已具备接口前提。
+2. 若选择 registry 实现链，则必须先单列处理 `DIA-BLK-003`，冻结 `health.snapshot`、`queue.stats`、`thread.dump` 的完整参数 schema。
+
+### 风险
+
+1. 当前 `ValidationResult` 的代码定义只承载 ref/summary + machine-locatable failures；后续若把 policy/audit 结果或完整 schema 直接塞进该对象，会同时破坏职责边界与 `DIA-BLK-003` 的阻塞纪律。
+2. `DiagnosticsCommandRegistryTest` 目前验证的是接口冻结和结果对象边界，不代表真实 `CommandRegistry.cpp` 已实现 allowlist/schema 校验逻辑；执行链仍需后续骨架任务与 schema 解阻支撑。
+
 ## 记录 #156
 
 - 日期：2026-04-07

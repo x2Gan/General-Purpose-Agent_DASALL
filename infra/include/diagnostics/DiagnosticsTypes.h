@@ -38,6 +38,8 @@ inline constexpr std::array<std::string_view, 3> kReadOnlyCommandWhitelist{
     "thread.dump",
 };
 
+inline constexpr std::string_view kDiagnosticsCatalogSchemaVersion = "1";
+
 [[nodiscard]] inline bool is_read_only_command_whitelisted(std::string_view command_name) {
   return std::find(kReadOnlyCommandWhitelist.begin(),
                    kReadOnlyCommandWhitelist.end(),
@@ -96,6 +98,104 @@ struct CommandDecision {
 
   [[nodiscard]] std::optional<contracts::ResultCode> mapped_result_code() const {
     return map_reason_code_to_result_code(reason_code);
+  }
+};
+
+struct CommandCatalogEntry {
+  std::string command_name;
+  std::string request_scope;
+  std::string arg_schema_ref;
+  std::string arg_schema_summary;
+  bool read_only = false;
+
+  [[nodiscard]] bool is_valid() const {
+    return !command_name.empty() && is_read_only_command_whitelisted(command_name) &&
+           !request_scope.empty() && !arg_schema_ref.empty() &&
+           !arg_schema_summary.empty() && read_only;
+  }
+};
+
+struct CommandCatalog {
+  std::string catalog_id;
+  std::string profile_id;
+  std::string schema_version = std::string(kDiagnosticsCatalogSchemaVersion);
+  std::vector<CommandCatalogEntry> entries;
+  std::string generated_at;
+
+  [[nodiscard]] bool is_valid() const {
+    if (catalog_id.empty() || profile_id.empty() || generated_at.empty() ||
+        schema_version != kDiagnosticsCatalogSchemaVersion || entries.empty()) {
+      return false;
+    }
+
+    return std::all_of(entries.begin(), entries.end(), [](const CommandCatalogEntry& entry) {
+      return entry.is_valid();
+    });
+  }
+};
+
+struct ValidationResult {
+  bool accepted = false;
+  std::string catalog_ref;
+  std::string matched_command_ref;
+  std::string schema_ref;
+  DiagnosticsCommand normalized_command;
+  std::vector<std::string> blocking_errors;
+  std::vector<std::string> warnings;
+  std::vector<std::string> field_paths;
+  contracts::ResultCode result_code = contracts::ResultCode::ValidationFieldMissing;
+
+  [[nodiscard]] static ValidationResult success(std::string catalog_ref,
+                                                std::string matched_command_ref,
+                                                std::string schema_ref,
+                                                DiagnosticsCommand normalized_command,
+                                                std::vector<std::string> warnings = {}) {
+    return ValidationResult{
+        .accepted = true,
+        .catalog_ref = std::move(catalog_ref),
+        .matched_command_ref = std::move(matched_command_ref),
+        .schema_ref = std::move(schema_ref),
+        .normalized_command = std::move(normalized_command),
+        .blocking_errors = {},
+        .warnings = std::move(warnings),
+        .field_paths = {},
+        .result_code = contracts::ResultCode::RuntimeRetryExhausted,
+    };
+  }
+
+  [[nodiscard]] static ValidationResult failure(std::vector<std::string> blocking_errors,
+                                                std::vector<std::string> field_paths,
+                                                std::string catalog_ref = {},
+                                                std::string matched_command_ref = {},
+                                                std::string schema_ref = {},
+                                                std::vector<std::string> warnings = {}) {
+    return ValidationResult{
+        .accepted = false,
+        .catalog_ref = std::move(catalog_ref),
+        .matched_command_ref = std::move(matched_command_ref),
+        .schema_ref = std::move(schema_ref),
+        .normalized_command = {},
+        .blocking_errors = std::move(blocking_errors),
+        .warnings = std::move(warnings),
+        .field_paths = std::move(field_paths),
+        .result_code = contracts::ResultCode::ValidationFieldMissing,
+    };
+  }
+
+  [[nodiscard]] bool has_blocking_findings() const {
+    return !blocking_errors.empty() || !field_paths.empty();
+  }
+
+  [[nodiscard]] bool is_valid() const {
+    if (accepted) {
+      return !catalog_ref.empty() && !matched_command_ref.empty() && !schema_ref.empty() &&
+             normalized_command.is_read_only_whitelisted() && blocking_errors.empty() &&
+             field_paths.empty() &&
+             result_code != contracts::ResultCode::ValidationFieldMissing;
+    }
+
+    return has_blocking_findings() &&
+           result_code == contracts::ResultCode::ValidationFieldMissing;
   }
 };
 

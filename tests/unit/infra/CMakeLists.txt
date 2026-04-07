@@ -1395,6 +1395,21 @@ dasall_apply_common_options(dasall_diagnostics_service_interface_unit_test)
 add_test(NAME DiagnosticsServiceInterfaceTest COMMAND dasall_diagnostics_service_interface_unit_test)
 set_tests_properties(DiagnosticsServiceInterfaceTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_diagnostics_command_registry_unit_test
+  DiagnosticsCommandRegistryTest.cpp
+)
+
+target_link_libraries(dasall_diagnostics_command_registry_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_diagnostics_command_registry_unit_test)
+
+add_test(NAME DiagnosticsCommandRegistryTest COMMAND dasall_diagnostics_command_registry_unit_test)
+set_tests_properties(DiagnosticsCommandRegistryTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_diagnostics_snapshot_export_unit_test
   DiagnosticsSnapshotExportTest.cpp
 )
