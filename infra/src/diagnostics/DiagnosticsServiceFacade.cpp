@@ -4,6 +4,8 @@
 #include <string_view>
 #include <utility>
 
+#include "diagnostics/CommandExecutor.h"
+
 namespace dasall::infra::diagnostics {
 namespace {
 
@@ -104,7 +106,28 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
         });
   }
 
+  const CommandExecutor executor;
+  const auto execution = executor.execute(command);
+  if (!execution.executed) {
+    note_failure("command_execute_failed");
+    return DiagnosticsSnapshotResult::failure(
+        execution.result_code,
+        execution.error.has_value() ? execution.error->details.message
+                                    : std::string("diagnostics command execution failed"),
+        std::string("diagnostics.execute"),
+        std::string(kDiagnosticsServiceFacadeSourceRef),
+        CommandDecision{
+            .allowed = true,
+            .reason_code = std::string(),
+            .policy_ref = std::string("policy://diagnostics/readonly"),
+            .denied_rule_id = std::string(),
+        });
+  }
+
   auto snapshot = build_snapshot(command);
+  snapshot.collected_at = execution.executed_at;
+  snapshot.summary = execution.summary;
+  snapshot.evidence_refs = execution.evidence_refs;
   snapshots_[snapshot.snapshot_id] = snapshot;
   reset_failures();
   return DiagnosticsSnapshotResult::success(
@@ -194,7 +217,7 @@ DiagnosticsSnapshot DiagnosticsServiceFacade::build_snapshot(const DiagnosticsCo
       .snapshot_id = std::string("diag-snapshot-") + std::to_string(next_snapshot_index_++),
       .command = command,
       .collected_at = current_time_rfc3339_stub(),
-      .summary = std::string("diagnostics facade placeholder snapshot"),
+  .summary = std::string("diagnostics executor skeleton snapshot"),
       .evidence_refs = {std::string("logs://diagnostics/facade"),
                         std::string("health://diagnostics/facade")},
       .redaction_profile = RedactionProfile::Strict,

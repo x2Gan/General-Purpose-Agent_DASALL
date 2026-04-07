@@ -157,12 +157,14 @@ set(DASALL_INFRA_POLICY_PRIVATE_HEADERS
 set(DASALL_INFRA_DIAGNOSTICS_SOURCES
   src/diagnostics/CommandRegistry.cpp
   src/diagnostics/CommandPolicyGuard.cpp
+  src/diagnostics/CommandExecutor.cpp
   src/diagnostics/DiagnosticsServiceFacade.cpp
 )
 
 set(DASALL_INFRA_DIAGNOSTICS_PRIVATE_HEADERS
   src/diagnostics/CommandRegistry.h
   src/diagnostics/CommandPolicyGuard.h
+  src/diagnostics/CommandExecutor.h
   src/diagnostics/DiagnosticsServiceFacade.h
 )
 

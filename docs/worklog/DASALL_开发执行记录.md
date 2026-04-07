@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #162
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-015 CommandExecutor 执行骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-015` 的前置 `DIA-TODO-014` 已完成，因此本轮最小原子任务就是把已通过准入的命令推进到真实 executor success/failure skeleton。
+2. 015 的验收同时包含 unit 与 smoke，这意味着 executor 不能只停留在一个未接线的私有类上；本轮必须让 `DiagnosticsServiceFacade.execute()` 真实进入 executor 路径，但仍不提前把 evidence/redaction/assembler/store 混进来。
+
+### 改动
+
+1. 新增 diagnostics executor 私有实现：
+   - 新增 [infra/src/diagnostics/CommandExecutor.h](/home/gangan/DASALL/infra/src/diagnostics/CommandExecutor.h) 与 [infra/src/diagnostics/CommandExecutor.cpp](/home/gangan/DASALL/infra/src/diagnostics/CommandExecutor.cpp)，定义私有 `CommandExecutionResult`，并实现 `health.snapshot`、`queue.stats`、`thread.dump` 三条只读命令的最小 success/failure skeleton。
+   - 当前 failure 语义已落到 diagnostics 私有错误码映射：`queue.stats --queue=missing` -> `INF_E_DIAG_EXEC_FAIL`，`thread.dump` 在极小 timeout 下 -> `INF_E_DIAG_EXEC_TIMEOUT`。
+2. 把 executor 接到 facade execute 路径：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，让 whitelist/safe_mode 之后的 success path 进入 `CommandExecutor`，并把 `executed_at`、`summary`、`evidence_refs` 回填到 snapshot。
+   - executor failure 时，facade 现在会返回结构化 `DiagnosticsSnapshotResult::failure`，同时保留“命令已通过准入”的 `CommandDecision`。
+3. 扩展 unit/smoke 证据：
+   - 更新 [tests/unit/infra/DiagnosticsCommandPolicyTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsCommandPolicyTest.cpp)，新增 allow 后调用真实 executor 的断言，验证 queue.stats 成功路径的结构化输出。
+   - 更新 [tests/integration/infra/InfraDiagnosticsSmokeTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsSmokeTest.cpp)，把 execute/get/export round-trip 的 summary 锚点切到 executor 输出，并新增 executor runtime failure 的 smoke 用例。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_diagnostics_command_policy_unit_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsCommandPolicyTest|InfraDiagnosticsSmokeTest"`
+2. 结果：
+   - `dasall_diagnostics_command_policy_unit_test` 与 `dasall_infra_diagnostics_smoke_integration_test` 构建通过。
+   - `DiagnosticsCommandPolicyTest`、`InfraDiagnosticsSmokeTest` 共 2/2 通过。
+3. 说明：
+   - 继续沿用 `build-ci` 显式构建/ctest 路径验收，因为当前会话内 VS Code CMake Tools 仍无法直接配置该项目。
+
+### 结果
+
+1. `DIA-TODO-015` 已完成，diagnostics 主链现在具备真实 `Registry -> PolicyGuard -> Executor` 三段骨架，facade 的成功/失败路径不再完全依赖本地 placeholder snapshot。
+2. 下一步可以直接进入 `DIA-TODO-016`，把 executor 的结构化输出推进到 `EvidenceCollector` 聚合骨架。
+
+### 下一步
+
+1. 进入 `DIA-TODO-016`，实现 `EvidenceCollector`，把 executor 输出与日志/指标/健康/错误摘要收敛为 `EvidenceBundle`。
+2. 016 完成后推进 `DIA-TODO-017`，实现 `SnapshotAssembler`，把 snapshot 组装从 facade 中拆出。
+
+### 风险
+
+1. 当前 executor 仍是只读命令 skeleton，不能被误解为真实沙箱或系统命令执行器；后续实现若开始调用外部进程，必须先补执行隔离与资源约束设计。
+2. facade 仍暂时承担 snapshot 组装职责，直到 016/017 把 evidence collect 与 snapshot assemble 正式拆出；在那之前不能继续把组装逻辑堆回 facade。
+
 ## 记录 #161
 
 - 日期：2026-04-07

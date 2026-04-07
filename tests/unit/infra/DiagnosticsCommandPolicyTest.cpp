@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include "InfraContext.h"
+#include "diagnostics/CommandExecutor.h"
 #include "diagnostics/CommandRegistry.h"
 #include "diagnostics/CommandPolicyGuard.h"
 #include "diagnostics/IDiagnosticsPolicyGuard.h"
@@ -213,6 +214,40 @@ void test_policy_guard_maps_policy_denies_to_stable_command_decisions() {
                "policy guard should surface the matched deny rule as denied_rule_id");
 }
 
+void test_executor_runs_after_policy_allow() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  dasall::infra::diagnostics::CommandRegistry registry;
+  StaticSecurityPolicyManager policy_manager(dasall::infra::policy::PolicyDecision::Allow);
+  dasall::infra::diagnostics::CommandPolicyGuard policy_guard(policy_manager);
+  dasall::infra::diagnostics::CommandExecutor executor;
+
+  const auto validation = registry.validate(make_command("queue.stats", {std::string("--queue=main")}));
+  assert_true(validation.accepted && validation.is_valid(),
+              "registry should accept queue.stats before executor checks");
+
+  const auto decision = policy_guard.authorize(
+      validation.normalized_command,
+      dasall::infra::InfraContext{
+          .request_id = std::string("req-diag-015"),
+          .session_id = std::string("session-diag-015"),
+          .trace_id = std::string("trace-diag-015"),
+          .task_id = std::string("task-diag-015"),
+          .parent_task_id = std::string("parent-diag-015"),
+          .lease_id = std::string("lease-diag-015"),
+      });
+  assert_true(decision.allowed && decision.is_valid(),
+              "policy guard should allow queue.stats before executor runs");
+
+  const auto execution = executor.execute(validation.normalized_command);
+  assert_true(execution.executed && execution.is_valid(),
+              "executor should produce a structured success result for allowed diagnostics commands");
+  assert_equal("diagnostics executor queue stats",
+               execution.summary,
+               "executor should keep a stable queue.stats summary for downstream snapshot assembly");
+}
+
 }  // namespace
 
 int main() {
@@ -220,6 +255,7 @@ int main() {
     test_registry_output_can_flow_to_policy_guard();
     test_policy_guard_keeps_denial_surface_observable();
     test_policy_guard_maps_policy_denies_to_stable_command_decisions();
+    test_executor_runs_after_policy_allow();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

@@ -182,7 +182,7 @@
 | DIA-TODO-012 | Done | 实现 DiagnosticsServiceFacade 生命周期与 safe_mode 骨架 | diagnostics 设计 6.2/6.7/6.8/6.9 | 6.2 DiagnosticsServiceFacade；6.8 兜底策略；6.9 safe_mode.failure_threshold | L2 | infra/src/diagnostics/DiagnosticsServiceFacade.cpp | DiagnosticsServiceFacade | unit：DiagnosticsServiceInterfaceTest；failure：InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsServiceInterfaceTest|InfraDiagnosticsSmokeTest" --output-on-failure | DIA-TODO-010 | 无（2026-03-30 已由 INF-BLK-08 校准解阻） | 无；可直接基于已落盘的 IDiagnosticsService 请求/返回对象推进 | DiagnosticsServiceFacade.cpp、DiagnosticsServiceFacade.h、DiagnosticsServiceInterfaceTest.cpp、InfraDiagnosticsSmokeTest.cpp；2026-04-07 已落盘 facade 生命周期/safe_mode 骨架并通过 unit + smoke integration 验收 | 仅当 execute/get/export 生命周期、safe_mode 进入条件与失败可观测路径可二值判定时完成 |
 | DIA-TODO-013 | Done | 实现 CommandRegistry 白名单治理骨架 | diagnostics 设计 6.2/6.3/6.7；11.1 | 6.2 CommandRegistry；6.5.2 allowed_commands 参数 schema；7 Design->Build | L2 | infra/src/diagnostics/CommandRegistry.cpp | CommandRegistry | unit：DiagnosticsCommandRegistryTest；unit：DiagnosticsCommandPolicyTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_diagnostics_command_registry_unit_test && cmake --build build-ci --target dasall_diagnostics_command_policy_unit_test && ctest --test-dir build-ci -R "DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest" --output-on-failure | DIA-TODO-011 | 无（2026-04-07 已由 DIA-BLK-003 解阻） | 无 | CommandRegistry.cpp、CommandRegistry.h、DiagnosticsCommandRegistryTest.cpp、DiagnosticsCommandPolicyTest.cpp、tests/unit/infra/CMakeLists.txt、infra/CMakeLists.txt；2026-04-07 已落盘真实 registry validate/capability gate 骨架并通过 2 条 unit 测试 | 仅当非白名单命令拒绝、参数非法路径可判定、空 args 可按 schema 规范化，且 registry 输出可稳定交给 policy handoff 测试时完成 |
 | DIA-TODO-014 | Done | 实现 CommandPolicyGuard 准入骨架 | diagnostics 设计 6.2/6.3/6.4/6.7 | 6.2 CommandPolicyGuard；6.4 依赖关系 | L2 | infra/src/diagnostics/CommandPolicyGuard.cpp | CommandPolicyGuard | unit：DiagnosticsCommandPolicyTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_diagnostics_command_policy_unit_test && ctest --test-dir build-ci -R "DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest" --output-on-failure | DIA-TODO-002、DIA-TODO-009 | 无 | 无 | CommandPolicyGuard.cpp、CommandPolicyGuard.h、DiagnosticsCommandPolicyTest.cpp、infra/CMakeLists.txt；2026-04-07 已落盘真实 policy query translation 与 allow/deny skeleton，并通过 registry+policy 2 条 unit 测试 | 仅当 allow/deny 双路径都能返回 policy_ref，且实现只依赖 ISecurityPolicyManager 抽象时完成 |
-| DIA-TODO-015 | Not Started | 实现 CommandExecutor 执行骨架 | diagnostics 设计 6.2/6.3/6.7/6.8 | 6.2 CommandExecutor；6.8 执行失败 | L2 | infra/src/diagnostics/CommandExecutor.cpp | CommandExecutor | unit：DiagnosticsCommandPolicyTest；failure：InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsCommandPolicyTest|InfraDiagnosticsSmokeTest" --output-on-failure | DIA-TODO-014 | 无 | 无 | CommandExecutor.cpp、执行测试 | 仅当超时、执行失败、资源不可用三类错误可结构化返回且不越权执行变更型命令时完成 |
+| DIA-TODO-015 | Done | 实现 CommandExecutor 执行骨架 | diagnostics 设计 6.2/6.3/6.7/6.8 | 6.2 CommandExecutor；6.8 执行失败 | L2 | infra/src/diagnostics/CommandExecutor.cpp | CommandExecutor | unit：DiagnosticsCommandPolicyTest；failure：InfraDiagnosticsSmokeTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_diagnostics_command_policy_unit_test && cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test && ctest --test-dir build-ci -R "DiagnosticsCommandPolicyTest|InfraDiagnosticsSmokeTest" --output-on-failure | DIA-TODO-014 | 无 | 无 | CommandExecutor.cpp、CommandExecutor.h、DiagnosticsCommandPolicyTest.cpp、DiagnosticsServiceFacade.cpp、InfraDiagnosticsSmokeTest.cpp、infra/CMakeLists.txt；2026-04-07 已落盘真实 executor success/failure skeleton 并通过 unit+smoke 2 条测试 | 仅当超时、执行失败、资源不可用三类错误可结构化返回且不越权执行变更型命令时完成 |
 | DIA-TODO-016 | Not Started | 实现 EvidenceCollector 证据聚合骨架 | diagnostics 设计 6.2/6.3/6.7；架构 9.5 | 6.2 EvidenceCollector；6.7 步骤 5 | L2 | infra/src/diagnostics/EvidenceCollector.cpp | EvidenceCollector | unit：DiagnosticsTypesTest；integration：InfraDiagnosticsIntegrationTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsTypesTest|InfraDiagnosticsIntegrationTest" --output-on-failure | DIA-TODO-003、DIA-TODO-015 | 无 | 无 | EvidenceCollector.cpp、聚合测试 | 仅当日志、指标、健康、错误摘要四类引用可进入 EvidenceBundle，且不引入相邻组件实现依赖时完成 |
 | DIA-TODO-017 | Not Started | 实现 SnapshotAssembler 快照组装骨架 | diagnostics 设计 6.2/6.7 | 6.2 SnapshotAssembler；6.7 步骤 7 | L2 | infra/src/diagnostics/SnapshotAssembler.cpp | SnapshotAssembler | unit：DiagnosticsSnapshotExportTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R DiagnosticsSnapshotExportTest --output-on-failure | DIA-TODO-004、DIA-TODO-016 | 无 | 无 | SnapshotAssembler.cpp、快照测试 | 仅当 snapshot_id 生成、summary 组装、evidence_refs 引用绑定都可重复验证时完成 |
 | DIA-TODO-018 | Blocked | 实现 RedactionEngine 脱敏骨架 | diagnostics 设计 6.2/6.3/6.8/6.9；11.1 | 6.2 RedactionEngine；6.8 脱敏失败；11.1 D-BLK-02 | L2 | infra/src/diagnostics/RedactionEngine.cpp | RedactionEngine | unit：DiagnosticsRedactionTest；failure：DiagnosticsRedactionFailureTest | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra && ctest --test-dir build-ci -R "DiagnosticsRedactionTest|DiagnosticsRedactionFailureTest" --output-on-failure | DIA-TODO-017 | DIA-BLK-004 | 先冻结字段分级、redaction.profile 语义和 deny-list 规则矩阵 | RedactionEngine.cpp、脱敏测试或阻塞记录 | 仅当敏感字段不落盘、脱敏失败阻断导出且测试可验证时完成 |
@@ -213,7 +213,7 @@
 | A 对象与错误码冻结 | DIA-TODO-001~006 | 可并行 | 先冻结核心对象与错误语义，避免实现期字段漂移 |
 | B 接口前置补设计 | DIA-TODO-008 | 已完成 | 2026-04-07 已把剩余设计缺口收敛到 registry/catalog 对象与 validate 返回语义 |
 | C 接口冻结 | DIA-TODO-009、DIA-TODO-011 | 已完成 | 2026-04-07 已完成 IDiagnosticsPolicyGuard 与 IDiagnosticsCommandRegistry 公开接口冻结 |
-| D 主链路骨架 | DIA-TODO-012、DIA-TODO-013、DIA-TODO-014、DIA-TODO-015、DIA-TODO-016、DIA-TODO-017 | 串行推进中 | 2026-04-07 已完成 DIA-TODO-012、DIA-TODO-013、DIA-TODO-014；下一步继续按 015 -> 016 -> 017 推进 |
+| D 主链路骨架 | DIA-TODO-012、DIA-TODO-013、DIA-TODO-014、DIA-TODO-015、DIA-TODO-016、DIA-TODO-017 | 串行推进中 | 2026-04-07 已完成 DIA-TODO-012、DIA-TODO-013、DIA-TODO-014、DIA-TODO-015；下一步继续按 016 -> 017 推进 |
 | E 脱敏/落盘/导出 | DIA-TODO-018、DIA-TODO-019、DIA-TODO-020 | 串行按阻塞项解锁 | 先脱敏，再存储，再导出 |
 | F 桥接与门禁 | DIA-TODO-021、DIA-TODO-022、DIA-TODO-023、DIA-TODO-024、DIA-TODO-025 | 可并行，但 integration 闭环仍以后置依赖为前提 | 指标/审计桥接依赖相邻组件接口，完整 integration 依赖组件实现落盘 |
 | G 证据收口 | DIA-TODO-026 | 串行 | 回写质量门、阻塞变化与 INF-TODO-018 状态 |
@@ -294,7 +294,7 @@
 
 1. DiagnosticsCommand、CommandDecision、EvidenceBundle、DiagnosticsSnapshot、SnapshotExportResult 已具备字段级证据，可安全拆到 L3。
 2. IDiagnosticsPolicyGuard 已完成接口冻结，且 `authorize(const DiagnosticsCommand&, const InfraContext&) -> CommandDecision` 已通过 interface/unit 与 boundary contract 验收。
-3. IDiagnosticsService 已完成首版对象/接口冻结；IDiagnosticsCommandRegistry 已完成公开头文件冻结，并以 DiagnosticsTypes.h 中的最小 `CommandCatalog` / `ValidationResult` 代码定义支撑可编译接口；CommandRegistry 与 CommandPolicyGuard 已完成 validate/capability gate 与 allow/deny skeleton，当前可直接进入 CommandExecutor 骨架实现。
+3. IDiagnosticsService 已完成首版对象/接口冻结；IDiagnosticsCommandRegistry 已完成公开头文件冻结，并以 DiagnosticsTypes.h 中的最小 `CommandCatalog` / `ValidationResult` 代码定义支撑可编译接口；CommandRegistry、CommandPolicyGuard 与 CommandExecutor 已完成 validate/capability gate、allow/deny 与执行 success/failure skeleton，当前可直接进入 EvidenceCollector 骨架实现。
 4. RedactionEngine、ExportManager、Metrics/Audit Bridge 的规则矩阵或桥接接口仍受 11.1 阻塞项约束，必须先补设计或冻结相邻接口。
 5. tests/integration 顶层已接线并可发现 InfraDiagnosticsSmokeTest，但完整 integration/bridge 用例仍需随组件实现落盘。
 
@@ -302,7 +302,7 @@
 
 1. 数据结构：函数/字段级可执行。
 2. 接口：IDiagnosticsPolicyGuard、IDiagnosticsService 与 IDiagnosticsCommandRegistry 均已完成方法级冻结。
-3. 实现：CommandExecutor、EvidenceCollector、SnapshotAssembler、SnapshotStore 当前可到类级骨架。
+3. 实现：EvidenceCollector、SnapshotAssembler、SnapshotStore 当前可到类级骨架。
 
 ### 11.4 若未达到函数级，还缺哪些设计信息
 
@@ -312,7 +312,7 @@
 
 ### 11.5 下一步建议
 
-1. 直接推进 DIA-TODO-015，把 registry/policy 已冻结的准入链接到真实 CommandExecutor 执行骨架。
-2. DIA-TODO-016、DIA-TODO-017 在 015 完成后继续串行推进主链路骨架。
+1. 直接推进 DIA-TODO-016，把 executor 的结构化 success/failure 输出接到真实 EvidenceCollector 聚合骨架。
+2. DIA-TODO-017 在 016 完成后继续串行推进 SnapshotAssembler 主链路骨架。
 3. 在脱敏矩阵、导出格式冻结后，再推进 DIA-TODO-018、DIA-TODO-020。
 4. 将 DIA-TODO-026 与 INF-TODO-018 联动回写，确保 diagnostics 专项执行证据回链到 infrastructure 总 TODO。

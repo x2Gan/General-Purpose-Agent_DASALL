@@ -37,8 +37,8 @@ void test_diagnostics_smoke_execute_get_and_export_round_trip() {
   const auto get_result = service.get_snapshot({.snapshot_id = execute_result.snapshot.snapshot_id});
   assert_true(get_result.ok,
               "diagnostics smoke flow should read back the retained snapshot");
-  assert_true(get_result.snapshot.summary == "diagnostics facade placeholder snapshot",
-              "diagnostics smoke flow should keep the snapshot summary stable across retrieval");
+  assert_true(get_result.snapshot.summary == "diagnostics executor health snapshot",
+              "diagnostics smoke flow should keep the executor-produced snapshot summary stable across retrieval");
 
   const auto export_result = service.export_snapshot({
       .snapshot_id = execute_result.snapshot.snapshot_id,
@@ -76,12 +76,39 @@ void test_diagnostics_smoke_rejects_non_whitelisted_command() {
               "diagnostics denial should surface an explicit command decision");
 }
 
+void test_diagnostics_smoke_surfaces_executor_failures() {
+  using dasall::infra::diagnostics::DiagnosticsCommand;
+  using dasall::infra::diagnostics::DiagnosticsServiceFacade;
+  using dasall::tests::support::assert_true;
+
+  DiagnosticsServiceFacade service;
+  assert_true(service.start(),
+              "diagnostics smoke executor failure path should start the facade before execute");
+
+  const auto execute_result = service.execute(DiagnosticsCommand{
+      .command_id = std::string("003"),
+      .command_name = std::string("queue.stats"),
+      .args = {std::string("--queue=missing")},
+      .request_scope = std::string("runtime"),
+      .timeout_ms = 3000,
+      .actor_ref = std::string("ops-user"),
+  });
+
+  assert_true(!execute_result.ok,
+              "diagnostics smoke flow should surface structured executor failures for runtime-unavailable diagnostics resources");
+  assert_true(execute_result.references_only_contract_error_types(),
+              "executor failures should remain within contracts ResultCode/ErrorInfo types");
+  assert_true(execute_result.decision.allowed,
+              "executor failures should preserve the successful authorization decision rather than rewriting it as a deny");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_diagnostics_smoke_execute_get_and_export_round_trip();
     test_diagnostics_smoke_rejects_non_whitelisted_command();
+    test_diagnostics_smoke_surfaces_executor_failures();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
