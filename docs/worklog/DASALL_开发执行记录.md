@@ -1,5 +1,64 @@
 # DASALL 开发执行记录
 
+## 记录 #154
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-019 tracing integration 子拓扑与 bridge reachability 扩展
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中 `TRC-GATE-07` 明确要求“tests 顶层已接入 integration 子目录并明确标签策略，且 tracing 组件用例已落盘”；而上一轮 `记录 #153` 也把“补 `tests/integration/infra/tracing` 子拓扑”列为最直接的后续路径。因此这次不是附带清理，而是有明确必要性的独立原子任务。
+2. 代码现状已满足最小集成前提：`TRC-TODO-015` 完成后，真实 `TracerProviderImpl -> TracerImpl -> SpanImpl -> SpanProcessorPipeline -> TraceMetricsBridge/TraceAuditBridge` 运行链已闭环；仓库顶层 `tests/integration` 与 `tests/integration/infra` 拓扑也已存在，只差 tracing 子目录与具体 reachability 用例。
+
+### 改动
+
+1. 补齐 tracing integration 子拓扑与注册：
+   - 新增 [tests/integration/infra/tracing/CMakeLists.txt](/home/gangan/DASALL/tests/integration/infra/tracing/CMakeLists.txt)，按现有 infra integration 样板定义 `dasall_register_tracing_integration_test()`，统一把 tracing integration 用例标记为 `integration;tracing`。
+   - 更新 [tests/integration/infra/CMakeLists.txt](/home/gangan/DASALL/tests/integration/infra/CMakeLists.txt) 接入新的 `add_subdirectory(tracing)`。
+   - 更新 [tests/integration/CMakeLists.txt](/home/gangan/DASALL/tests/integration/CMakeLists.txt)，把 `dasall_tracing_bridge_reachability_integration_test` 纳入顶层 integration executable target 聚合列表。
+2. 新增 tracing bridge reachability 集成用例：
+   - 新增 [tests/integration/infra/tracing/TracingBridgeReachabilityIntegrationTest.cpp](/home/gangan/DASALL/tests/integration/infra/tracing/TracingBridgeReachabilityIntegrationTest.cpp)，使用真实 `TracerProviderImpl` 主链，并注入 recording metrics provider / audit logger。
+   - 用例覆盖的 reachability 面为：
+     - `trace_span_ended_total`
+     - `trace_export_failure_total`
+     - `trace_export_latency_ms`
+     - `trace_batch_queue_depth`
+     - `tracing.sampler_changed`
+     - `tracing.shutdown_force_fallback`
+   - 触发策略保持最小而稳定：用 unsupported `otlp` exporter 触发 pipeline 级 export failure 指标，用 `shutdown(0)` 触发 provider 级 shutdown fallback 审计，避免在 integration 层引入不稳定 collector 依赖。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_tracing_bridge_reachability_integration_test`
+   - `ctest --test-dir build-ci -N -L tracing`
+   - `ctest --test-dir build-ci --output-on-failure -R TracingBridgeReachabilityIntegrationTest`
+   - `ctest --test-dir build-ci --output-on-failure -L tracing`
+2. 结果：
+   - 新增 tracing integration 目标构建通过；仅保留仓库既有 `IMetricsProvider.h` 缺省初始化 warning，无新增编译错误。
+   - `ctest --test-dir build-ci -N -L tracing` 发现 18 个 tracing 用例，较上一轮增加 1 个 integration 用例 `TracingBridgeReachabilityIntegrationTest`。
+   - 定向 integration 用例通过，`ctest --test-dir build-ci --output-on-failure -L tracing` 18/18 通过。
+3. 说明：
+   - VS Code CMake Tools 仍然处于“无法配置项目 / 无可用 targets”的工具态问题，本轮先用 CMake Tools 留痕确认失败，再按仓库 memory 中的 `build-ci` 回退路径完成验证。
+
+### 结果
+
+1. tracing 不再只有 unit+contract reachability：现在仓库里存在真实的 `tests/integration/infra/tracing` 子拓扑，且能在 integration 级验证 provider/pipeline 到 metrics/audit bridge 的实际送达路径。
+2. `TRC-GATE-07` 对 tracing 的准入条件已经具备最小实现：integration 子目录已入图、标签已注册、`ctest -N -L tracing` 可发现对应 integration 用例。
+
+### 下一步
+
+1. 若继续推进 tracing integration，优先候选是补 exporter failure injection 的 integration 用例，把 health degrade/recover 审计也提升到 integration 级。
+2. 另一条路径是按 tracing 设计 9.1，把 runtime/tools/multi_agent 的跨模块 trace path 补进 integration gate，而不是只停留在 tracing 私有实现链路。
+
+### 风险
+
+1. 当前 integration reachability 仍是 tracing 私有主链验证，不等于跨模块业务埋点已接入；runtime/tools/multi_agent 仍未消费 tracing provider。
+2. 由于 OTLP collector 拓扑未冻结，本轮集成测试仍采用 unsupported exporter + fallback 方式验证 reachability，而不是对接真实 collector 进程。
+
 ## 记录 #153
 
 - 日期：2026-04-07

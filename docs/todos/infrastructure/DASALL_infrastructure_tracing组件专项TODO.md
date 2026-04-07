@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 tracing 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-04-07  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/tracing
 
@@ -96,7 +96,7 @@
 3. 已有主流程与异常流程：正常流程 7 步、异常分类 4 类与恢复动作（tracing 设计 6.7/6.8）。
 4. 已有错误码域：TRC_E_PROVIDER_NOT_READY、TRC_E_INVALID_CONTEXT、TRC_E_QUEUE_FULL、TRC_E_EXPORT_TIMEOUT、TRC_E_EXPORT_FAILURE、TRC_E_SHUTDOWN_TIMEOUT、TRC_E_CONFIG_INVALID（tracing 设计 6.6）。
 5. 已有落盘建议与测试出口：infra/include/tracing、infra/src/tracing、tests/unit/infra/tracing、tests/integration/infra/tracing（tracing 设计 8.1、7）。
-6. 但 tracing 组件 integration/failure 用例尚未落盘、metrics/audit 适配接口未冻结，导致部分任务仍必须 Blocked。
+6. 但 tracing 组件 failure 用例与 runtime/tools/multi_agent 跨模块 trace path 尚未落盘，导致部分任务仍必须维持在 L2/L1。
 
 当前最小可执行粒度：函数/接口/数据结构级（以 L3 为主，局部受阻降为 L2/L1）。
 
@@ -115,7 +115,7 @@
 | SpanExporterAdapter | tracing 设计 6.2/6.3/6.9 | L2 | noop/file/otlp 预留与失败语义明确 | OTLP 首版是否启用未冻结 | 先做 noop/file，OTLP 标记 Blocked |
 | TraceMetricsBridge | tracing 设计 6.2/6.10 | L1 | 指标名清单完整 | metrics 接口签名未冻结 | 标记 Blocked，先补桥接接口设计 |
 | TraceAuditBridge | tracing 设计 6.2/6.10 | L1 | 审计事件清单明确 | audit 写入接口签名未冻结 | 标记 Blocked，先补桥接接口设计 |
-| tests/integration tracing 注册点 | tracing 设计 8.1/9.1；tests 现状 | L0 | 设计建议存在，且 tests 顶层 integration 拓扑已接入 | tracing integration/failure 用例尚未落盘 | 直接拆组件集成任务 |
+| tests/integration tracing 注册点 | tracing 设计 8.1/9.1；tests 现状 | L2 | tests 顶层 integration 拓扑已接入，且 tests/integration/infra/tracing 已落盘 bridge reachability 用例 | tracing failure 注入与跨模块 runtime/tools/multi_agent trace path 尚未落盘 | 先以 tracing 私有 integration 子拓扑冻结 provider -> bridge reachability，再后续扩展跨模块集成 |
 
 ## 5. Design -> TODO 映射表
 
@@ -131,7 +131,7 @@
 | 批处理导出管线 | tracing 设计 6.2/6.7/6.8/6.9 | 流程 | TRC-TODO-012、TRC-TODO-013 | queue 与 exporter 分任务，避免过载 |
 | 异常降级与可观测 | tracing 设计 6.8/6.10 | 错误处理/门禁 | TRC-TODO-014、TRC-TODO-015 | 失败注入与降级路径独立验收 |
 | 配置与 Profile 裁剪 | tracing 设计 6.9；蓝图 5 | 配置 | TRC-TODO-016 | 键名、默认值、覆盖层级明确落盘 |
-| CMake 与测试门禁 | tracing 设计 7/8/9；当前代码现状 | 测试/门禁 | TRC-TODO-017、TRC-TODO-018 | 构建接线与 unit/contract 可先做，integration 用例待组件后续落盘 |
+| CMake 与测试门禁 | tracing 设计 7/8/9；当前代码现状 | 测试/门禁 | TRC-TODO-017、TRC-TODO-018、TRC-TODO-019 | 构建接线与 unit/contract 已完成，integration reachability 由 tracing 私有子拓扑单列收口 |
 | metrics/audit 桥接 | tracing 设计 6.10 | 桥接/门禁 | TRC-BLK-001、TRC-BLK-002 | 外部接口未冻结，必须先补设计 |
 | OTLP 导出 | tracing 设计 6.9/7/11 | 导出 | TRC-BLK-004 | 首版导出器选型未冻结，不默认推进 |
 
@@ -159,6 +159,7 @@
 | TRC-TODO-016 | Done | 定义 tracing 配置模型与默认策略 | tracing 设计 6.9；蓝图 5 | 6.9 配置项表 | L3 | infra/include/tracing/TraceConfig.h | tracing.enabled/provider/sampler/batch/exporter/overflow/force_flush_on_stop | unit：默认值与覆盖优先级校验 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit | TRC-TODO-005 | 无 | 无 | 配置模型、单测；2026-04-06 已新增 infra/include/tracing/TraceConfig.h，公开冻结 tracing provider/sampler/batch/exporter/overflow/force_flush_on_stop 配置模型，并补齐 TraceConfigPatch 与 default -> profile -> deploy -> runtime 覆盖语义；同时更新 infra/include/tracing/ITracerProvider.h、infra/src/tracing/TracerProviderImpl.{h,cpp} 收口掉 008 同轮引入的私有最小 TraceConfig，占位配置不再滞留在实现层。新增 tests/unit/infra/tracing/TraceConfigTest.cpp，并更新 infra/CMakeLists.txt、tests/unit/infra/CMakeLists.txt、tests/unit/CMakeLists.txt 使公开配置头与单测入图。验证记录：ctest --test-dir build-ci -N -R "TraceConfigTest|TracerProviderImplTest|TracerSpanLifecycleTest" 可发现 3 个 tracing 相关用例，ctest --test-dir build-ci --output-on-failure -R "TraceConfigTest|TracerProviderImplTest|TracerSpanLifecycleTest" 通过，ctest --test-dir build-ci --output-on-failure -L unit 148/148 通过（未引入新增告警） | 仅当配置键名与默认值与 6.9 表一致且覆盖顺序可测试时完成 |
 | TRC-TODO-017 | Done | 注册 tracing 源码到 infra CMake | tracing 设计 8.1；infra 现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt, infra/src/tracing/ | tracing 源文件纳入 dasall_infra | build：dasall_infra 持续可编译 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_infra | TRC-TODO-008~TRC-TODO-014、TRC-TODO-016 | 无 | 无 | CMake 接线、构建记录；2026-04-07 已核查 infra/CMakeLists.txt 中 `DASALL_INFRA_TRACING_SOURCES` 已收口 TracingModuleAnchor、TracerProviderImpl、SamplingPolicyEngine、TracerImpl、SpanImpl、ContextPropagationAdapter、BatchSpanBuffer、SpanExporterAdapter、SpanProcessorPipeline、TraceHealthProbe 等 tracing 源文件，placeholder 不再是唯一编译源；验证记录：`cmake --build build-ci --target dasall_infra` 通过 | 仅当 placeholder 不再是唯一编译源且 tracing 源文件入图时完成 |
 | TRC-TODO-018 | Done | 注册 tracing 的 unit 与 contract 测试入口 | tracing 设计 7/8/9；编码规范 3.7 | 7 映射表、8.1 目录建议、9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt, tests/unit/infra/tracing/, tests/contract/CMakeLists.txt | 新增 tracing 标签测试注册 | unit+contract：ctest 可发现并执行 tracing 新增用例 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | TRC-TODO-017 | 无 | integration 相关验收按组件用例落盘推进 | 测试代码、注册改动、执行记录；2026-04-07 已在 tests/unit/infra/CMakeLists.txt 为 TraceTypes/SpanInterface/TraceContextPropagatorInterface/TraceErrors/TracerProviderImpl/TracerSpanLifecycle/ContextPropagationAdapter 等 tracing unit 用例补齐 `unit;tracing` 标签，并在 tests/contract/CMakeLists.txt 新增 `dasall_register_tracing_contract_test` 收口 tracing contract 标签族，使 `TraceErrorMappingContractTest` 进入 `contract;smoke;tracing;failure`；验证记录：`ctest --test-dir build-ci -N -L tracing` 可发现 13 个 tracing 用例，`ctest --test-dir build-ci --output-on-failure -L tracing` 通过，`ctest --test-dir build-ci --output-on-failure -L unit` 152/152 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 141/141 通过 | 仅当 tracing 测试在 ctest -N 可见并执行通过时完成 |
+| TRC-TODO-019 | Done | 补 tracing integration 子拓扑与 bridge reachability 验证 | tracing 设计 7/8/9.1；TRC-GATE-07；TRC-TODO-015 剩余风险 | 8.1 目录建议；9.1 Integration 测试矩阵；TRC-GATE-07 integration 准入门 | L2 | tests/integration/infra/CMakeLists.txt, tests/integration/CMakeLists.txt, tests/integration/infra/tracing/ | 新增 tracing integration 子目录、CMake 注册与 provider -> pipeline -> bridge reachability 用例 | integration：真实 provider/tracer/span 主链可把 metrics/audit bridge 信号送达外部 sink，且 tracing 标签可发现该用例 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_tracing_bridge_reachability_integration_test && ctest --test-dir build-ci -N -L tracing && ctest --test-dir build-ci --output-on-failure -R TracingBridgeReachabilityIntegrationTest && ctest --test-dir build-ci --output-on-failure -L tracing | TRC-TODO-015、TRC-TODO-017、TRC-TODO-018 | 无 | TRC-BLK-003 已解阻，且 015 的 runtime wiring 已提供可集成验证的 provider/pipeline/bridge 运行链 | tracing integration 子拓扑、CMake 注册与验证记录；2026-04-07 已新增 tests/integration/infra/tracing/CMakeLists.txt 与 tests/integration/infra/tracing/TracingBridgeReachabilityIntegrationTest.cpp，并更新 tests/integration/infra/CMakeLists.txt、tests/integration/CMakeLists.txt，把新用例接入 integration 聚合图。新用例使用真实 TracerProviderImpl -> TracerImpl -> SpanImpl -> SpanProcessorPipeline 主链，注入 recording metrics/audit sink，验证 `trace_span_ended_total`、`trace_export_failure_total`、`trace_export_latency_ms`、`trace_batch_queue_depth` 能通过 TraceMetricsBridge 到达 metrics provider，且 `tracing.sampler_changed`、`tracing.shutdown_force_fallback` 能通过 TraceAuditBridge 到达 audit logger。验证记录：`ctest --test-dir build-ci -N -L tracing` 发现 18 个 tracing 用例（含新 `TracingBridgeReachabilityIntegrationTest`），定向 integration 用例通过，`ctest --test-dir build-ci --output-on-failure -L tracing` 18/18 通过 | 仅当 tracing integration 子拓扑入图、ctest -N 可发现 integration 用例，且真实 runtime reachability 在 integration 级稳定通过时完成 |
 
 ### 6.2 Blocked 任务与阻塞索引
 
@@ -175,8 +176,9 @@
 | B 生命周期与上下文闭环 | TRC-TODO-008~TRC-TODO-010 | 串行 | provider -> tracer/span -> propagation |
 | C 采样与导出闭环 | TRC-TODO-011~TRC-TODO-013 | 串行 | sampler -> buffer -> pipeline/exporter |
 | D 降级与配置 | TRC-TODO-014、TRC-TODO-016 | 可并行 | 降级逻辑与配置模型可并行推进 |
-| E 构建与测试接线 | TRC-TODO-017、TRC-TODO-018 | 可并行 | CMake 接线与测试注册同步推进 |
+| E 构建与测试接线 | TRC-TODO-017、TRC-TODO-018 | 可并行 | CMake 接线与 unit/contract 测试注册同步推进 |
 | F 解阻后桥接 | TRC-TODO-015 | 串行 | 依赖 metrics/audit 接口冻结 |
+| G integration reachability | TRC-TODO-019 | 串行 | 在 015 runtime wiring 收口后补 tracing integration 子拓扑，完成 TRC-GATE-07 |
 
 ### 7.2 必过门禁
 
@@ -209,11 +211,12 @@
 | 构建 infra | cmake --build build-ci --target dasall_infra |
 | 执行 unit 套件 | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit |
 | 执行 contract 套件 | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract |
+| 执行 tracing integration reachability | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tracing_bridge_reachability_integration_test && ctest --test-dir build-ci --output-on-failure -R TracingBridgeReachabilityIntegrationTest |
 | 检查测试发现性 | ctest --test-dir build-ci -N |
 
 说明：
 
-1. integration 验收命令暂不纳入首轮 Gate，原因是 tracing integration 用例尚未落盘；顶层 integration 拓扑已于 2026-03-30 解阻。
+1. tracing integration 子拓扑已于 2026-04-07 落盘，TRC-GATE-07 现可通过 `TracingBridgeReachabilityIntegrationTest` 与 `ctest --test-dir build-ci -L tracing` 执行；跨 runtime/tools/multi_agent 的更大集成路径仍后续推进。
 2. 每项任务至少包含 1 条构建命令与 1 条测试命令。
 
 ### 9.2 质量门逐项回答（第 7 章要求）
@@ -247,10 +250,10 @@
    - 已给出落盘目录、建议文件与测试出口。
    - 当前阻塞主要集中在跨子域桥接与 integration 拓扑，不影响核心 tracing 闭环落地。
 3. 当前最小可执行粒度：函数/接口/数据结构。
-4. 未完全达到全域函数级的缺口：metrics/audit 桥接接口未冻结，tracing integration/failure 用例尚未落盘，OTLP 首版启用策略未冻结。
+4. 未完全达到全域函数级的缺口：tracing failure 注入与 runtime/tools/multi_agent 跨模块集成路径尚未落盘，OTLP 首版启用策略未冻结。
 5. 下一步建议：
-   - 先执行 TRC-TODO-001~TRC-TODO-014、TRC-TODO-016~TRC-TODO-018 完成 tracing 本地闭环。
-   - 并行推进 TRC-BLK-001、TRC-BLK-002、TRC-BLK-004 解阻；TRC-BLK-003 已完成仓库级解阻，再进入桥接与集成验收。
+   - 在当前 TRC-TODO-019 已完成的基础上，继续补 tracing failure injection integration 与跨模块 runtime/tools/multi_agent trace path。
+   - 对 OTLP exporter 首版启用策略完成冻结后，再决定是否把 collector 级联动纳入下一轮 tracing integration gate。
 
 ## 12. ARC 修复增量（2026-03-26）
 
