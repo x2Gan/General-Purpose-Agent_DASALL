@@ -1,21 +1,17 @@
 #include "diagnostics/DiagnosticsServiceFacade.h"
 
-#include <chrono>
 #include <string_view>
 #include <utility>
 
 #include "diagnostics/CommandExecutor.h"
 #include "diagnostics/EvidenceCollector.h"
+#include "diagnostics/ExportManager.h"
 #include "diagnostics/RedactionEngine.h"
 
 namespace dasall::infra::diagnostics {
 namespace {
 
 constexpr std::string_view kDiagnosticsServiceFacadeSourceRef = "DiagnosticsServiceFacade";
-
-[[nodiscard]] std::string current_time_rfc3339_stub() {
-  return "2026-04-07T13:00:00Z";
-}
 
 [[nodiscard]] DiagnosticsSnapshotResult make_snapshot_failure(contracts::ResultCode result_code,
                                                              std::string message,
@@ -226,24 +222,15 @@ SnapshotExportResult DiagnosticsServiceFacade::export_snapshot(
                                "diagnostics.export_snapshot");
   }
 
-  if (request.target != ExportTarget::LocalFile) {
-    return make_export_failure(contracts::ResultCode::ValidationFieldMissing,
-                               "diagnostics export skeleton only allows local targets",
-                               "diagnostics.export_snapshot");
-  }
-
-  if (!snapshot_store_.contains(request.snapshot_id)) {
+  const auto snapshot = snapshot_store_.get(request.snapshot_id);
+  if (!snapshot.has_value()) {
     return make_export_failure(contracts::ResultCode::ValidationFieldMissing,
                                "diagnostics export requires an existing retained snapshot",
                                "diagnostics.export_snapshot");
   }
 
-  return SnapshotExportResult::success(std::string("export-") + request.snapshot_id,
-                                       request.target,
-                                       request.format,
-                                       256,
-                                       std::string("sha256:diagnostics-export-001"),
-                                       current_time_rfc3339_stub());
+  const ExportManager export_manager;
+  return export_manager.export_snapshot(*snapshot, request);
 }
 
 bool DiagnosticsServiceFacade::allows_command_in_current_mode(

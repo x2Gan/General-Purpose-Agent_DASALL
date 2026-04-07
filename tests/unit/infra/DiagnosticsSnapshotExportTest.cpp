@@ -53,7 +53,7 @@ void test_diagnostics_types_freeze_read_only_command_and_local_export_contract()
       .snapshot_id = snapshot.snapshot_id,
       .target = ExportTarget::LocalFile,
       .format = ExportFormat::Json,
-      .target_ref = std::string("local://diagnostics/snapshot-001.json"),
+      .target_ref = std::string("local://diagnostics/snapshot-001.jsonl"),
   };
   assert_true(request.is_valid(),
               "local diagnostics export request should remain valid for the minimal export contract");
@@ -62,7 +62,7 @@ void test_diagnostics_types_freeze_read_only_command_and_local_export_contract()
                                                            ExportTarget::LocalFile,
                                                            ExportFormat::Json,
                                                            256,
-                                                           std::string("sha256:diag-export-001"),
+                                                           std::string("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
                                                            std::string("2026-03-27T11:01:00Z"));
   assert_true(export_result.is_valid(),
               "snapshot export result should remain valid once export metadata and checksum are frozen");

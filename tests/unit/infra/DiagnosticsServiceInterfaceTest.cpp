@@ -84,7 +84,7 @@ class NullDiagnosticsService final : public dasall::infra::diagnostics::IDiagnos
         request.target,
         request.format,
         256,
-        std::string("sha256:diag-export-001"),
+      std::string("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
         std::string("2026-04-07T10:00:00Z"));
   }
 
@@ -199,7 +199,7 @@ void test_diagnostics_service_keeps_snapshot_and_export_boundaries_stable() {
       .snapshot_id = std::string("diag-snapshot-lookup-001"),
       .target = ExportTarget::LocalFile,
       .format = ExportFormat::Json,
-      .target_ref = std::string("artifacts/diagnostics/diag-snapshot-lookup-001.json"),
+      .target_ref = std::string("local://diagnostics/diag-snapshot-lookup-001.jsonl"),
   });
   assert_true(export_result.ok && export_result.is_valid(),
               "IDiagnosticsService should keep export_snapshot constrained to SnapshotExportRequest and SnapshotExportResult");

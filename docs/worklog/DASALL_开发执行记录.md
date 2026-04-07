@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #169
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-020 ExportManager 导出骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 已把 `DIA-BLK-005` 标记解阻，因此本轮最小原子任务就是按 6.5.4 直接实现 `ExportManager`。
+2. 020 的验收不仅要看新 unit test；因为 facade 的 `export_snapshot()` 需要真正走 `SnapshotStore -> ExportManager`，所以还必须补跑 service-interface、snapshot-export、smoke 和 integration，确认整条导出链没有再回退到 placeholder 行为。
+
+### 改动
+
+1. 新增 diagnostics export 私有实现：
+   - 新增 [infra/src/diagnostics/ExportManager.h](/home/gangan/DASALL/infra/src/diagnostics/ExportManager.h) 与 [infra/src/diagnostics/ExportManager.cpp](/home/gangan/DASALL/infra/src/diagnostics/ExportManager.cpp)，定义 `ExportManagerOptions` 与 `ExportManager::export_snapshot()`。
+   - 当前骨架实现了 v1 本地 `Json -> JSON Lines` 导出、`sha256:<64 lowercase hex>` checksum 计算，以及 remote disabled / unsupported format / invalid local target 的失败路径。
+2. 把 facade 导出路径切到真实 manager：
+   - 更新 [infra/src/diagnostics/DiagnosticsServiceFacade.cpp](/home/gangan/DASALL/infra/src/diagnostics/DiagnosticsServiceFacade.cpp)，让 `export_snapshot()` 先经 `SnapshotStore` 取回 retained snapshot，再委托 `ExportManager`。
+   - 同时移除了旧的“非 LocalFile 一律 ValidationFieldMissing” placeholder 逻辑，让 `INF_E_DIAG_REMOTE_EXPORT_DISABLED` 真正由 manager 统一返回。
+3. 新增/更新导出测试：
+   - 更新 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，注册 `DiagnosticsExportTest`。
+   - 新增 [tests/unit/infra/DiagnosticsExportTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsExportTest.cpp)，覆盖本地 jsonl 成功、remote disabled 拒绝、unsupported format 与非法 local target。
+   - 更新 [tests/integration/infra/InfraDiagnosticsSmokeTest.cpp](/home/gangan/DASALL/tests/integration/infra/InfraDiagnosticsSmokeTest.cpp)，把本地导出 target_ref 锚点切到 `.jsonl`，并新增 remote disabled 错误码断言。
+   - 更新 [tests/unit/infra/DiagnosticsSnapshotExportTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsSnapshotExportTest.cpp) 与 [tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp](/home/gangan/DASALL/tests/unit/infra/DiagnosticsServiceInterfaceTest.cpp)，把导出样例统一到 `.jsonl` 和 `sha256` 形状。
+4. 构建图接线：
+   - 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)，把 `ExportManager.cpp/.h` 接入 diagnostics 私有源集。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_diagnostics_service_interface_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_snapshot_export_unit_test`
+   - `cmake --build build-ci --target dasall_diagnostics_export_unit_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test`
+   - `cmake --build build-ci --target dasall_infra_diagnostics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "DiagnosticsServiceInterfaceTest|DiagnosticsSnapshotExportTest|DiagnosticsExportTest|InfraDiagnosticsSmokeTest|InfraDiagnosticsIntegrationTest"`
+2. 结果：
+   - `DiagnosticsServiceInterfaceTest`、`DiagnosticsSnapshotExportTest`、`DiagnosticsExportTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 共 5/5 通过。
+
+### 结果
+
+1. `DIA-TODO-020` 已完成，diagnostics 主链现在具备 `SnapshotStore -> ExportManager` 的最小导出闭环，本地 JSON Lines 导出和 remote disabled gate 都进入了真实代码路径。
+2. E 阶段的“先脱敏，再存储，再导出”已经完整落盘，下一步可以切到 F 阶段的 metrics/audit bridge 设计冻结与实现。
+
+### 下一步
+
+1. 直接进入 `DIA-BLK-006`，冻结 metrics/audit 的最小桥接接口签名。
+2. `DIA-BLK-006` 解阻后继续推进 `DIA-TODO-021` 与 `DIA-TODO-022`。
+
+### 风险
+
+1. `ExportManager` 当前仍是逻辑导出骨架：它序列化并计算 checksum，但不包含真实远程上传 backend，也不把 `local://diagnostics/...` 解析成宿主机文件路径；若后续需要真实文件/网络适配，必须保持现有 JSON Lines、sha256 与 gate 语义不漂移。
+2. `sha256` 目前由 diagnostics 私有实现完成；若未来要切换到统一 crypto adapter 或 OpenSSL 封装，必须保持 `sha256:<64 lowercase hex>` outward 形状和当前回归测试不变。
+
 ## 记录 #168
 
 - 日期：2026-04-07
