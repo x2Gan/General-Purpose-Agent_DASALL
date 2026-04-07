@@ -22,7 +22,7 @@ void test_infra_error_code_maps_only_to_existing_contract_result_codes() {
 
   static_assert(std::is_same_v<decltype(InfraErrorMapping{}.result_code), ResultCode>);
 
-  constexpr std::array<InfraErrorCode, 7> kFrozenCodes{
+    constexpr std::array<InfraErrorCode, 8> kFrozenCodes{
       InfraErrorCode::ConfigInvalid,
       InfraErrorCode::SecretUnavailable,
       InfraErrorCode::LogQueueFull,
@@ -30,6 +30,7 @@ void test_infra_error_code_maps_only_to_existing_contract_result_codes() {
       InfraErrorCode::HealthProbeTimeout,
       InfraErrorCode::OTAVerifyFail,
       InfraErrorCode::OTARollbackFail,
+      InfraErrorCode::OTABootConfirmTimeout,
   };
 
   for (const auto code : kFrozenCodes) {
@@ -46,7 +47,7 @@ void test_infra_error_code_names_stay_private_to_infra_boundary() {
   using dasall::infra::infra_error_code_name;
   using dasall::tests::support::assert_true;
 
-  constexpr std::array<InfraErrorCode, 7> kFrozenCodes{
+    constexpr std::array<InfraErrorCode, 8> kFrozenCodes{
       InfraErrorCode::ConfigInvalid,
       InfraErrorCode::SecretUnavailable,
       InfraErrorCode::LogQueueFull,
@@ -54,6 +55,7 @@ void test_infra_error_code_names_stay_private_to_infra_boundary() {
       InfraErrorCode::HealthProbeTimeout,
       InfraErrorCode::OTAVerifyFail,
       InfraErrorCode::OTARollbackFail,
+      InfraErrorCode::OTABootConfirmTimeout,
   };
 
   for (const auto code : kFrozenCodes) {

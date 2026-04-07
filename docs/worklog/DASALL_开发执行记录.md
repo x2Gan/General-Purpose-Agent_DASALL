@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #186
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-011 BootConfirmationMonitor 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `OTA-TODO-020` 已冻结 boot confirm success/fail 判据，因此 `OTA-TODO-011` 成为 `OTA-TODO-014` 之前唯一必须先完成的实现任务。
+2. 011 的职责边界是把显式 self-check、health gate、heartbeat freshness、slot_bound version report 和 timeout 默认失败落成 ota 私有骨架，不引入新的 public contracts。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-011-BootConfirmationMonitor骨架收敛.md](../todos/infrastructure/deliverables/OTA-TODO-011-BootConfirmationMonitor骨架收敛.md)，记录 011 的输入依据、Design->Build 映射、Build 合规复核与验证结果。
+2. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 的 011 回写证据，将状态更新为 `Done`。
+3. 新增 [infra/src/ota/BootConfirmationMonitor.h](../../infra/src/ota/BootConfirmationMonitor.h) 与 [infra/src/ota/BootConfirmationMonitor.cpp](../../infra/src/ota/BootConfirmationMonitor.cpp)，冻结 BootConfirmationRequest、BootSuccessSignal、HeartbeatFreshnessReport、VersionReportSnapshot、BootConfirmationResult、BootConfirmationMonitorStatus 及私有 provider 边界，并实现 `evaluate_self_check / await_confirm / handle_timeout`。
+4. 更新 [infra/include/InfraErrorCode.h](../../infra/include/InfraErrorCode.h) 与 [infra/src/InfraErrorCode.cpp](../../infra/src/InfraErrorCode.cpp)，新增 `INF_E_OTA_BOOT_CONFIRM_TIMEOUT` 私有错误码及 outward 映射。
+5. 新增 [tests/unit/infra/ota/BootConfirmationMonitorTest.cpp](../../tests/unit/infra/ota/BootConfirmationMonitorTest.cpp)，覆盖 confirm success、health pending、confirm timeout 与 explicit self-check fail。
+6. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)、[tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)、[tests/unit/infra/InfraErrorCodeTest.cpp](../../tests/unit/infra/InfraErrorCodeTest.cpp) 与 [tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp](../../tests/contract/smoke/InfraErrorCodeBoundaryContractTest.cpp)，把 011 代码和 InfraErrorCode 回归接入构建与测试矩阵。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_boot_confirmation_monitor_unit_test dasall_infra_error_code_unit_test dasall_contract_infra_error_code_boundary_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "BootConfirmationMonitorTest|InfraErrorCodeUnitTest|InfraErrorCodeMappingContractTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+2. 结果：
+   - 定向回归通过，`BootConfirmationMonitorTest`、`InfraErrorCodeUnitTest`、`InfraErrorCodeMappingContractTest` 共 3/3 通过。
+   - `dasall_unit_tests` 聚合门通过，170/170 tests passed，`ota = 8 tests`。
+
+### 结果
+
+1. BootConfirmationMonitor 现在可以稳定区分 success、pending、explicit fail 与 timeout 四条 confirm 路径，并把 timeout 统一映射到 `INF_E_OTA_BOOT_CONFIRM_TIMEOUT`。
+2. `OTA-TODO-014` 已具备可直接实现的前置条件，后续可以围绕 `pending_confirm / last_error_code / detail_ref` 信号收敛 OTAHealthProbe。
+
+### 下一步
+
+1. 进入 `OTA-TODO-014`，实现 OTAHealthProbe 骨架，暴露 backlog、last_failure、pending_confirm 和 degraded 事实信号。
+2. 014 完成后再评估是否需要继续推进 OTA-TODO-015/016，把本轮新增骨架和测试入口进一步汇总到 OTA 顶层接线里。
+
+### 风险
+
+1. required heartbeat entity 的具体实体 ID 仍由 BootConfirmationMonitor 私有 policy snapshot 承载，后续若 profile 层需要可配置化，应走 021 的配置键收敛而不是改 public header。
+2. 当前 BootConfirmationMonitor 只消费私有 version report provider；014 和后续 integration 需要保持“先 confirm 成功，再切 repo pointer”的动作顺序，避免把 repo_bound 版本状态误计入 confirm success。
+
 ## 记录 #185
 
 - 日期：2026-04-07

@@ -14,6 +14,7 @@ enum class InfraErrorCode {
   HealthProbeTimeout = 5,
   OTAVerifyFail = 6,
   OTARollbackFail = 7,
+  OTABootConfirmTimeout = 8,
 };
 
 struct InfraErrorMapping {

@@ -34,6 +34,9 @@ void test_infra_error_code_names_and_mapping_are_stable() {
   assert_equal(std::string("INF_E_OTA_ROLLBACK_FAIL"),
                std::string(infra_error_code_name(InfraErrorCode::OTARollbackFail)),
                "OTA rollback fail code name should remain stable");
+  assert_equal(std::string("INF_E_OTA_BOOT_CONFIRM_TIMEOUT"),
+               std::string(infra_error_code_name(InfraErrorCode::OTABootConfirmTimeout)),
+               "OTA boot confirm timeout code name should remain stable");
 
   assert_equal(static_cast<int>(dasall::contracts::ResultCode::ValidationFieldMissing),
                static_cast<int>(map_infra_error_code(InfraErrorCode::ConfigInvalid).result_code),
@@ -53,7 +56,7 @@ void test_infra_error_code_mapping_covers_all_frozen_codes() {
   using dasall::infra::map_infra_error_code;
   using dasall::tests::support::assert_true;
 
-  constexpr std::array<InfraErrorCode, 7> kFrozenCodes{
+    constexpr std::array<InfraErrorCode, 8> kFrozenCodes{
       InfraErrorCode::ConfigInvalid,
       InfraErrorCode::SecretUnavailable,
       InfraErrorCode::LogQueueFull,
@@ -61,6 +64,7 @@ void test_infra_error_code_mapping_covers_all_frozen_codes() {
       InfraErrorCode::HealthProbeTimeout,
       InfraErrorCode::OTAVerifyFail,
       InfraErrorCode::OTARollbackFail,
+      InfraErrorCode::OTABootConfirmTimeout,
   };
 
   for (const auto code : kFrozenCodes) {

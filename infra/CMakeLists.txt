@@ -188,6 +188,7 @@ set(DASALL_INFRA_OTA_SOURCES
   src/ota/ArtifactCompatibilityEvaluator.cpp
   src/ota/InstallExecutor.cpp
   src/ota/SlotSwitchCoordinator.cpp
+  src/ota/BootConfirmationMonitor.cpp
   src/ota/RollbackController.cpp
   src/ota/OTAAuditBridge.cpp
 )
@@ -198,6 +199,7 @@ set(DASALL_INFRA_OTA_PRIVATE_HEADERS
   src/ota/ArtifactCompatibilityEvaluator.h
   src/ota/InstallExecutor.h
   src/ota/SlotSwitchCoordinator.h
+  src/ota/BootConfirmationMonitor.h
   src/ota/RollbackController.h
   src/ota/OTAAuditBridge.h
 )

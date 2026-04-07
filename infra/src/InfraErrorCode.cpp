@@ -18,6 +18,8 @@ std::string_view infra_error_code_name(InfraErrorCode code) {
       return "INF_E_OTA_VERIFY_FAIL";
     case InfraErrorCode::OTARollbackFail:
       return "INF_E_OTA_ROLLBACK_FAIL";
+    case InfraErrorCode::OTABootConfirmTimeout:
+      return "INF_E_OTA_BOOT_CONFIRM_TIMEOUT";
   }
 
   return "INF_E_UNKNOWN";
@@ -66,6 +68,12 @@ InfraErrorMapping map_infra_error_code(InfraErrorCode code) {
           .infra_code = code,
           .result_code = contracts::ResultCode::RuntimeRetryExhausted,
           .reason = "OTA rollback failure stays inside contracts runtime category",
+      };
+    case InfraErrorCode::OTABootConfirmTimeout:
+      return InfraErrorMapping{
+          .infra_code = code,
+          .result_code = contracts::ResultCode::ProviderTimeout,
+          .reason = "OTA boot confirm timeout stays inside contracts provider timeout category",
       };
   }
 
