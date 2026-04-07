@@ -206,6 +206,14 @@ set(DASALL_INFRA_OTA_PRIVATE_HEADERS
   src/ota/OTAHealthProbe.h
 )
 
+set(DASALL_INFRA_OTA_PUBLIC_HEADERS
+  include/ota/IBootControlAdapter.h
+  include/ota/IInstallExecutor.h
+  include/ota/IOTAManager.h
+  include/ota/IOTAPackageVerifier.h
+  include/ota/OTATypes.h
+)
+
 set(DASALL_INFRA_PUBLIC_HEADERS
   include/health/HealthErrors.h
   include/health/HealthStateTypes.h
@@ -231,7 +239,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/logging/ILogger.h
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h
-  include/ota/IOTAManager.h
+  ${DASALL_INFRA_OTA_PUBLIC_HEADERS}
   ${DASALL_INFRA_SECRET_PUBLIC_HEADERS}
   include/InfraContext.h
   include/InfraErrorCode.h
@@ -266,10 +274,6 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/config/IConfigPublisher.h
   include/diagnostics/DiagnosticsErrors.h
   include/diagnostics/DiagnosticsTypes.h
-  include/ota/IBootControlAdapter.h
-  include/ota/IInstallExecutor.h
-  include/ota/IOTAPackageVerifier.h
-  include/ota/OTATypes.h
   include/policy/IPolicyLoader.h
   include/policy/IPolicySchemaValidator.h
   include/policy/IPolicySnapshotStore.h

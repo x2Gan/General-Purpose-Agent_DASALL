@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #188
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-015 OTA 构建入口接线
+- 状态：已完成
+
+### 任务选择
+
+1. `OTA-TODO-014` 已完成后，`OTA-TODO-015` 成为 `OTA-TODO-015~016` 串行范围中的首个可执行原子任务，且不存在额外 BLOCK 前置。
+2. 015 的职责边界是把 OTA public/private 构建入口在 `infra/CMakeLists.txt` 中统一收敛，不扩张到测试注册细节；unit/contract discoverability 留给 016。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-015-OTA构建入口接线收敛.md](../todos/infrastructure/deliverables/OTA-TODO-015-OTA构建入口接线收敛.md)，记录 015 的输入依据、Design->Build 映射、Build 合规复核与验证结果。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，新增 `DASALL_INFRA_OTA_PUBLIC_HEADERS` 并把 OTA public/private headers 与实现源统一收敛到 OTA 专属列表，避免 public header 继续散落在全局 `DASALL_INFRA_PUBLIC_HEADERS` 中。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 的 015 回写证据，将状态更新为 `Done`。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra`
+2. 结果：
+   - `dasall_infra` 构建通过，说明 OTA 源码与 public/private 头文件接线未破坏库目标编译入口。
+
+### 结果
+
+1. OTA 的实现源、私有头和 public headers 现在都通过 OTA 专属列表集中挂接到 `dasall_infra`，后续新增 OTA 文件不需要再在全局 public header 清单中分散补点。
+2. 015 的构建入口收口已完成，下一步可以专注 016 的测试注册和 discoverability 收敛。
+
+### 下一步
+
+1. 进入 `OTA-TODO-016`，统一 OTA 的 unit/contract 测试注册 helper、聚合目标和 `ota` 标签。
+2. 016 完成后再评估是否继续推进 `OTA-TODO-017`，补 OTA integration/failure 入口。
+
+### 风险
+
+1. 015 只收敛了 `dasall_infra` 侧的构建入口，不涉及 tests 侧 discoverability；如果 016 不同步收口，OTA 测试仍会保留“已接入但标签不一致”的评审噪音。
+
 ## 记录 #187
 
 - 日期：2026-04-07
