@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #159
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-BLK-003 allowed_commands 参数 schema 解阻
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-013` 仍被 `DIA-BLK-003` 阻塞；在 `DIA-TODO-012` 已完成且工作区干净的前提下，本轮最小可执行任务就是 blocker recovery，而不是直接开始写 `CommandRegistry.cpp`。
+2. 这个 blocker 属于 context blocker：`IDiagnosticsCommandRegistry` 的 ref/summary 边界已经冻结，但 [infra/include/diagnostics/DiagnosticsTypes.h](/home/gangan/DASALL/infra/include/diagnostics/DiagnosticsTypes.h) 里 `DiagnosticsCommand.args` 仍是 `std::vector<std::string>`。如果不先把三条只读命令的 token 语法、默认值和 `request_scope` 冻结成 source of truth，013 的 validate 实现只能靠猜测扩张 schema。
+
+### 改动
+
+1. 冻结 diagnostics 详细设计中的 v1 参数 schema：
+   - 更新 [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_diagnostics模块详细设计.md)，新增 6.5.2 `allowed_commands` 参数 schema 章节，明确 `health.snapshot`、`queue.stats`、`thread.dump` 的 `schema_ref`、`request_scope=runtime`、args token grammar、normalized default 与 validate 负例锚点。
+   - 同步收紧 6.9 配置表：`infra.diagnostics.allowed_commands` 在 v1 只承担 capability gate，Profile/部署只能裁剪命令集合，不能改写内建 schema；`infra.diagnostics.command.timeout_ms` 明确成为 validate 的上限约束。
+   - 在设计文档的 Design->Build 与 blocker 表中回写：`D-BLK-01` / `DIA-BLK-003` 已解阻，下一轮可以直接进入 `DIA-TODO-013`。
+2. 新增 blocker deliverable：
+   - 新增 [docs/todos/infrastructure/deliverables/DIA-BLK-003-allowed_commands参数schema收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/DIA-BLK-003-allowed_commands%E5%8F%82%E6%95%B0schema%E6%94%B6%E6%95%9B.md)，记录本地证据、外部参考、三条只读命令 schema 结论、Design->Build 映射、Build 三件套和回退策略。
+   - 这份 deliverable 的作用是把“完整 schema 已冻结”与 “公开接口仍只暴露 ref+summary” 两件事同时固定下来，防止后续实现把完整 schema 再塞回 `CommandCatalog` / `ValidationResult`。
+3. 回写 diagnostics 专项 TODO 与 infrastructure 总 TODO：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md)，将 `DIA-TODO-013` 从 `Blocked` 恢复为 `Not Started`，将 `DIA-BLK-003` 改为已解阻，并把剩余设计缺口收敛到脱敏矩阵、导出细则与桥接接口。
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md)，同步 `INF-BLK-08` 的 diagnostics 摘录，移除“allowed_commands 参数 schema 仍是当前阻塞”的过时描述。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "### 6.5.2|schema://diagnostics/health.snapshot/v1|schema://diagnostics/queue.stats/v1|schema://diagnostics/thread.dump/v1" docs/architecture/DASALL_infra_diagnostics模块详细设计.md`
+   - `rg -n "DIA-BLK-003|DIA-TODO-013|已解阻|Not Started" docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+2. 结果：
+   - diagnostics 详细设计已可检索到 6.5.2 与三条 v1 schema 锚点，说明 `CommandRegistry` 的 validate 边界现在有统一 source of truth。
+   - diagnostics 专项 TODO、infrastructure 总 TODO 与 worklog 中，`DIA-BLK-003` 已解阻、`DIA-TODO-013` 已恢复 `Not Started`，台账口径一致。
+3. 说明：
+   - 本轮为 blocker recovery 文档任务，不涉及 C++ 代码或测试目标新增，因此未运行构建与单测；验收以任务表定义的 `rg` 命令和 TODO/worklog 追溯闭环为准。
+
+### 结果
+
+1. `DIA-BLK-003` 已完成，`health.snapshot`、`queue.stats`、`thread.dump` 的 v1 参数 schema 已冻结到 diagnostics 详细设计与独立 deliverable，`CommandRegistry` 不再受“参数结构未知”的设计阻塞。
+2. `DIA-TODO-013` 已恢复为可执行任务；下一轮可以直接把 6.5.2 的 schema 落到 `CommandRegistry.cpp` 和相关单测。
+
+### 下一步
+
+1. 进入 `DIA-TODO-013`，实现 `CommandRegistry` 的白名单命中、schema 校验、空 args 规范化与稳定 `field_paths` 负例。
+2. 013 完成后继续串行推进 `DIA-TODO-014`、`DIA-TODO-015`、`DIA-TODO-016`、`DIA-TODO-017`，把 facade placeholder gate 替换成真实主链。
+
+### 风险
+
+1. 本轮冻结的是 v1 内建 schema，而不是 profile 可覆盖 schema；如果后续实现把 `infra.diagnostics.allowed_commands` 扩成“按 profile 注入对象 schema”，会直接重开 `DIA-BLK-003`。
+2. 本轮刻意保留 `ValidationResult.field_paths` 的简化稳定定位符，而不是直接切换到 JSON Pointer 文本；若下一轮同时更改 field path 编码，会把实现变更和接口兼容风险混到一起。
+
 ## 记录 #158
 
 - 日期：2026-04-07

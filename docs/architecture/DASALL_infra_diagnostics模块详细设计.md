@@ -232,6 +232,35 @@ ValidationResult 的返回语义：
 4. `warnings` 只作为非阻断注解，不得单独把 `accepted` 置为 `false`。
 5. `result_code` 固定落在 diagnostics 私有错误域，并映射到 contracts::ResultCode::ValidationFieldMissing，不新增共享校验语义对象。
 
+### 6.5.2 allowed_commands 参数 schema 冻结
+
+冻结原则：
+1. `CommandRegistry::validate()` 以 `DiagnosticsCommand` 为权威输入模型；v1 参数 schema 只约束 `command_name`、`request_scope`、`args` 与 `timeout_ms`，不反向扩张公共对象。
+2. `infra.diagnostics.allowed_commands` 在 v1 只承担 capability gate，Profile/部署层只能裁剪已冻结的内建只读命令集合，不允许内联对象、不允许覆盖 `schema_ref`，也不允许按 profile 改写参数结构。
+3. 每条只读命令使用固定 schema 锚点：`schema://diagnostics/<command_name>/v1`；`CommandCatalog.arg_schema_ref` 返回该锚点，`arg_schema_summary` 继续只暴露 discoverability 摘要而不内联完整 schema。
+4. `DiagnosticsCommand.args` 采用受限 CLI token 形式：空数组表示“使用默认参数”；布尔 flag 写成 `--flag`；带值参数写成 `--key=value`；不允许 positional args、短参数、重复 token、未知 key 或非 ASCII token。
+5. `ValidationResult.field_paths` 继续使用已冻结的稳定定位符 `command_name`、`request_scope`、`timeout_ms`、`args[0]`；若未来需要指向 schema 内部子字段，可在 `arg_schema_ref` 中追加 JSON Pointer fragment，但不得改变公开 `field_paths` 语义。
+
+共用 envelope 约束：
+1. 三条 v1 只读命令的 `request_scope` 固定为 `runtime`；scope 不匹配时直接返回 `accepted=false`，`field_paths` 命中 `request_scope`。
+2. `timeout_ms` 必须满足 `1 <= timeout_ms <= infra.diagnostics.command.timeout_ms`；默认 cap 为 `3000`，超过 cap 的请求按参数非法处理。
+3. `args` 的静态校验只负责 token 语法、数量与数值范围，不承担 queue 是否存在、线程是否可枚举等运行期可用性判断；这类失败仍归 `CommandExecutor`。
+
+| command_name | schema_ref | request_scope | args schema | normalized default | validate 负例锚点 |
+|---|---|---|---|---|---|
+| `health.snapshot` | `schema://diagnostics/health.snapshot/v1` | `runtime` | `args` 允许为空，或仅允许 1 个 token `--summary`；`minItems=0`、`maxItems=1`、`uniqueItems=true` | 空 `args` 规范化为 `["--summary"]` | `request_scope!=runtime`、`args[0]=--verbose`、`args[1]` 存在 |
+| `queue.stats` | `schema://diagnostics/queue.stats/v1` | `runtime` | `args` 允许为空，或仅允许 1 个 token `--queue=<queue_id>`；`queue_id` 语法固定为 `[a-z0-9._-]{1,32}`；`minItems=0`、`maxItems=1`、`uniqueItems=true` | 空 `args` 规范化为 `["--queue=main"]` | `args[0]=main`、`args[0]=--queue=`、`args[1]` 存在 |
+| `thread.dump` | `schema://diagnostics/thread.dump/v1` | `runtime` | `args` 允许为空，或仅允许 1 个 token `--limit=<n>`；`n` 必须是十进制整数且满足 `1 <= n <= 32`；`minItems=0`、`maxItems=1`、`uniqueItems=true` | 空 `args` 规范化为 `["--limit=5"]` | `args[0]=5`、`args[0]=--limit=0`、`args[0]=--limit=99` |
+
+补充说明：
+1. `health.snapshot` 在 v1 不允许 `--full`、`--component=<id>` 等扩展参数，以保证 `diagnostics_safe_mode` 的最低风险回退面只包含稳定摘要快照。
+2. `queue.stats` 的 schema 只冻结 `queue_id` 的语法，不在 registry 层校验队列实例是否存在；若执行期找不到队列，错误归 `INF_E_DIAG_EXEC_FAIL`。
+3. `thread.dump` 的默认 `--limit=5` 是输出体积治理的一部分；任何需要更大上限的扩展都必须通过新的 schema version，而不是原位修改 v1。
+4. `CommandCatalog.arg_schema_summary` 的 v1 摘要应与上表保持一一对应，例如：
+   - `health.snapshot`: `type=array;minItems=0;maxItems=1;token=--summary;default=--summary`
+   - `queue.stats`: `type=array;minItems=0;maxItems=1;token=--queue=<queue_id>;pattern=[a-z0-9._-]{1,32};default=--queue=main`
+   - `thread.dump`: `type=array;minItems=0;maxItems=1;token=--limit=<1..32>;default=--limit=5`
+
 ### 6.6 核心接口语义定义
 
 建议头文件分布：infra/include/diagnostics/
@@ -303,8 +332,8 @@ ValidationResult 的返回语义：
 | 配置项 | 默认值 | 覆盖层级 | 说明 |
 |---|---|---|---|
 | infra.diagnostics.enabled | true | 默认/Profile/部署 | 诊断模块开关 |
-| infra.diagnostics.allowed_commands | ["health.snapshot","queue.stats","thread.dump"] | Profile/部署 | 命令白名单 |
-| infra.diagnostics.command.timeout_ms | 3000 | Profile/部署 | 单命令超时 |
+| infra.diagnostics.allowed_commands | ["health.snapshot","queue.stats","thread.dump"] | Profile/部署 | 只允许从 6.5.2 已冻结的内建 schema 集合中裁剪命令；v1 不允许 profile 改写参数 schema |
+| infra.diagnostics.command.timeout_ms | 3000 | Profile/部署 | 单命令超时上限；registry validate 拒绝超过该上限的请求 |
 | infra.diagnostics.max_artifact_bytes | 1048576 | Profile/部署 | 单快照最大证据大小 |
 | infra.diagnostics.redaction.profile | strict | Profile/部署 | strict/compat |
 | infra.diagnostics.snapshot.retention_days | 7 | Profile/部署 | 快照保留 |
@@ -347,7 +376,8 @@ ValidationResult 的返回语义：
 |---|---|---|---|---|---|---|
 | 冻结诊断统一入口 | 新增 IDiagnosticsService 接口 | 先锁定边界，避免实现漂移 | infra/include/diagnostics/IDiagnosticsService.h | unit: DiagnosticsServiceInterfaceTest | cmake --build build-ci --target dasall_infra | 依赖 INF-M1 接口冻结 |
 | 冻结快照对象 | 新增 DiagnosticsSnapshot 与命令对象 | 先对象后实现，满足 contracts 边界 | infra/include/diagnostics/DiagnosticsTypes.h | unit: DiagnosticsTypesTest; contract: DiagnosticsBoundaryContractTest | ctest --test-dir build-ci -R "DiagnosticsTypesTest|DiagnosticsBoundaryContractTest" | 依赖 contracts V1 Ready |
-| 冻结 registry 目录与校验返回边界 | 补齐 CommandCatalog 与 ValidationResult 设计 | 先锁定 list_commands/validate 的结果语义，再推进 IDiagnosticsCommandRegistry 头文件 | docs/architecture/DASALL_infra_diagnostics模块详细设计.md；后续 infra/include/diagnostics/IDiagnosticsCommandRegistry.h | process gate: DiagnosticsCommandRegistryTest | rg -n "CommandCatalog|ValidationResult|arg_schema_ref|field_paths" docs/architecture/DASALL_infra_diagnostics模块详细设计.md | 依赖只读命令白名单已完成；完整 allowed_commands 参数 schema 仍由 D-BLK-01 约束 |
+| 冻结 registry 目录与校验返回边界 | 补齐 CommandCatalog 与 ValidationResult 设计 | 先锁定 list_commands/validate 的结果语义，再推进 IDiagnosticsCommandRegistry 头文件 | docs/architecture/DASALL_infra_diagnostics模块详细设计.md；后续 infra/include/diagnostics/IDiagnosticsCommandRegistry.h | process gate: DiagnosticsCommandRegistryTest | rg -n "CommandCatalog|ValidationResult|arg_schema_ref|field_paths" docs/architecture/DASALL_infra_diagnostics模块详细设计.md | 依赖只读命令白名单已完成；完整 allowed_commands 参数 schema 已由 D-BLK-01 解阻 |
+| 冻结 allowed_commands v1 参数 schema | 补齐 `health.snapshot`、`queue.stats`、`thread.dump` 的 schema ref、args grammar 与 normalized defaults | 直接解除 CommandRegistry 的 validate 语义阻塞，避免实现期靠猜测扩张 schema | docs/architecture/DASALL_infra_diagnostics模块详细设计.md；docs/todos/infrastructure/deliverables/DIA-BLK-003-allowed_commands参数schema收敛.md | process gate: DiagnosticsCommandRegistryTest；TODO/worklog sync | rg -n "schema://diagnostics/health.snapshot/v1|schema://diagnostics/queue.stats/v1|schema://diagnostics/thread.dump/v1" docs/architecture/DASALL_infra_diagnostics模块详细设计.md | 无（2026-04-07 已完成 D-BLK-01 / DIA-BLK-003 解阻） |
 | 建立命令准入链路 | 新增 CommandRegistry + PolicyGuard 骨架 | 解决 INF-BLK-08 的白名单与准入问题 | infra/src/diagnostics/CommandRegistry.cpp; infra/src/diagnostics/CommandPolicyGuard.cpp | unit: DiagnosticsCommandPolicyTest | ctest --test-dir build-ci -R DiagnosticsCommandPolicyTest | 阻塞：策略 schema 冻结 |
 | 建立证据与脱敏链路 | 新增 EvidenceCollector + RedactionEngine | 满足“先脱敏再存储导出”硬约束 | infra/src/diagnostics/EvidenceCollector.cpp; infra/src/diagnostics/RedactionEngine.cpp | unit: DiagnosticsRedactionTest; failure: DiagnosticsRedactionFailureTest | ctest --test-dir build-ci -R "DiagnosticsRedactionTest|DiagnosticsRedactionFailureTest" | 阻塞：脱敏规则冻结 |
 | 建立快照存储与导出 | 新增 SnapshotStore + ExportManager | 形成可验证导出闭环 | infra/src/diagnostics/SnapshotStore.cpp; infra/src/diagnostics/ExportManager.cpp | unit: DiagnosticsSnapshotStoreTest; integration: InfraDiagnosticsIntegrationTest | ctest --test-dir build-ci -R "DiagnosticsSnapshotStoreTest|InfraDiagnosticsIntegrationTest" | 阻塞：导出格式与目标白名单 |
@@ -466,7 +496,7 @@ ValidationResult 的返回语义：
 
 | 阻塞项 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
-| D-BLK-01 命令白名单未冻结 | DIA-T004/T005 | 明确 allowed_commands 与参数 schema | 先冻结只读命令子集 | 禁止所有变更型命令，仅保留查询 |
+| D-BLK-01 已解阻（2026-04-07）：6.5.2 已冻结 `health.snapshot`、`queue.stats`、`thread.dump` 的 schema_ref、`request_scope=runtime`、args token grammar 与 normalized default；Profile 只允许裁剪命令集合，不允许改写参数 schema | DIA-T004/T005 | 无；后续仅需保持 diagnostics 详细设计、专项 TODO 与 deliverable 口径同步 | 证据回链到 6.5.2 与 docs/todos/infrastructure/deliverables/DIA-BLK-003-allowed_commands参数schema收敛.md | 若后续实现重新允许 profile 内联 schema、放开变更型命令或改变 v1 参数结构，则重新转为 Blocked |
 | D-BLK-02 脱敏规则未冻结 | DIA-T006/T007 | 明确字段分级与脱敏策略版本 | 先落 strict 规则与 deny-list | 导出功能仅限摘要，禁原始内容 |
 | D-BLK-03 导出格式与目标策略未冻结 | DIA-T007 | 明确 format/checksum/target 白名单 | 先支持本地 jsonl 导出 | 禁用远程导出 |
 | D-BLK-04 metrics/audit 最小接口未冻结 | DIA-T007/T009 | metrics/audit 桥接接口签名冻结 | 先使用最小适配器接口 | 降级为日志+错误码观测 |
@@ -496,6 +526,6 @@ ValidationResult 的返回语义：
 ### 12.2 后续任务建议
 
 1. 继续按 diagnostics 组件专项 TODO 推进 DIA-TODO-009 与 DIA-TODO-011，先完成公开接口收口。
-2. 在 DIA-TODO-011 完成后，再以 DIA-TODO-013 处理 CommandRegistry 实现，但完整 allowed_commands 参数 schema 仍需单独解阻。
+2. `DIA-BLK-003` 已在本轮完成；下一轮可直接以 `DIA-TODO-013` 落盘 CommandRegistry，并按 6.5.2 的 v1 schema 实现 validate 负例与规范化逻辑。
 3. 在 edge_balanced/edge_minimal 做一次资源预算压测，确认快照大小与保留窗口默认值。
 4. 补齐 tests/integration/infra/diagnostics 最小链路用例后，再开启远程导出能力评审。
