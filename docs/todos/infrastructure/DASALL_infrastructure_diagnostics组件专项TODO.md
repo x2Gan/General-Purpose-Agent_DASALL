@@ -193,7 +193,7 @@
 | DIA-TODO-023 | Done | 注册 diagnostics 源码到 infra CMake | diagnostics 设计 7、8.1；代码现状 | 8.1 文件落盘建议；7 Design->Build 映射 | L2 | infra/CMakeLists.txt、infra/src/diagnostics/ | diagnostics include/src 文件接线 | build：dasall_infra 可编译 | cmake --build build-ci --target dasall_infra | DIA-TODO-001~DIA-TODO-022 | 无 | 无 | infra/CMakeLists.txt、构建记录；2026-04-07 已确认 diagnostics 私有源码集覆盖 012~022 全部实现文件，并通过 `dasall_infra` 定向构建 gate | 仅当 placeholder 不再是唯一源码入口且 diagnostics 文件进入 dasall_infra 构建图时完成 |
 | DIA-TODO-024 | Done | 注册 diagnostics 的 unit 与 contract 测试入口 | diagnostics 设计 7、8.1、9.1；工程规范 3.7 | 8.1 tests 路径；9.1 测试矩阵 | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/diagnostics/、tests/contract/CMakeLists.txt、tests/contract/infra/diagnostics/ | unit：DiagnosticsTypesTest、DiagnosticsServiceInterfaceTest、DiagnosticsCommandRegistryTest、DiagnosticsCommandPolicyTest、DiagnosticsRedactionTest、DiagnosticsSnapshotStoreTest、DiagnosticsExportTest；contract：DiagnosticsBoundaryContractTest、DiagnosticsErrorMappingContractTest | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -N -L unit -R "DiagnosticsTypesTest|DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest|DiagnosticsRedactionTest|DiagnosticsSnapshotStoreTest|DiagnosticsExportTest" && ctest --test-dir build-ci -N -L contract -R "DiagnosticsBoundaryContractTest|DiagnosticsErrorMappingContractTest" && ctest --test-dir build-ci --output-on-failure -L unit -R "DiagnosticsTypesTest|DiagnosticsServiceInterfaceTest|DiagnosticsCommandRegistryTest|DiagnosticsCommandPolicyTest|DiagnosticsRedactionTest|DiagnosticsSnapshotStoreTest|DiagnosticsExportTest" && ctest --test-dir build-ci --output-on-failure -L contract -R "DiagnosticsBoundaryContractTest|DiagnosticsErrorMappingContractTest" | DIA-TODO-023 | 无 | 无 | tests/unit/infra/CMakeLists.txt、tests/contract/smoke/*.cpp、ctest 发现性证据；2026-04-07 已确认 7 个 diagnostics unit 与 2 个 contract 测试可被标签发现并通过 | 仅当新增 diagnostics unit/contract 测试可被 ctest -N 发现并执行时完成 |
 | DIA-TODO-025 | Done | 注册 diagnostics integration 测试入口 | diagnostics 设计 8.1、9.1；tests 现状；11.1 | 8.1 tests/integration/infra/diagnostics；9.1 Integration；11.1 D-BLK-05 | L0 | tests/integration/infra/diagnostics/、tests/CMakeLists.txt | integration：InfraDiagnosticsIntegrationTest、InfraDiagnosticsSmokeTest | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N -L integration -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest" && ctest --test-dir build-ci --output-on-failure -L integration -R "InfraDiagnosticsIntegrationTest|InfraDiagnosticsSmokeTest" | DIA-TODO-020、DIA-TODO-021、DIA-TODO-022、DIA-TODO-023 | 无（2026-03-30 已由 INF-BLK-06 integration 顶层拓扑校准解阻） | 无 | tests/integration/infra/CMakeLists.txt、tests/CMakeLists.txt、ctest 发现性证据；2026-04-07 已确认 2 个 diagnostics integration 测试可被 `integration` 标签发现并通过 | 仅当 tests 顶层完成 integration 接线且 diagnostics 集成用例可被 ctest 发现后，状态才可由 Not Started 转为 Done |
-| DIA-TODO-026 | Not Started | 回写 diagnostics 质量门与交付证据 | diagnostics 设计 8.3 DIA-T010；9.2；11.1；infra 专项 TODO INF-TODO-018 | 8.3 DIA-T010；9.2 Gate；11.1 阻塞 | L2 | docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md、docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md | process test：门禁结论、INF-TODO-018 与 INF-BLK-08 状态变化、回退证据回写 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract | DIA-TODO-024 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个门禁具备通过/失败结论及命令证据，并回链 INF-TODO-018/INF-BLK-08 时完成 |
+| DIA-TODO-026 | Done | 回写 diagnostics 质量门与交付证据 | diagnostics 设计 8.3 DIA-T010；9.2；11.1；infra 专项 TODO INF-TODO-018 | 8.3 DIA-T010；9.2 Gate；11.1 阻塞 | L2 | docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md、docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md、docs/worklog/DASALL_开发执行记录.md | process test：diagnostics discoverability 汇总、unit/contract/integration 门禁结论、INF-TODO-018 与 INF-BLK-08 状态变化、worklog 回写 | ctest --test-dir build-ci -N | rg 'Diagnostics|InfraDiagnostics' && ctest --test-dir build-ci --output-on-failure -L unit -R 'Diagnostics|InfraDiagnostics' && ctest --test-dir build-ci --output-on-failure -L contract -R 'Diagnostics|InfraDiagnostics' && ctest --test-dir build-ci --output-on-failure -L integration -R 'Diagnostics|InfraDiagnostics' | DIA-TODO-024、DIA-TODO-025 | 无 | 无 | 更新后的 TODO 文档证据段、worklog 记录；2026-04-07 已统一回写 diagnostics 专项 TODO / infra 总 TODO / worklog，并确认 discoverability 14 项、unit 10/10、contract 2/2、integration 2/2 通过 | 仅当每个门禁具备通过/失败结论及命令证据，并回链 INF-TODO-018/INF-BLK-08 与 worklog 时完成 |
 
 ### 6.2 当前 Blocked 任务索引
 
@@ -213,7 +213,7 @@
 | D 主链路骨架 | DIA-TODO-012、DIA-TODO-013、DIA-TODO-014、DIA-TODO-015、DIA-TODO-016、DIA-TODO-017 | 已完成 | 2026-04-07 已完成 Facade -> Registry -> PolicyGuard -> Executor -> EvidenceCollector -> SnapshotAssembler 主链骨架；下一步转入 E 阶段的脱敏/存储/导出 |
 | E 脱敏/落盘/导出 | 已完成 | 2026-04-07 已完成 RedactionEngine、SnapshotStore、ExportManager 最小骨架；当前可转入 F 阶段桥接接口冻结 |
 | F 桥接与门禁 | DIA-TODO-021、DIA-TODO-022、DIA-TODO-023、DIA-TODO-024、DIA-TODO-025 | 已完成 | 2026-04-07 已完成 diagnostics metrics/audit bridge、源码构建图接线、unit/contract 发现性与 integration 发现性门禁；下一步只剩 G 阶段证据收口 |
-| G 证据收口 | DIA-TODO-026 | 串行 | 回写质量门、阻塞变化与 INF-TODO-018 状态 |
+| G 证据收口 | DIA-TODO-026 | 已完成 | 2026-04-07 已统一回写 diagnostics 的 discoverability、unit/contract/integration 质量门结论，并完成 INF-TODO-018 / INF-BLK-08 / worklog 回链 |
 
 ### 7.2 必过门禁表
 
@@ -258,8 +258,10 @@
 说明：
 
 1. integration 命令已于 2026-04-07 随 DIA-TODO-025 纳入 diagnostics 门禁基线；顶层 integration 拓扑已于 2026-03-30 解阻，当前 diagnostics 用例也已完成 discoverability 收口。
-2. 每个可执行任务至少包含 1 条构建命令与 1 条测试命令；Block 任务保留解阻后的验收命令。
-3. 对于来自详细设计的命名测试项，应优先使用 DiagnosticsTypesTest、DiagnosticsBoundaryContractTest、DiagnosticsCommandPolicyTest、DiagnosticsRedactionTest、DiagnosticsRedactionFailureTest、DiagnosticsSnapshotStoreTest、DiagnosticsExportTest、DiagnosticsMetricsAuditBridgeTest、InfraDiagnosticsIntegrationTest、InfraDiagnosticsSmokeTest。
+2. 2026-04-07 已执行 `ctest --test-dir build-ci -N | rg 'Diagnostics|InfraDiagnostics'`，发现 diagnostics 相关测试 14 项：unit 10、contract 2、integration 2。
+3. 2026-04-07 已执行 diagnostics 标签门禁：`unit` 10/10 通过、`contract` 2/2 通过、`integration` 2/2 通过。
+4. 每个可执行任务至少包含 1 条构建命令与 1 条测试命令；Block 任务保留解阻后的验收命令。
+5. 对于来自详细设计的命名测试项，应优先使用 DiagnosticsTypesTest、DiagnosticsBoundaryContractTest、DiagnosticsCommandPolicyTest、DiagnosticsRedactionTest、DiagnosticsRedactionFailureTest、DiagnosticsSnapshotStoreTest、DiagnosticsExportTest、DiagnosticsMetricsAuditBridgeTest、InfraDiagnosticsIntegrationTest、InfraDiagnosticsSmokeTest。
 
 ### 9.2 质量门逐项回答
 
@@ -270,6 +272,16 @@
 5. 是否所有任务具备可二值判定完成标准：是。
 6. 是否避免跨子系统范围扩张：是。
 7. 若要求函数/数据结构级，是否真正落到对象：是；无法细化处已标注证据缺口。
+
+### 9.3 2026-04-07 质量门收口结论
+
+| 门禁 | 证据命令 | 结论 | 摘要 |
+|---|---|---|---|
+| Discoverability | ctest --test-dir build-ci -N \| rg 'Diagnostics\|InfraDiagnostics' | Pass | 发现 diagnostics 相关测试 14 项：unit 10、contract 2、integration 2 |
+| Unit | ctest --test-dir build-ci --output-on-failure -L unit -R 'Diagnostics\|InfraDiagnostics' | Pass | 10/10 通过 |
+| Contract | ctest --test-dir build-ci --output-on-failure -L contract -R 'Diagnostics\|InfraDiagnostics' | Pass | 2/2 通过 |
+| Integration | ctest --test-dir build-ci --output-on-failure -L integration -R 'Diagnostics\|InfraDiagnostics' | Pass | 2/2 通过 |
+| Traceability | 同轮回写 diagnostics 专项 TODO、infra 总 TODO 与 worklog | Pass | INF-TODO-018、INF-BLK-08 与记录 #176 已同步收口 |
 
 ## 10. 风险与回退策略
 
@@ -294,13 +306,13 @@
 2. IDiagnosticsPolicyGuard 已完成接口冻结，且 `authorize(const DiagnosticsCommand&, const InfraContext&) -> CommandDecision` 已通过 interface/unit 与 boundary contract 验收。
 3. IDiagnosticsService 已完成首版对象/接口冻结；IDiagnosticsCommandRegistry 已完成公开头文件冻结，并以 DiagnosticsTypes.h 中的最小 `CommandCatalog` / `ValidationResult` 代码定义支撑可编译接口；CommandRegistry、CommandPolicyGuard、CommandExecutor、EvidenceCollector 与 SnapshotAssembler 已完成 validate/capability gate、allow/deny、执行 success/failure、EvidenceBundle 聚合与 snapshot 组装 skeleton，主链 D 阶段已完成。
 4. RedactionEngine、ExportManager、DiagnosticsMetricsBridge 与 DiagnosticsAuditBridge 已完成最小骨架；remote export 的 required audit 与预留 command extension 审计合同已进入代码路径。
-5. tests/integration 顶层已接线并可发现 InfraDiagnosticsSmokeTest，且 diagnostics 私有源码、unit/contract 发现性与 integration 发现性均已收口；剩余工作只在质量门证据统一回写。
+5. tests/integration 顶层已接线并可发现 InfraDiagnosticsSmokeTest，且 diagnostics 私有源码、unit/contract/integration 发现性与执行证据均已收口；质量门证据也已统一回写。
 
 ### 11.3 当前最小可执行粒度
 
 1. 数据结构：函数/字段级可执行。
 2. 接口：IDiagnosticsPolicyGuard、IDiagnosticsService 与 IDiagnosticsCommandRegistry 均已完成方法级冻结。
-3. 实现：DiagnosticsMetricsBridge、DiagnosticsAuditBridge 与 ExportManager 均已落盘最小骨架，且 diagnostics 私有源码与全部测试发现性门禁均已完成；下一步进入质量门证据回写。
+3. 实现：DiagnosticsMetricsBridge、DiagnosticsAuditBridge 与 ExportManager 均已落盘最小骨架，且 diagnostics 私有源码、全部测试发现性门禁与质量门证据回写均已完成；当前进入回归维护。
 
 ### 11.4 若未达到函数级，还缺哪些设计信息
 
@@ -308,6 +320,6 @@
 
 ### 11.5 下一步建议
 
-1. 直接进入 DIA-TODO-026，统一回写 diagnostics 的 unit / contract / integration 质量门结论与交付证据。
-2. 保持现有 diagnostics 测试标签与注册入口稳定，避免在 026 之前回退已收口的 `unit` / `contract` / `integration` 发现性。
-3. 若后续新增 diagnostics 实现或测试文件，必须同步更新 CMake 与标签发现性门禁，避免重新打开 023~025。
+1. diagnostics 专项 TODO 当前 Build-ready 任务已全部收口，后续进入回归维护与证据同步阶段。
+2. 若后续新增 diagnostics 实现或测试文件，必须同步重跑 `ctest -N` 与 `unit` / `contract` / `integration` 标签门禁，并回写专项 TODO、infra 总 TODO 与 worklog。
+3. 若继续推进 infrastructure，应转向 diagnostics 之外仍未完成的原子任务，而不是重新打开 023~026。

@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #176
+
+- 日期：2026-04-07
+- 阶段：diagnostics 组件专项 TODO
+- 任务：DIA-TODO-026 diagnostics 质量门与交付证据统一回写
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md) 中 `DIA-TODO-026` 是 diagnostics 专项 TODO 当前唯一剩余的原子任务，前置的 024/025 测试入口门禁已全部完成，因此本轮只需要把质量门与交付证据集中回写收口。
+2. 026 的完成条件不是新增代码，而是把 diagnostics 的 discoverability、unit、contract、integration 结论与 INF-TODO-018 / INF-BLK-08 的对齐证据写回专项 TODO、infra 总 TODO 和 worklog，避免门禁状态继续分散在 023~025 的单轮记录里。
+
+### 改动
+
+1. 更新 [docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md)，把 `DIA-TODO-026` 从 `Not Started` 改为 `Done`，补齐 discoverability 与 unit / contract / integration 三道标签门禁的统一命令证据，并新增 9.3 质量门收口结论。
+2. 更新 [docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md)，把 diagnostics 在 `INF-BLK-08` 下的收口状态从“待统一回写证据”推进到“026 已完成统一回写”，并把最新测试证据补入 8.1 校准记录。
+3. 更新本文件，记录 diagnostics 专项 TODO 已完成全部 Build-ready 任务和质量门证据回链状态。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N | rg 'Diagnostics|InfraDiagnostics'`
+   - `ctest --test-dir build-ci --output-on-failure -L unit -R 'Diagnostics|InfraDiagnostics'`
+   - `ctest --test-dir build-ci --output-on-failure -L contract -R 'Diagnostics|InfraDiagnostics'`
+   - `ctest --test-dir build-ci --output-on-failure -L integration -R 'Diagnostics|InfraDiagnostics'`
+2. 结果：
+   - discoverability：发现 diagnostics 相关测试 14 项，其中 unit 10、contract 2、integration 2。
+   - unit：10/10 通过。
+   - contract：2/2 通过。
+   - integration：2/2 通过。
+
+### 结果
+
+1. `DIA-TODO-026` 已完成，diagnostics 的质量门和交付证据已从分散的 023~025 单轮记录统一回写到专项 TODO 与 infra 总 TODO。
+2. diagnostics 专项 TODO 当前 Build-ready 原子任务 001~026 已全部收口，`INF-TODO-018` 与 `INF-BLK-08` 的 diagnostics 校准状态也已同步到最新门禁证据。
+
+### 下一步
+
+1. diagnostics 子域后续进入回归维护阶段；若新增 diagnostics 源码或测试，必须同步重跑 discoverability 与 `unit` / `contract` / `integration` 标签门禁，并回写台账。
+2. 若继续推进 infrastructure，下一轮应从 diagnostics 之外仍未完成的原子任务中选择新的最小执行项。
+
+### 风险
+
+1. 026 本轮是 docs/worklog 收口轮，不新增代码实现；若未来 diagnostics 的 CMake 注册、标签或测试名发生变化而未同步回写，本轮收口结论会失效，需要重新执行 023~026 的门禁链。
+2. VS Code CMake Tools 当前仍无法列出有效 tests/targets，本轮证据继续采用仓库已验证的 `build-ci` + `ctest --test-dir build-ci ...` 路径；若工具状态恢复，后续可再切回 IDE 集成验证。
+
 ## 记录 #175
 
 - 日期：2026-04-07
