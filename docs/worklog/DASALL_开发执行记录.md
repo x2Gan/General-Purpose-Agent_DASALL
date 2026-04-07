@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #181
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-010 SlotSwitchCoordinator 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-010` 是 install 之后的直接后继任务，且前置 `OTA-TODO-005`、`OTA-TODO-009` 已完成，因此可以继续推进 slot switch skeleton。
+2. 010 的可执行边界只要求 inactive slot 选择、next boot 设置和 rollback token 预生成；token 持久化仍被 `OTA-BLK-01` 阻塞，所以本轮只落内存态 token 骨架。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-010-SlotSwitchCoordinator骨架收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-010-SlotSwitchCoordinator骨架收敛.md)，记录 010 的设计依据、Design->Build 映射、Build 合规复核与验证证据。
+2. 新增 [infra/src/ota/SlotSwitchCoordinator.h](/home/gangan/DASALL/infra/src/ota/SlotSwitchCoordinator.h) 与 [infra/src/ota/SlotSwitchCoordinator.cpp](/home/gangan/DASALL/infra/src/ota/SlotSwitchCoordinator.cpp)，冻结 slot inventory provider、rollback token factory、switch policy snapshot 与 slot switch result 边界，并实现 `select_inactive_slot / build_slot_plan / set_next_boot`。
+3. 新增 [tests/unit/infra/ota/SlotSwitchCoordinatorTest.cpp](/home/gangan/DASALL/tests/unit/infra/ota/SlotSwitchCoordinatorTest.cpp)，覆盖 inactive slot 选择、切换前 token 生成、slot unavailable 拒绝与 target 不再 inactive 拒绝。
+4. 更新 [infra/CMakeLists.txt](/home/gangan/DASALL/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](/home/gangan/DASALL/tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](/home/gangan/DASALL/tests/unit/infra/CMakeLists.txt)，把 SlotSwitchCoordinator 源码和 SlotSwitchCoordinatorTest 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-010` 从 `Not Started` 回写为 `Done` 并补齐交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci`
+   - `cmake --build build-ci --target dasall_slot_switch_coordinator_unit_test`
+   - `ctest --test-dir build-ci -N -R "SlotSwitchCoordinatorTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "SlotSwitchCoordinatorTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - OTA 定向 discoverability：发现 `SlotSwitchCoordinatorTest` 1 项。
+   - OTA 定向执行：`SlotSwitchCoordinatorTest` 1/1 通过。
+   - 仓库级 unit 门：167/167 通过。
+
+### 结果
+
+1. `OTA-TODO-010` 已完成，OTA 现在具备 SlotSwitchCoordinator 骨架，能够显式选择 inactive slot，并在 boot mutation 前生成有效 rollback token。
+2. `set_next_boot` 现在会在执行前重新校验 target 仍为 inactive target，避免把 stale slot plan 直接写入 boot control。
+
+### 下一步
+
+1. 先处理 `OTA-BLK-01`，冻结 rollback token 持久化位置、过期规则与重启恢复边界，为 `OTA-TODO-012` 解阻。
+2. 解阻完成后进入 `OTA-TODO-012`，实现 RollbackController 骨架，消费 009/010 已形成的 InstallEvidence 与 RollbackToken。
+
+### 风险
+
+1. 当前 rollback token 仍是内存态对象，尚未具备跨重启恢复能力；这不是遗漏，而是遵守 `OTA-BLK-01` 的显式阻塞边界。
+2. `set_next_boot` 只依赖 mockable boot control adapter 验证顺序和 inactive 约束，真实平台 wiring 仍需在后续 integration/failure 测试中补齐。
+
 ## 记录 #180
 
 - 日期：2026-04-07

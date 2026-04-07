@@ -187,6 +187,7 @@ set(DASALL_INFRA_OTA_SOURCES
   src/ota/PackageVerifier.cpp
   src/ota/ArtifactCompatibilityEvaluator.cpp
   src/ota/InstallExecutor.cpp
+  src/ota/SlotSwitchCoordinator.cpp
 )
 
 set(DASALL_INFRA_OTA_PRIVATE_HEADERS
@@ -194,6 +195,7 @@ set(DASALL_INFRA_OTA_PRIVATE_HEADERS
   src/ota/PackageVerifier.h
   src/ota/ArtifactCompatibilityEvaluator.h
   src/ota/InstallExecutor.h
+  src/ota/SlotSwitchCoordinator.h
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
