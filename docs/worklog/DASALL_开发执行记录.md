@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #182
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-018 rollback token 生命周期与持久化设计
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 中 `OTA-TODO-012` 仍被 `OTA-BLK-01` 阻塞，因此必须先执行 `OTA-TODO-018` 解阻，符合用户要求的 blocker recovery 顺序。
+2. 010 已经把 rollback token 生成顺序收敛为内存态骨架，本轮只需要把持久化位置、TTL 与重启恢复规则冻结到设计文档，即可解除 012 的前置阻塞。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-018-rollback-token生命周期与持久化设计收敛.md](/home/gangan/DASALL/docs/todos/infrastructure/deliverables/OTA-TODO-018-rollback-token生命周期与持久化设计收敛.md)，记录 018 的设计输入、收敛结论、阻塞解锁映射与过程验证。
+2. 更新 [docs/architecture/DASALL_infra_OTA模块详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_infra_OTA模块详细设计.md)，冻结：
+   - 单 active token 文件路径 `ota/rollback/active-token.json`；
+   - `infra.ota.rollback.token_ttl_sec` 默认值与下界；
+   - `prepared / armed / consumed / expired / invalid` 生命周期状态；
+   - 启动时 token 恢复矩阵与 `.corrupt` / `expired` 处理规则。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md)，将 `OTA-TODO-018` 回写为 `Done`，并同步把 `OTA-TODO-012` 的 blocker 字段与 `OTA-BLK-01` 阻塞表更新为已解阻。
+
+### 测试
+
+1. 过程验证命令：
+   - `rg -n "RollbackToken|rollback token|expires_at|持久化" docs/architecture/DASALL_infra_OTA模块详细设计.md`
+2. 结果：
+   - OTA 详细设计中已存在明确的 token 文件位置、TTL、生命周期状态与重启恢复矩阵。
+   - `OTA-TODO-012` 已解除 `OTA-BLK-01` 阻塞，可进入实现轮次。
+
+### 结果
+
+1. `OTA-TODO-018` 已完成，`OTA-BLK-01` 已被设计补丁解阻，RollbackController 后续不再需要重新讨论 file/sqlite 介质选择。
+2. rollback token 现在拥有明确的生命周期和恢复矩阵，后续 012 只需按此边界实现 code path 即可。
+
+### 下一步
+
+1. 进入 `OTA-TODO-012`，实现 RollbackController 骨架，消费 009/010 已落盘的 InstallEvidence 和 RollbackToken。
+2. 012 完成后继续回看 011/013/014 与 017 的剩余 OTA 闭环和测试门。
+
+### 风险
+
+1. 本轮只冻结了 V1 单文件 backend；如果未来要扩展 sqlite 或更强状态存储，必须保持现有生命周期语义和向后兼容读取。
+2. `invalid`/`expired` 的人工恢复流程已被设计层显式化，但具体运维工具和 CLI 恢复入口仍需后续任务补齐。
+
 ## 记录 #181
 
 - 日期：2026-04-07

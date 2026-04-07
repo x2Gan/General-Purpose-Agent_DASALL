@@ -338,7 +338,7 @@ infra/ota 非职责：
 | VerifiedPackageManifest | package_id, signature_ok, hash_set, release_counter, compatible_profiles, artifact_list | release_counter 必须单调不回退 | 可映射到 ResultCode，但对象保持私有 |
 | PrecheckReport | health_ok, resource_ok, compatibility_ok, policy_ok, blocking_reasons | 任一 false 都需带 blocking_reasons | reason 可通过 ErrorInfo 暴露，不新增 contracts 字段 |
 | SlotPlan | active_slot, target_slot, slot_group, switch_policy, confirm_deadline | target_slot 必须为 inactive | infra 私有对象 |
-| RollbackToken | rollback_id, previous_boot_target, staged_artifacts, created_at, expires_at | apply 成功切换前必须生成；过期后只能人工恢复 | rollback_id 复用 ID 语义，不进入 contracts |
+| RollbackToken | rollback_id, previous_boot_target, staged_artifacts, created_at, expires_at | apply 成功切换前必须生成并持久化为单 active token；过期后只能人工恢复 | rollback_id 复用 ID 语义，不进入 contracts |
 | InstallEvidence | artifact_id, written_target, checksum, install_ts, installer_version | 必须可回放、可审计 | 仅 evidence_ref 向外暴露 |
 | UpgradeOutcome | phase, result_code, rollback_applied, final_version_set, evidence_ref | 结果必须二值可判定；rollback_applied 显式建模 | 可作为 IOTAManager 输出锚点，不引入额外共享语义 |
 | OTAStatusSnapshot | last_plan_id, state, active_slot, pending_confirm, last_failure_code, backlog_count | 用于运维查询，不承载业务决策 | 通过 ResultCode/ErrorInfo 暴露失败摘要 |
@@ -468,6 +468,7 @@ infra/ota 非职责：
 | infra.ota.install.max_parallel_artifacts | 1 | 默认/Profile | 默认串行安装，避免边缘设备资源抖动 |
 | infra.ota.slot.confirm_timeout_sec | 180 | Profile/部署 | 启动确认窗口 |
 | infra.ota.rollback.auto_on_confirm_fail | true | 默认/Profile | confirm 失败是否自动回滚 |
+| infra.ota.rollback.token_ttl_sec | 900 | 默认/Profile/部署 | rollback token 自动回滚有效期；必须 >= confirm_timeout_sec + 60 |
 | infra.ota.repo_switch.atomic_required | true | 默认/Profile | repo_bound 工件是否要求原子指针切换 |
 | infra.ota.allow_downgrade | false | 默认/部署 | 是否允许人工显式降级 |
 | infra.ota.audit.required | true | 默认/Profile | 高风险操作审计不可关闭 |
@@ -488,6 +489,32 @@ infra/ota 非职责：
 4. `anchor_purpose` 本轮冻结为 `ota.package.verify`；OTA 只读取 trust anchor，不负责持久化、轮换、撤销与权限策略。
 5. 当 trust anchor 缺失、读取失败、内容为空或算法不匹配时，PackageVerifier 对外统一映射到已冻结的 `INF_E_OTA_VERIFY_FAIL`；细分原因仅通过日志、审计和 `source_ref` 留痕，不新增 contracts 字段。
 6. `SignatureVerifierAdapter` 继续作为实现抽象占位，但其输入必须被 `signature_algorithm + TrustAnchorMaterial + signed_metadata_ref` 约束；输出仍只承载 `signature_ok/hash_set/release_counter` 等 OTA 私有语义。
+
+#### 6.10.2 rollback token 生命周期与持久化冻结（2026-04-07）
+
+1. V1 rollback token 持久化介质固定为 platform 文件系统抽象上的单 active token 原子文件，不引入 sqlite；逻辑路径固定为 `ota/rollback/active-token.json`，Linux 映射为 `${platform.linux.fs.root_prefix}/ota/rollback/active-token.json`。
+2. `RollbackToken` 公共字段保持 `rollback_id + previous_boot_target + staged_artifacts + created_at + expires_at` 不变；持久化记录只在 OTA 私有域增加 `state` 与 `updated_at` 元数据，不修改 contracts 或 public OTATypes。
+3. 生命周期状态冻结为：
+   - `prepared`：SlotSwitchCoordinator 已写入 token 文件，但 `set_next_boot(...)` 尚未成功。
+   - `armed`：`set_next_boot(...)` 成功后，token 进入自动回滚窗口。
+   - `consumed`：BootConfirmationMonitor 判定成功启动，或 RollbackController 已完成回滚并写出证据。
+   - `expired`：当前时间超过 `expires_at`，且 token 仍未进入 `consumed`。
+   - `invalid`：token 文件解码失败、schema 缺字段、`staged_artifacts` 重复/为空或 `expires_at <= created_at`。
+4. 持久化操作必须通过 platform file adapter 的“临时文件 + 原子 rename”完成；同一设备同一时刻只允许存在一个 `active-token.json`，若发现已有 `armed` token，则新的 apply 必须被 precheck/manager 拒绝。
+5. `expires_at` 由 `created_at + infra.ota.rollback.token_ttl_sec` 计算，默认 TTL 为 900 秒，且必须满足 `infra.ota.rollback.token_ttl_sec >= infra.ota.slot.confirm_timeout_sec + 60`；小于该下限的配置在 precheck/manager 初始化阶段直接拒绝。
+6. 重启恢复矩阵冻结如下：
+
+| 启动时 token 状态 | 当前 active target | 时间窗口 | 恢复动作 |
+|---|---|---|---|
+| prepared | 等于 `previous_boot_target` | 未过期 | 视为切槽前中断，删除 token，写 audit，不触发 rollback |
+| prepared | 不等于 `previous_boot_target` | 任意 | 提升为 `invalid`，移动到 `.corrupt.<ts>`，标记 ota_degraded |
+| armed | 不等于 `previous_boot_target` | 未过期 | 暴露给 BootConfirmationMonitor / RollbackController，继续 confirm 或自动回滚决策 |
+| armed | 等于 `previous_boot_target` | 任意 | 视为切槽未生效或已恢复旧目标，写 audit 后删除 token |
+| expired | 任意 | 已过期 | 移动到 `ota/rollback/expired/<rollback_id>.json`，标记 ota_degraded，禁止自动 apply，要求人工清理 |
+| invalid | 任意 | 任意 | 移动到 `.corrupt.<ts>` 并记录 critical 审计；禁止自动回滚与自动 apply |
+
+7. RollbackController 只消费 `armed` 且未过期的 token；`expired`/`invalid` token 只能进入人工恢复路径，不得再触发自动 `set_next_boot(previous_boot_target)`。
+8. 该冻结结论直接解阻 `OTA-BLK-01` 与 `OTA-TODO-012`；后续若需要从单文件演进到 sqlite 或更强状态存储，只能作为向后兼容的新 backend，不能改变现有生命周期语义。
 
 ### 6.11 可观测性设计
 
@@ -636,7 +663,7 @@ infra/ota 非职责：
 | 签名算法与 trust anchor 接口已解阻（2026-04-01） | OTA-M2 | signature_algorithm 允许集与 secret 提供的 ITrustAnchorProvider.load_active_anchor(...) 读取接口已冻结 | 后续按冻结边界实现 IOTAPackageVerifier/PackageVerifier | 若具体密码库暂不可用，继续保留 SignatureVerifierAdapter 占位并维持 verify_required gate |
 | platform boot control adapter 未具备 | OTA-M3、OTA-M4 | 明确 get_active_target、set_next_boot、mark_boot_success/failed 四个动作 | 先用 mock boot control 走单测和集成夹具 | 未解阻前只支持 repo_bound 工件升级与 dry_run |
 | tests integration 顶层注册未稳定 | OTA-M5 | tests/CMakeLists.txt 接入 integration 子目录并建立发现规则 | 先完成 unit/contract/failure-injection 局部测试 | 未解阻前不得宣告 OTA 全链路 gate 完成 |
-| rollback token 生命周期与持久化位置未冻结 | OTA-M3、OTA-M4 | 明确 token 存储位置、过期策略与重启恢复规则 | 先冻结 token 字段和内存态流程 | 无法解阻时仅支持同进程内模拟回滚验证 |
+| rollback token 生命周期与持久化位置已解阻（2026-04-07） | OTA-M3、OTA-M4 | 单 active token 文件位置、TTL 与重启恢复矩阵已冻结 | 后续按冻结边界实现 RollbackController 与 token state store | 若平台原子写暂不可用，保持 dry_run/repo_bound 路径并禁止 slot-bound auto rollback |
 
 ### 11.2 风险清单
 
@@ -654,7 +681,7 @@ infra/ota 非职责：
 
 1. UpgradePlan 的 target_scope 是否允许跨进程组件批量升级，还是仅支持单设备局部范围。
 2. repo_bound 工件的原子指针切换由 config 模块提供通用发布能力，还是由 OTA 内部实现私有切换器。
-3. rollback token 需要持久化到本地文件、sqlite，还是先保留 platform 抽象存储。
+3. 已于 2026-04-07 收敛：V1 固定使用 platform 文件系统抽象上的单 active token 原子文件 `ota/rollback/active-token.json`；不引入 sqlite，后续若扩展 backend 只能保持现有生命周期语义不变。
 4. 已于 2026-04-01 收敛：首版允许 `ed25519` 与 `ecdsa-p256-sha256` 两种算法；具体密码库继续通过 adapter 注入，trust anchor 由 secret 子域只读接口提供。
 5. boot confirm 成功条件是否只依赖 health ready，还是还要包含指定进程心跳与版本报告。
 
