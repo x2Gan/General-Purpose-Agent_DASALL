@@ -134,7 +134,7 @@
 | IPluginSignatureVerifier | 详设 6.3、6.6 | L1 | 方法名、输入输出、验签失败禁止 load | trust_store 结构、链验细节、失败码详尽定义 | 先补设计，当前 Blocked（INF-BLK-09） |
 | IPluginCompatibilityEngine | 详设 6.3、6.6 | L1 | 方法名、check 方法、三检输出 | ABI/API 匹配规则表、主次版本定义、Host ABI 识别 | 先补设计，当前 Blocked（INF-BLK-09） |
 | PluginValidationPipeline | 详设 6.3、6.7/6.8 | L2 | 触发时机、三检顺序、失败枝条、输出聚合对象 | 并行 vs 串行执行约束、timeout 编排、回滚能力 | 直接拆流程任务，依赖接口与 INF-TODO-017 |
-| PluginLifecycleManager | 详设 6.7/6.8 | L1 | 状态机图、load/unload/enable/disable 转移、故障恢复 | safe_mode 触发逻辑、handle 释放时机、signal 处理 | 先补设计，当前不拆实现任务，仅接口骨架 |
+| PluginLifecycleManager | 详设 6.7/6.8 | L2 | 状态机图、load/unload/enable/disable 转移、故障恢复 | handle 释放细节、signal 处理、真实平台桥接 | 可直接拆流程骨架任务；真实 runtime bridge 仍受 PLG-BLK-04 约束 |
 | PluginAuditAdapter | 详设 6.8、6.10 | L2 | 高风险动作清单、审计字段最小集、强制审计条件 | 审计导出格式、脱敏规则 | 直接拆适配器任务，依赖 INF-TODO-016 |
 | infra CMake/plugin 注册 | 详设 8.1；当前代码现状 | L2 | 目录建议、文件列表、test 子目录 | integration 顶层 CMake 接入细节 | 直接拆注册任务 |
 
@@ -159,7 +159,7 @@
 | plugin 构建入口接线 | 详设 8.1、8.2 | 构建/测试 | P0 | Done | PLG-TODO-008 | plugin source/public header 已按组件收敛到 infra CMake 入口 |
 | plugin 单元测试入口注册 | 详设 9.1；编码规范 3.7 | 测试 | P0 | Done | PLG-TODO-009 | plugin unit 注册逻辑已下沉到 tests/unit/infra/plugin 子目录，并以组件级列表接入顶层聚合 |
 | plugin 合约边界测试入口注册 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 测试 | P0 | Done | PLG-TODO-010 | plugin contract 注册逻辑已下沉到 tests/contract/plugin 子目录，并统一收敛 helper 与 discoverability |
-| PluginLifecycleManager 状态机 | 详设 6.7/6.8 | 流程 | P1 | Not Started | PLG-TODO-011 | 状态机与故障恢复图存在，仅提供骨架与状态转移测试 |
+| PluginLifecycleManager 状态机 | 详设 6.7/6.8 | 流程 | P1 | Done | PLG-TODO-011 | 已落盘生命周期骨架，并通过 unit/contract 验证关键状态转移、failed cleanup 与公共结果边界稳定 |
 | 失败注入测试与指标验证 | 详设 9.1、9.2 | 测试 | P1 | Not Started | PLG-TODO-012 | 关键失败场景可测，但需要实现才能注入 |
 | Profile 插件治理行为矩阵测试 | 蓝图 5.1/5.2；详设 6.9 | 测试 | P1 | Not Started | PLG-TODO-013 | 配置项与默认值已列表，可写行为组合测试 |
 
@@ -181,7 +181,7 @@
 | PLG-TODO-008 | Done | 接线 infra/src/plugin 与 infra/include/plugin CMake 目标 | 详设 8.1；当前 CMake 现状 | 详设 8.1 目录落盘建议、8.2 分阶段实施 | L2 | 更新 infra/CMakeLists.txt，新增 plugin 子目录与源文件列表（允许仅添加头文件与空实现入口） | build：dasall_infra 目标可编译且包含 plugin 真实头文件 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra && rg -n "DASALL_INFRA_PLUGIN_(SOURCES|PUBLIC_HEADERS)" infra/CMakeLists.txt` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007 | 无 | 无 | infra/CMakeLists.txt 改动、构建输出 | 已完成（2026-04-07）：infra/CMakeLists.txt 新增 `DASALL_INFRA_PLUGIN_SOURCES` 与 `DASALL_INFRA_PLUGIN_PUBLIC_HEADERS`，plugin 源与公开头不再散落在全局清单中，`dasall_infra` 构建通过 |
 | PLG-TODO-009 | Done | 注册 tests/unit/infra/plugin 单元测试入口 | 详设 9.1；编码规范 3.7 | 详设 9.1 测试矩阵、编码规范 3.7 | L2 | 新增 tests/unit/infra/plugin/ 目录与 PluginDescriptorTest.cpp/PluginCatalogTest.cpp 等，在 tests/unit/CMakeLists.txt 中注册 plugin 子目录 | unit：用例被 ctest -L unit 发现 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_plugin_descriptor_unit_test dasall_plugin_catalog_unit_test dasall_plugin_error_code_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_policy_gate_interface_unit_test && ctest --test-dir build-ci -N -L unit \| grep -i plugin && ctest --test-dir build-ci --output-on-failure -L plugin` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008 | 无 | 无 | tests/unit/infra/plugin 目录与 CMakeLists.txt、ctest 发现证据 | 已完成（2026-04-07）：新增 tests/unit/infra/plugin/CMakeLists.txt，并把 plugin unit 注册从父级 CMake 下沉到子目录入口；`ctest -N -L unit` 可发现 5 个 plugin 用例，`ctest -L plugin` 5/5 通过 |
 | PLG-TODO-010 | Done | 注册 tests/contract/infra/plugin 合约边界测试入口 | 蓝图 4.3；contracts 冻结策略；编码规范 3.7 | 详设 6.5 contracts 对齐关系、9.1 contract 覆盖目标 | L2 | 在 tests/contract/ 现有注册机制下新增 plugin 边界用例，例如 PluginObjectBoundaryTest 检查标识字段不越权、ErrorCodeMappingTest 检查码映射稳定 | contract：标识字段、错误码、AuditEvent 引用不越权 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_plugin_descriptor_boundary_test dasall_contract_plugin_catalog_boundary_test dasall_contract_plugin_error_code_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_policy_gate_boundary_test && ctest --test-dir build-ci -N -L contract | grep -i Plugin && ctest --test-dir build-ci --output-on-failure -L contract -R "Plugin"` | PLG-TODO-001、PLG-TODO-002、PLG-TODO-003、PLG-TODO-004、PLG-TODO-007、PLG-TODO-008、PLG-TODO-009 | 无 | 无 | tests/contract/plugin/ 源文件、contract 执行记录 | 已完成（2026-04-07）：新增 tests/contract/plugin/CMakeLists.txt，并把 plugin contract 注册从主文件下沉到子目录入口；`ctest -N -L contract` 可发现 5 个 plugin contract 用例，`ctest -L contract -R Plugin` 5/5 通过 |
-| PLG-TODO-011 | Not Started | 新增 PluginLifecycleManager 状态机与转移测试 | 详设 6.7、6.8 | 详设 6.7 主流程、6.8 异常与恢复时序 | L2 | infra/src/plugin/PluginLifecycleManager.cpp（skeleton），包含 load/unload/enable/disable 四个方法与内部状态转移，不进入实际 dlopen/dlsym 实现 | unit：状态机转移枚举测试（loaded->active、loaded->disabled、failed->cleanup）；contract：LoadResult/UnloadResult 返回值稳定 | `ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest"` | PLG-TODO-003、PLG-TODO-006 | 无 | 无 | lifecycle 骨架实现、状态转移单测 | 仅当状态机转移可预测、失败路径可审计时完成 |
+| PLG-TODO-011 | Done | 新增 PluginLifecycleManager 状态机与转移测试 | 详设 6.7、6.8 | 详设 6.7 主流程、6.8 异常与恢复时序 | L2 | infra/src/plugin/PluginLifecycleManager.cpp（skeleton），包含 load/unload/enable/disable 四个方法与内部状态转移，不进入实际 dlopen/dlsym 实现 | unit：状态机转移枚举测试（loaded->active、loaded->disabled、failed->cleanup）；contract：LoadResult/UnloadResult 返回值稳定 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_manager_boundary_test && ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest|PluginManagerBoundaryContractTest"` | PLG-TODO-003、PLG-TODO-006 | 无 | 无 | lifecycle 骨架实现、状态转移单测 | 已完成（2026-04-07）：新增 PluginLifecycleManager.h/.cpp 与 PluginLifecycleStateTest，并将 PluginManager.load/unload/list_active 接入生命周期骨架，验证关键状态转移、failed cleanup 与合约边界稳定 |
 | PLG-TODO-012 | Not Started | 编写 plugin 失败注入与可观测性测试 | 详设 9.1、9.2 | 详设 9.1 failure injection 场景、9.2 quality gates | L2 | tests/ 下新增 PluginSignatureFailureTest、PluginCompatibilityFailureTest、PluginLoadTimeoutTest 等，验证失败路径有日志/审计/指标 | integration：当 validate fail 时有 AuditEvent、当 load fail 时有 CompatibilityReport | `ctest --test-dir build-ci -L integration --output-on-failure -R "PluginFailure\|PluginObservability"` | PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 | 无 | 无 | 失败注入测试源文件、执行记录 | 仅当关键失败路径（签名失败、兼容失败、load 超时）均有可观测证据时完成 |
 | PLG-TODO-013 | Not Started | 编写 Profile 插件治理行为矩阵测试 | 蓝图 5.1、5.2；详设 6.9 | 详设 6.9 配置项与默认策略、蓝图 3.13 profile 机制 | L2 | tests/ 下新增 ProfilePluginMatrixTest.cpp，覆盖 desktop_full/edge_balanced/edge_minimal 三档 profile 下 plugin 配置项的行为差异验证 | compatibility：三档 profile 下 plugin.allowlist、infra.plugin.signature.required、infra.plugin.abi.strict_mode 等行为一致性检查 | `ctest --test-dir build-ci --output-on-failure -R "ProfilePluginMatrix"` | 详设 9.1 里程碑 M4（all 标准对象与接口冻结） | 无 | 无 | profile 矩阵测试源文件、行为表 | 仅当三档 profile 下 plugin 行为无意外偏差时完成 |
 
@@ -376,13 +376,13 @@ PLG-TODO-014/015/016/017 进展
 | INF-TODO-017（SecurityPolicyManager） | Done | PLG-TODO-004、PLG-TODO-005 已消费其冻结边界 | 已完成 |
 | INF-TODO-016（AuditService） | Done | PLG-TODO-006 已消费其写入与导出边界 | 已完成 |
 | INF-BLK-09（manifest/ABI/signature 三项冻结） | Blocked | PLG-TODO-014/015/016/017 全部卡此 | 2-3 周 |
-| platform PluginRuntimeBridge | 未启动 | PLG-TODO-011 后续装载实现取决此 | 3-4 周 |
+| platform PluginRuntimeBridge | 未启动 | 011 已通过私有回调骨架绕开该依赖；后续真实平台装载实现仍取决此 | 3-4 周 |
 
 ### 11.4 下一步建议
 
 #### 立即启动（无前置）
 
-1. ✓ 继续推进剩余的 PLG-TODO-011~013（Phase 4-5）。
+1. ✓ 继续推进剩余的 PLG-TODO-012~013（Phase 5）。
 2. ✓ 直接复用已完成的 INF-TODO-017/016 边界，避免在 plugin 侧重复实现 policy 或 audit 桥接能力。
 3. ✓ 启动"PluginManifest Schema v1.0"补设计工作，与 tools 组件协商防止语义重复
 
@@ -1057,6 +1057,68 @@ Build 合规复核：
 
 ---
 
+## 24. 本轮执行记录（2026-04-07 / PLG-TODO-011）
+
+### 24.1 选中任务
+
+1. 本轮任务：PLG-TODO-011。
+2. 可执行性依据：PLG-TODO-003/006 已完成，PluginLoadResult/PluginUnloadResult/ActivePluginSet 与 PluginAuditAdapter 均已冻结；TODO 的 Q2 也已明确 PluginRuntimeBridge 缺失不阻塞 skeleton 阶段，因此本轮只需补足生命周期状态机骨架与状态转移测试。
+
+### 24.2 Design 结论
+
+阻塞证据：
+
+1. PluginManager.load()/unload() 仍返回统一 skeleton failure，说明 011 的真实缺口是 lifecycle state machine 不存在，而不是公共结果对象未定义。
+2. 真实 PluginRuntimeBridge 未冻结，若把 011 直接做成平台装载实现，会把 skeleton 任务拖进 platform 依赖阻塞。
+3. ActivePluginSet 的一致性检查要求 descriptor governance-ready；生命周期骨架若只维护 plugin_id/status，单测会在 active set gate 下失败。
+
+最小 blocker-fix：
+
+1. 新增 PluginLifecycleManager，并把 runtime 交互边界收敛为可注入的 load/unload callbacks，代替未冻结的 PluginRuntimeBridge。
+2. 让 PluginManager 的 load/unload/list_active 统一委托生命周期骨架，而不是继续输出统一 skeleton error。
+3. 在生命周期骨架内生成 governance-ready 的最小 descriptor 占位信息，并复用 PluginAuditAdapter 覆盖 failed unload 的审计出口。
+
+D 结论：
+
+1. PluginLifecycleManager 只承担 load/unload/enable/disable 状态推进、active set 维护、连续失败计数与 safe_mode 切换，不拥有 runtime 主控权。
+2. RuntimeBridge 平台细节继续留在 private callback 边界之外，后续只需替换 callback 实现即可接入真实平台装载链路。
+3. Build 三件套锁定为：
+        - 代码目标：infra/src/plugin/PluginLifecycleManager.h、PluginLifecycleManager.cpp、PluginManager.cpp、infra/CMakeLists.txt、tests/unit/infra/plugin/CMakeLists.txt。
+        - 测试目标：PluginLifecycleStateTest、PluginManagerBoundaryContractTest。
+        - 验收命令：cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_manager_boundary_test && ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest|PluginManagerBoundaryContractTest"。
+4. D Gate：PASS。
+
+### 24.3 Build 交付与证据
+
+交付物：
+
+1. infra/src/plugin/PluginLifecycleManager.h、PluginLifecycleManager.cpp：新增生命周期骨架、runtime callbacks、managed plugin 集合、safe_mode 计数与 enable/disable 转移结果对象。
+2. infra/src/plugin/PluginManager.cpp：load/unload/list_active 改为委托 PluginLifecycleManager。
+3. infra/CMakeLists.txt：把 PluginLifecycleManager.h/.cpp 纳入 plugin 私有源/头清单。
+4. tests/unit/infra/plugin/CMakeLists.txt、tests/unit/infra/plugin/PluginLifecycleStateTest.cpp：注册并验证 Loaded->Active、Loaded->Disabled->Unloaded、failed load cleanup + safe_mode、failed unload audit 四类路径。
+5. docs/todos/infrastructure/deliverables/PLG-TODO-011-plugin生命周期骨架收敛.md：记录输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_manager_boundary_test`：通过。
+3. `ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest|PluginManagerBoundaryContractTest"`：通过，2/2 tests passed。
+
+Build 合规复核：
+
+1. 边界：未新增公共 plugin 接口；RuntimeBridge 缺口被限制在 private callbacks 中，不反向把 platform 细节带入 infra/plugin 公开边界。
+2. 正负例覆盖：unit 同时覆盖正常状态转移、failed cleanup、safe_mode 和失败路径审计；contract 复用既有公共边界测试，确保 LoadResult/UnloadResult 未回归。
+3. 测试发现性：生命周期状态机已有独立的 plugin unit 入口，后续 012 只需在此基础上扩展 failure injection。
+4. TODO 证据回写：已完成任务状态、验收命令、交付物路径与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 PluginLifecycleManager、PluginManager lifecycle 接线、定向 unit/contract 验证与 011 文档证据。
+
+阻塞修复：
+
+1. 011 原始缺口是不存在可复用的生命周期状态机；本轮已把状态转移、failed cleanup 与 safe_mode 阈值收敛到 PluginLifecycleManager 单一出口。
+2. 011 实施过程中暴露出 active set 需要 governance-ready descriptor 的隐含 gate；本轮已在生命周期骨架内补齐最小 descriptor 占位字段，避免 ActivePluginSet 一致性检查继续失效。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -1072,6 +1134,7 @@ Build 合规复核：
 | v1.8 | 2026-04-07 | 回写 PLG-TODO-010 的 contract 注册入口收口与 discoverability 证据，使 plugin contract 用例具备组件级 helper 与标签 | （待评审） |
 | v1.9 | 2026-04-07 | 回写 PLG-TODO-005 的 validation pipeline 骨架与失败枝条验证证据，并修复 plugin 私有源文件未真正进入 dasall_infra 的构建接线缺口 | （待评审） |
 | v1.10 | 2026-04-07 | 回写 PLG-TODO-006 的 PluginAuditAdapter 审计适配层、unit/integration 验证证据，并同步修正已完成上游依赖状态 | （待评审） |
+| v1.11 | 2026-04-07 | 回写 PLG-TODO-011 的生命周期骨架、safe_mode/failed cleanup 状态机验证证据，并修正 LifecycleManager 粒度与 runtime bridge 依赖描述 | （待评审） |
 
 ---
 
@@ -1091,7 +1154,7 @@ Build 合规复核：
 当用户要求启动 plugin 专项 TODO 执行时，应：
 
 1. **首先确认**当前状态是否允许开始（参见 4.1 当前可执行范围）
-2. **确保前置**任务（INF-TODO-017、016）已至少进 Not Started 状态
+2. **确保前置**任务（INF-TODO-017、016）已完成或其冻结边界已可用
 3. **优先级**：Phase 1-3 > Phase 4 > 解阻项
 4. **并行建议**：Phase 1 三个对象可并行；Phase 2-3 可并行（以 Phase 1 完成为前置）
 5. **每个任务完成标准**参见对应任务行的"完成判定"列

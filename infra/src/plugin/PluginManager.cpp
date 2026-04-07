@@ -1,4 +1,5 @@
 #include "plugin/IPluginManager.h"
+#include "plugin/PluginLifecycleManager.h"
 #include "plugin/PluginValidationPipeline.h"
 
 namespace dasall::infra::plugin {
@@ -20,48 +21,19 @@ class PluginManager final : public IPluginManager {
 
   PluginLoadResult load(std::string_view plugin_id,
                         const PluginLoadOptions& load_options) override {
-    if (plugin_id.empty() || !load_options.is_valid()) {
-      return PluginLoadResult::failure(
-          contracts::ResultCode::ValidationFieldMissing,
-          std::string(plugin_id),
-          PluginOperationPhase::Load,
-          "plugin load requires a plugin_id and valid load options",
-          "plugin.load",
-          "PluginManager",
-          "plugin.load.invalid-request");
-    }
-
-    return PluginLoadResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
-                                     std::string(plugin_id),
-                                     PluginOperationPhase::Load,
-                                     "plugin load skeleton is frozen but not implemented",
-                                     "plugin.load",
-                                     "PluginManager",
-                                     "plugin.load.skeleton");
+    return lifecycle_manager_.load(plugin_id, load_options);
   }
 
   PluginUnloadResult unload(std::string_view plugin_id) override {
-    if (plugin_id.empty()) {
-      return PluginUnloadResult::failure(
-          contracts::ResultCode::ValidationFieldMissing,
-          std::string(plugin_id),
-          "plugin unload requires a plugin_id",
-          "plugin.unload",
-          "PluginManager",
-          "plugin.unload.invalid-request");
-    }
-
-    return PluginUnloadResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
-                                       std::string(plugin_id),
-                                       "plugin unload skeleton is frozen but not implemented",
-                                       "plugin.unload",
-                                       "PluginManager",
-                                       "plugin.unload.skeleton");
+    return lifecycle_manager_.unload(plugin_id);
   }
 
   [[nodiscard]] ActivePluginSet list_active() const override {
-    return ActivePluginSet{};
+    return lifecycle_manager_.list_active();
   }
+
+ private:
+  PluginLifecycleManager lifecycle_manager_;
 };
 
 }  // namespace

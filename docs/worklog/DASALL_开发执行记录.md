@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #197
+
+- 日期：2026-04-07
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-011 plugin 生命周期骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `PLG-TODO-006` 已完成并推送后，`PLG-TODO-011` 成为用户指定 Phase 4 串行范围中的最后一个原子任务。
+2. `PluginLoadResult`、`PluginUnloadResult`、`ActivePluginSet` 与 `PluginAuditAdapter` 均已冻结；同时专项 TODO 的 Q2 已明确 PluginRuntimeBridge 缺失不阻塞 skeleton 阶段，因此本轮可以直接落生命周期状态机骨架而不等待平台接入。
+
+### 改动
+
+1. 新增 [infra/src/plugin/PluginLifecycleManager.h](../../infra/src/plugin/PluginLifecycleManager.h) 与 [infra/src/plugin/PluginLifecycleManager.cpp](../../infra/src/plugin/PluginLifecycleManager.cpp)，实现 load/unload/enable/disable 状态推进、managed plugin 集合、连续失败计数、safe_mode 触发与可注入 runtime callbacks。
+2. 更新 [infra/src/plugin/PluginManager.cpp](../../infra/src/plugin/PluginManager.cpp)，把 `load()`、`unload()`、`list_active()` 从统一 skeleton failure 改为委托 PluginLifecycleManager。
+3. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 PluginLifecycleManager.h/.cpp 纳入 plugin 私有源/头清单。
+4. 更新 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt)，注册 `dasall_plugin_lifecycle_state_unit_test`。
+5. 新增 [tests/unit/infra/plugin/PluginLifecycleStateTest.cpp](../../tests/unit/infra/plugin/PluginLifecycleStateTest.cpp)，覆盖 Loaded->Active、Loaded->Disabled->Unloaded、failed load cleanup + safe_mode、failed unload audit 四类路径。
+6. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-011-plugin生命周期骨架收敛.md](../todos/infrastructure/deliverables/PLG-TODO-011-plugin%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E9%AA%A8%E6%9E%B6%E6%94%B6%E6%95%9B.md)，记录 011 的输入依据、外部参考、Design->Build 映射与 Build 合规复核。
+7. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-011` 回写为 Done，并补充本轮执行记录、版本记录 v1.11 与 LifecycleManager 粒度/依赖描述修正。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_manager_boundary_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginLifecycleStateTest|PluginManagerBoundaryContractTest"`
+2. 结果：
+   - `dasall_infra`、`dasall_plugin_lifecycle_state_unit_test` 与 `dasall_contract_plugin_manager_boundary_test` 全部构建通过。
+   - `PluginLifecycleStateTest` 与 `PluginManagerBoundaryContractTest` 2/2 通过。
+
+### 结果
+
+1. plugin 生命周期现在具备最小可执行骨架：Loaded、Active、Disabled、Unloaded 四类核心状态可预测推进，failed load 会清理残留并在阈值后触发 safe_mode。
+2. public manager 的 load/unload/list_active 已接入生命周期骨架，同时 failed unload 路径能够复用 PluginAuditAdapter 输出稳定审计事件。
+
+### 下一步
+
+1. 若继续沿 plugin 专项 TODO 推进，直接后继应进入 `PLG-TODO-012`，为签名失败、兼容失败、load 超时等路径补齐 failure injection 与更完整的可观测性验证。
+
+### 风险
+
+1. 011 当前只冻结了 skeleton 级状态机，真实平台动态装载、句柄释放语义与沙箱能力仍依赖后续 PluginRuntimeBridge 接入；在那之前，load/unload 的 runtime 行为仍由 private callback 占位。
+
 ## 记录 #196
 
 - 日期：2026-04-07

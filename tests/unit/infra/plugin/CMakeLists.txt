@@ -67,6 +67,12 @@ dasall_register_plugin_unit_test(
   PluginAuditAdapterTest.cpp
 )
 
+dasall_register_plugin_unit_test(
+  dasall_plugin_lifecycle_state_unit_test
+  PluginLifecycleStateTest
+  PluginLifecycleStateTest.cpp
+)
+
 set(DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS
   "${DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS}"
   PARENT_SCOPE
