@@ -2255,6 +2255,26 @@ dasall_apply_common_options(dasall_ota_audit_bridge_unit_test)
 add_test(NAME OTAAuditBridgeTest COMMAND dasall_ota_audit_bridge_unit_test)
 set_tests_properties(OTAAuditBridgeTest PROPERTIES LABELS "unit;ota")
 
+add_executable(dasall_ota_health_probe_unit_test
+  ota/OTAHealthProbeTest.cpp
+)
+
+target_include_directories(dasall_ota_health_probe_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_ota_health_probe_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_ota_health_probe_unit_test)
+
+add_test(NAME OTAHealthProbeTest COMMAND dasall_ota_health_probe_unit_test)
+set_tests_properties(OTAHealthProbeTest PROPERTIES LABELS "unit;ota")
+
 add_executable(dasall_ota_package_verifier_interface_unit_test
   OTAPackageVerifierInterfaceTest.cpp
 )

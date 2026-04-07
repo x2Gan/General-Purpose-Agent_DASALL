@@ -191,6 +191,7 @@ set(DASALL_INFRA_OTA_SOURCES
   src/ota/BootConfirmationMonitor.cpp
   src/ota/RollbackController.cpp
   src/ota/OTAAuditBridge.cpp
+  src/ota/OTAHealthProbe.cpp
 )
 
 set(DASALL_INFRA_OTA_PRIVATE_HEADERS
@@ -202,6 +203,7 @@ set(DASALL_INFRA_OTA_PRIVATE_HEADERS
   src/ota/BootConfirmationMonitor.h
   src/ota/RollbackController.h
   src/ota/OTAAuditBridge.h
+  src/ota/OTAHealthProbe.h
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS

@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #187
+
+- 日期：2026-04-07
+- 阶段：ota 组件专项 TODO
+- 任务：OTA-TODO-014 OTAHealthProbe 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `OTA-TODO-011` 已完成，`OTA-TODO-014` 成为用户指定 013~014 串行范围内最后一个待执行原子任务。
+2. 014 的职责边界是暴露 OTA backlog、pending_confirm、last_failure 与 timeout 等事实信号，不引入新的恢复裁定或 manager 编排逻辑。
+
+### 改动
+
+1. 新增 [docs/todos/infrastructure/deliverables/OTA-TODO-014-OTAHealthProbe骨架收敛.md](../todos/infrastructure/deliverables/OTA-TODO-014-OTAHealthProbe骨架收敛.md)，记录 014 的输入依据、Design->Build 映射、Build 合规复核与验证结果。
+2. 更新 [docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md) 的 014 回写证据，将状态更新为 `Done`。
+3. 新增 [infra/src/ota/OTAHealthProbe.h](../../infra/src/ota/OTAHealthProbe.h) 与 [infra/src/ota/OTAHealthProbe.cpp](../../infra/src/ota/OTAHealthProbe.cpp)，冻结 `OTAHealthSignals / OTAHealthSample / IOTAHealthSignalProvider / OTAHealthProbe`，并把 backlog、pending_confirm、last_failure、audit/rollback degraded 映射到 `ProbeResult`。
+4. 新增 [tests/unit/infra/ota/OTAHealthProbeTest.cpp](../../tests/unit/infra/ota/OTAHealthProbeTest.cpp)，覆盖 frozen descriptor、pending_confirm count、pending_confirm/backlog degraded、recent failure degraded、timeout failure。
+5. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，把 OTAHealthProbe 源码和 OTAHealthProbeTest 接入 `dasall_infra`、`dasall_unit_tests` 与 `unit;ota` 标签。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_ota_health_probe_unit_test`
+   - `ctest --test-dir build-ci -N -R "OTAHealthProbeTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "OTAHealthProbeTest"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+2. 结果：
+   - 定向 discoverability：发现 `OTAHealthProbeTest` 1 项。
+   - 定向执行：`OTAHealthProbeTest` 1/1 通过。
+   - `dasall_unit_tests` 聚合门通过，171/171 tests passed，`ota = 9 tests`。
+
+### 结果
+
+1. OTAHealthProbe 现在可以把 backlog、pending_confirm、last_failure、rollback/audit degraded 和 timeout 稳定映射到统一 ProbeResult。
+2. 用户请求中的 013~014 串行推进已全部完成，OTA 观测与健康出口具备独立骨架与验证证据。
+
+### 下一步
+
+1. 若继续推进 OTA，可进入 `OTA-TODO-015/016`，把当前骨架与测试入口进一步汇总到 OTA 顶层接线和 contract 发现性里。
+2. 若要验证闭环行为，可在后续 `OTA-TODO-017` 补 integration/failure 注册，把 `confirm_timeout` 与 `rollback_fail` 拉到跨组件门里。
+
+### 风险
+
+1. 当前 OTAHealthProbe 仍依赖 ota 私有 signal provider；后续如果 manager/diagnostics 需要统一采样面，需要在不扩 public contract 的前提下补内部 wiring。
+2. ProbeResult 只承载事实状态和 detail_ref，若后续需要更细粒度的 backlog 分类，应该继续放在 ota 私有 sample 里，而不是直接扩写 health 公共结构。
+
 ## 记录 #186
 
 - 日期：2026-04-07
