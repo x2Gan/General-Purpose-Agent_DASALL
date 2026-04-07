@@ -201,6 +201,10 @@ class TraceAuditBridge {
 
   void set_audit_logger(std::shared_ptr<audit::IAuditLogger> audit_logger);
 
+  [[nodiscard]] bool has_audit_logger() const {
+    return static_cast<bool>(audit_logger_);
+  }
+
   [[nodiscard]] TraceAuditWriteResult write_audit_event(
       const TraceAuditEvent& event);
   [[nodiscard]] TraceAuditBridgeStatus get_status() const;

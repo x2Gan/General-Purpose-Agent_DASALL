@@ -7,6 +7,10 @@
 #include <string>
 #include <string_view>
 
+#include "InfraContext.h"
+#include "audit/IAuditLogger.h"
+#include "metrics/IMetricsProvider.h"
+#include "tracing/TraceAuditBridge.h"
 #include "tracing/ITracerProvider.h"
 #include "tracing/TraceHealthProbe.h"
 
@@ -16,7 +20,13 @@ class SpanProcessorPipeline;
 
 class TracerProviderImpl final : public ITracerProvider {
  public:
-  TracerProviderImpl() = default;
+  TracerProviderImpl();
+
+  void set_metrics_provider(
+      std::shared_ptr<metrics::IMetricsProvider> metrics_provider,
+      std::string profile_id = "unknown");
+  void set_audit_logger(std::shared_ptr<audit::IAuditLogger> audit_logger,
+                        InfraContext infra_context = {});
 
   TraceOperationStatus init(const TraceConfig& config) override;
   [[nodiscard]] std::shared_ptr<ITracer> get_tracer(const TracerScope& scope) override;
@@ -48,12 +58,25 @@ class TracerProviderImpl final : public ITracerProvider {
       std::string_view operation,
       std::string_view expected_state) const;
   [[nodiscard]] static std::string make_scope_key(const TracerScope& scope);
+  [[nodiscard]] TraceAuditContext make_audit_context(
+      std::string trace_id = std::string()) const;
+  void bind_pipeline_observability();
+  void emit_sampler_change_audit(std::string previous_sampler_type,
+                                 std::string current_sampler_type,
+                                 std::string reason);
+  void emit_shutdown_fallback_audit(const TraceOperationStatus& status);
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   std::optional<TraceConfig> last_config_;
   std::optional<TracerScope> last_scope_;
   std::shared_ptr<SpanProcessorPipeline> pipeline_;
   TracerMap tracers_;
+  std::shared_ptr<metrics::IMetricsProvider> metrics_provider_;
+  std::shared_ptr<audit::IAuditLogger> audit_logger_;
+  std::string observability_profile_id_ = "unknown";
+  InfraContext observability_context_{};
+  TraceAuditBridge audit_bridge_;
+  bool sampler_change_audited_ = false;
 };
 
 }  // namespace dasall::infra::tracing

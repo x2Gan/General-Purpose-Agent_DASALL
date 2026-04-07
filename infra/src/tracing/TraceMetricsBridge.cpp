@@ -121,6 +121,18 @@ TraceMetricsBridge::TraceMetricsBridge(
     : metrics_provider_(std::move(metrics_provider)),
       profile_id_(normalize_profile_id(std::move(profile_id))) {}
 
+void TraceMetricsBridge::set_metrics_provider(
+    std::shared_ptr<metrics::IMetricsProvider> metrics_provider,
+    std::string profile_id) {
+  metrics_provider_ = std::move(metrics_provider);
+  profile_id_ = normalize_profile_id(std::move(profile_id));
+  meter_.reset();
+  instrument_handles_.fill(std::nullopt);
+  instruments_registered_ = false;
+  degraded_ = false;
+  last_metrics_error_code_.reset();
+}
+
 TraceMetricsEmitResult TraceMetricsBridge::emit(const TraceMetricSignal& signal) {
   ++emission_attempt_total_;
 

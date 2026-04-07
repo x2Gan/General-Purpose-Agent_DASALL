@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #153
+
+- 日期：2026-04-07
+- 阶段：tracing 组件专项 TODO
+- 任务：TRC-TODO-015 runtime bridge wiring closure（SpanProcessorPipeline / TracerProviderImpl -> TraceMetricsBridge / TraceAuditBridge）
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md](/home/gangan/DASALL/docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md) 中 `TRC-TODO-015` 在上一轮已经完成 bridge skeleton，但 worklog `记录 #152` 明确保留了“尚未把 `SpanProcessorPipeline` / `TracerProviderImpl` 的实际状态变迁主动推送到 bridge”的风险，因此本轮继续收口同一原子任务的 runtime wiring，而不是新开无依赖编号。
+2. 代码现状已具备可接线的最小状态面：pipeline 侧已有 `last_status()`、`module_snapshot()`、`health_snapshot()` 与 exporter `last_report()`；provider 侧已有 sampler 配置、shutdown 生命周期与 pipeline 绑定点。因此本轮聚焦“把现有状态面映射到 bridge 输入模型”，不扩张新的公共 tracing 接口。
+
+### 改动
+
+1. 完成 pipeline -> bridge 运行期接线：
+   - 更新 [infra/src/tracing/SpanProcessorPipeline.h](/home/gangan/DASALL/infra/src/tracing/SpanProcessorPipeline.h) 与 [infra/src/tracing/SpanProcessorPipeline.cpp](/home/gangan/DASALL/infra/src/tracing/SpanProcessorPipeline.cpp)，新增 `set_metrics_provider()` / `set_audit_logger()` 注入口，并在 `on_end()`、`export_batch()`、`force_flush()`、`shutdown()` 后把 queue/export/health/shutdown 相关状态映射到 tracing bridge。
+   - 具体映射包括：`trace_span_ended_total`、`trace_span_dropped_total`、`trace_export_success_total`、`trace_export_failure_total`、`trace_export_latency_ms`、`trace_batch_queue_depth` 指标发射，以及导出 degraded 转迁和 shutdown fallback 的治理审计事件。
+   - `observe_health_state()` 现在会比较 health probe 前后快照，只在状态实际转迁时通过 TraceAuditBridge 发出 `enter_degraded` / `degraded_still_active` / `recover_to_healthy` 审计事件，避免把健康观察逻辑散落到 provider 层外部调用者。
+2. 完成 provider -> bridge 运行期接线：
+   - 更新 [infra/src/tracing/TracerProviderImpl.h](/home/gangan/DASALL/infra/src/tracing/TracerProviderImpl.h) 与 [infra/src/tracing/TracerProviderImpl.cpp](/home/gangan/DASALL/infra/src/tracing/TracerProviderImpl.cpp)，新增 `set_metrics_provider()` / `set_audit_logger()`，并在 `init()` 后把 sink 统一绑定到 pipeline。
+   - provider 自身负责两类治理审计：初始化时的 `sampler_changed`，以及 `shutdown(0)` 等 provider 级超时路径的 `shutdown_force_fallback`；这样 sampler/shutdown 生命周期语义仍留在 provider，而 export/health 热路径留在 pipeline。
+   - 为支持运行期换绑 sink，更新 [infra/src/tracing/TraceMetricsBridge.h](/home/gangan/DASALL/infra/src/tracing/TraceMetricsBridge.h) 与 [infra/src/tracing/TraceMetricsBridge.cpp](/home/gangan/DASALL/infra/src/tracing/TraceMetricsBridge.cpp) 增加 `set_metrics_provider()`；更新 [infra/src/tracing/TraceAuditBridge.h](/home/gangan/DASALL/infra/src/tracing/TraceAuditBridge.h) 增加 `has_audit_logger()` 只读判定，保持 wiring 使用现有 bridge 模式而不扩张 payload。
+3. 完成运行链回归测试：
+   - 更新 [tests/unit/infra/tracing/TracerProviderImplTest.cpp](/home/gangan/DASALL/tests/unit/infra/tracing/TracerProviderImplTest.cpp)，新增 provider 级审计回归，验证 `init()` 会发出 `tracing.sampler_changed`，`shutdown(0)` 会发出 `tracing.shutdown_force_fallback`，并保留 provider 注入的 `InfraContext` 关联字段。
+   - 更新 [tests/unit/infra/tracing/BatchExportTest.cpp](/home/gangan/DASALL/tests/unit/infra/tracing/BatchExportTest.cpp)，新增两类运行链回归：其一验证 provider + pipeline 在 unsupported exporter 路径下会真实发射 `trace_export_failure_total` / `trace_export_latency_ms` / `trace_batch_queue_depth`；其二验证 pipeline 在连续失败后进入 degraded，并在后续成功 flush 后发出 `tracing.recover_to_healthy` 审计事件，同时保留 bridge 发射出的失败指标和最后活动 trace_id。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_tracer_provider_impl_unit_test dasall_batch_export_unit_test dasall_trace_health_probe_unit_test dasall_trace_metrics_bridge_unit_test dasall_trace_audit_bridge_unit_test dasall_contract_trace_metrics_bridge_boundary_test dasall_contract_trace_audit_bridge_boundary_test`
+   - `ctest --test-dir build-ci --output-on-failure -R 'TracerProviderImplTest|BatchExportTest|TraceHealthProbeTest|TraceMetricsBridgeTest|TraceAuditBridgeTest|TraceMetricsBridgeBoundaryContractTest|TraceAuditBridgeBoundaryContractTest'`
+   - `ctest --test-dir build-ci --output-on-failure -L tracing`
+2. 结果：
+   - 受影响目标构建通过。
+   - 定向 tracing bridge/runtime 用例 7/7 通过。
+   - `ctest -L tracing` 17/17 通过，说明 provider/pipeline 运行期接线没有破坏 008~018 已落地的 tracing 主链与 contract 约束。
+3. 说明：
+   - VS Code CMake Tools 仍处于“无法配置项目”的工具态问题，本轮继续沿用仓库 memory 中已验证的 build-ci 回退路径；验证有效性以显式 `cmake --build build-ci` / `ctest --test-dir build-ci` 为准。
+
+### 结果
+
+1. TRC-TODO-015 已从“bridge skeleton 已落盘”推进到“provider/pipeline runtime wiring 已闭环”：tracing 运行期状态变化现在会实际驱动 metrics/audit bridge，而不是只停留在可单测调用的骨架对象。
+2. tracing 观测链路已具备两层保障：桥接边界 contract/unit 测试继续冻结 payload 与 label allowlist；provider/pipeline 回归继续冻结运行链上的状态到 bridge 映射。
+
+### 下一步
+
+1. 若继续推进 tracing 专项 TODO，优先候选是把 `trace_span_started_total` 与 `trace_context_invalid_total` 分别接入 TracerImpl / ContextPropagationAdapter 的真实运行路径，补齐当前仍未从运行期直接发射的两类 tracing 指标。
+2. 另一条后续路径是补 `tests/integration/infra/tracing` 子拓扑，把当前 unit+contract 收口的 bridge wiring 再提升到 integration 级别。
+
+### 风险
+
+1. 当前 runtime wiring 仍按现有 TODO 边界保持在 tracing 私有实现层：provider 级审计使用稳定的 provider `InfraContext`，pipeline 级 health/export 审计使用最后活动 trace_id 回填；如果后续需要跨 request/task 精准关联，还需等统一 tracing runtime context 绑定方案单列任务收口。
+
 ## 记录 #152
 
 - 日期：2026-04-07

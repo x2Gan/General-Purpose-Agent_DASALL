@@ -206,7 +206,15 @@ class TraceMetricsBridge {
       std::shared_ptr<metrics::IMetricsProvider> metrics_provider,
       std::string profile_id = "unknown");
 
+  void set_metrics_provider(
+      std::shared_ptr<metrics::IMetricsProvider> metrics_provider,
+      std::string profile_id = "unknown");
+
   TraceMetricsEmitResult emit(const TraceMetricSignal& signal);
+
+  [[nodiscard]] bool has_metrics_provider() const {
+    return static_cast<bool>(metrics_provider_);
+  }
 
   [[nodiscard]] bool is_degraded() const {
     return degraded_;

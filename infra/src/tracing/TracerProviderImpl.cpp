@@ -1,5 +1,6 @@
 #include "tracing/TracerProviderImpl.h"
 
+#include <chrono>
 #include <string>
 #include <utility>
 
@@ -12,6 +13,12 @@ namespace dasall::infra::tracing {
 namespace {
 
 constexpr std::string_view kTracerProviderSourceRef = "TracerProviderImpl";
+
+[[nodiscard]] std::int64_t current_time_unix_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
 
 [[nodiscard]] TraceOperationStatus make_trace_failure(
     TraceErrorCode code,
@@ -27,6 +34,38 @@ constexpr std::string_view kTracerProviderSourceRef = "TracerProviderImpl";
 
 }  // namespace
 
+TracerProviderImpl::TracerProviderImpl()
+    : audit_bridge_(nullptr,
+                    TraceAuditBridgeOptions{
+                        .detail_ref_prefix = "status://tracing/provider/audit/",
+                        .event_id_prefix = "trace-provider-audit-event-",
+                    }) {}
+
+void TracerProviderImpl::set_metrics_provider(
+    std::shared_ptr<metrics::IMetricsProvider> metrics_provider,
+    std::string profile_id) {
+  metrics_provider_ = std::move(metrics_provider);
+  observability_profile_id_ = profile_id.empty() ? std::string("unknown")
+                                                 : std::move(profile_id);
+  bind_pipeline_observability();
+}
+
+void TracerProviderImpl::set_audit_logger(
+    std::shared_ptr<audit::IAuditLogger> audit_logger,
+    InfraContext infra_context) {
+  audit_logger_ = std::move(audit_logger);
+  observability_context_ = std::move(infra_context);
+  audit_bridge_.set_audit_logger(audit_logger_);
+  bind_pipeline_observability();
+  if (lifecycle_state_ == LifecycleState::Initialized && last_config_.has_value() &&
+      !sampler_change_audited_) {
+    emit_sampler_change_audit(
+        std::string("uninitialized"),
+        last_config_->sampler.type,
+        "audit sink attached after tracing provider initialization");
+  }
+}
+
 TraceOperationStatus TracerProviderImpl::init(const TraceConfig& config) {
   if (lifecycle_state_ != LifecycleState::Created) {
     return invalid_transition("init", "created");
@@ -39,11 +78,17 @@ TraceOperationStatus TracerProviderImpl::init(const TraceConfig& config) {
         "tracing.init");
   }
 
+  const auto previous_sampler_type =
+      last_config_.has_value() ? last_config_->sampler.type : std::string("uninitialized");
   last_config_ = config;
   last_scope_.reset();
   tracers_.clear();
   pipeline_ = std::make_shared<SpanProcessorPipeline>(config);
+  bind_pipeline_observability();
   lifecycle_state_ = LifecycleState::Initialized;
+  emit_sampler_change_audit(previous_sampler_type,
+                            config.sampler.type,
+                            "tracing provider initialized with sampler config");
   return TraceOperationStatus::success("tracing-provider://initialized");
 }
 
@@ -98,10 +143,12 @@ TraceOperationStatus TracerProviderImpl::shutdown(std::uint32_t timeout_ms) {
   }
 
   if (timeout_ms == 0U) {
-    return make_trace_failure(
+    const auto status = make_trace_failure(
         TraceErrorCode::ShutdownTimeout,
         "tracing provider shutdown() timed out before processors/exporters completed",
         "tracing.shutdown");
+    emit_shutdown_fallback_audit(status);
+    return status;
   }
 
   if (pipeline_) {
@@ -197,6 +244,80 @@ TraceOperationStatus TracerProviderImpl::invalid_transition(
 
 std::string TracerProviderImpl::make_scope_key(const TracerScope& scope) {
   return scope.name + "|" + scope.version + "|" + scope.schema_url;
+}
+
+TraceAuditContext TracerProviderImpl::make_audit_context(std::string trace_id) const {
+  TraceAuditContext context{
+      .infra_context = observability_context_,
+      .worker_type = std::string("infra.tracing"),
+  };
+  if (!trace_id.empty()) {
+    context.infra_context.trace_id = std::move(trace_id);
+  }
+
+  return context;
+}
+
+void TracerProviderImpl::bind_pipeline_observability() {
+  if (!pipeline_) {
+    return;
+  }
+
+  pipeline_->set_metrics_provider(metrics_provider_, observability_profile_id_);
+  pipeline_->set_audit_logger(audit_logger_, make_audit_context());
+}
+
+void TracerProviderImpl::emit_sampler_change_audit(std::string previous_sampler_type,
+                                                   std::string current_sampler_type,
+                                                   std::string reason) {
+  if (!audit_bridge_.has_audit_logger() || !pipeline_) {
+    sampler_change_audited_ = false;
+    return;
+  }
+
+  const auto result = audit_bridge_.write_audit_event(TraceAuditEvent{
+      .kind = TraceAuditEventKind::SamplerConfigChange,
+      .action = std::string("sampler_changed"),
+      .stage = std::string("tracing.init"),
+      .outcome = TraceAuditEventOutcome::Success,
+      .reason = std::move(reason),
+      .error_code = std::nullopt,
+      .module_snapshot = pipeline_->module_snapshot(),
+      .context = make_audit_context(),
+      .detail_ref = std::string("status://tracing/config/sampler/") +
+                    current_sampler_type,
+      .current_sampler_type = std::move(current_sampler_type),
+      .previous_sampler_type = std::move(previous_sampler_type),
+      .timestamp_ms = current_time_unix_ms(),
+  });
+  sampler_change_audited_ = result.emitted;
+}
+
+void TracerProviderImpl::emit_shutdown_fallback_audit(
+    const TraceOperationStatus& status) {
+  if (!audit_bridge_.has_audit_logger()) {
+    return;
+  }
+
+  const auto error_code = TraceErrorCode::ShutdownTimeout;
+  (void)audit_bridge_.write_audit_event(TraceAuditEvent{
+      .kind = TraceAuditEventKind::ShutdownFallback,
+      .action = std::string("shutdown_force_fallback"),
+      .stage = status.error.has_value() ? status.error->details.stage
+                                        : std::string("tracing.shutdown"),
+      .outcome = TraceAuditEventOutcome::Failure,
+      .reason = status.error.has_value()
+                    ? status.error->details.message
+                    : std::string(
+                          "tracing provider entered shutdown fallback handling after a failed stop request"),
+      .error_code = error_code,
+      .module_snapshot = module_snapshot(),
+      .context = make_audit_context(),
+      .detail_ref = std::string("status://tracing/shutdown/provider_fallback"),
+      .current_sampler_type = std::string(),
+      .previous_sampler_type = std::string(),
+      .timestamp_ms = current_time_unix_ms(),
+  });
 }
 
 }  // namespace dasall::infra::tracing
