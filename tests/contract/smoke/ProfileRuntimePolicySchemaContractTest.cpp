@@ -218,6 +218,26 @@ ValidationResult validate_required_paths(const std::string& document) {
       "infra.plugin.remote_fetch.enabled",
       "infra.plugin.safe_mode",
       "infra.plugin.safe_mode.fail_threshold",
+      "infra.watchdog",
+      "infra.watchdog.enabled",
+      "infra.watchdog.scan",
+      "infra.watchdog.scan.interval_ms",
+      "infra.watchdog.timeout_ms",
+      "infra.watchdog.grace_ms",
+      "infra.watchdog.consecutive_miss_threshold",
+      "infra.watchdog.timeout",
+      "infra.watchdog.timeout.level",
+      "infra.watchdog.timeout.level.policy",
+      "infra.watchdog.event",
+      "infra.watchdog.event.queue_size",
+      "infra.watchdog.event.overflow_policy",
+      "infra.watchdog.recovery_hint",
+      "infra.watchdog.recovery_hint.enabled",
+      "infra.watchdog.audit",
+      "infra.watchdog.audit.required",
+      "infra.watchdog.max_entities",
+      "infra.watchdog.safe_mode",
+      "infra.watchdog.safe_mode.scan_interval_ms",
       "ops_policy",
       "ops_policy.log_level",
       "ops_policy.metrics_granularity",
@@ -294,18 +314,26 @@ void test_profile_matrix_freeze_matches_blueprint_baselines() {
               "edge_balanced baseline freezes multi_agent off until optional path is implemented");
   assert_true(contains_text(edge_balanced, "plugin.edge.telemetry"),
               "edge_balanced must keep the edge telemetry plugin in the allowlist baseline");
+  assert_true(contains_text(cloud_full, "max_entities: 2048"),
+              "cloud_full must keep the higher watchdog entity ceiling for server deployments");
   assert_true(contains_text(edge_minimal, "llm_cloud_adapter: false"),
               "edge_minimal must keep cloud adapter disabled");
   assert_true(contains_text(edge_minimal, "tools_mcp: false"),
               "edge_minimal must keep MCP tools disabled");
   assert_true(contains_text(edge_minimal, "plugin.echo"),
               "edge_minimal must keep a single minimal plugin allowlist baseline");
+  assert_true(contains_text(edge_minimal, "policy: critical_only"),
+              "edge_minimal must keep watchdog timeout policy at critical_only to reduce advisory noise");
   assert_true(contains_text(factory_test, "platform_hal: true"),
               "factory_test must keep HAL enabled");
   assert_true(contains_text(factory_test, "remote_diagnostics_enabled: true"),
               "factory_test must keep remote diagnostics enabled");
+  assert_true(contains_text(factory_test, "consecutive_miss_threshold: 2"),
+              "factory_test must keep the tighter watchdog consecutive miss threshold for diagnostic loops");
   assert_true(contains_text(desktop_full, "plugin.tools.bridge"),
               "desktop_full must keep the desktop bridge plugin in the allowlist baseline");
+  assert_true(contains_text(desktop_full, "queue_size: 2048"),
+              "desktop_full must keep the default watchdog event queue capacity baseline");
   assert_true(contains_text(cloud_full, "plugin.remote.fetch"),
               "cloud_full must keep the remote fetch plugin id reserved in the allowlist baseline");
 }

@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #211
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-018 WatchdogConfigPolicy 配置模型与覆盖规则
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-017` 推送完成后，剩余串行链上阻塞最明确的是 `WDG-TODO-018`。
+2. `WDG-BLK-04` 的根因不是缺少 C++ 结构体，而是 `infra.watchdog.*` 键名虽然出现在设计文档和 `WatchdogServiceConfig`，却没有落到 defaults/profile 真值层，也没有进入 profile schema contract。
+3. 因此本轮把“解阻”和“实现”合并处理：先冻结 defaults/profile/schema，再落 `WatchdogConfigPolicy::load_defaults()/merge_layers()/validate_limits()`，保证配置覆盖规则有可追溯输入基线。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/WatchdogConfigPolicy.h](../../infra/src/watchdog/WatchdogConfigPolicy.h) 与 [infra/src/watchdog/WatchdogConfigPolicy.cpp](../../infra/src/watchdog/WatchdogConfigPolicy.cpp)，定义 `WatchdogConfigPatch`，实现 `load_defaults()`、`merge_layers()` 与 `validate_limits()`，覆盖默认值、四层覆盖顺序和 watchdog 阈值关系检查。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_watchdog_config_policy_unit_test` 与 `WatchdogConfigPolicyTest`。
+3. 新增 [tests/unit/infra/watchdog/WatchdogConfigPolicyTest.cpp](../../tests/unit/infra/watchdog/WatchdogConfigPolicyTest.cpp)，覆盖默认值冻结、profile->deploy->runtime 覆盖顺序、阈值关系非法与枚举非法路径。
+4. 更新 [infra/src/config/ConfigLoader.cpp](../../infra/src/config/ConfigLoader.cpp)，把 watchdog 默认键写入默认层 YAML，补齐 defaults 维度的真值来源。
+5. 更新 [profiles/cloud_full/runtime_policy.yaml](../../profiles/cloud_full/runtime_policy.yaml)、[profiles/desktop_full/runtime_policy.yaml](../../profiles/desktop_full/runtime_policy.yaml)、[profiles/edge_balanced/runtime_policy.yaml](../../profiles/edge_balanced/runtime_policy.yaml)、[profiles/edge_minimal/runtime_policy.yaml](../../profiles/edge_minimal/runtime_policy.yaml) 与 [profiles/factory_test/runtime_policy.yaml](../../profiles/factory_test/runtime_policy.yaml)，在所有运行时 profile 中统一冻结 `infra.watchdog.*` 键，并给出 profile 级差异化基线。
+6. 更新 [tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp](../../tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp)，将 watchdog 路径提升为 profile schema 必需项，并固定若干 profile watchdog 基线值。
+7. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-BLK-04` 与 `WDG-TODO-018` 回写为已解阻 / Done，并补充 defaults + profile + schema + unit 的定向验证证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_watchdog_config_policy_unit_test dasall_contract_profile_runtime_policy_schema_test`
+   - `ctest --test-dir build-ci -N -R "(WatchdogConfigPolicyTest|ProfileRuntimePolicySchemaContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(WatchdogConfigPolicyTest|ProfileRuntimePolicySchemaContractTest)"`
+2. 结果：
+   - `dasall_watchdog_config_policy_unit_test` 与 `dasall_contract_profile_runtime_policy_schema_test` 构建通过。
+   - `WatchdogConfigPolicyTest` 与 `ProfileRuntimePolicySchemaContractTest` 均被 CTest 发现。
+   - 2/2 tests passed。
+
+### 结果
+
+1. watchdog 现在具备最小可用的配置策略对象：默认值从 `WatchdogServiceConfig` 固化导出，`merge_layers()` 明确按 `defaults -> profile -> deploy -> runtime` 顺序应用 patch，`validate_limits()` 会拒绝 grace/timeout、safe_mode/scan、policy enum 等越界组合。
+2. `WDG-BLK-04` 已真正解除：默认层、五个 profile 与 profile schema contract 现在对 `infra.watchdog.*` 键名、存在性和关键 profile 基线给出统一真值，后续不再需要靠文档口头约定。
+3. `edge_minimal` 与 `factory_test` profile 现在冻结为 `critical_only` watchdog policy，`cloud_full`/`desktop_full`/`edge_balanced` 维持 `warn_then_critical`，从而把 profile 差异显式纳入 contract 回归面。
+
+### 下一步
+
+1. 本次用户指定的 `WDG-TODO-012、014、017、018` 已全部完成并逐轮推送；watchdog 后续可转入 `WDG-TODO-020/022` 这类构建接线与 profile 兼容验证任务。
+
+### 风险
+
+1. 当前 `WatchdogConfigPolicy` 只冻结了对象级 patch/merge/validate 规则，还没有实现从 ConfigCenter/typed config 到 `WatchdogConfigPatch` 的解析适配器；后续若需要直接接配置中心，应新增 adapter，而不是把 YAML/typed parsing 混入本轮已冻结的 policy 对象。
+
 ## 记录 #210
 
 - 日期：2026-04-08

@@ -102,6 +102,26 @@ infra:
 			enabled: false
 		safe_mode:
 			fail_threshold: 2
+	watchdog:
+		enabled: true
+		scan:
+			interval_ms: 700
+		timeout_ms: 10000
+		grace_ms: 1000
+		consecutive_miss_threshold: 2
+		timeout:
+			level:
+				policy: critical_only
+		event:
+			queue_size: 512
+			overflow_policy: block
+		recovery_hint:
+			enabled: true
+		audit:
+			required: true
+		max_entities: 256
+		safe_mode:
+			scan_interval_ms: 2500
 ops_policy:
 	log_level: debug
 	metrics_granularity: full

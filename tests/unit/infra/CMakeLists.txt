@@ -2146,6 +2146,26 @@ dasall_apply_common_options(dasall_recovery_request_emitter_unit_test)
 add_test(NAME RecoveryRequestEmitterTest COMMAND dasall_recovery_request_emitter_unit_test)
 set_tests_properties(RecoveryRequestEmitterTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_watchdog_config_policy_unit_test
+  watchdog/WatchdogConfigPolicyTest.cpp
+)
+
+target_include_directories(dasall_watchdog_config_policy_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_watchdog_config_policy_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_watchdog_config_policy_unit_test)
+
+add_test(NAME WatchdogConfigPolicyTest COMMAND dasall_watchdog_config_policy_unit_test)
+set_tests_properties(WatchdogConfigPolicyTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_watchdog_audit_bridge_unit_test
   watchdog/WatchdogAuditBridgeTest.cpp
 )

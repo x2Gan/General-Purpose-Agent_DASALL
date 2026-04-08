@@ -360,6 +360,26 @@ infra:
       external:
         enabled: false
         timeout_ms: 1000
+  watchdog:
+    enabled: true
+    scan:
+      interval_ms: 500
+    timeout_ms: 15000
+    grace_ms: 2000
+    consecutive_miss_threshold: 3
+    timeout:
+      level:
+        policy: warn_then_critical
+    event:
+      queue_size: 2048
+      overflow_policy: block
+    recovery_hint:
+      enabled: true
+    audit:
+      required: true
+    max_entities: 1024
+    safe_mode:
+      scan_interval_ms: 2000
 ops_policy:
   log_level: warn
 runtime_budget:
