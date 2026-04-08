@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #207
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-016 WatchdogMetricsBridge 指标桥接骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-015` 已完成并推送后，watchdog 主链在“先注册采集与判级，再做观测桥接”的顺序下，最后一个可直接执行的观测桥接任务就是 `WDG-TODO-016`。
+2. 016 不依赖事件总线阻塞项，因此本轮只落 metrics provider/meter 的 best-effort 桥接、七个 metric family 和本地 label guard，不提前跨入 014 的 timeout event publisher。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/WatchdogMetricsBridge.h](../../infra/src/watchdog/WatchdogMetricsBridge.h) 与 [infra/src/watchdog/WatchdogMetricsBridge.cpp](../../infra/src/watchdog/WatchdogMetricsBridge.cpp)，落盘 `infra.watchdog` meter scope、七个 watchdog metric family、provider/meter best-effort 接线与本地 label contract 校验。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `WatchdogMetricsBridge` 源文件与私有头纳入 `dasall_infra` 的 watchdog 构建集合。
+3. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_watchdog_metrics_bridge_unit_test` 与 `WatchdogMetricsBridgeTest`。
+4. 新增 [tests/unit/infra/watchdog/WatchdogMetricsBridgeTest.cpp](../../tests/unit/infra/watchdog/WatchdogMetricsBridgeTest.cpp)，覆盖 meter scope/identity 冻结、七个指标入口、invalid label guard 与 provider-not-ready 降级路径。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-016` 回写为 Done，并补充本轮构建/CTest 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_watchdog_metrics_bridge_unit_test`
+   - `ctest --test-dir build-ci -N -R WatchdogMetricsBridgeTest`
+   - `ctest --test-dir build-ci --output-on-failure -R WatchdogMetricsBridgeTest`
+2. 结果：
+   - `dasall_infra` 与 `dasall_watchdog_metrics_bridge_unit_test` 均构建通过。
+   - `WatchdogMetricsBridgeTest` 已进入 CTest 图。
+   - 1/1 tests passed。
+   - 构建输出中仍存在来自 [infra/include/metrics/IMetricsProvider.h](../../infra/include/metrics/IMetricsProvider.h) 的既有 `MetricsOperationStatus::failure` 聚合初始化告警；本轮新增的 watchdog metrics 代码已消除自身初始化告警。
+
+### 结果
+
+1. watchdog 现在具备与详细设计一致的七指标出口：entities、heartbeat ingest、timeout、consecutive miss、scan lag、event publish fail 与 safe mode 均有对应采样入口。
+2. 016 采用 best-effort metrics bridge 语义：provider/meter 不可用或 label contract 非法时，只把失败保留在 bridge-local degraded/result_code 内，不反噬 watchdog 主链的 timeout/audit 事实输出。
+
+### 下一步
+
+1. 当前用户指定的 `WDG-TODO-009~011、013、015、016、019` 已全部完成；下一轮如继续推进，应评估 014 的 blocker 是否已解，或切到 017/020~023 的构建与门禁收口任务。
+
+### 风险
+
+1. 由于当前 metrics label contract 仍受全局 `MetricLabels` 五元组限制，016 通过 stage 前缀编码 `entity_type/entity_id` 维度；若后续 metrics 子域扩展 label 模型，必须保持本轮已冻结的 metric name 和兼容映射不漂移。
+
 ## 记录 #206
 
 - 日期：2026-04-08

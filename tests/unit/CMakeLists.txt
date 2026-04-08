@@ -162,6 +162,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_heartbeat_ingestor_unit_test
 	dasall_timeout_policy_unit_test
 	dasall_watchdog_audit_bridge_unit_test
+	dasall_watchdog_metrics_bridge_unit_test
 	dasall_health_policy_interface_unit_test
 	dasall_health_probe_types_unit_test
 	dasall_health_recovery_hint_unit_test

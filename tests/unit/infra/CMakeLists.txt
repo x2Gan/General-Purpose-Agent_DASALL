@@ -2105,6 +2105,26 @@ dasall_apply_common_options(dasall_watchdog_audit_bridge_unit_test)
 add_test(NAME WatchdogAuditBridgeTest COMMAND dasall_watchdog_audit_bridge_unit_test)
 set_tests_properties(WatchdogAuditBridgeTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_watchdog_metrics_bridge_unit_test
+  watchdog/WatchdogMetricsBridgeTest.cpp
+)
+
+target_include_directories(dasall_watchdog_metrics_bridge_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_watchdog_metrics_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_watchdog_metrics_bridge_unit_test)
+
+add_test(NAME WatchdogMetricsBridgeTest COMMAND dasall_watchdog_metrics_bridge_unit_test)
+set_tests_properties(WatchdogMetricsBridgeTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )
