@@ -231,6 +231,7 @@ set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
   include/plugin/PluginDescriptor.h
   include/plugin/PluginManifest.h
   include/plugin/PluginErrorCode.h
+  include/plugin/IPluginCompatibilityEngine.h
   include/plugin/IPluginManager.h
   include/plugin/IPluginPolicyGate.h
   include/plugin/IPluginSignatureVerifier.h

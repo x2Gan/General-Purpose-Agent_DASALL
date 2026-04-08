@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #203
+
+- 日期：2026-04-08
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-016 IPluginCompatibilityEngine 边界冻结
+- 状态：已完成
+
+### 任务选择
+
+1. PLG-TODO-015 已完成并推送后，`PLG-TODO-016` 成为 017 的直接前置接口任务。
+2. 016 的边界已经收敛为“public header + ABI matrix/boundary tests”，不需要在本轮提前接入 PluginValidationPipeline 或 IPluginManager aggregation。
+
+### 改动
+
+1. 新增 [infra/include/plugin/IPluginCompatibilityEngine.h](../../infra/include/plugin/IPluginCompatibilityEngine.h)，定义 `PluginHostAbiSnapshot`、`PluginDependencyMatrixSnapshot`、`PluginCompatibilityCheckRequest`、`CompatibilityReport` 与 `IPluginCompatibilityEngine`。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `IPluginCompatibilityEngine.h` 纳入 plugin public header 列表。
+3. 更新 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt)，注册 `dasall_plugin_compatibility_engine_interface_unit_test`。
+4. 新增 [tests/unit/infra/plugin/PluginCompatibilityEngineInterfaceTest.cpp](../../tests/unit/infra/plugin/PluginCompatibilityEngineInterfaceTest.cpp)，覆盖 strict patch forward 正例、strict/non-strict minor matrix，以及 major mismatch + API/dependency 负例。
+5. 更新 [tests/contract/plugin/CMakeLists.txt](../../tests/contract/plugin/CMakeLists.txt)，注册 `dasall_contract_plugin_compatibility_engine_boundary_test`。
+6. 新增 [tests/contract/smoke/PluginCompatibilityEngineBoundaryContractTest.cpp](../../tests/contract/smoke/PluginCompatibilityEngineBoundaryContractTest.cpp)，验证 platform tag allow-list、dependency snapshot 去重以及“无 runtime/policy 内部字段”边界。
+7. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-016-IPluginCompatibilityEngine设计收敛.md](../todos/infrastructure/deliverables/PLG-TODO-016-IPluginCompatibilityEngine%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，记录设计结论、Design -> Build 映射与风险边界。
+8. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-016` 回写为 Done，并补充本轮执行记录与版本记录 v1.17。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_compatibility_engine_interface_unit_test dasall_contract_plugin_compatibility_engine_boundary_test`
+   - `ctest --test-dir build-ci -N -R "PluginCompatibilityEngineInterfaceCompileTest|PluginCompatibilityEngineBoundaryContractTest"`
+   - `ctest --test-dir build-ci --output-on-failure -R "PluginCompatibilityEngineInterfaceCompileTest|PluginCompatibilityEngineBoundaryContractTest"`
+2. 结果：
+   - `dasall_infra`、`dasall_plugin_compatibility_engine_interface_unit_test` 与 `dasall_contract_plugin_compatibility_engine_boundary_test` 全部构建通过。
+   - `PluginCompatibilityEngineInterfaceCompileTest` 与 `PluginCompatibilityEngineBoundaryContractTest` 都已进入 CTest 图。
+   - 两个用例 2/2 通过。
+
+### 结果
+
+1. plugin public boundary 现在拥有冻结的 compatibility engine 输入输出面，platform tag allow-list、strict/non-strict 规则、host ABI snapshot 与 dependency snapshot 不再只存在于文档层。
+2. 016 保持在最小接口冻结粒度，没有提前改动 validation aggregation 或 manager 签名，为后续 017 保留了清晰边界。
+
+### 下一步
+
+1. 进入 `PLG-TODO-017`，统一落盘 SignatureReport / CompatibilityReport 的正式公共承载与 validation aggregation tests。
+
+### 风险
+
+1. `CompatibilityReport` 当前仅作为 compatibility engine boundary 的最小输出对象存在；017 若统一抽取 report 承载或调整 aggregation，需要保持 016 已冻结接口签名不变。
+
 ## 记录 #202
 
 - 日期：2026-04-08

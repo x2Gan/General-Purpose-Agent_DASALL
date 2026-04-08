@@ -68,6 +68,12 @@ dasall_register_plugin_unit_test(
 )
 
 dasall_register_plugin_unit_test(
+  dasall_plugin_compatibility_engine_interface_unit_test
+  PluginCompatibilityEngineInterfaceCompileTest
+  PluginCompatibilityEngineInterfaceTest.cpp
+)
+
+dasall_register_plugin_unit_test(
   dasall_plugin_validation_pipeline_unit_test
   PluginValidationPipelineTest
   PluginValidationPipelineTest.cpp
