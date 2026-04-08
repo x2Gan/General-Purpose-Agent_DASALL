@@ -252,8 +252,7 @@
 3. 当前最小可执行粒度：函数/接口/数据结构。
 4. 未完全达到全域函数级的缺口：tracing failure 注入与 runtime/tools/multi_agent 跨模块集成路径尚未落盘，OTLP 首版启用策略未冻结。
 5. 下一步建议：
-   - 优先执行 `TRC-TODO-021`，完成 tracing 侧 blocked-first gate 收口。
-   - 随后补 tracing failure injection integration 与跨模块 runtime/tools/multi_agent trace path。
+   - 优先补 tracing failure injection integration 与跨模块 runtime/tools/multi_agent trace path。
    - 对 OTLP exporter 首版启用策略完成冻结后，再决定是否把 collector 级联动纳入下一轮 tracing integration gate。
 
 ## 12. ARC 修复增量（2026-03-26）
@@ -261,9 +260,14 @@
 | ID | 状态 | 对应问题 | 任务描述 | 代码目标 | 测试目标 | 验收命令 | 前置依赖 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|
 | TRC-TODO-020 | Done (2026-04-08) | ARC-01 | 在 tracing contract 边界增加 planning stage 观测约束：span 标签必须包含 stage=planning，且预算字段 budget_ms 可观测 | tests/contract/smoke/TracePlanningStageContractTest.cpp、tests/contract/CMakeLists.txt、infra/include/tracing/TraceTypes.h | contract：TracePlanningStageContractTest 校验 stage 标签、budget_ms、trace_id/span_id 关联与降级可观测一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R TracePlanningStageContractTest | TRC-TODO-005、TRC-TODO-018 | 仅当 planning 标签与预算字段被 contract 测试稳定约束，且不新增 contracts 共享对象时完成；2026-04-08 已补充 TraceTypes planning helper、新增 TracePlanningStageContractTest，并验证 contract 聚合 152/152 通过 |
-| TRC-TODO-021 | Not Started | ARC-02 | 将 tracing 任务纳入仓库级 Blocked-first gate 流程，禁止在 Blocked 未解时推进实现任务 | scripts/ci/infra_gate.sh, docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md | process test：默认执行 gate 时存在 Blocked 即失败；解阻窗口需显式 ALLOW_BLOCKED=1 | bash scripts/ci/infra_gate.sh | TRC-TODO-018 | 仅当 tracing 执行流程与 gate 绑定，并形成可重复执行记录时完成 |
+| TRC-TODO-021 | Done (2026-04-08) | ARC-02 | 将 tracing 任务纳入仓库级 Blocked-first gate 流程，禁止在 Blocked 未解时推进实现任务 | scripts/ci/infra_gate.sh、docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md | process test：默认执行 gate 时存在 Blocked 即失败；解阻窗口需显式 ALLOW_BLOCKED=1 | bash scripts/ci/infra_gate.sh | TRC-TODO-018 | 仅当 tracing 执行流程与 gate 绑定，并形成可重复执行记录时完成；2026-04-08 已验证默认模式因 2 个 Blocked 项以 exit 2 失败，`ALLOW_BLOCKED=1` 模式下 unit 191/191、contract 152/152、integration 26/26、failure 14/14 全部通过 |
 
 ### 12.1 2026-04-08 / TRC-TODO-020 回写
 
 1. 交付物：在 `infra/include/tracing/TraceTypes.h` 中补充 planning stage 预算/相关性/降级一致性 helper，新增 `tests/contract/smoke/TracePlanningStageContractTest.cpp`，并把 tracing planning contract 注册进 `tests/contract/CMakeLists.txt`。
 2. 验证结果：`cmake --build build-ci --target dasall_contract_trace_planning_stage_test && ctest --test-dir build-ci --output-on-failure -R TracePlanningStageContractTest` 通过；`cmake --build build-ci --target dasall_contract_tests` 通过，contract 聚合更新为 152/152 通过。
+
+### 12.2 2026-04-08 / TRC-TODO-021 回写
+
+1. 交付物：复核 `scripts/ci/infra_gate.sh` 已覆盖 tracing 专项 TODO，并将本任务状态与 gate 证据回写到本专项文档。
+2. 验证结果：默认执行 `bash scripts/ci/infra_gate.sh` 因存在 2 个 Blocked 项按预期以 exit 2 失败；审批窗口执行 `ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh` 通过，分类结果为 unit 191/191、contract 152/152、integration 26/26、failure 14/14 全通过，证明 tracing 已绑定到仓库级 blocked-first gate 流程。
