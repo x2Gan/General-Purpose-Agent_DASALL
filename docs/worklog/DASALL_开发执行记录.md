@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #209
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-014 TimeoutEventPublisher 发布骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-012` 已完成并推送后，受阻链上的下一项任务就是 `WDG-TODO-014`。
+2. `WDG-BLK-02` 属于可在同轮最小修复的 context blocker：watchdog 详细设计要求发布 timeout event，但仓库内没有统一 event bus 公共接口；参照 config 在 blocker 收敛时采用的“进程内最小 publisher 抽象”模式，本轮只冻结 watchdog 私有 `ITimeoutEventSink`，不等待全局跨进程 event bus。
+3. 015 审计桥接已经先行落盘，因此本轮只补 `TimeoutDecision -> TimeoutEvent` 发布与 fallback ring-buffer 语义，不重复实现 audit/logging 主链。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/TimeoutEventPublisher.h](../../infra/src/watchdog/TimeoutEventPublisher.h) 与 [infra/src/watchdog/TimeoutEventPublisher.cpp](../../infra/src/watchdog/TimeoutEventPublisher.cpp)，冻结 `TimeoutEvent`、`TimeoutEventDispatchResult`、`ITimeoutEventSink` 与 `publish_timeout(decision)` 的最小边界，并实现 critical/fatal 发布、warning skip 与 publish failure -> fallback ring-buffer 语义。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `TimeoutEventPublisher` 源文件与私有头纳入 `dasall_infra` 的 watchdog 构建集合。
+3. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_timeout_event_publisher_unit_test` 与 `TimeoutEventPublisherTest`。
+4. 新增 [tests/unit/infra/watchdog/TimeoutEventPublisherTest.cpp](../../tests/unit/infra/watchdog/TimeoutEventPublisherTest.cpp)，覆盖 critical publish、warning skip 以及 sink failure 时的 `INF_E_WATCHDOG_EVENT_PUBLISH_FAIL` 计数与本地缓冲路径。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-BLK-02` 回写为已解阻，并把 `WDG-TODO-014` 回写为 Done 与定向构建/CTest 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_timeout_event_publisher_unit_test`
+   - `ctest --test-dir build-ci -N -R TimeoutEventPublisherTest`
+   - `ctest --test-dir build-ci --output-on-failure -R TimeoutEventPublisherTest`
+2. 结果：
+   - `dasall_infra` 与 `dasall_timeout_event_publisher_unit_test` 构建通过。
+   - `TimeoutEventPublisherTest` 已进入 CTest 图。
+   - 1/1 tests passed。
+
+### 结果
+
+1. watchdog 现在具备最小 timeout 事件发布骨架：critical/fatal `TimeoutDecision` 会被投影为附带 `trace_id/session_id/task_id=unknown` 的 `TimeoutEvent`，warning 级则显式跳过发布。
+2. `WDG-BLK-02` 已在 watchdog 组件边界内完成收敛：v1 不等待全局 event bus，而是先冻结进程内 `ITimeoutEventSink` 与 `TimeoutEventDispatchResult`，为后续统一总线适配预留升级点。
+3. sink 缺失或 dispatch 失败时，publisher 会累计 `publish_fail_total`、映射 `INF_E_WATCHDOG_EVENT_PUBLISH_FAIL`，并把事件写入受 `event_queue_size`/`event_overflow_policy` 约束的 fallback ring-buffer，满足“禁止静默丢失”的最小要求。
+
+### 下一步
+
+1. 进入 `WDG-TODO-017`，在 013 判级输出与 008 RecoveryHintRequest 边界模板基础上落盘 recovery suggestion emitter，继续保持 ADR-007 的建议-执行分离。
+
+### 风险
+
+1. 当前 014 只冻结了 watchdog 私有事件发布抽象，没有统一到跨模块 `EventEnvelope`；若后续仓库收敛出全局 event bus，必须以适配器方式接入 `ITimeoutEventSink`，不能直接改写本轮已冻结的 timeout event payload 与 failure 语义。
+
 ## 记录 #208
 
 - 日期：2026-04-08

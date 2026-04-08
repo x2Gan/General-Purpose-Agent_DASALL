@@ -134,6 +134,7 @@ set(DASALL_INFRA_WATCHDOG_SOURCES
   src/watchdog/HeartbeatRegistry.cpp
   src/watchdog/HeartbeatIngestor.cpp
   src/watchdog/TimeoutPolicyEngine.cpp
+  src/watchdog/TimeoutEventPublisher.cpp
   src/watchdog/WatchdogAuditBridge.cpp
   src/watchdog/WatchdogMetricsBridge.cpp
   src/watchdog/WatchdogServiceFacade.cpp
@@ -144,6 +145,7 @@ set(DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS
   src/watchdog/HeartbeatRegistry.h
   src/watchdog/HeartbeatIngestor.h
   src/watchdog/TimeoutPolicyEngine.h
+  src/watchdog/TimeoutEventPublisher.h
   src/watchdog/WatchdogAuditBridge.h
   src/watchdog/WatchdogMetricsBridge.h
   src/watchdog/WatchdogServiceFacade.h
