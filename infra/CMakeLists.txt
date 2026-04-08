@@ -259,6 +259,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/watchdog/HeartbeatSample.h
   include/watchdog/RecoveryHintRequest.h
   include/watchdog/TimeoutDecision.h
+  include/watchdog/WatchdogErrors.h
   include/watchdog/WatchedEntityDescriptor.h
   include/watchdog/WatchdogSnapshot.h
   include/IInfrastructureService.h

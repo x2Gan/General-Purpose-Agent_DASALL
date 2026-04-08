@@ -157,6 +157,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_watchdog_snapshot_unit_test
 	dasall_watchdog_recovery_hint_request_unit_test
 	dasall_watchdog_service_facade_unit_test
+	dasall_watchdog_errors_unit_test
 	dasall_health_policy_interface_unit_test
 	dasall_health_probe_types_unit_test
 	dasall_health_recovery_hint_unit_test

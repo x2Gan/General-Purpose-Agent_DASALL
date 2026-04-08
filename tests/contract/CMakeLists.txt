@@ -512,6 +512,25 @@ target_link_libraries(dasall_contract_watchdog_recovery_hint_request_boundary_te
 )
 
 dasall_register_contract_test(
+  dasall_contract_watchdog_error_mapping_test
+  WatchdogErrorMappingContractTest
+  smoke/WatchdogErrorMappingContractTest.cpp
+  smoke
+)
+
+target_include_directories(dasall_contract_watchdog_error_mapping_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_watchdog_error_mapping_test
+  PRIVATE
+    dasall_infra
+)
+
+set_tests_properties(WatchdogErrorMappingContractTest PROPERTIES LABELS "contract;smoke;watchdog")
+
+dasall_register_contract_test(
   dasall_contract_infrastructure_service_boundary_test
   InfrastructureServiceBoundaryContractTest
   smoke/InfrastructureServiceBoundaryContractTest.cpp
