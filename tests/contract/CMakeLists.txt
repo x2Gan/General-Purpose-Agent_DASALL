@@ -31,6 +31,10 @@ function(dasall_register_logging_contract_test executable_target_name ctest_name
   )
 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;logging")
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 function(dasall_register_audit_contract_test executable_target_name ctest_name source_file)
@@ -42,6 +46,10 @@ function(dasall_register_audit_contract_test executable_target_name ctest_name s
   )
 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;audit")
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 function(dasall_register_secret_contract_test executable_target_name ctest_name source_file)
@@ -53,6 +61,10 @@ function(dasall_register_secret_contract_test executable_target_name ctest_name 
   )
 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;secret")
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 function(dasall_register_metrics_contract_test executable_target_name ctest_name source_file)
@@ -64,6 +76,10 @@ function(dasall_register_metrics_contract_test executable_target_name ctest_name
   )
 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;metrics")
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 function(dasall_register_tracing_contract_test executable_target_name ctest_name source_file)
@@ -75,6 +91,10 @@ function(dasall_register_tracing_contract_test executable_target_name ctest_name
   )
 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;tracing")
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 function(dasall_register_ota_contract_test executable_target_name ctest_name source_file)
@@ -86,6 +106,10 @@ function(dasall_register_ota_contract_test executable_target_name ctest_name sou
   )
 
   set_tests_properties(${ctest_name} PROPERTIES LABELS "contract;smoke;ota")
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 # smoke group
@@ -932,6 +956,22 @@ target_include_directories(dasall_contract_metrics_audit_bridge_boundary_test
 )
 
 target_link_libraries(dasall_contract_metrics_audit_bridge_boundary_test
+  PRIVATE
+    dasall_infra
+)
+
+dasall_register_metrics_contract_test(
+  dasall_contract_metrics_planning_stage_budget_test
+  MetricsPlanningStageBudgetContractTest
+  smoke/MetricsPlanningStageBudgetContractTest.cpp
+)
+
+target_include_directories(dasall_contract_metrics_planning_stage_budget_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_metrics_planning_stage_budget_test
   PRIVATE
     dasall_infra
 )

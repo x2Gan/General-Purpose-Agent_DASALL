@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -27,6 +28,15 @@ inline constexpr std::array<std::string_view, 5> kMetricLabelAllowlist{
     "profile",
     "outcome",
     "error_code",
+};
+
+inline constexpr std::string_view kPlanningMetricStageLabel = "planning";
+inline constexpr std::string_view kPlanningBudgetMetricName = "planning_budget_ms";
+inline constexpr std::string_view kPlanningLatencyMetricName = "planning_latency_ms";
+inline constexpr std::array<std::string_view, 3> kPlanningMetricAllowedOutcomes{
+  "success",
+  "degraded",
+  "failure",
 };
 
 [[nodiscard]] inline bool is_valid_metric_name(std::string_view name) {
@@ -111,6 +121,50 @@ struct MetricSample {
     return false;
   }
 };
+
+[[nodiscard]] inline bool is_planning_metric_stage(std::string_view stage) {
+  return stage == kPlanningMetricStageLabel;
+}
+
+[[nodiscard]] inline bool is_planning_metric_name(std::string_view name) {
+  return name == kPlanningBudgetMetricName || name == kPlanningLatencyMetricName;
+}
+
+[[nodiscard]] inline bool is_planning_metric_outcome(std::string_view outcome) {
+  return std::find(kPlanningMetricAllowedOutcomes.begin(),
+                   kPlanningMetricAllowedOutcomes.end(),
+                   outcome) != kPlanningMetricAllowedOutcomes.end();
+}
+
+[[nodiscard]] inline bool planning_metric_has_consistent_error_state(
+    const MetricLabels& labels) {
+  if (labels.outcome == "success") {
+    return labels.error_code.empty();
+  }
+
+  return !labels.error_code.empty();
+}
+
+[[nodiscard]] inline bool is_planning_observation_sample(
+    const MetricSample& sample) {
+  if (!sample.is_valid() || !is_planning_metric_stage(sample.labels.stage) ||
+      !is_planning_metric_outcome(sample.labels.outcome) ||
+      !planning_metric_has_consistent_error_state(sample.labels)) {
+    return false;
+  }
+
+  if (sample.identity_ref.name == kPlanningBudgetMetricName) {
+    return sample.identity_ref.type == MetricType::Gauge &&
+           sample.identity_ref.unit == "ms";
+  }
+
+  if (sample.identity_ref.name == kPlanningLatencyMetricName) {
+    return sample.identity_ref.type == MetricType::Histogram &&
+           sample.identity_ref.unit == "ms";
+  }
+
+  return false;
+}
 
 struct HistogramConfig {
   std::vector<double> buckets{0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 5.0};

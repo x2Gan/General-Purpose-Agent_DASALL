@@ -294,26 +294,32 @@
 
 ## 11. 可行性结论
 
-1. 结论：metrics 主专项 `MET-TODO-001`~`MET-TODO-020` 已完成到 unit/contract 与 bridge 证据收口阶段，但尚未进入完全维护态；`MET-GATE-07` 仍未通过，ARC 增量 `MET-TODO-021`、`MET-TODO-022` 仍待执行。
+1. 结论：metrics 主专项 `MET-TODO-001`~`MET-TODO-020` 已完成到 unit/contract 与 bridge 证据收口阶段，但尚未进入完全维护态；`MET-TODO-021` 已完成，`MET-GATE-07` 仍未通过，当前仍待执行的 ARC 增量为 `MET-TODO-022`。
 2. 依据：
    - `MET-TODO-001`~`MET-TODO-020` 当前均已完成，当前 Blocked 任务索引为空。
-   - 2026-04-06 收口结果显示：`ctest --test-dir build-ci -N` 发现 301 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 144/144 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 141/141 通过。
-   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 24 个 metrics 组件 unit/contract 测试，说明 discoverability 已稳定存在。
+   - 2026-04-06 收口结果显示：`ctest --test-dir build-ci -N` 发现 301 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 144/144 通过。
+   - 2026-04-08 补充执行 `cmake --build build-ci --target dasall_contract_tests` 后，contract 聚合更新为 151/151 通过；其中新增 `MetricsPlanningStageBudgetContractTest` 已纳入同一条验收链。
+   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 25 个 metrics 组件 unit/contract 测试，说明 discoverability 已随 `MET-TODO-021` 继续扩展且保持稳定。
    - `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-003`、`MET-BLK-004` 已解阻，当前仅 `MET-BLK-005` 仍作为 OTLP 扩展残余阻塞保留。
    - 顶层 integration 拓扑虽已存在，但 metrics 自身 integration/failure 用例尚未落盘，因此 `MET-GATE-07` 目前明确为 Fail，而不是隐式忽略。
 3. 当前维护粒度：以 L2/L3 增量任务为主；后续若继续推进，应优先以 integration/failure、contract 增量或 gate 流程收口任务进入下一轮，而非回退已有接口/主链基线。
 4. 下一步建议：
-   - 优先执行 `MET-TODO-021` 与 `MET-TODO-022`，完成 planning 阶段 ARC contract 与 blocked-first gate 收口。
+   - 优先执行 `MET-TODO-022`，完成 metrics 侧 blocked-first gate 收口。
    - 随后执行 `MET-TODO-023`，补齐 metrics integration/failure 子拓扑并消除 `MET-GATE-07` 失败项。
-   - profile 键域补齐已由 `PRF-TODO-022` 完成，后续应直接聚焦 `MET-TODO-021`~`MET-TODO-023` 与更高阶动态覆盖扩展。
+   - profile 键域补齐已由 `PRF-TODO-022` 完成，后续应直接聚焦 `MET-TODO-022`、`MET-TODO-023` 与更高阶动态覆盖扩展。
 
 ## 12. ARC 修复增量（2026-03-26）
 
 | ID | 状态 | 对应问题 | 任务描述 | 代码目标 | 测试目标 | 验收命令 | 前置依赖 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|
-| MET-TODO-021 | Not Started | ARC-01 | 在 metrics contract 边界增加 planning 阶段预算观测约束：stage=planning 标签与 planning_budget_ms 指标必须可追踪 | tests/contract/infra/metrics/MetricsPlanningStageBudgetContractTest.cpp, infra/include/metrics/MetricTypes.h | contract：MetricsPlanningStageBudgetContractTest 校验 planning 阶段标签、预算字段和退化路径统计的一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R MetricsPlanningStageBudgetContractTest | MET-TODO-006、MET-TODO-018 | 仅当 planning 标签与预算观测在 contract 测试中被稳定约束，且不改动 contracts 公共对象时完成 |
+| MET-TODO-021 | Done (2026-04-08) | ARC-01 | 在 metrics contract 边界增加 planning 阶段预算观测约束：stage=planning 标签与 planning_budget_ms 指标必须可追踪 | tests/contract/smoke/MetricsPlanningStageBudgetContractTest.cpp、tests/contract/CMakeLists.txt、infra/include/metrics/MetricTypes.h | contract：MetricsPlanningStageBudgetContractTest 校验 planning 阶段标签、预算字段和退化路径统计的一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R MetricsPlanningStageBudgetContractTest | MET-TODO-006、MET-TODO-018 | 仅当 planning 标签与预算观测在 contract 测试中被稳定约束，且不改动 contracts 公共对象时完成；2026-04-08 已补充 planning budget/latency helper、新增 MetricsPlanningStageBudgetContractTest，并修复 wrapper 注册 contract 目标对 `dasall_contract_tests` 的依赖传播，验证 contract 151/151 通过 |
 | MET-TODO-022 | Not Started | ARC-02 | 将 metrics 任务纳入仓库级 Blocked-first gate 流程，禁止绕过前置解阻直接推进实现 | scripts/ci/infra_gate.sh, docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | process test：默认执行 gate 时存在 Blocked 即失败；审批窗口通过 ALLOW_BLOCKED=1 执行例外 | bash scripts/ci/infra_gate.sh | MET-TODO-018 | 仅当 metrics 执行流程与 gate 绑定，并形成可重复执行记录时完成 |
 | MET-TODO-023 | Not Started | ARC-03 | 补齐 metrics integration/failure 子拓扑并关闭 MET-GATE-07 | metrics 设计 7/8/9；MET-GATE-07 | tests/integration/infra/metrics/、tests/integration/CMakeLists.txt、tests/CMakeLists.txt | integration：MetricsIntegrationTest；failure：MetricsFailureInjectionTest；discoverability：integration/failure 标签与聚合入口稳定 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_metrics_integration_tests && ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)" && ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest" | MET-TODO-018、MET-TODO-019 | 仅当 metrics integration/failure 用例进入顶层测试图并可被 ctest 发现、执行，且 `MET-GATE-07` 从 Fail 变为 Pass 时完成 |
+
+### 12.1 2026-04-08 / MET-TODO-021 回写
+
+1. 交付物：在 `infra/include/metrics/MetricTypes.h` 中冻结 planning stage 预算/延迟观测 helper，新增 `tests/contract/smoke/MetricsPlanningStageBudgetContractTest.cpp`，并修复 `tests/contract/CMakeLists.txt` 中 specialized wrapper 未向 `dasall_contract_tests` 回传依赖目标列表的问题。
+2. 验证结果：`cmake --build build-ci --target dasall_contract_metrics_planning_stage_budget_test && ctest --test-dir build-ci --output-on-failure -R MetricsPlanningStageBudgetContractTest` 通过；`cmake --build build-ci --target dasall_contract_tests` 通过，contract 聚合更新为 151/151 通过。
 
 ## 13. 本轮执行记录（2026-04-01 / MET-TODO-001）
 
