@@ -232,11 +232,13 @@
 | 构建 infra | cmake --build build-ci --target dasall_infra |
 | 执行 unit 套件 | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit |
 | 执行 contract 套件 | cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract |
+| 执行 metrics integration/failure 子拓扑 | cmake --build build-ci --target dasall_metrics_integration_tests && ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest" |
+| 检查 metrics integration/failure 发现性 | ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)" |
 | 检查测试发现性 | ctest --test-dir build-ci -N |
 
 说明：
 
-1. integration 命令暂不纳入 `MET-TODO-020` 的最小验收基线。tests 顶层 integration 拓扑已于 2026-03-30 解阻，但当前 `ctest --test-dir build-ci -N` 发现的 integration 测试中仍无 metrics 组件用例，且 `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前仅发现 24 个 metrics 组件 unit/contract 测试，因此 `MET-GATE-07` 在本轮保持 Fail。
+1. `MET-TODO-023` 已将 metrics integration/failure 命令纳入最小验收基线。当前 `ctest --test-dir build-ci -N` 发现 371 个测试，`ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 发现 27 个 metrics 组件测试，`ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 发现 2 个 metrics integration/failure 用例；`ctest --test-dir build-ci --output-on-failure -L integration` 28/28 通过、`ctest --test-dir build-ci --output-on-failure -L failure` 15/15 通过，因此 `MET-GATE-07` 已转为 Pass。
 2. 每项任务至少包含 1 条构建命令和 1 条测试命令。
 3. `MET-TODO-020` 的 gate 收口命令聚焦 `ctest -N`、`ctest -L unit`、`ctest -L contract`；构建接线证据回链到 `MET-TODO-017`~`MET-TODO-019` 的执行记录，不重复扩写代码验收。
 
@@ -250,23 +252,23 @@
 6. 是否避免跨子系统范围扩张：是。
 7. 若要求函数/数据结构级拆分，是否真正落到对象：是。
 
-### 9.3 2026-04-06 Gate 执行快照
+### 9.3 2026-04-08 Gate 执行快照
 
 | Gate ID | 当前状态 | 证据 | 结论 |
 |---|---|---|---|
 | MET-GATE-01 | Pass | `MET-TODO-001`~`MET-TODO-008` 已全部完成；`IMetricsProvider`、`IMeter`、`IMetricExporter`、`IMetricConfigPolicy`、`IMetricsHealthProbe`、`MetricTypes`、`MetricsErrors`、`MetricsSnapshots` 均已落盘并进入 build-ci 测试图 | metrics 公共接口、对象与错误面已经冻结，不再依赖 placeholder 边界 |
-| MET-GATE-02 | Pass | `MET-TODO-009`~`MET-TODO-015` 已完成；`ctest --test-dir build-ci --output-on-failure -L unit` 当前 144/144 通过，覆盖 `MetricsFacadeTest`、`InstrumentRegistryTest`、`MetricsAggregationTest`、`MetricsCardinalityGuardTest`、`MetricsRecoveryTest` 等主链用例 | `record -> aggregate -> snapshot` 主链与 degraded/recover 闭环保持稳定 |
-| MET-GATE-03 | Pass | `MetricsCardinalityGuardTest`、`MetricsExporterAdapterTest`、`MetricsRecoveryTest`、`MetricsSnapshotsTest`、`MetricsErrorMappingContractTest` 均已落盘；当前 unit 144/144、contract 141/141 继续通过 | label reject、queue full/error surface、export failure、config invalid 均保留错误码与观测输出边界 |
-| MET-GATE-04 | Pass | `MET-TODO-017` 与 `MET-TODO-019` 已完成 `infra/CMakeLists.txt`、unit/contract CMake 与 bridge 代码接线；相关执行记录已验证 `dasall_infra` 与新增 bridge 测试目标可构建 | metrics 源码与 bridge 代码已稳定进入构建图 |
-| MET-GATE-05 | Pass | `ctest --test-dir build-ci -N` 当前发现 301 个测试；`ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 24 个 metrics 组件 unit/contract 测试 | metrics 测试发现性稳定存在，不再依赖临时定向构建 |
-| MET-GATE-06 | Pass | `MET-TODO-001`~`MET-TODO-008` 已完成接口与错误码冻结；`MET-TODO-019` 仅新增 private bridge，`MET-TODO-020` 仅回写 docs/worklog | 当前无未评审的 metrics 公共接口或错误码 breaking change |
-| MET-GATE-07 | Fail | `ctest --test-dir build-ci -N` 显示顶层 integration 测试已存在，但当前列表中无 metrics 组件 integration/failure 用例；`ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 仅发现 unit/contract 测试 | tests 顶层 integration 拓扑已解阻，但 metrics 组件自身的 integration/failure 准入尚未落盘 |
+| MET-GATE-02 | Pass | `MET-TODO-009`~`MET-TODO-015` 已完成；`ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh` 当前 unit 191/191 通过，覆盖 `MetricsFacadeTest`、`InstrumentRegistryTest`、`MetricsAggregationTest`、`MetricsCardinalityGuardTest`、`MetricsRecoveryTest` 等主链用例 | `record -> aggregate -> snapshot` 主链与 degraded/recover 闭环保持稳定 |
+| MET-GATE-03 | Pass | `MetricsCardinalityGuardTest`、`MetricsExporterAdapterTest`、`MetricsRecoveryTest`、`MetricsFailureInjectionTest`、`MetricsErrorMappingContractTest` 均已落盘；当前 unit 191/191、contract 152/152、failure 15/15 继续通过 | label reject、export timeout、degraded/recover 与 config invalid 均保留错误码与观测输出边界 |
+| MET-GATE-04 | Pass | `MET-TODO-017`、`MET-TODO-019` 与 `MET-TODO-023` 已完成 `infra/CMakeLists.txt`、unit/contract CMake、bridge 代码与 integration CMake 接线；相关执行记录已验证 `dasall_infra` 与 `dasall_metrics_integration_tests` 可构建 | metrics 源码、bridge 代码与 integration 子拓扑已稳定进入构建图 |
+| MET-GATE-05 | Pass | `ctest --test-dir build-ci -N` 当前发现 371 个测试；`ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 27 个 metrics 组件测试；`ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 发现 2 个 metrics integration/failure 测试 | metrics 测试发现性已从 unit/contract 扩展到 integration/failure，不再依赖临时定向构建 |
+| MET-GATE-06 | Pass | `MET-TODO-001`~`MET-TODO-008` 已完成接口与错误码冻结；`MET-TODO-019` 仅新增 private bridge，`MET-TODO-023` 仅新增 integration/failure 测试与 CMake 注册 | 当前无未评审的 metrics 公共接口或错误码 breaking change |
+| MET-GATE-07 | Pass | `cmake --build build-ci --target dasall_metrics_integration_tests` 通过；`ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 发现 2 个测试，定向执行 2/2 通过，且 `ctest --test-dir build-ci --output-on-failure -L integration` 28/28、`-L failure` 15/15 均通过 | metrics 组件自身 integration/failure 用例已进入顶层测试图并可稳定发现、执行 |
 
-### 9.4 2026-04-06 Blocker 状态快照
+### 9.4 2026-04-08 Blocker 状态快照
 
 | Blocker ID | 当前状态 | 是否影响 MET-TODO-020 | 说明 |
 |---|---|---|---|
-| MET-BLK-001 | Resolved | 否 | tests 顶层 integration 拓扑与聚合 gate 已补齐；当前仅剩 metrics 组件自身 integration/failure 用例未落盘，不再属于仓库级阻塞 |
+| MET-BLK-001 | Resolved | 否 | tests 顶层 integration 拓扑与聚合 gate 已补齐，`MET-TODO-023` 也已补齐 metrics 组件自身 integration/failure 用例；后续无需再回退到仓库级阻塞 |
 | MET-BLK-002 | Resolved | 否 | audit 已冻结 `IAuditLogger::write_audit(...)` 与 `AuditEvent/AuditContext`，`MET-TODO-019` 已完成 MetricsAuditBridge 接线 |
 | MET-BLK-003 | Resolved | 否 | `PRF-TODO-022` 已补齐五档 `infra.metrics.*` 键域、统一覆盖优先级并通过 `ProfileRuntimePolicySchemaContractTest`；后续动态覆盖扩展不再受 profile 资产缺口阻塞 |
 | MET-BLK-004 | Resolved | 否 | logging 已冻结 `ILogger::log(const LogEvent&)` 与 `LogEvent`，`MET-TODO-019` 已完成 MetricsLoggingBridge 接线 |
@@ -274,12 +276,15 @@
 
 ### 9.5 验证与回退记录
 
-1. `ctest --test-dir build-ci -N`：通过，发现 301 个测试。
-2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，144/144 tests passed；标签摘要中 `metrics=10 tests`、`failure=5 tests`。
-3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，141/141 tests passed；标签摘要中 `metrics=6 tests`、`failure=1 test`。
-4. `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`：通过，发现 24 个 metrics 组件自身的 unit/contract 测试；当前无 metrics integration/failure 测试入口。
-5. `MET-TODO-017`~`MET-TODO-019` 在各自执行记录中已完成构建接线、bridge 验收与 blocker-first 回写；`MET-TODO-020` 为文档收口任务，本轮未触发代码回退。
-6. 若后续引入 metrics integration/failure 用例或 OTLP 依赖接入，应分别重新评估 `MET-GATE-07`、`MET-BLK-005`，并以新的原子任务回写证据。
+1. `ctest --test-dir build-ci -N`：通过，发现 371 个测试。
+2. `cmake --build build-ci --target dasall_metrics_integration_tests`：通过，`MetricsIntegrationTest`、`MetricsFailureInjectionTest` 作为组件级聚合目标 2/2 通过。
+3. `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`：通过，发现 27 个 metrics 组件测试。
+4. `ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"`：通过，发现 2 个 metrics integration/failure 测试入口。
+5. `ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest"`：通过，2/2 tests passed。
+6. `ctest --test-dir build-ci --output-on-failure -L integration`：通过，28/28 tests passed；标签摘要中 `metrics=2 tests`、`metrics-integration=2 tests`。
+7. `ctest --test-dir build-ci --output-on-failure -L failure`：通过，15/15 tests passed；标签摘要中 `metrics=7 tests`、`metrics-failure=1 test`。
+8. `ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh`：通过；分类结果为 unit 191/191、contract 152/152、integration 28/28、failure 15/15，全仓 gate 未被本轮 metrics 子拓扑破坏。
+9. 若后续引入 OTLP 依赖接入或更高层跨子系统 metrics 联调，应重新评估 `MET-BLK-005` 并以新的原子任务继续扩展，而不是回改当前 integration/failure 基线。
 
 ## 10. 风险与回退策略
 
@@ -294,19 +299,17 @@
 
 ## 11. 可行性结论
 
-1. 结论：metrics 主专项 `MET-TODO-001`~`MET-TODO-020` 已完成到 unit/contract 与 bridge 证据收口阶段，但尚未进入完全维护态；`MET-TODO-021`、`MET-TODO-022` 已完成，`MET-GATE-07` 仍未通过，当前剩余增量任务为 `MET-TODO-023`。
+1. 结论：metrics 主专项 `MET-TODO-001`~`MET-TODO-023` 已全部完成，`MET-GATE-01`~`MET-GATE-07` 均已通过；当前仅保留 `MET-BLK-005` 作为 OTLP exporter 扩展残余阻塞，metrics 已进入维护态。
 2. 依据：
-   - `MET-TODO-001`~`MET-TODO-020` 当前均已完成，当前 Blocked 任务索引为空。
-   - 2026-04-06 收口结果显示：`ctest --test-dir build-ci -N` 发现 301 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 144/144 通过。
-   - 2026-04-08 补充执行 `cmake --build build-ci --target dasall_contract_tests` 后，contract 聚合更新为 151/151 通过；其中新增 `MetricsPlanningStageBudgetContractTest` 已纳入同一条验收链。
-   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 25 个 metrics 组件 unit/contract 测试，说明 discoverability 已随 `MET-TODO-021` 继续扩展且保持稳定。
+   - `MET-TODO-001`~`MET-TODO-023` 当前均已完成，当前 Blocked 任务索引为空。
+   - `ctest --test-dir build-ci -N` 当前发现 371 个测试；`ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh` 当前给出 unit 191/191、contract 152/152、integration 28/28、failure 15/15 全通过的分类快照。
+   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 27 个 metrics 组件测试，其中 `ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 已能发现 2 个 metrics integration/failure 测试。
    - `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-003`、`MET-BLK-004` 已解阻，当前仅 `MET-BLK-005` 仍作为 OTLP 扩展残余阻塞保留。
-   - 顶层 integration 拓扑虽已存在，但 metrics 自身 integration/failure 用例尚未落盘，因此 `MET-GATE-07` 目前明确为 Fail，而不是隐式忽略。
-3. 当前维护粒度：以 L2/L3 增量任务为主；后续若继续推进，应优先以 integration/failure、contract 增量或 gate 流程收口任务进入下一轮，而非回退已有接口/主链基线。
+   - `MET-GATE-07` 已由 `MET-TODO-023` 明确关闭，metrics integration/failure 不再是当前轮显式缺口。
+3. 当前维护粒度：已进入维护态；后续若继续推进，应只在 OTLP exporter、跨子系统联调或新增 public boundary 场景出现时再新开增量任务，而不是回退已有接口/主链基线。
 4. 下一步建议：
-   - 优先执行 `MET-TODO-023`，补齐 metrics integration/failure 子拓扑并消除 `MET-GATE-07` 失败项。
-   - 随后执行 `MET-TODO-023`，补齐 metrics integration/failure 子拓扑并消除 `MET-GATE-07` 失败项。
-   - profile 键域补齐已由 `PRF-TODO-022` 完成，后续应直接聚焦 `MET-TODO-023` 与更高阶动态覆盖扩展。
+   - 若继续推进 metrics，优先冻结 `MET-BLK-005` 对应的 OTLP exporter 依赖与构建策略，再新开原子任务扩展 exporter 族。
+   - 若后续出现 runtime/cognition 等上层对 metrics 的更高阶联调诉求，新增跨子系统 integration 任务，而不是修改当前 `MetricsIntegrationTest` / `MetricsFailureInjectionTest` 的最小闭环基线。
 
 ## 12. ARC 修复增量（2026-03-26）
 
@@ -314,7 +317,7 @@
 |---|---|---|---|---|---|---|---|---|
 | MET-TODO-021 | Done (2026-04-08) | ARC-01 | 在 metrics contract 边界增加 planning 阶段预算观测约束：stage=planning 标签与 planning_budget_ms 指标必须可追踪 | tests/contract/smoke/MetricsPlanningStageBudgetContractTest.cpp、tests/contract/CMakeLists.txt、infra/include/metrics/MetricTypes.h | contract：MetricsPlanningStageBudgetContractTest 校验 planning 阶段标签、预算字段和退化路径统计的一致性 | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R MetricsPlanningStageBudgetContractTest | MET-TODO-006、MET-TODO-018 | 仅当 planning 标签与预算观测在 contract 测试中被稳定约束，且不改动 contracts 公共对象时完成；2026-04-08 已补充 planning budget/latency helper、新增 MetricsPlanningStageBudgetContractTest，并修复 wrapper 注册 contract 目标对 `dasall_contract_tests` 的依赖传播，验证 contract 151/151 通过 |
 | MET-TODO-022 | Done (2026-04-08) | ARC-02 | 将 metrics 任务纳入仓库级 Blocked-first gate 流程，禁止绕过前置解阻直接推进实现 | scripts/ci/infra_gate.sh、docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md | process test：默认执行 gate 时存在 Blocked 即失败；审批窗口通过 ALLOW_BLOCKED=1 执行例外 | bash scripts/ci/infra_gate.sh | MET-TODO-018 | 仅当 metrics 执行流程与 gate 绑定，并形成可重复执行记录时完成；2026-04-08 已验证默认模式因 2 个 Blocked 项以 exit 2 失败，`ALLOW_BLOCKED=1` 模式下 unit 191/191、contract 151/151、integration 26/26、failure 14/14 全部通过 |
-| MET-TODO-023 | Not Started | ARC-03 | 补齐 metrics integration/failure 子拓扑并关闭 MET-GATE-07 | metrics 设计 7/8/9；MET-GATE-07 | tests/integration/infra/metrics/、tests/integration/CMakeLists.txt、tests/CMakeLists.txt | integration：MetricsIntegrationTest；failure：MetricsFailureInjectionTest；discoverability：integration/failure 标签与聚合入口稳定 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_metrics_integration_tests && ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)" && ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest" | MET-TODO-018、MET-TODO-019 | 仅当 metrics integration/failure 用例进入顶层测试图并可被 ctest 发现、执行，且 `MET-GATE-07` 从 Fail 变为 Pass 时完成 |
+| MET-TODO-023 | Done (2026-04-08) | ARC-03 | 补齐 metrics integration/failure 子拓扑并关闭 MET-GATE-07 | metrics 设计 7/8/9；MET-GATE-07 | tests/integration/infra/metrics/、tests/integration/CMakeLists.txt、tests/CMakeLists.txt | integration：MetricsIntegrationTest；failure：MetricsFailureInjectionTest；discoverability：integration/failure 标签与聚合入口稳定 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_metrics_integration_tests && ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)" && ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest" | MET-TODO-018、MET-TODO-019 | 仅当 metrics integration/failure 用例进入顶层测试图并可被 ctest 发现、执行，且 `MET-GATE-07` 从 Fail 变为 Pass 时完成；2026-04-08 已新增 metrics integration/failure 子目录、顶层聚合目标与双测试入口，并验证定向 2/2、integration 28/28、failure 15/15、infra gate override 通过 |
 
 ### 12.1 2026-04-08 / MET-TODO-021 回写
 
@@ -325,6 +328,11 @@
 
 1. 交付物：复核 `scripts/ci/infra_gate.sh` 已覆盖 metrics 专项 TODO，并将本任务状态与 gate 证据回写到本专项文档。
 2. 验证结果：默认执行 `bash scripts/ci/infra_gate.sh` 因存在 2 个 Blocked 项按预期以 exit 2 失败；审批窗口执行 `ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh` 通过，分类结果为 unit 191/191、contract 151/151、integration 26/26、failure 14/14 全通过，证明 metrics 已绑定到仓库级 blocked-first gate 流程。
+
+### 12.3 2026-04-08 / MET-TODO-023 回写
+
+1. 交付物：新增 `tests/integration/infra/metrics/CMakeLists.txt`、`MetricsIntegrationTest.cpp`、`MetricsFailureInjectionTest.cpp`，在 `tests/integration/infra/CMakeLists.txt` 中接入 metrics 子目录，并在 `tests/integration/CMakeLists.txt` 中将两个 metrics 测试目标纳入 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`，新增 `dasall_metrics_integration_tests` 聚合目标。
+2. 验证结果：`cmake --build build-ci --target dasall_metrics_integration_tests` 通过；`ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 发现 2 个测试，`ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest"` 2/2 通过；`ctest --test-dir build-ci --output-on-failure -L integration` 28/28、`ctest --test-dir build-ci --output-on-failure -L failure` 15/15 通过；审批窗口执行 `ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh` 通过，分类结果为 unit 191/191、contract 152/152、integration 28/28、failure 15/15，全仓 gate 与 `MET-GATE-07` 同步收口。
 
 ## 13. 本轮执行记录（2026-04-01 / MET-TODO-001）
 

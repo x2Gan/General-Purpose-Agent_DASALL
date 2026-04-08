@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #216
+
+- 日期：2026-04-08
+- 阶段：infra/metrics 组件专项 TODO
+- 任务：MET-TODO-023 补齐 metrics integration/failure 子拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. `INF-TODO-020` 推送完成后，当前用户指定收口链条中仅剩 `MET-TODO-023` 未完成。
+2. 仓库级 tests integration 拓扑与 blocked-first gate 已在前序任务解阻，因此本轮只补 metrics 组件自身的 integration/failure 子目录、测试入口与聚合目标，不改动无关生产代码。
+3. 本轮目标是让 metrics 的成功导出闭环与导出超时降级/恢复闭环同时进入顶层 `integration` / `failure` 图，并据此关闭 `MET-GATE-07`。
+
+### 改动
+
+1. 更新 [tests/integration/infra/CMakeLists.txt](../../tests/integration/infra/CMakeLists.txt)，新增 `add_subdirectory(metrics)`，把 metrics 组件纳入 infra integration 拓扑。
+2. 新增 [tests/integration/infra/metrics/CMakeLists.txt](../../tests/integration/infra/metrics/CMakeLists.txt)，定义 `dasall_register_metrics_integration_test`，统一 `integration;metrics;metrics-integration` 标签，并为 `MetricsFailureInjectionTest` 追加 `failure;metrics-failure` 标签。
+3. 新增 [tests/integration/infra/metrics/MetricsIntegrationTest.cpp](../../tests/integration/infra/metrics/MetricsIntegrationTest.cpp)，覆盖 `MetricsFacade -> AggregationSnapshot -> MetricReaderScheduler -> MetricsExporterAdapter` 的 record/aggregate/export/flush/shutdown 最小成功闭环。
+4. 新增 [tests/integration/infra/metrics/MetricsFailureInjectionTest.cpp](../../tests/integration/infra/metrics/MetricsFailureInjectionTest.cpp)，覆盖 exporter timeout 连续失败触发 `MetricsRecovery` 进入 degraded、经 `MetricsLoggingBridge` / `MetricsAuditBridge` 发出治理证据，并在 exporter 恢复后回到 healthy 的最小故障注入闭环。
+5. 更新 [tests/integration/CMakeLists.txt](../../tests/integration/CMakeLists.txt)，将 `dasall_metrics_integration_test` 与 `dasall_metrics_failure_injection_integration_test` 纳入 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`，并新增 `dasall_metrics_integration_tests` 聚合目标。
+6. 更新 [docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_metrics%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `MET-TODO-023` 标记为 Done，并同步回写 `MET-GATE-07`、discoverability、integration/failure 计数与最新 gate 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_metrics_integration_tests`
+   - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`
+   - `ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "MetricsIntegrationTest|MetricsFailureInjectionTest"`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+   - `ctest --test-dir build-ci --output-on-failure -L failure`
+   - `ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh`
+2. 结果：
+   - `dasall_metrics_integration_tests` 构建并执行通过，`MetricsIntegrationTest`、`MetricsFailureInjectionTest` 2/2 通过。
+   - `ctest -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 发现 27 个 metrics 组件测试；`ctest -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 发现 2 个 metrics integration/failure 测试。
+   - `ctest -L integration` 28/28 通过，`ctest -L failure` 15/15 通过；`ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh` 给出 unit 191/191、contract 152/152、integration 28/28、failure 15/15 全通过。
+
+### 结果
+
+1. `MET-TODO-023` 已完成，metrics 组件现在具备独立的 integration/failure 子目录、组件级聚合目标和双标签 discoverability 入口。
+2. `MET-GATE-07` 已从显式 Fail 转为 Pass，metrics 当前轮不再缺 integration/failure 子拓扑。
+3. metrics 专项 TODO 的当前态已进入维护态；后续只需在 OTLP exporter 或更高阶跨子系统联调出现时再新开增量任务。
+
+### 下一步
+
+1. 若继续推进 metrics，优先围绕 `MET-BLK-005` 冻结 OTLP exporter 依赖与构建策略，再进入下一轮 exporter 扩展。
+
+### 风险
+
+1. 当前 `MetricsIntegrationTest` / `MetricsFailureInjectionTest` 覆盖的是组件级最小成功链和导出失败降级链，不等同于跨 runtime 的高阶联调；若后续要验证更长链路，应新增更高层 integration 用例，而不是修改本轮基线。
+
 ## 记录 #215
 
 - 日期：2026-04-08

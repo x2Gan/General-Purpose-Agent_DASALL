@@ -16,6 +16,8 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_logging_pipeline_integration_test
 	dasall_logging_audit_link_integration_test
 	dasall_log_query_integration_test
+	dasall_metrics_integration_test
+	dasall_metrics_failure_injection_integration_test
 	dasall_ota_workflow_integration_test
 	dasall_ota_failure_injection_integration_test
 	dasall_policy_lifecycle_integration_test
@@ -31,6 +33,20 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_linux_platform_bootstrap_integration_test
 	PARENT_SCOPE
 )
+
+set(DASALL_METRICS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+	dasall_metrics_integration_test
+	dasall_metrics_failure_injection_integration_test
+)
+
+add_custom_target(dasall_metrics_integration_tests
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L metrics-integration
+	DEPENDS ${DASALL_METRICS_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+)
+
+if(NOT DASALL_METRICS_INTEGRATION_TEST_EXECUTABLE_TARGETS)
+	message(FATAL_ERROR "dasall_metrics_integration_tests requires at least one registered metrics integration test target")
+endif()
 
 set(DASALL_WATCHDOG_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_watchdog_integration_test
