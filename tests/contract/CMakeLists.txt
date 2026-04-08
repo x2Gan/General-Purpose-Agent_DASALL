@@ -911,6 +911,22 @@ target_link_libraries(dasall_contract_trace_audit_bridge_boundary_test
     dasall_infra
 )
 
+dasall_register_tracing_contract_test(
+  dasall_contract_trace_planning_stage_test
+  TracePlanningStageContractTest
+  smoke/TracePlanningStageContractTest.cpp
+)
+
+target_include_directories(dasall_contract_trace_planning_stage_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+)
+
+target_link_libraries(dasall_contract_trace_planning_stage_test
+  PRIVATE
+    dasall_infra
+)
+
 dasall_register_metrics_contract_test(
   dasall_contract_metric_exporter_interface_boundary_test
   MetricsExporterInterfaceBoundaryContractTest

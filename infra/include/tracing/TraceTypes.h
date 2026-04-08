@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -19,6 +20,14 @@ namespace dasall::infra::tracing {
 inline constexpr std::size_t kTraceIdHexLength = 32;
 inline constexpr std::size_t kSpanIdHexLength = 16;
 inline constexpr std::size_t kTraceStateMaxLength = 512;
+inline constexpr std::string_view kPlanningTraceStageAttrKey = "stage";
+inline constexpr std::string_view kPlanningTraceStageAttrValue = "planning";
+inline constexpr std::string_view kPlanningTraceBudgetAttrKey = "budget_ms";
+inline constexpr std::string_view kPlanningTraceOutcomeAttrKey = "outcome";
+inline constexpr std::array<std::string_view, 2> kPlanningTraceAllowedOutcomes{
+  "success",
+  "degraded",
+};
 
 enum class TraceContextState {
   Invalid = 0,
@@ -270,6 +279,95 @@ struct SpanEndResult {
            (status_code == SpanStatusCode::Error || status_message.empty());
   }
 };
+
+[[nodiscard]] inline const TraceAttributeValue* find_trace_attribute(
+    const TraceAttributeMap& attrs,
+    std::string_view key) {
+  const auto it = attrs.find(std::string(key));
+  if (it == attrs.end()) {
+    return nullptr;
+  }
+
+  return &it->second;
+}
+
+[[nodiscard]] inline bool planning_trace_outcome_is_allowed(
+    std::string_view outcome) {
+  return std::find(kPlanningTraceAllowedOutcomes.begin(),
+                   kPlanningTraceAllowedOutcomes.end(),
+                   outcome) != kPlanningTraceAllowedOutcomes.end();
+}
+
+[[nodiscard]] inline bool span_has_planning_stage_contract(
+    const SpanDescriptor& descriptor) {
+  if (!descriptor.is_valid()) {
+    return false;
+  }
+
+  const auto* stage_attr = find_trace_attribute(descriptor.attrs,
+                                                kPlanningTraceStageAttrKey);
+  const auto* budget_attr = find_trace_attribute(descriptor.attrs,
+                                                 kPlanningTraceBudgetAttrKey);
+  const auto* outcome_attr = find_trace_attribute(descriptor.attrs,
+                                                  kPlanningTraceOutcomeAttrKey);
+  if (stage_attr == nullptr || budget_attr == nullptr || outcome_attr == nullptr) {
+    return false;
+  }
+
+  const auto* stage = std::get_if<std::string>(stage_attr);
+  const auto* outcome = std::get_if<std::string>(outcome_attr);
+  if (stage == nullptr || outcome == nullptr ||
+      *stage != kPlanningTraceStageAttrValue ||
+      !planning_trace_outcome_is_allowed(*outcome)) {
+    return false;
+  }
+
+  return std::visit(
+      [](const auto& value) -> bool {
+        using CurrentType = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<CurrentType, std::int64_t> ||
+                      std::is_same_v<CurrentType, std::uint64_t>) {
+          return value > 0;
+        } else if constexpr (std::is_same_v<CurrentType, double>) {
+          return std::isfinite(value) && value > 0.0;
+        } else {
+          return false;
+        }
+      },
+      *budget_attr);
+}
+
+[[nodiscard]] inline bool planning_stage_trace_has_correlation(
+    const TraceContext& context) {
+  return context.state == TraceContextState::Active && context.is_valid();
+}
+
+[[nodiscard]] inline bool planning_stage_outcome_is_consistent(
+    const SpanDescriptor& descriptor,
+    const SpanEndResult& end_result) {
+  if (!span_has_planning_stage_contract(descriptor) || !end_result.is_valid()) {
+    return false;
+  }
+
+  const auto* outcome_attr = find_trace_attribute(descriptor.attrs,
+                                                  kPlanningTraceOutcomeAttrKey);
+  const auto* outcome = outcome_attr == nullptr ? nullptr : std::get_if<std::string>(outcome_attr);
+  if (outcome == nullptr) {
+    return false;
+  }
+
+  if (*outcome == "success") {
+    return end_result.status_code == SpanStatusCode::Ok &&
+           end_result.status_message.empty();
+  }
+
+  if (*outcome == "degraded") {
+    return end_result.status_code == SpanStatusCode::Error &&
+           !end_result.status_message.empty();
+  }
+
+  return false;
+}
 
 struct SamplingDecision {
   SamplingDecisionKind decision = SamplingDecisionKind::Drop;
