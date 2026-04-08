@@ -218,6 +218,46 @@ ValidationResult validate_required_paths(const std::string& document) {
       "infra.plugin.remote_fetch.enabled",
       "infra.plugin.safe_mode",
       "infra.plugin.safe_mode.fail_threshold",
+      "infra.health",
+      "infra.health.enabled",
+      "infra.health.liveness",
+      "infra.health.liveness.interval_ms",
+      "infra.health.readiness",
+      "infra.health.readiness.interval_ms",
+      "infra.health.probe",
+      "infra.health.probe.timeout_ms",
+      "infra.health.probe.groups",
+      "infra.health.probe.groups.critical",
+      "infra.health.degraded",
+      "infra.health.degraded.threshold",
+      "infra.health.unhealthy",
+      "infra.health.unhealthy.consecutive_failures",
+      "infra.health.history",
+      "infra.health.history.window_size",
+      "infra.health.event_on_transition_only",
+      "infra.health.recovery_hint",
+      "infra.health.recovery_hint.enabled",
+      "infra.metrics",
+      "infra.metrics.enabled",
+      "infra.metrics.provider",
+      "infra.metrics.provider.type",
+      "infra.metrics.reader",
+      "infra.metrics.reader.interval_ms",
+      "infra.metrics.exporter",
+      "infra.metrics.exporter.type",
+      "infra.metrics.exporter.timeout_ms",
+      "infra.metrics.aggregation",
+      "infra.metrics.aggregation.temporality",
+      "infra.metrics.queue",
+      "infra.metrics.queue.max_size",
+      "infra.metrics.queue.overflow_policy",
+      "infra.metrics.labels",
+      "infra.metrics.labels.allowlist",
+      "infra.metrics.labels.max_cardinality_per_metric",
+      "infra.metrics.histogram",
+      "infra.metrics.histogram.default_buckets_seconds",
+      "infra.metrics.audit",
+      "infra.metrics.audit.on_policy_change",
       "infra.watchdog",
       "infra.watchdog.enabled",
       "infra.watchdog.scan",
@@ -314,20 +354,32 @@ void test_profile_matrix_freeze_matches_blueprint_baselines() {
               "edge_balanced baseline freezes multi_agent off until optional path is implemented");
   assert_true(contains_text(edge_balanced, "plugin.edge.telemetry"),
               "edge_balanced must keep the edge telemetry plugin in the allowlist baseline");
+  assert_true(contains_text(cloud_full, "max_size: 8192"),
+              "cloud_full must keep the larger metrics queue ceiling for server deployments");
   assert_true(contains_text(cloud_full, "max_entities: 2048"),
               "cloud_full must keep the higher watchdog entity ceiling for server deployments");
+  assert_true(contains_text(desktop_full, "max_cardinality_per_metric: 300"),
+              "desktop_full must keep the desktop metrics cardinality ceiling baseline");
+  assert_true(contains_text(edge_balanced, "type: prom_text"),
+              "edge_balanced must keep prom_text exporter enabled in the balanced observability baseline");
   assert_true(contains_text(edge_minimal, "llm_cloud_adapter: false"),
               "edge_minimal must keep cloud adapter disabled");
   assert_true(contains_text(edge_minimal, "tools_mcp: false"),
               "edge_minimal must keep MCP tools disabled");
   assert_true(contains_text(edge_minimal, "plugin.echo"),
               "edge_minimal must keep a single minimal plugin allowlist baseline");
+  assert_true(contains_text(edge_minimal, "type: noop"),
+              "edge_minimal must keep the noop metrics exporter to avoid external export cost");
+  assert_true(contains_text(edge_minimal, "window_size: 12"),
+              "edge_minimal must keep a smaller health history window for constrained memory baselines");
   assert_true(contains_text(edge_minimal, "policy: critical_only"),
               "edge_minimal must keep watchdog timeout policy at critical_only to reduce advisory noise");
   assert_true(contains_text(factory_test, "platform_hal: true"),
               "factory_test must keep HAL enabled");
   assert_true(contains_text(factory_test, "remote_diagnostics_enabled: true"),
               "factory_test must keep remote diagnostics enabled");
+  assert_true(contains_text(factory_test, "consecutive_failures: 2"),
+              "factory_test must keep a tighter health unhealthy threshold for diagnostic loops");
   assert_true(contains_text(factory_test, "consecutive_miss_threshold: 2"),
               "factory_test must keep the tighter watchdog consecutive miss threshold for diagnostic loops");
   assert_true(contains_text(desktop_full, "plugin.tools.bridge"),
@@ -370,7 +422,7 @@ int main() {
     }
   };
 
-  std::cout << "ProfileRuntimePolicySchemaContractTest - PRF-TODO-013\n";
+  std::cout << "ProfileRuntimePolicySchemaContractTest - PRF-TODO-013/022\n";
 
   run_test("test_runtime_policy_documents_keep_required_schema",
            test_runtime_policy_documents_keep_required_schema);

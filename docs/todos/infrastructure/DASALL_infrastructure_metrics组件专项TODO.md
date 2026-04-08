@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 metrics 组件专项 TODO
 
-最近更新时间：2026-03-25  
+最近更新时间：2026-04-08  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/metrics
 
@@ -134,7 +134,7 @@
 | 主链路 record->aggregate->snapshot | metrics 设计 6.7 | 生命周期/流程 | MET-TODO-009、MET-TODO-010、MET-TODO-011 | 按组件单目标拆分，避免任务过载 |
 | 标签治理与高基数防护 | metrics 设计 6.3/6.8/6.9 | 适配器/治理 | MET-TODO-012 | 独立治理任务，单独验证拒绝语义 |
 | 导出调度与可插拔导出 | metrics 设计 6.2/6.7/6.8/6.9 | 适配器/流程 | MET-TODO-013、MET-TODO-014 | 调度与导出拆分；OTLP 延后 |
-| 配置与 Profile 裁剪 | metrics 设计 6.9；架构 7.5.1 | 配置 | MET-TODO-016、MET-BLK-003 | 四层覆盖与回退策略单列任务 |
+| 配置与 Profile 裁剪 | metrics 设计 6.9；架构 7.5.1 | 配置 | MET-TODO-016 | 四层覆盖与回退策略已在 MetricsConfigPolicy 与 PRF-TODO-022 中完成最小收口 |
 | CMake 与测试门禁 | metrics 设计 7/8/9；当前代码现状 | 测试/门禁 | MET-TODO-017、MET-TODO-018 | 构建接线、unit/contract 先行，integration 用例待组件后续落盘 |
 | logging/audit/health 桥接 | metrics 设计 6.10 | 桥接 | MET-TODO-019、MET-BLK-002、MET-BLK-004 | 外部接口未冻结，必须先补设计 |
 | 交付证据回写 | metrics 设计 9.2/11 | 文档/门禁 | MET-TODO-020 | 回写质量门、阻塞变化、回退执行证据 |
@@ -148,7 +148,7 @@
 | 生命周期与初始化类任务 | 是 | MET-TODO-009~011 |
 | 适配器/桥接类任务 | 是 | MET-TODO-012~014、019 |
 | 异常与错误处理类任务 | 是 | MET-TODO-008、015 |
-| 配置与 Profile 裁剪类任务 | 是 | MET-TODO-016（含阻塞 MET-BLK-003） |
+| 配置与 Profile 裁剪类任务 | 是 | MET-TODO-016（2026-04-08 已由 PRF-TODO-022 解阻） |
 | 测试与门禁类任务 | 是 | MET-TODO-017~018 |
 | 文档/交付证据回写类任务 | 是 | MET-TODO-020 |
 
@@ -218,7 +218,7 @@
 |---|---|---|---|---|---|
 | MET-BLK-001 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；metrics integration 是否可执行改由组件自身落盘负责 | 后续 metrics integration 任务 | 无；后续仅需按组件落盘 integration/failure 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 | MET-BLK-002 | 已解阻（2026-04-06）：audit 子域已冻结 `IAuditLogger::write_audit(const AuditEvent&, const AuditContext&)` 与 `AuditEvent/AuditContext` 最小写入边界，MetricsAuditBridge 可稳定落盘 | MET-TODO-019 | 无 | 证据回链到 infra/include/audit/IAuditLogger.h、infra/include/audit/AuditTypes.h 与本 TODO 第 31 节执行记录 | 若 audit 写入接口出现未评审 breaking 变更，则重新转为 Blocked |
-| MET-BLK-003 | Profile 中 metrics 配置键尚未统一，跨档位覆盖规则不稳定 | MET-TODO-016 | 完成 PRF-TODO-022，冻结 enabled/exporter/interval/labels/queue/buckets 键集合与覆盖优先级 | 在五档 profile 资产与 schema contract 中同步补齐 metrics 键域 | 暂时禁用运行时动态覆盖 |
+| MET-BLK-003 | 已解阻（2026-04-08）：PRF-TODO-022 已统一 infra.metrics 键集合与跨档位覆盖优先级，并在五档 profile 资产与 schema contract 中补齐 metrics 键域 | MET-TODO-016 | 无 | 证据回链到 profiles/*/runtime_policy.yaml、tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp 与 docs/architecture/DASALL_infra_metrics模块详细设计.md | 若 profile 资产或 schema contract 回退，则重新转为 Blocked |
 | MET-BLK-004 | 已解阻（2026-04-06）：logging 子域已冻结 `ILogger::log(const LogEvent&)` 与 `LogEvent` 结构化写入边界，MetricsLoggingBridge 可稳定接线 | MET-TODO-019 | 无 | 证据回链到 infra/include/logging/ILogger.h、infra/include/LogEvent.h 与本 TODO 第 31 节执行记录 | 若 logging 写入接口出现未评审 breaking 变更，则重新转为 Blocked |
 | MET-BLK-005 | OTLP exporter 依赖与构建方式未冻结 | OTLP 相关扩展任务 | 明确 third_party 接入策略与版本 | 首版只实现 noop/prom_text，OTLP 延后 | 默认 exporter.type 维持 noop |
 
@@ -268,7 +268,7 @@
 |---|---|---|---|
 | MET-BLK-001 | Resolved | 否 | tests 顶层 integration 拓扑与聚合 gate 已补齐；当前仅剩 metrics 组件自身 integration/failure 用例未落盘，不再属于仓库级阻塞 |
 | MET-BLK-002 | Resolved | 否 | audit 已冻结 `IAuditLogger::write_audit(...)` 与 `AuditEvent/AuditContext`，`MET-TODO-019` 已完成 MetricsAuditBridge 接线 |
-| MET-BLK-003 | Open | 否 | `MET-TODO-016` 已在 `MetricsConfigPolicy` 内冻结 default/profile/deploy/runtime 最小键集合，但 profiles 资产仍未显式落盘 metrics 专项键域；该 blocker 当前只保留给后续 profile 对接/动态覆盖扩展 |
+| MET-BLK-003 | Resolved | 否 | `PRF-TODO-022` 已补齐五档 `infra.metrics.*` 键域、统一覆盖优先级并通过 `ProfileRuntimePolicySchemaContractTest`；后续动态覆盖扩展不再受 profile 资产缺口阻塞 |
 | MET-BLK-004 | Resolved | 否 | logging 已冻结 `ILogger::log(const LogEvent&)` 与 `LogEvent`，`MET-TODO-019` 已完成 MetricsLoggingBridge 接线 |
 | MET-BLK-005 | Open | 否 | OTLP exporter 依赖与构建策略仍未冻结；当前 metrics 范围继续以 `noop/prom_text` 为边界，不影响 020 的证据收口 |
 
@@ -279,7 +279,7 @@
 3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，141/141 tests passed；标签摘要中 `metrics=6 tests`、`failure=1 test`。
 4. `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`：通过，发现 24 个 metrics 组件自身的 unit/contract 测试；当前无 metrics integration/failure 测试入口。
 5. `MET-TODO-017`~`MET-TODO-019` 在各自执行记录中已完成构建接线、bridge 验收与 blocker-first 回写；`MET-TODO-020` 为文档收口任务，本轮未触发代码回退。
-6. 若后续引入 metrics integration/failure 用例、profile 键域冻结或 OTLP 依赖接入，应分别重新评估 `MET-GATE-07`、`MET-BLK-003`、`MET-BLK-005`，并以新的原子任务回写证据。
+6. 若后续引入 metrics integration/failure 用例或 OTLP 依赖接入，应分别重新评估 `MET-GATE-07`、`MET-BLK-005`，并以新的原子任务回写证据。
 
 ## 10. 风险与回退策略
 
@@ -299,13 +299,13 @@
    - `MET-TODO-001`~`MET-TODO-020` 当前均已完成，当前 Blocked 任务索引为空。
    - 2026-04-06 收口结果显示：`ctest --test-dir build-ci -N` 发现 301 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 144/144 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 141/141 通过。
    - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 24 个 metrics 组件 unit/contract 测试，说明 discoverability 已稳定存在。
-   - `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-004` 已解阻，但 `MET-BLK-003`、`MET-BLK-005` 仍作为 profile/OTLP 扩展残余阻塞保留。
+   - `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-003`、`MET-BLK-004` 已解阻，当前仅 `MET-BLK-005` 仍作为 OTLP 扩展残余阻塞保留。
    - 顶层 integration 拓扑虽已存在，但 metrics 自身 integration/failure 用例尚未落盘，因此 `MET-GATE-07` 目前明确为 Fail，而不是隐式忽略。
 3. 当前维护粒度：以 L2/L3 增量任务为主；后续若继续推进，应优先以 integration/failure、contract 增量或 gate 流程收口任务进入下一轮，而非回退已有接口/主链基线。
 4. 下一步建议：
    - 优先执行 `MET-TODO-021` 与 `MET-TODO-022`，完成 planning 阶段 ARC contract 与 blocked-first gate 收口。
    - 随后执行 `MET-TODO-023`，补齐 metrics integration/failure 子拓扑并消除 `MET-GATE-07` 失败项。
-   - profile 键域补齐统一由 `PRF-TODO-022` 承接，解完 `MET-BLK-003` 后再进入更高阶动态覆盖扩展。
+   - profile 键域补齐已由 `PRF-TODO-022` 完成，后续应直接聚焦 `MET-TODO-021`~`MET-TODO-023` 与更高阶动态覆盖扩展。
 
 ## 12. ARC 修复增量（2026-03-26）
 
@@ -551,7 +551,7 @@ Build 合规复核：
 1. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.6 已冻结 IMetricConfigPolicy 的 `validate_identity`、`normalize_labels`、`should_accept` 三个入口。
 2. docs/architecture/DASALL_infra_metrics模块详细设计.md 6.9 已明确 labels.allowlist 默认为 `module,stage,profile,outcome,error_code`，且需要 max cardinality 治理入口。
 3. MET-TODO-006 已把 MetricLabels 收敛为固定五元组，因此本轮可以直接把 allowlist 固化为结构化边界，而不引入运行期动态标签字典。
-4. TODO 中 MET-BLK-003 指出 taxonomy 尚未全局评审，因此本轮只冻结核心 allowlist 集合和最小 normalize/accept 语义，不扩张到额外标签域。
+4. 当时 TODO 中 `MET-BLK-003` 指出 profile 键域尚未全局评审，因此本轮只冻结核心 allowlist 集合和最小 normalize/accept 语义，不扩张到额外标签域；该 profile blocker 已于 2026-04-08 由 `PRF-TODO-022` 解阻。
 
 外部参考：
 
@@ -1368,7 +1368,7 @@ Build 合规复核：
 1. metrics 专项 TODO 的 `9.1`~`9.2` 仍只保留原则性表述，尚未同步 `MET-TODO-019` 完成后的 gate 结果、blocker 变化与 bridge 验收事实。
 2. 本轮执行 `ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract`，分别得到 301 个测试发现、unit 144/144 通过、contract 141/141 通过，可作为 020 的现时收口证据。
 3. 本轮补充执行 `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"`，当前发现 24 个 metrics 组件自身的 unit/contract 测试；顶层 integration 测试虽存在，但列表中仍无 metrics integration/failure 用例，因此 `MET-GATE-07` 必须显式记为 Fail。
-4. blocker 状态已经发生变化：`MET-BLK-001`、`MET-BLK-002`、`MET-BLK-004` 已解阻；`MET-BLK-003`、`MET-BLK-005` 仍仅作为 profile/OTLP 扩展残余阻塞保留，不影响 020 收口本身。
+4. 截至 2026-04-06 当时 blocker 状态已经发生变化：`MET-BLK-001`、`MET-BLK-002`、`MET-BLK-004` 已解阻；`MET-BLK-003`、`MET-BLK-005` 仍仅作为 profile/OTLP 扩展残余阻塞保留，不影响 020 收口本身。后续已于 2026-04-08 通过 `PRF-TODO-022` 解阻 `MET-BLK-003`。
 
 D 结论：
 

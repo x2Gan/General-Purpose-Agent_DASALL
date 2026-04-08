@@ -106,6 +106,65 @@ infra:
 			enabled: false
 		safe_mode:
 			fail_threshold: 3
+	health:
+		enabled: true
+		liveness:
+			interval_ms: 2000
+		readiness:
+			interval_ms: 5000
+		probe:
+			timeout_ms: 1000
+			groups:
+				critical:
+					- logging
+					- secret
+					- config
+		degraded:
+			threshold: 1
+		unhealthy:
+			consecutive_failures: 3
+		history:
+			window_size: 24
+		event_on_transition_only: true
+		recovery_hint:
+			enabled: true
+	metrics:
+		enabled: true
+		provider:
+			type: internal
+		reader:
+			interval_ms: 5000
+		exporter:
+			type: prom_text
+			timeout_ms: 2000
+		aggregation:
+			temporality: cumulative
+		queue:
+			max_size: 4096
+			overflow_policy: drop_oldest
+		labels:
+			allowlist:
+				- module
+				- stage
+				- profile
+				- outcome
+				- error_code
+			max_cardinality_per_metric: 300
+		histogram:
+			default_buckets_seconds:
+				- 0.005
+				- 0.01
+				- 0.025
+				- 0.05
+				- 0.1
+				- 0.2
+				- 0.3
+				- 0.5
+				- 1
+				- 2
+				- 5
+		audit:
+			on_policy_change: true
 	watchdog:
 		enabled: true
 		scan:

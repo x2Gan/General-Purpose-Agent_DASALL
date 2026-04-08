@@ -559,6 +559,7 @@ load/save 语义冻结：
 | degrade_policy | 模型不可用、MCP 不可用、预算超限时的回退路径 | 只描述策略，不直接执行 |
 | timeout_policy | LLM/Tool/MCP/Workflow 超时、重试、熔断阈值 | 高交互档位偏短、批处理档位可适度放宽 |
 | execution_policy | 确认门、安全模式、审计等级、允许工具域 | 任何档位都不得放宽高风险确认门槛 |
+| infra | infra.plugin / infra.health / infra.metrics / infra.watchdog 等基础设施 profile 键域 | 子系统详设给出默认值与允许覆盖层级，profiles 负责冻结键名与档位基线 |
 | ops_policy | 日志等级、指标粒度、trace 抽样、远程诊断开关、升级策略 | factory_test 诊断更强，edge_minimal 最小化 |
 
 #### runtime_policy.yaml v1 冻结规则
@@ -570,6 +571,22 @@ load/save 语义冻结：
 5. `model_profile` 至少冻结 `planner` 与 `responder` 两个 stage，且每个 stage 必须显式给出 `route`、`fallback_route`、`streaming_enabled`；`timeout_policy` 必须同时覆盖 `llm`、`tool`、`mcp`、`workflow` 四类预算。
 6. `prompt_policy`、`capability_cache_policy`、`degrade_policy`、`execution_policy`、`ops_policy` 中的必填键不得依赖运行时推断；新增字段只允许追加，不允许在 `schema_version: 1` 内重解释既有字段语义。
 7. `multi_agent`、`tools_mcp`、`llm_cloud_adapter` 等蓝图中标注为“可选”的能力，在具体档位资产中也必须冻结为显式基线值；若后续需要放开，只能通过新增字段或更高版本 schema 处理。
+
+#### infra profile 键域与覆盖优先级冻结（2026-04-08）
+
+冻结结论：五档 `runtime_policy.yaml` 统一以 `infra` 作为基础设施 profile 逻辑域根节点，v1 冻结的子域为 `infra.plugin`、`infra.health`、`infra.metrics`、`infra.watchdog`。其中 `infra.plugin`、`infra.watchdog` 已落盘并纳入 schema contract；本轮补齐 `infra.health` 与 `infra.metrics`，同时把三类配置键的覆盖优先级明确收敛到同一规则集。
+
+冻结规则：
+1. 键域命名固定采用 `infra.<component>.*`，不再接受 `health.*`、`metrics.*`、`watchdog.*` 这类脱离 `infra` 根节点的 profile 资产键名。
+2. 覆盖顺序固定为“模块默认值 < Profile 基线 < deployment override < runtime override”，但实际可用层级必须再满足各组件 6.9 配置表中的允许覆盖层级。
+3. `infra.health.*` v1 仅接受默认/Profile/部署三层；运行时不开放热改，避免在诊断窗口内漂移健康阈值。
+4. `infra.metrics.*` 保持默认/Profile/部署为主，只有组件详设明确允许运行时调整的键才允许进入 `runtime_override` 白名单；未在组件详设中声明的 metrics 键一律视为不可运行时覆盖。
+5. `infra.watchdog.*` 延续既有冻结结论：默认/Profile/部署三层为主，运行时不允许修改 timeout、scan、event queue 等关键监管阈值。
+6. 三个子域都必须在五档 profile 资产中显式落盘，不允许依赖“缺省即采用模块默认值”来省略键。
+
+评审依据：
+1. 本地证据：五档 `runtime_policy.yaml` 现已统一承载 `infra.plugin`、`infra.health`、`infra.metrics`、`infra.watchdog`，且 `ProfileRuntimePolicySchemaContractTest` 负责持续校验键存在性。
+2. 组件设计依据：health 6.9 已冻结 `infra.health.*`，watchdog 6.9 已冻结 `infra.watchdog.*`，metrics 6.9 在本轮统一收敛到 `infra.metrics.*`。
 
 #### enabled_modules 与 enabled_adapters 命名冻结表（v1）
 
