@@ -220,7 +220,7 @@
 |---|---|---|---|---|---|
 | HLT-BLK-001 | platform 线程与定时抽象未统一 | HLT-TODO-009 | platform 接口冻结并给出最小调度契约 | 在 platform 文档冻结 IThread/ITimer 最小接口并回链到 health | 先禁用周期调度，仅保留 evaluate_now 同步路径 |
 | HLT-BLK-002 | 事件总线发布接口未冻结 | HLT-TODO-012 | event publish 最小接口与 EventEnvelope 约束冻结 | 先定义最小 publish_transition API 与失败返回语义 | 先仅记录日志/指标并缓存状态转移，不对外发总线事件 |
-| HLT-BLK-003 | profiles 下 infra.health 键命名未冻结 | HLT-TODO-014、HLT-TODO-011（部分） | 冻结 infra.health.* 键名与覆盖优先级 | 在 profile 文档补齐键名并评审 | 暂停运行时覆盖，仅保留默认+部署层 |
+| HLT-BLK-003 | profiles 下 infra.health 键命名未冻结 | HLT-TODO-014、HLT-TODO-011（部分） | 完成 PRF-TODO-022，冻结 infra.health.* 键名与覆盖优先级 | 在 profile 资产与 schema contract 中同步补齐键名并评审 | 暂停运行时覆盖，仅保留默认+部署层 |
 | HLT-BLK-004 | 已解阻（2026-03-31）：RecoveryHint 边界 contract 模板已冻结到 tests/contract/smoke/RecoveryHintBoundaryContractTest.cpp | HLT-TODO-015 | 无；后续可直接复用 RecoveryHintBoundaryContractTest | 证据回链到 infra/include/health/RecoveryHint.h、tests/unit/infra/health/RecoveryHintTest.cpp、tests/contract/CMakeLists.txt | 若建议/执行分离模板被回退，则重新转为 Blocked |
 | HLT-BLK-005 | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；health integration 是否可执行改由组件自身落盘负责 | HLT-TODO-017 及后续 integration 任务 | 无；后续仅需按组件落盘 integration 用例 | 证据回链到 infra 专项 TODO 的 INF-BLK-06 校准记录，以及 tests/CMakeLists.txt、tests/integration/CMakeLists.txt | 若 tests 顶层 integration 接线或聚合依赖回退，则重新转为 Blocked |
 

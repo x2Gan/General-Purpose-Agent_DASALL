@@ -4,6 +4,7 @@
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/  
 当前结论：可进入部分执行，最细可安全落到 L2（数据结构/接口级），暂不允许按 L3（函数/方法级）全面展开。
+评审补充：2026-04-08 的跨子系统依赖判断、infra 对其它子系统的支撑范围评估与下一步推进建议，见 docs/todos/infrastructure/DASALL_infrastructure子系统评审结论与后续推进建议-2026-04-08.md。
 
 ## 1. 文档头
 

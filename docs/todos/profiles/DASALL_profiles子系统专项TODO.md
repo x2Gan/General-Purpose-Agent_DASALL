@@ -160,7 +160,7 @@
 | 生命周期与初始化类任务 | 是 | PRF-TODO-012 |
 | 适配器/桥接类任务 | 是 | PRF-TODO-009、017 |
 | 异常与错误处理类任务 | 是 | PRF-TODO-004、011、017 |
-| 配置与 Profile 裁剪类任务 | 是 | PRF-TODO-013、019、021 |
+| 配置与 Profile 裁剪类任务 | 是 | PRF-TODO-013、019、021、022 |
 | 测试与门禁类任务 | 是 | PRF-TODO-014、015、016、017 |
 | 文档/交付证据回写类任务 | 是 | PRF-TODO-018 |
 
@@ -191,6 +191,7 @@
 | PRF-TODO-019 | Done | 补齐模块标识与适配器命名冻结表 | 详细设计 8.3 阻塞项；蓝图 5.1 | 11.1 模块标识未统一 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | enabled_modules 与 enabled_adapters 命名表 | process test：评审门 | rg -n "enabled_modules|adapter|模块矩阵" docs/architecture/DASALL_profiles模块详细设计.md docs/architecture/DASALL_Engineering_Blueprint.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 6.9 命名冻结表补丁，并回链 PRF-TODO-007/010/PRF-BLK-03 | 仅当命名表冻结并回链 PRF-TODO-007/010 时完成 |
 | PRF-TODO-020 | Done | 补齐 overlay 输入契约与来源合法性设计 | 详细设计 6.3/6.7/11.1；infra 详细设计 | 11.1 override 接口未冻结 | L0 | docs/architecture/DASALL_profiles模块详细设计.md；docs/architecture/DASALL_infrastructure子系统详细设计.md | deployment_override/runtime_override 输入对象与合法性规则 | process test：跨文档一致性评审 | rg -n "override|Overlay|ConfigCenter|四层" docs/architecture/DASALL_profiles模块详细设计.md docs/architecture/DASALL_infrastructure子系统详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 profiles 6.9 与 infra 6.6/6.9 契约冻结补丁，并回链 PRF-TODO-009/PRF-BLK-02 | 仅当 overlay 输入契约冻结并回链 PRF-TODO-009 时完成 |
 | PRF-TODO-021 | Done | 补齐 LKG 存储介质与失效语义设计 | 详细设计 6.2/6.8/11.1 | 11.1 LKG 存储介质未定 | L0 | docs/architecture/DASALL_profiles模块详细设计.md | file/sqlite/in-memory 选型与失效策略 | process test：评审门 | rg -n "LastKnownGood|LKG|fallback" docs/architecture/DASALL_profiles模块详细设计.md | 无 | 无 | 无 | 设计补丁、评审记录、回链记录；2026-03-27 已完成 6.8 介质选型与失效语义补丁，并回链 PRF-TODO-012/PRF-BLK-05 | 仅当介质策略冻结并回链 PRF-TODO-012 时完成 |
+| PRF-TODO-022 | Not Started | 一次性冻结 infra.health/infra.metrics/infra.watchdog 键域与覆盖优先级，并补齐五档 runtime_policy 资产 | health 设计 6.9；metrics 设计 6.9；watchdog 设计 6.9；蓝图 5.1 | 6.9 配置项表；四层覆盖顺序 | L2 | profiles/*/runtime_policy.yaml、tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp、docs/architecture/DASALL_profiles模块详细设计.md | infra.health.*、infra.metrics.*、infra.watchdog.* 键存在性、默认/Profile/部署/运行时覆盖优先级；contract：缺键/越权覆盖阻断 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_profile_runtime_policy_schema_test && ctest --test-dir build-ci -N -R ProfileRuntimePolicySchemaContractTest && ctest --test-dir build-ci --output-on-failure -R ProfileRuntimePolicySchemaContractTest | PRF-TODO-013、PRF-TODO-020、WDG-TODO-018 | 无 | 无 | 五档 runtime_policy 资产、schema contract、设计回链与 blocker 解阻记录 | 仅当五档 profile 均显式具备三类 infra 键域，schema contract 可稳定阻断缺键与覆盖漂移，并为 HLT-BLK-003、MET-BLK-003 提供直接解阻证据时完成 |
 
 ## 7. 执行顺序建议
 
@@ -206,6 +207,7 @@
 | F 一致性与观测 | PRF-TODO-011、017 | 串行 | 一致性测试与最小观测链路均已完成，证据由 PRF-TODO-018 收口 |
 | G 证据收口 | PRF-TODO-018 | 串行 | 收敛 Gate 证据与阻塞状态 |
 | H 补设计解阻 | PRF-TODO-019~021 | 可并行 | 反哺 D/E/F 阶段阻塞项 |
+| I infra 键域收口 | PRF-TODO-022 | 串行 | 在既有 overlay 契约之上补齐 health/metrics 键域并复核 watchdog 资产，统一四层覆盖优先级 |
 
 ### 7.2 必过门禁表
 
