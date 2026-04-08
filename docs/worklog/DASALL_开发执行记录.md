@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #210
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-017 RecoveryRequestEmitter 边界守卫骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-014` 推送完成后，受阻链上下一项可执行任务是 `WDG-TODO-017`。
+2. `WDG-BLK-03` 已由 `WDG-TODO-008` 预先解阻，因此本轮只需把既有 `RecoveryHintRequest` contract 边界与 `TimeoutDecision` 判级输出接起来。
+3. 实现必须严格守住 ADR-007：watchdog 只能输出 advisory recovery request，不能携带执行句柄，也不能直接调用恢复执行路径。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/RecoveryRequestEmitter.h](../../infra/src/watchdog/RecoveryRequestEmitter.h) 与 [infra/src/watchdog/RecoveryRequestEmitter.cpp](../../infra/src/watchdog/RecoveryRequestEmitter.cpp)，落盘 `RecoveryRequestEmissionResult`、`emit_recovery_hint(decision)` 与 `sanitize_payload()`，并把 recovery request 的 admissibility 收紧到 `critical/fatal` timeout 决策。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `RecoveryRequestEmitter` 纳入 watchdog 私有实现集合。
+3. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_recovery_request_emitter_unit_test` 与 `RecoveryRequestEmitterTest`。
+4. 新增 [tests/unit/infra/watchdog/RecoveryRequestEmitterTest.cpp](../../tests/unit/infra/watchdog/RecoveryRequestEmitterTest.cpp)，覆盖 critical advisory request、fatal advisory escalation、warning 拒绝与 payload sanitize 路径。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-017` 回写为 Done，并补充 unit + contract 的定向验证证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_recovery_request_emitter_unit_test dasall_contract_watchdog_recovery_hint_request_boundary_test`
+   - `ctest --test-dir build-ci -N -R "(RecoveryRequestEmitterTest|WatchdogRecoveryHintRequestBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "(RecoveryRequestEmitterTest|WatchdogRecoveryHintRequestBoundaryContractTest)"`
+2. 结果：
+   - `dasall_recovery_request_emitter_unit_test` 与 `dasall_contract_watchdog_recovery_hint_request_boundary_test` 构建通过。
+   - `RecoveryRequestEmitterTest` 与 `WatchdogRecoveryHintRequestBoundaryContractTest` 均被 CTest 发现。
+   - 2/2 tests passed。
+
+### 结果
+
+1. watchdog 现在具备与 `TimeoutDecision` 对齐的 advisory recovery request 发射器：critical/fatal 超时会输出结构完整的 `RecoveryHintRequest`，warning 则被显式拒绝，避免提前触发恢复编排语义。
+2. `evidence_ref` 现在稳定包含 `entity/timeout_level/consecutive_miss/decision evidence` 四段信息，并通过 sanitize 路径把非安全字符转换为 `_`，满足追溯完整性要求。
+3. 现有 `WatchdogRecoveryHintRequestBoundaryContractTest` 无需改动即可继续守住 ADR-007：本轮 emitter 只复用边界对象，不向对象注入执行字段，也不依赖 runtime 恢复实现。
+
+### 下一步
+
+1. 进入 `WDG-TODO-018`，先收敛 `WDG-BLK-04` 的 profile 键名与覆盖优先级，再落 watchdog 配置合并与默认值路径。
+
+### 风险
+
+1. 当前 `RecoveryRequestEmitter` 只冻结了 watchdog 私有 advisory 输出，不负责把 `RecoveryHintRequest` 交给 runtime；后续接线时必须继续通过接口适配保持“建议输出”和“恢复执行”分层，不能直接从 watchdog 发起恢复调用。
+
 ## 记录 #209
 
 - 日期：2026-04-08
