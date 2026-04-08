@@ -62,6 +62,12 @@ dasall_register_plugin_unit_test(
 )
 
 dasall_register_plugin_unit_test(
+  dasall_plugin_signature_verifier_interface_unit_test
+  PluginSignatureVerifierInterfaceCompileTest
+  PluginSignatureVerifierInterfaceTest.cpp
+)
+
+dasall_register_plugin_unit_test(
   dasall_plugin_validation_pipeline_unit_test
   PluginValidationPipelineTest
   PluginValidationPipelineTest.cpp

@@ -233,6 +233,7 @@ set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
   include/plugin/PluginErrorCode.h
   include/plugin/IPluginManager.h
   include/plugin/IPluginPolicyGate.h
+  include/plugin/IPluginSignatureVerifier.h
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
