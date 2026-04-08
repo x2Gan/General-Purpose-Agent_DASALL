@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #206
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-015 WatchdogAuditBridge 审计桥接骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-013` 已完成并推送后，watchdog 主链在“先注册采集与判级，再做观测桥接”的顺序下，下一项可执行任务就是 `WDG-TODO-015`。
+2. `WDG-TODO-014` 仍受事件总线最小接口冻结阻塞，因此本轮只实现 `TimeoutDecision -> AuditEvent/AuditContext` 的 required-sink 审计桥接，不提前跨入 timeout event publisher。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/WatchdogAuditBridge.h](../../infra/src/watchdog/WatchdogAuditBridge.h) 与 [infra/src/watchdog/WatchdogAuditBridge.cpp](../../infra/src/watchdog/WatchdogAuditBridge.cpp)，实现 critical/fatal timeout 的审计投影、warning skip、sink required failure 与 bridge status 追踪。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `WatchdogAuditBridge` 源文件与私有头纳入 `dasall_infra` 的 watchdog 构建集合。
+3. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_watchdog_audit_bridge_unit_test` 与 `WatchdogAuditBridgeTest`。
+4. 新增 [tests/unit/infra/watchdog/WatchdogAuditBridgeTest.cpp](../../tests/unit/infra/watchdog/WatchdogAuditBridgeTest.cpp)，覆盖 critical/fatal 审计、warning skip、missing logger 与 sink write failure 的可观测路径。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-015` 回写为 Done，并补充本轮构建/CTest 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_watchdog_audit_bridge_unit_test`
+   - `ctest --test-dir build-ci -N -R WatchdogAuditBridgeTest`
+   - `ctest --test-dir build-ci --output-on-failure -R WatchdogAuditBridgeTest`
+2. 结果：
+   - `dasall_infra` 与 `dasall_watchdog_audit_bridge_unit_test` 均构建通过。
+   - `WatchdogAuditBridgeTest` 已进入 CTest 图。
+   - 1/1 tests passed。
+
+### 结果
+
+1. watchdog 现在具备独立的关键超时审计桥接骨架，critical/fatal 事件会被投影到冻结的 `AuditEvent/AuditContext` 边界，warning 级则显式跳过。
+2. 审计 sink 缺失或写入失败时，bridge 会返回 contracts 兼容的显式 failure，并在本地 status 中累计 degraded 证据，满足“关键超时不会静默丢审计”的最小约束。
+
+### 下一步
+
+1. 进入 `WDG-TODO-016`，在已冻结的 `TimeoutDecision` 与 015 的桥接模式基础上实现 `WatchdogMetricsBridge`，补齐 timeout、scan lag 与 safe mode 指标出口。
+
+### 风险
+
+1. 当前 015 只覆盖 `IAuditLogger` required sink，不处理 timeout event bus；若后续 014 解阻并接入 publisher/fallback ring-buffer，需保持本轮已冻结的审计字段映射与 failure 语义不漂移。
+
 ## 记录 #205
 
 - 日期：2026-04-08
