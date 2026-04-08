@@ -56,6 +56,9 @@ struct PluginValidationRequest {
 struct PluginLoadOptions {
   std::string profile_id = std::string(kPluginUnknownValue);
   std::string actor_ref = std::string(kPluginUnknownValue);
+  std::string binary_path = std::string(kPluginUnknownValue);
+  std::string entry_symbol = std::string("plugin_entry");
+  std::string sandbox_hint;
   std::uint32_t timeout_ms = 3000;
   bool audit_required = true;
   bool dry_run = false;

@@ -295,12 +295,14 @@ set(DASALL_INFRA_PLUGIN_SOURCES
   src/plugin/PluginAuditAdapter.cpp
   src/plugin/PluginLifecycleManager.cpp
   src/plugin/PluginManager.cpp
+  src/plugin/PluginRuntimeBridge.cpp
   src/plugin/PluginValidationPipeline.cpp
 )
 
 set(DASALL_INFRA_PLUGIN_PRIVATE_HEADERS
   src/plugin/PluginAuditAdapter.h
   src/plugin/PluginLifecycleManager.h
+  src/plugin/PluginRuntimeBridge.h
   src/plugin/PluginValidationPipeline.h
 )
 
@@ -313,6 +315,7 @@ set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
   include/plugin/IPluginCompatibilityEngine.h
   include/plugin/IPluginManager.h
   include/plugin/IPluginPolicyGate.h
+  include/plugin/IPluginRuntimeBridge.h
   include/plugin/IPluginSignatureVerifier.h
 )
 

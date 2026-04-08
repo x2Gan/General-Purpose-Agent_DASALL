@@ -3,7 +3,7 @@
 最近更新时间：2026-04-08  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/plugin（infra/src/plugin、infra/include/plugin）  
-当前结论：**014~017 已全部完成，最细稳定边界已落到 L2（数据结构/接口级）；下一阶段转向 platform + plugin 联合冻结 PluginRuntimeBridge v1 最小契约，再进入真实装载链收口**
+当前结论：**014~018 已全部完成，最细稳定边界已落到 L2（数据结构/接口级）；PluginRuntimeBridge v1 最小契约已冻结，下一阶段转向真实装载链集成与 sandbox 扩展收口**
 
 ---
 
@@ -193,7 +193,7 @@
 | PLG-TODO-015 | Done | 定义 IPluginSignatureVerifier 与签名链路规范 | 详设 6.6；INF-BLK-09 | shared blocker 已解除，本轮已完成 verifier boundary 落盘 | 详设 6.6、6.8、9.1 | 已新增 public header、signature/trust 最小输入输出对象与 compile/boundary tests | docs/todos/infrastructure/deliverables/PLG-TODO-015-IPluginSignatureVerifier设计收敛.md | 已完成；本轮无需再执行 | 完成后进入 016 |
 | PLG-TODO-016 | Done | 定义 IPluginCompatibilityEngine 与 ABI 兼容矩阵 | 详设 6.6；INF-BLK-09 | shared blocker 已解除，本轮已完成 compatibility boundary 落盘 | 详设 6.6、6.8、6.9 | 已新增 public header、host ABI/dependency 最小输入对象、CompatibilityReport 与 matrix/boundary tests | docs/todos/infrastructure/deliverables/PLG-TODO-016-IPluginCompatibilityEngine设计收敛.md | 已完成；本轮无需再执行 | 完成后进入 017 |
 | PLG-TODO-017 | Done | 定义 SignatureReport 与 CompatibilityReport 对象 | 详设 6.5、6.8；INF-BLK-09 | shared blocker 已解除，本轮已完成 shared report 与 validation aggregation 收口 | 详设 6.5、6.8 | 已抽取 shared report public header，并通过 manager/pipeline unit/contract 验证 optional object + ref 双承载边界 | docs/todos/infrastructure/deliverables/PLG-TODO-017-PluginReports与聚合收敛.md | 已完成；本轮无需再执行 | 完成后评估 load/runtime bridge 相关实现 |
-| PLG-TODO-018 | Not Started | 冻结 IPluginRuntimeBridge v1 最小契约并接线 PluginLifecycleManager | 详设 6.6、6.7/6.8；PLG-BLK-04 | 6.6 IPluginRuntimeBridge；6.7 load/unload；6.8 failure cleanup | L2 | infra/include/plugin/IPluginRuntimeBridge.h、infra/src/plugin/PluginRuntimeBridge.cpp、infra/src/plugin/PluginLifecycleManager.{h,cpp} | open_library/load_symbol/close_library/sandbox_hint；unit：bridge 句柄生命周期、symbol 缺失与错误映射；contract：bridge 边界不泄露 runtime 主控语义 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_plugin_runtime_bridge_unit_test dasall_contract_plugin_runtime_bridge_boundary_test && ctest --test-dir build-ci -N -R "PluginRuntimeBridgeTest|PluginRuntimeBridgeBoundaryContractTest" && ctest --test-dir build-ci --output-on-failure -R "PluginRuntimeBridgeTest|PluginRuntimeBridgeBoundaryContractTest" | PLG-TODO-011、PLAT-LNX-TODO-026 | 无 | 无 | IPluginRuntimeBridge 头文件、桥接实现、PluginLifecycleManager 接线、unit/contract 证据 | 仅当 PluginLifecycleManager 不再以匿名回调描述真实装载边界，且桥接契约可被 unit/contract 测试稳定约束时完成 |
+| PLG-TODO-018 | Done | 冻结 IPluginRuntimeBridge v1 最小契约并接线 PluginLifecycleManager | 详设 6.6、6.7/6.8；PLG-BLK-04 | 6.6 IPluginRuntimeBridge；6.7 load/unload；6.8 failure cleanup | L2 | infra/include/plugin/IPluginRuntimeBridge.h、infra/src/plugin/PluginRuntimeBridge.cpp、infra/src/plugin/PluginLifecycleManager.{h,cpp} | open_library/load_symbol/close_library/sandbox_hint；unit：bridge 句柄生命周期、symbol 缺失与错误映射；contract：bridge 边界不泄露 runtime 主控语义 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_runtime_bridge_unit_test dasall_plugin_lifecycle_state_unit_test dasall_contract_plugin_runtime_bridge_boundary_test && ctest --test-dir build-ci -N -R "PluginRuntimeBridgeTest|PluginRuntimeBridgeBoundaryContractTest|PluginLifecycleStateTest" && ctest --test-dir build-ci --output-on-failure -R "PluginRuntimeBridgeTest|PluginRuntimeBridgeBoundaryContractTest|PluginLifecycleStateTest" | PLG-TODO-011、PLAT-LNX-TODO-026 | 无 | 无 | IPluginRuntimeBridge 头文件、桥接实现、PluginLifecycleManager 接线、unit/contract 证据；2026-04-08 已新增 IPluginRuntimeBridge.h、PluginRuntimeBridge.h/.cpp、PluginRuntimeBridgeTest、PluginRuntimeBridgeBoundaryContractTest，并通过生命周期回归验证 manager 已消费 bridge 边界 | 仅当 PluginLifecycleManager 不再以匿名回调描述真实装载边界，且桥接契约可被 unit/contract 测试稳定约束时完成 |
 
 ---
 
@@ -209,7 +209,7 @@
 | **Phase 4：流程骨架与观测适配** | PLG-TODO-005、006、011 | ✓ 并行可行（以 Phase 2-3 完成为前置） | 三个流程骨架可独立推进，仅逻辑约束 |
 | **Phase 5：测试完善与兼容性验证** | PLG-TODO-012、013 | ✓ 并行可行（以 Phase 4 完成为前置） | 失败注入与 profile 矩阵测试可并行 |
 | **Phase 6：对象与接口冻结续航** | PLG-TODO-014、015、016、017 | ✓ 已完成：014 -> 015 -> 016 -> 017 | INF-BLK-09 shared blocker 已解除，四个串行冻结任务均已完成 |
-| **Phase 7：runtime bridge 最小契约** | PLG-TODO-018 | 串行（以前置 PLAT-LNX-TODO-026 完成为准） | 先冻结 platform 动态库加载抽象，再把 plugin 生命周期骨架收敛为 IPluginRuntimeBridge v1，不再把该项表述为等待 runtime 主链 |
+| **Phase 7：runtime bridge 最小契约** | PLG-TODO-018 | 已完成（018 Done） | 已冻结 platform + plugin 的 IPluginRuntimeBridge v1，并用 PluginLifecycleManager 回归测试证明生命周期路径已消费 bridge 边界 |
 
 ### 7.2 关键行为路径（Critical Path）
 
@@ -248,7 +248,7 @@ PLG-TODO-011
 | **PLG-BLK-01** | 已解阻（2026-04-07）：manifest schema 最终字段集与扩展命名空间已冻结 | shared blocker 已解除 | PLG-TODO-014 | plugin 组件负责人 | P0 | M2 已完成 | 直接执行 014 |
 | **PLG-BLK-02** | 已解阻（2026-04-07）：ABI 兼容矩阵与 Host ABI 识别规则已冻结 | shared blocker 已解除 | PLG-TODO-016 | plugin 组件负责人 + platform 组件负责人 | P0 | M2 已完成 | 直接执行 016 |
 | **PLG-BLK-03** | 已解阻（2026-04-07）：签名校验与信任链规范已冻结 | shared blocker 已解除 | PLG-TODO-015 | plugin 组件负责人 + security policy 组件负责人 | P0 | M2 已完成 | 直接执行 015 |
-| **PLG-BLK-04** | PluginRuntimeBridge 与平台动态库接口的约定不完整 | platform 动态库加载抽象与 plugin 侧桥接边界尚未共同冻结 | PLG-TODO-018、后续真实装载实现 | platform 组件负责人 + plugin 组件负责人 | P0（下一原子任务） | PLAT-LNX-TODO-026 + PLG-TODO-018 | 先完成 platform loader 抽象，再冻结 IPluginRuntimeBridge v1；不再作为 runtime 子系统前置 |
+| **PLG-BLK-04** | 已解阻（2026-04-08）：PLAT-LNX-TODO-026 与 PLG-TODO-018 已共同冻结 platform 动态库加载抽象和 plugin 侧 IPluginRuntimeBridge v1 边界 | 真实装载链集成与 sandbox 扩展仍留待后续原子任务推进，但最小桥接契约已稳定 | 后续真实装载实现与联调任务 | platform 组件负责人 + plugin 组件负责人 | Resolved | 无；后续直接复用 IDynamicLibraryLoader + IPluginRuntimeBridge | 证据回链到 platform/include/IDynamicLibraryLoader.h、platform/include/linux/PosixDynamicLibraryLoader.h、platform/src/linux/PosixDynamicLibraryLoader.cpp、infra/include/plugin/IPluginRuntimeBridge.h、infra/src/plugin/PluginRuntimeBridge.h、infra/src/plugin/PluginRuntimeBridge.cpp、infra/src/plugin/PluginLifecycleManager.h、infra/src/plugin/PluginLifecycleManager.cpp、tests/unit/infra/plugin/PluginRuntimeBridgeTest.cpp、tests/contract/smoke/PluginRuntimeBridgeBoundaryContractTest.cpp |
 | **PLG-BLK-05** | 已解阻（2026-03-30）：tests 顶层 integration 拓扑与聚合 gate 依赖已补齐；plugin integration/failure 是否可执行改由组件自身落盘负责 | 仓库级 tests integration 拓扑已稳定，当前缺口转为 plugin 组件具体用例与观测链落盘 | PLG-TODO-012/013 | infra 系统负责人 + tests 架构负责人 | P1 | M4 | 后续按组件落盘 plugin failure/profile/integration 用例并执行 gate |
 
 ### 8.2 与上游依赖关系（INF-BLK-09 解阻路径）

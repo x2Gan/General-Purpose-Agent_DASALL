@@ -35,6 +35,9 @@ namespace {
   return dasall::infra::plugin::PluginLoadOptions{
       .profile_id = std::string("desktop_full"),
       .actor_ref = std::string("runtime"),
+      .binary_path = std::string("./plugins/plugin.echo.so"),
+      .entry_symbol = std::string("plugin_entry"),
+      .sandbox_hint = std::string("seccomp:basic"),
       .timeout_ms = 3000,
       .audit_required = true,
       .dry_run = false,

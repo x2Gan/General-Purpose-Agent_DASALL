@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "plugin/IPluginRuntimeBridge.h"
 #include "plugin/IPluginManager.h"
 
 namespace dasall::infra::plugin {
@@ -41,48 +42,6 @@ struct PluginLifecycleTransitionResult {
   [[nodiscard]] bool references_only_contract_error_types() const;
 };
 
-struct PluginRuntimeLoadResult {
-  bool loaded = false;
-  std::string handle_ref;
-  std::string evidence_ref;
-  contracts::ResultCode result_code = contracts::ResultCode::RuntimeRetryExhausted;
-  std::string reason_code;
-  std::string message;
-
-  [[nodiscard]] static PluginRuntimeLoadResult success(
-      std::string handle_ref,
-      std::string evidence_ref,
-      std::string reason_code = {});
-
-  [[nodiscard]] static PluginRuntimeLoadResult failure(
-      contracts::ResultCode result_code,
-      std::string reason_code,
-      std::string evidence_ref,
-      std::string message);
-
-  [[nodiscard]] bool is_valid() const;
-};
-
-struct PluginRuntimeUnloadResult {
-  bool unloaded = false;
-  std::string evidence_ref;
-  contracts::ResultCode result_code = contracts::ResultCode::RuntimeRetryExhausted;
-  std::string reason_code;
-  std::string message;
-
-  [[nodiscard]] static PluginRuntimeUnloadResult success(
-      std::string evidence_ref,
-      std::string reason_code = {});
-
-  [[nodiscard]] static PluginRuntimeUnloadResult failure(
-      contracts::ResultCode result_code,
-      std::string reason_code,
-      std::string evidence_ref,
-      std::string message);
-
-  [[nodiscard]] bool is_valid() const;
-};
-
 using PluginRuntimeLoadCallback =
     std::function<PluginRuntimeLoadResult(std::string_view,
                                           const PluginLoadOptions&)>;
@@ -91,6 +50,10 @@ using PluginRuntimeUnloadCallback =
 
 class PluginLifecycleManager {
  public:
+  PluginLifecycleManager(IPluginRuntimeBridge& runtime_bridge,
+             PluginAuditAdapter* audit_adapter = nullptr,
+             std::size_t max_active = 16,
+             std::size_t safe_mode_fail_threshold = 3);
   PluginLifecycleManager(PluginRuntimeLoadCallback runtime_load = {},
                          PluginRuntimeUnloadCallback runtime_unload = {},
                          PluginAuditAdapter* audit_adapter = nullptr,

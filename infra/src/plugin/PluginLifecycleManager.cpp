@@ -41,6 +41,25 @@ namespace {
   return map_plugin_error_code(code).result_code;
 }
 
+[[nodiscard]] PluginRuntimeLoadRequest make_runtime_load_request(
+    std::string_view plugin_id,
+    const PluginLoadOptions& load_options) {
+  const bool has_explicit_binary = !load_options.binary_path.empty() &&
+                                   load_options.binary_path != kPluginUnknownValue;
+  return PluginRuntimeLoadRequest{
+      .plugin_id = plugin_value_or_unknown(plugin_id),
+      .binary_path = has_explicit_binary
+                         ? load_options.binary_path
+                         : std::string("./plugins/") +
+                               plugin_value_or_unknown(plugin_id) + ".so",
+      .entry_symbol = load_options.entry_symbol.empty()
+                          ? std::string("plugin_entry")
+                          : load_options.entry_symbol,
+      .sandbox_hint = load_options.sandbox_hint,
+      .timeout_ms = load_options.timeout_ms,
+  };
+}
+
 }  // namespace
 
 PluginLifecycleTransitionResult PluginLifecycleTransitionResult::success(
@@ -101,78 +120,24 @@ bool PluginLifecycleTransitionResult::references_only_contract_error_types() con
          *error_info->failure_type == contracts::classify_result_code(*result_code);
 }
 
-PluginRuntimeLoadResult PluginRuntimeLoadResult::success(std::string handle_ref,
-                                                         std::string evidence_ref,
-                                                         std::string reason_code) {
-  return PluginRuntimeLoadResult{
-      .loaded = true,
-      .handle_ref = std::move(handle_ref),
-      .evidence_ref = std::move(evidence_ref),
-      .result_code = contracts::ResultCode::RuntimeRetryExhausted,
-      .reason_code = std::move(reason_code),
-      .message = {},
-  };
-}
-
-PluginRuntimeLoadResult PluginRuntimeLoadResult::failure(
-    contracts::ResultCode result_code,
-    std::string reason_code,
-    std::string evidence_ref,
-    std::string message) {
-  return PluginRuntimeLoadResult{
-      .loaded = false,
-      .handle_ref = {},
-      .evidence_ref = std::move(evidence_ref),
-      .result_code = result_code,
-      .reason_code = std::move(reason_code),
-      .message = std::move(message),
-  };
-}
-
-bool PluginRuntimeLoadResult::is_valid() const {
-  if (loaded) {
-    return !handle_ref.empty() && !evidence_ref.empty();
-  }
-
-  return !evidence_ref.empty() && !reason_code.empty() && !message.empty() &&
-         contracts::classify_result_code(result_code) !=
-             contracts::ResultCodeCategory::Unknown;
-}
-
-PluginRuntimeUnloadResult PluginRuntimeUnloadResult::success(std::string evidence_ref,
-                                                             std::string reason_code) {
-  return PluginRuntimeUnloadResult{
-      .unloaded = true,
-      .evidence_ref = std::move(evidence_ref),
-      .result_code = contracts::ResultCode::RuntimeRetryExhausted,
-      .reason_code = std::move(reason_code),
-      .message = {},
-  };
-}
-
-PluginRuntimeUnloadResult PluginRuntimeUnloadResult::failure(
-    contracts::ResultCode result_code,
-    std::string reason_code,
-    std::string evidence_ref,
-    std::string message) {
-  return PluginRuntimeUnloadResult{
-      .unloaded = false,
-      .evidence_ref = std::move(evidence_ref),
-      .result_code = result_code,
-      .reason_code = std::move(reason_code),
-      .message = std::move(message),
-  };
-}
-
-bool PluginRuntimeUnloadResult::is_valid() const {
-  if (unloaded) {
-    return !evidence_ref.empty();
-  }
-
-  return !evidence_ref.empty() && !reason_code.empty() && !message.empty() &&
-         contracts::classify_result_code(result_code) !=
-             contracts::ResultCodeCategory::Unknown;
-}
+PluginLifecycleManager::PluginLifecycleManager(
+    IPluginRuntimeBridge& runtime_bridge,
+    PluginAuditAdapter* audit_adapter,
+    std::size_t max_active,
+    std::size_t safe_mode_fail_threshold)
+    : PluginLifecycleManager(
+          [&runtime_bridge](std::string_view plugin_id,
+                            const PluginLoadOptions& load_options) {
+            return runtime_bridge.load(
+                make_runtime_load_request(plugin_id, load_options));
+          },
+          [&runtime_bridge](std::string_view plugin_id,
+                            std::string_view handle_ref) {
+            return runtime_bridge.unload(plugin_id, handle_ref);
+          },
+          audit_adapter,
+          max_active,
+          safe_mode_fail_threshold) {}
 
 PluginLifecycleManager::PluginLifecycleManager(
     PluginRuntimeLoadCallback runtime_load,

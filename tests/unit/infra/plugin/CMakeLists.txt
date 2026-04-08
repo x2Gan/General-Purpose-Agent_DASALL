@@ -13,6 +13,7 @@ function(dasall_register_plugin_unit_test executable_target_name ctest_name sour
 
   target_include_directories(${executable_target_name}
     PRIVATE
+      ${CMAKE_SOURCE_DIR}/platform/include
       ${CMAKE_SOURCE_DIR}/infra/src
   )
 
@@ -95,6 +96,12 @@ dasall_register_plugin_unit_test(
   dasall_plugin_lifecycle_state_unit_test
   PluginLifecycleStateTest
   PluginLifecycleStateTest.cpp
+)
+
+dasall_register_plugin_unit_test(
+  dasall_plugin_runtime_bridge_unit_test
+  PluginRuntimeBridgeTest
+  PluginRuntimeBridgeTest.cpp
 )
 
 set(DASALL_PLUGIN_UNIT_TEST_EXECUTABLE_TARGETS

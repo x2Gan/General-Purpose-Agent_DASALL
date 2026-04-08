@@ -1,5 +1,9 @@
+#include <memory>
+
+#include "linux/PosixDynamicLibraryLoader.h"
 #include "plugin/IPluginManager.h"
 #include "plugin/PluginLifecycleManager.h"
+#include "plugin/PluginRuntimeBridge.h"
 #include "plugin/PluginValidationPipeline.h"
 
 namespace dasall::infra::plugin {
@@ -8,6 +12,11 @@ namespace {
 
 class PluginManager final : public IPluginManager {
  public:
+  PluginManager()
+      : runtime_bridge_(std::make_shared<PluginRuntimeBridge>(
+            std::make_shared<dasall::platform::linux::PosixDynamicLibraryLoader>())),
+        lifecycle_manager_(*runtime_bridge_) {}
+
   [[nodiscard]] PluginCatalog discover(std::string_view profile_id) const override {
     static_cast<void>(profile_id);
     return PluginCatalog{};
@@ -33,6 +42,7 @@ class PluginManager final : public IPluginManager {
   }
 
  private:
+  std::shared_ptr<IPluginRuntimeBridge> runtime_bridge_;
   PluginLifecycleManager lifecycle_manager_;
 };
 
