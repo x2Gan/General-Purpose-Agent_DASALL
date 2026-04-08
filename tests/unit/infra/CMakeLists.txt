@@ -2065,6 +2065,26 @@ dasall_apply_common_options(dasall_heartbeat_ingestor_unit_test)
 add_test(NAME HeartbeatIngestorTest COMMAND dasall_heartbeat_ingestor_unit_test)
 set_tests_properties(HeartbeatIngestorTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_timeout_policy_unit_test
+  watchdog/TimeoutPolicyEngineTest.cpp
+)
+
+target_include_directories(dasall_timeout_policy_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_timeout_policy_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_timeout_policy_unit_test)
+
+add_test(NAME TimeoutPolicyTest COMMAND dasall_timeout_policy_unit_test)
+set_tests_properties(TimeoutPolicyTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )

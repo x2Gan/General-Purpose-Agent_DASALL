@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #205
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-013 TimeoutPolicyEngine 判级骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-009`、`WDG-TODO-010`、`WDG-TODO-011` 与 `WDG-TODO-019` 已完成并推送后，watchdog 主链上满足“先注册采集与判级，再做观测桥接”的下一项可执行任务就是 `WDG-TODO-013`。
+2. `WDG-TODO-012` 仍受 platform monotonic clock 与 scheduler 抽象冻结阻塞，因此本轮只落纯策略判级引擎，不提前跨到 DeadlineWheel 或观测桥接实现。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/TimeoutPolicyEngine.h](../../infra/src/watchdog/TimeoutPolicyEngine.h) 与 [infra/src/watchdog/TimeoutPolicyEngine.cpp](../../infra/src/watchdog/TimeoutPolicyEngine.cpp)，实现 `ITimeoutPolicy` 私有落盘，基于 `scan_interval_ms`、`grace_ms`、`consecutive_miss_threshold` 与 `timeout_level_policy` 生成 `TimeoutDecision`。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `TimeoutPolicyEngine` 源文件与私有头纳入 `dasall_infra` 的 watchdog 构建集合。
+3. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_timeout_policy_unit_test` 与 `TimeoutPolicyTest`。
+4. 新增 [tests/unit/infra/watchdog/TimeoutPolicyEngineTest.cpp](../../tests/unit/infra/watchdog/TimeoutPolicyEngineTest.cpp)，覆盖 grace scan budget、warning->critical 升级、critical->fatal 升级、`critical_only` 策略以及输入绑定失败路径。
+5. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-013` 回写为 Done，并补充本轮构建/CTest 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_timeout_policy_unit_test`
+   - `ctest --test-dir build-ci -N -R TimeoutPolicyTest`
+   - `ctest --test-dir build-ci --output-on-failure -R TimeoutPolicyTest`
+2. 结果：
+   - `dasall_infra` 与 `dasall_timeout_policy_unit_test` 均构建通过。
+   - `TimeoutPolicyTest` 已进入 CTest 图。
+   - 1/1 tests passed。
+
+### 结果
+
+1. watchdog 主链现在具备独立的超时判级骨架，warning、critical、fatal 的输出不再只停留在详细设计文档中。
+2. 013 采用“基于扫描轮次预算的 grace 窗口”来适配当前 `ITimeoutPolicy` 输入面，没有引入新的时钟或调度依赖，因此不触碰 `WDG-TODO-012` 的 blocker 边界。
+
+### 下一步
+
+1. 进入 `WDG-TODO-015`，在既有 `TimeoutDecision` 输出面上补 `WatchdogAuditBridge`，先完成关键超时审计桥接，再继续 016 指标桥接。
+
+### 风险
+
+1. 当前 grace 语义以 `grace_ms / scan_interval_ms` 的扫描预算表示；若后续 `DeadlineWheel` 落地后需要改成精确 wall-clock hysteresis，必须通过 012 的时钟抽象统一收敛，不能直接改写 013 的 public contract。
+
 ## 记录 #204
 
 - 日期：2026-04-08
