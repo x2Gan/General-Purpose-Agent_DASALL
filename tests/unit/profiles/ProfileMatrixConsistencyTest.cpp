@@ -11,7 +11,7 @@
 #include "ProfileError.h"
 #include "RuntimePolicyProvider.h"
 #include "ProfileYamlParser.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

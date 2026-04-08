@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "task/TaskDomainContracts.h"
 #include "task/TaskDomainGuards.h"
 

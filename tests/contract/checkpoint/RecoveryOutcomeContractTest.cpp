@@ -20,7 +20,7 @@
 
 #include "checkpoint/RecoveryOutcome.h"
 #include "checkpoint/RecoveryOutcomeGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

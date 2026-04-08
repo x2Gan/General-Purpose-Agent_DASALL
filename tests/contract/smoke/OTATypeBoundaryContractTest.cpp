@@ -8,7 +8,7 @@
 #include "ota/OTATypes.h"
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

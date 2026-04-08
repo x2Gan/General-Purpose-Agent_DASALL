@@ -6,7 +6,7 @@
 #include "metrics/MetricsConfigPolicy.h"
 #include "metrics/MetricsExporterAdapter.h"
 #include "metrics/MetricsFacade.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

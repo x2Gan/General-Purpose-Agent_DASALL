@@ -5,7 +5,7 @@
 
 #include "boundary/PolicyDecisionMappingCatalog.h"
 #include "policy/PolicyDecisionRef.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

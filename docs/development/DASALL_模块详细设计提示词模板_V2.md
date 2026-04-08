@@ -61,7 +61,7 @@
 
 ### 4.1 Role
 
-你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 infra/plugin 的模块级详细设计。
+你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 Capability Services 的子系统级详细设计。
 
 你的输出必须同时满足：
 
@@ -74,10 +74,10 @@
 
 ### 4.2 Context
 
-- 项目根目录：/home/gangan/DASALL-Agent/
-- 当前日期：2026-3-25
-- 当前模块：infra/plugin
-- 设计阶段：Detailed Design
+- 项目根目录：/home/gangan/DASALL/
+- 当前日期：2026-4-8
+- 当前模块：Capability Services
+- 设计阶段：子系统架构设计/Detailed Design
 - 输出语言：中文
 - 输出文档：docs/architecture/
 
@@ -88,28 +88,48 @@
 1. 架构文档：docs/architecture/DASSALL_Agent_architecture.md
 2. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
 3. 相关 ADR：docs/adr
-4. contracts 计划与 TODO：docs/plans/DASALL_contracts冻结实施计划.md，docs/todos/contracts/DASALL_contracts冻结TODO总表.md
-5. infrastructure 子系统详细设计：docs/architecture/DASALL_infrastructure子系统详细设计.md
-6. 工程规范：docs/development/DASALL_工程协作与编码规范.md
-7. 当前模块代码骨架：N/A
-8. 可选行业参考方向：联网搜索行业内实践方案
+4. SSOT: docs/ssot
+5. 交付的子系统设计：
+   - docs/architecture/DASALL_profiles模块详细设计.md
+   - docs/architecture/platform_linux_detailed_design.md
+   - docs/architecture/DASALL_infrastructure子系统详细设计.md
+     1. docs/architecture/DASALL_infra_audit模块详细设计.md
+     2. docs/architecture/DASALL_infra_config模块详细设计方案.md
+     3. docs/architecture/DASALL_infra_diagnostics模块详细设计.md
+     4. docs/architecture/DASALL_infra_health模块详细设计.md
+     5. docs/architecture/DASALL_infra_logging模块详细设计.md
+     6. docs/architecture/DASALL_infra_metrics模块详细设计.md
+     7. docs/architecture/DASALL_infra_OTA模块详细设计.md
+     8. docs/architecture/DASALL_infra_plugin模块详细设计.md
+     9. docs/architecture/DASALL_infra_policy模块详细设计.md
+     10. docs/architecture/DASALL_infra_secret模块详细设计.md
+     11. docs/architecture/DASALL_infra_tracing模块详细设计.md
+     12. docs/architecture/DASALL_infra_watchdog模块详细设计.md
+   - NA
+6. 交付的实现：
+   - docs/todos/contracts/deliverables
+   - docs/todos/infrastructure/deliverables
+   - docs/todos/platform/deliverables
+7. 工程规范：docs/development/DASALL_工程协作与编码规范.md
+8. 当前模块代码骨架：N/A
+9. 可选行业参考方向：联网搜索行业内实践方案
 
 ### 4.4 Task
 
-请输出一份完整的 infra/plugin 组件详细设计方案，要求：
+请输出一份完整的Capability Services子系统详细设计方案，要求：
 
-1. 明确边界、职责、输入输出与相邻模块依赖方向。
-2. 给出子组件拆分、接口语义、核心对象与关键流程。
-3. 明确异常语义、恢复路径、可观测性与配置策略。
-4. 输出可映射到 Build 的实施分解建议。
-5. 输出测试策略、质量门、风险与回退策略。
-6. 检查并对齐到DASALL_infrastructure子系统详细设计.md和docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
+1. 完整详细且专业的子系统设计描述，配合流程图/时序图/数据流图进行说明
+2. 明确边界、职责、输入输出与相邻模块依赖方向。
+3. 给出子组件拆分、职责边界、接口语义、核心对象与关键流程。
+4. 明确异常语义、恢复路径、可观测性与配置策略。
+5. 输出可映射到 Build 的实施分解建议。
+6. 输出测试策略、质量门、风险与回退策略。
 
 ### 4.5 约束策略
 
 基础硬约束（必须遵守）：
 
-1. 不改写已冻结 ADR 结论。
+1. 不改写已冻结 ADR/SSOT 结论。
 2. 不把实现细节反向写入 contracts 共享语义对象。
 3. 不跨模块扩张到无关工作范围。
 4. 不输出纯概念方案，必须落到可实现结构。

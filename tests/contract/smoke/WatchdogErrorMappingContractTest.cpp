@@ -6,7 +6,7 @@
 #include <type_traits>
 
 #include "watchdog/WatchdogErrors.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "policy/PolicyDecisionProjector.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

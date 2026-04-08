@@ -20,7 +20,7 @@
 #include "agent/MultiAgentRequest.h"
 #include "agent/MultiAgentRequestGuards.h"
 #include "checkpoint/RuntimeBudget.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

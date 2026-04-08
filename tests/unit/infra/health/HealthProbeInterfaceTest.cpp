@@ -3,7 +3,7 @@
 #include <type_traits>
 
 #include "health/IHealthProbe.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

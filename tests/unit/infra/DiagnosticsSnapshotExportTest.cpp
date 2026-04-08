@@ -6,7 +6,7 @@
 #include "diagnostics/EvidenceCollector.h"
 #include "diagnostics/IDiagnosticsService.h"
 #include "diagnostics/SnapshotAssembler.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

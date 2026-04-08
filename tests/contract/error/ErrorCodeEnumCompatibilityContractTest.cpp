@@ -4,7 +4,7 @@
 #include <string>
 
 #include "boundary/EnumLifecycleGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "error/ResultCode.h"
 
 namespace {

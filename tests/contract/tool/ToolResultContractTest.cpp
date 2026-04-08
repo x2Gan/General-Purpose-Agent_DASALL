@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "error/ResultCode.h"
 #include "tool/ToolResult.h"
 #include "tool/ToolResultGuards.h"

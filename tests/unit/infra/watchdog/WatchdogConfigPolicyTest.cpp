@@ -2,7 +2,7 @@
 #include <iostream>
 
 #include "watchdog/WatchdogConfigPolicy.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "../../../infra/include/config/IConfigCenter.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -3,7 +3,7 @@
 #include <string>
 
 #include "health/ProbeRegistry.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

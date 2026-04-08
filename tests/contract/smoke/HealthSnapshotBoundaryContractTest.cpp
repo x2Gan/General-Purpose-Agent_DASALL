@@ -5,7 +5,7 @@
 
 #include "checkpoint/RecoveryOutcome.h"
 #include "../../../infra/include/health/HealthStateTypes.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include "watchdog/HeartbeatIngestor.h"
 #include "watchdog/HeartbeatRegistry.h"
 #include "watchdog/WatchdogErrors.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

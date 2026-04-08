@@ -23,7 +23,7 @@
 
 #include "checkpoint/Checkpoint.h"
 #include "checkpoint/CheckpointGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -19,7 +19,7 @@
 #include "watchdog/WatchdogMetricsBridge.h"
 #include "watchdog/WatchdogSnapshot.h"
 #include "watchdog/WatchdogServiceFacade.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

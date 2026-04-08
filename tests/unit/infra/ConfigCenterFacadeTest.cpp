@@ -6,7 +6,7 @@
 
 #include "config/ConfigCenterFacade.h"
 #include "config/ConfigErrors.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -14,7 +14,7 @@
 #include "checkpoint/ReflectionDecisionTag.h"
 #include "context/ContextPacketTag.h"
 #include "boundary/ObjectBoundaryCatalog.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "observation/ErrorInfoTag.h"
 #include "observation/ObservationDigestTag.h"
 #include "observation/ObservationTag.h"

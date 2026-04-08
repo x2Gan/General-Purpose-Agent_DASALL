@@ -4,7 +4,7 @@
 #include <type_traits>
 
 #include "../../../infra/include/metrics/IMetricConfigPolicy.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

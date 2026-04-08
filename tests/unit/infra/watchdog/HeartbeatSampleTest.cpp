@@ -3,7 +3,7 @@
 #include <string>
 
 #include "watchdog/HeartbeatSample.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -4,7 +4,7 @@
 #include <type_traits>
 
 #include "plugin/PluginCatalog.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

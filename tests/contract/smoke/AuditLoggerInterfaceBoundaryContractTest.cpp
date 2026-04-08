@@ -7,7 +7,7 @@
 
 #include "../../../infra/include/audit/IAuditLogger.h"
 #include "../../../infra/include/logging/IAuditLinkAdapter.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

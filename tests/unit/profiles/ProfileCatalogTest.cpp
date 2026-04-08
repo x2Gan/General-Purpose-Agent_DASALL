@@ -6,7 +6,7 @@
 
 #include "ProfileCatalog.h"
 #include "ProfileError.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

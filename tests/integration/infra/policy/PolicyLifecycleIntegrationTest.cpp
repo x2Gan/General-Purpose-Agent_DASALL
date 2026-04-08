@@ -7,7 +7,7 @@
 #include "policy/PolicySchemaValidator.h"
 #include "policy/PolicySnapshotStore.h"
 #include "policy/SecurityPolicyManager.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

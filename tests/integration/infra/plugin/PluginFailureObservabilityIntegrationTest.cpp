@@ -11,7 +11,7 @@
 #include "plugin/PluginLifecycleManager.h"
 #include "plugin/PluginValidationPipeline.h"
 #include "policy/ISecurityPolicyManager.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

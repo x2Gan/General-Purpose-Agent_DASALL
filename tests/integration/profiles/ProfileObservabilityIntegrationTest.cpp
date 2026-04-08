@@ -9,7 +9,7 @@
 #include "audit/AuditTypes.h"
 #include "audit/IAuditLogger.h"
 #include "logging/ILogger.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

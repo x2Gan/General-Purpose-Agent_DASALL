@@ -32,7 +32,7 @@
 #include <string>
 
 #include "boundary/M3ChecklistGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

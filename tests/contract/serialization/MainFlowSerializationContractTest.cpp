@@ -48,7 +48,7 @@
 #include "observation/ObservationSource.h"
 
 // --- test support ------------------------------------------------------------
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

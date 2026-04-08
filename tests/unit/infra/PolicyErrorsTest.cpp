@@ -4,7 +4,7 @@
 #include <string>
 
 #include "policy/PolicyErrors.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

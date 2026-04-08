@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "event/EventEnvelopeGuards.h"
 
 namespace {

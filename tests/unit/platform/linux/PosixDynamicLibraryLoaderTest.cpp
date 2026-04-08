@@ -1,7 +1,7 @@
 #include <exception>
 #include <iostream>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "linux/PosixDynamicLibraryLoader.h"
 
 extern "C" int dasall_test_dynamic_loader_anchor() {

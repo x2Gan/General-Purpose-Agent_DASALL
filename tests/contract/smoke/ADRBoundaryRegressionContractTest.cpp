@@ -10,7 +10,7 @@
 #include "checkpoint/ReflectionDecisionGuards.h"
 #include "context/ContextPacket.h"
 #include "context/ContextPacketGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "prompt/PromptBoundaryContracts.h"
 
 namespace {

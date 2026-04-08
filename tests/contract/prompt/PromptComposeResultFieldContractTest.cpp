@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "prompt/PromptComposeResult.h"
 #include "prompt/PromptComposeResultGuards.h"
 

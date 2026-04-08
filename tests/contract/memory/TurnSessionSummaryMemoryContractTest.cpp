@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "memory/Session.h"
 #include "memory/SummaryMemory.h"
 #include "memory/Turn.h"

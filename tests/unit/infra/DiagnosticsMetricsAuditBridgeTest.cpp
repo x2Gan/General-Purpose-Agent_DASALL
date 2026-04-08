@@ -11,7 +11,7 @@
 #include "audit/IAuditLogger.h"
 #include "diagnostics/DiagnosticsAuditBridge.h"
 #include "diagnostics/DiagnosticsMetricsBridge.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

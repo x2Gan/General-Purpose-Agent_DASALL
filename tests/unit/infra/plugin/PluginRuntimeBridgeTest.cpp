@@ -6,7 +6,7 @@
 #include "IDynamicLibraryLoader.h"
 #include "plugin/PluginLifecycleManager.h"
 #include "plugin/PluginRuntimeBridge.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

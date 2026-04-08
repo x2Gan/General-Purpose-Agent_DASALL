@@ -7,7 +7,7 @@
 #include "config/ConfigCenterFacade.h"
 #include "logging/ILogger.h"
 #include "audit/IAuditLogger.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

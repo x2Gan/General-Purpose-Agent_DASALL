@@ -9,7 +9,7 @@
 #include "diagnostics/CommandPolicyGuard.h"
 #include "diagnostics/IDiagnosticsPolicyGuard.h"
 #include "policy/ISecurityPolicyManager.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

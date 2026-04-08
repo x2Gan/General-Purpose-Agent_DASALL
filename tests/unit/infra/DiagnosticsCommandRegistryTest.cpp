@@ -7,7 +7,7 @@
 
 #include "diagnostics/CommandRegistry.h"
 #include "diagnostics/IDiagnosticsCommandRegistry.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

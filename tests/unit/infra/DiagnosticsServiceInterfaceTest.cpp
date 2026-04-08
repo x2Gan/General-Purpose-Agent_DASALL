@@ -7,7 +7,7 @@
 #include "InfraContext.h"
 #include "diagnostics/IDiagnosticsPolicyGuard.h"
 #include "diagnostics/IDiagnosticsService.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -1,7 +1,7 @@
 #include <exception>
 #include <iostream>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "error/ErrorInfoGuards.h"
 
 namespace {

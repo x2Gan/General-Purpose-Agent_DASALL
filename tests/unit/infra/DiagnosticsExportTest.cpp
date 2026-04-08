@@ -4,7 +4,7 @@
 
 #include "diagnostics/DiagnosticsErrors.h"
 #include "diagnostics/ExportManager.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

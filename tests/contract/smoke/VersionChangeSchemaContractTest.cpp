@@ -4,7 +4,7 @@
 
 #include "boundary/VersionChangeGuards.h"
 #include "boundary/VersionChangeSchema.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

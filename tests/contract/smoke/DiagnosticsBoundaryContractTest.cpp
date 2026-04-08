@@ -8,7 +8,7 @@
 #include "../../../infra/include/InfraContext.h"
 #include "../../../infra/include/diagnostics/DiagnosticsTypes.h"
 #include "../../../infra/include/diagnostics/IDiagnosticsPolicyGuard.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

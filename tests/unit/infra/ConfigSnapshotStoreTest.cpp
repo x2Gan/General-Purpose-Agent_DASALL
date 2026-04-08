@@ -4,7 +4,7 @@
 
 #include "config/ConfigErrors.h"
 #include "config/ConfigSnapshotStore.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include "watchdog/WatchdogServiceFacade.h"
 #include "watchdog/WatchdogErrors.h"
 #include "watchdog/WatchdogSnapshot.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

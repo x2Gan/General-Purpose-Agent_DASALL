@@ -66,7 +66,7 @@
 
 ### 4.1 Role
 
-你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中依据子系统或子模块详细设计文档，生成专项 TODO 文档。
+你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中依据子系统和组件详细设计文档，生成专项 TODO 文档。
 
 你的输出必须同时满足：
 
@@ -80,9 +80,9 @@
 
 ### 4.2 Context
 
-- 项目根目录：/home/gangan/DASALL-Agent/
+- 项目根目录：/home/gangan/DASALL/
 - 当前日期：2026-3-25
-- 当前对象：infra/plugin
+- 当前对象：Capability Services 子系统
 - 当前阶段：Detailed Design -> Special TODO
 - 输出语言：中文
 - 输出文档：docs/todos
@@ -91,35 +91,22 @@
 
 请严格基于以下输入生成专项 TODO，不得脱离上下文臆造边界：
 
-1. 详细设计文档：docs/architecture/DASALL_infra_plugin模块详细设计.md
-2. infrastructure子系统设计文档：docs/architecture/DASALL_infrastructure子系统详细设计.md
-3. 架构文档：docs/architecture/DASSALL_Agent_architecture.md
-4. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
-5. 相关 ADR：docs/adr/
-6. 计划文档：docs/plans/DASALL_工程落地实现步骤指引.md
-7. 工程规范：docs/development/DASALL_工程协作与编码规范.md
-8. 可选行业参考方向：联网搜索行业内实践方案
-9. 现有 TODO/交付记录：
-- docs/todos/contracts
-- docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md
-- docs/todos/platform/DASALL_platform_linux组件专项TODO.md
-- docs/todos/profiles/DASALL_profiles子系统专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md
+1. 详细设计文档：docs/architecture/DASALL_capability_services子系统详细设计.md
+2. 架构文档：docs/architecture/DASSALL_Agent_architecture.md
+3. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
+4. 相关 ADR：docs/adr/ + ssot
+5. 计划文档：docs/plans/DASALL_工程落地实现步骤指引.md
+6. 工程规范：docs/development/DASALL_工程协作与编码规范.md
+7. 可选行业参考方向：联网搜索行业内实践方案
+8. 现有 TODO/交付记录：
+   - docs/todos/contracts/deliverables
+   - docs/todos/infrastructure/deliverables
+   - docs/todos/platform/deliverables
 
 
 ### 4.4 Task
 
-请输出一份完整的“infra/plugin组件 专项 TODO 文档”，要求：
+请输出一份完整的“Capability Services 子系统 专项 TODO 文档”，要求：
 
 1. 先评估该详细设计是否足以支撑接口级、函数级、数据结构级原子任务拆分。
 2. 从详细设计中提取可落盘对象：接口、函数、数据结构、配置模型、错误码、测试点、CMake/注册点。

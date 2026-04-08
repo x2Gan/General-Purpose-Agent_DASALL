@@ -7,7 +7,7 @@
 #include "audit/IAuditLogger.h"
 #include "diagnostics/DiagnosticsErrors.h"
 #include "diagnostics/DiagnosticsServiceFacade.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

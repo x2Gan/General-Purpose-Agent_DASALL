@@ -8,7 +8,7 @@
 #include "watchdog/IWatchdogService.h"
 #include "watchdog/TimeoutDecision.h"
 #include "watchdog/TimeoutPolicyEngine.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

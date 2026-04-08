@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "plugin/IPluginSignatureVerifier.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -10,7 +10,7 @@
 #include "agent/AgentRequest.h"
 #include "agent/AgentRequestGuards.h"
 #include "boundary/CompatibilityGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "event/EventEnvelope.h"
 #include "event/EventEnvelopeGuards.h"
 

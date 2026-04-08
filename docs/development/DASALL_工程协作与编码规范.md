@@ -96,7 +96,8 @@
    - `unit`
    - `contract`
 3. 在 contracts 冻结前，tests/mocks 作为脚手架层存在，避免强绑定生产接口。
-4. 测试代码允许适度重复，优先可读性和意图表达。
+4. tests/mocks/include 作为测试支撑头文件的扁平 include 根；mock 头文件直接以 `MockExecutionService.h`、`MockLLMAdapter.h`、`MockMemoryStore.h`、`MockTool.h` 引用，断言辅助位于 `support/TestAssertions.h`，不再使用旧的嵌套 include 前缀。
+5. 测试代码允许适度重复，优先可读性和意图表达。
 
 ---
 

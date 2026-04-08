@@ -6,7 +6,7 @@
 #include "diagnostics/DiagnosticsErrors.h"
 #include "diagnostics/DiagnosticsServiceFacade.h"
 #include "diagnostics/SnapshotStore.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "prompt/PromptRelease.h"
 #include "prompt/PromptReleaseGuards.h"
 #include "prompt/PromptSpec.h"

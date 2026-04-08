@@ -9,7 +9,7 @@
 #include "../../../infra/include/audit/AuditErrors.h"
 #include "../../../infra/include/audit/IAuditRetention.h"
 #include "../../../infra/include/audit/AuditTypes.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -11,7 +11,7 @@
 #include "audit/IAuditLogger.h"
 #include "audit/IAuditRetention.h"
 #include "logging/IAuditLinkAdapter.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

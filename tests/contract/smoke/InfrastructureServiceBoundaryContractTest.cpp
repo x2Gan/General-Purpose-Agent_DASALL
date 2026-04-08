@@ -5,7 +5,7 @@
 #include <type_traits>
 
 #include "../../../infra/include/IInfrastructureService.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

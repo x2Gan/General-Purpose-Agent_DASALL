@@ -8,7 +8,7 @@
 #include "health/HealthEvaluator.h"
 #include "health/ProbeExecutor.h"
 #include "health/RecoveryHintEmitter.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

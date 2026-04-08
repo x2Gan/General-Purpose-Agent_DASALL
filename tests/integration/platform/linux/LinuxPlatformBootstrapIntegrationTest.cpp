@@ -2,7 +2,7 @@
 #include <exception>
 #include <iostream>
 
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 #include "linux/LinuxPlatformCapabilities.h"
 #include "linux/LinuxPlatformFactory.h"
 

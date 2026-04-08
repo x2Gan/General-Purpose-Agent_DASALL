@@ -2,9 +2,9 @@
 #include <iostream>
 #include <string>
 
-#include "dasall/tests/mocks/MockExecutionService.h"
-#include "dasall/tests/mocks/MockMemoryStore.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "MockExecutionService.h"
+#include "MockMemoryStore.h"
+#include "support/TestAssertions.h"
 
 int main() {
   using dasall::tests::mocks::MockExecutionService;

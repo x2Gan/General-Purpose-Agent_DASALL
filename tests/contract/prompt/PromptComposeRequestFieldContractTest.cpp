@@ -18,7 +18,7 @@
 
 #include "prompt/PromptComposeRequest.h"
 #include "prompt/PromptComposeRequestGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -2,10 +2,10 @@
 #include <iostream>
 #include <string>
 
-#include "dasall/tests/mocks/MockLLMAdapter.h"
-#include "dasall/tests/mocks/MockMemoryStore.h"
-#include "dasall/tests/mocks/MockTool.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "MockLLMAdapter.h"
+#include "MockMemoryStore.h"
+#include "MockTool.h"
+#include "support/TestAssertions.h"
 
 int main() {
   using dasall::tests::mocks::MockLLMAdapter;

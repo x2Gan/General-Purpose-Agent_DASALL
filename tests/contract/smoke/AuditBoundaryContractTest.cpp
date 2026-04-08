@@ -13,7 +13,7 @@
 #include "task/WorkerTask.h"
 #include "task/WorkerTaskGuards.h"
 #include "tool/ToolResultGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

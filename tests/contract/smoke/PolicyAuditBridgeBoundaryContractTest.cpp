@@ -6,7 +6,7 @@
 
 #include "audit/IAuditLogger.h"
 #include "policy/PolicyAuditBridge.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

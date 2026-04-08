@@ -9,7 +9,7 @@
 #include "ota/BootConfirmationMonitor.h"
 #include "ota/PackageVerifier.h"
 #include "ota/RollbackController.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -8,7 +8,7 @@
 #include "audit/AuditExporter.h"
 #include "audit/AuditExporterTypes.h"
 #include "audit/AuditTypes.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

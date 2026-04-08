@@ -804,7 +804,7 @@ struct ObservationDigest {
 | `contract/` | 契约测试 | schema 稳定性、错误码一致性、事件格式 |
 | `e2e/` | 端到端测试 | 真实/回放任务流程，含多 Agent 场景 |
 | `stress/` | 长稳测试 | 长期运行、恢复能力、内存泄漏监控 |
-| `mocks/` | Mock/Stub | 提供可复用的 Mock ILLMAdapter、MockTool 等 |
+| `mocks/` | Mock/Stub | 提供可复用的 Mock ILLMAdapter、MockTool 等；头文件位于 `tests/mocks/include/` 扁平 include 根，断言辅助位于 `tests/mocks/include/support/` |
 
 **测试原则：**
 - 每个核心接口（IAgent、ITool、IMemoryStore 等）必须有对应的 Mock 实现
@@ -1040,6 +1040,7 @@ infra/include/dasall/infra/
 - `MockTool`：可配置成功/失败/超时/副作用输出
 - `MockExecutionService`：用于工具执行控制层集成测试
 - `MockMemoryStore`：可注入预置的会话状态和历史
+- 测试代码默认从 `tests/mocks/include/` 直接 include mock 头；断言辅助统一使用 `support/TestAssertions.h`，不保留旧的嵌套 include 前缀
 
 ---
 

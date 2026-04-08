@@ -8,7 +8,7 @@
 #include "IQueue.h"
 #include "ITimer.h"
 #include "IThread.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -7,7 +7,7 @@
 #include <string>
 
 #include "secret/backends/FileSecretBackend.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

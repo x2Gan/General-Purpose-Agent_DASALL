@@ -27,7 +27,7 @@
 #include "observation/ObservationGuards.h"
 #include "observation/ObservationSource.h"
 #include "observation/ObservationSourceGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

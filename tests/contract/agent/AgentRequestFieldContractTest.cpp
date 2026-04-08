@@ -17,7 +17,7 @@
 #include "agent/AgentRequest.h"
 #include "agent/AgentRequestGuards.h"
 #include "checkpoint/RuntimeBudget.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

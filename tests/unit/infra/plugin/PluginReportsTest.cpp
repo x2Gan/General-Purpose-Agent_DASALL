@@ -3,7 +3,7 @@
 #include <string>
 
 #include "plugin/PluginReports.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

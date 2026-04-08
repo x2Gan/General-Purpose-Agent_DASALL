@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "policy/IPolicySnapshotStore.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

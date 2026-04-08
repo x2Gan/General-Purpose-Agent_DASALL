@@ -18,7 +18,7 @@
 #include "agent/GoalContract.h"
 #include "agent/GoalContractGuards.h"
 #include "checkpoint/RuntimeBudget.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

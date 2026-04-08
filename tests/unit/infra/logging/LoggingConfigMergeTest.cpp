@@ -6,7 +6,7 @@
 #include "config/IConfigCenter.h"
 #include "logging/ILogConfigurator.h"
 #include "logging/LoggingConfigAdapter.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "diagnostics/RedactionEngine.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

@@ -25,7 +25,7 @@
 
 #include "agent/AgentResult.h"
 #include "agent/AgentResultGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 

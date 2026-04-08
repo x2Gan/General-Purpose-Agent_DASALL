@@ -21,7 +21,7 @@
 
 #include "checkpoint/ReflectionDecision.h"
 #include "checkpoint/ReflectionDecisionGuards.h"
-#include "dasall/tests/support/TestAssertions.h"
+#include "support/TestAssertions.h"
 
 namespace {
 
