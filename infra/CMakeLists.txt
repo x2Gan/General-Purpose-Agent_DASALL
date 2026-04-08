@@ -131,11 +131,13 @@ set(DASALL_INFRA_HEALTH_PRIVATE_HEADERS
 
 set(DASALL_INFRA_WATCHDOG_SOURCES
   src/watchdog/HeartbeatRegistry.cpp
+  src/watchdog/HeartbeatIngestor.cpp
   src/watchdog/WatchdogServiceFacade.cpp
 )
 
 set(DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS
   src/watchdog/HeartbeatRegistry.h
+  src/watchdog/HeartbeatIngestor.h
   src/watchdog/WatchdogServiceFacade.h
 )
 

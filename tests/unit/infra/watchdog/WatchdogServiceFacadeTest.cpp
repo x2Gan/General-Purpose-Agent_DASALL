@@ -138,6 +138,57 @@ void test_watchdog_service_facade_routes_entity_registration_through_registry() 
               "WatchdogServiceFacade should drop the registry-backed entity total after unregister succeeds");
 }
 
+        void test_watchdog_service_facade_routes_heartbeat_ingest_and_rejects_stale_samples() {
+          using dasall::contracts::ResultCode;
+          using dasall::infra::watchdog::HeartbeatSample;
+          using dasall::infra::watchdog::watchdog_error_code_name;
+          using dasall::infra::watchdog::WatchedEntityDescriptor;
+          using dasall::infra::watchdog::WatchdogEntityCriticality;
+          using dasall::infra::watchdog::WatchdogErrorCode;
+          using dasall::infra::watchdog::WatchdogServiceConfig;
+          using dasall::infra::watchdog::WatchdogServiceFacade;
+          using dasall::tests::support::assert_true;
+
+          WatchdogServiceFacade facade;
+          assert_true(facade.init(WatchdogServiceConfig{}).ok,
+                "WatchdogServiceFacade should initialize before heartbeat ingest is exercised");
+          assert_true(facade.register_entity(WatchedEntityDescriptor{
+                  .entity_id = std::string("runtime.main_loop"),
+                  .entity_type = std::string("thread"),
+                  .owner_module = std::string("runtime"),
+                  .criticality = WatchdogEntityCriticality::Critical,
+                  .timeout_ms = 15000,
+                  .grace_ms = 2000,
+                }).ok,
+                "WatchdogServiceFacade should register the watched entity before heartbeats are ingested");
+          assert_true(facade.start().ok,
+                "WatchdogServiceFacade should enter started before the first heartbeat is ingested");
+
+          const auto first_heartbeat = facade.heartbeat(HeartbeatSample{
+            .entity_id = std::string("runtime.main_loop"),
+            .heartbeat_ts = 1711958405000,
+            .deadline_ts = 1711958420000,
+            .seq_no = 8,
+          });
+          assert_true(first_heartbeat.ok,
+                "WatchdogServiceFacade should accept the first monotonic heartbeat after the entity has been registered and the lifecycle is started");
+
+          const auto stale_heartbeat = facade.heartbeat(HeartbeatSample{
+            .entity_id = std::string("runtime.main_loop"),
+            .heartbeat_ts = 1711958404000,
+            .deadline_ts = 1711958419000,
+            .seq_no = 7,
+          });
+          assert_true(!stale_heartbeat.ok &&
+                  stale_heartbeat.references_only_contract_error_types() &&
+                  stale_heartbeat.result_code.has_value() &&
+                  *stale_heartbeat.result_code == ResultCode::ValidationFieldMissing &&
+                  stale_heartbeat.error.has_value() &&
+                  stale_heartbeat.error->details.message.find(
+                    std::string(watchdog_error_code_name(WatchdogErrorCode::HeartbeatStale))) != std::string::npos,
+                "WatchdogServiceFacade should surface stale heartbeat rejection through the frozen INF_E_WATCHDOG_HEARTBEAT_STALE private error name");
+        }
+
 }  // namespace
 
 int main() {
@@ -146,6 +197,7 @@ int main() {
     test_watchdog_service_facade_tracks_lifecycle_and_snapshots();
     test_watchdog_service_facade_rejects_invalid_config_and_zero_stop_timeout();
     test_watchdog_service_facade_routes_entity_registration_through_registry();
+    test_watchdog_service_facade_routes_heartbeat_ingest_and_rejects_stale_samples();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

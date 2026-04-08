@@ -37,6 +37,7 @@ WatchdogOperationResult WatchdogServiceFacade::init(
 
   last_config_ = config;
   registry_ = HeartbeatRegistry(config.max_entities);
+  ingestor_ = HeartbeatIngestor(&registry_, config.max_entities);
   lifecycle_state_ = LifecycleState::Initialized;
   last_stop_timeout_ms_.reset();
   refresh_snapshot();
@@ -122,6 +123,7 @@ WatchdogOperationResult WatchdogServiceFacade::unregister_entity(
     };
   }
 
+  ingestor_.forget_entity(entity_id);
   refresh_snapshot();
   return WatchdogOperationResult::success();
 }
@@ -140,7 +142,17 @@ WatchdogOperationResult WatchdogServiceFacade::heartbeat(
         std::string(kWatchdogFacadeSourceRef));
   }
 
-  return component_not_ready("heartbeat", "HeartbeatIngestor");
+  const auto ingest_result = ingestor_.ingest(sample);
+  if (!ingest_result.ok) {
+    return WatchdogOperationResult{
+        .ok = false,
+        .result_code = ingest_result.result_code,
+        .error = ingest_result.error,
+    };
+  }
+
+  refresh_snapshot();
+  return WatchdogOperationResult::success();
 }
 
 WatchdogSnapshotQueryResult WatchdogServiceFacade::snapshot() const {
