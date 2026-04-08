@@ -23,9 +23,27 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_secret_rotation_workflow_integration_test
 	dasall_secret_failure_injection_integration_test
 	dasall_tracing_bridge_reachability_integration_test
+	dasall_watchdog_integration_test
+	dasall_watchdog_failure_injection_integration_test
+	dasall_watchdog_profile_compatibility_integration_test
 	dasall_profiles_build_runtime_integration_test
 	dasall_profile_observability_integration_test
 	dasall_linux_platform_bootstrap_integration_test
 	PARENT_SCOPE
 )
+
+set(DASALL_WATCHDOG_INTEGRATION_TEST_EXECUTABLE_TARGETS
+	dasall_watchdog_integration_test
+	dasall_watchdog_failure_injection_integration_test
+	dasall_watchdog_profile_compatibility_integration_test
+)
+
+add_custom_target(dasall_watchdog_integration_tests
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L watchdog-integration
+	DEPENDS ${DASALL_WATCHDOG_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+)
+
+if(NOT DASALL_WATCHDOG_INTEGRATION_TEST_EXECUTABLE_TARGETS)
+	message(FATAL_ERROR "dasall_watchdog_integration_tests requires at least one registered watchdog integration test target")
+endif()
 

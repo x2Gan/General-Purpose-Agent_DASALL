@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #214
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-022 注册 watchdog integration/failure/profile 测试入口
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-021` 推送完成后，按串行顺序下一项是 `WDG-TODO-022`。
+2. `WDG-BLK-05` 已在仓库级解阻，因此本轮不处理 tests 顶层拓扑，只在 watchdog 组件内补齐真实 integration/failure/profile 用例与标签。
+3. 本轮目标是让 watchdog 的超时闭环、失败注入和 profile 差异矩阵都进入现有 integration 图，并为后续 `WDG-TODO-023` 提供可复用的组件级 gate 入口。
+
+### 改动
+
+1. 更新 [tests/integration/CMakeLists.txt](../../tests/integration/CMakeLists.txt)，将 watchdog integration/failure/profile 三个测试目标加入 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`，并新增 `dasall_watchdog_integration_tests` 聚合目标。
+2. 更新 [tests/integration/infra/CMakeLists.txt](../../tests/integration/infra/CMakeLists.txt)，新增 `add_subdirectory(watchdog)`，把 watchdog 组件纳入 infra integration 拓扑。
+3. 新增 [tests/integration/infra/watchdog/CMakeLists.txt](../../tests/integration/infra/watchdog/CMakeLists.txt)，注册 `WatchdogIntegrationTest`、`WatchdogFailureInjectionTest` 与 `WatchdogProfileCompatibilityTest`，并统一追加 `watchdog` / `watchdog-integration` 标签，其中失败与 profile 用例分别追加 `watchdog-failure`、`watchdog-profile` 及对应通用标签。
+4. 新增 [tests/integration/infra/watchdog/WatchdogIntegrationTest.cpp](../../tests/integration/infra/watchdog/WatchdogIntegrationTest.cpp)，覆盖 `HeartbeatRegistry -> HeartbeatIngestor -> DeadlineWheel -> TimeoutPolicyEngine -> TimeoutEventPublisher -> WatchdogAuditBridge -> WatchdogMetricsBridge -> RecoveryRequestEmitter` 的超时闭环，并补一条 `WatchdogServiceFacade` 的 public lifecycle/snapshot 集成路径。
+5. 新增 [tests/integration/infra/watchdog/WatchdogFailureInjectionTest.cpp](../../tests/integration/infra/watchdog/WatchdogFailureInjectionTest.cpp)，覆盖事件发布失败后的本地缓冲、扫描滞后触发 `safe_observe_mode`、以及心跳风暴导致的 tracked entity 容量耗尽。
+6. 新增 [tests/integration/infra/watchdog/WatchdogProfileCompatibilityTest.cpp](../../tests/integration/infra/watchdog/WatchdogProfileCompatibilityTest.cpp)，覆盖 `desktop_full`、`cloud_full`、`edge_balanced`、`edge_minimal`、`factory_test` 的 watchdog 配置矩阵与共通安全基线。
+7. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-022` 回写为 Done，并把 `WDG-TODO-023` 的前置依赖与验收命令切换到包含 watchdog integration 证据的版本。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_watchdog_integration_tests`
+   - `ctest --test-dir build-ci -N -L watchdog-integration`
+   - `ctest --test-dir build-ci -N -L watchdog-failure`
+   - `ctest --test-dir build-ci -N -L watchdog-profile`
+   - `ctest --test-dir build-ci -N -L watchdog`
+   - `ctest --test-dir build-ci --output-on-failure -L watchdog-integration`
+2. 结果：
+   - `dasall_watchdog_integration_tests` 构建并执行通过，3/3 watchdog integration tests passed。
+   - `ctest -N -L watchdog-integration` 发现 `WatchdogIntegrationTest`、`WatchdogFailureInjectionTest`、`WatchdogProfileCompatibilityTest` 共 3 个测试。
+   - `ctest -N -L watchdog-failure` 发现 `WatchdogFailureInjectionTest` 1 个测试，`ctest -N -L watchdog-profile` 发现 `WatchdogProfileCompatibilityTest` 1 个测试。
+   - `ctest -N -L watchdog` 现可发现 25 个 watchdog tests，说明 integration 入口已并入既有 watchdog 标签域。
+
+### 结果
+
+1. watchdog 现在具备组件级 integration/failure/profile 测试矩阵，且每一类都能通过 CTest 标签被稳定发现。
+2. `dasall_watchdog_integration_tests` 为 watchdog 提供了独立于全仓 integration 的快速回归入口，后续可以直接用于 `WDG-GATE-06` 与 `WDG-GATE-07` 的证据收口。
+3. `watchdog` 标签域已从 unit/contract 扩展到 integration，后续 `WDG-TODO-023` 可以直接基于统一标签汇总 watchdog 的完整测试面。
+
+### 下一步
+
+1. 进入 `WDG-TODO-023`，集中回写 watchdog gate、阻塞变化与回退证据，完成专项 TODO 收口。
+
+### 风险
+
+1. 当前 022 的 integration 闭环仍以 watchdog 组件内本地 fake sink/logger/provider 为主，覆盖的是组件边界与可观测性，而不是跨 runtime 的高阶联调；若后续需要验证跨子系统执行链，应新增更高层 integration 用例，而不是修改本轮已冻结的组件级测试入口。
+
 ## 记录 #213
 
 - 日期：2026-04-08
