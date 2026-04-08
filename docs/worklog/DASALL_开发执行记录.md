@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #215
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-023 回写 watchdog 门禁结果与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 完成 WDG-TODO-023 的专项 TODO 收口：
+   - 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../../docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md)，将 `WDG-TODO-023` 标记为 Done，并补齐 9.3 Gate 执行快照、9.4 Blocker 状态快照、9.5 验证与回退记录。
+   - 同步把 watchdog 第 11 章改为维护态结论，明确 `WDG-TODO-001`~`WDG-TODO-023` 已全部完成、`WDG-BLK-01`~`WDG-BLK-05` 已全部 Resolved。
+2. 完成 watchdog gate 口径修正：
+   - 将 `WDG-GATE-01`~`WDG-GATE-08` 全量回写为当前 Pass 结论，并将 `WDG-GATE-06` / `WDG-GATE-07` 的证据统一回链到 `ctest --test-dir build-ci --output-on-failure -L watchdog-integration`。
+   - 将 `WDG-BLK-01`~`WDG-BLK-05` 整理为 Resolved 快照，去除“仍待后续收口”的旧口径。
+
+### 测试
+
+1. 验证命令：
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+   - `ctest --test-dir build-ci --output-on-failure -L watchdog-integration`
+2. 结果：
+   - `ctest -N` 发现 364 个测试。
+   - `ctest -L unit` 通过，189/189 tests passed；标签摘要中 `watchdog=19 tests`。
+   - `ctest -L contract` 通过，149/149 tests passed；标签摘要中 `watchdog=3 tests`。
+   - `ctest -L watchdog-integration` 通过，3/3 tests passed，覆盖 `WatchdogIntegrationTest`、`WatchdogFailureInjectionTest`、`WatchdogProfileCompatibilityTest`，且摘要中 `watchdog-failure=1 test`、`watchdog-profile=1 test`。
+
+### 结果
+
+1. `WDG-TODO-023` 已完成，watchdog 专项 TODO 的 `WDG-TODO-001`~`WDG-TODO-023` 现已全部 Done，`WDG-BLK-01`~`WDG-BLK-05` 全部为 Resolved。
+2. watchdog 第 9 章现在同时具备 gate、blocker 与 validation/rollback 三类闭环证据，后续无需再依赖零散 task 记录判断当前状态。
+
+### 下一步
+
+1. watchdog 组件专项 TODO 已收口；后续仅在新增 public boundary、profile 键域、cross-runtime recovery chain 或更高层 integration 场景时，再新开原子任务。
+
+### 风险
+
+1. 本轮只做 gate 与 evidence 收口，不新增生产代码；若后续 watchdog 主链、profile 矩阵或恢复语义继续扩展，必须重新开任务并重跑 gate，不能默认沿用本次 Pass 结论。
+
 ## 记录 #214
 
 - 日期：2026-04-08

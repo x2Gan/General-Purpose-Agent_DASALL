@@ -191,7 +191,7 @@
 | WDG-TODO-020 | Done | 接线 watchdog 到 infra CMake 构建入口 | watchdog 设计 7/8.1；代码现状 | 8.1 文件落盘建议 | L2 | infra/CMakeLists.txt、infra/src/watchdog/ | watchdog 源文件纳入 dasall_infra | build：dasall_infra 可编译；test：新增单测目标可链接 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_watchdog_build dasall_watchdog_metrics_bridge_unit_test | WDG-TODO-001~019 | 无 | 无 | infra/CMakeLists.txt；2026-04-08 通过 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_watchdog_build dasall_watchdog_metrics_bridge_unit_test；配置期已新增 watchdog file-list drift guard，确保 infra/src/watchdog 下的实现与私有头全部进入 dasall_infra 构建图 | 仅当 placeholder 不再是唯一源码入口、watchdog 文件全部入图且定向单测目标可链接时完成 |
 | WDG-TODO-021 | Done | 注册 watchdog 的 unit 与 contract 测试入口 | watchdog 设计 9.1/9.2；工程规范 3.7 | 9.1 测试矩阵；9.2 gate | L2 | tests/unit/CMakeLists.txt、tests/unit/infra/watchdog/、tests/contract/CMakeLists.txt | unit：Registry/Ingestor/Policy；contract：边界与错误映射 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_watchdog_unit_tests dasall_watchdog_contract_tests && ctest --test-dir build-ci -N -L watchdog && ctest --test-dir build-ci --output-on-failure -L watchdog | WDG-TODO-019、020 | 无 | 无 | tests/unit/CMakeLists.txt；tests/unit/infra/CMakeLists.txt；tests/contract/CMakeLists.txt；2026-04-08 通过 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_watchdog_unit_tests dasall_watchdog_contract_tests、ctest --test-dir build-ci -N -L watchdog 与 ctest --test-dir build-ci --output-on-failure -L watchdog；watchdog unit/contract 测试现已具备统一 label 与聚合入口 | 仅当 watchdog 测试可被 ctest -N -L watchdog 发现，并能通过 unit/contract 聚合入口执行时完成 |
 | WDG-TODO-022 | Done | 注册 watchdog integration/failure/profile 测试入口 | watchdog 设计 9.1/9.2；代码现状 | 9.1 Integration/Failure/Compatibility | L0 | tests/integration/CMakeLists.txt、tests/integration/infra/CMakeLists.txt、tests/integration/infra/watchdog/ | integration：超时闭环；failure：发布失败/扫描滞后/心跳风暴；profile：差异一致性 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_watchdog_integration_tests && ctest --test-dir build-ci -N -L watchdog-integration && ctest --test-dir build-ci -N -L watchdog-failure && ctest --test-dir build-ci -N -L watchdog-profile && ctest --test-dir build-ci --output-on-failure -L watchdog-integration | WDG-TODO-020、021 | 无（2026-03-30 已由 WDG-BLK-05 integration 顶层拓扑校准解阻） | 无 | tests/integration/CMakeLists.txt；tests/integration/infra/CMakeLists.txt；tests/integration/infra/watchdog/CMakeLists.txt；tests/integration/infra/watchdog/WatchdogIntegrationTest.cpp；tests/integration/infra/watchdog/WatchdogFailureInjectionTest.cpp；tests/integration/infra/watchdog/WatchdogProfileCompatibilityTest.cpp；2026-04-08 通过 cmake -S . -B build-ci -G "Unix Makefiles"、cmake --build build-ci --target dasall_watchdog_integration_tests、ctest --test-dir build-ci -N -L watchdog-integration、ctest --test-dir build-ci -N -L watchdog-failure、ctest --test-dir build-ci -N -L watchdog-profile、ctest --test-dir build-ci -N -L watchdog 与 ctest --test-dir build-ci --output-on-failure -L watchdog-integration；watchdog integration/failure/profile 测试现已具备统一聚合入口与子标签发现性 | 仅当 watchdog integration/failure/profile 用例可被 ctest 发现，并可通过 watchdog-integration 聚合入口执行时完成 |
-| WDG-TODO-023 | Not Started | 回写 watchdog 门禁结果与交付证据 | watchdog 设计 9.2/11.1；规范 6.2 | 9.2 Gate；11 风险阻塞 | L2 | docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md | process test：门禁状态、阻塞变化、回退执行证据 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L watchdog-integration | WDG-TODO-022 | 无 | 无 | 更新后的 TODO 文档证据段 | 仅当每个 Gate 有通过/失败结论及对应命令证据时完成 |
+| WDG-TODO-023 | Done (2026-04-08) | 回写 watchdog 门禁结果与交付证据 | watchdog 设计 9.2/11.1；规范 6.2 | 9.2 Gate；11 风险阻塞 | L2 | docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md、docs/worklog/DASALL_开发执行记录.md | process test：门禁状态、阻塞变化、回退执行证据 | ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L watchdog-integration | WDG-TODO-022 | 无 | 无 | 更新后的 TODO 文档证据段；2026-04-08 已新增 9.3/9.4/9.5 gate/blocker/validation 快照并补记 worklog #215；`ctest --test-dir build-ci -N` 发现 364 个测试，`ctest --test-dir build-ci --output-on-failure -L unit` 189/189 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 149/149 通过，`ctest --test-dir build-ci --output-on-failure -L watchdog-integration` 3/3 通过 | 仅当每个 Gate 有通过/失败结论及对应命令证据时完成 |
 
 ## 7. 执行顺序建议
 
@@ -259,6 +259,38 @@
 6. 是否避免跨子系统范围扩张：是。  
 7. 若要求函数/数据结构级，是否真正落到对象：是。
 
+### 9.3 2026-04-08 Gate 执行快照
+
+| Gate ID | 当前状态 | 证据 | 结论 |
+|---|---|---|---|
+| WDG-GATE-01 | Pass | `WDG-TODO-001`~`WDG-TODO-008` 已全部完成；`ctest --test-dir build-ci -N` 当前发现 364 个测试，包含 `WatchdogServiceInterfaceTest`、`HeartbeatSourceInterfaceTest`、`TimeoutPolicyInterfaceTest`、`RecoveryHintRequestTest` 等边界测试 | watchdog 公共接口、对象与建议边界已冻结并稳定存在于 build-ci 测试图 |
+| WDG-GATE-02 | Pass | `WDG-TODO-017` 已完成；`ctest --test-dir build-ci --output-on-failure -L contract` 当前 149/149 通过，覆盖 `WatchdogRecoveryHintRequestBoundaryContractTest` | RecoveryHintRequest 仍保持“只建议、不执行”的 contract 边界 |
+| WDG-GATE-03 | Pass | `WDG-TODO-019` 已完成；`ctest --test-dir build-ci --output-on-failure -L unit` 当前 189/189 通过、`ctest --test-dir build-ci --output-on-failure -L contract` 当前 149/149 通过，覆盖 `WatchdogErrorsTest` 与 `WatchdogErrorMappingContractTest` | 7 个 `INF_E_WATCHDOG_*` 私有错误码与 contracts 映射维持稳定 |
+| WDG-GATE-04 | Pass | `WDG-TODO-020` 已完成 `dasall_watchdog_build` / file-list drift guard，并通过 `cmake --build build-ci --target dasall_watchdog_build dasall_watchdog_metrics_bridge_unit_test`；当前 `ctest --test-dir build-ci -N` 仍可遍历完整 build-ci 测试图 | watchdog 源码、私有头与定向测试入口已稳定进入构建图 |
+| WDG-GATE-05 | Pass | `ctest --test-dir build-ci -N` 当前发现 364 个测试；`ctest --test-dir build-ci --output-on-failure -L unit` 标签摘要中 `watchdog=19 tests`，`ctest --test-dir build-ci --output-on-failure -L contract` 标签摘要中 `watchdog=3 tests` | watchdog 单测/contract 发现性已稳定存在，当前组件测试面合计 25 个（unit 19 + contract 3 + integration 3） |
+| WDG-GATE-06 | Pass | `ctest --test-dir build-ci --output-on-failure -L watchdog-integration` 当前 3/3 通过，覆盖 `WatchdogFailureInjectionTest` | 事件发布失败、扫描滞后 `safe_observe_mode` 与心跳风暴三类失败注入链路均有可执行证据 |
+| WDG-GATE-07 | Pass | `ctest --test-dir build-ci --output-on-failure -L watchdog-integration` 当前 3/3 通过，覆盖 `WatchdogProfileCompatibilityTest` | `desktop_full`、`cloud_full`、`edge_balanced`、`edge_minimal`、`factory_test` 的 watchdog 配置矩阵未出现 breaking 漂移 |
+| WDG-GATE-08 | Pass | `WDG-TODO-020`~`WDG-TODO-023` 仅修改 internal 源码、CMake、tests、profiles、TODO 与 worklog；未新增 public 接口签名或 contracts 映射 breaking 变更 | 当前无未评审的 breaking change，评审门未被触发 |
+
+### 9.4 2026-04-08 Blocker 状态快照
+
+| Blocker ID | 当前状态 | 是否影响 WDG-TODO-023 | 说明 |
+|---|---|---|---|
+| WDG-BLK-01 | Resolved | 否 | monotonic periodic timer 抽象已冻结，并由 `DeadlineWheelTest` 与 `PosixTimerProviderTest` 持续支撑回归 |
+| WDG-BLK-02 | Resolved | 否 | `ITimeoutEventSink::publish_timeout_event(event)` 与 `INF_E_WATCHDOG_EVENT_PUBLISH_FAIL` outward 失败语义已冻结，`TimeoutEventPublisherTest` 与 `WatchdogFailureInjectionTest` 持续覆盖 |
+| WDG-BLK-03 | Resolved | 否 | `RecoveryHintRequest` 建议边界 contract 模板已冻结，`WatchdogRecoveryHintRequestBoundaryContractTest` 在当前 contract 149/149 中继续通过 |
+| WDG-BLK-04 | Resolved | 否 | `infra.watchdog.*` 五套 profile 键名与默认层已冻结，`WatchdogConfigPolicyTest` 与 `ProfileRuntimePolicySchemaContractTest` 持续覆盖 |
+| WDG-BLK-05 | Resolved | 否 | 顶层 integration 拓扑与 watchdog 组件级 `watchdog-integration` / `watchdog-failure` / `watchdog-profile` 用例均已落盘；当前 `ctest --test-dir build-ci --output-on-failure -L watchdog-integration` 3/3 通过 |
+
+### 9.5 验证与回退记录
+
+1. `ctest --test-dir build-ci -N`：通过，发现 364 个测试，包含 `WatchdogIntegrationTest`、`WatchdogFailureInjectionTest`、`WatchdogProfileCompatibilityTest` 三个 watchdog integration 用例。
+2. `ctest --test-dir build-ci --output-on-failure -L unit`：通过，189/189 tests passed；标签摘要中 `watchdog=19 tests`、`watchdog-unit=19 tests`。
+3. `ctest --test-dir build-ci --output-on-failure -L contract`：通过，149/149 tests passed；标签摘要中 `watchdog=3 tests`、`watchdog-contract=3 tests`。
+4. `ctest --test-dir build-ci --output-on-failure -L watchdog-integration`：通过，3/3 tests passed；标签摘要中 `watchdog-integration=3 tests`、`watchdog-failure=1 test`、`watchdog-profile=1 test`。
+5. `WDG-TODO-020`~`WDG-TODO-022` 已分别完成 build wiring、watchdog label discoverability 与 integration/failure/profile 接线；`WDG-TODO-023` 为文档收口任务，本轮未触发代码回退。
+6. 后续若新增 public watchdog boundary、错误映射、profile 键域或跨 runtime 恢复执行语义，必须重新开原子任务并重跑 `WDG-GATE-02` / `WDG-GATE-03` / `WDG-GATE-07` / `WDG-GATE-08`，不能直接沿用本次收口结论。
+
 ## 10. 风险与回退策略
 
 | 风险 | 等级 | 触发条件 | 监测信号 | 回退策略 |
@@ -272,18 +304,12 @@
 
 ## 11. 可行性结论
 
-1. 结论：可直接生成并执行函数/数据结构级专项 TODO（L3/L2 混合），但包含 5 个明确 Blocked 项，需先解阻后推进对应任务。
-2. 原因：
-   - 已具备明确接口清单、对象字段、主异常流程、错误语义、测试出口与落盘路径。
-   - 设计中已给出 Design -> Build 映射、测试矩阵与质量 Gate。
-   - 现有代码虽为空实现，但 CMake 与 tests 骨架已可承载增量接线。
-   - 阻塞项具备明确证据、影响范围和最小解阻动作。
-   - ADR-006/007/008 对职责边界裁定足以形成可执行门禁断言。
-3. 当前最小可执行粒度：函数 / 接口 / 数据结构（L3），受阻链路为 L2/L0。
-4. 若未达到全量函数级仍缺信息：
-   - platform monotonic clock/scheduler 抽象接口。
-   - 事件总线最小发布接口。
-   - runtime RecoveryHintRequest 输入结构与边界 contract 模板。
-   - profile 下 watchdog 键名与覆盖优先级冻结。
-5. 下一步建议：
-   - WDG-TODO-001~022 已完成，下一步直接执行 WDG-TODO-023 收口 watchdog 门禁结果与交付证据。
+1. 结论：截至 2026-04-08，watchdog 组件专项 `WDG-TODO-001`~`WDG-TODO-023` 已全部完成，`WDG-BLK-01`~`WDG-BLK-05` 全部为 Resolved，watchdog 已进入维护态 gate 基线。
+2. 支撑证据：
+   - `ctest --test-dir build-ci -N` 当前发现 364 个测试，其中 watchdog 组件测试面合计 25 个（unit 19 + contract 3 + integration 3）。
+   - `ctest --test-dir build-ci --output-on-failure -L unit` 189/189 通过，`ctest --test-dir build-ci --output-on-failure -L contract` 149/149 通过，`ctest --test-dir build-ci --output-on-failure -L watchdog-integration` 3/3 通过。
+   - `WDG-GATE-01`~`WDG-GATE-08` 当前均已有通过结论与命令证据；失败注入与 profile 兼容性 gate 已由组件级 integration 测试收口。
+   - `WDG-BLK-01`~`WDG-BLK-05` 对应的 timer、event sink、recovery hint、profile schema 与 integration topology 缺口均已解阻，并在 TODO / worklog 中可回链。
+3. 当前最小稳定交付粒度：L2/L3 watchdog v1 骨架 + unit/contract/integration/failure/profile gate 证据闭环。
+4. 下一步建议：
+   - watchdog 组件专项 TODO 已收口；后续仅在新增 public boundary、shared contract、profile 矩阵或跨 runtime 恢复执行链需求时，再新开原子任务推进。
