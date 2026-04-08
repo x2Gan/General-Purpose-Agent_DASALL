@@ -2025,6 +2025,26 @@ dasall_apply_common_options(dasall_watchdog_errors_unit_test)
 add_test(NAME WatchdogErrorsTest COMMAND dasall_watchdog_errors_unit_test)
 set_tests_properties(WatchdogErrorsTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_heartbeat_registry_unit_test
+  watchdog/HeartbeatRegistryTest.cpp
+)
+
+target_include_directories(dasall_heartbeat_registry_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_heartbeat_registry_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_heartbeat_registry_unit_test)
+
+add_test(NAME HeartbeatRegistryTest COMMAND dasall_heartbeat_registry_unit_test)
+set_tests_properties(HeartbeatRegistryTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )

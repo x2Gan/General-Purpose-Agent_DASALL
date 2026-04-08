@@ -5,6 +5,7 @@
 #include <optional>
 #include <string_view>
 
+#include "watchdog/HeartbeatRegistry.h"
 #include "watchdog/IWatchdogService.h"
 
 namespace dasall::infra::watchdog {
@@ -47,6 +48,7 @@ class WatchdogServiceFacade final : public IWatchdogService {
   std::uint64_t next_snapshot_version_ = 1;
   std::shared_ptr<WatchdogSnapshot> latest_snapshot_;
   std::optional<std::uint32_t> last_stop_timeout_ms_;
+  HeartbeatRegistry registry_{};
 };
 
 }  // namespace dasall::infra::watchdog

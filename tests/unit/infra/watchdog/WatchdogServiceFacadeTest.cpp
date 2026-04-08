@@ -1,7 +1,9 @@
 #include <exception>
 #include <iostream>
+#include <string>
 
 #include "watchdog/WatchdogServiceFacade.h"
+#include "watchdog/WatchdogErrors.h"
 #include "watchdog/WatchdogSnapshot.h"
 #include "dasall/tests/support/TestAssertions.h"
 
@@ -93,6 +95,49 @@ void test_watchdog_service_facade_rejects_invalid_config_and_zero_stop_timeout()
               "WatchdogServiceFacade should reject zero timeout so graceful shutdown keeps an explicit budget");
 }
 
+void test_watchdog_service_facade_routes_entity_registration_through_registry() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::watchdog::watchdog_error_code_name;
+  using dasall::infra::watchdog::WatchdogErrorCode;
+  using dasall::infra::watchdog::WatchedEntityDescriptor;
+  using dasall::infra::watchdog::WatchdogEntityCriticality;
+  using dasall::infra::watchdog::WatchdogServiceConfig;
+  using dasall::infra::watchdog::WatchdogServiceFacade;
+  using dasall::tests::support::assert_true;
+
+  WatchdogServiceFacade facade;
+  assert_true(facade.init(WatchdogServiceConfig{.max_entities = 2}).ok,
+              "WatchdogServiceFacade should initialize before registry-backed registration is exercised");
+
+  const WatchedEntityDescriptor descriptor{
+      .entity_id = std::string("runtime.main_loop"),
+      .entity_type = std::string("thread"),
+      .owner_module = std::string("runtime"),
+      .criticality = WatchdogEntityCriticality::Critical,
+      .timeout_ms = 15000,
+      .grace_ms = 2000,
+  };
+
+  const auto first_registration = facade.register_entity(descriptor);
+  assert_true(first_registration.ok && facade.snapshot().snapshot->total_entities == 1U,
+              "WatchdogServiceFacade should expose the registry-backed entity total after the first registration succeeds");
+
+  const auto duplicate_registration = facade.register_entity(descriptor);
+  assert_true(!duplicate_registration.ok &&
+                  duplicate_registration.references_only_contract_error_types() &&
+                  duplicate_registration.result_code.has_value() &&
+                  *duplicate_registration.result_code == ResultCode::ValidationFieldMissing &&
+                  duplicate_registration.error.has_value() &&
+                  duplicate_registration.error->details.message.find(
+                      std::string(watchdog_error_code_name(WatchdogErrorCode::EntityDuplicate))) != std::string::npos &&
+                  facade.snapshot().snapshot->total_entities == 1U,
+              "WatchdogServiceFacade should surface duplicate registrations through the frozen INF_E_WATCHDOG_ENTITY_DUPLICATE private error name without mutating registry size");
+
+  const auto removed = facade.unregister_entity("runtime.main_loop");
+  assert_true(removed.ok && facade.snapshot().snapshot->total_entities == 0U,
+              "WatchdogServiceFacade should drop the registry-backed entity total after unregister succeeds");
+}
+
 }  // namespace
 
 int main() {
@@ -100,6 +145,7 @@ int main() {
     test_watchdog_service_facade_rejects_uninitialized_paths();
     test_watchdog_service_facade_tracks_lifecycle_and_snapshots();
     test_watchdog_service_facade_rejects_invalid_config_and_zero_stop_timeout();
+    test_watchdog_service_facade_routes_entity_registration_through_registry();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

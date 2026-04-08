@@ -36,6 +36,7 @@ WatchdogOperationResult WatchdogServiceFacade::init(
   }
 
   last_config_ = config;
+  registry_ = HeartbeatRegistry(config.max_entities);
   lifecycle_state_ = LifecycleState::Initialized;
   last_stop_timeout_ms_.reset();
   refresh_snapshot();
@@ -85,7 +86,17 @@ WatchdogOperationResult WatchdogServiceFacade::register_entity(
         std::string(kWatchdogFacadeSourceRef));
   }
 
-  return component_not_ready("register_entity", "HeartbeatRegistry");
+  const auto registry_result = registry_.register_entity(descriptor);
+  if (!registry_result.ok) {
+    return WatchdogOperationResult{
+        .ok = false,
+        .result_code = registry_result.result_code,
+        .error = registry_result.error,
+    };
+  }
+
+  refresh_snapshot();
+  return WatchdogOperationResult::success();
 }
 
 WatchdogOperationResult WatchdogServiceFacade::unregister_entity(
@@ -102,7 +113,17 @@ WatchdogOperationResult WatchdogServiceFacade::unregister_entity(
         std::string(kWatchdogFacadeSourceRef));
   }
 
-  return component_not_ready("unregister_entity", "HeartbeatRegistry");
+  const auto registry_result = registry_.unregister_entity(entity_id);
+  if (!registry_result.ok) {
+    return WatchdogOperationResult{
+        .ok = false,
+        .result_code = registry_result.result_code,
+        .error = registry_result.error,
+    };
+  }
+
+  refresh_snapshot();
+  return WatchdogOperationResult::success();
 }
 
 WatchdogOperationResult WatchdogServiceFacade::heartbeat(
@@ -184,7 +205,7 @@ WatchdogOperationResult WatchdogServiceFacade::component_not_ready(
 void WatchdogServiceFacade::refresh_snapshot() {
   auto snapshot = std::make_shared<WatchdogSnapshot>();
   snapshot->version = next_snapshot_version_++;
-  snapshot->total_entities = 0;
+  snapshot->total_entities = static_cast<std::uint32_t>(registry_.size());
   snapshot->timed_out_entities = 0;
   snapshot->degraded_entities = 0;
   snapshot->scan_lag_ms = 0;
