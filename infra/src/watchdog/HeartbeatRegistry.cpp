@@ -133,6 +133,18 @@ HeartbeatRegistryQueryResult HeartbeatRegistry::query_entity(
   return HeartbeatRegistryQueryResult::success(entry->second);
 }
 
+std::vector<WatchedEntityDescriptor> HeartbeatRegistry::list_entities() const {
+  std::vector<WatchedEntityDescriptor> descriptors;
+  descriptors.reserve(entries_.size());
+
+  for (const auto& [entity_id, descriptor] : entries_) {
+    (void)entity_id;
+    descriptors.push_back(descriptor);
+  }
+
+  return descriptors;
+}
+
 std::size_t HeartbeatRegistry::size() const {
   return entries_.size();
 }

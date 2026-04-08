@@ -160,6 +160,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_watchdog_errors_unit_test
 	dasall_heartbeat_registry_unit_test
 	dasall_heartbeat_ingestor_unit_test
+	dasall_deadline_wheel_unit_test
 	dasall_timeout_policy_unit_test
 	dasall_watchdog_audit_bridge_unit_test
 	dasall_watchdog_metrics_bridge_unit_test

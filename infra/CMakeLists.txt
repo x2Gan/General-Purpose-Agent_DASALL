@@ -130,6 +130,7 @@ set(DASALL_INFRA_HEALTH_PRIVATE_HEADERS
 )
 
 set(DASALL_INFRA_WATCHDOG_SOURCES
+  src/watchdog/DeadlineWheel.cpp
   src/watchdog/HeartbeatRegistry.cpp
   src/watchdog/HeartbeatIngestor.cpp
   src/watchdog/TimeoutPolicyEngine.cpp
@@ -139,6 +140,7 @@ set(DASALL_INFRA_WATCHDOG_SOURCES
 )
 
 set(DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS
+  src/watchdog/DeadlineWheel.h
   src/watchdog/HeartbeatRegistry.h
   src/watchdog/HeartbeatIngestor.h
   src/watchdog/TimeoutPolicyEngine.h
@@ -381,6 +383,8 @@ target_include_directories(dasall_infra
 target_link_libraries(dasall_infra
   PUBLIC
     dasall_contracts
+  PRIVATE
+    dasall_platform
 )
 
 dasall_apply_common_options(dasall_infra)

@@ -2065,6 +2065,27 @@ dasall_apply_common_options(dasall_heartbeat_ingestor_unit_test)
 add_test(NAME HeartbeatIngestorTest COMMAND dasall_heartbeat_ingestor_unit_test)
 set_tests_properties(HeartbeatIngestorTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_deadline_wheel_unit_test
+  watchdog/DeadlineWheelTest.cpp
+)
+
+target_include_directories(dasall_deadline_wheel_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_deadline_wheel_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_deadline_wheel_unit_test)
+
+add_test(NAME DeadlineWheelTest COMMAND dasall_deadline_wheel_unit_test)
+set_tests_properties(DeadlineWheelTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_timeout_policy_unit_test
   watchdog/TimeoutPolicyEngineTest.cpp
 )

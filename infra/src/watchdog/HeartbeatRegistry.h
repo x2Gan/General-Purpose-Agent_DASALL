@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
@@ -209,6 +210,7 @@ class HeartbeatRegistry {
       std::string_view entity_id);
   [[nodiscard]] HeartbeatRegistryQueryResult query_entity(
       std::string_view entity_id) const;
+  [[nodiscard]] std::vector<WatchedEntityDescriptor> list_entities() const;
   [[nodiscard]] std::size_t size() const;
   [[nodiscard]] std::size_t max_entities() const;
 

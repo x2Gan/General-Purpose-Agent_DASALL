@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #208
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-012 DeadlineWheel 扫描骨架
+- 状态：已完成
+
+### 任务选择
+
+1. 用户当前要求按受阻链顺序推进 `WDG-TODO-012、014、017、018`，而 `WDG-TODO-012` 是最靠前且仍处于 Blocked 的 watchdog 原子任务。
+2. `WDG-BLK-01` 属于可在同轮最小修复的 context blocker：platform 侧已经落盘 [platform/include/ITimer.h](../../platform/include/ITimer.h) 与 [tests/unit/platform/linux/PosixTimerProviderTest.cpp](../../tests/unit/platform/linux/PosixTimerProviderTest.cpp)，缺口只剩 watchdog 没把 monotonic periodic timer 抽象回链到 DeadlineWheel。
+3. 因此本轮先用 `ITimer::start_periodic` 解开 BLK-01，再在同一轮实现 `DeadlineWheel` 的 due candidate 扫描与 scan overdue safe-observe 语义，不扩张到 014 的事件总线或 018 的配置覆盖规则。
+
+### 改动
+
+1. 新增 [infra/src/watchdog/DeadlineWheel.h](../../infra/src/watchdog/DeadlineWheel.h) 与 [infra/src/watchdog/DeadlineWheel.cpp](../../infra/src/watchdog/DeadlineWheel.cpp)，落盘 `tick_collect_due(now_ts)` 与 `scan_once()`，把 registry + ingestor 最新样本收敛为 due candidate 列表，并在 scan gap 超过 `safe_mode_scan_interval_ms` 时显式返回 `INF_E_WATCHDOG_SCAN_OVERDUE`。
+2. 更新 [infra/src/watchdog/HeartbeatRegistry.h](../../infra/src/watchdog/HeartbeatRegistry.h) 与 [infra/src/watchdog/HeartbeatRegistry.cpp](../../infra/src/watchdog/HeartbeatRegistry.cpp)，新增 `list_entities()` 最小枚举视图，避免 DeadlineWheel 复制第二套实体缓存。
+3. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `DeadlineWheel` 源文件与私有头纳入 `dasall_infra`，并以 private 方式接入 `dasall_platform` 供 watchdog 私有实现消费 `ITimer`。
+4. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，注册 `dasall_deadline_wheel_unit_test` 与 `DeadlineWheelTest`。
+5. 新增 [tests/unit/infra/watchdog/DeadlineWheelTest.cpp](../../tests/unit/infra/watchdog/DeadlineWheelTest.cpp)，覆盖 due candidate 筛选、`scan_once()` 对 monotonic periodic scheduler 的绑定，以及 scan overdue -> safe_observe_mode 失败路径。
+6. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-BLK-01` 回写为已解阻，并把 `WDG-TODO-012` 回写为 Done 与定向构建/CTest 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_deadline_wheel_unit_test`
+   - `ctest --test-dir build-ci -N -R DeadlineWheelTest`
+   - `ctest --test-dir build-ci --output-on-failure -R DeadlineWheelTest`
+2. 结果：
+   - `dasall_infra` 与 `dasall_deadline_wheel_unit_test` 构建通过。
+   - `DeadlineWheelTest` 已进入 CTest 图。
+   - 1/1 tests passed。
+
+### 结果
+
+1. watchdog 现在具备最小 deadline 扫描骨架：可以根据 registry + ingestor 最新样本筛出到期实体，并通过 `overdue_by_ms` 保留 deadline 超期事实。
+2. `WDG-BLK-01` 已完成回链解阻；watchdog 不再依赖未定义的“未来时钟接口”，而是显式复用 platform 已冻结的 monotonic periodic timer 抽象来承接 `scan_once()` 的调度入口。
+3. scan gap 超过 `safe_mode_scan_interval_ms` 时，DeadlineWheel 会进入 `safe_observe_mode` 并输出 `INF_E_WATCHDOG_SCAN_OVERDUE`，与后续 022 的 failure/safe-mode 门禁保持一致。
+
+### 下一步
+
+1. 进入 `WDG-TODO-014` 前先处理 `WDG-BLK-02`，明确 timeout event publish 最小接口与失败返回语义，然后再落 TimeoutEventPublisher 骨架。
+
+### 风险
+
+1. 当前 `scan_once()` 用 `scan_interval_ms` 推导同步扫描轮次，并把真实“当前时间”继续保留为 `tick_collect_due(now_ts)` 的调用方输入；若后续平台补出独立 monotonic now provider，只能在保持 `ITimer` 调度边界不变的前提下收敛实现，不能直接改写本轮已冻结的错误语义或 safe-observe 入口。
+
 ## 记录 #207
 
 - 日期：2026-04-08
