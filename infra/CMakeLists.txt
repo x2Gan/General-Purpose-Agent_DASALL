@@ -129,6 +129,14 @@ set(DASALL_INFRA_HEALTH_PRIVATE_HEADERS
   src/health/RecoveryHintEmitter.h
 )
 
+set(DASALL_INFRA_WATCHDOG_SOURCES
+  src/watchdog/WatchdogServiceFacade.cpp
+)
+
+set(DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS
+  src/watchdog/WatchdogServiceFacade.h
+)
+
 set(DASALL_INFRA_POLICY_SOURCES
   src/policy/PolicyAuditBridge.cpp
   src/policy/PolicyHealthProbe.cpp
@@ -330,6 +338,8 @@ target_sources(dasall_infra
     ${DASALL_INFRA_AUDIT_SOURCES}
     ${DASALL_INFRA_HEALTH_SOURCES}
     ${DASALL_INFRA_HEALTH_PRIVATE_HEADERS}
+    ${DASALL_INFRA_WATCHDOG_SOURCES}
+    ${DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS}
     ${DASALL_INFRA_LOGGING_SOURCES}
     ${DASALL_INFRA_POLICY_SOURCES}
     ${DASALL_INFRA_POLICY_PRIVATE_HEADERS}
