@@ -1,3 +1,43 @@
+function(dasall_assert_declared_files_match_glob label declared_list_var glob_pattern)
+  file(GLOB discovered_files CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/${glob_pattern}"
+  )
+
+  set(relative_discovered_files "")
+  foreach(discovered_file IN LISTS discovered_files)
+    file(RELATIVE_PATH relative_file
+      "${CMAKE_CURRENT_SOURCE_DIR}"
+      "${discovered_file}"
+    )
+    list(APPEND relative_discovered_files "${relative_file}")
+  endforeach()
+
+  set(missing_from_declared_list "")
+  foreach(relative_file IN LISTS relative_discovered_files)
+    list(FIND ${declared_list_var} "${relative_file}" declared_index)
+    if(declared_index EQUAL -1)
+      list(APPEND missing_from_declared_list "${relative_file}")
+    endif()
+  endforeach()
+
+  set(missing_from_disk "")
+  foreach(declared_file IN LISTS ${declared_list_var})
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${declared_file}")
+      list(APPEND missing_from_disk "${declared_file}")
+    endif()
+  endforeach()
+
+  if(missing_from_declared_list OR missing_from_disk)
+    list(JOIN missing_from_declared_list ", " missing_from_declared_list_text)
+    list(JOIN missing_from_disk ", " missing_from_disk_text)
+    message(FATAL_ERROR
+      "${label} build graph drift detected. "
+      "undeclared files: [${missing_from_declared_list_text}] "
+      "missing files: [${missing_from_disk_text}]"
+    )
+  endif()
+endfunction()
+
 set(DASALL_INFRA_CORE_SOURCES
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
@@ -153,6 +193,18 @@ set(DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS
   src/watchdog/WatchdogAuditBridge.h
   src/watchdog/WatchdogMetricsBridge.h
   src/watchdog/WatchdogServiceFacade.h
+)
+
+dasall_assert_declared_files_match_glob(
+  "watchdog source"
+  DASALL_INFRA_WATCHDOG_SOURCES
+  "src/watchdog/*.cpp"
+)
+
+dasall_assert_declared_files_match_glob(
+  "watchdog private header"
+  DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS
+  "src/watchdog/*.h"
 )
 
 set(DASALL_INFRA_POLICY_SOURCES
@@ -394,3 +446,7 @@ target_link_libraries(dasall_infra
 )
 
 dasall_apply_common_options(dasall_infra)
+
+add_custom_target(dasall_watchdog_build
+  DEPENDS dasall_infra
+)

@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #212
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-020 接线 watchdog 到 infra CMake 构建入口
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-018` 推送完成后，按串行顺序下一项是 `WDG-TODO-020`。
+2. watchdog 源文件实际上已在前几轮逐步加入 `infra/CMakeLists.txt`，但 020 的交付还缺一个可复用的构建入口和防回退保护；否则后续新增 `infra/src/watchdog/*` 文件时仍可能再次发生“文件落盘但未入图”的漂移。
+3. 本轮因此不重做业务实现，只补 build wiring 守卫与定向构建入口，并把 TODO 状态与证据补齐。
+
+### 改动
+
+1. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，新增 `dasall_assert_declared_files_match_glob()`，在配置期校验 `infra/src/watchdog/*.cpp` 与 `infra/src/watchdog/*.h` 是否完整进入 `DASALL_INFRA_WATCHDOG_SOURCES` / `DASALL_INFRA_WATCHDOG_PRIVATE_HEADERS`。
+2. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，新增 `dasall_watchdog_build` 自定义目标，作为 watchdog 源码已入 `dasall_infra` 构建图的专用 build 入口。
+3. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-020` 回写为 Done，并补充定向 build 证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_watchdog_build dasall_watchdog_metrics_bridge_unit_test`
+2. 结果：
+   - configure 通过，说明 watchdog file-list drift guard 未发现漏接线源文件或私有头。
+   - `dasall_watchdog_build` 与 `dasall_watchdog_metrics_bridge_unit_test` 构建通过，证明 watchdog 源文件已稳定纳入 `dasall_infra`，且新增单测目标可链接。
+
+### 结果
+
+1. watchdog 现在具备明确的 infra 构建入口：后续可直接通过 `dasall_watchdog_build` 检查 watchdog 源码是否仍在 `dasall_infra` 图中，而不必依赖全量 `dasall_infra` 构建输出来人工判断。
+2. `infra/src/watchdog` 目录现已受 configure-time drift guard 保护；只要目录中新增 `.cpp` 或 `.h` 却没有接入 watchdog file list，CMake 配置就会直接失败，而不是把问题留到更晚的链接阶段。
+
+### 下一步
+
+1. 进入 `WDG-TODO-021`，在已有 unit/contract 测试已注册的基础上补 watchdog 专属的测试发现性锚点与聚合入口。
+
+### 风险
+
+1. 当前 020 只覆盖了 `infra/src/watchdog` 私有实现文件与私有头的入图完整性，没有覆盖 `infra/include/watchdog` 公共头的文档化测试矩阵；这部分将在 021 的测试发现性收口阶段继续固化。
+
 ## 记录 #211
 
 - 日期：2026-04-08
