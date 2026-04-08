@@ -192,3 +192,23 @@ dasall_apply_common_options(dasall_hal_availability_bridge_unit_test)
 
 add_test(NAME HalAvailabilityBridgeTest COMMAND dasall_hal_availability_bridge_unit_test)
 set_tests_properties(HalAvailabilityBridgeTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_posix_dynamic_library_loader_unit_test
+  PosixDynamicLibraryLoaderTest.cpp
+)
+
+target_link_libraries(dasall_posix_dynamic_library_loader_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+target_link_options(dasall_posix_dynamic_library_loader_unit_test
+  PRIVATE
+    -Wl,--export-dynamic
+)
+
+dasall_apply_common_options(dasall_posix_dynamic_library_loader_unit_test)
+
+add_test(NAME PosixDynamicLibraryLoaderTest COMMAND dasall_posix_dynamic_library_loader_unit_test)
+set_tests_properties(PosixDynamicLibraryLoaderTest PROPERTIES LABELS "unit")

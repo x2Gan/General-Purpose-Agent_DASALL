@@ -187,7 +187,7 @@
 | PLAT-LNX-TODO-023 | Done | 补齐 HAL 最小接口设计前置 | platform 设计 11.1 | 11.1 HAL 真实接口未冻结 | L0 | docs/architecture/platform_linux_detailed_design.md | Hal 最小桥接接口（方法、返回码、能力探测边界） | process test：设计评审门 | rg -n "HAL|HalAvailabilityBridge|HalStub|接口" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-018 | 设计补丁、评审记录、回链记录；2026-03-27 已新增 6.6.1「HAL 最小探测接口冻结」并回链 TODO-018/023，明确本轮仅冻结 availability probe | 仅当 HAL 最小接口清单冻结且评审通过时完成 |
 | PLAT-LNX-TODO-024 | Done | 补齐网络 fallback 策略前置设计 | platform 设计 6.9/11.1 | 6.9 enable_epoll；11.1 未决项 | L0 | docs/architecture/platform_linux_detailed_design.md | epoll/eventfd 失败触发 poll/select 的条件与错误语义 | process test：设计评审门 | rg -n "enable_epoll|poll|select|fallback" docs/architecture/platform_linux_detailed_design.md | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-008、016 | 设计补丁、评审记录、回链记录；2026-03-27 已补充 6.9.1 评审结论与回链段落，冻结 A/B/C/D 触发矩阵且明确禁止隐式重试 | 仅当 fallback 条件可判定且不引入隐式重试时完成 |
 | PLAT-LNX-TODO-025 | Done | 补齐 profile 注入键与入口设计前置 | platform 设计 6.9/11.1；架构 7.5 | 6.9 配置项；11.1 注入路径未统一 | L0 | docs/architecture/platform_linux_detailed_design.md、profiles/ | platform.linux.* 键名、注入入口、覆盖层级矩阵 | process test：配置评审门 | rg -n "platform.linux|profile|覆盖层级|注入" docs/architecture/platform_linux_detailed_design.md profiles -g "**/*" | 无 | 无 | 评审通过并回链 PLAT-LNX-TODO-010、021 | 设计补丁、评审记录、回链记录；2026-03-27 已新增 6.9.2「profile 注入键全集、入口与覆盖优先级冻结」并回链 TODO-010/021/025，明确 PlatformInitConfig 缺失字段补充计划 | 仅当键名/入口/覆盖优先级三项冻结时完成 |
-| PLAT-LNX-TODO-026 | Not Started | 冻结 Linux 动态库加载抽象并落最小 dlopen/dlsym 适配 | platform 设计 6.6/6.8/11.1；plugin runtime bridge 协同 | 6.6 provider 抽象；6.8 错误语义；11.1 plugin bridge 前置 | L2 | platform/include/IDynamicLibraryLoader.h、platform/include/linux/PosixDynamicLibraryLoader.h、platform/src/linux/PosixDynamicLibraryLoader.cpp | open/load_symbol/close/error_message；unit：成功加载、symbol 缺失、close 幂等与错误映射 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_platform dasall_posix_dynamic_library_loader_unit_test && ctest --test-dir build-ci -N -R PosixDynamicLibraryLoaderTest && ctest --test-dir build-ci --output-on-failure -R PosixDynamicLibraryLoaderTest | PLAT-LNX-TODO-003 | 无 | 无 | 动态库加载抽象头文件、Linux 适配实现、unit 证据 | 仅当 platform 能以稳定错误语义暴露 open/load_symbol/close 边界，并可作为 PLG-TODO-018 的直接前置时完成 |
+| PLAT-LNX-TODO-026 | Done | 冻结 Linux 动态库加载抽象并落最小 dlopen/dlsym 适配 | platform 设计 6.6/6.8/11.1；plugin runtime bridge 协同 | 6.6 provider 抽象；6.8 错误语义；11.1 plugin bridge 前置 | L2 | platform/include/IDynamicLibraryLoader.h、platform/include/linux/PosixDynamicLibraryLoader.h、platform/src/linux/PosixDynamicLibraryLoader.cpp | open/load_symbol/close/error_message；unit：成功加载、symbol 缺失、close 幂等与错误映射 | cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_platform dasall_posix_dynamic_library_loader_unit_test && ctest --test-dir build-ci -N -R PosixDynamicLibraryLoaderTest && ctest --test-dir build-ci --output-on-failure -R PosixDynamicLibraryLoaderTest | PLAT-LNX-TODO-003 | 无 | 无 | 动态库加载抽象头文件、Linux 适配实现、unit 证据；2026-04-08 已新增 IDynamicLibraryLoader.h、PosixDynamicLibraryLoader.h/.cpp、PosixDynamicLibraryLoaderTest.cpp，并通过定向 build 与 ctest 验证 self-handle、missing symbol、close 幂等路径 | 仅当 platform 能以稳定错误语义暴露 open/load_symbol/close 边界，并可作为 PLG-TODO-018 的直接前置时完成 |
 
 ## 7. 执行顺序建议
 
@@ -203,7 +203,7 @@
 | F 集成门禁 | PLAT-LNX-TODO-021 | 已完成（021 Done） | R-4 加工厂 HAL 接线后，双档 profile 集成断言均已通过 |
 | G 补设计收敛 | PLAT-LNX-TODO-023~025 | 已完成（023/024/025 全部 Done） | 024 fallback 矩阵、023 HAL 最小探测接口、025 profile 注入键与入口均已冻结并回链 |
 | H 证据回写 | PLAT-LNX-TODO-022 | 已完成（022 Done） | 已回写全部 Gate 通过结论与命令证据（2026-03-27）；BLK-01/02/03/05 状态已收口 |
-| I plugin bridge 前置 | PLAT-LNX-TODO-026 | 串行 | 为 plugin runtime bridge 提供稳定的动态库加载抽象，避免 plugin 直接绑定 dlopen/dlsym 细节 |
+| I plugin bridge 前置 | PLAT-LNX-TODO-026 | 已完成（026 Done） | 已提供稳定的动态库加载抽象，plugin 后续只需消费 IDynamicLibraryLoader，不再直接绑定 dlopen/dlsym 细节 |
 
 ### 7.2 必过门禁表
 
@@ -231,7 +231,7 @@
 | R-4 | 工厂 HAL 接线（Done） | 代码补丁 | R-2a 完成 | 已将 LinuxPlatformFactory::detect_capabilities 中 HAL 判定改为调用 HalAvailabilityBridge::probe_hal_availability（2026-03-27）；新增 #include "linux/HalAvailabilityBridge.h"；23 项 unit 测试全部通过，desktop_full/enable_hal=false 返回 DisabledByProfile，edge_balanced/enable_hal=true 返回 degraded/HalStubOnly | edge_balanced 配置下工厂产出 HAL degraded 状态（已验证） |
 | R-5 | PLAT-LNX-TODO-021 | 集成测试（Done） | R-3、R-4 完成 | 已扩展 desktop_full HAL disabled 与 edge_balanced HAL degraded/HalStubOnly 两档断言（2026-03-27）；ctest 通过，集成门禁已满足 | ctest --test-dir build-ci -R LinuxPlatformBootstrapIntegrationTest --output-on-failure 通过（两档用例） |
 | R-6 | PLAT-LNX-TODO-022 | 证据回写（Done） | R-1~R-5 全部完成 | 已回写全部 Gate 通过结论与命令证据（2026-03-27）；LinuxPlatformBootstrapIntegrationTest 1/1 Passed（双档）；unit 23/23 Passed；构建门通过 | 全部 Gate 均有通过结论与命令证据（已满足） |
-| R-7 | PLAT-LNX-TODO-026 | plugin runtime bridge 前置 | R-6 完成 | 新增 IDynamicLibraryLoader 与 PosixDynamicLibraryLoader，冻结 open/load_symbol/close/error_message 最小语义，作为 PLG-TODO-018 的直接前置 | PosixDynamicLibraryLoaderTest 可发现并通过，plugin 不再直接持有 dlopen/dlsym 细节 |
+| R-7 | PLAT-LNX-TODO-026 | plugin runtime bridge 前置（Done） | R-6 完成 | 已新增 IDynamicLibraryLoader 与 PosixDynamicLibraryLoader，冻结 open/load_symbol/close/error_message 最小语义，并完成 self-handle / missing symbol / close 幂等定向验证 | PosixDynamicLibraryLoaderTest 可发现并通过，plugin 不再直接持有 dlopen/dlsym 细节 |
 
 **关键说明：**
 

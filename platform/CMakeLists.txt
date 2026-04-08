@@ -9,6 +9,7 @@ target_sources(dasall_platform
     src/linux/LinuxFileSystemProvider.cpp
     src/linux/LinuxNetworkProvider.cpp
     src/linux/LinuxPlatformFactory.cpp
+    src/linux/PosixDynamicLibraryLoader.cpp
     src/linux/PosixThreadProvider.cpp
     src/linux/PosixTimerProvider.cpp
     src/linux/UnixIpcProvider.cpp
@@ -25,6 +26,8 @@ target_include_directories(dasall_platform
 target_link_libraries(dasall_platform
   PUBLIC
     dasall_contracts
+  PRIVATE
+    ${CMAKE_DL_LIBS}
 )
 
 dasall_apply_common_options(dasall_platform)
