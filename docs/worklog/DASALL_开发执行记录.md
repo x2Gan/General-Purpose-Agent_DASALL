@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #213
+
+- 日期：2026-04-08
+- 阶段：infra/watchdog 组件专项 TODO
+- 任务：WDG-TODO-021 注册 watchdog 的 unit 与 contract 测试入口
+- 状态：已完成
+
+### 任务选择
+
+1. `WDG-TODO-020` 推送完成后，按顺序进入 `WDG-TODO-021`。
+2. watchdog 的 unit/contract 测试实际上已在前几轮逐步落盘，但缺少统一的 watchdog 级发现标签和聚合执行入口；当前只能依赖零散测试名或全量 `unit/contract` 标签来间接发现。
+3. 本轮因此只做测试接线与发现性收口，不改动任何 watchdog 生产实现。
+
+### 改动
+
+1. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，抽出 `DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS` 列表，并新增 `dasall_watchdog_unit_tests` 聚合目标。
+2. 更新 [tests/unit/infra/CMakeLists.txt](../../tests/unit/infra/CMakeLists.txt)，为 watchdog 相关 unit tests 统一追加 `watchdog` / `watchdog-unit` 标签，使接口、对象、核心实现与桥接测试都进入同一发现域。
+3. 更新 [tests/contract/CMakeLists.txt](../../tests/contract/CMakeLists.txt)，抽出 `DASALL_WATCHDOG_CONTRACT_TEST_EXECUTABLE_TARGETS` 列表，为 3 个 watchdog contract tests 统一追加 `watchdog` / `watchdog-contract` 标签，并新增 `dasall_watchdog_contract_tests` 聚合目标。
+4. 更新 [docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_watchdog%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `WDG-TODO-021` 回写为 Done，并补充 watchdog label 发现性与聚合执行证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_watchdog_unit_tests dasall_watchdog_contract_tests`
+   - `ctest --test-dir build-ci -N -L watchdog`
+   - `ctest --test-dir build-ci --output-on-failure -L watchdog`
+2. 结果：
+   - `dasall_watchdog_unit_tests` 与 `dasall_watchdog_contract_tests` 聚合入口执行通过。
+   - `ctest -N -L watchdog` 能稳定发现 watchdog unit + contract 测试集合。
+   - `ctest --output-on-failure -L watchdog` 通过，证明 watchdog 测试已具备统一发现与执行入口。
+
+### 结果
+
+1. watchdog 现在不再依赖零散测试名发现；`watchdog` 已成为统一的测试发现标签，覆盖 unit 与 contract 两类门禁。
+2. `dasall_watchdog_unit_tests` 与 `dasall_watchdog_contract_tests` 为后续 022/023 提供了稳定的子集执行入口，使 watchdog 门禁可以在不拉起全仓 unit/contract 的情况下独立回归。
+
+### 下一步
+
+1. 用户指定的 `WDG-TODO-020、021` 已全部完成并可提交；watchdog 下一步自然转入 `WDG-TODO-022` 的 integration/failure/profile 用例落盘。
+
+### 风险
+
+1. 当前 021 只收口了 unit/contract 发现性，还没有建立 integration/failure/profile 的 watchdog 专属标签；这部分仍需在 022 中继续补齐，避免后续 gate 只能覆盖一半测试矩阵。
+
 ## 记录 #212
 
 - 日期：2026-04-08

@@ -528,7 +528,18 @@ target_link_libraries(dasall_contract_watchdog_error_mapping_test
     dasall_infra
 )
 
-set_tests_properties(WatchdogErrorMappingContractTest PROPERTIES LABELS "contract;smoke;watchdog")
+set(DASALL_WATCHDOG_CONTRACT_TEST_EXECUTABLE_TARGETS
+  dasall_contract_watchdog_timeout_decision_boundary_test
+  dasall_contract_watchdog_recovery_hint_request_boundary_test
+  dasall_contract_watchdog_error_mapping_test
+)
+
+set_tests_properties(
+  WatchdogTimeoutDecisionBoundaryContractTest
+  WatchdogRecoveryHintRequestBoundaryContractTest
+  WatchdogErrorMappingContractTest
+  PROPERTIES LABELS "contract;smoke;watchdog;watchdog-contract"
+)
 
 dasall_register_contract_test(
   dasall_contract_infrastructure_service_boundary_test
@@ -1754,6 +1765,11 @@ dasall_register_contract_test(
 )
 
 # Export the converged contract test target list to tests/CMakeLists.txt.
+add_custom_target(dasall_watchdog_contract_tests
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L watchdog-contract
+  DEPENDS ${DASALL_WATCHDOG_CONTRACT_TEST_EXECUTABLE_TARGETS}
+)
+
 set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
   "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
   PARENT_SCOPE

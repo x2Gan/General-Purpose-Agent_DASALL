@@ -2206,6 +2206,29 @@ dasall_apply_common_options(dasall_watchdog_metrics_bridge_unit_test)
 add_test(NAME WatchdogMetricsBridgeTest COMMAND dasall_watchdog_metrics_bridge_unit_test)
 set_tests_properties(WatchdogMetricsBridgeTest PROPERTIES LABELS "unit")
 
+set_tests_properties(
+  WatchdogServiceInterfaceTest
+  HeartbeatSourceInterfaceTest
+  TimeoutPolicyInterfaceTest
+  WatchedEntityDescriptorTest
+  HeartbeatSampleTest
+  TimeoutDecisionTest
+  WatchdogSnapshotTest
+  RecoveryHintRequestTest
+  WatchdogServiceFacadeTest
+  WatchdogErrorsTest
+  HeartbeatRegistryTest
+  HeartbeatIngestorTest
+  DeadlineWheelTest
+  TimeoutPolicyTest
+  TimeoutEventPublisherTest
+  RecoveryRequestEmitterTest
+  WatchdogConfigPolicyTest
+  WatchdogAuditBridgeTest
+  WatchdogMetricsBridgeTest
+  PROPERTIES LABELS "unit;watchdog;watchdog-unit"
+)
+
 add_executable(dasall_health_policy_interface_unit_test
   health/HealthPolicyInterfaceTest.cpp
 )

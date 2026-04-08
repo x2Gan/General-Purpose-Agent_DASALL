@@ -84,6 +84,28 @@ set(DASALL_OTA_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_boot_control_adapter_interface_unit_test
 )
 
+set(DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS
+	dasall_watchdog_service_interface_unit_test
+	dasall_heartbeat_source_interface_unit_test
+	dasall_timeout_policy_interface_unit_test
+	dasall_watched_entity_descriptor_unit_test
+	dasall_heartbeat_sample_unit_test
+	dasall_timeout_decision_unit_test
+	dasall_watchdog_snapshot_unit_test
+	dasall_watchdog_recovery_hint_request_unit_test
+	dasall_watchdog_service_facade_unit_test
+	dasall_watchdog_errors_unit_test
+	dasall_heartbeat_registry_unit_test
+	dasall_heartbeat_ingestor_unit_test
+	dasall_deadline_wheel_unit_test
+	dasall_timeout_policy_unit_test
+	dasall_timeout_event_publisher_unit_test
+	dasall_recovery_request_emitter_unit_test
+	dasall_watchdog_config_policy_unit_test
+	dasall_watchdog_audit_bridge_unit_test
+	dasall_watchdog_metrics_bridge_unit_test
+)
+
 set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_smoke_test
 	dasall_infra_context_unit_test
@@ -148,25 +170,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_health_evaluator_unit_test
 	dasall_recovery_hint_emitter_unit_test
 	dasall_health_errors_unit_test
-	dasall_watchdog_service_interface_unit_test
-	dasall_heartbeat_source_interface_unit_test
-	dasall_timeout_policy_interface_unit_test
-	dasall_watched_entity_descriptor_unit_test
-	dasall_heartbeat_sample_unit_test
-	dasall_timeout_decision_unit_test
-	dasall_watchdog_snapshot_unit_test
-	dasall_watchdog_recovery_hint_request_unit_test
-	dasall_watchdog_service_facade_unit_test
-	dasall_watchdog_errors_unit_test
-	dasall_heartbeat_registry_unit_test
-	dasall_heartbeat_ingestor_unit_test
-	dasall_deadline_wheel_unit_test
-	dasall_timeout_policy_unit_test
-	dasall_timeout_event_publisher_unit_test
-	dasall_recovery_request_emitter_unit_test
-	dasall_watchdog_config_policy_unit_test
-	dasall_watchdog_audit_bridge_unit_test
-	dasall_watchdog_metrics_bridge_unit_test
+	${DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_health_policy_interface_unit_test
 	dasall_health_probe_types_unit_test
 	dasall_health_recovery_hint_unit_test
@@ -200,4 +204,9 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_last_known_good_store_unit_test
 	dasall_last_known_good_store_impl_unit_test
 	PARENT_SCOPE
+)
+
+add_custom_target(dasall_watchdog_unit_tests
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L watchdog-unit
+	DEPENDS ${DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS}
 )
