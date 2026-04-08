@@ -36,41 +36,55 @@ constexpr std::string_view kCompatibilityReportPrefix = "plugin.compatibility://
     std::string evidence_ref,
     policy::PolicyDecisionRef policy_decision = {},
     std::string signature_report_ref = {},
-    std::string compatibility_report_ref = {}) {
+    std::string compatibility_report_ref = {},
+    std::optional<SignatureReport> signature_report = std::nullopt,
+    std::optional<CompatibilityReport> compatibility_report = std::nullopt) {
   auto result = PluginValidationResult::failure(map_plugin_error_code(error_code).result_code,
                                                 request.plugin_id,
                                                 std::move(message),
                                                 std::move(stage),
                                                 std::string(kPluginValidationSourceRef),
-                                                std::move(evidence_ref));
+                                                std::move(evidence_ref),
+                                                std::move(signature_report_ref),
+                                                std::move(compatibility_report_ref),
+                                                std::move(signature_report),
+                                                std::move(compatibility_report));
   result.policy_decision = std::move(policy_decision);
-  result.signature_report_ref = std::move(signature_report_ref);
-  result.compatibility_report_ref = std::move(compatibility_report_ref);
   return result;
 }
 
 [[nodiscard]] PluginValidationStageResult default_signature_stage(
     const PluginValidationRequest& request) {
+  const auto plugin_id = normalized_or_unknown(request.plugin_id);
+  const auto report_ref = build_ref(kSignatureReportPrefix, plugin_id, "skeleton-pass");
+  const auto evidence_ref =
+    build_ref(kValidationEvidencePrefix, plugin_id, "signature/skeleton-pass");
   return PluginValidationStageResult::success(
-      build_ref(kSignatureReportPrefix,
-                normalized_or_unknown(request.plugin_id),
-                "skeleton-pass"),
-      build_ref(kValidationEvidencePrefix,
-                normalized_or_unknown(request.plugin_id),
-                "signature/skeleton-pass"),
-      "plugin_signature_skeleton_pass");
+    report_ref,
+    evidence_ref,
+    "plugin_signature_skeleton_pass",
+    SignatureReport::success(std::string("plugin.validation.skeleton"),
+                 std::string("ed25519"),
+                 PluginTrustLevel::Internal,
+                 evidence_ref,
+                 std::string("plugin_signature_skeleton_pass")));
 }
 
 [[nodiscard]] PluginValidationStageResult default_compatibility_stage(
     const PluginValidationRequest& request) {
+  const auto plugin_id = normalized_or_unknown(request.plugin_id);
+  const auto report_ref =
+    build_ref(kCompatibilityReportPrefix, plugin_id, "skeleton-pass");
+  const auto evidence_ref =
+    build_ref(kValidationEvidencePrefix, plugin_id, "compatibility/skeleton-pass");
   return PluginValidationStageResult::success(
-      build_ref(kCompatibilityReportPrefix,
-                normalized_or_unknown(request.plugin_id),
-                "skeleton-pass"),
-      build_ref(kValidationEvidencePrefix,
-                normalized_or_unknown(request.plugin_id),
-                "compatibility/skeleton-pass"),
-      "plugin_compatibility_skeleton_pass");
+    report_ref,
+    evidence_ref,
+    "plugin_compatibility_skeleton_pass",
+    std::nullopt,
+    CompatibilityReport::success(std::string("x86_64-linux-gnu"),
+                   std::string("x86_64-linux-gnu@1.0.0"),
+                   evidence_ref));
 }
 
 }  // namespace
@@ -78,7 +92,9 @@ constexpr std::string_view kCompatibilityReportPrefix = "plugin.compatibility://
 PluginValidationStageResult PluginValidationStageResult::success(
     std::string report_ref,
     std::string evidence_ref,
-    std::string reason_code) {
+    std::string reason_code,
+    std::optional<SignatureReport> signature_report,
+    std::optional<CompatibilityReport> compatibility_report) {
   return PluginValidationStageResult{
       .passed = true,
       .report_ref = std::move(report_ref),
@@ -86,6 +102,8 @@ PluginValidationStageResult PluginValidationStageResult::success(
       .error_code = PluginErrorCode::ValidateFail,
       .reason_code = std::move(reason_code),
       .message = {},
+      .signature_report = std::move(signature_report),
+      .compatibility_report = std::move(compatibility_report),
   };
 }
 
@@ -94,7 +112,9 @@ PluginValidationStageResult PluginValidationStageResult::failure(
     std::string report_ref,
     std::string evidence_ref,
     std::string reason_code,
-    std::string message) {
+    std::string message,
+    std::optional<SignatureReport> signature_report,
+    std::optional<CompatibilityReport> compatibility_report) {
   return PluginValidationStageResult{
       .passed = false,
       .report_ref = std::move(report_ref),
@@ -102,11 +122,25 @@ PluginValidationStageResult PluginValidationStageResult::failure(
       .error_code = error_code,
       .reason_code = std::move(reason_code),
       .message = std::move(message),
+      .signature_report = std::move(signature_report),
+      .compatibility_report = std::move(compatibility_report),
   };
 }
 
 bool PluginValidationStageResult::is_valid() const {
   if (report_ref.empty() || evidence_ref.empty()) {
+    return false;
+  }
+
+  if (signature_report.has_value() && !signature_report->is_valid()) {
+    return false;
+  }
+
+  if (compatibility_report.has_value() && !compatibility_report->is_valid()) {
+    return false;
+  }
+
+  if (signature_report.has_value() && compatibility_report.has_value()) {
     return false;
   }
 
@@ -232,7 +266,9 @@ PluginValidationResult PluginValidationPipeline::validate(
                                "plugin.validate.signature",
                                signature_result.evidence_ref,
                                policy_decision,
-                               signature_result.report_ref);
+                               signature_result.report_ref,
+                               {},
+                               signature_result.signature_report);
   }
 
   const auto compatibility_result = run_compatibility_stage(request);
@@ -247,7 +283,9 @@ PluginValidationResult PluginValidationPipeline::validate(
                   request.plugin_id,
                   "compatibility/invalid-stage-result"),
         policy_decision,
-        signature_result.report_ref);
+        signature_result.report_ref,
+        {},
+        signature_result.signature_report);
   }
 
   if (!compatibility_result.passed) {
@@ -259,7 +297,9 @@ PluginValidationResult PluginValidationPipeline::validate(
                                compatibility_result.evidence_ref,
                                policy_decision,
                                signature_result.report_ref,
-                               compatibility_result.report_ref);
+                                 compatibility_result.report_ref,
+                                 signature_result.signature_report,
+                                 compatibility_result.compatibility_report);
   }
 
   return PluginValidationResult::success(
@@ -267,7 +307,9 @@ PluginValidationResult PluginValidationPipeline::validate(
       policy_decision,
       signature_result.report_ref,
       compatibility_result.report_ref,
-      build_ref(kValidationEvidencePrefix, request.plugin_id, "accepted"));
+                    build_ref(kValidationEvidencePrefix, request.plugin_id, "accepted"),
+                    signature_result.signature_report,
+                    compatibility_result.compatibility_report);
 }
 
 PluginPolicyRequest PluginValidationPipeline::make_policy_request(

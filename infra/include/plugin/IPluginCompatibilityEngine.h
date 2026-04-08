@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "plugin/PluginManifest.h"
+#include "plugin/PluginReports.h"
 
 namespace dasall::infra::plugin {
 
@@ -110,61 +111,6 @@ struct PluginCompatibilityCheckRequest {
 
   [[nodiscard]] bool is_valid() const {
     return manifest.is_valid() && host_abi.is_valid() && dependency_matrix.is_valid();
-  }
-};
-
-struct CompatibilityReport {
-  bool abi_ok = false;
-  bool api_ok = false;
-  bool dependency_ok = false;
-  std::vector<std::string> reason_codes;
-  std::string resolved_platform_tag = std::string(kPluginUnknownValue);
-  std::string required_abi = std::string(kPluginUnknownValue);
-  std::string evidence_ref;
-
-  [[nodiscard]] static CompatibilityReport success(std::string resolved_platform_tag,
-                                                   std::string required_abi,
-                                                   std::string evidence_ref) {
-    return CompatibilityReport{
-        .abi_ok = true,
-        .api_ok = true,
-        .dependency_ok = true,
-        .reason_codes = {},
-        .resolved_platform_tag = plugin_value_or_unknown(resolved_platform_tag),
-        .required_abi = plugin_value_or_unknown(required_abi),
-        .evidence_ref = std::move(evidence_ref),
-    };
-  }
-
-  [[nodiscard]] static CompatibilityReport failure(bool abi_ok,
-                                                   bool api_ok,
-                                                   bool dependency_ok,
-                                                   std::vector<std::string> reason_codes,
-                                                   std::string resolved_platform_tag,
-                                                   std::string required_abi,
-                                                   std::string evidence_ref) {
-    return CompatibilityReport{
-        .abi_ok = abi_ok,
-        .api_ok = api_ok,
-        .dependency_ok = dependency_ok,
-        .reason_codes = std::move(reason_codes),
-        .resolved_platform_tag = plugin_value_or_unknown(resolved_platform_tag),
-        .required_abi = plugin_value_or_unknown(required_abi),
-        .evidence_ref = std::move(evidence_ref),
-    };
-  }
-
-  [[nodiscard]] bool is_valid() const {
-    if (resolved_platform_tag == kPluginUnknownValue || !is_plugin_manifest_required_abi(required_abi) ||
-        evidence_ref.empty() || !has_unique_non_empty_plugin_dependency_refs(reason_codes)) {
-      return false;
-    }
-
-    if (abi_ok && api_ok && dependency_ok) {
-      return reason_codes.empty();
-    }
-
-    return !reason_codes.empty();
   }
 };
 

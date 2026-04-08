@@ -57,6 +57,42 @@ dasall::infra::policy::PolicyDecisionRef make_decision(
   };
 }
 
+dasall::infra::plugin::SignatureReport make_signature_pass_report(
+    const std::string& plugin_id,
+    std::string evidence_ref,
+    std::string reason_code = "plugin_signature_passed") {
+  return dasall::infra::plugin::SignatureReport::success(
+      std::string("signer:") + plugin_id,
+      std::string("ed25519"),
+      dasall::infra::plugin::PluginTrustLevel::Vendor,
+      std::move(evidence_ref),
+      std::move(reason_code));
+}
+
+dasall::infra::plugin::SignatureReport make_signature_fail_report(
+    const std::string& plugin_id,
+    std::string evidence_ref) {
+  return dasall::infra::plugin::SignatureReport::failure(
+      std::string("ed25519"),
+      dasall::infra::plugin::PluginSignatureChainStatus::SignatureInvalid,
+      dasall::infra::plugin::PluginTrustLevel::Vendor,
+      std::string("plugin_signature_failed"),
+      std::move(evidence_ref),
+      std::string("signer:") + plugin_id);
+}
+
+dasall::infra::plugin::CompatibilityReport make_compatibility_fail_report(
+    std::string evidence_ref) {
+  return dasall::infra::plugin::CompatibilityReport::failure(
+      false,
+      true,
+      false,
+      {std::string("plugin_abi_incompatible")},
+      std::string("x86_64-linux-gnu"),
+      std::string("x86_64-linux-gnu@1.2.0"),
+      std::move(evidence_ref));
+}
+
 class StaticSecurityPolicyManager final : public dasall::infra::policy::ISecurityPolicyManager {
  public:
   explicit StaticSecurityPolicyManager(dasall::infra::policy::PolicySnapshot snapshot)
@@ -176,6 +212,8 @@ void test_plugin_validation_pipeline_short_circuits_policy_denials() {
                "PluginValidationPipeline should not enter the signature stage after a policy denial");
   assert_equal(0, compatibility_calls,
                "PluginValidationPipeline should not enter the compatibility stage after a policy denial");
+  assert_true(!result.signature_report.has_value() && !result.compatibility_report.has_value(),
+              "PluginValidationPipeline should not fabricate shared report objects when the policy gate denies before downstream stages run");
   assert_true(policy_gate.call_count() == 1 && policy_gate.last_request_valid() &&
                   policy_gate.last_snapshot_valid(),
               "PluginValidationPipeline should drive IPluginPolicyGate with a valid minimal request and snapshot");
@@ -198,12 +236,14 @@ void test_plugin_validation_pipeline_returns_signature_report_on_signature_failu
       &policy_manager,
       &policy_gate,
       [](const dasall::infra::plugin::PluginValidationRequest& request) {
+        const auto evidence_ref = std::string("evidence://signature/") + request.plugin_id;
         return dasall::infra::plugin::PluginValidationStageResult::failure(
             PluginErrorCode::SignatureFail,
             std::string("report://signature/") + request.plugin_id,
-            std::string("evidence://signature/") + request.plugin_id,
+            evidence_ref,
             std::string("plugin_signature_failed"),
-            std::string("INF_E_PLUGIN_SIGNATURE_FAIL: plugin signature skeleton rejected request"));
+            std::string("INF_E_PLUGIN_SIGNATURE_FAIL: plugin signature skeleton rejected request"),
+            make_signature_fail_report(request.plugin_id, evidence_ref));
       },
       [&compatibility_calls](const dasall::infra::plugin::PluginValidationRequest& request) {
         ++compatibility_calls;
@@ -220,8 +260,12 @@ void test_plugin_validation_pipeline_returns_signature_report_on_signature_failu
   assert_true(result.policy_decision.is_valid() &&
                   result.policy_decision.decision == dasall::infra::policy::PolicyDecision::Allow,
               "PluginValidationPipeline should preserve the passing policy decision when the signature stage fails later");
-  assert_true(!result.signature_report_ref.empty() && result.compatibility_report_ref.empty(),
-              "PluginValidationPipeline should surface only the failing signature report ref on signature rejection");
+    assert_true(!result.signature_report_ref.empty() && result.compatibility_report_ref.empty() &&
+            result.signature_report.has_value() &&
+            result.signature_report->chain_status ==
+              dasall::infra::plugin::PluginSignatureChainStatus::SignatureInvalid &&
+            !result.compatibility_report.has_value(),
+          "PluginValidationPipeline should surface the failing shared signature report object together with its ref while keeping compatibility empty on signature rejection");
   assert_equal(0, compatibility_calls,
                "PluginValidationPipeline should stop before the compatibility stage when signature verification fails");
   assert_true(result.references_only_contract_error_types(),
@@ -243,26 +287,35 @@ void test_plugin_validation_pipeline_returns_compatibility_report_on_compatibili
       &policy_manager,
       &policy_gate,
       [](const dasall::infra::plugin::PluginValidationRequest& request) {
+      const auto evidence_ref = std::string("evidence://signature/") + request.plugin_id;
         return dasall::infra::plugin::PluginValidationStageResult::success(
             std::string("report://signature/") + request.plugin_id,
-            std::string("evidence://signature/") + request.plugin_id,
-            std::string("plugin_signature_passed"));
+        evidence_ref,
+        std::string("plugin_signature_passed"),
+        make_signature_pass_report(request.plugin_id, evidence_ref));
       },
       [](const dasall::infra::plugin::PluginValidationRequest& request) {
+      const auto evidence_ref = std::string("evidence://compat/") + request.plugin_id;
         return dasall::infra::plugin::PluginValidationStageResult::failure(
             PluginErrorCode::CompatibilityFail,
             std::string("report://compat/") + request.plugin_id,
-            std::string("evidence://compat/") + request.plugin_id,
+        evidence_ref,
             std::string("plugin_abi_incompatible"),
-            std::string("INF_E_PLUGIN_COMPATIBILITY_FAIL: plugin compatibility skeleton rejected request"));
+        std::string("INF_E_PLUGIN_COMPATIBILITY_FAIL: plugin compatibility skeleton rejected request"),
+        std::nullopt,
+        make_compatibility_fail_report(evidence_ref));
       });
 
   const auto result = pipeline.validate(make_request());
 
   assert_true(!result.accepted && result.result_code == ResultCode::ValidationFieldMissing,
               "PluginValidationPipeline should map compatibility stage failures to the frozen validation error category");
-  assert_true(!result.signature_report_ref.empty() && !result.compatibility_report_ref.empty(),
-              "PluginValidationPipeline should preserve both the signature pass report and the failing compatibility report ref");
+  assert_true(!result.signature_report_ref.empty() && !result.compatibility_report_ref.empty() &&
+                  result.signature_report.has_value() &&
+                  result.compatibility_report.has_value() &&
+                  !result.compatibility_report->abi_ok &&
+                  !result.compatibility_report->dependency_ok,
+              "PluginValidationPipeline should preserve both shared report objects and their refs when compatibility fails after signature passes");
   assert_true(result.references_only_contract_error_types(),
               "PluginValidationPipeline compatibility failures should remain inside contracts ResultCode/ErrorInfo types");
 }
@@ -280,8 +333,14 @@ void test_plugin_validation_pipeline_accepts_when_all_three_stages_pass() {
 
   const auto result = pipeline.validate(make_request());
 
-  assert_true(result.accepted && result.has_traceable_refs(),
-              "PluginValidationPipeline should aggregate policy/signature/compat refs into a traceable success result when all stages pass");
+  assert_true(result.accepted && result.has_traceable_refs() &&
+                  result.signature_report.has_value() &&
+                  result.signature_report->verified &&
+                  result.compatibility_report.has_value() &&
+                  result.compatibility_report->abi_ok &&
+                  result.compatibility_report->api_ok &&
+                  result.compatibility_report->dependency_ok,
+              "PluginValidationPipeline should aggregate shared signature and compatibility report objects together with traceable refs when all stages pass");
 }
 
 }  // namespace

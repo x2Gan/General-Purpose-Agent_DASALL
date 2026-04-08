@@ -69,6 +69,12 @@ dasall_register_plugin_contract_test(
 )
 
 dasall_register_plugin_contract_test(
+  dasall_contract_plugin_reports_boundary_test
+  PluginReportsBoundaryContractTest
+  ../smoke/PluginReportsBoundaryContractTest.cpp
+)
+
+dasall_register_plugin_contract_test(
   dasall_contract_plugin_validation_pipeline_boundary_test
   PluginValidationPipelineBoundaryContractTest
   ../smoke/PluginValidationPipelineBoundaryContractTest.cpp

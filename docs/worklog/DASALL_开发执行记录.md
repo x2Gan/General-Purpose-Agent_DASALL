@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #204
+
+- 日期：2026-04-08
+- 阶段：infra/plugin 组件专项 TODO
+- 任务：PLG-TODO-017 shared reports 与 validation aggregation 收口
+- 状态：已完成
+
+### 任务选择
+
+1. PLG-TODO-016 已完成并推送后，`PLG-TODO-017` 成为 014~017 串行链上的最后一个对象/接口冻结任务。
+2. 017 的边界已经收敛为“shared report public header + manager/pipeline optional aggregation + unit/contract tests”，不需要在本轮提前进入 load/runtime bridge 实现。
+
+### 改动
+
+1. 新增 [infra/include/plugin/PluginReports.h](../../infra/include/plugin/PluginReports.h)，统一定义 `PluginSignatureChainStatus`、`is_plugin_signature_algorithm_allowed()`、`SignatureReport` 与 `CompatibilityReport`。
+2. 更新 [infra/include/plugin/IPluginSignatureVerifier.h](../../infra/include/plugin/IPluginSignatureVerifier.h) 与 [infra/include/plugin/IPluginCompatibilityEngine.h](../../infra/include/plugin/IPluginCompatibilityEngine.h)，改为复用 shared report header，保持既有接口签名不变。
+3. 更新 [infra/include/plugin/IPluginManager.h](../../infra/include/plugin/IPluginManager.h)，在保留 `signature_report_ref` / `compatibility_report_ref` 的同时新增 optional `signature_report` / `compatibility_report`，并收紧 `has_traceable_refs()` 约束。
+4. 更新 [infra/src/plugin/PluginValidationPipeline.h](../../infra/src/plugin/PluginValidationPipeline.h) 与 [infra/src/plugin/PluginValidationPipeline.cpp](../../infra/src/plugin/PluginValidationPipeline.cpp)，把 stage/result 扩展为 optional shared report aggregation，并保持失败/成功分支的 ref traceability。
+5. 更新 [infra/CMakeLists.txt](../../infra/CMakeLists.txt)，把 `PluginReports.h` 纳入 plugin public header 列表。
+6. 更新 [tests/unit/infra/plugin/CMakeLists.txt](../../tests/unit/infra/plugin/CMakeLists.txt)，注册 `dasall_plugin_reports_unit_test`。
+7. 新增 [tests/unit/infra/plugin/PluginReportsTest.cpp](../../tests/unit/infra/plugin/PluginReportsTest.cpp)，覆盖 shared report 对象、chain status token、algorithm allow-list 与 compatibility failure reason code 负例。
+8. 更新 [tests/unit/infra/plugin/PluginManagerInterfaceTest.cpp](../../tests/unit/infra/plugin/PluginManagerInterfaceTest.cpp) 与 [tests/unit/infra/plugin/PluginValidationPipelineTest.cpp](../../tests/unit/infra/plugin/PluginValidationPipelineTest.cpp)，验证 manager/pipeline 的 optional object + ref 双承载聚合边界。
+9. 更新 [tests/contract/plugin/CMakeLists.txt](../../tests/contract/plugin/CMakeLists.txt)，注册 `dasall_contract_plugin_reports_boundary_test`。
+10. 新增 [tests/contract/smoke/PluginReportsBoundaryContractTest.cpp](../../tests/contract/smoke/PluginReportsBoundaryContractTest.cpp)，验证 shared reports 不泄漏 contracts/policy-only 字段。
+11. 更新 [tests/contract/smoke/PluginManagerBoundaryContractTest.cpp](../../tests/contract/smoke/PluginManagerBoundaryContractTest.cpp) 与 [tests/contract/smoke/PluginValidationPipelineBoundaryContractTest.cpp](../../tests/contract/smoke/PluginValidationPipelineBoundaryContractTest.cpp)，验证 manager/pipeline 聚合边界在新增 shared report object 后仍保持 contracts 错误面稳定。
+12. 新增 [docs/todos/infrastructure/deliverables/PLG-TODO-017-PluginReports与聚合收敛.md](../todos/infrastructure/deliverables/PLG-TODO-017-PluginReports%E4%B8%8E%E8%81%9A%E5%90%88%E6%94%B6%E6%95%9B.md)，记录设计结论、Design -> Build 映射与风险边界。
+13. 更新 [docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_plugin%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，将 `PLG-TODO-017` 回写为 Done，并补充本轮执行记录与版本记录 v1.18。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_infra dasall_plugin_signature_verifier_interface_unit_test dasall_plugin_compatibility_engine_interface_unit_test dasall_plugin_reports_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_validation_pipeline_unit_test dasall_contract_plugin_signature_verifier_boundary_test dasall_contract_plugin_compatibility_engine_boundary_test dasall_contract_plugin_reports_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_validation_pipeline_boundary_test`
+   - `ctest --test-dir build-ci -N -R "Plugin(SignatureVerifierInterfaceCompileTest|CompatibilityEngineInterfaceCompileTest|ReportsTest|ManagerInterfaceCompileTest|ValidationPipelineTest|SignatureVerifierBoundaryContractTest|CompatibilityEngineBoundaryContractTest|ReportsBoundaryContractTest|ManagerBoundaryContractTest|ValidationPipelineBoundaryContractTest)"`
+   - `ctest --test-dir build-ci --output-on-failure -R "Plugin(SignatureVerifierInterfaceCompileTest|CompatibilityEngineInterfaceCompileTest|ReportsTest|ManagerInterfaceCompileTest|ValidationPipelineTest|SignatureVerifierBoundaryContractTest|CompatibilityEngineBoundaryContractTest|ReportsBoundaryContractTest|ManagerBoundaryContractTest|ValidationPipelineBoundaryContractTest)"`
+2. 结果：
+   - `dasall_infra` 与 017 涉及的 10 个 interface/unit/contract targets 全部构建通过。
+   - 10 个 CTest 用例全部进入测试图。
+   - 10/10 tests passed。
+
+### 结果
+
+1. plugin public boundary 现在拥有统一的 shared report 承载，SignatureReport / CompatibilityReport 不再分别散落在 verifier / compatibility header 中。
+2. PluginValidationPipeline 与 IPluginManager 现在能同时返回 optional shared report object 与 traceable ref，017 以加法方式完成 aggregation 收口，没有破坏 015/016/005 已冻结的 ref 边界。
+3. 用户请求的 014~017 串行冻结链已全部完成；当前 plugin 下一阶段阻塞切换为 PluginRuntimeBridge 与真实 load/runtime 集成约束。
+
+### 下一步
+
+1. 评估 PluginRuntimeBridge 与 load/runtime 集成的下一轮原子任务拆解，先冻结平台桥接约束再进入完整装载实现。
+
+### 风险
+
+1. 当前采用 optional object + ref 双承载以保持向后兼容；若未来需要移除 ref-only 字段，必须另起 breaking review 任务并显式给出迁移窗口。
+
 ## 记录 #203
 
 - 日期：2026-04-08

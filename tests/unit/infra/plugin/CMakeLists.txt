@@ -74,6 +74,12 @@ dasall_register_plugin_unit_test(
 )
 
 dasall_register_plugin_unit_test(
+  dasall_plugin_reports_unit_test
+  PluginReportsTest
+  PluginReportsTest.cpp
+)
+
+dasall_register_plugin_unit_test(
   dasall_plugin_validation_pipeline_unit_test
   PluginValidationPipelineTest
   PluginValidationPipelineTest.cpp

@@ -33,6 +33,22 @@ dasall::infra::policy::PolicyDecisionRef make_policy_decision() {
   };
 }
 
+dasall::infra::plugin::SignatureReport make_signature_report(std::string evidence_ref) {
+  return dasall::infra::plugin::SignatureReport::success(
+      std::string("signer:plugin.echo"),
+      std::string("ed25519"),
+      dasall::infra::plugin::PluginTrustLevel::Internal,
+      std::move(evidence_ref),
+      std::string("plugin_signature_verified"));
+}
+
+dasall::infra::plugin::CompatibilityReport make_compatibility_report(std::string evidence_ref) {
+  return dasall::infra::plugin::CompatibilityReport::success(
+      std::string("x86_64-linux-gnu"),
+      std::string("x86_64-linux-gnu@1.2.0"),
+      std::move(evidence_ref));
+}
+
 class NullPluginManager final : public dasall::infra::plugin::IPluginManager {
  public:
   [[nodiscard]] dasall::infra::plugin::PluginCatalog discover(
@@ -59,12 +75,16 @@ class NullPluginManager final : public dasall::infra::plugin::IPluginManager {
           "plugin.validation.invalid-request");
     }
 
+    const auto signature_evidence_ref = std::string("evidence://signature/plugin.echo");
+    const auto compatibility_evidence_ref = std::string("evidence://compat/plugin.echo");
     return dasall::infra::plugin::PluginValidationResult::success(
         request.plugin_id,
         make_policy_decision(),
         std::string("signature-report:plugin.echo"),
         std::string("compat-report:plugin.echo"),
-        std::string("observation:plugin.echo.validate"));
+      std::string("observation:plugin.echo.validate"),
+      make_signature_report(signature_evidence_ref),
+      make_compatibility_report(compatibility_evidence_ref));
   }
 
   dasall::infra::plugin::PluginLoadResult load(
@@ -151,8 +171,10 @@ void test_plugin_manager_interface_freezes_manager_surface_and_boundary_types() 
       .package_ref = std::string("package:plugin.echo@1"),
       .profile_id = std::string("desktop_full"),
   });
-  assert_true(validation.accepted && validation.has_traceable_refs(),
-              "IPluginManager validate should freeze a traceable boundary result with policy/signature/compat refs");
+    assert_true(validation.accepted && validation.has_traceable_refs() &&
+            validation.signature_report.has_value() &&
+            validation.compatibility_report.has_value(),
+          "IPluginManager validate should freeze a traceable boundary result with shared signature and compatibility report objects plus refs");
 
   const auto load = manager.load("plugin.echo",
                                  dasall::infra::plugin::PluginLoadOptions{

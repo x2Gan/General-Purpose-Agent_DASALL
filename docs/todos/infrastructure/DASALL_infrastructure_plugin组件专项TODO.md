@@ -3,7 +3,7 @@
 最近更新时间：2026-04-08  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/plugin（infra/src/plugin、infra/include/plugin）  
-当前结论：**可继续串行推进 017，最细可安全落到 L2（数据结构/接口级）；014、015、016 已完成，完整装载实现仍暂不进入**
+当前结论：**014~017 已全部完成，最细稳定边界已落到 L2（数据结构/接口级）；完整装载实现仍暂不进入，下一阶段转向 PluginRuntimeBridge / load-runtime 集成解阻**
 
 ---
 
@@ -19,7 +19,7 @@
 6. docs/plans/DASALL_工程落地实现步骤指引.md
 7. docs/development/DASALL_工程协作与编码规范.md
 8. docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md（INF-TODO-019、INF-BLK-09）
-9. 当前仓库代码现状：infra/src/plugin、infra/include/plugin、tests/unit/infra/plugin 与 tests/contract/plugin 已建立；017 仍待串行推进
+9. 当前仓库代码现状：infra/src/plugin、infra/include/plugin、tests/unit/infra/plugin 与 tests/contract/plugin 已建立；014~017 已完成，shared report 与 validation aggregation 边界已落盘
 
 本文档目的是将 plugin 详细设计转化为：
 
@@ -91,13 +91,13 @@
 |---|---|---|---|
 | infra/src/plugin 子目录 | 已建立并接入 dasall_infra 构建 | High | Done |
 | infra/include/plugin 接口头文件 | 已建立基础接口与对象头文件集合 | High | Done |
-| PluginDescriptor/Manifest/Catalog 对象 | Descriptor/Catalog/Manifest 已落盘；Report 对象待 017 | High | P1 |
+| PluginDescriptor/Manifest/Catalog 对象 | Descriptor/Catalog/Manifest/Reports 已落盘 | High | Done |
 | IPluginManager 接口 | 已落盘最小 request/result 边界与 skeleton | High | Done |
 | PluginManifest schema_version 与字段冻结 | 已由详细设计冻结并在 PluginManifest.h 落盘 | High | Done |
 | ABI 兼容矩阵规则 | 已冻结规则并在 IPluginCompatibilityEngine.h 落盘 host ABI / matrix boundary | High | Done |
 | 签名校验链路规范 | 已冻结规则并在 IPluginSignatureVerifier.h 落盘最小 verifier boundary | High | Done |
 | Plugin 单元测试基线 | 已建立 tests/unit/infra/plugin 并完成组件级注册 | Medium | Done |
-| PluginValidationPipeline 实现 | 三检骨架已落盘，待 017 接入 object-based report aggregation | Medium | P1 |
+| PluginValidationPipeline 实现 | 三检骨架与 shared report aggregation 已落盘 | Medium | Done |
 | PluginAuditAdapter 实现 | 高风险动作审计适配已落盘 | Medium | Done |
 
 ---
@@ -127,12 +127,12 @@
 | PluginDescriptor | 详设 6.5 | L2 | 字段清单、必填约束、治理状态机、contracts 映射 | 序列化格式 | 直接拆数据结构任务 |
 | PluginManifest | 详设 6.5；PLG-TODO-014 | L2 | schema_version、required_abi、capabilities、扩展命名空间及 unit/contract 守卫已落盘 | parser/serialization 中间格式 | 对象冻结已完成；若后续需要 parser，另拆原子任务 |
 | PluginCatalog | 详设 6.3、6.5 | L2 | 结构字段、rejected_plugins 与拒绝原因链接 | 大小限制、导出限制 | 直接拆数据结构任务 |
-| SignatureReport | 详设 6.5、6.8 | L2 | 字段清单、验签失败禁止 load、链状态说明、trust policy v1 已冻结 | validation aggregation public boundary 尚未落盘 | 直接拆数据结构，待 017 落盘 |
-| CompatibilityReport | 详设 6.5、6.8 | L2 | 字段清单、三检结果聚合、reason codes、ABI matrix v1 已冻结 | validation aggregation public boundary 尚未落盘 | 直接拆数据结构，待 017 落盘 |
+| SignatureReport | 详设 6.5、6.8；PLG-TODO-017 | L2 | shared report header、chain_status 词典、algorithm allow-list 与 manager/pipeline optional aggregation 已落盘 | 外部导出/序列化格式 | 对象冻结已完成；若后续需要 export schema，另拆原子任务 |
+| CompatibilityReport | 详设 6.5、6.8；PLG-TODO-017 | L2 | shared report header、abi/api/dependency 三检语义与 manager/pipeline optional aggregation 已落盘 | 外部导出/序列化格式 | 对象冻结已完成；若后续需要 export schema，另拆原子任务 |
 | IPluginManager | 详设 6.6；infra 系统 6.6 | L2 | 方法名、输入输出对象、主流程调用关系 | 内部错误重试策略、timeout 约定、exception 映射 | 直接拆接口级任务，实现保持 skeleton |
 | IPluginPolicyGate | 详设 6.3、6.6 | L2 | 方法名、输入（PolicySnapshot、allowlist）、输出 | 裁定优先级冲突时的详细规则 | 直接拆接口级任务，依赖 INF-TODO-017 |
-| IPluginSignatureVerifier | 详设 6.3、6.6；PLG-TODO-015 | L2 | verify(request)->SignatureReport、trust anchor 输入面、chain_status 词典及 unit/contract 守卫已落盘 | 与 validation aggregation 的正式接线仍待 017 收口 | 接口冻结已完成；后续只允许在保持签名不变前提下接实现 |
-| IPluginCompatibilityEngine | 详设 6.3、6.6；PLG-TODO-016 | L2 | check(request)->CompatibilityReport、platform tag allow-list、strict/non-strict matrix 与 host/dependency snapshot 守卫已落盘 | 与 validation aggregation 的正式接线仍待 017 收口 | 接口冻结已完成；后续只允许在保持签名不变前提下接实现 |
+| IPluginSignatureVerifier | 详设 6.3、6.6；PLG-TODO-015 | L2 | verify(request)->SignatureReport、trust anchor 输入面、chain_status 词典、shared report 头复用及 unit/contract 守卫已落盘 | 真实验签实现与外部 trust store 读取链 | 接口冻结已完成；后续只允许在保持签名不变前提下接实现 |
+| IPluginCompatibilityEngine | 详设 6.3、6.6；PLG-TODO-016 | L2 | check(request)->CompatibilityReport、platform tag allow-list、strict/non-strict matrix、shared report 头复用与 host/dependency snapshot 守卫已落盘 | 真实 host ABI 识别与外部依赖解析实现 | 接口冻结已完成；后续只允许在保持签名不变前提下接实现 |
 | PluginValidationPipeline | 详设 6.3、6.7/6.8 | L2 | 触发时机、三检顺序、失败枝条、输出聚合对象 | 并行 vs 串行执行约束、timeout 编排、回滚能力 | 直接拆流程任务，依赖接口与 INF-TODO-017 |
 | PluginLifecycleManager | 详设 6.7/6.8 | L2 | 状态机图、load/unload/enable/disable 转移、故障恢复 | handle 释放细节、signal 处理、真实平台桥接 | 可直接拆流程骨架任务；真实 runtime bridge 仍受 PLG-BLK-04 约束 |
 | PluginAuditAdapter | 详设 6.8、6.10 | L2 | 高风险动作清单、审计字段最小集、强制审计条件 | 审计导出格式、脱敏规则 | 直接拆适配器任务，依赖 INF-TODO-016 |
@@ -148,8 +148,8 @@
 | PluginCatalog 结构定义 | 详设 6.5、6.3 | 数据结构 | P0 | Done | PLG-TODO-002 | discovered_plugins[] + rejected_plugins[] 清晰，可直接拆 |
 | IPluginManager 接口冻结与骨架 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Done | PLG-TODO-003 | 已通过最小 request/result 边界收敛修复签名缺口，接口与 skeleton 可直接编译验证 |
 | IPluginPolicyGate 接口定义 | 详设 6.6；infra 系统 6.6 | 接口 | P0 | Done | PLG-TODO-004 | 已通过最小 PluginPolicyRequest 收敛 manifest/profile 缺口，并复用已冻结的 PolicySnapshot/PolicyDecisionRef 边界 |
-| SignatureReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Not Started | PLG-TODO-017 | 已于 2026-04-07 通过 shared blocker freeze 明确字段、chain_status 与 contracts 留痕边界，等待对象落盘 |
-| CompatibilityReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Not Started | PLG-TODO-017 | 已于 2026-04-07 通过 shared blocker freeze 明确 abi/api/dependency 三检与 reason_codes 语义，等待对象落盘 |
+| SignatureReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Done | PLG-TODO-017 | 已通过 PluginReports.h 与 manager/pipeline optional aggregation 冻结 chain_status、reason_code 与 traceable ref 双承载边界 |
+| CompatibilityReport 对象冻结 | 详设 6.5、6.8 | 数据结构 | P1 | Done | PLG-TODO-017 | 已通过 PluginReports.h 与 manager/pipeline optional aggregation 冻结 abi/api/dependency 三检、reason_codes 与 traceable ref 双承载边界 |
 | IPluginSignatureVerifier 接口 | 详设 6.6 | 接口 | P1 | Done | PLG-TODO-015 | 已通过 IPluginSignatureVerifier.h + compile/boundary tests 冻结 signature/trust 最小输入输出对象 |
 | IPluginCompatibilityEngine 接口 | 详设 6.6 | 接口 | P1 | Done | PLG-TODO-016 | 已通过 IPluginCompatibilityEngine.h + matrix/boundary tests 冻结 host ABI snapshot、dependency snapshot 与 CompatibilityReport |
 | PluginManifest 对象冻结 | 详设 6.5；INF-BLK-09 | 数据结构 | P0 | Done | PLG-TODO-014 | 已通过 PluginManifest.h + unit/contract 守卫落盘 schema_version、required_abi 与 extension namespace 冻结边界 |
@@ -185,14 +185,14 @@
 | PLG-TODO-012 | Done | 编写 plugin 失败注入与可观测性测试 | 详设 9.1、9.2 | 详设 9.1 failure injection 场景、9.2 quality gates | L2 | tests/ 下新增 PluginSignatureFailureTest、PluginCompatibilityFailureTest、PluginLoadTimeoutTest 等，验证失败路径有日志/审计/指标 | integration：当 validate fail 时有 AuditEvent、当 load fail 时有 CompatibilityReport | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_audit_adapter_unit_test dasall_plugin_failure_observability_integration_test && ctest --test-dir build-ci -N -L integration | grep -E "Plugin(AuditTraceIntegrationTest|FailureObservabilityIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "PluginAuditAdapterTest|PluginFailureObservabilityIntegrationTest"` | PLG-TODO-005、PLG-TODO-006、PLG-TODO-011 | 无 | 无 | 失败注入测试源文件、执行记录 | 已完成（2026-04-07）：新增 PluginFailureObservabilityIntegrationTest，并把 PluginValidationPipeline 接入 signature/compatibility failure audit；定向 build、discoverability 与 ctest 验证通过 |
 | PLG-TODO-013 | Done | 编写 Profile 插件治理行为矩阵测试 | 蓝图 5.1、5.2；详设 6.9 | 详设 6.9 配置项与默认策略、蓝图 3.13 profile 机制 | L2 | tests/ 下新增 ProfilePluginMatrixTest.cpp，覆盖 desktop_full/edge_balanced/edge_minimal 三档 profile 下 plugin 配置项的行为差异验证 | compatibility：三档 profile 下 plugin.allowlist、infra.plugin.signature.required、infra.plugin.abi.strict_mode 等行为一致性检查 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_profile_runtime_policy_schema_test dasall_profile_plugin_matrix_integration_test && ctest --test-dir build-ci -N | grep -E "Profile(RuntimePolicySchemaContractTest|PluginMatrixIntegrationTest)" && ctest --test-dir build-ci --output-on-failure -R "ProfileRuntimePolicySchemaContractTest|ProfilePluginMatrixIntegrationTest"` | 详设 9.1 里程碑 M4（all 标准对象与接口冻结） | 无 | 无 | profile 矩阵测试源文件、行为表 | 已完成（2026-04-07）：补齐五档 profile 的 infra.plugin.* schema，新增 ProfilePluginMatrixIntegrationTest，并通过 schema contract + integration 冻结三档 profile 的治理矩阵 |
 
-### 6.2 原阻塞任务（已于 2026-04-07 解阻，当前可串行推进）
+### 6.2 原阻塞任务（已于 2026-04-08 全部完成）
 
 | ID | 状态 | 任务标题 | 来源依据 | 阻塞原因 | 设计锚点 | 解阻条件 | 最小解阻动作 | 当前执行建议 | 解阻后任务号 |
 |---|---|---|---|---|---|---|---|---|---|
 | PLG-TODO-014 | Done | 定义 PluginManifest 对象与 schema 冻结 | 详设 6.5；INF-BLK-09 | shared blocker 已解除，本轮已完成 schema v1.0 对象落盘 | 详设 6.5；6.9 | 已新增 public header、unit/contract 与 deliverable 证据 | docs/todos/infrastructure/deliverables/PLG-TODO-014-PluginManifest设计收敛.md | 已完成；本轮无需再执行 | 完成后进入 015 |
 | PLG-TODO-015 | Done | 定义 IPluginSignatureVerifier 与签名链路规范 | 详设 6.6；INF-BLK-09 | shared blocker 已解除，本轮已完成 verifier boundary 落盘 | 详设 6.6、6.8、9.1 | 已新增 public header、signature/trust 最小输入输出对象与 compile/boundary tests | docs/todos/infrastructure/deliverables/PLG-TODO-015-IPluginSignatureVerifier设计收敛.md | 已完成；本轮无需再执行 | 完成后进入 016 |
 | PLG-TODO-016 | Done | 定义 IPluginCompatibilityEngine 与 ABI 兼容矩阵 | 详设 6.6；INF-BLK-09 | shared blocker 已解除，本轮已完成 compatibility boundary 落盘 | 详设 6.6、6.8、6.9 | 已新增 public header、host ABI/dependency 最小输入对象、CompatibilityReport 与 matrix/boundary tests | docs/todos/infrastructure/deliverables/PLG-TODO-016-IPluginCompatibilityEngine设计收敛.md | 已完成；本轮无需再执行 | 完成后进入 017 |
-| PLG-TODO-017 | Not Started | 定义 SignatureReport 与 CompatibilityReport 对象 | 详设 6.5、6.8；INF-BLK-09 | 上游 manifest/signature/ABI 规则已冻结，report 字段与 reason_code 边界已明确 | 详设 6.5、6.8 | 落盘两个 report 对象及 validation aggregation 单测/边界测试 | docs/todos/infrastructure/deliverables/PLG-BLK-01-03-INF-BLK-09-plugin对象与校验链路冻结.md | 本任务可直接执行；依赖 014/015/016 先完成 | 完成后进入装载闭环实现准备 |
+| PLG-TODO-017 | Done | 定义 SignatureReport 与 CompatibilityReport 对象 | 详设 6.5、6.8；INF-BLK-09 | shared blocker 已解除，本轮已完成 shared report 与 validation aggregation 收口 | 详设 6.5、6.8 | 已抽取 shared report public header，并通过 manager/pipeline unit/contract 验证 optional object + ref 双承载边界 | docs/todos/infrastructure/deliverables/PLG-TODO-017-PluginReports与聚合收敛.md | 已完成；本轮无需再执行 | 完成后评估 load/runtime bridge 相关实现 |
 
 ---
 
@@ -207,7 +207,7 @@
 | **Phase 3：构建与测试入口** | PLG-TODO-008、009、010 | ✓ 并行可行（以 Phase 1-2 完成为前置） | CMake 与测试注册，不互相依赖 |
 | **Phase 4：流程骨架与观测适配** | PLG-TODO-005、006、011 | ✓ 并行可行（以 Phase 2-3 完成为前置） | 三个流程骨架可独立推进，仅逻辑约束 |
 | **Phase 5：测试完善与兼容性验证** | PLG-TODO-012、013 | ✓ 并行可行（以 Phase 4 完成为前置） | 失败注入与 profile 矩阵测试可并行 |
-| **Phase 6：对象与接口冻结续航** | PLG-TODO-014、015、016、017 | ✓ 串行建议：017（014、015、016 已完成） | INF-BLK-09 已于 2026-04-07 解阻，当前按共享冻结结论顺序推进更稳妥 |
+| **Phase 6：对象与接口冻结续航** | PLG-TODO-014、015、016、017 | ✓ 已完成：014 -> 015 -> 016 -> 017 | INF-BLK-09 shared blocker 已解除，四个串行冻结任务均已完成 |
 
 ### 7.2 关键行为路径（Critical Path）
 
@@ -370,11 +370,11 @@ PLG-TODO-014/015/016/017 进展
 
 ### 11.4 下一步建议
 
-#### 立即启动（无前置）
+#### 下一阶段建议
 
-1. ✓ 进入 PLG-TODO-017，统一落盘 SignatureReport / CompatibilityReport 的正式公共承载与 validation aggregation 测试。
-2. ✓ 017 完成后再评估是否进入 load/runtime bridge 相关实现轮次。
-3. ✓ 若 017 触及 public aggregation breaking 面，需显式记录 review 结论与回退边界。
+1. ✓ 评估 PluginRuntimeBridge 与 load/runtime 集成的下一轮原子任务拆解，先补平台桥接约束再进入完整装载实现。
+2. ✓ 若后续需要从 optional object + ref 双承载迁移到纯对象聚合，必须单独记录 breaking review 结论、迁移窗口与回退边界。
+3. ✓ integration/end-to-end 级别的 plugin load 联调只在 platform/runtime bridge 冻结后推进。
 
 #### 暂不启动
 
@@ -404,7 +404,7 @@ PLG-TODO-014/015/016/017 进展
 
 - **M1（Week 1-2）**：所有 L2 对象与接口冻结，ctest 发现 plugin 用例数 ≥5
 - **M2（Week 2-3）**：Phase 4 完成，PluginValidationPipeline 与 PluginLifecycleManager 骨架可编译可测
-- **M3（Week 3-4）**：manifest/ABI/signature shared blocker 已解除，PLG-TODO-014/015/016 已完成，017 进入串行落盘阶段
+- **M3（Week 3-4）**：manifest/ABI/signature shared blocker 已解除，PLG-TODO-014/015/016/017 全部完成，plugin public boundary 已收敛到 shared reports + optional aggregation 形态
 - **M4（Week 4-5）**：完整装载实现完成，unit/contract/failure injection/profile matrix 全部 gates 通过
 - **M5（Week 5+）**：与 runtime/platform 集成联调完成，端到端 plugin 加载链路冒烟测试通过
 
@@ -414,7 +414,7 @@ PLG-TODO-014/015/016/017 进展
 
 ### Q1：为什么仍然"不进入完整装载实现"？
 
-**A**：虽然 INF-BLK-09 已解除，且 PLG-TODO-014/015/016 已完成，但 017 仍需先完成 report/public aggregation 边界冻结。此时直接实现 load() 仍会把尚未稳定的对象/接口面绑进装载链路，增加 breaking review 风险。遵循“先冻结边界，再接实现”的工程原则，避免返工。
+**A**：虽然 INF-BLK-09 已解除，且 PLG-TODO-014/015/016/017 已完成，但 PluginRuntimeBridge 与真实装载链路仍未冻结。此时直接实现 load() 仍会把尚未稳定的平台桥接约束绑进装载路径，增加 breaking review 风险。遵循“先冻结边界，再接实现”的工程原则，避免返工。
 
 ### Q2：PluginRuntimeBridge 的缺失是否阻塞当前任务？
 
@@ -1441,6 +1441,64 @@ Build 合规复核：
 
 ---
 
+## 31. 本轮执行记录（2026-04-08 / PLG-TODO-017）
+
+### 31.1 选中任务
+
+1. 本轮任务：PLG-TODO-017。
+2. 可执行性依据：PLG-TODO-014/015/016 已完成，shared blocker 已解除；017 当前是 plugin 对象与接口冻结续航中的最后一个串行任务，且可在单轮内完成“shared report public header + validation aggregation tests + 证据回写”闭环。
+
+### 31.2 研究与 Design 结论
+
+本地证据：
+
+1. docs/architecture/DASALL_infra_plugin模块详细设计.md 6.5.2 已冻结 SignatureReport / CompatibilityReport v1 字段；6.8 已要求 validate 失败路径返回可观测证据并保持 contracts 边界稳定。
+2. PLG-TODO-015 与 PLG-TODO-016 已分别在 verifier / compatibility engine 中冻结最小 report 输出对象，但 IPluginManager 与 PluginValidationPipeline 仍停留在 ref-only aggregation。
+3. tests/unit/infra/plugin/PluginManagerInterfaceTest.cpp、PluginValidationPipelineTest.cpp 与对应 contract tests 已构成当前 validation aggregation 的正式边界守卫，因此 017 必须在保持 ref traceability 的前提下新增 shared report object，而不是直接替换既有 ref 字段。
+
+外部参考：
+
+1. SemVer 2.0.0 要求对公开 API 的兼容演进保持向后兼容；本轮据此选择新增 optional shared report object，并保留既有 `*_report_ref` 字段，避免把 017 做成破坏性替换。
+
+D 结论：
+
+1. 新增 docs/todos/infrastructure/deliverables/PLG-TODO-017-PluginReports与聚合收敛.md，明确 shared report header、optional aggregation 与 Design -> Build 映射。
+2. Build 三件套锁定为：
+        - 代码目标：infra/include/plugin/PluginReports.h、IPluginManager.h、PluginValidationPipeline.h/.cpp。
+        - 测试目标：PluginReportsTest、PluginReportsBoundaryContractTest、PluginManagerInterfaceCompileTest、PluginValidationPipelineTest、PluginManagerBoundaryContractTest、PluginValidationPipelineBoundaryContractTest。
+        - 验收命令：cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_infra dasall_plugin_signature_verifier_interface_unit_test dasall_plugin_compatibility_engine_interface_unit_test dasall_plugin_reports_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_validation_pipeline_unit_test dasall_contract_plugin_signature_verifier_boundary_test dasall_contract_plugin_compatibility_engine_boundary_test dasall_contract_plugin_reports_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_validation_pipeline_boundary_test && ctest --test-dir build-ci -N -R "Plugin(SignatureVerifierInterfaceCompileTest|CompatibilityEngineInterfaceCompileTest|ReportsTest|ManagerInterfaceCompileTest|ValidationPipelineTest|SignatureVerifierBoundaryContractTest|CompatibilityEngineBoundaryContractTest|ReportsBoundaryContractTest|ManagerBoundaryContractTest|ValidationPipelineBoundaryContractTest)" && ctest --test-dir build-ci --output-on-failure -R "Plugin(SignatureVerifierInterfaceCompileTest|CompatibilityEngineInterfaceCompileTest|ReportsTest|ManagerInterfaceCompileTest|ValidationPipelineTest|SignatureVerifierBoundaryContractTest|CompatibilityEngineBoundaryContractTest|ReportsBoundaryContractTest|ManagerBoundaryContractTest|ValidationPipelineBoundaryContractTest)"。
+3. D Gate：PASS。
+
+### 31.3 Build 交付与证据
+
+交付物：
+
+1. infra/include/plugin/PluginReports.h：统一落盘 PluginSignatureChainStatus、算法 allow-list、SignatureReport 与 CompatibilityReport，消除 015/016 之间的 report 重复定义。
+2. infra/include/plugin/IPluginSignatureVerifier.h、infra/include/plugin/IPluginCompatibilityEngine.h：改为复用 shared report header，保持既有接口签名不变。
+3. infra/include/plugin/IPluginManager.h：在保留 `signature_report_ref` / `compatibility_report_ref` 的同时，新增 optional shared report objects，并把 `has_traceable_refs()` 收紧为“有 object 时必须有 ref 且 object 有效”。
+4. infra/src/plugin/PluginValidationPipeline.h/.cpp：在 stage/result 级别接入 optional shared reports，保持失败分支与成功分支都能返回 object + ref 双承载的聚合结果。
+5. tests/unit/infra/plugin/PluginReportsTest.cpp 与 tests/contract/smoke/PluginReportsBoundaryContractTest.cpp：冻结 shared report 对象本身的正负例与 boundary 约束。
+6. tests/unit/infra/plugin/PluginManagerInterfaceTest.cpp、tests/unit/infra/plugin/PluginValidationPipelineTest.cpp、tests/contract/smoke/PluginManagerBoundaryContractTest.cpp、tests/contract/smoke/PluginValidationPipelineBoundaryContractTest.cpp：同步验证 manager/pipeline 的 optional object + ref 双承载聚合边界。
+7. infra/CMakeLists.txt、tests/unit/infra/plugin/CMakeLists.txt、tests/contract/plugin/CMakeLists.txt：完成 shared report public header 与新增 unit/contract 用例注册。
+8. docs/todos/infrastructure/deliverables/PLG-TODO-017-PluginReports与聚合收敛.md：记录设计结论、Design -> Build 映射与风险边界。
+
+验收结果：
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+2. `cmake --build build-ci --target dasall_infra dasall_plugin_signature_verifier_interface_unit_test dasall_plugin_compatibility_engine_interface_unit_test dasall_plugin_reports_unit_test dasall_plugin_manager_interface_unit_test dasall_plugin_validation_pipeline_unit_test dasall_contract_plugin_signature_verifier_boundary_test dasall_contract_plugin_compatibility_engine_boundary_test dasall_contract_plugin_reports_boundary_test dasall_contract_plugin_manager_boundary_test dasall_contract_plugin_validation_pipeline_boundary_test`：通过。
+3. `ctest --test-dir build-ci -N -R "Plugin(SignatureVerifierInterfaceCompileTest|CompatibilityEngineInterfaceCompileTest|ReportsTest|ManagerInterfaceCompileTest|ValidationPipelineTest|SignatureVerifierBoundaryContractTest|CompatibilityEngineBoundaryContractTest|ReportsBoundaryContractTest|ManagerBoundaryContractTest|ValidationPipelineBoundaryContractTest)"`：通过，发现 10 个测试。
+4. `ctest --test-dir build-ci --output-on-failure -R "Plugin(SignatureVerifierInterfaceCompileTest|CompatibilityEngineInterfaceCompileTest|ReportsTest|ManagerInterfaceCompileTest|ValidationPipelineTest|SignatureVerifierBoundaryContractTest|CompatibilityEngineBoundaryContractTest|ReportsBoundaryContractTest|ManagerBoundaryContractTest|ValidationPipelineBoundaryContractTest)"`：通过，10/10 tests passed。
+
+Build 合规复核：
+
+1. 向后兼容：017 保留既有 report ref 字段，只新增 optional shared report object，未破坏 015/016/005 已冻结的 traceability surface。
+2. 正负例覆盖：unit 覆盖 shared report 正负例、manager success 聚合与 pipeline policy/signature/compatibility 三类分支；contract 覆盖 shared report 无 contracts/policy 泄漏、manager aggregation 与 pipeline aggregation 边界。
+3. 测试发现性：已通过 `ctest -N -R ...` 验证新增/受影响的 10 个 interface/unit/contract 用例进入 CTest 图。
+4. TODO 证据回写：已完成任务状态、验收命令、交付物路径与本轮执行记录回写。
+5. 提交隔离：本轮提交范围限定为 shared report header、manager/pipeline aggregation、对应 unit/contract 与 017 文档证据，不混入后续 load/runtime bridge 实现。
+
+---
+
 ## 本文档历史与评审
 
 | 版本 | 日期 | 变更说明 | 评审人 |
@@ -1463,6 +1521,7 @@ Build 合规复核：
 | v1.15 | 2026-04-07 | 回写 PLG-TODO-014 的 PluginManifest 对象、unit/contract 证据与执行记录，并将下一步切换到 PLG-TODO-015 | （待评审） |
 | v1.16 | 2026-04-08 | 回写 PLG-TODO-015 的 IPluginSignatureVerifier 边界、compile/boundary 验证证据与执行记录，并将下一步切换到 PLG-TODO-016 | （待评审） |
 | v1.17 | 2026-04-08 | 回写 PLG-TODO-016 的 IPluginCompatibilityEngine 边界、ABI matrix/boundary 验证证据与执行记录，并将下一步切换到 PLG-TODO-017 | （待评审） |
+| v1.18 | 2026-04-08 | 回写 PLG-TODO-017 的 shared report header、validation aggregation unit/contract 证据与执行记录，并将 Phase 6 标记为完成 | （待评审） |
 
 ---
 

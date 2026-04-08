@@ -11,6 +11,7 @@
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "plugin/PluginCatalog.h"
+#include "plugin/PluginReports.h"
 #include "policy/PolicyDecisionRef.h"
 
 namespace dasall::infra::plugin {
@@ -71,6 +72,8 @@ struct PluginValidationResult {
   policy::PolicyDecisionRef policy_decision;
   std::string signature_report_ref;
   std::string compatibility_report_ref;
+  std::optional<SignatureReport> signature_report;
+  std::optional<CompatibilityReport> compatibility_report;
   std::string evidence_ref;
   contracts::ResultCode result_code = contracts::ResultCode::RuntimeRetryExhausted;
   std::optional<contracts::ErrorInfo> error_info;
@@ -80,13 +83,17 @@ struct PluginValidationResult {
       policy::PolicyDecisionRef policy_decision,
       std::string signature_report_ref,
       std::string compatibility_report_ref,
-      std::string evidence_ref) {
+      std::string evidence_ref,
+      std::optional<SignatureReport> signature_report = std::nullopt,
+      std::optional<CompatibilityReport> compatibility_report = std::nullopt) {
     return PluginValidationResult{
         .accepted = true,
         .plugin_id = plugin_value_or_unknown(plugin_id),
         .policy_decision = std::move(policy_decision),
         .signature_report_ref = std::move(signature_report_ref),
         .compatibility_report_ref = std::move(compatibility_report_ref),
+        .signature_report = std::move(signature_report),
+        .compatibility_report = std::move(compatibility_report),
         .evidence_ref = std::move(evidence_ref),
         .result_code = contracts::ResultCode::RuntimeRetryExhausted,
         .error_info = std::nullopt,
@@ -98,13 +105,19 @@ struct PluginValidationResult {
                                                       std::string message,
                                                       std::string stage,
                                                       std::string source_ref,
-                                                      std::string evidence_ref) {
+                              std::string evidence_ref,
+                              std::string signature_report_ref = {},
+                              std::string compatibility_report_ref = {},
+                              std::optional<SignatureReport> signature_report = std::nullopt,
+                              std::optional<CompatibilityReport> compatibility_report = std::nullopt) {
     return PluginValidationResult{
         .accepted = false,
         .plugin_id = plugin_value_or_unknown(plugin_id),
         .policy_decision = {},
-        .signature_report_ref = {},
-        .compatibility_report_ref = {},
+      .signature_report_ref = std::move(signature_report_ref),
+      .compatibility_report_ref = std::move(compatibility_report_ref),
+      .signature_report = std::move(signature_report),
+      .compatibility_report = std::move(compatibility_report),
         .evidence_ref = std::move(evidence_ref),
         .result_code = result_code,
         .error_info = contracts::ErrorInfo{
@@ -125,10 +138,23 @@ struct PluginValidationResult {
   }
 
   [[nodiscard]] bool has_traceable_refs() const {
-    return plugin_id != kPluginUnknownValue && !evidence_ref.empty() &&
-           (accepted ? policy_decision.is_valid() && !signature_report_ref.empty() &&
-                           !compatibility_report_ref.empty()
-                     : true);
+    if (plugin_id == kPluginUnknownValue || evidence_ref.empty()) {
+      return false;
+    }
+
+    if (signature_report.has_value() &&
+        (signature_report_ref.empty() || !signature_report->is_valid())) {
+      return false;
+    }
+
+    if (compatibility_report.has_value() &&
+        (compatibility_report_ref.empty() || !compatibility_report->is_valid())) {
+      return false;
+    }
+
+    return accepted ? policy_decision.is_valid() && !signature_report_ref.empty() &&
+                          !compatibility_report_ref.empty()
+                    : true;
   }
 
   [[nodiscard]] bool references_only_contract_error_types() const {

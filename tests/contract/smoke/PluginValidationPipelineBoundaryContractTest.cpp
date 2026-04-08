@@ -120,17 +120,25 @@ class StaticPluginPolicyGate final : public dasall::infra::plugin::IPluginPolicy
 void test_plugin_validation_pipeline_keeps_ref_only_report_boundary_on_stage_failures() {
   using dasall::contracts::ErrorInfo;
   using dasall::contracts::ResultCode;
+  using dasall::infra::plugin::CompatibilityReport;
   using dasall::infra::plugin::PluginErrorCode;
+  using dasall::infra::plugin::PluginSignatureChainStatus;
+  using dasall::infra::plugin::PluginTrustLevel;
   using dasall::infra::plugin::PluginValidationPipeline;
   using dasall::infra::plugin::PluginValidationResult;
+  using dasall::infra::plugin::SignatureReport;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(PluginValidationResult{}.result_code), ResultCode>);
   static_assert(std::is_same_v<decltype(PluginValidationResult{}.error_info), std::optional<ErrorInfo>>);
   static_assert(std::is_same_v<decltype(PluginValidationResult{}.signature_report_ref), std::string>);
   static_assert(std::is_same_v<decltype(PluginValidationResult{}.compatibility_report_ref), std::string>);
-  static_assert(!HasSignatureReportObject<PluginValidationResult>::value);
-  static_assert(!HasCompatibilityReportObject<PluginValidationResult>::value);
+  static_assert(std::is_same_v<decltype(PluginValidationResult{}.signature_report),
+                               std::optional<SignatureReport>>);
+  static_assert(std::is_same_v<decltype(PluginValidationResult{}.compatibility_report),
+                               std::optional<CompatibilityReport>>);
+  static_assert(HasSignatureReportObject<PluginValidationResult>::value);
+  static_assert(HasCompatibilityReportObject<PluginValidationResult>::value);
 
   StaticSecurityPolicyManager policy_manager;
   StaticPluginPolicyGate policy_gate(dasall::infra::policy::PolicyDecision::Allow);
@@ -138,20 +146,28 @@ void test_plugin_validation_pipeline_keeps_ref_only_report_boundary_on_stage_fai
       &policy_manager,
       &policy_gate,
       [](const dasall::infra::plugin::PluginValidationRequest& request) {
+      const auto evidence_ref = std::string("evidence://signature/") + request.plugin_id;
         return dasall::infra::plugin::PluginValidationStageResult::failure(
             PluginErrorCode::SignatureFail,
             std::string("report://signature/") + request.plugin_id,
-            std::string("evidence://signature/") + request.plugin_id,
+        evidence_ref,
             std::string("plugin_signature_failed"),
-            std::string("INF_E_PLUGIN_SIGNATURE_FAIL: signature validation failed"));
+        std::string("INF_E_PLUGIN_SIGNATURE_FAIL: signature validation failed"),
+        SignatureReport::failure(std::string("ed25519"),
+                     PluginSignatureChainStatus::SignatureInvalid,
+                     PluginTrustLevel::Vendor,
+                     std::string("plugin_signature_failed"),
+                     evidence_ref,
+                     std::string("signer:") + request.plugin_id));
       });
 
   const auto result = pipeline.validate(make_request());
 
   assert_true(!result.accepted && result.references_only_contract_error_types(),
-              "PluginValidationPipeline should keep stage failure payloads inside contracts ResultCode/ErrorInfo while exposing only report refs");
-  assert_true(!result.signature_report_ref.empty() && result.compatibility_report_ref.empty(),
-              "PluginValidationPipeline should expose signature failure evidence through ref fields only");
+          "PluginValidationPipeline should keep stage failure payloads inside contracts ResultCode/ErrorInfo while exposing optional shared report objects through ref-linked aggregation");
+    assert_true(!result.signature_report_ref.empty() && result.compatibility_report_ref.empty() &&
+            result.signature_report.has_value() && !result.compatibility_report.has_value(),
+          "PluginValidationPipeline should expose signature failure evidence through both the shared report object and its ref while keeping compatibility empty");
 }
 
 void test_plugin_validation_pipeline_keeps_policy_decision_traceable_on_policy_deny() {
@@ -168,7 +184,8 @@ void test_plugin_validation_pipeline_keeps_policy_decision_traceable_on_policy_d
   assert_true(!result.accepted && result.result_code == ResultCode::PolicyDenied,
               "PluginValidationPipeline should preserve policy denials inside the contracts policy category");
   assert_true(result.policy_decision.is_valid() && result.signature_report_ref.empty() &&
-                  result.compatibility_report_ref.empty(),
+            result.compatibility_report_ref.empty() && !result.signature_report.has_value() &&
+            !result.compatibility_report.has_value(),
               "PluginValidationPipeline should keep policy denials traceable without fabricating downstream report objects");
 }
 

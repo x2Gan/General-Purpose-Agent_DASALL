@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "plugin/IPluginManager.h"
@@ -19,18 +20,24 @@ struct PluginValidationStageResult {
   PluginErrorCode error_code = PluginErrorCode::ValidateFail;
   std::string reason_code;
   std::string message;
+    std::optional<SignatureReport> signature_report;
+    std::optional<CompatibilityReport> compatibility_report;
 
   [[nodiscard]] static PluginValidationStageResult success(
       std::string report_ref,
       std::string evidence_ref,
-      std::string reason_code = {});
+            std::string reason_code = {},
+            std::optional<SignatureReport> signature_report = std::nullopt,
+            std::optional<CompatibilityReport> compatibility_report = std::nullopt);
 
   [[nodiscard]] static PluginValidationStageResult failure(
       PluginErrorCode error_code,
       std::string report_ref,
       std::string evidence_ref,
       std::string reason_code,
-      std::string message);
+            std::string message,
+            std::optional<SignatureReport> signature_report = std::nullopt,
+            std::optional<CompatibilityReport> compatibility_report = std::nullopt);
 
   [[nodiscard]] bool is_valid() const;
 };
