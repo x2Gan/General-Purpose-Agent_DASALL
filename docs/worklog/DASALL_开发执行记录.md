@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #232
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-036 实现 AdapterBridge 统一适配封装
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-035 推送完成后，CAP-TODO-036 成为 D1 的下一项直接可执行任务。
+2. 该任务是 LocalPlatformAdapter、LocalServiceAdapter、RemoteServiceAdapter 和 ResultMapper 的共同前置，且当前没有额外 blocker。
+3. 本轮目标是在不引入 `ErrorInfo` 语义漂移的前提下，先把统一 invoker 接口、AdapterReceipt 事实对象与 AdapterBridge 封装骨架落盘并通过 unit 验证。
+
+### 改动
+
+1. 新增 [services/src/adapters/AdapterBridge.h](../services/src/adapters/AdapterBridge.h) 与 [services/src/adapters/AdapterBridge.cpp](../services/src/adapters/AdapterBridge.cpp)，定义 `AdapterTransportOutcome`、`AdapterInvocationRequest`、`AdapterInvocationResult`、`AdapterReceipt`、`IAdapterInvoker` 和 `AdapterBridge`。
+2. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 AdapterBridge 纳入 `dasall_services` 构建。
+3. 新增 [tests/unit/services/adapters/AdapterBridgeTest.cpp](../tests/unit/services/adapters/AdapterBridgeTest.cpp)，覆盖成功、未注册、route_kind mismatch、partial side effect 与 invoker 异常五类路径。
+4. 更新 [tests/unit/services/adapters/CMakeLists.txt](../tests/unit/services/adapters/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 AdapterBridge unit 接入 services 子目录和顶层 `dasall_unit_tests` 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-036-AdapterBridge统一适配封装设计收敛.md](../todos/services/deliverables/CAP-TODO-036-AdapterBridge%E7%BB%9F%E4%B8%80%E9%80%82%E9%85%8D%E5%B0%81%E8%A3%85%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、CAP-TODO-036 与 037~040 的状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 AdapterBridge 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 AdapterBridgeTest 已进入 discoverability 与执行路径。
+   - partial side effect、missing adapter、route mismatch 与 bridge exception 都能产出结构化 receipt，说明负路径没有吞错且 AdapterReceipt 字段完整。
+
+### 结果
+
+1. CAP-TODO-036 已完成，D1 现在具备统一的 adapter invocation / receipt 事实面。
+2. CAP-TODO-037~040 不再被 AdapterBridge 前置依赖阻塞，可作为后续直接执行入口。
+
+### 下一步
+
+1. 进入 CAP-TODO-037，落盘 LocalPlatformAdapter 最小骨架。
+
+### 风险
+
+1. `AdapterBridge` 目前只定义统一 invoker 协议和 receipt 组装，不实现具体 provider 逻辑；037~039 必须保持对该协议的复用，不能再在桥外引入并行调用约定。
+
 ## 记录 #231
 
 - 日期：2026-04-09

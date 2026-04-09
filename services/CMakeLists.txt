@@ -5,6 +5,7 @@ target_sources(dasall_services
     src/ServiceFacade.cpp
     src/ServiceContextBuilder.cpp
     src/adapters/AdapterRouter.cpp
+    src/adapters/AdapterBridge.cpp
     src/execution/placeholder.cpp
     src/data/placeholder.cpp
     src/system/placeholder.cpp

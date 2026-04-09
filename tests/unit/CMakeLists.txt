@@ -113,6 +113,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_service_context_builder_unit_test
 	dasall_service_facade_unit_test
 	dasall_adapter_router_unit_test
+	dasall_adapter_bridge_unit_test
 	dasall_infra_context_unit_test
 	${DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS}
