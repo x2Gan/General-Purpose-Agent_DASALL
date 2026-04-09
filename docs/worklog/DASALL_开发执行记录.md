@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #236
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-040 实现 ResultMapper 结果映射组件
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-039 推送完成后，CAP-TODO-040 成为 D1 中的最后一项串行任务。
+2. 该任务无额外 blocker，且直接为 execution / data / system 车道提供稳定的 `AdapterReceipt -> ErrorInfo / public result` 收口基础。
+3. 本轮目标是在不扩张 shared contracts 的前提下，把九类 `ServiceErrorClass` 的 `ErrorInfo.failure_type` 映射、partial evidence 约束和 execution / data 结果构造 helper 一次性落盘。
+
+### 改动
+
+1. 新增 [services/src/mapping/ResultMapper.h](../services/src/mapping/ResultMapper.h) 与 [services/src/mapping/ResultMapper.cpp](../services/src/mapping/ResultMapper.cpp)，定义 internal `ServiceErrorClass`、`ResultMapping` 和 `ResultMapper`，实现 receipt 分类、`ErrorInfo` 填值以及 execution / data 结果构造 helper。
+2. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 ResultMapper 纳入 `dasall_services` 构建。
+3. 新增 [tests/unit/services/mapping/ResultMapperTest.cpp](../tests/unit/services/mapping/ResultMapperTest.cpp) 与 [tests/unit/services/mapping/CMakeLists.txt](../tests/unit/services/mapping/CMakeLists.txt)，覆盖九类错误映射、partial side effect evidence 约束、subscription overflow、data stale 与 success path。
+4. 更新 [tests/unit/services/CMakeLists.txt](../tests/unit/services/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 ResultMapper unit 接入 services 子目录和顶层 `dasall_unit_tests` 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-040-ResultMapper结果映射组件设计收敛.md](../todos/services/deliverables/CAP-TODO-040-ResultMapper结果映射组件设计收敛.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md) 当前结论、D1 阶段状态和 D2 直接执行集合。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest`
+2. 结果：
+   - `dasall_services`、`dasall_unit_tests` 与 `dasall_contract_tests` 构建通过，说明 ResultMapper 与 unit / contract 接线有效。
+   - `ctest -L unit` 通过，新增 ResultMapperTest 已进入 discoverability 与执行路径。
+   - `InterfaceCatalogContractTest` 通过，说明 040 没有破坏既有公共接口门或重定义 shared contracts 语义。
+
+### 结果
+
+1. CAP-TODO-040 已完成，D1 Adapter / ResultMapper Build 阶段已全部闭环。
+2. execution / data / system 车道现已具备稳定的 adapter routing / receipt mapping 基础，可进入 D2 深链路实现。
+
+### 下一步
+
+1. 按顺序进入 CAP-TODO-015、017、018、019、020、022、023；其中 CAP-TODO-028 可并行推进。
+
+### 风险
+
+1. 当前 `ResultCode` 仍只有最小失败种子，ResultMapper 只能保守复用既有 category seed；若后续需要更细 success / failure code，必须先走 contracts / design 评审，而不是直接在 services 中扩张。
+
 ## 记录 #235
 
 - 日期：2026-04-09
