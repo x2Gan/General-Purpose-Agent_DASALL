@@ -468,6 +468,34 @@ flowchart TD
 4. DataProjectionCache 只能服务只读路径，不允许被 ExecutionCommandLane 作为副作用状态真值源。
 5. ExecutionSubscriptionHub、SystemSnapshotLane、ServiceHealthProbe 属于 internal-only 对象，不进入模块公共 include 面。
 
+#### AdapterSelection 与 route 输入契约
+
+V1 设计收敛：
+1. `AdapterSelection`、`CapabilitySnapshotView` 与 `FallbackEnvelope` 都保持 internal-only；它们不进入 ServiceTypes，也不新增 `services.*` profile schema。
+2. AdapterRouter 是具体 adapter 选择的唯一 owner；Runtime 决定是否允许 fallback，Tool Policy Gate 只约束 caller domain 与 route class，Service 不接受 Tool 直接指定 `adapter_id`。
+3. route 输入只能来自请求 target、模块内 capability snapshot、ServicePolicyView 和健康事实；任何来自 Tool 的 trust override、availability override 或 fallback hop 提示都视为越权输入。
+
+| internal object | 关键字段 | owner | 来源 / 派生 | 边界约束 |
+|---|---|---|---|---|
+| `CapabilitySnapshotView` | `capability_id`、`capability_version`、`supported_actions`、`supported_queries`、`route_classes`、`preferred_locality` | ServiceConfigAdapter | BuildProfileManifest + adapter registration + runtime probe | 只表达 capability 能力事实，不承载审批或 fallback 裁定 |
+| `AdapterSelection` | `route_kind`、`adapter_id`、`target_id`、`route_equivalence_class`、`fallback_hop`、`selected_reason`、`trust_class`、`availability_state` | AdapterRouter | 由 route 输入契约求值得到 | 只输出选择结果与理由，不直接执行 adapter |
+| `FallbackEnvelope` | `requested_action_class`、`ordered_candidates`、`route_equivalence_class`、`allow_degrade`、`deny_reason_on_exhaustion` | Runtime + Tool Policy Gate | `degrade_policy.fallback_chain` + action class + policy decision | services 只能收紧，不可扩张候选链 |
+
+| route 输入 | source of truth | owner | consumer | 禁止越权点 |
+|---|---|---|---|---|
+| `CapabilityTargetRef` | `Execution*Request` / `Data*Request` 中的 target 或 dataset 语义 | Tool Executor -> ServiceFacade | AdapterRouter | Tool 只能表达 capability/target 语义，不能附带具体 `adapter_id` |
+| `CapabilitySnapshotView` | BuildProfileManifest、adapter registration、runtime probe | ServiceConfigAdapter | AdapterRouter、Execution/Data/System lanes | 不允许从 `target_id` 字符串推断隐藏 capability 或绕过 snapshot 校验 |
+| `trust_class` | adapter registration 信任级别 + `caller_domain_allowlist` + action class 约束 | ServiceConfigAdapter + Tool Policy Gate | AdapterRouter | 不允许由 Tool 请求直接覆盖 trust tier，也不允许把 remote route 提升为 trusted-local |
+| `availability_state` | ServiceHealthProbe、adapter probe、circuit state、timeout budget | ServiceHealthProbe | AdapterRouter | 缺失或低置信度 availability 只能 fail-closed，不能假定后端可达 |
+| `FallbackEnvelope` | Runtime `degrade_policy.fallback_chain` + policy decision | Runtime | AdapterRouter | Service 只能消费 envelope，不能在本地追加 hop、跨出 `route_equivalence_class` 或放宽 `allow_degrade` |
+| `local_platform_route_enabled` | `enabled_modules.platform_hal` -> `ServicePolicyView` | RuntimePolicySnapshot / ServiceConfigAdapter | AdapterRouter | 当 profile 禁用 platform HAL 时，不得回退到 LocalPlatformAdapter |
+
+route 规则：
+1. 若 `CapabilitySnapshotView` 不声明请求动作 / 查询可在候选 route_kind 上执行，AdapterRouter 必须 fail-closed 并返回 `CapabilityUnsupported` 或 `RouteUnavailable`，不得盲目尝试后端。
+2. 高风险动作和 `safe_mode.*` 只允许在 `FallbackEnvelope.route_equivalence_class` 内做语义等价 fallback；若唯一可用候选超出 envelope，必须返回 `fallback_blocked`。
+3. `availability_state` 只负责剔除不可用候选或在 envelope 内调整优先级，不能把未注册 route 或不受信 route 提升为可选路径。
+4. `trust_class` 与 `caller_domain` 不一致、缺失或过期时，Router 必须拒绝选择 remote/local route，而不是尝试隐式降级。
+
 ### 6.5 公共 supporting objects 与 contracts 对齐关系
 
 V1 公共 supporting objects 冻结清单：
@@ -1021,6 +1049,7 @@ schema 对齐结论：
 |---|---|---|
 | D Gate | 文档已覆盖 12 章、边界/流程/Build/Test/兼容性完整 | 覆盖则 PASS，否则 FAIL |
 | Policy Alignment Gate | `require_confirmation` 动作集合、`caller_domain_allowlist` 与 proof recheck 规则已冻结，且与 `execution_policy.requires_high_risk_confirmation` / `allowed_tool_domains` 对齐 | 对齐则 PASS，否则 FAIL |
+| Route Contract Gate | `AdapterSelection` 字段、capability snapshot source、trust / availability owner 与 fallback envelope 已冻结，且未新增 `services.*` 顶层 schema | 对齐则 PASS，否则 FAIL |
 | B Gate-1 | `dasall_services` 编译通过且不引入对 cognition/llm 的实现依赖 | 通过则 PASS，否则 FAIL |
 | B Gate-2 | 新增 services unit tests 通过 | 全通过则 PASS，否则 FAIL |
 | B Gate-3 | `ctest -N` 能发现 services integration 用例且标签合法 | 发现则 PASS，否则 FAIL |

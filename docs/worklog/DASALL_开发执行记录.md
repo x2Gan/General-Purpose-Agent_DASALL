@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #229
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-013 补齐 AdapterSelection 与 route 输入契约
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-012 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-013。
+2. 该任务直接对应 CAP-BLK-002，是进入 AdapterRouter、SystemSnapshotLane 与后续 execution/data/query 深链路之前的最小补设计解阻项。
+3. 本轮目标是在不扩张 ServiceTypes 和 `services.*` profile schema 的前提下，冻结 `AdapterSelection`、`CapabilitySnapshotView`、`FallbackEnvelope` 以及 trust / availability 的 owner 与 fail-closed 规则。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services子系统详细设计.md)，新增“AdapterSelection 与 route 输入契约”小节，明确 `CapabilitySnapshotView`、`AdapterSelection`、`FallbackEnvelope` 的字段、source owner、禁止越权点和 route fail-closed 规则，并在 9.4 增加 Route Contract Gate。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-013-AdapterSelection与route输入契约设计收敛.md](../todos/services/deliverables/CAP-TODO-013-AdapterSelection%E4%B8%8Eroute%E8%BE%93%E5%85%A5%E5%A5%91%E7%BA%A6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design->Build 映射与本轮验收口径。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md)，将 CAP-TODO-013 标记为 Done，关闭 CAP-BLK-002，并同步释放 CAP-TODO-022、035 的前置阻塞，同时把 CAP-TODO-015、017、018、019、021、030、031、034、036~039 的 blocker 口径收敛到 CAP-BLK-003/004/005。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "AdapterSelection|capability snapshot|trust|availability|fallback" docs/architecture/DASALL_capability_services子系统详细设计.md docs/architecture/DASALL_Engineering_Blueprint.md`
+2. 结果：
+   - detailed design 中已命中 `AdapterSelection`、`CapabilitySnapshotView`、`FallbackEnvelope`、`trust_class`、`availability_state`、`Route Contract Gate` 等条目。
+   - route 输入来源、owner、禁止 Tool override、fallback envelope 不可扩张与 fail-closed 规则都已形成成表约束，CAP-BLK-002 可二值化关闭。
+
+### 结果
+
+1. CAP-TODO-013 已完成，CAP-BLK-002 已关闭。
+2. AdapterRouter 与 SystemSnapshotLane 不再被 route 输入契约缺失单独阻塞；AdapterBridge、三类 Adapter、ResultMapper 与 execution/data 深链路现在只剩 AdapterReceipt / 结果映射契约需要在 CAP-TODO-014 收口。
+
+### 下一步
+
+1. 进入 CAP-TODO-014，补齐 AdapterReceipt、ServiceErrorClass -> ErrorInfo.failure_type 映射、evidence refs 与 partial side effect 证据语义。
+
+### 风险
+
+1. `AdapterSelection` 与 `FallbackEnvelope` 仍保持 internal-only；在 AdapterReceipt 未冻结前，不应把 route supporting objects 误升级为共享 ABI，也不应提前启动 AdapterBridge / ResultMapper 的字段级实现。
+
 ## 记录 #228
 
 - 日期：2026-04-09
