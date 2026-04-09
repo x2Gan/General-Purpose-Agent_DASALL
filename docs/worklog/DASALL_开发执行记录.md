@@ -1,6 +1,49 @@
 # DASALL 开发执行记录
 
-# DASALL 开发执行记录
+## 记录 #246
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-024 实现 ServiceAuditBridge
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-023 推送完成后，CAP-TODO-024 成为配置与观测阶段第一个真正落代码的 observability 任务，也是后续 025~027 继续挂 metrics / trace / health 之前必须先稳定的 audit 基线。
+2. 该任务的关键边界是不新增公共 ABI、不把审计逻辑扩散到多个入口点，也不让 services 自建平行审计 schema；所有事件都必须映射到既有 `infra::AuditEvent` / `infra::audit::IAuditLogger`。
+3. 本轮目标是在不改变低风险主链结果语义的前提下，落盘 `ServiceAuditBridge`、把高风险命令/显式补偿/fallback_blocked 接到统一审计桥，并补齐 unit 与 integration discoverability。
+
+### 改动
+
+1. 新增 [services/src/bridges/ServiceAuditBridge.h](../../services/src/bridges/ServiceAuditBridge.h) 与 [services/src/bridges/ServiceAuditBridge.cpp](../../services/src/bridges/ServiceAuditBridge.cpp)，定义 internal `ServiceAuditBridge`、`ServiceAuditEmitResult`、`ServiceAuditBridgeStatus` 与 services audit event family，把 execution / compensation / fallback 事实映射到 `infra::AuditEvent`，并通过 `infra::audit::IAuditLogger` 发射。
+2. 更新 [services/src/execution/ExecutionCommandLane.h](../../services/src/execution/ExecutionCommandLane.h) 与 [services/src/execution/ExecutionCommandLane.cpp](../../services/src/execution/ExecutionCommandLane.cpp)，新增 `audit_bridge` 依赖注入，把高风险 `execute()`、显式 `compensate()` 与 route failure 为 `fallback_blocked` 的路径统一收口到 lane 内部审计接线点。
+3. 更新 [services/CMakeLists.txt](../../services/CMakeLists.txt)，把 `ServiceAuditBridge.cpp` 接入 `dasall_services` 构建图，保持 services 仅依赖既有 infra audit 抽象，而不引入新的跨模块实现依赖。
+4. 新增 [tests/unit/services/bridges/CMakeLists.txt](../../tests/unit/services/bridges/CMakeLists.txt) 与 [tests/unit/services/bridges/ServiceAuditBridgeTest.cpp](../../tests/unit/services/bridges/ServiceAuditBridgeTest.cpp)，并更新 [tests/unit/services/CMakeLists.txt](../../tests/unit/services/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，覆盖高风险 request/completed、补偿 request/completed、fallback_blocked 与缺 sink 失败可见性。
+5. 新增 [tests/integration/services/CMakeLists.txt](../../tests/integration/services/CMakeLists.txt) 与 [tests/integration/services/CapabilityServicesAuditIntegrationTest.cpp](../../tests/integration/services/CapabilityServicesAuditIntegrationTest.cpp)，并更新 [tests/integration/CMakeLists.txt](../../tests/integration/CMakeLists.txt)，把 `ServiceFacade -> ExecutionCommandLane -> ServiceAuditBridge` 串联接入顶层 integration 聚合目标。
+6. 新增 [docs/todos/services/deliverables/CAP-TODO-024-ServiceAuditBridge审计桥设计收敛.md](../todos/services/deliverables/CAP-TODO-024-ServiceAuditBridge%E5%AE%A1%E8%AE%A1%E6%A1%A5%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、024 状态以及 025~027 的可执行性。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_integration_tests`
+2. 结果：
+   - `dasall_services` 构建通过，说明 bridges 子目录、lane 注入点与 CMake 接线已收口。
+   - `dasall_unit_tests` 通过，最终结果为 `100% tests passed, 0 tests failed out of 210`，新增 `ServiceAuditBridgeTest` 已进入 unit discoverability，并验证高风险/补偿/fallback-blocked 与缺 sink 场景。
+   - `dasall_integration_tests` 通过，最终结果为 `100% tests passed, 0 tests failed out of 29`，新增 `CapabilityServicesAuditIntegrationTest` 已进入 integration discoverability，并验证 facade/lane/bridge 串联。
+
+### 结果
+
+1. CAP-TODO-024 已完成，services 现在具备统一的 internal 审计桥，可以把高风险动作前后、补偿请求与结果、以及 forced `fallback_blocked` 映射到 infra audit 冻结边界。
+2. 本轮没有新增 `services.*` 顶层 schema，也没有扩大公共 supporting objects；审计字段仍然基于现有 `ServiceCallContext` / `Execution*Request` / `ExecutionCommandResult` 与 `AuditEvent` 抽象派生。
+
+### 下一步
+
+1. 进入 CAP-TODO-025，实现 `ServiceMetricsBridge`，把请求量、成功率、熔断、缓存命中、overflow 与补偿提示指标接到当前已经稳定的 lane / audit 基线之上。
+
+### 风险
+
+1. 当前 services request model 还没有独立 `decision_ref` 字段，024 只能用 `tool_call_id / request_id / execution_id` 形成当前最小可追溯链；若后续 gate 要求显式 confirmation proof ref，则必须先走 supporting object review，而不是直接在 bridge 内发明新公共字段。
 
 ## 记录 #245
 

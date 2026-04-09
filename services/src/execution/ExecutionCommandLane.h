@@ -15,6 +15,7 @@
 namespace dasall::services::internal {
 
 class CompensationCatalog;
+class ServiceAuditBridge;
 
 struct ExecutionCommandLaneDependencies {
   const AdapterRouter* router = nullptr;
@@ -40,6 +41,7 @@ struct ExecutionCommandLaneDependencies {
   std::function<std::string(const ExecutionCompensationRequest& request)>
       make_compensation_execution_id;
   std::function<void(const std::string& serialization_key)> on_serialization_acquired;
+  ServiceAuditBridge* audit_bridge = nullptr;
 };
 
 class ExecutionCommandLane {
@@ -60,7 +62,8 @@ class ExecutionCommandLane {
                                                     const std::string& execution_id,
                                                     const std::string& idempotency_cache_key,
                                                     bool critical_action,
-                                                    bool high_risk_action);
+                                                    bool high_risk_action,
+                                                    bool audit_required);
   [[nodiscard]] ExecutionCommandResult make_runtime_failure(const std::string& message,
                                                             const std::string& stage,
                                                             const std::string& ref_id) const;

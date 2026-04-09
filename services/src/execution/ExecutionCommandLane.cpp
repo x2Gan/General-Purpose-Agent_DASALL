@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "bridges/ServiceAuditBridge.h"
 #include "execution/CompensationCatalog.h"
 
 namespace dasall::services::internal {
@@ -172,14 +173,35 @@ ExecutionCommandResult ExecutionCommandLane::execute(const ServiceCallContext& c
                                                                       request.action,
                                                                       *request.idempotency_key)
                                          : std::string{};
-  return execute_impl(context,
-                      request.target,
-                      request.action,
-                      request.arguments_json,
-                      execution_id,
-                      idempotency_cache_key,
-                      critical_action,
-                      high_risk_action);
+  const auto audit_required = high_risk_action;
+  if (audit_required && dependencies_.audit_bridge != nullptr) {
+    (void)dependencies_.audit_bridge->write_execution_requested(
+        context,
+        request.target,
+        request.action,
+        execution_id,
+        dependencies_.policy_view.high_risk_confirmation_required);
+  }
+
+  auto result = execute_impl(context,
+                             request.target,
+                             request.action,
+                             request.arguments_json,
+                             execution_id,
+                             idempotency_cache_key,
+                             critical_action,
+                             high_risk_action,
+                             audit_required);
+
+  if (audit_required && dependencies_.audit_bridge != nullptr) {
+    (void)dependencies_.audit_bridge->write_execution_completed(
+        context,
+        request.target,
+        request.action,
+        result);
+  }
+
+  return result;
 }
 
 ExecutionCommandResult ExecutionCommandLane::compensate(
@@ -202,14 +224,31 @@ ExecutionCommandResult ExecutionCommandLane::compensate(
                                 : default_compensation_execution_id(request);
   const auto idempotency_cache_key = make_idempotency_cache_key(
       request.target, request.compensation_action, request.source_execution_id);
-  return execute_impl(context,
-                      request.target,
-                      request.compensation_action,
-                      request.arguments_json,
-                      execution_id,
-                      idempotency_cache_key,
-                      true,
-                      false);
+  if (dependencies_.audit_bridge != nullptr) {
+    (void)dependencies_.audit_bridge->write_compensation_requested(
+        context,
+        request,
+        execution_id);
+  }
+
+  auto result = execute_impl(context,
+                             request.target,
+                             request.compensation_action,
+                             request.arguments_json,
+                             execution_id,
+                             idempotency_cache_key,
+                             true,
+                             false,
+                             true);
+
+  if (dependencies_.audit_bridge != nullptr) {
+    (void)dependencies_.audit_bridge->write_compensation_completed(
+        context,
+        request,
+        result);
+  }
+
+  return result;
 }
 
 ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallContext& context,
@@ -219,7 +258,8 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
                                                           const std::string& execution_id,
                                                           const std::string& idempotency_cache_key,
                                                           bool critical_action,
-                                                          bool high_risk_action) {
+                                                          bool high_risk_action,
+                                                          bool audit_required) {
   if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
       dependencies_.result_mapper == nullptr) {
     return make_runtime_failure("command lane dependencies are not configured",
@@ -274,15 +314,30 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
                                                  high_risk_action);
   const auto route_decision = dependencies_.router->select_adapter(route_request);
   if (!route_decision.ok()) {
-    return make_error_result(target.target_id,
-                             "route:" + context.request_id,
-                             std::string(route_failure_name(route_decision.failure)),
-                             route_decision.reason,
-                             "adapter_router",
-                             route_decision.failure == AdapterRouteFailure::route_not_permitted
-                                 ? std::vector<std::string>{"policy://route/" + context.request_id}
-                                 : std::vector<std::string>{},
-                             execution_id);
+    auto result = make_error_result(target.target_id,
+                    "route:" + context.request_id,
+                    std::string(route_failure_name(route_decision.failure)),
+                    route_decision.reason,
+                    "adapter_router",
+                    route_decision.failure ==
+                        AdapterRouteFailure::route_not_permitted
+                      ? std::vector<std::string>{"policy://route/" +
+                                     context.request_id}
+                      : std::vector<std::string>{},
+                    execution_id);
+
+    if (audit_required && dependencies_.audit_bridge != nullptr &&
+      route_decision.failure == AdapterRouteFailure::fallback_blocked) {
+      (void)dependencies_.audit_bridge->write_fallback_blocked(
+        context,
+        target,
+        action,
+        execution_id,
+        route_decision.reason,
+        dependencies_.fallback_envelope.requested_action_class);
+    }
+
+    return result;
   }
 
   const auto receipt = dependencies_.bridge->invoke(
