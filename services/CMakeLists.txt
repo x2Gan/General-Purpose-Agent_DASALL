@@ -11,6 +11,7 @@ target_sources(dasall_services
     src/adapters/RemoteServiceAdapter.cpp
     src/execution/CompensationCatalog.cpp
     src/execution/ExecutionCommandLane.cpp
+    src/execution/ExecutionDiagnoseService.cpp
     src/execution/ExecutionQueryLane.cpp
     src/execution/ExecutionSubscriptionHub.cpp
     src/mapping/ResultMapper.cpp

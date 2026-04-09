@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #241
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-019 实现 ExecutionDiagnoseService 诊断路径
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-018 推送完成后，CAP-TODO-019 成为 D2 中下一项直接可执行的 V1.1 diagnose-only 任务，也是后续 query/diagnose integration smoke 的共同代码基础。
+2. 该任务无额外 blocker，且边界清晰：只返回 `target_reachable` / `report_json` 诊断事实，不产生 side effects，不替代 infra diagnostics 导出。
+3. 本轮目标是在不扩张 public ABI 和不改写 adapter 基座的前提下，落盘 internal `ExecutionDiagnoseService`，复用 Router / Bridge / ResultMapper 形成只读诊断路径。
+
+### 改动
+
+1. 新增 [services/src/execution/ExecutionDiagnoseService.h](../services/src/execution/ExecutionDiagnoseService.h) 与 [services/src/execution/ExecutionDiagnoseService.cpp](../services/src/execution/ExecutionDiagnoseService.cpp)，定义 internal `ExecutionDiagnoseService` 与依赖注入面，复用 `AdapterRouter`、`AdapterBridge`、`ResultMapper` 实现 diagnose 路由、adapter 调用与结构化错误映射。
+2. diagnose 路径把 `include_last_error` 作为只读 JSON 负载透给 adapter，固定以 query-style `diagnose` operation 执行，不引入新的命令或恢复语义。
+3. 若 diagnose receipt 携带 `side_effects`，组件立即 fail-closed 为 validation error，防止诊断路径隐式改变目标状态。
+4. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)、[tests/unit/services/execution/CMakeLists.txt](../tests/unit/services/execution/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 diagnose 组件和 `dasall_execution_diagnose_service_unit_test` 接入 services/top-level unit 聚合目标。
+5. 新增 [tests/unit/services/execution/ExecutionDiagnoseServiceTest.cpp](../tests/unit/services/execution/ExecutionDiagnoseServiceTest.cpp) 与 [docs/todos/services/deliverables/CAP-TODO-019-ExecutionDiagnoseService诊断路径设计收敛.md](../todos/services/deliverables/CAP-TODO-019-ExecutionDiagnoseService%E8%AF%8A%E6%96%AD%E8%B7%AF%E5%BE%84%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 019 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 diagnose 组件与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 ExecutionDiagnoseServiceTest 已进入 discoverability 与执行路径，最终结果为 `100% tests passed, 0 tests failed out of 205`。
+   - diagnose success、invalid request、adapter unavailable 与 side_effect 违约四类场景均可二值化，说明 019 已把只读诊断语义稳定落盘。
+
+### 结果
+
+1. CAP-TODO-019 已完成，Execution 子域现已具备 diagnose-only 只读路径，可稳定返回 `target_reachable` 与 `report_json`。
+2. query-only 与 diagnose-only 两条低风险读取路径都已落盘，为后续 V1.1 integration smoke 与高风险命令解锁前置提供了直接输入。
+
+### 下一步
+
+1. 进入 CAP-TODO-020，落盘 `DataProjectionCache`，为 CAP-TODO-021 DataQueryLane 解锁缓存与 stale-read 基础。
+
+### 风险
+
+1. 当前 diagnose 路径仍以 query-style `diagnose` operation 复用既有 route/bridge 协议；若后续 adapter 需要独立 diagnose transport contract，必须先回写设计与 TODO，再调整基座枚举与映射。
+
 ## 记录 #240
 
 - 日期：2026-04-09

@@ -77,3 +77,23 @@ dasall_apply_common_options(dasall_execution_subscription_hub_unit_test)
 
 add_test(NAME ExecutionSubscriptionHubTest COMMAND dasall_execution_subscription_hub_unit_test)
 set_tests_properties(ExecutionSubscriptionHubTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_execution_diagnose_service_unit_test
+  ExecutionDiagnoseServiceTest.cpp
+)
+
+target_link_libraries(dasall_execution_diagnose_service_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_services
+)
+
+target_include_directories(dasall_execution_diagnose_service_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/services/src
+)
+
+dasall_apply_common_options(dasall_execution_diagnose_service_unit_test)
+
+add_test(NAME ExecutionDiagnoseServiceTest COMMAND dasall_execution_diagnose_service_unit_test)
+set_tests_properties(ExecutionDiagnoseServiceTest PROPERTIES LABELS "unit")
