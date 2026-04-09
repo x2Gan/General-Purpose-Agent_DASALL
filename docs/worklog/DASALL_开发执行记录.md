@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #222
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-006 定义 IExecutionService 公共接口
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-005 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-006。
+2. 该任务依赖 CAP-TODO-001、003、004，当前均已完成，且没有 blocker，因此本轮只在 /home/gangan/DASALL/services/include/IExecutionService.h 中冻结 execution 公共接口。
+3. 本轮目标是把 execute、compensate、query_state、subscribe、diagnose 五个方法签名落到稳定头文件中，但不提前扩张到 IDataService、façade 或 lane 实现。
+
+### 改动
+
+1. 更新 [services/include/IExecutionService.h](../services/include/IExecutionService.h)，新增纯抽象 `IExecutionService`，定义 `execute`、`compensate`、`query_state`、`subscribe`、`diagnose` 五个纯虚方法与默认虚析构。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-006-IExecutionService公共接口设计收敛.md](../todos/services/deliverables/CAP-TODO-006-IExecutionService%E5%85%AC%E5%85%B1%E6%8E%A5%E5%8F%A3%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-006 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+   - `printf '#include "IExecutionService.h"\nusing namespace dasall::services;\nstruct Demo final : IExecutionService {\n  ExecutionCommandResult execute(const ExecutionCommandRequest&) override { return {}; }\n  ExecutionCommandResult compensate(const ExecutionCompensationRequest&) override { return {}; }\n  ExecutionQueryResult query_state(const ExecutionQueryRequest&) override { return {}; }\n  ExecutionSubscriptionResult subscribe(const ExecutionSubscriptionRequest&) override { return {}; }\n  ExecutionDiagnoseResult diagnose(const ExecutionDiagnoseRequest&) override { return {}; }\n};\nint main() { Demo demo{}; IExecutionService* service = &demo; return static_cast<int>(service == nullptr); }\n' | c++ -std=c++20 -Iservices/include -Icontracts/include -xc++ -fsyntax-only -`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明 IExecutionService 头文件冻结未破坏 services 模块构建与 contract gate。
+   - `InterfaceCatalogContractTest` 1/1 通过，services admission readiness 继续保持 awaiting 状态。
+   - `IExecutionService.h` 的独立语法编译检查通过，说明五个方法签名可被后续 façade、mock 与 lane 实现稳定覆写。
+
+### 结果
+
+1. CAP-TODO-006 已完成，services V1 公共 ABI 现在具备 execution 子域的稳定接口头。
+2. 本轮未引入 `set_safe_mode()` 等额外顶层方法，也未把订阅缓冲、健康探针或 façade 实现细节泄漏进公共接口。
+
+### 下一步
+
+1. 进入 CAP-TODO-007，在 [services/include/IDataService.h](../services/include/IDataService.h) 中冻结 `query` 与 `list_capabilities` 两个 data 公共方法签名。
+
+### 风险
+
+1. 当前 tests/mocks 层仍未跟进新的 execution/data 公共接口；后续当 façade 与 unit/integration 开始消费这些头文件时，需要在对应任务中同步对齐 mock 签名，避免测试支撑层继续停留在旧的字符串执行口径。
+
 ## 记录 #221
 
 - 日期：2026-04-09
