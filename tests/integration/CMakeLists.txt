@@ -32,10 +32,7 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_profiles_build_runtime_integration_test
 	dasall_profile_observability_integration_test
 	dasall_linux_platform_bootstrap_integration_test
-	dasall_services_audit_integration_test
-	dasall_services_metrics_integration_test
-	dasall_services_trace_integration_test
-	dasall_services_health_integration_test
+	${DASALL_SERVICES_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	PARENT_SCOPE
 )
 

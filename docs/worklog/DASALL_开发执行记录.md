@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #251
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-029 注册 services integration 测试拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-028 推送完成后，CAP-TODO-029 成为当前最小可执行的 direct build 任务；它直接承接已落盘的 `CapabilityServicesLoopbackFixture`，负责收敛 services integration 的 discoverability 与顶层聚合接线。
+2. 该任务的关键边界是不把 smoke/failure/profile 的完整语义验收一次性打包进本轮，也不继续手工硬编码 services integration target 清单；本轮只做“统一注册入口 + 顶层 discoverability + 最小 smoke executable”。
+3. 本轮目标是在不改变 services 主链语义的前提下，把 services integration CMake 收敛为统一注册宏，导出 services integration target 列表到顶层，并新增 `CapabilityServicesSmokeIntegrationTest` 进入 `ctest -N` 与 `integration` 标签清单。
+
+### 改动
+
+1. 更新 [tests/integration/services/CMakeLists.txt](../integration/services/CMakeLists.txt)，新增 `dasall_add_services_integration_test(...)` 注册宏，统一封装 services integration 的 `add_executable()`、`add_test()`、标签设置与 target list 累积，并将 `DASALL_SERVICES_INTEGRATION_TEST_EXECUTABLE_TARGETS` 导出到顶层。
+2. 更新 [tests/integration/CMakeLists.txt](../integration/CMakeLists.txt)，把顶层 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS` 从手工列举 services tests 改为消费子目录导出的 services integration target 列表，避免未来新增 services integration 用例时再次双处同步。
+3. 新增 [tests/integration/services/CapabilityServicesSmokeIntegrationTest.cpp](../integration/services/CapabilityServicesSmokeIntegrationTest.cpp)，消费 [tests/mocks/include/CapabilityServicesLoopbackFixture.h](../mocks/include/CapabilityServicesLoopbackFixture.h) 验证 execute/query/catalog 的最小 loopback round-trip，并保持默认仅走 local route。
+4. 新增 [docs/todos/services/deliverables/CAP-TODO-029-services-integration测试拓扑设计收敛.md](../todos/services/deliverables/CAP-TODO-029-services-integration%E6%B5%8B%E8%AF%95%E6%8B%93%E6%89%91%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 顶部结论、029 状态、030 可执行性与 blocker 迁移。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests`
+   - `ctest --test-dir build-ci -N | rg "CapabilityServices(Smoke|Audit|Metrics|Trace|Health)IntegrationTest|Total Tests"`
+   - `ctest --test-dir build-ci --output-on-failure -R CapabilityServicesSmokeIntegrationTest`
+2. 结果：
+   - `dasall_integration_tests` 构建通过，并在 custom target 执行阶段完成全部 `integration` 标签测试，结果为 `100% tests passed, 0 tests failed out of 33`，说明 services integration 新旧目标都已进入顶层聚合链路。
+   - `ctest -N` 明确列出 `CapabilityServicesSmokeIntegrationTest`、`CapabilityServicesAuditIntegrationTest`、`CapabilityServicesMetricsIntegrationTest`、`CapabilityServicesTraceIntegrationTest` 与 `CapabilityServicesHealthIntegrationTest`，总测试数增至 `398`，说明 services integration discoverability 已稳定可见。
+   - 新增 `CapabilityServicesSmokeIntegrationTest` 单独执行通过，验证 loopback fixture、services integration 注册宏和顶层 target 列表导出接线均有效。
+
+### 结果
+
+1. CAP-TODO-029 已完成，services integration 现在通过子目录统一注册宏和导出 target 列表接入顶层聚合，不再依赖手工同步 services integration executable 清单。
+2. `CapabilityServicesSmokeIntegrationTest` 已成为顶层 discoverable 的 services smoke 基线，但本轮只保证 registration 与最小 round-trip；更强的 smoke observability 断言仍留给 CAP-TODO-030。
+
+### 下一步
+
+1. 进入 CAP-TODO-030，基于已注册的 `CapabilityServicesSmokeIntegrationTest` 补齐 services smoke integration 的 audit/trace/metrics 可观测证据。
+
+### 风险
+
+1. 若后续新增 services integration 用例绕开 `dasall_add_services_integration_test(...)` 宏直接落到子目录，顶层 discoverability 仍可能再次漂移；services integration 新增用例需要遵守当前导出列表模式。
+
 ## 记录 #250
 
 - 日期：2026-04-09
