@@ -685,6 +685,30 @@ class IDataService {
 3. Subscription capability 必须进入公共 ABI，是为了满足上位架构中 Execution Service 对“状态订阅”的能力范围要求；ExecutionSubscriptionHub 仍保持内部实现。
 4. 安全模式切换必须可经公共执行 ABI 到达，但不单独膨胀为新的顶层接口，以避免把高风险动作族拆成多个并列控制面。
 
+#### 高风险 action taxonomy 与确认 / recheck 映射
+
+V1 设计收敛：
+1. Tool Policy Gate 继续是 `allow` / `deny` / `require_confirmation` 的唯一 owner；services 只消费 internal-only 的执行准入事实，不在 ServiceTypes.h 中新增 confirmation proof 公共字段。
+2. `require_confirmation` 动作集合固定为：`safe_mode.enter`、`safe_mode.exit`，以及 capability snapshot 明确标记 `requires_confirmation=true` 或 `risk_tier=high` 的副作用动作。
+3. `safe_mode.enter` 与 `safe_mode.exit` 不允许被拆成新的顶层接口，也不允许通过语义不等价 fallback 绕开原始 action class。
+
+| action class / family | 代表动作或判定来源 | require_confirmation | caller_domain 约束 | fallback / audit 约束 |
+|---|---|---|---|---|
+| `command.standard` | capability snapshot 标记为副作用动作，且 `risk_tier=normal` | 否 | 只允许来自 `execution_policy.allowed_tool_domains` 的 caller domain；Service 仅 recheck 透传值与上游决策一致 | 允许语义等价 route；执行前后写普通日志与 trace，是否写 audit 由 `audit_level` 与 capability policy 决定 |
+| `command.high_risk` | capability snapshot 标记 `requires_confirmation=true` 或 `risk_tier=high` 的副作用动作 | 是 | caller domain 必须仍在 `execution_policy.allowed_tool_domains` 中，且与 Tool Policy Gate 评估时使用的 domain 完全一致 | 不允许无 `decision_ref` 的隐式放行；高风险动作前后必须写 audit |
+| `safe_mode.enter` | 固定高风险 action；进入安全模式 | 是 | 仅允许被 Tool Policy Gate 放行后的受信 caller domain 调用；Service 不放宽 allowlist | 禁止语义不等价 fallback；必须记录 before/after audit，并保留 `decision_ref` |
+| `safe_mode.exit` | 固定高风险 action；退出安全模式 | 是 | 同 `safe_mode.enter` | 同 `safe_mode.enter` |
+| `compensate.*` | `IExecutionService.compensate` 下的补偿动作族 | 否；是否进入补偿由 Runtime/RecoveryManager 裁定 | caller domain 必须与原始执行记录或补偿授权记录一致；Service 只 recheck source execution 与 authorization ref | 必须携带 source execution / idempotency 事实；补偿请求和结果均写 audit |
+
+| recheck 项 | 上游 owner / 来源 | Service 侧强制规则 | 失败结果 |
+|---|---|---|---|
+| action class 一致性 | Tool Policy Gate + capability snapshot | Service 必须验证请求 action 与上游判定出的 action class 一致，禁止把 `safe_mode.*` 或高风险动作降格为普通命令 | `PolicyDenied` |
+| caller_domain allowlist | `execution_policy.allowed_tool_domains` | Service 只接受 allowlist 内 domain；若请求透传 domain 与上游决策记录不一致，必须拒绝 | `PolicyDenied` |
+| require_confirmation 决策引用 | Tool Policy Gate `PolicyDecision` | 对 require_confirmation 动作，必须存在 `decision_ref`，且状态为已确认通过；缺失或状态不匹配时拒绝 | `PolicyDenied` |
+| confirmation proof 绑定关系 | internal-only confirmation proof sideband | Service 只 recheck proof 是否绑定同一 action class、同一 `CapabilityTargetRef` 和同一 caller domain；proof 结构保持 internal-only，不进入公共 ABI | `PolicyDenied` |
+| proof 新鲜度 | confirmation proof issue / expiry metadata | proof 必须在 request `deadline_ms` 约束内仍然有效；过期 proof 不得被复用到新的高风险动作请求 | `PolicyDenied` |
+| 审计可追溯性 | ServiceAuditBridge + `audit_level` | 所有 require_confirmation 动作都必须能把 request/result 关联到 `decision_ref` 与 action class；缺失 audit 关联视为 Gate 不通过 | `PolicyDenied` 或 Ops Gate FAIL |
+
 ### 6.7 主流程时序
 
 #### 6.7.1 主执行链路
@@ -996,6 +1020,7 @@ schema 对齐结论：
 | Gate | 规则 | 二值判定 |
 |---|---|---|
 | D Gate | 文档已覆盖 12 章、边界/流程/Build/Test/兼容性完整 | 覆盖则 PASS，否则 FAIL |
+| Policy Alignment Gate | `require_confirmation` 动作集合、`caller_domain_allowlist` 与 proof recheck 规则已冻结，且与 `execution_policy.requires_high_risk_confirmation` / `allowed_tool_domains` 对齐 | 对齐则 PASS，否则 FAIL |
 | B Gate-1 | `dasall_services` 编译通过且不引入对 cognition/llm 的实现依赖 | 通过则 PASS，否则 FAIL |
 | B Gate-2 | 新增 services unit tests 通过 | 全通过则 PASS，否则 FAIL |
 | B Gate-3 | `ctest -N` 能发现 services integration 用例且标签合法 | 发现则 PASS，否则 FAIL |

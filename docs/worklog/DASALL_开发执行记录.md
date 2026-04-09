@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #228
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-012 补齐高风险 action taxonomy 与确认映射表
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-011 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-012。
+2. 该任务无前置依赖，且直接对应 CAP-BLK-001，是进入 ExecutionCommandLane、CompensationCatalog、ServiceAuditBridge 和后续高风险 integration 之前的最小补设计解阻项。
+3. 本轮目标是在不扩张公共 ABI 的前提下，把 `safe_mode.enter` / `safe_mode.exit`、`require_confirmation` 动作集合以及 caller_domain / proof recheck 规则冻结到详细设计与 TODO 证据链中。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services子系统详细设计.md)，在 6.6.1 下新增高风险 action taxonomy 与确认 / recheck 映射表，并在 9.4 增加 Policy Alignment Gate，明确 `execution_policy.requires_high_risk_confirmation` 与 `allowed_tool_domains` 的对齐要求。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-012-高风险action-taxonomy与确认映射表设计收敛.md](../todos/services/deliverables/CAP-TODO-012-%E9%AB%98%E9%A3%8E%E9%99%A9action-taxonomy%E4%B8%8E%E7%A1%AE%E8%AE%A4%E6%98%A0%E5%B0%84%E8%A1%A8%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design->Build 映射与本轮验收口径。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md)，将 CAP-TODO-012 标记为 Done，关闭 CAP-BLK-001，并同步移除 CAP-TODO-015、016、024、030、031、034 对 CAP-BLK-001 的阻塞依赖。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "safe_mode|require_confirmation|allowed_tool_domains" docs/architecture/DASALL_capability_services子系统详细设计.md docs/architecture/DASSALL_Agent_architecture.md docs/architecture/DASALL_Engineering_Blueprint.md`
+2. 结果：
+   - `safe_mode.enter` / `safe_mode.exit`、`require_confirmation` 动作集合、`caller_domain_allowlist` 与 `execution_policy.allowed_tool_domains` 的对齐要求都已在 detailed design 中落表。
+   - 上位架构 5.5.2 / 5.5.3 与 services 详细设计 6.6.1 / 9.4 的约束形成回链，CAP-BLK-001 可二值化关闭。
+
+### 结果
+
+1. CAP-TODO-012 已完成，CAP-BLK-001 已关闭。
+2. Execution 高风险动作的进入方式、确认要求、caller_domain / proof recheck 与审计门禁现在有稳定设计基线，后续 015 / 016 / 024 / 030 / 031 不再被“动作 taxonomy 未冻结”单独阻塞。
+
+### 下一步
+
+1. 进入 CAP-TODO-013，补齐 AdapterSelection、capability snapshot source、trust / availability 输入与 fallback envelope 的 route 输入契约。
+
+### 风险
+
+1. confirmation proof 仍保持 internal-only sideband；在 route / receipt supporting objects 未冻结前，不应把 proof 结构误升级为 ServiceTypes 公共字段。
+
 ## 记录 #227
 
 - 日期：2026-04-09
