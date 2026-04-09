@@ -14,10 +14,13 @@
 
 namespace dasall::services::internal {
 
+class CompensationCatalog;
+
 struct ExecutionCommandLaneDependencies {
   const AdapterRouter* router = nullptr;
   const AdapterBridge* bridge = nullptr;
   const ResultMapper* result_mapper = nullptr;
+  const CompensationCatalog* compensation_catalog = nullptr;
 
   ServicePolicyView policy_view;
   CapabilitySnapshotView capability_snapshot;

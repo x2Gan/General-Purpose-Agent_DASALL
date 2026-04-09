@@ -5,6 +5,8 @@
 #include <string_view>
 #include <utility>
 
+#include "execution/CompensationCatalog.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -294,13 +296,20 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
           .payload_json = payload_json,
       });
 
-  const auto compensation_hints = dependencies_.lookup_compensation_hints
-                                      ? dependencies_.lookup_compensation_hints(
-                                            target.capability_id,
-                                            action,
-                                            dependencies_.capability_snapshot.capability_version,
-                                            receipt)
-                                      : std::vector<std::string>{};
+    const auto compensation_hints = dependencies_.lookup_compensation_hints
+                ? dependencies_.lookup_compensation_hints(
+                  target.capability_id,
+                  action,
+                  dependencies_.capability_snapshot.capability_version,
+                  receipt)
+                : (dependencies_.compensation_catalog != nullptr
+                   ? dependencies_.compensation_catalog->flatten_hints(
+                     dependencies_.compensation_catalog->lookup(
+                     target.capability_id,
+                     action,
+                     dependencies_.capability_snapshot
+                         .capability_version))
+                   : std::vector<std::string>{});
   auto result = dependencies_.result_mapper->to_execution_command_result(
       receipt,
       compensation_hints,

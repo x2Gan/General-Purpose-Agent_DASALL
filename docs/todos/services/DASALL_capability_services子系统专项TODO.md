@@ -1,9 +1,9 @@
 # DASALL Capability Services 子系统专项 TODO
 
-最近更新时间：2026-04-09（CAP-TODO-015 已完成，D2 命令车道低风险基础已落盘）  
+最近更新时间：2026-04-09（CAP-TODO-016 已完成，静态补偿目录已落盘）
 阶段：Detailed Design -> Special TODO  
 适用范围：services/  
-当前结论：D1 已完成；CAP-TODO-015 已为 D2 落盘 low-risk `ExecutionCommandLane` 基础，命令车道现已具备幂等键缓存、关键动作串行化、route/receipt/result mapping 收口与 `PartialSideEffect` 结构化输出，CAP-TODO-016 已解阻；高风险 action 仍按 CAP-GATE-08 fail-closed，下一直接执行入口转为 CAP-TODO-016、017、018、019、020、022、023、028，剩余前置门禁主要是 query/diagnose-only integration smoke、ServiceAuditBridge、loopback fixture 与 shared-contract admission。
+当前结论：D1 已完成；CAP-TODO-015/016 已为 D2 落盘 low-risk `ExecutionCommandLane` 与 static `CompensationCatalog`，命令车道现已具备幂等键缓存、关键动作串行化、route/receipt/result mapping 收口与 capability/action/version 驱动的补偿提示基础；高风险 action 仍按 CAP-GATE-08 fail-closed，下一直接执行入口转为 CAP-TODO-017、018、019、020、022、023、028，剩余前置门禁主要是 query/diagnose-only integration smoke、ServiceAuditBridge、loopback fixture 与 shared-contract admission。
 
 ## 1. 文档头
 
@@ -196,7 +196,7 @@
 | CAP-TODO-013 | Done | 补齐 AdapterSelection 与 route 输入契约 | 详细设计 6.3、6.4、8.3、12.2 | 6.3 AdapterRouter 输入输出；8.3 blocker | L0 | docs/architecture/DASALL_capability_services子系统详细设计.md | AdapterSelection、capability snapshot source、trust / availability 输入、fallback envelope | process：跨文档一致性评审通过 | `rg -n "AdapterSelection|capability snapshot|trust|availability|fallback" docs/architecture/DASALL_capability_services子系统详细设计.md docs/architecture/DASALL_Engineering_Blueprint.md` | 无 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-013-AdapterSelection与route输入契约设计收敛.md、docs/architecture/DASALL_capability_services子系统详细设计.md；2026-04-09 已通过 `rg` 校验 AdapterSelection / capability snapshot / trust / availability / fallback 条目 | 仅当 AdapterSelection 及其输入来源、fallback 约束和 owner 边界明确写入设计文档时完成 |
 | CAP-TODO-014 | Done | 补齐 AdapterReceipt 与结果映射契约 | 详细设计 6.3、6.5、6.8、9.3 | 6.3 AdapterReceipt；6.5 contracts 对齐；6.8 ServiceErrorClass | L0 | docs/architecture/DASALL_capability_services子系统详细设计.md | AdapterReceipt、ServiceErrorClass -> ErrorInfo.failure_type 映射、evidence refs、side_effects / compensation_hints 约束 | process：设计评审可二值通过；contract：ErrorInfo 语义不回退 | `rg -n "AdapterReceipt|ServiceErrorClass|ErrorInfo|side_effects|compensation_hints" docs/architecture/DASALL_capability_services子系统详细设计.md` | 无 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-014-AdapterReceipt与结果映射契约设计收敛.md、docs/architecture/DASALL_capability_services子系统详细设计.md；2026-04-09 已通过 `rg` 校验 AdapterReceipt / ServiceErrorClass / ErrorInfo / side_effects / compensation_hints 条目 | 仅当 AdapterReceipt 字段、错误分类映射和 partial side effect 证据要求明确成表时完成 |
 | CAP-TODO-015 | Done | 实现 ExecutionCommandLane 命令车道 | 详细设计 6.2、6.3、6.7.1、6.8、7.1 | 7.1 ExecutionCommandLane.cpp；6.8 PartialSideEffect | L2 | services/src/execution/ExecutionCommandLane.cpp | execute 路径、幂等键、关键动作串行化、结构化错误输出 | unit：成功 / invalid request / partial side effect；contract：不越权修改 InterfaceCatalog readiness | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest` | CAP-TODO-008、009、010、011 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-015-ExecutionCommandLane命令车道设计收敛.md、services/src/execution/ExecutionCommandLane.h、services/src/execution/ExecutionCommandLane.cpp、tests/unit/services/execution/ExecutionCommandLaneTest.cpp、tests/unit/services/execution/CMakeLists.txt、tests/unit/services/CMakeLists.txt、tests/unit/CMakeLists.txt、services/CMakeLists.txt；2026-04-09 已通过 `dasall_services`/`dasall_unit_tests`/`dasall_contract_tests` 构建、`ctest -L unit` 与 `InterfaceCatalogContractTest` 校验，并将高风险动作显式门控在 CAP-GATE-08 fail-closed 路径 | 仅当命令车道实现串行化与幂等语义、输出 side_effects / compensation_hints / ErrorInfo 且不承接恢复裁定时完成 |
-| CAP-TODO-016 | Todo | 实现 CompensationCatalog 静态补偿目录 | 详细设计 6.2、6.3、6.6.1、6.9.2 | 6.6.1 CompensationCatalog；6.9.2 static mode | L2 | services/src/execution/CompensationCatalog.cpp | capability_id + action + version -> compensation_hints | unit：仅输出提示，不自动执行补偿 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-014、015 | 无 | 无 | CompensationCatalog.cpp 与补偿提示 unit 用例 | 仅当目录为 static 模式、输出幂等要求与动作先后约束且不变成自动回滚器时完成 |
+| CAP-TODO-016 | Done | 实现 CompensationCatalog 静态补偿目录 | 详细设计 6.2、6.3、6.6.1、6.9.2 | 6.6.1 CompensationCatalog；6.9.2 static mode | L2 | services/src/execution/CompensationCatalog.cpp | capability_id + action + version -> compensation_hints | unit：仅输出提示，不自动执行补偿 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-014、015 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-016-CompensationCatalog静态补偿目录设计收敛.md、services/src/execution/CompensationCatalog.h、services/src/execution/CompensationCatalog.cpp、services/src/execution/ExecutionCommandLane.h、services/src/execution/ExecutionCommandLane.cpp、tests/unit/services/execution/CompensationCatalogTest.cpp、tests/unit/services/execution/CMakeLists.txt、tests/unit/CMakeLists.txt、services/CMakeLists.txt；2026-04-09 已通过 `dasall_services`/`dasall_unit_tests` 构建与 `ctest -L unit` 校验，静态目录已接入命令车道但仅输出 hints、不执行补偿 | 仅当目录为 static 模式、输出幂等要求与动作先后约束且不变成自动回滚器时完成 |
 | CAP-TODO-017 | Todo | 实现 ExecutionQueryLane 只读查询车道 | 详细设计 6.2、6.3、6.7、7.1 | 7.1 ExecutionQueryLane.cpp；6.8 DataStale / AdapterUnavailable | L2 | services/src/execution/ExecutionQueryLane.cpp | query_state 路径、freshness 处理、只读错误映射 | unit：只读查询不产生 side_effects | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-008、009、010、011 | 无 | 无 | ExecutionQueryLane.cpp 与查询车道 unit 用例 | 仅当查询路径不触发隐式写入、可区分 strict / allow_stale 语义且错误映射稳定时完成 |
 | CAP-TODO-018 | Todo | 实现 ExecutionSubscriptionHub 订阅骨架 | 详细设计 6.2、6.3、6.6.1、6.9.2、9.3 | 6.6.1 subscribe 收口；6.9.2 `drop_oldest` | L2 | services/src/execution/ExecutionSubscriptionHub.cpp | subscribe、cursor/batch、`resync_required`、`dropped_count` | unit：overflow 后必须置 `resync_required`；process：回链 InfraConcurrencyPolicy | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit && rg -n "drop_oldest|resync_required|InfraConcurrencyPolicy" docs/architecture/DASALL_capability_services子系统详细设计.md docs/ssot/InfraConcurrencyPolicy.md` | CAP-TODO-008、010、011 | 无 | 无 | ExecutionSubscriptionHub.cpp 与订阅 unit 用例 | 仅当公共 ABI 只暴露 cursor/batch 语义、overflow 可观测且 internal buffer 实现未泄漏时完成 |
 | CAP-TODO-019 | Todo | 实现 ExecutionDiagnoseService 诊断路径 | 详细设计 6.2、6.3、6.7、7.1 | 6.3 ExecutionDiagnoseService；7.1 execution diagnose scope | L2 | services/src/execution/ | diagnose 路径、`target_reachable`、`report_json` | unit：诊断路径只读、不可改变目标状态 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-008、010、011 | 无 | 无 | execution/ 诊断组件与 unit 用例 | 仅当诊断只返回 reachability / report 事实，不替代 infra diagnostics 导出时完成 |
@@ -298,7 +298,7 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 | 架构一致性 | 可满足 | 只要保持 Runtime / Tool / Service 控制权边界不漂移，TODO 已与 6.1.4、6.1.5 对齐 |
 | ADR 边界一致性 | 可满足 | ADR-006/007/008 主要约束是“不越权”，当前任务未把上下文、恢复、全局调度拉入 services |
 | contracts / 公共语义兼容性 | 可满足但有 admission 门禁 | 通过 CAP-GATE-07 控制，当前不允许把 IExecutionService / IDataService 直接升格为 shared contracts |
-| 工程可实现性 | 部分直接可执行 | A-B-C 与 D1 阶段已完成，CAP-TODO-015 已完成；CAP-TODO-016、017、018、019、020、022、023、028 可直接进入执行；CAP-TODO-021 仍依赖 020，integration 阶段继续受 CAP-BLK-004~005 约束 |
+| 工程可实现性 | 部分直接可执行 | A-B-C 与 D1 阶段已完成，CAP-TODO-015/016 已完成；CAP-TODO-017、018、019、020、022、023、028 可直接进入执行；CAP-TODO-021 仍依赖 020，integration 阶段继续受 CAP-BLK-004~005 约束 |
 | 测试可验证性 | 可满足 | 已有顶层 unit / contract / integration 聚合 target，可承接 services 用例 |
 | 原子任务可执行性 | 可满足 | 公共 ABI 已拆到对象 / 接口级；内部复杂链路显式保留补设计前置 |
 | 粒度可评审性 | 可满足 | 每个任务都回链到 6.x / 7.x / 8.x / 9.x 设计锚点或当前代码现状 |
@@ -324,14 +324,14 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 当前可直接进入执行的任务集合：
 
 1. CAP-TODO-001~014、035~040：公共 ABI、补设计与 D1 Adapter / ResultMapper Build 已完成。
-2. CAP-TODO-016、017、018、019、020、022、023、028：补偿目录、查询 / 订阅 / 诊断车道，DataProjectionCache，SystemSnapshotLane，ServiceConfigAdapter 与 loopback fixture 方案。
+2. CAP-TODO-017、018、019、020、022、023、028：查询 / 订阅 / 诊断车道，DataProjectionCache，SystemSnapshotLane，ServiceConfigAdapter 与 loopback fixture 方案。
 3. CAP-TODO-021 仍等待 CAP-TODO-020；integration / admission 任务继续受 CAP-BLK-004~005 约束。
 
 ### 11.2 当前可落到的最细粒度
 
 1. 公共 supporting objects 与 IExecutionService / IDataService：可落到 L3。
 2. ServiceContextBuilder、ServiceFacade、DataProjectionCache、ServiceConfigAdapter：可落到 L2。
-3. Execution / Query / Diagnose / Subscription / Adapter / Observability / Integration 深链路：当前只能落到 L2；其中 D1 已完成、015 已落盘，D2 可从 016、017、018、019 起步，integration 仍继续受 CAP-BLK-004~005 约束。
+3. Execution / Query / Diagnose / Subscription / Adapter / Observability / Integration 深链路：当前只能落到 L2；其中 D1 已完成、015/016 已落盘，D2 可从 017、018、019 起步，integration 仍继续受 CAP-BLK-004~005 约束。
 
 ### 11.3 阻止进一步细化到全量函数级的证据缺口
 
@@ -343,7 +343,7 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 ### 11.4 后续建议
 
 1. A-B-C 与 D1 阶段已完成，当前进入 D2 Execution / Data / System 深链路实现。
-2. 下一优先顺序可收敛为 `016 -> 017 -> 018 -> 019 -> 020 -> 021 -> 022 -> 023`，其中 CAP-TODO-028 可并行推进。
+2. 下一优先顺序可收敛为 `017 -> 018 -> 019 -> 020 -> 021 -> 022 -> 023`，其中 CAP-TODO-028 可并行推进。
 3. loopback / mock fixture 方案仍需尽快落盘；在 CAP-TODO-028 未完成前，不要提前承诺 services integration 完成时间。
 4. CAP-TODO-024~027 继续依赖 D2 结果面与 CAP-TODO-023，不应跳过车道实现直接落 observability 终态代码。
 5. CAP-TODO-033 必须保持为评审门，不应在本轮 TODO 中默认写成 shared contracts 编码任务。

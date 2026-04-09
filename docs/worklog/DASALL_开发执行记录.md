@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #238
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-016 实现 CompensationCatalog 静态补偿目录
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-015 推送完成后，CAP-TODO-016 的前置依赖被关闭，成为 D2 串行链上的下一项可执行任务。
+2. 该任务不再受 blocker 限制，且正好对应 015 中预留的 compensation hint lookup 接缝，因此适合作为最小后续实现来收敛补偿提示来源。
+3. 本轮目标是在不越权执行补偿、也不扩张 shared contracts 的前提下，落盘 static `CompensationCatalog`，并把命令车道的 hints 来源从临时注入点收敛为 capability/action/version 驱动的稳定目录。
+
+### 改动
+
+1. 新增 [services/src/execution/CompensationCatalog.h](../services/src/execution/CompensationCatalog.h) 与 [services/src/execution/CompensationCatalog.cpp](../services/src/execution/CompensationCatalog.cpp)，定义 `CompensationDescriptor`、`CompensationCatalogEntry` 与 `CompensationCatalog`，实现 static mode 下的 capability/action/version 精确匹配、幂等要求与动作先后约束输出，以及面向命令车道的 `flatten_hints()`。
+2. 更新 [services/src/execution/ExecutionCommandLane.h](../services/src/execution/ExecutionCommandLane.h) 与 [services/src/execution/ExecutionCommandLane.cpp](../services/src/execution/ExecutionCommandLane.cpp)，允许命令车道在未注入自定义 lookup 时直接消费 `CompensationCatalog`，但仍只输出 hints，不执行补偿。
+3. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 `CompensationCatalog.cpp` 纳入 `dasall_services` 构建。
+4. 更新 [tests/unit/services/execution/CMakeLists.txt](../tests/unit/services/execution/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 `dasall_compensation_catalog_unit_test` 接入 execution/top-level unit 聚合目标。
+5. 新增 [tests/unit/services/execution/CompensationCatalogTest.cpp](../tests/unit/services/execution/CompensationCatalogTest.cpp)，覆盖已知条目、未知条目和命令车道消费 catalog 的 partial side effect 场景；新增 [docs/todos/services/deliverables/CAP-TODO-016-CompensationCatalog静态补偿目录设计收敛.md](../todos/services/deliverables/CAP-TODO-016-CompensationCatalog%E9%9D%99%E6%80%81%E8%A1%A5%E5%81%BF%E7%9B%AE%E5%BD%95%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 016 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 static catalog 与命令车道集成接线有效。
+   - `ctest -L unit` 通过，新增 CompensationCatalogTest 已进入 discoverability 与执行路径。
+   - 已知/未知条目与 lane-consume 场景均可二值化，证明目录只输出 hints / idempotency / order facts，不执行补偿动作。
+
+### 结果
+
+1. CAP-TODO-016 已完成，Execution 子域现已具备 static compensation directory 基础。
+2. 命令车道现在可以在不注入自定义 lookup 的情况下消费 capability/action/version 驱动的补偿提示，下一轮可顺势进入只读查询车道 CAP-TODO-017。
+
+### 下一步
+
+1. 进入 CAP-TODO-017，落盘 `ExecutionQueryLane`，把 D2 的 query-only 路径和 stale/read-only 错误映射基础建起来。
+
+### 风险
+
+1. 当前 catalog 仍是 static exact-match 目录；若未来需要 profile/runtime 动态派生条目，必须先回写设计与 TODO，再扩张实现，不得直接把本目录演化成策略执行器。
+
 ## 记录 #237
 
 - 日期：2026-04-09
