@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #227
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-011 注册 services unit 测试拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-010 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-011。
+2. 该任务只依赖 CAP-TODO-008，当前已经满足，且 CAP-TODO-009/010 也已提供最小 services unit，用于本轮收口测试拓扑。
+3. 本轮目标是把 services 单测从 tests/unit 顶层散点注册收回到 tests/unit/services 子目录，补 public header layout smoke，并确保 `ctest -N` 与 `ctest -L unit` 都能稳定发现这些用例。
+
+### 改动
+
+1. 更新 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，增加 `add_subdirectory(services)`，移除顶层散点的 services test target 注册，并把 services 三个 unit target 纳入顶层 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS` 聚合列表。
+2. 新增 [tests/unit/services/CMakeLists.txt](../tests/unit/services/CMakeLists.txt)，集中注册 `dasall_service_header_layout_unit_test`、`dasall_service_context_builder_unit_test`、`dasall_service_facade_unit_test` 三个 target，并统一设置 `unit` 标签。
+3. 新增 [tests/unit/services/ServiceHeaderLayoutTest.cpp](../tests/unit/services/ServiceHeaderLayoutTest.cpp)，验证 `IExecutionService.h`、`IDataService.h`、`ServiceTypes.h` 通过 services include 根可达，且关键签名和 `deadline_ms` 类型不漂移。
+4. 新增 [docs/todos/services/deliverables/CAP-TODO-011-services-unit测试拓扑注册设计收敛.md](../todos/services/deliverables/CAP-TODO-011-services-unit测试拓扑注册设计收敛.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md) 本轮证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_unit_tests`
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_unit_tests` 构建通过，说明 services 子目录 CMake 接线没有破坏顶层 unit 聚合目标。
+   - `ctest -N` 可发现 ServiceHeaderLayoutTest、ServiceContextBuilderTest、ServiceFacadeTest，说明 services unit discoverability 已收口到稳定拓扑。
+   - `ctest -L unit` 全量通过，说明新的 services 测试拓扑和既有负例覆盖都保持有效。
+
+### 结果
+
+1. CAP-TODO-011 已完成，services 模块现在拥有稳定的 tests/unit/services 测试拓扑。
+2. 随着 CAP-TODO-008~011 全部完成，services 已满足 CAP-GATE-02 的通过条件：退出 placeholder-only 状态，且 unit 拓扑已注册。
+
+### 下一步
+
+1. B 阶段骨架已收齐，可转入 CAP-TODO-012~014 的补设计解阻，或按需要先做后续骨架评审与 Gate 回写。
+
+### 风险
+
+1. 当前 services unit 拓扑只覆盖 header layout、context builder、facade 三类入口；后续 execution/data/system 深链路推进时，必须沿 tests/unit/services 分层继续扩展，避免重新回到顶层散点注册模式。
+
 ## 记录 #226
 
 - 日期：2026-04-09
