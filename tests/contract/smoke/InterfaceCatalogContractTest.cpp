@@ -41,13 +41,13 @@ void test_catalog_keeps_only_retained_cross_module_candidates() {
                "IPlanner must be owned by cognition");
 }
 
-// Validates the two currently mature candidates are the ones with fully frozen
-// supporting request/response object families.
-void test_review_ready_candidates_are_llm_and_tools_only() {
-  assert_equal(2,
+// Validates the current mature set includes llm, tools, and the services pair
+// after CAP-TODO-033 closed the shared-contract readiness review.
+void test_review_ready_candidates_include_services_after_cap_033() {
+  assert_equal(4,
                static_cast<int>(count_interface_candidates_by_readiness(
                    InterfaceAdmissionReadiness::ReviewReady)),
-               "only llm and tools candidates should be review-ready in T011");
+               "llm, tools, and services candidates should be review-ready after CAP-TODO-033");
 
   assert_true(is_review_ready_interface_candidate(
                   InterfaceCandidate::IToolManager),
@@ -55,6 +55,12 @@ void test_review_ready_candidates_are_llm_and_tools_only() {
   assert_true(is_review_ready_interface_candidate(
                   InterfaceCandidate::ILLMAdapter),
               "ILLMAdapter must be review-ready");
+  assert_true(is_review_ready_interface_candidate(
+                  InterfaceCandidate::IExecutionService),
+              "IExecutionService must be review-ready after CAP-TODO-033");
+  assert_true(is_review_ready_interface_candidate(
+                  InterfaceCandidate::IDataService),
+              "IDataService must be review-ready after CAP-TODO-033");
   assert_true(!is_review_ready_interface_candidate(
                   InterfaceCandidate::IMemoryStore),
               "IMemoryStore must still wait for supporting contracts");
@@ -105,17 +111,25 @@ void test_internal_or_low_level_interfaces_are_excluded() {
               "IGPIO must stay outside the shared interface catalog");
 }
 
-// Negative coverage: unresolved candidates must preserve their awaiting state
-// and not silently flip to review-ready before supporting contracts freeze.
+// Negative coverage: unresolved candidates must preserve their awaiting state,
+// while the services pair only flips after the explicit CAP-TODO-033 review.
 void test_awaiting_candidates_keep_their_readiness_state() {
+  const auto* merger_entry =
+      find_interface_catalog_entry_by_name("IResultMerger");
+  assert_true(merger_entry != nullptr,
+              "IResultMerger must exist in the interface catalog");
+  assert_equal(std::string("awaiting_supporting_contracts"),
+               std::string(interface_admission_readiness_name(
+                   merger_entry->readiness)),
+               "IResultMerger must remain awaiting supporting contracts");
   const auto* execution_entry =
       find_interface_catalog_entry_by_name("IExecutionService");
   assert_true(execution_entry != nullptr,
               "IExecutionService must exist in the interface catalog");
-  assert_equal(std::string("awaiting_supporting_contracts"),
+  assert_equal(std::string("review_ready"),
                std::string(interface_admission_readiness_name(
                    execution_entry->readiness)),
-               "IExecutionService must remain awaiting supporting contracts");
+               "IExecutionService must be review-ready after CAP-TODO-033");
   assert_equal(std::string("IResultMerger"),
                std::string(interface_candidate_name(
                    InterfaceCandidate::IResultMerger)),
@@ -146,8 +160,8 @@ int main() {
 
   run_test("test_catalog_keeps_only_retained_cross_module_candidates",
            test_catalog_keeps_only_retained_cross_module_candidates);
-  run_test("test_review_ready_candidates_are_llm_and_tools_only",
-           test_review_ready_candidates_are_llm_and_tools_only);
+  run_test("test_review_ready_candidates_include_services_after_cap_033",
+           test_review_ready_candidates_include_services_after_cap_033);
   run_test("test_owner_module_counts_match_design_groups",
            test_owner_module_counts_match_design_groups);
   run_test("test_catalog_entry_metadata_is_queryable",

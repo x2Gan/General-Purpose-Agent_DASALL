@@ -39,9 +39,9 @@ void test_tool_manager_is_admitted() {
                "IToolManager must report the stable admit reason");
 }
 
-// Positive coverage: the admission baseline currently contains exactly two
-// interfaces, and the llm adapter is the second admitted candidate.
-void test_llm_adapter_is_admitted_and_baseline_count_is_two() {
+// Positive coverage: the admission baseline now contains four interfaces after
+// CAP-TODO-033, and the llm adapter remains one of the admitted candidates.
+void test_llm_adapter_is_admitted_and_baseline_count_is_four() {
   const auto result =
       evaluate_interface_admission_by_name("ILLMAdapter");
 
@@ -49,9 +49,34 @@ void test_llm_adapter_is_admitted_and_baseline_count_is_two() {
               "ILLMAdapter must be admitted into shared contracts");
   assert_true(can_admit_interface_candidate(InterfaceCandidate::ILLMAdapter),
               "can_admit helper must agree for ILLMAdapter");
-  assert_equal(2,
+  assert_equal(4,
                static_cast<int>(count_admitted_interface_candidates()),
-               "T012 initial admission baseline must contain exactly two interfaces");
+               "current admission baseline must contain four interfaces after CAP-TODO-033");
+}
+
+// Positive coverage: services now has frozen supporting request/result objects
+// plus integration evidence, so both service facades should be admitted.
+void test_services_interfaces_are_admitted() {
+  const auto execution_result =
+      evaluate_interface_admission_by_name("IExecutionService");
+  assert_true(execution_result.admitted,
+              "IExecutionService must be admitted after CAP-TODO-033");
+  assert_equal(static_cast<int>(InterfaceAdmissionDecision::Admit),
+               static_cast<int>(execution_result.decision),
+               "IExecutionService must return the admit decision");
+  assert_equal(std::string("interface candidate is admitted into shared contracts"),
+               std::string(execution_result.reason),
+               "IExecutionService must report the stable admit reason");
+
+  const auto data_result =
+      evaluate_interface_admission(InterfaceCandidate::IDataService);
+  assert_true(data_result.admitted,
+              "IDataService must be admitted after CAP-TODO-033");
+  assert_true(can_admit_interface_candidate(InterfaceCandidate::IDataService),
+              "can_admit helper must agree for IDataService");
+  assert_equal(static_cast<int>(InterfaceAdmissionDecision::Admit),
+               static_cast<int>(data_result.decision),
+               "IDataService must return the admit decision");
 }
 
 // Negative coverage: candidates that still depend on unfrozen supporting
@@ -161,8 +186,10 @@ int main() {
   std::cout << "InterfaceAdmissionContractTest - WP05-T012-B\n";
 
   run_test("test_tool_manager_is_admitted", test_tool_manager_is_admitted);
-  run_test("test_llm_adapter_is_admitted_and_baseline_count_is_two",
-           test_llm_adapter_is_admitted_and_baseline_count_is_two);
+  run_test("test_llm_adapter_is_admitted_and_baseline_count_is_four",
+           test_llm_adapter_is_admitted_and_baseline_count_is_four);
+  run_test("test_services_interfaces_are_admitted",
+           test_services_interfaces_are_admitted);
   run_test("test_planner_is_postponed_until_supporting_contracts_freeze",
            test_planner_is_postponed_until_supporting_contracts_freeze);
   run_test("test_non_catalogued_interface_is_returned",

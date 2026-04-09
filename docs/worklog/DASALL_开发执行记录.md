@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #255
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-033 发起 IExecutionService / IDataService admission 评审
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-032 推送完成后，CAP-TODO-033 成为 services 专项串行链上的最小可执行评审门任务；030~032 已经补齐 smoke / failure / profile 三类 integration 证据，CAP-BLK-005 剩余缺口只剩 readiness checklist 与 catalog 决策回写。
+2. 该任务的关键边界是不把 admission review 误做成 shared-contract 编码任务。本轮只允许更新 InterfaceCatalog / contract tests / 设计与 TODO 证据，不允许在 contracts/include 下新增 services interface 头文件，也不扩大 ISystemService 或 internal supporting objects 的 ABI。
+3. 本轮目标是基于已冻结的 ServiceTypes、IExecutionService、IDataService 与 030~032 integration evidence，给出 IExecutionService / IDataService 的二值 admission 结论，并让 InterfaceCatalog / InterfaceAdmission contract gates 稳定反映该结论。
+
+### 改动
+
+1. 更新 [contracts/include/boundary/InterfaceCatalog.h](../contracts/include/boundary/InterfaceCatalog.h)，把 `IExecutionService` / `IDataService` 的 readiness 从 `AwaitingSupportingContracts` 提升为 `ReviewReady`，并补齐基于 `ServiceTypes` 与 integration evidence 的 stable anchor / rationale。
+2. 更新 [tests/contract/smoke/InterfaceCatalogContractTest.cpp](../tests/contract/smoke/InterfaceCatalogContractTest.cpp) 与 [tests/contract/smoke/InterfaceAdmissionContractTest.cpp](../tests/contract/smoke/InterfaceAdmissionContractTest.cpp)，将 review-ready / admitted baseline 从 llm+tools 两项扩展到包含 services pair 的四项，并保留 `IPlanner` / `IResultMerger` 等未冻结候选的 Postpone / Awaiting 负例。
+3. 新增 [docs/todos/services/deliverables/CAP-TODO-033-IExecutionService-IDataService-admission评审收敛.md](../todos/services/deliverables/CAP-TODO-033-IExecutionService-IDataService-admission%E8%AF%84%E5%AE%A1%E6%94%B6%E6%95%9B.md)，同步回写 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 与 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，把 CAP-BLK-005 标记为已解阻，并把 CAP-TODO-034 切到可执行状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest`
+   - `ctest --test-dir build-ci --output-on-failure -R InterfaceAdmissionContractTest`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `dasall_contract_tests` 构建通过，services admission 评审所需的 catalog / guard / smoke contract 目标均可复用既有 contract 聚合链。
+   - `InterfaceCatalogContractTest` 定向执行 1/1 通过，`InterfaceAdmissionContractTest` 定向执行 1/1 通过，说明 services pair 的 review-ready / admitted baseline 已与 catalog metadata 保持一致。
+   - `ctest -L contract` 结果为 `100% tests passed, 0 tests failed out of 152`，说明本轮 admission 基线调整没有破坏既有 contract suite。
+
+### 结果
+
+1. CAP-TODO-033 已完成，IExecutionService / IDataService 的 shared-contract admission 结论已从 `AwaitingSupportingContracts` 收敛为 `Admit`，并通过 InterfaceCatalog / InterfaceAdmission contract tests 稳定固化为 `ReviewReady` 基线。
+2. 本轮没有新增 contracts/include 下的 services interface 头文件，也没有扩张 ISystemService、AdapterReceipt、HealthSnapshot 等 internal-only 对象；033 只完成 admission review 与证据回写，不越过 services 专项边界。
+
+### 下一步
+
+1. 进入 CAP-TODO-034，基于已关闭的 CAP-BLK-005 回写 services 专项 Gate、阻塞状态、命令证据与残余风险。
+
+### 风险
+
+1. 033 的 `Admit` 只代表 admission baseline 已更新，不代表本轮已经完成 shared-contract header 落位；若后续需要把 services 接口头真正迁入 contracts/include，仍需单独拆原子任务处理 include 迁移和兼容评审。
+2. 若 030~032 中任何 integration evidence 后续回退，services pair 的 admission 结论也必须跟随复核，而不能让 catalog readiness 与真实验证状态脱节。
+
 ## 记录 #254
 
 - 日期：2026-04-09

@@ -980,7 +980,7 @@ schema 对齐结论：
 
 | 设计项 | 当前不能直接进入 Build 的原因 | 后续动作 |
 |---|---|---|
-| IExecutionService / IDataService 进入共享 contracts | supporting objects 尚未冻结，WP05-T012 明确为 Postpone | 先完成模块内对象收敛，再发起新的 interface admission 评审 |
+| IExecutionService / IDataService 进入共享 contracts | CAP-TODO-033 已完成二次 admission review；ServiceTypes、IExecutionService/IDataService 与 smoke/failure/profile evidence 已闭合，但本轮只更新 InterfaceCatalog / readiness 基线，不在 contracts/include 直接新增正式接口头 | 若后续确需把 services 接口头迁入 contracts/include，另起 shared-contract header 落位任务，并补 include 迁移与兼容评审 |
 | ISystemService 共享接口 | 当前无架构锚点与 supporting contracts，属边界扩张 | 仅保留模块内实现；待真实跨模块消费者稳定后再评估 |
 | 事件总线式服务编排 | 需要新增事件契约与状态存储设计，超出当前阶段范围 | 保留为未来版本演进方向，不纳入本轮 Build |
 
@@ -1015,7 +1015,7 @@ schema 对齐结论：
 | Phase 3 | 落地 Data/System 子域 | 实现 DataQueryLane、ProjectionCache、SystemSnapshotLane | 查询链路 unit 测试通过；stale read / snapshot 语义可验证 |
 | Phase 4 | 接入可观测与配置治理 | 实现 Audit/Metrics/Trace/Health/Config 桥；接 RuntimePolicySnapshot -> ServicePolicyView 派生 | 日志/审计/指标/trace 字段通过测试；health 可产出 degraded 状态 |
 | Phase 5 | 集成与失败注入 | 增加 smoke/failure/profile integration，用例进入 tests/integration | `ctest -N` 可发现 integration；至少 1 个 `integration` 与 1 个 `integration;failure` 通过 |
-| Phase 6 | 兼容评估与接口升格准备 | 评估 supporting objects 稳定度，准备 IExecutionService/IDataService admission | Interface admission checklist 满足；如不满足则明确 Blocked |
+| Phase 6 | 兼容评估与接口升格准备 | 评估 supporting objects 稳定度，完成 IExecutionService/IDataService admission review | Interface admission checklist 满足并回写 ReviewReady；如不满足则明确 Blocked |
 
 ### 8.3 阶段阻塞项与解阻条件
 
@@ -1149,5 +1149,5 @@ schema 对齐结论：
 2. 补齐 services/include 与 src 子目录骨架，并移除 placeholder-only 状态。
 3. 为 Execution / Data 路径优先落一组 `CapabilityServicesLoopbackFixture` + integration smoke：夹具位于 `tests/mocks/include/CapabilityServicesLoopbackFixture.h`，默认复用 `LocalServiceAdapter` 回调注入形成 `local_service` loopback，failure / profile 变体只允许在 tests 内切换 `RemoteServiceAdapter` handler、timeout 或 candidate availability。
 4. 若后续确需 profile 化新的 services 参数，先更新 profiles 的 runtime_policy schema、资产与 contract tests，再把新增字段接入 ServiceConfigAdapter。
-5. 待 supporting objects 稳定后，发起 IExecutionService / IDataService 的 interface admission 评审，而不是直接进入 contracts 编码。
+5. CAP-TODO-033 已完成 IExecutionService / IDataService 的 interface admission 评审；若后续确需把接口头正式迁入 contracts/include，必须另起 shared-contract header 落位任务，而不是在 services 专项 TODO 中混做。
 6. Phase 1 落盘新公共接口后，同步更新 tests/mocks/include/MockExecutionService.h 并新增 MockDataService，使其签名匹配 ServiceTypes.h 中的新请求/结果类型（当前 MockExecutionService 签名 `bool execute(const std::string&)` 与设计中 `ExecutionCommandResult execute(const ExecutionCommandRequest&)` 不兼容），确保后续 unit/integration 测试可直接复用 mock 层。
