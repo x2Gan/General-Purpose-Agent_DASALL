@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #252
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-030 验证 Capability Services smoke integration
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-029 推送完成后，CAP-TODO-030 成为当前最小可执行的 direct build 任务；它直接承接已 discoverable 的 `CapabilityServicesSmokeIntegrationTest`，负责把 services smoke 从“能被发现”推进到“最小闭环 + observability 字段可验”。
+2. 该任务的关键边界是不把 failure injection 和 profile 差异提前打包进本轮，也不修改 services 主链冻结语义；本轮只允许增强 tests-side fixture 与 smoke 断言，并保持 029 已落盘的 integration registration/CMake 拓扑不回退。
+3. 本轮目标是在不扩张 production ABI 的前提下，验证 execute/query/catalog loopback 最小闭环，补齐 request ledger、audit context 与 trace span 字段的 smoke 证据，并把 CAP-TODO-031 / 032 从 Blocked 解到 Todo。
+
+### 改动
+
+1. 更新 [tests/mocks/include/CapabilityServicesLoopbackFixture.h](../mocks/include/CapabilityServicesLoopbackFixture.h)，为 header-only loopback fixture 新增 `ServiceAuditBridge` / `ServiceTraceBridge` 注入点，以及 `high_risk_actions` / `critical_actions` / `allow_high_risk_actions` policy 选项，让 smoke 测试可以直接复用 production `ServiceFacade`、`ExecutionCommandLane`、`DataQueryLane`、`AdapterBridge` 主链验证 observability。
+2. 更新 [tests/integration/services/CapabilityServicesSmokeIntegrationTest.cpp](../integration/services/CapabilityServicesSmokeIntegrationTest.cpp)，保留 execute/query/catalog 的最小 round-trip 断言，并新增 high-risk `toggle` + `idempotency_key` 的 observability 子场景：
+   - 继续验证 local loopback request ledger 中的 `request_id` / `capability_id` / `target_id` / `operation_name`
+   - 验证 `ServiceAuditBridge` 发射 `service.execution.requested/completed`、保留 `request_id` / `trace_id` / `worker_type`
+   - 验证 `ServiceTraceBridge` 串起 facade/lane/adapter/external span，并暴露 `request_id` / `tool_call_id` / `capability_id` / `target_id`
+3. 新增 [docs/todos/services/deliverables/CAP-TODO-030-CapabilityServices-smoke-integration设计收敛.md](../todos/services/deliverables/CAP-TODO-030-CapabilityServices-smoke-integration%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 顶部结论、030 状态以及 031/032 解阻结果。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services_smoke_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R CapabilityServicesSmokeIntegrationTest`
+   - `cmake --build build-ci --target dasall_integration_tests`
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - VS Code CMake Tools 在本轮返回空的 build target/test 列表，默认构建进一步报出“无法配置项目”；因此按仓库基线切换到显式 `cmake -S . -B build-ci -G "Unix Makefiles"` + `ctest --test-dir build-ci ...` 验证链。
+   - 定向 `CapabilityServicesSmokeIntegrationTest` 通过，结果为 `100% tests passed, 0 tests failed out of 1`，说明 execute/query/catalog 最小闭环与新增 observability 断言均已稳定。
+   - `dasall_integration_tests` 构建通过并执行全部 `integration` 标签测试，结果为 `100% tests passed, 0 tests failed out of 33`，说明 services smoke 增强没有破坏现有 integration 聚合链。
+   - `ctest -N` 仍列出 `CapabilityServicesSmokeIntegrationTest` 到 `CapabilityServicesHealthIntegrationTest` 五个 services integration 用例，`Total Tests: 398`，说明 029 的 discoverability 没有回退。
+
+### 结果
+
+1. CAP-TODO-030 已完成，`CapabilityServicesSmokeIntegrationTest` 现在不仅可被顶层 discover，还能稳定验证 execute/query/catalog loopback 最小闭环、request ledger 字段、audit 事件/上下文和 facade/lane/adapter/external trace 链。
+2. 本轮没有修改 services 公共 ABI、没有扩张 `services.*` schema，也没有改变 `ExecutionCommandLane` 对 high-risk/idempotency 的既有约束；observability smoke 通过显式 high-risk 输入命中 production 语义，而不是弱化 production gate。
+
+### 下一步
+
+1. 进入 CAP-TODO-031，新增 `CapabilityServicesFailureIntegrationTest` 并覆盖 `adapter timeout`、`partial side effect`、`subscription overflow`、`circuit open` 四类 failure injection 关键注入点。
+
+### 风险
+
+1. 当前 smoke 的“日志字段可观测”仍由 loopback request ledger 承担，因为仓库尚无独立 services logging bridge；若未来新增正式 logging sink，smoke 断言应迁移到正式出口而不是继续堆叠 fixture ledger 语义。
+2. observability 子场景依赖 high-risk `toggle` + `idempotency_key` 命中审计路径；若 future taxonomy 变更，应更新 smoke 输入或 fixture options，而不是回退 production `ExecutionCommandLane` 的 high-risk/critical 约束。
+
 ## 记录 #251
 
 - 日期：2026-04-09

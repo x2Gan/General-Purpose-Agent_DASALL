@@ -19,6 +19,11 @@
 #include "execution/ExecutionCommandLane.h"
 #include "mapping/ResultMapper.h"
 
+namespace dasall::services::internal {
+class ServiceAuditBridge;
+class ServiceTraceBridge;
+}  // namespace dasall::services::internal
+
 namespace dasall::tests::mocks {
 
 struct CapabilityServicesLoopbackFixtureOptions {
@@ -31,6 +36,11 @@ struct CapabilityServicesLoopbackFixtureOptions {
   bool remote_service_available = false;
   bool remote_timeout = false;
   bool allow_route_degrade = true;
+    std::vector<std::string> critical_actions;
+    std::vector<std::string> high_risk_actions;
+    bool allow_high_risk_actions = true;
+    services::internal::ServiceAuditBridge* audit_bridge = nullptr;
+    services::internal::ServiceTraceBridge* trace_bridge = nullptr;
   std::function<services::internal::AdapterInvocationResult(
       const services::internal::AdapterInvocationRequest& request)>
       local_handler;
@@ -75,7 +85,10 @@ class CapabilityServicesLoopbackFixture {
         });
 
     bridge_ = std::make_unique<services::internal::AdapterBridge>(
-        services::internal::AdapterBridgeDependencies{.invokers = build_invokers()});
+    services::internal::AdapterBridgeDependencies{
+      .invokers = build_invokers(),
+      .trace_bridge = options_.trace_bridge,
+    });
 
     projection_cache_ = std::make_unique<services::internal::DataProjectionCache>(
         services::internal::DataProjectionCacheDependencies{
@@ -93,9 +106,9 @@ class CapabilityServicesLoopbackFixture {
             .capability_snapshot = build_execution_snapshot(),
             .fallback_envelope = build_fallback_envelope("command.standard"),
             .registered_candidates = build_candidates(),
-            .critical_actions = {},
-            .high_risk_actions = {},
-            .allow_high_risk_actions = true,
+            .critical_actions = options_.critical_actions,
+            .high_risk_actions = options_.high_risk_actions,
+            .allow_high_risk_actions = options_.allow_high_risk_actions,
             .lookup_compensation_hints = [](const std::string&,
                                             const std::string&,
                                             const std::string&,
@@ -105,9 +118,9 @@ class CapabilityServicesLoopbackFixture {
             .make_execution_id = {},
             .make_compensation_execution_id = {},
             .on_serialization_acquired = {},
-            .audit_bridge = nullptr,
+            .audit_bridge = options_.audit_bridge,
             .metrics_bridge = nullptr,
-            .trace_bridge = nullptr,
+            .trace_bridge = options_.trace_bridge,
         });
 
     data_query_lane_ = std::make_unique<services::internal::DataQueryLane>(
@@ -121,7 +134,7 @@ class CapabilityServicesLoopbackFixture {
             .fallback_envelope = build_fallback_envelope("query.read_only"),
             .registered_candidates = build_candidates(),
             .metrics_bridge = nullptr,
-            .trace_bridge = nullptr,
+            .trace_bridge = options_.trace_bridge,
         });
 
     facade_ = std::make_unique<services::internal::ServiceFacade>(
@@ -143,7 +156,7 @@ class CapabilityServicesLoopbackFixture {
                                              const services::DataCatalogRequest& request) {
               return data_query_lane_->list_capabilities(context, request);
             },
-            .trace_bridge = nullptr,
+            .trace_bridge = options_.trace_bridge,
         });
   }
 
