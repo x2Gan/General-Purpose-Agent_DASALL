@@ -16,6 +16,7 @@ namespace dasall::services::internal {
 
 class CompensationCatalog;
 class ServiceAuditBridge;
+class ServiceMetricsBridge;
 
 struct ExecutionCommandLaneDependencies {
   const AdapterRouter* router = nullptr;
@@ -42,6 +43,7 @@ struct ExecutionCommandLaneDependencies {
       make_compensation_execution_id;
   std::function<void(const std::string& serialization_key)> on_serialization_acquired;
   ServiceAuditBridge* audit_bridge = nullptr;
+  ServiceMetricsBridge* metrics_bridge = nullptr;
 };
 
 class ExecutionCommandLane {

@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #247
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-025 实现 ServiceMetricsBridge
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-024 推送完成后，CAP-TODO-025 成为配置与观测阶段第二个 direct observability build 任务，也是 026 trace / 027 health 继续推进前必须先稳定的 metrics 基线。
+2. 该任务的关键边界是不新增公共 ABI、不新增 `services.*` schema，也不把 exporter 故障放大为命令/查询主链失败；所有 measurement 都必须映射到既有 `infra::metrics::IMetricsProvider` / `IMeter` 抽象。
+3. 本轮目标是在不改变现有 execution/data/subscription 结果语义的前提下，落盘 `ServiceMetricsBridge`、把命令/查询/data/cache/overflow/补偿提示接到统一 metrics bridge，并补齐 unit 与 integration discoverability。
+
+### 改动
+
+1. 新增 [services/src/bridges/ServiceMetricsBridge.h](../../services/src/bridges/ServiceMetricsBridge.h) 与 [services/src/bridges/ServiceMetricsBridge.cpp](../../services/src/bridges/ServiceMetricsBridge.cpp)，定义 internal `ServiceMetricsBridge`、`ServiceMetricsBridgeOptions`、`ServiceMetricsEmitResult` 与降级状态对象，冻结六个指标族：`services_execution_requests_total`、`services_execution_latency_ms`、`services_execution_circuit_open_total`、`services_data_query_requests_total`、`services_subscription_overflow_total`、`services_compensation_hint_total`。
+2. 更新 [services/src/execution/ExecutionCommandLane.h](../../services/src/execution/ExecutionCommandLane.h) 与 [services/src/execution/ExecutionCommandLane.cpp](../../services/src/execution/ExecutionCommandLane.cpp)，新增 `metrics_bridge` 依赖注入，把 invalid request、幂等 replay、高风险 deny、busy target、route failure、`route_unavailable` 的最小 circuit-open 代理与最终命令结果统一收口到 lane 内部指标接线点。
+3. 更新 [services/src/execution/ExecutionQueryLane.h](../../services/src/execution/ExecutionQueryLane.h) 与 [services/src/execution/ExecutionQueryLane.cpp](../../services/src/execution/ExecutionQueryLane.cpp)，把 query-state 的 validation/runtime/route/cached/live 各路径接到 metrics bridge，保持只读错误映射不变。
+4. 更新 [services/src/data/DataQueryLane.h](../../services/src/data/DataQueryLane.h) 与 [services/src/data/DataQueryLane.cpp](../../services/src/data/DataQueryLane.cpp)，把 data query / catalog 的 miss、fresh hit、stale、route error 与 live result 接到统一数据指标链路，并通过 stage 编码 cache hit/miss 事实。
+5. 更新 [services/src/execution/ExecutionSubscriptionHub.h](../../services/src/execution/ExecutionSubscriptionHub.h) 与 [services/src/execution/ExecutionSubscriptionHub.cpp](../../services/src/execution/ExecutionSubscriptionHub.cpp)，把 `resync_required` / `dropped_count` overflow 路径接到 `services_subscription_overflow_total` 发射入口。
+6. 更新 [services/CMakeLists.txt](../../services/CMakeLists.txt)，把 `ServiceMetricsBridge.cpp` 接入 `dasall_services` 构建图，保持 services 仅依赖既有 infra metrics 抽象，而不引入新的 exporter 实现依赖。
+7. 新增 [tests/unit/services/bridges/CMakeLists.txt](../../tests/unit/services/bridges/CMakeLists.txt) 与 [tests/unit/services/bridges/ServiceMetricsBridgeTest.cpp](../../tests/unit/services/bridges/ServiceMetricsBridgeTest.cpp)，并更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，覆盖指标族注册、记录失败触发 degraded、以及 observability disabled 时的 no-op 行为。
+8. 新增 [tests/integration/services/CMakeLists.txt](../../tests/integration/services/CMakeLists.txt) 与 [tests/integration/services/CapabilityServicesMetricsIntegrationTest.cpp](../../tests/integration/services/CapabilityServicesMetricsIntegrationTest.cpp)，并更新 [tests/integration/CMakeLists.txt](../../tests/integration/CMakeLists.txt)，把 `ServiceFacade -> lane/query/cache/subscription -> ServiceMetricsBridge` 串联接入顶层 integration 聚合目标。
+9. 新增 [docs/todos/services/deliverables/CAP-TODO-025-ServiceMetricsBridge指标桥设计收敛.md](../todos/services/deliverables/CAP-TODO-025-ServiceMetricsBridge%E6%8C%87%E6%A0%87%E6%A1%A5%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、025 状态以及下一直接执行入口。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_service_metrics_bridge_unit_test dasall_services_metrics_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - `dasall_services`、`dasall_service_metrics_bridge_unit_test` 与 `dasall_services_metrics_integration_test` 构建通过，说明 metrics bridge、lane/hub 注入点与 unit/integration 接线已收口。
+   - `ctest -L unit` 通过，最终结果为 `100% tests passed, 0 tests failed out of 211`，新增 `ServiceMetricsBridgeTest` 已进入 unit discoverability，并验证 frozen metric families、降级与 disabled no-op 场景。
+   - `ctest -L integration` 通过，最终结果为 `100% tests passed, 0 tests failed out of 30`，新增 `CapabilityServicesMetricsIntegrationTest` 已进入 integration discoverability，并验证 facade/lane/query/cache/subscription 的 shared meter 串联。
+
+### 结果
+
+1. CAP-TODO-025 已完成，services 现在具备统一的 internal 指标桥，可以把命令请求、查询/数据请求、时延分布、route-unavailable 的最小熔断代理、订阅 overflow 与补偿提示映射到 infra metrics 冻结边界。
+2. 本轮没有新增 `services.*` 顶层 schema，也没有扩大公共 supporting objects；指标启停与粒度仍然基于既有 `ServicePolicyView` 派生字段控制。
+
+### 下一步
+
+1. 进入 CAP-TODO-026，实现 `ServiceTraceBridge`，把 `ServiceFacade -> lane -> adapter -> external` 的 trace span 链路接到当前已经稳定的 policy / audit / metrics 基线之上。
+
+### 风险
+
+1. 当前 `services_execution_circuit_open_total` 仍以 `route_unavailable` 作为最小代理事实，尚不等价于 runtime 级独立 circuit breaker 状态；若 027 需要导出更严格的 readiness/degraded circuit 快照，必须在 health 路径统一收口，而不是继续在 metrics bridge 内扩张语义。
+
 ## 记录 #246
 
 - 日期：2026-04-09

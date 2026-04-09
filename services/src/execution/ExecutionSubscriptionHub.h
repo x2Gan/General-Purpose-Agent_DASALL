@@ -13,6 +13,8 @@
 
 namespace dasall::services::internal {
 
+class ServiceMetricsBridge;
+
 struct ExecutionSubscriptionEvent {
   std::uint64_t sequence = 0;
   std::string payload_json;
@@ -27,6 +29,7 @@ struct ExecutionSubscriptionStreamState {
 
 struct ExecutionSubscriptionHubDependencies {
   std::size_t max_buffered_events = 64;
+  ServiceMetricsBridge* metrics_bridge = nullptr;
 };
 
 class ExecutionSubscriptionHub {

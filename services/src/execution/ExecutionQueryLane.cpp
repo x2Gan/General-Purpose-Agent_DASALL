@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "bridges/ServiceMetricsBridge.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -72,22 +74,41 @@ ExecutionQueryLane::ExecutionQueryLane(ExecutionQueryLaneDependencies dependenci
 
 ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& context,
                                                      const ExecutionQueryRequest& request) const {
+  const auto emit_metrics = [&](ExecutionQueryResult result,
+                                std::string_view adapter_id,
+                                std::optional<std::uint64_t> latency_ms)
+      -> ExecutionQueryResult {
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_query_result(
+          request.query_kind,
+          adapter_id,
+          result,
+          latency_ms);
+    }
+
+    return result;
+  };
+
   if (request.target.capability_id.empty() || request.target.target_id.empty() ||
       request.query_kind.empty()) {
-    return make_error_result(request.target.target_id,
-                             "validator:" + context.request_id,
-                             "invalid_request",
-                             "capability_id, target_id, and query_kind are required",
-                             "execution_query_lane",
-                             {},
-                             false);
+    return emit_metrics(make_error_result(request.target.target_id,
+                                          "validator:" + context.request_id,
+                                          "invalid_request",
+                                          "capability_id, target_id, and query_kind are required",
+                                          "execution_query_lane",
+                                          {},
+                                          false),
+                        {},
+                        std::nullopt);
   }
 
   if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
       dependencies_.result_mapper == nullptr) {
-    return make_runtime_failure("query lane dependencies are not configured",
-                                "execution_query_lane",
-                                "query_lane.dependencies");
+    return emit_metrics(make_runtime_failure("query lane dependencies are not configured",
+                                             "execution_query_lane",
+                                             "query_lane.dependencies"),
+                        {},
+                        std::nullopt);
   }
 
   const auto route_decision = dependencies_.router->select_adapter(build_route_request(
@@ -97,15 +118,17 @@ ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& c
       dependencies_.registered_candidates,
       request));
   if (!route_decision.ok()) {
-    return make_error_result(request.target.target_id,
-                             "route:" + context.request_id,
-                             std::string(route_failure_name(route_decision.failure)),
-                             route_decision.reason,
-                             "adapter_router",
-                             route_decision.failure == AdapterRouteFailure::route_not_permitted
-                                 ? std::vector<std::string>{"policy://route/" + context.request_id}
-                                 : std::vector<std::string>{},
-                             false);
+    return emit_metrics(make_error_result(request.target.target_id,
+                        "route:" + context.request_id,
+                        std::string(route_failure_name(route_decision.failure)),
+                        route_decision.reason,
+                        "adapter_router",
+                        route_decision.failure == AdapterRouteFailure::route_not_permitted
+                          ? std::vector<std::string>{"policy://route/" + context.request_id}
+                          : std::vector<std::string>{},
+                        false),
+              {},
+              std::nullopt);
   }
 
   const auto receipt = dependencies_.bridge->invoke(
@@ -121,27 +144,31 @@ ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& c
       });
 
   if (!receipt.side_effects.empty()) {
-    return make_error_result(request.target.target_id,
-                             receipt.receipt_ref.empty() ? "query_receipt:" + context.request_id
-                                                         : receipt.receipt_ref,
-                             "invalid_request",
-                             "query_state must not emit side_effects",
-                             "execution_query_lane",
-                             receipt.evidence_refs,
-                             false);
+    return emit_metrics(make_error_result(request.target.target_id,
+                                          receipt.receipt_ref.empty() ? "query_receipt:" + context.request_id
+                                                                      : receipt.receipt_ref,
+                                          "invalid_request",
+                                          "query_state must not emit side_effects",
+                                          "execution_query_lane",
+                                          receipt.evidence_refs,
+                                          false),
+                        route_decision.selection->adapter_id,
+                        receipt.latency_ms);
   }
 
   if (request.freshness == ServiceDataFreshness::allow_stale &&
       receipt.provider_status_code == "data_stale" && dependencies_.load_cached_snapshot) {
     const auto cached_snapshot = dependencies_.load_cached_snapshot(request);
     if (cached_snapshot.has_value()) {
-      return ExecutionQueryResult{
+      return emit_metrics(ExecutionQueryResult{
           .code = contracts::ResultCode::ToolExecutionFailed,
           .state = cached_snapshot->state,
           .snapshot_json = cached_snapshot->snapshot_json,
           .from_cache = true,
           .error = std::nullopt,
-      };
+      },
+      route_decision.selection->adapter_id,
+      std::nullopt);
     }
   }
 
@@ -154,7 +181,7 @@ ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& c
     result.error->details.stage = "execution_query_lane";
   }
 
-  return result;
+  return emit_metrics(std::move(result), route_decision.selection->adapter_id, receipt.latency_ms);
 }
 
 ExecutionQueryResult ExecutionQueryLane::make_runtime_failure(const std::string& message,

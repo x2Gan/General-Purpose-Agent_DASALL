@@ -6,6 +6,7 @@ target_sources(dasall_services
     src/ServiceContextBuilder.cpp
     src/ops/ServiceConfigAdapter.cpp
     src/bridges/ServiceAuditBridge.cpp
+    src/bridges/ServiceMetricsBridge.cpp
     src/adapters/AdapterRouter.cpp
     src/adapters/AdapterBridge.cpp
     src/adapters/LocalPlatformAdapter.cpp

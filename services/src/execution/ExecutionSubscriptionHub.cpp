@@ -3,6 +3,8 @@
 #include <sstream>
 #include <utility>
 
+#include "bridges/ServiceMetricsBridge.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -60,18 +62,31 @@ void ExecutionSubscriptionHub::publish(const CapabilityTargetRef& target,
 
 ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCallContext&,
                                                                 const ExecutionSubscriptionRequest& request) {
+  const auto emit_metrics = [&](ExecutionSubscriptionResult result)
+      -> ExecutionSubscriptionResult {
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_subscription_result(
+          request.target.capability_id,
+          request.stream_kind,
+          result);
+    }
+
+    return result;
+  };
+
   if (request.target.capability_id.empty() || request.target.target_id.empty() ||
       request.stream_kind.empty() || request.max_events == 0U) {
-    return make_validation_failure("capability_id, target_id, stream_kind, and max_events are required",
-                                   "execution_subscription_hub",
-                                   "subscription_request");
+    return emit_metrics(make_validation_failure(
+        "capability_id, target_id, stream_kind, and max_events are required",
+        "execution_subscription_hub",
+        "subscription_request"));
   }
 
   const auto cursor_sequence = parse_cursor(request.cursor);
   if (!cursor_sequence.has_value()) {
-    return make_validation_failure("cursor must be an unsigned integer string",
-                                   "execution_subscription_hub",
-                                   "subscription_cursor");
+    return emit_metrics(make_validation_failure("cursor must be an unsigned integer string",
+                                                "execution_subscription_hub",
+                                                "subscription_cursor"));
   }
 
   const auto stream_key = make_stream_key(request.target, request.stream_kind);
@@ -84,14 +99,14 @@ ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCal
     std::lock_guard<std::mutex> lock(mutex_);
     auto stream_it = streams_.find(stream_key);
     if (stream_it == streams_.end()) {
-      return ExecutionSubscriptionResult{
+      return emit_metrics(ExecutionSubscriptionResult{
           .code = contracts::ResultCode::ToolExecutionFailed,
           .events_json = "[]",
           .next_cursor = request.cursor,
           .resync_required = false,
           .dropped_count = 0U,
           .error = std::nullopt,
-      };
+      });
     }
 
     auto& stream = stream_it->second;
@@ -121,20 +136,20 @@ ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCal
   }
 
   if (resync_required) {
-    return make_overflow_result(next_cursor,
-                                build_events_json(selected_events),
-                                dropped_count,
-                                stream_key);
+    return emit_metrics(make_overflow_result(next_cursor,
+                                             build_events_json(selected_events),
+                                             dropped_count,
+                                             stream_key));
   }
 
-  return ExecutionSubscriptionResult{
+  return emit_metrics(ExecutionSubscriptionResult{
       .code = contracts::ResultCode::ToolExecutionFailed,
       .events_json = build_events_json(selected_events),
       .next_cursor = next_cursor,
       .resync_required = false,
       .dropped_count = dropped_count,
       .error = std::nullopt,
-  };
+  });
 }
 
 std::string ExecutionSubscriptionHub::make_stream_key(const CapabilityTargetRef& target,

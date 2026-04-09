@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "bridges/ServiceAuditBridge.h"
+#include "bridges/ServiceMetricsBridge.h"
 #include "execution/CompensationCatalog.h"
 
 namespace dasall::services::internal {
@@ -143,26 +144,42 @@ ExecutionCommandResult ExecutionCommandLane::execute(const ServiceCallContext& c
                                                      const ExecutionCommandRequest& request) {
   if (request.target.capability_id.empty() || request.target.target_id.empty() ||
       request.action.empty()) {
-    return make_error_result(request.target.target_id,
-                             "validator:" + context.request_id,
-                             "invalid_request",
-                             "capability_id, target_id, and action are required",
-                             "execution_command_lane",
-                             {},
-                             {});
+    auto result = make_error_result(request.target.target_id,
+                                    "validator:" + context.request_id,
+                                    "invalid_request",
+                                    "capability_id, target_id, and action are required",
+                                    "execution_command_lane",
+                                    {},
+                                    {});
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          request.action,
+          {},
+          result,
+          std::nullopt);
+    }
+    return result;
   }
 
   const auto high_risk_action = is_high_risk_action(dependencies_, request.action);
   const auto critical_action = is_critical_action(dependencies_, request.action, high_risk_action);
 
   if (critical_action && !request.idempotency_key.has_value()) {
-    return make_error_result(request.target.target_id,
-                             "validator:" + context.request_id,
-                             "invalid_request",
-                             "critical actions require idempotency_key",
-                             "execution_command_lane",
-                             {},
-                             {});
+    auto result = make_error_result(request.target.target_id,
+                                    "validator:" + context.request_id,
+                                    "invalid_request",
+                                    "critical actions require idempotency_key",
+                                    "execution_command_lane",
+                                    {},
+                                    {});
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          request.action,
+          {},
+          result,
+          std::nullopt);
+    }
+    return result;
   }
 
   const auto execution_id = dependencies_.make_execution_id
@@ -210,13 +227,21 @@ ExecutionCommandResult ExecutionCommandLane::compensate(
   if (request.target.capability_id.empty() || request.target.target_id.empty() ||
       request.compensation_action.empty() || request.source_execution_id.empty() ||
       request.reason_code.empty()) {
-    return make_error_result(request.target.target_id,
-                             "validator:" + context.request_id,
-                             "invalid_request",
-                             "compensation requires capability_id, target_id, compensation_action, source_execution_id, and reason_code",
-                             "execution_command_lane",
-                             {},
-                             {});
+    auto result = make_error_result(request.target.target_id,
+                                    "validator:" + context.request_id,
+                                    "invalid_request",
+                                    "compensation requires capability_id, target_id, compensation_action, source_execution_id, and reason_code",
+                                    "execution_command_lane",
+                                    {},
+                                    {});
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          request.compensation_action,
+          {},
+          result,
+          std::nullopt);
+    }
+    return result;
   }
 
   const auto execution_id = dependencies_.make_compensation_execution_id
@@ -262,38 +287,69 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
                                                           bool audit_required) {
   if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
       dependencies_.result_mapper == nullptr) {
-    return make_runtime_failure("command lane dependencies are not configured",
-                                "execution_command_lane",
-                                "command_lane.dependencies");
+    auto result = make_runtime_failure("command lane dependencies are not configured",
+                                       "execution_command_lane",
+                                       "command_lane.dependencies");
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          action,
+          {},
+          result,
+          std::nullopt);
+    }
+    return result;
   }
 
   if (!idempotency_cache_key.empty()) {
     ExecutionCommandResult cached_result;
     if (try_get_cached_result(idempotency_cache_key, &cached_result)) {
+      if (dependencies_.metrics_bridge != nullptr) {
+        (void)dependencies_.metrics_bridge->record_execution_result(
+            action,
+            {},
+            cached_result,
+            std::nullopt);
+      }
       return cached_result;
     }
   }
 
   if (high_risk_action && !dependencies_.allow_high_risk_actions) {
-    return make_error_result(target.target_id,
-                             "policy:cap-gate-08",
-                             "policy_denied",
-                             "high-risk action remains gated until CAP-GATE-08 is satisfied",
-                             "execution_command_lane",
-                             {"cap-gate-08"},
-                             execution_id);
+    auto result = make_error_result(target.target_id,
+                                    "policy:cap-gate-08",
+                                    "policy_denied",
+                                    "high-risk action remains gated until CAP-GATE-08 is satisfied",
+                                    "execution_command_lane",
+                                    {"cap-gate-08"},
+                                    execution_id);
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          action,
+          {},
+          result,
+          std::nullopt);
+    }
+    return result;
   }
 
   const auto serialization_key = critical_action ? make_serialization_key(target, action)
                                                  : std::string{};
   if (!serialization_key.empty() && !try_acquire_serialization_key(serialization_key)) {
-    return make_error_result(target.target_id,
-                             "target-lease:" + serialization_key,
-                             "target_busy",
-                             "critical action is already in progress for target",
-                             "execution_command_lane",
-                             {},
-                             execution_id);
+    auto result = make_error_result(target.target_id,
+                                    "target-lease:" + serialization_key,
+                                    "target_busy",
+                                    "critical action is already in progress for target",
+                                    "execution_command_lane",
+                                    {},
+                                    execution_id);
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          action,
+          {},
+          result,
+          std::nullopt);
+    }
+    return result;
   }
   ScopeExit releaser([this, serialization_key]() {
     if (!serialization_key.empty()) {
@@ -337,6 +393,20 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
         dependencies_.fallback_envelope.requested_action_class);
     }
 
+    if (dependencies_.metrics_bridge != nullptr) {
+      if (route_decision.failure == AdapterRouteFailure::route_unavailable) {
+        (void)dependencies_.metrics_bridge->record_execution_circuit_open(
+            action,
+            {},
+            route_decision.reason);
+      }
+      (void)dependencies_.metrics_bridge->record_execution_result(
+          action,
+          {},
+          result,
+          std::nullopt);
+    }
+
     return result;
   }
 
@@ -376,6 +446,14 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
 
   if (!idempotency_cache_key.empty()) {
     cache_result(idempotency_cache_key, result);
+  }
+
+  if (dependencies_.metrics_bridge != nullptr) {
+    (void)dependencies_.metrics_bridge->record_execution_result(
+        action,
+        route_decision.selection->adapter_id,
+        result,
+        receipt.latency_ms);
   }
 
   return result;

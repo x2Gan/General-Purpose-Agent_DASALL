@@ -3,6 +3,8 @@
 #include <string_view>
 #include <utility>
 
+#include "bridges/ServiceMetricsBridge.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -104,41 +106,59 @@ DataQueryLane::DataQueryLane(DataQueryLaneDependencies dependencies)
 
 DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
                                      const DataQueryRequest& request) {
+  const auto emit_query_metrics = [&](DataQueryResult result,
+                                      std::optional<std::uint64_t> latency_ms)
+      -> DataQueryResult {
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_data_query_result(
+          request.projection,
+          result,
+          latency_ms);
+    }
+
+    return result;
+  };
+
   if (request.dataset.empty() || request.projection.empty()) {
-    return make_query_error_result(request.dataset,
-                                   "validator:" + context.request_id,
-                                   "invalid_request",
-                                   "dataset and projection are required",
-                                   "data_query_lane",
-                                   {},
-                                   false);
+    return emit_query_metrics(make_query_error_result(request.dataset,
+                                                      "validator:" + context.request_id,
+                                                      "invalid_request",
+                                                      "dataset and projection are required",
+                                                      "data_query_lane",
+                                                      {},
+                                                      false),
+                              std::nullopt);
   }
 
   if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
       dependencies_.result_mapper == nullptr || dependencies_.projection_cache == nullptr) {
-    return make_runtime_query_failure("data query lane dependencies are not configured",
-                                      "data_query_lane",
-                                      "data_query_lane.dependencies");
+    return emit_query_metrics(make_runtime_query_failure(
+                                  "data query lane dependencies are not configured",
+                                  "data_query_lane",
+                                  "data_query_lane.dependencies"),
+                              std::nullopt);
   }
 
   const auto cached = dependencies_.projection_cache->lookup(request, request.freshness);
   if (cached.snapshot.has_value() && cached.from_cache) {
-    return DataQueryResult{
+    return emit_query_metrics(DataQueryResult{
         .code = contracts::ResultCode::ToolExecutionFailed,
         .rows_json = cached.snapshot->rows_json,
         .from_cache = true,
         .error = std::nullopt,
-    };
+    },
+    std::nullopt);
   }
 
   if (cached.state == ProjectionCacheState::hit_stale && cached.snapshot.has_value()) {
-    return make_query_error_result(request.dataset,
-                                   cached.snapshot->cache_ref,
-                                   "data_stale",
-                                   "cached projection is stale under strict freshness",
-                                   "data_query_lane",
-                                   {cached.snapshot->cache_ref},
-                                   false);
+    return emit_query_metrics(make_query_error_result(request.dataset,
+                                                      cached.snapshot->cache_ref,
+                                                      "data_stale",
+                                                      "cached projection is stale under strict freshness",
+                                                      "data_query_lane",
+                                                      {cached.snapshot->cache_ref},
+                                                      false),
+                              std::nullopt);
   }
 
   const auto route_decision = dependencies_.router->select_adapter(build_query_route_request(
@@ -148,15 +168,17 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
       dependencies_.registered_candidates,
       request));
   if (!route_decision.ok()) {
-    return make_query_error_result(request.dataset,
-                                   "route:" + context.request_id,
-                                   std::string(route_failure_name(route_decision.failure)),
-                                   route_decision.reason,
-                                   "adapter_router",
-                                   route_decision.failure == AdapterRouteFailure::route_not_permitted
-                                       ? std::vector<std::string>{"policy://route/" + context.request_id}
-                                       : std::vector<std::string>{},
-                                   false);
+    return emit_query_metrics(make_query_error_result(
+                    request.dataset,
+                    "route:" + context.request_id,
+                    std::string(route_failure_name(route_decision.failure)),
+                    route_decision.reason,
+                    "adapter_router",
+                    route_decision.failure == AdapterRouteFailure::route_not_permitted
+                      ? std::vector<std::string>{"policy://route/" + context.request_id}
+                      : std::vector<std::string>{},
+                    false),
+                  std::nullopt);
   }
 
   const auto receipt = dependencies_.bridge->invoke(
@@ -171,14 +193,16 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
       });
 
   if (!receipt.side_effects.empty()) {
-    return make_query_error_result(request.dataset,
-                                   receipt.receipt_ref.empty() ? "data_query_receipt:" + context.request_id
-                                                               : receipt.receipt_ref,
-                                   "invalid_request",
-                                   "data query must not emit side_effects",
-                                   "data_query_lane",
-                                   receipt.evidence_refs,
-                                   false);
+    return emit_query_metrics(make_query_error_result(
+                                  request.dataset,
+                                  receipt.receipt_ref.empty() ? "data_query_receipt:" + context.request_id
+                                                              : receipt.receipt_ref,
+                                  "invalid_request",
+                                  "data query must not emit side_effects",
+                                  "data_query_lane",
+                                  receipt.evidence_refs,
+                                  false),
+                              receipt.latency_ms);
   }
 
   auto result = dependencies_.result_mapper->to_data_query_result(receipt, false);
@@ -191,25 +215,41 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
     result.error->details.stage = "data_query_lane";
   }
 
-  return result;
+  return emit_query_metrics(std::move(result), receipt.latency_ms);
 }
 
 DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& context,
                                                    const DataCatalogRequest& request) const {
+  const auto emit_catalog_metrics = [&](DataCatalogResult result,
+                                        std::optional<std::uint64_t> latency_ms)
+      -> DataCatalogResult {
+    if (dependencies_.metrics_bridge != nullptr) {
+      (void)dependencies_.metrics_bridge->record_data_catalog_result(
+          request.target_class,
+          result,
+          latency_ms);
+    }
+
+    return result;
+  };
+
   if (request.target_class.empty()) {
-    return make_catalog_error_result(request.target_class,
-                                     "validator:" + context.request_id,
-                                     "invalid_request",
-                                     "target_class is required",
-                                     "data_query_lane",
-                                     {});
+    return emit_catalog_metrics(make_catalog_error_result(request.target_class,
+                                                          "validator:" + context.request_id,
+                                                          "invalid_request",
+                                                          "target_class is required",
+                                                          "data_query_lane",
+                                                          {}),
+                                std::nullopt);
   }
 
   if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
       dependencies_.result_mapper == nullptr) {
-    return make_runtime_catalog_failure("data query lane dependencies are not configured",
-                                        "data_query_lane",
-                                        "data_query_lane.dependencies");
+    return emit_catalog_metrics(make_runtime_catalog_failure(
+                                    "data query lane dependencies are not configured",
+                                    "data_query_lane",
+                                    "data_query_lane.dependencies"),
+                                std::nullopt);
   }
 
   const auto route_decision = dependencies_.router->select_adapter(build_catalog_route_request(
@@ -219,14 +259,16 @@ DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& con
       dependencies_.registered_candidates,
       request));
   if (!route_decision.ok()) {
-    return make_catalog_error_result(request.target_class,
-                                     "route:" + context.request_id,
-                                     std::string(route_failure_name(route_decision.failure)),
-                                     route_decision.reason,
-                                     "adapter_router",
-                                     route_decision.failure == AdapterRouteFailure::route_not_permitted
-                                         ? std::vector<std::string>{"policy://route/" + context.request_id}
-                                         : std::vector<std::string>{});
+    return emit_catalog_metrics(make_catalog_error_result(
+                    request.target_class,
+                    "route:" + context.request_id,
+                    std::string(route_failure_name(route_decision.failure)),
+                    route_decision.reason,
+                    "adapter_router",
+                    route_decision.failure == AdapterRouteFailure::route_not_permitted
+                      ? std::vector<std::string>{"policy://route/" + context.request_id}
+                      : std::vector<std::string>{}),
+                  std::nullopt);
   }
 
   const auto receipt = dependencies_.bridge->invoke(
@@ -241,14 +283,15 @@ DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& con
       });
 
   if (!receipt.side_effects.empty()) {
-    return make_catalog_error_result(
-        request.target_class,
-        receipt.receipt_ref.empty() ? "data_catalog_receipt:" + context.request_id
-                                    : receipt.receipt_ref,
-        "invalid_request",
-        "data capability listing must not emit side_effects",
-        "data_query_lane",
-        receipt.evidence_refs);
+    return emit_catalog_metrics(make_catalog_error_result(
+                    request.target_class,
+                    receipt.receipt_ref.empty() ? "data_catalog_receipt:" + context.request_id
+                                  : receipt.receipt_ref,
+                    "invalid_request",
+                    "data capability listing must not emit side_effects",
+                    "data_query_lane",
+                    receipt.evidence_refs),
+                  receipt.latency_ms);
   }
 
   auto result = dependencies_.result_mapper->to_data_catalog_result(receipt);
@@ -256,7 +299,7 @@ DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& con
     result.error->details.stage = "data_query_lane";
   }
 
-  return result;
+  return emit_catalog_metrics(std::move(result), receipt.latency_ms);
 }
 
 DataQueryResult DataQueryLane::make_runtime_query_failure(const std::string& message,

@@ -12,6 +12,8 @@
 
 namespace dasall::services::internal {
 
+class ServiceMetricsBridge;
+
 struct CachedExecutionQuerySnapshot {
   std::string state;
   std::string snapshot_json;
@@ -34,6 +36,7 @@ struct ExecutionQueryLaneDependencies {
   std::function<std::string(const AdapterReceipt& receipt,
                             const ExecutionQueryRequest& request)>
       extract_state;
+  ServiceMetricsBridge* metrics_bridge = nullptr;
 };
 
 class ExecutionQueryLane {
