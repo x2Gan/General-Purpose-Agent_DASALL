@@ -104,4 +104,30 @@ struct ExecutionDiagnoseResult {
 	std::optional<contracts::ErrorInfo> error;
 };
 
+struct DataQueryRequest {
+	ServiceCallContext context;
+	std::string dataset;
+	SerializedJson filters_json;
+	std::string projection;
+	ServiceDataFreshness freshness;
+};
+
+struct DataCatalogRequest {
+	ServiceCallContext context;
+	std::string target_class;
+};
+
+struct DataQueryResult {
+	contracts::ResultCode code;
+	SerializedJson rows_json;
+	bool from_cache;
+	std::optional<contracts::ErrorInfo> error;
+};
+
+struct DataCatalogResult {
+	contracts::ResultCode code;
+	SerializedJson catalog_json;
+	std::optional<contracts::ErrorInfo> error;
+};
+
 }  // namespace dasall::services

@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #221
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-005 定义 Data 请求与结果对象族
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-004 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-005。
+2. 该任务只依赖 CAP-TODO-001、002，当前无 blocker，因此本轮继续只在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中收口 Data 请求/结果对象族。
+3. 本轮目标是冻结 data 子域的 query-only 公共对象边界，但不提前落 IDataService 方法签名。
+
+### 改动
+
+1. 更新 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h)，新增 `DataQueryRequest`、`DataCatalogRequest`、`DataQueryResult`、`DataCatalogResult` 四个 data 对象。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-005-Data请求与结果对象族设计收敛.md](../todos/services/deliverables/CAP-TODO-005-Data%E8%AF%B7%E6%B1%82%E4%B8%8E%E7%BB%93%E6%9E%9C%E5%AF%B9%E8%B1%A1%E6%97%8F%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-005 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+   - `printf '#include "ServiceTypes.h"\nusing namespace dasall::services;\nint main() { DataQueryRequest a{}; DataCatalogRequest b{}; DataQueryResult c{}; DataCatalogResult d{}; return static_cast<int>(a.dataset.size() + a.projection.size() + b.target_class.size() + c.from_cache + d.catalog_json.size()); }\n' | c++ -std=c++20 -Iservices/include -Icontracts/include -xc++ -fsyntax-only -`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明 Data 对象族落盘未破坏 services 模块构建与 contract gate。
+   - `InterfaceCatalogContractTest` 1/1 通过，services admission readiness 保持 awaiting 状态。
+   - 四个 Data request/result 类型的独立语法编译检查通过，说明 data 对象定义可被后续 IDataService 接口稳定复用。
+
+### 结果
+
+1. CAP-TODO-005 已完成，ServiceTypes.h 现在包含 services V1 公共 ABI 所需的全部基础/Execution/Data supporting objects。
+2. 本轮保持了 query-only 语义，没有在 data 对象层引入业务写操作、健康裁定或缓存实现细节。
+
+### 下一步
+
+1. 进入 CAP-TODO-006，在 [services/include/IExecutionService.h](../services/include/IExecutionService.h) 中冻结 execute、compensate、query_state、subscribe、diagnose 五个方法签名。
+
+### 风险
+
+1. 当前 `filters_json`、`rows_json` 与 `catalog_json` 仍保持字符串化承载；若后续某个 profile 或 adapter 需要更强类型 projection/filter 语义，应在 lane/mapper 层处理，不应回头扩张公共 data 对象头文件。
+
 ## 记录 #220
 
 - 日期：2026-04-09
