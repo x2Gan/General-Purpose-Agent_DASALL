@@ -2,7 +2,11 @@ add_library(dasall_services STATIC)
 
 target_sources(dasall_services
   PRIVATE
-    src/placeholder.cpp
+    src/ServiceFacade.cpp
+    src/ServiceContextBuilder.cpp
+    src/execution/placeholder.cpp
+    src/data/placeholder.cpp
+    src/system/placeholder.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS
@@ -19,6 +23,8 @@ target_compile_features(dasall_services PUBLIC cxx_std_20)
 target_include_directories(dasall_services
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(dasall_services

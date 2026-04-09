@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #224
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-008 接线 services CMake 与源码骨架目录
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-007 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-008。
+2. 该任务依赖 CAP-TODO-001、006、007，当前均已完成，且没有 blocker，因此本轮只处理 services 模块的 CMake 接线和源码骨架目录。
+3. 本轮目标是让 `dasall_services` 退出顶层 placeholder-only 状态，落下 ServiceFacade、ServiceContextBuilder 和 execution/data/system 三个子域的最小源码骨架，但不提前实现行为逻辑或 unit 注册。
+
+### 改动
+
+1. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 `dasall_services` 的 `PRIVATE` 源列表切到 [services/src/ServiceFacade.cpp](../services/src/ServiceFacade.cpp)、[services/src/ServiceContextBuilder.cpp](../services/src/ServiceContextBuilder.cpp)、[services/src/execution/placeholder.cpp](../services/src/execution/placeholder.cpp)、[services/src/data/placeholder.cpp](../services/src/data/placeholder.cpp)、[services/src/system/placeholder.cpp](../services/src/system/placeholder.cpp)，并新增 `services/src` 的 `PRIVATE` include 目录。
+2. 删除旧的 [services/src/placeholder.cpp](../services/src/placeholder.cpp) 顶层 placeholder-only 源，改为按 façade / context / execution / data / system 五个骨架翻译单元承接 Phase 1 源码树。
+3. 新增 [docs/todos/services/deliverables/CAP-TODO-008-services-CMake与源码骨架目录接线设计收敛.md](../todos/services/deliverables/CAP-TODO-008-services-CMake与源码骨架目录接线设计收敛.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+4. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md)，将 CAP-TODO-008 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services`
+   - `ctest --test-dir build-ci -N`
+2. 结果：
+   - `dasall_services` 构建通过，说明 services 模块已可在真实源码树下编译，不再依赖单一 placeholder 源。
+   - `ctest -N` 能正常列出当前仓库测试集合，说明本轮 CMake 接线没有破坏现有测试 discoverability。
+
+### 结果
+
+1. CAP-TODO-008 已完成，services 现在具备 ServiceFacade / ServiceContextBuilder / execution / data / system 的 Phase 1 源码树骨架。
+2. 本轮只完成骨架接线，没有提前把 normalize_context、façade 委派或 services unit 注册混入同一提交，保持了 008 与 009~011 的原子边界。
+
+### 下一步
+
+1. 进入 CAP-TODO-009，在 services/src 中实现 ServiceContextBuilder 的 `normalize_context()` 规范化骨架，并为透传与缺字段负路径补 unit 用例。
+
+### 风险
+
+1. 当前 execution/data/system 目录仍只有占位翻译单元；若后续任务没有及时补上 internal headers 与 tests，目录骨架只能证明落点已固定，尚不能证明行为语义正确。
+
 ## 记录 #223
 
 - 日期：2026-04-09
