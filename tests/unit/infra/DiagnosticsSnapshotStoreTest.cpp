@@ -79,6 +79,7 @@ void test_snapshot_store_prunes_snapshots_outside_the_retention_window() {
   using dasall::tests::support::assert_true;
 
   SnapshotStore store(SnapshotStoreOptions{.retention_days = 1, .max_snapshot_count = 8});
+  store.inject_current_time_for_test("2026-04-08T10:00:00Z");
 
   assert_true(store.store(make_snapshot("diag-snapshot-store-old", "2026-04-07T10:00:00Z")).stored,
               "SnapshotStore should accept an older retained snapshot before retention pruning is evaluated against a later clock");

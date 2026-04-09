@@ -1,9 +1,9 @@
 # DASALL Capability Services 子系统专项 TODO
 
-最近更新时间：2026-04-09（CAP-TODO-033 已完成，IExecutionService / IDataService shared-contract admission 已给出 Admit 结论，InterfaceCatalog readiness 从 AwaitingSupportingContracts 提升为 ReviewReady）
+最近更新时间：2026-04-09（CAP-TODO-034 已完成，services 专项 Gate 已回写并通过 unit / contract / integration / discoverability 全量基线）
 阶段：Detailed Design -> Special TODO  
 适用范围：services/  
-当前结论：D1 已完成；CAP-TODO-015~027 已为 D2 / Phase 4 落盘 low-risk `ExecutionCommandLane`、static `CompensationCatalog`、query-only `ExecutionQueryLane`、internal `ExecutionSubscriptionHub`、diagnose-only `ExecutionDiagnoseService`、`DataProjectionCache`、`DataQueryLane`、internal-only `SystemSnapshotLane`，以及 `RuntimePolicySnapshot` / `BuildProfileManifest` -> internal `ServicePolicyView` 的统一派生入口 `ServiceConfigAdapter`、接入 `ExecutionCommandLane` 的 internal `ServiceAuditBridge`、接入命令/查询/缓存/overflow 链路的 internal `ServiceMetricsBridge`、串起 `ServiceFacade -> lane -> adapter -> external` 的 internal `ServiceTraceBridge`，以及把 circuit / adapter readiness / queue pressure / observability degraded 事实统一收敛为 `HealthSnapshot` 的 internal `ServiceHealthProbe`。当前已新增 header-only `CapabilityServicesLoopbackFixture`，并把 services integration 注册收敛为子目录导出的 target 列表 + 顶层聚合消费模式；`CapabilityServicesSmokeIntegrationTest` 已验证 execute/query/catalog loopback 最小闭环与 smoke 级 observability 字段，`CapabilityServicesFailureIntegrationTest` 已进一步覆盖 remote timeout、partial side effect、subscription overflow 与 route-unavailable circuit-open proxy，并通过 `ServiceAuditBridge` / `ServiceMetricsBridge` 验证 error、audit、metrics 证据不回退；`CapabilityServicesProfileIntegrationTest` 已基于真实 `desktop_full` / `edge_balanced` profile 资产验证 platform route、timeout/workflow deadline、cache TTL 与默认 stale-read 基线差异，且 `ProfileRuntimePolicySchemaContractTest` 未回退。Execution/Data/System 子域现已具备幂等键缓存、关键动作串行化、补偿提示目录、strict/allow_stale freshness 分支、cursor/batch 订阅骨架、`drop_oldest` overflow、`resync_required` / `dropped_count` 可观测基础、`target_reachable` / `report_json` 只读诊断语义、TTL/stale/from_cache 缓存骨架、统一数据 query/catalog 只读入口、供 health/internal orchestration 使用的系统快照骨架，以及 lane worker、timeout/circuit、TTL/stale-read、safe_mode/high-risk/audit/caller domain、platform/observability 开关的统一内部 policy 基线、高风险/补偿/fallback_blocked 审计发射能力、请求量/时延分布/route-unavailable 熔断代理、缓存 hit/miss、订阅 overflow 与补偿提示的指标发射能力、稳定的 root/lane/adapter/external 父子 span 追踪链与内部 services health snapshot；高风险 action 仍按 CAP-GATE-08 fail-closed，015~033 串行链已闭合，`IExecutionService` / `IDataService` shared-contract admission 已完成评审并切到 `ReviewReady`，剩余收口集中在专项 Gate 与交付证据回写。
+当前结论：D1 已完成；CAP-TODO-015~027 已为 D2 / Phase 4 落盘 low-risk `ExecutionCommandLane`、static `CompensationCatalog`、query-only `ExecutionQueryLane`、internal `ExecutionSubscriptionHub`、diagnose-only `ExecutionDiagnoseService`、`DataProjectionCache`、`DataQueryLane`、internal-only `SystemSnapshotLane`，以及 `RuntimePolicySnapshot` / `BuildProfileManifest` -> internal `ServicePolicyView` 的统一派生入口 `ServiceConfigAdapter`、接入 `ExecutionCommandLane` 的 internal `ServiceAuditBridge`、接入命令/查询/缓存/overflow 链路的 internal `ServiceMetricsBridge`、串起 `ServiceFacade -> lane -> adapter -> external` 的 internal `ServiceTraceBridge`，以及把 circuit / adapter readiness / queue pressure / observability degraded 事实统一收敛为 `HealthSnapshot` 的 internal `ServiceHealthProbe`。当前已新增 header-only `CapabilityServicesLoopbackFixture`，并把 services integration 注册收敛为子目录导出的 target 列表 + 顶层聚合消费模式；`CapabilityServicesSmokeIntegrationTest` 已验证 execute/query/catalog loopback 最小闭环与 smoke 级 observability 字段，`CapabilityServicesFailureIntegrationTest` 已进一步覆盖 remote timeout、partial side effect、subscription overflow 与 route-unavailable circuit-open proxy，并通过 `ServiceAuditBridge` / `ServiceMetricsBridge` 验证 error、audit、metrics 证据不回退；`CapabilityServicesProfileIntegrationTest` 已基于真实 `desktop_full` / `edge_balanced` profile 资产验证 platform route、timeout/workflow deadline、cache TTL 与默认 stale-read 基线差异，且 `ProfileRuntimePolicySchemaContractTest` 未回退。Execution/Data/System 子域现已具备幂等键缓存、关键动作串行化、补偿提示目录、strict/allow_stale freshness 分支、cursor/batch 订阅骨架、`drop_oldest` overflow、`resync_required` / `dropped_count` 可观测基础、`target_reachable` / `report_json` 只读诊断语义、TTL/stale/from_cache 缓存骨架、统一数据 query/catalog 只读入口、供 health/internal orchestration 使用的系统快照骨架，以及 lane worker、timeout/circuit、TTL/stale-read、safe_mode/high-risk/audit/caller domain、platform/observability 开关的统一内部 policy 基线、高风险/补偿/fallback_blocked 审计发射能力、请求量/时延分布/route-unavailable 熔断代理、缓存 hit/miss、订阅 overflow 与补偿提示的指标发射能力、稳定的 root/lane/adapter/external 父子 span 追踪链与内部 services health snapshot；高风险 action 仍按 CAP-GATE-08 fail-closed，015~034 串行链已闭合，`IExecutionService` / `IDataService` shared-contract admission 已完成评审并切到 `ReviewReady`，services 专项 Gate 已完成回写，`ctest -N` Total Tests=400，unit 213/213、contract 152/152、integration 35/35 全部通过。
 
 ## 1. 文档头
 
@@ -220,7 +220,7 @@
 | CAP-TODO-031 | Done | 验证 failure injection integration | 详细设计 7.1、9.1、9.3、9.4 | CapabilityServicesFailureIntegrationTest；9.3 failure 注入点 | L2 | tests/integration/services/；tests/mocks/include/ | adapter timeout、partial side effect、subscription overflow、circuit open | integration：`integration;failure` 用例通过 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration && ctest --test-dir build-ci --output-on-failure -L failure` | CAP-TODO-015、016、018、024、025、026、027、028、029、030 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-031-CapabilityServices-failure-integration设计收敛.md、tests/mocks/include/CapabilityServicesLoopbackFixture.h、tests/integration/services/CMakeLists.txt、tests/integration/services/CapabilityServicesFailureIntegrationTest.cpp；2026-04-09 已通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_services_failure_integration_test`、`ctest --test-dir build-ci --output-on-failure -R CapabilityServicesFailureIntegrationTest`、`cmake --build build-ci --target dasall_integration_tests`、`ctest --test-dir build-ci -N -L failure`、`ctest --test-dir build-ci --output-on-failure -L failure`、`ctest --test-dir build-ci --output-on-failure -L integration` 与 `ctest --test-dir build-ci -N`，其中 failure 定向 1/1 通过、failure 标签 16/16 通过、integration 34/34 通过、Total Tests=399 | 仅当 9.3 列出的关键注入点都有二值化结果，且错误/审计/指标表现符合设计时完成 |
 | CAP-TODO-032 | Done | 验证 profile 差异 integration | 详细设计 9.1、10.2；6.9.1 派生表 | 9.1 profile 差异测试；10.2 灰度路径 | L2 | tests/integration/services/ | desktop_full 与 edge_balanced 的路由 / timeout / cache 差异 | integration：`integration;profile` 用例通过；contract：ProfileRuntimePolicySchemaContractTest 不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services_profile_integration_test && ctest --test-dir build-ci --output-on-failure -R CapabilityServicesProfileIntegrationTest && ctest --test-dir build-ci --output-on-failure -L profile && ctest --test-dir build-ci --output-on-failure -L integration && ctest --test-dir build-ci --output-on-failure -R ProfileRuntimePolicySchemaContractTest && ctest --test-dir build-ci -N` | CAP-TODO-023、028、029、030 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-032-CapabilityServices-profile-integration设计收敛.md、tests/integration/services/CMakeLists.txt、tests/integration/services/CapabilityServicesProfileIntegrationTest.cpp、docs/worklog/DASALL_开发执行记录.md；2026-04-09 已通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_services_profile_integration_test`、`ctest --test-dir build-ci --output-on-failure -R CapabilityServicesProfileIntegrationTest`、`ctest --test-dir build-ci --output-on-failure -L profile`、`ctest --test-dir build-ci --output-on-failure -L integration`、`ctest --test-dir build-ci --output-on-failure -R ProfileRuntimePolicySchemaContractTest` 与 `ctest --test-dir build-ci -N`，其中 profile 定向 1/1 通过、profile 标签 2/2 通过、integration 35/35 通过、contract 1/1 通过、Total Tests=400 | 仅当 profile 差异只经 RuntimePolicySnapshot / BuildProfileManifest 派生体现，而非新增 `services.*` schema 时完成 |
 | CAP-TODO-033 | Done | 发起 IExecutionService / IDataService admission 评审 | 详细设计 7.2、8.2 Phase 6、10.2；InterfaceCatalog 现状 | 7.2 当前无法直接映射项；10.2 V2 准备 | L0 | docs/architecture/DASALL_capability_services子系统详细设计.md；contracts/include/boundary/InterfaceCatalog.h；tests/contract/smoke/InterfaceCatalogContractTest.cpp；tests/contract/smoke/InterfaceAdmissionContractTest.cpp | shared-contract readiness checklist；InterfaceCatalog readiness 决策 | contract：InterfaceCatalogContractTest、InterfaceAdmissionContractTest 和 contract gate 通过；process：评审结论二值化 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest && ctest --test-dir build-ci --output-on-failure -R InterfaceAdmissionContractTest && ctest --test-dir build-ci --output-on-failure -L contract` | CAP-TODO-002、003、004、005、006、007、030、031、032 | 无（CAP-BLK-005 已由本任务关闭） | public ABI 稳定、services integration 全量通过、评审门通过 | docs/todos/services/deliverables/CAP-TODO-033-IExecutionService-IDataService-admission评审收敛.md、docs/architecture/DASALL_capability_services子系统详细设计.md、contracts/include/boundary/InterfaceCatalog.h、tests/contract/smoke/InterfaceCatalogContractTest.cpp、tests/contract/smoke/InterfaceAdmissionContractTest.cpp、docs/worklog/DASALL_开发执行记录.md；2026-04-09 已通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_contract_tests`、`ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest`、`ctest --test-dir build-ci --output-on-failure -R InterfaceAdmissionContractTest` 与 `ctest --test-dir build-ci --output-on-failure -L contract`，其中 InterfaceCatalog 1/1 通过、InterfaceAdmission 1/1 通过、contract 标签 152/152 通过，并将 services pair 的 readiness 提升为 `ReviewReady` | 仅当评审明确给出 admit / postpone 结论，且不破坏现有 contract gate 时完成 |
-| CAP-TODO-034 | Todo | 回写 services 专项 Gate 与交付证据 | 详细设计 9.4、10.2、11、12.2；本专项 TODO | 9.4 Gate；11 风险与阻塞；12.2 后续任务 | L2 | docs/todos/services/DASALL_capability_services子系统专项TODO.md | Gate、阻塞、验收、回退记录回写 | process：命令证据、阻塞变更、风险残留全部回写 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration` | CAP-TODO-011、029、030、031、032、033 | 无（CAP-BLK-005 已解阻，待执行 Gate 收口） | 完成 CAP-TODO-033 并执行专项 Gate 命令 | 更新后的专项 TODO 与执行证据 | 仅当每个 Gate 都有通过/失败结论、命令证据、阻塞状态和后续动作回写时完成 |
+| CAP-TODO-034 | Done | 回写 services 专项 Gate 与交付证据 | 详细设计 9.4、10.2、11、12.2；本专项 TODO | 9.4 Gate；11 风险与阻塞；12.2 后续任务 | L2 | docs/todos/services/DASALL_capability_services子系统专项TODO.md；docs/todos/services/deliverables/CAP-TODO-034-services专项Gate与交付证据收敛.md；docs/worklog/DASALL_开发执行记录.md；tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp | Gate、阻塞、验收、回退记录回写；全量 Gate 期间的最小 blocker-fix | process：命令证据、阻塞变更、风险残留全部回写；unit：SnapshotStore retention window 用例去除实时墙钟依赖 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration` | CAP-TODO-011、029、030、031、032、033 | 首次 Gate 受 `DiagnosticsSnapshotStoreTest` 实时墙钟依赖阻塞，已在本轮解阻 | 为 retention window 场景注入固定当前时间、重建 `dasall_diagnostics_snapshot_store_unit_test` 并复验 full gate | docs/todos/services/deliverables/CAP-TODO-034-services专项Gate与交付证据收敛.md、docs/todos/services/DASALL_capability_services子系统专项TODO.md、docs/worklog/DASALL_开发执行记录.md、tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp；2026-04-09 已通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_diagnostics_snapshot_store_unit_test`、`ctest --test-dir build-ci --output-on-failure -R DiagnosticsSnapshotStoreTest`、`cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests dasall_integration_tests`、`ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract` 与 `ctest --test-dir build-ci --output-on-failure -L integration`，其中 `DiagnosticsSnapshotStoreTest` 1/1 通过、Total Tests=400、unit 213/213、contract 152/152、integration 35/35 全部通过 | 仅当每个 Gate 都有通过结论、命令证据、阻塞状态和后续动作回写，且 blocker-fix 不改写 services 产品语义时完成 |
 
 ## 7. 执行顺序建议
 
@@ -298,52 +298,67 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 | 架构一致性 | 可满足 | 只要保持 Runtime / Tool / Service 控制权边界不漂移，TODO 已与 6.1.4、6.1.5 对齐 |
 | ADR 边界一致性 | 可满足 | ADR-006/007/008 主要约束是“不越权”，当前任务未把上下文、恢复、全局调度拉入 services |
 | contracts / 公共语义兼容性 | 可满足 | CAP-TODO-033 已完成 admission review，IExecutionService / IDataService 已切换到 ReviewReady；正式 shared header 升格仍需独立任务控制 |
-| 工程可实现性 | 部分直接可执行 | A-B-C 与 D1 阶段已完成，CAP-TODO-015/016/017 已完成；CAP-TODO-018、019、020、022、023、028 可直接进入执行；CAP-TODO-021 仍依赖 020，integration 阶段继续受 CAP-BLK-004~005 约束 |
+| 工程可实现性 | 已满足 | A-H 阶段已全部完成；CAP-TODO-034 已执行专项 Gate 并完成证据回写，首次全量 unit 基线受 `DiagnosticsSnapshotStoreTest` 的实时墙钟依赖阻塞，已通过 tests-side 固定时钟解阻，不涉及 services 产品语义变更 |
 | 测试可验证性 | 可满足 | 已有顶层 unit / contract / integration 聚合 target，可承接 services 用例 |
 | 原子任务可执行性 | 可满足 | 公共 ABI 已拆到对象 / 接口级；内部复杂链路显式保留补设计前置 |
 | 粒度可评审性 | 可满足 | 每个任务都回链到 6.x / 7.x / 8.x / 9.x 设计锚点或当前代码现状 |
+
+### 9.3 CAP-TODO-034 Gate 执行证据（2026-04-09）
+
+| Gate ID | 结论 | 命令证据 | 结果摘要 |
+|---|---|---|---|
+| CAP-GATE-01 | PASS | `cmake -S . -B build-ci -G "Unix Makefiles"`；`cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests dasall_integration_tests` | configure / generate 成功；services 静态库与 unit / contract / integration 聚合 target 全部重编通过 |
+| CAP-GATE-02 | PASS | `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests dasall_integration_tests` | `dasall_services` 已包含 facade、lane、adapter、bridge、health 等真实源码，034 执行时不再依赖 placeholder-only 状态 |
+| CAP-GATE-03 | PASS | `ctest --test-dir build-ci --output-on-failure -L contract` | contract 152/152 全部通过，CAP-BLK-001~005 对应的 taxonomy / route / receipt / admission 基线未回退 |
+| CAP-GATE-04 | PASS | `ctest --test-dir build-ci -N`；`ctest --test-dir build-ci --output-on-failure -L unit` | `ctest -N` 总测试数为 400，unit 213/213 全部通过，services/infra unit 入口均可发现且可执行 |
+| CAP-GATE-05 | PASS | `ctest --test-dir build-ci -N`；`ctest --test-dir build-ci --output-on-failure -L integration` | services smoke / failure / profile / audit / metrics / trace / health 集成入口保持 discoverable，integration 35/35 全部通过 |
+| CAP-GATE-06 | PASS | `ctest --test-dir build-ci --output-on-failure -L integration` | 高风险审计、metrics、trace、health 集成链路未回退，services 集成套件 35/35 全部通过 |
+| CAP-GATE-07 | PASS | `ctest --test-dir build-ci --output-on-failure -L contract` | InterfaceCatalog / InterfaceAdmission 所在 contract 套件保持全绿，`IExecutionService` / `IDataService` 的 `ReviewReady` 基线稳定 |
+| CAP-GATE-08 | PASS | `ctest --test-dir build-ci --output-on-failure -L unit`；`ctest --test-dir build-ci --output-on-failure -L integration` | query / diagnose / system 只读路径与高风险 fail-closed 相关回归未退化，本轮只收口 Gate 证据，不新增越界命令语义 |
+
+### 9.4 阻塞变化与回退记录
+
+1. CAP-BLK-001~005 已全部解除，034 执行时 services 专项范围内已无未解阻的显式 blocker；本轮只出现一次全仓 unit 基线阻塞，不新增新的 services blocker ID。
+2. 首次 `ctest --test-dir build-ci --output-on-failure -L unit` 期间，`DiagnosticsSnapshotStoreTest` 因 retention window 场景依赖实时墙钟时间而失败。该问题属于跨模块 tests-side 不确定性，而不是 services 产品语义回归。已在 `tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp` 的 `test_snapshot_store_prunes_snapshots_outside_the_retention_window()` 中注入固定当前时间，并重建 `dasall_diagnostics_snapshot_store_unit_test` 后恢复通过。
+3. 本轮未触发产品回退路径；最小解阻严格限制在 tests-side 确定性修复。034 最终仍沿用统一 `build-ci` 命令链完成 full gate 复验，结论不依赖 IDE / CMake Tools 状态。
 
 ## 10. 风险与回退策略
 
 | 风险 ID | 风险描述 | 级别 | 触发条件 | 回退 / 缓解策略 |
 |---|---|---|---|---|
-| CAP-RISK-001 | 过早把 IExecutionService / IDataService 推进到共享 contracts | High | supporting objects 未稳定就改 InterfaceCatalog readiness | 维持模块内接口冻结；Phase 6 前只做 review checklist，不改共享 contracts |
+| CAP-RISK-001 | 把 `ReviewReady` 误当作 shared header 落位完成 | High | 后续直接在 `contracts/include` 迁入 services 接口头而未单独评审 include 迁移与兼容影响 | 保持 033/034 结论仅代表 admission baseline 已闭合；若要落位 shared header，必须单独起原子任务并补兼容评审 |
 | CAP-RISK-002 | 高风险 action taxonomy 或 caller_domain / proof recheck 漂移 | High | 命令车道绕过已冻结确认映射，或新增高风险动作未回写设计 | 保持 CAP-TODO-012 设计基线；新增高风险动作必须先回评审，再进入命令链实现 |
 | CAP-RISK-003 | Adapter 自动 fallback 改变动作语义 | High | 语义不等价的 adapter 被自动切换 | 在 CAP-TODO-013 中冻结 fallback envelope；未冻结前不实现 router |
 | CAP-RISK-004 | 订阅链路 silent drop | Medium | overflow 发生但未返回 `resync_required` 或 drop 计数 | 强制回链 InfraConcurrencyPolicy，保持 `drop_oldest + resync_required + dropped_count` 三联约束 |
 | CAP-RISK-005 | services 私自引入 `services.*` 顶层 schema | Medium | ServiceConfigAdapter 绕过 RuntimePolicySnapshot 派生新键 | 只允许在 CAP-TODO-023 中消费既有 schema；若要新增键，先回到 profiles contract |
 | CAP-RISK-006 | observability exporter 故障拖垮主链路 | Medium | metrics / trace / audit sink 异常阻断主路径 | audit 必须保留；metrics / trace 可降级，但不得吞掉主错误 |
-| CAP-RISK-007 | 缺少 loopback / mock fixture 导致 integration 无法闭环 | Medium | tests/integration/services 无法形成最小回路 | 先完成 CAP-TODO-028，再进入 029~032 |
+| CAP-RISK-007 | 全量专项 Gate 受跨模块 wall-clock 依赖测试波动影响 | Medium | unit 基线中仍存在依赖实时系统时间的断言，导致与 services 无关的测试波动阻塞 034 这类全量 gate | 优先做 tests-side 确定性修复并重建定向目标，再重跑 full gate；不要为了绕过 baseline 噪声而放宽 services 产品语义 |
 
 ## 11. 可行性结论
 
 ### 11.1 是否可以直接进入执行
 
-可以，但仅限部分执行。
+可以，且本专项范围内的 Build-ready 任务已经执行完毕。
 
-当前可直接进入执行的任务集合：
+当前状态：
 
-1. CAP-TODO-001~014、035~040：公共 ABI、补设计与 D1 Adapter / ResultMapper Build 已完成。
-2. CAP-TODO-018、019、020、022、025~028：订阅 / 诊断车道，DataProjectionCache，SystemSnapshotLane，Metrics/Trace/Health bridge 与 loopback fixture 方案；CAP-TODO-023、024 已完成并为 025~027 提供统一 policy / audit 基线。
-3. CAP-TODO-033 已完成 admission 评审并关闭 CAP-BLK-005；当前剩余未完成任务仅收敛到 CAP-TODO-034 的专项 Gate 证据回写。
+1. CAP-TODO-001~040、033~034 已全部完成。
+2. CAP-BLK-001~005 已全部解除。
+3. services 专项 Gate 已在 2026-04-09 重新执行并全量通过，当前专项范围内无未解阻的 Build-ready 缺口。
 
 ### 11.2 当前可落到的最细粒度
 
-1. 公共 supporting objects 与 IExecutionService / IDataService：可落到 L3。
-2. ServiceContextBuilder、ServiceFacade、DataProjectionCache、ServiceConfigAdapter：可落到 L2。
-3. Execution / Query / Diagnose / Subscription / Adapter / Observability / Integration 深链路：当前只能落到 L2；其中 D1 已完成、015/016/017 已落盘，D2 可从 018、019 起步，integration 仍继续受 CAP-BLK-004~005 约束。
+1. 本轮已经实际落到 supporting object / interface / component / integration / gate evidence 五个层级，并形成 L3 / L2 / L0 的闭环交付。
+2. 若继续演进，新的最细粒度应重新收敛到独立原子任务，例如 shared-contract header 落位、`ISystemService` externalization、额外 observability sink / adapter 扩展；这些都不属于当前专项收口范围。
 
 ### 11.3 阻止进一步细化到全量函数级的证据缺口
 
-1. D1 Adapter / ResultMapper 代码路径已全部落盘并通过 unit / contract 验证，lane 的全量函数级实现已具备稳定的路由与结果映射基础。
-2. loopback / mock integration fixture 尚无明确落盘方案，无法把 smoke / failure / profile integration 拆到用例级原子任务后直接执行。
-3. IExecutionService / IDataService 的 shared-contract admission 已在 CAP-TODO-033 中完成评审并切到 ReviewReady；但这仍不等于本轮要在 contracts/include 新增正式 services 接口头，相关 header 落位必须单独起任务。
-4. observability 与 integration 深链路仍依赖 D2 产出，当前不能跳过车道实现直接承诺终态验证。
+1. 当前不存在阻止本专项收口的证据缺口；configure / build / discoverability / unit / contract / integration 已全部闭合。
+2. 仍保留的边界不是“证据不足”，而是“范围冻结”：`IExecutionService` / `IDataService` 虽已 `ReviewReady`，但本轮不迁入 `contracts/include`；`ISystemService`、`AdapterReceipt`、`HealthSnapshot` 继续 internal-only。
+3. 全量 Gate 仍可能受跨模块测试基线影响；若未来再次出现 wall-clock dependent unit 波动，应按 9.4 的最小 blocker-fix 路径先稳定测试，再重跑专项 Gate。
 
 ### 11.4 后续建议
 
-1. A-B-C 与 D1 阶段已完成，当前进入 D2 Execution / Data / System 深链路实现。
-2. 下一优先顺序可收敛为 `018 -> 019 -> 020 -> 021 -> 022 -> 023`，其中 CAP-TODO-028 可并行推进。
-3. loopback / mock fixture 方案仍需尽快落盘；在 CAP-TODO-028 未完成前，不要提前承诺 services integration 完成时间。
-4. CAP-TODO-024~027 继续依赖 D2 结果面与 CAP-TODO-023，不应跳过车道实现直接落 observability 终态代码。
-5. CAP-TODO-033 已作为评审门完成；后续若要真正把 services 接口头迁入 contracts/include，必须单独拆 shared-contract header 落位任务，不应与 CAP-TODO-034 的 Gate 收口混做。
+1. 若后续要把 `IExecutionService` / `IDataService` 正式迁入 `contracts/include`，应单独拆 shared-contract header 落位任务，并补 include 迁移与兼容评审。
+2. 若后续要开放 system shared ABI，应先补 system supporting objects 与跨模块消费者证据，不得复用 033 的 services pair admission 结论。
+3. 若 future gate 再受非 services baseline 噪声影响，优先修复测试确定性，不要在 services 产品语义上做补丁式让步。

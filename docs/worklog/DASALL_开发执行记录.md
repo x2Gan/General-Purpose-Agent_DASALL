@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #256
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-034 回写 services 专项 Gate 与交付证据
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-033 推送完成后，CAP-TODO-034 成为 services 专项串行链上的最后一个收口任务；033 已经关闭 CAP-BLK-005，因此 034 的唯一目标是把专项 Gate、阻塞变化、风险残留和执行证据完整回写，而不是继续扩张 services ABI。
+2. 该任务的关键边界是“只做证据收口和最小 blocker-fix”。若 full gate 被与 services 无关的基线噪声阻塞，只允许做 tests-side 确定性修复，不允许借机改写 services 产品语义或放宽既有 contract / integration 断言。
+3. 本轮首次执行 full gate 时，`DiagnosticsSnapshotStoreTest` 因 retention window 场景依赖实时墙钟而失败；这直接阻塞了 034 的 `ctest -L unit` 基线，因此必须先做最小解阻，再回到专项 Gate 收口主线。
+
+### 改动
+
+1. 更新 [tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp](../tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp)，在 `test_snapshot_store_prunes_snapshots_outside_the_retention_window()` 中为 `SnapshotStore` 注入固定当前时间 `2026-04-08T10:00:00Z`，消除 retention window 边界对实时系统时间的依赖。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-034-services专项Gate与交付证据收敛.md](../todos/services/deliverables/CAP-TODO-034-services专项Gate与交付证据收敛.md)，收敛 full gate 结果、阻塞变化、最小解阻与风险 / 回退结论。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md)，把 CAP-TODO-034 标记为 Done，并补齐 9.3 Gate 执行证据、9.4 阻塞变化与回退记录、10 风险表与 11 节完成态结论。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_diagnostics_snapshot_store_unit_test`
+   - `ctest --test-dir build-ci --output-on-failure -R DiagnosticsSnapshotStoreTest`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - 定向重建并执行 `DiagnosticsSnapshotStoreTest` 后，结果恢复为 `100% tests passed, 0 tests failed out of 1`，说明 retention window 场景的时钟依赖已经被稳定化处理。
+   - `ctest -N` 总测试数保持为 `400`，说明本轮没有破坏顶层 discoverability。
+   - `ctest -L unit` 结果为 `100% tests passed, 0 tests failed out of 213`，`ctest -L contract` 结果为 `100% tests passed, 0 tests failed out of 152`，`ctest -L integration` 结果为 `100% tests passed, 0 tests failed out of 35`，说明 034 的专项 Gate 已全部恢复为全绿。
+
+### 结果
+
+1. CAP-TODO-034 已完成，services 专项 TODO 现在已经具备完整的 Gate、阻塞变化、风险残留、最小解阻与完成态证据；001~040、033~034 串行链全部闭合。
+2. 本轮 blocker-fix 严格限制在 tests-side 确定性修复，没有修改 services 公共 ABI、shared-contract 结论或 execution / data / system 产品语义。
+
+### 下一步
+
+1. services 专项范围内已无直接后续的 Build-ready 任务；若继续推进，应单独拆 shared-contract header 落位或 system shared ABI 扩展任务，而不是继续复用 034 的 Gate 收口入口。
+
+### 风险
+
+1. 033/034 的完成态只代表 admission baseline 与专项 Gate 已闭合，不代表 `IExecutionService` / `IDataService` 已正式迁入 `contracts/include`；后续若要做 include 迁移，仍需单独评审兼容影响。
+2. 全量 Gate 仍可能受跨模块 wall-clock dependent baseline 噪声影响；若未来再次出现类似阻塞，应优先修复测试确定性并重跑 full gate，不要在 services 主链语义上做让步式补丁。
+
 ## 记录 #255
 
 - 日期：2026-04-09
