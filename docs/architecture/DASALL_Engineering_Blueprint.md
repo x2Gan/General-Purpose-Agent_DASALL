@@ -973,36 +973,36 @@ contracts/include/
   checkpoint/Checkpoint.h, RuntimeBudget.h
   event/EventEnvelope.h
 
-runtime/include/dasall/runtime/
+runtime/include/
   IAgent.h, IAgentOrchestrator.h, ISessionManager.h
 
-cognition/include/dasall/cognition/
+cognition/include/
   ICognitionEngine.h, IPlanner.h, IReasoner.h, IReflectionEngine.h
 
-llm/include/dasall/llm/
+llm/include/
   ILLMAdapter.h, ILLMManager.h, IPromptRegistry.h, IPromptComposer.h
 
-tools/include/dasall/tools/
+tools/include/
   ITool.h, IToolManager.h, IPolicyGate.h, ICapabilityCache.h
   mcp/IMCPAdapter.h
 
-memory/include/dasall/memory/
+memory/include/
   IMemoryStore.h, IMemoryManager.h, IContextOrchestrator.h
 
-knowledge/include/dasall/knowledge/
+knowledge/include/
   IKnowledgeService.h
 
-services/include/dasall/services/
+services/include/
   IExecutionService.h, IDataService.h
 
-multi_agent/include/dasall/multi_agent/
+multi_agent/include/
   IAgentRegistry.h, IResultMerger.h
 
-platform/include/dasall/platform/
+platform/include/
   IThread.h, ITimer.h, IQueue.h, IFileSystem.h, INetwork.h
   hal/IGPIO.h, IUART.h, II2C.h
 
-infra/include/dasall/infra/
+infra/include/
   ILogger.h, ITracer.h, IMetricsExporter.h, IAuditLogger.h
   IConfigCenter.h, ISecretManager.h, IHealthMonitor.h
 ```
@@ -1066,7 +1066,7 @@ infra/include/dasall/infra/
 ### 8.3 代码组织约定
 
 1. 每个模块的 `include/` 目录只暴露 `IXxx.h` 接口，具体实现放在 `src/`。
-2. 头文件路径约定：`dasall/<module_name>/IXxx.h`，例如 `#include "dasall/tools/ITool.h"`。
+2. 头文件路径约定：以模块 `include/` 根为起点使用稳定相对子路径，例如 `#include "policy/PolicyTypes.h"`、`#include "logging/ILogger.h"`、`#include "IExecutionService.h"`。
 3. 命名空间约定：`namespace dasall::<module_name>`。
 4. 所有跨线程共享状态必须通过受控队列或 Working Memory 黑板管理，禁止裸共享可变对象。
 5. 取消与超时必须使用 `CancelToken + Deadline` 贯穿 LLM 与 Tool 调用链。

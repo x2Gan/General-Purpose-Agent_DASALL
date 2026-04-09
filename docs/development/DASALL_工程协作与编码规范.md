@@ -52,7 +52,9 @@
 1. 对外接口放在各模块 include/ 下。
 2. 具体实现放在各模块 src/ 下。
 3. 跨模块暴露的头文件路径统一使用：
-   - `dasall/<module_name>/...`
+   - 以模块 include/ 根为起点的稳定相对子路径，例如 `logging/ILogger.h`、`policy/PolicyTypes.h`、`linux/LinuxPlatformFactory.h`
+   - 若头文件位于模块 include/ 根目录，可直接使用文件名，例如 `IInfrastructureService.h`、`IExecutionService.h`
+   - 不再引入 `include/dasall/<module_name>/...` 这类额外模块目录嵌套
 4. 头文件必须使用 `#pragma once`。
 5. `.h` 用于接口、契约、轻量声明；`.cpp` 用于实现。
 
