@@ -19,6 +19,7 @@ target_sources(dasall_services
     src/data/DataProjectionCache.cpp
     src/data/DataQueryLane.cpp
     src/data/placeholder.cpp
+    src/system/SystemSnapshotLane.cpp
     src/system/placeholder.cpp
   PUBLIC
     FILE_SET public_headers

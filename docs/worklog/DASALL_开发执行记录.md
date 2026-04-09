@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #244
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-022 实现 SystemSnapshotLane internal-only 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-021 推送完成后，CAP-TODO-022 成为用户指定 015~022 串行链上的最后一项直接可执行任务，也是 system 子域当前唯一允许落盘的 internal-only 组件。
+2. 该任务的关键边界是不生成 `ISystemService` 或其他 shared ABI，只给内部编排和 health 路径提供系统快照事实。
+3. 本轮目标是在不引入 public contracts 和不接入 facade 公共接口的前提下，落盘 `SystemSnapshotLane`、strict health fail-closed、degraded snapshot 与 service registry 可选聚合。
+
+### 改动
+
+1. 新增 [services/src/system/SystemSnapshotLane.h](../services/src/system/SystemSnapshotLane.h) 与 [services/src/system/SystemSnapshotLane.cpp](../services/src/system/SystemSnapshotLane.cpp)，定义 internal `InternalSnapshotQuery`、`InternalSystemSnapshot`、`SystemSnapshotLane` 与依赖注入面，聚合 infra health、platform snapshot、resource summary 与 service registry。
+2. `SystemSnapshotLane` 在 `strict_health=true` 且 infra health 快照缺失时 fail-closed 返回内部错误；在非 strict 模式下则允许返回 degraded snapshot，并将缺失源序列化为 `null`。
+3. 该骨架不进入 [services/include/IExecutionService.h](../services/include/IExecutionService.h) 或 [services/include/IDataService.h](../services/include/IDataService.h)，保持 system 子域 internal-only，不扩张 shared ABI。
+4. 新增 [tests/unit/services/system/CMakeLists.txt](../unit/services/system/CMakeLists.txt) 与 [tests/unit/services/system/SystemSnapshotLaneTest.cpp](../unit/services/system/SystemSnapshotLaneTest.cpp)，并更新 [tests/unit/services/CMakeLists.txt](../unit/services/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../unit/CMakeLists.txt) 与 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 system snapshot unit 接入 services/top-level unit 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-022-SystemSnapshotLane-internal-only骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-022-SystemSnapshotLane-internal-only%E9%AA%A8%E6%9E%B6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 022 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 system 子域与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 SystemSnapshotLaneTest 已进入 discoverability 与执行路径，最终结果为 `100% tests passed, 0 tests failed out of 208`。
+   - internal snapshot success、strict health fail-closed、degraded snapshot 与 service registry omission 四类场景均可二值化，说明 022 已把 system 子域骨架稳定落盘且未越过 internal-only 边界。
+
+### 结果
+
+1. CAP-TODO-022 已完成，System 子域现已具备供内部编排 / health 使用的系统快照骨架。
+2. 用户指定的 CAP-TODO-015~022 execution/data/system 串行链已全部落盘、验证并准备提交推送。
+
+### 下一步
+
+1. 用户指定范围已完成；若继续推进 services 后续链路，下一直接执行入口是 CAP-TODO-023 与 CAP-TODO-028。
+
+### 风险
+
+1. 当前 system snapshot 仍是 internal-only 事实聚合器，未与 facade 公共面或独立 health probe 打通；若未来出现稳定跨模块消费者，再评估是否发起新的 interface admission review。
+
 ## 记录 #243
 
 - 日期：2026-04-09
