@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #249
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-027 实现 ServiceHealthProbe
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-026 推送完成后，CAP-TODO-027 成为配置与观测阶段最后一个 direct observability build 任务，也是进入 loopback fixture 方案前必须先稳定的 services health 基线。
+2. 该任务的关键边界是不新增公共 ABI、不扩大 `services.*` schema，也不把 health 路径变成恢复裁定器；所有健康输出都必须收敛到既有 `infra::IHealthProbe` / `ProbeResult` / `HealthSnapshot` 抽象。
+3. 本轮目标是在不改变 execution/data/system 主链结果语义的前提下，落盘 `ServiceHealthProbe`，把 circuit / adapter readiness / queue pressure / observability degraded 事实统一映射为 services 内部 health snapshot，并补齐 unit、integration 和聚合 target discoverability。
+
+### 改动
+
+1. 新增 [services/src/ops/ServiceHealthProbe.h](../../services/src/ops/ServiceHealthProbe.h) 与 [services/src/ops/ServiceHealthProbe.cpp](../../services/src/ops/ServiceHealthProbe.cpp)，定义 internal `ServiceCircuitState`、`ServiceQueueSnapshot`、`ServiceHealthSample`、`IServiceHealthSignalProvider` 与 `ServiceHealthProbe`，同时兼容 `ProbeResult` 和 versioned `HealthSnapshot` 输出。
+2. 在 `ServiceHealthProbe` 中固定健康映射规则：`circuit open/unknown`、`adapter unavailable/unknown`、queue 达到 high-watermark 或 overflow/`resync_required` 会阻断 readiness；`half_open`、`adapter degraded`、`system_snapshot_degraded` 与 audit/metrics/trace degraded 仅标记 degraded，不越权裁定恢复动作。
+3. 更新 [services/CMakeLists.txt](../../services/CMakeLists.txt)，把 `ServiceHealthProbe.cpp` 接入 `dasall_services` 构建图，保持 services 仍只依赖既有 infra health 抽象。
+4. 更新 [tests/unit/services/ops/CMakeLists.txt](../../tests/unit/services/ops/CMakeLists.txt)，新增 [tests/unit/services/ops/ServiceHealthProbeTest.cpp](../../tests/unit/services/ops/ServiceHealthProbeTest.cpp)，覆盖 `circuit open`、`adapter down` 与 `queue overflow` 三个稳定健康输出场景。
+5. 更新 [tests/integration/services/CMakeLists.txt](../../tests/integration/services/CMakeLists.txt)，新增 [tests/integration/services/CapabilityServicesHealthIntegrationTest.cpp](../../tests/integration/services/CapabilityServicesHealthIntegrationTest.cpp)，使用真实 `ExecutionCommandLane` route-unavailable 与 `ExecutionSubscriptionHub` overflow 事实验证 services health snapshot 聚合结果。
+6. 更新 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [tests/integration/CMakeLists.txt](../../tests/integration/CMakeLists.txt)，把 services trace/health 测试显式补入顶层聚合 target，修正此前聚合构建不一定先编译这些 services observability 用例的偏差。
+7. 新增 [docs/todos/services/deliverables/CAP-TODO-027-ServiceHealthProbe健康探针设计收敛.md](../todos/services/deliverables/CAP-TODO-027-ServiceHealthProbe%E5%81%A5%E5%BA%B7%E6%8E%A2%E9%92%88%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 顶部结论与 027 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_service_health_probe_unit_test dasall_services_health_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R "ServiceHealthProbeTest|CapabilityServicesHealthIntegrationTest"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - 027 新增代码和新增测试目标构建通过，说明 `ServiceHealthProbe` 本体、unit/integration 接线和 services 构建图均已收口。
+   - 定向测试通过，`ServiceHealthProbeTest` 与 `CapabilityServicesHealthIntegrationTest` 均通过，验证 `circuit open`、`adapter down`、`queue overflow` 以及 command/subscription 事实到 health snapshot 的整合语义。
+   - `ctest -L unit` 通过，最终结果为 `100% tests passed, 0 tests failed out of 213`，新增 `ServiceHealthProbeTest` 已进入 unit discoverability，同时 services trace 测试也已被顶层 unit 聚合 target 显式编译。
+   - `ctest -L integration` 通过，最终结果为 `100% tests passed, 0 tests failed out of 32`，新增 `CapabilityServicesHealthIntegrationTest` 已进入 integration discoverability，services trace/health 测试均已被顶层 integration 聚合 target 显式编译并执行。
+
+### 结果
+
+1. CAP-TODO-027 已完成，services 现在具备统一的 internal health probe，可以把 circuit、adapter readiness、queue pressure 和 observability degraded 事实收敛成稳定的 readiness/degraded/circuit 健康输出。
+2. 本轮没有新增 `services.*` 顶层 schema，也没有扩大公共 supporting objects；health 仍停留在 internal-only probe/snapshot 层，不承接 runtime recovery 或 shared-contract admission。
+
+### 下一步
+
+1. 进入 CAP-TODO-028，收敛 loopback / mock target 集成夹具方案，为后续 smoke / failure / profile integration 的闭环解阻。
+
+### 风险
+
+1. 当前 `ServiceHealthProbe` 仍依赖 signal provider 输入事实，还没有在 services 组合根内形成常驻自动采样接线；若后续需要持续采样，必须继续保持 internal-only 边界，不得把 health provider 直接升格为公共 ABI。
+
 ## 记录 #248
 
 - 日期：2026-04-09

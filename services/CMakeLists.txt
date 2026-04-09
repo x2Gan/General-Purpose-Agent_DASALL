@@ -5,6 +5,7 @@ target_sources(dasall_services
     src/ServiceFacade.cpp
     src/ServiceContextBuilder.cpp
     src/ops/ServiceConfigAdapter.cpp
+    src/ops/ServiceHealthProbe.cpp
     src/bridges/ServiceAuditBridge.cpp
     src/bridges/ServiceMetricsBridge.cpp
     src/bridges/ServiceTraceBridge.cpp
