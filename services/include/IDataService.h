@@ -4,7 +4,12 @@
 
 namespace dasall::services {
 
-// CAP-TODO-001 establishes the stable public include slot. Interface methods
-// are added in CAP-TODO-007.
+class IDataService {
+public:
+	virtual ~IDataService() = default;
+
+	virtual DataQueryResult query(const DataQueryRequest& request) = 0;
+	virtual DataCatalogResult list_capabilities(const DataCatalogRequest& request) = 0;
+};
 
 }  // namespace dasall::services

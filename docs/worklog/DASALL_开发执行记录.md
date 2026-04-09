@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #223
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-007 定义 IDataService 公共接口
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-006 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-007。
+2. 该任务依赖 CAP-TODO-001、005，当前均已完成，且没有 blocker，因此本轮只在 /home/gangan/DASALL/services/include/IDataService.h 中冻结 data 公共接口。
+3. 本轮目标是把 `query` 与 `list_capabilities` 两个方法签名落到稳定头文件中，并保持 query-only / discoverability 语义，不提前扩张到 lane、cache 或 façade 实现。
+
+### 改动
+
+1. 更新 [services/include/IDataService.h](../services/include/IDataService.h)，新增纯抽象 `IDataService`，定义 `query` 与 `list_capabilities` 两个纯虚方法与默认虚析构。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-007-IDataService公共接口设计收敛.md](../todos/services/deliverables/CAP-TODO-007-IDataService%E5%85%AC%E5%85%B1%E6%8E%A5%E5%8F%A3%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-007 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+   - `printf '#include "IDataService.h"\nusing namespace dasall::services;\nstruct Demo final : IDataService {\n  DataQueryResult query(const DataQueryRequest&) override { return {}; }\n  DataCatalogResult list_capabilities(const DataCatalogRequest&) override { return {}; }\n};\nint main() { Demo demo{}; IDataService* service = &demo; return static_cast<int>(service == nullptr); }\n' | c++ -std=c++20 -Iservices/include -Icontracts/include -xc++ -fsyntax-only -`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明 IDataService 头文件冻结未破坏 services 模块构建与 contract gate。
+   - `InterfaceCatalogContractTest` 1/1 通过，services admission readiness 继续保持 awaiting 状态。
+   - `IDataService.h` 的独立语法编译检查通过，说明两个方法签名可被后续 façade、mock 与 data lane 实现稳定覆写。
+
+### 结果
+
+1. CAP-TODO-007 已完成，services V1 公共 ABI 现在具备 data 子域的稳定接口头。
+2. CAP-TODO-001~007 已全部完成，CAP-GATE-01 的通过条件已经具备：services/include/ 下公共头文件落盘、`dasall_services` 可编译、InterfaceCatalogContractTest 通过。
+3. 本轮未引入任何执行授权、业务写操作或 internal snapshot 顶层方法，IDataService 继续保持 query-only / discoverability 边界。
+
+### 下一步
+
+1. 进入 CAP-TODO-008，开始把 services 从 placeholder-only 目标推进到真实源码骨架接线，并为后续 unit discoverability 做准备。
+
+### 风险
+
+1. 当前 tests/mocks 层仍未跟进新的 execution/data 公共接口；当 008~011 开始接线 façade 与测试拓扑时，需要同步把 mock 口径从旧字符串执行接口迁移到新的 request/result ABI。
+
 ## 记录 #222
 
 - 日期：2026-04-09
