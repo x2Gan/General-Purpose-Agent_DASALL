@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #239
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-017 实现 ExecutionQueryLane 只读查询车道
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-016 推送完成后，CAP-TODO-017 是 D2 中下一项直接可执行的 V1.1 query-only 任务，也是 CAP-GATE-08 后续 integration smoke 的先行代码基础。
+2. 该任务无额外 blocker，且目标清晰：只读查询、freshness 语义和错误映射，不需要等待 020 的 DataProjectionCache 终态，只需保留 cache seam。
+3. 本轮目标是在不引入隐式写入和不提前实现 cache 子系统的前提下，落盘 `ExecutionQueryLane`、strict/allow_stale 分支、adapter unavailable 映射以及 read-only 违约保护。
+
+### 改动
+
+1. 新增 [services/src/execution/ExecutionQueryLane.h](../services/src/execution/ExecutionQueryLane.h) 与 [services/src/execution/ExecutionQueryLane.cpp](../services/src/execution/ExecutionQueryLane.cpp)，定义 internal `ExecutionQueryLane`、`CachedExecutionQuerySnapshot` 与依赖注入面，复用 `AdapterRouter`、`AdapterBridge`、`ResultMapper` 收口 query_state 路径。
+2. 在 query lane 中实现 `strict` / `allow_stale` freshness 分支：`DataStale + allow_stale + cached snapshot` 返回 `from_cache=true` 成功结果，`strict` 或无缓存时保持 `DataStale` 结构化错误。
+3. 新增 query receipt 的只读防线：若 adapter receipt 夹带 `side_effects`，车道立即 fail-closed 为 validation error，避免查询路径隐式写入。
+4. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)、[tests/unit/services/execution/CMakeLists.txt](../tests/unit/services/execution/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 query lane 源文件与 `dasall_execution_query_lane_unit_test` 接入 services/top-level unit 聚合目标。
+5. 新增 [tests/unit/services/execution/ExecutionQueryLaneTest.cpp](../tests/unit/services/execution/ExecutionQueryLaneTest.cpp) 与 [docs/todos/services/deliverables/CAP-TODO-017-ExecutionQueryLane只读查询车道设计收敛.md](../todos/services/deliverables/CAP-TODO-017-ExecutionQueryLane%E5%8F%AA%E8%AF%BB%E6%9F%A5%E8%AF%A2%E8%BD%A6%E9%81%93%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 017 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 query lane 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 ExecutionQueryLaneTest 已进入 discoverability 与执行路径。
+   - success、invalid request、strict stale、allow_stale cached、adapter unavailable 与 read-only violation 六类场景均可二值化，说明 017 已把只读查询语义稳定落盘。
+
+### 结果
+
+1. CAP-TODO-017 已完成，Execution 子域现已具备 query-only 查询路径与 freshness/error mapping 基础。
+2. V1.1 所需的 query-only 代码入口已落盘，下一轮可继续推进 CAP-TODO-018 订阅骨架与 CAP-TODO-019 diagnose 路径。
+
+### 下一步
+
+1. 进入 CAP-TODO-018，落盘 `ExecutionSubscriptionHub`，把 cursor/batch、overflow、`resync_required` 语义建起来。
+
+### 风险
+
+1. 当前 allow_stale 只消费 injected cached snapshot seam；在 CAP-TODO-020 DataProjectionCache 落盘前，不应把这个 seam 扩张成通用 cache 实现，也不应借此掩盖 provider unavailable。
+
 ## 记录 #238
 
 - 日期：2026-04-09
