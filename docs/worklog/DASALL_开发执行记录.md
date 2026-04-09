@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #250
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-028 收敛 loopback / mock target 集成夹具方案
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-027 推送完成后，CAP-TODO-028 成为当前最小可执行的解阻任务；它直接关闭 CAP-BLK-004，并为 029 的 integration discoverability 注册提供可复用的夹具基线。
+2. 该任务的关键边界是不新增 production-only loopback adapter、不扩张 `services.*` schema，也不把 smoke / failure / profile 三类 integration 逻辑一次性打包到同一轮；本轮只收敛“夹具类型、落点、依赖边界、最小回路”。
+3. 本轮目标是在 tests 侧落盘一个可复用的 header-only fixture，复用现有 `LocalServiceAdapter` / `RemoteServiceAdapter` 回调注入缝隙，证明 services integration 可以在不修改主链 ABI 的前提下形成最小 execute/query/catalog 闭环。
+
+### 改动
+
+1. 新增 [tests/mocks/include/CapabilityServicesLoopbackFixture.h](../mocks/include/CapabilityServicesLoopbackFixture.h)，定义 header-only `CapabilityServicesLoopbackFixture` 与 options，对内复用 `ServiceFacade`、`ExecutionCommandLane`、`DataQueryLane`、`DataProjectionCache`、`AdapterBridge`、`LocalServiceAdapter`、`RemoteServiceAdapter`，并提供 `make_context()`、`make_execute_request()`、`make_query_request()`、`make_catalog_request()` 以及 local/remote invocation 记录。
+2. 更新 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services子系统详细设计.md)，把 Phase 5 的 integration fixture 从“至少有一组 loopback adapter 或 mock target”收敛为固定的 header-only `CapabilityServicesLoopbackFixture` 策略：smoke 默认走 `LocalServiceAdapter` loopback，failure / profile 仅允许在 tests 内切换 scripted remote handler、timeout 与 candidate availability。
+3. 新增 [docs/todos/services/deliverables/CAP-TODO-028-loopback-mock-target集成夹具设计收敛.md](../todos/services/deliverables/CAP-TODO-028-loopback-mock-target%E9%9B%86%E6%88%90%E5%A4%B9%E5%85%B7%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 顶部结论、028 状态、029 可执行性以及 CAP-BLK-004 解阻结果。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "loopback|integration fixture|mock target|LocalPlatformAdapter|LocalServiceAdapter|RemoteServiceAdapter" docs/architecture/DASALL_capability_services子系统详细设计.md tests/mocks/include services/CMakeLists.txt`
+   - `cat <<'EOF' | c++ -std=c++20 -Iservices/src -Iservices/include -Itests/mocks/include -Iinfra/include -Iprofiles/include -Icontracts/include -x c++ - -fsyntax-only
+#include "CapabilityServicesLoopbackFixture.h"
+
+int main() {
+  dasall::tests::mocks::CapabilityServicesLoopbackFixture fixture;
+  auto execute_request = fixture.make_execute_request();
+  auto query_request = fixture.make_query_request();
+  (void)fixture.execution_service().execute(execute_request);
+  (void)fixture.data_service().query(query_request);
+  return 0;
+}
+EOF`
+2. 结果：
+   - `rg` 输出已同时命中 detailed design、专项 TODO、adapter 槽位和 tests/mocks include 根，说明 fixture 策略、落点和 Phase 5 blocker 已形成统一文档口径。
+   - `c++ -fsyntax-only` 通过，说明新 fixture 头文件可以独立拼装 `ServiceFacade`、`ExecutionCommandLane`、`DataQueryLane`、`LocalServiceAdapter` / `RemoteServiceAdapter` 的最小闭环，且不依赖新的 production CMake 接线。
+
+### 结果
+
+1. CAP-TODO-028 已完成，CAP-BLK-004 已关闭；services integration 现在具备可复用的 tests-side loopback fixture，不再缺少最小 smoke 回路的测试支撑。
+2. 本轮没有修改 services 公共 ABI，也没有在 services/src 新增 production-only loopback adapter；所有 test-only 变化都被压在 tests/mocks include 根下，保持了分层和依赖方向。
+
+### 下一步
+
+1. 进入 CAP-TODO-029，基于 `CapabilityServicesLoopbackFixture` 注册 services integration topology，并补齐顶层 discoverability。
+
+### 风险
+
+1. 当前 fixture 仍是 header-only 支撑，真正的 `integration` 标签 discoverability 与 smoke 用例注册还没有落盘；若 029 的 CMake 聚合接线遗漏，CAP-GATE-05 仍会失败。
+
 ## 记录 #249
 
 - 日期：2026-04-09

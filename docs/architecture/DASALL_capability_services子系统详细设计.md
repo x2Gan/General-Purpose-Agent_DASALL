@@ -1024,7 +1024,7 @@ schema 对齐结论：
 | supporting objects 未收敛 | Phase 1、6 | ServiceTypes 中的请求/结果/上下文对象经评审稳定，且不与 contracts 对象职责重叠 |
 | 后端适配器清单不明确 | Phase 2、3 | 平台/本地/远程三类 adapter 的 capability map 与 trust/availability 来源被 profile/config 明确 |
 | RuntimePolicySnapshot -> ServicePolicyView 派生规则未固化 | Phase 4 | 当前文档 6.9 的映射与派生公式冻结，并由单元测试验证 worker/timeout/overflow 派生结果 |
-| integration fixture 缺失 | Phase 5 | 至少有 1 组本地 loopback adapter 或 mock target 可用于集成回路 |
+| integration fixture 缺失 | Phase 5 | 至少有 1 组 header-only `CapabilityServicesLoopbackFixture` 可在 `tests/mocks/include/` 复用 `LocalServiceAdapter` / `RemoteServiceAdapter` 的回调注入形成集成回路；smoke 默认走 `local_service` loopback，failure / profile 用例仅允许切换 scripted remote handler、timeout 与 candidate availability，不新增 production-only loopback adapter |
 | 高风险动作语义清单未评审 | Phase 2、4 | execution action taxonomy 明确，并标出 require_confirmation 的动作集合 |
 
 ### 8.4 回退策略
@@ -1052,7 +1052,7 @@ schema 对齐结论：
 | 单元测试 | AdapterRouter | profile / trust / availability / preferred path 路由 | 给定输入时路由选择稳定 |
 | 单元测试 | ServiceHealthProbe | circuit open、adapter down、queue overflow 的健康输出 | degraded/readiness 状态稳定可测 |
 | 契约影响测试 | InterfaceCatalog / Smoke | 现有 IExecutionService/IDataService catalog 条目不被破坏 | 现有 contract smoke 全通过 |
-| 集成测试 | CapabilityServices smoke | Tool -> IExecutionService / IDataService -> Adapter loopback -> result | `integration` 标签用例通过 |
+| 集成测试 | CapabilityServices smoke | Tool -> IExecutionService / IDataService -> `CapabilityServicesLoopbackFixture` -> `LocalServiceAdapter` loopback -> result | `integration` 标签用例通过 |
 | 集成测试 | failure injection | adapter timeout、partial side effect、subscription overflow | `integration;failure` 标签用例通过 |
 | 集成测试 | profile 差异 | desktop_full 与 edge_balanced 路由/timeout/cache 差异 | `integration;profile` 标签用例通过 |
 | 兼容性检查 | contracts 边界 | 本轮 Build 不修改已冻结 contracts 对象 | 现有 contract gates 不回退 |
@@ -1147,7 +1147,7 @@ schema 对齐结论：
 
 1. 新增 services 子系统专项 TODO，按 Phase 1 到 Phase 6 拆分 Design/Build 双轨任务。
 2. 补齐 services/include 与 src 子目录骨架，并移除 placeholder-only 状态。
-3. 为 Execution 子域优先落一组 loopback adapter + integration smoke，用于缩短后续验证周期。
+3. 为 Execution / Data 路径优先落一组 `CapabilityServicesLoopbackFixture` + integration smoke：夹具位于 `tests/mocks/include/CapabilityServicesLoopbackFixture.h`，默认复用 `LocalServiceAdapter` 回调注入形成 `local_service` loopback，failure / profile 变体只允许在 tests 内切换 `RemoteServiceAdapter` handler、timeout 或 candidate availability。
 4. 若后续确需 profile 化新的 services 参数，先更新 profiles 的 runtime_policy schema、资产与 contract tests，再把新增字段接入 ServiceConfigAdapter。
 5. 待 supporting objects 稳定后，发起 IExecutionService / IDataService 的 interface admission 评审，而不是直接进入 contracts 编码。
 6. Phase 1 落盘新公共接口后，同步更新 tests/mocks/include/MockExecutionService.h 并新增 MockDataService，使其签名匹配 ServiceTypes.h 中的新请求/结果类型（当前 MockExecutionService 签名 `bool execute(const std::string&)` 与设计中 `ExecutionCommandResult execute(const ExecutionCommandRequest&)` 不兼容），确保后续 unit/integration 测试可直接复用 mock 层。
