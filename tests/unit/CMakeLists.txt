@@ -8,6 +8,26 @@ add_subdirectory(infra)
 add_subdirectory(platform)
 add_subdirectory(profiles)
 
+add_executable(dasall_service_context_builder_unit_test
+	services/ServiceContextBuilderTest.cpp
+)
+
+target_link_libraries(dasall_service_context_builder_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_services
+)
+
+target_include_directories(dasall_service_context_builder_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/services/src
+)
+
+dasall_apply_common_options(dasall_service_context_builder_unit_test)
+
+add_test(NAME ServiceContextBuilderTest COMMAND dasall_service_context_builder_unit_test)
+set_tests_properties(ServiceContextBuilderTest PROPERTIES LABELS "unit")
+
 set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_log_event_unit_test
 	dasall_logger_interface_unit_test
@@ -108,6 +128,7 @@ set(DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS
 
 set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_smoke_test
+	dasall_service_context_builder_unit_test
 	dasall_infra_context_unit_test
 	${DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_AUDIT_UNIT_TEST_EXECUTABLE_TARGETS}

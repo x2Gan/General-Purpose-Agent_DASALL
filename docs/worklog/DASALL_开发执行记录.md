@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #225
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-009 实现 ServiceContextBuilder 上下文规范化骨架
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-008 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-009。
+2. 该任务依赖 CAP-TODO-002、008，当前均已完成，且没有 blocker，因此本轮聚焦 ServiceContextBuilder 的 `normalize_context()` 骨架与最小 unit 验证。
+3. 本轮目标是让 ServiceContextBuilder 对既有 ServiceCallContext 做显式校验与透传，并补齐一条正例和一条负例的单元测试，但不提前处理 façade 委派或公共错误映射。
+
+### 改动
+
+1. 新增 [services/src/ServiceContextBuilder.h](../services/src/ServiceContextBuilder.h)，定义内部 `ContextNormalizationResult` 与 `ServiceContextBuilder`。
+2. 更新 [services/src/ServiceContextBuilder.cpp](../services/src/ServiceContextBuilder.cpp)，实现 `normalize_context()`：要求 request_id、session_id、trace_id、tool_call_id、goal_id 非空，要求 deadline_ms 大于 0，并在成功时原样透传 `ServiceCallContext`。
+3. 新增 [tests/unit/services/ServiceContextBuilderTest.cpp](../tests/unit/services/ServiceContextBuilderTest.cpp)，覆盖完整上下文透传正例与缺失 request_id 的负例。
+4. 更新 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，增加 `dasall_service_context_builder_unit_test` 最小 target 接线，使本轮新增 unit 进入 `dasall_unit_tests` 聚合执行。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-009-ServiceContextBuilder上下文规范化骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-009-ServiceContextBuilder上下文规范化骨架设计收敛.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md) 本轮证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 ServiceContextBuilder 内部头与最小 unit target 接线有效。
+   - `ctest -L unit` 全量通过，且新增 ServiceContextBuilderTest 可执行，说明上下文规范化骨架已进入 unit 验证路径。
+
+### 结果
+
+1. CAP-TODO-009 已完成，ServiceContextBuilder 现在具备显式的上下文校验与透传骨架。
+2. 本轮没有新增任何 services 私有上下文字段，也没有在 builder 内重算 deadline/budget，保持了 Runtime 作为预算与 deadline owner 的边界。
+
+### 下一步
+
+1. 进入 CAP-TODO-010，在 services/src/ServiceFacade.cpp 中实现同时覆盖 IExecutionService / IDataService 的最小 façade 委派骨架，并继续保持 InterfaceCatalog contract gate 不回退。
+
+### 风险
+
+1. 当前 `normalize_context()` 仍只输出内部错误字符串；后续 façade 若要把失败投射到公共 result，对应映射必须留在 façade/mapper 层，而不能把 contracts 级错误语义反向塞回 builder。
+
 ## 记录 #224
 
 - 日期：2026-04-09
