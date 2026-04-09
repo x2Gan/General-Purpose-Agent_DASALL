@@ -16,6 +16,7 @@ target_sources(dasall_services
     src/execution/ExecutionSubscriptionHub.cpp
     src/mapping/ResultMapper.cpp
     src/execution/placeholder.cpp
+    src/data/DataProjectionCache.cpp
     src/data/placeholder.cpp
     src/system/placeholder.cpp
   PUBLIC

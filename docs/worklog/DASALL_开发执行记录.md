@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #242
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-020 实现 DataProjectionCache 缓存骨架
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-019 推送完成后，CAP-TODO-020 成为 D2 中 data 子域的下一项直接可执行任务，同时也是 CAP-TODO-021 DataQueryLane 的唯一前置解阻项。
+2. 该任务无额外 blocker，且目标明确：先把 TTL、stale-read 与 `from_cache` 语义固化在 internal cache 组件里，再让 021 消费该组件，而不是把缓存逻辑散落在 query lane 内部。
+3. 本轮目标是在不引入 profile schema 新字段和不提前实现 DataQueryLane 的前提下，落盘 `DataProjectionCache`、时间源注入与四类 unit 场景。
+
+### 改动
+
+1. 新增 [services/src/data/DataProjectionCache.h](../services/src/data/DataProjectionCache.h) 与 [services/src/data/DataProjectionCache.cpp](../services/src/data/DataProjectionCache.cpp)，定义 `ProjectionCacheState`、`CachedProjectionSnapshot`、`ProjectionCacheLookup` 与 `DataProjectionCache`，实现 cache key、TTL 判断、stale 状态和 `from_cache` 判定位。
+2. `DataProjectionCache` 通过 injected `now_ms` 时间源把 TTL 行为做成可测逻辑；lookup 在 stale + strict 时返回 `hit_stale` 但 `from_cache=false`，在 stale + allow_stale 时返回 `hit_stale` 且 `from_cache=true`。
+3. 该缓存只消费 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中既有 `DataQueryRequest` / `ServiceDataFreshness`，不缓存任何 execution command 结果。
+4. 新增 [tests/unit/services/data/CMakeLists.txt](../unit/services/data/CMakeLists.txt) 与 [tests/unit/services/data/DataProjectionCacheTest.cpp](../unit/services/data/DataProjectionCacheTest.cpp)，并更新 [tests/unit/services/CMakeLists.txt](../unit/services/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../unit/CMakeLists.txt) 与 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 data cache unit 接入 services/top-level unit 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-020-DataProjectionCache缓存骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-020-DataProjectionCache%E7%BC%93%E5%AD%98%E9%AA%A8%E6%9E%B6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、020 状态与 021 解阻状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 data cache 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 DataProjectionCacheTest 已进入 discoverability 与执行路径，最终结果为 `100% tests passed, 0 tests failed out of 206`。
+   - miss、fresh hit、stale + strict、stale + allow_stale 四类场景均可二值化，说明 020 已把 TTL/stale/from_cache 语义稳定落盘，并成功解阻 CAP-TODO-021。
+
+### 结果
+
+1. CAP-TODO-020 已完成，Data 子域现已具备 internal projection cache 骨架，可稳定提供 fresh/stale/miss 状态与 cache age 事实。
+2. CAP-TODO-021 的前置依赖已关闭，DataQueryLane 现在可以直接消费 `DataProjectionCache` 进入实现阶段。
+
+### 下一步
+
+1. 进入 CAP-TODO-021，落盘 `DataQueryLane`，把 cache hit/miss/stale 与 query-only adapter path 收口成统一数据查询入口。
+
+### 风险
+
+1. 当前 cache key 直接由 dataset/filters_json/projection 原始串拼接，尚未做语义级 JSON 规范化；若后续需要支持 filters 字段顺序无关的 key 等价，必须先回写设计与 TODO，再扩张实现。
+
 ## 记录 #241
 
 - 日期：2026-04-09

@@ -55,4 +55,5 @@ set_tests_properties(ServiceFacadeTest PROPERTIES LABELS "unit")
 
 add_subdirectory(adapters)
 add_subdirectory(execution)
+add_subdirectory(data)
 add_subdirectory(mapping)
