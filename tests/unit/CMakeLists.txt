@@ -123,6 +123,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_execution_subscription_hub_unit_test
 	dasall_execution_diagnose_service_unit_test
 	dasall_data_projection_cache_unit_test
+	dasall_data_query_lane_unit_test
 	dasall_result_mapper_unit_test
 	dasall_infra_context_unit_test
 	${DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS}

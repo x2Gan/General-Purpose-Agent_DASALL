@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #243
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-021 实现 DataQueryLane 查询车道
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-020 推送完成后，CAP-TODO-021 的 blocker 被关闭，成为 D2 中 data 子域的下一项直接可执行任务。
+2. 该任务的关键目标是消费已落盘的 `DataProjectionCache`，把 data query 与 catalog discoverability 收口到统一的只读数据车道，同时保持 stale/read-only 事实可观测。
+3. 本轮目标是在不扩张 shared contracts 和不引入独立 read store 的前提下，落盘 `DataQueryLane`、cache hit/miss/stale 分支、projection/filter 透传与 `list_capabilities()` 路径。
+
+### 改动
+
+1. 新增 [services/src/data/DataQueryLane.h](../services/src/data/DataQueryLane.h) 与 [services/src/data/DataQueryLane.cpp](../services/src/data/DataQueryLane.cpp)，定义 internal `DataQueryLane` 与依赖注入面，复用 `AdapterRouter`、`AdapterBridge`、`ResultMapper` 与 `DataProjectionCache` 实现 `query()` / `list_capabilities()` 两条只读路径。
+2. `query()` 在 cache miss 时走 live adapter 路径并回写缓存；fresh hit 直接返回 `from_cache=true`，stale + strict 返回 `DataStale` 结构化错误，stale + allow_stale 返回缓存结果并保留 `from_cache=true`。
+3. `list_capabilities()` 以 query-style `catalog.list` operation 承接目录 discoverability，不使用缓存，也不引入执行语义。
+4. data query/capability listing receipt 若夹带 `side_effects`，车道立即 fail-closed 为 validation error，防止读路径隐式写入。
+5. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)、[tests/unit/services/data/CMakeLists.txt](../unit/services/data/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../unit/CMakeLists.txt)，把 `DataQueryLane` 与 `dasall_data_query_lane_unit_test` 接入 services/top-level unit 聚合目标；新增 [tests/unit/services/data/DataQueryLaneTest.cpp](../unit/services/data/DataQueryLaneTest.cpp) 与 [docs/todos/services/deliverables/CAP-TODO-021-DataQueryLane查询车道设计收敛.md](../todos/services/deliverables/CAP-TODO-021-DataQueryLane%E6%9F%A5%E8%AF%A2%E8%BD%A6%E9%81%93%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 021 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 data query lane 与 cache 集成接线有效。
+   - `ctest -L unit` 通过，新增 DataQueryLaneTest 已进入 discoverability 与执行路径，最终结果为 `100% tests passed, 0 tests failed out of 207`。
+   - cache miss/hit、strict stale、allow_stale、query side_effect 违约与 catalog listing 五类场景均可二值化，说明 021 已把数据查询与目录 discoverability 的只读语义稳定落盘。
+
+### 结果
+
+1. CAP-TODO-021 已完成，Data 子域现已具备统一的 query/catalog 只读入口，并与 `DataProjectionCache` 形成稳定集成。
+2. data query 路径现已显式区分 live 与 cache 结果，并可稳定输出 `from_cache` 与 stale 事实，为后续 observability 与 integration smoke 提供直接输入。
+
+### 下一步
+
+1. 进入 CAP-TODO-022，落盘 `SystemSnapshotLane` internal-only 骨架，补齐 D2 最后一项 system 子域直接执行任务。
+
+### 风险
+
+1. 当前 data 路由把 `dataset` / `target_class` 直接映射为 adapter route 的 `capability_id` / `target_id`；若后续需要 dataset 与 capability 注册表解耦，必须先回写设计与 TODO，再调整路由契约。
+
 ## 记录 #242
 
 - 日期：2026-04-09

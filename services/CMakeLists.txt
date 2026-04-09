@@ -17,6 +17,7 @@ target_sources(dasall_services
     src/mapping/ResultMapper.cpp
     src/execution/placeholder.cpp
     src/data/DataProjectionCache.cpp
+    src/data/DataQueryLane.cpp
     src/data/placeholder.cpp
     src/system/placeholder.cpp
   PUBLIC
