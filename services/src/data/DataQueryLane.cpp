@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "bridges/ServiceMetricsBridge.h"
+#include "bridges/ServiceTraceBridge.h"
 
 namespace dasall::services::internal {
 
@@ -106,6 +107,7 @@ DataQueryLane::DataQueryLane(DataQueryLaneDependencies dependencies)
 
 DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
                                      const DataQueryRequest& request) {
+  auto invoke_lane = [&]() -> DataQueryResult {
   const auto emit_query_metrics = [&](DataQueryResult result,
                                       std::optional<std::uint64_t> latency_ms)
       -> DataQueryResult {
@@ -216,10 +218,29 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
   }
 
   return emit_query_metrics(std::move(result), receipt.latency_ms);
+  };
+
+  if (dependencies_.trace_bridge == nullptr) {
+    return invoke_lane();
+  }
+
+  CapabilityTargetRef target{
+      .capability_id = request.dataset,
+      .target_id = request.dataset,
+  };
+  auto span = dependencies_.trace_bridge->start_lane_span(
+      context,
+      "data.query",
+      request.projection,
+      &target);
+  auto result = dependencies_.trace_bridge->with_span(span, invoke_lane);
+  dependencies_.trace_bridge->complete_span(&span, result);
+  return result;
 }
 
 DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& context,
                                                    const DataCatalogRequest& request) const {
+  auto invoke_lane = [&]() -> DataCatalogResult {
   const auto emit_catalog_metrics = [&](DataCatalogResult result,
                                         std::optional<std::uint64_t> latency_ms)
       -> DataCatalogResult {
@@ -300,6 +321,24 @@ DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& con
   }
 
   return emit_catalog_metrics(std::move(result), receipt.latency_ms);
+  };
+
+  if (dependencies_.trace_bridge == nullptr) {
+    return invoke_lane();
+  }
+
+  CapabilityTargetRef target{
+      .capability_id = request.target_class,
+      .target_id = request.target_class,
+  };
+  auto span = dependencies_.trace_bridge->start_lane_span(
+      context,
+      "data.catalog",
+      kCatalogOperation,
+      &target);
+  auto result = dependencies_.trace_bridge->with_span(span, invoke_lane);
+  dependencies_.trace_bridge->complete_span(&span, result);
+  return result;
 }
 
 DataQueryResult DataQueryLane::make_runtime_query_failure(const std::string& message,

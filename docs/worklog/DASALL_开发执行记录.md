@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #248
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-026 实现 ServiceTraceBridge
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-025 推送完成后，CAP-TODO-026 成为配置与观测阶段第三个 direct observability build 任务，也是 027 health 收口前必须先稳定的 trace 基线。
+2. 该任务的关键边界是不新增公共 ABI、不新增 `services.*` schema，也不让 tracer/exporter 故障放大为命令或查询主链失败；所有 span 都必须映射到既有 `infra::tracing::ITracerProvider` / `ITracer` / `ISpan` 抽象。
+3. 本轮目标是在不改变 execution/data 结果语义的前提下，落盘 `ServiceTraceBridge`，把 `ServiceFacade -> lane -> adapter -> external` 串成一条可验证的 parent-child trace 链，并补齐 unit 与 integration discoverability。
+
+### 改动
+
+1. 新增 [services/src/bridges/ServiceTraceBridge.h](../../services/src/bridges/ServiceTraceBridge.h) 与 [services/src/bridges/ServiceTraceBridge.cpp](../../services/src/bridges/ServiceTraceBridge.cpp)，定义 internal `ServiceTraceBridge`、`ServiceTraceBridgeOptions`、`ServiceTraceSpan` 与 `ServiceTraceBridgeStatus`，固定 services trace scope，并把 raw `trace_id` / `tool_call_id` / `request_id` 规范化为 remote parent context。
+2. 更新 [services/src/ServiceFacade.h](../../services/src/ServiceFacade.h) 与 [services/src/ServiceFacade.cpp](../../services/src/ServiceFacade.cpp)，新增 `trace_bridge` 依赖注入，把 `execute()`、`compensate()`、`query_state()`、`diagnose()`、`query()` 与 `list_capabilities()` 收口到 facade root span。
+3. 更新 [services/src/execution/ExecutionCommandLane.h](../../services/src/execution/ExecutionCommandLane.h)、[services/src/execution/ExecutionCommandLane.cpp](../../services/src/execution/ExecutionCommandLane.cpp)、[services/src/execution/ExecutionQueryLane.h](../../services/src/execution/ExecutionQueryLane.h)、[services/src/execution/ExecutionQueryLane.cpp](../../services/src/execution/ExecutionQueryLane.cpp)、[services/src/execution/ExecutionDiagnoseService.h](../../services/src/execution/ExecutionDiagnoseService.h)、[services/src/execution/ExecutionDiagnoseService.cpp](../../services/src/execution/ExecutionDiagnoseService.cpp)、[services/src/data/DataQueryLane.h](../../services/src/data/DataQueryLane.h) 与 [services/src/data/DataQueryLane.cpp](../../services/src/data/DataQueryLane.cpp)，把命令、查询、诊断与数据读路径统一接到 lane span，并保持主链结果结构不变。
+4. 更新 [services/src/adapters/AdapterBridge.h](../../services/src/adapters/AdapterBridge.h) 与 [services/src/adapters/AdapterBridge.cpp](../../services/src/adapters/AdapterBridge.cpp)，新增 adapter/external tracing 注入点，并在 integration 测试暴露 external span 原先未挂在 adapter span 下后，修正为先激活 adapter span、再启动 external span 的严格嵌套顺序。
+5. 更新 [services/CMakeLists.txt](../../services/CMakeLists.txt)，把 `ServiceTraceBridge.cpp` 接入 `dasall_services` 构建图，保持 services 仅依赖既有 infra tracing 抽象。
+6. 更新 [tests/unit/services/bridges/CMakeLists.txt](../../tests/unit/services/bridges/CMakeLists.txt) 与 [tests/integration/services/CMakeLists.txt](../../tests/integration/services/CMakeLists.txt)，新增 [tests/unit/services/bridges/ServiceTraceBridgeTest.cpp](../../tests/unit/services/bridges/ServiceTraceBridgeTest.cpp) 与 [tests/integration/services/CapabilityServicesTraceIntegrationTest.cpp](../../tests/integration/services/CapabilityServicesTraceIntegrationTest.cpp)，覆盖 remote parent、from_cache、provider missing、adapter receipt error 与全链 parent-child 关系。
+7. 新增 [docs/todos/services/deliverables/CAP-TODO-026-ServiceTraceBridge追踪桥设计收敛.md](../todos/services/deliverables/CAP-TODO-026-ServiceTraceBridge%E8%BF%BD%E8%B8%AA%E6%A1%A5%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、026 状态与下一直接执行入口。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 结果：
+   - `dasall_services`、`dasall_unit_tests` 与 `dasall_integration_tests` 构建通过，说明 trace bridge、facade/lane/adapter 注入点与 unit/integration 接线已收口。
+   - `ctest -L unit` 通过，最终结果为 `100% tests passed, 0 tests failed out of 212`，新增 `ServiceTraceBridgeTest` 已进入 unit discoverability，并验证 remote parent、`from_cache` span 属性、provider missing 降级与 adapter receipt error 场景。
+   - `ctest -L integration` 通过，最终结果为 `100% tests passed, 0 tests failed out of 31`，新增 `CapabilityServicesTraceIntegrationTest` 已进入 integration discoverability，并验证 `Tool -> ServiceFacade -> lane -> adapter -> external` 的严格父子 span 链。
+
+### 结果
+
+1. CAP-TODO-026 已完成，services 现在具备统一的 internal trace bridge，可以把 execution/data 语义入口、lane 处理、adapter 调用与 external target 访问映射到 infra tracing 冻结边界。
+2. 本轮没有新增 `services.*` 顶层 schema，也没有扩大公共 supporting objects；trace scope、profile 与采样语义仍然基于既有 `ServicePolicyView` 派生字段控制。
+
+### 下一步
+
+1. 进入 CAP-TODO-027，实现 `ServiceHealthProbe`，把 audit / metrics / trace 的局部 degraded 状态与 queue/circuit/readiness 事实收敛到统一 health snapshot。
+
+### 风险
+
+1. 当前 remote parent 仍只消费最小 `trace_id` / `tool_call_id` / `request_id`，还没有完整承接 `tracestate` / baggage；若后续需要跨进程更完整传播，必须先走 infra tracing / supporting object 评审，而不是在 services bridge 内直接扩字段。
+
 ## 记录 #247
 
 - 日期：2026-04-09

@@ -3,6 +3,8 @@
 #include <exception>
 #include <utility>
 
+#include "bridges/ServiceTraceBridge.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -63,56 +65,98 @@ AdapterBridge::AdapterBridge(AdapterBridgeDependencies dependencies)
 
 AdapterReceipt AdapterBridge::invoke(const AdapterSelection& selection,
                                      const AdapterInvocationRequest& request) const {
+  auto adapter_span = dependencies_.trace_bridge != nullptr
+                          ? dependencies_.trace_bridge->start_adapter_span(selection, request)
+                          : ServiceTraceSpan{};
+
   for (const auto* invoker : dependencies_.invokers) {
     if (invoker == nullptr || invoker->adapter_id() != selection.adapter_id) {
       continue;
     }
 
     if (invoker->route_kind() != selection.route_kind) {
-      return make_bridge_failure_receipt(selection,
-                                         request,
-                                         AdapterTransportOutcome::rejected,
-                                         "route_kind_mismatch",
-                                         make_error_payload("route_kind_mismatch",
-                                                            "selected route_kind does not match invoker route_kind"));
+      auto receipt = make_bridge_failure_receipt(selection,
+                                                 request,
+                                                 AdapterTransportOutcome::rejected,
+                                                 "route_kind_mismatch",
+                                                 make_error_payload("route_kind_mismatch",
+                                                                    "selected route_kind does not match invoker route_kind"));
+      if (dependencies_.trace_bridge != nullptr) {
+        dependencies_.trace_bridge->complete_span(&adapter_span, receipt);
+      }
+      return receipt;
     }
 
     try {
-      const auto result = invoker->invoke(request);
-      return AdapterReceipt{
-          .receipt_ref = make_receipt_ref(selection, request, result.transport_outcome),
-          .adapter_id = selection.adapter_id,
-          .route_kind = selection.route_kind,
-          .target_id = request.target_id.empty() ? selection.target_id : request.target_id,
-          .transport_outcome = result.transport_outcome,
-          .provider_status_code = result.provider_status_code,
-          .payload_json = result.payload_json,
-          .latency_ms = result.latency_ms,
-          .side_effects = result.side_effects,
-          .evidence_refs = result.evidence_refs,
+      auto invoke_selected = [&]() -> AdapterReceipt {
+        auto external_span = dependencies_.trace_bridge != nullptr
+                                 ? dependencies_.trace_bridge->start_external_span(selection, request)
+                                 : ServiceTraceSpan{};
+        const auto result = dependencies_.trace_bridge != nullptr
+                                ? dependencies_.trace_bridge->with_span(
+                                      external_span,
+                                      [&]() { return invoker->invoke(request); })
+                                : invoker->invoke(request);
+        auto receipt = AdapterReceipt{
+            .receipt_ref = make_receipt_ref(selection, request, result.transport_outcome),
+            .adapter_id = selection.adapter_id,
+            .route_kind = selection.route_kind,
+            .target_id = request.target_id.empty() ? selection.target_id : request.target_id,
+            .transport_outcome = result.transport_outcome,
+            .provider_status_code = result.provider_status_code,
+            .payload_json = result.payload_json,
+            .latency_ms = result.latency_ms,
+            .side_effects = result.side_effects,
+            .evidence_refs = result.evidence_refs,
+        };
+        if (dependencies_.trace_bridge != nullptr) {
+          dependencies_.trace_bridge->complete_span(&external_span, receipt);
+        }
+        return receipt;
       };
+
+      auto receipt = dependencies_.trace_bridge != nullptr
+                         ? dependencies_.trace_bridge->with_span(adapter_span,
+                                                                 invoke_selected)
+                         : invoke_selected();
+      if (dependencies_.trace_bridge != nullptr) {
+        dependencies_.trace_bridge->complete_span(&adapter_span, receipt);
+      }
+      return receipt;
     } catch (const std::exception& ex) {
-      return make_bridge_failure_receipt(selection,
-                                         request,
-                                         AdapterTransportOutcome::rejected,
-                                         "bridge_exception",
-                                         make_error_payload("bridge_exception", ex.what()));
+      auto receipt = make_bridge_failure_receipt(selection,
+                                                 request,
+                                                 AdapterTransportOutcome::rejected,
+                                                 "bridge_exception",
+                                                 make_error_payload("bridge_exception", ex.what()));
+      if (dependencies_.trace_bridge != nullptr) {
+        dependencies_.trace_bridge->complete_span(&adapter_span, receipt);
+      }
+      return receipt;
     } catch (...) {
-      return make_bridge_failure_receipt(selection,
-                                         request,
-                                         AdapterTransportOutcome::rejected,
-                                         "bridge_exception",
-                                         make_error_payload("bridge_exception",
-                                                            "unknown adapter invocation failure"));
+      auto receipt = make_bridge_failure_receipt(selection,
+                                                 request,
+                                                 AdapterTransportOutcome::rejected,
+                                                 "bridge_exception",
+                                                 make_error_payload("bridge_exception",
+                                                                    "unknown adapter invocation failure"));
+      if (dependencies_.trace_bridge != nullptr) {
+        dependencies_.trace_bridge->complete_span(&adapter_span, receipt);
+      }
+      return receipt;
     }
   }
 
-  return make_bridge_failure_receipt(selection,
-                                     request,
-                                     AdapterTransportOutcome::unreachable,
-                                     "adapter_not_registered",
-                                     make_error_payload("adapter_not_registered",
-                                                        "selected adapter_id is not registered in AdapterBridge"));
+  auto receipt = make_bridge_failure_receipt(selection,
+                                             request,
+                                             AdapterTransportOutcome::unreachable,
+                                             "adapter_not_registered",
+                                             make_error_payload("adapter_not_registered",
+                                                                "selected adapter_id is not registered in AdapterBridge"));
+  if (dependencies_.trace_bridge != nullptr) {
+    dependencies_.trace_bridge->complete_span(&adapter_span, receipt);
+  }
+  return receipt;
 }
 
 }  // namespace dasall::services::internal

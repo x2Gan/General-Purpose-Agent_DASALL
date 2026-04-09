@@ -13,6 +13,7 @@
 namespace dasall::services::internal {
 
 class ServiceMetricsBridge;
+class ServiceTraceBridge;
 
 struct CachedExecutionQuerySnapshot {
   std::string state;
@@ -37,6 +38,7 @@ struct ExecutionQueryLaneDependencies {
                             const ExecutionQueryRequest& request)>
       extract_state;
   ServiceMetricsBridge* metrics_bridge = nullptr;
+  ServiceTraceBridge* trace_bridge = nullptr;
 };
 
 class ExecutionQueryLane {

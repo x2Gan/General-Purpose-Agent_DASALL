@@ -12,6 +12,7 @@
 namespace dasall::services::internal {
 
 class ServiceMetricsBridge;
+class ServiceTraceBridge;
 
 struct DataQueryLaneDependencies {
   const AdapterRouter* router = nullptr;
@@ -24,6 +25,7 @@ struct DataQueryLaneDependencies {
   FallbackEnvelope fallback_envelope;
   std::vector<AdapterCandidateView> registered_candidates;
   ServiceMetricsBridge* metrics_bridge = nullptr;
+  ServiceTraceBridge* trace_bridge = nullptr;
 };
 
 class DataQueryLane {

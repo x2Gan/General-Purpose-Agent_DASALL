@@ -9,6 +9,8 @@
 
 namespace dasall::services::internal {
 
+class ServiceTraceBridge;
+
 enum class AdapterTransportOutcome {
   acknowledged,
   timeout,
@@ -60,6 +62,7 @@ class IAdapterInvoker {
 
 struct AdapterBridgeDependencies {
   std::vector<const IAdapterInvoker*> invokers;
+  ServiceTraceBridge* trace_bridge = nullptr;
 };
 
 class AdapterBridge {

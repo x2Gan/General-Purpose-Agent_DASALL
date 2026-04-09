@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "bridges/ServiceTraceBridge.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -143,7 +145,16 @@ ExecutionCommandResult ServiceFacade::execute(const ExecutionCommandRequest& req
 																"execute");
 	}
 
-	return dependencies_.execute_command(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.execute_command(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context, "execute");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 ExecutionCommandResult ServiceFacade::compensate(const ExecutionCompensationRequest& request) {
@@ -172,7 +183,17 @@ ExecutionCommandResult ServiceFacade::compensate(const ExecutionCompensationRequ
 																"compensate");
 	}
 
-	return dependencies_.compensate_command(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.compensate_command(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context,
+																	 "compensate");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 ExecutionQueryResult ServiceFacade::query_state(const ExecutionQueryRequest& request) {
@@ -201,7 +222,17 @@ ExecutionQueryResult ServiceFacade::query_state(const ExecutionQueryRequest& req
 															"query_state");
 	}
 
-	return dependencies_.query_execution_state(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.query_execution_state(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context,
+																	 "query_state");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 ExecutionSubscriptionResult ServiceFacade::subscribe(const ExecutionSubscriptionRequest& request) {
@@ -259,7 +290,16 @@ ExecutionDiagnoseResult ServiceFacade::diagnose(const ExecutionDiagnoseRequest& 
 																 "diagnose");
 	}
 
-	return dependencies_.diagnose_execution_target(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.diagnose_execution_target(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context, "diagnose");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 DataQueryResult ServiceFacade::query(const DataQueryRequest& request) {
@@ -288,7 +328,16 @@ DataQueryResult ServiceFacade::query(const DataQueryRequest& request) {
 																	 "query");
 	}
 
-	return dependencies_.query_data(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.query_data(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context, "query");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 DataCatalogResult ServiceFacade::list_capabilities(const DataCatalogRequest& request) {
@@ -317,7 +366,17 @@ DataCatalogResult ServiceFacade::list_capabilities(const DataCatalogRequest& req
 																		 "list_capabilities");
 	}
 
-	return dependencies_.list_data_capabilities(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.list_data_capabilities(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context,
+																	 "list_capabilities");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 }  // namespace dasall::services::internal

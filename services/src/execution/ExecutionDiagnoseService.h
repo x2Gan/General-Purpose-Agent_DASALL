@@ -10,6 +10,8 @@
 
 namespace dasall::services::internal {
 
+class ServiceTraceBridge;
+
 struct ExecutionDiagnoseServiceDependencies {
   const AdapterRouter* router = nullptr;
   const AdapterBridge* bridge = nullptr;
@@ -19,6 +21,7 @@ struct ExecutionDiagnoseServiceDependencies {
   CapabilitySnapshotView capability_snapshot;
   FallbackEnvelope fallback_envelope;
   std::vector<AdapterCandidateView> registered_candidates;
+  ServiceTraceBridge* trace_bridge = nullptr;
 };
 
 class ExecutionDiagnoseService {

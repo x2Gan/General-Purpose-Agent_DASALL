@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "bridges/ServiceMetricsBridge.h"
+#include "bridges/ServiceTraceBridge.h"
 
 namespace dasall::services::internal {
 
@@ -74,6 +75,7 @@ ExecutionQueryLane::ExecutionQueryLane(ExecutionQueryLaneDependencies dependenci
 
 ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& context,
                                                      const ExecutionQueryRequest& request) const {
+  auto invoke_lane = [&]() -> ExecutionQueryResult {
   const auto emit_metrics = [&](ExecutionQueryResult result,
                                 std::string_view adapter_id,
                                 std::optional<std::uint64_t> latency_ms)
@@ -182,6 +184,20 @@ ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& c
   }
 
   return emit_metrics(std::move(result), route_decision.selection->adapter_id, receipt.latency_ms);
+  };
+
+  if (dependencies_.trace_bridge == nullptr) {
+    return invoke_lane();
+  }
+
+  auto span = dependencies_.trace_bridge->start_lane_span(
+      context,
+      "execution.query",
+      request.query_kind,
+      &request.target);
+  auto result = dependencies_.trace_bridge->with_span(span, invoke_lane);
+  dependencies_.trace_bridge->complete_span(&span, result);
+  return result;
 }
 
 ExecutionQueryResult ExecutionQueryLane::make_runtime_failure(const std::string& message,

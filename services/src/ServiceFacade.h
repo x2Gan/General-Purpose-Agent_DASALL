@@ -8,6 +8,8 @@
 
 namespace dasall::services::internal {
 
+class ServiceTraceBridge;
+
 struct ServiceFacadeDependencies {
   ServiceContextBuilder* context_builder = nullptr;
 
@@ -25,6 +27,7 @@ struct ServiceFacadeDependencies {
   std::function<DataQueryResult(const ServiceCallContext&, const DataQueryRequest&)> query_data;
   std::function<DataCatalogResult(const ServiceCallContext&, const DataCatalogRequest&)>
       list_data_capabilities;
+  ServiceTraceBridge* trace_bridge = nullptr;
 };
 
 class ServiceFacade final : public IExecutionService, public IDataService {

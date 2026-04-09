@@ -3,6 +3,8 @@
 #include <string_view>
 #include <utility>
 
+#include "bridges/ServiceTraceBridge.h"
+
 namespace dasall::services::internal {
 
 namespace {
@@ -77,6 +79,7 @@ ExecutionDiagnoseService::ExecutionDiagnoseService(ExecutionDiagnoseServiceDepen
 ExecutionDiagnoseResult ExecutionDiagnoseService::diagnose(
     const ServiceCallContext& context,
     const ExecutionDiagnoseRequest& request) const {
+  auto invoke_lane = [&]() -> ExecutionDiagnoseResult {
   if (request.target.capability_id.empty() || request.target.target_id.empty()) {
     return make_error_result(request.target.target_id,
                              "validator:" + context.request_id,
@@ -136,6 +139,20 @@ ExecutionDiagnoseResult ExecutionDiagnoseService::diagnose(
     result.error->details.stage = "execution_diagnose_service";
   }
 
+  return result;
+  };
+
+  if (dependencies_.trace_bridge == nullptr) {
+    return invoke_lane();
+  }
+
+  auto span = dependencies_.trace_bridge->start_lane_span(
+      context,
+      "execution.diagnose",
+      kDiagnoseOperation,
+      &request.target);
+  auto result = dependencies_.trace_bridge->with_span(span, invoke_lane);
+  dependencies_.trace_bridge->complete_span(&span, result);
   return result;
 }
 

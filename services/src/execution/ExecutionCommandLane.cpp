@@ -7,6 +7,7 @@
 
 #include "bridges/ServiceAuditBridge.h"
 #include "bridges/ServiceMetricsBridge.h"
+#include "bridges/ServiceTraceBridge.h"
 #include "execution/CompensationCatalog.h"
 
 namespace dasall::services::internal {
@@ -285,6 +286,7 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
                                                           bool critical_action,
                                                           bool high_risk_action,
                                                           bool audit_required) {
+  auto invoke_lane = [&]() -> ExecutionCommandResult {
   if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
       dependencies_.result_mapper == nullptr) {
     auto result = make_runtime_failure("command lane dependencies are not configured",
@@ -456,6 +458,20 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
         receipt.latency_ms);
   }
 
+  return result;
+  };
+
+  if (dependencies_.trace_bridge == nullptr) {
+    return invoke_lane();
+  }
+
+  auto span = dependencies_.trace_bridge->start_lane_span(
+      context,
+      "execution.command",
+      action,
+      &target);
+  auto result = dependencies_.trace_bridge->with_span(span, invoke_lane);
+  dependencies_.trace_bridge->complete_span(&span, result);
   return result;
 }
 
