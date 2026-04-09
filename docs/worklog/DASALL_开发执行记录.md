@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #217
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-001 新增 services 公共 include 布局
+- 状态：已完成
+
+### 任务选择
+
+1. 用户明确要求按 project-implementation-cycle 技能串行推进 CAP-TODO-001~007，并在每个原子任务完成后提交推送，因此本轮只处理第一个可执行原子任务 CAP-TODO-001。
+2. [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 已将 CAP-TODO-001 定义为阶段 A 的串行起步任务，且该行没有前置依赖或 blocker。
+3. 本轮目标是先把 services/include 根目录、三份公共头文件槽位和 CMake 公开头文件入口落盘，为后续 CAP-TODO-002~007 在稳定 ABI 槽位上继续填充对象与接口语义。
+
+### 改动
+
+1. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，为 dasall_services 新增 PUBLIC HEADERS file set，显式登记 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h)、[services/include/IExecutionService.h](../services/include/IExecutionService.h)、[services/include/IDataService.h](../services/include/IDataService.h)。
+2. 新增 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h)，建立 services 公共 supporting object 的稳定头文件槽位。
+3. 新增 [services/include/IExecutionService.h](../services/include/IExecutionService.h) 与 [services/include/IDataService.h](../services/include/IDataService.h)，建立 execution/data 公共接口头文件槽位，并通过 include 根稳定暴露。
+4. 新增 [docs/todos/services/deliverables/CAP-TODO-001-services公共include布局设计收敛.md](../todos/services/deliverables/CAP-TODO-001-services%E5%85%AC%E5%85%B1include%E5%B8%83%E5%B1%80%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写 CAP-TODO-001 的本地证据、外部参考、Design->Build 映射与 D Gate。
+5. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-001 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明 services 公共头文件已稳定进入构建图。
+   - `InterfaceCatalogContractTest` 通过，说明 IExecutionService / IDataService 的 owner/readiness 未因本轮 public include 落盘而回退。
+
+### 结果
+
+1. CAP-TODO-001 已完成，services 现在具备与详细设计 8.1 一致的公共 include 根布局。
+2. 本轮仅建立 ABI 槽位与 CMake 暴露，不提前冻结对象字段或接口方法签名，后续 CAP-TODO-002~007 可以在不改目录口径的前提下继续填充公共 ABI。
+
+### 下一步
+
+1. 进入 CAP-TODO-002，开始在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中冻结 ServiceCallContext、CapabilityTargetRef 与 ServiceDataFreshness。
+
+### 风险
+
+1. 当前三份头文件仍是空槽位；若后续 CAP-TODO-002~007 未继续按序推进，services 只具备布局而不具备实际 ABI 语义，因此必须保持串行推进，不应在 001 后长时间停留。
+
 ## 记录 #216
 
 - 日期：2026-04-08
