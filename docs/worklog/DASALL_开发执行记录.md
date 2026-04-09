@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #253
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-031 验证 failure injection integration
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-030 推送完成后，CAP-TODO-031 成为当前最小可执行的 direct build 任务；它直接承接已具备 smoke 语义的 loopback fixture 和 services integration 拓扑，负责把 failure injection 从文档要求推进到可回归的 `integration;failure` 入口。
+2. 该任务的关键边界是不新增 services public ABI、不把 profile 差异提前打包进本轮，也不修改 `ExecutionCommandLane`、`ResultMapper`、`ExecutionSubscriptionHub`、`RemoteServiceAdapter` 的既有错误语义；本轮只允许补 tests-side fixture 能力和 failure integration 断言。
+3. 本轮目标是让 `CapabilityServicesFailureIntegrationTest` 稳定覆盖 `adapter timeout`、`partial side effect`、`subscription overflow`、`circuit open` 四类注入点，并给出 error/audit/metrics 证据，同时把下一直接执行入口切到 CAP-TODO-032。
+
+### 改动
+
+1. 更新 [tests/mocks/include/CapabilityServicesLoopbackFixture.h](../mocks/include/CapabilityServicesLoopbackFixture.h)，为 loopback fixture 新增 `ServiceMetricsBridge` 注入、partial side effect 所需的 `lookup_compensation_hints`、`ExecutionSubscriptionHub` 接线以及 `make_subscription_request` / `publish_subscription_events` helper，使 failure integration 可继续复用 production `ServiceFacade`、`ExecutionCommandLane`、`ExecutionSubscriptionHub`、`AdapterBridge` 主链。
+2. 更新 [tests/integration/services/CMakeLists.txt](../integration/services/CMakeLists.txt)，新增 `CapabilityServicesFailureIntegrationTest` 的 executable/test 注册，并打上 `integration;failure` 标签，使 services failure integration 同时进入 integration 聚合链和 failure 过滤链。
+3. 新增 [tests/integration/services/CapabilityServicesFailureIntegrationTest.cpp](../integration/services/CapabilityServicesFailureIntegrationTest.cpp)，覆盖四类 failure injection：
+   - remote timeout：验证 `RemoteServiceAdapter` timeout 走 `AdapterUnavailable -> ProviderTimeout`
+   - partial side effect：验证 `side_effects` / `compensation_hints` / `evidence_ref` 保留，并命中 requested/completed audit
+   - subscription overflow：验证 `resync_required` / `dropped_count` / `next_cursor` 与 overflow metric
+   - circuit open proxy：验证 route-unavailable fast-fail 不进入后端，并发射 `services_execution_circuit_open_total`
+4. 新增 [docs/todos/services/deliverables/CAP-TODO-031-CapabilityServices-failure-integration设计收敛.md](../todos/services/deliverables/CAP-TODO-031-CapabilityServices-failure-integration%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 顶部结论和 031 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services_failure_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R CapabilityServicesFailureIntegrationTest`
+   - `cmake --build build-ci --target dasall_integration_tests`
+   - `ctest --test-dir build-ci -N -L failure`
+   - `ctest --test-dir build-ci --output-on-failure -L failure`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+   - `ctest --test-dir build-ci -N`
+2. 结果：
+   - 先定向构建并执行 `CapabilityServicesFailureIntegrationTest`，结果为 `100% tests passed, 0 tests failed out of 1`，说明四类 failure 断言在单入口下稳定。
+   - `ctest -N -L failure` 已发现 `CapabilityServicesFailureIntegrationTest`，且 failure 标签总集合为 `16` 个用例；随后 `ctest -L failure` 结果为 `100% tests passed, 0 tests failed out of 16`，说明 services failure 新入口已进入既有 failure 聚合链。
+   - `ctest -L integration` 结果为 `100% tests passed, 0 tests failed out of 34`，说明新增 services failure integration 没有破坏现有 integration 拓扑。
+   - `ctest -N` 的总测试数增至 `399`，对应 services integration 现已包含 smoke、failure、audit、metrics、trace、health 六个用例入口。
+
+### 结果
+
+1. CAP-TODO-031 已完成，services failure integration 现在可以稳定回归 remote timeout、partial side effect、subscription overflow 和 route-unavailable circuit-open proxy 四类关键故障语义，并保留 error/audit/metrics 证据链。
+2. 本轮没有修改 services 公共 ABI，也没有放宽 `ResultMapper` 的 partial-side-effect 约束、`RemoteServiceAdapter` 的 timeout 语义或 `ExecutionSubscriptionHub` 的 overflow 契约；所有修正都限定在 tests-side fixture 和 failure integration 注册层。
+
+### 下一步
+
+1. 进入 CAP-TODO-032，验证 `desktop_full` 与 `edge_balanced` 的 route / timeout / cache 派生差异，并确保 `ProfileRuntimePolicySchemaContractTest` 不回退。
+
+### 风险
+
+1. 当前 services 的 “circuit open” 仍由 route-unavailable + circuit metric 代理承载，而不是独立 breaker 状态机；若 runtime/infra 后续引入显式 breaker owner，failure integration 需要迁移到新的稳定信号源。
+2. remote timeout 在 production 语义上会先短路 adapter，再返回 receipt，因此 loopback callback 计数不能作为稳定断言；后续如需观察更深层 remote transport 细节，应引入独立 adapter telemetry，而不是在 failure integration 中滥用 request ledger。
+
 ## 记录 #252
 
 - 日期：2026-04-09

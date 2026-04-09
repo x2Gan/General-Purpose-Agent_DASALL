@@ -33,6 +33,13 @@ dasall_add_services_integration_test(
 )
 
 dasall_add_services_integration_test(
+  dasall_services_failure_integration_test
+  CapabilityServicesFailureIntegrationTest
+  CapabilityServicesFailureIntegrationTest.cpp
+  "integration;failure"
+)
+
+dasall_add_services_integration_test(
   dasall_services_audit_integration_test
   CapabilityServicesAuditIntegrationTest
   CapabilityServicesAuditIntegrationTest.cpp

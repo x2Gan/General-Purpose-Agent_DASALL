@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -17,10 +18,12 @@
 #include "data/DataProjectionCache.h"
 #include "data/DataQueryLane.h"
 #include "execution/ExecutionCommandLane.h"
+#include "execution/ExecutionSubscriptionHub.h"
 #include "mapping/ResultMapper.h"
 
 namespace dasall::services::internal {
 class ServiceAuditBridge;
+class ServiceMetricsBridge;
 class ServiceTraceBridge;
 }  // namespace dasall::services::internal
 
@@ -32,15 +35,23 @@ struct CapabilityServicesLoopbackFixtureOptions {
   std::string data_capability_id = "devices";
   std::uint64_t now_ms = 1712746800000ULL;
   std::uint64_t cache_ttl_ms = 5000U;
+  std::size_t max_buffered_subscription_events = 64U;
   bool local_service_available = true;
   bool remote_service_available = false;
   bool remote_timeout = false;
   bool allow_route_degrade = true;
-    std::vector<std::string> critical_actions;
-    std::vector<std::string> high_risk_actions;
-    bool allow_high_risk_actions = true;
-    services::internal::ServiceAuditBridge* audit_bridge = nullptr;
-    services::internal::ServiceTraceBridge* trace_bridge = nullptr;
+  std::vector<std::string> critical_actions;
+  std::vector<std::string> high_risk_actions;
+  bool allow_high_risk_actions = true;
+  std::function<std::vector<std::string>(
+      const std::string& capability_id,
+      const std::string& action,
+      const std::string& capability_version,
+      const services::internal::AdapterReceipt& receipt)>
+      lookup_compensation_hints;
+  services::internal::ServiceAuditBridge* audit_bridge = nullptr;
+  services::internal::ServiceMetricsBridge* metrics_bridge = nullptr;
+  services::internal::ServiceTraceBridge* trace_bridge = nullptr;
   std::function<services::internal::AdapterInvocationResult(
       const services::internal::AdapterInvocationRequest& request)>
       local_handler;
@@ -85,10 +96,10 @@ class CapabilityServicesLoopbackFixture {
         });
 
     bridge_ = std::make_unique<services::internal::AdapterBridge>(
-    services::internal::AdapterBridgeDependencies{
-      .invokers = build_invokers(),
-      .trace_bridge = options_.trace_bridge,
-    });
+      services::internal::AdapterBridgeDependencies{
+        .invokers = build_invokers(),
+        .trace_bridge = options_.trace_bridge,
+      });
 
     projection_cache_ = std::make_unique<services::internal::DataProjectionCache>(
         services::internal::DataProjectionCacheDependencies{
@@ -109,17 +120,12 @@ class CapabilityServicesLoopbackFixture {
             .critical_actions = options_.critical_actions,
             .high_risk_actions = options_.high_risk_actions,
             .allow_high_risk_actions = options_.allow_high_risk_actions,
-            .lookup_compensation_hints = [](const std::string&,
-                                            const std::string&,
-                                            const std::string&,
-                                            const services::internal::AdapterReceipt&) {
-              return std::vector<std::string>{};
-            },
+            .lookup_compensation_hints = build_compensation_lookup(),
             .make_execution_id = {},
             .make_compensation_execution_id = {},
             .on_serialization_acquired = {},
             .audit_bridge = options_.audit_bridge,
-            .metrics_bridge = nullptr,
+            .metrics_bridge = options_.metrics_bridge,
             .trace_bridge = options_.trace_bridge,
         });
 
@@ -133,9 +139,15 @@ class CapabilityServicesLoopbackFixture {
             .capability_snapshot = build_data_snapshot(),
             .fallback_envelope = build_fallback_envelope("query.read_only"),
             .registered_candidates = build_candidates(),
-            .metrics_bridge = nullptr,
+            .metrics_bridge = options_.metrics_bridge,
             .trace_bridge = options_.trace_bridge,
         });
+
+        subscription_hub_ = std::make_unique<services::internal::ExecutionSubscriptionHub>(
+          services::internal::ExecutionSubscriptionHubDependencies{
+            .max_buffered_events = options_.max_buffered_subscription_events,
+            .metrics_bridge = options_.metrics_bridge,
+          });
 
     facade_ = std::make_unique<services::internal::ServiceFacade>(
         services::internal::ServiceFacadeDependencies{
@@ -146,7 +158,10 @@ class CapabilityServicesLoopbackFixture {
             },
             .compensate_command = {},
             .query_execution_state = {},
-            .subscribe_execution_state = {},
+            .subscribe_execution_state = [this](const services::ServiceCallContext& context,
+                              const services::ExecutionSubscriptionRequest& request) {
+              return subscription_hub_->subscribe(context, request);
+            },
             .diagnose_execution_target = {},
             .query_data = [this](const services::ServiceCallContext& context,
                                  const services::DataQueryRequest& request) {
@@ -239,6 +254,30 @@ class CapabilityServicesLoopbackFixture {
     };
   }
 
+  [[nodiscard]] services::ExecutionSubscriptionRequest make_subscription_request(
+      std::string request_id = "req-loopback-subscribe",
+      std::string target_id = "loopback.target",
+      std::string stream_kind = "status",
+      std::optional<std::string> cursor = std::nullopt,
+      std::uint32_t max_events = 2U) const {
+    return services::ExecutionSubscriptionRequest{
+        .context = make_context(std::move(request_id)),
+        .target = make_execution_target(std::move(target_id)),
+        .stream_kind = std::move(stream_kind),
+        .cursor = std::move(cursor),
+        .max_events = max_events,
+    };
+  }
+
+  void publish_subscription_events(
+      std::string target_id,
+      std::string stream_kind,
+      const std::vector<std::string>& events_json_batch) {
+    subscription_hub_->publish(make_execution_target(std::move(target_id)),
+                               std::move(stream_kind),
+                               events_json_batch);
+  }
+
   void set_now_ms(std::uint64_t now_ms) {
     options_.now_ms = now_ms;
   }
@@ -254,6 +293,24 @@ class CapabilityServicesLoopbackFixture {
   }
 
  private:
+  [[nodiscard]] std::function<std::vector<std::string>(
+      const std::string& capability_id,
+      const std::string& action,
+      const std::string& capability_version,
+      const services::internal::AdapterReceipt& receipt)>
+  build_compensation_lookup() const {
+    if (options_.lookup_compensation_hints) {
+      return options_.lookup_compensation_hints;
+    }
+
+    return [](const std::string&,
+              const std::string&,
+              const std::string&,
+              const services::internal::AdapterReceipt&) {
+      return std::vector<std::string>{};
+    };
+  }
+
   [[nodiscard]] bool wants_remote_route() const {
     return options_.remote_service_available || options_.remote_timeout ||
            static_cast<bool>(options_.remote_handler);
@@ -440,6 +497,7 @@ class CapabilityServicesLoopbackFixture {
   std::unique_ptr<services::internal::DataProjectionCache> projection_cache_;
   std::unique_ptr<services::internal::ExecutionCommandLane> command_lane_;
   std::unique_ptr<services::internal::DataQueryLane> data_query_lane_;
+  std::unique_ptr<services::internal::ExecutionSubscriptionHub> subscription_hub_;
   std::unique_ptr<services::internal::ServiceFacade> facade_;
 };
 
