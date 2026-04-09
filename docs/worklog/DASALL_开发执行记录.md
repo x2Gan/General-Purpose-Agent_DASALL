@@ -2,6 +2,52 @@
 
 # DASALL 开发执行记录
 
+## 记录 #240
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-018 实现 ExecutionSubscriptionHub 订阅骨架
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-017 推送完成后，CAP-TODO-018 成为 D2 中下一项直接可执行的订阅车道任务，也是后续 ServiceMetricsBridge、ServiceHealthProbe 与 failure integration 观测 subscription overflow 的前置基础。
+2. 该任务无额外 blocker，且设计边界已经明确：公共 ABI 只能暴露 cursor/batch、`next_cursor`、`resync_required` 与 `dropped_count`，内部缓冲、线程与 lease 细节不得泄漏。
+3. 本轮目标是在不提前引入 integration fixture、也不扩张公共接口的前提下，落盘 internal `ExecutionSubscriptionHub`，实现 `drop_oldest` overflow、重同步标记和可观测丢弃计数。
+
+### 改动
+
+1. 新增 [services/src/execution/ExecutionSubscriptionHub.h](../services/src/execution/ExecutionSubscriptionHub.h) 与 [services/src/execution/ExecutionSubscriptionHub.cpp](../services/src/execution/ExecutionSubscriptionHub.cpp)，定义 internal `ExecutionSubscriptionHub`、流状态缓冲与 `publish()/subscribe()`，实现 cursor 解析、batch 拉取、`drop_oldest` overflow、`resync_required` 与 `dropped_count`。
+2. 订阅结果保持在既有 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 的 `ExecutionSubscriptionResult` 面上，只返回 event batch JSON、`next_cursor`、`resync_required` 与 `dropped_count`，不暴露内部 buffer/lease 结构。
+3. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 `ExecutionSubscriptionHub.cpp` 纳入 `dasall_services` 构建。
+4. 更新 [tests/unit/services/execution/CMakeLists.txt](../tests/unit/services/execution/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 `dasall_execution_subscription_hub_unit_test` 接入 execution/top-level unit 聚合目标。
+5. 新增 [tests/unit/services/execution/ExecutionSubscriptionHubTest.cpp](../tests/unit/services/execution/ExecutionSubscriptionHubTest.cpp) 与 [docs/todos/services/deliverables/CAP-TODO-018-ExecutionSubscriptionHub订阅骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-018-ExecutionSubscriptionHub%E8%AE%A2%E9%98%85%E9%AA%A8%E6%9E%B6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 018 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `rg -n "drop_oldest|resync_required|InfraConcurrencyPolicy" docs/architecture/DASALL_capability_services子系统详细设计.md docs/ssot/InfraConcurrencyPolicy.md`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 subscription hub 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 ExecutionSubscriptionHubTest 已进入 discoverability 与执行路径，最终结果为 `100% tests passed, 0 tests failed out of 204`。
+   - `rg` 校验命中了架构文档中的 `ExecutionSubscriptionHub` / `resync_required` / `drop_oldest` 条目，以及 SSOT 中对 `drop_oldest` / backpressure 可观测性的约束，说明 018 已回链 InfraConcurrencyPolicy。
+
+### 结果
+
+1. CAP-TODO-018 已完成，Execution 子域现已具备 internal subscription buffer、cursor/batch 拉取与 overflow 可观测基础。
+2. `drop_oldest`、`resync_required` 与 `dropped_count` 已成为稳定的订阅错误事实输出，可为后续 metrics/health/failure integration 直接复用。
+
+### 下一步
+
+1. 进入 CAP-TODO-019，落盘 diagnose-only 路径，把 `target_reachable` 与 `report_json` 的只读诊断语义建起来。
+
+### 风险
+
+1. 当前 `ExecutionSubscriptionHub` 仍是 internal-only 内存骨架，尚未与真实 adapter stream 或 snapshot refresh 机制对接；若后续要扩张到持久 cursor 或跨进程订阅，必须先回写设计与 TODO，再补 integration 证据。
+
 ## 记录 #239
 
 - 日期：2026-04-09

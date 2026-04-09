@@ -12,6 +12,7 @@ target_sources(dasall_services
     src/execution/CompensationCatalog.cpp
     src/execution/ExecutionCommandLane.cpp
     src/execution/ExecutionQueryLane.cpp
+    src/execution/ExecutionSubscriptionHub.cpp
     src/mapping/ResultMapper.cpp
     src/execution/placeholder.cpp
     src/data/placeholder.cpp
