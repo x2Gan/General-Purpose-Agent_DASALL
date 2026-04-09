@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #235
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-039 实现 RemoteServiceAdapter
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-038 推送完成后，CAP-TODO-039 成为 D1 中的下一项串行任务。
+2. 该任务无额外 blocker，且直接为远端业务服务路径和后续 ResultMapper 的 timeout/unreachable 语义提供事实输入。
+3. 本轮目标是在不接入真实远端 SDK 的前提下，提供一个可被 Bridge 统一调用、可由 stub/fake remote handler 替换的 RemoteServiceAdapter 骨架。
+
+### 改动
+
+1. 新增 [services/src/adapters/RemoteServiceAdapter.h](../services/src/adapters/RemoteServiceAdapter.h) 与 [services/src/adapters/RemoteServiceAdapter.cpp](../services/src/adapters/RemoteServiceAdapter.cpp)，定义 `RemoteServiceAdapterOptions` 与 `RemoteServiceAdapter`，实现 timeout、endpoint unavailable、stub handler 和正常委派的最小语义。
+2. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 RemoteServiceAdapter 纳入 `dasall_services` 构建。
+3. 新增 [tests/unit/services/adapters/RemoteServiceAdapterTest.cpp](../tests/unit/services/adapters/RemoteServiceAdapterTest.cpp)，覆盖 identity、timeout、unreachable 和 loopback success 四类场景。
+4. 更新 [tests/unit/services/adapters/CMakeLists.txt](../tests/unit/services/adapters/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 RemoteServiceAdapter unit 接入 services 子目录和顶层 `dasall_unit_tests` 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-039-RemoteServiceAdapter最小骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-039-RemoteServiceAdapter%E6%9C%80%E5%B0%8F%E9%AA%A8%E6%9E%B6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 039~040 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 RemoteServiceAdapter 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 RemoteServiceAdapterTest 已进入 discoverability 与执行路径。
+   - timeout、endpoint unavailable 与 loopback handler 场景都能产出稳定的 `AdapterInvocationResult`，说明远端路径已有可二值化的最小骨架。
+
+### 结果
+
+1. CAP-TODO-039 已完成，D1 现在具备远端业务服务路径的统一适配骨架。
+2. CAP-TODO-040 现为本轮串行链条中的最后一项直接执行任务。
+
+### 下一步
+
+1. 进入 CAP-TODO-040，落盘 ResultMapper 结果映射组件。
+
+### 风险
+
+1. 当前 RemoteServiceAdapter 通过 injected remote handler 维持最小依赖面；后续若接入真实远端协议栈，对外仍应保持 `IAdapterInvoker` 协议不变，且不得把远端失败伪装成本地成功。
+
 ## 记录 #234
 
 - 日期：2026-04-09

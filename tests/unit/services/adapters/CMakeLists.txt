@@ -77,3 +77,23 @@ dasall_apply_common_options(dasall_local_service_adapter_unit_test)
 
 add_test(NAME LocalServiceAdapterTest COMMAND dasall_local_service_adapter_unit_test)
 set_tests_properties(LocalServiceAdapterTest PROPERTIES LABELS "unit")
+
+add_executable(dasall_remote_service_adapter_unit_test
+  RemoteServiceAdapterTest.cpp
+)
+
+target_link_libraries(dasall_remote_service_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_services
+)
+
+target_include_directories(dasall_remote_service_adapter_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/services/src
+)
+
+dasall_apply_common_options(dasall_remote_service_adapter_unit_test)
+
+add_test(NAME RemoteServiceAdapterTest COMMAND dasall_remote_service_adapter_unit_test)
+set_tests_properties(RemoteServiceAdapterTest PROPERTIES LABELS "unit")
