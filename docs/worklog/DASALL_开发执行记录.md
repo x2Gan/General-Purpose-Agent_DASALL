@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #226
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-010 实现 ServiceFacade 组合根骨架
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-009 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-010。
+2. 该任务依赖 CAP-TODO-006、007、008、009，当前均已完成，且没有 blocker，因此本轮聚焦 ServiceFacade 的双接口实现与最小 façade unit 验证。
+3. 本轮目标是让 ServiceFacade 成为同时覆盖 IExecutionService / IDataService 的内部组合根，先做上下文规范化，再把调用委派给注入的 execution/data handler，但不提前接入具体 lane/adapter 实现。
+
+### 改动
+
+1. 新增 [services/src/ServiceFacade.h](../services/src/ServiceFacade.h)，定义内部 `ServiceFacadeDependencies` 和 `ServiceFacade`。
+2. 更新 [services/src/ServiceFacade.cpp](../services/src/ServiceFacade.cpp)，实现 execute、compensate、query_state、subscribe、diagnose、query、list_capabilities 七个方法：统一先调用 ServiceContextBuilder，再把请求委派给注入 handler；若上下文非法或 handler 未配置，则返回显式失败结果。
+3. 新增 [tests/unit/services/ServiceFacadeTest.cpp](../tests/unit/services/ServiceFacadeTest.cpp)，覆盖 execute/query 正例与非法上下文阻断委派负例。
+4. 更新 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，增加 `dasall_service_facade_unit_test` 最小 target 接线，使 façade unit 进入 `dasall_unit_tests`。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-010-ServiceFacade组合根骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-010-ServiceFacade组合根骨架设计收敛.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md) 本轮证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+2. 结果：
+   - `dasall_services`、`dasall_unit_tests` 与 `dasall_contract_tests` 构建通过，说明 façade 骨架与新增 unit/contract 接线有效。
+   - `ctest -L unit` 全量通过，且新增 ServiceFacadeTest 可执行，说明 façade 委派骨架已进入 unit 验证路径。
+   - `InterfaceCatalogContractTest` 1/1 通过，说明 ServiceFacade 内部实现没有回退 services 的 contract gate。
+
+### 结果
+
+1. CAP-TODO-010 已完成，ServiceFacade 现在具备内部组合根所需的双接口实现与最小委派能力。
+2. 本轮没有引入审批、确认、恢复裁定或 platform/infra 细节，保持了 ServiceFacade 只做编排和委派的职责边界。
+
+### 下一步
+
+1. 进入 CAP-TODO-011，整理 services unit 测试拓扑，把当前最小 unit target 接线收口到稳定的 tests/unit/services 目录结构，并补齐 ServiceHeaderLayoutTest / ServiceFacadeTest 槽位。
+
+### 风险
+
+1. 当前 façade 通过 injected handlers 维持组合根边界；等后续 execution/data/system 真实子域落盘后，需要把这些 handler 替换成稳定协作者，而不是让 façade 永久停留在 lambda 组装状态。
+
 ## 记录 #225
 
 - 日期：2026-04-09
