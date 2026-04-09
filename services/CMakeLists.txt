@@ -9,6 +9,7 @@ target_sources(dasall_services
     src/adapters/LocalPlatformAdapter.cpp
     src/adapters/LocalServiceAdapter.cpp
     src/adapters/RemoteServiceAdapter.cpp
+    src/execution/ExecutionCommandLane.cpp
     src/mapping/ResultMapper.cpp
     src/execution/placeholder.cpp
     src/data/placeholder.cpp

@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #237
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-015 实现 ExecutionCommandLane 命令车道
+- 状态：已完成
+
+### 任务选择
+
+1. D1 推送完成后，CAP-TODO-015 是 D2 中第一个直接可执行的 execution 车道任务，也是 CAP-TODO-016 与 observability / integration 深链路的共同前置。
+2. 该任务无额外 blocker，但受 CAP-GATE-08 约束，不能提前落高风险动作实现；因此本轮目标收敛为 low-risk command lane 基础，并把高风险动作显式门控在 fail-closed 路径。
+3. 本轮目标是在不扩张 public ABI 和 shared contracts 的前提下，落盘 `ExecutionCommandLane`、幂等缓存、关键动作串行化以及 `PartialSideEffect` 的结构化结果收口。
+
+### 改动
+
+1. 新增 [services/src/execution/ExecutionCommandLane.h](../services/src/execution/ExecutionCommandLane.h) 与 [services/src/execution/ExecutionCommandLane.cpp](../services/src/execution/ExecutionCommandLane.cpp)，定义 internal `ExecutionCommandLane` 与依赖注入面，复用 `AdapterRouter`、`AdapterBridge`、`ResultMapper` 完成 execute/compensate 命令路径、幂等键缓存、target/action 级串行化和高风险动作 CAP-GATE-08 fail-closed。
+2. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 `ExecutionCommandLane.cpp` 纳入 `dasall_services` 构建。
+3. 新增 [tests/unit/services/execution/ExecutionCommandLaneTest.cpp](../tests/unit/services/execution/ExecutionCommandLaneTest.cpp) 与 [tests/unit/services/execution/CMakeLists.txt](../tests/unit/services/execution/CMakeLists.txt)，覆盖 success、invalid request、partial side effect、critical action busy 与 high-risk gate 五类场景。
+4. 更新 [tests/unit/services/CMakeLists.txt](../tests/unit/services/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 execution 子目录与 `dasall_execution_command_lane_unit_test` 接入 services/top-level unit 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-015-ExecutionCommandLane命令车道设计收敛.md](../todos/services/deliverables/CAP-TODO-015-ExecutionCommandLane%E5%91%BD%E4%BB%A4%E8%BD%A6%E9%81%93%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、015/016 状态、D2 直接执行集合与优先顺序。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest`
+2. 结果：
+   - `dasall_services`、`dasall_unit_tests` 与 `dasall_contract_tests` 构建通过，说明命令车道实现与 unit/contract 接线有效。
+   - `ctest -L unit` 通过，新增 ExecutionCommandLaneTest 已进入 discoverability 与执行路径，success / invalid / partial / busy / gate 五类场景均可二值化。
+   - `InterfaceCatalogContractTest` 通过，说明本轮没有越权修改 services 共享接口 readiness 或重定义 shared contracts 语义。
+
+### 结果
+
+1. CAP-TODO-015 已完成，Execution 子域现在具备 low-risk 命令路径的最小可执行骨架。
+2. CAP-TODO-016 已解阻，可作为下一轮直接执行入口；高风险动作仍按 CAP-GATE-08 保持 fail-closed，等待 query/diagnose-only integration smoke 与审计桥证据。
+
+### 下一步
+
+1. 进入 CAP-TODO-016，落盘静态 `CompensationCatalog`，把当前 injected compensation hint lookup 收敛为 capability/action/version 驱动的稳定目录。
+
+### 风险
+
+1. 当前命令车道只落 low-risk 基础与高风险 gate；若后续有人绕过 CAP-GATE-08 直接打开 `safe_mode.*` 或 require_confirmation 动作，必须先补审计与 integration 证据，再扩张 lane 行为。
+
 ## 记录 #236
 
 - 日期：2026-04-09

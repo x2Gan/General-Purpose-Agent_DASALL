@@ -54,4 +54,5 @@ add_test(NAME ServiceFacadeTest COMMAND dasall_service_facade_unit_test)
 set_tests_properties(ServiceFacadeTest PROPERTIES LABELS "unit")
 
 add_subdirectory(adapters)
+add_subdirectory(execution)
 add_subdirectory(mapping)
