@@ -2,6 +2,49 @@
 
 # DASALL 开发执行记录
 
+## 记录 #234
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-038 实现 LocalServiceAdapter
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-037 推送完成后，CAP-TODO-038 成为 D1 中的下一项串行任务。
+2. 该任务无额外 blocker，且为本地业务服务路径和后续 loopback/fake service fixture 提供最小实现入口。
+3. 本轮目标是在不引入 service registry 终态依赖的前提下，提供一个可被 Bridge 统一调用、可由测试夹具替换的 LocalServiceAdapter 骨架。
+
+### 改动
+
+1. 新增 [services/src/adapters/LocalServiceAdapter.h](../services/src/adapters/LocalServiceAdapter.h) 与 [services/src/adapters/LocalServiceAdapter.cpp](../services/src/adapters/LocalServiceAdapter.cpp)，定义 `LocalServiceAdapterOptions` 与 `LocalServiceAdapter`，实现 endpoint unavailable、unbound handler 和 handler exception 的 fail-safe 行为。
+2. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 LocalServiceAdapter 纳入 `dasall_services` 构建。
+3. 新增 [tests/unit/services/adapters/LocalServiceAdapterTest.cpp](../tests/unit/services/adapters/LocalServiceAdapterTest.cpp)，覆盖 identity、endpoint unavailable、loopback success 和 exception 四类场景。
+4. 更新 [tests/unit/services/adapters/CMakeLists.txt](../tests/unit/services/adapters/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 LocalServiceAdapter unit 接入 services 子目录和顶层 `dasall_unit_tests` 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-038-LocalServiceAdapter最小骨架设计收敛.md](../todos/services/deliverables/CAP-TODO-038-LocalServiceAdapter%E6%9C%80%E5%B0%8F%E9%AA%A8%E6%9E%B6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论与 038~040 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 LocalServiceAdapter 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 LocalServiceAdapterTest 已进入 discoverability 与执行路径。
+   - endpoint unavailable、loopback handler 与 exception 场景都能产出稳定的 `AdapterInvocationResult`，说明本地服务路径已有可二值化的最小骨架。
+
+### 结果
+
+1. CAP-TODO-038 已完成，D1 现在具备本地业务服务路径的统一适配骨架。
+2. CAP-TODO-039~040 仍可直接执行，其中 039 是下一项串行任务。
+
+### 下一步
+
+1. 进入 CAP-TODO-039，落盘 RemoteServiceAdapter 最小骨架。
+
+### 风险
+
+1. 当前 LocalServiceAdapter 通过 injected handler 维持最小依赖面；后续若接入真实本地服务注册或调度组件，对外仍应保持 `IAdapterInvoker` 协议不变。
+
 ## 记录 #233
 
 - 日期：2026-04-09
