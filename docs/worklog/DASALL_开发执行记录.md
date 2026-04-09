@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #219
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-003 定义 Execution 请求对象族
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-002 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-003。
+2. 该任务只依赖 CAP-TODO-001、002，且当前无 blocker，因此本轮只在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 上继续追加 Execution 请求对象族。
+3. 本轮目标是把 execute/compensate/query/subscribe/diagnose 五类 request 边界固定下来，但不提前落结果对象或接口方法签名。
+
+### 改动
+
+1. 更新 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h)，新增 `SerializedJson` alias，以及 `ExecutionCommandRequest`、`ExecutionCompensationRequest`、`ExecutionQueryRequest`、`ExecutionSubscriptionRequest`、`ExecutionDiagnoseRequest` 五个请求对象。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-003-Execution请求对象族设计收敛.md](../todos/services/deliverables/CAP-TODO-003-Execution%E8%AF%B7%E6%B1%82%E5%AF%B9%E8%B1%A1%E6%97%8F%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-003 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+   - `printf '#include "ServiceTypes.h"\nusing namespace dasall::services;\nint main() { ExecutionCommandRequest a{}; ExecutionCompensationRequest b{}; ExecutionQueryRequest c{}; ExecutionSubscriptionRequest d{}; ExecutionDiagnoseRequest e{}; return static_cast<int>(a.action.size() + b.reason_code.size() + c.query_kind.size() + d.stream_kind.size() + e.include_last_error); }\n' | c++ -std=c++20 -Iservices/include -Icontracts/include -xc++ -fsyntax-only -`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明请求对象族落盘未破坏现有构建和 contract gate。
+   - `InterfaceCatalogContractTest` 1/1 通过，services admission readiness 未漂移。
+   - 五个 Execution request 类型的独立语法编译检查通过，说明对象定义可被后续接口头与测试稳定复用。
+
+### 结果
+
+1. CAP-TODO-003 已完成，ServiceTypes.h 现在具备 execution 请求对象层。
+2. 本轮仍保持“请求/结果分离”的公共 ABI 边界，没有把 ResultCode、ErrorInfo 或 side_effects 等结果语义提前带入请求层。
+
+### 下一步
+
+1. 进入 CAP-TODO-004，继续在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中冻结 ExecutionCommandResult、ExecutionQueryResult、ExecutionSubscriptionResult、ExecutionDiagnoseResult。
+
+### 风险
+
+1. 当前 `action`、`compensation_action`、`stream_kind`、`query_kind` 仍保持字符串化表示；若后续 taxonomy 评审要求升级为枚举或分类对象，必须走补设计任务，不应在当前已完成的请求对象任务里就地改口径。
+
 ## 记录 #218
 
 - 日期：2026-04-09
