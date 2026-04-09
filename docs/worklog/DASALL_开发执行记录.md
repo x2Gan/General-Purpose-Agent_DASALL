@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #254
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-032 验证 profile 差异 integration
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-031 推送完成后，CAP-TODO-032 成为 030~032 串行链上的最后一个 direct build 任务；它直接承接已经冻结的 `ServiceConfigAdapter`、`DataProjectionCache` 和 loopback/integration 注册拓扑，负责把 profile 差异从静态派生表推进到可回归的 `integration;profile` 入口。
+2. 该任务的关键边界是不新增任何 `services.*` schema、不修改 services public ABI，也不把 profile 语义绕开既有 `ProfileCatalog -> BuildProfileResolver -> RuntimePolicyProvider -> ServiceConfigAdapter` 路径；本轮只允许新增 tests-side profile integration 断言和最小 CMake 注册。
+3. 本轮目标是让 `CapabilityServicesProfileIntegrationTest` 稳定覆盖 `desktop_full` 与 `edge_balanced` 在 platform route、request/workflow timeout、cache TTL 与默认 stale-read 基线上的差异，并同时证明 `ProfileRuntimePolicySchemaContractTest` 与既有 integration 聚合链不回退。
+
+### 改动
+
+1. 更新 [tests/integration/services/CMakeLists.txt](../integration/services/CMakeLists.txt)，新增 `CapabilityServicesProfileIntegrationTest` 的 executable/test 注册，并打上 `integration;profile` 标签；仅对该目标补充 `dasall_profiles` 链接，使 profile integration 能直接消费真实 profile 资产而不扩大其他 services integration target 的依赖面。
+2. 新增 [tests/integration/services/CapabilityServicesProfileIntegrationTest.cpp](../integration/services/CapabilityServicesProfileIntegrationTest.cpp)，通过 `ProfileCatalog -> BuildProfileResolver -> RuntimePolicyProvider -> ServiceConfigAdapter` 加载真实 `desktop_full` / `edge_balanced` 资产，断言：
+   - `platform_hal` 驱动的 route order 差异：desktop_full 保持 `local_service -> remote_service`，edge_balanced 前置 `local_platform`
+   - request/workflow timeout 差异：desktop_full 为 8000/5000ms，edge_balanced 为 7000/4000ms
+   - cache TTL 与 stale-read 差异：desktop_full 180s 严格 freshness，edge_balanced 120s 且默认允许 stale
+3. 新增 [docs/todos/services/deliverables/CAP-TODO-032-CapabilityServices-profile-integration设计收敛.md](../todos/services/deliverables/CAP-TODO-032-CapabilityServices-profile-integration%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 顶部结论和 032 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services_profile_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -R CapabilityServicesProfileIntegrationTest`
+   - `ctest --test-dir build-ci --output-on-failure -L profile`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+   - `ctest --test-dir build-ci --output-on-failure -R ProfileRuntimePolicySchemaContractTest`
+   - `ctest --test-dir build-ci -N`
+2. 结果：
+   - VS Code CMake Tools 在本轮仍返回空的 build target/test 列表，并在构建时报出“无法配置项目”；因此继续沿用显式 `cmake -S . -B build-ci -G "Unix Makefiles"` + `ctest --test-dir build-ci ...` 验证链，避免把 032 绑定到不稳定的 IDE 状态。
+   - 定向 `CapabilityServicesProfileIntegrationTest` 通过，结果为 `100% tests passed, 0 tests failed out of 1`，说明 profile route / timeout / cache 差异在单入口下稳定。
+   - `ctest -L profile` 结果为 `100% tests passed, 0 tests failed out of 2`，说明新增 services profile integration 已进入既有 profile 聚合链。
+   - `ctest -L integration` 结果为 `100% tests passed, 0 tests failed out of 35`，说明 032 没有破坏现有 integration 拓扑。
+   - `ProfileRuntimePolicySchemaContractTest` 单独执行通过，结果为 `100% tests passed, 0 tests failed out of 1`；`ctest -N` 总测试数增至 `400`，对应 services integration 现已包含 smoke、failure、profile、audit、metrics、trace、health 七个用例入口。
+
+### 结果
+
+1. CAP-TODO-032 已完成，services 现在有一个稳定的 `integration;profile` 回归入口，可以直接用真实 profile 资产验证 `desktop_full` 与 `edge_balanced` 的 route、timeout 与 cache 差异，而不新增 `services.*` schema。
+2. 本轮没有修改 services 公共 ABI，也没有绕开 `ServiceConfigAdapter`/`RuntimePolicyProvider` 的既有派生路径；缓存断言显式遵守 `DataProjectionCache` 的 `age_ms > ttl_ms` 边界，而不是放宽 freshness 语义。
+
+### 下一步
+
+1. 若继续推进 services 专项，下一步转入 CAP-TODO-033 / CAP-TODO-034 的 admission 与 Gate 证据收口；当前剩余阻塞已不再是 030~032 的实现缺口，而是 shared-contract readiness 与专项回写门禁。
+
+### 风险
+
+1. 032 的 profile integration 直接绑定真实 `desktop_full` / `edge_balanced` 资产值；若 profile 资产后续有意调整 platform_hal、timeout 或 cache policy，需要同步更新测试断言和专项 TODO 证据，而不是重新引入 `services.*` 私有键兜底。
+2. cache stale 边界当前严格依赖 `DataProjectionCache` 的 `age_ms > ttl_ms` 语义；若后续 freshness 判定改为 `>=` 或新增多级 TTL，032 的缓存断言需要跟随冻结语义重写。
+
 ## 记录 #253
 
 - 日期：2026-04-09

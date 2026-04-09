@@ -40,6 +40,18 @@ dasall_add_services_integration_test(
 )
 
 dasall_add_services_integration_test(
+  dasall_services_profile_integration_test
+  CapabilityServicesProfileIntegrationTest
+  CapabilityServicesProfileIntegrationTest.cpp
+  "integration;profile"
+)
+
+target_link_libraries(dasall_services_profile_integration_test
+  PRIVATE
+    dasall_profiles
+)
+
+dasall_add_services_integration_test(
   dasall_services_audit_integration_test
   CapabilityServicesAuditIntegrationTest
   CapabilityServicesAuditIntegrationTest.cpp
