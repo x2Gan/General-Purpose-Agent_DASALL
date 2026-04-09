@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #230
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-014 补齐 AdapterReceipt 与结果映射契约
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-013 推送完成后，当前串行链条中的下一项可执行原子任务是 CAP-TODO-014。
+2. 该任务直接对应 CAP-BLK-003，是进入 AdapterBridge、ResultMapper 与 execution/data 深链路之前的最后一个补设计解阻项。
+3. 本轮目标是在不改写 `ErrorInfo` 既有语义、也不扩张 ServiceTypes 的前提下，冻结 `AdapterReceipt` 字段、`ServiceErrorClass -> ErrorInfo.failure_type` 映射，以及 `evidence_refs`、`side_effects`、`compensation_hints` 的结果约束。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services子系统详细设计.md)，新增“AdapterReceipt 与结果映射契约”小节，明确 `AdapterReceipt` 字段、`ErrorInfo.source_ref` / `details` 约束、`PartialSideEffect` 的 evidence 规则，并在 9.4 增加 Receipt Mapping Gate。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-014-AdapterReceipt与结果映射契约设计收敛.md](../todos/services/deliverables/CAP-TODO-014-AdapterReceipt%E4%B8%8E%E7%BB%93%E6%9E%9C%E6%98%A0%E5%B0%84%E5%A5%91%E7%BA%A6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，补齐本地证据、外部参考、Design->Build 映射与本轮验收口径。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services子系统专项TODO.md)，将 CAP-TODO-014 标记为 Done，关闭 CAP-BLK-003，并把后续任务从“receipt 设计 blocker”切换为 D1 / integration / review 依赖状态。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "AdapterReceipt|ServiceErrorClass|ErrorInfo|side_effects|compensation_hints" docs/architecture/DASALL_capability_services子系统详细设计.md`
+2. 结果：
+   - detailed design 中已命中 `AdapterReceipt` 字段约束、`ServiceErrorClass` 分类表、`ErrorInfo.failure_type` 映射规则、`side_effects` / `compensation_hints` 约束与 Receipt Mapping Gate。
+   - receipt facts、evidence refs、partial side effect 和公共 result 约束已形成成表定义，CAP-BLK-003 可二值化关闭。
+
+### 结果
+
+1. CAP-TODO-014 已完成，CAP-BLK-003 已关闭。
+2. Capability Services 的三项补设计解阻任务（CAP-TODO-012~014）现已全部完成；D1 Adapter / ResultMapper Build 可以作为下一阶段直接执行入口。
+
+### 下一步
+
+1. 转入 D1，先完成 CAP-TODO-035，再按 `036 -> 037~040` 的顺序推进 Adapter / ResultMapper Build。
+
+### 风险
+
+1. `AdapterReceipt` 仍保持 internal-only；在 AdapterBridge 与 ResultMapper 真正落盘前，不应把 receipt facts、evidence refs 或补偿语义提前泄漏为 public ABI，也不应在 ExecutionCommandLane 中自行拼装 `ErrorInfo` 语义。
+
 ## 记录 #229
 
 - 日期：2026-04-09

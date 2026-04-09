@@ -496,6 +496,23 @@ route 规则：
 3. `availability_state` 只负责剔除不可用候选或在 envelope 内调整优先级，不能把未注册 route 或不受信 route 提升为可选路径。
 4. `trust_class` 与 `caller_domain` 不一致、缺失或过期时，Router 必须拒绝选择 remote/local route，而不是尝试隐式降级。
 
+#### AdapterReceipt 与结果映射契约
+
+V1 设计收敛：
+1. `AdapterReceipt` 保持 internal-only；AdapterBridge 只记录 provider / transport 事实，`ResultMapper` 是唯一 owner，用于归类 `ServiceErrorClass` 并填充公共 result + `ErrorInfo`。
+2. `AdapterReceipt` 不直接携带 `ErrorInfo`、`PolicyDecision`、`Observation` 或补偿执行结果；它只保留本次 adapter 调用的 receipt facts。
+3. `side_effects` 与 `evidence_refs` 必须来自 adapter/provider 的可追溯返回；`compensation_hints` 不属于 receipt 原始字段，而是由 `ResultMapper` + `CompensationCatalog` 组合生成。
+
+| internal object | 关键字段 | owner | 来源 / 派生 | 边界约束 |
+|---|---|---|---|---|
+| `AdapterReceipt` | `receipt_ref`、`adapter_id`、`route_kind`、`target_id`、`transport_outcome`、`provider_status_code`、`payload_json`、`latency_ms`、`side_effects`、`evidence_refs` | AdapterBridge | adapter invocation + provider response | 只记录事实，不直接输出 `ErrorInfo` 或补偿决策 |
+
+结果约束：
+1. `ExecutionCommandResult` 是唯一允许携带非空 `side_effects` 与 `compensation_hints` 的公共 result；query / diagnose / data / catalog / subscription 结果只能通过 `ErrorInfo` 报告失败事实。
+2. 仅当 `ServiceErrorClass=PartialSideEffect` 或显式 `compensate()` 返回可执行建议时，`ResultMapper` 才能输出 `compensation_hints`；验证、策略和纯可达性错误不得捏造补偿建议。
+3. 若 `side_effects` 非空，则 `evidence_refs` 必须至少提供 1 个 durable ref；`ErrorInfo.source_ref` 取主 evidence ref 或 `receipt_ref`，其余 evidence refs 进入 `ErrorInfo.details`。
+4. 对 `PartialSideEffect` 以外的错误，`side_effects` 和 `compensation_hints` 必须为空；`ResultMapper` 不得把普通超时 / 不可达错误伪装成部分成功。
+
 ### 6.5 公共 supporting objects 与 contracts 对齐关系
 
 V1 公共 supporting objects 冻结清单：
@@ -522,7 +539,7 @@ V1 公共 supporting objects 冻结清单：
 | ExecutionDiagnoseResult | 服务层对诊断请求的统一结果 | 供 Tool/Runtime 生成可观测信息 | 不替代 infra diagnostics 导出 |
 | DataQueryResult | 服务层对数据查询的统一结果 | 供 Tool 构建 ToolResult/Observation | 允许 from_cache 标记，但不得隐藏 stale 事实 |
 | DataCatalogResult | 返回可见能力目录或数据视图目录 | 供 Tool 做 capability discoverability；不进入 contracts | 只做目录查询，不承载健康裁定 |
-| AdapterReceipt | 统一适配器返回 | 作为 ErrorInfo、ToolResult、Observation 的上游事实来源，但本身不进入 contracts | 只表达 transport/result/latency/side_effects |
+| AdapterReceipt | 统一适配器返回 | 作为 ErrorInfo、ToolResult、Observation 的上游事实来源，但本身不进入 contracts | 只表达 transport/result/latency/side_effects/evidence refs，不直接承载 ErrorInfo |
 | ServicePolicyView | RuntimePolicySnapshot 的模块内派生视图 | 消费 profiles 已冻结逻辑域，但本身不进入 contracts | 只做内部派生，禁止反向写回 profiles |
 
 核心分层规则：
@@ -814,6 +831,20 @@ flowchart LR
 | DataStale | 只读快照过期且不允许 stale read | runtime | true | true | cache age、snapshot version |
 | SubscriptionOverflow | 订阅缓冲溢出，需要重同步 | runtime | true | false | resync_required、last sequence、dropped_count |
 
+ServiceErrorClass -> ErrorInfo 映射收敛：
+
+| ServiceErrorClass | `ErrorInfo.failure_type` | `ErrorInfo.source_ref` / `details` 约束 | 公共 result 约束 |
+|---|---|---|---|
+| InvalidRequest | `validation` | `source_ref` 指向 request validator 或字段路径；`details` 必须列出 invalid fields / reject reason | `side_effects` / `compensation_hints` 为空 |
+| CapabilityUnsupported | `validation` | `source_ref` 指向 capability snapshot 或 capability_id；`details` 列出支持动作 / 查询 | `side_effects` / `compensation_hints` 为空 |
+| PolicyDenied | `policy` | `source_ref` 指向 `decision_ref`；`details` 列出 caller domain / proof mismatch | `side_effects` / `compensation_hints` 为空 |
+| RouteUnavailable | `runtime` | `source_ref` 指向 route evaluation ref 或 `receipt_ref`；`details` 列出 route candidates、last health、fallback blocked reason | `side_effects` / `compensation_hints` 为空 |
+| AdapterUnavailable | `provider` | `source_ref` 指向 `receipt_ref` 或 `adapter_id`；`details` 列出 timeout / provider status / last health | `side_effects` / `compensation_hints` 为空 |
+| TargetBusy | `provider` | `source_ref` 指向 `receipt_ref` 或 target lease ref；`details` 列出 busy owner / retry window | `side_effects` / `compensation_hints` 为空 |
+| PartialSideEffect | `provider` | `source_ref` 必须指向主 `evidence_ref` 或 `receipt_ref`；`details` 必须携带序列化后的 `evidence_refs`、affected targets 与 provider status | `ExecutionCommandResult` 必须同时携带 `side_effects` 与 `compensation_hints` |
+| DataStale | `runtime` | `source_ref` 指向 snapshot / cache ref；`details` 列出 cache age、snapshot version | 保留 `from_cache` 事实，且 `compensation_hints` 为空 |
+| SubscriptionOverflow | `runtime` | `source_ref` 指向 subscription stream / cursor ref；`details` 列出 dropped_count、last sequence、`resync_required` | `ExecutionSubscriptionResult` 必须置 `resync_required` 并报告 `dropped_count` |
+
 #### 6.8.2 异常与补偿时序
 
 ```mermaid
@@ -1050,6 +1081,7 @@ schema 对齐结论：
 | D Gate | 文档已覆盖 12 章、边界/流程/Build/Test/兼容性完整 | 覆盖则 PASS，否则 FAIL |
 | Policy Alignment Gate | `require_confirmation` 动作集合、`caller_domain_allowlist` 与 proof recheck 规则已冻结，且与 `execution_policy.requires_high_risk_confirmation` / `allowed_tool_domains` 对齐 | 对齐则 PASS，否则 FAIL |
 | Route Contract Gate | `AdapterSelection` 字段、capability snapshot source、trust / availability owner 与 fallback envelope 已冻结，且未新增 `services.*` 顶层 schema | 对齐则 PASS，否则 FAIL |
+| Receipt Mapping Gate | `AdapterReceipt` 字段、`ServiceErrorClass -> ErrorInfo.failure_type` 映射、`evidence_refs` 与 `side_effects` / `compensation_hints` 约束已冻结，且未重定义 `ErrorInfo` 语义 | 对齐则 PASS，否则 FAIL |
 | B Gate-1 | `dasall_services` 编译通过且不引入对 cognition/llm 的实现依赖 | 通过则 PASS，否则 FAIL |
 | B Gate-2 | 新增 services unit tests 通过 | 全通过则 PASS，否则 FAIL |
 | B Gate-3 | `ctest -N` 能发现 services integration 用例且标签合法 | 发现则 PASS，否则 FAIL |
