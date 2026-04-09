@@ -1,9 +1,9 @@
 # DASALL Capability Services 子系统专项 TODO
 
-最近更新时间：2026-04-09（CAP-TODO-014 已完成，C 补设计解阻完成）  
+最近更新时间：2026-04-09（CAP-TODO-035 已完成，D1 Adapter / ResultMapper Build 推进中）  
 阶段：Detailed Design -> Special TODO  
 适用范围：services/  
-当前结论：可进入 D1 执行；当前最细可安全落到 L3（公共 supporting objects / 公共接口级），内部 lane / adapter / bridge 以 L2 为主；高风险动作、route 输入与 receipt mapping 三项补设计已收敛，剩余前置门禁主要是 loopback fixture 与 shared-contract admission。
+当前结论：可继续推进 D1；当前最细可安全落到 L3（公共 supporting objects / 公共接口级），内部 lane / adapter / bridge 以 L2 为主；高风险动作、route 输入与 receipt mapping 三项补设计已收敛，AdapterRouter 已落盘并通过 unit 验证，下一直接执行入口为 AdapterBridge，剩余前置门禁主要是 loopback fixture 与 shared-contract admission。
 
 ## 1. 文档头
 
@@ -209,8 +209,8 @@
 | CAP-TODO-026 | Blocked | 实现 ServiceTraceBridge | 详细设计 6.2、6.10、7.1 | 7.1 ServiceTraceBridge.cpp；6.10 trace fields | L2 | services/src/bridges/ServiceTraceBridge.cpp | ServiceFacade span、lane span、adapter span、external target span | unit / integration：trace 链路可串起 Tool -> Services -> Adapter -> External | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration` | CAP-TODO-015、017、019、021、023 | 无 | 无 | ServiceTraceBridge.cpp 与 observability 测试 | 仅当 trace 字段齐全、父子 span 关系可验证且 trace exporter 故障不吞掉主错误时完成 |
 | CAP-TODO-027 | Blocked | 实现 ServiceHealthProbe | 详细设计 6.2、6.10、7.1、9.1 | 7.1 ServiceHealthProbe.cpp；6.10 HealthSnapshot | L2 | services/src/ops/ServiceHealthProbe.cpp | readiness / degraded / circuit 状态输出 | unit / integration：circuit open、adapter down、queue overflow 的健康输出可测 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration` | CAP-TODO-018、022、023 | 无 | 无 | ServiceHealthProbe.cpp 与 observability 测试 | 仅当 health 输出只提供事实快照、不越权裁定恢复动作且 degraded/readiness 状态可二值判定时完成 |
 | CAP-TODO-028 | Todo | 收敛 loopback / mock target 集成夹具方案 | 详细设计 8.3、12.2；代码现状 | 8.3 integration fixture 缺失；12.2 loopback adapter 建议 | L1 | services/src/adapters/；tests/mocks/include/；tests/integration/services/ | loopback adapter 或 mock target 的最小可用夹具策略 | process：夹具设计评审通过；integration：可支撑 smoke 回路 | `rg -n "loopback|integration fixture|mock target|LocalPlatformAdapter|LocalServiceAdapter|RemoteServiceAdapter" docs/architecture/DASALL_capability_services子系统详细设计.md tests/mocks/include services/CMakeLists.txt` | CAP-TODO-013、014 | CAP-BLK-004 | 形成可落盘的 loopback / mock fixture 方案与最小目录约束 | 详细设计补丁、tests 方案回链 | 仅当集成夹具类型、落点路径、依赖边界和最小回路明确到可实现程度时完成 |
-| CAP-TODO-035 | Todo | 实现 AdapterRouter 路由组件 | 详细设计 6.2、6.3、6.4、7.1、8.3 | 6.3 AdapterRouter 输入输出；6.4 依赖图；7.1 AdapterRouter.cpp | L2 | services/src/adapters/AdapterRouter.cpp | select_adapter(capability_id, target_id, policy_view) -> AdapterSelection | unit：给定 profile / trust / availability 输入时路由选择可二值判定；语义等价 fallback 不改变动作语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-008、010、011、013 | 无 | 无 | AdapterRouter.cpp 与路由 unit 用例 | 仅当路由组件不越过 Runtime 给定的 fallback envelope、给定输入时路由稳定且不自发切换语义不等价后端时完成 |
-| CAP-TODO-036 | Blocked | 实现 AdapterBridge 统一适配封装 | 详细设计 6.2、6.3、6.8；7.1 | 6.3 AdapterBridge 输入输出；6.8 AdapterReceipt；7.1 adapters/ | L2 | services/src/adapters/AdapterBridge.cpp | invoke(selection, adapter_request) -> AdapterReceipt | unit：统一返回 transport outcome / payload / latency / error / side_effects；负路径不吞错、AdapterReceipt 字段完整 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-035 | 无 | 完成 CAP-TODO-035 | AdapterBridge.cpp 与适配桥 unit 用例 | 仅当 AdapterBridge 统一封装三类 adapter、AdapterReceipt 字段完整且错误不被吞没时完成 |
+| CAP-TODO-035 | Done | 实现 AdapterRouter 路由组件 | 详细设计 6.2、6.3、6.4、7.1、8.3 | 6.3 AdapterRouter 输入输出；6.4 依赖图；7.1 AdapterRouter.cpp | L2 | services/src/adapters/AdapterRouter.cpp | select_adapter(capability_id, target_id, policy_view) -> AdapterSelection | unit：给定 profile / trust / availability 输入时路由选择可二值判定；语义等价 fallback 不改变动作语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-008、010、011、013 | 无 | 无 | docs/todos/services/deliverables/CAP-TODO-035-AdapterRouter路由组件设计收敛.md、services/src/adapters/AdapterRouter.h、services/src/adapters/AdapterRouter.cpp、tests/unit/services/adapters/AdapterRouterTest.cpp；2026-04-09 已通过 `dasall_services`/`dasall_unit_tests` 构建与 `ctest -L unit` 校验 | 仅当路由组件不越过 Runtime 给定的 fallback envelope、给定输入时路由稳定且不自发切换语义不等价后端时完成 |
+| CAP-TODO-036 | Todo | 实现 AdapterBridge 统一适配封装 | 详细设计 6.2、6.3、6.8；7.1 | 6.3 AdapterBridge 输入输出；6.8 AdapterReceipt；7.1 adapters/ | L2 | services/src/adapters/AdapterBridge.cpp | invoke(selection, adapter_request) -> AdapterReceipt | unit：统一返回 transport outcome / payload / latency / error / side_effects；负路径不吞错、AdapterReceipt 字段完整 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-035 | 无 | 完成 CAP-TODO-035 | AdapterBridge.cpp 与适配桥 unit 用例 | 仅当 AdapterBridge 统一封装三类 adapter、AdapterReceipt 字段完整且错误不被吞没时完成 |
 | CAP-TODO-037 | Blocked | 实现 LocalPlatformAdapter | 详细设计 6.2、6.3、6.4；7.1 | 6.4 LocalPlatformAdapter；7.1 adapters/LocalPlatformAdapter.cpp | L2 | services/src/adapters/LocalPlatformAdapter.cpp | platform 能力执行与状态读取适配 | unit：platform_hal disabled 时返回 RouteUnavailable；loopback/fake fixture 可替换此实现用于集成测试 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-036 | 无 | 完成 CAP-TODO-036 | LocalPlatformAdapter.cpp 与 unit 用例 | 仅当 adapter 在 platform_hal enabled/disabled 两种 profile 下行为可二值判定时完成 |
 | CAP-TODO-038 | Blocked | 实现 LocalServiceAdapter | 详细设计 6.2、6.3、6.4；7.1 | 6.4 LocalServiceAdapter；7.1 adapters/LocalServiceAdapter.cpp | L2 | services/src/adapters/LocalServiceAdapter.cpp | 本地业务服务调用适配 | unit：服务不可达时返回 AdapterUnavailable（retryable=true）；正路径可返回结构化 AdapterReceipt | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-036 | 无 | 完成 CAP-TODO-036 | LocalServiceAdapter.cpp 与 unit 用例 | 仅当 adapter 正确返回 AdapterReceipt、不可达时产生可观测错误时完成 |
 | CAP-TODO-039 | Blocked | 实现 RemoteServiceAdapter 最小骨架 | 详细设计 6.2、6.3、6.4；7.1 | 6.4 RemoteServiceAdapter；7.1 adapters/RemoteServiceAdapter.cpp | L2 | services/src/adapters/RemoteServiceAdapter.cpp | 远程业务服务调用最小适配骨架（超时、不可达语义） | unit：超时返回 AdapterUnavailable（retryable=true）；V1 允许存根实现 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | CAP-TODO-036 | 无 | 完成 CAP-TODO-036 | RemoteServiceAdapter.cpp 与 unit 用例（V1 存根可接受） | 仅当超时与不可达的错误语义符合 6.8 ServiceErrorClass 映射、且不把远端副作用当本地成功时完成 |
@@ -298,7 +298,7 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 | 架构一致性 | 可满足 | 只要保持 Runtime / Tool / Service 控制权边界不漂移，TODO 已与 6.1.4、6.1.5 对齐 |
 | ADR 边界一致性 | 可满足 | ADR-006/007/008 主要约束是“不越权”，当前任务未把上下文、恢复、全局调度拉入 services |
 | contracts / 公共语义兼容性 | 可满足但有 admission 门禁 | 通过 CAP-GATE-07 控制，当前不允许把 IExecutionService / IDataService 直接升格为 shared contracts |
-| 工程可实现性 | 部分直接可执行 | A-B-C 阶段已完成；CAP-TODO-020、022、023、028、035 可直接进入执行；其余 D1 / D2 / integration 阶段需按 `035 -> 036~040 -> 015~021` 顺序推进，并继续受 CAP-BLK-004~005 约束 |
+| 工程可实现性 | 部分直接可执行 | A-B-C 阶段已完成；CAP-TODO-020、022、023、028、036 可直接进入执行；其余 D1 / D2 / integration 阶段需按 `036 -> 037~040 -> 015~021` 顺序推进，并继续受 CAP-BLK-004~005 约束 |
 | 测试可验证性 | 可满足 | 已有顶层 unit / contract / integration 聚合 target，可承接 services 用例 |
 | 原子任务可执行性 | 可满足 | 公共 ABI 已拆到对象 / 接口级；内部复杂链路显式保留补设计前置 |
 | 粒度可评审性 | 可满足 | 每个任务都回链到 6.x / 7.x / 8.x / 9.x 设计锚点或当前代码现状 |
@@ -324,36 +324,32 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 当前可直接进入执行的任务集合：
 
 1. CAP-TODO-001~011：公共 ABI、CMake 骨架、ServiceContextBuilder、ServiceFacade、unit 拓扑。
-2. CAP-TODO-020、022、023、028、035：DataProjectionCache、SystemSnapshotLane、ServiceConfigAdapter、loopback fixture 方案与 AdapterRouter。
-
-在 CAP-TODO-035 完成后可进入执行的任务集合：
-
-3. CAP-TODO-036：AdapterBridge 统一适配封装。
+2. CAP-TODO-020、022、023、028、036：DataProjectionCache、SystemSnapshotLane、ServiceConfigAdapter、loopback fixture 方案与 AdapterBridge。
 
 在 CAP-TODO-036 完成后可进入执行的任务集合：
 
-4. CAP-TODO-037~040：三类 Adapter 与 ResultMapper。
+3. CAP-TODO-037~040：三类 Adapter 与 ResultMapper。
 
 D1 全部完成后可进入执行的任务集合（当前 Blocked）：
 
-5. CAP-TODO-015~021：命令 / 查询 / 订阅 / 诊断 / data query 深链路。
+4. CAP-TODO-015~021：命令 / 查询 / 订阅 / 诊断 / data query 深链路。
 
 ### 11.2 当前可落到的最细粒度
 
 1. 公共 supporting objects 与 IExecutionService / IDataService：可落到 L3。
 2. ServiceContextBuilder、ServiceFacade、DataProjectionCache、ServiceConfigAdapter：可落到 L2。
-3. Execution / Query / Diagnose / Subscription / Adapter / Observability / Integration 深链路：当前只能落到 L2；其中 D1 Adapter / ResultMapper 可按 `035 -> 036~040` 推进，D2 与 integration 仍需等待 D1 完成并继续受 CAP-BLK-004~005 约束。
+3. Execution / Query / Diagnose / Subscription / Adapter / Observability / Integration 深链路：当前只能落到 L2；其中 D1 Adapter / ResultMapper 可按 `036 -> 037~040` 推进，D2 与 integration 仍需等待 D1 完成并继续受 CAP-BLK-004~005 约束。
 
 ### 11.3 阻止进一步细化到全量函数级的证据缺口
 
-1. D1 Adapter / ResultMapper 代码路径尚未落盘，lane 的全量函数级实现仍依赖 035~040 先完成。
+1. D1 Adapter / ResultMapper 代码路径已开始落盘，但 lane 的全量函数级实现仍依赖 036~040 继续完成。
 2. loopback / mock integration fixture 尚无明确落盘方案，无法把 smoke / failure / profile integration 拆到用例级原子任务后直接执行。
 3. IExecutionService / IDataService 的 shared-contract admission 仍明确处于 AwaitingSupportingContracts，不能把模块内接口任务误写成 contracts 编码任务。
 4. observability 与 integration 深链路仍依赖 D2 产出，当前不能跳过车道实现直接承诺终态验证。
 
 ### 11.4 后续建议
 
-1. A-B-C 阶段已完成，直接转入 D1 Adapter / ResultMapper Build。
+1. A-B-C 阶段已完成，当前继续推进 D1 Adapter / ResultMapper Build。
 2. 先完成 CAP-TODO-035，再按 `036 -> 037~040` 的顺序推进；CAP-TODO-040 应以 CAP-TODO-036 产出的 AdapterReceipt fixture 作为稳定输入。
 3. D1 全部完成后，再进入 D2 Execution / Data / System 深链路实现（CAP-TODO-015~022）；D2 内部遵守 7.3 灰度序列。
 4. CAP-TODO-028 可与 D1 并行推进；在 loopback / mock fixture 方案未落盘前，不要提前承诺 services integration 完成时间。

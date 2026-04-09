@@ -52,3 +52,5 @@ dasall_apply_common_options(dasall_service_facade_unit_test)
 
 add_test(NAME ServiceFacadeTest COMMAND dasall_service_facade_unit_test)
 set_tests_properties(ServiceFacadeTest PROPERTIES LABELS "unit")
+
+add_subdirectory(adapters)

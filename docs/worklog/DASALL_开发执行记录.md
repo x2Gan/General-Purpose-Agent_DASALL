@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+# DASALL 开发执行记录
+
+## 记录 #231
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-035 实现 AdapterRouter 路由组件
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-012~014 和 CAP-BLK-001~003 全部关闭后，D1 的起始任务是 CAP-TODO-035。
+2. 该任务没有额外 blocker，且是 CAP-TODO-036~040、015~021 的共同前置，因此适合作为本轮最小可提交原子任务。
+3. 本轮目标是在不改写 public ABI 和 shared contracts 的前提下，落盘 AdapterRouter 的 internal-only supporting objects、路由决策骨架和 unit 验证。
+
+### 改动
+
+1. 新增 [services/src/adapters/AdapterRouter.h](../services/src/adapters/AdapterRouter.h) 与 [services/src/adapters/AdapterRouter.cpp](../services/src/adapters/AdapterRouter.cpp)，定义 `AdapterSelection`、`CapabilitySnapshotView`、`FallbackEnvelope`、`ServicePolicyView`、`AdapterCandidateView`、`AdapterRouteDecision` 以及 `AdapterRouter::select_adapter()` 的 fail-closed 路由逻辑。
+2. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，把 AdapterRouter 纳入 `dasall_services` 构建。
+3. 新增 [tests/unit/services/adapters/CMakeLists.txt](../tests/unit/services/adapters/CMakeLists.txt) 与 [tests/unit/services/adapters/AdapterRouterTest.cpp](../tests/unit/services/adapters/AdapterRouterTest.cpp)，覆盖 preferred route、profile 禁用、availability fallback、等价类阻断和 trust mismatch 五类路由行为。
+4. 更新 [tests/unit/services/CMakeLists.txt](../tests/unit/services/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 AdapterRouter unit 接入 services 子目录和顶层 `dasall_unit_tests` 聚合目标。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-035-AdapterRouter路由组件设计收敛.md](../todos/services/deliverables/CAP-TODO-035-AdapterRouter%E8%B7%AF%E7%94%B1%E7%BB%84%E4%BB%B6%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、可执行集合与 CAP-TODO-035/036 状态。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_services dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+2. 结果：
+   - `dasall_services` 与 `dasall_unit_tests` 构建通过，说明 AdapterRouter 与 unit 接线有效。
+   - `ctest -L unit` 通过，新增 AdapterRouterTest 已进入 discoverability 与执行路径。
+   - 路由正负例覆盖了 profile / trust / availability / fallback equivalence 四类核心约束，说明 Route Contract Gate 已转化为可执行的 unit 验证。
+
+### 结果
+
+1. CAP-TODO-035 已完成，D1 现在具备稳定的 route selection 基础。
+2. CAP-TODO-036 不再被前置依赖阻塞，可作为下一轮直接执行入口。
+
+### 下一步
+
+1. 进入 CAP-TODO-036，落盘 AdapterBridge 统一适配封装与 `AdapterReceipt` fixture。
+
+### 风险
+
+1. 当前 `ServicePolicyView` 只承载 Router 所需最小字段；后续 023 可以扩展其派生维度，但不能改变本轮已经落盘的 fail-closed、envelope-first 和 no-client-override 语义。
+
 ## 记录 #230
 
 - 日期：2026-04-09
