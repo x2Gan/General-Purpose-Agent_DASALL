@@ -1,8 +1,31 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
+#include <string>
+
+#include "checkpoint/RuntimeBudget.h"
+
 namespace dasall::services {
 
-// CAP-TODO-001 establishes the stable public include slot. Public supporting
-// objects are added in CAP-TODO-002 through CAP-TODO-005.
+enum class ServiceDataFreshness {
+	strict,
+	allow_stale,
+};
+
+struct CapabilityTargetRef {
+	std::string capability_id;
+	std::string target_id;
+};
+
+struct ServiceCallContext {
+	std::string request_id;
+	std::string session_id;
+	std::string trace_id;
+	std::string tool_call_id;
+	std::string goal_id;
+	std::optional<contracts::RuntimeBudget> budget_guard;
+	std::uint64_t deadline_ms;
+};
 
 }  // namespace dasall::services

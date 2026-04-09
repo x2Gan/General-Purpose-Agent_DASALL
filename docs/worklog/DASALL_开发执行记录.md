@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #218
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-002 定义服务调用基础对象
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-001 已完成并推送后，按 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 的串行顺序，下一项最小可执行原子任务是 CAP-TODO-002。
+2. CAP-TODO-002 只依赖 CAP-TODO-001，且当前没有 blocker，因此本轮只在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中冻结基础对象，不提前跨到 execution/data 请求结果族。
+3. 本轮目标是把 ServiceCallContext、CapabilityTargetRef、ServiceDataFreshness 作为最小基础对象落盘，同时守住“只复用 RuntimeBudget，不新增 helper family”的 contracts 边界。
+
+### 改动
+
+1. 更新 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h)，新增 `ServiceDataFreshness`、`CapabilityTargetRef`、`ServiceCallContext`，并引入 [contracts/include/checkpoint/RuntimeBudget.h](../contracts/include/checkpoint/RuntimeBudget.h) 作为唯一 contracts 依赖。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-002-服务调用基础对象设计收敛.md](../todos/services/deliverables/CAP-TODO-002-%E6%9C%8D%E5%8A%A1%E8%B0%83%E7%94%A8%E5%9F%BA%E7%A1%80%E5%AF%B9%E8%B1%A1%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-002 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+   - `printf '#include "ServiceTypes.h"\nint main() { return 0; }\n' | c++ -std=c++20 -Iservices/include -Icontracts/include -xc++ -fsyntax-only -`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明基础对象落盘未破坏 services 模块构建与 contract gate。
+   - `InterfaceCatalogContractTest` 1/1 通过，services admission readiness 保持 awaiting 状态。
+   - `ServiceTypes.h` 独立包含的语法编译检查通过，说明基础对象头文件可被后续接口头稳定复用。
+
+### 结果
+
+1. CAP-TODO-002 已完成，ServiceTypes.h 现在具备 services 公共 ABI 的最小基础对象层。
+2. 本轮没有引入 ResultCode、ErrorInfo、SerializedJson 或 execution/data 请求结果字段，保持了与 CAP-TODO-003~005 的粒度边界一致。
+
+### 下一步
+
+1. 进入 CAP-TODO-003，在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中继续冻结 ExecutionCommandRequest、ExecutionCompensationRequest、ExecutionQueryRequest、ExecutionSubscriptionRequest、ExecutionDiagnoseRequest。
+
+### 风险
+
+1. 当前 ServiceCallContext 只定义数据面，不含校验逻辑；若后续 009 的 normalize_context 需要额外一致性规则，应在实现层补，不应回到 002 扩大对象职责。
+
 ## 记录 #217
 
 - 日期：2026-04-09
