@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #220
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-004 定义 Execution 结果对象族
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-003 推送完成后，按串行顺序进入 CAP-TODO-004。
+2. 该任务仍只依赖 CAP-TODO-001、002，当前无 blocker，因此本轮继续只在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 上追加 Execution 结果对象族。
+3. 本轮目标是冻结 execution 结果字段面，但不提前实现错误映射或 ResultMapper。
+
+### 改动
+
+1. 更新 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h)，新增 `ExecutionCommandResult`、`ExecutionQueryResult`、`ExecutionSubscriptionResult`、`ExecutionDiagnoseResult`，并引入 [contracts/include/error/ResultCode.h](../contracts/include/error/ResultCode.h) 与 [contracts/include/error/ErrorInfo.h](../contracts/include/error/ErrorInfo.h) 作为结果语义依赖。
+2. 新增 [docs/todos/services/deliverables/CAP-TODO-004-Execution结果对象族设计收敛.md](../todos/services/deliverables/CAP-TODO-004-Execution%E7%BB%93%E6%9E%9C%E5%AF%B9%E8%B1%A1%E6%97%8F%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，回写本轮本地证据、外部参考、Design->Build 映射与 D Gate。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-004 标记为 Done，并补充交付物与验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R "^InterfaceCatalogContractTest$"`
+   - `printf '#include "ServiceTypes.h"\nusing namespace dasall::services;\nint main() { ExecutionCommandResult a{}; ExecutionQueryResult b{}; ExecutionSubscriptionResult c{}; ExecutionDiagnoseResult d{}; return static_cast<int>(a.side_effects.size() + a.compensation_hints.size() + b.state.size() + c.dropped_count + d.target_reachable); }\n' | c++ -std=c++20 -Iservices/include -Icontracts/include -xc++ -fsyntax-only -`
+2. 结果：
+   - `dasall_services` 与 `dasall_contract_tests` 构建通过，说明 Execution 结果对象族落盘未破坏现有构建与 contract gate。
+   - `InterfaceCatalogContractTest` 1/1 通过，services admission readiness 保持 awaiting 状态。
+   - 四个 Execution result 类型的独立语法编译检查通过，说明结果对象头文件定义可被后续接口头稳定复用。
+
+### 结果
+
+1. CAP-TODO-004 已完成，ServiceTypes.h 现在具备完整的 Execution 结果对象层。
+2. 本轮只冻结公共结果字段，没有把 ServiceErrorClass -> ErrorInfo 的映射逻辑提前写入头文件，保持与后续 mapper 任务边界一致。
+
+### 下一步
+
+1. 进入 CAP-TODO-005，在 [services/include/ServiceTypes.h](../services/include/ServiceTypes.h) 中补齐 DataQueryRequest、DataCatalogRequest、DataQueryResult、DataCatalogResult。
+
+### 风险
+
+1. 当前 `code` 字段先复用既有 contracts::ResultCode；若后续出现更细粒度的 services 私有错误码需求，应在内部 mapper 层消化，不应反向污染公共 ABI。
+
 ## 记录 #219
 
 - 日期：2026-04-09

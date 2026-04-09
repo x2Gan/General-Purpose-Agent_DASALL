@@ -3,8 +3,11 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "checkpoint/RuntimeBudget.h"
+#include "error/ErrorInfo.h"
+#include "error/ResultCode.h"
 
 namespace dasall::services {
 
@@ -66,6 +69,39 @@ struct ExecutionDiagnoseRequest {
 	ServiceCallContext context;
 	CapabilityTargetRef target;
 	bool include_last_error;
+};
+
+struct ExecutionCommandResult {
+	contracts::ResultCode code;
+	std::string execution_id;
+	SerializedJson payload_json;
+	std::vector<std::string> side_effects;
+	std::vector<std::string> compensation_hints;
+	std::optional<contracts::ErrorInfo> error;
+};
+
+struct ExecutionQueryResult {
+	contracts::ResultCode code;
+	std::string state;
+	SerializedJson snapshot_json;
+	bool from_cache;
+	std::optional<contracts::ErrorInfo> error;
+};
+
+struct ExecutionSubscriptionResult {
+	contracts::ResultCode code;
+	SerializedJson events_json;
+	std::optional<std::string> next_cursor;
+	bool resync_required;
+	std::uint32_t dropped_count;
+	std::optional<contracts::ErrorInfo> error;
+};
+
+struct ExecutionDiagnoseResult {
+	contracts::ResultCode code;
+	bool target_reachable;
+	SerializedJson report_json;
+	std::optional<contracts::ErrorInfo> error;
 };
 
 }  // namespace dasall::services
