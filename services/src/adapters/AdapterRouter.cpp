@@ -125,6 +125,17 @@ std::string_view route_failure_name(AdapterRouteFailure failure) {
   return "unknown_route_failure";
 }
 
+std::string_view overflow_policy_name(ServiceQueueOverflowPolicy overflow_policy) {
+  switch (overflow_policy) {
+    case ServiceQueueOverflowPolicy::reject:
+      return "reject";
+    case ServiceQueueOverflowPolicy::drop_oldest:
+      return "drop_oldest";
+  }
+
+  return "unknown_overflow_policy";
+}
+
 AdapterRouteDecision AdapterRouter::select_adapter(const AdapterRouteRequest& request) const {
   if (request.capability_id.empty() || request.target_id.empty() ||
       request.requested_operation.empty()) {

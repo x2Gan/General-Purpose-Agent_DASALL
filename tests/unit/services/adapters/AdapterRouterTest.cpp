@@ -34,14 +34,14 @@ using dasall::services::internal::ServicePolicyView;
 }
 
 [[nodiscard]] ServicePolicyView make_policy_view(bool local_platform_enabled = true) {
-  return ServicePolicyView{
-      .local_platform_route_enabled = local_platform_enabled,
-      .adapter_preference_order = {
-          AdapterRouteKind::local_platform,
-          AdapterRouteKind::local_service,
-          AdapterRouteKind::remote_service,
-      },
+  ServicePolicyView policy_view{};
+  policy_view.local_platform_route_enabled = local_platform_enabled;
+  policy_view.adapter_preference_order = {
+      AdapterRouteKind::local_platform,
+      AdapterRouteKind::local_service,
+      AdapterRouteKind::remote_service,
   };
+  return policy_view;
 }
 
 [[nodiscard]] FallbackEnvelope make_envelope(bool allow_degrade = true,

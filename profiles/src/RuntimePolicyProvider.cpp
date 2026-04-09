@@ -110,7 +110,9 @@ template <typename T>
     return std::nullopt;
   }
 
-  const auto max_tokens = get_numeric<std::uint32_t>(parsed_yaml.scalar_values, "runtime_budget.max_tokens");
+    const auto worker_threads =
+            get_numeric<std::uint32_t>(parsed_yaml.scalar_values, "runtime_budget.worker_threads");
+    const auto max_tokens = get_numeric<std::uint32_t>(parsed_yaml.scalar_values, "runtime_budget.max_tokens");
   const auto max_turns = get_numeric<std::uint32_t>(parsed_yaml.scalar_values, "runtime_budget.max_turns");
   const auto max_tool_calls =
       get_numeric<std::uint32_t>(parsed_yaml.scalar_values, "runtime_budget.max_tool_calls");
@@ -161,7 +163,7 @@ template <typename T>
       get_bool(parsed_yaml.scalar_values, "model_profile.planner.streaming_enabled");
   const auto responder_streaming_enabled =
       get_bool(parsed_yaml.scalar_values, "model_profile.responder.streaming_enabled");
-  if (!max_tokens.has_value() || !max_turns.has_value() || !max_tool_calls.has_value() ||
+    if (!worker_threads.has_value() || !max_tokens.has_value() || !max_turns.has_value() ||
       !max_latency_ms.has_value() || !max_replan_count.has_value() ||
       !max_input_tokens.has_value() || !max_output_tokens.has_value() ||
       !max_history_turns.has_value() || !compression_threshold.has_value() ||
@@ -290,6 +292,7 @@ template <typename T>
           .remote_diagnostics_enabled = *ops_remote_diagnostics_enabled,
           .upgrade_strategy = *ops_upgrade_strategy,
       },
+      *worker_threads,
   };
 
   if (!snapshot.has_consistent_values()) {

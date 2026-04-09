@@ -146,7 +146,8 @@ class RuntimePolicySnapshot {
                         DegradePolicy degrade_policy,
                         TimeoutPolicy timeout_policy,
                         ExecutionPolicy execution_policy,
-                        OpsPolicy ops_policy)
+                        OpsPolicy ops_policy,
+                        std::uint32_t worker_threads = 1U)
       : generation_(generation),
         effective_profile_id_(std::move(effective_profile_id)),
         runtime_budget_(std::move(runtime_budget)),
@@ -157,7 +158,8 @@ class RuntimePolicySnapshot {
         degrade_policy_(std::move(degrade_policy)),
         timeout_policy_(std::move(timeout_policy)),
         execution_policy_(std::move(execution_policy)),
-        ops_policy_(std::move(ops_policy)) {}
+        ops_policy_(std::move(ops_policy)),
+        worker_threads_(worker_threads) {}
 
   [[nodiscard]] std::uint64_t generation() const {
     return generation_;
@@ -203,6 +205,10 @@ class RuntimePolicySnapshot {
     return ops_policy_;
   }
 
+  [[nodiscard]] std::uint32_t worker_threads() const {
+    return worker_threads_;
+  }
+
   [[nodiscard]] bool has_consistent_values() const {
     return generation_ > 0U && !effective_profile_id_.empty() &&
            runtime_budget_.max_tokens.has_value() && runtime_budget_.max_turns.has_value() &&
@@ -212,7 +218,8 @@ class RuntimePolicySnapshot {
            token_budget_policy_.has_consistent_values() && prompt_policy_.has_consistent_values() &&
            capability_cache_policy_.has_consistent_values() &&
            degrade_policy_.has_consistent_values() && timeout_policy_.has_consistent_values() &&
-           execution_policy_.has_consistent_values() && ops_policy_.has_consistent_values();
+           execution_policy_.has_consistent_values() && ops_policy_.has_consistent_values() &&
+           worker_threads_ > 0U;
   }
 
  private:
@@ -227,6 +234,7 @@ class RuntimePolicySnapshot {
   TimeoutPolicy timeout_policy_;
   ExecutionPolicy execution_policy_;
   OpsPolicy ops_policy_;
+  std::uint32_t worker_threads_;
 };
 
 }  // namespace dasall::profiles

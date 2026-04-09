@@ -40,8 +40,37 @@ enum class AdapterRouteFailure {
   route_not_permitted,
 };
 
+enum class ServiceQueueOverflowPolicy {
+  reject,
+  drop_oldest,
+};
+
 struct ServicePolicyView {
+  std::string effective_profile_id;
+  std::uint32_t command_lane_workers = 1U;
+  std::uint32_t execution_query_lane_workers = 1U;
+  std::uint32_t data_query_lane_workers = 1U;
+  std::int64_t request_deadline_ceiling_ms = 0;
+  std::int64_t adapter_call_timeout_ms = 0;
+  std::int64_t orchestration_timeout_ms = 0;
+  std::uint32_t adapter_failure_threshold = 0U;
+  std::int64_t data_cache_ttl_ms = 0;
+  bool default_allow_stale_reads = false;
+  std::int64_t resync_backoff_ms = 0;
+  ServiceQueueOverflowPolicy command_queue_overflow_policy =
+      ServiceQueueOverflowPolicy::reject;
+  ServiceQueueOverflowPolicy subscription_queue_overflow_policy =
+      ServiceQueueOverflowPolicy::drop_oldest;
+  bool read_path_degrade_allowed = false;
+  bool high_risk_confirmation_required = true;
+  bool safe_mode_enabled = true;
+  std::string audit_level;
+  std::vector<std::string> caller_domain_allowlist;
   bool local_platform_route_enabled = false;
+  bool observability_bridge_enabled = false;
+  std::string metrics_granularity;
+  double trace_sample_ratio = 0.0;
+  bool remote_diagnostics_enabled = false;
   std::vector<AdapterRouteKind> adapter_preference_order;
 };
 
@@ -112,5 +141,6 @@ class AdapterRouter {
 
 [[nodiscard]] std::string_view route_kind_name(AdapterRouteKind route_kind);
 [[nodiscard]] std::string_view route_failure_name(AdapterRouteFailure failure);
+[[nodiscard]] std::string_view overflow_policy_name(ServiceQueueOverflowPolicy overflow_policy);
 
 }  // namespace dasall::services::internal

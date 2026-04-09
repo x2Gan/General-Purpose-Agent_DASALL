@@ -2,6 +2,52 @@
 
 # DASALL 开发执行记录
 
+## 记录 #245
+
+- 日期：2026-04-09
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-023 实现 ServiceConfigAdapter 与 ServicePolicyView 派生
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-022 推送完成后，CAP-TODO-023 成为配置与观测阶段的首个直接可执行任务，也是 024~027 接入统一 policy 基线前必须先收口的内部配置派生入口。
+2. 该任务的关键边界是不新增 `services.*` 顶层 schema、不让各个 lane 或 bridge 自己读 YAML，同时继续保持 `ServicePolicyView` internal-only。
+3. 本轮目标是在不扩张 shared contracts 的前提下，落盘 `ServiceConfigAdapter`、扩展 `ServicePolicyView` 字段面，并补齐 `worker_threads` 的最小上游暴露以支撑 worker/timeout/overflow/stale-read 派生验证。
+
+### 改动
+
+1. 新增 [services/src/ops/ServiceConfigAdapter.h](../../services/src/ops/ServiceConfigAdapter.h) 与 [services/src/ops/ServiceConfigAdapter.cpp](../../services/src/ops/ServiceConfigAdapter.cpp)，定义 internal `ServicePolicyDerivationResult` 与 `ServiceConfigAdapter::derive_policy_view()`，统一消费 `RuntimePolicySnapshot` / `BuildProfileManifest` 并派生 lane worker、deadline/timeout、circuit threshold、cache TTL、stale-read、overflow policy、safe mode / audit / caller domain、platform / observability 开关等 services 内部策略字段。
+2. 更新 [services/src/adapters/AdapterRouter.h](../../services/src/adapters/AdapterRouter.h) 与 [services/src/adapters/AdapterRouter.cpp](../../services/src/adapters/AdapterRouter.cpp)，把 `ServicePolicyView` 从 Router 最小字段扩展为统一 internal policy view，并新增 `ServiceQueueOverflowPolicy` 与字符串化 helper，同时保持既有 fail-closed 路由语义不变。
+3. 更新 [profiles/include/RuntimePolicySnapshot.h](../../profiles/include/RuntimePolicySnapshot.h) 与 [profiles/src/RuntimePolicyProvider.cpp](../../profiles/src/RuntimePolicyProvider.cpp)，新增 `worker_threads()` 只读访问面并从既有 `runtime_budget.worker_threads` YAML 资产填充，作为 services worker 派生的最小上游输入，不改 shared contracts。
+4. 新增 [tests/unit/services/ops/CMakeLists.txt](../../tests/unit/services/ops/CMakeLists.txt) 与 [tests/unit/services/ops/ServiceConfigAdapterTest.cpp](../../tests/unit/services/ops/ServiceConfigAdapterTest.cpp)，并更新 [tests/unit/services/CMakeLists.txt](../../tests/unit/services/CMakeLists.txt)、[tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt) 与 [services/CMakeLists.txt](../../services/CMakeLists.txt)，把 config adapter unit 接入 services/top-level unit 聚合目标；同时更新 [tests/unit/services/adapters/AdapterRouterTest.cpp](../../tests/unit/services/adapters/AdapterRouterTest.cpp)、[tests/unit/services/execution/ExecutionCommandLaneTest.cpp](../../tests/unit/services/execution/ExecutionCommandLaneTest.cpp)、[tests/unit/services/execution/ExecutionQueryLaneTest.cpp](../../tests/unit/services/execution/ExecutionQueryLaneTest.cpp)、[tests/unit/services/execution/CompensationCatalogTest.cpp](../../tests/unit/services/execution/CompensationCatalogTest.cpp)、[tests/unit/services/execution/ExecutionDiagnoseServiceTest.cpp](../../tests/unit/services/execution/ExecutionDiagnoseServiceTest.cpp) 与 [tests/unit/services/data/DataQueryLaneTest.cpp](../../tests/unit/services/data/DataQueryLaneTest.cpp)，消除 `ServicePolicyView` 扩展后的聚合初始化告警。
+5. 新增 [docs/todos/services/deliverables/CAP-TODO-023-ServiceConfigAdapter与ServicePolicyView派生设计收敛.md](../todos/services/deliverables/CAP-TODO-023-ServiceConfigAdapter%E4%B8%8EServicePolicyView%E6%B4%BE%E7%94%9F%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，并回写 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 当前结论、023 状态与下一直接执行入口。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -R ProfileRuntimePolicySchemaContractTest`
+2. 结果：
+   - `dasall_services`、`dasall_unit_tests` 与 `dasall_contract_tests` 构建通过，说明 profiles->services 的最小字段扩展、ops 子目录接线和顶层聚合目标都已收口。
+   - `ctest -L unit` 通过，最终结果为 `100% tests passed, 0 tests failed out of 209`，新增 ServiceConfigAdapterTest 已进入 discoverability 与执行路径。
+   - `ProfileRuntimePolicySchemaContractTest` 单独执行通过，结果为 `1/1` passed，说明 023 没有回退既有 profile schema gate。
+
+### 结果
+
+1. CAP-TODO-023 已完成，services 现在具备统一的 internal `ServicePolicyView` 派生入口，后续 024~027 可直接复用同一 policy 基线接入 audit / metrics / trace / health。
+2. 本轮没有引入新的 `services.*` 配置键，也没有把 `ServicePolicyView` 或 `ServiceConfigAdapter` 升格为公共 ABI，继续保持 services 对 profile/runtime 语义的只读消费边界。
+
+### 下一步
+
+1. 进入 CAP-TODO-024，实现 `ServiceAuditBridge`，把高风险动作前后、补偿入口与 fallback blocked 审计事件收敛到 infra audit 冻结边界。
+
+### 风险
+
+1. 当前 `RuntimePolicySnapshot` 只向 services 补充了 `worker_threads()`，尚未全量暴露 `infra.health.*` / `infra.metrics.*` 细项；若 025/027 需要更细的导出或阈值策略字段，应先确认 profiles 稳定暴露面，而不是让 services 反向扩 schema。
+
 ## 记录 #244
 
 - 日期：2026-04-09

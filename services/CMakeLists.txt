@@ -4,6 +4,7 @@ target_sources(dasall_services
   PRIVATE
     src/ServiceFacade.cpp
     src/ServiceContextBuilder.cpp
+    src/ops/ServiceConfigAdapter.cpp
     src/adapters/AdapterRouter.cpp
     src/adapters/AdapterBridge.cpp
     src/adapters/LocalPlatformAdapter.cpp
@@ -39,6 +40,8 @@ target_include_directories(dasall_services
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/profiles/include
+    ${CMAKE_SOURCE_DIR}/infra/include
 )
 
 target_link_libraries(dasall_services

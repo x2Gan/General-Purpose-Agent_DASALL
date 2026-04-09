@@ -86,10 +86,10 @@ class DiagnoseInvoker final : public IAdapterInvoker {
 }
 
 [[nodiscard]] ServicePolicyView make_policy_view() {
-  return ServicePolicyView{
-      .local_platform_route_enabled = false,
-      .adapter_preference_order = {AdapterRouteKind::local_service},
-  };
+  ServicePolicyView policy_view{};
+  policy_view.local_platform_route_enabled = false;
+  policy_view.adapter_preference_order = {AdapterRouteKind::local_service};
+  return policy_view;
 }
 
 [[nodiscard]] FallbackEnvelope make_fallback_envelope() {
