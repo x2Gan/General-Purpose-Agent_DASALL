@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #262
+
+- 日期：2026-04-10
+- 阶段：llm/专项 TODO 阶段 A
+- 任务：LLM-TODO-003 注册 llm integration 测试拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 已在上一轮关闭 LLM-BLK-002，LLM-TODO-003 成为阶段 A 串行链上的最后一个构建/测试骨架任务。
+2. [docs/ssot/InfraIntegrationTopology.md](../ssot/InfraIntegrationTopology.md) 明确要求 integration 用例必须可被 `ctest -N` 发现，且新增核心链路组件至少补 1 个 smoke integration 用例；当前 llm 尚无 `tests/integration/llm` 目录，因此本轮必须先补 discoverability 入口。
+3. [tests/integration/CMakeLists.txt](../tests/integration/CMakeLists.txt) 目前只汇总 infra/profiles/platform/services integration target，说明本轮除了新增 llm 子目录外，还必须把 llm target 列表回传到顶层聚合，而不是只在子目录里局部注册。
+
+### 改动
+
+1. 更新 [tests/integration/CMakeLists.txt](../tests/integration/CMakeLists.txt)，新增 `add_subdirectory(llm)`，并把 `DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS` 并入顶层 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS` 聚合列表。
+2. 新增 [tests/integration/llm/CMakeLists.txt](../tests/integration/llm/CMakeLists.txt)，建立 llm integration 注册宏、最小 smoke executable 注册、`integration;llm` 标签设置，以及 target 列表 `PARENT_SCOPE` 回传。
+3. 新增 [tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp](../tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp)，以“组件前缀 + smoke 场景 + llm 命名空间 target”作为 discoverability 锚点断言，为后续 029~035 的真实 llm integration 语义预留稳定入口。
+4. 新增 [docs/todos/llm/deliverables/LLM-TODO-003-llm-integration测试拓扑设计收敛.md](../todos/llm/deliverables/LLM-TODO-003-llm-integration%E6%B5%8B%E8%AF%95%E6%8B%93%E6%89%91%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，沉淀本轮本地证据、外部 `add_test`/`ctest` 参考与 Design -> Build 映射。
+5. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 LLM-TODO-003 标记为 Done，并在阶段 A 执行记录中显式回写 LLM-BLK-003 已解阻和 LLM-GATE-01 通过。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+   - `ListTests_CMakeTools`
+   - `RunCtest_CMakeTools` 运行 `LLMSubsystemSmokeIntegrationTest`
+2. 结果：
+   - `dasall_integration_tests` 构建成功并执行 36 个 integration 用例，`LLMSubsystemSmokeIntegrationTest` 作为第 36 个用例通过，说明 llm integration 已进入顶层 discoverability 与聚合执行路径。
+   - `ListTests_CMakeTools` 已列出 `LLMSubsystemSmokeIntegrationTest`，说明 llm integration smoke 入口可被测试清单稳定发现。
+   - `RunCtest_CMakeTools` 定向执行 `LLMSubsystemSmokeIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示未影响测试返回码和断言结果，暂记为 CTest 工具噪声而非任务 blocker。
+
+### 结果
+
+1. LLM-TODO-003 已完成，`tests/integration/llm` 现在具备真实 smoke executable、`integration` 标签和顶层聚合入口，不再是缺失目录状态。
+2. LLM-BLK-003 已在本轮关闭；至此 LLM-TODO-001、002、003 已全部完成，llm 构建与测试骨架已落盘，阶段 A 的 LLM-GATE-01 达到通过条件。
+
+### 下一步
+
+1. 进入 LLM-TODO-005，开始冻结 ILLMAdapter SPI 与适配配置对象；后续 005~011 可直接复用 001~003 搭好的 include/unit/integration 骨架。
+
+### 风险
+
+1. 当前 `LLMSubsystemSmokeIntegrationTest.cpp` 仍只是 discoverability 锚点，不代表 llm unary 主链已集成；若后续 029 没有在同名 smoke 测试上继续补真实链路断言，会留下“integration 可发现但语义未闭合”的假阳性风险。
+
 ## 记录 #261
 
 - 日期：2026-04-10
