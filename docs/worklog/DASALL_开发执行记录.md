@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #263
+
+- 日期：2026-04-10
+- 阶段：llm/专项 TODO 阶段 B
+- 任务：LLM-TODO-005 定义 ILLMAdapter SPI 与适配配置对象
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 已在上一轮完成阶段 A 的 001/002/003，因此阶段 B 的首个最小原子任务自然切换到 LLM-TODO-005。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 的 6.5.1 明确要求 `ILLMAdapter::generate()` 返回 `AdapterCallResult`、不得抛异常；这意味着本轮必须先冻结 adapter SPI 和返回边界，而不是直接跳到 manager、registry 或 adapter skeleton 实现。
+3. 本轮边界收敛为“adapter SPI + config + module-local result + surface test”：不定义 `HealthStatus`、`StreamSessionRef`、`IStreamObserver` 的具体对象，不推进 `LLMSubsystemConfig`，也不提前落 transport 抽象，从而避免把 011/012/036 混进 005。
+
+### 改动
+
+1. 新增 [llm/include/LLMAdapterConfig.h](../llm/include/LLMAdapterConfig.h)，冻结 `adapter_id`、`adapter_family`、`base_url`、`auth_ref`、`header_refs`、`timeout_ms`、`max_retries`、`capability_tags` 八个配置字段，作为 adapter 初始化的强类型输入对象。
+2. 新增 [llm/include/ILLMAdapter.h](../llm/include/ILLMAdapter.h)，冻结 `init()`、`generate()`、`stream_generate()`、`health_check()` 四入口 SPI，并把 `generate()` 正式收敛为返回 `AdapterCallResult`。
+3. 新增 [llm/src/adapters/AdapterCallResult.h](../llm/src/adapters/AdapterCallResult.h)，以 `response` / `error` / `result_code` 三元组表达 adapter 成功或失败事实，并通过 `has_consistent_values()` 显式拒绝混合态，确保失败通过返回值而不是异常穿透。
+4. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，从 topology anchor 升级为真实接口冻结测试，补齐 `ILLMAdapter` 签名断言、`LLMAdapterConfig` 字段断言与 `AdapterCallResult` 成功/失败边界断言。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-005-ILLMAdapter-SPI与适配配置对象设计收敛.md](../todos/llm/deliverables/LLM-TODO-005-ILLMAdapter-SPI%E4%B8%8E%E9%80%82%E9%85%8D%E9%85%8D%E7%BD%AE%E5%AF%B9%E8%B1%A1%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，沉淀本轮本地证据、外部 C++ 接口设计参考、Design -> Build 映射与边界决策。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 LLM-TODO-005 标记为 Done，并新增阶段 B 执行记录。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm`、`dasall_unit_tests`
+   - `ListTests_CMakeTools`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm` 与 `dasall_unit_tests`，说明 005 未破坏现有 llm 模块和 unit 聚合目标的 discoverability。
+   - `Build_CMakeTools` 构建 `dasall_llm`、`dasall_unit_tests` 成功，期间 `LLMInterfaceSurfaceTest` 在 unit 标签链中通过；修正测试初始化告警后，本轮构建已无新增编译警告。
+   - `ListTests_CMakeTools` 已列出 `LLMInterfaceSurfaceTest`。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示未影响测试返回码，暂记为 CTest 工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-005 已完成，`ILLMAdapter` 四入口 SPI、`LLMAdapterConfig` 强类型初始化输入，以及 module-local `AdapterCallResult` 成功/失败边界已经落盘并被单测冻结。
+2. `tests/unit/llm/InterfaceSurfaceTest.cpp` 不再只是 topology anchor，而是阶段 B 的真实接口冻结门；后续 006~011 可以继续在同一测试壳上扩展 manager/prompt/supporting types 的签名断言。
+
+### 下一步
+
+1. 进入 LLM-TODO-006，冻结 `ILLMManager`、`LLMGenerateRequest` 与 `LLMManagerResult` 的输入输出和失败语义。
+2. 完成 006 后继续推进 007~011，使 `LLM-GATE-02` 达到通过条件。
+
+### 风险
+
+1. 本轮只前向声明了 `HealthStatus`、`StreamSessionRef`、`IStreamObserver`；若后续任务忘记为这些类型补定义，编译期会在真正消费它们的调用点暴露缺口，因此 006/011/036 仍必须按顺序推进，不能把当前“签名已冻结”误判成“supporting types 已完备”。
+
 ## 记录 #262
 
 - 日期：2026-04-10
