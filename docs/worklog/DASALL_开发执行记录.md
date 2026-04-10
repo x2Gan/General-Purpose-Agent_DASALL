@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #264
+
+- 日期：2026-04-10
+- 阶段：llm/专项 TODO 阶段 B
+- 任务：LLM-TODO-006 定义 ILLMManager 输入输出与失败语义
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 已在上一轮完成阶段 B 的 LLM-TODO-005，因此当前最小原子任务自然切换到 LLM-TODO-006。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 的 6.5.2 已明确 `ILLMManager` 是 Runtime 访问 llm 的唯一统一入口；这意味着本轮必须先冻结 manager 的输入、输出和失败表达，而不是直接跳到 PromptRegistry、PromptComposer 或 LLMSubsystemConfig 实现。
+3. 同一设计文档的 6.9.2 进一步要求 fallback exhausted 必须返回 attempted routes、failure category 和 retryable hint，因此 006 不能只做“manager 有个返回类型”的占位，而必须把 fallback 语义真正纳入结果对象。
+
+### 改动
+
+1. 新增 [llm/include/LLMGenerateRequest.h](../llm/include/LLMGenerateRequest.h)，冻结 `stage`、`task_type`、预路由 `contracts::LLMRequest` 与 opaque `selection_hint` 四部分 runtime handoff 输入，明确 `model_route` 在此阶段允许仍是 pre-route hint。
+2. 新增 [llm/include/LLMManagerResult.h](../llm/include/LLMManagerResult.h)，冻结 `code`、`response`、`error`、`resolved_route`、`attempted_routes`、`failure_category`、`fallback_used` 字段，并通过 `has_consistent_values()` 守卫 success/failure/fallback 组合边界。
+3. 新增 [llm/include/ILLMManager.h](../llm/include/ILLMManager.h)，冻结 `init()`、`generate()`、`stream_generate()`、`health_check() const` 四个 manager SPI，并继续把 `LLMSubsystemConfig`、`HealthStatus`、`IStreamObserver` 保持在前向声明边界内。
+4. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，在原有 adapter SPI 冻结基础上继续补齐 `ILLMManager` 签名断言、`LLMGenerateRequest` 字段断言，以及 `LLMManagerResult` 的 success/failure/fallback 语义断言。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-006-ILLMManager输入输出与失败语义设计收敛.md](../todos/llm/deliverables/LLM-TODO-006-ILLMManager%E8%BE%93%E5%85%A5%E8%BE%93%E5%87%BA%E4%B8%8E%E5%A4%B1%E8%B4%A5%E8%AF%AD%E4%B9%89%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，沉淀本轮本地证据、`std::optional` 参考、Design -> Build 映射与结果对象收敛理由。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 LLM-TODO-006 标记为 Done，并新增阶段 B 执行记录。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm`、`dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_llm`、`dasall_unit_tests` 成功，并在 unit 标签链中执行 `LLMInterfaceSurfaceTest` 通过；本轮未观察到由 006 引入的新编译警告。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示未影响测试返回码，暂记为 CTest 工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-006 已完成，`ILLMManager` 统一入口 SPI、`LLMGenerateRequest` runtime handoff 对象，以及 `LLMManagerResult` 的 success / failure / fallback 边界已经落盘并被单测冻结。
+2. `LLMManagerResult.code` 在本轮收敛为 optional 失败码，而不是伪造成功哨兵；fallback exhausted 语义也已通过 `attempted_routes + failure_category + fallback_used` 正式进入 manager 结果边界。
+
+### 下一步
+
+1. 进入 LLM-TODO-007，冻结 PromptRegistry 选择面接口与返回元数据。
+2. 在 007~011 完成前，继续保持 `ModelSelectionHint`、`LLMSubsystemConfig`、`HealthStatus`、`StreamSessionRef` 只作为后续 supporting type / config projection 任务推进，避免越权扩张当前边界。
+
+### 风险
+
+1. 本轮只冻结了 `selection_hint` 的依赖方向，没有定义 `ModelSelectionHint` 本体；若 011 后续收敛时偏离当前 `shared_ptr<const ModelSelectionHint>` 边界，006 的 manager 输入面需要重新评审。
+
 ## 记录 #263
 
 - 日期：2026-04-10
