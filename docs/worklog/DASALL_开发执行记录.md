@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #261
+
+- 日期：2026-04-10
+- 阶段：llm/专项 TODO 阶段 A
+- 任务：LLM-TODO-002 注册 llm unit 测试拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 已在上一轮关闭 LLM-BLK-001，LLM-TODO-002 随即成为阶段 A 串行链上的下一个最小可执行任务。
+2. [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt) 已预留 `add_subdirectory(llm)`，但 [tests/unit/llm/CMakeLists.txt](../tests/unit/llm/CMakeLists.txt) 仍只有占位注释，说明当前缺口是“真实注册入口缺失”，不是顶层目录结构缺失。
+3. [tests/unit/platform/linux/CMakeLists.txt](../tests/unit/platform/linux/CMakeLists.txt) 已经注册 `InterfaceSurfaceTest`，因此本轮必须同时解决 llm unit discoverability 与测试命名冲突风险，不能直接复用同名 `ctest` 名称。
+
+### 改动
+
+1. 更新 [tests/unit/CMakeLists.txt](../tests/unit/CMakeLists.txt)，把 `dasall_llm_interface_surface_unit_test` 加入 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS`，确保 llm unit 目标进入顶层 `dasall_unit_tests` 聚合构建。
+2. 更新 [tests/unit/llm/CMakeLists.txt](../tests/unit/llm/CMakeLists.txt)，新增最小 llm unit executable，链接 `dasall_test_support` 与 `dasall_llm`，并注册 `LLMInterfaceSurfaceTest`，同时赋予 `unit;llm` 标签。
+3. 新增 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，以“collision-free 名称 + llm 命名空间前缀”作为 topology 锚点断言，为后续 005~011 继续补 public interface 断言保留稳定测试壳。
+4. 新增 [docs/todos/llm/deliverables/LLM-TODO-002-llm-unit测试拓扑注册设计收敛.md](../todos/llm/deliverables/LLM-TODO-002-llm-unit%E6%B5%8B%E8%AF%95%E6%8B%93%E6%89%91%E6%B3%A8%E5%86%8C%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，沉淀本轮本地证据、外部 `add_test`/`ctest` 参考与 Design -> Build 映射。
+5. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 LLM-TODO-002 标记为 Done，并在阶段 A 执行记录中显式回写 LLM-BLK-002 已解阻。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `ListTests_CMakeTools`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `dasall_unit_tests` 构建成功，并在 unit 标签执行链中显示 `LLMInterfaceSurfaceTest` 为第 2 个测试且通过，说明 llm unit 已进入顶层 discoverability 和聚合执行路径。
+   - `ListTests_CMakeTools` 结果已经列出 `LLMInterfaceSurfaceTest`，说明 llm unit 入口可被测试清单稳定发现。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示未影响测试返回码和断言结果，暂记为 CTest 工具噪声而非任务 blocker。
+
+### 结果
+
+1. LLM-TODO-002 已完成，`tests/unit/llm` 不再是占位目录，而是具备真实 executable、唯一 ctest 名称和 `unit` 标签的最小 llm unit 测试拓扑。
+2. LLM-BLK-002 已在本轮关闭；后续 005~011 可以直接复用 `LLMInterfaceSurfaceTest` 扩展公共接口断言，而无需再次搭建 discoverability 骨架。
+
+### 下一步
+
+1. 进入 LLM-TODO-003，补齐 llm integration 子目录、smoke executable 和顶层 integration discoverability。
+
+### 风险
+
+1. 当前 `InterfaceSurfaceTest.cpp` 仍是 topology anchor，不代表 llm 公共接口面已经冻结；若后续接口任务忘记在该测试上继续补真实断言，就会留下“测试能跑但 ABI 未验”的假阳性风险。
+
 ## 记录 #260
 
 - 日期：2026-04-10

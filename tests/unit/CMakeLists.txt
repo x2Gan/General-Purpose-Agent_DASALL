@@ -109,6 +109,7 @@ set(DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS
 
 set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_smoke_test
+	dasall_llm_interface_surface_unit_test
 	dasall_service_header_layout_unit_test
 	dasall_service_context_builder_unit_test
 	dasall_service_facade_unit_test

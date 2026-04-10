@@ -1,1 +1,14 @@
-# Placeholder for llm unit tests.
+add_executable(dasall_llm_interface_surface_unit_test
+	InterfaceSurfaceTest.cpp
+)
+
+target_link_libraries(dasall_llm_interface_surface_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+dasall_apply_common_options(dasall_llm_interface_surface_unit_test)
+
+add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
+set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
