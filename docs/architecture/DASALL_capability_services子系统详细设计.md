@@ -65,7 +65,7 @@ contracts 与实现现状证据：
 1. services/CMakeLists.txt：当前仅构建静态库与占位源码。
 2. services/src/placeholder.cpp：当前仅保留空实现以维持库非空。
 3. tests/contract/smoke/InterfaceCatalogContractTest.cpp：services 只保留 IExecutionService、IDataService 两个接口候选。
-4. contracts/include/boundary/InterfaceCatalog.h：IExecutionService、IDataService 当前处于 AwaitingSupportingContracts。
+4. contracts/include/boundary/InterfaceCatalog.h：IExecutionService、IDataService 已在 CAP-TODO-033 后进入 `ReviewReady`；formal shared header placement 由 CAP-TODO-041 单独评审。
 5. tests/mocks/include/MockExecutionService.h：tests/mocks 已收敛为扁平 include 根，仅存在最小 smoke/mock 级执行服务占位。
 6. tests/CMakeLists.txt：unit/contract/integration 测试总入口已接线，可承接 services 后续测试落盘。
 
@@ -87,7 +87,7 @@ contracts 与实现现状证据：
 | CAP-C003 | DASALL_架构设计文档.md 4.10.3 + DASSALL_Agent_architecture.md 4.5/5.1/5.2 | Must | Runtime 持有调度、预算、deadline、取消、重试、恢复与全局停止/降级裁定权；Tool Policy Gate 持有单次调用的校验、权限与确认门控；services 只持有服务语义与后端选择权 | 边界职责 |
 | CAP-C004 | DASSALL_Agent_architecture.md 3.7、7.4 | Must-Not | services 不依赖 cognition、llm，也不反向把 platform/infra 细节暴露给 tools | 模块依赖 |
 | CAP-C005 | ADR-005 | Must | 在 supporting contracts 未成熟前，不得把 services 内部请求/结果对象提前冻结进 contracts | contracts 策略 |
-| CAP-C006 | WP05-T011 / T012 | Must | IExecutionService、IDataService 当前只作为候选接口存在，结论为 Postpone/AwaitingSupportingContracts | 接口演进 |
+| CAP-C006 | WP05-T011 / T012、CAP-TODO-033 | Must | IExecutionService、IDataService 的 admission baseline 已收敛为 Admit/ReviewReady；formal shared header placement 仍需单独兼容评审 | 接口演进 |
 | CAP-C007 | WP03-T006 / T008 | Must | services 必须消费 Observation / ObservationDigest / ErrorInfo / RuntimeBudget 的既有冻结语义，不得重定义这些共享对象 | 核心对象 |
 | CAP-C008 | ADR-007 | Must-Not | services 不拥有失败语义最终裁定与恢复执行权；只能输出结构化失败事实、侧效应与补偿提示 | 异常语义 |
 | CAP-C009 | DASSALL_Agent_architecture.md 8.5、8.7、8.8 | Must | 服务链路必须具备日志、指标、追踪、审计四类可观测性 | 可观测性 |
@@ -106,7 +106,7 @@ contracts 与实现现状证据：
 Must：
 1. services 是 Tool 与 platform/外部目标之间唯一稳定服务语义层。
 2. Runtime 持有控制面；Tool 持有调用级校验、权限与确认门控；services 仅返回事实、状态、错误与补偿提示。
-3. IExecutionService/IDataService 暂不进入共享 contracts，先在模块内收敛 supporting objects。
+3. IExecutionService/IDataService 的 admission baseline 已闭合，但当前 public header 仍维持在 `services/include`；是否迁入共享 contracts 需要单独兼容评审与迁移窗口设计。
 4. 可观测性、Profile 裁剪与测试门禁必须从设计阶段就显式落位。
 
 Should：
@@ -364,7 +364,7 @@ flowchart LR
 1. V1 仅公开三个头文件：ServiceTypes.h、IExecutionService.h、IDataService.h。
 2. tools 只依赖 IExecutionService、IDataService 与 ServiceTypes 中定义的 supporting objects；不直接依赖 ServiceFacade 具体类。
 3. ServiceFacade 是模块内部组合根，负责实现 IExecutionService 与 IDataService，并协调 SystemSnapshotLane、ExecutionSubscriptionHub、ServiceHealthProbe 等 internal-only 能力。
-4. Subscription capability 以 cursor/batch 语义进入公共 ABI；ExecutionSubscriptionHub 仅作为内部实现。System Snapshot 与 Health Probe 暂不形成公共 ABI；只有出现稳定跨模块消费者时才单独发起新的 interface admission review。
+4. Subscription capability 以 cursor/batch 语义进入公共 ABI；ExecutionSubscriptionHub 仅作为内部实现。System Snapshot 与 Health Probe 暂不形成公共 ABI；只有出现稳定跨模块消费者时才单独发起新的 interface admission review。在当前专项 TODO 中，该预研先收敛为 CAP-TODO-042，不直接承诺 shared ABI 落位。
 
 | 子域 | 子组件 | 职责 | 对外可见性 |
 |---|---|---|---|
@@ -552,8 +552,9 @@ V1 公共 supporting objects 冻结清单：
 
 接口冻结策略说明：
 1. 以下接口先作为 services 模块内公共接口建议落盘，不直接放入 contracts。
-2. 只有在 supporting objects 稳定后，IExecutionService/IDataService 才进入共享 contracts 评审。
-3. Subscription capability 进入模块公共 ABI，但其 hub/buffer/lease 实现保持 internal-only；System 与 Health Probe 相关能力暂不进入共享目录。
+2. 只有在 supporting objects 稳定后，IExecutionService/IDataService 才进入共享 contracts 评审；在专项 TODO 中，该兼容迁移决策由 CAP-TODO-041 单独承接。
+3. CAP-TODO-041 已于 2026-04-10 给出结论：当前不直接把 `IExecutionService`、`IDataService` 或 `ServiceTypes` 迁入 `contracts/include`；`services/include` 继续作为 canonical public include 根。只有在出现真实跨模块消费者、contracts taxonomy 定稿且旧 include 路径可通过兼容包装头保留一个迁移窗口时，才允许以 Phase-Go 方式升格。
+4. Subscription capability 进入模块公共 ABI，但其 hub/buffer/lease 实现保持 internal-only；System 与 Health Probe 相关能力暂不进入共享目录，相关 shared ABI 可行性仅允许通过 CAP-TODO-042 预研，不直接进入实现。
 
 建议对象：
 
@@ -980,8 +981,8 @@ schema 对齐结论：
 
 | 设计项 | 当前不能直接进入 Build 的原因 | 后续动作 |
 |---|---|---|
-| IExecutionService / IDataService 进入共享 contracts | CAP-TODO-033 已完成二次 admission review；ServiceTypes、IExecutionService/IDataService 与 smoke/failure/profile evidence 已闭合，但本轮只更新 InterfaceCatalog / readiness 基线，不在 contracts/include 直接新增正式接口头 | 若后续确需把 services 接口头迁入 contracts/include，另起 shared-contract header 落位任务，并补 include 迁移与兼容评审 |
-| ISystemService 共享接口 | 当前无架构锚点与 supporting contracts，属边界扩张 | 仅保留模块内实现；待真实跨模块消费者稳定后再评估 |
+| IExecutionService / IDataService 进入共享 contracts | CAP-TODO-033 已完成 admission review，CAP-TODO-041 也已完成 shared-contract header 兼容评审；当前剩余问题不再是 admission，而是 future 是否值得为真实跨模块消费者引入兼容迁移窗口 | 041 结论为“当前直接迁移 No-Go，future 仅可在 compat wrapper + taxonomy + consumer evidence 同时满足时 Phase-Go”；现阶段保持 `services/include` 不变 |
+| ISystemService 共享接口 | 当前无架构锚点与 supporting contracts，属边界扩张 | 降级为 CAP-TODO-042“system shared ABI 预研与证据收集”；在稳定跨模块消费者出现前，只允许收集 evidence，不直接推进 shared ABI |
 | 事件总线式服务编排 | 需要新增事件契约与状态存储设计，超出当前阶段范围 | 保留为未来版本演进方向，不纳入本轮 Build |
 
 ---

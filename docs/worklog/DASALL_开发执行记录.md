@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #257
+
+- 日期：2026-04-10
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-041 发起 shared-contract header 兼容评审与落位决策
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-034 推送完成后，CAP-TODO-041 成为 services 专项 post-034 跟进链上的下一个最小原子任务；它不负责移动生产头文件，而是要回答 `IExecutionService` / `IDataService` / `ServiceTypes` 今天是否应该从 `services/include` 迁入 `contracts/include`。
+2. 该任务的关键边界是把“shared-contract admission 已闭合”和“shared header 应立即改址”拆开处理。033 已经给出了 `ReviewReady` / `Admit` 结论，但那只说明 interface candidate 合格，不等于物理头文件位置必须变更。
+3. 本轮没有新的 blocker。需要收敛的是兼容证据：当前 canonical include 根、真实 consumer 影响面、contracts taxonomy 是否 ready，以及若 future 迁移，是否必须保留 compat wrapper window。
+
+### 改动
+
+1. 新增 [docs/todos/services/deliverables/CAP-TODO-041-shared-contract-header兼容评审与落位决策.md](../todos/services/deliverables/CAP-TODO-041-shared-contract-header%E5%85%BC%E5%AE%B9%E8%AF%84%E5%AE%A1%E4%B8%8E%E8%90%BD%E4%BD%8D%E5%86%B3%E7%AD%96.md)，整理本轮本地证据、外部参考、consumer 兼容矩阵，并把结论固化为“当前直接迁移 No-Go，future 仅可 Phase-Go”。
+2. 更新 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，把 shared-contract header 的当前状态从 admission baseline 与 physical placement 两层显式拆开，并记录 041 的兼容结论与 future 迁移前提。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-041 标记为 Done，补写 9.5 兼容评审证据、11 节后续建议与风险表中的 direct-move 约束。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_contract_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R InterfaceCatalogContractTest`
+   - `ctest --test-dir build-ci --output-on-failure -R InterfaceAdmissionContractTest`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+2. 结果：
+   - `dasall_contract_tests` 构建通过，说明本轮 docs-only 兼容评审没有引入新的 contract 编译风险。
+   - `InterfaceCatalogContractTest` 定向执行 1/1 通过，`InterfaceAdmissionContractTest` 定向执行 1/1 通过，说明 services pair 的 `ReviewReady` / admitted 基线在 041 之后保持稳定。
+   - `ctest -L contract` 结果为 `100% tests passed, 0 tests failed out of 152`，说明 041 只收敛 header placement 决策，没有回退 shared-contract admission 语义。
+
+### 结果
+
+1. CAP-TODO-041 已完成，最终结论不是直接 Go，而是“当前直接迁移 No-Go，future 仅可在 compat wrapper、contracts taxonomy 与真实 consumer evidence 同时满足时 Phase-Go”。
+2. 本轮明确了 `services/include` 继续作为当前 canonical public include 根；`ReviewReady` / `Admit` 继续由 InterfaceCatalog 与 InterfaceAdmission contract gates 表达，不通过挪动头文件来证明 shared-contract 语义成立。
+
+### 下一步
+
+1. 进入 CAP-TODO-042，只收敛 `SystemSnapshotLane` / `ServiceHealthProbe` 的跨模块消费者与 supporting objects 证据，不直接承诺 `ISystemService` 或其他 system shared ABI 落位。
+
+### 风险
+
+1. 若后续跳过 compat wrapper window 直接把三份头从 `services/include` 改址到 `contracts/include`，将主动制造 source/include compatibility break；041 已明确这是当前应避免的动作。
+2. 若 future 确有跨模块 consumer 需要 shared header 升格，必须先回写架构文档与蓝图中的目录 taxonomy，再用新原子任务承接迁移，而不是在现有 No-Go 结论上直接追加代码变更。
+
 ## 记录 #256
 
 - 日期：2026-04-09
