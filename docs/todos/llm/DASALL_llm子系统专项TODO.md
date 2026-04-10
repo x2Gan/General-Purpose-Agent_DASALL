@@ -1,6 +1,6 @@
 # DASALL LLM 子系统专项 TODO
 
-最近更新时间：2026-04-10
+最近更新时间：2026-04-10（完成 LLM-TODO-001 llm 公共 include 布局）
 阶段：Detailed Design -> Special TODO
 适用范围：llm/
 当前结论：可直接进入 L3/L2 混合执行；module-local 公共接口、Prompt/Provider 资产、Prompt 三段治理、路由与 unary 主链路可落地，shared ModelRoute / PromptPolicyDecision 升格与 streaming 生命周期保持 Blocked/后置。
@@ -202,7 +202,7 @@
 
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| LLM-TODO-001 | Todo | 新增 llm 公共 include 布局 | 详细设计 6.6、8.1；蓝图 3.5；编码规范 3.2 | 6.6 目录与工程落点建议 | L2 | llm/include/；llm/include/prompt/；llm/include/provider/；llm/include/route/；llm/include/stream/；llm/CMakeLists.txt | llm 模块公共 include 根与稳定子目录 | unit：为 LLMInterfaceSurfaceTest 提供稳定 include 根 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_llm` | 无 | LLM-BLK-001 | 建立 include 根且不破坏 dasall_llm 现有构建 | llm/include 目录骨架、llm/CMakeLists.txt 接线调整 | 仅当 llm 公共 include 根稳定存在且 dasall_llm 可继续构建时完成 |
+| LLM-TODO-001 | Done | 新增 llm 公共 include 布局 | 详细设计 6.6、8.1；蓝图 3.5；编码规范 3.2 | 6.6 目录与工程落点建议 | L2 | llm/include/；llm/include/prompt/；llm/include/provider/；llm/include/route/；llm/include/stream/；llm/CMakeLists.txt | llm 模块公共 include 根与稳定子目录 | unit：为 LLMInterfaceSurfaceTest 提供稳定 include 根 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_llm` | 无 | LLM-BLK-001 | 建立 include 根且不破坏 dasall_llm 现有构建 | llm/include 目录骨架、llm/CMakeLists.txt 接线调整、docs/todos/llm/deliverables/LLM-TODO-001-llm公共include布局设计收敛.md | 仅当 llm 公共 include 根稳定存在且 dasall_llm 可继续构建时完成 |
 | LLM-TODO-002 | Todo | 注册 llm unit 测试拓扑 | 详细设计 8.1、9.1；当前 tests/unit/llm 现状 | 8.1 测试目录建议；9.1 单元测试范围 | L2 | tests/unit/llm/CMakeLists.txt；tests/unit/CMakeLists.txt；tests/unit/llm/InterfaceSurfaceTest.cpp | llm unit discoverability 入口 | unit：ctest -N 可发现 llm unit 入口，且带 unit 标签 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N` | LLM-TODO-001 | LLM-BLK-002 | tests/unit/llm 被顶层 unit 聚合 target 发现 | llm unit CMake 接线、InterfaceSurfaceTest 占位/骨架 | 仅当 ctest -N 能发现至少 1 个 llm unit 用例时完成 |
 | LLM-TODO-003 | Todo | 注册 llm integration 测试拓扑 | 详细设计 9.3、9.6；InfraIntegrationTopology | 9.3 集成测试路径；9.6 Gate 建议清单 | L2 | tests/integration/llm/CMakeLists.txt；tests/integration/CMakeLists.txt；tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp | llm integration discoverability 入口 | integration：ctest -N 可发现 llm integration 入口，且带 integration 标签 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N` | LLM-TODO-001 | LLM-BLK-003 | tests/integration/llm 被顶层 integration 聚合 target 发现 | llm integration CMake 接线、LLMSubsystemSmokeIntegrationTest 占位/骨架 | 仅当 ctest -N 能发现至少 1 个 llm integration 用例时完成 |
 | LLM-TODO-004 | Todo | 升级 MockLLMAdapter 为生产接口 mock | 当前 Mock 现状；详细设计 6.13；v1.0 指引 | 6.13 与 tests/mocks 协作要点 | L2 | tests/mocks/include/MockLLMAdapter.h；tests/unit/llm/MockLLMAdapterSurfaceTest.cpp | MockLLMAdapter::init()、generate()、stream_generate()、health_check() | unit：MockLLMAdapterSurfaceTest 覆盖可编程返回、计数与 health_check | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R MockLLMAdapterSurfaceTest --output-on-failure` | LLM-TODO-005、LLM-TODO-002 | LLM-BLK-004 | ILLMAdapter 公共接口先落盘 | 生产接口 mock、最小可复用 test fixture | 仅当 MockLLMAdapter 继承 ILLMAdapter 且能支撑 unary/fallback 测试时完成 |
@@ -377,3 +377,13 @@
 2. shared admission：缺少 shared ModelRoute / PromptPolicyDecision / StreamHandle 的跨模块消费者矩阵、兼容窗口和 contract test 基线，因此不能默认推进 shared contracts。
 
 TemplateRenderer 安全规则、调用执行治理、Provider 注入闭环与 asset-only onboarding 已在本修正版中转为显式 Build 任务；除此之外，LLM 子系统的核心 Build 面已经具备足够的接口、对象、流程、错误语义、目录、测试与门禁证据，可直接进入执行。
+
+## 12. 阶段 A 执行记录
+
+### 12.1 LLM-TODO-001
+
+1. 状态：Done；LLM-BLK-001 已解阻。
+2. 设计交付：[docs/todos/llm/deliverables/LLM-TODO-001-llm公共include布局设计收敛.md](deliverables/LLM-TODO-001-llm%E5%85%AC%E5%85%B1include%E5%B8%83%E5%B1%80%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)。
+3. 代码交付：[llm/CMakeLists.txt](../../../llm/CMakeLists.txt)、[llm/include/.gitkeep](../../../llm/include/.gitkeep)、[llm/include/prompt/.gitkeep](../../../llm/include/prompt/.gitkeep)、[llm/include/provider/.gitkeep](../../../llm/include/provider/.gitkeep)、[llm/include/route/.gitkeep](../../../llm/include/route/.gitkeep)、[llm/include/stream/.gitkeep](../../../llm/include/stream/.gitkeep)。
+4. 验证结果：`Build_CMakeTools` 构建 `dasall_llm` 成功，输出为 `ninja: no work to do.`，说明 include 根与显式存在性校验未破坏现有 placeholder-only 构建。
+5. 后继任务：LLM-TODO-002 已具备执行条件，可进入 llm unit 测试拓扑注册。

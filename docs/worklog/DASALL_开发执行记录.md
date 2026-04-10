@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #260
+
+- 日期：2026-04-10
+- 阶段：llm/专项 TODO 阶段 A
+- 任务：LLM-TODO-001 新增 llm 公共 include 布局
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 的阶段 A 明确要求 001、002、003 串行起步，其中 LLM-TODO-001 负责先解 `llm/include` 空骨架问题，是 002、003 与 005~011 的前置解阻任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 已确认 llm 当前仍是 placeholder-only：`llm/CMakeLists.txt` 只编译 `src/placeholder.cpp`，公共 include 面为空，因此本轮必须先把公共 include 根和稳定子目录变成真实可追踪交付物。
+3. 本轮边界保持为“目录骨架 + CMake 接线”：不提前落具体公共头文件，不改写 llm/shared ABI，不混入 unit/integration 注册逻辑；测试目标仅验证 `dasall_llm` 在新布局下继续可构建。
+
+### 改动
+
+1. 更新 [llm/CMakeLists.txt](../llm/CMakeLists.txt)，新增 `DASALL_LLM_PUBLIC_INCLUDE_DIR` 与稳定子目录列表，使用 `BUILD_INTERFACE` / `INSTALL_INTERFACE` 收敛公共 include usage requirements，并在配置期对 include 根和 `prompt/`、`provider/`、`route/`、`stream/` 四个子目录执行显式存在性校验。
+2. 新增 [llm/include/.gitkeep](../llm/include/.gitkeep)、[llm/include/prompt/.gitkeep](../llm/include/prompt/.gitkeep)、[llm/include/provider/.gitkeep](../llm/include/provider/.gitkeep)、[llm/include/route/.gitkeep](../llm/include/route/.gitkeep)、[llm/include/stream/.gitkeep](../llm/include/stream/.gitkeep)，把 llm 公共 include 骨架和稳定子目录正式纳入版本控制。
+3. 新增 [docs/todos/llm/deliverables/LLM-TODO-001-llm公共include布局设计收敛.md](../todos/llm/deliverables/LLM-TODO-001-llm%E5%85%AC%E5%85%B1include%E5%B8%83%E5%B1%80%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，沉淀本轮本地证据、外部 CMake 参考、Design -> Build 映射与 Build 三件套。
+4. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 LLM-TODO-001 标记为 Done，并新增阶段 A 执行记录，显式回写 LLM-BLK-001 已解阻与后继任务状态。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm`
+2. 结果：
+   - `dasall_llm` 构建成功，输出 `ninja: no work to do.`，说明 include 根和四个稳定子目录的显式校验没有破坏当前 placeholder-only 构建。
+   - `ListBuildTargets_CMakeTools` 结果仍包含 `dasall_llm`，说明 llm 模块目标在新的 include 布局下仍可被 CMake Tools 正常发现。
+
+### 结果
+
+1. LLM-TODO-001 已完成，`llm/include` 不再是“仅本地存在的空目录”，而是具备可追踪骨架和稳定子目录的正式模块公共 include 根。
+2. LLM-BLK-001 已在本轮关闭；LLM-TODO-002 和 LLM-TODO-003 现在都具备继续推进测试 discoverability 的基础目录条件。
+
+### 下一步
+
+1. 进入 LLM-TODO-002，注册 llm unit 测试拓扑并确保最小 surface test 能被顶层 `ctest` 发现。
+
+### 风险
+
+1. 当前目录骨架仍通过 `.gitkeep` 占位，后续 005~011 落具体公共头文件时必须逐步替换这些占位文件，避免长期保留“目录已存在但 ABI 尚未落盘”的假象。
+
 ## 记录 #259
 
 - 日期：2026-04-10

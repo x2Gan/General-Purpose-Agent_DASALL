@@ -1,5 +1,25 @@
 add_library(dasall_llm STATIC)
 
+set(DASALL_LLM_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(DASALL_LLM_PUBLIC_INCLUDE_SUBDIRECTORIES
+  prompt
+  provider
+  route
+  stream
+)
+
+if(NOT EXISTS ${DASALL_LLM_PUBLIC_INCLUDE_DIR})
+  message(FATAL_ERROR "dasall_llm requires ${DASALL_LLM_PUBLIC_INCLUDE_DIR} to exist")
+endif()
+
+foreach(public_subdirectory IN LISTS DASALL_LLM_PUBLIC_INCLUDE_SUBDIRECTORIES)
+  if(NOT EXISTS ${DASALL_LLM_PUBLIC_INCLUDE_DIR}/${public_subdirectory})
+    message(FATAL_ERROR
+      "dasall_llm requires ${DASALL_LLM_PUBLIC_INCLUDE_DIR}/${public_subdirectory} to exist"
+    )
+  endif()
+endforeach()
+
 target_sources(dasall_llm
   PRIVATE
     src/placeholder.cpp
@@ -9,7 +29,8 @@ target_compile_features(dasall_llm PUBLIC cxx_std_20)
 
 target_include_directories(dasall_llm
   PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    $<BUILD_INTERFACE:${DASALL_LLM_PUBLIC_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(dasall_llm
