@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #258
+
+- 日期：2026-04-10
+- 阶段：services/capability services 专项 TODO
+- 任务：CAP-TODO-042 开展 system shared ABI 预研与证据收集
+- 状态：已完成
+
+### 任务选择
+
+1. CAP-TODO-041 推送完成后，CAP-TODO-042 成为 services 专项 post-034 跟进链上的最后一个最小原子任务；它不负责新增 `ISystemService`，而是要回答 `SystemSnapshotLane` / `ServiceHealthProbe` 今天是否已经具备被升格为 services shared ABI 的条件。
+2. 该任务的关键边界是把“system 子域存在 internal 能力”与“必须新增 services-owned shared ABI”拆开处理。当前只允许收敛真实跨模块消费者、supporting object 稳定度与 ABI owner，不能借预研名义直接扩 public header 或 InterfaceCatalog metadata。
+3. 本轮没有新的 blocker。需要收敛的核心证据有两类：一是 `SystemSnapshotLane` 是否已经拥有 runtime/tools/apps 的非测试直接消费者；二是 `ServiceHealthProbe` 是否真的需要新的 services shared ABI，还是应该继续复用 infra health 边界。
+
+### 改动
+
+1. 新增 [docs/todos/services/deliverables/CAP-TODO-042-system-shared-ABI预研与证据收集.md](../todos/services/deliverables/CAP-TODO-042-system-shared-ABI%E9%A2%84%E7%A0%94%E4%B8%8E%E8%AF%81%E6%8D%AE%E6%94%B6%E9%9B%86.md)，固化本轮本地证据、消费者与 supporting object 矩阵，并把结论收敛为“当前 shared ABI No-Go，保持 internal-only；health 路径复用 infra ABI”。
+2. 更新 [docs/architecture/DASALL_capability_services子系统详细设计.md](../architecture/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，把 system snapshot shared ABI 与 health aggregation ABI 明确拆开：前者当前缺少稳定非测试消费者，后者继续由 `infra::IHealthProbe` / `infra::HealthSnapshot` 承载。
+3. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 CAP-TODO-042 标记为 Done，补写 9.6 预研证据、风险表中的 ABI duplication 风险，以及 11 节完成态结论。
+
+### 测试
+
+1. 验证命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_services dasall_unit_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci --output-on-failure -R SystemSnapshotLaneTest`
+   - `ctest --test-dir build-ci --output-on-failure -R CapabilityServicesHealthIntegrationTest`
+2. 结果：
+   - `SystemSnapshotLaneTest` 定向执行 1/1 通过，说明 042 的 docs-only 预研没有回退 system snapshot 的 internal-only 语义。
+   - `CapabilityServicesHealthIntegrationTest` 定向执行 1/1 通过，说明 services health 集成仍沿 internal signal -> `ServiceHealthProbe` -> `infra::HealthSnapshot` 主链工作，没有因为 042 文档收敛而改变产品行为。
+
+### 结果
+
+1. CAP-TODO-042 已完成，最终结论不是“继续实现 system shared ABI”，而是“当前 shared ABI No-Go”：`SystemSnapshotLane` 暂无稳定非测试跨模块消费者，supporting objects 仍位于 `services/src/system` 内部头；`ServiceHealthProbe` 的稳定跨模块 ABI owner 已经是 infra，而不是 services。
+2. 本轮明确了 future reopen 的前提：只有在新增 snapshot 直接消费者、supporting objects 公共化并能证明现有 infra ABI 不足时，才允许另起原子任务重新评审；health 聚合本身不再构成新建 services-owned ABI 的理由。
+
+### 下一步
+
+1. services 专项与 post-034 跟进链已经全部闭合；若 future 出现新的 snapshot 消费者或 contracts taxonomy 决策，再以新的原子任务继续推进。
+
+### 风险
+
+1. 若后续把 `SystemSnapshotLane` 与 `ServiceHealthProbe` 重新打包为单一 `ISystemService`，会同时复制 infra health 边界并冻结尚未稳定的 internal supporting objects；042 已明确这是当前应避免的扩边方式。
+2. 若 future 只是需要把 services health 纳入更广泛的健康聚合，应直接接到 `infra::IHealthProbe` / `infra::HealthSnapshot`，不要绕过 042 结论再造一层 services-owned health ABI。
+
 ## 记录 #257
 
 - 日期：2026-04-10

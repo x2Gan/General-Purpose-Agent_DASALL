@@ -364,7 +364,7 @@ flowchart LR
 1. V1 仅公开三个头文件：ServiceTypes.h、IExecutionService.h、IDataService.h。
 2. tools 只依赖 IExecutionService、IDataService 与 ServiceTypes 中定义的 supporting objects；不直接依赖 ServiceFacade 具体类。
 3. ServiceFacade 是模块内部组合根，负责实现 IExecutionService 与 IDataService，并协调 SystemSnapshotLane、ExecutionSubscriptionHub、ServiceHealthProbe 等 internal-only 能力。
-4. Subscription capability 以 cursor/batch 语义进入公共 ABI；ExecutionSubscriptionHub 仅作为内部实现。System Snapshot 与 Health Probe 暂不形成公共 ABI；只有出现稳定跨模块消费者时才单独发起新的 interface admission review。在当前专项 TODO 中，该预研先收敛为 CAP-TODO-042，不直接承诺 shared ABI 落位。
+4. Subscription capability 以 cursor/batch 语义进入公共 ABI；ExecutionSubscriptionHub 仅作为内部实现。System Snapshot 与 Health Probe 暂不形成公共 ABI；CAP-TODO-042 已确认当前不存在足以支撑 system shared ABI 的稳定非测试跨模块消费者，且 health 聚合路径继续复用 `infra::IHealthProbe` / `infra::HealthSnapshot`。future 若重开评审，只能把 snapshot shared ABI 与 health aggregation 分开处理，不直接打包为单一 `ISystemService`。
 
 | 子域 | 子组件 | 职责 | 对外可见性 |
 |---|---|---|---|
@@ -386,7 +386,7 @@ flowchart LR
 | Observability | ServiceAuditBridge | 输出高风险动作前后审计事件 | 模块内部 |
 | Observability | ServiceMetricsBridge | 输出命令/查询/熔断/缓存/订阅等指标 | 模块内部 |
 | Observability | ServiceTraceBridge | 发射服务 span 与 adapter 子 span | 模块内部 |
-| Ops | ServiceHealthProbe | 产出 readiness/degraded/circuit 状态，供 infra/health 聚合。偏差说明：架构 7.2 将 HealthService 列为 services 级组件；本设计将其收敛为模块内部 ServiceHealthProbe，原因是当前无稳定跨模块公共 ABI 消费者，仅 infra/health 以内部聚合方式消费健康状态。待出现稳定跨模块消费需求后，可发起独立 interface admission 评审将其升格为公共 ABI | 模块内部 |
+| Ops | ServiceHealthProbe | 产出 readiness/degraded/circuit 状态，并通过 `infra::IHealthProbe` / `infra::HealthSnapshot` 进入 infra/health 聚合。偏差说明：架构 7.2 将 HealthService 列为 services 级组件；本设计将其收敛为模块内部 ServiceHealthProbe，原因是当前 health 路径的稳定跨模块 ABI owner 已经是 infra，而不是 services；CAP-TODO-042 也确认当前无额外 services-owned shared ABI 消费者 | 模块内部 |
 | Ops | ServiceConfigAdapter | 从 RuntimePolicySnapshot 派生 ServicePolicyView，并统一下发 timeout/circuit/cache/queue 策略 | 模块内部 |
 
 ### 6.3 子组件输入/输出
@@ -410,7 +410,7 @@ flowchart LR
 | ResultMapper | AdapterReceipt + compensation hints | 公共 result 类型 + ErrorInfo | 统一错误分类、侧效应摘要、引用字段 |
 | ServiceAuditBridge | 公共 request/result + action class | AuditEvent | 高风险动作前后审计 |
 | ServiceMetricsBridge | runtime counters / latency / queue / cache stats | MetricSample | 供 infra/metrics 导出 |
-| ServiceHealthProbe | circuit state / adapter readiness / queue stats | HealthSnapshot | 供 infra/health 使用 |
+| ServiceHealthProbe | circuit state / adapter readiness / queue stats | infra::HealthSnapshot | 供 infra/health 使用 |
 
 ### 6.4 子组件依赖关系
 
@@ -554,7 +554,7 @@ V1 公共 supporting objects 冻结清单：
 1. 以下接口先作为 services 模块内公共接口建议落盘，不直接放入 contracts。
 2. 只有在 supporting objects 稳定后，IExecutionService/IDataService 才进入共享 contracts 评审；在专项 TODO 中，该兼容迁移决策由 CAP-TODO-041 单独承接。
 3. CAP-TODO-041 已于 2026-04-10 给出结论：当前不直接把 `IExecutionService`、`IDataService` 或 `ServiceTypes` 迁入 `contracts/include`；`services/include` 继续作为 canonical public include 根。只有在出现真实跨模块消费者、contracts taxonomy 定稿且旧 include 路径可通过兼容包装头保留一个迁移窗口时，才允许以 Phase-Go 方式升格。
-4. Subscription capability 进入模块公共 ABI，但其 hub/buffer/lease 实现保持 internal-only；System 与 Health Probe 相关能力暂不进入共享目录，相关 shared ABI 可行性仅允许通过 CAP-TODO-042 预研，不直接进入实现。
+4. Subscription capability 进入模块公共 ABI，但其 hub/buffer/lease 实现保持 internal-only；System 与 Health Probe 相关能力暂不进入共享目录。CAP-TODO-042 已进一步确认：snapshot 路径当前缺少稳定跨模块消费者，health 路径则直接复用 `infra::IHealthProbe` / `infra::HealthSnapshot`，因此当前不新增 services-owned shared ABI。
 
 建议对象：
 
@@ -708,7 +708,7 @@ class IDataService {
 5. `subscribe` 必须通过 cursor/batch 风格公共 ABI 暴露状态订阅能力；公共接口只返回增量事件、续传游标与 `resync_required`，不暴露线程、回调或 reactor 句柄。
 6. `diagnose` 只返回执行目标/适配器可诊断状态，不替代 infra/diagnostics 的系统级导出能力。
 7. 安全模式切换属于 `execute` 的受限 action taxonomy，例如 `safe_mode.enter` / `safe_mode.exit`；V1 不单独引入新的顶层接口方法，但该能力必须可经公共执行 ABI 到达。
-8. `system snapshot` 与 `health probe` 不进入 V1 公共 ABI；它们保持 internal-only，待出现稳定跨模块消费者后再评估升格。
+8. `system snapshot` 与 `health probe` 不进入 V1 公共 ABI；`SystemSnapshotLane` 保持 internal-only，`ServiceHealthProbe` 继续以 `infra::IHealthProbe` / `infra::HealthSnapshot` 进入 health 聚合。只有在出现新的非测试 snapshot 消费者且能证明 infra ABI 不足时，才重新评估 services 级 shared ABI。
 9. `payload_json`、`snapshot_json`、`events_json`、`rows_json`、`catalog_json` 等字段统一使用序列化字符串，是为了避免在公共头文件中冻结 JsonObject 或具体 JSON 库依赖。
 10. 字段宽度约定：deadline 与时间戳字段统一使用 `uint64_t`，以承载长链路、跨时区与大间隔场景下的毫秒级精度；计数与窗口字段（如 `max_events`、`dropped_count`）使用 `uint32_t`，表达有限批次窗口，避免过度分配。
 
@@ -722,8 +722,8 @@ class IDataService {
 | 状态订阅 | `IExecutionService.subscribe` | 必须进入公共 ABI | ServiceFacade + ExecutionSubscriptionHub | 采用 cursor/batch 语义，满足架构要求的“状态订阅”能力覆盖 |
 | 订阅缓冲、溢出与重同步 | ExecutionSubscriptionHub | 只能 internal-only | ExecutionSubscriptionHub | 公共 ABI 只暴露 `next_cursor` 与 `resync_required`，不暴露缓冲实现 |
 | 安全模式切换 | `IExecutionService.execute` 的受限 action taxonomy | 必须通过公共 ABI 可达 | ExecutionCommandLane + AdapterRouter | V1 不单列 `set_safe_mode()`；使用受限 action class 保持高风险动作语义统一 |
-| 系统快照 | SystemSnapshotLane | 只能 internal-only | SystemSnapshotLane | 当前无稳定跨模块消费者，不进入公共 ABI |
-| 健康探针 | ServiceHealthProbe | 只能 internal-only | ServiceHealthProbe | 供 infra/health 聚合，不向 tools 暴露独立 ABI |
+| 系统快照 | SystemSnapshotLane | 只能 internal-only | SystemSnapshotLane | 当前无稳定跨模块消费者，`InternalSnapshotQuery` / `InternalSystemSnapshot` 仍属内部头，不进入公共 ABI |
+| 健康探针 | ServiceHealthProbe | 只能 internal-only | ServiceHealthProbe | 对外健康聚合继续复用 `infra::IHealthProbe` / `infra::HealthSnapshot`，不新增 services-owned 独立 ABI |
 
 收口规则：
 1. Tool Compensation Manager 只负责记录副作用、组织补偿计划和请求 Runtime/RecoveryManager 裁定，不直接替代 Service 执行补偿动作。
@@ -982,7 +982,7 @@ schema 对齐结论：
 | 设计项 | 当前不能直接进入 Build 的原因 | 后续动作 |
 |---|---|---|
 | IExecutionService / IDataService 进入共享 contracts | CAP-TODO-033 已完成 admission review，CAP-TODO-041 也已完成 shared-contract header 兼容评审；当前剩余问题不再是 admission，而是 future 是否值得为真实跨模块消费者引入兼容迁移窗口 | 041 结论为“当前直接迁移 No-Go，future 仅可在 compat wrapper + taxonomy + consumer evidence 同时满足时 Phase-Go”；现阶段保持 `services/include` 不变 |
-| ISystemService 共享接口 | 当前无架构锚点与 supporting contracts，属边界扩张 | 降级为 CAP-TODO-042“system shared ABI 预研与证据收集”；在稳定跨模块消费者出现前，只允许收集 evidence，不直接推进 shared ABI |
+| ISystemService 共享接口 | CAP-TODO-042 已完成证据收敛：`SystemSnapshotLane` 当前没有 runtime/tools/apps 非测试直接消费者，supporting objects 仍位于 `services/src/system` 内部头；`ServiceHealthProbe` 的跨模块健康 ABI 则已由 infra 持有 | 当前 shared ABI No-Go；future 仅在新增 snapshot consumer evidence、supporting objects 公共化且能证明 infra ABI 不足时，才以新原子任务重新评审 |
 | 事件总线式服务编排 | 需要新增事件契约与状态存储设计，超出当前阶段范围 | 保留为未来版本演进方向，不纳入本轮 Build |
 
 ---
@@ -1117,7 +1117,7 @@ schema 对齐结论：
 1. 为 `AdapterRouter` 预留多后端权重/成本模型，但当前不进入共享 contracts。
 2. 为 `DataQueryLane` 预留物化视图/分离读存储能力，但当前不引入独立 read store。
 3. 为 `ExecutionSubscriptionHub` 预留事件序号、租约与 checkpoint 协同，但当前仅保留 resync 语义。
-4. 为 `SystemSnapshotLane` 预留独立共享接口评估位，但仅在出现稳定跨模块消费者后再考虑升格。
+4. 为 `SystemSnapshotLane` 预留独立共享接口评估位，但 CAP-TODO-042 已确认 health 路径不构成升格理由；仅在出现稳定非测试 snapshot 消费者后再考虑 shared ABI。
 
 ---
 
@@ -1140,7 +1140,7 @@ schema 对齐结论：
 ### 12.1 未决问题
 
 1. V1 是否允许 `IDataService` 承接少量幂等写操作，还是严格保持 query-only？当前建议保持 query-only，待 action taxonomy 稳定后再评审。
-2. `SystemSnapshotLane` 是否存在稳定跨模块消费者，足以支撑未来 ISystemService 准入？当前证据不足，建议维持模块内实现。
+2. future 是否会出现新的 runtime/tools/apps snapshot 消费者，足以触发独立 shared ABI admission？CAP-TODO-042 当前结论是“尚未达到阈值”：`SystemSnapshotLane` 继续维持模块内实现，health 聚合继续复用 infra ABI。
 3. 高风险动作 taxonomy 是否由 services 自维护，还是由 tools/policy 配置统一下发？当前建议由 profile/config 下发，services 只消费。
 4. `compensation_hints` 未来是否需要单独 contracts 对象？当前不建议，先以模块内结构稳定语义。
 
@@ -1152,3 +1152,4 @@ schema 对齐结论：
 4. 若后续确需 profile 化新的 services 参数，先更新 profiles 的 runtime_policy schema、资产与 contract tests，再把新增字段接入 ServiceConfigAdapter。
 5. CAP-TODO-033 已完成 IExecutionService / IDataService 的 interface admission 评审；若后续确需把接口头正式迁入 contracts/include，必须另起 shared-contract header 落位任务，而不是在 services 专项 TODO 中混做。
 6. Phase 1 落盘新公共接口后，同步更新 tests/mocks/include/MockExecutionService.h 并新增 MockDataService，使其签名匹配 ServiceTypes.h 中的新请求/结果类型（当前 MockExecutionService 签名 `bool execute(const std::string&)` 与设计中 `ExecutionCommandResult execute(const ExecutionCommandRequest&)` 不兼容），确保后续 unit/integration 测试可直接复用 mock 层。
+7. CAP-TODO-042 已完成 system shared ABI 预研；若 future 继续推进，只能先围绕新的非测试 snapshot 消费者新建原子任务，且 health 聚合继续沿 `infra::IHealthProbe` / `infra::HealthSnapshot` 演进，不另造 services-owned shared ABI。
