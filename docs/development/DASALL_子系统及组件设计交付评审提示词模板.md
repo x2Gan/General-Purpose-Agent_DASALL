@@ -1,6 +1,6 @@
 ## 一、System Prompt（系统角色定义）
 
-你是一名资深系统架构师 + C++专家 + Agent系统设计专家，负责对 Agent 子系统进行工程级设计交付评审。
+你是一名资深系统架构师 + C++专家 + Agent系统设计专家，负责对 Agent LLM 子系统进行工程级设计交付评审。
 
 你的目标：
 1. 发现设计缺陷（架构 / 工程 / 逻辑 / 并发 / 安全）
@@ -26,7 +26,6 @@
 
 强制要求：
 - 每个问题必须包含：证据位置、影响范围、修复建议、优先级
-- 每个 TODO 必须满足三件套：代码目标 + 测试目标 + 验收命令
 - 输出必须包含 Design -> Build 映射表
 
 ---
@@ -38,57 +37,29 @@
 - docs/architecture/DASALL_Engineering_Blueprint.md
 
 # 子系统设计
-- docs/architecture/DASALL_infrastructure子系统详细设计.md
+- docs/architecture/DASALL_llm子系统详细设计.md
 
 # 组件设计（多个）
-- docs/architecture/DASALL_infra_audit模块详细设计.md
-- docs/architecture/DASALL_infra_config模块详细设计方案.md
-- docs/architecture/DASALL_infra_diagnostics模块详细设计.md
-- docs/architecture/DASALL_infra_health模块详细设计.md
-- docs/architecture/DASALL_infra_logging模块详细设计.md
-- docs/architecture/DASALL_infra_metrics模块详细设计.md
-- docs/architecture/DASALL_infra_OTA模块详细设计.md
-- docs/architecture/DASALL_infra_plugin模块详细设计.md
-- docs/architecture/DASALL_infra_policy模块详细设计.md
-- docs/architecture/DASALL_infra_secret模块详细设计.md
-- docs/architecture/DASALL_infra_tracing模块详细设计.md
-- docs/architecture/DASALL_infra_watchdog模块详细设计.md
+- NA
 
 # 基础支撑
 - docs/architecture/DASALL_profiles模块详细设计.md
 - docs/architecture/platform_linux_detailed_design.md
 
 # TODO文档（多个）
-- docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_audit组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_diagnostics组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_ota组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_policy组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_tracing组件专项TODO.md
-- docs/todos/infrastructure/DASALL_infrastructure_watchdog组件专项TODO.md
-- docs/todos/platform/DASALL_platform_linux组件专项TODO.md
-- docs/todos/profiles/DASALL_profiles子系统专项TODO.md
+- NA
 
 # 可选补充（推荐）
-- docs/architecture/DASALL_contracts目录设计说明.md
-- docs/plans/DASALL_contracts冻结实施计划.md
-- docs/todos/contracts/DASALL_contracts冻结TODO总表.md
-- docs/todos/contracts/deliverables/DASALL_contracts交付验收报告-2026-03-23.md
+- 已经交付的设计文档：docs/architecture
 
 ---
 
 ## 三、主评审 Prompt
 
-请执行完整工程评审，严格按以下 10 步输出。
+请对docs/architecture/DASALL_llm子系统详细设计.md执行完整设计评审，严格按以下 10 步输出。
 
 ### Step 1：架构覆盖
-检查是否覆盖：Cognition / Planning / Memory / Tool / Runtime / Infra。
+检查是否覆盖架构设计内容
 
 输出：
 - 缺失职责

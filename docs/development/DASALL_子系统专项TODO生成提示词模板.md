@@ -66,7 +66,7 @@
 
 ### 4.1 Role
 
-你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中依据子系统和组件详细设计文档，生成专项 TODO 文档。
+你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中依据子系统/组件详细设计文档，设计工程实施计划、生成专项 TODO 文档。
 
 你的输出必须同时满足：
 
@@ -81,17 +81,17 @@
 ### 4.2 Context
 
 - 项目根目录：/home/gangan/DASALL/
-- 当前日期：2026-3-25
-- 当前对象：Capability Services 子系统
+- 当前日期：2026-4-10
+- 当前对象：LLM 子系统
 - 当前阶段：Detailed Design -> Special TODO
 - 输出语言：中文
 - 输出文档：docs/todos
 
 ### 4.3 Inputs
 
-请严格基于以下输入生成专项 TODO，不得脱离上下文臆造边界：
+请严格基于以下输入设计工程实施计划、生成专项 TODO，不得脱离上下文臆造边界：
 
-1. 详细设计文档：docs/architecture/DASALL_capability_services子系统详细设计.md
+1. 详细设计文档：docs/architecture/DASALL_llm子系统详细设计.md
 2. 架构文档：docs/architecture/DASSALL_Agent_architecture.md
 3. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
 4. 相关 ADR：docs/adr/ + ssot
@@ -102,19 +102,21 @@
    - docs/todos/contracts/deliverables
    - docs/todos/infrastructure/deliverables
    - docs/todos/platform/deliverables
+   - docs/todos/services/deliverables
 
 
 ### 4.4 Task
 
-请输出一份完整的“Capability Services 子系统 专项 TODO 文档”，要求：
+请设计子系统工程化计划、输出一份完整的“LLM 子系统专项 TODO 文档”，要求：
 
 1. 先评估该详细设计是否足以支撑接口级、函数级、数据结构级原子任务拆分。
 2. 从详细设计中提取可落盘对象：接口、函数、数据结构、配置模型、错误码、测试点、CMake/注册点。
 3. 建立 Design -> TODO 映射，确保每个 TODO 都有明确来源依据。
-4. 按最小原子原则拆分任务，默认一项任务只解决一个主目标。
-5. 每个 TODO 必须包含代码目标、测试目标、验收命令三件套。
-6. 显式输出阻塞项、解阻条件、风险与回退策略。
-7. 若设计证据不足，必须把“补设计”作为前置阻塞项，而不是伪造实现任务。
+4. 先设计完整详细的工程实施计划
+5. 按最小原子原则拆分任务，默认一项任务只解决一个主目标。
+6. 每个 TODO 必须包含代码目标、测试目标、验收命令三件套。
+7. 显式输出阻塞项、解阻条件、风险与回退策略。
+8. 若设计证据不足，必须把“补设计”作为前置阻塞项，而不是伪造实现任务。
 
 ### 4.5 Hard Constraints
 
@@ -128,6 +130,7 @@
 8. 若存在 breaking change 风险，必须标记评审门禁，不得在 TODO 中默认推进。
 9. 任务拆分必须保持最小原子化；同一任务中不得混入两个以上主实现目标。
 10. 所有任务都必须可追溯到详细设计章节、现有代码现状或相关约束文档。
+11. 任务拆分时需要考虑Copilot模型能力和上下文容量，避免单次任务过大导致输出失败或者降质输出。
 
 ### 4.6 粒度可行性评估规则
 

@@ -61,7 +61,7 @@
 
 ### 4.1 Role
 
-你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 Capability Services 的子系统级详细设计。
+你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 LLM 子系统级详细设计。
 
 你的输出必须同时满足：
 
@@ -75,8 +75,8 @@
 ### 4.2 Context
 
 - 项目根目录：/home/gangan/DASALL/
-- 当前日期：2026-4-8
-- 当前模块：Capability Services
+- 当前日期：2026-4-10
+- 当前模块：LLM 子系统
 - 设计阶段：子系统架构设计/Detailed Design
 - 输出语言：中文
 - 输出文档：docs/architecture/
@@ -105,18 +105,20 @@
      10. docs/architecture/DASALL_infra_secret模块详细设计.md
      11. docs/architecture/DASALL_infra_tracing模块详细设计.md
      12. docs/architecture/DASALL_infra_watchdog模块详细设计.md
-   - NA
+   - docs/architecture/DASALL_boundary治理与优化说明.md
+   - docs/architecture/DASALL_capability_services子系统详细设计.md
 6. 交付的实现：
    - docs/todos/contracts/deliverables
    - docs/todos/infrastructure/deliverables
    - docs/todos/platform/deliverables
+   - docs/todos/services/deliverables
 7. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 8. 当前模块代码骨架：N/A
 9. 可选行业参考方向：联网搜索行业内实践方案
 
 ### 4.4 Task
 
-请输出一份完整的Capability Services子系统详细设计方案，要求：
+请输出一份完整的LLM 子系统详细设计方案，要求：
 
 1. 完整详细且专业的子系统设计描述，配合流程图/时序图/数据流图进行说明
 2. 明确边界、职责、输入输出与相邻模块依赖方向。
@@ -184,7 +186,7 @@
 至少覆盖以下设计面：
 
 1. 职责边界
-2. 子组件清单
+2. 子组件清单与组件职责
 3. 子组件输入/输出
 4. 子组件依赖关系
 5. 核心对象与 contracts 对齐关系
@@ -256,6 +258,7 @@
 2. 尽量使用表格表达映射、风险、测试矩阵与任务分解。
 3. 任务描述使用工程动词（新增、重构、补齐、校验、收敛、迁移）。
 4. 验收描述必须二值可判定，避免模糊词。
+5. 理论、原理描述应该保持语言丰富
 
 ---
 
