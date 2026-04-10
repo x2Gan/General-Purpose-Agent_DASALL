@@ -160,9 +160,8 @@ MetricReaderTickResult MetricReaderScheduler::invalid_request(std::string messag
 
 std::size_t MetricReaderScheduler::count_samples(const AggregationSnapshot& snapshot) {
   std::size_t total_samples = 0;
-  for (const auto& [metric_name, aggregate] : snapshot.metrics) {
-    (void)metric_name;
-    total_samples += static_cast<std::size_t>(aggregate.sample_count);
+  for (const auto& metric_entry : snapshot.metrics) {
+    total_samples += static_cast<std::size_t>(metric_entry.second.sample_count);
   }
 
   return total_samples;

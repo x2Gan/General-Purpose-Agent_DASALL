@@ -20,12 +20,9 @@ target_sources(dasall_services
     src/execution/ExecutionQueryLane.cpp
     src/execution/ExecutionSubscriptionHub.cpp
     src/mapping/ResultMapper.cpp
-    src/execution/placeholder.cpp
     src/data/DataProjectionCache.cpp
     src/data/DataQueryLane.cpp
-    src/data/placeholder.cpp
     src/system/SystemSnapshotLane.cpp
-    src/system/placeholder.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS

@@ -27,11 +27,14 @@ struct RuleRank {
 
 [[nodiscard]] std::string extract_priority_order(const PolicyBundle& bundle) {
   for (const auto& rule : bundle.rules) {
-    for (const auto& condition : rule.conditions) {
-      if (starts_with(condition, "priority_order=")) {
-        const std::string order = condition.substr(std::string_view("priority_order=").size());
-        return order == "explicit-priority" ? "explicit-priority" : "deny-first";
-      }
+    const auto condition = std::find_if(rule.conditions.begin(),
+                                        rule.conditions.end(),
+                                        [](const std::string& item) {
+                                          return starts_with(item, "priority_order=");
+                                        });
+    if (condition != rule.conditions.end()) {
+      const std::string order = condition->substr(std::string_view("priority_order=").size());
+      return order == "explicit-priority" ? "explicit-priority" : "deny-first";
     }
   }
 
@@ -44,7 +47,7 @@ struct RuleRank {
 }
 
 [[nodiscard]] RuleRank make_rank(const PolicyRuleDescriptor& rule,
-                                 std::string_view priority_order) {
+                                 const std::string_view& priority_order) {
   if (priority_order == "explicit-priority") {
     return RuleRank{
         .primary = rule.priority,
@@ -66,7 +69,7 @@ struct RuleRank {
 
 [[nodiscard]] bool same_rank(const PolicyRuleDescriptor& lhs,
                              const PolicyRuleDescriptor& rhs,
-                             std::string_view priority_order) {
+                             const std::string_view& priority_order) {
   return make_rank(lhs, priority_order).tie() == make_rank(rhs, priority_order).tie();
 }
 

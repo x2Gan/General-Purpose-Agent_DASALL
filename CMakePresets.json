@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 19,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vscode-linux-ninja",
+      "displayName": "VS Code Linux Ninja",
+      "description": "Dedicated CMake Tools preset that avoids the existing build-ci cache.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/vscode-linux-ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "DASALL_ENABLE_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vscode-linux-ninja",
+      "displayName": "Build With VS Code Linux Ninja",
+      "configurePreset": "vscode-linux-ninja"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "vscode-linux-ninja",
+      "displayName": "Test With VS Code Linux Ninja",
+      "configurePreset": "vscode-linux-ninja",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

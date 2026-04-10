@@ -18,7 +18,8 @@ constexpr std::string_view kCommandExecutorSourceRef = "CommandExecutor";
   return std::string("command://diagnostics/") + std::string(command_name) + "/v1";
 }
 
-[[nodiscard]] bool has_token(const DiagnosticsCommand& command, std::string_view token) {
+[[nodiscard]] bool has_token(const DiagnosticsCommand& command,
+                             const std::string_view& token) {
   return command.args.size() == 1 && command.args.front() == token;
 }
 

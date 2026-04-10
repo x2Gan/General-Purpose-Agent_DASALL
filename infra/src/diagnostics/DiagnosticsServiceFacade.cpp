@@ -22,7 +22,8 @@ constexpr std::string_view kDiagnosticsServiceFacadeSourceRef = "DiagnosticsServ
       .count();
 }
 
-[[nodiscard]] std::string execute_stage_for_command(std::string_view command_name) {
+[[nodiscard]] std::string execute_stage_for_command(
+    const std::string_view& command_name) {
   if (command_name == "health.snapshot") {
     return "execute.health_snapshot";
   }

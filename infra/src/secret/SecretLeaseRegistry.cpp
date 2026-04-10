@@ -268,10 +268,11 @@ SecretLifecycleResult SecretLeaseRegistry::release_lease(const SecretLease& leas
                                         lease_it->second.lease.lease_id);
 }
 
-void SecretLeaseRegistry::expire_secret_leases(std::string_view secret_name,
+void SecretLeaseRegistry::expire_secret_leases(const std::string_view& secret_name,
                                                SecretLeaseState target_state) {
   const SecretLeaseState normalized_state = normalize_target_state(target_state);
-  for (auto& [lease_id, entry] : leases_) {
+  for (auto& lease_entry : leases_) {
+    auto& entry = lease_entry.second;
     if (entry.handle.secret_name == secret_name && entry.lease.state == SecretLeaseState::Active) {
       entry.lease.state = normalized_state;
     }

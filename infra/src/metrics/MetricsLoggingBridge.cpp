@@ -137,7 +137,7 @@ MetricsLoggingWriteResult MetricsLoggingBridge::write_log_event(
     record_failure(write_result.result_code, event.detail_ref);
     return MetricsLoggingWriteResult{
         .emitted = false,
-        .log_event = std::move(log_event),
+        .log_event = log_event,
         .write_result = write_result,
     };
   }
@@ -146,7 +146,7 @@ MetricsLoggingWriteResult MetricsLoggingBridge::write_log_event(
   record_success(event.detail_ref);
   return MetricsLoggingWriteResult{
       .emitted = true,
-      .log_event = std::move(log_event),
+      .log_event = log_event,
       .write_result = write_result,
   };
 }

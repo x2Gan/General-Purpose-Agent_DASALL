@@ -84,11 +84,11 @@ struct PolicyLoaderInputs {
   return "deny-first";
 }
 
-[[nodiscard]] PolicyMode parse_mode(std::string_view mode_name) {
+[[nodiscard]] PolicyMode parse_mode(const std::string_view& mode_name) {
   return mode_name == "compat" ? PolicyMode::Compatibility : PolicyMode::Enforced;
 }
 
-[[nodiscard]] PolicyEffect parse_effect(std::string_view effect_name) {
+[[nodiscard]] PolicyEffect parse_effect(const std::string_view& effect_name) {
   if (effect_name == "allow") {
     return PolicyEffect::Allow;
   }
@@ -104,7 +104,7 @@ struct PolicyLoaderInputs {
   return PolicyEffect::Deny;
 }
 
-[[nodiscard]] std::uint32_t base_priority(std::string_view priority_order) {
+[[nodiscard]] std::uint32_t base_priority(const std::string_view& priority_order) {
   return priority_order == "explicit-priority" ? 100U : 1U;
 }
 

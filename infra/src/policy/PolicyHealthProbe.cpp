@@ -17,7 +17,7 @@ namespace {
       .count();
 }
 
-[[nodiscard]] std::string make_detail_ref(std::string suffix) {
+[[nodiscard]] std::string make_detail_ref(const std::string& suffix) {
   return std::string(kPolicyHealthDetailNamespace) + "/" + suffix;
 }
 

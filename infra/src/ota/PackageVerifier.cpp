@@ -11,7 +11,8 @@ namespace {
 constexpr char kPackageVerifierSourceRef[] = "PackageVerifier";
 constexpr char kTrustAnchorPurpose[] = "ota.package.verify";
 
-[[nodiscard]] bool is_supported_signature_algorithm(std::string_view algorithm) {
+[[nodiscard]] bool is_supported_signature_algorithm(
+    const std::string_view& algorithm) {
   return algorithm == "ed25519" || algorithm == "ecdsa-p256-sha256";
 }
 

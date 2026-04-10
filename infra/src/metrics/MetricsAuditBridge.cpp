@@ -157,8 +157,8 @@ MetricsAuditWriteResult MetricsAuditBridge::write_audit_event(
     record_failure(write_outcome.error_code, event.detail_ref);
     return MetricsAuditWriteResult{
         .emitted = false,
-        .audit_event = std::move(audit_event),
-        .audit_context = std::move(audit_context),
+        .audit_event = audit_event,
+        .audit_context = audit_context,
         .write_outcome = write_outcome,
     };
   }
@@ -167,8 +167,8 @@ MetricsAuditWriteResult MetricsAuditBridge::write_audit_event(
   record_success(event.detail_ref);
   return MetricsAuditWriteResult{
       .emitted = true,
-      .audit_event = std::move(audit_event),
-      .audit_context = std::move(audit_context),
+      .audit_event = audit_event,
+      .audit_context = audit_context,
       .write_outcome = write_outcome,
   };
 }

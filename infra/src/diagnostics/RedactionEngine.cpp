@@ -43,9 +43,11 @@ constexpr std::array<std::string_view, 8> kAllowedEvidenceSchemes{
   return lowered;
 }
 
-[[nodiscard]] bool contains_deny_token(std::string_view value) {
+[[nodiscard]] bool contains_deny_token(const std::string_view& value) {
   const std::string lowered = to_lower_copy(value);
-  return std::any_of(kDenyListTokens.begin(), kDenyListTokens.end(), [&](std::string_view token) {
+  return std::any_of(kDenyListTokens.begin(),
+                     kDenyListTokens.end(),
+                     [&](const std::string_view& token) {
     return lowered.find(token) != std::string::npos;
   });
 }
@@ -87,7 +89,7 @@ void replace_case_insensitive_all(std::string& value,
                      [&](std::string_view scheme) { return ref.rfind(scheme, 0) == 0; });
 }
 
-[[nodiscard]] std::string canonical_summary(std::string_view command_name) {
+[[nodiscard]] std::string canonical_summary(const std::string_view& command_name) {
   if (command_name == "health.snapshot") {
     return "diagnostics redacted health snapshot";
   }

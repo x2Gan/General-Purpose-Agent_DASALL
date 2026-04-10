@@ -15,23 +15,23 @@ namespace dasall::services::internal {
 namespace {
 
 [[nodiscard]] bool contains_string(const std::vector<std::string>& values,
-                                   std::string_view target) {
+                                   const std::string_view& target) {
   return std::any_of(values.begin(), values.end(), [target](const std::string& value) {
     return value == target;
   });
 }
 
-[[nodiscard]] bool is_safe_mode_action(std::string_view action) {
+[[nodiscard]] bool is_safe_mode_action(const std::string_view& action) {
   return action == "safe_mode.enter" || action == "safe_mode.exit";
 }
 
 [[nodiscard]] bool is_high_risk_action(const ExecutionCommandLaneDependencies& dependencies,
-                                       std::string_view action) {
+                                       const std::string_view& action) {
   return is_safe_mode_action(action) || contains_string(dependencies.high_risk_actions, action);
 }
 
 [[nodiscard]] bool is_critical_action(const ExecutionCommandLaneDependencies& dependencies,
-                                      std::string_view action,
+                                      const std::string_view& action,
                                       bool high_risk_action) {
   return high_risk_action || contains_string(dependencies.critical_actions, action);
 }

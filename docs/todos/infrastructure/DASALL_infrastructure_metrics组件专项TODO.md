@@ -284,7 +284,8 @@
 6. `ctest --test-dir build-ci --output-on-failure -L integration`：通过，28/28 tests passed；标签摘要中 `metrics=2 tests`、`metrics-integration=2 tests`。
 7. `ctest --test-dir build-ci --output-on-failure -L failure`：通过，15/15 tests passed；标签摘要中 `metrics=7 tests`、`metrics-failure=1 test`。
 8. `ALLOW_BLOCKED=1 bash scripts/ci/infra_gate.sh`：通过；分类结果为 unit 191/191、contract 152/152、integration 28/28、failure 15/15，全仓 gate 未被本轮 metrics 子拓扑破坏。
-9. 若后续引入 OTLP 依赖接入或更高层跨子系统 metrics 联调，应重新评估 `MET-BLK-005` 并以新的原子任务继续扩展，而不是回改当前 integration/failure 基线。
+9. `touch services/src/execution/ExecutionCommandLane.cpp && cmake --build build-ci --target dasall_services`：通过；2026-04-10 维护任务已在 `MetricsOperationStatus::failure()` 中补齐 `.state_ref = {}`，services 重编期间不再出现 `missing initializer for member 'state_ref'` 告警。
+10. 若后续引入 OTLP 依赖接入或更高层跨子系统 metrics 联调，应重新评估 `MET-BLK-005` 并以新的原子任务继续扩展，而不是回改当前 integration/failure 基线。
 
 ## 10. 风险与回退策略
 
@@ -306,6 +307,7 @@
    - `ctest --test-dir build-ci -N -R "^(Metrics|MetricTypesTest|InstrumentRegistryTest)"` 当前发现 27 个 metrics 组件测试，其中 `ctest --test-dir build-ci -N -R "Metrics(IntegrationTest|FailureInjectionTest)"` 已能发现 2 个 metrics integration/failure 测试。
    - `MET-BLK-001`、`MET-BLK-002`、`MET-BLK-003`、`MET-BLK-004` 已解阻，当前仅 `MET-BLK-005` 仍作为 OTLP 扩展残余阻塞保留。
    - `MET-GATE-07` 已由 `MET-TODO-023` 明确关闭，metrics integration/failure 不再是当前轮显式缺口。
+   - 2026-04-10 维护任务已在 `infra/include/metrics/IMetricsProvider.h` 中补齐 `MetricsOperationStatus::failure()` 的 `.state_ref = {}`，并通过 services 侧强制重编复验 warning 已消失。
 3. 当前维护粒度：已进入维护态；后续若继续推进，应只在 OTLP exporter、跨子系统联调或新增 public boundary 场景出现时再新开增量任务，而不是回退已有接口/主链基线。
 4. 下一步建议：
    - 若继续推进 metrics，优先冻结 `MET-BLK-005` 对应的 OTLP exporter 依赖与构建策略，再新开原子任务扩展 exporter 族。

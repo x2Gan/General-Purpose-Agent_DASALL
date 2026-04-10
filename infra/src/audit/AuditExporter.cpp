@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -271,11 +272,10 @@ std::vector<AuditEvent> AuditExporter::collect_matching_records(
       return;
     }
 
-    for (const auto& event : *source) {
-      if (matches_query(event, query)) {
-        records.push_back(event);
-      }
-    }
+    std::copy_if(source->begin(),
+                 source->end(),
+                 std::back_inserter(records),
+                 [&query](const AuditEvent& event) { return matches_query(event, query); });
   };
 
   append_from(primary_records_);

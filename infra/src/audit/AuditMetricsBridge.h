@@ -102,7 +102,7 @@ inline constexpr std::size_t kAuditMetricFamilyCount = 7U;
 }
 
 [[nodiscard]] inline bool is_audit_metric_error_code(
-    std::string_view error_code) {
+  const std::string_view& error_code) {
   return error_code == kAuditMetricNoErrorCodeLabel ||
          error_code == audit_error_code_name(AuditErrorCode::InvalidEvent) ||
          error_code == audit_error_code_name(AuditErrorCode::WriteFail) ||

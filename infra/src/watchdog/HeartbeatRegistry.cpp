@@ -137,9 +137,8 @@ std::vector<WatchedEntityDescriptor> HeartbeatRegistry::list_entities() const {
   std::vector<WatchedEntityDescriptor> descriptors;
   descriptors.reserve(entries_.size());
 
-  for (const auto& [entity_id, descriptor] : entries_) {
-    (void)entity_id;
-    descriptors.push_back(descriptor);
+  for (const auto& entry : entries_) {
+    descriptors.push_back(entry.second);
   }
 
   return descriptors;

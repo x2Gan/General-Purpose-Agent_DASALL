@@ -85,7 +85,8 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   };
 }
 
-[[nodiscard]] bool parse_bool_value(std::string_view serialized_value, bool& parsed_value) {
+[[nodiscard]] bool parse_bool_value(const std::string_view& serialized_value,
+                                    bool& parsed_value) {
   const std::string normalized = to_ascii_lower(serialized_value);
   if (normalized == "true" || normalized == "1") {
     parsed_value = true;
@@ -100,7 +101,7 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   return false;
 }
 
-[[nodiscard]] bool parse_uint32_value(std::string_view serialized_value,
+[[nodiscard]] bool parse_uint32_value(const std::string_view& serialized_value,
                                       std::uint32_t& parsed_value) {
   try {
     const std::size_t consumed = 0;
@@ -117,7 +118,7 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   }
 }
 
-[[nodiscard]] bool parse_log_level_value(std::string_view serialized_value,
+[[nodiscard]] bool parse_log_level_value(const std::string_view& serialized_value,
                                          LogLevel& parsed_value) {
   const std::string normalized = to_ascii_lower(serialized_value);
   if (normalized == "trace") {
@@ -153,7 +154,7 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   return false;
 }
 
-[[nodiscard]] bool parse_logging_format_value(std::string_view serialized_value,
+[[nodiscard]] bool parse_logging_format_value(const std::string_view& serialized_value,
                                               LoggingFormat& parsed_value) {
   const std::string normalized = to_ascii_lower(serialized_value);
   if (normalized == "json_line") {
@@ -170,7 +171,7 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
 }
 
 [[nodiscard]] bool parse_logging_overflow_policy_value(
-    std::string_view serialized_value,
+  const std::string_view& serialized_value,
     LoggingOverflowPolicy& parsed_value) {
   const std::string normalized = to_ascii_lower(serialized_value);
   if (normalized == "block") {

@@ -10,21 +10,21 @@ run_cppcheck() {
     return 0
   fi
 
+  if [[ ! -f "${BUILD_DIR}/compile_commands.json" ]]; then
+    echo "[static-check] compile_commands.json missing, run build.sh first"
+    return 1
+  fi
+
   cppcheck \
+    --project="${BUILD_DIR}/compile_commands.json" \
+    --cppcheck-build-dir="${BUILD_DIR}/cppcheck" \
     --enable=warning,performance,portability,style \
     --error-exitcode=1 \
+    --suppress=missingIncludeSystem \
     --quiet \
-    "${ROOT_DIR}/apps" \
-    "${ROOT_DIR}/runtime" \
-    "${ROOT_DIR}/cognition" \
-    "${ROOT_DIR}/llm" \
-    "${ROOT_DIR}/tools" \
-    "${ROOT_DIR}/memory" \
-    "${ROOT_DIR}/knowledge" \
-    "${ROOT_DIR}/services" \
-    "${ROOT_DIR}/multi_agent" \
-    "${ROOT_DIR}/platform" \
-    "${ROOT_DIR}/infra"
+    -i"${ROOT_DIR}/tests" \
+    -i"${ROOT_DIR}/contracts" \
+    -i"${ROOT_DIR}/profiles"
 }
 
 run_clang_tidy() {

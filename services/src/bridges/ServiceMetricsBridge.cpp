@@ -65,7 +65,8 @@ enum class ServiceMetricsGranularity {
   return "full";
 }
 
-[[nodiscard]] ServiceMetricsGranularity parse_granularity(std::string_view granularity) {
+[[nodiscard]] ServiceMetricsGranularity parse_granularity(
+    const std::string_view& granularity) {
   if (granularity == "minimal") {
     return ServiceMetricsGranularity::minimal;
   }

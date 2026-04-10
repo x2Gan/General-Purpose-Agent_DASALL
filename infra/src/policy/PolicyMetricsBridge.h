@@ -104,7 +104,7 @@ inline constexpr std::size_t kPolicyMetricFamilyCount = 7U;
 }
 
 [[nodiscard]] inline bool is_policy_metric_error_code(
-    std::string_view error_code) {
+  const std::string_view& error_code) {
   return error_code == kPolicyMetricNoErrorCodeLabel ||
          error_code == policy_error_code_name(PolicyErrorCode::BundleInvalid) ||
          error_code == policy_error_code_name(PolicyErrorCode::SchemaUnsupported) ||

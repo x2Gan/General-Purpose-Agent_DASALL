@@ -1,6 +1,8 @@
 #include "LogQueryService.h"
 
+#include <algorithm>
 #include <chrono>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -123,11 +125,10 @@ LogQueryResult LogQueryService::query(const LogQueryRequest& request,
   const auto records = record_reader_->read_window(request.start_ts_ms, request.end_ts_ms);
   std::vector<LogEvent> matches;
   matches.reserve(records.size());
-  for (const auto& record : records) {
-    if (matches_selector(record, request)) {
-      matches.push_back(record);
-    }
-  }
+  std::copy_if(records.begin(),
+               records.end(),
+               std::back_inserter(matches),
+               [&](const LogEvent& record) { return matches_selector(record, request); });
 
   const bool truncated = matches.size() > request.max_records;
   const auto returned_match_count = static_cast<std::uint32_t>(

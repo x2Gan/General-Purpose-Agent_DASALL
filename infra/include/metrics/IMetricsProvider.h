@@ -80,6 +80,7 @@ struct MetricsOperationStatus {
                 .ref_id = std::move(source_ref),
             },
         },
+      .state_ref = {},
     };
   }
 

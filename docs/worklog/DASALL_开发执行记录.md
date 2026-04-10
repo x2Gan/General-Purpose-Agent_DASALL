@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #259
+
+- 日期：2026-04-10
+- 阶段：infra/services 维护任务
+- 任务：修复 IMetricsProvider 初始化告警并清理 services placeholder
+- 状态：已完成
+
+### 任务选择
+
+1. services 专项评审已确认 `infra/include/metrics/IMetricsProvider.h` 的 `MetricsOperationStatus::failure()` 在 services 重编路径上暴露 `state_ref` 缺省初始化告警；该问题属于 infra 头文件维护项，修复后需要回到 services 侧做强制重编复验。
+2. 同一轮评审还指出 `services/CMakeLists.txt` 中 execution/data/system 三个 placeholder 翻译单元已只剩历史目录锚点用途。当前三个子目录都已具备真实实现文件，因此需要先核对 `keep_*_linked()` 是否仍被任何目标引用；若无引用，应直接在本次维护中移除，而不是继续保留无意义源文件。
+3. 本轮边界保持为“只做维护态清理”：不改 services 对外 ABI、不改 TODO 结论、不扩 shared-contract 或 system shared ABI，只修复 warning 并删除已无用途的 placeholder。
+
+### 改动
+
+1. 更新 [docs/todos/infrastructure/DASALL_infrastructure_metrics组件专项TODO.md](../todos/infrastructure/DASALL_infrastructure_metrics%E7%BB%84%E4%BB%B6%E4%B8%93%E9%A1%B9TODO.md)，补写 2026-04-10 维护记录：`MetricsOperationStatus::failure()` 已显式初始化 `.state_ref = {}`，并在 services 强制重编链上确认 warning 消失。
+2. 更新 [infra/include/metrics/IMetricsProvider.h](../infra/include/metrics/IMetricsProvider.h)，为 `MetricsOperationStatus::failure()` 的聚合初始化显式补齐 `.state_ref = {}`，消除 `-Wmissing-field-initializers` 告警。
+3. 更新 [services/CMakeLists.txt](../services/CMakeLists.txt)，移除 `src/execution/placeholder.cpp`、`src/data/placeholder.cpp`、`src/system/placeholder.cpp` 的 source 注册，并删除三份 placeholder 源文件；execution/data/system 子目录现均由真实实现翻译单元承载。
+4. 更新 [docs/todos/services/DASALL_capability_services子系统专项TODO.md](../todos/services/DASALL_capability_services%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，回写 placeholder 清理时机与完成态说明，明确本轮维护不改变 services 专项结论。
+
+### 测试
+
+1. 验证命令：
+   - `cmake --build build-ci --target dasall_services`
+   - `touch services/src/execution/ExecutionCommandLane.cpp`
+   - `cmake --build build-ci --target dasall_services`
+   - `ctest --test-dir build-ci --output-on-failure -R "ServiceHeaderLayoutTest|ExecutionCommandLaneTest|SystemSnapshotLaneTest"`
+2. 结果：
+   - `dasall_services` 在补齐 `.state_ref = {}` 后可稳定重编，通过强制触发 `ExecutionCommandLane.cpp` 重编确认原 `missing initializer for member 'state_ref'` 告警已消失。
+   - `grep -rn "keep_execution_skeleton_linked|keep_data_skeleton_linked|keep_system_skeleton_linked" **/*` 仅命中三份 placeholder 源文件自身，说明删除前不存在外部引用。
+   - `ServiceHeaderLayoutTest`、`ExecutionCommandLaneTest`、`SystemSnapshotLaneTest` 定向执行保持通过，说明 placeholder 清理未破坏 public header 布局、命令车道或 system 子域现有构建与回归基线。
+
+### 结果
+
+1. infra 侧 warning 已被根因修复：`IMetricsProvider.h` 不再依赖聚合初始化默认补齐 `state_ref`，services 侧重编验证结果为无告警回归。
+2. services 侧 placeholder 清理条件已满足且已在本轮维护完成：execution/data/system 三个子目录都有真实实现文件，`keep_*_linked()` 无外部引用，因此无需再把 placeholder 留到下一轮。
+
+### 下一步
+
+1. 若后续还有类似“历史骨架文件已无引用”的维护项，直接在最近一次维护任务中清理，不要把无用 placeholder 长期保留到已收口专项中。
+
+### 风险
+
+1. 若后续再次对 `MetricsOperationStatus` 增加字段而未同步更新 `success()/failure()` 工厂，仍可能在高告警级别构建下复发同类 `missing-field-initializers` 问题；维护态应优先保持这些工厂函数与结构字段一一对齐。
+2. 若 future 在 execution/data/system 子目录重新引入仅用于“保目录”的 placeholder，应同时给出明确退出条件；本轮已经证明在真实实现文件落齐后继续保留此类源文件只会制造无用符号与维护噪声。
+
 ## 记录 #258
 
 - 日期：2026-04-10

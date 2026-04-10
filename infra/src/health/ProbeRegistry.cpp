@@ -119,10 +119,9 @@ std::vector<ProbeDescriptor> ProbeRegistry::list_by_group(std::string_view group
   }
 
   descriptors.reserve(entries_.size());
-  for (const auto& [probe_name, entry] : entries_) {
-    (void)probe_name;
-    if (entry.descriptor.group == group) {
-      descriptors.push_back(entry.descriptor);
+  for (const auto& entry : entries_) {
+    if (entry.second.descriptor.group == group) {
+      descriptors.push_back(entry.second.descriptor);
     }
   }
 

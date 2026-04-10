@@ -2,6 +2,28 @@ if(TARGET dasall_build_options)
   return()
 endif()
 
+option(DASALL_ENABLE_CPPCHECK "Run cppcheck during compilation" OFF)
+option(DASALL_ENABLE_CLANG_TIDY "Run clang-tidy during compilation" OFF)
+
+if(DASALL_ENABLE_CPPCHECK)
+  find_program(DASALL_CPPCHECK_EXECUTABLE NAMES cppcheck)
+  if(NOT DASALL_CPPCHECK_EXECUTABLE)
+    message(FATAL_ERROR "DASALL_ENABLE_CPPCHECK=ON but cppcheck was not found")
+  endif()
+
+  set(CMAKE_CXX_CPPCHECK
+    "${DASALL_CPPCHECK_EXECUTABLE};--enable=warning,performance,portability,style;--error-exitcode=1;--quiet;--suppress=missingIncludeSystem")
+endif()
+
+if(DASALL_ENABLE_CLANG_TIDY)
+  find_program(DASALL_CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
+  if(NOT DASALL_CLANG_TIDY_EXECUTABLE)
+    message(FATAL_ERROR "DASALL_ENABLE_CLANG_TIDY=ON but clang-tidy was not found")
+  endif()
+
+  set(CMAKE_CXX_CLANG_TIDY "${DASALL_CLANG_TIDY_EXECUTABLE}")
+endif()
+
 add_library(dasall_build_options INTERFACE)
 
 target_compile_features(dasall_build_options INTERFACE cxx_std_20)

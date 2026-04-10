@@ -1,5 +1,6 @@
 #include "diagnostics/EvidenceCollector.h"
 
+#include <algorithm>
 #include <string_view>
 
 namespace dasall::infra::diagnostics {
@@ -12,10 +13,11 @@ namespace {
 [[nodiscard]] std::string pick_ref(const std::vector<std::string>& refs,
                                    std::string_view prefix,
                                    std::string fallback) {
-  for (const auto& ref : refs) {
-    if (ref.rfind(prefix, 0) == 0) {
-      return ref;
-    }
+  const auto match = std::find_if(refs.begin(), refs.end(), [prefix](const std::string& ref) {
+    return ref.rfind(prefix, 0) == 0;
+  });
+  if (match != refs.end()) {
+    return *match;
   }
 
   return fallback;

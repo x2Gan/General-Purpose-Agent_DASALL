@@ -76,114 +76,119 @@ ExecutionQueryLane::ExecutionQueryLane(ExecutionQueryLaneDependencies dependenci
 ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& context,
                                                      const ExecutionQueryRequest& request) const {
   auto invoke_lane = [&]() -> ExecutionQueryResult {
-  const auto emit_metrics = [&](ExecutionQueryResult result,
-                                std::string_view adapter_id,
-                                std::optional<std::uint64_t> latency_ms)
-      -> ExecutionQueryResult {
-    if (dependencies_.metrics_bridge != nullptr) {
-      (void)dependencies_.metrics_bridge->record_execution_query_result(
-          request.query_kind,
-          adapter_id,
-          result,
-          latency_ms);
+    const auto emit_metrics = [&](ExecutionQueryResult result,
+                                  std::string_view adapter_id,
+                                  std::optional<std::uint64_t> latency_ms)
+        -> ExecutionQueryResult {
+      if (dependencies_.metrics_bridge != nullptr) {
+        (void)dependencies_.metrics_bridge->record_execution_query_result(
+            request.query_kind,
+            adapter_id,
+            result,
+            latency_ms);
+      }
+
+      return result;
+    };
+
+    if (request.target.capability_id.empty() || request.target.target_id.empty() ||
+        request.query_kind.empty()) {
+      return emit_metrics(make_error_result(request.target.target_id,
+                                            "validator:" + context.request_id,
+                                            "invalid_request",
+                                            "capability_id, target_id, and query_kind are required",
+                                            "execution_query_lane",
+                                            {},
+                                            false),
+                          {},
+                          std::nullopt);
     }
 
-    return result;
-  };
-
-  if (request.target.capability_id.empty() || request.target.target_id.empty() ||
-      request.query_kind.empty()) {
-    return emit_metrics(make_error_result(request.target.target_id,
-                                          "validator:" + context.request_id,
-                                          "invalid_request",
-                                          "capability_id, target_id, and query_kind are required",
-                                          "execution_query_lane",
-                                          {},
-                                          false),
-                        {},
-                        std::nullopt);
-  }
-
-  if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
-      dependencies_.result_mapper == nullptr) {
-    return emit_metrics(make_runtime_failure("query lane dependencies are not configured",
-                                             "execution_query_lane",
-                                             "query_lane.dependencies"),
-                        {},
-                        std::nullopt);
-  }
-
-  const auto route_decision = dependencies_.router->select_adapter(build_route_request(
-      dependencies_.policy_view,
-      dependencies_.capability_snapshot,
-      dependencies_.fallback_envelope,
-      dependencies_.registered_candidates,
-      request));
-  if (!route_decision.ok()) {
-    return emit_metrics(make_error_result(request.target.target_id,
-                        "route:" + context.request_id,
-                        std::string(route_failure_name(route_decision.failure)),
-                        route_decision.reason,
-                        "adapter_router",
-                        route_decision.failure == AdapterRouteFailure::route_not_permitted
-                          ? std::vector<std::string>{"policy://route/" + context.request_id}
-                          : std::vector<std::string>{},
-                        false),
-              {},
-              std::nullopt);
-  }
-
-  const auto receipt = dependencies_.bridge->invoke(
-      *route_decision.selection,
-      AdapterInvocationRequest{
-          .request_id = context.request_id,
-          .capability_id = request.target.capability_id,
-          .target_id = request.target.target_id,
-          .request_kind = AdapterRouteRequestKind::query,
-          .operation_name = request.query_kind,
-          .payload_json = std::string("{\"freshness\":\"") + freshness_name(request.freshness) +
-                          "\"}",
-      });
-
-  if (!receipt.side_effects.empty()) {
-    return emit_metrics(make_error_result(request.target.target_id,
-                                          receipt.receipt_ref.empty() ? "query_receipt:" + context.request_id
-                                                                      : receipt.receipt_ref,
-                                          "invalid_request",
-                                          "query_state must not emit side_effects",
-                                          "execution_query_lane",
-                                          receipt.evidence_refs,
-                                          false),
-                        route_decision.selection->adapter_id,
-                        receipt.latency_ms);
-  }
-
-  if (request.freshness == ServiceDataFreshness::allow_stale &&
-      receipt.provider_status_code == "data_stale" && dependencies_.load_cached_snapshot) {
-    const auto cached_snapshot = dependencies_.load_cached_snapshot(request);
-    if (cached_snapshot.has_value()) {
-      return emit_metrics(ExecutionQueryResult{
-          .code = contracts::ResultCode::ToolExecutionFailed,
-          .state = cached_snapshot->state,
-          .snapshot_json = cached_snapshot->snapshot_json,
-          .from_cache = true,
-          .error = std::nullopt,
-      },
-      route_decision.selection->adapter_id,
-      std::nullopt);
+    if (dependencies_.router == nullptr || dependencies_.bridge == nullptr ||
+        dependencies_.result_mapper == nullptr) {
+      return emit_metrics(make_runtime_failure("query lane dependencies are not configured",
+                                               "execution_query_lane",
+                                               "query_lane.dependencies"),
+                          {},
+                          std::nullopt);
     }
-  }
 
-  auto result = dependencies_.result_mapper->to_execution_query_result(
-      receipt,
-      dependencies_.extract_state ? dependencies_.extract_state(receipt, request)
-                                  : request.query_kind,
-      false);
-  if (result.error.has_value() && !receipt.provider_status_code.empty()) {
-    result.error->details.stage = "execution_query_lane";
-  }
+    const auto route_decision = dependencies_.router->select_adapter(build_route_request(
+        dependencies_.policy_view,
+        dependencies_.capability_snapshot,
+        dependencies_.fallback_envelope,
+        dependencies_.registered_candidates,
+        request));
+    if (!route_decision.ok()) {
+      const auto evidence_refs =
+          route_decision.failure == AdapterRouteFailure::route_not_permitted
+              ? std::vector<std::string>{"policy://route/" + context.request_id}
+              : std::vector<std::string>{};
+      return emit_metrics(make_error_result(request.target.target_id,
+                                            "route:" + context.request_id,
+                                            std::string(route_failure_name(route_decision.failure)),
+                                            route_decision.reason,
+                                            "adapter_router",
+                                            std::move(evidence_refs),
+                                            false),
+                          {},
+                          std::nullopt);
+    }
 
-  return emit_metrics(std::move(result), route_decision.selection->adapter_id, receipt.latency_ms);
+    const auto& selection = *route_decision.selection;
+    const std::string adapter_id = selection.adapter_id;
+    const auto receipt = dependencies_.bridge->invoke(
+        selection,
+        AdapterInvocationRequest{
+            .request_id = context.request_id,
+            .capability_id = request.target.capability_id,
+            .target_id = request.target.target_id,
+            .request_kind = AdapterRouteRequestKind::query,
+            .operation_name = request.query_kind,
+            .payload_json = std::string("{\"freshness\":\"") + freshness_name(request.freshness) +
+                            "\"}",
+        });
+
+    if (!receipt.side_effects.empty()) {
+      const auto receipt_ref = receipt.receipt_ref.empty()
+                                   ? "query_receipt:" + context.request_id
+                                   : receipt.receipt_ref;
+      return emit_metrics(make_error_result(request.target.target_id,
+                                            receipt_ref,
+                                            "invalid_request",
+                                            "query_state must not emit side_effects",
+                                            "execution_query_lane",
+                                            receipt.evidence_refs,
+                                            false),
+                          adapter_id,
+                          receipt.latency_ms);
+    }
+
+    if (request.freshness == ServiceDataFreshness::allow_stale &&
+        receipt.provider_status_code == "data_stale" && dependencies_.load_cached_snapshot) {
+      const auto cached_snapshot = dependencies_.load_cached_snapshot(request);
+      if (cached_snapshot.has_value()) {
+        ExecutionQueryResult cached_result{
+            .code = contracts::ResultCode::ToolExecutionFailed,
+            .state = cached_snapshot->state,
+            .snapshot_json = cached_snapshot->snapshot_json,
+            .from_cache = true,
+            .error = std::nullopt,
+        };
+        return emit_metrics(std::move(cached_result), adapter_id, std::nullopt);
+      }
+    }
+
+    auto result = dependencies_.result_mapper->to_execution_query_result(
+        receipt,
+        dependencies_.extract_state ? dependencies_.extract_state(receipt, request)
+                                    : request.query_kind,
+        false);
+    if (result.error.has_value() && !receipt.provider_status_code.empty()) {
+      result.error->details.stage = "execution_query_lane";
+    }
+
+    return emit_metrics(std::move(result), adapter_id, receipt.latency_ms);
   };
 
   if (dependencies_.trace_bridge == nullptr) {

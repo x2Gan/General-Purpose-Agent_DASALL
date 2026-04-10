@@ -75,7 +75,8 @@ struct MatchedRule {
   return PolicyDomain::Unspecified;
 }
 
-[[nodiscard]] bool action_matches(std::string_view rule_action, std::string_view query_operation) {
+[[nodiscard]] bool action_matches(const std::string_view& rule_action,
+                                  const std::string_view& query_operation) {
   const std::string normalized_action = lowercase_copy(rule_action);
   if (normalized_action == "*" || normalized_action == "any") {
     return true;
@@ -84,7 +85,8 @@ struct MatchedRule {
   return normalized_action == lowercase_copy(query_operation);
 }
 
-[[nodiscard]] bool subject_matches(std::string_view rule_subject, std::string_view actor_ref) {
+[[nodiscard]] bool subject_matches(const std::string_view& rule_subject,
+                                   const std::string_view& actor_ref) {
   const std::string normalized_subject = lowercase_copy(rule_subject);
   if (normalized_subject == "*" || normalized_subject == "any") {
     return true;
@@ -93,7 +95,7 @@ struct MatchedRule {
   return normalized_subject == lowercase_copy(actor_ref);
 }
 
-[[nodiscard]] int target_selector_specificity(std::string_view selector,
+[[nodiscard]] int target_selector_specificity(const std::string_view& selector,
                                               const PolicyQueryContext& query) {
   const std::string normalized_selector = lowercase_copy(selector);
   const std::string normalized_target_type = lowercase_copy(query.target_type);
@@ -250,11 +252,13 @@ PolicyDecisionRef PolicyDecisionProjector::project(const PolicyQueryContext& que
       return left.rule->rule_id < right.rule->rule_id;
     });
 
-    std::vector<std::string> matched_rule_ids;
-    matched_rule_ids.reserve(matched_rules.size());
-    for (const auto& matched_rule : matched_rules) {
-      matched_rule_ids.push_back(matched_rule.rule->rule_id);
-    }
+    std::vector<std::string> matched_rule_ids(matched_rules.size());
+    std::transform(matched_rules.begin(),
+                   matched_rules.end(),
+                   matched_rule_ids.begin(),
+                   [](const MatchedRule& matched_rule) {
+                     return matched_rule.rule->rule_id;
+                   });
 
     return build_decision_from_rule(*matched_rules.front().rule,
                                     snapshot,

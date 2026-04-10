@@ -24,21 +24,21 @@ constexpr std::string_view kPolicyAuditBridgeWorkerType = "infra.policy";
   return value;
 }
 
-[[nodiscard]] std::string make_side_effect(std::string_view key,
-                                           std::string_view value) {
+[[nodiscard]] std::string make_side_effect(const std::string_view& key,
+                                           const std::string_view& value) {
   return std::string(key) + ":" + std::string(value);
 }
 
 void append_side_effect(std::vector<std::string>* side_effects,
-                        std::string_view key,
-                        std::string_view value) {
+                        const std::string_view& key,
+                        const std::string_view& value) {
   if (!value.empty()) {
     side_effects->push_back(make_side_effect(key, value));
   }
 }
 
 void append_number_side_effect(std::vector<std::string>* side_effects,
-                               std::string_view key,
+                               const std::string_view& key,
                                std::uint64_t value) {
   if (value > 0U) {
     side_effects->push_back(make_side_effect(key, std::to_string(value)));
@@ -169,8 +169,8 @@ PolicyAuditEmitResult PolicyAuditBridge::emit_event(AuditEvent audit_event,
     record_failure(write_outcome.error_code, detail_suffix + "/write_failed");
     return PolicyAuditEmitResult{
         .emitted = false,
-        .audit_event = std::move(audit_event),
-        .audit_context = std::move(audit_context),
+        .audit_event = audit_event,
+        .audit_context = audit_context,
         .write_outcome = write_outcome,
     };
   }
@@ -179,8 +179,8 @@ PolicyAuditEmitResult PolicyAuditBridge::emit_event(AuditEvent audit_event,
   record_success(detail_suffix);
   return PolicyAuditEmitResult{
       .emitted = true,
-      .audit_event = std::move(audit_event),
-      .audit_context = std::move(audit_context),
+      .audit_event = audit_event,
+      .audit_context = audit_context,
       .write_outcome = write_outcome,
   };
 }

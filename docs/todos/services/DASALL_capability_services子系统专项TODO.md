@@ -374,6 +374,7 @@ D2 阶段内的 Execution 子域任务必须按下列灰度顺序推进，不允
 3. services 专项 Gate 已在 2026-04-09 重新执行并全量通过，当前专项范围内无未解阻的 Build-ready 缺口。
 4. CAP-TODO-041 已完成并给出“当前直接迁移 No-Go、future Phase-Go”的结论。
 5. CAP-TODO-042 已完成并给出“当前 shared ABI No-Go、保持 internal-only、health 复用 infra ABI”的结论；两项都不回滚 001~034 的完成态。
+6. 2026-04-10 维护任务已确认 execution/data/system 三个子目录均存在真实实现文件，且 `keep_execution_skeleton_linked()` / `keep_data_skeleton_linked()` / `keep_system_skeleton_linked()` 无任何引用；因此已从 `services/CMakeLists.txt` 与源码树中移除三个 placeholder 翻译单元，不影响专项完成态。
 
 ### 11.2 当前可落到的最细粒度
 

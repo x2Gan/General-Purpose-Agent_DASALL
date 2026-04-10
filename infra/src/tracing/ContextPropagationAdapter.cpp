@@ -39,17 +39,20 @@ constexpr std::string_view kTracePropagationSourceRef = "ContextPropagationAdapt
 
 [[nodiscard]] const std::string* find_header_value(
     const TraceCarrier& carrier,
-    std::string_view header_name) {
-  for (const auto& entry : carrier) {
-    if (equals_ignore_case_ascii(entry.first, header_name)) {
-      return &entry.second;
-    }
+    const std::string_view& header_name) {
+  const auto entry = std::find_if(carrier.begin(),
+                                  carrier.end(),
+                                  [&header_name](const auto& item) {
+                                    return equals_ignore_case_ascii(item.first, header_name);
+                                  });
+  if (entry != carrier.end()) {
+    return &entry->second;
   }
 
   return nullptr;
 }
 
-void erase_header(TraceCarrier& carrier, std::string_view header_name) {
+void erase_header(TraceCarrier& carrier, const std::string_view& header_name) {
   for (auto it = carrier.begin(); it != carrier.end();) {
     if (equals_ignore_case_ascii(it->first, header_name)) {
       it = carrier.erase(it);

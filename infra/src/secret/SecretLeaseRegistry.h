@@ -88,7 +88,7 @@ class SecretLeaseRegistry {
       const SecretLease& lease);
 
   void expire_secret_leases(
-      std::string_view secret_name,
+      const std::string_view& secret_name,
       SecretLeaseState target_state = SecretLeaseState::Revoked);
 
   [[nodiscard]] std::size_t active_lease_count() const;

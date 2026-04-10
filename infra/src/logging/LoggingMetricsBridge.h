@@ -104,7 +104,7 @@ inline constexpr std::size_t kLoggingMetricFamilyCount = 5U;
 }
 
 [[nodiscard]] inline bool is_logging_metric_error_code(
-    std::string_view error_code) {
+  const std::string_view& error_code) {
   return error_code == kLoggingMetricNoErrorCodeLabel ||
          error_code == logging_error_code_name(LoggingErrorCode::QueueFull) ||
          error_code == logging_error_code_name(LoggingErrorCode::SinkIo) ||

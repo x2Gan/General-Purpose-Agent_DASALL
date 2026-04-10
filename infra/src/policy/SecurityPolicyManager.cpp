@@ -41,9 +41,9 @@ constexpr std::string_view kRuleSourcePrefix = "runtime_patch:";
 
 [[nodiscard]] std::optional<std::string> find_rule_condition_value(
     const std::vector<PolicyRuleDescriptor>& rules,
-    std::string_view action,
-    std::string_view target_selector,
-    std::string_view key) {
+    const std::string_view& action,
+    const std::string_view& target_selector,
+    const std::string_view& key) {
   const std::string prefix = std::string(key) + "=";
 
   for (const auto& rule : rules) {
@@ -51,10 +51,13 @@ constexpr std::string_view kRuleSourcePrefix = "runtime_patch:";
       continue;
     }
 
-    for (const auto& condition : rule.conditions) {
-      if (starts_with(condition, prefix)) {
-        return condition.substr(prefix.size());
-      }
+    const auto condition = std::find_if(rule.conditions.begin(),
+                                        rule.conditions.end(),
+                                        [&prefix](const std::string& item) {
+                                          return starts_with(item, prefix);
+                                        });
+    if (condition != rule.conditions.end()) {
+      return condition->substr(prefix.size());
     }
   }
 

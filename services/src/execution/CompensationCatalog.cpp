@@ -1,5 +1,6 @@
 #include "execution/CompensationCatalog.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace dasall::services::internal {
@@ -47,11 +48,15 @@ CompensationCatalog::CompensationCatalog(std::vector<CompensationCatalogEntry> e
 CompensationDescriptor CompensationCatalog::lookup(std::string_view capability_id,
                                                    std::string_view action,
                                                    std::string_view capability_version) const {
-  for (const auto& entry : entries_) {
-    if (entry.capability_id == capability_id && entry.action == action &&
-        entry.capability_version == capability_version) {
-      return entry.descriptor;
-    }
+  const auto entry = std::find_if(entries_.begin(),
+                                  entries_.end(),
+                                  [capability_id, action, capability_version](const auto& item) {
+                                    return item.capability_id == capability_id &&
+                                           item.action == action &&
+                                           item.capability_version == capability_version;
+                                  });
+  if (entry != entries_.end()) {
+    return entry->descriptor;
   }
 
   return CompensationDescriptor{};

@@ -1,5 +1,6 @@
 #include "tracing/SpanExporterAdapter.h"
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -190,17 +191,10 @@ std::uint32_t SpanExporterAdapter::simulated_latency_ms(const SpanBatch& batch) 
 }
 
 bool SpanExporterAdapter::batch_is_exportable(const SpanBatch& batch) {
-  if (batch.empty()) {
-    return false;
-  }
-
-  for (const auto& span : batch) {
-    if (!span || !span->has_ended()) {
-      return false;
-    }
-  }
-
-  return true;
+  return !batch.empty() &&
+         std::all_of(batch.begin(), batch.end(), [](const auto& span) {
+           return span && span->has_ended();
+         });
 }
 
 std::string SpanExporterAdapter::render_span_line(const SpanImpl& span) {

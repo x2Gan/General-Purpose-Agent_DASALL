@@ -180,7 +180,8 @@ struct ParsedMaterializedSecret {
   return parsed;
 }
 
-[[nodiscard]] SecretClassification parse_classification(std::string_view classification) {
+[[nodiscard]] SecretClassification parse_classification(
+    const std::string_view& classification) {
   if (classification == "credential") {
     return SecretClassification::Credential;
   }
