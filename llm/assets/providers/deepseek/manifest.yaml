@@ -1,0 +1,22 @@
+schema_version: "1"
+provider_id: deepseek-prod
+display_name: DeepSeek Production
+adapter_family: openai_compatible
+api_family: openai-completions
+base_url: https://api.deepseek.com
+base_url_alias: deepseek/default
+auth_mode: bearer_api_key
+auth_ref: secret://llm/providers/deepseek-prod
+header_refs:
+trusted_source: profiles
+source_version: 2026.04.10
+activation_flag: true
+tags:
+  - cloud
+  - external
+  - deepseek
+mutable_overlay_fields:
+  - auth_ref
+  - header_refs
+  - base_url_alias
+  - activation_flag

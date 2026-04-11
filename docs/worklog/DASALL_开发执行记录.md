@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #272
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 D
+- 任务：LLM-TODO-014 实现 Provider Catalog 加载器与 baseline Provider 资产
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 013，且 014 的前置依赖只要求 011 与 002 完成，因此当前按串行原子任务顺序直接进入 Provider 资产仓储实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.4、6.10.1、6.15.2 已把 Provider 目录包、顶层索引、truth-source 分层、mutable overlay 边界和静态元数据禁区写实，因此 014 的主目标可以收敛为“装载 provider 资产、发布 immutable catalog、验证 mutable overlay 和静态元数据不可变”。
+3. 当前 `llm/assets/providers/` 仍为空，已经成为 020、021、023、030、041、042 的共同前置依赖；优先完成 014 能为 ModelRouter、AdapterRegistry、UsageAggregator 和 asset-only onboarding 建立真实 Provider 基线。
+
+### 改动
+
+1. 新增 [llm/src/provider/ProviderCatalogRepository.h](../../llm/src/provider/ProviderCatalogRepository.h) 与 [llm/src/provider/ProviderCatalogRepository.cpp](../../llm/src/provider/ProviderCatalogRepository.cpp)，实现 provider catalog 索引、manifest/models 解析、immutable snapshot 发布、mutable overlay 合并与坏包回退。
+2. 新增 [llm/assets/providers/catalog.yaml](../../llm/assets/providers/catalog.yaml)、[llm/assets/providers/deepseek/manifest.yaml](../../llm/assets/providers/deepseek/manifest.yaml) 与 [llm/assets/providers/deepseek/models.yaml](../../llm/assets/providers/deepseek/models.yaml)，落盘 `deepseek-prod` 的 baseline Provider 样例资产，并冻结 pricing/context/effective_at/verification_state 基线字段。
+3. 新增 [tests/unit/llm/ProviderCatalogParseTest.cpp](../../tests/unit/llm/ProviderCatalogParseTest.cpp)、[tests/unit/llm/ProviderCatalogOverlayTest.cpp](../../tests/unit/llm/ProviderCatalogOverlayTest.cpp) 与 [tests/unit/llm/ProviderModelMetadataParseTest.cpp](../../tests/unit/llm/ProviderModelMetadataParseTest.cpp)，覆盖 catalog 解析、mutable overlay、静态元数据不可变与 DeepSeek 模型 metadata 提取。
+4. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 ProviderCatalogRepository 实现和三条新 llm unit 测试接入 llm / unit 聚合目标。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-014-ProviderCatalogRepository与baseline-Provider资产设计收敛.md](../todos/llm/deliverables/LLM-TODO-014-ProviderCatalogRepository与baseline-Provider资产设计收敛.md)，沉淀 Provider 资产目录包、truth-source 分层与 mutable overlay 边界的 Design -> Build 映射。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-014 标记为 Done，并补充阶段 D 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `ProviderCatalogParseTest`
+   - `RunCtest_CMakeTools` 运行 `ProviderCatalogOverlayTest`
+   - `RunCtest_CMakeTools` 运行 `ProviderModelMetadataParseTest`
+2. 结果：
+   - `ListTests_CMakeTools` 已列出 `ProviderCatalogParseTest`、`ProviderCatalogOverlayTest` 与 `ProviderModelMetadataParseTest`。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，unit 链路 `221/221` 全部通过，本轮新增的三条 Provider 资产测试均通过。
+   - `RunCtest_CMakeTools` 定向执行三条 Provider 资产测试均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-014 已完成，llm 现已拥有真实的 Provider 资产目录、最小可用 `ProviderCatalogRepository` 以及覆盖 mutable overlay / 静态元数据不可变的 unit 证据。
+2. 014 没有把路由策略、调用预算或真实 secret 注入链揉进 Provider Catalog，而是把 Provider truth-source、feature-level `verification_state` 与 mutable overlay 声明固定在 Repository 边界内，从而继续保持 ConfigCenter / secret owner 的职责分离。
+3. 阶段 D 的 013/014 已全部完成，LLM-GATE-03 达到通过条件。
+
+### 下一步
+
+1. 进入 LLM-TODO-015，开始实现 `PromptRegistry` 选择逻辑。
+2. 在 041 落地前，继续保持 `ProviderCatalogRepository` 只发布 truth-source 和 overlay 结果，不在仓储层直接生成 `LLMAdapterConfig` 实例。
+
+### 风险
+
+1. 当前 Provider 资产仍采用 key/list 级最小 YAML 子集与 keyed model map；若后续 trusted snapshot 或 richer provider metadata 需要更复杂 schema，应在不回退 014 既有边界的前提下扩展内部解析器，而不是把复杂 schema 直接推入 shared contracts。
+
 ## 记录 #271
 
 - 日期：2026-04-11

@@ -1,0 +1,79 @@
+schema_version: "1"
+models:
+  deepseek-chat:
+    id: deepseek-chat
+    display_name: DeepSeek Chat
+    model_version: DeepSeek-V3.2
+    reasoning_mode: non_thinking
+    tier_family: default
+    latency_tier: low
+    cost_tier: low
+    reasoning_depth_tier: standard
+    aliases:
+      - deepseek/default
+    context_window: 131072
+    default_max_output_tokens: 4096
+    max_output_tokens_hard_limit: 8192
+    input_modalities:
+      - text
+    supports_tools: true
+    supports_streaming: true
+    supports_json_object: true
+    supports_json_schema: false
+    supports_reasoning: false
+    supports_visible_reasoning: false
+    supports_prompt_cache: true
+    supports_native_stream_usage: false
+    pricing:
+      pricing_ref: deepseek-v3.2-official-2026-04-10
+      input_cache_hit_usd_per_1m: 0.014
+      input_cache_miss_usd_per_1m: 0.14
+      output_usd_per_1m: 2.19
+    metadata_source_uri: https://api-docs.deepseek.com/quick_start/pricing
+    metadata_effective_at: 2026-04-10
+    verification_state:
+      tools: verified
+      json_output: verified
+      prompt_cache: verified
+    feature_notes:
+      - production_default
+  deepseek-reasoner:
+    id: deepseek-reasoner
+    display_name: DeepSeek Reasoner
+    model_version: DeepSeek-V3.2
+    reasoning_mode: thinking
+    tier_family: reasoning
+    latency_tier: medium
+    cost_tier: medium
+    reasoning_depth_tier: deep
+    aliases:
+      - deepseek/reasoning
+    context_window: 131072
+    default_max_output_tokens: 32768
+    max_output_tokens_hard_limit: 65536
+    input_modalities:
+      - text
+    supports_tools: true
+    supports_streaming: true
+    supports_json_object: true
+    supports_json_schema: false
+    supports_reasoning: true
+    supports_visible_reasoning: true
+    supports_prompt_cache: true
+    supports_native_stream_usage: false
+    pricing:
+      pricing_ref: deepseek-v3.2-official-2026-04-10
+      input_cache_hit_usd_per_1m: 0.028
+      input_cache_miss_usd_per_1m: 0.28
+      output_usd_per_1m: 2.19
+    metadata_source_uri: https://api-docs.deepseek.com/quick_start/pricing
+    metadata_effective_at: 2026-04-10
+    verification_state:
+      visible_reasoning: verified
+      tools: needs_integration_validation
+      prompt_cache: verified
+    response_private_fields:
+      - reasoning_content
+    feature_notes:
+      - strip_reasoning_content_before_next_round
+      - ignore_temperature_top_p_penalties_when_provider_disables_them

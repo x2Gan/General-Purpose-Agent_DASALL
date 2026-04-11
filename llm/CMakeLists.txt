@@ -24,6 +24,7 @@ target_sources(dasall_llm
   PRIVATE
     src/LLMSubsystemConfig.cpp
     src/prompt/PromptAssetRepository.cpp
+    src/provider/ProviderCatalogRepository.cpp
     src/placeholder.cpp
 )
 
