@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #265
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 B
+- 任务：LLM-TODO-007 定义 PromptRegistry 选择面接口
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 已在上一轮完成阶段 B 的 LLM-TODO-006，因此当前最小原子任务自然切换到 LLM-TODO-007。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.3 已明确 `IPromptRegistry` 只负责根据 `PromptQuery` 和资产目录选择 `PromptRelease`，这意味着本轮必须先冻结选择 SPI、输入维度和返回元数据，而不是提前跳到 PromptComposer、PromptPolicy 或 PromptPipeline。
+3. 同一设计文档的 6.15.5 进一步要求 PromptRegistry 是选择 owner，不是装配 owner；因此 007 必须停留在 interface/supporting type 冻结，不把 catalog 装载顺序、选择算法或 provider 分支逻辑混入本轮提交。
+
+### 改动
+
+1. 新增 [llm/include/prompt/PromptQuery.h](../llm/include/prompt/PromptQuery.h)，冻结 `stage`、`task_type`、`language`、`model_family`、`scene_id`、`persona_id`、`profile_id`、`available_tools`、`trusted_sources` 九个选择维度。
+2. 新增 [llm/include/prompt/PromptRegistryConfig.h](../llm/include/prompt/PromptRegistryConfig.h)，冻结 `asset_root` 与 `trusted_sources` 两项 Registry 初始化输入。
+3. 新增 [llm/include/prompt/PromptRegistryResult.h](../llm/include/prompt/PromptRegistryResult.h)，冻结 optional `code`、optional `release`、`selected_prompt_id`、`selected_version`、`selection_reason`、`trusted_sources_matched` 字段，并通过 `has_consistent_values()` 守卫 success/failure 审计边界。
+4. 新增 [llm/include/prompt/IPromptRegistry.h](../llm/include/prompt/IPromptRegistry.h)，冻结 `init()` 与 `select()` 两个 Prompt 选择 SPI 入口，并保持接口纯抽象。
+5. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，在既有 adapter/manager 冻结测试基础上继续补齐 PromptRegistry SPI 签名、选择维度、配置对象和返回元数据一致性断言。
+6. 新增 [docs/todos/llm/deliverables/LLM-TODO-007-PromptRegistry选择面接口设计收敛.md](../todos/llm/deliverables/LLM-TODO-007-PromptRegistry选择面接口设计收敛.md)，沉淀本轮本地证据、外部参考、Design -> Build 映射与结果对象收敛理由。
+7. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-007 标记为 Done，并新增阶段 B 执行记录。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm`、`dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_llm`、`dasall_unit_tests` 成功；本轮未观察到由 007 引入的新编译警告。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示未影响测试返回码，暂记为 CTest 工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-007 已完成，`IPromptRegistry` 选择 SPI、`PromptQuery` 选择输入对象、`PromptRegistryConfig` 初始化配置对象，以及 `PromptRegistryResult` 的 success/failure 与审计元数据边界已经落盘并被单测冻结。
+2. `PromptRegistryResult.code` 在本轮收敛为 optional 失败码，而不是伪造成功哨兵；选择成功通过 `PromptRelease` 与 `selected_prompt_id` / `selected_version` 一致性来判定，避免在 Registry 边界内出现双重真相源。
+
+### 下一步
+
+1. 进入 LLM-TODO-008，冻结 PromptComposer 的预算输入与 compose 接口。
+2. 在 013 完成前，继续保持 PromptRegistry 的具体 catalog/selector 算法停留在实现待办，不把 015 的稳定选择顺序提前揉进 007 的接口冻结提交。
+
+### 风险
+
+1. 本轮没有把显式 `prompt_release_id` override 暴露进 `PromptQuery`；若后续 015 发现实现确需公开该 selector 维度，应先回到接口评审，而不是绕过 007 直接扩字段。
+
 ## 记录 #264
 
 - 日期：2026-04-10

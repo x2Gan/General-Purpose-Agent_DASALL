@@ -15,6 +15,11 @@
 #include "error/ResultCode.h"
 #include "llm/LLMRequest.h"
 #include "llm/LLMResponse.h"
+#include "prompt/IPromptRegistry.h"
+#include "prompt/PromptQuery.h"
+#include "prompt/PromptRegistryConfig.h"
+#include "prompt/PromptRegistryResult.h"
+#include "prompt/PromptRelease.h"
 #include "support/TestAssertions.h"
 
 #include "../../../llm/src/adapters/AdapterCallResult.h"
@@ -296,6 +301,136 @@ void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
               "LLMManagerResult should reject mixed success and failure payloads");
 }
 
+void test_iprompt_registry_surface_freezes_spi_signatures() {
+  using dasall::llm::prompt::IPromptRegistry;
+  using dasall::llm::prompt::PromptQuery;
+  using dasall::llm::prompt::PromptRegistryConfig;
+  using dasall::llm::prompt::PromptRegistryResult;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IPromptRegistry::init),
+                 bool (IPromptRegistry::*)(const PromptRegistryConfig&)>);
+  static_assert(std::is_same_v<decltype(&IPromptRegistry::select),
+                 PromptRegistryResult (IPromptRegistry::*)(const PromptQuery&) const>);
+  static_assert(std::is_abstract_v<IPromptRegistry>);
+
+  assert_true(std::is_abstract_v<IPromptRegistry>,
+              "IPromptRegistry should remain a pure abstract prompt selection SPI");
+}
+
+void test_prompt_query_freezes_selection_dimensions() {
+  using dasall::llm::prompt::PromptQuery;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptQuery{}.stage), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.task_type), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.language), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.model_family), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.scene_id), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.persona_id), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.profile_id), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.available_tools),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.trusted_sources),
+                 std::vector<std::string>>);
+
+  const PromptQuery query{
+    .stage = "planner",
+    .task_type = "analysis",
+    .language = "zh-CN",
+    .model_family = "deepseek",
+    .scene_id = "ops_diagnosis",
+    .persona_id = "default_planner",
+    .profile_id = "desktop_full",
+    .available_tools = {"search", "summarize"},
+    .trusted_sources = {"baseline", "deployment_override"},
+  };
+
+  assert_true(query.available_tools.size() == 2U,
+              "PromptQuery should keep available_tools as an explicit selection dimension");
+  assert_true(query.trusted_sources.size() == 2U,
+              "PromptQuery should keep trusted_sources as an explicit fail-closed selection filter");
+}
+
+void test_prompt_registry_config_freezes_asset_root_and_trusted_sources() {
+  using dasall::llm::prompt::PromptRegistryConfig;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptRegistryConfig{}.asset_root), std::string>);
+  static_assert(std::is_same_v<decltype(PromptRegistryConfig{}.trusted_sources),
+                 std::vector<std::string>>);
+
+  const PromptRegistryConfig config{
+    .asset_root = "/opt/dasall/prompts",
+    .trusted_sources = {"baseline", "trusted_snapshot"},
+  };
+
+  assert_true(config.asset_root == "/opt/dasall/prompts",
+              "PromptRegistryConfig should freeze the prompt asset root field");
+  assert_true(config.trusted_sources.size() == 2U,
+              "PromptRegistryConfig should preserve trusted_sources as registry init input");
+}
+
+void test_prompt_registry_result_freezes_selection_metadata() {
+  using dasall::contracts::CompositionStage;
+  using dasall::contracts::PromptEvalStatus;
+  using dasall::contracts::PromptRelease;
+  using dasall::contracts::ResultCode;
+  using dasall::llm::prompt::PromptRegistryResult;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptRegistryResult{}.code),
+                 std::optional<ResultCode>>);
+  static_assert(std::is_same_v<decltype(PromptRegistryResult{}.release),
+                 std::optional<PromptRelease>>);
+  static_assert(std::is_same_v<decltype(PromptRegistryResult{}.selected_prompt_id), std::string>);
+  static_assert(std::is_same_v<decltype(PromptRegistryResult{}.selected_version), std::string>);
+  static_assert(std::is_same_v<decltype(PromptRegistryResult{}.selection_reason), std::string>);
+  static_assert(std::is_same_v<decltype(PromptRegistryResult{}.trusted_sources_matched),
+                 std::vector<std::string>>);
+
+  PromptRelease selected_release;
+  selected_release.prompt_id = std::string("prompt.plan.default");
+  selected_release.version = std::string("2026-04-10.1");
+  selected_release.stage = CompositionStage::Planning;
+  selected_release.eval_status = PromptEvalStatus::Stable;
+  selected_release.trusted_source = std::string("baseline");
+
+  const PromptRegistryResult success_result{
+    .code = std::nullopt,
+    .release = selected_release,
+    .selected_prompt_id = "prompt.plan.default",
+    .selected_version = "2026-04-10.1",
+    .selection_reason = "matched stage/task_type and trusted source",
+    .trusted_sources_matched = {"baseline"},
+  };
+
+  const PromptRegistryResult failure_result{
+    .code = ResultCode::PolicyDenied,
+    .release = std::nullopt,
+    .selected_prompt_id = "",
+    .selected_version = "",
+    .selection_reason = "",
+    .trusted_sources_matched = {},
+  };
+
+  const PromptRegistryResult invalid_result{
+    .code = ResultCode::PolicyDenied,
+    .release = selected_release,
+    .selected_prompt_id = "prompt.plan.default",
+    .selected_version = "2026-04-10.1",
+    .selection_reason = "mixed success and failure",
+    .trusted_sources_matched = {"baseline"},
+  };
+
+  assert_true(success_result.has_consistent_values(),
+              "PromptRegistryResult should accept a selected release with auditable prompt metadata");
+  assert_true(failure_result.has_consistent_values(),
+              "PromptRegistryResult should allow selection failure without fabricating a PromptRelease");
+  assert_true(!invalid_result.has_consistent_values(),
+              "PromptRegistryResult should reject mixed success and failure selection payloads");
+}
+
 }  // namespace
 
 int main() {
@@ -307,6 +442,10 @@ int main() {
     test_illm_manager_surface_freezes_spi_signatures();
     test_llm_generate_request_freezes_runtime_handoff_fields();
     test_llm_manager_result_freezes_success_failure_and_fallback_semantics();
+    test_iprompt_registry_surface_freezes_spi_signatures();
+    test_prompt_query_freezes_selection_dimensions();
+    test_prompt_registry_config_freezes_asset_root_and_trusted_sources();
+    test_prompt_registry_result_freezes_selection_metadata();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
