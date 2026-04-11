@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #271
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 D
+- 任务：LLM-TODO-013 实现 PromptAssetRepository 与 baseline Prompt 资产
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 012，且 013 的前置依赖只要求 007 与 002 完成，因此当前按串行原子任务顺序直接进入 Prompt 资产仓储实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.1、6.6.2、6.15.5 已把 Prompt 包形态、三层装载顺序、坏包回退和 owner 边界写实，因此 013 的主目标清晰地收敛为“装载资产、构建 catalog、验证 overlay”，而不是提前实现 PromptRegistry 选择逻辑。
+3. 当前 `llm/assets/prompts/` 仍为空，已经成为 015、017、032、033 的共同前置依赖；优先完成 013 能为 PromptRegistry、PromptComposer 与后续 integration source switch 建立真实资产基线。
+
+### 改动
+
+1. 新增 [llm/src/asset/KeyValueYamlParser.h](../../llm/src/asset/KeyValueYamlParser.h)，提供 llm 内部使用的最小 key/list YAML 解析支撑，用于 Prompt manifest 与后续 Provider catalog manifest/index 读取。
+2. 新增 [llm/src/prompt/PromptAssetDescriptor.h](../../llm/src/prompt/PromptAssetDescriptor.h)、[llm/src/prompt/PromptAssetRepository.h](../../llm/src/prompt/PromptAssetRepository.h) 与 [llm/src/prompt/PromptAssetRepository.cpp](../../llm/src/prompt/PromptAssetRepository.cpp)，实现 Prompt 资产描述符、baseline/deployment/snapshot 三层装载、content hash 计算、immutable catalog 发布与坏包回退。
+3. 新增 [llm/assets/prompts/planner/default/manifest.yaml](../../llm/assets/prompts/planner/default/manifest.yaml)、[llm/assets/prompts/planner/default/system.md](../../llm/assets/prompts/planner/default/system.md)、[llm/assets/prompts/planner/default/task.md](../../llm/assets/prompts/planner/default/task.md)，落盘 `planner/default` 基线 Prompt 包样例。
+4. 新增 [tests/unit/llm/PromptAssetPackageParseTest.cpp](../../tests/unit/llm/PromptAssetPackageParseTest.cpp) 与 [tests/unit/llm/PromptSourceOverlayTest.cpp](../../tests/unit/llm/PromptSourceOverlayTest.cpp)，覆盖 manifest 解析、Markdown 正文加载、content hash 更新、缺失字段拒绝、三层 overlay 优先级和 snapshot 损坏回退。
+5. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 Repository 实现和两条新 llm unit 测试接入 llm / unit 聚合目标。
+6. 新增 [docs/todos/llm/deliverables/LLM-TODO-013-PromptAssetRepository与baseline-Prompt资产设计收敛.md](../todos/llm/deliverables/LLM-TODO-013-PromptAssetRepository与baseline-Prompt资产设计收敛.md)，沉淀 Prompt 资产外置包、overlay 与回退策略的 Design -> Build 映射。
+7. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-013 标记为 Done，并新增阶段 D 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `PromptAssetPackageParseTest`
+   - `RunCtest_CMakeTools` 运行 `PromptSourceOverlayTest`
+   - `ctest --test-dir build-ci -N -R PromptAssetPackageParseTest`
+   - `ctest --test-dir build-ci -N -R PromptSourceOverlayTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已发现 `dasall_unit_tests`、`dasall_prompt_asset_package_parse_unit_test` 与 `dasall_prompt_source_overlay_unit_test`。
+   - `ListTests_CMakeTools` 已列出 `PromptAssetPackageParseTest` 与 `PromptSourceOverlayTest`。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，unit 链路 `218/218` 全部通过，本轮新增的 `PromptAssetPackageParseTest` 与 `PromptSourceOverlayTest` 均通过。
+   - `RunCtest_CMakeTools` 定向执行 `PromptAssetPackageParseTest` 与 `PromptSourceOverlayTest` 均为 `100% tests passed, 0 tests failed out of 1`；显式 `ctest -N` 也确认两条新测试已 discover。附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-013 已完成，llm 现已拥有真实的 Prompt 资产目录、最小可用 PromptAssetRepository 以及覆盖三层 overlay / 坏包回退的 unit 证据。
+2. 013 没有把 Prompt 选择逻辑、模板渲染或 provider 路由混进 Repository，也没有把 Prompt 文本编译进二进制，从而继续保持 Prompt 资产装载权与运行态选择权分离。
+
+### 下一步
+
+1. 进入 LLM-TODO-014，开始实现 `ProviderCatalogRepository` 与 baseline Provider 资产。
+2. 在 014 完成前，继续保持 `PromptAssetRepository` 只负责装载和发布 Prompt catalog，不在仓储层直接解释 scene/persona/profile 选择优先级。
+
+### 风险
+
+1. 当前 Prompt manifest 仍采用 key/list 级最小 YAML 子集；若后续 trusted snapshot 或 richer prompt metadata 需要更复杂结构，应在不回退 013 既有接口的前提下扩展内部解析器，而不是直接把复杂 schema 压回 shared contracts。
+
 ## 记录 #270
 
 - 日期：2026-04-11

@@ -1,0 +1,29 @@
+schema_version: "1"
+min_loader_version: "1"
+package_id: planner.default
+prompt_id: planner
+version: "2026.04.11"
+stage: planning
+eval_status: stable
+release_scope: stable
+output_schema_ref: schema://planner/default
+trusted_source: profiles
+default_release: true
+source_uri: prompt://planner/default
+language: zh-cn
+model_family: openai_compatible
+task_types:
+  - plan
+template_slots:
+  - user_goal
+  - constraints
+tool_hints:
+  - builtin
+tags:
+  - planner
+  - baseline
+profile_tags:
+  - desktop_full
+  - cloud_full
+scene_id: general
+persona_id: planner
