@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #269
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 C
+- 任务：LLM-TODO-004 升级 MockLLMAdapter 为生产接口 mock
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 已在上一轮完成阶段 B 的 005~011，LLM-TODO-004 对 `ILLMAdapter` 的前置依赖已满足，因此本轮可按原子任务顺序直接进入测试夹具升级。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.13 明确要求 MockLLMAdapter 升级为基于生产接口的 mock，但该动作只影响 tests/mocks，不写回 shared contracts，因此本轮边界清晰且适合作为单轮提交。
+3. 当前 [tests/mocks/include/MockLLMAdapter.h](../mocks/include/MockLLMAdapter.h) 仍是字符串脚手架，已经成为 024 和 029~034 的共同前置障碍；优先完成 004 能直接消掉这条测试夹具 blocker。
+
+### 改动
+
+1. 更新 [tests/mocks/include/MockLLMAdapter.h](../mocks/include/MockLLMAdapter.h)，使其继承 `ILLMAdapter`，补齐 `init()`、`generate()`、`stream_generate()`、`health_check()` 四个 SPI 入口，并增加可编程返回值、调用计数、最近一次调用记录与 legacy `invoke()` 兼容层。
+2. 新增 [tests/unit/llm/MockLLMAdapterSurfaceTest.cpp](../unit/llm/MockLLMAdapterSurfaceTest.cpp)，覆盖 programmable success/failure、stream session 占位、health_check 状态与 legacy helper 兼容行为。
+3. 更新 [tests/unit/llm/CMakeLists.txt](../unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../unit/CMakeLists.txt)，将 `MockLLMAdapterSurfaceTest` 接入 llm unit 子目录和 `dasall_unit_tests` 聚合目标。
+4. 新增 [docs/todos/llm/deliverables/LLM-TODO-004-MockLLMAdapter生产接口mock设计收敛.md](../todos/llm/deliverables/LLM-TODO-004-MockLLMAdapter生产接口mock设计收敛.md)，沉淀接口 mock 边界、legacy 兼容策略与 Build 三件套。
+5. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-004 标记为 Done，并补充阶段 C 执行记录。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `MockLLMAdapterSurfaceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，unit 链路中 `dasall_runtime_smoke_test`、`LLMInterfaceSurfaceTest`、`MockLLMAdapterSurfaceTest` 均通过，本轮未观察到由 004 引入的新编译告警。
+   - `RunCtest_CMakeTools` 定向执行 `MockLLMAdapterSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-004 已完成，MockLLMAdapter 现已对齐 `ILLMAdapter` 的四入口生产接口，可直接作为后续 unary/fallback/integration 测试夹具复用。
+2. 现有 runtime smoke test 没有被这轮升级打坏，因为 mock 保留了 legacy `invoke()` / `set_handler()` 兼容层，同时把真实调用计数统一收口到生产接口路径。
+
+### 下一步
+
+1. 按专项 TODO 的串行顺序，进入 LLM-TODO-012，开始实现 `LLMSubsystemConfig` 配置投影。
+2. 在进入 024 和 029~034 时，可直接复用本轮完成的 MockLLMAdapter 作为生产接口夹具，而不再依赖字符串脚手架。
+
+### 风险
+
+1. `HealthStatus` 当前只在 mock 头内提供最小 test-local 定义；若后续 llm 正式落盘统一健康状态对象，必须以正式头文件取代这份测试夹具定义，而不是反向把测试实现固化为生产语义。
+
 ## 记录 #268
 
 - 日期：2026-04-11
