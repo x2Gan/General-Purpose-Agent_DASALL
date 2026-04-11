@@ -398,6 +398,7 @@ void test_prompt_query_freezes_selection_dimensions() {
   static_assert(std::is_same_v<decltype(PromptQuery{}.task_type), std::string>);
   static_assert(std::is_same_v<decltype(PromptQuery{}.language), std::string>);
   static_assert(std::is_same_v<decltype(PromptQuery{}.model_family), std::string>);
+  static_assert(std::is_same_v<decltype(PromptQuery{}.prompt_release_id), std::string>);
   static_assert(std::is_same_v<decltype(PromptQuery{}.scene_id), std::string>);
   static_assert(std::is_same_v<decltype(PromptQuery{}.persona_id), std::string>);
   static_assert(std::is_same_v<decltype(PromptQuery{}.profile_id), std::string>);
@@ -411,6 +412,7 @@ void test_prompt_query_freezes_selection_dimensions() {
     .task_type = "analysis",
     .language = "zh-CN",
     .model_family = "deepseek",
+    .prompt_release_id = "planner@2026.04.12",
     .scene_id = "ops_diagnosis",
     .persona_id = "default_planner",
     .profile_id = "desktop_full",
@@ -422,6 +424,8 @@ void test_prompt_query_freezes_selection_dimensions() {
               "PromptQuery should keep available_tools as an explicit selection dimension");
   assert_true(query.trusted_sources.size() == 2U,
               "PromptQuery should keep trusted_sources as an explicit fail-closed selection filter");
+  assert_true(query.prompt_release_id == "planner@2026.04.12",
+              "PromptQuery should expose prompt_release_id for explicit registry overrides");
 }
 
 void test_prompt_registry_config_freezes_asset_root_and_trusted_sources() {

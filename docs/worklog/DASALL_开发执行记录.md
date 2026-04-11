@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #273
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 E
+- 任务：LLM-TODO-015 实现 PromptRegistry 选择逻辑
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 014，且 015 的前置依赖只要求 007 与 013 完成，因此当前按串行原子任务顺序直接进入 PromptRegistry 选择逻辑实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.3 与 6.15.5 已把 Prompt 选择优先级写实为“显式 `prompt_release_id` > scene/persona selector > profile selector > default release”，同时要求 trusted source 过滤 fail-closed，因此 015 的主目标可以收敛为“补 PromptRegistry 具体实现与单测”，而不是提前进入 Composer/Policy。
+3. 015 执行前发现 [docs/todos/llm/deliverables/LLM-TODO-007-PromptRegistry选择面接口设计收敛.md](../todos/llm/deliverables/LLM-TODO-007-PromptRegistry选择面接口设计收敛.md) 仍把 `prompt_release_id` 留在“后续再议”状态，这和当前详细设计的显式 override 要求冲突；因此本轮先将其作为 direct blocker fix 最小补入 `PromptQuery`，再继续实现 015，而不把问题外溢成新的 shared interface 任务。
+
+### 改动
+
+1. 新增 [llm/src/prompt/PromptRegistry.h](../../llm/src/prompt/PromptRegistry.h) 与 [llm/src/prompt/PromptRegistry.cpp](../../llm/src/prompt/PromptRegistry.cpp)，实现 PromptRegistry 的 base-dimension 过滤、显式 release override、scene/persona/profile/default 四层选择顺序、trusted source 交集策略与稳定 tie-break。
+2. 更新 [llm/include/prompt/PromptQuery.h](../../llm/include/prompt/PromptQuery.h) 与 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，补入并冻结 `prompt_release_id` 选择维度，使显式 release override 不再停留在设计层口头约束。
+3. 新增 [tests/unit/llm/PromptRegistrySelectionTest.cpp](../../tests/unit/llm/PromptRegistrySelectionTest.cpp) 与 [tests/unit/llm/PromptRegistryTrustSourceTest.cpp](../../tests/unit/llm/PromptRegistryTrustSourceTest.cpp)，覆盖显式 release 命中、scene/persona 命中、profile fallback、default fallback、稳定重复选择、trusted source 允许、query widening 拒绝与 allowlist 缺失 fail-closed。
+4. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 Registry 实现和两条新 llm unit 测试接入 llm / unit 聚合目标。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-015-PromptRegistry选择逻辑设计收敛.md](../todos/llm/deliverables/LLM-TODO-015-PromptRegistry选择逻辑设计收敛.md)，沉淀 PromptRegistry 的显式 release 语义、trusted source fail-closed 边界与稳定 tie-break 设计。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-015 标记为 Done，并补充阶段 E 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `PromptRegistrySelectionTest`
+   - `RunCtest_CMakeTools` 运行 `PromptRegistryTrustSourceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `223/223` 全部通过，本轮新增的 `PromptRegistrySelectionTest` 与 `PromptRegistryTrustSourceTest` 均通过。
+   - `RunCtest_CMakeTools` 定向执行两条 PromptRegistry 测试均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-015 已完成，llm 现已拥有稳定的 Prompt release 选择 owner，后续 PromptComposer / PromptPipeline / integration source switch 不再需要在调用方重复实现 prompt 选择顺序。
+2. 本轮把 `prompt_release_id` blocker fix 限定在 module-local `PromptQuery`，没有回改 shared contracts，也没有把 PromptPolicy 的 allowlist / tool visibility 或 PromptComposer 的消息装配提前揉进 Registry。
+3. trusted source 现已明确按 config 与 query 的交集 fail-closed，query 无法放宽 registry 初始策略，这为后续 018 的 PromptPolicy 和 032 的 prompt source switch 提供了可复用的最小治理基线。
+
+### 下一步
+
+1. 进入 LLM-TODO-016，开始实现 `TokenEstimator` 预估器。
+2. 在 017 落地前，继续保持 `PromptRegistry` 只输出 release 选择事实，不承担模板渲染、token 预算或 policy allowlist 决策。
+
+### 风险
+
+1. `PromptRegistryConfig` 当前仍只表达 `asset_root + trusted_sources`，未把 deployment/snapshot source chain 直接映射进 init 配置；后续 source switch integration 仍需通过 012/041/032 的配置投影链补齐，而不是在 015 上直接膨胀 init 面。
+
 ## 记录 #272
 
 - 日期：2026-04-11

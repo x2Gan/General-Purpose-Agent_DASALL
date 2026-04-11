@@ -10,6 +10,7 @@ struct PromptQuery {
   std::string task_type;
   std::string language;
   std::string model_family;
+  std::string prompt_release_id;
   std::string scene_id;
   std::string persona_id;
   std::string profile_id;

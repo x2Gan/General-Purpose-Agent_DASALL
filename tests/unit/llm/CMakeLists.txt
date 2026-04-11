@@ -30,6 +30,14 @@ add_executable(dasall_provider_model_metadata_parse_unit_test
 	ProviderModelMetadataParseTest.cpp
 )
 
+add_executable(dasall_prompt_registry_selection_unit_test
+	PromptRegistrySelectionTest.cpp
+)
+
+add_executable(dasall_prompt_registry_trust_source_unit_test
+	PromptRegistryTrustSourceTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -79,6 +87,18 @@ target_link_libraries(dasall_provider_model_metadata_parse_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_prompt_registry_selection_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_prompt_registry_trust_source_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -102,6 +122,8 @@ dasall_apply_common_options(dasall_prompt_source_overlay_unit_test)
 dasall_apply_common_options(dasall_provider_catalog_parse_unit_test)
 dasall_apply_common_options(dasall_provider_catalog_overlay_unit_test)
 dasall_apply_common_options(dasall_provider_model_metadata_parse_unit_test)
+dasall_apply_common_options(dasall_prompt_registry_selection_unit_test)
+dasall_apply_common_options(dasall_prompt_registry_trust_source_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -126,3 +148,9 @@ set_tests_properties(ProviderCatalogOverlayTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME ProviderModelMetadataParseTest COMMAND dasall_provider_model_metadata_parse_unit_test)
 set_tests_properties(ProviderModelMetadataParseTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME PromptRegistrySelectionTest COMMAND dasall_prompt_registry_selection_unit_test)
+set_tests_properties(PromptRegistrySelectionTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME PromptRegistryTrustSourceTest COMMAND dasall_prompt_registry_trust_source_unit_test)
+set_tests_properties(PromptRegistryTrustSourceTest PROPERTIES LABELS "unit;llm")
