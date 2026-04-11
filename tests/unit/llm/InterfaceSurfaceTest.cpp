@@ -16,8 +16,12 @@
 #include "llm/LLMRequest.h"
 #include "llm/LLMResponse.h"
 #include "prompt/IPromptComposer.h"
+#include "prompt/IPromptPolicy.h"
 #include "prompt/IPromptRegistry.h"
 #include "prompt/ModelBudgetHint.h"
+#include "prompt/PromptPolicyConfig.h"
+#include "prompt/PromptPolicyDecision.h"
+#include "prompt/PromptPolicyInput.h"
 #include "prompt/PromptComposeRequest.h"
 #include "prompt/PromptComposeResult.h"
 #include "prompt/PromptComposerConfig.h"
@@ -496,6 +500,150 @@ void test_prompt_composer_config_freezes_renderer_controls() {
               "PromptComposerConfig should preserve max_few_shot_count as a composition guardrail");
 }
 
+void test_iprompt_policy_surface_freezes_spi_signatures() {
+  using dasall::contracts::PromptComposeResult;
+  using dasall::llm::prompt::IPromptPolicy;
+  using dasall::llm::prompt::PromptPolicyConfig;
+  using dasall::llm::prompt::PromptPolicyDecision;
+  using dasall::llm::prompt::PromptPolicyInput;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IPromptPolicy::init),
+                 bool (IPromptPolicy::*)(const PromptPolicyConfig&)>);
+  static_assert(std::is_same_v<decltype(&IPromptPolicy::evaluate),
+                 PromptPolicyDecision (IPromptPolicy::*)(
+                     const PromptComposeResult&, const PromptPolicyInput&) const>);
+  static_assert(std::is_abstract_v<IPromptPolicy>);
+
+  assert_true(std::is_abstract_v<IPromptPolicy>,
+              "IPromptPolicy should remain a pure abstract prompt governance SPI");
+}
+
+void test_prompt_policy_input_freezes_profile_and_governance_dimensions() {
+  using dasall::llm::prompt::PromptPolicyInput;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.profile_id), std::string>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.allowed_prompt_releases),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.trusted_sources),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.tool_visibility_rules),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.render_budget_tokens),
+                 std::uint32_t>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.active_scene), std::string>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.active_persona), std::string>);
+
+  const PromptPolicyInput input{
+    .profile_id = "desktop_full",
+    .allowed_prompt_releases = {"prompt.plan.default@2026-04-10.1"},
+    .trusted_sources = {"baseline", "trusted_snapshot"},
+    .tool_visibility_rules = {"fs.read=visible", "shell.exec=hidden"},
+    .render_budget_tokens = 4096,
+    .active_scene = "ops_diagnosis",
+    .active_persona = "default_planner",
+  };
+
+  assert_true(input.allowed_prompt_releases.size() == 1U,
+              "PromptPolicyInput should preserve prompt release allowlist as an explicit governance input");
+  assert_true(input.trusted_sources.size() == 2U,
+              "PromptPolicyInput should keep trusted_sources as an explicit fail-closed filter");
+  assert_true(input.render_budget_tokens == 4096U,
+              "PromptPolicyInput should keep render_budget_tokens visible for over-budget evaluation");
+}
+
+void test_prompt_policy_config_freezes_fail_closed_defaults() {
+  using dasall::llm::prompt::PromptPolicyConfig;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptPolicyConfig{}.default_allowed_releases),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyConfig{}.default_trusted_sources),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyConfig{}.deny_on_missing_allowlist), bool>);
+
+  const PromptPolicyConfig config{
+    .default_allowed_releases = {"prompt.plan.default@2026-04-10.1"},
+    .default_trusted_sources = {"baseline"},
+    .deny_on_missing_allowlist = true,
+  };
+
+  assert_true(config.default_allowed_releases.size() == 1U,
+              "PromptPolicyConfig should keep default_allowed_releases as a stable init-time allowlist");
+  assert_true(config.default_trusted_sources.size() == 1U,
+              "PromptPolicyConfig should preserve default_trusted_sources as a stable init-time filter");
+  assert_true(config.deny_on_missing_allowlist,
+              "PromptPolicyConfig should default to deny_on_missing_allowlist for fail-closed governance");
+}
+
+void test_prompt_policy_decision_freezes_disposition_and_message_boundary() {
+  using dasall::llm::prompt::PromptPolicyDecision;
+  using dasall::llm::prompt::PromptPolicyDisposition;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptPolicyDecision{}.disposition),
+                 PromptPolicyDisposition>);
+  static_assert(std::is_same_v<decltype(PromptPolicyDecision{}.governed_messages),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyDecision{}.redactions),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyDecision{}.tool_visibility_patch),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PromptPolicyDecision{}.reason), std::string>);
+
+  const PromptPolicyDecision allow_decision{
+    .disposition = PromptPolicyDisposition::Allow,
+    .governed_messages = {"system:plan carefully", "user:diagnose timeout"},
+    .redactions = {"secret_ref masked"},
+    .tool_visibility_patch = {"shell.exec=hidden"},
+    .reason = "trusted source and allowlist matched",
+  };
+
+  const PromptPolicyDecision deny_decision{
+    .disposition = PromptPolicyDisposition::Deny,
+    .governed_messages = {},
+    .redactions = {},
+    .tool_visibility_patch = {},
+    .reason = "prompt release missing from allowlist",
+  };
+
+  const PromptPolicyDecision over_budget_decision{
+    .disposition = PromptPolicyDisposition::OverBudget,
+    .governed_messages = {},
+    .redactions = {},
+    .tool_visibility_patch = {},
+    .reason = "render budget exceeded configured token limit",
+  };
+
+  const PromptPolicyDecision recompose_decision{
+    .disposition = PromptPolicyDisposition::RequireRecompose,
+    .governed_messages = {},
+    .redactions = {"tool summary removed"},
+    .tool_visibility_patch = {"fs.read=visible"},
+    .reason = "tool visibility drift requires recomposition",
+  };
+
+  const PromptPolicyDecision invalid_decision{
+    .disposition = PromptPolicyDisposition::Deny,
+    .governed_messages = {"assistant:this should not pass"},
+    .redactions = {},
+    .tool_visibility_patch = {},
+    .reason = "deny result must not emit governed_messages",
+  };
+
+  assert_true(allow_decision.has_consistent_values(),
+              "PromptPolicyDecision should allow governed_messages only when disposition is Allow");
+  assert_true(deny_decision.has_consistent_values(),
+              "PromptPolicyDecision should express deny without fabricating governed_messages");
+  assert_true(over_budget_decision.has_consistent_values(),
+              "PromptPolicyDecision should preserve OverBudget as a first-class disposition");
+  assert_true(recompose_decision.has_consistent_values(),
+              "PromptPolicyDecision should preserve RequireRecompose without implying Allow");
+  assert_true(!invalid_decision.has_consistent_values(),
+              "PromptPolicyDecision should reject deny payloads that still emit governed_messages");
+}
+
 }  // namespace
 
 int main() {
@@ -514,6 +662,10 @@ int main() {
     test_iprompt_composer_surface_freezes_spi_signatures();
     test_model_budget_hint_freezes_context_window_inputs();
     test_prompt_composer_config_freezes_renderer_controls();
+    test_iprompt_policy_surface_freezes_spi_signatures();
+    test_prompt_policy_input_freezes_profile_and_governance_dimensions();
+    test_prompt_policy_config_freezes_fail_closed_defaults();
+    test_prompt_policy_decision_freezes_disposition_and_message_boundary();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

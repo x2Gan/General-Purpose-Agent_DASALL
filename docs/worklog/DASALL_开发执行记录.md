@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #266
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 B
+- 任务：LLM-TODO-009 定义 PromptPolicy 治理接口与决策对象
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 已在上一轮完成阶段 B 的 LLM-TODO-008，因此当前最小原子任务自然切换到 LLM-TODO-009。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.5 已明确 `IPromptPolicy` 是 Prompt 发送前的唯一治理边界门，这意味着本轮必须先冻结治理 SPI、策略输入和决策对象，而不是提前跳到 PromptPipeline、LLMSubsystemConfig 或 PromptPolicy 具体实现。
+3. 同一设计文档的 6.15.3 进一步要求 trusted source 和 allowlist 缺失时必须 fail-closed，因此 009 不能只做“policy 有个 evaluate()”的空壳，而必须把四态 disposition 和默认拒绝语义真正编码进接口面。
+
+### 改动
+
+1. 新增 [llm/include/prompt/PromptPolicyDecision.h](../llm/include/prompt/PromptPolicyDecision.h)，冻结 `PromptPolicyDisposition` 四态枚举，以及 `governed_messages`、`redactions`、`tool_visibility_patch`、`reason` 四类治理输出，并通过 `has_consistent_values()` 守卫“只有 Allow 才能输出 governed_messages”的边界。
+2. 新增 [llm/include/prompt/PromptPolicyInput.h](../llm/include/prompt/PromptPolicyInput.h)，冻结 `profile_id`、`allowed_prompt_releases`、`trusted_sources`、`tool_visibility_rules`、`render_budget_tokens`、`active_scene`、`active_persona` 七项治理输入。
+3. 新增 [llm/include/prompt/PromptPolicyConfig.h](../llm/include/prompt/PromptPolicyConfig.h)，冻结 `default_allowed_releases`、`default_trusted_sources` 与 `deny_on_missing_allowlist` 三项初始化配置，并把 fail-closed 默认值固定在接口面。
+4. 新增 [llm/include/prompt/IPromptPolicy.h](../llm/include/prompt/IPromptPolicy.h)，冻结 `init()` 与 `evaluate()` 两个 PromptPolicy SPI 入口，保持接口纯抽象。
+5. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，在既有 adapter / manager / registry / composer 冻结测试基础上继续补齐 PromptPolicy SPI 签名、治理输入、默认配置和四态决策一致性断言。
+6. 新增 [docs/todos/llm/deliverables/LLM-TODO-009-PromptPolicy治理接口与决策对象设计收敛.md](../todos/llm/deliverables/LLM-TODO-009-PromptPolicy治理接口与决策对象设计收敛.md)，沉淀本轮本地证据、OWASP fail-closed 参考、Design -> Build 映射与治理边界收敛理由。
+7. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-009 标记为 Done，并新增阶段 B 执行记录。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm`、`dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_llm` 与 `dasall_unit_tests` 成功；本轮未观察到由 009 引入的新编译告警。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示若继续出现，仍记为 CTest 工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-009 已完成，`IPromptPolicy` 治理 SPI、`PromptPolicyInput` profile 投影输入，以及 `PromptPolicyDecision` 的四态治理边界已经落盘并被单测冻结。
+2. `PromptPolicyConfig.deny_on_missing_allowlist` 在本轮固定为 fail-closed 默认值，确保缺少 allowlist 或 trusted source 时不会因为实现细节漂移而隐式放行。
+
+### 下一步
+
+1. 进入 LLM-TODO-010，冻结 PromptPipeline facade 接口与返回类型。
+2. 在 018 完成前，继续保持 PromptPolicy 只冻结输入输出边界，不把 redaction 规则、tool visibility diff 算法或 over-budget 实现细节提前揉进 009 提交。
+
+### 风险
+
+1. 本轮把 `Allow` 设为唯一允许输出 `governed_messages` 的 disposition；若后续实现需要在 `RequireRecompose` 场景暴露半成品消息，必须先重新评审 009 的接口边界，而不是在实现阶段静默突破。
+
 ## 记录 #265
 
 - 日期：2026-04-11
