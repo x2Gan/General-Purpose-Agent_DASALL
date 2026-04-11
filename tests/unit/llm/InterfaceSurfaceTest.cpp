@@ -11,10 +11,14 @@
 #include "LLMAdapterConfig.h"
 #include "LLMGenerateRequest.h"
 #include "LLMManagerResult.h"
+#include "NormalizedUsageRecord.h"
+#include "TokenEstimate.h"
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "llm/LLMRequest.h"
 #include "llm/LLMResponse.h"
+#include "provider/ModelCatalogEntry.h"
+#include "provider/ProviderDescriptor.h"
 #include "prompt/IPromptComposer.h"
 #include "prompt/IPromptPipeline.h"
 #include "prompt/IPromptPolicy.h"
@@ -32,6 +36,9 @@
 #include "prompt/PromptRegistryConfig.h"
 #include "prompt/PromptRegistryResult.h"
 #include "prompt/PromptRelease.h"
+#include "route/ModelSelectionHint.h"
+#include "route/ResolvedModelRoute.h"
+#include "stream/StreamSessionRef.h"
 #include "support/TestAssertions.h"
 
 #include "../../../llm/src/adapters/AdapterCallResult.h"
@@ -791,6 +798,233 @@ void test_prompt_pipeline_result_freezes_three_stage_outputs_without_model_input
               "PromptPipelineResult should preserve OverBudget as a first-class pipeline outcome");
 }
 
+void test_provider_descriptor_freezes_provider_asset_identity() {
+  using dasall::llm::ProviderDescriptor;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.provider_id), std::string>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.adapter_family), std::string>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.api_family), std::string>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.base_url), std::string>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.auth_ref), std::string>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.header_refs),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.capability_tags),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ProviderDescriptor{}.source_version), std::string>);
+
+  const ProviderDescriptor descriptor{
+    .provider_id = "deepseek-primary",
+    .adapter_family = "openai_compatible",
+    .api_family = "deepseek_api",
+    .base_url = "https://api.deepseek.example/v1",
+    .auth_ref = "secret://llm/deepseek-primary",
+    .header_refs = {"profile://headers/x-trace-id"},
+    .capability_tags = {"reasoning", "prompt_cache", "tool_call"},
+    .source_version = "providers/deepseek@2026-04-11.1",
+  };
+
+  assert_true(descriptor.header_refs.size() == 1U,
+              "ProviderDescriptor should preserve injected header references as provider metadata");
+  assert_true(descriptor.capability_tags.size() == 3U,
+              "ProviderDescriptor should freeze capability_tags for provider governance and routing");
+  assert_true(descriptor.source_version == "providers/deepseek@2026-04-11.1",
+              "ProviderDescriptor should keep source_version visible for catalog traceability");
+}
+
+void test_model_catalog_entry_freezes_pricing_and_verification_axes() {
+  using dasall::llm::ModelCatalogEntry;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.provider_id), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.model_id), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.model_version), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.tier_family), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.latency_tier), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.cost_tier), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.reasoning_depth_tier), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.context_window), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.default_max_output_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.max_output_tokens_hard_limit), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.supports_tools), bool>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.supports_reasoning), bool>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.supports_visible_reasoning), bool>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.supports_prompt_cache), bool>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.input_cache_hit_usd_per_1m), double>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.input_cache_miss_usd_per_1m), double>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.output_usd_per_1m), double>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.metadata_source_uri), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.metadata_effective_at), std::string>);
+  static_assert(std::is_same_v<decltype(ModelCatalogEntry{}.verification_state), std::string>);
+
+  const ModelCatalogEntry entry{
+    .provider_id = "deepseek-primary",
+    .model_id = "deepseek-reasoner",
+    .model_version = "2026-04-11",
+    .tier_family = "reasoning",
+    .latency_tier = "high",
+    .cost_tier = "premium",
+    .reasoning_depth_tier = "deep",
+    .context_window = 128000,
+    .default_max_output_tokens = 8192,
+    .max_output_tokens_hard_limit = 65536,
+    .supports_tools = true,
+    .supports_reasoning = true,
+    .supports_visible_reasoning = true,
+    .supports_prompt_cache = true,
+    .input_cache_hit_usd_per_1m = 0.14,
+    .input_cache_miss_usd_per_1m = 0.55,
+    .output_usd_per_1m = 2.19,
+    .metadata_source_uri = "assets/providers/deepseek/models.yaml",
+    .metadata_effective_at = "2026-04-11T00:00:00Z",
+    .verification_state = "verified",
+  };
+
+  assert_true(entry.context_window == 128000U,
+              "ModelCatalogEntry should freeze context_window as a static provider catalog fact");
+  assert_true(entry.supports_visible_reasoning,
+              "ModelCatalogEntry should preserve reasoning visibility as a first-class capability flag");
+  assert_true(entry.output_usd_per_1m > entry.input_cache_hit_usd_per_1m,
+              "ModelCatalogEntry should expose pricing tiers for usage aggregation and routing");
+}
+
+void test_resolved_model_route_freezes_primary_and_fallback_chain() {
+  using dasall::llm::ResolvedModelRoute;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(ResolvedModelRoute{}.stage), std::string>);
+  static_assert(std::is_same_v<decltype(ResolvedModelRoute{}.primary_route), std::string>);
+  static_assert(std::is_same_v<decltype(ResolvedModelRoute{}.fallback_routes),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ResolvedModelRoute{}.streaming_enabled), bool>);
+
+  const ResolvedModelRoute route{
+    .stage = "planning",
+    .primary_route = "deepseek-reasoner",
+    .fallback_routes = {"deepseek-chat", "deepseek-economy"},
+    .streaming_enabled = false,
+  };
+
+  assert_true(route.primary_route == "deepseek-reasoner",
+              "ResolvedModelRoute should freeze the resolved primary route string");
+  assert_true(route.fallback_routes.size() == 2U,
+              "ResolvedModelRoute should preserve fallback_routes as an ordered degradation chain");
+  assert_true(!route.streaming_enabled,
+              "ResolvedModelRoute should keep streaming_enabled explicit instead of inferring it from route names");
+}
+
+void test_model_selection_hint_freezes_routing_governance_inputs() {
+  using dasall::llm::ModelSelectionHint;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.stage), std::string>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.task_type), std::string>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.complexity_tier), std::string>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.latency_sla_tier), std::string>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.budget_tier), std::string>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.requires_tools), bool>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.requires_reasoning), bool>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.prefers_visible_reasoning), bool>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.estimated_input_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.target_output_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelSelectionHint{}.previous_route_failures), std::uint32_t>);
+
+  const ModelSelectionHint hint{
+    .stage = "planning",
+    .task_type = "diagnosis",
+    .complexity_tier = "high",
+    .latency_sla_tier = "interactive",
+    .budget_tier = "balanced",
+    .requires_tools = true,
+    .requires_reasoning = true,
+    .prefers_visible_reasoning = false,
+    .estimated_input_tokens = 6144,
+    .target_output_tokens = 2048,
+    .previous_route_failures = 1,
+  };
+
+  assert_true(hint.requires_tools,
+              "ModelSelectionHint should preserve tool requirements as an explicit routing input");
+  assert_true(hint.requires_reasoning,
+              "ModelSelectionHint should preserve reasoning requirements as an explicit routing input");
+  assert_true(hint.previous_route_failures == 1U,
+              "ModelSelectionHint should keep previous_route_failures visible for deterministic fallback scoring");
+}
+
+void test_stream_session_ref_freezes_module_local_lifecycle_anchor() {
+  using dasall::llm::StreamSessionRef;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(StreamSessionRef{}.session_id), std::string>);
+
+  const StreamSessionRef session_ref{
+    .session_id = "stream-2026-04-11-0001",
+  };
+
+  assert_true(session_ref.session_id == "stream-2026-04-11-0001",
+              "StreamSessionRef should remain a module-local lifecycle anchor instead of a shared streaming contract");
+}
+
+void test_token_estimate_freezes_budget_projection_fields() {
+  using dasall::llm::TokenEstimate;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(TokenEstimate{}.estimated_input_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(TokenEstimate{}.reserved_output_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(TokenEstimate{}.context_window), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(TokenEstimate{}.over_budget), bool>);
+  static_assert(std::is_same_v<decltype(TokenEstimate{}.safety_margin), double>);
+
+  const TokenEstimate estimate{
+    .estimated_input_tokens = 5800,
+    .reserved_output_tokens = 2048,
+    .context_window = 4096,
+    .over_budget = true,
+    .safety_margin = 0.08,
+  };
+
+  assert_true(estimate.over_budget,
+              "TokenEstimate should preserve over_budget as an explicit governance outcome");
+  assert_true(estimate.safety_margin == 0.08,
+              "TokenEstimate should freeze safety_margin so estimation policy stays observable");
+  assert_true(estimate.estimated_input_tokens + estimate.reserved_output_tokens > estimate.context_window,
+              "TokenEstimate should expose the arithmetic inputs behind over-budget decisions");
+}
+
+void test_normalized_usage_record_freezes_usage_aggregation_output() {
+  using dasall::llm::NormalizedUsageRecord;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.prompt_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.completion_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.total_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.prompt_cache_hit_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.prompt_cache_miss_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.estimated_cost_usd), double>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.provider_id), std::string>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.model_id), std::string>);
+  static_assert(std::is_same_v<decltype(NormalizedUsageRecord{}.pricing_ref), std::string>);
+
+  const NormalizedUsageRecord usage{
+    .prompt_tokens = 1200,
+    .completion_tokens = 600,
+    .total_tokens = 1800,
+    .prompt_cache_hit_tokens = 400,
+    .prompt_cache_miss_tokens = 800,
+    .estimated_cost_usd = 0.0048,
+    .provider_id = "deepseek-primary",
+    .model_id = "deepseek-chat",
+    .pricing_ref = "providers/deepseek/models.yaml#deepseek-chat",
+  };
+
+  assert_true(usage.total_tokens == usage.prompt_tokens + usage.completion_tokens,
+              "NormalizedUsageRecord should preserve total_tokens as the normalized aggregate of prompt and completion usage");
+  assert_true(usage.prompt_cache_hit_tokens == 400U,
+              "NormalizedUsageRecord should expose prompt_cache_hit_tokens for provider-neutral accounting");
+  assert_true(usage.estimated_cost_usd > 0.0,
+              "NormalizedUsageRecord should keep estimated_cost_usd visible for observability and audit sinks");
+}
+
 }  // namespace
 
 int main() {
@@ -816,6 +1050,13 @@ int main() {
     test_iprompt_pipeline_surface_freezes_facade_signatures();
     test_prompt_pipeline_config_freezes_three_stage_init_bundle();
     test_prompt_pipeline_result_freezes_three_stage_outputs_without_model_inputs();
+    test_provider_descriptor_freezes_provider_asset_identity();
+    test_model_catalog_entry_freezes_pricing_and_verification_axes();
+    test_resolved_model_route_freezes_primary_and_fallback_chain();
+    test_model_selection_hint_freezes_routing_governance_inputs();
+    test_stream_session_ref_freezes_module_local_lifecycle_anchor();
+    test_token_estimate_freezes_budget_projection_fields();
+    test_normalized_usage_record_freezes_usage_aggregation_output();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

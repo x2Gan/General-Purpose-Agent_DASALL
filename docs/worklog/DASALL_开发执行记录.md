@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #268
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 B
+- 任务：LLM-TODO-011 定义 route、provider、stream、usage supporting types
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 已在上一轮完成 LLM-TODO-010，因此按串行依赖顺序，本轮最小原子任务切换为 LLM-TODO-011。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.4.2 / 6.4.3 已把 provider、route、stream、token、usage supporting types 的字段边界写实，因此 011 的首要目标是把这些类型冻结落盘，而不是提前进入 Provider Catalog、ModelRouter、TokenEstimator、UsageAggregator 或 streaming 实现。
+3. 同一设计文档的 6.15.1、6.15.2、6.15.7、6.15.8 进一步明确了 owner 关系和禁止事项，本轮必须守住“module-local、不推进 shared contracts、streaming 只留生命周期占位”的边界。
+
+### 改动
+
+1. 新增 [llm/include/provider/ProviderDescriptor.h](../llm/include/provider/ProviderDescriptor.h) 与 [llm/include/provider/ModelCatalogEntry.h](../llm/include/provider/ModelCatalogEntry.h)，冻结 provider instance 元数据与单模型 catalog 元数据事实源。
+2. 新增 [llm/include/route/ResolvedModelRoute.h](../llm/include/route/ResolvedModelRoute.h) 与 [llm/include/route/ModelSelectionHint.h](../llm/include/route/ModelSelectionHint.h)，冻结 ModelRouter 的最小输入输出对象。
+3. 新增 [llm/include/stream/StreamSessionRef.h](../llm/include/stream/StreamSessionRef.h)，把 streaming 生命周期占位收敛成 module-local `session_id` 锚点，不提前引入 shared StreamHandle。
+4. 新增 [llm/include/TokenEstimate.h](../llm/include/TokenEstimate.h) 与 [llm/include/NormalizedUsageRecord.h](../llm/include/NormalizedUsageRecord.h)，冻结 TokenEstimator 与 UsageAggregator 的 supporting type 边界。
+5. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，补齐 provider/route/stream/token/usage supporting types 的字段可见性和 module-local 断言。
+6. 新增 [docs/todos/llm/deliverables/LLM-TODO-011-route-provider-stream-usage-supporting-types设计收敛.md](../todos/llm/deliverables/LLM-TODO-011-route-provider-stream-usage-supporting-types设计收敛.md)，沉淀 supporting types 的设计边界与 shared admission 风险说明。
+7. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-011 标记为 Done，并新增阶段 B 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm`、`dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_llm` 与 `dasall_unit_tests` 成功，本轮未观察到由 011 引入的新编译告警。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-011 已完成，七个 supporting types 已作为 llm module-local 类型落盘，后续 Provider Catalog、ModelRouter、TokenEstimator、UsageAggregator 与 streaming 任务有了统一的静态边界。
+2. 011 没有把 `ResolvedModelRoute`、`StreamSessionRef` 或 usage/provider 元数据推进 shared contracts，也没有改变 005/006 已冻结的公共接口签名。
+
+### 下一步
+
+1. 可进入 LLM-TODO-012，开始实现 `LLMSubsystemConfig` 的配置投影。
+2. 也可在后续回合进入 LLM-TODO-016、018、019，分别落 TokenEstimator、PromptPolicy、PromptPipeline 的实现。
+
+### 风险
+
+1. `StreamSessionRef` 当前只表达生命周期占位；若 streaming 后续需要取消、observer 或 backpressure 细节，必须在 streaming 专项任务中补设计，而不是在 011 上静默扩字段。
+
 ## 记录 #267
 
 - 日期：2026-04-11
