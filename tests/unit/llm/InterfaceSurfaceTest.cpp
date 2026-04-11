@@ -10,6 +10,7 @@
 #include "ILLMManager.h"
 #include "LLMAdapterConfig.h"
 #include "LLMGenerateRequest.h"
+#include "LLMSubsystemConfig.h"
 #include "LLMManagerResult.h"
 #include "NormalizedUsageRecord.h"
 #include "TokenEstimate.h"
@@ -197,6 +198,58 @@ void test_illm_manager_surface_freezes_spi_signatures() {
 
   assert_true(std::is_abstract_v<ILLMManager>,
               "ILLMManager should remain a pure abstract runtime-facing SPI");
+}
+
+void test_llm_subsystem_config_surface_freezes_projection_helpers() {
+  using dasall::llm::LLMDegradeConfig;
+  using dasall::llm::LLMStageRouteConfig;
+  using dasall::llm::LLMSubsystemConfig;
+  using dasall::llm::LLMSubsystemConfigOverlay;
+  using dasall::llm::LLMTimeoutConfig;
+  using dasall::llm::PromptAssetSourceConfig;
+  using dasall::llm::PromptSelectorOverlay;
+  using dasall::llm::ProviderCatalogSourceConfig;
+  using dasall::llm::project_llm_subsystem_config;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.profile_id), std::string>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.stage_routes),
+                 std::map<std::string, LLMStageRouteConfig>>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.allowed_prompt_releases),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.trusted_sources),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.tool_visibility_rules),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.prompt_asset_sources),
+                 PromptAssetSourceConfig>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.prompt_selector_overlay),
+                 PromptSelectorOverlay>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.provider_catalog_sources),
+                 ProviderCatalogSourceConfig>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.degrade_policy),
+                 LLMDegradeConfig>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.timeout_policy),
+                 LLMTimeoutConfig>);
+  static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.worker_threads), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(&LLMSubsystemConfig::stage_route_for),
+                 std::optional<LLMStageRouteConfig> (LLMSubsystemConfig::*)(std::string_view) const>);
+  static_assert(std::is_same_v<decltype(&LLMSubsystemConfig::make_prompt_policy_input),
+                 dasall::llm::prompt::PromptPolicyInput (LLMSubsystemConfig::*)(std::uint32_t) const>);
+  static_assert(std::is_same_v<decltype(&project_llm_subsystem_config),
+                 std::optional<LLMSubsystemConfig> (*)(const dasall::profiles::RuntimePolicySnapshot&,
+                                                       const LLMSubsystemConfigOverlay&)>);
+
+  const LLMSubsystemConfigOverlay overlay{};
+
+  assert_true(overlay.prompt_asset_sources.baseline_root == "llm/assets/prompts",
+              "PromptAssetSourceConfig should freeze llm/assets/prompts as the default prompt baseline root");
+  assert_true(overlay.provider_catalog_sources.baseline_root == "llm/assets/providers",
+              "ProviderCatalogSourceConfig should freeze llm/assets/providers as the default provider baseline root");
+  assert_true(overlay.prompt_selector_overlay.active_scene.empty(),
+              "PromptSelectorOverlay should default active_scene to empty so no selector override is forced");
+  assert_true(overlay.prompt_selector_overlay.active_persona.empty(),
+              "PromptSelectorOverlay should default active_persona to empty so no selector override is forced");
 }
 
 void test_llm_generate_request_freezes_runtime_handoff_fields() {
@@ -1034,6 +1087,7 @@ int main() {
     test_llm_adapter_config_freezes_expected_fields();
     test_adapter_call_result_freezes_non_exception_error_boundary();
     test_illm_manager_surface_freezes_spi_signatures();
+    test_llm_subsystem_config_surface_freezes_projection_helpers();
     test_llm_generate_request_freezes_runtime_handoff_fields();
     test_llm_manager_result_freezes_success_failure_and_fallback_semantics();
     test_iprompt_registry_surface_freezes_spi_signatures();

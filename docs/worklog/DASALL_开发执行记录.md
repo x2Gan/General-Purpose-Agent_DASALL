@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #270
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 C
+- 任务：LLM-TODO-012 实现 LLMSubsystemConfig 配置投影
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已经完成 006、009、011，因此 012 的前置接口冻结条件全部满足，可按串行原子任务顺序直接进入配置投影实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.10 已明确 `LLMSubsystemConfig` 只是 llm 的 consumer view，而不是第二套全局配置系统；这使 012 具备清晰的“只做投影、不做资产加载、不做 provider init”边界。
+3. 当前 [llm/include/ILLMManager.h](../../llm/include/ILLMManager.h) 仍只前向声明 `LLMSubsystemConfig`，而 020、021、041 又都依赖其存在；优先完成 012 能为 ModelRouter、LLMManager 治理和后续 provider 投影提供统一的 llm 本地配置锚点。
+
+### 改动
+
+1. 新增 [llm/include/LLMSubsystemConfig.h](../../llm/include/LLMSubsystemConfig.h)，冻结 `LLMStageRouteConfig`、`PromptAssetSourceConfig`、`PromptSelectorOverlay`、`ProviderCatalogSourceConfig`、`LLMDegradeConfig`、`LLMTimeoutConfig`、`LLMSubsystemConfigOverlay` 与 `LLMSubsystemConfig` 八类 llm 本地配置对象，并公开 `project_llm_subsystem_config()`、`stage_route_for()`、`make_prompt_policy_input()` 三个消费 helper。
+2. 新增 [llm/src/LLMSubsystemConfig.cpp](../../llm/src/LLMSubsystemConfig.cpp)，实现 `RuntimePolicySnapshot` -> `LLMSubsystemConfig` 的投影逻辑，确保只裁剪 `model_profile`、`prompt_policy`、`degrade_policy`、`timeout_policy.llm` 与 llm 本地 overlay，不直接保留全量 snapshot。
+3. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，补齐 `LLMSubsystemConfig` public surface、默认资产根路径、空 scene/persona selector 语义与 projector 签名冻结断言。
+4. 新增 [tests/unit/llm/LLMSubsystemConfigProjectionTest.cpp](../../tests/unit/llm/LLMSubsystemConfigProjectionTest.cpp)，覆盖 route map 投影、prompt allowlist/trusted source 投影、llm timeout 投影、默认 `llm/assets/prompts` / `llm/assets/providers` 根路径、空 selector 默认值与 overlay 合法性校验。
+5. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 `LLMSubsystemConfig` 实现与 `LLMSubsystemConfigProjectionTest` 接入 llm / unit 构建拓扑。
+6. 新增 [docs/todos/llm/deliverables/LLM-TODO-012-LLMSubsystemConfig配置投影设计收敛.md](../todos/llm/deliverables/LLM-TODO-012-LLMSubsystemConfig配置投影设计收敛.md)，沉淀 profile->llm consumer view 的配置边界、默认 selector 语义与 Design -> Build 映射。
+7. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-012 标记为 Done，并补充阶段 C 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm_interface_surface_unit_test`、`dasall_llm_subsystem_config_projection_unit_test`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+   - `RunCtest_CMakeTools` 运行 `LLMSubsystemConfigProjectionTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_llm_interface_surface_unit_test` 与 `dasall_llm_subsystem_config_projection_unit_test` 成功，本轮未观察到由 012 引入的新编译告警。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 与 `LLMSubsystemConfigProjectionTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-012 已完成，llm 现已拥有稳定的 `LLMSubsystemConfig` 消费视图，后续 ModelRouter / LLMManager / provider 投影链不再需要直接依赖完整 `RuntimePolicySnapshot`。
+2. 012 没有把 `auth_ref`、`header_refs`、`base_url alias`、provider activation flag 等 provider init 细节提前揉进配置投影视图，也没有把 prompt selector 默认值静默写死为某个场景或人格，从而守住了 013/014/041 的后续边界。
+
+### 下一步
+
+1. 进入 LLM-TODO-013，开始实现 `PromptAssetRepository` 与 baseline Prompt 资产。
+2. 在 013 完成前，继续保持 `LLMSubsystemConfig` 只表达 llm consumer view，不把 Prompt 资产加载顺序或 Provider Catalog 解析细节提前塞回 012。
+
+### 风险
+
+1. `default_prompt_bundle` 当前默认留空，仅表达“不给额外 bundle 提示”；若 013/015 后发现 baseline Prompt 资产必须依赖显式 bundle 常量，应先重新评审 012 的配置边界，而不是在 Registry/Composer 实现中静默补默认值。
+
 ## 记录 #269
 
 - 日期：2026-04-11

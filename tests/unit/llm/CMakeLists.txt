@@ -2,6 +2,10 @@ add_executable(dasall_llm_interface_surface_unit_test
 	InterfaceSurfaceTest.cpp
 )
 
+add_executable(dasall_llm_subsystem_config_projection_unit_test
+	LLMSubsystemConfigProjectionTest.cpp
+)
+
 add_executable(dasall_mock_llm_adapter_surface_unit_test
 	MockLLMAdapterSurfaceTest.cpp
 )
@@ -12,6 +16,13 @@ target_link_libraries(dasall_llm_interface_surface_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_llm_subsystem_config_projection_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+		dasall_profiles
+)
+
 target_link_libraries(dasall_mock_llm_adapter_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -19,10 +30,14 @@ target_link_libraries(dasall_mock_llm_adapter_surface_unit_test
 )
 
 dasall_apply_common_options(dasall_llm_interface_surface_unit_test)
+dasall_apply_common_options(dasall_llm_subsystem_config_projection_unit_test)
 dasall_apply_common_options(dasall_mock_llm_adapter_surface_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMSubsystemConfigProjectionTest COMMAND dasall_llm_subsystem_config_projection_unit_test)
+set_tests_properties(LLMSubsystemConfigProjectionTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME MockLLMAdapterSurfaceTest COMMAND dasall_mock_llm_adapter_surface_unit_test)
 set_tests_properties(MockLLMAdapterSurfaceTest PROPERTIES LABELS "unit;llm")

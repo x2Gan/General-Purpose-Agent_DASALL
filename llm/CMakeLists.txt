@@ -22,6 +22,7 @@ endforeach()
 
 target_sources(dasall_llm
   PRIVATE
+    src/LLMSubsystemConfig.cpp
     src/placeholder.cpp
 )
 
@@ -31,6 +32,8 @@ target_include_directories(dasall_llm
   PUBLIC
     $<BUILD_INTERFACE:${DASALL_LLM_PUBLIC_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/profiles/include
 )
 
 target_link_libraries(dasall_llm
