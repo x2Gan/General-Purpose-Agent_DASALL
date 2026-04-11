@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #275
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 E
+- 任务：LLM-TODO-039 实现 TemplateRenderer 安全规则与可注入渲染接口
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 016，且 039 的前置依赖只要求 002 完成，因此当前按串行原子任务顺序直接进入 TemplateRenderer 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.1a 已把模板能力收敛为 `simple_var`、单轮替换、白名单变量名、缺失保留原文并告警、值内分隔符转义，以及禁止代码执行/网络/文件读取，因此 039 的主目标可以收敛为“补内部渲染器实现与单测”，而不是提前进入 017 的 PromptComposer 消息装配。
+3. 039 执行前已经确认 [llm/include/prompt/IPromptComposer.h](../../llm/include/prompt/IPromptComposer.h) 和 [llm/include/prompt/PromptComposerConfig.h](../../llm/include/prompt/PromptComposerConfig.h) 只冻结了 Composer 的公共 SPI 与 `template_engine` 配置，因此本轮只需要新增 module-local 可注入接口，不应回改 shared prompt contracts 或 public llm include。
+
+### 改动
+
+1. 新增 [llm/src/prompt/TemplateRenderer.h](../../llm/src/prompt/TemplateRenderer.h)，定义 `ITemplateRenderer`、`TemplateRendererConfig`、`TemplateRenderResult` 与 `TemplateVariables`，为后续 PromptComposer 提供 module-local 的渲染依赖注入点。
+2. 新增 [llm/src/prompt/TemplateRenderer.cpp](../../llm/src/prompt/TemplateRenderer.cpp)，实现 simple_var 单轮替换、变量名白名单校验、未匹配变量保留原文、值内 `{{` / `}}` 的反斜杠字面化、UTF-8 码点级长度截断以及 `renderer_not_initialized` / `unsupported_template_tag` / `nested_render_rejected` / `value_truncated` warning 产出。
+3. 新增 [tests/unit/llm/TemplateRendererTest.cpp](../../tests/unit/llm/TemplateRendererTest.cpp)，覆盖正常替换、未匹配变量 warning、嵌套渲染拒绝、超长值截断和特殊字符转义五类行为。
+4. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 TemplateRenderer 实现与单测接入 llm / unit 聚合目标。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-039-TemplateRenderer安全规则与可注入渲染接口设计收敛.md](../todos/llm/deliverables/LLM-TODO-039-TemplateRenderer安全规则与可注入渲染接口设计收敛.md)，沉淀 simple_var 安全边界、字面化策略与可注入接口设计。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-039 标记为 Done，并补充阶段 E 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `TemplateRendererTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_template_renderer_unit_test`，`ListTests_CMakeTools` 已列出 `TemplateRendererTest`，说明 039 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `227/227` 全部通过，其中新增的 `TemplateRendererTest` 通过。
+   - `RunCtest_CMakeTools` 定向执行 `TemplateRendererTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-039 已完成，llm 现已拥有独立的模板渲染 owner，后续 017 可以直接依赖 `ITemplateRenderer` 组装 Prompt，而不需要把模板安全规则内嵌进 PromptComposer。
+2. 本轮把嵌套模板注入风险收敛为“字面化 + warning”而不是“静默透传”，同时保持 renderer 仍是 provider-neutral、plain-text 导向的内部组件，不越权承担 PromptPolicy 的注入防御职责。
+3. 039 没有引入第三方模板库，也没有扩张到 shared contracts，从而保持这一轮仍是单一主目标任务。
+
+### 下一步
+
+1. 进入 LLM-TODO-017，开始实现 `PromptComposer` 装配流程，并直接复用本轮新增的 `ITemplateRenderer` 与 `TemplateRendererTest` 的安全边界。
+2. 在 017 中把本轮的 warning 语义映射进 `PromptComposeResult.composition_warnings`，而不是再造第二套模板渲染告警名。
+
+### 风险
+
+1. 当前字面化策略使用反斜杠转义，适合 plain-text Prompt 资产；如果后续具体输出上下文要求不同的展示语义，应保持 `ITemplateRenderer` 接口稳定，仅替换内部 escape policy，而不是在 Composer 侧临时拼补。
+
 ## 记录 #274
 
 - 日期：2026-04-11
