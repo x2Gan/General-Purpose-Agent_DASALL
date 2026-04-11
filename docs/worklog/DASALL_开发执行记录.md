@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #267
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 B
+- 任务：LLM-TODO-010 定义 PromptPipeline facade 接口与返回类型
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 已在上一轮完成 LLM-TODO-009，因此按依赖顺序，本轮最小原子任务切换为 LLM-TODO-010。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.6 明确 `IPromptPipeline` 用于收敛 PromptRegistry -> PromptComposer -> PromptPolicy 三段编排，解决 Runtime 硬编码 llm 内部顺序的问题，因此本轮必须先冻结 facade SPI 与结果类型，而不是直接进入 019 的 pipeline 实现。
+3. 同一设计文档的 6.7.1 和 7.1 要求 Runtime 默认通过 `IPromptPipeline.run()` 加 `ILLMManager.generate()` 的两步模式工作，因此 010 不能把模型调用参数或 recovery 控制面塞回 PromptPipeline 接口。
+
+### 改动
+
+1. 新增 [llm/include/prompt/PromptPipelineConfig.h](../llm/include/prompt/PromptPipelineConfig.h)，冻结 `registry_config`、`composer_config`、`policy_config` 三段初始化聚合对象。
+2. 新增 [llm/include/prompt/PromptPipelineResult.h](../llm/include/prompt/PromptPipelineResult.h)，冻结 `disposition`、`compose_result`、`policy_decision`、`registry_result`、`reason` 五项 facade 返回面。
+3. 新增 [llm/include/prompt/IPromptPipeline.h](../llm/include/prompt/IPromptPipeline.h)，冻结 `init()` 与 `run()` 两个 PromptPipeline facade SPI 入口，保持接口纯抽象。
+4. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)，补齐 PromptPipeline facade 签名、三段配置聚合与返回类型边界断言，确保接口面只表达 `select -> compose -> evaluate`。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-010-PromptPipeline-facade接口与返回类型设计收敛.md](../todos/llm/deliverables/LLM-TODO-010-PromptPipeline-facade接口与返回类型设计收敛.md)，沉淀设计收敛、Facade 边界与 Design -> Build 映射。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-010 标记为 Done，并回写阶段 B 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_llm`、`dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMInterfaceSurfaceTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_llm` 与 `dasall_unit_tests` 成功，本轮未观察到由 010 引入的新编译告警。
+   - `RunCtest_CMakeTools` 定向执行 `LLMInterfaceSurfaceTest` 结果为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-010 已完成，Prompt 三段治理的统一 facade SPI 与返回类型边界已经落盘，并通过公共接口冻结测试约束不引入模型调用输入。
+2. Runtime 对 llm 的默认 Prompt 编排出口已被接口层显式化，但 `ILLMManager` 的模型调用 owner 身份没有被 PromptPipeline 吞并。
+
+### 下一步
+
+1. 进入 LLM-TODO-011，冻结 route、provider、stream、usage supporting types。
+2. 在 019 完成前，继续保持 PromptPipeline 只冻结外部接口与 supporting types，不把三段组件注入或失败码映射细节提前揉进 010 提交。
+
+### 风险
+
+1. `PromptPipelineResult` 当前只承载三段编排产物，不承载模型请求对象；若后续实现需要 pipeline 直接产出模型调用输入，必须先回到 010 的接口评审，而不是在实现阶段静默扩面。
+
 ## 记录 #266
 
 - 日期：2026-04-11

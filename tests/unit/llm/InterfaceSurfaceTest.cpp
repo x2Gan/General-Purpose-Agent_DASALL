@@ -16,9 +16,12 @@
 #include "llm/LLMRequest.h"
 #include "llm/LLMResponse.h"
 #include "prompt/IPromptComposer.h"
+#include "prompt/IPromptPipeline.h"
 #include "prompt/IPromptPolicy.h"
 #include "prompt/IPromptRegistry.h"
 #include "prompt/ModelBudgetHint.h"
+#include "prompt/PromptPipelineConfig.h"
+#include "prompt/PromptPipelineResult.h"
 #include "prompt/PromptPolicyConfig.h"
 #include "prompt/PromptPolicyDecision.h"
 #include "prompt/PromptPolicyInput.h"
@@ -644,6 +647,150 @@ void test_prompt_policy_decision_freezes_disposition_and_message_boundary() {
               "PromptPolicyDecision should reject deny payloads that still emit governed_messages");
 }
 
+void test_iprompt_pipeline_surface_freezes_facade_signatures() {
+  using dasall::contracts::PromptComposeRequest;
+  using dasall::llm::prompt::IPromptPipeline;
+  using dasall::llm::prompt::PromptPipelineConfig;
+  using dasall::llm::prompt::PromptPipelineResult;
+  using dasall::llm::prompt::PromptPolicyInput;
+  using dasall::llm::prompt::PromptQuery;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IPromptPipeline::init),
+                 bool (IPromptPipeline::*)(const PromptPipelineConfig&)>);
+  static_assert(std::is_same_v<decltype(&IPromptPipeline::run),
+                 PromptPipelineResult (IPromptPipeline::*)(
+                     const PromptQuery&, const PromptComposeRequest&, const PromptPolicyInput&) const>);
+  static_assert(std::is_abstract_v<IPromptPipeline>);
+
+  assert_true(std::is_abstract_v<IPromptPipeline>,
+              "IPromptPipeline should remain a pure abstract facade over select-compose-evaluate");
+}
+
+void test_prompt_pipeline_config_freezes_three_stage_init_bundle() {
+  using dasall::llm::prompt::PromptComposerConfig;
+  using dasall::llm::prompt::PromptPipelineConfig;
+  using dasall::llm::prompt::PromptPolicyConfig;
+  using dasall::llm::prompt::PromptRegistryConfig;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptPipelineConfig{}.registry_config), PromptRegistryConfig>);
+  static_assert(std::is_same_v<decltype(PromptPipelineConfig{}.composer_config), PromptComposerConfig>);
+  static_assert(std::is_same_v<decltype(PromptPipelineConfig{}.policy_config), PromptPolicyConfig>);
+
+  const PromptPipelineConfig config{
+    .registry_config = {
+      .asset_root = "assets/prompts",
+      .trusted_sources = {"baseline", "signed_overlay"},
+    },
+    .composer_config = {
+      .template_engine = "simple_var",
+      .max_few_shot_count = 4,
+    },
+    .policy_config = {
+      .default_allowed_releases = {"prompt.plan.default@2026-04-10.1"},
+      .default_trusted_sources = {"baseline"},
+      .deny_on_missing_allowlist = true,
+    },
+  };
+
+  assert_true(config.registry_config.trusted_sources.size() == 2U,
+              "PromptPipelineConfig should freeze PromptRegistry init config inside the facade bundle");
+  assert_true(config.composer_config.max_few_shot_count == 4U,
+              "PromptPipelineConfig should preserve PromptComposerConfig without widening the facade scope");
+  assert_true(config.policy_config.deny_on_missing_allowlist,
+              "PromptPipelineConfig should preserve fail-closed PromptPolicyConfig defaults");
+}
+
+void test_prompt_pipeline_result_freezes_three_stage_outputs_without_model_inputs() {
+  using dasall::contracts::CompositionStage;
+  using dasall::contracts::PromptEvalStatus;
+  using dasall::contracts::PromptComposeResult;
+  using dasall::contracts::PromptRelease;
+  using dasall::llm::prompt::PromptPipelineResult;
+  using dasall::llm::prompt::PromptPolicyDecision;
+  using dasall::llm::prompt::PromptPolicyDisposition;
+  using dasall::llm::prompt::PromptRegistryResult;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptPipelineResult{}.disposition),
+                 PromptPolicyDisposition>);
+  static_assert(std::is_same_v<decltype(PromptPipelineResult{}.compose_result),
+                 std::optional<PromptComposeResult>>);
+  static_assert(std::is_same_v<decltype(PromptPipelineResult{}.policy_decision),
+                 std::optional<PromptPolicyDecision>>);
+  static_assert(std::is_same_v<decltype(PromptPipelineResult{}.registry_result),
+                 std::optional<PromptRegistryResult>>);
+  static_assert(std::is_same_v<decltype(PromptPipelineResult{}.reason), std::string>);
+
+  const PromptRelease selected_release{
+    .prompt_id = "prompt.plan.default",
+    .version = "2026-04-10.1",
+    .stage = CompositionStage::Planning,
+    .eval_status = PromptEvalStatus::Stable,
+    .release_scope = "desktop_full",
+    .system_instructions = "plan carefully",
+    .task_template = "diagnose timeout",
+    .output_schema_ref = std::nullopt,
+    .few_shot_refs = std::nullopt,
+    .policy_notes = std::nullopt,
+    .rollback_from = std::nullopt,
+    .trusted_source = "baseline",
+    .tags = std::nullopt,
+  };
+
+  const PromptPipelineResult allow_result{
+    .disposition = PromptPolicyDisposition::Allow,
+    .compose_result = PromptComposeResult{},
+    .policy_decision = PromptPolicyDecision{
+      .disposition = PromptPolicyDisposition::Allow,
+      .governed_messages = {"system:plan carefully", "user:diagnose timeout"},
+      .redactions = {},
+      .tool_visibility_patch = {},
+      .reason = "policy accepted composed prompt",
+    },
+    .registry_result = PromptRegistryResult{
+      .code = std::nullopt,
+      .release = selected_release,
+      .selected_prompt_id = "prompt.plan.default",
+      .selected_version = "2026-04-10.1",
+      .selection_reason = "matched profile and scene",
+      .trusted_sources_matched = {"baseline"},
+    },
+    .reason = "",
+  };
+
+  const PromptPipelineResult over_budget_result{
+    .disposition = PromptPolicyDisposition::OverBudget,
+    .compose_result = PromptComposeResult{},
+    .policy_decision = PromptPolicyDecision{
+      .disposition = PromptPolicyDisposition::OverBudget,
+      .governed_messages = {},
+      .redactions = {},
+      .tool_visibility_patch = {},
+      .reason = "render budget exceeded configured token limit",
+    },
+    .registry_result = PromptRegistryResult{
+      .code = std::nullopt,
+      .release = selected_release,
+      .selected_prompt_id = "prompt.plan.default",
+      .selected_version = "2026-04-10.1",
+      .selection_reason = "matched profile and scene",
+      .trusted_sources_matched = {"baseline"},
+    },
+    .reason = "policy requested context recomposition via over-budget signal",
+  };
+
+  assert_true(allow_result.compose_result.has_value(),
+              "PromptPipelineResult should surface PromptComposeResult so Runtime can build the next LLM request");
+  assert_true(allow_result.policy_decision.has_value(),
+              "PromptPipelineResult should carry the final PromptPolicyDecision from the facade");
+  assert_true(allow_result.registry_result.has_value(),
+              "PromptPipelineResult should preserve PromptRegistry selection metadata for auditing");
+  assert_true(over_budget_result.disposition == PromptPolicyDisposition::OverBudget,
+              "PromptPipelineResult should preserve OverBudget as a first-class pipeline outcome");
+}
+
 }  // namespace
 
 int main() {
@@ -666,6 +813,9 @@ int main() {
     test_prompt_policy_input_freezes_profile_and_governance_dimensions();
     test_prompt_policy_config_freezes_fail_closed_defaults();
     test_prompt_policy_decision_freezes_disposition_and_message_boundary();
+    test_iprompt_pipeline_surface_freezes_facade_signatures();
+    test_prompt_pipeline_config_freezes_three_stage_init_bundle();
+    test_prompt_pipeline_result_freezes_three_stage_outputs_without_model_inputs();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
