@@ -15,7 +15,12 @@
 #include "error/ResultCode.h"
 #include "llm/LLMRequest.h"
 #include "llm/LLMResponse.h"
+#include "prompt/IPromptComposer.h"
 #include "prompt/IPromptRegistry.h"
+#include "prompt/ModelBudgetHint.h"
+#include "prompt/PromptComposeRequest.h"
+#include "prompt/PromptComposeResult.h"
+#include "prompt/PromptComposerConfig.h"
 #include "prompt/PromptQuery.h"
 #include "prompt/PromptRegistryConfig.h"
 #include "prompt/PromptRegistryResult.h"
@@ -431,6 +436,66 @@ void test_prompt_registry_result_freezes_selection_metadata() {
               "PromptRegistryResult should reject mixed success and failure selection payloads");
 }
 
+void test_iprompt_composer_surface_freezes_spi_signatures() {
+  using dasall::contracts::PromptComposeRequest;
+  using dasall::contracts::PromptComposeResult;
+  using dasall::contracts::PromptRelease;
+  using dasall::llm::prompt::IPromptComposer;
+  using dasall::llm::prompt::ModelBudgetHint;
+  using dasall::llm::prompt::PromptComposerConfig;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(&IPromptComposer::init),
+                 bool (IPromptComposer::*)(const PromptComposerConfig&)>);
+  static_assert(std::is_same_v<decltype(&IPromptComposer::compose),
+                 PromptComposeResult (IPromptComposer::*)(
+                     const PromptComposeRequest&, const PromptRelease&, const ModelBudgetHint&) const>);
+  static_assert(std::is_abstract_v<IPromptComposer>);
+
+  assert_true(std::is_abstract_v<IPromptComposer>,
+              "IPromptComposer should remain a pure abstract prompt composition SPI");
+}
+
+void test_model_budget_hint_freezes_context_window_inputs() {
+  using dasall::llm::prompt::ModelBudgetHint;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(ModelBudgetHint{}.context_window), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelBudgetHint{}.max_output_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(ModelBudgetHint{}.reserved_output_tokens), std::uint32_t>);
+
+  const ModelBudgetHint budget_hint{
+    .context_window = 128000,
+    .max_output_tokens = 8192,
+    .reserved_output_tokens = 2048,
+  };
+
+  assert_true(budget_hint.context_window == 128000U,
+              "ModelBudgetHint should freeze context_window for pre-call prompt budgeting");
+  assert_true(budget_hint.max_output_tokens == 8192U,
+              "ModelBudgetHint should keep max_output_tokens visible to PromptComposer");
+  assert_true(budget_hint.reserved_output_tokens == 2048U,
+              "ModelBudgetHint should preserve reserved_output_tokens for over-budget warnings");
+}
+
+void test_prompt_composer_config_freezes_renderer_controls() {
+  using dasall::llm::prompt::PromptComposerConfig;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PromptComposerConfig{}.template_engine), std::string>);
+  static_assert(std::is_same_v<decltype(PromptComposerConfig{}.max_few_shot_count), std::uint32_t>);
+
+  const PromptComposerConfig config{
+    .template_engine = "simple_var",
+    .max_few_shot_count = 4,
+  };
+
+  assert_true(config.template_engine == "simple_var",
+              "PromptComposerConfig should freeze template_engine as the renderer selection knob");
+  assert_true(config.max_few_shot_count == 4U,
+              "PromptComposerConfig should preserve max_few_shot_count as a composition guardrail");
+}
+
 }  // namespace
 
 int main() {
@@ -446,6 +511,9 @@ int main() {
     test_prompt_query_freezes_selection_dimensions();
     test_prompt_registry_config_freezes_asset_root_and_trusted_sources();
     test_prompt_registry_result_freezes_selection_metadata();
+    test_iprompt_composer_surface_freezes_spi_signatures();
+    test_model_budget_hint_freezes_context_window_inputs();
+    test_prompt_composer_config_freezes_renderer_controls();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
