@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #274
+
+- 日期：2026-04-11
+- 阶段：llm/专项 TODO 阶段 E
+- 任务：LLM-TODO-016 实现 TokenEstimator 预估器
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 015，且 016 的前置依赖只要求 011 与 002 完成，因此当前按串行原子任务顺序直接进入 TokenEstimator 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.15.7 已把 TokenEstimator 收敛为“预调用 token 预估 owner”，允许 v1 使用英文 `4 chars/token`、中文 `1.5 chars/token` 的字符换算近似，并把消费者明确限定为 PromptPolicy 与 ModelRouter。
+3. 016 执行前发现专项 TODO 的验收命令已经把 `PromptComposerOverBudgetTest` 和 `ModelRouterPolicyTest` 纳入本轮，但 017/020 尚未实现；因此本轮除了 `TokenEstimatorTest` 之外，还需要补入最小消费型测试锚点，确保专项 TODO 的验收命令可执行，而不越权进入 017/020 的真实组件实现。
+
+### 改动
+
+1. 新增 [llm/src/TokenEstimator.h](../../llm/src/TokenEstimator.h) 与 [llm/src/TokenEstimator.cpp](../../llm/src/TokenEstimator.cpp)，实现基于 UTF-8 码点分类的启发式 token 预估：ASCII 按 `4 chars/token`，CJK 按 `1.5 chars/token`，其余字符按 `2 chars/token`，并统一附加可配置安全余量。
+2. 新增 [tests/unit/llm/TokenEstimatorTest.cpp](../../tests/unit/llm/TokenEstimatorTest.cpp)，覆盖空输入、英文/中文启发式范围与自定义安全余量配置。
+3. 新增 [tests/unit/llm/PromptComposerOverBudgetTest.cpp](../../tests/unit/llm/PromptComposerOverBudgetTest.cpp) 与 [tests/unit/llm/ModelRouterPolicyTest.cpp](../../tests/unit/llm/ModelRouterPolicyTest.cpp)，作为专项 TODO 验收所需的最小消费型测试锚点，验证 `TokenEstimate.over_budget`、`reserved_output_tokens` 与 `context_window` 可被未来 PromptComposer / ModelRouter 直接消费。
+4. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 TokenEstimator 实现与三条新 llm unit 测试接入 llm / unit 聚合目标。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-016-TokenEstimator预估器设计收敛.md](../todos/llm/deliverables/LLM-TODO-016-TokenEstimator预估器设计收敛.md)，沉淀启发式换算、配置边界与消费型测试补位策略。
+6. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 LLM-TODO-016 标记为 Done，并补充阶段 E 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `TokenEstimatorTest`
+   - `RunCtest_CMakeTools` 运行 `PromptComposerOverBudgetTest`
+   - `RunCtest_CMakeTools` 运行 `ModelRouterPolicyTest`
+2. 结果：
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `226/226` 全部通过，本轮新增的三条 016 相关测试均通过。
+   - `RunCtest_CMakeTools` 定向执行 `TokenEstimatorTest`、`PromptComposerOverBudgetTest` 与 `ModelRouterPolicyTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-016 已完成，llm 现已拥有统一的 token 预估组件，后续 PromptPolicy 的 over-budget 治理与 ModelRouter 的上下文窗口硬过滤可以复用同一份 `TokenEstimate` 事实源。
+2. 本轮没有提前实现 PromptComposer / ModelRouter，只是补入了专项 TODO 验收所需的最小消费型测试锚点，从而保持 016 仍是单一主目标任务。
+3. TokenEstimator 继续保持 provider-neutral 近似预算器定位，没有发起 provider 调用，也没有把预估结果伪装成真实 usage/cost 结算。
+
+### 下一步
+
+1. 进入 LLM-TODO-039，开始实现 `TemplateRenderer` 安全规则与可注入渲染接口。
+2. 在 017/020 落地时，直接扩展本轮新增的 `PromptComposerOverBudgetTest` 与 `ModelRouterPolicyTest`，而不是拆出新的并行验收名称。
+
+### 风险
+
+1. 当前启发式没有计入 provider 私有 message framing 开销，因此更适合做保守预算门而非精确计数；若未来 provider family 需要更精确的 framing 系数，应通过配置或 tokenizer 实现替换，而不是让 TokenEstimator 长出 provider-specific 分支。
+
 ## 记录 #273
 
 - 日期：2026-04-11

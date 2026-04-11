@@ -38,6 +38,18 @@ add_executable(dasall_prompt_registry_trust_source_unit_test
 	PromptRegistryTrustSourceTest.cpp
 )
 
+add_executable(dasall_token_estimator_unit_test
+	TokenEstimatorTest.cpp
+)
+
+add_executable(dasall_prompt_composer_over_budget_unit_test
+	PromptComposerOverBudgetTest.cpp
+)
+
+add_executable(dasall_model_router_policy_unit_test
+	ModelRouterPolicyTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -99,6 +111,24 @@ target_link_libraries(dasall_prompt_registry_trust_source_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_token_estimator_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_prompt_composer_over_budget_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_model_router_policy_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -124,6 +154,9 @@ dasall_apply_common_options(dasall_provider_catalog_overlay_unit_test)
 dasall_apply_common_options(dasall_provider_model_metadata_parse_unit_test)
 dasall_apply_common_options(dasall_prompt_registry_selection_unit_test)
 dasall_apply_common_options(dasall_prompt_registry_trust_source_unit_test)
+dasall_apply_common_options(dasall_token_estimator_unit_test)
+dasall_apply_common_options(dasall_prompt_composer_over_budget_unit_test)
+dasall_apply_common_options(dasall_model_router_policy_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -154,3 +187,12 @@ set_tests_properties(PromptRegistrySelectionTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME PromptRegistryTrustSourceTest COMMAND dasall_prompt_registry_trust_source_unit_test)
 set_tests_properties(PromptRegistryTrustSourceTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME TokenEstimatorTest COMMAND dasall_token_estimator_unit_test)
+set_tests_properties(TokenEstimatorTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME PromptComposerOverBudgetTest COMMAND dasall_prompt_composer_over_budget_unit_test)
+set_tests_properties(PromptComposerOverBudgetTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME ModelRouterPolicyTest COMMAND dasall_model_router_policy_unit_test)
+set_tests_properties(ModelRouterPolicyTest PROPERTIES LABELS "unit;llm")
