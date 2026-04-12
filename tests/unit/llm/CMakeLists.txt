@@ -66,6 +66,10 @@ add_executable(dasall_prompt_policy_profile_diff_unit_test
 	PromptPolicyProfileDiffTest.cpp
 )
 
+add_executable(dasall_prompt_pipeline_unit_test
+	PromptPipelineTest.cpp
+)
+
 add_executable(dasall_model_router_policy_unit_test
 	ModelRouterPolicyTest.cpp
 )
@@ -173,6 +177,12 @@ target_link_libraries(dasall_prompt_policy_profile_diff_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_prompt_pipeline_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_link_libraries(dasall_model_router_policy_unit_test
 	PRIVATE
 		dasall_test_support
@@ -211,6 +221,7 @@ dasall_apply_common_options(dasall_prompt_composer_over_budget_unit_test)
 dasall_apply_common_options(dasall_prompt_policy_allowlist_unit_test)
 dasall_apply_common_options(dasall_prompt_policy_tool_visibility_unit_test)
 dasall_apply_common_options(dasall_prompt_policy_profile_diff_unit_test)
+dasall_apply_common_options(dasall_prompt_pipeline_unit_test)
 dasall_apply_common_options(dasall_model_router_policy_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
@@ -263,6 +274,9 @@ set_tests_properties(PromptPolicyToolVisibilityTest PROPERTIES LABELS "unit;llm"
 
 add_test(NAME PromptPolicyProfileDiffTest COMMAND dasall_prompt_policy_profile_diff_unit_test)
 set_tests_properties(PromptPolicyProfileDiffTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME PromptPipelineTest COMMAND dasall_prompt_pipeline_unit_test)
+set_tests_properties(PromptPipelineTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME ModelRouterPolicyTest COMMAND dasall_model_router_policy_unit_test)
 set_tests_properties(ModelRouterPolicyTest PROPERTIES LABELS "unit;llm")

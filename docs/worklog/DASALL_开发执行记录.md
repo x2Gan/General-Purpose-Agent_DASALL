@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #278
+
+- 日期：2026-04-12
+- 阶段：llm/专项 TODO 阶段 E
+- 任务：LLM-TODO-019 实现 PromptPipeline 三段编排
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 018，且 019 的前置依赖只要求 010、015、017、018 完成，因此当前按串行原子任务顺序直接进入 PromptPipeline façade 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.6 已把 019 收敛为“固定执行 select -> compose -> evaluate，并把 Allow / Deny / OverBudget / RequireRecompose 原样透传给 Runtime 的统一 façade”，同时明确禁止 Pipeline 内部发起模型调用、读取 memory 或新增治理逻辑。
+3. 019 开始前确认了一个直接收口点：018 虽已为 `PromptPolicyInput` 补入 `selected_release_scope`、`selected_trusted_source` 与 `visible_tools`，但这些 per-request 事实仍停留在测试注入态。当前轮次必须由 Pipeline 在运行时把 015 的选择结果和 017 的 compose 输入真实灌入这些字段，否则 018 的 direct blocker 只是“接口已开口”，并没有真正闭环。
+
+### 改动
+
+1. 新增 [llm/src/prompt/PromptPipeline.h](../../llm/src/prompt/PromptPipeline.h) 与 [llm/src/prompt/PromptPipeline.cpp](../../llm/src/prompt/PromptPipeline.cpp)，实现 `IPromptPipeline` 的内部 concrete owner，并通过构造注入 `IPromptRegistry`、`IPromptComposer`、`IPromptPolicy`，默认装配 015/017/018 的 concrete owner。
+2. 在 [llm/src/prompt/PromptPipeline.cpp](../../llm/src/prompt/PromptPipeline.cpp) 内落地固定编排顺序：`select()` 失败立即返回 `Deny` 且不进入 compose；compose 产物不完整时立即返回 `Deny` 且不进入 policy；policy 的 `OverBudget` / `Deny` / `RequireRecompose` 原样透传；Allow 路径则保留全部中间产物并返回空顶层 `reason`。
+3. 019 采用最小预算桥接：把 `PromptPolicyInput.render_budget_tokens` 映射为 composer 侧 `ModelBudgetHint.context_window`，从而在不改 façade public SPI 的前提下继续复用 017 的 budget hint 输入路径。
+4. 019 真正闭合了 018 的 direct blocker：Pipeline 在调用 Policy 前会把 `selected_release_scope`、`selected_trusted_source`、`visible_tools` 富化进 `PromptPolicyInput`，其中 selected release/source 来自 Registry 的实际选择结果，visible tools 来自 `PromptComposeRequest.visible_tools` 或 `PromptQuery.available_tools`。
+5. 新增 [tests/unit/llm/PromptPipelineTest.cpp](../../tests/unit/llm/PromptPipelineTest.cpp)，通过 recording stub 覆盖 select 失败、OverBudget 透传、policy deny、Allow 四条路径，并额外断言 budget hint 桥接与 per-request 元数据富化确实发生。
+6. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 PromptPipeline 实现与新 llm unit 测试接入 llm / unit 聚合目标。
+7. 新增 [docs/todos/llm/deliverables/LLM-TODO-019-PromptPipeline三段编排设计收敛.md](../todos/llm/deliverables/LLM-TODO-019-PromptPipeline三段编排设计收敛.md)，沉淀 façade 顺序、budget bridge 与 policy_input 富化边界；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 019 标记为 Done 并补充阶段 E 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_prompt_pipeline_unit_test`
+   - `RunCtest_CMakeTools` 运行 `PromptPipelineTest`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_prompt_pipeline_unit_test` 与 `dasall_unit_tests`，`ListTests_CMakeTools` 已列出 `PromptPipelineTest`，说明 019 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 定向构建 `dasall_prompt_pipeline_unit_test` 成功；`RunCtest_CMakeTools` 定向执行 `PromptPipelineTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `232/232` 全部通过；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-019 已完成，llm 现已拥有真正的 PromptPipeline façade，后续 Runtime 可以默认通过一步调用完成 Prompt 三段治理，而不需要继续硬编码 Registry / Composer / Policy 的内部顺序。
+2. 019 保持了详细设计与 ADR 边界：Pipeline 只做编排、失败透传和输入富化，不拥有新的治理裁定权，不发起模型调用，也不读取 memory 原始候选。
+3. 对 019 的关键收口，本轮选择“在 Pipeline 内富化 `PromptPolicyInput` + 最小 budget hint 桥接”，而不是“再扩 public/shared interface”。这保证了 015/017/018 能在当前 SPI 下真正连成闭环，同时不破坏既有接口冻结面。
+
+### 下一步
+
+1. 进入 LLM-TODO-020，开始实现 `ModelRouter` 路由选择。
+2. 在 020 中继续保持 `PromptPipeline` 只处理 Prompt 三段治理，不把 route 评分、fallback 展开或 provider 调用编排提前混入 façade。
+
+### 风险
+
+1. 当前 budget bridge 仍是 `render_budget_tokens -> context_window` 的最小映射；如果后续需要显式区分输入窗口、保留输出预算与 provider-specific framing，应先补 public SPI 设计，而不是在 Pipeline 内持续叠加隐式规则。
+
 ## 记录 #277
 
 - 日期：2026-04-12
