@@ -31,6 +31,7 @@ target_sources(dasall_llm
     src/prompt/PromptRegistry.cpp
     src/prompt/TemplateRenderer.cpp
     src/provider/ProviderCatalogRepository.cpp
+    src/route/ModelRouter.cpp
     src/placeholder.cpp
 )
 

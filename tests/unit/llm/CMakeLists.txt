@@ -74,6 +74,18 @@ add_executable(dasall_model_router_policy_unit_test
 	ModelRouterPolicyTest.cpp
 )
 
+add_executable(dasall_model_router_fallback_unit_test
+	ModelRouterFallbackTest.cpp
+)
+
+add_executable(dasall_model_router_reasoning_mode_selection_unit_test
+	ModelRouterReasoningModeSelectionTest.cpp
+)
+
+add_executable(dasall_model_router_stability_unit_test
+	ModelRouterStabilityTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -189,6 +201,24 @@ target_link_libraries(dasall_model_router_policy_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_model_router_fallback_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_model_router_reasoning_mode_selection_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_model_router_stability_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -223,6 +253,9 @@ dasall_apply_common_options(dasall_prompt_policy_tool_visibility_unit_test)
 dasall_apply_common_options(dasall_prompt_policy_profile_diff_unit_test)
 dasall_apply_common_options(dasall_prompt_pipeline_unit_test)
 dasall_apply_common_options(dasall_model_router_policy_unit_test)
+dasall_apply_common_options(dasall_model_router_fallback_unit_test)
+dasall_apply_common_options(dasall_model_router_reasoning_mode_selection_unit_test)
+dasall_apply_common_options(dasall_model_router_stability_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -280,3 +313,12 @@ set_tests_properties(PromptPipelineTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME ModelRouterPolicyTest COMMAND dasall_model_router_policy_unit_test)
 set_tests_properties(ModelRouterPolicyTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME ModelRouterFallbackTest COMMAND dasall_model_router_fallback_unit_test)
+set_tests_properties(ModelRouterFallbackTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME ModelRouterReasoningModeSelectionTest COMMAND dasall_model_router_reasoning_mode_selection_unit_test)
+set_tests_properties(ModelRouterReasoningModeSelectionTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME ModelRouterStabilityTest COMMAND dasall_model_router_stability_unit_test)
+set_tests_properties(ModelRouterStabilityTest PROPERTIES LABELS "unit;llm")

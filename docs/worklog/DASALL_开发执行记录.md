@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #279
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 F
+- 任务：LLM-TODO-020 实现 ModelRouter 路由选择
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 019，且 020 的前置依赖只要求 011、012、014 完成，因此当前按串行原子任务顺序直接进入 ModelRouter 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.15.1 已把 020 收敛为“唯一 owner 的模型挡位选择 + 主路/回退链展开 + profile 对齐”，并要求固定执行 `候选集装配 -> 硬过滤 -> 确定性评分 -> fallback chain 展开` 四步，禁止在组件内部额外发起 LLM 推理或厂商专有硬编码分支。
+3. 020 开始前确认了一个关键实现缺口：profile 当前只提供 `cloud.reasoning`、`cloud.general`、`lan.general`、`local.small` 这类抽象 route 名，而后续 021/024 需要的是可直接消费的具体 route。当前轮次因此选择“保留抽象 route 作为 envelope 输入，但把 `ResolvedModelRoute` 输出收敛为具体 `provider_id/model_id`”，而不是继续把 020 停留在抽象 route 字符串上。
+
+### 改动
+
+1. 新增 [llm/src/route/ModelRouter.h](../../llm/src/route/ModelRouter.h) 与 [llm/src/route/ModelRouter.cpp](../../llm/src/route/ModelRouter.cpp)，实现 `ModelRouter` concrete owner、`ModelRouterHealthSnapshot` 注入面与 `ModelRouterResolveResult`，并把 route 输出固定为具体 `provider_id/model_id` 键。
+2. 在 [llm/src/route/ModelRouter.cpp](../../llm/src/route/ModelRouter.cpp) 内落地四段式路由算法：先按 stage route、explicit fallback 与 degrade policy 组装 route envelope；再按 provider locality、activation、trusted source、summary verification_state 与 health snapshot 过滤；随后对 context window、output hard limit、tools verified、reasoning capability 做硬过滤；最后用 deterministic score 选 primary，并按稳定排序导出 fallback 列表。
+3. 020 将 `interactive + hard_cap + reasoning 非必需` 显式收敛为 `interactive_hard_cap_downgrade` / `interactive_hard_cap_penalty` 评分因子，从而把详细设计中“planner/diagnosis 默认 reasoner，但在交互/硬预算场景可降档到 chat”的文字约束真正落成可测规则，而不是继续依赖隐式 stage 偏好。
+4. 新增 [tests/unit/llm/ModelRouterTestSupport.h](../../tests/unit/llm/ModelRouterTestSupport.h)，统一生成 LLM config、Provider Catalog snapshot、health snapshot 与 route/assertion 辅助，避免四组用例重复拼装临时 catalog。
+5. 更新 [tests/unit/llm/ModelRouterPolicyTest.cpp](../../tests/unit/llm/ModelRouterPolicyTest.cpp)，把 016 的 token-estimate 占位测试升级为真实 020 验收，覆盖 context window / output hard limit 双硬过滤，以及 reasoning-tools 未 verified 时降档到 chat。
+6. 新增 [tests/unit/llm/ModelRouterFallbackTest.cpp](../../tests/unit/llm/ModelRouterFallbackTest.cpp)、[tests/unit/llm/ModelRouterReasoningModeSelectionTest.cpp](../../tests/unit/llm/ModelRouterReasoningModeSelectionTest.cpp)、[tests/unit/llm/ModelRouterStabilityTest.cpp](../../tests/unit/llm/ModelRouterStabilityTest.cpp)，分别覆盖 explicit fallback 优先级、deepseek-chat / deepseek-reasoner 双模式切换，以及同分候选的稳定 tie-break / 重复调用稳定性。
+7. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 ModelRouter 实现与四条新单测接入 llm / unit 聚合目标。
+8. 新增 [docs/todos/llm/deliverables/LLM-TODO-020-ModelRouter路由选择设计收敛.md](../todos/llm/deliverables/LLM-TODO-020-ModelRouter路由选择设计收敛.md)，沉淀 route envelope、硬过滤、reason code、fallback 展开与稳定 tie-break 规则；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 020 标记为 Done 并补充阶段 F 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `ModelRouterPolicyTest`
+   - `RunCtest_CMakeTools` 运行 `ModelRouterFallbackTest`
+   - `RunCtest_CMakeTools` 运行 `ModelRouterReasoningModeSelectionTest`
+   - `RunCtest_CMakeTools` 运行 `ModelRouterStabilityTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出四个 `dasall_model_router_*_unit_test` 目标与 `dasall_unit_tests`，`ListTests_CMakeTools` 已列出四条 ModelRouter 用例，说明 020 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `235/235` 全部通过，其中新增的四条 020 用例全部通过。
+   - `RunCtest_CMakeTools` 定向执行 `ModelRouterPolicyTest`、`ModelRouterFallbackTest`、`ModelRouterReasoningModeSelectionTest` 与 `ModelRouterStabilityTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-020 已完成，llm 现已拥有真正的 route owner，可以把 profile 的抽象 route 偏好稳定映射到具体 `provider_id/model_id`，并同时导出有序 fallback 列表与 internal reason codes。
+2. 020 保持了设计与 ADR 边界：ModelRouter 只做路由与选择解释，不调用 provider、不篡改 profile/degrade policy、不向 shared contracts 推出新的 route supporting object，也不把 DeepSeek 双模式写成调用层硬编码分支。
+3. 对 020 的关键收口，本轮选择“summary verification_state + feature verification_state 双层过滤 + deterministic score + lexicographic tie-break”，而不是“随机选一个还能跑的模型”。这保证了 020 的结果既可测、可回放，也能直接被后续 021/024 消费。
+
+### 下一步
+
+1. 进入 LLM-TODO-021，开始实现 `AdapterRegistry` 生命周期与健康快照。
+2. 在 021 中直接复用 020 产出的 concrete route key 与 module-local health snapshot 注入面，不要再把 route 解析逻辑复制到 registry 或 manager。
+
+### 风险
+
+1. 当前 `ModelRouterHealthSnapshot` 仍是 module-local 输入对象；如果 021 需要暴露更细粒度的 circuit / health 事实，应继续在 llm 内部扩面，而不是把这套结构提前推入 shared contracts。
+
 ## 记录 #278
 
 - 日期：2026-04-12
