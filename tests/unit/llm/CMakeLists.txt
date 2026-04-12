@@ -46,6 +46,10 @@ add_executable(dasall_template_renderer_unit_test
 	TemplateRendererTest.cpp
 )
 
+add_executable(dasall_prompt_composer_slot_mapping_unit_test
+	PromptComposerSlotMappingTest.cpp
+)
+
 add_executable(dasall_prompt_composer_over_budget_unit_test
 	PromptComposerOverBudgetTest.cpp
 )
@@ -127,6 +131,12 @@ target_link_libraries(dasall_template_renderer_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_prompt_composer_slot_mapping_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_link_libraries(dasall_prompt_composer_over_budget_unit_test
 	PRIVATE
 		dasall_test_support
@@ -166,6 +176,7 @@ dasall_apply_common_options(dasall_prompt_registry_selection_unit_test)
 dasall_apply_common_options(dasall_prompt_registry_trust_source_unit_test)
 dasall_apply_common_options(dasall_token_estimator_unit_test)
 dasall_apply_common_options(dasall_template_renderer_unit_test)
+dasall_apply_common_options(dasall_prompt_composer_slot_mapping_unit_test)
 dasall_apply_common_options(dasall_prompt_composer_over_budget_unit_test)
 dasall_apply_common_options(dasall_model_router_policy_unit_test)
 
@@ -204,6 +215,9 @@ set_tests_properties(TokenEstimatorTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME TemplateRendererTest COMMAND dasall_template_renderer_unit_test)
 set_tests_properties(TemplateRendererTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME PromptComposerSlotMappingTest COMMAND dasall_prompt_composer_slot_mapping_unit_test)
+set_tests_properties(PromptComposerSlotMappingTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME PromptComposerOverBudgetTest COMMAND dasall_prompt_composer_over_budget_unit_test)
 set_tests_properties(PromptComposerOverBudgetTest PROPERTIES LABELS "unit;llm")

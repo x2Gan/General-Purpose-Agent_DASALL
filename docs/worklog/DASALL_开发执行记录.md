@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #276
+
+- 日期：2026-04-12
+- 阶段：llm/专项 TODO 阶段 E
+- 任务：LLM-TODO-017 实现 PromptComposer 装配流程
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 039，且 017 的前置依赖只要求 008、013、016、039 完成，因此当前按串行原子任务顺序直接进入 PromptComposer 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.4、6.7.2 与 LLM-D5 已把 017 收敛为“只做 provider-neutral message 装配、模板槽位映射与 over-budget warning，不做 memory ownership、不做二次语义裁剪”。
+3. 017 开始前确认了两个实现缺口：shared [contracts/include/prompt/PromptComposeRequest.h](../../contracts/include/prompt/PromptComposeRequest.h) 不提供 `user_goal` / `constraints` 一类 richer semantic slots，而 [contracts/include/prompt/PromptRelease.h](../../contracts/include/prompt/PromptRelease.h) 的 `few_shot_refs` 只表达引用，不携带 package root。当前轮次据此选择“严格映射现有字段 + few-shot 解析器注入 + 显式 warning 记账”，而不是回改 shared contracts 或在 Composer 内伪造语义内容。
+
+### 改动
+
+1. 新增 [llm/src/prompt/PromptComposer.h](../../llm/src/prompt/PromptComposer.h) 与 [llm/src/prompt/PromptComposer.cpp](../../llm/src/prompt/PromptComposer.cpp)，实现 `IPromptComposer` 的内部 concrete owner，支持注入 `ITemplateRenderer`、`TokenEstimator` 与 `FewShotResolver`。
+2. 在 [llm/src/prompt/PromptComposer.cpp](../../llm/src/prompt/PromptComposer.cpp) 内落地 deterministic slot mapping：把 request/release 当前已有字段映射到 `TemplateVariables`，复用 [llm/src/prompt/TemplateRenderer.cpp](../../llm/src/prompt/TemplateRenderer.cpp) 渲染 `system_instructions` / `task_template`，汇总 render warning，并调用 [llm/src/TokenEstimator.cpp](../../llm/src/TokenEstimator.cpp) 产出 `estimated_tokens`。
+3. 017 最终把 over-budget 行为收敛为“保留完整消息并回传 `over_budget` warning”。验证中曾暴露出 Composer 会尝试在预算压力下删减 few-shot 的偏差，本轮已在实现内移除该路径，确保 017 不越权承担语义裁剪 owner。
+4. 更新 [tests/unit/llm/PromptComposerOverBudgetTest.cpp](../../tests/unit/llm/PromptComposerOverBudgetTest.cpp)，把 016 留下的消费型占位测试升级为真实 Composer 验收，新增“预算超限时不自行 prune”断言，并覆盖含 few-shot 的超限场景。
+5. 新增 [tests/unit/llm/PromptComposerSlotMappingTest.cpp](../../tests/unit/llm/PromptComposerSlotMappingTest.cpp)，覆盖 request/release 字段替换、few-shot 注入 / 上限和未匹配变量 warning；同时更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将新实现与新测试接入 llm / unit 聚合目标，并修复新单测 executable 初次未进入 `dasall_unit_tests` 聚合依赖的问题。
+6. 新增 [docs/todos/llm/deliverables/LLM-TODO-017-PromptComposer装配流程设计收敛.md](../todos/llm/deliverables/LLM-TODO-017-PromptComposer装配流程设计收敛.md)，沉淀 slot mapping、few-shot 解析策略、warning 语义与 over-budget 边界；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 017 标记为 Done 并补充阶段 E 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `PromptComposerSlotMappingTest`
+   - `RunCtest_CMakeTools` 运行 `PromptComposerOverBudgetTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_prompt_composer_slot_mapping_unit_test`、`dasall_prompt_composer_over_budget_unit_test` 与 `dasall_unit_tests`，`ListTests_CMakeTools` 已列出 `PromptComposerSlotMappingTest` 与 `PromptComposerOverBudgetTest`，说明 017 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `228/228` 全部通过，其中新增的两条 017 测试均通过。
+   - `RunCtest_CMakeTools` 定向执行 `PromptComposerSlotMappingTest` 与 `PromptComposerOverBudgetTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-017 已完成，llm 现已拥有真正的 PromptComposer owner，后续 018/019 可以直接消费 `PromptComposeResult` 进入治理和三段编排，而不需要继续依赖 016 的占位测试锚点。
+2. 017 保持了 ADR-006 边界：Composer 只消费 `PromptComposeRequest` 引用和 `PromptRelease` 正式资产，不拥有上下文检索、上下文压缩、memory write-back 或工具权限裁定。
+3. 对当前 contracts 无法表达的 richer semantic slots，本轮选择“保留原占位 + warning”而非“猜测默认值”；对预算超限，本轮选择“返回 warning”而非“静默删减 few-shot”。这两点共同保证了 017 的输出仍然是可审计的装配事实，而不是隐式改写后的黑箱结果。
+
+### 下一步
+
+1. 进入 LLM-TODO-018，开始实现 `PromptPolicy` 治理流程。
+2. 在 018 中优先补齐 `PromptPolicyInput` 的 module-local 元数据输入，使 trusted source / allowlist / render-budget 检查能够直接消费 017 的装配结果与 015 的选择结果，而不是把治理事实重新塞回 shared contracts。
+
+### 风险
+
+1. 当前默认 few-shot 路径仍主要依赖 `inline:` 或注入式 resolver；如果后续 PromptAssetRepository 要直接驱动 package-local `few_shot_refs` 文件解析，应在仓储/选择结果侧把引用正规化为 Composer 可消费的形态，而不是把文件系统路径所有权压入 shared `PromptRelease`。
+
 ## 记录 #275
 
 - 日期：2026-04-11
