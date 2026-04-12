@@ -14,6 +14,7 @@ void test_router_prefers_explicit_stage_fallback_before_degrade_chain() {
   using dasall::llm::ModelSelectionHint;
   using dasall::llm::route::ModelRouter;
   using dasall::llm::route::ModelRouterHealthState;
+  using dasall::llm::test_support::has_audit_reason;
   using dasall::llm::test_support::has_reason;
   using dasall::llm::test_support::join_routes;
   using dasall::llm::test_support::make_config;
@@ -57,6 +58,16 @@ void test_router_prefers_explicit_stage_fallback_before_degrade_chain() {
               "ModelRouter should expose that the final primary route came from the fallback chain");
   assert_true(has_reason(result.selection_reason_codes, "fallback_chain_prepared"),
               "ModelRouter should keep fallback-chain preparation visible when secondary routes remain available");
+  assert_true(has_audit_reason(result,
+                               "deepseek-prod/deepseek-chat",
+                               "rejected_hard_filter",
+                               "health_blocked"),
+              "ModelRouter should preserve the rejected primary chat candidate and its health-blocked reason in audit evidence");
+  assert_true(has_audit_reason(result,
+                               "deepseek-prod/deepseek-reasoner",
+                               "rejected_hard_filter",
+                               "health_blocked"),
+              "ModelRouter should preserve the rejected primary reasoning candidate and its health-blocked reason in audit evidence");
 }
 
 void test_router_does_not_append_degrade_chain_when_failover_is_disabled() {

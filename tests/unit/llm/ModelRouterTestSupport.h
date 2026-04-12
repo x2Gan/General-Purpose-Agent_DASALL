@@ -238,4 +238,35 @@ inline bool has_reason(const std::vector<std::string>& reasons, std::string_view
          }) != reasons.end();
 }
 
+inline std::string join_audit_evidence(
+    const std::vector<route::ModelRouterAuditEvidence>& audit_evidence) {
+  std::string joined;
+  for (std::size_t index = 0U; index < audit_evidence.size(); ++index) {
+    if (index > 0U) {
+      joined.push_back(';');
+    }
+
+    joined.append(audit_evidence[index].outcome);
+    joined.push_back('@');
+    joined.append(audit_evidence[index].route_preference);
+    joined.push_back('@');
+    joined.append(audit_evidence[index].route_id);
+    joined.push_back('@');
+    joined.append(join_routes(audit_evidence[index].reason_codes));
+  }
+
+  return joined;
+}
+
+inline bool has_audit_reason(const route::ModelRouterResolveResult& result,
+                             std::string_view route_id,
+                             std::string_view outcome,
+                             std::string_view reason) {
+  return std::find_if(result.audit_evidence.begin(), result.audit_evidence.end(),
+                      [&](const route::ModelRouterAuditEvidence& evidence) {
+                        return evidence.route_id == route_id && evidence.outcome == outcome &&
+                               has_reason(evidence.reason_codes, reason);
+                      }) != result.audit_evidence.end();
+}
+
 }  // namespace dasall::llm::test_support

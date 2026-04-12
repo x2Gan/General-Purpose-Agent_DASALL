@@ -14,6 +14,7 @@ void test_router_keeps_deterministic_order_for_equal_score_candidates() {
   using dasall::llm::ModelSelectionHint;
   using dasall::llm::provider::ProviderCatalogSnapshot;
   using dasall::llm::route::ModelRouter;
+  using dasall::llm::test_support::join_audit_evidence;
   using dasall::llm::test_support::join_routes;
   using dasall::llm::test_support::make_config;
   using dasall::llm::test_support::make_model;
@@ -73,6 +74,9 @@ void test_router_keeps_deterministic_order_for_equal_score_candidates() {
     assert_equal(join_routes(first.selection_reason_codes),
                  join_routes(repeated.selection_reason_codes),
                  "ModelRouter should keep the same reason-code ordering for identical repeated input");
+    assert_equal(join_audit_evidence(first.audit_evidence),
+                 join_audit_evidence(repeated.audit_evidence),
+                 "ModelRouter should keep the same audit-evidence ordering for identical repeated input");
   }
 }
 

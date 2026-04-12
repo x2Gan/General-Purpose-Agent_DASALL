@@ -34,9 +34,17 @@ struct ModelRouterHealthSnapshot {
                                                        std::string_view model_id) const;
 };
 
+struct ModelRouterAuditEvidence {
+  std::string route_id;
+  std::string route_preference;
+  std::string outcome;
+  std::vector<std::string> reason_codes;
+};
+
 struct ModelRouterResolveResult {
   std::optional<ResolvedModelRoute> resolved_route;
   std::vector<std::string> selection_reason_codes;
+  std::vector<ModelRouterAuditEvidence> audit_evidence;
 
   [[nodiscard]] bool has_route() const {
     return resolved_route.has_value();

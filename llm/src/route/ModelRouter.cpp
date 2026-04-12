@@ -13,6 +13,7 @@
 namespace {
 
 using ModelRouterHealthSnapshot = dasall::llm::route::ModelRouterHealthSnapshot;
+using ModelRouterAuditEvidence = dasall::llm::route::ModelRouterAuditEvidence;
 using ModelRouterResolveResult = dasall::llm::route::ModelRouterResolveResult;
 using ProviderCatalogProvider = dasall::llm::provider::ProviderCatalogProvider;
 using ProviderCatalogSnapshot = dasall::llm::provider::ProviderCatalogSnapshot;
@@ -27,6 +28,7 @@ struct RoutePreference {
 
 struct ScoredCandidate {
   std::string route_id;
+  std::string route_preference;
   std::string provider_id;
   std::string model_id;
   std::string preferred_tier;
@@ -47,10 +49,38 @@ bool contains_value(const std::vector<std::string>& values, std::string_view nee
   return std::find(values.begin(), values.end(), needle) != values.end();
 }
 
+std::string make_route_id(std::string_view provider_id, std::string_view model_id) {
+  return std::string(provider_id) + "/" + std::string(model_id);
+}
+
 void append_unique_reason(std::vector<std::string>& reasons, std::string reason) {
   if (!contains_value(reasons, reason)) {
     reasons.push_back(std::move(reason));
   }
+}
+
+void append_unique_reasons(std::vector<std::string>& reasons,
+                           const std::vector<std::string>& new_reasons) {
+  for (const auto& reason : new_reasons) {
+    append_unique_reason(reasons, reason);
+  }
+}
+
+void append_audit_evidence(std::vector<ModelRouterAuditEvidence>& audit_evidence,
+                           std::string route_id,
+                           std::string route_preference,
+                           std::string outcome,
+                           std::vector<std::string> reason_codes) {
+  if (route_id.empty()) {
+    return;
+  }
+
+  audit_evidence.push_back(ModelRouterAuditEvidence{
+      .route_id = std::move(route_id),
+      .route_preference = std::move(route_preference),
+      .outcome = std::move(outcome),
+      .reason_codes = std::move(reason_codes),
+  });
 }
 
 std::string canonical_tier(std::string_view raw_tier) {
@@ -248,7 +278,7 @@ std::optional<ScoredCandidate> score_candidate(
     const ProviderModelMetadata& model,
     const ModelRouterHealthSnapshot& health_snapshot,
     std::vector<std::string>& rejection_reasons) {
-  const std::string route_id = provider.descriptor.provider_id + "/" + model.summary.model_id;
+  const std::string route_id = make_route_id(provider.descriptor.provider_id, model.summary.model_id);
 
   if (!provider.runtime.activation_flag) {
     append_unique_reason(rejection_reasons, "provider_inactive");
@@ -302,6 +332,7 @@ std::optional<ScoredCandidate> score_candidate(
 
   ScoredCandidate candidate;
   candidate.route_id = route_id;
+  candidate.route_preference = route_preference.raw_route;
   candidate.provider_id = provider.descriptor.provider_id;
   candidate.model_id = model.summary.model_id;
   candidate.preferred_tier = route_preference.preferred_tier;
@@ -491,12 +522,19 @@ ModelRouterResolveResult ModelRouter::resolve(
 
   std::unordered_map<std::string, ScoredCandidate> best_candidates;
   std::vector<std::string> rejection_reasons;
+  std::vector<ModelRouterAuditEvidence> rejected_audit_evidence;
 
   for (const auto& route_preference : route_preferences) {
     for (const auto& model : catalog_snapshot.models) {
+      const std::string route_id = make_route_id(model.summary.provider_id, model.summary.model_id);
       const auto* provider = catalog_snapshot.find_provider(model.summary.provider_id);
       if (provider == nullptr) {
         append_unique_reason(rejection_reasons, "provider_missing");
+        append_audit_evidence(rejected_audit_evidence,
+                              route_id,
+                              route_preference.raw_route,
+                              "rejected_hard_filter",
+                              {"provider_missing"});
         continue;
       }
 
@@ -504,14 +542,21 @@ ModelRouterResolveResult ModelRouter::resolve(
         continue;
       }
 
+      std::vector<std::string> candidate_rejection_reasons;
       auto candidate = score_candidate(config_,
                                        selection_hint,
                                        route_preference,
                                        *provider,
                                        model,
                                        health_snapshot,
-                                       rejection_reasons);
+                                       candidate_rejection_reasons);
       if (!candidate.has_value()) {
+        append_unique_reasons(rejection_reasons, candidate_rejection_reasons);
+        append_audit_evidence(rejected_audit_evidence,
+                              route_id,
+                              route_preference.raw_route,
+                              "rejected_hard_filter",
+                              std::move(candidate_rejection_reasons));
         continue;
       }
 
@@ -529,6 +574,7 @@ ModelRouterResolveResult ModelRouter::resolve(
 
     append_unique_reason(rejection_reasons, "no_candidate_after_hard_filter");
     result.selection_reason_codes = std::move(rejection_reasons);
+    result.audit_evidence = std::move(rejected_audit_evidence);
     return result;
   }
 
@@ -566,6 +612,24 @@ ModelRouterResolveResult ModelRouter::resolve(
   if (!ordered_candidates.front().reason_codes.empty() && !result.resolved_route->fallback_routes.empty()) {
     append_unique_reason(result.selection_reason_codes, "fallback_chain_prepared");
   }
+
+  result.audit_evidence.reserve(ordered_candidates.size() + rejected_audit_evidence.size());
+  for (std::size_t index = 0U; index < ordered_candidates.size(); ++index) {
+    std::vector<std::string> audit_reason_codes = ordered_candidates[index].reason_codes;
+    if (index == 0U && !result.resolved_route->fallback_routes.empty()) {
+      append_unique_reason(audit_reason_codes, "fallback_chain_prepared");
+    }
+
+    append_audit_evidence(result.audit_evidence,
+                          ordered_candidates[index].route_id,
+                          ordered_candidates[index].route_preference,
+                          index == 0U ? "selected_primary" : "selected_fallback",
+                          std::move(audit_reason_codes));
+  }
+
+  result.audit_evidence.insert(result.audit_evidence.end(),
+                               std::make_move_iterator(rejected_audit_evidence.begin()),
+                               std::make_move_iterator(rejected_audit_evidence.end()));
 
   return result;
 }
