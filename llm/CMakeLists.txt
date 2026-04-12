@@ -26,6 +26,7 @@ target_sources(dasall_llm
     src/TokenEstimator.cpp
     src/prompt/PromptAssetRepository.cpp
     src/prompt/PromptComposer.cpp
+    src/prompt/PromptPolicy.cpp
     src/prompt/PromptRegistry.cpp
     src/prompt/TemplateRenderer.cpp
     src/provider/ProviderCatalogRepository.cpp

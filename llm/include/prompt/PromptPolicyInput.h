@@ -14,6 +14,9 @@ struct PromptPolicyInput {
   std::uint32_t render_budget_tokens = 0;
   std::string active_scene;
   std::string active_persona;
+  std::string selected_release_scope;
+  std::string selected_trusted_source;
+  std::vector<std::string> visible_tools;
 };
 
 }  // namespace dasall::llm::prompt

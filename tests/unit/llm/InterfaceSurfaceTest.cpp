@@ -601,6 +601,10 @@ void test_prompt_policy_input_freezes_profile_and_governance_dimensions() {
                  std::uint32_t>);
   static_assert(std::is_same_v<decltype(PromptPolicyInput{}.active_scene), std::string>);
   static_assert(std::is_same_v<decltype(PromptPolicyInput{}.active_persona), std::string>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.selected_release_scope), std::string>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.selected_trusted_source), std::string>);
+  static_assert(std::is_same_v<decltype(PromptPolicyInput{}.visible_tools),
+                 std::vector<std::string>>);
 
   const PromptPolicyInput input{
     .profile_id = "desktop_full",
@@ -610,6 +614,9 @@ void test_prompt_policy_input_freezes_profile_and_governance_dimensions() {
     .render_budget_tokens = 4096,
     .active_scene = "ops_diagnosis",
     .active_persona = "default_planner",
+    .selected_release_scope = "stable",
+    .selected_trusted_source = "baseline",
+    .visible_tools = {"fs.read", "shell.exec"},
   };
 
   assert_true(input.allowed_prompt_releases.size() == 1U,
@@ -618,6 +625,8 @@ void test_prompt_policy_input_freezes_profile_and_governance_dimensions() {
               "PromptPolicyInput should keep trusted_sources as an explicit fail-closed filter");
   assert_true(input.render_budget_tokens == 4096U,
               "PromptPolicyInput should keep render_budget_tokens visible for over-budget evaluation");
+  assert_true(input.visible_tools.size() == 2U,
+              "PromptPolicyInput should carry the visible tool set needed for tool visibility governance");
 }
 
 void test_prompt_policy_config_freezes_fail_closed_defaults() {

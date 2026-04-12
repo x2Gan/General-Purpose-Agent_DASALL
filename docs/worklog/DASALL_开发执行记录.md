@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #277
+
+- 日期：2026-04-12
+- 阶段：llm/专项 TODO 阶段 E
+- 任务：LLM-TODO-018 实现 PromptPolicy 治理流程
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 017，且 018 的前置依赖只要求 009、016、017 完成，因此当前按串行原子任务顺序直接进入 PromptPolicy 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.5 与 6.15.3 已把 018 收敛为“按 trusted source -> allowlist -> tool visibility -> redaction -> render budget 固定顺序做最终治理裁定”，并明确 over-budget 只能返回 `OverBudget` 回流 Runtime，不能在 llm 内自行做二次语义裁剪。
+3. 018 开始前确认了一个 direct blocker：旧版 [llm/include/prompt/PromptPolicyInput.h](../../llm/include/prompt/PromptPolicyInput.h) 只携带 profile 侧静态策略，缺少本次调用实际选中的 `release scope`、`trusted source` 与 `visible tools`，导致 Policy 无法在不扩 shared contracts 的前提下完成 source trust / tool visibility 的最终裁定。当前轮次据此选择“仅扩 module-local 输入 + 保持 shared contracts 不变”。
+
+### 改动
+
+1. 更新 [llm/include/prompt/PromptPolicyInput.h](../../llm/include/prompt/PromptPolicyInput.h)，补入 `selected_release_scope`、`selected_trusted_source` 与 `visible_tools` 三个 module-local 字段；同步更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，把 direct blocker fix 显式冻结到 llm 公共面。
+2. 新增 [llm/src/prompt/PromptPolicy.h](../../llm/src/prompt/PromptPolicy.h) 与 [llm/src/prompt/PromptPolicy.cpp](../../llm/src/prompt/PromptPolicy.cpp)，实现 `IPromptPolicy` 的内部 concrete owner，并复用 [llm/src/TokenEstimator.h](../../llm/src/TokenEstimator.h) / [llm/src/TokenEstimator.cpp](../../llm/src/TokenEstimator.cpp) 对 redaction 后的 governed payload 重新估算 render budget。
+3. 在 [llm/src/prompt/PromptPolicy.cpp](../../llm/src/prompt/PromptPolicy.cpp) 内落地固定治理顺序：先验 `selected_trusted_source` 是否存在且属于可信集合，再验 `allowed_prompt_releases`，再校验 `visible_tools` 与 `tool_visibility_rules` 的一致性，然后对 `secret://`、`token=`、`api_key=`、`password=`、`bearer ` 等敏感片段执行 redaction，最后基于 redacted payload 复核预算并输出 `Allow` / `Deny` / `OverBudget` / `RequireRecompose`。
+4. 新增 [tests/unit/llm/PromptPolicyAllowlistTest.cpp](../../tests/unit/llm/PromptPolicyAllowlistTest.cpp)、[tests/unit/llm/PromptPolicyToolVisibilityTest.cpp](../../tests/unit/llm/PromptPolicyToolVisibilityTest.cpp) 与 [tests/unit/llm/PromptPolicyProfileDiffTest.cpp](../../tests/unit/llm/PromptPolicyProfileDiffTest.cpp)，分别覆盖 trusted source 缺失 fail-closed、allowlist deny、tool visibility mismatch、redaction 后预算回落、OverBudget 回流以及 `cloud_full` / `edge_minimal` 风格配置差异。
+5. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 PromptPolicy 实现与三条新 llm unit 测试接入 llm / unit 聚合目标。
+6. 更新 [llm/src/LLMSubsystemConfig.cpp](../../llm/src/LLMSubsystemConfig.cpp)，为 `PromptPolicyInput` 新增字段补齐显式初始化，消除 018 direct blocker fix 带来的缺省初始化编译告警。
+7. 新增 [docs/todos/llm/deliverables/LLM-TODO-018-PromptPolicy治理流程设计收敛.md](../todos/llm/deliverables/LLM-TODO-018-PromptPolicy治理流程设计收敛.md)，沉淀治理顺序、fail-closed 边界、tool visibility patch 语义与 per-request 元数据输入约束；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 018 标记为 Done 并补充阶段 E 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_prompt_policy_allowlist_unit_test`、`dasall_prompt_policy_tool_visibility_unit_test`、`dasall_prompt_policy_profile_diff_unit_test`
+   - `RunCtest_CMakeTools` 运行 `PromptPolicyAllowlistTest`、`PromptPolicyToolVisibilityTest`、`PromptPolicyProfileDiffTest`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_subsystem_config_projection_unit_test` 与 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMSubsystemConfigProjectionTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_prompt_policy_allowlist_unit_test`、`dasall_prompt_policy_tool_visibility_unit_test`、`dasall_prompt_policy_profile_diff_unit_test` 与 `dasall_unit_tests`，`ListTests_CMakeTools` 已列出三条 PromptPolicy 测试，说明 018 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 定向构建三条 PromptPolicy 目标成功；随后构建 `dasall_llm_subsystem_config_projection_unit_test` 成功，并进一步构建 `dasall_unit_tests` 成功，在 unit 标签链路中显示 `231/231` 全部通过。
+   - `RunCtest_CMakeTools` 定向执行 `PromptPolicyAllowlistTest`、`PromptPolicyToolVisibilityTest`、`PromptPolicyProfileDiffTest` 与 `LLMSubsystemConfigProjectionTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-018 已完成，llm 现已拥有真正的 PromptPolicy owner，后续 019 可以直接消费 015 的选择事实、017 的装配事实和 018 的治理结果，形成完整的 Prompt 三段编排闭环。
+2. 018 保持了详细设计与 ADR 边界：Policy 只做治理裁定和 redaction，不拥有工具执行权限、不读取 memory 原始候选、不重排 ContextPacket，也不发起 provider 调用。
+3. 对 018 的 direct blocker，本轮选择“扩 module-local `PromptPolicyInput`”而不是“改 shared contracts”；对预算治理，本轮选择“redaction 后重估并返回 `OverBudget`”而不是“在 Policy 内静默删减消息”。这两点共同保证了 Policy 输出仍然是可审计的治理事实，而不是黑箱改写结果。
+
+### 下一步
+
+1. 进入 LLM-TODO-019，开始实现 `PromptPipeline` 三段编排。
+2. 在 019 中把 015 的 selected release、017 的 `PromptComposeResult` 与 Tool Policy Gate 的可见工具事实真实传入 018 新增的 `PromptPolicyInput` 字段，而不是继续停留在测试注入态。
+
+### 风险
+
+1. 当前 `tool_visibility_rules` 仍是最小字符串语法；如果后续 Tool Policy Gate 需要 capability 级或参数级治理，应在 profiles/schema 与正式策略模型中扩展，而不是在 PromptPolicy 内继续堆叠 ad-hoc 解析分支。
+
 ## 记录 #276
 
 - 日期：2026-04-12

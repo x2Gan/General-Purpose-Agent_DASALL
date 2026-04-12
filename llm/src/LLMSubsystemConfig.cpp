@@ -67,6 +67,9 @@ prompt::PromptPolicyInput LLMSubsystemConfig::make_prompt_policy_input(
       .render_budget_tokens = render_budget_tokens,
       .active_scene = prompt_selector_overlay.active_scene,
       .active_persona = prompt_selector_overlay.active_persona,
+      .selected_release_scope = {},
+      .selected_trusted_source = {},
+      .visible_tools = {},
   };
 }
 
