@@ -134,6 +134,10 @@ void test_adapter_call_result_freezes_non_exception_error_boundary() {
                  std::optional<ErrorInfo>>);
   static_assert(std::is_same_v<decltype(AdapterCallResult{}.result_code),
                  std::optional<ResultCode>>);
+  static_assert(std::is_same_v<decltype(AdapterCallResult{}.usage),
+                 std::optional<dasall::llm::AdapterUsageFragment>>);
+  static_assert(std::is_same_v<decltype(AdapterCallResult{}.provider_diagnostics),
+                 dasall::llm::AdapterProviderDiagnostics>);
 
   LLMResponse success_response;
   success_response.model_name = std::string("deepseek-chat");
@@ -142,6 +146,8 @@ void test_adapter_call_result_freezes_non_exception_error_boundary() {
     .response = success_response,
     .error = std::nullopt,
     .result_code = std::nullopt,
+    .usage = std::nullopt,
+    .provider_diagnostics = {},
   };
 
   const AdapterCallResult failure_result{
@@ -161,12 +167,16 @@ void test_adapter_call_result_freezes_non_exception_error_boundary() {
       },
     },
     .result_code = ResultCode::ProviderTimeout,
+    .usage = std::nullopt,
+    .provider_diagnostics = {},
   };
 
   const AdapterCallResult invalid_result{
     .response = LLMResponse{},
     .error = failure_result.error,
     .result_code = ResultCode::ProviderTimeout,
+    .usage = std::nullopt,
+    .provider_diagnostics = {},
   };
 
   assert_true(success_result.has_consistent_values(),

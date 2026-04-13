@@ -25,6 +25,7 @@ target_sources(dasall_llm
     src/LLMManager.cpp
     src/LLMSubsystemConfig.cpp
     src/TokenEstimator.cpp
+    src/execution/ResponseNormalizer.cpp
     src/prompt/PromptAssetRepository.cpp
     src/prompt/PromptComposer.cpp
     src/prompt/PromptPipeline.cpp

@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #282
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 F
+- 任务：LLM-TODO-022 实现 ResponseNormalizer 语义归一化
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 040，且 022 的前置依赖只要求 005、011、002 完成，因此当前按串行原子任务顺序直接进入 `ResponseNormalizer` 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.15.4 已把 `ResponseNormalizer` 冻结为 provider raw result 到 shared `LLMResponse` / `ErrorInfo` 的唯一收口点，并要求它独占 `reasoning_content`、provider trace id 与 raw usage fragment 的保留/剥离策略。这意味着 022 不能把 private 字段处理分散到 adapter 或 manager 里。
+3. 本轮识别到一个 direct blocker：现有 [llm/src/adapters/AdapterCallResult.h](../../llm/src/adapters/AdapterCallResult.h) 只有 `response/error/result_code` 三元组，无法承载 prompt cache hit/miss 或 `reasoning_content` side channel。当前轮次按最小原则仅在该 module-local 类型内补入 usage/diagnostics 承载面，没有改 shared contracts。
+
+### 改动
+
+1. 扩展 [llm/src/adapters/AdapterCallResult.h](../../llm/src/adapters/AdapterCallResult.h)，新增 `AdapterUsageFragment` 与 `AdapterProviderDiagnostics` 两个 module-local side channel，使 adapter 返回值可以同时携带 raw token usage、prompt cache hit/miss、`reasoning_content` 与 provider trace id，而不把这些字段挤进 shared `LLMResponse`。
+2. 新增 [llm/src/execution/ResponseNormalizer.h](../../llm/src/execution/ResponseNormalizer.h) 与 [llm/src/execution/ResponseNormalizer.cpp](../../llm/src/execution/ResponseNormalizer.cpp)，实现 `ResponseNormalizer`、`ResponseNormalizerContext` 与 `ResponseNormalizationResult`。022 将 normalizer 收敛为“结构校验 + metadata 富化 + finish_reason 规范化 + private diagnostics 剥离 + usage fragment 提取”的唯一 owner。
+3. 022 复用 [contracts/include/llm/LLMBoundaryGuards.h](../../contracts/include/llm/LLMBoundaryGuards.h) 中的 `validate_llm_response_field_rules()` 做 malformed payload fail-closed，只要共享响应缺少 required 字段、usage 统计自相矛盾，或共享 token 字段与 side-channel usage 冲突，就直接返回 module-local ProviderProtocol failure，并写入 `malformed_payload:*` 审计事件。
+4. 022 采用最小 canonicalization：`tool_calls -> tool_call`、`max_tokens -> length`、`content_filter -> refusal`，其余未知 finish reason 统一收敛为 `unknown` 并记录 `unknown_finish_reason:*` 审计事件；`reasoning_content` 只保留“已剥离”事实和 provider trace id，不进入 shared `content_payload` 或下一轮请求。
+5. 新增 [tests/unit/llm/ResponseNormalizerSemanticMappingTest.cpp](../../tests/unit/llm/ResponseNormalizerSemanticMappingTest.cpp)、[tests/unit/llm/ResponseNormalizerReasoningContentStripTest.cpp](../../tests/unit/llm/ResponseNormalizerReasoningContentStripTest.cpp) 与 [tests/unit/llm/ResponseNormalizerUsageTest.cpp](../../tests/unit/llm/ResponseNormalizerUsageTest.cpp)，分别覆盖五类共享语义分支、reasoning_content 剥离与 unknown finish reason 审计、以及 raw usage fragment 到 shared token 字段的回填。
+6. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，补齐 `AdapterCallResult` 新增 side channel 的类型可见性断言，避免 022 引入的聚合初始化告警继续残留。
+7. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 `ResponseNormalizer` 实现与三条新 unit 用例接入 llm / unit 聚合目标。
+8. 新增 [docs/todos/llm/deliverables/LLM-TODO-022-ResponseNormalizer语义归一化设计收敛.md](../todos/llm/deliverables/LLM-TODO-022-ResponseNormalizer语义归一化设计收敛.md)，沉淀 022 的本地/外部证据、Design->Build 映射与 Build 三件套；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 022 标记为 Done 并补充阶段 F 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `ResponseNormalizerSemanticMappingTest`
+   - `RunCtest_CMakeTools` 运行 `ResponseNormalizerReasoningContentStripTest`
+   - `RunCtest_CMakeTools` 运行 `ResponseNormalizerUsageTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_response_normalizer_semantic_mapping_unit_test`、`dasall_response_normalizer_reasoning_content_strip_unit_test` 与 `dasall_response_normalizer_usage_unit_test`；`ListTests_CMakeTools` 已列出三条 022 用例，说明 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `243/243` 全部通过；中途因 022 新增 side channel 触发的 `InterfaceSurfaceTest` 聚合初始化告警已通过补齐显式初始化与类型断言清除。
+   - `RunCtest_CMakeTools` 定向执行三条 022 用例均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-022 已完成，llm 现在具备 shared `LLMResponse` 的唯一收口点，可以稳定完成结构校验、metadata 富化、finish_reason 规范化、provider-private 字段剥离与 raw usage side-channel 提取。
+2. 022 保持了设计与 ADR 边界：`reasoning_content`、provider trace id 与 prompt cache hit/miss 没有穿透到 shared contracts；成本计算与 observability 也没有提前混进 normalizer owner。
+3. 这轮选择了“先把 adapter 产出的 shared 响应做 fail-closed 守卫与 side-channel 清洗”的保守收口方式，而不是在 022 提前引入未冻结的 raw JSON parser。这样 023 可以直接消费 normalized usage fragment，024 也可以直接消费成功/失败归一化结果。
+
+### 下一步
+
+1. 进入 LLM-TODO-023，开始实现 `UsageAggregator` 的 token/cost 归并。
+2. 在 023 中优先把 pricing metadata 缺失的 graceful fallback 与 prompt cache hit/miss 分价逻辑收口好，为 024 的 manager 结果装配准备稳定输入。
+
+### 风险
+
+1. 当前 022 仍建立在“adapter 已经返回 shared `LLMResponse`”这一阶段性前提上；待 025/026/027 落真实 provider adapter family 时，可能需要在 `AdapterCallResult` 中继续扩展 module-local raw payload carrier，但不应回改 022 已冻结的 shared contracts 边界。
+
 ## 记录 #281
 
 - 日期：2026-04-13
