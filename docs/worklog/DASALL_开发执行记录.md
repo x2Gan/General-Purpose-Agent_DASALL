@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #292
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-031 验证 fallback integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一条记录已完成 030，且 031 的前置依赖只要求 024、025、026、027、029 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 fallback integration，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.7.2、6.9 与 9.3 已冻结 031 的 owner：必须验证 primary route 失败后 LAN / local fallback 的真实 manager 收口、`attempted_routes` 与 `fallback_used` 可观测性，以及 fallback exhausted 时的失败分类，而不是只停留在 unit 层的 route list 断言。
+3. 029/030 已提供真实 `PromptPipeline + LLMManager + ResponseNormalizer + observability` 基座与 integration support header，031 因此只需要在集成层补齐 fallback success / degrade success / exhausted 三类结果，不需要改写生产 llm 逻辑或 provider 资产。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-031-fallback-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-031-fallback-integration设计收敛.md)，固定 031 的本地证据、AWS retry/backoff 参考、Design 结论和 Build 三件套。
+2. 新增 [tests/integration/llm/LLMFallbackIntegrationTest.cpp](../../tests/integration/llm/LLMFallbackIntegrationTest.cpp)，在真实 `PromptPipeline + LLMManager` 闭环中注册 cloud、LAN、local 三条 mock route，覆盖：
+   - cloud 失败后 `lan-ollama/lan-general` 成功
+   - cloud 与 LAN 失败后 `local-runtime/local-small` 成功
+   - 三条 route 全失败后返回 `FallbackExhausted`
+   并断言 response tags、structured log、fallback metric 与 trace attrs 中的 route chain / degraded outcome / attempted routes 事实。
+3. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_llm_fallback_integration_test` / `LLMFallbackIntegrationTest`，让 031 进入 llm integration discoverability 与聚合 target。
+4. 为让 fallback 证据稳定落在 cloud、LAN、local 三条 route，本轮只在 031 的 test catalog snapshot 内裁掉与本任务无关的 `deepseek-reasoner` 候选，避免 reasoning 路由插入 fallback 链；生产 provider 资产与 routing 逻辑保持不变。
+5. 调试过程中暴露了一个真实 manager 收口细节：fallback exhausted 结果会保留最后失败 route 的 message，但 `error.details.stage` 会统一投影成 `llm.manager.execute_unary`。当前已将该行为固定为 integration 断言，而没有修改生产收口逻辑。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_fallback_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMFallbackIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_fallback_integration_test`，`ListTests_CMakeTools` 已列出 `LLMFallbackIntegrationTest`，说明 031 已进入 llm integration discoverability。
+   - `Build_CMakeTools` 定向构建 031 target 成功；中间只出现 `AdapterBehavior` 部分初始化的编译告警，已通过显式 success/failure builder 最小修复消除。
+   - `RunCtest_CMakeTools` 首次执行暴露 exhausted 路径断言与真实 manager 行为不一致：实际返回的 `error.details.stage` 为 `llm.manager.execute_unary`。修正断言后再次运行，结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 38 条用例全部通过，其中 `LLMFallbackIntegrationTest` 作为第 38 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-031 已完成，llm 现在具备真实的 fallback integration 证据：cloud primary 失败后的 LAN fallback、local degrade-chain success，以及 fallback exhausted 的失败收口，都能在 production prompt / manager / normalizer / observability 闭环里被自动验证。
+2. 031 保持了设计与 ADR 边界：没有改动 `LLMManager`、`ModelRouter`、adapter skeleton 或 provider 资产，只在 integration fixture 中补齐三类结果与 route-level observability 断言。
+3. 这轮实现为 032~035 留下了稳定基座：Prompt source switch、persona、governance 和 profile 差异验证后续都可以继续复用 029/030/031 已抽出的 integration support 模式与 structured log / metric / trace 断言方法。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-032`，验证 Prompt source switch integration，并复用 031 已稳定的真实 prompt/manager/observability 基座。
+2. 在 source switch 收口后，再继续推进 `LLM-TODO-033`~`035`，把 persona、governance 与 profile 差异都接到同一真实 llm integration 基座上。
+
+### 风险
+
+1. 031 为了把 fallback 链稳定聚焦到 cloud、LAN、local，在 test catalog snapshot 中裁掉了 `deepseek-reasoner`；这一步必须继续限制在测试夹具内，不能反向得出“生产 catalog 中天然不存在 reasoning fallback 候选”的结论。
+2. 031 当前验证的是 route failure 收口与 observability，不等于 prompt source switch、governance deny 或 profile diff 已自动成立；若后续任务直接复用 031 证据宣称“阶段 H 已全闭合”，仍需要退回 032~035 的 owner 重新收口。
+
 ## 记录 #291
 
 - 日期：2026-04-13
