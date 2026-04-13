@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #283
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 F
+- 任务：LLM-TODO-023 实现 UsageAggregator 用量与成本归并
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 022，且 023 的前置依赖只要求 014、022 完成，因此当前按串行原子任务顺序直接进入 `UsageAggregator` 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.15.8 已把 023 收敛为“adapter usage fragment + provider pricing metadata -> NormalizedUsageRecord”的唯一归并 owner，并明确禁止它回写 Provider Catalog 或替代 observability bridge。当前轮次因此只做 token/cost 计算，不扩张到 bridge sink 或 manager 编排。
+3. 本轮发现一个验收级 direct blocker：023 的验收命令引用了 `LLMObservabilityFieldCompletenessTest`，但该完整 bridge 用例按专项 TODO 原本要到 028 才落盘。当前轮次按最小原则先补一个同名 unit 用例，只验证成本锚点字段可观测，完整桥接字段矩阵继续留给 028。
+
+### 改动
+
+1. 新增 [llm/src/UsageAggregator.h](../../llm/src/UsageAggregator.h) 与 [llm/src/UsageAggregator.cpp](../../llm/src/UsageAggregator.cpp)，实现 `UsageAggregator` concrete owner，把 022 的 `AdapterUsageFragment` 与 014 的 `ProviderModelMetadata` 归并为 `NormalizedUsageRecord`。
+2. 023 将成本公式固定为三段分价：`prompt_cache_hit_tokens * input_cache_hit_usd_per_1m`、`prompt_cache_miss_tokens * input_cache_miss_usd_per_1m`、`completion_tokens * output_usd_per_1m`。当 usage fragment 未显式拆出 hit/miss 时，全部 prompt tokens 默认按 miss 计费；当仅给出 hit 或 miss 其中一个时，则基于 `prompt_tokens` 反推另一侧。
+3. 当 pricing metadata 缺失（`pricing_ref` 为空且相关费率全为 0）时，023 采用 `estimated_cost_usd = 0.0` 的 graceful fallback，并完整保留 token totals、provider_id、model_id 与 pricing_ref，不因计费缺口阻塞主链。
+4. 扩展 [tests/unit/llm/ResponseNormalizerUsageTest.cpp](../../tests/unit/llm/ResponseNormalizerUsageTest.cpp)，在保留 022 usage side-channel 断言的基础上，新增标准 usage 成本计算与 cache hit/miss 分价断言，使 023 的归并逻辑继续复用 022 已稳定的 normalizer 出口。
+5. 新增 [tests/unit/llm/LLMObservabilityFieldCompletenessTest.cpp](../../tests/unit/llm/LLMObservabilityFieldCompletenessTest.cpp)，按最小 acceptance 补位验证 `provider_id`、`model_id`、`pricing_ref` 与 `estimated_cost_usd` 等成本锚点已经可被后续 observability 消费；本轮不提前实现 028 的完整 bridge 字段矩阵。
+6. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 `UsageAggregator.cpp` 与新的 observability 补位测试接入 llm / unit 聚合目标。
+7. 新增 [docs/todos/llm/deliverables/LLM-TODO-023-UsageAggregator用量与成本归并设计收敛.md](../todos/llm/deliverables/LLM-TODO-023-UsageAggregator用量与成本归并设计收敛.md)，沉淀 023 的本地/外部证据、Design->Build 映射与 Build 三件套；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 023 标记为 Done 并补充阶段 F 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `ResponseNormalizerUsageTest`
+   - `RunCtest_CMakeTools` 运行 `LLMObservabilityFieldCompletenessTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_observability_field_completeness_unit_test` 与 `dasall_unit_tests`；`ListTests_CMakeTools` 已列出两条 023 用例，说明 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `244/244` 全部通过，其中新增的 observability 补位用例通过。
+   - `RunCtest_CMakeTools` 定向执行 `ResponseNormalizerUsageTest` 与 `LLMObservabilityFieldCompletenessTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-023 已完成，llm 现在具备标准 usage、prompt cache hit/miss 与 per-call 成本估算的统一归并 owner，可为 024 的 manager 装配和 028 的 observability bridge 提供稳定输入。
+2. 023 保持了设计与 ADR 边界：它只消费 normalizer side-channel 与 provider pricing metadata，不直接访问 provider，不回写资产，不扩 shared contracts，也不越权实现完整 observability bridge。
+3. 这轮选择了“最小 acceptance 补位 + 可扩展 bridge 接缝”的保守实现：先确保成本锚点不丢失，再把完整日志/metrics/trace 字段矩阵留给 028 在同名测试文件上继续扩展。
+
+### 下一步
+
+1. 进入 LLM-TODO-024，开始实现 `LLMManager` unary 编排与结果装配。
+2. 在 024 中直接复用 019 的 PromptPipeline、020 的 ModelRouter、021 的 AdapterRegistry、040 的执行治理、022 的 ResponseNormalizer 与 023 的 UsageAggregator，不重复造第二层 policy/route/usage owner。
+
+### 风险
+
+1. 当前 023 的成本估算仍完全依赖静态 pricing metadata；若后续 provider 需要按区域、服务层级或批处理折扣切换费率，应通过 provider asset / config projection 演进，而不是在 023 内部临时叠加新的动态定价来源。
+
 ## 记录 #282
 
 - 日期：2026-04-13

@@ -1,10 +1,14 @@
+#include <cmath>
 #include <exception>
 #include <iostream>
 #include <string>
 
 #include "support/TestAssertions.h"
 
+#include "../../../llm/src/UsageAggregator.h"
 #include "../../../llm/src/execution/ResponseNormalizer.h"
+
+#include "ModelRouterTestSupport.h"
 
 namespace {
 
@@ -12,8 +16,10 @@ using dasall::contracts::LLMResponse;
 using dasall::contracts::LLMResponseKind;
 using dasall::llm::AdapterCallResult;
 using dasall::llm::AdapterUsageFragment;
+using dasall::llm::UsageAggregator;
 using dasall::llm::execution::ResponseNormalizer;
 using dasall::llm::execution::ResponseNormalizerContext;
+using dasall::llm::provider::ProviderModelMetadata;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -43,6 +49,16 @@ AdapterCallResult make_result() {
   AdapterCallResult result;
   result.response = std::move(response);
   return result;
+}
+
+const ProviderModelMetadata& require_model(std::string provider_id, std::string model_id) {
+  static const auto catalog = dasall::llm::test_support::make_default_catalog();
+  const auto* model = catalog.find_model(provider_id, model_id);
+  if (model == nullptr) {
+    throw std::runtime_error("usage test fixture model metadata is missing");
+  }
+
+  return *model;
 }
 
 void test_usage_fragment_promotes_token_counts_into_shared_response() {
@@ -93,12 +109,64 @@ void test_cache_hit_and_miss_usage_is_preserved_for_usage_aggregator() {
                "ResponseNormalizer should preserve prompt_cache_miss_tokens for UsageAggregator");
 }
 
+void test_usage_aggregator_calculates_standard_cost_without_cache() {
+  ResponseNormalizer normalizer;
+  UsageAggregator aggregator;
+  auto adapter_result = make_result();
+  adapter_result.usage = AdapterUsageFragment{
+      .prompt_tokens = 120U,
+      .completion_tokens = 30U,
+      .total_tokens = 150U,
+      .prompt_cache_hit_tokens = std::nullopt,
+      .prompt_cache_miss_tokens = std::nullopt,
+  };
+
+  const auto normalized = normalizer.normalize(adapter_result, make_context());
+  const auto usage = aggregator.aggregate(*normalized.usage_fragment,
+                                          require_model("deepseek-prod", "deepseek-chat"));
+
+  assert_equal(120, static_cast<int>(usage.prompt_tokens),
+               "UsageAggregator should preserve prompt token totals for standard usage");
+  assert_equal(30, static_cast<int>(usage.completion_tokens),
+               "UsageAggregator should preserve completion token totals for standard usage");
+  assert_equal(120, static_cast<int>(usage.prompt_cache_miss_tokens),
+               "UsageAggregator should treat prompt tokens as cache misses when no cache split is provided");
+  assert_true(std::fabs(usage.estimated_cost_usd - 0.000042) < 1e-12,
+              "UsageAggregator should price standard usage with the miss-input and output rates from provider metadata");
+}
+
+void test_usage_aggregator_calculates_split_cache_pricing() {
+  ResponseNormalizer normalizer;
+  UsageAggregator aggregator;
+  auto adapter_result = make_result();
+  adapter_result.usage = AdapterUsageFragment{
+      .prompt_tokens = 150U,
+      .completion_tokens = 20U,
+      .total_tokens = 170U,
+      .prompt_cache_hit_tokens = 50U,
+      .prompt_cache_miss_tokens = 100U,
+  };
+
+  const auto normalized = normalizer.normalize(adapter_result, make_context());
+  const auto usage = aggregator.aggregate(*normalized.usage_fragment,
+                                          require_model("deepseek-prod", "deepseek-chat"));
+
+  assert_equal(50, static_cast<int>(usage.prompt_cache_hit_tokens),
+               "UsageAggregator should preserve prompt_cache_hit_tokens for split pricing");
+  assert_equal(100, static_cast<int>(usage.prompt_cache_miss_tokens),
+               "UsageAggregator should preserve prompt_cache_miss_tokens for split pricing");
+  assert_true(std::fabs(usage.estimated_cost_usd - 0.0000305) < 1e-12,
+              "UsageAggregator should apply cache-hit, cache-miss, and output rates independently");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_usage_fragment_promotes_token_counts_into_shared_response();
     test_cache_hit_and_miss_usage_is_preserved_for_usage_aggregator();
+    test_usage_aggregator_calculates_standard_cost_without_cache();
+    test_usage_aggregator_calculates_split_cache_pricing();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

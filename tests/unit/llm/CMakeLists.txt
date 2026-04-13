@@ -118,6 +118,10 @@ add_executable(dasall_response_normalizer_usage_unit_test
 	ResponseNormalizerUsageTest.cpp
 )
 
+add_executable(dasall_llm_observability_field_completeness_unit_test
+	LLMObservabilityFieldCompletenessTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -299,6 +303,12 @@ target_link_libraries(dasall_response_normalizer_usage_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_llm_observability_field_completeness_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -344,6 +354,7 @@ dasall_apply_common_options(dasall_llm_manager_concurrency_guard_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_semantic_mapping_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_reasoning_content_strip_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_usage_unit_test)
+dasall_apply_common_options(dasall_llm_observability_field_completeness_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -434,3 +445,6 @@ set_tests_properties(ResponseNormalizerReasoningContentStripTest PROPERTIES LABE
 
 add_test(NAME ResponseNormalizerUsageTest COMMAND dasall_response_normalizer_usage_unit_test)
 set_tests_properties(ResponseNormalizerUsageTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMObservabilityFieldCompletenessTest COMMAND dasall_llm_observability_field_completeness_unit_test)
+set_tests_properties(LLMObservabilityFieldCompletenessTest PROPERTIES LABELS "unit;llm")
