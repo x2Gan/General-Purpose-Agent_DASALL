@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #297
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-042 验证 asset-only Provider instance onboarding integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 在上一条记录已完成 035，且 042 的前置依赖要求 014、020、025、029、041 完成；交叉核对 blocker 表后确认 041 已完成 `LLM-BLK-007` 的最小解阻动作，因此本轮无需先开新的 blocker recovery。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 的 6.10.1、6.14 与 9.3 已冻结 042 的 owner：必须验证“既有 admitted family 只加 provider package + auth_ref + profile route 即可完成 provider instance 接入”，同时证明 profile 未声明时新 provider 不会被隐式启用。
+3. 研究确认 042 不需要新增生产修补。`ProviderCatalogRepository` 已支持 baseline/deployment overlay，041 已完成 ProviderConfig 投影到 adapter init，025 已提供 openai-compatible family skeleton，`LLMManager` 的真实缺口只剩 integration 证据，因此本轮 owner 收敛为测试接线与验证，而不是改写生产逻辑。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-042-asset-only-provider-onboarding-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-042-asset-only-provider-onboarding-integration%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固定 042 的本地证据、最小验证矩阵、Build 三件套与残余边界。
+2. 新增 [tests/integration/llm/LLMProviderAssetOnboardingIntegrationTest.cpp](../../tests/integration/llm/LLMProviderAssetOnboardingIntegrationTest.cpp)，在真实 `ProviderCatalogRepository + AdapterRegistry + PromptPipeline + LLMManager` 闭环中动态生成 deployment 层 `openclaw` provider package 与 prompt package，覆盖：
+   - `cloud.premium` 明确声明 route 时命中 `openclaw-prod/openclaw-chat`
+   - 相同 provider asset 已接入但 profile 仍走 `cloud.default` 时继续命中 baseline `deepseek-prod/deepseek-chat`
+3. 042 的测试显式固定 `provider catalog snapshot -> registry route registration` 这条最小接缝：fixture 用真实 catalog snapshot 加载 repo baseline DeepSeek 与 deployment overlay OpenClaw，再把 snapshot 中的 provider/model route 注册进真实 `AdapterRegistry`，随后由真实 `LLMManager.generate()` 验证 dispatch 结果。
+4. 同一组用例还固定了 provider init 投影证据：`openclaw` adapter 会真实接收到 `adapter_family=openai_compatible`、`provider_instance_id=openclaw-prod`、`base_url_alias=openclaw/premium`、`auth_ref=secret://llm/providers/openclaw-prod` 与 `snapshot_version=2026.04.14-openclaw`。
+5. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_llm_provider_asset_onboarding_integration_test` / `LLMProviderAssetOnboardingIntegrationTest`，让 042 进入 llm integration discoverability 与聚合 target。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_provider_asset_onboarding_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMProviderAssetOnboardingIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_provider_asset_onboarding_integration_test` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 已列出 `LLMProviderAssetOnboardingIntegrationTest`，说明 042 的 discoverability 已闭合。
+   - `Build_CMakeTools` 定向构建 042 target 成功，`LLMProviderAssetOnboardingIntegrationTest.cpp` 已编译并链接入新的 integration 可执行文件。
+   - `RunCtest_CMakeTools` 定向执行 `LLMProviderAssetOnboardingIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 43 条用例全部通过，其中 `LLMProviderAssetOnboardingIntegrationTest` 作为第 43 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-042 已完成，llm 现在具备真实的 asset-only Provider onboarding integration 证据：既有 admitted family 下新增 provider package 后，只要 profile 显式声明 route，新 provider instance 就能被真实 manager dispatch 命中。
+2. 042 同时固定了负例边界：即使新的 provider asset 已进入 catalog snapshot，只要 profile 未显式切到对应 route，它也不会被隐式激活，而会继续保持 dormant。
+3. 042 保持了设计与 ADR 边界：没有改写 `ProviderCatalogRepository`、`LLMSubsystemConfig`、`AdapterRegistry`、`LLMManager` 或 shared contracts，只验证既有 projection + catalog overlay + family skeleton 已经能够支撑配置式实例接入。
+
+### 下一步
+
+1. 继续按专项 TODO 推进 `LLM-TODO-038`，统一回写 llm 专项 Gate、阶段 G/H 证据链与残余 blocker 说明。
+
+### 风险
+
+1. 042 当前验证的是 llm 内部的 asset-only onboarding，不等于 Cloud/LAN/Local 真实 endpoint、secret resolver 或 header 注入链已联通；`LLM-BLK-007` 的外部残余约束仍需后续 owner 单独处理。
+2. 本轮通过 fixture 显式执行 `snapshot -> registry` 注册收口了最小验证链；若后续要求生产 `LLMManager` 自动装配 provider routes，需要单独评审生命周期、热更新与并发边界，而不能把生产 owner 扩张夹带进 042。
+
 ## 记录 #296
 
 - 日期：2026-04-13
