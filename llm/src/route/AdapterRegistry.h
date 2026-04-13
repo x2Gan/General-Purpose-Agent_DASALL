@@ -10,6 +10,7 @@
 
 #include "HealthStatus.h"
 #include "ILLMAdapter.h"
+#include "LLMSubsystemConfig.h"
 
 #include "ModelRouter.h"
 
@@ -64,6 +65,12 @@ class AdapterRegistry {
  public:
   bool init(const AdapterRegistryConfig& config = {});
   bool register_adapter(const AdapterRegistration& registration);
+  bool initialize_and_register_provider_route(const ProviderDescriptor& descriptor,
+                                              const ProviderRuntimeProjectionView& runtime_view,
+                                              std::string_view model_id,
+                                              bool supports_streaming,
+                                              const LLMSubsystemConfig& config,
+                                              std::shared_ptr<ILLMAdapter> adapter);
   bool unregister_adapter(std::string_view route_key);
 
   [[nodiscard]] std::shared_ptr<const AdapterRegistrySnapshot> snapshot() const;

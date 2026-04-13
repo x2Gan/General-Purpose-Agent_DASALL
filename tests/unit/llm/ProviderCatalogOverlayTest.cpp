@@ -147,6 +147,8 @@ void test_repository_applies_mutable_overlay_fields_without_touching_static_mode
                "deployment overlay should be able to override auth_ref");
   assert_equal(std::string("deepseek/canary"), provider->runtime.base_url_alias,
                "deployment overlay should be able to override base_url_alias");
+  assert_equal(std::string("2026.04.11"), provider->descriptor.source_version,
+               "deployment overlay should advance source_version only through declared mutable overlay fields");
   assert_true(provider->descriptor.header_refs.size() == 1U &&
                   provider->descriptor.header_refs.front() ==
                       "header://llm/providers/deepseek-canary-org",

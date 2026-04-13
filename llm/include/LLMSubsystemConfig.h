@@ -7,6 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "LLMAdapterConfig.h"
+#include "provider/ProviderDescriptor.h"
 #include "prompt/PromptPolicyInput.h"
 
 namespace dasall::profiles {
@@ -56,6 +58,18 @@ struct ProviderCatalogSourceConfig {
 
   [[nodiscard]] bool has_consistent_values() const {
     return !baseline_root.empty() && !merge_mode.empty();
+  }
+};
+
+struct ProviderRuntimeProjectionView {
+  std::string provider_instance_id;
+  std::string base_url_alias;
+  std::string snapshot_version;
+  std::vector<std::string> runtime_tags;
+  bool activation_flag = true;
+
+  [[nodiscard]] bool has_consistent_values() const {
+    return !provider_instance_id.empty() && !base_url_alias.empty() && !snapshot_version.empty();
   }
 };
 
@@ -113,5 +127,10 @@ struct LLMSubsystemConfig {
 [[nodiscard]] std::optional<LLMSubsystemConfig> project_llm_subsystem_config(
     const profiles::RuntimePolicySnapshot& snapshot,
     const LLMSubsystemConfigOverlay& overlay = {});
+
+[[nodiscard]] std::optional<LLMAdapterConfig> project_provider_to_adapter_config(
+  const LLMSubsystemConfig& config,
+  const ProviderDescriptor& descriptor,
+  const ProviderRuntimeProjectionView& runtime_view);
 
 }  // namespace dasall::llm

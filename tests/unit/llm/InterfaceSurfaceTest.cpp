@@ -91,10 +91,14 @@ void test_llm_adapter_config_freezes_expected_fields() {
 
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.adapter_id), std::string>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.adapter_family), std::string>);
+  static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.provider_instance_id), std::string>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.base_url), std::string>);
+  static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.base_url_alias), std::string>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.auth_ref), std::string>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.header_refs),
                  std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.activation_flag), bool>);
+  static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.snapshot_version), std::string>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.timeout_ms), std::uint32_t>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.max_retries), std::uint32_t>);
   static_assert(std::is_same_v<decltype(LLMAdapterConfig{}.capability_tags),
@@ -103,9 +107,13 @@ void test_llm_adapter_config_freezes_expected_fields() {
   const LLMAdapterConfig config{
     .adapter_id = "deepseek-primary",
     .adapter_family = "openai_compatible",
+    .provider_instance_id = "deepseek-prod",
     .base_url = "https://api.deepseek.example/v1",
+    .base_url_alias = "deepseek/default",
     .auth_ref = "secret://llm/deepseek-primary",
     .header_refs = {"profile://headers/x-trace-id"},
+    .activation_flag = true,
+    .snapshot_version = "2026.04.13",
     .timeout_ms = 45000,
     .max_retries = 2,
     .capability_tags = {"reasoning", "tool_call"},
@@ -113,8 +121,14 @@ void test_llm_adapter_config_freezes_expected_fields() {
 
   assert_true(config.adapter_id == "deepseek-primary",
               "LLMAdapterConfig should keep adapter_id as an explicit stable identity field");
+  assert_true(config.provider_instance_id == "deepseek-prod",
+              "LLMAdapterConfig should preserve provider_instance_id for asset-derived adapter instances");
   assert_true(config.header_refs.size() == 1U,
               "LLMAdapterConfig should preserve header_refs for injected provider headers");
+  assert_true(config.base_url_alias == "deepseek/default",
+              "LLMAdapterConfig should preserve base_url_alias as a mutable endpoint indirection field");
+  assert_true(config.activation_flag,
+              "LLMAdapterConfig should preserve activation_flag so disabled provider instances fail closed at init time");
   assert_true(config.capability_tags.size() == 2U,
               "LLMAdapterConfig should keep capability_tags as a stable vector field");
 }
@@ -218,7 +232,9 @@ void test_llm_subsystem_config_surface_freezes_projection_helpers() {
   using dasall::llm::LLMTimeoutConfig;
   using dasall::llm::PromptAssetSourceConfig;
   using dasall::llm::PromptSelectorOverlay;
+  using dasall::llm::ProviderRuntimeProjectionView;
   using dasall::llm::ProviderCatalogSourceConfig;
+  using dasall::llm::project_provider_to_adapter_config;
   using dasall::llm::project_llm_subsystem_config;
   using dasall::tests::support::assert_true;
 
@@ -237,6 +253,15 @@ void test_llm_subsystem_config_surface_freezes_projection_helpers() {
                  PromptSelectorOverlay>);
   static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.provider_catalog_sources),
                  ProviderCatalogSourceConfig>);
+  static_assert(std::is_same_v<decltype(ProviderRuntimeProjectionView{}.provider_instance_id),
+                 std::string>);
+  static_assert(std::is_same_v<decltype(ProviderRuntimeProjectionView{}.base_url_alias),
+                 std::string>);
+  static_assert(std::is_same_v<decltype(ProviderRuntimeProjectionView{}.snapshot_version),
+                 std::string>);
+  static_assert(std::is_same_v<decltype(ProviderRuntimeProjectionView{}.runtime_tags),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ProviderRuntimeProjectionView{}.activation_flag), bool>);
   static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.degrade_policy),
                  LLMDegradeConfig>);
   static_assert(std::is_same_v<decltype(LLMSubsystemConfig{}.timeout_policy),
@@ -249,8 +274,20 @@ void test_llm_subsystem_config_surface_freezes_projection_helpers() {
   static_assert(std::is_same_v<decltype(&project_llm_subsystem_config),
                  std::optional<LLMSubsystemConfig> (*)(const dasall::profiles::RuntimePolicySnapshot&,
                                                        const LLMSubsystemConfigOverlay&)>);
+    static_assert(std::is_same_v<decltype(&project_provider_to_adapter_config),
+           std::optional<dasall::llm::LLMAdapterConfig> (*)(
+             const LLMSubsystemConfig&,
+             const dasall::llm::ProviderDescriptor&,
+             const ProviderRuntimeProjectionView&)>);
 
   const LLMSubsystemConfigOverlay overlay{};
+    const ProviderRuntimeProjectionView provider_runtime_view{
+      .provider_instance_id = "deepseek-prod",
+      .base_url_alias = "deepseek/default",
+      .snapshot_version = "2026.04.13",
+      .runtime_tags = {"cloud", "external"},
+      .activation_flag = true,
+    };
 
   assert_true(overlay.prompt_asset_sources.baseline_root == "llm/assets/prompts",
               "PromptAssetSourceConfig should freeze llm/assets/prompts as the default prompt baseline root");
@@ -258,6 +295,8 @@ void test_llm_subsystem_config_surface_freezes_projection_helpers() {
               "ProviderCatalogSourceConfig should freeze llm/assets/providers as the default provider baseline root");
   assert_true(overlay.prompt_selector_overlay.active_scene.empty(),
               "PromptSelectorOverlay should default active_scene to empty so no selector override is forced");
+    assert_true(provider_runtime_view.has_consistent_values(),
+          "ProviderRuntimeProjectionView should require provider instance id, alias and snapshot version before adapter projection");
   assert_true(overlay.prompt_selector_overlay.active_persona.empty(),
               "PromptSelectorOverlay should default active_persona to empty so no selector override is forced");
 }

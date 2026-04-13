@@ -1,6 +1,7 @@
 #include "LLMSubsystemConfig.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "RuntimePolicySnapshot.h"
@@ -11,6 +12,33 @@ namespace {
   std::vector<std::string> sorted_values = values;
   std::sort(sorted_values.begin(), sorted_values.end());
   return std::adjacent_find(sorted_values.begin(), sorted_values.end()) == sorted_values.end();
+}
+
+[[nodiscard]] bool is_reference_value(std::string_view value) {
+  return value.starts_with("secret://") || value.starts_with("profile://") ||
+         value.starts_with("header://");
+}
+
+[[nodiscard]] bool is_auth_reference_value(std::string_view value) {
+  return value.starts_with("secret://") || value.starts_with("profile://");
+}
+
+void append_unique_values(std::vector<std::string>& destination,
+                          const std::vector<std::string>& source) {
+  for (const auto& value : source) {
+    if (std::find(destination.begin(), destination.end(), value) == destination.end()) {
+      destination.push_back(value);
+    }
+  }
+}
+
+[[nodiscard]] std::uint32_t clamp_timeout_ms(std::int64_t timeout_ms) {
+  if (timeout_ms <= 0) {
+    return 0U;
+  }
+
+  const auto max_timeout = static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max());
+  return static_cast<std::uint32_t>(std::min(timeout_ms, max_timeout));
 }
 
 [[nodiscard]] std::map<std::string, dasall::llm::LLMStageRouteConfig> project_stage_routes(
@@ -107,6 +135,47 @@ std::optional<LLMSubsystemConfig> project_llm_subsystem_config(
   }
 
   return config;
+}
+
+std::optional<LLMAdapterConfig> project_provider_to_adapter_config(
+    const LLMSubsystemConfig& config,
+    const ProviderDescriptor& descriptor,
+    const ProviderRuntimeProjectionView& runtime_view) {
+  if (!config.has_consistent_values() || !runtime_view.has_consistent_values() ||
+      descriptor.provider_id.empty() || descriptor.adapter_family.empty() ||
+      descriptor.base_url.empty() || descriptor.auth_ref.empty()) {
+    return std::nullopt;
+  }
+
+  if (!is_auth_reference_value(descriptor.auth_ref) ||
+      !has_unique_values(descriptor.header_refs) ||
+      !std::all_of(descriptor.header_refs.begin(), descriptor.header_refs.end(),
+                   [](const std::string& header_ref) { return is_reference_value(header_ref); })) {
+    return std::nullopt;
+  }
+
+  const std::uint32_t timeout_ms = clamp_timeout_ms(config.timeout_policy.timeout_ms);
+  if (timeout_ms == 0U) {
+    return std::nullopt;
+  }
+
+  std::vector<std::string> capability_tags = descriptor.capability_tags;
+  append_unique_values(capability_tags, runtime_view.runtime_tags);
+
+  return LLMAdapterConfig{
+      .adapter_id = runtime_view.provider_instance_id,
+      .adapter_family = descriptor.adapter_family,
+      .provider_instance_id = runtime_view.provider_instance_id,
+      .base_url = descriptor.base_url,
+      .base_url_alias = runtime_view.base_url_alias,
+      .auth_ref = descriptor.auth_ref,
+      .header_refs = descriptor.header_refs,
+      .activation_flag = runtime_view.activation_flag,
+      .snapshot_version = runtime_view.snapshot_version,
+      .timeout_ms = timeout_ms,
+      .max_retries = config.timeout_policy.retry_budget,
+      .capability_tags = std::move(capability_tags),
+  };
 }
 
 }  // namespace dasall::llm

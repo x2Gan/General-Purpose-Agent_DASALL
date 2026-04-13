@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #285
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 G
+- 任务：LLM-TODO-041 实现 ProviderConfig 投影与 mutable overlay 规则
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 024，且 041 的前置依赖只要求 012、014、021 完成，因此当前按串行原子任务顺序直接进入 provider instance 注入链的最小收口。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.10.1、6.14、6.15.2 已把 041 冻结为“配置投影 + 资产式实例接入”的 owner：Provider Catalog 只负责 truth-source 与 mutable overlay，adapter init 所需的 runtime overlay 必须经 `LLMSubsystemConfig` 投影，而不是把仓储层扩成第二配置中心。
+3. `LLM-BLK-007` 对 041 而言不是外部前置 blocker，而是本轮要完成的最小解阻动作：先把 `auth_ref/header_refs/base_url alias/activation flag/snapshot version` 安全投影到 adapter init 输入，后续 042 再验证 asset-only onboarding 集成闭环。
+
+### 改动
+
+1. 扩展 [llm/include/LLMAdapterConfig.h](../../llm/include/LLMAdapterConfig.h)，新增 `provider_instance_id`、`base_url_alias`、`activation_flag` 与 `snapshot_version` 四个字段，使 adapter init 能显式看见 provider runtime overlay，而不再把这些信息塞进 `adapter_id` 或静态 `base_url`。
+2. 更新 [llm/include/LLMSubsystemConfig.h](../../llm/include/LLMSubsystemConfig.h) 与 [llm/src/LLMSubsystemConfig.cpp](../../llm/src/LLMSubsystemConfig.cpp)，新增 `ProviderRuntimeProjectionView` 和 `project_provider_to_adapter_config(...)`。041 在这里把 timeout/retry 投影、descriptor/runtime tag 合并，以及 `auth_ref/header_refs` reference 校验统一收口为 fail-closed 投影函数。
+3. 更新 [llm/src/route/AdapterRegistry.h](../../llm/src/route/AdapterRegistry.h) 与 [llm/src/route/AdapterRegistry.cpp](../../llm/src/route/AdapterRegistry.cpp)，新增 `initialize_and_register_provider_route(...)`。该入口只做四件事：投影 `LLMAdapterConfig`、拒绝 disabled provider instance、调用 adapter `init()`、按 copy-on-write 既有路径注册 provider/model route。
+4. 扩展 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，冻结新增的 `LLMAdapterConfig` 字段面和 `ProviderRuntimeProjectionView` / `project_provider_to_adapter_config(...)` 的 surface，避免 041 在后续 family skeleton 或 042 集成期漂移。
+5. 新增 [tests/unit/llm/ProviderConfigProjectionTest.cpp](../../tests/unit/llm/ProviderConfigProjectionTest.cpp)，覆盖 provider runtime overlay 投影、plain-text secret ref 拒绝、registry 的 adapter init 输入和 disabled provider fail-closed 路径；同时增强 [tests/unit/llm/ProviderCatalogOverlayTest.cpp](../../tests/unit/llm/ProviderCatalogOverlayTest.cpp)，补充 `source_version` 作为显式 mutable 字段随合法 overlay 前移的断言。
+6. 更新 [tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 `ProviderConfigProjectionTest` 接入 llm unit discoverability 与顶层 unit 聚合；新增 [docs/todos/llm/deliverables/LLM-TODO-041-ProviderConfig投影与mutable-overlay规则设计收敛.md](../todos/llm/deliverables/LLM-TODO-041-ProviderConfig投影与mutable-overlay规则设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `ListTests_CMakeTools`
+   - `RunCtest_CMakeTools` 运行 `ProviderConfigProjectionTest`
+   - `RunCtest_CMakeTools` 运行 `ProviderCatalogOverlayTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_provider_config_projection_unit_test` 与 `dasall_unit_tests`；`ListTests_CMakeTools` 已列出 `ProviderConfigProjectionTest` 与 `ProviderCatalogOverlayTest`，说明 041 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `247/247` 全部通过，其中新增的 `ProviderConfigProjectionTest` 与增强后的 `ProviderCatalogOverlayTest` 均通过。
+   - `RunCtest_CMakeTools` 定向执行两条 041 验收测试结果均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-041 已完成，llm 现在具备从 Provider 资产/overlay 到 adapter init 输入的最小投影链，并能在 registry 内安全拒绝 disabled provider instance。
+2. 041 保持了设计与 ADR 边界：Provider Catalog 仍是 truth-source 和 mutable overlay owner，没有越权生成运行态对象；registry 仍只做 route/health owner，没有重写 route 评分或 endpoint 解析；`LLMManager` 也没有因为 041 被扩成 provider instance 工厂。
+3. 这轮实现为 042 和 025/026/027 留下了明确接缝：已有 family 可以消费统一的 `LLMAdapterConfig` 投影视图，而 asset-only onboarding 与 concrete adapter skeleton 继续在后续任务分别验证。
+
+### 下一步
+
+1. 继续按专项 TODO 顺序推进 `LLM-TODO-025`，开始实现 `OpenAICompatibleAdapter` skeleton。
+2. 在 `OpenAICompatibleAdapter` 落地后，再结合 smoke integration 推进 `LLM-TODO-042`，验证“只加 provider 资产 + profile route”即可启用既有 family provider instance。
+
+### 风险
+
+1. 041 当前只打通了 llm 内部的 provider runtime overlay -> adapter init 投影链，还没有落真实 endpoint/secret 解析器；若后续 family skeleton 试图直接绕过 `base_url_alias` 或把 secret 明文回写到 adapter config，本轮结论需要重新评审。
+
 ## 记录 #284
 
 - 日期：2026-04-13

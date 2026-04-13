@@ -24,6 +24,22 @@ std::string make_route_key(std::string_view provider_id, std::string_view model_
   return std::string(provider_id) + "/" + std::string(model_id);
 }
 
+std::string infer_deployment_type(const std::vector<std::string>& capability_tags) {
+  static constexpr std::string_view kKnownDeploymentTypes[] = {"cloud", "lan", "local"};
+  for (const auto deployment_type : kKnownDeploymentTypes) {
+    if (std::find(capability_tags.begin(), capability_tags.end(), deployment_type) !=
+        capability_tags.end()) {
+      return std::string(deployment_type);
+    }
+  }
+
+  if (!capability_tags.empty()) {
+    return capability_tags.front();
+  }
+
+  return "managed";
+}
+
 void sort_routes(std::vector<AdapterRouteState>& routes) {
   std::sort(routes.begin(), routes.end(), [](const AdapterRouteState& left, const AdapterRouteState& right) {
     return left.route_key() < right.route_key();
@@ -221,6 +237,56 @@ bool AdapterRegistry::register_adapter(const AdapterRegistration& registration) 
   std::atomic_store_explicit(&snapshot_, immutable_snapshot, std::memory_order_release);
   last_error_message_.clear();
   return true;
+}
+
+bool AdapterRegistry::initialize_and_register_provider_route(
+    const ProviderDescriptor& descriptor,
+    const ProviderRuntimeProjectionView& runtime_view,
+    std::string_view model_id,
+    bool supports_streaming,
+    const LLMSubsystemConfig& config,
+    std::shared_ptr<ILLMAdapter> adapter) {
+  if (!initialized_) {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    last_error_message_ = "adapter registry has not been initialized";
+    return false;
+  }
+
+  if (model_id.empty() || adapter == nullptr || !config.has_consistent_values()) {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    last_error_message_ = "adapter registry received inconsistent provider route input";
+    return false;
+  }
+
+  const auto adapter_config = project_provider_to_adapter_config(config, descriptor, runtime_view);
+  if (!adapter_config.has_value()) {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    last_error_message_ = "adapter registry failed to project provider config into adapter config";
+    return false;
+  }
+
+  if (!adapter_config->activation_flag) {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    last_error_message_ = "adapter registry refused to register a disabled provider instance";
+    return false;
+  }
+
+  if (!adapter->init(*adapter_config)) {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    last_error_message_ = "adapter registry failed to initialize adapter for provider route";
+    return false;
+  }
+
+  AdapterRegistration registration{
+      .provider_id = descriptor.provider_id,
+      .model_id = std::string(model_id),
+      .adapter_id = adapter_config->adapter_id,
+      .deployment_type = infer_deployment_type(adapter_config->capability_tags),
+      .capability_tags = adapter_config->capability_tags,
+      .supports_streaming = supports_streaming,
+      .adapter = std::move(adapter),
+  };
+  return register_adapter(registration);
 }
 
 bool AdapterRegistry::unregister_adapter(std::string_view route_key) {
