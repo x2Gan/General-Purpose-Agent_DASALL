@@ -6,6 +6,7 @@
 
 #include "support/TestAssertions.h"
 
+#include "../../../llm/src/adapters/LocalLLMAdapter.h"
 #include "../../../llm/src/adapters/OllamaAdapter.h"
 #include "../../../llm/src/adapters/OpenAICompatibleAdapter.h"
 
@@ -16,6 +17,7 @@ using dasall::contracts::LLMRequestMode;
 using dasall::contracts::ResultCode;
 using dasall::llm::ILLMTransport;
 using dasall::llm::LLMAdapterConfig;
+using dasall::llm::LocalLLMAdapter;
 using dasall::llm::LLMTransportMethod;
 using dasall::llm::LLMTransportRequest;
 using dasall::llm::LLMTransportResponse;
@@ -100,6 +102,39 @@ LLMRequest make_ollama_request() {
   request.prompt_version = "2026-04-13.2";
   request.response_format = "json_object";
   request.max_output_tokens = 96U;
+  return request;
+}
+
+LLMAdapterConfig make_local_config() {
+  return LLMAdapterConfig{
+      .adapter_id = "local-runtime",
+      .adapter_family = "local_runtime",
+      .provider_instance_id = "local-runtime",
+      .base_url = "local-runtime:///var/run/dasall/local-llm",
+      .base_url_alias = "local/runtime-main",
+      .auth_ref = "profile://llm/providers/local-runtime/noauth",
+      .header_refs = {"header://llm/providers/local-runtime-trace"},
+      .activation_flag = true,
+      .snapshot_version = "2026.04.13",
+      .timeout_ms = 1800U,
+      .max_retries = 1U,
+      .capability_tags = {"local", "internal", "edge_minimal", "factory_test"},
+  };
+}
+
+LLMRequest make_local_request() {
+  LLMRequest request;
+  request.request_id = "req-027-001";
+  request.llm_call_id = "call-027-001";
+  request.model_route = "local-runtime/local-small";
+  request.request_mode = LLMRequestMode::Unary;
+  request.messages = std::vector<std::string>{"system: keep output terse",
+                                              "user: summarize local pipeline"};
+  request.created_at = 1712966523000LL;
+  request.prompt_id = "prompt.local.minimal";
+  request.prompt_version = "2026-04-13.3";
+  request.response_format = "json_object";
+  request.max_output_tokens = 64U;
   return request;
 }
 
@@ -301,6 +336,103 @@ void test_ollama_adapter_surfaces_transport_failures_without_throwing() {
               "OllamaAdapter should emit a stable stage string for transport failure diagnostics");
 }
 
+void test_local_llm_adapter_maps_generate_request_and_local_runtime_response() {
+  auto transport = std::make_shared<CapturingTransport>();
+  transport->next_response = LLMTransportResponse{
+      .status_code = 200U,
+      .body = R"({
+        "model":"local-small",
+        "output_text":"{\"status\":\"ready\"}",
+        "finish_reason":"stop",
+        "runtime_session_id":"local-session-7",
+        "input_tokens":18,
+        "output_tokens":6,
+        "total_tokens":24,
+        "reasoning_trace":"hidden-local"
+      })",
+      .error_message = {},
+  };
+
+  LocalLLMAdapter adapter(transport);
+  assert_true(adapter.init(make_local_config()),
+              "LocalLLMAdapter should initialize with projected local provider config and transport dependency");
+
+  const auto result = adapter.generate(make_local_request());
+
+  assert_true(transport->last_request.has_value(),
+              "LocalLLMAdapter should issue a concrete transport request during generate()");
+  assert_equal(1, transport->call_count,
+               "LocalLLMAdapter should call transport exactly once for a unary request");
+  assert_true(transport->last_request->method == LLMTransportMethod::Post,
+              "LocalLLMAdapter should map unary generate() to POST local runtime generate");
+  assert_equal(std::string("local-runtime:///var/run/dasall/local-llm/generate"),
+               transport->last_request->url,
+               "LocalLLMAdapter should append /generate to the projected local runtime path");
+  assert_equal(std::string("profile://llm/providers/local-runtime/noauth"),
+               transport->last_request->auth_ref,
+               "LocalLLMAdapter should preserve auth_ref as a projected local runtime policy reference");
+  assert_equal(std::string("local/runtime-main"), transport->last_request->base_url_alias,
+               "LocalLLMAdapter should preserve base_url_alias for downstream local runtime indirection");
+  assert_true(transport->last_request->body.find("\"model\":\"local-small\"") != std::string::npos,
+              "LocalLLMAdapter should derive the concrete model id from request.model_route");
+  assert_true(transport->last_request->body.find("\"role\":\"system\"") != std::string::npos &&
+                  transport->last_request->body.find("\"content\":\"keep output terse\"") != std::string::npos,
+              "LocalLLMAdapter should preserve system instructions in the local runtime payload");
+  assert_true(transport->last_request->body.find("\"role\":\"user\"") != std::string::npos &&
+                  transport->last_request->body.find("\"content\":\"summarize local pipeline\"") != std::string::npos,
+              "LocalLLMAdapter should preserve user content in the local runtime payload");
+  assert_true(transport->last_request->body.find("\"execution_mode\":\"local_runtime\"") != std::string::npos,
+              "LocalLLMAdapter should stamp the request as a local_runtime execution path");
+  assert_true(transport->last_request->body.find("\"response_format\":\"json_object\"") != std::string::npos,
+              "LocalLLMAdapter should preserve the shared response format hint in the local runtime payload");
+  assert_true(transport->last_request->body.find("\"max_output_tokens\":64") != std::string::npos,
+              "LocalLLMAdapter should preserve max_output_tokens for constrained local runtime execution");
+
+  assert_true(result.response.has_value(),
+              "LocalLLMAdapter should return a shared LLMResponse on successful local runtime responses");
+  assert_equal(std::string("req-027-001"), *result.response->request_id,
+               "LocalLLMAdapter should preserve request_id in the shared response");
+  assert_equal(std::string("call-027-001"), *result.response->llm_call_id,
+               "LocalLLMAdapter should preserve llm_call_id in the shared response");
+  assert_equal(std::string("{\"status\":\"ready\"}"), *result.response->content_payload,
+               "LocalLLMAdapter should map local runtime output_text into the shared response payload");
+  assert_equal(std::string("local-small"), *result.response->model_name,
+               "LocalLLMAdapter should surface the concrete local model identity in the shared response");
+  assert_equal(std::string("stop"), *result.response->finish_reason,
+               "LocalLLMAdapter should preserve finish_reason for 022 canonicalization");
+  assert_true(result.usage.has_value() && result.usage->prompt_tokens == 18U &&
+                  result.usage->completion_tokens == 6U && result.usage->total_tokens == 24U,
+              "LocalLLMAdapter should project local runtime usage fields into AdapterUsageFragment for 023 aggregation");
+  assert_equal(std::string("local-session-7"), result.provider_diagnostics.provider_trace_id,
+               "LocalLLMAdapter should preserve runtime_session_id in diagnostics rather than shared contracts");
+  assert_equal(std::string("hidden-local"), result.provider_diagnostics.reasoning_content,
+               "LocalLLMAdapter should keep local reasoning_trace in diagnostics so 022 can strip it");
+}
+
+void test_local_llm_adapter_surfaces_transport_failures_without_throwing() {
+  auto transport = std::make_shared<CapturingTransport>();
+  transport->next_response = LLMTransportResponse{
+      .status_code = 503U,
+      .body = {},
+      .error_message = {},
+  };
+
+  LocalLLMAdapter adapter(transport);
+  assert_true(adapter.init(make_local_config()),
+              "LocalLLMAdapter should initialize before transport failure coverage");
+
+  const auto result = adapter.generate(make_local_request());
+
+  assert_true(!result.response.has_value() && result.error.has_value() && result.result_code.has_value(),
+              "LocalLLMAdapter should surface transport failures through AdapterCallResult error fields instead of exceptions");
+  assert_true(*result.result_code == ResultCode::ProviderTimeout,
+              "LocalLLMAdapter should map retryable local runtime transport failures to ProviderTimeout in the current shared code set");
+  assert_true(result.error->retryable.has_value() && *result.error->retryable,
+              "LocalLLMAdapter should mark 5xx local runtime failures as retryable for local fallback governance");
+  assert_true(result.error->details.stage == "llm.local_runtime.generate",
+              "LocalLLMAdapter should emit a stable stage string for transport failure diagnostics");
+}
+
 }  // namespace
 
 int main() {
@@ -309,6 +441,8 @@ int main() {
     test_openai_compatible_adapter_surfaces_transport_failures_without_throwing();
     test_ollama_adapter_maps_chat_request_and_usage_response();
     test_ollama_adapter_surfaces_transport_failures_without_throwing();
+    test_local_llm_adapter_maps_generate_request_and_local_runtime_response();
+    test_local_llm_adapter_surfaces_transport_failures_without_throwing();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

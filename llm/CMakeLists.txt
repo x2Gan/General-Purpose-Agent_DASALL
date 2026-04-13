@@ -26,6 +26,7 @@ target_sources(dasall_llm
     src/LLMSubsystemConfig.cpp
     src/TokenEstimator.cpp
     src/UsageAggregator.cpp
+    src/adapters/LocalLLMAdapter.cpp
     src/adapters/OpenAICompatibleAdapter.cpp
     src/adapters/OllamaAdapter.cpp
     src/execution/ResponseNormalizer.cpp

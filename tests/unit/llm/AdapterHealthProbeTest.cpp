@@ -9,6 +9,7 @@
 
 #include "support/TestAssertions.h"
 
+#include "../../../llm/src/adapters/LocalLLMAdapter.h"
 #include "../../../llm/src/adapters/OllamaAdapter.h"
 #include "../../../llm/src/adapters/OpenAICompatibleAdapter.h"
 #include "../../../llm/src/route/AdapterRegistry.h"
@@ -65,6 +66,23 @@ dasall::llm::LLMAdapterConfig make_ollama_adapter_config() {
       .timeout_ms = 2500U,
       .max_retries = 1U,
       .capability_tags = {"lan", "internal"},
+  };
+}
+
+dasall::llm::LLMAdapterConfig make_local_adapter_config() {
+  return dasall::llm::LLMAdapterConfig{
+      .adapter_id = "local-runtime",
+      .adapter_family = "local_runtime",
+      .provider_instance_id = "local-runtime",
+      .base_url = "local-runtime:///var/run/dasall/local-llm",
+      .base_url_alias = "local/runtime-main",
+      .auth_ref = "profile://llm/providers/local-runtime/noauth",
+      .header_refs = {"header://llm/providers/local-runtime-trace"},
+      .activation_flag = true,
+      .snapshot_version = "2026.04.13",
+      .timeout_ms = 1800U,
+      .max_retries = 1U,
+      .capability_tags = {"local", "internal", "edge_minimal", "factory_test"},
   };
 }
 
@@ -283,52 +301,109 @@ void test_openai_compatible_adapter_health_check_reports_concrete_probe_states()
 
     auto healthy_transport = std::make_shared<HealthTransport>();
     healthy_transport->next_response = {
-    .status_code = 200U,
-    .body = R"({"models":[]})",
-    .error_message = {},
+      .status_code = 200U,
+      .body = R"({"models":[]})",
+      .error_message = {},
     };
     OllamaAdapter healthy_adapter(healthy_transport);
     assert_true(healthy_adapter.init(make_ollama_adapter_config()),
-        "OllamaAdapter should initialize before healthy probe coverage");
+          "OllamaAdapter should initialize before healthy probe coverage");
 
     const auto healthy = healthy_adapter.health_check();
     assert_true(healthy.ready && !healthy.degraded,
-        "OllamaAdapter should report ready=true and degraded=false for a 2xx /api/tags probe");
+          "OllamaAdapter should report ready=true and degraded=false for a 2xx /api/tags probe");
     assert_equal(1, healthy_transport->call_count,
-         "OllamaAdapter should issue exactly one transport probe per health_check()");
+           "OllamaAdapter should issue exactly one transport probe per health_check()");
     assert_true(healthy_transport->last_request.has_value() &&
-        healthy_transport->last_request->method == LLMTransportMethod::Get,
-        "OllamaAdapter health_check() should probe via GET");
+            healthy_transport->last_request->method == LLMTransportMethod::Get,
+          "OllamaAdapter health_check() should probe via GET");
     assert_true(healthy_transport->last_request->url == "http://lan-ollama.internal:11434/api/tags",
-        "OllamaAdapter health_check() should append /api/tags to the projected base_url");
+          "OllamaAdapter health_check() should append /api/tags to the projected base_url");
 
     auto degraded_transport = std::make_shared<HealthTransport>();
     degraded_transport->next_response = {
-    .status_code = 503U,
-    .body = {},
-    .error_message = {},
+      .status_code = 503U,
+      .body = {},
+      .error_message = {},
     };
     OllamaAdapter degraded_adapter(degraded_transport);
     assert_true(degraded_adapter.init(make_ollama_adapter_config()),
-        "OllamaAdapter should initialize before degraded probe coverage");
+          "OllamaAdapter should initialize before degraded probe coverage");
 
     const auto degraded = degraded_adapter.health_check();
     assert_true(degraded.ready && degraded.degraded,
-        "OllamaAdapter should treat 503 as degraded-but-ready so AdapterRegistry can penalize instead of hard-blocking");
+          "OllamaAdapter should treat 503 as degraded-but-ready so AdapterRegistry can penalize instead of hard-blocking");
 
     auto unavailable_transport = std::make_shared<HealthTransport>();
     unavailable_transport->next_response = {
-    .status_code = 0U,
-    .body = {},
-    .error_message = "connection refused",
+      .status_code = 0U,
+      .body = {},
+      .error_message = "connection refused",
     };
     OllamaAdapter unavailable_adapter(unavailable_transport);
     assert_true(unavailable_adapter.init(make_ollama_adapter_config()),
-        "OllamaAdapter should initialize before unavailable probe coverage");
+          "OllamaAdapter should initialize before unavailable probe coverage");
 
     const auto unavailable = unavailable_adapter.health_check();
     assert_true(!unavailable.ready && unavailable.degraded,
-        "OllamaAdapter should report unavailable LAN transport probes as not ready and degraded");
+          "OllamaAdapter should report unavailable LAN transport probes as not ready and degraded");
+  }
+
+  void test_local_llm_adapter_health_check_reports_concrete_probe_states() {
+    using dasall::llm::LLMTransportMethod;
+    using dasall::llm::LocalLLMAdapter;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    auto healthy_transport = std::make_shared<HealthTransport>();
+    healthy_transport->next_response = {
+      .status_code = 200U,
+      .body = R"({"ready":true})",
+      .error_message = {},
+    };
+    LocalLLMAdapter healthy_adapter(healthy_transport);
+    assert_true(healthy_adapter.init(make_local_adapter_config()),
+          "LocalLLMAdapter should initialize before healthy probe coverage");
+
+    const auto healthy = healthy_adapter.health_check();
+    assert_true(healthy.ready && !healthy.degraded,
+          "LocalLLMAdapter should report ready=true and degraded=false for a 2xx /health probe");
+    assert_equal(1, healthy_transport->call_count,
+           "LocalLLMAdapter should issue exactly one transport probe per health_check()");
+    assert_true(healthy_transport->last_request.has_value() &&
+            healthy_transport->last_request->method == LLMTransportMethod::Get,
+          "LocalLLMAdapter health_check() should probe via GET");
+    assert_true(healthy_transport->last_request->url ==
+            "local-runtime:///var/run/dasall/local-llm/health",
+          "LocalLLMAdapter health_check() should append /health to the projected local runtime path");
+
+    auto degraded_transport = std::make_shared<HealthTransport>();
+    degraded_transport->next_response = {
+      .status_code = 503U,
+      .body = {},
+      .error_message = {},
+    };
+    LocalLLMAdapter degraded_adapter(degraded_transport);
+    assert_true(degraded_adapter.init(make_local_adapter_config()),
+          "LocalLLMAdapter should initialize before degraded probe coverage");
+
+    const auto degraded = degraded_adapter.health_check();
+    assert_true(degraded.ready && degraded.degraded,
+          "LocalLLMAdapter should treat 503 as degraded-but-ready so AdapterRegistry can penalize instead of hard-blocking");
+
+    auto unavailable_transport = std::make_shared<HealthTransport>();
+    unavailable_transport->next_response = {
+      .status_code = 0U,
+      .body = {},
+      .error_message = "runtime not loaded",
+    };
+    LocalLLMAdapter unavailable_adapter(unavailable_transport);
+    assert_true(unavailable_adapter.init(make_local_adapter_config()),
+          "LocalLLMAdapter should initialize before unavailable probe coverage");
+
+    const auto unavailable = unavailable_adapter.health_check();
+    assert_true(!unavailable.ready && unavailable.degraded,
+          "LocalLLMAdapter should report unavailable local runtime probes as not ready and degraded");
   }
 
 }  // namespace
@@ -339,6 +414,7 @@ int main() {
     test_registry_fails_closed_for_missing_routes_and_unregisters_cleanly();
     test_openai_compatible_adapter_health_check_reports_concrete_probe_states();
     test_ollama_adapter_health_check_reports_concrete_probe_states();
+    test_local_llm_adapter_health_check_reports_concrete_probe_states();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

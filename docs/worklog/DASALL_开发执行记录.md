@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #288
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 G
+- 任务：LLM-TODO-027 实现 LocalLLMAdapter skeleton
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 026，且 027 的前置依赖只要求 005、014、021、022 完成，因此当前按专项 TODO 的阶段 G 顺序直接进入第三个 concrete adapter family skeleton。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.14、adapter endpoints 与 profile 约束已冻结 027 的 owner：Local family adapter 只负责 local runtime 协议映射、请求投递、响应接收和本地错误采样，不负责 Prompt 治理、route 评分、secret 解析或 provider raw payload 向 shared contracts 的泄漏。
+3. `LLM-BLK-007` 在 027 上仍然成立，但像 025/026 一样不再阻塞 skeleton 本身：本轮只允许在 mock transport 下完成 Local runtime 的协议映射与 health_check 骨架，不宣称真实 local runtime、本地 IPC 或 session 生命周期已联通。
+
+### 改动
+
+1. 新增 [llm/src/adapters/LocalLLMAdapter.h](../../llm/src/adapters/LocalLLMAdapter.h) 与 [llm/src/adapters/LocalLLMAdapter.cpp](../../llm/src/adapters/LocalLLMAdapter.cpp)，实现 `init()`、`generate()`、`stream_generate()` 占位与 `health_check()`。027 将 unary 路径固定为 `POST {base_url}/generate`，从 `request.model_route` 提取 concrete model id，把 prefixed `developer:` 下沉为 `system` role，其余消息映射到 local runtime `messages` 数组，并在请求体固定补齐 `stream:false`、`execution_mode:"local_runtime"`、可选 `response_format` 与 `max_output_tokens`。
+2. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)，将 `LocalLLMAdapter.cpp` 接入 `dasall_llm` 静态库，保持 concrete adapter family skeleton 继续沿同一编译入口纳管。
+3. 扩展 [tests/unit/llm/AdapterProtocolMappingTest.cpp](../../tests/unit/llm/AdapterProtocolMappingTest.cpp)，新增 Local runtime 的请求映射、`local-runtime/local-small` route fixture、usage / diagnostics 收敛，以及 transport 5xx 失败通过非异常 error/result_code 返回的覆盖。
+4. 扩展 [tests/unit/llm/AdapterHealthProbeTest.cpp](../../tests/unit/llm/AdapterHealthProbeTest.cpp)，新增 `LocalLLMAdapter` 自身的 healthy / degraded / unavailable 三态探针用例，并将 Local health probe 路径固定为 `GET {base_url}/health`。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-027-LocalLLMAdapter-skeleton设计收敛.md](../todos/llm/deliverables/LLM-TODO-027-LocalLLMAdapter-skeleton设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_adapter_protocol_mapping_unit_test`、`dasall_adapter_health_probe_unit_test`
+   - `RunCtest_CMakeTools` 运行 `AdapterProtocolMappingTest`
+   - `RunCtest_CMakeTools` 运行 `AdapterHealthProbeTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_adapter_protocol_mapping_unit_test`、`dasall_adapter_health_probe_unit_test`，`ListTests_CMakeTools` 已列出 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest`，说明 027 沿用 025/026 的 build/test discoverability 接缝时未引入新的注册缺口。
+   - `Build_CMakeTools` 定向构建两条验收目标成功，输出显示新增的 `LocalLLMAdapter.cpp` 已完成编译并链接入 `dasall_llm`，相关测试可执行文件也已重新链接成功。
+   - `RunCtest_CMakeTools` 定向执行 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-027 已完成，llm 现在具备第三个 concrete provider family skeleton，可以在不依赖真实 local runtime 环境的前提下验证 Local family 的 init / generate / health_check 基本边界。
+2. 027 保持了设计与 ADR 边界：`LocalLLMAdapter` 继续复用 `ILLMTransport` 作为 adapter-internal transport seam，不承担 secret 解析、route owner 或 normalizer owner；`reasoning_trace` 继续停留在 `AdapterProviderDiagnostics`，没有泄漏到 shared `LLMResponse`。
+3. 这轮实现为 028 与 042 留下了稳定接缝：observability bridge 可以继续消费统一的 route / model / trace / usage 结果，而 asset-only onboarding 验证仍可在 smoke integration 条件满足后复用 025/026/027 已冻结的 family 接缝。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 G 顺序推进 `LLM-TODO-028`，接线 llm observability bridges，并复用 024/027 已稳定的 response / diagnostics 字段。
+2. 待 unary family skeleton 与 smoke integration 条件满足后，再结合 `LLM-TODO-042` 验证“只加 provider 资产 + profile route”即可启用既有 family provider instance。
+
+### 风险
+
+1. 027 当前仍采用 module-local 的轻量 payload parser，只保证 Local runtime `/generate` 在单测覆盖范围内的 deterministic 映射；若后续需要更完整的 tool-call、拒绝语义或 runtime session 扩展，演进应继续留在 adapter 内部，不回推 shared contracts。
+2. 027 仍未打通真实 local runtime、本地 IPC、streaming 与 auth/header 注入链；若后续实现试图在 adapter 内直接放松 `local-runtime:///...` 地址约束或绕过 041 的 ref 投影，需要回到 041/025 的边界重新评审。
+
 ## 记录 #287
 
 - 日期：2026-04-13
