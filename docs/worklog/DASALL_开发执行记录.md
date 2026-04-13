@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #294
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-033 验证 persona 选择 integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一条记录已完成 032，且 033 的前置依赖只要求 013、015、029 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 persona selection integration，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.3 与 9.3 已冻结 033 的 owner：必须验证同一 stage 下 scene/persona 变体选择已经进入真实 manager 闭环，并留下可追溯的选择锚点，而不是再停留在 registry 单测。
+3. 研究确认 033 不需要新增生产修补：`LLMManager` 已把 `active_scene/active_persona` 投影到 `PromptQuery`，`PromptRegistry` 已实现 `scene_persona_selector -> profile_selector -> default_release` 选择链，`PromptPipeline` 也已保留 scene/persona 到 governance 输入面的透传。因此本轮 owner 只需要补 integration 证据，而不是改写生产代码。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-033-persona-selection-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-033-persona-selection-integration设计收敛.md)，固定 033 的本地证据、Design 结论与 Build 三件套。
+2. 新增 [tests/integration/llm/LLMPersonaSelectionIntegrationTest.cpp](../../tests/integration/llm/LLMPersonaSelectionIntegrationTest.cpp)，在真实 `PromptPipeline + LLMManager` 闭环中动态生成 `general-planner-default`、`operator-planner`、`general-explainer` 与 `cloud-profile` 四个 prompt release 变体，覆盖：
+   - `scene=operator`、`persona=planner` 命中 `scene_persona_selector`
+   - `scene=general`、`persona=explainer` 命中同一 stage 下的 persona 变体
+   - scene/persona miss 后回落到 `profile_selector`
+   - profile 也 miss 后回落到 `default_release`
+3. 033 的每条用例都先直接查询真实 `PromptRegistry` 固定 `selection_reason` / `selected_version`，再执行 `LLMManager.generate()` 校验 `response.prompt_id` / `prompt_version` 与 adapter dispatch 前的 composed `messages`，从而把“审计锚点”收敛在真实 prompt selection + manager dispatch 闭环里，而不扩 shared contracts 或 observability surface。
+4. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_llm_persona_selection_integration_test` / `LLMPersonaSelectionIntegrationTest`，让 033 进入 llm integration discoverability 与聚合 target。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_persona_selection_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMPersonaSelectionIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_persona_selection_integration_test` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 已列出 `LLMPersonaSelectionIntegrationTest`，说明 033 的 discoverability 已闭合。
+   - `Build_CMakeTools` 定向构建 033 target 成功，`LLMPersonaSelectionIntegrationTest.cpp` 已编译并链接入新的 integration 可执行文件。
+   - `RunCtest_CMakeTools` 定向执行 `LLMPersonaSelectionIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 40 条用例全部通过，其中 `LLMPersonaSelectionIntegrationTest` 作为第 40 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-033 已完成，llm 现在具备真实的 persona selection integration 证据：scene/persona 精确命中、profile fallback 与 default fallback 都能在 production prompt / manager 闭环里被自动验证。
+2. 033 保持了设计与 ADR 边界：没有改动 `PromptRegistry`、`PromptPipeline`、`LLMManager` 或 shared contracts，只验证既有 scene/persona 选择链已经被正确消费进真实 dispatch 路径。
+3. 这轮实现为 034/035 留下了更清晰的基座：治理失败路径与 profile 差异验证后续都可以继续复用 029~033 已稳定的真实 prompt/manager integration 模式。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-034`，验证治理失败 integration，并复用 033 已稳定的 prompt selector 与 manager 基座。
+2. 在 governance failure 收口后，再继续推进 `LLM-TODO-035`，把 profile 差异验证接到同一真实 llm integration 闭环上。
+
+### 风险
+
+1. 033 当前固定的是 prompt release 选择与 composed messages，不等于 governance deny 或 profile 差异已经自动成立；若后续任务直接复用 033 证据宣称阶段 H 已全闭合，仍需要退回 034/035 的 owner 逐项收口。
+2. 本轮没有新增 scene/persona 专属 structured log / trace attrs，而是把“审计锚点”收敛在 registry selection reason 与 manager prompt identity 上；若后续需要更强的 observability 证据，应在 observability owner 下单独评审，而不是在 033 里临时扩表。
+
 ## 记录 #293
 
 - 日期：2026-04-13
