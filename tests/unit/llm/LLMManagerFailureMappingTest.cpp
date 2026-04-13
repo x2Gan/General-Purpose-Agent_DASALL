@@ -97,6 +97,50 @@ PromptPipelineResult make_policy_deny_result() {
   };
 }
 
+PromptPipelineResult make_over_budget_result() {
+  return PromptPipelineResult{
+      .disposition = PromptPolicyDisposition::OverBudget,
+      .compose_result = PromptComposeResult{
+          .messages = std::vector<std::string>{"system", "user"},
+          .selected_prompt_id = "prompt.planner.over-budget",
+          .selected_version = "2026-04-13.5",
+          .estimated_tokens = 4096,
+          .pruned_sections = std::nullopt,
+          .composition_warnings = std::vector<std::string>{"render_budget_exceeded"},
+      },
+      .policy_decision = PromptPolicyDecision{
+          .disposition = PromptPolicyDisposition::OverBudget,
+          .governed_messages = {},
+          .redactions = {},
+          .tool_visibility_patch = {},
+          .reason = "render_budget_exceeded",
+      },
+      .registry_result = dasall::llm::prompt::PromptRegistryResult{
+          .code = std::nullopt,
+          .release = dasall::contracts::PromptRelease{
+              .prompt_id = "prompt.planner.over-budget",
+              .version = "2026-04-13.5",
+              .stage = dasall::contracts::CompositionStage::Planning,
+              .eval_status = dasall::contracts::PromptEvalStatus::Stable,
+              .release_scope = "stable",
+              .system_instructions = "system",
+              .task_template = "task",
+              .output_schema_ref = std::nullopt,
+              .few_shot_refs = std::nullopt,
+              .policy_notes = std::nullopt,
+              .rollback_from = std::nullopt,
+              .trusted_source = "profiles",
+              .tags = std::nullopt,
+          },
+          .selected_prompt_id = "prompt.planner.over-budget",
+          .selected_version = "2026-04-13.5",
+          .selection_reason = "selected_default_release",
+          .trusted_sources_matched = {"profiles"},
+      },
+      .reason = "render_budget_exceeded",
+  };
+}
+
 PromptPipelineResult make_allow_result() {
   return PromptPipelineResult{
       .disposition = PromptPolicyDisposition::Allow,
@@ -172,6 +216,7 @@ LLMGenerateRequest make_request() {
       .stage = "planner",
       .task_type = "plan",
       .request = std::move(request),
+      .prompt_release_id_override = std::nullopt,
       .selection_hint = std::make_shared<const dasall::llm::ModelSelectionHint>(
           dasall::llm::ModelSelectionHint{
               .stage = "planner",
@@ -245,10 +290,63 @@ void test_prompt_governance_failure_stops_before_adapter_dispatch() {
   assert_true(result.code.has_value() &&
                   *result.code == dasall::contracts::ResultCode::PolicyDenied,
               "LLMManager should surface governance failures through PolicyDenied");
+  assert_true(result.governance_disposition.has_value() &&
+                  *result.governance_disposition == PromptPolicyDisposition::Deny,
+              "LLMManager should preserve a PromptPolicy deny disposition for runtime governance handling");
   assert_true(result.attempted_routes.empty(),
               "LLMManager should not attempt any route when PromptPipeline denies the request");
   assert_equal(0, adapter->generate_call_count(),
                "LLMManager should not call any adapter when governance fails before routing");
+}
+
+void test_over_budget_governance_failure_preserves_recompose_signal() {
+  auto pipeline = std::make_shared<StaticPromptPipeline>(make_over_budget_result());
+  auto router = std::make_shared<dasall::llm::route::ModelRouter>();
+  auto registry = std::make_shared<dasall::llm::route::AdapterRegistry>();
+  auto executor = std::make_shared<dasall::llm::LLMCallExecutor>();
+  auto normalizer = std::make_shared<dasall::llm::execution::ResponseNormalizer>();
+  auto aggregator = std::make_shared<dasall::llm::UsageAggregator>();
+  auto catalog_snapshot =
+      std::make_shared<const dasall::llm::provider::ProviderCatalogSnapshot>(
+          dasall::llm::test_support::make_default_catalog());
+
+  assert_true(registry->init(dasall::llm::route::AdapterRegistryConfig{.blocked_failure_threshold = 3U}),
+              "AdapterRegistry should initialize for over-budget governance coverage");
+
+  auto adapter = std::make_shared<MockLLMAdapter>();
+  assert_true(registry->register_adapter(make_registration("deepseek-prod",
+                                                          "deepseek-chat",
+                                                          "deepseek-cloud",
+                                                          "cloud",
+                                                          {"cloud", "external"},
+                                                          adapter)),
+              "AdapterRegistry should register the route even though over-budget governance should stop before dispatch");
+
+  LLMManager manager(pipeline, router, registry, executor, normalizer, aggregator,
+                     catalog_snapshot);
+  assert_true(manager.init(dasall::llm::test_support::make_config(
+                  "planner", "cloud.reasoning", std::string("lan.general"),
+                  {"local.small"}, false, false)),
+              "LLMManager should initialize for over-budget governance coverage");
+
+  const auto result = manager.generate(make_request());
+
+  assert_true(result.has_consistent_values() && !result.response.has_value() &&
+                  result.failure_category.has_value() &&
+                  *result.failure_category == LLMFailureCategory::PromptGovernance,
+              "LLMManager should keep over-budget failures inside the prompt governance category without producing a response");
+  assert_true(result.code.has_value() &&
+                  *result.code == dasall::contracts::ResultCode::PolicyDenied,
+              "LLMManager should continue surfacing over-budget governance failures through PolicyDenied until shared contracts add a finer code");
+  assert_true(result.governance_disposition.has_value() &&
+                  *result.governance_disposition == PromptPolicyDisposition::OverBudget,
+              "LLMManager should preserve PromptPolicy OverBudget for runtime-side recompose handling");
+  assert_true(result.error.has_value() && result.error->safe_to_replan.value_or(false),
+              "LLMManager should mark over-budget governance failures safe_to_replan so Runtime can trigger recompose ownership");
+  assert_true(result.attempted_routes.empty(),
+              "LLMManager should not attempt any route when PromptPipeline returns OverBudget");
+  assert_equal(0, adapter->generate_call_count(),
+               "LLMManager should not call any adapter when over-budget governance fails before routing");
 }
 
 void test_multiple_route_failures_collapse_into_fallback_exhausted() {
@@ -315,6 +413,7 @@ void test_multiple_route_failures_collapse_into_fallback_exhausted() {
 int main() {
   try {
     test_prompt_governance_failure_stops_before_adapter_dispatch();
+        test_over_budget_governance_failure_preserves_recompose_signal();
     test_multiple_route_failures_collapse_into_fallback_exhausted();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

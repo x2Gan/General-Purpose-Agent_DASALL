@@ -35,6 +35,7 @@ dasall::contracts::LLMRequest make_request() {
   dasall::contracts::LLMRequest request;
   request.request_id = "req-llm-retry-001";
   request.llm_call_id = "call-llm-retry-001";
+  request.model_route = "cloud.reasoning";
   request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   request.messages = std::vector<std::string>{"retry"};
   request.prompt_id = "prompt.test.retry";

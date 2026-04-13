@@ -151,14 +151,15 @@ LLMGenerateRequest make_request() {
       .stage = "planner",
       .task_type = "plan",
       .request = std::move(request),
+      .prompt_release_id_override = std::nullopt,
       .selection_hint = std::make_shared<const dasall::llm::ModelSelectionHint>(
           dasall::llm::ModelSelectionHint{
               .stage = "planner",
               .task_type = "plan",
-            .complexity_tier = "standard",
-            .latency_sla_tier = "interactive",
-            .budget_tier = "hard_cap",
-            .requires_tools = true,
+              .complexity_tier = "standard",
+              .latency_sla_tier = "interactive",
+              .budget_tier = "hard_cap",
+              .requires_tools = true,
               .requires_reasoning = false,
               .prefers_visible_reasoning = false,
               .estimated_input_tokens = 1024U,
@@ -166,6 +167,14 @@ LLMGenerateRequest make_request() {
               .previous_route_failures = 0U,
           }),
   };
+}
+
+LLMGenerateRequest make_request_with_prompt_release_override() {
+  auto request = make_request();
+  request.request.prompt_id = "prompt.audit.seed";
+  request.request.prompt_version = "2026-04-01.9";
+  request.prompt_release_id_override = std::string("planner/canary@2026-04-13.9");
+  return request;
 }
 
 bool has_tag(const LLMManagerResult& result, const std::string& expected_tag) {
@@ -258,6 +267,61 @@ void test_llm_manager_generates_success_result_and_usage_tags() {
               "LLMManager should forward prompt_id from PromptPipeline into the adapter request");
   assert_true(pipeline->initialized() && pipeline->last_query().has_value(),
               "LLMManager should initialize and invoke PromptPipeline before provider dispatch");
+  assert_true(pipeline->last_query()->prompt_release_id.empty(),
+              "LLMManager should leave PromptRegistry on automatic selection when no explicit prompt release override is provided");
+}
+
+void test_llm_manager_uses_explicit_prompt_release_override_without_reusing_audit_prompt_id() {
+  auto pipeline = std::make_shared<AllowPromptPipeline>();
+  auto router = std::make_shared<dasall::llm::route::ModelRouter>();
+  auto registry = std::make_shared<dasall::llm::route::AdapterRegistry>();
+  auto executor = std::make_shared<dasall::llm::LLMCallExecutor>();
+  auto normalizer = std::make_shared<dasall::llm::execution::ResponseNormalizer>();
+  auto aggregator = std::make_shared<dasall::llm::UsageAggregator>();
+  auto catalog_snapshot =
+      std::make_shared<const dasall::llm::provider::ProviderCatalogSnapshot>(
+          dasall::llm::test_support::make_default_catalog());
+
+  assert_true(registry->init(dasall::llm::route::AdapterRegistryConfig{.blocked_failure_threshold = 3U}),
+              "AdapterRegistry should initialize for prompt release override coverage");
+
+  auto adapter = std::make_shared<MockLLMAdapter>();
+  adapter->set_generate_handler([](const LLMRequest& request) {
+    LLMResponse response;
+    response.request_id = request.request_id;
+    response.llm_call_id = request.llm_call_id;
+    response.response_kind = LLMResponseKind::DirectResponse;
+    response.content_payload = "manager-success-override";
+    response.finish_reason = "stop";
+
+    AdapterCallResult result;
+    result.response = std::move(response);
+    return result;
+  });
+  assert_true(registry->register_adapter(make_registration(adapter)),
+              "AdapterRegistry should register the override coverage route");
+
+  LLMManager manager(pipeline, router, registry, executor, normalizer, aggregator,
+                     catalog_snapshot);
+  assert_true(manager.init(dasall::llm::test_support::make_config(
+                  "planner", "cloud.reasoning", std::nullopt,
+                  {"local.small"}, false, false)),
+              "LLMManager should initialize with injected dependencies for prompt release override coverage");
+
+  const auto result = manager.generate(make_request_with_prompt_release_override());
+
+  assert_true(result.has_consistent_values() && result.response.has_value(),
+              "LLMManager should still produce a consistent success result when an explicit prompt release override is supplied");
+  assert_true(pipeline->last_query().has_value() &&
+                  pipeline->last_query()->prompt_release_id == "planner/canary@2026-04-13.9",
+              "LLMManager should use prompt_release_id_override as the explicit PromptRegistry selector");
+  assert_true(result.response->prompt_id.has_value() &&
+                  *result.response->prompt_id == "prompt.planner.default",
+              "LLMManager should keep response prompt audit anchors sourced from PromptPipeline rather than the caller's input audit prompt_id");
+  assert_true(adapter->last_request().has_value() &&
+                  adapter->last_request()->prompt_id.has_value() &&
+                  *adapter->last_request()->prompt_id == "prompt.planner.default",
+              "LLMManager should forward the PromptPipeline-selected prompt_id to the adapter request after prompt selection completes");
 }
 
 }  // namespace
@@ -265,6 +329,7 @@ void test_llm_manager_generates_success_result_and_usage_tags() {
 int main() {
   try {
     test_llm_manager_generates_success_result_and_usage_tags();
+    test_llm_manager_uses_explicit_prompt_release_override_without_reusing_audit_prompt_id();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

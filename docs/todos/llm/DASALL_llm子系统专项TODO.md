@@ -1,9 +1,9 @@
 # DASALL LLM 子系统专项 TODO
 
-最近更新时间：2026-04-13（完成 LLM-TODO-001/002/003/004/005/006/007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/038/039/040/041/042，阶段 B 公共接口冻结、阶段 C 测试夹具升级、阶段 D Prompt/Provider 资产基线、阶段 E PromptRegistry/TokenEstimator/TemplateRenderer/PromptComposer/PromptPolicy/PromptPipeline、阶段 F ModelRouter/AdapterRegistry/CallExecution/ResponseNormalizer/UsageAggregator/LLMManager、阶段 G Provider 注入/adapter skeleton/observability、阶段 H 关键 integration 与阶段 I Gate 证据收口已落盘）
+最近更新时间：2026-04-13（完成 LLM-TODO-001/002/003/004/005/006/007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/038/039/040/041/042/043，阶段 B 公共接口冻结、阶段 C 测试夹具升级、阶段 D Prompt/Provider 资产基线、阶段 E PromptRegistry/TokenEstimator/TemplateRenderer/PromptComposer/PromptPolicy/PromptPipeline、阶段 F ModelRouter/AdapterRegistry/CallExecution/ResponseNormalizer/UsageAggregator/LLMManager、阶段 G Provider 注入/adapter skeleton/observability、阶段 H 关键 integration、阶段 I Gate 证据收口与阶段 I+ 评审缺陷修复已落盘）
 阶段：Detailed Design -> Special TODO
 适用范围：llm/
-当前结论：阶段 I Gate 证据已闭合；module-local 公共接口、Prompt/Provider 资产、Prompt 三段治理、路由与 unary 主链路已完成，shared ModelRoute / PromptPolicyDecision 升格与 streaming 生命周期继续保持 Blocked/后置，需等待 contracts supporting-object/admission 基线成熟后再进入阶段 J。
+当前结论：阶段 I Gate 证据已闭合，阶段 I+ 的 LLM-TODO-043 也已完成。module-local 公共接口、Prompt/Provider 资产、Prompt 三段治理、路由与 unary 主链路已完成，manager 输入边界、OverBudget/RequireRecompose 回流语义以及本专项 TODO 当前态漂移均已修复并经 unit / contract / integration 回归验证。shared ModelRoute / PromptPolicyDecision 升格与 streaming 生命周期继续保持 Blocked/后置，需等待 contracts supporting-object/admission 基线成熟后再进入阶段 J。
 
 ## 1. 文档头
 
@@ -83,7 +83,7 @@
 | LLM-TC015 | 当前 Mock 现状；详细设计 6.13 | Must | MockLLMAdapter 仍是 string->string 脚手架，不能直接支撑 ILLMAdapter 主链路 | mock 升级是 unary 主链路和 integration fixture 的前置任务 |
 | LLM-TC016 | 详细设计 6.12、9.6 | Must | llm 进入核心链路前必须具备日志、指标、trace、audit 四类观测锚点 | observability 不能后置到“代码跑通以后再补” |
 
-### 3.2 代码现状证据
+### 3.2 启动期代码现状证据（2026-04-10 历史快照）
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
@@ -97,6 +97,8 @@
 | tests/mocks/include/MockLLMAdapter.h | 仅提供 string 输入/输出的 invoke()，不继承 ILLMAdapter | 无法直接覆盖 unary 主链、fallback 与 health_check |
 | tests/CMakeLists.txt | 已提供 dasall_unit_tests、dasall_contract_tests、dasall_integration_tests 聚合目标 | llm 不需要新造顶层 target，只需接线到现有测试体系 |
 | build-ci/ | 已存在可复用配置与 ctest 入口 | 可作为本专项统一验收基线；CMake Tools 失灵时可退回显式 cmake/ctest |
+
+当前状态更新（2026-04-13 / LLM-TODO-043）：上述表格保留为专项 TODO 启动期快照，不再代表当前运行态。当前 llm/include、llm/src、llm/assets/prompts、llm/assets/providers、tests/unit/llm、tests/integration/llm 与 MockLLMAdapter 生产接口夹具均已落盘并进入 build / unit / contract / integration Gate；043 的 owner 已从“骨架补齐”切换为“语义修复 + 回归防线 + 当前态回写”。
 
 ## 4. 粒度可行性评估
 
@@ -118,7 +120,7 @@
 4. 详细设计 7.1 已给出 Design -> Build 映射表，可直接转换为专项 TODO 任务源。
 5. 当前阻塞主要集中在工程骨架、测试 discoverability、shared ABI 升格与 streaming，而不是 llm 核心职责本身不清晰。
 
-### 4.2 可落盘对象提取表（Step 2 输出）
+### 4.2 可落盘对象提取表（Step 2 输出，启动期快照）
 
 | 类别 | 可落盘对象 | 设计锚点 | 建议落位 | 当前状态 |
 |---|---|---|---|---|
@@ -132,7 +134,9 @@
 | integration 测试出口 | LLMSubsystemSmokeIntegrationTest、DeepSeekDualModeSelectionIntegrationTest、LLMFallbackIntegrationTest、LLMPromptSourceSwitchIntegrationTest、LLMPersonaSelectionIntegrationTest、LLMGovernanceFailureIntegrationTest、LLMProfileIntegrationTest、LLMProviderAssetOnboardingIntegrationTest | 9.3；现有 v1.0 指引 | tests/integration/llm/ | 目录不存在 |
 | CMake / 注册点 | llm/CMakeLists.txt、tests/unit/llm/CMakeLists.txt、tests/integration/llm/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/integration/CMakeLists.txt | 6.6、8.1、9.6 | 仓库现有 CMake 拓扑 | llm 侧未接入真实源文件和测试目标 |
 
-### 4.3 粒度可行性评估表（Step 2 输出）
+当前状态更新（2026-04-13 / LLM-TODO-043）：4.2 保留的是启动期“待落盘对象”提取依据。相关对象现已按 001~042 落盘并进入 Gate；043 不再新增大块对象，而是对 LLMGenerateRequest、LLMManagerResult、LLMManager.cpp 以及对应 unit/integration 用例做语义修复，并刷新本文件的历史快照标识。
+
+### 4.3 粒度可行性评估表（Step 2 输出，启动期评估）
 
 | 设计对象 | 设计锚点 | 当前粒度等级 | 已具备证据 | 缺失证据 | TODO 拆解策略 |
 |---|---|---|---|---|---|
@@ -160,6 +164,8 @@
 | observability bridges | 6.12、7.1、9.6 | L2 | 必填字段、指标、span、audit 场景明确 | 具体 sink 适配接口以 infra 现有实现对齐 | 拆为统一 observability 接线任务 |
 | streaming 生命周期 | 6.4.2、7.2、10.1 | L0 | 只有占位方向与后置建议 | 取消、背压、共享 handle、ownership 未冻结 | 保持 Blocked，不进入首轮 Build |
 | shared supporting object admission | 7.2、10.1、12.1 | L0 | 升格风险和迁移路径已有结论 | 消费者矩阵、contract tests、兼容窗口未齐 | 只列 Review Gate，继续 module-local |
+
+当前状态更新（2026-04-13 / LLM-TODO-043）：4.3 的“缺失证据”字段用于解释专项 TODO 启动时为何按 001~042 排布，而不是描述当前实现缺口。当前仍保持缺口的只有阶段 J 对应的 shared admission / streaming 生命周期；043 的直接 owner 则是已落盘接口上的语义收敛与回归门补强。
 
 ## 5. Design -> TODO 映射表
 
@@ -194,7 +200,7 @@
 | 模板安全与注入防护类任务 | 是 | LLM-TODO-039 |
 | 配置与 Profile 裁剪类任务 | 是 | LLM-TODO-012、014、035、041、042 |
 | 测试与门禁类任务 | 是 | LLM-TODO-002、003、004、029、030、031、032、033、034、035、042 |
-| 文档 / 交付证据回写类任务 | 是 | LLM-TODO-038 |
+| 文档 / 交付证据回写类任务 | 是 | LLM-TODO-038、043 |
 
 ## 6. 原子任务清单
 
@@ -244,6 +250,7 @@
 | LLM-TODO-036 | Blocked | 补齐 streaming 生命周期设计并后置实现 | 详细设计 7.2、10.1、12.1；v1.0 指引 | 7.2 shared StreamHandle 缺失；10.1 streaming 风险 | L0 | 无新增 shared 头文件；保持 llm/include/stream/StreamSessionRef.h 为 module-local；待补 llm/src/stream/StreamSessionRegistry.cpp | StreamSessionRef、stream_generate 生命周期、bounded session / cancel / cleanup | unit：StreamSessionLifecycleTest（解阻后执行） | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R StreamSessionLifecycleTest --output-on-failure` | LLM-TODO-011、LLM-TODO-024 | LLM-BLK-005 | 冻结 cancel / ownership / backpressure / shared handle 语义并补设计评审 | streaming 设计补丁、StreamSessionRegistry 方案、生命周期单测 | 仅当 streaming 仍不影响 unary 验收且生命周期语义被冻结后才可解锁 |
 | LLM-TODO-037 | Blocked | 评审 shared supporting object admission | 详细设计 7.2、10.1、12.1 | 7.2 暂不可直接映射项；10.1 breaking risk | L0 | 无新增 shared 头文件；继续保持 llm/include/route/ResolvedModelRoute.h、llm/include/prompt/PromptPolicyDecision.h、llm/include/stream/StreamSessionRef.h 为 module-local | shared ModelRoute、shared PromptPolicyDecision、shared StreamHandle admission 候选 | contract：现有 LLMRequest / LLMResponse / PromptComposeRequest / PromptComposeResult 契约测试不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | LLM-TODO-005、LLM-TODO-006、LLM-TODO-007、LLM-TODO-008、LLM-TODO-009、LLM-TODO-010、LLM-TODO-011、LLM-TODO-029、LLM-TODO-031、LLM-TODO-035 | LLM-BLK-006 | 形成跨模块消费者矩阵、迁移窗口、兼容 contract tests 和 Go/No-Go 评审结论 | admission 评审纪要、兼容矩阵、风险清单 | 仅当评审给出清晰 Go/No-Go 且 contract gate 不回退时完成 |
 | LLM-TODO-038 | Done | 回写 llm 专项 Gate 与交付证据 | 计划文档；编码规范；本专项 TODO | 9.6 Gate 建议清单；11 风险阻塞 | L2 | docs/todos/llm/DASALL_llm子系统专项TODO.md；docs/worklog/DASALL_开发执行记录.md | build / unit / contract / integration / risk / blocker 证据回写 | process：显式记录命令、结果、阻塞变化、回退策略与后继任务 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_llm dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration` | LLM-TODO-029、LLM-TODO-030、LLM-TODO-031、LLM-TODO-032、LLM-TODO-033、LLM-TODO-034、LLM-TODO-035、LLM-TODO-042 | LLM-BLK-008（工具状态异常时只影响验证手段） | 若 CMake Tools 预设异常，则回退显式 cmake/ctest 命令并在证据中注明 | Gate 回写条目、worklog 证据、残余风险清单 | 仅当每个 Gate 都有可追溯证据且残余风险被显式记录时完成 |
+| LLM-TODO-043 | Done | 修复 manager 输入边界与治理回流语义，并刷新专项 TODO 当前态标识 | 详细设计 6.4.2、6.4.3、6.5.2、6.7.2、6.15.3、6.15.6；2026-04-13 llm 评审结论 | 6.5.2 manager 统一入口；6.7.2 OverBudget 回流；6.15.3/6.15.6 policy/manager 边界 | L2 | llm/include/LLMGenerateRequest.h；llm/include/LLMManagerResult.h；llm/src/LLMManager.cpp；docs/architecture/DASALL_llm子系统详细设计.md；docs/todos/llm/DASALL_llm子系统专项TODO.md | manager handoff 改为 required pre-route route hint + 独立 prompt_release override；manager failure 保留 governance disposition / safe_to_replan；专项 TODO 上半部分显式标记为启动快照 | unit：LLMInterfaceSurfaceTest、LLMManagerSuccessPathTest、LLMManagerFailureMappingTest、LLMManagerTimeoutPolicyTest、LLMManagerRetryBudgetTest、LLMManagerConcurrencyGuardTest；integration：LLMGovernanceFailureIntegrationTest 与受影响 request helper 回归 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -R "LLM(InterfaceSurface|Manager(SuccessPath|FailureMapping|TimeoutPolicy|RetryBudget|ConcurrencyGuard)|GovernanceFailureIntegration)Test" --output-on-failure` | LLM-TODO-006、LLM-TODO-024、LLM-TODO-034、LLM-TODO-038 | 无 | 设计文档、manager/module-local 接口、对应 unit/integration 断言全部收敛到统一语义 | docs/todos/llm/deliverables/LLM-TODO-043-manager边界与治理回流语义修复设计收敛.md、相关代码与测试、TODO/worklog 回写 | 仅当 manager 不再复用 request.prompt_id 作为显式 release selector、LLMGenerateRequest.request.model_route 作为 required pre-route hint 被稳定验证、OverBudget/RequireRecompose 能通过 governance_disposition + safe_to_replan 回流 Runtime、且本文件上半部分不再把启动快照表述为当前态时完成 |
 
 ## 7. 执行顺序建议
 
@@ -260,6 +267,7 @@
 | G Provider 注入、skeleton 与观测 | LLM-TODO-041、025、026、027、028 | 041 与 025/026/027 可并行；028 依赖 024；asset-only onboarding 留到集成阶段验证 | 保持 provider projection 与 adapter family 分任务推进，避免把实例接入和协议骨架混成一项任务 |
 | H 集成验证 | LLM-TODO-029、030、031、032、033、034、035、042 | 029 先行；030~035、042 在 smoke 打通后可并行 | 先 smoke，再做 dual-mode、fallback、source switch、persona、governance、profile 与 asset-only onboarding |
 | I 证据收口 | LLM-TODO-038 | 串行 | Gate、阻塞状态和风险回退统一回写 |
+| I+ 评审缺陷修复 | LLM-TODO-043 | 串行 | 修复 manager 输入边界、治理回流语义与专项 TODO 当前态漂移 |
 | J 后置与评审 | LLM-TODO-036、037 | 串行后置 | streaming 与 shared admission 均需在 unary 稳定后评审 |
 
 ### 7.2 必过门禁表
@@ -792,3 +800,20 @@ TemplateRenderer 安全规则、调用执行治理、Provider 注入闭环与 as
 6. 036/037 评估：当前都不具备直接执行条件。036 已满足 unary 稳定前提，但仍缺 `StreamHandle`/streaming 生命周期 shared baseline；优先解阻 owner 是 contracts 子系统对 `StreamHandle` 的 supporting-object 基线冻结，完成后再回 llm 阶段 J。037 则明确依赖 contracts 子系统对 `ModelRoute`、`PromptPolicyDecision`、`StreamHandle` 的 supporting object / admission 基线收口（现有锚点为 contracts T009/T010 或等价 owner），完成后才能回 llm 做 shared admission 评审。
 7. 子系统结论：当前 `runtime/`、`apps/`、`cognition/` 与 `tools/` 里还没有稳定的 streaming/shared supporting object 消费面证据，因此 036/037 的首要解阻 owner 不是这些子系统，而是 contracts supporting-object/admission 基线。
 8. 后继任务：038 已闭环；036/037 继续保持 Blocked，等待 contracts 子系统完成对应 supporting-object / admission 收口后，再回 llm 阶段 J 进入评审与实现。
+
+### 17.21 LLM-TODO-043
+
+1. 状态：Done；043 已按 2026-04-13 llm 评审结论闭环，owner 收敛在 manager 输入边界修复、OverBudget/RequireRecompose 回流语义保留，以及本专项 TODO 启动快照与当前态的显式区分。
+2. 设计交付：[docs/todos/llm/deliverables/LLM-TODO-043-manager边界与治理回流语义修复设计收敛.md](deliverables/LLM-TODO-043-manager%E8%BE%B9%E7%95%8C%E4%B8%8E%E6%B2%BB%E7%90%86%E5%9B%9E%E6%B5%81%E8%AF%AD%E4%B9%89%E4%BF%AE%E5%A4%8D%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)。
+3. 代码目标：
+   - `LLMGenerateRequest` 增加独立 `prompt_release_id_override`，不再复用 `request.prompt_id` 作为显式 selector。
+   - `LLMGenerateRequest.request.model_route` 收敛为 required pre-route hint，并补齐所有 manager/integration request 构造点。
+   - `LLMManagerResult` / `LLMManager.cpp` 保留 `PromptPolicyDisposition` 与 `safe_to_replan`，避免 OverBudget 被折叠成普通 deny。
+   - 本专项 TODO 的 3.2 / 4.2 / 4.3 显式标记为启动期快照，避免与 17.x Gate 结论冲突。
+4. 测试目标：
+   - unit：接口冻结测试覆盖 route hint / override / governance disposition；manager success / failure mapping 覆盖显式 selector 与 OverBudget 回流；timeout/retry/concurrency helper 通过新的 route-hint 边界。
+   - integration：`LLMGovernanceFailureIntegrationTest` 覆盖 deny / trusted-source reject / over-budget 三条治理失败路径，并验证 `governance_disposition + safe_to_replan`。
+5. 验收结果：`Build_CMakeTools` 构建 `dasall_unit_tests`、`dasall_contract_tests`、`dasall_integration_tests` 成功；contract 聚合 `152/152`、unit 聚合 `249/249` 通过；`LLMInterfaceSurfaceTest`、`LLMManagerSuccessPathTest`、`LLMManagerFailureMappingTest`、`LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest`、`LLMManagerConcurrencyGuardTest`、`LLMGovernanceFailureIntegrationTest` 与 llm integration 8 件套全部 `100% tests passed`。
+6. 验收命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -R "LLM(InterfaceSurface|Manager(SuccessPath|FailureMapping|TimeoutPolicy|RetryBudget|ConcurrencyGuard)|GovernanceFailureIntegration)Test" --output-on-failure`。
+7. 设计结论：043 不扩张 shared contracts；修复全部收敛在 llm module-local handoff/result 与文档证据层。shared `ResultCode` 仍无更细的 over-budget code，因此当前阶段保留 `PolicyDenied`，但通过 `governance_disposition` 与 `ErrorInfo.safe_to_replan` 向 Runtime 传回“应重装配/重规划”的真实语义。
+8. 风险提示：若后续再次把 `request.prompt_id` 复用为显式 selector，或让 `LLMGenerateRequest.request.model_route` 重新退化为可空字段，manager 将重新与 shared `LLMRequest` contract 脱节；若 OverBudget 再被折叠为普通 deny，Runtime 会失去 ContextOrchestrator 重装配准入信号。

@@ -36,6 +36,7 @@ using dasall::llm::LLMManager;
 using dasall::llm::LLMManagerResult;
 using dasall::llm::LLMSubsystemConfig;
 using dasall::llm::ModelSelectionHint;
+using dasall::llm::prompt::PromptPolicyDisposition;
 using dasall::llm::prompt::PromptPipeline;
 using dasall::llm::prompt::PromptQuery;
 using dasall::llm::prompt::PromptRegistry;
@@ -171,6 +172,7 @@ LLMGenerateRequest make_request(std::string request_id,
   LLMRequest request;
   request.request_id = std::move(request_id);
   request.llm_call_id = std::move(llm_call_id);
+  request.model_route = "cloud.default";
   request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   request.messages = std::vector<std::string>{"validate governance failure"};
   request.created_at = 1712966406000LL;
@@ -190,6 +192,7 @@ LLMGenerateRequest make_request(std::string request_id,
       .stage = "planning",
       .task_type = "plan",
       .request = std::move(request),
+      .prompt_release_id_override = std::nullopt,
       .selection_hint = std::make_shared<const ModelSelectionHint>(ModelSelectionHint{
           .stage = "planning",
           .task_type = "plan",
@@ -285,6 +288,8 @@ void assert_failure_result(const LLMManagerResult& result,
                            ResultCode expected_code,
                            LLMFailureCategory expected_category,
                            std::string_view expected_message_fragment,
+                           std::optional<PromptPolicyDisposition> expected_disposition,
+                           bool expected_safe_to_replan,
                            const std::shared_ptr<MockLLMAdapter>& adapter,
                            std::string_view message_prefix) {
   assert_true(result.has_consistent_values() && !result.response.has_value() &&
@@ -297,6 +302,10 @@ void assert_failure_result(const LLMManagerResult& result,
               std::string(message_prefix) + " should surface the expected failure category");
   assert_true(contains_text(result.error->details.message, expected_message_fragment),
               std::string(message_prefix) + " should preserve the expected failure reason");
+  assert_true(result.governance_disposition == expected_disposition,
+              std::string(message_prefix) + " should preserve the expected governance disposition boundary");
+  assert_true(result.error->safe_to_replan.value_or(false) == expected_safe_to_replan,
+              std::string(message_prefix) + " should expose the expected safe_to_replan runtime handoff");
   assert_true(result.error->details.stage == "llm.manager.generate",
               std::string(message_prefix) + " should fail before the adapter execution stage");
   assert_true(result.attempted_routes.empty(),
@@ -329,6 +338,8 @@ void test_governance_failure_denies_release_outside_allowlist() {
                         ResultCode::PolicyDenied,
                         LLMFailureCategory::PromptGovernance,
                         "prompt_release_not_allowed",
+                        PromptPolicyDisposition::Deny,
+                        false,
                         fixture.adapter,
                         "allowlist governance failure");
 }
@@ -358,6 +369,8 @@ void test_governance_failure_rejects_untrusted_prompt_source_before_policy() {
                         ResultCode::ValidationFieldMissing,
                         LLMFailureCategory::PromptAsset,
                         "trusted_source_rejected",
+                        std::nullopt,
+                        false,
                         fixture.adapter,
                         "trusted-source gating failure");
 }
@@ -387,6 +400,8 @@ void test_governance_failure_surfaces_over_budget_without_adapter_dispatch() {
                         ResultCode::PolicyDenied,
                         LLMFailureCategory::PromptGovernance,
                         "render_budget_exceeded",
+                        PromptPolicyDisposition::OverBudget,
+                        true,
                         fixture.adapter,
                         "over-budget governance failure");
 }

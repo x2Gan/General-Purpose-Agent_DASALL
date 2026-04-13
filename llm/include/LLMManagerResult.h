@@ -7,6 +7,7 @@
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "llm/LLMResponse.h"
+#include "prompt/PromptPolicyDecision.h"
 
 namespace dasall::llm {
 
@@ -26,6 +27,7 @@ struct LLMManagerResult {
   std::string resolved_route;
   std::vector<std::string> attempted_routes;
   std::optional<LLMFailureCategory> failure_category;
+  std::optional<prompt::PromptPolicyDisposition> governance_disposition;
   bool fallback_used = false;
 
   [[nodiscard]] bool has_consistent_values() const {
@@ -41,6 +43,23 @@ struct LLMManagerResult {
     }
 
     if (has_failure != failure_category.has_value()) {
+      return false;
+    }
+
+    if (has_response && governance_disposition.has_value()) {
+      return false;
+    }
+
+    if (governance_disposition.has_value()) {
+      if (!has_failure || !failure_category.has_value() ||
+          *failure_category != LLMFailureCategory::PromptGovernance) {
+        return false;
+      }
+    }
+
+    if (failure_category.has_value() &&
+        *failure_category == LLMFailureCategory::PromptGovernance &&
+        !governance_disposition.has_value()) {
       return false;
     }
 
@@ -70,6 +89,13 @@ struct LLMManagerResult {
 
     if (has_failure && code.has_value() && error->failure_type.has_value() &&
         contracts::classify_result_code(*code) != *error->failure_type) {
+      return false;
+    }
+
+    if (governance_disposition.has_value() && error.has_value() &&
+        (*governance_disposition == prompt::PromptPolicyDisposition::OverBudget ||
+         *governance_disposition == prompt::PromptPolicyDisposition::RequireRecompose) &&
+        !error->safe_to_replan.value_or(false)) {
       return false;
     }
 

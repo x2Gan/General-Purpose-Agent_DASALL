@@ -364,12 +364,15 @@ void test_llm_generate_request_freezes_runtime_handoff_fields() {
   static_assert(std::is_same_v<decltype(LLMGenerateRequest{}.stage), std::string>);
   static_assert(std::is_same_v<decltype(LLMGenerateRequest{}.task_type), std::string>);
   static_assert(std::is_same_v<decltype(LLMGenerateRequest{}.request), LLMRequest>);
+  static_assert(std::is_same_v<decltype(LLMGenerateRequest{}.prompt_release_id_override),
+                 std::optional<std::string>>);
   static_assert(std::is_same_v<decltype(LLMGenerateRequest{}.selection_hint),
                  std::shared_ptr<const ModelSelectionHint>>);
 
   LLMRequest request;
   request.request_id = std::string("req-llm-006");
   request.llm_call_id = std::string("llm-call-006");
+  request.model_route = std::string("cloud.reasoning");
   request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   request.messages = std::vector<std::string>{"system:plan carefully", "user:diagnose timeout"};
   request.prompt_id = std::string("prompt.plan.default");
@@ -380,6 +383,7 @@ void test_llm_generate_request_freezes_runtime_handoff_fields() {
     .stage = "planner",
     .task_type = "diagnostics",
     .request = request,
+    .prompt_release_id_override = std::string("planner/diagnostics@2026-04-13.1"),
     .selection_hint = nullptr,
   };
 
@@ -387,8 +391,12 @@ void test_llm_generate_request_freezes_runtime_handoff_fields() {
               "LLMGenerateRequest should freeze stage as an explicit routing dimension");
   assert_true(generate_request.task_type == "diagnostics",
               "LLMGenerateRequest should preserve task_type for deterministic model selection");
-  assert_true(!generate_request.request.model_route.has_value(),
-              "LLMGenerateRequest should allow pre-route LLMRequest handoff before ModelRouter resolves a final route");
+  assert_true(generate_request.request.model_route.has_value() &&
+                  *generate_request.request.model_route == "cloud.reasoning",
+              "LLMGenerateRequest should require a pre-route model_route hint before ModelRouter resolves the final adapter route");
+  assert_true(generate_request.prompt_release_id_override.has_value() &&
+                  *generate_request.prompt_release_id_override == "planner/diagnostics@2026-04-13.1",
+              "LLMGenerateRequest should keep an explicit prompt release selector separate from request.prompt_id audit anchors");
 }
 
 void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
@@ -400,6 +408,7 @@ void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
   using dasall::contracts::ResultCodeCategory;
   using dasall::llm::LLMFailureCategory;
   using dasall::llm::LLMManagerResult;
+  using dasall::llm::prompt::PromptPolicyDisposition;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(LLMManagerResult{}.code),
@@ -413,6 +422,8 @@ void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
                  std::vector<std::string>>);
   static_assert(std::is_same_v<decltype(LLMManagerResult{}.failure_category),
                  std::optional<LLMFailureCategory>>);
+  static_assert(std::is_same_v<decltype(LLMManagerResult{}.governance_disposition),
+                 std::optional<PromptPolicyDisposition>>);
   static_assert(std::is_same_v<decltype(LLMManagerResult{}.fallback_used), bool>);
 
   LLMResponse success_response;
@@ -432,6 +443,31 @@ void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
     .resolved_route = "planner.cloud.reasoner",
     .attempted_routes = {"planner.cloud.reasoner"},
     .failure_category = std::nullopt,
+    .governance_disposition = std::nullopt,
+    .fallback_used = false,
+  };
+
+  const LLMManagerResult governance_failure_result{
+    .code = ResultCode::PolicyDenied,
+    .response = std::nullopt,
+    .error = ErrorInfo{
+      .failure_type = ResultCodeCategory::Policy,
+      .retryable = false,
+      .safe_to_replan = true,
+      .details = {
+        .code = static_cast<int>(ResultCode::PolicyDenied),
+        .message = std::string("render_budget_exceeded"),
+        .stage = std::string("llm.manager.generate"),
+      },
+      .source_ref = ErrorSourceRefMinimal{
+        .ref_type = std::string("stage"),
+        .ref_id = std::string("planner"),
+      },
+    },
+    .resolved_route = std::string{},
+    .attempted_routes = {},
+    .failure_category = LLMFailureCategory::PromptGovernance,
+    .governance_disposition = PromptPolicyDisposition::OverBudget,
     .fallback_used = false,
   };
 
@@ -455,6 +491,7 @@ void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
     .resolved_route = "planner.cloud.fallback",
     .attempted_routes = {"planner.cloud.primary", "planner.cloud.fallback"},
     .failure_category = LLMFailureCategory::FallbackExhausted,
+    .governance_disposition = std::nullopt,
     .fallback_used = true,
   };
 
@@ -465,11 +502,14 @@ void test_llm_manager_result_freezes_success_failure_and_fallback_semantics() {
     .resolved_route = "planner.cloud.fallback",
     .attempted_routes = {"planner.cloud.primary", "planner.cloud.fallback"},
     .failure_category = LLMFailureCategory::FallbackExhausted,
+    .governance_disposition = PromptPolicyDisposition::Deny,
     .fallback_used = true,
   };
 
   assert_true(success_result.has_consistent_values(),
               "LLMManagerResult should accept a success payload without forcing a synthetic success code");
+  assert_true(governance_failure_result.has_consistent_values(),
+              "LLMManagerResult should preserve prompt governance disposition and safe_to_replan hints for runtime recompose owners");
   assert_true(fallback_failure_result.has_consistent_values(),
               "LLMManagerResult should carry fallback attempt trace and final failure category when routes are exhausted");
   assert_true(!invalid_result.has_consistent_values(),
@@ -868,6 +908,8 @@ void test_prompt_pipeline_config_freezes_three_stage_init_bundle() {
     .registry_config = {
       .asset_sources = dasall::llm::PromptAssetSourceConfig{
           .baseline_root = "assets/prompts",
+          .deployment_root = std::string{},
+          .snapshot_cache_root = std::string{},
       },
       .trusted_sources = {"baseline", "signed_overlay"},
     },

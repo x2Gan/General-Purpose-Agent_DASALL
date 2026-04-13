@@ -356,8 +356,8 @@ PromptQuery make_prompt_query(const LLMGenerateRequest& request,
   query.stage = request.stage;
   query.task_type = request.task_type;
   query.language = "zh-cn";
-  query.model_family = request.request.model_route.value_or(std::string{});
-  query.prompt_release_id = request.request.prompt_id.value_or(std::string{});
+  query.model_family = std::string{};
+  query.prompt_release_id = request.prompt_release_id_override.value_or(std::string{});
   query.scene_id = config.prompt_selector_overlay.active_scene;
   query.persona_id = config.prompt_selector_overlay.active_persona;
   query.profile_id = config.profile_id;
@@ -368,8 +368,7 @@ PromptQuery make_prompt_query(const LLMGenerateRequest& request,
 
 PromptComposeRequest make_prompt_compose_request(
     const LLMGenerateRequest& request,
-    const dasall::contracts::LLMRequest& base_request,
-    const std::optional<dasall::llm::LLMStageRouteConfig>& stage_route) {
+    const dasall::contracts::LLMRequest& base_request) {
   PromptComposeRequest compose_request;
   compose_request.request_id = base_request.request_id;
   compose_request.stage = to_composition_stage(request.stage);
@@ -382,8 +381,6 @@ PromptComposeRequest make_prompt_compose_request(
   compose_request.visible_tools = std::nullopt;
   if (base_request.model_route.has_value() && !base_request.model_route->empty()) {
     compose_request.model_route = base_request.model_route;
-  } else if (stage_route.has_value()) {
-    compose_request.model_route = stage_route->route;
   }
   compose_request.output_schema_ref = base_request.output_schema_ref;
   compose_request.response_format = base_request.response_format;
@@ -423,13 +420,14 @@ std::vector<std::string> build_route_candidates(const dasall::llm::ResolvedModel
 dasall::contracts::ErrorInfo make_manager_error(ResultCode result_code,
                                                 std::string message,
                                                 bool retryable,
+                                                bool safe_to_replan,
                                                 std::string stage_name,
                                                 std::string ref_type,
                                                 std::string ref_id) {
   dasall::contracts::ErrorInfo error;
   error.failure_type = dasall::contracts::classify_result_code(result_code);
   error.retryable = retryable;
-  error.safe_to_replan = false;
+  error.safe_to_replan = safe_to_replan;
   error.details.code = static_cast<int>(result_code);
   error.details.message = std::move(message);
   error.details.stage = std::move(stage_name);
@@ -446,7 +444,10 @@ LLMManagerResult make_manager_failure(ResultCode result_code,
                                       std::string ref_type,
                                       std::string ref_id,
                                       std::vector<std::string> attempted_routes = {},
-                                      std::string resolved_route = {}) {
+                                      std::string resolved_route = {},
+                                      std::optional<PromptPolicyDisposition> governance_disposition =
+                                          std::nullopt,
+                                      bool safe_to_replan = false) {
   if (resolved_route.empty() && !attempted_routes.empty()) {
     resolved_route = attempted_routes.back();
   }
@@ -455,11 +456,13 @@ LLMManagerResult make_manager_failure(ResultCode result_code,
       .code = result_code,
       .response = std::nullopt,
       .error = make_manager_error(result_code, std::move(message), retryable,
+                                  safe_to_replan,
                                   std::move(stage_name), std::move(ref_type),
                                   std::move(ref_id)),
       .resolved_route = std::move(resolved_route),
       .attempted_routes = std::move(attempted_routes),
       .failure_category = category,
+      .governance_disposition = governance_disposition,
       .fallback_used = false,
   };
 }
@@ -468,7 +471,9 @@ LLMManagerResult make_manager_failure_from_error(dasall::contracts::ErrorInfo er
                                                  ResultCode result_code,
                                                  LLMFailureCategory category,
                                                  std::vector<std::string> attempted_routes = {},
-                                                 std::string resolved_route = {}) {
+                                                 std::string resolved_route = {},
+                                                 std::optional<PromptPolicyDisposition> governance_disposition =
+                                                     std::nullopt) {
   if (!error.failure_type.has_value()) {
     error.failure_type = dasall::contracts::classify_result_code(result_code);
   }
@@ -493,6 +498,7 @@ LLMManagerResult make_manager_failure_from_error(dasall::contracts::ErrorInfo er
       .resolved_route = std::move(resolved_route),
       .attempted_routes = std::move(attempted_routes),
       .failure_category = category,
+      .governance_disposition = governance_disposition,
       .fallback_used = false,
   };
 }
@@ -596,6 +602,16 @@ std::optional<LLMManagerResult> validate_generate_request(
                                 "messages");
   }
 
+  if (!request.request.model_route.has_value() || request.request.model_route->empty()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "llm generate request missing pre-route model_route hint",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStage),
+                                "request",
+                                "model_route");
+  }
+
   if (!stage_route.has_value()) {
     return make_manager_failure(ResultCode::RuntimeRetryExhausted,
                                 "no stage route configured for llm stage: " + request.stage,
@@ -613,21 +629,33 @@ LLMManagerResult make_pipeline_failure(const PromptPipelineResult& pipeline_resu
                                        std::string stage) {
   const bool prompt_asset_failure = !pipeline_result.registry_result.has_value() ||
                                     !pipeline_result.registry_result->release.has_value();
-  const auto category = prompt_asset_failure
-                            ? LLMFailureCategory::PromptAsset
-                            : LLMFailureCategory::PromptGovernance;
-  const auto code = prompt_asset_failure ? ResultCode::ValidationFieldMissing
-                                         : ResultCode::PolicyDenied;
   const auto message = pipeline_result.reason.empty()
                            ? std::string("prompt pipeline failed")
                            : pipeline_result.reason;
-  return make_manager_failure(code,
+  if (prompt_asset_failure) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                message,
+                                false,
+                                LLMFailureCategory::PromptAsset,
+                                std::string(kManagerStage),
+                                "stage",
+                                std::move(stage));
+  }
+
+  const bool safe_to_replan =
+      pipeline_result.disposition == PromptPolicyDisposition::OverBudget ||
+      pipeline_result.disposition == PromptPolicyDisposition::RequireRecompose;
+  return make_manager_failure(ResultCode::PolicyDenied,
                               message,
                               false,
-                              category,
+                              LLMFailureCategory::PromptGovernance,
                               std::string(kManagerStage),
                               "stage",
-                              std::move(stage));
+                              std::move(stage),
+                              {},
+                              {},
+                              pipeline_result.disposition,
+                              safe_to_replan);
 }
 
 std::uint32_t clamp_timeout_ms(std::uint64_t timeout_ms) {
@@ -1086,12 +1114,7 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
     base_request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   }
 
-  if ((!base_request.model_route.has_value() || base_request.model_route->empty()) &&
-      stage_route.has_value()) {
-    base_request.model_route = stage_route->route;
-  }
-
-  const auto compose_request = make_prompt_compose_request(request, base_request, stage_route);
+  const auto compose_request = make_prompt_compose_request(request, base_request);
   const auto compose_validation =
       contracts::validate_prompt_compose_request_field_rules(compose_request);
   if (!compose_validation.ok) {
@@ -1204,6 +1227,7 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
               execution_result.result_code.value_or(ResultCode::RuntimeRetryExhausted),
               "llm call executor failed without error payload",
               false,
+            false,
               std::string(kExecutionStage),
               "route",
               route_key)),
@@ -1255,6 +1279,7 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
               normalization_result.result_code.value_or(ResultCode::ValidationFieldMissing),
               "response normalizer failed without error payload",
               false,
+            false,
               std::string(kManagerStage),
               "route",
               route_key)),
@@ -1295,6 +1320,7 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
         .resolved_route = route_key,
         .attempted_routes = attempted_routes,
         .failure_category = std::nullopt,
+      .governance_disposition = std::nullopt,
         .fallback_used = attempted_routes.size() > 1U,
     };
     if (!result.has_consistent_values()) {

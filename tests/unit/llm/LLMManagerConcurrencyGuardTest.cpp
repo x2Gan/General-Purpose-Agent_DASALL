@@ -38,6 +38,7 @@ dasall::contracts::LLMRequest make_request() {
   dasall::contracts::LLMRequest request;
   request.request_id = "req-llm-concurrency-001";
   request.llm_call_id = "call-llm-concurrency-001";
+  request.model_route = "cloud.reasoning";
   request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   request.messages = std::vector<std::string>{"concurrency"};
   request.prompt_id = "prompt.test.concurrency";

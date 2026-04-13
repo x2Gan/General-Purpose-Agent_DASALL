@@ -393,6 +393,7 @@ LLMGenerateRequest make_request() {
   LLMRequest request;
   request.request_id = "req-029-smoke";
   request.llm_call_id = "call-029-smoke";
+  request.model_route = "cloud.reasoning";
   request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   request.messages = std::vector<std::string>{"draft the llm smoke integration acceptance"};
   request.created_at = 1712966400000LL;
@@ -412,6 +413,7 @@ LLMGenerateRequest make_request() {
       .stage = "planning",
       .task_type = "plan",
       .request = std::move(request),
+      .prompt_release_id_override = std::nullopt,
       .selection_hint = std::make_shared<const ModelSelectionHint>(ModelSelectionHint{
           .stage = "planning",
           .task_type = "plan",

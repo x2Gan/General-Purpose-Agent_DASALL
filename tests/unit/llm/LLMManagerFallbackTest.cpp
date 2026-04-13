@@ -126,6 +126,7 @@ LLMGenerateRequest make_request() {
       .stage = "planner",
       .task_type = "plan",
       .request = std::move(request),
+      .prompt_release_id_override = std::nullopt,
       .selection_hint = std::make_shared<const dasall::llm::ModelSelectionHint>(
           dasall::llm::ModelSelectionHint{
               .stage = "planner",

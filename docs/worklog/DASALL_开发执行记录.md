@@ -1,5 +1,75 @@
 # DASALL 开发执行记录
 
+## 记录 #299
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 I+
+- 任务：LLM-TODO-043 修复 manager 输入边界、治理回流语义与专项 TODO 当前态漂移
+- 状态：已完成
+
+### 任务选择
+
+1. 上一轮 llm 评审已定位三处必须立即闭环的问题：`LLMGenerateRequest` 与 shared `LLMRequest` 的输入边界自相矛盾、`OverBudget` 在 manager failure 中被折叠成普通 `PolicyDenied`、以及 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 上半部分仍把启动期快照写成当前状态；因此在 038 完成后直接立项 043 做评审缺陷修复。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 的 6.5.2、6.7.2、6.15.3、6.15.6 已冻结本轮 owner：修复必须收敛在 llm module-local handoff/result 与文档证据层，不扩张 shared contracts，也不能让 llm 吞掉 Runtime 的重装配语义。
+3. 本轮因此采用“设计收敛 -> manager/module-local 边界修复 -> unit/integration 回归 -> TODO/worklog 证据回写”的顺序，确保 043 既修代码，也修冻结面与文档当前态。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-043-manager边界与治理回流语义修复设计收敛.md](../todos/llm/deliverables/LLM-TODO-043-manager%E8%BE%B9%E7%95%8C%E4%B8%8E%E6%B2%BB%E7%90%86%E5%9B%9E%E6%B5%81%E8%AF%AD%E4%B9%89%E4%BF%AE%E5%A4%8D%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固定本地证据、Design 结论、Design->Build 映射、Build 三件套与回退边界。
+2. 更新 [llm/include/LLMGenerateRequest.h](../../llm/include/LLMGenerateRequest.h)、[llm/include/LLMManagerResult.h](../../llm/include/LLMManagerResult.h)、[llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)：
+   - `LLMGenerateRequest.request.model_route` 收敛为 required pre-route hint。
+   - 新增 `prompt_release_id_override`，不再复用 `request.prompt_id/request.prompt_version` 作为显式 PromptRegistry selector。
+   - `LLMManagerResult` 新增 `governance_disposition`，并要求 `OverBudget/RequireRecompose` 必须伴随 `ErrorInfo.safe_to_replan=true`。
+   - `LLMManager::make_prompt_query()` 不再把 route hint 当作 `PromptQuery.model_family`，也不再把输入 `prompt_id` 误写为 explicit release selector。
+3. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 与 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，把 manager handoff、OverBudget 回流、route-hint 时序和专项 TODO 的“启动期历史快照”标识统一收敛。
+4. 批量更新 llm unit/integration request helper 与冻结测试：
+   - [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)、[tests/unit/llm/LLMManagerSuccessPathTest.cpp](../../tests/unit/llm/LLMManagerSuccessPathTest.cpp)、[tests/unit/llm/LLMManagerFailureMappingTest.cpp](../../tests/unit/llm/LLMManagerFailureMappingTest.cpp) 增加 override / governance disposition / safe_to_replan 断言。
+   - [tests/integration/llm/LLMGovernanceFailureIntegrationTest.cpp](../../tests/integration/llm/LLMGovernanceFailureIntegrationTest.cpp) 与其余 request helper 显式补齐 required route hint，并覆盖 deny、trusted-source reject、over-budget 三条治理失败路径。
+5. 顺手修复 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp) 中 `PromptAssetSourceConfig` 聚合初始化缺尾字段导致的 warning，避免 043 的验证证据夹带编译噪声。
+
+### 测试
+
+1. discoverability / build：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建 `dasall_unit_tests`、`dasall_contract_tests`、`dasall_integration_tests`
+2. 定向验证：
+   - `LLMInterfaceSurfaceTest`
+   - `LLMManagerSuccessPathTest`
+   - `LLMManagerFailureMappingTest`
+   - `LLMManagerTimeoutPolicyTest`
+   - `LLMManagerRetryBudgetTest`
+   - `LLMManagerConcurrencyGuardTest`
+   - `LLMGovernanceFailureIntegrationTest`
+   - `LLMRequestResponseContractTest`
+3. 扩面回归：
+   - `LLMSubsystemSmokeIntegrationTest`
+   - `DeepSeekDualModeSelectionIntegrationTest`
+   - `LLMFallbackIntegrationTest`
+   - `LLMPromptSourceSwitchIntegrationTest`
+   - `LLMPersonaSelectionIntegrationTest`
+   - `LLMGovernanceFailureIntegrationTest`
+   - `LLMProfileIntegrationTest`
+   - `LLMProviderAssetOnboardingIntegrationTest`
+4. 结果：聚合构建成功；contract `152/152`、unit `249/249`、integration 聚合目标构建通过；上述定向与扩面 llm tests 全部 `100% tests passed`。CTest 仍附带 `DartConfiguration.tcl` 缺失提示，但继续判定为工具噪声，不影响 043 Gate 结论。
+
+### 结果
+
+1. LLM-TODO-043 已完成，manager handoff 与 shared `LLMRequest` 的最小边界重新对齐：route hint 现在在 module-local handoff 处即为 required，不再依赖测试里的隐式回填。
+2. Runtime 所需的治理回流语义已保留：shared `ResultCode` 仍暂用 `PolicyDenied`，但 `OverBudget/RequireRecompose` 现在通过 `governance_disposition + safe_to_replan` 回到 Runtime，不再被吞并成普通 deny。
+3. 显式 PromptRegistry selector 与 response audit 锚点已彻底解耦；后续若 Runtime 需要指定 release，应只经 `prompt_release_id_override` 传入。
+4. llm 专项 TODO 的 3.2 / 4.2 / 4.3 已明确标记为启动期历史快照，当前实现状态以 17.x 执行记录和 043 当前状态更新为准，不再与已闭合 Gate 证据冲突。
+
+### 下一步
+
+1. 按仓库提交规范整理 043 的代码与文档改动，隔离无关工作树变更后提交并推送远端。
+
+### 风险
+
+1. 若后续再次把 `request.prompt_id` 复用为显式 selector，会重新污染“输入 selector / 输出 audit 锚点”边界，导致 PromptRegistry 选择与响应追溯混用一条槽位。
+2. 若把 `LLMGenerateRequest.request.model_route` 再放宽为可空字段，manager handoff 会再次脱离 shared `LLMRequest` 的 required-field contract，测试也会重新退回“靠省略字段掩盖错误语义”的状态。
+3. shared contracts 目前仍没有 finer-grained governance result code；本轮通过 module-local 语义已完成 Runtime 回流，但若未来需要 shared 层升级，应由 contracts owner 单独立项评审，而不是在 llm 内继续局部扩张。
+
 ## 记录 #298
 
 - 日期：2026-04-13

@@ -368,6 +368,7 @@ LLMGenerateRequest make_request(std::string request_id, std::string llm_call_id)
   LLMRequest request;
   request.request_id = std::move(request_id);
   request.llm_call_id = std::move(llm_call_id);
+  request.model_route = "cloud.premium";
   request.request_mode = dasall::contracts::LLMRequestMode::Unary;
   request.messages = std::vector<std::string>{"summarize the onboarding route"};
   request.created_at = 1712966408000LL;
@@ -387,6 +388,7 @@ LLMGenerateRequest make_request(std::string request_id, std::string llm_call_id)
       .stage = "response",
       .task_type = "summary",
       .request = std::move(request),
+      .prompt_release_id_override = std::nullopt,
       .selection_hint = std::make_shared<const ModelSelectionHint>(ModelSelectionHint{
           .stage = "response",
           .task_type = "summary",
