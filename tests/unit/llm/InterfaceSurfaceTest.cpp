@@ -8,6 +8,7 @@
 
 #include "ILLMAdapter.h"
 #include "ILLMManager.h"
+#include "ILLMTransport.h"
 #include "LLMAdapterConfig.h"
 #include "LLMGenerateRequest.h"
 #include "LLMSubsystemConfig.h"
@@ -131,6 +132,59 @@ void test_llm_adapter_config_freezes_expected_fields() {
               "LLMAdapterConfig should preserve activation_flag so disabled provider instances fail closed at init time");
   assert_true(config.capability_tags.size() == 2U,
               "LLMAdapterConfig should keep capability_tags as a stable vector field");
+}
+
+void test_illm_transport_surface_freezes_adapter_internal_transport_contract() {
+  using dasall::llm::ILLMTransport;
+  using dasall::llm::LLMTransportHeader;
+  using dasall::llm::LLMTransportMethod;
+  using dasall::llm::LLMTransportRequest;
+  using dasall::llm::LLMTransportResponse;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.method),
+                 LLMTransportMethod>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.url), std::string>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.auth_ref), std::string>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.header_refs),
+                 std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.base_url_alias), std::string>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.snapshot_version), std::string>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.headers),
+                 std::vector<LLMTransportHeader>>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.body), std::string>);
+  static_assert(std::is_same_v<decltype(LLMTransportRequest{}.timeout_ms), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(LLMTransportResponse{}.status_code), std::uint16_t>);
+  static_assert(std::is_same_v<decltype(LLMTransportResponse{}.body), std::string>);
+  static_assert(std::is_same_v<decltype(LLMTransportResponse{}.error_message), std::string>);
+  static_assert(std::is_same_v<decltype(&ILLMTransport::send),
+                 LLMTransportResponse (ILLMTransport::*)(const LLMTransportRequest&)>);
+  static_assert(std::is_abstract_v<ILLMTransport>);
+
+  const LLMTransportRequest request{
+    .method = LLMTransportMethod::Post,
+    .url = "https://api.deepseek.example/v1/chat/completions",
+    .auth_ref = "secret://llm/providers/deepseek-prod",
+    .header_refs = {"header://llm/providers/deepseek-org"},
+    .base_url_alias = "deepseek/default",
+    .snapshot_version = "2026.04.13",
+    .headers = {
+      LLMTransportHeader{.name = "Content-Type", .value = "application/json"},
+    },
+    .body = "{\"model\":\"deepseek-chat\"}",
+    .timeout_ms = 4000U,
+  };
+
+  const LLMTransportResponse response{
+    .status_code = 200U,
+    .body = "{\"id\":\"chatcmpl-1\"}",
+    .error_message = {},
+  };
+
+  assert_true(request.has_consistent_values(),
+              "ILLMTransport request should freeze URL/ref/body/timeout as a valid adapter-internal transport payload");
+  assert_true(response.has_consistent_values() && response.ok(),
+              "ILLMTransport response should treat HTTP 2xx with empty transport error as success");
 }
 
 void test_adapter_call_result_freezes_non_exception_error_boundary() {
@@ -1147,6 +1201,7 @@ int main() {
     test_llm_unit_surface_anchor_uses_a_collision_free_ctest_name();
     test_illm_adapter_surface_freezes_spi_signatures();
     test_llm_adapter_config_freezes_expected_fields();
+    test_illm_transport_surface_freezes_adapter_internal_transport_contract();
     test_adapter_call_result_freezes_non_exception_error_boundary();
     test_illm_manager_surface_freezes_spi_signatures();
     test_llm_subsystem_config_surface_freezes_projection_helpers();

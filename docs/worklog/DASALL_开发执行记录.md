@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #286
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 G
+- 任务：LLM-TODO-025 实现 OpenAICompatibleAdapter skeleton
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 041，且 025 的前置依赖只要求 005、014、021、022 完成，因此当前按专项 TODO 的阶段 G 顺序直接进入首个 concrete adapter family skeleton。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.14 已冻结 025 的 owner：adapter 只负责 provider 协议适配、请求投递、响应接收和本地错误采样，不负责 Prompt 治理、route 评分或 provider raw payload 向 shared contracts 的泄漏。
+3. `LLM-BLK-007` 在 025 上仍然成立，但经 041 已不再阻塞 skeleton 本身：本轮只允许在 mock transport 下完成 OpenAI-compatible 的协议映射与 health_check 骨架，不宣称真实 endpoint/secret 注入链已联通。
+
+### 改动
+
+1. 新增 [llm/include/ILLMTransport.h](../../llm/include/ILLMTransport.h)，定义 adapter-internal 的同步 transport 抽象，固定 method、URL、auth/header refs、base_url alias、snapshot version、headers、body 与 timeout 等最小字段，并保持它不进入 shared contracts。
+2. 新增 [llm/src/adapters/OpenAICompatibleAdapter.h](../../llm/src/adapters/OpenAICompatibleAdapter.h) 与 [llm/src/adapters/OpenAICompatibleAdapter.cpp](../../llm/src/adapters/OpenAICompatibleAdapter.cpp)，实现 `init()`、`generate()`、`stream_generate()` 占位与 `health_check()`。025 将 unary 路径固定为 `POST {base_url}/chat/completions`，从 `request.model_route` 提取 concrete model id，把 prefixed `system:` / `user:` 消息映射为 OpenAI-compatible `role/content` 数组，并在成功路径提取 `content`、`finish_reason`、usage、provider trace id 与 `reasoning_content` side channel。
+3. 更新 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，冻结 `ILLMTransport` 的 request/response/interface surface，避免 025 之后 transport 抽象在 026/027 或 042 漂移。
+4. 新增 [tests/unit/llm/AdapterProtocolMappingTest.cpp](../../tests/unit/llm/AdapterProtocolMappingTest.cpp)，覆盖 shared `LLMRequest` 到 OpenAI-compatible chat-completions 请求的映射、success response 到 `AdapterCallResult` 的转换，以及 transport 5xx 失败通过非异常 error/result_code 路径返回。
+5. 扩展 [tests/unit/llm/AdapterHealthProbeTest.cpp](../../tests/unit/llm/AdapterHealthProbeTest.cpp)，在保留 021 的 registry 健康快照覆盖之外，新增 `OpenAICompatibleAdapter` 自身的 healthy / degraded / unavailable 三态探针用例。
+6. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 `OpenAICompatibleAdapter.cpp` 和 `AdapterProtocolMappingTest` 接入 llm / unit 聚合目标；新增 [docs/todos/llm/deliverables/LLM-TODO-025-OpenAICompatibleAdapter-skeleton设计收敛.md](../todos/llm/deliverables/LLM-TODO-025-OpenAICompatibleAdapter-skeleton设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_adapter_protocol_mapping_unit_test`、`dasall_adapter_health_probe_unit_test`、`dasall_llm_interface_surface_unit_test`、`dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `AdapterProtocolMappingTest`
+   - `RunCtest_CMakeTools` 运行 `AdapterHealthProbeTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_adapter_protocol_mapping_unit_test`、`dasall_adapter_health_probe_unit_test` 与 `dasall_unit_tests`，说明 025 的 build target discoverability 已闭合。
+   - 第一轮 `ListTests_CMakeTools` 暴露出 `AdapterProtocolMappingTest` 尚未进入 CTest 清单；当前轮次已在 [tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 补齐 `add_test()` 注册并重新构建，unit 总数随之从 `247` 增至 `248`，且清单内已显式出现 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest`。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `248/248` 全部通过，其中 `AdapterProtocolMappingTest` 与扩展后的 `AdapterHealthProbeTest` 均通过。
+   - `RunCtest_CMakeTools` 定向执行 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-025 已完成，llm 现在具备首个 concrete provider family skeleton，可以在不依赖真实网络环境的前提下验证 OpenAI-compatible family 的 init / generate / health_check 基本边界。
+2. 025 保持了设计与 ADR 边界：`ILLMTransport` 只做 adapter-internal transport 抽象，不承担 secret 解析或 route owner；`OpenAICompatibleAdapter` 只做 provider 协议映射与 diagnostics 保留，没有重写 PromptPipeline / ModelRouter / ResponseNormalizer / UsageAggregator 的 owner 语义。
+3. 这轮实现为 026/027 和 042 留下了稳定接缝：后续 family skeleton 可以复用相同的 transport/test pattern，而 042 在 smoke integration 准备好后可进一步验证“已有 family + provider 资产 + profile route”的 asset-only onboarding 路径。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 G 顺序推进 `LLM-TODO-026`，实现 `OllamaAdapter` skeleton，并复用 025 已冻结的 transport mock / protocol mapping 测试模式。
+2. 待 smoke integration 条件满足后，再进入 `LLM-TODO-042`，验证既有 family 下的 provider instance 能通过“只加资产 + profile route”路径启用。
+
+### 风险
+
+1. 025 当前仍采用 module-local 的轻量 payload parser，只保证 OpenAI-compatible chat-completions 在单测覆盖范围内的 deterministic 映射；若后续 provider 需要更复杂的 schema/tool-call 载荷，演进应继续留在 adapter 内部，不回推 shared contracts。
+2. 025 仍未打通真实 auth/header ref 解析与 endpoint alias 解析链；若后续实现试图在 adapter 内直接把 ref 展开成明文 secret 或重写静态 `base_url`，需要回到 041 的投影边界重新评审。
+
 ## 记录 #285
 
 - 日期：2026-04-13
