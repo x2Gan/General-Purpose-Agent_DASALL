@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #295
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-034 验证治理失败 integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一条记录已完成 033，且 034 的前置依赖只要求 018、019、029 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 governance failure integration，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.5.5、6.5.6、6.7.2 与 9.3 已冻结 034 的 owner：必须验证治理失败不会误入 route / adapter 调用链，并且失败结果要能被 Runtime 稳定区分，而不是只停留在 unit 层的 policy / pipeline mock 断言。
+3. 研究确认 034 不需要新增生产修补，但暴露出一个必须写入证据的现状：allowlist deny 与 over-budget 都会在 manager 结果中映射为 `PromptGovernance / PolicyDenied`；trusted-source reject 由于在 `PromptRegistry` 选择阶段 fail-closed 且没有选中 release，当前会映射为 `PromptAsset / ValidationFieldMissing`。本轮按真实行为写测试，不在 integration 任务里擅自改分类语义。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-034-governance-failure-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-034-governance-failure-integration设计收敛.md)，固定 034 的本地证据、真实失败映射与 Build 三件套。
+2. 新增 [tests/integration/llm/LLMGovernanceFailureIntegrationTest.cpp](../../tests/integration/llm/LLMGovernanceFailureIntegrationTest.cpp)，在真实 `PromptPipeline + LLMManager` 闭环中覆盖：
+   - allowlist deny：prompt selection 成功，但 `PromptPolicy` 以 `prompt_release_not_allowed` 否决
+   - trusted-source reject：`PromptRegistry` 以 `trusted_source_rejected` fail-closed，manager 因未选中 release 将其映射为 `PromptAsset`
+   - over-budget：prompt selection 成功，但 `PromptPolicy` 以 `render_budget_exceeded` 否决
+3. 034 的每条用例都固定相同的 adapter 隔离事实：`response == nullopt`、`attempted_routes` 为空、`error.details.stage == llm.manager.generate`、adapter 调用计数为 0。为了避免 route/fallback 干扰，测试继续复用单一路由 `deepseek-prod/deepseek-chat` provider catalog。
+4. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_llm_governance_failure_integration_test` / `LLMGovernanceFailureIntegrationTest`，让 034 进入 llm integration discoverability 与聚合 target。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_governance_failure_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMGovernanceFailureIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_governance_failure_integration_test` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 已列出 `LLMGovernanceFailureIntegrationTest`，说明 034 的 discoverability 已闭合。
+   - `Build_CMakeTools` 定向构建 034 target 成功，`LLMGovernanceFailureIntegrationTest.cpp` 已编译并链接入新的 integration 可执行文件。
+   - `RunCtest_CMakeTools` 定向执行 `LLMGovernanceFailureIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 41 条用例全部通过，其中 `LLMGovernanceFailureIntegrationTest` 作为第 41 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-034 已完成，llm 现在具备真实的 governance failure integration 证据：allowlist deny、trusted-source fail-closed 与 over-budget 三条路径都能在 production prompt / manager 闭环里被自动验证，而且都不会误入 adapter dispatch。
+2. 034 保持了设计与 ADR 边界：没有改动 `PromptPolicy`、`PromptPipeline`、`PromptRegistry`、`LLMManager` 或 shared contracts，只验证现有治理失败链的真实收口。
+3. 这轮实现为 035 留下了更清晰的基座：profile 差异验证后续可以继续复用 029~034 已稳定的真实 prompt/manager integration 模式，同时把 allowlist / trusted source / budget 作为 profile 差异的现成对照面。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-035`，验证 profile 差异 integration，并复用 034 已稳定的 governance / prompt / manager 基座。
+2. 在 profile integration 收口后，再统一回看 `LLM-TODO-038` 的 llm 专项 Gate 与交付证据，确认 029~035 的阶段 H 证据链是否闭合。
+
+### 风险
+
+1. 034 当前固定的是 trusted-source reject 的真实 manager 行为：它在 registry 阶段 fail-closed 并映射为 `PromptAsset / ValidationFieldMissing`，而不是 `PromptGovernance`；若后续设计决定统一 trusted-source 分类，需要独立的生产改动与兼容评审。
+2. over-budget 当前虽然在 PromptPolicy 中保留 `OverBudget` disposition，但 manager 结果码仍统一表现为 `PolicyDenied`；若后续需要更细的 RuntimeResourceExhausted 契约语义，也应在独立 owner 下完成，而不能在 034 的 integration 任务里悄悄修改冻结面。
+
 ## 记录 #294
 
 - 日期：2026-04-13
