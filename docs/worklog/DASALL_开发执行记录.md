@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #284
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 F
+- 任务：LLM-TODO-024 实现 LLMManager unary 编排与结果装配
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 023，且 024 的前置依赖只要求 004、019、020、021、040、022、023 完成，因此当前按串行原子任务顺序直接进入 `LLMManager` unary 编排收口。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.15.6 已把 `LLMManager` 冻结为“只编排、不越权”的统一入口：顺序必须是 PromptPipeline -> ModelRouter -> AdapterRegistry/CallExecution -> ResponseNormalizer -> UsageAggregator -> 结果装配。这意味着 024 不能重写路由评分、Prompt 选择或 provider raw payload 解析。
+3. 本轮未发现新的前置 BLOCK 任务，但在第一次编译时暴露出一个实现级 direct blocker：初版 `LLMManager.h` 直接持有 `ProviderCatalogRepository` concrete member，扩大了 header 级依赖面。当前轮次按最小原则改为前向声明 + implementation-only shared_ptr，不扩 public ABI。
+
+### 改动
+
+1. 扩展 [llm/src/LLMManager.h](../../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)，新增 concrete `LLMManager`，实现 `ILLMManager::init()`、`generate()`、`stream_generate()` 与 `health_check()`。
+2. 024 将 unary 主链固定为：构造 `PromptQuery` / `PromptComposeRequest` / `PromptPolicyInput` -> 运行 `PromptPipeline` -> 调用 `ModelRouter` 解析 primary/fallback route chain -> 复用 040 的 `LLMCallExecutor` 执行每条 route -> 用 022 的 `ResponseNormalizer` 统一收口响应 -> 用 023 的 `UsageAggregator` 归并 token/cost -> 组装 `LLMManagerResult`。
+3. 失败映射固定为：PromptPipeline deny/over-budget -> `PromptGovernance`；无 route -> `Routing`；执行失败 -> `AdapterTransport`；normalizer malformed payload -> `ProviderProtocol`；多 route 全部失败则升格为 `FallbackExhausted`，并保留 `attempted_routes` 与最后一次 failure code/error。
+4. 024 为后续 028 预留最小 observability 接缝：在成功路径上把 `route`、`selection_reason`、`provider_trace_id`、`usage:*` 与 `estimated_cost_usd` 追加到 shared `LLMResponse.tags`，但没有提前实现 logs/metrics/trace/audit bridge sink。
+5. 新增 [tests/unit/llm/LLMManagerSuccessPathTest.cpp](../../tests/unit/llm/LLMManagerSuccessPathTest.cpp)、[tests/unit/llm/LLMManagerFailureMappingTest.cpp](../../tests/unit/llm/LLMManagerFailureMappingTest.cpp)，并将 [tests/unit/llm/LLMManagerFallbackTest.cpp](../../tests/unit/llm/LLMManagerFallbackTest.cpp) 升级为真正的 manager fallback 编排测试。
+6. 更新 [tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，把 success path / failure mapping 测试接入 llm unit discoverability 与顶层 unit 聚合。
+7. 新增 [docs/todos/llm/deliverables/LLM-TODO-024-LLMManager-unary编排与结果装配设计收敛.md](../todos/llm/deliverables/LLM-TODO-024-LLMManager-unary编排与结果装配设计收敛.md)，同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 024 标记为 Done 并补充阶段 F 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_manager_success_path_unit_test`、`dasall_llm_manager_fallback_unit_test`、`dasall_llm_manager_failure_mapping_unit_test`、`dasall_llm_manager_timeout_policy_unit_test`、`dasall_llm_manager_retry_budget_unit_test`、`dasall_llm_manager_concurrency_guard_unit_test`
+   - `RunCtest_CMakeTools` 运行 `LLMManagerSuccessPathTest`、`LLMManagerFallbackTest`、`LLMManagerFailureMappingTest`、`LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest`、`LLMManagerConcurrencyGuardTest`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_manager_success_path_unit_test`、`dasall_llm_manager_fallback_unit_test`、`dasall_llm_manager_failure_mapping_unit_test` 与 `dasall_unit_tests`；`ListTests_CMakeTools` 已列出三条 024 用例，说明 discoverability 已闭合。
+   - 第一轮聚合构建暴露 header 依赖面问题和测试路由输入配置偏差；修复后，manager 相关六个可执行目标全部编译通过。
+   - `RunCtest_CMakeTools` 定向执行六条 manager 用例均为 `100% tests passed, 0 tests failed out of 1`。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，unit 标签链路显示全部通过；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-024 已完成，llm 现在具备从 PromptPipeline 到 manager 结果装配的完整 unary 主链，且 success / fallback / failure mapping 三条主路径已有独立 unit 门禁。
+2. 024 保持了设计与 ADR 边界：manager 只做 orchestrator，不在内部复制 PromptRegistry/PromptPolicy/ModelRouter/ResponseNormalizer/UsageAggregator 的 owner 语义。
+3. 当前实现同时兼顾运行与可测：默认路径可自举 catalog/pipeline/router/executor，测试路径则能注入现成 snapshot / registry / pipeline，而不需要为了可测性扩 public 工厂或 shared contract。
+
+### 下一步
+
+1. 继续按专项 TODO 顺序推进 `LLM-TODO-025`，开始实现 `OpenAICompatibleAdapter` skeleton。
+2. 若优先补齐观测闭环，可转入 `LLM-TODO-028`，在 024 已保留的 `LLMResponse.tags` / manager failure facts 基础上统一接线 observability bridges。
+
+### 风险
+
+1. 024 当前仅把最小观测锚点附着到 `LLMResponse.tags`；完整日志、指标、trace、audit sink 仍需 028 正式接线，不能把本轮 tags 补位误判为 observability 已完成。
+
 ## 记录 #283
 
 - 日期：2026-04-13

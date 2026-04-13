@@ -94,6 +94,14 @@ add_executable(dasall_llm_manager_fallback_unit_test
 	LLMManagerFallbackTest.cpp
 )
 
+add_executable(dasall_llm_manager_success_path_unit_test
+	LLMManagerSuccessPathTest.cpp
+)
+
+add_executable(dasall_llm_manager_failure_mapping_unit_test
+	LLMManagerFailureMappingTest.cpp
+)
+
 add_executable(dasall_llm_manager_timeout_policy_unit_test
 	LLMManagerTimeoutPolicyTest.cpp
 )
@@ -267,6 +275,18 @@ target_link_libraries(dasall_llm_manager_fallback_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_llm_manager_success_path_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_llm_manager_failure_mapping_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_link_libraries(dasall_llm_manager_timeout_policy_unit_test
 	PRIVATE
 		dasall_test_support
@@ -348,6 +368,8 @@ dasall_apply_common_options(dasall_model_router_reasoning_mode_selection_unit_te
 dasall_apply_common_options(dasall_model_router_stability_unit_test)
 dasall_apply_common_options(dasall_adapter_health_probe_unit_test)
 dasall_apply_common_options(dasall_llm_manager_fallback_unit_test)
+dasall_apply_common_options(dasall_llm_manager_success_path_unit_test)
+dasall_apply_common_options(dasall_llm_manager_failure_mapping_unit_test)
 dasall_apply_common_options(dasall_llm_manager_timeout_policy_unit_test)
 dasall_apply_common_options(dasall_llm_manager_retry_budget_unit_test)
 dasall_apply_common_options(dasall_llm_manager_concurrency_guard_unit_test)
@@ -427,6 +449,12 @@ set_tests_properties(AdapterHealthProbeTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME LLMManagerFallbackTest COMMAND dasall_llm_manager_fallback_unit_test)
 set_tests_properties(LLMManagerFallbackTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMManagerSuccessPathTest COMMAND dasall_llm_manager_success_path_unit_test)
+set_tests_properties(LLMManagerSuccessPathTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMManagerFailureMappingTest COMMAND dasall_llm_manager_failure_mapping_unit_test)
+set_tests_properties(LLMManagerFailureMappingTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME LLMManagerTimeoutPolicyTest COMMAND dasall_llm_manager_timeout_policy_unit_test)
 set_tests_properties(LLMManagerTimeoutPolicyTest PROPERTIES LABELS "unit;llm")

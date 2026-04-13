@@ -1,22 +1,406 @@
 #include "LLMManager.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
+
+#include "llm/LLMBoundaryGuards.h"
+#include "prompt/PromptComposeRequestGuards.h"
+
+#include "UsageAggregator.h"
+#include "execution/ResponseNormalizer.h"
+#include "prompt/PromptPipeline.h"
+#include "provider/ProviderCatalogRepository.h"
+#include "route/ModelRouter.h"
 
 namespace {
 
 using AdapterCallResult = dasall::llm::AdapterCallResult;
 using LLMCallExecutionFailureReason = dasall::llm::LLMCallExecutionFailureReason;
 using LLMCallExecutionResult = dasall::llm::LLMCallExecutionResult;
+using LLMFailureCategory = dasall::llm::LLMFailureCategory;
+using LLMGenerateRequest = dasall::llm::LLMGenerateRequest;
+using LLMManagerResult = dasall::llm::LLMManagerResult;
 using LLMTimeoutConfig = dasall::llm::LLMTimeoutConfig;
+using ModelSelectionHint = dasall::llm::ModelSelectionHint;
+using NormalizedUsageRecord = dasall::llm::NormalizedUsageRecord;
+using PromptComposeRequest = dasall::contracts::PromptComposeRequest;
+using PromptPipelineConfig = dasall::llm::prompt::PromptPipelineConfig;
+using PromptPipelineResult = dasall::llm::prompt::PromptPipelineResult;
+using PromptPolicyDisposition = dasall::llm::prompt::PromptPolicyDisposition;
+using PromptQuery = dasall::llm::prompt::PromptQuery;
+using ProviderCatalogSnapshot = dasall::llm::provider::ProviderCatalogSnapshot;
+using ProviderModelMetadata = dasall::llm::provider::ProviderModelMetadata;
+using ResponseNormalizationResult = dasall::llm::execution::ResponseNormalizationResult;
+using ResponseNormalizerContext = dasall::llm::execution::ResponseNormalizerContext;
 using ResultCode = dasall::contracts::ResultCode;
 
 constexpr std::string_view kExecutionStage = "llm.manager.execute_unary";
+constexpr std::string_view kManagerStage = "llm.manager.generate";
+constexpr std::string_view kManagerStreamStage = "llm.manager.stream_generate";
+
+std::int64_t current_time_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
+std::string to_lower_copy(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+    return static_cast<char>(std::tolower(character));
+  });
+  return value;
+}
+
+void append_unique_string(std::vector<std::string>& values, std::string value) {
+  if (value.empty()) {
+    return;
+  }
+
+  if (std::find(values.begin(), values.end(), value) == values.end()) {
+    values.push_back(std::move(value));
+  }
+}
+
+void append_response_tag(dasall::contracts::LLMResponse& response, std::string tag) {
+  if (tag.empty()) {
+    return;
+  }
+
+  if (!response.tags.has_value()) {
+    response.tags = std::vector<std::string>{};
+  }
+
+  append_unique_string(*response.tags, std::move(tag));
+}
+
+std::optional<dasall::contracts::CompositionStage> to_composition_stage(
+    std::string_view stage) {
+  const std::string normalized = to_lower_copy(std::string(stage));
+  if (normalized == "planner" || normalized == "planning") {
+    return dasall::contracts::CompositionStage::Planning;
+  }
+
+  if (normalized == "execution" || normalized == "execute") {
+    return dasall::contracts::CompositionStage::Execution;
+  }
+
+  if (normalized == "reflection" || normalized == "reflect") {
+    return dasall::contracts::CompositionStage::Reflection;
+  }
+
+  if (normalized == "response" || normalized == "respond") {
+    return dasall::contracts::CompositionStage::Response;
+  }
+
+  return std::nullopt;
+}
+
+PromptPipelineConfig make_prompt_pipeline_config(const dasall::llm::LLMSubsystemConfig& config) {
+  return PromptPipelineConfig{
+      .registry_config = dasall::llm::prompt::PromptRegistryConfig{
+          .asset_root = config.prompt_asset_sources.baseline_root,
+          .trusted_sources = config.trusted_sources,
+      },
+      .composer_config = dasall::llm::prompt::PromptComposerConfig{
+          .template_engine = "simple_var",
+          .max_few_shot_count = 5U,
+      },
+      .policy_config = dasall::llm::prompt::PromptPolicyConfig{
+          .default_allowed_releases = config.allowed_prompt_releases,
+          .default_trusted_sources = config.trusted_sources,
+          .deny_on_missing_allowlist = true,
+      },
+  };
+}
+
+PromptQuery make_prompt_query(const LLMGenerateRequest& request,
+                              const dasall::llm::LLMSubsystemConfig& config) {
+  PromptQuery query;
+  query.stage = request.stage;
+  query.task_type = request.task_type;
+  query.language = "zh-CN";
+  query.model_family = request.request.model_route.value_or(std::string{});
+  query.prompt_release_id = request.request.prompt_id.value_or(std::string{});
+  query.scene_id = config.prompt_selector_overlay.active_scene;
+  query.persona_id = config.prompt_selector_overlay.active_persona;
+  query.profile_id = config.profile_id;
+  query.available_tools = {};
+  query.trusted_sources = config.trusted_sources;
+  return query;
+}
+
+PromptComposeRequest make_prompt_compose_request(
+    const LLMGenerateRequest& request,
+    const dasall::contracts::LLMRequest& base_request,
+    const std::optional<dasall::llm::LLMStageRouteConfig>& stage_route) {
+  PromptComposeRequest compose_request;
+  compose_request.request_id = base_request.request_id;
+  compose_request.stage = to_composition_stage(request.stage);
+  compose_request.context_packet_id = base_request.request_id;
+  compose_request.created_at = base_request.created_at;
+  if (!request.task_type.empty()) {
+    compose_request.task_type = request.task_type;
+  }
+  compose_request.prompt_release_id = std::nullopt;
+  compose_request.visible_tools = std::nullopt;
+  if (base_request.model_route.has_value() && !base_request.model_route->empty()) {
+    compose_request.model_route = base_request.model_route;
+  } else if (stage_route.has_value()) {
+    compose_request.model_route = stage_route->route;
+  }
+  compose_request.output_schema_ref = base_request.output_schema_ref;
+  compose_request.response_format = base_request.response_format;
+  compose_request.tags = base_request.tags;
+  return compose_request;
+}
+
+ModelSelectionHint make_selection_hint(const LLMGenerateRequest& request) {
+  if (request.selection_hint != nullptr) {
+    return *request.selection_hint;
+  }
+
+  ModelSelectionHint hint;
+  hint.stage = request.stage;
+  hint.task_type = request.task_type;
+  hint.complexity_tier = "balanced";
+  hint.latency_sla_tier = "balanced";
+  hint.budget_tier = "balanced";
+  hint.requires_tools = false;
+  hint.requires_reasoning = false;
+  hint.prefers_visible_reasoning = false;
+  hint.estimated_input_tokens = 0U;
+  hint.target_output_tokens = request.request.max_output_tokens.value_or(0U);
+  hint.previous_route_failures = 0U;
+  return hint;
+}
+
+std::vector<std::string> build_route_candidates(const dasall::llm::ResolvedModelRoute& route) {
+  std::vector<std::string> candidates;
+  append_unique_string(candidates, route.primary_route);
+  for (const auto& fallback_route : route.fallback_routes) {
+    append_unique_string(candidates, fallback_route);
+  }
+  return candidates;
+}
+
+dasall::contracts::ErrorInfo make_manager_error(ResultCode result_code,
+                                                std::string message,
+                                                bool retryable,
+                                                std::string stage_name,
+                                                std::string ref_type,
+                                                std::string ref_id) {
+  dasall::contracts::ErrorInfo error;
+  error.failure_type = dasall::contracts::classify_result_code(result_code);
+  error.retryable = retryable;
+  error.safe_to_replan = false;
+  error.details.code = static_cast<int>(result_code);
+  error.details.message = std::move(message);
+  error.details.stage = std::move(stage_name);
+  error.source_ref.ref_type = std::move(ref_type);
+  error.source_ref.ref_id = std::move(ref_id);
+  return error;
+}
+
+LLMManagerResult make_manager_failure(ResultCode result_code,
+                                      std::string message,
+                                      bool retryable,
+                                      LLMFailureCategory category,
+                                      std::string stage_name,
+                                      std::string ref_type,
+                                      std::string ref_id,
+                                      std::vector<std::string> attempted_routes = {},
+                                      std::string resolved_route = {}) {
+  if (resolved_route.empty() && !attempted_routes.empty()) {
+    resolved_route = attempted_routes.back();
+  }
+
+  return LLMManagerResult{
+      .code = result_code,
+      .response = std::nullopt,
+      .error = make_manager_error(result_code, std::move(message), retryable,
+                                  std::move(stage_name), std::move(ref_type),
+                                  std::move(ref_id)),
+      .resolved_route = std::move(resolved_route),
+      .attempted_routes = std::move(attempted_routes),
+      .failure_category = category,
+      .fallback_used = false,
+  };
+}
+
+LLMManagerResult make_manager_failure_from_error(dasall::contracts::ErrorInfo error,
+                                                 ResultCode result_code,
+                                                 LLMFailureCategory category,
+                                                 std::vector<std::string> attempted_routes = {},
+                                                 std::string resolved_route = {}) {
+  if (!error.failure_type.has_value()) {
+    error.failure_type = dasall::contracts::classify_result_code(result_code);
+  }
+  if (!error.retryable.has_value()) {
+    error.retryable = false;
+  }
+  if (!error.safe_to_replan.has_value()) {
+    error.safe_to_replan = false;
+  }
+  if (!error.details.code.has_value()) {
+    error.details.code = static_cast<int>(result_code);
+  }
+
+  if (resolved_route.empty() && !attempted_routes.empty()) {
+    resolved_route = attempted_routes.back();
+  }
+
+  return LLMManagerResult{
+      .code = result_code,
+      .response = std::nullopt,
+      .error = std::move(error),
+      .resolved_route = std::move(resolved_route),
+      .attempted_routes = std::move(attempted_routes),
+      .failure_category = category,
+      .fallback_used = false,
+  };
+}
+
+LLMManagerResult elevate_to_fallback_exhausted(LLMManagerResult failure) {
+  if (!failure.code.has_value() || !failure.error.has_value() ||
+      failure.attempted_routes.size() < 2U) {
+    return failure;
+  }
+
+  failure.failure_category = LLMFailureCategory::FallbackExhausted;
+  failure.resolved_route = failure.attempted_routes.back();
+  return failure;
+}
+
+void append_usage_tags(dasall::contracts::LLMResponse& response,
+                       const NormalizedUsageRecord& usage_record) {
+  append_response_tag(response, "usage:provider_id=" + usage_record.provider_id);
+  append_response_tag(response, "usage:model_id=" + usage_record.model_id);
+  append_response_tag(response,
+                      "usage:prompt_tokens=" + std::to_string(usage_record.prompt_tokens));
+  append_response_tag(response,
+                      "usage:completion_tokens=" +
+                          std::to_string(usage_record.completion_tokens));
+  append_response_tag(response,
+                      "usage:total_tokens=" + std::to_string(usage_record.total_tokens));
+  append_response_tag(response,
+                      "usage:prompt_cache_hit_tokens=" +
+                          std::to_string(usage_record.prompt_cache_hit_tokens));
+  append_response_tag(response,
+                      "usage:prompt_cache_miss_tokens=" +
+                          std::to_string(usage_record.prompt_cache_miss_tokens));
+  if (!usage_record.pricing_ref.empty()) {
+    append_response_tag(response, "usage:pricing_ref=" + usage_record.pricing_ref);
+  }
+
+  std::ostringstream cost_stream;
+  cost_stream.precision(6);
+  cost_stream << std::fixed << usage_record.estimated_cost_usd;
+  append_response_tag(response, "usage:estimated_cost_usd=" + cost_stream.str());
+}
+
+ResponseNormalizerContext make_normalizer_context(
+    const dasall::contracts::LLMRequest& request,
+    const dasall::llm::route::AdapterRouteState& route_state,
+    const ProviderModelMetadata* model_metadata) {
+  return ResponseNormalizerContext{
+      .route_key = route_state.route_key(),
+      .provider_id = route_state.provider_id,
+      .model_id = route_state.model_id,
+      .model_name = model_metadata != nullptr ? model_metadata->display_name
+                                              : route_state.model_id,
+      .prompt_id = request.prompt_id.value_or(std::string{}),
+      .prompt_version = request.prompt_version.value_or(std::string{}),
+      .request_id = request.request_id,
+      .llm_call_id = request.llm_call_id,
+      .completed_at_ms = current_time_ms(),
+  };
+}
+
+std::optional<LLMManagerResult> validate_generate_request(
+    const LLMGenerateRequest& request,
+    const std::optional<dasall::llm::LLMStageRouteConfig>& stage_route) {
+  if (request.stage.empty()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "llm generate request missing stage",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStage),
+                                "stage",
+                                "missing");
+  }
+
+  if (!request.request.request_id.has_value() || request.request.request_id->empty()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "llm generate request missing request_id",
+                                false,
+                                LLMFailureCategory::PromptAsset,
+                                std::string(kManagerStage),
+                                "request",
+                                "request_id");
+  }
+
+  if (!request.request.llm_call_id.has_value() || request.request.llm_call_id->empty()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "llm generate request missing llm_call_id",
+                                false,
+                                LLMFailureCategory::PromptAsset,
+                                std::string(kManagerStage),
+                                "request",
+                                "llm_call_id");
+  }
+
+  if (!request.request.messages.has_value() || request.request.messages->empty()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "llm generate request missing messages",
+                                false,
+                                LLMFailureCategory::PromptAsset,
+                                std::string(kManagerStage),
+                                "request",
+                                "messages");
+  }
+
+  if (!stage_route.has_value()) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "no stage route configured for llm stage: " + request.stage,
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStage),
+                                "stage",
+                                request.stage);
+  }
+
+  return std::nullopt;
+}
+
+LLMManagerResult make_pipeline_failure(const PromptPipelineResult& pipeline_result,
+                                       std::string stage) {
+  const bool prompt_asset_failure = !pipeline_result.registry_result.has_value() ||
+                                    !pipeline_result.registry_result->release.has_value();
+  const auto category = prompt_asset_failure
+                            ? LLMFailureCategory::PromptAsset
+                            : LLMFailureCategory::PromptGovernance;
+  const auto code = prompt_asset_failure ? ResultCode::ValidationFieldMissing
+                                         : ResultCode::PolicyDenied;
+  const auto message = pipeline_result.reason.empty()
+                           ? std::string("prompt pipeline failed")
+                           : pipeline_result.reason;
+  return make_manager_failure(code,
+                              message,
+                              false,
+                              category,
+                              std::string(kManagerStage),
+                              "stage",
+                              std::move(stage));
+}
 
 std::uint32_t clamp_timeout_ms(std::uint64_t timeout_ms) {
   return static_cast<std::uint32_t>(std::min<std::uint64_t>(
@@ -368,6 +752,398 @@ std::uint32_t LLMCallExecutor::active_call_count() const {
 }
 
 bool LLMCallExecutor::is_initialized() const {
+  return initialized_;
+}
+
+LLMManager::LLMManager()
+    : LLMManager(std::make_shared<prompt::PromptPipeline>(),
+                 std::make_shared<route::ModelRouter>(),
+                 std::make_shared<route::AdapterRegistry>(),
+                 std::make_shared<LLMCallExecutor>(),
+                 std::make_shared<execution::ResponseNormalizer>(),
+                 std::make_shared<UsageAggregator>()) {}
+
+LLMManager::LLMManager(
+    std::shared_ptr<prompt::IPromptPipeline> prompt_pipeline,
+    std::shared_ptr<route::ModelRouter> model_router,
+    std::shared_ptr<route::AdapterRegistry> adapter_registry,
+    std::shared_ptr<LLMCallExecutor> call_executor,
+    std::shared_ptr<execution::ResponseNormalizer> response_normalizer,
+    std::shared_ptr<UsageAggregator> usage_aggregator,
+    std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot)
+    : provider_catalog_snapshot_(std::move(provider_catalog_snapshot)),
+      prompt_pipeline_(std::move(prompt_pipeline)),
+      model_router_(std::move(model_router)),
+      adapter_registry_(std::move(adapter_registry)),
+      call_executor_(std::move(call_executor)),
+      response_normalizer_(std::move(response_normalizer)),
+      usage_aggregator_(std::move(usage_aggregator)) {}
+
+bool LLMManager::init(const LLMSubsystemConfig& config) {
+  initialized_ = false;
+
+  if (!config.has_consistent_values() || prompt_pipeline_ == nullptr ||
+      model_router_ == nullptr || adapter_registry_ == nullptr ||
+      call_executor_ == nullptr || response_normalizer_ == nullptr ||
+      usage_aggregator_ == nullptr) {
+    return false;
+  }
+
+  if (!prompt_pipeline_->init(make_prompt_pipeline_config(config))) {
+    return false;
+  }
+
+  if (!model_router_->init(config) || !call_executor_->init(config)) {
+    return false;
+  }
+
+  if (adapter_registry_->snapshot() == nullptr &&
+      !adapter_registry_->init(route::AdapterRegistryConfig{
+          .blocked_failure_threshold = config.timeout_policy.circuit_breaker_threshold,
+      })) {
+    return false;
+  }
+
+  if (provider_catalog_snapshot_ == nullptr) {
+    if (provider_catalog_repository_ == nullptr) {
+      provider_catalog_repository_ = std::make_shared<provider::ProviderCatalogRepository>();
+    }
+
+    if (!provider_catalog_repository_->init(config.provider_catalog_sources) ||
+        !provider_catalog_repository_->reload()) {
+      return false;
+    }
+
+    provider_catalog_snapshot_ = provider_catalog_repository_->snapshot();
+  }
+
+  if (provider_catalog_snapshot_ == nullptr ||
+      !provider_catalog_snapshot_->has_consistent_values()) {
+    return false;
+  }
+
+  config_ = config;
+  initialized_ = true;
+  return true;
+}
+
+LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
+  if (!initialized_) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "llm manager is not initialized",
+                                false,
+                                LLMFailureCategory::AdapterTransport,
+                                std::string(kManagerStage),
+                                "manager",
+                                "uninitialized");
+  }
+
+  const auto stage_route = config_.stage_route_for(request.stage);
+  if (const auto invalid_request = validate_generate_request(request, stage_route);
+      invalid_request.has_value()) {
+    return *invalid_request;
+  }
+
+  auto base_request = request.request;
+  if (!base_request.created_at.has_value()) {
+    base_request.created_at = current_time_ms();
+  }
+
+  if (!base_request.request_mode.has_value()) {
+    base_request.request_mode = dasall::contracts::LLMRequestMode::Unary;
+  }
+
+  if ((!base_request.model_route.has_value() || base_request.model_route->empty()) &&
+      stage_route.has_value()) {
+    base_request.model_route = stage_route->route;
+  }
+
+  const auto compose_request = make_prompt_compose_request(request, base_request, stage_route);
+  const auto compose_validation =
+      contracts::validate_prompt_compose_request_field_rules(compose_request);
+  if (!compose_validation.ok) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                std::string("invalid prompt compose request: ") +
+                                    std::string(compose_validation.reason),
+                                false,
+                                LLMFailureCategory::PromptAsset,
+                                std::string(kManagerStage),
+                                "stage",
+                                request.stage);
+  }
+
+  auto policy_input = config_.make_prompt_policy_input(
+      base_request.runtime_budget.has_value()
+          ? base_request.runtime_budget->max_tokens.value_or(0U)
+          : 0U);
+  const auto pipeline_result =
+      prompt_pipeline_->run(make_prompt_query(request, config_), compose_request, policy_input);
+  if (pipeline_result.disposition != PromptPolicyDisposition::Allow ||
+      !pipeline_result.compose_result.has_value() ||
+      !pipeline_result.policy_decision.has_value() ||
+      pipeline_result.policy_decision->governed_messages.empty()) {
+    return make_pipeline_failure(pipeline_result, request.stage);
+  }
+
+  auto call_request = base_request;
+  call_request.messages = pipeline_result.policy_decision->governed_messages;
+  call_request.prompt_id = pipeline_result.compose_result->selected_prompt_id;
+  call_request.prompt_version = pipeline_result.compose_result->selected_version;
+
+  const auto call_request_validation = contracts::validate_llm_request_field_rules(call_request);
+  if (!call_request_validation.ok) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                std::string("invalid llm call request: ") +
+                                    std::string(call_request_validation.reason),
+                                false,
+                                LLMFailureCategory::PromptGovernance,
+                                std::string(kManagerStage),
+                                "stage",
+                                request.stage);
+  }
+
+  const auto catalog_snapshot = provider_catalog_snapshot_;
+  if (catalog_snapshot == nullptr || !catalog_snapshot->has_consistent_values()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "provider catalog snapshot is unavailable",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStage),
+                                "catalog",
+                                "provider_catalog");
+  }
+
+  const auto router_result = model_router_->resolve(
+      make_selection_hint(request), *catalog_snapshot, adapter_registry_->health_snapshot());
+  if (!router_result.has_route()) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "model router did not resolve a route",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStage),
+                                "stage",
+                                request.stage);
+  }
+
+  const auto route_candidates = build_route_candidates(*router_result.resolved_route);
+  if (route_candidates.empty()) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "resolved route chain is empty",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStage),
+                                "stage",
+                                request.stage);
+  }
+
+  std::vector<std::string> attempted_routes;
+  std::optional<LLMManagerResult> last_failure;
+  for (const auto& route_key : route_candidates) {
+    const auto execution_result =
+        call_executor_->execute_unary(route_key, call_request, *adapter_registry_);
+    attempted_routes.push_back(route_key);
+
+    if (!execution_result.has_consistent_values()) {
+      last_failure = make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                          "llm call executor returned inconsistent result",
+                                          false,
+                                          LLMFailureCategory::AdapterTransport,
+                                          std::string(kManagerStage),
+                                          "route",
+                                          route_key,
+                                          attempted_routes,
+                                          route_key);
+      continue;
+    }
+
+    if (!execution_result.succeeded()) {
+      last_failure = make_manager_failure_from_error(
+          execution_result.error.value_or(make_manager_error(
+              execution_result.result_code.value_or(ResultCode::RuntimeRetryExhausted),
+              "llm call executor failed without error payload",
+              false,
+              std::string(kExecutionStage),
+              "route",
+              route_key)),
+          execution_result.result_code.value_or(ResultCode::RuntimeRetryExhausted),
+          LLMFailureCategory::AdapterTransport,
+          attempted_routes,
+          route_key);
+      continue;
+    }
+
+    const auto route_state = adapter_registry_->resolve_route(route_key);
+    if (!route_state.has_value()) {
+      last_failure = make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                          "adapter registry lost resolved route state",
+                                          false,
+                                          LLMFailureCategory::Routing,
+                                          std::string(kManagerStage),
+                                          "route",
+                                          route_key,
+                                          attempted_routes,
+                                          route_key);
+      continue;
+    }
+
+    const ProviderModelMetadata* model_metadata =
+        catalog_snapshot->find_model(route_state->provider_id, route_state->model_id);
+    if (model_metadata == nullptr) {
+      last_failure = make_manager_failure(ResultCode::ValidationFieldMissing,
+                                          "provider catalog metadata missing for resolved route",
+                                          false,
+                                          LLMFailureCategory::Routing,
+                                          std::string(kManagerStage),
+                                          "route",
+                                          route_key,
+                                          attempted_routes,
+                                          route_key);
+      continue;
+    }
+
+    const auto normalization_result = response_normalizer_->normalize(
+        *execution_result.adapter_result,
+        make_normalizer_context(call_request, *route_state, model_metadata));
+    if (!normalization_result.has_consistent_values() ||
+        !normalization_result.succeeded()) {
+      last_failure = make_manager_failure_from_error(
+          normalization_result.error.value_or(make_manager_error(
+              normalization_result.result_code.value_or(ResultCode::ValidationFieldMissing),
+              "response normalizer failed without error payload",
+              false,
+              std::string(kManagerStage),
+              "route",
+              route_key)),
+          normalization_result.result_code.value_or(ResultCode::ValidationFieldMissing),
+          LLMFailureCategory::ProviderProtocol,
+          attempted_routes,
+          route_key);
+      continue;
+    }
+
+    auto response = *normalization_result.response;
+    append_response_tag(response, "route=" + route_key);
+    for (const auto& reason_code : router_result.selection_reason_codes) {
+      append_response_tag(response, "selection_reason=" + reason_code);
+    }
+    if (!normalization_result.provider_trace_id.empty()) {
+      append_response_tag(response,
+                          "provider_trace_id=" + normalization_result.provider_trace_id);
+    }
+    for (const auto& audit_event : normalization_result.audit_events) {
+      append_response_tag(response, "audit=" + audit_event);
+    }
+    if (normalization_result.reasoning_content_stripped) {
+      append_response_tag(response, "reasoning_content_stripped=true");
+    }
+
+    if (normalization_result.usage_fragment.has_value()) {
+      append_usage_tags(
+          response,
+          usage_aggregator_->aggregate(*normalization_result.usage_fragment, *model_metadata));
+    }
+
+    LLMManagerResult result{
+        .code = std::nullopt,
+        .response = std::move(response),
+        .error = std::nullopt,
+        .resolved_route = route_key,
+        .attempted_routes = attempted_routes,
+        .failure_category = std::nullopt,
+        .fallback_used = attempted_routes.size() > 1U,
+    };
+    if (!result.has_consistent_values()) {
+      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                  "llm manager produced inconsistent success result",
+                                  false,
+                                  LLMFailureCategory::AdapterTransport,
+                                  std::string(kManagerStage),
+                                  "route",
+                                  route_key,
+                                  attempted_routes,
+                                  route_key);
+    }
+
+    return result;
+  }
+
+  if (last_failure.has_value()) {
+    auto failure = *last_failure;
+    if (attempted_routes.size() >= 2U) {
+      failure = elevate_to_fallback_exhausted(std::move(failure));
+    }
+
+    if (!failure.has_consistent_values()) {
+      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                  "llm manager produced inconsistent failure result",
+                                  false,
+                                  attempted_routes.size() >= 2U
+                                      ? LLMFailureCategory::FallbackExhausted
+                                      : LLMFailureCategory::AdapterTransport,
+                                  std::string(kManagerStage),
+                                  "stage",
+                                  request.stage,
+                                  attempted_routes,
+                                  attempted_routes.empty() ? std::string{} : attempted_routes.back());
+    }
+
+    return failure;
+  }
+
+  return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                              "llm manager exhausted route chain without result",
+                              false,
+                              attempted_routes.size() >= 2U
+                                  ? LLMFailureCategory::FallbackExhausted
+                                  : LLMFailureCategory::Routing,
+                              std::string(kManagerStage),
+                              "stage",
+                              request.stage,
+                              attempted_routes,
+                              attempted_routes.empty() ? std::string{} : attempted_routes.back());
+}
+
+LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
+                                             IStreamObserver* observer) {
+  static_cast<void>(request);
+  static_cast<void>(observer);
+  return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                              "llm manager stream_generate is not implemented in unary phase",
+                              false,
+                              LLMFailureCategory::AdapterTransport,
+                              std::string(kManagerStreamStage),
+                              "manager",
+                              "stream_unavailable");
+}
+
+HealthStatus LLMManager::health_check() const {
+  if (!initialized_) {
+    return HealthStatus{
+        .ready = false,
+        .degraded = false,
+        .message = "llm manager is not initialized",
+    };
+  }
+
+  const auto registry_snapshot = adapter_registry_ != nullptr ? adapter_registry_->snapshot() : nullptr;
+  const bool ready = prompt_pipeline_ != nullptr && model_router_ != nullptr &&
+                     adapter_registry_ != nullptr && call_executor_ != nullptr &&
+                     response_normalizer_ != nullptr && usage_aggregator_ != nullptr &&
+                     call_executor_->is_initialized() && provider_catalog_snapshot_ != nullptr &&
+                     registry_snapshot != nullptr;
+  const bool degraded = ready &&
+                        (registry_snapshot->routes.empty() ||
+                         provider_catalog_snapshot_->models.empty());
+  return HealthStatus{
+      .ready = ready,
+      .degraded = degraded,
+      .message = ready ? (degraded ? "llm manager ready with partial dependencies"
+                                   : "llm manager ready")
+                       : "llm manager dependency chain is incomplete",
+  };
+}
+
+bool LLMManager::is_initialized() const {
   return initialized_;
 }
 

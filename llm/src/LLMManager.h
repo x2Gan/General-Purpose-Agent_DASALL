@@ -3,14 +3,35 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <memory>
 #include <string>
 #include <string_view>
 
+#include "ILLMManager.h"
 #include "LLMSubsystemConfig.h"
 #include "adapters/AdapterCallResult.h"
 #include "route/AdapterRegistry.h"
 
 namespace dasall::llm {
+
+class UsageAggregator;
+
+namespace execution {
+class ResponseNormalizer;
+}
+
+namespace prompt {
+class IPromptPipeline;
+}
+
+namespace provider {
+class ProviderCatalogRepository;
+struct ProviderCatalogSnapshot;
+}
+
+namespace route {
+class ModelRouter;
+}
 
 enum class LLMCallExecutionFailureReason {
   NotInitialized = 0,
@@ -47,6 +68,38 @@ class LLMCallExecutor {
  private:
   LLMSubsystemConfig config_{};
   std::atomic<std::uint32_t> active_call_count_{0U};
+  bool initialized_ = false;
+};
+
+class LLMManager final : public ILLMManager {
+ public:
+  LLMManager();
+  LLMManager(std::shared_ptr<prompt::IPromptPipeline> prompt_pipeline,
+             std::shared_ptr<route::ModelRouter> model_router,
+             std::shared_ptr<route::AdapterRegistry> adapter_registry,
+             std::shared_ptr<LLMCallExecutor> call_executor,
+             std::shared_ptr<execution::ResponseNormalizer> response_normalizer,
+             std::shared_ptr<UsageAggregator> usage_aggregator,
+             std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot = nullptr);
+
+  bool init(const LLMSubsystemConfig& config) override;
+  [[nodiscard]] LLMManagerResult generate(const LLMGenerateRequest& request) override;
+  [[nodiscard]] LLMManagerResult stream_generate(const LLMGenerateRequest& request,
+                                                 IStreamObserver* observer) override;
+  [[nodiscard]] HealthStatus health_check() const override;
+
+  [[nodiscard]] bool is_initialized() const;
+
+ private:
+  LLMSubsystemConfig config_{};
+  std::shared_ptr<provider::ProviderCatalogRepository> provider_catalog_repository_;
+  std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot_;
+  std::shared_ptr<prompt::IPromptPipeline> prompt_pipeline_;
+  std::shared_ptr<route::ModelRouter> model_router_;
+  std::shared_ptr<route::AdapterRegistry> adapter_registry_;
+  std::shared_ptr<LLMCallExecutor> call_executor_;
+  std::shared_ptr<execution::ResponseNormalizer> response_normalizer_;
+  std::shared_ptr<UsageAggregator> usage_aggregator_;
   bool initialized_ = false;
 };
 
