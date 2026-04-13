@@ -30,6 +30,9 @@ target_sources(dasall_llm
     src/adapters/OpenAICompatibleAdapter.cpp
     src/adapters/OllamaAdapter.cpp
     src/execution/ResponseNormalizer.cpp
+    src/observability/LLMAuditBridge.cpp
+    src/observability/LLMMetricsBridge.cpp
+    src/observability/LLMTraceBridge.cpp
     src/prompt/PromptAssetRepository.cpp
     src/prompt/PromptComposer.cpp
     src/prompt/PromptPipeline.cpp
@@ -55,6 +58,8 @@ target_include_directories(dasall_llm
 target_link_libraries(dasall_llm
   PUBLIC
     dasall_contracts
+  PRIVATE
+    dasall_infra
 )
 
 dasall_apply_common_options(dasall_llm)

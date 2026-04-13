@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #289
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 G
+- 任务：LLM-TODO-028 接线 LLM observability bridges
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 027，且 028 的前置依赖只要求 023、024、003 完成，因此当前按专项 TODO 的阶段 G 顺序直接进入 observability bridge 接线任务，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.12 与 9.6 已冻结 028 的 owner：llm 必须复用 infra 的 log/metric/trace/audit 能力，把关键字段统一投影到 observability sink，但不借机扩 shared contracts，也不让 observability sink 反向成为 llm 主链的准入 owner。
+3. 024/023 已留下稳定输入面：`LLMManager` 成功路径会把 `route=`、`selection_reason=`、`provider_trace_id=`、`audit=`、`reasoning_content_stripped=true` 与 `usage:*` tags 追加到 provider-neutral response tags，028 因此可围绕 module-local summary signal 和 bridge 实现收敛，而不必回写 `LLMResponse` ABI。
+
+### 改动
+
+1. 新增 [llm/src/observability/LLMMetricsBridge.h](../../llm/src/observability/LLMMetricsBridge.h) 与 [llm/src/observability/LLMMetricsBridge.cpp](../../llm/src/observability/LLMMetricsBridge.cpp)，冻结 `LLMCallSummary`、12 个 metric family、bridge-local status/result 结构，并把结构化 call summary log 折叠到 metrics bridge 内，使用同一摘要输入向 `ILogger` 和 `IMetricsProvider` 发射 fire-and-forget 观测事件。
+2. 新增 [llm/src/observability/LLMTraceBridge.h](../../llm/src/observability/LLMTraceBridge.h) 与 [llm/src/observability/LLMTraceBridge.cpp](../../llm/src/observability/LLMTraceBridge.cpp)，冻结 `LLMTraceSpanSignal` 与六个低基数 span 名：`llm.prompt.select`、`llm.prompt.compose`、`llm.prompt.policy`、`llm.route.resolve`、`llm.adapter.invoke`、`llm.response.normalize`，并在失败时才设置 `SpanStatusCode::Error`。
+3. 新增 [llm/src/observability/LLMAuditBridge.h](../../llm/src/observability/LLMAuditBridge.h) 与 [llm/src/observability/LLMAuditBridge.cpp](../../llm/src/observability/LLMAuditBridge.cpp)，冻结三类关键审计事件：trusted source 失败、`reasoning_content` 剥离、metadata drift；桥接到 `IAuditLogger` 时统一收敛为 provider-neutral `AuditEvent` + `AuditContext`。
+4. 扩展 [tests/unit/llm/LLMObservabilityFieldCompletenessTest.cpp](../../tests/unit/llm/LLMObservabilityFieldCompletenessTest.cpp)，在保留 023 usage/cost anchor 回归的同时，新增 structured log、12 个 metrics family 与 trace span attrs 的字段完整性断言。
+5. 新增 [tests/unit/llm/LLMAuditEventCoverageTest.cpp](../../tests/unit/llm/LLMAuditEventCoverageTest.cpp)，覆盖 trusted source 失败、`reasoning_content` 剥离、metadata drift 三类审计事件。
+6. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt) 与 [tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt)，将 observability bridge 源文件接入 `dasall_llm`，并注册 `dasall_llm_observability_field_completeness_unit_test`、`dasall_llm_audit_event_coverage_unit_test` 两个 028 验收 target。
+7. 新增 [docs/todos/llm/deliverables/LLM-TODO-028-LLM-observability-bridges设计收敛.md](../todos/llm/deliverables/LLM-TODO-028-LLM-observability-bridges设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_observability_field_completeness_unit_test`、`dasall_llm_audit_event_coverage_unit_test`
+   - `RunCtest_CMakeTools` 运行 `LLMObservabilityFieldCompletenessTest`
+   - `RunCtest_CMakeTools` 运行 `LLMAuditEventCoverageTest`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_smoke_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMSubsystemSmokeIntegrationTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_observability_field_completeness_unit_test`、`dasall_llm_audit_event_coverage_unit_test` 与 `dasall_llm_smoke_integration_test`，说明 028 的 build graph 与 integration discoverability 未出现注册缺口。
+   - `Build_CMakeTools` 定向构建两个 028 unit target 成功，输出显示新增的 `LLMMetricsBridge.cpp`、`LLMTraceBridge.cpp`、`LLMAuditBridge.cpp` 已编译并链接入 `dasall_llm`。
+   - `RunCtest_CMakeTools` 定向执行 `LLMObservabilityFieldCompletenessTest` 与 `LLMAuditEventCoverageTest` 均为 `100% tests passed, 0 tests failed out of 1`。
+   - 为避免 028 在集成层引入静默回归，又定向构建并执行了 `LLMSubsystemSmokeIntegrationTest`，结果同样为 `100% tests passed, 0 tests failed out of 1`。CTool/CTest 仍附带 `DartConfiguration.tcl` 缺失提示，按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-028 已完成，llm 现在具备可单测、可扩展的 observability bridge 层，能够把 prompt/model/route/latency/error/type/token/cost/reasoning 等关键字段统一投影到 logs/metrics/trace/audit sink。
+2. 028 保持了设计与 ADR 边界：bridge 只消费 module-local summary / span / audit signal，不扩 shared contracts，不接管 `LLMManager` 编排 owner，也不把 sink failure 反向升级为 llm 主链失败。
+3. 这轮实现为 029 留下了稳定输入面：smoke integration 后续只需要在现有主链闭环里消费这些 bridge signal，即可增强“调用完成即观测到位”的断言，而无需重新设计 observability ABI。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 G 顺序推进 `LLM-TODO-029`，把 028 已冻结的 bridge 输入面接入 llm smoke integration，并把观测字段断言提升到最小主链闭环。
+2. 待 smoke/integration 条件进一步收口后，再结合 `LLM-TODO-042` 验证 asset-only provider instance onboarding 对 observability 字段的复用能力。
+
+### 风险
+
+1. 028 当前完成的是 bridge 层与 unit-testable signal contract，不是对 024 runtime hot path 的自动织入声明；如果后续任务在未消费 bridge signal 的情况下直接宣称“主链已全自动观测”，需要回到 029 的 integration owner 重新收口。
+2. 由于 infra metrics labels 被硬冻结为 `module/stage/profile/outcome/error_code` 五元组，028 只能把 route/model/reason/provider 等高维信息压缩进 stage token；完整字段仍以 structured log 与 trace attrs 为准，后续若需要更细粒度指标维度，必须先走 infra 评审而不是在 llm 内私扩 labels。
+
 ## 记录 #288
 
 - 日期：2026-04-13

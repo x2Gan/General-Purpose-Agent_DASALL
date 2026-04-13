@@ -138,6 +138,10 @@ add_executable(dasall_llm_observability_field_completeness_unit_test
 	LLMObservabilityFieldCompletenessTest.cpp
 )
 
+add_executable(dasall_llm_audit_event_coverage_unit_test
+	LLMAuditEventCoverageTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -347,6 +351,14 @@ target_link_libraries(dasall_llm_observability_field_completeness_unit_test
 	PRIVATE
 		dasall_test_support
 		dasall_llm
+		dasall_infra
+)
+
+target_link_libraries(dasall_llm_audit_event_coverage_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+		dasall_infra
 )
 
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
@@ -399,6 +411,7 @@ dasall_apply_common_options(dasall_response_normalizer_semantic_mapping_unit_tes
 dasall_apply_common_options(dasall_response_normalizer_reasoning_content_strip_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_usage_unit_test)
 dasall_apply_common_options(dasall_llm_observability_field_completeness_unit_test)
+dasall_apply_common_options(dasall_llm_audit_event_coverage_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -504,3 +517,6 @@ set_tests_properties(ResponseNormalizerUsageTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME LLMObservabilityFieldCompletenessTest COMMAND dasall_llm_observability_field_completeness_unit_test)
 set_tests_properties(LLMObservabilityFieldCompletenessTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMAuditEventCoverageTest COMMAND dasall_llm_audit_event_coverage_unit_test)
+set_tests_properties(LLMAuditEventCoverageTest PROPERTIES LABELS "unit;llm")
