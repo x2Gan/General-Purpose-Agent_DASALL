@@ -11,6 +11,11 @@ macro(dasall_add_llm_integration_test target_name test_name source_file labels)
       dasall_llm
   )
 
+  target_include_directories(${target_name}
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/infra/include
+  )
+
   dasall_apply_common_options(${target_name})
 
   add_test(NAME ${test_name} COMMAND ${target_name})

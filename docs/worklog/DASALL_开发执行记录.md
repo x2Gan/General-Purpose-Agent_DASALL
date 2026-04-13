@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #290
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-029 验证 LLM smoke integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 028，且 029 的前置依赖只要求 003、004、019、024、028 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 smoke integration 验证，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 9.3 与 9.6 已冻结 029 的 owner：必须用真实 `PromptPipeline + LLMManager + MockLLMAdapter` 跑通最小闭环，并把 integration discoverability、主链成功路径与观测字段断言收敛到同一个 smoke fixture，而不是继续停留在命名锚点测试。
+3. 028 已留下稳定的 observability bridge 输入面，但 bridge 仍未被 024 的 runtime hot path 实际消费；029 因此需要在不扩 shared contracts 的前提下，把 `LLMMetricsBridge` 与 `LLMTraceBridge` 接入 `LLMManager` 成功路径，并验证真实 prompt 资产、route 选择、response normalize、usage/cost 聚合与 observability sink 可以一次性闭环。
+
+### 改动
+
+1. 更新 [llm/src/LLMManager.h](../../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)，为 `LLMManager` 增加可选的 `LLMMetricsBridge` / `LLMTraceBridge` 注入点，并在 unary 成功路径统一生成 `LLMCallSummary`、route/adapter/normalize 三个 trace signal 与结构化 call log，确保 028 冻结的 observability bridge 真正消费 024 主链输出。
+2. 在 [llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp) 内同步修正 `make_prompt_query()` 的语言字段，把 `zh-CN` 改为 `zh-cn`，使 manager 在真实 `PromptRegistry` 下能够命中 [llm/assets/prompts/planner/default/manifest.yaml](../../llm/assets/prompts/planner/default/manifest.yaml) 的 baseline planner 资产，而不是只在 fake pipeline 下“看起来可用”。
+3. 重写 [tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp](../../tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp)，将原 discoverability 占位测试升级为真实 smoke fixture：使用真实 `PromptPipeline`、真实 `ModelRouter`、真实 `ResponseNormalizer`、真实 provider catalog snapshot 与 `MockLLMAdapter`，并新增 recording logger / meter / tracer / audit logger 夹具，断言 response tags、adapter request、structured log、metrics family、trace attrs 与 audit event 全部收口。
+4. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，为 llm integration target 显式增加 `infra/include` 搜索根，解决 smoke fixture 引用 audit / logging / metrics / tracing 接口时的编译缺口。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-029-LLM-smoke-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-029-LLM-smoke-integration设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，记录 029 的本地证据、外部参考、Design->Build 映射、验证命令与边界结论。
+6. 029 明确保持 audit 边界不变：`LLMRequest` 仍不承载完整 `InfraContext`，因此 `LLMAuditBridge` 继续由 smoke fixture 基于 `reasoning_content_stripped` 等主链事实消费，而不是为了审计把 session/trace/task/lease 字段私扩回 llm shared ABI。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_smoke_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMSubsystemSmokeIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 继续列出 `dasall_llm_smoke_integration_test`，`ListTests_CMakeTools` 继续列出 `LLMSubsystemSmokeIntegrationTest`，说明 029 没有破坏 llm integration discoverability。
+   - `Build_CMakeTools` 定向构建 `dasall_llm_smoke_integration_test` 成功；中间曾暴露 `InfraContext.h` / `AuditExporterTypes.h` / `ModelRouterTestSupport.h` 三处编译接缝，均已通过最小 include 调整修复并纳入最终代码。
+   - `RunCtest_CMakeTools` 定向执行 `LLMSubsystemSmokeIntegrationTest` 的最终结果为 `100% tests passed, 0 tests failed out of 1`；随后构建 `dasall_integration_tests` 时，integration 聚合链路中的 36 条用例全部通过，其中 `LLMSubsystemSmokeIntegrationTest` 作为第 36 个 integration 用例通过。CTest 仍附带 `DartConfiguration.tcl` 缺失提示，继续记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-029 已完成，llm 现在具备真实的 smoke integration 闭环：prompt 资产选择、prompt 三段治理、模型路由、mock provider 调用、响应归一化、usage/cost 聚合以及 logs/metrics/trace/audit 断言可以在单个 integration fixture 中一次性验证。
+2. 029 保持了设计与 ADR 边界：`LLMManager` 只消费 module-local observability signal，不扩 shared contracts，不把 audit context owner 反向拉回 llm，也不让 observability sink failure 升级为主链失败。
+3. 这轮实现为 030~035 和 042 留下了稳定的阶段 H 起点：后续 dual-mode、fallback、Prompt source switch、persona、governance、profile 与 asset-only onboarding integration 可以在同一真实 smoke 基座上继续扩展，而不必再先修 prompt/query/observability 基础接缝。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-030`，验证 DeepSeek 双模式 integration，并复用 029 已稳定的真实 prompt 资产、route 选择与 observability 断言模式。
+2. 待 dual-mode 与 fallback 等集成路径逐步收口后，再结合 `LLM-TODO-042` 验证 asset-only provider onboarding 是否能够在不新增 adapter 代码的前提下复用 029 的 smoke 基线。
+
+### 风险
+
+1. 029 当前验证的是 unary happy-path smoke，不等于 fallback、governance deny、profile diff 或 asset-only onboarding 已自动成立；若后续任务跳过各自 integration 而直接借 029 宣称“阶段 H 已闭合”，需要退回 030~035、042 的 owner 重新收口。
+2. 029 将 metrics labels 继续保持在 infra 冻结的低基数五元组内，stage 语义通过 `call/planning/...` 之类 token 编码；后续如果需要把 provider / route / model 直接提升为指标 labels，必须先走 infra 评审，而不是在 llm integration 里私扩 label 维度。
+
 ## 记录 #289
 
 - 日期：2026-04-13

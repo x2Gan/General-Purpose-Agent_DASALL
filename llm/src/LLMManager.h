@@ -20,6 +20,11 @@ namespace execution {
 class ResponseNormalizer;
 }
 
+namespace observability {
+class LLMMetricsBridge;
+class LLMTraceBridge;
+}
+
 namespace prompt {
 class IPromptPipeline;
 }
@@ -80,7 +85,9 @@ class LLMManager final : public ILLMManager {
              std::shared_ptr<LLMCallExecutor> call_executor,
              std::shared_ptr<execution::ResponseNormalizer> response_normalizer,
              std::shared_ptr<UsageAggregator> usage_aggregator,
-             std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot = nullptr);
+             std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot = nullptr,
+             std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge = nullptr,
+             std::shared_ptr<observability::LLMTraceBridge> trace_bridge = nullptr);
 
   bool init(const LLMSubsystemConfig& config) override;
   [[nodiscard]] LLMManagerResult generate(const LLMGenerateRequest& request) override;
@@ -100,6 +107,8 @@ class LLMManager final : public ILLMManager {
   std::shared_ptr<LLMCallExecutor> call_executor_;
   std::shared_ptr<execution::ResponseNormalizer> response_normalizer_;
   std::shared_ptr<UsageAggregator> usage_aggregator_;
+  std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge_;
+  std::shared_ptr<observability::LLMTraceBridge> trace_bridge_;
   bool initialized_ = false;
 };
 

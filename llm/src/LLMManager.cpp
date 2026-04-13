@@ -17,6 +17,8 @@
 
 #include "UsageAggregator.h"
 #include "execution/ResponseNormalizer.h"
+#include "observability/LLMMetricsBridge.h"
+#include "observability/LLMTraceBridge.h"
 #include "prompt/PromptPipeline.h"
 #include "provider/ProviderCatalogRepository.h"
 #include "route/ModelRouter.h"
@@ -37,6 +39,11 @@ using PromptPipelineConfig = dasall::llm::prompt::PromptPipelineConfig;
 using PromptPipelineResult = dasall::llm::prompt::PromptPipelineResult;
 using PromptPolicyDisposition = dasall::llm::prompt::PromptPolicyDisposition;
 using PromptQuery = dasall::llm::prompt::PromptQuery;
+using LLMCallSummary = dasall::llm::observability::LLMCallSummary;
+using LLMMetricsBridge = dasall::llm::observability::LLMMetricsBridge;
+using LLMTraceBridge = dasall::llm::observability::LLMTraceBridge;
+using LLMTraceSpanKind = dasall::llm::observability::LLMTraceSpanKind;
+using LLMTraceSpanSignal = dasall::llm::observability::LLMTraceSpanSignal;
 using ProviderCatalogSnapshot = dasall::llm::provider::ProviderCatalogSnapshot;
 using ProviderModelMetadata = dasall::llm::provider::ProviderModelMetadata;
 using ResponseNormalizationResult = dasall::llm::execution::ResponseNormalizationResult;
@@ -51,6 +58,14 @@ std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+std::uint32_t elapsed_ms_since(const std::chrono::steady_clock::time_point& started_at) {
+  const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - started_at)
+                              .count();
+  return static_cast<std::uint32_t>(std::clamp<std::int64_t>(
+      elapsed_ms, 0, std::numeric_limits<std::uint32_t>::max()));
 }
 
 std::string to_lower_copy(std::string value) {
@@ -68,6 +83,219 @@ void append_unique_string(std::vector<std::string>& values, std::string value) {
   if (std::find(values.begin(), values.end(), value) == values.end()) {
     values.push_back(std::move(value));
   }
+}
+
+std::vector<std::string> normalized_selection_reasons(
+    const std::vector<std::string>& reason_codes) {
+  std::vector<std::string> normalized;
+  normalized.reserve(reason_codes.size() + 1U);
+
+  for (const auto& reason_code : reason_codes) {
+    append_unique_string(normalized, reason_code);
+  }
+
+  if (normalized.empty()) {
+    normalized.push_back("selected_route");
+  }
+
+  return normalized;
+}
+
+std::string requested_reasoning_mode(const ModelSelectionHint& hint) {
+  return (hint.requires_reasoning || hint.prefers_visible_reasoning) ? "thinking" : "chat";
+}
+
+std::string effective_reasoning_mode(const ProviderModelMetadata& model_metadata,
+                                    const std::string& requested_mode) {
+  return model_metadata.reasoning_mode.empty() ? requested_mode : model_metadata.reasoning_mode;
+}
+
+bool reasoning_mode_escalated(const ModelSelectionHint& hint,
+                              const ProviderModelMetadata& model_metadata) {
+  const std::string requested_mode = requested_reasoning_mode(hint);
+  const std::string effective_mode = effective_reasoning_mode(model_metadata, requested_mode);
+  return requested_mode == "chat" && effective_mode == "thinking";
+}
+
+std::string trace_detail_ref(LLMTraceSpanKind kind) {
+  switch (kind) {
+    case LLMTraceSpanKind::PromptSelect:
+      return "llm://trace/prompt-select";
+    case LLMTraceSpanKind::PromptCompose:
+      return "llm://trace/prompt-compose";
+    case LLMTraceSpanKind::PromptPolicy:
+      return "llm://trace/prompt-policy";
+    case LLMTraceSpanKind::RouteResolve:
+      return "llm://trace/route-resolve";
+    case LLMTraceSpanKind::AdapterInvoke:
+      return "llm://trace/adapter-invoke";
+    case LLMTraceSpanKind::ResponseNormalize:
+      return "llm://trace/response-normalize";
+  }
+
+  return "llm://trace/unknown";
+}
+
+LLMTraceSpanSignal make_trace_signal(
+    LLMTraceSpanKind kind,
+    const dasall::contracts::LLMResponse& response,
+    const ModelSelectionHint& selection_hint,
+    const ProviderModelMetadata& model_metadata,
+    std::string_view stage,
+    std::string_view resolved_route,
+    const std::vector<std::string>& selection_reason_codes,
+    std::uint32_t latency_ms,
+    const std::optional<NormalizedUsageRecord>& usage_record,
+    bool fallback_used,
+    std::string outcome) {
+  return LLMTraceSpanSignal{
+      .kind = kind,
+      .request_id = response.request_id.value_or(std::string{}),
+      .llm_call_id = response.llm_call_id.value_or(std::string{}),
+      .stage = std::string(stage),
+      .resolved_route = std::string(resolved_route),
+      .model_name = response.model_name.value_or(model_metadata.display_name),
+      .prompt_id = response.prompt_id.value_or(std::string{}),
+      .prompt_version = response.prompt_version.value_or(std::string{}),
+      .fallback_used = fallback_used,
+      .latency_ms = latency_ms,
+      .failure_category = {},
+      .error_type = {},
+      .selection_reason_codes = selection_reason_codes,
+      .estimated_input_tokens = selection_hint.estimated_input_tokens,
+      .prompt_cache_hit_tokens = usage_record.has_value() ? usage_record->prompt_cache_hit_tokens : 0U,
+      .prompt_cache_miss_tokens = usage_record.has_value() ? usage_record->prompt_cache_miss_tokens : 0U,
+      .actual_cost_estimate_usd = usage_record.has_value() ? usage_record->estimated_cost_usd : 0.0,
+      .reasoning_mode_requested = requested_reasoning_mode(selection_hint),
+      .reasoning_mode_effective = effective_reasoning_mode(model_metadata, requested_reasoning_mode(selection_hint)),
+      .completed_at_ms = response.completed_at.value_or(current_time_ms()),
+      .parent_context = std::nullopt,
+      .detail_ref = trace_detail_ref(kind),
+      .outcome = std::move(outcome),
+  };
+}
+
+std::optional<LLMCallSummary> make_call_summary(
+    const dasall::contracts::LLMResponse& response,
+    const ModelSelectionHint& selection_hint,
+    const ProviderModelMetadata& model_metadata,
+    std::string_view stage,
+    std::string_view resolved_route,
+    std::string_view provider_id,
+  std::string_view profile_id,
+    const std::vector<std::string>& attempted_routes,
+    const std::vector<std::string>& selection_reason_codes,
+    const std::optional<NormalizedUsageRecord>& usage_record,
+    std::uint32_t total_latency_ms,
+    bool fallback_used) {
+  LLMCallSummary summary{
+      .request_id = response.request_id.value_or(std::string{}),
+      .llm_call_id = response.llm_call_id.value_or(std::string{}),
+      .stage = std::string(stage),
+      .resolved_route = std::string(resolved_route),
+      .model_name = response.model_name.value_or(model_metadata.display_name),
+      .prompt_id = response.prompt_id.value_or(std::string{}),
+      .prompt_version = response.prompt_version.value_or(std::string{}),
+      .fallback_used = fallback_used,
+      .completed_at_ms = response.completed_at.value_or(current_time_ms()),
+      .latency_ms = total_latency_ms,
+      .failure_category = {},
+      .error_type = {},
+      .selection_reason_codes = selection_reason_codes,
+      .estimated_input_tokens = selection_hint.estimated_input_tokens,
+      .prompt_cache_hit_tokens = usage_record.has_value() ? usage_record->prompt_cache_hit_tokens : 0U,
+      .prompt_cache_miss_tokens = usage_record.has_value() ? usage_record->prompt_cache_miss_tokens : 0U,
+      .actual_cost_estimate_usd = usage_record.has_value() ? usage_record->estimated_cost_usd : 0.0,
+      .reasoning_mode_requested = requested_reasoning_mode(selection_hint),
+      .reasoning_mode_effective = effective_reasoning_mode(model_metadata, requested_reasoning_mode(selection_hint)),
+      .provider_id = std::string(provider_id),
+      .profile_id = std::string(profile_id),
+      .outcome = fallback_used ? "degraded" : "success",
+      .from_route = fallback_used && !attempted_routes.empty() ? attempted_routes.front() : std::string{},
+      .to_route = fallback_used ? std::string(resolved_route) : std::string{},
+      .prompt_policy_denied = false,
+      .prompt_compose_over_budget = false,
+      .adapter_timeout = false,
+      .health_degraded = false,
+      .reasoning_escalated = reasoning_mode_escalated(selection_hint, model_metadata),
+  };
+
+  if (!summary.has_consistent_values()) {
+    return std::nullopt;
+  }
+
+  return summary;
+}
+
+void record_success_observability(
+    LLMMetricsBridge* metrics_bridge,
+    LLMTraceBridge* trace_bridge,
+    const dasall::contracts::LLMResponse& response,
+    const ModelSelectionHint& selection_hint,
+    const ProviderModelMetadata& model_metadata,
+    std::string_view stage,
+    std::string_view resolved_route,
+    std::string_view provider_id,
+    std::string_view profile_id,
+    const std::vector<std::string>& attempted_routes,
+    const std::vector<std::string>& selection_reason_codes,
+    const std::optional<NormalizedUsageRecord>& usage_record,
+    std::uint32_t total_latency_ms,
+    std::uint32_t route_latency_ms,
+    std::uint32_t adapter_latency_ms,
+    std::uint32_t normalize_latency_ms,
+    bool fallback_used) {
+  const auto summary = make_call_summary(response, selection_hint, model_metadata,
+                                         stage, resolved_route, provider_id,
+                                         profile_id,
+                                         attempted_routes, selection_reason_codes,
+                                         usage_record, total_latency_ms,
+                                         fallback_used);
+  if (summary.has_value() && metrics_bridge != nullptr) {
+    static_cast<void>(metrics_bridge->record_call(*summary));
+  }
+
+  if (trace_bridge == nullptr) {
+    return;
+  }
+
+  const std::string outcome = fallback_used ? "degraded" : "success";
+  static_cast<void>(trace_bridge->record_span(make_trace_signal(
+      LLMTraceSpanKind::RouteResolve,
+      response,
+      selection_hint,
+      model_metadata,
+      stage,
+      resolved_route,
+      selection_reason_codes,
+      route_latency_ms,
+      usage_record,
+      fallback_used,
+      outcome)));
+  static_cast<void>(trace_bridge->record_span(make_trace_signal(
+      LLMTraceSpanKind::AdapterInvoke,
+      response,
+      selection_hint,
+      model_metadata,
+      stage,
+      resolved_route,
+      selection_reason_codes,
+      adapter_latency_ms,
+      usage_record,
+      fallback_used,
+      outcome)));
+  static_cast<void>(trace_bridge->record_span(make_trace_signal(
+      LLMTraceSpanKind::ResponseNormalize,
+      response,
+      selection_hint,
+      model_metadata,
+      stage,
+      resolved_route,
+      selection_reason_codes,
+      normalize_latency_ms,
+      usage_record,
+      fallback_used,
+      outcome)));
 }
 
 void append_response_tag(dasall::contracts::LLMResponse& response, std::string tag) {
@@ -127,7 +355,7 @@ PromptQuery make_prompt_query(const LLMGenerateRequest& request,
   PromptQuery query;
   query.stage = request.stage;
   query.task_type = request.task_type;
-  query.language = "zh-CN";
+  query.language = "zh-cn";
   query.model_family = request.request.model_route.value_or(std::string{});
   query.prompt_release_id = request.request.prompt_id.value_or(std::string{});
   query.scene_id = config.prompt_selector_overlay.active_scene;
@@ -770,14 +998,18 @@ LLMManager::LLMManager(
     std::shared_ptr<LLMCallExecutor> call_executor,
     std::shared_ptr<execution::ResponseNormalizer> response_normalizer,
     std::shared_ptr<UsageAggregator> usage_aggregator,
-    std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot)
+    std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot,
+    std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge,
+    std::shared_ptr<observability::LLMTraceBridge> trace_bridge)
     : provider_catalog_snapshot_(std::move(provider_catalog_snapshot)),
       prompt_pipeline_(std::move(prompt_pipeline)),
       model_router_(std::move(model_router)),
       adapter_registry_(std::move(adapter_registry)),
       call_executor_(std::move(call_executor)),
       response_normalizer_(std::move(response_normalizer)),
-      usage_aggregator_(std::move(usage_aggregator)) {}
+      usage_aggregator_(std::move(usage_aggregator)),
+      metrics_bridge_(std::move(metrics_bridge)),
+      trace_bridge_(std::move(trace_bridge)) {}
 
 bool LLMManager::init(const LLMSubsystemConfig& config) {
   initialized_ = false;
@@ -828,6 +1060,7 @@ bool LLMManager::init(const LLMSubsystemConfig& config) {
 }
 
 LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
+  const auto request_started_at = std::chrono::steady_clock::now();
   if (!initialized_) {
     return make_manager_failure(ResultCode::RuntimeRetryExhausted,
                                 "llm manager is not initialized",
@@ -876,8 +1109,10 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       base_request.runtime_budget.has_value()
           ? base_request.runtime_budget->max_tokens.value_or(0U)
           : 0U);
+    const auto pipeline_started_at = std::chrono::steady_clock::now();
   const auto pipeline_result =
       prompt_pipeline_->run(make_prompt_query(request, config_), compose_request, policy_input);
+    static_cast<void>(elapsed_ms_since(pipeline_started_at));
   if (pipeline_result.disposition != PromptPolicyDisposition::Allow ||
       !pipeline_result.compose_result.has_value() ||
       !pipeline_result.policy_decision.has_value() ||
@@ -913,8 +1148,10 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
                                 "provider_catalog");
   }
 
+  const auto router_started_at = std::chrono::steady_clock::now();
   const auto router_result = model_router_->resolve(
       make_selection_hint(request), *catalog_snapshot, adapter_registry_->health_snapshot());
+  const auto route_latency_ms = elapsed_ms_since(router_started_at);
   if (!router_result.has_route()) {
     return make_manager_failure(ResultCode::RuntimeRetryExhausted,
                                 "model router did not resolve a route",
@@ -925,6 +1162,9 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
                                 request.stage);
   }
 
+  const auto selection_hint = make_selection_hint(request);
+  const auto selection_reason_codes =
+      normalized_selection_reasons(router_result.selection_reason_codes);
   const auto route_candidates = build_route_candidates(*router_result.resolved_route);
   if (route_candidates.empty()) {
     return make_manager_failure(ResultCode::RuntimeRetryExhausted,
@@ -939,8 +1179,10 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
   std::vector<std::string> attempted_routes;
   std::optional<LLMManagerResult> last_failure;
   for (const auto& route_key : route_candidates) {
+    const auto adapter_started_at = std::chrono::steady_clock::now();
     const auto execution_result =
         call_executor_->execute_unary(route_key, call_request, *adapter_registry_);
+    const auto adapter_latency_ms = elapsed_ms_since(adapter_started_at);
     attempted_routes.push_back(route_key);
 
     if (!execution_result.has_consistent_values()) {
@@ -1001,9 +1243,11 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       continue;
     }
 
+    const auto normalization_started_at = std::chrono::steady_clock::now();
     const auto normalization_result = response_normalizer_->normalize(
         *execution_result.adapter_result,
         make_normalizer_context(call_request, *route_state, model_metadata));
+    const auto normalize_latency_ms = elapsed_ms_since(normalization_started_at);
     if (!normalization_result.has_consistent_values() ||
         !normalization_result.succeeded()) {
       last_failure = make_manager_failure_from_error(
@@ -1037,10 +1281,11 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       append_response_tag(response, "reasoning_content_stripped=true");
     }
 
+    std::optional<NormalizedUsageRecord> usage_record;
     if (normalization_result.usage_fragment.has_value()) {
-      append_usage_tags(
-          response,
-          usage_aggregator_->aggregate(*normalization_result.usage_fragment, *model_metadata));
+      usage_record = usage_aggregator_->aggregate(*normalization_result.usage_fragment,
+                                                  *model_metadata);
+      append_usage_tags(response, *usage_record);
     }
 
     LLMManagerResult result{
@@ -1063,6 +1308,24 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
                                   attempted_routes,
                                   route_key);
     }
+
+    record_success_observability(metrics_bridge_.get(),
+                                 trace_bridge_.get(),
+                                 *result.response,
+                                 selection_hint,
+                                 *model_metadata,
+                                 request.stage,
+                                 route_key,
+                                 route_state->provider_id,
+                                 config_.profile_id,
+                                 attempted_routes,
+                                 selection_reason_codes,
+                                 usage_record,
+                                 elapsed_ms_since(request_started_at),
+                                 route_latency_ms,
+                                 adapter_latency_ms,
+                                 normalize_latency_ms,
+                                 result.fallback_used);
 
     return result;
   }
