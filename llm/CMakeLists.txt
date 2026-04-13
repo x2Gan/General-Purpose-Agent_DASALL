@@ -22,6 +22,7 @@ endforeach()
 
 target_sources(dasall_llm
   PRIVATE
+    src/LLMManager.cpp
     src/LLMSubsystemConfig.cpp
     src/TokenEstimator.cpp
     src/prompt/PromptAssetRepository.cpp

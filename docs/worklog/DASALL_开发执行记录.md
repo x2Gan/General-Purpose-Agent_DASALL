@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #281
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 F
+- 任务：LLM-TODO-040 实现 unary 调用执行治理
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 021，且 040 的前置依赖只要求 004、012、020、021 完成，因此当前按串行原子任务顺序直接进入 LLMManager 调用执行治理。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.10.1 已把 `timeout_policy.timeout_ms`、`retry_budget` 与 `circuit_breaker_threshold` 的执行 owner 明确冻结在 LLMManager；6.11 又要求 unary 首轮 Build 走同步 caller-owned thread，并把 `active llm calls` 收敛为 `bounded semaphore + reject`。这意味着 040 只能在 `LLMManager.cpp` 内落一层最小调用治理，不能借机扩出隐藏 worker、无限队列或 detach 超时线程。
+3. 本轮未发现新的 direct blocker。021 已经提供 `record_call_failure()` / `record_call_success()` 与 blocked route 状态入口，足以让 040 在执行路径里消费 failure counter / circuit threshold，而无需再起独立 breaker owner。
+
+### 改动
+
+1. 新增 [llm/src/LLMManager.h](../../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)，定义 module-local `LLMCallExecutor`、`LLMCallExecutionResult` 与 `LLMCallExecutionFailureReason`，把 timeout clamp、retry budget、route blocked fast-fail 与 inflight slot 计数集中到一个内部 owner。
+2. 040 将 timeout 实现固定为“deadline 传播 + 后验超时判定”：每次调用先把有效 timeout 写回 [contracts/include/llm/LLMRequest.h](../../contracts/include/llm/LLMRequest.h) 的 `timeout_ms` 字段，并把最终 concrete route key 写入 `model_route`；调用返回后若真实耗时超出预算，即使 payload 看似 success，也统一按 `ProviderTimeout` 收敛，而不是通过 detach 线程伪造抢占式取消。
+3. 040 的同 route 重试只对 retryable adapter failure 与 synthetic timeout 生效，且总尝试次数固定为 `retry_budget + 1`；每次失败后立即调用 [llm/src/route/AdapterRegistry.cpp](../../llm/src/route/AdapterRegistry.cpp) 的 `record_call_failure()`，每次成功后调用 `record_call_success()` 清零 failure counter。若 route 在重试过程中被 registry 标记为 blocked，则后续同 route 调用立即 fail-fast，不再进入 adapter。
+4. 并发治理采用无等待的 atomic slot acquisition，以 `worker_threads` 作为 inflight 上限。达到上限时，`LLMCallExecutor` 立即返回 runtime failure，不写 route health counter，也不让第二个请求进入 adapter；slot 释放通过 RAII 自动完成，避免成功/失败路径泄露 inflight 计数。
+5. 新增 [tests/unit/llm/LLMManagerTimeoutPolicyTest.cpp](../../tests/unit/llm/LLMManagerTimeoutPolicyTest.cpp)、[tests/unit/llm/LLMManagerRetryBudgetTest.cpp](../../tests/unit/llm/LLMManagerRetryBudgetTest.cpp) 与 [tests/unit/llm/LLMManagerConcurrencyGuardTest.cpp](../../tests/unit/llm/LLMManagerConcurrencyGuardTest.cpp)，分别覆盖 timeout clamp + late success 超时化、retry budget 内成功 / blocked threshold fast-fail，以及 inflight saturation reject + slot 自动释放。
+6. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 `LLMManager.cpp` 与三条新 unit 测试接入 llm / unit 聚合目标。
+7. 新增 [docs/todos/llm/deliverables/LLM-TODO-040-LLMManager调用执行治理设计收敛.md](../todos/llm/deliverables/LLM-TODO-040-LLMManager调用执行治理设计收敛.md)，沉淀 040 的本地/外部证据、Design->Build 映射与 Build 三件套；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 040 标记为 Done 并补充阶段 F 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `LLMManagerTimeoutPolicyTest`
+   - `RunCtest_CMakeTools` 运行 `LLMManagerRetryBudgetTest`
+   - `RunCtest_CMakeTools` 运行 `LLMManagerConcurrencyGuardTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_manager_timeout_policy_unit_test`、`dasall_llm_manager_retry_budget_unit_test`、`dasall_llm_manager_concurrency_guard_unit_test` 与 `dasall_unit_tests`；`ListTests_CMakeTools` 已列出三条 040 用例，说明 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `240/240` 全部通过，其中新增的三条 040 用例全部通过。
+   - `RunCtest_CMakeTools` 定向执行 `LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest` 与 `LLMManagerConcurrencyGuardTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-040 已完成，llm 现在具备真正的 unary 调用执行治理 owner，可以在不实现完整 024 主链的前提下，稳定约束 timeout、同 route 重试、route blocked fast-fail 与并发上限拒绝。
+2. 040 保持了设计与 ADR 边界：调用治理继续留在 llm 内部，但不越权重解释 profile、不复制 ModelRouter 评分、不接手 health owner，也不触碰 ContextPacket、恢复裁定或 shared contracts admission。
+3. 对 040 的关键收口，本轮选择“同步 unary + cooperative deadline + 后验 timeout 判定 + registry blocked 代理 breaker-open + atomic inflight slot”的保守实现，而不是“后台线程取消 + 独立 breaker 状态机 + 隐藏队列”。这让 024 后续可以直接复用 040 的执行器，而不用回退 021/020 已冻结的边界。
+
+### 下一步
+
+1. 进入 LLM-TODO-022，开始实现 `ResponseNormalizer` 语义归一化。
+2. 在 022 中优先收敛 provider-private 字段剥离与 malformed payload fail-closed，为 023/024 的 usage 归并和 manager 结果装配准备稳定输入。
+
+### 风险
+
+1. 当前 040 仍基于同步 adapter SPI，因此 timeout 是 cooperative deadline + 后验超时判定，不是抢占式取消；真正可取消的 transport deadline 仍留待 025/026/027 的 adapter/transport 体系落盘后继续收口。
+
 ## 记录 #280
 
 - 日期：2026-04-13

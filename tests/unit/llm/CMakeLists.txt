@@ -94,6 +94,18 @@ add_executable(dasall_llm_manager_fallback_unit_test
 	LLMManagerFallbackTest.cpp
 )
 
+add_executable(dasall_llm_manager_timeout_policy_unit_test
+	LLMManagerTimeoutPolicyTest.cpp
+)
+
+add_executable(dasall_llm_manager_retry_budget_unit_test
+	LLMManagerRetryBudgetTest.cpp
+)
+
+add_executable(dasall_llm_manager_concurrency_guard_unit_test
+	LLMManagerConcurrencyGuardTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -239,6 +251,24 @@ target_link_libraries(dasall_llm_manager_fallback_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_llm_manager_timeout_policy_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_llm_manager_retry_budget_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_llm_manager_concurrency_guard_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -278,6 +308,9 @@ dasall_apply_common_options(dasall_model_router_reasoning_mode_selection_unit_te
 dasall_apply_common_options(dasall_model_router_stability_unit_test)
 dasall_apply_common_options(dasall_adapter_health_probe_unit_test)
 dasall_apply_common_options(dasall_llm_manager_fallback_unit_test)
+dasall_apply_common_options(dasall_llm_manager_timeout_policy_unit_test)
+dasall_apply_common_options(dasall_llm_manager_retry_budget_unit_test)
+dasall_apply_common_options(dasall_llm_manager_concurrency_guard_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -350,3 +383,12 @@ set_tests_properties(AdapterHealthProbeTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME LLMManagerFallbackTest COMMAND dasall_llm_manager_fallback_unit_test)
 set_tests_properties(LLMManagerFallbackTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMManagerTimeoutPolicyTest COMMAND dasall_llm_manager_timeout_policy_unit_test)
+set_tests_properties(LLMManagerTimeoutPolicyTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMManagerRetryBudgetTest COMMAND dasall_llm_manager_retry_budget_unit_test)
+set_tests_properties(LLMManagerRetryBudgetTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMManagerConcurrencyGuardTest COMMAND dasall_llm_manager_concurrency_guard_unit_test)
+set_tests_properties(LLMManagerConcurrencyGuardTest PROPERTIES LABELS "unit;llm")
