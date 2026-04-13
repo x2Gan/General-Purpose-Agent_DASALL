@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #298
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 I
+- 任务：LLM-TODO-038 回写 llm 专项 Gate 与阶段 G/H 证据链
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 在上一条记录已完成 042，且 038 的前置依赖 029、030、031、032、033、034、035、042 已全部闭合，因此当前按专项 TODO 的阶段 I 顺序进入 Gate/Blocker 证据收口。
+2. 038 的 owner 不是再补 llm 生产代码，而是统一回答三件事：阶段 G/H 的 Gate 是否已经闭合、`LLM-BLK-008` 是否触发了工具态回退、以及 036/037 在当前基线下是否已具备进入阶段 J 的条件。
+3. 研究确认 036/037 的关键阻塞已不在 llm unary 主链：当前真正缺的是 shared supporting object / streaming 生命周期的跨模块冻结基线，因此 038 必须把“哪些 Gate 已 Pass、哪些仍 Blocked、要等哪个子系统”写明，而不能只给出一段模糊总结。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-038-llm专项Gate与阶段G-H证据回写设计收敛.md](../todos/llm/deliverables/LLM-TODO-038-llm%E4%B8%93%E9%A1%B9Gate%E4%B8%8E%E9%98%B6%E6%AE%B5G-H%E8%AF%81%E6%8D%AE%E5%9B%9E%E5%86%99%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，统一记录 038 的 Gate 快照、四段验证结果、工具回退策略与 036/037 解锁判断。
+2. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 `LLM-TODO-038` 标记为 Done，补齐阶段 I 当前结论，并新增 17.20 节统一回写：
+   - `LLM-GATE-01` 到 `LLM-GATE-09` 已闭合
+   - `LLM-GATE-10` 仍保持 Blocked
+   - 036/037 当前都不具备执行条件，首要解阻 owner 在 contracts supporting-object/admission 基线
+3. 本轮同时显式核对了 `runtime/`、`apps/`、`cognition/` 与 `tools/` 中的 streaming/shared supporting object 使用面；当前未见稳定 `stream_generate`、`IStreamObserver`、`StreamHandle`、`StreamSessionRef` 消费证据，因此 036/037 不能被解释为“下游已成熟，只剩 llm 没写”。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `Build_CMakeTools` 构建目标 `dasall_contract_tests`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 继续列出 `dasall_llm`、`dasall_unit_tests`、`dasall_contract_tests` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 继续可见 llm unit/integration 用例，说明 038 所要求的 discoverability 基线保持闭合。
+   - `Build_CMakeTools` 构建 `dasall_llm` 成功，当前输出为 `ninja: no work to do.`，说明 llm 模块本体构建态稳定。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 时，unit 聚合链路 `249/249` 全部通过。
+   - `Build_CMakeTools` 构建 `dasall_contract_tests` 时，contract 聚合链路 `152/152` 全部通过。
+   - `Build_CMakeTools` 构建 `dasall_integration_tests` 时，integration 聚合链路 `43/43` 全部通过。
+   - 本轮未触发 `LLM-BLK-008` 的显式 `cmake/ctest` 回退；若后续 IDE 工具态失效，仍按专项 TODO 中已记录的 fallback 路径处理。
+
+### 结果
+
+1. LLM-TODO-038 已完成，llm 专项当前可给出稳定 Gate 快照：阶段 A-H 的 Gate 已全部闭合，阶段 I 证据回写也已完成，当前唯一仍保持 Blocked 的是阶段 J 对应的 `LLM-GATE-10`。
+2. 036 当前仍不能执行。它虽然已经满足“unary 主链稳定”这个前提，但 `StreamHandle`/streaming 生命周期的 shared baseline 仍缺，且没有稳定跨模块 streaming 消费面可约束取消、ownership、observer、backpressure 语义；应先等待 contracts 子系统完成 `StreamHandle` supporting-object 基线，再回 llm 阶段 J。
+3. 037 当前同样不能执行。`ResolvedModelRoute`、`PromptPolicyDecision`、`StreamHandle` 的 shared admission 仍缺 contracts 侧的 consumers matrix、迁移窗口与 contract baseline；应先等待 contracts 子系统完成 T009/T010 或等价 owner，再回 llm 做 shared admission 评审。
+4. 因此，036/037 的首要解阻 owner 都不在 runtime、apps、cognition 或 tools，而在 contracts supporting-object/admission 基线；当前继续在 llm 内强行推进，只会把尚未成熟的 supporting object 过早冻结为 shared 事实。
+
+### 下一步
+
+1. 暂不启动 LLM-TODO-036、037；先等待 contracts 子系统完成 `StreamHandle`、`ModelRoute`、`PromptPolicyDecision` 的 supporting-object / admission 收口，再回 llm 阶段 J 做后置评审。
+
+### 风险
+
+1. 若误把 038 的全绿测试结论等同于“036/037 已解阻”，会直接绕过 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 7.2、10.1、12.1 已冻结的 deferred/admission 边界，导致 llm 抢先冻结 shared supporting objects。
+2. 当前 `runtime/`、`apps/`、`cognition/`、`tools/` 还没有稳定 streaming/shared supporting object 消费证据；若在这些子系统尚未形成真实 consumer 之前就推进 036/037，后续很可能出现 contracts ABI 与实际调用方语义不一致的返工。
+
 ## 记录 #297
 
 - 日期：2026-04-13
