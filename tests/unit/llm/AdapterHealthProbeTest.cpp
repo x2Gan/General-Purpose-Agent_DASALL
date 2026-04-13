@@ -9,6 +9,7 @@
 
 #include "support/TestAssertions.h"
 
+#include "../../../llm/src/adapters/OllamaAdapter.h"
 #include "../../../llm/src/adapters/OpenAICompatibleAdapter.h"
 #include "../../../llm/src/route/AdapterRegistry.h"
 #include "../../mocks/include/MockLLMAdapter.h"
@@ -47,6 +48,23 @@ dasall::llm::LLMAdapterConfig make_openai_adapter_config() {
       .timeout_ms = 4000U,
       .max_retries = 1U,
       .capability_tags = {"cloud", "external"},
+  };
+}
+
+dasall::llm::LLMAdapterConfig make_ollama_adapter_config() {
+  return dasall::llm::LLMAdapterConfig{
+      .adapter_id = "ollama-lan",
+      .adapter_family = "ollama_native",
+      .provider_instance_id = "lan-ollama",
+      .base_url = "http://lan-ollama.internal:11434",
+      .base_url_alias = "lan/ollama-primary",
+      .auth_ref = "profile://llm/providers/lan-ollama/noauth",
+      .header_refs = {"header://llm/providers/lan-ollama-trace"},
+      .activation_flag = true,
+      .snapshot_version = "2026.04.13",
+      .timeout_ms = 2500U,
+      .max_retries = 1U,
+      .capability_tags = {"lan", "internal"},
   };
 }
 
@@ -257,6 +275,62 @@ void test_openai_compatible_adapter_health_check_reports_concrete_probe_states()
               "OpenAICompatibleAdapter should report unavailable transport probes as not ready and degraded");
 }
 
+  void test_ollama_adapter_health_check_reports_concrete_probe_states() {
+    using dasall::llm::LLMTransportMethod;
+    using dasall::llm::OllamaAdapter;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    auto healthy_transport = std::make_shared<HealthTransport>();
+    healthy_transport->next_response = {
+    .status_code = 200U,
+    .body = R"({"models":[]})",
+    .error_message = {},
+    };
+    OllamaAdapter healthy_adapter(healthy_transport);
+    assert_true(healthy_adapter.init(make_ollama_adapter_config()),
+        "OllamaAdapter should initialize before healthy probe coverage");
+
+    const auto healthy = healthy_adapter.health_check();
+    assert_true(healthy.ready && !healthy.degraded,
+        "OllamaAdapter should report ready=true and degraded=false for a 2xx /api/tags probe");
+    assert_equal(1, healthy_transport->call_count,
+         "OllamaAdapter should issue exactly one transport probe per health_check()");
+    assert_true(healthy_transport->last_request.has_value() &&
+        healthy_transport->last_request->method == LLMTransportMethod::Get,
+        "OllamaAdapter health_check() should probe via GET");
+    assert_true(healthy_transport->last_request->url == "http://lan-ollama.internal:11434/api/tags",
+        "OllamaAdapter health_check() should append /api/tags to the projected base_url");
+
+    auto degraded_transport = std::make_shared<HealthTransport>();
+    degraded_transport->next_response = {
+    .status_code = 503U,
+    .body = {},
+    .error_message = {},
+    };
+    OllamaAdapter degraded_adapter(degraded_transport);
+    assert_true(degraded_adapter.init(make_ollama_adapter_config()),
+        "OllamaAdapter should initialize before degraded probe coverage");
+
+    const auto degraded = degraded_adapter.health_check();
+    assert_true(degraded.ready && degraded.degraded,
+        "OllamaAdapter should treat 503 as degraded-but-ready so AdapterRegistry can penalize instead of hard-blocking");
+
+    auto unavailable_transport = std::make_shared<HealthTransport>();
+    unavailable_transport->next_response = {
+    .status_code = 0U,
+    .body = {},
+    .error_message = "connection refused",
+    };
+    OllamaAdapter unavailable_adapter(unavailable_transport);
+    assert_true(unavailable_adapter.init(make_ollama_adapter_config()),
+        "OllamaAdapter should initialize before unavailable probe coverage");
+
+    const auto unavailable = unavailable_adapter.health_check();
+    assert_true(!unavailable.ready && unavailable.degraded,
+        "OllamaAdapter should report unavailable LAN transport probes as not ready and degraded");
+  }
+
 }  // namespace
 
 int main() {
@@ -264,6 +338,7 @@ int main() {
     test_registry_probes_health_and_preserves_metadata();
     test_registry_fails_closed_for_missing_routes_and_unregisters_cleanly();
     test_openai_compatible_adapter_health_check_reports_concrete_probe_states();
+    test_ollama_adapter_health_check_reports_concrete_probe_states();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

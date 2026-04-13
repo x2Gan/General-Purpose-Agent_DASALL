@@ -27,6 +27,7 @@ target_sources(dasall_llm
     src/TokenEstimator.cpp
     src/UsageAggregator.cpp
     src/adapters/OpenAICompatibleAdapter.cpp
+    src/adapters/OllamaAdapter.cpp
     src/execution/ResponseNormalizer.cpp
     src/prompt/PromptAssetRepository.cpp
     src/prompt/PromptComposer.cpp

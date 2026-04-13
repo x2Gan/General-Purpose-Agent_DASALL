@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #287
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 G
+- 任务：LLM-TODO-026 实现 OllamaAdapter skeleton
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 025，且 026 的前置依赖只要求 005、014、021、022 完成，因此当前按专项 TODO 的阶段 G 顺序直接进入第二个 concrete adapter family skeleton。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.14 与 7.1 LLM-D8 已冻结 026 的 owner：LAN family adapter 只负责 Ollama native 协议映射、请求投递、响应接收和本地错误采样，不负责 Prompt 治理、route 评分、secret 解析或 provider raw payload 向 shared contracts 的泄漏。
+3. `LLM-BLK-007` 在 026 上仍然成立，但像 025 一样不再阻塞 skeleton 本身：本轮只允许在 mock transport 下完成 Ollama native 的协议映射与 health_check 骨架，不宣称真实 LAN endpoint、本地模型拉取或 warmup 已联通。
+
+### 改动
+
+1. 新增 [llm/src/adapters/OllamaAdapter.h](../../llm/src/adapters/OllamaAdapter.h) 与 [llm/src/adapters/OllamaAdapter.cpp](../../llm/src/adapters/OllamaAdapter.cpp)，实现 `init()`、`generate()`、`stream_generate()` 占位与 `health_check()`。026 将 unary 路径固定为 `POST {base_url}/api/chat`，从 `request.model_route` 提取 concrete model id，把 prefixed `developer:` 下沉为 Ollama 支持的 `system` role，其余消息映射为原生 `messages` 数组，并在成功路径提取 `message.content`、`done_reason`、`prompt_eval_count`、`eval_count` 与 `message.thinking` side channel。
+2. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)，将 `OllamaAdapter.cpp` 接入 `dasall_llm` 静态库，保持 concrete adapter family skeleton 继续沿同一编译入口纳管。
+3. 扩展 [tests/unit/llm/AdapterProtocolMappingTest.cpp](../../tests/unit/llm/AdapterProtocolMappingTest.cpp)，新增 Ollama native 的请求映射、JSON mode 映射、`num_predict` 运行时选项投影、usage 推导以及 transport 5xx 失败通过非异常 error/result_code 返回的覆盖。
+4. 扩展 [tests/unit/llm/AdapterHealthProbeTest.cpp](../../tests/unit/llm/AdapterHealthProbeTest.cpp)，新增 `OllamaAdapter` 自身的 healthy / degraded / unavailable 三态探针用例，并把 `GET /api/tags` 探针路径固定下来。
+5. 新增 [docs/todos/llm/deliverables/LLM-TODO-026-OllamaAdapter-skeleton设计收敛.md](../todos/llm/deliverables/LLM-TODO-026-OllamaAdapter-skeleton设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `AdapterProtocolMappingTest`
+   - `RunCtest_CMakeTools` 运行 `AdapterHealthProbeTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_adapter_protocol_mapping_unit_test`、`dasall_adapter_health_probe_unit_test` 与 `dasall_unit_tests`；`ListTests_CMakeTools` 已列出 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest`，说明 026 沿用 025 的 build/test discoverability 接缝时未引入新的注册缺口。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `248/248` 全部通过，其中扩展后的 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest` 均通过。
+   - `RunCtest_CMakeTools` 定向执行 `AdapterProtocolMappingTest` 与 `AdapterHealthProbeTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-026 已完成，llm 现在具备第二个 concrete provider family skeleton，可以在不依赖真实 LAN 网络环境的前提下验证 Ollama native family 的 init / generate / health_check 基本边界。
+2. 026 保持了设计与 ADR 边界：`OllamaAdapter` 继续复用 `ILLMTransport` 作为 adapter-internal transport seam，不承担 secret 解析、route owner 或 normalizer owner；Ollama 的 `thinking` 字段继续停留在 `AdapterProviderDiagnostics`，没有泄漏到 shared `LLMResponse`。
+3. 这轮实现为 027 与 042 留下了稳定接缝：Local family skeleton 可以继续复用相同的 transport/test pattern，而 asset-only onboarding 验证仍可在 smoke integration 条件满足后复用 025/026 已冻结的 family 接缝。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 G 顺序推进 `LLM-TODO-027`，实现 `LocalLLMAdapter` skeleton，并复用 025/026 已冻结的 transport mock / protocol mapping 测试模式。
+2. 待 unary family skeleton 基本闭合后，再结合 smoke integration 推进 `LLM-TODO-042`，验证“只加 provider 资产 + profile route”即可启用既有 family provider instance。
+
+### 风险
+
+1. 026 当前仍采用 module-local 的轻量 payload parser，只保证 Ollama native `/api/chat` 在单测覆盖范围内的 deterministic 映射；若后续需要更完整的 tool-call、thinking 或 multimodal schema 支持，演进应继续留在 adapter 内部，不回推 shared contracts。
+2. 026 仍未打通真实 LAN endpoint、模型拉取、warmup 与 auth/header 注入链；若后续实现试图在 adapter 内直接绕过 041 的 ref 投影或放松 transport contract，需要回到 041/025 的边界重新评审。
+
 ## 记录 #286
 
 - 日期：2026-04-13
