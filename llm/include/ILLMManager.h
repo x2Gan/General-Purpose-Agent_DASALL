@@ -1,11 +1,11 @@
 #pragma once
 
+#include "HealthStatus.h"
 #include "LLMGenerateRequest.h"
 #include "LLMManagerResult.h"
 
 namespace dasall::llm {
 
-struct HealthStatus;
 struct LLMSubsystemConfig;
 class IStreamObserver;
 

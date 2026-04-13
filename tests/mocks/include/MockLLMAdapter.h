@@ -13,20 +13,6 @@
 #include "../../../llm/include/stream/StreamSessionRef.h"
 #include "../../../llm/src/adapters/AdapterCallResult.h"
 
-namespace dasall::llm {
-
-struct HealthStatus {
-  bool ready = false;
-  bool degraded = false;
-  std::string message;
-
-  [[nodiscard]] bool is_healthy() const {
-    return ready && !degraded;
-  }
-};
-
-}  // namespace dasall::llm
-
 namespace dasall::tests::mocks {
 
 class MockLLMAdapter : public dasall::llm::ILLMAdapter {

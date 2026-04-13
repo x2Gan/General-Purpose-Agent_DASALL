@@ -86,6 +86,14 @@ add_executable(dasall_model_router_stability_unit_test
 	ModelRouterStabilityTest.cpp
 )
 
+add_executable(dasall_adapter_health_probe_unit_test
+	AdapterHealthProbeTest.cpp
+)
+
+add_executable(dasall_llm_manager_fallback_unit_test
+	LLMManagerFallbackTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -219,6 +227,18 @@ target_link_libraries(dasall_model_router_stability_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_adapter_health_probe_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_llm_manager_fallback_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -256,6 +276,8 @@ dasall_apply_common_options(dasall_model_router_policy_unit_test)
 dasall_apply_common_options(dasall_model_router_fallback_unit_test)
 dasall_apply_common_options(dasall_model_router_reasoning_mode_selection_unit_test)
 dasall_apply_common_options(dasall_model_router_stability_unit_test)
+dasall_apply_common_options(dasall_adapter_health_probe_unit_test)
+dasall_apply_common_options(dasall_llm_manager_fallback_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -322,3 +344,9 @@ set_tests_properties(ModelRouterReasoningModeSelectionTest PROPERTIES LABELS "un
 
 add_test(NAME ModelRouterStabilityTest COMMAND dasall_model_router_stability_unit_test)
 set_tests_properties(ModelRouterStabilityTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME AdapterHealthProbeTest COMMAND dasall_adapter_health_probe_unit_test)
+set_tests_properties(AdapterHealthProbeTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMManagerFallbackTest COMMAND dasall_llm_manager_fallback_unit_test)
+set_tests_properties(LLMManagerFallbackTest PROPERTIES LABELS "unit;llm")

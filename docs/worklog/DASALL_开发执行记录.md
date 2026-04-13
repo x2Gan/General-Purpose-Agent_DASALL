@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #280
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 F
+- 任务：LLM-TODO-021 实现 AdapterRegistry 生命周期与健康快照
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 020，且 021 的前置依赖只要求 014、020 完成，因此当前按串行原子任务顺序直接进入 AdapterRegistry 实现。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.11 已把 021 收敛为“copy-on-write health snapshot + lock-free read or short L1 lock”，并明确禁止持锁做 adapter I/O；6.15.6 则要求 LLMManager 只能通过 AdapterRegistry 获取 adapter handle，而不是直接持有 concrete adapter。
+3. 021 开始前确认了一个 direct blocker：`ILLMAdapter::health_check()` 与 `ILLMManager::health_check()` 只前向声明了 `HealthStatus`，真实定义仍停留在 test-local 的 [tests/mocks/include/MockLLMAdapter.h](../mocks/include/MockLLMAdapter.h) 内。当前轮次因此先做最小 blocker fix，把 `HealthStatus` 提升为 llm 公共 leaf type，再继续落 registry owner；没有借机扩张 shared contracts 或 infra 健康模型。
+
+### 改动
+
+1. 新增 [llm/include/HealthStatus.h](../../llm/include/HealthStatus.h)，将 `ready/degraded/message` 三元健康事实提升为 llm 公共 leaf type；同步更新 [llm/include/ILLMAdapter.h](../../llm/include/ILLMAdapter.h)、[llm/include/ILLMManager.h](../../llm/include/ILLMManager.h) 与 [tests/mocks/include/MockLLMAdapter.h](../mocks/include/MockLLMAdapter.h)，使 SPI 与现有 mock 统一复用该定义。
+2. 新增 [llm/src/route/AdapterRegistry.h](../../llm/src/route/AdapterRegistry.h) 与 [llm/src/route/AdapterRegistry.cpp](../../llm/src/route/AdapterRegistry.cpp)，实现 `AdapterRegistry` concrete owner、`AdapterRegistrySnapshot`、route-level registration metadata、lock-free `snapshot()/resolve_route()/health_snapshot()` 读取，以及 `probe_health()/record_call_failure()/record_call_success()` 三条状态更新入口。
+3. 021 将 registry 注册维度固定为 concrete route key `provider_id/model_id`，并显式保留 `deployment_type`、`capability_tags` 与 `supports_streaming` 等 metadata；重复注册同一路由时只替换 handle/元数据，保留既有 failure counter 与最近 health 事实，避免后续 provider refresh 静默抹掉健康历史。
+4. 021 的健康映射收敛为两层：`ready=false` 直接 hard block route；`ready=true && degraded=true` 保持 route 可见但增加 failure counter。这样 [llm/src/route/ModelRouter.cpp](../../llm/src/route/ModelRouter.cpp) 现有的 `health_blocked` 与 `health_failure_penalty` 机制可以同时消费 hard filter 和降权事实，而不需要回改 020 的输入 shape。
+5. 新增 [tests/unit/llm/AdapterHealthProbeTest.cpp](../../tests/unit/llm/AdapterHealthProbeTest.cpp)，覆盖 healthy probe、degraded probe、not-ready probe、handle metadata 保留、missing route fail-closed 与 unregister 行为。
+6. 新增 [tests/unit/llm/LLMManagerFallbackTest.cpp](../../tests/unit/llm/LLMManagerFallbackTest.cpp)，用 `record_call_failure()` 先把 cloud chat/reasoner 两条主路推进到 blocked，再把 [llm/src/route/AdapterRegistry.cpp](../../llm/src/route/AdapterRegistry.cpp) 导出的 `health_snapshot()` 交给 [llm/src/route/ModelRouter.cpp](../../llm/src/route/ModelRouter.cpp)，验证 fallback route 会切到 `lan-ollama/lan-general`，并能再回到 registry 解析出同一 adapter handle。
+7. 更新 [llm/CMakeLists.txt](../../llm/CMakeLists.txt)、[tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，将 AdapterRegistry 实现与两条新 llm unit 测试接入 llm / unit 聚合目标。
+8. 新增 [docs/todos/llm/deliverables/LLM-TODO-021-AdapterRegistry生命周期与健康快照设计收敛.md](../todos/llm/deliverables/LLM-TODO-021-AdapterRegistry生命周期与健康快照设计收敛.md)，沉淀 copy-on-write 发布策略、HealthStatus blocker fix、route key 维度和 Build 三件套；同步更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)，将 021 标记为 Done 并补充阶段 F 执行证据。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `RunCtest_CMakeTools` 运行 `AdapterHealthProbeTest`
+   - `RunCtest_CMakeTools` 运行 `LLMManagerFallbackTest`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_adapter_health_probe_unit_test`、`dasall_llm_manager_fallback_unit_test` 与 `dasall_unit_tests`，`ListTests_CMakeTools` 已列出 `AdapterHealthProbeTest` 与 `LLMManagerFallbackTest`，说明 021 的 build/test discoverability 已闭合。
+   - `Build_CMakeTools` 构建 `dasall_unit_tests` 成功，并在 unit 标签链路中显示 `237/237` 全部通过，其中新增的两条 021 用例全部通过。
+   - `RunCtest_CMakeTools` 定向执行 `AdapterHealthProbeTest` 与 `LLMManagerFallbackTest` 均为 `100% tests passed, 0 tests failed out of 1`；附带的 `DartConfiguration.tcl` 缺失提示继续记为 CTest 工具噪声，而非 blocker。
+
+### 结果
+
+1. LLM-TODO-021 已完成，llm 现已拥有真正的 registry owner，可以按 concrete route key 统一管理 adapter handle、capability metadata 与 health snapshot，而不再依赖零散的 test-local health state。
+2. 021 保持了设计与 ADR 边界：registry 只做注册、快照发布与状态聚合，不复制 ModelRouter 评分，不承担 timeout/retry/circuit breaker 执行治理，也不触碰 ContextPacket、恢复裁定或 shared contracts admission。
+3. 对 021 的关键收口，本轮选择“`std::shared_ptr<const Snapshot>` atomic load/store + 短锁 copy-on-write + I/O 在锁外”的并发模型，而不是“一个大 mutex 包住 probe 和读取”。这保证了 020 后续读取 health snapshot 仍是 lock-free，也为 024/040 继续消费 failure counter 留下了稳定接缝。
+
+### 下一步
+
+1. 进入 LLM-TODO-040，开始实现 unary 调用执行治理。
+2. 在 040 中直接复用 021 已提供的 `record_call_failure()/record_call_success()` 状态入口与 concrete route key，不要把调用治理再拆成新的独立健康聚合组件。
+
+### 风险
+
+1. 当前 `record_call_failure()` 只提供最小 failure counter / blocked threshold 入口；真正的 timeout、retry_budget、circuit_breaker_threshold 执行 owner 仍是 040/024。若后续需要更细粒度的 circuit state，可继续在 llm 内部扩面，但不要回退 021 的 route key snapshot owner 设计。
+
 ## 记录 #279
 
 - 日期：2026-04-13
