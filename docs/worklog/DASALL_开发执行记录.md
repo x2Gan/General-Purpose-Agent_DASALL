@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #296
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-035 验证 profile 差异 integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一条记录已完成 034，且 035 的前置依赖只要求 012、020、029 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 profile integration，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.10、9.3、9.5 已冻结 035 的 owner：必须验证 profile 差异通过 `RuntimePolicySnapshot` 投影视图进入真实 llm manager 闭环，同时保持 contracts 不回退，不能在 integration 任务里另造一套配置系统。
+3. 研究确认 035 不需要新增生产修补，但暴露了一个必须写入证据的 stage 接缝：`LLMSubsystemConfigProjectionTest` 的 fixture 常用 `planner/responder` stage key，而真实 `PromptRegistry` 当前只接受 `planning/execution/reflection/response`。本轮按真实 llm stage 名称写 integration snapshot，不在测试任务里擅自添加 stage 归一化逻辑。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-035-profile-diff-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-035-profile-diff-integration设计收敛.md)，固定 035 的本地证据、投影边界、stage 接缝与 Build 三件套。
+2. 新增 [tests/integration/llm/LLMProfileIntegrationTest.cpp](../../tests/integration/llm/LLMProfileIntegrationTest.cpp)，在真实 `RuntimePolicySnapshot -> project_llm_subsystem_config(...) -> PromptPipeline + LLMManager` 闭环中覆盖：
+   - `cloud_full` 与 `edge_minimal` 的主 route 差异
+   - 同一 canary prompt release 在 `cloud_full` 下允许、在 `edge_minimal` 下被 `PromptGovernance / PolicyDenied` 拒绝
+   - `desktop_full` 与 `edge_balanced` 向 adapter 传入不同的 `timeout_ms`
+3. 035 的测试继续复用真实 provider catalog、真实 adapter registry 与真实 manager dispatch；为避免平行配置系统，所有 llm config 都通过 `RuntimePolicySnapshot` 先投影，再用 overlay 仅覆盖 module-local prompt asset root。
+4. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_llm_profile_integration_test` / `LLMProfileIntegrationTest`，让 035 进入 llm integration discoverability 与聚合 target。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_profile_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMProfileIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests` 与 `dasall_contract_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_profile_integration_test`、`dasall_integration_tests` 与 `dasall_contract_tests`；`ListTests_CMakeTools` 已列出 `LLMProfileIntegrationTest`，说明 035 的 discoverability 已闭合。
+   - `Build_CMakeTools` 定向构建 035 target 成功，`LLMProfileIntegrationTest.cpp` 已编译并链接入新的 integration 可执行文件。
+   - `RunCtest_CMakeTools` 定向执行 `LLMProfileIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_integration_tests` 与 `dasall_contract_tests` 时，integration 聚合链路中的 42 条用例全部通过，其中 `LLMProfileIntegrationTest` 作为第 42 个 integration 用例通过；contract 聚合链路中的 152 条用例也全部通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-035 已完成，llm 现在具备真实的 profile integration 证据：不同 profile 的主 route、prompt allowlist 与 timeout 都能通过 `RuntimePolicySnapshot` 投影进入真实 manager dispatch，并留下稳定断言。
+2. 035 保持了设计与兼容边界：没有改动 `RuntimePolicySnapshot`、`LLMSubsystemConfig` projector、`PromptPipeline`、`LLMManager` 或 shared contracts，只验证现有投影链的真实收口，且 contract gate 未回退。
+3. 随着 035 完成，用户要求的 030~035 已全部独立闭环；后续 asset-only provider onboarding 或 llm Gate 回写都可以继续复用 029~035 已稳定的真实 prompt/manager integration 基座。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-042`，验证 asset-only Provider onboarding integration。
+2. 或切换到 `LLM-TODO-038`，统一回写 llm 专项 Gate 与 029~035 的阶段 H 证据链。
+
+### 风险
+
+1. 035 当前通过真实 llm stage 名称 `planning` 固定了投影闭环；若后续决定把 `planner/responder` 与 `planning/response` 合并成统一共享 taxonomy，需要单独 owner 任务同步调整 projector fixture 与 PromptRegistry 解析边界。
+2. 035 只覆盖了 route、allowlist、timeout 三类 profile 差异；若后续希望把 trusted-source、streaming 或 fallback exhausted 也叠加进 profile 矩阵，应在新的 owner 用例里明确扩展，而不是在本轮已完成任务上继续累加变量。
+
 ## 记录 #295
 
 - 日期：2026-04-13
