@@ -264,14 +264,16 @@ namespace dasall::llm::prompt {
 
 bool PromptRegistry::init(const PromptRegistryConfig& config) {
   config_ = config;
+  const auto previous_snapshot = repository_.snapshot();
 
-  PromptAssetSourceConfig asset_config;
-  if (!config.asset_root.empty()) {
-    asset_config.baseline_root = config.asset_root;
+  if (repository_.init(config.asset_sources)) {
+    initialized_ = true;
+    return true;
   }
 
-  initialized_ = repository_.init(asset_config);
-  return initialized_;
+  const auto retained_snapshot = repository_.snapshot();
+  initialized_ = previous_snapshot != nullptr && retained_snapshot != nullptr;
+  return false;
 }
 
 PromptRegistryResult PromptRegistry::select(const PromptQuery& query) const {

@@ -120,14 +120,47 @@ void create_prompt_package(const std::filesystem::path& root,
 dasall::llm::prompt::PromptRegistry make_registry(const std::filesystem::path& root) {
   using dasall::llm::prompt::PromptRegistry;
   using dasall::llm::prompt::PromptRegistryConfig;
+  using dasall::llm::PromptAssetSourceConfig;
   using dasall::tests::support::assert_true;
 
-  PromptRegistry registry;
   const PromptRegistryConfig config{
-    .asset_root = root.generic_string(),
+    .asset_sources = PromptAssetSourceConfig{
+        .baseline_root = root.generic_string(),
+    },
     .trusted_sources = {"profiles"},
   };
 
+  PromptRegistry registry;
+  assert_true(registry.init(config),
+              "PromptRegistry should initialize against the temporary prompt catalog");
+  return registry;
+}
+
+dasall::llm::prompt::PromptRegistryConfig make_registry_config(
+    const std::filesystem::path& baseline_root,
+    const std::filesystem::path& deployment_root = {},
+    const std::filesystem::path& snapshot_root = {}) {
+  using dasall::llm::prompt::PromptRegistryConfig;
+  using dasall::llm::PromptAssetSourceConfig;
+
+  return PromptRegistryConfig{
+      .asset_sources = PromptAssetSourceConfig{
+          .baseline_root = baseline_root.generic_string(),
+          .deployment_root = deployment_root.empty() ? std::string()
+                                                     : deployment_root.generic_string(),
+          .snapshot_cache_root = snapshot_root.empty() ? std::string()
+                                                       : snapshot_root.generic_string(),
+          .cache_ttl_ms = snapshot_root.empty() ? 0U : 60000U,
+      },
+      .trusted_sources = {"profiles"},
+  };
+}
+
+dasall::llm::prompt::PromptRegistry make_registry(const dasall::llm::prompt::PromptRegistryConfig& config) {
+  using dasall::llm::prompt::PromptRegistry;
+  using dasall::tests::support::assert_true;
+
+  PromptRegistry registry;
   assert_true(registry.init(config),
               "PromptRegistry should initialize against the temporary prompt catalog");
   return registry;
@@ -273,6 +306,57 @@ void test_registry_rejects_unknown_explicit_release() {
               "PromptRegistry should surface missing explicit releases as validation failures");
 }
 
+void test_registry_keeps_previous_catalog_after_failed_reinit() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  TempDirectory baseline_root("dasall_prompt_registry_reload_baseline");
+  TempDirectory snapshot_root("dasall_prompt_registry_reload_snapshot");
+
+  create_prompt_package(baseline_root.path(), PromptPackageOptions{
+                                                   .version = "2026.04.11",
+                                                   .default_release = true,
+                                               });
+  create_prompt_package(snapshot_root.path(), PromptPackageOptions{
+                                                   .version = "2026.04.13",
+                                                   .default_release = true,
+                                               });
+
+  const auto config = make_registry_config(baseline_root.path(), {}, snapshot_root.path());
+  auto registry = make_registry(config);
+  const auto before_reload = registry.select(make_query());
+  assert_true(before_reload.release.has_value(),
+              "PromptRegistry should select a release before the snapshot overlay is corrupted");
+  assert_equal(std::string("2026.04.13"), before_reload.selected_version,
+               "PromptRegistry should prefer the valid snapshot overlay before reload failure");
+
+  write_file(snapshot_root.path() / "planner" / "2026.04.13" / "manifest.yaml",
+             "schema_version: \"2\"\n"
+             "min_loader_version: \"1\"\n"
+             "prompt_id: planner\n"
+             "version: \"2026.04.13\"\n"
+             "stage: planning\n"
+             "eval_status: stable\n"
+             "release_scope: stable\n"
+             "output_schema_ref: schema://planner/default\n"
+             "trusted_source: profiles\n"
+             "default_release: true\n"
+             "language: zh-cn\n"
+             "model_family: openai_compatible\n"
+             "task_types:\n"
+             "  - plan\n"
+             "tags:\n"
+             "  - planner\n");
+
+  assert_true(!registry.init(config),
+              "PromptRegistry should surface reload failure when the snapshot overlay becomes invalid");
+  const auto after_reload = registry.select(make_query());
+  assert_true(after_reload.release.has_value(),
+              "PromptRegistry should keep serving the previously published prompt catalog after reload failure");
+  assert_equal(std::string("2026.04.13"), after_reload.selected_version,
+               "PromptRegistry should retain the last valid snapshot-backed release after reload failure");
+}
+
 }  // namespace
 
 int main() {
@@ -280,6 +364,7 @@ int main() {
     test_registry_prefers_explicit_release_over_scene_persona_and_default();
     test_registry_selects_scene_persona_then_profile_then_default();
     test_registry_rejects_unknown_explicit_release();
+    test_registry_keeps_previous_catalog_after_failed_reinit();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

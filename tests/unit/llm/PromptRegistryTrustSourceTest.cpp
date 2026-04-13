@@ -71,11 +71,14 @@ dasall::llm::prompt::PromptRegistry make_registry(const std::filesystem::path& r
                                                   std::vector<std::string> trusted_sources) {
   using dasall::llm::prompt::PromptRegistry;
   using dasall::llm::prompt::PromptRegistryConfig;
+  using dasall::llm::PromptAssetSourceConfig;
   using dasall::tests::support::assert_true;
 
   PromptRegistry registry;
   const PromptRegistryConfig config{
-    .asset_root = root.generic_string(),
+    .asset_sources = PromptAssetSourceConfig{
+        .baseline_root = root.generic_string(),
+    },
     .trusted_sources = std::move(trusted_sources),
   };
 

@@ -335,7 +335,7 @@ std::optional<dasall::contracts::CompositionStage> to_composition_stage(
 PromptPipelineConfig make_prompt_pipeline_config(const dasall::llm::LLMSubsystemConfig& config) {
   return PromptPipelineConfig{
       .registry_config = dasall::llm::prompt::PromptRegistryConfig{
-          .asset_root = config.prompt_asset_sources.baseline_root,
+      .asset_sources = config.prompt_asset_sources,
           .trusted_sources = config.trusted_sources,
       },
       .composer_config = dasall::llm::prompt::PromptComposerConfig{

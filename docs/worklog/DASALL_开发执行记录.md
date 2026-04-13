@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #293
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-032 验证 Prompt source switch integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一条记录已完成 031，且 032 的前置依赖只要求 013、015、029 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 prompt source switch integration，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.2、6.10.1 与 9.3 已冻结 032 的 owner：必须验证 baseline / deployment / trusted snapshot prompt source 的真实切换与坏 snapshot 回退，而不是只停留在 repository overlay unit 语义。
+3. 029/030/031 已提供真实 `PromptPipeline + LLMManager + ResponseNormalizer + observability` 基座，但本轮研究同时发现一个生产接缝：`PromptAssetRepository` 已支持三层 source chain，`PromptRegistryConfig` 与 `LLMManager` 却只把 baseline root 投给 registry；因此 032 不能只补测试，必须先做最小生产修补，再补 integration 证据。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-032-prompt-source-switch-integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-032-prompt-source-switch-integration设计收敛.md)，固定 032 的本地证据、真实根因、Design 结论与 Build 三件套。
+2. 更新 [llm/include/prompt/PromptRegistryConfig.h](../../llm/include/prompt/PromptRegistryConfig.h)、[llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp) 与 [tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)，将 registry init 面从单一 `asset_root` 收敛为完整 `PromptAssetSourceConfig asset_sources`，并把 `LLMSubsystemConfig.prompt_asset_sources` 全量透传进 prompt pipeline。
+3. 更新 [llm/src/prompt/PromptRegistry.cpp](../../llm/src/prompt/PromptRegistry.cpp)、[tests/unit/llm/PromptRegistrySelectionTest.cpp](../../tests/unit/llm/PromptRegistrySelectionTest.cpp) 与 [tests/unit/llm/PromptRegistryTrustSourceTest.cpp](../../tests/unit/llm/PromptRegistryTrustSourceTest.cpp)，让 registry 在 reload 失败时保留 previous valid catalog 的服务能力，同时继续对调用方显式返回失败信号。
+4. 新增 [tests/integration/llm/LLMPromptSourceSwitchIntegrationTest.cpp](../../tests/integration/llm/LLMPromptSourceSwitchIntegrationTest.cpp)，在真实 manager 闭环中动态生成 baseline / deployment / snapshot prompt package，覆盖：
+   - baseline only
+   - deployment override over baseline
+   - snapshot over deployment and baseline
+   - corrupted snapshot 后 reload 失败但继续使用上一份有效 catalog
+5. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_llm_prompt_source_switch_integration_test` / `LLMPromptSourceSwitchIntegrationTest`，让 032 进入 llm integration discoverability 与聚合 target。
+6. 032 第一次定向构建时，`LLMPromptSourceSwitchIntegrationTest.cpp` 只为复用 `make_registration(...)` 引入了 [tests/integration/llm/LLMIntegrationTestSupport.h](../../tests/integration/llm/LLMIntegrationTestSupport.h)，结果触发 metrics incomplete type 编译错误。当前已将该 helper 回收为测试文件内的本地函数，去掉多余 support header 依赖，保持 032 聚焦 prompt source switch 本身。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_llm_prompt_source_switch_integration_test`
+   - `RunCtest_CMakeTools` 运行 `LLMPromptSourceSwitchIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_unit_tests`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_llm_prompt_source_switch_integration_test`、`dasall_llm_interface_surface_unit_test`、`dasall_prompt_registry_selection_unit_test`、`dasall_prompt_registry_trust_source_unit_test`、`dasall_unit_tests` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 已列出 `LLMPromptSourceSwitchIntegrationTest`、`LLMInterfaceSurfaceTest`、`PromptRegistrySelectionTest` 与 `PromptRegistryTrustSourceTest`，说明 032 的 discoverability 已闭合。
+   - `Build_CMakeTools` 首次定向构建 032 target 时暴露出 `LLMIntegrationTestSupport.h` 带来的 metrics incomplete type 编译错误；去掉多余依赖并改为本地 `make_registration(...)` helper 后再次构建，`dasall_llm_prompt_source_switch_integration_test` 成功。
+   - `RunCtest_CMakeTools` 定向执行 `LLMPromptSourceSwitchIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_unit_tests` 时，unit 聚合链路中的 249 条用例全部通过，其中 `LLMInterfaceSurfaceTest`、`PromptRegistrySelectionTest`、`PromptRegistryTrustSourceTest` 均通过。
+   - 进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 39 条用例全部通过，其中 `LLMPromptSourceSwitchIntegrationTest` 作为第 39 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-032 已完成，llm 现在具备真实的 prompt source switch integration 证据：baseline、deployment override、trusted snapshot 与 damaged snapshot retain previous catalog 四条路径都能在 production prompt / manager / normalizer 闭环里被自动验证。
+2. 032 保持了设计与 ADR 边界：没有改写 PromptPolicy、ModelRouter、adapter skeleton 或 shared contracts，只把 prompt source chain projection 与 reload failure retain 语义收敛在 llm 模块内部。
+3. 这轮实现为 033~035 留下了更稳的基座：persona 选择、governance deny 与 profile 差异验证后续都可以继续复用 029~032 已稳定的真实 prompt/manager integration 模式，而不必再绕过 deployment / snapshot prompt source。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-033`，验证 persona 选择 integration，并复用 032 已稳定的 prompt source chain 和真实 manager 基座。
+2. 在 persona 收口后，再继续推进 `LLM-TODO-034` 与 `LLM-TODO-035`，把治理失败路径和 profile 差异也接到同一真实 llm integration 闭环上。
+
+### 风险
+
+1. 032 当前验证的是 prompt source switch，不等于 persona、governance 或 profile 差异已经自动成立；若后续任务直接复用 032 证据宣称阶段 H 已全部闭合，仍需要退回 033~035 的 owner 逐项收口。
+2. `PromptRegistry::init()` 现在会在 reload 失败时保留 previous valid catalog 但返回失败；若后续调用方把该返回值直接当成“立即停止服务”的硬门禁，仍需要在 owner 层做显式策略评审，而不能回退到“失败即清空当前 catalog”的实现。
+
 ## 记录 #292
 
 - 日期：2026-04-13

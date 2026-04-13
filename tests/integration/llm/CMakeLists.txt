@@ -45,6 +45,13 @@ dasall_add_llm_integration_test(
   "integration;llm;fallback"
 )
 
+dasall_add_llm_integration_test(
+  dasall_llm_prompt_source_switch_integration_test
+  LLMPromptSourceSwitchIntegrationTest
+  LLMPromptSourceSwitchIntegrationTest.cpp
+  "integration;llm;profile"
+)
+
 if(NOT DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "llm integration registration requires at least one test target")
 endif()

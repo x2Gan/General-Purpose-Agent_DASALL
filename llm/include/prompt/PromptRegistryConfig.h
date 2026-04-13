@@ -1,12 +1,13 @@
 #pragma once
 
-#include <string>
+#include "LLMSubsystemConfig.h"
+
 #include <vector>
 
 namespace dasall::llm::prompt {
 
 struct PromptRegistryConfig {
-  std::string asset_root;
+  dasall::llm::PromptAssetSourceConfig asset_sources;
   std::vector<std::string> trusted_sources;
 };
 

@@ -531,21 +531,31 @@ void test_prompt_query_freezes_selection_dimensions() {
               "PromptQuery should expose prompt_release_id for explicit registry overrides");
 }
 
-void test_prompt_registry_config_freezes_asset_root_and_trusted_sources() {
+void test_prompt_registry_config_freezes_asset_sources_and_trusted_sources() {
+  using dasall::llm::PromptAssetSourceConfig;
   using dasall::llm::prompt::PromptRegistryConfig;
   using dasall::tests::support::assert_true;
 
-  static_assert(std::is_same_v<decltype(PromptRegistryConfig{}.asset_root), std::string>);
+  static_assert(std::is_same_v<decltype(PromptRegistryConfig{}.asset_sources),
+                 PromptAssetSourceConfig>);
   static_assert(std::is_same_v<decltype(PromptRegistryConfig{}.trusted_sources),
                  std::vector<std::string>>);
 
   const PromptRegistryConfig config{
-    .asset_root = "/opt/dasall/prompts",
+    .asset_sources = PromptAssetSourceConfig{
+        .baseline_root = "/opt/dasall/prompts",
+        .deployment_root = "/var/lib/dasall/prompts",
+        .snapshot_cache_root = "/run/dasall/prompt-cache",
+        .cache_ttl_ms = 60000U,
+    },
     .trusted_sources = {"baseline", "trusted_snapshot"},
   };
 
-  assert_true(config.asset_root == "/opt/dasall/prompts",
-              "PromptRegistryConfig should freeze the prompt asset root field");
+  assert_true(config.asset_sources.baseline_root == "/opt/dasall/prompts" &&
+                  config.asset_sources.deployment_root == "/var/lib/dasall/prompts" &&
+                  config.asset_sources.snapshot_cache_root == "/run/dasall/prompt-cache" &&
+                  config.asset_sources.cache_ttl_ms == 60000U,
+              "PromptRegistryConfig should freeze the full prompt asset source chain");
   assert_true(config.trusted_sources.size() == 2U,
               "PromptRegistryConfig should preserve trusted_sources as registry init input");
 }
@@ -856,7 +866,9 @@ void test_prompt_pipeline_config_freezes_three_stage_init_bundle() {
 
   const PromptPipelineConfig config{
     .registry_config = {
-      .asset_root = "assets/prompts",
+      .asset_sources = dasall::llm::PromptAssetSourceConfig{
+          .baseline_root = "assets/prompts",
+      },
       .trusted_sources = {"baseline", "signed_overlay"},
     },
     .composer_config = {
@@ -1209,7 +1221,7 @@ int main() {
     test_llm_manager_result_freezes_success_failure_and_fallback_semantics();
     test_iprompt_registry_surface_freezes_spi_signatures();
     test_prompt_query_freezes_selection_dimensions();
-    test_prompt_registry_config_freezes_asset_root_and_trusted_sources();
+    test_prompt_registry_config_freezes_asset_sources_and_trusted_sources();
     test_prompt_registry_result_freezes_selection_metadata();
     test_iprompt_composer_surface_freezes_spi_signatures();
     test_model_budget_hint_freezes_context_window_inputs();
