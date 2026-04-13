@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #291
+
+- 日期：2026-04-13
+- 阶段：llm/专项 TODO 阶段 H
+- 任务：LLM-TODO-030 验证 DeepSeek 双模式 integration
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md) 在上一轮已完成 029，且 030 的前置依赖只要求 014、020、029 完成，因此当前按专项 TODO 的阶段 H 顺序直接进入 DeepSeek dual-mode integration，无需先解新的 BLOCK 原子任务。
+2. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 6.6.6 与 9.3 已冻结 030 的 owner：必须验证 `deepseek-chat` / `deepseek-reasoner` 在同一 provider instance 下按复杂度、SLA、预算与 reasoning 需求做策略驱动切换，而不是只靠 unit test 证明 `ModelRouter` 单点评分正确。
+3. 029 已提供真实 `PromptPipeline + LLMManager + ModelRouter + ResponseNormalizer + observability` smoke 基座，030 因此只需要在集成层补齐 dual-mode 两条正例和 reason code 可观测性，不需要改写生产路由策略或 provider 资产。
+
+### 改动
+
+1. 新增 [tests/integration/llm/LLMIntegrationTestSupport.h](../../tests/integration/llm/LLMIntegrationTestSupport.h)，抽取 029 已验证过的 recording logger / meter / tracer 以及 log/trace/result tag 辅助函数，作为阶段 H 其余 llm integration 的最小复用基座。
+2. 新增 [tests/integration/llm/DeepSeekDualModeSelectionIntegrationTest.cpp](../../tests/integration/llm/DeepSeekDualModeSelectionIntegrationTest.cpp)，在真实 `PromptPipeline + LLMManager` 闭环中注册 `deepseek-chat` 与 `deepseek-reasoner` 两条 mock route，覆盖：
+   - reasoning 升档：`requires_reasoning + prefers_visible_reasoning + high complexity` 选择 `deepseek-prod/deepseek-reasoner`
+   - chat 降档：`interactive + hard_cap + requires_tools` 选择 `deepseek-prod/deepseek-chat`
+   并断言 response tags、structured log、trace attrs 中的 selection reasons 和 reasoning mode 字段。
+3. 更新 [tests/integration/llm/CMakeLists.txt](../../tests/integration/llm/CMakeLists.txt)，注册 `dasall_deepseek_dual_mode_selection_integration_test` / `DeepSeekDualModeSelectionIntegrationTest`，让 030 进入 llm integration discoverability 与聚合 target。
+4. 新增 [docs/todos/llm/deliverables/LLM-TODO-030-DeepSeek双模式integration设计收敛.md](../todos/llm/deliverables/LLM-TODO-030-DeepSeek双模式integration设计收敛.md)，并同步回写 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm子系统专项TODO.md)。
+5. 调试过程中暴露并修复两处真实 prompt 接缝，但都严格收敛在测试请求层：planner baseline prompt 资产只接受 `task_type = plan`，且 pre-route `request.model_route` 不能被误当作 prompt `model_family` 传给 `PromptRegistry`。这两处都没有改动生产逻辑。
+6. 为避免 chat 降档路径被 `tools_unverified` 伪通过，030 只在 test catalog snapshot 内把 reasoner 的 tools verification 调整为 verified，用来验证“复杂度/SLA/预算触发的真实降档”；生产资产 [llm/assets/providers/deepseek/models.yaml](../../llm/assets/providers/deepseek/models.yaml) 保持不变。
+
+### 测试
+
+1. 验证动作：
+   - `ListBuildTargets_CMakeTools`
+   - `ListTests_CMakeTools`
+   - `Build_CMakeTools` 构建目标 `dasall_deepseek_dual_mode_selection_integration_test`
+   - `RunCtest_CMakeTools` 运行 `DeepSeekDualModeSelectionIntegrationTest`
+   - `Build_CMakeTools` 构建目标 `dasall_integration_tests`
+2. 结果：
+   - `ListBuildTargets_CMakeTools` 已列出 `dasall_deepseek_dual_mode_selection_integration_test`，`ListTests_CMakeTools` 已列出 `DeepSeekDualModeSelectionIntegrationTest`，说明 030 已进入 llm integration discoverability。
+   - `Build_CMakeTools` 定向构建 030 target 成功；中间只出现两次测试夹具级别问题：一是 `LLMSubsystemConfig` 的 `fallback_chain` 不能为空，二是 reasoning 正例需要对齐 planner baseline prompt 的 `task_type` / `model_family` 命中条件，均已通过最小 fixture 修复解决。
+   - `RunCtest_CMakeTools` 定向执行 `DeepSeekDualModeSelectionIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。
+   - 进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 37 条用例全部通过，其中 `DeepSeekDualModeSelectionIntegrationTest` 作为第 37 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
+
+### 结果
+
+1. LLM-TODO-030 已完成，llm 现在具备真实的 DeepSeek dual-mode integration 证据：同一 provider 下的 reasoning 升档与 chat 降档都能在 production routing / prompt / manager / normalizer 闭环里被自动验证。
+2. 030 保持了设计与 ADR 边界：没有改动 `ModelRouter` 评分规则、`LLMManager` 生产逻辑或 provider 资产，只在 integration fixture 中补齐可解释 reason codes 和 reasoning mode 字段断言。
+3. 这轮实现为 031 与 035 留下了稳定基座：fallback 与 profile 差异验证后续可以直接复用 030 抽出的 integration support header、双 route 注册模式以及 structured log / trace 断言方法。
+
+### 下一步
+
+1. 继续按专项 TODO 阶段 H 顺序推进 `LLM-TODO-031`，验证 fallback integration，并复用 030 的双 route fixture 与 029/030 已稳定的 observability 断言。
+2. 在 fallback 路径收口后，再继续推进 `LLM-TODO-032`~`035`，把 prompt source、persona、governance 和 profile 差异都接到同一真实 llm integration 基座上。
+
+### 风险
+
+1. 030 当前验证的是同一 provider 内的 dual-mode 切换，不等于 profile 差异、fallback exhaustion 或 prompt source switch 已自动成立；若后续任务直接复用 030 证据宣称“阶段 H 已全闭合”，需要回到 031~035 的 owner 重新收口。
+2. 030 为了验证 chat 降档是策略结果，在 test catalog 中临时把 reasoner 的 tools verification 调整为 verified；若后续把这一步错误地复制回生产资产，就会绕过 `needs_integration_validation` 的真实治理边界，因此必须继续把该调整限制在测试夹具内。
+
 ## 记录 #290
 
 - 日期：2026-04-13

@@ -31,6 +31,13 @@ dasall_add_llm_integration_test(
   "integration;llm"
 )
 
+dasall_add_llm_integration_test(
+  dasall_deepseek_dual_mode_selection_integration_test
+  DeepSeekDualModeSelectionIntegrationTest
+  DeepSeekDualModeSelectionIntegrationTest.cpp
+  "integration;llm;profile"
+)
+
 if(NOT DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "llm integration registration requires at least one test target")
 endif()
