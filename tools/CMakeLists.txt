@@ -2,7 +2,18 @@ add_library(dasall_tools STATIC)
 
 target_sources(dasall_tools
   PRIVATE
-    src/placeholder.cpp
+    src/ToolManager.cpp
+    src/bridge/placeholder.cpp
+    src/config/placeholder.cpp
+    src/execution/placeholder.cpp
+    src/mcp/placeholder.cpp
+    src/ops/placeholder.cpp
+    src/policy/placeholder.cpp
+    src/projection/placeholder.cpp
+    src/registry/placeholder.cpp
+    src/route/placeholder.cpp
+    src/skills/placeholder.cpp
+    src/validation/placeholder.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS

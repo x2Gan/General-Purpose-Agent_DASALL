@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -62,3 +65,14 @@ void tool_invocation_context_surface_keeps_caller_profile_trace_and_confirmation
 }
 
 }  // namespace
+
+int main() {
+  try {
+    tool_invocation_context_surface_keeps_caller_profile_trace_and_confirmation_inputs();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
+}

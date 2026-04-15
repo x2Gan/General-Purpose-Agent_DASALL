@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -43,3 +46,14 @@ void tool_manager_batch_surface_keeps_non_owning_request_view() {
 }
 
 }  // namespace
+
+int main() {
+  try {
+    tool_manager_batch_surface_keeps_non_owning_request_view();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
+}

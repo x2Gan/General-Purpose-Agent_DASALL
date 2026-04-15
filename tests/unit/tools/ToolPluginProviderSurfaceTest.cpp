@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -73,3 +76,14 @@ void plugin_extension_catalog_only_expresses_supported_payload_kinds() {
 }
 
 }  // namespace
+
+int main() {
+  try {
+    plugin_extension_catalog_only_expresses_supported_payload_kinds();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
+}

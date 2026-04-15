@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include <chrono>
 #include <optional>
 #include <string>
@@ -114,3 +117,14 @@ void mcp_surfaces_keep_transport_raw_and_adapter_protocol_facing_shapes() {
 }
 
 }  // namespace
+
+int main() {
+  try {
+    mcp_surfaces_keep_transport_raw_and_adapter_protocol_facing_shapes();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
+}

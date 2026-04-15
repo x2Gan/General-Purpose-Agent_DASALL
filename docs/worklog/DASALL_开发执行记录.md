@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #307
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-008 接线 tools 源码骨架与 unit 测试入口
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 008 依赖 001~007，职责是把 tools 源码骨架和 unit discoverability 收口为可执行工程入口；因此本轮作为阶段 A 的最后一个原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 8.1、8.2 Phase 0 与 1412~1422 的 delivery map 已明确：在公共 ABI 冻结后，必须把 `tools/src` skeleton tree 与 `tests/unit/tools` discoverability 接到 CMake/CTest。
+3. 本轮不进入 009+ 的真实实现逻辑，只负责真实落盘骨架目录、接线 six surface tests，并让 CTest 能枚举出 tools unit 入口。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-008-tools源码骨架与unit测试入口接线收敛.md，固定 008 的本地证据、外部参考、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，把 `dasall_tools` 从单文件 placeholder 编译切换为 `ToolManager.cpp` 与 `tools/src/*` 子目录 skeleton 源文件集合，并删除旧的 tools/src/placeholder.cpp。
+3. 新增 tools/src/ToolManager.cpp 与 registry/validation/policy/route/execution/bridge/projection/mcp/skills/ops/config 下的 placeholder.cpp，占位出真实源码树。
+4. 更新 tests/unit/tools/CMakeLists.txt，注册 six surface tests 为可执行 unit target，并通过 `add_test(...); set_tests_properties(... LABELS "unit;tools")` 接入 CTest discoverability。
+5. 更新 tests/unit/CMakeLists.txt，把新的 tools unit executable targets 纳入 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS` 聚合列表。
+6. 更新 six surface test 源文件，补 `main()` 包装层，使其从 compile-only 语法探针升级为真正可执行的 unit tests。
+7. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-008 标记为 Done，并补充本轮交付物与 discoverability 证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`
+2. discoverability 检查：
+   - `ctest --test-dir /home/gangan/DASALL/build/vscode-linux-ninja -N`
+3. 结果摘要：
+   - `dasall_unit_tests` 目标在构建期间自动执行当前 unit 集合无回归
+   - `ctest -N` 能发现 ToolInvocationContextSurfaceTest、ToolInvocationEnvelopeSurfaceTest、ToolInterfaceSurfaceTest、ToolPolicyCapabilitySurfaceTest、MCPInterfaceSurfaceTest、ToolPluginProviderSurfaceTest
+
+### 结果
+
+1. TOOL-TODO-008 完成后，tools 阶段 A 的公共 ABI 与 skeleton/discoverability 基线已闭合：`tools/src` 不再是单文件 placeholder，`tests/unit/tools` 不再是空注释目录，six public surface tests 已进入 CTest。
+2. 这轮改动仍保持 skeleton-only 边界，没有提前实现 registry/policy/mcp/plugin bridge 逻辑，为 009+ 的实现任务保留了清晰的目录和测试入口。
+3. `dasall_unit_tests` 现在会自动构建并运行 tools surface tests，后续新增 tools 行为测试可沿同一路径继续扩展。
+
+### 下一步
+
+1. 阶段 A 的 TOOL-TODO-001 ~ 008 已全部完成；后续可转入 009+ 的实现类任务。
+
+### 风险
+
+1. 当前 skeleton `.cpp` 仍为空命名空间翻译单元；如果后续实现任务选择新建文件而不是替换现有 skeleton，需注意避免目录内形成重复占位。
+2. six surface tests 现在只是 discoverable 的 ABI smoke tests，不代表行为层实现已经存在；后续不能把这些通过误读成组件功能已完成。
+
 ## 记录 #306
 
 - 日期：2026-04-15

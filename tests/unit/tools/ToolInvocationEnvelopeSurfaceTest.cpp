@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -92,3 +95,14 @@ void tool_invocation_envelope_surface_keeps_shared_results_and_module_local_fact
 }
 
 }  // namespace
+
+int main() {
+  try {
+    tool_invocation_envelope_surface_keeps_shared_results_and_module_local_facts();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
+}

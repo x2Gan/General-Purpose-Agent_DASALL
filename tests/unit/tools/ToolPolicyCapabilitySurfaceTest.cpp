@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -79,3 +82,14 @@ void policy_and_capability_surfaces_keep_fail_closed_and_snapshot_only_shapes() 
 }
 
 }  // namespace
+
+int main() {
+  try {
+    policy_and_capability_surfaces_keep_fail_closed_and_snapshot_only_shapes();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
