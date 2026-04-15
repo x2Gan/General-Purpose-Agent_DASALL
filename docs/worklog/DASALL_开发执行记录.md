@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #302
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-003 定义 ToolInvocationEnvelope 对象
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 003 只依赖已完成的 001、002，且是 ITool / IToolManager 之前必须先冻结的统一返回面，因此本轮继续按 project-implementation-cycle 选择 003 作为唯一原子任务。
+2. docs/architecture/DASALL_tools子系统详细设计.md 的 6.5.1、6.5.3、6.8、6.10 已经冻结 003 的 owner：本轮只收敛 ToolResult、Observation、ObservationDigest 与 route/compensation supporting facts 的组合边界，不提前实现 ResultProjector、CompensationLedger 或 runtime 恢复主链。
+3. 为保持与 002 一致的边界纪律，本轮继续采用“compile-only surface 源文件 + 语法编译 + CMake 聚合回归”的验证路径，不提前侵入 TOOL-TODO-008 的 tools unit discoverability 接线。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-003-ToolInvocationEnvelope对象设计收敛.md，固定本地证据、外部参考、Design 结论、Design->Build 映射与 Build 三件套。
+2. 更新 tools/include/ToolInvocationEnvelope.h，把前向声明替换为真实 module-public 定义：新增 ToolRouteFacts、ToolCompensationHint 与 ToolInvocationEnvelope，冻结 shared result/projection 对象与 module-local route / evidence / compensation handoff supporting data 的组合面。
+3. 新增 tests/unit/tools/ToolInvocationEnvelopeSurfaceTest.cpp，使用字段类型断言与样例初始化锁定 003 的 public ABI，同时保持该测试源未接入 CMake，留待 TOOL-TODO-008 统一处理 tools unit discoverability。
+4. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-003 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 语法编译：
+   - `c++ -std=c++20 -I/home/gangan/DASALL/tools/include -I/home/gangan/DASALL/contracts/include -x c++ -fsyntax-only /home/gangan/DASALL/tests/unit/tools/ToolInvocationEnvelopeSurfaceTest.cpp`
+2. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+3. 结果摘要：
+   - `dasall_unit_tests` 目标在构建期间自动执行当前 unit 集合，结果为 `249/249 passed`
+   - `dasall_contract_tests` 目标在构建期间自动执行当前 contract 集合，结果为 `152/152 passed`
+
+### 结果
+
+1. TOOL-TODO-003 已把 ToolInvocationEnvelope 从占位前向声明推进为真实 module-public 返回面，后续 004、017、018 可以基于既定组合边界继续推进接口与投影骨架。
+2. 本轮没有把 route facts、evidence refs、compensation hints 推回 ToolResult、Observation 或 ObservationDigest，也没有新增 shared route/result enum，对齐了 6.5.3 的 shared/module-local 分层要求。
+3. tests/unit/tools 目录现在具备第二个 tools ABI surface 测试源，但 discoverability 仍保持由 TOOL-TODO-008 统一接线，未提前侵入源码骨架与 unit topology owner。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-004，定义 ITool 与 IToolManager 接口，消费已冻结的 ToolInvocationContext / ToolInvocationEnvelope。
+
+### 风险
+
+1. 当前 route facts 使用字符串型 supporting fields；若后续需要更强类型约束，应在 tools module-public 或 internal route object 中收敛，而不是直接扩张 shared contracts。
+2. 当前 compensation hints 只冻结 handoff 事实，不携带执行计划；若后续 workflow / recovery 需要更细控制，必须在 CompensationLedger 或 runtime 恢复链任务中推进，而不是把控制平面塞进 Envelope。
+
 ## 记录 #301
 
 - 日期：2026-04-15
