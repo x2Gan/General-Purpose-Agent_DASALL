@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #306
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-007 定义 IToolPluginProvider 与 ToolPluginExtensionCatalog 接口
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 007 只依赖 001，并且是 017、018 等 plugin 扩展实现任务的接口前置；因此本轮继续按 project-implementation-cycle 把 007 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.5.4、6.6、6.12.4 已明确 plugin -> tools 边界与三类允许载荷，本轮只把这些约束收敛为 module-public ABI，不进入 bridge/importer 实现层。
+3. 为保持阶段 A 的边界纪律，本轮继续采用“compile-only surface 源文件 + 语法编译 + CMake 聚合回归”的验证路径，不提前接线 PluginExtensionBridge 或 plugin load/unload 夹具。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-007-IToolPluginProvider与ToolPluginExtensionCatalog接口设计收敛.md，固定 007 的本地证据、外部参考、Design 结论与 Build 三件套。
+2. 更新 tools/include/plugin/IToolPluginProvider.h，定义 ToolPluginPayloadKind、ToolPluginProviderRef、BuiltinToolProviderExport、MCPServerStdioExport、SkillBundleExport、ToolPluginExtensionCatalog 与 `describe_extensions()`，把 plugin extension 目录面冻结到 tools 模块公共接口。
+3. 新增 tests/unit/tools/ToolPluginProviderSurfaceTest.cpp，使用方法指针类型断言与样例 catalog 初始化锁定 007 的 public ABI，同时保持该测试源未接入 CMake，留待 TOOL-TODO-008 统一纳管。
+4. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-007 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 语法编译：
+   - `c++ -std=c++20 -I/home/gangan/DASALL/tools/include -x c++ -fsyntax-only /home/gangan/DASALL/tests/unit/tools/ToolPluginProviderSurfaceTest.cpp`
+2. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`
+3. 结果摘要：
+   - `dasall_unit_tests` 目标在构建期间自动执行当前 unit 集合，无回归
+
+### 结果
+
+1. TOOL-TODO-007 已把 IToolPluginProvider / ToolPluginExtensionCatalog 从占位壳推进为真实 module-public 接口，并为 017、018、031 等 plugin 扩展桥接任务提供了稳定 ABI 基线。
+2. 当前 catalog 只允许 builtin tool provider、stdio MCP server、skill bundle 三类载荷；tools 继续只消费 active plugin set 归一化结果，没有复制 infra/plugin 的 discover/load/unload/sign/ABI 治理职责。
+3. 目录面当前只暴露 source traceability ref 和 consumer-local handle ref；descriptor、launch spec、skill asset 的具体归一化仍留给后续 bridge/importer 实现任务处理。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-008，补齐公共 ABI 与 skeleton discoverability 骨架。
+
+### 风险
+
+1. 当前 007 没有引入泛化 `custom payload` 逃生口；如果未来需要新增载荷类型，必须先更新设计文档和专项 TODO，再显式扩展枚举与目录结构。
+2. `ToolPluginProviderRef` 当前使用 `plugin_id/export_key/source_revision` 作为 traceability 锚点，后续若 infra/plugin 统一为 handle-ref 语义，需要在 ABI 兼容前提下平滑扩展。
+
 ## 记录 #305
 
 - 日期：2026-04-15
