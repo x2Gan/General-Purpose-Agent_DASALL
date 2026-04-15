@@ -61,7 +61,7 @@
 
 ### 4.1 Role
 
-你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 LLM 子系统级详细设计。
+你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 access 子系统级详细设计。
 
 你的输出必须同时满足：
 
@@ -75,8 +75,8 @@
 ### 4.2 Context
 
 - 项目根目录：/home/gangan/DASALL/
-- 当前日期：2026-4-10
-- 当前模块：LLM 子系统
+- 当前日期：2026-4-14
+- 当前模块：access 子系统
 - 设计阶段：子系统架构设计/Detailed Design
 - 输出语言：中文
 - 输出文档：docs/architecture/
@@ -85,7 +85,7 @@
 
 请严格基于以下输入，不得跳过约束：
 
-1. 架构文档：docs/architecture/DASSALL_Agent_architecture.md
+1. 架构文档：docs/architecture/DASALL_Agent_architecture.md
 2. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
 3. 相关 ADR：docs/adr
 4. SSOT: docs/ssot
@@ -107,18 +107,25 @@
      12. docs/architecture/DASALL_infra_watchdog模块详细设计.md
    - docs/architecture/DASALL_boundary治理与优化说明.md
    - docs/architecture/DASALL_capability_services子系统详细设计.md
-6. 交付的实现：
+   - docs/architecture/DASALL_llm子系统详细设计.md
+   - docs/architecture/DASALL_tools子系统详细设计.md
+   - docs/architecture/DASALL_memory子系统详细设计.md
+   - docs/architecture/DASALL_knowledge子系统详细设计.md
+   - docs/architecture/DASALL_cognition子系统详细设计.md
+   - docs/architecture/DASALL_runtime子系统详细设计.md
+6. 交付的设计收敛：
    - docs/todos/contracts/deliverables
    - docs/todos/infrastructure/deliverables
    - docs/todos/platform/deliverables
    - docs/todos/services/deliverables
+   - docs/todos/llm/deliverables
 7. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 8. 当前模块代码骨架：N/A
-9. 可选行业参考方向：联网搜索行业内实践方案
+9. 可选行业参考方向：联网搜索行业内实践方案（C++/Agent）
 
 ### 4.4 Task
 
-请输出一份完整的LLM 子系统详细设计方案，要求：
+请输出一份完整的 access 子系统详细设计方案，要求：
 
 1. 完整详细且专业的子系统设计描述，配合流程图/时序图/数据流图进行说明
 2. 明确边界、职责、输入输出与相邻模块依赖方向。
@@ -126,6 +133,7 @@
 4. 明确异常语义、恢复路径、可观测性与配置策略。
 5. 输出可映射到 Build 的实施分解建议。
 6. 输出测试策略、质量门、风险与回退策略。
+7. 厘清上下游及依赖模块的调用关系
 
 ### 4.5 约束策略
 

@@ -40,7 +40,7 @@
   - [2. 分层到目录的映射](#2-分层到目录的映射)
   - [3. 顶层目录详细展开](#3-顶层目录详细展开)
     - [3.1 contracts/](#31-contracts)
-    - [3.2 apps/](#32-apps)
+    - [3.2 access/ 与 apps/](#32-access-与-apps)
     - [3.3 runtime/](#33-runtime)
     - [3.4 cognition/](#34-cognition)
     - [3.5 llm/](#35-llm)
@@ -81,7 +81,8 @@
 ```text
 DASALL-OS/
 ├── automation/                     #   项目开发循环自动化的控制面目录
-├── apps/                           #   产品入口与运行壳层
+├── access/                         #   Access 子系统共享接入 core
+├── apps/                           #   产品入口壳层与装配面
 │   ├── cli/                        #   命令行交互入口
 │   ├── daemon/                     #   后台守护进程入口
 │   ├── gateway/                    #   HTTP/WebSocket/MQTT 网关入口
@@ -263,7 +264,7 @@ DASALL-OS/
 
 | 架构层 | 编号 | 对应工程目录 | 说明 |
 |---|---|---|---|
-| Product & Access Layer | Layer 7 | `apps/` | 产品入口、协议适配、请求归一化 |
+| Product & Access Layer | Layer 7 | `access/`, `apps/` | `access/` 承载共享接入 core；`apps/` 承载入口壳层与装配 |
 | Agent Control Plane | Layer 6 | `runtime/` | 状态机、调度、预算、恢复、会话 |
 | Cognition Layer | Layer 5 | `cognition/` | 感知、规划、推理、反思、回复构建 |
 | Execution & Collaboration Layer | Layer 4 | `tools/`, `memory/`, `knowledge/`, `multi_agent/` | 工具治理、记忆编排、知识检索、多 Agent |
@@ -316,30 +317,34 @@ DASALL-OS/
 
 ---
 
-### 3.2 apps/
+### 3.2 access/ 与 apps/
 
 **对应架构层：** Layer 7 — Product & Access Layer
 
 **职责：**
-产品入口与运行壳层，负责接收不同协议的外部流量，执行认证鉴权、协议转换和请求归一化，最终构造 `AgentRequest` 传递给 `runtime/`。每个子目录是一个独立的可执行程序。
+Layer 7 在工程上拆成两类单元：
 
-**子目录说明：**
+1. `access/`：独立 Access 子系统根，负责共享接入 core、认证鉴权、Admission pipeline、Runtime bridge、结果发布与观测桥接。
+2. `apps/`：产品入口壳层与装配面。每个子目录仍是独立可执行程序，只负责 entry-specific bootstrap、监听绑定、进程生命周期和协议适配器装配。
 
-| 子目录 | 作用 | 典型协议 |
+**目录说明：**
+
+| 路径 | 作用 | 典型内容 |
 |---|---|---|
-| `cli/` | 命令行交互入口，适合开发调试与运维操作 | stdin/stdout |
-| `daemon/` | 后台守护进程，长期运行，支持信号处理与优雅退出 | IPC / UNIX Domain Socket |
-| `gateway/` | 网络网关入口，适合桌面端、远程客户端、上位机接入 | HTTP / WebSocket / MQTT |
-| `simulator/` | 桌面模拟器，用于集成联调和 e2e 场景回放 | 内部直调 |
+| `access/include/` | Access module public interface | `IAccessGateway`、`IAccessRuntimeBridge`、`IProtocolAdapter`、`AccessTypes` |
+| `access/src/` | 共享 access core 实现 | Admission pipeline、Normalizer、Runtime bridge、ResultPublisher、Replay/Observability |
+| `apps/cli/` | 命令行入口壳层 | stdin/stdout 绑定、本地主体识别、CLI adapter 装配 |
+| `apps/daemon/` | 后台守护入口壳层 | IPC/UDS 绑定、signal 处理、daemon adapter 装配 |
+| `apps/gateway/` | 网络入口壳层 | HTTP/WebSocket/MQTT 监听、gateway adapter 装配 |
+| `apps/simulator/` | 模拟联调入口壳层 | 内部直调、fixture/bootstrap 装配 |
 
 **关键组件：**
-- `Protocol Adapter`：各协议 -> 统一 `InboundPacket`
-- `AuthN/AuthZ Middleware`：认证与权限校验
-- `Request Normalizer`：构造 `AgentRequest`（含 `request_id`, `session_id`, `trace_id`）
-- `Stream Gateway`：管理流式响应出口
+- `access/`：`Protocol Adapter Registry`、`AuthN/AuthZ Middleware`、`Request Normalizer`、`Runtime Bridge`、`ResultPublisher`、`Stream Gateway`
+- `apps/*`：entry main、监听绑定、adapter 装配、启动期 bootstrap
 
 **依赖关系：**
-- 依赖：`contracts/`, `runtime/`（接口），`infra/`（日志、认证）
+- `access/` 依赖：`contracts/`, `runtime/`（接口），`infra/`, `platform/`, `profiles/`
+- `apps/` 依赖：`access/`, `runtime/`, `contracts/`, `infra/`
 - 不依赖：`cognition/`, `llm/`, `tools/`（不直接感知推理细节）
 
 ---

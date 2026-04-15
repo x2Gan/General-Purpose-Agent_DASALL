@@ -333,6 +333,30 @@ profiles 模块非职责：
 | ValidationReport | blocking_errors, warnings, dependency_gaps, compatibility_state | 任何 blocking error 均拒绝激活 | 仅引用通用 ResultCode / ErrorInfo 映射 |
 | ProfileActivationRecord | requested_profile_id, effective_profile_id, source, activation_mode, fallback_reason, snapshot_ref | 每次激活必须可审计 | 不成为 AgentResult 一部分 |
 
+#### 6.5.1 RuntimePolicySnapshot v1 消费矩阵
+
+语义冻结原则：
+
+1. RuntimePolicySnapshot 的域语义由 profiles 定义，runtime 负责快照生命周期与分发，consumer 只消费本地 typed projection。
+2. llm/tools/knowledge/memory 不得直接解析 runtime_policy.yaml，也不得在各自文档中重定义同名键的含义。
+3. consumer 可以派生本地默认值或预算公式，但派生逻辑只能在本矩阵允许的域内进行，且不得把派生值反写为新的 profile 语义。
+4. 跨模块对象投影链路另见 [../ssot/CrossModuleDataProjectionMatrix.md](../ssot/CrossModuleDataProjectionMatrix.md)；本节只冻结 profile 键的消费 ownership。
+
+| 消费者 | 允许消费的 RuntimePolicySnapshot 域 / 键 | 唯一投影视图 | v1 消费语义 | 禁止事项 |
+|---|---|---|---|---|
+| runtime | 全量快照 | RuntimePolicySnapshot | 唯一持有完整快照并负责 generation、激活、原子替换、LKG 回退和下游分发 | 不把快照拆成多份可变局部状态后各自漂移 |
+| llm | `model_profile.*`；`prompt_policy.*`；`timeout_policy.llm.*`；`degrade_policy.*`；与 llm 相关的 `ops_policy.*` | `LLMSubsystemConfig` | 负责模型路由、prompt allowlist / trusted source、LLM timeout/retry/fallback 与 llm 侧 observability 配置 | 不直接读取 YAML；不解释 tools/knowledge/memory 专属键；不把部署细节写成新的 profile 语义 |
+| tools | `enabled_modules.tools_builtin/tools_mcp/multi_agent`；`runtime_budget.max_tool_calls`；`prompt_policy.tool_visibility_rules`；`capability_cache_policy.*`；`timeout_policy.tool.*` / `timeout_policy.mcp.*` / `timeout_policy.workflow.*`；`execution_policy.*`；`ops_policy.*` | `ToolConfigAdapter -> ToolPolicyView / ToolTimeoutView` | 负责 lane enable/disable、工具可见域、MCP 能力缓存、tool/workflow timeout 与高风险执行门禁 | 不自行扩写新的 tool policy schema；不从 `prompt_policy` 推导超出 tool visibility 的授权语义 |
+| knowledge | `enabled_modules.knowledge`；`enabled_modules.memory_vector`；`token_budget_policy.*`；`capability_cache_policy.*`；`runtime_budget.max_latency_ms / worker_threads`；`degrade_policy.allow_budget_degrade` | `KnowledgeConfigProjector -> KnowledgeConfigSnapshot` | 负责 knowledge on/off、lexical-only / hybrid 模式、证据预算、catalog freshness、召回 deadline 与退化开关 | 不新增 schema v1 顶层 knowledge 域；不把 `capability_cache_policy` 重新解释成 provider/MCP 专属策略 |
+| memory | `enabled_modules.memory_vector`；`token_budget_policy.*`；`runtime_budget.max_latency_ms`；`degrade_policy.allow_budget_degrade` | `MemoryConfig + BudgetPolicy + request-level token_budget_hint` | 负责 vector path 开关、ContextPacket 预算上限与 budget degrade 行为；storage/maintenance 默认值继续留在 memory 本地配置，直到 profile 单独冻结相应键 | 不擅自把 retention/checkpoint/WAL 等本地默认值升级为 profile 语义；不重解释 knowledge 证据字段 |
+| infra / observability | `ops_policy.*`；deployment/runtime override 来源约束 | infra module-local config views | 负责日志级别、metrics granularity、trace sample ratio 与 override 来源治理 | 不越权定义业务模块策略含义 |
+
+补充约束：
+
+1. 同一域被多个 consumer 读取时，字段含义只在 profiles 文档定义一次；consumer 文档只说明“如何投影”，不说明“键本身意味着什么”。
+2. 若 consumer 需要新的 typed view 字段，应优先从现有域派生；只有现有域无法表达时，才允许申请新增 top-level domain。
+3. 新增 consumer 或新增域时，必须同步更新本表和对应模块的 projection tests。
+
 ### 6.6 核心接口语义定义
 
 建议头文件分布：profiles/include/

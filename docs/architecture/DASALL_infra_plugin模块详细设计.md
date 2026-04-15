@@ -227,6 +227,16 @@ plugin 组件非职责：
 2. 对外统一错误出口继续通过 ResultCode + ErrorInfo；细分原因通过 `reason_code(s)`、审计与 evidence_ref 留痕。
 3. `api_ok` 保留为 runtime bridge handshake 预留位；在当前阶段也必须显式出现在 CompatibilityReport 中，避免后续再次 breaking 扩写对象。
 
+### 6.5.3 面向 tools 的扩展载荷边界
+
+plugin 组件可以作为 tools 域的 deployment-time extension carrier，但必须保持“plugin 治理语义”和“tool/skill 运行语义”分层：
+
+1. plugin 允许承载 builtin tool provider、stdio MCP server bundle、skill bundle 三类工具域扩展载荷。
+2. PluginManifest.capabilities 只声明 generic token，例如 `tool.provider`、`mcp.server.stdio`、`skill.bundle`；不得在 manifest 中直接嵌入 ToolDescriptor、MCP binding、SkillSpec 等 consumer-specific 对象。
+3. 上述 consumer-specific 语义必须在 plugin 通过 discover/validate/load 后，由 tools 侧 bridge/importer 进一步解析、注册和治理。
+4. plugin load success 不等于 capability 对 runtime 或模型可见；最终可见性、路由和执行准入继续由 tools/runtime 决定。
+5. 可随包分发的本地 stdio MCP server 适合作为 plugin payload；远程 socket server 仍可继续通过 deployment/profile 配置提供，无需强制插件化。
+
 ### 6.6 核心接口语义定义
 
 建议头文件：infra/include/plugin/

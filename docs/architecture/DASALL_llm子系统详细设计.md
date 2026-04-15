@@ -150,7 +150,7 @@ Must-Not：
 |---|---|---|---|
 | llm 模块构建入口 | 已存在 | llm/CMakeLists.txt | 已有独立静态库目标，但尚未形成真实实现 |
 | llm 源码实现 | 占位 | llm/src/placeholder.cpp | 当前没有 LLMManager、ModelRouter、Prompt 三段或 adapter 实现 |
-| llm 公共头文件 | 缺失 | llm/include 目录不存在 | 当前没有模块公共接口与 module-local supporting type 落点 |
+| llm 公共头文件 | 已存在，仍待实现闭环 | llm/include/ILLMManager.h、ILLMAdapter.h、LLMSubsystemConfig.h 等 | 模块公共接口与 supporting type 落点已建立，但多数接口仍未由真实实现支撑 |
 | shared request/response contracts | 已冻结 | contracts/include/llm/LLMRequest.h、LLMResponse.h | provider-neutral 请求/响应基线已具备 |
 | Prompt 资产与装配 contracts | 已冻结 | contracts/include/prompt/* | PromptSpec、PromptRelease、PromptComposeRequest、PromptComposeResult 已具备 |
 | 独立 ModelRoute 共享对象 | 缺失 | DASALL_blueprint对当前contracts差异矩阵-2026-03-23.md | 当前只有 LLMRequest.model_route 字符串，没有独立共享对象 |
@@ -159,13 +159,13 @@ Must-Not：
 | shared interface admission | 部分具备 | WP05-T012、worklog 记录 #039 | 仅 ILLMAdapter 达到 Admit 基线，其他接口应留在 module-local |
 | llm contract tests | 已存在 | tests/contract/llm/LLMRequestResponseContractTest.cpp | request/response 语义边界已有自动化基线 |
 | prompt contract tests | 已存在 | tests/contract/prompt/* | Prompt 链路边界已有自动化基线 |
-| Prompt 资产目录 | 缺失 | llm/assets/prompts 目录尚不存在 | 当前没有可被 PromptAssetRepository 直接消费的 baseline Prompt 包 |
-| Prompt 包文件规范 | 缺失 | 仓库内无 manifest + Markdown 的 Prompt 包规范 | Prompt 文本无法以受管资产形式免重编译迭代 |
-| Prompt 动态切换路径 | 上游基础具备、llm 侧缺失 | profiles/*/runtime_policy.yaml 已冻结 prompt_policy；infra ConfigCenter 已冻结四层 override；llm 尚无 PromptAssetRepository 实现 | 资产切换尚未形成端到端闭环 |
-| Provider 资产目录 | 缺失 | llm/assets/providers 目录尚不存在 | 当前没有 baseline Provider Catalog，也没有“仅配置接入”入口 |
-| Provider Catalog 规范 | 缺失 | 仓库内无 provider manifest/models yaml 规范 | 新增 OpenAI-compatible provider 仍会散落到代码或 deployment 临时配置 |
-| Provider 凭据分层 | 上游能力具备、llm 侧缺失 | infra secret/config 已存在，但 llm 尚无 auth profile / secret ref 投影约定 | provider 资产与真实密钥尚未形成清晰边界 |
-| 模型元数据治理 | 缺失 | 当前 models.yaml 仅覆盖能力示意，未冻结 pricing/source/effective_at/verification_state 结构 | 无法做上下文预算检查、成本估算和能力漂移治理 |
+| Prompt 资产目录 | 已存在，仍待装载链路落地 | llm/assets/prompts/planner/default/manifest.yaml | baseline Prompt 包已入仓，但 PromptAssetRepository 与运行时装载闭环尚未实现 |
+| Prompt 包文件规范 | 已有基线 | llm/assets/prompts/planner/default/manifest.yaml | manifest 规范已存在，但多场景/多版本资产治理仍待扩展 |
+| Prompt 动态切换路径 | 上游基础具备、llm 侧部分缺失 | profiles/*/runtime_policy.yaml 已冻结 prompt_policy；llm/assets/prompts 已存在；llm 尚无 PromptAssetRepository 实现 | 资产切换资产面已具备，运行时装载与切换闭环尚未形成 |
+| Provider 资产目录 | 已存在，仍待装载链路落地 | llm/assets/providers/deepseek/manifest.yaml、models.yaml | baseline Provider Catalog 已入仓，但加载器与治理闭环尚未实现 |
+| Provider Catalog 规范 | 已有基线 | llm/assets/providers/deepseek/manifest.yaml、models.yaml | provider manifest 与 models yaml 已形成基础规范，可继续在同一形态上扩展 |
+| Provider 凭据分层 | 部分具备 | llm/assets/providers/deepseek/manifest.yaml 中 `auth_ref`；infra secret/config 已存在 | provider 资产与 secret ref 边界已建立，但运行时投影与校验链尚未落地 |
+| 模型元数据治理 | 已有基线，仍待消费链落地 | llm/assets/providers/deepseek/models.yaml | pricing/source/effective_at/verification_state 已入模型目录，但预算检查与漂移治理尚未形成端到端闭环 |
 | thinking / non-thinking 选择策略 | 缺失 | 当前没有 deepseek-chat / deepseek-reasoner 的场景切换规则和观测字段 | 无法按复杂度、时延和预算智能切换双模式 |
 | 通用模型挡位抽象 | 缺失 | 当前设计重点仍偏 DeepSeek 双模式，尚未把 fast/quality、mini/pro、thinking/non-thinking 统一抽象为 tier traits | 后续接入其它多挡位 Provider 时易重复建模 |
 | 场景/角色选择维度 | 缺失 | 当前 PromptQuery 仅覆盖 stage/task_type/language/model_family/trusted_sources | 无法优雅支撑 scene/persona 定制 |
@@ -1370,7 +1370,7 @@ flowchart TB
 
 #### 6.10.3 配置约束
 
-1. llm 不直接依赖 RuntimePolicySnapshot 全对象；建议在 init 时投影出 LLMSubsystemConfig，避免模块对 profiles 过度耦合。
+1. llm 不直接依赖 RuntimePolicySnapshot 全对象；建议在 init 时投影出 LLMSubsystemConfig，避免模块对 profiles 过度耦合。具体允许消费的域与键语义以 [DASALL_profiles模块详细设计.md](DASALL_profiles模块详细设计.md) 的 RuntimePolicySnapshot v1 消费矩阵为准。
 2. allowed_prompt_releases 与 trusted_sources 缺失时，PromptPolicy 应拒绝发送，而不是默认放行。
 3. 同一 stage 不允许配置空 primary route。
 4. fallback route 必须是显式有序列表，不能依赖 provider 默认顺序。

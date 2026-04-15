@@ -4,6 +4,7 @@ target_compile_features(dasall_simulator PRIVATE cxx_std_20)
 
 target_link_libraries(dasall_simulator
   PRIVATE
+    dasall_access
     dasall_runtime
     dasall_contracts
     dasall_infra

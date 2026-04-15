@@ -1,0 +1,360 @@
+# DASALL Tools 子系统专项 TODO
+
+最近更新时间：2026-04-15  
+阶段：Detailed Design -> Special TODO  
+适用范围：tools/  
+当前结论：Tools 子系统已具备 L3/L2 混合粒度的专项拆分条件；公共接口/对象、治理链骨架、builtin -> services 最小闭环、workflow/compensation 主链可直接进入 Build 规划，runtime caller fixture、MCP loopback 夹具、external skill 样本三项仍需以前置补设计/夹具任务解阻，generic MCP ready 与外部 Skill 兼容不得写成当前已可交付事实。
+
+## 1. 文档头
+
+本文档严格基于以下输入生成：
+
+1. docs/architecture/DASALL_tools子系统详细设计.md
+2. docs/architecture/DASALL_Agent_architecture.md
+3. docs/architecture/DASALL_Engineering_Blueprint.md
+4. docs/adr/ADR-005-architecture-review-baseline.md
+5. docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
+6. docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md
+7. docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md
+8. docs/ssot/InfraConcurrencyPolicy.md
+9. docs/ssot/InfraIntegrationTopology.md
+10. docs/plans/DASALL_工程落地实现步骤指引.md
+11. docs/development/DASALL_工程协作与编码规范.md
+12. 当前代码与构建现状：tools/CMakeLists.txt、tools/src/placeholder.cpp、tests/unit/CMakeLists.txt、tests/unit/tools/CMakeLists.txt、tests/contract/CMakeLists.txt、tests/contract/tool/*、tests/integration/CMakeLists.txt、profiles/include/RuntimePolicySnapshot.h、services/include/IExecutionService.h、services/include/IDataService.h
+13. 现有 TODO / 交付基线：docs/todos/services/DASALL_capability_services子系统专项TODO.md、docs/todos/profiles/DASALL_profiles子系统专项TODO.md、docs/todos/infrastructure/DASALL_infrastructure_plugin组件专项TODO.md 及其 deliverables
+
+生成原则：
+
+1. 不改写已冻结 ADR 结论。
+2. 不越过 Tools 子系统边界扩张到无关模块。
+3. 不把 generic MCP ready、external skill 兼容、runtime 生产接线写成当前已完成事实。
+4. 每项任务都保留代码目标、测试目标、验收命令三件套。
+5. 对设计证据不足的 runtime caller、MCP loopback、external skill 样本先列补设计/夹具前置项，不伪造实现任务。
+6. 不提前把 ToolAdmissionDecision、ToolRouteDecision、CapabilitySnapshot、SkillSpecAsset 等 supporting object 升格到 shared contracts。
+
+## 2. 子系统目标与范围
+
+### 2.1 子系统目标
+
+1. 将 tools 从占位静态库收敛为 Layer 4 Execution & Collaboration Layer 的统一工具治理与执行入口，保持 Runtime 主控权、Memory 上下文权、RecoveryManager 恢复准入权和 LLM Prompt 治理边界不变。
+2. 按 ToolRequest -> ToolDescriptor -> ToolIR -> ToolResult -> ObservationDigest 的对象分层，实现 Registry、Validator、PolicyGate、RouteSelector、Executor、ResultProjector、CompensationLedger 的稳定责任链。
+3. 复用既有 contracts、profiles、services、infra/plugin 冻结基线，优先完成 builtin/workflow 主链，再按门禁灰度引入 MCP、plugin-delivered stdio MCP 和 Skill runtime。
+4. 为 tests/unit/tools、tests/integration/tools、ctest discoverability、profile 差异验证和 observability 质量门提供可执行工程入口。
+
+### 2.2 范围边界
+
+纳入本专项 TODO 的对象：
+
+1. tools/include 公共接口面、ToolInvocationContext / ToolInvocationEnvelope 等 module public 对象。
+2. ToolRegistry、PluginExtensionBridge、ToolValidator、ToolConfigAdapter、ToolPolicyGate、ToolRouteSelector、ToolManager 治理链。
+3. ToolServiceBridge、BuiltinExecutorLane、ResultProjector、ToolAuditBridge、ToolMetricsBridge、ToolTraceBridge、ToolHealthProbe。
+4. WorkflowPlan / WorkflowReceipt 补设计、WorkflowEngine、CompensationLedger。
+5. CapabilityCache、MCPLane、IMCPAdapter、IMCPTransport、CapabilityDiscovery、plugin-delivered stdio MCP 接线。
+6. internal SkillSpec 样本、SkillRegistry、SkillRuntime、ExternalSkillImporter、plugin skill bundle importer。
+7. tools 的 CMake 接线、unit/integration 测试拓扑、discoverability、profile gate 与交付证据回写。
+
+不纳入本专项 TODO 的对象：
+
+1. runtime 主循环、SessionManager、RecoveryManager、CheckpointManager 的实现。
+2. memory/ContextOrchestrator 的上下文生产策略与 llm/PromptComposer 的消息渲染策略本体。
+3. services 的执行后端、platform 的 OS / 进程 / 驱动实现细节。
+4. infra/plugin 的 discover / validate / load / unload、签名、ABI、safe mode 决策本体。
+5. shared contracts 的对象扩张与 ABI 重新冻结。
+
+## 3. 输入依据与约束清单
+
+### 3.1 约束清单（Step 1 输出）
+
+| ID | 来源 | 类型 | 约束内容 | 对 TODO 的直接影响 |
+|---|---|---|---|---|
+| TOOL-TC001 | tools 详设 2.1；架构 4.5、5.2 | Must | Tool 主链必须保持 Registry -> Validator -> Policy Gate -> Route -> Executor -> Audit -> Observation Digest 的治理顺序 | 原子任务必须围绕治理链分段落盘，不允许跳过中间门禁 |
+| TOOL-TC002 | tools 详设 1.2；ADR-008 | Must | runtime 是 Tools 的唯一直接调用者；llm/cognition 只提供意图，不得直调 tools 实现 | runtime caller 相关证据不足时只能先做 fixture / 补设计，不得伪造生产接线 |
+| TOOL-TC003 | ADR-006；tools 详设 1.1、6.1 | Must | tools 不拥有 ContextPacket 装配权，不直接把 raw tool result 塞回 prompt | ResultProjector 只能产出 Observation / ObservationDigest；不得生成 prompt payload |
+| TOOL-TC004 | ADR-007；tools 详设 1.1、6.8 | Must | tools 只输出失败事实、side_effects、compensation_hints，不裁定 retry / replan / abort / compensate | Workflow / failure 任务不得把恢复裁定写进 tools 公共接口 |
+| TOOL-TC005 | ADR-008；tools 详设 6.5.2 | Must | AgentDelegation 只能收敛为 runtime recommendation，不得在 tools 内形成第二主循环 | WorkflowEngine 只能输出 delegation sidecar，不得直连 multi_agent 主控 |
+| TOOL-TC006 | tools 详设 2.1、6.5 | Must | 当前 shared contracts 只复用 ToolRequest、ToolDescriptor、ToolIR、ToolResult、ObservationDigest、ErrorInfo；新增 supporting object 默认 module-local | ToolInvocationContext、Envelope、PolicyView、RouteDecision、CapabilitySnapshot、SkillSpecAsset 等任务不得推进 contracts |
+| TOOL-TC007 | contracts/include/observation/ObservationDigest.h；架构 5.2.6 | Must | ObservationDigest 五字段语义冻结，禁止混入 payload、error、side_effects、duration、tool_call_id | ResultProjector 必须显式按五字段输出，不能用 ToolResult 冒充 Digest |
+| TOOL-TC008 | tools 详设 1.2、6.2；services 详细设计基线 | Must | builtin/action/query/diagnose 路径必须优先走 IExecutionService / IDataService，不得直连 platform 或 remote adapter | BuiltinExecutorLane 必须通过 ToolServiceBridge 做映射，不得把 OS 细节塞进 tools |
+| TOOL-TC009 | 架构 5.2.13；tools 详设 2.1 | Must | Function vs MCP 的双路径选择必须由 ToolRoute / RouteSelector 决定，prompt 或 skill 正文不得决定最终执行通道 | RouteSelector 与 profile gate 是单独任务，不得被 builtin/MCP 实现吞并 |
+| TOOL-TC010 | 架构 5.2.14；tools 详设 2.1、10.2 | Must-Not | 在 MCPAdapter、CapabilityDiscovery、CapabilityCache、ToolRoute、统一审计和失败收敛链路未落地前，不得宣称 generic MCP 已可用 | generic MCP 相关任务必须先做夹具和 gate，不得直接标记 Done-ready |
+| TOOL-TC011 | 蓝图 4.1、4.2；架构 7.4 | Must | tools 依赖方向只能指向 contracts、services、infra、profiles 投影视图；不得依赖 cognition/llm/platform/recovery 实现 | 代码目标限定在 tools/tests/docs；不得引入上层实现头文件 |
+| TOOL-TC012 | tools 详设 6.9；profiles/include/RuntimePolicySnapshot.h | Must | tools 只能消费 RuntimePolicySnapshot 既有键：max_tool_calls、tool_visibility_rules、capability_cache_policy、timeout_policy、allowed_tool_domains 等 | ToolConfigAdapter 必须做 projection-only 实现，不得新增 tools.* 顶层 schema |
+| TOOL-TC013 | tools 详设 6.5.4；infra/plugin 设计基线 | Must | 部署期扩展统一经 infra/plugin 激活；tools 只消费 active plugin set 和 export table，不复制 discover/load/unload/sign/ABI 治理 | PluginExtensionBridge 只能解析 builtin_tool_provider、mcp_server.stdio、skill_bundle 三类载荷 |
+| TOOL-TC014 | tools 详设 6.5.4；11.2 | Must | plugin 激活成功不等于 capability 可见，仍需经过 ToolRegistry、CapabilityDiscovery、PolicyGate、RouteSelector | plugin delta 任务必须保留 source-scoped revoke 与 fail-closed 行为 |
+| TOOL-TC015 | ssot/InfraConcurrencyPolicy.md；tools 详设 2.1、6.12.4 | Must | 引入 lane pool、session pool、delta queue 时必须声明 overflow_policy、backpressure 和 lock order，且不得持锁执行 I/O | ToolRegistry、PluginExtensionBridge、CapabilityCache、CapabilityDiscovery 的并发策略需单列任务或验收点 |
+| TOOL-TC016 | ssot/InfraIntegrationTopology.md；tools 详设 2.1、9.1 | Must | tools 进入核心链路后必须补至少 1 条 integration smoke 用例，并保证 ctest -N 可发现 | tests/integration/tools 拓扑注册和 smoke gate 是显式任务，不可后置省略 |
+| TOOL-TC017 | 架构 5.2.7；蓝图 4.2 | Must-Not | 工具之间不能直接互调，跨工具协作只能通过 WorkflowEngine | WorkflowPlan / WorkflowEngine 必须先冻结 DAG-only 约束，再允许复合编排 |
+| TOOL-TC018 | tools 详设 2.1、6.6、13 | Should | IToolManager 必须预留 invoke_batch()，首版实现可内部串行，但要保持 request 级隔离与并行扩展空间 | ToolManager 任务必须显式覆盖批量调用入口和同批局部失败隔离 |
+| TOOL-TC019 | ADR-006；tools 详设 2.1、6.12.2 | Must | ResultProjector 只能做规则化投影，不得在 tools 内部直接或间接调用 LLM provider | ResultProjector 任务必须以 deterministic projection / truncation / confidence 为验收基线 |
+| TOOL-TC020 | tools 详设 2.1、6.12.2 | Must | WorkflowEngine v1 只支持无条件无循环 DAG；条件分支和循环必须上收 runtime/cognition | WorkflowPlan / WorkflowEngine 必须先补 schema 与 cyclic rejection 设计 |
+| TOOL-TC021 | ADR-007；tools 详设 2.1、6.12.2 | Must | CompensationLedger 采用 invoke-scoped 生命周期，跨 invoke 持久化由 runtime checkpoint 负责 | CompensationLedger 只能输出 hints / evidence，不得实现持久 store |
+| TOOL-TC022 | 编码规范 3.6、3.7 | Must | 禁止吞错；新增模块公共接口应同步补 unit 或 contract 测试 | public header、module public object 和 discoverability 任务必须绑定测试与命令 |
+| TOOL-TC023 | tools 详设 2.1 TOOL-C009；架构 5.2.10~5.2.14 | Must-Not | IMCPAdapter、CapabilityCache、MCPToolBinding 等 MCP 协议内部接口和对象不得进入 shared contracts | MCPAdapter / MCPLane / CapabilityCache 相关任务不得把 MCP 传输对象升格到 contracts |
+| TOOL-TC024 | tools 详设 2.1 TOOL-C022；6.12.3 | Should | 每个 MCP server 保持 1:1 会话隔离，server 不应获得跨 server 视图或全局上下文 | MCPLane / CapabilityDiscovery 任务必须保证 session 隔离与生命周期由 Tool host 统一管理 |
+| TOOL-TC025 | tools 详设 2.1 TOOL-C032；ssot/InfraConcurrencyPolicy.md | Must | ToolRegistry、CapabilityCache、PluginExtensionBridge 等动态变更组件必须采用 snapshot-and-swap 策略，invoke 入口时刻绑定快照 | Registry / Cache / Bridge 相关任务必须显式验证并发读一致性与 snapshot 绑定 |
+| TOOL-TC026 | tools 详设 2.1 TOOL-C020；架构 5.2.8 | Should | CompensationLedger 补偿建议默认按 LIFO 顺序生成，所有副作用工具应声明幂等性与 side_effects 形态 | CompensationLedger 任务必须验证 LIFO hints 顺序与副作用声明完整性 |
+
+### 3.2 代码现状证据
+
+| 证据对象 | 当前状态 | 结论 |
+|---|---|---|
+| tools/CMakeLists.txt | `dasall_tools` 仅编译 tools/src/placeholder.cpp，并 PUBLIC 指向当前缺失的 tools/include | tools 已纳入构建图，但仍是占位静态库 |
+| tools/src/placeholder.cpp | 仅保留 keep_library_non_empty 占位函数 | tools 生产实现尚未启动 |
+| tools/include | 当前不存在 | module public ABI 与 header layout 完全缺失 |
+| tests/unit/CMakeLists.txt | 已 add_subdirectory(tools) | tools 已被纳入 unit 拓扑，但只到目录级接线 |
+| tests/unit/tools/CMakeLists.txt | 仅有 placeholder 注释，无任何 target 注册 | tools unit discoverability 仍为空 |
+| tests/integration/CMakeLists.txt | 当前只接入 infra / profiles / platform / services / llm | tools integration 拓扑完全缺失 |
+| tests/contract/tool/ToolRequestContractTest.cpp | 已验证 ToolRequest 边界、字段规则与枚举范围 | shared ToolRequest 契约基线已存在 |
+| tests/contract/tool/ToolResultContractTest.cpp | 已验证 ToolResult success/error/side_effects 边界 | shared ToolResult 契约基线已存在 |
+| tests/contract/tool/ToolDescriptorIRContractTest.cpp | 已验证 ToolDescriptor / ToolIR 字段边界与 guard 规则 | shared ToolDescriptor / ToolIR 契约基线已存在 |
+| tests/contract/CMakeLists.txt | 已注册 ToolRequestContractTest、ToolResultContractTest、ToolDescriptorIRContractTest | tools contract gate 具备现成入口，不需要重建顶层 contract 机制 |
+| services/include/IExecutionService.h、IDataService.h | 公共 ABI 已存在，且 services 专项 TODO 已收敛为稳定基线 | builtin lane 可直接以 services facade 作为下游门面 |
+| profiles/include/RuntimePolicySnapshot.h | 已冻结 runtime_budget、prompt_policy、capability_cache_policy、timeout_policy、execution_policy 等策略域 | ToolConfigAdapter 可直接消费既有 profile 视图，不应再建平行配置面 |
+
+## 4. 粒度可行性评估
+
+### 4.1 总体结论
+
+结论：Tools 当前可直接生成 L3 / L2 混合专项 TODO，不能整体按纯 L3 推进。
+
+当前最细可执行粒度：
+
+1. L3：ToolInvocationContext、ToolInvocationEnvelope、ITool / IToolManager、IPolicyGate / ICapabilityCache、IMCPAdapter / IMCPTransport、IToolPluginProvider / ToolPluginExtensionCatalog 等 module public 对象与接口。
+2. L2：ToolRegistry、PluginExtensionBridge、ToolValidator、ToolConfigAdapter、ToolPolicyGate、ToolRouteSelector、ToolManager、ToolServiceBridge、BuiltinExecutorLane、ResultProjector、ToolAuditBridge、ToolMetricsBridge、ToolTraceBridge、ToolHealthProbe、WorkflowEngine、CompensationLedger、CapabilityCache、CapabilityDiscovery、MCPLane、SkillRegistry、SkillRuntime。
+3. L1-L0：runtime caller fixture、MCP loopback / mock server fixture、internal SkillSpec 样本与 external dialect 样本。
+
+证据：
+
+1. tools 详设 6.2、6.5、6.6 已明确核心接口清单、对象分层和 module-local / shared 边界。
+2. 6.7、6.8 已给出主流程和异常流程，且 6.9 给出 profile 投影与默认策略。
+3. 6.12 为治理链、执行链、MCP、plugin 扩展、skill runtime、ops bridge 给出了组件卡片、关键执行流、失败语义和建议测试出口。
+4. 7.1、8.1、8.2、9.1 已给出代码路径、阶段实施计划、测试矩阵和质量门。
+5. 当前真正缺失的是 runtime 调用夹具、MCP loopback 夹具、external skill 样本和少数 internal schema 细节，而不是公共接口/组件职责本身。
+6. 因此可直接把“公共接口/对象 + 治理链骨架 + builtin/services 闭环 + workflow/compensation 主链”拆到 L3/L2；MCP 和 Skill 的高级路径必须先放前置补设计/夹具任务。
+
+### 4.2 粒度可行性评估表（Step 2 输出）
+
+| 设计对象 | 设计锚点 | 当前粒度等级 | 已具备证据 | 缺失证据 | TODO 拆解策略 |
+|---|---|---|---|---|---|
+| ToolInvocationContext | 6.5.1、8.1 | L3 | 归属、作用、注入字段边界明确，文件名已建议 | 具体验证夹具尚未落盘 | 直接拆数据结构任务 |
+| ToolInvocationEnvelope | 6.5.1、8.1 | L3 | 返回面组成、route facts、compensation handoff 边界明确，文件名已建议 | 与 runtime caller fixture 的联调样例缺失 | 直接拆数据结构任务 |
+| ITool / IToolManager | 6.6、8.1 | L3 | 方法语义、invoke_batch 预留、compensate 边界明确 | 仅缺实现与 unit surface | 直接拆接口冻结任务 |
+| IPolicyGate / ICapabilityCache | 6.6、6.12.1、6.12.3 | L3 | evaluate()/snapshot()/update() 语义明确 | internal reason code / cache invalidation 辅助对象未独立定义 | 先冻接口，再在 L2 任务中补 internal 实现 |
+| IMCPAdapter / IMCPTransport | 6.6、6.12.3 | L3 | ensure_session/list_capabilities/invoke、transport connect/send/receive/close 语义明确 | loopback fixture 与 transport 选择样例缺失 | 直接拆接口任务，实现前置夹具 |
+| IToolPluginProvider / ToolPluginExtensionCatalog | 6.6、6.12.4 | L3 | plugin -> tools 导出边界与三类载荷已冻结 | export table 真实样本缺失 | 直接拆接口任务 |
+| ToolRegistry / BuiltinCatalog / MCPBindingRegistry | 6.2、6.12.1、8.1 | L2 | 目录面职责、source-scoped revoke、snapshot-and-swap 原则、文件路径建议明确 | 具体 store 布局与 revision 结构未显式展开 | 先实现骨架与并发策略，不继续细化到私有 helper |
+| PluginExtensionBridge | 6.2、6.5.4、6.12.4 | L2 | delta 类型、载荷边界、lock order、source revoke 规则明确 | active plugin set 的真实样本与 runtime 事件流未落盘 | 先做 bridge skeleton 和并发安全，再接 plugin-delivered builtin/MCP/skill |
+| ToolValidator | 6.2、6.12.1 | L2 | validate/defaulting/normalize/route hint 语义明确 | ValidateOnly / DryRun 的完整用例矩阵尚未写出 | 先做组件实现与 unit 测试 |
+| ToolConfigAdapter / ToolPolicyView / ToolTimeoutView | 6.2、6.9、6.12.6 | L2 | profile 投影表、deny-oriented 默认、热更新原则明确 | snapshot version 指纹具体对象尚未落盘 | 先做 projection 组件，不单独升格 internal views |
+| ToolPolicyGate / ToolRouteSelector / ToolManager | 6.2、6.7、6.12.1 | L2 | fail-closed、route fallback、batch invoke、lane 选择与原因码规则明确 | runtime caller fixture 与 reason code taxonomy 尚未完全收口 | 先做组件骨架，caller 相关证据由前置补设计解阻 |
+| ToolServiceBridge / BuiltinExecutorLane | 6.2、6.12.2 | L2 | ToolIR -> services facade 映射、只读/副作用边界和错误收口明确 | builtin tool 样本与 caller 夹具缺失 | 先做 bridge + lane，再用 services smoke 集成验证 |
+| ResultProjector / ToolAuditBridge / ToolMetricsBridge / ToolTraceBridge / ToolHealthProbe | 6.10、6.12.2、6.12.6 | L2 | digest 五字段、audit/metrics/trace/health 字段面和 failure fallback 已明确 | integration fixtures 尚未落盘 | 先分组件落盘，再通过 observability integration 收口 |
+| WorkflowPlan / WorkflowReceipt + WorkflowEngine | 6.5、6.12.2 | L2 | DAG-only、step_output_mapping、delegation sidecar、failure stop 规则明确；6.12.2 已给出完整 DAG 约束规格 | 与 runtime caller fixture 的联调样例缺失 | 先补 schema 成表（已可直接拆 L2 任务），再推进 engine 实现 |
+| CompensationLedger | 6.2、6.8、6.12.2 | L2 | invoke-scoped 生命周期、LIFO hints、runtime 持久化边界明确 | 与 workflow receipt 的字段联动尚未单独成表 | 先做组件实现，字段联动跟随 workflow schema |
+| CapabilityCache / CapabilityDiscovery / MCPLane | 6.2、6.12.3 | L2 | fresh/stale/expired、failure_backoff、route fallback、server session 语义明确 | loopback server / stdio launch fixture 缺失 | 先做 fixture 和 cache，再推进 MCPLane / discovery |
+| SkillRegistry / SkillRuntime | 6.2、6.12.5 | L2 | normalized asset、match、instantiate、workflow bind 语义明确 | internal skill 样本和 eval 资产缺失 | 先补样本，再实现 registry/runtime |
+| ExternalSkillImporter / PluginSkillBundleImporter | 6.2、6.12.5 | L1 | 归一化方向、方言输入、feature flag 边界明确 | 样本目录、frontmatter 样本和 canonical asset 路径尚未落盘 | 只能先做补样本/补设计，再推进实现 |
+| runtime caller fixture | 8.3、11.1、12.1 | L0 | 需要 runtime 向 ToolManager 注入 caller/profile/trace/confirmation facts 的事实已明确 | 具体 fixture 形状与最小调用样例未冻结 | 先做补设计前置任务，阻断 runtime 生产接线 |
+| MCP loopback / mock server fixture | 8.3、11.1 | L0 | Phase 4 需要最小握手/列能力/调用闭环已明确 | 具体 fixture 与 plugin stdio launch 样本缺失 | 先做补设计 / 夹具任务，阻断 MCP Build |
+| tools integration / profile gate | 9.1、9.2、11.1 | L2 | integration 拓扑 SSOT、profile 差异 gate、discoverability gate 已明确 | tests/integration/tools 尚未接线 | 先补 topology，再做 smoke / observability / workflow / MCP / skill / profile 集成 |
+
+## 5. Design -> TODO 映射表
+
+### 5.1 映射总表（Step 3 输出）
+
+| Design 项 | 设计锚点 | TODO 类型 | 对应任务 ID | 映射说明 |
+|---|---|---|---|---|
+| tools/include 公共接口根与 CMake 骨架 | 7.1 TOOL-D1；8.1；8.2 Phase 0 | 目录 / 接口布局 | TOOL-TODO-001 ~ 008 | 先建立 module public ABI、src 骨架和 unit discoverability |
+| runtime 调用上下文与统一返回面 | 6.5.1；8.1；11.1 | 数据结构 / 生命周期 | TOOL-TODO-002、003、023 | 先定义 ToolInvocationContext / Envelope，再补 caller fixture 口径 |
+| Registry / Builtin / MCP binding / plugin delta | 6.2、6.5.4、6.12.1、6.12.4 | 注册 / 适配器 / 并发安全 | TOOL-TODO-009、010 | 先落目录骨架与 source-scoped revoke，再接 plugin 扩展 |
+| Validator / Config projection / Admission | 6.2、6.9、6.12.1、6.12.6 | 接口 / 配置 / 错误处理 | TOOL-TODO-011、012、013 | 先把 request 收敛、profile 投影和 fail-closed 准入稳定下来 |
+| Route 选择、lane 隔离与 ToolManager 主链 | 6.7、6.12.1 | 生命周期 / 初始化 / 执行编排 | TOOL-TODO-014、015a、015b | 保证 batch invoke、route fallback 和 lane 隔离受控 |
+| builtin -> services 闭环 | 6.2、6.12.2；7.1 TOOL-D6 | bridge / 执行 | TOOL-TODO-016、017、025 | 先经 ToolServiceBridge 映射，再通过 smoke integration 验证 |
+| ToolResult -> Observation / Digest 投影 | 5.2.6；6.8；6.12.2 | 数据投影 / 异常收口 | TOOL-TODO-018、026 | 统一 digest 五字段和 failure fallback |
+| observability / health 桥接 | 6.10、6.12.6 | 适配器 / 门禁 | TOOL-TODO-019 ~ 022、026、041 | log/metric/trace/audit/health 全部要可观测、可 discover |
+| Workflow / compensation 主链 | 5.2.7、5.2.8；6.12.2 | 补设计 / 执行 / failure gate | TOOL-TODO-027 ~ 030 | 先补 DAG-only schema，再落 engine 和 ledger |
+| MCP runtime 与 plugin stdio 路径 | 5.2.10~5.2.14；6.12.3；8.3 | 夹具 / 缓存 / 适配器 / 集成 | TOOL-TODO-031 ~ 035 | 先解阻 loopback / launch fixture，再推进 cache、adapter、discovery 和 integration |
+| Skill runtime 与外部 importer | 5.2.9、5.2.14；6.12.5 | 资产 / 运行时 / importer / 集成 | TOOL-TODO-036 ~ 040 | 先补 normalized 样本，再推进 registry/runtime/importer |
+| tests/integration/tools、profile diff、discoverability、Gate 收口 | 8.1、9.1、9.2、11.1 | 测试 / 门禁 / 文档回写 | TOOL-TODO-024、041、042 | tools 进入核心链路后必须具备 integration discoverability 和交付证据 |
+
+### 5.2 映射覆盖性检查
+
+| 类型 | 是否覆盖 | 任务 ID |
+|---|---|---|
+| 接口定义类任务 | 是 | TOOL-TODO-001、004、005、006、007 |
+| 数据结构定义类任务 | 是 | TOOL-TODO-002、003 |
+| 生命周期与初始化类任务 | 是 | TOOL-TODO-008、015a、015b、023 |
+| 适配器 / 桥接类任务 | 是 | TOOL-TODO-010、016、019、020、021、022、031、033、034、039 |
+| 异常与错误处理类任务 | 是 | TOOL-TODO-011、013、018、029、033 |
+| 配置与 Profile 裁剪类任务 | 是 | TOOL-TODO-012、041 |
+| 测试与门禁类任务 | 是 | TOOL-TODO-024、025、026、030、035、040、041 |
+| 文档 / 交付证据回写类任务 | 是 | TOOL-TODO-023、027、031、036、042 |
+
+## 6. 原子任务清单
+
+### 6.1 原子任务表（Step 4 输出）
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| TOOL-TODO-001 | NotStarted | 新增 tools 公共 include 布局与 CMake 骨架 | 详设 7.1 TOOL-D1、8.1、8.2；蓝图 3.6、6 | 8.1 目录建议；7.1 TOOL-D1 | L2 | tools/include/；tools/CMakeLists.txt | ITool.h、IToolManager.h、IPolicyGate.h、ICapabilityCache.h、plugin/、mcp/ 公共 include 根 | unit：tools 公共头文件可被纳入 unit surface；contract：既有 tool contract tests 不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | 无 | TOOL-BLK-001 | 完成本任务 | tools/include/；更新后的 tools/CMakeLists.txt | 仅当 tools/include 真正落盘、dasall_tools 可编译且 tool contract tests 全绿时完成 |
+| TOOL-TODO-002 | NotStarted | 定义 ToolInvocationContext 对象 | 详设 6.5.1、8.1；ADR-006/007/008 | 6.5.1 shared/module-local 分层；8.1 ToolInvocationContext.h | L3 | tools/include/ToolInvocationContext.h | ToolInvocationContext | unit：caller_domain、profile snapshot ref、trace / confirmation 输入面可编译且不越权承载上下文/恢复语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-001 | 无 | 无 | tools/include/ToolInvocationContext.h | 仅当字段集合与 6.5.1 一致，且不混入 ContextPacket、Prompt、Recovery 控制字段时完成 |
+| TOOL-TODO-003 | NotStarted | 定义 ToolInvocationEnvelope 对象 | 详设 6.5.1、8.1；架构 5.2.6 | 6.5.1 ToolInvocationEnvelope；8.1 ToolInvocationEnvelope.h | L3 | tools/include/ToolInvocationEnvelope.h | ToolInvocationEnvelope | unit：ToolResult、Observation、ObservationDigest、route facts、compensation_hints 的组合面可编译且不回写 shared contracts | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | TOOL-TODO-001、002 | 无 | 无 | tools/include/ToolInvocationEnvelope.h | 仅当 envelope 明确承载模块公共返回面且不把 supporting object 升格到 contracts 时完成 |
+| TOOL-TODO-004 | NotStarted | 定义 ITool 与 IToolManager 接口 | 详设 6.6、8.1；架构 7.3.4 | 6.6 ITool / IToolManager；7.1 TOOL-D1 | L3 | tools/include/ITool.h；tools/include/IToolManager.h | descriptor()、execute()、invoke()、invoke_batch()、compensate() | unit：接口头文件可编译；process：invoke_batch 保留 request 级隔离语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-001、002、003 | 无 | 无 | tools/include/ITool.h；tools/include/IToolManager.h | 仅当接口签名与 6.6 一致，且 batch / compensate 语义不越过 runtime 边界时完成 |
+| TOOL-TODO-005 | NotStarted | 定义 IPolicyGate 与 ICapabilityCache 接口 | 详设 6.6、6.12.1、6.12.3 | 6.6 IPolicyGate / ICapabilityCache；7.1 TOOL-D1 | L3 | tools/include/IPolicyGate.h；tools/include/ICapabilityCache.h | evaluate()、snapshot()、update() | unit：接口编译通过；contract：不把 ToolPolicyView / CapabilitySnapshot 升格到 shared contracts | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | TOOL-TODO-001 | 无 | 无 | tools/include/IPolicyGate.h；tools/include/ICapabilityCache.h | 仅当接口最小面与 fail-closed / snapshot-only 约束一致时完成 |
+| TOOL-TODO-006 | NotStarted | 定义 IMCPAdapter 与 IMCPTransport 接口 | 详设 6.6、6.12.3；架构 5.2.10~5.2.12 | 6.6 IMCPAdapter；6.12.3 IMCPTransport | L3 | tools/include/mcp/IMCPAdapter.h；tools/include/mcp/IMCPTransport.h | ensure_session()、list_capabilities()、invoke()；connect()/send()/receive()/close() | unit：接口头文件可编译；design：transport 只负责 raw JSON-RPC，不解释协议语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-001 | 无 | 无 | tools/include/mcp/IMCPAdapter.h；tools/include/mcp/IMCPTransport.h | 仅当 adapter / transport 边界与 6.12.3 一致，且 transport 不侵入 route/policy 时完成 |
+| TOOL-TODO-007 | NotStarted | 定义 IToolPluginProvider 与 ToolPluginExtensionCatalog 接口 | 详设 6.5.4、6.6、6.12.4 | 6.6 IToolPluginProvider；8.1 tools/include/plugin/ | L3 | tools/include/plugin/IToolPluginProvider.h；tools/include/plugin/ | IToolPluginProvider、ToolPluginExtensionCatalog | unit：只能表达 builtin_tool_provider、mcp_server.stdio、skill_bundle 三类载荷 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-001 | 无 | 无 | tools/include/plugin/IToolPluginProvider.h；tools/include/plugin/ | 仅当 plugin 扩展面保持 consumer-local，且不复制 infra/plugin 治理职责时完成 |
+| TOOL-TODO-008 | NotStarted | 接线 tools 源码骨架与 unit 测试入口 | 详设 8.1、8.2；代码现状 | 8.1 tools/src/*、tests/unit/tools/；8.2 Phase 0 | L2 | tools/src/；tests/unit/tools/CMakeLists.txt；tests/unit/CMakeLists.txt | ToolManager.cpp、registry/、validation/、policy/、route/、execution/、bridge/、projection/、mcp/、skills/、ops/、config/ 骨架；ToolInterfaceSurfaceTest 入口 | unit：tools 子目录不再是 placeholder-only，ctest -N 可发现 tools unit 用例 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci -N` | TOOL-TODO-001 ~ 007 | TOOL-BLK-001 | 完成 TOOL-TODO-001 ~ 007 | tools/src/ 各子目录骨架；tests/unit/tools/CMakeLists.txt | 仅当 tools 源码树真实落盘，tests/unit/tools 不再为空注释，且 ctest -N 能发现 tools unit 入口时完成 |
+| TOOL-TODO-009 | NotStarted | 实现 ToolRegistry 描述符目录骨架 | 详设 6.2、6.12.1；7.1 TOOL-D2 | 6.12.1 ToolRegistry；8.1 registry/ | L2 | tools/src/registry/ToolRegistry.cpp；tools/src/registry/BuiltinCatalog.cpp；tools/src/registry/MCPBindingRegistry.cpp | resolve_descriptor()、list_descriptors()、register_builtin()、upsert_mcp_bindings() | unit：descriptor / binding 增删改查可断言；并发：ToolRegistryConcurrentReadTest.cpp 验证 snapshot-and-swap 读一致性；contract：ToolDescriptorIRContractTest 不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | TOOL-TODO-008 | 无 | 无 | tools/src/registry/ToolRegistry.cpp；tools/src/registry/BuiltinCatalog.cpp；tools/src/registry/MCPBindingRegistry.cpp | 仅当 registry 实现 source-scoped lookup 与 snapshot-and-swap 读一致性，不误改 shared contract 语义时完成 |
+| TOOL-TODO-010 | NotStarted | 实现 PluginExtensionBridge source delta 骨架 | 详设 6.2、6.5.4、6.12.4 | 6.12.4 PluginExtensionBridge；7.1 TOOL-D2 | L2 | tools/src/bridge/PluginExtensionBridge.cpp | on_plugin_loaded()、on_plugin_unloaded()、emit_builtin_delta()、emit_mcp_delta()、emit_skill_delta() | unit：plugin unload 时 source-owned builtin / launch spec / skill asset 可撤销；并发：PluginExtensionBridgeConcurrencyTest.cpp 验证 delta 写路径串行化 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-007、008、009 | 无 | 无 | tools/src/bridge/PluginExtensionBridge.cpp | 仅当 bridge 只消费 active plugin set，且 load success 不自动等于 capability visible 时完成 |
+| TOOL-TODO-011 | NotStarted | 实现 ToolValidator | 详设 6.2、6.12.1；7.1 TOOL-D3 | 6.12.1 ToolValidator；7.1 TOOL-D3 | L2 | tools/src/validation/ToolValidator.cpp | validate()、inject_defaults()、normalize_arguments()、derive_operation() | unit：idempotency_key 非空传递可断言；request 缺失、default timeout、DryRun / ValidateOnly 分支可断言；contract：ToolRequestContractTest 不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | TOOL-TODO-008、009 | 无 | 无 | tools/src/validation/ToolValidator.cpp | 仅当 ToolRequest 能稳定归一化到 ToolIR，且默认值注入不做静默猜测时完成 |
+| TOOL-TODO-012 | NotStarted | 实现 ToolConfigAdapter 与 ToolPolicyView 派生 | 详设 6.9、6.12.6；profiles 基线 | 6.12.6 ToolConfigAdapter；7.1 TOOL-D4 | L2 | tools/src/config/ToolConfigAdapter.cpp | build_policy_view()、build_timeout_view()、is_snapshot_current() | unit：desktop / edge profile 差异投影可断言；hot-update：ToolConfigAdapterHotUpdateTest.cpp 验证 invoke-scoped snapshot 一致性不被打破 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-008 | 无 | 无 | tools/src/config/ToolConfigAdapter.cpp | 仅当组件只消费 RuntimePolicySnapshot 既有键，且缺失视图默认 deny 时完成 |
+| TOOL-TODO-013 | NotStarted | 实现 ToolPolicyGate | 详设 6.7、6.12.1；7.1 TOOL-D4 | 6.12.1 ToolPolicyGate；7.1 TOOL-D4 | L2 | tools/src/policy/ToolPolicyGate.cpp | evaluate()、check_allowed_domain()、check_visibility()、check_confirmation() | unit：PolicyDenied、缺 profile、缺 confirmation、safe mode 拒绝可二值断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-005、012 | 无 | 无 | tools/src/policy/ToolPolicyGate.cpp | 仅当 PolicyGate 缺关键输入时 fail-closed，且不代替 runtime 做恢复裁定时完成 |
+| TOOL-TODO-014 | NotStarted | 实现 ToolRouteSelector 与 lane 选择骨架 | 详设 6.2、6.12.1；7.1 TOOL-D5 | 6.12.1 ToolRouteSelector；7.1 TOOL-D5 | L2 | tools/src/route/ToolRouteSelector.cpp；tools/src/execution/ExecutorLanePool.cpp | select_route()、score_builtin_candidate()、score_mcp_candidate() | unit：builtin / workflow / mcp 选择、stale snapshot fallback、route unavailable 可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-009、012、013 | 无 | 无 | tools/src/route/ToolRouteSelector.cpp；tools/src/execution/ExecutorLanePool.cpp | 仅当 lane 隔离、route reason codes 和 stale-read 策略按 profile 生效时完成 |
+| TOOL-TODO-015a | NotStarted | 实现 ToolManager 骨架与 invoke_batch 入口 | 详设 6.7、6.12.1；7.1 TOOL-D1、TOOL-D11 | 6.12.1 ToolManager；13 invoke_batch 对齐 | L2 | tools/src/ToolManager.cpp | invoke()、invoke_batch()、compensate() 入口签名与 stub 管线 | unit：ToolManager 可实例化，invoke / invoke_batch 入口签名可编译；ToolManagerBatchInvokeTest.cpp request 级隔离签名可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-001 ~ 008 | 无 | 无 | tools/src/ToolManager.cpp（骨架） | 仅当 ToolManager 可实例化、invoke/invoke_batch 入口可编译（内部链尚可为 stub）时完成 |
+| TOOL-TODO-015b | NotStarted | 接通 ToolManager 完整治理管线 | 详设 6.7、6.12.1；7.1 TOOL-D1、TOOL-D11 | 6.12.1 ToolManager run_invoke_pipeline | L2 | tools/src/ToolManager.cpp | run_invoke_pipeline() 接通 Registry -> Validator -> PolicyGate -> RouteSelector -> Executor -> Audit -> Digest 完整链路 | unit：单请求失败 fail-closed；batch 中单 request deny 不阻断其它 request；ToolManagerBatchInvokeTest.cpp 全管线可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-009 ~ 014、015a | TOOL-BLK-002 | 完成 TOOL-TODO-023 或先用测试 fixture 验证调用面 | tools/src/ToolManager.cpp（完整管线） | 仅当 ToolManager 串起完整治理链、保留 invoke_batch 入口且不提前接 runtime 生产主链时完成 |
+| TOOL-TODO-016 | NotStarted | 实现 ToolServiceBridge | 详设 6.2、6.12.2；7.1 TOOL-D6 | 6.2 ToolServiceBridge；6.2.2 agent terminal 示例 | L2 | tools/src/bridge/ToolServiceBridge.cpp | ToolIR -> IExecutionService / IDataService request 映射 | unit：ToolIR 到 service request 的字段映射可断言，且不泄漏 services supporting object 给上游 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-008、011 | 无 | 无 | tools/src/bridge/ToolServiceBridge.cpp | 仅当 bridge 只做映射与隔离，不直接执行 side effects 或 route 决策时完成 |
+| TOOL-TODO-017 | NotStarted | 实现 BuiltinExecutorLane | 详设 6.2、6.12.2；7.1 TOOL-D6 | 6.12.2 BuiltinExecutorLane；7.1 TOOL-D6 | L2 | tools/src/execution/BuiltinExecutorLane.cpp | execute()、dispatch_action()、dispatch_query()、dispatch_diagnose()、map_service_result() | unit：success / timeout / partial side effect / read-only query 分支可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-016 | 无 | 无 | tools/src/execution/BuiltinExecutorLane.cpp | 仅当 builtin lane 只经 services facade 执行、正确映射 ErrorInfo 且不自行改路由时完成 |
+| TOOL-TODO-018 | NotStarted | 实现 ResultProjector | 详设 5.2.6、6.10、6.12.2；7.1 TOOL-D7 | 6.12.2 ResultProjector；7.1 TOOL-D7 | L2 | tools/src/projection/ResultProjector.cpp | project_success()、project_failure()、build_digest()、build_observation() | unit：ResultProjectorConfidenceTest.cpp 验证 summary / key_facts / citations / omitted_details / confidence 可二值断言；failure path 不泄漏 raw payload；contract：build_digest() 输出必须通过 ObservationDigest 五字段契约验证 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci --output-on-failure -L contract` | TOOL-TODO-003、017 | 无 | 无 | tools/src/projection/ResultProjector.cpp | 仅当 ObservationDigest 五字段完整，且投影严格遵守规则化截断与 confidence 扣减策略时完成 |
+| TOOL-TODO-019 | NotStarted | 实现 ToolAuditBridge | 详设 6.10、6.12.6；7.1 TOOL-D7 | 6.12.6 ToolAuditBridge；9.2 Gate-TOOL-08 | L2 | tools/src/ops/ToolAuditBridge.cpp | emit_requested()、emit_completed()、emit_failed()、emit_compensation() | unit / integration：requested / completed / failed / compensation 审计事件字段完整，且不嵌入 raw payload | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration` | TOOL-TODO-018 | 无 | 无 | tools/src/ops/ToolAuditBridge.cpp | 仅当关键审计事件可观测且与主执行结果解耦时完成 |
+| TOOL-TODO-020 | NotStarted | 实现 ToolMetricsBridge | 详设 6.10、6.12.6；7.1 TOOL-D7 | 6.12.6 ToolMetricsBridge；9.2 Gate-TOOL-08 | L2 | tools/src/ops/ToolMetricsBridge.cpp | emit_counter()、emit_histogram()、emit_route_metrics() | unit / integration：request_total、admission_denied_total、execution_latency、stale_snapshot、workflow_step_failure 等指标可观测 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration` | TOOL-TODO-018 | 无 | 无 | tools/src/ops/ToolMetricsBridge.cpp | 仅当指标维度不泄漏 provider 私有标签，且 backend 不可用不阻断主链时完成 |
+| TOOL-TODO-021 | NotStarted | 实现 ToolTraceBridge | 详设 6.10、6.12.6；7.1 TOOL-D7 | 6.12.6 ToolTraceBridge；9.2 Gate-TOOL-08 | L2 | tools/src/ops/ToolTraceBridge.cpp | start_root_span()、start_stage_span()、finish_with_status() | unit / integration：tool.invoke 到 lane / services / adapter 父子 span 结构稳定可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L integration` | TOOL-TODO-017、018 | 无 | 无 | tools/src/ops/ToolTraceBridge.cpp | 仅当 trace 桥接不改变主链顺序，且 exporter 故障不吞掉主错误时完成 |
+| TOOL-TODO-022 | NotStarted | 实现 ToolHealthProbe | 详设 6.10、6.12.6 | 6.12.6 ToolHealthProbe | L2 | tools/src/ops/ToolHealthProbe.cpp | collect_registry_health()、collect_lane_health()、collect_mcp_health() | unit：registry revision、lane saturation、cache freshness、degraded 标记可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-009、014 | 无 | 无 | tools/src/ops/ToolHealthProbe.cpp | 仅当 health 只提供事实快照，不越权触发恢复，并可供 RouteSelector 消费时完成 |
+| TOOL-TODO-023 | NotStarted | 补齐 runtime caller fixture 与 ToolInvocationContext caller 口径 | 详设 8.3、11.1、12.1；ADR-008 | 11.1 TOOL-BLK-002；12.1 TOOL-OPEN-01 | L0 | docs/architecture/DASALL_tools子系统详细设计.md；本专项 TODO 文档 | ToolInvocationContext 中 caller_domain / confirmation / trace / profile 输入口径；runtime -> tools 最小 fixture 约束 | process：与 runtime 主控边界一致；docs：不得把 runtime 生产接线误写成已完成事实 | `rg -n "ToolInvocationContext|caller_domain|confirmation|runtime" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md` | TOOL-TODO-002、004 | TOOL-BLK-002 | 明确 fixture 仅用于 tests / design gate，不替代 runtime 生产接线 | 更新后的 tools 详设与 TODO 阻塞描述 | 仅当 runtime 调用口径明确、fixture 范围受控，且生产主链仍保持 Blocked 时完成 |
+| TOOL-TODO-024 | NotStarted | 注册 tests/integration/tools 拓扑 | 详设 8.1、9.1；ssot/InfraIntegrationTopology.md | 8.1 tests/integration/tools；9.2 Gate-TOOL-10 | L2 | tests/integration/tools/；tests/integration/CMakeLists.txt | tools integration 子目录接线、合法命名和 integration 标签 discoverability | integration：ctest -N 可发现 tools integration 用例 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N` | TOOL-TODO-008 | TOOL-BLK-003 | 完成本任务 | tests/integration/tools/；更新后的 tests/integration/CMakeLists.txt | 仅当 tools integration 被顶层聚合 target 发现，且命名/标签符合 SSOT 时完成 |
+| TOOL-TODO-025 | NotStarted | 验证 ToolServicesSmokeIntegration | 详设 7.1 TOOL-D6、9.1 | 9.1 ToolServicesSmokeIntegrationTest；9.2 Gate-TOOL-05 | L2 | tests/integration/tools/ToolServicesSmokeIntegrationTest.cpp | Tool -> Services -> ToolResult -> ObservationDigest 最小闭环；builtin query / action 基本路径 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration -R ToolServicesSmokeIntegrationTest` | TOOL-TODO-016、017、018、024 | TOOL-BLK-002、TOOL-BLK-003 | 完成 TOOL-TODO-023、024 | tests/integration/tools/ToolServicesSmokeIntegrationTest.cpp | 仅当最小 builtin 闭环通过，且 ToolResult / ObservationDigest 关键字段可二值断言时完成 |
+| TOOL-TODO-026 | NotStarted | 验证 ToolObservabilityIntegration | 详设 7.1 TOOL-D7、9.1 | 9.1 ToolObservabilityIntegrationTest；9.2 Gate-TOOL-08 | L2 | tests/integration/tools/ToolObservabilityIntegrationTest.cpp | audit / metrics / trace / health 关键字段完整，且 failure path 仍可观测 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration -R ToolObservabilityIntegrationTest` | TOOL-TODO-019 ~ 022、024、025 | TOOL-BLK-003 | 完成 TOOL-TODO-024 | tests/integration/tools/ToolObservabilityIntegrationTest.cpp | 仅当四类 observability 证据齐备，且 exporter 故障不影响主链结果时完成 |
+| TOOL-TODO-027 | NotStarted | 补齐 WorkflowPlan 与 WorkflowReceipt internal schema | 详设 6.5、6.12.2、12.1 | 6.12.2 WorkflowPlan / WorkflowReceipt；11.1 风险表 | L2 | docs/architecture/DASALL_tools子系统详细设计.md；本专项 TODO 文档 | WorkflowPlan、WorkflowReceipt、delegation sidecar、step_output_mapping、cyclic rejection 约束 | process：DAG-only 约束可评审；docs：不引入 shared contract 扩张 | `rg -n "WorkflowPlan|WorkflowReceipt|step_output_mapping|cyclic|delegation" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md` | 无 | 无 | 无 | 更新后的 tools 详设与 TODO 映射 | 仅当 workflow internal schema 和 DAG-only 约束成表，且未伪造 shared ABI 时完成 |
+| TOOL-TODO-028 | NotStarted | 实现 WorkflowEngine | 详设 6.12.2；7.1 TOOL-D8 | 6.12.2 WorkflowEngine；7.1 TOOL-D8 | L2 | tools/src/execution/WorkflowEngine.cpp | execute()、build_batches()、dispatch_step()、collect_step_result()、finalize_receipt() | unit：topological ordering、failure stop、delegation sidecar、cyclic rejection 可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-014、017、027 | 无 | 无 | tools/src/execution/WorkflowEngine.cpp | 仅当 engine 严格执行 DAG-only 模型，且不实现条件/循环解释器时完成 |
+| TOOL-TODO-029 | NotStarted | 实现 CompensationLedger | 详设 6.8、6.12.2；架构 5.2.8 | 6.12.2 CompensationLedger；7.1 TOOL-D8 | L2 | tools/src/execution/CompensationLedger.cpp | register()、lookup()、build_hints()、record_irreversible_effect() | unit：LIFO hints、invoke-scoped 生命周期、irreversible effect 拒绝伪造补偿可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-018、027 | 无 | 无 | tools/src/execution/CompensationLedger.cpp | 仅当 ledger 只输出 hints / evidence，不跨 invoke 持久化且不覆盖原始失败语义时完成 |
+| TOOL-TODO-030 | NotStarted | 验证 ToolWorkflowFailureIntegration | 详设 9.1；7.1 TOOL-D8 | 9.1 ToolWorkflowFailureIntegrationTest；9.2 Gate-TOOL-06 | L2 | tests/integration/tools/ToolWorkflowFailureIntegrationTest.cpp | workflow step failure、delegation sidecar、compensation_hints、failure digest | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration -R ToolWorkflowFailureIntegrationTest` | TOOL-TODO-024、028、029 | TOOL-BLK-003 | 完成 TOOL-TODO-024 | tests/integration/tools/ToolWorkflowFailureIntegrationTest.cpp | 仅当 workflow 失败后 ErrorInfo、Digest 和 compensation_hints 同时可断言时完成 |
+| TOOL-TODO-031 | NotStarted | 补齐 MCP loopback 夹具与 plugin stdio launch 样本方案 | 详设 8.3、11.1、12.1；MCP 运行时设计 | 11.1 TOOL-BLK-003；8.3 阻塞项表 | L0 | docs/architecture/DASALL_tools子系统详细设计.md；本专项 TODO 文档 | MCP loopback/mock server、stdio launch spec 样本、最小握手/列表/调用闭环 | process：fixture 只服务测试与 gate，不宣称 generic MCP ready | `rg -n "loopback|stdio|MCPServerLaunchSpec|CapabilityDiscovery|ToolMCPFallbackIntegrationTest" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md` | TOOL-TODO-006、007 | TOOL-BLK-004 | 完成本任务 | 更新后的 tools 详设与 TODO 阻塞描述 | 仅当 loopback / launch 样本来源和最小闭环明确，且仍保持 production-ready 结论为 Blocked 时完成 |
+| TOOL-TODO-032 | NotStarted | 实现 CapabilityCache | 详设 6.12.3；7.1 TOOL-D9 | 6.12.3 CapabilityCache；7.1 TOOL-D9 | L2 | tools/src/mcp/CapabilityCache.cpp | snapshot()、update()、invalidate()、mark_failed()、list_trusted() | unit：fresh / stale / expired / last_error 状态转移可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-005、012、031 | TOOL-BLK-004 | 完成 TOOL-TODO-031 | tools/src/mcp/CapabilityCache.cpp | 仅当 stale-read 与 expire-after 策略严格按 profile 生效，且缓存缺失不被伪装为空能力时完成 |
+| TOOL-TODO-033 | NotStarted | 实现 MCPLane、IMCPAdapter 与 StdioMCPTransport | 详设 6.12.3；7.1 TOOL-D9 | 6.12.3 MCPLane / IMCPAdapter / IMCPTransport；7.1 TOOL-D9 | L2 | tools/src/mcp/MCPAdapter.cpp；tools/src/mcp/StdioMCPTransport.cpp | ensure_session_ready()、perform_handshake()、map_protocol_error()、execute() | unit：MCPAdapterTransportSwitchTest.cpp 验证 handshake failure、transport switch、protocol error mapping 可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-006、031、032 | TOOL-BLK-004 | 完成 TOOL-TODO-031 | tools/src/mcp/MCPAdapter.cpp；tools/src/mcp/StdioMCPTransport.cpp | 仅当 adapter / transport / lane 分层清晰，且 transport 不直接掌路由和 policy 时完成 |
+| TOOL-TODO-034 | NotStarted | 实现 CapabilityDiscovery 与 StdioMCPServerLauncher | 详设 6.12.3；7.1 TOOL-D9 | 6.12.3 CapabilityDiscovery；7.1 TOOL-D9 | L2 | tools/src/mcp/CapabilityDiscovery.cpp；tools/src/mcp/StdioMCPServerLauncher.cpp | refresh_once()、schedule_refresh()、on_plugin_delta()、publish_snapshot() | unit：failure_backoff、stale snapshot 保留、plugin delta 驱动 refresh 可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-010、031、032、033 | TOOL-BLK-004 | 完成 TOOL-TODO-031 | tools/src/mcp/CapabilityDiscovery.cpp；tools/src/mcp/StdioMCPServerLauncher.cpp | 仅当 discovery 单 server 失败不拖垮全局 refresh，且 stdio launch 只消费 plugin-delivered launch spec 时完成 |
+| TOOL-TODO-035 | NotStarted | 验证 ToolMCPFallback 与 ToolPluginStdioMCPIntegration | 详设 9.1、9.2；7.1 TOOL-D9 | 9.1 ToolMCPFallbackIntegrationTest、ToolPluginStdioMCPIntegrationTest；Gate-TOOL-07 | L2 | tests/integration/tools/ToolMCPFallbackIntegrationTest.cpp；tests/integration/tools/ToolPluginStdioMCPIntegrationTest.cpp | stale snapshot、route fallback、plugin-delivered stdio launch、统一 ErrorInfo 映射 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration -R "ToolMCPFallbackIntegrationTest|ToolPluginStdioMCPIntegrationTest"` | TOOL-TODO-024、032、033、034 | TOOL-BLK-003、TOOL-BLK-004 | 完成 TOOL-TODO-024、031 | tests/integration/tools/ToolMCPFallbackIntegrationTest.cpp；tests/integration/tools/ToolPluginStdioMCPIntegrationTest.cpp | 仅当 route fallback、stale snapshot 和 plugin stdio launch 都能自动验证，且仍不越级宣称 generic MCP ready 时完成 |
+| TOOL-TODO-036 | NotStarted | 补齐 internal SkillSpec 与 external dialect 样本资产 | 详设 6.12.5、8.1、11.1、12.1 | 6.12.5 SkillSpecAsset；11.1 TOOL-BLK-004 | L0 | docs/architecture/DASALL_tools子系统详细设计.md；本专项 TODO 文档；skills/specs/；skills/workflows/；skills/evals/ | internal normalized 样本、external dialect frontmatter 样本、feature flag 范围 | process：样本存在但不等于产品级兼容承诺 | `rg -n "SkillSpecAsset|ExternalSkillImporter|skills/specs|ToolSkillRuntimeIntegrationTest|ToolPluginSkillBundleIntegrationTest" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md` | TOOL-TODO-008 | TOOL-BLK-005 | 完成本任务 | 更新后的 tools 详设与 TODO；新增 skills/ 样本目录 | 仅当 internal / external 样本边界和 feature flag 策略明确，且未把 importer 兼容写成已完成事实时完成 |
+| TOOL-TODO-037 | NotStarted | 实现 SkillRegistry | 详设 6.12.5；7.1 TOOL-D10 | 6.12.5 SkillRegistry；7.1 TOOL-D10 | L2 | tools/src/skills/SkillRegistry.cpp | register_asset()、match_intent()、revoke_source()、list_assets() | unit：register / match / revoke 索引一致性可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-036 | TOOL-BLK-005 | 完成 TOOL-TODO-036 | tools/src/skills/SkillRegistry.cpp | 仅当 registry 只接受 normalized assets，且空匹配不被误判为错误时完成 |
+| TOOL-TODO-038 | NotStarted | 实现 SkillRuntime | 详设 6.12.5；7.1 TOOL-D10 | 6.12.5 SkillRuntime；7.1 TOOL-D10 | L2 | tools/src/skills/SkillRuntime.cpp | instantiate()、bind_workflow_template()、build_tool_allowlist()、release_instance() | unit：实例化、allowlist 收敛、policy 拒绝后的 fallback strategy 可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-028、036、037 | TOOL-BLK-005 | 完成 TOOL-TODO-036 | tools/src/skills/SkillRuntime.cpp | 仅当 runtime 只负责实例化与 plan 生成，不直接执行 workflow 或越权调度时完成 |
+| TOOL-TODO-039 | NotStarted | 实现 ExternalSkillImporter 与 PluginSkillBundleImporter | 详设 6.12.5；7.1 TOOL-D10 | 6.12.5 ExternalSkillImporter；7.1 TOOL-D10 | L2 | tools/src/skills/ExternalSkillImporter.cpp；tools/src/skills/PluginSkillBundleImporter.cpp | import_directory()、parse_frontmatter()、normalize_assets()、emit_diagnostics() | unit：方言解析、格式错误 quarantine、feature flag 关闭可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-010、036、037 | TOOL-BLK-005 | 完成 TOOL-TODO-036 | tools/src/skills/ExternalSkillImporter.cpp；tools/src/skills/PluginSkillBundleImporter.cpp | 仅当 importer 先归一化再注册，且错误输入被 quarantine 而不是隐式兼容时完成 |
+| TOOL-TODO-040 | NotStarted | 验证 ToolSkillRuntime 与 ToolPluginSkillBundleIntegration | 详设 9.1；7.1 TOOL-D10 | 9.1 ToolSkillRuntimeIntegrationTest、ToolPluginSkillBundleIntegrationTest | L2 | tests/integration/tools/ToolSkillRuntimeIntegrationTest.cpp；tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp | internal skill 实例化、plugin skill bundle 接线、external dialect behind feature flag | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration -R "ToolSkillRuntimeIntegrationTest|ToolPluginSkillBundleIntegrationTest"` | TOOL-TODO-024、037、038、039 | TOOL-BLK-003、TOOL-BLK-005 | 完成 TOOL-TODO-024、036 | tests/integration/tools/ToolSkillRuntimeIntegrationTest.cpp；tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp | 仅当 skill runtime 仅消费 normalized asset，plugin skill bundle 可撤销，且 external dialect 仍受 feature flag 约束时完成 |
+| TOOL-TODO-041 | NotStarted | 验证 ToolProfileIntegration 与 tools discoverability Gate | 详设 6.9、9.1、9.2；ssot/InfraIntegrationTopology.md | 9.1 ToolProfileIntegrationTest；9.2 Gate-TOOL-09、10 | L2 | tests/integration/tools/ToolProfileIntegrationTest.cpp；tests/unit/tools/CMakeLists.txt；tests/integration/tools/CMakeLists.txt | desktop_full vs edge_minimal 的 tool/mcp/workflow timeout、visibility、allowed domains 差异；ctest -N 可发现 tools unit/integration | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L integration -R ToolProfileIntegrationTest` | TOOL-TODO-012、024、025、026、030、035、040 | TOOL-BLK-003 | 完成 TOOL-TODO-024 | tests/integration/tools/ToolProfileIntegrationTest.cpp；更新后的 tools unit/integration CMake 注册 | 仅当 profile 差异通过 RuntimePolicySnapshot 投影体现，且 tools 测试入口可被 ctest -N 稳定发现时完成 |
+| TOOL-TODO-042 | NotStarted | 回写 tools 专项 Gate 与交付证据 | 详设 9.2、11.1、12.2；本专项 TODO | 9.2 Gate-TOOL-*；11.1 blocker table；12.2 next steps | L2 | docs/todos/tools/DASALL_tools子系统专项TODO.md；docs/worklog/DASALL_开发执行记录.md | process：Gate 通过结论、阻塞变化、风险残留、命令证据全部回写 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration` | TOOL-TODO-025、026、030、035、040、041 | TOOL-BLK-003、TOOL-BLK-004、TOOL-BLK-005 | 相关 gate 全部具备可执行证据 | 更新后的本专项 TODO 与工作记录 | 仅当每个 Gate 都有命令证据、通过/失败结论、阻塞状态和后续动作回写时完成 |
+
+## 7. 执行顺序建议
+
+### 7.1 串并行编排（Step 5 输出）
+
+| 阶段 | 任务 ID | 串并行建议 | 说明 |
+|---|---|---|---|
+| A 公共 ABI 与骨架 | TOOL-TODO-001 ~ 008 | 001 串行起步；002~007 可并行；008 收口 | 先补全 module public include 与 src/tests 骨架，否则后续所有 Build 任务都无承载面 |
+| B 治理链核心 | TOOL-TODO-009 ~ 015b | 009~014 可按依赖分段并行；015a 串联骨架；015b 末尾串联 | 先把 registry / validation / config / policy / route 稳定，再接 ToolManager 管线；015a 可在阶段 A 完成后即时启动，015b 待治理链组件就绪 |
+| C builtin 最小闭环 | TOOL-TODO-016 ~ 026 | 016~022 可并行分组；024 先于 025 / 026；025 先于 026 | Tool -> Services -> Digest/Observability 最小闭环是进入 workflow / MCP / skill 的前置门 |
+| D workflow / compensation | TOOL-TODO-027 ~ 030 | 027 先行；028 与 029 可并行；030 收口 | WorkflowPlan/Receipt schema 必须先冻结，避免 Engine 越权扩张 |
+| E MCP runtime | TOOL-TODO-031 ~ 035 | 031 先行；032 / 033 / 034 按依赖推进；035 收口 | loopback / launch fixture 是 MCP 全链条的最小前置，不解阻不推进 Build |
+| F skill runtime | TOOL-TODO-036 ~ 040 | 036 先行；037 / 038 / 039 按依赖推进；040 收口 | 先有 normalized/internal 样本和 external dialect 样本，再做 registry/runtime/importer |
+| G profile / discoverability / gate | TOOL-TODO-041 ~ 042 | 串行 | profile 差异与 discoverability 是工具子系统全量收口门禁 |
+
+### 7.2 必过门禁表
+
+| Gate ID | 门禁名称 | 触发时机 | 通过条件 | 不通过后动作 |
+|---|---|---|---|---|
+| Gate-TOOL-01 | Header Layout 门 | 阶段 A 结束 | tools/include 落盘、dasall_tools 可构建、tool contract tests 不回退 | 退回 TOOL-TODO-001 ~ 008 |
+| Gate-TOOL-02 | Governance Core 门 | 阶段 B 结束 | Registry / Validator / ConfigAdapter / PolicyGate / RouteSelector / ToolManager unit 全绿，且 fail-closed 行为稳定 | 退回 TOOL-TODO-009 ~ 015b |
+| Gate-TOOL-03 | Services Smoke 门 | 阶段 C 结束 | Tool -> Services -> Result -> Digest 最小闭环通过 | 退回 TOOL-TODO-016 ~ 025 |
+| Gate-TOOL-04 | Observability 门 | 阶段 C 结束 | audit / metrics / trace / health 字段完整，可在 integration 里断言 | 退回 TOOL-TODO-018 ~ 026 |
+| Gate-TOOL-05 | Workflow Failure 门 | 阶段 D 结束 | workflow failure、delegation sidecar、compensation_hints 全部通过二值验收 | 退回 TOOL-TODO-027 ~ 030 |
+| Gate-TOOL-06 | MCP Fixture 解阻门 | 阶段 E 前 | loopback / plugin stdio launch fixture 设计已冻结且可落测试 | 未解阻禁止推进 TOOL-TODO-032 ~ 035 |
+| Gate-TOOL-07 | MCP Hybrid 门 | 阶段 E 结束 | stale snapshot、route fallback、plugin-delivered stdio launch、统一 ErrorInfo 映射均通过 | 退回 TOOL-TODO-031 ~ 035，并保持 generic MCP ready 结论为 No-Go |
+| Gate-TOOL-08 | Skill Asset 解阻门 | 阶段 F 前 | internal normalized 样本和 external dialect 样本存在，feature flag 策略明确 | 未解阻禁止推进 TOOL-TODO-037 ~ 040 |
+| Gate-TOOL-09 | Skill Runtime 门 | 阶段 F 结束 | SkillRegistry / SkillRuntime / importer / plugin skill bundle integration 全绿 | 退回 TOOL-TODO-036 ~ 040 |
+| Gate-TOOL-10 | Discoverability 与 Profile 门 | 阶段 G 结束 | ctest -N 能发现 tools unit/integration，且 ToolProfileIntegrationTest 通过 | 退回 TOOL-TODO-024、041 |
+
+## 8. 阻塞项与解阻条件
+
+| 阻塞项 ID | 阻塞描述 | 影响任务 | 解阻条件 | 最小解阻动作 | 回退策略 |
+|---|---|---|---|---|---|
+| TOOL-BLK-001 | tools/include 与真实源码骨架当前缺失，`dasall_tools` 仍是 placeholder-only | TOOL-TODO-001 ~ 018、024 ~ 042 | 完成 public include 和 src/tests 骨架接线 | 完成 TOOL-TODO-001 ~ 008 | 在骨架落盘前，只允许继续维护现有 contract baseline，不推进 tools Build |
+| TOOL-BLK-002 | runtime 尚无稳定 ToolManager caller surface 或 caller fixture | TOOL-TODO-015b、023、025 | 明确 ToolInvocationContext caller 口径，并用测试 fixture 验证最小调用闭环 | 完成 TOOL-TODO-023 | 在 caller 未冻结前，只允许 tests/mocks 夹具驱动 ToolManager，不接 runtime 生产主链 |
+| TOOL-BLK-003 | tests/integration/tools 当前不存在，tools integration discoverability 为 0 | TOOL-TODO-024 ~ 042 | 顶层 integration 接入 tools 子目录且 ctest -N 可发现 tools integration | 完成 TOOL-TODO-024 | integration 门未开时，不得宣称 builtin/workflow/MCP/skill 闭环已验证 |
+| TOOL-BLK-004 | MCP loopback / plugin stdio launch fixture 缺失，无法验证 CapabilityDiscovery / cache / launch / fallback 闭环 | TOOL-TODO-031 ~ 035 | loopback server、stdio launch 样本和最小握手/列表/调用闭环成表 | 完成 TOOL-TODO-031 | 保持 `tools_mcp=false` 的 builtin/workflow rollout，不推进 generic MCP ready |
+| TOOL-BLK-005 | internal SkillSpec 样本与 external dialect 样本缺失，external importer 无法建立可靠回归基线 | TOOL-TODO-036 ~ 040 | internal normalized 样本、external frontmatter 样本和 feature flag 策略明确 | 完成 TOOL-TODO-036 | 在样本未齐前，只支持内部 workflow / builtin 路径，不开放 external importer |
+
+## 9. 验收与质量门
+
+### 9.1 验收命令基线
+
+1. 构建基线：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_tools`
+2. unit / contract / integration 聚合基线：
+   - `cmake --build build-ci --target dasall_unit_tests dasall_contract_tests dasall_integration_tests`
+3. discoverability 基线：
+   - `ctest --test-dir build-ci -N`
+4. unit 基线：
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+5. contract 基线：
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+6. integration 基线：
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+
+说明：
+
+1. 当前 VS Code CMake Tools 预设状态不作为唯一 Gate 依据，专项验收以显式 build-ci configure/build/ctest 链为准。
+2. 在 `build-ci` 生成器异常或残留错误时，应按仓库验证基线先清理后重配，再继续执行聚合 Gate。
+3. 本专项所有验收命令统一使用 `-G "Unix Makefiles"` 生成器（build-ci 目录），与 CI 管线保持一致。VS Code CMake Tools 预设使用 Ninja 生成器（build/ 目录）仅作为开发期辅助，不影响 Gate 判定。详设 7.1 中出现的 `-G Ninja` 示例指向开发期快速验证路径，正式 Gate 以 build-ci 为准。
+
+### 9.2 质量门逐项回答
+
+| 质量维度 | 当前判断 | 说明 |
+|---|---|---|
+| 架构一致性 | 可满足 | 详设已与 Runtime 主控、Memory 上下文权、Recovery 准入权、Multi-Agent 主控边界对齐 |
+| ADR 边界一致性 | 可满足 | ADR-006/007/008 已在 tools 详设中显式约束，专项 TODO 未改写结论 |
+| contracts / 公共语义兼容性 | 可满足 | 只复用 ToolRequest / Result / Descriptor / IR、ObservationDigest、ErrorInfo，不扩张 shared contracts |
+| 工程可实现性 | 可满足 | 公共接口、组件路径、测试入口和阶段计划已明确；MCP / skill 的缺口已转为前置补设计任务 |
+| 测试可验证性 | 可满足 | unit / contract / integration / failure / profile 五类出口均已成表 |
+| 原子任务可执行性 | 可满足 | 每项任务保留代码目标、测试目标、验收命令，且按单一主目标拆分 |
+| 任务粒度可评审性 | 可满足 | L3/L2 混合拆分，避免把 MCP / skill 高级路径一次性做成超大任务 |
+| 当前可直接执行性 | 附条件可执行 | 需先完成 TOOL-TODO-001 ~ 008、023、024、031、036 等骨架/补设计解阻项 |
+
+## 10. 风险与回退策略
+
+| 风险 | 级别 | 触发方式 | 缓解措施 | 回退策略 |
+|---|---|---|---|---|
+| ToolPolicyGate 吸收 runtime 恢复裁定语义 | High | 在 PolicyGate 中加入 retry / replan / compensate 决策 | 保持 PolicyGate 只输出 admission decision 与 reason codes | 立即回退新增恢复字段，恢复为 module-local 说明 |
+| ToolRouteDecision / CapabilitySnapshot 被过早推进 shared contracts | High | 为了“方便复用”把 internal object 升格到 contracts | 坚持 module-local / module-public 分层，仅以 envelope 传递 supporting data | 不进入 shared ABI，维持 tools 内部映射层 |
+| PluginExtensionBridge 越权依赖 infra/plugin 内部状态机 | High | 直接访问 discover/load/sign/ABI 内部实现对象 | 只依赖 active plugin set、handle_ref、export table | 一旦越权，回退到最小 export parsing 路径 |
+| ResultProjector 直接或间接调用 LLM 做摘要 | High | 为提升 digest 质量把 llm 逻辑塞进 tools | 只允许规则化投影，LLM-assisted summary 上收 runtime/cognition | 回退到 deterministic projection，并保留 confidence 降级 |
+| builtin / workflow / MCP 共用单一资源池 | Medium | 为快速打通闭环而忽略 lane 隔离 | 按 RouteSelector + ExecutorLanePool 隔离 builtin/workflow/MCP 故障域 | 如发生级联阻塞，回退到 builtin-only rollout |
+| plugin load/unload 与正在执行的 invoke 交叉导致悬挂引用 | High | 动态 delta 与调用快照没有隔离 | snapshot-and-swap + invoke 入口时刻快照绑定 + 写路径串行化 | 若实现复杂度过高，临时回退到单线程 delta queue |
+| generic MCP 兼容被过早宣称 | Medium | 在 Gate-TOOL-07 前把架构支持写成实现 ready | 在文档与验收结论中坚持 architecture ready / implementation not ready | 移除兼容声明，回到 builtin/workflow 稳定面 |
+| external skill importer 被误当成产品级兼容 | Medium | 没有样本和回归时就打开 importer | 先补样本、保留 feature flag、以 plugin skill bundle 为先 | importer 保持关闭，仅支持 internal assets |
+| ToolProfileIntegration 缺失导致 profile 差异悄然漂移 | Medium | timeout / visibility / allowed domains 写死在代码 | ToolConfigAdapter + ToolProfileIntegrationTest 双重守卫 | 一旦漂移，回退到 RuntimePolicySnapshot 投影基线 |
+
+## 11. 可行性结论
+
+1. 本专项 TODO 可以直接进入执行，但应按 L3/L2 混合粒度推进，而不是把整个 Tools 子系统一次性铺成全量实现。
+2. 当前可直接落到的最细粒度是：module public 对象与接口级（ToolInvocationContext、ToolInvocationEnvelope、ITool / IToolManager、IPolicyGate / ICapabilityCache、IMCPAdapter / IMCPTransport、IToolPluginProvider）以及组件骨架级（Registry、Validator、ConfigAdapter、PolicyGate、RouteSelector、ToolManager、BuiltinExecutorLane、ResultProjector、WorkflowEngine、CompensationLedger、CapabilityCache、SkillRegistry、SkillRuntime）。
+3. 当前不能直接细化到函数/数据结构级的阻塞点主要有三类：
+   - runtime caller fixture 未冻结，导致 ToolManager 生产接线不能安全下推到 runtime。
+   - MCP loopback / stdio launch fixture 缺失，导致 CapabilityDiscovery、MCPLane、plugin stdio launch 的关键验收出口不足。
+   - internal SkillSpec 与 external dialect 样本缺失，导致 ExternalSkillImporter 与 plugin skill bundle integration 无法建立可靠回归基线。
+4. 因此，推荐执行顺序是：先完成 TOOL-TODO-001 ~ 008 打底，再完成 TOOL-TODO-009 ~ 026 闭合 builtin 主链与 observability，再依次推进 TOOL-TODO-027 ~ 035 的 workflow/MCP 路径，最后推进 TOOL-TODO-036 ~ 042 的 skill、profile 和 Gate 收口。
+5. 在 Gate-TOOL-07 和 Gate-TOOL-09 通过前，generic MCP ready 与 external skill compatibility 一律维持 No-Go 结论；在 TOOL-TODO-023 完成前，runtime 生产接线一律维持 Blocked 结论。
+
+## 12. 交付物总览
+
+| 交付物类型 | 交付物列表 | 责任阶段 |
+|---|---|---|
+| 公共 include 与 CMake 骨架 | tools/include/（ITool.h、IToolManager.h、IPolicyGate.h、ICapabilityCache.h、mcp/IMCPAdapter.h、mcp/IMCPTransport.h、plugin/IToolPluginProvider.h）；tools/CMakeLists.txt | A |
+| Module-local 数据对象 | tools/include/ToolInvocationContext.h；tools/include/ToolInvocationEnvelope.h | A |
+| 源码骨架 | tools/src/ 各子目录骨架（registry/、validation/、policy/、route/、execution/、bridge/、projection/、ops/、config/、mcp/、skills/） | A |
+| 治理链组件 | ToolRegistry.cpp、PluginExtensionBridge.cpp、ToolValidator.cpp、ToolConfigAdapter.cpp、ToolPolicyGate.cpp、ToolRouteSelector.cpp、ExecutorLanePool.cpp、ToolManager.cpp | A~B |
+| Builtin 执行链 | ToolServiceBridge.cpp、BuiltinExecutorLane.cpp、ResultProjector.cpp | C |
+| Observability 桥接 | ToolAuditBridge.cpp、ToolMetricsBridge.cpp、ToolTraceBridge.cpp、ToolHealthProbe.cpp | C |
+| Workflow / Compensation | WorkflowEngine.cpp、CompensationLedger.cpp；更新后的 tools 详设 WorkflowPlan/Receipt schema | D |
+| MCP 运行时 | CapabilityCache.cpp、MCPAdapter.cpp、StdioMCPTransport.cpp、CapabilityDiscovery.cpp、StdioMCPServerLauncher.cpp | E |
+| Skill 运行时 | SkillRegistry.cpp、SkillRuntime.cpp、ExternalSkillImporter.cpp、PluginSkillBundleImporter.cpp；skills/ 样本目录 | F |
+| Unit 测试 | tests/unit/tools/（含 ToolManagerBatchInvokeTest、ToolRegistryConcurrentReadTest、PluginExtensionBridgeConcurrencyTest、ToolConfigAdapterHotUpdateTest、MCPAdapterTransportSwitchTest、ResultProjectorConfidenceTest 等） | A~F |
+| Integration 测试 | tests/integration/tools/（ToolServicesSmokeIntegrationTest、ToolObservabilityIntegrationTest、ToolWorkflowFailureIntegrationTest、ToolMCPFallbackIntegrationTest、ToolPluginStdioMCPIntegrationTest、ToolSkillRuntimeIntegrationTest、ToolPluginSkillBundleIntegrationTest、ToolProfileIntegrationTest） | C~G |
+| 补设计 / 夹具文档 | runtime caller fixture 口径文档；MCP loopback / stdio launch 夹具方案；internal/external skill 样本资产 | 各阶段前置 |
+| Gate 与交付证据回写 | 本专项 TODO 各 Gate 通过结论与命令证据；docs/worklog/DASALL_开发执行记录.md 更新 | G |

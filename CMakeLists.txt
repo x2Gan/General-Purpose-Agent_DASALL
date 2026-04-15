@@ -26,6 +26,7 @@ add_subdirectory(multi_agent)
 add_subdirectory(platform)
 add_subdirectory(infra)
 add_subdirectory(profiles)
+add_subdirectory(access)
 add_subdirectory(apps)
 
 if(DASALL_ENABLE_TESTS)
