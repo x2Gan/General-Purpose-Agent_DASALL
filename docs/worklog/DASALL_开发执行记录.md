@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #301
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-002 定义 ToolInvocationContext 对象
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 002 只依赖已完成的 TOOL-TODO-001，且是 003/004/023 之前最小可执行的 module-public 对象任务，因此本轮继续按 project-implementation-cycle 选择 002 作为唯一原子任务。
+2. docs/architecture/DASALL_tools子系统详细设计.md 的 6.5.1、6.5.3、6.7 已经冻结 002 的 owner：本轮仅收敛 invoke-scoped caller/profile/trace/confirmation 输入面，不提前实现 runtime caller fixture、PolicyGate 决策或 ToolManager 执行链。
+3. 为避免越权侵入 TOOL-TODO-008 的 unit topology 接线，本轮采用“新增 compile-only surface 源文件 + 手工语法编译 + CMake 聚合回归”的验证路径，而不是提前改写 tests/unit/tools/CMakeLists.txt。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-002-ToolInvocationContext对象设计收敛.md，固定本地证据、外部参考、Design 结论、Design->Build 映射与 Build 三件套。
+2. 更新 tools/include/ToolInvocationContext.h，把前向声明替换为真实 module-public 定义：新增 ToolTraceContext、ToolConfirmationFact 与 ToolInvocationContext，冻结 caller_domain、session_id、profile snapshot ref、trace propagation identity 与 confirmation fact set 这组 invoke-scoped 输入。
+3. 新增 tests/unit/tools/ToolInvocationContextSurfaceTest.cpp，使用字段类型断言与样例初始化锁定 002 的 public ABI，同时保持该测试源未接入 CMake，留待 TOOL-TODO-008 统一处理 tools unit discoverability。
+4. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-002 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 语法编译：
+   - `c++ -std=c++20 -I/home/gangan/DASALL/tools/include -x c++ -fsyntax-only /home/gangan/DASALL/tests/unit/tools/ToolInvocationContextSurfaceTest.cpp`
+2. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`
+3. 结果摘要：
+   - `dasall_unit_tests` 目标在构建期间自动执行当前 unit 集合，结果为 `249/249 passed`
+   - 额外尝试 RunCtest_CMakeTools 时仍出现历史 `DartConfiguration.tcl` 噪声，但未检测到真实 `Failed` 测试标记，因此本轮以构建期 unit gate 作为验收依据
+
+### 结果
+
+1. TOOL-TODO-002 已把 ToolInvocationContext 从占位前向声明推进为真实 module-public invoke-scoped 输入对象，后续 003/004/023 可以基于既定 caller/profile/trace/confirmation 口径继续推进。
+2. 本轮没有把 ContextPacket、Prompt、Observation、Recovery 控制字段写入 tools 公共 ABI，也没有把 profile 视图复制成新的 shared contract，对齐了 ADR-006/007/008 与 6.5.3 的边界要求。
+3. tests/unit/tools 目录现在具备首个 tools ABI surface 测试源，但 discoverability 仍保持由 TOOL-TODO-008 统一接线，未提前侵入源码骨架与 unit topology owner。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-003，定义 ToolInvocationEnvelope 的统一返回面，保持 supporting object 仍停留在 tools module-public 层。
+
+### 风险
+
+1. 当前 profile snapshot 仅以非 owning 引用暴露，若后续 runtime caller fixture 需要更严格生命周期保证，应在 TOOL-TODO-023 明确 fixture 约束，而不是把 snapshot 复制进 context。
+2. trace 侧当前只冻结 trace_id/span_id/parent_span_id；若后续想引入 trace_state/baggage，必须先经过 tracing/runtime surface 评审，不能在 tools 阶段 A 中顺手扩 ABI。
+
 ## 记录 #300
 
 - 日期：2026-04-15
