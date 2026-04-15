@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #303
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-004 定义 ITool 与 IToolManager 接口
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 004 依赖 001、002、003，且是 005~008 之前必须先冻结的模块公共接口层，因此本轮继续按 project-implementation-cycle 选择 004 作为唯一原子任务。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.6 已直接给出 ITool / IToolManager 的建议签名，本轮 owner 只覆盖接口声明本身，不提前实现 ToolExecutionContext、CompensationRequest 或 ToolManager 内部责任链。
+3. 为保持阶段 A 的最小边界，本轮继续采用“compile-only surface 源文件 + 语法编译 + CMake 聚合回归”的验证路径，不提前侵入 TOOL-TODO-008 的 tools unit discoverability 接线。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-004-ITool与IToolManager接口设计收敛.md，固定本地证据、外部参考、Design 结论、Design->Build 映射与 Build 三件套。
+2. 更新 tools/include/ITool.h，定义 `descriptor()` 与 `execute()` 最小 SPI，复用 shared `ToolDescriptor`、`ToolIR`、`ToolResult`，并保留 ToolExecutionContext 前向声明。
+3. 更新 tools/include/IToolManager.h，定义 `invoke()`、`invoke_batch()`、`compensate()` 三条 runtime-facing API，复用 ToolInvocationContext / ToolInvocationEnvelope，并以 `std::span<const ToolRequest>` 固化 non-owning batch 视图。
+4. 新增 tests/unit/tools/ToolInterfaceSurfaceTest.cpp，使用方法指针类型断言与 abstractness 断言锁定 004 的 public ABI，同时保持该测试源未接入 CMake，留待 TOOL-TODO-008 统一处理 tools unit discoverability。
+5. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-004 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 语法编译：
+   - `c++ -std=c++20 -I/home/gangan/DASALL/tools/include -I/home/gangan/DASALL/contracts/include -x c++ -fsyntax-only /home/gangan/DASALL/tests/unit/tools/ToolInterfaceSurfaceTest.cpp`
+2. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`
+3. 结果摘要：
+   - `dasall_unit_tests` 目标在构建期间自动执行当前 unit 集合，无回归
+
+### 结果
+
+1. TOOL-TODO-004 已把 ITool / IToolManager 从占位壳推进为真实模块公共接口，后续 005~008 可以在既定 API 形状上继续冻结 policy cache、MCP、plugin 接口和 src 骨架。
+2. 本轮没有把 ToolExecutionContext、CompensationRequest 或任何 recovery/runtime 主控字段偷渡进公共 ABI，保持了 6.6 与 ADR-006/007/008 的边界纪律。
+3. `invoke_batch()` 现已以 `std::span<const ToolRequest>` 固化 non-owning batch 视图语义，但请求所有权与执行隔离仍留给 ToolManager 内部实现，不在接口层泄露共享可变状态。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-005，定义 IPolicyGate 与 ICapabilityCache 接口。
+
+### 风险
+
+1. 当前 `invoke_batch()` 只冻结 batch view 形状，不冻结并发、取消、超时分配等调度策略；这些策略若需要扩展，必须在 internal policy 层推进。
+2. ToolExecutionContext 与 CompensationRequest 仍是前向声明；若后续 supporting object 边界评审出现漂移，需要单独任务收敛，而不是在 004 中直接补一个临时定义。
+
 ## 记录 #302
 
 - 日期：2026-04-15
