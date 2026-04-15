@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #300
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-001 新增 tools 公共 include 布局与 CMake 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 的阶段 A 明确要求从 TOOL-TODO-001 串行起步；002 到 007 都依赖公共 include 根和 CMake 头文件交付面，因此本轮按 project-implementation-cycle 先选择 001 作为最小可执行原子任务。
+2. docs/architecture/DASALL_tools子系统详细设计.md 的 6.5.1、6.6、8.1 已冻结 001 的 owner：本轮只建立 tools/include、plugin/mcp 子目录和 public header file set，不提前冻结对象字段、接口签名或 src 骨架。
+3. 研究同时确认 001 的验收会触发 `dasall_unit_tests` 聚合；因此本轮把 `DiagnosticsSnapshotStoreTest` 的墙钟失败识别为直接 validation blocker，并按最小 blocker-fix 处理，而不扩张到其它 tools 子任务。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-001-tools公共include布局与CMake骨架设计收敛.md，固定 001 的本地证据、外部参考、Design 结论、Design->Build 映射与 Build 三件套。
+2. 新增 tools/include/ITool.h、tools/include/IToolManager.h、tools/include/IPolicyGate.h、tools/include/ICapabilityCache.h、tools/include/ToolInvocationContext.h、tools/include/ToolInvocationEnvelope.h、tools/include/plugin/IToolPluginProvider.h、tools/include/mcp/IMCPAdapter.h、tools/include/mcp/IMCPTransport.h，先把 tools 模块公共 ABI 路径与命名槽位落盘为可包含壳文件。
+3. 更新 tools/CMakeLists.txt，为 dasall_tools 增加 `FILE_SET public_headers`，把上述公共头文件显式挂入构建图，同时保留 `src/placeholder.cpp` 直到 TOOL-TODO-008 接管真实源码骨架。
+4. 为解阻 001 的 unit 验收，更新 tests/unit/infra/DiagnosticsSnapshotStoreTest.cpp，在失败注入分支显式注入固定当前时间，避免历史时间戳快照被真实墙钟立即按 retention 清掉，导致无关单测阻塞 tools 阶段 A。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_diagnostics_snapshot_store_unit_test`
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+2. CMake Tools 测试：
+   - RunCtest_CMakeTools 运行 `DiagnosticsSnapshotStoreTest`
+   - RunCtest_CMakeTools 运行 `ToolRequestContractTest`
+   - RunCtest_CMakeTools 运行 `ToolResultContractTest`
+   - RunCtest_CMakeTools 运行 `ToolDescriptorIRContractTest`
+3. 结果：
+   - `DiagnosticsSnapshotStoreTest` 由失败恢复为 `1/1 passed`。
+   - `dasall_unit_tests` 聚合恢复为 `249/249 passed`。
+   - `dasall_contract_tests` 聚合保持 `152/152 passed`。
+   - 定向 tool contract 三项全部 `1/1 passed`。
+   - RunCtest_CMakeTools 仍附带 `DartConfiguration.tcl` 缺失提示，当前继续记为工具噪声，不影响本轮结论。
+
+### 结果
+
+1. TOOL-TODO-001 已完成，tools 现在具备稳定的公共 include 根、plugin/mcp 子目录与 CMake public header file set，后续 002 到 007 可以在既定文件路径内继续冻结对象和接口语义。
+2. 本轮没有越权改写 shared contracts，也没有提前实现 ToolManager 或 lane 逻辑；`dasall_tools` 仍保持 placeholder-only 源文件状态，符合 001 只做 ABI 布局与 CMake 骨架的任务边界。
+3. `DiagnosticsSnapshotStoreTest` 的墙钟依赖已被最小修复，后续 001 到 008 的 unit gate 不会再被这条无关基线反复阻塞。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-002，定义 ToolInvocationContext 的字段边界与编译面。
+
+### 风险
+
+1. 当前 public 头文件仍是路径与命名壳；若后续任务直接在 001 再次扩写签名或字段，会打破 002 到 007 的原子边界。
+2. `DartConfiguration.tcl` 缺失提示仍存在；若后续仓库把它提升为硬门禁，需要单独在构建基础设施层面处理，而不是继续混入 tools 任务轮次。
+
 ## 记录 #299
 
 - 日期：2026-04-13

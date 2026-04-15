@@ -102,6 +102,7 @@ void test_snapshot_store_and_facade_surface_snapshot_persistence_failures() {
   using dasall::tests::support::assert_true;
 
   SnapshotStore store;
+  store.inject_current_time_for_test("2026-04-07T21:30:01Z");
   const auto invalid_result = store.store(dasall::infra::diagnostics::DiagnosticsSnapshot{});
   assert_true(!invalid_result.stored && invalid_result.references_only_contract_error_types(),
               "SnapshotStore should reject structurally invalid snapshots through the frozen contracts error boundary");
