@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #308
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-009 实现 ToolRegistry 描述符目录骨架
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 009 只依赖 008，且是 010、014、015b 等任务开始消费 registry 之前必须先闭合的目录骨架任务；因此本轮按 project-implementation-cycle 选择 009 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.1 已明确 ToolRegistry 的核心职责是统一 descriptor / binding 目录，并要求写路径串行、读路径基于 snapshot-and-swap 的不可变目录视图；本轮只实现该目录骨架，不提前接入 PluginExtensionBridge 或 RouteSelector。
+3. contracts/include/tool/ToolDescriptor.h 与 tests/contract/tool/ToolDescriptorIRContractTest.cpp 已冻结共享 contract 语义，因此本轮 registry 只消费现有 `ToolDescriptor` / `MCPToolBinding`，不改 shared contracts。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-009-ToolRegistry描述符目录骨架设计收敛.md，固定 009 的本地证据、外部参考、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，移除 registry placeholder 编译入口，改为编译 `ToolRegistry.cpp`、`BuiltinCatalog.cpp`、`MCPBindingRegistry.cpp` 三个真实 registry 源文件。
+3. 新增 tools/src/registry/ToolRegistry.h / ToolRegistry.cpp，落地基于不可变 `ToolRegistrySnapshot` 的 descriptor catalog，提供 `resolve_descriptor()`、`list_descriptors()`、`register_builtin()`、`upsert_mcp_bindings()`、`revoke_source()`，并通过 `shared_ptr` snapshot publish 保持读一致性。
+4. 新增 tools/src/registry/BuiltinCatalog.h / BuiltinCatalog.cpp，提供静态 builtin descriptor seed，并使用保留 `builtin.static` source key 保护 builtin catalog 不被 source revoke 误删。
+5. 新增 tools/src/registry/MCPBindingRegistry.h / MCPBindingRegistry.cpp，收口 source-scoped MCP binding reconcile / revoke，使同一 source 的 binding 批次整体替换、不同 source 可并存。
+6. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_tool_registry_unit_test`、`dasall_tool_registry_concurrent_read_unit_test` 两个 executable unit target，并接入 `dasall_test_support` 与 `unit;tools` discoverability。
+7. 新增 tests/unit/tools/ToolRegistryTest.cpp 与 ToolRegistryConcurrentReadTest.cpp，分别断言 descriptor / binding CRUD、fail-closed、source-scoped revoke，以及并发 publish 下 snapshot 读一致性。
+8. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-009 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+2. 结果摘要：
+   - `dasall_unit_tests` 目标构建期间自动执行 257 条 unit tests，全绿
+   - `dasall_contract_tests` 目标构建期间自动执行 152 条 contract tests，全绿
+   - 新增 `ToolRegistryTest`、`ToolRegistryConcurrentReadTest` 已进入 unit 集合，`ToolDescriptorIRContractTest` 保持通过
+
+### 结果
+
+1. TOOL-TODO-009 已把 `tools/src/registry` 从空骨架推进为真实 descriptor / binding 目录层，为后续 PluginExtensionBridge、ToolRouteSelector、ToolManager 完整治理链提供了稳定的 registry 基线。
+2. 当前实现已经具备 source-scoped MCP binding reconcile / revoke 与 builtin source 保护，满足“plugin unload 不得误删静态 builtin”这一设计约束。
+3. 本轮保持 shared contract 零变更，ToolRegistry 只消费既有 `ToolDescriptor` / `MCPToolBinding`，并用 257 条 unit 与 152 条 contract 回归证明没有引入 discoverability 或 contract 回退。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-010，补齐 PluginExtensionBridge source delta 骨架，并开始让 plugin load/unload 真正驱动 registry source lifecycle。
+
+### 风险
+
+1. 当前 ToolRegistry 仍只覆盖 builtin descriptor 与 MCP binding；workflow descriptor、plugin descriptor delta 与 skill asset 目录仍待后续任务接入同一 snapshot 模型，避免出现第二套并行目录容器。
+2. `resolve_descriptor()` 当前返回 descriptor 副本，以换取简单稳定的 snapshot 生命周期；如果后续为性能把它改成内部引用视图，必须显式绑定 snapshot 生命周期，否则会重新引入悬垂引用风险。
+
 ## 记录 #307
 
 - 日期：2026-04-15

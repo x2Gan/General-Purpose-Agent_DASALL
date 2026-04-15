@@ -10,7 +10,9 @@ target_sources(dasall_tools
     src/ops/placeholder.cpp
     src/policy/placeholder.cpp
     src/projection/placeholder.cpp
-    src/registry/placeholder.cpp
+    src/registry/ToolRegistry.cpp
+    src/registry/BuiltinCatalog.cpp
+    src/registry/MCPBindingRegistry.cpp
     src/route/placeholder.cpp
     src/skills/placeholder.cpp
     src/validation/placeholder.cpp
