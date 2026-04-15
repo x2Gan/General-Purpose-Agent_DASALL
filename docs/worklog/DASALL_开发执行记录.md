@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #305
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-006 定义 IMCPAdapter 与 IMCPTransport 接口
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 006 只依赖 001，并且是 005 之后、031/033 之前的接口冻结任务；因此本轮继续按 project-implementation-cycle 把 006 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.6、6.12.3 已明确 adapter / transport 的建议签名与分层边界，本轮目标是把这些约束收敛为可编译的 module-public ABI，而不是进入实现层。
+3. 为保持阶段 A 的边界纪律，本轮继续采用“compile-only surface 源文件 + 语法编译 + CMake 聚合回归”的验证路径，不提前接线 MCP loopback fixture 或 transport implementation owner。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-006-IMCPAdapter与IMCPTransport接口设计收敛.md，固定 006 的本地证据、外部参考、Design 结论与 Build 三件套。
+2. 更新 tools/include/mcp/IMCPTransport.h，定义 MCPTransportKind、MCPServerSpec、TransportConnectResult 与 `connect()/send()/receive()/close()/is_connected()`，把 raw JSON-RPC transport 边界冻结到 tools/mcp 公共接口。
+3. 更新 tools/include/mcp/IMCPAdapter.h，定义 MCPServerSession、MCPToolBinding 与 `ensure_session()/list_capabilities()/invoke()`，把 MCP 协议语义边界冻结到 adapter 接口。
+4. 新增 tests/unit/tools/MCPInterfaceSurfaceTest.cpp，使用方法指针类型断言与样例初始化锁定 006 的 public ABI，同时保持该测试源未接入 CMake，留待 TOOL-TODO-008 统一纳管。
+5. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-006 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 语法编译：
+   - `c++ -std=c++20 -I/home/gangan/DASALL/tools/include -I/home/gangan/DASALL/contracts/include -x c++ -fsyntax-only /home/gangan/DASALL/tests/unit/tools/MCPInterfaceSurfaceTest.cpp`
+2. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`
+3. 结果摘要：
+   - `dasall_unit_tests` 目标在构建期间自动执行当前 unit 集合，无回归
+
+### 结果
+
+1. TOOL-TODO-006 已把 IMCPAdapter / IMCPTransport 从占位壳推进为真实 module-public 接口，并为 031、033 等 MCP 运行时实现任务提供了稳定 ABI 基线。
+2. transport 层当前只承接连接建立与 raw JSON-RPC message 收发，没有侵入握手、能力发现、invoke 或 route/policy 语义，对齐了 6.12.3 的分层约束。
+3. `MCPServerSpec`、`MCPServerSession`、`MCPToolBinding` 仍保留在 tools/mcp 模块边界内，没有进入 shared contracts；plugin-delivered `MCPServerLaunchSpec` 也仍保持 internal。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-007，定义 IToolPluginProvider 与 ToolPluginExtensionCatalog。
+
+### 风险
+
+1. 当前 `MCPServerSpec` 采用 `endpoint_ref` 这一抽象引用，后续如果 transport selector 需要显式 URL 或 launch 配置字段，必须在 ABI 兼容前提下追加，而不能把内部 launch spec 直接泄漏到公共接口。
+2. 本轮没有引入 loopback fixture 或 transport implementation；若后续实现任务发现握手状态需要更多 session metadata，需要在保持 `ensure_session()` 签名稳定的前提下扩展 supporting type。
+
 ## 记录 #304
 
 - 日期：2026-04-15
