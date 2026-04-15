@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #304
+
+- 日期：2026-04-15
+- 阶段：tools/专项 TODO 阶段 A
+- 任务：TOOL-TODO-005 定义 IPolicyGate 与 ICapabilityCache 接口
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 005 只依赖 001，且在阶段 A 中属于 004 之后、006 之前的最小接口冻结任务，因此本轮继续按 project-implementation-cycle 选择 005 作为唯一原子任务。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.6、6.12.1、6.12.3 明确了 IPolicyGate 与 ICapabilityCache 的签名，但 supporting type 尚未有独立头文件任务；因此本轮采用“留在 tools module-local / module-public，不进入 contracts”的最小收口方式。
+3. 为保持阶段 A 的边界纪律，本轮继续采用“compile-only surface 源文件 + 语法编译 + CMake 聚合回归”的验证路径，不提前侵入 TOOL-TODO-008 的 tools unit discoverability 接线。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-005-IPolicyGate与ICapabilityCache接口设计收敛.md，固定本地证据、外部参考、Design 结论、Design->Build 映射与 Build 三件套。
+2. 更新 tools/include/IPolicyGate.h，定义 ToolAdmissionEffect、ToolPolicyView、ToolAdmissionRequest、ToolAdmissionDecision 与 `IPolicyGate::evaluate()`，把 fail-closed policy gate 的最小 supporting type 收口到 tools 模块公共面。
+3. 更新 tools/include/ICapabilityCache.h，定义 CapabilityFreshness、CapabilityEntry、CapabilitySnapshot 与 `snapshot()/update()`，把 snapshot-only cache supporting type 收口到 tools 模块公共面。
+4. 新增 tests/unit/tools/ToolPolicyCapabilitySurfaceTest.cpp，使用方法指针类型断言与样例初始化锁定 005 的 public ABI，同时保持该测试源未接入 CMake，留待 TOOL-TODO-008 统一处理 tools unit discoverability。
+5. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-005 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 语法编译：
+   - `c++ -std=c++20 -I/home/gangan/DASALL/tools/include -x c++ -fsyntax-only /home/gangan/DASALL/tests/unit/tools/ToolPolicyCapabilitySurfaceTest.cpp`
+2. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+3. 结果摘要：
+   - `dasall_unit_tests` 与 `dasall_contract_tests` 目标在构建期间自动执行当前 unit / contract 集合，无回归
+
+### 结果
+
+1. TOOL-TODO-005 已把 policy/cache 两个公共接口从占位壳推进为真实模块公共接口，并为后续 006、012、020 等任务提供了可编译的 ABI 基线。
+2. 本轮没有把 ToolPolicyView、ToolAdmissionDecision、CapabilitySnapshot 推进 shared contracts；这些 supporting type 仍停留在 tools 模块边界内，对齐了 6.5.1、6.5.3 与 TOOL-TC006 的约束。
+3. 当前 supporting type 采用最小 compile-first 形状，后续若实现层需要更丰富字段，可在保持 ABI 兼容的前提下继续扩展，而不需要回退本轮提交。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-006，定义 IMCPAdapter 与 IMCPTransport 接口。
+
+### 风险
+
+1. 当前 005 为满足公共接口可编译而把 supporting type 放在接口头内；如果后续设计评审要求这些类型重新 internal-only 化，需要同步调整 6.6 的接口签名。
+2. CapabilitySnapshot 目前只表达进程内缓存事实，尚未涉及持久化或 session 级 lifecycle；相关扩展必须留给后续 MCP/CapabilityCache 实现任务处理。
+
 ## 记录 #303
 
 - 日期：2026-04-15
