@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #328
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 D
+- 任务：TOOL-TODO-028 实现 WorkflowEngine
+- 状态：已完成
+
+### 任务选择
+
+1. 027 已把 WorkflowPlan / WorkflowReceipt internal schema 冻结成表，因此 028 的最小可执行动作已经明确为“实现 DAG-only engine 内核”，而不是继续写 design-only 文档。
+2. 当前 ToolManager 对 workflow route 仍走 default executor 占位路径，导致 workflow descriptor 虽能被 route 到 workflow lane，却没有真实执行语义；这正是 028 需要修复的根因。
+3. 根据专项 TODO，029 仍需独立实现 CompensationLedger，因此本轮只做 WorkflowEngine 本体，不提前把 workflow-scoped compensation_hints 混进同一提交。
+
+### 改动
+
+1. 新增 tools/src/execution/WorkflowEngine.h 与 tools/src/execution/WorkflowEngine.cpp，落盘 WorkflowPlan/WorkflowStep/WorkflowReceipt/WorkflowDelegationSidecar internal object，以及 `execute()`、`build_batches()`、`dispatch_step()`、`collect_step_result()`、`finalize_receipt()` 五个核心入口。
+2. 在 WorkflowEngine 中实现 DAG-only 拓扑校验、step/output mapping 注入、delegation step recommendation、failure stop 与 skipped-step 汇总。
+3. 更新 tools/src/ToolManager.h 与 tools/src/ToolManager.cpp，引入 `workflow_engine` 依赖，并让 `ToolIRRoute::WorkflowEngine` 走真实 WorkflowEngine，而不再落到 default executor 占位结果。
+4. 更新 tools/CMakeLists.txt，把 WorkflowEngine.cpp 纳入 `dasall_tools`。
+5. 新增 tests/unit/tools/WorkflowEngineTest.cpp 与 tests/unit/tools/WorkflowCyclicRejectionTest.cpp，并更新 tests/unit/tools/CMakeLists.txt 注册两个 unit 目标。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools：`dasall_tools`
+   - Build_CMakeTools：`dasall_workflow_engine_unit_test`
+   - Build_CMakeTools：`dasall_workflow_cyclic_rejection_unit_test`
+   - Build_CMakeTools：`dasall_unit_tests`
+2. 定向执行：
+   - RunCtest_CMakeTools：`WorkflowEngineTest`
+   - RunCtest_CMakeTools：`WorkflowCyclicRejectionTest`
+3. 结果摘要：
+   - `WorkflowEngineTest` 通过，确认 batch 拓扑、static output mapping、delegation sidecar 与 failure stop 成立。
+   - `WorkflowCyclicRejectionTest` 通过，确认 cyclic graph 会在 build_batches 阶段 reject，并写回 WorkflowReceipt / ToolResult error。
+   - `dasall_unit_tests` 聚合构建通过，无新增 tools unit 回归。
+   - CMake Tools 仍有历史 `DartConfiguration.tcl` 噪声，不影响本任务通过结论。
+
+### 结果
+
+1. workflow route 现在具备真实执行主链：Workflow descriptor 不再返回占位成功，而是经过 WorkflowEngine 的拓扑排序、step 调度与 receipt 汇总。
+2. delegation step 已被收敛为 recommendation sidecar，不会在 tools 内部直连 multi_agent 主控，继续符合 ADR-008。
+3. step_output_mapping 已在 engine 中形成可执行的静态字段注入路径，为后续 workflow failure integration 提供稳定输入面。
+
+### 下一步
+
+1. 进入 TOOL-TODO-029，实现 CompensationLedger，并把 workflow-scoped compensation_hints 接到 WorkflowReceipt / ToolInvocationEnvelope。
+2. 在 029 完成后推进 TOOL-TODO-030，把 workflow step failure、delegation sidecar、compensation_hints、failure digest 收口到 integration gate。
+
+### 风险
+
+1. 当前 workflow route 默认 plan_loader 仍未接生产 parser；这意味着未显式注入 plan_loader 的 workflow request 仍会 fail-closed，这符合当前阶段的最小实现边界。
+2. 028 的 output mapping 只支持 v1 静态字段注入；若后续尝试加入动态表达式或默认值推断，需要先回到 design 层扩 schema，而不是在 engine 内部偷偷增长解释器。
+
 ## 记录 #327
 
 - 日期：2026-04-16

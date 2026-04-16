@@ -4,6 +4,7 @@
 #include <chrono>
 #include <utility>
 
+#include "execution/WorkflowEngine.h"
 #include "execution/BuiltinExecutorLane.h"
 #include "error/ResultCode.h"
 #include "ops/ToolAuditBridge.h"
@@ -410,6 +411,9 @@ ToolManager::ToolManager(manager::ToolManagerDependencies dependencies)
 	if (!dependencies_.route_selector) {
 		dependencies_.route_selector = defaults.route_selector;
 	}
+	if (!dependencies_.workflow_engine) {
+		dependencies_.workflow_engine = defaults.workflow_engine;
+	}
 	if (!dependencies_.metrics_bridge) {
 		dependencies_.metrics_bridge = defaults.metrics_bridge;
 	}
@@ -686,6 +690,9 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 		}
 
 		ToolResult result;
+		std::optional<std::vector<ToolCompensationHint>> workflow_compensation_hints;
+		std::optional<std::vector<std::string>> workflow_evidence_refs;
+		std::optional<std::string> workflow_failure_reason_code;
 		if (*validation_result.tool_ir->operation == ToolIROperation::DryRun) {
 			result = build_non_execution_result(
 					*validation_result.tool_ir,
@@ -696,6 +703,32 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 					*validation_result.tool_ir,
 					route_decision,
 					"tool.mode.validate_only");
+		} else if (route_decision.route == ToolIRRoute::WorkflowEngine) {
+			if (!dependencies_.workflow_engine) {
+				return emit_failure_with_metrics(build_failure_envelope(
+						request,
+						ResultCode::ToolExecutionFailed,
+						"workflow.engine_unavailable",
+						"tools.manager.execute",
+						build_route_facts(route_decision)));
+			}
+
+			auto outcome = dependencies_.workflow_engine->execute(
+					*validation_result.tool_ir,
+					ToolExecutionContext{
+							.invocation_context = context,
+							.lane_key = route_decision.lane_key,
+					});
+			result = std::move(outcome.tool_result);
+			if (outcome.compensation_hints.has_value()) {
+				workflow_compensation_hints = std::move(outcome.compensation_hints);
+			}
+			if (!outcome.evidence_refs.empty()) {
+				workflow_evidence_refs = std::move(outcome.evidence_refs);
+			}
+			if (!outcome.failure_reason_code.empty()) {
+				workflow_failure_reason_code = std::move(outcome.failure_reason_code);
+			}
 		} else {
 			const auto execute = [&]() {
 				return dependencies_.executor(ToolExecutionRequest{
@@ -759,10 +792,19 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 				!envelope.tool_result->success.value_or(false)) {
 			envelope.failure_reason_code = fallback_projection.failure_reason_code;
 		}
+			if (workflow_evidence_refs.has_value()) {
+				envelope.evidence_refs = std::move(workflow_evidence_refs);
+			}
+			if (workflow_failure_reason_code.has_value()) {
+				envelope.failure_reason_code = std::move(workflow_failure_reason_code);
+			}
 		if (envelope.tool_result->success.value_or(false)) {
 			envelope.failure_reason_code = std::nullopt;
 		}
-		if (!envelope.compensation_hints.has_value() &&
+			if (workflow_compensation_hints.has_value()) {
+				envelope.compensation_hints = std::move(workflow_compensation_hints);
+			} else if (!envelope.compensation_hints.has_value() &&
+					route_decision.route != ToolIRRoute::WorkflowEngine &&
 				descriptor->supports_compensation.value_or(false)) {
 			envelope.compensation_hints = build_compensation_hints(*envelope.tool_result);
 		}
@@ -844,6 +886,16 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					.schema_url = std::string("https://opentelemetry.io/schemas/1.26.0"),
 			});
 	auto result_projector = std::make_shared<projection::ResultProjector>();
+		auto workflow_engine = std::make_shared<execution::WorkflowEngine>(
+				execution::WorkflowEngineDependencies{
+						.plan_loader = {},
+						.builtin_executor = [builtin_lane](
+								const ToolIR& tool_ir,
+								const ToolExecutionContext& execution_context) {
+							return builtin_lane->execute(tool_ir, execution_context);
+						},
+						.mcp_executor = {},
+					});
 
 	return manager::ToolManagerDependencies{
 			.registry = std::move(registry),
@@ -851,6 +903,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 			.config_adapter = std::move(config_adapter),
 			.policy_gate = std::move(policy_gate),
 			.route_selector = std::move(route_selector),
+				.workflow_engine = std::move(workflow_engine),
 			.metrics_bridge = std::move(metrics_bridge),
 			.trace_bridge = std::move(trace_bridge),
 			.build_manifest = profiles::BuildProfileManifest{

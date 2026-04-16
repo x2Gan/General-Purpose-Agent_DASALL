@@ -8,6 +8,7 @@ target_sources(dasall_tools
     src/config/ToolConfigAdapter.cpp
     src/execution/BuiltinExecutorLane.cpp
     src/execution/ExecutorLanePool.cpp
+    src/execution/WorkflowEngine.cpp
     src/mcp/placeholder.cpp
     src/ops/ToolAuditBridge.cpp
     src/ops/ToolHealthProbe.cpp

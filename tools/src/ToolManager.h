@@ -11,6 +11,7 @@
 #include "ICapabilityCache.h"
 #include "IToolManager.h"
 #include "config/ToolConfigAdapter.h"
+#include "execution/WorkflowEngine.h"
 #include "policy/ToolPolicyGate.h"
 #include "registry/ToolRegistry.h"
 #include "route/ToolRouteSelector.h"
@@ -67,6 +68,7 @@ struct ToolManagerDependencies {
   std::shared_ptr<config::ToolConfigAdapter> config_adapter;
   std::shared_ptr<IPolicyGate> policy_gate;
   std::shared_ptr<route::ToolRouteSelector> route_selector;
+  std::shared_ptr<execution::WorkflowEngine> workflow_engine;
   std::shared_ptr<ops::ToolMetricsBridge> metrics_bridge;
   std::shared_ptr<ops::ToolTraceBridge> trace_bridge;
   profiles::BuildProfileManifest build_manifest;

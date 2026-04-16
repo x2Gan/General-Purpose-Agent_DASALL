@@ -236,3 +236,15 @@ dasall_add_tools_behavior_test(
 	ResultProjectorConfidenceTest.cpp
 	ResultProjectorConfidenceTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_workflow_engine_unit_test
+	WorkflowEngineTest.cpp
+	WorkflowEngineTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_workflow_cyclic_rejection_unit_test
+	WorkflowCyclicRejectionTest.cpp
+	WorkflowCyclicRejectionTest
+)
