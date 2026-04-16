@@ -69,6 +69,24 @@ dasall_add_tools_surface_test(
 	MCPInterfaceSurfaceTest
 )
 
+dasall_add_tools_behavior_test(
+	dasall_mcp_adapter_unit_test
+	MCPAdapterTest.cpp
+	MCPAdapterTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_mcp_adapter_transport_switch_unit_test
+	MCPAdapterTransportSwitchTest.cpp
+	MCPAdapterTransportSwitchTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_mcp_lane_invoke_unit_test
+	MCPLaneInvokeTest.cpp
+	MCPLaneInvokeTest
+)
+
 dasall_add_tools_surface_test(
 	dasall_tool_plugin_provider_surface_unit_test
 	ToolPluginProviderSurfaceTest.cpp

@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #333
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 E
+- 任务：TOOL-TODO-033 实现 MCPLane、IMCPAdapter 与 StdioMCPTransport
+- 状态：已完成
+
+### 任务选择
+
+1. 032 已把 freshness / stale / trusted snapshot 语义固定在 `CapabilityCache`，033 的最小动作就是把 transport、adapter、lane 三层从 interface-only 推进为可执行实现。
+2. 034 仍要独立实现 `CapabilityDiscovery` 与 `StdioMCPServerLauncher`，因此 033 不能越权直接写真实 launcher；本轮必须把 stdio transport 做成可注入 channel 的 raw JSON-RPC 承载层，为 034 留出接线点。
+3. TODO 的显式验收点要求覆盖 handshake failure、transport switch、protocol error mapping，所以 033 不能只写 happy path，必须先把失败语义做成 unit gate。
+
+### 改动
+
+1. 新增 `tools/src/mcp/StdioMCPTransport.h` 与 `tools/src/mcp/StdioMCPTransport.cpp`：
+   - `StdioMCPTransport` 实现 `IMCPTransport`；
+   - 通过 `IStdioTransportChannel` / factory 注入底层 channel；
+   - 只负责 connect/send/receive/close/is_connected，不承接 initialize 或 tools/list 语义。
+2. 新增 `tools/src/mcp/MCPAdapter.h` 与 `tools/src/mcp/MCPAdapter.cpp`：
+   - 选择 transport；
+   - 执行 initialize -> initialized 最小握手；
+   - 缓存 per-server session；
+   - 实现 tools/list -> `CapabilitySnapshot` 和 tools/call -> `ToolResult`；
+   - 统一把协议错误映射为稳定 `ToolResult.error`。
+3. 新增 `tools/src/mcp/MCPLane.h` 与 `tools/src/mcp/MCPLane.cpp`：
+   - 从 `ToolRegistry` 解析 `MCPToolBinding`；
+   - 通过 `server_spec_resolver` 查找 `MCPServerSpec`；
+   - 调用 adapter 准备 session 并执行 invoke；
+   - 对缺失 binding / 缺失 spec / 缺失 session fail-closed。
+4. 新增单测：
+   - `tests/unit/tools/MCPAdapterTest.cpp`
+   - `tests/unit/tools/MCPAdapterTransportSwitchTest.cpp`
+   - `tests/unit/tools/MCPLaneInvokeTest.cpp`
+5. 更新 `tools/CMakeLists.txt`、`tests/unit/tools/CMakeLists.txt`、`tests/unit/CMakeLists.txt`，把 033 的源文件和单测目标纳入 `dasall_tools` / `dasall_unit_tests`。
+6. 更新 `docs/architecture/DASALL_tools子系统详细设计.md` 的现状表，把 MCP runtime 与传输层抽象同步为“部分存在”。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools` targets: `dasall_tools`, `dasall_unit_tests`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `MCPAdapterTest`, `MCPAdapterTransportSwitchTest`, `MCPLaneInvokeTest`
+3. 结果：
+   - 首轮编译暴露 `build_initialize_request()` 字符串拼接错误以及默认 `now_ms` lambda 指向错误 helper；修正后重新构建通过。
+   - `MCPAdapterTest`、`MCPAdapterTransportSwitchTest`、`MCPLaneInvokeTest` 全部通过。
+   - CTest 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. MCP transport / adapter / lane 三层职责已经在代码层面分离：transport 只管 raw JSON-RPC 通道，adapter 只管协议语义，lane 只管 binding/session 组装。
+2. handshake failure、transport switch 和 protocol error mapping 已在 unit 层固定，后续 035 集成门可以直接复用这些错误语义。
+3. 033 有意没有把真实 subprocess launcher 混进来，保证 034 仍保持独立任务边界。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-034`，实现 `CapabilityDiscovery` 与 `StdioMCPServerLauncher`，把 031 的 launch sample 方案真正接到 033 的 transport / adapter 路径上。
+2. 034 需要把 `failure_backoff_ms`、plugin delta 驱动 refresh 和 032 的 `CapabilityCache::mark_failed()` 串起来，避免 discovery 再复制一套 freshness 状态机。
+
+### 风险
+
+1. 当前 JSON 解析仍是最小实现，只覆盖 initialize / tools/list / tools/call 的受控测试面；若后续 payload 变复杂，需要补内部 parsing support，而不是扩大 public interface。
+2. `StdioMCPTransport` 仍依赖 injected channel，尚未接真实 subprocess lifecycle；这是有意留给 034 的 launcher 任务，不应在 033 内部偷偷扩边界。
+
 ## 记录 #332
 
 - 日期：2026-04-16

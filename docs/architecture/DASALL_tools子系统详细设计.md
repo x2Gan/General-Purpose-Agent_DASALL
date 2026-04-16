@@ -203,7 +203,7 @@ Must-Not：
 | tool 集成测试 | 缺失 | tests/integration 下无 tools/ 目录 | 当前无 Tool -> Services / MCP / Workflow 集成路径 |
 | tool 契约测试 | 部分存在 | tests/contract/tool/* | 仅覆盖共享对象边界，不覆盖模块行为 |
 | Skill 运行时 | 缺失 | 工作区无 SkillRegistry/SkillRuntime 生产代码 | 当前只有架构与研究文档，不具备真实运行时 |
-| MCP 运行时 | 部分存在 | `tools/src/mcp/CapabilityCache.cpp` 与 `tests/unit/tools/CapabilityCacheTest.cpp` 已落地；IMCPAdapter / CapabilityDiscovery / stdio transport 仍待实现 | 当前 generic MCP 仍是架构预留，不是实现事实 |
+| MCP 运行时 | 部分存在 | `tools/src/mcp/CapabilityCache.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPTransport.cpp` 与对应 unit tests 已落地；CapabilityDiscovery / launcher / integration gate 仍待实现 | 当前 generic MCP 仍是架构预留，不是实现事实 |
 | plugin -> tools 扩展桥接 | 缺失 | 工作区无 PluginExtensionBridge、IToolPluginProvider 等生产代码 | 当前无法通过 infra/plugin 注入额外 builtin tool、stdio MCP、skill assets |
 | ToolRoute 实现 | 缺失 | 工作区无 ToolRoute/RouteSelector 生产代码 | builtin 与 MCP 的混合路由尚未闭环 |
 | PolicyGate 实现 | 缺失 | 工作区无 tools policy 生产代码 | 高风险确认、allowed_tool_domains、tool_visibility_rules 尚无执行面载体 |
@@ -232,7 +232,7 @@ Must-Not：
 | Unit / Integration Gate | 缺失 | tests/unit/tools 与 tests/integration/tools 为空 | High | P0 |
 | Build discoverability | 缺失 | 无可发现的 tool unit/integration target/test | Medium | P1 |
 | 批量调用（invoke_batch） | 缺失 | ToolManager 仅有单请求 invoke，缺少对 runtime 并行工具调用的批量入口 | Medium | P1 |
-| MCP 传输层抽象 | 缺失 | IMCPAdapter 直接管理 stdio 细节，无 IMCPTransport 接口隔离 | Medium | P1 |
+| MCP 传输层抽象 | 部分存在 | `IMCPTransport` 与 `StdioMCPTransport` 已落地，SSE / streamable-HTTP 仍未实现 | Medium | P1 |
 | 动态变更并发安全 | 缺失 | ToolRegistry/PluginExtensionBridge 无 snapshot-and-swap 或 RCU 机制 | High | P1 |
 | ToolConfigAdapter 热更新 | 缺失 | 无 snapshot version 指纹与 invoke-scoped 一致性保证 | Medium | P1 |
 
