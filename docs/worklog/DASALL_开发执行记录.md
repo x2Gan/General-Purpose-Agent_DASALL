@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #332
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 E
+- 任务：TOOL-TODO-032 实现 CapabilityCache
+- 状态：已完成
+
+### 任务选择
+
+1. 031 已冻结 MCP loopback fixture 与 launch sample 方案，032 的最小可执行动作就是把 `CapabilityCache` 从 placeholder 变成可被 033 / 034 直接复用的内部组件。
+2. `ICapabilityCache` 的公共面只有 `snapshot()` 与 `update()`，但详设明确要求内部还要补 `invalidate()`、`mark_failed()`、`list_trusted()`；因此本轮必须在不扩大 public ABI 的前提下补齐 internal header/cpp。
+3. RouteSelector、HealthProbe、ToolConfigAdapter 已经分别消费 freshness、trust marker 与 capability cache policy，如果 032 不先把状态转移写成单测，后续 adapter / discovery 很容易各自实现一套不一致的 stale / expired 语义。
+
+### 改动
+
+1. 新增 `tools/src/mcp/CapabilityCache.h` 与 `tools/src/mcp/CapabilityCache.cpp`，实现 `dasall::tools::mcp::CapabilityCache`：
+   - `snapshot()` 按 `last_refresh_at_ms + expire_after_ms` 动态计算 `fresh` / `stale` / `expired`；
+   - `update()` 为成功刷新写入新的 refresh 时间、清空 `last_error` 并归一 freshness；
+   - `mark_failed()` 保留既有 capability entries / trust marker，仅更新错误态；
+   - `list_trusted()` 结合 trusted marker 与 `stale_read_allowed` 过滤输出；
+   - 写路径采用 snapshot-and-swap 发布 `CapabilityCacheState`，与 `ToolRegistry` 的并发模型对齐。
+2. 新增 `tests/unit/tools/CapabilityCacheTest.cpp`，覆盖：
+   - fresh / stale / expired 状态转移；
+   - `last_error` 失败态写入与恢复态清空；
+   - 缺失 `trust_marker` 时对既有 trusted snapshot 的继承；
+   - missing server failure 不伪造 capability entries；
+   - `list_trusted()` / `invalidate()` 的 policy 行为。
+3. 更新 `tools/CMakeLists.txt`、`tests/unit/tools/CMakeLists.txt`，把 `CapabilityCache.cpp` 与 `dasall_capability_cache_unit_test` 纳入构建。
+4. 更新 `tests/unit/CMakeLists.txt`，把 `dasall_capability_cache_unit_test` 加入 `dasall_unit_tests` 聚合依赖，修复“CTest 能发现测试名但聚合目标未先构建对应可执行文件”的接线缺口。
+5. 更新 `docs/architecture/DASALL_tools子系统详细设计.md` 的现状表，把 MCP 运行时从“完全缺失”修正为“CapabilityCache 已落地，其余组件待实现”。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools` targets: `dasall_tools`, `dasall_unit_tests`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `CapabilityCacheTest`
+3. 结果：
+   - 初次构建定位到 `dasall_unit_tests` 聚合未依赖 `dasall_capability_cache_unit_test`，导致 CTest 找不到可执行文件；补齐 `tests/unit/CMakeLists.txt` 依赖后重新构建通过。
+   - `CapabilityCacheTest` 通过。
+   - CTest 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. CapabilityCache 已具备 033 / 034 所需的最小 runtime 支撑：成功刷新、失败降级、trusted snapshot 过滤与 TTL 过期判断都已有统一实现。
+2. `fresh` / `stale` / `expired` 与 `last_error` 的语义已在 unit 层固定，不需要等到 MCP integration gate 才发现状态机漂移。
+3. unit 聚合目标重新恢复对新 tools 测试的 discoverability，避免后续 033 / 034 再次出现“测试名被注册但二进制未纳入聚合构建”的问题。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-033`，实现 `MCPLane`、`IMCPAdapter` 与 `StdioMCPTransport`，直接复用 032 的 freshness / trusted snapshot 语义。
+2. 在 033 中保持 transport 只管连接与 JSON-RPC 收发，不把 route / policy / cache 判断重新塞回 transport 层。
+
+### 风险
+
+1. 当前 CapabilityCache 仍是纯内存态实现，不含持久化 backend；这符合当前详设，但若 034 之后需要跨进程保留 snapshot，需另起任务扩展 backend，而不是在 032 上偷塞职责。
+2. `failure_backoff_ms` 尚未在 cache 中消费；退避调度仍由 034 的 CapabilityDiscovery 承担，避免缓存层与 refresh scheduler 职责耦合。
+
 ## 记录 #331
 
 - 日期：2026-04-16

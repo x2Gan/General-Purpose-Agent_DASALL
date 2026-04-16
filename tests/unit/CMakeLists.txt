@@ -128,6 +128,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_tool_policy_profile_diff_unit_test
 	dasall_tool_route_selector_unit_test
 	dasall_tool_route_fallback_unit_test
+	dasall_capability_cache_unit_test
 	dasall_tool_manager_skeleton_unit_test
 	dasall_tool_manager_batch_invoke_unit_test
 	dasall_tool_manager_pipeline_unit_test

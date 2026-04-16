@@ -10,6 +10,7 @@ target_sources(dasall_tools
     src/execution/CompensationLedger.cpp
     src/execution/ExecutorLanePool.cpp
     src/execution/WorkflowEngine.cpp
+    src/mcp/CapabilityCache.cpp
     src/mcp/placeholder.cpp
     src/ops/ToolAuditBridge.cpp
     src/ops/ToolHealthProbe.cpp

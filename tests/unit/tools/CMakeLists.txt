@@ -154,6 +154,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_capability_cache_unit_test
+	CapabilityCacheTest.cpp
+	CapabilityCacheTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_tool_manager_skeleton_unit_test
 	ToolManagerSkeletonTest.cpp
 	ToolManagerSkeletonTest
