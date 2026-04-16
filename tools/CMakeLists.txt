@@ -15,7 +15,7 @@ target_sources(dasall_tools
     src/registry/MCPBindingRegistry.cpp
     src/route/placeholder.cpp
     src/skills/placeholder.cpp
-    src/validation/placeholder.cpp
+    src/validation/ToolValidator.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS

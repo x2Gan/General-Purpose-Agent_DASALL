@@ -95,3 +95,21 @@ dasall_add_tools_behavior_test(
 	PluginExtensionBridgeConcurrencyTest.cpp
 	PluginExtensionBridgeConcurrencyTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_tool_validator_unit_test
+	ToolValidatorTest.cpp
+	ToolValidatorTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_validator_defaulting_unit_test
+	ToolValidatorDefaultingTest.cpp
+	ToolValidatorDefaultingTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_validator_dry_run_unit_test
+	ToolValidatorDryRunTest.cpp
+	ToolValidatorDryRunTest
+)

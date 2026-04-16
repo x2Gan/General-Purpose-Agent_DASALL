@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #310
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-011 实现 ToolValidator
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 011 依赖 008、009，且是后续 ToolPolicyGate、ToolRouteSelector、ToolManager 主链开始消费稳定 `ToolIR` 前的唯一归一化入口，因此本轮按 project-implementation-cycle 选择 011 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.1 已明确 ToolValidator 的职责边界是“request + descriptor -> ToolIR”，本轮只收敛字段校验、默认值注入、参数规范化和非执行态 operation 派生，不提前承担 policy、route、projection 或 compensation 责任。
+3. `ToolRequest` / `ToolIR` contract 语义已冻结，因此本轮只复用既有 guards；DryRun / ValidateOnly 保持 module-local tag 约定，不新增 shared contract 字段。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-011-ToolValidator设计收敛.md，固定 011 的本地证据、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，把 validation 编译入口从 placeholder 切到 `ToolValidator.cpp`。
+3. 新增 tools/src/validation/ToolValidator.h / ToolValidator.cpp，落地 `ToolValidationResult`、`ValidationDiagnostics`、`validate()`、`inject_defaults()`、`normalize_arguments()`、`derive_operation()`，并把 request / descriptor / IR guard 串成 fail-closed 归一化链。
+4. ToolValidator 现在会显式核对 request.tool_name 与 descriptor.tool_name、invocation kind 与 descriptor category 的一致性；timeout 只从 request.timeout_ms 或 descriptor.default_timeout_ms 注入，保持“无显式默认值就不猜测”。
+5. DryRun / ValidateOnly 当前通过 module-local tags `tool.mode.dry_run` 与 `tool.mode.validate_only` 选择；若同时出现则直接拒绝，避免隐式优先级。
+6. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_tool_validator_unit_test`、`dasall_tool_validator_defaulting_unit_test`、`dasall_tool_validator_dry_run_unit_test` 三个 executable unit target。
+7. 新增 tests/unit/tools/ToolValidatorTest.cpp、ToolValidatorDefaultingTest.cpp、ToolValidatorDryRunTest.cpp，分别覆盖基础归一化、defaulting 和非执行态分支。
+8. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-011 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+2. 定向 tests：
+   - RunCtest_CMakeTools 运行 `ToolValidatorTest`
+   - RunCtest_CMakeTools 运行 `ToolValidatorDefaultingTest`
+   - RunCtest_CMakeTools 运行 `ToolValidatorDryRunTest`
+3. 结果摘要：
+   - 三条新增 validator unit tests 全部通过
+   - `dasall_contract_tests` 目标构建期间自动执行 152 条 contract tests，全绿
+   - `ToolRequestContractTest`、`ToolDescriptorIRContractTest` 保持通过
+
+### 结果
+
+1. TOOL-TODO-011 已把 tools 治理链从“只有 descriptor 目录”推进到“具备稳定 request -> ToolIR 归一化能力”，为 012~015b 的 policy、route 和 manager 主链提供了一致输入。
+2. 当前 validator 保持了设计边界：不做 admission、不做最终 route 选择、不解释业务 payload，只负责显式可证明的字段收敛与非执行态保留。
+3. 本轮继续保持 shared contract 零变更，并用 contract gate 证明 ToolRequest / ToolIR 语义没有回退。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-012，补齐 ToolConfigAdapter 与 ToolPolicyView / ToolTimeoutView 投影，让后续 PolicyGate 与 RouteSelector 有稳定 profile 视图可消费。
+
+### 风险
+
+1. 当前 DryRun / ValidateOnly 仍是 module-local tag 约定；后续若 runtime caller fixture 冻结了更正式的控制面，需要迁移而不是双轨并存。
+2. route hint 目前只做最小分类，不能替代 014 的最终路由裁定；后续如果有 MCP 优先、stale snapshot fallback 等策略，必须在 RouteSelector 中实现。
+
 ## 记录 #309
 
 - 日期：2026-04-16
