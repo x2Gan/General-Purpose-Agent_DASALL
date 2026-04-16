@@ -7,6 +7,7 @@ target_sources(dasall_tools
     src/bridge/ToolServiceBridge.cpp
     src/config/ToolConfigAdapter.cpp
     src/execution/BuiltinExecutorLane.cpp
+    src/execution/CompensationLedger.cpp
     src/execution/ExecutorLanePool.cpp
     src/execution/WorkflowEngine.cpp
     src/mcp/placeholder.cpp

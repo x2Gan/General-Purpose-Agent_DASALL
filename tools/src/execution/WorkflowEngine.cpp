@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "execution/CompensationLedger.h"
 #include "ToolManager.h"
 #include "error/ResultCode.h"
 
@@ -452,6 +453,7 @@ WorkflowExecutionOutcome WorkflowEngine::execute(
     const WorkflowPlan& plan,
     const ToolIR& workflow_ir,
     const ToolExecutionContext& execution_context) const {
+  CompensationLedger compensation_ledger;
   auto receipt = WorkflowReceipt{
       .workflow_id = plan.workflow_id,
       .status = "completed",
@@ -496,6 +498,22 @@ WorkflowExecutionOutcome WorkflowEngine::execute(
           execution_context,
           receipt.step_results,
           delegation_count);
+      if (dispatch_result.result.side_effects.has_value() &&
+          !dispatch_result.result.side_effects->empty()) {
+        if (dispatch_result.result.success.value_or(false) ||
+            found->second->allow_partial_side_effect) {
+          compensation_ledger.register_result(
+              found->second->step_id,
+              dispatch_result.route_kind,
+              dispatch_result.result,
+              true);
+        } else {
+          compensation_ledger.record_irreversible_effect(
+              found->second->step_id,
+              dispatch_result.route_kind,
+              dispatch_result.result);
+        }
+      }
       if (dispatch_result.delegation_sidecar.has_value()) {
         ++delegation_count;
       }
@@ -521,6 +539,8 @@ WorkflowExecutionOutcome WorkflowEngine::execute(
       receipt.skipped_step_ids.push_back(step.step_id);
     }
   }
+
+  receipt.compensation_hints = compensation_ledger.build_hints();
 
   return finalize_receipt(std::move(receipt), workflow_ir);
 }
@@ -999,6 +1019,11 @@ WorkflowExecutionOutcome WorkflowEngine::finalize_receipt(
   }
 
   const bool success = receipt.status == "completed";
+  const auto compensation_hints = receipt.compensation_hints.empty()
+                                      ? std::nullopt
+                                      : std::optional<std::vector<ToolCompensationHint>>(
+                                            receipt.compensation_hints);
+  const auto evidence_refs = receipt.evidence_refs;
   const auto payload = serialize_receipt(receipt);
   auto tool_result = ToolResult{
       .request_id = workflow_ir.request_id,
@@ -1020,8 +1045,8 @@ WorkflowExecutionOutcome WorkflowEngine::finalize_receipt(
   return WorkflowExecutionOutcome{
       .receipt = std::move(receipt),
       .tool_result = std::move(tool_result),
-      .compensation_hints = std::nullopt,
-      .evidence_refs = {},
+      .compensation_hints = std::move(compensation_hints),
+      .evidence_refs = std::move(evidence_refs),
       .failure_reason_code = success ? std::string() :
           (tool_result.error.has_value() && !tool_result.error->details.message.empty()
                ? tool_result.error->details.message

@@ -244,6 +244,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_compensation_ledger_unit_test
+	CompensationLedgerTest.cpp
+	CompensationLedgerTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_workflow_cyclic_rejection_unit_test
 	WorkflowCyclicRejectionTest.cpp
 	WorkflowCyclicRejectionTest

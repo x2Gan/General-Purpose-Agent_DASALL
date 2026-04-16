@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #329
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 D
+- 任务：TOOL-TODO-029 实现 CompensationLedger
+- 状态：已完成
+
+### 任务选择
+
+1. 028 已把 WorkflowEngine 的 DAG-only 调度和 WorkflowReceipt 汇总落地，但 `compensation_hints` 仍是空壳字段；029 的目标就是补上这个恢复 supporting data，而不是扩张 ToolResult 公共契约。
+2. tools 详设与 TODO 约束都要求 CompensationLedger 为 invoke-scoped 生命周期，因此本轮必须避免单例、静态缓存或跨 invoke store。
+3. 030 仍要独立做 workflow failure integration gate，因此 029 只收敛 ledger 与 workflow 内核接线，不提前写 integration test。
+
+### 改动
+
+1. 新增 tools/src/execution/CompensationLedger.h 与 tools/src/execution/CompensationLedger.cpp，定义 `CompensationRecord` 以及 `register_result()`、`lookup()`、`build_hints()`、`record_irreversible_effect()` 四个内部接口。
+2. `build_hints()` 采用逆序遍历 reversible records，默认输出 LIFO compensation hints；irreversible record 只保留 evidence，不生成伪造 rollback suggestion。
+3. 更新 tools/src/execution/WorkflowEngine.cpp，在单次 `execute()` 内部构造 invoke-local CompensationLedger，并在 step dispatch 后按 `ToolResult.side_effects` 写入记录，最后把 hints 汇总回 WorkflowReceipt 与 WorkflowExecutionOutcome。
+4. 更新 tools/CMakeLists.txt，把 CompensationLedger.cpp 纳入 `dasall_tools`。
+5. 新增 tests/unit/tools/CompensationLedgerTest.cpp，并扩展 tests/unit/tools/WorkflowEngineTest.cpp 断言 workflow-scoped compensation hints；同步 tests/unit/tools/CMakeLists.txt 注册新 unit 目标。
+6. 更新 docs/architecture/DASALL_tools子系统详细设计.md，把“WorkflowEngine 实现 / 补偿台账缺失”的旧差距项改为已实现事实，避免设计文档与当前代码状态冲突。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools：`dasall_tools`
+   - Build_CMakeTools：`dasall_compensation_ledger_unit_test`
+   - Build_CMakeTools：`dasall_workflow_engine_unit_test`
+   - Build_CMakeTools：`dasall_unit_tests`
+2. 定向执行：
+   - RunCtest_CMakeTools：`CompensationLedgerTest`
+   - RunCtest_CMakeTools：`WorkflowEngineTest`
+   - RunCtest_CMakeTools：`WorkflowCyclicRejectionTest`
+3. 聚合结果：
+   - `dasall_unit_tests` 触发 285 个 unit tests，全部通过。
+   - CMake Tools 仍有历史 `DartConfiguration.tcl` 噪声，不影响本任务通过结论。
+
+### 结果
+
+1. tools 现在已经能够在 workflow invoke 结束时输出 workflow-scoped `compensation_hints`，并维持与 step-level `side_effects` 的证据链关联。
+2. CompensationLedger 只输出 hints / evidence，不决定何时执行补偿，也不跨 invoke 落盘，仍严格保持恢复控制权在 runtime。
+3. irreversible side effects 不会被伪装成可补偿动作，避免 tools 在恢复链路上制造错误暗示。
+
+### 下一步
+
+1. 进入 TOOL-TODO-030，新增 ToolWorkflowFailureIntegrationTest，把 workflow step failure、delegation sidecar、compensation_hints、failure digest 一次性拉进 integration gate。
+2. 若 030 通过，再回看 Gate-TOOL-05 是否满足 workflow failure 门的阶段 D 收口条件。
+
+### 风险
+
+1. 当前 ledger 只依赖 `ToolResult.side_effects` 的字符串列表；如果后续 runtime 需要更细粒度的 undo 参数或幂等等级，必须先扩内部 supporting schema，而不是在当前 hint 字符串上叠加隐式语义。
+2. workflow route 默认 plan_loader 仍未接生产 parser；030 的 integration test 需要使用显式注入 plan_loader 的测试构造，而不是假设生产 parser 已经存在。
+
 ## 记录 #328
 
 - 日期：2026-04-16

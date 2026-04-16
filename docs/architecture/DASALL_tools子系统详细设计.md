@@ -207,8 +207,8 @@ Must-Not：
 | plugin -> tools 扩展桥接 | 缺失 | 工作区无 PluginExtensionBridge、IToolPluginProvider 等生产代码 | 当前无法通过 infra/plugin 注入额外 builtin tool、stdio MCP、skill assets |
 | ToolRoute 实现 | 缺失 | 工作区无 ToolRoute/RouteSelector 生产代码 | builtin 与 MCP 的混合路由尚未闭环 |
 | PolicyGate 实现 | 缺失 | 工作区无 tools policy 生产代码 | 高风险确认、allowed_tool_domains、tool_visibility_rules 尚无执行面载体 |
-| WorkflowEngine 实现 | 缺失 | 工作区无 workflow 编排生产代码 | 跨工具协作仍停留在架构描述 |
-| 补偿台账 | 缺失 | 工作区无 CompensationLedger/Manager 生产代码 | 目前无法把 side_effects 与 compensation_hints 收敛到工具域 |
+| WorkflowEngine 实现 | 已存在 | tools/src/execution/WorkflowEngine.cpp；tests/unit/tools/WorkflowEngineTest.cpp | 已具备 DAG-only 拓扑调度、failure stop、delegation sidecar 与 workflow receipt 汇总能力 |
+| 补偿台账 | 已存在 | tools/src/execution/CompensationLedger.cpp；tests/unit/tools/CompensationLedgerTest.cpp | 已能在 invoke-scoped 生命周期内汇总 side_effects、生成 LIFO compensation_hints，并保留 irreversible evidence |
 | Profile 策略输入 | 已存在 | profiles/include/RuntimePolicySnapshot.h 与各 runtime_policy.yaml | Tool 可直接消费 max_tool_calls、tool/mcp/workflow timeout、capability cache policy 等现有键 |
 | 设计收敛交付物 | Tool 专项缺失 | docs/todos/*deliverables 未见 Tool 专项项 | 当前没有 Tool 子系统自己的收敛证据与 Gate 快照 |
 

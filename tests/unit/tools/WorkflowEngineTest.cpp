@@ -201,7 +201,7 @@ void test_workflow_engine_builds_batches_and_stops_after_failure() {
                   .success = true,
                   .payload = std::string("{\"ticket\":\"42\"}"),
                   .error = std::nullopt,
-                  .side_effects = std::nullopt,
+                                    .side_effects = std::vector<std::string>{"terminal.cwd_restore"},
                   .completed_at = 100,
                   .duration_ms = 1,
                   .goal_id = tool_ir.goal_id,
@@ -274,6 +274,12 @@ void test_workflow_engine_builds_batches_and_stops_after_failure() {
   assert_true(outcome.receipt.delegation_sidecar.has_value() &&
                   outcome.receipt.delegation_sidecar->delegate_target == "multi_agent.review",
               "workflow engine should preserve delegation recommendation as a receipt sidecar");
+    assert_true(outcome.receipt.compensation_hints.size() == 1U,
+                            "workflow engine should aggregate reversible step side effects into workflow-scoped compensation hints");
+    assert_true(outcome.compensation_hints.has_value() &&
+                                    outcome.compensation_hints->size() == 1U &&
+                                    outcome.compensation_hints->front().target_ref == std::string("call-prepare"),
+                            "workflow engine should expose workflow compensation hints on the top-level execution outcome");
   assert_true(!outcome.tool_result.success.value_or(true),
               "workflow engine should project workflow failure into the top-level ToolResult");
   assert_true(outcome.tool_result.payload.has_value() &&
