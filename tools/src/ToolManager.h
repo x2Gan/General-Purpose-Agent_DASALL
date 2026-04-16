@@ -18,6 +18,12 @@
 
 namespace dasall::tools {
 
+namespace ops {
+
+class ToolMetricsBridge;
+
+}  // namespace ops
+
 struct CompensationRequest {
   std::optional<std::string> tool_call_id;
   std::optional<std::string> compensation_action;
@@ -60,6 +66,7 @@ struct ToolManagerDependencies {
   std::shared_ptr<config::ToolConfigAdapter> config_adapter;
   std::shared_ptr<IPolicyGate> policy_gate;
   std::shared_ptr<route::ToolRouteSelector> route_selector;
+  std::shared_ptr<ops::ToolMetricsBridge> metrics_bridge;
   profiles::BuildProfileManifest build_manifest;
   ToolExecutor executor;
   ToolProjector projector;

@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #322
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-020 实现 ToolMetricsBridge
+- 状态：已完成
+
+### 任务选择
+
+1. TOOL-TODO-019 已把默认 audit hooks 与 `ToolObservabilityIntegrationTest` 接好，因此 020 的最低风险路径是沿用同一 observability integration 出口扩展 metrics，而不是新增并行 test topology。
+2. `ToolManager` 当前仍持有请求失败、policy deny、route selection、terminal execution 的完整上下文，因此 020 适合采用同步 bridge 调用，而不是复用 019 的 request fact cache 方案。
+3. 结合 6.10、6.12.6 与 infra metrics 合同约束，本轮优先收敛固定 metric family、stage 标签编码、backend failure fail-open 语义，不提前混入 trace / health 结构。
+
+### 改动
+
+1. 新增 tools/src/ops/ToolMetricsBridge.h 与 tools/src/ops/ToolMetricsBridge.cpp，实现 tools 内部 metrics bridge、六个冻结指标族、granularity 开关、lazy meter/instrument 注册以及 `ToolMetricsEmitResult` degraded 状态。
+2. 更新 tools/src/ToolManager.h 与 tools/src/ToolManager.cpp，为 `ToolManagerDependencies` 增加 `metrics_bridge`，并在默认 dependencies 中挂接 disabled 的默认 bridge。
+3. 在 `ToolManager::run_invoke_pipeline()` 中补入 metrics 采样点：请求前置失败、policy deny、stale route、terminal execution；保持 metrics backend 故障不影响主结果。
+4. 更新 tools/CMakeLists.txt、tests/unit/tools/CMakeLists.txt、tests/unit/CMakeLists.txt，补齐 metrics bridge 源文件和 `dasall_tool_metrics_bridge_unit_test` 注册。
+5. 新增 tests/unit/tools/ToolMetricsBridgeTest.cpp，覆盖 metric family 冻结、request/deny/stale/latency/partial side effect/workflow failure 样本发射、backend failure degraded 和 disabled no-op。
+6. 扩展 tests/integration/tools/ToolObservabilityIntegrationTest.cpp，在既有 audit integration 基础上增加 metrics provider/meter 夹具，并验证 success/failure/policy deny 路径的 request/denied/latency metrics 与 exporter failure fail-open。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools: `dasall_tool_metrics_bridge_unit_test`
+   - Build_CMakeTools: `dasall_tool_observability_integration_test`
+   - Build_CMakeTools: `dasall_tool_manager_pipeline_unit_test`
+   - Build_CMakeTools: `dasall_tools`
+   - Build_CMakeTools: `dasall_unit_tests`
+   - Build_CMakeTools: `dasall_integration_tests`
+2. 定向执行：
+   - RunCtest_CMakeTools: `ToolMetricsBridgeTest`
+   - RunCtest_CMakeTools: `ToolManagerPipelineTest`
+   - RunCtest_CMakeTools: `ToolObservabilityIntegrationTest`
+   - RunCtest_CMakeTools: `ToolServicesSmokeIntegrationTest`
+3. 结果摘要：
+   - 新增定向用例全部通过。
+   - `dasall_unit_tests` 聚合回归通过，结果为 `280/280 passed`。
+   - `dasall_integration_tests` 聚合执行时，本轮 tools integration 用例通过，剩余失败仍是既有 infra diagnostics：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. tools 现在具备可复用的内部 metrics bridge，默认 ToolManager 已能把前置失败、policy deny、stale route、terminal execution 映射为统一 metrics 信号。
+2. metrics backend 缺失或 exporter 失败不会改变主执行结果，但 bridge status 会显式进入 degraded，可供后续 trace / health / observability integration 继续复用。
+3. `ToolObservabilityIntegrationTest` 已同时覆盖 audit 与 metrics，为 021、022、026 后续继续扩展 observability 门保留单一集成出口。
+
+### 下一步
+
+1. 推进 TOOL-TODO-021，实现 ToolTraceBridge，把 tool.invoke 到 route/lane 的 span 父子关系收口到统一 trace bridge。
+2. 完成 021 后继续推进 022，把 ToolHealthProbe 接入同一 observability integration 出口与 unit health 断言。
+
+### 风险
+
+1. metrics 维度当前通过 `stage` token 编码 route/tool/workflow 等 facts，满足现有 infra label 合同；若后续 metrics 合同扩展 frozen labels，需要在 bridge 内做增量映射，而不是把 provider 私有标签透传进来。
+2. tools integration aggregate 目前仍受两个既有 infra diagnostics 失败影响，导致 `dasall_integration_tests` 不能整体报绿；后续若要恢复全量绿灯，需要单独处理 infra 用例，而不是回退 tools metrics 改动。
+
 ## 记录 #321
 
 - 日期：2026-04-16

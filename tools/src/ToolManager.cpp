@@ -7,6 +7,7 @@
 #include "execution/BuiltinExecutorLane.h"
 #include "error/ResultCode.h"
 #include "ops/ToolAuditBridge.h"
+#include "ops/ToolMetricsBridge.h"
 #include "projection/ResultProjector.h"
 
 namespace {
@@ -375,6 +376,9 @@ ToolManager::ToolManager(manager::ToolManagerDependencies dependencies)
 	if (!dependencies_.route_selector) {
 		dependencies_.route_selector = defaults.route_selector;
 	}
+	if (!dependencies_.metrics_bridge) {
+		dependencies_.metrics_bridge = defaults.metrics_bridge;
+	}
 	if (!dependencies_.build_manifest.has_consistent_values()) {
 		dependencies_.build_manifest = defaults.build_manifest;
 	}
@@ -434,48 +438,61 @@ void ToolManager::set_capability_snapshot(
 ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 		const contracts::ToolRequest& request,
 		const ToolInvocationContext& context) const {
+	std::optional<ToolDescriptor> descriptor_cache;
+	auto emit_failure_with_metrics = [&](ToolInvocationEnvelope envelope) {
+		if (dependencies_.metrics_bridge) {
+			static_cast<void>(dependencies_.metrics_bridge->record_preflight_failure(
+					request,
+					descriptor_cache,
+					envelope,
+					context));
+		}
+		return envelope;
+	};
+
 	if (!dependencies_.registry || !dependencies_.validator || !dependencies_.config_adapter ||
 			!dependencies_.policy_gate || !dependencies_.route_selector ||
 			!dependencies_.executor || !dependencies_.projector) {
-		return build_failure_envelope(
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::RuntimeRetryExhausted,
 				"tool.manager.dependencies_unavailable",
-				"tools.manager.init");
+				"tools.manager.init"));
 	}
 
 	if (!context.has_profile_snapshot()) {
-		return build_failure_envelope(
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::ValidationFieldMissing,
 				"tool.manager.profile_missing",
-				"tools.manager.context");
+				"tools.manager.context"));
 	}
 
 	if (!request.tool_name.has_value() || request.tool_name->empty()) {
-		return build_failure_envelope(
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::ValidationFieldMissing,
 				"InvalidRequest",
-				"tools.manager.resolve");
+				"tools.manager.resolve"));
 	}
 
 	const auto descriptor = dependencies_.registry->resolve_descriptor(*request.tool_name);
+	descriptor_cache = descriptor;
 	if (!descriptor.has_value()) {
-		return build_failure_envelope(
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::ToolExecutionFailed,
 				"tool.manager.descriptor_missing",
-				"tools.manager.resolve");
+				"tools.manager.resolve"));
 	}
 
 	const auto validation_result = dependencies_.validator->validate(request, *descriptor);
 	if (!validation_result.ok()) {
-		return build_failure_envelope(
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::ValidationFieldMissing,
 				validation_result.diagnostics->error_code,
-				"tools.manager.validate");
+				"tools.manager.validate"));
 	}
 
 	const auto& snapshot = *context.profile_snapshot;
@@ -495,11 +512,18 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 			},
 			policy_view);
 	if (!admission_decision.allowed()) {
-		return build_failure_envelope(
+		if (dependencies_.metrics_bridge) {
+			static_cast<void>(dependencies_.metrics_bridge->record_admission_denied(
+					request,
+					descriptor_cache,
+					admission_decision.reason_code,
+					context));
+		}
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::PolicyDenied,
 				admission_decision.reason_code,
-				"tools.manager.admit");
+				"tools.manager.admit"));
 	}
 
 	const auto route_decision = dependencies_.route_selector->select_route(
@@ -510,12 +534,20 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 			capability_snapshot_,
 			route_health_);
 	if (!route_decision.available) {
-		return build_failure_envelope(
+		return emit_failure_with_metrics(build_failure_envelope(
 				request,
 				ResultCode::ToolExecutionFailed,
 				route_decision.reason_code,
 				"tools.manager.route",
-				build_route_facts(route_decision));
+				build_route_facts(route_decision)));
+	}
+
+	if (dependencies_.metrics_bridge) {
+		static_cast<void>(dependencies_.metrics_bridge->record_route_selection(
+				request,
+				descriptor_cache,
+				route_decision,
+				context));
 	}
 
 	ToolResult result;
@@ -568,6 +600,13 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 			descriptor->supports_compensation.value_or(false)) {
 		envelope.compensation_hints = build_compensation_hints(*envelope.tool_result);
 	}
+	if (dependencies_.metrics_bridge) {
+		static_cast<void>(dependencies_.metrics_bridge->record_execution_terminal(
+				request,
+				descriptor_cache,
+				envelope,
+				context));
+	}
 	return envelope;
 }
 
@@ -596,6 +635,16 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					.now_ms = {},
 			});
 	auto audit_bridge = std::make_shared<ops::ToolAuditBridge>();
+	auto metrics_bridge = std::make_shared<ops::ToolMetricsBridge>(
+			nullptr,
+			ops::ToolMetricsBridgeOptions{
+					.enabled = false,
+					.profile_id = std::string("unknown"),
+					.metrics_granularity = std::string("minimal"),
+					.meter_scope_name = std::string("tools"),
+					.meter_scope_version = std::string("v1"),
+					.now_ms = {},
+			});
 	auto result_projector = std::make_shared<projection::ResultProjector>();
 
 	return manager::ToolManagerDependencies{
@@ -604,6 +653,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 			.config_adapter = std::move(config_adapter),
 			.policy_gate = std::move(policy_gate),
 			.route_selector = std::move(route_selector),
+			.metrics_bridge = std::move(metrics_bridge),
 			.build_manifest = profiles::BuildProfileManifest{
 					.enabled_modules = {"runtime", "tools_builtin"},
 					.enabled_adapters = {},

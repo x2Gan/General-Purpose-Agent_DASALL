@@ -7,7 +7,10 @@
 #include "RuntimePolicySnapshot.h"
 #include "ToolManager.h"
 #include "audit/IAuditLogger.h"
+#include "metrics/MetricTypes.h"
+#include "metrics/IMetricsProvider.h"
 #include "ops/ToolAuditBridge.h"
+#include "ops/ToolMetricsBridge.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -46,6 +49,85 @@ class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
   std::vector<dasall::infra::AuditContext> contexts;
 };
 
+class RecordingMeter final : public dasall::infra::metrics::IMeter {
+ public:
+    std::optional<dasall::infra::metrics::InstrumentHandle> create_counter(
+            const dasall::infra::metrics::MetricIdentity& identity) override {
+        created_identities.push_back(identity);
+        return dasall::infra::metrics::InstrumentHandle{
+                .instrument_key = identity.name + ":counter",
+        };
+    }
+
+    std::optional<dasall::infra::metrics::InstrumentHandle> create_gauge(
+            const dasall::infra::metrics::MetricIdentity& identity) override {
+        created_identities.push_back(identity);
+        return dasall::infra::metrics::InstrumentHandle{
+                .instrument_key = identity.name + ":gauge",
+        };
+    }
+
+    std::optional<dasall::infra::metrics::InstrumentHandle> create_histogram(
+            const dasall::infra::metrics::MetricIdentity& identity) override {
+        created_identities.push_back(identity);
+        return dasall::infra::metrics::InstrumentHandle{
+                .instrument_key = identity.name + ":histogram",
+        };
+    }
+
+    dasall::infra::metrics::MetricsOperationStatus record(
+            const dasall::infra::metrics::MetricSample& sample) override {
+        recorded_samples.push_back(sample);
+        if (scripted_record_results.empty()) {
+            return dasall::infra::metrics::MetricsOperationStatus::success(
+                    "metrics://tools/integration-recorded");
+        }
+
+        auto result = scripted_record_results.front();
+        scripted_record_results.erase(scripted_record_results.begin());
+        return result;
+    }
+
+    std::vector<dasall::infra::metrics::MetricsOperationStatus> scripted_record_results;
+    std::vector<dasall::infra::metrics::MetricIdentity> created_identities;
+    std::vector<dasall::infra::metrics::MetricSample> recorded_samples;
+};
+
+class RecordingMetricsProvider final : public dasall::infra::metrics::IMetricsProvider {
+ public:
+    explicit RecordingMetricsProvider(std::shared_ptr<RecordingMeter> meter)
+            : meter_(std::move(meter)) {}
+
+    dasall::infra::metrics::MetricsOperationStatus init(
+            const dasall::infra::metrics::MetricsProviderConfig&) override {
+        return dasall::infra::metrics::MetricsOperationStatus::success(
+                "metrics://tools/integration-provider-init");
+    }
+
+    std::shared_ptr<dasall::infra::metrics::IMeter> get_meter(
+            const dasall::infra::metrics::MeterScope& scope) override {
+        last_scope = scope;
+        return meter_;
+    }
+
+    dasall::infra::metrics::MetricsOperationStatus force_flush(
+            const dasall::infra::metrics::MetricsCallDeadline&) override {
+        return dasall::infra::metrics::MetricsOperationStatus::success(
+                "metrics://tools/integration-provider-flush");
+    }
+
+    dasall::infra::metrics::MetricsOperationStatus shutdown(
+            const dasall::infra::metrics::MetricsCallDeadline&) override {
+        return dasall::infra::metrics::MetricsOperationStatus::success(
+                "metrics://tools/integration-provider-shutdown");
+    }
+
+    dasall::infra::metrics::MeterScope last_scope{};
+
+ private:
+    std::shared_ptr<RecordingMeter> meter_;
+};
+
 [[nodiscard]] bool has_action(const std::vector<dasall::infra::AuditEvent>& events,
                               const std::string& action) {
   return std::find_if(events.begin(), events.end(), [&](const auto& event) {
@@ -56,6 +138,16 @@ class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
 [[nodiscard]] bool contains_string(const std::vector<std::string>& values,
                                    const std::string& expected) {
   return std::find(values.begin(), values.end(), expected) != values.end();
+}
+
+[[nodiscard]] bool has_metric_sample(
+        const std::vector<dasall::infra::metrics::MetricSample>& samples,
+        const std::string& metric_name,
+        const std::string& outcome) {
+    return std::find_if(samples.begin(), samples.end(), [&](const auto& sample) {
+                     return sample.identity_ref.name == metric_name &&
+                                    sample.labels.outcome == outcome;
+                 }) != samples.end();
 }
 
 [[nodiscard]] dasall::profiles::RuntimePolicySnapshot make_snapshot() {
@@ -201,19 +293,41 @@ class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
   return context;
 }
 
+[[nodiscard]] dasall::tools::ToolInvocationContext make_denied_context(
+        const dasall::profiles::RuntimePolicySnapshot& snapshot) {
+    auto context = make_bound_context(snapshot);
+    context.confirmation_facts = std::nullopt;
+    return context;
+}
+
 void test_tool_observability_integration_emits_audit_events_for_success_failure_and_compensation() {
   ScriptedAuditLogger audit_logger;
   auto audit_bridge = std::make_shared<dasall::tools::ops::ToolAuditBridge>(&audit_logger);
+  auto meter = std::make_shared<RecordingMeter>();
+  auto metrics_provider = std::make_shared<RecordingMetricsProvider>(meter);
+  auto metrics_bridge = std::make_shared<dasall::tools::ops::ToolMetricsBridge>(
+      metrics_provider,
+      dasall::tools::ops::ToolMetricsBridgeOptions{
+          .enabled = true,
+          .profile_id = "desktop_full",
+          .metrics_granularity = "full",
+          .meter_scope_name = "tools",
+          .meter_scope_version = "v1",
+          .now_ms = []() { return 1712738000000LL; },
+      });
 
   dasall::tools::manager::ToolManagerDependencies dependencies;
   dependencies.audit_hooks = dasall::tools::ops::ToolAuditBridge::bind_hooks(audit_bridge);
+  dependencies.metrics_bridge = metrics_bridge;
 
   dasall::tools::ToolManager manager(std::move(dependencies));
   const auto snapshot = make_snapshot();
   const auto context = make_bound_context(snapshot);
+    const auto denied_context = make_denied_context(snapshot);
 
   const auto success = manager.invoke(make_success_request(), context);
   const auto failed = manager.invoke(make_failure_request(), context);
+    const auto denied = manager.invoke(make_success_request(), denied_context);
   const auto compensation = manager.compensate(
       dasall::tools::CompensationRequest{
           .tool_call_id = std::string("call-audit-int-success"),
@@ -228,6 +342,8 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
               "tools observability integration should not change the successful builtin result");
   assert_true(failed.tool_result.has_value() && !failed.tool_result->success.value_or(true),
               "tools observability integration should keep the fail-closed execution result intact");
+    assert_true(denied.tool_result.has_value() && !denied.tool_result->success.value_or(true),
+                            "tools observability integration should preserve policy-denied results while emitting denied-path observability signals");
   assert_true(compensation.tool_result.has_value() &&
                   !compensation.tool_result->success.value_or(true),
               "tools observability integration should expose the current unconfigured compensation result unchanged");
@@ -244,6 +360,14 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
                   contains_string(audit_logger.events.back().side_effects,
                                   "compensation_action:safe_mode.exit"),
               "tools observability integration should preserve caller and compensation facts in emitted audit payloads");
+    assert_true(has_metric_sample(meter->recorded_samples, "tool_request_total", "success") &&
+                                    has_metric_sample(meter->recorded_samples, "tool_request_total", "failure") &&
+                                    has_metric_sample(meter->recorded_samples, "tool_admission_denied_total", "rejected") &&
+                                    has_metric_sample(meter->recorded_samples, "tool_execution_latency_ms", "success"),
+                            "tools observability integration should emit request, denied, and latency metric samples alongside audit events");
+    assert_equal(std::string("tools"),
+                             metrics_provider->last_scope.name,
+                             "tools observability integration should request the frozen tools meter scope");
   for (const auto& event : audit_logger.events) {
     assert_true(!contains_string(event.side_effects,
                                  std::string("{\"command\":\"echo integration\"}")) &&
@@ -253,6 +377,8 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
   }
   assert_true(audit_bridge->get_status().emitted_total >= 4,
               "tools observability integration should track persisted audit emissions in bridge status");
+    assert_true(!metrics_bridge->is_degraded() && metrics_bridge->emission_attempt_total() >= 3,
+                            "tools observability integration should keep the metrics bridge healthy on the success/failure main paths");
 }
 
 void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails() {
@@ -272,9 +398,28 @@ void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails
       },
   };
   auto audit_bridge = std::make_shared<dasall::tools::ops::ToolAuditBridge>(&audit_logger);
+  auto meter = std::make_shared<RecordingMeter>();
+  meter->scripted_record_results = {
+      dasall::infra::metrics::MetricsOperationStatus::failure(
+          dasall::contracts::ResultCode::ProviderTimeout,
+          "metrics exporter timed out",
+          "metrics.record",
+          "RecordingMeter")};
+  auto metrics_provider = std::make_shared<RecordingMetricsProvider>(meter);
+  auto metrics_bridge = std::make_shared<dasall::tools::ops::ToolMetricsBridge>(
+      metrics_provider,
+      dasall::tools::ops::ToolMetricsBridgeOptions{
+          .enabled = true,
+          .profile_id = "desktop_full",
+          .metrics_granularity = "full",
+          .meter_scope_name = "tools",
+          .meter_scope_version = "v1",
+          .now_ms = []() { return 1712738001000LL; },
+      });
 
   dasall::tools::manager::ToolManagerDependencies dependencies;
   dependencies.audit_hooks = dasall::tools::ops::ToolAuditBridge::bind_hooks(audit_bridge);
+  dependencies.metrics_bridge = metrics_bridge;
 
   dasall::tools::ToolManager manager(std::move(dependencies));
   const auto snapshot = make_snapshot();
@@ -286,6 +431,8 @@ void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails
   assert_true(audit_bridge->get_status().degraded &&
                   audit_bridge->get_status().emit_failures >= 2,
               "failing audit sink should remain observable through ToolAuditBridge status without blocking the main result");
+    assert_true(metrics_bridge->is_degraded() && metrics_bridge->emission_failure_total() == 1U,
+                            "failing metrics backend should remain observable through ToolMetricsBridge status without blocking the main result");
 }
 
 }  // namespace

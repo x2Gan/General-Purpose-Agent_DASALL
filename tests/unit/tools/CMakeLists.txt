@@ -202,6 +202,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_tool_metrics_bridge_unit_test
+	ToolMetricsBridgeTest.cpp
+	ToolMetricsBridgeTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_result_projector_unit_test
 	ResultProjectorTest.cpp
 	ResultProjectorTest
