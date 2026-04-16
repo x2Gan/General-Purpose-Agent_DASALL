@@ -22,6 +22,7 @@ function(dasall_add_tools_behavior_test target_name source_file test_name)
 	target_include_directories(${target_name}
 		PRIVATE
 			${CMAKE_SOURCE_DIR}/tools/src
+			${CMAKE_SOURCE_DIR}/profiles/include
 	)
 
 	target_link_libraries(${target_name}
@@ -112,4 +113,16 @@ dasall_add_tools_behavior_test(
 	dasall_tool_validator_dry_run_unit_test
 	ToolValidatorDryRunTest.cpp
 	ToolValidatorDryRunTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_config_adapter_unit_test
+	ToolConfigAdapterTest.cpp
+	ToolConfigAdapterTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_config_adapter_hot_update_unit_test
+	ToolConfigAdapterHotUpdateTest.cpp
+	ToolConfigAdapterHotUpdateTest
 )

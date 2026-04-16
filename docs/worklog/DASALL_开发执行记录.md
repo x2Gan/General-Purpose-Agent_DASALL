@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #311
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-012 实现 ToolConfigAdapter 与 ToolPolicyView 派生
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 012 是 013 PolicyGate 与 014 RouteSelector 开始消费 profile 投影视图前的共同前置，因此本轮按 project-implementation-cycle 选择 012 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.6 已明确 ToolConfigAdapter 的职责边界是 projection-only，本轮只收敛 profile snapshot -> tools 视图的投影与热更新一致性，不提前做 admission、route 或 health 决策。
+3. 由于 `RuntimePolicySnapshot` 本身不携带 `enabled_modules`，但 route/gate 后续需要 lane 开关，本轮以既有 `BuildProfileManifest` 作为模块矩阵来源投影 builtin / mcp / multi-agent enablement，保持“不新增 schema，只复用上游现有视图”的约束。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-012-ToolConfigAdapter与ToolPolicyView派生设计收敛.md，固定 012 的本地证据、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，把 config 编译入口从 placeholder 切到 `ToolConfigAdapter.cpp`，并为 tools target 补充 `profiles/include` 私有 include root。
+3. 新增 tools/src/config/ToolConfigAdapter.h / ToolConfigAdapter.cpp，落地 `ToolLaneTimeoutBudget`、`ToolTimeoutView`、`build_policy_view()`、`build_timeout_view()`、`snapshot_fingerprint()`、`is_snapshot_current()`，并采用 per-fingerprint 缓存减少重复 projection。
+4. `ToolPolicyView` 保持现有 public 形状；lane 开关、timeout budget、`max_tool_calls` 与 capability cache freshness 统一进入内部 `ToolTimeoutView`，避免在 012 里扩 public ABI。
+5. 对 snapshot / manifest 不一致输入，adapter 返回 deny-oriented 视图：policy 侧收敛为空 allowed domains / visibility，timeout 侧收敛为零预算与全部 lane disabled，避免隐式放宽。
+6. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_tool_config_adapter_unit_test` 与 `dasall_tool_config_adapter_hot_update_unit_test` 两个 executable unit target，并为 behavior tests 补充 `profiles/include` include root。
+7. 新增 tests/unit/tools/ToolConfigAdapterTest.cpp 与 ToolConfigAdapterHotUpdateTest.cpp，分别覆盖 desktop_full vs edge_minimal 的投影差异，以及 snapshot generation 变化触发的 fingerprint invalidation / invoke-scoped 视图更新。
+8. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-012 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+2. 定向 tests：
+   - RunCtest_CMakeTools 运行 `ToolConfigAdapterTest`
+   - RunCtest_CMakeTools 运行 `ToolConfigAdapterHotUpdateTest`
+3. 结果摘要：
+   - 两条新增 config adapter unit tests 全部通过
+   - `dasall_contract_tests` 目标构建期间自动执行 152 条 contract tests，全绿
+   - 定向测试返回成功，stderr 中的 `DartConfiguration.tcl` 缺失告警未影响用例通过
+
+### 结果
+
+1. TOOL-TODO-012 已把 tools 治理链从“只有 request/descriptor/registry 骨架”推进到“具备稳定 profile 投影视图”，为 013 PolicyGate 与 014 RouteSelector 提供一致的 policy、timeout 和 lane enablement 输入。
+2. 当前实现保持了设计边界：ToolConfigAdapter 只做 projection 与缓存一致性判断，不拥有 profile 解析权，不做准入决策，也不把 `BuildProfileManifest` 变成新的长期配置脑。
+3. 本轮继续保持 shared contract 零变更，并把热更新一致性约束落到 `snapshot_fingerprint()` / `is_snapshot_current()`，避免进行中 invoke 因 profile 热切换而看到半旧半新的投影视图。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-013，落地 ToolPolicyGate，把 012 产生的 `ToolPolicyView` 正式接到 fail-closed 的 domain / visibility / confirmation 裁定链。
+
+### 风险
+
+1. 当前 lane enablement 来自 `BuildProfileManifest`，后续如果 runtime active profile 只暴露 snapshot 而不再同时提供 manifest，RouteSelector 需要明确其稳定投影来源，避免 route 与 config adapter 各自维护不同模块开关来源。
+2. `ToolTimeoutView` 暂时同时承载 timeout、max_tool_calls 与 capability cache freshness；如果后续 RouteSelector / CapabilityCache 的消费面继续扩大，可能需要在 tools 内部再拆分更细视图，但不应回退为新的 shared contract。
+
 ## 记录 #310
 
 - 日期：2026-04-16

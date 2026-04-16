@@ -4,7 +4,7 @@ target_sources(dasall_tools
   PRIVATE
     src/ToolManager.cpp
     src/bridge/PluginExtensionBridge.cpp
-    src/config/placeholder.cpp
+    src/config/ToolConfigAdapter.cpp
     src/execution/placeholder.cpp
     src/mcp/placeholder.cpp
     src/ops/placeholder.cpp
@@ -38,6 +38,8 @@ target_compile_features(dasall_tools PUBLIC cxx_std_20)
 target_include_directories(dasall_tools
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/profiles/include
 )
 
 target_link_libraries(dasall_tools
