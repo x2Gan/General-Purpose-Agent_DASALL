@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #314
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-015a 实现 ToolManager 骨架与 invoke_batch 入口
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 015a 只依赖 001~008，且是 015b 完整治理链前的独立入口骨架任务，因此本轮按 project-implementation-cycle 选择 015a 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.1 已明确 ToolManager 在本阶段只需具备统一入口、批量调用入口和 fail-closed stub；完整治理链接线留给 015b，runtime caller 口径澄清留给 023，因此本轮严格不提前越过这些边界。
+3. `ToolConfigAdapter` 仍需要 `BuildProfileManifest`，但 `ToolInvocationContext` 还未在 023 中澄清 caller fixture 口径，所以 015a 只把 manifest 保持在 ToolManager 内部依赖注入层，不扩 public context。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-015a-ToolManager骨架与invoke_batch入口设计收敛.md，固定 015a 的本地证据、Design 结论与 Build 三件套。
+2. 新增 tools/src/ToolManager.h，落地 ToolManager 内部实现头，以及 `CompensationRequest`、`ToolExecutionContext`、executor/projector/audit hooks、默认依赖容器等 module-local supporting object。
+3. 更新 tools/src/ToolManager.cpp，把原有空占位替换为可实例化的 `ToolManager` 骨架，实现默认依赖装配、`invoke()`、`invoke_batch()`、`compensate()` 入口，以及 `tool.manager.pipeline_unconfigured` / `tool.manager.compensation_unconfigured` 两条 fail-closed stub 路径。
+4. `invoke_batch()` 首版内部串行复用 `invoke()`，但保持输入顺序、一请求一 envelope、request_id / tool_call_id 不串扰，为 015b 后续接 executor 和 projector 留出稳定入口。
+5. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_tool_manager_skeleton_unit_test` 与 `dasall_tool_manager_batch_invoke_unit_test` 两个 executable unit target。
+6. 新增 tests/unit/tools/ToolManagerSkeletonTest.cpp，覆盖 ToolManager 可实例化、invoke fail-closed、compensate fail-closed 和“未接完整管线时不伪造 projection”的骨架行为。
+7. 新增 tests/unit/tools/ToolManagerBatchInvokeTest.cpp，覆盖 batch 入口的一请求一 envelope、输入顺序保持和 request/tool_call identity 隔离。
+8. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-015a 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. 构建：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_tool_manager_skeleton_unit_test dasall_tool_manager_batch_invoke_unit_test`
+   - `cmake --build build-ci --target dasall_tools dasall_unit_tests`
+2. 定向 tests：
+   - `ctest --test-dir build-ci --output-on-failure -R "ToolManager(Skeleton|BatchInvoke)Test"`
+3. 全量 unit：
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+4. 结果摘要：
+   - `ToolManagerSkeletonTest`、`ToolManagerBatchInvokeTest` 全部通过。
+   - 首次 full unit 期间，`DiagnosticsSnapshotStoreTest` 因旧构建产物导致失败；在不修改任何产品代码的前提下，最小重建现有 `dasall_diagnostics_snapshot_store_unit_test` 后恢复通过。
+   - 随后 `cmake --build build-ci --target dasall_tools dasall_unit_tests` 与 `ctest --test-dir build-ci --output-on-failure -L unit` 均通过，unit 270/270 全绿。
+
+### 结果
+
+1. TOOL-TODO-015a 已把 tools 子系统从“只有 IToolManager 接口”推进到“存在可实例化的 ToolManager 内部骨架和 invoke_batch 入口”，为 023 caller fixture 澄清和 015b 完整治理链接线提供了稳定承载点。
+2. 当前实现严格保持边界：没有提前落地 ToolServiceBridge、BuiltinExecutorLane、ResultProjector 或 observability bridge，也没有把 supporting object 升格到 public ABI 或 shared contracts。
+3. 015a 交付后，批量入口的最小语义已经固定下来：批内单请求独立返回 envelope、身份字段不串扰、骨架阶段统一 fail-closed，不会把“未接通的主链”伪装成成功路径。
+
+### 下一步
+
+1. 继续按串行顺序先完成 TOOL-TODO-023，澄清 runtime caller fixture 与 ToolInvocationContext 口径，解开 015b 的 BLOCK 条件。
+2. 在 023 解阻后进入 TOOL-TODO-015b，把 ToolManager 接到 Registry -> Validator -> PolicyGate -> RouteSelector -> Executor -> Audit -> Digest 的完整治理管线。
+
+### 风险
+
+1. 当前骨架 reason code 仍是 015a 专用 stub；015b 接线时需要替换为阶段化、可审计的稳定 failure facts，避免 stub reason 滞留到完整链路。
+2. `BuildProfileManifest` 目前仍在 ToolManager 内部依赖层注入；023 若把 caller fixture 口径收得更严，后续需要明确它属于 fixture/config 依赖，而不是 runtime 每次 invoke 都显式提供的上下文字段。
+
 ## 记录 #313
 
 - 日期：2026-04-16

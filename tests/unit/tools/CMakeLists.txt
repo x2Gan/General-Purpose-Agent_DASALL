@@ -150,3 +150,15 @@ dasall_add_tools_behavior_test(
 	ToolRouteFallbackTest.cpp
 	ToolRouteFallbackTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_tool_manager_skeleton_unit_test
+	ToolManagerSkeletonTest.cpp
+	ToolManagerSkeletonTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_manager_batch_invoke_unit_test
+	ToolManagerBatchInvokeTest.cpp
+	ToolManagerBatchInvokeTest
+)
