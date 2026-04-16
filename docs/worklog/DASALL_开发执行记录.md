@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #320
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-024 注册 tests/integration/tools 拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. 在继续 TOOL-TODO-019 之前，docs/todos/tools/DASALL_tools子系统专项TODO.md 的 `TOOL-BLK-003` 已成为实际 blocker：`tests/integration/tools` 不存在会导致 tools observability integration discoverability 为 0。
+2. docs/ssot/InfraIntegrationTopology.md 要求新增核心链路组件至少补 1 条 smoke integration 用例，且 `ctest -N` 必须可发现；因此本轮优先做 topology/discoverability，不提前扩到 025 的完整 builtin smoke 或 026 的 observability 语义门。
+3. 现有顶层 integration 已采用“子目录注册宏 + target 列表导出”的统一模式，024 应与 services / llm 对齐，而不是在顶层继续手工枚举 tools integration target。
+
+### 改动
+
+1. 更新 tests/integration/CMakeLists.txt，新增 `add_subdirectory(tools)`，并把 `${DASALL_TOOLS_INTEGRATION_TEST_EXECUTABLE_TARGETS}` 纳入顶层 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS` 聚合列表。
+2. 新增 tests/integration/tools/CMakeLists.txt，定义 `dasall_add_tools_integration_test` 注册宏，统一 tools integration 的 target、labels 与 `PARENT_SCOPE` 导出模式。
+3. 新增 tests/integration/tools/ToolServicesSmokeIntegrationTest.cpp，作为 tools integration 的首个 discoverability smoke：使用默认 ToolManager 跑通 builtin route 的最小 invoke，断言 `ToolResult`、projection 与 route facts 同时存在。
+4. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-024 标记为 Done，并将 `TOOL-BLK-003` 状态改为“已由 024 解阻”。
+5. 新增 docs/todos/tools/deliverables/TOOL-TODO-024-tests_integration_tools拓扑收敛.md，固定 topology owner、discoverability 证据与最小 smoke 边界。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools: `dasall_tool_services_smoke_integration_test`
+   - Build_CMakeTools: `dasall_integration_tests`
+2. 定向执行：
+   - RunCtest_CMakeTools: `ToolServicesSmokeIntegrationTest`
+3. discoverability：
+   - `ctest --test-dir build/vscode-linux-ninja -N | rg "ToolServicesSmokeIntegrationTest|Total Tests"`
+4. 结果摘要：
+   - `ToolServicesSmokeIntegrationTest` 通过。
+   - `ctest -N` 已发现 `ToolServicesSmokeIntegrationTest`，总测试数升至 `474`。
+   - tools integration 现已进入顶层 `dasall_integration_tests` 聚合路径。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，但未影响结论。
+
+### 结果
+
+1. `TOOL-BLK-003` 已关闭，tools integration discoverability 不再为 0。
+2. 后续 019~022、025、026 现在具备合法的 `tests/integration/tools` 落点和顶层聚合接缝，不再需要额外的 topology 补丁。
+3. 本轮只打开 integration 门，不宣称 builtin / observability 语义闭环已经完成；这些语义验收仍由 025、026 等后续任务负责。
+
+### 下一步
+
+1. 回到 TOOL-TODO-019，实现 ToolAuditBridge，并把 requested / completed / failed / compensation 审计事件接到 ToolManager audit hooks。
+2. 在 019 完成后继续推进 020~022 的 metrics / trace / health bridges。
+
+### 风险
+
+1. 当前 `ToolServicesSmokeIntegrationTest` 仍是最小活性锚点，字段断言尚未覆盖 builtin query 路径与 observability 证据完整性；若 025/026 不继续扩展，会留下“可发现但语义不足”的假阳性风险。
+2. tools integration 目录虽已接线，但目前只有 1 条 smoke；后续任务必须保持命名和标签纪律，否则 discoverability 仍可能出现回退。
+
 ## 记录 #319
 
 - 日期：2026-04-16

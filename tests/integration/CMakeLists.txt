@@ -7,8 +7,10 @@ add_subdirectory(infra)
 add_subdirectory(profiles)
 add_subdirectory(platform)
 add_subdirectory(services)
+add_subdirectory(tools)
 add_subdirectory(llm)
 
+add_subdirectory(tools)
 set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_infra_diagnostics_smoke_integration_test
 	dasall_infra_audit_health_integration_test
@@ -34,6 +36,8 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_profile_observability_integration_test
 	dasall_linux_platform_bootstrap_integration_test
 	${DASALL_SERVICES_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+	${DASALL_SERVICES_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+	${DASALL_TOOLS_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	PARENT_SCOPE
 )
