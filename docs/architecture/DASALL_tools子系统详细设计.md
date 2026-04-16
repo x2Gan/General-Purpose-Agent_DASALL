@@ -1298,6 +1298,53 @@ transport 分层约束：
 6. 失败与回退语义：cache 过期且 profile 不允许 stale read 时必须 deny；cache 自身损坏必须触发 source invalidation 和 diagnostics evidence；不得把缓存缺失伪装成 capability empty。
 7. 测试与验收出口：推荐单测为 `CapabilityCacheTest.cpp`、`CapabilityCacheStateTransitionTest.cpp`；验收标准是 fresh/stale/expired 的状态转移与 stale read 策略可自动断言。
 
+##### MCP loopback fixture 与 plugin stdio launch 样本方案（TOOL-TODO-031 收敛）
+
+为解开 Phase 4 的自动化验证阻塞，MCP loopback fixture 与 plugin stdio launch 样本在 v1 统一收敛为以下最小方案：
+
+1. `tests/mocks/include/MCPLoopbackServerFixture.h` 作为 header-only fixture，沿用 `CapabilityServicesLoopbackFixture.h` 的测试夹具放置约定；它只服务 unit / integration gate，不进入 `tools/src/mcp/` 生产实现。
+2. fixture 必须模拟 stdio transport 的最小 JSON-RPC 生命周期，并严格遵守 MCP 官方约束：`stdin`/`stdout` 只承载 UTF-8、newline-delimited 的 JSON-RPC message；`initialize` 必须是首个且非 batch 请求；server 只有在收到 `notifications/initialized` 后才进入正常 operation phase。
+3. fixture 的最小脚本化闭环固定为 5 个阶段：
+   - `initialize` request -> response
+   - `notifications/initialized`
+   - `tools/list`
+   - `tools/call`
+   - shutdown evidence（close stdin -> wait -> terminate escalation）
+4. fixture 应暴露可编排 scenario 输入，而不是硬编码单一路径；首版建议使用 `MCPLoopbackScenario`、`MCPLoopbackFrame`、`MCPLoopbackExitMode` 等 internal supporting object 描述 request/response transcript、stderr log、transport close 时机和 exit reason。
+5. plugin-delivered stdio server 不直接在 TODO 或 integration test 中内联命令行；统一通过 `bridge::MCPServerLaunchSpec.launch_spec_ref` 指向测试样本，再由后续 `StdioMCPServerLauncher` 在 034 中解析。031 只冻结样本 shape，不回滚 010 已落盘的 bridge ABI。
+6. `launch_spec_ref` 的首版规范样本固定为 plugin-local、可重放、不可联网的 loopback server 资产，推荐 ID 形如 `launch://plugin.loopback/mcp.echo.v1`；样本 payload 至少包含 `command`、`args`、`env`、`working_dir`、`protocol_version`、`server_capabilities`、`tool_bindings`、`healthcheck_mode` 八类字段。
+
+规范样本（v1，示意）如下：
+
+```json
+{
+  "server_id": "mcp.echo.loopback",
+  "transport": "stdio",
+  "command": "tests/mocks/bin/mcp-loopback-server",
+  "args": ["--scenario", "echo"],
+  "env": {
+    "MCP_PROTOCOL_VERSION": "2025-03-26"
+  },
+  "working_dir": "${workspaceFolder}",
+  "protocol_version": "2025-03-26",
+  "server_capabilities": {
+    "tools": {
+      "listChanged": false
+    }
+  },
+  "tool_bindings": [
+    {
+      "internal_tool_name": "tool.remote.echo",
+      "remote_tool_name": "echo"
+    }
+  ],
+  "healthcheck_mode": "initialize_roundtrip"
+}
+```
+
+7. `ToolMCPFallbackIntegrationTest` 复用同一 loopback fixture，但通过 stale snapshot、handshake failure、transport close script 注入失败；`ToolPluginStdioMCPIntegrationTest` 在同一 fixture 之上额外验证 plugin-delivered `launch_spec_ref` -> launch sample -> stdio invoke 的解析与接线。
+8. 该方案的目标是为 032~035 提供 deterministic test seam，不代表 generic MCP ready；在 `CapabilityCache`、`IMCPAdapter`、`CapabilityDiscovery` 和两个 integration gate 真正落地前，仍保持 `tools_mcp=false` 的 builtin/workflow rollout 结论。
+
 MCP Runtime 关键时序图如下：
 
 ```mermaid
@@ -1595,7 +1642,7 @@ plugins/
 | 阻塞项 | 影响阶段 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
 | runtime 生产 caller 尚未冻结（tools-side fixture 已定义） | Phase 0-2 | runtime 能以 ToolRequest 调用 ToolManager，或沿用 6.5.1.1 的 caller fixture 完成 tools-side 验证 | 以 `ToolInvocationContext` + ToolManager 本地依赖注入组成 caller fixture，`BuildProfileManifest` 不进入 context | 保持 tools 仅由测试夹具调用，不提前接 runtime 生产链 |
-| MCP loopback server 缺失 | Phase 4 | 提供最小握手/列表/调用 fixture | 在 tests/mocks 增加 mock MCP server fixture | 若 fixture 未就绪，暂时禁用 `tools_mcp` 路径，只验证 builtin/workflow |
+| MCP loopback server / plugin stdio launch 样本待 Build 落地（031 已补齐方案） | Phase 4 | 6.12.3 中定义的最小握手/列表/调用 fixture 与 launch sample 能落到 tests/mocks / integration | 在 tests/mocks 增加 `MCPLoopbackServerFixture.h`，并以 `launch_spec_ref` 指向 loopback sample | 若 Build 未就绪，暂时禁用 `tools_mcp` 路径，只验证 builtin/workflow |
 | 外部 Skill 规范样本缺失 | Phase 5 | 至少提供 1 组 normalized skill 资产和 1 组外部方言样本 | 先实现 internal SkillSpec parser，再补 external importer | 若外部 importer 不稳定，保持只支持内部 `skills/specs/` |
 | services result 语义后续调整 | Phase 2-4 | Execution/Data 公共对象与 ResultMapper 字段保持稳定 | 以 ToolServiceBridge 做 module-local 映射层，不直接耦合 adapter receipt 细节 | 若 services 变更，先改 bridge，不回滚 Tool shared contracts |
 | CMake Tools 预设未激活 | 全阶段验证 | build-ci configure/build/ctest 能稳定执行 | 统一使用显式 build-ci 验收链 | IDE target/test 列表异常不改变 Gate 结论 |
@@ -1684,9 +1731,10 @@ plugins/
 |---|---|---|---|---|
 | TOOL-BLK-001 | tools/include 完全缺失 | Phase 0 之前无法形成模块公共接口与单测入口 | 完成 TOOL-D1 | 暂以 src 内部类和测试夹具推进，避免过早接生产调用面 |
 | TOOL-BLK-002 | runtime 生产 caller 尚未冻结（023 已定义 tools-side fixture） | runtime 生产主链仍无法直接接 tools，但 tools 侧单测/设计 gate 已可继续 | runtime 能发起 ToolRequest，或沿用 6.5.1.1 的 caller fixture 验证 tools-side 闭环 | 在 tests/mocks 中构造 ToolInvocationContext，并由 ToolManager 本地依赖注入补充 BuildProfileManifest / capability / executor hooks |
-| TOOL-BLK-003 | MCP loopback fixture 缺失 | MCP lane 无法做自动化验证 | 提供最小 mock MCP server | 暂时保持 `tools_mcp=false` 的 builtin-only rollout |
-| TOOL-BLK-004 | external skill 样本与归一化资产缺失 | Skill importer 无法验证真实方言兼容 | 提供至少 1 组 internal spec 与 1 组 external sample | 只支持内部 `skills/specs/`，关闭 importer |
-| TOOL-BLK-005 | CMake Tools 预设可能未激活 | IDE 内 target/test 可能为空，影响 discoverability 观察 | 显式 build-ci configure/build/ctest 路径跑通 | 以显式命令链作为唯一 Gate 基线 |
+| TOOL-BLK-003 | tests/integration/tools 拓扑缺失（已由 TOOL-TODO-024 解阻） | tools integration discoverability 已恢复，不再阻塞 MCP / skill integration gate | 保持顶层 integration 接线与 `ctest -N` 可发现性 | 若 discoverability 回退，先修复 tests/integration/tools 拓扑 |
+| TOOL-BLK-004 | MCP loopback / plugin stdio launch 样本方案缺失（已由 TOOL-TODO-031 解阻） | 032~035 现已具备统一 fixture / sample 设计锚点，只剩 Build 落地与测试注册 | 按 6.12.3 中的 `MCPLoopbackServerFixture` + `launch_spec_ref` 样本方案实现 MCP 子域代码 | 在 Build 未落地前继续保持 `tools_mcp=false` 的 builtin/workflow rollout |
+| TOOL-BLK-005 | external skill 样本与归一化资产缺失 | Skill importer 无法验证真实方言兼容 | 提供至少 1 组 internal spec 与 1 组 external sample | 只支持内部 `skills/specs/`，关闭 importer |
+| TOOL-BLK-006 | CMake Tools 预设可能未激活 | IDE 内 target/test 可能为空，影响 discoverability 观察 | 显式 build-ci configure/build/ctest 路径跑通 | 以显式命令链作为唯一 Gate 基线 |
 
 ### 11.2 风险与回退策略
 

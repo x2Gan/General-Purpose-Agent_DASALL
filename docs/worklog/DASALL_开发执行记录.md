@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #331
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 E
+- 任务：TOOL-TODO-031 补齐 MCP loopback 夹具与 plugin stdio launch 样本方案
+- 状态：已完成
+
+### 任务选择
+
+1. 031 是 032~035 的显式前置 blocker；若 loopback fixture 与 stdio launch sample 仍未冻结，`CapabilityCache`、`IMCPAdapter`、`CapabilityDiscovery` 与 MCP integration gate 都没有统一的实现锚点。
+2. 本轮优先处理 design blocker，而不是提前写 `tools/src/mcp/` 生产代码；当前 `tools/src/mcp/` 只有 `placeholder.cpp`，说明正确动作应是先补齐可追溯方案。
+3. 详设与专项 TODO 对 blocker 编号存在偏差：详设把 MCP blocker 写成 `TOOL-BLK-003`，而专项 TODO 已将 `TOOL-BLK-003` 用于 integration discoverability；若不先统一，后续 032~036 会持续引用错误锚点。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_tools子系统详细设计.md`，在 6.12.3 新增“MCP loopback fixture 与 plugin stdio launch 样本方案”小节，明确：
+   - loopback fixture 采用 `tests/mocks/include/MCPLoopbackServerFixture.h` 的 header-only 放置约定；
+   - 最小闭环固定覆盖 initialize / initialized / tools/list / tools/call / shutdown；
+   - plugin stdio launch 样本通过 `bridge::MCPServerLaunchSpec.launch_spec_ref` 引用，不回滚既有 bridge ABI；
+   - 032~035 落地前仍保持 `tools_mcp=false` 的 builtin/workflow rollout。
+2. 同步更新详设 8.3 与 11.1 blocker 表，将 MCP blocker 编号统一为 `TOOL-BLK-004`，并补入已由 024 解阻的 integration discoverability 行，消除 architecture / TODO 之间的编号漂移。
+3. 更新 `docs/todos/tools/DASALL_tools子系统专项TODO.md`：
+   - 将 `TOOL-TODO-031` 标记为 Done；
+   - 将 `TOOL-BLK-004` 改为“已由 031 解阻”；
+   - 将 036 的设计锚点修正为 `11.1 TOOL-BLK-005`；
+   - 将“当前可直接执行性”中的前置条件移除 031。
+4. 新增交付物 `docs/todos/tools/deliverables/TOOL-TODO-031-MCP-loopback与plugin-stdio-launch样本方案收敛.md`，记录本地证据、MCP 官方 transports / lifecycle 约束、Design -> Build 映射以及风险与回退。
+
+### 测试
+
+1. 文档一致性校验：
+   - `rg -n "loopback|stdio|MCPServerLaunchSpec|CapabilityDiscovery|ToolMCPFallbackIntegrationTest" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md`
+2. 结果：
+   - 关键命中项已在详设与专项 TODO 中同时出现；
+   - blocker 编号、fixture 放置约定与 launch sample 方案保持一致；
+   - 本轮为 design blocker 收敛，不涉及编译目标与 CTest 运行。
+
+### 结果
+
+1. MCP runtime 的 032~035 现已拥有统一的 fixture / launch sample 设计基线，不再需要在实现轮次中反复讨论 test seam 与 launch data 来源。
+2. architecture / TODO 的 blocker 编号口径已统一，后续 skill 分支不会再误引用 MCP blocker。
+3. 031 只解开 design blocker，没有把 generic MCP ready 写成已实现事实，维持了 rollout 结论的保守边界。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-032`，按 6.12.3 的 cache 语义实现 `CapabilityCache.cpp`，并补 fresh / stale / expired / last_error 状态转移单测。
+2. 032 完成后继续推进 033 / 034，把 031 冻结的 fixture / launch sample 方案真正接到 `MCPLane`、`IMCPAdapter`、`StdioMCPTransport` 与 `StdioMCPServerLauncher`。
+
+### 风险
+
+1. 031 目前仍是设计与追踪层收敛，真实 loopback binary/script 尚未创建；若 033/034 发现需要额外 transport 行为，必须先补 supporting object 而不是直接扩写生产接口。
+2. MCP 官方协议仍在演进；当前样本基于 2025-03-26 版 stdio / lifecycle 约束，后续若升级协议版本，需要重新校验 initialize 与 shutdown 假设。
+
 ## 记录 #330
 
 - 日期：2026-04-16
