@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #330
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 D
+- 任务：TOOL-TODO-030 验证 ToolWorkflowFailureIntegration
+- 状态：已完成
+
+### 任务选择
+
+1. 027~029 已完成 workflow schema、WorkflowEngine、CompensationLedger 三段实现，本轮 030 的最小动作是补 integration gate，而不是继续扩实现对象。
+2. TODO 已明确 030 要同时断言 workflow step failure、delegation sidecar、compensation_hints、failure digest，必须用 ToolManager 边界验证而非只跑 WorkflowEngine unit。
+3. blocker `TOOL-BLK-003`（024）已完成，因此可以直接推进 integration test，不需要再做 blocker 解组。
+
+### 改动
+
+1. 新增 tests/integration/tools/ToolWorkflowFailureIntegrationTest.cpp，构造 workflow failure 场景并在 ToolManager 返回面断言：
+   - top-level ToolResult 失败与 ErrorInfo 可见
+   - delegation sidecar 在 workflow payload 中保留
+   - workflow-scoped compensation_hints 输出且仅包含 reversible upstream effect
+   - failure_reason_code 与 failure digest message 对齐
+2. 更新 tests/integration/tools/CMakeLists.txt，注册 `dasall_tool_workflow_failure_integration_test` 与 `ToolWorkflowFailureIntegrationTest`。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools：`dasall_tool_workflow_failure_integration_test`
+2. 执行：
+   - RunCtest_CMakeTools：`ToolWorkflowFailureIntegrationTest`
+3. 结果：
+   - 测试通过，workflow failure、delegation sidecar、compensation_hints、failure digest 可同时断言。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. Workflow / Compensation 主链在 ToolManager 集成边界完成闭环，027~030 的 Gate-TOOL-05 核心验收项已具备可执行证据。
+2. workflow failure 场景不再依赖单元级局部断言，已在 integration 层覆盖 top-level envelope 合同。
+3. failure digest 与 compensation_hints 在同一失败请求中可并存，符合“失败事实与恢复建议并行传递”的设计边界。
+
+### 下一步
+
+1. 进入后续阶段时，可将 030 的注入式 plan_loader 场景扩展为“真实 parser + workflow payload 输入”的端到端集成路径。
+2. 若未来引入多批次并发失败策略，建议新增 integration 用例覆盖 failure digest 优先级与 evidence 合并顺序。
+
+### 风险
+
+1. 当前 030 用例聚焦单工作流失败链路，对复杂并行批次冲突和多失败聚合策略覆盖不足。
+2. 生产 parser 尚未并入该用例路径；若 parser 行为偏离计划对象语义，仍需独立 integration gate 补测。
+
 ## 记录 #329
 
 - 日期：2026-04-16
