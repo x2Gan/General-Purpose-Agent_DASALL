@@ -1,5 +1,71 @@
 # DASALL 开发执行记录
 
+## 记录 #318
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-017 实现 BuiltinExecutorLane
+- 状态：已完成
+
+### 任务选择
+
+1. TOOL-TODO-016 已完成 ToolIR -> services request 的稳定映射，因此 017 可以直接承接 builtin route 的真实执行，不需要额外扩 shared contracts 或重做 request 映射。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.2 已将 BuiltinExecutorLane 固定为 action / query / diagnose 的本地分发器，本轮只替换 builtin 默认 executor，不提前引入 ResultProjector 或 observability bridge。
+3. 015b 当前 ToolManager 主链仍依赖 module-local fallback executor；017 的核心目标是把 builtin route 收口到真实 lane，同时保持 workflow / MCP fallback 不受影响。
+
+### 改动
+
+1. 新增 tools/src/execution/BuiltinExecutorLane.h，定义 `BuiltinExecutorLaneDependencies` 与 `BuiltinExecutorLane`，暴露 `execute()`、`dispatch_action()`、`dispatch_query()`、`dispatch_diagnose()` 与三类 `map_service_result()`。
+2. 新增 tools/src/execution/BuiltinExecutorLane.cpp，在 lane 内基于 registry 解析 descriptor category，并把 action / information / diagnostic 分别分发到 `IExecutionService::execute()`、`IDataService::query()` 与 `IExecutionService::diagnose()`。
+3. 在同一实现中新增 module-local 默认 execution/data services stub，确保默认 ToolManager builtin route 不再落回 015b 的字符串 fallback executor，并以 `error` 是否存在作为 v1 `ToolResult.success` 判定。
+4. 保留 services 返回的 `ErrorInfo`、`payload_json / rows_json / report_json` 与 action `side_effects`，并对 query cache hit 写入 `cache:hit` tag，不在 lane 内伪造 compensation 或重解释 route。
+5. 更新 tools/src/ToolManager.cpp，在 `default_dependencies()` 中构造共享 `BuiltinExecutorLane`，将 `ToolIRRoute::LocalTool` 默认执行改为调用 lane，非 builtin route 仍保持原 fallback executor。
+6. 更新 tools/CMakeLists.txt，把 BuiltinExecutorLane 源文件纳入 `dasall_tools`。
+7. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，注册 `dasall_builtin_executor_lane_unit_test` 与 `dasall_builtin_executor_lane_timeout_unit_test`。
+8. 新增 tests/unit/tools/BuiltinExecutorLaneTest.cpp，覆盖 action dispatch、read-only query、diagnose dispatch 与 partial side effect 错误收口。
+9. 新增 tests/unit/tools/BuiltinExecutorLaneTimeoutTest.cpp，锁定 provider timeout 透传行为，确保 lane 不重写 services 错误消息。
+10. 新增 docs/todos/tools/deliverables/TOOL-TODO-017-BuiltinExecutorLane设计收敛.md，并更新 docs/todos/tools/DASALL_tools子系统专项TODO.md 的 017 行状态与验证证据。
+
+### 测试
+
+1. 定向构建：
+   - Build_CMakeTools: `dasall_builtin_executor_lane_unit_test`
+   - Build_CMakeTools: `dasall_builtin_executor_lane_timeout_unit_test`
+   - Build_CMakeTools: `dasall_tool_manager_skeleton_unit_test`
+   - Build_CMakeTools: `dasall_tool_manager_batch_invoke_unit_test`
+   - Build_CMakeTools: `dasall_tool_manager_pipeline_unit_test`
+   - Build_CMakeTools: `dasall_tool_manager_failure_path_unit_test`
+2. 定向验证：
+   - RunCtest_CMakeTools: `BuiltinExecutorLaneTest`
+   - RunCtest_CMakeTools: `BuiltinExecutorLaneTimeoutTest`
+   - RunCtest_CMakeTools: `ToolManagerSkeletonTest`
+   - RunCtest_CMakeTools: `ToolManagerBatchInvokeTest`
+   - RunCtest_CMakeTools: `ToolManagerPipelineTest`
+   - RunCtest_CMakeTools: `ToolManagerFailurePathTest`
+3. 聚合回归：
+   - Build_CMakeTools: `dasall_tools`、`dasall_unit_tests`
+4. 结果摘要：
+   - 新增 BuiltinExecutorLane 定向 tests 全部通过。
+   - ToolManager 既有 skeleton / batch / pipeline / failure tests 在 builtin 默认接线切换后保持通过。
+   - `dasall_unit_tests` 构建期间自动执行 unit 集合，`275/275` 全绿。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，但未影响测试通过结论。
+
+### 结果
+
+1. builtin route 的默认执行已从 015b 的 module-local fallback executor 收口到真实 BuiltinExecutorLane，builtin 最小闭环推进到执行层。
+2. lane 现在稳定复用 016 的 ToolServiceBridge 与 services facade，对 action / query / diagnose 的输入映射、错误透传和最小标签策略均有单测保护。
+3. ToolManager 的默认依赖不再把 builtin 执行与 workflow / MCP fallback 混在同一 stub 中，为 018 的 ResultProjector 接替默认 projector 提供了清晰边界。
+
+### 下一步
+
+1. 进入 TOOL-TODO-018，实现 ResultProjector，把 ToolManager 当前的 module-local digest fallback 替换成真实投影器。
+2. 在 018 完成后继续推进 019~022 的 audit / metrics / trace / health observability 闭环。
+
+### 风险
+
+1. 当前 lane 只把 services 回执收敛到 `ToolResult`，尚未把 `compensation_hints` 与更细粒度 evidence refs 进入统一 envelope；这部分仍需后续任务收口。
+2. query / diagnose 的 payload 仍以 services JSON 直接进入 `ToolResult.payload`；若 018 的 projector 未及时落地，builtin 闭环仍只覆盖执行层，不覆盖 digest 规则化边界。
+
 ## 记录 #317
 
 - 日期：2026-04-16

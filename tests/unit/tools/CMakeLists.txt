@@ -181,3 +181,15 @@ dasall_add_tools_behavior_test(
 	ToolServiceBridgeTest.cpp
 	ToolServiceBridgeTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_builtin_executor_lane_unit_test
+	BuiltinExecutorLaneTest.cpp
+	BuiltinExecutorLaneTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_builtin_executor_lane_timeout_unit_test
+	BuiltinExecutorLaneTimeoutTest.cpp
+	BuiltinExecutorLaneTimeoutTest
+)

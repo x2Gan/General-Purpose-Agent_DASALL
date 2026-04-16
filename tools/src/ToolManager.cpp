@@ -4,6 +4,7 @@
 #include <chrono>
 #include <utility>
 
+#include "execution/BuiltinExecutorLane.h"
 #include "error/ResultCode.h"
 #include "observation/Observation.h"
 #include "observation/ObservationSource.h"
@@ -673,12 +674,26 @@ ToolInvocationEnvelope ToolManager::run_compensation_pipeline(
 }
 
 manager::ToolManagerDependencies ToolManager::default_dependencies() {
+	auto registry = std::make_shared<registry::ToolRegistry>();
+	auto validator = std::make_shared<validation::ToolValidator>();
+	auto config_adapter = std::make_shared<config::ToolConfigAdapter>();
+	auto policy_gate = std::make_shared<policy::ToolPolicyGate>();
+	auto route_selector = std::make_shared<route::ToolRouteSelector>();
+	auto builtin_lane = std::make_shared<execution::BuiltinExecutorLane>(
+			execution::BuiltinExecutorLaneDependencies{
+					.registry = registry,
+					.service_bridge = nullptr,
+					.execution_service = nullptr,
+					.data_service = nullptr,
+					.now_ms = {},
+			});
+
 	return manager::ToolManagerDependencies{
-			.registry = std::make_shared<registry::ToolRegistry>(),
-			.validator = std::make_shared<validation::ToolValidator>(),
-			.config_adapter = std::make_shared<config::ToolConfigAdapter>(),
-			.policy_gate = std::make_shared<policy::ToolPolicyGate>(),
-			.route_selector = std::make_shared<route::ToolRouteSelector>(),
+			.registry = std::move(registry),
+			.validator = std::move(validator),
+			.config_adapter = std::move(config_adapter),
+			.policy_gate = std::move(policy_gate),
+			.route_selector = std::move(route_selector),
 			.build_manifest = profiles::BuildProfileManifest{
 					.enabled_modules = {"runtime", "tools_builtin"},
 					.enabled_adapters = {},
@@ -686,7 +701,18 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					.build_tags = {"tools:manager"},
 					.toolchain_hint = std::string("x86_64-linux-gnu"),
 			},
-			.executor = default_executor,
+			.executor = [builtin_lane](const ToolExecutionRequest& execution_request) {
+					if (execution_request.route_decision.route == ToolIRRoute::LocalTool) {
+						return builtin_lane->execute(
+								execution_request.tool_ir,
+								ToolExecutionContext{
+										.invocation_context = execution_request.invocation_context,
+										.lane_key = execution_request.route_decision.lane_key,
+								});
+					}
+
+					return default_executor(execution_request);
+			},
 			.projector = default_projector,
 			.audit_hooks = {},
 	};

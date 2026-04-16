@@ -6,6 +6,7 @@ target_sources(dasall_tools
     src/bridge/PluginExtensionBridge.cpp
     src/bridge/ToolServiceBridge.cpp
     src/config/ToolConfigAdapter.cpp
+    src/execution/BuiltinExecutorLane.cpp
     src/execution/ExecutorLanePool.cpp
     src/mcp/placeholder.cpp
     src/ops/placeholder.cpp
