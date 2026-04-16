@@ -178,6 +178,18 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_stdio_mcp_server_launcher_unit_test
+	StdioMCPServerLauncherTest.cpp
+	StdioMCPServerLauncherTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_capability_discovery_unit_test
+	CapabilityDiscoveryTest.cpp
+	CapabilityDiscoveryTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_tool_manager_skeleton_unit_test
 	ToolManagerSkeletonTest.cpp
 	ToolManagerSkeletonTest

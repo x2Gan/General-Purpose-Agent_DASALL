@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #334
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 E
+- 任务：TOOL-TODO-034 实现 CapabilityDiscovery 与 StdioMCPServerLauncher
+- 状态：已完成
+
+### 任务选择
+
+1. 033 已把 transport / adapter / lane 三层拆开，034 的最小动作就是把 031 冻结的 `launch_spec_ref` 样本真正接进 transport factory，并把 032 的 cache 失败态与 refresh backoff 串起来。
+2. `PluginExtensionBridge` 已提供 source-scoped `MCPServerLaunchSpec` 视图，因此 034 不应再旁路新建第二套 plugin delta 容器，而是直接消费 source_key + launch spec 批次。
+3. TODO 的显式验收点要求覆盖 `failure_backoff`、stale snapshot 保留、plugin delta 驱动 refresh，所以 034 必须把 discovery 做成 deterministic 的单测对象，而不是埋进 ToolManager 里做黑盒接线。
+
+### 改动
+
+1. 新增 `tools/src/mcp/StdioMCPServerLauncher.h` 与 `tools/src/mcp/StdioMCPServerLauncher.cpp`：
+   - 通过 `launch_spec_ref` 解析 plugin-local launch sample；
+   - 生成 `MCPServerSpec` 与 `MCPToolBinding`；
+   - 暴露可注入的 stdio transport factory，把 `launch_spec_ref` 接到 `StdioMCPTransport` 的 channel factory。
+2. 新增 `tools/src/mcp/CapabilityDiscovery.h` 与 `tools/src/mcp/CapabilityDiscovery.cpp`：
+   - 接收 source-scoped plugin delta；
+   - 发布 server spec snapshot；
+   - 执行 `refresh_once()` / `schedule_refresh()`；
+   - 在单 server 失败时只对该 server 应用 `failure_backoff_ms`；
+   - 成功时刷新 `CapabilityCache` 并向 `ToolRegistry` 发布 binding，失败时调用 `CapabilityCache::mark_failed()` 保留 stale snapshot。
+3. 新增单测：
+   - `tests/unit/tools/StdioMCPServerLauncherTest.cpp`
+   - `tests/unit/tools/CapabilityDiscoveryTest.cpp`
+4. 更新 `tools/CMakeLists.txt`、`tests/unit/tools/CMakeLists.txt`、`tests/unit/CMakeLists.txt`，把 launcher/discovery 源文件与测试目标接入 `dasall_tools` / `dasall_unit_tests`。
+5. 更新 `docs/architecture/DASALL_tools子系统详细设计.md` 与专项 TODO，回写 MCP runtime 当前状态与 TOOL-D9 / TOOL-TODO-034 的实现事实。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools` targets: `dasall_tools`, `dasall_unit_tests`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `CapabilityDiscoveryTest`, `StdioMCPServerLauncherTest`
+3. 结果：
+   - `Build_CMakeTools` 构建 `dasall_tools` 与 `dasall_unit_tests` 成功，并包含新增 2 个 tools unit tests；
+   - `CapabilityDiscoveryTest`、`StdioMCPServerLauncherTest` 全部通过；
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. plugin 导出的 `launch_spec_ref` 已能在 tools 内部被解析为 `MCPServerSpec`、binding 和可连接的 stdio transport，不需要回滚 010/031 已冻结的 bridge ABI。
+2. `CapabilityDiscovery` 已具备 source-scoped delta、per-server backoff、stale snapshot 保留与 binding publish 语义，为 035 的 fallback / plugin stdio integration gate 提供了可复用底座。
+3. generic MCP 仍不能对外宣称 ready；034 只完成 runtime 组件与单测闭环，integration gate 仍留给 035。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-035`，补齐 `ToolMCPFallbackIntegrationTest` 与 `ToolPluginStdioMCPIntegrationTest`。
+2. 035 需要把 034 的 discovery / launcher 与 033 的 adapter / lane 接成完整 fallback / plugin stdio invoke 闭环，但仍保持 `tools_mcp=false` 的 rollout 结论。
+
+### 风险
+
+1. 当前 `StdioMCPServerLauncher` 解析的是受控 sample resolver，而不是真实插件资产存储；035 若引入 loopback fixture，应继续沿用这一受控 seam，而不是直接把外部进程管理塞回 discovery。
+2. `CapabilityDiscovery` 当前仅发布 server spec 与 binding，不替代 RouteSelector 做最终路由判断；fallback 是否被选中仍应在 035 的集成门里验证。
+
 ## 记录 #333
 
 - 日期：2026-04-16
