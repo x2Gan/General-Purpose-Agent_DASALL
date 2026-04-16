@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #315
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 D
+- 任务：TOOL-TODO-023 补齐 runtime caller fixture 与 ToolInvocationContext caller 口径
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 将 015b 标记为受 TOOL-BLK-002 阻塞，且最小解阻动作明确指向 TOOL-TODO-023，因此本轮按 project-implementation-cycle 先执行 023，而不是直接进入 015b。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.5.1、8.3、11.1、12.1 已明确缺口集中在 caller fixture 口径，而不是 shared contract 或生产代码实现，因此本轮只回写设计与 blocker 证据，不扩张到 runtime 生产接线。
+3. TOOL-TODO-015a 已证明 ToolManager 内部依赖需要持有 `BuildProfileManifest`，而 TOOL-TODO-002 又已冻结 `ToolInvocationContext` 为 invoke-scoped context；023 的核心任务就是把这两者的边界在文档中讲清楚。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-023-runtime-caller-fixture与ToolInvocationContext口径收敛.md，固定 023 的本地证据、Design 结论与验收命令。
+2. 更新 docs/architecture/DASALL_tools子系统详细设计.md，在 6.5.1 表中明确 `ToolInvocationContext` 只承载 invoke-scoped caller/session/profile/trace/confirmation facts，不承载 `BuildProfileManifest` 或最终执行通道。
+3. 在同一设计文档新增 6.5.1.1 小节，把 tools-side caller fixture 固定为 `ToolRequest` + `ToolInvocationContext` + ToolManager 本地依赖三段式，并明确 `BuildProfileManifest`、capability snapshot、route health、executor/projector hooks 均属于 ToolManager fixture / dependency injection，而不进入 public context。
+4. 同时把 `ToolInvocationContext.caller_domain` 的语义收敛为“调用来源域”，并明确 PolicyGate 当前消费的 requested execution domain 由 ToolManager 在验证后基于 `ToolIR.route` / descriptor category 映射为 `builtin`、`workflow`、`mcp`，而不是直接复用 context 字段。
+5. 更新 docs/architecture/DASALL_tools子系统详细设计.md 的 8.3 blocker 表、11.1 blocker 表和 12.1 open item，使 TOOL-BLK-002 从“tools-side fixture 未定义”收敛为“runtime 生产 caller 仍未冻结，但 tools-side fixture 已解阻”。
+6. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md：把 TOOL-TODO-023 标记为 Done，移除 015b 和 025 上已解除的 TOOL-BLK-002 引用，更新顶部当前结论、可执行性判断、runtime caller fixture 行和 blocker 表，使 TODO 与 architecture 保持一致。
+
+### 测试
+
+1. 文档检索验收：
+   - `rg -n "ToolInvocationContext|caller_domain|BuildProfileManifest|TOOL-BLK-002|fixture" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md`
+2. 结果摘要：
+   - architecture 与 TODO 中关于 caller fixture、`BuildProfileManifest` 边界和 TOOL-BLK-002 的表述已可被统一检索命中。
+   - 015b 的 blocker 字段已解除，但 runtime 生产接线仍明确保留 Blocked 结论，没有被误写成已完成事实。
+
+### 结果
+
+1. TOOL-TODO-023 已把 TOOL-BLK-002 从“缺少 tools-side caller fixture 口径”收敛为“仅剩 runtime 生产 caller adapter 未冻结”，因此 015b 现在可以在 tests/design gate 口径下继续推进。
+2. 当前文档边界保持清晰：`ToolInvocationContext` 继续只是 invoke-scoped context；`BuildProfileManifest`、capability snapshot 与 executor/projector hooks 都留在 ToolManager 本地依赖层，不扩 public ABI。
+3. 023 没有把 runtime 生产接线伪造成已完成事实，只是为 tools 侧治理链验证提供了最小 caller fixture，这符合 ADR-008 和专项 TODO 的 blocker-first 要求。
+
+### 下一步
+
+1. 直接进入 TOOL-TODO-015b，把 ToolManager 接到完整治理管线，并基于 023 明确的 caller fixture 做 tools-side 单测闭环。
+
+### 风险
+
+1. requested execution domain 目前仍是 ToolManager 的 module-local 映射；如果 runtime 后续冻结了更正式的 admission supporting object，应迁移而不是长期维持双义的 `caller_domain` 解释。
+2. 023 只解阻 tests/design gate caller fixture，不等于 runtime 生产 caller 已稳定；后续文档与提交仍需持续保持这条边界。
+
 ## 记录 #314
 
 - 日期：2026-04-16

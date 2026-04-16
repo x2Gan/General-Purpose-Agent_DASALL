@@ -516,7 +516,7 @@ flowchart TD
 | Observation | shared contract | contracts | runtime/memory/cognition 消费的观察对象 | 复用，不在 tools 本地重定义 |
 | ObservationDigest | shared contract | contracts | 面向推理和写回的压缩摘要 | 已冻结，必须产出 |
 | ErrorInfo | shared contract | contracts | 统一失败语义 | 已冻结，统一映射 |
-| ToolInvocationContext | module-local public | tools/include | runtime 注入 caller/profile/trace/confirmation 等调用上下文 | 首版保留 module public |
+| ToolInvocationContext | module-local public | tools/include | runtime/fixture 注入 caller/session/profile/trace/confirmation 等 invoke-scoped 调用上下文，不承载 BuildProfileManifest 或最终执行通道 | 首版保留 module public |
 | ToolInvocationEnvelope | module-local public | tools/include | ToolManager 对 runtime 的统一返回值，承载 ToolResult、Observation、ObservationDigest 与路由事实 | 首版保留 module public |
 | ToolAdmissionRequest / Decision | module-local internal | tools/src | PolicyGate 的输入输出 | 不进入 contracts |
 | ToolPolicyView / ToolTimeoutView | module-local internal | tools/src | RuntimePolicySnapshot 的工具域投影 | 不进入 contracts |
@@ -529,6 +529,16 @@ flowchart TD
 | SkillSpecAsset / SkillInstance | module-local asset/runtime | tools/src + skills/ | Skill 资产与运行态实例 | 不进入 contracts |
 | WorkflowPlan / WorkflowReceipt | module-local internal | tools/src/execution | 工作流执行计划与批次回执 | 不进入 contracts |
 | CompensationRecord | module-local internal | tools/src/execution | side_effects 与补偿提示台账 | 不进入 contracts |
+
+#### 6.5.1.1 runtime caller fixture 最小口径
+
+为解阻 TOOL-BLK-002，当前冻结如下的 tests/design gate caller fixture 口径：
+
+1. tools 侧的最小调用输入由 `ToolRequest`、`ToolInvocationContext` 和 ToolManager 本地依赖三部分组成，而不是把所有上游事实都压进同一个 context 聚合里。
+2. `ToolInvocationContext` 只承载 invoke-scoped 的 caller/session/profile snapshot/trace/confirmation facts；它不承载 `BuildProfileManifest`、lane 开关、capability snapshot、executor/projector hook 或恢复控制语义。
+3. `BuildProfileManifest` 由 ToolManager fixture / dependency injection 提供，用于 ToolConfigAdapter 的 enabled_modules 投影；它属于 build/config 视图，不属于每次 invoke 的 runtime context。
+4. `ToolInvocationContext.caller_domain` 表示调用来源域，例如 `runtime.main`、`runtime.worker`；PolicyGate 当前使用的 requested execution domain 由 ToolManager 在验证完成后基于 `ToolIR.route` / descriptor category 映射为 `builtin`、`workflow`、`mcp`，而不是直接复用 `ToolInvocationContext.caller_domain`。
+5. 该 fixture 只用于 tests/mocks 和 design gate，证明 tools 侧调用闭环可验证；它不等价于 runtime 生产主链已经完成稳定接线。
 
 #### 6.5.2 AgentDelegation 的路由收敛策略
 
@@ -1516,7 +1526,7 @@ plugins/
 
 | 阻塞项 | 影响阶段 | 解阻条件 | 最小解阻动作 | 回退策略 |
 |---|---|---|---|---|
-| runtime 尚无稳定 ToolRequest caller | Phase 0-2 | runtime 能以 ToolRequest 调用 ToolManager，或在 tests 中提供 caller fixture | 先用 module-local ToolManager fixture 和 services loopback 完成 tool 自身闭环 | 保持 tools 仅由测试夹具调用，不提前接 runtime 生产链 |
+| runtime 生产 caller 尚未冻结（tools-side fixture 已定义） | Phase 0-2 | runtime 能以 ToolRequest 调用 ToolManager，或沿用 6.5.1.1 的 caller fixture 完成 tools-side 验证 | 以 `ToolInvocationContext` + ToolManager 本地依赖注入组成 caller fixture，`BuildProfileManifest` 不进入 context | 保持 tools 仅由测试夹具调用，不提前接 runtime 生产链 |
 | MCP loopback server 缺失 | Phase 4 | 提供最小握手/列表/调用 fixture | 在 tests/mocks 增加 mock MCP server fixture | 若 fixture 未就绪，暂时禁用 `tools_mcp` 路径，只验证 builtin/workflow |
 | 外部 Skill 规范样本缺失 | Phase 5 | 至少提供 1 组 normalized skill 资产和 1 组外部方言样本 | 先实现 internal SkillSpec parser，再补 external importer | 若外部 importer 不稳定，保持只支持内部 `skills/specs/` |
 | services result 语义后续调整 | Phase 2-4 | Execution/Data 公共对象与 ResultMapper 字段保持稳定 | 以 ToolServiceBridge 做 module-local 映射层，不直接耦合 adapter receipt 细节 | 若 services 变更，先改 bridge，不回滚 Tool shared contracts |
@@ -1605,7 +1615,7 @@ plugins/
 | Blocker ID | 阻塞项 | 当前影响 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|
 | TOOL-BLK-001 | tools/include 完全缺失 | Phase 0 之前无法形成模块公共接口与单测入口 | 完成 TOOL-D1 | 暂以 src 内部类和测试夹具推进，避免过早接生产调用面 |
-| TOOL-BLK-002 | runtime 尚无稳定 ToolManager 调用面 | 生产主链无法直接接 tools | runtime 能发起 ToolRequest 或提供 caller fixture | 在 tests/mocks 中先构造 ToolInvocationContext |
+| TOOL-BLK-002 | runtime 生产 caller 尚未冻结（023 已定义 tools-side fixture） | runtime 生产主链仍无法直接接 tools，但 tools 侧单测/设计 gate 已可继续 | runtime 能发起 ToolRequest，或沿用 6.5.1.1 的 caller fixture 验证 tools-side 闭环 | 在 tests/mocks 中构造 ToolInvocationContext，并由 ToolManager 本地依赖注入补充 BuildProfileManifest / capability / executor hooks |
 | TOOL-BLK-003 | MCP loopback fixture 缺失 | MCP lane 无法做自动化验证 | 提供最小 mock MCP server | 暂时保持 `tools_mcp=false` 的 builtin-only rollout |
 | TOOL-BLK-004 | external skill 样本与归一化资产缺失 | Skill importer 无法验证真实方言兼容 | 提供至少 1 组 internal spec 与 1 组 external sample | 只支持内部 `skills/specs/`，关闭 importer |
 | TOOL-BLK-005 | CMake Tools 预设可能未激活 | IDE 内 target/test 可能为空，影响 discoverability 观察 | 显式 build-ci configure/build/ctest 路径跑通 | 以显式命令链作为唯一 Gate 基线 |
@@ -1634,7 +1644,7 @@ plugins/
 
 | ID | 未决问题 | 当前建议 |
 |---|---|---|
-| TOOL-OPEN-01 | IToolManager、IMCPAdapter 是否需要进入 InterfaceCatalog 做 shared admission？ | 当前不需要；先保持 tools/include 模块公共接口，待 caller 与 supporting object 稳定后再评审 |
+| TOOL-OPEN-01 | IToolManager、IMCPAdapter 是否需要进入 InterfaceCatalog 做 shared admission？ | 当前不需要；023 已把 caller fixture 固定为 module-local `ToolInvocationContext` + ToolManager 本地依赖，待 runtime 生产 caller 与 requested-domain supporting object 稳定后再评审 |
 | TOOL-OPEN-02 | CapabilitySnapshot 是否应持久化到独立 store，还是只保存在进程内缓存？ | v1 先做进程内缓存；只有在跨重启恢复成为显式需求后再评审持久化 |
 | TOOL-OPEN-03 | AgentDelegation recommendation 的 module-local supporting object 形状是否应在 runtime 和 tools 间共享？ | 先保持 module-local sidecar，由 runtime fixture 验证；不提前进入 contracts |
 | TOOL-OPEN-04 | external skill 资产的 canonical root 是否固定为顶层 skills/？ | 当前建议固定为顶层 skills/，external dialect 只作为 importer 输入，不直接成为运行时 canonical layout |
