@@ -8,7 +8,7 @@ target_sources(dasall_tools
     src/execution/placeholder.cpp
     src/mcp/placeholder.cpp
     src/ops/placeholder.cpp
-    src/policy/placeholder.cpp
+    src/policy/ToolPolicyGate.cpp
     src/projection/placeholder.cpp
     src/registry/ToolRegistry.cpp
     src/registry/BuiltinCatalog.cpp

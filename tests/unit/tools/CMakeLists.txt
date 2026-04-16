@@ -126,3 +126,15 @@ dasall_add_tools_behavior_test(
 	ToolConfigAdapterHotUpdateTest.cpp
 	ToolConfigAdapterHotUpdateTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_tool_policy_gate_unit_test
+	ToolPolicyGateTest.cpp
+	ToolPolicyGateTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_policy_profile_diff_unit_test
+	ToolPolicyProfileDiffTest.cpp
+	ToolPolicyProfileDiffTest
+)

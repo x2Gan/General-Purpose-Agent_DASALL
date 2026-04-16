@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #312
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-013 实现 ToolPolicyGate
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 013 依赖 005、012，且是 014 RouteSelector 与 015b ToolManager 全链路开始依赖明确 admission reason 之前的唯一 gate 前置，因此本轮按 project-implementation-cycle 选择 013 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.1 已明确 ToolPolicyGate 只负责 admission，不做恢复裁定、不做 route 选择，因此本轮只收敛 fail-closed gate 逻辑，不把 route/fallback 或 runtime 交互推入 tools。
+3. TOOL-TODO-012 已提供稳定 `ToolPolicyView`，所以本轮直接消费投影视图，不重新引入 RuntimePolicySnapshot 依赖到 gate 逻辑内部。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-013-ToolPolicyGate设计收敛.md，固定 013 的本地证据、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，把 policy 编译入口从 placeholder 切到 `ToolPolicyGate.cpp`。
+3. 新增 tools/src/policy/ToolPolicyGate.h / ToolPolicyGate.cpp，落地 `evaluate()`、`check_allowed_domain()`、`check_visibility()`、`check_confirmation()` 与 `check_safe_mode()`，形成固定的 fail-closed 准入顺序。
+4. Gate 现在会在 policy view 缺字段时直接返回 `policy.profile_missing`；在 safe mode 下 route 未证明时返回 `policy.safe_mode_route_unproven`；在高风险缺确认时返回 `policy.confirmation_required`；allowed domain / visibility 不满足时分别返回 `policy.domain_denied` 与 `policy.visibility_denied`。
+5. visibility 规则保持最小语义集：`domain:all` 全开，`domain:trusted` 需要 proven route，其余 selector 只允许显式命中 `tool_name` 或 `required_scopes`，避免模糊匹配放宽策略。
+6. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_tool_policy_gate_unit_test` 与 `dasall_tool_policy_profile_diff_unit_test` 两个 executable unit target。
+7. 新增 tests/unit/tools/ToolPolicyGateTest.cpp 与 ToolPolicyProfileDiffTest.cpp，分别覆盖 gate 的 fail-closed 行为，以及 desktop_full / edge_minimal policy 投影对同一 MCP request 产生不同准入结果。
+8. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-013 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+2. 定向 tests：
+   - RunCtest_CMakeTools 运行 `ToolPolicyGateTest`
+   - RunCtest_CMakeTools 运行 `ToolPolicyProfileDiffTest`
+3. 结果摘要：
+   - 两条新增 policy gate unit tests 全部通过
+   - `dasall_contract_tests` 目标构建期间自动执行 152 条 contract tests，全绿
+   - 定向测试返回成功，stderr 中的 `DartConfiguration.tcl` 缺失告警未影响用例通过
+
+### 结果
+
+1. TOOL-TODO-013 已把 tools 治理链从“只有投影视图”推进到“具备稳定 fail-closed 准入裁定”，为 014 RouteSelector 和 015b ToolManager 主链提供了可复用的 deny reason code。
+2. 当前 gate 保持了明确边界：只根据 policy view 和 request facts 作 allow/deny，不读取 profile 原始对象、不决定 route、不触发确认交互，也不替 runtime 做恢复判定。
+3. 本轮继续保持 shared contract 零变更，并通过 profile-diff 测试证明 012 的 projection 结果会真实影响 gate，而不是停留在孤立数据结构层。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-014，落地 ToolRouteSelector 与 ExecutorLanePool 骨架，把 route reason codes、lane 隔离和 stale-read policy 真正接到治理链上。
+
+### 风险
+
+1. 当前 `caller_domain` 同时承担 requested domain 输入角色；如果后续 runtime caller fixture 为 route proof 与 requested domain 提供更清晰分离的字段，gate 需要切换到更正式的上游事实对象。
+2. `domain:trusted` 目前只等价为 proven route，而不是多级 trust policy；后续若 MCP 或 plugin source 引入更细粒度 trust level，应由 route/capability 层产出更明确事实，再由 gate 消费。
+
 ## 记录 #311
 
 - 日期：2026-04-16
