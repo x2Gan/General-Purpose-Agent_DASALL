@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #335
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 E
+- 任务：TOOL-TODO-035 验证 ToolMCPFallback 与 ToolPluginStdioMCPIntegration
+- 状态：已完成
+
+### 任务选择
+
+1. 034 已把 discovery / launcher runtime 底座补齐，035 的最小动作就是把 route selector、ToolManager、MCP lane 与 plugin bridge 真正串成 integration gate，而不是继续停留在白盒单测。
+2. TODO 的验收点明确要求覆盖 stale snapshot、route fallback、plugin-delivered stdio launch 和统一 ErrorInfo 映射，因此 035 必须提供 deterministic MCP transcript 夹具，并在 ToolManager 黑盒路径上断言结果。
+3. 当前仓库已具备 services / workflow / observability 的 tools integration 基线，035 应只补 MCP hybrid gate，不额外篡改生产主链行为。
+
+### 改动
+
+1. 新增 `tests/mocks/include/MCPLoopbackServerFixture.h`：
+   - 提供 `MCPLoopbackScenario` / `MCPLoopbackFrame` / `MCPLoopbackExitMode`；
+   - 通过注入 `StdioLaunchChannelBuilder` 复用到 launcher / adapter / lane integration；
+   - 记录 MCP initialize / list / call transcript，支持 close-after-write / close-after-read 等 deterministic 脚本。
+2. 新增 `tests/integration/tools/ToolMCPFallbackIntegrationTest.cpp`：
+   - 验证 trusted stale snapshot 仍选中 MCP；
+   - 验证 MCP lane unhealthy 时回退 builtin；
+   - 验证 MCP protocol error 经 ToolManager 投影后仍保持统一 `ErrorInfo` / `failure_reason_code`。
+3. 新增 `tests/integration/tools/ToolPluginStdioMCPIntegrationTest.cpp`：
+   - 通过 `PluginExtensionBridge` 发布 plugin stdio launch spec；
+   - 通过 `CapabilityDiscovery` 刷新 binding / cache；
+   - 验证 `launch_spec_ref` -> launch sample -> stdio invoke；
+   - 验证 plugin unload 后 source-scoped revoke 会清理 server spec、registry binding 与 capability cache。
+4. 更新 `tests/integration/tools/CMakeLists.txt`，把两个新增 integration test 接入 tools integration target 注册。
+5. 更新 tools 详设、专项 TODO 与本条 worklog，回写 Gate-TOOL-07 已具备自动化事实，但 generic MCP 对外 rollout 仍待单独评审。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `ToolMCPFallbackIntegrationTest`, `ToolPluginStdioMCPIntegrationTest`
+3. 结果：
+   - 新增两个 tools integration targets 构建成功；
+   - `ToolMCPFallbackIntegrationTest`、`ToolPluginStdioMCPIntegrationTest` 全部通过；
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. 032~035 的 MCP hybrid 路径现在已经拥有从 cache/discovery 到 ToolManager route/fallback，再到 plugin stdio invoke / revoke 的自动化闭环证据。
+2. `MCPLoopbackServerFixture` 成为后续 profile/discoverability 阶段可复用的 deterministic seam，不需要再为 MCP transcript 另起一套 mock 基础设施。
+3. 035 完成后，`TOOL-D9` 不再只有 unit coverage；Gate-TOOL-07 的核心断言已经被正式固化进 integration suite。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-041` 之前，需要先按专项串行顺序推进阶段 F 的 Skill 相关任务。
+2. 后续若要讨论 generic MCP rollout，只能基于 Gate-TOOL-07 已完成这一实现事实继续评审，不能把 035 直接写成“默认开启”。
+
+### 风险
+
+1. 当前 loopback fixture 仍是测试 seam，不代表真实外部 MCP 进程托管策略已经产品化；真实 spawn / kill / restart 行为仍受后续发布约束。
+2. 035 已验证 hybrid route 的核心行为，但 profile compatibility 与 discoverability 仍待阶段 G 的 Gate-TOOL-09 / 10 收口。
+
 ## 记录 #334
 
 - 日期：2026-04-16

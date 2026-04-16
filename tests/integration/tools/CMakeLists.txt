@@ -28,9 +28,23 @@ macro(dasall_add_tools_integration_test target_name test_name source_file labels
 endmacro()
 
 dasall_add_tools_integration_test(
+  dasall_tool_mcp_fallback_integration_test
+  ToolMCPFallbackIntegrationTest
+  ToolMCPFallbackIntegrationTest.cpp
+  "integration;tools"
+)
+
+dasall_add_tools_integration_test(
   dasall_tool_observability_integration_test
   ToolObservabilityIntegrationTest
   ToolObservabilityIntegrationTest.cpp
+  "integration;tools"
+)
+
+dasall_add_tools_integration_test(
+  dasall_tool_plugin_stdio_mcp_integration_test
+  ToolPluginStdioMCPIntegrationTest
+  ToolPluginStdioMCPIntegrationTest.cpp
   "integration;tools"
 )
 

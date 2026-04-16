@@ -203,7 +203,7 @@ Must-Not：
 | tool 集成测试 | 缺失 | tests/integration 下无 tools/ 目录 | 当前无 Tool -> Services / MCP / Workflow 集成路径 |
 | tool 契约测试 | 部分存在 | tests/contract/tool/* | 仅覆盖共享对象边界，不覆盖模块行为 |
 | Skill 运行时 | 缺失 | 工作区无 SkillRegistry/SkillRuntime 生产代码 | 当前只有架构与研究文档，不具备真实运行时 |
-| MCP 运行时 | 部分存在 | `tools/src/mcp/CapabilityCache.cpp`、`CapabilityDiscovery.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPServerLauncher.cpp`、`StdioMCPTransport.cpp` 与对应 unit tests 已落地；integration gate 仍待实现 | 当前 generic MCP 仍是架构预留，不是实现事实 |
+| MCP 运行时 | 已存在 | `tools/src/mcp/CapabilityCache.cpp`、`CapabilityDiscovery.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPServerLauncher.cpp`、`StdioMCPTransport.cpp` 以及 `ToolMCPFallbackIntegrationTest.cpp`、`ToolPluginStdioMCPIntegrationTest.cpp` 已形成闭环 | hybrid stdio MCP 运行闭环已具备，但 generic MCP 对外 rollout 仍需单独评审 |
 | plugin -> tools 扩展桥接 | 缺失 | 工作区无 PluginExtensionBridge、IToolPluginProvider 等生产代码 | 当前无法通过 infra/plugin 注入额外 builtin tool、stdio MCP、skill assets |
 | ToolRoute 实现 | 缺失 | 工作区无 ToolRoute/RouteSelector 生产代码 | builtin 与 MCP 的混合路由尚未闭环 |
 | PolicyGate 实现 | 缺失 | 工作区无 tools policy 生产代码 | 高风险确认、allowed_tool_domains、tool_visibility_rules 尚无执行面载体 |
@@ -1286,7 +1286,7 @@ transport 分层约束：
 4. 公共/内部接口：内部建议具备 `refresh_once()`、`schedule_refresh()`、`on_plugin_delta()`、`resolve_server_spec()`、`publish_snapshot()`。
 5. 关键执行流：枚举 deployment/profile/plugin 提供的 server specs，逐个调用 IMCPAdapter 确保 session 和 list capabilities，把结果刷入 CapabilityCache，并通知 ToolRegistry / RouteSelector 可见的 binding 变化。
 6. 失败与回退语义：单个 server discovery 失败不拖垮全局 refresh；失败后遵循 `failure_backoff_ms` 退避；在缓存未过期且 `stale_read_allowed=true` 时，保留最近可信 snapshot 供 route 决策。
-7. 测试与验收出口：当前单测为 `CapabilityDiscoveryTest.cpp`、`StdioMCPServerLauncherTest.cpp`；集成验收继续与 `ToolPluginStdioMCPIntegrationTest`、`ToolMCPFallbackIntegrationTest` 联动完成。
+7. 测试与验收出口：单测为 `CapabilityDiscoveryTest.cpp`、`StdioMCPServerLauncherTest.cpp`；集成验收已由 `ToolPluginStdioMCPIntegrationTest`、`ToolMCPFallbackIntegrationTest` 落地，覆盖 plugin-delivered stdio launch、route fallback、stale snapshot 与统一 ErrorInfo 映射。
 
 ##### CapabilityCache
 
@@ -1342,8 +1342,8 @@ transport 分层约束：
 }
 ```
 
-7. `ToolMCPFallbackIntegrationTest` 复用同一 loopback fixture，但通过 stale snapshot、handshake failure、transport close script 注入失败；`ToolPluginStdioMCPIntegrationTest` 在同一 fixture 之上额外验证 plugin-delivered `launch_spec_ref` -> launch sample -> stdio invoke 的解析与接线。
-8. 该方案的目标是为 032~035 提供 deterministic test seam，不代表 generic MCP ready；在 `CapabilityCache`、`IMCPAdapter`、`CapabilityDiscovery` 和两个 integration gate 真正落地前，仍保持 `tools_mcp=false` 的 builtin/workflow rollout 结论。
+7. `ToolMCPFallbackIntegrationTest` 复用同一 loopback fixture，验证 stale snapshot 选路、MCP lane 不健康时回退 builtin，以及 MCP protocol error -> ErrorInfo 的统一映射；`ToolPluginStdioMCPIntegrationTest` 在同一 fixture 之上额外验证 plugin-delivered `launch_spec_ref` -> launch sample -> stdio invoke，以及 unload 后 source-scoped revoke。
+8. 该方案的目标是为 032~035 提供 deterministic test seam；两个 integration gate 现已落地，但这仍不自动等于 generic MCP 对外 ready，是否从 `tools_mcp=false` 调整为灰度开启仍需单独 rollout 评审。
 
 MCP Runtime 关键时序图如下：
 
@@ -1550,7 +1550,7 @@ ToolConfigAdapter 策略投影缓存与热更新约束：
 
 | 项目 | 当前原因 | 后续动作 |
 |---|---|---|
-| generic MCP ready 对外宣称 | 目前没有 MCPAdapter/CapabilityCache/ToolRoute/审计恢复闭环 | 完成 TOOL-D9 与 9.2 的 MCP Gate 后再评审 |
+| generic MCP ready 对外宣称 | TOOL-D9 与 Gate-TOOL-07 已落地，但 rollout / 兼容承诺仍未单独评审 | 继续维持 implementation available but rollout pending 的口径，待发布评审决定 |
 | 外部 Skill 方言产品级兼容 | 当前没有 importer、normalized asset、评测链路 | 完成 TOOL-D10，并补 external dialect regression suite |
 | ToolAdmissionDecision / ToolRouteDecision 升格 shared contracts | supporting objects 尚未在 runtime/tools/services 间闭合 | 保持 module-local，待 admission review 再决定 |
 
@@ -1679,7 +1679,7 @@ plugins/
 
 ### 9.3 当前基线判断
 
-以当前仓库状态看，只有 Gate-TOOL-03 的一部分已具备事实基础，即 shared tool contracts 已存在自动化测试。其余 Gate 仍需通过 Tool 子系统 Build 落地后补齐。
+以当前仓库状态看，Gate-TOOL-03 继续由 shared tool contracts 托底，Gate-TOOL-04 ~ Gate-TOOL-08 已分别由 governance core、services smoke、workflow failure、MCP hybrid、observability 自动化用例覆盖。剩余待补门为 Gate-TOOL-09 与 Gate-TOOL-10。
 
 ---
 
