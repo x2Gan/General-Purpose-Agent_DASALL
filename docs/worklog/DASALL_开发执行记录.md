@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #325
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-025 验证 ToolServicesSmokeIntegration
+- 状态：已完成
+
+### 任务选择
+
+1. `TOOL-TODO-024` 已经打开 `tests/integration/tools` 的 discoverability，因此 025 的最小可执行动作是直接补强既有 `ToolServicesSmokeIntegrationTest`，而不是再开新的 smoke topology。
+2. `TOOL-TODO-016`、`017`、`018` 已分别落好 `ToolServiceBridge`、`BuiltinExecutorLane`、`ResultProjector`，025 的核心工作不再是补实现，而是把 Gate-TOOL-05 提升到真正的 action/query 闭环验证。
+3. 当前生产 builtin catalog 只内建 `agent.terminal` action 描述符；要验证 builtin query 基本路径，必须在测试中注入 test-local query descriptor，不能把验证需求误写成生产 builtin 能力扩张。
+
+### 改动
+
+1. 更新 `tests/integration/tools/ToolServicesSmokeIntegrationTest.cpp`，把原来的单一路径冒烟改为 action / query 双正例闭环测试。
+2. 在同一 smoke integration 中加入 test-local `ToolRegistry + BuiltinExecutorLane + ToolManagerDependencies.executor` 接线，为 query 路径注入仅测试可见的 builtin descriptor。
+3. 新增 `assert_closed_loop()`，显式断言 `ToolResult`、`Observation`、`ObservationDigest`、`route_facts`、`evidence_refs` 的关键字段一致性，包括 observation_id、ToolExecution source、citations、confidence 与 request tags。
+4. 增加 descriptor-missing 负例，验证预检失败时保持 fail-closed，且不伪造 `Observation` / `ObservationDigest`。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools：`dasall_tools`
+   - Build_CMakeTools：`dasall_tool_services_smoke_integration_test`
+2. 定向执行：
+   - RunCtest_CMakeTools：`ToolServicesSmokeIntegrationTest`
+3. 聚合基线：
+   - Build_CMakeTools：`dasall_tools`、`dasall_integration_tests`
+4. 结果摘要：
+   - `ToolServicesSmokeIntegrationTest` 通过，action / query 闭环和 descriptor-missing fail-closed 负例全部通过。
+   - `dasall_integration_tests` 聚合构建仍会命中既有 infra diagnostics 失败：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`；tools smoke 用例本身通过，不属于本任务回归。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响本任务通过结论。
+
+### 结果
+
+1. Gate-TOOL-05 现已从“默认 ToolManager 能返回成功”提升为“builtin action/query 最小闭环和关键投影字段都可二值断言”。
+2. 025 明确把 query 覆盖收敛在 test-local descriptor 注入层，不扩张生产 builtin catalog，保持了本轮任务的验证属性。
+3. descriptor-missing 负例保证 smoke gate 不会在预检失败时产生假阳性投影。
+
+### 下一步
+
+1. 推进 TOOL-TODO-026，在 `ToolObservabilityIntegrationTest` 中把 health 与 exporter failure 的观测证据补齐到 Gate-TOOL-08。
+
+### 风险
+
+1. 当前 query 路径验证依赖 test-local descriptor 注入；后续若生产 builtin catalog 真要引入 query capability，应单独以实现任务提交，不应复用本轮验证性改动冒充能力落地。
+2. tools integration 聚合仍受两个既有 infra diagnostics 失败影响；若要恢复全量 integration 绿灯，需要单独处理 infra 用例，而不是回退 025 的 smoke gate 增强。
+
 ## 记录 #324
 
 - 日期：2026-04-16
