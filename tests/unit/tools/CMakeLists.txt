@@ -208,6 +208,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_tool_trace_bridge_unit_test
+	ToolTraceBridgeTest.cpp
+	ToolTraceBridgeTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_result_projector_unit_test
 	ResultProjectorTest.cpp
 	ResultProjectorTest

@@ -1,7 +1,13 @@
+#include <algorithm>
+#include <cstdint>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "RuntimePolicySnapshot.h"
@@ -11,7 +17,12 @@
 #include "metrics/IMetricsProvider.h"
 #include "ops/ToolAuditBridge.h"
 #include "ops/ToolMetricsBridge.h"
+#include "ops/ToolTraceBridge.h"
 #include "support/TestAssertions.h"
+#include "tracing/ISpan.h"
+#include "tracing/ITracer.h"
+#include "tracing/ITracerProvider.h"
+#include "tracing/TraceTypes.h"
 
 namespace {
 
@@ -128,6 +139,218 @@ class RecordingMetricsProvider final : public dasall::infra::metrics::IMetricsPr
     std::shared_ptr<RecordingMeter> meter_;
 };
 
+[[nodiscard]] std::string hex_id(std::uint64_t value, std::size_t width) {
+    std::ostringstream builder;
+    builder << std::hex << std::nouppercase << std::setfill('0')
+                    << std::setw(static_cast<int>(width)) << value;
+    auto encoded = builder.str();
+    if (encoded.size() > width) {
+        encoded = encoded.substr(encoded.size() - width);
+    }
+    if (encoded.size() < width) {
+        encoded.insert(encoded.begin(), width - encoded.size(), '0');
+    }
+    if (std::all_of(encoded.begin(), encoded.end(), [](const char ch) {
+                return ch == '0';
+            })) {
+        encoded.back() = '1';
+    }
+    return encoded;
+}
+
+class RecordingSpan final : public dasall::infra::tracing::ISpan {
+ public:
+    RecordingSpan(dasall::infra::tracing::SpanDescriptor descriptor,
+                                dasall::infra::tracing::TraceContext context,
+                                std::optional<dasall::infra::tracing::TraceContext> parent_context)
+            : descriptor(std::move(descriptor)),
+                context(std::move(context)),
+                parent_context(std::move(parent_context)) {}
+
+    void set_attribute(
+            std::string_view key,
+            const dasall::infra::tracing::TraceAttributeValue& value) override {
+        attributes[std::string(key)] = value;
+    }
+
+    void add_event(
+            std::string_view,
+            const dasall::infra::tracing::TraceAttributeMap&) override {}
+
+    void set_status(dasall::infra::tracing::SpanStatusCode code,
+                                    std::string_view message) override {
+        status_code = code;
+        status_message = std::string(message);
+    }
+
+    [[nodiscard]] dasall::infra::tracing::SpanEndResult end(
+            std::optional<std::int64_t> end_ts_unix_ms = std::nullopt) override {
+        ++end_call_total;
+        if (!end_result.has_value()) {
+            end_result = dasall::infra::tracing::SpanEndResult{
+                    .end_ts_unix_ms = end_ts_unix_ms.has_value()
+                                                             ? end_ts_unix_ms
+                                                             : std::optional<std::int64_t>(1712749800000LL),
+                    .status_code = status_code,
+                    .status_message = status_message,
+                    .dropped_attr_count = 0U,
+            };
+        }
+
+        return *end_result;
+    }
+
+    [[nodiscard]] dasall::infra::tracing::TraceContext get_context() const override {
+        return context;
+    }
+
+    dasall::infra::tracing::SpanDescriptor descriptor;
+    dasall::infra::tracing::TraceContext context;
+    std::optional<dasall::infra::tracing::TraceContext> parent_context;
+    dasall::infra::tracing::TraceAttributeMap attributes;
+    dasall::infra::tracing::SpanStatusCode status_code =
+            dasall::infra::tracing::SpanStatusCode::Unset;
+    std::string status_message;
+    int end_call_total = 0;
+    std::optional<dasall::infra::tracing::SpanEndResult> end_result;
+};
+
+struct StartedSpanRecord {
+    dasall::infra::tracing::SpanDescriptor descriptor;
+    std::optional<dasall::infra::tracing::TraceContext> explicit_parent;
+    std::optional<dasall::infra::tracing::TraceContext> resolved_parent;
+    std::shared_ptr<RecordingSpan> span;
+};
+
+class RecordingTracer final : public dasall::infra::tracing::ITracer {
+ public:
+    [[nodiscard]] std::shared_ptr<dasall::infra::tracing::ISpan> start_span(
+            const dasall::infra::tracing::SpanDescriptor& descriptor,
+            const dasall::infra::tracing::TraceContext* parent) override {
+        std::optional<dasall::infra::tracing::TraceContext> explicit_parent =
+                std::nullopt;
+        if (parent != nullptr) {
+            explicit_parent = *parent;
+        }
+
+        std::optional<dasall::infra::tracing::TraceContext> resolved_parent =
+                std::nullopt;
+        if (parent != nullptr &&
+                parent->state == dasall::infra::tracing::TraceContextState::Active) {
+            resolved_parent = *parent;
+        } else if (active_context_.state ==
+                             dasall::infra::tracing::TraceContextState::Active) {
+            resolved_parent = active_context_;
+        }
+
+        dasall::infra::tracing::TraceContext context{
+                .trace_id = resolved_parent.has_value()
+                                                ? resolved_parent->trace_id
+                                                : hex_id(++trace_seed_,
+                                                                 dasall::infra::tracing::kTraceIdHexLength),
+                .span_id = hex_id(++span_seed_,
+                                                    dasall::infra::tracing::kSpanIdHexLength),
+                .trace_flags = 0x01U,
+                .trace_state = {},
+                .parent_span_id = resolved_parent.has_value() ? resolved_parent->span_id
+                                                                                                            : std::string{},
+                .state = dasall::infra::tracing::TraceContextState::Active,
+                .is_remote = false,
+        };
+        auto span = std::make_shared<RecordingSpan>(descriptor, context, resolved_parent);
+        started_spans.push_back(StartedSpanRecord{
+                .descriptor = descriptor,
+                .explicit_parent = explicit_parent,
+                .resolved_parent = resolved_parent,
+                .span = span,
+        });
+        return span;
+    }
+
+    void with_active_span(
+            const std::shared_ptr<dasall::infra::tracing::ISpan>& span,
+            const dasall::infra::tracing::ActiveSpanCallback& fn) override {
+        const auto recording_span = std::dynamic_pointer_cast<RecordingSpan>(span);
+        const auto previous = active_context_;
+        active_context_ = recording_span != nullptr
+                                                    ? recording_span->context
+                                                    : dasall::infra::tracing::TraceContext::noop();
+        fn();
+        active_context_ = previous;
+    }
+
+    [[nodiscard]] dasall::infra::tracing::TraceContext current_context() const override {
+        return active_context_;
+    }
+
+    std::vector<StartedSpanRecord> started_spans;
+
+ private:
+    dasall::infra::tracing::TraceContext active_context_ =
+            dasall::infra::tracing::TraceContext::noop();
+    std::uint64_t trace_seed_ = 0U;
+    std::uint64_t span_seed_ = 0U;
+};
+
+class RecordingTracerProvider final : public dasall::infra::tracing::ITracerProvider {
+ public:
+    dasall::infra::tracing::TraceOperationStatus init(
+            const dasall::infra::tracing::TraceConfig&) override {
+        return dasall::infra::tracing::TraceOperationStatus::success(
+                "trace://tools/integration-provider-init");
+    }
+
+    [[nodiscard]] std::shared_ptr<dasall::infra::tracing::ITracer> get_tracer(
+            const dasall::infra::tracing::TracerScope& scope) override {
+        last_scope = scope;
+        if (tracer == nullptr) {
+            tracer = std::make_shared<RecordingTracer>();
+        }
+        return tracer;
+    }
+
+    dasall::infra::tracing::TraceOperationStatus force_flush(
+            std::uint32_t) override {
+        return dasall::infra::tracing::TraceOperationStatus::success(
+                "trace://tools/integration-provider-flush");
+    }
+
+    dasall::infra::tracing::TraceOperationStatus shutdown(
+            std::uint32_t) override {
+        return dasall::infra::tracing::TraceOperationStatus::success(
+                "trace://tools/integration-provider-shutdown");
+    }
+
+    std::shared_ptr<RecordingTracer> tracer;
+    dasall::infra::tracing::TracerScope last_scope{};
+};
+
+class NullTracerProvider final : public dasall::infra::tracing::ITracerProvider {
+ public:
+    dasall::infra::tracing::TraceOperationStatus init(
+            const dasall::infra::tracing::TraceConfig&) override {
+        return dasall::infra::tracing::TraceOperationStatus::success(
+                "trace://tools/null-provider-init");
+    }
+
+    [[nodiscard]] std::shared_ptr<dasall::infra::tracing::ITracer> get_tracer(
+            const dasall::infra::tracing::TracerScope&) override {
+        return nullptr;
+    }
+
+    dasall::infra::tracing::TraceOperationStatus force_flush(
+            std::uint32_t) override {
+        return dasall::infra::tracing::TraceOperationStatus::success(
+                "trace://tools/null-provider-flush");
+    }
+
+    dasall::infra::tracing::TraceOperationStatus shutdown(
+            std::uint32_t) override {
+        return dasall::infra::tracing::TraceOperationStatus::success(
+                "trace://tools/null-provider-shutdown");
+    }
+};
+
 [[nodiscard]] bool has_action(const std::vector<dasall::infra::AuditEvent>& events,
                               const std::string& action) {
   return std::find_if(events.begin(), events.end(), [&](const auto& event) {
@@ -148,6 +371,14 @@ class RecordingMetricsProvider final : public dasall::infra::metrics::IMetricsPr
                      return sample.identity_ref.name == metric_name &&
                                     sample.labels.outcome == outcome;
                  }) != samples.end();
+}
+
+[[nodiscard]] bool has_trace_span(
+        const std::vector<StartedSpanRecord>& spans,
+        const std::string& span_name) {
+    return std::find_if(spans.begin(), spans.end(), [&](const auto& record) {
+                     return record.descriptor.name == span_name;
+                 }) != spans.end();
 }
 
 [[nodiscard]] dasall::profiles::RuntimePolicySnapshot make_snapshot() {
@@ -315,10 +546,22 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
           .meter_scope_version = "v1",
           .now_ms = []() { return 1712738000000LL; },
       });
+  auto tracer_provider = std::make_shared<RecordingTracerProvider>();
+  auto trace_bridge = std::make_shared<dasall::tools::ops::ToolTraceBridge>(
+      tracer_provider,
+      dasall::tools::ops::ToolTraceBridgeOptions{
+          .enabled = true,
+          .profile_id = "desktop_full",
+          .trace_sample_ratio = 0.5,
+          .tracer_scope_name = "tools",
+          .tracer_scope_version = "v1",
+          .schema_url = "https://opentelemetry.io/schemas/1.26.0",
+      });
 
   dasall::tools::manager::ToolManagerDependencies dependencies;
   dependencies.audit_hooks = dasall::tools::ops::ToolAuditBridge::bind_hooks(audit_bridge);
   dependencies.metrics_bridge = metrics_bridge;
+  dependencies.trace_bridge = trace_bridge;
 
   dasall::tools::ToolManager manager(std::move(dependencies));
   const auto snapshot = make_snapshot();
@@ -365,9 +608,19 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
                                     has_metric_sample(meter->recorded_samples, "tool_admission_denied_total", "rejected") &&
                                     has_metric_sample(meter->recorded_samples, "tool_execution_latency_ms", "success"),
                             "tools observability integration should emit request, denied, and latency metric samples alongside audit events");
+    assert_true(tracer_provider->tracer != nullptr &&
+                                    has_trace_span(tracer_provider->tracer->started_spans, "tool.invoke") &&
+                                    has_trace_span(tracer_provider->tracer->started_spans, "tool.validate") &&
+                                    has_trace_span(tracer_provider->tracer->started_spans, "tool.policy") &&
+                                    has_trace_span(tracer_provider->tracer->started_spans, "tool.route") &&
+                                    has_trace_span(tracer_provider->tracer->started_spans, "tool.execute.builtin"),
+                            "tools observability integration should emit root, governance, and builtin lane trace spans");
     assert_equal(std::string("tools"),
                              metrics_provider->last_scope.name,
                              "tools observability integration should request the frozen tools meter scope");
+    assert_equal(std::string("tools"),
+                             tracer_provider->last_scope.name,
+                             "tools observability integration should request the frozen tools tracer scope");
   for (const auto& event : audit_logger.events) {
     assert_true(!contains_string(event.side_effects,
                                  std::string("{\"command\":\"echo integration\"}")) &&
@@ -379,6 +632,9 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
               "tools observability integration should track persisted audit emissions in bridge status");
     assert_true(!metrics_bridge->is_degraded() && metrics_bridge->emission_attempt_total() >= 3,
                             "tools observability integration should keep the metrics bridge healthy on the success/failure main paths");
+    assert_true(!trace_bridge->is_degraded() &&
+                                    trace_bridge->get_status().started_span_total >= 5U,
+                            "tools observability integration should keep the trace bridge healthy on the builtin governance path");
 }
 
 void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails() {
@@ -416,10 +672,21 @@ void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails
           .meter_scope_version = "v1",
           .now_ms = []() { return 1712738001000LL; },
       });
+  auto trace_bridge = std::make_shared<dasall::tools::ops::ToolTraceBridge>(
+      std::make_shared<NullTracerProvider>(),
+      dasall::tools::ops::ToolTraceBridgeOptions{
+          .enabled = true,
+          .profile_id = "desktop_full",
+          .trace_sample_ratio = 0.5,
+          .tracer_scope_name = "tools",
+          .tracer_scope_version = "v1",
+          .schema_url = "https://opentelemetry.io/schemas/1.26.0",
+      });
 
   dasall::tools::manager::ToolManagerDependencies dependencies;
   dependencies.audit_hooks = dasall::tools::ops::ToolAuditBridge::bind_hooks(audit_bridge);
   dependencies.metrics_bridge = metrics_bridge;
+  dependencies.trace_bridge = trace_bridge;
 
   dasall::tools::ToolManager manager(std::move(dependencies));
   const auto snapshot = make_snapshot();
@@ -433,6 +700,9 @@ void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails
               "failing audit sink should remain observable through ToolAuditBridge status without blocking the main result");
     assert_true(metrics_bridge->is_degraded() && metrics_bridge->emission_failure_total() == 1U,
                             "failing metrics backend should remain observable through ToolMetricsBridge status without blocking the main result");
+    assert_true(trace_bridge->is_degraded() &&
+                                    trace_bridge->get_status().span_failure_total >= 1U,
+                            "failing trace backend should remain observable through ToolTraceBridge status without blocking the main result");
 }
 
 }  // namespace

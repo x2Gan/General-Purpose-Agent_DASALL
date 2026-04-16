@@ -21,6 +21,7 @@ namespace dasall::tools {
 namespace ops {
 
 class ToolMetricsBridge;
+class ToolTraceBridge;
 
 }  // namespace ops
 
@@ -67,6 +68,7 @@ struct ToolManagerDependencies {
   std::shared_ptr<IPolicyGate> policy_gate;
   std::shared_ptr<route::ToolRouteSelector> route_selector;
   std::shared_ptr<ops::ToolMetricsBridge> metrics_bridge;
+  std::shared_ptr<ops::ToolTraceBridge> trace_bridge;
   profiles::BuildProfileManifest build_manifest;
   ToolExecutor executor;
   ToolProjector projector;

@@ -8,6 +8,7 @@
 #include "error/ResultCode.h"
 #include "ops/ToolAuditBridge.h"
 #include "ops/ToolMetricsBridge.h"
+#include "ops/ToolTraceBridge.h"
 #include "projection/ResultProjector.h"
 
 namespace {
@@ -165,6 +166,39 @@ using dasall::tools::manager::ToolExecutionRequest;
 
 [[nodiscard]] bool is_successful(const ToolInvocationEnvelope& envelope) {
 	return envelope.tool_result.has_value() && envelope.tool_result->success.value_or(false);
+}
+
+[[nodiscard]] ResultCode result_code_for_envelope(
+		const ToolInvocationEnvelope& envelope,
+		ResultCode fallback = ResultCode::ToolExecutionFailed) {
+	if (envelope.tool_result.has_value() && envelope.tool_result->error.has_value() &&
+			envelope.tool_result->error->details.code.has_value()) {
+		return static_cast<ResultCode>(*envelope.tool_result->error->details.code);
+	}
+
+	return fallback;
+}
+
+[[nodiscard]] std::string message_for_envelope(const ToolInvocationEnvelope& envelope) {
+	if (envelope.tool_result.has_value() && envelope.tool_result->error.has_value() &&
+			!envelope.tool_result->error->details.message.empty()) {
+		return envelope.tool_result->error->details.message;
+	}
+
+	if (envelope.failure_reason_code.has_value()) {
+		return *envelope.failure_reason_code;
+	}
+
+	return std::string("tool execution failed");
+}
+
+[[nodiscard]] std::string stage_for_envelope(const ToolInvocationEnvelope& envelope) {
+	if (envelope.tool_result.has_value() && envelope.tool_result->error.has_value() &&
+			!envelope.tool_result->error->details.stage.empty()) {
+		return envelope.tool_result->error->details.stage;
+	}
+
+	return std::string("tools.manager.invoke");
 }
 
 void emit_terminal_audit(
@@ -379,6 +413,9 @@ ToolManager::ToolManager(manager::ToolManagerDependencies dependencies)
 	if (!dependencies_.metrics_bridge) {
 		dependencies_.metrics_bridge = defaults.metrics_bridge;
 	}
+	if (!dependencies_.trace_bridge) {
+		dependencies_.trace_bridge = defaults.trace_bridge;
+	}
 	if (!dependencies_.build_manifest.has_consistent_values()) {
 		dependencies_.build_manifest = defaults.build_manifest;
 	}
@@ -438,6 +475,11 @@ void ToolManager::set_capability_snapshot(
 ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 		const contracts::ToolRequest& request,
 		const ToolInvocationContext& context) const {
+	ops::ToolTraceSpan root_trace_scope;
+	if (dependencies_.trace_bridge) {
+		root_trace_scope = dependencies_.trace_bridge->start_root_span(request, context);
+	}
+
 	std::optional<ToolDescriptor> descriptor_cache;
 	auto emit_failure_with_metrics = [&](ToolInvocationEnvelope envelope) {
 		if (dependencies_.metrics_bridge) {
@@ -449,164 +491,310 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 		}
 		return envelope;
 	};
+	auto invoke_body = [&]() -> ToolInvocationEnvelope {
+		if (!dependencies_.registry || !dependencies_.validator || !dependencies_.config_adapter ||
+				!dependencies_.policy_gate || !dependencies_.route_selector ||
+				!dependencies_.executor || !dependencies_.projector) {
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::RuntimeRetryExhausted,
+					"tool.manager.dependencies_unavailable",
+					"tools.manager.init"));
+		}
 
-	if (!dependencies_.registry || !dependencies_.validator || !dependencies_.config_adapter ||
-			!dependencies_.policy_gate || !dependencies_.route_selector ||
-			!dependencies_.executor || !dependencies_.projector) {
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::RuntimeRetryExhausted,
-				"tool.manager.dependencies_unavailable",
-				"tools.manager.init"));
-	}
+		if (!context.has_profile_snapshot()) {
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::ValidationFieldMissing,
+					"tool.manager.profile_missing",
+					"tools.manager.context"));
+		}
 
-	if (!context.has_profile_snapshot()) {
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::ValidationFieldMissing,
-				"tool.manager.profile_missing",
-				"tools.manager.context"));
-	}
+		if (!request.tool_name.has_value() || request.tool_name->empty()) {
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::ValidationFieldMissing,
+					"InvalidRequest",
+					"tools.manager.resolve"));
+		}
 
-	if (!request.tool_name.has_value() || request.tool_name->empty()) {
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::ValidationFieldMissing,
-				"InvalidRequest",
-				"tools.manager.resolve"));
-	}
+		const auto descriptor = dependencies_.registry->resolve_descriptor(*request.tool_name);
+		descriptor_cache = descriptor;
+		if (!descriptor.has_value()) {
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::ToolExecutionFailed,
+					"tool.manager.descriptor_missing",
+					"tools.manager.resolve"));
+		}
 
-	const auto descriptor = dependencies_.registry->resolve_descriptor(*request.tool_name);
-	descriptor_cache = descriptor;
-	if (!descriptor.has_value()) {
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::ToolExecutionFailed,
-				"tool.manager.descriptor_missing",
-				"tools.manager.resolve"));
-	}
+		const auto validation_result = [&]() {
+			const auto validate = [&]() {
+				return dependencies_.validator->validate(request, *descriptor);
+			};
 
-	const auto validation_result = dependencies_.validator->validate(request, *descriptor);
-	if (!validation_result.ok()) {
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::ValidationFieldMissing,
-				validation_result.diagnostics->error_code,
-				"tools.manager.validate"));
-	}
+			if (!dependencies_.trace_bridge) {
+				return validate();
+			}
 
-	const auto& snapshot = *context.profile_snapshot;
-	const auto policy_view =
-			dependencies_.config_adapter->build_policy_view(snapshot, dependencies_.build_manifest);
-	const auto timeout_view =
-			dependencies_.config_adapter->build_timeout_view(snapshot, dependencies_.build_manifest);
-	const auto requested_domain = derive_requested_domain(*validation_result.tool_ir, *descriptor);
-	const auto admission_decision = dependencies_.policy_gate->evaluate(
-			ToolAdmissionRequest{
-					.tool_name = descriptor->tool_name.value_or(*request.tool_name),
-					.required_scopes = descriptor->required_scopes.value_or(std::vector<std::string>{}),
-					.caller_domain = requested_domain,
-					.high_risk = is_high_risk_descriptor(*descriptor),
-					.confirmation_present = has_confirmation_fact(context),
-					.route_proven = requested_domain.has_value(),
-			},
-			policy_view);
-	if (!admission_decision.allowed()) {
+			auto validation_scope = dependencies_.trace_bridge->start_stage_span(
+					"tool.validate",
+					request,
+					context);
+			auto result = dependencies_.trace_bridge->with_span(validation_scope, validate);
+			if (!result.ok()) {
+				dependencies_.trace_bridge->mark_error(
+						&validation_scope,
+						ResultCode::ValidationFieldMissing,
+						result.diagnostics->error_code,
+						"tools.manager.validate");
+			} else {
+				dependencies_.trace_bridge->mark_success(&validation_scope);
+			}
+			return result;
+		}();
+		if (!validation_result.ok()) {
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::ValidationFieldMissing,
+					validation_result.diagnostics->error_code,
+					"tools.manager.validate"));
+		}
+
+		const auto& snapshot = *context.profile_snapshot;
+		const auto policy_view = dependencies_.config_adapter->build_policy_view(
+				snapshot,
+				dependencies_.build_manifest);
+		const auto timeout_view = dependencies_.config_adapter->build_timeout_view(
+				snapshot,
+				dependencies_.build_manifest);
+		const auto requested_domain =
+				derive_requested_domain(*validation_result.tool_ir, *descriptor);
+		const auto admission_decision = [&]() {
+			const auto evaluate = [&]() {
+				return dependencies_.policy_gate->evaluate(
+						ToolAdmissionRequest{
+								.tool_name = descriptor->tool_name.value_or(*request.tool_name),
+								.required_scopes = descriptor->required_scopes.value_or(
+										std::vector<std::string>{}),
+								.caller_domain = requested_domain,
+								.high_risk = is_high_risk_descriptor(*descriptor),
+								.confirmation_present = has_confirmation_fact(context),
+								.route_proven = requested_domain.has_value(),
+						},
+						policy_view);
+			};
+
+			if (!dependencies_.trace_bridge) {
+				return evaluate();
+			}
+
+			auto policy_scope = dependencies_.trace_bridge->start_stage_span(
+					"tool.policy",
+					request,
+					context);
+			auto decision = dependencies_.trace_bridge->with_span(policy_scope, evaluate);
+			if (policy_scope.is_valid()) {
+				policy_scope.span->set_attribute("tools.reason_code", decision.reason_code);
+			}
+			if (!decision.allowed()) {
+				dependencies_.trace_bridge->mark_error(
+						&policy_scope,
+						ResultCode::PolicyDenied,
+						decision.reason_code,
+						"tools.manager.admit");
+			} else {
+				dependencies_.trace_bridge->mark_success(&policy_scope);
+			}
+			return decision;
+		}();
+		if (!admission_decision.allowed()) {
+			if (dependencies_.metrics_bridge) {
+				static_cast<void>(dependencies_.metrics_bridge->record_admission_denied(
+						request,
+						descriptor_cache,
+						admission_decision.reason_code,
+						context));
+			}
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::PolicyDenied,
+					admission_decision.reason_code,
+					"tools.manager.admit"));
+		}
+
+		const auto route_decision = [&]() {
+			const auto select = [&]() {
+				return dependencies_.route_selector->select_route(
+						*validation_result.tool_ir,
+						*descriptor,
+						timeout_view,
+						dependencies_.registry->list_mcp_bindings(*request.tool_name),
+						capability_snapshot_,
+						route_health_);
+			};
+
+			if (!dependencies_.trace_bridge) {
+				return select();
+			}
+
+			auto route_scope = dependencies_.trace_bridge->start_stage_span(
+					"tool.route",
+					request,
+					context);
+			auto decision = dependencies_.trace_bridge->with_span(route_scope, select);
+			if (route_scope.is_valid()) {
+				route_scope.span->set_attribute("tools.reason_code", decision.reason_code);
+				route_scope.span->set_attribute(
+						"tools.route_kind",
+						infra::tracing::TraceAttributeValue{route_kind_string(decision.route)});
+				route_scope.span->set_attribute(
+						"tools.lane_key",
+						infra::tracing::TraceAttributeValue{decision.lane_key});
+				if (decision.server_id.has_value()) {
+					route_scope.span->set_attribute(
+							"tools.server_id",
+							infra::tracing::TraceAttributeValue{*decision.server_id});
+				}
+			}
+			if (!decision.available) {
+				dependencies_.trace_bridge->mark_error(
+						&route_scope,
+						ResultCode::ToolExecutionFailed,
+						decision.reason_code,
+						"tools.manager.route");
+			} else {
+				dependencies_.trace_bridge->mark_success(&route_scope);
+			}
+			return decision;
+		}();
+		if (!route_decision.available) {
+			return emit_failure_with_metrics(build_failure_envelope(
+					request,
+					ResultCode::ToolExecutionFailed,
+					route_decision.reason_code,
+					"tools.manager.route",
+					build_route_facts(route_decision)));
+		}
+
 		if (dependencies_.metrics_bridge) {
-			static_cast<void>(dependencies_.metrics_bridge->record_admission_denied(
+			static_cast<void>(dependencies_.metrics_bridge->record_route_selection(
 					request,
 					descriptor_cache,
-					admission_decision.reason_code,
+					route_decision,
 					context));
 		}
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::PolicyDenied,
-				admission_decision.reason_code,
-				"tools.manager.admit"));
-	}
 
-	const auto route_decision = dependencies_.route_selector->select_route(
-			*validation_result.tool_ir,
-			*descriptor,
-			timeout_view,
-			dependencies_.registry->list_mcp_bindings(*request.tool_name),
-			capability_snapshot_,
-			route_health_);
-	if (!route_decision.available) {
-		return emit_failure_with_metrics(build_failure_envelope(
-				request,
-				ResultCode::ToolExecutionFailed,
-				route_decision.reason_code,
-				"tools.manager.route",
-				build_route_facts(route_decision)));
-	}
+		ToolResult result;
+		if (*validation_result.tool_ir->operation == ToolIROperation::DryRun) {
+			result = build_non_execution_result(
+					*validation_result.tool_ir,
+					route_decision,
+					"tool.mode.dry_run");
+		} else if (*validation_result.tool_ir->operation == ToolIROperation::ValidateOnly) {
+			result = build_non_execution_result(
+					*validation_result.tool_ir,
+					route_decision,
+					"tool.mode.validate_only");
+		} else {
+			const auto execute = [&]() {
+				return dependencies_.executor(ToolExecutionRequest{
+							.tool_ir = *validation_result.tool_ir,
+							.route_decision = route_decision,
+							.invocation_context = context,
+					});
+			};
 
-	if (dependencies_.metrics_bridge) {
-		static_cast<void>(dependencies_.metrics_bridge->record_route_selection(
-				request,
-				descriptor_cache,
-				route_decision,
-				context));
-	}
+			if (!dependencies_.trace_bridge || route_decision.route != ToolIRRoute::LocalTool) {
+				result = execute();
+			} else {
+				auto execute_scope = dependencies_.trace_bridge->start_stage_span(
+						"tool.execute.builtin",
+						request,
+						context,
+						ops::ToolTraceStageDetails{
+								.route_kind = std::string("builtin"),
+								.lane_key = route_decision.lane_key,
+								.server_id = route_decision.server_id,
+								.reason_code = route_decision.reason_code,
+						});
+				result = dependencies_.trace_bridge->with_span(execute_scope, execute);
+				if (result.error.has_value()) {
+					dependencies_.trace_bridge->mark_error(
+							&execute_scope,
+							result.error->details.code.has_value()
+									? static_cast<ResultCode>(*result.error->details.code)
+									: ResultCode::ToolExecutionFailed,
+							result.error->details.message,
+							result.error->details.stage.empty()
+									? std::string("tools.manager.execute")
+									: result.error->details.stage);
+				} else {
+					dependencies_.trace_bridge->mark_success(&execute_scope);
+				}
+			}
+		}
 
-	ToolResult result;
-	if (*validation_result.tool_ir->operation == ToolIROperation::DryRun) {
-		result = build_non_execution_result(
+		auto normalized_result = normalize_result(
+				request,
 				*validation_result.tool_ir,
-				route_decision,
-				"tool.mode.dry_run");
-	} else if (*validation_result.tool_ir->operation == ToolIROperation::ValidateOnly) {
-		result = build_non_execution_result(
-				*validation_result.tool_ir,
-				route_decision,
-				"tool.mode.validate_only");
+				std::move(result));
+		auto envelope = dependencies_.projector(normalized_result, route_decision, context);
+		envelope.tool_result = normalized_result;
+		const auto fallback_projection =
+				standard_projector().project(normalized_result, route_decision, context);
+		if (!envelope.route_facts.has_value()) {
+			envelope.route_facts = fallback_projection.route_facts;
+		}
+		if (!envelope.observation.has_value()) {
+			envelope.observation = fallback_projection.observation;
+		}
+		if (!envelope.observation_digest.has_value()) {
+			envelope.observation_digest = fallback_projection.observation_digest;
+		}
+		if (!envelope.evidence_refs.has_value()) {
+			envelope.evidence_refs = fallback_projection.evidence_refs;
+		}
+		if (!envelope.failure_reason_code.has_value() &&
+				!envelope.tool_result->success.value_or(false)) {
+			envelope.failure_reason_code = fallback_projection.failure_reason_code;
+		}
+		if (envelope.tool_result->success.value_or(false)) {
+			envelope.failure_reason_code = std::nullopt;
+		}
+		if (!envelope.compensation_hints.has_value() &&
+				descriptor->supports_compensation.value_or(false)) {
+			envelope.compensation_hints = build_compensation_hints(*envelope.tool_result);
+		}
+		if (dependencies_.metrics_bridge) {
+			static_cast<void>(dependencies_.metrics_bridge->record_execution_terminal(
+					request,
+					descriptor_cache,
+					envelope,
+					context));
+		}
+		return envelope;
+	};
+
+	ToolInvocationEnvelope envelope;
+	if (dependencies_.trace_bridge && root_trace_scope.is_valid()) {
+		envelope = dependencies_.trace_bridge->with_span(root_trace_scope, invoke_body);
 	} else {
-		result = dependencies_.executor(ToolExecutionRequest{
-					.tool_ir = *validation_result.tool_ir,
-					.route_decision = route_decision,
-					.invocation_context = context,
-			});
+		envelope = invoke_body();
 	}
 
-	auto normalized_result = normalize_result(
-			request,
-			*validation_result.tool_ir,
-			std::move(result));
-	auto envelope = dependencies_.projector(normalized_result, route_decision, context);
-	envelope.tool_result = normalized_result;
-	const auto fallback_projection =
-			standard_projector().project(normalized_result, route_decision, context);
-	if (!envelope.route_facts.has_value()) {
-		envelope.route_facts = fallback_projection.route_facts;
+	if (dependencies_.trace_bridge) {
+		if (is_successful(envelope)) {
+			dependencies_.trace_bridge->mark_success(&root_trace_scope);
+		} else {
+			dependencies_.trace_bridge->mark_error(
+					&root_trace_scope,
+					result_code_for_envelope(envelope),
+					message_for_envelope(envelope),
+					stage_for_envelope(envelope));
+		}
 	}
-	if (!envelope.observation.has_value()) {
-		envelope.observation = fallback_projection.observation;
-	}
-	if (!envelope.observation_digest.has_value()) {
-		envelope.observation_digest = fallback_projection.observation_digest;
-	}
-	if (!envelope.evidence_refs.has_value()) {
-		envelope.evidence_refs = fallback_projection.evidence_refs;
-	}
-	if (!envelope.failure_reason_code.has_value() &&
-			!envelope.tool_result->success.value_or(false)) {
-		envelope.failure_reason_code = fallback_projection.failure_reason_code;
-	}
-	if (envelope.tool_result->success.value_or(false)) {
-		envelope.failure_reason_code = std::nullopt;
-	}
-	if (!envelope.compensation_hints.has_value() &&
-			descriptor->supports_compensation.value_or(false)) {
-		envelope.compensation_hints = build_compensation_hints(*envelope.tool_result);
-	}
-	if (dependencies_.metrics_bridge) {
-		static_cast<void>(dependencies_.metrics_bridge->record_execution_terminal(
-				request,
-				descriptor_cache,
-				envelope,
-				context));
-	}
+
 	return envelope;
 }
 
@@ -645,6 +833,16 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					.meter_scope_version = std::string("v1"),
 					.now_ms = {},
 			});
+	auto trace_bridge = std::make_shared<ops::ToolTraceBridge>(
+			nullptr,
+			ops::ToolTraceBridgeOptions{
+					.enabled = false,
+					.profile_id = std::string("unknown"),
+					.trace_sample_ratio = 0.0,
+					.tracer_scope_name = std::string("tools"),
+					.tracer_scope_version = std::string("v1"),
+					.schema_url = std::string("https://opentelemetry.io/schemas/1.26.0"),
+			});
 	auto result_projector = std::make_shared<projection::ResultProjector>();
 
 	return manager::ToolManagerDependencies{
@@ -654,6 +852,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 			.policy_gate = std::move(policy_gate),
 			.route_selector = std::move(route_selector),
 			.metrics_bridge = std::move(metrics_bridge),
+			.trace_bridge = std::move(trace_bridge),
 			.build_manifest = profiles::BuildProfileManifest{
 					.enabled_modules = {"runtime", "tools_builtin"},
 					.enabled_adapters = {},

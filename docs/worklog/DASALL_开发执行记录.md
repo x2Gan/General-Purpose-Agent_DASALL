@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #323
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-021 实现 ToolTraceBridge
+- 状态：已完成
+
+### 任务选择
+
+1. TOOL-TODO-020 已把 `ToolObservabilityIntegrationTest` 收敛为 audit + metrics 的单一 observability 出口，因此 021 的最低风险路径是直接在同一 integration 上扩展 trace，而不是再开平行 tracing test topology。
+2. `ToolManager` 仍持有最完整的 request、profile、policy、route 与 terminal envelope 事实；trace span 如果在这里同步落点，就不需要像 audit bridge 那样维护 request fact cache，也不需要像跨模块 tracing 那样额外改 services context。
+3. 当前 services 调用上下文没有稳定 parent span 传播面，所以 021 应先收敛 tools-local root/governance/builtin lane span 树，并把跨模块 parent-child 传播明确留给后续任务，而不是在本轮混入额外接口改动。
+
+### 改动
+
+1. 新增 tools/src/ops/ToolTraceBridge.h 与 tools/src/ops/ToolTraceBridge.cpp，实现 tools 内部 trace bridge、frozen tracer scope、remote parent context 归一化、stage span 启动与 fail-open degraded 状态。
+2. 更新 tools/src/ToolManager.h 与 tools/src/ToolManager.cpp，为 `ToolManagerDependencies` 增加 `trace_bridge`，并在默认 dependencies 中挂接 disabled 的默认 bridge。
+3. 在 `ToolManager::run_invoke_pipeline()` 中补入 trace span：`tool.invoke` root span、`tool.validate`、`tool.policy`、`tool.route` 治理阶段 span，以及 builtin 路径的 `tool.execute.builtin` lane span；root span 终态统一由 terminal envelope 回填。
+4. 更新 tools/CMakeLists.txt、tests/unit/tools/CMakeLists.txt、tests/unit/CMakeLists.txt，补齐 trace bridge 源文件和 `dasall_tool_trace_bridge_unit_test` 注册。
+5. 新增 tests/unit/tools/ToolTraceBridgeTest.cpp，覆盖 remote parent 绑定、active parent 继承、error stage 属性、provider 缺失时 degraded fail-open。
+6. 扩展 tests/integration/tools/ToolObservabilityIntegrationTest.cpp，在既有 audit + metrics integration 基础上增加 tracer provider/span recorder 夹具，并验证 builtin success / failure / denied 路径的 trace span 链与 backend failure non-blocking 行为。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools: `all`
+2. 定向执行：
+   - RunCtest_CMakeTools: `ToolTraceBridgeTest`
+   - RunCtest_CMakeTools: `ToolManagerPipelineTest`
+   - RunCtest_CMakeTools: `ToolObservabilityIntegrationTest`
+   - RunCtest_CMakeTools: `ToolServicesSmokeIntegrationTest`
+3. 聚合执行：
+   - RunCtest_CMakeTools: 全量测试集
+4. 结果摘要：
+   - 新增定向用例全部通过。
+   - 全量 CTest 聚合结果中，新增 tools trace 相关用例通过，剩余失败仍是既有 infra diagnostics：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`。
+   - `ToolObservabilityIntegrationTest` 现已同时覆盖 audit、metrics、trace 三类 bridge。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. tools 现在具备可复用的内部 trace bridge，默认 ToolManager 已能把 invoke 治理链与 builtin lane 映射为稳定的 root/stage span 结构。
+2. trace backend 缺失、tracer 获取失败或 span end 失败不会改变主执行结果，但 bridge status 会显式进入 degraded，可供 022 的 health probe 和后续 observability gate 继续复用。
+3. 021 明确保持 tools-local span 树，不把 tools -> services parent span 传播问题伪装成已完成事实，从而避免把跨模块 tracing 改动混入当前原子任务。
+
+### 下一步
+
+1. 推进 TOOL-TODO-022，实现 ToolHealthProbe，把 registry / lane / observability degraded 状态收敛到统一 health snapshot。
+2. 完成 022 后继续回到 025、026，把 builtin smoke 与 observability integration gate 的通过证据补齐到专项 TODO。
+
+### 风险
+
+1. 当前 `ToolTraceBridge` 只覆盖 tools 内部治理链和 builtin lane，尚未提供跨 tools -> services 的 parent-child span 传播；若后续要补齐，需要先扩展 services context，而不是在 bridge 内部猜测 parent span。
+2. workflow / mcp execution span 仍待对应执行链真正落地后再补；如果过早在当前 bridge 里加入占位 execution span，会制造“有 trace 名称、无真实执行事实”的假阳性。
+3. tools integration aggregate 目前仍受两个既有 infra diagnostics 失败影响，导致 `dasall_integration_tests` 不能整体报绿；后续若要恢复全量绿灯，需要单独处理 infra 用例，而不是回退 tools trace 改动。
+
 ## 记录 #322
 
 - 日期：2026-04-16

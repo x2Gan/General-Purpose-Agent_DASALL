@@ -11,6 +11,7 @@ target_sources(dasall_tools
     src/mcp/placeholder.cpp
     src/ops/ToolAuditBridge.cpp
     src/ops/ToolMetricsBridge.cpp
+    src/ops/ToolTraceBridge.cpp
     src/ops/placeholder.cpp
     src/policy/ToolPolicyGate.cpp
     src/projection/ResultProjector.cpp
