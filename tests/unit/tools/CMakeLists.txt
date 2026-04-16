@@ -83,3 +83,15 @@ dasall_add_tools_behavior_test(
 	ToolRegistryConcurrentReadTest.cpp
 	ToolRegistryConcurrentReadTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_plugin_extension_bridge_unit_test
+	PluginExtensionBridgeTest.cpp
+	PluginExtensionBridgeTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_plugin_extension_bridge_concurrency_unit_test
+	PluginExtensionBridgeConcurrencyTest.cpp
+	PluginExtensionBridgeConcurrencyTest
+)

@@ -3,7 +3,7 @@ add_library(dasall_tools STATIC)
 target_sources(dasall_tools
   PRIVATE
     src/ToolManager.cpp
-    src/bridge/placeholder.cpp
+    src/bridge/PluginExtensionBridge.cpp
     src/config/placeholder.cpp
     src/execution/placeholder.cpp
     src/mcp/placeholder.cpp

@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #309
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-010 实现 PluginExtensionBridge source delta 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 010 依赖 007、008、009，且是后续 CapabilityDiscovery、ToolPluginStdioMCPIntegration、Skill bundle 导入链开始消费 plugin source 生命周期前的唯一桥接前置，因此本轮按 project-implementation-cycle 选择 010 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.4 已明确 PluginExtensionBridge 的职责边界是“只消费 active plugin set / export table 的公共结果，把 builtin / MCP / skill 扩展归一化为 source delta”，本轮只实现 delta skeleton，不提前接入 plugin manager、registry descriptor materialization 或 process/network I/O。
+3. TOOL-TODO-007 与 TOOL-TODO-009 已分别冻结 plugin public ABI 和 registry snapshot 模型，因此本轮 bridge 只复用既有 `ToolPluginExtensionCatalog` 与 `shared_ptr<const Snapshot>` 发布方式，不改 shared contracts，也不回退前序任务语义。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-010-PluginExtensionBridge-source-delta骨架设计收敛.md，固定 010 的本地证据、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，把 bridge 编译入口从 placeholder 切到 `PluginExtensionBridge.cpp`，让 `dasall_tools` 开始承载真实 plugin delta 骨架。
+3. 新增 tools/src/bridge/PluginExtensionBridge.h / PluginExtensionBridge.cpp，落地 `PluginExtensionSnapshot`、`PluginExtensionDelta`、builtin provider / MCP launch spec / skill asset 三类 source-owned 视图，以及 `rebuild_extension_catalog()`、`on_plugin_loaded()`、`on_plugin_unloaded()`、`emit_builtin_delta()`、`emit_mcp_delta()`、`emit_skill_delta()`。
+4. bridge 写路径通过 `write_mutex_` 串行化，在副本 snapshot 上完成整个 source 批次替换后一次性发布，保持 reader 只能观察到完整批次或撤销后的空状态，不会读到半发布 delta。
+5. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_plugin_extension_bridge_unit_test` 与 `dasall_plugin_extension_bridge_concurrency_unit_test` 两个 executable unit target，并接入 `unit;tools` discoverability。
+6. 新增 tests/unit/tools/PluginExtensionBridgeTest.cpp 与 PluginExtensionBridgeConcurrencyTest.cpp，分别断言 source reconcile、plugin unload revoke、payload kind / plugin ownership fail-closed，以及并发写入下 snapshot 读一致性。
+7. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-010 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`
+2. 结果摘要：
+   - `dasall_unit_tests` 目标构建期间自动执行 259 条 unit tests，全绿
+   - 新增 `PluginExtensionBridgeTest`、`PluginExtensionBridgeConcurrencyTest` 已进入 unit 集合并通过
+
+### 结果
+
+1. TOOL-TODO-010 已把 plugin 扩展从静态接口面推进为可发布、可撤销、source-scoped 的内部 delta 骨架，为后续 ToolRegistry / CapabilityDiscovery / SkillRegistry 消费 plugin 生命周期事件提供了统一入口。
+2. 当前实现保持了严格边界：bridge 只处理 export table 到 tools 内部视图的归一化，不触碰 plugin discover/load/unload/sign/ABI 治理，也不把 plugin load success 误写成 capability visible。
+3. 本轮继续沿用 snapshot-and-swap 一致性模型，把三类 delta 作为一个 source 批次整体发布，满足设计文档对动态变更组件写路径串行化和读一致性的要求。
+
+### 下一步
+
+1. 继续串行推进 TOOL-TODO-011，补齐 ToolValidator，把 ToolRequest + ToolDescriptor 稳定收敛到 ToolIR，为 PolicyGate 与 RouteSelector 提供一致输入。
+
+### 风险
+
+1. 当前 builtin delta 仍停留在 provider view 层，还没有 materialize 成 ToolRegistry descriptor；后续接 registry 时必须复用本轮 source key 和整批发布语义，避免 plugin source 生命周期在 bridge 与 registry 两侧漂移。
+2. MCP launch spec 与 skill asset 目前只在 bridge snapshot 内收口；在 CapabilityDiscovery / SkillRegistry 未就绪前，这些 delta 还没有下游消费方，后续任务需要避免直接旁路读取 plugin public ABI。
+
 ## 记录 #308
 
 - 日期：2026-04-15
