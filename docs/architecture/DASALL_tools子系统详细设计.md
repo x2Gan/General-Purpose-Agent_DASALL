@@ -1047,6 +1047,74 @@ WorkflowEngine 图结构约束（v1）：
 5. 同一批次内的无依赖 step 允许并行执行（受 lane pool 约束），但同一 step 不允许跨 lane 执行。
 6. 后续版本如需支持条件边或有限循环，应通过 WorkflowPlan 的 schema 扩展（而非 WorkflowEngine 内部逻辑扩张）来实现，并经过独立的设计评审和约束追加。
 
+WorkflowPlan / WorkflowReceipt internal schema（v1）：
+
+| 对象 | 字段 | 类型/形态 | 约束 | 说明 |
+|---|---|---|---|---|
+| WorkflowPlan | `workflow_id` | string | 必填；invoke 内唯一 | 仅用于 workflow-scoped receipt、audit 与 evidence 关联，不进入 shared contracts。 |
+| WorkflowPlan | `entry_step_ids` | string[] | 必填；每个 step id 必须存在且入度为 0 | 显式声明入口 step，避免 engine 依赖隐式首节点推断。 |
+| WorkflowPlan | `steps` | WorkflowStep[] | 必填；至少 1 个 step | 描述 DAG 中全部 step；step 顺序不代表执行顺序。 |
+| WorkflowPlan | `edges` | WorkflowEdge[] | 可空；仅允许 data dependency | 首版只允许无条件依赖边，不允许 branch/back edge。 |
+| WorkflowPlan | `step_output_mapping` | WorkflowStepOutputBinding[] | 可空；引用的 source/target step 必须存在 | 声明上游 payload 到下游 normalized_arguments 的静态字段映射。 |
+| WorkflowPlan | `delegation_policy` | WorkflowDelegationPolicy | 可空 | 只描述 recommendation 输出方式，不触发 multi-agent 主控。 |
+| WorkflowPlan | `metadata` | map<string,string> | 可空；不得承载执行句柄 | 仅保留 workflow template/version/source 等静态事实。 |
+| WorkflowStep | `step_id` | string | 必填；plan 内唯一 | 作为依赖边、映射、receipt 汇总的稳定锚点。 |
+| WorkflowStep | `tool_ir` | ToolIR | 必填 | step 仍以共享 ToolIR 作为执行输入，不引入新的 shared object。 |
+| WorkflowStep | `route_kind_hint` | enum(`builtin`,`mcp`,`workflow`) | 可空；不得覆盖 RouteSelector 最终决策 | 对 workflow step 的期望通道做静态提示，engine 最终仍以 ToolIR/descriptor 决定 lane。 |
+| WorkflowStep | `step_kind` | enum(`tool`,`delegation`) | 必填 | `tool` 走 builtin/MCP 执行；`delegation` 只产出 sidecar recommendation。 |
+| WorkflowStep | `depends_on` | string[] | 可空；不得包含自身；引用 step 必须存在 | 与 `edges` 保持一致的扁平依赖视图，便于 build_batches 做拓扑排序。 |
+| WorkflowStep | `allow_partial_side_effect` | bool | 可空；默认 false | 仅声明该 step 允许将 partial side effect 事实继续交给 ledger，不等于自动补偿。 |
+| WorkflowStep | `timeout_override_ms` | uint32 | 可空；不得突破 profile 上限 | 仅是 step 级预算缩紧，不允许扩张 profile timeout。 |
+| WorkflowEdge | `from_step_id` / `to_step_id` | string | 必填；二者不同 | 仅表达先后依赖，不承载条件表达式。 |
+| WorkflowEdge | `dependency_kind` | enum(`payload`,`ordering`) | 必填 | `payload` 需要配套 output mapping；`ordering` 只表示执行顺序约束。 |
+| WorkflowStepOutputBinding | `source_step_id` | string | 必填 | 上游 step 必须成功并存在 payload，映射才生效。 |
+| WorkflowStepOutputBinding | `source_json_pointer` | string | 必填 | 使用静态 JSON Pointer 选择上游 payload 字段，不支持表达式。 |
+| WorkflowStepOutputBinding | `target_step_id` | string | 必填 | 目标 step 必须存在。 |
+| WorkflowStepOutputBinding | `target_argument_key` | string | 必填 | 写入下游 ToolIR.normalized_arguments 的键名。 |
+| WorkflowStepOutputBinding | `required` | bool | 可空；默认 true | required 映射缺失时视为 InvalidWorkflowPlan 或 step preflight failure。 |
+| WorkflowDelegationPolicy | `mode` | enum(`disabled`,`recommend_only`) | 可空；默认 `disabled` | v1 仅允许 recommendation，不允许 tools 内部直连 multi_agent。 |
+| WorkflowDelegationPolicy | `max_delegate_steps` | uint32 | 可空；默认 0 | 限制一个 workflow 中 delegation step 的数量，防止扩张成第二主循环。 |
+
+WorkflowReceipt internal schema（v1）：
+
+| 对象 | 字段 | 类型/形态 | 约束 | 说明 |
+|---|---|---|---|---|
+| WorkflowReceipt | `workflow_id` | string | 必填；与 WorkflowPlan 一致 | 作为 workflow-scoped 结果汇总主键。 |
+| WorkflowReceipt | `status` | enum(`completed`,`failed`,`rejected`) | 必填 | `completed`=全部 step 成功；`failed`=执行中失败早停；`rejected`=plan schema/graph 不合法。 |
+| WorkflowReceipt | `completed_step_ids` | string[] | 可空 | 已成功执行的 step。 |
+| WorkflowReceipt | `skipped_step_ids` | string[] | 可空 | 因上游失败或早停而未执行的下游 step。 |
+| WorkflowReceipt | `failed_step_id` | string | 可空；仅 `failed` 时允许 | 指向首个终止 workflow 的失败 step。 |
+| WorkflowReceipt | `step_results` | WorkflowStepReceipt[] | 可空 | 记录每个已尝试 step 的执行事实。 |
+| WorkflowReceipt | `compensation_hints` | ToolCompensationHint[] | 可空 | workflow-scoped ledger 聚合结果；由 runtime 决定是否持久化/执行。 |
+| WorkflowReceipt | `evidence_refs` | string[] | 可空 | 汇总 step 级 evidence refs 与 graph rejection facts。 |
+| WorkflowReceipt | `failure_digest` | ErrorInfo | 可空；`failed`/`rejected` 时允许 | 统一 workflow 主失败语义，不覆盖 step 原始 ToolResult.error。 |
+| WorkflowReceipt | `delegation_sidecar` | WorkflowDelegationSidecar | 可空 | 只在 delegation step 命中时返回 recommendation。 |
+| WorkflowStepReceipt | `step_id` | string | 必填 | 对应 WorkflowStep.step_id。 |
+| WorkflowStepReceipt | `route_kind` | enum(`builtin`,`mcp`,`workflow`) | 必填 | 记录实际执行通道，用于 audit/trace/health 聚合。 |
+| WorkflowStepReceipt | `result` | ToolResult | 必填 | 保留 step 级原始执行结果。 |
+| WorkflowStepReceipt | `mapped_arguments` | string[] | 可空 | 记录由 output mapping 注入的目标参数键，便于调试 schema。 |
+| WorkflowStepReceipt | `evidence_refs` | string[] | 可空 | step 级证据引用。 |
+| WorkflowDelegationSidecar | `step_id` | string | 必填 | 触发 delegation recommendation 的 step。 |
+| WorkflowDelegationSidecar | `delegate_target` | string | 必填 | 推荐交给 runtime 评估的 delegation target。 |
+| WorkflowDelegationSidecar | `reason_code` | string | 必填 | 解释 delegation recommendation 来源；不直接驱动执行。 |
+| WorkflowDelegationSidecar | `input_evidence_refs` | string[] | 可空 | 指向触发 delegation 的 step 结果或 workflow 事实。 |
+
+补充 schema 约束：
+
+1. `WorkflowPlan.steps[*].tool_ir.route=WorkflowEngine` 只用于标识“该请求进入 workflow lane”；step 内部真正执行的 `tool_ir.route` 必须在 `builtin` 或 `mcp` 之间显式可判定，delegation step 则不进入 executor。
+2. `step_output_mapping` 只允许从成功 step 的结构化 payload 读取字段；若 payload 非结构化或 pointer 不存在，engine 必须把该 step 视为 preflight failure，而不是运行时猜测默认值。
+3. `WorkflowReceipt.failure_digest` 负责 workflow 级统一失败事实，`WorkflowStepReceipt.result.error` 负责 step 级原始错误；两者必须可同时保留，避免 workflow 汇总覆盖底层 evidence。
+4. workflow-scoped ledger 只在 `WorkflowReceipt.compensation_hints` 汇总 hints，不把 `CompensationRecord` 升格到 public/shared ABI。
+
+Design -> Build 映射（TOOL-D8 / TOOL-TODO-027 收敛）：
+
+| 设计项 | Build 落点 | 验证出口 |
+|---|---|---|
+| WorkflowPlan DAG-only schema | `tools/src/execution/WorkflowEngine.cpp` 内部 plan 校验与 batch 构建 | `WorkflowCyclicRejectionTest.cpp`、`ToolWorkflowFailureIntegrationTest.cpp` |
+| step_output_mapping 静态字段映射 | `dispatch_step()` 前的参数注入逻辑 | `WorkflowEngineTest.cpp` |
+| WorkflowReceipt / StepReceipt / delegation sidecar | workflow 执行收尾与 envelope 汇总 | `WorkflowEngineTest.cpp`、`ToolWorkflowFailureIntegrationTest.cpp` |
+| workflow-scoped compensation_hints handoff | `tools/src/execution/CompensationLedger.cpp` + `WorkflowEngine.cpp` 汇总路径 | `CompensationLedgerTest.cpp`、`ToolWorkflowFailureIntegrationTest.cpp` |
+
 ##### ResultProjector
 
 1. 职责：作为 `ToolResult -> Observation / ObservationDigest / audit facts` 的唯一投影出口，完成规则化摘要压缩、引用保留和 confidence 标注。

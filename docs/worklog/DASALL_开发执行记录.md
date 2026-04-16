@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #327
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 D
+- 任务：TOOL-TODO-027 补齐 WorkflowPlan 与 WorkflowReceipt internal schema
+- 状态：已完成
+
+### 任务选择
+
+1. 025、026 已完成 builtin 最小闭环与 observability gate，按专项 TODO 的阶段顺序，下一最小可执行任务就是 027 的 schema 收敛，而不是直接跳到 028/029 写执行代码。
+2. 当前 detailed design 已冻结 workflow 的 DAG-only、failure stop、delegation recommendation 与 compensation lifecycle 边界，但 WorkflowPlan / WorkflowReceipt 仍停留在描述级，没有成表到可直接实现的 internal schema。
+3. 因此本轮只做 D Gate：把 WorkflowPlan、WorkflowReceipt、step_output_mapping、delegation sidecar 与 cyclic rejection 约束补成 schema 表，并锁定 028/029 的 Design->Build 映射，不提前扩张 shared contracts。
+
+### 改动
+
+1. 更新 docs/architecture/DASALL_tools子系统详细设计.md，在 WorkflowEngine 段新增 WorkflowPlan / WorkflowReceipt internal schema（v1）表，明确 step、edge、output binding、delegation policy、step receipt、failure digest 与 workflow-scoped compensation_hints 的字段面。
+2. 在同一 detailed design 中补充 schema 约束，明确 DAG-only、静态 JSON Pointer 映射、workflow failure_digest 与 step 原始错误并存、CompensationRecord 不升格 shared ABI 的边界。
+3. 新增 docs/todos/tools/deliverables/TOOL-TODO-027-WorkflowPlan与WorkflowReceipt-internal-schema收敛.md，记录本地证据、设计结论、Design->Build 映射、Build 三件套和风险回退。
+4. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，将 TOOL-TODO-027 回写为 Done，并附上 deliverable 与 grep 验收证据。
+
+### 测试
+
+1. 验证命令：
+   - `rg -n "WorkflowPlan|WorkflowReceipt|step_output_mapping|cyclic|delegation" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md`
+2. 结果摘要：
+   - architecture 与 TODO 均命中 WorkflowPlan、WorkflowReceipt、step_output_mapping、delegation sidecar、cyclic rejection 关键词，schema 与任务表证据一致。
+   - 本轮未修改 production code / CMake / tests，因此无需额外 build；027 的完成条件是 D Gate 收敛，而不是 B Gate 验证。
+
+### 结果
+
+1. WorkflowPlan 与 WorkflowReceipt 现在具备可直接驱动 028/029 的 internal schema：execution plan、step receipt、delegation sidecar 与 workflow-scoped compensation_hints 的边界已经固定。
+2. 027 明确把 `step_output_mapping` 收敛为静态字段映射，不允许 runtime 期间表达式求值或动态默认值，从设计层提前挡住 engine 越权扩张。
+3. CompensationLedger 与 WorkflowReceipt 的耦合点被限定在 workflow-scoped hints 汇总，没有把 CompensationRecord 或 workflow step supporting data 误推到 shared ABI。
+
+### 下一步
+
+1. 进入 TOOL-TODO-028，实现 WorkflowEngine 的 DAG 校验、batch 构建、step 调度、receipt 汇总。
+2. 并行准备 TOOL-TODO-029 所需的 CompensationLedger internal object 和 workflow-scoped hints 汇总路径。
+
+### 风险
+
+1. 027 只冻结了 v1 schema；若 028/029 需要更多字段，必须继续停留在 module-local internal，不得借机扩张 contracts。
+2. `route_kind_hint` 与 delegation policy 都只是静态设计输入；若实现阶段把它们写成强制执行策略，将破坏 RouteSelector 与 runtime 主控边界。
+
 ## 记录 #326
 
 - 日期：2026-04-16
