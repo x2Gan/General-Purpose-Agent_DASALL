@@ -138,3 +138,15 @@ dasall_add_tools_behavior_test(
 	ToolPolicyProfileDiffTest.cpp
 	ToolPolicyProfileDiffTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_tool_route_selector_unit_test
+	ToolRouteSelectorTest.cpp
+	ToolRouteSelectorTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_route_fallback_unit_test
+	ToolRouteFallbackTest.cpp
+	ToolRouteFallbackTest
+)

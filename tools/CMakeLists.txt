@@ -5,7 +5,7 @@ target_sources(dasall_tools
     src/ToolManager.cpp
     src/bridge/PluginExtensionBridge.cpp
     src/config/ToolConfigAdapter.cpp
-    src/execution/placeholder.cpp
+    src/execution/ExecutorLanePool.cpp
     src/mcp/placeholder.cpp
     src/ops/placeholder.cpp
     src/policy/ToolPolicyGate.cpp
@@ -13,7 +13,7 @@ target_sources(dasall_tools
     src/registry/ToolRegistry.cpp
     src/registry/BuiltinCatalog.cpp
     src/registry/MCPBindingRegistry.cpp
-    src/route/placeholder.cpp
+    src/route/ToolRouteSelector.cpp
     src/skills/placeholder.cpp
     src/validation/ToolValidator.cpp
   PUBLIC
@@ -39,6 +39,7 @@ target_include_directories(dasall_tools
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/profiles/include
 )
 

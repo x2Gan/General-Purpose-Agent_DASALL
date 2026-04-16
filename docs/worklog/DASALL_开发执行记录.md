@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #313
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 B
+- 任务：TOOL-TODO-014 实现 ToolRouteSelector 与 lane 选择骨架
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 规定 014 依赖 009、012、013，且是 015b ToolManager 完整治理链开始选择 builtin / workflow / MCP lane 前的唯一路由骨架前置，因此本轮按 project-implementation-cycle 选择 014 作为唯一原子任务推进。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.12.1 已明确 ToolRouteSelector 的职责边界是 route 选择而非执行，本轮只落地 route reason code、lane reservation 与 stale-read 策略，不提前接入 executor、MCP session lifecycle 或 capability discovery。
+3. TOOL-TODO-012 已提供 timeout / lane switch 视图，TOOL-TODO-013 已提供 fail-closed admission 结果，因此 014 只消费既有 descriptor / ToolIR / timeout view / capability snapshot / health facts，保持治理链解耦。
+
+### 改动
+
+1. 新增 docs/todos/tools/deliverables/TOOL-TODO-014-ToolRouteSelector与lane选择骨架设计收敛.md，固定 014 的本地证据、Design 结论与 Build 三件套。
+2. 更新 tools/CMakeLists.txt，把 route/execution 编译入口从 placeholder 切到 `ToolRouteSelector.cpp` 与 `ExecutorLanePool.cpp`，并为 tools target 补充 `tools/src` 私有 include root 以支持模块内内部头文件引用。
+3. 新增 tools/src/execution/ExecutorLanePool.h / ExecutorLanePool.cpp，落地 builtin / workflow / server-scoped mcp lane reservation skeleton，统一输出 lane key、available 与 concurrency budget。
+4. 新增 tools/src/route/ToolRouteSelector.h / ToolRouteSelector.cpp，落地 `ToolRouteDecision`、`ToolRouteHealthSnapshot`、`select_route()`、`score_builtin_candidate()`、`score_mcp_candidate()`、`select_workflow_route()`，并实现 workflow 优先、builtin 与 mcp 评分、stale snapshot fallback 和 `RouteUnavailable` reason code。
+5. stale snapshot 当前只有在 `stale_read_allowed=true` 且 snapshot 带可信 `trust_marker` 时才可用；否则 MCP 候选直接失效，不做静默放宽。
+6. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，新增 `dasall_tool_route_selector_unit_test` 与 `dasall_tool_route_fallback_unit_test` 两个 executable unit target。
+7. 新增 tests/unit/tools/ToolRouteSelectorTest.cpp 与 ToolRouteFallbackTest.cpp，分别覆盖 workflow / builtin / mcp route 选择，以及 stale snapshot fallback 与 route unavailable 两类回退行为。
+8. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-014 标记为 Done，并补充本轮交付物与验证证据。
+
+### 测试
+
+1. CMake Tools 构建：
+   - Build_CMakeTools 构建 `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+2. 定向 tests：
+   - RunCtest_CMakeTools 运行 `ToolRouteSelectorTest`
+   - RunCtest_CMakeTools 运行 `ToolRouteFallbackTest`
+3. 结果摘要：
+   - 两条新增 route unit tests 全部通过
+   - `dasall_contract_tests` 目标构建期间自动执行 152 条 contract tests，全绿
+   - 定向测试返回成功，stderr 中的 `DartConfiguration.tcl` 缺失告警未影响用例通过
+
+### 结果
+
+1. TOOL-TODO-014 已把 tools 治理链从“具备 admission gate”推进到“具备 lane-aware route skeleton”，为 015b ToolManager 完整治理链提供了稳定的 route reason codes、lane key 与 stale snapshot 选择语义。
+2. 当前实现保持了设计边界：RouteSelector 只做选择，不执行工具、不管理 session、不产生 digest；ExecutorLanePool 只做 lane reservation，不承担真实执行资源池职责。
+3. 本轮继续保持 shared contract 零变更，并把 route supporting object 全部控制在 module-local 范围内，符合专项 TODO 对 ToolRouteDecision 不得升级 shared contracts 的约束。
+
+### 下一步
+
+1. 010~014 治理链核心已按原子任务串行完成并推送；后续若继续推进 tools 主链，直接进入 015a/015b 的 ToolManager 入口与完整治理管线接线即可。
+
+### 风险
+
+1. 当前 MCP route 评分仍依赖最小 capability snapshot 事实，尚未接入真正的 CapabilityCache freshness/health 演化与 ToolHealthProbe；后续 route 健康切换任务需要避免在不同组件中重复编码 freshness 规则。
+2. lane reservation 目前只有静态 budget 语义，没有真正的池化调度和 backpressure；后续 executor 扩展时必须显式声明 overflow/backpressure，而不能把 014 的 skeleton 误当成完整资源池。
+
 ## 记录 #312
 
 - 日期：2026-04-16
