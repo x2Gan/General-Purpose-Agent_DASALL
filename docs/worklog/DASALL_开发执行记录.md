@@ -1,5 +1,76 @@
 # DASALL 开发执行记录
 
+## 记录 #319
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-018 实现 ResultProjector
+- 状态：已完成
+
+### 任务选择
+
+1. TOOL-TODO-017 已把 builtin route 执行接到真实 BuiltinExecutorLane，因此 018 可以直接聚焦 `ToolResult -> Observation / ObservationDigest` 的默认投影收口，不需要再触碰 executor 或 route 逻辑。
+2. docs/architecture/DASALL_tools子系统详细设计.md 5.2.6、6.10、6.12.2 已明确 ResultProjector 只做规则化摘要、引用保留和 confidence 标注，不得在 tools 内调用 LLM，也不得把 raw failure payload 直接泄漏给 digest。
+3. 当前 ToolManager 默认 projector 仍是 module-local fallback，且投影早于 `normalize_result()`；018 的根目标是把默认投影独立成组件，并把投影时机移到归一化之后。
+
+### 改动
+
+1. 新增 tools/src/projection/ResultProjector.h，定义 module-local `ResultProjector`，暴露 `project()`、`project_success()`、`project_failure()`、`build_observation()`、`build_digest()`。
+2. 新增 tools/src/projection/ResultProjector.cpp，收敛规则化投影策略：
+   - success path 优先提取 JSON 顶层 `summary/message/description/result`
+   - key facts 只展开顶层字段，数组只取前 5 项，嵌套对象记为 `{...}`
+   - citations 固定为 `tool_call` / `route_kind` / `route_reason` / 可选 `server`
+   - omitted details 记录 payload 超限、字段裁剪和 failure payload suppression
+   - confidence 按 summary/fact/payload 截断因子扣减并 clamp 到 `0.1~1.0`
+3. 更新 tools/src/ToolManager.cpp，引入独立 `ResultProjector` 作为默认 projector，并将 `run_invoke_pipeline()` 改为先 `normalize_result()` 再投影；若调用方自定义 projector 返回部分 envelope，则用标准 projector 的结果补齐 observation / digest / evidence / failure_reason。
+4. 更新 tools/CMakeLists.txt，把 ResultProjector 源文件纳入 `dasall_tools`。
+5. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，注册 `dasall_result_projector_unit_test`、`dasall_result_projector_truncation_unit_test`、`dasall_result_projector_confidence_unit_test`。
+6. 新增 tests/unit/tools/ResultProjectorTest.cpp，验证 structured success summary、scalar facts、citations 与 observation payload 保留。
+7. 新增 tests/unit/tools/ResultProjectorTruncationTest.cpp，验证 large plain-text payload 的 summary truncation、omitted details 和 confidence 扣减。
+8. 新增 tests/unit/tools/ResultProjectorConfidenceTest.cpp，验证 failure digest 不泄漏 raw payload，且通过 ObservationDigest guards。
+9. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md 与 docs/todos/tools/deliverables/TOOL-TODO-018-ResultProjector设计收敛.md，回写 018 的设计边界与验证证据。
+
+### 测试
+
+1. 定向构建：
+   - Build_CMakeTools: `dasall_result_projector_unit_test`
+   - Build_CMakeTools: `dasall_result_projector_truncation_unit_test`
+   - Build_CMakeTools: `dasall_result_projector_confidence_unit_test`
+   - Build_CMakeTools: `dasall_tool_manager_pipeline_unit_test`
+   - Build_CMakeTools: `dasall_tool_manager_failure_path_unit_test`
+   - Build_CMakeTools: `dasall_contract_observation_digest_boundary_test`
+2. 定向验证：
+   - RunCtest_CMakeTools: `ResultProjectorTest`
+   - RunCtest_CMakeTools: `ResultProjectorTruncationTest`
+   - RunCtest_CMakeTools: `ResultProjectorConfidenceTest`
+   - RunCtest_CMakeTools: `ToolManagerPipelineTest`
+   - RunCtest_CMakeTools: `ToolManagerFailurePathTest`
+   - RunCtest_CMakeTools: `ObservationDigestBoundaryContractTest`
+3. 聚合回归：
+   - Build_CMakeTools: `dasall_tools`、`dasall_unit_tests`、`dasall_contract_tests`
+4. 结果摘要：
+   - ResultProjector 三组新 unit tests 全部通过。
+   - ToolManager pipeline / failure tests 在默认 projector 切换后保持通过。
+   - `dasall_unit_tests` 构建期间自动执行 unit 集合，`278/278` 全绿。
+   - `dasall_contract_tests` 构建期间自动执行 contract 集合，`152/152` 全绿。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，但未影响结论。
+
+### 结果
+
+1. ToolManager 的默认投影已从内联 fallback 收口到独立 ResultProjector，builtin 最小闭环推进到 digest / observation 层。
+2. projector 现在基于归一化后的 `ToolResult` 生成 observation、digest、citations 和 failure_reason，从根上消除了旧默认 projector 对未归一化 result 的依赖。
+3. failure path 不再把 raw payload 泄漏到 digest，ObservationDigest 的五字段完整性和 confidence 规则已有 unit + contract 双重保护。
+
+### 下一步
+
+1. 进入 TOOL-TODO-019，实现 ToolAuditBridge，把 ResultProjector 产出的稳定投影事实接入 requested / completed / failed / compensation 审计事件。
+2. 随后推进 020~022，把 metrics / trace / health observability 闭环补齐。
+
+### 风险
+
+1. 当前 ResultProjector 的 JSON 提取仍是浅层 top-level 规则，不支持 schema-aware 深层展开；复杂 payload 后续仍需要通过规则扩展而不是回退到 raw digest。
+2. observability bridge 尚未落地，当前 projector 产出的 citations / omitted_details / confidence 还主要停留在 envelope 面，019~021 需要继续把它们显式接入 audit / metrics / trace 主链。
+
 ## 记录 #318
 
 - 日期：2026-04-16

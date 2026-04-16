@@ -193,3 +193,21 @@ dasall_add_tools_behavior_test(
 	BuiltinExecutorLaneTimeoutTest.cpp
 	BuiltinExecutorLaneTimeoutTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_result_projector_unit_test
+	ResultProjectorTest.cpp
+	ResultProjectorTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_result_projector_truncation_unit_test
+	ResultProjectorTruncationTest.cpp
+	ResultProjectorTruncationTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_result_projector_confidence_unit_test
+	ResultProjectorConfidenceTest.cpp
+	ResultProjectorConfidenceTest
+)

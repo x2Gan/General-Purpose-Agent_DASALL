@@ -11,6 +11,7 @@ target_sources(dasall_tools
     src/mcp/placeholder.cpp
     src/ops/placeholder.cpp
     src/policy/ToolPolicyGate.cpp
+    src/projection/ResultProjector.cpp
     src/projection/placeholder.cpp
     src/registry/ToolRegistry.cpp
     src/registry/BuiltinCatalog.cpp

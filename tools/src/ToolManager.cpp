@@ -6,17 +6,13 @@
 
 #include "execution/BuiltinExecutorLane.h"
 #include "error/ResultCode.h"
-#include "observation/Observation.h"
-#include "observation/ObservationSource.h"
+#include "projection/ResultProjector.h"
 
 namespace {
 
 using dasall::contracts::ErrorDetails;
 using dasall::contracts::ErrorInfo;
 using dasall::contracts::ErrorSourceRefMinimal;
-using dasall::contracts::Observation;
-using dasall::contracts::ObservationDigest;
-using dasall::contracts::ObservationSource;
 using dasall::contracts::ResultCode;
 using dasall::contracts::ToolDescriptor;
 using dasall::contracts::ToolIR;
@@ -53,6 +49,11 @@ using dasall::tools::manager::ToolExecutionRequest;
 	return "unspecified";
 }
 
+[[nodiscard]] const dasall::tools::projection::ResultProjector& standard_projector() {
+	static const dasall::tools::projection::ResultProjector projector;
+	return projector;
+}
+
 [[nodiscard]] ErrorInfo build_error(
 		ResultCode result_code,
 		std::string message,
@@ -85,22 +86,6 @@ using dasall::tools::manager::ToolExecutionRequest;
 	facts.plugin_id = std::nullopt;
 	facts.server_id = route_decision.server_id;
 	return facts;
-}
-
-[[nodiscard]] std::vector<std::string> build_evidence_refs(
-		const ToolResult& result,
-		const dasall::tools::route::ToolRouteDecision& route_decision) {
-	std::vector<std::string> evidence_refs;
-	if (result.tool_call_id.has_value()) {
-		evidence_refs.push_back("tool_call:" + *result.tool_call_id);
-	}
-	if (!route_decision.reason_code.empty()) {
-		evidence_refs.push_back("route_reason:" + route_decision.reason_code);
-	}
-	if (route_decision.server_id.has_value()) {
-		evidence_refs.push_back("server:" + *route_decision.server_id);
-	}
-	return evidence_refs;
 }
 
 [[nodiscard]] ToolResult build_failure_result(
@@ -331,68 +316,6 @@ void emit_terminal_audit(
 	return result;
 }
 
-[[nodiscard]] std::string derive_failure_reason(const ToolResult& result) {
-	if (result.error.has_value() && !result.error->details.message.empty()) {
-		return result.error->details.message;
-	}
-
-	return "tool.manager.execution_failed";
-}
-
-[[nodiscard]] std::string build_observation_id(const ToolResult& result) {
-	return std::string("observation:") +
-			 result.tool_call_id.value_or(std::string("unknown_call"));
-}
-
-[[nodiscard]] Observation build_observation(const ToolResult& result) {
-	return Observation{
-			.observation_id = build_observation_id(result),
-			.source = ObservationSource::ToolExecution,
-			.success = result.success,
-			.payload = result.payload,
-			.created_at = result.completed_at,
-			.error = result.error,
-			.side_effects = result.side_effects,
-			.tool_call_id = result.tool_call_id,
-			.worker_task_id = result.worker_task_id,
-			.request_id = result.request_id,
-			.goal_id = result.goal_id,
-			.duration_ms = result.duration_ms,
-			.tags = result.tags,
-	};
-}
-
-[[nodiscard]] ObservationDigest build_observation_digest(
-		const ToolResult& result,
-		const dasall::tools::route::ToolRouteDecision& route_decision) {
-	std::vector<std::string> key_facts{
-			std::string("status=") + (result.success.value_or(false) ? "success" : "failure"),
-			"route=" + route_kind_string(route_decision.route),
-			"decision=" + route_decision.reason_code,
-	};
-	if (route_decision.server_id.has_value()) {
-		key_facts.push_back("server=" + *route_decision.server_id);
-	}
-
-	return ObservationDigest{
-			.observation_id = build_observation_id(result),
-			.summary = std::string("Tool ") +
-						   result.tool_name.value_or(std::string("unknown_tool")) +
-						   (result.success.value_or(false) ? " completed via " : " failed via ") +
-						   route_kind_string(route_decision.route),
-			.key_facts = std::move(key_facts),
-			.citations = build_evidence_refs(result, route_decision),
-			.confidence = result.success.value_or(false) ? 0.85f : 0.35f,
-			.omitted_details = result.payload.has_value()
-								? std::optional<std::vector<std::string>>{
-											std::vector<std::string>{"raw payload retained in Observation.payload"}}
-								: std::nullopt,
-			.source = ObservationSource::ToolExecution,
-			.created_at = result.completed_at,
-			.tags = result.tags,
-	};
-}
-
 [[nodiscard]] std::optional<std::vector<ToolCompensationHint>> build_compensation_hints(
 		const ToolResult& result) {
 	if (!result.side_effects.has_value() || result.side_effects->empty()) {
@@ -405,23 +328,6 @@ void emit_terminal_audit(
 			.reason_code = std::string("tool.manager.compensation_available"),
 			.evidence_refs = *result.side_effects,
 	}};
-}
-
-[[nodiscard]] ToolInvocationEnvelope default_projector(
-		const ToolResult& result,
-		const dasall::tools::route::ToolRouteDecision& route_decision,
-		const ToolInvocationContext& invocation_context) {
-	static_cast<void>(invocation_context);
-	ToolInvocationEnvelope envelope;
-	envelope.tool_result = result;
-	envelope.observation = build_observation(result);
-	envelope.observation_digest = build_observation_digest(result, route_decision);
-	envelope.route_facts = build_route_facts(route_decision);
-	envelope.evidence_refs = build_evidence_refs(result, route_decision);
-	if (!result.success.value_or(false)) {
-		envelope.failure_reason_code = derive_failure_reason(result);
-	}
-	return envelope;
 }
 
 [[nodiscard]] ToolResult default_executor(const ToolExecutionRequest& execution_request) {
@@ -630,28 +536,29 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 			});
 	}
 
-	auto envelope = dependencies_.projector(result, route_decision, context);
-	envelope.tool_result = normalize_result(
+	auto normalized_result = normalize_result(
 			request,
 			*validation_result.tool_ir,
-			envelope.tool_result.value_or(std::move(result)));
+			std::move(result));
+	auto envelope = dependencies_.projector(normalized_result, route_decision, context);
+	envelope.tool_result = normalized_result;
+	const auto fallback_projection =
+			standard_projector().project(normalized_result, route_decision, context);
 	if (!envelope.route_facts.has_value()) {
-		envelope.route_facts = build_route_facts(route_decision);
+		envelope.route_facts = fallback_projection.route_facts;
 	}
 	if (!envelope.observation.has_value()) {
-		envelope.observation = build_observation(*envelope.tool_result);
+		envelope.observation = fallback_projection.observation;
 	}
 	if (!envelope.observation_digest.has_value()) {
-		envelope.observation_digest = build_observation_digest(
-				*envelope.tool_result,
-				route_decision);
+		envelope.observation_digest = fallback_projection.observation_digest;
 	}
 	if (!envelope.evidence_refs.has_value()) {
-		envelope.evidence_refs = build_evidence_refs(*envelope.tool_result, route_decision);
+		envelope.evidence_refs = fallback_projection.evidence_refs;
 	}
 	if (!envelope.failure_reason_code.has_value() &&
 			!envelope.tool_result->success.value_or(false)) {
-		envelope.failure_reason_code = derive_failure_reason(*envelope.tool_result);
+		envelope.failure_reason_code = fallback_projection.failure_reason_code;
 	}
 	if (envelope.tool_result->success.value_or(false)) {
 		envelope.failure_reason_code = std::nullopt;
@@ -687,6 +594,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					.data_service = nullptr,
 					.now_ms = {},
 			});
+	auto result_projector = std::make_shared<projection::ResultProjector>();
 
 	return manager::ToolManagerDependencies{
 			.registry = std::move(registry),
@@ -713,7 +621,12 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 
 					return default_executor(execution_request);
 			},
-			.projector = default_projector,
+			.projector = [result_projector](
+						const ToolResult& result,
+						const dasall::tools::route::ToolRouteDecision& route_decision,
+						const ToolInvocationContext& invocation_context) {
+					return result_projector->project(result, route_decision, invocation_context);
+			},
 			.audit_hooks = {},
 	};
 }
