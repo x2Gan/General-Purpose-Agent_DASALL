@@ -16,6 +16,7 @@
 #include "metrics/MetricTypes.h"
 #include "metrics/IMetricsProvider.h"
 #include "ops/ToolAuditBridge.h"
+#include "ops/ToolHealthProbe.h"
 #include "ops/ToolMetricsBridge.h"
 #include "ops/ToolTraceBridge.h"
 #include "support/TestAssertions.h"
@@ -28,6 +29,7 @@ namespace {
 
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
+using dasall::infra::ProbeStatus;
 
 class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
  public:
@@ -351,6 +353,20 @@ class NullTracerProvider final : public dasall::infra::tracing::ITracerProvider 
     }
 };
 
+class StaticHealthSignalProvider final
+    : public dasall::tools::ops::IToolHealthSignalProvider {
+ public:
+    explicit StaticHealthSignalProvider(dasall::tools::ops::ToolHealthSample sample)
+            : sample_(std::move(sample)) {}
+
+    [[nodiscard]] dasall::tools::ops::ToolHealthSample sample(std::int64_t) override {
+        return sample_;
+    }
+
+ private:
+    dasall::tools::ops::ToolHealthSample sample_;
+};
+
 [[nodiscard]] bool has_action(const std::vector<dasall::infra::AuditEvent>& events,
                               const std::string& action) {
   return std::find_if(events.begin(), events.end(), [&](const auto& event) {
@@ -379,6 +395,41 @@ class NullTracerProvider final : public dasall::infra::tracing::ITracerProvider 
     return std::find_if(spans.begin(), spans.end(), [&](const auto& record) {
                      return record.descriptor.name == span_name;
                  }) != spans.end();
+}
+
+[[nodiscard]] bool has_failed_component(
+        const dasall::infra::HealthSnapshot& snapshot,
+        const std::string& component) {
+    return std::find(snapshot.failed_components.begin(),
+                                         snapshot.failed_components.end(),
+                                         component) != snapshot.failed_components.end();
+}
+
+[[nodiscard]] dasall::tools::ops::ToolHealthSample make_health_sample(
+        const std::shared_ptr<dasall::tools::ops::ToolAuditBridge>& audit_bridge,
+        const std::shared_ptr<dasall::tools::ops::ToolMetricsBridge>& metrics_bridge,
+        const std::shared_ptr<dasall::tools::ops::ToolTraceBridge>& trace_bridge,
+        std::int64_t sampled_at_unix_ms,
+        std::string detail_ref) {
+    dasall::tools::ops::ToolHealthSample sample;
+    sample.registry.revision = 7U;
+    sample.registry.descriptor_catalog_ready = true;
+    sample.builtin_lane.available = true;
+    sample.builtin_lane.concurrency_budget = 1U;
+    sample.builtin_lane.saturated = false;
+    sample.workflow_lane.available = true;
+    sample.workflow_lane.concurrency_budget = 1U;
+    sample.workflow_lane.saturated = false;
+    sample.mcp.session_ready = true;
+    sample.mcp.freshness = dasall::tools::CapabilityFreshness::fresh;
+    sample.mcp.stale_read_allowed = false;
+    sample.audit_bridge_degraded = audit_bridge->get_status().degraded;
+    sample.metrics_bridge_degraded = metrics_bridge->is_degraded();
+    sample.trace_bridge_degraded = trace_bridge->is_degraded();
+    sample.latency_ms = 4;
+    sample.sampled_at_unix_ms = sampled_at_unix_ms;
+    sample.detail_ref = std::move(detail_ref);
+    return sample;
 }
 
 [[nodiscard]] dasall::profiles::RuntimePolicySnapshot make_snapshot() {
@@ -635,6 +686,30 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
     assert_true(!trace_bridge->is_degraded() &&
                                     trace_bridge->get_status().started_span_total >= 5U,
                             "tools observability integration should keep the trace bridge healthy on the builtin governance path");
+
+    dasall::tools::ops::ToolHealthProbe health_probe(
+        std::make_shared<StaticHealthSignalProvider>(make_health_sample(
+            audit_bridge,
+            metrics_bridge,
+            trace_bridge,
+            1712738002000LL,
+            "status://tools/health/integration-healthy")));
+    const auto health_result = health_probe.probe();
+    const auto health_snapshot = health_probe.snapshot();
+    const auto route_health = health_probe.route_health_snapshot();
+
+    assert_true(health_result.status == ProbeStatus::Healthy &&
+                    health_result.detail_ref ==
+                        "status://tools/health/integration-healthy",
+                "tools observability integration should aggregate audit, metrics, trace, and health as a healthy snapshot on the normal path");
+    assert_true(health_snapshot.liveness && health_snapshot.readiness &&
+                    !health_snapshot.degraded &&
+                    health_snapshot.failed_components.empty(),
+                "tools observability integration should keep the health snapshot free of failed components when all observability bridges remain healthy");
+    assert_true(route_health.builtin_lane_healthy &&
+                    route_health.workflow_lane_healthy &&
+                    route_health.mcp_lane_healthy,
+                "tools observability integration should keep all route health switches available on the healthy observability path");
 }
 
 void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails() {
@@ -703,6 +778,32 @@ void test_tool_observability_integration_keeps_main_result_when_audit_sink_fails
     assert_true(trace_bridge->is_degraded() &&
                                     trace_bridge->get_status().span_failure_total >= 1U,
                             "failing trace backend should remain observable through ToolTraceBridge status without blocking the main result");
+
+    dasall::tools::ops::ToolHealthProbe health_probe(
+        std::make_shared<StaticHealthSignalProvider>(make_health_sample(
+            audit_bridge,
+            metrics_bridge,
+            trace_bridge,
+            1712738003000LL,
+            "status://tools/health/integration-degraded")));
+    const auto health_result = health_probe.probe();
+    const auto health_snapshot = health_probe.snapshot();
+    const auto route_health = health_probe.route_health_snapshot();
+
+    assert_true(health_result.status == ProbeStatus::Degraded &&
+                    health_result.detail_ref.find("trace_bridge") !=
+                        std::string::npos,
+                "exporter failures should remain visible through the aggregated tools health result without changing the main execution outcome");
+    assert_true(health_snapshot.liveness && health_snapshot.readiness &&
+                    health_snapshot.degraded &&
+                    has_failed_component(health_snapshot, "tools.audit_bridge") &&
+                    has_failed_component(health_snapshot, "tools.metrics_bridge") &&
+                    has_failed_component(health_snapshot, "tools.trace_bridge"),
+                "exporter failures should surface through health snapshot failed components for audit, metrics, and trace bridges");
+    assert_true(route_health.builtin_lane_healthy &&
+                    route_health.workflow_lane_healthy &&
+                    route_health.mcp_lane_healthy,
+                "observability exporter degradation should not disable route health switches on the builtin main path");
 }
 
 }  // namespace

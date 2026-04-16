@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #326
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-026 验证 ToolObservabilityIntegration
+- 状态：已完成
+
+### 任务选择
+
+1. `TOOL-TODO-019` ~ `022` 已分别落好 audit、metrics、trace、health 四个 internal observability 组件，因此 026 的最小可执行动作是把四类证据收口到既有 `ToolObservabilityIntegrationTest`，而不是再开新的 health integration。
+2. /memories/repo/tools-observability-bridges.md 已明确 `ToolObservabilityIntegrationTest` 是 tools observability 的共享 integration 出口；026 继续沿用该出口最符合前序任务的收敛路径。
+3. 当前 `ToolHealthProbe` 采用 sample-provider 形态，没有 live wiring 到真实 runtime source，因此 026 最合理的集成方式是在测试中从 bridge status 组装 `ToolHealthSample`，验证健康聚合语义，而不伪造生产接线。
+
+### 改动
+
+1. 更新 `tests/integration/tools/ToolObservabilityIntegrationTest.cpp`，引入 `ToolHealthProbe`、`StaticHealthSignalProvider`、`ToolHealthSample` 组装 helper，把 health 聚合并入既有 observability integration。
+2. 在正常路径断言中增加 health 正例：确认 audit / metrics / trace bridge 全部健康时，`ToolHealthProbe` 输出 healthy snapshot，`failed_components` 为空，route health 三开关保持可用。
+3. 在 exporter failure 路径断言中增加 health 退化验证：确认 audit / metrics / trace bridge 退化时，`ToolHealthProbe` 输出 degraded snapshot，并暴露 `tools.audit_bridge`、`tools.metrics_bridge`、`tools.trace_bridge` 三个 failed components，同时不关闭 builtin 主链 route health。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools：`dasall_tools`
+   - Build_CMakeTools：`dasall_tool_observability_integration_test`
+2. 定向执行：
+   - RunCtest_CMakeTools：`ToolObservabilityIntegrationTest`
+3. 聚合基线：
+   - Build_CMakeTools：`dasall_tools`、`dasall_integration_tests`
+4. 结果摘要：
+   - `ToolObservabilityIntegrationTest` 通过，audit / metrics / trace / health 四类 observability 证据与 exporter failure 断言全部通过。
+   - `dasall_integration_tests` 聚合构建仍仅命中既有 infra diagnostics 失败：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`；未新增 tools integration 回归。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响本任务通过结论。
+
+### 结果
+
+1. Gate-TOOL-08 现已从 audit + metrics + trace 扩展为 audit + metrics + trace + health 的统一 observability integration 门。
+2. exporter failure 路径现在不仅能从 bridge status 上观察，还能通过 `ToolHealthProbe` 的 degraded snapshot 统一收敛到 health 视图。
+3. 026 保持测试级 health sample 组装方式，没有把尚未存在的 live runtime wiring 伪装成已完成事实。
+
+### 下一步
+
+1. builtin 最小闭环相关的 025、026 已全部完成，后续可按专项 TODO 继续推进 027 起的 workflow / compensation 主链。
+
+### 风险
+
+1. 026 只验证当前 builtin 主链下的 observability gate；workflow / MCP / skill 路径的 observability 仍需在对应执行链落地后接入同一 integration 出口。
+2. tools integration 聚合仍受两个既有 infra diagnostics 失败影响；若要恢复全量 integration 绿灯，需要单独处理 infra 用例，而不是回退 026 的 observability gate 扩展。
+
 ## 记录 #325
 
 - 日期：2026-04-16
