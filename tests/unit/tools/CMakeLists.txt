@@ -214,6 +214,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_tool_health_probe_unit_test
+	ToolHealthProbeTest.cpp
+	ToolHealthProbeTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_result_projector_unit_test
 	ResultProjectorTest.cpp
 	ResultProjectorTest

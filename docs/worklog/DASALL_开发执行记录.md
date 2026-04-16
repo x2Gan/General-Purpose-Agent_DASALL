@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #324
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-022 实现 ToolHealthProbe
+- 状态：已完成
+
+### 任务选择
+
+1. `ToolAuditBridge`、`ToolMetricsBridge`、`ToolTraceBridge` 已经把 observability 退化面拆成独立 internal bridge；022 的最低风险路径是补一个汇聚 probe，而不是把 health 逻辑再塞回 `ToolManager`。
+2. `ToolRouteSelector` 需要的是保守但可解释的 route health 事实，不是“总健康/总不健康”单比特，所以 probe 需要同时维护 `HealthSnapshot` 与 `ToolRouteHealthSnapshot` 两种输出。
+3. 当前 tools runtime 还没有可直接复用的 live lane saturation 计数与完整 MCP session runtime store，因此本轮实现应保持 sample-provider 形态，只收敛事实映射，不伪造恢复逻辑或 shared ABI。
+
+### 改动
+
+1. 新增 tools/src/ops/ToolHealthProbe.h 与 tools/src/ops/ToolHealthProbe.cpp，定义 `IToolHealthSignalProvider`、registry/lane/MCP/observability 采样结构，以及 `ToolHealthProbe` 对 `ProbeResult`、`HealthSnapshot`、`ToolRouteHealthSnapshot` 的统一映射。
+2. 在 probe 内部落盘 `collect_registry_health()`、`collect_lane_health()`、`collect_mcp_health()` 三个子域汇聚函数，明确 registry 缺失、builtin lane blocked、workflow degraded、MCP stale/expired、bridge degraded 的不同健康语义。
+3. 让 `ToolHealthProbe::probe()` 在 provider 缺失或 sample 不一致时返回 `ProbeStatus::Unknown`，并缓存保守 unhealthy snapshot，避免未采样状态被误读为 healthy。
+4. 更新 tools/CMakeLists.txt、tests/unit/tools/CMakeLists.txt、tests/unit/CMakeLists.txt，补齐 health probe 源文件和 `dasall_tool_health_probe_unit_test` 注册。
+5. 新增 tests/unit/tools/ToolHealthProbeTest.cpp，覆盖 registry missing、builtin lane saturation、stale capability cache + trace bridge degraded、provider 缺失四类断言，并同步验证 route health switch 行为。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools: `all`
+2. 定向执行：
+   - RunCtest_CMakeTools: `ToolHealthProbeTest`
+   - RunCtest_CMakeTools: `ToolTraceBridgeTest`
+   - RunCtest_CMakeTools: `ToolManagerPipelineTest`
+   - RunCtest_CMakeTools: `ToolObservabilityIntegrationTest`
+   - RunCtest_CMakeTools: `ToolServicesSmokeIntegrationTest`
+3. 聚合执行：
+   - RunCtest_CMakeTools: 全量测试集
+4. 结果摘要：
+   - 新增 `ToolHealthProbeTest` 通过，registry revision、lane saturation、cache freshness、degraded 标记与 route health switch 断言全部成立。
+   - tools 相关定向 unit / integration 用例全部通过。
+   - 全量 CTest 聚合仍只剩既有 infra diagnostics 失败：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，不影响通过结论。
+
+### 结果
+
+1. tools 现在具备统一的 internal health probe，可以把 registry、lane、MCP freshness 与 observability degraded 信号收敛为稳定的 `HealthSnapshot`。
+2. route health 已从 ops health 中单独分离：builtin lane blocked 会拉低 readiness；workflow / mcp / observability bridge 的退化只在必要时关闭对应 route switch，不会把整个 builtin 最小闭环误判成 hard-down。
+3. 022 保持 sample-driven contract，没有越权触发恢复，也没有把尚未存在的 live runtime 计数或 shared health ABI 伪装成已完成事实。
+
+### 下一步
+
+1. 推进 TOOL-TODO-025，补齐 `ToolServicesSmokeIntegrationTest` 的 builtin 最小闭环 gate 证据。
+2. 推进 TOOL-TODO-026，把 `ToolHealthProbe` 纳入同一 `ToolObservabilityIntegrationTest` 出口，补齐四类 observability gate。
+
+### 风险
+
+1. 当前 `ToolHealthProbe` 仍依赖外部 signal provider 提供事实采样，尚未绑定真实 registry / capability cache / bridge live source；后续若接线，应保持“provider 负责采样、probe 负责聚合”的边界。
+2. workflow lane 与 MCP lane 的 route health 目前是基于 sample contract 的保守开关，尚未接入真实 inflight/backpressure 计数；后续如果补 live saturation，要避免改变现有 builtin readiness 语义。
+3. 全量 integration aggregate 仍受两个既有 infra diagnostics 失败影响，后续若要恢复整体绿灯，应单独处理 infra 用例，而不是回退 tools health 改动。
+
 ## 记录 #323
 
 - 日期：2026-04-16

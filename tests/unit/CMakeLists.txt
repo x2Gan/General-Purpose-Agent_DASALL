@@ -138,6 +138,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_tool_audit_bridge_unit_test
 	dasall_tool_metrics_bridge_unit_test
 	dasall_tool_trace_bridge_unit_test
+	dasall_tool_health_probe_unit_test
 	dasall_result_projector_unit_test
 	dasall_result_projector_truncation_unit_test
 	dasall_result_projector_confidence_unit_test

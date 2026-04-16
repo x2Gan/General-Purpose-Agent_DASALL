@@ -10,6 +10,7 @@ target_sources(dasall_tools
     src/execution/ExecutorLanePool.cpp
     src/mcp/placeholder.cpp
     src/ops/ToolAuditBridge.cpp
+    src/ops/ToolHealthProbe.cpp
     src/ops/ToolMetricsBridge.cpp
     src/ops/ToolTraceBridge.cpp
     src/ops/placeholder.cpp
