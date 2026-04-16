@@ -22,6 +22,7 @@ function(dasall_add_tools_behavior_test target_name source_file test_name)
 	target_include_directories(${target_name}
 		PRIVATE
 			${CMAKE_SOURCE_DIR}/tools/src
+			${CMAKE_SOURCE_DIR}/infra/include
 			${CMAKE_SOURCE_DIR}/profiles/include
 			${CMAKE_SOURCE_DIR}/services/include
 	)
@@ -192,6 +193,12 @@ dasall_add_tools_behavior_test(
 	dasall_builtin_executor_lane_timeout_unit_test
 	BuiltinExecutorLaneTimeoutTest.cpp
 	BuiltinExecutorLaneTimeoutTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_audit_bridge_unit_test
+	ToolAuditBridgeTest.cpp
+	ToolAuditBridgeTest
 )
 
 dasall_add_tools_behavior_test(

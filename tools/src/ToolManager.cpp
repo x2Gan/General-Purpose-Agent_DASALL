@@ -6,6 +6,7 @@
 
 #include "execution/BuiltinExecutorLane.h"
 #include "error/ResultCode.h"
+#include "ops/ToolAuditBridge.h"
 #include "projection/ResultProjector.h"
 
 namespace {
@@ -594,6 +595,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					.data_service = nullptr,
 					.now_ms = {},
 			});
+	auto audit_bridge = std::make_shared<ops::ToolAuditBridge>();
 	auto result_projector = std::make_shared<projection::ResultProjector>();
 
 	return manager::ToolManagerDependencies{
@@ -627,7 +629,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 						const ToolInvocationContext& invocation_context) {
 					return result_projector->project(result, route_decision, invocation_context);
 			},
-			.audit_hooks = {},
+			.audit_hooks = ops::ToolAuditBridge::bind_hooks(audit_bridge),
 	};
 }
 

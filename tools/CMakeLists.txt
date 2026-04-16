@@ -9,6 +9,7 @@ target_sources(dasall_tools
     src/execution/BuiltinExecutorLane.cpp
     src/execution/ExecutorLanePool.cpp
     src/mcp/placeholder.cpp
+    src/ops/ToolAuditBridge.cpp
     src/ops/placeholder.cpp
     src/policy/ToolPolicyGate.cpp
     src/projection/ResultProjector.cpp
@@ -43,6 +44,7 @@ target_include_directories(dasall_tools
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/infra/include
     ${CMAKE_SOURCE_DIR}/profiles/include
     ${CMAKE_SOURCE_DIR}/services/include
 )

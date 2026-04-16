@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #321
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-019 实现 ToolAuditBridge
+- 状态：已完成
+
+### 任务选择
+
+1. TOOL-TODO-024 已经打开 `tests/integration/tools` discoverability，因此 019 成为下一条最小可执行原子任务。
+2. `ToolManager` 已经存在 `on_requested`、`on_completed`、`on_failed`、`on_compensation` 四个 hook，说明 019 的主工作应集中在默认桥接实现和可观测性证据，而不是再次改执行治理链。
+3. 结合 6.10、6.12.6 的设计约束，本轮优先收敛 audit 字段口径、sink failure 可观测性和 raw payload 隔离，不提前混入 metrics / trace / health 语义。
+
+### 改动
+
+1. 新增 tools/src/ops/ToolAuditBridge.h 与 tools/src/ops/ToolAuditBridge.cpp，实现 tools 内部 audit bridge、标准事件名、结构化 side effects、`ToolAuditEmitResult` 和 `ToolAuditBridgeStatus`。
+2. `ToolAuditBridge` 通过 `tool_call_id` 缓存 request 关联事实，在 terminal audit 阶段回填 `AuditContext`，从而让 `on_completed` / `on_failed` 事件继续带 session / trace / goal / worker 相关性。
+3. 更新 tools/src/ToolManager.cpp，在默认 dependencies 中挂接 `ToolAuditBridge::bind_hooks()`，让默认 ToolManager 不再是空 audit hooks。
+4. 更新 tools/CMakeLists.txt、tests/unit/tools/CMakeLists.txt、tests/unit/CMakeLists.txt、tests/integration/tools/CMakeLists.txt，补齐 bridge 源文件、unit target、integration target 和 infra include 路径。
+5. 新增 tests/unit/tools/ToolAuditBridgeTest.cpp，覆盖 requested / completed / failed / compensation 字段完整性、missing sink degradation 和 raw payload 不落 side effects。
+6. 新增 tests/integration/tools/ToolObservabilityIntegrationTest.cpp，验证 ToolManager -> ToolAuditBridge -> IAuditLogger 的 success / fail-closed / compensation 路径，且 audit sink failure 不吞掉主结果。
+7. 清理 024 落盘时遗留的 `tests/integration/CMakeLists.txt`、`tests/integration/tools/CMakeLists.txt`、`tests/integration/tools/ToolServicesSmokeIntegrationTest.cpp` 重复拼接残留，确保 CMake 重配稳定。
+
+### 测试
+
+1. 构建：
+   - Build_CMakeTools: `dasall_tool_audit_bridge_unit_test`
+   - Build_CMakeTools: `dasall_tool_observability_integration_test`
+   - Build_CMakeTools: `dasall_tool_manager_pipeline_unit_test`
+   - Build_CMakeTools: `dasall_tool_services_smoke_integration_test`
+   - Build_CMakeTools: `dasall_tools`
+   - Build_CMakeTools: `dasall_unit_tests`
+   - Build_CMakeTools: `dasall_integration_tests`
+2. 定向执行：
+   - RunCtest_CMakeTools: `ToolAuditBridgeTest`
+   - RunCtest_CMakeTools: `ToolManagerPipelineTest`
+   - RunCtest_CMakeTools: `ToolObservabilityIntegrationTest`
+   - RunCtest_CMakeTools: `ToolServicesSmokeIntegrationTest`
+3. discoverability：
+   - `ctest --test-dir build/vscode-linux-ninja -N | rg "ToolObservabilityIntegrationTest|ToolServicesSmokeIntegrationTest"`
+4. 结果摘要：
+   - 新增定向用例全部通过。
+   - `dasall_unit_tests` 聚合回归通过，结果为 `279/279 passed`。
+   - `dasall_integration_tests` 聚合执行时，本轮新增 tools integration 用例通过，但存在既有 infra diagnostics 失败：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`。
+   - `ctest -N` 已显式发现 `ToolObservabilityIntegrationTest` 与 `ToolServicesSmokeIntegrationTest`。
+
+### 结果
+
+1. tools 现在具备可复用的内部 audit bridge，默认 ToolManager 已经能把 requested / completed / failed / compensation 四类事件统一投影到 infra audit sink。
+2. 审计 sink 缺失或写失败不会改变主执行结果，但 bridge status 会显式进入 degraded，可供后续 metrics / health 任务复用。
+3. `ToolObservabilityIntegrationTest` 已经入图，020~022、026 后续可以直接在同一 integration 出口上扩展 metrics / trace / health 断言，而不需要再次补 topology。
+
+### 下一步
+
+1. 推进 TOOL-TODO-020，实现 ToolMetricsBridge，把 request_total / admission_denied_total / execution_latency / stale_snapshot / workflow_step_failure 等指标统一收敛。
+2. 完成 020 后继续推进 021、022，把 ToolTraceBridge 和 ToolHealthProbe 接入同一 observability integration 出口。
+
+### 风险
+
+1. `ToolAuditBridge` 当前对 request 事实采用基于 `tool_call_id` 的内存缓存，尚未引入 TTL 或容量管理；若未来高并发放大，需要在 health/probe 层补充治理。
+2. tools integration aggregate 目前受两个既有 infra diagnostics 失败影响，导致 `dasall_integration_tests` 不能整体报绿；后续若要恢复全量绿灯，需要单独处理这两个 infra 用例，而不是回退 tools 改动。
+
 ## 记录 #320
 
 - 日期：2026-04-16
