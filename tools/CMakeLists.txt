@@ -4,6 +4,7 @@ target_sources(dasall_tools
   PRIVATE
     src/ToolManager.cpp
     src/bridge/PluginExtensionBridge.cpp
+    src/bridge/ToolServiceBridge.cpp
     src/config/ToolConfigAdapter.cpp
     src/execution/ExecutorLanePool.cpp
     src/mcp/placeholder.cpp
@@ -41,6 +42,7 @@ target_include_directories(dasall_tools
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/profiles/include
+    ${CMAKE_SOURCE_DIR}/services/include
 )
 
 target_link_libraries(dasall_tools

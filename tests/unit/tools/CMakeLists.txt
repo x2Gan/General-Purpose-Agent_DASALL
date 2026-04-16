@@ -23,6 +23,7 @@ function(dasall_add_tools_behavior_test target_name source_file test_name)
 		PRIVATE
 			${CMAKE_SOURCE_DIR}/tools/src
 			${CMAKE_SOURCE_DIR}/profiles/include
+			${CMAKE_SOURCE_DIR}/services/include
 	)
 
 	target_link_libraries(${target_name}
@@ -173,4 +174,10 @@ dasall_add_tools_behavior_test(
 	dasall_tool_manager_failure_path_unit_test
 	ToolManagerFailurePathTest.cpp
 	ToolManagerFailurePathTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_service_bridge_unit_test
+	ToolServiceBridgeTest.cpp
+	ToolServiceBridgeTest
 )

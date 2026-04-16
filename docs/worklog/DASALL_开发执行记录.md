@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #317
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 C
+- 任务：TOOL-TODO-016 实现 ToolServiceBridge
+- 状态：已完成
+
+### 任务选择
+
+1. docs/todos/tools/DASALL_tools子系统专项TODO.md 中 016 只依赖 008 与 011，且当前 015b、023 已完成，因此 builtin 最小闭环可以按用户要求从 016 开始串行推进，无需额外 blocker disassembly。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.2、6.2.2、6.12.2 已将 ToolServiceBridge 固定为 ToolIR 到 services request 的 module-local 映射层，因此本轮只实现 request mapper，不提前侵入 BuiltinExecutorLane、ToolResult 收口或 ResultProjector 规则。
+3. services/include/ServiceTypes.h、IExecutionService.h、IDataService.h 已冻结 ServiceCallContext 与 execution/data request 对象族，016 的主目标是把这些既有对象与 ToolIR / ToolInvocationContext 接起来，而不是新增 shared contracts。
+
+### 改动
+
+1. 新增 tools/src/bridge/ToolServiceBridge.h，定义 module-local `ToolServiceBridge`，暴露 `build_context()`、`build_action_request()`、`build_query_request()`、`build_diagnose_request()` 四个映射入口。
+2. 新增 tools/src/bridge/ToolServiceBridge.cpp，把 `ToolIR + ToolInvocationContext` 规范化为 `ServiceCallContext`，固定 request/session/trace/tool_call/goal 的透传与 fallback 规则，并将 `RuntimePolicySnapshot.runtime_budget()`、tool timeout 和 stale-read 策略投影到 services request。
+3. 在同一实现中把 builtin v1 最小映射规则收敛为：`tool_name -> capability_id / action / dataset`，`target_id -> builtin:<tool_name>`，`normalized_arguments -> arguments_json / filters_json`，`idempotency_key` 原样透传。
+4. 更新 tools/CMakeLists.txt，把 ToolServiceBridge 源文件纳入 `dasall_tools`，并补齐 tools 私有实现对 services 头文件的 include 可见性。
+5. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，注册 `dasall_tool_service_bridge_unit_test` 并把 services include 根加入 tools behavior tests 的内部头可见性。
+6. 新增 tests/unit/tools/ToolServiceBridgeTest.cpp，覆盖 action request 映射、query freshness 与 fallback correlation ids、diagnose request 的最小 deadline / optional budget 三条行为路径。
+7. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-016 标记为 Done，并补充交付物与 CMake Tools 验证证据。
+8. 新增 docs/todos/tools/deliverables/TOOL-TODO-016-ToolServiceBridge设计收敛.md，固定 016 的设计边界、Build 三件套和验证摘要。
+
+### 测试
+
+1. 定向构建：
+   - Build_CMakeTools: `dasall_tool_service_bridge_unit_test`
+2. 定向验证：
+   - RunCtest_CMakeTools: `ToolServiceBridgeTest`
+3. 聚合回归：
+   - Build_CMakeTools: `dasall_tools`、`dasall_unit_tests`
+4. 结果摘要：
+   - `ToolServiceBridgeTest` 通过。
+   - `dasall_unit_tests` 构建期间自动执行 unit 集合，`273/273` 全绿。
+   - CMake Tools 仍输出历史 `DartConfiguration.tcl` 噪声，但未影响测试通过结论。
+
+### 结果
+
+1. ToolServiceBridge 已作为 module-local request mapper 落盘，tools 现在具备 builtin -> services 闭环的第一段稳定接线点。
+2. 016 没有扩 shared contracts，也没有把 result projection / route / policy 逻辑混入 bridge，保持了后续 017 与 018 的职责边界。
+3. query freshness、budget guard 与 deadline 的最小映射规则已经被 unit tests 锁定，为 BuiltinExecutorLane 直接复用提供了稳定输入面。
+
+### 下一步
+
+1. 进入 TOOL-TODO-017，实现 BuiltinExecutorLane，并用 016 的 ToolServiceBridge 接通 action / query / diagnose 三类分发。
+2. 随后进入 TOOL-TODO-018，用真实 ResultProjector 替换 ToolManager 中的 module-local projector fallback。
+
+### 风险
+
+1. 当前 builtin target/action 的映射采用 v1 最小规则；若后续 builtin descriptor 需要更细的 capability/target 语义，应在 bridge 内调整，而不是扩大 shared contracts。
+2. 016 只完成 request mapping，尚未完成 services result -> ToolResult 的统一收口；若 017 处理不当，仍可能在 lane 层形成临时重复映射逻辑。
+
 ## 记录 #316
 
 - 日期：2026-04-16
