@@ -415,11 +415,11 @@ flowchart LR
 
 | 组件 | 职责 | 输入 | 输出 | 依赖 | Must-Not |
 |---|---|---|---|---|---|
-| MemoryManager | runtime-facing facade；统一 prepare_context/write_back/export/maintenance | MemoryContextRequest、MemoryWritebackRequest | ContextAssemblyResult、WritebackResult、WorkingMemoryExportResult | ContextOrchestrator、WritebackCoordinator、WorkingMemoryBoard、仓储层 | 不直接做 provider payload 装配 |
+| MemoryManager | runtime-facing facade；统一 prepare_context/write_back/export/maintenance | MemoryContextRequest、MemoryWritebackRequest、WorkingMemoryExportRequest、MaintenanceRequest | ContextAssemblyResult、WritebackResult、WorkingMemoryExportResult、MaintenanceReport | ContextOrchestrator、WritebackCoordinator、WorkingMemoryBoard、IMemoryStore | 不直接做 provider payload 装配 |
 | ContextOrchestrator | 组装 ContextPacket；触发压缩和预算裁剪 | MemoryContextRequest、候选记忆切片 | ContextPacket、dropped_sections、warnings | CandidateCollector、BudgetAllocator、CompressionCoordinator | 不直接持久化 Turn/Fact |
 | CandidateCollector | 从 WorkingMemory、Session/Turn、Summary、Fact、Experience、可选 Vector/外部证据收集候选项 | session_id、stage、预算提示、外部证据 | CandidateSet | 各仓储、WorkingMemory、Vector adapter | 不直接决定最终 ContextPacket |
 | BudgetAllocator | 按 stage/risk/latency/token budget 进行分层分配 | CandidateSet、BudgetPolicy | BudgetPlan、trim actions | 配置策略 | 不读底层数据库 |
-| CompressionCoordinator | 生成 SummaryMemory；将长历史压成结构化摘要 | CompressionInput | SummaryMemory、SummaryProjection、compression notes | SummaryRepository、WorkingMemoryBoard、ISummarizer（可选） | 不直接修改 Prompt 或 Checkpoint |
+| CompressionCoordinator | 生成 SummaryMemory；将长历史压成结构化摘要 | CompressionInput、SummaryGenerationRequest | SummaryMemory、SummaryProjection、compression notes | IMemoryStore（summary surface）、ISummarizer（可选） | 不直接修改 Prompt 或 Checkpoint |
 | WritebackCoordinator | 把回合结果拆分写回；协调核心持久化事务 | MemoryWritebackRequest | WritebackResult | 仓储层、ConflictResolver、WorkingMemoryBoard | 不拥有恢复裁定权 |
 | WorkingMemoryBoard | 管理 session/task 内存黑板、TTL、pending slots、snapshot export | slot ops、snapshot request | WorkingMemorySnapshot、ephemeral context slices | 内存结构、clock | 不直接写 SQLite |
 | SessionTimelineRepository | 持久化 Session、Turn；维护 session 索引 | Session/Turn | SessionLoadBundle、append/update result | SQLite backend | 不持有 runtime SessionContext |
@@ -542,7 +542,43 @@ public:
 | ContextAssemblyResult | result_code、context_packet、dropped_sections、compression_notes、warnings、degraded | prepare_context 的 facade 返回 | 否 |
 | MemoryWritebackRequest | session_id、turn payload、tool refs、observation refs、summary candidates、fact candidates、experience candidates、side_effect_report_ref | runtime 发起写回请求 | 否 |
 | WritebackResult | persisted_turn_id、summary_id、fact_ids、experience_ids、conflicts、warnings、degraded、retryable_storage_failure | 写回结果与降级信号 | 否 |
+| WorkingMemoryExportRequest | session_id、export_reason、include_ephemeral_facts、evict_expired_before_export | runtime 通过 facade 请求导出 WorkingMemory snapshot | 否 |
+| WorkingMemoryExportResult | result_code、snapshot、warnings、degraded | export facade 返回给 runtime 的导出结果 | 否 |
+| SummaryGenerationRequest | session_id、source_turns、existing_summary、target_token_budget、strategy_hint | CompressionCoordinator 向 ISummarizer 发起结构化摘要生成请求 | 否 |
+| SummaryGenerationResult | projection、warnings、fallback_used、degraded | ISummarizer 返回的结构化摘要结果 | 否 |
+| SummaryProjection | summary_text、decisions_made、confirmed_facts、tool_outcomes、source_turn_ids、estimated_tokens | SummaryMemory 生成前的 module-local 中间投影对象 | 否 |
 | WorkingMemorySnapshot | session_id、slot map、open_questions、ephemeral facts、ttl metadata | 与 runtime checkpoint 交汇 | 否 |
+
+##### 6.5.3a WorkingMemory 导出 supporting objects
+
+`WorkingMemoryExportRequest/Result` 的 owner 明确归 `IMemoryManager` facade，而不是 `IWorkingMemoryBoard`。`IWorkingMemoryBoard` 只负责生成 `WorkingMemorySnapshot`，导出 envelope 的字段、错误语义和对 runtime 的返回语义由 `MemoryManager` 统一承接。
+
+| 类型 | 建议落点 | Owner / 调用方 | 字段说明 |
+|---|---|---|---|
+| `WorkingMemoryExportRequest` | `memory/include/working/WorkingMemoryExportRequest.h` | runtime 通过 `IMemoryManager::export_working_memory_snapshot()` 发起；`MemoryManager` 消费 | `session_id`：目标 session；`export_reason`：`checkpoint` / `shutdown` / `debug` 等导出原因；`include_ephemeral_facts`：是否携带瞬态事实；`evict_expired_before_export`：导出前是否主动清理 TTL 过期条目 |
+| `WorkingMemoryExportResult` | `memory/include/working/WorkingMemoryExportResult.h` | `MemoryManager` 返回给 runtime；payload 由 `IWorkingMemoryBoard::export_snapshot()` 产生 | `result_code`：导出结果码；`snapshot`：导出的 `WorkingMemorySnapshot`；`warnings`：导出期间的降级或数据修正提示；`degraded`：是否以降级方式完成导出 |
+
+补充语义：
+
+1. `session_id` 不存在时不抛异常，返回空 `snapshot` 或空 slot 集合，并通过 `warnings` 标记 `session_not_found`。
+2. `export_reason` 仅作为审计和后续策略分支依据，不改变 `WorkingMemoryBoard` 的所有权边界。
+3. `WorkingMemoryBoard` 的 `export_snapshot()` 仍保持纯内存接口；是否携带 envelope 元数据由 `MemoryManager` 负责包装。
+
+##### 6.5.3b Summary 生成 supporting objects
+
+`SummaryGenerationRequest/Result` 与 `SummaryProjection` 作为 `ISummarizer` 和 `CompressionCoordinator` 的 supporting objects，均保持 module-local，不进入 shared contracts。`SummaryProjection` 是中间投影对象，`CompressionCoordinator` 负责将其归一化为最终 `SummaryMemory` 并通过 `IMemoryStore` 的 summary surface 执行持久化。
+
+| 类型 | 建议落点 | Owner / 调用方 | 字段说明 |
+|---|---|---|---|
+| `SummaryGenerationRequest` | `memory/include/writeback/SummaryGenerationRequest.h` | `CompressionCoordinator` 向 `ISummarizer::summarize()` 发起调用 | `session_id`：摘要所属 session；`source_turns`：待压缩 Turn 序列；`existing_summary`：已有摘要，用于增量合并；`target_token_budget`：目标 token 上限；`strategy_hint`：`template` / `llm` / `auto` 等策略提示 |
+| `SummaryProjection` | `memory/include/writeback/SummaryProjection.h` | `ISummarizer` 和 `CompressionCoordinator` 共享的 module-local 中间对象 | `summary_text`：摘要正文；`decisions_made`：结构化决策列表；`confirmed_facts`：结构化已确认事实；`tool_outcomes`：工具执行结果摘要；`source_turn_ids`：摘要覆盖的回合 ID；`estimated_tokens`：投影 token 估算 |
+| `SummaryGenerationResult` | `memory/include/writeback/SummaryGenerationResult.h` | `ISummarizer` 返回给 `CompressionCoordinator` | `projection`：结构化摘要投影；`warnings`：生成过程告警；`fallback_used`：是否触发 fallback；`degraded`：是否以降级模式完成 |
+
+补充语义：
+
+1. `SummaryProjection` 只表达摘要生成的中间视图，不承载 `summary_id`、`created_at` 等持久化主键和审计元数据。
+2. `CompressionCoordinator` 在接收 `SummaryGenerationResult` 后，负责把 `projection` 映射为 `SummaryMemory`，并决定是否与 `existing_summary` 执行增量合并。
+3. `ISummarizer` 的失败语义通过 `SummaryGenerationResult.warnings` 和 `degraded` 反馈，不允许要求 memory 直接依赖 llm 模块具体实现。
 
 ### 6.6 核心接口语义定义
 
@@ -556,9 +592,15 @@ public:
 6. context/ContextAssemblyResult.h
 7. writeback/MemoryWritebackRequest.h
 8. writeback/WritebackResult.h
-9. working/WorkingMemorySnapshot.h
-10. config/MemoryConfig.h
-11. error/MemoryError.h
+9. ISummarizer.h
+10. writeback/SummaryGenerationRequest.h
+11. writeback/SummaryGenerationResult.h
+12. writeback/SummaryProjection.h
+13. working/WorkingMemoryExportRequest.h
+14. working/WorkingMemoryExportResult.h
+15. working/WorkingMemorySnapshot.h
+16. config/MemoryConfig.h
+17. error/MemoryError.h
 
 建议接口语义如下：
 
@@ -696,9 +738,9 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
 组装顺序：
 
 1. 根据 config 创建 SQLite 连接（writer + reader pool）。
-2. 创建各 Repository 实例。
+2. 创建 `SqliteMemoryStore`，由其统一承载 Session / Turn / Summary / Fact / Experience 的逻辑仓储 surface。
 3. 创建 WorkingMemoryBoard。
-4. 创建 CandidateCollector、BudgetAllocator、CompressionCoordinator。
+4. 创建 CandidateCollector、BudgetAllocator、CompressionCoordinator（均注入 `IMemoryStore`；`CompressionCoordinator` 额外注入可选 `ISummarizer`）。
 5. 创建 ContextOrchestrator（注入 CandidateCollector、BudgetAllocator、CompressionCoordinator）。
 6. 创建 WritebackCoordinator、ConflictResolver。
 7. 可选创建 VectorMemoryIndexAdapter、MaintenanceWorker（根据 config feature flag）。
@@ -1219,7 +1261,8 @@ struct MemoryManagerDeps {
 5. **关键执行流**：
    - `init`：校验 config → 调用 `memory_store->open(config)` → schema migration → 初始化 WorkingMemoryBoard → 启动可选 MaintenanceWorker → 切换到 Running 状态。
    - `prepare_context`：`enforce_lifecycle(Running)` → 转发至 `context_orchestrator->assemble(request)` → 返回 `ContextAssemblyResult`。
-   - `write_back`：`enforce_lifecycle(Running)` → 转发至 `writeback_coordinator->persist(request)` → 更新 WorkingMemoryBoard 相关槽位 → 返回 `WritebackResult`。
+  - `write_back`：`enforce_lifecycle(Running)` → 转发至 `writeback_coordinator->persist(request)` → 直接返回 `WritebackResult`。WorkingMemoryBoard 更新的唯一 owner 为 `WritebackCoordinator`，MemoryManager 不再重复修改黑板状态。
+  - `export_working_memory_snapshot`：`enforce_lifecycle(Running)` → 读取 `WorkingMemoryExportRequest` → 调用 `working_memory_board->export_snapshot(request.session_id)` 生成 `WorkingMemorySnapshot` → 由 `MemoryManager` 封装 `WorkingMemoryExportResult` 返回给 runtime。
    - `shutdown`：切换到 ShuttingDown → 停止 MaintenanceWorker → drain pending writes → 最终 WAL checkpoint → 关闭 SQLite 连接 → 切换到 Stopped。
 6. **失败与回退语义**：`init` 失败返回具体 `ResultCode`（`SchemaMismatch`、`StorageUnavailable`、`ConfigInvalid`），不允许调用其他方法。`shutdown` 中若有活跃事务则等待超时后强制关闭，记录 warning 审计事件。析构函数中检测到未 shutdown 则 best-effort 关闭并记录 warning。任何主链路方法在非 Running 状态调用均返回 `RuntimeRetryExhausted` 语义错误。
 7. **测试与验收出口**：推荐单测 `MemoryManagerLifecycleTest.cpp`（init/shutdown 状态机）、`MemoryManagerSmokeTest.cpp`（init→prepare_context→write_back→export→shutdown 最小闭环）；验收命令 `ctest --test-dir build-ci -R "MemoryManager(Lifecycle|Smoke)Test" --output-on-failure`。
@@ -1440,7 +1483,7 @@ struct CompressionOutput {
 class CompressionCoordinator {
 public:
   explicit CompressionCoordinator(
-      SummaryRepository& summary_repo,
+  IMemoryStore& store,
       ISummarizer* summarizer);  // nullable, 阶段 1 无 LLM
 
   CompressionOutput compress(const CompressionInput& input);
@@ -1456,7 +1499,7 @@ private:
       const std::vector<Turn>& turns,
       const std::optional<SummaryMemory>& existing);
 
-  SummaryRepository& summary_repo_;
+  IMemoryStore& store_;
   ISummarizer* summarizer_;  // nullable
 };
 ```
@@ -1466,9 +1509,10 @@ private:
    2. **模板拼接路径**（阶段 1）：遍历 source_turns，按 user_input → agent_response → tool_call_refs → observation_refs 提取结构化字段；从中抽取 `decisions_made`（含 "决定"/"选择"/"确定" 等关键词的句子）、`confirmed_facts`（含 "确认"/"证实" 等关键词）、`tool_outcomes`（从 tool_call_refs 关联的 observation 中提取）；拼接 `summary_text`（格式："[Turn N-M 摘要] 用户请求：...，执行工具：...，关键结论：..."）。
       > **已知局限**：阶段 1 的关键词匹配策略依赖中文特定词汇（"决定"/"确认" 等），precision 受限——无关键词但语义上属于决策的句子会漏提取，包含关键词但非决策的句子会误提取。此为 MVP 策略，测试锚点 CC-T03 应覆盖中文关键词误判/漏判边界。阶段 2 引入 ISummarizer 后可获得语义级提取质量（参见 MEM-E01）。
    3. **ISummarizer 路径**（阶段 2）：构造 `SummaryGenerationRequest` 交给 `summarizer_->summarize()`，获取结构化摘要结果。
-   4. 若存在 `existing_summary`，执行增量合并：保留旧摘要的 `confirmed_facts` 和 `decisions_made`，追加新提取的条目，去重。
-   5. 生成 `SummaryMemory` 对象（含 summary_id、session_id、source_turn_ids、created_at）。
-   6. 记录 `compression_notes`（压缩比、覆盖 Turn 范围、策略类型）。
+  4. 若存在 `existing_summary`，执行增量合并：保留旧摘要的 `confirmed_facts` 和 `decisions_made`，追加新提取条目或 `SummaryGenerationResult.projection` 中的新条目，去重。
+  5. 将模板路径或 `SummaryGenerationResult.projection` 统一映射为 `SummaryMemory` 对象（含 `summary_id`、`session_id`、`source_turn_ids`、`created_at`）。
+  6. 若调用点要求 materialize latest summary，则通过 `IMemoryStore::upsert_summary()` 执行摘要持久化；`CompressionCoordinator` 不再依赖独立 `SummaryRepository` 实例。
+  7. 记录 `compression_notes`（压缩比、覆盖 Turn 范围、策略类型）。
 6. **失败与回退语义**：ISummarizer 调用失败时回退到模板拼接策略（记录 `summarizer_fallback` warning）。模板拼接本身不应失败（纯规则提取）；若 source_turns 为空则返回 `compression_applied=false`。提取出的 confirmed_facts 不得包含已被 supersede 的事实（由调用方在冲突检测后保证）。
 7. **测试与验收出口**：推荐单测 `CompressionCoordinatorTest.cpp`（模板拼接路径 + 增量合并路径）、`CompressionCoordinatorSummarizerTest.cpp`（ISummarizer mock 路径 + fallback）；验收命令 `ctest --test-dir build-ci -R "CompressionCoordinator.*Test" --output-on-failure`。
 
@@ -1546,7 +1590,7 @@ private:
    2. **核心事务**（单 SQLite 事务）：`BEGIN IMMEDIATE` → `INSERT INTO turns` → `UPDATE sessions`（追加 turn_id、更新 last_active_at） → 若有 summary_candidate 则 `UPSERT INTO summaries` → `COMMIT`。核心事务失败则整体回滚，返回 `retryable_storage_failure=true`。
    3. **附属写入**（best-effort，核心事务提交后）：对每个 fact_candidate 调用 `conflict_resolver.resolve()`，根据 `ConflictResolutionPlan` 执行 INSERT 或 supersede；对每个 experience_candidate 执行 INSERT。单个失败标记 `partial=true`，不影响已提交的核心数据。
    4. **旁路写入**（best-effort）：若 vector_adapter 非空，对新 Turn/Fact 执行 embedding upsert。失败仅记录指标。
-   5. **WorkingMemoryBoard 更新**：将本轮 Turn 信息更新到 working board 的相应槽位。
+  5. **WorkingMemoryBoard 更新（唯一 owner）**：由 `WritebackCoordinator` 在核心事务和附属写入完成后统一将本轮 Turn 信息更新到 working board 的相应槽位；`MemoryManager` 不再重复更新同一批槽位。
    6. **审计发射**：发射 `writeback_completed` 或 `degraded_writeback` 审计事件；若有 fact supersede 则发射 `fact_superseded` 事件。
 6. **失败与回退语义**：核心事务 SQLITE_BUSY 采用 bounded local retry（最多 2 次，间隔由 busy_timeout 控制）；retry 耗尽后返回 `retryable_storage_failure=true`，由 runtime 决定是否重试。附属写入失败只标记 `partial=true` + warning，不回滚核心事务。vector 写入失败完全透明。所有错误均通过 `WritebackResult` 结构化返回，不使用异常。
 7. **测试与验收出口**：推荐单测 `WritebackCoordinatorCoreTest.cpp`（Turn+Session+Summary 原子事务 + 回滚验证）、`WritebackCoordinatorPartialTest.cpp`（fact/experience 部分失败不影响核心）；集成测试 `MemoryWritebackIntegrationTest.cpp`（端到端含冲突解析和 vector）；验收命令 `ctest --test-dir build-ci -R "WritebackCoordinator.*Test|MemoryWritebackIntegrationTest" --output-on-failure`。
@@ -1991,11 +2035,11 @@ public:
 
 | Design ID | 设计结论 | 代码目标 | 测试目标 | 前置依赖 | 建议验收命令 | 备注 |
 |---|---|---|---|---|---|---|
-| MEM-D001 | 建立 memory 模块 public facade + 工厂函数 | memory/include/IMemoryManager.h；memory/src/MemoryManager.cpp；memory/src/MemoryManagerFactory.cpp | unit: MemoryInterfaceCompileTest | 无 | cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R MemoryInterfaceCompileTest --output-on-failure | 先替换 placeholder 主入口；包含 init/shutdown 生命周期 |
+| MEM-D001 | 建立 memory 模块 public facade + 工厂函数 | memory/include/IMemoryManager.h；memory/include/working/WorkingMemoryExport*.h；memory/src/MemoryManager.cpp；memory/src/MemoryManagerFactory.cpp | unit: MemoryInterfaceCompileTest | 无 | cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R MemoryInterfaceCompileTest --output-on-failure | 先替换 placeholder 主入口；包含 init/shutdown 生命周期与 export facade |
 | MEM-D002 | 建立 ContextOrchestrator module-local supporting types | memory/include/IContextOrchestrator.h；memory/include/context/*；memory/src/context/* | unit: ContextOrchestratorBudgetTest | MEM-D001 | cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R ContextOrchestratorBudgetTest --output-on-failure | 不进入 contracts |
 | MEM-D003 | 建立 WorkingMemory 黑板与 snapshot 导出 | memory/include/working/*；memory/src/working/* | unit: WorkingMemoryBoardTest | MEM-D001 | ctest --test-dir build-ci -R WorkingMemoryBoardTest --output-on-failure | 与 runtime checkpoint 对接 |
 | MEM-D004 | 建立 SQLite schema、migration 与仓储层 | memory/src/store/sqlite/*；sql/V001__initial_schema.sql | unit: SqliteMemoryStoreTest、SchemaMigrationTest | MEM-D001 | ctest --test-dir build-ci -R "SqliteMemoryStoreTest\|SchemaMigrationTest" --output-on-failure | 单逻辑主库策略；含连接管理与 migration |
-| MEM-D005 | 建立 SummaryCompression 主链路 | memory/src/writeback/CompressionCoordinator.cpp；memory/include/ISummarizer.h | unit: SummaryCompressionTest | MEM-D002、MEM-D004 | ctest --test-dir build-ci -R SummaryCompressionTest --output-on-failure | 阶段 1 采用模板拼接策略；需复用 SummaryMemory contracts guard |
+| MEM-D005 | 建立 SummaryCompression 主链路 | memory/src/writeback/CompressionCoordinator.cpp；memory/include/ISummarizer.h；memory/include/writeback/SummaryGeneration*.h；memory/include/writeback/SummaryProjection.h | unit: SummaryCompressionTest | MEM-D002、MEM-D004 | ctest --test-dir build-ci -R SummaryCompressionTest --output-on-failure | 阶段 1 采用模板拼接策略；需复用 SummaryMemory contracts guard，并通过 IMemoryStore 统一执行摘要持久化 |
 | MEM-D006 | 建立 WritebackCoordinator | memory/include/writeback/*；memory/src/writeback/* | integration: MemoryWritebackIntegrationTest | MEM-D003、MEM-D004、MEM-D005 | cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R MemoryWritebackIntegrationTest --output-on-failure | 覆盖 Turn/Summary/Fact/Experience 写回 |
 | MEM-D007 | 建立 Fact/Experience 冲突与 supersede 机制 | memory/src/conflict/*；memory/src/store/sqlite/* | unit: FactConflictResolverTest | MEM-D004 | ctest --test-dir build-ci -R FactConflictResolverTest --output-on-failure | 不回扩 MemoryFact shared fields |
 | MEM-D008 | 建立 VectorMemory 可选 backend | memory/src/vector/*；memory/include/vector/* | integration: VectorMemoryAdapterTest | MEM-D004 | ctest --test-dir build-ci -R VectorMemoryAdapterTest --output-on-failure | 关闭时不影响主链路 |
@@ -2062,6 +2106,7 @@ memory/
     IMemoryManager.h
     IContextOrchestrator.h
     IMemoryStore.h
+    ISummarizer.h
     context/
       MemoryContextRequest.h
       ContextAssemblyResult.h
@@ -2069,7 +2114,12 @@ memory/
     writeback/
       MemoryWritebackRequest.h
       WritebackResult.h
+      SummaryGenerationRequest.h
+      SummaryGenerationResult.h
+      SummaryProjection.h
     working/
+      WorkingMemoryExportRequest.h
+      WorkingMemoryExportResult.h
       WorkingMemorySnapshot.h
       IWorkingMemoryBoard.h
     error/

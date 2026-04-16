@@ -82,8 +82,8 @@
 ### 4.2 Context
 
 - 项目根目录：/home/gangan/DASALL/
-- 当前日期：2026-4-10
-- 当前对象：Tools 子系统
+- 当前日期：2026-4-16
+- 当前对象：记忆子系统
 - 当前阶段：Detailed Design -> Special TODO
 - 输出语言：中文
 - 输出文档：docs/todos
@@ -92,7 +92,7 @@
 
 请严格基于以下输入设计工程实施计划、生成专项 TODO，不得脱离上下文臆造边界：
 
-1. 详细设计文档：、docs/architecture/DASALL_tools子系统详细设计.md
+1. 详细设计文档：docs/architecture/DASALL_memory子系统详细设计.md
 2. 架构文档：docs/architecture/DASALL_Agent_architecture.md
 3. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
 4. 相关 ADR：docs/adr/ + ssot
@@ -105,11 +105,12 @@
    - docs/todos/platform/deliverables
    - docs/todos/services/deliverables
    - docs/todos/llm/deliverables
+   - docs/todos/tools/deliverables
 
 
 ### 4.4 Task
 
-请设计子系统工程化计划、输出一份完整的“Tools 子系统专项 TODO 文档”，要求：
+请设计子系统工程化计划、输出一份完整的“记忆子系统专项 TODO 文档”，要求：
 
 1. 先评估该详细设计是否足以支撑接口级、函数级、数据结构级原子任务拆分。
 2. 进行完整的需求确认+任务拆分+任务编排+TODO生成
