@@ -29,21 +29,21 @@ using dasall::tests::support::assert_true;
   };
 }
 
-void test_tool_manager_is_instantiable_and_fails_closed_until_pipeline_is_connected() {
+void test_tool_manager_is_instantiable_and_fails_closed_when_runtime_context_is_missing() {
   dasall::tools::ToolManager manager;
 
   const auto invoke_envelope = manager.invoke(make_request("req-1", "call-1"), {});
   assert_true(invoke_envelope.tool_result.has_value(),
               "invoke should still produce a unified envelope");
   assert_true(!invoke_envelope.tool_result->success.value_or(true),
-              "skeleton invoke should fail closed before the full pipeline is wired");
+              "invoke should fail closed when caller context is incomplete");
   assert_true(invoke_envelope.failure_reason_code.has_value(),
-              "skeleton invoke should explain why the pipeline was closed");
-  assert_equal(std::string("tool.manager.pipeline_unconfigured"),
+              "invoke should explain why the request was denied");
+  assert_equal(std::string("tool.manager.profile_missing"),
                *invoke_envelope.failure_reason_code,
-               "skeleton invoke should expose the pipeline-unconfigured reason");
+               "missing profile snapshot should surface a fail-closed reason");
   assert_true(!invoke_envelope.has_projection(),
-              "skeleton invoke should not pretend projection exists yet");
+              "early fail-closed invocation should not pretend projection exists");
 
   const auto compensate_envelope = manager.compensate(
       dasall::tools::CompensationRequest{
@@ -65,7 +65,7 @@ void test_tool_manager_is_instantiable_and_fails_closed_until_pipeline_is_connec
 
 int main() {
   try {
-    test_tool_manager_is_instantiable_and_fails_closed_until_pipeline_is_connected();
+    test_tool_manager_is_instantiable_and_fails_closed_when_runtime_context_is_missing();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

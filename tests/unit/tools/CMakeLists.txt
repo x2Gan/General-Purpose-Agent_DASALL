@@ -162,3 +162,15 @@ dasall_add_tools_behavior_test(
 	ToolManagerBatchInvokeTest.cpp
 	ToolManagerBatchInvokeTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_tool_manager_pipeline_unit_test
+	ToolManagerPipelineTest.cpp
+	ToolManagerPipelineTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_tool_manager_failure_path_unit_test
+	ToolManagerFailurePathTest.cpp
+	ToolManagerFailurePathTest
+)

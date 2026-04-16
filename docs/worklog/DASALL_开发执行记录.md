@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #316
+
+- 日期：2026-04-16
+- 阶段：tools/专项 TODO 阶段 D
+- 任务：TOOL-TODO-015b 接通 ToolManager 完整治理管线
+- 状态：已完成
+
+### 任务选择
+
+1. TOOL-TODO-023 已在上一原子提交中解阻 caller fixture，因此本轮可以按 project-implementation-cycle 继续推进 015b，而不再需要额外 blocker disassembly。
+2. docs/architecture/DASALL_tools子系统详细设计.md 6.7、6.12.1 已明确 015b 的唯一目标是把既有 Registry、Validator、PolicyGate、RouteSelector 串进 ToolManager 主链，不提前落到 runtime 生产 caller、BuiltinExecutorLane 或 compensation 主链。
+3. 015a 已提供 ToolManager 骨架与注入点，所以本轮应优先复用既有依赖对象与 module-local hook，而不是新造 shared contract 或 public ABI。
+
+### 改动
+
+1. 更新 tools/src/ToolManager.cpp，把 `run_invoke_pipeline()` 从 skeleton stub 改为完整治理链：descriptor resolve、request validate、requested-domain derive、PolicyGate fail-closed admission、RouteSelector lane 选择、executor 调用、Observation/ObservationDigest 投影与 route facts/evidence refs 收口。
+2. 在同一实现中增加 module-local 默认 executor / projector，用于在 016/017/018 完成前提供最小闭环；`DryRun` / `ValidateOnly` 不进入真实 executor，而是生成 non-executing `ToolResult`。
+3. 保持 `invoke_batch()` 入口不变，但让每个 request 真正经过完整治理链；高风险 request 的 deny 不再阻断同批次后续 read-only request 的成功执行。
+4. 保留 compensation 主链为 stub，明确 015b 只完成 invoke 主链，不提前侵入 6.8/6.12.2 的补偿执行细节。
+5. 更新 tests/unit/tools/ToolManagerSkeletonTest.cpp，把原 skeleton stub 断言调整为“缺失 runtime context 时 fail-closed”。
+6. 更新 tests/unit/tools/ToolManagerBatchInvokeTest.cpp，验证 batch 中前序 deny 不阻断后续成功 request，且 executor 只命中 admitted request。
+7. 新增 tests/unit/tools/ToolManagerPipelineTest.cpp，验证单请求成功路径能贯通 registry / validation / policy / route / execute / projection / audit。
+8. 新增 tests/unit/tools/ToolManagerFailurePathTest.cpp，覆盖 descriptor missing、policy confirmation deny、RouteUnavailable 三条 fail-closed 路径。
+9. 更新 tests/unit/tools/CMakeLists.txt 与 tests/unit/CMakeLists.txt，把新增 ToolManager pipeline/failure tests 纳入 unit 目标。
+10. 更新 docs/todos/tools/DASALL_tools子系统专项TODO.md，把 TOOL-TODO-015b 标记为 Done，并修正 L2 粒度评估中仍停留在“治理链未接通”的旧描述。
+
+### 测试
+
+1. 定向构建：
+   - `cmake --build build-ci --target dasall_tool_manager_skeleton_unit_test dasall_tool_manager_batch_invoke_unit_test`
+   - `cmake --build build-ci --target dasall_tool_manager_pipeline_unit_test dasall_tool_manager_failure_path_unit_test`
+2. 定向验证：
+   - `ctest --test-dir build-ci --output-on-failure -R "ToolManager(Skeleton|Pipeline|FailurePath|BatchInvoke)Test"`
+3. 正式验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit`
+4. 结果摘要：
+   - ToolManager 相关 4 个定向 unit tests 全部通过。
+   - 全量 unit 回归通过，`272/272` 全绿。
+
+### 结果
+
+1. ToolManager 已从“仅有入口 skeleton”推进到“具备完整治理链主流程”，并能在 caller fixture 约束下输出统一 `ToolInvocationEnvelope`、Observation 与 ObservationDigest。
+2. PolicyGate 现在消费 ToolManager 推导出的 requested execution domain，而不是误用 `ToolInvocationContext.caller_domain` 作为最终 lane 语义；这与 023 的文档收敛保持一致。
+3. batch 语义已经固定为 request 级隔离：单请求 deny、descriptor missing 或 route unavailable 不会污染同批次其它 request 的执行结果。
+
+### 下一步
+
+1. 进入 TOOL-TODO-016、017、018，把 015b 阶段的默认 executor / projector 替换成真实 ToolServiceBridge、BuiltinExecutorLane 与 ResultProjector。
+2. 随后推进 TOOL-TODO-025，用 integration smoke 验证 builtin -> services -> ToolResult -> ObservationDigest 的最小闭环。
+
+### 风险
+
+1. 当前默认 executor / projector 仍是 module-local fallback，只适合 015b 阶段的治理链接线验证；如果后续不及时由 016/017/018 替换，可能形成与真实 lane/projector 并存的技术债。
+2. compensation 主链仍未实现；后续任务必须避免把 invoke 主链已通误读为整个 ToolManager 生命周期都已完成。
+
 ## 记录 #315
 
 - 日期：2026-04-16
