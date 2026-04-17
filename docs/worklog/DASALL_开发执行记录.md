@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #344
+
+- 日期：2026-04-17
+- 阶段：memory/专项 TODO 阶段 A
+- 任务：MEM-TODO-002 补齐 Summary 生成 supporting objects
+- 状态：已完成
+
+### 任务选择
+
+1. MEM-TODO-002 是 001 完成后的下一条最小可执行原子任务；它直接解除 `ISummarizer` 与 `CompressionCoordinator` 阶段 2 的 supporting object 缺口，不需要等待 003 / 004 的 ownership 收敛。
+2. 本地证据显示 `docs/architecture/DASALL_memory子系统详细设计.md` 的 6.5.3b 与 6.12.2 已经补齐 `SummaryGenerationRequest`、`SummaryGenerationResult`、`SummaryProjection` 的 schema、module-local 边界、fallback 与增量合并语义，但专项 TODO 仍停留在 `NotStarted` 与 `MEM-BLK-02` 未解状态；本轮最小动作是同步专项 TODO 的粒度评估、任务状态、阻塞表以及下游任务的 blocker 引用。
+3. 外部参考继续采用 Martin Fowler 的 Data Transfer Object 模式：summary request/result 与中间 projection 适合作为 façade / collaborator 间的 module-local transfer objects，从而把传输与中间视图语义留在 memory 内部，而不是扩写 shared contracts。
+
+### 改动
+
+1. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-002` 标记为 `Done`；
+   - 同步 4.1 / 4.2 对 Summary supporting objects 与 `CompressionCoordinator` 缺口的粒度判断；
+   - 将 `MEM-BLK-02` 回写为已解除，并把当前活跃 blocker 收缩为 `MEM-BLK-03 ~ 05`；
+   - 清理 `MEM-TODO-009`、`MEM-TODO-009A`、`MEM-TODO-012`、`MEM-TODO-018` 中对 `MEM-BLK-01 / 02` 的陈旧引用；
+   - 更新顶部当前结论与 11.1 ~ 11.3 的可执行性描述，避免后续继续把 Summary supporting object gap 误判为未解前置。
+2. 更新本条 worklog，记录 002 的任务选择、验证命令与解阻结果。
+
+### 测试
+
+1. 文档一致性验证：
+   - `rg -n "SummaryGenerationRequest|SummaryGenerationResult|SummaryProjection" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md`
+2. 结果：
+   - 命中详设 6.5.3 / 6.5.3b、6.3.1、6.12.2 与专项 TODO 6.1 / 8 / 11 相关段落；
+   - `SummaryGenerationRequest`、`SummaryGenerationResult`、`SummaryProjection` 已不再只是接口签名引用，schema、fallback、增量合并与 module-local 边界均可检索确认。
+
+### 结果
+
+1. `MEM-TODO-002` 已完成，`MEM-BLK-02` 已解除；`MEM-TODO-009A` 与 `MEM-TODO-018` 不再受 Summary supporting object 缺口阻塞。
+2. Memory 详设当前对 Summary supporting objects 的边界已经固定为：`SummaryProjection` 只作为 `ISummarizer` 与 `CompressionCoordinator` 间的 module-local 中间对象，最终摘要持久化仍由 `CompressionCoordinator` 映射为 `SummaryMemory` 并走 store surface。
+3. 本轮不新增 architecture 补丁，而是以已落盘的 6.5.3b / 6.12.2 作为设计交付物，同步专项 TODO 的状态、blocker 与下游任务可执行性，消除“详设已补、TODO 未收口”的执行偏差。
+
+### 下一步
+
+1. 进入 `MEM-TODO-003`，收敛 `CompressionCoordinator` 的 persistence dependency 到唯一可执行口径。
+
+### 风险
+
+1. `MEM-TODO-003 ~ 004` 仍未完成，`CompressionCoordinator` 的持久化依赖与 `WorkingMemoryBoard` ownership 仍不能被误判为已解阻。
+2. 本轮只消除了 Summary supporting object 缺口，不等于 `ISummarizer` 接口、Compression 主链或 writeback 主链已经 ready。
+
 ## 记录 #343
 
 - 日期：2026-04-17
