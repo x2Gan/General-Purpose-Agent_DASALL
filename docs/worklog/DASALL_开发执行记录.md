@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #341
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 G
+- 任务：TOOL-TODO-041 验证 ToolProfileIntegration 与 tools discoverability Gate
+- 状态：已完成
+
+### 任务选择
+
+1. 040 已把 skill runtime / plugin skill bundle integration 收口，阶段 G 剩下的最小动作就是把 profile compatibility 与 discoverability 两个残余门禁补成自动化证据，而不是继续依赖 012 的 unit projection 结论。
+2. 9.1 与 9.2 已明确 041 需要同时覆盖 desktop_full vs edge_minimal 的 timeout / visibility / allowed domains 差异，以及 `ctest -N` 的 tools discoverability，因此本轮必须补一条黑盒 integration test，并用 build-ci 命令回收正式 Gate 证据。
+3. 本轮只触及一条 integration test 与最小 CMake 注册，范围保持在 041，不把全量 Gate 总回写提前并入同一提交。
+
+### 改动
+
+1. 新增 `tests/integration/tools/ToolProfileIntegrationTest.cpp`：
+   - 构造 `desktop_full` 与 `edge_minimal` 两组 `RuntimePolicySnapshot` / `BuildProfileManifest`；
+   - 断言 builtin / mcp / workflow timeout、`max_tool_calls`、`allowed_tool_domains`、`tool_visibility_rules`、`stale_read_allowed` 的 profile 差异；
+   - 通过 `ToolPolicyGate` 断言 profile 差异会真实改变 mcp domain gate 与 builtin visibility gate 的准入结果。
+2. 更新 `tests/integration/tools/CMakeLists.txt`，新增 `dasall_tool_profile_integration_test`。
+3. 新增 `docs/todos/tools/deliverables/TOOL-TODO-041-ToolProfileIntegration与discoverability-gate收敛.md`，沉淀 041 的目标、测试覆盖与验证证据。
+4. 更新 tools 详设与专项 TODO，回写 Gate-TOOL-09 / Gate-TOOL-10 已具备自动化证据的当前基线。
+
+### 测试
+
+1. CMake Tools 辅助：
+   - `Build_CMakeTools`
+   - `RunCtest_CMakeTools` tests: `ToolProfileIntegrationTest`
+2. build-ci 正式 gate：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_tool_profile_integration_test`
+   - `ctest --test-dir build-ci --output-on-failure -L integration -R ToolProfileIntegrationTest`
+   - `ctest --test-dir build-ci -N | rg "ToolInvocationContextSurfaceTest|ToolProfileIntegrationTest|ToolPluginSkillBundleIntegrationTest|ToolServicesSmokeIntegrationTest"`
+3. 结果：
+   - `dasall_tool_profile_integration_test` 构建通过；
+   - `ToolProfileIntegrationTest` 在 CMake Tools 与 build-ci 两条路径下均通过；
+   - build-ci `ctest -N` 可同时发现 tools unit 与 integration 入口；
+   - 历史 `DartConfiguration.tcl` 噪声仍只出现在开发期 CMake Tools 输出，不影响 041 通过结论。
+
+### 结果
+
+1. Gate-TOOL-09 的 profile compatibility 现在已有黑盒 integration 证据，desktop_full 与 edge_minimal 的策略差异不再只依赖 unit 层字段比对。
+2. Gate-TOOL-10 的 discoverability 现在已有 build-ci `ctest -N` 证据，tools unit / integration 入口已经具备正式门禁支撑。
+3. 041 完成后，tools 专项剩余工作收敛为 042 的 Gate 与交付证据总回写，不再缺少实现或测试基座。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-042`，汇总回写 tools 专项 Gate 通过结论、残余风险和命令证据，完成阶段 G 收口。
+
+### 风险
+
+1. build-ci 的 discoverability 证据只证明测试入口存在，不替代全量聚合 gate；042 仍需补 unit / contract / integration 聚合命令的总证据回写。
+2. `ToolMetricsBridge.cpp` 的未用函数告警是既有 warning-clean 问题，不属于 041 的改动范围；后续若要消除编译告警，应单列任务处理。
+
 ## 记录 #340
 
 - 日期：2026-04-17

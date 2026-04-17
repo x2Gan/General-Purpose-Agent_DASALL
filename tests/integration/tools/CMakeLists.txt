@@ -42,6 +42,13 @@ dasall_add_tools_integration_test(
 )
 
 dasall_add_tools_integration_test(
+  dasall_tool_profile_integration_test
+  ToolProfileIntegrationTest
+  ToolProfileIntegrationTest.cpp
+  "integration;tools"
+)
+
+dasall_add_tools_integration_test(
   dasall_tool_plugin_skill_bundle_integration_test
   ToolPluginSkillBundleIntegrationTest
   ToolPluginSkillBundleIntegrationTest.cpp

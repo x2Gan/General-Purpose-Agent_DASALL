@@ -1693,7 +1693,7 @@ plugins/
 
 ### 9.3 当前基线判断
 
-以当前仓库状态看，Gate-TOOL-03 继续由 shared tool contracts 托底，Gate-TOOL-04 ~ Gate-TOOL-08 已分别由 governance core、services smoke、workflow failure、MCP hybrid、observability 自动化用例覆盖。剩余待补门为 Gate-TOOL-09 与 Gate-TOOL-10。
+以当前仓库状态看，Gate-TOOL-03 继续由 shared tool contracts 托底，Gate-TOOL-04 ~ Gate-TOOL-10 均已有自动化 gate 覆盖：Gate-TOOL-09 由 `ToolProfileIntegrationTest` 验证 desktop_full 与 edge_minimal 的 timeout、allowed domains、visibility 与 stale-read 差异投影，Gate-TOOL-10 由 build-ci `ctest -N` 的 tools unit/integration discoverability 证据托底。历史 `DartConfiguration.tcl` 噪声仍只出现在开发期 CMake Tools 输出，不影响正式 Gate 结论。
 
 ---
 
