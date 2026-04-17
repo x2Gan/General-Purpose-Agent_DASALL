@@ -1,0 +1,9 @@
+workflow_id: external.github.runtime-incident
+intent_keywords:
+  - runtime incident
+  - service degradation
+tool_allowlist:
+  - runtime.inspect_status
+  - runtime.collect_logs
+  - knowledge.summarize_findings
+fallback_mode: builtin-summary

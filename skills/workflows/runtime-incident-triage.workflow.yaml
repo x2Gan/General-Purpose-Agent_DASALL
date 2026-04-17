@@ -1,0 +1,26 @@
+workflow_id: skill.runtime-incident-triage
+entry_step_ids:
+  - inspect_status
+steps:
+  - inspect_status
+  - collect_logs
+  - summarize_findings
+step.inspect_status.tool_name: runtime.inspect_status
+step.inspect_status.route_kind: LocalTool
+step.inspect_status.timeout_ms: 1500
+step.collect_logs.tool_name: runtime.collect_logs
+step.collect_logs.route_kind: LocalTool
+step.collect_logs.timeout_ms: 1800
+step.collect_logs.depends_on:
+  - inspect_status
+step.summarize_findings.tool_name: knowledge.summarize_findings
+step.summarize_findings.route_kind: LocalTool
+step.summarize_findings.depends_on:
+  - inspect_status
+  - collect_logs
+binding.inspect_status.summary.target_step_id: summarize_findings
+binding.inspect_status.summary.target_argument_key: runtime_summary
+binding.collect_logs.logs.target_step_id: summarize_findings
+binding.collect_logs.logs.target_argument_key: recent_logs
+delegation_mode: Disabled
+max_delegate_steps: 0

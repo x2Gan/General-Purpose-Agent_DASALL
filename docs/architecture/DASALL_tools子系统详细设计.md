@@ -1501,6 +1501,15 @@ flowchart LR
   WP --> WE["WorkflowEngine"]
 ```
 
+##### Skill 资产基线（TOOL-TODO-036）
+
+1. internal normalized 资产根固定为 `skills/specs/`、`skills/workflows/`、`skills/evals/`；首个 canonical sample 固定为 `runtime-incident-triage.skill.yaml`、`runtime-incident-triage.workflow.yaml`、`runtime-incident-triage.eval.yaml`，用于后续 037~040 的 register / instantiate / import / integration 回归。
+2. external dialect fixture 固定为 `skills/external_dialects/claude/runtime-incident/` 与 `skills/external_dialects/github/runtime-incident/`，两者都以 `SKILL.md` 为入口，并通过相对路径引用同目录下的 `workflow.yaml`、`eval.yaml` 与 `reference.md` supporting files。
+3. external importer 的开关在 v1 保持 module-local `external_skill_import_enabled`，由 importer 依赖注入或测试夹具显式提供，默认关闭；本轮不新增 `RuntimePolicySnapshot`、`BuildProfileManifest` 或 profile YAML 的顶层 schema。
+4. GitHub-style sample 只冻结本仓库当前采用的 `SKILL.md + YAML frontmatter` 子集，以及 `tool-allowlist`、`workflow-template`、`eval-suite` 这类 importer-local sample keys；这不等于承诺兼容任意外部 GitHub Agent skill 方言。
+5. Claude-style sample 对齐官方 `SKILL.md + YAML frontmatter + supporting files` 目录布局；其中 `workflow`、`eval_suite` 仅作为 DASALL importer fixture 扩展键存在，不改变上游工具的公开规范。
+6. 上述样本的目标是为 039 的 `parse_frontmatter()`、`normalize_assets()` 与 040 的 plugin skill bundle integration 提供 deterministic fixture；在 importer feature flag 未显式打开前，runtime 继续只消费 internal `skills/specs/` 资产。
+
 #### 6.12.6 配置投影、健康与观测桥接组件
 
 调研学习结论：
@@ -1643,7 +1652,7 @@ plugins/
 |---|---|---|---|---|
 | runtime 生产 caller 尚未冻结（tools-side fixture 已定义） | Phase 0-2 | runtime 能以 ToolRequest 调用 ToolManager，或沿用 6.5.1.1 的 caller fixture 完成 tools-side 验证 | 以 `ToolInvocationContext` + ToolManager 本地依赖注入组成 caller fixture，`BuildProfileManifest` 不进入 context | 保持 tools 仅由测试夹具调用，不提前接 runtime 生产链 |
 | MCP loopback server / plugin stdio launch 样本待 Build 落地（031 已补齐方案） | Phase 4 | 6.12.3 中定义的最小握手/列表/调用 fixture 与 launch sample 能落到 tests/mocks / integration | 在 tests/mocks 增加 `MCPLoopbackServerFixture.h`，并以 `launch_spec_ref` 指向 loopback sample | 若 Build 未就绪，暂时禁用 `tools_mcp` 路径，只验证 builtin/workflow |
-| 外部 Skill 规范样本缺失 | Phase 5 | 至少提供 1 组 normalized skill 资产和 1 组外部方言样本 | 先实现 internal SkillSpec parser，再补 external importer | 若外部 importer 不稳定，保持只支持内部 `skills/specs/` |
+| 外部 Skill 规范样本缺失（已由 TOOL-TODO-036 解阻） | Phase 5 | `skills/specs/`、`skills/workflows/`、`skills/evals/` 与 external dialect fixture 已落盘，且 module-local importer flag 边界明确 | 保持 036 冻结的 sample shape 与 module-local feature flag，继续推进 037~040 Build 落地 | 若外部 importer 不稳定，保持只支持内部 `skills/specs/` |
 | services result 语义后续调整 | Phase 2-4 | Execution/Data 公共对象与 ResultMapper 字段保持稳定 | 以 ToolServiceBridge 做 module-local 映射层，不直接耦合 adapter receipt 细节 | 若 services 变更，先改 bridge，不回滚 Tool shared contracts |
 | CMake Tools 预设未激活 | 全阶段验证 | build-ci configure/build/ctest 能稳定执行 | 统一使用显式 build-ci 验收链 | IDE target/test 列表异常不改变 Gate 结论 |
 | tools 与 infra/plugin 间 extension ABI 缺失 | Phase 1/4/5 | 冻结 IToolPluginProvider 与 ToolPluginExtensionCatalog 最小语义 | 先补 PluginExtensionBridge 单测，再接 builtin/MCP/skill 扩展源 | 暂以静态注册、仓内 `skills/specs/`、非 plugin MCP 配置继续推进 |
@@ -1711,7 +1720,7 @@ plugins/
 | workflow 能力 | 在 builtin 闭环稳定后再引入 WorkflowEngine | 先限制为单批次串行或小规模批次并发 |
 | MCP 能力 | 先在 desktop_full/cloud_full 打开 `tools_mcp=true`，edge_minimal 保持 false | 先接单个 loopback server，再接 plugin-delivered stdio server，远程 socket server 继续走 deployment config |
 | stale snapshot 回退 | 先在 edge_minimal 验证 `stale_read_allowed=true`，desktop_full 保持更严格策略 | 通过 ToolProfileIntegrationTest 固定差异 |
-| external skill importer | 先只支持内部 normalized assets，再引入 plugin-delivered skill bundle，最后引入 `.github/skills` / `.claude/skills` 方言 | importer 默认 behind feature flag |
+| external skill importer | 先只支持内部 normalized assets，再引入 plugin-delivered skill bundle，最后引入 `.github/skills` / `.claude/skills` 方言 | importer 默认 behind module-local feature flag，且不新增 profile schema |
 
 ### 10.3 后续版本扩展预留点
 
@@ -1733,7 +1742,7 @@ plugins/
 | TOOL-BLK-002 | runtime 生产 caller 尚未冻结（023 已定义 tools-side fixture） | runtime 生产主链仍无法直接接 tools，但 tools 侧单测/设计 gate 已可继续 | runtime 能发起 ToolRequest，或沿用 6.5.1.1 的 caller fixture 验证 tools-side 闭环 | 在 tests/mocks 中构造 ToolInvocationContext，并由 ToolManager 本地依赖注入补充 BuildProfileManifest / capability / executor hooks |
 | TOOL-BLK-003 | tests/integration/tools 拓扑缺失（已由 TOOL-TODO-024 解阻） | tools integration discoverability 已恢复，不再阻塞 MCP / skill integration gate | 保持顶层 integration 接线与 `ctest -N` 可发现性 | 若 discoverability 回退，先修复 tests/integration/tools 拓扑 |
 | TOOL-BLK-004 | MCP loopback / plugin stdio launch 样本方案缺失（已由 TOOL-TODO-031 解阻） | 032~035 现已具备统一 fixture / sample 设计锚点，只剩 Build 落地与测试注册 | 按 6.12.3 中的 `MCPLoopbackServerFixture` + `launch_spec_ref` 样本方案实现 MCP 子域代码 | 在 Build 未落地前继续保持 `tools_mcp=false` 的 builtin/workflow rollout |
-| TOOL-BLK-005 | external skill 样本与归一化资产缺失 | Skill importer 无法验证真实方言兼容 | 提供至少 1 组 internal spec 与 1 组 external sample | 只支持内部 `skills/specs/`，关闭 importer |
+| TOOL-BLK-005 | external skill 样本与归一化资产缺失（已由 TOOL-TODO-036 解阻） | 037~040 现已具备统一 internal/external sample 与 feature flag 设计锚点，只剩 Build 落地与集成验证 | 保持 `skills/specs/`、`skills/workflows/`、`skills/evals/` 与 `skills/external_dialects/*` sample shape，不把 importer flag 提升为 profile schema | 在 039/040 落地前继续只默认支持 internal `skills/specs/`，外部 importer 保持关闭 |
 | TOOL-BLK-006 | CMake Tools 预设可能未激活 | IDE 内 target/test 可能为空，影响 discoverability 观察 | 显式 build-ci configure/build/ctest 路径跑通 | 以显式命令链作为唯一 Gate 基线 |
 
 ### 11.2 风险与回退策略

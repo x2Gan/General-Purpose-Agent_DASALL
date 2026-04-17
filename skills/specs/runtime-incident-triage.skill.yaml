@@ -1,0 +1,23 @@
+skill_id: internal.runtime-incident-triage
+version: 1
+name: runtime-incident-triage
+description: Diagnose runtime incidents with a fixed read-mostly workflow and a bounded tool allowlist.
+intent_patterns:
+  - diagnose runtime incident
+  - investigate runtime failure
+  - explain runtime degradation
+tags:
+  - runtime
+  - diagnostics
+allowed_tools:
+  - runtime.inspect_status
+  - runtime.collect_logs
+  - knowledge.summarize_findings
+profile_constraints:
+  - desktop_full
+  - cloud_full
+required_domains:
+  - runtime
+workflow_template_ref: skills/workflows/runtime-incident-triage.workflow.yaml
+eval_suite_ref: skills/evals/runtime-incident-triage.eval.yaml
+fallback_mode: builtin-summary

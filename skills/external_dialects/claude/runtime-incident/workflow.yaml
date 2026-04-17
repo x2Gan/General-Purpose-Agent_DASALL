@@ -1,0 +1,9 @@
+workflow_id: external.claude.runtime-incident
+intent_keywords:
+  - runtime triage
+  - degradation review
+allowed_tools:
+  - runtime.inspect_status
+  - runtime.collect_logs
+  - knowledge.summarize_findings
+fallback_mode: reject

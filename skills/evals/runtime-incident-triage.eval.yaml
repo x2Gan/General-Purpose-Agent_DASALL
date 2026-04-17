@@ -1,0 +1,15 @@
+suite_id: eval.runtime-incident-triage
+skill_id: internal.runtime-incident-triage
+expected_workflow_id: skill.runtime-incident-triage
+positive_prompts:
+  - diagnose runtime incident after deploy
+  - investigate service degradation with recent logs
+negative_prompts:
+  - deploy the application to production
+  - delete the failed worker
+assertions:
+  - matches_skill
+  - workflow_plan_bound
+  - allowlist_is_subset
+notes:
+  - external importer remains feature-gated

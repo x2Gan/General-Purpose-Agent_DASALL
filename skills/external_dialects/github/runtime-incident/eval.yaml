@@ -1,0 +1,8 @@
+suite_id: external.github.runtime-incident
+positive_prompts:
+  - investigate runtime failure with recent logs
+negative_prompts:
+  - deploy a production hotfix now
+assertions:
+  - importer_normalizes_skill
+  - importer_keeps_feature_flag

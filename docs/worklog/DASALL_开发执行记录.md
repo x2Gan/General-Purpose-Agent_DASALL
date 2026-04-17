@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #336
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 F
+- 任务：TOOL-TODO-036 补齐 internal SkillSpec 与 external dialect 样本资产
+- 状态：已完成
+
+### 任务选择
+
+1. 036 是 037~040 的显式 blocker recovery 任务；在 `TOOL-BLK-005` 未解开前，SkillRegistry、SkillRuntime、ExternalSkillImporter 与 plugin skill bundle integration 都没有可追溯的 deterministic 输入资产。
+2. 6.12.5 已经冻结 Skill 运行时对象边界，但仓库此前没有 `skills/specs/`、`skills/workflows/`、`skills/evals/` 与 external dialect sample，因此本轮的最小动作是先补样本与 feature flag 口径，而不是提前写 parser/registry 代码。
+3. profiles schema 当前没有 external skill importer 的正式模块键，本轮只能把 importer 开关收敛为 module-local flag，不能借 036 擅自新增 `RuntimePolicySnapshot` 或 `BuildProfileManifest` schema。
+
+### 改动
+
+1. 新增 internal normalized 样本：
+   - `skills/specs/runtime-incident-triage.skill.yaml`
+   - `skills/workflows/runtime-incident-triage.workflow.yaml`
+   - `skills/evals/runtime-incident-triage.eval.yaml`
+2. 新增 Claude-style external dialect fixture：
+   - `skills/external_dialects/claude/runtime-incident/SKILL.md`
+   - `skills/external_dialects/claude/runtime-incident/workflow.yaml`
+   - `skills/external_dialects/claude/runtime-incident/eval.yaml`
+   - `skills/external_dialects/claude/runtime-incident/reference.md`
+3. 新增 GitHub-style external dialect fixture：
+   - `skills/external_dialects/github/runtime-incident/SKILL.md`
+   - `skills/external_dialects/github/runtime-incident/workflow.yaml`
+   - `skills/external_dialects/github/runtime-incident/eval.yaml`
+   - `skills/external_dialects/github/runtime-incident/reference.md`
+4. 更新 `docs/architecture/DASALL_tools子系统详细设计.md`，新增 6.12.5 下的“Skill 资产基线（TOOL-TODO-036）”小节，固定 internal/external 样本路径、supporting files 形态、GitHub/Claude sample 差异与 module-local importer feature flag 边界。
+5. 新增 `docs/todos/tools/deliverables/TOOL-TODO-036-internal-SkillSpec与external-dialect样本资产收敛.md`，沉淀本地证据、外部参考、Design->Build 映射与 D Gate 结论。
+6. 更新 `docs/todos/tools/DASALL_tools子系统专项TODO.md`，把 TOOL-TODO-036 标记为 Done，并把 `TOOL-BLK-005` 回写为“已由 036 解阻但 external importer 默认仍关闭”的状态。
+
+### 测试
+
+1. 文档一致性：
+   - `rg -n "SkillSpecAsset|ExternalSkillImporter|skills/specs|ToolSkillRuntimeIntegrationTest|ToolPluginSkillBundleIntegrationTest" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md`
+2. 资产落盘：
+   - `test -d skills/specs && test -d skills/workflows && test -d skills/evals`
+   - `test -f skills/specs/runtime-incident-triage.skill.yaml`
+   - `test -f skills/external_dialects/claude/runtime-incident/SKILL.md`
+   - `test -f skills/external_dialects/github/runtime-incident/SKILL.md`
+
+### 结果
+
+1. `TOOL-BLK-005` 已被正式解开，037~040 现在可以基于同一组 internal/external 样本推进 parser、registry、runtime 与 integration，而不需要临时捏造测试输入。
+2. external importer 的开关仍保持 module-local 默认关闭，避免在 036 里偷渡新的 profile schema 或误写产品级兼容结论。
+3. GitHub-style 与 Claude-style sample 都已经以 `SKILL.md + supporting files` 的形式落盘，后续 039 可以直接围绕 frontmatter 解析、相对路径引用与 quarantine 分支补单测。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-037`，实现 `SkillRegistry`，并以 036 新增的 internal sample 作为 register/match/revoke 的 deterministic 输入。
+
+### 风险
+
+1. 当前 external sample 仍然只是 importer fixture，不代表 DASALL 已承诺通用外部 skill 方言兼容；039 必须显式验证 feature flag 关闭和 malformed frontmatter 的 quarantine 分支。
+2. internal workflow sample 目前刻意收敛为轻量 YAML 结构；如果 038 需要更丰富的 DAG 绑定语义，应先在 module-local parser 层扩展，而不是回头扩 shared contracts。
+
 ## 记录 #335
 
 - 日期：2026-04-16

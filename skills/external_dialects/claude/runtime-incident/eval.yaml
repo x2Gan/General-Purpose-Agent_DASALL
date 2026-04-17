@@ -1,0 +1,8 @@
+suite_id: external.claude.runtime-incident
+positive_prompts:
+  - diagnose runtime incident after deploy
+negative_prompts:
+  - restart every worker immediately
+assertions:
+  - importer_normalizes_skill
+  - importer_preserves_allowlist
