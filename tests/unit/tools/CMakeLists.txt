@@ -298,6 +298,18 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_external_skill_importer_unit_test
+	ExternalSkillImporterTest.cpp
+	ExternalSkillImporterTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_plugin_skill_bundle_importer_unit_test
+	PluginSkillBundleImporterTest.cpp
+	PluginSkillBundleImporterTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_skill_runtime_instantiate_unit_test
 	SkillRuntimeInstantiateTest.cpp
 	SkillRuntimeInstantiateTest

@@ -29,6 +29,9 @@ target_sources(dasall_tools
     src/registry/BuiltinCatalog.cpp
     src/registry/MCPBindingRegistry.cpp
     src/route/ToolRouteSelector.cpp
+    src/skills/ExternalSkillImporter.cpp
+    src/skills/PluginSkillBundleImporter.cpp
+    src/skills/SkillImportSupport.cpp
     src/skills/SkillRegistry.cpp
     src/skills/SkillRuntime.cpp
     src/validation/ToolValidator.cpp

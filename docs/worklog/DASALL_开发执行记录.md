@@ -1,5 +1,64 @@
 # DASALL 开发执行记录
 
+## 记录 #339
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 F
+- 任务：TOOL-TODO-039 实现 ExternalSkillImporter 与 PluginSkillBundleImporter
+- 状态：已完成
+
+### 任务选择
+
+1. 038 已把 skill runtime 的 instantiate/bind 基座补齐，039 的最小动作就是把 external dialect fixture 与 plugin bundle 入口真正归一化成 `SkillSpecAsset`，而不是继续让 036 的样本只停留在文档和静态目录里。
+2. 6.12.5 已经明确 importer 只负责解析、归一化和 quarantine，不直接注册到 runtime，也不宣称产品级兼容，因此本轮必须把范围限制在 importer + plugin bundle import，而不能提前把 integration gate 混进同一提交。
+3. 本轮新增了两条 unit tests，所以除了 importer 自身验证外，还需要复跑 037/038 的 registry/runtime 基线，并额外确认新增测试已进入 discoverability。
+
+### 改动
+
+1. 新增 `tools/src/skills/SkillImportSupport.h` 与 `tools/src/skills/SkillImportSupport.cpp`：
+   - 提供轻量 YAML/key-value 解析、路径解析、asset ref 归一化和 identifier/token 工具；
+   - 只服务 039 的 module-local importer，不扩 shared contracts。
+2. 新增 `tools/src/skills/ExternalSkillImporter.h` 与 `tools/src/skills/ExternalSkillImporter.cpp`：
+   - 定义 `SkillImportDiagnostic`、`ParsedSkillFrontmatter`、`SkillImporterOptions`、`SkillImportResult`；
+   - 落地 `import_directory()`、`parse_frontmatter()`、`normalize_assets()`、`emit_diagnostics()`；
+   - 支持 GitHub-style / Claude-style sample 通过 `SKILL.md` frontmatter 与 supporting workflow/eval 归一化为 `SkillSpecAsset`。
+3. 新增 `tools/src/skills/PluginSkillBundleImporter.h` 与 `tools/src/skills/PluginSkillBundleImporter.cpp`：
+   - 对 normalized internal bundle 读取 `.skill.yaml`；
+   - 对 external dialect bundle 委托 `ExternalSkillImporter`；
+   - 保持 plugin `source_key` 透传，并把错误输入 quarantine。
+4. 更新 `tools/CMakeLists.txt`，把三份 039 新增源文件接入 `dasall_tools`。
+5. 新增 `tests/unit/tools/ExternalSkillImporterTest.cpp` 与 `tests/unit/tools/PluginSkillBundleImporterTest.cpp`，并更新 `tests/unit/tools/CMakeLists.txt` 注册新的 importer unit targets。
+6. 更新 tools 详设、专项 TODO 与本条 worklog，回写 importer / plugin bundle import 当前实现基线与 039 的验证证据。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `ExternalSkillImporterTest`, `PluginSkillBundleImporterTest`, `SkillRegistryTest`, `SkillRegistryPriorityTest`, `SkillRuntimeInstantiateTest`
+3. discoverability：
+   - `ListTests_CMakeTools`
+4. 结果：
+   - `dasall_tools` 与新增 importer unit targets 构建通过；
+   - `ExternalSkillImporterTest`、`PluginSkillBundleImporterTest`、`SkillRegistryTest`、`SkillRegistryPriorityTest`、`SkillRuntimeInstantiateTest` 全部通过；
+   - `ListTests_CMakeTools` 可发现两条新增 importer unit tests；
+   - 历史 `DartConfiguration.tcl` 噪声仍存在，不影响通过结论。
+
+### 结果
+
+1. skill 运行时现在已经具备 external dialect -> normalized asset 与 plugin bundle -> normalized asset 的真实导入路径，040 后续只剩 load/unload/source revoke 与 runtime/register 闭环的 integration 验证。
+2. external importer 仍在 module-local feature flag 后，避免把 039 的 sample fixture 误写成已承诺的通用方言兼容能力。
+3. 039 保持了职责边界：importer 只做 frontmatter/supporting-file 解析和 quarantine，不在 importer 内直接注册到 SkillRegistry，也不执行 workflow。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-040`，验证 `ToolSkillRuntimeIntegrationTest` 与 `ToolPluginSkillBundleIntegrationTest`，把 internal skill 实例化、plugin skill bundle 接线、feature flag 与 source-scoped revoke 组成黑盒闭环。
+
+### 风险
+
+1. 当前 importer parser 故意保持轻量，只覆盖 036 冻结的 sample key 子集；040 若遇到 fixture 扩展需求，应继续在 module-local parser 层演进，而不是把字段扩到 shared contracts。
+2. `PluginSkillBundleImporter` 目前只覆盖 normalized internal bundle 与 external dialect bundle 两条最小路径；更复杂的 plugin 资产布局需要先在 040 验证 lifecycle 和 revoke，再决定是否扩展。
+
 ## 记录 #338
 
 - 日期：2026-04-17
