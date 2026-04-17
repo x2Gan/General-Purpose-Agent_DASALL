@@ -1252,7 +1252,7 @@ private:
 struct MemoryManagerDeps {
   std::unique_ptr<IContextOrchestrator> context_orchestrator;
   std::unique_ptr<WritebackCoordinator> writeback_coordinator;
-  std::unique_ptr<IWorkingMemoryBoard> working_memory_board;
+  std::unique_ptr<IWorkingMemoryBoard> working_memory_board;  // 仅供 init/export/shutdown 路径使用，不承担 write_back owner
   std::unique_ptr<IMemoryStore> memory_store;
   std::unique_ptr<MemoryMaintenanceWorker> maintenance_worker;  // 可选
 };
@@ -1261,7 +1261,7 @@ struct MemoryManagerDeps {
 5. **关键执行流**：
    - `init`：校验 config → 调用 `memory_store->open(config)` → schema migration → 初始化 WorkingMemoryBoard → 启动可选 MaintenanceWorker → 切换到 Running 状态。
    - `prepare_context`：`enforce_lifecycle(Running)` → 转发至 `context_orchestrator->assemble(request)` → 返回 `ContextAssemblyResult`。
-  - `write_back`：`enforce_lifecycle(Running)` → 转发至 `writeback_coordinator->persist(request)` → 直接返回 `WritebackResult`。WorkingMemoryBoard 更新的唯一 owner 为 `WritebackCoordinator`，MemoryManager 不再重复修改黑板状态。
+  - `write_back`：`enforce_lifecycle(Running)` → 转发至 `writeback_coordinator->persist(request)` → 直接返回 `WritebackResult`。WorkingMemoryBoard 更新的唯一 owner 为 `WritebackCoordinator`，MemoryManager 不再重复修改黑板状态；`working_memory_board` 依赖在该 facade 中仅用于 init/export/shutdown 等非 writeback mutation 场景。
   - `export_working_memory_snapshot`：`enforce_lifecycle(Running)` → 读取 `WorkingMemoryExportRequest` → 调用 `working_memory_board->export_snapshot(request.session_id)` 生成 `WorkingMemorySnapshot` → 由 `MemoryManager` 封装 `WorkingMemoryExportResult` 返回给 runtime。
    - `shutdown`：切换到 ShuttingDown → 停止 MaintenanceWorker → drain pending writes → 最终 WAL checkpoint → 关闭 SQLite 连接 → 切换到 Stopped。
 6. **失败与回退语义**：`init` 失败返回具体 `ResultCode`（`SchemaMismatch`、`StorageUnavailable`、`ConfigInvalid`），不允许调用其他方法。`shutdown` 中若有活跃事务则等待超时后强制关闭，记录 warning 审计事件。析构函数中检测到未 shutdown 则 best-effort 关闭并记录 warning。任何主链路方法在非 Running 状态调用均返回 `RuntimeRetryExhausted` 语义错误。

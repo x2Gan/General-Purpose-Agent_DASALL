@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #346
+
+- 日期：2026-04-17
+- 阶段：memory/专项 TODO 阶段 A
+- 任务：MEM-TODO-004 收敛 WorkingMemoryBoard 更新 ownership
+- 状态：已完成
+
+### 任务选择
+
+1. MEM-TODO-004 是 A 阶段最后一个未完成的补设计原子任务；它直接决定 `MemoryManager` 与 `WritebackCoordinator` 在 Build 阶段的职责归属，若不先冻结 owner，`MemoryManagerLifecycleTest` 与 `WritebackCoordinatorCoreTest` 的实现边界会继续漂移。
+2. 本地证据显示 `docs/architecture/DASALL_memory子系统详细设计.md` 的 6.12.1 与 6.12.3 已经把 `WritebackCoordinator` 写成 `WorkingMemoryBoard` 更新唯一 owner，`MemoryManager` 仅负责 facade 转发与 export snapshot；但专项 TODO 仍停留在 `MEM-TODO-004` / `MEM-BLK-04` 未解状态，且 `MemoryManagerDeps` 中的 blackboard 依赖用途没有写得足够窄。本轮最小动作是补上这条显式边界，并同步专项 TODO 的 blocker / 粒度状态。
+3. 本轮不再引入新的外部参考，直接以详设 6.12.1 / 6.12.3 的 owner 约束和仓库既有分层边界作为唯一设计事实来源。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_memory子系统详细设计.md`：
+   - 在 `MemoryManagerDeps` 中显式说明 `working_memory_board` 依赖仅用于 init/export/shutdown，不承担 writeback owner；
+   - 在 6.12.1 `MemoryManager.write_back` 关键执行流补充 facade 边界说明，进一步固定 `WritebackCoordinator` 为唯一 mutation owner。
+2. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-004` 标记为 `Done`；
+   - 同步 4.1 / 4.2 对 `MemoryManager`、`WritebackCoordinator` 与 ownership gap 的粒度判断；
+   - 将 `MEM-BLK-04` 回写为已解除，并清理 `MEM-TODO-011`、`MEM-TODO-021` 中对该 blocker 的陈旧引用；
+   - 更新 5.1、7.1、8、11 等总览段落，使 A 阶段补设计解阻状态与当前可执行结论一致。
+3. 更新本条 worklog，记录 004 的任务选择、验证命令与 owner 收敛结论。
+
+### 测试
+
+1. 文档一致性验证：
+   - `rg -n "MemoryManager|WritebackCoordinator|update_working_board|WorkingMemoryBoard 更新" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md`
+2. 结果：
+   - 命中 6.12.1 `MemoryManager.write_back`、6.12.3 `WritebackCoordinator.update_working_board`、专项 TODO 6.1 / 6.2 / 8 / 11 相关段落；
+   - `WritebackCoordinator` 已稳定为 WorkingMemoryBoard 更新唯一 owner，`MemoryManager` 只保留 facade 转发与 export snapshot 边界。
+
+### 结果
+
+1. `MEM-TODO-004` 已完成，`MEM-BLK-04` 已解除；`MEM-TODO-011` 与 `MEM-TODO-021` 不再受 ownership 重复声明阻塞。
+2. Memory 详设当前对 writeback 链路的 owner 边界已经固定为：`MemoryManager` 负责生命周期与 facade 转发，所有 WorkingMemory mutation 统一经 `WritebackCoordinator::update_working_board()` 执行。
+3. A 阶段补设计解阻 `MEM-TODO-001 ~ 004` 至此全部完成，memory 专项 TODO 当前仅剩 `MEM-BLK-05` 这个 concrete vector backend 评审 blocker。
+
+### 下一步
+
+1. 进入 `MEM-TODO-005` 等 Build-ready 公共 surface 任务，并在适当时机处理 `MEM-TODO-023` 的 concrete vector backend 评审。
+
+### 风险
+
+1. `MEM-BLK-05` 仍未完成，vector backend 默认策略未冻结前，`MEM-TODO-023 / 029` 仍不能被误判为 ready。
+2. 本轮只完成 owner 收敛，不等于 `MemoryManager`、`WritebackCoordinator` 或 `WorkingMemoryBoard` 的代码实现已经落盘。
+
 ## 记录 #345
 
 - 日期：2026-04-17
