@@ -1466,6 +1466,7 @@ Skill 运行时核心对象建议保持如下分层：
 5. 关键执行流：接收内部 `skills/specs/` 与 plugin/importer 归一化后的资产，建立按 intent pattern、tags、profile constraints 的索引，再按请求语义返回最佳匹配或空结果。
 6. 失败与回退语义：非法或不完整资产必须被隔离；空匹配不是错误，只表示当前无合适 skill；不允许在 registry 内部做模糊降级执行。
 7. 测试与验收出口：推荐单测为 `SkillRegistryTest.cpp`、`SkillRegistryPriorityTest.cpp`；验收标准是 register/match/revoke 的索引一致性可自动断言。
+8. 当前 Build 基线已在 `tools/src/skills/SkillRegistry.cpp` 落地 `register_asset()`、`match_intent()`、`revoke_source()`、`list_assets()` 四个入口，采用 source-scoped snapshot-and-swap 发布与稳定 tie-break；registry 仍只接受 normalized asset，不旁路解析 external dialect。
 
 ##### SkillRuntime
 

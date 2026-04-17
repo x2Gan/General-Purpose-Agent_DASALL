@@ -29,7 +29,7 @@ target_sources(dasall_tools
     src/registry/BuiltinCatalog.cpp
     src/registry/MCPBindingRegistry.cpp
     src/route/ToolRouteSelector.cpp
-    src/skills/placeholder.cpp
+    src/skills/SkillRegistry.cpp
     src/validation/ToolValidator.cpp
   PUBLIC
     FILE_SET public_headers

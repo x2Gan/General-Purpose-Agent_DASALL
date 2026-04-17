@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #337
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 F
+- 任务：TOOL-TODO-037 实现 SkillRegistry
+- 状态：已完成
+
+### 任务选择
+
+1. 036 已把 internal/external sample 和 `TOOL-BLK-005` 的边界收敛完成，037 的最小动作就是把 normalized `SkillSpecAsset` 真正接入 tools 运行时代码，而不是继续停留在 `tools/src/skills/placeholder.cpp`。
+2. 6.12.5 已经明确 SkillRegistry 只负责 register/match/revoke，不解析外部方言、不执行 workflow，因此本轮必须把范围限定在 normalized asset catalog，而不能把 importer/runtime 逻辑一起塞进同一提交。
+3. 本轮同时触及了 unit test 注册，所以除了定向测试通过，还必须额外检查 `ctest -N` discoverability，避免新用例只编译不入门禁。
+
+### 改动
+
+1. 新增 `tools/src/skills/SkillRegistry.h` 与 `tools/src/skills/SkillRegistry.cpp`：
+   - 定义 `SkillSpecAsset`、`SkillMatchQuery`、`SkillMatchResult`、`SkillRegistrySnapshot`；
+   - 落地 `register_asset()`、`match_intent()`、`revoke_source()`、`list_assets()`；
+   - 采用 source-scoped snapshot-and-swap 发布与稳定 tie-break；
+   - 保持 registry 只接受 normalized asset，不旁路解析 external dialect。
+2. 更新 `tools/CMakeLists.txt`，把 `src/skills/SkillRegistry.cpp` 接入 `dasall_tools`，替代原先 skills placeholder 的编译入口。
+3. 新增 `tests/unit/tools/SkillRegistryTest.cpp`：
+   - 验证 register / upsert / revoke；
+   - 验证 flattened list view 与 snapshot revision 更新；
+   - 验证 runtime incident query 能匹配到 internal incident skill。
+4. 新增 `tests/unit/tools/SkillRegistryPriorityTest.cpp`：
+   - 验证更高 specificity 的 incident skill 优先于泛化 runtime skill；
+   - 验证 profile mismatch 走 `skill.match.profile_filtered` fail-closed 路径。
+5. 更新 `tests/unit/tools/CMakeLists.txt`，新增 `dasall_skill_registry_unit_test` 与 `dasall_skill_registry_priority_unit_test` 两个 tools unit targets。
+6. 更新 tools 详设、专项 TODO 与本条 worklog，回写 SkillRegistry 当前实现基线与 037 的验证证据。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `SkillRegistryTest`, `SkillRegistryPriorityTest`
+3. discoverability：
+   - `ctest --test-dir build/vscode-linux-ninja -N | rg "SkillRegistry(Test|PriorityTest)"`
+4. 结果：
+   - `dasall_tools` 构建成功，且我引入的 `SkillMatchResult` 初始化告警已清理；
+   - `SkillRegistryTest`、`SkillRegistryPriorityTest` 全部通过；
+   - `ctest -N` 可发现两条新增 tools unit tests；
+   - 历史 `DartConfiguration.tcl` 噪声仍存在，不影响通过结论。
+
+### 结果
+
+1. Skill 运行时现在已有真正的 normalized asset catalog，038 可以直接消费 `SkillMatchResult` 和 `SkillSpecAsset` 实例化 `SkillInstance`，不需要再临时拼 catalog。
+2. 039 后续只需把 external dialect / plugin bundle 归一化到 `SkillSpecAsset` 再注册即可，不需要回头修改 registry 的 source ownership 或匹配契约。
+3. 037 保持了职责边界：registry 只表达资产事实和匹配结果，不替代 runtime 做 workflow 执行、route 决策或 importer 解析。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-038`，实现 `SkillRuntime`，把 `SkillMatchResult` 绑定到 workflow template 和 tool allowlist。
+
+### 风险
+
+1. 当前匹配算法故意保持轻量，主要服务 deterministic gate；如果后续引入更复杂 ranking，需要保持 stable tie-break 与 `profile_filtered` fail-closed 语义不变。
+2. 037 仍未读取真实 `skills/specs/` 文件；039 若引入 loader/importer，必须继续把文件解析与 registry 注册分层，而不是把 IO 重新塞进 registry。
+
 ## 记录 #336
 
 - 日期：2026-04-17

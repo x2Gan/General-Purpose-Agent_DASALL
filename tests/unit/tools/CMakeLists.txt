@@ -286,6 +286,18 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_skill_registry_unit_test
+	SkillRegistryTest.cpp
+	SkillRegistryTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_skill_registry_priority_unit_test
+	SkillRegistryPriorityTest.cpp
+	SkillRegistryPriorityTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_workflow_cyclic_rejection_unit_test
 	WorkflowCyclicRejectionTest.cpp
 	WorkflowCyclicRejectionTest
