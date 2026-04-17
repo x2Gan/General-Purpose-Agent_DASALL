@@ -1,5 +1,62 @@
 # DASALL 开发执行记录
 
+## 记录 #338
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 F
+- 任务：TOOL-TODO-038 实现 SkillRuntime
+- 状态：已完成
+
+### 任务选择
+
+1. 037 已把 normalized `SkillSpecAsset` catalog 落进代码，038 的最小动作就是把匹配结果进一步绑定成 `SkillInstance` 与 `WorkflowPlan`，而不是继续停留在“只会 match 不会 instantiate”的半成品状态。
+2. 6.12.5 已经明确 SkillRuntime 只负责实例化与计划生成，不解析 external dialect、不直接执行 workflow，因此本轮必须把范围限制在 runtime bind，而不能提前把 importer 或 integration gate 混进同一提交。
+3. 本轮同时触及了 unit test 注册，所以除了定向测试通过，还必须额外检查新增 `SkillRuntimeInstantiateTest` 已进入 discoverability，避免只编译不入门禁。
+
+### 改动
+
+1. 新增 `tools/src/skills/SkillRuntime.h` 与 `tools/src/skills/SkillRuntime.cpp`：
+   - 定义 `SkillInstance`、`SkillInstantiateResult`；
+   - 落地 `instantiate()`、`bind_workflow_template()`、`build_tool_allowlist()`、`release_instance()`；
+   - 以 module-local YAML 绑定器读取 036 的 canonical workflow sample，生成 `WorkflowPlan` 与 step-level `ToolIR`；
+   - 保持 runtime 只消费 normalized asset，不旁路 external importer 或 workflow 执行职责。
+2. 更新 `tools/CMakeLists.txt`，把 `src/skills/SkillRuntime.cpp` 接入 `dasall_tools`。
+3. 新增 `tests/unit/tools/SkillRuntimeInstantiateTest.cpp`：
+   - 验证实例化成功后返回 `SkillInstance` 与 `WorkflowPlan`；
+   - 验证 allowlist 会按 policy domain 收敛；
+   - 验证 policy denial 会保留 fallback strategy 与 denied tool 列表。
+4. 更新 `tests/unit/tools/CMakeLists.txt`，新增 `dasall_skill_runtime_instantiate_unit_test`。
+5. 更新 tools 详设、专项 TODO 与本条 worklog，回写 SkillRuntime 当前实现基线与 038 的验证证据。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `SkillRegistryTest`, `SkillRegistryPriorityTest`, `SkillRuntimeInstantiateTest`
+3. discoverability：
+   - `ListTests_CMakeTools`
+4. 结果：
+   - `dasall_tools` 与新增 unit target 构建通过，新增 `SkillRuntime` 代码保持 warning-clean；
+   - `SkillRegistryTest`、`SkillRegistryPriorityTest`、`SkillRuntimeInstantiateTest` 全部通过；
+   - `ListTests_CMakeTools` 可发现 `SkillRuntimeInstantiateTest`；
+   - 历史 `DartConfiguration.tcl` 噪声仍存在，不影响通过结论。
+
+### 结果
+
+1. Skill runtime 现在已经具备从 `SkillMatchResult` 到 `SkillInstance`、`WorkflowPlan` 的真实运行时绑定链，040 后续可以直接围绕 integration 黑盒闭环补强，而不必再回头补 runtime 基座。
+2. 039 后续只需把 external dialect / plugin bundle 归一化到 `SkillSpecAsset`，即可直接复用当前 runtime 做实例化与 workflow bind，不需要另建第二套 skill 执行入口。
+3. 038 保持了职责边界：runtime 只做实例化、allowlist 收敛和 workflow bind，不替代 WorkflowEngine 执行 step，也不旁路 policy / route 的后续裁定。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-039`，实现 `ExternalSkillImporter` 与 `PluginSkillBundleImporter`，把 036 的 external dialect fixture 与 plugin bundle 入口归一化到 `SkillSpecAsset`。
+
+### 风险
+
+1. 当前 workflow template 绑定器故意保持轻量，只覆盖 036 冻结的 canonical YAML shape；039/040 若需要更复杂的 DAG 元数据，必须继续在 module-local parser 层扩展，而不是把临时字段塞进 shared contracts。
+2. `SkillRuntime` 当前只消费 workflow ref，不负责目录扫描；039 引入 importer 时必须继续维持“解析/归一化”和“实例化/绑定”分层，避免把 IO/方言逻辑重新塞回 runtime。
+
 ## 记录 #337
 
 - 日期：2026-04-17

@@ -298,6 +298,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_skill_runtime_instantiate_unit_test
+	SkillRuntimeInstantiateTest.cpp
+	SkillRuntimeInstantiateTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_workflow_cyclic_rejection_unit_test
 	WorkflowCyclicRejectionTest.cpp
 	WorkflowCyclicRejectionTest

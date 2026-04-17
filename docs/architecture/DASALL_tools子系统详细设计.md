@@ -202,7 +202,7 @@ Must-Not：
 | tool 单元测试 | 缺失 | tests/unit/tools/CMakeLists.txt 仅为占位 | 当前无 InterfaceSurface、Registry、PolicyGate、RouteSelector、Workflow 等单测 |
 | tool 集成测试 | 缺失 | tests/integration 下无 tools/ 目录 | 当前无 Tool -> Services / MCP / Workflow 集成路径 |
 | tool 契约测试 | 部分存在 | tests/contract/tool/* | 仅覆盖共享对象边界，不覆盖模块行为 |
-| Skill 运行时 | 缺失 | 工作区无 SkillRegistry/SkillRuntime 生产代码 | 当前只有架构与研究文档，不具备真实运行时 |
+| Skill 运行时 | 部分存在 | `tools/src/skills/SkillRegistry.cpp`、`tools/src/skills/SkillRuntime.cpp` 已落地，external importer 与 integration gate 仍待完成 | 当前已具备 normalized match -> instantiate -> workflow bind 基线，但 external dialect / plugin skill bundle 闭环尚未完成 |
 | MCP 运行时 | 已存在 | `tools/src/mcp/CapabilityCache.cpp`、`CapabilityDiscovery.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPServerLauncher.cpp`、`StdioMCPTransport.cpp` 以及 `ToolMCPFallbackIntegrationTest.cpp`、`ToolPluginStdioMCPIntegrationTest.cpp` 已形成闭环 | hybrid stdio MCP 运行闭环已具备，但 generic MCP 对外 rollout 仍需单独评审 |
 | plugin -> tools 扩展桥接 | 缺失 | 工作区无 PluginExtensionBridge、IToolPluginProvider 等生产代码 | 当前无法通过 infra/plugin 注入额外 builtin tool、stdio MCP、skill assets |
 | ToolRoute 实现 | 缺失 | 工作区无 ToolRoute/RouteSelector 生产代码 | builtin 与 MCP 的混合路由尚未闭环 |
@@ -226,7 +226,7 @@ Must-Not：
 | Workflow 编排 | 缺失 | 无 StepGraph、批次调度、失败收口逻辑 | High | P1 |
 | MCP 发现、缓存、回退 | 部分存在 | handshake、snapshot、stale read、binding refresh、plugin `launch_spec_ref` 解析已落地；fallback integration gate 仍待实现 | High | P1 |
 | plugin 扩展载体接线 | 缺失 | 无 active plugin import、plugin unload invalidation、plugin source traceability | High | P1 |
-| Skill 资产运行时 | 缺失 | 无 SkillSpec parser、SkillRegistry、SkillRuntime、external importer | Medium | P1 |
+| Skill 资产运行时 | 部分存在 | `SkillRegistry`、`SkillRuntime` 已落地，但 external importer、plugin skill bundle 接线与 integration gate 仍缺 | Medium | P1 |
 | ResultProjector 与 Digest 写出 | 缺失 | 无 ToolResult -> Observation/ObservationDigest 投影逻辑 | High | P0 |
 | 可观测与审计闭环 | 缺失 | 无 log/metric/trace/audit bridge | High | P0 |
 | Unit / Integration Gate | 缺失 | tests/unit/tools 与 tests/integration/tools 为空 | High | P0 |
@@ -1477,6 +1477,7 @@ Skill 运行时核心对象建议保持如下分层：
 5. 关键执行流：先基于 match result 和 profile 过滤出允许工具集，再绑定 workflow template、prompt bundle 和 fallback strategy，最后生成 `SkillInstance` 与 `WorkflowPlan` 交给 WorkflowEngine。
 6. 失败与回退语义：若 skill 所需工具被 policy 拒绝，SkillRuntime 只能按 fallback strategy 降级或拒绝实例化；缺失 workflow template 时不能临时拼装执行计划。
 7. 测试与验收出口：推荐单测为 `SkillRuntimeInstantiateTest.cpp`；集成验收继续以 `ToolSkillRuntimeIntegrationTest` 为主出口。
+8. 当前 Build 基线已在 `tools/src/skills/SkillRuntime.h`、`tools/src/skills/SkillRuntime.cpp` 落地 `instantiate()`、`bind_workflow_template()`、`build_tool_allowlist()`、`release_instance()` 四个入口；runtime 目前只消费 normalized `SkillSpecAsset` 与 internal workflow sample，通过 module-local YAML 绑定器生成 `WorkflowPlan`，仍不旁路 external importer 或 workflow 执行职责。
 
 ##### ExternalSkillImporter
 

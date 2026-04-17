@@ -30,6 +30,7 @@ target_sources(dasall_tools
     src/registry/MCPBindingRegistry.cpp
     src/route/ToolRouteSelector.cpp
     src/skills/SkillRegistry.cpp
+    src/skills/SkillRuntime.cpp
     src/validation/ToolValidator.cpp
   PUBLIC
     FILE_SET public_headers
