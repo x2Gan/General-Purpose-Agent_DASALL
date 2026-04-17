@@ -240,7 +240,7 @@ MCPAdapter::MCPAdapter(MCPAdapterDependencies dependencies)
 
 MCPServerSession MCPAdapter::ensure_session(const MCPServerSpec& spec) {
   {
-    std::lock_guard<std::mutex> guard(sessions_mutex_);
+    std::shared_lock<std::shared_mutex> guard(sessions_mutex_);
     const auto existing = sessions_by_server_.find(spec.server_id);
     if (existing != sessions_by_server_.end() && existing->second.transport &&
         existing->second.transport->is_connected() &&
@@ -268,7 +268,7 @@ MCPServerSession MCPAdapter::ensure_session(const MCPServerSpec& spec) {
     return MCPServerSession{};
   }
 
-  std::lock_guard<std::mutex> guard(sessions_mutex_);
+  std::unique_lock<std::shared_mutex> guard(sessions_mutex_);
   auto existing = sessions_by_server_.find(spec.server_id);
   if (existing != sessions_by_server_.end() && existing->second.transport &&
       existing->second.transport != transport) {
@@ -456,7 +456,7 @@ MCPServerSession MCPAdapter::perform_handshake(
 
 std::optional<MCPAdapter::SessionRecord> MCPAdapter::resolve_session_record(
     const MCPServerSession& session) const {
-  std::lock_guard<std::mutex> guard(sessions_mutex_);
+  std::shared_lock<std::shared_mutex> guard(sessions_mutex_);
   const auto found = sessions_by_server_.find(session.server_id);
   if (found == sessions_by_server_.end()) {
     return std::nullopt;

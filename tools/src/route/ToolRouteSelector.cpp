@@ -4,6 +4,18 @@
 
 namespace dasall::tools::route {
 
+namespace {
+
+constexpr int kBuiltinBaseScore = 60;
+constexpr int kBuiltinRouteHintBonus = 20;
+constexpr int kBuiltinReadOnlyBonus = 5;
+
+constexpr int kMCPBaseScore = 50;
+constexpr int kMCPRoutePreferenceBonus = 25;
+constexpr int kMCPFreshSnapshotBonus = 15;
+
+}  // namespace
+
 ToolRouteSelector::ToolRouteSelector(execution::ExecutorLanePool lane_pool)
     : lane_pool_(std::move(lane_pool)) {}
 
@@ -74,12 +86,12 @@ int ToolRouteSelector::score_builtin_candidate(
     return 0;
   }
 
-  auto score = 60;
+  auto score = kBuiltinBaseScore;
   if (tool_ir.route.has_value() && *tool_ir.route == contracts::ToolIRRoute::LocalTool) {
-    score += 20;
+    score += kBuiltinRouteHintBonus;
   }
   if (descriptor.is_read_only.value_or(false)) {
-    score += 5;
+    score += kBuiltinReadOnlyBonus;
   }
 
   return score;
@@ -113,12 +125,12 @@ int ToolRouteSelector::score_mcp_candidate(
     return 0;
   }
 
-  auto score = 50;
+  auto score = kMCPBaseScore;
   if (prefers_mcp(tool_ir)) {
-    score += 25;
+    score += kMCPRoutePreferenceBonus;
   }
   if (capability_snapshot->freshness == tools::CapabilityFreshness::fresh) {
-    score += 15;
+    score += kMCPFreshSnapshotBonus;
   }
 
   return score;

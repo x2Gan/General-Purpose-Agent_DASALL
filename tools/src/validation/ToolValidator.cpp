@@ -86,7 +86,17 @@ contracts::ToolIR ToolValidator::inject_defaults(
 }
 
 std::string ToolValidator::normalize_arguments(std::string_view arguments_payload) const {
-  return trim_ascii(arguments_payload);
+  auto trimmed = trim_ascii(arguments_payload);
+  if (trimmed.empty()) {
+    return trimmed;
+  }
+  const char first = trimmed.front();
+  if (first != '{' && first != '[' && first != '"' &&
+      first != 't' && first != 'f' && first != 'n' &&
+      !(first >= '0' && first <= '9') && first != '-') {
+    return std::string();
+  }
+  return trimmed;
 }
 
 std::optional<contracts::ToolIROperation> ToolValidator::derive_operation(

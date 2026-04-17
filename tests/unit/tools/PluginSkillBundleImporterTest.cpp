@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -57,9 +58,13 @@ void test_internal_bundle_import_reads_normalized_skill_assets() {
       "skills/specs",
       std::string("dasall.skill.v1")));
 
-  assert_equal(1, static_cast<int>(result.imported_assets.size()),
-               "normalized internal plugin bundle should import the canonical .skill.yaml asset");
-  const auto& asset = result.imported_assets.front();
+  assert_equal(2, static_cast<int>(result.imported_assets.size()),
+               "normalized internal plugin bundle should import the canonical .skill.yaml assets");
+  const auto it = std::find_if(result.imported_assets.begin(), result.imported_assets.end(),
+      [](const auto& a) { return a.asset_ref.find("runtime-incident-triage") != std::string::npos; });
+  assert_true(it != result.imported_assets.end(),
+              "internal bundle should contain the runtime-incident-triage skill asset");
+  const auto& asset = *it;
   assert_equal(std::string("plugin:runtime.bundle"), asset.source_key,
                "internal plugin bundle import should preserve the plugin source key");
   assert_equal(std::string("skills/specs/runtime-incident-triage.skill.yaml"), asset.asset_ref,
@@ -77,9 +82,13 @@ void test_external_bundle_import_delegates_to_external_importer() {
       "skills/external_dialects/github",
       std::string("github.skills")));
 
-  assert_equal(1, static_cast<int>(result.imported_assets.size()),
+  assert_equal(2, static_cast<int>(result.imported_assets.size()),
                "external plugin bundle should delegate to ExternalSkillImporter when the feature flag is enabled");
-  const auto& asset = result.imported_assets.front();
+  const auto it = std::find_if(result.imported_assets.begin(), result.imported_assets.end(),
+      [](const auto& a) { return a.name == "runtime-incident"; });
+  assert_true(it != result.imported_assets.end(),
+              "delegated external bundle should contain the runtime-incident skill asset");
+  const auto& asset = *it;
   assert_equal(std::string("plugin:runtime.bundle"), asset.source_key,
                "delegated external bundle import should preserve the plugin source key");
   assert_equal(std::string("runtime-incident"), asset.name,

@@ -1,0 +1,15 @@
+suite_id: eval.device-health-check
+skill_id: internal.device-health-check
+expected_workflow_id: skill.device-health-check
+positive_prompts:
+  - check device health after firmware update
+  - run diagnostics on edge sensor node
+negative_prompts:
+  - reboot the device immediately
+  - factory reset the hardware
+assertions:
+  - matches_skill
+  - workflow_plan_bound
+  - allowlist_is_subset
+notes:
+  - external importer remains feature-gated

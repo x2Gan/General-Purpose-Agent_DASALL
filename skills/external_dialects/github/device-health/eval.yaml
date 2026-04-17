@@ -1,0 +1,8 @@
+suite_id: external.github.device-health
+positive_prompts:
+  - run device diagnostics on edge node
+negative_prompts:
+  - factory reset the hardware now
+assertions:
+  - importer_normalizes_skill
+  - importer_keeps_feature_flag

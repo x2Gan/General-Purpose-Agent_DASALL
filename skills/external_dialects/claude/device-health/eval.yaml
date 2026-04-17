@@ -1,0 +1,8 @@
+suite_id: external.claude.device-health
+positive_prompts:
+  - check device health after firmware update
+negative_prompts:
+  - reboot the device immediately
+assertions:
+  - importer_normalizes_skill
+  - importer_preserves_allowlist

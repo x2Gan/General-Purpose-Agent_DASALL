@@ -320,3 +320,15 @@ dasall_add_tools_behavior_test(
 	WorkflowCyclicRejectionTest.cpp
 	WorkflowCyclicRejectionTest
 )
+
+dasall_add_tools_behavior_test(
+	dasall_tool_validator_boundary_unit_test
+	ToolValidatorBoundaryTest.cpp
+	ToolValidatorBoundaryTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_capability_cache_concurrency_unit_test
+	CapabilityCacheConcurrencyTest.cpp
+	CapabilityCacheConcurrencyTest
+)

@@ -1,0 +1,26 @@
+workflow_id: skill.device-health-check
+entry_step_ids:
+  - poll_sensors
+steps:
+  - poll_sensors
+  - collect_diagnostics
+  - generate_health_report
+step.poll_sensors.tool_name: device.poll_sensors
+step.poll_sensors.route_kind: LocalTool
+step.poll_sensors.timeout_ms: 2000
+step.collect_diagnostics.tool_name: device.collect_diagnostics
+step.collect_diagnostics.route_kind: LocalTool
+step.collect_diagnostics.timeout_ms: 3000
+step.collect_diagnostics.depends_on:
+  - poll_sensors
+step.generate_health_report.tool_name: knowledge.generate_health_report
+step.generate_health_report.route_kind: LocalTool
+step.generate_health_report.depends_on:
+  - poll_sensors
+  - collect_diagnostics
+binding.poll_sensors.readings.target_step_id: generate_health_report
+binding.poll_sensors.readings.target_argument_key: sensor_readings
+binding.collect_diagnostics.report.target_step_id: generate_health_report
+binding.collect_diagnostics.report.target_argument_key: diagnostics_data
+delegation_mode: Disabled
+max_delegate_steps: 0

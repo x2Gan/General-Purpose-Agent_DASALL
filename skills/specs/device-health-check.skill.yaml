@@ -1,0 +1,26 @@
+skill_id: internal.device-health-check
+version: 1
+name: device-health-check
+description: Perform a non-destructive device health assessment via sensor polling, diagnostics collection, and status report generation.
+intent_patterns:
+  - check device health
+  - run device diagnostics
+  - inspect hardware sensor readings
+tags:
+  - device
+  - diagnostics
+  - health
+allowed_tools:
+  - device.poll_sensors
+  - device.collect_diagnostics
+  - knowledge.generate_health_report
+profile_constraints:
+  - edge_minimal
+  - edge_balanced
+  - desktop_full
+required_domains:
+  - device
+  - knowledge
+workflow_template_ref: skills/workflows/device-health-check.workflow.yaml
+eval_suite_ref: skills/evals/device-health-check.eval.yaml
+fallback_mode: builtin-summary

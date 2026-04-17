@@ -129,12 +129,12 @@ using dasall::tools::manager::ToolExecutionRequest;
 			result_code,
 			reason_code,
 			stage);
+	envelope.evidence_refs = std::vector<std::string>{
+			"stage:" + stage,
+			"reason:" + reason_code,
+	};
 	envelope.failure_reason_code = std::move(reason_code);
 	envelope.route_facts = std::move(route_facts);
-	envelope.evidence_refs = std::vector<std::string>{
-			"stage:" + std::move(stage),
-			"reason:" + *envelope.failure_reason_code,
-	};
 	return envelope;
 }
 

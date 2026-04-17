@@ -16,15 +16,12 @@ target_sources(dasall_tools
     src/mcp/MCPLane.cpp
     src/mcp/StdioMCPServerLauncher.cpp
     src/mcp/StdioMCPTransport.cpp
-    src/mcp/placeholder.cpp
     src/ops/ToolAuditBridge.cpp
     src/ops/ToolHealthProbe.cpp
     src/ops/ToolMetricsBridge.cpp
     src/ops/ToolTraceBridge.cpp
-    src/ops/placeholder.cpp
     src/policy/ToolPolicyGate.cpp
     src/projection/ResultProjector.cpp
-    src/projection/placeholder.cpp
     src/registry/ToolRegistry.cpp
     src/registry/BuiltinCatalog.cpp
     src/registry/MCPBindingRegistry.cpp

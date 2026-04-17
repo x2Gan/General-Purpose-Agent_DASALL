@@ -85,9 +85,13 @@ void test_github_sample_is_normalized_to_skill_asset() {
       "skills/external_dialects/github",
       std::string("github.skills"));
 
-  assert_equal(1, static_cast<int>(result.imported_assets.size()),
-               "GitHub-style sample fixture should normalize to one skill asset");
-  const auto& asset = result.imported_assets.front();
+  assert_equal(2, static_cast<int>(result.imported_assets.size()),
+               "GitHub-style sample fixture should normalize to two skill assets");
+  const auto it = std::find_if(result.imported_assets.begin(), result.imported_assets.end(),
+      [](const auto& a) { return a.name == "runtime-incident"; });
+  assert_true(it != result.imported_assets.end(),
+              "GitHub-style sample should contain the runtime-incident skill asset");
+  const auto& asset = *it;
   assert_equal(std::string("external:github"), asset.source_key,
                "normalized asset should preserve the caller-provided source key");
   assert_equal(std::string("runtime-incident"), asset.name,
@@ -108,9 +112,13 @@ void test_claude_sample_uses_supporting_workflow_allowlist() {
       "skills/external_dialects/claude",
       std::string("claude.skills"));
 
-  assert_equal(1, static_cast<int>(result.imported_assets.size()),
-               "Claude-style sample fixture should normalize to one skill asset");
-  const auto& asset = result.imported_assets.front();
+  assert_equal(2, static_cast<int>(result.imported_assets.size()),
+               "Claude-style sample fixture should normalize to two skill assets");
+  const auto it = std::find_if(result.imported_assets.begin(), result.imported_assets.end(),
+      [](const auto& a) { return a.name == "runtime-incident"; });
+  assert_true(it != result.imported_assets.end(),
+              "Claude-style sample should contain the runtime-incident skill asset");
+  const auto& asset = *it;
   assert_equal(std::string("external:claude"), asset.source_key,
                "normalized Claude asset should preserve the caller-provided source key");
   assert_equal(std::string("reject"), asset.fallback_mode,

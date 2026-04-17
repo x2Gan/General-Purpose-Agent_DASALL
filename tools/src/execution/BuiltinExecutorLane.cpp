@@ -238,13 +238,30 @@ ToolResult BuiltinExecutorLane::execute(
                                 "tools.builtin.resolve");
   }
 
+  const auto start_ms = dependencies_.now_ms();
+  const auto deadline_ms = tool_ir.timeout_ms.has_value()
+      ? std::optional<std::int64_t>(start_ms + static_cast<std::int64_t>(*tool_ir.timeout_ms))
+      : std::nullopt;
+
+  if (deadline_ms.has_value() && start_ms >= *deadline_ms) {
+    return build_failure_result(tool_ir,
+                                execution_context,
+                                ResultCode::ProviderTimeout,
+                                "builtin.executor.deadline_already_expired",
+                                "tools.builtin.deadline");
+  }
+
+  ToolResult result;
   switch (*descriptor->category) {
     case ToolCategory::Action:
-      return dispatch_action(tool_ir, execution_context);
+      result = dispatch_action(tool_ir, execution_context);
+      break;
     case ToolCategory::Information:
-      return dispatch_query(tool_ir, execution_context);
+      result = dispatch_query(tool_ir, execution_context);
+      break;
     case ToolCategory::Diagnostic:
-      return dispatch_diagnose(tool_ir, execution_context);
+      result = dispatch_diagnose(tool_ir, execution_context);
+      break;
     case ToolCategory::Workflow:
     case ToolCategory::AgentDelegation:
     case ToolCategory::Unspecified:
@@ -255,11 +272,22 @@ ToolResult BuiltinExecutorLane::execute(
                                   "tools.builtin.dispatch");
   }
 
-  return build_failure_result(tool_ir,
-                              execution_context,
-                              ResultCode::ToolExecutionFailed,
-                              "builtin.executor.unsupported_category",
-                              "tools.builtin.dispatch");
+  const auto end_ms = dependencies_.now_ms();
+  result.duration_ms = static_cast<std::uint32_t>(end_ms - start_ms);
+
+  if (deadline_ms.has_value() && end_ms > *deadline_ms) {
+    result.success = false;
+    result.error = build_error(
+        ResultCode::ProviderTimeout,
+        "builtin.executor.deadline_exceeded",
+        "tools.builtin.deadline",
+        tool_ir.tool_name.value_or(std::string("unknown_tool")));
+    auto tags = result.tags.value_or(std::vector<std::string>{});
+    tags.push_back("deadline:exceeded");
+    result.tags = std::move(tags);
+  }
+
+  return result;
 }
 
 ToolResult BuiltinExecutorLane::dispatch_action(

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 
 #include "mcp/IMCPAdapter.h"
@@ -64,7 +65,7 @@ class MCPAdapter final : public IMCPAdapter {
       dasall::contracts::ResultCode result_code) const;
 
   MCPAdapterDependencies dependencies_;
-  mutable std::mutex sessions_mutex_;
+  mutable std::shared_mutex sessions_mutex_;
   std::map<std::string, SessionRecord> sessions_by_server_;
 };
 

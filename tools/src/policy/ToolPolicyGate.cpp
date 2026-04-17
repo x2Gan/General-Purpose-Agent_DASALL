@@ -138,6 +138,14 @@ bool ToolPolicyGate::matches_visibility_rule(
     return true;
   }
 
+  if (!selector.empty() && selector.back() == '*') {
+    const auto prefix = selector.substr(0, selector.size() - 1U);
+    if (request.tool_name.size() >= prefix.size() &&
+        std::string_view(request.tool_name).substr(0, prefix.size()) == prefix) {
+      return true;
+    }
+  }
+
   return std::find(
              request.required_scopes.begin(),
              request.required_scopes.end(),

@@ -1,0 +1,9 @@
+workflow_id: external.github.device-health
+intent_keywords:
+  - device health
+  - hardware diagnostics
+tool_allowlist:
+  - device.poll_sensors
+  - device.collect_diagnostics
+  - knowledge.generate_health_report
+fallback_mode: builtin-summary

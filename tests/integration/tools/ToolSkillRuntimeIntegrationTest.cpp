@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -59,9 +60,14 @@ void test_internal_skill_asset_import_match_and_instantiate() {
   dasall::tools::skills::SkillRuntime runtime(project_root());
 
   const auto import_result = importer.import_bundle(make_internal_bundle_ref());
-  assert_equal(1, static_cast<int>(import_result.imported_assets.size()),
-               "integration path should import the canonical internal skill bundle asset");
-  assert_true(registry.register_asset(import_result.imported_assets.front()),
+  assert_equal(2, static_cast<int>(import_result.imported_assets.size()),
+               "integration path should import the canonical internal skill bundle assets");
+  const auto asset_it = std::find_if(import_result.imported_assets.begin(),
+      import_result.imported_assets.end(),
+      [](const auto& a) { return a.asset_ref.find("runtime-incident-triage") != std::string::npos; });
+  assert_true(asset_it != import_result.imported_assets.end(),
+              "internal bundle should contain the runtime-incident-triage skill asset");
+  assert_true(registry.register_asset(*asset_it),
               "imported internal skill asset should register into SkillRegistry");
 
   const auto match_result = registry.match_intent(
@@ -80,7 +86,7 @@ void test_internal_skill_asset_import_match_and_instantiate() {
               "successful integration instantiation should return a SkillInstance");
   assert_true(instantiate_result.workflow_plan.has_value(),
               "successful integration instantiation should return a WorkflowPlan");
-  assert_equal(import_result.imported_assets.front().skill_id,
+  assert_equal(asset_it->skill_id,
                instantiate_result.instance->asset.skill_id,
                "runtime instance should preserve the imported skill id");
   assert_equal(std::string("skill.runtime-incident-triage"),

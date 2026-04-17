@@ -1,0 +1,9 @@
+workflow_id: external.claude.device-health
+intent_keywords:
+  - device health
+  - sensor diagnostics
+allowed_tools:
+  - device.poll_sensors
+  - device.collect_diagnostics
+  - knowledge.generate_health_report
+fallback_mode: reject

@@ -90,9 +90,14 @@ void test_plugin_skill_bundle_feature_flag_and_source_revoke() {
           .project_root = project_root(),
       });
   const auto enabled_result = enabled_importer.import_bundle(skill_asset_ref);
-  assert_equal(1, static_cast<int>(enabled_result.imported_assets.size()),
-               "enabled external dialect bundle should normalize into one skill asset");
-  assert_true(registry.register_asset(enabled_result.imported_assets.front()),
+  assert_equal(2, static_cast<int>(enabled_result.imported_assets.size()),
+               "enabled external dialect bundle should normalize into two skill assets");
+  const auto reg_it = std::find_if(enabled_result.imported_assets.begin(),
+      enabled_result.imported_assets.end(),
+      [](const auto& a) { return a.name == "runtime-incident"; });
+  assert_true(reg_it != enabled_result.imported_assets.end(),
+              "enabled external dialect bundle should contain the runtime-incident skill asset");
+  assert_true(registry.register_asset(*reg_it),
               "normalized plugin skill bundle should register into SkillRegistry");
   assert_equal(1, static_cast<int>(registry.list_assets().size()),
                "registered plugin skill bundle should appear in the registry list view");
