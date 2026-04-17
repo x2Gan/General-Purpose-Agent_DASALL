@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #343
+
+- 日期：2026-04-17
+- 阶段：memory/专项 TODO 阶段 A
+- 任务：MEM-TODO-001 补齐 WorkingMemory 导出对象定义
+- 状态：已完成
+
+### 任务选择
+
+1. MEM-TODO-001 是 memory 阶段 A 中最早且可二值判定的原子任务；它不依赖 002~004 的 summary / ownership 收敛，可单独完成并直接解除 MEM-BLK-01。
+2. 本地证据显示 `docs/architecture/DASALL_memory子系统详细设计.md` 的 6.5.3a 与 6.12.1 已经补齐 `WorkingMemoryExportRequest/Result` 的字段、owner 和 facade 包装语义，但 `docs/todos/memory/DASALL_memory子系统专项TODO.md` 仍停留在 `NotStarted` 与 `MEM-BLK-01` 未解状态；本轮最小动作是同步专项 TODO 的粒度评估、任务状态、阻塞表与后续执行建议。
+3. 外部参考采用 Martin Fowler 的 Data Transfer Object 模式：request/result envelope 适合由 facade 承接，底层组件只暴露纯数据载体；这与 memory 中“`MemoryManager` 包装导出结果、`IWorkingMemoryBoard` 只产出 `WorkingMemorySnapshot`”的边界一致。
+
+### 改动
+
+1. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-001` 标记为 `Done`；
+   - 同步 4.1 / 4.2 对 `WorkingMemoryExportRequest/Result` 与 `IMemoryManager` 的粒度判断；
+   - 将 `MEM-BLK-01` 回写为已解除，并显式列出当前剩余活跃 blocker；
+   - 更新顶部当前结论与 11.1 ~ 11.3 的可执行性描述，避免后续继续把 001 误判为未解前置。
+2. 更新本条 worklog，记录 001 的任务选择、验证命令与解阻结果。
+
+### 测试
+
+1. 文档一致性验证：
+   - `rg -n "WorkingMemoryExportRequest|WorkingMemoryExportResult" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md`
+2. 结果：
+   - 命中详设 6.5.3 / 6.5.3a、6.6、6.12.1 与专项 TODO 6.1 / 8 / 11 相关段落；
+   - `WorkingMemoryExportRequest/Result` 已不再只是接口签名引用，字段、owner、返回语义与建议落点均可检索确认。
+
+### 结果
+
+1. `MEM-TODO-001` 已完成，`MEM-BLK-01` 已解除；`MEM-TODO-009`、`MEM-TODO-011` 与 `MEM-TODO-012` 不再受 export supporting object 缺口阻塞。
+2. Memory 详设当前对 export 路径的 owner 边界已经固定为：`IWorkingMemoryBoard` 只负责 `WorkingMemorySnapshot`，`MemoryManager` 负责 export request/result envelope 与 runtime-facing 返回语义。
+3. 本轮不新增 architecture 补丁，而是以已落盘的 6.5.3a / 6.12.1 作为设计交付物，同步专项 TODO 的状态和 blocker 口径，消除“详设已补、TODO 未收口”的执行偏差。
+
+### 下一步
+
+1. 进入 `MEM-TODO-002`，补齐 `SummaryGenerationRequest`、`SummaryGenerationResult` 与 `SummaryProjection` 的专项 TODO 回链和 blocker 收口。
+
+### 风险
+
+1. `MEM-TODO-002 ~ 004` 仍未完成，`ISummarizer` supporting objects、`CompressionCoordinator` persistence dependency 与 `WorkingMemoryBoard` ownership 仍不能被误判为已解阻。
+2. 本轮只消除了 export supporting object 缺口，不等于 memory 公共接口、WorkingMemory 实现或 writeback 主链已经 ready。
+
 ## 记录 #342
 
 - 日期：2026-04-17

@@ -1,9 +1,9 @@
 # DASALL Memory 子系统专项 TODO
 
-最近更新时间：2026-04-16  
+最近更新时间：2026-04-17（完成 MEM-TODO-001）  
 阶段：Detailed Design -> Special TODO  
 适用范围：memory/  
-当前结论：Memory 子系统已具备 L3/L2 混合粒度的专项拆分条件；公共接口、supporting types、WorkingMemory、SQLite store、ContextOrchestrator、Writeback/Conflict、Maintenance baseline 和 tests topology 可直接进入 Build 规划，但 `WorkingMemoryExportRequest/Result`、`SummaryGenerationRequest/Result`、`CompressionCoordinator` 持久化依赖口径、`WorkingMemoryBoard` 更新 ownership、concrete vector backend 选型五项必须显式以前置补设计/评审任务解阻。
+当前结论：Memory 子系统已具备 L3/L2 混合粒度的专项拆分条件；公共接口、supporting types、WorkingMemory、SQLite store、ContextOrchestrator、Writeback/Conflict、Maintenance baseline 和 tests topology 可直接进入 Build 规划，其中 `WorkingMemoryExportRequest/Result` 已在详设 6.5.3a / 6.12.1 完成字段、owner 与返回语义收敛；当前剩余 `SummaryGenerationRequest/Result`、`CompressionCoordinator` 持久化依赖口径、`WorkingMemoryBoard` 更新 ownership、concrete vector backend 选型四项仍需以前置补设计/评审任务解阻。
 
 ## 1. 文档头
 
@@ -127,26 +127,26 @@
 
 1. L3：`MemoryContextRequest`、`ContextAssemblyResult`、`MemoryWritebackRequest`、`WritebackResult`、`MemoryConfig`、`IMemoryStore`、`IStoreTransaction`、`IContextOrchestrator`、`WorkingMemoryBoard`、`CandidateCollector`、`BudgetAllocator`、`MemoryConflictResolver`、`SqliteSchemaMigrator`、`SqliteMemoryStore`、`MemoryMaintenanceWorker`。
 2. L2：`IMemoryManager`、`MemoryManager`、`CompressionCoordinator`、`WritebackCoordinator`、`VectorMemoryIndexAdapter`。
-3. L0：`WorkingMemoryExportRequest/Result`、`SummaryGenerationRequest/Result`、`SummaryProjection`，以及两处 ownership / dependency 歧义。
+3. L0：`SummaryGenerationRequest/Result`、`SummaryProjection`，以及两处 ownership / dependency 歧义。
 
 判断依据：
 
 1. 详设已经给出完整接口清单、核心对象字段、主流程/异常流程、目录建议、测试出口和 Design -> Build 映射。
 2. 绝大多数组件都具备类名、方法名、输入输出、失败语义和建议测试名，可直接进入接口级或函数语义级拆分。
 3. 当前真正阻碍 L3 落地的不是主链缺乏设计，而是少量 supporting object 未成表，以及组件职责 ownership 仍有重复声明。
-4. 因此专项 TODO 可以直接进入执行，但必须先清掉 4 个补设计前置项和 1 个向量后端评审项。
+4. 因此专项 TODO 可以直接进入执行，但当前仍需清掉 3 个补设计前置项和 1 个向量后端评审项。
 
 ### 4.2 粒度可行性评估表（Step 2 输出）
 
 | 设计对象 | 设计锚点 | 当前粒度等级 | 已具备证据 | 缺失证据 | TODO 拆解策略 |
 |---|---|---|---|---|---|
-| `WorkingMemoryExportRequest` / `WorkingMemoryExportResult` | 6.6、6.12.1 | L0 | 仅出现在 `IMemoryManager` / `MemoryManager` 签名中 | 无字段定义、无 file/guard、无 owner 说明 | 先做补设计任务，再允许实现 `IMemoryManager.export_*` |
+| `WorkingMemoryExportRequest` / `WorkingMemoryExportResult` | 6.6、6.12.1 | L3 | 6.5.3a 已补字段、落点与 owner；6.12.1 已补 facade 包装语义 | 无明显缺口 | 作为 `IMemoryManager` supporting object 直接进入接口落盘任务 |
 | `SummaryGenerationRequest` / `SummaryGenerationResult` / `SummaryProjection` | 6.3.1、6.12.2 | L0 | `ISummarizer` 签名存在，`CompressionCoordinator` 输出提及 `SummaryProjection` | 无字段定义、无路径、无测试锚点成表 | 先做补设计任务，再推进 `ISummarizer` 和 `CompressionCoordinator` 阶段 2 |
 | `MemoryContextRequest` / `ContextAssemblyResult` | 6.5.3、6.12.2 | L3 | 字段、用途、调用链、warnings/degraded 语义明确 | 无明显缺口 | 直接拆对象定义任务 |
 | `MemoryWritebackRequest` / `WritebackResult` / `FactCandidate` / `ExperienceCandidate` | 6.5.3、6.12.3 | L3 | 字段、事务边界、partial / degraded / retryable 语义明确 | 无明显缺口 | 直接拆对象族定义任务 |
 | `MemoryConfig` 及子配置 | 6.10.1a | L3 | `StorageConfig`、`ContextConfig`、`VectorConfig`、`MaintenanceConfig` 字段完整 | 无明显缺口 | 直接拆配置模型任务 |
 | `MemoryError.h` | 6.6、6.9.2 | L2 | file path 已建议，错误域与返回语义已表述 | 具体对象/枚举名未冻结 | 以“错误域映射面”拆任务，不臆造不必要类型 |
-| `IMemoryManager` | 6.6、6.12.1 | L2 | 方法集、生命周期、失败语义和依赖注入明确 | export request/result 未定义 | 先补 export 对象，再冻结接口 |
+| `IMemoryManager` | 6.6、6.12.1 | L2 | 方法集、生命周期、失败语义、依赖注入与 export supporting objects 已明确 | 无明显缺口 | 可在 supporting types 与 include 布局任务完成后直接冻结接口 |
 | `IContextOrchestrator` | 6.6、6.12.2 | L3 | 方法、输入输出、装配顺序明确 | 无明显缺口 | 直接拆接口任务 |
 | `IMemoryStore` / `IStoreTransaction` + query types | 6.6、6.12.5 | L3 | 完整方法集合、Supporting query/result struct、事务语义明确 | 无明显缺口 | 直接拆接口与 supporting types 任务 |
 | `MemoryManager` | 6.12.1 | L2 | 生命周期、组合根、测试锚点明确 | `WorkingMemoryBoard` 更新 ownership 重复声明 | 先收敛 ownership，再实现骨架 |
@@ -210,7 +210,7 @@
 
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| MEM-TODO-001 | NotStarted | 补齐 WorkingMemory 导出对象定义 | memory 详设 6.6、6.12.1；阶段 G；编码规范 3.6/3.7 | 6.6 `IMemoryManager`；6.12.1 `MemoryManager` | L0 | 更新 `docs/architecture/DASALL_memory子系统详细设计.md` 与本专项 TODO，补成 `WorkingMemoryExportRequest/WorkingMemoryExportResult` 字段表与 owner 说明 | `WorkingMemoryExportRequest`、`WorkingMemoryExportResult` | 文档一致性：导出 request/result 字段、错误语义、调用者、落盘位置可通过文本检索命中 | `rg -n "WorkingMemoryExportRequest|WorkingMemoryExportResult" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md` | 无 | MEM-BLK-01 | 完成本任务 | 更新后的 memory 详设；更新后的本专项 TODO | 仅当 export request/result 具备字段、职责、返回语义和落盘位置，且不再只是接口签名引用时完成 |
+| MEM-TODO-001 | Done | 补齐 WorkingMemory 导出对象定义 | memory 详设 6.6、6.12.1；阶段 G；编码规范 3.6/3.7 | 6.6 `IMemoryManager`；6.12.1 `MemoryManager` | L0 | 更新 `docs/architecture/DASALL_memory子系统详细设计.md` 与本专项 TODO，补成 `WorkingMemoryExportRequest/WorkingMemoryExportResult` 字段表与 owner 说明 | `WorkingMemoryExportRequest`、`WorkingMemoryExportResult` | 文档一致性：导出 request/result 字段、错误语义、调用者、落盘位置可通过文本检索命中 | `rg -n "WorkingMemoryExportRequest|WorkingMemoryExportResult" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md` | 无 | MEM-BLK-01 | 完成本任务 | 更新后的 memory 详设；更新后的本专项 TODO；2026-04-17 已通过 `rg -n "WorkingMemoryExportRequest|WorkingMemoryExportResult" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md`，确认 6.5.3a / 6.12.1 已具备字段、owner、返回语义与落盘位置，并同步回写本专项 TODO 的 4.1 / 4.2 / 8 / 11 章节 | 仅当 export request/result 具备字段、职责、返回语义和落盘位置，且不再只是接口签名引用时完成 |
 | MEM-TODO-002 | NotStarted | 补齐 Summary 生成 supporting objects | memory 详设 6.3.1、6.12.2；MEM-E01 | 6.3.1 `ISummarizer`；6.12.2 `CompressionCoordinator` | L0 | 更新 `docs/architecture/DASALL_memory子系统详细设计.md` 与本专项 TODO，补成 `SummaryGenerationRequest`、`SummaryGenerationResult`、`SummaryProjection` schema | `SummaryGenerationRequest`、`SummaryGenerationResult`、`SummaryProjection` | 文档一致性：summarizer 输入输出、模板路径与 fallback 语义可检索 | `rg -n "SummaryGenerationRequest|SummaryGenerationResult|SummaryProjection" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md` | 无 | MEM-BLK-02 | 完成本任务 | 更新后的 memory 详设；更新后的本专项 TODO | 仅当 `ISummarizer` 的 supporting objects 成表，且 `CompressionCoordinator` 的阶段 2 输入输出不再悬空时完成 |
 | MEM-TODO-003 | NotStarted | 收敛 CompressionCoordinator 持久化依赖口径 | memory 详设 6.3、6.6、6.12.2；设计决策注记 | 6.3 组件职责；6.6 `IMemoryStore`；6.12.2 `CompressionCoordinator` | L0 | 更新 `docs/architecture/DASALL_memory子系统详细设计.md` 与本专项 TODO，统一 `CompressionCoordinator` 是依赖 `IMemoryStore`、逻辑 `SummaryRepository` port，还是独立 `SummaryRepository` 接口 | `CompressionCoordinator` 构造依赖；`SummaryRepository`；`IMemoryStore` | 文档一致性：不再同时出现“统一由 `SqliteMemoryStore` 承载”和“构造函数注入 `SummaryRepository&`”的双口径 | `rg -n "CompressionCoordinator|SummaryRepository|IMemoryStore|SqliteMemoryStore" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md` | 无 | MEM-BLK-03 | 完成本任务 | 更新后的 memory 详设；更新后的本专项 TODO | 仅当 `CompressionCoordinator` 的 persistence dependency 与 store 架构口径统一，且可直接映射到头文件 / 构造函数时完成 |
 | MEM-TODO-004 | NotStarted | 收敛 WorkingMemoryBoard 更新 ownership | memory 详设 6.12.1、6.12.3 | 6.12.1 `MemoryManager.write_back`；6.12.3 `WritebackCoordinator.update_working_board` | L0 | 更新 `docs/architecture/DASALL_memory子系统详细设计.md` 与本专项 TODO，明确 `WorkingMemoryBoard` 更新由 `MemoryManager` 或 `WritebackCoordinator` 单点负责 | `MemoryManager.write_back`；`WritebackCoordinator.update_working_board` | 文档一致性：writeback 链路只保留一处 `WorkingMemoryBoard` 更新 owner 描述 | `rg -n "MemoryManager|WritebackCoordinator|update_working_board|WorkingMemoryBoard 更新" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md` | 无 | MEM-BLK-04 | 完成本任务 | 更新后的 memory 详设；更新后的本专项 TODO | 仅当 WorkingMemory 更新 owner 唯一、调用顺序清晰、测试责任可单点归属时完成 |
@@ -284,11 +284,13 @@
 
 | 阻塞项 ID | 阻塞描述 | 影响范围 | 影响任务 | 解阻条件 | 最小解阻动作 |
 |---|---|---|---|---|---|
-| MEM-BLK-01 | `WorkingMemoryExportRequest/Result` 只在签名出现，未形成字段表 | facade / smoke / export path；`WorkingMemoryBoard` 核心仅部分受影响 | MEM-TODO-009、011；MEM-TODO-012 的 export / restore facade 对接 | 导出 request/result 字段、owner、返回语义、文件位置冻结 | 完成 MEM-TODO-001 |
+| MEM-BLK-01 | 已解除：`WorkingMemoryExportRequest/Result` 已在详设 6.5.3a 与 6.12.1 补齐字段表、owner 和 facade 返回语义（2026-04-17） | 不再阻塞 facade / smoke / export path；`WorkingMemoryBoard` 的 export / restore facade 对接条件已具备 | MEM-TODO-009、011；MEM-TODO-012 的 export / restore facade 对接 | 已满足：导出 request/result 字段、owner、返回语义、文件位置已冻结 | 无；继续保持 `MemoryManager` 包装 export envelope、`IWorkingMemoryBoard` 只返回 `WorkingMemorySnapshot` |
 | MEM-BLK-02 | `SummaryGenerationRequest/Result` 与 `SummaryProjection` 未定义 | `ISummarizer`、Compression 阶段 2、测试接口 | MEM-TODO-009A、018 | 形成 supporting object schema，明确模板路径与 summarizer 路径的切换边界 | 完成 MEM-TODO-002 |
 | MEM-BLK-03 | `CompressionCoordinator` 的 persistence dependency 同时出现 `SummaryRepository` 与 `IMemoryStore` 两套口径 | Compression 实现、工厂 wiring、测试 stub | MEM-TODO-018、019 | 统一构造依赖和持久化 owner | 完成 MEM-TODO-003 |
 | MEM-BLK-04 | `WorkingMemoryBoard` 更新责任在 `MemoryManager` 与 `WritebackCoordinator` 之间重复声明 | writeback 实现、manager smoke、测试归因 | MEM-TODO-011、021 | 选择唯一 owner 并在详设和 TODO 中统一 | 完成 MEM-TODO-004 |
 | MEM-BLK-05 | concrete vector backend 选型未冻结，`sqlite-vss` / `hnswlib` / `none` 的默认顺序不明确 | vector concrete backend、profile compatibility | MEM-TODO-023、029 | 冻结 backend strategy、profile 默认值与 fallback | 完成 MEM-TODO-023 |
+
+当前活跃阻塞项：MEM-BLK-02、MEM-BLK-03、MEM-BLK-04、MEM-BLK-05。MEM-BLK-01 已解除，且与 MEM-TODO-009 / 011 / 012 的前置关系一致。
 
 ---
 
@@ -348,7 +350,7 @@
 
 当前建议的执行方式：
 
-1. 先执行 MEM-TODO-001 ~ 004，清理 supporting object 与 ownership / dependency 的 4 个真实设计缺口。
+1. MEM-TODO-001 已完成；继续执行 MEM-TODO-002 ~ 004，清理剩余 supporting object 与 ownership / dependency 的 3 个真实设计缺口。
 2. 并行推进 MEM-TODO-005、025、006、007、008A、008B、009、009A、010、022，先建立 public surface、测试拓扑、config/error/store/summarizer 契约面与 vector unavailable baseline。
 3. 再进入 MEM-TODO-011 ~ 021 的主链实现，按 WorkingMemory -> Store -> Context -> Writeback 的顺序收口。
 4. 主链稳定后执行 MEM-TODO-023、024、026 ~ 030，其中 MEM-TODO-026 是关键里程碑：Context Assemble Smoke Gate。
@@ -359,16 +361,15 @@
 
 1. L3：context / writeback / config 对象定义、store/query structs、WorkingMemoryBoard、CandidateCollector、BudgetAllocator、MemoryConflictResolver、SqliteSchemaMigrator、SqliteMemoryStore、MaintenanceWorker。
 2. L2：`IMemoryManager`、`IContextOrchestrator`、`ISummarizer`、`MemoryManager`、`CompressionCoordinator`、`WritebackCoordinator`、`VectorMemoryIndexAdapter`。
-3. L0：仅限 5 个 blocker 项，不得伪装成 Build-ready 任务。
+3. L0：仅限 4 个未解 blocker 项，不得伪装成 Build-ready 任务。
 
 ### 11.3 不可继续细化的证据缺口
 
 当前仍阻止个别任务进入纯函数级拆分的最小证据缺口只有：
 
-1. `WorkingMemoryExportRequest/Result` 未定义。
-2. `SummaryGenerationRequest/Result` 与 `SummaryProjection` 未定义。
-3. `CompressionCoordinator` 的 persistence dependency 未统一。
-4. `WorkingMemoryBoard` 更新 ownership 未统一。
-5. concrete vector backend 未冻结。
+1. `SummaryGenerationRequest/Result` 与 `SummaryProjection` 未定义。
+2. `CompressionCoordinator` 的 persistence dependency 未统一。
+3. `WorkingMemoryBoard` 更新 ownership 未统一。
+4. concrete vector backend 未冻结。
 
-在这 5 项之外，当前 detailed design 已经足以支撑接口级、函数语义级和数据结构级的专项 TODO 拆解。
+在这 4 项之外，当前 detailed design 已经足以支撑接口级、函数语义级和数据结构级的专项 TODO 拆解。
