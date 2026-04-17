@@ -202,7 +202,7 @@ Must-Not：
 | tool 单元测试 | 缺失 | tests/unit/tools/CMakeLists.txt 仅为占位 | 当前无 InterfaceSurface、Registry、PolicyGate、RouteSelector、Workflow 等单测 |
 | tool 集成测试 | 缺失 | tests/integration 下无 tools/ 目录 | 当前无 Tool -> Services / MCP / Workflow 集成路径 |
 | tool 契约测试 | 部分存在 | tests/contract/tool/* | 仅覆盖共享对象边界，不覆盖模块行为 |
-| Skill 运行时 | 部分存在 | `tools/src/skills/SkillRegistry.cpp`、`tools/src/skills/SkillRuntime.cpp`、`tools/src/skills/ExternalSkillImporter.cpp`、`tools/src/skills/PluginSkillBundleImporter.cpp` 已落地，integration gate 仍待完成 | 当前已具备 normalized match -> instantiate -> import 基线，但 plugin load/unload 与 runtime integration 闭环尚未完成 |
+| Skill 运行时 | 已存在 | `tools/src/skills/SkillRegistry.cpp`、`tools/src/skills/SkillRuntime.cpp`、`tools/src/skills/ExternalSkillImporter.cpp`、`tools/src/skills/PluginSkillBundleImporter.cpp`，以及 `ToolSkillRuntimeIntegrationTest.cpp`、`ToolPluginSkillBundleIntegrationTest.cpp` 已形成闭环 | 当前已具备 normalized import -> register -> match -> instantiate -> source revoke 的自动化基线，external dialect 仍保持 feature flag 约束 |
 | MCP 运行时 | 已存在 | `tools/src/mcp/CapabilityCache.cpp`、`CapabilityDiscovery.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPServerLauncher.cpp`、`StdioMCPTransport.cpp` 以及 `ToolMCPFallbackIntegrationTest.cpp`、`ToolPluginStdioMCPIntegrationTest.cpp` 已形成闭环 | hybrid stdio MCP 运行闭环已具备，但 generic MCP 对外 rollout 仍需单独评审 |
 | plugin -> tools 扩展桥接 | 缺失 | 工作区无 PluginExtensionBridge、IToolPluginProvider 等生产代码 | 当前无法通过 infra/plugin 注入额外 builtin tool、stdio MCP、skill assets |
 | ToolRoute 实现 | 缺失 | 工作区无 ToolRoute/RouteSelector 生产代码 | builtin 与 MCP 的混合路由尚未闭环 |
@@ -226,7 +226,7 @@ Must-Not：
 | Workflow 编排 | 缺失 | 无 StepGraph、批次调度、失败收口逻辑 | High | P1 |
 | MCP 发现、缓存、回退 | 部分存在 | handshake、snapshot、stale read、binding refresh、plugin `launch_spec_ref` 解析已落地；fallback integration gate 仍待实现 | High | P1 |
 | plugin 扩展载体接线 | 缺失 | 无 active plugin import、plugin unload invalidation、plugin source traceability | High | P1 |
-| Skill 资产运行时 | 部分存在 | `SkillRegistry`、`SkillRuntime`、`ExternalSkillImporter`、`PluginSkillBundleImporter` 已落地，但 integration gate 与 plugin source lifecycle 验证仍缺 | Medium | P1 |
+| Skill 资产运行时 | 已存在 | `SkillRegistry`、`SkillRuntime`、`ExternalSkillImporter`、`PluginSkillBundleImporter` 与两条 integration gate 已落地；剩余约束主要是 feature flag 和 profile/discoverability gate 收口 | Low | P2 |
 | ResultProjector 与 Digest 写出 | 缺失 | 无 ToolResult -> Observation/ObservationDigest 投影逻辑 | High | P0 |
 | 可观测与审计闭环 | 缺失 | 无 log/metric/trace/audit bridge | High | P0 |
 | Unit / Integration Gate | 缺失 | tests/unit/tools 与 tests/integration/tools 为空 | High | P0 |
@@ -1478,6 +1478,7 @@ Skill 运行时核心对象建议保持如下分层：
 6. 失败与回退语义：若 skill 所需工具被 policy 拒绝，SkillRuntime 只能按 fallback strategy 降级或拒绝实例化；缺失 workflow template 时不能临时拼装执行计划。
 7. 测试与验收出口：推荐单测为 `SkillRuntimeInstantiateTest.cpp`；集成验收继续以 `ToolSkillRuntimeIntegrationTest` 为主出口。
 8. 当前 Build 基线已在 `tools/src/skills/SkillRuntime.h`、`tools/src/skills/SkillRuntime.cpp` 落地 `instantiate()`、`bind_workflow_template()`、`build_tool_allowlist()`、`release_instance()` 四个入口；runtime 目前只消费 normalized `SkillSpecAsset` 与 internal workflow sample，通过 module-local YAML 绑定器生成 `WorkflowPlan`，仍不旁路 external importer 或 workflow 执行职责。
+9. 040 已用 `tests/integration/tools/ToolSkillRuntimeIntegrationTest.cpp` 验证 internal bundle import -> register -> match -> instantiate -> release 的 integration 闭环，确保 runtime 继续只消费 normalized asset，不在集成路径上旁路 importer 或 registry。
 
 ##### ExternalSkillImporter
 
@@ -1489,6 +1490,7 @@ Skill 运行时核心对象建议保持如下分层：
 6. 失败与回退语义：格式错误、字段缺失或资产不完整时必须 quarantine 并输出 diagnostics；当 importer feature flag 关闭时，系统继续只支持内部 `skills/specs/` 资产。
 7. 测试与验收出口：推荐单测为 `ExternalSkillImporterTest.cpp`、`ExternalSkillDialectRegressionTest.cpp`；集成验收继续以 `ToolPluginSkillBundleIntegrationTest` 为主出口。
 8. 当前 Build 基线已在 `tools/src/skills/ExternalSkillImporter.cpp`、`tools/src/skills/PluginSkillBundleImporter.cpp` 落地 external dialect frontmatter 解析、supporting workflow/eval 归一化、diagnostics quarantine 与 plugin bundle 导入；其中 external dialect 仍受 module-local `external_skill_import_enabled` 保护，plugin-delivered normalized internal bundle 只返回 `SkillSpecAsset`，不在 importer 内直接注册或执行。
+9. 040 已用 `tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp` 验证 plugin skill bundle delta -> feature flag gate -> import -> register -> unload revoke 的闭环，确保 plugin source lifecycle 继续通过 `PluginExtensionBridge` 和 `SkillRegistry::revoke_source()` 显式衔接，而不是隐式耦合。
 
 Skill 运行时数据流如下：
 
@@ -1670,7 +1672,7 @@ plugins/
 |---|---|---|---|
 | 单元测试 | 公共接口与组件行为 | ToolInterfaceSurfaceTest、ToolRegistryTest、PluginExtensionBridgeTest、ToolValidatorTest、ToolPolicyGateTest、ToolRouteSelectorTest、BuiltinExecutorLaneTest、WorkflowEngineTest、CapabilityCacheTest、SkillRegistryTest、ExternalSkillImporterTest、ResultProjectorTest | 每条用例通过，且无 discoverability 缺口 |
 | 契约测试 | shared tool contracts 稳定性 | ToolRequestContractTest、ToolResultContractTest、ToolDescriptorIRContractTest | 既有 contract tests 全绿，无字段语义回退 |
-| 集成测试 | Tool -> Services / MCP / Workflow / Plugin 联动 | ToolServicesSmokeIntegrationTest、ToolMCPFallbackIntegrationTest、ToolPluginStdioMCPIntegrationTest、ToolWorkflowFailureIntegrationTest、ToolObservabilityIntegrationTest、ToolProfileIntegrationTest、ToolPluginSkillBundleIntegrationTest | 指定路径全部通过，关键字段可二值断言 |
+| 集成测试 | Tool -> Services / MCP / Workflow / Plugin 联动 | ToolServicesSmokeIntegrationTest、ToolMCPFallbackIntegrationTest、ToolPluginStdioMCPIntegrationTest、ToolWorkflowFailureIntegrationTest、ToolObservabilityIntegrationTest、ToolSkillRuntimeIntegrationTest、ToolPluginSkillBundleIntegrationTest、ToolProfileIntegrationTest | 指定路径全部通过，关键字段可二值断言 |
 | 失败注入测试 | validation/policy/route/provider failure | InvalidRequest、PolicyDenied、RouteUnavailable、plugin unload invalidation、MCP handshake fail、stale cache fallback、PartialSideEffect、workflow timeout | 每种失败都能映射成确定的 ErrorInfo / audit / metrics 结果 |
 | 兼容性检查 | profile、discoverability、边界守卫 | desktop_full vs edge_minimal profile diff、ctest -N discoverability、services include boundary、generic MCP readiness guard | 配置差异与 discoverability 可被自动验证，且未错误宣称兼容 |
 

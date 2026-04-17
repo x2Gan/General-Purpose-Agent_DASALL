@@ -42,9 +42,23 @@ dasall_add_tools_integration_test(
 )
 
 dasall_add_tools_integration_test(
+  dasall_tool_plugin_skill_bundle_integration_test
+  ToolPluginSkillBundleIntegrationTest
+  ToolPluginSkillBundleIntegrationTest.cpp
+  "integration;tools"
+)
+
+dasall_add_tools_integration_test(
   dasall_tool_plugin_stdio_mcp_integration_test
   ToolPluginStdioMCPIntegrationTest
   ToolPluginStdioMCPIntegrationTest.cpp
+  "integration;tools"
+)
+
+dasall_add_tools_integration_test(
+  dasall_tool_skill_runtime_integration_test
+  ToolSkillRuntimeIntegrationTest
+  ToolSkillRuntimeIntegrationTest.cpp
   "integration;tools"
 )
 

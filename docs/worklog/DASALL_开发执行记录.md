@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #340
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 F
+- 任务：TOOL-TODO-040 验证 ToolSkillRuntime 与 ToolPluginSkillBundleIntegration
+- 状态：已完成
+
+### 任务选择
+
+1. 039 已把 importer 与 plugin bundle import 基座补齐，040 的最小动作就是把 internal skill 实例化和 plugin skill bundle lifecycle 真正串进 integration gate，而不是继续只依赖白盒单测结论。
+2. 9.1 与 6.12.5 已经明确本轮要覆盖 internal normalized asset、plugin skill bundle、external dialect feature flag 与 source-scoped revoke，因此 040 应只补黑盒 integration tests，不扩生产 schema 或旁路 module-local feature flag。
+3. 本轮同时触及 integration test 注册，所以除了用例通过，还必须额外检查两条新增 integration tests 已进入 discoverability。
+
+### 改动
+
+1. 新增 `tests/integration/tools/ToolSkillRuntimeIntegrationTest.cpp`：
+   - 通过 `PluginSkillBundleImporter` 导入 internal normalized bundle；
+   - 将导入资产注册到 `SkillRegistry`；
+   - 用 `SkillRuntime` 对匹配结果做实例化，并断言 `WorkflowPlan`、step 数量和 output binding。
+2. 新增 `tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp`：
+   - 用 `PluginExtensionBridge` 发布 plugin skill bundle delta；
+   - 验证 external dialect feature flag 关闭时不导入；
+   - 验证 feature flag 打开后的 import/register 路径；
+   - 验证 plugin unload 后的 source-scoped revoke。
+3. 更新 `tests/integration/tools/CMakeLists.txt`，新增 `dasall_tool_skill_runtime_integration_test` 与 `dasall_tool_plugin_skill_bundle_integration_test`。
+4. 更新 tools 详设、专项 TODO 与本条 worklog，回写 Phase 5 skill runtime/importer/plugin bundle integration 的闭环证据。
+
+### 测试
+
+1. 构建：
+   - `Build_CMakeTools`
+2. 定向执行：
+   - `RunCtest_CMakeTools` tests: `ToolSkillRuntimeIntegrationTest`, `ToolPluginSkillBundleIntegrationTest`
+3. discoverability：
+   - `ListTests_CMakeTools`
+4. 结果：
+   - `dasall_tools` 与新增 integration targets 构建通过；
+   - `ToolSkillRuntimeIntegrationTest`、`ToolPluginSkillBundleIntegrationTest` 全部通过；
+   - `ListTests_CMakeTools` 可发现两条新增 integration tests；
+   - 历史 `DartConfiguration.tcl` 噪声仍存在，不影响通过结论。
+
+### 结果
+
+1. Phase 5 的 skill runtime / importer / plugin bundle integration 现在已经具备自动化黑盒闭环：internal bundle 可 import -> register -> match -> instantiate，plugin bundle 可 load -> import -> register -> unload -> revoke。
+2. external dialect 仍严格保持在 module-local feature flag 后，040 强化了“默认关闭”这一系统边界，而不是把 sample fixture 误写成产品级兼容。
+3. 040 保持了职责边界：bridge 只发布 `SkillAssetRef`，importer 只做归一化与 quarantine，registry/runtime 继续只消费 normalized asset。
+
+### 下一步
+
+1. 进入 `TOOL-TODO-041`，验证 ToolProfileIntegration 与 tools discoverability gate，把阶段 F 的 profile compatibility 与剩余 gate 证据收口。
+
+### 风险
+
+1. 当前 integration tests 仍围绕 036 冻结的 canonical sample 展开，未宣称 generic external dialect compatibility；feature flag 与 sample-scope 约束必须继续保留。
+2. `DartConfiguration.tcl` 噪声仍会出现在 CMake Tools 测试输出中，041 做 discoverability gate 时仍需继续注明其不影响结论。
+
 ## 记录 #339
 
 - 日期：2026-04-17
