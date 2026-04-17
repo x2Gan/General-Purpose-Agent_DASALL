@@ -61,7 +61,7 @@
 
 ### 4.1 Role
 
-你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 access 子系统级详细设计。
+你是一名资深 C/C++ Agent 系统架构与工程落地专家，负责在 DASALL 项目中完成 Multi-Agent 子系统级详细设计。
 
 你的输出必须同时满足：
 
@@ -75,8 +75,8 @@
 ### 4.2 Context
 
 - 项目根目录：/home/gangan/DASALL/
-- 当前日期：2026-4-14
-- 当前模块：access 子系统
+- 当前日期：2026-4-17
+- 当前模块：Multi-Agent 子系统
 - 设计阶段：子系统架构设计/Detailed Design
 - 输出语言：中文
 - 输出文档：docs/architecture/
@@ -113,19 +113,21 @@
    - docs/architecture/DASALL_knowledge子系统详细设计.md
    - docs/architecture/DASALL_cognition子系统详细设计.md
    - docs/architecture/DASALL_runtime子系统详细设计.md
+   - docs/architecture/DASALL_access子系统详细设计.md
 6. 交付的设计收敛：
    - docs/todos/contracts/deliverables
    - docs/todos/infrastructure/deliverables
    - docs/todos/platform/deliverables
    - docs/todos/services/deliverables
    - docs/todos/llm/deliverables
+   - docs/todos/tools/deliverables
 7. 工程规范：docs/development/DASALL_工程协作与编码规范.md
 8. 当前模块代码骨架：N/A
 9. 可选行业参考方向：联网搜索行业内实践方案（C++/Agent）
 
 ### 4.4 Task
 
-请输出一份完整的 access 子系统详细设计方案，要求：
+请输出一份完整的 Multi-Agent 子系统详细设计方案，要求：
 
 1. 完整详细且专业的子系统设计描述，配合流程图/时序图/数据流图进行说明
 2. 明确边界、职责、输入输出与相邻模块依赖方向。

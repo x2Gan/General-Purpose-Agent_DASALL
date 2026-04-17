@@ -1,0 +1,465 @@
+# DASALL Knowledge 子系统专项 TODO
+
+最近更新时间：2026-04-18  
+阶段：Detailed Design -> Special TODO  
+适用范围：knowledge/  
+当前结论：Knowledge 子系统当前可直接生成 L3/L2 混合专项 TODO。`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`KnowledgeServiceFacade`、`FreshnessController`、`VersionLedger`、`KnowledgeTelemetry`、`KnowledgeHealthProbe` 已具备接口级或数据结构级拆分条件；`SparseRetriever` 的词法索引技术选型、`VectorRetrieverBridge` 的窄接口 ownership、首批 corpus 资产与 metadata/trust 规范、retrieval quality golden set 四项仍必须以前置补设计/评审任务解阻，之后才能把 lexical/hybrid/index/quality 全链路推进到稳定 Build。
+
+## 1. 文档头
+
+本文档严格基于以下输入生成：
+
+1. `docs/architecture/DASALL_knowledge子系统详细设计.md`
+2. `docs/architecture/DASALL_Agent_architecture.md`
+3. `docs/architecture/DASALL_Engineering_Blueprint.md`
+4. `docs/adr/ADR-005-architecture-review-baseline.md`
+5. `docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md`
+6. `docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md`
+7. `docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md`
+8. `docs/ssot/InfraConcurrencyPolicy.md`
+9. `docs/ssot/InfraIntegrationTopology.md`
+10. `docs/plans/DASALL_工程落地实现步骤指引.md`
+11. `docs/development/DASALL_工程协作与编码规范.md`
+12. 现有专项 TODO / 交付基线：`docs/todos/llm/DASALL_llm子系统专项TODO.md`、`docs/todos/memory/DASALL_memory子系统专项TODO.md`、`docs/todos/tools/DASALL_tools子系统专项TODO.md`、`docs/todos/infrastructure/DASALL_infrastructure子系统专项TODO.md` 及对应 deliverables 目录
+13. 当前代码与测试现状：`knowledge/CMakeLists.txt`、`knowledge/src/placeholder.cpp`、`tests/unit/knowledge/CMakeLists.txt`、`tests/integration/CMakeLists.txt`、顶层 `CMakeLists.txt`
+
+本文档目的不是补写新架构，也不是宣称 Knowledge 已具备直接全量编码条件，而是把当前详细设计转换为：
+
+1. 可回溯的约束清单。
+2. 可执行的粒度评估结论。
+3. Design -> TODO 的工程映射。
+4. 最小原子化、可二值判定的任务清单。
+5. 显式 blocker、解阻条件、质量门与回退策略。
+
+生成原则：
+
+1. 不改写已冻结 ADR 结论。
+2. 不把 Knowledge 扩张为 LLM、Memory、Runtime、Tools 的替代实现。
+3. 纯讨论事项不伪装为 Done-ready Build 任务。
+4. 每项任务都必须具备代码目标、测试目标、验收命令三件套。
+5. 设计证据不足之处必须先列为补设计/Blocked，而不是伪造实现任务。
+6. 所有任务都必须回链到详细设计章节、现有代码现状或上层约束文档。
+
+---
+
+## 2. 子系统目标与范围
+
+### 2.1 子系统目标
+
+根据 Knowledge 详设 1.1、架构 5.9、蓝图 3.8/4.1/6、阶段 H 实施要求，Knowledge 子系统的工程目标固定为：
+
+1. 向 Runtime 提供受治理的查询归一化、检索召回、重排与证据组装能力，而不是把原始索引结果直接泄漏给上层。
+2. 以 `IKnowledgeService` 作为唯一 runtime-facing 公共入口，稳定输出 `KnowledgeRetrieveResult`、`EvidenceBundle` 与 `context_projection`，供 Runtime 再投影到 `ContextPacket.retrieval_evidence`。
+3. 在 `knowledge=true && memory_vector=false` 的组合下稳定提供 lexical-only 主链，在向量后端不可用时显式退化而不是进程级失败。
+4. 建立索引新鲜度、版本账本、增量更新和 snapshot-and-swap 闭环，并保证 query path 不读取半成品索引。
+5. 为 `knowledge/include`、`knowledge/src`、`tests/unit/knowledge`、`tests/integration/knowledge`、CMake、质量门与交付证据提供可实施、可测试、可审计的落盘计划。
+
+### 2.2 范围边界
+
+纳入本专项 TODO 的对象：
+
+1. `knowledge/include` 公共接口面与 `knowledge/src` 内部实现骨架。
+2. `KnowledgeServiceFacade`、`QueryNormalizer`、`CorpusRouter`、`RecallCoordinator`、`SparseRetriever`、`VectorRetrieverBridge`、`Reranker`、`EvidenceAssembler`。
+3. `CorpusCatalog`、`FreshnessController`、`VersionLedger`、`IndexReader`、`IndexWriter`、`SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator`。
+4. `KnowledgeConfigProjector`、`KnowledgeTelemetry`、`KnowledgeHealthProbe` 与相关 profile 投影、可观测性和健康快照。
+5. `MetadataExtractor`、`EmbeddingEncoder` 作为内部策略扩展点（详设 §6.13.6 标记为内部策略点，v1 不单独拆为编译单元，分别嵌入 `Canonicalizer` / `IngestionCoordinator` 实现内部）。
+6. Knowledge 相关 unit / integration / quality regression / Gate 证据回写。
+
+不纳入本专项 TODO 的对象：
+
+1. `ContextPacket` 的生成、裁剪与写权限；该职责仍在 Memory / `ContextOrchestrator`。
+2. Prompt 选择、消息装配、tokenizer 精确预算裁剪与 provider payload 生成；该职责仍在 LLM。
+3. Runtime 的 retry / replan / degrade / abort_safe 裁定与调度。
+4. Memory 的 Session/Fact 写回、Experience 沉淀、VectorMemory 生命周期管理。
+5. shared contracts 的主动扩张；Knowledge supporting types 当前保持 module-local。
+6. 独立文件监听器、独立调度循环或自行拥有定时器的刷新主控。
+7. query rewrite、answer synthesis、LLM 直接调用、跨层语义增强。
+8. `HotResultCache`（详设 §6.12 锁表列出 L2 层级，v1 明确不实现，不拆分任务）。
+9. `KnowledgeQuery.latest_observation_digest_summary` / `belief_state_summary` 等 v1 标记为 not-consumed 的预留字段消费逻辑（在 KNO-TODO-006 中仅声明字段，不落实际处理链路）。
+10. `KnowledgeQueryKind::MultiHop` 的实际多跳执行链路（v1 仅声明枚举值，不落 multi-hop 召回编排与证据拼接逻辑）。
+
+---
+
+## 3. 输入依据与约束清单
+
+### 3.1 约束清单（Step 1 输出）
+
+| ID | 来源 | 类型 | 约束内容 | 对 TODO 的直接影响 |
+|---|---|---|---|---|
+| KNO-TC001 | 架构 5.9.1；详设 1.1、6.1 | Must | Knowledge 负责查询理解、召回、重排、证据组装与索引新鲜度 | TODO 必须覆盖 query/evidence/index 三条主链，而不是只做 facade 空壳 |
+| KNO-TC002 | ADR-008；详设 1.2、6.9 | Must-Not | Knowledge 不拥有独立调度循环或刷新触发权，`request_refresh()` 由 Runtime 调用 | ingest/refresh 任务不得引入自主管理 watcher/timer 主控 |
+| KNO-TC003 | ADR-006；详设 1.2、6.5、6.6 | Must-Not | Knowledge 不生成 `ContextPacket`、Prompt、provider payload，不接管上下文装配权 | 不生成 PromptComposer、ContextPacket 写入或 query rewrite 任务 |
+| KNO-TC004 | 蓝图 4.1/4.2；详设 1.2、6.3 | Must | Knowledge 只依赖 `contracts/`、`memory/` 窄接口与 `infra/`，不依赖 `llm/`、`cognition/`、`tools/` 实现 | 任务必须以 `knowledge/include` 的 module-local 接口为边界 |
+| KNO-TC005 | 蓝图 6；详设 6.6 | Must | `IKnowledgeService` 必须先落 `knowledge/include`，保持 public surface 小而稳 | 必须先做 include/CMake/public ABI 冻结任务 |
+| KNO-TC006 | 架构 3.8.2；详设 6.5、6.8 | Must | `KnowledgeRetrieveResult.error` 复用 `ErrorInfo`，失败语义映射到 Validation/Policy/Provider/Runtime | 错误码与 `ErrorInfo` 映射必须单列任务并带测试 |
+| KNO-TC007 | 详设 6.6、6.10 | Must | `retrieve()` 只读且幂等；`request_refresh()` 是唯一写入口 | 任务拆分时必须把读路径与写路径分离，不做隐式 rebuild |
+| KNO-TC008 | 详设 6.5、6.6 | Must | `EvidenceBundle.context_projection` 是写入 `ContextPacket.retrieval_evidence` 的唯一共享投影面 | evidence 组装和 projection mapping 必须原子建模 |
+| KNO-TC009 | 详设 6.10；蓝图 5.1 | Must | 不新增 profile schema v1 顶层域，`KnowledgeConfigProjector` 只能消费既有 snapshot 域 | 需要单列配置投影任务，不允许自建平行配置系统 |
+| KNO-TC010 | 蓝图 5.1；详设 6.10 | Must | `knowledge=true && memory_vector=false` 是合法组合，必须支持 lexical-only | Query/Router/Recall/Integration 任务必须覆盖 degrade 路径 |
+| KNO-TC011 | SSOT `InfraConcurrencyPolicy`；详设 6.12、6.13.3 | Must | 新增 queue/buffer/snapshot 设计必须显式声明 overflow_policy、backpressure 与 lock order；不允许持 L2 锁做 I/O | IndexReader/IndexWriter/Telemetry/Health 任务必须回链并发 SSOT |
+| KNO-TC012 | SSOT `InfraIntegrationTopology`；详设 9.1、9.3 | Must | 新增核心链路后必须补至少 1 个 `integration` smoke，并能被 `ctest -N` 发现 | 测试拓扑和 integration discoverability 必须前置 |
+| KNO-TC013 | 编码规范 3.2/3.6/3.7 | Must | 公共接口进 `include/`；不吞错；新增 public interface 至少补 unit 或 integration 测试 | public ABI、错误映射、CMake 拓扑任务都必须绑定测试 |
+| KNO-TC014 | 落地指引阶段 H；ADR-005 | Must | Knowledge 位于 memory 之后、cognition 之前推进；不得越过 memory/vector 边界冻结 | vector bridge 与 corpus/index 任务需要显式 blocker |
+| KNO-TC015 | 详设 6.11、9.3、11.1 | Must | retrieve / ingest / snapshot swap / degraded return 四类关键路径必须可观测 | Telemetry 与 HealthProbe 不能后置成“实现后再补” |
+| KNO-TC016 | 详设 11.1 KNO-B02、12.1 | Must | `VectorRetrieverBridge` 的窄接口 ownership 未冻结前，不允许推进 hybrid Build | hybrid recall、failure/degrade、profile integration 必须标记 Blocked |
+| KNO-TC017 | 详设 11.1 KNO-B03、12.1 | Must | 词法索引技术选型未冻结前，不允许推进 `SparseRetriever` / `IndexReader` / `IndexWriter` 的真实 Build | lexical 主链任务需要补设计前置任务 |
+| KNO-TC018 | 详设 6.9、11.1 KNO-B04 | Must | 首批 corpus 资产、metadata 必填字段与 trust 规则缺失时，不允许推进 ingest/index 验证任务 | `SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator` 需前置补设计 |
+| KNO-TC019 | 详设 6.9 Ingest 触发模型、11.1 KNO-R10 | Must | `SourceScanner` 仅接受 `trust_level >= Trusted` 的注册源，坏源需 quarantine | corpus/trust 规则必须入设计、测试与审计 |
+
+### 3.2 当前代码与测试现状证据
+
+| 证据对象 | 当前状态 | 结论 |
+|---|---|---|
+| `knowledge/CMakeLists.txt` | 已定义 `dasall_knowledge`，但仅编译 `src/placeholder.cpp`，并把 PUBLIC include 指向当前不存在的 `knowledge/include` | Knowledge 已进构建图，但仍是 placeholder-only 静态库 |
+| `knowledge/src/placeholder.cpp` | 仅保留 `keep_library_non_empty()` | 查询、索引、观测三条主链均未开始 |
+| `knowledge/include/` | 目录不存在 | public interface、supporting types、错误码和组件头文件均未落盘 |
+| `tests/unit/knowledge/CMakeLists.txt` | 仅有 `# Placeholder for knowledge unit tests.` | unit 测试 discoverability 尚未建立 |
+| `tests/unit/CMakeLists.txt` | 已 `add_subdirectory(knowledge)` | Knowledge unit 拓扑挂点已存在，但子目录内容为空 |
+| `tests/integration/CMakeLists.txt` | 当前仅接入 infra / profiles / platform / services / tools / llm，未接 `knowledge` 子目录 | integration discoverability 缺失 |
+| `CMakeLists.txt` | 顶层已 `add_subdirectory(knowledge)` | 不需要新增顶层模块注册，只需补知识侧 include/src/tests 落点 |
+| `docs/todos/knowledge/` | 当前不存在 | 本文档是首份正式 Knowledge 专项 TODO 基线 |
+
+---
+
+## 4. 粒度可行性评估
+
+### 4.1 总体结论
+
+结论：Knowledge 当前可直接生成 L3/L2 混合专项 TODO，但不能整体按“无 blocker 的纯 L3”推进。
+
+当前最细可安全落盘粒度：
+
+1. L3：`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`KnowledgeErrorCode`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`FreshnessController`。
+2. L2：`KnowledgeServiceFacade`、`RecallCoordinator`、`CorpusCatalog`、`VersionLedger`、`IndexReader`、`IndexWriter`、`KnowledgeTelemetry`、`KnowledgeHealthProbe`。
+3. L2 但当前 Blocked：`SparseRetriever`、`VectorRetrieverBridge`、`SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator`、`RetrievalQualityRegression`。
+4. L0：四项补设计前置任务本身，分别对应 lexical index 选型、vector bridge 窄接口、corpus asset/metadata/trust baseline、golden set/quality 阈值冻结。
+
+判断依据：
+
+1. 详设 6.6、6.10、6.13 已给出明确的接口名、字段、错误语义、主流程、异常流程、目录建议和测试出口。
+2. 详设 7、8、9 已给出 Design -> Build 映射、里程碑、测试矩阵和质量门，足以支撑接口级、数据结构级和组件级任务拆分。
+3. 当前主要阻碍来自实现技术选型、跨模块窄接口 ownership 和测试语料/质量资产缺失，而不是 query/evidence 主链语义不清晰。
+4. 因此专项 TODO 可以直接进入执行，但必须先清掉 4 个前置补设计项，再推进被阻塞的 lexical/hybrid/ingest/quality Build 任务。
+
+### 4.2 可落盘对象提取表（Step 2 输出）
+
+| 类别 | 可落盘对象 | 设计锚点 | 建议落位 | 当前状态 |
+|---|---|---|---|---|
+| Public ABI | `IKnowledgeService`、`KnowledgeTypes`、`KnowledgeErrors` | 6.5、6.6、7 KNO-D01 | `knowledge/include/` | 全部未落盘 |
+| 配置投影 | `KnowledgeConfigProjector`、`KnowledgeConfigSnapshot` | 6.10、6.13.6 | `knowledge/src/health/` 或 `knowledge/src/config/` | 未落盘 |
+| Query Plane | `QueryNormalizer`、`CorpusRouter` | 6.13.1、7 KNO-D02 | `knowledge/include/query/`、`knowledge/src/query/` | 未落盘 |
+| Recall / Rerank / Evidence | `RecallCoordinator`、`SparseRetriever`、`VectorRetrieverBridge`、`Reranker`、`EvidenceAssembler` | 6.13.2、7 KNO-D02~D04 | `knowledge/include/retrieve/`、`knowledge/src/retrieve/`、`knowledge/include/rerank/`、`knowledge/include/evidence/` | 未落盘 |
+| Catalog / Freshness | `CorpusCatalog`、`FreshnessController` | 6.10、6.13.3、6.13.6 | `knowledge/include/index/`、`knowledge/include/health/` | 未落盘 |
+| Index Plane | `VersionLedger`、`IndexReader`、`IndexWriter` | 6.9、6.13.3、10.4 | `knowledge/include/index/`、`knowledge/src/index/` | 未落盘 |
+| Ingest Plane | `SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator` | 6.9、6.13.3、6.13.5 | `knowledge/include/ingest/`、`knowledge/src/ingest/` | 未落盘 |
+| Observability / Health | `KnowledgeTelemetry`、`KnowledgeHealthProbe` | 6.11、6.13.4、7 KNO-D06 | `knowledge/include/health/`、`knowledge/src/observability/`、`knowledge/src/health/` | 未落盘 |
+| Unit 测试出口 | `KnowledgeServiceFacade*Test`、`QueryNormalizer*Test`、`CorpusRouter*Test`、`SparseRetriever*Test`、`VectorRetrieverBridge*Test`、`Reranker*Test`、`EvidenceAssembler*Test`、`Index*Test`、`IngestionCoordinator*Test`、`SourceScanner*Test`、`Canonicalizer*Test`、`Chunker*Test`、`KnowledgeTelemetry*Test`、`KnowledgeHealthProbe*Test` | 6.13、9.1 | `tests/unit/knowledge/` | 目录挂点存在但内容全缺 |
+| Integration 测试出口 | `dasall_knowledge_retrieval_smoke_integration_test`、`dasall_knowledge_failure_degrade_integration_test`、`dasall_knowledge_profile_compatibility_integration_test` | 7 KNO-D07、9.1、9.3 | `tests/integration/knowledge/` | 目录不存在 |
+| 质量资产 | golden set、MRR/NDCG@k/Recall@k baseline | 9.1、12.2 | `tests/integration/knowledge/golden/` | 未落盘 |
+| CMake / 注册点 | `knowledge/CMakeLists.txt`、`tests/unit/knowledge/CMakeLists.txt`、`tests/integration/knowledge/CMakeLists.txt`、`tests/integration/CMakeLists.txt` | 8.1、9.3 | 现有 CMake 拓扑 | 仅 knowledge 库 target 存在 |
+
+### 4.3 粒度可行性评估表（Step 2 输出）
+
+| 设计对象 | 设计锚点 | 当前粒度等级 | 已具备证据 | 缺失证据 | TODO 拆解策略 |
+|---|---|---|---|---|---|
+| `IKnowledgeService` + public surface | 6.5、6.6、7 KNO-D01 | L3 | 接口、返回语义、health/refresh 入口明确 | 无实质缺口 | 直接拆成 ABI 冻结任务 |
+| `KnowledgeConfigProjector` | 6.10、6.13.6 | L3 | 配置来源、派生规则、profile 行为明确 | 无实质缺口 | 直接拆配置投影任务 |
+| `KnowledgeServiceFacade` | 6.13.1 | L3 | deps 注入、生命周期、内部方法、deadline 传播与失败语义明确 | 依赖组件需先落盘 | 作为单独编排任务，依赖下游组件完成 |
+| `QueryNormalizer` | 6.13.1 | L3 | 数据结构、步骤、失败语义、测试出口明确 | 无实质缺口 | 直接拆实现任务 |
+| `CorpusRouter` | 6.13.1、6.10 | L3 | `RetrievalPlan` 字段、freshness / mode 选择规则、错误语义明确 | 需要 `CorpusCatalogSnapshot` 与 `FreshnessSnapshot` 头文件 | 先补 supporting headers，再落实现 |
+| `RecallCoordinator` | 6.13.2 | L2 | lane 执行策略、超时、degraded 规则明确 | 依赖 lexical/vector lane 实现 | 先 lexical，再补 vector，再闭环 coordinator |
+| `SparseRetriever` | 6.13.2、11.1 KNO-B03 | L2 | 接口、过滤、sentence-window、测试出口明确 | lexical index 技术栈未冻结 | 先补设计选型，再进入 Build |
+| `VectorRetrieverBridge` | 6.13.2、11.1 KNO-B02 | L2 | `IQueryEncoder`、backend health、lane 失败语义明确 | 窄接口 owner 未冻结 | 先做接口冻结任务，再 Build |
+| `Reranker` | 6.13.2 | L3 | RRF 公式、参数、freshness penalty、测试出口明确 | 无实质缺口 | 直接拆实现任务 |
+| `EvidenceAssembler` | 6.13.2 | L3 | budget 协调、confidence 公式、projection 规则、错误语义明确 | golden set 尚未建立，不影响实现 | 直接拆实现任务 |
+| `CorpusCatalog` | 6.13.6、8.1 | L2 | schema、只读 snapshot 接口、delta apply 语义明确 | 首批 corpus 资产尚未冻结 | 先实现容器与 snapshot，再接资产 baseline |
+| `FreshnessController` | 6.10、6.13.3 | L3 | 输入输出、reason codes、纯计算边界明确 | 无实质缺口 | 直接拆实现任务 |
+| `VersionLedger` | 6.13.4、10.4 | L2 | append-only 账本、candidate/active/superseded 状态流明确 | 持久化形式未在代码层定型 | 先做本地账本实现，再与 snapshot 绑定 |
+| `IndexReader` | 6.13.3 | L2 | active snapshot、lock-free 读语义、manifest 查询明确 | lexical snapshot 实现依赖技术选型 | 选型冻结后实现 search/read path |
+| `IndexWriter` | 6.13.3、10.4 | L2 | shadow build、swap、rollback、事务边界明确 | lexical snapshot 实现依赖技术选型 | 选型冻结后实现写路径 |
+| `SourceScanner` | 6.13.5、11.1 KNO-B04 | L2 | source delta、quarantine、hash/mtime 逻辑明确 | 首批 source trust/metadata baseline 缺失 | 先补资产/metadata 规范，再 Build |
+| `Canonicalizer` | 6.13.5、11.1 KNO-B04 | L2 | `CanonicalDocument`、normalize/extract 语义明确 | 支持格式与 metadata 必填字段未冻结 | 先补 corpus 规范，再 Build |
+| `Chunker` | 6.13.5、11.1 KNO-B04 | L2 | `ChunkRecord`、stable id、切分策略、测试出口明确 | 首批 chunk policy 与语料 baseline 缺失 | 先补 corpus 规范，再 Build |
+| `IngestionCoordinator` | 6.13.3、6.13.5 | L2 | `CorpusChangeSet`、`IndexUpdateBatch`、流程与失败语义明确 | 依赖 SourceScanner/Canonicalizer/Chunker 和 corpus baseline | 先解阻三组件，再做编排 |
+| `KnowledgeTelemetry` | 6.11、6.13.4 | L2 | 事件字段、四类关键路径、drop 规则明确 | 需与现有 infra sink 对齐 | 直接拆实现任务 |
+| `KnowledgeHealthProbe` | 6.13.4 | L2 | 依赖源、状态分类、只读聚合边界明确 | 依赖 manifest/ledger/freshness/telemetry 基础 | 在 supporting components 后实施 |
+| retrieval quality regression | 9.1、12.2 | L2（当前 Blocked） | 指标、golden set 格式、阈值原则明确 | baseline 数据与样本语料缺失 | 先补质量资产，再注册 Gate |
+
+---
+
+## 5. Design -> TODO 映射表
+
+### 5.1 映射总表（Step 3 输出）
+
+| Design 项 | 设计锚点 | TODO 类型 | 对应任务 ID | 映射说明 |
+|---|---|---|---|---|
+| lexical index 选型缺口 | 11.1 KNO-B03、12.1 | 补设计 / PoC | KNO-TODO-001 | 先确定 `SparseRetriever` / `IndexReader` / `IndexWriter` 的技术底座 |
+| vector bridge ownership 缺口 | 11.1 KNO-B02、12.1 | 补设计 / 边界冻结 | KNO-TODO-002 | hybrid recall 前置边界任务 |
+| corpus asset / metadata / trust baseline 缺口 | 6.9、11.1 KNO-B04、12.1 | 补设计 / 资产规范 | KNO-TODO-003 | ingest/index 任务前置 |
+| golden set / 质量阈值缺口 | 9.1、12.2 | 补设计 / 质量资产 | KNO-TODO-004 | quality regression Gate 前置 |
+| public surface 与工程骨架 | 7 KNO-D01、8.1 | 目录 / CMake / 测试拓扑 | KNO-TODO-005、006 | 先解 include 与 discoverability |
+| 配置投影 | 6.10、6.13.6 | 配置与 Profile 裁剪 | KNO-TODO-007 | 保证不新增 profile schema v1 顶层域 |
+| query 归一化与路由 | 6.13.1、7 KNO-D02 | 组件实现 | KNO-TODO-008、009 | lexical/hybrid 主链共同依赖 |
+| rerank 与 evidence 投影 | 6.13.2、7 KNO-D04 | 数据处理 / 输出投影 | KNO-TODO-010、011 | 收敛到 `EvidenceBundle` 与 `context_projection` |
+| facade 编排与 refresh 入口 | 6.13.1、6.6 | 生命周期 / 组合根 | KNO-TODO-012 | Runtime-facing 唯一同步读入口与异步刷新入口 |
+| lexical recall 最小链 | 6.13.2、7 KNO-D02 | 检索执行 | KNO-TODO-013、014 | 先 lexical-only，再补 lane 协调 |
+| hybrid/vector 增强 | 6.13.2、7 KNO-D03 | 适配器 / 协调 | KNO-TODO-015、014 | vector lane 与 degrade 闭环 |
+| catalog / freshness / ledger | 6.10、6.13.3、6.13.4 | 配置/元数据/健康支撑 | KNO-TODO-016、017、018 | query/index 共享支撑层 |
+| index read/write | 6.13.3、10.4 | 生命周期 / snapshot 协议 | KNO-TODO-019、020 | 严格按 read/write 拆分 |
+| ingest pipeline | 6.9、6.13.3、6.13.5 | 编排 / 数据准备 | KNO-TODO-021、022、023、024 | scanner/canonicalizer/chunker 分离后再编排 |
+| observability / health | 6.11、6.13.4、7 KNO-D06 | 观测 / 诊断 | KNO-TODO-025、026 | 关键字段、degrade 计数与 health 状态收口 |
+| smoke / failure / profile / quality Gate | 7 KNO-D07、9.1、9.3 | integration / regression / Gate | KNO-TODO-027、028、029、030 | 至少一条 smoke + degrade + profile + quality 证据链 |
+| TODO / deliverables / worklog 回写 | 8.2 Phase K5、9.3 | 文档 / 交付证据 | KNO-TODO-031 | 显式证据回写与残余风险记录 |
+| Facade 完整编排（评审补充） | 6.6、6.10、6.13.1；评审 D-1 | 生命周期 / 组合根 | KNO-TODO-032 | 骨架 012 升级为真实组件编排 |
+| refresh 端到端集成闭环（评审补充） | 6.6、6.9、10.4；评审 D-4 | integration / 端到端 | KNO-TODO-033 | 验证 refresh → ingest → swap → retrieve 闭环 |
+
+### 5.2 映射覆盖性检查
+
+| 类型 | 是否覆盖 | 任务 ID |
+|---|---|---|
+| 接口定义类任务 | 是 | KNO-TODO-005、006 |
+| 数据结构定义类任务 | 是 | KNO-TODO-006 |
+| 生命周期与初始化类任务 | 是 | KNO-TODO-007、012、018、019、020 |
+| 适配器 / 桥接类任务 | 是 | KNO-TODO-002、015 |
+| 异常与错误处理类任务 | 是 | KNO-TODO-006、011、012、025、026、028 |
+| 配置与 Profile 裁剪类任务 | 是 | KNO-TODO-007、017、029 |
+| 测试与门禁类任务 | 是 | KNO-TODO-005、027、028、029、030 |
+| 文档 / 交付证据回写类任务 | 是 | KNO-TODO-001、002、003、004、031 |
+| Facade 拆分 / 分阶段编排类任务 | 是 | KNO-TODO-012、032 |
+| 端到端集成闭环类任务 | 是 | KNO-TODO-027、028、029、033 |
+
+---
+
+## 6. 原子任务清单
+
+说明：除文档一致性任务使用 `rg` 检索外，本章验收命令统一以 `cmake -S . -B build-ci -G "Unix Makefiles" &&` 作为配置前缀。若后续确认本地 `build-ci` 使用 Ninja 且未污染，可切换为 Ninja；若 CMake Tools 预设状态异常，则以显式 `cmake --build` / `ctest --test-dir build-ci` 为准。
+
+### 6.1 前置补设计任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-001 | NotStarted | 收敛 lexical 索引技术选型与 PoC 证据 | 详设 6.13.2、10.4、11.1 KNO-B03、12.1 | `SparseRetriever`；`IndexReader`；`IndexWriter` | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 lexical index 首选实现、依赖接入方式、cross-compile 约束和最小 PoC 结论；**评审补充**：需包含 edge_balanced 10k chunks BM25 p99 延迟基准测量（作为 QG-K04 前置数据） | `SparseRetriever`；lexical snapshot；`IndexManifest.format_version` | 文档一致性：单一技术选型、回退条件和格式版本约束可检索；edge_balanced p99 延迟基准存在 | `rg -n "SQLite FTS5|倒排|lexical index|format_version|SparseRetriever" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-001 | 形成唯一 lexical 技术路线并补 PoC 证据 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 lexical index 选型唯一、PoC 结论可回链、`SparseRetriever` / `IndexReader` / `IndexWriter` 不再存在多候选歧义时完成 |
+| KNO-TODO-002 | NotStarted | 冻结 vector bridge 窄接口与 ownership | 详设 6.13.2、11.1 KNO-B02、12.1；阶段 H 与 memory 边界 | `VectorRetrieverBridge`；`IQueryEncoder`；`IVectorRecallStore` | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 `IQueryEncoder` / `IVectorRecallStore` owner、注入方向和 module-local 边界 | `VectorRetrieverBridge`；`IQueryEncoder`；`IVectorRecallStore` | 文档一致性：窄接口归属、注入方向和 degrade 语义可检索 | `rg -n "IQueryEncoder|IVectorRecallStore|VectorRetrieverBridge|ownership|memory/vector" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-002 | 形成单一 ownership 结论，并锁定 bridge 输入输出语义 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 hybrid recall 不再依赖未定义 owner 的接口，且 bridge 语义可直接映射到头文件与单测时完成 |
+| KNO-TODO-003 | NotStarted | 补齐首批 corpus 资产与 metadata/trust 规范 | 详设 6.9、6.13.5、11.1 KNO-B04、12.1 | `SourceScanner`；`Canonicalizer`；`Chunker`；`CorpusCatalog` | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，补齐首批 corpus 包、metadata 必填字段、`trust_level` 规则和 quarantine 条件 | `CorpusDescriptor`；`SourceRecord`；`CanonicalDocument`；`ChunkRecord` | 文档一致性：corpus baseline、metadata 字段、trust 规则可检索 | `rg -n "trust_level|metadata|corpus|quarantine|SourceScanner|Canonicalizer|Chunker" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-003 | 形成最小 corpus baseline 与 source trust SSOT | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 ingest/index 相关组件拥有明确的输入资产、metadata 必填字段与 trust 规则，且坏源隔离条件明确时完成 |
+| KNO-TODO-004 | NotStarted | 定义 retrieval quality golden set 与回归阈值 | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set；MRR/NDCG@k/Recall@k | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，冻结 golden set 文件格式、最小样本数、质量阈值和失败判定规则；**评审补充**：预留 RAGAS 风格 context-level 指标扩展槽位（Context Precision / Context Recall / Faithfulness），v1 先以 MRR/NDCG@k/Recall@k 为门禁 | golden set schema；MRR/NDCG@k/Recall@k；context-level metrics 扩展声明 | 文档一致性：quality gate 样本格式和阈值可检索；context-level 指标扩展槽位已声明 | `rg -n "golden set|MRR|NDCG@k|Recall@k|RetrievalQualityRegressionTest" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-004 | 形成 retrieval quality baseline 定义 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 regression gate 的输入格式、通过阈值和 fail 判定可二值执行时完成 |
+
+### 6.2 公共骨架与 ABI 任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-005 | NotStarted | 新增 knowledge 公共 include 与测试/CMake 骨架 | 详设 7 KNO-D01、8.1、9.3；当前代码现状 | 7 KNO-D01；8.1 目录建议；9.3 QG-K03 | L2 | 建立 `knowledge/include/`；重写 `knowledge/CMakeLists.txt` 的源文件布局；替换 `tests/unit/knowledge/CMakeLists.txt` 占位；新增 `tests/integration/knowledge/CMakeLists.txt` 并接入 `tests/integration/CMakeLists.txt` | `dasall_knowledge` 构建骨架；knowledge unit/integration 注册点 | discoverability：`ctest -N` 可发现至少 1 个 knowledge unit 和 1 个 knowledge integration 入口 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N` | 无 | 无 | 无 | `knowledge/CMakeLists.txt`；`knowledge/include/`；`tests/unit/knowledge/CMakeLists.txt`；`tests/integration/knowledge/CMakeLists.txt`；更新后的 `tests/integration/CMakeLists.txt` | 仅当 `dasall_knowledge` 不再依赖单一 placeholder 布局，且 `ctest -N` 能发现 knowledge 的 unit/integration 挂点时完成 |
+| KNO-TODO-006 | NotStarted | 定义 Knowledge public surface 对象、错误映射与 IKnowledgeService | 详设 6.5、6.6、7 KNO-D01；蓝图 6；规范 3.2/3.6/3.7 | 6.5/6.6 `KnowledgeQuery`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`IKnowledgeService` | L3 | 新增 `knowledge/include/KnowledgeTypes.h`、`knowledge/include/KnowledgeErrors.h`、`knowledge/include/IKnowledgeService.h`，冻结 `KnowledgeQueryKind`（含 `MultiHop` 枚举值，**v1 仅声明不落执行链路**）、`RetrievalMode`、`FreshnessState`、`TrustLevel`、`KnowledgeQuery`（含 `latest_observation_digest_summary` / `belief_state_summary` 预留字段，**v1 标记 not-consumed**）、`EvidenceSlice`、`EvidenceBundle`、`CorpusDescriptor`、`KnowledgeRetrieveResult`、`RefreshResult` 与 `KnowledgeErrorCode` 到 `ErrorInfo` 的映射面 | `IKnowledgeService::init/retrieve/health_snapshot/request_refresh`；public supporting types；错误码映射 | unit：`dasall_knowledge_interface_surface_unit_test` 覆盖 ABI 可见性、错误语义与 `ErrorInfo` 投影 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R dasall_knowledge_interface_surface_unit_test --output-on-failure` | KNO-TODO-005 | 无 | 无 | `knowledge/include/KnowledgeTypes.h`；`knowledge/include/KnowledgeErrors.h`；`knowledge/include/IKnowledgeService.h`；对应 unit test | 仅当 public ABI、错误映射和 Runtime-facing 接口签名稳定可编译，且不把 supporting types 推入 shared contracts 时完成 |
+| KNO-TODO-007 | NotStarted | 实现 KnowledgeConfigProjector 配置投影 | 详设 6.10、6.13.6、9.1；蓝图 5.1 | 6.10 `KnowledgeConfigSnapshot`；6.13.6 `KnowledgeConfigProjector` | L3 | 新增 `knowledge/src/health/KnowledgeConfigProjector.cpp` 及必要头文件，落盘 `knowledge_enabled`、`vector_enabled`、`retrieval_mode_default`、`evidence_budget_tokens`、`catalog_refresh_interval_ms`、`request_deadline_ms`、`max_parallel_recall` 等派生规则 | `KnowledgeConfigProjector::project`；`KnowledgeConfigSnapshot` | unit：`KnowledgeConfigProjectionTest` 覆盖 profile 派生、override merge 和 `knowledge=true && memory_vector=false` 兼容性 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R KnowledgeConfigProjectionTest --output-on-failure` | KNO-TODO-005、006 | 无 | 无 | `KnowledgeConfigProjector` 实现与对应 unit test | 仅当 Knowledge 不再自建平行配置系统，且 profile/deployment/runtime override 的优先级与派生规则可自动验证时完成 |
+
+### 6.3 Query / Evidence 主链任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-008 | NotStarted | 实现 QueryNormalizer | 详设 6.13.1、7 KNO-D02 | `QueryNormalizer`；`NormalizeResult`；`NormalizedQuery` | L3 | 新增 `knowledge/include/query/QueryNormalizer.h`、`knowledge/src/query/QueryNormalizer.cpp`，落盘 query text 规范化、tag/corpus 去重、top-k 边界裁剪和 warning 语义 | `QueryNormalizer::normalize`；`canonicalize_text`；`derive_lexical_terms` | unit：`QueryNormalizerTest`、`QueryNormalizerBoundaryTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "QueryNormalizer.*Test" --output-on-failure` | KNO-TODO-006、007 | 无 | 无 | `knowledge/include/query/QueryNormalizer.h`；`knowledge/src/query/QueryNormalizer.cpp`；对应 unit tests | 仅当空 query、超长 query、tag 归一与 warning 语义都可二值判定，且不引入 llm rewrite 依赖时完成 |
+| KNO-TODO-009 | NotStarted | 实现 CorpusRouter | 详设 6.10、6.13.1、7 KNO-D02 | `CorpusRouter`；`RetrievalPlan` | L3 | 新增 `knowledge/include/query/CorpusRouter.h`、`knowledge/src/query/CorpusRouter.cpp`，落盘 corpus 过滤、mode 选择、route reason codes 和 stale/read 准入规则 | `CorpusRouter::build_plan`；`select_mode`；`RetrievalPlan` | unit：`CorpusRouterTest`、`CorpusRouterFreshnessPolicyTest`、`CorpusRouterModeSelectionTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "CorpusRouter.*Test" --output-on-failure` | KNO-TODO-006、007、016、017 | 无 | 无 | `knowledge/include/query/CorpusRouter.h`；`knowledge/src/query/CorpusRouter.cpp`；对应 unit tests | 仅当 Router 不再默认扫全库、能对 stale/vector/legal combinations 做显式选择，并把 route reason codes 暴露给上游时完成 |
+| KNO-TODO-010 | NotStarted | 实现 Reranker | 详设 6.13.2、7 KNO-D04 | `Reranker`；`RankedHitSet`；RRF 公式 | L3 | 新增 `knowledge/include/rerank/Reranker.h`、`knowledge/src/rerank/Reranker.cpp`，落盘去重、RRF（**v1 默认融合策略，接口预留 relative score fusion 扩展槽位**）、freshness penalty、authority weighting 和 top-k 截断 | `Reranker::rerank`；`RankedHit`；`RankedHitSet` | unit：`RerankerTest`、`HybridRrfMergeTest`、`RerankerFreshnessPenaltyTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "(Reranker|HybridRrfMerge).*Test" --output-on-failure` | KNO-TODO-006、017 | 无 | 无 | `knowledge/include/rerank/Reranker.h`；`knowledge/src/rerank/Reranker.cpp`；对应 unit tests | 仅当 RRF 融合、penalty/boost 和空结果语义都可稳定测试，且不在组件内发起 I/O 时完成 |
+| KNO-TODO-011 | NotStarted | 实现 EvidenceAssembler 与 ContextProjectionMapper | 详设 6.13.2、7 KNO-D04 | `EvidenceAssembler`；`EvidenceBundle`；`context_projection` | L3 | 新增 `knowledge/include/evidence/EvidenceAssembler.h`、`knowledge/src/evidence/EvidenceAssembler.cpp`，落盘 `EvidenceSlice` 构造、budget clamp、projection line 生成、`omitted_sources` 和 `evidence_insufficient` 语义；**评审补充**：token 估算采用 `chars/4` 近似，CJK 文本精度约 70%，需在 budget clamp 中预留 10% 安全余量；`EvidenceSlice` 需携带 `freshness_state` 字段（stale 时显式标记，避免过时证据无法追踪） | `EvidenceAssembler::assemble`；`build_slice`；`build_projection_line` | unit：`EvidenceAssemblerTest`、`ContextProjectionMapperTest`、`EvidenceBudgetClampTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "(EvidenceAssembler|ContextProjectionMapper|EvidenceBudgetClamp).*Test" --output-on-failure` | KNO-TODO-006、007、010 | 无 | 无 | `knowledge/include/evidence/EvidenceAssembler.h`；`knowledge/src/evidence/EvidenceAssembler.cpp`；对应 unit tests | 仅当结构化 `slices`、`context_projection` 与 budget/degraded 语义可分离验证，且不直接写 `ContextPacket` 时完成 |
+| KNO-TODO-012 | NotStarted | 实现 KnowledgeServiceFacade lexical-only 骨架编排 | 详设 6.6、6.10、6.13.1、7 KNO-D01；评审修正：拆分 Facade 为骨架 + 完整两阶段 | `KnowledgeServiceFacade`；`compute_stage_budget`；`request_refresh` stub | L3 | 新增 `knowledge/src/facade/KnowledgeService.cpp`，按 deps 组合根落盘 lifecycle、deadline 传播（normalize+route 5% / sparse 35% / dense 35% / rerank+evidence 15% / telemetry 10%）、fail-closed、disabled/not-initialized 错误路径、lexical-only retrieve 编排（使用 stub/mock 替代尚未解阻的 RecallCoordinator / IndexReader / IngestionCoordinator / HealthProbe）与 refresh busy 占位 | `KnowledgeServiceFacade::init`；`retrieve`（lexical-only 路径）；`health_snapshot`（基础版）；`request_refresh`（busy guard）；`compute_stage_budget` | unit：`KnowledgeServiceFacadeSmokeTest`、`KnowledgeServiceFacadeFailurePathTest`、`KnowledgeServiceFacadeDegradedModeTest`、`KnowledgeServiceFacadeDeadlineBudgetTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "KnowledgeServiceFacade.*Test" --output-on-failure` | KNO-TODO-006、007、008、009、010、011、016、017、018、025 | 无 | 无 | `knowledge/src/facade/KnowledgeService.cpp`；对应 unit tests | 仅当 facade 骨架能完成 lifecycle 校验、stage deadline 传播、disabled/not-initialized/fail-closed 映射与 refresh busy guard，使用 stub seam 隔离未解阻的 recall/index/ingest/health 依赖，且不承担跨层恢复裁定时完成 |
+| KNO-TODO-013 | Blocked | 实现 SparseRetriever lexical 召回 | 详设 6.13.2、7 KNO-D02、11.1 KNO-B03 | `SparseRetriever`；`RecallHit`；lexical search path | L2 | 新增 `knowledge/include/retrieve/SparseRetriever.h`、`knowledge/src/retrieve/SparseRetriever.cpp`，落盘 lexical query expression、metadata filter、language/trust filter 与 sentence-window 扩展 | `SparseRetriever::retrieve`；`build_query_expression`；`expand_sentence_window` | unit：`SparseRetrieverTest`、`SparseRetrieverFilterTest`、`SparseRetrieverSentenceWindowTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "SparseRetriever.*Test" --output-on-failure` | KNO-TODO-001、005、006 | KNO-BLK-001 | 完成 KNO-TODO-001 | `knowledge/include/retrieve/SparseRetriever.h`；`knowledge/src/retrieve/SparseRetriever.cpp`；对应 unit tests | 仅当 lexical index 技术栈已冻结，且 filter/0-hit/损坏索引三类路径都能二值验证时完成 |
+| KNO-TODO-014 | NotStarted | 实现 RecallCoordinator lane 编排 | 详设 6.10、6.13.2、7 KNO-D03 | `RecallCoordinator`；`RecallCandidateSet` | L2 | 新增 `knowledge/include/retrieve/RecallCoordinator.h`、`knowledge/src/retrieve/RecallCoordinator.cpp`，落盘 sparse/dense lane 调度、**v1 默认串行执行**（不开放并行度控制，为 v2 hybrid 并发预留 lane executor 接口）、partial results 和 degraded 标记；**评审补充**：dense lane 使用 stub/mock seam，不硬依赖 VectorRetrieverBridge 实现 | `RecallCoordinator::recall`；`run_sparse_lane`；`run_dense_lane` | unit：`RecallCoordinatorTest`、`RecallCoordinatorDegradedTest`、**`RecallCoordinatorSerialExecutionTest`** | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "RecallCoordinator.*Test" --output-on-failure` | KNO-TODO-007、013 | 无 | 013 至少具备可替身的 lane seam；dense lane 使用 stub | `knowledge/include/retrieve/RecallCoordinator.h`；`knowledge/src/retrieve/RecallCoordinator.cpp`；对应 unit tests | 仅当双 lane 超时、单 lane 成功、双 lane 失败三类路径可自动验证，且 dense 失败不会拖垮 sparse 返回时完成 |
+| KNO-TODO-015 | Blocked | 实现 VectorRetrieverBridge 与 IQueryEncoder seam | 详设 6.13.2、7 KNO-D03、11.1 KNO-B02 | `VectorRetrieverBridge`；`IQueryEncoder` | L2 | 新增 `knowledge/include/retrieve/VectorRetrieverBridge.h`、`knowledge/include/retrieve/IQueryEncoder.h`、`knowledge/src/retrieve/VectorRetrieverBridge.cpp`，落盘 backend health 检查、dense query 构造和 hit 映射 | `VectorRetrieverBridge::retrieve`；`available`；`IQueryEncoder::encode` | unit：`VectorRetrieverBridgeTest`、`VectorRetrieverBridgeUnavailableTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "VectorRetrieverBridge.*Test" --output-on-failure` | KNO-TODO-002、005、006 | KNO-BLK-002 | 完成 KNO-TODO-002 | `knowledge/include/retrieve/VectorRetrieverBridge.h`；`knowledge/include/retrieve/IQueryEncoder.h`；`knowledge/src/retrieve/VectorRetrieverBridge.cpp`；对应 unit tests | 仅当 bridge ownership 已冻结，且 backend unavailable / timeout / vector disabled 三类路径都能以 lane failure 形式表达时完成 |
+
+### 6.4 Catalog / Freshness / Index 任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-016 | NotStarted | 实现 CorpusCatalog route metadata snapshot | 详设 6.13.6、8.1、7 KNO-D02/KNO-D05 | `CorpusCatalog`；`CorpusCatalogSnapshot`；`CorpusDescriptor` | L2 | 新增 `knowledge/include/index/CorpusCatalog.h`、`knowledge/src/index/CorpusCatalog.cpp`，落盘只读 snapshot、按 id/tags/mode 过滤和 delta apply 失败保留上一 valid snapshot 的语义 | `CorpusCatalogSnapshot::list_all/find_by_id/filter_by_tags/filter_by_mode` | unit：`CorpusCatalogTest`、`CorpusCatalogDeltaApplyTest`、**`CorpusCatalogColdStartTest`**（验证空 catalog bootstrap 场景） | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "CorpusCatalog.*Test" --output-on-failure` | KNO-TODO-006 | 无 | 无 | `knowledge/include/index/CorpusCatalog.h`；`knowledge/src/index/CorpusCatalog.cpp`；对应 unit tests | 仅当 catalog 支持只读 snapshot、delta apply 回滚和 trust/mode 过滤，不允许 query path 写入 catalog 时完成 |
+| KNO-TODO-017 | NotStarted | 实现 FreshnessController 新鲜度评估 | 详设 6.10、6.13.3、7 KNO-D05 | `FreshnessController`；`FreshnessSnapshot` | L3 | 新增 `knowledge/include/health/FreshnessController.h`、`knowledge/src/health/FreshnessController.cpp`，落盘 `age_ms`、`stale_read_allowed`、`rebuild_recommended` 和 `reason_codes` 计算；**评审补充**：新鲜度状态需通过 `FreshnessSnapshot` 传播至下游 `EvidenceSlice.freshness_state`，确保 stale 证据可被上层显式追踪 | `FreshnessController::evaluate`；`FreshnessSnapshot` | unit：`FreshnessControllerTest`、`FreshnessControllerStalePolicyTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "FreshnessController.*Test" --output-on-failure` | KNO-TODO-006、007 | 无 | 无 | `knowledge/include/health/FreshnessController.h`；`knowledge/src/health/FreshnessController.cpp`；对应 unit tests | 仅当 manifest 缺失、stale reject、stale allowed 和 pure-compute 边界都能自动验证时完成 |
+| KNO-TODO-018 | NotStarted | 实现 VersionLedger snapshot 账本 | 详设 6.13.4、10.4、7 KNO-D05 | `VersionLedger`；`VersionLedgerEntry` | L2 | 新增 `knowledge/include/index/VersionLedger.h`、`knowledge/src/index/VersionLedger.cpp`，落盘 candidate/active/superseded 状态流转、`last_known_good()` 与 checksum 校验 | `record_candidate`；`mark_active`；`mark_superseded`；`last_known_good` | unit：`VersionLedgerTest`、`VersionLedgerActivationTest`、`VersionLedgerRollbackEligibilityTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "VersionLedger.*Test" --output-on-failure` | KNO-TODO-006 | 无 | 无 | `knowledge/include/index/VersionLedger.h`；`knowledge/src/index/VersionLedger.cpp`；对应 unit tests | 仅当 candidate/active/rollback eligibility 三类状态转换和 checksum 失配拒绝都可验证时完成 |
+| KNO-TODO-019 | Blocked | 实现 IndexReader active snapshot 读路径 | 详设 6.13.3、7 KNO-D05、11.1 KNO-B03 | `IndexReader`；`IndexManifest`；active snapshot | L2 | 新增 `knowledge/include/index/IndexReader.h`、`knowledge/src/index/IndexReader.cpp`，落盘 active snapshot 原子读取、manifest 查询与 lexical search 只读路径 | `IndexReader::search_sparse`；`current_manifest` | unit：`IndexReaderTest`、`IndexReaderConcurrentSwapTest`、**`IndexReaderNoActiveSnapshotTest`**（验证 bootstrap/无活跃 snapshot 场景显式失败） | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "IndexReader.*Test" --output-on-failure` | KNO-TODO-001、006、018 | KNO-BLK-001 | 完成 KNO-TODO-001 | `knowledge/include/index/IndexReader.h`；`knowledge/src/index/IndexReader.cpp`；对应 unit tests | 仅当 lexical snapshot 方案已冻结，且读路径满足 lock-free/MVCC 语义、active snapshot 缺失时显式失败时完成 |
+| KNO-TODO-020 | Blocked | 实现 IndexWriter shadow build 与 snapshot swap | 详设 6.13.3、10.4、11.1 KNO-B03 | `IndexWriter`；`swap_active_snapshot`；核心事务边界 | L2 | 新增 `knowledge/include/index/IndexWriter.h`、`knowledge/src/index/IndexWriter.cpp`，落盘 shadow build、candidate 记录、active swap、last-known-good 回退和 core/sidecar 分层语义 | `apply_update_batch`；`rebuild_all`；`build_shadow_index`；`swap_active_snapshot` | unit：`IndexWriterTest`、`IndexWriterSnapshotSwapTest`、`IndexWriterRecoveryTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "IndexWriter.*Test" --output-on-failure` | KNO-TODO-001、006、018、019 | KNO-BLK-001 | 完成 KNO-TODO-001 | `knowledge/include/index/IndexWriter.h`；`knowledge/src/index/IndexWriter.cpp`；对应 unit tests | 仅当 lexical snapshot 方案已冻结，且 `record_candidate -> swap -> mark_active -> catalog refresh` 顺序可二值验证、失败时不污染 active snapshot 时完成 |
+
+### 6.5 Ingest 任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-021 | Blocked | 实现 SourceScanner source delta 与 quarantine | 详设 6.9、6.13.5、11.1 KNO-B04/KNO-R10 | `SourceScanner`；`SourceRecord`；`SourceScanDelta` | L2 | 新增 `knowledge/include/ingest/SourceScanner.h`、`knowledge/src/ingest/SourceScanner.cpp`，落盘 source 枚举、hash/mtime diff、不可读源 quarantine 和 full scan 标志；**评审补充**：`compute_source_hash` 统一采用 SHA-256 算法，避免算法变更导致误报全量 diff | `SourceScanner::scan`；`compute_source_hash` | unit：`SourceScannerTest`、`SourceScannerDeltaDiffTest`、`SourceScannerQuarantineTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "SourceScanner.*Test" --output-on-failure` | KNO-TODO-003、005、006 | KNO-BLK-003 | 完成 KNO-TODO-003 | `knowledge/include/ingest/SourceScanner.h`；`knowledge/src/ingest/SourceScanner.cpp`；对应 unit tests | 仅当 source baseline/trust 规则已冻结，且 added/updated/removed/quarantine 四类 delta 都可验证时完成 |
+| KNO-TODO-022 | Blocked | 实现 Canonicalizer 文档规范化 | 详设 6.13.5、11.1 KNO-B04 | `Canonicalizer`；`CanonicalDocument` | L2 | 新增 `knowledge/include/ingest/Canonicalizer.h`、`knowledge/src/ingest/Canonicalizer.cpp`，落盘编码/换行规范化、markup 展平、metadata 提取、stable `document_id` 生成 | `Canonicalizer::canonicalize`；`normalize_markup`；`extract_metadata` | unit：`CanonicalizerTest`、`CanonicalizerMarkupNormalizeTest`、`CanonicalizerMetadataFallbackTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "Canonicalizer.*Test" --output-on-failure` | KNO-TODO-003、005、006 | KNO-BLK-003 | 完成 KNO-TODO-003 | `knowledge/include/ingest/Canonicalizer.h`；`knowledge/src/ingest/Canonicalizer.cpp`；对应 unit tests | 仅当 metadata baseline 已冻结，且 markup 规范化失败会显式 quarantine/ warning，而不是生成半有效文档时完成 |
+| KNO-TODO-023 | Blocked | 实现 Chunker stable chunk 切分 | 详设 6.13.5、11.1 KNO-B04 | `Chunker`；`ChunkRecord`；stable chunk id | L2 | 新增 `knowledge/include/ingest/Chunker.h`、`knowledge/src/ingest/Chunker.cpp`，落盘段落/章节优先切分、overlap、token estimate、citation span 与 `chunk_id` 生成；**评审补充**：v1 默认 fixed-size 切分，接口预留 `ChunkStrategy`（fixed-size / semantic / document-aware）可配置扩展槽位 | `Chunker::chunk`；`split_into_spans`；`build_chunk_id` | unit：`ChunkerTest`、`ChunkerStableIdTest`、`ChunkerBoundaryFallbackTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "Chunker.*Test" --output-on-failure` | KNO-TODO-003、005、006 | KNO-BLK-003 | 完成 KNO-TODO-003 | `knowledge/include/ingest/Chunker.h`；`knowledge/src/ingest/Chunker.cpp`；对应 unit tests | 仅当 chunk policy 与 corpus baseline 已冻结，且 stable id、empty text、forced split 三类路径可二值验证时完成 |
+| KNO-TODO-024 | Blocked | 实现 IngestionCoordinator update batch 编排 | 详设 6.9、6.13.3、7 KNO-D05、11.1 KNO-B04 | `IngestionCoordinator`；`CorpusChangeSet`；`IndexUpdateBatch` | L2 | 新增 `knowledge/include/ingest/IngestionCoordinator.h`、`knowledge/src/ingest/IngestionCoordinator.cpp`，落盘 scan/canonicalize/chunk 组合编排、warning 收敛与 batch 装配 | `build_update_batch`；`scan_and_canonicalize`；`build_chunk_records` | unit：`IngestionCoordinatorTest`、`IngestionCoordinatorSelectiveRefreshTest`、`IngestionCoordinatorBadSourceTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "IngestionCoordinator.*Test" --output-on-failure` | KNO-TODO-003、021、022、023 | KNO-BLK-003 | 完成 KNO-TODO-003 | `knowledge/include/ingest/IngestionCoordinator.h`；`knowledge/src/ingest/IngestionCoordinator.cpp`；对应 unit tests | 仅当 source baseline 已冻结，且单源失败 warning、selective refresh 与 batch 组装都可自动验证时完成 |
+
+### 6.6 Observability / Gate 任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-025 | NotStarted | 实现 KnowledgeTelemetry 观测桥 | 详设 6.11、6.13.4、7 KNO-D06；SSOT 并发策略 | `KnowledgeTelemetry`；`KnowledgeTelemetryEvent` | L2 | 新增 `knowledge/include/health/KnowledgeTelemetry.h`、`knowledge/src/observability/KnowledgeTelemetry.cpp`，落盘 retrieve/ingest/health/snapshot_swap 事件统一字段、sink 容错与 drop counter | `emit_retrieve_event`；`emit_ingest_event`；`emit_health_event`；`emit_snapshot_swap_event` | unit：`KnowledgeTelemetryTest`、`KnowledgeTelemetryFieldSetTest`、`KnowledgeTelemetryDegradeEventTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "KnowledgeTelemetry.*Test" --output-on-failure` | KNO-TODO-005、006 | 无 | 无 | `knowledge/include/health/KnowledgeTelemetry.h`；`knowledge/src/observability/KnowledgeTelemetry.cpp`；对应 unit tests | 仅当关键事件字段齐全、sink 失败不阻断主链路、并能记录 drop/invalid payload 事实时完成 |
+| KNO-TODO-026 | NotStarted | 实现 KnowledgeHealthProbe 健康快照 | 详设 6.13.4、7 KNO-D06 | `KnowledgeHealthProbe`；`KnowledgeHealthSnapshot` | L2 | 新增 `knowledge/include/health/KnowledgeHealthProbe.h`、`knowledge/src/health/KnowledgeHealthProbe.cpp`，落盘 lifecycle/manifest/freshness/vector/degraded count 聚合与 `HealthState` 分类 | `KnowledgeHealthProbe::collect`；`classify_state` | unit：`KnowledgeHealthProbeTest`、`KnowledgeHealthProbeDegradedStateTest`、`KnowledgeHealthProbeUnknownDependencyTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "KnowledgeHealthProbe.*Test" --output-on-failure` | KNO-TODO-006、017、018、019、025 | 无 | 无 | `knowledge/include/health/KnowledgeHealthProbe.h`；`knowledge/src/health/KnowledgeHealthProbe.cpp`；对应 unit tests | 仅当 HealthProbe 在依赖缺失时不误判 Healthy，并能区分 lexical-only degrade 与真正不可用状态时完成 |
+| KNO-TODO-027 | Blocked | 验证 lexical retrieval smoke integration | 详设 7 KNO-D07、8.2 Phase K1、9.1 | `dasall_knowledge_retrieval_smoke_integration_test` | L2 | 新增 `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`，打通 `Runtime -> Knowledge retrieve -> context_projection` 最小闭环 | `KnowledgeRetrievalSmokeTest`；`dasall_knowledge_retrieval_smoke_integration_test` | integration：最小 lexical retrieval 闭环可通过且 `ctest -N` 可发现 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_retrieval_smoke_integration_test --output-on-failure` | KNO-TODO-005、006、007、008、009、011、012、013、014、016、017、019 | KNO-BLK-001 | 完成 KNO-TODO-001 | `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`；更新后的 integration CMake | 仅当 lexical-only 主链可对外返回非空 `context_projection`，且 smoke 用例可被 `ctest -N` 发现时完成 |
+| KNO-TODO-028 | Blocked | 验证 failure/degrade integration | 详设 7 KNO-D07、9.1、11.1 KNO-R06/KNO-R07 | `dasall_knowledge_failure_degrade_integration_test` | L2 | 新增 `tests/integration/knowledge/KnowledgeFailureDegradeTest.cpp`，覆盖 vector unavailable、partial timeout、stale reject、refresh busy 等退化路径 | `KnowledgeFailureDegradeTest`；`dasall_knowledge_failure_degrade_integration_test` | integration：degrade 路径以显式 `degraded` / `error` / `reason_codes` 形式可验证 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_failure_degrade_integration_test --output-on-failure` | KNO-TODO-012、014、015、017、019、020、025、026 | KNO-BLK-001、KNO-BLK-002 | 完成 KNO-TODO-001、002 | `tests/integration/knowledge/KnowledgeFailureDegradeTest.cpp`；对应 integration CMake | 仅当 vector unavailable、partial result、stale reject、refresh busy 四类路径均可自动验证，且不会演化为进程级失败时完成 |
+| KNO-TODO-029 | Blocked | 验证 profile compatibility integration | 详设 8.2 Phase K2/K4、9.1、10.2、QG-K04/K05 | `dasall_knowledge_profile_compatibility_integration_test` | L2 | 新增 `tests/integration/knowledge/KnowledgeProfileCompatibilityTest.cpp`，覆盖 `desktop_full` / `cloud_full` / `edge_balanced` / `edge_minimal` / `factory_test` 的 enabled/vector/degrade 行为 | `KnowledgeProfileCompatibilityTest`；`dasall_knowledge_profile_compatibility_integration_test` | integration：`knowledge=true && memory_vector=false` 合法；`edge_minimal` 默认关闭；hybrid 可在支持档位灰度 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_profile_compatibility_integration_test --output-on-failure` | KNO-TODO-007、012、015、017、025、026 | KNO-BLK-002 | 完成 KNO-TODO-002 | `tests/integration/knowledge/KnowledgeProfileCompatibilityTest.cpp`；对应 integration CMake | 仅当 profile 行为全部来自投影规则，且 `knowledge=false` / lexical-only / hybrid 三种模式都能自动验证时完成 |
+| KNO-TODO-030 | Blocked | 验证 retrieval quality regression gate | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set | L2 | 新增 `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp` 与 `tests/integration/knowledge/golden/` 基线资产，落盘 MRR/NDCG@k/Recall@k 回归校验 | `RetrievalQualityRegressionTest`；golden set schema | integration：golden set ≥30 条，指标不低于基线阈值 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure` | KNO-TODO-004、027、028 | KNO-BLK-004 | 完成 KNO-TODO-004 | `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`；`tests/integration/knowledge/golden/` 资产 | 仅当 golden set 资产和阈值已冻结，且质量退化会被自动阻断时完成 |
+| KNO-TODO-031 | NotStarted | 回写 knowledge 专项 Gate 与交付证据 | 阶段 H；详设 8.2 Phase K5、9.3；工程执行规范 | 8.2 Phase K5；9.3 质量门 | L2 | 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md`，回写 build / unit / integration / quality / blocker / rollback 证据 | Gate 结果、命令、风险、blocker、后继动作 | process：所有 Gate 都有命令证据、结果摘要和残余风险回写 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -R "Knowledge|dasall_knowledge"` | KNO-TODO-027、028、029、030、032、033 | 无 | 无 | 更新后的专项 TODO；更新后的 worklog；对应 deliverables 记录 | 仅当每个 Gate 都存在可追溯证据、blocker 状态与后继动作回写，不再依赖口头结论时完成 |
+
+### 6.7 评审补充任务
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| KNO-TODO-032 | Blocked | 补全 KnowledgeServiceFacade 完整编排（hybrid/ingest/health） | 评审 D-1：Facade 依赖过重需拆分为骨架 + 完整两阶段；详设 6.6、6.10、6.13.1 | `KnowledgeServiceFacade`；`RecallCoordinator` 真实接入；`IngestionCoordinator` 真实 refresh 编排；`KnowledgeHealthProbe` 接入 | L2 | 在 KNO-TODO-012 骨架基础上，替换 stub 为真实组件：接入 `RecallCoordinator`（含 sparse + dense lane）、`IndexReader` 真实 snapshot 读取、`IngestionCoordinator` 真实 refresh 编排、`KnowledgeHealthProbe` 完整健康聚合 | `KnowledgeServiceFacade::retrieve`（完整 hybrid 路径）；`request_refresh`（真实 ingest 编排）；`health_snapshot`（完整 probe 接入） | unit：`KnowledgeServiceFacadeHybridRecallTest`、`KnowledgeServiceFacadeRealRefreshTest`、`KnowledgeServiceFacadeFullHealthSnapshotTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests && ctest --test-dir build-ci -R "KnowledgeServiceFacade.*(Hybrid|RealRefresh|FullHealth).*Test" --output-on-failure` | KNO-TODO-012、013、014、015、019、020、024、026 | KNO-BLK-001、KNO-BLK-002、KNO-BLK-003 | 完成 KNO-TODO-001、002、003 | 更新后的 `knowledge/src/facade/KnowledgeService.cpp`；对应 unit tests | 仅当 facade 内所有 stub seam 被替换为真实组件、hybrid recall / real ingest refresh / full health 路径可自动验证，且 facade 不再包含硬编码 mock 时完成 |
+| KNO-TODO-033 | Blocked | 验证 request_refresh → ingest → snapshot swap → retrieve 端到端集成闭环 | 评审 D-4：缺少 refresh 闭环集成测试；详设 6.6、6.9、10.4 | `request_refresh`；`IngestionCoordinator`；`IndexWriter.swap_active_snapshot`；`IndexReader`；retrieve 闭环 | L2 | 新增 `tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp`，验证 `request_refresh(changes)` → 触发 ingest → shadow build → snapshot swap → 下次 `retrieve()` 返回更新后数据的完整闭环；同时验证 refresh busy reject 与 swap 失败回退语义 | `KnowledgeRefreshLoopTest`；`dasall_knowledge_refresh_loop_integration_test` | integration：refresh → retrieve 闭环可通过；refresh busy reject 可验证；swap 失败时 active snapshot 不污染 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_refresh_loop_integration_test --output-on-failure` | KNO-TODO-020、024、032 | KNO-BLK-001、KNO-BLK-003 | 完成 KNO-TODO-001、003 | `tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp`；对应 integration CMake | 仅当 refresh → ingest → swap → retrieve 端到端闭环可自动验证、refresh busy 拒绝可二值判定、swap 失败不丢失 last-known-good snapshot 时完成 |
+
+---
+
+## 7. 执行顺序建议
+
+### 7.1 串并行编排（Step 5 输出）
+
+| 阶段 | 任务 ID | 串并行建议 | 说明 |
+|---|---|---|---|
+| A 补设计解阻 | KNO-TODO-001 ~ 004 | 可并行，全部前置 | 先冻结 lexical/vector/corpus/quality 四类 blocker，避免 Build 返工扩散 |
+| B 公共骨架与 ABI + 观测基础 | KNO-TODO-005、006、007、025 | 005 先起；006 紧随；007 依赖 006；025 在 005/006 后启动 | 先建立 include/CMake/test discoverability，再冻结 public surface 与配置投影；**025（Telemetry）前移至此阶段**以遵守 KNO-TC015"四类关键路径必须可观测、不能后置"的约束 |
+| C Route / Evidence 纯计算链 + 健康探针 | KNO-TODO-016、017、008、009、010、011、026 | 016/017 可并行；008/010 可并行；009 依赖 016/017/008；011 依赖 010；026 在 017/018/025 后启动 | 先把无外部 I/O 的纯计算与 snapshot 支撑层做稳；**026（HealthProbe）前移至此阶段**以确保健康状态可在 lexical 主链闭环前就位 |
+| D lexical 最小主链 + 骨架 Facade | KNO-TODO-013、018、019、014、012、027 | 013/018 在 KNO-BLK-001 解阻后并行；019 依赖 013/018；014 依赖 013（dense lane 使用 stub）；012 依赖上游纯计算链与 stub seam；027 最后验证 | 形成 lexical-only 最小闭环；**012 已拆分为骨架版本**，仅依赖已解阻组件 + stub |
+| E hybrid 与退化闭环 | KNO-TODO-015、014（补齐 dense lane）、028、029 | 015 解阻后先做；014 补齐 dense lane 真实接入；028/029 串行验证 | hybrid 与 profile 只在边界冻结后推进 |
+| F ingest / snapshot 治理 + Facade 完整版 | KNO-TODO-021、022、023、024、020、032 | 021/022/023 在 KNO-BLK-003 解阻后可并行；024 依赖前三者；020 依赖 001/018/019/024；**032 在 013/014/015/019/020/024/026 就绪后补全 Facade 真实编排** | 构建 source -> canonical -> chunk -> batch -> snapshot swap 全链；Facade 从骨架升级为完整编排 |
+| G 质量门与证据收口 | KNO-TODO-030、033、031 | 030 依赖 004、027、028；**033 在 020/024/032 后验证 refresh 闭环**；031 最后收口 | 把 golden set、refresh 闭环与证据回写收口到 Gate |
+
+### 7.2 必过门禁表
+
+| 门禁 | 通过条件 | 对应任务 | 未通过时禁止推进 |
+|---|---|---|---|
+| Gate-A：补设计冻结 | KNO-BLK-001 ~ 004 至少完成本阶段所需解阻项 | KNO-TODO-001 ~ 004 | 禁止 lexical / hybrid / ingest / quality Build |
+| Gate-B：ABI 冻结 | `IKnowledgeService`、public types、error mapping 编译与 surface test 全绿 | KNO-TODO-005 ~ 007 | 禁止 Runtime 侧接线与上游 mock 依赖 |
+| Gate-B+：观测基础就位 | `KnowledgeTelemetry` 四类关键事件字段齐全、sink 容错可验证 | KNO-TODO-025 | 禁止组件实现不接入观测（KNO-TC015） |
+| Gate-C：discoverability | `ctest -N` 可发现 knowledge 的 unit / integration 入口 | KNO-TODO-005 | 禁止 Phase D/E/F 的测试主张 |
+| Gate-D：lexical smoke | lexical-only 主链返回非空 `context_projection` | KNO-TODO-013、014、019、012、027 | 禁止 hybrid/profile 推进 |
+| Gate-E：hybrid degrade | vector unavailable/timeout 时明确退 lexical-only，不进程失败 | KNO-TODO-015、028、029 | 禁止 profile 扩面 |
+| Gate-F：index consistency | `record_candidate -> swap -> mark_active` 顺序与 rollback 可验证 | KNO-TODO-018、019、020、024 | 禁止 stale/read/rebuild 灰度 |
+| Gate-F+：refresh 闭环 | `request_refresh()` → ingest → swap → retrieve 返回更新数据的端到端闭环可验证 | KNO-TODO-032、033 | 禁止声称 ingest/index 治理完成 |
+| Gate-G：quality baseline | golden set 指标不低于阈值 | KNO-TODO-004、030 | 禁止把 Knowledge 标记为 ready |
+| Gate-H：evidence 回写 | TODO / worklog / deliverables 证据齐全 | KNO-TODO-031 | 禁止收尾宣称完成 |
+
+---
+
+## 8. 阻塞项与解阻条件
+
+| Blocker ID | 阻塞描述 | 直接受影响任务 | 解阻条件 | 当前处置策略 |
+|---|---|---|---|---|
+| KNO-BLK-001 | lexical index 技术栈未冻结，`SparseRetriever` / `IndexReader` / `IndexWriter` 无法安全编码 | KNO-TODO-013、019、020、027、028、032、033 | 完成 KNO-TODO-001，形成唯一 lexical 方案与 PoC 证据 | public ABI、pure compute、catalog/freshness/ledger 先行 |
+| KNO-BLK-002 | `VectorRetrieverBridge` 的窄接口 owner 与注入方向未冻结 | KNO-TODO-015、014、028、029、032 | 完成 KNO-TODO-002，锁定 `IQueryEncoder` / `IVectorRecallStore` 边界 | hybrid 与 profile/hybrid 用例保持 Blocked |
+| KNO-BLK-003 | corpus baseline、metadata 必填字段与 trust/quarantine 规则缺失 | KNO-TODO-021、022、023、024、032、033 | 完成 KNO-TODO-003，建立最小语料包与 metadata/trust SSOT | query/evidence/health 可以先实现；ingest Build 暂停 |
+| KNO-BLK-004 | golden set 资产与质量阈值未冻结 | KNO-TODO-030 | 完成 KNO-TODO-004，冻结样本格式、条数下限和 fail 阈值 | 先推进 smoke / degrade / profile，质量回归 Gate 后置 |
+
+### 8.1 Blocker 校准记录
+
+执行期间逐 blocker 填写校准记录，当前为占位。
+
+| Blocker ID | 校准时间 | 校准结果 | 剩余阻塞范围 | 校准者 |
+|---|---|---|---|---|
+| KNO-BLK-001 | — | — | — | — |
+| KNO-BLK-002 | — | — | — | — |
+| KNO-BLK-003 | — | — | — | — |
+| KNO-BLK-004 | — | — | — | — |
+
+---
+
+## 9. 验收与质量门
+
+### 9.1 质量门清单
+
+| Gate ID | 质量门 | 通过标准 | 验收命令 |
+|---|---|---|---|
+| QG-K01 | 构建门 | `dasall_knowledge` 可编译，且不再仅由 placeholder 维持 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge` |
+| QG-K02 | Public ABI 门 | `IKnowledgeService` 与 public types/error mapping 有至少 1 个 surface unit test 通过 | `ctest --test-dir build-ci -R dasall_knowledge_interface_surface_unit_test --output-on-failure` |
+| QG-K03 | Discoverability 门 | `ctest -N` 可发现至少 1 个 knowledge integration 用例 | `ctest --test-dir build-ci -N` |
+| QG-K04 | Lexical-only 兼容门 | `knowledge=true && memory_vector=false` 不报配置错误，lexical-only smoke 通过 | `ctest --test-dir build-ci -R dasall_knowledge_retrieval_smoke_integration_test --output-on-failure` |
+| QG-K05 | Degrade 门 | vector unavailable/timeout/stale reject/refresh busy 路径均显式表达，不进程级失败 | `ctest --test-dir build-ci -R dasall_knowledge_failure_degrade_integration_test --output-on-failure` |
+| QG-K06 | Profile 门 | `desktop_full` / `cloud_full` / `edge_balanced` / `edge_minimal` / `factory_test` 的启停与降级行为符合投影规则 | `ctest --test-dir build-ci -R dasall_knowledge_profile_compatibility_integration_test --output-on-failure` |
+| QG-K07 | 质量回归门 | golden set 指标不低于基线阈值 | `ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure` |
+| QG-K08 | 可观测性门 | retrieve/ingest/swap/degraded 四类关键字段齐全，缺失字段视为失败 | `ctest --test-dir build-ci -R "Knowledge(Telemetry|HealthProbe).*Test" --output-on-failure` |
+| QG-K09 | 证据回写门 | TODO、deliverables、worklog 全部写入命令、结果、风险和 blocker 状态 | `rg -n "KNO-TODO-|Knowledge|quality|blocker|rollback" docs/todos/knowledge docs/worklog/DASALL_开发执行记录.md` |
+| QG-K10 | ADR 边界门 | Knowledge 不生成 ContextPacket（ADR-006）、不拥有调度环（ADR-008）、不做恢复裁定（ADR-007），通过代码审查与 `rg` 反向搜索确认 | `rg -n "ContextPacket\|PromptComposer\|RecoveryManager\|timer\|watcher\|schedule_loop" knowledge/include knowledge/src` 结果为空 |
+| QG-K11 | 并发安全门 | lock ordering 符合 `InfraConcurrencyPolicy`（L0→L1→L2），不持 L2 锁做 I/O；queue/buffer 声明 overflow_policy | `rg -n "mutex\|lock_guard\|unique_lock\|atomic" knowledge/src` 结果与 lock ordering 声明一致；`rg -n "overflow_policy\|backpressure" knowledge/include knowledge/src` 可命中 |
+| QG-K12 | Refresh 闭环门 | `request_refresh()` → ingest → swap → retrieve 端到端闭环可验证，refresh busy reject 与 swap 失败回退可验证 | `ctest --test-dir build-ci -R dasall_knowledge_refresh_loop_integration_test --output-on-failure` |
+
+### 9.2 最小验收命令组合
+
+```bash
+cmake -S . -B build-ci -G "Unix Makefiles"
+cmake --build build-ci --target dasall_knowledge dasall_unit_tests dasall_integration_tests
+ctest --test-dir build-ci -N
+ctest --test-dir build-ci -R "Knowledge|dasall_knowledge" --output-on-failure
+```
+
+### 9.3 契约影响检查点
+
+1. `EvidenceBundle.context_projection` 只能投影到既有 `ContextPacket.retrieval_evidence`，不得引入新的 shared contracts 字段。
+2. `KnowledgeRetrieveResult.error` 必须复用 `ErrorInfo`，不得私造跨模块错误对象。
+3. `IKnowledgeService` 与 supporting types 当前维持 module-local，不得越级 admission 到 shared contracts。
+
+### 9.4 Gate 执行证据表
+
+执行期间逐 Gate 填写，当前为占位。
+
+| Gate ID | 执行时间 | 执行命令 | 执行结果 | 残余风险 | 后继动作 |
+|---|---|---|---|---|---|
+| QG-K01 | — | — | — | — | — |
+| QG-K02 | — | — | — | — | — |
+| QG-K03 | — | — | — | — | — |
+| QG-K04 | — | — | — | — | — |
+| QG-K05 | — | — | — | — | — |
+| QG-K06 | — | — | — | — | — |
+| QG-K07 | — | — | — | — | — |
+| QG-K08 | — | — | — | — | — |
+| QG-K09 | — | — | — | — | — |
+| QG-K10 | — | — | — | — | — |
+| QG-K11 | — | — | — | — | — |
+| QG-K12 | — | — | — | — | — |
+
+---
+
+## 10. 风险与回退策略
+
+| 风险 ID | 风险描述 | 影响 | 缓解策略 | 回退策略 |
+|---|---|---|---|---|
+| KNO-R01 | lexical index 选型与目标平台不匹配 | `SparseRetriever` 延迟、体积或交叉编译失败 | 先做 KNO-TODO-001 PoC，再决定正式实现 | 回退到最小可工作的测试夹具索引；暂不打开 lexical Build |
+| KNO-R02 | vector bridge ownership 继续漂移 | hybrid 任务返工扩散到 memory / profile / tests | 用 KNO-TODO-002 先冻结窄接口和 owner | 回退到 lexical-only，保持 `memory_vector=false` 合法组合 |
+| KNO-R03 | stale read 被滥用 | 过时证据进入上游，影响 grounding | `FreshnessController` + `KnowledgeHealthProbe` + 审计事件强校验 stale serve 计数 | profile 层禁用 stale read，并回退到 last-known-good snapshot |
+| KNO-R04 | corpus 投毒或间接 prompt injection | 恶意语料污染 evidence 与 LLM 推理 | 建立 trust level + quarantine 规则，坏源不入 active snapshot | 立即将对应 corpus 标记 `Quarantined`，并禁用 Knowledge 或切回 memory-only |
+| KNO-R05 | snapshot swap 或 ledger 失配 | 查询读到不一致状态或丢失回退依据 | 强制 `record_candidate -> swap -> mark_active` 顺序和 checksum 校验 | 回退 `last_known_good()`，拒绝继续激活异常 snapshot |
+| KNO-R06 | observability 字段缺失 | 退化与失败不可追踪，Gate 形同虚设 | `KnowledgeTelemetryFieldSetTest` 与 QG-K08 强阻断 | 停止发布，先补字段而不是带病上线 |
+| KNO-R07 | edge 设备 lexical recall 超时 | `edge_balanced` 预算被击穿 | 在 KNO-TODO-001 / KNO-TODO-030 中纳入 PoC 与 quality 基线 | 对 edge profile 回退到 `knowledge=false` 或更小 corpus 范围 |
+| KNO-R08 | golden set 不足或偏斜 | quality gate 失真，排序优化无有效反馈 | 先做 KNO-TODO-004 定义样本覆盖标准，再扩到 ≥30 条 | 暂停 quality-ready 结论，只保留 smoke/degrade 级可用 |
+| KNO-R09 | token 估算 `chars/4` 对 CJK 文本精度仅 ~70% | evidence budget 超支或浪费，context projection 截断不准 | `EvidenceAssembler` budget clamp 预留 10% 安全余量；在 v2 中评估引入真实 tokenizer 估算 | 回退到更保守的 budget 比例（`chars/5`），宁可少填不超 |
+| KNO-R10 | `MultiHop` 枚举值 v1 仅声明不落链路，后续扩展可能影响 QueryNormalizer/CorpusRouter 接口 | v2 新增 multi-hop 执行链路时发现 v1 接口不兼容，需回退 ABI | 在 KNO-TODO-006 中把 `MultiHop` 标记为 `reserved`，并在 `QueryNormalizer` 中遇到 MultiHop 时返回 `NotSupported` 错误 | 延迟 MultiHop 到 v2 版本周期，v1 仅保留枚举声明 |
+
+系统级回退基线：
+
+1. Profile 回退：`enabled_modules.knowledge=false`，主链回退到 memory-only 上下文。
+2. 检索回退：强制 `retrieval_mode_default=LexicalOnly`，禁用 vector bridge。
+3. 索引回退：切回 `VersionLedger.last_known_good()` 对应 snapshot，并记录审计事件。
+4. 语义回退：返回 `evidence_insufficient=true`，由 Runtime 走澄清、低置信回复或继续无 Knowledge 路径。
+
+---
+
+## 11. 可行性结论
+
+结论：Knowledge 专项 TODO 可以直接进入执行，但执行策略必须分成“立即可做”和“先解阻再做”两段。
+
+当前可直接落到的最细粒度：
+
+1. L3：public ABI、配置投影、QueryNormalizer、CorpusRouter、Reranker、EvidenceAssembler、FreshnessController。
+2. L2：KnowledgeServiceFacade（骨架版，已拆分为 012 + 032 两阶段）、CorpusCatalog、VersionLedger、KnowledgeTelemetry、KnowledgeHealthProbe。
+3. L2 但当前 Blocked：SparseRetriever、VectorRetrieverBridge、IndexReader、IndexWriter、SourceScanner、Canonicalizer、Chunker、IngestionCoordinator、RetrievalQualityRegression、KnowledgeServiceFacade 完整版（032）、refresh 闭环集成测试（033）。
+
+评审修正要点（共 33 项任务，较原始版本新增 032/033）：
+
+1. **Facade 拆分（P0 D-1）**：KNO-TODO-012 降级为 lexical-only 骨架，使用 stub 隔离 14 → 10 项依赖；KNO-TODO-032 承接完整编排，显式标记 Blocked。
+2. **Telemetry 前移（P0 D-2）**：025 从 Phase G 前移至 Phase B+，026 前移至 Phase C+，遵守 KNO-TC015"不能后置"约束。
+3. **新增质量门（P1）**：QG-K10 ADR 边界门、QG-K11 并发安全门、QG-K12 Refresh 闭环门，共计 12 个质量门。
+4. **新增门禁（P1）**：Gate-B+ 观测基础、Gate-F+ refresh 闭环，共计 10 个必过门禁。
+5. **任务级微调（P2/P3）**：001 补 edge BM25 基准、004 补 context-level metrics 槽位、006 补 MultiHop/预留字段 v1 声明、010 补融合策略扩展接口、011 补 token 估算精度与 stale 标注、014 修正 v1 串行与 stub 策略、016/019 补 cold-start 测试、017 补 freshness 传播注解、021 补 SHA-256 约束、023 补可配置 chunk 策略。
+6. **新增风险（P2/P3）**：KNO-R09 CJK token 估算精度、KNO-R10 MultiHop 延迟风险。
+
+直接执行建议：
+
+1. 先并行完成 KNO-TODO-001 ~ 004 的补设计解阻。
+2. 在 blocker 解锁前，优先推进 KNO-TODO-005 ~ 012、016 ~ 018、025 的骨架、ABI、纯计算和观测类任务（025/026 已前移）。
+3. 在 KNO-BLK-001 解锁后推进 lexical 主链与 smoke；在 KNO-BLK-002 解锁后推进 hybrid/profile；在 KNO-BLK-003 解锁后推进 ingest/index；在 KNO-BLK-004 解锁后补 quality regression Gate。
+4. 在 KNO-BLK-001/002/003 全部解锁后推进 KNO-TODO-032（Facade 完整版）和 KNO-TODO-033（refresh 闭环集成测试）。
+
+若不先完成四项 blocker，就无法把 Knowledge 安全细化到“真实 lexical/hybrid/index/quality Build 任务”，继续硬拆只会把设计不确定性转移到代码层。当前最合理的工程策略是：先冻边界，再做最小 lexical 闭环，最后补 hybrid、index 治理与 quality Gate。
