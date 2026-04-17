@@ -1,9 +1,9 @@
 # DASALL Memory 子系统专项 TODO
 
-最近更新时间：2026-04-17（完成 MEM-TODO-001/002/003/004）  
+最近更新时间：2026-04-17（完成 MEM-TODO-001/002/003/004/005）  
 阶段：Detailed Design -> Special TODO  
 适用范围：memory/  
-当前结论：Memory 子系统已具备 L3/L2 混合粒度的专项拆分条件；公共接口、supporting types、WorkingMemory、SQLite store、ContextOrchestrator、Writeback/Conflict、Maintenance baseline 和 tests topology 可直接进入 Build 规划，其中 `WorkingMemoryExportRequest/Result`、`SummaryGenerationRequest/Result` / `SummaryProjection`、`CompressionCoordinator` 的持久化依赖口径以及 `WorkingMemoryBoard` 更新 ownership 已分别在详设 6.5.3a / 6.12.1、6.5.3b / 6.12.2、6.3 / 6.12.2、6.12.1 / 6.12.3 收敛；当前仅剩 concrete vector backend 选型一项仍需以前置评审任务解阻。
+当前结论：Memory 子系统已具备 L3/L2 混合粒度的专项拆分条件；`memory/include` 根与 `config/context/error/vector/working/writeback` 稳定子目录、`MemoryBuildSkeleton.cpp` 以及 `MemoryInterfaceCompileTest` 已落盘，memory 模块已退出 placeholder-only 状态；公共接口、supporting types、WorkingMemory、SQLite store、ContextOrchestrator、Writeback/Conflict、Maintenance baseline 和 tests topology 可直接进入 Build 推进，当前仅剩 concrete vector backend 选型一项仍需以前置评审任务解阻。
 
 ## 1. 文档头
 
@@ -105,10 +105,10 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| `memory/CMakeLists.txt` | `dasall_memory` 仅编译 `src/placeholder.cpp`，PUBLIC include 指向当前缺失的 `memory/include` | memory 已在构建图中，但仍是 placeholder-only 静态库 |
-| `memory/include/` | 当前不存在 | 公共 ABI、supporting types 和 module public surface 尚未落盘 |
-| `memory/src/` | 当前仅有 `placeholder.cpp` | 真实实现尚未开始 |
-| `tests/unit/memory/CMakeLists.txt` | 仅保留 `# Placeholder for memory unit tests.` | unit 测试入口未接线 |
+| `memory/CMakeLists.txt` | `dasall_memory` 当前编译 `src/MemoryBuildSkeleton.cpp`，configure 时校验 `memory/include` 根与 `config/context/error/vector/working/writeback` 稳定子目录，并保留 `dasall_contracts` link 依赖 | memory 已退出 placeholder-only 静态库状态，公共 surface 骨架已接入构建图 |
+| `memory/include/` | 已存在根目录及 `config/context/error/vector/working/writeback` 六个稳定子目录，并以 `.gitkeep` 锚定 | 公共 ABI 落点已落盘，可承接后续头文件任务 |
+| `memory/src/` | 已移除 `placeholder.cpp`，新增 `MemoryBuildSkeleton.cpp` 作为 skeleton anchor | 真实实现尚未开始，但构建骨架已具备 |
+| `tests/unit/memory/CMakeLists.txt` | 已注册 `dasall_memory_interface_compile_unit_test` / `MemoryInterfaceCompileTest`，并通过 `tests/unit/CMakeLists.txt` 纳入顶层 unit executable 聚合 | memory unit 测试入口已接线，可承接后续 public surface compile test |
 | `tests/integration/CMakeLists.txt` | 当前只接入 infra / profiles / platform / services / tools / llm | memory integration topology 尚未进入顶层聚合 |
 | `tests/contract/CMakeLists.txt` | 已注册 `TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest`、`ContextPacketFieldContractTest` | memory shared contracts 与 ContextPacket 边界 gate 已具备可复用入口 |
 | `tests/contract/memory/*` | 已存在 `TurnSessionSummaryMemoryContractTest.cpp`、`MemoryFactExperienceContractTest.cpp` | shared memory 对象契约基线已稳定，不需要重建 |
@@ -219,7 +219,7 @@
 
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| MEM-TODO-005 | NotStarted | 新增 memory 公共 include 布局与 CMake 骨架 | memory 详设 6.6、8.1、8.2；当前代码现状 | 6.6 接口清单；8.1 目录建议；7 MEM-D001 | L2 | 建立 `memory/include/`；保留既有 include path 配置，仅替换 `memory/CMakeLists.txt` 中的 `placeholder.cpp` source 列表并确认 `dasall_contracts` link 依赖；替换 `tests/unit/memory/CMakeLists.txt` 占位内容 | `memory/include/*`；`memory/CMakeLists.txt` | unit：`MemoryInterfaceCompileTest`；contract：既有 memory/context contract tests 不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest|TurnSessionSummaryMemoryContractTest|MemoryFactExperienceContractTest|ContextPacketFieldContractTest" --output-on-failure` | 无 | 无 | 无 | `memory/CMakeLists.txt`；`memory/include/`；`tests/unit/memory/CMakeLists.txt` | 仅当 `dasall_memory` 不再是 placeholder-only，且 unit / contract 入口可承载后续 memory 文件时完成 |
+| MEM-TODO-005 | Done | 新增 memory 公共 include 布局与 CMake 骨架 | memory 详设 6.6、8.1、8.2；当前代码现状 | 6.6 接口清单；8.1 目录建议；7 MEM-D001 | L2 | 建立 `memory/include/`；保留既有 include path 配置，仅替换 `memory/CMakeLists.txt` 中的 `placeholder.cpp` source 列表并确认 `dasall_contracts` link 依赖；替换 `tests/unit/memory/CMakeLists.txt` 占位内容 | `memory/include/*`；`memory/CMakeLists.txt` | unit：`MemoryInterfaceCompileTest`；contract：既有 memory/context contract tests 不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_memory_interface_compile_unit_test dasall_contract_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest|TurnSessionSummaryMemoryContractTest|MemoryFactExperienceContractTest|ContextPacketFieldContractTest" --output-on-failure` | 无 | 无 | 无 | `memory/CMakeLists.txt`；`memory/src/MemoryBuildSkeleton.cpp`；`memory/include/{config,context,error,vector,working,writeback}/.gitkeep`；`tests/unit/memory/CMakeLists.txt`；`tests/unit/memory/MemoryInterfaceCompileTest.cpp`；`tests/unit/CMakeLists.txt`；2026-04-17 已通过 CMake Tools 构建 `dasall_memory`、`dasall_memory_interface_compile_unit_test`、`dasall_contract_tests`，并验证 `MemoryInterfaceCompileTest`、`TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest`、`ContextPacketFieldContractTest` 全绿 | 仅当 `dasall_memory` 不再是 placeholder-only，且 unit / contract 入口可承载后续 memory 文件时完成 |
 | MEM-TODO-006 | NotStarted | 定义 context 请求与结果对象族 | memory 详设 6.5.3、6.6、6.12.2 | 6.5.3 `MemoryContextRequest`、`ContextAssemblyResult` | L3 | 新增 `memory/include/context/MemoryContextRequest.h`、`memory/include/context/ContextAssemblyResult.h` | `MemoryContextRequest`、`ContextAssemblyResult` | unit：`MemoryInterfaceCompileTest`；后续集成验收：`ContextOrchestratorBudgetTest`（在 MEM-TODO-026 完成后追加） | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest" --output-on-failure` | MEM-TODO-005 | 无 | 无 | `memory/include/context/MemoryContextRequest.h`；`memory/include/context/ContextAssemblyResult.h` | 仅当 request/result 字段与 6.5.3 一致，且 warnings/degraded 语义可被编译消费并为后续 `ContextOrchestratorBudgetTest` 留出稳定接口时完成 |
 | MEM-TODO-007 | NotStarted | 定义 writeback 请求与结果对象族 | memory 详设 6.5.3、6.12.3 | 6.12.3 `MemoryWritebackRequest`、`WritebackResult` | L3 | 新增 `memory/include/writeback/MemoryWritebackRequest.h`、`memory/include/writeback/WritebackResult.h` | `MemoryWritebackRequest`、`WritebackResult`、`FactCandidate`、`ExperienceCandidate` | unit：`MemoryInterfaceCompileTest`；后续集成验收：`MemoryWritebackIntegrationTest`（在 MEM-TODO-027 完成后追加） | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest" --output-on-failure` | MEM-TODO-005 | 无 | 无 | `memory/include/writeback/MemoryWritebackRequest.h`；`memory/include/writeback/WritebackResult.h` | 仅当 request/result/partial/retryable 语义与 6.12.3 对齐，且不混入 runtime 恢复字段并为后续 `MemoryWritebackIntegrationTest` 留出稳定接口时完成 |
 | MEM-TODO-008A | NotStarted | 定义 MemoryConfig 配置模型 | memory 详设 6.10.1a、6.10.3；阶段 G/H | 6.10.1a `MemoryConfig`；6.10.3 profile defaults | L3 | 新增 `memory/include/config/MemoryConfig.h` | `StorageConfig`、`ContextConfig`、`ExperienceConfig`、`VectorConfig`、`MaintenanceConfig` | unit：`MemoryInterfaceCompileTest`；后续集成验收：`MemoryProfileCompatibilityTest`（在 MEM-TODO-029 完成后追加） | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest" --output-on-failure` | MEM-TODO-005 | 无 | 无 | `memory/include/config/MemoryConfig.h` | 仅当配置键、默认值和 profile 投影点与详设表格一致，且可被 store / vector / maintenance 任务复用时完成 |
@@ -257,7 +257,7 @@
 | 阶段 | 任务 ID | 串并行建议 | 说明 |
 |---|---|---|---|
 | A 补设计解阻 | MEM-TODO-001 ~ 004 | 已全部完成 | supporting object 与 ownership / dependency 歧义已收敛，可作为后续 Build 的稳定前置 |
-| B 公共 ABI、测试拓扑与基线适配器 | MEM-TODO-005、025、006、007、008A、008B、009、009A、010、022 | 005 先起步；025 紧随 005；006/007/008A/008B/010/022 可并行；009 依赖 001；009A 依赖 002 | 先建立 include 布局和测试 discoverability，再冻结 supporting types、config/error、store、summarizer 与 vector unavailable baseline |
+| B 公共 ABI、测试拓扑与基线适配器 | MEM-TODO-005、025、006、007、008A、008B、009、009A、010、022 | 005 已完成；025 紧随 005；006/007/008A/008B/010/022 可并行；009 依赖 001；009A 依赖 002 | 已建立 include 布局、skeleton source 与 `MemoryInterfaceCompileTest`；下一步继续冻结 supporting types、config/error、store、summarizer 与 vector unavailable baseline |
 | C 生命周期与主存储基线 | MEM-TODO-011 ~ 015 | 012 核心与 013 可并行，导出 facade 对接受 001 部分阻塞；014 依赖 013；015 依赖 014 | 先完成 WorkingMemory 核心 + schema + store 主路径，再打开 Fact/Experience/maintenance 支持 |
 | D Context 组装链 | MEM-TODO-016 ~ 019 | 016/017 可并行；018 依赖 002/003/009A；019 串联收口 | `CandidateCollector` / `BudgetAllocator` 先稳定，再接 `CompressionCoordinator` 和 `ContextOrchestrator`；022 已前移，不再形成阶段循环 |
 | E 写回与冲突链 | MEM-TODO-020 ~ 021 | 020 先于 021 | 先把 conflict plan 规则独立出来，再做 core transaction + derived writes |
@@ -313,7 +313,7 @@
 
 | Gate | 建议命令 | 说明 |
 |---|---|---|
-| Public surface compile | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest" --output-on-failure` | 公共头与 supporting types 编译门 |
+| Public surface compile | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest" --output-on-failure` | 公共头与 supporting types 编译门 |
 | Working memory | `ctest --test-dir build-ci -R "WorkingMemoryBoard.*Test|WorkingMemorySnapshot.*Test" --output-on-failure` | 黑板、TTL、snapshot、并发 |
 | Store / migration | `ctest --test-dir build-ci -R "SqliteMemoryStoreTest|SchemaMigration.*Test|SqliteTransaction.*Test" --output-on-failure` | schema / CRUD / 事务 |
 | Context assemble | `ctest --test-dir build-ci -R "ContextOrchestrator.*Test|MemoryContextAssembleIntegrationTest|ContextOrchestratorBudgetTest" --output-on-failure` | assemble / trim / compression gate |
@@ -350,7 +350,7 @@
 
 当前建议的执行方式：
 
-1. MEM-TODO-001 ~ 004 已完成；可直接进入 MEM-TODO-005、025、006、007、008A、008B、009、009A、010、022，先建立 public surface、测试拓扑、config/error/store/summarizer 契约面与 vector unavailable baseline。
+1. MEM-TODO-001 ~ 005 已完成；可直接进入 MEM-TODO-025、006、007、008A、008B、009、009A、010、022，继续补齐 tests topology、supporting types、config/error/store/summarizer 契约面与 vector unavailable baseline。
 2. 再进入 MEM-TODO-011 ~ 021 的主链实现，按 WorkingMemory -> Store -> Context -> Writeback 的顺序收口。
 3. 主链稳定后执行 MEM-TODO-023、024、026 ~ 030，其中 MEM-TODO-023 是当前唯一剩余评审 blocker，MEM-TODO-026 是关键里程碑：Context Assemble Smoke Gate。
 

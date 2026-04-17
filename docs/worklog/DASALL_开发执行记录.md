@@ -1,5 +1,66 @@
 # DASALL 开发执行记录
 
+## 记录 #347
+
+- 日期：2026-04-17
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-005 新增 memory 公共 include 布局与 CMake 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. MEM-TODO-005 是阶段 A 设计解阻后的第一条 Build-ready 原子任务；如果 public include 根、skeleton source 和 unit compile anchor 不先落盘，`MEM-TODO-006/007/008A/008B/009/009A/010/022/025` 都没有稳定承载面。
+2. 当前代码基线显示 `memory/CMakeLists.txt` 仍只编译 `src/placeholder.cpp`，`memory/include/` 缺失，`tests/unit/memory/CMakeLists.txt` 仍是占位注释；本轮最小动作是把 memory 模块从 placeholder-only 静态库切到真实 skeleton，并接上最小 compile test。
+3. 本轮保持范围在 005：只建立公共 surface 骨架、CMake 校验和 unit entry，不提前下探到 `IMemoryManager`、`IMemoryStore` 或具体 storage/vector 实现。
+
+### 改动
+
+1. 更新 `memory/CMakeLists.txt`：
+   - 引入 `DASALL_MEMORY_PUBLIC_INCLUDE_DIR`、稳定子目录列表与 skeleton source 列表；
+   - 在 configure 阶段校验 `memory/include` 根、`config/context/error/vector/working/writeback` 子目录与 `src/MemoryBuildSkeleton.cpp` 的存在性；
+   - 将 `dasall_memory` 的 source 从 `src/placeholder.cpp` 切换到 `src/MemoryBuildSkeleton.cpp`，同时保留 `dasall_contracts` link 并补上 `src` private include。
+2. 调整 `memory/` 骨架：
+   - 删除 `memory/src/placeholder.cpp`；
+   - 新增 `memory/src/MemoryBuildSkeleton.cpp` 作为构建锚点；
+   - 新建 `memory/include/` 及 `config/context/error/vector/working/writeback` 六个稳定子目录，并以 `.gitkeep` 锚定。
+3. 更新 `tests/unit/memory/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册 `dasall_memory_interface_compile_unit_test` 与 `MemoryInterfaceCompileTest`；
+   - 将 memory unit executable 聚合进顶层 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS`。
+4. 新增 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 校验 ctest 名称与 target 名称保持 memory 命名空间；
+   - 校验 `memory/include` 根及六个稳定子目录存在；
+   - 校验 `MemoryBuildSkeleton.cpp` 存在且旧的 `placeholder.cpp` 已移除。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/CMakeLists.txt` 与 `tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. CMake 可发现性与聚焦构建：
+   - `ListBuildTargets_CMakeTools` 已出现 `dasall_memory_interface_compile_unit_test`；
+   - `ListTests_CMakeTools` 已出现 `MemoryInterfaceCompileTest`；
+   - `Build_CMakeTools` 定向构建 `dasall_memory`、`dasall_memory_interface_compile_unit_test`、`dasall_contract_tests`，结果为通过。
+3. 任务级测试验收：
+   - `RunCtest_CMakeTools` 逐项验证 `MemoryInterfaceCompileTest`、`TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest`、`ContextPacketFieldContractTest`，结果均为通过。
+4. 基线噪声观察：
+   - 活跃 preset 下的 `dasall_unit_tests` 聚合目标仍会命中既有 tools 测试问题：`ExternalSkillImporterTest`、`PluginSkillBundleImporterTest` 失败，且 `ToolValidatorBoundaryTest`、`CapabilityCacheConcurrencyTest` 缺少 executable；
+   - 本轮未修改 tools 代码，因此 005 的完成证据以任务级目标和指定 contract tests 为准。
+
+### 结果
+
+1. `MEM-TODO-005` 已完成，`dasall_memory` 不再是 placeholder-only 静态库，`memory/include` 稳定目录骨架已进入构建图。
+2. `MemoryInterfaceCompileTest` 已成为 memory public surface 的最小 compile gate，后续 `MEM-TODO-006/007/008A/008B/009/009A/010/022` 可直接复用。
+3. 本轮同步把专项 TODO 中 005 的验收命令与 Public surface compile gate 收窄到任务级 build target，避免无关 unit 聚合失败污染后续 public-surface 任务判断。
+
+### 下一步
+
+1. 进入 `MEM-TODO-025`，继续把 memory integration topology 与 discoverability gate 接入顶层测试聚合。
+2. 若保持 public-surface 先行，也可并行推进 `MEM-TODO-006/007/008A/008B` 的 supporting types 与 config/error 骨架。
+
+### 风险
+
+1. 活跃 preset 的 `dasall_unit_tests` 聚合目标仍受既有 tools 基线问题影响；在该问题单独收口前，memory public-surface 任务应优先使用任务级 build/test target 验证。
+2. 本轮只建立目录、CMake 与 compile gate 骨架，不代表 `IMemoryManager`、`IMemoryStore`、`WorkingMemoryBoard` 或 integration topology 已经落盘。
+
 ## 记录 #346
 
 - 日期：2026-04-17
