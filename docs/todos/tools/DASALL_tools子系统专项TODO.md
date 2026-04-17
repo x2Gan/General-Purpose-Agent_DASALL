@@ -1,9 +1,9 @@
 # DASALL Tools 子系统专项 TODO
 
-最近更新时间：2026-04-16  
-阶段：Detailed Design -> Special TODO  
-适用范围：tools/  
-当前结论：Tools 子系统已具备 L3/L2 混合粒度的专项拆分条件；公共接口/对象、治理链核心、runtime caller fixture、builtin -> services 最小闭环、workflow/compensation 主链可直接进入 Build 规划，MCP loopback 夹具与 external skill 样本两项仍需以前置补设计/夹具任务解阻，generic MCP ready 与外部 Skill 兼容不得写成当前已可交付事实。
+最近更新时间：2026-04-17（完成 TOOL-TODO-042，tools 专项 Gate 与交付证据收口）
+阶段：Detailed Design -> Special TODO
+适用范围：tools/
+当前结论：A~G 阶段与 TOOL-TODO-001~042 已在 tools 子系统范围内闭合；`ToolServicesSmokeIntegrationTest`、`ToolObservabilityIntegrationTest`、`ToolWorkflowFailureIntegrationTest`、`ToolMCPFallbackIntegrationTest`、`ToolPluginStdioMCPIntegrationTest`、`ToolSkillRuntimeIntegrationTest`、`ToolPluginSkillBundleIntegrationTest`、`ToolProfileIntegrationTest` 已覆盖 builtin/workflow/MCP/skill/profile 主链，build-ci `ctest -N` 总测试数为 499，unit 296/296、contract 152/152 全部通过，integration 聚合为 49/51 通过，剩余失败仅为既有跨模块 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest`，不属于 tools 回归；Gate-TOOL-01 ~ Gate-TOOL-10 已具备明确命令证据并完成回写。generic MCP ready 仍只收敛到 loopback / plugin-stdio hybrid 证据，external skill importer 仍受 sample scope 与 feature flag 约束，runtime 生产 caller adapter 仍保持跨模块后续事项，不在本专项内误写成已交付事实。
 
 ## 1. 文档头
 
@@ -238,7 +238,7 @@
 | TOOL-TODO-039 | Done | 实现 ExternalSkillImporter 与 PluginSkillBundleImporter | 详设 6.12.5；7.1 TOOL-D10 | 6.12.5 ExternalSkillImporter；7.1 TOOL-D10 | L2 | tools/src/skills/ExternalSkillImporter.cpp；tools/src/skills/PluginSkillBundleImporter.cpp | import_directory()、parse_frontmatter()、normalize_assets()、emit_diagnostics() | unit：方言解析、格式错误 quarantine、feature flag 关闭可断言 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests && ctest --test-dir build-ci --output-on-failure -L unit` | TOOL-TODO-010、036、037 | TOOL-BLK-005 | 完成 TOOL-TODO-036 | docs/todos/tools/deliverables/TOOL-TODO-039-ExternalSkillImporter与PluginSkillBundleImporter收敛.md、docs/architecture/DASALL_tools子系统详细设计.md、tools/src/skills/SkillImportSupport.h、tools/src/skills/SkillImportSupport.cpp、tools/src/skills/ExternalSkillImporter.h、tools/src/skills/ExternalSkillImporter.cpp、tools/src/skills/PluginSkillBundleImporter.h、tools/src/skills/PluginSkillBundleImporter.cpp、tools/CMakeLists.txt、tests/unit/tools/ExternalSkillImporterTest.cpp、tests/unit/tools/PluginSkillBundleImporterTest.cpp、tests/unit/tools/CMakeLists.txt；2026-04-17 已实现 external dialect frontmatter 解析、supporting workflow/eval 归一化、plugin skill bundle import 包装与 quarantine diagnostics，并通过 Build_CMakeTools 构建 `dasall_tools`，RunCtest_CMakeTools 执行 `ExternalSkillImporterTest`、`PluginSkillBundleImporterTest`、`SkillRegistryTest`、`SkillRegistryPriorityTest`、`SkillRuntimeInstantiateTest` 全部通过，同时以 ListTests_CMakeTools 验证两条 importer unit tests discoverability；历史 `DartConfiguration.tcl` 噪声不影响通过结论 | 仅当 importer 先归一化再注册，且错误输入被 quarantine 而不是隐式兼容时完成 |
 | TOOL-TODO-040 | Done | 验证 ToolSkillRuntime 与 ToolPluginSkillBundleIntegration | 详设 9.1；7.1 TOOL-D10 | 9.1 ToolSkillRuntimeIntegrationTest、ToolPluginSkillBundleIntegrationTest | L2 | tests/integration/tools/ToolSkillRuntimeIntegrationTest.cpp；tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp | internal skill 实例化、plugin skill bundle 接线、external dialect behind feature flag | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -L integration -R "ToolSkillRuntimeIntegrationTest|ToolPluginSkillBundleIntegrationTest"` | TOOL-TODO-024、037、038、039 | TOOL-BLK-003、TOOL-BLK-005 | 完成 TOOL-TODO-024、036 | docs/todos/tools/deliverables/TOOL-TODO-040-ToolSkillRuntime与ToolPluginSkillBundleIntegration收敛.md、docs/architecture/DASALL_tools子系统详细设计.md、tests/integration/tools/ToolSkillRuntimeIntegrationTest.cpp、tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp、tests/integration/tools/CMakeLists.txt；2026-04-17 已新增 `ToolSkillRuntimeIntegrationTest` 与 `ToolPluginSkillBundleIntegrationTest`，并通过 Build_CMakeTools 构建新增 integration targets、RunCtest_CMakeTools 执行两条 integration tests 全部通过，同时以 ListTests_CMakeTools 验证 discoverability；历史 `DartConfiguration.tcl` 噪声不影响通过结论 | 仅当 skill runtime 仅消费 normalized asset，plugin skill bundle 可撤销，且 external dialect 仍受 feature flag 约束时完成 |
 | TOOL-TODO-041 | Done | 验证 ToolProfileIntegration 与 tools discoverability Gate | 详设 6.9、9.1、9.2；ssot/InfraIntegrationTopology.md | 9.1 ToolProfileIntegrationTest；9.2 Gate-TOOL-09、10 | L2 | tests/integration/tools/ToolProfileIntegrationTest.cpp；tests/unit/tools/CMakeLists.txt；tests/integration/tools/CMakeLists.txt | desktop_full vs edge_minimal 的 tool/mcp/workflow timeout、visibility、allowed domains 差异；ctest -N 可发现 tools unit/integration | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L integration -R ToolProfileIntegrationTest` | TOOL-TODO-012、024、025、026、030、035、040 | TOOL-BLK-003 | 完成 TOOL-TODO-024 | docs/todos/tools/deliverables/TOOL-TODO-041-ToolProfileIntegration与discoverability-gate收敛.md、docs/architecture/DASALL_tools子系统详细设计.md、tests/integration/tools/ToolProfileIntegrationTest.cpp、tests/integration/tools/CMakeLists.txt；2026-04-17 已新增 `ToolProfileIntegrationTest` 并通过 Build_CMakeTools 构建 `dasall_tools` 与新增 integration target、RunCtest_CMakeTools 执行 `ToolProfileIntegrationTest` 通过；同时通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_tool_profile_integration_test`、`ctest --test-dir build-ci --output-on-failure -L integration -R ToolProfileIntegrationTest` 与 `ctest --test-dir build-ci -N | rg "ToolInvocationContextSurfaceTest|ToolProfileIntegrationTest|ToolPluginSkillBundleIntegrationTest|ToolServicesSmokeIntegrationTest"` 验证 build-ci profile gate 与 tools discoverability；历史 `DartConfiguration.tcl` 噪声不影响通过结论 | 仅当 profile 差异通过 RuntimePolicySnapshot 投影体现，且 tools 测试入口可被 ctest -N 稳定发现时完成 |
-| TOOL-TODO-042 | NotStarted | 回写 tools 专项 Gate 与交付证据 | 详设 9.2、11.1、12.2；本专项 TODO | 9.2 Gate-TOOL-*；11.1 blocker table；12.2 next steps | L2 | docs/todos/tools/DASALL_tools子系统专项TODO.md；docs/worklog/DASALL_开发执行记录.md | process：Gate 通过结论、阻塞变化、风险残留、命令证据全部回写 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration` | TOOL-TODO-025、026、030、035、040、041 | TOOL-BLK-003、TOOL-BLK-004、TOOL-BLK-005 | 相关 gate 全部具备可执行证据 | 更新后的本专项 TODO 与工作记录 | 仅当每个 Gate 都有命令证据、通过/失败结论、阻塞状态和后续动作回写时完成 |
+| TOOL-TODO-042 | Done | 回写 tools 专项 Gate 与交付证据 | 详设 9.2、11.1、12.2；本专项 TODO | 9.2 Gate-TOOL-*；11.1 blocker table；12.2 next steps | L2 | docs/todos/tools/DASALL_tools子系统专项TODO.md；docs/todos/tools/deliverables/TOOL-TODO-042-tools专项Gate与交付证据收敛.md；docs/worklog/DASALL_开发执行记录.md | process：Gate 通过结论、阻塞变化、风险残留、命令证据全部回写；首次 Gate 采样中的最小环境噪声只允许在 build/tests 侧解阻 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -L unit && ctest --test-dir build-ci --output-on-failure -L contract && ctest --test-dir build-ci --output-on-failure -L integration` | TOOL-TODO-025、026、030、035、040、041 | 首次 042 证据采样时，build-ci 中部分 tools test executable 未物化且终端 PATH 缺少 `/usr/bin`，导致 `c++` 无法调用 `as`；已通过显式 PATH 与定向 target 重建解阻 | 显式补建缺失 tools test targets、复验 unit / integration 汇总，并将既有 `InfraDiagnosticsSmokeTest` / `InfraDiagnosticsIntegrationTest` 标记为跨模块残余，不登记新的 tools blocker ID | docs/todos/tools/deliverables/TOOL-TODO-042-tools专项Gate与交付证据收敛.md、docs/todos/tools/DASALL_tools子系统专项TODO.md、docs/worklog/DASALL_开发执行记录.md；2026-04-17 已通过 `cmake -S . -B build-ci -G "Unix Makefiles"`、`cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests dasall_integration_tests`、`ctest --test-dir build-ci -N`、`ctest --test-dir build-ci --output-on-failure -L unit`、`ctest --test-dir build-ci --output-on-failure -L contract` 与 `ctest --test-dir build-ci --output-on-failure -L integration`，其中 Total Tests=499、unit 296/296、contract 152/152 全绿，integration 49/51 通过且 tools 自身用例全部通过，剩余失败仅为既有跨模块 `InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` | 仅当每个 Gate 都有通过/残余结论、命令证据、阻塞状态和后续动作回写，且最小解阻不改写 tools 产品语义时完成 |
 
 ## 7. 执行顺序建议
 
@@ -258,16 +258,16 @@
 
 | Gate ID | 门禁名称 | 触发时机 | 通过条件 | 不通过后动作 |
 |---|---|---|---|---|
-| Gate-TOOL-01 | Header Layout 门 | 阶段 A 结束 | tools/include 落盘、dasall_tools 可构建、tool contract tests 不回退 | 退回 TOOL-TODO-001 ~ 008 |
-| Gate-TOOL-02 | Governance Core 门 | 阶段 B 结束 | Registry / Validator / ConfigAdapter / PolicyGate / RouteSelector / ToolManager unit 全绿，且 fail-closed 行为稳定 | 退回 TOOL-TODO-009 ~ 015b |
-| Gate-TOOL-03 | Services Smoke 门 | 阶段 C 结束 | Tool -> Services -> Result -> Digest 最小闭环通过 | 退回 TOOL-TODO-016 ~ 025 |
-| Gate-TOOL-04 | Observability 门 | 阶段 C 结束 | audit / metrics / trace / health 字段完整，可在 integration 里断言 | 退回 TOOL-TODO-018 ~ 026 |
-| Gate-TOOL-05 | Workflow Failure 门 | 阶段 D 结束 | workflow failure、delegation sidecar、compensation_hints 全部通过二值验收 | 退回 TOOL-TODO-027 ~ 030 |
-| Gate-TOOL-06 | MCP Fixture 解阻门 | 阶段 E 前 | loopback / plugin stdio launch fixture 设计已冻结且可落测试 | 未解阻禁止推进 TOOL-TODO-032 ~ 035 |
+| Gate-TOOL-01 | 文档与边界门 | 阶段 A 前与阶段 G 收口 | 详设 / TODO / deliverable 与架构 / ADR / contracts 边界一致，不把 runtime caller、generic MCP ready、external skill compatibility 误写成已完成事实 | 退回 TOOL-TODO-023、031、036、042 |
+| Gate-TOOL-02 | Header Layout 门 | 阶段 A 结束 | tools/include 落盘、header surface test 可稳定通过，且无跨模块相对路径 include | 退回 TOOL-TODO-001 ~ 008 |
+| Gate-TOOL-03 | Shared Contract 守卫门 | 阶段 A 结束与阶段 G 收口 | ToolRequest/Result/Descriptor/IR contract tests 继续全绿 | 退回 TOOL-TODO-001、003、018、042 |
+| Gate-TOOL-04 | Governance Core 门 | 阶段 B 结束 | Registry / Validator / ConfigAdapter / PolicyGate / RouteSelector / ToolManager unit 全绿，且 fail-closed 行为稳定 | 退回 TOOL-TODO-009 ~ 015b |
+| Gate-TOOL-05 | Services Smoke 门 | 阶段 C 结束 | Tool -> Services -> Result -> Digest 最小闭环通过 | 退回 TOOL-TODO-016 ~ 025 |
+| Gate-TOOL-06 | Workflow Failure 门 | 阶段 D 结束 | workflow failure、delegation sidecar、compensation_hints 全部通过二值验收 | 退回 TOOL-TODO-027 ~ 030 |
 | Gate-TOOL-07 | MCP Hybrid 门 | 阶段 E 结束 | stale snapshot、route fallback、plugin-delivered stdio launch、统一 ErrorInfo 映射均通过 | 退回 TOOL-TODO-031 ~ 035，并保持 generic MCP ready 结论为 No-Go |
-| Gate-TOOL-08 | Skill Asset 解阻门 | 阶段 F 前 | internal normalized 样本和 external dialect 样本存在，feature flag 策略明确 | 未解阻禁止推进 TOOL-TODO-037 ~ 040 |
-| Gate-TOOL-09 | Skill Runtime 门 | 阶段 F 结束 | SkillRegistry / SkillRuntime / importer / plugin skill bundle integration 全绿 | 退回 TOOL-TODO-036 ~ 040 |
-| Gate-TOOL-10 | Discoverability 与 Profile 门 | 阶段 G 结束 | ctest -N 能发现 tools unit/integration，且 ToolProfileIntegrationTest 通过 | 退回 TOOL-TODO-024、041 |
+| Gate-TOOL-08 | Observability 门 | 阶段 C~G 收口 | audit / metrics / trace / health 字段完整，可在 integration 里断言 | 退回 TOOL-TODO-019 ~ 022、026 |
+| Gate-TOOL-09 | Profile Compatibility 门 | 阶段 G 结束 | desktop_full 与 edge_minimal 的 tool/mcp/workflow timeout、visibility、allowed domains 差异正确投影 | 退回 TOOL-TODO-012、041 |
+| Gate-TOOL-10 | Discoverability 门 | 阶段 G 结束 | `ctest -N` 能发现 tools unit/integration，且聚合 target 可执行 | 退回 TOOL-TODO-024、041 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -278,6 +278,8 @@
 | TOOL-BLK-003 | 已由 TOOL-TODO-024 解阻：tests/integration/tools 已接入顶层 integration，`ctest -N` 可发现 `ToolServicesSmokeIntegrationTest` | TOOL-TODO-025 ~ 042 | 顶层 integration 接入 tools 子目录且 ctest -N 可发现 tools integration | TOOL-TODO-024 已完成 | 即便 discoverability 已打开，在 025/026/030/035/040 未完成前，仍不得宣称 builtin/workflow/MCP/skill 语义闭环全部验证完成 |
 | TOOL-BLK-004 | 已由 TOOL-TODO-031 解阻：MCP loopback / plugin stdio launch 样本方案已在详设中冻结，Build 仅剩代码与测试落地 | TOOL-TODO-032 ~ 035 | 6.12.3 中的 `MCPLoopbackServerFixture` 放置约定、`launch_spec_ref` 样本 shape 与最小 initialize/list/call/shutdown 闭环保持一致 | TOOL-TODO-031 已完成 | 在 032 ~ 035 完成前仍保持 `tools_mcp=false` 的 builtin/workflow rollout，不推进 generic MCP ready |
 | TOOL-BLK-005 | 已由 TOOL-TODO-036 解阻：internal SkillSpec 样本、external dialect sample 与 module-local feature flag 策略已冻结 | TOOL-TODO-037 ~ 040 | 保持 `skills/specs/`、`skills/workflows/`、`skills/evals/` 与 `skills/external_dialects/*` sample shape 一致，并维持 external importer 默认关闭 | TOOL-TODO-036 已完成 | 在 039/040 完成前继续只默认支持内部 workflow / builtin 路径，external importer 不作为默认开启能力 |
+
+当前活跃阻塞项：无。TOOL-BLK-001 ~ 005 已全部解除；042 证据采样中的 executable 未物化与 PATH 噪声已在 9.4 记录为 gate 采样期环境问题，不新增 tools blocker ID。
 
 ## 9. 验收与质量门
 
@@ -307,14 +309,37 @@
 
 | 质量维度 | 当前判断 | 说明 |
 |---|---|---|
-| 架构一致性 | 可满足 | 详设已与 Runtime 主控、Memory 上下文权、Recovery 准入权、Multi-Agent 主控边界对齐 |
-| ADR 边界一致性 | 可满足 | ADR-006/007/008 已在 tools 详设中显式约束，专项 TODO 未改写结论 |
-| contracts / 公共语义兼容性 | 可满足 | 只复用 ToolRequest / Result / Descriptor / IR、ObservationDigest、ErrorInfo，不扩张 shared contracts |
-| 工程可实现性 | 可满足 | 公共接口、组件路径、测试入口和阶段计划已明确；MCP / skill 的缺口已转为前置补设计任务 |
-| 测试可验证性 | 可满足 | unit / contract / integration / failure / profile 五类出口均已成表 |
-| 原子任务可执行性 | 可满足 | 每项任务保留代码目标、测试目标、验收命令，且按单一主目标拆分 |
-| 任务粒度可评审性 | 可满足 | L3/L2 混合拆分，避免把 MCP / skill 高级路径一次性做成超大任务 |
-| 当前可直接执行性 | 附条件可执行 | 需先完成 TOOL-TODO-001 ~ 008、024、036 等骨架/补设计解阻项 |
+| 架构一致性 | 已满足 | A~G 阶段落地保持 Runtime 主控、Memory 上下文权、Recovery 准入权与 Multi-Agent 主控边界不变 |
+| ADR 边界一致性 | 已满足 | ADR-006/007/008 在 023/027/031/036/042 的文档与实现回链中保持一致 |
+| contracts / 公共语义兼容性 | 已满足 | 只复用 ToolRequest / Result / Descriptor / IR、ObservationDigest、ErrorInfo；contract 152/152 全绿 |
+| 工程可实现性 | 已满足 | TOOL-TODO-001~042 已全部落盘；042 采样阶段出现的 executable 未物化 / PATH 噪声已通过 build/tests 侧最小解阻恢复，不涉及 products 语义 |
+| 测试可验证性 | 已满足 | build-ci `ctest -N` Total Tests=499，unit 296/296、contract 152/152 全绿；integration 49/51 通过且 tools 自身 8 条 integration 全部通过 |
+| 原子任务可执行性 | 已满足 | 每项任务均保持代码目标、测试目标、验收命令三件套，且 042 已完成 Gate 结果回写 |
+| 任务粒度可评审性 | 已满足 | L3/L2 + blocker 预解阻链路已经完成，未把 MCP / skill / profile / discoverability 混成不可审查的大任务 |
+| 当前可直接执行性 | 已完成 | tools 专项范围内已无未解阻的 Build-ready blocker；残余仅为跨模块 infra diagnostics 失败与后续跨子系统演进事项 |
+
+### 9.3 TOOL-TODO-042 Gate 执行证据（2026-04-17）
+
+| Gate ID | 结论 | 命令证据 | 结果摘要 |
+|---|---|---|---|
+| Gate-TOOL-01 | PASS | `rg -n "Gate-TOOL-09|Gate-TOOL-10|TOOL-BLK-005|ToolProfileIntegrationTest|ToolServicesSmokeIntegrationTest" docs/architecture/DASALL_tools子系统详细设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md` | tools 详设与专项 TODO 的 gate 编号、blocker 解阻口径、profile/discoverability 收口结论已对齐，且未把 runtime 生产 caller、generic MCP ready、external skill compatibility 误写成已完成事实 |
+| Gate-TOOL-02 | PASS | `cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests dasall_integration_tests`；`ctest --test-dir build-ci --output-on-failure -L unit` | tools/include 与 surface/unit 入口保持稳定，unit 296/296 全部通过 |
+| Gate-TOOL-03 | PASS | `ctest --test-dir build-ci --output-on-failure -L contract` | ToolRequest / Result / Descriptor / IR 继续由 contract 152/152 全绿托底 |
+| Gate-TOOL-04 | PASS | `ctest --test-dir build-ci --output-on-failure -L unit` | Registry / Validator / ConfigAdapter / PolicyGate / RouteSelector / ToolManager 等治理链单测全部通过，fail-closed 行为未回退 |
+| Gate-TOOL-05 | PASS | `ctest --test-dir build-ci --output-on-failure -L integration` | `ToolServicesSmokeIntegrationTest` 在聚合 integration 中通过，Tool -> Services -> Digest 最小闭环保持成立 |
+| Gate-TOOL-06 | PASS | `ctest --test-dir build-ci --output-on-failure -L integration` | `ToolWorkflowFailureIntegrationTest` 在聚合 integration 中通过，workflow failure / delegation sidecar / compensation_hints 证据未回退 |
+| Gate-TOOL-07 | PASS | `ctest --test-dir build-ci --output-on-failure -L integration` | `ToolMCPFallbackIntegrationTest` 与 `ToolPluginStdioMCPIntegrationTest` 在聚合 integration 中通过；generic MCP ready 仍保持 loopback / plugin-stdio hybrid 范围内的 No-Go 边界 |
+| Gate-TOOL-08 | PASS | `ctest --test-dir build-ci --output-on-failure -L integration` | `ToolObservabilityIntegrationTest` 在聚合 integration 中通过，audit / metrics / trace / health 字段完整性未回退 |
+| Gate-TOOL-09 | PASS | `ctest --test-dir build-ci --output-on-failure -L integration` | `ToolProfileIntegrationTest` 在聚合 integration 中通过，desktop_full vs edge_minimal 的 timeout / allowed domains / visibility 差异仍被正确投影 |
+| Gate-TOOL-10 | PASS | `ctest --test-dir build-ci -N` | build-ci discoverability 总测试数为 499，tools unit/integration 入口可被稳定发现 |
+
+### 9.4 阻塞变化与回退记录
+
+1. TOOL-BLK-001 ~ TOOL-BLK-005 已全部解除，042 启动时 tools 专项范围内已无未解阻的显式 blocker。
+2. 首次 `ctest --test-dir build-ci --output-on-failure -L unit` 与 `ctest --test-dir build-ci --output-on-failure -L integration` 采样时，若干 tools 测试显示 `Not Run`。根因不是 source CMake 漏接，而是对应 executable 尚未在 build-ci 中物化；生成的 `build.make` 已列出这些 targets 依赖。
+3. 追补构建时一度出现终端 PATH 缺少 `/usr/bin`，触发 `c++: fatal error: cannot execute 'as': execvp: No such file or directory`。已通过显式 `PATH=/usr/bin:/bin:$PATH` 重建缺失的 tools unit/integration targets，并复验得到 unit 296/296 全绿、tools integration entries 全部通过。
+4. `ctest --test-dir build-ci --output-on-failure -L integration` 仍保留 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 两条既有跨模块失败，不新增 tools blocker ID；tools 专项 Gate 结论以 tools 自身用例与 targeted/aggregate evidence 为准。
+5. 本轮未触发产品回退；最小解阻严格限定在 build/tests 侧的 target 物化与环境 PATH 修正，没有修改 tools 公共 ABI、治理链语义或 integration 断言。
 
 ## 10. 风险与回退策略
 
@@ -332,14 +357,11 @@
 
 ## 11. 可行性结论
 
-1. 本专项 TODO 可以直接进入执行，但应按 L3/L2 混合粒度推进，而不是把整个 Tools 子系统一次性铺成全量实现。
-2. 当前可直接落到的最细粒度是：module public 对象与接口级（ToolInvocationContext、ToolInvocationEnvelope、ITool / IToolManager、IPolicyGate / ICapabilityCache、IMCPAdapter / IMCPTransport、IToolPluginProvider）以及组件骨架级（Registry、Validator、ConfigAdapter、PolicyGate、RouteSelector、ToolManager、BuiltinExecutorLane、ResultProjector、WorkflowEngine、CompensationLedger、CapabilityCache、SkillRegistry、SkillRuntime）。
-3. 当前不能直接细化到函数/数据结构级的阻塞点主要有三类：
-   - runtime caller fixture 已冻结为 tests/design gate 口径，但 ToolManager 生产接线仍不能安全下推到 runtime。
-   - MCP loopback / stdio launch fixture 缺失，导致 CapabilityDiscovery、MCPLane、plugin stdio launch 的关键验收出口不足。
-   - internal SkillSpec 与 external dialect 样本缺失，导致 ExternalSkillImporter 与 plugin skill bundle integration 无法建立可靠回归基线。
-4. 因此，推荐执行顺序是：先完成 TOOL-TODO-001 ~ 008 打底，再完成 TOOL-TODO-009 ~ 026 闭合 builtin 主链与 observability，再依次推进 TOOL-TODO-027 ~ 035 的 workflow/MCP 路径，最后推进 TOOL-TODO-036 ~ 042 的 skill、profile 和 Gate 收口。
-5. 在 Gate-TOOL-07 和 Gate-TOOL-09 通过前，generic MCP ready 与 external skill compatibility 一律维持 No-Go 结论；在 runtime owner 提供稳定生产 caller adapter 前，runtime 生产接线一律维持 Blocked 结论。
+1. 结论：tools 专项 001~042 已在子系统范围内闭合，Gate-TOOL-01~10 已具备明确命令证据并完成回写。
+2. build-ci 正式 gate 当前结果为 `Total Tests=499`、unit `296/296`、contract `152/152`、integration `49/51`。两条剩余失败仅为既有跨模块 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest`；tools 自身的 smoke / workflow / MCP / skill / profile / discoverability gates 均通过，不影响本专项完成判定。
+3. tools 专项范围内已无未解阻 Build-ready blocker。`TOOL-BLK-001 ~ TOOL-BLK-005` 全部解除后，042 只处理证据采样期间的 target 物化与 PATH 噪声，不新增新的 blocker ID，也不要求产品代码回退。
+4. 仍需保持的系统边界有三项：generic MCP ready 只以 loopback / plugin-stdio hybrid 证据成立，不外推为任意 MCP 兼容；external skill importer 仍受 sample scope 与 feature flag 约束，不外推为通用 dialect 兼容；runtime 生产 caller adapter 仍是跨模块后续事项，继续沿用 TOOL-TODO-023 冻结的 tests/design gate fixture 口径。
+5. 后续若继续推进，只应围绕跨模块问题开题，例如 infra diagnostics 失败收口或 runtime owner 的生产 caller 接线，不需要再回头补 tools 专项基座。
 
 ## 12. 交付物总览
 
@@ -357,4 +379,4 @@
 | Unit 测试 | tests/unit/tools/（含 ToolManagerBatchInvokeTest、ToolRegistryConcurrentReadTest、PluginExtensionBridgeConcurrencyTest、ToolConfigAdapterHotUpdateTest、MCPAdapterTransportSwitchTest、ResultProjectorConfidenceTest 等） | A~F |
 | Integration 测试 | tests/integration/tools/（ToolServicesSmokeIntegrationTest、ToolObservabilityIntegrationTest、ToolWorkflowFailureIntegrationTest、ToolMCPFallbackIntegrationTest、ToolPluginStdioMCPIntegrationTest、ToolSkillRuntimeIntegrationTest、ToolPluginSkillBundleIntegrationTest、ToolProfileIntegrationTest） | C~G |
 | 补设计 / 夹具文档 | runtime caller fixture 口径文档（已由 TOOL-TODO-023 补齐）；MCP loopback / stdio launch 夹具方案；internal/external skill 样本资产 | 各阶段前置 |
-| Gate 与交付证据回写 | 本专项 TODO 各 Gate 通过结论与命令证据；docs/worklog/DASALL_开发执行记录.md 更新 | G |
+| Gate 与交付证据回写 | 本专项 TODO 各 Gate 的通过/残余结论与命令证据；docs/todos/tools/deliverables/TOOL-TODO-042-tools专项Gate与交付证据收敛.md；docs/worklog/DASALL_开发执行记录.md 更新 | G |

@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #342
+
+- 日期：2026-04-17
+- 阶段：tools/专项 TODO 阶段 G
+- 任务：TOOL-TODO-042 回写 tools 专项 Gate 与交付证据
+- 状态：已完成
+
+### 任务选择
+
+1. 041 已把 profile/discoverability gate 自动化收口，042 的最小动作就是把 tools 专项 001~041 的 Gate、blocker、风险残留与命令证据统一回写，不再增加新的产品代码变更。
+2. 本轮必须用 build-ci 正式链确认 discoverability / unit / contract / integration 的当前状态，并把 tools 自身通过结论与跨模块残余失败分开记录，避免把既有 infra diagnostics 噪声误写成 tools blocker。
+3. 若 full gate 采样只暴露 build/tests 侧的环境噪声，本轮只允许做最小解阻，不扩散到 tools 产品语义或无关模块实现。
+
+### 改动
+
+1. 更新 `docs/todos/tools/DASALL_tools子系统专项TODO.md`：
+   - 将 `TOOL-TODO-042` 标记为 `Done`；
+   - 对齐 `Gate-TOOL-01 ~ Gate-TOOL-10` 编号与 tools 详设；
+   - 回写 9.2 / 9.3 / 9.4 的质量门、Gate 证据、blocker 变化；
+   - 更新顶部当前结论、可行性结论与交付物总览。
+2. 新增 `docs/todos/tools/deliverables/TOOL-TODO-042-tools专项Gate与交付证据收敛.md`，沉淀 042 的 full gate 结果与最小解阻记录。
+3. 更新本条 worklog，记录 042 的执行决策、验证结果与残余边界。
+
+### 测试
+
+1. build-ci 正式 Gate：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_tools dasall_unit_tests dasall_contract_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -L unit`
+   - `ctest --test-dir build-ci --output-on-failure -L contract`
+   - `ctest --test-dir build-ci --output-on-failure -L integration`
+2. 最小解阻：
+   - 显式补齐 `PATH=/usr/bin:/bin:$PATH`；
+   - 定向重建缺失的 tools unit / integration targets，恢复 build-ci 下的 executable 物化。
+3. 结果：
+   - `ctest -N` 总测试数 `499`；
+   - unit `296/296` 全部通过；
+   - contract `152/152` 全部通过；
+   - integration `49/51` 通过，tools 自身用例全部通过，剩余失败仅为既有跨模块 `InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`。
+
+### 结果
+
+1. tools 专项 001~042 已在子系统范围内闭合，Gate-TOOL-01 ~ Gate-TOOL-10 均已具备明确命令证据并完成回写。
+2. TOOL-BLK-001 ~ TOOL-BLK-005 已全部解除，本轮未新增新的 tools blocker；042 期间出现的 executable 未物化与 PATH 噪声已在 build/tests 侧最小解阻恢复。
+3. 本轮保持了系统边界：generic MCP ready 不外推为任意 MCP 兼容，external skill importer 仍受 sample scope 与 feature flag 约束，runtime 生产 caller adapter 仍是跨模块后续事项。
+
+### 下一步
+
+1. 若继续推进，应单列跨模块任务处理 `InfraDiagnosticsSmokeTest` / `InfraDiagnosticsIntegrationTest` 的聚合失败，或由 runtime owner 推进生产 caller adapter；tools 专项基座无需继续返工。
+
+### 风险
+
+1. full integration 的跨模块失败仍可能掩盖 tools 自身 Gate 结论；后续若再出现聚合失败，应先区分 tools regression 与外部 baseline 噪声。
+2. `035/040/042` 的结论只覆盖 loopback / plugin-stdio hybrid MCP 与 sample-scope external skill importer，不应被误读为系统级“任意 MCP / 任意外部 skill 已 ready”。
+
 ## 记录 #341
 
 - 日期：2026-04-17
