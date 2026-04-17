@@ -430,7 +430,7 @@ flowchart LR
 | VectorMemoryIndexAdapter | 可选索引写入/查询/rebuild | Vector documents、query | vector hits、health | SQLite-vss/sidecar backend | 不承担 knowledge 检索编排 |
 | MemoryMaintenanceWorker | retention、WAL checkpoint、quarantine、rebuild | MaintenancePlan | audit/metrics/report | 仓储层、Vector adapter、infra hooks | 不阻塞主链路语义装配 |
 
-> **设计决策注记**：上表中 SessionTimelineRepository、SummaryRepository、FactRepository、ExperienceRepository 为逻辑职责概念。在 §6.12.5 组件级详细设计中，这些逻辑仓储统一由 `SqliteMemoryStore` 一个实现类承载（理由见 §6.6 IMemoryStore 接口设计决策说明：单 SQLite 逻辑主库 + 事务原子性需求 + DI 友好性）。CandidateCollector / WritebackCoordinator / ConflictResolver 等内部消费方均通过 `IMemoryStore` 接口访问，不直接依赖独立 Repository 实例。
+> **设计决策注记**：上表中 SessionTimelineRepository、SummaryRepository、FactRepository、ExperienceRepository 为逻辑职责概念。在 §6.12.5 组件级详细设计中，这些逻辑仓储统一由 `SqliteMemoryStore` 一个实现类承载（理由见 §6.6 IMemoryStore 接口设计决策说明：单 SQLite 逻辑主库 + 事务原子性需求 + DI 友好性）。CandidateCollector / CompressionCoordinator / WritebackCoordinator / ConflictResolver 等内部消费方均通过 `IMemoryStore` 接口访问，不直接依赖独立 Repository 实例。
 
 #### 6.3.1 CompressionCoordinator 摘要文本生成策略
 
@@ -1503,6 +1503,8 @@ private:
   ISummarizer* summarizer_;  // nullable
 };
 ```
+
+`SummaryRepository` 在本节只保留为高层逻辑职责名，不再作为 `CompressionCoordinator` 的独立 port / constructor dependency。Build 阶段固定以 `IMemoryStore& store_` 承载 summary 持久化 surface，避免在实现层并存两套持久化注入口径。
 
 5. **关键执行流**（按 §6.3.1 三阶段策略）：
    1. 检查是否有 ISummarizer 注入：有则使用 LLM-backed 摘要（阶段 2），否则使用模板拼接（阶段 1）。

@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #345
+
+- 日期：2026-04-17
+- 阶段：memory/专项 TODO 阶段 A
+- 任务：MEM-TODO-003 收敛 CompressionCoordinator 持久化依赖口径
+- 状态：已完成
+
+### 任务选择
+
+1. MEM-TODO-003 是 001 / 002 之后剩余的最小 dependency 收敛任务；它直接决定 `CompressionCoordinator` 在 Build 阶段应注入 `IMemoryStore` 还是额外引入 `SummaryRepository` port，因此必须在实现 018 前先冻结。
+2. 本地证据显示 `docs/architecture/DASALL_memory子系统详细设计.md` 的 6.3 组件表、6.6 仓储决策与 6.12.2 构造签名已经趋向 `IMemoryStore` 单口径，但高层“逻辑仓储”注记没有把 `CompressionCoordinator` 明确列入统一消费方，仍可能让评审者误读为存在第二条 `SummaryRepository` 注入路径；本轮最小动作是补上这条显式约束，并同步专项 TODO 的 blocker / 粒度状态。
+3. 外部参考采用 Martin Fowler 的 Repository 模式：领域消费者应依赖单一 repository abstraction，而不是同时耦合多条数据映射入口；在 DASALL memory 中，这对应为 `CompressionCoordinator` 只依赖 `IMemoryStore` summary surface，而非并存独立 `SummaryRepository` port。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_memory子系统详细设计.md`：
+   - 在 6.3 的设计决策注记中显式把 `CompressionCoordinator` 纳入 `IMemoryStore` 统一消费方；
+   - 在 6.12.2 `CompressionCoordinator` 段新增约束说明，明确 `SummaryRepository` 仅保留为逻辑职责名，不进入构造函数或 port surface。
+2. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-003` 标记为 `Done`；
+   - 同步 4.1 / 4.2 对 `CompressionCoordinator` 粒度和缺口判断；
+   - 将 `MEM-BLK-03` 回写为已解除，并把当前活跃 blocker 收缩为 `MEM-BLK-04 ~ 05`；
+   - 清理 `MEM-TODO-018` 对 `MEM-BLK-03` 的陈旧引用；
+   - 更新顶部当前结论与 11.1 ~ 11.3 的可执行性描述，避免后续继续把 persistence dependency gap 误判为未解前置。
+3. 更新本条 worklog，记录 003 的任务选择、验证命令与依赖收敛结论。
+
+### 测试
+
+1. 文档一致性验证：
+   - `rg -n "CompressionCoordinator|SummaryRepository|IMemoryStore|SqliteMemoryStore" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md`
+2. 结果：
+   - 命中 6.3 组件表、设计决策注记、6.12.2 构造签名与关键执行流、专项 TODO 6.1 / 8 / 11 相关段落；
+   - `CompressionCoordinator` 的构造依赖与摘要持久化 surface 已稳定收敛到 `IMemoryStore`，`SummaryRepository` 只保留为逻辑职责名。
+
+### 结果
+
+1. `MEM-TODO-003` 已完成，`MEM-BLK-03` 已解除；`MEM-TODO-018` 与 `MEM-TODO-019` 不再受 persistence dependency 双口径阻塞。
+2. Memory 详设当前对 `CompressionCoordinator` 的依赖边界已经固定为：实现层只注入 `IMemoryStore` 与可选 `ISummarizer`，高层 `SummaryRepository` 仅作为逻辑职责名保留，不单独形成 port。
+3. 本轮通过补强详设中的显式约束和 TODO 的 blocker 回写，消除了“总体仓储统一由 `SqliteMemoryStore` 承载，但 Compression 可能另走 `SummaryRepository`”的评审歧义。
+
+### 下一步
+
+1. 进入 `MEM-TODO-004`，把 `WorkingMemoryBoard` 的更新 owner 收敛到唯一责任点。
+
+### 风险
+
+1. `MEM-TODO-004` 仍未完成，`WorkingMemoryBoard` ownership 若不收口，`MemoryManager` 与 `WritebackCoordinator` 的实现职责仍可能分叉。
+2. 本轮只收敛了 persistence dependency，不等于 `CompressionCoordinator` 的模板路径、summarizer 注入点或写回主链已经完成代码实现。
+
 ## 记录 #344
 
 - 日期：2026-04-17
