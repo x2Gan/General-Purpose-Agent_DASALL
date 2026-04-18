@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #349
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-006 定义 context 请求与结果对象族
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-006` 是 025 之后最早且无 blocker 的 Build-ready 原子任务；它只依赖 005 已落盘的 public include skeleton，不依赖 store、vector 或 manager concrete 实现。
+2. memory 详设 6.5.3 已冻结 `MemoryContextRequest`、`ContextAssemblyResult` 的字段面，而 `tests/unit/memory/MemoryInterfaceCompileTest.cpp` 仍只停留在目录与 skeleton topology 检查；本轮最小动作是把 context supporting types 落到 `memory/include/context/`，并让 compile gate 真正消费这些 ABI。
+3. 当前共享 `ResultCode` 还没有 memory 专用 success / error 段，因此本轮沿用仓库既有结果对象模式：`ContextAssemblyResult.result_code` 采用 `std::optional<contracts::ResultCode>`，成功路径为空，避免与后续 `MEM-TODO-008B` 的错误域冻结相冲突。
+
+### 改动
+
+1. 新增 `memory/include/context/MemoryContextRequest.h`：
+   - 落盘 `request_id`、`session_id`、`stage`、`goal_summary`、`constraints_summary`、`latest_observation_digest_summary`、`visible_tools`、`token_budget_hint`、`latency_budget_ms`、`external_evidence`；
+   - 将 request 保持为 module-local supporting type，不提前推进 contracts。
+2. 新增 `memory/include/context/ContextAssemblyResult.h`：
+   - 落盘 `result_code`、`context_packet`、`dropped_sections`、`compression_notes`、`warnings`、`degraded`；
+   - 复用 `contracts::ContextPacket` 作为 payload，并让成功路径允许 `result_code` 为空。
+3. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 `MemoryContextRequest`、`ContextAssemblyResult` 的直接 include 与类型断言；
+   - 校验 request 默认 token / latency 预算值、runtime 投影字段，以及 result 的 `warnings` / `degraded` / `ContextPacket` payload 语义。
+4. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-006` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/context/MemoryContextRequest.h`、`memory/include/context/ContextAssemblyResult.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_unit_tests && ctest --test-dir build-ci -R "MemoryInterfaceCompileTest" --output-on-failure`
+   - 结果：`dasall_memory` 与 `dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；本次 `ctest` 同步返回 `100% tests passed, 0 tests failed out of 299`。
+
+### 结果
+
+1. `MEM-TODO-006` 已完成，context supporting types 不再停留在详设表格，已经成为可被 compile gate 消费的公共 ABI。
+2. `ContextAssemblyResult` 直接承接 `contracts::ContextPacket`，为后续 `IContextOrchestrator::assemble()` 和 `IMemoryManager::prepare_context()` 留出了稳定 payload 面。
+3. 这轮将 memory 的 compile gate 从“目录/骨架存在”推进到了“request/result 字段和默认语义可编译消费”，为 007/008A/008B/009 的接口冻结降低了返工成本。
+
+### 下一步
+
+1. 进入 `MEM-TODO-007`，补齐 writeback supporting types，保持 request/result object family 连续收敛。
+2. 随后执行 `MEM-TODO-008A`、`MEM-TODO-008B`，冻结配置模型与错误域映射面，再推进 009/010/022。
+
+### 风险
+
+1. `ContextAssemblyResult.result_code` 当前采用可空 contracts 结果码作为过渡表示；若后续 `MEM-TODO-008B` 冻结出更细的 memory 内部错误枚举，需要只在映射层补强，不应回破 006 已落盘的 payload 结构。
+2. 本轮只冻结 supporting types，不代表 `ContextOrchestratorBudgetTest` 或真实 assemble 行为已具备实现基础；这些仍依赖 008A、009、016、017、018、019。
+
 ## 记录 #348
 
 - 日期：2026-04-18

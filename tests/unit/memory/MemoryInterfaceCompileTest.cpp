@@ -2,6 +2,10 @@
 #include <filesystem>
 #include <iostream>
 #include <string_view>
+#include <type_traits>
+
+#include "context/ContextAssemblyResult.h"
+#include "context/MemoryContextRequest.h"
 
 #include "support/TestAssertions.h"
 
@@ -71,6 +75,65 @@ void test_memory_module_is_no_longer_placeholder_only() {
               "memory module should no longer rely on the legacy placeholder.cpp translation unit");
 }
 
+void test_memory_context_supporting_types_compile_and_expose_expected_defaults() {
+  using dasall::memory::ContextAssemblyResult;
+  using dasall::memory::MemoryContextRequest;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(MemoryContextRequest{}.visible_tools),
+                               std::vector<std::string>>,
+                "MemoryContextRequest should expose visible_tools as string identifiers");
+  static_assert(std::is_same_v<decltype(ContextAssemblyResult{}.context_packet),
+                               dasall::contracts::ContextPacket>,
+                "ContextAssemblyResult should carry the contracts ContextPacket payload");
+
+  MemoryContextRequest request;
+  request.request_id = "req-001";
+  request.session_id = "session-001";
+  request.stage = "plan";
+  request.goal_summary = "Produce a stable prompt packet";
+  request.constraints_summary = "Stay within token budget";
+  request.latest_observation_digest_summary = "No prior observation";
+  request.visible_tools = {"shell", "search"};
+  request.external_evidence = {"profile:desktop_full", "policy:interactive"};
+
+  assert_equal("req-001", request.request_id,
+               "memory context request should expose a runtime correlation id");
+  assert_equal("session-001", request.session_id,
+               "memory context request should expose a target session id");
+  assert_equal("plan", request.stage,
+               "memory context request should expose the orchestration stage");
+  assert_equal(4096, MemoryContextRequest{}.token_budget_hint,
+               "memory context request should default to the detailed-design token budget hint");
+  assert_equal(0, MemoryContextRequest{}.latency_budget_ms,
+               "memory context request should default latency budget to unconstrained");
+  assert_equal(2, static_cast<int>(request.visible_tools.size()),
+               "memory context request should carry runtime-projected visible tools");
+  assert_equal(2, static_cast<int>(request.external_evidence.size()),
+               "memory context request should carry external evidence projections");
+
+  ContextAssemblyResult result;
+  result.context_packet.request_id = request.request_id;
+  result.context_packet.current_goal_summary = request.goal_summary;
+
+  assert_true(!result.result_code.has_value(),
+              "context assembly success path should allow the shared result code to stay empty");
+  assert_true(result.context_packet.request_id.has_value(),
+              "context assembly result should expose the assembled contracts payload");
+  assert_equal("Produce a stable prompt packet",
+               result.context_packet.current_goal_summary.value_or(std::string{}),
+               "context assembly result should surface the goal summary in ContextPacket");
+  assert_true(result.dropped_sections.empty(),
+              "fresh context assembly results should start without dropped sections");
+  assert_true(result.compression_notes.empty(),
+              "fresh context assembly results should start without compression notes");
+  assert_true(result.warnings.empty(),
+              "fresh context assembly results should start without warnings");
+  assert_true(!result.degraded,
+              "fresh context assembly results should not report degraded execution");
+}
+
 }  // namespace
 
 int main() {
@@ -78,6 +141,7 @@ int main() {
     test_memory_unit_surface_anchor_uses_a_collision_free_ctest_name();
     test_memory_public_include_layout_exists();
     test_memory_module_is_no_longer_placeholder_only();
+    test_memory_context_supporting_types_compile_and_expose_expected_defaults();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;
