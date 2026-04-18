@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #355
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-010 定义 IMemoryStore 与 store supporting types
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-010` 是 009/009A 之后最早可执行的仓储接口冻结任务；如果 store surface 继续悬空，013~015 的 schema/store 实现与 016/021 的上游依赖都会持续堵塞。
+2. 详设 6.12.5 已给出完整的 `SessionLoad*`、`StoreResult`、`FactQuery*`、`ExperienceQuery*` 字段表，足够直接进入代码冻结，不需要再补设计。
+3. 现有 `MockMemoryStore` 仍只有 KV 语义，无法支撑未来 store-oriented unit 场景；因此本轮除了接口头，还必须补一个真实继承 `IMemoryStore` 的 fake。
+
+### 改动
+
+1. 新增 `memory/include/IStoreTransaction.h`：
+   - 落盘 RAII 事务抽象；
+   - `commit()` 采用 `std::optional<ResultCode>`，避免在当前 contracts 缺少通用 success code 的前提下硬塞伪成功码。
+2. 新增 `memory/include/IMemoryStore.h`：
+   - 落盘 `open/close`、`begin_immediate`、session/turn、summary、fact、experience、maintenance support 方法；
+   - 同文件冻结 `SessionLoadRequest/Bundle`、`StoreResult`、`FactQuery*`、`ExperienceQuery*` supporting structs。
+3. 新增 `tests/mocks/include/FakeMemoryStore.h`：
+   - 提供继承 `IMemoryStore` 的测试替身；
+   - 覆盖事务句柄、session/turn/summary 持有、fact/experience 查询与 quarantine 基线。
+4. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 store / transaction 接口签名的 `static_assert`；
+   - 直接构造 supporting structs，并通过 `FakeMemoryStore` 验证 open / transaction / query / quarantine 基线。
+5. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-010` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/IStoreTransaction.h`、`memory/include/IMemoryStore.h`、`tests/mocks/include/FakeMemoryStore.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^MemoryInterfaceCompileTest$' --output-on-failure`
+   - 结果：`dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. `MEM-TODO-010` 已完成，memory 模块现在具备统一的 store 与 transaction public surface，可供后续 `SqliteMemoryStore`、`CandidateCollector`、`WritebackCoordinator` 直接消费。
+2. `SessionLoadRequest/Bundle`、`StoreResult`、`FactQuery*`、`ExperienceQuery*` 已成为真实代码 surface，而不再只是 6.12.5 中的设计表格。
+3. `FakeMemoryStore` 已把测试替身从简单 KV 脚手架提升到真正的仓储 fake，为 013~015 和后续 unit 测试铺平接口层依赖。
+
+### 下一步
+
+1. 进入 `MEM-TODO-022`，冻结 vector unavailable baseline 与 `IEmbeddingAdapter` 接线，打通 CandidateCollector / WritebackCoordinator 的 availability gate。
+
+### 风险
+
+1. 详设草图把 `StoreResult.result_code`、`IMemoryStore::open()`、`IStoreTransaction::commit()` 画成非 optional，但当前 contracts 仍缺少通用 success code；本轮按仓库既有 envelope 模式改为 `std::optional<ResultCode>`。后续若 contracts 收敛出通用 success code，应统一评估是否需要升级这些签名，而不是零散回摆。
+2. `ExperienceQuery.stage` 在当前 shared `ExperienceMemory` contract 中没有同名字段；本轮 fake 仅以 tag 兼容 `stage:<value>` 的最小过滤约定保留查询面，具体持久化列与过滤语义留待 015 落地时再最终收敛。
+
 ## 记录 #354
 
 - 日期：2026-04-18

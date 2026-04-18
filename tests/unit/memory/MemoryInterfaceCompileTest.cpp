@@ -6,7 +6,9 @@
 
 #include "IContextOrchestrator.h"
 #include "IMemoryManager.h"
+#include "IMemoryStore.h"
 #include "ISummarizer.h"
+#include "IStoreTransaction.h"
 #include "config/MemoryConfig.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
@@ -17,6 +19,7 @@
 #include "writeback/SummaryProjection.h"
 #include "writeback/WritebackResult.h"
 
+#include "FakeMemoryStore.h"
 #include "support/TestAssertions.h"
 
 #ifndef DASALL_MEMORY_PUBLIC_INCLUDE_DIR
@@ -455,6 +458,182 @@ void test_memory_summarizer_interface_uses_module_local_summary_supporting_types
                                    "summary generation result should preserve the degraded flag");
 }
 
+void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types() {
+     using dasall::memory::ExperienceQuery;
+     using dasall::memory::FactQuery;
+     using dasall::memory::IMemoryStore;
+     using dasall::memory::IStoreTransaction;
+     using dasall::memory::MemoryConfig;
+     using dasall::memory::SessionLoadRequest;
+     using dasall::memory::StoreResult;
+     using dasall::tests::mocks::FakeMemoryStore;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     using OpenSignature = std::optional<dasall::contracts::ResultCode> (IMemoryStore::*)(
+               const MemoryConfig&);
+     using BeginTransactionSignature = std::unique_ptr<IStoreTransaction> (IMemoryStore::*)();
+     using LoadBundleSignature = dasall::memory::SessionLoadBundle (IMemoryStore::*)(
+               const SessionLoadRequest&);
+     using QueryFactsSignature = dasall::memory::FactQueryResult (IMemoryStore::*)(
+               const FactQuery&);
+     using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IMemoryStore::*)(
+               const ExperienceQuery&);
+     using CommitSignature = std::optional<dasall::contracts::ResultCode> (IStoreTransaction::*)();
+
+     static_assert(std::has_virtual_destructor_v<IMemoryStore>,
+                                        "IMemoryStore should remain a polymorphic storage abstraction");
+     static_assert(std::has_virtual_destructor_v<IStoreTransaction>,
+                                        "IStoreTransaction should remain a polymorphic transaction abstraction");
+     static_assert(std::is_abstract_v<IMemoryStore>,
+                                        "IMemoryStore should stay abstract until the SQLite-backed implementation lands");
+     static_assert(std::is_abstract_v<IStoreTransaction>,
+                                        "IStoreTransaction should stay abstract until a concrete transaction implementation lands");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::open), OpenSignature>,
+                                        "IMemoryStore::open should surface the optional ResultCode outcome pattern");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::begin_immediate), BeginTransactionSignature>,
+                                        "IMemoryStore::begin_immediate should return a RAII transaction handle");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::load_session_bundle), LoadBundleSignature>,
+                                        "IMemoryStore::load_session_bundle should consume the module-local session load request");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::query_facts), QueryFactsSignature>,
+                                        "IMemoryStore::query_facts should consume the module-local fact query surface");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::query_experiences), QueryExperiencesSignature>,
+                                        "IMemoryStore::query_experiences should consume the module-local experience query surface");
+     static_assert(std::is_same_v<decltype(&IStoreTransaction::commit), CommitSignature>,
+                                        "IStoreTransaction::commit should use the optional ResultCode outcome pattern");
+
+     SessionLoadRequest session_load_request;
+     session_load_request.session_id = "session-001";
+     session_load_request.recent_turn_limit = 5;
+     assert_equal("session-001", session_load_request.session_id,
+                                    "session load request should preserve the requested session id");
+     assert_equal(5, session_load_request.recent_turn_limit,
+                                    "session load request should preserve the requested turn window size");
+
+     StoreResult success = StoreResult::success(std::string{"persisted-001"});
+     StoreResult failure = StoreResult::failure(
+               dasall::contracts::ResultCode::ValidationFieldMissing,
+               std::string{"session_id is required"});
+     assert_true(success.ok,
+                                   "store result success helper should mark successful writes");
+     assert_true(!success.result_code.has_value(),
+                                   "store result success helper should leave the error code empty on success");
+     assert_equal("persisted-001", success.persisted_id.value_or(std::string{}),
+                                    "store result success helper should preserve the persisted id");
+     assert_true(!failure.ok,
+                                   "store result failure helper should mark failed writes");
+     assert_true(failure.result_code == dasall::contracts::ResultCode::ValidationFieldMissing,
+                                   "store result failure helper should preserve the contracts result code");
+
+     FactQuery fact_query;
+     fact_query.session_id = "session-001";
+     fact_query.user_id = "user-001";
+     fact_query.fact_type = "preference";
+     fact_query.min_confidence = 80;
+     fact_query.limit = 10;
+
+     ExperienceQuery experience_query;
+     experience_query.session_id = "session-001";
+     experience_query.user_id = "user-001";
+     experience_query.stage = "plan";
+     experience_query.applicable_domains = std::vector<std::string>{"memory"};
+     experience_query.limit = 5;
+
+     FakeMemoryStore store;
+     MemoryConfig config;
+
+     assert_true(!store.open(config).has_value(),
+                                   "fake memory store should reuse the optional ResultCode success pattern");
+     assert_true(store.is_open_for_test(),
+                                   "fake memory store should expose an opened state after open()");
+     assert_equal("sqlite", store.last_open_backend_for_test(),
+                                    "fake memory store should preserve the configured backend projection");
+
+     auto transaction = store.begin_immediate();
+     assert_true(static_cast<bool>(transaction),
+                                   "fake memory store should expose a transaction handle");
+     assert_true(store.has_active_transaction_for_test(),
+                                   "fake memory store should mark a transaction as active while the handle is alive");
+     assert_true(!transaction->commit().has_value(),
+                                   "fake store transactions should commit using the optional ResultCode success pattern");
+     assert_true(!store.has_active_transaction_for_test(),
+                                   "fake memory store should clear the active transaction flag after commit");
+
+     dasall::contracts::Session session;
+     session.session_id = "session-001";
+     session.turn_ids = std::vector<std::string>{};
+     session.user_id = "user-001";
+     session.created_at = 1;
+     assert_true(store.create_session(session).ok,
+                                   "fake memory store should create sessions through the IMemoryStore surface");
+
+     dasall::contracts::Turn turn;
+     turn.turn_id = "turn-001";
+     turn.session_id = "session-001";
+     turn.user_input = "Remember the latest shell result";
+     turn.created_at = 2;
+     assert_true(store.append_turn(turn).ok,
+                                   "fake memory store should append turns through the IMemoryStore surface");
+     assert_equal(1, static_cast<int>(store.count_turns("session-001")),
+                                    "fake memory store should count turns per session");
+     assert_true(store.update_session_active("session-001", 3).ok,
+                                   "fake memory store should update session activity timestamps");
+
+     dasall::contracts::SummaryMemory summary;
+     summary.summary_id = "summary-001";
+     summary.session_id = "session-001";
+     summary.summary_text = "A compact summary";
+     summary.created_at = 4;
+     assert_true(store.upsert_summary(summary).ok,
+                                   "fake memory store should upsert summaries through the IMemoryStore surface");
+     assert_true(store.load_latest_summary("session-001").has_value(),
+                                   "fake memory store should expose the latest summary for a session");
+
+     dasall::contracts::MemoryFact fact;
+     fact.fact_id = "fact-001";
+     fact.session_id = "session-001";
+     fact.fact_text = "The shell command succeeded";
+     fact.source_turn_ids = std::vector<std::string>{"turn-001"};
+     fact.confidence_score = 90;
+     fact.created_at = 5;
+     fact.fact_type = "preference";
+     assert_true(store.insert_fact(fact).ok,
+                                   "fake memory store should insert facts through the IMemoryStore surface");
+     const auto fact_result = store.query_facts(fact_query);
+     assert_equal(1, static_cast<int>(fact_result.facts.size()),
+                                    "fake memory store should answer fact queries through the frozen query surface");
+
+     dasall::contracts::ExperienceMemory experience;
+     experience.experience_id = "experience-001";
+     experience.session_id = "session-001";
+     experience.lesson_summary = "Retry storage after a busy window";
+     experience.trigger_condition = "storage busy";
+     experience.recommended_action = "retry with bounded budget";
+     experience.created_at = 6;
+     experience.applicable_domains = std::vector<std::string>{"memory"};
+     experience.tags = std::vector<std::string>{"stage:plan"};
+     assert_true(store.insert_experience(experience).ok,
+                                   "fake memory store should insert experiences through the IMemoryStore surface");
+     const auto experience_result = store.query_experiences(experience_query);
+     assert_equal(1, static_cast<int>(experience_result.experiences.size()),
+                                    "fake memory store should answer experience queries through the frozen query surface");
+
+     const auto bundle = store.load_session_bundle(session_load_request);
+     assert_true(bundle.session.session_id == std::optional<std::string>{"session-001"},
+                                   "session load bundle should surface the stored session metadata");
+     assert_equal(1, static_cast<int>(bundle.recent_turns.size()),
+                                    "session load bundle should surface the recent turn window");
+     assert_equal(1, bundle.total_turn_count,
+                                    "session load bundle should surface the total turn count");
+
+     assert_true(store.quarantine_record("fact", "fact-001", "manual_review").ok,
+                                   "fake memory store should expose the maintenance quarantine surface");
+
+     store.close();
+     assert_true(!store.is_open_for_test(),
+                                   "fake memory store should clear its opened state after close()");
+}
+
 }  // namespace
 
 int main() {
@@ -468,6 +647,7 @@ int main() {
           test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
           test_memory_manager_interfaces_expose_expected_runtime_facing_signatures();
           test_memory_summarizer_interface_uses_module_local_summary_supporting_types();
+            test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;
