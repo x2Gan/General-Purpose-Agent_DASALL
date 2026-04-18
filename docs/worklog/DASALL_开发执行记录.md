@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #354
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-009A 定义 ISummarizer 抽象接口
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-009A` 只依赖 002 的设计收敛与 005 的 public include skeleton，是当前最早可执行的 summary-compression 接口冻结任务。
+2. 009A 的完成判定要求 `SummaryGenerationRequest/Result` 等 supporting objects 不再悬空；因此本轮不能只落一个空的 `ISummarizer.h`，必须把 summarizer 直接依赖的三个 module-local headers 一起补齐。
+3. 这组对象仍保持 module-local，不进入 contracts，符合 6.5.3b 和 MEM-E01 的分层约束，也不会让 memory 对 llm 具体实现产生编译依赖。
+
+### 改动
+
+1. 新增 `memory/include/ISummarizer.h`：
+   - 落盘 `SummaryGenerationResult summarize(const SummaryGenerationRequest&)` 抽象接口；
+   - 保持 summarizer 为可注入的 module-local abstraction。
+2. 新增 `memory/include/writeback/SummaryGenerationRequest.h`、`SummaryGenerationResult.h`、`SummaryProjection.h`：
+   - 落盘 summary 请求、结果与中间投影对象；
+   - 复用 frozen `Turn`、`SummaryMemory` contracts，并保留 `warnings` / `fallback_used` / `degraded` 反馈位。
+3. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 summarizer 接口和 supporting headers 的直接 include；
+   - 锁定 `ISummarizer::summarize()` 签名，并校验 request/projection/result 字段与 fallback/degraded 语义。
+4. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-009A` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/ISummarizer.h`、`memory/include/writeback/SummaryGenerationRequest.h`、`memory/include/writeback/SummaryProjection.h`、`memory/include/writeback/SummaryGenerationResult.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^MemoryInterfaceCompileTest$' --output-on-failure`
+   - 结果：`dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. `MEM-TODO-009A` 已完成，`ISummarizer` 不再只是设计占位，而是可被后续 `CompressionCoordinator` 注入的稳定抽象接口。
+2. `SummaryGenerationRequest`、`SummaryProjection`、`SummaryGenerationResult` 已成为真实代码 surface，summarizer supporting objects 不再悬空。
+3. 这轮让 summary-compression 相关 ABI 与 manager/orchestrator/store surface 保持同一层级冻结，为 018 的 mock/fallback 测试预留了直接可用的接口面。
+
+### 下一步
+
+1. 进入 `MEM-TODO-010`，冻结 `IMemoryStore` 与 store supporting types，补齐 session/fact/experience 查询与事务抽象。
+2. 随后推进 `MEM-TODO-022`，落实 vector unavailable baseline 和 `IEmbeddingAdapter` 接线。
+
+### 风险
+
+1. `SummaryGenerationRequest/Result` 当前只冻结结构体字段，不包含更多 helper 或验证函数；后续若需要补投影/merge helper，应避免破坏 009A 已冻结的字段语义。
+2. `ISummarizer` 仍是 nullable 注入点，具体 fallback 行为留待 018 实现；本轮不应把 compression runtime policy 或 llm 依赖提前塞进接口头。
+
 ## 记录 #353
 
 - 日期：2026-04-18

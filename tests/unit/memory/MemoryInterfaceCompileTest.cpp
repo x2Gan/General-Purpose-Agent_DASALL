@@ -6,11 +6,15 @@
 
 #include "IContextOrchestrator.h"
 #include "IMemoryManager.h"
+#include "ISummarizer.h"
 #include "config/MemoryConfig.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/MemoryError.h"
 #include "writeback/MemoryWritebackRequest.h"
+#include "writeback/SummaryGenerationRequest.h"
+#include "writeback/SummaryGenerationResult.h"
+#include "writeback/SummaryProjection.h"
 #include "writeback/WritebackResult.h"
 
 #include "support/TestAssertions.h"
@@ -388,6 +392,69 @@ void test_memory_error_mapping_aligns_with_warning_and_audit_semantics() {
                          "IContextOrchestrator::assemble should consume the module-local context request/result pair");
      }
 
+void test_memory_summarizer_interface_uses_module_local_summary_supporting_types() {
+     using dasall::memory::ISummarizer;
+     using dasall::memory::SummaryGenerationRequest;
+     using dasall::memory::SummaryGenerationResult;
+     using dasall::memory::SummaryProjection;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     using SummarizeSignature = SummaryGenerationResult (ISummarizer::*)(
+               const SummaryGenerationRequest&);
+
+     static_assert(std::has_virtual_destructor_v<ISummarizer>,
+                                        "ISummarizer should remain a polymorphic summarizer abstraction");
+     static_assert(std::is_abstract_v<ISummarizer>,
+                                        "ISummarizer should stay abstract until runtime injects a concrete summarizer");
+     static_assert(std::is_same_v<decltype(&ISummarizer::summarize), SummarizeSignature>,
+                                        "ISummarizer::summarize should consume the module-local summary request/result pair");
+
+     SummaryGenerationRequest request;
+     request.session_id = "session-001";
+     request.source_turns.push_back(dasall::contracts::Turn{});
+     request.source_turns.front().turn_id = "turn-001";
+     request.existing_summary = dasall::contracts::SummaryMemory{};
+     request.existing_summary->summary_text = "Previous summary";
+     request.target_token_budget = 1024;
+     request.strategy_hint = "auto";
+
+     assert_equal("session-001", request.session_id,
+                                    "summary generation request should target a single session");
+     assert_equal(1, static_cast<int>(request.source_turns.size()),
+                                    "summary generation request should carry source turns");
+     assert_true(request.existing_summary.has_value(),
+                                   "summary generation request should allow an optional existing summary");
+     assert_equal(1024, request.target_token_budget,
+                                    "summary generation request should preserve the target token budget");
+     assert_equal("auto", request.strategy_hint,
+                                    "summary generation request should preserve the strategy hint");
+
+     SummaryGenerationResult result;
+     result.projection = SummaryProjection{
+               .summary_text = "A merged summary",
+               .decisions_made = {"use cached evidence"},
+               .confirmed_facts = {"tool run completed"},
+               .tool_outcomes = {"shell succeeded"},
+               .source_turn_ids = {"turn-001"},
+               .estimated_tokens = 128,
+     };
+     result.warnings = {"summarizer_fallback"};
+     result.fallback_used = true;
+     result.degraded = true;
+
+     assert_equal("A merged summary", result.projection.summary_text,
+                                    "summary generation result should surface the summary projection text");
+     assert_equal(1, static_cast<int>(result.projection.decisions_made.size()),
+                                    "summary generation result should surface structured decisions");
+     assert_equal(128, result.projection.estimated_tokens,
+                                    "summary generation result should surface the token estimate");
+     assert_true(result.fallback_used,
+                                   "summary generation result should preserve the fallback-used flag");
+     assert_true(result.degraded,
+                                   "summary generation result should preserve the degraded flag");
+}
+
 }  // namespace
 
 int main() {
@@ -400,6 +467,7 @@ int main() {
     test_memory_config_defaults_align_with_detailed_design();
           test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
           test_memory_manager_interfaces_expose_expected_runtime_facing_signatures();
+          test_memory_summarizer_interface_uses_module_local_summary_supporting_types();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;
