@@ -7,6 +7,7 @@
 #include "config/MemoryConfig.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
+#include "error/MemoryError.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/WritebackResult.h"
 
@@ -290,6 +291,55 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
          "memory maintenance config should default maintenance schedule interval to sixty seconds");
   }
 
+void test_memory_error_mapping_aligns_with_warning_and_audit_semantics() {
+     using dasall::memory::MemoryError;
+     using dasall::memory::map_memory_errno;
+     using dasall::memory::map_memory_error;
+     using dasall::memory::memory_error_name;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     assert_equal("MEM_E_STORAGE_BUSY", std::string(memory_error_name(MemoryError::StorageBusy)),
+                                    "memory error names should stay stable for storage busy");
+     assert_equal("MEM_E_SCHEMA_MISMATCH", std::string(memory_error_name(MemoryError::SchemaMismatch)),
+                                    "memory error names should stay stable for schema mismatch");
+
+     const auto storage_busy = map_memory_error(MemoryError::StorageBusy);
+     assert_true(storage_busy.result_code == dasall::contracts::ResultCode::RuntimeRetryExhausted,
+                                   "storage busy should map to the contracts runtime failure category");
+     assert_true(storage_busy.retryable,
+                                   "storage busy should remain retryable until the bounded retry window is exhausted");
+     assert_true(!storage_busy.audit_required,
+                                   "storage busy should degrade to a warning before forcing audit escalation");
+     assert_equal("retryable_storage_failure", std::string(storage_busy.warning_key),
+                                    "storage busy should surface the retryable storage failure warning key");
+
+     const auto schema_mismatch = map_memory_error(MemoryError::SchemaMismatch);
+     assert_true(schema_mismatch.result_code == dasall::contracts::ResultCode::ValidationFieldMissing,
+                                   "schema mismatch should map into the contracts validation category");
+     assert_true(schema_mismatch.audit_required,
+                                   "schema mismatch should require audit evidence");
+     assert_equal("runtime/deploy", std::string(schema_mismatch.audit_scope),
+                                    "schema mismatch should report the runtime/deploy audit scope");
+
+     const auto validation_rejected = map_memory_error(MemoryError::ValidationRejected);
+     assert_true(validation_rejected.result_code == dasall::contracts::ResultCode::ValidationFieldMissing,
+                                   "validation rejected should stay in the contracts validation category");
+     assert_equal("partial_writeback_warning", std::string(validation_rejected.warning_key),
+                                    "validation rejected should surface the partial writeback warning key");
+     assert_true(validation_rejected.audit_required,
+                                   "validation rejected should remain auditable even when the main writeback path continues");
+
+     assert_true(map_memory_errno(EBUSY) == MemoryError::StorageBusy,
+                                   "EBUSY should map to the storage busy memory error");
+     assert_true(map_memory_errno(EAGAIN) == MemoryError::StorageBusy,
+                                   "EAGAIN should map to the storage busy memory error");
+     assert_true(map_memory_errno(EINVAL) == MemoryError::ConfigInvalid,
+                                   "EINVAL should map to the config invalid memory error");
+     assert_true(map_memory_errno(EIO) == MemoryError::StorageUnavailable,
+                                   "EIO should map to the storage unavailable memory error");
+}
+
 }  // namespace
 
 int main() {
@@ -300,6 +350,7 @@ int main() {
     test_memory_context_supporting_types_compile_and_expose_expected_defaults();
     test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();
     test_memory_config_defaults_align_with_detailed_design();
+          test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

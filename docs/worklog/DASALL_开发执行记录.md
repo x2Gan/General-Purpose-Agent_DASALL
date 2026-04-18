@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #352
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-008B 定义 MemoryError 错误域映射面
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-008B` 是 008A 之后最早能直接解锁 009/010 的 error-surface 原子任务；它不依赖 store、manager 或 vector 的 concrete 实现。
+2. memory 详设 6.9.2 已固定 `StorageBusy`、`SchemaMismatch`、`ValidationRejected` 三条核心错误语义，同时 6.12.1 又要求 init/open 失败能暴露 `StorageUnavailable`、`ConfigInvalid`。当前仓库没有 memory 专用错误头，导致 006/007 的 result envelopes 还没有统一的 warning / audit / errno 对接入口。
+3. 本轮选择与 infra 模块 `*Errors.h` 相同的模式落盘：`enum + name + mapping + errno adapter`，既保持和现有仓库风格一致，也能让 compile gate 直接消费映射结果。
+
+### 改动
+
+1. 新增 `memory/include/error/MemoryError.h`：
+   - 落盘 `MemoryError` 枚举：`StorageBusy`、`SchemaMismatch`、`ValidationRejected`、`StorageUnavailable`、`ConfigInvalid`；
+   - 落盘 `memory_error_name()`、`map_memory_error()`、`map_memory_errno()`；
+   - 在映射结果中冻结 `result_code`、`warning_key`、`audit_scope`、`retryable`、`audit_required` 与说明文案。
+2. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 `MemoryError.h` 的直接 include；
+   - 校验 `StorageBusy` / `SchemaMismatch` / `ValidationRejected` 的 name、`ResultCode`、warning/audit/retryable 语义，以及 `EBUSY` / `EAGAIN` / `EINVAL` / `EIO` 的 errno 映射入口。
+3. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-008B` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/error/MemoryError.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^MemoryInterfaceCompileTest$' --output-on-failure`
+   - 结果：`dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. `MEM-TODO-008B` 已完成，memory 模块第一次具备独立的错误域映射面，`ResultCode` / warning / audit / errno 入口不再分散在后续实现任务里临时拼装。
+2. `StorageBusy` 现在稳定映射为 retryable runtime failure，并保留 `retryable_storage_failure` warning key；`SchemaMismatch` 和 `ValidationRejected` 则分别冻结为 non-retryable audit 路径和 partial writeback warning 路径。
+3. 这轮让 009/010 能直接复用同一套错误面，不必在接口冻结阶段再猜哪些 failure 应该落到 contracts validation/runtime 类别。
+
+### 下一步
+
+1. 进入 `MEM-TODO-009`，冻结 `IMemoryManager` 与 `IContextOrchestrator` 接口，直接消费 006/007/008A/008B 已落盘的 request/result/config/error surface。
+2. 随后推进 `MEM-TODO-009A`、`MEM-TODO-010` 与 `MEM-TODO-022`，补齐 summarizer/store/vector unavailable baseline。
+
+### 风险
+
+1. `map_memory_errno()` 当前只冻结常见 POSIX errno 的分类入口；若后续 store 层需要区分 SQLite 扩展错误码，必须在不破坏现有 `MemoryError` 语义的前提下增加更细的 adapter，而不是回写枚举含义。
+2. 共享 `ResultCode` 仍没有 memory 专用细分值，因此 `SchemaMismatch`、`ValidationRejected`、`ConfigInvalid` 目前都复用了 contracts validation 类别；后续如果 contracts 层扩充 result code，应该只增强映射，不应回破 008B 已冻结的 memory error domain。
+
 ## 记录 #351
 
 - 日期：2026-04-18
