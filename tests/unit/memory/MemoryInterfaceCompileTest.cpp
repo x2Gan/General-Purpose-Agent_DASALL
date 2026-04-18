@@ -4,6 +4,8 @@
 #include <string_view>
 #include <type_traits>
 
+#include "IContextOrchestrator.h"
+#include "IMemoryManager.h"
 #include "config/MemoryConfig.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
@@ -340,6 +342,52 @@ void test_memory_error_mapping_aligns_with_warning_and_audit_semantics() {
                                    "EIO should map to the storage unavailable memory error");
 }
 
+     void test_memory_manager_interfaces_expose_expected_runtime_facing_signatures() {
+       using dasall::memory::ContextAssemblyResult;
+       using dasall::memory::IContextOrchestrator;
+       using dasall::memory::IMemoryManager;
+       using dasall::memory::MaintenanceReport;
+       using dasall::memory::MaintenanceRequest;
+       using dasall::memory::MemoryConfig;
+       using dasall::memory::MemoryContextRequest;
+       using dasall::memory::MemoryWritebackRequest;
+       using dasall::memory::WorkingMemoryExportRequest;
+       using dasall::memory::WorkingMemoryExportResult;
+       using dasall::memory::WritebackResult;
+
+       using InitSignature = dasall::contracts::ResultCode (IMemoryManager::*)(const MemoryConfig&);
+       using PrepareSignature = ContextAssemblyResult (IMemoryManager::*)(const MemoryContextRequest&);
+       using WriteBackSignature = WritebackResult (IMemoryManager::*)(const MemoryWritebackRequest&);
+       using ExportSignature = WorkingMemoryExportResult (IMemoryManager::*)(
+            const WorkingMemoryExportRequest&);
+       using MaintenanceSignature = MaintenanceReport (IMemoryManager::*)(
+            const MaintenanceRequest&);
+       using AssembleSignature = ContextAssemblyResult (IContextOrchestrator::*)(
+            const MemoryContextRequest&);
+
+       static_assert(std::has_virtual_destructor_v<IMemoryManager>,
+                         "IMemoryManager should remain a polymorphic runtime-facing interface");
+       static_assert(std::has_virtual_destructor_v<IContextOrchestrator>,
+                         "IContextOrchestrator should remain a polymorphic orchestration interface");
+       static_assert(std::is_abstract_v<IMemoryManager>,
+                         "IMemoryManager should stay abstract until concrete manager implementation lands");
+       static_assert(std::is_abstract_v<IContextOrchestrator>,
+                         "IContextOrchestrator should stay abstract until concrete orchestrator implementation lands");
+       static_assert(std::is_same_v<decltype(&IMemoryManager::init), InitSignature>,
+                         "IMemoryManager::init should consume MemoryConfig and return the shared ResultCode");
+       static_assert(std::is_same_v<decltype(&IMemoryManager::prepare_context), PrepareSignature>,
+                         "IMemoryManager::prepare_context should forward the context request/result surface");
+       static_assert(std::is_same_v<decltype(&IMemoryManager::write_back), WriteBackSignature>,
+                         "IMemoryManager::write_back should forward the writeback request/result surface");
+       static_assert(std::is_same_v<decltype(&IMemoryManager::export_working_memory_snapshot),
+                                           ExportSignature>,
+                         "IMemoryManager::export_working_memory_snapshot should preserve the working-memory export facade signature");
+       static_assert(std::is_same_v<decltype(&IMemoryManager::run_maintenance), MaintenanceSignature>,
+                         "IMemoryManager::run_maintenance should preserve the maintenance facade signature");
+       static_assert(std::is_same_v<decltype(&IContextOrchestrator::assemble), AssembleSignature>,
+                         "IContextOrchestrator::assemble should consume the module-local context request/result pair");
+     }
+
 }  // namespace
 
 int main() {
@@ -351,6 +399,7 @@ int main() {
     test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();
     test_memory_config_defaults_align_with_detailed_design();
           test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
+          test_memory_manager_interfaces_expose_expected_runtime_facing_signatures();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

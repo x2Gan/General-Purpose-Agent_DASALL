@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #353
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-009 定义 IMemoryManager 与 IContextOrchestrator 接口
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-009` 的前置 006/007/008A/008B 已完成，是本轮最早可执行的接口冻结任务；如果 manager/orchestrator 接口不先稳定，后续 011/019 将持续面临签名返工风险。
+2. memory 详设 6.6 已明确 `IMemoryManager` 是 runtime-facing facade，`IContextOrchestrator` 只负责 assemble；同时 WP05-T012 又要求这些接口先停留在 `memory/include`，不进入 contracts admission。本轮正好收敛这两条约束。
+3. `WorkingMemoryExportRequest/Result` 与 `MaintenanceRequest/Report` 虽然在设计阶段已成表，但尚未进入代码落盘范围；因此本轮按最小接口冻结策略，只对这四个类型做前向声明，避免为了接口头而提前扩张到额外 supporting types 任务。
+
+### 改动
+
+1. 新增 `memory/include/IMemoryManager.h`：
+   - 落盘 `init`、`shutdown`、`prepare_context`、`write_back`、`export_working_memory_snapshot`、`run_maintenance` 六个 facade 方法；
+   - 直接 include 已冻结的 `MemoryConfig`、context/writeback supporting types，并对 export/maintenance supporting types 使用前向声明。
+2. 新增 `memory/include/IContextOrchestrator.h`：
+   - 落盘唯一 `assemble(const MemoryContextRequest&) -> ContextAssemblyResult` 接口；
+   - 保持其职责只限语义上下文装配，不扩入持久化写入。
+3. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 `IMemoryManager`、`IContextOrchestrator` 的直接 include；
+   - 使用 member-function signature `static_assert` 锁定 manager/orchestrator 方法签名，验证它们确实消费 006/007/008A/008B 已落盘的 surface。
+4. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-009` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/IMemoryManager.h`、`memory/include/IContextOrchestrator.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^MemoryInterfaceCompileTest$' --output-on-failure`
+   - 结果：`dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. `MEM-TODO-009` 已完成，memory 模块第一次具备稳定的 runtime-facing facade 与 module-local orchestrator 接口头。
+2. `IMemoryManager` 现在明确承接 `init/prepare_context/write_back/export/maintenance` 入口，`IContextOrchestrator` 只保留 assemble 面，符合详设和 WP05-T012 的模块边界约束。
+3. 这轮用前向声明为 WorkingMemory export / maintenance supporting types 预留了接口位点，既没有阻塞签名冻结，也没有提前扩张到不在本轮范围内的头文件任务。
+
+### 下一步
+
+1. 进入 `MEM-TODO-009A`，补齐 `ISummarizer` 抽象接口，让 compression / summarizer 注入点和 manager/orchestrator/store surface 一起闭环。
+2. 随后推进 `MEM-TODO-010` 与 `MEM-TODO-022`，冻结 store interface 与 vector unavailable baseline。
+
+### 风险
+
+1. `WorkingMemoryExportRequest/Result` 与 `MaintenanceRequest/Report` 目前仍是前向声明位点；后续真正落盘这些头时必须保持与 009 已冻结签名完全兼容。
+2. 当前接口层只冻结方法面，不包含 factory function 或 lifecycle state machine 具体行为；这些仍留待 011 与后续实现任务完成。
+
 ## 记录 #352
 
 - 日期：2026-04-18
