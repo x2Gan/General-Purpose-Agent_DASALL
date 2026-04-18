@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #350
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-007 定义 writeback 请求与结果对象族
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-007` 紧随 006，且同样只依赖 005 已落盘的 public include skeleton；它是冻结 request/result object family 的连续最小原子任务。
+2. memory 详设 6.12.3 已给出 `MemoryWritebackRequest`、`FactCandidate`、`ExperienceCandidate`、`WritebackResult` 的主结构，但仓库里还没有任何 writeback supporting types 头文件；若不先冻结它们，后续 `IMemoryManager`、`IMemoryStore`、`WritebackCoordinator` 和 `MemoryWritebackIntegrationTest` 都没有稳定 ABI 面。
+3. 详设在“tool refs / observation refs”上存在双口径：总表描述为 request 字段，runtime 示例与 `Turn` shared contract 则已把这些引用稳定收敛到 `Turn.tool_call_refs` / `Turn.observation_refs`。本轮按更具体、与 shared contracts 一致的口径冻结：writeback request 只携带 `Turn`，不再重复展开 refs 字段。
+
+### 改动
+
+1. 新增 `memory/include/writeback/MemoryWritebackRequest.h`：
+   - 落盘 `FactCandidate`、`ExperienceCandidate`；
+   - 落盘 `session_id`、`turn`、`summary_candidate`、`fact_candidates`、`experience_candidates`、`side_effect_report_ref`；
+   - 明确复用 frozen `Turn`、`SummaryMemory`、`MemoryFact`、`ExperienceMemory` contracts，而不是复制 shared object 结构。
+2. 新增 `memory/include/writeback/WritebackResult.h`：
+   - 落盘 `ConflictAction`、`ConflictRecord` 作为 writeback result 必需 supporting types；
+   - 落盘 `result_code`、`persisted_turn_id`、`summary_id`、`fact_ids`、`experience_ids`、`conflicts`、`warnings`、`degraded`、`partial`、`retryable_storage_failure`；
+   - 沿用仓库既有结果对象模式，让成功路径的 `result_code` 为空。
+3. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 writeback 头文件的直接 include 与类型断言；
+   - 校验 `Turn` 自带 tool/observation refs 的消费方式、summary candidate、fact/experience candidates，以及 `partial` / `retryable_storage_failure` / `ConflictAction` 的可编译语义。
+4. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-007` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/writeback/MemoryWritebackRequest.h`、`memory/include/writeback/WritebackResult.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^MemoryInterfaceCompileTest$' --output-on-failure`
+   - 结果：`dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. `MEM-TODO-007` 已完成，writeback request/result object family 不再停留在详设伪码，已经成为可被 compile gate 消费的公共 ABI。
+2. `MemoryWritebackRequest` 通过复用 `Turn` shared contract 承接 tool / observation refs，避免在 memory module-local supporting types 中复制稳定字段。
+3. `WritebackResult` 已冻结 `partial`、`retryable_storage_failure` 与 `ConflictRecord` 基线，为后续 `WritebackCoordinator` 事务分层和 `MemoryWritebackIntegrationTest` 留出了稳定返回面。
+
+### 下一步
+
+1. 进入 `MEM-TODO-008A`，冻结 `MemoryConfig` 配置模型，给 009/010/022 提供稳定输入配置面。
+2. 随后执行 `MEM-TODO-008B`，补齐 memory 错误域映射，再推进 `IMemoryManager` / `IMemoryStore` 接口冻结。
+
+### 风险
+
+1. `ConflictResolutionPlan` 仍留待 `MEM-TODO-020` 完整落盘；本轮只补 `WritebackResult` 直接依赖的 `ConflictAction` / `ConflictRecord`，不应把 resolver 行为提前实现。
+2. `WritebackResult.result_code` 当前延续可空 contracts 结果码模式；若 `MEM-TODO-008B` 引入 memory 内部错误枚举，只能在映射层补强，不应回破 007 已冻结的 result envelope。
+
 ## 记录 #349
 
 - 日期：2026-04-18

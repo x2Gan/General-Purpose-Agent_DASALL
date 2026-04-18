@@ -6,6 +6,8 @@
 
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
+#include "writeback/MemoryWritebackRequest.h"
+#include "writeback/WritebackResult.h"
 
 #include "support/TestAssertions.h"
 
@@ -134,6 +136,87 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
               "fresh context assembly results should not report degraded execution");
 }
 
+  void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics() {
+    using dasall::memory::ConflictAction;
+    using dasall::memory::MemoryWritebackRequest;
+    using dasall::memory::WritebackResult;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    static_assert(std::is_same_v<decltype(MemoryWritebackRequest{}.turn),
+                   dasall::contracts::Turn>,
+          "MemoryWritebackRequest should reuse the frozen Turn contract");
+    static_assert(std::is_same_v<decltype(WritebackResult{}.result_code),
+                   std::optional<dasall::contracts::ResultCode>>,
+          "WritebackResult should keep the shared result code optional on success");
+
+    MemoryWritebackRequest request;
+    request.session_id = "session-001";
+    request.turn.turn_id = "turn-001";
+    request.turn.session_id = request.session_id;
+    request.turn.user_input = "Summarize the latest tool run";
+    request.turn.tool_call_refs = std::vector<std::string>{"tool-call-1", "tool-call-2"};
+    request.turn.observation_refs = std::vector<std::string>{"observation-1"};
+    request.summary_candidate = dasall::contracts::SummaryMemory{};
+    request.summary_candidate->summary_text = "A compact summary";
+    request.summary_candidate->source_turn_ids = std::vector<std::string>{"turn-001"};
+      dasall::contracts::MemoryFact fact_candidate;
+      fact_candidate.fact_text = "The shell command succeeded";
+      request.fact_candidates.push_back(dasall::memory::FactCandidate{
+        .fact = std::move(fact_candidate),
+        .extraction_source = "observation",
+      });
+      dasall::contracts::ExperienceMemory experience_candidate;
+      experience_candidate.lesson_summary = "Retry storage after a busy window";
+      request.experience_candidates.push_back(dasall::memory::ExperienceCandidate{
+        .experience = std::move(experience_candidate),
+        .extraction_source = "reflection",
+      });
+    request.side_effect_report_ref = "side-effect-report-1";
+
+    assert_equal("session-001", request.session_id,
+           "memory writeback request should target a single session");
+    assert_true(request.turn.tool_call_refs.has_value() &&
+            request.turn.tool_call_refs->size() == 2U,
+          "memory writeback request should rely on Turn tool refs instead of duplicating them");
+    assert_true(request.turn.observation_refs.has_value() &&
+            request.turn.observation_refs->size() == 1U,
+          "memory writeback request should rely on Turn observation refs instead of duplicating them");
+    assert_true(request.summary_candidate.has_value(),
+          "memory writeback request should allow an optional summary candidate");
+    assert_equal(1, static_cast<int>(request.fact_candidates.size()),
+           "memory writeback request should carry fact candidates");
+    assert_equal(1, static_cast<int>(request.experience_candidates.size()),
+           "memory writeback request should carry experience candidates");
+    assert_equal("side-effect-report-1", request.side_effect_report_ref.value_or(std::string{}),
+           "memory writeback request should preserve a side-effect report reference");
+
+    WritebackResult result;
+    result.persisted_turn_id = "turn-001";
+    result.conflicts.push_back(dasall::memory::ConflictRecord{
+      .new_fact_id = "fact-new",
+      .existing_fact_id = "fact-old",
+      .action = ConflictAction::Supersede,
+      .reason = "new fact has higher confidence",
+      .confidence_delta = 15,
+    });
+
+    assert_true(!result.result_code.has_value(),
+          "writeback success path should allow the shared result code to stay empty");
+    assert_true(result.persisted_turn_id.has_value(),
+          "writeback result should expose the persisted turn identifier");
+    assert_true(!result.degraded,
+          "fresh writeback results should default to non-degraded");
+    assert_true(!result.partial,
+          "fresh writeback results should default to non-partial");
+    assert_true(!result.retryable_storage_failure,
+          "fresh writeback results should default to non-retryable-storage-failure");
+    assert_equal(1, static_cast<int>(result.conflicts.size()),
+           "writeback result should expose conflict records when present");
+    assert_true(result.conflicts.front().action == ConflictAction::Supersede,
+          "writeback conflict records should preserve the conflict action enum");
+  }
+
 }  // namespace
 
 int main() {
@@ -142,6 +225,7 @@ int main() {
     test_memory_public_include_layout_exists();
     test_memory_module_is_no_longer_placeholder_only();
     test_memory_context_supporting_types_compile_and_expose_expected_defaults();
+    test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;
