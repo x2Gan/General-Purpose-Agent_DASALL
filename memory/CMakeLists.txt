@@ -13,6 +13,7 @@ set(DASALL_MEMORY_PUBLIC_INCLUDE_SUBDIRECTORIES
 
 set(DASALL_MEMORY_SKELETON_SOURCES
   src/MemoryBuildSkeleton.cpp
+  src/vector/UnavailableVectorMemoryIndexAdapter.cpp
 )
 
 if(NOT IS_DIRECTORY ${DASALL_MEMORY_PUBLIC_INCLUDE_DIR})

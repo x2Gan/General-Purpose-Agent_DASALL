@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #356
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-022 实现 VectorMemory unavailable baseline 与 IEmbeddingAdapter 接线
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-022` 是当前用户请求链里的最后一个原子任务，也是 `CandidateCollector`、`WritebackCoordinator`、`MemoryMaintenanceWorker` 三条后续实现链共享的可用性前置。
+2. 这轮不做 concrete backend 选型，只做 unavailable / no-op baseline，符合 6.3.2 的分阶段策略，也能避免在 `sqlite-vss` / `hnswlib` 评审完成前把依赖冻结错位。
+3. `IEmbeddingAdapter` 需要与 unavailable gate 同时落盘，否则上游组件仍无法判断“有 adapter 但 backend 不可用”与“根本未接线”这两类场景。
+
+### 改动
+
+1. 新增 `memory/include/vector/IEmbeddingAdapter.h`：
+   - 落盘 `embed()` / `dimension()` 抽象接口；
+   - 保持 memory 对 embedding 生成侧的编译依赖只停留在接口层。
+2. 新增 `memory/include/vector/VectorMemoryIndexAdapter.h`：
+   - 冻结 `VectorDocument`、`VectorHit`、`VectorIndexHealth` supporting types；
+   - 落盘抽象 `VectorMemoryIndexAdapter` 以及 concrete `UnavailableVectorMemoryIndexAdapter` 声明。
+3. 新增 `memory/src/vector/UnavailableVectorMemoryIndexAdapter.cpp`：
+   - 实现 unavailable / no-op baseline；
+   - `is_available()` 固定返回 false；`upsert/search/rebuild_index` 均降级为不阻断主链路的 no-op。
+4. 更新 `memory/CMakeLists.txt`：
+   - 将 vector unavailable baseline source 接入 `dasall_memory` 静态库。
+5. 新增 `tests/unit/memory/VectorMemoryAdapterTest.cpp` 并更新 `tests/unit/memory/CMakeLists.txt`：
+   - 注册 `dasall_vector_memory_adapter_unit_test` / `VectorMemoryAdapterTest`；
+   - 通过 counting embedding adapter 证明 unavailable gate 不会误调用 `IEmbeddingAdapter`。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/vector/IEmbeddingAdapter.h`、`memory/include/vector/VectorMemoryIndexAdapter.h`、`memory/src/vector/UnavailableVectorMemoryIndexAdapter.cpp`、`tests/unit/memory/VectorMemoryAdapterTest.cpp`、`tests/unit/memory/CMakeLists.txt`、`memory/CMakeLists.txt` 无错误。
+2. 构建与验收：
+   - 首次直接构建新 target 失败，原因是 `build-ci` 尚未重新配置以纳入新增 CMake target；随后执行重新配置并复验。
+   - 最终命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_vector_memory_adapter_unit_test dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^(VectorMemoryAdapterTest|MemoryInterfaceCompileTest)$' --output-on-failure`
+   - 结果：`MemoryInterfaceCompileTest` 与 `VectorMemoryAdapterTest` 通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. `MEM-TODO-022` 已完成，vector 关闭或 backend 不可用时，memory 主链现在有可判定、可测试、不会阻断主链路的 unavailable baseline。
+2. `IEmbeddingAdapter` 已成为明确的注入 seam；上游可以区分“有 embedding adapter”与“vector backend 仍 unavailable”的状态，而不用直接依赖具体 embedding 实现。
+3. `VectorMemoryAdapterTest` 已提供独立的行为验收出口，为后续 concrete backend 选型与 CandidateCollector / WritebackCoordinator 接线留下稳定基线。
+
+### 下一步
+
+1. 当前用户请求的 006、007、008A、008B、009、009A、010、022 已全部完成，可根据下一轮优先级继续进入 011~015 的 concrete manager/store/working 实现，或先处理 023 的 vector backend 选型评审。
+
+### 风险
+
+1. 当前 `UnavailableVectorMemoryIndexAdapter` 故意不调用 `IEmbeddingAdapter`，哪怕已经注入 adapter；这是 unavailable baseline 的设计目标，不是遗漏。后续 concrete backend 落地时，需在 `is_available()` 为 true 的实现中再引入真实 embedding 生成路径。
+2. `VectorIndexHealth.backend_type` 在 `config.enabled=false` 时归一化为 `none`，在 enabled-but-unavailable 时保留请求的 backend type。后续 concrete backend 工厂必须延续这套可观测语义，避免 profile 诊断口径漂移。
+
 ## 记录 #355
 
 - 日期：2026-04-18
