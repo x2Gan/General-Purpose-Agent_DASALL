@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #351
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-008A 定义 MemoryConfig 配置模型
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-008A` 是 007 之后最早可执行且能直接解锁 009/010/022 的配置类原子任务；它不依赖 error/store/vector concrete 实现。
+2. memory 详设 6.10.1a 已给出 `StorageConfig`、`ContextConfig`、`ExperienceConfig`、`VectorConfig`、`MaintenanceConfig` 与 `MemoryConfig` 的完整字段和默认值，当前代码基线却仍没有任何 memory 配置头文件；如果不先冻结配置模型，后续 `IMemoryManager::init`、`IMemoryStore::open` 和 vector availability baseline 都只能继续悬空。
+3. 6.10.3 还额外给出了 profile 默认建议：desktop/cloud 默认可开 vector，edge_minimal 默认关闭。因此本轮保持 `VectorConfig.enabled=false` 作为 profile-safe 缺省值，把“开启 vector”留给后续 profile projection 而不是在 memory 模块内硬编码。
+
+### 改动
+
+1. 新增 `memory/include/config/MemoryConfig.h`：
+   - 落盘 `StorageConfig`、`ContextConfig`、`ExperienceConfig`、`VectorConfig`、`MaintenanceConfig`、`MemoryConfig`；
+   - 将 WAL、PASSIVE checkpoint、busy timeout、compression 阈值、vector backend type、maintenance retention 等默认值直接映射为公共配置模型。
+2. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 新增对 `MemoryConfig` 头文件的直接 include 与类型断言；
+   - 校验 storage/context/experience/vector/maintenance 五组默认值，以及 vector disabled / auto_schedule disabled 这两个 profile-safe baseline。
+3. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-008A` 标记为 `Done`；
+   - 同步当前结论、现状证据与 11.1 下一步。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/config/MemoryConfig.h`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R '^MemoryInterfaceCompileTest$' --output-on-failure`
+   - 结果：`dasall_memory_interface_compile_unit_test` 构建通过；`MemoryInterfaceCompileTest` 通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. `MEM-TODO-008A` 已完成，`MemoryConfig` 不再停留在详设表格，已成为 `memory/include/config` 下可被其他接口直接复用的公共配置模型。
+2. `VectorConfig.enabled=false`、`MaintenanceConfig.auto_schedule=false` 现在作为 profile-safe 缺省值固定下来，为后续 `MEM-TODO-022` 的 unavailable baseline 和 profile 投影测试提供了稳定入口。
+3. 这轮让 memory compile gate 首次验证了配置默认值，后续 009/010/022 可以直接依赖同一套 `MemoryConfig` surface，而不必在实现阶段边写边猜默认值。
+
+### 下一步
+
+1. 进入 `MEM-TODO-008B`，冻结 memory 错误域映射面，解决 `ResultCode` / errno / warning-audit 统一入口问题。
+2. 随后推进 `MEM-TODO-009`、`MEM-TODO-010` 与 `MEM-TODO-022`，把 manager/store/vector 接口面与 baseline 对齐到同一套 config/error surface。
+
+### 风险
+
+1. `MemoryConfig` 当前只冻结结构体和默认值，不包含 profile projection helper；若后续需要从 profiles 模块直接投影，必须在不改写既有字段语义的前提下补 helper 或 adapter。
+2. edge_minimal 的 `journal_mode=DELETE fallback` 仍属于 profile 层静态配置决策，本轮没有把该分支硬编码进 `MemoryConfig` 默认值，后续 profile 兼容测试必须显式覆盖。
+
 ## 记录 #350
 
 - 日期：2026-04-18
