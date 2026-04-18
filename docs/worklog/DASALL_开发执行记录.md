@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #359
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 C
+- 任务：MEM-TODO-013 实现 SqliteSchemaMigrator 与初始 schema
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-013` 是 `SqliteMemoryStore` 主路径前必须先完成的 schema/migration 基线；如果 schema 版本管理和初始表结构还不存在，014/015 的 CRUD surface 只能继续停留在设计层。
+2. 当前环境没有系统 `sqlite3` 开发包，因此本轮除了 migrator 与 `V001__initial_schema.sql`，还必须把 SQLite release 包作为仓库内第三方依赖接入，才能让 013 ~ 015 的本地构建真正可执行。
+3. 本轮只做 schema migration 和事务回滚基线，不提前实现 `SqliteMemoryStore` 的 Session/Turn/Summary/Fact/Experience CRUD 逻辑；相关持久化行为仍由 014/015 承接。
+
+### 改动
+
+1. 更新 `memory/CMakeLists.txt`：
+   - 在 memory 子模块内启用 C 语言并通过官方 `sqlite-autoconf-3460100` release 包组装 `dasall_sqlite3` 静态库；
+   - 将 `SqliteSchemaMigrator.cpp` 接入 `dasall_memory`，为后续 store 实现复用同一 SQLite 依赖入口。
+2. 新增 `memory/src/store/sqlite/SqliteSchemaMigrator.h` 与 `memory/src/store/sqlite/SqliteSchemaMigrator.cpp`：
+   - 落盘 `MigrationFile`、`MigrationStatus`、`SqliteSchemaMigrator::migrate/status`；
+   - 实现 migrations 目录扫描、checksum 校验、逐版本事务执行与失败回滚；
+   - 内置 SHA-256 checksum 计算，确保已应用 migration 被篡改时会被拒绝。
+3. 新增 `sql/memory/V001__initial_schema.sql`：
+   - 建立 `sessions`、`turns`、`summaries`、`facts`、`experiences`、`quarantined_records` 初始表；
+   - 为 Session/Turn/Summary/Fact/Experience 的后续主链 CRUD 提前冻结字段与索引基线。
+4. 新增 `tests/unit/memory/SchemaMigrationTest.cpp`、`tests/unit/memory/SqliteTransactionTest.cpp`，并更新 `tests/unit/memory/CMakeLists.txt`：
+   - `SchemaMigrationTest` 覆盖首次建库、重复执行 no-op 与 checksum mismatch 拒绝；
+   - `SqliteTransactionTest` 覆盖失败 migration 的独立事务回滚，验证失败版本不会留下半成品 DDL。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/CMakeLists.txt`、`SqliteSchemaMigrator.h/.cpp`、`sql/memory/V001__initial_schema.sql`、`SchemaMigrationTest.cpp`、`SqliteTransactionTest.cpp`、`tests/unit/memory/CMakeLists.txt` 无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_schema_migration_unit_test`、`dasall_memory_sqlite_transaction_unit_test`
+   - `RunCtest_CMakeTools` 运行 `MemoryInterfaceCompileTest`、`SchemaMigrationTest`、`SqliteTransactionTest`
+   - 结果：三项测试全部通过，`100% tests passed, 0 tests failed out of 3`；首次构建同时完成了官方 SQLite release 包下载、本地 `dasall_sqlite3` 静态库编译与 migrator 测试链接。
+
+### 结果
+
+1. `MEM-TODO-013` 已完成，memory 子系统现在具备真实可执行的 SQLite schema migration 基线，`schema_migrations` 表与 `V001` 初始表结构不再只是设计文档内容。
+2. 官方 SQLite 依赖已经通过 memory 子模块内的 `dasall_sqlite3` 接线进入构建图，后续 014/015 可以直接复用同一 release 包与编译入口，不需要再额外解决系统依赖问题。
+3. 013 仍然只负责 schema / transaction baseline，没有提前实现 `SqliteMemoryStore` 的 CRUD surface；Stage C 现已可以直接进入 014 的 Session/Turn/Summary 主路径。
+
+### 下一步
+
+1. 进入 `MEM-TODO-014`，实现 `SqliteMemoryStore` 的 `open/close`、事务入口以及 Session/Turn/Summary 主链 CRUD。
+
+### 风险
+
+1. 当前 SQLite 依赖使用官方 release 包的 configure-time 下载路径；离线环境若没有本地缓存，configure 会受网络影响。后续若仓库需要完全离线复现，应把该 release 包放入 `third_party/.cache` 或收敛为明确的第三方镜像策略。
+2. `V001__initial_schema.sql` 当前以 JSON TEXT 列承载数组型 contract 字段，这为 014/015 的最小持久化基线提供了足够入口，但后续若要引入更强约束或拆分关联表，必须通过新的 migration 版本演进，而不能直接改写 `V001`。
+
 ## 记录 #358
 
 - 日期：2026-04-18
