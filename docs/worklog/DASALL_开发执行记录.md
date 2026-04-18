@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #360
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 C
+- 任务：MEM-TODO-014 实现 SqliteMemoryStore 的 Session/Turn/Summary 主路径
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-014` 是 `SqliteSchemaMigrator` 之后的直接后继；如果 Session/Turn/Summary 主链还没有真实 store surface，`MemoryManager` 的 sqlite backend 仍只能停留在 unavailable 占位，Stage C 无法形成真正可执行的持久化入口。
+2. 本轮严格限定在 Session/Turn/Summary 主路径和事务入口，不提前实现 Fact/Experience/maintenance 查询写入；`query_facts`、`insert_fact`、`supersede_fact`、`query_experiences`、`insert_experience`、`count_turns`、`quarantine_record` 继续保留给 `MEM-TODO-015`。
+3. 除 store 本体外，还需要把 `MemoryManagerFactory` 切到真实 sqlite store，并让 smoke / transaction / round-trip 测试形成同一条证据链，否则 014 只能证明局部类存在，不能证明运行路径真正接通。
+
+### 改动
+
+1. 新增 `memory/src/store/sqlite/SqliteMemoryStore.h`、`memory/src/store/sqlite/SqliteMemoryStore.cpp`：
+   - 落盘 sqlite store 的 writer / readers 连接管理、`open/close`、`begin_immediate` 与 RAII transaction；
+   - 实现 `load_session_bundle`、`create_session`、`append_turn`、`update_session_active`、`upsert_summary`、`load_latest_summary`；
+   - 对未进入 014 范围的 Fact/Experience/maintenance surface 保持结构化 not-implemented 占位。
+2. 新增 `memory/src/store/sqlite/RowMappers.h` 与 `memory/src/store/sqlite/RowMappers.cpp`：
+   - 提供 Session/Turn/Summary 的 SQLite row mapping；
+   - 用 JSON TEXT 编解码承接数组型 contract 字段，保持与 `V001__initial_schema.sql` 的列设计一致。
+3. 更新 `memory/src/MemoryManagerFactory.cpp` 与 `memory/CMakeLists.txt`：
+   - `create_memory_manager()` 在 sqlite backend 下默认注入 `create_sqlite_memory_store()`；
+   - 将 `SqliteMemoryStore.cpp` 与 `RowMappers.cpp` 接入 `dasall_memory` 构建图。
+4. 新增 `tests/unit/memory/SqliteMemoryStoreTest.cpp`，并更新 `tests/unit/memory/SqliteTransactionTest.cpp`、`tests/unit/memory/MemoryManagerSmokeTest.cpp`、`tests/unit/memory/CMakeLists.txt`：
+   - `SqliteMemoryStoreTest` 覆盖 session/turn/summary round-trip、recent turn limit、reopen persistence；
+   - `SqliteTransactionTest` 新增 store 级 RAII rollback / explicit commit 断言；
+   - `MemoryManagerSmokeTest` 从“sqlite unavailable”切换为“sqlite manager init 成功”路径。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `SqliteMemoryStore.h/.cpp`、`RowMappers.h/.cpp`、`MemoryManagerFactory.cpp`、`memory/CMakeLists.txt`、`SqliteMemoryStoreTest.cpp`、`SqliteTransactionTest.cpp`、`MemoryManagerSmokeTest.cpp`、`tests/unit/memory/CMakeLists.txt` 无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_manager_smoke_unit_test`、`dasall_memory_schema_migration_unit_test`、`dasall_memory_sqlite_transaction_unit_test`、`dasall_memory_sqlite_store_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryManagerSmokeTest`、`SchemaMigrationTest`、`SqliteTransactionTest`、`SqliteMemoryStoreTest`；
+   - 结果：四项测试全部通过，`100% tests passed, 0 tests failed out of 4`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但未影响返回码与结论。
+
+### 结果
+
+1. `MEM-TODO-014` 已完成，sqlite backend 现在具备真实可执行的 Session/Turn/Summary 主链，`MemoryManager` 也已通过工厂接入真实 store，不再停留在 unavailable 占位。
+2. row mapper 与 JSON TEXT 编解码已经把 `V001` 的数组型列和 shared contracts 接通，session timeline、recent turns、latest summary pointer 与 summary round-trip 都可自动化验证。
+3. 014 没有提前实现 Fact/Experience/maintenance 路径；Stage C 现可直接进入 `MEM-TODO-015`，补齐剩余的 store query/write surface。
+
+### 下一步
+
+1. 进入 `MEM-TODO-015`，实现 `SqliteMemoryStore` 的 Fact/Experience 与 maintenance 查询路径。
+
+### 风险
+
+1. 当前数组字段通过 JSON TEXT 编解码承载，满足 `V001` 基线和 round-trip 需求，但并不提供更强的结构约束；后续若要引入更细粒度索引或关系表，必须通过新 migration 演进。
+2. 当前 reader pool 采用轻量 round-robin 选择策略，能满足单机基线与测试覆盖，但后续若 maintenance / long-read 场景增多，需要在不改 public surface 的前提下继续细化 reader gap 与 checkpoint 协调策略。
+
 ## 记录 #359
 
 - 日期：2026-04-18

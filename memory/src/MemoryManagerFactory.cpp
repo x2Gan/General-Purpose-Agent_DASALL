@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "store/sqlite/SqliteMemoryStore.h"
 #include "working/IWorkingMemoryBoard.h"
 
 namespace dasall::memory {
@@ -43,11 +44,12 @@ class BootstrapContextOrchestrator final : public IContextOrchestrator {
 }  // namespace
 
 std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config) {
-  (void)config;
-
   MemoryManagerDependencies dependencies;
   dependencies.context_orchestrator = std::make_unique<BootstrapContextOrchestrator>();
   dependencies.working_memory_board = create_working_memory_board();
+  if (config.storage.backend == "sqlite") {
+    dependencies.store = store::sqlite::create_sqlite_memory_store();
+  }
   return create_memory_manager_with_dependencies(std::move(dependencies));
 }
 

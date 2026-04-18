@@ -8,6 +8,7 @@
 
 #include <sqlite3.h>
 
+#include "store/sqlite/SqliteMemoryStore.h"
 #include "store/sqlite/SqliteSchemaMigrator.h"
 #include "support/TestAssertions.h"
 
@@ -123,11 +124,78 @@ void test_sqlite_schema_migrator_rolls_back_failed_migration() {
   std::filesystem::remove_all(migration_dir);
 }
 
+std::filesystem::path make_temp_database_path() {
+  const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+  return std::filesystem::temp_directory_path() /
+         ("dasall-sqlite-transaction-" + std::to_string(timestamp) + ".db");
+}
+
+void test_sqlite_store_transaction_rolls_back_on_scope_exit_and_commits_explicitly() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const auto database_path = make_temp_database_path();
+
+  dasall::memory::MemoryConfig config;
+  config.storage.backend = "sqlite";
+  config.storage.db_path = database_path.string();
+  config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
+
+  auto store = dasall::memory::store::sqlite::create_sqlite_memory_store();
+  assert_true(!store->open(config).has_value(),
+              "sqlite store should open for transaction coverage");
+
+  {
+    auto transaction = store->begin_immediate();
+
+    dasall::contracts::Session session;
+    session.session_id = "session-txn-rollback";
+    session.turn_ids = std::vector<std::string>{};
+    session.created_at = 100;
+
+    assert_true(store->create_session(session).ok,
+                "create_session should succeed inside a pending writer transaction");
+  }
+
+  const auto rolled_back_bundle = store->load_session_bundle(
+      dasall::memory::SessionLoadRequest{.session_id = "session-txn-rollback", .recent_turn_limit = 1});
+  assert_true(!rolled_back_bundle.session.session_id.has_value(),
+              "transaction destructor should roll back uncommitted session writes");
+
+  {
+    auto transaction = store->begin_immediate();
+
+    dasall::contracts::Session session;
+    session.session_id = "session-txn-commit";
+    session.turn_ids = std::vector<std::string>{};
+    session.created_at = 200;
+
+    assert_true(store->create_session(session).ok,
+                "create_session should succeed before explicit commit");
+    assert_true(!transaction->commit().has_value(),
+                "explicit sqlite store commit should succeed");
+  }
+
+  const auto committed_bundle = store->load_session_bundle(
+      dasall::memory::SessionLoadRequest{.session_id = "session-txn-commit", .recent_turn_limit = 1});
+  assert_true(committed_bundle.session.session_id ==
+                  std::optional<std::string>{"session-txn-commit"},
+              "explicit commit should persist session writes");
+  assert_equal(0, committed_bundle.total_turn_count,
+               "committed session should start with an empty turn count");
+
+  store->close();
+  std::filesystem::remove(database_path);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_sqlite_schema_migrator_rolls_back_failed_migration();
+    test_sqlite_store_transaction_rolls_back_on_scope_exit_and_commits_explicitly();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

@@ -1,22 +1,41 @@
 #include <algorithm>
+#include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
+
+#ifndef DASALL_SQL_MEMORY_DIR
+#error DASALL_SQL_MEMORY_DIR must be defined for sqlite smoke coverage
+#endif
 
 #include "IMemoryManager.h"
 #include "support/TestAssertions.h"
 
 namespace {
 
-void test_memory_manager_factory_surfaces_sqlite_store_gap_until_mem_todo_014() {
+std::filesystem::path make_temp_database_path() {
+  const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+  return std::filesystem::temp_directory_path() /
+         ("dasall-memory-manager-smoke-" + std::to_string(timestamp) + ".db");
+}
+
+void test_memory_manager_factory_bootstraps_sqlite_store_after_mem_todo_014() {
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
+  config.storage.backend = "sqlite";
+  config.storage.db_path = make_temp_database_path().string();
+  config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
   auto manager = dasall::memory::create_memory_manager(config);
 
   const auto init_code = manager->init(config);
 
-  assert_true(init_code == dasall::contracts::ResultCode::RuntimeRetryExhausted,
-              "default sqlite config should stay unavailable until the sqlite store lands");
+  assert_true(static_cast<int>(init_code) == 0,
+              "sqlite-backed memory manager should initialize once the sqlite store lands");
+
+  manager->shutdown();
 }
 
 void test_memory_manager_smoke_surface_covers_writeback_export_and_maintenance() {
@@ -76,7 +95,7 @@ void test_memory_manager_smoke_surface_covers_writeback_export_and_maintenance()
 
 int main() {
   try {
-    test_memory_manager_factory_surfaces_sqlite_store_gap_until_mem_todo_014();
+    test_memory_manager_factory_bootstraps_sqlite_store_after_mem_todo_014();
     test_memory_manager_smoke_surface_covers_writeback_export_and_maintenance();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
