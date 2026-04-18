@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #361
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 C
+- 任务：MEM-TODO-015 实现 SqliteMemoryStore 的 Fact/Experience 与 maintenance 查询路径
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-015` 是 `011 ~ 015` 串行链的最后一环；如果 Fact/Experience 与 maintenance 查询路径仍是占位，`SqliteMemoryStore` 只能算 Session/Turn/Summary 半链路落地，Stage C 还不能宣称“主存储基线完成”。
+2. 本轮严格只补 `query_facts`、`insert_fact`、`supersede_fact`、`query_experiences`、`insert_experience`、`count_turns`、`quarantine_record`，不提前进入 `CandidateCollector`、`ContextOrchestrator`、`WritebackCoordinator` 等 016 ~ 021 的上下文/写回主链。
+3. 由于 `V001__initial_schema.sql` 没有为 `source_observation_refs`、`source_fact_ids`、`risk_notes` 单独拆表，本轮需要在不改 shared contracts 和不回写 V001 的前提下，把这些字段稳定映射到现有 TEXT/JSON 列中。
+
+### 改动
+
+1. 更新 `memory/src/store/sqlite/SqliteMemoryStore.cpp`：
+   - 实现 `query_facts`、`insert_fact`、`supersede_fact`、`query_experiences`、`insert_experience`、`count_turns`、`quarantine_record`；
+   - 在 fact/experience 写入时补用户隔离快照、stage/domain 过滤、过期过滤和 quarantine 持久化；
+   - 保持所有写操作继续走 `StoreResult`，不引入异常路径。
+2. 更新 `memory/src/store/sqlite/RowMappers.h` 与 `memory/src/store/sqlite/RowMappers.cpp`：
+   - 新增 `MemoryFact` / `ExperienceMemory` row mapping；
+   - 使用 token 化 JSON array sidecar 承接 `source_observation_refs`、`valid_until`、`source_fact_ids`、`risk_notes`，在不修改 `V001` 的前提下补齐 contract 字段 round-trip。
+3. 更新 `tests/unit/memory/SqliteMemoryStoreTest.cpp`：
+   - 新增 fact query、experience query、supersede、count_turns、quarantine 的 round-trip 与过滤断言；
+   - 保持 014 的 Session/Turn/Summary 场景同时通过，验证 store 全路径没有互相回归。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `SqliteMemoryStore.cpp`、`RowMappers.h/.cpp`、`SqliteMemoryStoreTest.cpp` 无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_sqlite_store_unit_test`、`dasall_memory_sqlite_transaction_unit_test`、`dasall_contract_memory_fact_experience_test`、`dasall_contract_turn_session_summary_memory_test`；
+   - `RunCtest_CMakeTools` 运行 `SqliteTransactionTest`、`SqliteMemoryStoreTest`、`MemoryFactExperienceContractTest`、`TurnSessionSummaryMemoryContractTest`；
+   - 结果：四项测试全部通过，`100% tests passed, 0 tests failed out of 4`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但未影响返回码与结论。
+
+### 结果
+
+1. `MEM-TODO-015` 已完成，`SqliteMemoryStore` 现在具备 Session/Turn/Summary/Fact/Experience/maintenance 的统一 store surface，`011 ~ 015` 的生命周期与主存储基线全部收口。
+2. facts / experiences 的 sidecar 字段已经在不改 `V001` 的前提下完成 round-trip，query filters、supersede、turn counting 和 quarantine 也有自动化覆盖。
+3. 015 没有提前触碰 Context / Writeback 组装链；下一阶段可以直接进入 `MEM-TODO-016 ~ 021` 的 Context -> Writeback 收口。
+
+### 下一步
+
+1. 进入 `MEM-TODO-016`，实现 `CandidateCollector` 并接通多源候选收集入口。
+
+### 风险
+
+1. Fact / Experience 的附加字段当前通过 token 化 JSON array sidecar 存在现有 TEXT/JSON 列中，适合主存储基线，但如果后续要做更强约束、索引或数据修复，仍需新的 migration 拆出更明确的列或关联表。
+2. cross-session `user_id` 过滤当前依赖写入时从 session 行抓取的用户快照；若未来允许 session owner 变更，需要明确是否回填既有 fact / experience 记录，而不能隐式依赖旧快照永久正确。
+
 ## 记录 #360
 
 - 日期：2026-04-18
