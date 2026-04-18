@@ -6,12 +6,14 @@
 #include "IContextOrchestrator.h"
 #include "IMemoryManager.h"
 #include "IMemoryStore.h"
+#include "working/IWorkingMemoryBoard.h"
 
 namespace dasall::memory {
 
 struct MemoryManagerDependencies {
   std::unique_ptr<IContextOrchestrator> context_orchestrator;
   std::unique_ptr<IMemoryStore> store;
+  std::unique_ptr<IWorkingMemoryBoard> working_memory_board;
 };
 
 class MemoryManager final : public IMemoryManager {

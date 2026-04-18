@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #358
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 C
+- 任务：MEM-TODO-012 实现 WorkingMemoryBoard 核心与 snapshot 基线
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-012` 是 `MEM-TODO-011` 之后最早可执行的 working-memory concrete 任务；如果 export 仍停留在 manager 内部 degraded 占位，后续 checkpoint / recovery / writeback 都没有真实的 session 内存基线可依赖。
+2. 011 已经把 `WorkingMemorySnapshot` 与 export supporting objects 落成 public surface，本轮的重点是把 `IWorkingMemoryBoard`、TTL/LRU、snapshot/export/restore 和并发安全变成真正可执行的内存语义，而不是继续保留空接口。
+3. 013 ~ 015 仍然是 SQLite schema/store 主路径，本轮只把 manager 的 export 接线切到真实 board，不提前实现 store / writeback / maintenance 的持久化能力。
+
+### 改动
+
+1. 新增 `memory/include/working/IWorkingMemoryBoard.h`：
+   - 冻结 `set_slot/get_slot/remove_slot/clear_session/export_snapshot/restore_snapshot/evict_expired` 接口；
+   - 新增 `create_working_memory_board()` 工厂，便于 `MemoryManagerFactory` 和 unit test 复用同一组装入口。
+2. 新增 `memory/src/working/WorkingMemoryBoard.cpp`：
+   - 落盘按 session 隔离的内存状态、TTL 过期清理、`max_slots_per_session` 压力保护与 TTL 优先的 LRU 淘汰；
+   - 支持 snapshot export / restore 往返与 `std::shared_mutex` 保护下的并发读写。
+3. 更新 `memory/src/MemoryManagerInternal.h`、`memory/src/MemoryManager.cpp`、`memory/src/MemoryManagerFactory.cpp`：
+   - 在 manager dependency graph 中注入 `IWorkingMemoryBoard`；
+   - `export_working_memory_snapshot()` 现在优先调用 board 的真实 export 路径，并在空 session 时返回 `session_not_found` warning；
+   - `create_memory_manager()` 默认组装 working-memory board，替换 011 中的 export degraded baseline。
+4. 更新 `memory/CMakeLists.txt`：
+   - 将 `src/working/WorkingMemoryBoard.cpp` 接入 `dasall_memory` 静态库。
+5. 新增 `tests/unit/memory/WorkingMemoryBoardTest.cpp`、`tests/unit/memory/WorkingMemorySnapshotTest.cpp`、`tests/unit/memory/WorkingMemoryBoardConcurrencyTest.cpp`，并更新 `tests/unit/memory/CMakeLists.txt`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp`、`tests/unit/memory/MemoryManagerSmokeTest.cpp`：
+   - board test 覆盖 set/get/remove/clear、TTL 过期、多 session 隔离与 LRU 压力行为；
+   - snapshot test 覆盖 export/restore 往返与空 session export 基线；
+   - concurrency test 覆盖多线程并发写入后的可读性；
+   - compile gate 新增 board 接口/工厂签名断言；manager smoke 改为验证 board 已接线后的 export 语义。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/working/IWorkingMemoryBoard.h`、`memory/src/working/WorkingMemoryBoard.cpp`、manager 相关更新文件、`WorkingMemoryBoardTest.cpp`、`WorkingMemorySnapshotTest.cpp`、`WorkingMemoryBoardConcurrencyTest.cpp`、`tests/unit/memory/CMakeLists.txt`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp` 无错误。
+2. 构建与验收：
+   - 首次 `Build_CMakeTools` 失败，原因是 `WorkingMemoryBoard.cpp` 漏包含 `<mutex>`；同轮补齐后重新构建通过。
+   - 最终 `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_interface_compile_unit_test`、`dasall_memory_manager_lifecycle_unit_test`、`dasall_memory_manager_smoke_unit_test`、`dasall_memory_working_memory_board_unit_test`、`dasall_memory_working_memory_snapshot_unit_test`、`dasall_memory_working_memory_board_concurrency_unit_test`
+   - `RunCtest_CMakeTools` 运行 `MemoryInterfaceCompileTest`、`MemoryManagerLifecycleTest`、`MemoryManagerSmokeTest`、`WorkingMemoryBoardTest`、`WorkingMemorySnapshotTest`、`WorkingMemoryBoardConcurrencyTest`
+   - 结果：六项测试全部通过，`100% tests passed, 0 tests failed out of 6`；CMake Tools 的 `DartConfiguration.tcl` stderr 噪声未影响返回码与测试结论。
+
+### 结果
+
+1. `MEM-TODO-012` 已完成，working-memory board 现在具备真实的 slot/TTL/LRU/snapshot/restore/multi-session 基线，不再只是 supporting object 占位。
+2. `create_memory_manager()` 已默认接入 working-memory board，manager export 路径不再依赖 011 的 degraded placeholder，而是直接消费 board snapshot，并在空 session 上给出显式 `session_not_found` warning。
+3. 012 没有提前实现 `SqliteSchemaMigrator` 或 `SqliteMemoryStore`；Stage C 现在可以顺势转入 013/014/015 的持久化主链，而不会与 working-memory 内存语义继续互相阻塞。
+
+### 下一步
+
+1. 进入 `MEM-TODO-013`，实现 `SqliteSchemaMigrator` 与 `V001__initial_schema.sql`，为 014/015 的主存储 surface 提供真实 schema 入口。
+
+### 风险
+
+1. 当前 `WorkingMemoryBoard` 使用单个 `std::shared_mutex` 保护 session map，能满足基线并发安全，但还不是详设所说的更细粒度 session 分片锁；若后续高并发 profile 需要更细锁粒度，应在不改 public surface 的前提下做内部替换。
+2. manager export 目前把“空 snapshot”统一投影为 `session_not_found` warning；如果 runtime 后续需要区分“确实不存在的 session”与“存在但当前无 slots/open_questions/ephemeral_facts 的空 session”，需要在 board 或 manager 内部增加更精确的可观测语义，而不是修改 shared ABI。
+
 ## 记录 #357
 
 - 日期：2026-04-18

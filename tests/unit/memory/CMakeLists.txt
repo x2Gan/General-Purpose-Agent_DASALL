@@ -14,6 +14,18 @@ add_executable(dasall_memory_manager_smoke_unit_test
 	MemoryManagerSmokeTest.cpp
 )
 
+add_executable(dasall_memory_working_memory_board_unit_test
+	WorkingMemoryBoardTest.cpp
+)
+
+add_executable(dasall_memory_working_memory_snapshot_unit_test
+	WorkingMemorySnapshotTest.cpp
+)
+
+add_executable(dasall_memory_working_memory_board_concurrency_unit_test
+	WorkingMemoryBoardConcurrencyTest.cpp
+)
+
 target_link_libraries(dasall_memory_interface_compile_unit_test
 	PRIVATE
 		dasall_memory
@@ -38,6 +50,24 @@ target_link_libraries(dasall_memory_manager_smoke_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_working_memory_board_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_working_memory_snapshot_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_working_memory_board_concurrency_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
 target_compile_definitions(dasall_memory_interface_compile_unit_test
 	PRIVATE
 		DASALL_MEMORY_PUBLIC_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/memory/include"
@@ -48,6 +78,9 @@ dasall_apply_common_options(dasall_memory_interface_compile_unit_test)
 dasall_apply_common_options(dasall_vector_memory_adapter_unit_test)
 dasall_apply_common_options(dasall_memory_manager_lifecycle_unit_test)
 dasall_apply_common_options(dasall_memory_manager_smoke_unit_test)
+dasall_apply_common_options(dasall_memory_working_memory_board_unit_test)
+dasall_apply_common_options(dasall_memory_working_memory_snapshot_unit_test)
+dasall_apply_common_options(dasall_memory_working_memory_board_concurrency_unit_test)
 
 add_test(NAME MemoryInterfaceCompileTest COMMAND dasall_memory_interface_compile_unit_test)
 set_tests_properties(MemoryInterfaceCompileTest PROPERTIES LABELS "unit;memory")
@@ -61,10 +94,22 @@ set_tests_properties(MemoryManagerLifecycleTest PROPERTIES LABELS "unit;memory")
 add_test(NAME MemoryManagerSmokeTest COMMAND dasall_memory_manager_smoke_unit_test)
 set_tests_properties(MemoryManagerSmokeTest PROPERTIES LABELS "unit;memory")
 
+add_test(NAME WorkingMemoryBoardTest COMMAND dasall_memory_working_memory_board_unit_test)
+set_tests_properties(WorkingMemoryBoardTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME WorkingMemorySnapshotTest COMMAND dasall_memory_working_memory_snapshot_unit_test)
+set_tests_properties(WorkingMemorySnapshotTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME WorkingMemoryBoardConcurrencyTest COMMAND dasall_memory_working_memory_board_concurrency_unit_test)
+set_tests_properties(WorkingMemoryBoardConcurrencyTest PROPERTIES LABELS "unit;memory")
+
 set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_interface_compile_unit_test
 	dasall_vector_memory_adapter_unit_test
 	dasall_memory_manager_lifecycle_unit_test
 	dasall_memory_manager_smoke_unit_test
+	dasall_memory_working_memory_board_unit_test
+	dasall_memory_working_memory_snapshot_unit_test
+	dasall_memory_working_memory_board_concurrency_unit_test
 	PARENT_SCOPE
 )

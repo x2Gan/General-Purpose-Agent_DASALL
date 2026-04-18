@@ -53,17 +53,16 @@ void test_memory_manager_smoke_surface_covers_writeback_export_and_maintenance()
 
   const auto export_result = manager->export_working_memory_snapshot(export_request);
   assert_true(!export_result.result_code.has_value(),
-              "working-memory export should stay callable even before the board lands");
+          "working-memory export should stay successful after the board lands");
   assert_true(export_result.snapshot.session_id == "session-001",
               "working-memory export should preserve the target session id");
-  assert_true(export_result.degraded,
-              "working-memory export should report degraded execution while the board is unwired");
-  assert_true(std::find(export_result.warnings.begin(), export_result.warnings.end(),
-                        "working_memory_board_unwired") != export_result.warnings.end(),
-              "working-memory export should surface the board-unwired warning");
-  assert_true(std::find(export_result.warnings.begin(), export_result.warnings.end(),
-                        "ephemeral_facts_unavailable") != export_result.warnings.end(),
-              "working-memory export should surface the missing ephemeral facts warning when requested");
+    assert_true(!export_result.degraded,
+          "working-memory export should no longer report degraded execution once the board is wired");
+    assert_true(export_result.snapshot.slots.empty(),
+          "working-memory export should return an empty slot set for a missing session");
+    assert_true(export_result.warnings.size() == 1U &&
+            export_result.warnings.front() == "session_not_found",
+          "working-memory export should surface a missing-session warning when no snapshot exists");
 
   const auto maintenance_report = manager->run_maintenance(dasall::memory::MaintenanceRequest{});
   assert_true(maintenance_report.warnings.size() == 1U &&

@@ -3,6 +3,8 @@
 #include <memory>
 #include <string>
 
+#include "working/IWorkingMemoryBoard.h"
+
 namespace dasall::memory {
 namespace {
 
@@ -45,6 +47,7 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
 
   MemoryManagerDependencies dependencies;
   dependencies.context_orchestrator = std::make_unique<BootstrapContextOrchestrator>();
+  dependencies.working_memory_board = create_working_memory_board();
   return create_memory_manager_with_dependencies(std::move(dependencies));
 }
 

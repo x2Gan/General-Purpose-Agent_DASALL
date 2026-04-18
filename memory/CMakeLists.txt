@@ -15,6 +15,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/MemoryBuildSkeleton.cpp
   src/MemoryManager.cpp
   src/MemoryManagerFactory.cpp
+  src/working/WorkingMemoryBoard.cpp
   src/vector/UnavailableVectorMemoryIndexAdapter.cpp
 )
 

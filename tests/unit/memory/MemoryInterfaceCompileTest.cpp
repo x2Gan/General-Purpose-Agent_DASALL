@@ -16,6 +16,7 @@
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/MemoryError.h"
+#include "working/IWorkingMemoryBoard.h"
 #include "working/WorkingMemoryExportRequest.h"
 #include "working/WorkingMemoryExportResult.h"
 #include "working/WorkingMemorySnapshot.h"
@@ -420,6 +421,52 @@ void test_memory_manager_supporting_types_and_factory_surface_compile_with_stabl
                                    "fresh maintenance reports should default to no warnings");
 }
 
+void test_working_memory_board_interface_surface_compiles_with_snapshot_round_trip() {
+     using dasall::memory::IWorkingMemoryBoard;
+     using dasall::memory::WorkingMemorySlot;
+     using dasall::memory::WorkingMemorySnapshot;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     using SetSlotSignature = void (IWorkingMemoryBoard::*)(const std::string&, const WorkingMemorySlot&);
+     using GetSlotSignature = std::optional<WorkingMemorySlot> (IWorkingMemoryBoard::*)(const std::string&, const std::string&) const;
+     using ExportSignature = WorkingMemorySnapshot (IWorkingMemoryBoard::*)(const std::string&) const;
+     using BoardFactorySignature = std::unique_ptr<IWorkingMemoryBoard> (*)(std::size_t);
+
+     static_assert(std::is_same_v<decltype(&IWorkingMemoryBoard::set_slot), SetSlotSignature>,
+                                        "IWorkingMemoryBoard::set_slot should preserve the keyed slot write surface");
+     static_assert(std::is_same_v<decltype(&IWorkingMemoryBoard::get_slot), GetSlotSignature>,
+                                        "IWorkingMemoryBoard::get_slot should preserve the optional keyed read surface");
+     static_assert(std::is_same_v<decltype(&IWorkingMemoryBoard::export_snapshot), ExportSignature>,
+                                        "IWorkingMemoryBoard::export_snapshot should preserve the snapshot export surface");
+     static_assert(std::is_same_v<decltype(&dasall::memory::create_working_memory_board), BoardFactorySignature>,
+                                        "create_working_memory_board should remain the public board factory surface");
+
+     auto board = dasall::memory::create_working_memory_board(4);
+     WorkingMemorySnapshot snapshot;
+     snapshot.session_id = "session-001";
+     snapshot.slots.push_back(WorkingMemorySlot{
+               .key = "active_goal",
+               .value = "finish mem-todo-012",
+               .updated_at = 10,
+               .ttl_ms = 0,
+               .source = "agent",
+     });
+     snapshot.open_questions = {"Should board export empty sessions?"};
+     snapshot.ephemeral_facts = {"working board restored from snapshot"};
+
+     board->restore_snapshot(snapshot);
+     const auto exported = board->export_snapshot("session-001");
+     assert_equal("session-001", exported.session_id,
+                                    "working-memory board export should preserve the restored session id");
+     assert_equal(1, static_cast<int>(exported.slots.size()),
+                                    "working-memory board export should preserve restored slots");
+     assert_true(exported.open_questions.size() == 1U,
+                                   "working-memory board export should preserve restored open questions");
+     assert_true(exported.ephemeral_facts.size() == 1U,
+                                   "working-memory board export should preserve restored ephemeral facts");
+}
+
      void test_memory_manager_interfaces_expose_expected_runtime_facing_signatures() {
        using dasall::memory::ContextAssemblyResult;
        using dasall::memory::IContextOrchestrator;
@@ -717,6 +764,7 @@ int main() {
     test_memory_config_defaults_align_with_detailed_design();
           test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
          test_memory_manager_supporting_types_and_factory_surface_compile_with_stable_defaults();
+                     test_working_memory_board_interface_surface_compiles_with_snapshot_round_trip();
           test_memory_manager_interfaces_expose_expected_runtime_facing_signatures();
           test_memory_summarizer_interface_uses_module_local_summary_supporting_types();
             test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types();

@@ -145,7 +145,27 @@ WorkingMemoryExportResult MemoryManager::export_working_memory_snapshot(
     return make_export_failure_result(request, "memory_manager_not_running");
   }
 
-  return make_unwired_export_result(request);
+  if (!dependencies_.working_memory_board) {
+    return make_unwired_export_result(request);
+  }
+
+  if (request.evict_expired_before_export) {
+    dependencies_.working_memory_board->evict_expired(request.session_id);
+  }
+
+  WorkingMemoryExportResult result;
+  result.snapshot =
+      dependencies_.working_memory_board->export_snapshot(request.session_id);
+  if (!request.include_ephemeral_facts) {
+    result.snapshot.ephemeral_facts.clear();
+  }
+
+  if (result.snapshot.slots.empty() && result.snapshot.open_questions.empty() &&
+      result.snapshot.ephemeral_facts.empty()) {
+    result.warnings.push_back("session_not_found");
+  }
+
+  return result;
 }
 
 MaintenanceReport MemoryManager::run_maintenance(
