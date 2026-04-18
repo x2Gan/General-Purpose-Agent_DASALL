@@ -1,18 +1,19 @@
 #pragma once
 
+#include <memory>
+
+#include "MaintenanceReport.h"
+#include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/ResultCode.h"
+#include "working/WorkingMemoryExportRequest.h"
+#include "working/WorkingMemoryExportResult.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/WritebackResult.h"
 
 namespace dasall::memory {
-
-struct MaintenanceReport;
-struct MaintenanceRequest;
-struct WorkingMemoryExportRequest;
-struct WorkingMemoryExportResult;
 
 class IMemoryManager {
  public:
@@ -33,5 +34,8 @@ class IMemoryManager {
   [[nodiscard]] virtual MaintenanceReport run_maintenance(
       const MaintenanceRequest& request) = 0;
 };
+
+[[nodiscard]] std::unique_ptr<IMemoryManager> create_memory_manager(
+        const MemoryConfig& config);
 
 }  // namespace dasall::memory

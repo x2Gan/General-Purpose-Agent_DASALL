@@ -1,6 +1,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 
@@ -9,10 +10,15 @@
 #include "IMemoryStore.h"
 #include "ISummarizer.h"
 #include "IStoreTransaction.h"
+#include "MaintenanceReport.h"
+#include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/MemoryError.h"
+#include "working/WorkingMemoryExportRequest.h"
+#include "working/WorkingMemoryExportResult.h"
+#include "working/WorkingMemorySnapshot.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/SummaryGenerationRequest.h"
 #include "writeback/SummaryGenerationResult.h"
@@ -349,6 +355,71 @@ void test_memory_error_mapping_aligns_with_warning_and_audit_semantics() {
                                    "EIO should map to the storage unavailable memory error");
 }
 
+void test_memory_manager_supporting_types_and_factory_surface_compile_with_stable_defaults() {
+     using dasall::memory::IMemoryManager;
+     using dasall::memory::MaintenanceReport;
+     using dasall::memory::MaintenanceRequest;
+     using dasall::memory::MemoryConfig;
+     using dasall::memory::WorkingMemoryExportRequest;
+     using dasall::memory::WorkingMemoryExportResult;
+     using dasall::memory::WorkingMemorySlot;
+     using dasall::memory::WorkingMemorySnapshot;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     using FactorySignature = std::unique_ptr<IMemoryManager> (*)(const MemoryConfig&);
+     static_assert(std::is_same_v<decltype(&dasall::memory::create_memory_manager), FactorySignature>,
+                                        "create_memory_manager should remain the config-driven public factory surface");
+
+     WorkingMemoryExportRequest export_request;
+     export_request.session_id = "session-001";
+     assert_equal("manual", export_request.export_reason,
+                                    "working-memory export requests should default to the manual export reason");
+     assert_true(!export_request.include_ephemeral_facts,
+                                   "working-memory export should default ephemeral facts export to disabled");
+     assert_true(!export_request.evict_expired_before_export,
+                                   "working-memory export should default eviction to disabled");
+
+     WorkingMemorySnapshot snapshot;
+     snapshot.session_id = "session-001";
+     snapshot.slots.push_back(WorkingMemorySlot{
+               .key = "active_goal",
+               .value = "stabilize memory lifecycle",
+               .updated_at = 1,
+               .ttl_ms = 0,
+               .source = "agent",
+     });
+     snapshot.open_questions = {"Should sqlite writer retry be configurable?"};
+     snapshot.ephemeral_facts = {"factory uses bootstrap orchestrator"};
+
+     WorkingMemoryExportResult export_result;
+     export_result.snapshot = snapshot;
+     assert_equal("session-001", export_result.snapshot.session_id,
+                                    "working-memory export results should carry the snapshot payload");
+     assert_equal(1, static_cast<int>(export_result.snapshot.slots.size()),
+                                    "working-memory export results should preserve slot projections");
+     assert_true(!export_result.result_code.has_value(),
+                                   "fresh working-memory export results should default to success semantics");
+     assert_true(!export_result.degraded,
+                                   "fresh working-memory export results should default to non-degraded");
+
+     MaintenanceRequest maintenance_request;
+     assert_true(maintenance_request.run_checkpoint,
+                                   "maintenance requests should default checkpoint execution to enabled");
+     assert_true(maintenance_request.run_retention,
+                                   "maintenance requests should default retention execution to enabled");
+     assert_true(maintenance_request.run_quarantine_cleanup,
+                                   "maintenance requests should default quarantine cleanup to enabled");
+     assert_true(!maintenance_request.run_vector_rebuild,
+                                   "maintenance requests should default vector rebuild to disabled");
+
+     MaintenanceReport maintenance_report;
+     assert_true(!maintenance_report.checkpoint_executed,
+                                   "fresh maintenance reports should default checkpoint execution to false");
+     assert_true(maintenance_report.warnings.empty(),
+                                   "fresh maintenance reports should default to no warnings");
+}
+
      void test_memory_manager_interfaces_expose_expected_runtime_facing_signatures() {
        using dasall::memory::ContextAssemblyResult;
        using dasall::memory::IContextOrchestrator;
@@ -645,6 +716,7 @@ int main() {
     test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();
     test_memory_config_defaults_align_with_detailed_design();
           test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
+         test_memory_manager_supporting_types_and_factory_surface_compile_with_stable_defaults();
           test_memory_manager_interfaces_expose_expected_runtime_facing_signatures();
           test_memory_summarizer_interface_uses_module_local_summary_supporting_types();
             test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types();

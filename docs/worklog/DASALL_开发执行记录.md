@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #357
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 C
+- 任务：MEM-TODO-011 实现 MemoryManager 生命周期骨架与工厂函数
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-011` 是当前用户请求链 `011 ~ 015` 中最早可执行的 concrete build 任务；如果组合根与生命周期还停留在抽象接口层，`WorkingMemoryBoard`、`SqliteSchemaMigrator`、`SqliteMemoryStore` 后续都没有稳定接线入口。
+2. `IMemoryManager` 上的 working-memory export / maintenance supporting types 在 009 阶段仍只有前向声明；本轮必须把 `WorkingMemorySnapshot`、`WorkingMemoryExportRequest/Result`、`MaintenanceRequest/Report` 作为同轮最小解阻一起落盘，否则 `MemoryManager` 实现和 smoke/lifecycle test 都无法真正编译执行。
+3. 012 / 014 / 024 还未落地，所以 011 只做生命周期骨架与工厂组装，不偷跑真实 `WorkingMemoryBoard`、`SqliteMemoryStore`、`MaintenanceWorker` 逻辑；缺失能力统一以结构化 degraded / unavailable 语义暴露。
+
+### 改动
+
+1. 更新 `memory/include/IMemoryManager.h`：
+   - 接入 `WorkingMemoryExportRequest/Result` 与 `MaintenanceRequest/Report` 的真实头文件；
+   - 新增 `create_memory_manager(const MemoryConfig&)` 工厂声明。
+2. 新增 `memory/include/MaintenanceRequest.h`、`memory/include/MaintenanceReport.h`、`memory/include/working/WorkingMemorySnapshot.h`、`memory/include/working/WorkingMemoryExportRequest.h`、`memory/include/working/WorkingMemoryExportResult.h`：
+   - 把 6.5.3/6.5.3a/6.12.6 中仍悬空的 working export / maintenance supporting objects 落成真实 public surface；
+   - 为 011 的 manager 实现和 012 的 working-board 核心复用同一套 snapshot / export 数据面。
+3. 新增 `memory/src/MemoryManagerInternal.h`、`memory/src/MemoryManager.cpp`、`memory/src/MemoryManagerFactory.cpp`：
+   - 落盘 `MemoryManager` 生命周期状态机、config-driven init、idempotent shutdown、prepare/export/writeback/maintenance 的 skeleton 行为；
+   - 工厂提供 bootstrap `IContextOrchestrator`，让 `prepare_context()` 在 `memory` backend 下具备最小可执行闭环；
+   - 默认 `sqlite` backend 仍明确返回 unavailable，等待 014 的真实 store 落地。
+4. 更新 `memory/CMakeLists.txt`：
+   - 将 `MemoryManager.cpp`、`MemoryManagerFactory.cpp` 接入 `dasall_memory` 静态库。
+5. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp` 并新增 `tests/unit/memory/MemoryManagerLifecycleTest.cpp`、`tests/unit/memory/MemoryManagerSmokeTest.cpp`：
+   - compile gate 现在显式覆盖新 supporting types 与 `create_memory_manager` 工厂签名；
+   - lifecycle test 验证 pre-init failure、idempotent init/shutdown 与 bootstrap `prepare_context()`；
+   - smoke test 验证默认 sqlite unavailable 语义以及 writeback/export/maintenance 的结构化 degraded 行为。
+6. 更新 `tests/unit/memory/CMakeLists.txt`：
+   - 注册 `dasall_memory_manager_lifecycle_unit_test`、`dasall_memory_manager_smoke_unit_test` 与对应 CTest 条目。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `memory/include/IMemoryManager.h`、新增 working / maintenance headers、`memory/src/MemoryManager*.{h,cpp}`、`tests/unit/memory/MemoryManagerLifecycleTest.cpp`、`tests/unit/memory/MemoryManagerSmokeTest.cpp`、`tests/unit/memory/MemoryInterfaceCompileTest.cpp`、`tests/unit/memory/CMakeLists.txt`、`memory/CMakeLists.txt` 无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_interface_compile_unit_test`、`dasall_vector_memory_adapter_unit_test`、`dasall_memory_manager_lifecycle_unit_test`、`dasall_memory_manager_smoke_unit_test`
+   - `RunCtest_CMakeTools` 运行 `MemoryInterfaceCompileTest`、`VectorMemoryAdapterTest`、`MemoryManagerLifecycleTest`、`MemoryManagerSmokeTest`
+   - 结果：四项测试全部通过，`100% tests passed, 0 tests failed out of 4`；CMake Tools 的 `DartConfiguration.tcl` stderr 噪声未影响返回码与测试结论。
+
+### 结果
+
+1. `MEM-TODO-011` 已完成，memory 子系统现在具备真实可实例化的 `MemoryManager` 组合根与 lifecycle skeleton，不再只有抽象接口和前向声明。
+2. `create_memory_manager()` 已成为稳定 public factory surface；在 `memory` backend 下可以完成 `init -> prepare_context -> export/writeback/maintenance(degraded) -> shutdown` 的最小可执行闭环。
+3. 011 同轮解除了 working export / maintenance supporting type 的悬空状态，但没有提前实现 `IWorkingMemoryBoard`、`SqliteMemoryStore` 或 `MemoryMaintenanceWorker`，因此 012 / 014 / 024 仍保持清晰的后续落点。
+
+### 下一步
+
+1. 进入 `MEM-TODO-012`，实现 `IWorkingMemoryBoard`、`WorkingMemoryBoard` 与 snapshot/export/restore 的真实内存语义，把 011 中的 export degraded baseline 替换成 working-board 驱动路径。
+
+### 风险
+
+1. `MemoryManager::init()` 当前沿用仓库既有的零值 `ResultCode` 成功哨兵，因为 shared contracts 仍缺少统一 success code；后续如果 contracts 收敛出成功码，需要统一回收这一临时语义，而不是只在 memory 内局部修改。
+2. `BootstrapContextOrchestrator` 只提供最小字段投影，目的是让 lifecycle/smoke 可执行；它不是 019 要交付的真实 `ContextOrchestrator`，后续必须由 `CandidateCollector` / `BudgetAllocator` / `CompressionCoordinator` 驱动的正式实现替换。
+
 ## 记录 #356
 
 - 日期：2026-04-18
