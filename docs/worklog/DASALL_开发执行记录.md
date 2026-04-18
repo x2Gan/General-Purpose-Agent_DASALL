@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #348
+
+- 日期：2026-04-18
+- 阶段：memory/专项 TODO 阶段 B
+- 任务：MEM-TODO-025 注册 memory unit / integration 测试拓扑
+- 状态：已完成
+
+### 任务选择
+
+1. MEM-TODO-025 是 005 之后最小且直接可执行的拓扑任务；它只依赖 public surface skeleton 已落盘，不依赖 `IMemoryManager`、`IMemoryStore` 或 Context / Writeback 实现。
+2. 当前基线显示 `tests/unit/memory/CMakeLists.txt` 已在 005 中接入 unit compile gate，但 `tests/integration/` 顶层仍未注册 memory 子目录，`ctest -N` 还不能把 memory integration 用例作为独立拓扑发现出来。
+3. 本轮保持范围在 025：只补齐 integration 子目录、顶层 CMake 聚合和最小 discoverability smoke，不提前实现 `MemoryContextAssembleIntegrationTest` 或 `MemoryWritebackIntegrationTest`。
+
+### 改动
+
+1. 新增 `tests/integration/memory/CMakeLists.txt`：
+   - 建立 `DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS` 聚合变量；
+   - 注册 `dasall_memory_integration_topology_smoke_integration_test`；
+   - 将 memory integration target 列表通过 `PARENT_SCOPE` 导出给顶层聚合。
+2. 新增 `tests/integration/memory/MemoryIntegrationTopologySmokeTest.cpp`：
+   - 校验 integration ctest / target 命名保持 memory 命名空间；
+   - 校验 `tests/integration/memory/` 子目录和其 CMake/source 文件真实存在；
+   - 校验 `tests/integration/CMakeLists.txt` 已接入 `add_subdirectory(memory)` 和 `${DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS}`；
+   - 校验 integration 拓扑不再退化为 placeholder-only 子树。
+3. 更新 `tests/integration/CMakeLists.txt`：
+   - 接入 `add_subdirectory(memory)`；
+   - 将 `${DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS}` 注入顶层 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`。
+4. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-025` 标记为 `Done`；
+   - 同步当前代码与测试现状证据、验收命令和阶段 B 执行顺序；
+   - 将 11.1 的下一步收敛到 `MEM-TODO-006/007/008A/008B/009/009A/010/022`。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `tests/integration/memory/CMakeLists.txt`、`tests/integration/memory/MemoryIntegrationTopologySmokeTest.cpp`、`tests/integration/CMakeLists.txt` 无错误。
+2. CMake Tools 可发现性与定向构建：
+   - `ListBuildTargets_CMakeTools` 已出现 `dasall_memory_integration_topology_smoke_integration_test`；
+   - `ListTests_CMakeTools` 已出现 `MemoryIntegrationTopologySmokeTest`；
+   - `Build_CMakeTools` 定向构建 `dasall_memory_interface_compile_unit_test` 与 `dasall_memory_integration_topology_smoke_integration_test`，结果为通过。
+3. 任务级测试验收：
+   - `RunCtest_CMakeTools` 验证 `MemoryInterfaceCompileTest` 与 `MemoryIntegrationTopologySmokeTest`，结果均为通过。
+4. 仓库口径 discoverability 证据：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && ctest --test-dir build-ci -N | rg "MemoryInterfaceCompileTest|MemoryIntegrationTopologySmokeTest"`
+   - 结果：`build-ci` 的 `ctest -N` 同时列出 `MemoryInterfaceCompileTest` 与 `MemoryIntegrationTopologySmokeTest`。
+
+### 结果
+
+1. `MEM-TODO-025` 已完成，memory integration 子目录已进入顶层 `tests/integration` 聚合，unit / integration 两条 memory discoverability 基线同时成立。
+2. `MemoryIntegrationTopologySmokeTest` 为后续 `MemoryContextAssembleIntegrationTest`、`MemoryWritebackIntegrationTest`、`MemoryFailureInjectionTest` 提供了稳定的 integration topology 锚点。
+3. 本轮将 025 的专项 TODO 验收命令收窄为任务级 target + `ctest -N` 检查，避免把无关全量聚合噪声误记为 memory 测试拓扑 blocker。
+
+### 下一步
+
+1. 进入 `MEM-TODO-006` 或 `MEM-TODO-007`，继续冻结 context / writeback supporting types。
+2. 若优先补公共接口冻结面，也可并行推进 `MEM-TODO-008A`、`MEM-TODO-008B` 与 `MEM-TODO-022`。
+
+### 风险
+
+1. 当前 integration smoke 只证明 topology 与 discoverability，不代表 `MemoryContextAssembleIntegrationTest`、`MemoryWritebackIntegrationTest` 或 failure injection 已具备实现基础。
+2. `MEM-BLK-05` 仍未解除，vector concrete backend 选型未冻结前，`MEM-TODO-023 / 029` 仍不能被误判为 ready。
+
 ## 记录 #347
 
 - 日期：2026-04-17

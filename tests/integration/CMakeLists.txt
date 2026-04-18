@@ -8,6 +8,7 @@ add_subdirectory(profiles)
 add_subdirectory(platform)
 add_subdirectory(services)
 add_subdirectory(tools)
+add_subdirectory(memory)
 add_subdirectory(llm)
 
 set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
@@ -36,6 +37,7 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_linux_platform_bootstrap_integration_test
 	${DASALL_SERVICES_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_TOOLS_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+	${DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	PARENT_SCOPE
 )
