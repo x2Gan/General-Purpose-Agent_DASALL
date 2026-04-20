@@ -23,8 +23,28 @@ constexpr contracts::ResultCode kMemoryManagerInitSuccess =
     const char* warning_key) {
   ContextAssemblyResult result;
   result.result_code = storage_unavailable_code();
-  result.context_packet.request_id = request.request_id;
-  result.context_packet.current_goal_summary = request.goal_summary;
+  result.context_packet.request_id =
+      request.request_id.empty() ? "context-request" : request.request_id;
+  result.context_packet.user_turn = !request.goal_summary.empty()
+                                        ? request.goal_summary
+                                        : std::string{"context unavailable"};
+  result.context_packet.current_goal_summary = !request.goal_summary.empty()
+                                                  ? request.goal_summary
+                                                  : std::string{"goal unavailable"};
+  result.context_packet.recent_history = std::vector<std::string>{};
+  if (!request.constraints_summary.empty()) {
+    result.context_packet.policy_digest = request.constraints_summary;
+  }
+  if (!request.latest_observation_digest_summary.empty()) {
+    result.context_packet.latest_observation_digest_summary =
+        request.latest_observation_digest_summary;
+  }
+  if (!request.visible_tools.empty()) {
+    result.context_packet.active_tools = request.visible_tools;
+  }
+  result.context_packet.token_budget_report =
+      std::string{"token_budget_hint="} +
+      std::to_string(request.token_budget_hint);
   result.warnings.push_back(warning_key);
   result.degraded = true;
   return result;

@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #365
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 D
+- 任务：MEM-TODO-019 实现 ContextOrchestrator 与 ContextPacket 槽位映射
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-019` 是阶段 D 的收口任务；如果真实 `ContextOrchestrator` 仍停留在 bootstrap 占位，016/017/018 的 `CandidateCollector`、`BudgetAllocator`、`CompressionCoordinator` 就无法组成可执行的 Context 组装主链。
+2. 本轮严格限定在 `ContextOrchestrator` 的 module-local 头/实现、sqlite factory wiring、context-specific unit tests，以及与 prepare_context 最小有效输出直接相关的 fallback 修正，不提前进入 `WritebackCoordinator` 或 `MemoryConflictResolver`。
+3. 由于 `MemoryContextRequest` 没有显式 `user_turn` 字段，本轮必须把“从最近 Turn 取值，缺失时回退到 goal_summary”的降级语义收进 orchestrator，而不是把 contract 缺口留给 runtime 或 Prompt 层兜底。
+
+### 改动
+
+1. 新增 `memory/src/context/ContextOrchestrator.h` 与 `memory/src/context/ContextOrchestrator.cpp`：
+   - 定义真实 `ContextOrchestrator` module-local surface；
+   - 实现 `assemble`、`build_packet`、`needs_compression`；
+   - 串联 `CandidateCollector`、`BudgetAllocator`、`CompressionCoordinator`，完成 compression trigger、budget trim、`ContextPacket` 十槽位映射、`dropped_sections` / `warnings` / `degraded` 组装；
+   - 对 `user_turn`、`current_goal_summary`、`retrieval_evidence`、`belief_state_summary`、`token_budget_report` 等槽位补齐 fallback 和投影逻辑。
+2. 更新 `memory/src/MemoryManagerFactory.cpp` 与 `memory/src/MemoryManager.cpp`：
+   - sqlite backend 下由工厂创建真实 `ContextOrchestrator`，不再继续使用 bootstrap 占位；
+   - 保留 `memory` backend 的最小 bootstrap 语义；
+   - 补齐 prepare_context 失败结果和 bootstrap packet 的最小必需槽位，确保在 unwired / not-running 场景下也能返回 contract-valid 的最小 `ContextPacket`。
+3. 新增 `tests/unit/memory/ContextOrchestratorTest.cpp` 与 `tests/unit/memory/ContextOrchestratorDegradedTest.cpp` 并更新 CMake：
+   - 覆盖正常 assemble 路径、compression trigger、budget trim、retrieval_evidence 预算裁剪记录、belief_state 投影；
+   - 覆盖 `user_turn` fallback 到 `goal_summary`、缺少 compressor 时的 `compression_skipped` 和 degraded 语义；
+   - 同时把 `MemoryManagerLifecycleTest`、`MemoryManagerSmokeTest` 纳入回归，验证 bootstrap/factory 变化不回退。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `ContextOrchestrator.h/.cpp`、`MemoryManagerFactory.cpp`、`MemoryManager.cpp`、两条 orchestrator 测试和相关 CMake 文件均无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_context_orchestrator_unit_test`、`dasall_memory_context_orchestrator_degraded_unit_test`、`dasall_memory_manager_lifecycle_unit_test`、`dasall_memory_manager_smoke_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `ContextOrchestratorTest`、`ContextOrchestratorDegradedTest`、`MemoryManagerLifecycleTest`、`MemoryManagerSmokeTest`；
+   - 结果：四条测试全部通过，`100% tests passed, 0 tests failed out of 4`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但未影响返回码与结论。
+
+### 结果
+
+1. `MEM-TODO-019` 已完成，Context 组装链现在可以从候选收集、预算分配、压缩触发一路收口到 `ContextPacket` 的 10 槽位映射，并对 trim / dropped / degraded 给出结构化结果。
+2. sqlite backend 的 `MemoryManager` 工厂已经改用真实 `ContextOrchestrator`，而 `memory` backend 仍保留最小 bootstrap 语义，避免回退现有 lifecycle smoke。
+3. 阶段 D 的 `016 ~ 019` 现已全部闭环；下一轮可以直接进入 `MEM-TODO-020` / `021` 的冲突检测与写回主链。
+
+### 下一步
+
+1. 进入 `MEM-TODO-020`，实现 `MemoryConflictResolver`，先固定冲突计划与 supersede / reject / coexist 规则，再接 `MEM-TODO-021` 的 `WritebackCoordinator`。
+
+### 风险
+
+1. 当前 `user_turn` 的最小降级策略仍然受 `MemoryContextRequest` 字段面限制：没有 persisted turn 时只能回退到 `goal_summary`，这能保证 contract-valid，但不等于完美语义；若后续 runtime 需要首轮更精确的原始输入投影，应单独评审 supporting object，而不是在本轮破坏 ABI。
+2. `ContextOrchestrator` 目前只在 assembly 时瞬态消费压缩结果，不负责摘要持久化；真正的 summary/fact/experience 写回与冲突处理仍留在 020/021，不能因为 019 完成就误判 writeback 主链已就绪。
+
 ## 记录 #364
 
 - 日期：2026-04-20
