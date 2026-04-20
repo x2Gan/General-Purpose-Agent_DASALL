@@ -160,7 +160,8 @@ void test_writeback_coordinator_marks_partial_without_rolling_back_core_transact
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(store);
   dasall::memory::WritebackCoordinator coordinator(
-      store, std::move(conflict_resolver), *working_board, &vector_index);
+      store, store, store, store, store,
+      std::move(conflict_resolver), *working_board, &vector_index);
 
   dasall::memory::MemoryWritebackRequest request;
   request.session_id = "session-021-partial";

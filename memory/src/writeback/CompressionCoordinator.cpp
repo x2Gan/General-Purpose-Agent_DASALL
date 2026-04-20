@@ -89,7 +89,7 @@ std::string build_summary_id(const CompressionInput& input) {
 
 }  // namespace
 
-CompressionCoordinator::CompressionCoordinator(IMemoryStore& store,
+CompressionCoordinator::CompressionCoordinator(ISummaryStore& store,
                                                ISummarizer* summarizer)
     : store_(store), summarizer_(summarizer) {}
 

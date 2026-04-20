@@ -559,7 +559,7 @@ void run_vector_rebuild(VectorMemoryIndexAdapter* vector_adapter,
 }  // namespace
 
 MemoryMaintenanceWorker::MemoryMaintenanceWorker(
-    IMemoryStore& store,
+    IMaintenanceStore& store,
     MemoryConfig config,
     VectorMemoryIndexAdapter* vector_adapter,
     std::shared_ptr<std::mutex> writer_mutex)

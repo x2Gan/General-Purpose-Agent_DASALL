@@ -6,10 +6,16 @@
 #include <type_traits>
 
 #include "IContextOrchestrator.h"
+#include "IExperienceStore.h"
+#include "IFactStore.h"
 #include "IMemoryManager.h"
+#include "IMaintenanceStore.h"
 #include "IMemoryStore.h"
+#include "ISessionStore.h"
 #include "ISummarizer.h"
 #include "IStoreTransaction.h"
+#include "ISummaryStore.h"
+#include "ITransactionalStore.h"
 #include "MaintenanceReport.h"
 #include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
@@ -61,7 +67,7 @@ void test_memory_public_include_layout_exists() {
   const fs::path config_dir = include_root / "config";
   const fs::path context_dir = include_root / "context";
   const fs::path error_dir = include_root / "error";
-     const fs::path store_dir = include_root / "store";
+  const fs::path store_dir = include_root / "store";
   const fs::path vector_dir = include_root / "vector";
   const fs::path working_dir = include_root / "working";
   const fs::path writeback_dir = include_root / "writeback";
@@ -180,19 +186,56 @@ void test_store_result_compiles_as_an_independent_public_surface() {
                                     "store result failure factory should preserve the error message");
 }
 
-  void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics() {
-    using dasall::memory::ConflictAction;
-    using dasall::memory::MemoryWritebackRequest;
-    using dasall::memory::WritebackResult;
-    using dasall::tests::support::assert_equal;
-    using dasall::tests::support::assert_true;
+void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly() {
+     using dasall::memory::IExperienceStore;
+     using dasall::memory::IFactStore;
+     using dasall::memory::IMaintenanceStore;
+     using dasall::memory::IMemoryStore;
+     using dasall::memory::ISessionStore;
+     using dasall::memory::ISummaryStore;
+     using dasall::memory::ITransactionalStore;
+     using dasall::tests::support::assert_true;
 
-    static_assert(std::is_same_v<decltype(MemoryWritebackRequest{}.turn),
-             dasall::contracts::Turn>,
-          "MemoryWritebackRequest should reuse the frozen Turn contract");
-    static_assert(std::is_same_v<decltype(WritebackResult{}.result_code),
-             std::optional<dasall::contracts::ResultCode>>,
-          "WritebackResult should keep the shared result code optional on success");
+     static_assert(std::is_base_of_v<ITransactionalStore, IMemoryStore>,
+                                        "IMemoryStore should aggregate transactional access through a narrow interface");
+     static_assert(std::is_base_of_v<ISessionStore, IMemoryStore>,
+                                        "IMemoryStore should aggregate session access through a narrow interface");
+     static_assert(std::is_base_of_v<ISummaryStore, IMemoryStore>,
+                                        "IMemoryStore should aggregate summary access through a narrow interface");
+     static_assert(std::is_base_of_v<IFactStore, IMemoryStore>,
+                                        "IMemoryStore should aggregate fact access through a narrow interface");
+     static_assert(std::is_base_of_v<IExperienceStore, IMemoryStore>,
+                                        "IMemoryStore should aggregate experience access through a narrow interface");
+     static_assert(std::is_base_of_v<IMaintenanceStore, IMemoryStore>,
+                                        "IMemoryStore should aggregate maintenance access through a narrow interface");
+
+     assert_true(std::has_virtual_destructor_v<ITransactionalStore>,
+                                   "transactional store interface should remain safely polymorphic");
+     assert_true(std::has_virtual_destructor_v<ISessionStore>,
+                                   "session store interface should remain safely polymorphic");
+     assert_true(std::has_virtual_destructor_v<ISummaryStore>,
+                                   "summary store interface should remain safely polymorphic");
+     assert_true(std::has_virtual_destructor_v<IFactStore>,
+                                   "fact store interface should remain safely polymorphic");
+     assert_true(std::has_virtual_destructor_v<IExperienceStore>,
+                                   "experience store interface should remain safely polymorphic");
+     assert_true(std::has_virtual_destructor_v<IMaintenanceStore>,
+                                   "maintenance store interface should remain safely polymorphic");
+}
+
+void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics() {
+     using dasall::memory::ConflictAction;
+     using dasall::memory::MemoryWritebackRequest;
+     using dasall::memory::WritebackResult;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     static_assert(std::is_same_v<decltype(MemoryWritebackRequest{}.turn),
+                                                                            dasall::contracts::Turn>,
+                                        "MemoryWritebackRequest should reuse the frozen Turn contract");
+     static_assert(std::is_same_v<decltype(WritebackResult{}.result_code),
+                                                                            std::optional<dasall::contracts::ResultCode>>,
+                                        "WritebackResult should keep the shared result code optional on success");
 
     MemoryWritebackRequest request;
     request.session_id = "session-001";
@@ -603,48 +646,52 @@ void test_memory_summarizer_interface_uses_module_local_summary_supporting_types
 }
 
 void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types() {
-     using dasall::memory::ExperienceQuery;
-     using dasall::memory::FactQuery;
-     using dasall::memory::IMemoryStore;
-     using dasall::memory::IStoreTransaction;
-     using dasall::memory::MemoryConfig;
-     using dasall::memory::SessionLoadRequest;
-     using dasall::memory::StoreResult;
-     using dasall::tests::mocks::FakeMemoryStore;
-     using dasall::tests::support::assert_equal;
-     using dasall::tests::support::assert_true;
+  using dasall::memory::ExperienceQuery;
+  using dasall::memory::FactQuery;
+  using dasall::memory::IExperienceStore;
+  using dasall::memory::IFactStore;
+  using dasall::memory::IMemoryStore;
+  using dasall::memory::ISessionStore;
+  using dasall::memory::IStoreTransaction;
+  using dasall::memory::ITransactionalStore;
+  using dasall::memory::MemoryConfig;
+  using dasall::memory::SessionLoadRequest;
+  using dasall::memory::StoreResult;
+  using dasall::tests::mocks::FakeMemoryStore;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
 
-     using OpenSignature = std::optional<dasall::contracts::ResultCode> (IMemoryStore::*)(
-               const MemoryConfig&);
-     using BeginTransactionSignature = std::unique_ptr<IStoreTransaction> (IMemoryStore::*)();
-     using LoadBundleSignature = dasall::memory::SessionLoadBundle (IMemoryStore::*)(
-               const SessionLoadRequest&) const;
-     using QueryFactsSignature = dasall::memory::FactQueryResult (IMemoryStore::*)(
-               const FactQuery&) const;
-     using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IMemoryStore::*)(
-               const ExperienceQuery&) const;
-     using CommitSignature = std::optional<dasall::contracts::ResultCode> (IStoreTransaction::*)();
+  using OpenSignature = std::optional<dasall::contracts::ResultCode> (IMemoryStore::*)(
+       const MemoryConfig&);
+  using BeginTransactionSignature = std::unique_ptr<IStoreTransaction> (ITransactionalStore::*)();
+  using LoadBundleSignature = dasall::memory::SessionLoadBundle (ISessionStore::*)(
+       const SessionLoadRequest&) const;
+  using QueryFactsSignature = dasall::memory::FactQueryResult (IFactStore::*)(
+       const FactQuery&) const;
+  using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IExperienceStore::*)(
+       const ExperienceQuery&) const;
+  using CommitSignature = std::optional<dasall::contracts::ResultCode> (IStoreTransaction::*)();
 
-     static_assert(std::has_virtual_destructor_v<IMemoryStore>,
-                                        "IMemoryStore should remain a polymorphic storage abstraction");
-     static_assert(std::has_virtual_destructor_v<IStoreTransaction>,
-                                        "IStoreTransaction should remain a polymorphic transaction abstraction");
-     static_assert(std::is_abstract_v<IMemoryStore>,
-                                        "IMemoryStore should stay abstract until the SQLite-backed implementation lands");
-     static_assert(std::is_abstract_v<IStoreTransaction>,
-                                        "IStoreTransaction should stay abstract until a concrete transaction implementation lands");
-     static_assert(std::is_same_v<decltype(&IMemoryStore::open), OpenSignature>,
-                                        "IMemoryStore::open should surface the optional ResultCode outcome pattern");
-     static_assert(std::is_same_v<decltype(&IMemoryStore::begin_immediate), BeginTransactionSignature>,
-                                        "IMemoryStore::begin_immediate should return a RAII transaction handle");
-     static_assert(std::is_same_v<decltype(&IMemoryStore::load_session_bundle), LoadBundleSignature>,
-                                        "IMemoryStore::load_session_bundle should consume the module-local session load request");
-     static_assert(std::is_same_v<decltype(&IMemoryStore::query_facts), QueryFactsSignature>,
-                                        "IMemoryStore::query_facts should consume the module-local fact query surface");
-     static_assert(std::is_same_v<decltype(&IMemoryStore::query_experiences), QueryExperiencesSignature>,
-                                        "IMemoryStore::query_experiences should consume the module-local experience query surface");
-     static_assert(std::is_same_v<decltype(&IStoreTransaction::commit), CommitSignature>,
-                                        "IStoreTransaction::commit should use the optional ResultCode outcome pattern");
+  static_assert(std::has_virtual_destructor_v<IMemoryStore>,
+                    "IMemoryStore should remain a polymorphic storage abstraction");
+  static_assert(std::has_virtual_destructor_v<IStoreTransaction>,
+                    "IStoreTransaction should remain a polymorphic transaction abstraction");
+  static_assert(std::is_abstract_v<IMemoryStore>,
+                    "IMemoryStore should stay abstract until the SQLite-backed implementation lands");
+  static_assert(std::is_abstract_v<IStoreTransaction>,
+                    "IStoreTransaction should stay abstract until a concrete transaction implementation lands");
+  static_assert(std::is_same_v<decltype(&IMemoryStore::open), OpenSignature>,
+                    "IMemoryStore::open should surface the optional ResultCode outcome pattern");
+  static_assert(std::is_same_v<decltype(&ITransactionalStore::begin_immediate), BeginTransactionSignature>,
+                    "ITransactionalStore::begin_immediate should return a RAII transaction handle");
+  static_assert(std::is_same_v<decltype(&ISessionStore::load_session_bundle), LoadBundleSignature>,
+                    "ISessionStore::load_session_bundle should consume the module-local session load request");
+  static_assert(std::is_same_v<decltype(&IFactStore::query_facts), QueryFactsSignature>,
+                    "IFactStore::query_facts should consume the module-local fact query surface");
+  static_assert(std::is_same_v<decltype(&IExperienceStore::query_experiences), QueryExperiencesSignature>,
+                    "IExperienceStore::query_experiences should consume the module-local experience query surface");
+  static_assert(std::is_same_v<decltype(&IStoreTransaction::commit), CommitSignature>,
+                    "IStoreTransaction::commit should use the optional ResultCode outcome pattern");
 
      SessionLoadRequest session_load_request;
      session_load_request.session_id = "session-001";
@@ -785,16 +832,17 @@ int main() {
     test_memory_unit_surface_anchor_uses_a_collision_free_ctest_name();
     test_memory_public_include_layout_exists();
     test_memory_module_is_no_longer_placeholder_only();
-          test_store_result_compiles_as_an_independent_public_surface();
     test_memory_context_supporting_types_compile_and_expose_expected_defaults();
+          test_store_result_compiles_as_an_independent_public_surface();
+          test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly();
     test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();
     test_memory_config_defaults_align_with_detailed_design();
           test_memory_error_mapping_aligns_with_warning_and_audit_semantics();
-         test_memory_manager_supporting_types_and_factory_surface_compile_with_stable_defaults();
-                     test_working_memory_board_interface_surface_compiles_with_snapshot_round_trip();
+          test_memory_manager_supporting_types_and_factory_surface_compile_with_stable_defaults();
+          test_working_memory_board_interface_surface_compiles_with_snapshot_round_trip();
           test_memory_manager_interfaces_expose_expected_runtime_facing_signatures();
           test_memory_summarizer_interface_uses_module_local_summary_supporting_types();
-            test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types();
+          test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

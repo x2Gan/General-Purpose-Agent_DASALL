@@ -1,5 +1,66 @@
 # DASALL 开发执行记录
 
+## 记录 #377
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 结构优化轮次
+- 任务：MEM-TODO-033 拆分 IMemoryStore 为 ISP 兼容的细粒度接口
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-033` 是 034 的直接前置重构：如果 `IMemoryStore` 继续承担 16+ 方法的聚合职责，context / writeback / maintenance consumer 会长期被迫依赖超出自身职责面的接口集合。
+2. 本轮限定为“抽象面拆分 + consumer 依赖收口 + fake/test 适配”，不提前处理 034 的 checkpoint 原语抽象，也不把 035 的 sqlite-vss concrete backend 混入本轮提交。
+3. 设计上延续 031 的 supporting type 拆分结果，把 `IMemoryStore` 改造成 lifecycle-only aggregate shell，并把事务、session、summary、fact、experience、maintenance 六类能力显式分层到独立 public headers。
+
+### 改动
+
+1. 新增 `memory/include/ITransactionalStore.h`、`ISessionStore.h`、`ISummaryStore.h`、`IFactStore.h`、`IExperienceStore.h`、`IMaintenanceStore.h`：
+   - 将 `SessionLoadRequest/Bundle`、`FactQuery/Result`、`ExperienceQuery/Result` 和对应能力接口迁入窄接口头；
+   - 让 `IMemoryStore` 不再直接声明全部 supporting queries / methods。
+2. 更新 `memory/include/IMemoryStore.h`：
+   - 改为聚合 `ITransactionalStore`、`ISessionStore`、`ISummaryStore`、`IFactStore`、`IExperienceStore`、`IMaintenanceStore` 的 lifecycle shell；
+   - 保留 `open/close` 作为 manager/store 组合根仍需消费的总入口。
+3. 更新 `memory/src/context/CandidateCollector.*`：
+   - 依赖从 `IMemoryStore&` 收口为 `ISessionStore&`、`ISummaryStore&`、`IFactStore&`、`IExperienceStore&`；
+   - 只保留 session bundle、summary、fact、experience 四类查询依赖。
+4. 更新 `memory/src/writeback/CompressionCoordinator.*`、`memory/src/conflict/MemoryConflictResolver.*`、`memory/src/maintenance/MemoryMaintenanceWorker.*`：
+   - 分别收口为 `ISummaryStore&`、`IFactStore&`、`IMaintenanceStore&`；
+   - 为 034 后续移除 maintenance concrete cast 准备独立依赖面。
+5. 更新 `memory/src/writeback/WritebackCoordinator.*` 与 `memory/src/MemoryManagerFactory.cpp`：
+   - 将写回链路拆成事务、session、summary、fact、experience 五类注入；
+   - 保持既有 core transaction / derived writes 语义不变，仅调整依赖面。
+6. 更新 `memory/CMakeLists.txt` 与相关单测：
+   - 将 `store` 纳入 public include 子目录校验；
+   - 扩展 `MemoryInterfaceCompileTest` 校验 aggregate 对窄接口的继承关系；
+   - 适配 `CandidateCollector`、`ContextOrchestrator`、`WritebackCoordinator` 相关单测构造签名。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认新增窄接口头、consumer 更新点和 compile-surface test 无编辑器级错误。
+2. 定向构建：
+   - `Build_CMakeTools` 构建 `dasall_memory` 与 memory 全量 unit / integration / contract 相关 targets。
+   - 首轮构建暴露 `MemoryInterfaceCompileTest` 仍按旧口径断言 `IMemoryStore::begin_immediate/query_*`；修正为窄接口签名断言后重建通过。
+   - 二轮构建暴露 `ContextOrchestrator` 两个单测仍在使用旧 `CandidateCollector` 构造；补齐窄接口注入后再次重建通过。
+3. 定向验收：
+   - `RunCtest_CMakeTools` 验证 `MemoryInterfaceCompileTest`、`VectorMemoryAdapterTest`、全部 memory unit tests、7 条 memory integration tests，以及 `TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest`。
+   - 结果：34/34 目标测试全部通过；`DartConfiguration.tcl` 仍为 CMake Tools stderr 噪声，但返回码为 0。
+
+### 结果
+
+1. `MEM-TODO-033` 已完成，memory public store surface 从“单一超宽接口”收敛为“六个窄接口 + 一个 aggregate lifecycle shell”。
+2. `CandidateCollector`、`CompressionCoordinator`、`MemoryConflictResolver`、`WritebackCoordinator`、`MemoryMaintenanceWorker` 已切换到按职责面依赖各自所需接口，不再直接持有完整 `IMemoryStore`。
+3. `FakeMemoryStore` 无需拆成多个 fake 类型，仍可通过聚合 `IMemoryStore` 兼容既有测试；因此 033 没有引入额外测试基座回退或 mock 重写成本。
+
+### 下一步
+
+1. 进入 `MEM-TODO-034`，在 `IMaintenanceStore` 上补 checkpoint / retention 原语，彻底移除 `MemoryMaintenanceWorker` 对 `SqliteMemoryStore.h` 与 `dynamic_cast` 的 concrete 依赖。
+
+### 风险
+
+1. 033 只完成了 consumer 依赖面的拆分，尚未让 maintenance 路径脱离 concrete sqlite API；034 仍需要把 checkpoint / retention 原语正式上提到抽象层，避免只停留在“类型签名已变窄”的中间状态。
+
 ## 记录 #376
 
 - 日期：2026-04-20

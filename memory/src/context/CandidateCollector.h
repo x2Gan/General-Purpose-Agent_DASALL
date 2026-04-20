@@ -4,9 +4,12 @@
 #include <string>
 #include <vector>
 
-#include "IMemoryStore.h"
+#include "IExperienceStore.h"
+#include "IFactStore.h"
+#include "ISessionStore.h"
 #include "config/MemoryConfig.h"
 #include "memory/SummaryMemory.h"
+#include "ISummaryStore.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
 
@@ -36,7 +39,10 @@ struct CandidateSet {
 class CandidateCollector {
  public:
   CandidateCollector(IWorkingMemoryBoard& working_memory_board,
-                     IMemoryStore& store,
+                     ISessionStore& session_store,
+                     ISummaryStore& summary_store,
+                     IFactStore& fact_store,
+                     IExperienceStore& experience_store,
                      const MemoryConfig& config,
                      VectorMemoryIndexAdapter* vector_index = nullptr);
 
@@ -56,7 +62,10 @@ class CandidateCollector {
   [[nodiscard]] int estimate_tokens(const CandidateSet& set) const;
 
   IWorkingMemoryBoard& working_memory_board_;
-  IMemoryStore& store_;
+  ISessionStore& session_store_;
+  ISummaryStore& summary_store_;
+  IFactStore& fact_store_;
+  IExperienceStore& experience_store_;
   ContextConfig context_config_{};
   VectorConfig vector_config_{};
   VectorMemoryIndexAdapter* vector_index_ = nullptr;

@@ -170,7 +170,7 @@ void test_context_orchestrator_maps_context_packet_slots_and_triggers_compressio
   config.context.compression_trigger_ratio = 0.5;
 
   auto collector = std::make_unique<dasall::memory::CandidateCollector>(
-      *working_board, store, config, &vector_index);
+      *working_board, store, store, store, store, config, &vector_index);
   auto allocator = std::make_unique<dasall::memory::BudgetAllocator>(config);
   auto compressor = std::make_unique<dasall::memory::CompressionCoordinator>(store);
   dasall::memory::ContextOrchestrator orchestrator(

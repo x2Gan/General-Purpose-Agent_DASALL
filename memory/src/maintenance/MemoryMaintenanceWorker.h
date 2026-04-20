@@ -5,7 +5,7 @@
 #include <mutex>
 #include <thread>
 
-#include "IMemoryStore.h"
+#include "IMaintenanceStore.h"
 #include "MaintenanceReport.h"
 #include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
@@ -15,7 +15,7 @@ namespace dasall::memory {
 
 class MemoryMaintenanceWorker {
  public:
-  MemoryMaintenanceWorker(IMemoryStore& store,
+  MemoryMaintenanceWorker(IMaintenanceStore& store,
                           MemoryConfig config,
                           VectorMemoryIndexAdapter* vector_adapter = nullptr,
                           std::shared_ptr<std::mutex> writer_mutex = nullptr);
@@ -29,7 +29,7 @@ class MemoryMaintenanceWorker {
  private:
   void background_loop();
 
-  IMemoryStore& store_;
+  IMaintenanceStore& store_;
   MemoryConfig config_{};
   VectorMemoryIndexAdapter* vector_adapter_ = nullptr;
   std::shared_ptr<std::mutex> writer_mutex_;

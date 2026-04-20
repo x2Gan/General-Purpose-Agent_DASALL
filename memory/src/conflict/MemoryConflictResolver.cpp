@@ -210,7 +210,7 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 9>
 
 }  // namespace
 
-MemoryConflictResolver::MemoryConflictResolver(IMemoryStore& store) : store_(store) {}
+MemoryConflictResolver::MemoryConflictResolver(IFactStore& store) : store_(store) {}
 
 ConflictResolutionPlan MemoryConflictResolver::resolve(
     const FactCandidate& candidate,

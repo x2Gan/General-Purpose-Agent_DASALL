@@ -77,7 +77,8 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
   if (dependencies.store && dependencies.working_memory_board) {
     dependencies.store_writer_mutex = std::make_shared<std::mutex>();
     auto collector = std::make_unique<CandidateCollector>(
-        *dependencies.working_memory_board, *dependencies.store, config);
+        *dependencies.working_memory_board, *dependencies.store, *dependencies.store,
+        *dependencies.store, *dependencies.store, config);
     auto allocator = std::make_unique<BudgetAllocator>(config);
     auto compressor = std::make_unique<CompressionCoordinator>(*dependencies.store);
     auto conflict_resolver =
@@ -85,7 +86,8 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(
         std::move(collector), std::move(allocator), std::move(compressor), config);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
-      *dependencies.store, std::move(conflict_resolver),
+      *dependencies.store, *dependencies.store, *dependencies.store,
+      *dependencies.store, *dependencies.store, std::move(conflict_resolver),
       *dependencies.working_memory_board, nullptr,
       dependencies.store_writer_mutex);
     dependencies.maintenance_worker = std::make_unique<MemoryMaintenanceWorker>(

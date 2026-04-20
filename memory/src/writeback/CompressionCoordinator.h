@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "IMemoryStore.h"
+#include "ISummaryStore.h"
 #include "ISummarizer.h"
 #include "memory/SummaryMemory.h"
 #include "memory/Turn.h"
@@ -30,7 +30,7 @@ struct CompressionOutput {
 
 class CompressionCoordinator {
  public:
-  explicit CompressionCoordinator(IMemoryStore& store,
+  explicit CompressionCoordinator(ISummaryStore& store,
                                   ISummarizer* summarizer = nullptr);
 
   [[nodiscard]] CompressionOutput compress(const CompressionInput& input);
@@ -54,7 +54,7 @@ class CompressionCoordinator {
       const CompressionInput& input,
       const SummaryProjection& projection) const;
 
-  IMemoryStore& store_;
+  ISummaryStore& store_;
   ISummarizer* summarizer_ = nullptr;
 };
 

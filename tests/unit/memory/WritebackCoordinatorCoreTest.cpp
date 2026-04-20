@@ -274,7 +274,8 @@ void test_writeback_coordinator_persists_core_transaction_and_updates_working_bo
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(*store);
   dasall::memory::WritebackCoordinator coordinator(
-      *store, std::move(conflict_resolver), *working_board, &vector_index);
+      *store, *store, *store, *store, *store,
+      std::move(conflict_resolver), *working_board, &vector_index);
 
   const auto request = make_request("session-021-core", "turn-021-core",
                                     "记录最近一次执行结果", "已写入核心事务");
@@ -323,7 +324,8 @@ void test_writeback_coordinator_rolls_back_when_commit_fails() {
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(store);
   dasall::memory::WritebackCoordinator coordinator(
-      store, std::move(conflict_resolver), *working_board);
+      store, store, store, store, store,
+      std::move(conflict_resolver), *working_board);
 
   const auto request = make_request("session-021-rollback", "turn-021-rollback",
                                     "验证 commit 失败回滚", "核心事务必须失败回滚");

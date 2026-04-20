@@ -55,7 +55,7 @@ void test_context_orchestrator_degrades_when_user_turn_must_fall_back_to_goal_su
 
   dasall::memory::MemoryConfig config;
   auto collector = std::make_unique<dasall::memory::CandidateCollector>(
-      *working_board, store, config);
+      *working_board, store, store, store, store, config);
   auto allocator = std::make_unique<dasall::memory::BudgetAllocator>(config);
   auto compressor = std::make_unique<dasall::memory::CompressionCoordinator>(store);
   dasall::memory::ContextOrchestrator orchestrator(
@@ -110,7 +110,7 @@ void test_context_orchestrator_warns_when_compression_is_needed_but_unavailable(
   config.context.compression_trigger_turns = 1;
   config.context.compression_trigger_ratio = 0.2;
   auto collector = std::make_unique<dasall::memory::CandidateCollector>(
-      *working_board, store, config);
+      *working_board, store, store, store, store, config);
   auto allocator = std::make_unique<dasall::memory::BudgetAllocator>(config);
   dasall::memory::ContextOrchestrator orchestrator(
       std::move(collector), std::move(allocator), nullptr, config);

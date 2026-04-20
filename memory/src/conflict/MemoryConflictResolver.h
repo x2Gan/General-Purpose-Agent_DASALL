@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "IMemoryStore.h"
+#include "IFactStore.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/WritebackResult.h"
 
@@ -20,7 +20,7 @@ struct ConflictResolutionPlan {
 
 class MemoryConflictResolver {
  public:
-  explicit MemoryConflictResolver(IMemoryStore& store);
+  explicit MemoryConflictResolver(IFactStore& store);
 
   [[nodiscard]] ConflictResolutionPlan resolve(
       const FactCandidate& candidate,
@@ -40,7 +40,7 @@ class MemoryConflictResolver {
       const contracts::MemoryFact& existing,
       const FactCandidate& candidate) const;
 
-  IMemoryStore& store_;
+  IFactStore& store_;
 };
 
 }  // namespace dasall::memory

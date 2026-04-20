@@ -52,6 +52,7 @@ set(DASALL_MEMORY_PUBLIC_INCLUDE_SUBDIRECTORIES
   config
   context
   error
+  store
   vector
   working
   writeback

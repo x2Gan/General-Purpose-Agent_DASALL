@@ -3,7 +3,11 @@
 #include <memory>
 #include <mutex>
 
-#include "IMemoryStore.h"
+#include "IExperienceStore.h"
+#include "IFactStore.h"
+#include "ISessionStore.h"
+#include "ISummaryStore.h"
+#include "ITransactionalStore.h"
 #include "conflict/MemoryConflictResolver.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
@@ -14,7 +18,11 @@ namespace dasall::memory {
 
 class WritebackCoordinator {
  public:
-  WritebackCoordinator(IMemoryStore& store,
+  WritebackCoordinator(ITransactionalStore& transaction_store,
+                       ISessionStore& session_store,
+                       ISummaryStore& summary_store,
+                       IFactStore& fact_store,
+                       IExperienceStore& experience_store,
                        std::unique_ptr<MemoryConflictResolver> conflict_resolver,
                        IWorkingMemoryBoard& working_memory_board,
                        VectorMemoryIndexAdapter* vector_index = nullptr,
@@ -35,7 +43,11 @@ class WritebackCoordinator {
   void update_working_board(const MemoryWritebackRequest& request,
                             const WritebackResult& result);
 
-  IMemoryStore& store_;
+  ITransactionalStore& transaction_store_;
+  ISessionStore& session_store_;
+  ISummaryStore& summary_store_;
+  IFactStore& fact_store_;
+  IExperienceStore& experience_store_;
   std::unique_ptr<MemoryConflictResolver> conflict_resolver_;
   IWorkingMemoryBoard& working_memory_board_;
   VectorMemoryIndexAdapter* vector_index_ = nullptr;

@@ -41,11 +41,17 @@ void add_optional_string_vector_tokens(
 }  // namespace
 
 CandidateCollector::CandidateCollector(IWorkingMemoryBoard& working_memory_board,
-                                       IMemoryStore& store,
+                                       ISessionStore& session_store,
+                                       ISummaryStore& summary_store,
+                                       IFactStore& fact_store,
+                                       IExperienceStore& experience_store,
                                        const MemoryConfig& config,
                                        VectorMemoryIndexAdapter* vector_index)
     : working_memory_board_(working_memory_board),
-      store_(store),
+      session_store_(session_store),
+      summary_store_(summary_store),
+      fact_store_(fact_store),
+      experience_store_(experience_store),
       context_config_(config.context),
       vector_config_(config.vector),
       vector_index_(vector_index) {}
@@ -69,7 +75,7 @@ CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request)
   }
 
   try {
-    set.latest_summary = store_.load_latest_summary(request.session_id);
+    set.latest_summary = summary_store_.load_latest_summary(request.session_id);
   } catch (...) {
     append_warning(set.warnings, "summary_query_unavailable");
   }
@@ -104,7 +110,7 @@ CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request)
 
 SessionLoadBundle CandidateCollector::load_session_context(
     const std::string& session_id) const {
-  return store_.load_session_bundle(SessionLoadRequest{
+  return session_store_.load_session_bundle(SessionLoadRequest{
       .session_id = session_id,
       .recent_turn_limit = std::max(1, context_config_.recent_turn_limit),
   });
@@ -126,7 +132,7 @@ std::vector<contracts::MemoryFact> CandidateCollector::query_relevant_facts(
   query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
   query.exclude_superseded = true;
   query.limit = 50;
-  return store_.query_facts(query).facts;
+  return fact_store_.query_facts(query).facts;
 }
 
 std::vector<contracts::ExperienceMemory>
@@ -149,7 +155,7 @@ CandidateCollector::query_relevant_experiences(
 
   query.exclude_expired = true;
   query.limit = 20;
-  return store_.query_experiences(query).experiences;
+  return experience_store_.query_experiences(query).experiences;
 }
 
 std::vector<VectorHit> CandidateCollector::search_vector(

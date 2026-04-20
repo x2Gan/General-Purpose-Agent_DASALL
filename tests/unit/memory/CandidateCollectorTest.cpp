@@ -309,7 +309,8 @@ void test_candidate_collector_collects_multi_source_candidates_and_estimates_tok
   }});
 
   const auto config = make_memory_config();
-  dasall::memory::CandidateCollector collector(*board, store, config, &vector_index);
+  dasall::memory::CandidateCollector collector(
+      *board, store, store, store, store, config, &vector_index);
 
   const auto set = collector.collect(dasall::memory::CandidateCollectRequest{
       .session_id = "session-016",
@@ -399,7 +400,8 @@ void test_candidate_collector_degrades_when_experience_query_fails_and_vector_is
   config.vector = vector_config;
 
   dasall::memory::UnavailableVectorMemoryIndexAdapter unavailable_vector(config.vector);
-  dasall::memory::CandidateCollector collector(*board, store, config, &unavailable_vector);
+  dasall::memory::CandidateCollector collector(
+      *board, store, store, store, store, config, &unavailable_vector);
 
   const auto set = collector.collect(dasall::memory::CandidateCollectRequest{
       .session_id = "session-016",
