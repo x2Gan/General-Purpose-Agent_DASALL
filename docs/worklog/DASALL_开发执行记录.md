@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #372
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 G
+- 任务：MEM-TODO-028 验证 failure injection 与 checkpoint busy 路径
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-028` 是 027 之后的故障语义 gate；如果 memory 仍只证明“成功路径可跑”，而没有把 schema mismatch、disk full、summary quarantine、vector off 与 checkpoint busy-reader gap 收口为明确证据，则 021 / 024 的实现还缺少 failure visibility 的正式验收链。
+2. 本轮严格限定在 028 的最小闭环：新增 `MemoryFailureInjectionTest`、扩展 `MemoryCheckpointBusyTest` 的 busy -> recovery 路径，并在必要处修正 sqlite store 的错误分类；不提前扩张到 029 的 profile compatibility，也不把 030 的文档总收口混进实现轮。
+3. 设计上优先修 root cause，而不是只补一个会通过的测试：`SqliteMemoryStore::map_sqlite_result()` 之前把多数非 busy sqlite 失败折叠成 `ValidationFieldMissing`，这会让 disk full / cantopen / readonly 等 failure 在 memory 语义上失真，因此本轮先修分类，再补故障注入矩阵。
+
+### 改动
+
+1. 更新 `memory/src/store/sqlite/SqliteMemoryStore.cpp`：
+   - 引入 `MemoryError` 映射；
+   - 将 `SQLITE_BUSY` / `SQLITE_LOCKED` 映射为 `StorageBusy`；
+   - 将 `SQLITE_CANTOPEN` / `SQLITE_IOERR` / `SQLITE_FULL` / `SQLITE_READONLY` 映射为 `StorageUnavailable`；
+   - 将 `SQLITE_MISUSE` 映射为 `ConfigInvalid`；
+   - 其余异常默认映射为 `SchemaMismatch`，避免 storage failure 被错误折叠为 field validation。
+2. 新增 `tests/integration/memory/MemoryFailureInjectionTest.cpp`：
+   - 覆盖 migration checksum 篡改后的 schema mismatch init failure；
+   - 通过 `PRAGMA max_page_count` 注入 sqlite full，验证 storage unavailable result code；
+   - 通过置空 `summary_candidate.summary_text` 触发 summary quarantine / partial writeback warning；
+   - 覆盖 vector disabled 时主链保持健康且不发出 `vector_sidecar_failed`。
+3. 扩展 `tests/integration/memory/MemoryCheckpointBusyTest.cpp`：
+   - 在 reader transaction 持有时验证 PASSIVE checkpoint busy 证据；
+   - 在 reader 提交后再次执行 checkpoint，验证 busy warning 清除与 WAL page drain recovery。
+4. 更新 `tests/integration/memory/CMakeLists.txt`：
+   - 注册 `dasall_memory_failure_injection_integration_test` / `MemoryFailureInjectionTest`；
+   - 补齐 sqlite 链接、`memory/src` include path 与 `DASALL_SQL_MEMORY_DIR` 编译定义。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `SqliteMemoryStore.cpp`、`MemoryFailureInjectionTest.cpp`、`MemoryCheckpointBusyTest.cpp`、`tests/integration/memory/CMakeLists.txt` 无编辑器级错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_failure_injection_integration_test`、`dasall_memory_checkpoint_busy_integration_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryFailureInjectionTest`、`MemoryCheckpointBusyTest`；
+   - 两条测试全部通过，`100% tests passed, 0 tests failed`。
+3. 回归验证：
+   - 由于本轮修正了 sqlite store 的错误分类，又补跑 `SqliteMemoryStoreTest` 与 `MemoryWritebackIntegrationTest`；
+   - 两条回归测试同样全部通过；
+   - `DartConfiguration.tcl` 仍是 CMake Tools stderr 噪声，但所有返回码均为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-028` 已完成，memory 现在不仅能跑通 success path，也具备明确的 failure visibility：schema mismatch、storage unavailable、summary quarantine、vector off 与 busy checkpoint recovery 都有稳定测试证据。
+2. sqlite store 的错误分类已与 `MemoryError` 语义对齐，disk full / cantopen / readonly / ioerr 不再被误报为 `ValidationFieldMissing`。
+3. `MemoryCheckpointBusyTest` 不再只证明“checkpoint 遇到 busy”，而是覆盖“busy 后 reader gap 关闭，checkpoint 恢复成功”的完整路径，因此 024 的 maintenance checkpoint 语义在 028 被正式收口。
+
+### 下一步
+
+1. 进入 `MEM-TODO-029`，新增 `MemoryProfileCompatibilityTest` 并验证 `desktop_full` / `edge_balanced` / `edge_minimal` 的 vector / maintenance / discoverability 差异。
+2. 完成 `MEM-TODO-030`，把 026 / 027 / 028 / 029 的 gate 证据统一回写到 memory 专项 TODO 与 worklog 总结。
+
+### 风险
+
+1. 当前 `StorageUnavailable` 与 `StorageBusy` 在 writeback 结果面上仍共享 `RuntimeRetryExhausted` 结果码，虽然 028 已补足 store-level failure classification 与 integration evidence，但若后续需要更细粒度 runtime 告警，还要继续扩展 writeback 结果承载面。
+2. 028 已关闭 failure injection / busy recovery gate，但 profile compatibility 与 discoverability 仍待 029；因此当前还不能提前宣称 memory 全部专项 gates 已完成。
+
 ## 记录 #371
 
 - 日期：2026-04-20

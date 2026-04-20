@@ -134,6 +134,14 @@ void test_memory_maintenance_checkpoint_reports_busy_reader_gap() {
   sqlite3_exec(reader_connection, "COMMIT;", nullptr, nullptr, nullptr);
   sqlite3_close(reader_connection);
 
+  const auto recovery_report = worker.execute(request);
+  assert_true(recovery_report.checkpoint_executed,
+              "busy checkpoint test should allow a second passive checkpoint after the reader gap closes");
+  assert_true(!contains_warning(recovery_report.warnings, "checkpoint_busy"),
+              "busy checkpoint test should clear the busy warning once the reader transaction has committed");
+  assert_true(recovery_report.checkpoint_wal_pages_remaining == 0,
+              "busy checkpoint test should drain the remaining WAL pages after the reader gap closes");
+
   store->close();
   cleanup_database_artifacts(database_path);
 }

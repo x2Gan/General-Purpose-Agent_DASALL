@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "error/MemoryError.h"
 #include "store/sqlite/RowMappers.h"
 
 namespace dasall::memory::store::sqlite {
@@ -22,9 +23,16 @@ namespace {
       return std::nullopt;
     case SQLITE_BUSY:
     case SQLITE_LOCKED:
-      return contracts::ResultCode::RuntimeRetryExhausted;
+      return map_memory_error(MemoryError::StorageBusy).result_code;
+    case SQLITE_CANTOPEN:
+    case SQLITE_IOERR:
+    case SQLITE_FULL:
+    case SQLITE_READONLY:
+      return map_memory_error(MemoryError::StorageUnavailable).result_code;
+    case SQLITE_MISUSE:
+      return map_memory_error(MemoryError::ConfigInvalid).result_code;
     default:
-      return contracts::ResultCode::ValidationFieldMissing;
+      return map_memory_error(MemoryError::SchemaMismatch).result_code;
   }
 }
 
