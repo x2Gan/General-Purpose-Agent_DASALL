@@ -9,9 +9,12 @@
 #include <utility>
 
 #include "context/ContextPacketGuards.h"
+#include "util/TokenEstimator.h"
 
 namespace dasall::memory {
 namespace {
+
+using util::estimate_text_tokens;
 
 struct SlotProjection {
   std::string current_goal_summary;
@@ -28,26 +31,6 @@ std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
-}
-
-int estimate_text_tokens(std::string_view text) {
-  if (text.empty()) {
-    return 0;
-  }
-
-  int ascii_bytes = 0;
-  int multibyte_characters = 0;
-  for (const unsigned char byte : text) {
-    if (byte < 0x80U) {
-      ++ascii_bytes;
-      continue;
-    }
-    if ((byte & 0xC0U) != 0x80U) {
-      ++multibyte_characters;
-    }
-  }
-
-  return std::max(1, ((ascii_bytes + 3) / 4) + (multibyte_characters * 2));
 }
 
 void append_unique(std::vector<std::string>& destination,

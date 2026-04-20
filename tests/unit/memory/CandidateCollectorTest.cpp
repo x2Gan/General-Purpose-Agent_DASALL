@@ -30,7 +30,7 @@ class SpyVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryInd
 
   [[nodiscard]] std::vector<dasall::memory::VectorHit> search(
       const std::string& query_text,
-      int top_k) override {
+      int top_k) const override {
     ++search_call_count_;
     last_query_text_ = query_text;
     last_top_k_ = top_k;
@@ -64,9 +64,9 @@ class SpyVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryInd
 
  private:
   std::vector<dasall::memory::VectorHit> hits_;
-  int search_call_count_ = 0;
-  int last_top_k_ = 0;
-  std::string last_query_text_;
+  mutable int search_call_count_ = 0;
+  mutable int last_top_k_ = 0;
+  mutable std::string last_query_text_;
 };
 
 class DelegatingMemoryStore final : public dasall::memory::IMemoryStore {
@@ -81,7 +81,7 @@ class DelegatingMemoryStore final : public dasall::memory::IMemoryStore {
     return delegate_.open(config);
   }
 
-  void close() override {
+  void close() noexcept override {
     delegate_.close();
   }
 
@@ -91,7 +91,7 @@ class DelegatingMemoryStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::SessionLoadBundle load_session_bundle(
-      const dasall::memory::SessionLoadRequest& request) override {
+      const dasall::memory::SessionLoadRequest& request) const override {
     return delegate_.load_session_bundle(request);
   }
 
@@ -117,12 +117,12 @@ class DelegatingMemoryStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] std::optional<dasall::contracts::SummaryMemory> load_latest_summary(
-      const std::string& session_id) override {
+      const std::string& session_id) const override {
     return delegate_.load_latest_summary(session_id);
   }
 
   [[nodiscard]] dasall::memory::FactQueryResult query_facts(
-      const dasall::memory::FactQuery& query) override {
+      const dasall::memory::FactQuery& query) const override {
     return delegate_.query_facts(query);
   }
 
@@ -138,7 +138,7 @@ class DelegatingMemoryStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::ExperienceQueryResult query_experiences(
-      const dasall::memory::ExperienceQuery& query) override {
+      const dasall::memory::ExperienceQuery& query) const override {
     if (fail_experience_query) {
       throw std::runtime_error("experience query failure");
     }
@@ -151,7 +151,7 @@ class DelegatingMemoryStore final : public dasall::memory::IMemoryStore {
     return delegate_.insert_experience(experience);
   }
 
-  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) override {
+  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) const override {
     return delegate_.count_turns(session_id);
   }
 

@@ -24,7 +24,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     return std::nullopt;
   }
 
-  void close() override {
+  void close() noexcept override {
     is_open_ = false;
     active_transaction_ = false;
   }
@@ -35,7 +35,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   }
 
   [[nodiscard]] memory::SessionLoadBundle load_session_bundle(
-      const memory::SessionLoadRequest& request) override {
+      const memory::SessionLoadRequest& request) const override {
     memory::SessionLoadBundle bundle;
 
     const auto session_it = sessions_.find(request.session_id);
@@ -129,7 +129,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   }
 
   [[nodiscard]] std::optional<contracts::SummaryMemory> load_latest_summary(
-      const std::string& session_id) override {
+      const std::string& session_id) const override {
     const auto summary_it = summaries_by_session_.find(session_id);
     if (summary_it == summaries_by_session_.end()) {
       return std::nullopt;
@@ -139,7 +139,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   }
 
   [[nodiscard]] memory::FactQueryResult query_facts(
-      const memory::FactQuery& query) override {
+      const memory::FactQuery& query) const override {
     memory::FactQueryResult result;
 
     for (const auto& [fact_id, fact] : facts_by_id_) {
@@ -205,7 +205,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   }
 
   [[nodiscard]] memory::ExperienceQueryResult query_experiences(
-      const memory::ExperienceQuery& query) override {
+      const memory::ExperienceQuery& query) const override {
     memory::ExperienceQueryResult result;
 
     for (const auto& [experience_id, experience] : experiences_by_id_) {
@@ -256,7 +256,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     return memory::StoreResult::success(*experience_id);
   }
 
-  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) override {
+  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) const override {
     const auto turns_it = turns_by_session_.find(session_id);
     if (turns_it == turns_by_session_.end()) {
       return 0;
@@ -298,7 +298,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
       return std::nullopt;
     }
 
-    void rollback() override {
+    void rollback() noexcept override {
       active_ = false;
       owner_.active_transaction_ = false;
     }

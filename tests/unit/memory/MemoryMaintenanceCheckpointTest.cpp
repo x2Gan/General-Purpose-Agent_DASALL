@@ -32,7 +32,7 @@ class SpyVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryInd
 
   [[nodiscard]] std::vector<dasall::memory::VectorHit> search(
       const std::string& query_text,
-      int top_k) override {
+      int top_k) const override {
     (void)query_text;
     (void)top_k;
     return {};

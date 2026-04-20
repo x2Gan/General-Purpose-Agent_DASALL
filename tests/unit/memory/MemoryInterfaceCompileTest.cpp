@@ -592,11 +592,11 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
                const MemoryConfig&);
      using BeginTransactionSignature = std::unique_ptr<IStoreTransaction> (IMemoryStore::*)();
      using LoadBundleSignature = dasall::memory::SessionLoadBundle (IMemoryStore::*)(
-               const SessionLoadRequest&);
+               const SessionLoadRequest&) const;
      using QueryFactsSignature = dasall::memory::FactQueryResult (IMemoryStore::*)(
-               const FactQuery&);
+               const FactQuery&) const;
      using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IMemoryStore::*)(
-               const ExperienceQuery&);
+               const ExperienceQuery&) const;
      using CommitSignature = std::optional<dasall::contracts::ResultCode> (IStoreTransaction::*)();
 
      static_assert(std::has_virtual_destructor_v<IMemoryStore>,

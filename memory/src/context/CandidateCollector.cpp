@@ -3,36 +3,18 @@
 #include <algorithm>
 #include <string_view>
 
+#include "util/TokenEstimator.h"
+
 namespace dasall::memory {
 namespace {
+
+using util::estimate_text_tokens;
 
 void append_warning(std::vector<std::string>& warnings,
                     const std::string& warning) {
   if (std::find(warnings.begin(), warnings.end(), warning) == warnings.end()) {
     warnings.push_back(warning);
   }
-}
-
-int estimate_text_tokens(std::string_view text) {
-  if (text.empty()) {
-    return 0;
-  }
-
-  int ascii_bytes = 0;
-  int multibyte_characters = 0;
-
-  for (const unsigned char byte : text) {
-    if (byte < 0x80U) {
-      ++ascii_bytes;
-      continue;
-    }
-
-    if ((byte & 0xC0U) != 0x80U) {
-      ++multibyte_characters;
-    }
-  }
-
-  return std::max(1, ((ascii_bytes + 3) / 4) + (multibyte_characters * 2));
 }
 
 void add_optional_string_tokens(const std::optional<std::string>& value,

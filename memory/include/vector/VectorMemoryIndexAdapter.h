@@ -38,7 +38,7 @@ class VectorMemoryIndexAdapter {
   [[nodiscard]] virtual bool is_available() const = 0;
   [[nodiscard]] virtual StoreResult upsert(const VectorDocument& doc) = 0;
   [[nodiscard]] virtual std::vector<VectorHit> search(
-      const std::string& query_text, int top_k) = 0;
+      const std::string& query_text, int top_k) const = 0;
   [[nodiscard]] virtual VectorIndexHealth health() const = 0;
   [[nodiscard]] virtual StoreResult rebuild_index() = 0;
 };
@@ -51,7 +51,7 @@ class UnavailableVectorMemoryIndexAdapter final : public VectorMemoryIndexAdapte
   [[nodiscard]] bool is_available() const override;
   [[nodiscard]] StoreResult upsert(const VectorDocument& doc) override;
   [[nodiscard]] std::vector<VectorHit> search(
-      const std::string& query_text, int top_k) override;
+      const std::string& query_text, int top_k) const override;
   [[nodiscard]] VectorIndexHealth health() const override;
   [[nodiscard]] StoreResult rebuild_index() override;
 

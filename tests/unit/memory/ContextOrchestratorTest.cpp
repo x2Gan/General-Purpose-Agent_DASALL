@@ -33,7 +33,7 @@ class StubVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryIn
   }
 
   [[nodiscard]] std::vector<dasall::memory::VectorHit> search(
-      const std::string& query_text, int top_k) override {
+      const std::string& query_text, int top_k) const override {
     last_query = query_text;
     last_top_k = top_k;
     return hits;
@@ -52,8 +52,8 @@ class StubVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryIn
     return dasall::memory::StoreResult::success("rebuild");
   }
 
-  std::string last_query;
-  int last_top_k = 0;
+  mutable std::string last_query;
+  mutable int last_top_k = 0;
 };
 
 bool contains_value(const std::vector<std::string>& values,

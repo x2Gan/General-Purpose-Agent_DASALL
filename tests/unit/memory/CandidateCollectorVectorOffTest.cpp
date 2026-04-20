@@ -26,7 +26,7 @@ class TrackingVectorMemoryIndexAdapter final : public dasall::memory::VectorMemo
 
   [[nodiscard]] std::vector<dasall::memory::VectorHit> search(
       const std::string& query_text,
-      int top_k) override {
+      int top_k) const override {
     ++search_call_count_;
     last_query_text_ = query_text;
     last_top_k_ = top_k;
@@ -64,9 +64,9 @@ class TrackingVectorMemoryIndexAdapter final : public dasall::memory::VectorMemo
   }
 
  private:
-  int search_call_count_ = 0;
-  int last_top_k_ = 0;
-  std::string last_query_text_;
+  mutable int search_call_count_ = 0;
+  mutable int last_top_k_ = 0;
+  mutable std::string last_query_text_;
 };
 
 void test_candidate_collector_skips_vector_search_when_vector_is_disabled() {

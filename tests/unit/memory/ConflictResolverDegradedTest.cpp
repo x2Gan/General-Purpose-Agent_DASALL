@@ -19,7 +19,7 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
     return delegate_.open(config);
   }
 
-  void close() override {
+  void close() noexcept override {
     delegate_.close();
   }
 
@@ -29,7 +29,7 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::SessionLoadBundle load_session_bundle(
-      const dasall::memory::SessionLoadRequest& request) override {
+      const dasall::memory::SessionLoadRequest& request) const override {
     return delegate_.load_session_bundle(request);
   }
 
@@ -55,12 +55,12 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] std::optional<dasall::contracts::SummaryMemory> load_latest_summary(
-      const std::string& session_id) override {
+      const std::string& session_id) const override {
     return delegate_.load_latest_summary(session_id);
   }
 
   [[nodiscard]] dasall::memory::FactQueryResult query_facts(
-      const dasall::memory::FactQuery& query) override {
+      const dasall::memory::FactQuery& query) const override {
     (void)query;
     throw std::runtime_error("fact query unavailable");
   }
@@ -77,7 +77,7 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::ExperienceQueryResult query_experiences(
-      const dasall::memory::ExperienceQuery& query) override {
+      const dasall::memory::ExperienceQuery& query) const override {
     return delegate_.query_experiences(query);
   }
 
@@ -86,7 +86,7 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
     return delegate_.insert_experience(experience);
   }
 
-  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) override {
+  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) const override {
     return delegate_.count_turns(session_id);
   }
 

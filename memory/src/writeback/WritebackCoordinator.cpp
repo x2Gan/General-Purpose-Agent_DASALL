@@ -373,6 +373,12 @@ void WritebackCoordinator::persist_derived_data(
     append_warning_once(result.warnings, "conflict_resolver_unwired");
   }
 
+  if (request.fact_candidates.empty() && request.experience_candidates.empty()) {
+    return;
+  }
+
+  auto derived_txn = store_.begin_immediate();
+
   for (const auto& candidate : request.fact_candidates) {
     const auto plan = conflict_resolver_
                           ? conflict_resolver_->resolve(candidate, request.session_id)
@@ -433,6 +439,14 @@ void WritebackCoordinator::persist_derived_data(
 
     result.experience_ids.push_back(insert_result.persisted_id.value_or(
         candidate.experience.experience_id.value_or("")));
+  }
+
+  if (derived_txn) {
+    const auto commit_result = derived_txn->commit();
+    if (commit_result.has_value()) {
+      result.partial = true;
+      append_warning_once(result.warnings, "derived_data_commit_failed");
+    }
   }
 }
 

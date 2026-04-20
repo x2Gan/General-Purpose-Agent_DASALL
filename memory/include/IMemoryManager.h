@@ -20,7 +20,7 @@ class IMemoryManager {
   virtual ~IMemoryManager() = default;
 
   virtual contracts::ResultCode init(const MemoryConfig& config) = 0;
-  virtual void shutdown() = 0;
+  virtual void shutdown() noexcept = 0;
 
   [[nodiscard]] virtual ContextAssemblyResult prepare_context(
       const MemoryContextRequest& request) = 0;

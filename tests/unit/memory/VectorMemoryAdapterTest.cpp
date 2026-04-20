@@ -12,7 +12,7 @@ namespace {
 
 class CountingEmbeddingAdapter final : public dasall::memory::IEmbeddingAdapter {
  public:
-  [[nodiscard]] std::vector<float> embed(const std::string& text) override {
+  [[nodiscard]] std::vector<float> embed(const std::string& text) const override {
     ++embed_call_count_;
     last_text_ = text;
     return {1.0F, 2.0F, 3.0F};
@@ -31,8 +31,8 @@ class CountingEmbeddingAdapter final : public dasall::memory::IEmbeddingAdapter 
   }
 
  private:
-  int embed_call_count_ = 0;
-  std::string last_text_;
+  mutable int embed_call_count_ = 0;
+  mutable std::string last_text_;
 };
 
 void test_unavailable_vector_memory_adapter_reports_none_backend_when_vector_is_disabled() {

@@ -19,12 +19,12 @@ class SqliteMemoryStore final : public IMemoryStore {
 
   [[nodiscard]] std::optional<contracts::ResultCode> open(
       const MemoryConfig& config) override;
-  void close() override;
+  void close() noexcept override;
 
   [[nodiscard]] std::unique_ptr<IStoreTransaction> begin_immediate() override;
 
   [[nodiscard]] SessionLoadBundle load_session_bundle(
-      const SessionLoadRequest& request) override;
+      const SessionLoadRequest& request) const override;
   [[nodiscard]] StoreResult create_session(
       const contracts::Session& session) override;
   [[nodiscard]] StoreResult append_turn(
@@ -36,9 +36,9 @@ class SqliteMemoryStore final : public IMemoryStore {
   [[nodiscard]] StoreResult upsert_summary(
       const contracts::SummaryMemory& summary) override;
   [[nodiscard]] std::optional<contracts::SummaryMemory> load_latest_summary(
-      const std::string& session_id) override;
+      const std::string& session_id) const override;
 
-  [[nodiscard]] FactQueryResult query_facts(const FactQuery& query) override;
+  [[nodiscard]] FactQueryResult query_facts(const FactQuery& query) const override;
   [[nodiscard]] StoreResult insert_fact(
       const contracts::MemoryFact& fact) override;
   [[nodiscard]] StoreResult supersede_fact(
@@ -46,12 +46,12 @@ class SqliteMemoryStore final : public IMemoryStore {
       const std::string& new_fact_id) override;
 
   [[nodiscard]] ExperienceQueryResult query_experiences(
-      const ExperienceQuery& query) override;
+      const ExperienceQuery& query) const override;
   [[nodiscard]] StoreResult insert_experience(
       const contracts::ExperienceMemory& experience) override;
 
   [[nodiscard]] std::int64_t count_turns(
-      const std::string& session_id) override;
+      const std::string& session_id) const override;
   [[nodiscard]] StoreResult quarantine_record(
       const std::string& object_type,
       const std::string& object_id,
@@ -60,11 +60,11 @@ class SqliteMemoryStore final : public IMemoryStore {
     [[nodiscard]] sqlite3* writer_connection_for_maintenance();
 
  private:
-  [[nodiscard]] sqlite3* select_reader_connection();
+  [[nodiscard]] sqlite3* select_reader_connection() const;
 
   sqlite3* writer_connection_ = nullptr;
   std::vector<sqlite3*> reader_connections_;
-  std::size_t next_reader_index_ = 0;
+  mutable std::size_t next_reader_index_ = 0;
   std::optional<MemoryConfig> config_;
   std::unique_ptr<SqliteSchemaMigrator> migrator_;
 };

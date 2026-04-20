@@ -125,7 +125,7 @@ contracts::ResultCode MemoryManager::init(const MemoryConfig& config) {
   return kMemoryManagerInitSuccess;
 }
 
-void MemoryManager::shutdown() {
+void MemoryManager::shutdown() noexcept {
   if (dependencies_.maintenance_worker) {
     dependencies_.maintenance_worker->stop();
   }

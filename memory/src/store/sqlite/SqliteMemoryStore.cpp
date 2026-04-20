@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "error/MemoryError.h"
@@ -174,7 +175,7 @@ class SqliteStoreTransaction final : public IStoreTransaction {
     return commit_result;
   }
 
-  void rollback() override {
+  void rollback() noexcept override {
     if (!active_) {
       return;
     }
@@ -205,6 +206,25 @@ std::optional<contracts::ResultCode> SqliteMemoryStore::open(
     return contracts::ResultCode::ValidationFieldMissing;
   }
 
+  static constexpr std::string_view kAllowedJournalModes[] = {
+      "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"};
+  static constexpr std::string_view kAllowedSynchronous[] = {
+      "OFF", "NORMAL", "FULL", "EXTRA"};
+
+  const auto mode_ok = std::any_of(
+      std::begin(kAllowedJournalModes), std::end(kAllowedJournalModes),
+      [&](std::string_view allowed) { return allowed == config.storage.journal_mode; });
+  if (!mode_ok) {
+    return contracts::ResultCode::ValidationFieldMissing;
+  }
+
+  const auto sync_ok = std::any_of(
+      std::begin(kAllowedSynchronous), std::end(kAllowedSynchronous),
+      [&](std::string_view allowed) { return allowed == config.storage.synchronous; });
+  if (!sync_ok) {
+    return contracts::ResultCode::ValidationFieldMissing;
+  }
+
   if (sqlite3_open(config.storage.db_path.c_str(), &writer_connection_) != SQLITE_OK) {
     close();
     return contracts::ResultCode::RuntimeRetryExhausted;
@@ -228,12 +248,25 @@ std::optional<contracts::ResultCode> SqliteMemoryStore::open(
     close();
     return foreign_keys_result;
   }
+  if (const auto checkpoint_result = exec_sql(
+          writer_connection_,
+          "PRAGMA wal_autocheckpoint = " +
+              std::to_string(config.storage.wal_autocheckpoint_pages) + ";");
+      checkpoint_result.has_value()) {
+    close();
+    return checkpoint_result;
+  }
 
   migrator_ = std::make_unique<SqliteSchemaMigrator>(config.storage.migrations_dir);
-  if (const auto migration_result = migrator_->migrate(writer_connection_);
-      migration_result.has_value()) {
+  try {
+    if (const auto migration_result = migrator_->migrate(writer_connection_);
+        migration_result.has_value()) {
+      close();
+      return migration_result;
+    }
+  } catch (const std::exception&) {
     close();
-    return migration_result;
+    return contracts::ResultCode::RuntimeRetryExhausted;
   }
 
   const int reader_count = std::max(1, config.storage.reader_pool_size);
@@ -268,7 +301,7 @@ std::optional<contracts::ResultCode> SqliteMemoryStore::open(
   return std::nullopt;
 }
 
-void SqliteMemoryStore::close() {
+void SqliteMemoryStore::close() noexcept {
   for (auto*& reader_connection : reader_connections_) {
     if (reader_connection != nullptr) {
       sqlite3_close(reader_connection);
@@ -298,7 +331,7 @@ std::unique_ptr<IStoreTransaction> SqliteMemoryStore::begin_immediate() {
 }
 
 SessionLoadBundle SqliteMemoryStore::load_session_bundle(
-    const SessionLoadRequest& request) {
+    const SessionLoadRequest& request) const {
   SessionLoadBundle bundle;
   sqlite3* reader_connection = select_reader_connection();
   if (reader_connection == nullptr) {
@@ -555,7 +588,7 @@ StoreResult SqliteMemoryStore::upsert_summary(
 }
 
 std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
-    const std::string& session_id) {
+    const std::string& session_id) const {
   sqlite3* reader_connection = select_reader_connection();
   if (reader_connection == nullptr) {
     return std::nullopt;
@@ -579,52 +612,64 @@ std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
   return summary;
 }
 
-FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) {
+FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {
   FactQueryResult result;
   sqlite3* reader_connection = select_reader_connection();
   if (reader_connection == nullptr) {
     return result;
   }
 
-  sqlite3_stmt* statement = nullptr;
-  constexpr auto select_sql =
+  std::string sql =
       "SELECT fact_id, session_id, user_id, fact_text, source_turn_ids_json, confidence_score, "
       "fact_type, validity_ref, evidence_digest, superseded_by_fact_id, created_at, tags_json "
-      "FROM facts ORDER BY created_at DESC";
-  if (sqlite3_prepare_v2(reader_connection, select_sql, -1, &statement, nullptr) != SQLITE_OK) {
+      "FROM facts WHERE 1=1";
+  int bind_index = 1;
+  int session_idx = 0, user_idx = 0, type_idx = 0, conf_idx = 0;
+
+  if (query.session_id.has_value()) {
+    sql += " AND session_id = ?" + std::to_string(bind_index);
+    session_idx = bind_index++;
+  }
+  if (query.user_id.has_value()) {
+    sql += " AND user_id = ?" + std::to_string(bind_index);
+    user_idx = bind_index++;
+  }
+  if (query.fact_type.has_value()) {
+    sql += " AND fact_type = ?" + std::to_string(bind_index);
+    type_idx = bind_index++;
+  }
+  if (query.min_confidence.has_value()) {
+    sql += " AND confidence_score >= ?" + std::to_string(bind_index);
+    conf_idx = bind_index++;
+  }
+  if (query.exclude_superseded) {
+    sql += " AND superseded_by_fact_id IS NULL";
+  }
+  sql += " ORDER BY created_at DESC";
+  if (query.limit > 0) {
+    sql += " LIMIT " + std::to_string(query.limit);
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  if (sqlite3_prepare_v2(reader_connection, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK) {
     return result;
   }
 
+  if (session_idx > 0) {
+    sqlite3_bind_text(statement, session_idx, query.session_id->c_str(), -1, SQLITE_TRANSIENT);
+  }
+  if (user_idx > 0) {
+    sqlite3_bind_text(statement, user_idx, query.user_id->c_str(), -1, SQLITE_TRANSIENT);
+  }
+  if (type_idx > 0) {
+    sqlite3_bind_text(statement, type_idx, query.fact_type->c_str(), -1, SQLITE_TRANSIENT);
+  }
+  if (conf_idx > 0) {
+    sqlite3_bind_int64(statement, conf_idx, static_cast<std::int64_t>(*query.min_confidence));
+  }
+
   while (sqlite3_step(statement) == SQLITE_ROW) {
-    const auto fact = map_row_to_fact(statement);
-
-    if (query.session_id.has_value() && fact.session_id != query.session_id) {
-      continue;
-    }
-
-    if (query.user_id.has_value() && column_text(statement, 2) != query.user_id) {
-      continue;
-    }
-
-    if (query.fact_type.has_value() && fact.fact_type != query.fact_type) {
-      continue;
-    }
-
-    if (query.min_confidence.has_value()) {
-      if (!fact.confidence_score.has_value() ||
-          static_cast<int>(*fact.confidence_score) < *query.min_confidence) {
-        continue;
-      }
-    }
-
-    if (query.exclude_superseded && fact.superseded_by_fact_id.has_value()) {
-      continue;
-    }
-
-    result.facts.push_back(fact);
-    if (query.limit > 0 && static_cast<int>(result.facts.size()) >= query.limit) {
-      break;
-    }
+    result.facts.push_back(map_row_to_fact(statement));
   }
 
   sqlite3_finalize(statement);
@@ -713,34 +758,55 @@ StoreResult SqliteMemoryStore::supersede_fact(const std::string& old_fact_id,
 }
 
 ExperienceQueryResult SqliteMemoryStore::query_experiences(
-    const ExperienceQuery& query) {
+    const ExperienceQuery& query) const {
   ExperienceQueryResult result;
   sqlite3* reader_connection = select_reader_connection();
   if (reader_connection == nullptr) {
     return result;
   }
 
-  sqlite3_stmt* statement = nullptr;
-  constexpr auto select_sql =
+  std::string sql =
       "SELECT experience_id, session_id, user_id, lesson_summary, trigger_condition, "
       "recommended_action, source_turn_ids_json, effectiveness_score, applicable_domains_json, "
       "risk_notes_json, expires_at, superseded_by_experience_id, created_at, tags_json "
-      "FROM experiences ORDER BY created_at DESC";
-  if (sqlite3_prepare_v2(reader_connection, select_sql, -1, &statement, nullptr) != SQLITE_OK) {
+      "FROM experiences WHERE 1=1";
+  int bind_index = 1;
+  int session_idx = 0, user_idx = 0, expired_idx = 0;
+
+  if (query.session_id.has_value()) {
+    sql += " AND session_id = ?" + std::to_string(bind_index);
+    session_idx = bind_index++;
+  }
+  if (query.user_id.has_value()) {
+    sql += " AND user_id = ?" + std::to_string(bind_index);
+    user_idx = bind_index++;
+  }
+  if (query.exclude_expired) {
+    sql += " AND (expires_at IS NULL OR expires_at > ?" + std::to_string(bind_index) + ")";
+    expired_idx = bind_index++;
+  }
+  sql += " ORDER BY created_at DESC";
+  if (query.limit > 0) {
+    sql += " LIMIT " + std::to_string(query.limit);
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  if (sqlite3_prepare_v2(reader_connection, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK) {
     return result;
   }
 
-  const auto now_millis = current_time_millis();
+  if (session_idx > 0) {
+    sqlite3_bind_text(statement, session_idx, query.session_id->c_str(), -1, SQLITE_TRANSIENT);
+  }
+  if (user_idx > 0) {
+    sqlite3_bind_text(statement, user_idx, query.user_id->c_str(), -1, SQLITE_TRANSIENT);
+  }
+  if (expired_idx > 0) {
+    sqlite3_bind_int64(statement, expired_idx, current_time_millis());
+  }
+
   while (sqlite3_step(statement) == SQLITE_ROW) {
     const auto experience = map_row_to_experience(statement);
-
-    if (query.session_id.has_value() && experience.session_id != query.session_id) {
-      continue;
-    }
-
-    if (query.user_id.has_value() && column_text(statement, 2) != query.user_id) {
-      continue;
-    }
 
     if (query.stage.has_value() && !matches_stage(experience, *query.stage)) {
       continue;
@@ -751,16 +817,7 @@ ExperienceQueryResult SqliteMemoryStore::query_experiences(
       continue;
     }
 
-    if (query.exclude_expired && experience.expires_at.has_value() &&
-        *experience.expires_at <= now_millis) {
-      continue;
-    }
-
     result.experiences.push_back(experience);
-    if (query.limit > 0 &&
-        static_cast<int>(result.experiences.size()) >= query.limit) {
-      break;
-    }
   }
 
   sqlite3_finalize(statement);
@@ -823,7 +880,7 @@ StoreResult SqliteMemoryStore::insert_experience(
   return StoreResult::success(experience.experience_id);
 }
 
-std::int64_t SqliteMemoryStore::count_turns(const std::string& session_id) {
+std::int64_t SqliteMemoryStore::count_turns(const std::string& session_id) const {
   return query_turn_count(select_reader_connection(), session_id);
 }
 
@@ -864,7 +921,7 @@ sqlite3* SqliteMemoryStore::writer_connection_for_maintenance() {
   return writer_connection_;
 }
 
-sqlite3* SqliteMemoryStore::select_reader_connection() {
+sqlite3* SqliteMemoryStore::select_reader_connection() const {
   if (!reader_connections_.empty()) {
     sqlite3* connection = reader_connections_[next_reader_index_ % reader_connections_.size()];
     ++next_reader_index_;

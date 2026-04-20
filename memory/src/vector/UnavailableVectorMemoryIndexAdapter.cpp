@@ -43,7 +43,7 @@ StoreResult UnavailableVectorMemoryIndexAdapter::upsert(const VectorDocument& do
 
 std::vector<VectorHit> UnavailableVectorMemoryIndexAdapter::search(
     const std::string& query_text,
-    int top_k) {
+    int top_k) const {
   (void)query_text;
   (void)top_k;
   return {};

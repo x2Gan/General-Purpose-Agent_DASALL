@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -27,7 +28,7 @@ class MemoryManager final : public IMemoryManager {
   explicit MemoryManager(MemoryManagerDependencies dependencies);
 
   [[nodiscard]] contracts::ResultCode init(const MemoryConfig& config) override;
-  void shutdown() override;
+  void shutdown() noexcept override;
 
   [[nodiscard]] ContextAssemblyResult prepare_context(
       const MemoryContextRequest& request) override;
@@ -47,7 +48,7 @@ class MemoryManager final : public IMemoryManager {
 
   MemoryManagerDependencies dependencies_;
   std::optional<MemoryConfig> config_;
-  LifecycleState state_ = LifecycleState::Created;
+  std::atomic<LifecycleState> state_{LifecycleState::Created};
 };
 
 [[nodiscard]] std::unique_ptr<IMemoryManager> create_memory_manager_with_dependencies(

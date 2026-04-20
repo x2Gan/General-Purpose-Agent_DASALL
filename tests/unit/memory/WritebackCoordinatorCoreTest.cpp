@@ -44,7 +44,7 @@ class SpyVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryInd
 
   [[nodiscard]] std::vector<dasall::memory::VectorHit> search(
       const std::string& query_text,
-      int top_k) override {
+      int top_k) const override {
     (void)query_text;
     (void)top_k;
     return {};
@@ -81,7 +81,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
       return dasall::contracts::ResultCode::RuntimeRetryExhausted;
     }
 
-    void rollback() override {
+    void rollback() noexcept override {
       if (!active_) {
         return;
       }
@@ -104,7 +104,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
     return std::nullopt;
   }
 
-  void close() override {
+  void close() noexcept override {
     transaction_active_ = false;
   }
 
@@ -118,7 +118,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::SessionLoadBundle load_session_bundle(
-      const dasall::memory::SessionLoadRequest& request) override {
+      const dasall::memory::SessionLoadRequest& request) const override {
     dasall::memory::SessionLoadBundle bundle;
     if (committed_session_.has_value() &&
         committed_session_->session_id == std::optional<std::string>{request.session_id}) {
@@ -158,7 +158,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] std::optional<dasall::contracts::SummaryMemory> load_latest_summary(
-      const std::string& session_id) override {
+      const std::string& session_id) const override {
     if (committed_summary_.has_value() &&
         committed_summary_->session_id == std::optional<std::string>{session_id}) {
       return committed_summary_;
@@ -167,7 +167,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::FactQueryResult query_facts(
-      const dasall::memory::FactQuery& query) override {
+      const dasall::memory::FactQuery& query) const override {
     (void)query;
     return {};
   }
@@ -184,7 +184,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
   }
 
   [[nodiscard]] dasall::memory::ExperienceQueryResult query_experiences(
-      const dasall::memory::ExperienceQuery& query) override {
+      const dasall::memory::ExperienceQuery& query) const override {
     (void)query;
     return {};
   }
@@ -194,7 +194,7 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
     return dasall::memory::StoreResult::success(experience.experience_id);
   }
 
-  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) override {
+  [[nodiscard]] std::int64_t count_turns(const std::string& session_id) const override {
     return (committed_session_.has_value() &&
             committed_session_->session_id == std::optional<std::string>{session_id})
                ? static_cast<std::int64_t>(committed_turns_.size())

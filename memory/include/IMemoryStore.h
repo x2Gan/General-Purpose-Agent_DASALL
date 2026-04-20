@@ -90,12 +90,12 @@ class IMemoryStore {
 
   [[nodiscard]] virtual std::optional<contracts::ResultCode> open(
       const MemoryConfig& config) = 0;
-  virtual void close() = 0;
+  virtual void close() noexcept = 0;
 
   [[nodiscard]] virtual std::unique_ptr<IStoreTransaction> begin_immediate() = 0;
 
   [[nodiscard]] virtual SessionLoadBundle load_session_bundle(
-      const SessionLoadRequest& request) = 0;
+      const SessionLoadRequest& request) const = 0;
   [[nodiscard]] virtual StoreResult create_session(
       const contracts::Session& session) = 0;
   [[nodiscard]] virtual StoreResult append_turn(
@@ -106,20 +106,20 @@ class IMemoryStore {
   [[nodiscard]] virtual StoreResult upsert_summary(
       const contracts::SummaryMemory& summary) = 0;
   [[nodiscard]] virtual std::optional<contracts::SummaryMemory> load_latest_summary(
-      const std::string& session_id) = 0;
+      const std::string& session_id) const = 0;
 
-  [[nodiscard]] virtual FactQueryResult query_facts(const FactQuery& query) = 0;
+  [[nodiscard]] virtual FactQueryResult query_facts(const FactQuery& query) const = 0;
   [[nodiscard]] virtual StoreResult insert_fact(
       const contracts::MemoryFact& fact) = 0;
   [[nodiscard]] virtual StoreResult supersede_fact(
       const std::string& old_fact_id, const std::string& new_fact_id) = 0;
 
   [[nodiscard]] virtual ExperienceQueryResult query_experiences(
-      const ExperienceQuery& query) = 0;
+      const ExperienceQuery& query) const = 0;
   [[nodiscard]] virtual StoreResult insert_experience(
       const contracts::ExperienceMemory& experience) = 0;
 
-  [[nodiscard]] virtual std::int64_t count_turns(const std::string& session_id) = 0;
+  [[nodiscard]] virtual std::int64_t count_turns(const std::string& session_id) const = 0;
   [[nodiscard]] virtual StoreResult quarantine_record(
       const std::string& object_type,
       const std::string& object_id,

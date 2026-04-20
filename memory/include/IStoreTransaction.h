@@ -11,7 +11,7 @@ class IStoreTransaction {
   virtual ~IStoreTransaction() = default;
 
   [[nodiscard]] virtual std::optional<contracts::ResultCode> commit() = 0;
-  virtual void rollback() = 0;
+  virtual void rollback() noexcept = 0;
 };
 
 }  // namespace dasall::memory
