@@ -70,6 +70,18 @@ add_executable(dasall_memory_context_orchestrator_degraded_unit_test
 	ContextOrchestratorDegradedTest.cpp
 )
 
+add_executable(dasall_memory_conflict_resolver_unit_test
+	MemoryConflictResolverTest.cpp
+)
+
+add_executable(dasall_memory_conflict_resolver_degraded_unit_test
+	ConflictResolverDegradedTest.cpp
+)
+
+add_executable(dasall_memory_fact_conflict_resolver_unit_test
+	FactConflictResolverTest.cpp
+)
+
 target_link_libraries(dasall_memory_interface_compile_unit_test
 	PRIVATE
 		dasall_memory
@@ -181,6 +193,24 @@ target_link_libraries(dasall_memory_context_orchestrator_degraded_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_conflict_resolver_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_conflict_resolver_degraded_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_fact_conflict_resolver_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
 target_include_directories(dasall_memory_schema_migration_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -236,6 +266,21 @@ target_include_directories(dasall_memory_context_orchestrator_degraded_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_conflict_resolver_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
+target_include_directories(dasall_memory_conflict_resolver_degraded_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
+target_include_directories(dasall_memory_fact_conflict_resolver_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_compile_definitions(dasall_memory_schema_migration_unit_test
 	PRIVATE
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
@@ -280,6 +325,9 @@ dasall_apply_common_options(dasall_memory_compression_coordinator_unit_test)
 dasall_apply_common_options(dasall_memory_compression_summarizer_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_degraded_unit_test)
+dasall_apply_common_options(dasall_memory_conflict_resolver_unit_test)
+dasall_apply_common_options(dasall_memory_conflict_resolver_degraded_unit_test)
+dasall_apply_common_options(dasall_memory_fact_conflict_resolver_unit_test)
 
 add_test(NAME MemoryInterfaceCompileTest COMMAND dasall_memory_interface_compile_unit_test)
 set_tests_properties(MemoryInterfaceCompileTest PROPERTIES LABELS "unit;memory")
@@ -334,6 +382,15 @@ set_tests_properties(ContextOrchestratorTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME ContextOrchestratorDegradedTest COMMAND dasall_memory_context_orchestrator_degraded_unit_test)
 set_tests_properties(ContextOrchestratorDegradedTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME MemoryConflictResolverTest COMMAND dasall_memory_conflict_resolver_unit_test)
+set_tests_properties(MemoryConflictResolverTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME ConflictResolverDegradedTest COMMAND dasall_memory_conflict_resolver_degraded_unit_test)
+set_tests_properties(ConflictResolverDegradedTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME FactConflictResolverTest COMMAND dasall_memory_fact_conflict_resolver_unit_test)
+set_tests_properties(FactConflictResolverTest PROPERTIES LABELS "unit;memory")
 
 set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_interface_compile_unit_test

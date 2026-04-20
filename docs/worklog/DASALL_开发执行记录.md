@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #366
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 E
+- 任务：MEM-TODO-020 实现 MemoryConflictResolver
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-020` 是阶段 E 的起点；如果 conflict plan 仍未独立落地，021 的 `WritebackCoordinator` 就会被迫同时承担规则冲突判断、事务边界和 working board owner 三类职责，直接逼近 God Object 风险。
+2. 本轮严格限定在 `MemoryConflictResolver` 的 module-local 头/实现、conflict-specific unit tests 与 CMake 注册，不提前进入 `WritebackCoordinator`、`MemoryManager` 的 write_back 接线或 integration 主链。
+3. 本轮实现同时参考了 memory 详设 6.12.3 对 `Accept / Supersede / Reject / Coexist` 的规则化要求，以及 SQLite 官方事务文档对 `BEGIN IMMEDIATE` / `SQLITE_BUSY` 的约束说明，用于确保 020 只输出 plan，不越权承担事务重试和提交控制。
+
+### 改动
+
+1. 新增 `memory/src/conflict/MemoryConflictResolver.h` 与 `memory/src/conflict/MemoryConflictResolver.cpp`：
+   - 定义 module-local `ConflictResolutionPlan`，在不扩 public ABI 的前提下补齐 `warnings`、`degraded` 与 `supersede_target_id`；
+   - 实现 `resolve`、`find_related_facts`、`is_semantically_conflicting`、`determine_action`；
+   - 采用 session-scope fact 查询 + resolver 自筛选模式，避免过早按 `fact_type` 过滤导致 `Coexist` 路径不可达；
+   - 支持 polarity 对立、否定词反转、数字矛盾三类 v1 规则冲突检测，并在仓储查询异常时降级为 `Accept + conflict_check_skipped`。
+2. 新增 `tests/unit/memory/MemoryConflictResolverTest.cpp`、`ConflictResolverDegradedTest.cpp`、`FactConflictResolverTest.cpp` 并更新 CMake：
+   - 覆盖 `Accept`、`Supersede`、`Reject`、`Coexist` 四条主路径；
+   - 覆盖仓储查询抛错时的 degraded accept；
+   - 覆盖 numeric conflict 与不同 `fact_type` 的 coexist 语义边界。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 resolver 头/实现、三条单测与相关 CMake 文件均无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_conflict_resolver_unit_test`、`dasall_memory_conflict_resolver_degraded_unit_test`、`dasall_memory_fact_conflict_resolver_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryConflictResolverTest`、`ConflictResolverDegradedTest`、`FactConflictResolverTest`；
+   - 结果：三条测试全部通过，`100% tests passed, 0 tests failed out of 3`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但返回码为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-020` 已完成，memory 模块现在拥有可复用的 conflict-plan 组件，能够在不写库的前提下把新事实归类为 `Accept / Supersede / Reject / Coexist`。
+2. query failure 的降级语义已经固定为 `Accept + conflict_check_skipped`，从而不阻断后续 writeback 主链；真正的事务提交、partial 标记和 audit 仍保留给 021。
+3. 阶段 E 现在只剩 `MEM-TODO-021`：`WritebackCoordinator` 可以在明确的 plan 输出之上收口 core transaction、derived writes 和 vector sidecar，而不必再把规则判定混在事务逻辑里。
+
+### 下一步
+
+1. 进入 `MEM-TODO-021`，实现 `WritebackCoordinator`，把 `Turn + Session + Summary` 核心事务、`Fact/Experience` best-effort 附属写入、vector sidecar 和 `WorkingMemoryBoard` 唯一 owner 语义一并落地。
+
+### 风险
+
+1. 当前冲突检测仍是 v1 规则引擎，主要依赖 polarity、否定词和数字矛盾；这足够支撑当前阶段的 deterministic unit tests，但不等于完整语义理解，后续若要引入向量或更强语义判别，必须作为 module-local 增强，而不是回改 shared contracts。
+2. `ConflictResolutionPlan` 目前是 module-local supporting object，尚未经过 writeback integration 压力；如果 021 在事务层面对多冲突目标的执行策略有新约束，应优先在 `WritebackCoordinator` 内做消费规则补齐，而不是把 plan 直接升格为 public surface。
+
 ## 记录 #365
 
 - 日期：2026-04-20

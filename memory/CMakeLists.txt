@@ -61,6 +61,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/MemoryBuildSkeleton.cpp
   src/MemoryManager.cpp
   src/MemoryManagerFactory.cpp
+  src/conflict/MemoryConflictResolver.cpp
   src/context/BudgetAllocator.cpp
   src/context/CandidateCollector.cpp
   src/context/ContextOrchestrator.cpp
