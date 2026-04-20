@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "IMemoryStore.h"
 #include "config/MemoryConfig.h"
+#include "store/StoreResult.h"
 #include "vector/IEmbeddingAdapter.h"
 
 namespace dasall::memory {

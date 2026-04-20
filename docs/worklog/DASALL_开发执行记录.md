@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #375
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 结构优化轮次
+- 任务：MEM-TODO-031 抽取 StoreResult 到独立头文件
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-031` 是 033 的直接前置，而且是当前 031 ~ 035 中最小、最清晰、无 blocker 的原子任务；如果 `StoreResult` 仍内嵌在 `IMemoryStore.h`，后续 ISP 拆分会继续把 vector / test 等纯结果消费方绑到整个 store surface 上。
+2. 本轮严格限定在 public surface 解耦，不提前实现 033 的接口拆分，也不触碰 maintenance / concrete vector backend，避免把一个“头文件抽取任务”扩成大规模重构。
+3. 设计上以 memory 详设 6.6 / 6.12.5 为锚点：`StoreResult` 保持 module public supporting type 身份，但从 `IMemoryStore` 定义体中剥离为可独立 include 的 `store/StoreResult.h`。
+
+### 改动
+
+1. 新增 `memory/include/store/StoreResult.h`：
+   - 将 `StoreResult` 及其 `success()` / `failure()` factory methods 抽取为独立 public header；
+   - 保持既有字段和错误语义不变，不引入行为变更。
+2. 更新 `memory/include/IMemoryStore.h`：
+   - 删除内嵌 `StoreResult` 定义；
+   - 改为 include `store/StoreResult.h`，保留现有 store 接口签名。
+3. 更新 `memory/include/vector/VectorMemoryIndexAdapter.h`：
+   - 将只为 `StoreResult` 引入的 `IMemoryStore.h` 依赖替换为 `store/StoreResult.h`；
+   - 让 vector public surface 不再因结果类型而额外暴露整个 store interface。
+4. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 显式 include `store/StoreResult.h`；
+   - 增加 `store/` public include layout 断言；
+   - 增加独立 `StoreResult` 编译面断言，验证 standalone header、factory methods 与 shared `ResultCode` 映射仍可编译消费。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `StoreResult.h`、`IMemoryStore.h`、`VectorMemoryIndexAdapter.h`、`MemoryInterfaceCompileTest.cpp` 无编辑器级错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory dasall_unit_tests dasall_contract_tests`
+   - `ctest --test-dir build-ci -R "MemoryInterfaceCompileTest|TurnSessionSummaryMemoryContractTest|MemoryFactExperienceContractTest" --output-on-failure`
+   - 结果：3/3 tests passed，contracts gate 无回退。
+
+### 结果
+
+1. `MEM-TODO-031` 已完成，`StoreResult` 已从 `IMemoryStore` 内嵌定义提升为独立 public supporting type，可被 vector surface 和后续窄接口单独复用。
+2. 本轮同时消除了一个不必要的 public coupling：`VectorMemoryIndexAdapter` 不再为 `StoreResult` 结果类型被迫 include `IMemoryStore.h`。
+3. scoped build/test 证明本轮没有破坏 shared contracts compatibility，也没有引入新的 public include 循环依赖。
+
+### 下一步
+
+1. 进入 `MEM-TODO-032`，把 `UnavailableVectorMemoryIndexAdapter` 从 public header 移入 `memory/src/vector/`，继续收窄 vector public ABI。
+
+### 风险
+
+1. 031 只完成结果类型抽取，没有触及 `IMemoryStore` 的接口隔离问题；033 仍将是一次更大范围的 consumer 依赖面收缩。
+
 ## 记录 #374
 
 - 日期：2026-04-20

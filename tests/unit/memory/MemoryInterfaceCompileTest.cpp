@@ -16,6 +16,7 @@
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/MemoryError.h"
+#include "store/StoreResult.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "working/WorkingMemoryExportRequest.h"
 #include "working/WorkingMemoryExportResult.h"
@@ -60,6 +61,7 @@ void test_memory_public_include_layout_exists() {
   const fs::path config_dir = include_root / "config";
   const fs::path context_dir = include_root / "context";
   const fs::path error_dir = include_root / "error";
+     const fs::path store_dir = include_root / "store";
   const fs::path vector_dir = include_root / "vector";
   const fs::path working_dir = include_root / "working";
   const fs::path writeback_dir = include_root / "writeback";
@@ -72,6 +74,8 @@ void test_memory_public_include_layout_exists() {
               "memory public include layout should expose the context subdirectory");
   assert_true(fs::is_directory(error_dir),
               "memory public include layout should expose the error subdirectory");
+     assert_true(fs::is_directory(store_dir),
+                                   "memory public include layout should expose the store subdirectory");
   assert_true(fs::is_directory(vector_dir),
               "memory public include layout should expose the vector subdirectory");
   assert_true(fs::is_directory(working_dir),
@@ -152,6 +156,28 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
               "fresh context assembly results should start without warnings");
   assert_true(!result.degraded,
               "fresh context assembly results should not report degraded execution");
+}
+
+void test_store_result_compiles_as_an_independent_public_surface() {
+     using dasall::memory::StoreResult;
+     using dasall::tests::support::assert_equal;
+     using dasall::tests::support::assert_true;
+
+     StoreResult success = StoreResult::success(std::string{"persisted-001"});
+     StoreResult failure = StoreResult::failure(
+               dasall::contracts::ResultCode::ValidationFieldMissing,
+               std::string{"missing summary id"});
+
+     assert_true(success.ok,
+                                   "store result success factory should remain available from the standalone header");
+     assert_equal("persisted-001", success.persisted_id.value_or(std::string{}),
+                                    "store result success factory should preserve the persisted identifier");
+     assert_true(!failure.ok,
+                                   "store result failure factory should remain available from the standalone header");
+     assert_true(failure.result_code == dasall::contracts::ResultCode::ValidationFieldMissing,
+                                   "store result failure factory should preserve the shared result code");
+     assert_equal("missing summary id", failure.error_message.value_or(std::string{}),
+                                    "store result failure factory should preserve the error message");
 }
 
   void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics() {
@@ -759,6 +785,7 @@ int main() {
     test_memory_unit_surface_anchor_uses_a_collision_free_ctest_name();
     test_memory_public_include_layout_exists();
     test_memory_module_is_no_longer_placeholder_only();
+          test_store_result_compiles_as_an_independent_public_surface();
     test_memory_context_supporting_types_compile_and_expose_expected_defaults();
     test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();
     test_memory_config_defaults_align_with_detailed_design();
