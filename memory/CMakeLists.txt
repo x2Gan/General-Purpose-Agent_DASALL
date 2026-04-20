@@ -61,6 +61,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/MemoryBuildSkeleton.cpp
   src/MemoryManager.cpp
   src/MemoryManagerFactory.cpp
+  src/config/MemoryConfigProjector.cpp
   src/conflict/MemoryConflictResolver.cpp
   src/context/BudgetAllocator.cpp
   src/context/CandidateCollector.cpp
@@ -105,6 +106,7 @@ target_include_directories(dasall_memory
     $<BUILD_INTERFACE:${DASALL_MEMORY_PUBLIC_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/profiles/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 

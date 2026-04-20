@@ -1,5 +1,64 @@
 # DASALL 开发执行记录
 
+## 记录 #373
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 G
+- 任务：MEM-TODO-029 验证 profile compatibility 与 discoverability Gate
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-029` 是 028 之后的最后一个代码侧 gate；如果 memory 仍只依赖手工构造 `MemoryConfig`，而没有证明 `desktop_full` / `edge_balanced` / `edge_minimal` 三档 profile 能稳定投影出兼容的 memory 策略，则 008A 的配置模型和 023 的 vector profile 冻结都还缺少正式的 runtime/build 证据链。
+2. 本轮严格限定在 029 的最小闭环：新增 `MemoryProfileCompatibilityTest`、补一个 memory 内部 `MemoryConfigProjector`，并通过真实 `profiles/*/runtime_policy.yaml` 和 build manifest 视图验证 profile 差异与 discoverability；不扩到 030 的总收口文档轮。
+3. 设计上沿用 llm/tools 已存在的 projector 思路，但保持边界收敛：`MemoryConfigProjector` 只是把 shared profile runtime/build 视图投影成既有 `MemoryConfig`，不新增 policy schema，也不把 memory 变成新的 profile brain。
+
+### 改动
+
+1. 新增 `memory/src/config/MemoryConfigProjector.h` 与 `memory/src/config/MemoryConfigProjector.cpp`：
+   - 新增 `project_memory_config(snapshot, manifest)`；
+   - 基于真实 `RuntimePolicySnapshot` + `BuildProfileManifest` 投影 `MemoryConfig`；
+   - 显式给出 vector enablement / backend、WAL autocheckpoint、reader pool、compression turn window、summary candidate fan-in、maintenance schedule 等 profile 差异。
+2. 更新 `memory/CMakeLists.txt`：
+   - 将 `src/config/MemoryConfigProjector.cpp` 纳入 `dasall_memory`；
+   - 补 `profiles/include` 私有 include path，供 projector 读取 shared profile types。
+3. 新增 `tests/integration/memory/MemoryProfileCompatibilityTest.cpp`：
+   - 直接从仓库 `profiles/` 目录加载 `desktop_full`、`edge_balanced`、`edge_minimal` 的 build/runtime 视图；
+   - 验证 vector / maintenance / compression / WAL 差异；
+   - 通过 `ProfileCompatibilityValidator` 证明投影仍与共享 profile validator 兼容；
+   - 读取 `tests/integration/memory/CMakeLists.txt` 断言 `MemoryProfileCompatibilityTest` 已被注册，补 discoverability 证据。
+4. 更新 `tests/integration/memory/CMakeLists.txt`：
+   - 注册 `dasall_memory_profile_compatibility_integration_test` / `MemoryProfileCompatibilityTest`；
+   - 补 `dasall_profiles` 链接与 `memory/src` include path。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `MemoryConfigProjector.h/.cpp`、`MemoryProfileCompatibilityTest.cpp`、相关 CMake 文件无编辑器级错误。
+2. 构建与验收：
+   - `ListBuildTargets_CMakeTools` / `ListTests_CMakeTools` 已发现 `dasall_memory_profile_compatibility_integration_test` 与 `MemoryProfileCompatibilityTest`；
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_profile_compatibility_integration_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryProfileCompatibilityTest`；
+   - 结果：测试通过，`100% tests passed, 0 tests failed`。
+3. 说明：
+   - 构建时曾因 `MemoryConfigProjector` 缺少 `profiles/include` 私有 include path 失败一次，补齐后重新构建通过；
+   - `DartConfiguration.tcl` 仍是 CMake Tools stderr 噪声，但返回码为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-029` 已完成，memory 现在具备真实 profile compatibility gate：`desktop_full`、`edge_balanced`、`edge_minimal` 的 vector / maintenance / compression / WAL 差异已经通过自动化证明，而不是只留在 TODO 或详设表述里。
+2. `MemoryProfileCompatibilityTest` 同时把 discoverability 纳入 gate：不只验证 profile 行为，还验证新测试已正确注册到 memory integration CMake，从而为 030 的总收口提供可靠前提。
+3. `MemoryConfigProjector` 让 memory 对 profile 视图的消费不再只能依赖手工构造配置，这为后续 runtime 组合根真正接入 profile projection 留出了稳定、轻量的落点。
+
+### 下一步
+
+1. 进入 `MEM-TODO-030`，把 026 / 027 / 028 / 029 的 gate 证据统一回写到 memory 专项 TODO 与 worklog 总结，形成最终交付链。
+
+### 风险
+
+1. 当前 `MemoryConfigProjector` 仍是 memory 内部 utility，并未直接被 runtime 组合根消费；029 已证明 profile 差异可投影，但若后续要把 profile projection 接进生产配置装配，还需单独安排接线任务。
+2. 029 已关闭 profile compatibility / discoverability gate，但还没有形成最终专项交付总结；必须完成 030，才能正式宣称 memory 专项 gates 全部闭环。
+
 ## 记录 #372
 
 - 日期：2026-04-20

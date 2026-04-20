@@ -48,6 +48,13 @@ dasall_add_memory_integration_test(
 )
 
 dasall_add_memory_integration_test(
+  dasall_memory_profile_compatibility_integration_test
+  MemoryProfileCompatibilityTest
+  MemoryProfileCompatibilityTest.cpp
+  "integration;memory"
+)
+
+dasall_add_memory_integration_test(
   dasall_memory_writeback_integration_test
   MemoryWritebackIntegrationTest
   MemoryWritebackIntegrationTest.cpp
@@ -83,6 +90,11 @@ target_link_libraries(dasall_memory_failure_injection_integration_test
     dasall_sqlite3
 )
 
+target_link_libraries(dasall_memory_profile_compatibility_integration_test
+  PRIVATE
+    dasall_profiles
+)
+
 target_link_libraries(dasall_memory_maintenance_integration_test
   PRIVATE
     dasall_sqlite3
@@ -99,6 +111,11 @@ target_include_directories(dasall_memory_writeback_integration_test
 )
 
 target_include_directories(dasall_memory_failure_injection_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/memory/src
+)
+
+target_include_directories(dasall_memory_profile_compatibility_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
 )
