@@ -67,6 +67,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/store/sqlite/SqliteMemoryStore.cpp
   src/store/sqlite/SqliteSchemaMigrator.cpp
   src/working/WorkingMemoryBoard.cpp
+  src/writeback/CompressionCoordinator.cpp
   src/vector/UnavailableVectorMemoryIndexAdapter.cpp
 )
 

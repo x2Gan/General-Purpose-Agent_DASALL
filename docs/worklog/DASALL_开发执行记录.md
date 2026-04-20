@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #364
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 D
+- 任务：MEM-TODO-018 实现 CompressionCoordinator 模板压缩路径
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-018` 是 `CandidateCollector` 与 `BudgetAllocator` 之后的下一条最小可执行行；如果压缩路径仍为空，019 的 `ContextOrchestrator` 就必须自己承担 summary 生成和 fallback 逻辑，违反阶段 D 的组件分层目标。
+2. 本轮严格限定在 `CompressionCoordinator` 的 module-local 头/实现、compression-specific unit tests 和 CMake 注册，不提前进入真实 `ContextOrchestrator` wiring，也不修改 public ABI。
+3. 由于 `ISummarizer` supporting objects 和 `IMemoryStore` 持久化口径都已冻结，本轮必须同时落模板压缩、增量合并和 summarizer fallback，避免只实现单一路径导致 019 再返工。
+
+### 改动
+
+1. 新增 `memory/src/writeback/CompressionCoordinator.h` 与 `memory/src/writeback/CompressionCoordinator.cpp`：
+   - 定义 `CompressionInput`、`CompressionOutput` 和 `CompressionCoordinator` module-local surface；
+   - 实现 `compress`、`extract_structured_summary`、`extract_decisions`、`extract_confirmed_facts`、`extract_tool_outcomes`、`build_summary_text`；
+   - 在无 summarizer 时走模板压缩，在 summarizer 可用时消费 `SummaryGenerationRequest/Result`，异常或降级时统一回退到模板路径；
+   - 把 `SummaryProjection` 归一化为 `SummaryMemory`，支持增量合并、结构化字段去重与可选 `upsert_summary()` 持久化。
+2. 新增 `tests/unit/memory/CompressionCoordinatorTest.cpp`：
+   - 覆盖模板压缩路径、`SummaryMemory` materialize、中文关键词提取和 existing summary 增量合并去重。
+3. 新增 `tests/unit/memory/CompressionCoordinatorSummarizerTest.cpp` 并更新 CMake：
+   - 覆盖 `ISummarizer` 注入路径、warning 透传和 summarizer 抛错时的 `summarizer_fallback` 路径；
+   - 把 `CompressionCoordinator` 以及两条压缩测试目标接入 `dasall_memory` 构建图和 CTest。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `CompressionCoordinator.h/.cpp`、两条压缩测试与相关 CMake 文件均无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_compression_coordinator_unit_test`、`dasall_memory_compression_summarizer_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `CompressionCoordinatorTest` 与 `CompressionCoordinatorSummarizerTest`；
+   - 结果：两条测试全部通过，`100% tests passed, 0 tests failed out of 2`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但未影响返回码与结论。
+
+### 结果
+
+1. `MEM-TODO-018` 已完成，`CompressionCoordinator` 现在可以生成结构化摘要投影、执行 existing summary 增量合并，并把结果 materialize 为 `SummaryMemory`。
+2. summarizer 注入点与 fallback 语义已经冻结为 module-local 压缩基线；019 只需要决定何时触发压缩以及如何把压缩结果映射进 `ContextPacket`，不必重新发明 summary 生成逻辑。
+3. 018 没有提前进入 `ContextOrchestrator` 或 `WritebackCoordinator`；下一轮可以直接进入 `MEM-TODO-019` 的 slot mapping 收口。
+
+### 下一步
+
+1. 进入 `MEM-TODO-019`，实现 `ContextOrchestrator` 与 `ContextPacket` 的 10 槽位映射，并串联 `CandidateCollector`、`BudgetAllocator`、`CompressionCoordinator`。
+
+### 风险
+
+1. 当前模板压缩的中文关键词提取仍是启发式规则，复杂否定句和中英混排场景需要依赖后续 `ISummarizer` 具体实现进一步提高精度；因此 019 应把压缩失败视作可降级事件，而不是硬依赖。
+2. `CompressionCoordinator` 当前只覆盖摘要生成、合并与持久化，不负责决定何时触发压缩或如何执行 slot trim；这些决策必须继续留在 019 的 `ContextOrchestrator`，避免再次把预算/装配规则回流到压缩组件。
+
 ## 记录 #363
 
 - 日期：2026-04-20
