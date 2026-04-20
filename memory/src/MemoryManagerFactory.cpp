@@ -5,12 +5,14 @@
 #include <string>
 
 #include "config/MemoryConfig.h"
+#include "conflict/MemoryConflictResolver.h"
 #include "context/BudgetAllocator.h"
 #include "context/CandidateCollector.h"
 #include "context/ContextOrchestrator.h"
 #include "store/sqlite/SqliteMemoryStore.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "writeback/CompressionCoordinator.h"
+#include "writeback/WritebackCoordinator.h"
 
 namespace dasall::memory {
 namespace {
@@ -75,8 +77,13 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
         *dependencies.working_memory_board, *dependencies.store, config);
     auto allocator = std::make_unique<BudgetAllocator>(config);
     auto compressor = std::make_unique<CompressionCoordinator>(*dependencies.store);
+    auto conflict_resolver =
+      std::make_unique<MemoryConflictResolver>(*dependencies.store);
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(
         std::move(collector), std::move(allocator), std::move(compressor), config);
+    dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
+      *dependencies.store, std::move(conflict_resolver),
+      *dependencies.working_memory_board);
   } else {
     dependencies.context_orchestrator = std::make_unique<BootstrapContextOrchestrator>();
   }

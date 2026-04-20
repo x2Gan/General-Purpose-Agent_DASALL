@@ -1,5 +1,62 @@
 # DASALL 开发执行记录
 
+## 记录 #367
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 E
+- 任务：MEM-TODO-021 实现 WritebackCoordinator 核心事务与附属写入分层
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-021` 是阶段 E 的收口任务；如果 writeback 仍停留在 `MemoryManager` 的 unwired fallback，020 固定下来的 conflict plan、014/015 的 sqlite store 写路径以及 012 的 `WorkingMemoryBoard` owner 约束都无法组成可执行主链。
+2. 本轮严格限定在 `WritebackCoordinator` module-local 头/实现、`MemoryManager` / factory 接线、sqlite transaction commit 语义修正，以及 writeback-specific unit/integration 测试，不扩 shared contracts，也不把 retry / replan / abort_safe 执行控制引回 memory。
+3. 本轮同时利用 020 的 `MemoryConflictResolver` plan 输出与 022 的 vector unavailable baseline，确保 core transaction、derived writes、vector sidecar 和 working board 更新可以按分层语义收口，而不是在单个 facade 里混做所有职责。
+
+### 改动
+
+1. 新增 `memory/src/writeback/WritebackCoordinator.h` 与 `memory/src/writeback/WritebackCoordinator.cpp`：
+   - 实现 `persist`、`persist_core_transaction`、`persist_derived_data`、`persist_vector_sidecar`、`update_working_board`；
+   - 把 `Turn + Session + Summary` 收口到单次 store transaction 中，派生的 `Fact / Experience` 写入改为 best-effort，vector sidecar 改为 warning-only；
+   - 为 summary / fact / experience 自动补 `*_id`、`session_id`、`created_at` 与必要 source refs，避免 runtime 候选对象因缺少规范化字段直接落入无意义失败；
+   - 在 fact 写入前消费 `MemoryConflictResolver` 的 `Accept / Supersede / Reject / Coexist` plan，并把 partial / degraded / retryable 语义映射到 `WritebackResult`。
+2. 更新 `memory/src/MemoryManagerInternal.h`、`memory/src/MemoryManager.cpp`、`memory/src/MemoryManagerFactory.cpp`：
+   - 在依赖组合根中加入 `WritebackCoordinator`；
+   - 让 sqlite backend 的 `MemoryManager::write_back()` 委托真实 coordinator，而 `memory` backend 仍保留 `writeback_pipeline_unwired` fallback；
+   - 工厂在 sqlite store + working board 存在时同时注入 `MemoryConflictResolver` 与 `WritebackCoordinator`，完成主链 wiring。
+3. 更新 `memory/src/store/sqlite/SqliteMemoryStore.cpp`：
+   - 修复 `SqliteStoreTransaction::commit()` 提前清除 `active_` 的问题，改为仅在 COMMIT 成功后结束 active 状态，从而支持 commit 失败后的显式 rollback。
+4. 新增 `tests/unit/memory/WritebackCoordinatorCoreTest.cpp`、`tests/unit/memory/WritebackCoordinatorPartialTest.cpp`、`tests/integration/memory/MemoryWritebackIntegrationTest.cpp` 并更新 `tests/unit/memory/CMakeLists.txt`、`tests/integration/memory/CMakeLists.txt`、`memory/CMakeLists.txt`：
+   - 覆盖 sqlite core transaction 成功、commit failure rollback、derived partial、vector sidecar failure warning、sqlite-backed `MemoryManager` writeback 与 supersede 主链；
+   - 同时回归 `MemoryManagerSmokeTest`、`MemoryManagerLifecycleTest`，确保 facade / factory 接线未回退；
+   - 清理了测试里的 aggregate 初始化告警与一次 CMake 重复注册，保证 021 最终 build graph 干净稳定。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `WritebackCoordinator` 头/实现、`MemoryManager` / factory / sqlite store 改动、021 新增测试与相关 CMake 文件均无错误；
+   - integration 测试补充了 `DASALL_SQL_MEMORY_DIR` 的编辑器级 fallback，避免 compile definition 只在 target 级生效时产生误报。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_writeback_core_unit_test`、`dasall_memory_writeback_partial_unit_test`、`dasall_memory_writeback_integration_test`、`dasall_memory_manager_smoke_unit_test`、`dasall_memory_manager_lifecycle_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `WritebackCoordinatorCoreTest`、`WritebackCoordinatorPartialTest`、`MemoryWritebackIntegrationTest`、`MemoryManagerSmokeTest`、`MemoryManagerLifecycleTest`；
+   - 结果：五条测试全部通过，`100% tests passed, 0 tests failed out of 5`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但返回码为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-021` 已完成，memory 模块现在拥有真实 writeback 主链：sqlite backend 下 `MemoryManager::write_back()` 会通过 `WritebackCoordinator` 执行 core transaction、derived writes、vector sidecar 和 working board 更新。
+2. conflict-plan、partial、retryable 与 degraded 语义已经贯通到 sqlite store 主路径，`Fact` supersede 可在 integration 测试中被直接验证；`memory` backend 仍保留 unwired fallback，因此不回退现有 smoke 语义。
+3. 阶段 E 的 `020 ~ 021` 已全部闭环；后续可以转入 `MEM-TODO-023` / `024` / `026 ~ 030`，其中 concrete vector backend 选型仍是唯一活跃 blocker。
+
+### 下一步
+
+1. 优先进入 `MEM-TODO-026` / `027`，把 Context assemble smoke gate 与 writeback contracts compatibility gate 补齐为正式阶段证据。
+2. 在不等待 vector backend 评审完成的前提下，继续推进 `MEM-TODO-024` / `028` / `030`，把 maintenance、failure injection 与专项 TODO/worklog 证据收口。
+
+### 风险
+
+1. `WritebackCoordinator` 当前的 normalization 负责补齐常见缺省字段，适合保证主链健壮性，但它不是 shared contracts 的替代品；若后续 runtime 需要更强的 candidate 规范化约束，应通过 request producer 明确输入责任，而不是持续膨胀 writeback layer。
+2. vector sidecar 仍是 best-effort unavailable baseline，能够保证主链不被 embedding/backend 拖垮，但 profile compatibility 与 concrete backend 行为仍要等待 `MEM-TODO-023` / `029` 收口后才能正式宣称 ready。
+
 ## 记录 #366
 
 - 日期：2026-04-20

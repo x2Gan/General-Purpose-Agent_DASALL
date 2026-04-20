@@ -159,8 +159,11 @@ class SqliteStoreTransaction final : public IStoreTransaction {
       return std::nullopt;
     }
 
-    active_ = false;
-    return exec_sql(connection_, "COMMIT;");
+    const auto commit_result = exec_sql(connection_, "COMMIT;");
+    if (!commit_result.has_value()) {
+      active_ = false;
+    }
+    return commit_result;
   }
 
   void rollback() override {

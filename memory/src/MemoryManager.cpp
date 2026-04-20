@@ -156,7 +156,11 @@ WritebackResult MemoryManager::write_back(const MemoryWritebackRequest& request)
     return result;
   }
 
-  return make_writeback_failure_result("writeback_pipeline_unwired");
+  if (!dependencies_.writeback_coordinator) {
+    return make_writeback_failure_result("writeback_pipeline_unwired");
+  }
+
+  return dependencies_.writeback_coordinator->persist(request);
 }
 
 WorkingMemoryExportResult MemoryManager::export_working_memory_snapshot(
