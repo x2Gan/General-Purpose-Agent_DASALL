@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #363
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 D
+- 任务：MEM-TODO-017 实现 BudgetAllocator
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-017` 直接消费刚完成的 `CandidateSet`，是 `CompressionCoordinator` 和 `ContextOrchestrator` 之前的唯一预算分配入口；如果没有稳定的 slot budget / trim action 计划，018/019 会被迫把预算逻辑散落在 orchestrator 内部。
+2. 本轮严格限定在 `BudgetAllocator` 的 module-local 头/实现、budget-specific unit tests 和 CMake 注册，不提前实现 `CompressionCoordinator` 或真实 `ContextOrchestrator`。
+3. 由于 `ContextPacket` 最终槽位是固定面，本轮需要先冻结 slot 名称、stage 默认比例以及 risk / latency 的再平衡规则，保证后续 019 只做装配而不再发散预算策略。
+
+### 改动
+
+1. 新增 `memory/src/context/BudgetAllocator.h` 与 `memory/src/context/BudgetAllocator.cpp`：
+   - 定义 `BudgetPolicy`、`SlotBudget`、`TrimAction`、`BudgetPlan`；
+   - 实现 `allocate`、`compute_slot_budgets`、`compute_trim_actions`；
+   - 固化 planning / reasoning / reflection 三类 stage 的默认槽位比例，并在高 risk / 低 latency 下把预算从 `recent_history`、`summary_memory`、`retrieval_evidence` 向 `policy_digest`、`current_goal_summary`、`latest_observation_digest_summary` 倾斜。
+2. 新增 `tests/unit/memory/BudgetAllocatorTest.cpp`：
+   - 覆盖 planning 场景下的 goal / policy 高优先级分配；
+   - 覆盖 budget pressure 下的 trim action 生成与 target floor 约束。
+3. 新增 `tests/unit/memory/ContextOrchestratorBudgetTest.cpp` 并更新 CMake：
+   - 覆盖 reasoning 场景在高 risk 与低 latency 约束下的 budget shift；
+   - 把 `BudgetAllocator` 以及两条预算测试目标接入 `dasall_memory` 构建图和 CTest。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `BudgetAllocator.h/.cpp`、两条预算测试与相关 CMake 文件均无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_budget_allocator_unit_test`、`dasall_memory_context_budget_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `BudgetAllocatorTest` 与 `ContextOrchestratorBudgetTest`；
+   - 结果：两条测试全部通过，`100% tests passed, 0 tests failed out of 2`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但未影响返回码与结论。
+
+### 结果
+
+1. `MEM-TODO-017` 已完成，`BudgetAllocator` 现在可以把 `CandidateSet` 转换为固定槽位的 `BudgetPlan`，并在 budget pressure 下输出可执行的 `TrimAction` 列表。
+2. stage 默认比例和 risk / latency 调节规则已经冻结为 module-local 预算基线，后续 019 只需要消费 `BudgetPlan` 做装配与 token report，不必再重新发明预算规则。
+3. 017 没有提前进入压缩和 orchestrator wiring；下一轮可以直接进入 `MEM-TODO-018` 的模板压缩路径。
+
+### 下一步
+
+1. 进入 `MEM-TODO-018`，实现 `CompressionCoordinator` 的模板压缩、增量合并与 summarizer fallback 路径。
+
+### 风险
+
+1. 当前 `BudgetAllocator` 对 request 驱动槽位的 estimated usage 仍以固定配额为主，真实 token 使用要到 019 的 `MemoryContextRequest` 投影阶段再补齐；因此当前更适合作为分配与 trim 基线，而不是最终 tokenizer 精算器。
+2. `relevant_experiences` 尚未映射到独立的 `ContextPacket` 槽位，当前预算模型主要覆盖 goal / policy / observation / history / summary / facts / retrieval / tools；如果后续要把经验教训投影到上下文，需要在 018/019 明确折叠位置，而不是在本轮隐式扩槽位。
+
 ## 记录 #362
 
 - 日期：2026-04-20
