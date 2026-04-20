@@ -61,13 +61,13 @@ std::optional<MemoryConfig> project_memory_config(
       0.90);
 
   MemoryConfig config;
-  config.storage.backend = "sqlite";
-  config.storage.journal_mode = "WAL";
-  config.storage.synchronous = "NORMAL";
+  config.storage.backend = StorageBackend::Sqlite;
+  config.storage.journal_mode = JournalMode::Wal;
+  config.storage.synchronous = SynchronousMode::Normal;
   config.storage.wal_autocheckpoint_pages = wal_autocheckpoint_pages;
   config.storage.busy_timeout_ms = busy_timeout_ms;
   config.storage.writer_retry_count = snapshot.degrade_policy().allow_budget_degrade ? 2 : 1;
-  config.storage.checkpoint_mode = "PASSIVE";
+  config.storage.checkpoint_mode = CheckpointMode::Passive;
   config.storage.reader_pool_size = reader_pool_size;
 
   config.context.recent_turn_limit = recent_turn_limit;
@@ -81,7 +81,7 @@ std::optional<MemoryConfig> project_memory_config(
       manifest.enables_module("memory_experience") ? 60 : 100;
 
   config.vector.enabled = vector_enabled;
-  config.vector.backend_type = vector_enabled ? "sqlite-vss" : "none";
+  config.vector.backend_type = vector_enabled ? VectorBackend::SqliteVss : VectorBackend::None;
   config.vector.search_top_k = search_top_k;
 
   config.maintenance.retention_turns = retention_turns;

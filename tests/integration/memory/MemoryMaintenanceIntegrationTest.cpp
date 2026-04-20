@@ -78,7 +78,7 @@ int query_scalar_count(const std::filesystem::path& database_path,
 
 dasall::memory::MemoryConfig make_sqlite_config(const std::filesystem::path& database_path) {
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.reader_pool_size = 2;
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;

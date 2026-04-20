@@ -44,7 +44,7 @@ class StubVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryIn
         .available = available,
         .indexed_doc_count = static_cast<int>(hits.size()),
         .last_rebuild_at = 0,
-        .backend_type = "stub",
+        .backend_type = "sqlite-vss",
     };
   }
 

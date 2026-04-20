@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cctype>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -34,13 +33,6 @@ void append_warning_once(std::vector<std::string>& warnings,
 
 [[nodiscard]] bool is_busy_code(int sqlite_status) {
   return sqlite_status == SQLITE_BUSY || sqlite_status == SQLITE_LOCKED;
-}
-
-[[nodiscard]] std::string uppercase_copy(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
-    return static_cast<char>(std::toupper(ch));
-  });
-  return value;
 }
 
 [[nodiscard]] bool begin_transaction(sqlite3* connection) {
@@ -412,12 +404,12 @@ void rollback_transaction(sqlite3* connection) {
 void run_wal_checkpoint(sqlite3* connection,
                         const MemoryConfig& config,
                         MaintenanceReport& report) {
-  if (uppercase_copy(config.storage.journal_mode) != "WAL") {
+  if (config.storage.journal_mode != JournalMode::Wal) {
     append_warning_once(report.warnings, "checkpoint_skipped_non_wal");
     return;
   }
 
-  if (uppercase_copy(config.storage.checkpoint_mode) != "PASSIVE") {
+  if (config.storage.checkpoint_mode != CheckpointMode::Passive) {
     append_warning_once(report.warnings, "checkpoint_mode_forced_passive");
   }
 
@@ -653,7 +645,7 @@ MaintenanceReport MemoryMaintenanceWorker::execute(
 
 void MemoryMaintenanceWorker::background_loop() {
   const auto interval =
-      std::chrono::milliseconds(std::max(1, config_.maintenance.schedule_interval_ms));
+      std::chrono::milliseconds(std::max(std::int64_t{1}, config_.maintenance.schedule_interval_ms));
   const MaintenanceRequest scheduled_request{};
 
   std::unique_lock<std::mutex> lock(schedule_mutex_);

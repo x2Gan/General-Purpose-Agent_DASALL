@@ -249,13 +249,13 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
 
     MemoryConfig config;
 
-    assert_equal("sqlite", config.storage.backend,
+    assert_equal(std::string("sqlite"), std::string(to_string_view(config.storage.backend)),
          "memory storage backend should default to sqlite");
     assert_equal("memory.db", config.storage.db_path,
          "memory storage db path should default to the local sqlite file");
-    assert_equal("WAL", config.storage.journal_mode,
+    assert_equal(std::string("WAL"), std::string(to_string_view(config.storage.journal_mode)),
          "memory storage should default to WAL journal mode");
-    assert_equal("NORMAL", config.storage.synchronous,
+    assert_equal(std::string("NORMAL"), std::string(to_string_view(config.storage.synchronous)),
          "memory storage should default synchronous mode to NORMAL");
     assert_equal(1000, config.storage.wal_autocheckpoint_pages,
          "memory storage should default WAL autocheckpoint pages to the detailed-design baseline");
@@ -263,7 +263,7 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
          "memory storage should default busy timeout to the bounded local retry window");
     assert_equal(2, config.storage.writer_retry_count,
          "memory storage should default writer retry count to the design baseline");
-    assert_equal("PASSIVE", config.storage.checkpoint_mode,
+    assert_equal(std::string("PASSIVE"), std::string(to_string_view(config.storage.checkpoint_mode)),
          "memory storage should default checkpoint mode to PASSIVE");
     assert_equal(2, config.storage.reader_pool_size,
          "memory storage should default reader pool size to the design baseline");
@@ -286,7 +286,7 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
          "memory experience config should default effectiveness floor to sixty");
     assert_true(!config.vector.enabled,
         "memory vector config should default to disabled until profile projection enables it");
-    assert_equal("sqlite-vss", config.vector.backend_type,
+    assert_equal(std::string("sqlite-vss"), std::string(to_string_view(config.vector.backend_type)),
          "memory vector config should expose sqlite-vss as the default backend type");
     assert_equal(5, config.vector.search_top_k,
          "memory vector config should default top-k search width to five");
@@ -303,7 +303,7 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
         "memory maintenance config should default experience ttl to disabled cleanup");
     assert_true(!config.maintenance.auto_schedule,
         "memory maintenance config should default auto schedule to disabled");
-    assert_equal(60000, config.maintenance.schedule_interval_ms,
+    assert_equal(std::int64_t{60000}, config.maintenance.schedule_interval_ms,
          "memory maintenance config should default maintenance schedule interval to sixty seconds");
   }
 
@@ -664,7 +664,7 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
                                    "fake memory store should reuse the optional ResultCode success pattern");
      assert_true(store.is_open_for_test(),
                                    "fake memory store should expose an opened state after open()");
-     assert_equal("sqlite", store.last_open_backend_for_test(),
+     assert_true(store.last_open_backend_for_test() == dasall::memory::StorageBackend::Sqlite,
                                     "fake memory store should preserve the configured backend projection");
 
      auto transaction = store.begin_immediate();

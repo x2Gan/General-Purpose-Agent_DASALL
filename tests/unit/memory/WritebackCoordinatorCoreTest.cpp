@@ -55,7 +55,7 @@ class SpyVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryInd
         .available = available,
         .indexed_doc_count = static_cast<int>(upserted_documents.size()),
         .last_rebuild_at = 0,
-        .backend_type = "spy",
+        .backend_type = "sqlite-vss",
     };
   }
 
@@ -259,7 +259,7 @@ void test_writeback_coordinator_persists_core_transaction_and_updates_working_bo
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = make_temp_database_path().string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
 

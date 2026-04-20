@@ -135,7 +135,7 @@ class FailingVectorMemoryIndexAdapter final : public dasall::memory::VectorMemor
         .available = true,
         .indexed_doc_count = 0,
         .last_rebuild_at = 0,
-        .backend_type = "failing",
+        .backend_type = "sqlite-vss",
     };
   }
 

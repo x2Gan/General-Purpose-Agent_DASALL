@@ -279,7 +279,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
 
   [[nodiscard]] bool is_open_for_test() const { return is_open_; }
   [[nodiscard]] bool has_active_transaction_for_test() const { return active_transaction_; }
-  [[nodiscard]] std::string last_open_backend_for_test() const { return last_open_backend_; }
+  [[nodiscard]] memory::StorageBackend last_open_backend_for_test() const { return last_open_backend_; }
 
  private:
   class FakeStoreTransaction final : public memory::IStoreTransaction {
@@ -366,7 +366,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
 
   bool is_open_ = false;
   bool active_transaction_ = false;
-  std::string last_open_backend_;
+  memory::StorageBackend last_open_backend_{};
   std::unordered_map<std::string, contracts::Session> sessions_;
   std::unordered_map<std::string, std::vector<contracts::Turn>> turns_by_session_;
   std::unordered_map<std::string, contracts::SummaryMemory> summaries_by_session_;

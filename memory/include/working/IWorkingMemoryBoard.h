@@ -9,6 +9,15 @@
 
 namespace dasall::memory {
 
+/// In-memory working board for short-lived slot data scoped to sessions.
+///
+/// Thread-safety contract:
+/// - All methods are safe to call from any thread. The concrete implementation
+///   uses an internal mutex to protect the slot map.
+/// - export_snapshot() and get_slot() are read-side and may run concurrently
+///   with each other.
+/// - set_slot(), remove_slot(), clear_session(), restore_snapshot(), and
+///   evict_expired() are write-side and serialize against each other.
 class IWorkingMemoryBoard {
  public:
   virtual ~IWorkingMemoryBoard() = default;

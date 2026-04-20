@@ -64,7 +64,7 @@ void test_memory_manager_factory_bootstraps_sqlite_store_after_mem_todo_014() {
   cleanup_database_artifacts(database_path);
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
   auto manager = dasall::memory::create_memory_manager(config);
@@ -86,7 +86,7 @@ void test_memory_manager_smoke_surface_covers_sqlite_writeback_export_and_mainte
   cleanup_database_artifacts(database_path);
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
 

@@ -44,7 +44,7 @@ void test_unavailable_vector_memory_adapter_reports_none_backend_when_vector_is_
 
   VectorConfig config;
   config.enabled = false;
-  config.backend_type = "sqlite-vss";
+  config.backend_type = dasall::memory::VectorBackend::SqliteVss;
 
   CountingEmbeddingAdapter embedding_adapter;
   UnavailableVectorMemoryIndexAdapter adapter(config, &embedding_adapter);
@@ -88,7 +88,7 @@ void test_unavailable_vector_memory_adapter_preserves_requested_backend_for_avai
 
   VectorConfig config;
   config.enabled = true;
-  config.backend_type = "sqlite-vss";
+  config.backend_type = dasall::memory::VectorBackend::SqliteVss;
   config.search_top_k = 7;
 
   CountingEmbeddingAdapter embedding_adapter;

@@ -70,7 +70,7 @@ class BootstrapContextOrchestrator final : public IContextOrchestrator {
 std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config) {
   MemoryManagerDependencies dependencies;
   dependencies.working_memory_board = create_working_memory_board();
-  if (config.storage.backend == "sqlite") {
+  if (config.storage.backend == StorageBackend::Sqlite) {
     dependencies.store = store::sqlite::create_sqlite_memory_store();
   }
 

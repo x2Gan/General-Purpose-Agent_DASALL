@@ -10,12 +10,7 @@ std::string resolve_backend_type(const VectorConfig& config) {
   if (!config.enabled) {
     return "none";
   }
-
-  if (config.backend_type.empty()) {
-    return "none";
-  }
-
-  return config.backend_type;
+  return std::string(to_string_view(config.backend_type));
 }
 
 }  // namespace

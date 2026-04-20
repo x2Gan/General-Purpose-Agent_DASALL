@@ -51,7 +51,7 @@ void cleanup_database_artifacts(const std::filesystem::path& database_path) {
 [[nodiscard]] dasall::memory::MemoryConfig make_sqlite_config(
     const std::filesystem::path& database_path) {
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
   config.context.compression_trigger_turns = 2;

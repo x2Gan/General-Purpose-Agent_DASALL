@@ -15,6 +15,17 @@
 
 namespace dasall::memory {
 
+/// Central facade for the memory subsystem lifecycle.
+///
+/// Thread-safety contract:
+/// - init() and shutdown() must be called from a single owner thread.
+/// - prepare_context() and write_back() may be called from any thread after
+///   init() returns success, but concurrent calls to write_back() are
+///   serialized internally via the shared writer mutex.
+/// - export_working_memory_snapshot() is safe to call concurrently with
+///   prepare_context(); the working memory board provides its own locking.
+/// - run_maintenance() is safe to call concurrently; the maintenance worker
+///   acquires the shared writer mutex for checkpoint/retention operations.
 class IMemoryManager {
  public:
   virtual ~IMemoryManager() = default;

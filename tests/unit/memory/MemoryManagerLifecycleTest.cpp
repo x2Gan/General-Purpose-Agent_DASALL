@@ -10,7 +10,7 @@ void test_memory_manager_rejects_prepare_context_before_init() {
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "memory";
+  config.storage.backend = dasall::memory::StorageBackend::Memory;
 
   auto manager = dasall::memory::create_memory_manager(config);
 
@@ -36,7 +36,7 @@ void test_memory_manager_init_prepare_and_shutdown_follow_the_lifecycle_skeleton
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "memory";
+  config.storage.backend = dasall::memory::StorageBackend::Memory;
 
   auto manager = dasall::memory::create_memory_manager(config);
 

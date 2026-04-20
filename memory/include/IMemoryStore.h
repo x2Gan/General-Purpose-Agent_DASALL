@@ -60,7 +60,7 @@ struct FactQuery {
   std::optional<std::string> session_id;
   std::optional<std::string> user_id;
   std::optional<std::string> fact_type;
-  std::optional<int> min_confidence = 0;
+  std::optional<int> min_confidence;
   bool exclude_superseded = true;
   int limit = 50;
 };

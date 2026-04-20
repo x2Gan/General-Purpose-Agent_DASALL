@@ -139,7 +139,7 @@ void test_sqlite_store_transaction_rolls_back_on_scope_exit_and_commits_explicit
   const auto database_path = make_temp_database_path();
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
 

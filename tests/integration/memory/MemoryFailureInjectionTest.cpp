@@ -96,9 +96,9 @@ int query_scalar_int(sqlite3* connection, const std::string& sql) {
 
 [[nodiscard]] dasall::memory::MemoryConfig make_sqlite_config(
     const std::filesystem::path& database_path,
-    const std::string& journal_mode = "WAL") {
+    dasall::memory::JournalMode journal_mode = dasall::memory::JournalMode::Wal) {
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
   config.storage.journal_mode = journal_mode;
@@ -162,7 +162,7 @@ void test_sqlite_store_reports_storage_unavailable_when_database_is_full() {
   const auto database_path = make_temp_database_path("dasall-memory-sqlite-full");
   cleanup_database_artifacts(database_path);
 
-  const auto config = make_sqlite_config(database_path, "DELETE");
+  const auto config = make_sqlite_config(database_path, dasall::memory::JournalMode::Delete);
   auto store = dasall::memory::store::sqlite::create_sqlite_memory_store();
   assert_true(!store->open(config).has_value(),
               "sqlite store should open before disk-full failure injection");

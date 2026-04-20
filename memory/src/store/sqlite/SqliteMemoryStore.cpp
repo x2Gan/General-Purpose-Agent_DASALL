@@ -206,39 +206,23 @@ std::optional<contracts::ResultCode> SqliteMemoryStore::open(
     return contracts::ResultCode::ValidationFieldMissing;
   }
 
-  static constexpr std::string_view kAllowedJournalModes[] = {
-      "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"};
-  static constexpr std::string_view kAllowedSynchronous[] = {
-      "OFF", "NORMAL", "FULL", "EXTRA"};
-
-  const auto mode_ok = std::any_of(
-      std::begin(kAllowedJournalModes), std::end(kAllowedJournalModes),
-      [&](std::string_view allowed) { return allowed == config.storage.journal_mode; });
-  if (!mode_ok) {
-    return contracts::ResultCode::ValidationFieldMissing;
-  }
-
-  const auto sync_ok = std::any_of(
-      std::begin(kAllowedSynchronous), std::end(kAllowedSynchronous),
-      [&](std::string_view allowed) { return allowed == config.storage.synchronous; });
-  if (!sync_ok) {
-    return contracts::ResultCode::ValidationFieldMissing;
-  }
-
   if (sqlite3_open(config.storage.db_path.c_str(), &writer_connection_) != SQLITE_OK) {
     close();
     return contracts::ResultCode::RuntimeRetryExhausted;
   }
 
+  const std::string journal_mode_str{to_string_view(config.storage.journal_mode)};
+  const std::string synchronous_str{to_string_view(config.storage.synchronous)};
+
   sqlite3_busy_timeout(writer_connection_, config.storage.busy_timeout_ms);
   if (const auto journal_result = exec_sql(
-          writer_connection_, "PRAGMA journal_mode = " + config.storage.journal_mode + ";");
+          writer_connection_, "PRAGMA journal_mode = " + journal_mode_str + ";");
       journal_result.has_value()) {
     close();
     return journal_result;
   }
   if (const auto sync_result = exec_sql(
-          writer_connection_, "PRAGMA synchronous = " + config.storage.synchronous + ";");
+          writer_connection_, "PRAGMA synchronous = " + synchronous_str + ";");
       sync_result.has_value()) {
     close();
     return sync_result;

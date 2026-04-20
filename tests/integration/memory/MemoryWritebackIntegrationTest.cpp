@@ -87,7 +87,7 @@ void test_memory_manager_writeback_integration_persists_and_supersedes_facts() {
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
-  config.storage.backend = "sqlite";
+  config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = make_temp_database_path().string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
   if (config.storage.migrations_dir.empty()) {

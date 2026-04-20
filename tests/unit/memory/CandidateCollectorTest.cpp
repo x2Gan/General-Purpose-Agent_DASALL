@@ -42,7 +42,7 @@ class SpyVectorMemoryIndexAdapter final : public dasall::memory::VectorMemoryInd
         .available = true,
         .indexed_doc_count = static_cast<int>(hits_.size()),
         .last_rebuild_at = 0,
-        .backend_type = "spy",
+        .backend_type = "sqlite-vss",
     };
   }
 

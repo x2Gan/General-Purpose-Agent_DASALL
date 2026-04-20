@@ -46,6 +46,7 @@ class VectorMemoryIndexAdapter {
 class UnavailableVectorMemoryIndexAdapter final : public VectorMemoryIndexAdapter {
  public:
   explicit UnavailableVectorMemoryIndexAdapter(const VectorConfig& config,
+                                               /// Non-owning; lifetime must be managed by the caller (typically MemoryManagerFactory).
                                                IEmbeddingAdapter* embedding_adapter = nullptr);
 
   [[nodiscard]] bool is_available() const override;
@@ -57,6 +58,7 @@ class UnavailableVectorMemoryIndexAdapter final : public VectorMemoryIndexAdapte
 
  private:
   VectorConfig config_{};
+  /// Non-owning pointer; caller retains ownership.
   IEmbeddingAdapter* embedding_adapter_ = nullptr;
   VectorIndexHealth health_{};
 };

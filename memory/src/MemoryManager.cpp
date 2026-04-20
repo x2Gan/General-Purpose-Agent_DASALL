@@ -97,15 +97,12 @@ contracts::ResultCode MemoryManager::init(const MemoryConfig& config) {
     return kMemoryManagerInitSuccess;
   }
 
-  if (config.storage.backend.empty()) {
+  if (config.storage.backend != StorageBackend::Sqlite &&
+      config.storage.backend != StorageBackend::Memory) {
     return config_invalid_code();
   }
 
-  if (config.storage.backend != "memory" && config.storage.backend != "sqlite") {
-    return config_invalid_code();
-  }
-
-  if (config.storage.backend == "sqlite" && !dependencies_.store) {
+  if (config.storage.backend == StorageBackend::Sqlite && !dependencies_.store) {
     return storage_unavailable_code();
   }
 

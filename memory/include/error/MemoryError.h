@@ -3,6 +3,11 @@
 #include <cerrno>
 #include <string_view>
 
+// L3: ETIMEDOUT is POSIX-only. Provide a fallback for non-POSIX platforms.
+#ifndef ETIMEDOUT
+#define ETIMEDOUT 110
+#endif
+
 #include "error/ResultCode.h"
 
 namespace dasall::memory {

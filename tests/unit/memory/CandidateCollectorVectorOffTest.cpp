@@ -43,7 +43,7 @@ class TrackingVectorMemoryIndexAdapter final : public dasall::memory::VectorMemo
         .available = true,
         .indexed_doc_count = 1,
         .last_rebuild_at = 0,
-        .backend_type = "tracking",
+        .backend_type = "sqlite-vss",
     };
   }
 

@@ -1,4 +1,5 @@
 #include <exception>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -83,6 +84,8 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
   const auto desktop = load_profile("desktop_full", "linux-x86_64-workstation");
   const auto edge_balanced = load_profile("edge_balanced", "linux-arm64-embedded");
   const auto edge_minimal = load_profile("edge_minimal", "linux-arm64-embedded");
+  const auto cloud = load_profile("cloud_full", "linux-x86_64-server");
+  const auto factory = load_profile("factory_test", "linux-arm64-factory");
 
   assert_equal(std::string("desktop_full"), desktop.snapshot->effective_profile_id(),
                "memory profile projection should preserve the desktop profile id");
@@ -104,11 +107,11 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
               "edge_balanced should project vector as enabled");
   assert_true(!edge_minimal.config.vector.enabled,
               "edge_minimal should project vector as disabled without breaking the rest of MemoryConfig");
-  assert_equal(std::string("sqlite-vss"), desktop.config.vector.backend_type,
+  assert_equal(std::string("sqlite-vss"), std::string(dasall::memory::to_string_view(desktop.config.vector.backend_type)),
                "desktop_full should keep sqlite-vss as the projected vector backend");
-  assert_equal(std::string("sqlite-vss"), edge_balanced.config.vector.backend_type,
+  assert_equal(std::string("sqlite-vss"), std::string(dasall::memory::to_string_view(edge_balanced.config.vector.backend_type)),
                "edge_balanced should keep sqlite-vss as the projected vector backend");
-  assert_equal(std::string("none"), edge_minimal.config.vector.backend_type,
+  assert_equal(std::string("none"), std::string(dasall::memory::to_string_view(edge_minimal.config.vector.backend_type)),
                "edge_minimal should downgrade the projected vector backend to none");
   assert_equal(8, desktop.config.vector.search_top_k,
                "desktop_full should keep the broader vector search window");
@@ -155,12 +158,34 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
               "edge_balanced should keep maintenance auto-schedule enabled");
   assert_true(!edge_minimal.config.maintenance.auto_schedule,
               "edge_minimal should disable maintenance auto-schedule by projection");
-  assert_equal(60000, desktop.config.maintenance.schedule_interval_ms,
+  assert_equal(std::int64_t{60000}, desktop.config.maintenance.schedule_interval_ms,
                "desktop_full should project the fastest maintenance cadence");
-  assert_equal(90000, edge_balanced.config.maintenance.schedule_interval_ms,
+  assert_equal(std::int64_t{90000}, edge_balanced.config.maintenance.schedule_interval_ms,
                "edge_balanced should project the mid-tier maintenance cadence");
-  assert_equal(120000, edge_minimal.config.maintenance.schedule_interval_ms,
+  assert_equal(std::int64_t{120000}, edge_minimal.config.maintenance.schedule_interval_ms,
                "edge_minimal should project the slowest maintenance cadence");
+
+  // --- L13: cloud_full and factory_test profile coverage ---
+  assert_equal(std::string("cloud_full"), cloud.snapshot->effective_profile_id(),
+               "memory profile projection should preserve the cloud_full profile id");
+  assert_equal(std::string("factory_test"), factory.snapshot->effective_profile_id(),
+               "memory profile projection should preserve the factory_test profile id");
+
+  assert_true(cloud.config.vector.enabled,
+              "cloud_full should project vector as enabled");
+  assert_equal(std::string("sqlite-vss"),
+               std::string(dasall::memory::to_string_view(cloud.config.vector.backend_type)),
+               "cloud_full should keep sqlite-vss as the projected vector backend");
+  assert_true(!factory.config.vector.enabled,
+              "factory_test should project vector as disabled");
+  assert_equal(std::string("none"),
+               std::string(dasall::memory::to_string_view(factory.config.vector.backend_type)),
+               "factory_test should downgrade the projected vector backend to none");
+
+  assert_true(cloud.config.maintenance.auto_schedule,
+              "cloud_full should keep maintenance auto-schedule enabled");
+  assert_true(factory.config.maintenance.auto_schedule,
+              "factory_test should keep maintenance auto-schedule enabled with 4 worker threads");
 }
 
 void test_memory_profile_projection_stays_compatible_with_profile_validator() {
@@ -168,6 +193,8 @@ void test_memory_profile_projection_stays_compatible_with_profile_validator() {
       load_profile("desktop_full", "linux-x86_64-workstation"),
       load_profile("edge_balanced", "linux-arm64-embedded"),
       load_profile("edge_minimal", "linux-arm64-embedded"),
+      load_profile("cloud_full", "linux-x86_64-server"),
+      load_profile("factory_test", "linux-arm64-factory"),
   };
   const dasall::profiles::ProfileCompatibilityValidator validator;
 
