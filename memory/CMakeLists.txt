@@ -61,6 +61,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/MemoryBuildSkeleton.cpp
   src/MemoryManager.cpp
   src/MemoryManagerFactory.cpp
+  src/context/CandidateCollector.cpp
   src/store/sqlite/RowMappers.cpp
   src/store/sqlite/SqliteMemoryStore.cpp
   src/store/sqlite/SqliteSchemaMigrator.cpp

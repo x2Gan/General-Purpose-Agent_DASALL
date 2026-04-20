@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #362
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 D
+- 任务：MEM-TODO-016 实现 CandidateCollector
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-016` 是阶段 D 的最早可执行行，且其前置 `MEM-TODO-006`、`010`、`012`、`014`、`015`、`022` 均已完成；如果不先落 `CandidateCollector`，后续 `BudgetAllocator` / `CompressionCoordinator` / `ContextOrchestrator` 都缺少统一的候选输入面。
+2. 本轮严格限定在 `CandidateCollector` 的 module-local 头/实现、unit tests 与 CMake 注册，不提前进入 `BudgetAllocator`、`CompressionCoordinator`、`ContextOrchestrator` 的 wiring，也不改 public ABI。
+3. 由于 022 已经把 vector unavailable baseline 落好，本轮必须复用 `VectorMemoryIndexAdapter::is_available()` gate 做 graceful degrade，而不是对 concrete backend 建立硬依赖。
+
+### 改动
+
+1. 新增 `memory/src/context/CandidateCollector.h` 与 `memory/src/context/CandidateCollector.cpp`：
+   - 定义 `CandidateCollectRequest`、`CandidateSet` 和 `CandidateCollector` module-local surface；
+   - 实现 `collect`、`load_session_context`、`query_relevant_facts`、`query_relevant_experiences`、`search_vector`、`estimate_tokens`；
+   - 通过 working memory snapshot、session bundle、latest summary、fact / experience query、external evidence 与可选 vector hit 汇聚多源候选，并在单个子源失败时记录 warning 后降级继续。
+2. 新增 `tests/unit/memory/CandidateCollectorTest.cpp` 与 `tests/unit/memory/CandidateCollectorVectorOffTest.cpp`：
+   - 覆盖 happy path 的多源候选收集、recent turn limit、fact confidence floor、stage 过滤、vector search query 以及 token estimate；
+   - 覆盖 experience query failure 的独立降级，以及 vector unavailable / disabled 两种 gate 行为。
+3. 更新 `memory/CMakeLists.txt` 与 `tests/unit/memory/CMakeLists.txt`：
+   - 把 `CandidateCollector.cpp` 接入 `dasall_memory`；
+   - 新增 `dasall_memory_candidate_collector_unit_test` 与 `dasall_memory_candidate_collector_vector_off_unit_test` 两个目标并注册到 CTest。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `CandidateCollector.h/.cpp`、两条 unit test 与相关 CMake 文件均无错误。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_candidate_collector_unit_test`、`dasall_memory_candidate_collector_vector_off_unit_test`；
+   - `RunCtest_CMakeTools` 运行 `CandidateCollectorTest` 与 `CandidateCollectorVectorOffTest`；
+   - 结果：两条测试全部通过，`100% tests passed, 0 tests failed out of 2`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但未影响返回码与结论。
+
+### 结果
+
+1. `MEM-TODO-016` 已完成，`CandidateCollector` 现在可以从 `WorkingMemoryBoard`、`IMemoryStore` 和可选 `VectorMemoryIndexAdapter` 汇聚多源候选，并输出统一的 `CandidateSet`。
+2. vector 路径已经严格受 `is_available()` gate 约束：backend unavailable 时降级为 warning + 空结果，backend disabled 时直接跳过搜索，不影响主链。
+3. token 估算逻辑已落为 ASCII / UTF-8 混合启发式并追加 10% 余量，足以为 017 的预算分配提供输入基线。
+
+### 下一步
+
+1. 进入 `MEM-TODO-017`，实现 `BudgetAllocator`，把 `CandidateSet` 转换成可裁剪的 slot budget / trim actions 计划。
+
+### 风险
+
+1. `CandidateCollector` 当前只按 session、user、confidence 和 stage 做稳定过滤，`applicable_domains` 尚未从请求或 working slots 投影出来；如果后续需要更细的 domain-aware 经验召回，需要在 017/019 或后续 supporting object 中补输入面，而不是把语义猜测塞进本轮。
+2. token estimate 目前是启发式估算而非 tokenizer 精算，足以支撑预算排序与 trim gate，但在中英混排极端长文本上仍可能偏保守，后续若引入精确 tokenizer 绑定需要保持输入输出口径不变。
+
 ## 记录 #361
 
 - 日期：2026-04-18
