@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #374
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 G
+- 任务：MEM-TODO-030 回写 memory 专项 Gate 与交付证据
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-030` 是 026 ~ 029 全部通过后的最终收口任务；它的职责不是再写代码，而是把 manager smoke、writeback/contracts、failure injection、profile compatibility / discoverability 的 gate 结果统一记账，形成完整、可追溯的 memory 专项交付链。
+2. 本轮遵循“只对当前任务范围记账”的原则：先尝试按 TODO 基线触发聚合 build/test，再把结论收敛到 memory scoped gate，避免仓库里无关子系统的既有失败被误记成 memory blocker。
+3. 因此前置动作不是修改实现，而是补做最终 memory 专项 build/test 证据，并显式区分“memory 全绿”与“仓库其他 integration 残留失败”两个层次。
+
+### 改动
+
+1. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-030` 标记为 Done；
+   - 把顶部 current conclusion 推进为 memory 专项 TODO 全部闭环；
+   - 记录 memory scoped 最终 gate 的构建 / 测试证据；
+   - 显式注明聚合 `dasall_integration_tests` 在本轮暴露的两个 infra 既有失败不构成 memory blocker。
+2. 更新本记录：
+   - 保留最终 memory 专项 build/test 证据；
+   - 记录无关 infra integration 残留的观测；
+   - 给出 memory 专项交付结论与后续可选方向。
+
+### 测试
+
+1. 聚合尝试：
+   - `Build_CMakeTools` 尝试构建 `dasall_memory`、`dasall_unit_tests`、`dasall_contract_tests`、`dasall_integration_tests`；
+   - `dasall_contract_tests` 全绿，但 `dasall_integration_tests` 在仓库级别暴露 `InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 两个既有失败。
+2. memory scoped 定向 gate：
+   - `Build_CMakeTools` 定向构建 `dasall_memory`、memory 全量 unit / integration / contract targets；
+   - `RunCtest_CMakeTools` 运行 25 条 memory unit tests：
+     `MemoryInterfaceCompileTest`、`VectorMemoryAdapterTest`、`MemoryManagerLifecycleTest`、`MemoryManagerSmokeTest`、`WorkingMemoryBoardTest`、`WorkingMemorySnapshotTest`、`WorkingMemoryBoardConcurrencyTest`、`SchemaMigrationTest`、`SqliteTransactionTest`、`SqliteMemoryStoreTest`、`CandidateCollectorTest`、`CandidateCollectorVectorOffTest`、`BudgetAllocatorTest`、`ContextOrchestratorBudgetTest`、`CompressionCoordinatorTest`、`CompressionCoordinatorSummarizerTest`、`ContextOrchestratorTest`、`ContextOrchestratorDegradedTest`、`MemoryConflictResolverTest`、`ConflictResolverDegradedTest`、`FactConflictResolverTest`、`WritebackCoordinatorCoreTest`、`WritebackCoordinatorPartialTest`、`MemoryMaintenanceRetentionTest`、`MemoryMaintenanceCheckpointTest`；
+   - `RunCtest_CMakeTools` 运行 7 条 memory integration tests：
+     `MemoryIntegrationTopologySmokeTest`、`MemoryContextAssembleIntegrationTest`、`MemoryFailureInjectionTest`、`MemoryProfileCompatibilityTest`、`MemoryWritebackIntegrationTest`、`MemoryMaintenanceIntegrationTest`、`MemoryCheckpointBusyTest`；
+   - `RunCtest_CMakeTools` 运行 3 条 memory contracts：
+     `TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest`、`ContextPacketFieldContractTest`；
+   - 上述 35 条 memory scoped tests 全部通过；`ListTests_CMakeTools` 同时确认 `MemoryProfileCompatibilityTest` 已 discoverable。
+3. 说明：
+   - `DartConfiguration.tcl` 仍是 CMake Tools stderr 噪声，但 memory scoped build/test 返回码均为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-030` 已完成，memory 专项 TODO 现已全部闭环：026 的 manager smoke / context assemble、027 的 writeback/contracts、028 的 failure injection / busy recovery、029 的 profile compatibility / discoverability，均已被统一纳入同一份交付证据链。
+2. 本轮同时澄清了一个重要边界：仓库级聚合 `dasall_integration_tests` 当前仍受两个 infra integration 既有失败影响，但这不改变 memory scoped gate 全绿的事实，因此不构成 memory 子系统专项交付的阻塞项。
+3. 由此，memory 子系统当前可以明确宣称：在专项 TODO 定义的范围内，public ABI、主链实现、failure semantics、profile projection 与测试 discoverability 均已完成并具备可追溯证据。
+
+### 下一步
+
+1. 若继续推进 memory，可转入 runtime 组合根对 `MemoryConfigProjector` 的实际接线，避免 profile projection 仍停留在 internal utility 层。
+2. 若进入跨模块收口，应单独处理本轮观测到的 `InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest` 既有失败，而不是在 memory 专项 TODO 内继续消化。
+
+### 风险
+
+1. memory scoped gate 已闭环，但仓库级 integration 全绿仍受 infra 残留影响；如果后续需要仓库级 release-ready 结论，必须单独清理这两个 infra integration failure。
+2. `MemoryConfigProjector` 目前只在 memory 模块内部和 integration gate 中被消费，尚未被 runtime 组合根正式使用；这不影响 029/030 的 gate 结论，但会影响未来生产装配的一致性。 
+
 ## 记录 #373
 
 - 日期：2026-04-20
