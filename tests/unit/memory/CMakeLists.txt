@@ -259,6 +259,11 @@ target_include_directories(dasall_memory_schema_migration_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_vector_memory_adapter_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_sqlite_transaction_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src

@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #376
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 结构优化轮次
+- 任务：MEM-TODO-032 将 UnavailableVectorMemoryIndexAdapter 移入 src/
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-032` 是 033 前的第二个最小 ABI 收口任务：如果 unavailable concrete adapter 继续停留在 public header，后续 concrete backend 扩展和 vector surface 演进都会把 internal implementation 细节持续暴露给外部消费者。
+2. 本轮只做“public header 收窄 + internal header 补位 + 测试入口跟进”，不把 035 的 concrete backend 或 033 的 store ISP 拆分提前混入。
+3. 由于生产代码当前并未在 `MemoryManagerFactory` 中直接构造 unavailable adapter，本轮的关键验收点变为 public ABI 是否只剩抽象接口，以及 internal header 是否可被现有 unit tests 稳定消费。
+
+### 改动
+
+1. 新增 `memory/src/vector/UnavailableVectorMemoryIndexAdapter.h`：
+   - 将 `UnavailableVectorMemoryIndexAdapter` 声明迁入 internal source header；
+   - 保留构造参数和 non-owning ownership 说明。
+2. 更新 `memory/include/vector/VectorMemoryIndexAdapter.h`：
+   - 删除 concrete unavailable adapter 声明；
+   - public surface 只保留 `VectorMemoryIndexAdapter` 抽象接口与 supporting structs。
+3. 更新 `memory/src/vector/UnavailableVectorMemoryIndexAdapter.cpp`：
+   - 改为 include internal header，保持实现行为不变。
+4. 更新 `tests/unit/memory/VectorMemoryAdapterTest.cpp` 与 `tests/unit/memory/CandidateCollectorTest.cpp`：
+   - 改为 include internal `vector/UnavailableVectorMemoryIndexAdapter.h`；
+   - 继续复用既有 unavailable / vector-off 语义断言。
+5. 更新 `tests/unit/memory/CMakeLists.txt`：
+   - 为 `dasall_vector_memory_adapter_unit_test` 补齐 `memory/src` include path，保证 internal header 可见。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 public header、internal header、实现文件与两个测试入口无编辑器级错误。
+2. 构建与验收：
+   - `cmake --build build-ci --target dasall_memory dasall_unit_tests`
+   - `ctest --test-dir build-ci -R "VectorMemoryAdapterTest|MemoryManagerSmokeTest" --output-on-failure`
+   - 结果：2/2 tests passed；同时修复了 `dasall_vector_memory_adapter_unit_test` 缺少 `memory/src` include path 的构建配置缺口。
+
+### 结果
+
+1. `MEM-TODO-032` 已完成，vector public ABI 已收窄为纯抽象 `VectorMemoryIndexAdapter`，unavailable concrete adapter 不再对外暴露。
+2. 本轮没有引入行为变化：unavailable baseline 仍保持 `is_available=false` 与 no-op result 语义，变化仅限声明位置和测试入口。
+3. 这为 035 的 concrete backend 引入留出了正确的边界位置：后续 concrete implementations 应继续待在 `memory/src/vector/`，而不是回流到 public include surface。
+
+### 下一步
+
+1. 进入 `MEM-TODO-033`，按 consumer 责任面拆分 `IMemoryStore`，让 context / writeback / maintenance 只依赖各自需要的窄接口。
+
+### 风险
+
+1. 032 只收窄了 vector public ABI，并未改变工厂 wiring；如果后续 035 引入 concrete backend，仍需要在 internal 组合根中补实际构造与选择逻辑。
+
 ## 记录 #375
 
 - 日期：2026-04-20

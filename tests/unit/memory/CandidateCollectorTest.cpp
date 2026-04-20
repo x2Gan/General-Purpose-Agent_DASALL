@@ -8,6 +8,7 @@
 #include "config/MemoryConfig.h"
 #include "context/CandidateCollector.h"
 #include "support/TestAssertions.h"
+#include "vector/UnavailableVectorMemoryIndexAdapter.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
 

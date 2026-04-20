@@ -1,4 +1,4 @@
-#include "vector/VectorMemoryIndexAdapter.h"
+#include "vector/UnavailableVectorMemoryIndexAdapter.h"
 
 #include <utility>
 

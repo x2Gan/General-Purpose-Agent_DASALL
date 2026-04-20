@@ -6,6 +6,7 @@
 #include "config/MemoryConfig.h"
 #include "support/TestAssertions.h"
 #include "vector/IEmbeddingAdapter.h"
+#include "vector/UnavailableVectorMemoryIndexAdapter.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 
 namespace {
