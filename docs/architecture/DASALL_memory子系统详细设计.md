@@ -488,6 +488,13 @@ public:
 
 工厂函数根据 `VectorConfig.backend_type` 和可用的 IEmbeddingAdapter 决定创建哪种 VectorMemoryIndexAdapter 实现。
 
+MEM-TODO-023 冻结结论：
+
+1. v1 默认优先 backend 固定为 `sqlite-vss`，因为它仍然保持 SQLite 扩展形态，最接近 memory 当前“单机、单逻辑主库、低运维”的持久化基线。
+2. v1 的强制回退 backend 固定为 `none`；若 `sqlite-vss` 未打包、扩展加载失败、平台 ABI 不匹配或 embedding 不可用，则直接降级为 unavailable / no-op，不自动切换到 `hnswlib`。
+3. `hnswlib` 保留为显式 opt-in 的实验性 sidecar backend，只能在后续单独评审其构建打包、索引文件生命周期、参数持久化与运维观测之后启用；它不是 v1 默认链路的一部分。
+4. 因此 `backend_type` 字面值虽然保留 `"sqlite-vss" | "hnswlib" | "none"` 三档，但默认顺序已冻结为 `sqlite-vss -> none`，而不是 `sqlite-vss -> hnswlib -> none`。
+
 ### 6.4 子组件依赖关系与上下游调用关系
 
 | 调用关系 | 方向 | 语义 | 边界说明 |
@@ -772,8 +779,9 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
 
 VectorMemory：
 
-1. 若 SQLite-vss 可用，优先复用同库扩展或 sidecar 索引库。
+1. 若 `sqlite-vss` 已随发行物打包且扩展加载成功，优先复用 SQLite 扩展形态的索引实现，保持 memory 主库 + 可选扩展的低运维部署模型。
 2. 若扩展不可用，则 VectorMemory 默认关闭，并由 Fact/Summary 文本回退到非向量模式；不阻断主链路。
+3. `hnswlib` 仅作为后续显式 opt-in 的 sidecar backend 预留，不参与 v1 默认回退链；原因是其索引文件、容量参数、重建策略与查询参数都独立于 SQLite 主库，部署和运维面比 `sqlite-vss` 更重。
 
 #### 6.7.2 并发模型
 
@@ -1152,11 +1160,11 @@ struct MemoryConfig {
 
 | Profile | 持久化策略 | VectorMemory | 压缩强度 | 备注 |
 |---|---|---|---|---|
-| desktop_full | WAL + NORMAL + PASSIVE checkpoint | 开启 | 中 | 主打完整链路和观测 |
-| cloud_full | WAL + NORMAL + PASSIVE checkpoint | 开启 | 中 | 更看重吞吐与完整能力 |
-| edge_balanced | WAL + FULL 或更短 checkpoint 阈值 | 可选 | 高 | 控制磁盘抖动和上下文大小 |
-| edge_minimal | WAL EXCLUSIVE 或 journal_mode=DELETE fallback | 关闭 | 很高 | 只保留 Session/Turn/Summary 主链路；journal_mode 为 profile 构建时静态配置（通过 profiles/edge_minimal/ 配置），不做运行时动态切换 |
-| factory_test | WAL + FULL | 关闭或手动 | 低 | 优先可诊断性和证据留存 |
+| desktop_full | WAL + NORMAL + PASSIVE checkpoint | 开启（默认 `sqlite-vss`，失败回退 `none`） | 中 | 主打完整链路和观测 |
+| cloud_full | WAL + NORMAL + PASSIVE checkpoint | 开启（默认 `sqlite-vss`，失败回退 `none`） | 中 | 更看重吞吐与完整能力 |
+| edge_balanced | WAL + FULL 或更短 checkpoint 阈值 | 可选（优先 `sqlite-vss`，未打包/不可用则 `none`） | 高 | 控制磁盘抖动和上下文大小；不自动回退到 `hnswlib` |
+| edge_minimal | WAL EXCLUSIVE 或 journal_mode=DELETE fallback | 关闭（`none`） | 很高 | 只保留 Session/Turn/Summary 主链路；journal_mode 为 profile 构建时静态配置（通过 profiles/edge_minimal/ 配置），不做运行时动态切换 |
+| factory_test | WAL + FULL | 关闭（`none`，如需验证扩展则显式手动打开） | 低 | 优先可诊断性和证据留存 |
 
 ### 6.11 可观测性
 
@@ -2255,8 +2263,9 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 
 1. 第一阶段只启用 WorkingMemory + Session/Turn/Summary；Fact/Experience/Vector 默认关闭。
 2. 第二阶段打开 Fact/Experience 写回，但仍将 vector path 保持关闭，先验证核心长记忆闭环。
-3. 第三阶段仅在 desktop_full/cloud_full 灰度打开 VectorMemory。
-4. 若后续要把 IMemoryStore / IContextOrchestrator 提升为更稳定的跨模块接口，必须等待 ContextAssembleRequest/Result、SessionSnapshot 等 supporting objects 收敛后再评估 admission。
+3. 第三阶段仅在 desktop_full/cloud_full 灰度打开 `sqlite-vss` 主链，edge_balanced 只在扩展已随平台包验证通过时开启；所有 profile 都保留 `none` 回退。
+4. `hnswlib` 不进入本轮灰度默认链，后续如要引入，只能以显式 opt-in sidecar backend 进入新的评审任务。
+5. 若后续要把 IMemoryStore / IContextOrchestrator 提升为更稳定的跨模块接口，必须等待 ContextAssembleRequest/Result、SessionSnapshot 等 supporting objects 收敛后再评估 admission。
 
 ### 10.3 扩展预留点
 
@@ -2285,7 +2294,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 |---|---|---|---|---|
 | MEM-B01 | ContextAssembleRequest/Result 尚未冻结为 shared contracts | 无法把 IContextOrchestrator 推入 contracts admission | 相关 supporting objects 在 runtime/memory 设计评审后稳定 | 保持 module-local supporting types |
 | MEM-B02 | IMemoryStore / IContextOrchestrator 在 WP05-T012 中为 Postpone | 无法宣称其为 shared interface | supporting contracts 收敛并完成 admission 复评 | 先作为 memory/include public interface 使用 |
-| MEM-B03 | Vector backend 选型未冻结 | VectorMemory 无法立即进入 Build 主路径 | 明确 SQLite-vss、sidecar 或关闭策略 | 默认关闭 VectorMemory |
+| MEM-B03 | 已解除：v1 已冻结为 `sqlite-vss` 主选、`none` 强制回退、`hnswlib` 显式 opt-in | VectorMemory 可以进入 profile / maintenance / gate 设计，不再阻塞默认链路定义 | 保持 `sqlite-vss -> none` 默认顺序，并把 `hnswlib` 限定为后续单独评审项 | 若扩展打包或 ABI 校验失败，则回退到 `none`，不得隐式切到 `hnswlib` |
 | MEM-B04 | SQLite 版本基线未在工程依赖中锁定 | WAL 并发与 checkpoint 可靠性存在风险 | 工程侧明确 sqlite >= 3.51.3 或回补版本 | edge_minimal 回退到 DELETE journal 或禁用后台 checkpoint |
 | MEM-B05 | profile 的 retention / compression / checkpoint 阈值未统一 | 默认参数可能与 edge profile 不匹配 | profiles 评审明确 memory 配置键 | 先使用 conservative default |
 | MEM-B06 | knowledge -> memory 的外部证据投影实现尚未落地 | 若 runtime 未按统一规则投影，CandidateCollector 的 external evidence 会出现文本/结构化语义漂移 | 按 [../ssot/CrossModuleDataProjectionMatrix.md](../ssot/CrossModuleDataProjectionMatrix.md) 实现 v1 文本投影，并保留 structured evidence refs 于 knowledge/runtime invoke-scoped sidecar | 文档层已冻结 `external_evidence` 为 `std::vector<std::string>`；实现前不得私自扩 shape |

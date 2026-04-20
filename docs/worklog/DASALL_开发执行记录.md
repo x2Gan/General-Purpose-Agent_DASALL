@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #368
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 F
+- 任务：MEM-TODO-023 评审并冻结 concrete vector backend 选型
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-023` 是 `MEM-BLK-05` 的直接解阻任务；如果 concrete vector backend 的默认顺序、profile 默认值与 fallback 继续停留在“可选 sidecar”口径，`MEM-TODO-024` 的 vector rebuild 语义和 `MEM-TODO-029` 的 profile compatibility gate 都无法稳定收口。
+2. 本轮严格限定在设计冻结与追溯回写：只更新 memory 详设、本专项 TODO 与 worklog，不提前实现 concrete backend，也不把 `hnswlib` 的 sidecar 生命周期问题误包装成当前 Build-ready 任务。
+3. 评审同时参考了本地详设与 profile 现状，以及 SQLite WAL 官方文档、`sqlite-vss` 上游 README、`hnswlib` 上游 README：前者确认单机单 writer / checkpoint 基线仍与 memory 主库形态一致，后两者分别暴露了 `sqlite-vss` 的扩展打包约束与 `hnswlib` 的 sidecar / capacity / 参数持久化特征，因此需要先冻结默认顺序，而不是继续模糊保留三者并列。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_memory子系统详细设计.md`：
+   - 在 6.3.2、6.7.1、6.10.3、10.2、11.2 明确冻结 v1 默认顺序为 `sqlite-vss -> none`；
+   - 把 `desktop_full` / `cloud_full` 的默认策略固定为优先请求 `sqlite-vss`，失败回退 `none`；
+   - 把 `edge_balanced` 固定为“仅在扩展已随平台包验证通过时开启”，`edge_minimal` / `factory_test` 固定为 `none`；
+   - 把 `hnswlib` 限定为显式 opt-in 的 sidecar 预留项，不进入 v1 默认回退链。
+2. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-023` 标记为 Done，并补入 frozen strategy、profile fallback 与检索证据；
+   - 解除 `MEM-BLK-05`，把阶段 F 说明改为“023 已完成，024 可继续推进”；
+   - 将 `MEM-TODO-024` 前置依赖补齐为包含 `MEM-TODO-023`，避免后续执行再误用旧 blocker 口径。
+3. 更新本记录，保留 023 的外部依据、设计结论与验收链，确保 `MEM-TODO-024` / `029` 后续可以直接引用 frozen strategy，而不需要重复做 backend 评审。
+
+### 测试
+
+1. 验证动作：
+   - `rg -n "sqlite-vss|hnswlib|VectorMemory|backend_type|edge_minimal" docs/architecture/DASALL_memory子系统详细设计.md docs/todos/memory/DASALL_memory子系统专项TODO.md`
+2. 结果：
+   - 关键命中已同时出现在 memory 详设与本专项 TODO，能够检索到 backend 默认顺序、profile 默认值、fallback 策略与 blocker 已解除状态；023 的文档一致性验收通过。
+
+### 结果
+
+1. `MEM-TODO-023` 已完成，memory 的 concrete vector backend 默认口径已从模糊并列冻结为 `sqlite-vss -> none`，`hnswlib` 不再被默认视为自动回退路径。
+2. `MEM-BLK-05` 已解除，`MEM-TODO-024` 与 `MEM-TODO-029` 后续可以在同一 frozen strategy 上推进，而不必继续等待 backend 评审门。
+3. 本轮没有提前引入 `sqlite-vss` 或 `hnswlib` 的真实构建依赖，从而保持 023 仍是单一设计收敛任务，而不是把实现、打包和 ABI 适配混进同一个原子项。
+
+### 下一步
+
+1. 进入 `MEM-TODO-024`，实现 `MemoryMaintenanceWorker`，把 checkpoint / retention / quarantine / vector rebuild 的行为对齐到本轮冻结的 backend / profile 策略。
+2. 在 024 完成后继续推进 `MEM-TODO-028` / `029`，把 checkpoint busy 与 profile compatibility 的 gate 证据补齐为正式验收链。
+
+### 风险
+
+1. `sqlite-vss` 上游当前并非活跃开发分支，且扩展打包、ABI 和系统依赖仍要靠后续实现任务验证；因此当前冻结的是默认顺序，不是“无条件宣称已可生产启用”。
+2. `hnswlib` 虽然是轻量 header-only C++ 库，但其 sidecar 索引文件、容量参数与查询调优面会扩大 memory 的运维面；在单独评审前把它排除在默认回退链外是有意的风险收敛，而不是能力删除。
+
 ## 记录 #367
 
 - 日期：2026-04-20
