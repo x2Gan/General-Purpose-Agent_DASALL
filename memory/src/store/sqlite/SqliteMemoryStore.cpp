@@ -852,6 +852,10 @@ StoreResult SqliteMemoryStore::quarantine_record(const std::string& object_type,
   return StoreResult::success(object_id);
 }
 
+sqlite3* SqliteMemoryStore::writer_connection_for_maintenance() {
+  return writer_connection_;
+}
+
 sqlite3* SqliteMemoryStore::select_reader_connection() {
   if (!reader_connections_.empty()) {
     sqlite3* connection = reader_connections_[next_reader_index_ % reader_connections_.size()];

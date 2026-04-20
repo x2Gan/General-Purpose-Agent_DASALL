@@ -116,12 +116,20 @@ contracts::ResultCode MemoryManager::init(const MemoryConfig& config) {
     }
   }
 
+  if (dependencies_.maintenance_worker) {
+    dependencies_.maintenance_worker->start();
+  }
+
   config_ = config;
   state_ = LifecycleState::Running;
   return kMemoryManagerInitSuccess;
 }
 
 void MemoryManager::shutdown() {
+  if (dependencies_.maintenance_worker) {
+    dependencies_.maintenance_worker->stop();
+  }
+
   if (state_ == LifecycleState::Running && dependencies_.store) {
     dependencies_.store->close();
   }
@@ -203,7 +211,11 @@ MaintenanceReport MemoryManager::run_maintenance(
     return make_maintenance_report("maintenance_noop_requested");
   }
 
-  return make_maintenance_report("maintenance_worker_unwired");
+  if (!dependencies_.maintenance_worker) {
+    return make_maintenance_report("maintenance_worker_unwired");
+  }
+
+  return dependencies_.maintenance_worker->execute(request);
 }
 
 std::unique_ptr<IMemoryManager> create_memory_manager_with_dependencies(

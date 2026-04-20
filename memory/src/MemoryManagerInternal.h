@@ -1,11 +1,13 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <optional>
 
 #include "IContextOrchestrator.h"
 #include "IMemoryManager.h"
 #include "IMemoryStore.h"
+#include "maintenance/MemoryMaintenanceWorker.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "writeback/WritebackCoordinator.h"
 
@@ -15,7 +17,9 @@ struct MemoryManagerDependencies {
   std::unique_ptr<IContextOrchestrator> context_orchestrator;
   std::unique_ptr<IMemoryStore> store;
   std::unique_ptr<IWorkingMemoryBoard> working_memory_board;
+  std::shared_ptr<std::mutex> store_writer_mutex;
   std::unique_ptr<WritebackCoordinator> writeback_coordinator;
+  std::unique_ptr<MemoryMaintenanceWorker> maintenance_worker;
 };
 
 class MemoryManager final : public IMemoryManager {

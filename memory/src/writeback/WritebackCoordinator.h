@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
 #include "IMemoryStore.h"
 #include "conflict/MemoryConflictResolver.h"
@@ -16,7 +17,8 @@ class WritebackCoordinator {
   WritebackCoordinator(IMemoryStore& store,
                        std::unique_ptr<MemoryConflictResolver> conflict_resolver,
                        IWorkingMemoryBoard& working_memory_board,
-                       VectorMemoryIndexAdapter* vector_index = nullptr);
+                       VectorMemoryIndexAdapter* vector_index = nullptr,
+                       std::shared_ptr<std::mutex> writer_mutex = nullptr);
 
   [[nodiscard]] WritebackResult persist(const MemoryWritebackRequest& request);
 
@@ -37,6 +39,7 @@ class WritebackCoordinator {
   std::unique_ptr<MemoryConflictResolver> conflict_resolver_;
   IWorkingMemoryBoard& working_memory_board_;
   VectorMemoryIndexAdapter* vector_index_ = nullptr;
+  std::shared_ptr<std::mutex> writer_mutex_;
 };
 
 }  // namespace dasall::memory

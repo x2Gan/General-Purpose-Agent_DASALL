@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "config/MemoryConfig.h"
@@ -9,6 +10,7 @@
 #include "context/BudgetAllocator.h"
 #include "context/CandidateCollector.h"
 #include "context/ContextOrchestrator.h"
+#include "maintenance/MemoryMaintenanceWorker.h"
 #include "store/sqlite/SqliteMemoryStore.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "writeback/CompressionCoordinator.h"
@@ -73,6 +75,7 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
   }
 
   if (dependencies.store && dependencies.working_memory_board) {
+    dependencies.store_writer_mutex = std::make_shared<std::mutex>();
     auto collector = std::make_unique<CandidateCollector>(
         *dependencies.working_memory_board, *dependencies.store, config);
     auto allocator = std::make_unique<BudgetAllocator>(config);
@@ -83,7 +86,10 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
         std::move(collector), std::move(allocator), std::move(compressor), config);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, std::move(conflict_resolver),
-      *dependencies.working_memory_board);
+      *dependencies.working_memory_board, nullptr,
+      dependencies.store_writer_mutex);
+    dependencies.maintenance_worker = std::make_unique<MemoryMaintenanceWorker>(
+        *dependencies.store, config, nullptr, dependencies.store_writer_mutex);
   } else {
     dependencies.context_orchestrator = std::make_unique<BootstrapContextOrchestrator>();
   }

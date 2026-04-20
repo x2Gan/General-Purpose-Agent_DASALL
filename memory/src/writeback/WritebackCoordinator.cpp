@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -204,14 +205,21 @@ WritebackCoordinator::WritebackCoordinator(
     IMemoryStore& store,
     std::unique_ptr<MemoryConflictResolver> conflict_resolver,
     IWorkingMemoryBoard& working_memory_board,
-    VectorMemoryIndexAdapter* vector_index)
+    VectorMemoryIndexAdapter* vector_index,
+    std::shared_ptr<std::mutex> writer_mutex)
     : store_(store),
       conflict_resolver_(std::move(conflict_resolver)),
       working_memory_board_(working_memory_board),
-      vector_index_(vector_index) {}
+      vector_index_(vector_index),
+      writer_mutex_(std::move(writer_mutex)) {}
 
 WritebackResult WritebackCoordinator::persist(
     const MemoryWritebackRequest& request) {
+  std::unique_lock<std::mutex> writer_lock;
+  if (writer_mutex_) {
+    writer_lock = std::unique_lock<std::mutex>(*writer_mutex_);
+  }
+
   if (request.session_id.empty()) {
     return make_invalid_result("writeback_session_id_missing");
   }

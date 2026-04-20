@@ -1,5 +1,64 @@
 # DASALL 开发执行记录
 
+## 记录 #369
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 F
+- 任务：MEM-TODO-024 实现 MemoryMaintenanceWorker
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-024` 是 `MEM-TODO-023` 解阻后的直接 Build 任务；如果 maintenance 仍停留在 `maintenance_worker_unwired` 占位，memory 的 WAL checkpoint、retention、quarantine cleanup 与 vector rebuild 语义就无法通过真实 sqlite 主链验收。
+2. 本轮严格限定在 module-local `MemoryMaintenanceWorker`、sqlite-backed manager/factory/writeback/store 接线，以及 maintenance-specific unit / integration 测试，不扩 `IMemoryStore` public ABI，也不把 profile compatibility 或全量 failure injection 扩张进同一原子任务。
+3. 本轮同时复用 023 已冻结的 `sqlite-vss -> none` 策略，并把 writeback/maintenance 的 sqlite writer 竞争作为 root-cause 问题处理：通过 shared writer mutex 串行化 writer access，避免 `auto_schedule=true` 时把后台 maintenance 线程直接引成新的并发隐患。
+
+### 改动
+
+1. 更新 `memory/src/MemoryManagerInternal.h`、`memory/src/MemoryManager.cpp`、`memory/src/MemoryManagerFactory.cpp`、`memory/src/writeback/WritebackCoordinator.h`、`memory/src/writeback/WritebackCoordinator.cpp`、`memory/src/store/sqlite/SqliteMemoryStore.h`、`memory/src/store/sqlite/SqliteMemoryStore.cpp`：
+   - 为 sqlite-backed manager 组合根新增 `MemoryMaintenanceWorker` 与 shared writer mutex；
+   - 让 `MemoryManager::init()` / `shutdown()` 承担 maintenance worker 的 start / stop 生命周期；
+   - 让 `MemoryManager::run_maintenance()` 真实转发到 worker，而不再返回 `maintenance_worker_unwired`；
+   - 通过 `WritebackCoordinator` 与 sqlite writer accessor 复用同一 writer 串行化边界。
+2. 新增 `memory/src/maintenance/MemoryMaintenanceWorker.h` 与 `memory/src/maintenance/MemoryMaintenanceWorker.cpp`：
+   - 实现 `execute`、`run_wal_checkpoint`、`run_turn_retention`、`run_fact_retention`、`run_experience_retention`、`run_quarantine_cleanup`、`run_vector_rebuild`；
+   - 采用 PASSIVE checkpoint，并在 busy / starvation 场景输出 warning；
+   - 以 summary-protected turn 保留、`valid_until` / TTL、`expires_at` / superseded 标记为 v1 retention 规则；
+   - 实现 `start` / `stop` / `background_loop`，支持 auto-schedule 主动维护。
+3. 更新 `memory/CMakeLists.txt`、`tests/unit/memory/CMakeLists.txt`、`tests/integration/memory/CMakeLists.txt`，新增：
+   - `MemoryMaintenanceRetentionTest`
+   - `MemoryMaintenanceCheckpointTest`
+   - `MemoryMaintenanceIntegrationTest`
+   - `MemoryCheckpointBusyTest`
+   使 024 的 retention、checkpoint、sqlite manager wiring、busy reader gap 都具备独立验收出口。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 maintenance worker、sqlite/writeback/manager 接线、四条新增测试以及相关 CMake 文件均无编辑器级错误；
+   - 修正了一次 `MemoryMaintenanceWorker.cpp` 重复拼接导致的重定义构建失败，随后重新构建通过。
+2. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_maintenance_retention_unit_test`、`dasall_memory_maintenance_checkpoint_unit_test`、`dasall_memory_maintenance_integration_test`、`dasall_memory_checkpoint_busy_integration_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryMaintenanceRetentionTest`、`MemoryMaintenanceCheckpointTest`、`MemoryMaintenanceIntegrationTest`、`MemoryCheckpointBusyTest`；
+   - 结果：四条测试全部通过，`100% tests passed, 0 tests failed out of 4`；CMake Tools 仍有 `DartConfiguration.tcl` stderr 噪声，但返回码为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-024` 已完成，sqlite-backed memory 现在具备真实 maintenance 主链：`MemoryManager::run_maintenance()`、被动手动执行与 `auto_schedule` 主动调度都已可用。
+2. WAL PASSIVE checkpoint、summary-protected turn retention、fact / experience retention、quarantine cleanup 与 vector rebuild 已通过真实 sqlite store 验证，不再停留在设计说明或 stub 接线阶段。
+3. writeback 与 maintenance 共享 writer mutex 的并发收敛已经进入主链，因此 024 不只是新增 worker 类，而是把 sqlite writer 竞争风险一并纳入实现闭环。
+
+### 下一步
+
+1. 进入 `MEM-TODO-026`，把 context assemble smoke 与 lifecycle gate 继续补齐为正式阶段 F/G 证据。
+2. 在已有 `MemoryCheckpointBusyTest` 基线上推进 `MEM-TODO-028`，补完 schema mismatch / disk full / summary quarantine / vector off 的 failure injection 矩阵。
+3. 继续推进 `MEM-TODO-029` / `030`，完成 profile compatibility gate 与专项 TODO / worklog 总体验收回写。
+
+### 风险
+
+1. 当前 retention 规则仍是 v1 实现：turn 以 summary-protected + count cap 为主，fact / experience 以 superseded 标记和 TTL / expires_at 为主；若后续 profile 需要更细粒度策略，应在 module-local policy 层扩展，而不是回改 public ABI。
+2. `MemoryCheckpointBusyTest` 现已覆盖 reader gap / PASSIVE checkpoint 的 busy 证据，但更广的 failure injection 仍待 `MEM-TODO-028` 完成；因此 024 已闭环，不等于全部故障注入门禁已完成。
+
 ## 记录 #368
 
 - 日期：2026-04-20

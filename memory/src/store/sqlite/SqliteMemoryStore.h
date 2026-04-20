@@ -57,6 +57,8 @@ class SqliteMemoryStore final : public IMemoryStore {
       const std::string& object_id,
       const std::string& reason) override;
 
+    [[nodiscard]] sqlite3* writer_connection_for_maintenance();
+
  private:
   [[nodiscard]] sqlite3* select_reader_connection();
 
