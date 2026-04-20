@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #370
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 G
+- 任务：MEM-TODO-026 验证 MemoryManager smoke 与 context assemble 最小闭环
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-026` 是阶段 G 的第一个 gate 任务；如果 `MemoryManagerSmokeTest` 仍停留在旧的 unwired 降级断言，且缺少 `MemoryContextAssembleIntegrationTest`，则 019 的 context 组装链和 021/024 的 sqlite-backed manager 主链还没有形成正式的 smoke / lifecycle / assemble 闭环证据。
+2. 本轮严格限定在 026 要求的四条 gate：更新 `MemoryManagerSmokeTest` 为真实 sqlite-backed smoke、复用既有 `MemoryManagerLifecycleTest` 与 `ContextOrchestratorBudgetTest`、新增 `MemoryContextAssembleIntegrationTest` 并注册到 memory integration 拓扑；不把 writeback contracts gate、failure injection 或 profile compatibility 扩张进同一任务。
+3. 本轮同时沿用 023 冻结的 `sqlite-vss -> none` 策略和 024 已完成的 maintenance 接线，把 026 的验证重心放在“manager facade 已真实串起 writeback/export/context/maintenance”和“预算/压缩 gate 已能由自动化证明”，而不是重复实现已完成组件。
+
+### 改动
+
+1. 更新 `tests/unit/memory/MemoryManagerSmokeTest.cpp`：
+   - 保留 sqlite bootstrap 覆盖；
+   - 把旧的 `writeback_pipeline_unwired` / `maintenance_worker_unwired` 降级断言切换为真实 sqlite-backed smoke 主链，验证 `write_back`、`export_working_memory_snapshot` 与 `run_maintenance` 已不再停留在占位路径。
+2. 新增 `tests/integration/memory/MemoryContextAssembleIntegrationTest.cpp`：
+   - 通过真实 `MemoryManager` + sqlite backend 先完成两次 writeback，再执行 export 与 `prepare_context`；
+   - 验证 working snapshot 连续性、`ContextPacket` 关键槽位保留、template compression note 与 budget report 输出，以及 `ContextPacket` frozen contract guard 通过。
+3. 更新 `tests/integration/memory/CMakeLists.txt`：
+   - 注册 `dasall_memory_context_assemble_integration_test` / `MemoryContextAssembleIntegrationTest`；
+   - 补齐 sqlite integration 所需的 `dasall_sqlite3` 链接与 `DASALL_SQL_MEMORY_DIR` 编译定义。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `MemoryManagerSmokeTest.cpp`、`MemoryContextAssembleIntegrationTest.cpp` 与 `tests/integration/memory/CMakeLists.txt` 无编辑器级错误。
+2. 构建与验收：
+   - `ListBuildTargets_CMakeTools` / `ListTests_CMakeTools` 已发现 `dasall_memory_context_assemble_integration_test` 与 `MemoryContextAssembleIntegrationTest`；
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_manager_smoke_unit_test`、`dasall_memory_manager_lifecycle_unit_test`、`dasall_memory_context_budget_unit_test`、`dasall_memory_context_assemble_integration_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryManagerSmokeTest`、`MemoryManagerLifecycleTest`、`ContextOrchestratorBudgetTest`、`MemoryContextAssembleIntegrationTest`；
+   - 结果：四条测试全部通过，`100% tests passed, 0 tests failed`；`DartConfiguration.tcl` 仍是 CMake Tools stderr 噪声，但返回码为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-026` 已完成，memory 现在具备正式的 manager smoke 与 context assemble 最小闭环证据：`init -> write_back -> export -> prepare_context -> shutdown` 在 sqlite-backed manager 路径上可重复执行。
+2. `MemoryManagerSmokeTest` 不再依赖 unwired fallback，而是验证真实 writeback/export/maintenance 主链；`MemoryContextAssembleIntegrationTest` 则把 019 的 context 组装能力提升为 manager 级集成 gate。
+3. `ContextOrchestratorBudgetTest` 与新集成用例组合后，026 所要求的上下文连续性与预算/压缩 gate 已具备自动化证明，不再只是各组件的孤立 unit 断言。
+
+### 下一步
+
+1. 进入 `MEM-TODO-027`，把 `MemoryWritebackIntegrationTest` 与 memory/context contracts gate 组合成正式的 writeback compatibility 证据链。
+2. 在 024 已有 `MemoryCheckpointBusyTest` 基线上推进 `MEM-TODO-028`，补齐 schema mismatch / disk full / summary quarantine / vector off 的 failure injection 矩阵。
+3. 继续推进 `MEM-TODO-029` / `030`，完成 profile compatibility / discoverability gate 与专项 TODO / worklog 总体验收回写。
+
+### 风险
+
+1. 026 当前验证的是 sqlite-backed manager 的最小闭环，不等于 027 的 writeback contracts gate 已经回写完成；shared contracts compatibility 仍需单独以 027 的 contract 命令链收口。
+2. 新增的 `MemoryContextAssembleIntegrationTest` 只覆盖 vector disabled 的 frozen baseline；profile 差异与 discoverability 仍待 029 单独验证，不能提前宣称全部 profile gate 已闭环。
+
 ## 记录 #369
 
 - 日期：2026-04-20
