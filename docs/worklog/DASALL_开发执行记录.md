@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #371
+
+- 日期：2026-04-20
+- 阶段：memory/专项 TODO 阶段 G
+- 任务：MEM-TODO-027 验证 writeback 主链与 contracts 兼容 Gate
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-027` 是 026 之后的直接 gate 任务；如果 `MemoryWritebackIntegrationTest` 与 memory/context contracts 只是“存在但未形成专项验收链”，则 021 的 writeback 主链仍然缺少正式的 shared contracts compatibility 证据。
+2. 本轮严格限定在 027 的验证出口：复用既有 `MemoryWritebackIntegrationTest`、`TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest` 与 `ContextPacketFieldContractTest`，确认它们在当前主线下共同通过，并将证据回写到 TODO / worklog；不额外修改 writeback 主链实现，也不提前扩张到 028 的 failure injection 或 029 的 profile gate。
+3. 因为 021 已经把 writeback integration 用例和相关 wiring 落盘，所以 027 本轮的重点不是“再造测试”，而是证明现有用例集合已经足以关闭 writeback + contracts 兼容门，并把这件事从隐性事实变成显性 gate 证据。
+
+### 改动
+
+1. 本轮未新增代码或测试实现文件；核心动作是复用既有：
+   - `tests/integration/memory/MemoryWritebackIntegrationTest.cpp`
+   - `tests/contract/memory/TurnSessionSummaryMemoryContractTest.cpp`
+   - `tests/contract/memory/MemoryFactExperienceContractTest.cpp`
+   - `tests/contract/context/ContextPacketFieldContractTest.cpp`
+2. 更新 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：
+   - 将 `MEM-TODO-027` 标记为 Done；
+   - 回写 writeback integration + contracts gate 的构建与测试证据；
+   - 把阶段 G 的剩余任务推进到 `MEM-TODO-028 ~ 030`。
+3. 更新本记录，保留 027 的 gate 验证链和下一步，确保后续 028 / 029 / 030 可以直接引用 027 已关闭的 contracts compatibility 前提。
+
+### 测试
+
+1. 构建与验收：
+   - `Build_CMakeTools` 构建 `dasall_memory`、`dasall_memory_writeback_integration_test`、`dasall_contract_turn_session_summary_memory_test`、`dasall_contract_memory_fact_experience_test`、`dasall_contract_context_packet_field_test`；
+   - `RunCtest_CMakeTools` 运行 `MemoryWritebackIntegrationTest`、`TurnSessionSummaryMemoryContractTest`、`MemoryFactExperienceContractTest`、`ContextPacketFieldContractTest`。
+2. 结果：
+   - 四条测试全部通过，`100% tests passed, 0 tests failed`；
+   - `DartConfiguration.tcl` 仍是 CMake Tools stderr 噪声，但返回码为 0，结论有效。
+
+### 结果
+
+1. `MEM-TODO-027` 已完成，writeback 主链和 shared contracts / `ContextPacket` 边界已经通过同一轮专项 gate 验证，而不是分别散落在 021 和 contracts 基线任务中。
+2. 这意味着 021 的 `WritebackCoordinator` 主链现在不仅“集成能跑”，而且能在 frozen contracts 边界下持续通过 `Turn` / `SummaryMemory` / `MemoryFact` / `ExperienceMemory` / `ContextPacket` 的兼容性守卫。
+3. 027 本轮没有引入额外代码改动，因此结果是一次验证收口轮：把既有实现状态转换成明确可追溯的 gate 证据，为 028 的 failure injection 提供干净前提。
+
+### 下一步
+
+1. 进入 `MEM-TODO-028`，在已有 `MemoryCheckpointBusyTest` 基线上补齐 schema mismatch / disk full / summary quarantine / vector off 的 failure injection 矩阵。
+2. 继续推进 `MEM-TODO-029` / `030`，完成 profile compatibility / discoverability gate 与专项 TODO / worklog 总体验收回写。
+
+### 风险
+
+1. 027 已证明 shared contracts compatibility，但没有覆盖故障语义；`retryable_storage_failure`、summary quarantine、checkpoint busy 等 failure 证据仍待 028 单独收口。
+2. 027 没有触及 profile 差异与 discoverability，因此不能据此提前宣称 edge profile / vector policy / maintenance schedule 的 compatibility gate 已关闭。
+
 ## 记录 #370
 
 - 日期：2026-04-20
