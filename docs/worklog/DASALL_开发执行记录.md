@@ -1,5 +1,70 @@
 # DASALL 开发执行记录
 
+## 记录 #391
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build rerank 轮次
+- 任务：KNO-TODO-010 实现 Reranker
+- 状态：已完成
+
+### 任务选择
+
+1. 009 已经补齐 `RetrievalPlan`，017 已经补齐 `FreshnessSnapshot`；按用户给定顺序，下一轮最小可执行任务是 010。
+2. 详细设计把 `Reranker` 限定为纯计算排序层，不依赖真实 retriever 执行，因此可以在 011 之前独立闭环。
+3. 011 `EvidenceAssembler` 必须消费稳定的 `RankedHitSet`；如果 010 不先落盘，011 会被迫把去重、RRF、authority/freshness 规则混进 evidence 组装层。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-010-Reranker设计收敛.md`：
+   - 收敛 `Reranker` 的边界、RRF 公式、penalty/boost 纪律和 fallback 语义；
+   - 明确为了让 stale penalty 可观测，归一化后不再做第二次全局归一。
+2. 新增 `knowledge/include/retrieve/RecallTypes.h`：
+   - 定义 `RecallHit` 与 `RecallCandidateSet`，为 010 提供稳定的 recall 输入 supporting shape。
+3. 新增 `knowledge/include/rerank/Reranker.h` 与 `knowledge/src/rerank/Reranker.cpp`：
+   - 定义 `RankedHit`、`RankedHitSet`、`RerankPolicy`；
+   - 实现按 `chunk_id` 去重、RRF merge、authority weighting、stale penalty、top-k/cutoff；
+   - 实现 invalid policy -> lexical-first degraded fallback。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`，接入 `Reranker` 与三条 unit target。
+5. 新增三条 unit test：
+   - `RerankerTest.cpp`：空输入与 invalid policy fallback；
+   - `HybridRrfMergeTest.cpp`：multi-lane RRF merge 与 dedupe；
+   - `RerankerFreshnessPenaltyTest.cpp`：stale penalty 与 authority weighting。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_reranker_unit_test`
+   - `dasall_hybrid_rrf_merge_unit_test`
+   - `dasall_reranker_freshness_penalty_unit_test`
+2. 显式 `ctest`：
+   - `ctest --test-dir build/vscode-linux-ninja -R "(Reranker|HybridRrfMerge).*Test" --output-on-failure`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_reranker_unit_test dasall_hybrid_rrf_merge_unit_test dasall_reranker_freshness_penalty_unit_test`
+   - `ctest --test-dir build-ci -R "(Reranker|HybridRrfMerge).*Test" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备稳定的 `RankedHitSet` supporting header，后续 011 可直接消费排序后 hit，而不再重写 RRF 或 freshness/authority 规则。
+2. 010 已固定三类关键纪律：
+   - empty candidate set 是合法结果；
+   - invalid policy 只允许 degraded lexical-first fallback；
+   - stale penalty 与 authority weighting 都是纯计算，不得触发 I/O。
+3. 010 保持了原子任务边界：
+   - 没有提前实现 RecallCoordinator / SparseRetriever / VectorRetrieverBridge；
+   - 没有提前生成 `EvidenceBundle`；
+   - 只交付排序 supporting layer 和最小 recall hit shape。
+
+### 下一步
+
+1. 转入 `KNO-TODO-011`，实现 `EvidenceAssembler` 与 `context_projection` 组装，闭合 Route / Evidence 纯计算链。
+
+### 风险
+
+1. 010 为 `RecallHit` 补了最小 `authority_level` 字段；后续 013/015 必须沿用这个 supporting shape，而不是另建平行命中结构。
+2. 当前 010 采用 v1 默认 RRF，并仅预留 relative score fusion 扩展槽；若后续质量基线表明需要更复杂融合策略，应在 `RerankPolicy` 内扩展，不要破坏 `RankedHitSet` 输出形状。
+
 ## 记录 #390
 
 - 日期：2026-04-21

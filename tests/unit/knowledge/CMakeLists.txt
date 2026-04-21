@@ -109,6 +109,24 @@ dasall_add_knowledge_unit_test(
 	CorpusRouterModeSelectionTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_reranker_unit_test
+	RerankerTest.cpp
+	RerankerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_hybrid_rrf_merge_unit_test
+	HybridRrfMergeTest.cpp
+	HybridRrfMergeTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_reranker_freshness_penalty_unit_test
+	RerankerFreshnessPenaltyTest.cpp
+	RerankerFreshnessPenaltyTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

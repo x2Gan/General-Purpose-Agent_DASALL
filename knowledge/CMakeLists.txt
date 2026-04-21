@@ -9,6 +9,8 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/index/CorpusCatalog.h
   include/query/CorpusRouter.h
   include/query/QueryNormalizer.h
+  include/rerank/Reranker.h
+  include/retrieve/RecallTypes.h
 )
 
 if(NOT EXISTS ${DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR})
@@ -30,6 +32,7 @@ target_sources(dasall_knowledge
     src/observability/KnowledgeTelemetry.cpp
     src/query/CorpusRouter.cpp
     src/query/QueryNormalizer.cpp
+    src/rerank/Reranker.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS
