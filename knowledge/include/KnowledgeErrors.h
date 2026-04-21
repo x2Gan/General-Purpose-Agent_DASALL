@@ -15,6 +15,7 @@ enum class KnowledgeErrorCode : std::uint16_t {
   Disabled = 2001,
   IndexStaleRejected = 2002,
   EvidenceBudgetExhausted = 2003,
+  NotSupported = 2004,
   NoCorpusAvailable = 4001,
   IndexUnavailable = 4002,
   VectorBackendUnavailable = 4003,
@@ -47,6 +48,8 @@ struct KnowledgeErrorDescriptor {
       return "index_stale_rejected";
     case KnowledgeErrorCode::EvidenceBudgetExhausted:
       return "evidence_budget_exhausted";
+    case KnowledgeErrorCode::NotSupported:
+      return "not_supported";
     case KnowledgeErrorCode::NoCorpusAvailable:
       return "no_corpus_available";
     case KnowledgeErrorCode::IndexUnavailable:
@@ -102,6 +105,14 @@ struct KnowledgeErrorDescriptor {
           .safe_to_replan = true,
           .source_ref_type = "knowledge::assembler",
           .default_ref_id = "evidence_budget_exhausted",
+      };
+    case KnowledgeErrorCode::NotSupported:
+      return KnowledgeErrorDescriptor{
+          .failure_type = dasall::contracts::ResultCodeCategory::Policy,
+          .retryable = false,
+          .safe_to_replan = true,
+          .source_ref_type = "knowledge::normalizer",
+          .default_ref_id = "not_supported",
       };
     case KnowledgeErrorCode::NoCorpusAvailable:
       return KnowledgeErrorDescriptor{

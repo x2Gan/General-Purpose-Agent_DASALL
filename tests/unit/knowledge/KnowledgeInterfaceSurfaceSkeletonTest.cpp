@@ -182,6 +182,8 @@ void test_knowledge_error_projection_maps_all_failure_domains() {
        "knowledge::freshness", true, true},
       {KnowledgeErrorCode::EvidenceBudgetExhausted, ResultCodeCategory::Policy,
        "knowledge::assembler", false, true},
+      {KnowledgeErrorCode::NotSupported, ResultCodeCategory::Policy,
+       "knowledge::normalizer", false, true},
       {KnowledgeErrorCode::NoCorpusAvailable, ResultCodeCategory::Provider,
        "knowledge::router", false, true},
       {KnowledgeErrorCode::IndexUnavailable, ResultCodeCategory::Provider,

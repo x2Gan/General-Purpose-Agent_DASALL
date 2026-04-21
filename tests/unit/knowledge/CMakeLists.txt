@@ -79,6 +79,18 @@ dasall_add_knowledge_unit_test(
 	FreshnessControllerStalePolicyTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_query_normalizer_unit_test
+	QueryNormalizerTest.cpp
+	QueryNormalizerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_query_normalizer_boundary_unit_test
+	QueryNormalizerBoundaryTest.cpp
+	QueryNormalizerBoundaryTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

@@ -1,5 +1,74 @@
 # DASALL 开发执行记录
 
+## 记录 #389
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build query normalization 轮次
+- 任务：KNO-TODO-008 实现 QueryNormalizer
+- 状态：已完成
+
+### 任务选择
+
+1. 017 已经补齐 `FreshnessSnapshot`；按用户给定顺序与 implementation-cycle 的单任务规则，下一轮最小可执行任务是 008。
+2. 详细设计 6.13.1 已把 `QueryNormalizer` 限定为纯确定性 supporting layer，不依赖 catalog/freshness/index 运行态，因此范围比 009 更小，更适合作为 Query Plane 首个 Build 任务。
+3. 009 `CorpusRouter` 依赖 `NormalizedQuery`；如果 008 不先落盘，后续路由层会被迫重复实现文本清洗、tag alias 与 top-k clamp 规则。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-008-QueryNormalizer设计收敛.md`：
+   - 收敛 `QueryNormalizer` 的职责、非职责、warning 纪律与 Design -> Build 映射；
+   - 记录 KNO-R10 的处理结论：`MultiHop` 在 v1 返回 `NotSupported`，而不是伪装成 validation failure。
+2. 新增 `knowledge/include/query/QueryNormalizer.h`：
+   - 定义 `QueryNormalizePolicy`、`NormalizedQuery`、`NormalizeResult`；
+   - 定义 `QueryNormalizer::normalize()`。
+3. 新增 `knowledge/src/query/QueryNormalizer.cpp`：
+   - 实现 query text canonicalization、UTF-8 安全截断、lexical term 提取；
+   - 实现 domain tag alias / allowlist 收窄；
+   - 实现 top-k 与 projection item default/clamp warning；
+   - 实现 `MultiHop -> NotSupported` fail-fast。
+4. 更新 `knowledge/include/KnowledgeErrors.h`：
+   - 新增 `KnowledgeErrorCode::NotSupported`，避免把 feature gate 伪装成 `QueryValidationFailed`。
+5. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`，接入 QueryNormalizer 源文件与两条 unit target。
+6. 更新 `tests/unit/knowledge/KnowledgeInterfaceSurfaceSkeletonTest.cpp`，回归 public error surface。
+7. 新增两条 unit test：
+   - `QueryNormalizerTest.cpp`：canonical text、alias/allowlist、deterministic lexical terms；
+   - `QueryNormalizerBoundaryTest.cpp`：空 query、超长 query、warning、MultiHop not supported。
+8. 顺手修复本轮编译暴露的 017 遗留问题：`knowledge/src/health/FreshnessController.cpp` 在此前落盘时误重复了一整段实现，本轮删除重复段，恢复 `dasall_knowledge` 可重编译状态。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_query_normalizer_unit_test`
+   - `dasall_query_normalizer_boundary_unit_test`
+   - `dasall_knowledge_interface_surface_unit_test`
+2. 显式 `ctest`（因 RunCtest_CMakeTools 代理侧调用异常，改用等价定向命令）：
+   - `ctest --test-dir build/vscode-linux-ninja -R "(QueryNormalizer.*Test|dasall_knowledge_interface_surface_unit_test)" --output-on-failure`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_query_normalizer_unit_test dasall_query_normalizer_boundary_unit_test dasall_knowledge_interface_surface_unit_test`
+   - `ctest --test-dir build-ci -R "(QueryNormalizer.*Test|dasall_knowledge_interface_surface_unit_test)" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备稳定的 `NormalizedQuery` supporting header，后续 009 可直接消费统一的 normalized text、lexical terms、domain tags、allowed corpora 和 warning 事实。
+2. 008 已固定两类关键纪律：
+   - fail-soft：超长 query 裁剪但必须写 warning；
+   - fail-fast：`MultiHop` 在 v1 明确返回 `NotSupported`。
+3. 008 保持了原子任务边界：
+   - 没有提前决定 retrieval mode 或 corpus 选择；
+   - 没有引入 LLM rewrite；
+   - 只交付 Query Plane 的标准化 supporting layer。
+
+### 下一步
+
+1. 转入 `KNO-TODO-009`，实现 `CorpusRouter`，把 `NormalizedQuery + CorpusCatalogSnapshot + FreshnessSnapshot` 串成稳定的 retrieval plan。
+
+### 风险
+
+1. 008 新增了 `KnowledgeErrorCode::NotSupported`；后续若 012/Facade 或上层调用方对错误码有白名单假设，需要同步消费该新增 policy-domain 错误。
+2. 当前 lexical term 提取仍是轻量 deterministic tokenizer；若 019/030 后续需要与真实 lexical index tokenizer 做更细一致性校验，应在不破坏 008 的 route input 形状前提下迭代，而不是回退 QueryNormalizer 的接口。
+
 ## 记录 #388
 
 - 日期：2026-04-21
