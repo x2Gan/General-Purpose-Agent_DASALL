@@ -1,5 +1,75 @@
 # DASALL 开发执行记录
 
+## 记录 #387
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build route metadata 轮次
+- 任务：KNO-TODO-016 实现 CorpusCatalog route metadata snapshot
+- 状态：已完成
+
+### 任务选择
+
+1. 按 implementation-cycle 的单任务轮次规则，本轮必须先处理用户给定序列里最靠前且前置已满足的 016；它只依赖 006，范围清晰，可独立提交。
+2. 详细设计 6.13.6 已把 `CorpusCatalog` 的职责压缩到“只读 snapshot + delta apply fail-closed”，而 009 `CorpusRouter` 又明确需要 `CorpusCatalogSnapshot` supporting header，因此 016 是 Route / Evidence 纯计算链的最小入口。
+3. `KNO-TODO-003` 已冻结 corpus baseline 和 typed provenance；本轮不需要再争论 corpus schema，只需要把这些字段装配为 query/ingest 共用的 route metadata 事实源。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-016-CorpusCatalog-route-metadata-snapshot设计收敛.md`：
+   - 收敛 `CorpusCatalog` 的边界、snapshot/delta 语义、cold-start 行为与 Design -> Build 映射；
+   - 补充外部参考，把“版本化值 + copy-on-write”模式映射到 catalog snapshot 更新纪律。
+2. 新增 `knowledge/include/index/CorpusCatalog.h`：
+   - 定义 `CorpusCatalogDelta`；
+   - 定义 `CorpusCatalogSnapshot` 的只读 `list_all/find_by_id/filter_by_tags/filter_by_mode` 接口；
+   - 定义 `CorpusCatalog::replace_all/apply_delta/snapshot` 最小更新与读取入口。
+3. 新增 `knowledge/src/index/CorpusCatalog.cpp`：
+   - 实现 descriptor 全局一致性校验；
+   - 实现全包含 tag 过滤与 mode 过滤；
+   - 实现 remove/upsert delta apply，并在候选 snapshot 非法时保留旧 snapshot。
+4. 更新 `knowledge/CMakeLists.txt`，把 `include/index/CorpusCatalog.h` 与 `src/index/CorpusCatalog.cpp` 接入 `dasall_knowledge`。
+5. 更新 `tests/unit/knowledge/CMakeLists.txt`，注册三条新 unit target。
+6. 新增三条 unit test：
+   - `CorpusCatalogTest.cpp`：lookup、tag filter、mode filter；
+   - `CorpusCatalogDeltaApplyTest.cpp`：valid delta 应用与 invalid delta 回滚；
+   - `CorpusCatalogColdStartTest.cpp`：空 catalog bootstrap。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_corpus_catalog_unit_test`
+   - `dasall_corpus_catalog_delta_apply_unit_test`
+   - `dasall_corpus_catalog_cold_start_unit_test`
+2. RunCtest_CMakeTools：
+   - `CorpusCatalogTest`
+   - `CorpusCatalogDeltaApplyTest`
+   - `CorpusCatalogColdStartTest`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_corpus_catalog_unit_test dasall_corpus_catalog_delta_apply_unit_test dasall_corpus_catalog_cold_start_unit_test`
+   - `ctest --test-dir build-ci -R "CorpusCatalog.*Test" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备稳定的 `CorpusCatalogSnapshot` supporting header，后续 009 可以直接消费 route metadata，而不必临时拼装 `std::vector<CorpusDescriptor>`。
+2. `CorpusCatalog` 已固定三类关键语义：
+   - 空但一致的 cold-start snapshot；
+   - `filter_by_tags` 全包含匹配；
+   - delta apply 失败保留上一 valid snapshot。
+3. 016 保持了原子任务边界：
+   - 没有提前实现 freshness 计算；
+   - 没有引入持久化 JSON 或并发 swap；
+   - 只交付 009 所需的 route metadata supporting layer。
+
+### 下一步
+
+1. 转入 `KNO-TODO-017`，补 `FreshnessController` / `FreshnessSnapshot`，继续为 `CorpusRouter` 准备第二块 supporting header。
+
+### 风险
+
+1. 当前 `CorpusCatalogSnapshot` 仍是进程内只读状态，不包含持久化格式版本；后续 018/019/020 需要在不破坏查询接口的前提下补 manifest/ledger 对接。
+2. 当前 tag 过滤采用全包含匹配；若 009 需要更细的 authority/freshness 组合判决，必须在 `CorpusRouter` 中实现，而不是反向改写 016 的基础过滤语义。
+
 ## 记录 #386
 
 - 日期：2026-04-21

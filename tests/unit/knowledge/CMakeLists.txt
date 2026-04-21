@@ -49,6 +49,24 @@ dasall_add_knowledge_unit_test(
 	KnowledgeTelemetryDegradeEventTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_corpus_catalog_unit_test
+	CorpusCatalogTest.cpp
+	CorpusCatalogTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_corpus_catalog_delta_apply_unit_test
+	CorpusCatalogDeltaApplyTest.cpp
+	CorpusCatalogDeltaApplyTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_corpus_catalog_cold_start_unit_test
+	CorpusCatalogColdStartTest.cpp
+	CorpusCatalogColdStartTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

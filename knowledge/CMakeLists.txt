@@ -5,6 +5,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/IKnowledgeService.h
   include/KnowledgeErrors.h
   include/KnowledgeTypes.h
+  include/index/CorpusCatalog.h
 )
 
 if(NOT EXISTS ${DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR})
@@ -21,6 +22,7 @@ target_sources(dasall_knowledge
   PRIVATE
     src/config/KnowledgeConfigProjector.cpp
     src/KnowledgeBuildSkeleton.cpp
+    src/index/CorpusCatalog.cpp
     src/observability/KnowledgeTelemetry.cpp
   PUBLIC
     FILE_SET public_headers
