@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #396
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build active snapshot read plane 轮次
+- 任务：KNO-TODO-019 实现 IndexReader active snapshot 读路径
+- 状态：已完成
+
+### 任务选择
+
+1. 018 已完成并提交，按用户指定顺序本轮进入 `KNO-TODO-019`，这是 014 `RecallCoordinator` 与 012 facade 骨架接 lexical 主链前必须补齐的 active snapshot read owner。
+2. 013 已经把 lexical search 固化成 `SparseIndexSearchRequest/Result` seam，019 的首要目标不是再写一套 sparse query contract，而是把 active snapshot 原子读路径接到这条 seam 上。
+3. 评估后确认 019 不能提前做 020 的 writer 事务编排，因此本轮只新增 writer-facing `swap_active_snapshot()`，不在同一提交里加入 shadow build、candidate 记录或 mark_active 顺序。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-019-IndexReader设计收敛.md`：
+   - 固定 019 的职责、非职责、acquire/release 原子读写语义与 MVCC 读一致性；
+   - 明确 019 必须复用 013 search seam，不回退到旧版 `RecallHit search_sparse(const RetrievalPlan&)` 简写；
+   - 说明 `swap_active_snapshot()` 仅承担原子切换，020 再负责与 018 ledger 的顺序编排。
+2. 新增 `knowledge/include/index/IndexReader.h` 与 `knowledge/src/index/IndexReader.cpp`：
+   - 定义 `IndexSnapshot` 与 `IndexReader`；
+   - 实现 `search_sparse()`、`current_manifest()`、`read_snapshot_checksum()` 与 `swap_active_snapshot()`；
+   - 统一无 active snapshot / snapshot 不一致 / callback 抛异常 / callback 返回不一致结果的 fail-closed 映射。
+3. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `IndexReader` 头/源与 3 条 unit targets。
+4. 新增三条 unit test：
+   - `IndexReaderTest.cpp`：验证 active manifest 查询、checksum 查询与 search 透传；
+   - `IndexReaderConcurrentSwapTest.cpp`：验证旧读持有旧 snapshot、新读切到新 snapshot 的 MVCC 语义；
+   - `IndexReaderNoActiveSnapshotTest.cpp`：验证 bootstrap / 无活跃 snapshot 场景显式返回 `IndexUnavailable`。
+
+### 测试
+
+1. CMake Tools 定向构建：
+   - `Build_CMakeTools`：`dasall_knowledge`、`dasall_index_reader_unit_test`、`dasall_index_reader_concurrent_swap_unit_test`、`dasall_index_reader_no_active_snapshot_unit_test`
+   - 结果：构建成功。
+2. CMake Tools 测试尝试：
+   - `RunCtest_CMakeTools` 指定 `IndexReaderTest` / `IndexReaderConcurrentSwapTest` / `IndexReaderNoActiveSnapshotTest`
+   - 结果：工具态继续报 `生成失败`。
+3. build-ci 回退验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_index_reader_unit_test dasall_index_reader_concurrent_swap_unit_test dasall_index_reader_no_active_snapshot_unit_test`
+   - `ctest --test-dir build-ci -R "IndexReader.*Test" --output-on-failure`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. Knowledge 现在具备真正的 active snapshot read owner，013 的 lexical search seam 已正式挂到 019 的读平面，而不是继续停留在 mock seam 阶段。
+2. 019 固定了三条关键语义：
+   - 无 active snapshot 时显式返回 `IndexUnavailable`；
+   - search 开始后即使发生 swap，当前读仍持有旧 snapshot 副本；
+   - `current_manifest()` 与 checksum 查询只读取当前 active snapshot，不偷渡 superseded snapshot 存储责任。
+3. `swap_active_snapshot()` 现在是 020 唯一合法的原子切换入口，但它仍不负责 ledger record/activate 顺序，因此依赖方向保持清晰：writer 编排权仍在 020。
+
+### 下一步
+
+1. 继续按用户指定顺序进入 `KNO-TODO-014`，实现 `RecallCoordinator` lane 编排；
+2. 014 必须直接消费 013 `SparseRetriever` 与 019 `IndexReader` 提供的稳定 search path，不允许重新拼装 sparse lane contract。
+
+### 风险
+
+1. 019 当前 `read_snapshot_checksum()` 只读 active snapshot checksum，不提供 superseded snapshot 存储；020 若需要真正的 last-known-good 物理回退，必须在 writer/storage 侧补足 superseded snapshot 持有策略，而不是把历史存储压力压回 reader。
+2. 本轮 `IndexSnapshot` 通过 callback 抽象了真实 SQLite 查询实现；020 接线时必须保证 callback 背后遵守同一 request/result 一致性约束，否则 019 会把其视为 `InternalError` 或 `IndexUnavailable` fail-closed。
+
 ## 记录 #395
 
 - 日期：2026-04-21

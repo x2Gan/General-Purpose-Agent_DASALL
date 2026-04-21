@@ -86,6 +86,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_index_reader_unit_test
+	IndexReaderTest.cpp
+	IndexReaderTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_index_reader_concurrent_swap_unit_test
+	IndexReaderConcurrentSwapTest.cpp
+	IndexReaderConcurrentSwapTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_index_reader_no_active_snapshot_unit_test
+	IndexReaderNoActiveSnapshotTest.cpp
+	IndexReaderNoActiveSnapshotTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_freshness_controller_unit_test
 	FreshnessControllerTest.cpp
 	FreshnessControllerTest
