@@ -67,6 +67,18 @@ dasall_add_knowledge_unit_test(
 	CorpusCatalogColdStartTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_freshness_controller_unit_test
+	FreshnessControllerTest.cpp
+	FreshnessControllerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_freshness_controller_stale_policy_unit_test
+	FreshnessControllerStalePolicyTest.cpp
+	FreshnessControllerStalePolicyTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

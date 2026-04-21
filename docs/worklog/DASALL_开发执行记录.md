@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #388
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build freshness 轮次
+- 任务：KNO-TODO-017 实现 FreshnessController 新鲜度评估
+- 状态：已完成
+
+### 任务选择
+
+1. 016 已经补齐 `CorpusCatalogSnapshot`；按用户给定顺序和 implementation-cycle 的单任务规则，下一轮最小可执行任务就是 017。
+2. 详细设计已把 017 限定为纯计算组件：只根据 manifest 与 policy 计算 freshness，不触发 ingest、不切换 snapshot，因此范围清晰、适合独立提交。
+3. 009 `CorpusRouter` 和 010 `Reranker` 都依赖 `FreshnessSnapshot` supporting header；如果 017 不先落盘，这两个任务会被迫各自重复 stale 规则。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-017-FreshnessController新鲜度评估设计收敛.md`：
+   - 收敛 freshness 状态机、reason code、dual gate 和 Design -> Build 映射；
+   - 以 RFC 5861 的 stale window / hard stop 模式锚定 `refresh_interval` 与 `expire_after` 语义。
+2. 新增 `knowledge/include/health/FreshnessController.h`：
+   - 定义最小 `IndexManifest` 视图；
+   - 定义 `FreshnessSnapshot`；
+   - 定义 `FreshnessController::evaluate(manifest, config, now_ms, query_allow_stale)`。
+3. 新增 `knowledge/src/health/FreshnessController.cpp`：
+   - 实现 manifest 缺失与时间戳异常 fail-closed；
+   - 实现 fresh / stale-allowed / stale-rejected 状态机；
+   - 固定 `profile_stale_read_disabled`、`query_stale_opt_in_missing`、`catalog_expired` 等 reason code。
+4. 更新 `knowledge/CMakeLists.txt`，把 `FreshnessController.h/.cpp` 接入 `dasall_knowledge`。
+5. 更新 `tests/unit/knowledge/CMakeLists.txt`，注册两条 freshness unit target。
+6. 新增两条 unit test：
+   - `FreshnessControllerTest.cpp`：manifest missing、timestamp invalid、fresh 与 determinism；
+   - `FreshnessControllerStalePolicyTest.cpp`：stale allowed、query opt-in 缺失 reject、expired reject。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_freshness_controller_unit_test`
+   - `dasall_freshness_controller_stale_policy_unit_test`
+2. RunCtest_CMakeTools：
+   - `FreshnessControllerTest`
+   - `FreshnessControllerStalePolicyTest`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_freshness_controller_unit_test dasall_freshness_controller_stale_policy_unit_test`
+   - `ctest --test-dir build-ci -R "FreshnessController.*Test" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备稳定的 `FreshnessSnapshot` supporting header，后续 009/010/026 可直接复用统一 freshness 状态，而不必各自重算年龄窗口。
+2. 017 已固定 dual gate：只有 `config.allow_stale_read && query_allow_stale` 同时成立且未超过 `catalog_expire_after_ms` 时，才允许 `StaleAllowed`。
+3. 017 保持了原子任务边界：
+   - 没有提前实现 019 的真实 `IndexReader`；
+   - 没有引入后台 refresh 或告警逻辑；
+   - 只交付 freshness supporting layer 与单测证据。
+
+### 下一步
+
+1. 转入 `KNO-TODO-008`，实现 `QueryNormalizer`，开始 Route / Evidence 纯计算链的 query 面。
+
+### 风险
+
+1. 当前 `IndexManifest` 仍是 017 内部 supporting 视图；018/019/020 若需要扩更多 manifest 字段，必须保持对 017 既有 freshness 字段兼容。
+2. `FreshnessController` 目前只给出事实与建议，不负责 telemetry；026 必须消费其结果并通过 025 的 bridge 输出健康/退化事实，不能另起一套 stale 计数来源。
+
 ## 记录 #387
 
 - 日期：2026-04-21
