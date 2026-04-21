@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #403
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build profile compatibility integration 轮次
+- 任务：KNO-TODO-029 验证 profile compatibility integration
+- 状态：已完成
+
+### 任务选择
+
+1. 028 已提供 failure/degrade integration 证据，029 继续验证 frozen profiles 在 knowledge projector 下的兼容矩阵。
+2. 本轮坚持真实 profile 资产读取，不手写 YAML parser，也不平行构造 `KnowledgeConfigSnapshot`。
+3. 专项 TODO 明确要求 `knowledge=true && memory_vector=false` 合法，但 frozen profiles 中没有该组合，因此补一个基于真实 `desktop_full` manifest 的最小 synthetic downgrade case，仅锁规则、不引入新 profile 资产。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-029-profile-compatibility-integration设计收敛.md`：
+   - 固定真实 frozen profile + synthetic vector downgrade 的双层验证策略；
+   - 明确 029 负责 projector compatibility，不扩张到 retrieval smoke 或 quality regression。
+2. 新增 `tests/integration/knowledge/KnowledgeProfileCompatibilityTest.cpp`：
+   - 通过 `ProfileCatalog`、`BuildProfileResolver`、`RuntimePolicyProvider` 与 `KnowledgeConfigProjector` 加载/投影五个 frozen profiles；
+   - 验证 enabled bits、hybrid/lexical-only 默认 mode、deadline/parallelism/ingest timeout/stale/degrade 等派生规则；
+   - 追加 `knowledge=true && memory_vector=false` synthetic manifest downgrade case；
+   - 验证 shared `ProfileCompatibilityValidator` 仍报告 Compatible；
+   - 检查 integration CMake discoverability 注册。
+3. 更新 `tests/integration/knowledge/CMakeLists.txt`：
+   - 注册 `dasall_knowledge_profile_compatibility_integration_test`；
+   - 为该 target 增加 `knowledge/src` include 与 `dasall_profiles` 链接。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge_profile_compatibility_integration_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools` 运行 `dasall_knowledge_profile_compatibility_integration_test`：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge_profile_compatibility_integration_test`
+   - `ctest --test-dir build-ci -N | grep KnowledgeProfileCompatibilityTest`
+   - `ctest --test-dir build-ci -R KnowledgeProfileCompatibilityTest --output-on-failure`
+   - 结果：discoverability 正常，1/1 Passed。
+
+### 结果
+
+1. 029 已完成，knowledge profile compatibility 矩阵已具备 integration 级证据。
+2. 三种模式都已被锁定：`knowledge=false`、`knowledge=true && vector=false`、`knowledge=true && vector=true`。
+3. 027/028/029 串起来后，knowledge hybrid 与退化闭环在 smoke / degrade / profile compatibility 三个维度都具备自动化验证基础。
+
 ## 记录 #402
 
 - 日期：2026-04-21
