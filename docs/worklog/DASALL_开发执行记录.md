@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #408
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build IndexWriter snapshot governance 轮次
+- 任务：KNO-TODO-020 实现 IndexWriter shadow build 与 snapshot swap
+- 状态：已完成
+
+### 任务选择
+
+1. 024 已完成并推送，用户要求 ingest / snapshot 主链按 021 → 022 → 023 → 024 → 020 → 032 串行推进，因此本轮只做 `IndexWriter`，不提前切入 `KnowledgeServiceFacade` 完整编排。
+2. `KNO-TODO-001` 已冻结 lexical snapshot 技术路线，018/019 已分别提供 snapshot 账本与 active snapshot 读路径，024 已把 refresh 输入收敛为 `IndexUpdateBatch`，因此 020 已无 blocker，可直接进入 Build。
+3. 020 的最小闭环是把 `IndexUpdateBatch` 落到 SQLite FTS5 shadow build、candidate 记录、active swap、last-known-good 回退与 catalog refresh seam，不在本轮抢跑 032 的 facade 真实接线。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-020-IndexWriter设计收敛.md`：
+   - 固定 `IndexWriter` 的职责边界、SQLite FTS5 core/sidecar snapshot 形态、`record_candidate -> swap -> mark_active -> refresh_catalog` 顺序与 rollback 纪律；
+   - 明确 020 只把 catalog refresh 收敛为 seam，真实 `CorpusCatalog` 更新逻辑留待 032 接线。
+2. 新增 `knowledge/include/index/IndexWriter.h` 与 `knowledge/src/index/IndexWriter.cpp`：
+   - 落盘 `UpdateReport`、`RebuildPlan`、`RebuildReport`、`IndexWriterDeps` 与 `IndexWriter`；
+   - 实现 SQLite FTS5 shadow build、manifest sidecar、incremental remove-by-lineage、checksum 生成、active snapshot swap、activation rollback 与 refresh seam。
+3. 新增 `tests/unit/knowledge/IndexWriterTest.cpp`、`tests/unit/knowledge/IndexWriterSnapshotSwapTest.cpp`、`tests/unit/knowledge/IndexWriterRecoveryTest.cpp`：
+   - 覆盖 cold-start build、catalog refresh seam 触发与 invalid batch fail-closed；
+   - 覆盖同一 lineage 下的 replace/remove + snapshot swap；
+   - 覆盖 activation 失败后的 last-known-good rollback。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `IndexWriter` 头/源与三个新的 knowledge unit test target；
+   - 为 writer 实现与单测接入 `dasall_sqlite3`。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge`
+   - `dasall_index_writer_unit_test`
+   - `dasall_index_writer_snapshot_swap_unit_test`
+   - `dasall_index_writer_recovery_unit_test`
+   - 结果：构建通过。
+2. `ListBuildTargets_CMakeTools` 与 `ListTests_CMakeTools`：
+   - 可发现 `dasall_index_writer_*` 目标；
+   - 可发现 `IndexWriterTest`、`IndexWriterSnapshotSwapTest`、`IndexWriterRecoveryTest`。
+3. `RunCtest_CMakeTools` 运行上述三条测试：
+   - 结果：工具态报错 `生成失败`。
+4. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_index_writer_unit_test dasall_index_writer_snapshot_swap_unit_test dasall_index_writer_recovery_unit_test`
+   - `ctest --test-dir build-ci -R "IndexWriter(Test|SnapshotSwapTest|RecoveryTest)" --output-on-failure`
+   - 结果：3/3 Passed。
+
+### 结果
+
+1. 020 已完成，knowledge snapshot 治理主链现在具备从 `IndexUpdateBatch` 到 SQLite lexical snapshot 的真实写路径 owner。
+2. remove-by-lineage、active snapshot swap、activation rollback 与 refresh seam 已被单测锁定，可作为 032 `KnowledgeServiceFacade` 真实 refresh 编排的 index 写入基线。
+3. `RunCtest_CMakeTools` 的通用 `生成失败` 工具态仍存在，但不影响 build-ci 作为本轮主验收信号。
+
+### 下一步
+
+1. 进入 `KNO-TODO-032`，把 `RecallCoordinator`、`IndexReader`、`IngestionCoordinator`、`IndexWriter` 与 `KnowledgeHealthProbe` 接到 `KnowledgeServiceFacade` 完整编排。
+
+### 风险
+
+1. 020 当前只把 `refresh_catalog` 收敛为 activation 后的 seam，真实 `CorpusCatalog` 更新逻辑仍需在 032 与 facade refresh 路径一并接线，否则 catalog route hints 与 snapshot manifest 仍是弱一致。
+
 ## 记录 #407
 
 - 日期：2026-04-21

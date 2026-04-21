@@ -104,6 +104,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_index_writer_unit_test
+	IndexWriterTest.cpp
+	IndexWriterTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_index_writer_snapshot_swap_unit_test
+	IndexWriterSnapshotSwapTest.cpp
+	IndexWriterSnapshotSwapTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_index_writer_recovery_unit_test
+	IndexWriterRecoveryTest.cpp
+	IndexWriterRecoveryTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_source_scanner_unit_test
 	SourceScannerTest.cpp
 	SourceScannerTest
@@ -380,6 +398,21 @@ target_include_directories(dasall_knowledge_service_facade_deadline_budget_unit_
 )
 
 target_link_libraries(dasall_sparse_retriever_unit_test
+	PRIVATE
+		dasall_sqlite3
+)
+
+target_link_libraries(dasall_index_writer_unit_test
+	PRIVATE
+		dasall_sqlite3
+)
+
+target_link_libraries(dasall_index_writer_snapshot_swap_unit_test
+	PRIVATE
+		dasall_sqlite3
+)
+
+target_link_libraries(dasall_index_writer_recovery_unit_test
 	PRIVATE
 		dasall_sqlite3
 )
