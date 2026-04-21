@@ -104,6 +104,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_recall_coordinator_unit_test
+	RecallCoordinatorTest.cpp
+	RecallCoordinatorTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_recall_coordinator_degraded_unit_test
+	RecallCoordinatorDegradedTest.cpp
+	RecallCoordinatorDegradedTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_recall_coordinator_serial_execution_unit_test
+	RecallCoordinatorSerialExecutionTest.cpp
+	RecallCoordinatorSerialExecutionTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_freshness_controller_unit_test
 	FreshnessControllerTest.cpp
 	FreshnessControllerTest

@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #397
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build recall lane orchestration 轮次
+- 任务：KNO-TODO-014 实现 RecallCoordinator lane 编排
+- 状态：已完成
+
+### 任务选择
+
+1. 019 已完成并提交，按用户指定顺序本轮进入 `KNO-TODO-014`，为 012 facade 骨架补齐 sparse/dense lane 编排层。
+2. 013 已经提供 sparse lane seam，015 `VectorRetrieverBridge` 尚未落盘，因此 014 的关键不是实现 dense backend，而是先把 lane 调度、partial results 和 degraded contract 收紧到 coordinator 本身。
+3. 评估后确认 detailed design 里 `RecallCandidateSet recall(const RetrievalPlan&)` 的简写存在一个缺口：双 lane 都失败时无法显式表达“失败但还没映射成 facade 级 `ErrorInfo`”；本轮因此新增 `RecallCoordinatorResult` 作为中间结果壳。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-014-RecallCoordinator设计收敛.md`：
+   - 固定 014 的职责、非职责、v1 串行执行策略与 partial results 规则；
+   - 明确 014 必须复用 013 sparse seam，并通过 dense stub/mock seam 等待 015 concrete owner；
+   - 记录 `RecallCoordinatorResult` 用来表达“双 lane 都失败，但还没到 facade 错误映射层”的原因。
+2. 新增 `knowledge/include/retrieve/RecallCoordinator.h` 与 `knowledge/src/retrieve/RecallCoordinator.cpp`：
+   - 定义 `RecallRequest`、`DenseRecallRequest/Result`、`RecallCoordinatorResult`、`RecallCoordinatorDeps` 与 `RecallCoordinatorPolicy`；
+   - 实现 lexical-only / dense-only / hybrid 三种 lane 选择；
+   - 固定 v1 一律串行执行 `sparse -> dense`，并把 lane 失败 reason codes 归一成稳定字符串。
+3. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `RecallCoordinator` 头/源与 3 条 unit targets。
+4. 新增三条 unit test：
+   - `RecallCoordinatorTest.cpp`：验证 lexical-only 只跑 sparse，以及 hybrid 双 lane 成功聚合；
+   - `RecallCoordinatorDegradedTest.cpp`：验证 dense lane 失败但 sparse 成功时的 degraded 返回，以及双 lane 都失败时的显式失败；
+   - `RecallCoordinatorSerialExecutionTest.cpp`：验证 v1 即使 `max_parallel_recall > 1` 也保持固定串行顺序 `sparse -> dense`。
+
+### 测试
+
+1. CMake Tools 定向构建：
+   - `Build_CMakeTools`：`dasall_knowledge`、`dasall_recall_coordinator_unit_test`、`dasall_recall_coordinator_degraded_unit_test`、`dasall_recall_coordinator_serial_execution_unit_test`
+   - 结果：构建成功。
+2. CMake Tools 测试尝试：
+   - `RunCtest_CMakeTools` 指定 `RecallCoordinatorTest` / `RecallCoordinatorDegradedTest` / `RecallCoordinatorSerialExecutionTest`
+   - 结果：工具态继续报 `生成失败`。
+3. build-ci 回退验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_recall_coordinator_unit_test dasall_recall_coordinator_degraded_unit_test dasall_recall_coordinator_serial_execution_unit_test`
+   - `ctest --test-dir build-ci -R "RecallCoordinator.*Test" --output-on-failure`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. Knowledge 现在具备独立的 recall lane orchestration layer，012 facade 下一轮可以直接消费统一的 `RecallCoordinatorResult`，而不再自行拼 sparse/dense lane 逻辑。
+2. 014 固定了三条关键语义：
+   - hybrid 单 lane 成功且 `allow_partial_results=true` 时返回 `ok=true + degraded=true`；
+   - 双 lane 都失败时返回 `ok=false + failure_reason_codes`，但不越级映射成 `ErrorInfo`；
+   - v1 无论 `max_parallel_recall` 如何配置，都保持串行 `sparse -> dense` 执行。
+3. dense lane 仍是 stub/mock seam，没有把 015 `VectorRetrieverBridge` 的 concrete owner 提前锁死，因此依赖方向仍保持清晰。
+
+### 下一步
+
+1. 继续按用户指定顺序进入 `KNO-TODO-012`，实现 `KnowledgeServiceFacade` lexical-only 骨架编排；
+2. 012 需要把 008/009/014/010/011 串起来，并把 014 的 `failure_reason_codes` 统一映射成 facade 级 `ErrorInfo`。
+
+### 风险
+
+1. 014 当前 `DenseRecallResult` 只冻结了最小 lane seam；015 接线时必须继续遵守 `failure_reason_codes` 和 `warnings` 的形状，不要绕过 coordinator 直接向 facade 返回 provider 级对象。
+2. `RecallCoordinatorResult` 目前是为 012 过渡引入的 module-local supporting shape；若 032 完整 facade 轮次要扩并行或更细粒度 lane metrics，必须在保持当前 failure/degraded 语义不破坏的前提下演进。
+
 ## 记录 #396
 
 - 日期：2026-04-21

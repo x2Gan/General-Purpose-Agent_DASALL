@@ -14,6 +14,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/query/CorpusRouter.h
   include/query/QueryNormalizer.h
   include/rerank/Reranker.h
+  include/retrieve/RecallCoordinator.h
   include/retrieve/RecallTypes.h
   include/retrieve/SparseRetriever.h
 )
@@ -42,6 +43,7 @@ target_sources(dasall_knowledge
     src/query/CorpusRouter.cpp
     src/query/QueryNormalizer.cpp
     src/rerank/Reranker.cpp
+    src/retrieve/RecallCoordinator.cpp
     src/retrieve/SparseRetriever.cpp
   PUBLIC
     FILE_SET public_headers
