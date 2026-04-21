@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #379
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO 设计解阻轮次
+- 任务：KNO-TODO-001 收敛 lexical 索引技术选型与 PoC 证据
+- 状态：已完成
+
+### 任务选择
+
+1. `KNO-BLK-001` 直接阻塞 `SparseRetriever`、`IndexReader`、`IndexWriter` 及其下游 smoke/integration 任务；如果 lexical engine 继续保持“SQLite FTS5 / 自研倒排 / 三方库”多候选，后续 Build 只能在代码层继续带着歧义推进。
+2. 本轮限定为“唯一 lexical 路线冻结 + tokenizer 策略显式化 + host-side PoC 证据回写”，不混入 `KNO-TODO-002 ~ 004` 的 vector bridge、corpus baseline 或 quality gate 设计项。
+3. 设计决策优先复用仓库现有 sqlite amalgamation 配方与 third-party 治理顺序，避免为了 lexical recall 再引入新的 third-party 检索依赖或破坏模块边界。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-001-lexical索引技术选型与PoC设计收敛.md`：
+   - 冻结 v1 lexical engine 为 SQLite FTS5；
+   - 明确依赖接入方式为共享 sqlite target + `SQLITE_ENABLE_FTS5=1`；
+   - 回写 tokenizer profile、host-side benchmark、Design -> Build 映射与回退策略。
+2. 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md`：
+   - 在 `SparseRetriever`、`IndexReader`、`IndexWriter` 卡片中把 lexical backend 固定为 SQLite FTS5；
+   - 为 `IndexManifest` 补齐 `format_version`、`lexical_backend`、`tokenizer_profile`；
+   - 把 10.4 的 lexical snapshot 从“待定”改为 `SQLite FTS5 snapshot`，并关闭 11.1 的 `KNO-B03` 选型 blocker。
+3. 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`：
+   - 将 `KNO-TODO-001` 标记为 `Done`；
+   - 回写 `KNO-BLK-001` 校准记录；
+   - 更新 `KNO-R01` / `KNO-R07` 缓解策略与执行建议，使其与 001 的结论一致。
+
+### 测试
+
+1. host-side SQLite PoC：
+   - 10k chunks 内存库 BM25：`p50=0.3530ms`、`p95=0.4271ms`、`p99=0.9224ms`、`max=1.0761ms`；
+   - 10k chunks 文件库/WAL BM25：`db_size=6.7773MB`、`p50=0.3576ms`、`p95=0.4314ms`、`p99=0.7640ms`、`max=0.9396ms`；
+   - 10k chunks `trigram` 中英混合语料：`p50=3.1166ms`、`p95=5.0649ms`、`p99=5.7153ms`，中文/英文样例 query 均可命中；
+   - `unicode61` 验证显示中文短语与子词 query 基本 0 命中，因此不能作为中英混合默认方案。
+2. 文档验收：
+   - 使用 `rg -n "SQLite FTS5|tokenizer_profile|format_version|KNO-BLK-001|0.7640ms|5.7153ms" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-001-lexical索引技术选型与PoC设计收敛.md` 校验关键结论可检索。
+3. 本轮未执行 CMake 构建或 CTest：`KNO-TODO-001` 是补设计解阻任务，目标是形成唯一技术路线与 PoC 证据，不是进入 `SparseRetriever` / `IndexReader` / `IndexWriter` 的实现期 Build。
+
+### 结果
+
+1. `KNO-TODO-001` 已完成，Knowledge v1 lexical 路线收敛为“SQLite FTS5 + 共享 sqlite target + 显式 tokenizer profile”。
+2. `KNO-BLK-001` 的“选型未定”部分已解除；`SparseRetriever`、`IndexReader`、`IndexWriter` 后续可以直接按 SQLite FTS5 snapshot 模型进入 Build，而不再重复讨论 engine 候选。
+3. edge 预算可行性已有 host-side 证据：按 knowledge 详设 6.10 推导的 sparse lane 预算约为 `525ms`，当前 PoC p99 明显低于该阈值。
+
+### 下一步
+
+1. 进入 `KNO-TODO-002`，冻结 `VectorRetrieverBridge`、`IQueryEncoder`、`IVectorRecallStore` 的 owner、注入方向与 degrade 语义，继续按单任务串行推进 blocker recovery。
+
+### 风险
+
+1. 当前 benchmark 仍是 host-side sqlite3 PoC，不是仓库最终共享 sqlite target 的目标机结果；进入 `KNO-TODO-013` / `019` / `020` 时，仍需补一次基于 vendored sqlite 与目标平台的 smoke/latency 验证。
+2. `dasall_sqlite3` 目前仍定义在 `memory/CMakeLists.txt`；若不在 Build 前提升为共享 third-party target，knowledge 侧会出现不必要的构建层耦合。
+
 ## 记录 #378
 
 - 日期：2026-04-21

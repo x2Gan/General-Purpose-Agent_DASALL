@@ -1,9 +1,9 @@
 # DASALL Knowledge 子系统专项 TODO
 
-最近更新时间：2026-04-18  
+最近更新时间：2026-04-21  
 阶段：Detailed Design -> Special TODO  
 适用范围：knowledge/  
-当前结论：Knowledge 子系统当前可直接生成 L3/L2 混合专项 TODO。`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`KnowledgeServiceFacade`、`FreshnessController`、`VersionLedger`、`KnowledgeTelemetry`、`KnowledgeHealthProbe` 已具备接口级或数据结构级拆分条件；`SparseRetriever` 的词法索引技术选型、`VectorRetrieverBridge` 的窄接口 ownership、首批 corpus 资产与 metadata/trust 规范、retrieval quality golden set 四项仍必须以前置补设计/评审任务解阻，之后才能把 lexical/hybrid/index/quality 全链路推进到稳定 Build。
+当前结论：Knowledge 子系统当前可直接生成 L3/L2 混合专项 TODO。`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`KnowledgeServiceFacade`、`FreshnessController`、`VersionLedger`、`KnowledgeTelemetry`、`KnowledgeHealthProbe` 已具备接口级或数据结构级拆分条件；`KNO-TODO-001` 已冻结 `SparseRetriever` / `IndexReader` / `IndexWriter` 的 lexical 路线为 SQLite FTS5 + 显式 tokenizer profile，并解除 `KNO-BLK-001`。当前仍需继续完成 `VectorRetrieverBridge` ownership、首批 corpus 资产与 metadata/trust 规范、retrieval quality golden set 三项前置补设计，之后再把 hybrid/index/quality 全链路推进到稳定 Build。
 
 ## 1. 文档头
 
@@ -238,7 +238,7 @@
 
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| KNO-TODO-001 | NotStarted | 收敛 lexical 索引技术选型与 PoC 证据 | 详设 6.13.2、10.4、11.1 KNO-B03、12.1 | `SparseRetriever`；`IndexReader`；`IndexWriter` | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 lexical index 首选实现、依赖接入方式、cross-compile 约束和最小 PoC 结论；**评审补充**：需包含 edge_balanced 10k chunks BM25 p99 延迟基准测量（作为 QG-K04 前置数据） | `SparseRetriever`；lexical snapshot；`IndexManifest.format_version` | 文档一致性：单一技术选型、回退条件和格式版本约束可检索；edge_balanced p99 延迟基准存在 | `rg -n "SQLite FTS5|倒排|lexical index|format_version|SparseRetriever" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-001 | 形成唯一 lexical 技术路线并补 PoC 证据 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 lexical index 选型唯一、PoC 结论可回链、`SparseRetriever` / `IndexReader` / `IndexWriter` 不再存在多候选歧义时完成 |
+| KNO-TODO-001 | Done | 收敛 lexical 索引技术选型与 PoC 证据 | 详设 6.13.2、10.4、11.1 KNO-B03、12.1 | `SparseRetriever`；`IndexReader`；`IndexWriter` | L0 | 已更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 lexical index 唯一实现为 SQLite FTS5、共享 sqlite target 接入方向、cross-compile 约束和最小 PoC 结论；**评审补充**：已补 edge_balanced 10k chunks BM25 host-side p99 延迟基准（作为 QG-K04 前置数据） | `SparseRetriever`；lexical snapshot；`IndexManifest.format_version`；`IndexManifest.tokenizer_profile` | 文档一致性：单一技术选型、回退条件和格式版本约束可检索；host-side p99 延迟基准存在；mixed-language tokenizer 证据已回写 | `rg -n "SQLite FTS5|tokenizer_profile|format_version|KNO-BLK-001|0.7640ms|5.7153ms" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-001-lexical索引技术选型与PoC设计收敛.md` | 无 | KNO-BLK-001 | 形成唯一 lexical 技术路线并补 PoC 证据 | 更新后的 knowledge 详设；更新后的专项 TODO；`docs/todos/knowledge/deliverables/KNO-TODO-001-lexical索引技术选型与PoC设计收敛.md` | 仅当 lexical index 唯一收敛为 SQLite FTS5、`SparseRetriever` / `IndexReader` / `IndexWriter` 不再存在多候选歧义、`format_version` / `tokenizer_profile` / host-side PoC 证据可回链时完成 |
 | KNO-TODO-002 | NotStarted | 冻结 vector bridge 窄接口与 ownership | 详设 6.13.2、11.1 KNO-B02、12.1；阶段 H 与 memory 边界 | `VectorRetrieverBridge`；`IQueryEncoder`；`IVectorRecallStore` | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 `IQueryEncoder` / `IVectorRecallStore` owner、注入方向和 module-local 边界 | `VectorRetrieverBridge`；`IQueryEncoder`；`IVectorRecallStore` | 文档一致性：窄接口归属、注入方向和 degrade 语义可检索 | `rg -n "IQueryEncoder|IVectorRecallStore|VectorRetrieverBridge|ownership|memory/vector" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-002 | 形成单一 ownership 结论，并锁定 bridge 输入输出语义 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 hybrid recall 不再依赖未定义 owner 的接口，且 bridge 语义可直接映射到头文件与单测时完成 |
 | KNO-TODO-003 | NotStarted | 补齐首批 corpus 资产与 metadata/trust 规范 | 详设 6.9、6.13.5、11.1 KNO-B04、12.1 | `SourceScanner`；`Canonicalizer`；`Chunker`；`CorpusCatalog` | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，补齐首批 corpus 包、metadata 必填字段、`trust_level` 规则和 quarantine 条件 | `CorpusDescriptor`；`SourceRecord`；`CanonicalDocument`；`ChunkRecord` | 文档一致性：corpus baseline、metadata 字段、trust 规则可检索 | `rg -n "trust_level|metadata|corpus|quarantine|SourceScanner|Canonicalizer|Chunker" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-003 | 形成最小 corpus baseline 与 source trust SSOT | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 ingest/index 相关组件拥有明确的输入资产、metadata 必填字段与 trust 规则，且坏源隔离条件明确时完成 |
 | KNO-TODO-004 | NotStarted | 定义 retrieval quality golden set 与回归阈值 | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set；MRR/NDCG@k/Recall@k | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，冻结 golden set 文件格式、最小样本数、质量阈值和失败判定规则；**评审补充**：预留 RAGAS 风格 context-level 指标扩展槽位（Context Precision / Context Recall / Faithfulness），v1 先以 MRR/NDCG@k/Recall@k 为门禁 | golden set schema；MRR/NDCG@k/Recall@k；context-level metrics 扩展声明 | 文档一致性：quality gate 样本格式和阈值可检索；context-level 指标扩展槽位已声明 | `rg -n "golden set|MRR|NDCG@k|Recall@k|RetrievalQualityRegressionTest" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-004 | 形成 retrieval quality baseline 定义 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 regression gate 的输入格式、通过阈值和 fail 判定可二值执行时完成 |
@@ -339,7 +339,7 @@
 
 | Blocker ID | 阻塞描述 | 直接受影响任务 | 解阻条件 | 当前处置策略 |
 |---|---|---|---|---|
-| KNO-BLK-001 | lexical index 技术栈未冻结，`SparseRetriever` / `IndexReader` / `IndexWriter` 无法安全编码 | KNO-TODO-013、019、020、027、028、032、033 | 完成 KNO-TODO-001，形成唯一 lexical 方案与 PoC 证据 | public ABI、pure compute、catalog/freshness/ledger 先行 |
+| KNO-BLK-001 | lexical index 技术栈未冻结，`SparseRetriever` / `IndexReader` / `IndexWriter` 无法安全编码；现已由 KNO-TODO-001 解阻 | KNO-TODO-013、019、020、027、028、032、033 | 完成 KNO-TODO-001，形成唯一 lexical 方案与 PoC 证据 | 已解阻；lexical 主链、smoke 与相关 integration 可进入 Build |
 | KNO-BLK-002 | `VectorRetrieverBridge` 的窄接口 owner 与注入方向未冻结 | KNO-TODO-015、014、028、029、032 | 完成 KNO-TODO-002，锁定 `IQueryEncoder` / `IVectorRecallStore` 边界 | hybrid 与 profile/hybrid 用例保持 Blocked |
 | KNO-BLK-003 | corpus baseline、metadata 必填字段与 trust/quarantine 规则缺失 | KNO-TODO-021、022、023、024、032、033 | 完成 KNO-TODO-003，建立最小语料包与 metadata/trust SSOT | query/evidence/health 可以先实现；ingest Build 暂停 |
 | KNO-BLK-004 | golden set 资产与质量阈值未冻结 | KNO-TODO-030 | 完成 KNO-TODO-004，冻结样本格式、条数下限和 fail 阈值 | 先推进 smoke / degrade / profile，质量回归 Gate 后置 |
@@ -350,7 +350,7 @@
 
 | Blocker ID | 校准时间 | 校准结果 | 剩余阻塞范围 | 校准者 |
 |---|---|---|---|---|
-| KNO-BLK-001 | — | — | — | — |
+| KNO-BLK-001 | 2026-04-21 | 已解阻：SQLite FTS5 + 显式 tokenizer profile + host-side 10k chunks PoC 已回写 | 无；后续只剩 Build 接线与实现验证 | GitHub Copilot |
 | KNO-BLK-002 | — | — | — | — |
 | KNO-BLK-003 | — | — | — | — |
 | KNO-BLK-004 | — | — | — | — |
@@ -416,13 +416,13 @@ ctest --test-dir build-ci -R "Knowledge|dasall_knowledge" --output-on-failure
 
 | 风险 ID | 风险描述 | 影响 | 缓解策略 | 回退策略 |
 |---|---|---|---|---|
-| KNO-R01 | lexical index 选型与目标平台不匹配 | `SparseRetriever` 延迟、体积或交叉编译失败 | 先做 KNO-TODO-001 PoC，再决定正式实现 | 回退到最小可工作的测试夹具索引；暂不打开 lexical Build |
+| KNO-R01 | lexical index 选型与目标平台不匹配 | `SparseRetriever` 延迟、体积或交叉编译失败 | `KNO-TODO-001` 已冻结 SQLite FTS5；Build 阶段继续验证共享 sqlite target、交叉编译和目标机 smoke | 回退到最小可工作的 FTS5 测试夹具索引；暂不打开其它 engine 选型 |
 | KNO-R02 | vector bridge ownership 继续漂移 | hybrid 任务返工扩散到 memory / profile / tests | 用 KNO-TODO-002 先冻结窄接口和 owner | 回退到 lexical-only，保持 `memory_vector=false` 合法组合 |
 | KNO-R03 | stale read 被滥用 | 过时证据进入上游，影响 grounding | `FreshnessController` + `KnowledgeHealthProbe` + 审计事件强校验 stale serve 计数 | profile 层禁用 stale read，并回退到 last-known-good snapshot |
 | KNO-R04 | corpus 投毒或间接 prompt injection | 恶意语料污染 evidence 与 LLM 推理 | 建立 trust level + quarantine 规则，坏源不入 active snapshot | 立即将对应 corpus 标记 `Quarantined`，并禁用 Knowledge 或切回 memory-only |
 | KNO-R05 | snapshot swap 或 ledger 失配 | 查询读到不一致状态或丢失回退依据 | 强制 `record_candidate -> swap -> mark_active` 顺序和 checksum 校验 | 回退 `last_known_good()`，拒绝继续激活异常 snapshot |
 | KNO-R06 | observability 字段缺失 | 退化与失败不可追踪，Gate 形同虚设 | `KnowledgeTelemetryFieldSetTest` 与 QG-K08 强阻断 | 停止发布，先补字段而不是带病上线 |
-| KNO-R07 | edge 设备 lexical recall 超时 | `edge_balanced` 预算被击穿 | 在 KNO-TODO-001 / KNO-TODO-030 中纳入 PoC 与 quality 基线 | 对 edge profile 回退到 `knowledge=false` 或更小 corpus 范围 |
+| KNO-R07 | edge 设备 lexical recall 超时 | `edge_balanced` 预算被击穿 | `KNO-TODO-001` 已补 host-side PoC；后续在 KNO-TODO-030 中继续纳入质量基线与目标机测量 | 对 edge profile 回退到 `knowledge=false` 或更小 corpus 范围 |
 | KNO-R08 | golden set 不足或偏斜 | quality gate 失真，排序优化无有效反馈 | 先做 KNO-TODO-004 定义样本覆盖标准，再扩到 ≥30 条 | 暂停 quality-ready 结论，只保留 smoke/degrade 级可用 |
 | KNO-R09 | token 估算 `chars/4` 对 CJK 文本精度仅 ~70% | evidence budget 超支或浪费，context projection 截断不准 | `EvidenceAssembler` budget clamp 预留 10% 安全余量；在 v2 中评估引入真实 tokenizer 估算 | 回退到更保守的 budget 比例（`chars/5`），宁可少填不超 |
 | KNO-R10 | `MultiHop` 枚举值 v1 仅声明不落链路，后续扩展可能影响 QueryNormalizer/CorpusRouter 接口 | v2 新增 multi-hop 执行链路时发现 v1 接口不兼容，需回退 ABI | 在 KNO-TODO-006 中把 `MultiHop` 标记为 `reserved`，并在 `QueryNormalizer` 中遇到 MultiHop 时返回 `NotSupported` 错误 | 延迟 MultiHop 到 v2 版本周期，v1 仅保留枚举声明 |
@@ -457,9 +457,9 @@ ctest --test-dir build-ci -R "Knowledge|dasall_knowledge" --output-on-failure
 
 直接执行建议：
 
-1. 先并行完成 KNO-TODO-001 ~ 004 的补设计解阻。
+1. `KNO-TODO-001` 已完成；继续串行推进 KNO-TODO-002 ~ 004 的补设计解阻。
 2. 在 blocker 解锁前，优先推进 KNO-TODO-005 ~ 012、016 ~ 018、025 的骨架、ABI、纯计算和观测类任务（025/026 已前移）。
-3. 在 KNO-BLK-001 解锁后推进 lexical 主链与 smoke；在 KNO-BLK-002 解锁后推进 hybrid/profile；在 KNO-BLK-003 解锁后推进 ingest/index；在 KNO-BLK-004 解锁后补 quality regression Gate。
+3. `KNO-BLK-001` 已解锁，可推进 lexical 主链与 smoke；在 KNO-BLK-002 解锁后推进 hybrid/profile；在 KNO-BLK-003 解锁后推进 ingest/index；在 KNO-BLK-004 解锁后补 quality regression Gate。
 4. 在 KNO-BLK-001/002/003 全部解锁后推进 KNO-TODO-032（Facade 完整版）和 KNO-TODO-033（refresh 闭环集成测试）。
 
 若不先完成四项 blocker，就无法把 Knowledge 安全细化到“真实 lexical/hybrid/index/quality Build 任务”，继续硬拆只会把设计不确定性转移到代码层。当前最合理的工程策略是：先冻边界，再做最小 lexical 闭环，最后补 hybrid、index 治理与 quality Gate。
