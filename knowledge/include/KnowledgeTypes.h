@@ -85,6 +85,13 @@ enum class RefreshStatus : std::uint8_t {
 	Failed = 2,
 };
 
+enum class HealthState : std::uint8_t {
+	Unknown = 0,
+	Healthy = 1,
+	Degraded = 2,
+	Unhealthy = 3,
+};
+
 struct KnowledgeQuery {
 	std::string request_id;
 	std::optional<std::string> session_id;
@@ -252,6 +259,29 @@ struct RefreshResult {
 	}
 };
 
-struct KnowledgeHealthSnapshot;
+struct KnowledgeHealthSnapshot {
+	HealthState state = HealthState::Unknown;
+	std::string active_snapshot_id;
+	FreshnessState freshness_state = FreshnessState::Unknown;
+	bool vector_backend_available = false;
+	bool last_known_good_available = false;
+	std::uint64_t degraded_return_count = 0U;
+	std::vector<std::string> reason_codes;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		if (!detail::has_unique_values(reason_codes)) {
+			return false;
+		}
+
+		if (state == HealthState::Healthy) {
+			return !active_snapshot_id.empty() &&
+					 freshness_state == FreshnessState::Fresh &&
+					 vector_backend_available && degraded_return_count == 0U &&
+					 reason_codes.empty();
+		}
+
+		return true;
+	}
+};
 
 }  // namespace dasall::knowledge

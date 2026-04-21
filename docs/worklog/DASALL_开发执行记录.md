@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #393
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build health snapshot 轮次
+- 任务：KNO-TODO-026 实现 KnowledgeHealthProbe 健康快照
+- 状态：已完成
+
+### 任务选择
+
+1. 011 已经补齐 `EvidenceBundle/context_projection`，用户要求的“Route / Evidence 纯计算链 + 健康探针”只剩 026。
+2. 评估后确认 026 不需要先把 018 `VersionLedger` / 019 `IndexReader` 的 concrete owner 全部落盘；只要把其状态面收敛为 provider seam，026 就能保持只读聚合边界并独立验收。
+3. 006 已预留 `IKnowledgeService::health_snapshot()`，017/025 已分别提供 freshness 与 telemetry supporting shape，因此本轮的最小可执行任务就是补齐 `KnowledgeHealthSnapshot` public ABI 和 `KnowledgeHealthProbe` supporting layer。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-026-KnowledgeHealthProbe健康快照设计收敛.md`：
+   - 固定 026 的职责、非职责与 provider seam 边界；
+   - 明确 `Unknown / Degraded / Unhealthy / Healthy` 四态的分类规则；
+   - 记录 026 可先于 018/019 落地，但真实接线留给 032 的原因。
+2. 更新 `knowledge/include/KnowledgeTypes.h` 与 `tests/unit/knowledge/KnowledgeInterfaceSurfaceSkeletonTest.cpp`：
+   - 新增 `HealthState` 与 `KnowledgeHealthSnapshot` public ABI；
+   - 回归 `IKnowledgeService::health_snapshot()` 的签名与 runtime-facing health shape。
+3. 新增 `knowledge/include/health/KnowledgeHealthProbe.h` 与 `knowledge/src/health/KnowledgeHealthProbe.cpp`：
+   - 定义 `HealthProbeDeps` provider seam；
+   - 实现 lifecycle / manifest / freshness / vector backend / last-known-good / telemetry / degraded count / recent reason code 聚合；
+   - 固定依赖缺失不误判 `Healthy`、lexical-only degrade 与真正不可用分流的 `HealthState` 分类。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`，把 `KnowledgeHealthProbe` 代码和三条 health unit target 接入现有 knowledge 拓扑。
+5. 新增三条 unit test：
+   - `KnowledgeHealthProbeTest.cpp`：验证 healthy 路径与 active snapshot 丢失的 `Unhealthy` 路径；
+   - `KnowledgeHealthProbeDegradedStateTest.cpp`：验证 vector backend 缺失但 lexical snapshot 仍可用时返回 `Degraded`；
+   - `KnowledgeHealthProbeUnknownDependencyTest.cpp`：验证关键 provider 缺失时返回 `Unknown` 而不是 `Healthy`。
+
+### 测试
+
+1. build-ci configure：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+2. build-ci 定向构建：
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_interface_surface_unit_test dasall_knowledge_health_probe_unit_test dasall_knowledge_health_probe_degraded_state_unit_test dasall_knowledge_health_probe_unknown_dependency_unit_test`
+3. 显式 `ctest`：
+   - `ctest --test-dir build-ci -R "(dasall_knowledge_interface_surface_unit_test|KnowledgeHealthProbe.*Test)" --output-on-failure`
+
+### 结果
+
+1. Knowledge 现已具备稳定的 `KnowledgeHealthSnapshot` public ABI 与 provider-seam `KnowledgeHealthProbe` supporting layer，用户要求的 Route / Evidence 纯计算链 + 健康探针已闭环到 supporting layer 级别。
+2. 026 固定了三类关键语义：
+   - 关键依赖缺失时必须返回 `Unknown`，不能误判 `Healthy`；
+   - active snapshot 丢失且无 last-known-good 时返回 `Unhealthy`；
+   - vector backend 不可用但 lexical snapshot 仍可读时返回 `Degraded`，明确区分 lexical-only degrade 与真正不可用。
+3. 026 保持了原子任务边界：
+   - 没有提前实现 `VersionLedger` / `IndexReader` concrete owner；
+   - 没有提前实现 `KnowledgeServiceFacade` 完整健康编排；
+   - 只交付公共 health snapshot 形状、只读聚合组件与 unit gates。
+
+### 下一步
+
+1. 用户要求的 016/017/008/009/010/011/026 已全部闭环；若继续推进 knowledge 主线，优先候选应在 012 facade 骨架与 018/019 index plane 之间重新择序，而不是回改已完成的 Route / Evidence / Health supporting layers。
+
+### 风险
+
+1. 026 当前通过 provider seam 隔离 018/019/032 的真实 owner；后续 032 接线时必须复用既有 `KnowledgeHealthSnapshot` / `HealthState` 语义，禁止在 facade 内重写一套平行健康分类。
+2. 当前仓库的默认 `all` 构建仍受无关 Freshness 测试历史坏文件影响；本轮继续以 build-ci 定向构建与显式 `ctest` 作为有效验收证据。
+
 ## 记录 #392
 
 - 日期：2026-04-21

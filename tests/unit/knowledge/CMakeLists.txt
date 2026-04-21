@@ -145,6 +145,24 @@ dasall_add_knowledge_unit_test(
 	EvidenceBudgetClampTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_health_probe_unit_test
+	KnowledgeHealthProbeTest.cpp
+	KnowledgeHealthProbeTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_health_probe_degraded_state_unit_test
+	KnowledgeHealthProbeDegradedStateTest.cpp
+	KnowledgeHealthProbeDegradedStateTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_health_probe_unknown_dependency_unit_test
+	KnowledgeHealthProbeUnknownDependencyTest.cpp
+	KnowledgeHealthProbeUnknownDependencyTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

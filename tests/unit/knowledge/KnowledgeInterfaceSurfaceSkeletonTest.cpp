@@ -20,9 +20,11 @@ using dasall::knowledge::CorpusDescriptor;
 using dasall::knowledge::EvidenceBundle;
 using dasall::knowledge::EvidenceSlice;
 using dasall::knowledge::FreshnessState;
+using dasall::knowledge::HealthState;
 using dasall::knowledge::IKnowledgeService;
 using dasall::knowledge::KnowledgeConfigSnapshot;
 using dasall::knowledge::KnowledgeErrorCode;
+using dasall::knowledge::KnowledgeHealthSnapshot;
 using dasall::knowledge::KnowledgeQuery;
 using dasall::knowledge::KnowledgeQueryKind;
 using dasall::knowledge::KnowledgeRetrieveResult;
@@ -45,6 +47,8 @@ static_assert(std::is_same_v<decltype(&IKnowledgeService::init),
 static_assert(std::is_same_v<decltype(&IKnowledgeService::retrieve),
                              KnowledgeRetrieveResult (IKnowledgeService::*)(
                                  const KnowledgeQuery&)>);
+static_assert(std::is_same_v<decltype(&IKnowledgeService::health_snapshot),
+               KnowledgeHealthSnapshot (IKnowledgeService::*)() const>);
 static_assert(std::is_same_v<decltype(&IKnowledgeService::request_refresh),
                              RefreshResult (IKnowledgeService::*)(
                                  const CorpusChangeSet&)>);
@@ -148,6 +152,16 @@ void test_knowledge_surface_types_capture_runtime_facing_shapes() {
       .error = std::nullopt,
   };
 
+    KnowledgeHealthSnapshot health{
+      .state = HealthState::Healthy,
+      .active_snapshot_id = "snapshot-01",
+      .freshness_state = FreshnessState::Fresh,
+      .vector_backend_available = true,
+      .last_known_good_available = true,
+      .degraded_return_count = 0U,
+      .reason_codes = {},
+    };
+
   assert_true(slice.has_consistent_values(),
               "evidence slice should keep snippet/citation/confidence semantics");
   assert_true(bundle.has_consistent_values(),
@@ -162,6 +176,8 @@ void test_knowledge_surface_types_capture_runtime_facing_shapes() {
               "corpus change set should reject duplicate sources across each lane");
   assert_true(refresh.has_consistent_values(),
               "accepted refresh result should require a refresh id without an error");
+  assert_true(health.has_consistent_values(),
+              "knowledge health snapshot should expose a stable runtime-facing public shape");
 }
 
 void test_knowledge_error_projection_maps_all_failure_domains() {

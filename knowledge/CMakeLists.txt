@@ -7,6 +7,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/KnowledgeErrors.h
   include/KnowledgeTypes.h
   include/health/FreshnessController.h
+  include/health/KnowledgeHealthProbe.h
   include/index/CorpusCatalog.h
   include/query/CorpusRouter.h
   include/query/QueryNormalizer.h
@@ -29,6 +30,7 @@ target_sources(dasall_knowledge
     src/config/KnowledgeConfigProjector.cpp
     src/evidence/EvidenceAssembler.cpp
     src/health/FreshnessController.cpp
+    src/health/KnowledgeHealthProbe.cpp
     src/KnowledgeBuildSkeleton.cpp
     src/index/CorpusCatalog.cpp
     src/observability/KnowledgeTelemetry.cpp

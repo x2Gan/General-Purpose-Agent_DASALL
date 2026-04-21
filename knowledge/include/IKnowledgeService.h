@@ -4,8 +4,6 @@
 
 namespace dasall::knowledge {
 
-struct KnowledgeHealthSnapshot;
-
 class IKnowledgeService {
  public:
   virtual ~IKnowledgeService() = default;
