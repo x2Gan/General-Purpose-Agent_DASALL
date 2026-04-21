@@ -1,19 +1,19 @@
 #pragma once
 
+#include "KnowledgeTypes.h"
+
 namespace dasall::knowledge {
+
+struct KnowledgeHealthSnapshot;
 
 class IKnowledgeService {
  public:
-  virtual ~IKnowledgeService() = 0;
+  virtual ~IKnowledgeService() = default;
 
- protected:
-  IKnowledgeService() = default;
-  IKnowledgeService(const IKnowledgeService&) = default;
-  IKnowledgeService& operator=(const IKnowledgeService&) = default;
-  IKnowledgeService(IKnowledgeService&&) = default;
-  IKnowledgeService& operator=(IKnowledgeService&&) = default;
+  virtual bool init(const KnowledgeConfigSnapshot& config) = 0;
+  virtual KnowledgeRetrieveResult retrieve(const KnowledgeQuery& query) = 0;
+  virtual KnowledgeHealthSnapshot health_snapshot() const = 0;
+  virtual RefreshResult request_refresh(const CorpusChangeSet& changes) = 0;
 };
-
-inline IKnowledgeService::~IKnowledgeService() = default;
 
 }  // namespace dasall::knowledge

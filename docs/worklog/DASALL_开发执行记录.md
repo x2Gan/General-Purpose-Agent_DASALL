@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #384
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build ABI 轮次
+- 任务：KNO-TODO-006 定义 Knowledge public surface 对象、错误映射与 IKnowledgeService
+- 状态：已完成
+
+### 任务选择
+
+1. 005 已经关闭了 include/CMake/discoverability 拓扑缺口，接下来阻塞 007/025 的核心不再是工程骨架，而是 root public headers 仍是 skeleton declarations，无法为 projector、telemetry 和 facade 提供稳定 ABI。
+2. 详细设计 6.5/6.6 已把 `KnowledgeQuery`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`RefreshResult` 与 `IKnowledgeService` 的字段和方法边界写清；如果 006 不先冻结它们，007/025 就会各自引入一套隐含的配置/错误/健康接口假设。
+3. 本轮目标限定为“root public headers + interface surface unit gate”，不触发 `KnowledgeConfigProjector` 的真实派生逻辑，也不展开 `KnowledgeHealthSnapshot` 的完整字段实现。
+
+### 改动
+
+1. 更新 `knowledge/include/KnowledgeTypes.h`：
+   - 冻结 `KnowledgeQueryKind`、`RetrievalMode`、`FreshnessState`、`TrustLevel`、`AuthorityLevel`、`SourceKind`、`SourceFormat`、`RefreshStatus`；
+   - 落盘 `KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`CorpusDescriptor`、`KnowledgeConfigSnapshot`、`KnowledgeRetrieveResult`、`CorpusChangeSet`、`RefreshResult`；
+   - 为关键 public types 增加最小 `has_consistent_values()` 规则，作为后续 unit gate 的稳定断言面。
+2. 更新 `knowledge/include/KnowledgeErrors.h`：
+   - 冻结 12 个 `KnowledgeErrorCode`；
+   - 新增 `describe_knowledge_error()` 与 `make_knowledge_error_info()`，统一输出 `failure_type`、`retryable`、`safe_to_replan`、`details` 和 `source_ref`。
+3. 更新 `knowledge/include/IKnowledgeService.h`：
+   - 将接口从抽象骨架升级为正式四方法签名：`init`、`retrieve`、`health_snapshot`、`request_refresh`；
+   - `KnowledgeHealthSnapshot` 保持前向声明，避免在 006 提前锁死 health 实现字段。
+4. 更新 `knowledge/src/KnowledgeBuildSkeleton.cpp`，为 `IKnowledgeService` 三个已完整签名的方法增加编译期签名断言。
+5. 更新 `tests/unit/knowledge/KnowledgeInterfaceSurfaceSkeletonTest.cpp`：
+   - 覆盖 query/evidence/corpus/config/refresh surface；
+   - 覆盖 `KnowledgeErrorCode -> ErrorInfo` 的四类 failure domain 映射；
+   - 覆盖失败 `KnowledgeRetrieveResult` 必须携带结构化 `ErrorInfo` 的一致性约束。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_knowledge_interface_surface_unit_test`
+   - `dasall_knowledge_integration_topology_smoke_integration_test`
+2. RunCtest_CMakeTools：
+   - `dasall_knowledge_interface_surface_unit_test`
+   - `KnowledgeIntegrationTopologySmokeTest`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_interface_surface_unit_test`
+   - `ctest --test-dir build-ci -R "dasall_knowledge_interface_surface_unit_test" --output-on-failure`
+
+### 结果
+
+1. `KnowledgeTypes.h`、`KnowledgeErrors.h`、`IKnowledgeService.h` 已从 skeleton 升级为正式 public ABI，007 不再需要重新定义 config snapshot 或 refresh 输入输出形状。
+2. `dasall_knowledge_interface_surface_unit_test` 通过，现已同时覆盖：
+   - reserved `MultiHop` / `latest_observation_digest_summary` / `belief_state_summary` ABI 槽位；
+   - `KnowledgeConfigSnapshot` 和 `CorpusChangeSet` 的 surface 形状；
+   - `KnowledgeErrorCode -> ErrorInfo` 的 category/source/retry 语义。
+3. 006 保持了范围纪律：没有提前实现 projector、health probe 或 telemetry，只冻结它们依赖的接口面。
+
+### 下一步
+
+1. 转入 `KNO-TODO-007`，在已冻结的 `KnowledgeConfigSnapshot` 上实现 `KnowledgeConfigProjector::project()` 的 profile 派生与 override merge 逻辑。
+
+### 风险
+
+1. `KnowledgeHealthSnapshot` 当前只在 `IKnowledgeService` 中前向声明；若后续任务在实现期擅自改成其他返回形状，会直接破坏已冻结 ABI。
+2. `KnowledgeErrorCode` 现在已形成单一映射 helper；后续若在 facade 或 telemetry 内重新手写 `ErrorInfo`，会造成语义漂移，必须显式复用 006 的 helper。
+
 ## 记录 #383
 
 - 日期：2026-04-21
