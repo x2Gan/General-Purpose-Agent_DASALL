@@ -1,5 +1,70 @@
 # DASALL 开发执行记录
 
+## 记录 #392
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build evidence assembly 轮次
+- 任务：KNO-TODO-011 实现 EvidenceAssembler 与 ContextProjectionMapper
+- 状态：已完成
+
+### 任务选择
+
+1. 010 已经补齐 `RankedHitSet`，006/007 也已提供 `EvidenceBundle` / `KnowledgeConfigSnapshot`；按用户给定顺序，下一轮最小可执行任务就是 011。
+2. 详细设计把 011 限定为纯计算证据组装层：只负责 `RankedHitSet -> EvidenceBundle/context_projection`，不发起 recall、不写 `ContextPacket`，因此可以独立闭环。
+3. 012 `KnowledgeServiceFacade` 与 027 lexical smoke 都要消费稳定的 `context_projection`；如果 011 不先落盘，后续 facade 或 integration 层会被迫各自复制 budget/projection 规则。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-011-EvidenceAssembler设计收敛.md`：
+   - 收敛 `EvidenceAssembler` 的职责、非职责、budget 纪律和 projection 映射格式；
+   - 固定 `chars/4` 估算 + 10% 安全余量，避免 CJK 文本把 projection budget 算得过满。
+2. 新增 `knowledge/include/evidence/EvidenceAssembler.h` 与 `knowledge/src/evidence/EvidenceAssembler.cpp`：
+   - 定义 `EvidenceAssemblePolicy` 与 `EvidenceAssembler::assemble()`；
+   - 实现 `KnowledgeQuery.retrieval_evidence_budget_hint` 优先、config cap、structured `EvidenceSlice`、single-line `context_projection`、`omitted_sources` 与 `evidence_insufficient`；
+   - 固定 stale 证据在 `EvidenceSlice.freshness` 与 projection 文本中都要可见。
+3. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`，把 evidence assembly 代码和三条 unit target 接入现有拓扑。
+4. 新增三条 unit test：
+   - `EvidenceAssemblerTest.cpp`：验证 slice 组装、confidence 公式与 policy derive；
+   - `ContextProjectionMapperTest.cpp`：验证 projection 单行化、authority prefix 与 stale marker；
+   - `EvidenceBudgetClampTest.cpp`：验证 budget clamp、`omitted_sources` 与 empty projection 回退。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_evidence_assembler_unit_test`
+   - `dasall_context_projection_mapper_unit_test`
+   - `dasall_evidence_budget_clamp_unit_test`
+2. RunCtest_CMakeTools：
+   - 本轮对 `EvidenceAssemblerTest`、`ContextProjectionMapperTest`、`EvidenceBudgetClampTest` 调用时返回“生成失败”，判定为工具态问题，不作为代码失败证据。
+3. 显式 `ctest`：
+   - `ctest --test-dir build/vscode-linux-ninja -R "(EvidenceAssembler|ContextProjectionMapper|EvidenceBudgetClamp).*Test" --output-on-failure`
+4. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_evidence_assembler_unit_test dasall_context_projection_mapper_unit_test dasall_evidence_budget_clamp_unit_test`
+   - `ctest --test-dir build-ci -R "(EvidenceAssembler|ContextProjectionMapper|EvidenceBudgetClamp).*Test" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备稳定的 `EvidenceBundle` / `context_projection` supporting layer，后续 012/027 可直接消费 `RankedHitSet` 的结构化投影结果，而不再复制 projection/budget 规则。
+2. 011 已固定三类关键纪律：
+   - budget clamp 先裁 projection，不裁结构化 `slices`；
+   - stale 证据必须同时在 `freshness` 字段和投影文本中显式可见；
+   - `context_projection` 只能输出 authority-tagged、single-line、带 citation 的共享字符串，不允许塞 raw payload。
+3. 011 保持了原子任务边界：
+   - 没有提前实现 `KnowledgeServiceFacade`；
+   - 没有提前发起 recall 或写 `ContextPacket`；
+   - 只交付 evidence assembly supporting layer 与其 unit gates。
+
+### 下一步
+
+1. 转入 `KNO-TODO-026` 前，先评估它与 012/017/025 的依赖闭合；若健康探针需要 Facade 汇总态，则需要先切 012，否则可继续按 TODO 设计直接补 probe supporting layer。
+
+### 风险
+
+1. 当前 token 估算仍是 `chars/4` 粗估，且用 10% 安全余量保守裁剪；如果后续 profile 或 CJK 语料密度显著变化，应在 v2 通过间接策略点引入真实 tokenizer，而不是在 Runtime/Facade 内部分叉规则。
+2. 本轮发现 VS Code CMake Tools 的默认 `all` 构建会命中两个无关的 Freshness 测试历史坏文件（`FreshnessControllerTest.cpp`、`FreshnessControllerStalePolicyTest.cpp` 的拼接残留）；011 已通过定向构建与定向 `ctest` 闭环，但默认全量 unit target 仍不能作为当前仓库的有效验收信号。
+
 ## 记录 #391
 
 - 日期：2026-04-21

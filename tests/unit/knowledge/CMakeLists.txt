@@ -127,6 +127,24 @@ dasall_add_knowledge_unit_test(
 	RerankerFreshnessPenaltyTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_evidence_assembler_unit_test
+	EvidenceAssemblerTest.cpp
+	EvidenceAssemblerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_context_projection_mapper_unit_test
+	ContextProjectionMapperTest.cpp
+	ContextProjectionMapperTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_evidence_budget_clamp_unit_test
+	EvidenceBudgetClampTest.cpp
+	EvidenceBudgetClampTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
