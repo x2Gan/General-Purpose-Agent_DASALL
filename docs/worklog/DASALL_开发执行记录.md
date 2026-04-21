@@ -1,5 +1,71 @@
 # DASALL 开发执行记录
 
+## 记录 #383
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build 骨架轮次
+- 任务：KNO-TODO-005 新增 knowledge 公共 include 与测试/CMake 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. `KNO-TODO-006`、`007`、`025` 分别冻结 public ABI、配置投影与 observability/health 语义，但当前仓库里的 knowledge 仍是 `placeholder.cpp + 空 tests` 组合；如果 005 不先把 include 根、file set 与 discoverability 拓扑落稳，后续三项任务只能一边写实现一边返工 CMake / 目录结构。
+2. 当前顶层 `CMakeLists.txt` 已接入 `knowledge`，`tests/unit/CMakeLists.txt` 也已挂 `add_subdirectory(knowledge)`，说明阻塞点不是模块注册，而是 knowledge 子树内部仍没有正式 public headers、unit target 与 integration subtree。
+3. 本轮严格限定为“public include skeleton + unit/integration discoverability + CMake file set 收敛”，不提前冻结 `IKnowledgeService::init/retrieve/...` 签名，也不抢跑 `KnowledgeConfigProjector` 或 `KnowledgeTelemetry` 的行为语义。
+
+### 改动
+
+1. 更新 `knowledge/CMakeLists.txt`：
+   - 引入 `DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR` 与显式 `public_headers` file set；
+   - 校验 `KnowledgeTypes.h`、`KnowledgeErrors.h`、`IKnowledgeService.h` 三个 root public headers 存在；
+   - 编译锚点从 `src/placeholder.cpp` 切换为 `src/KnowledgeBuildSkeleton.cpp`，并保留 `dasall_contracts` 作为公共依赖。
+2. 新增 `knowledge/include/KnowledgeTypes.h`、`knowledge/include/KnowledgeErrors.h`、`knowledge/include/IKnowledgeService.h`：
+   - 先落最小 skeleton declarations，锚定后续 006 的 public ABI 文件名与 include 根；
+   - `KnowledgeTypes.h` 只声明核心类型名与空结构骨架，不提前写字段；
+   - `KnowledgeErrors.h` 只冻结 `KnowledgeErrorCode` 的最小枚举壳；
+   - `IKnowledgeService.h` 先提供抽象基类骨架，不提前注入真实方法签名。
+3. 新增 `knowledge/src/KnowledgeBuildSkeleton.cpp` 并删除 `knowledge/src/placeholder.cpp`：
+   - 前者作为编译锚点显式包含三份 root public headers；
+   - 后者退出构建图，避免 knowledge 继续维持 placeholder-only 布局。
+4. 重写 `tests/unit/knowledge/CMakeLists.txt`，注册 `dasall_knowledge_interface_surface_unit_test`；新增 `tests/unit/knowledge/KnowledgeInterfaceSurfaceSkeletonTest.cpp`，对 skeleton headers 做最小 surface/static-assert 覆盖。
+5. 新增 `tests/integration/knowledge/CMakeLists.txt` 与 `tests/integration/knowledge/KnowledgeIntegrationTopologySmokeTest.cpp`，并更新 `tests/integration/CMakeLists.txt`：
+   - 接入 knowledge integration subtree；
+   - 导出 `${DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS}`；
+   - 通过 topology smoke 断言 include 根、knowledge CMake file set、顶层 integration 聚合与“无 placeholder integration 树”事实。
+6. 更新 `tests/unit/CMakeLists.txt`，把 `${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}` 纳入顶层 `dasall_unit_tests` 聚合。
+7. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-005-knowledge公共include与测试CMake骨架设计收敛.md`，并回写专项 TODO 当前结论、代码现状证据和 005 行状态。
+
+### 测试
+
+1. 本轮验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_unit_tests dasall_integration_tests`
+   - `ctest --test-dir build-ci -N`
+2. 定向 smoke/表面测试：
+   - `ctest --test-dir build-ci -R dasall_knowledge_interface_surface_unit_test --output-on-failure`
+   - `ctest --test-dir build-ci -R KnowledgeIntegrationTopologySmokeTest --output-on-failure`
+3. 实际执行结果：
+   - Build_CMakeTools 成功构建 `dasall_knowledge`、`dasall_knowledge_interface_surface_unit_test`、`dasall_knowledge_integration_topology_smoke_integration_test`；
+   - `cmake -S . -B build-ci -G "Unix Makefiles"` 成功重新生成 build-ci；
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_interface_surface_unit_test dasall_knowledge_integration_topology_smoke_integration_test` 成功；
+   - `ctest --test-dir build-ci -R "dasall_knowledge_interface_surface_unit_test|KnowledgeIntegrationTopologySmokeTest" --output-on-failure` 两项均通过；
+   - `ctest --test-dir build-ci -N` 已显式发现 `dasall_knowledge_interface_surface_unit_test` 与 `KnowledgeIntegrationTopologySmokeTest`，总测试数为 `536`。
+
+### 结果
+
+1. knowledge 现在已有正式 `include/` 根和 root public headers，后续 006 可以直接在既有文件名上冻结 public ABI，而不需要再改目录拓扑。
+2. `dasall_knowledge_interface_surface_unit_test` 与 `KnowledgeIntegrationTopologySmokeTest` 已为 knowledge 建立最小 discoverability 锚点；build-ci `ctest -N` 已显式列出这两个测试，不再把 knowledge 视为“挂了子目录但没有可发现测试”的空树。
+3. 005 保持了范围约束：本轮只做 build skeleton，不提前冻结 006/007/025 的行为或数据语义。
+
+### 下一步
+
+1. 转入 `KNO-TODO-006`，在本轮建立的三份 root public headers 上冻结 `KnowledgeQuery` / `EvidenceBundle` / `KnowledgeRetrieveResult` / `IKnowledgeService` 与 `KnowledgeErrorCode -> ErrorInfo` 映射。
+
+### 风险
+
+1. 005 只建立 skeleton declarations；如果后续 006 直接把 supporting types 推入 shared contracts，仍会违反当前 module-local 边界。
+2. `KnowledgeBuildSkeleton.cpp` 只是编译锚点，不代表 facade/query/index/observability 实现已经开始；后续任务必须继续用专用 unit/integration 覆盖真实语义，而不是把 005 的 discoverability smoke 当成功能完成证据。
+
 ## 记录 #382
 
 - 日期：2026-04-21

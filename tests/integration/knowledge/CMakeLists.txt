@@ -1,0 +1,45 @@
+set(DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS)
+
+macro(dasall_add_knowledge_integration_test target_name test_name source_file labels)
+  add_executable(${target_name}
+    ${CMAKE_CURRENT_SOURCE_DIR}/${source_file}
+  )
+
+  target_link_libraries(${target_name}
+    PRIVATE
+      dasall_test_support
+      dasall_knowledge
+  )
+
+  target_compile_definitions(${target_name}
+    PRIVATE
+      DASALL_KNOWLEDGE_MODULE_CMAKE="${CMAKE_SOURCE_DIR}/knowledge/CMakeLists.txt"
+      DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/knowledge/include"
+      DASALL_KNOWLEDGE_UNIT_TEST_DIR="${CMAKE_SOURCE_DIR}/tests/unit/knowledge"
+      DASALL_KNOWLEDGE_INTEGRATION_TEST_DIR="${CMAKE_SOURCE_DIR}/tests/integration/knowledge"
+      DASALL_KNOWLEDGE_INTEGRATION_TOP_LEVEL_CMAKE="${CMAKE_SOURCE_DIR}/tests/integration/CMakeLists.txt"
+  )
+
+  dasall_apply_common_options(${target_name})
+
+  add_test(NAME ${test_name} COMMAND ${target_name})
+  set_tests_properties(${test_name} PROPERTIES LABELS "${labels}")
+
+  list(APPEND DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS ${target_name})
+endmacro()
+
+dasall_add_knowledge_integration_test(
+  dasall_knowledge_integration_topology_smoke_integration_test
+  KnowledgeIntegrationTopologySmokeTest
+  KnowledgeIntegrationTopologySmokeTest.cpp
+  "integration;knowledge"
+)
+
+if(NOT DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS)
+  message(FATAL_ERROR "knowledge integration registration requires at least one test target")
+endif()
+
+set(DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  ${DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+  PARENT_SCOPE
+)
