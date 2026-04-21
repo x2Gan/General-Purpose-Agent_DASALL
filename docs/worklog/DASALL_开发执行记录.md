@@ -1,5 +1,72 @@
 # DASALL 开发执行记录
 
+## 记录 #390
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build route planning 轮次
+- 任务：KNO-TODO-009 实现 CorpusRouter
+- 状态：已完成
+
+### 任务选择
+
+1. 008 已经补齐 `NormalizedQuery`，016/017 也已提供 `CorpusCatalogSnapshot` 与 `FreshnessSnapshot`；按用户给定顺序，下一轮最小可执行任务就是 009。
+2. 详细设计把 `CorpusRouter` 限定为纯计划组件：只负责 filter、mode、stale gate 和 reason code，不触发真正召回，因此可以独立闭环。
+3. 013/014/015/010 都要消费 `RetrievalPlan`；如果 009 不先落盘，后续每个组件都会重复一遍 corpus/mode/freshness 决策，耦合面会快速失控。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-009-CorpusRouter设计收敛.md`：
+   - 收敛 `CorpusRouter` 的职责、过滤顺序、mode 选择与 route reason code 纪律；
+   - 明确当前 `RetrievalPlan` 只有一组 `corpus_ids`，因此 009 采用“所有入选 corpus 共同支持所选 mode”的保守策略。
+2. 新增 `knowledge/include/query/CorpusRouter.h`：
+   - 定义 `RetrievalPlan`；
+   - 定义 `RoutePlanResult`；
+   - 定义 `CorpusRouter::build_plan()`。
+3. 新增 `knowledge/src/query/CorpusRouter.cpp`：
+   - 实现 `domain_tags -> trusted corpus -> allowed_corpora -> authority_level` 的固定过滤顺序；
+   - 实现 freshness gate 和 `IndexStaleRejected` / `NoCorpusAvailable` 失败面；
+   - 实现 `DenseOnly / Hybrid / LexicalOnly` mode 选择与 degrade reason code。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`，接入 Router 源文件与三条 unit target。
+5. 新增三条 unit test：
+   - `CorpusRouterTest.cpp`：hybrid 规划与 no-corpus 失败；
+   - `CorpusRouterFreshnessPolicyTest.cpp`：stale allowed / stale rejected；
+   - `CorpusRouterModeSelectionTest.cpp`：dense-only 与 lexical fallback。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_corpus_router_unit_test`
+   - `dasall_corpus_router_freshness_policy_unit_test`
+   - `dasall_corpus_router_mode_selection_unit_test`
+2. 显式 `ctest`：
+   - `ctest --test-dir build/vscode-linux-ninja -R "CorpusRouter.*Test" --output-on-failure`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_corpus_router_unit_test dasall_corpus_router_freshness_policy_unit_test dasall_corpus_router_mode_selection_unit_test`
+   - `ctest --test-dir build-ci -R "CorpusRouter.*Test" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备稳定的 `RetrievalPlan` supporting header，后续 013/014/015/010 不再需要重复做 corpus、mode 或 stale gate 决策。
+2. 009 已固定三类关键纪律：
+   - route 失败必须显式返回 `NoCorpusAvailable` 或 `IndexStaleRejected`；
+   - route 成功必须带 `route_reason_codes`；
+   - mixed capability corpus 不做隐式 lane 分叉，而是显式退化到 `LexicalOnly`。
+3. 009 保持了原子任务边界：
+   - 没有提前做真正 recall；
+   - 没有提前引入 rerank 或 evidence packing；
+   - 只交付 Query Plane 的 route planning supporting layer。
+
+### 下一步
+
+1. 转入 `KNO-TODO-010`，实现 `Reranker`，补齐 Recall -> Rank -> Evidence 链中的排序阶段 supporting layer。
+
+### 风险
+
+1. 当前 `RetrievalPlan` 只有统一 `corpus_ids`；若后续 013/015 需要 lane-specific corpus 列表，必须在不破坏 009 现有消费面的前提下演进，而不是回退 Router 的基本路由纪律。
+2. 当前 009 对 mixed capability corpus 采用保守的 lexical fallback；若后续评估需要更细的 per-lane corpus 分裂，应通过扩展 `RetrievalPlan` 完成，而不是在 013/015 内部偷偷重写路由规则。
+
 ## 记录 #389
 
 - 日期：2026-04-21

@@ -91,6 +91,24 @@ dasall_add_knowledge_unit_test(
 	QueryNormalizerBoundaryTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_corpus_router_unit_test
+	CorpusRouterTest.cpp
+	CorpusRouterTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_corpus_router_freshness_policy_unit_test
+	CorpusRouterFreshnessPolicyTest.cpp
+	CorpusRouterFreshnessPolicyTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_corpus_router_mode_selection_unit_test
+	CorpusRouterModeSelectionTest.cpp
+	CorpusRouterModeSelectionTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

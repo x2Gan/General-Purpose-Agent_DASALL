@@ -7,6 +7,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/KnowledgeTypes.h
   include/health/FreshnessController.h
   include/index/CorpusCatalog.h
+  include/query/CorpusRouter.h
   include/query/QueryNormalizer.h
 )
 
@@ -27,6 +28,7 @@ target_sources(dasall_knowledge
     src/KnowledgeBuildSkeleton.cpp
     src/index/CorpusCatalog.cpp
     src/observability/KnowledgeTelemetry.cpp
+    src/query/CorpusRouter.cpp
     src/query/QueryNormalizer.cpp
   PUBLIC
     FILE_SET public_headers
