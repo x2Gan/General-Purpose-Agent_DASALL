@@ -66,27 +66,6 @@ void clear_candidates_for_failure(RecallCandidateSet& candidates) {
 
 }  // namespace
 
-bool DenseRecallRequest::has_consistent_values() const {
-  return normalized_query.has_consistent_values() && plan.has_consistent_values() &&
-         plan.mode != RetrievalMode::LexicalOnly &&
-         (!required_language.has_value() || !required_language->empty());
-}
-
-bool DenseRecallResult::has_consistent_values() const {
-  if (!detail::has_unique_values(warnings) || !detail::has_unique_values(failure_reason_codes)) {
-    return false;
-  }
-
-  if (ok) {
-    return std::all_of(hits.begin(), hits.end(), [](const RecallHit& hit) {
-             return hit.has_consistent_values();
-           }) &&
-           failure_reason_codes.empty();
-  }
-
-  return hits.empty() && !failure_reason_codes.empty();
-}
-
 bool RecallRequest::has_consistent_values() const {
   return normalized_query.has_consistent_values() && plan.has_consistent_values() &&
          (!required_language.has_value() || !required_language->empty());

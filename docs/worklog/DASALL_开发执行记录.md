@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #400
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build vector bridge dense lane seam 轮次
+- 任务：KNO-TODO-015 实现 VectorRetrieverBridge 与 IQueryEncoder seam
+- 状态：已完成
+
+### 任务选择
+
+1. 用户指定本轮先进入 `KNO-TODO-015`，作为 hybrid 与退化闭环的前置实现项。
+2. 结合 `KNO-TODO-002` 的冻结结论，015 当前已无 blocker；最小可执行边界是只在 Knowledge 内补 `IQueryEncoder` / `IVectorRecallStore` ports、`VectorRetrieverBridge` 和对应 unit tests，不抢跑任何 memory/llm concrete adapter。
+3. 同时需要为后续 014 dense lane 真实接入收敛 dense 类型 owner，因此把 `DenseRecallRequest` / `DenseRecallResult` 从 `RecallCoordinator` 头文件迁到 dense bridge 语义域一并处理。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-015-VectorRetrieverBridge设计收敛.md`：
+   - 固定 owner、注入方向、dense request 结构、lane failure reason code 与文件范围；
+   - 明确 015 只做 ports + bridge，不接线 concrete adapter，也不决定 hybrid/profile 行为。
+2. 新增 `knowledge/include/retrieve/IQueryEncoder.h`、`knowledge/include/retrieve/IVectorRecallStore.h`、`knowledge/include/retrieve/VectorRetrieverBridge.h` 与 `knowledge/src/retrieve/VectorRetrieverBridge.cpp`：
+   - 落盘 `DenseQueryInputMode`、`DenseQueryRequest`、`VectorRetrieverBridge::available()` 与 `retrieve()`；
+   - 支持 `TextOnly` 与 `EmbeddingRequired` 两种 dense 输入模式；
+   - 将 vector backend unavailable、required encoder unavailable 统一映射为稳定 lane 级 reason code `vector_backend_unavailable`。
+3. 调整 `knowledge/include/retrieve/RecallCoordinator.h` 与 `knowledge/src/retrieve/RecallCoordinator.cpp`：
+   - dense lane 请求/返回类型改为从 bridge 头文件导出；
+   - 保持既有 coordinator 编排逻辑与 degraded/failure 语义不变。
+4. 新增 `tests/unit/knowledge/VectorRetrieverBridgeTest.cpp` 与 `tests/unit/knowledge/VectorRetrieverBridgeUnavailableTest.cpp`，并更新 `tests/unit/knowledge/CMakeLists.txt`、`knowledge/CMakeLists.txt`：
+   - 正例覆盖 `TextOnly` 与 `EmbeddingRequired` 两类 dense request 构造；
+   - 负例覆盖 backend unavailable 与 encoder unavailable；
+   - 回归 `RecallCoordinator.*Test`，确保 dense 类型 owner 迁移未破坏既有基线。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_vector_retriever_bridge_unit_test`
+   - `dasall_vector_retriever_bridge_unavailable_unit_test`
+   - `dasall_recall_coordinator_unit_test`
+   - `dasall_recall_coordinator_degraded_unit_test`
+   - `dasall_recall_coordinator_serial_execution_unit_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools` 运行 `VectorRetrieverBridgeTest`、`VectorRetrieverBridgeUnavailableTest`、`RecallCoordinator*`：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_vector_retriever_bridge_unit_test dasall_vector_retriever_bridge_unavailable_unit_test dasall_recall_coordinator_unit_test dasall_recall_coordinator_degraded_unit_test dasall_recall_coordinator_serial_execution_unit_test`
+   - `ctest --test-dir build-ci -R "(VectorRetrieverBridge|RecallCoordinator).*Test" --output-on-failure`
+   - 结果：5/5 Passed。
+
+### 结果
+
+1. 015 已完成，dense lane 的 bridge/port 边界正式落盘。
+2. 后续 014 可以直接把原 stub dense seam 替换为真实 `VectorRetrieverBridge` 调用，而无需再调整 dense 类型 owner。
+3. 当前残余已知问题仍仅是 `RunCtest_CMakeTools` 的工具态 `生成失败`，不影响 build-ci 作为主验收信号。
+
 ## 记录 #399
 
 - 日期：2026-04-21

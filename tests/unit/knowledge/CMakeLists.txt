@@ -206,6 +206,18 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_vector_retriever_bridge_unit_test
+	VectorRetrieverBridgeTest.cpp
+	VectorRetrieverBridgeTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_vector_retriever_bridge_unavailable_unit_test
+	VectorRetrieverBridgeUnavailableTest.cpp
+	VectorRetrieverBridgeUnavailableTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_reranker_unit_test
 	RerankerTest.cpp
 	RerankerTest

@@ -6,29 +6,11 @@
 #include <string>
 #include <vector>
 
-#include "query/CorpusRouter.h"
-#include "query/QueryNormalizer.h"
 #include "retrieve/RecallTypes.h"
 #include "retrieve/SparseRetriever.h"
+#include "retrieve/VectorRetrieverBridge.h"
 
 namespace dasall::knowledge::retrieve {
-
-struct DenseRecallRequest {
-  query::NormalizedQuery normalized_query;
-  query::RetrievalPlan plan;
-  std::optional<std::string> required_language;
-
-  [[nodiscard]] bool has_consistent_values() const;
-};
-
-struct DenseRecallResult {
-  bool ok = false;
-  std::vector<RecallHit> hits;
-  std::vector<std::string> warnings;
-  std::vector<std::string> failure_reason_codes;
-
-  [[nodiscard]] bool has_consistent_values() const;
-};
 
 struct RecallRequest {
   query::NormalizedQuery normalized_query;

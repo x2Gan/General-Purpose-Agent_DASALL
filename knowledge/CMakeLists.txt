@@ -16,7 +16,10 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/rerank/Reranker.h
   include/retrieve/RecallCoordinator.h
   include/retrieve/RecallTypes.h
+  include/retrieve/IQueryEncoder.h
+  include/retrieve/IVectorRecallStore.h
   include/retrieve/SparseRetriever.h
+  include/retrieve/VectorRetrieverBridge.h
 )
 
 if(NOT EXISTS ${DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR})
@@ -46,6 +49,7 @@ target_sources(dasall_knowledge
     src/rerank/Reranker.cpp
     src/retrieve/RecallCoordinator.cpp
     src/retrieve/SparseRetriever.cpp
+    src/retrieve/VectorRetrieverBridge.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS
