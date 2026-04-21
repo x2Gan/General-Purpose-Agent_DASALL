@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #405
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build Canonicalizer 文档规范化 轮次
+- 任务：KNO-TODO-022 实现 Canonicalizer 文档规范化
+- 状态：已完成
+
+### 任务选择
+
+1. 021 已完成并推送，用户要求 ingest 主链严格按 021 → 022 → 023 → 024 串行推进，因此本轮只做 `Canonicalizer`，不提前落 `Chunker` 或 `IngestionCoordinator`。
+2. `KNO-TODO-003` 已冻结 `CanonicalDocument` metadata baseline、markdown/profile policy fallback 规则和 quarantine 语义，022 已无 blocker，可直接进入 Build。
+3. 022 的最小闭环是把 markdown 表示归一、runtime policy yaml stable flatten、typed metadata fallback、stable `document_id`/`version` 一次做实，不把 embedding/index write 提前揉进来。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-022-Canonicalizer设计收敛.md`：
+   - 固定 `Canonicalizer` 的职责、输入输出对象、markdown/yaml canonicalize 规则和 fail-closed metadata 约束；
+   - 补充 CommonMark 结构保留依据，明确 022 只做表示归一，不改写正文语义。
+2. 新增 `knowledge/include/ingest/Canonicalizer.h` 与 `knowledge/src/ingest/Canonicalizer.cpp`：
+   - 落盘 `CanonicalDocument`、`CanonicalizeResult`、`CanonicalizerPolicy` 与 `Canonicalizer`；
+   - 实现 UTF-8 BOM/换行归一、front matter 剥离、markdown heading/title fallback、runtime policy yaml key-path flatten、typed metadata 提取、warning/quarantine 输出、canonical hash version 与 stable `document_id` 生成。
+3. 新增 `tests/unit/knowledge/CanonicalizerTest.cpp`、`tests/unit/knowledge/CanonicalizerMarkupNormalizeTest.cpp`、`tests/unit/knowledge/CanonicalizerMetadataFallbackTest.cpp`：
+   - 覆盖 yaml key 重排下 canonical text/version/document id 稳定；
+   - 覆盖 markdown BOM/CRLF/front matter 归一以及 heading/list/code fence 保留；
+   - 覆盖 metadata fallback warning 和 empty canonical text quarantine。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `Canonicalizer` 头/源；
+   - 注册三个新的 knowledge unit test target。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge`
+   - `dasall_canonicalizer_unit_test`
+   - `dasall_canonicalizer_markup_normalize_unit_test`
+   - `dasall_canonicalizer_metadata_fallback_unit_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools` 运行 `CanonicalizerTest`、`CanonicalizerMarkupNormalizeTest`、`CanonicalizerMetadataFallbackTest`：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_canonicalizer_unit_test dasall_canonicalizer_markup_normalize_unit_test dasall_canonicalizer_metadata_fallback_unit_test`
+   - `ctest --test-dir build-ci -R "Canonicalizer(Test|MarkupNormalizeTest|MetadataFallbackTest)" --output-on-failure`
+   - 结果：3/3 Passed。
+
+### 结果
+
+1. 022 已完成，knowledge ingest 主链现在具备从 `SourceRecord` 到 `CanonicalDocument` 的真实 canonicalization 落点。
+2. markdown 结构保留、yaml stable flatten 与 metadata fail-closed 语义已经被单测锁定，可直接作为 023 的 chunk 输入基线。
+3. `RunCtest_CMakeTools` 的通用 `生成失败` 工具态仍存在，但不影响 build-ci 作为本轮主验收信号。
+
 ## 记录 #404
 
 - 日期：2026-04-21

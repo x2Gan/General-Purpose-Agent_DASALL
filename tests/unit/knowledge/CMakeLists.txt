@@ -122,6 +122,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_canonicalizer_unit_test
+	CanonicalizerTest.cpp
+	CanonicalizerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_canonicalizer_markup_normalize_unit_test
+	CanonicalizerMarkupNormalizeTest.cpp
+	CanonicalizerMarkupNormalizeTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_canonicalizer_metadata_fallback_unit_test
+	CanonicalizerMetadataFallbackTest.cpp
+	CanonicalizerMetadataFallbackTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_recall_coordinator_unit_test
 	RecallCoordinatorTest.cpp
 	RecallCoordinatorTest
