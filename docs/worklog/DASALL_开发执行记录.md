@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #402
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build failure/degrade integration 轮次
+- 任务：KNO-TODO-028 验证 failure/degrade integration
+- 状态：已完成
+
+### 任务选择
+
+1. 015 和 014 dense bridge 接线均已完成，028 已具备进入 Build 的全部前置条件。
+2. 本轮不重复做 profile 资产加载或 quality regression，只验证 hybrid/degrade 闭环最关键的四类路径：`vector unavailable`、`partial timeout`、`stale reject`、`refresh busy`。
+3. 设计上明确复用 027 的真实 lexical supporting chain，并仅在 dense bridge、timeout fallback、manifest freshness 和 refresh seam 上做最小注入。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-028-failure-degrade-integration设计收敛.md`：
+   - 固定四类场景各自验证的语义层级；
+   - 明确 028 复用真实 lexical 主链，不扩张到 profile compatibility 或 refresh E2E。
+2. 新增 `tests/integration/knowledge/KnowledgeFailureDegradeTest.cpp`：
+   - 构造与 027 同类的 SQLite FTS5 in-memory lexical fixture；
+   - 复用真实 `QueryNormalizer`、`CorpusRouter`、`FreshnessController`、`CorpusCatalog`、`IndexReader`、`SparseRetriever`、`RecallCoordinator`、`Reranker`、`EvidenceAssembler` 与 `KnowledgeServiceFacade`；
+   - 覆盖 `vector unavailable`、`partial timeout`、`stale reject`、`refresh busy` 四个 integration 场景。
+3. 更新 `tests/integration/knowledge/CMakeLists.txt`：
+   - 注册 `dasall_knowledge_failure_degrade_integration_test`；
+   - 为该 target 增加 `knowledge/src` include path 与 `dasall_sqlite3` 链接。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge_failure_degrade_integration_test`
+   - `dasall_knowledge_retrieval_smoke_integration_test`
+   - 结果：构建通过；首轮仅提示本轮新增 `HarnessOptions` 缺省字段初始化 warning，随后已补齐显式初始化并重建通过。
+2. `RunCtest_CMakeTools` 运行 `dasall_knowledge_failure_degrade_integration_test`：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge_failure_degrade_integration_test`
+   - `ctest --test-dir build-ci -R dasall_knowledge_failure_degrade_integration_test --output-on-failure`
+   - 结果：1/1 Passed。
+
+### 结果
+
+1. 028 已完成，hybrid/degrade 闭环首次具备 integration 级证据。
+2. `vector unavailable` 和 `partial timeout` 均验证为 degraded success，而不是整体失败。
+3. `stale reject` 与 `refresh busy` 继续保持显式拒绝语义，后续 029 可以在此基础上做 profile compatibility 验证。
+
 ## 记录 #401
 
 - 日期：2026-04-21

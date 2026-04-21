@@ -42,12 +42,29 @@ dasall_add_knowledge_integration_test(
   "integration;knowledge"
 )
 
+dasall_add_knowledge_integration_test(
+  dasall_knowledge_failure_degrade_integration_test
+  dasall_knowledge_failure_degrade_integration_test
+  KnowledgeFailureDegradeTest.cpp
+  "integration;knowledge"
+)
+
 target_include_directories(dasall_knowledge_retrieval_smoke_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/knowledge/src
 )
 
 target_link_libraries(dasall_knowledge_retrieval_smoke_integration_test
+  PRIVATE
+    dasall_sqlite3
+)
+
+target_include_directories(dasall_knowledge_failure_degrade_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_link_libraries(dasall_knowledge_failure_degrade_integration_test
   PRIVATE
     dasall_sqlite3
 )
