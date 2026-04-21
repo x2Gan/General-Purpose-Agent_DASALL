@@ -140,6 +140,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_chunker_unit_test
+	ChunkerTest.cpp
+	ChunkerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_chunker_stable_id_unit_test
+	ChunkerStableIdTest.cpp
+	ChunkerStableIdTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_chunker_boundary_fallback_unit_test
+	ChunkerBoundaryFallbackTest.cpp
+	ChunkerBoundaryFallbackTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_recall_coordinator_unit_test
 	RecallCoordinatorTest.cpp
 	RecallCoordinatorTest

@@ -1,5 +1,64 @@
 # DASALL 开发执行记录
 
+## 记录 #406
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build Chunker stable chunk 轮次
+- 任务：KNO-TODO-023 实现 Chunker stable chunk 切分
+- 状态：已完成
+
+### 任务选择
+
+1. 022 已完成并推送，用户要求 ingest 主链严格按 021 → 022 → 023 → 024 串行推进，因此本轮只做 `Chunker`，不提前落 `IngestionCoordinator`。
+2. `KNO-TODO-003` 已冻结 `ChunkRecord` provenance baseline、`citation_ref` / `section_path` 规则和空正文 defensive 语义，023 已无 blocker，可直接进入 Build。
+3. 023 的最小闭环是把 fixed-size chunk 策略、heading/blank-line breakpoint、forced split、overlap、stable `chunk_id` 与三条 unit gate 一次做实，不把 update batch 编排或 snapshot swap 提前揉进来。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-023-Chunker设计收敛.md`：
+   - 固定 `Chunker` 的职责边界、policy 约束、breakpoint / overlap / citation 语义和 provenance fail-closed 规则；
+   - 明确 v1 默认 fixed-size 切分，同时在对象面保留 `ChunkStrategy` 的 semantic / document-aware 扩展槽位。
+2. 新增 `knowledge/include/ingest/Chunker.h` 与 `knowledge/src/ingest/Chunker.cpp`：
+   - 落盘 `ChunkStrategy`、`ChunkPolicy`、`TextSpan`、`ChunkRecord` 与 `Chunker`；
+   - 实现 heading/空行优先切分、超长段落 forced split、char-span overlap、`source_uri#char=<begin>-<end>` citation ref、typed provenance 继承与 stable `chunk_id` 生成。
+3. 新增 `tests/unit/knowledge/ChunkerTest.cpp`、`tests/unit/knowledge/ChunkerStableIdTest.cpp`、`tests/unit/knowledge/ChunkerBoundaryFallbackTest.cpp`：
+   - 覆盖 heading/paragraph breakpoint 与 provenance 继承；
+   - 覆盖 identical canonical input 下的 stable chunk ids；
+   - 覆盖 empty text、forced split 与 invalid policy fail-closed。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `Chunker` 头/源；
+   - 注册三个新的 knowledge unit test target。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge`
+   - `dasall_chunker_unit_test`
+   - `dasall_chunker_stable_id_unit_test`
+   - `dasall_chunker_boundary_fallback_unit_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools` 运行 `ChunkerTest`、`ChunkerStableIdTest`、`ChunkerBoundaryFallbackTest`：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_chunker_unit_test dasall_chunker_stable_id_unit_test dasall_chunker_boundary_fallback_unit_test`
+   - `ctest --test-dir build-ci -R "Chunker(Test|StableIdTest|BoundaryFallbackTest)" --output-on-failure`
+   - 结果：3/3 Passed。
+
+### 结果
+
+1. 023 已完成，knowledge ingest 主链现在具备从 `CanonicalDocument` 到 `ChunkRecord` 的真实 deterministic chunk 落点。
+2. chunk policy、stable id、citation span 与 forced split 语义已经被单测锁定，可直接作为 024 `IngestionCoordinator` 的 batch 组装输入基线。
+3. `RunCtest_CMakeTools` 的通用 `生成失败` 工具态仍存在，但不影响 build-ci 作为本轮主验收信号。
+
+### 下一步
+
+1. 进入 `KNO-TODO-024`，实现 `IngestionCoordinator`，把 021/022/023 串成 `scan -> canonicalize -> chunk -> update batch` 的真实编排。
+
+### 风险
+
+1. `ChunkStrategy::Semantic` / `DocumentAware` 当前只保留扩展槽位，后续若需要更复杂的 section-aware 语义，必须继续保持 deterministic boundary 与 stable id 规则不变。
+
 ## 记录 #405
 
 - 日期：2026-04-21

@@ -3,6 +3,7 @@ add_library(dasall_knowledge STATIC)
 set(DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/ingest/Canonicalizer.h
+  include/ingest/Chunker.h
   include/evidence/EvidenceAssembler.h
   include/ingest/SourceScanner.h
   include/IKnowledgeService.h
@@ -42,6 +43,7 @@ target_sources(dasall_knowledge
     src/health/FreshnessController.cpp
     src/health/KnowledgeHealthProbe.cpp
     src/ingest/Canonicalizer.cpp
+    src/ingest/Chunker.cpp
     src/ingest/SourceScanner.cpp
     src/KnowledgeBuildSkeleton.cpp
     src/index/CorpusCatalog.cpp
