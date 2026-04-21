@@ -68,6 +68,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_version_ledger_unit_test
+	VersionLedgerTest.cpp
+	VersionLedgerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_version_ledger_activation_unit_test
+	VersionLedgerActivationTest.cpp
+	VersionLedgerActivationTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_version_ledger_rollback_eligibility_unit_test
+	VersionLedgerRollbackEligibilityTest.cpp
+	VersionLedgerRollbackEligibilityTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_freshness_controller_unit_test
 	FreshnessControllerTest.cpp
 	FreshnessControllerTest

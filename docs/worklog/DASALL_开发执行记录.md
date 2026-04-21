@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #395
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build ledger lineage 轮次
+- 任务：KNO-TODO-018 实现 VersionLedger snapshot 账本
+- 状态：已完成
+
+### 任务选择
+
+1. 013 已完成并提交，按用户指定顺序本轮应进入 `KNO-TODO-018`，这是 019 `IndexReader` 与 020 `IndexWriter` 之间唯一合法的前置账本对象。
+2. 详细设计 6.13.4 / 10.4 已把 snapshot-and-swap 的顺序和 last-known-good 语义写清，因此 018 不需要再做技术选型，而是要把 lineage/state/checksum 纪律先收紧成稳定 contract。
+3. 评估后确认本轮真正的边界不是“选 JSONL 还是 SQLite 存账本”，而是“不能在 018 内提前拥有 active snapshot storage owner”；否则会把 019/020 的读写责任偷渡进同一提交。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-018-VersionLedger设计收敛.md`：
+   - 固定 `VersionLedger` 的职责、非职责、状态机与 checksum fail-closed 规则；
+   - 明确 018 只落 lineage/state contract，不提前落盘 JSONL/SQLite 持久化文件格式；
+   - 通过 `VersionLedgerDeps::read_snapshot_checksum` 把真实 snapshot checksum 读取延后到 019/020 接线。
+2. 新增 `knowledge/include/index/VersionLedger.h` 与 `knowledge/src/index/VersionLedger.cpp`：
+   - 定义 `SnapshotState`、`VersionLedgerEntry`、`VersionLedgerDeps` 与 `VersionLedger`；
+   - 实现 `record_candidate()`、`mark_active()`、`mark_superseded()`、`last_known_good()`；
+   - 固定 candidate 必须 `Pending`、parent lineage 必须已存在、前一 active 在新激活后自动转 `Superseded + rollback_eligible=true`。
+3. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `VersionLedger` 头/源与 3 条 unit targets。
+4. 新增三条 unit test：
+   - `VersionLedgerTest.cpp`：验证 candidate 录入、重复 snapshot 拒绝与 parent lineage 约束；
+   - `VersionLedgerActivationTest.cpp`：验证 `mark_active()` 激活、前一 active 自动 supersede 和 active checksum 失配回退；
+   - `VersionLedgerRollbackEligibilityTest.cpp`：验证 pending 不得成为 rollback target、显式 supersede 后的 eligibility 与 checksum 失配拒绝。
+
+### 测试
+
+1. CMake Tools 定向构建：
+   - `Build_CMakeTools`：`dasall_knowledge`、`dasall_version_ledger_unit_test`、`dasall_version_ledger_activation_unit_test`、`dasall_version_ledger_rollback_eligibility_unit_test`
+   - 结果：构建成功。
+2. CMake Tools 测试尝试：
+   - `RunCtest_CMakeTools` 指定 `VersionLedgerTest` / `VersionLedgerActivationTest` / `VersionLedgerRollbackEligibilityTest`
+   - 结果：工具态直接报 `生成失败`，不是 production 逻辑失败。
+3. build-ci 回退验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_version_ledger_unit_test dasall_version_ledger_activation_unit_test dasall_version_ledger_rollback_eligibility_unit_test`
+   - `ctest --test-dir build-ci -R "VersionLedger.*Test" --output-on-failure`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. Knowledge 现在具备独立的 snapshot ledger supporting object，019/020 可以在不重写账本 contract 的前提下直接接入 active snapshot 读写路径。
+2. 018 固定了三条关键语义：
+   - pending candidate 不是 last-known-good；
+   - 新 active 激活后，前一 active 自动保留为 rollback target；
+   - checksum verifier 缺失、读取失败或失配时，`last_known_good()` fail-closed。
+3. 018 没有提前持有 snapshot 文件句柄或 SQLite owner，因此仍保持了索引治理里的依赖方向：账本只描述 lineage 与可回退性，不吞掉读写组件的职责。
+
+### 下一步
+
+1. 继续按用户指定顺序进入 `KNO-TODO-019`，实现 `IndexReader` active snapshot 读路径；
+2. 019 必须直接复用 013 的 lexical search seam 与 018 的 ledger contract，不允许再建一套平行 snapshot/ledger 输入输出。
+
+### 风险
+
+1. 018 当前只固定了进程内 append-only entry 语义，尚未决定 JSONL / SQLite 实际持久化介质；020 接线时必须保持同一 public shape，而不是把持久化细节反推回 `VersionLedgerEntry` 字段定义。
+2. `last_known_good()` 当前依赖 `VersionLedgerDeps::read_snapshot_checksum` 外部提供真实 checksum；019/020 若生成 checksum 的规范与 018 单测假设不一致，必须先统一 checksum SSOT，再接 snapshot 校验链。
+
 ## 记录 #394
 
 - 日期：2026-04-21
