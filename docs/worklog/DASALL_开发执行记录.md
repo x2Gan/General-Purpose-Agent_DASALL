@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #385
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build 配置投影轮次
+- 任务：KNO-TODO-007 实现 KnowledgeConfigProjector 配置投影
+- 状态：已完成
+
+### 任务选择
+
+1. 006 已经冻结 `KnowledgeConfigSnapshot` ABI；如果 007 不马上实现 projector，后续 facade、telemetry 与 profile compatibility 都会各自带一套隐含配置解释。
+2. 详细设计 6.10 已给出所有关键字段的派生规则，但代码侧仍没有唯一投影入口；本轮的目标是把“profile/manifest -> KnowledgeConfigSnapshot”的 owner 固定下来，而不是提前实现 facade request merge。
+3. 取证时确认 `RuntimePolicySnapshot` 不包含 `enabled_modules.*`，因此 projector 不能只吃 snapshot，必须像 memory 一样同时消费 `BuildProfileManifest`，否则 `knowledge_enabled` / `vector_enabled` 没有单一 owner。
+
+### 改动
+
+1. 新增 `knowledge/src/config/KnowledgeConfigProjector.h` 与 `knowledge/src/config/KnowledgeConfigProjector.cpp`：
+   - 新增 `KnowledgeConfigProjectorOverlay`，只承载 module-local deployment override；
+   - 实现 `KnowledgeConfigProjector::project(snapshot, manifest, overlay)`；
+   - 将 `knowledge_enabled` / `vector_enabled` 固定为 `BuildProfileManifest` owner；
+   - 落盘 `retrieval_mode_default`、`evidence_budget_tokens`、`max_context_projection_items`、`request_deadline_ms`、`max_parallel_recall`、lane timeout 和 ingest timeout 的派生规则。
+2. 更新 `knowledge/CMakeLists.txt`，把 `KnowledgeConfigProjector.cpp` 接入 `dasall_knowledge`，并为 knowledge target 增加对 `dasall_profiles` 的私有编译依赖。
+3. 更新 `tests/unit/knowledge/CMakeLists.txt`，新增 `dasall_knowledge_config_projection_unit_test`，并给它补 `dasall_profiles` 链接与 `knowledge/src` include path。
+4. 新增 `tests/unit/knowledge/KnowledgeConfigProjectionTest.cpp`，覆盖：
+   - 默认派生；
+   - deployment override merge；
+   - `knowledge=true && memory_vector=false` 合法 lexical-only；
+   - vector-off 场景下非法 dense override fail-closed。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_knowledge_config_projection_unit_test`
+   - `dasall_knowledge_interface_surface_unit_test`
+2. RunCtest_CMakeTools：
+   - `KnowledgeConfigProjectionTest`
+   - `dasall_knowledge_interface_surface_unit_test`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_config_projection_unit_test dasall_knowledge_interface_surface_unit_test`
+   - `ctest --test-dir build-ci -R "KnowledgeConfigProjectionTest|dasall_knowledge_interface_surface_unit_test" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备唯一的配置投影链：`RuntimePolicySnapshot + BuildProfileManifest + KnowledgeConfigProjectorOverlay -> KnowledgeConfigSnapshot`。
+2. `KnowledgeConfigProjectionTest` 证明：
+   - projector 会从 manifest 解释 `knowledge` / `memory_vector`；
+   - `knowledge=true && memory_vector=false` 被稳定收敛为 lexical-only，而不是错误；
+   - override 不会变成第二套配置系统，非法 dense override 会直接 fail-closed。
+3. 007 仍保持原子边界：没有提前实现 request-level merge、health snapshot 或 telemetry 字段，只把这些任务依赖的 config owner 固定下来。
+
+### 下一步
+
+1. 转入 `KNO-TODO-025`，在 006/007 已冻结的错误映射与配置投影基础上实现 `KnowledgeTelemetry`，把 retrieve/degrade/refresh 的观测字段桥接到日志/指标/审计语义。
+
+### 风险
+
+1. 如果后续 025/029/Facade 路径直接绕过 manifest 去解释 `knowledge` / `memory_vector`，会与 007 的 owner 结论冲突。
+2. `KnowledgeConfigProjectorOverlay` 当前只承载 deployment override；若后续把 request-level override 也塞进它，会模糊 `init()` 与 `retrieve()` 的职责边界。
+
 ## 记录 #384
 
 - 日期：2026-04-21

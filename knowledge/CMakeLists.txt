@@ -19,6 +19,7 @@ endforeach()
 
 target_sources(dasall_knowledge
   PRIVATE
+    src/config/KnowledgeConfigProjector.cpp
     src/KnowledgeBuildSkeleton.cpp
   PUBLIC
     FILE_SET public_headers
@@ -42,6 +43,8 @@ target_include_directories(dasall_knowledge
 target_link_libraries(dasall_knowledge
   PUBLIC
     dasall_contracts
+  PRIVATE
+    dasall_profiles
 )
 
 dasall_apply_common_options(dasall_knowledge)

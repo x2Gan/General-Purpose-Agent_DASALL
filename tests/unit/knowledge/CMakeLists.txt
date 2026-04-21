@@ -25,6 +25,22 @@ dasall_add_knowledge_unit_test(
 	dasall_knowledge_interface_surface_unit_test
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_config_projection_unit_test
+	KnowledgeConfigProjectionTest.cpp
+	KnowledgeConfigProjectionTest
+)
+
+target_link_libraries(dasall_knowledge_config_projection_unit_test
+	PRIVATE
+		dasall_profiles
+)
+
+target_include_directories(dasall_knowledge_config_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
 if(NOT DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS)
 	message(FATAL_ERROR "knowledge unit registration requires at least one test target")
 endif()
