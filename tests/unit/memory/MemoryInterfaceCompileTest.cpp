@@ -187,6 +187,8 @@ void test_store_result_compiles_as_an_independent_public_surface() {
 }
 
 void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly() {
+     using dasall::memory::MaintenanceReport;
+     using dasall::memory::MemoryConfig;
      using dasall::memory::IExperienceStore;
      using dasall::memory::IFactStore;
      using dasall::memory::IMaintenanceStore;
@@ -208,6 +210,21 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
                                         "IMemoryStore should aggregate experience access through a narrow interface");
      static_assert(std::is_base_of_v<IMaintenanceStore, IMemoryStore>,
                                         "IMemoryStore should aggregate maintenance access through a narrow interface");
+          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_wal_checkpoint),
+                                  void (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "maintenance checkpoint should stay reachable via the abstract maintenance interface");
+          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_turn_retention),
+                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "turn retention should stay reachable via the abstract maintenance interface");
+          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_fact_retention),
+                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "fact retention should stay reachable via the abstract maintenance interface");
+          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_experience_retention),
+                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "experience retention should stay reachable via the abstract maintenance interface");
+          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_quarantine_cleanup),
+                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "quarantine cleanup should stay reachable via the abstract maintenance interface");
 
      assert_true(std::has_virtual_destructor_v<ITransactionalStore>,
                                    "transactional store interface should remain safely polymorphic");

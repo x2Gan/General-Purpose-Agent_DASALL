@@ -97,6 +97,35 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
     return delegate_.quarantine_record(object_type, object_id, reason);
   }
 
+  void run_wal_checkpoint(const dasall::memory::MemoryConfig& config,
+                          dasall::memory::MaintenanceReport& report) override {
+    delegate_.run_wal_checkpoint(config, report);
+  }
+
+  [[nodiscard]] int run_turn_retention(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    return delegate_.run_turn_retention(config, report);
+  }
+
+  [[nodiscard]] int run_fact_retention(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    return delegate_.run_fact_retention(config, report);
+  }
+
+  [[nodiscard]] int run_experience_retention(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    return delegate_.run_experience_retention(config, report);
+  }
+
+  [[nodiscard]] int run_quarantine_cleanup(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    return delegate_.run_quarantine_cleanup(config, report);
+  }
+
  private:
   dasall::tests::mocks::FakeMemoryStore delegate_;
 };

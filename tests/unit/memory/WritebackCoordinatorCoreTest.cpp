@@ -208,6 +208,44 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
     return dasall::memory::StoreResult::success(object_type + ":" + object_id + ":" + reason);
   }
 
+  void run_wal_checkpoint(const dasall::memory::MemoryConfig& config,
+                          dasall::memory::MaintenanceReport& report) override {
+    (void)config;
+    (void)report;
+  }
+
+  [[nodiscard]] int run_turn_retention(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    (void)config;
+    (void)report;
+    return 0;
+  }
+
+  [[nodiscard]] int run_fact_retention(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    (void)config;
+    (void)report;
+    return 0;
+  }
+
+  [[nodiscard]] int run_experience_retention(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    (void)config;
+    (void)report;
+    return 0;
+  }
+
+  [[nodiscard]] int run_quarantine_cleanup(
+      const dasall::memory::MemoryConfig& config,
+      dasall::memory::MaintenanceReport& report) override {
+    (void)config;
+    (void)report;
+    return 0;
+  }
+
   [[nodiscard]] int commit_attempts_for_test() const {
     return commit_attempts_;
   }

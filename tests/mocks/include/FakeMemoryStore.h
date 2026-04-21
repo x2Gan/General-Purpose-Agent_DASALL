@@ -277,6 +277,51 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     return memory::StoreResult::success(object_id);
   }
 
+  void run_wal_checkpoint(const memory::MemoryConfig& config,
+                          memory::MaintenanceReport& report) override {
+    (void)config;
+    if (!is_open_) {
+      append_warning(report, "maintenance_store_not_open");
+    }
+  }
+
+  [[nodiscard]] int run_turn_retention(const memory::MemoryConfig& config,
+                                       memory::MaintenanceReport& report) override {
+    (void)config;
+    if (!is_open_) {
+      append_warning(report, "maintenance_store_not_open");
+    }
+    return 0;
+  }
+
+  [[nodiscard]] int run_fact_retention(const memory::MemoryConfig& config,
+                                       memory::MaintenanceReport& report) override {
+    (void)config;
+    if (!is_open_) {
+      append_warning(report, "maintenance_store_not_open");
+    }
+    return 0;
+  }
+
+  [[nodiscard]] int run_experience_retention(
+      const memory::MemoryConfig& config,
+      memory::MaintenanceReport& report) override {
+    (void)config;
+    if (!is_open_) {
+      append_warning(report, "maintenance_store_not_open");
+    }
+    return 0;
+  }
+
+  [[nodiscard]] int run_quarantine_cleanup(const memory::MemoryConfig& config,
+                                           memory::MaintenanceReport& report) override {
+    (void)config;
+    if (!is_open_) {
+      append_warning(report, "maintenance_store_not_open");
+    }
+    return 0;
+  }
+
   [[nodiscard]] bool is_open_for_test() const { return is_open_; }
   [[nodiscard]] bool has_active_transaction_for_test() const { return active_transaction_; }
   [[nodiscard]] memory::StorageBackend last_open_backend_for_test() const { return last_open_backend_; }
@@ -362,6 +407,14 @@ class FakeMemoryStore final : public memory::IMemoryStore {
                                           experience_domains->end(),
                                           query_domain) != experience_domains->end();
                        });
+  }
+
+  static void append_warning(memory::MaintenanceReport& report,
+                             std::string warning) {
+    if (std::find(report.warnings.begin(), report.warnings.end(), warning) ==
+        report.warnings.end()) {
+      report.warnings.push_back(std::move(warning));
+    }
   }
 
   bool is_open_ = false;

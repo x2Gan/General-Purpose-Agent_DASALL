@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #378
+
+- 日期：2026-04-21
+- 阶段：memory/专项 TODO 结构优化轮次
+- 任务：MEM-TODO-034 消除 MaintenanceWorker 中的 dynamic_cast
+- 状态：已完成
+
+### 任务选择
+
+1. `MEM-TODO-034` 是 033 的直接后继：虽然 033 已把 `MemoryMaintenanceWorker` 的构造依赖收口为 `IMaintenanceStore&`，但实现体仍通过 `dynamic_cast<SqliteMemoryStore*>` 和 `writer_connection_for_maintenance()` 旁路 concrete sqlite backend，抽象边界并未真正闭合。
+2. 本轮限定为“maintenance 原语上提 + sqlite maintenance SQL 下沉 + worker concrete 依赖清除”，不提前进入 035 的 sqlite-vss concrete backend 可行性与测试设计。
+3. 设计上沿用 memory 详设 6.12.6 对 maintenance 责任的定义：checkpoint、turn/fact/experience retention、quarantine cleanup 仍由 maintenance worker 编排，但具体 sqlite WAL / SQL 执行转移到 `IMaintenanceStore` 抽象面之后。
+
+### 改动
+
+1. 更新 `memory/include/IMaintenanceStore.h`：
+   - 新增 `run_wal_checkpoint()`、`run_turn_retention()`、`run_fact_retention()`、`run_experience_retention()`、`run_quarantine_cleanup()` 五个 maintenance 原语；
+   - 让 checkpoint / retention / quarantine 能力可通过窄接口直接到达，而非依赖 concrete store 逃逸口。
+2. 更新 `memory/src/store/sqlite/SqliteMemoryStore.h` 与 `memory/src/store/sqlite/SqliteMemoryStore.cpp`：
+   - 将原先散落在 `MemoryMaintenanceWorker.cpp` 中的 sqlite helper、WAL checkpoint、retention、quarantine cleanup 逻辑下沉到 sqlite store；
+   - 保持既有 warning key、busy retry、summary source turn 保护和 quarantine TTL 行为不变。
+3. 更新 `memory/src/maintenance/MemoryMaintenanceWorker.cpp`：
+   - 删除对 `store/sqlite/SqliteMemoryStore.h` 的 include；
+   - 删除 `dynamic_cast<SqliteMemoryStore*>` 与 raw `sqlite3*` 获取路径；
+   - worker 仅保留 maintenance request 调度、writer mutex 管理、vector rebuild 编排与 report 汇总。
+4. 更新 `tests/unit/memory/MemoryInterfaceCompileTest.cpp`：
+   - 增加 `IMaintenanceStore` maintenance 原语签名断言，锁定 034 形成的抽象面，防止后续回退到 concrete backend 旁路。
+5. 更新 `tests/mocks/include/FakeMemoryStore.h` 以及 `CandidateCollectorTest.cpp`、`WritebackCoordinatorCoreTest.cpp`、`WritebackCoordinatorPartialTest.cpp`、`ConflictResolverDegradedTest.cpp`：
+   - 为 `FakeMemoryStore` 和局部 `IMemoryStore` test doubles 补齐新的 maintenance 原语实现；
+   - 首轮构建暴露这些替身遗漏，修正后保证 034 不对 memory 既有测试基座造成抽象未实现回退。
+
+### 测试
+
+1. 静态检查：
+   - `get_errors` 确认 `IMaintenanceStore`、`SqliteMemoryStore`、`MemoryMaintenanceWorker` 与 compile-surface test 在编辑器层面无错误。
+2. 定向构建：
+   - `Build_CMakeTools` 首轮重建暴露 `FakeMemoryStore` 与多个局部 `IMemoryStore` test doubles 未实现新增 maintenance 原语；
+   - 补齐这些测试替身后再次执行 `Build_CMakeTools`，memory 相关 unit / integration targets 全部构建通过。
+3. 定向验收：
+   - `RunCtest_CMakeTools` 验证 `MemoryInterfaceCompileTest`、`MemoryMaintenanceRetentionTest`、`MemoryMaintenanceCheckpointTest`、`MemoryMaintenanceIntegrationTest`、`MemoryCheckpointBusyTest`、`MemoryFailureInjectionTest`；
+   - 结果：6/6 目标测试全部通过；`DartConfiguration.tcl` 仍为 CMake Tools stderr 噪声，但返回码为 0。
+
+### 结果
+
+1. `MEM-TODO-034` 已完成，`MemoryMaintenanceWorker` 不再 include `SqliteMemoryStore.h`，也不再通过 `dynamic_cast` 获取 sqlite writer connection。
+2. maintenance 抽象边界已真正闭合：checkpoint、turn/fact/experience retention、quarantine cleanup 均可通过 `IMaintenanceStore` 直接触达，sqlite-specific SQL 逻辑留在 concrete store 内部。
+3. `MemoryFailureInjectionTest` 仍可保留对 `writer_connection_for_maintenance()` 的测试侧注入路径，因此本轮没有额外扩大 028 的 failure injection 语义面。
+
+### 下一步
+
+1. 进入 `MEM-TODO-035` 可执行性检查，先确认 sqlite-vss concrete backend 与第三方依赖是否已具备实现/构建前提；若仍受 third-party 接入阻塞，则按 blocker recovery 路径显式收敛，而不是把测试任务硬扩成依赖接入任务。
+
+### 风险
+
+1. 034 只收口了 maintenance concrete 依赖，不等于 035 已自动可执行；sqlite-vss backend 当前是否存在稳定 concrete implementation、第三方扩展加载方式与测试 fixture 仍需单独核查。
+
 ## 记录 #377
 
 - 日期：2026-04-20

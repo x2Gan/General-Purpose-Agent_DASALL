@@ -56,8 +56,23 @@ class SqliteMemoryStore final : public IMemoryStore {
       const std::string& object_type,
       const std::string& object_id,
       const std::string& reason) override;
+  void run_wal_checkpoint(
+      const MemoryConfig& config,
+      MaintenanceReport& report) override;
+  [[nodiscard]] int run_turn_retention(
+      const MemoryConfig& config,
+      MaintenanceReport& report) override;
+  [[nodiscard]] int run_fact_retention(
+      const MemoryConfig& config,
+      MaintenanceReport& report) override;
+  [[nodiscard]] int run_experience_retention(
+      const MemoryConfig& config,
+      MaintenanceReport& report) override;
+  [[nodiscard]] int run_quarantine_cleanup(
+      const MemoryConfig& config,
+      MaintenanceReport& report) override;
 
-    [[nodiscard]] sqlite3* writer_connection_for_maintenance();
+  [[nodiscard]] sqlite3* writer_connection_for_maintenance();
 
  private:
   [[nodiscard]] sqlite3* select_reader_connection() const;
