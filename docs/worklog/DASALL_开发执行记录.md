@@ -1,5 +1,72 @@
 # DASALL 开发执行记录
 
+## 记录 #394
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build lexical sparse recall 轮次
+- 任务：KNO-TODO-013 实现 SparseRetriever lexical 召回
+- 状态：已完成
+
+### 任务选择
+
+1. 用户要求继续按 implementation-cycle 顺序推进 lexical 最小主链，当前合法起点是 `KNO-TODO-013`。
+2. 008 已提供 `NormalizedQuery`，009 已提供 `RetrievalPlan`，016/017 已把 corpus / freshness 纪律前移，因此 013 已具备最小闭环条件。
+3. 评估后确认 013 的关键边界不在“如何做 SQLite 查询”，而在“不能把 019 的 active snapshot owner 提前塞进 013”；因此本轮必须先收敛 request/result 与 search seam，再落真实 lexical 夹具测试。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-013-SparseRetriever设计收敛.md`：
+   - 固定 013 的职责、非职责、FTS5 query expression 纪律、hard filter 顺序和 sentence-window 规则；
+   - 明确详细设计卡片里 `retrieve(const RetrievalPlan&)` 与现有 `RetrievalPlan` 不携带 lexical terms 的不匹配，收敛为 `SparseRetrieveRequest`；
+   - 记录 013 采用 knowledge-owned search seam，而不是提前实现 019 `IndexReader` active snapshot owner 的原因。
+2. 新增 `knowledge/include/retrieve/SparseRetriever.h` 与 `knowledge/src/retrieve/SparseRetriever.cpp`：
+   - 定义 `SparseQueryExpression`、`SparseIndexSearchRequest/Result`、`SparseRetrieveRequest/Result`、`SparseRetrieverDeps`、`SparseRetrieverPolicy`；
+   - 实现 quoted FTS5 lexical expression、corpus allowlist、metadata tag / language / authority floor 过滤和 sentence-window 邻域扩展；
+   - 固定缺少 search seam 或 index failure 时显式返回 `IndexUnavailable`，而不是伪装成空命中成功。
+3. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `SparseRetriever` 头文件、源文件与 3 条 unit targets；
+   - SQLite 夹具测试目标显式链接共享 `dasall_sqlite3`。
+4. 新增三条 unit test：
+   - `SparseRetrieverTest.cpp`：用真实 SQLite FTS5 夹具验证 lexical expression / snippet / 显式 index failure；
+   - `SparseRetrieverFilterTest.cpp`：验证 metadata / language / authority filter 与 0-hit 合法成功语义；
+   - `SparseRetrieverSentenceWindowTest.cpp`：验证 anchor sentence 左右各一窗的邻域扩展。
+5. 更新 `memory/CMakeLists.txt`：
+   - 为共享 `dasall_sqlite3` 补齐 `SQLITE_ENABLE_FTS5=1`；
+   - 修复真实 SQLite lexical fixture 首次验收时暴露的 `no such module: fts5` 根因。
+
+### 测试
+
+1. build-ci configure：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+2. build-ci 定向构建：
+   - `cmake --build build-ci --target dasall_knowledge dasall_sparse_retriever_unit_test dasall_sparse_retriever_filter_unit_test dasall_sparse_retriever_sentence_window_unit_test`
+3. 显式 `ctest`：
+   - 首次运行 `ctest --test-dir build-ci -R "SparseRetriever.*Test" --output-on-failure` 暴露真实根因：`SparseRetrieverTest` 失败，错误为 `no such module: fts5`；
+   - 补齐共享 sqlite target 的 `SQLITE_ENABLE_FTS5=1` 后，重建 `dasall_sqlite3` 与 3 个 SparseRetriever test targets；
+   - 再次运行 `ctest --test-dir build-ci -R "SparseRetriever.*Test" --output-on-failure`，结果 3/3 通过。
+
+### 结果
+
+1. Knowledge 已具备可执行的 lexical sparse recall supporting layer，013 为后续 014/012/027 固定了三块稳定输入输出面：
+   - `SparseRetrieveRequest`：把 normalized query 与 route plan 合并成可执行 lexical 请求；
+   - `SparseRetrieverDeps`：把 active snapshot 查询 owner 延后到 019，不在 013 抢跑；
+   - `SparseRetrieveResult`：把成功空命中与 provider failure 明确分开。
+2. 013 固定了三类关键语义：
+   - 缺少 lexical search seam / 索引不可读时，必须显式失败；
+   - metadata / language / authority filter 冲突导致 0 hit 时，是合法成功态；
+   - sentence-window 邻域补齐属于 retriever 后处理，不依赖 evidence assembler 或 facade。
+3. 013 同时把 lexical 路线的共享依赖补齐到可运行状态：真实 SQLite FTS5 夹具不再报 `no such module: fts5`，后续 019/027 可继续复用共享 `dasall_sqlite3`。
+
+### 下一步
+
+1. 继续按用户指定顺序进入 `KNO-TODO-018`，实现 `VersionLedger` snapshot 账本；
+2. 待 018 完成后，再推进 019 `IndexReader`，把 013 本轮收敛的 lexical search seam 接到 active snapshot 读路径。
+
+### 风险
+
+1. 013 当前只固定了 lexical request/result/seam 形状，并未拥有 active snapshot；019 必须复用这套 seam，而不是再建一套平行 `search_sparse()` 输入输出，避免 014/012 出现两套 sparse lane contract。
+2. `SparseRetriever` 当前通过 `required_language` 显式字段承载 language filter；若后续 query surface 需要自动推导 locale，应在 facade / router 的 request 装配处收口，不要把语言推导规则塞回 retriever 内部。
+
 ## 记录 #393
 
 - 日期：2026-04-21

@@ -110,6 +110,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_sparse_retriever_unit_test
+	SparseRetrieverTest.cpp
+	SparseRetrieverTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_sparse_retriever_filter_unit_test
+	SparseRetrieverFilterTest.cpp
+	SparseRetrieverFilterTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_sparse_retriever_sentence_window_unit_test
+	SparseRetrieverSentenceWindowTest.cpp
+	SparseRetrieverSentenceWindowTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_reranker_unit_test
 	RerankerTest.cpp
 	RerankerTest
@@ -171,6 +189,11 @@ target_link_libraries(dasall_knowledge_config_projection_unit_test
 target_include_directories(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_link_libraries(dasall_sparse_retriever_unit_test
+	PRIVATE
+		dasall_sqlite3
 )
 
 if(NOT DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS)

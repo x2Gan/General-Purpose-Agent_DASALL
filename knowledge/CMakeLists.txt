@@ -13,6 +13,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/query/QueryNormalizer.h
   include/rerank/Reranker.h
   include/retrieve/RecallTypes.h
+  include/retrieve/SparseRetriever.h
 )
 
 if(NOT EXISTS ${DASALL_KNOWLEDGE_PUBLIC_INCLUDE_DIR})
@@ -37,6 +38,7 @@ target_sources(dasall_knowledge
     src/query/CorpusRouter.cpp
     src/query/QueryNormalizer.cpp
     src/rerank/Reranker.cpp
+    src/retrieve/SparseRetriever.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS

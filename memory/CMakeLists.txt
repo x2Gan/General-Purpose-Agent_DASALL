@@ -33,6 +33,7 @@ if(NOT TARGET dasall_sqlite3)
   target_compile_definitions(dasall_sqlite3
     PUBLIC
       SQLITE_THREADSAFE=1
+      SQLITE_ENABLE_FTS5=1
       SQLITE_OMIT_LOAD_EXTENSION=1
   )
 
