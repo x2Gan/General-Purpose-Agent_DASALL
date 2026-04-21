@@ -518,22 +518,45 @@ struct EvidenceBundle {
   std::string coverage_notes;
 };
 
+enum class TrustLevel {
+  Trusted,
+  Quarantined,
+  Unregistered,
+};
+
+enum class AuthorityLevel {
+  Normative,
+  Reference,
+  Advisory,
+};
+
+enum class SourceKind {
+  File,
+  ConfigSnapshot,
+  CuratedBundle,
+};
+
+enum class SourceFormat {
+  Markdown,
+  Yaml,
+  Text,
+};
+
 struct CorpusDescriptor {
   std::string corpus_id;
   std::string display_name;
   std::string source_uri;
   TrustLevel trust_level = TrustLevel::Trusted;
+  AuthorityLevel authority_level = AuthorityLevel::Reference;
+  SourceKind source_kind = SourceKind::File;
+  std::vector<SourceFormat> allowed_formats{SourceFormat::Markdown};
+  std::vector<std::string> include_globs;
+  std::vector<std::string> exclude_globs;
   std::vector<RetrievalMode> supported_modes;
   std::string active_snapshot_id;
   std::int64_t last_updated_ms = 0;
   std::vector<std::string> tags;
   std::map<std::string, std::string> metadata;
-};
-
-enum class TrustLevel {
-  Trusted,
-  Quarantined,
-  Unregistered,
 };
 
 struct KnowledgeRetrieveResult {
@@ -717,7 +740,7 @@ flowchart LR
 1. `SourceScanner` 只识别受信语料源，不直接暴露任意目录遍历入口给 Runtime。
 2. `Canonicalizer` 负责把输入文档标准化为统一编码、清洗噪声、抽取 metadata，不执行 query 逻辑。
 3. `Chunker` 采用 section/paragraph 为主、sentence-window 为辅的两级切分策略，保留 `chunk_id`、`parent_doc_id`、`adjacent_chunk_refs`。
-4. `MetadataExtractor` 至少生成 `corpus_id`、`source_uri`、`version`、`updated_at`、`tags`、`authority_level`、`language`。
+4. `MetadataExtractor` 至少生成并写实 `corpus_id`、`source_uri`、`source_kind`、`source_format`、`version`、`updated_at_ms`、`tags`、`authority_level`、`language`；这些 provenance 字段不得只作为自由文本 metadata 悬空存在。
 5. `VersionLedger` 维护 `source_hash`、`chunk_version`、`index_version` 和 `effective_at`，支持 selective refresh 与 last-known-good snapshot。
 6. `Snapshot-and-Swap` 用于避免 query path 在 rebuild 过程中读取半成品索引。
 
@@ -1855,6 +1878,65 @@ public:
 2. 依据 DASALL 当前 profile 与审计需求，scanner/chunker 路径必须保证“同一输入在同一策略下得到同一 document_id / chunk_id”，否则 `VersionLedger` 与 snapshot diff 将失真。
 3. `MetadataExtractor` 与 `EmbeddingEncoder` 仍应保留为该组的内部策略点，本轮不单独提升为公共组件，以避免在 supporting contracts 仍未冻结时过度外溢接口面。
 
+##### 首批 corpus 资产与 metadata/trust baseline（KNO-TODO-003）
+
+1. v1 首批 corpus baseline 固定为四类真实仓库资产：architecture 设计文档、ADR、SSOT、profile runtime policy snapshots；它们共同覆盖 query/evidence/index 主链需要的权威文本来源。
+2. `docs/todos/`、`docs/worklog/`、`docs/plans/`、`docs/development/` 以及 `docs/architecture/*评审报告*.md`、`*迁移影响清单*.md` 等高波动或非规范性文件不进入首批 baseline；这些资产保留给未来 `AuthorityLevel::Advisory` lane 单独评审。
+3. `profiles/*/runtime_policy.yaml` 允许作为 Knowledge retrieval corpus 的证据来源，但这不改变 `KnowledgeConfigProjector -> KnowledgeConfigSnapshot` 对 profile 配置的唯一 owner 身份；retrieval 只消费其文本证据，不重写配置投影语义。
+
+首批 corpus 目录面：
+
+| `corpus_id` | `source_uri` | `include_globs` | `exclude_globs` | `source_kind` | `allowed_formats` | `authority_level` | `trust_level` | `supported_modes` | 说明 |
+|---|---|---|---|---|---|---|---|---|---|
+| `architecture_reference` | `docs/architecture/` | `DASALL_Agent_architecture.md`；`DASALL_Engineering_Blueprint.md`；`DASALL_*详细设计*.md`；`platform_linux_detailed_design.md` | `*评审报告*.md`；`*迁移影响清单*.md`；`DASALL_boundary治理与优化说明.md` | `File` | `Markdown` | `Reference` | `Trusted` | `LexicalOnly`、`Hybrid` | 子系统设计与蓝图的主 reference corpus |
+| `adr_normative` | `docs/adr/` | `ADR-*.md` | — | `File` | `Markdown` | `Normative` | `Trusted` | `LexicalOnly`、`Hybrid` | 架构边界与 owner 约束的最高优先级文本来源 |
+| `ssot_normative` | `docs/ssot/` | `*.md` | — | `File` | `Markdown` | `Normative` | `Trusted` | `LexicalOnly`、`Hybrid` | 跨模块投影、并发与 integration topology 的单一真相来源 |
+| `profile_policy_normative` | `profiles/` | `*/runtime_policy.yaml` | — | `ConfigSnapshot` | `Yaml` | `Normative` | `Trusted` | `LexicalOnly` | 仅用于查询期引用 profile policy 文本；不替代 RuntimePolicySnapshot 消费链 |
+
+`CorpusScanPlan` 最小对象面：
+
+```cpp
+struct CorpusScanPlan {
+  std::string corpus_id;
+  std::string root_uri;
+  SourceKind source_kind = SourceKind::File;
+  std::vector<std::string> include_globs;
+  std::vector<std::string> exclude_globs;
+  std::vector<SourceFormat> allowed_formats;
+  bool full_scan = false;
+};
+```
+
+v1 必填 typed 字段与 fallback 规则：
+
+| 对象 | 必填 typed 字段 | 允许 fallback 的字段 | 规则 |
+|---|---|---|---|
+| `CorpusDescriptor` | `corpus_id`、`source_uri`、`trust_level`、`authority_level`、`source_kind`、`allowed_formats`、`include_globs`、`supported_modes` | `display_name`、`tags`、`metadata` | `metadata` 只承载扩展键，不能替代必填字段 |
+| `SourceRecord` | `source_id`、`corpus_id`、`source_uri`、`content_hash`、`version`、`updated_at_ms`、`kind`、`format`、`authority_level` | `language`、`tags` | `language` 缺失时可回退为 `und` 并写 warning；其余缺失直接 quarantine |
+| `CanonicalDocument` | `document_id`、`corpus_id`、`source_id`、`source_uri`、`canonical_text`、`source_hash`、`version`、`updated_at_ms`、`source_format`、`authority_level` | `title`、`language`、`tags` | `title` 可回退到文件名/一级标题；空正文不可回退 |
+| `ChunkRecord` | `chunk_id`、`document_id`、`corpus_id`、`source_id`、`source_uri`、`chunk_text`、`citation_ref`、`version`、`updated_at_ms`、`authority_level` | `language`、`tags`、`adjacent_chunk_refs` | 必填 provenance 字段必须继承自 `CanonicalDocument`，不可在 chunk 阶段丢失 |
+
+扩展 metadata keyspace 约束：
+
+1. `CorpusDescriptor.metadata` 在 v1 必填 `baseline_class`、`owner_module`、`refresh_strategy`、`default_language`。
+2. `CanonicalDocument.metadata` 对 markdown corpus 必填 `document_class`、`section_path`；对 profile snapshots 额外必填 `profile_name`、`policy_domain=runtime_policy`。
+3. `ChunkRecord.metadata` 必须至少保留 `document_class` 与 `section_path`，以支撑 citation 与 router/tag filtering。
+
+quarantine / fail-closed 规则：
+
+| 触发条件 | 处置 | 说明 |
+|---|---|---|
+| source 不属于任何已注册 `corpus_id`，或其 corpus `trust_level < Trusted` | quarantine source | 防止任意目录遍历和未注册资产注入 |
+| 文件格式不在 corpus `allowed_formats` 中 | quarantine source | v1 只接受 markdown 与 runtime policy yaml |
+| `content_hash` / `version` / `updated_at_ms` / `authority_level` 无法生成 | quarantine source | provenance 不完整时不允许进入 canonicalize |
+| canonicalize 后正文为空、markup/yaml flatten 失败 | quarantine source | 禁止生成半有效文档 |
+| `ChunkPolicy` 非法或 Build 配置冲突 | fail-closed batch | 这是系统配置错误，不属于单源 quarantine |
+
+格式级 canonicalize 规则：
+
+1. markdown 文档保留 heading 层级、列表顺序与 code fence 文本；不做语义改写，只做换行、编码和 markup 展平。
+2. `runtime_policy.yaml` 以稳定 key-path flatten 方式 canonicalize，例如 `runtime_budget.max_latency_ms=7000`；key 顺序按字典序固定，保证同一 snapshot 得到同一 `document_id` / `chunk_id`。
+
 ##### SourceScanner
 
 1. **职责**：在给定 corpus 范围内枚举源文件或源记录，计算增量变化集，产出新增、更新、删除与 quarantine 四类 source delta，供 `IngestionCoordinator` 构造 `CorpusChangeSet`。
@@ -1867,8 +1949,13 @@ struct SourceRecord {
   std::string corpus_id;
   std::string source_uri;
   std::string content_hash;
-  std::int64_t last_modified_ms = 0;
+  std::string version;
+  std::int64_t updated_at_ms = 0;
   SourceKind kind = SourceKind::File;
+  SourceFormat format = SourceFormat::Markdown;
+  AuthorityLevel authority_level = AuthorityLevel::Reference;
+  std::string language = "und";
+  std::vector<std::string> tags;
 };
 
 struct SourceScanDelta {
@@ -1876,6 +1963,7 @@ struct SourceScanDelta {
   std::vector<SourceRecord> updated;
   std::vector<std::string> removed_source_ids;
   std::vector<std::string> quarantined_source_ids;
+  bool full_scan = false;
 };
 ```
 
@@ -1895,13 +1983,14 @@ private:
 
 5. **关键执行流**：
    1. 读取 corpus scan plan 和上一轮 source inventory。
-   2. 枚举当前源集合，计算 hash、mtime 和可读性状态。
-   3. 与上一轮 inventory 做 diff，产出 added / updated / removed 集合。
-   4. 对不可读、权限不足、编码不可识别的源写入 quarantine 列表。
+  2. 仅枚举 `include_globs` 命中的注册源，并在进入 diff 前应用 `exclude_globs`、`allowed_formats` 与 `trust_level` 过滤。
+  3. 为每个候选源生成 `content_hash`、`version`、`updated_at_ms`、`format` 与可读性状态。
+  4. 与上一轮 inventory 做 diff，产出 added / updated / removed 集合。
+  5. 对不可读、权限不足、格式不允许、编码不可识别或 provenance 字段缺失的源写入 quarantine 列表。
 6. **失败与回退语义**：
    - 单个源异常应进入 quarantine，不得导致整库扫描失败。
    - inventory 缺失时允许执行首轮全量扫描，但必须显式标记 `full_scan=true`。
-   - 不允许因 hash 计算失败而静默把源当作未变化；必须进入 warning 或 quarantine。
+  - 不允许因 hash/version 计算失败而静默把源当作未变化；必须进入 warning 或 quarantine。
 7. **测试与验收出口**：推荐单测 `SourceScannerTest.cpp`、`SourceScannerDeltaDiffTest.cpp`、`SourceScannerQuarantineTest.cpp`；验收命令 `ctest --test-dir build-ci -R "SourceScanner.*Test" --output-on-failure`。
 
 ##### Canonicalizer
@@ -1915,9 +2004,15 @@ struct CanonicalDocument {
   std::string document_id;
   std::string corpus_id;
   std::string source_id;
+  std::string source_uri;
   std::string title;
   std::string canonical_text;
   std::string source_hash;
+  std::string version;
+  std::int64_t updated_at_ms = 0;
+  SourceFormat source_format = SourceFormat::Markdown;
+  AuthorityLevel authority_level = AuthorityLevel::Reference;
+  std::string language = "und";
   std::vector<std::string> tags;
   std::map<std::string, std::string> metadata;
 };
@@ -1941,12 +2036,12 @@ private:
 
 5. **关键执行流**：
    1. 读取原始源内容并做编码与换行标准化。
-   2. 展平 markdown/html 等格式，保留章节边界与引用锚点。
-   3. 提取 title、tags、基础 metadata，并生成 stable `document_id`。
+  2. 按 `SourceFormat` 分派 canonicalize 策略：markdown 保留 heading/citation 锚点；runtime policy yaml 做稳定 key-path flatten。
+  3. 提取 title、tags、基础 metadata，并补齐 `version`、`updated_at_ms`、`authority_level`、`language`。
    4. 输出 `CanonicalDocument`，供 `Chunker` 和 `VersionLedger` 计算后续差异。
 6. **失败与回退语义**：
    - 原始内容不可解析或规范化失败时，该 source 进入 quarantine，不得生成半有效文档。
-   - metadata 提取失败时允许继续，但必须在结果中写 warning，并保留最小 metadata 集。
+  - title/tags/language 提取失败时允许继续，但必须在结果中写 warning，并保留最小 fallback 集；若 provenance 必填字段缺失则直接 quarantine。
    - 不允许为了“提高召回率”擅自改写正文语义；canonicalize 只做表示归一，不做语义增强。
 7. **测试与验收出口**：推荐单测 `CanonicalizerTest.cpp`、`CanonicalizerMarkupNormalizeTest.cpp`、`CanonicalizerMetadataFallbackTest.cpp`；验收命令 `ctest --test-dir build-ci -R "Canonicalizer.*Test" --output-on-failure`。
 
@@ -1961,11 +2056,20 @@ struct ChunkRecord {
   std::string chunk_id;
   std::string document_id;
   std::string corpus_id;
+  std::string source_id;
+  std::string source_uri;
   std::string chunk_text;
+  std::string version;
+  std::int64_t updated_at_ms = 0;
+  SourceFormat source_format = SourceFormat::Markdown;
+  AuthorityLevel authority_level = AuthorityLevel::Reference;
+  std::string language = "und";
   std::size_t token_estimate = 0;
   std::size_t span_begin = 0;
   std::size_t span_end = 0;
   std::string citation_ref;
+  std::vector<std::string> tags;
+  std::vector<std::string> adjacent_chunk_refs;
   std::map<std::string, std::string> metadata;
 };
 ```
@@ -1990,12 +2094,12 @@ private:
 5. **关键执行流**：
    1. 读取 `CanonicalDocument` 与 profile 投影出的 chunk policy。
    2. 优先按章节、标题、段落边界切分，超长段落再做强制 split。
-   3. 为每个 span 生成 token estimate、citation ref、stable chunk id 和相邻重叠窗口。
+  3. 为每个 span 生成 token estimate、citation ref、stable chunk id，并继承 `version`、`updated_at_ms`、`authority_level`、`language`、`tags` 与相邻重叠窗口。
    4. 输出 `ChunkRecord` 序列，供 `IngestionCoordinator` 组装 `IndexUpdateBatch`。
 6. **失败与回退语义**：
    - 空正文文档返回空 chunk 列表并写 warning，这是合法结果。
    - 单段过长时允许强制切分，但必须保留 citation/span 连续性，不能直接截断丢尾。
-   - chunk policy 非法时应 fail-closed，拒绝写入 index update batch。
+  - chunk policy 非法或 provenance 继承字段丢失时应 fail-closed，拒绝写入 index update batch。
 7. **测试与验收出口**：推荐单测 `ChunkerTest.cpp`、`ChunkerStableIdTest.cpp`、`ChunkerBoundaryFallbackTest.cpp`；验收命令 `ctest --test-dir build-ci -R "Chunker.*Test" --output-on-failure`。
 
 #### 6.13.6 仍维持轻量收敛的辅助组件
@@ -2022,11 +2126,16 @@ private:
 | `display_name` | `string` | 日志和审计可读名 | — |
 | `source_uri` | `string` | 语料根路径或 URI | UNIQUE |
 | `trust_level` | `TrustLevel` | 源信任级别（KNO-C019） | —，必须≥ Trusted 才允许 ingest |
+| `authority_level` | `AuthorityLevel` | 语料权威等级（Normative / Reference / Advisory） | Router 可按最小 authority 过滤 |
+| `source_kind` | `SourceKind` | 语料源类型（文件 / config snapshot / curated bundle） | SourceScanner canonicalize 路由键 |
+| `allowed_formats` | `vector<SourceFormat>` | 该 corpus 允许 ingest 的格式白名单 | 不在白名单中的源直接 quarantine |
+| `include_globs` | `vector<string>` | 允许扫描的相对路径模式 | 为空视为配置错误 |
+| `exclude_globs` | `vector<string>` | 显式排除的相对路径模式 | 优先级高于 include |
 | `supported_modes` | `vector<RetrievalMode>` | 支持的检索模式（LexicalOnly/DenseOnly/Hybrid） | — |
 | `active_snapshot_id` | `string` | 当前活跃索引 snapshot | 与 VersionLedger Active 条目关联 |
 | `last_updated_ms` | `int64` | 最后更新时间戳 | — |
 | `tags` | `vector<string>` | 领域/分类标签，Router 用于匹配 | — |
-| `metadata` | `map<string,string>` | 扩展 kv 元数据 | — |
+| `metadata` | `map<string,string>` | 扩展 kv 元数据（v1 必填 `baseline_class`、`owner_module`、`refresh_strategy`、`default_language`） | 不得回填必填 typed 字段 |
 
 `CorpusCatalogSnapshot` 接口：
 
@@ -2229,13 +2338,13 @@ profile schema v2 演进预留：
 | KNO-B01 | Blocker | `IKnowledgeService` supporting contracts 未冻结 | 不能推进 shared contracts header | 保持 module-local public interface；待多模块复用稳定后再评审 admission | 不做 contracts 升格 |
 | KNO-B02 | Blocker（已解） | `KNO-TODO-002` 已冻结 `IQueryEncoder` / `IVectorRecallStore` 为 Knowledge 自有 module-local ports，注入方向固定为 composition root -> Knowledge | `KNO-BLK-002` 可关闭；hybrid recall Build 可进入 port 实现期 | 保持 `knowledge/include/retrieve/` owner，不把 port 下沉到 memory/llm；dense lane 继续允许 unavailable/degraded | 若 concrete adapter 未就绪，继续用 mock/unavailable adapter 推进 RecallCoordinator、profile compatibility 与 failure/degrade 用例 |
 | KNO-B03 | Blocker（已解） | `KNO-TODO-001` 已冻结 lexical 路线为 SQLite FTS5 + 共享 sqlite target + 显式 tokenizer profile | `KNO-BLK-001` 可关闭；lexical-only P0 可进入 Build | 保持 `SQLITE_ENABLE_FTS5=1` 的共享 sqlite target，并在 manifest 记录 `format_version` / `lexical_backend` / `tokenizer_profile` | 若共享 target 接线短期未就绪，只允许继续用 FTS5 测试夹具做 smoke，不重新打开多路线选型 |
-| KNO-B04 | Blocker | 首批 corpus 资产与 metadata 规范缺失 | ingest/index 无法验证真实数据 | 补齐最小语料包、metadata 必填字段和 source trust 规则 | 先使用测试语料夹具 |
+| KNO-B04 | Blocker（已解） | `KNO-TODO-003` 已冻结首批 corpus baseline、`AuthorityLevel` / `SourceFormat` / glob 规则、必填 provenance 字段与 quarantine 条件 | `KNO-BLK-003` 可关闭；ingest/index Build 可进入真实资产接线期 | 保持首批 baseline 仅限 architecture / ADR / SSOT / profile policy snapshots；高波动工作文档继续排除在外 | 若真实资产接线短期未就绪，继续用同 schema 的测试 corpus fixtures，不重新打开 corpus 范围争论 |
 | KNO-R05 | Risk | 证据预算推导过紧导致 recall 足够但投影过少 | 回答 grounding 变弱 | 用 golden set 调优 `evidence_budget_tokens` | 暂时回退到固定 top-k 投影 |
 | KNO-R06 | Risk | stale read 被过度使用导致回答引用陈旧证据 | 事实新鲜度下降 | 健康探针和审计必须记录 stale serve 次数 | profile 层禁用 stale read |
 | KNO-R07 | Risk | hybrid merge 过度偏向 dense 或 sparse | 结果排序不稳定 | 补齐 hybrid relevance regression 和 golden set | 先回退到 lexical-only |
 | KNO-R08 | Risk | observability 字段不完整 | 退化问题难以追溯 | 在 Gate 中强校验日志/trace attrs | 先阻断上线，不接受“观测后补” |
 | KNO-R09 | Risk | edge 设备 BM25 10k+ chunks 延迟超预算 | `edge_balanced` 下 lexical recall 可能超出 `request_deadline_ms` | `KNO-TODO-001` 已补 host-side 10k chunks PoC（文件库 `p99=0.7640ms`，内存库 `p99=0.9224ms`）；Phase K1 继续补 vendored sqlite / 目标机 smoke benchmark | 减小 top-k 或限制 corpus 规模；极端情况 `edge_minimal` 保持 `knowledge=false` |
-| KNO-R10 | Risk | corpus 投毒或间接 prompt injection | 恶意语料进入 evidence 影响 LLM 推理 | KNO-C019 trust level 校验 + SourceScanner quarantine | 拒绝未注册语料源；对 quarantine 语料做隔离审计 |
+| KNO-R10 | Risk | corpus 投毒或间接 prompt injection | 恶意语料进入 evidence 影响 LLM 推理 | `KNO-TODO-003` 已冻结 trust level、authority level、format allowlist 与 SourceScanner quarantine 规则；Build 阶段继续验证审计证据 | 拒绝未注册语料源；对 quarantine 语料做隔离审计 |
 
 ### 11.2 系统级回退基线
 
@@ -2250,7 +2359,7 @@ profile schema v2 演进预留：
 
 1. `IQueryEncoder` / `IVectorRecallStore` 的 owner 已冻结为 `knowledge/include/retrieve/`；剩余未决只在 concrete adapter 放置位置与 memory sqlite-vss backend 落地节奏，不再涉及 owner 重选。
 2. 共享 sqlite target 仍需从 `memory/CMakeLists.txt` 的局部配方下沉到通用 third-party helper；这是接线问题，不再涉及 lexical engine 重选。
-3. 首批 corpus source 的信任等级、metadata 必填字段和更新节奏尚未形成 SSOT。
+3. 首批 corpus source、authority/trust 规则、metadata 必填字段与 quarantine 条件已形成 SSOT；剩余未决仅在未来是否引入 `AuthorityLevel::Advisory` 的 working-doc corpus lane。
 4. `EvidenceSlice` 是否需要在 runtime/memory/multi_agent 共同消费后升格为 shared contracts，当前仍应保持 module-local。
 5. `edge_minimal` 是否在后续版本允许只读、本地、小语料的 lexical-only knowledge，需要单独性能评估。
 
@@ -2258,9 +2367,9 @@ profile schema v2 演进预留：
 
 1. `KNO-TODO-001` 已完成：冻结 SQLite FTS5 lexical 路线、共享 sqlite target 接入方向、`IndexManifest` 关键字段与 host-side 10k chunks PoC。
 2. `KNO-TODO-002` 已完成：冻结 vector bridge 窄接口（含 `IQueryEncoder` / `IVectorRecallStore`）owner、注入方向与 degrade 语义。
-3. `KNO-TODO-003`：补齐 corpus baseline、metadata/trust SSOT 与最小 source 资产。
+3. `KNO-TODO-003` 已完成：冻结首批 corpus baseline、metadata/trust SSOT、profile snapshot canonicalize 规则与 quarantine 条件。
 4. `KNO-TODO-004`：定义 retrieval quality golden set、MRR/NDCG@k/Recall@k 阈值与 context-level 指标扩展槽位。
-5. 在 001 ~ 004 完成后，进入专项 TODO §6.2 ~ §6.4 的公共骨架、组件实现和测试门禁任务。
+5. 在 001 ~ 003 完成后，可进入专项 TODO §6.4 ~ §6.5 的 catalog/index/ingest Build；004 完成后再补 quality regression Gate 与总收口。
 
 ### 12.3 结论性说明
 

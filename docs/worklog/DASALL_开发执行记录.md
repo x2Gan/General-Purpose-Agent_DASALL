@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #381
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO 设计解阻轮次
+- 任务：KNO-TODO-003 补齐首批 corpus 资产与 metadata/trust 规范
+- 状态：已完成
+
+### 任务选择
+
+1. `KNO-BLK-003` 直接阻塞 `SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator`，并连带挡住 `KnowledgeServiceFacade` 完整版与 refresh 闭环集成；如果 corpus baseline、authority/trust 规则和 quarantine 条件继续悬空，021 ~ 024 与 032 ~ 033 进入 Build 只会把歧义转移到代码层。
+2. 当前 knowledge 详设虽然已经有 ingest 组件卡片和基础对象名，但缺三类真正影响后续签名的事实：首批 corpus 究竟扫描哪些真实仓库资产、`authority_level/source_format/version/updated_at_ms` 是否属于 typed 字段、以及什么条件必须 quarantine 而不是 warning。
+3. 本轮严格限定为“首批 corpus baseline + typed provenance 字段 + quarantine/fail-closed 规则冻结”，不提前进入 021 ~ 024 的实现期代码，也不混入 004 的 golden set / 阈值问题。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-003-corpus资产与metadata-trust基线设计收敛.md`：
+   - 冻结四类首批 corpus baseline：`architecture_reference`、`adr_normative`、`ssot_normative`、`profile_policy_normative`；
+   - 明确排除 `docs/todos/`、`docs/worklog/`、`docs/plans/`、`docs/development/` 等过程性文档；
+   - 定义 `AuthorityLevel`、`SourceKind`、`SourceFormat`、`CorpusScanPlan`，并给出 typed provenance / fallback / quarantine 规则。
+2. 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md`：
+   - 扩充 `CorpusDescriptor`，补齐 `authority_level`、`source_kind`、`allowed_formats`、`include_globs`、`exclude_globs`；
+   - 在 6.13.5 新增“首批 corpus 资产与 metadata/trust baseline”小节，固定四类真实仓库资产、profile snapshot canonicalize 规则与 quarantine 条件；
+   - 为 `SourceRecord`、`CanonicalDocument`、`ChunkRecord` 补齐 `version`、`updated_at_ms`、`source_format`、`authority_level` 等 typed 字段，并关闭 11.1 的 `KNO-B04`。
+3. 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`：
+   - 将 `KNO-TODO-003` 标记为 `Done` 并新增 deliverable 路径；
+   - 将 `KNO-BLK-003` 标记为已解阻；
+   - 把 `KNO-TODO-021`、`022`、`023`、`024`、`032`、`033` 从 `Blocked` 调整为 `NotStarted`，并同步更新粒度评估、blocker 校准和直接执行建议。
+
+### 测试
+
+1. 本地设计证据核对：
+   - knowledge 详设原先已语义引用 `authority_level`、`SourceKind`、`CorpusScanPlan`，但对象面不完整；
+   - 仓库中已存在 `docs/architecture/`、`docs/adr/`、`docs/ssot/`、`profiles/*/runtime_policy.yaml` 四类长期版本控制资产；
+   - projection 矩阵已冻结 `KnowledgeConfigProjector -> KnowledgeConfigSnapshot` 为 Knowledge 的 profile 消费 owner，因此 profile YAML 只能作为 retrieval evidence，不能反向重写配置 owner。
+2. 文档验收：
+   - 使用 `rg -n "AuthorityLevel|SourceFormat|CorpusScanPlan|architecture_reference|profile_policy_normative|quarantine|updated_at_ms|source_format" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-003-corpus资产与metadata-trust基线设计收敛.md` 校验关键结论可检索。
+3. 本轮未执行 CMake 构建或 CTest：`KNO-TODO-003` 是 corpus/metadata/trust baseline 的设计解阻任务，目标是为 ingest/index Build 建立单一 SSOT，而不是直接进入 021 ~ 024 的实现期。
+
+### 结果
+
+1. 首批 corpus baseline 已唯一收敛为 architecture / ADR / SSOT / profile runtime policy snapshots 四类真实仓库资产，不再停留在抽象的“local docs / config snapshots / curated bundles”。
+2. `AuthorityLevel`、`SourceKind`、`SourceFormat`、`CorpusScanPlan` 与 provenance typed 字段已进入 knowledge 详设，`SourceScanner` / `Canonicalizer` / `Chunker` / `CorpusCatalog` 后续不需要再在代码层重新发明 metadata 口径。
+3. `KNO-BLK-003` 已解除；`KNO-TODO-021`、`022`、`023`、`024`、`032`、`033` 已从设计阻塞态切换为可排程状态。
+
+### 下一步
+
+1. 进入 `KNO-TODO-004`，冻结 retrieval quality golden set、MRR/NDCG@k/Recall@k 阈值与 context-level 扩展槽位，完成 001 ~ 004 设计解阻收口。
+
+### 风险
+
+1. 003 已冻结 Trusted/Reference/Normative baseline，但 future 是否引入 `AuthorityLevel::Advisory` 的 working-doc corpus lane 仍需单独评审，不能在 021 ~ 024 实现期顺手扩张语料范围。
+2. `profiles/*/runtime_policy.yaml` 同时属于配置源和 retrieval 证据源；Build 期如果误让 ingest 结果反向替代 `KnowledgeConfigProjector`，会破坏 projection 矩阵边界。
+
 ## 记录 #380
 
 - 日期：2026-04-21
