@@ -1,5 +1,73 @@
 # DASALL 开发执行记录
 
+## 记录 #386
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build 观测桥轮次
+- 任务：KNO-TODO-025 实现 KnowledgeTelemetry 观测桥
+- 状态：已完成
+
+### 任务选择
+
+1. 006 已稳定错误域与 `ErrorInfo`，007 已稳定配置投影；接下来最直接阻塞 `KnowledgeHealthProbe`、profile compatibility gate 与后续 facade/integration 的，就是 Knowledge 仍没有统一的 observability event owner。
+2. 详细设计 6.11 / 6.13.4 已经把事件集合、必带字段和 fail-open 语义写清，因此 025 应作为单独的“统一事件桥 + failure accounting”任务完成，而不是等待 facade/full integration 一起实现。
+3. 参考 repo memory 中 tools observability 的收敛经验，本轮必须把 sink 故障限制在 degraded status / failure counter / fallback evidence 内，不能让观测故障反向污染业务返回面。
+
+### 改动
+
+1. 新增 `knowledge/include/health/KnowledgeTelemetry.h`：
+   - 定义 `KnowledgeTelemetryEvent` 统一字段集；
+   - 定义 `TelemetrySinks` 回调聚合；
+   - 定义 `KnowledgeTelemetryStatus` 计数与 degraded 位；
+   - 冻结四个公共入口：`emit_retrieve_event`、`emit_ingest_event`、`emit_health_event`、`emit_snapshot_swap_event`。
+2. 新增 `knowledge/src/observability/KnowledgeTelemetry.cpp`：
+   - 实现 retrieve/ingest/health/snapshot_swap 事件 fanout；
+   - 对 retrieve 必带字段缺失做 `invalid_telemetry_payload` fallback；
+   - 对单 sink 写入失败做 fail-open accounting 和 fallback log；
+   - 维护 `drop/invalid/sink_failure/fallback_log` 计数。
+3. 更新 `knowledge/CMakeLists.txt`，把 `KnowledgeTelemetry.cpp` 接入 `dasall_knowledge`。
+4. 更新 `tests/unit/knowledge/CMakeLists.txt`，新增三条 telemetry unit target。
+5. 新增三条 unit test：
+   - `KnowledgeTelemetryTest.cpp`：成功 fanout 四类事件；
+   - `KnowledgeTelemetryFieldSetTest.cpp`：invalid payload -> fallback log；
+   - `KnowledgeTelemetryDegradeEventTest.cpp`：sink failure fail-open 与 drop accounting。
+
+### 测试
+
+1. Build_CMakeTools：
+   - `dasall_knowledge`
+   - `dasall_knowledge_telemetry_unit_test`
+   - `dasall_knowledge_observability_fields_unit_test`
+   - `dasall_knowledge_telemetry_degrade_event_unit_test`
+2. RunCtest_CMakeTools：
+   - `KnowledgeTelemetryTest`
+   - `KnowledgeTelemetryFieldSetTest`
+   - `KnowledgeTelemetryDegradeEventTest`
+3. build-ci 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_telemetry_unit_test dasall_knowledge_observability_fields_unit_test dasall_knowledge_telemetry_degrade_event_unit_test`
+   - `ctest --test-dir build-ci -R "KnowledgeTelemetry(Test|FieldSetTest|DegradeEventTest)" --output-on-failure`
+
+### 结果
+
+1. Knowledge 已具备统一的 telemetry owner：retrieve/ingest/health/snapshot_swap 四类事件均通过同一 bridge 发出。
+2. invalid payload 与 sink failure 都会留下结构化证据：
+   - invalid retrieve payload -> `invalid_telemetry_payload` fallback log；
+   - sink failure -> degraded status + `*_sink_failure` reason code + fallback log。
+3. 025 保持了原子任务边界：
+   - 没有提前实现 `KnowledgeHealthProbe`；
+   - 没有硬编码具体 infra exporter；
+   - 只冻结事件字段、bridge 语义和可验证状态计数。
+
+### 下一步
+
+1. 进入汇总验收与状态回写，确认 005/006/007/025 四个原子任务都已独立提交推送，并为后续 026/029 留下稳定边界。
+
+### 风险
+
+1. 当前 `TelemetrySinks` 仍是轻量回调聚合；后续若接入真实 infra sink 时跳过 `KnowledgeTelemetry`，会重新分裂 event owner。
+2. `KnowledgeTelemetryStatus` 目前只做计数和 degraded 位，不负责健康裁定；若 026 不复用这些事实，而另起一套状态源，会削弱 health 结论的一致性。
+
 ## 记录 #385
 
 - 日期：2026-04-21

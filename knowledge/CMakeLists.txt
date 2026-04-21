@@ -21,6 +21,7 @@ target_sources(dasall_knowledge
   PRIVATE
     src/config/KnowledgeConfigProjector.cpp
     src/KnowledgeBuildSkeleton.cpp
+    src/observability/KnowledgeTelemetry.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS

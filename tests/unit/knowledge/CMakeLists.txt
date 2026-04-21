@@ -31,6 +31,24 @@ dasall_add_knowledge_unit_test(
 	KnowledgeConfigProjectionTest
 )
 
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_telemetry_unit_test
+	KnowledgeTelemetryTest.cpp
+	KnowledgeTelemetryTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_observability_fields_unit_test
+	KnowledgeTelemetryFieldSetTest.cpp
+	KnowledgeTelemetryFieldSetTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_telemetry_degrade_event_unit_test
+	KnowledgeTelemetryDegradeEventTest.cpp
+	KnowledgeTelemetryDegradeEventTest
+)
+
 target_link_libraries(dasall_knowledge_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
