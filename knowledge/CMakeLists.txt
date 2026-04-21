@@ -33,6 +33,7 @@ target_sources(dasall_knowledge
   PRIVATE
     src/config/KnowledgeConfigProjector.cpp
     src/evidence/EvidenceAssembler.cpp
+    src/facade/KnowledgeService.cpp
     src/health/FreshnessController.cpp
     src/health/KnowledgeHealthProbe.cpp
     src/KnowledgeBuildSkeleton.cpp

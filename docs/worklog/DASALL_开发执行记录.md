@@ -1,5 +1,72 @@
 # DASALL 开发执行记录
 
+## 记录 #398
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build facade lexical-only skeleton 轮次
+- 任务：KNO-TODO-012 实现 KnowledgeServiceFacade lexical-only 骨架编排
+- 状态：已完成
+
+### 任务选择
+
+1. 014 已完成并提交，按用户指定顺序本轮进入 `KNO-TODO-012`，把 008/009/014/010/011 串成 runtime-facing 的最小 lexical 主链。
+2. 详细设计中 `KnowledgeServiceFacade` 依赖关系较重，且 015/020/026 的 concrete owner 尚未全部落盘，因此本轮只做 lexical-only skeleton，不抢跑 hybrid recall、真实 refresh 编排或完整 health 聚合。
+3. 评估后确认 tests 需要访问 concrete facade，但 public ABI 仍应保持 `IKnowledgeService` 稳定，因此 concrete 类被放入 module-local `knowledge/src/facade/KnowledgeService.h`，不提升为 public include。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-012-KnowledgeServiceFacade骨架设计收敛.md`：
+   - 固定 012 的职责、非职责、deadline 分配比例、fail-closed 映射和 refresh busy guard 策略；
+   - 明确本轮采用 function-based `KnowledgeServiceDeps` seams，而不是提前冻结更多 public/concrete 接口；
+   - 记录 012 与 032 的边界：012 只交付 lexical-only skeleton，032 承接完整 hybrid / ingest / health 接线。
+2. 新增 `knowledge/src/facade/KnowledgeService.h` 与 `knowledge/src/facade/KnowledgeService.cpp`：
+   - 定义 module-local `LifecycleState`、`StageBudget`、`KnowledgeServiceDeps` 与 `KnowledgeServiceFacade`；
+   - 实现 `init/retrieve/health_snapshot/request_refresh` 四个入口；
+   - 在 `retrieve()` 内串联 normalize -> freshness -> route -> recall -> rerank -> evidence -> telemetry，并统一做 disabled / not-initialized / deadline exceeded / missing deps fail-closed 映射；
+   - 使用 `std::atomic_bool` 为 `request_refresh()` 提供单飞 busy guard。
+3. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 facade source；
+   - 注册 4 条 facade unit tests，并为它们补 `knowledge/src` 的 internal include path。
+4. 新增四条 unit test：
+   - `KnowledgeServiceFacadeSmokeTest.cpp`：验证 lexical-only 正常闭环与 telemetry success 事件；
+   - `KnowledgeServiceFacadeFailurePathTest.cpp`：验证 not-initialized、disabled 和 normalize failure 三类 fail-closed；
+   - `KnowledgeServiceFacadeDegradedModeTest.cpp`：验证 recall/rerank degraded 状态会传递到最终 `EvidenceBundle`；
+   - `KnowledgeServiceFacadeDeadlineBudgetTest.cpp`：验证固定 budget 比例与 route 后 deadline exceeded -> `RecallTimeout`。
+
+### 测试
+
+1. CMake Tools 定向构建：
+   - `Build_CMakeTools`：`dasall_knowledge`、`dasall_knowledge_service_facade_smoke_unit_test`、`dasall_knowledge_service_facade_failure_path_unit_test`、`dasall_knowledge_service_facade_degraded_mode_unit_test`、`dasall_knowledge_service_facade_deadline_budget_unit_test`
+   - 结果：构建成功。
+2. CMake Tools 测试尝试：
+   - `RunCtest_CMakeTools` 指定 `KnowledgeServiceFacadeSmokeTest` / `KnowledgeServiceFacadeFailurePathTest` / `KnowledgeServiceFacadeDegradedModeTest` / `KnowledgeServiceFacadeDeadlineBudgetTest`
+   - 结果：工具态继续报 `生成失败`。
+3. build-ci 回退验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_service_facade_smoke_unit_test dasall_knowledge_service_facade_failure_path_unit_test dasall_knowledge_service_facade_degraded_mode_unit_test dasall_knowledge_service_facade_deadline_budget_unit_test`
+   - `ctest --test-dir build-ci -R "KnowledgeServiceFacade.*Test" --output-on-failure`
+   - 首轮结果：3/4 通过，`KnowledgeServiceFacadeDeadlineBudgetTest` 因测试 stub 未补 freshness/route 最小依赖，误落到 `InternalError`。
+   - 修正后结果：4/4 通过。
+
+### 结果
+
+1. Knowledge 现在具备 runtime-facing 的最小 facade 骨架，能够以 lexical-only 路径稳定消费 008/009/014/010/011 supporting chain。
+2. 012 固定了三条关键语义：
+   - deadline budget 使用固定 5/35/35/15/10 比例，并在阶段边界做 fail-fast；
+   - recall/rerank 的 degraded 状态会提升到最终 `EvidenceBundle.degraded`；
+   - `request_refresh()` 目前只提供单飞 busy guard，不提前承担 refresh worker 或恢复裁定权。
+3. concrete facade 仍是 module-local 实现细节，没有提前扩大 public ABI；这为后续 032 替换 stub seams 为真实组件保留了演进空间。
+
+### 下一步
+
+1. 继续按用户指定顺序进入 `KNO-TODO-027`，补 lexical retrieval smoke integration；
+2. 027 将验证 facade 骨架能否在 integration 层被稳定调用，并为后续 032/033 的真实编排预留回归锚点。
+
+### 风险
+
+1. 012 当前 `KnowledgeServiceDeps` 仍是 function seams；032 接真实组件时必须保持现有 error/degraded 语义不被 concrete owner 绕开。
+2. `request_refresh()` 目前返回 busy stub 而不是真实 ingest 编排，任何需要 refresh -> swap -> retrieve 证据链的任务都必须后移到 033。
+
 ## 记录 #397
 
 - 日期：2026-04-21

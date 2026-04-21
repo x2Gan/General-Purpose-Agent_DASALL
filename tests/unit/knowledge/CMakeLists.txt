@@ -122,6 +122,30 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_smoke_unit_test
+	KnowledgeServiceFacadeSmokeTest.cpp
+	KnowledgeServiceFacadeSmokeTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_failure_path_unit_test
+	KnowledgeServiceFacadeFailurePathTest.cpp
+	KnowledgeServiceFacadeFailurePathTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_degraded_mode_unit_test
+	KnowledgeServiceFacadeDegradedModeTest.cpp
+	KnowledgeServiceFacadeDegradedModeTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_deadline_budget_unit_test
+	KnowledgeServiceFacadeDeadlineBudgetTest.cpp
+	KnowledgeServiceFacadeDeadlineBudgetTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_freshness_controller_unit_test
 	FreshnessControllerTest.cpp
 	FreshnessControllerTest
@@ -241,6 +265,26 @@ target_link_libraries(dasall_knowledge_config_projection_unit_test
 )
 
 target_include_directories(dasall_knowledge_config_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_service_facade_smoke_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_service_facade_failure_path_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_service_facade_degraded_mode_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_service_facade_deadline_budget_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/knowledge/src
 )
