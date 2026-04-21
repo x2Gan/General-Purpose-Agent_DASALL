@@ -104,6 +104,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_source_scanner_unit_test
+	SourceScannerTest.cpp
+	SourceScannerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_source_scanner_delta_diff_unit_test
+	SourceScannerDeltaDiffTest.cpp
+	SourceScannerDeltaDiffTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_source_scanner_quarantine_unit_test
+	SourceScannerQuarantineTest.cpp
+	SourceScannerQuarantineTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_recall_coordinator_unit_test
 	RecallCoordinatorTest.cpp
 	RecallCoordinatorTest

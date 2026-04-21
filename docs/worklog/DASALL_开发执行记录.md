@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #404
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build SourceScanner source delta 轮次
+- 任务：KNO-TODO-021 实现 SourceScanner source delta 与 quarantine
+- 状态：已完成
+
+### 任务选择
+
+1. 用户已指定 ingest / snapshot 主链必须按 021 → 022 → 023 → 024 → 020 → 032 串行推进，因此本轮只做 `SourceScanner`，不提前并行 canonicalizer/chunker。
+2. `KNO-TODO-003` 已冻结 corpus baseline、metadata 必填字段和 trust/quarantine 规则，021 已无 blocker，可直接进入 Build。
+3. 021 的最小可执行边界是落盘真实文件系统扫描、SHA-256 content hash、`version`/`updated_at_ms` diff 与 format quarantine；不把 canonicalize、chunk 或 index write 责任提前揉进来。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-021-SourceScanner设计收敛.md`：
+   - 固定 `SourceScanner` 的职责边界、seam、数据对象与 diff/quarantine 判定；
+   - 明确 021 的 source-level `version` 采用 `sha256:<content_hash>`，为后续 022/024 保留 canonical 覆写空间。
+2. 新增 `knowledge/include/ingest/SourceScanner.h` 与 `knowledge/src/ingest/SourceScanner.cpp`：
+   - 落盘 `CorpusScanPlan`、`SourceRecord`、`SourceScanDelta` 与 `SourceScannerDeps`；
+   - 实现 repo-root-relative source URI、glob 过滤、格式判定、SHA-256 哈希、`updated_at_ms` 回退、inventory diff 与 source/corpus 级 quarantine。
+3. 新增 `tests/unit/knowledge/SourceScannerTest.cpp`、`tests/unit/knowledge/SourceScannerDeltaDiffTest.cpp`、`tests/unit/knowledge/SourceScannerQuarantineTest.cpp`：
+   - 覆盖 trusted full scan、`added/updated/removed` diff 与 non allow-list format quarantine 三类关键路径；
+   - 直接使用临时目录和真实文件系统，避免把 021 变成纯 mock 逻辑测试。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `SourceScanner` 头/源；
+   - 注册三个新的 knowledge unit test target。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge`
+   - `dasall_source_scanner_unit_test`
+   - `dasall_source_scanner_delta_diff_unit_test`
+   - `dasall_source_scanner_quarantine_unit_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools` 运行 `SourceScannerTest`、`SourceScannerDeltaDiffTest`、`SourceScannerQuarantineTest`：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_source_scanner_unit_test dasall_source_scanner_delta_diff_unit_test dasall_source_scanner_quarantine_unit_test`
+   - `ctest --test-dir build-ci -R "SourceScanner.*Test" --output-on-failure`
+   - 结果：3/3 Passed。
+
+### 结果
+
+1. 021 已完成，knowledge ingest 主链首次具备 source scan / diff / quarantine 的真实代码落点。
+2. 当前 `SourceScanner` 已稳定输出 `added/updated/removed/quarantined` 四类 delta，可直接作为 024 的 scan 入口。
+3. `RunCtest_CMakeTools` 的通用 `生成失败` 工具态仍存在，但不影响 build-ci 作为本轮主验收信号。
+
 ## 记录 #403
 
 - 日期：2026-04-21
