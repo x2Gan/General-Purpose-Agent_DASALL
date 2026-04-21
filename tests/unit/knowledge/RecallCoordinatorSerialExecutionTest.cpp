@@ -77,6 +77,7 @@ void test_recall_coordinator_keeps_v1_hybrid_execution_serial() {
             result.hits = {make_hit("chunk-sparse")};
             return result;
           },
+          .dense_bridge = nullptr,
           .dense_lane = [&call_order](const DenseRecallRequest&) {
             call_order.push_back("dense");
             DenseRecallResult result;

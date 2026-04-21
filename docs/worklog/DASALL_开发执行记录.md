@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #401
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build recall coordinator dense bridge wiring 轮次
+- 任务：KNO-TODO-014 补齐 dense lane 真实接入
+- 状态：已完成
+
+### 任务选择
+
+1. 015 已完成并提交，用户指定本轮继续处理 014 的剩余缺口，即把 `RecallCoordinator` 从“dense seam 可替身”推进到“优先消费真实 `VectorRetrieverBridge`”。
+2. 014 第一阶段的编排 contract 已经稳定，因此本轮不重写 degraded/failure 语义，只补真实 bridge 接线与最小回归。
+3. 028 仍需要稳定构造 `recall_timeout` 等 lane 级失败，因此本轮保留 `dense_lane` 回调作为故障注入兜底，而不是在 014 内强行删除该 seam。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-014-dense-lane真实接入设计补充.md`：
+   - 明确 `RecallCoordinatorDeps` 新增 `dense_bridge`；
+   - 约束真实 bridge 优先于 fallback seam；
+   - 说明保留 `dense_lane` 回调是为了 028 的 timeout/failure 注入，而不是继续用 stub 代替生产路径。
+2. 更新 `knowledge/include/retrieve/RecallCoordinator.h` 与 `knowledge/src/retrieve/RecallCoordinator.cpp`：
+   - 新增 `std::shared_ptr<const VectorRetrieverBridge> dense_bridge`；
+   - `run_dense_lane()` 先走真实 bridge，再退回 callback fallback；
+   - 保持 `RecallCoordinatorResult` 与 degraded/failure 行为不变。
+3. 新增 `tests/unit/knowledge/RecallCoordinatorDenseBridgeTest.cpp` 并更新 `tests/unit/knowledge/CMakeLists.txt`：
+   - 验证真实 `VectorRetrieverBridge` 存在时优先于 fallback dense seam；
+   - 验证 dense hits 能进入 `RecallCandidateSet`。
+4. 更新现有 `RecallCoordinatorDeps` 初始化点与 `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`：
+   - 显式补齐 `.dense_bridge = nullptr`，避免新增字段引入初始化 warning；
+   - lexical smoke integration 继续保持 lexical-only，不被 dense 接线补丁破坏。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_recall_coordinator_unit_test`
+   - `dasall_recall_coordinator_degraded_unit_test`
+   - `dasall_recall_coordinator_serial_execution_unit_test`
+   - `dasall_recall_coordinator_dense_bridge_unit_test`
+   - `dasall_knowledge_retrieval_smoke_integration_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools` 运行 recall tests 与 lexical smoke：
+   - 结果：工具态报错 `生成失败`。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_recall_coordinator_unit_test dasall_recall_coordinator_degraded_unit_test dasall_recall_coordinator_serial_execution_unit_test dasall_recall_coordinator_dense_bridge_unit_test dasall_knowledge_retrieval_smoke_integration_test`
+   - `ctest --test-dir build-ci -R "(RecallCoordinator.*Test|dasall_knowledge_retrieval_smoke_integration_test)" --output-on-failure`
+   - 结果：5/5 Passed。
+
+### 结果
+
+1. 014 的 dense lane 已补齐真实 `VectorRetrieverBridge` 接线，不再只能依赖 stub seam。
+2. 回调 fallback 仍然保留，但角色收缩为超时/故障注入兜底，供 028 failure/degrade integration 继续使用。
+3. lexical-only smoke integration 回归通过，说明 dense 接线补丁未破坏既有最小主链。
+
 ## 记录 #400
 
 - 日期：2026-04-21

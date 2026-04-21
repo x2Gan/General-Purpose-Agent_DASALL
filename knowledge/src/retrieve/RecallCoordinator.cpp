@@ -194,16 +194,25 @@ SparseRetrieveResult RecallCoordinator::run_sparse_lane(const RecallRequest& req
 }
 
 DenseRecallResult RecallCoordinator::run_dense_lane(const RecallRequest& request) const {
-  if (!deps_.dense_lane) {
-    return make_dense_failure({"lane_unavailable"});
-  }
-
   DenseRecallRequest dense_request;
   dense_request.normalized_query = request.normalized_query;
   dense_request.plan = request.plan;
   dense_request.required_language = request.required_language;
   if (!dense_request.has_consistent_values()) {
     return make_dense_failure({"request_inconsistent"});
+  }
+
+  if (deps_.dense_bridge) {
+    auto dense_result = deps_.dense_bridge->retrieve(dense_request);
+    if (!dense_result.has_consistent_values()) {
+      return make_dense_failure({"result_inconsistent"});
+    }
+
+    return dense_result;
+  }
+
+  if (!deps_.dense_lane) {
+    return make_dense_failure({"lane_unavailable"});
   }
 
   auto dense_result = deps_.dense_lane(dense_request);

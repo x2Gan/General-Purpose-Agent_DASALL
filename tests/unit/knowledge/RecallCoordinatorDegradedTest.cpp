@@ -76,6 +76,7 @@ void test_recall_coordinator_marks_dense_lane_failure_as_degraded_when_partial_a
         result.hits = {make_hit("chunk-sparse")};
         return result;
       },
+      .dense_bridge = nullptr,
       .dense_lane = [](const DenseRecallRequest&) {
         DenseRecallResult result;
         result.ok = false;
@@ -114,6 +115,7 @@ void test_recall_coordinator_fails_when_both_lanes_fail() {
                                                  "sparse_lane_failed");
         return result;
       },
+      .dense_bridge = nullptr,
       .dense_lane = [](const DenseRecallRequest&) {
         DenseRecallResult result;
         result.ok = false;

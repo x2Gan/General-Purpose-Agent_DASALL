@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -30,6 +31,7 @@ struct RecallCoordinatorResult {
 
 struct RecallCoordinatorDeps {
   std::function<SparseRetrieveResult(const SparseRetrieveRequest& request)> sparse_lane;
+  std::shared_ptr<const VectorRetrieverBridge> dense_bridge;
   std::function<DenseRecallResult(const DenseRecallRequest& request)> dense_lane;
 };
 

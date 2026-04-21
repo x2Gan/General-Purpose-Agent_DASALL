@@ -87,6 +87,7 @@ void test_recall_coordinator_runs_lexical_only_without_dense_lane() {
         result.hits = {make_hit("chunk-sparse")};
         return result;
       },
+      .dense_bridge = nullptr,
       .dense_lane = [&dense_called](const DenseRecallRequest&) {
         dense_called = true;
         DenseRecallResult result;
@@ -121,6 +122,7 @@ void test_recall_coordinator_collects_both_hybrid_lanes_when_they_succeed() {
         result.hits = {make_hit("chunk-sparse")};
         return result;
       },
+      .dense_bridge = nullptr,
       .dense_lane = [](const DenseRecallRequest& request) {
         assert_true(request.has_consistent_values(),
                     "dense lane should receive a consistent dense request");

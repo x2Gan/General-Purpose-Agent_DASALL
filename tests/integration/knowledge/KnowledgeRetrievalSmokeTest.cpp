@@ -390,6 +390,7 @@ struct KnowledgeSmokeHarness {
                                .sparse_lane = [this](const dasall::knowledge::retrieve::SparseRetrieveRequest& request) {
                                  return sparse_retriever.retrieve(request);
                                },
+                               .dense_bridge = nullptr,
                                .dense_lane = [](const DenseRecallRequest&) {
                                  DenseRecallResult result;
                                  result.ok = false;
