@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #399
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build lexical retrieval smoke integration 轮次
+- 任务：KNO-TODO-027 验证 lexical retrieval smoke integration
+- 状态：已完成
+
+### 任务选择
+
+1. 012 已完成并提交，按用户指定顺序本轮进入 `KNO-TODO-027`，为 lexical-only facade 骨架补一条 integration 级最小闭环证据。
+2. 027 的关键不是再写一条 stub unit test，而是让 facade 通过真实 supporting components 返回非空 `context_projection`，证明 lexical 主链已经具备最小对外交付能力。
+3. 评估后确认当前最小有效边界应覆盖 `QueryNormalizer`、`CorpusRouter`、`FreshnessController`、`CorpusCatalog`、`IndexReader`、`SparseRetriever`、`RecallCoordinator`、`Reranker` 与 `EvidenceAssembler`，而不是把 telemetry/health/refresh 一并拉入本轮 smoke。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-027-lexical-retrieval-smoke-integration设计收敛.md`：
+   - 固定 027 的集成边界、SQLite FTS5 fixture 方案与 discoverability 验证方式；
+   - 明确 smoke 通过 `std::unique_ptr<IKnowledgeService>` 走 facade，而不是直接调用 supporting components。
+2. 新增 `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`：
+   - 内建 SQLite FTS5 in-memory fixture，插入 1 条 normative lexical 文档；
+   - 构造真实 `CorpusCatalog`、`IndexReader` active snapshot、`SparseRetriever`、`RecallCoordinator`、`Reranker` 与 `EvidenceAssembler`；
+   - 通过 module-local `KnowledgeServiceFacade` 组装为 `IKnowledgeService`，验证 `retrieve()` 返回 lexical-only、且 `context_projection` 非空并保留 citation。
+3. 更新 `tests/integration/knowledge/CMakeLists.txt`：
+   - 注册 `dasall_knowledge_retrieval_smoke_integration_test`；
+   - 为该 target 增加 `knowledge/src` internal include path 与 `dasall_sqlite3` 链接。
+
+### 测试
+
+1. CMake Tools 定向构建：
+   - `Build_CMakeTools`：`dasall_knowledge_retrieval_smoke_integration_test`
+   - 结果：构建成功。
+2. CMake Tools discoverability：
+   - `ListTests_CMakeTools`
+   - 结果：可见 `dasall_knowledge_retrieval_smoke_integration_test` 已被发现。
+3. CMake Tools 测试尝试：
+   - `RunCtest_CMakeTools` 指定 `dasall_knowledge_retrieval_smoke_integration_test`
+   - 结果：工具态继续报 `生成失败`。
+4. build-ci 回退验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge_retrieval_smoke_integration_test`
+   - `ctest --test-dir build-ci -N | grep dasall_knowledge_retrieval_smoke_integration_test`
+   - `ctest --test-dir build-ci -R dasall_knowledge_retrieval_smoke_integration_test --output-on-failure`
+   - 结果：discoverability 命中 1 条，smoke 执行 1/1 通过。
+
+### 结果
+
+1. Knowledge 现在拥有一条 integration 级 lexical smoke 证据：通过 facade 的真实 lexical-only supporting chain 可以对外返回非空 `context_projection`。
+2. 027 固定了当前可对外证明的最小边界：
+   - facade 通过 `IKnowledgeService` 暴露 retrieve 能力；
+   - lexical supporting chain 不再只停留在 unit seam；
+   - FTS5 fixture 已被 integration 层消费，说明 SQLite lexical 路线在 smoke 层可达。
+3. 本轮没有把 hybrid/vector、degrade matrix 或 refresh worker 拉入 smoke，因此 028/029/032/033 仍保持清晰后续边界。
+
+### 下一步
+
+1. 用户指定序列 `013、018、019、014、012、027` 已全部完成；
+2. 若继续推进，可按 TODO 顺序进入 `KNO-TODO-028` failure/degrade integration，或转入用户新的优先级指令。
+
+### 风险
+
+1. 027 仍通过 module-local facade header 组装 concrete service；在 032 替换为真实完整编排后，需要继续保证 integration smoke 不依赖过时的 internal seam 形状。
+2. smoke 当前只证明 lexical-only 闭环；dense lane unavailable、stale reject、refresh busy 等退化路径仍需 028 补齐 integration 证据。
+
 ## 记录 #398
 
 - 日期：2026-04-21

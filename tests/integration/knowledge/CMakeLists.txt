@@ -35,6 +35,23 @@ dasall_add_knowledge_integration_test(
   "integration;knowledge"
 )
 
+dasall_add_knowledge_integration_test(
+  dasall_knowledge_retrieval_smoke_integration_test
+  dasall_knowledge_retrieval_smoke_integration_test
+  KnowledgeRetrievalSmokeTest.cpp
+  "integration;knowledge"
+)
+
+target_include_directories(dasall_knowledge_retrieval_smoke_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_link_libraries(dasall_knowledge_retrieval_smoke_integration_test
+  PRIVATE
+    dasall_sqlite3
+)
+
 if(NOT DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "knowledge integration registration requires at least one test target")
 endif()
