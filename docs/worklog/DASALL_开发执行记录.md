@@ -1,5 +1,66 @@
 # DASALL 开发执行记录
 
+## 记录 #407
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO Build IngestionCoordinator update batch 轮次
+- 任务：KNO-TODO-024 实现 IngestionCoordinator update batch 编排
+- 状态：已完成
+
+### 任务选择
+
+1. 023 已完成并推送，用户要求 ingest / snapshot 主链按 021 → 022 → 023 → 024 → 020 → 032 串行推进，因此本轮只做 `IngestionCoordinator`，不提前落 `IndexWriter` 或 `KnowledgeServiceFacade` 完整编排。
+2. `KNO-TODO-003` 已冻结 trusted corpus、typed provenance 与 quarantine 基线，021/022/023 已分别提供真实 scan / canonicalize / chunk 能力，因此 024 已无 blocker，可直接进入 Build。
+3. 024 的最小闭环是把 `CorpusChangeSet` 收敛为 `IndexUpdateBatch`，做实 selective refresh、warning 聚合、removed lineage refs 与 chunk batch 装配；不把 snapshot swap 提前揉进来。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-024-IngestionCoordinator设计收敛.md`：
+   - 固定 `IngestionCoordinator` 的职责边界、`IndexUpdateBatch` shape、selective refresh 规则和单源失败 fail-soft 语义；
+   - 明确在 017 `VersionLedger` 未落盘前，024 使用 deterministic `document_lineage_id` 作为 remove-by-lineage 键。
+2. 新增 `knowledge/include/ingest/IngestionCoordinator.h` 与 `knowledge/src/ingest/IngestionCoordinator.cpp`：
+   - 落盘 `IndexUpdateBatch`、`IngestionCoordinatorDeps` 与 `IngestionCoordinator`；
+   - 实现 trusted corpus 选择、`scan -> canonicalize -> chunk` 编排、warning 聚合、`document_lineage_id` 注入与 deterministic `batch_id` 生成。
+3. 新增 `tests/unit/knowledge/IngestionCoordinatorTest.cpp`、`tests/unit/knowledge/IngestionCoordinatorSelectiveRefreshTest.cpp`、`tests/unit/knowledge/IngestionCoordinatorBadSourceTest.cpp`：
+   - 覆盖 full scan 下的 batch 组装与 removed lineage refs；
+   - 覆盖非空 `CorpusChangeSet` 时仅刷新受影响 corpora；
+   - 覆盖 empty source quarantine 只写 warning、不阻断同批其他 source。
+4. 更新 `knowledge/CMakeLists.txt` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 注册 `IngestionCoordinator` 头/源；
+   - 注册三个新的 knowledge unit test target。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge`
+   - `dasall_ingestion_coordinator_unit_test`
+   - `dasall_ingestion_coordinator_selective_refresh_unit_test`
+   - `dasall_ingestion_coordinator_bad_source_unit_test`
+   - 结果：构建通过。
+2. `ListTests_CMakeTools`：
+   - 可发现 `IngestionCoordinatorTest`、`IngestionCoordinatorSelectiveRefreshTest`、`IngestionCoordinatorBadSourceTest`。
+3. `RunCtest_CMakeTools` 运行上述三条测试：
+   - 结果：工具态报错 `生成失败`。
+4. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_ingestion_coordinator_unit_test dasall_ingestion_coordinator_selective_refresh_unit_test dasall_ingestion_coordinator_bad_source_unit_test`
+   - `ctest --test-dir build-ci -R "IngestionCoordinator(Test|SelectiveRefreshTest|BadSourceTest)" --output-on-failure`
+   - 结果：3/3 Passed。
+
+### 结果
+
+1. 024 已完成，knowledge ingest 主链现在具备从 `CorpusChangeSet` 到 `IndexUpdateBatch` 的真实 batch 编排落点。
+2. selective refresh、warning 聚合与 deterministic remove-by-lineage 语义已经被单测锁定，可直接作为 020 `IndexWriter` 的输入基线。
+3. `RunCtest_CMakeTools` 的通用 `生成失败` 工具态仍存在，但不影响 build-ci 作为本轮主验收信号。
+
+### 下一步
+
+1. 进入 `KNO-TODO-020`，实现 `IndexWriter` 的 shadow build、snapshot swap 与 last-known-good 回退。
+
+### 风险
+
+1. `removed_document_ids` 当前承载的是 deterministic source-lineage key，而不是最终 ledger 驱动的历史 document id；020 必须继续沿用这一 remove-by-lineage 解释，不能在 writer 侧改成另一套键语义。
+
 ## 记录 #406
 
 - 日期：2026-04-21

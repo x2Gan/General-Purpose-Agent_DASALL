@@ -158,6 +158,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_ingestion_coordinator_unit_test
+	IngestionCoordinatorTest.cpp
+	IngestionCoordinatorTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_ingestion_coordinator_selective_refresh_unit_test
+	IngestionCoordinatorSelectiveRefreshTest.cpp
+	IngestionCoordinatorSelectiveRefreshTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_ingestion_coordinator_bad_source_unit_test
+	IngestionCoordinatorBadSourceTest.cpp
+	IngestionCoordinatorBadSourceTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_recall_coordinator_unit_test
 	RecallCoordinatorTest.cpp
 	RecallCoordinatorTest
