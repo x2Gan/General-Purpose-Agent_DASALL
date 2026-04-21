@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #382
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO 设计解阻轮次
+- 任务：KNO-TODO-004 定义 retrieval quality golden set 与回归阈值
+- 状态：已完成
+
+### 任务选择
+
+1. `KNO-BLK-004` 直接阻塞 `RetrievalQualityRegressionTest` 与 Gate-G；如果 golden set 文件格式、样本覆盖下限、绝对阈值和 hard-fail 规则继续悬空，030 即使开始写代码也只能生成“会跑但不具备二值判定力”的质量门。
+2. 当前 knowledge 详设 9.1 虽然已经写到 `MRR/NDCG@k/Recall@k` 与“baseline 下降 5% fail”，但仍缺四类真正会影响 030 harness 的事实：golden manifest 到底是什么文件格式、以 doc/source 还是 chunk/answer 为 gate 粒度、最小覆盖样本如何分布、以及 context-level 指标只是保留槽位还是 v1 硬门禁。
+3. 本轮严格限定为“source-level retrieval quality baseline + YAML manifest schema + threshold/hard-fail/context slot 冻结”，不提前编写 030 的测试代码，也不混入 answer evaluator 或 RAGAS 框架接线。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-004-retrieval-quality-golden-set与回归阈值设计收敛.md`：
+   - 冻结 `tests/integration/knowledge/golden/retrieval_quality_v1.yaml` 单文件 manifest 方案；
+   - 明确 `expected_source_uris`、`baseline_metrics`、`hard_fail`、`context_metric_slots` 等字段；
+   - 定义 `MRR@10 >= 0.70`、`NDCG@10 >= 0.82`、`Recall@5 >= 0.80`、`Recall@10 >= 0.90` 的绝对阈值与 95% relative regression 规则。
+2. 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md`：
+   - 将检索质量回归从泛化的 `MRR/NDCG@k/Recall@k` 原则，收敛为 source-level gate 与 `retrieval_quality_v1.yaml` manifest；
+   - 冻结样本覆盖下限、`hard_fail` case 语义、`source_uri` 去重统计与 context-level 扩展槽位；
+   - 将 12.1 / 12.2 的未决问题与后续任务收敛为“004 已完成，剩余只在未来是否把 Context Precision / Context Recall / Faithfulness 升级为硬 Gate”。
+3. 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`：
+   - 将 `KNO-TODO-004` 标记为 `Done` 并新增 deliverable 路径；
+   - 将 `KNO-BLK-004` 标记为已解阻；
+   - 把 `KNO-TODO-030` 从 `Blocked` 调整为 `NotStarted`，并同步更新当前结论、粒度评估、质量门说明、blocker 校准和直接执行建议。
+
+### 测试
+
+1. 本地设计证据核对：
+   - knowledge 详设原先只有 `expected_doc_ids + min_recall/min_mrr + >5% regression` 的宽泛描述，尚不足以直接驱动 regression harness；
+   - 工作区当前没有任何 golden 基线资产；
+   - `profiles/src/ProfileYamlParser.cpp` 已证明仓库内存在轻量 YAML 解析模式，因此 v1 quality manifest 选用 YAML 不会迫使仓库额外引入外部评估框架依赖；
+   - `KNO-TODO-003` 已冻结 `source_uri` / `citation_ref` typed provenance，因此 004 可以把 gate 锚定在 source-level，而不依赖不透明的 hashed document id。
+2. 文档验收：
+   - 使用 `rg -n "retrieval_quality_v1.yaml|expected_source_uris|min_mrr_at_10|min_ndcg_at_10|min_recall_at_10|context_metric_slots|hard_fail|KNO-BLK-004" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-004-retrieval-quality-golden-set与回归阈值设计收敛.md` 校验关键结论可检索。
+3. 本轮未执行 CMake 构建或 CTest：`KNO-TODO-004` 是 quality baseline 的设计解阻任务，目标是把 030 变为可二值执行的 Gate 定义，而不是提前进入 regression harness 实现期。
+
+### 结果
+
+1. retrieval quality gate 已唯一收敛为 source-level document/source gate，而不是 answer synthesis gate；v1 以 `retrieval_quality_v1.yaml` manifest 驱动。
+2. golden set 的样本覆盖下限、绝对阈值、relative regression 公式、`hard_fail` case 与 context-level 扩展槽位已进入 knowledge 详设，030 后续不需要再在代码层重定义 quality baseline。
+3. `KNO-BLK-004` 已解除；`KNO-TODO-030` 已从设计阻塞态切换为可排程状态；001 ~ 004 这一轮 Knowledge 设计解阻已全部闭环。
+
+### 下一步
+
+1. 转入 Build 阶段，优先推进 `KNO-TODO-005` ~ `012`、`016` ~ `020`、`025` ~ `029`，为后续 `KNO-TODO-030` / `033` 的 quality 与 refresh Gate 提供真实执行链。
+
+### 风险
+
+1. 004 只冻结了 source-level retrieval gate；future 若要把 `Context Precision` / `Context Recall` / `Faithfulness` 升级为硬门禁，仍需要 answer-level evaluator 与 reference answer 资产，不应在 030 实现期顺手扩大 scope。
+2. quality gate 当前依赖 `source_uri` 去重统计；若后续 retrieval hit schema 误删 `source_uri` 或 `citation_ref`，030 会失去稳定对齐键，需要在 Build 期继续守住 003 的 provenance 约束。
+
 ## 记录 #381
 
 - 日期：2026-04-21
@@ -52,6 +106,7 @@
 
 1. 003 已冻结 Trusted/Reference/Normative baseline，但 future 是否引入 `AuthorityLevel::Advisory` 的 working-doc corpus lane 仍需单独评审，不能在 021 ~ 024 实现期顺手扩张语料范围。
 2. `profiles/*/runtime_policy.yaml` 同时属于配置源和 retrieval 证据源；Build 期如果误让 ingest 结果反向替代 `KnowledgeConfigProjector`，会破坏 projection 矩阵边界。
+
 
 ## 记录 #380
 

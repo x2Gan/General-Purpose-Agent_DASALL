@@ -3,7 +3,7 @@
 最近更新时间：2026-04-21  
 阶段：Detailed Design -> Special TODO  
 适用范围：knowledge/  
-当前结论：Knowledge 子系统当前可直接生成 L3/L2 混合专项 TODO。`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`KnowledgeServiceFacade`、`FreshnessController`、`VersionLedger`、`CorpusCatalog`、`SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator`、`KnowledgeTelemetry`、`KnowledgeHealthProbe` 已具备接口级或数据结构级拆分条件；`KNO-TODO-001` 已冻结 lexical 路线为 SQLite FTS5，`KNO-TODO-002` 已冻结 `VectorRetrieverBridge` 的 owner、注入方向与 module-local ports（`IQueryEncoder` / `IVectorRecallStore`），`KNO-TODO-003` 已冻结首批 corpus baseline、`AuthorityLevel` / `SourceFormat` / `CorpusScanPlan` 与 quarantine 规则，并解除 `KNO-BLK-001`、`KNO-BLK-002`、`KNO-BLK-003`。当前仅剩 retrieval quality golden set / 阈值这一项前置补设计，之后即可把 ingest/index/quality 全链路推进到稳定 Build。
+当前结论：Knowledge 子系统当前可直接生成 L3/L2 混合专项 TODO。`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`KnowledgeServiceFacade`、`FreshnessController`、`VersionLedger`、`CorpusCatalog`、`SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator`、`KnowledgeTelemetry`、`KnowledgeHealthProbe`、`RetrievalQualityRegressionTest` 已具备接口级或数据结构级拆分条件；`KNO-TODO-001` 已冻结 lexical 路线为 SQLite FTS5，`KNO-TODO-002` 已冻结 `VectorRetrieverBridge` 的 owner、注入方向与 module-local ports（`IQueryEncoder` / `IVectorRecallStore`），`KNO-TODO-003` 已冻结首批 corpus baseline、`AuthorityLevel` / `SourceFormat` / `CorpusScanPlan` 与 quarantine 规则，`KNO-TODO-004` 已冻结 retrieval quality YAML manifest、样本覆盖下限、`MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` 阈值、`hard_fail` case 与 context-level 扩展槽位，并解除 `KNO-BLK-001`、`KNO-BLK-002`、`KNO-BLK-003`、`KNO-BLK-004`。当前已无设计 blocker，lexical/hybrid/ingest/index/quality 全链路均可按任务前置关系进入 Build 排程。
 
 ## 1. 文档头
 
@@ -131,15 +131,15 @@
 
 1. L3：`KnowledgeQuery`、`EvidenceSlice`、`EvidenceBundle`、`KnowledgeRetrieveResult`、`KnowledgeErrorCode`、`IKnowledgeService`、`KnowledgeConfigProjector`、`QueryNormalizer`、`CorpusRouter`、`Reranker`、`EvidenceAssembler`、`FreshnessController`。
 2. L2：`KnowledgeServiceFacade`、`RecallCoordinator`、`SparseRetriever`、`VectorRetrieverBridge`、`CorpusCatalog`、`VersionLedger`、`IndexReader`、`IndexWriter`、`SourceScanner`、`Canonicalizer`、`Chunker`、`IngestionCoordinator`、`KnowledgeTelemetry`、`KnowledgeHealthProbe`。
-3. L2 但当前 Blocked：`RetrievalQualityRegression`。
-4. L0：四项补设计前置任务中，001/002/003 已完成；当前仅剩 golden set / quality 阈值冻结（KNO-TODO-004）。
+3. 当前无额外设计 Blocked 项；剩余约束仅表现为任务前置依赖，而不是语义未定。
+4. L0：四项补设计前置任务 001/002/003/004 已全部完成。
 
 判断依据：
 
 1. 详设 6.6、6.10、6.13 已给出明确的接口名、字段、错误语义、主流程、异常流程、目录建议和测试出口。
 2. 详设 7、8、9 已给出 Design -> Build 映射、里程碑、测试矩阵和质量门，足以支撑接口级、数据结构级和组件级任务拆分。
-3. 当前主要阻碍已收敛到 quality baseline 缺失，而不再是 lexical 选型、vector owner 或 corpus/trust 语义不清晰。
-4. 因此专项 TODO 可以直接进入执行；在 001/002/003 已完成后，可推进 lexical/hybrid/ingest/index Build，quality regression Gate 仍需等待 KNO-TODO-004。
+3. 当前主要约束已从设计缺口转为 Build 前置顺序与基线资产落盘，而不再是 lexical/vector/corpus/quality 语义不清晰。
+4. 因此专项 TODO 已可整体进入执行；quality regression Gate 仍需等待 027/028/030 的实现顺序，但不再受设计 blocker 约束。
 
 ### 4.2 可落盘对象提取表（Step 2 输出）
 
@@ -155,7 +155,7 @@
 | Observability / Health | `KnowledgeTelemetry`、`KnowledgeHealthProbe` | 6.11、6.13.4、7 KNO-D06 | `knowledge/include/health/`、`knowledge/src/observability/`、`knowledge/src/health/` | 未落盘 |
 | Unit 测试出口 | `KnowledgeServiceFacade*Test`、`QueryNormalizer*Test`、`CorpusRouter*Test`、`SparseRetriever*Test`、`VectorRetrieverBridge*Test`、`Reranker*Test`、`EvidenceAssembler*Test`、`Index*Test`、`IngestionCoordinator*Test`、`SourceScanner*Test`、`Canonicalizer*Test`、`Chunker*Test`、`KnowledgeTelemetry*Test`、`KnowledgeHealthProbe*Test` | 6.13、9.1 | `tests/unit/knowledge/` | 目录挂点存在但内容全缺 |
 | Integration 测试出口 | `dasall_knowledge_retrieval_smoke_integration_test`、`dasall_knowledge_failure_degrade_integration_test`、`dasall_knowledge_profile_compatibility_integration_test` | 7 KNO-D07、9.1、9.3 | `tests/integration/knowledge/` | 目录不存在 |
-| 质量资产 | golden set、MRR/NDCG@k/Recall@k baseline | 9.1、12.2 | `tests/integration/knowledge/golden/` | 未落盘 |
+| 质量资产 | golden set、`MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` baseline、`hard_fail` case 规则、context-level 扩展槽位 | 9.1、12.2 | `tests/integration/knowledge/golden/retrieval_quality_v1.yaml` | schema 已冻结；Build 资产待 KNO-TODO-030 落盘 |
 | CMake / 注册点 | `knowledge/CMakeLists.txt`、`tests/unit/knowledge/CMakeLists.txt`、`tests/integration/knowledge/CMakeLists.txt`、`tests/integration/CMakeLists.txt` | 8.1、9.3 | 现有 CMake 拓扑 | 仅 knowledge 库 target 存在 |
 
 ### 4.3 粒度可行性评估表（Step 2 输出）
@@ -183,7 +183,7 @@
 | `IngestionCoordinator` | 6.13.3、6.13.5 | L2 | `CorpusChangeSet`、`IndexUpdateBatch`、流程与失败语义明确；scanner/canonicalizer/chunker 输入基线已冻结 | 无阻塞性设计缺口 | 在 021/022/023 落盘后直接做编排 |
 | `KnowledgeTelemetry` | 6.11、6.13.4 | L2 | 事件字段、四类关键路径、drop 规则明确 | 需与现有 infra sink 对齐 | 直接拆实现任务 |
 | `KnowledgeHealthProbe` | 6.13.4 | L2 | 依赖源、状态分类、只读聚合边界明确 | 依赖 manifest/ledger/freshness/telemetry 基础 | 在 supporting components 后实施 |
-| retrieval quality regression | 9.1、12.2 | L2（当前 Blocked） | 指标、golden set 格式、阈值原则明确 | baseline 数据与样本语料缺失 | 先补质量资产，再注册 Gate |
+| retrieval quality regression | 9.1、12.2 | L2 | YAML manifest、source-level 指标、coverage floor、`hard_fail` 规则与 context-level 槽位已冻结 | golden 资产与 test harness 尚未落盘 | 先完成 027/028 与 golden 资产，再注册 030 Gate |
 
 ---
 
@@ -241,7 +241,7 @@
 | KNO-TODO-001 | Done | 收敛 lexical 索引技术选型与 PoC 证据 | 详设 6.13.2、10.4、11.1 KNO-B03、12.1 | `SparseRetriever`；`IndexReader`；`IndexWriter` | L0 | 已更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 lexical index 唯一实现为 SQLite FTS5、共享 sqlite target 接入方向、cross-compile 约束和最小 PoC 结论；**评审补充**：已补 edge_balanced 10k chunks BM25 host-side p99 延迟基准（作为 QG-K04 前置数据） | `SparseRetriever`；lexical snapshot；`IndexManifest.format_version`；`IndexManifest.tokenizer_profile` | 文档一致性：单一技术选型、回退条件和格式版本约束可检索；host-side p99 延迟基准存在；mixed-language tokenizer 证据已回写 | `rg -n "SQLite FTS5|tokenizer_profile|format_version|KNO-BLK-001|0.7640ms|5.7153ms" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-001-lexical索引技术选型与PoC设计收敛.md` | 无 | KNO-BLK-001 | 形成唯一 lexical 技术路线并补 PoC 证据 | 更新后的 knowledge 详设；更新后的专项 TODO；`docs/todos/knowledge/deliverables/KNO-TODO-001-lexical索引技术选型与PoC设计收敛.md` | 仅当 lexical index 唯一收敛为 SQLite FTS5、`SparseRetriever` / `IndexReader` / `IndexWriter` 不再存在多候选歧义、`format_version` / `tokenizer_profile` / host-side PoC 证据可回链时完成 |
 | KNO-TODO-002 | Done | 冻结 vector bridge 窄接口与 ownership | 详设 6.13.2、11.1 KNO-B02、12.1；阶段 H 与 memory 边界 | `VectorRetrieverBridge`；`IQueryEncoder`；`IVectorRecallStore` | L0 | 已更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，明确 `IQueryEncoder` / `IVectorRecallStore` 归 Knowledge module-local owner、注入方向为 composition root -> Knowledge、并锁定 dense lane degrade 语义 | `VectorRetrieverBridge`；`IQueryEncoder`；`IVectorRecallStore`；`DenseQueryInputMode` | 文档一致性：窄接口归属、注入方向、`DenseQueryInputMode` 和 degrade 语义可检索 | `rg -n "IQueryEncoder|IVectorRecallStore|DenseQueryInputMode|VectorRetrieverBridge|VectorBackendUnavailable|memory_vector=false" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-002-vector-bridge窄接口与ownership设计收敛.md` | 无 | KNO-BLK-002 | 形成单一 ownership 结论，并锁定 bridge 输入输出语义 | 更新后的 knowledge 详设；更新后的专项 TODO；`docs/todos/knowledge/deliverables/KNO-TODO-002-vector-bridge窄接口与ownership设计收敛.md` | 仅当 `IQueryEncoder` / `IVectorRecallStore` owner 唯一收敛为 Knowledge module-local、注入方向固定、dense lane degrade 语义不再依赖未定义 owner 时完成 |
 | KNO-TODO-003 | Done | 补齐首批 corpus 资产与 metadata/trust 规范 | 详设 6.9、6.13.5、11.1 KNO-B04、12.1 | `SourceScanner`；`Canonicalizer`；`Chunker`；`CorpusCatalog` | L0 | 已更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，冻结首批 corpus baseline（architecture / ADR / SSOT / profile runtime policy snapshots）、`AuthorityLevel` / `SourceFormat` / `CorpusScanPlan`、typed provenance 字段与 quarantine 条件 | `CorpusDescriptor`；`SourceRecord`；`CanonicalDocument`；`ChunkRecord`；`CorpusScanPlan` | 文档一致性：corpus baseline、typed metadata 字段、trust/quarantine 规则与 profile snapshot canonicalize 规则可检索 | `rg -n "AuthorityLevel|SourceFormat|CorpusScanPlan|architecture_reference|profile_policy_normative|quarantine|updated_at_ms|source_format" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-003-corpus资产与metadata-trust基线设计收敛.md` | 无 | KNO-BLK-003 | 形成最小 corpus baseline 与 source trust SSOT | 更新后的 knowledge 详设；更新后的专项 TODO；`docs/todos/knowledge/deliverables/KNO-TODO-003-corpus资产与metadata-trust基线设计收敛.md` | 仅当 ingest/index 相关组件拥有明确的输入资产、metadata 必填字段与 trust 规则，且坏源隔离条件明确时完成 |
-| KNO-TODO-004 | NotStarted | 定义 retrieval quality golden set 与回归阈值 | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set；MRR/NDCG@k/Recall@k | L0 | 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，冻结 golden set 文件格式、最小样本数、质量阈值和失败判定规则；**评审补充**：预留 RAGAS 风格 context-level 指标扩展槽位（Context Precision / Context Recall / Faithfulness），v1 先以 MRR/NDCG@k/Recall@k 为门禁 | golden set schema；MRR/NDCG@k/Recall@k；context-level metrics 扩展声明 | 文档一致性：quality gate 样本格式和阈值可检索；context-level 指标扩展槽位已声明 | `rg -n "golden set|MRR|NDCG@k|Recall@k|RetrievalQualityRegressionTest" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` | 无 | KNO-BLK-004 | 形成 retrieval quality baseline 定义 | 更新后的 knowledge 详设；更新后的专项 TODO | 仅当 regression gate 的输入格式、通过阈值和 fail 判定可二值执行时完成 |
+| KNO-TODO-004 | Done | 定义 retrieval quality golden set 与回归阈值 | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set；`MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` | L0 | 已更新 `docs/architecture/DASALL_knowledge子系统详细设计.md` 与本专项 TODO，冻结 `tests/integration/knowledge/golden/retrieval_quality_v1.yaml` manifest、样本覆盖下限、source-level 指标阈值、`hard_fail` case 规则与 context-level 扩展槽位 | golden set manifest schema；`expected_source_uris`；`baseline_metrics`；context metric slots | 文档一致性：quality gate 样本格式、绝对阈值、回归公式和 context-level 扩展槽位可检索 | `rg -n "retrieval_quality_v1.yaml|expected_source_uris|min_mrr_at_10|min_ndcg_at_10|min_recall_at_10|context_metric_slots|hard_fail|KNO-BLK-004" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-004-retrieval-quality-golden-set与回归阈值设计收敛.md` | 无 | KNO-BLK-004 | 形成 retrieval quality baseline 定义 | 更新后的 knowledge 详设；更新后的专项 TODO；`docs/todos/knowledge/deliverables/KNO-TODO-004-retrieval-quality-golden-set与回归阈值设计收敛.md` | 仅当 regression gate 的输入格式、样本覆盖下限、绝对阈值、relative regression 公式和 `hard_fail` 规则都可二值执行时完成 |
 
 ### 6.2 公共骨架与 ABI 任务
 
@@ -292,7 +292,7 @@
 | KNO-TODO-027 | NotStarted | 验证 lexical retrieval smoke integration | 详设 7 KNO-D07、8.2 Phase K1、9.1 | `dasall_knowledge_retrieval_smoke_integration_test` | L2 | 新增 `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`，打通 `Runtime -> Knowledge retrieve -> context_projection` 最小闭环 | `KnowledgeRetrievalSmokeTest`；`dasall_knowledge_retrieval_smoke_integration_test` | integration：最小 lexical retrieval 闭环可通过且 `ctest -N` 可发现 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_retrieval_smoke_integration_test --output-on-failure` | KNO-TODO-005、006、007、008、009、011、012、013、014、016、017、019 | 已解除：KNO-BLK-001 | 已完成 KNO-TODO-001 | `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`；更新后的 integration CMake | 仅当 lexical-only 主链可对外返回非空 `context_projection`，且 smoke 用例可被 `ctest -N` 发现时完成 |
 | KNO-TODO-028 | NotStarted | 验证 failure/degrade integration | 详设 7 KNO-D07、9.1、11.1 KNO-R06/KNO-R07 | `dasall_knowledge_failure_degrade_integration_test` | L2 | 新增 `tests/integration/knowledge/KnowledgeFailureDegradeTest.cpp`，覆盖 vector unavailable、partial timeout、stale reject、refresh busy 等退化路径 | `KnowledgeFailureDegradeTest`；`dasall_knowledge_failure_degrade_integration_test` | integration：degrade 路径以显式 `degraded` / `error` / `reason_codes` 形式可验证 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_failure_degrade_integration_test --output-on-failure` | KNO-TODO-012、014、015、017、019、020、025、026 | 已解除：KNO-BLK-001、KNO-BLK-002 | 已完成 KNO-TODO-001、002 | `tests/integration/knowledge/KnowledgeFailureDegradeTest.cpp`；对应 integration CMake | 仅当 vector unavailable、partial result、stale reject、refresh busy 四类路径均可自动验证，且不会演化为进程级失败时完成 |
 | KNO-TODO-029 | NotStarted | 验证 profile compatibility integration | 详设 8.2 Phase K2/K4、9.1、10.2、QG-K04/K05 | `dasall_knowledge_profile_compatibility_integration_test` | L2 | 新增 `tests/integration/knowledge/KnowledgeProfileCompatibilityTest.cpp`，覆盖 `desktop_full` / `cloud_full` / `edge_balanced` / `edge_minimal` / `factory_test` 的 enabled/vector/degrade 行为 | `KnowledgeProfileCompatibilityTest`；`dasall_knowledge_profile_compatibility_integration_test` | integration：`knowledge=true && memory_vector=false` 合法；`edge_minimal` 默认关闭；hybrid 可在支持档位灰度 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R dasall_knowledge_profile_compatibility_integration_test --output-on-failure` | KNO-TODO-007、012、015、017、025、026 | 已解除：KNO-BLK-002 | 已完成 KNO-TODO-002 | `tests/integration/knowledge/KnowledgeProfileCompatibilityTest.cpp`；对应 integration CMake | 仅当 profile 行为全部来自投影规则，且 `knowledge=false` / lexical-only / hybrid 三种模式都能自动验证时完成 |
-| KNO-TODO-030 | Blocked | 验证 retrieval quality regression gate | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set | L2 | 新增 `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp` 与 `tests/integration/knowledge/golden/` 基线资产，落盘 MRR/NDCG@k/Recall@k 回归校验 | `RetrievalQualityRegressionTest`；golden set schema | integration：golden set ≥30 条，指标不低于基线阈值 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure` | KNO-TODO-004、027、028 | KNO-BLK-004 | 完成 KNO-TODO-004 | `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`；`tests/integration/knowledge/golden/` 资产 | 仅当 golden set 资产和阈值已冻结，且质量退化会被自动阻断时完成 |
+| KNO-TODO-030 | NotStarted | 验证 retrieval quality regression gate | 详设 9.1、12.2 | `RetrievalQualityRegressionTest`；golden set | L2 | 新增 `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp` 与 `tests/integration/knowledge/golden/retrieval_quality_v1.yaml` 基线资产，落盘 `source_uri` 去重后的 `MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` 回归校验与 `hard_fail` case 阻断 | `RetrievalQualityRegressionTest`；golden set manifest schema | integration：golden set ≥30 条，aggregate 指标不低于基线阈值，`hard_fail` case 全通过 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure` | KNO-TODO-004、027、028 | 已解除：KNO-BLK-004 | 已完成 KNO-TODO-004 | `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`；`tests/integration/knowledge/golden/retrieval_quality_v1.yaml` 资产 | 仅当 golden set 资产、绝对阈值、relative regression 公式与 `hard_fail` case 都被自动验证，且质量退化会被自动阻断时完成 |
 | KNO-TODO-031 | NotStarted | 回写 knowledge 专项 Gate 与交付证据 | 阶段 H；详设 8.2 Phase K5、9.3；工程执行规范 | 8.2 Phase K5；9.3 质量门 | L2 | 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md`，回写 build / unit / integration / quality / blocker / rollback 证据 | Gate 结果、命令、风险、blocker、后继动作 | process：所有 Gate 都有命令证据、结果摘要和残余风险回写 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_knowledge dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -R "Knowledge|dasall_knowledge"` | KNO-TODO-027、028、029、030、032、033 | 无 | 无 | 更新后的专项 TODO；更新后的 worklog；对应 deliverables 记录 | 仅当每个 Gate 都存在可追溯证据、blocker 状态与后继动作回写，不再依赖口头结论时完成 |
 
 ### 6.7 评审补充任务
@@ -310,7 +310,7 @@
 
 | 阶段 | 任务 ID | 串并行建议 | 说明 |
 |---|---|---|---|
-| A 补设计解阻 | KNO-TODO-001 ~ 004 | 可并行，全部前置 | 先冻结 lexical/vector/corpus/quality 四类 blocker，避免 Build 返工扩散 |
+| A 补设计解阻 | KNO-TODO-001 ~ 004 | 已完成 | lexical/vector/corpus/quality 四类 blocker 已冻结完毕，后续阶段不再受设计 blocker 返工扩散 |
 | B 公共骨架与 ABI + 观测基础 | KNO-TODO-005、006、007、025 | 005 先起；006 紧随；007 依赖 006；025 在 005/006 后启动 | 先建立 include/CMake/test discoverability，再冻结 public surface 与配置投影；**025（Telemetry）前移至此阶段**以遵守 KNO-TC015"四类关键路径必须可观测、不能后置"的约束 |
 | C Route / Evidence 纯计算链 + 健康探针 | KNO-TODO-016、017、008、009、010、011、026 | 016/017 可并行；008/010 可并行；009 依赖 016/017/008；011 依赖 010；026 在 017/018/025 后启动 | 先把无外部 I/O 的纯计算与 snapshot 支撑层做稳；**026（HealthProbe）前移至此阶段**以确保健康状态可在 lexical 主链闭环前就位 |
 | D lexical 最小主链 + 骨架 Facade | KNO-TODO-013、018、019、014、012、027 | 013/018 在 KNO-BLK-001 解阻后并行；019 依赖 013/018；014 依赖 013（dense lane 使用 stub）；012 依赖上游纯计算链与 stub seam；027 最后验证 | 形成 lexical-only 最小闭环；**012 已拆分为骨架版本**，仅依赖已解阻组件 + stub |
@@ -322,7 +322,7 @@
 
 | 门禁 | 通过条件 | 对应任务 | 未通过时禁止推进 |
 |---|---|---|---|
-| Gate-A：补设计冻结 | KNO-BLK-001 ~ 004 至少完成本阶段所需解阻项 | KNO-TODO-001 ~ 004 | 禁止 lexical / hybrid / ingest / quality Build |
+| Gate-A：补设计冻结 | KNO-BLK-001 ~ 004 已全部完成解阻 | KNO-TODO-001 ~ 004 | 禁止在 blocker 未解前启动 lexical / hybrid / ingest / quality Build |
 | Gate-B：ABI 冻结 | `IKnowledgeService`、public types、error mapping 编译与 surface test 全绿 | KNO-TODO-005 ~ 007 | 禁止 Runtime 侧接线与上游 mock 依赖 |
 | Gate-B+：观测基础就位 | `KnowledgeTelemetry` 四类关键事件字段齐全、sink 容错可验证 | KNO-TODO-025 | 禁止组件实现不接入观测（KNO-TC015） |
 | Gate-C：discoverability | `ctest -N` 可发现 knowledge 的 unit / integration 入口 | KNO-TODO-005 | 禁止 Phase D/E/F 的测试主张 |
@@ -330,7 +330,7 @@
 | Gate-E：hybrid degrade | vector unavailable/timeout 时明确退 lexical-only，不进程失败 | KNO-TODO-015、028、029 | 禁止 profile 扩面 |
 | Gate-F：index consistency | `record_candidate -> swap -> mark_active` 顺序与 rollback 可验证 | KNO-TODO-018、019、020、024 | 禁止 stale/read/rebuild 灰度 |
 | Gate-F+：refresh 闭环 | `request_refresh()` → ingest → swap → retrieve 返回更新数据的端到端闭环可验证 | KNO-TODO-032、033 | 禁止声称 ingest/index 治理完成 |
-| Gate-G：quality baseline | golden set 指标不低于阈值 | KNO-TODO-004、030 | 禁止把 Knowledge 标记为 ready |
+| Gate-G：quality baseline | golden set 的 `MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` 不低于阈值，且 `hard_fail` case 全通过 | KNO-TODO-004、030 | 禁止把 Knowledge 标记为 ready |
 | Gate-H：evidence 回写 | TODO / worklog / deliverables 证据齐全 | KNO-TODO-031 | 禁止收尾宣称完成 |
 
 ---
@@ -342,7 +342,7 @@
 | KNO-BLK-001 | lexical index 技术栈未冻结，`SparseRetriever` / `IndexReader` / `IndexWriter` 无法安全编码；现已由 KNO-TODO-001 解阻 | KNO-TODO-013、019、020、027、028、032、033 | 完成 KNO-TODO-001，形成唯一 lexical 方案与 PoC 证据 | 已解阻；lexical 主链、smoke 与相关 integration 可进入 Build |
 | KNO-BLK-002 | `VectorRetrieverBridge` 的窄接口 owner 与注入方向未冻结；现已由 KNO-TODO-002 解阻 | KNO-TODO-015、014、028、029、032 | 完成 KNO-TODO-002，锁定 `IQueryEncoder` / `IVectorRecallStore` 边界 | 已解阻；hybrid bridge、failure/degrade 与 profile compatibility 可进入 Build |
 | KNO-BLK-003 | corpus baseline、metadata 必填字段与 trust/quarantine 规则缺失；现已由 KNO-TODO-003 解阻 | KNO-TODO-021、022、023、024、032、033 | 完成 KNO-TODO-003，建立最小语料包与 metadata/trust SSOT | 已解阻；ingest/index/Facade 完整版/refresh 闭环可进入 Build 排程 |
-| KNO-BLK-004 | golden set 资产与质量阈值未冻结 | KNO-TODO-030 | 完成 KNO-TODO-004，冻结样本格式、条数下限和 fail 阈值 | 先推进 smoke / degrade / profile，质量回归 Gate 后置 |
+| KNO-BLK-004 | golden set 资产与质量阈值未冻结；现已由 KNO-TODO-004 解阻 | KNO-TODO-030 | 完成 KNO-TODO-004，冻结样本格式、条数下限、`hard_fail` 规则和 fail 阈值 | 已解阻；quality regression Gate 可进入 Build 排程 |
 
 ### 8.1 Blocker 校准记录
 
@@ -353,7 +353,7 @@
 | KNO-BLK-001 | 2026-04-21 | 已解阻：SQLite FTS5 + 显式 tokenizer profile + host-side 10k chunks PoC 已回写 | 无；后续只剩 Build 接线与实现验证 | GitHub Copilot |
 | KNO-BLK-002 | 2026-04-21 | 已解阻：`IQueryEncoder` / `IVectorRecallStore` owner、注入方向与 degrade 语义已回写 | 无；后续只剩 port 实现与 adapter 接线 | GitHub Copilot |
 | KNO-BLK-003 | 2026-04-21 | 已解阻：首批 corpus baseline、`AuthorityLevel` / `SourceFormat` / `CorpusScanPlan`、typed provenance 字段与 quarantine 条件已回写 | 无；后续只剩 ingest/index 实现与真实资产接线 | GitHub Copilot |
-| KNO-BLK-004 | — | — | — | — |
+| KNO-BLK-004 | 2026-04-21 | 已解阻：`retrieval_quality_v1.yaml` manifest、样本覆盖下限、绝对阈值、relative regression 公式与 `hard_fail` 规则已回写 | 无；后续只剩 golden 资产与 regression harness 实现 | GitHub Copilot |
 
 ---
 
@@ -369,7 +369,7 @@
 | QG-K04 | Lexical-only 兼容门 | `knowledge=true && memory_vector=false` 不报配置错误，lexical-only smoke 通过 | `ctest --test-dir build-ci -R dasall_knowledge_retrieval_smoke_integration_test --output-on-failure` |
 | QG-K05 | Degrade 门 | vector unavailable/timeout/stale reject/refresh busy 路径均显式表达，不进程级失败 | `ctest --test-dir build-ci -R dasall_knowledge_failure_degrade_integration_test --output-on-failure` |
 | QG-K06 | Profile 门 | `desktop_full` / `cloud_full` / `edge_balanced` / `edge_minimal` / `factory_test` 的启停与降级行为符合投影规则 | `ctest --test-dir build-ci -R dasall_knowledge_profile_compatibility_integration_test --output-on-failure` |
-| QG-K07 | 质量回归门 | golden set 指标不低于基线阈值 | `ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure` |
+| QG-K07 | 质量回归门 | golden set 的 `MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` 不低于基线阈值，且 `hard_fail` case 全通过 | `ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure` |
 | QG-K08 | 可观测性门 | retrieve/ingest/swap/degraded 四类关键字段齐全，缺失字段视为失败 | `ctest --test-dir build-ci -R "Knowledge(Telemetry|HealthProbe).*Test" --output-on-failure` |
 | QG-K09 | 证据回写门 | TODO、deliverables、worklog 全部写入命令、结果、风险和 blocker 状态 | `rg -n "KNO-TODO-|Knowledge|quality|blocker|rollback" docs/todos/knowledge docs/worklog/DASALL_开发执行记录.md` |
 | QG-K10 | ADR 边界门 | Knowledge 不生成 ContextPacket（ADR-006）、不拥有调度环（ADR-008）、不做恢复裁定（ADR-007），通过代码审查与 `rg` 反向搜索确认 | `rg -n "ContextPacket\|PromptComposer\|RecoveryManager\|timer\|watcher\|schedule_loop" knowledge/include knowledge/src` 结果为空 |
@@ -423,7 +423,7 @@ ctest --test-dir build-ci -R "Knowledge|dasall_knowledge" --output-on-failure
 | KNO-R05 | snapshot swap 或 ledger 失配 | 查询读到不一致状态或丢失回退依据 | 强制 `record_candidate -> swap -> mark_active` 顺序和 checksum 校验 | 回退 `last_known_good()`，拒绝继续激活异常 snapshot |
 | KNO-R06 | observability 字段缺失 | 退化与失败不可追踪，Gate 形同虚设 | `KnowledgeTelemetryFieldSetTest` 与 QG-K08 强阻断 | 停止发布，先补字段而不是带病上线 |
 | KNO-R07 | edge 设备 lexical recall 超时 | `edge_balanced` 预算被击穿 | `KNO-TODO-001` 已补 host-side PoC；后续在 KNO-TODO-030 中继续纳入质量基线与目标机测量 | 对 edge profile 回退到 `knowledge=false` 或更小 corpus 范围 |
-| KNO-R08 | golden set 不足或偏斜 | quality gate 失真，排序优化无有效反馈 | 先做 KNO-TODO-004 定义样本覆盖标准，再扩到 ≥30 条 | 暂停 quality-ready 结论，只保留 smoke/degrade 级可用 |
+| KNO-R08 | golden set 不足或偏斜 | quality gate 失真，排序优化无有效反馈 | `KNO-TODO-004` 已冻结样本覆盖标准、`hard_fail` case 与 absolute threshold；KNO-TODO-030 落盘时按该标准补齐资产 | 暂停 quality-ready 结论，只保留 smoke/degrade 级可用 |
 | KNO-R09 | token 估算 `chars/4` 对 CJK 文本精度仅 ~70% | evidence budget 超支或浪费，context projection 截断不准 | `EvidenceAssembler` budget clamp 预留 10% 安全余量；在 v2 中评估引入真实 tokenizer 估算 | 回退到更保守的 budget 比例（`chars/5`），宁可少填不超 |
 | KNO-R10 | `MultiHop` 枚举值 v1 仅声明不落链路，后续扩展可能影响 QueryNormalizer/CorpusRouter 接口 | v2 新增 multi-hop 执行链路时发现 v1 接口不兼容，需回退 ABI | 在 KNO-TODO-006 中把 `MultiHop` 标记为 `reserved`，并在 `QueryNormalizer` 中遇到 MultiHop 时返回 `NotSupported` 错误 | 延迟 MultiHop 到 v2 版本周期，v1 仅保留枚举声明 |
 
@@ -443,8 +443,8 @@ ctest --test-dir build-ci -R "Knowledge|dasall_knowledge" --output-on-failure
 当前可直接落到的最细粒度：
 
 1. L3：public ABI、配置投影、QueryNormalizer、CorpusRouter、Reranker、EvidenceAssembler、FreshnessController。
-2. L2：KnowledgeServiceFacade（骨架版，已拆分为 012 + 032 两阶段）、SparseRetriever、VectorRetrieverBridge、CorpusCatalog、VersionLedger、IndexReader、IndexWriter、SourceScanner、Canonicalizer、Chunker、IngestionCoordinator、KnowledgeTelemetry、KnowledgeHealthProbe。
-3. L2 但当前 Blocked：RetrievalQualityRegression。
+2. L2：KnowledgeServiceFacade（骨架版，已拆分为 012 + 032 两阶段）、SparseRetriever、VectorRetrieverBridge、CorpusCatalog、VersionLedger、IndexReader、IndexWriter、SourceScanner、Canonicalizer、Chunker、IngestionCoordinator、KnowledgeTelemetry、KnowledgeHealthProbe、RetrievalQualityRegression。
+3. 当前无额外设计 Blocked 项。
 
 评审修正要点（共 33 项任务，较原始版本新增 032/033）：
 
@@ -457,9 +457,10 @@ ctest --test-dir build-ci -R "Knowledge|dasall_knowledge" --output-on-failure
 
 直接执行建议：
 
-1. `KNO-TODO-001`、`KNO-TODO-002`、`KNO-TODO-003` 已完成；继续串行推进 KNO-TODO-004 的 quality baseline 解阻。
-2. 在 KNO-BLK-004 解锁前，可优先推进 KNO-TODO-005 ~ 012、016 ~ 029、032 ~ 033 的骨架、ABI、纯计算、ingest/index 和 observability 任务。
-3. `KNO-BLK-001`、`KNO-BLK-002`、`KNO-BLK-003` 已解锁，可推进 lexical 主链、hybrid/profile、failure/degrade、ingest/index、Facade 完整版与 refresh 闭环；在 KNO-BLK-004 解锁后补 quality regression Gate。
-4. 当前最合理的串行顺序是：先完成 KNO-TODO-004，再进入 005 ~ 012 的公共骨架与 query/evidence 主链，同时把 021 ~ 024 纳入 ingest/index Build 排程。
+1. `KNO-TODO-001` ~ `KNO-TODO-004` 已全部完成；下一步进入 005 ~ 012、016 ~ 020、025 ~ 029 的 Build 实现。
+2. `KNO-BLK-001` ~ `KNO-BLK-004` 已全部解锁；030 仅受 027/028 与 golden 资产落盘前置约束，不再受设计 blocker 限制。
+3. `KNO-TODO-021` ~ `024` 与 `032` ~ `033` 可按 Phase F/G 排程，先完成 ingest/index 主链，再收口 refresh/quality Gate。
+4. 当前最合理的串行顺序是：005 -> 006 -> 007 -> 016/017 -> 008/010 -> 009/011 -> 025/026 -> 013/018/019 -> 014/012 -> 027 -> 015 -> 028/029 -> 021/022/023/024 -> 020/032 -> 030/033 -> 031。
 
-若不先完成四项 blocker，就无法把 Knowledge 安全细化到“真实 lexical/hybrid/index/quality Build 任务”，继续硬拆只会把设计不确定性转移到代码层。当前最合理的工程策略是：先冻边界，再做最小 lexical 闭环，最后补 hybrid、index 治理与 quality Gate。
+四项 blocker 已全部完成，Knowledge 后续工作的关键已不再是“继续冻边界”，而是按 Phase B ~ G 顺序把 ABI、query/evidence、index/ingest、refresh 与 quality Gate 真正落到代码和测试。当前最合理的工程策略是：先起骨架与纯计算链，再做 lexical/hybrid 闭环，最后用 refresh/quality Gate 收口。
+

@@ -2249,17 +2249,74 @@ public:
 | ingest / refresh / rebuild | `IndexReader`、`IndexWriter`、`IngestionCoordinator`、`FreshnessController` | 无 shared contracts 变更 | update/rebuild integration | version conflict / stale snapshot / swap failure | `integration;failure` 必过 |
 | profile compatibility | `KnowledgeProfileProjection` | 影响 `enabled_modules.knowledge`、`memory_vector` 解释 | `desktop_full` / `edge_balanced` / `edge_minimal` compatibility integration | knowledge enabled but vector disabled | `integration;profile` 必过 |
 | observability / health | `KnowledgeHealthProbe`、`KnowledgeObservabilityFields` | 影响 ErrorInfo 和审计字段完整性 | health probe integration | stale read / degraded mode / rebuild busy | `unit + integration` 必过 |
-| retrieval quality regression | `RetrievalQualityRegressionTest` | 不变更 contracts；验证 MRR/NDCG@k/Recall@k 不低于基线 | golden set + retrieval quality integration | corpus 变更 / reranker config 变更 / index rebuild | `integration;quality` 必过 |
+| retrieval quality regression | `RetrievalQualityRegressionTest` | 不变更 contracts；验证 MRR@10 / NDCG@10 / Recall@5 / Recall@10 与 hard-fail case 不低于基线 | golden set + retrieval quality integration | corpus 变更 / reranker config 变更 / index rebuild | `integration;quality` 必过 |
 
-**检索质量回归测试补充说明**：
+**检索质量回归测试补充说明（KNO-TODO-004 已冻结）**：
 
-1. **golden set 格式**：每条包含 `query_text`、`expected_doc_ids`（按 relevance 排序）、`min_recall@k`、`min_mrr`。建议首批至少 30 条覆盖 FactLookup / ProcedureLookup / DiagnosticContext 三种 query kind。
-2. **评估指标**：
-   - MRR（Mean Reciprocal Rank）：首个相关结果的排名倒数均值。
-   - NDCG@k（Normalized Discounted Cumulative Gain）：考虑排名位置的增益归一化值。
-   - Recall@k：前 k 个结果中包含的相关文档占全部相关文档的比例。
-3. **回归判定**：若任一指标低于上次 baseline 超过 5%，测试标记 fail。
-4. **Build 映射**：归入 KNO-D07 集成测试阶段，golden set 文件存放于 `tests/integration/knowledge/golden/`。
+1. **golden set 文件格式**：v1 统一使用 `tests/integration/knowledge/golden/retrieval_quality_v1.yaml` 单文件 manifest，保持人可审阅、git diff 友好，并沿用仓库现有轻量 YAML 解析模式（标量 + map + list-of-scalars）；不引入 LangSmith、RAGAS 或额外 JSON/评估框架依赖。
+2. **manifest 最小字段**：
+
+```yaml
+format_version: 1
+dataset_id: knowledge_retrieval_quality_v1
+retrieval_top_k: 10
+aggregate_thresholds:
+  min_mrr_at_10: 0.70
+  min_ndcg_at_10: 0.82
+  min_recall_at_5: 0.80
+  min_recall_at_10: 0.90
+  max_regression_pct: 5
+baseline_metrics:
+  mrr_at_10: 0.00
+  ndcg_at_10: 0.00
+  recall_at_5: 0.00
+  recall_at_10: 0.00
+coverage:
+  min_total_cases: 30
+  min_fact_lookup_cases: 10
+  min_procedure_lookup_cases: 10
+  min_diagnostic_context_cases: 10
+  min_hard_fail_cases: 6
+  min_architecture_reference_cases: 6
+  min_adr_normative_cases: 8
+  min_ssot_normative_cases: 8
+  min_profile_policy_normative_cases: 4
+context_metric_slots:
+  enabled: false
+  fields:
+    - context_precision_reference
+    - context_recall_reference
+    - faithfulness_reference
+cases:
+  sample_case:
+    query_kind: FactLookup
+    query_text: "<query>"
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+      - Hybrid
+    expected_source_uris:
+      - docs/adr/<doc>.md
+      - docs/ssot/<doc>.md
+    expected_chunk_refs:
+      - <citation_ref>
+    required_top_k: 5
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+    context_extensions:
+      reference_answer: ""
+      expected_claims:
+        - "<claim>"
+      supporting_chunk_refs:
+        - <citation_ref>
+```
+
+3. **样本覆盖下限**：首批 dataset 至少 30 条；`FactLookup` / `ProcedureLookup` / `DiagnosticContext` 各至少 10 条；至少 6 条 `hard_fail=true` case，且每类 query kind 至少 2 条 hard-fail；按 `primary_corpus_id` 计数时，`architecture_reference >= 6`、`adr_normative >= 8`、`ssot_normative >= 8`、`profile_policy_normative >= 4`。样本命中多个 corpus 时允许额外标注，但覆盖统计只看 `primary_corpus_id`，避免双重计数美化结果。
+4. **评估语义**：v1 retrieval quality gate 以 document/source 级为主，不把 answer synthesis 混入 Gate。`expected_source_uris` 按 relevance 递减排列；NDCG 使用该顺序生成隐式 gain（第 1 个=3、第 2 个=2、其余=1）；Recall 与 MRR 在 `source_uri` 去重后计算，避免同一文档多个 chunk 虚高指标。
+5. **回归判定**：Gate fail 条件固定为任一 aggregate 指标低于绝对阈值，或低于 committed `baseline_metrics` 的 95%；任一 `hard_fail=true` case 若其首个 `expected_source_uri` 未进入 `required_top_k`，同样直接 fail。`allowed_modes` 不包含当前检索模式的 case 在该次运行中标记 skipped，但不得计入通过样本数。
+6. **context-level 指标扩展槽位**：`context_metric_slots` 只冻结 schema，不作为 v1 硬门禁；`reference_answer`、`expected_claims`、`supporting_chunk_refs` 缺失时统一报告 `not_evaluated`。待 answer-level evaluator 就绪后，再决定是否把 `Context Precision` / `Context Recall` / `Faithfulness` 升格为 Gate。
+7. **Build 映射**：归入 KNO-D07 集成测试阶段，`RetrievalQualityRegressionTest` 读取上述 manifest，先完成 source-level 指标 gate，再把 context-level 槽位作为诊断输出；KNO-TODO-030 落盘 golden 资产时必须同时写入 committed `baseline_metrics`。
 
 ### 9.2 契约测试影响点
 
@@ -2339,9 +2396,9 @@ profile schema v2 演进预留：
 | KNO-B02 | Blocker（已解） | `KNO-TODO-002` 已冻结 `IQueryEncoder` / `IVectorRecallStore` 为 Knowledge 自有 module-local ports，注入方向固定为 composition root -> Knowledge | `KNO-BLK-002` 可关闭；hybrid recall Build 可进入 port 实现期 | 保持 `knowledge/include/retrieve/` owner，不把 port 下沉到 memory/llm；dense lane 继续允许 unavailable/degraded | 若 concrete adapter 未就绪，继续用 mock/unavailable adapter 推进 RecallCoordinator、profile compatibility 与 failure/degrade 用例 |
 | KNO-B03 | Blocker（已解） | `KNO-TODO-001` 已冻结 lexical 路线为 SQLite FTS5 + 共享 sqlite target + 显式 tokenizer profile | `KNO-BLK-001` 可关闭；lexical-only P0 可进入 Build | 保持 `SQLITE_ENABLE_FTS5=1` 的共享 sqlite target，并在 manifest 记录 `format_version` / `lexical_backend` / `tokenizer_profile` | 若共享 target 接线短期未就绪，只允许继续用 FTS5 测试夹具做 smoke，不重新打开多路线选型 |
 | KNO-B04 | Blocker（已解） | `KNO-TODO-003` 已冻结首批 corpus baseline、`AuthorityLevel` / `SourceFormat` / glob 规则、必填 provenance 字段与 quarantine 条件 | `KNO-BLK-003` 可关闭；ingest/index Build 可进入真实资产接线期 | 保持首批 baseline 仅限 architecture / ADR / SSOT / profile policy snapshots；高波动工作文档继续排除在外 | 若真实资产接线短期未就绪，继续用同 schema 的测试 corpus fixtures，不重新打开 corpus 范围争论 |
-| KNO-R05 | Risk | 证据预算推导过紧导致 recall 足够但投影过少 | 回答 grounding 变弱 | 用 golden set 调优 `evidence_budget_tokens` | 暂时回退到固定 top-k 投影 |
+| KNO-R05 | Risk | 证据预算推导过紧导致 recall 足够但投影过少 | 回答 grounding 变弱 | `KNO-TODO-004` 已冻结 golden set coverage、`Recall@5/10` 与 `MRR@10/NDCG@10` 阈值；Build 阶段用该基线调优 `evidence_budget_tokens` | 暂时回退到固定 top-k 投影 |
 | KNO-R06 | Risk | stale read 被过度使用导致回答引用陈旧证据 | 事实新鲜度下降 | 健康探针和审计必须记录 stale serve 次数 | profile 层禁用 stale read |
-| KNO-R07 | Risk | hybrid merge 过度偏向 dense 或 sparse | 结果排序不稳定 | 补齐 hybrid relevance regression 和 golden set | 先回退到 lexical-only |
+| KNO-R07 | Risk | hybrid merge 过度偏向 dense 或 sparse | 结果排序不稳定 | `KNO-TODO-004` 已冻结 source-level quality baseline 与 `hard_fail` case；Build 阶段继续补 hybrid relevance regression | 先回退到 lexical-only |
 | KNO-R08 | Risk | observability 字段不完整 | 退化问题难以追溯 | 在 Gate 中强校验日志/trace attrs | 先阻断上线，不接受“观测后补” |
 | KNO-R09 | Risk | edge 设备 BM25 10k+ chunks 延迟超预算 | `edge_balanced` 下 lexical recall 可能超出 `request_deadline_ms` | `KNO-TODO-001` 已补 host-side 10k chunks PoC（文件库 `p99=0.7640ms`，内存库 `p99=0.9224ms`）；Phase K1 继续补 vendored sqlite / 目标机 smoke benchmark | 减小 top-k 或限制 corpus 规模；极端情况 `edge_minimal` 保持 `knowledge=false` |
 | KNO-R10 | Risk | corpus 投毒或间接 prompt injection | 恶意语料进入 evidence 影响 LLM 推理 | `KNO-TODO-003` 已冻结 trust level、authority level、format allowlist 与 SourceScanner quarantine 规则；Build 阶段继续验证审计证据 | 拒绝未注册语料源；对 quarantine 语料做隔离审计 |
@@ -2360,16 +2417,18 @@ profile schema v2 演进预留：
 1. `IQueryEncoder` / `IVectorRecallStore` 的 owner 已冻结为 `knowledge/include/retrieve/`；剩余未决只在 concrete adapter 放置位置与 memory sqlite-vss backend 落地节奏，不再涉及 owner 重选。
 2. 共享 sqlite target 仍需从 `memory/CMakeLists.txt` 的局部配方下沉到通用 third-party helper；这是接线问题，不再涉及 lexical engine 重选。
 3. 首批 corpus source、authority/trust 规则、metadata 必填字段与 quarantine 条件已形成 SSOT；剩余未决仅在未来是否引入 `AuthorityLevel::Advisory` 的 working-doc corpus lane。
-4. `EvidenceSlice` 是否需要在 runtime/memory/multi_agent 共同消费后升格为 shared contracts，当前仍应保持 module-local。
-5. `edge_minimal` 是否在后续版本允许只读、本地、小语料的 lexical-only knowledge，需要单独性能评估。
+4. retrieval quality baseline、YAML manifest schema、aggregate thresholds 与 context-level 扩展槽位已形成 SSOT；剩余未决仅在未来何时把 `Context Precision` / `Context Recall` / `Faithfulness` 从 advisory 诊断升级为硬 Gate。
+5. `EvidenceSlice` 是否需要在 runtime/memory/multi_agent 共同消费后升格为 shared contracts，当前仍应保持 module-local。
+6. `edge_minimal` 是否在后续版本允许只读、本地、小语料的 lexical-only knowledge，需要单独性能评估。
 
 ### 12.2 后续任务建议
 
 1. `KNO-TODO-001` 已完成：冻结 SQLite FTS5 lexical 路线、共享 sqlite target 接入方向、`IndexManifest` 关键字段与 host-side 10k chunks PoC。
 2. `KNO-TODO-002` 已完成：冻结 vector bridge 窄接口（含 `IQueryEncoder` / `IVectorRecallStore`）owner、注入方向与 degrade 语义。
 3. `KNO-TODO-003` 已完成：冻结首批 corpus baseline、metadata/trust SSOT、profile snapshot canonicalize 规则与 quarantine 条件。
-4. `KNO-TODO-004`：定义 retrieval quality golden set、MRR/NDCG@k/Recall@k 阈值与 context-level 指标扩展槽位。
-5. 在 001 ~ 003 完成后，可进入专项 TODO §6.4 ~ §6.5 的 catalog/index/ingest Build；004 完成后再补 quality regression Gate 与总收口。
+4. `KNO-TODO-004` 已完成：冻结 `retrieval_quality_v1.yaml` manifest、样本覆盖下限、`MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` 阈值、`hard_fail` case 规则与 context-level 指标扩展槽位。
+5. 在 001 ~ 004 全部完成后，可进入专项 TODO §6.2 ~ §6.7 的 Build；其中 030 的 quality regression Gate 不再受设计 blocker 限制，仅受 smoke/degrade 与 golden 资产落盘前置约束。
+
 
 ### 12.3 结论性说明
 
