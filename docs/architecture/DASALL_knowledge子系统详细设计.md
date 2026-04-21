@@ -407,7 +407,7 @@ flowchart LR
 | `CorpusRouter` | 选择目标语料、检索模式和 recall 参数 | `NormalizedQuery`、`KnowledgeConfigSnapshot`、catalog freshness | `RetrievalPlan` | CorpusCatalog |
 | `RecallCoordinator` | 驱动 lexical / vector 召回并统一收集候选 | `RetrievalPlan` | `RecallCandidateSet` | SparseRetriever、VectorRetrieverBridge |
 | `SparseRetriever` | 执行关键词/BM25 类召回与 metadata filter | `RetrievalPlan` | `vector<RecallHit>` | IndexReader |
-| `VectorRetrieverBridge` | 通过窄接口访问向量后端，执行 dense recall | `RetrievalPlan` | `vector<RecallHit>` | memory vector backend / local fallback |
+| `VectorRetrieverBridge` | 通过 Knowledge 自有窄接口访问向量后端，执行 dense recall | `RetrievalPlan` | `vector<RecallHit>` | `IQueryEncoder`、`IVectorRecallStore` |
 | `Reranker` | 去重、RRF merge、freshness 修正、top-k 收敛 | `RecallCandidateSet` | `RankedHitSet` | FreshnessController |
 | `EvidenceAssembler` | 组装 `EvidenceSlice`/`EvidenceBundle`，生成 `context_projection` | `RankedHitSet`、budget policy | `EvidenceBundle` | token budget projector |
 | `CorpusCatalog` | 保存 corpus 描述、source trust、版本与路由元数据 | ingest report、health snapshot | `CorpusDescriptor`、route hints | IndexWriter |
@@ -680,7 +680,7 @@ sequenceDiagram
 | `NoCorpusAvailable` | CorpusRouter 无可用语料 | `Provider` | `knowledge::router` | 跳过召回，直接返回 evidence_insufficient | `ok=true, evidence_insufficient=true` |
 | `IndexUnavailable` | active_snapshot 为空且不允许 stale | `Provider` | `knowledge::index_reader` | 返回空 evidence | `ok=false`；可建议 Runtime 触发 refresh |
 | `IndexStaleRejected` | snapshot 过期且 `allow_stale=false` | `Policy` | `knowledge::freshness` | 拒绝返回过期结果 | `ok=false`；Runtime 可选择触发 refresh 或放宽 allow_stale |
-| `VectorBackendUnavailable` | dense lane 超时或 backend 不可达 | `Provider` | `knowledge::vector_bridge` | 退化到 lexical-only，标记 degraded | `ok=true, degraded=true` |
+| `VectorBackendUnavailable` | dense lane 超时、backend 不可达，或 required query encoder 不可用 | `Provider` | `knowledge::vector_bridge` | 退化到 lexical-only，标记 degraded | `ok=true, degraded=true` |
 | `RecallTimeout` | 所有 lane 均超 deadline | `Runtime` | `knowledge::recall_coordinator` | 返回已收集的部分结果 | `ok=true, degraded=true` 或 `ok=false` |
 | `EvidenceBudgetExhausted` | budget 不足以填充任何 slice | `Policy` | `knowledge::assembler` | 返回空 projection + evidence_insufficient | `ok=true, evidence_insufficient=true` |
 | `RefreshBusy` | 已有活跃 refresh 在运行 | `Runtime` | `knowledge::ingest_worker` | 返回 `RefreshResult::Busy` | Runtime 稍后重试或忽略 |
@@ -1273,19 +1273,31 @@ private:
 
 ##### VectorRetrieverBridge
 
-1. **职责**：通过窄接口访问 memory/vector backend 或本地向量存储，执行 dense recall 并把 backend 私有结果归一化为 `RecallHit`。
-2. **非职责边界**：不拥有 embedding model 生命周期；不做 ingest 写入；不做混合融合；不决定是否启用 vector 模式。
+1. **职责**：通过 Knowledge 自有 module-local ports 访问外部向量 recall 能力，执行 dense recall 并返回可直接进入 hybrid merge 的 `RecallHit`。
+2. **非职责边界**：不拥有 embedding model 或 vector backend 生命周期；不做 ingest 写入；不做混合融合；不决定是否启用 vector 模式；不直接 include memory/llm concrete 头文件。
 3. **核心数据定义**：
    - 消费：`RetrievalPlan` 中的 dense lane 参数、query text、corpus filter。
    - 产出：`vector<RecallHit>`、lane 级错误码与 warning。
    - 依赖状态：backend health snapshot、vector index availability、bridge config。
 
+```cpp
+enum class DenseQueryInputMode {
+  TextOnly,
+  EmbeddingRequired,
+};
+
+struct DenseQueryRequest {
+  std::string query_text;
+  std::vector<float> query_embedding;
+  std::size_t top_k = 0;
+};
+```
+
 查询时 embedding 编码策略：
 
 ```cpp
-/// 窄接口：将 query text 编码为向量。
-/// 实现可走 memory vector backend 的 encode_query()，
-/// 或本地 ONNX/TFLite 模型，或远程 embedding service。
+/// Knowledge 自有窄接口：将 query text 编码为向量。
+/// 具体实现可由外部 adapter 注入，但 owner 不下沉到 llm 或 memory。
 class IQueryEncoder {
 public:
   virtual ~IQueryEncoder() = default;
@@ -1294,9 +1306,21 @@ public:
 };
 ```
 
-> `VectorRetrieverBridge` 通过构造函数注入 `IQueryEncoder`。
-> 若 backend 自带 `encode_query()` 能力，则 `BackendQueryEncoder` 封装该调用；
-> 若 backend 只提供纯向量检索，则 `LocalQueryEncoder` 在 bridge 侧完成编码。
+```cpp
+/// Knowledge 自有 outbound port：执行 dense recall。
+/// backend 私有命中结构必须在 adapter 内完成映射，不外泄到 Knowledge 核心。
+class IVectorRecallStore {
+public:
+  virtual ~IVectorRecallStore() = default;
+  virtual bool available() const = 0;
+  virtual DenseQueryInputMode query_input_mode() const = 0;
+  virtual std::vector<RecallHit> search(const DenseQueryRequest& request) const = 0;
+};
+```
+
+> `IQueryEncoder` 与 `IVectorRecallStore` 都归 `knowledge/include/retrieve/` 所有，并保持 module-local。
+> 外部模块只提供 adapter implementation；Knowledge 核心不直接依赖 memory vector public types 或未来的 llm/provider public types。
+> 对 memory 当前 public adapter 而言，`query_input_mode() = TextOnly`；对未来只接受向量输入的 ANN / remote backend，`query_input_mode() = EmbeddingRequired`。
 
 4. **公共/内部接口**：
 
@@ -1304,27 +1328,28 @@ public:
 class VectorRetrieverBridge {
 public:
   VectorRetrieverBridge(std::unique_ptr<IQueryEncoder> encoder,
-                        BackendConfig backend_config);
+                        std::unique_ptr<IVectorRecallStore> vector_store);
   LaneResult retrieve(const RetrievalPlan& plan) const;
   bool available() const;
 
 private:
-  EmbeddingQuery build_embedding_query(const RetrievalPlan& plan) const;
-  std::vector<RecallHit> map_hits(const BackendHitSet& hits) const;
+  DenseQueryRequest build_dense_query(const RetrievalPlan& plan) const;
 
   std::unique_ptr<IQueryEncoder> query_encoder_;
+  std::unique_ptr<IVectorRecallStore> vector_store_;
 };
 ```
 
 5. **关键执行流**：
-   1. 先检查 `vector_enabled`、backend health 和 active snapshot。
-   2. 从 `RetrievalPlan` 构建 dense query。
-   3. 调用 backend 执行向量检索。
-   4. 将 backend hit 集映射为 `RecallHit`，并透传 freshness / citation 基础信息。
+   1. 先检查 `vector_enabled`、`vector_store_` 与 `vector_store_->available()`。
+   2. 从 `RetrievalPlan` 构建 `DenseQueryRequest`。
+   3. 若 `query_input_mode() = EmbeddingRequired`，再检查 `query_encoder_` 与 `query_encoder_->available()`，并生成 `query_embedding`。
+   4. 调用 `IVectorRecallStore::search()` 获取 `RecallHit` 列表。
+   5. dense lane 失败只产生 lane 级失败或 warning，由 `RecallCoordinator` 统一裁定是否退化。
 6. **失败与回退语义**：
-   - backend unavailable / timeout / snapshot missing 时返回 lane 失败，由 `RecallCoordinator` 决定是否退化。
+   - `vector_store_` 缺失、backend unavailable / timeout，或 required encoder unavailable 时返回 `VectorBackendUnavailable` lane failure，由 `RecallCoordinator` 决定是否退化。
    - 不对 backend 做重试风暴式调用；仅允许单次 best-effort 读取。
-   - 不允许在 vector 关闭时偷偷改走 sparse lane，lane 选择属于 coordinator/router。
+   - 不允许在 vector 关闭时偷偷改走 sparse lane，也不允许在 Knowledge 核心内创建第二套本地向量 fallback；lane 选择属于 coordinator/router。
 7. **测试与验收出口**：推荐单测 `VectorRetrieverBridgeTest.cpp`、`VectorRetrieverBridgeUnavailableTest.cpp`；验收命令 `ctest --test-dir build-ci -R "VectorRetrieverBridge.*Test" --output-on-failure`。
 
 ##### Reranker
@@ -2051,6 +2076,7 @@ public:
 | `knowledge/include/retrieve/SparseRetriever.h` | lexical 召回接口 |
 | `knowledge/include/retrieve/VectorRetrieverBridge.h` | 向量召回桥接接口 |
 | `knowledge/include/retrieve/IQueryEncoder.h` | 查询编码窄接口 |
+| `knowledge/include/retrieve/IVectorRecallStore.h` | 向量召回存储窄接口 |
 | `knowledge/include/rerank/Reranker.h` | 重排器接口 |
 | `knowledge/include/evidence/EvidenceAssembler.h` | 证据组装接口 |
 | `knowledge/include/index/IndexReader.h` | 索引只读接口 |
@@ -2080,6 +2106,7 @@ public:
 | `tests/unit/knowledge/*.cpp` | module-level unit tests |
 | `tests/integration/knowledge/*.cpp` | smoke / failure / profile integration tests |
 | `tests/mocks/include/MockKnowledgeService.h` | Runtime/Cognition 侧测试支撑 |
+| `tests/mocks/include/MockQueryEncoder.h` | dense lane / degrade 测试支撑 |
 | `tests/mocks/include/MockVectorRecallStore.h` | hybrid recall 与 degrade 测试支撑 |
 
 ### 8.2 分阶段实施计划
@@ -2200,7 +2227,7 @@ profile schema v2 演进预留：
 | ID | 类型 | 描述 | 影响 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|---|
 | KNO-B01 | Blocker | `IKnowledgeService` supporting contracts 未冻结 | 不能推进 shared contracts header | 保持 module-local public interface；待多模块复用稳定后再评审 admission | 不做 contracts 升格 |
-| KNO-B02 | Blocker | memory/vector backend 的 ownership 与桥接接口未最终收敛 | hybrid recall Build 可能反复修改 | 先冻结窄接口 `IVectorRecallStore` 或等价 bridge contract 于 module-local | lexical-only 先行 |
+| KNO-B02 | Blocker（已解） | `KNO-TODO-002` 已冻结 `IQueryEncoder` / `IVectorRecallStore` 为 Knowledge 自有 module-local ports，注入方向固定为 composition root -> Knowledge | `KNO-BLK-002` 可关闭；hybrid recall Build 可进入 port 实现期 | 保持 `knowledge/include/retrieve/` owner，不把 port 下沉到 memory/llm；dense lane 继续允许 unavailable/degraded | 若 concrete adapter 未就绪，继续用 mock/unavailable adapter 推进 RecallCoordinator、profile compatibility 与 failure/degrade 用例 |
 | KNO-B03 | Blocker（已解） | `KNO-TODO-001` 已冻结 lexical 路线为 SQLite FTS5 + 共享 sqlite target + 显式 tokenizer profile | `KNO-BLK-001` 可关闭；lexical-only P0 可进入 Build | 保持 `SQLITE_ENABLE_FTS5=1` 的共享 sqlite target，并在 manifest 记录 `format_version` / `lexical_backend` / `tokenizer_profile` | 若共享 target 接线短期未就绪，只允许继续用 FTS5 测试夹具做 smoke，不重新打开多路线选型 |
 | KNO-B04 | Blocker | 首批 corpus 资产与 metadata 规范缺失 | ingest/index 无法验证真实数据 | 补齐最小语料包、metadata 必填字段和 source trust 规则 | 先使用测试语料夹具 |
 | KNO-R05 | Risk | 证据预算推导过紧导致 recall 足够但投影过少 | 回答 grounding 变弱 | 用 golden set 调优 `evidence_budget_tokens` | 暂时回退到固定 top-k 投影 |
@@ -2221,7 +2248,7 @@ profile schema v2 演进预留：
 
 ### 12.1 未决问题
 
-1. `IVectorRecallStore` 的 owner 应落在 memory/include 还是 knowledge/include bridge 层，目前需在 Build 前冻结。
+1. `IQueryEncoder` / `IVectorRecallStore` 的 owner 已冻结为 `knowledge/include/retrieve/`；剩余未决只在 concrete adapter 放置位置与 memory sqlite-vss backend 落地节奏，不再涉及 owner 重选。
 2. 共享 sqlite target 仍需从 `memory/CMakeLists.txt` 的局部配方下沉到通用 third-party helper；这是接线问题，不再涉及 lexical engine 重选。
 3. 首批 corpus source 的信任等级、metadata 必填字段和更新节奏尚未形成 SSOT。
 4. `EvidenceSlice` 是否需要在 runtime/memory/multi_agent 共同消费后升格为 shared contracts，当前仍应保持 module-local。
@@ -2230,7 +2257,7 @@ profile schema v2 演进预留：
 ### 12.2 后续任务建议
 
 1. `KNO-TODO-001` 已完成：冻结 SQLite FTS5 lexical 路线、共享 sqlite target 接入方向、`IndexManifest` 关键字段与 host-side 10k chunks PoC。
-2. `KNO-TODO-002`：冻结 vector bridge 窄接口（含 `IQueryEncoder`），补 hybrid recall 设计与 profile compatibility 证据。
+2. `KNO-TODO-002` 已完成：冻结 vector bridge 窄接口（含 `IQueryEncoder` / `IVectorRecallStore`）owner、注入方向与 degrade 语义。
 3. `KNO-TODO-003`：补齐 corpus baseline、metadata/trust SSOT 与最小 source 资产。
 4. `KNO-TODO-004`：定义 retrieval quality golden set、MRR/NDCG@k/Recall@k 阈值与 context-level 指标扩展槽位。
 5. 在 001 ~ 004 完成后，进入专项 TODO §6.2 ~ §6.4 的公共骨架、组件实现和测试门禁任务。

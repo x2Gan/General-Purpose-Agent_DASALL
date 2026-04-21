@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #380
+
+- 日期：2026-04-21
+- 阶段：knowledge/专项 TODO 设计解阻轮次
+- 任务：KNO-TODO-002 冻结 vector bridge 窄接口与 ownership
+- 状态：已完成
+
+### 任务选择
+
+1. `KNO-BLK-002` 直接阻塞 `VectorRetrieverBridge`、failure/degrade integration、profile compatibility integration 与 Facade 完整编排；若 owner 和注入方向继续悬空，hybrid Build 会在 knowledge / memory / llm 三侧来回漂移。
+2. 当前 knowledge 详设存在三处口径冲突：工厂签名已声明注入 `IQueryEncoder` + `IVectorRecallStore`，但 `IVectorRecallStore` 没有接口定义；`VectorRetrieverBridge` 卡片仍保留 `BackendConfig` 构造；memory 侧现有 public vector interface 又把 query encoding 藏在自身内部。002 的目标就是把这三处口径压成一套单一语义。
+3. 本轮限定为“owner + 注入方向 + dense lane degrade 语义冻结”，不提前进入 concrete adapter、sqlite-vss backend 或 hybrid 实现期代码。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-002-vector-bridge窄接口与ownership设计收敛.md`：
+   - 冻结 `IQueryEncoder`、`IVectorRecallStore` 均归 `knowledge/include/retrieve/` 所有；
+   - 明确注入方向为 `composition root -> Knowledge ports -> VectorRetrieverBridge`；
+   - 引入 `DenseQueryInputMode`，兼容 memory 当前 text-only search 与未来 embedding-required backend。
+2. 更新 `docs/architecture/DASALL_knowledge子系统详细设计.md`：
+   - 将 `VectorRetrieverBridge` 的直接依赖改为 Knowledge 自有 ports，而不是 memory/vector backend 或 local fallback；
+   - 补齐 `IVectorRecallStore` 接口、`DenseQueryRequest` / `DenseQueryInputMode` 数据定义，并把 `VectorRetrieverBridge` 构造函数改为注入 `std::unique_ptr<IVectorRecallStore>`；
+   - 关闭 11.1 的 `KNO-B02` ownership blocker，并把 12.1 未决问题收敛为“concrete adapter 落点与 memory backend 落地节奏”，不再重新讨论 owner。
+3. 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`：
+   - 将 `KNO-TODO-002` 标记为 `Done`，并新增 deliverable 路径；
+   - 回写 `KNO-BLK-002` 校准记录；
+   - 将 `KNO-TODO-015`、`028`、`029` 以及先前由 `KNO-BLK-001/002` 挡住的下游任务切换为可启动状态。
+
+### 测试
+
+1. 本地设计证据核对：
+   - knowledge 工厂签名已声明 `std::unique_ptr<IQueryEncoder>` 与 `std::unique_ptr<IVectorRecallStore>` 注入；
+   - memory 现有 public vector interface 为 `VectorMemoryIndexAdapter::search(query_text, top_k)`，并由 memory 自有 `IEmbeddingAdapter` 支撑；
+   - memory vector backend 冻结结论已是 `sqlite-vss -> none`，但 concrete sqlite-vss backend 仍缺失；
+   - llm / services 工作区没有现成可复用的 query encoder 公共接口，因此 `IQueryEncoder` 不应外迁 owner。
+2. 文档验收：
+   - 使用 `rg -n "IQueryEncoder|IVectorRecallStore|DenseQueryInputMode|VectorRetrieverBridge|VectorBackendUnavailable|memory_vector=false" docs/architecture/DASALL_knowledge子系统详细设计.md docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md docs/todos/knowledge/deliverables/KNO-TODO-002-vector-bridge窄接口与ownership设计收敛.md` 校验关键结论可检索。
+3. 本轮未执行 CMake 构建或 CTest：`KNO-TODO-002` 是 bridge owner 冻结任务，目的是解除 hybrid 路径的设计阻塞，而不是立即进入 `VectorRetrieverBridge` concrete 实现期。
+
+### 结果
+
+1. `IQueryEncoder` 与 `IVectorRecallStore` 的 owner 已唯一收敛到 Knowledge 模块，且保持 module-local，不进入 `contracts/`、`memory/include/` 或 `llm/include/`。
+2. Knowledge hybrid 路径的正确依赖方向已冻结为“外部 adapter 注入实现”；Knowledge 核心不再直接依赖 memory vector public type 或未来的 llm/provider public type。
+3. `memory_vector=true` 的语义被收敛为“capability intent”，不是 dense lane 必然在线；dense lane unavailable / encoder unavailable 时统一回到 lexical-only degraded 语义。
+
+### 下一步
+
+1. 进入 `KNO-TODO-003`，补齐首批 corpus baseline、metadata 必填字段、trust level 与 quarantine SSOT，继续按单任务串行推进 blocker recovery。
+
+### 风险
+
+1. `IVectorRecallStore` owner 已冻结，但 concrete `MemoryVectorRecallStoreAdapter` 放在 memory 侧还是组合根辅助目录，仍需在 Build 期结合依赖图做一次最小落点决策。
+2. memory concrete sqlite-vss backend 仍未落盘；后续 hybrid 实现只能先对接 mock/unavailable adapter 或 text-only wrapper，不能把 concrete backend 存在当作前提。
+
 ## 记录 #379
 
 - 日期：2026-04-21
