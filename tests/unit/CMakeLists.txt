@@ -118,6 +118,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_session_type_surface_unit_test
 	dasall_runtime_scheduler_surface_unit_test
 	dasall_runtime_checkpoint_state_mapper_unit_test
+	dasall_runtime_transition_guard_table_unit_test
 	${DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_tool_invocation_context_surface_unit_test

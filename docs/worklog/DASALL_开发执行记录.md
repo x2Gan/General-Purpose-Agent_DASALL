@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #425
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-013 实现 TransitionGuardTable
+- 状态：已完成
+
+### 任务选择
+
+1. 012 完成后，013 是 014 的直接前置；如果不先把 6.7.4 的合法边、guard 条件和 checkpoint 策略落成独立规则表，`AgentFsm` 会在实现期继续手写转移条件，放大状态机语义漂移风险。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `TransitionGuardTable`，能稳定回答三件事：from->to 是否合法、该边需要哪些 guard、该边应产出什么 checkpoint hint。
+3. 本轮只实现规则表和单测，不提前实现 `AgentFsm` 的 rejection/outcome 逻辑。
+
+### 改动
+
+1. 新增 `runtime/src/fsm/TransitionGuardTable.h` 与 `runtime/src/fsm/TransitionGuardTable.cpp`：
+   - 编码 6.7.4 的 22 条合法转移；
+   - 落地 `TransitionGuardTable::is_legal(...)`、`get_guard(...)`、`get_checkpoint_strategy(...)`；
+   - 用 `TransitionGuardRule{all_of, any_of}` 支持 `Reflecting -> Reasoning`、`Reflecting -> FailedSafe` 这类 OR 守卫；
+   - 固定每条合法边的 `CheckpointMutationKind`、`CheckpointState` 和 `pending_action_required`。
+2. 新增 `tests/unit/runtime/TransitionGuardTableTest.cpp`：
+   - 逐条断言 22 条合法边的 guard 规则和 checkpoint strategy；
+   - 校验 guard 满足/缺失时的 `satisfied_by(...)` 与 `first_unsatisfied_guard(...)`；
+   - 穷举 17x17 组合，验证所有不在 6.7.4 表中的非法边都返回 `is_legal=false` 且无 guard/hint。
+3. 更新 `runtime/CMakeLists.txt`、`tests/unit/runtime/CMakeLists.txt`、`tests/unit/CMakeLists.txt`：
+   - 把规则表实现接入 `dasall_runtime`；
+   - 注册 `dasall_runtime_transition_guard_table_unit_test` 与 `TransitionGuardTableTest`。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-013-TransitionGuardTable设计收敛.md`：
+   - 固定私有规则表边界、AND/OR guard 编码方式、Build 三件套和不扩 public ABI 的约束。
+
+### 验证
+
+1. 窄目标构建：
+   - ListBuildTargets_CMakeTools：确认 `dasall_runtime_transition_guard_table_unit_test` 已被发现。
+   - Build_CMakeTools：`dasall_runtime_transition_guard_table_unit_test`
+   - 结果：通过；并在一次重构后消除了本轮新增代码的初始化告警。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `TransitionGuardTableTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_transition_guard_table_unit_test && ctest --test-dir build-ci -R "^TransitionGuardTableTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-013 已完成，runtime 现在具备可复用的 FSM 转移规则表；014 可以直接消费 guard 规则和 checkpoint strategy，而不必再次抄写 6.7.4。
+2. 本轮把合法边集合、guard 编码和 checkpoint hint 从 `AgentFsm` 中前移到独立模块，后续 rejection reason 只需围绕规则表结果组装。
+
+### 下一步
+
+1. 进入 RT-TODO-014，实现 `AgentFsm`，把 `TransitionGuardTable` 的合法边查询、guard 校验和 `TransitionRejectionReason` 组装串起来。
+
+### 风险
+
+1. `WaitingClarify -> Receiving` 当前复用 `AgentRequestAvailable` 表示新的用户澄清输入到达；如果后续 session/resume 语义证明这两个入口必须区分，需要在 014 或后续任务中审视 guard fact 词汇是否需要细化，但本轮先保持 public ABI 不扩张。
+2. 013 只提供规则表与 guard 判定辅助，不直接产出 `StateTransitionOutcome`；014 若绕开规则表手写 rejection 逻辑，仍可能重新引入 detail 文案和 violated_guard 选择不一致的问题。
+
 ## 记录 #424
 
 - 日期：2026-04-22

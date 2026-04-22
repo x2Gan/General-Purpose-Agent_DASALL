@@ -4,6 +4,7 @@ target_sources(dasall_runtime
   PRIVATE
     src/AgentFacade.cpp
     src/checkpoint/CheckpointStateMapper.cpp
+    src/fsm/TransitionGuardTable.cpp
 )
 
 target_compile_features(dasall_runtime PUBLIC cxx_std_20)
