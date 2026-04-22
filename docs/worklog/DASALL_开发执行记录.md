@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #410
+
+- 日期：2026-04-22
+- 阶段：knowledge/专项 TODO Build retrieval quality regression gate 轮次
+- 任务：KNO-TODO-030 验证 retrieval quality regression gate
+- 状态：已完成
+
+### 任务选择
+
+1. `KNO-TODO-004` 已冻结 quality manifest schema 与阈值，`KNO-TODO-027/028` 已分别给出 lexical smoke 与 failure/degrade 集成基线，因此 030 已具备直接进入 Build 的前置条件。
+2. 030 的最小闭环不是补 retrieval 生产逻辑，而是把 004 冻结的 `retrieval_quality_v1.yaml`、coverage floor、aggregate metric 和 `hard_fail` 语义落成真实 integration gate。
+3. 本轮严格限定为 quality gate 资产与 harness，不提前推进 033 的 refresh 闭环，也不提前做 031 的全量 Gate 回写。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-030-retrieval-quality-regression-gate设计收敛.md`：
+   - 固定 030 只负责 source-level retrieval quality gate；
+   - 锁定固定 schema YAML manifest、真实 lexical harness、aggregate metric 与 `hard_fail` 判定路径；
+   - 输出 Design -> Build 映射与 Build 三件套。
+2. 新增 `tests/integration/knowledge/golden/retrieval_quality_v1.yaml`：
+   - 落盘 30 条 curated regression cases；
+   - 满足 `FactLookup` / `ProcedureLookup` / `DiagnosticContext` 各 10 条、`hard_fail` 6 条、`architecture/adr/ssot/profile` coverage floor；
+   - 固化 `MRR@10` / `NDCG@10` / `Recall@5` / `Recall@10` baseline 与 95% relative regression 规则。
+3. 新增 `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`：
+   - 实现固定 schema YAML 解析；
+   - 复用真实 `KnowledgeServiceFacade + QueryNormalizer + CorpusRouter + IndexReader + SparseRetriever + RecallCoordinator + Reranker + EvidenceAssembler` lexical 链，按 `source_uri` 去重计算 aggregate metrics；
+   - 补 1 条正向断言与 1 条 hard-fail 负向断言。
+4. 更新 `tests/integration/knowledge/CMakeLists.txt`：
+   - 注册 `dasall_knowledge_retrieval_quality_regression_integration_test`；
+   - 接入 `knowledge/src` include 与 `dasall_sqlite3`。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge_retrieval_quality_regression_integration_test`
+   - 结果：构建通过。
+2. `RunCtest_CMakeTools`：
+   - 对 `RetrievalQualityRegressionTest` 仍返回仓库已知工具态错误 `生成失败`；
+   - 结论：不作为 030 代码失败信号，转用仓库稳定回退链。
+3. `build-ci` 定向验收：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge_retrieval_quality_regression_integration_test`
+   - `ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure`
+   - 结果：1/1 Passed。
+4. 聚合验收补充：
+   - `cmake --build build-ci --target dasall_integration_tests`
+   - 聚合构建/执行中 `RetrievalQualityRegressionTest` Passed；
+   - 但 aggregate target 最终被仓库既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败拖住。
+
+### 结果
+
+1. 030 已完成，knowledge 现在具备可执行的 retrieval quality regression gate，而不是只有设计上的阈值描述。
+2. `retrieval_quality_v1.yaml` 已成为单一真值源，gate 会对 aggregate metrics、coverage floor 与 `hard_fail` case 同时做二值判定。
+3. 本轮没有引入新的 knowledge 生产逻辑改动，说明 030 成功保持在 quality gate 范围内，没有越界扩张到 033 或 031。
+
+### 下一步
+
+1. 进入 `KNO-TODO-033`，补 `request_refresh -> ingest -> snapshot swap -> retrieve` 的端到端 integration 闭环与 swap failure rollback 验证。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 对 knowledge 测试仍存在通用 `生成失败` 工具态问题，本轮继续依赖 build-ci 定向命令作为主验证证据。
+2. `dasall_integration_tests` aggregate target 目前受无关的 infra diagnostics 失败污染；在 031 做全量 Gate 回写时，需要把它明确记录为仓库级残余风险，而不是误记为 030 缺陷。
+
 ## 记录 #409
 
 - 日期：2026-04-22

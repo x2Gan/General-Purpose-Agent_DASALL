@@ -1,0 +1,451 @@
+format_version: 1
+dataset_id: knowledge_retrieval_quality_v1
+retrieval_top_k: 10
+aggregate_thresholds:
+  min_mrr_at_10: 0.70
+  min_ndcg_at_10: 0.82
+  min_recall_at_5: 0.80
+  min_recall_at_10: 0.90
+  max_regression_pct: 5
+baseline_metrics:
+  mrr_at_10: 0.92
+  ndcg_at_10: 0.93
+  recall_at_5: 0.91
+  recall_at_10: 0.94
+coverage:
+  min_total_cases: 30
+  min_fact_lookup_cases: 10
+  min_procedure_lookup_cases: 10
+  min_diagnostic_context_cases: 10
+  min_hard_fail_cases: 6
+  min_architecture_reference_cases: 6
+  min_adr_normative_cases: 8
+  min_ssot_normative_cases: 8
+  min_profile_policy_normative_cases: 4
+context_metric_slots:
+  enabled: false
+  fields:
+    - context_precision_reference
+    - context_recall_reference
+    - faithfulness_reference
+cases:
+  fact_arch_01:
+    query_kind: FactLookup
+    query_text: quality architecture fact alpha atlas boundary
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-01.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-01.md#fact-arch-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_arch_02:
+    query_kind: FactLookup
+    query_text: quality architecture fact bravo corridor ledger
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-02.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-02.md#fact-arch-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_arch_03:
+    query_kind: FactLookup
+    query_text: quality architecture fact charlie dependency surface
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-03.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-03.md#fact-arch-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_arch_01:
+    query_kind: ProcedureLookup
+    query_text: quality architecture procedure delta rollback staging
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-04.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-04.md#proc-arch-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_arch_01:
+    query_kind: DiagnosticContext
+    query_text: quality architecture diagnostic echo mismatch probe
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-05.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-05.md#diag-arch-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_arch_02:
+    query_kind: DiagnosticContext
+    query_text: quality architecture diagnostic foxtrot stale symptom
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-06.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-06.md#diag-arch-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_adr_01:
+    query_kind: FactLookup
+    query_text: quality adr fact golf owner boundary
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-01.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-01.md#fact-adr-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_adr_02:
+    query_kind: FactLookup
+    query_text: quality adr fact hotel lifecycle contract
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-02.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-02.md#fact-adr-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_adr_03:
+    query_kind: FactLookup
+    query_text: quality adr fact india semantic authority
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-03.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-03.md#fact-adr-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_adr_01:
+    query_kind: ProcedureLookup
+    query_text: quality adr procedure juliet fail closed sequence
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-04.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-04.md#proc-adr-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_adr_02:
+    query_kind: ProcedureLookup
+    query_text: quality adr procedure kilo guardrail escalation
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-05.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-05.md#proc-adr-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_adr_03:
+    query_kind: ProcedureLookup
+    query_text: quality adr procedure lima recovery ownership
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-06.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-06.md#proc-adr-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_adr_01:
+    query_kind: DiagnosticContext
+    query_text: quality adr diagnostic mike regression symptom
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-07.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-07.md#diag-adr-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_adr_02:
+    query_kind: DiagnosticContext
+    query_text: quality adr diagnostic november rollback symptom
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-08.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-08.md#diag-adr-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_ssot_01:
+    query_kind: FactLookup
+    query_text: quality ssot fact oscar invariant packet
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-01.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-01.md#fact-ssot-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_ssot_02:
+    query_kind: FactLookup
+    query_text: quality ssot fact papa concurrency matrix
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-02.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-02.md#fact-ssot-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_ssot_01:
+    query_kind: ProcedureLookup
+    query_text: quality ssot procedure quebec quarantine flow
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-03.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-03.md#proc-ssot-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_ssot_02:
+    query_kind: ProcedureLookup
+    query_text: quality ssot procedure romeo freshness ladder
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-04.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-04.md#proc-ssot-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_ssot_03:
+    query_kind: ProcedureLookup
+    query_text: quality ssot procedure sierra ledger promotion
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-05.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-05.md#proc-ssot-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_ssot_01:
+    query_kind: DiagnosticContext
+    query_text: quality ssot diagnostic tango degraded signal
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-06.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-06.md#diag-ssot-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_ssot_02:
+    query_kind: DiagnosticContext
+    query_text: quality ssot diagnostic uniform telemetry drop
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-07.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-07.md#diag-ssot-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_ssot_03:
+    query_kind: DiagnosticContext
+    query_text: quality ssot diagnostic victor fallback trace
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-08.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-08.md#diag-ssot-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_profile_01:
+    query_kind: FactLookup
+    query_text: quality profile fact whiskey projection enablement
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-01.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-01.yaml#fact-profile-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_profile_02:
+    query_kind: FactLookup
+    query_text: quality profile fact xray vector downgrade
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-02.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-02.yaml#fact-profile-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_profile_01:
+    query_kind: ProcedureLookup
+    query_text: quality profile procedure yankee rollout matrix
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-03.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-03.yaml#proc-profile-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_profile_02:
+    query_kind: ProcedureLookup
+    query_text: quality profile procedure zulu fallback clamp
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-04.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-04.yaml#proc-profile-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_profile_03:
+    query_kind: ProcedureLookup
+    query_text: quality profile procedure amber snapshot cadence
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-05.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-05.yaml#proc-profile-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_profile_01:
+    query_kind: DiagnosticContext
+    query_text: quality profile diagnostic cedar mismatch explain
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-06.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-06.yaml#diag-profile-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_profile_02:
+    query_kind: DiagnosticContext
+    query_text: quality profile diagnostic birch refresh contention
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-07.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-07.yaml#diag-profile-02
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_profile_03:
+    query_kind: DiagnosticContext
+    query_text: quality profile diagnostic dogwood stale projection
+    primary_corpus_id: profile_policy_normative
+    allowed_modes:
+      - LexicalOnly
+    expected_source_uris:
+      - profiles/quality/PROFILE-QUALITY-08.yaml
+    expected_chunk_refs:
+      - profiles/quality/PROFILE-QUALITY-08.yaml#diag-profile-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
