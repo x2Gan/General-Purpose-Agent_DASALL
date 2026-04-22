@@ -70,15 +70,31 @@ std::optional<std::string> SafeModeController::select_fallback(
   }
 
   const auto& degrade_policy = policy_snapshot_->degrade_policy();
-  for (const auto& step : degrade_policy.fallback_chain) {
-    if (!fallback_step_enabled(degrade_policy, step)) {
-      continue;
+  if (trigger_kind == SafeModeTriggerKind::BudgetExhausted) {
+    if (degrade_policy.allow_budget_degrade) {
+      return std::string("allow_budget_degrade");
     }
 
-    if (trigger_kind == SafeModeTriggerKind::BudgetExhausted) {
-      if (step == "allow_budget_degrade" || step == "abort_safe") {
+    for (const auto& step : degrade_policy.fallback_chain) {
+      if (step == "abort_safe") {
         return step;
       }
+    }
+
+    return std::nullopt;
+  }
+
+  if (trigger_kind == SafeModeTriggerKind::DependencyUnavailable &&
+      degrade_policy.allow_model_failover) {
+    for (const auto& step : degrade_policy.fallback_chain) {
+      if (!step.empty() && step != "abort_safe") {
+        return step;
+      }
+    }
+  }
+
+  for (const auto& step : degrade_policy.fallback_chain) {
+    if (!fallback_step_enabled(degrade_policy, step)) {
       continue;
     }
 

@@ -1,0 +1,200 @@
+#include <algorithm>
+#include <exception>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
+
+#include "health/RuntimeHealthProbe.h"
+#include "maintenance/BackgroundMaintenanceHooks.h"
+#include "support/TestAssertions.h"
+#include "telemetry/RuntimeEventBus.h"
+
+namespace {
+
+using dasall::infra::ProbeStatus;
+using dasall::runtime::BackgroundMaintenanceHookOptions;
+using dasall::runtime::BackgroundMaintenanceHooks;
+using dasall::runtime::BackgroundMaintenanceTick;
+using dasall::runtime::IRuntimeHealthSignalProvider;
+using dasall::runtime::RuntimeEventBus;
+using dasall::runtime::RuntimeEventBusOptions;
+using dasall::runtime::RuntimeEventEnvelope;
+using dasall::runtime::RuntimeHealthProbe;
+using dasall::runtime::RuntimeHealthProbeOptions;
+using dasall::runtime::RuntimeHealthSample;
+using dasall::tests::support::assert_equal;
+using dasall::tests::support::assert_true;
+
+class MutableHealthSignalProvider final : public IRuntimeHealthSignalProvider {
+ public:
+  explicit MutableHealthSignalProvider(RuntimeHealthSample sample)
+      : sample_(std::move(sample)) {}
+
+  RuntimeHealthSample sample(std::int64_t) override {
+    const std::lock_guard<std::mutex> lock(sample_mutex_);
+    return sample_;
+  }
+
+  void set_sample(RuntimeHealthSample sample) {
+    const std::lock_guard<std::mutex> lock(sample_mutex_);
+    sample_ = std::move(sample);
+  }
+
+ private:
+  std::mutex sample_mutex_;
+  RuntimeHealthSample sample_;
+};
+
+[[nodiscard]] bool contains_component(const dasall::infra::HealthSnapshot& snapshot,
+                                      const std::string& component) {
+  return std::find(snapshot.failed_components.begin(),
+                   snapshot.failed_components.end(),
+                   component) != snapshot.failed_components.end();
+}
+
+[[nodiscard]] bool has_attribute(const RuntimeEventEnvelope& envelope,
+                                 const std::string& key,
+                                 const std::string& value) {
+  return std::find_if(
+             envelope.attributes.begin(),
+             envelope.attributes.end(),
+             [&key, &value](const auto& attribute) {
+               return attribute.key == key && attribute.value == value;
+             }) != envelope.attributes.end();
+}
+
+void test_health_probe_tracks_maintenance_backlog_and_event_bus_pressure_until_drain() {
+  auto event_bus = std::make_shared<RuntimeEventBus>(RuntimeEventBusOptions{
+      .max_non_audit_queue_depth = 1U,
+      .now_ms = []() { return 1700000005000LL; },
+  });
+  BackgroundMaintenanceHooks hooks(
+      event_bus,
+      BackgroundMaintenanceHookOptions{
+          .now_ms = []() { return 1700000005001LL; },
+          .event_name_prefix = "runtime.maintenance",
+      });
+
+  std::vector<RuntimeEventEnvelope> delivered;
+  const auto subscription = event_bus->subscribe(
+      "runtime.maintenance.idle_tick",
+      [&delivered](const RuntimeEventEnvelope& event) { delivered.push_back(event); });
+  assert_true(subscription.is_valid(),
+              "health-maintenance integration should subscribe to idle tick events");
+
+  auto provider = std::make_shared<MutableHealthSignalProvider>(RuntimeHealthSample{
+      .dependencies_ready = true,
+      .watchdog_healthy = true,
+      .telemetry_degraded = false,
+      .event_bus_overflow = false,
+      .maintenance_backlog = false,
+      .safe_mode_active = false,
+      .failed_components = {},
+      .latency_ms = 11,
+      .sampled_at_unix_ms = 1700000005002LL,
+      .detail_ref = "status://runtime/health/healthy",
+  });
+  RuntimeHealthProbe probe(
+      provider,
+      RuntimeHealthProbeOptions{
+          .detail_namespace = "status://runtime/health",
+          .now_ms = []() { return 1700000005003LL; },
+      });
+
+  const auto first_publish = hooks.publish_idle_tick(BackgroundMaintenanceTick{
+      .tick_sequence = 1U,
+      .system_idle = true,
+      .checkpoint_cleanup_due = true,
+      .session_expiry_due = false,
+      .health_probe_due = true,
+      .profile_refresh_due = false,
+      .telemetry_flush_due = false,
+      .detail = "first idle window",
+      .timestamp_ms = 1700000005004LL,
+  });
+  const auto second_publish = hooks.publish_idle_tick(BackgroundMaintenanceTick{
+      .tick_sequence = 2U,
+      .system_idle = true,
+      .checkpoint_cleanup_due = true,
+      .session_expiry_due = true,
+      .health_probe_due = true,
+      .profile_refresh_due = false,
+      .telemetry_flush_due = true,
+      .detail = "second idle window",
+      .timestamp_ms = 1700000005005LL,
+  });
+  assert_true(first_publish.accepted && second_publish.accepted,
+              "maintenance hooks should enqueue idle ticks on the runtime event bus");
+  assert_true(second_publish.dropped_oldest,
+              "maintenance overflow should drop the oldest pending non-audit event");
+
+  provider->set_sample(RuntimeHealthSample{
+      .dependencies_ready = true,
+      .watchdog_healthy = true,
+      .telemetry_degraded = false,
+      .event_bus_overflow = event_bus->drop_count() > 0,
+      .maintenance_backlog = event_bus->queue_depth() > 0,
+      .safe_mode_active = false,
+      .failed_components = {},
+      .latency_ms = 27,
+      .sampled_at_unix_ms = 1700000005006LL,
+      .detail_ref = "status://runtime/health/degraded/maintenance_backlog",
+  });
+
+  const auto degraded_snapshot = probe.collect_snapshot();
+  const auto degraded_result = probe.probe();
+  assert_true(degraded_snapshot.is_degraded_state(),
+              "event bus overflow plus maintenance backlog should degrade runtime health");
+  assert_true(degraded_result.status == ProbeStatus::Degraded,
+              "runtime health probe should report degraded while maintenance backlog exists");
+  assert_true(contains_component(degraded_snapshot, "runtime.event_bus"),
+              "degraded runtime health should surface runtime.event_bus component");
+  assert_true(contains_component(degraded_snapshot, "runtime.maintenance"),
+              "degraded runtime health should surface runtime.maintenance component");
+
+  assert_equal(1,
+               static_cast<int>(event_bus->dispatch_pending()),
+               "dispatch_pending should drain the newest idle tick without blocking the main loop");
+  assert_equal(1,
+               static_cast<int>(delivered.size()),
+               "maintenance subscriber should only observe the retained idle tick after overflow");
+  assert_true(has_attribute(delivered.front(), "tick_sequence", "2"),
+              "maintenance overflow should retain the newest idle tick event");
+  assert_true(has_attribute(delivered.front(), "telemetry_flush_due", "true"),
+              "retained idle tick should preserve due-work attributes");
+
+  provider->set_sample(RuntimeHealthSample{
+      .dependencies_ready = true,
+      .watchdog_healthy = true,
+      .telemetry_degraded = false,
+      .event_bus_overflow = false,
+      .maintenance_backlog = event_bus->queue_depth() > 0,
+      .safe_mode_active = false,
+      .failed_components = {},
+      .latency_ms = 12,
+      .sampled_at_unix_ms = 1700000005007LL,
+      .detail_ref = "status://runtime/health/recovered",
+  });
+
+  const auto recovered_snapshot = probe.collect_snapshot();
+  const auto recovered_result = probe.probe();
+  assert_true(recovered_snapshot.is_ready(),
+              "runtime health should recover once maintenance backlog is drained");
+  assert_true(recovered_result.status == ProbeStatus::Healthy,
+              "runtime health probe should return Healthy after backlog drain");
+}
+
+}  // namespace
+
+int main() {
+  try {
+    test_health_probe_tracks_maintenance_backlog_and_event_bus_pressure_until_drain();
+  } catch (const std::exception& ex) {
+    std::cerr << ex.what() << '\n';
+    return 1;
+  }
+
+  return 0;
+}

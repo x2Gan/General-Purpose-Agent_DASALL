@@ -1,8 +1,12 @@
+#include <atomic>
+#include <barrier>
 #include <cstdint>
 #include <exception>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "scheduling/Scheduler.h"
 #include "support/TestAssertions.h"
@@ -219,6 +223,80 @@ int main() {
                 "release_worker should succeed for an acquired worker ticket");
     assert_true(!release_result.backpressure_state.workers_saturated(),
                 "release_worker should restore worker budget capacity in fake scheduler");
+
+    dasall::runtime::Scheduler stress_scheduler(2, 4);
+    constexpr int kStressThreadCount = 4;
+    constexpr int kStressIterations = 48;
+    std::barrier sync_point(kStressThreadCount + 1);
+    std::atomic<int> accepted_count{0};
+    std::atomic<int> acquired_count{0};
+    std::atomic<int> released_count{0};
+    std::vector<std::thread> workers;
+    workers.reserve(kStressThreadCount);
+
+    for (int worker_index = 0; worker_index < kStressThreadCount; ++worker_index) {
+      workers.emplace_back(
+          [worker_index,
+           &stress_scheduler,
+           &sync_point,
+           &accepted_count,
+           &acquired_count,
+           &released_count]() {
+            sync_point.arrive_and_wait();
+            for (int iteration = 0; iteration < kStressIterations; ++iteration) {
+              const auto enqueue_result = stress_scheduler.enqueue(make_ticket_request(
+                  "maintenance-stress-" + std::to_string(worker_index) + "-" +
+                      std::to_string(iteration),
+                  "req-maintenance-stress-" + std::to_string(worker_index) + "-" +
+                      std::to_string(iteration),
+                  SchedulerPriorityClass::Maintenance,
+                  std::nullopt,
+                  std::nullopt,
+                  std::string("maintenance")));
+              if (enqueue_result.accepted) {
+                accepted_count.fetch_add(1, std::memory_order_relaxed);
+              }
+
+              const auto acquire_result = stress_scheduler.acquire_worker(
+                  AcquireWorkerRequest{
+                      .worker_budget = WorkerLeaseBudget{.max_workers = 1, .busy_workers = 0},
+                      .preferred_priority_class = SchedulerPriorityClass::Maintenance,
+                      .preferred_ticket_id = std::nullopt,
+                  });
+              if (!acquire_result.acquired || !acquire_result.ticket.has_value()) {
+                (void)stress_scheduler.backpressure_state();
+                continue;
+              }
+
+              acquired_count.fetch_add(1, std::memory_order_relaxed);
+              const auto stress_release_result = stress_scheduler.release_worker(
+                  ReleaseWorkerRequest{
+                      .ticket = *acquire_result.ticket,
+                      .worker_completed = true,
+                  });
+              if (stress_release_result.released) {
+                released_count.fetch_add(1, std::memory_order_relaxed);
+              }
+            }
+          });
+    }
+
+    sync_point.arrive_and_wait();
+    for (auto& worker : workers) {
+      worker.join();
+    }
+
+    const auto stress_state = stress_scheduler.backpressure_state();
+    assert_true(accepted_count.load(std::memory_order_acquire) > 0,
+                "scheduler stress test should accept work under concurrent enqueue");
+    assert_true(acquired_count.load(std::memory_order_acquire) > 0,
+                "scheduler stress test should acquire worker leases without deadlock");
+    assert_true(released_count.load(std::memory_order_acquire) > 0,
+                "scheduler stress test should release worker leases after acquisition");
+    assert_true(stress_state.maintenance_queue_depth <= stress_state.maintenance_queue_limit,
+                "scheduler stress test should keep maintenance queue depth bounded");
+    assert_true(!stress_state.workers_saturated(),
+                "scheduler stress test should leave worker leases unsaturated after joins");
 
     return 0;
   } catch (const std::exception& ex) {

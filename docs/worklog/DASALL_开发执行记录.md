@@ -1,5 +1,71 @@
 # DASALL 开发执行记录
 
+## 记录 #441
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO runtime-local gates 与兼容性任务
+- 任务：RT-TODO-030 验证 RuntimeSafeMode、Health、Cancellation 与 Concurrency Gate
+- 状态：已完成
+
+### 任务选择
+
+1. 029 之后，runtime-local gates 还剩最后一组控制面验证：safe mode 审计终态、health degrade / recovery、idle maintenance、cancellation 与 scheduler backpressure / lock-order stress；该任务没有额外前置 blocker，因此可以直接进入 030。
+2. 本轮最小判别点是：现有 runtime 控制组件是否已经足以闭出两条 integration gate，而不需要再造新的 orchestrator seam；一旦 integration gate 暴露 real profile / real event bus 语义缺口，就应该先修生产控制片段，再收口测试。
+3. 030 的目标不是扩展 true integration 端口，而是把 runtime-local 控制面自身的 safe-mode、health 与 concurrency 语义补齐，并把仓库级聚合 blocker 与本轮 runtime 回归明确分账。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-030-RuntimeSafeMode与HealthMaintenance设计收敛.md`：
+   - 固定 030 的边界：safe mode 走真实 profile 资产链，health / maintenance 走 `RuntimeEventBus + RuntimeHealthProbe + BackgroundMaintenanceHooks` 组合，cancel / backpressure / lock-order stress 留在 runtime unit gate。
+2. 更新 `runtime/src/safety/SafeModeController.cpp`：
+   - 修复 `select_fallback(...)` 对真实 profile `fallback_chain` 的解释；
+   - `BudgetExhausted` 现在直接尊重 `allow_budget_degrade` 布尔位；
+   - `DependencyUnavailable` 在 `allow_model_failover=true` 时会选取真实 route（如 `lan.general`），而不是只识别测试私有 token。
+3. 更新 `tests/integration/agent_loop/CMakeLists.txt`：
+   - 注册 `RuntimeSafeModeIntegrationTest` 与 `RuntimeHealthMaintenanceIntegrationTest`。
+4. 新增 `tests/integration/agent_loop/RuntimeSafeModeIntegrationTest.cpp`：
+   - 通过真实 `desktop_full` / `edge_minimal` profile snapshot 验证 budget overrun、watchdog timeout、dependency unavailable 的 safe-mode 决策；
+   - 通过 `RuntimeTelemetryBridge` + `RuntimeEventBus` 断言这些终态都能进入审计事件流。
+5. 新增 `tests/integration/agent_loop/RuntimeHealthMaintenanceIntegrationTest.cpp`：
+   - 让 maintenance idle tick 进入 `RuntimeEventBus`；
+   - 用真实 backlog / overflow 采样驱动 `RuntimeHealthProbe` 进入 degraded，再在 backlog drain 后恢复到 healthy；
+   - 证明后台维护任务不会阻塞主循环事件排空。
+6. 更新 `tests/unit/runtime/SchedulerTest.cpp`：
+   - 新增并发 enqueue / acquire / release stress，覆盖 lock-order / bounded queue / worker lease release。
+
+### 验证
+
+1. safe-mode 局部修复验证：
+   - 命令：`cmake --build build-ci --target dasall_runtime_safe_mode_integration_test dasall_runtime_safe_mode_controller_unit_test && ctest --test-dir build-ci -R "^(RuntimeSafeModeIntegrationTest|SafeModeControllerTest)$" --output-on-failure`
+   - 结果：`RuntimeSafeModeIntegrationTest` 与 `SafeModeControllerTest` 全部通过，确认真实 profile fallback 语义与既有 unit 语义同时成立。
+2. 030 窄验收：
+   - 命令：`cmake --build build-ci --target dasall_runtime_safe_mode_integration_test dasall_runtime_health_maintenance_integration_test dasall_runtime_cancellation_token_unit_test dasall_runtime_scheduler_surface_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test && ctest --test-dir build-ci -R "^(RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|CancellationTokenTest|SchedulerTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest)$" --output-on-failure`
+   - 结果：六个 runtime 目标测试全部通过。
+3. discoverability 验证：
+   - 命令：`ctest --test-dir build-ci -N | rg "RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|CancellationTokenTest|SchedulerTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest"`
+   - 结果：两条新 integration gate 已进入顶层 CTest discoverability；同名筛选中额外出现 `MetricsReaderSchedulerTest`，因此实际验收仍坚持使用 anchored regex。
+4. 聚合 acceptance 探针：
+   - 命令：`cmake --build build-ci --target dasall_unit_tests dasall_integration_tests`
+   - 结果：`dasall_unit_tests` 仍在既有 `tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 语法损坏（` }#include <algorithm>` 与重复 `main()`）处失败，不属于本轮 runtime 回归。
+5. integration 聚合 acceptance 探针：
+   - 命令：`cmake --build build-ci --target dasall_integration_tests`
+   - 结果：runtime 新增 gates 全部通过，但聚合仍受既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败阻塞，不属于本轮 runtime 回归。
+
+### 结果
+
+1. RT-TODO-030 已完成，runtime 现在具备 safe-mode 审计链、health/maintenance backlog 链和 concurrency stress 的明确 gate。
+2. 真实 profile 资产链上的 safe-mode fallback 语义已经接通，`allow_budget_degrade` 与具体 failover route 不再被测试私有 token 绑死。
+3. 030 的 runtime-local 验证与仓库级聚合 blocker 已分开记账，后续 031 可以直接汇总 gate 结论而不需要重新辨析责任边界。
+
+### 下一步
+
+1. 进入 RT-TODO-031，回写 runtime 专项 Gate 的全量证据、blocker 状态与 runtime-local / true integration 分层结论。
+
+### 风险
+
+1. 目前 `SafeModeController` 对真实 failover route 的解释仍基于 `fallback_chain` 首个可用 route；若后续 profile schema 引入显式 failover strategy 字段，应优先迁移到更强类型的策略枚举。
+2. `dasall_unit_tests` 与 `dasall_integration_tests` 的全量绿灯仍分别受 knowledge stale-policy 测试文件损坏与 infra diagnostics 两条既有失败阻塞；031 收口时必须继续单独记账，不能误记为 runtime 缺陷。
+
 ## 记录 #440
 
 - 日期：2026-04-22
