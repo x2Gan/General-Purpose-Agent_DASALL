@@ -1,4 +1,6 @@
 set(DASALL_RUNTIME_AGENT_LOOP_INTEGRATION_TEST_EXECUTABLE_TARGETS)
+set(DASALL_RUNTIME_FIXTURE_ROOT_DIR "${CMAKE_SOURCE_DIR}/tests/fixtures/runtime")
+set(DASALL_RUNTIME_FIXTURE_CHECKPOINT_DIR "${DASALL_RUNTIME_FIXTURE_ROOT_DIR}/checkpoints")
 
 macro(dasall_add_runtime_agent_loop_integration_test target_name test_name source_file)
   add_executable(${target_name}
@@ -18,7 +20,8 @@ macro(dasall_add_runtime_agent_loop_integration_test target_name test_name sourc
 
   target_compile_definitions(${target_name}
     PRIVATE
-      DASALL_RUNTIME_FIXTURE_CHECKPOINT_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/runtime/checkpoints"
+      DASALL_RUNTIME_FIXTURE_ROOT_DIR="${DASALL_RUNTIME_FIXTURE_ROOT_DIR}"
+      DASALL_RUNTIME_FIXTURE_CHECKPOINT_DIR="${DASALL_RUNTIME_FIXTURE_CHECKPOINT_DIR}"
   )
 
   dasall_apply_common_options(${target_name})

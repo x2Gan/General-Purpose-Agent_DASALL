@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #437
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO runtime-local gates 与兼容性任务
+- 任务：RT-TODO-025 接线 runtime unit、integration、fixture 测试拓扑并替换旧 smoke 语义
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-004 只冻结了 topology / fixture 设计规则，RT-BLK-06 仍卡在“顶层 `ctest -N` 看不到完整 runtime discoverability，旧 smoke 还容易被误读成 gate”的 Build 落盘缺口；因此 025 是当前串行链上最小且必须优先执行的解阻任务。
+2. 本轮最小判别点是：runtime 是否已经拥有一个真正锚定 `IAgent` / `AgentFacade` / `AgentTypes` 的 `RuntimeControlPlaneSurfaceTest`，并且顶层 `dasall_unit_tests` / `ctest -N` 至少能发现完整 runtime unit target、runtime integration 入口和显式 build-liveness smoke。
+3. 本轮不推进 026 的 unary 成功链，只收口测试拓扑、fixture 根和 smoke 语义，避免把 public-surface gate 与 runtime-local success integration 混成同一轮。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-025-runtime测试拓扑与surface-gate收敛.md`：
+   - 固定 025 的 discoverability 责任边界、surface gate 职责、fixture root 约束与 Build 三件套。
+2. 新增 `tests/fixtures/runtime/README.md`：
+   - 把 `tests/fixtures/runtime/` 固定为 runtime-owned deterministic fixture 根；
+   - 明确 checkpoint fixtures 与后续 026/028/029/030 runtime-local fixtures 的落盘边界。
+3. 新增 `tests/unit/runtime/RuntimeControlPlaneSurfaceTest.cpp`：
+   - 通过真实 `IAgent` / `AgentFacade` / `AgentInitRequest` / `ResumeHandleRequest` public surface 覆盖最小正向 init；
+   - 覆盖 fail-closed `handle()` 与缺失 checkpoint anchor 的 `resume()` 拒绝路径；
+   - 使用最小测试侧 `RuntimeDependencySet` 空桩，避免把 025 扩张成真实 seam 装配任务。
+4. 更新 `tests/unit/runtime/CMakeLists.txt`：
+   - 注册 `dasall_runtime_control_plane_surface_unit_test` / `RuntimeControlPlaneSurfaceTest`；
+   - 把旧 `RuntimeSmokeTest` 改名为 `RuntimeBuildLivenessSmokeTest`，并移出 `unit` 标签，只保留 `build-liveness;runtime`。
+5. 更新 `tests/unit/CMakeLists.txt`：
+   - 把 runtime 当前已落盘的 unit targets 全量纳入 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS`，包括 orchestrator、session manager、safe mode、event bus、telemetry bridge、health probe、background maintenance 等遗漏项。
+6. 更新 `tests/integration/CMakeLists.txt` 与 `tests/integration/agent_loop/CMakeLists.txt`：
+   - 显式建立 runtime integration target 聚合槽位；
+   - 统一注入 `DASALL_RUNTIME_FIXTURE_ROOT_DIR` 和 `DASALL_RUNTIME_FIXTURE_CHECKPOINT_DIR`，为后续 runtime-local integration gate 提供稳定 fixture root。
+
+### 验证
+
+1. runtime surface gate 窄验证：
+   - 命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_checkpoint_replay_compatibility_integration_test && ctest --test-dir build-ci -R "^RuntimeControlPlaneSurfaceTest$" --output-on-failure`
+   - 结果：`RuntimeControlPlaneSurfaceTest` 通过；新的 runtime surface gate 已可独立运行。
+2. discoverability 验证：
+   - 命令：`ctest --test-dir build-ci -N | rg "Runtime(BuildLivenessSmokeTest|ControlPlaneSurfaceTest|CheckpointReplayCompatibilityTest)"`
+   - 结果：`RuntimeBuildLivenessSmokeTest`、`RuntimeControlPlaneSurfaceTest`、`RuntimeCheckpointReplayCompatibilityTest` 均可被顶层发现。
+3. build-liveness 验证：
+   - 命令：`ctest --test-dir build-ci -R "^RuntimeBuildLivenessSmokeTest$" --output-on-failure`
+   - 结果：`RuntimeBuildLivenessSmokeTest` 通过，且标签只剩 `build-liveness;runtime`。
+4. 聚合 acceptance 尝试：
+   - 命令：`cmake --build build-ci --target dasall_unit_tests dasall_integration_tests`
+   - 结果：新增 runtime unit targets 已全部在聚合目标下成功编译；随后构建在既有仓库故障 `tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 处失败，报错为 `}#include <algorithm>` 语法损坏和重复 `main()`，属于 runtime 外部 blocker，不是本轮引入回归。
+
+### 结果
+
+1. RT-TODO-025 已完成，`RuntimeControlPlaneSurfaceTest` 已替代旧 smoke 成为 runtime public-surface gate 的最小入口。
+2. 旧 `RuntimeSmokeTest` 已被显式降级为 `RuntimeBuildLivenessSmokeTest`，只保留 build-liveness 语义，不再参与 `unit` gate。
+3. RT-BLK-06 已解阻：顶层 `ctest -N` 现在能发现 runtime build-liveness、surface gate 与 runtime integration 入口，runtime fixture 根也已有统一落盘位置。
+4. 聚合 `dasall_unit_tests` 的全量通过仍被知识模块既有文件 `tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 阻塞，但这不改变本轮 runtime discoverability 与 surface gate 已落盘的结论。
+
+### 下一步
+
+1. 进入 RT-TODO-026，基于 025 已固定的 fixture root 与 discoverability，把 runtime-local unary 主成功链补成真正经过 `AgentFacade -> AgentOrchestrator` 的 subsystem-local integration gate。
+
+### 风险
+
+1. 当前 `AgentFacade` 仍是 fail-closed skeleton，025 只证明 public surface 和 discoverability 已落盘，不代表 unary 成功链已闭环；该缺口必须由 026 承接。
+2. `dasall_unit_tests` 的聚合全绿仍受知识模块既有语法故障影响；后续若需要执行包含该聚合目标的验收命令，应把该文件作为仓库级 blocker 单独跟踪，不能误报为 runtime 回归。
+
 ## 记录 #436
 
 - 日期：2026-04-22

@@ -13,8 +13,12 @@ add_subdirectory(memory)
 add_subdirectory(knowledge)
 add_subdirectory(llm)
 
-set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
+set(DASALL_RUNTIME_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	${DASALL_RUNTIME_AGENT_LOOP_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+)
+
+set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
+	${DASALL_RUNTIME_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	dasall_infra_diagnostics_smoke_integration_test
 	dasall_infra_audit_health_integration_test
 	dasall_config_runtime_patch_integration_test
