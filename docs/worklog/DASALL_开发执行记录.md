@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #432
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Orchestrator 两阶段任务
+- 任务：RT-TODO-020 实现 AgentOrchestrator 骨架与 stub 主循环
+- 状态：已完成
+
+### 任务选择
+
+1. 019 完成后，020 是 021 全控制器装配和 026 unary fixture integration 的直接前置；如果 runtime 仍没有可执行的 `AgentOrchestrator` 骨架，后续所有主循环闭环任务都只能停留在设计层。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local `AgentOrchestrator`，能在不宣称真端口 ready 的前提下，用注入式 stub round ports 打通 `preflight/main_loop/tool_round/recovery_round/terminalize` 五段 topology，并让真实 `AgentFsm` 推进可追踪。
+3. 根据 RT-TODO-003 的 seam 规则，本轮只消费注入的 stub/null 端口，不在 orchestrator 内部自行判断并构造 stub/null adapter。
+
+### 改动
+
+1. 新增 `runtime/src/AgentOrchestrator.h` 与 `runtime/src/AgentOrchestrator.cpp`：
+   - 定义 runtime 私有 `AgentOrchestrator`、`OrchestratorRunResult`、`OrchestratorStageTrace` 与 `OrchestratorStubPorts`；
+   - 用真实 `AgentFsm` 驱动 `Idle -> Receiving -> Planning -> ... -> Completed` 的骨架路径；
+   - 落地 `run_once(...)` 的五段主循环骨架，并把 direct-response、tool-round、abort-safe recovery 都折叠成 deterministic stage trace；
+   - 对非法状态迁移与 preflight reject 统一输出 runtime 范围内的 fail-closed `AgentResult`。
+2. 新增 `tests/unit/runtime/AgentOrchestratorSkeletonTest.cpp`：
+   - 覆盖 direct response 路径，验证五段 trace 固定存在且 tool/recovery round 可被显式跳过；
+   - 覆盖 tool + abort-safe recovery 路径，验证 `ToolCalling -> WaitingExternal -> Reflecting -> FailedSafe -> Completed` 的骨架收敛；
+   - 断言最终 `AgentResult` 的 `status/task_completed/error_info/response_text` 与骨架路径一致。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `AgentOrchestrator.cpp` 接入 `dasall_runtime`；
+   - 新增 `dasall_runtime_agent_orchestrator_skeleton_unit_test`；
+   - 为新单测开放 `runtime/src` 私有头 include path。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-020-AgentOrchestrator骨架设计收敛.md`：
+   - 固定五段 topology、注入式 stub round ports、真实 `AgentFsm` 接入范围与 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_agent_orchestrator_skeleton_unit_test`
+   - 结果：通过；新增 orchestrator 骨架与单测成功编译链接。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回仓库已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_agent_orchestrator_skeleton_unit_test && ctest --test-dir build-ci -R '^AgentOrchestratorSkeletonTest$' --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-020 已完成，runtime 现在具备可执行的 `AgentOrchestrator` 骨架，五段主循环 topology 已能在 runtime-local stub/null 端口下连通。
+2. `AgentOrchestrator` 不再只是文档占位：真实 `AgentFsm` 已进入 orchestrator 主循环，stage trace 可直接证明 preflight、main loop、tool round、recovery round 与 terminalize 的收敛顺序。
+3. 020 仍严格停留在 subsystem-local 证明层：没有提前接入 Session/Budget/Checkpoint/Recovery/Scheduler 真控制器，也没有宣称 true integration ready。
+
+### 下一步
+
+1. 进入 RT-TODO-021，把 015~019 的真实控制器装配到 `AgentOrchestrator`，补齐 `continue_from_checkpoint(...)`、`handle_waiting_state(...)` 与 runtime-local 全控制器闭环。
+
+### 风险
+
+1. 当前 `AgentOrchestrator` 仍使用 deterministic stub round ports，尚未消费真实 Session/Budget/Checkpoint/Recovery/Scheduler 事实；021 必须沿当前 stage topology 继续演进，而不是重写主循环壳子。
+2. `AgentFacade` 目前仍未接到新的 orchestrator 骨架；如果 021 在装配控制器时绕过 facade 或自行创建第二套主循环，会再次触发 ADR-008 的主控漂移风险。
+
 ## 记录 #431
 
 - 日期：2026-04-22
