@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #431
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-019 实现 Scheduler
+- 状态：已完成
+
+### 任务选择
+
+1. 018 完成后，019 是 021 orchestrator controller assembly 与 030 concurrency gate 的直接前置；如果队列深度、overflow disposition 和 worker saturation 仍停留在 fake surface，后续并发与 backpressure gate 没有真实控制器可挂。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `Scheduler`，能真实承接 `enqueue/acquire_worker/release_worker/backpressure_state` 四个接口，并让前台拒绝、恢复 FailedSafe、维护 drop-oldest 与 worker saturation 路径可执行。
+3. 本轮只实现 runtime-local 调度控制器，不提前接 worker pool、event bus 或 orchestrator。
+
+### 改动
+
+1. 新增 `runtime/src/scheduling/Scheduler.h` 与 `runtime/src/scheduling/Scheduler.cpp`：
+   - 实现私有 `Scheduler` 类并承接 `IScheduler`；
+   - 使用 `queue_mutex_` 保护前台、恢复、维护三类队列，满足 6.14.2 的 L5 锁顺序约束；
+   - 落地 `enqueue(...)` 的 `RejectNew` / `EnterFailedSafe` / `DropOldest` 三类 overflow 语义；
+   - 落地 `acquire_worker(...)` 的 preferred ticket / preferred priority / 默认优先级出队逻辑；
+   - 落地 `WorkerPoolSaturated` backpressure 与 `assigned_worker_id` 绑定；
+   - 落地 `release_worker(...)` 的 worker budget 回收与 backpressure 视图恢复。
+2. 更新 `tests/unit/runtime/SchedulerTest.cpp`：
+   - 用真实 `Scheduler` 替换 011 阶段的 fake surface 蓝图；
+   - 保留前台 busy reject、恢复 FailedSafe、维护 drop-oldest、worker saturation 与 cancellation propagation 断言；
+   - 通过构造函数参数把维护队列 limit 固定为 2，保持最小可测矩阵。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `Scheduler.cpp` 接入 `dasall_runtime`；
+   - 让 `dasall_runtime_scheduler_surface_unit_test` 可读取 `runtime/src` 私有头。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-019-Scheduler设计收敛.md`：
+   - 固定三类队列、L5 `queue_mutex_`、worker budget/backpressure 语义与 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_scheduler_surface_unit_test`
+   - 结果：首次构建失败，定位到 `Scheduler.cpp` 使用了不匹配的私有头 include 路径；修正为同目录 include 后重跑通过。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回仓库已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_scheduler_surface_unit_test && ctest --test-dir build-ci -R "^SchedulerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-019 已完成，runtime 现在具备真实 `Scheduler`，后续 021 和 030 可直接消费队列深度、overflow disposition、worker saturation 与 cancellation binding 的真实控制器语义。
+2. `Scheduler` 不再只是 surface fake：L5 `queue_mutex_`、三类队列和 worker budget/backpressure 视图都已经落到 runtime 私有实现。
+
+### 下一步
+
+1. 进入 RT-TODO-020，实现 `AgentOrchestrator` 骨架与 stub 主循环，把已经完成的 014~019 控制器挂到统一 topology 上。
+
+### 风险
+
+1. 当前 `Scheduler` 仍是 runtime-local 控制器，没有接真实 worker pool 或 event bus；后续接 021/023 时，应保持 queue/backpressure 规则继续集中在控制器内，而不是散到 orchestrator 或 telemetry 侧。
+2. `Scheduler` 构造函数当前通过参数接收 queue limit，足够支撑 019 的单测与后续装配；当 profile 真正接入时，应由 higher-level assembly 提供 limit，不应把 profile 解析逻辑塞进控制器本体。
+
 ## 记录 #430
 
 - 日期：2026-04-22
