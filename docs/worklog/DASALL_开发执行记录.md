@@ -1,5 +1,66 @@
 # DASALL 开发执行记录
 
+## 记录 #419
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-007 定义 IAgentFsm 与 StateTransitionTypes
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-006 已完成并推送后，RT-TODO-007 成为 012/013/014 共享的最小状态机基础任务；如果不先冻结 17 态与转移输入/输出类型，后续 `CheckpointStateMapper`、`TransitionGuardTable` 和 `AgentFsm` 会继续各写一套状态定义。
+2. 本轮最小判别点是：runtime 是否已经拥有不依赖实现文件的稳定状态机 public surface，且非法转移是否能以结构化 rejection 暴露出来；若否，后续状态机实现会继续漂移在局部 helper 和魔法字符串之间。
+3. 本轮只收敛 header-only interface/types 和 surface test，不提前实现 `AgentFsm.cpp` 或 `TransitionGuardTable.cpp`。
+
+### 改动
+
+1. 新增 `runtime/include/fsm/StateTransitionTypes.h`：
+   - 固定 `RuntimeState` 17 态枚举与稳定名称函数；
+   - 定义 `TransitionGuardFact`、`TransitionViolationType`、`StateTransitionRequest`、`StateTransitionOutcome`、`TransitionRejectionReason`、`StateTransitionCheckpointHint`；
+   - 让 checkpoint hint 直接复用 frozen 的 `contracts::CheckpointState`，不再引入第二套 checkpoint 状态枚举。
+2. 新增 `runtime/include/fsm/IAgentFsm.h`：
+   - 冻结 `current_state()`、`can_enter(...)`、`transition(...)`、`is_terminal(...)` 四个最小 public 方法；
+   - 保持接口纯状态事实边界，不直接依赖 session/recovery/checkpoint manager 实现对象。
+3. 新增 `tests/unit/runtime/AgentFsmTest.cpp`：
+   - 用本地 test double 验证 17 态目录与状态名称稳定；
+   - 验证正例 `Reasoning -> WaitingClarify` 的 accepted outcome 和 `Paused` checkpoint hint；
+   - 验证负例非法转移会返回 `TransitionRejectionReason`。
+4. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册 `dasall_agent_fsm_unit_test`；
+   - 把 `AgentFsmTest` 纳入 runtime/unit 聚合列表。
+5. 新增 `docs/todos/runtime/deliverables/RT-TODO-007-IAgentFsm与StateTransitionTypes设计收敛.md`：
+   - 固定 17 态、guard facts、rejection surface 和 checkpoint hint 的边界；
+   - 明确 007 只冻结 public surface，不越权实现 014/013 的行为层。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_agent_fsm_unit_test`
+   - 结果：通过；007 的新增 public headers 可被独立编译并成功链接。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `AgentFsmTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回泛化错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_agent_fsm_unit_test && ctest --test-dir build-ci -R AgentFsmTest --output-on-failure`
+   - 结果：通过；1/1 test passed。
+3. 设计文档与 TODO 口径检查：
+   - `rg -n "RT-TODO-007|IAgentFsm|StateTransitionTypes|AgentFsmTest|TransitionRejectionReason" docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-007-IAgentFsm与StateTransitionTypes设计收敛.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：用于提交前一致性复核。
+
+### 结果
+
+1. RT-TODO-007 已完成，runtime 现在具备稳定的 `IAgentFsm` public contract 和 17 态 `StateTransitionTypes` supporting layer；后续 012/013/014 可直接消费统一状态域，而不再复制枚举和 rejection shape。
+2. `StateTransitionOutcome` 已固定 accepted/rejected 双出口，非法转移具备结构化 rejection surface；这为后续守卫表实现和 telemetry 可观测性留出了稳定接缝。
+
+### 下一步
+
+1. 进入 RT-TODO-008，定义 `IBudgetController` 与 `BudgetDecision`，把 runtime budget 的 consume/snapshot/replan/tool-call 判定公共面显式落到 include 层。
+
+### 风险
+
+1. 本轮只冻结了状态机类型和接口，还没有把 6.7.4 的完整合法转移表编码进 `TransitionGuardTable`；如果后续 013/014 偏离当前 guard facts 词汇，就会重新引入词汇漂移。
+2. `is_terminal(...)` 目前只在 test double 中给出最小行为示例，真实终态判定仍需 014 与 guard table 一并收敛，当前不应把 007 的 surface test 当作完整状态机行为证明。
+
 ## 记录 #418
 
 - 日期：2026-04-22
