@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #438
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO runtime-local gates 与兼容性任务
+- 任务：RT-TODO-026 验证 RuntimeUnaryFixtureIntegration 主成功链
+- 状态：已完成
+
+### 任务选择
+
+1. 025 已把 runtime test topology、fixture root 与 surface gate 接线完成，但真正的 unary 主成功链仍停在 `AgentFacade::handle()` 返回“orchestrator 未接线”的 fail-closed 文本，因此 026 的最短控制路径就是 facade -> orchestrator handoff。
+2. 本轮最小判别点是：在不引入真实相邻模块端口的前提下，`AgentFacade` 是否已经能把 unary request 委派给 `AgentOrchestrator::run_once(...)`，并在 runtime-local fixture 下返回 completed result 与 checkpoint anchor。
+3. 026 只收口 unary 主成功链，不顺手接 resume dispatcher；waiting/resume 仍留给 028，避免把 checkpoint/replay 语义提前混入本轮。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-026-RuntimeUnaryFixtureIntegration设计收敛.md`：
+   - 固定 facade -> orchestrator handoff、runtime unary fixture 资产和 subsystem-local gate 边界。
+2. 新增 `tests/fixtures/runtime/RuntimeUnaryFixture.h`：
+   - 统一 runtime unary fixture 所需的 policy snapshot、init request、agent request 与最小 `RuntimeDependencySet` 空桩。
+3. 更新 `runtime/src/AgentFacade.cpp`：
+   - 在 `init(...)` 后构造默认 `AgentOrchestrator` composition；
+   - 让 `handle(...)` 直接委派到 `AgentOrchestrator::run_once(...)`；
+   - 保持 `resume(...)` 仍停在 checkpoint/session flow 未接线状态，避免与 028 混层。
+4. 更新 `tests/unit/runtime/RuntimeControlPlaneSurfaceTest.cpp`：
+   - 从“handle fail-closed”断言切换为“facade 成功 handoff 到 orchestrator”的正向断言；
+   - 保留不完整 resume request 的 reject 断言。
+5. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/integration/agent_loop/CMakeLists.txt`：
+   - 为 runtime unary fixture 头补 include 路径；
+   - 注册新的 `RuntimeUnaryFixtureIntegrationTest`。
+6. 新增 `tests/integration/agent_loop/RuntimeUnaryFixtureIntegrationTest.cpp`：
+   - 通过 runtime-owned unary fixture 初始化 `AgentFacade`；
+   - 断言 completed result、request/trace 关联字段、goal_id 与 checkpoint_ref。
+
+### 验证
+
+1. 026 主链窄验证：
+   - 命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_unary_fixture_integration_test dasall_runtime_agent_orchestrator_skeleton_unit_test && ctest --test-dir build-ci -R "^(RuntimeControlPlaneSurfaceTest|RuntimeUnaryFixtureIntegrationTest|AgentOrchestratorSkeletonTest)$" --output-on-failure`
+   - 结果：`RuntimeControlPlaneSurfaceTest`、`RuntimeUnaryFixtureIntegrationTest`、`AgentOrchestratorSkeletonTest` 3/3 通过。
+2. 同切片告警修正复验：
+   - 命令：`cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_unary_fixture_integration_test dasall_runtime_agent_orchestrator_skeleton_unit_test && ctest --test-dir build-ci -R "^(RuntimeControlPlaneSurfaceTest|RuntimeUnaryFixtureIntegrationTest|AgentOrchestratorSkeletonTest)$" --output-on-failure`
+   - 结果：补齐 `OrchestratorComposition` 缺省成员初始化后复跑通过，未再出现本轮引入的 `-Wmissing-field-initializers` 告警。
+3. discoverability 验证：
+   - 命令：`ctest --test-dir build-ci -N | rg "RuntimeUnaryFixtureIntegrationTest|RuntimeControlPlaneSurfaceTest|AgentOrchestratorSkeletonTest"`
+   - 结果：新的 unary fixture integration 入口已进入顶层 CTest 列表。
+4. 聚合 acceptance 背景：
+   - 本轮未再次把 `cmake --build build-ci --target dasall_unit_tests dasall_integration_tests` 作为主验证，因为 025 已确认该命令会在既有 `tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 语法损坏处失败；该 blocker 仍存在，但不影响本轮 runtime-local 主成功链的定向验收。
+
+### 结果
+
+1. RT-TODO-026 已完成，runtime-local unary 主成功链已真实经过 `AgentFacade -> AgentOrchestrator`。
+2. `RuntimeUnaryFixtureIntegrationTest` 现在能够在 runtime-owned fixture 下稳定得到 completed result、goal_id 和 checkpoint anchor，证明 subsystem-local unary gate 已闭环。
+3. `RuntimeControlPlaneSurfaceTest` 已同步升级为“public-surface 成功 handoff + incomplete resume reject”语义，与 026 的成功链结论保持一致。
+4. 本轮仍只证明 subsystem-local ready，不外推 true integration ready；RT-TODO-027 仍继续受 RT-BLK-01 约束。
+
+### 下一步
+
+1. 进入 RT-TODO-028，把 waiting-state resume、checkpoint replay regression 和 runtime-owned resume dispatcher 收口到真正的 integration gate。
+
+### 风险
+
+1. `resume(...)` 仍未把 waiting session / checkpoint dispatcher 接到 facade，这不是遗漏，而是 028 的既定范围；如果在 026 提前接入，会和 replay gate 混层。
+2. 顶层 `dasall_unit_tests` / `dasall_integration_tests` 的全量聚合构建仍继承 025 已知 knowledge 模块 blocker；后续若需要完整聚合通过，必须把该 blocker 当作仓库级问题单独处理，而不是误记为 runtime 回归。
+
 ## 记录 #437
 
 - 日期：2026-04-22

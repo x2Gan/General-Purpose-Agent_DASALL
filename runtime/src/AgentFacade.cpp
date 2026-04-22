@@ -3,6 +3,7 @@
 #include <chrono>
 #include <utility>
 
+#include "AgentOrchestrator.h"
 #include "error/ResultCode.h"
 
 namespace dasall::runtime {
@@ -13,6 +14,7 @@ struct RuntimeCompositionRoot {
   std::string profile_id;
   std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot;
   std::shared_ptr<RuntimeDependencySet> dependency_set;
+  std::unique_ptr<AgentOrchestrator> orchestrator;
   bool degraded = false;
 };
 
@@ -43,15 +45,6 @@ struct RuntimeCompositionRoot {
   result.request_id = request_id;
   result.trace_id = trace_id;
   return result;
-}
-
-[[nodiscard]] HandleOptions normalize_handle_options(const contracts::AgentRequest& request) {
-  HandleOptions options;
-  options.request_id = request.request_id.value_or("");
-  options.session_id = request.session_id.value_or("");
-  options.entrypoint = "handle";
-  options.trace_context = request.trace_id.value_or("");
-  return options;
 }
 
 [[nodiscard]] HandleOptions normalize_resume_options(const ResumeHandleRequest& request) {
@@ -96,6 +89,14 @@ class AgentFacade::State {
         .profile_id = request.profile_id,
         .policy_snapshot = request.policy_snapshot,
         .dependency_set = request.dependency_set,
+      .orchestrator = std::make_unique<AgentOrchestrator>(OrchestratorComposition{
+        .runtime_instance_id = request.runtime_instance_id,
+        .profile_id = request.profile_id,
+        .policy_snapshot = request.policy_snapshot,
+        .dependency_set = request.dependency_set,
+          .stub_ports = {},
+          .fsm_factory = {},
+      }),
         .degraded = false,
     };
     initialized_ = true;
@@ -111,11 +112,13 @@ class AgentFacade::State {
                                 "runtime facade is not initialized");
     }
 
-    const HandleOptions options = normalize_handle_options(request);
-    (void)options;
-    return make_failed_result(
-        request.request_id, request.trace_id,
-        "runtime control-plane skeleton is initialized but AgentOrchestrator is not wired yet");
+    if (!root_.orchestrator) {
+      return make_failed_result(request.request_id,
+                                request.trace_id,
+                                "runtime facade is missing orchestrator composition");
+    }
+
+    return root_.orchestrator->run_once(request).agent_result;
   }
 
   contracts::AgentResult resume(const ResumeHandleRequest& request) {

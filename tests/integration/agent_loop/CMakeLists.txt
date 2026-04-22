@@ -16,6 +16,7 @@ macro(dasall_add_runtime_agent_loop_integration_test target_name test_name sourc
   target_include_directories(${target_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/runtime/src
+      ${DASALL_RUNTIME_FIXTURE_ROOT_DIR}
   )
 
   target_compile_definitions(${target_name}
@@ -31,6 +32,12 @@ macro(dasall_add_runtime_agent_loop_integration_test target_name test_name sourc
 
   list(APPEND DASALL_RUNTIME_AGENT_LOOP_INTEGRATION_TEST_EXECUTABLE_TARGETS ${target_name})
 endmacro()
+
+dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_unary_fixture_integration_test
+  RuntimeUnaryFixtureIntegrationTest
+  RuntimeUnaryFixtureIntegrationTest.cpp
+)
 
 dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_checkpoint_replay_compatibility_integration_test
