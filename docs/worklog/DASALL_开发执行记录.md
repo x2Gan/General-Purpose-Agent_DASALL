@@ -1,5 +1,70 @@
 # DASALL 开发执行记录
 
+## 记录 #409
+
+- 日期：2026-04-22
+- 阶段：knowledge/专项 TODO Build KnowledgeServiceFacade 完整编排轮次
+- 任务：KNO-TODO-032 补全 KnowledgeServiceFacade 完整编排（hybrid/ingest/health）
+- 状态：已完成
+
+### 任务选择
+
+1. 020 已完成并推送，专项 TODO 中 032 的前置链 `012/013/014/015/019/020/024/026` 已全部满足，因此本轮可直接进入 facade 完整编排，而不需要再回头补 blocker。
+2. 032 的最小闭环不是重写 retrieve 主链，而是把 facade 从骨架 callback seam 升级为“real component owner + seam 优先覆盖”的组合根，同时补齐 hybrid retrieve、real refresh 与 full health 三条真实路径。
+3. 现有 012 单测仍依赖 facade-level lambda seam，因此 032 必须保留 seam 覆盖能力，只在 seam 缺失时才绑定 concrete owner，避免破坏既有 failure/degraded 回归。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-032-KnowledgeServiceFacade完整编排设计收敛.md`：
+   - 固定 facade 作为 module-local composition root 的职责边界；
+   - 明确 `retrieve()` 走 real owner 默认绑定、`request_refresh()` 走 `IngestionCoordinator -> IndexWriter`、`health_snapshot()` 走 `KnowledgeHealthProbe` 聚合。
+2. 更新 `knowledge/src/facade/KnowledgeService.h` 与 `knowledge/src/facade/KnowledgeService.cpp`：
+   - 将 `KnowledgeServiceDeps` 升级为 concrete owner + function seam 共存的 move-only 依赖结构；
+   - 在 constructor 中绑定 `QueryNormalizer`、`CorpusCatalog`、`IndexReader`、`FreshnessController`、`CorpusRouter`、`RecallCoordinator`、`Reranker`、`EvidenceAssembler` 与 `KnowledgeHealthProbe` 的默认 seam；
+   - 把 `request_refresh()` 从 stub delegation 升级为真实 `IngestionCoordinator -> IndexWriter` 同步编排，并保留 busy guard 与 seam 优先级。
+3. 新增 `tests/unit/knowledge/KnowledgeServiceFacadeHybridRecallTest.cpp`、`tests/unit/knowledge/KnowledgeServiceFacadeRealRefreshTest.cpp`、`tests/unit/knowledge/KnowledgeServiceFacadeFullHealthSnapshotTest.cpp`：
+   - 验证只注入 real owners 时，facade 可自动跑通 hybrid retrieve；
+   - 验证 real refresh 可生成新 active snapshot 并可被 `IndexReader` 搜索；
+   - 验证 full health 路径可通过 real `KnowledgeHealthProbe` 输出健康快照。
+4. 更新 `tests/unit/knowledge/KnowledgeServiceFacadeFailurePathTest.cpp` 与 `tests/unit/knowledge/CMakeLists.txt`：
+   - 修正 move-only `KnowledgeServiceDeps` 的旧测试构造方式；
+   - 注册 032 新增的三个 unit test，并为 real refresh test 接入 `dasall_sqlite3`。
+
+### 验证
+
+1. `Build_CMakeTools` 定向构建：
+   - `dasall_knowledge`
+   - `dasall_knowledge_service_facade_hybrid_recall_unit_test`
+   - `dasall_knowledge_service_facade_real_refresh_unit_test`
+   - `dasall_knowledge_service_facade_full_health_snapshot_unit_test`
+   - `dasall_knowledge_service_facade_failure_path_unit_test`
+   - 结果：构建通过。
+2. 直接运行已构建单测二进制：
+   - `dasall_knowledge_service_facade_hybrid_recall_unit_test`
+   - `dasall_knowledge_service_facade_real_refresh_unit_test`
+   - `dasall_knowledge_service_facade_full_health_snapshot_unit_test`
+   - `dasall_knowledge_service_facade_failure_path_unit_test`
+   - 结果：4/4 通过。
+3. 使用仓库稳定回退链执行：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - `cmake --build build-ci --target dasall_knowledge dasall_knowledge_service_facade_hybrid_recall_unit_test dasall_knowledge_service_facade_real_refresh_unit_test dasall_knowledge_service_facade_full_health_snapshot_unit_test dasall_knowledge_service_facade_failure_path_unit_test`
+   - `ctest --test-dir build-ci -R "KnowledgeServiceFacade(HybridRecallTest|RealRefreshTest|FullHealthSnapshotTest|FailurePathTest)" --output-on-failure`
+   - 结果：4/4 Passed。
+
+### 结果
+
+1. 032 已完成，`KnowledgeServiceFacade` 现在已成为 knowledge 子系统内部的真实组合根，可在不提供 facade-level lambda seams 的情况下跑通 hybrid retrieve、real refresh 与 full health 三条路径。
+2. 012 既有骨架测试兼容性仍保留，说明 032 没有用真实接线破坏 failure/degraded/fail-closed 约束。
+3. 032 完成后，knowledge 主链剩余的功能性缺口已经收敛到 033 的端到端 refresh loop integration 与 030/031 的质量/证据收口。
+
+### 下一步
+
+1. 进入 `KNO-TODO-033`，补 `request_refresh -> ingest -> snapshot swap -> retrieve` 的 integration 闭环与 swap failure rollback 端到端验证。
+
+### 风险
+
+1. 032 当前的 real refresh 仍是同步单飞路径，尚未引入后台 worker 或 runtime 恢复编排；若后续需要异步化，只能在 033 之后按 runtime 边界单独推进，不能回灌到 knowledge facade 内部。
+
 ## 记录 #408
 
 - 日期：2026-04-21

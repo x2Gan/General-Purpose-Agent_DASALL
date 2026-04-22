@@ -27,7 +27,7 @@ using dasall::tests::support::assert_true;
 
 void test_facade_rejects_retrieve_before_init() {
   KnowledgeServiceDeps deps;
-  KnowledgeServiceFacade facade(deps);
+  KnowledgeServiceFacade facade(std::move(deps));
   const auto result = facade.retrieve(make_query());
   assert_true(!result.ok,
               "retrieve before init should fail closed");

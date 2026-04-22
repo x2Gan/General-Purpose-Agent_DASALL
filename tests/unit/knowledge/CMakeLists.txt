@@ -242,6 +242,24 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_hybrid_recall_unit_test
+	KnowledgeServiceFacadeHybridRecallTest.cpp
+	KnowledgeServiceFacadeHybridRecallTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_real_refresh_unit_test
+	KnowledgeServiceFacadeRealRefreshTest.cpp
+	KnowledgeServiceFacadeRealRefreshTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_knowledge_service_facade_full_health_snapshot_unit_test
+	KnowledgeServiceFacadeFullHealthSnapshotTest.cpp
+	KnowledgeServiceFacadeFullHealthSnapshotTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_freshness_controller_unit_test
 	FreshnessControllerTest.cpp
 	FreshnessControllerTest
@@ -397,6 +415,21 @@ target_include_directories(dasall_knowledge_service_facade_deadline_budget_unit_
 		${CMAKE_SOURCE_DIR}/knowledge/src
 )
 
+target_include_directories(dasall_knowledge_service_facade_hybrid_recall_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_service_facade_real_refresh_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_service_facade_full_health_snapshot_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
 target_link_libraries(dasall_sparse_retriever_unit_test
 	PRIVATE
 		dasall_sqlite3
@@ -413,6 +446,11 @@ target_link_libraries(dasall_index_writer_snapshot_swap_unit_test
 )
 
 target_link_libraries(dasall_index_writer_recovery_unit_test
+	PRIVATE
+		dasall_sqlite3
+)
+
+target_link_libraries(dasall_knowledge_service_facade_real_refresh_unit_test
 	PRIVATE
 		dasall_sqlite3
 )

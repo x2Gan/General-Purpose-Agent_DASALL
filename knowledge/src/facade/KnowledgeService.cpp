@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <utility>
 
 namespace dasall::knowledge::facade {
@@ -61,6 +62,24 @@ namespace {
   return policy;
 }
 
+[[nodiscard]] RefreshResult make_busy_refresh_result() {
+  RefreshResult result;
+  result.status = RefreshStatus::Busy;
+  return result;
+}
+
+[[nodiscard]] RefreshResult make_refresh_failure_result(KnowledgeErrorCode error_code,
+                                                        std::string_view message,
+                                                        std::string_view ref_id) {
+  RefreshResult result;
+  result.status = RefreshStatus::Failed;
+  result.error = make_knowledge_error_info(error_code,
+                                           std::string(message),
+                                           "knowledge_service_facade.request_refresh",
+                                           std::string(ref_id));
+  return result;
+}
+
 }  // namespace
 
 bool StageBudget::has_consistent_values() const {
@@ -69,7 +88,9 @@ bool StageBudget::has_consistent_values() const {
 }
 
 KnowledgeServiceFacade::KnowledgeServiceFacade(KnowledgeServiceDeps deps)
-    : deps_(std::move(deps)) {}
+    : deps_(std::move(deps)) {
+  bind_default_component_seams();
+}
 
 bool KnowledgeServiceFacade::init(const KnowledgeConfigSnapshot& config) {
   if (!config.has_consistent_values()) {
@@ -283,29 +304,36 @@ KnowledgeHealthSnapshot KnowledgeServiceFacade::health_snapshot() const {
 
 RefreshResult KnowledgeServiceFacade::request_refresh(const CorpusChangeSet& changes) {
   if (refresh_in_flight_.exchange(true)) {
-    RefreshResult result;
-    result.status = RefreshStatus::Busy;
-    return result;
+    return make_busy_refresh_result();
   }
 
-  if (!deps_.request_refresh) {
+  if (!deps_.request_refresh && (!deps_.ingestion_coordinator || !deps_.index_writer)) {
     refresh_in_flight_.store(false);
-    RefreshResult result;
-    result.status = RefreshStatus::Busy;
-    return result;
+    return make_busy_refresh_result();
   }
 
-  auto refresh_result = deps_.request_refresh(changes);
+  RefreshResult refresh_result;
+  try {
+    refresh_result = deps_.request_refresh ? deps_.request_refresh(changes)
+                                           : run_real_refresh(changes);
+  } catch (const std::exception& exception) {
+    refresh_in_flight_.store(false);
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       exception.what(),
+                                       "refresh_exception");
+  } catch (...) {
+    refresh_in_flight_.store(false);
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       "refresh raised an unknown exception",
+                                       "refresh_exception");
+  }
+
   refresh_in_flight_.store(false);
 
   if (!refresh_result.has_consistent_values()) {
-    RefreshResult result;
-    result.status = RefreshStatus::Failed;
-    result.error = make_knowledge_error_info(KnowledgeErrorCode::RefreshFailed,
-                                             "refresh result is inconsistent",
-                                             "knowledge_service_facade.request_refresh",
-                                             "refresh_result_inconsistent");
-    return result;
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       "refresh result is inconsistent",
+                                       "refresh_result_inconsistent");
   }
 
   return refresh_result;
@@ -351,6 +379,74 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::fail_closed(const KnowledgeQuery
   return result;
 }
 
+void KnowledgeServiceFacade::bind_default_component_seams() {
+  if (!deps_.normalize_query && deps_.query_normalizer) {
+    deps_.normalize_query = [this](const KnowledgeQuery& query) {
+      return deps_.query_normalizer->normalize(query);
+    };
+  }
+
+  if (!deps_.catalog_snapshot && deps_.corpus_catalog) {
+    deps_.catalog_snapshot = [this] {
+      return deps_.corpus_catalog->snapshot();
+    };
+  }
+
+  if (!deps_.current_manifest && deps_.index_reader) {
+    deps_.current_manifest = [this] {
+      return deps_.index_reader->current_manifest();
+    };
+  }
+
+  if (!deps_.evaluate_freshness && deps_.freshness_controller) {
+    deps_.evaluate_freshness = [this](const std::optional<IndexManifest>& manifest,
+                                      const KnowledgeConfigSnapshot& config,
+                                      std::int64_t current_now_ms,
+                                      bool query_allow_stale) {
+      return deps_.freshness_controller->evaluate(manifest,
+                                                  config,
+                                                  current_now_ms,
+                                                  query_allow_stale);
+    };
+  }
+
+  if (!deps_.build_plan && deps_.corpus_router) {
+    deps_.build_plan = [this](const query::NormalizedQuery& query,
+                              const KnowledgeConfigSnapshot& config,
+                              const index::CorpusCatalogSnapshot& catalog,
+                              const FreshnessSnapshot& freshness) {
+      return deps_.corpus_router->build_plan(query, config, catalog, freshness);
+    };
+  }
+
+  if (!deps_.recall && deps_.recall_coordinator) {
+    deps_.recall = [this](const retrieve::RecallRequest& request) {
+      return deps_.recall_coordinator->recall(request);
+    };
+  }
+
+  if (!deps_.rerank && deps_.reranker) {
+    deps_.rerank = [this](const retrieve::RecallCandidateSet& candidates,
+                          const FreshnessSnapshot& freshness,
+                          const rerank::RerankPolicy& policy) {
+      return deps_.reranker->rerank(candidates, freshness, policy);
+    };
+  }
+
+  if (!deps_.assemble_evidence && deps_.evidence_assembler) {
+    deps_.assemble_evidence = [this](const rerank::RankedHitSet& hits,
+                                     const evidence::EvidenceAssemblePolicy& policy) {
+      return deps_.evidence_assembler->assemble(hits, policy);
+    };
+  }
+
+  if (!deps_.collect_health_snapshot && deps_.health_probe) {
+    deps_.collect_health_snapshot = [this] {
+      return deps_.health_probe->collect();
+    };
+  }
+}
+
 std::int64_t KnowledgeServiceFacade::now_ms() const {
   if (deps_.now_ms) {
     return deps_.now_ms();
@@ -359,6 +455,46 @@ std::int64_t KnowledgeServiceFacade::now_ms() const {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+RefreshResult KnowledgeServiceFacade::run_real_refresh(const CorpusChangeSet& changes) {
+  if (!changes.has_consistent_values()) {
+    return make_refresh_failure_result(KnowledgeErrorCode::QueryValidationFailed,
+                                       "corpus change set is inconsistent",
+                                       "corpus_change_set_inconsistent");
+  }
+
+  const auto batch = deps_.ingestion_coordinator->build_update_batch(changes);
+  if (!batch.has_consistent_values()) {
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       "ingestion batch is inconsistent",
+                                       "index_update_batch_inconsistent");
+  }
+
+  const auto report = deps_.index_writer->apply_update_batch(batch);
+  if (!report.has_consistent_values()) {
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       "index writer report is inconsistent",
+                                       "update_report_inconsistent");
+  }
+
+  if (!report.ok) {
+    RefreshResult result;
+    result.status = RefreshStatus::Failed;
+    result.error = report.error.has_value()
+                       ? report.error
+                       : std::optional<dasall::contracts::ErrorInfo>(
+                             make_knowledge_error_info(KnowledgeErrorCode::RefreshFailed,
+                                                       "index writer failed to activate snapshot",
+                                                       "knowledge_service_facade.request_refresh",
+                                                       "index_writer_failed"));
+    return result;
+  }
+
+  RefreshResult result;
+  result.status = RefreshStatus::Accepted;
+  result.refresh_id = batch.batch_id;
+  return result;
 }
 
 }  // namespace dasall::knowledge::facade

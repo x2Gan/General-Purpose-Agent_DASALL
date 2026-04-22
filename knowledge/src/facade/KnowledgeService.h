@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -10,8 +11,12 @@
 #include "IKnowledgeService.h"
 #include "evidence/EvidenceAssembler.h"
 #include "health/FreshnessController.h"
+#include "health/KnowledgeHealthProbe.h"
 #include "health/KnowledgeTelemetry.h"
 #include "index/CorpusCatalog.h"
+#include "index/IndexReader.h"
+#include "index/IndexWriter.h"
+#include "ingest/IngestionCoordinator.h"
 #include "query/CorpusRouter.h"
 #include "query/QueryNormalizer.h"
 #include "rerank/Reranker.h"
@@ -37,6 +42,17 @@ struct StageBudget {
 };
 
 struct KnowledgeServiceDeps {
+  std::unique_ptr<query::QueryNormalizer> query_normalizer;
+  std::unique_ptr<index::CorpusCatalog> corpus_catalog;
+  std::unique_ptr<index::IndexReader> index_reader;
+  std::unique_ptr<FreshnessController> freshness_controller;
+  std::unique_ptr<query::CorpusRouter> corpus_router;
+  std::unique_ptr<retrieve::RecallCoordinator> recall_coordinator;
+  std::unique_ptr<rerank::Reranker> reranker;
+  std::unique_ptr<evidence::EvidenceAssembler> evidence_assembler;
+  std::unique_ptr<ingest::IngestionCoordinator> ingestion_coordinator;
+  std::unique_ptr<index::IndexWriter> index_writer;
+  std::unique_ptr<KnowledgeHealthProbe> health_probe;
   std::function<std::int64_t()> now_ms;
   std::function<query::NormalizeResult(const KnowledgeQuery& query)> normalize_query;
   std::function<index::CorpusCatalogSnapshot()> catalog_snapshot;
@@ -81,7 +97,9 @@ class KnowledgeServiceFacade final : public IKnowledgeService {
                                                     RetrievalMode mode,
                                                     KnowledgeErrorCode error_code,
                                                     std::string_view reason) const;
+    void bind_default_component_seams();
   [[nodiscard]] std::int64_t now_ms() const;
+    [[nodiscard]] RefreshResult run_real_refresh(const CorpusChangeSet& changes);
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   KnowledgeConfigSnapshot config_{};
