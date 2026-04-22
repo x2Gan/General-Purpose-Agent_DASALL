@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #424
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-012 实现 CheckpointStateMapper
+- 状态：已完成
+
+### 任务选择
+
+1. 005~011 闭环后，012 是 013/014/016 共享的最小规则表任务；如果不先把 `RuntimeState -> CheckpointState` 的唯一折叠关系落成可执行规则，后续 `TransitionGuardTable`、`AgentFsm` 和 `CheckpointManager` 会继续复制状态映射，放大语义漂移风险。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `CheckpointStateMapper`，能覆盖 17 态映射、非法枚举 reject 和 `Failed/Succeeded` resume 拒绝；若不能，016 就无法把 checkpoint state consistency 写成稳定断言。
+3. 本轮只实现规则表，不提前实现 `CheckpointManager` 或改写 `ResumePlan` public seam。
+
+### 改动
+
+1. 新增 `runtime/src/checkpoint/CheckpointStateMapper.h` 与 `runtime/src/checkpoint/CheckpointStateMapper.cpp`：
+   - 实现 `CheckpointStateMapper::to_checkpoint_state(...)`，把 17 态 `RuntimeState` 折叠成 7 态 `CheckpointState`；
+   - 对非法 `RuntimeState` 枚举值返回 `std::nullopt`；
+   - 实现 `CheckpointStateMapper::can_resume_from(...)`，固定 `Running/Paused/WaitingConfirm/WaitingTool` 可恢复，`Failed/Succeeded/Unspecified` 不可恢复。
+2. 新增 `tests/unit/runtime/CheckpointStateMapperTest.cpp`：
+   - 直接编码 6.5.1 的 17 态映射表；
+   - 验证非法枚举值返回 `nullopt`；
+   - 验证 `Failed/Succeeded/Unspecified` resume 拒绝。
+3. 更新 `runtime/CMakeLists.txt`、`tests/unit/runtime/CMakeLists.txt`、`tests/unit/CMakeLists.txt`：
+   - 把 mapper 实现接入 `dasall_runtime`；
+   - 注册 `dasall_runtime_checkpoint_state_mapper_unit_test` 与 `CheckpointStateMapperTest`。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-012-CheckpointStateMapper设计收敛.md`：
+   - 固定 mapper 的 module-local 边界、设计结论和 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_checkpoint_state_mapper_unit_test`
+   - 结果：通过；mapper 实现与独立单测可成功编译链接。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `CheckpointStateMapperTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_checkpoint_state_mapper_unit_test && ctest --test-dir build-ci -R "^CheckpointStateMapperTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-012 已完成，runtime 现在具备可复用的 CheckpointState 折叠规则表；016 可以直接复用 mapper，而不必在 `CheckpointManager.cpp` 里再写第二份映射逻辑。
+2. 012 已把非法枚举值处理成显式 `nullopt`，为后续 checkpoint consistency reject 预留了稳定入口。
+
+### 下一步
+
+1. 进入 RT-TODO-013，实现 `TransitionGuardTable`，把 6.7.4 的合法/非法转移表和 checkpoint strategy 落成独立规则表。
+
+### 风险
+
+1. 本轮只实现了 `RuntimeState -> CheckpointState` 和 resume admit/reject 判断，尚未统一 reverse mapping 到 resume target state；016 若继续维护自己的 reverse map，需要在实现时保证与 6.5.1 同步。
+2. mapper 目前是 runtime 私有头；若后续任务误把它提升到 public include，会扩大 ABI 面并削弱 012 的 module-local 边界。
+
 ## 记录 #423
 
 - 日期：2026-04-22

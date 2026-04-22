@@ -3,6 +3,7 @@ add_library(dasall_runtime STATIC)
 target_sources(dasall_runtime
   PRIVATE
     src/AgentFacade.cpp
+    src/checkpoint/CheckpointStateMapper.cpp
 )
 
 target_compile_features(dasall_runtime PUBLIC cxx_std_20)
