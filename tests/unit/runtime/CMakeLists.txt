@@ -26,6 +26,10 @@ add_executable(dasall_runtime_recovery_manager_unit_test
   RecoveryManagerTest.cpp
 )
 
+add_executable(dasall_runtime_session_type_surface_unit_test
+  SessionTypeSurfaceTest.cpp
+)
+
 target_link_libraries(dasall_runtime_smoke_test
   PRIVATE
     dasall_test_support
@@ -68,6 +72,12 @@ target_link_libraries(dasall_runtime_recovery_manager_unit_test
     dasall_runtime
 )
 
+target_link_libraries(dasall_runtime_session_type_surface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+)
+
 dasall_apply_common_options(dasall_runtime_smoke_test)
 dasall_apply_common_options(dasall_runtime_error_code_unit_test)
 dasall_apply_common_options(dasall_runtime_cancellation_token_unit_test)
@@ -75,6 +85,7 @@ dasall_apply_common_options(dasall_agent_fsm_unit_test)
 dasall_apply_common_options(dasall_budget_controller_unit_test)
 dasall_apply_common_options(dasall_runtime_checkpoint_manager_unit_test)
 dasall_apply_common_options(dasall_runtime_recovery_manager_unit_test)
+dasall_apply_common_options(dasall_runtime_session_type_surface_unit_test)
 
 add_test(NAME dasall_runtime_smoke_test COMMAND dasall_runtime_smoke_test)
 set_tests_properties(dasall_runtime_smoke_test PROPERTIES LABELS "unit")
@@ -96,3 +107,6 @@ set_tests_properties(CheckpointManagerTest PROPERTIES LABELS "unit")
 
 add_test(NAME RecoveryManagerTest COMMAND dasall_runtime_recovery_manager_unit_test)
 set_tests_properties(RecoveryManagerTest PROPERTIES LABELS "unit")
+
+add_test(NAME SessionTypeSurfaceTest COMMAND dasall_runtime_session_type_surface_unit_test)
+set_tests_properties(SessionTypeSurfaceTest PROPERTIES LABELS "unit")

@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #422
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-010 定义 ISessionManager 与 session public types
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-009 已完成并推送后，RT-TODO-010 成为 018/028 共享的 session seam 任务；如果不先冻结 `ISessionManager`、`SessionSnapshot`、`PendingInteractionState`、`ResumeSeed` 的 public include 面，后续 session/checkpoint/resume 路径会继续把读取态、写回态和恢复种子混写在一起。
+2. 本轮最小判别点是：runtime 是否已经拥有稳定的 session snapshot / pending interaction / resume-seed public types，以及 `ISessionManager` 的 5 个可编译方法面；若否，018 很容易把 `TurnPersistPlan` 或存储细节提前抬进 public header。
+3. 本轮只收敛 header-only interface/types 和 surface test，不提前实现 `SessionManager.cpp`。
+
+### 改动
+
+1. 新增 `runtime/include/session/SessionTypes.h`：
+   - 定义 `PendingInteractionKind`、`PendingInteractionState`、`SessionSnapshot`、`ResumeSeed`；
+   - 冻结 `SessionLoadRequest/Result`、`PrepareTurnRequest/Result`、`SessionPersistRequest/Result`、`BindCheckpointRefRequest`、`BuildResumeSeedRequest`、`ResumeSeedResult` 这些 request/result seam types；
+   - 明确 `TurnPersistPlan` 继续保持 module-local，不进入 public include 面。
+2. 新增 `runtime/include/session/ISessionManager.h`：
+   - 冻结 `load_session(...)`、`prepare_turn(...)`、`persist_turn(...)`、`bind_checkpoint_ref(...)`、`build_resume_seed(...)` 五个最小 public 方法；
+   - 保持 SessionManager 只输出 session-owned snapshot / persist result / resume seed，不拥有 checkpoint compatibility 或 recovery 裁定权。
+3. 新增 `tests/unit/runtime/SessionTypeSurfaceTest.cpp`：
+   - 用本地 fake session manager 验证 load/create、checkpoint anchor 绑定、waiting snapshot prepare、resume-seed 组装与 persist seam；
+   - 验证 checkpoint anchor 不匹配时返回 `RT_E_401_SESSION_INCONSISTENT`。
+4. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册 `dasall_runtime_session_type_surface_unit_test`；
+   - 把 `SessionTypeSurfaceTest` 纳入 runtime/unit 聚合列表。
+5. 新增 `docs/todos/runtime/deliverables/RT-TODO-010-ISessionManager与SessionTypes设计收敛.md`：
+   - 固定 session public types、request/result seam types、`ISessionManager` 方法面与 Design -> Build 映射；
+   - 强调 `TurnPersistPlan` 继续留在 module-local，避免 public surface 越界。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_session_type_surface_unit_test`
+   - 结果：通过；010 的新增 session public headers 与 surface test 可被独立编译并成功链接。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `SessionTypeSurfaceTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回泛化错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_session_type_surface_unit_test && ctest --test-dir build-ci -R SessionTypeSurfaceTest --output-on-failure`
+   - 结果：通过；1/1 test passed。
+3. 设计文档与 TODO 口径检查：
+   - `rg -n "RT-TODO-010|ISessionManager|SessionSnapshot|PendingInteractionState|ResumeSeed|SessionLoadRequest" docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-010-ISessionManager与SessionTypes设计收敛.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：用于提交前一致性复核。
+
+### 结果
+
+1. RT-TODO-010 已完成，runtime 现在具备稳定的 session public surface；后续 018/028 可以直接复用 `SessionSnapshot`、`PendingInteractionState`、`ResumeSeed` 与 request/result seam types，不再各自定义局部 session bridge 对象。
+2. 010 已把 `TurnPersistPlan` 固定回 module-local，避免 session public header 被写回计划和存储细节污染。
+
+### 下一步
+
+1. 进入 RT-TODO-011，定义 `IScheduler` 与 `SchedulerTicket`，把队列、worker 获取与背压输出口显式落到 include 面。
+
+### 风险
+
+1. 本轮只冻结了 session include 面，还没有实现真实持久化与 checkpoint anchor 读写；018 若偏离当前 request/result seam types，会重新引入读取态/写回态混层。
+2. `SessionPersistResult` 目前只收敛公共 seam 结果，真实持久化计划仍留给 module-local `TurnPersistPlan`；若后续实现试图把完整写回计划抬进 public header，应回退到本轮边界。
+
 ## 记录 #421
 
 - 日期：2026-04-22
