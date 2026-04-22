@@ -3,6 +3,7 @@ add_library(dasall_runtime STATIC)
 target_sources(dasall_runtime
   PRIVATE
     src/AgentFacade.cpp
+    src/budget/BudgetController.cpp
     src/checkpoint/CheckpointStateMapper.cpp
     src/fsm/AgentFsm.cpp
     src/fsm/TransitionGuardTable.cpp

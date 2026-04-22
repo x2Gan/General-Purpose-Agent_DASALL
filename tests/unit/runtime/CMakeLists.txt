@@ -77,6 +77,11 @@ target_link_libraries(dasall_budget_controller_unit_test
     dasall_runtime
 )
 
+target_include_directories(dasall_budget_controller_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+)
+
 target_link_libraries(dasall_runtime_checkpoint_manager_unit_test
   PRIVATE
     dasall_test_support

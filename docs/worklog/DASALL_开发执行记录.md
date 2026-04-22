@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #427
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-015 实现 BudgetController
+- 状态：已完成
+
+### 任务选择
+
+1. 014 完成后，015 是 017 和后续 orchestrator 预算裁定的直接前置；如果不先把五维预算的真实扣减和 `can_*` 判定落成控制器，恢复与主循环仍只能依赖 fake budget double。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `BudgetController`，能维护统一的 `BudgetSnapshot`，并对 token / tool / latency / replan 超限给出稳定 rejection。
+3. 本轮只实现预算控制器，不提前耦合 recovery、safe mode 或错误桥接层。
+
+### 改动
+
+1. 新增 `runtime/src/budget/BudgetController.h` 与 `runtime/src/budget/BudgetController.cpp`：
+   - 实现私有 `BudgetController` 类并承接 `IBudgetController`；
+   - 用 `budget_mutex_` 保护初始化状态、`RuntimeBudget`、`BudgetSnapshot` 与 `started_at_ms_`；
+   - 复用 `validate_runtime_budget(...)` 做初始化校验；
+   - 将 `Latency` 维度固定为 `observed_at_ms - started_at_ms_` 的 wall-clock 语义；
+   - 统一 `can_continue()` / `can_replan()` / `can_call_tool()` 对 snapshot 的准入判定。
+2. 更新 `tests/unit/runtime/BudgetControllerTest.cpp`：
+   - 用真实 `BudgetController` 替换 008 的 fake 测试双；
+   - 覆盖合法初始化、snapshot 五维展开、tool/replan/latency/token 超限、invalid initialize 等行为；
+   - 校验 `BudgetViolationClass` 与 `RT_E_3xx` 错误码映射保持稳定。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `BudgetController.cpp` 接入 `dasall_runtime`；
+   - 让 `dasall_budget_controller_unit_test` 可读取 `runtime/src` 私有头。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-015-BudgetController设计收敛.md`：
+   - 固定五维 snapshot 状态、latency 语义、`can_*` 维度子集和 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_budget_controller_unit_test`
+   - 结果：通过；真实控制器与升级后的行为测试成功编译链接。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_budget_controller_unit_test && ctest --test-dir build-ci -R "^BudgetControllerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-015 已完成，runtime 现在具备真实 `BudgetController`，后续 017/021 可直接消费统一的预算 snapshot 和超限拒绝语义。
+2. `max_latency_ms` 已按 wall-clock 而非累加计数落地，避免后续主循环把 latency 预算误当作另一类 step counter。
+
+### 下一步
+
+1. 进入 RT-TODO-016，实现 `CheckpointManager`，把 012 的状态映射和 009 的 checkpoint/recovery public seam 串成真实 checkpoint 生命周期控制器。
+
+### 风险
+
+1. 当前 `can_continue()` / `can_replan()` / `can_call_tool()` 的维度子集是按 6.24.7 做的最小闭环；如果后续 orchestrator 需要把更多组合语义前置到预算层，应优先扩展内部判定顺序，而不是新增第二份 budget gate。
+2. `Latency` 在 `observed_at_ms < started_at_ms_` 时当前回落为 0；若后续真实时间源可能出现回拨或跨线程时间基不一致，需要在基础时间提供者层收敛单调时间，而不是在 015 内部继续扩错误分支。
+
 ## 记录 #426
 
 - 日期：2026-04-22

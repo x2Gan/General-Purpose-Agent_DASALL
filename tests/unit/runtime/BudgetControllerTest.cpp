@@ -1,178 +1,30 @@
-#include <cstdint>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
-#include <vector>
 
-#include "budget/IBudgetController.h"
-#include "checkpoint/RuntimeBudgetGuards.h"
+#include "budget/BudgetController.h"
 #include "support/TestAssertions.h"
 
 namespace {
 
-dasall::runtime::BudgetViolationClass exhausted_violation_for(
+[[nodiscard]] const dasall::contracts::BudgetSnapshotEntry* find_entry(
+    const dasall::contracts::BudgetSnapshot& snapshot,
     const dasall::contracts::BudgetType budget_type) {
-  switch (budget_type) {
-    case dasall::contracts::BudgetType::Token:
-      return dasall::runtime::BudgetViolationClass::TokenExhausted;
-    case dasall::contracts::BudgetType::Turn:
-      return dasall::runtime::BudgetViolationClass::TurnExhausted;
-    case dasall::contracts::BudgetType::ToolCall:
-      return dasall::runtime::BudgetViolationClass::ToolCallExhausted;
-    case dasall::contracts::BudgetType::Latency:
-      return dasall::runtime::BudgetViolationClass::LatencyExhausted;
-    case dasall::contracts::BudgetType::Replan:
-      return dasall::runtime::BudgetViolationClass::ReplanExhausted;
+  for (const auto& entry : snapshot.entries) {
+    if (entry.budget_type == budget_type) {
+      return &entry;
+    }
   }
 
-  return dasall::runtime::BudgetViolationClass::SnapshotUnavailable;
+  return nullptr;
 }
-
-class FakeBudgetController final : public dasall::runtime::IBudgetController {
- public:
-  [[nodiscard]] dasall::runtime::BudgetDecision initialize(
-      const dasall::runtime::BudgetInitializeRequest& request) override {
-    const auto guard_result = dasall::contracts::validate_runtime_budget(request.runtime_budget);
-    if (!guard_result.ok) {
-      initialized_ = false;
-      return dasall::runtime::make_budget_rejected_decision(
-          dasall::runtime::BudgetViolationClass::ConfigurationInvalid,
-          std::string(guard_result.reason));
-    }
-
-    budget_ = request.runtime_budget;
-    snapshot_ = {
-        .snapshot_at_ms = request.started_at_ms,
-        .entries = {
-            {.budget_type = dasall::contracts::BudgetType::Token,
-             .current = 0,
-             .max = *budget_.max_tokens,
-             .remaining = static_cast<std::int64_t>(*budget_.max_tokens),
-             .reject_reason = std::nullopt},
-            {.budget_type = dasall::contracts::BudgetType::Turn,
-             .current = 0,
-             .max = *budget_.max_turns,
-             .remaining = static_cast<std::int64_t>(*budget_.max_turns),
-             .reject_reason = std::nullopt},
-            {.budget_type = dasall::contracts::BudgetType::ToolCall,
-             .current = 0,
-             .max = *budget_.max_tool_calls,
-             .remaining = static_cast<std::int64_t>(*budget_.max_tool_calls),
-             .reject_reason = std::nullopt},
-            {.budget_type = dasall::contracts::BudgetType::Latency,
-             .current = 0,
-             .max = *budget_.max_latency_ms,
-             .remaining = static_cast<std::int64_t>(*budget_.max_latency_ms),
-             .reject_reason = std::nullopt},
-            {.budget_type = dasall::contracts::BudgetType::Replan,
-             .current = 0,
-             .max = *budget_.max_replan_count,
-             .remaining = static_cast<std::int64_t>(*budget_.max_replan_count),
-             .reject_reason = std::nullopt},
-        },
-        .overall_reject_reason = std::nullopt,
-    };
-    initialized_ = true;
-    return dasall::runtime::make_budget_allowed_decision(std::nullopt, "budget initialized");
-  }
-
-  [[nodiscard]] dasall::runtime::BudgetDecision consume(
-      const dasall::runtime::BudgetConsumeRequest& request) override {
-    if (!initialized_) {
-      return dasall::runtime::make_budget_rejected_decision(
-          dasall::runtime::BudgetViolationClass::SnapshotUnavailable,
-          "budget controller must be initialized before consume");
-    }
-
-    auto* entry = find_entry(request.budget_type);
-    entry->current += request.amount;
-    entry->remaining = static_cast<std::int64_t>(entry->max) -
-                       static_cast<std::int64_t>(entry->current);
-    snapshot_.snapshot_at_ms = request.observed_at_ms;
-
-    if (entry->current > entry->max) {
-      entry->reject_reason = request.detail.empty() ? std::optional<std::string>("budget exhausted")
-                                                    : std::optional<std::string>(request.detail);
-      snapshot_.overall_reject_reason = entry->reject_reason;
-      return dasall::runtime::make_budget_rejected_decision(
-          exhausted_violation_for(request.budget_type),
-          *entry->reject_reason,
-          request.budget_type);
-    }
-
-    entry->reject_reason = std::nullopt;
-    snapshot_.overall_reject_reason = std::nullopt;
-    return dasall::runtime::make_budget_allowed_decision(request.budget_type,
-                                                         request.detail.empty() ? "budget consumed"
-                                                                                : request.detail);
-  }
-
-  [[nodiscard]] dasall::contracts::BudgetSnapshot snapshot() const override {
-    return snapshot_;
-  }
-
-  [[nodiscard]] dasall::runtime::BudgetDecision can_continue() const override {
-    return decision_for(dasall::contracts::BudgetType::Turn, "turn budget available");
-  }
-
-  [[nodiscard]] dasall::runtime::BudgetDecision can_replan() const override {
-    return decision_for(dasall::contracts::BudgetType::Replan, "replan budget available");
-  }
-
-  [[nodiscard]] dasall::runtime::BudgetDecision can_call_tool() const override {
-    return decision_for(dasall::contracts::BudgetType::ToolCall, "tool-call budget available");
-  }
-
- private:
-  dasall::contracts::BudgetSnapshotEntry* find_entry(const dasall::contracts::BudgetType budget_type) {
-    for (auto& entry : snapshot_.entries) {
-      if (entry.budget_type == budget_type) {
-        return &entry;
-      }
-    }
-
-    return nullptr;
-  }
-
-  [[nodiscard]] dasall::runtime::BudgetDecision decision_for(
-      const dasall::contracts::BudgetType budget_type,
-      const std::string& allowed_detail) const {
-    if (!initialized_) {
-      return dasall::runtime::make_budget_rejected_decision(
-          dasall::runtime::BudgetViolationClass::SnapshotUnavailable,
-          "budget controller has no snapshot");
-    }
-
-    for (const auto& entry : snapshot_.entries) {
-      if (entry.budget_type != budget_type) {
-        continue;
-      }
-
-      if (entry.current > entry.max) {
-        return dasall::runtime::make_budget_rejected_decision(
-            exhausted_violation_for(budget_type),
-            entry.reject_reason.value_or("budget exhausted"),
-            budget_type);
-      }
-
-      return dasall::runtime::make_budget_allowed_decision(budget_type, allowed_detail);
-    }
-
-    return dasall::runtime::make_budget_rejected_decision(
-        dasall::runtime::BudgetViolationClass::SnapshotUnavailable,
-        "budget snapshot entry is missing",
-        budget_type);
-  }
-
-  bool initialized_ = false;
-  dasall::contracts::RuntimeBudget budget_{};
-  dasall::contracts::BudgetSnapshot snapshot_{};
-};
 
 }  // namespace
 
 int main() {
   using dasall::contracts::BudgetType;
+  using dasall::runtime::BudgetController;
   using dasall::runtime::BudgetViolationClass;
   using dasall::runtime::RuntimeErrorCode;
   using dasall::runtime::budget_violation_error_code;
@@ -188,7 +40,6 @@ int main() {
                     RuntimeErrorCode::RT_E_303_LATENCY_OVERRUN,
                 "latency violation should map to RT_E_303");
 
-    FakeBudgetController controller;
     const dasall::runtime::BudgetInitializeRequest init_request{
         .runtime_budget = {.max_tokens = 1000,
                            .max_turns = 4,
@@ -198,6 +49,7 @@ int main() {
         .started_at_ms = 42,
     };
 
+    BudgetController controller;
     const auto init_decision = controller.initialize(init_request);
     assert_true(init_decision.allowed, "valid runtime budget should initialize successfully");
 
@@ -205,9 +57,9 @@ int main() {
     assert_true(snapshot.snapshot_at_ms == 42, "snapshot timestamp should reflect initialize request");
     assert_equal(5, static_cast<int>(snapshot.entries.size()),
                  "budget snapshot must expose exactly five budget dimensions");
-    assert_true(snapshot.entries[0].budget_type == BudgetType::Token,
-                "first snapshot entry should remain the token dimension");
-    assert_true(snapshot.entries[0].max == 1000, "token max should be copied from RuntimeBudget");
+    const auto* token_entry = find_entry(snapshot, BudgetType::Token);
+    assert_true(token_entry != nullptr, "snapshot must include the token dimension");
+    assert_true(token_entry->max == 1000, "token max should be copied from RuntimeBudget");
 
     assert_true(controller.can_continue().allowed,
                 "freshly initialized controller should allow continuing the main loop");
@@ -235,6 +87,87 @@ int main() {
                 "tool-call overflow should map to RT_E_302");
     assert_true(!controller.can_call_tool().allowed,
                 "post-overflow controller must reject further tool calls");
+
+    BudgetController replan_controller;
+    assert_true(replan_controller.initialize(init_request).allowed,
+                "replan controller should initialize with the same valid budget");
+    assert_true(replan_controller.consume(
+                    {.budget_type = BudgetType::Replan,
+                     .amount = 2,
+                     .observed_at_ms = 70,
+                     .detail = "consume replan budget to boundary"})
+                    .allowed,
+                "consuming up to the replan boundary should remain allowed");
+    const auto replan_reject = replan_controller.consume(
+        {.budget_type = BudgetType::Replan,
+         .amount = 1,
+         .observed_at_ms = 80,
+         .detail = "replan budget exhausted"});
+    assert_true(!replan_reject.allowed, "replan overflow must be rejected");
+    assert_true(replan_reject.violation == BudgetViolationClass::ReplanExhausted,
+                "replan overflow should report ReplanExhausted");
+    assert_true(replan_controller.can_replan().error_code == RuntimeErrorCode::RT_E_304_REPLAN_OVERRUN,
+                "replan overflow should map to RT_E_304");
+
+    BudgetController latency_controller;
+    assert_true(latency_controller.initialize(init_request).allowed,
+                "latency controller should initialize successfully");
+    const auto latency_allowed = latency_controller.consume(
+        {.budget_type = BudgetType::Latency,
+         .amount = 1,
+         .observed_at_ms = 1000,
+         .detail = "latency within limit"});
+    assert_true(latency_allowed.allowed, "latency within max_latency_ms should remain allowed");
+    const auto latency_snapshot = latency_controller.snapshot();
+    const auto* latency_entry = find_entry(latency_snapshot, BudgetType::Latency);
+    assert_true(latency_entry != nullptr, "snapshot must include the latency dimension");
+    assert_true(latency_entry->current == 958,
+                "latency current should reflect observed_at_ms - started_at_ms");
+    const auto latency_reject = latency_controller.consume(
+        {.budget_type = BudgetType::Latency,
+         .amount = 999,
+         .observed_at_ms = 2000,
+         .detail = "latency budget exhausted"});
+    assert_true(!latency_reject.allowed, "latency overflow must be rejected");
+    assert_true(latency_reject.violation == BudgetViolationClass::LatencyExhausted,
+                "latency overflow should report LatencyExhausted");
+    assert_true(!latency_controller.can_continue().allowed,
+                "latency exhaustion should block can_continue");
+
+    BudgetController token_controller;
+    assert_true(token_controller.initialize(init_request).allowed,
+                "token controller should initialize successfully");
+    assert_true(token_controller.consume(
+                    {.budget_type = BudgetType::Token,
+                     .amount = 1000,
+                     .observed_at_ms = 90,
+                     .detail = "consume token budget to boundary"})
+                    .allowed,
+                "token usage up to the boundary should remain allowed");
+    const auto token_reject = token_controller.consume(
+        {.budget_type = BudgetType::Token,
+         .amount = 1,
+         .observed_at_ms = 91,
+         .detail = "token budget exhausted"});
+    assert_true(!token_reject.allowed, "token overflow must be rejected");
+    assert_true(token_reject.violation == BudgetViolationClass::TokenExhausted,
+                "token overflow should report TokenExhausted");
+    assert_true(!token_controller.can_continue().allowed,
+                "token exhaustion should block can_continue");
+
+    BudgetController invalid_controller;
+    const auto invalid_init = invalid_controller.initialize(
+        {.runtime_budget = {.max_tokens = 1000,
+                            .max_turns = std::nullopt,
+                            .max_tool_calls = 1,
+                            .max_latency_ms = 1500,
+                            .max_replan_count = 2},
+         .started_at_ms = 42});
+    assert_true(!invalid_init.allowed, "missing required budget dimension must reject initialize");
+    assert_true(invalid_init.violation == BudgetViolationClass::ConfigurationInvalid,
+                "invalid initialize should report ConfigurationInvalid");
+    assert_true(invalid_init.error_code == RuntimeErrorCode::RT_E_100_CONFIG_MISSING,
+                "invalid initialize should map to RT_E_100");
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
