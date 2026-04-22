@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #417
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-005 新增 runtime include 布局与 CMake 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-001 和 RT-TODO-003 已完成后，RT-TODO-005 成为 006~011 共同依赖的最小可执行 Build 任务；如果这一轮不先把 runtime include 根和 CMake 骨架落盘，后续所有 public interface 任务都会继续挂在 placeholder-only 静态库上。
+2. 本轮最小判别点是：`dasall_runtime` 是否仍然只能靠 `runtime/src/placeholder.cpp` 保持空库，且缺少 apps-facing 的 runtime public ABI；若是，则 006~011 即使新增头文件也没有稳定挂载面。
+3. 根据 RT-TODO-004 的拓扑规则，本轮只处理 public surface 和构建骨架，不提前改写 `RuntimeSmokeTest` 的 Gate 语义；旧 smoke 的 discoverability 调整继续留给 RT-TODO-025。
+
+### 改动
+
+1. 新增 `runtime/include/AgentTypes.h`、`runtime/include/IAgent.h`、`runtime/include/AgentFacade.h`：
+   - 把 6.24.3.1 已冻结的 `AgentInitRequest`、`AgentInitResult`、`HandleOptions`、`ResumeHandleRequest` 落到 runtime public include 根；
+   - 建立 apps-facing 的 `IAgent::init/handle/resume/stop` 最小门面；
+   - 暴露 `AgentFacade` 的 public skeleton，而不提前泄露内部控制器细节。
+2. 新增 `runtime/src/AgentFacade.cpp`：
+   - 用 fail-closed 方式实现初始化、handle、resume、stop 的最小生命周期骨架；
+   - 在实现侧显式持有 boot-time 组合根状态，为后续 `AgentOrchestrator` 接线预留稳定入口。
+3. 更新 `runtime/CMakeLists.txt`：
+   - 让 `dasall_runtime` 从 `src/placeholder.cpp` 切换到 `src/AgentFacade.cpp`；
+   - 将 `dasall_profiles` 加入 `PUBLIC` 链接，确保 `AgentTypes.h` 暴露 `RuntimePolicySnapshot` 时 usage requirements 能继续向下游传播。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-005-runtime-include布局与CMake骨架收敛.md`：
+   - 固定 runtime 根层 public surface 只建立 `IAgent.h`、`AgentTypes.h`、`AgentFacade.h` 三个入口；
+   - 明确旧 `RuntimeSmokeTest` 在 RT-TODO-025 前仅是 build-liveness 资产，不承担 control-plane Gate 语义。
+5. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md` 与 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 把 runtime 当前实现状态从“无 include、placeholder-only”回写为“public skeleton 已落位”；
+   - 将 RT-TODO-005 从 `NotStarted` 回写为 `Done`。
+
+### 验证
+
+1. 文档设计映射检索：
+   - `rg -n "RT-TODO-005|IAgent.h|AgentTypes.h|AgentFacade.cpp|dasall_profiles|placeholder-only" docs/todos/runtime/deliverables/RT-TODO-005-runtime-include布局与CMake骨架收敛.md`
+   - 结果：通过；005 的 design 结论、Build 三件套和 CMake 依赖传播规则都已固化到交付文档。
+2. 定向构建验证：
+   - VS Code CMake Tools：build target `dasall_runtime`
+   - 结果：通过；`runtime/src/AgentFacade.cpp` 编译并链接为 `runtime/libdasall_runtime.a`，说明 runtime 已摆脱 placeholder-only 状态。
+
+### 结果
+
+1. RT-TODO-005 已完成，runtime 现在具备稳定的 apps-facing public include 根和最小的 `AgentFacade` 骨架，后续 006~011 可以直接在这个 public surface 上继续分任务挂载接口。
+2. 旧 `RuntimeSmokeTest` 没有被误升格为 Gate；从本轮开始，runtime 的交付依据切回真正的 public ABI 和定向构建结果，discoverability 与 control-plane surface 语义继续等 RT-TODO-025 收口。
+
+### 下一步
+
+1. 进入 RT-TODO-006，定义 `RuntimeErrorCode` 与 `CancellationToken`，补齐 runtime 错误码域和取消传播的公共面，并为后续 budget / scheduler / recovery 任务提供共享基础。
+
+### 风险
+
+1. 本轮的 `AgentFacade` 仍是 fail-closed skeleton；如果后续任务直接把它的失败占位结果当作 orchestrator 行为，会产生假完成，需要回退到“只证明 public surface 已落位”的边界。
+2. `AgentTypes.h` 现在公开依赖 `RuntimePolicySnapshot`；如果后续有人把 `dasall_profiles` 改回 `PRIVATE` 依赖，下游只包含 runtime 头时会失去 usage requirements，构建将再次退化。
+
 ## 记录 #416
 
 - 日期：2026-04-22

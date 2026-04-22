@@ -121,8 +121,8 @@ Must-Not：
 | 观察项 | 当前状态 | 证据 | 结论 |
 |---|---|---|---|
 | runtime 构建入口 | 已存在 | runtime/CMakeLists.txt | 已有独立静态库目标 dasall_runtime |
-| runtime 源码实现 | 占位 | runtime/src/placeholder.cpp | 当前无主控逻辑、状态机、恢复链路或公共接口 |
-| runtime 公共头文件 | 缺失 | runtime/include 目录当前不存在 | 上游 apps 与下游协作缺少稳定 runtime public surface |
+| runtime 源码实现 | public skeleton | runtime/src/AgentFacade.cpp | 已有 fail-closed `AgentFacade` 骨架，但主控、状态机、恢复链路仍待后续任务落盘 |
+| runtime 公共头文件 | 已存在 | runtime/include/{IAgent.h,AgentTypes.h,AgentFacade.h} | 上游 apps 已有稳定 runtime public surface 入口，可继续挂载 006~011 的显式接口 |
 | runtime 单测 | 仅 smoke 脚手架 | tests/unit/runtime/RuntimeSmokeTest.cpp | 现有 smoke 仅验证 mock 串联，不代表真实 Runtime 闭环 |
 | runtime 集成测试 | 缺失 | tests/integration 下无 runtime 子目录 | 无法验证真正的主循环与恢复行为 |
 | contracts 依赖面 | 已存在 | contracts/include/{agent,context,observation,checkpoint,...} | 共享对象边界可直接复用 |
@@ -135,7 +135,7 @@ Must-Not：
 
 | 目标能力 | 当前状态 | 关键差距 | 风险等级 | 优先级 |
 |---|---|---|---|---|
-| AgentFacade 与对外调用面 | 缺失 | 无 runtime/include、无稳定入口接口 | High | P0 |
+| AgentFacade 与对外调用面 | skeleton 已落位 | 当前只有 fail-closed facade，尚未接入 AgentOrchestrator 与 runtime-local gate | High | P0 |
 | AgentOrchestrator 主循环 | 缺失 | 没有 request -> decide -> execute -> observe -> recover -> respond 闭环 | High | P0 |
 | SessionManager | 缺失 | 没有会话快照装载、等待态恢复、turn 终结写回 | High | P0 |
 | AgentFSM | 缺失 | 架构定义存在，代码中没有显式状态机与转移守卫 | High | P0 |

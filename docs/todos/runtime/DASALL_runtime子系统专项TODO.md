@@ -95,7 +95,7 @@
 | RT-TC007 | runtime 详设 6.14；InfraConcurrencyPolicy | 队列、锁顺序、backpressure 必须显式定义 | `Scheduler`、`RuntimeEventBus` 必须带并发门禁 |
 | RT-TC008 | runtime 详设 6.12、6.15 | 状态迁移、预算拒绝、恢复拒绝、safe mode 必须可观测并归入 `RT_E_*` | telemetry/error domain 不是可选项 |
 | RT-TC009 | CrossModuleDataProjectionMatrix | runtime 只能消费 projection，不得回灌 raw payload | 集成测试不能伪造 raw payload 直通 |
-| RT-TC010 | runtime 详设 3.1、8.3；当前仓库现状 | 当前 runtime 仍是 placeholder-only，tests 只有 smoke | 必须先做骨架、control-plane surface test 和测试拓扑，不得直接宣称主链 ready |
+| RT-TC010 | runtime 详设 3.1、8.3；当前仓库现状 | 当前 runtime 已有 public skeleton，但 control-plane test 仍只有 smoke | 必须继续做 control-plane surface test 和测试拓扑，不得把 public skeleton 直接外推为主链 ready |
 | RT-TC011 | runtime 详设 8.3 RT-BLK-01；当前仓库现状 | memory/knowledge/tools runtime-facing public interface 尚未全部落位 | 集成任务必须带 blocker 或 fail-closed stub 策略 |
 | RT-TC012 | runtime 详设 6.24、9.2 | 任务拆分优先落到显式接口、规则表、控制器和单一测试组 | 使用"补设计 / 接口 / 控制器 / 集成门禁"四段拆分 |
 | RT-TC013 | runtime 详设 6.16.2；RT-C019 | 每个 Worker Ticket 必须绑定 CancellationToken，支持 step-level 超时取消传播 | `CancellationToken` 必须作为独立对象落盘，Scheduler 与 Worker 接口必须接受 token |
@@ -114,9 +114,9 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| runtime/CMakeLists.txt | 仅编译 `src/placeholder.cpp` | runtime 已进构建图，但仍是 placeholder-only |
-| runtime/src/placeholder.cpp | 只有占位函数 | 生产控制平面尚未开始 |
-| runtime/include | 当前不存在 | 公共 ABI 和 supporting types 尚未落盘 |
+| runtime/CMakeLists.txt | 编译 `src/AgentFacade.cpp`，并将 `dasall_profiles` 作为 PUBLIC 依赖 | runtime 已退出 placeholder-only，且 public 头可继承 profile usage requirements |
+| runtime/src/placeholder.cpp | 仍保留历史占位文件，但已退出 `dasall_runtime` 构建图 | placeholder 不再作为 runtime 有效实现证据 |
+| runtime/include | 已存在 `IAgent.h`、`AgentTypes.h`、`AgentFacade.h` | 公共 ABI 和 AgentFacade supporting types 已有稳定挂载点 |
 | tests/unit/runtime/CMakeLists.txt | 只注册 `dasall_runtime_smoke_test` | runtime unit 拓扑尚未组件化 |
 | tests/unit/runtime/RuntimeSmokeTest.cpp | 只串联 mock，不经过真实 control-plane | 不能作为 runtime 主控闭环证据 |
 | tests/integration/CMakeLists.txt | 未接入 runtime / agent_loop | runtime integration discoverability 为空 |
@@ -192,7 +192,7 @@
 
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| RT-TODO-005 | NotStarted | 新增 runtime include 布局与 CMake 骨架 | runtime 详设 7、8.1、8.2 J0 | 8.1 目录布局；8.2 J0 public surface 建立 | L2 | `runtime/include/IAgent.h`、`runtime/include/AgentTypes.h`、`runtime/CMakeLists.txt`、`runtime/src/AgentFacade.cpp` | `IAgent::init/handle/resume/stop`、`AgentFacade`、组合根 | build 通过，且不再依赖旧 smoke 语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime` | 001、003 | 无 | — | `runtime/include/IAgent.h`、`runtime/include/AgentTypes.h`、更新后的 `runtime/CMakeLists.txt`、`runtime/src/AgentFacade.cpp` | runtime 不再只靠 placeholder 维持空库，且 RT-TODO-025 之前不再把旧 smoke 当作交付依据 |
+| RT-TODO-005 | Done | 新增 runtime include 布局与 CMake 骨架 | runtime 详设 7、8.1、8.2 J0 | 8.1 目录布局；8.2 J0 public surface 建立 | L2 | `runtime/include/IAgent.h`、`runtime/include/AgentTypes.h`、`runtime/include/AgentFacade.h`、`runtime/CMakeLists.txt`、`runtime/src/AgentFacade.cpp` | `IAgent::init/handle/resume/stop`、`AgentFacade`、组合根 | build 通过，且不再依赖旧 smoke 语义 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime` | 001、003 | 无 | — | `runtime/include/IAgent.h`、`runtime/include/AgentTypes.h`、`runtime/include/AgentFacade.h`、更新后的 `runtime/CMakeLists.txt`、`runtime/src/AgentFacade.cpp`、`docs/todos/runtime/deliverables/RT-TODO-005-runtime-include布局与CMake骨架收敛.md` | runtime 不再只靠 placeholder 维持空库，且 RT-TODO-025 之前不再把旧 smoke 当作交付依据 |
 | RT-TODO-006 | NotStarted | 定义 RuntimeErrorCode 与 CancellationToken | runtime 详设 6.15、6.16、8.1；RT-TC013、RT-TC017 | 6.15.1 错误码分类表；6.16.2 取消令牌语义 | L3 | `runtime/include/RuntimeErrorCode.h`、`runtime/include/CancellationToken.h` | `RT_E_1xx`~`RT_E_6xx` 全码段枚举、`CancellationToken::cancel/is_cancelled/bind_deadline` | `RuntimeErrorCodeTest`、`CancellationTokenTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "RuntimeErrorCodeTest\|CancellationTokenTest" --output-on-failure` | 005 | 无 | — | `runtime/include/RuntimeErrorCode.h`、`runtime/include/CancellationToken.h`、`tests/unit/runtime/RuntimeErrorCodeTest.cpp`、`tests/unit/runtime/CancellationTokenTest.cpp` | error/cancel 公共面可编译且可测；码段不重叠；cancel 跨线程可见 |
 | RT-TODO-007 | NotStarted | 定义 IAgentFsm 与 StateTransitionTypes | runtime 详设 6.6、6.7.4、6.24.6 | 6.6 接口表；6.7.1 运行状态枚举；6.7.4 守卫表列定义 | L3 | `runtime/include/fsm/IAgentFsm.h`、`runtime/include/fsm/StateTransitionTypes.h` | `IAgentFsm::current_state/can_enter/transition/is_terminal`、`RuntimeState`(17态)、`StateTransitionRequest`、`StateTransitionOutcome`、`TransitionRejectionReason` | `AgentFsmTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R AgentFsmTest --output-on-failure` | 005 | 无 | — | `runtime/include/fsm/IAgentFsm.h`、`runtime/include/fsm/StateTransitionTypes.h` | 显式状态机输入/输出类型稳定；17 态枚举与详设 6.7.1 一致 |
 | RT-TODO-008 | NotStarted | 定义 IBudgetController 与 BudgetDecision | runtime 详设 6.10、6.24.7；RT-TC005 | 6.24.7 接口表；6.10 配置映射表 | L3 | `runtime/include/budget/IBudgetController.h`、`runtime/include/budget/BudgetDecision.h` | `IBudgetController::initialize/consume/snapshot/can_continue/can_replan/can_call_tool`、`BudgetDecision`、`BudgetViolationClass` | `BudgetControllerTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R BudgetControllerTest --output-on-failure` | 005、006 | 无 | — | `runtime/include/budget/IBudgetController.h`、`runtime/include/budget/BudgetDecision.h` | 预算公共面覆盖 turn/tool/replan/latency 五维；消费 RuntimeBudget 不重解释语义 |
