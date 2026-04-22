@@ -112,6 +112,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_error_code_unit_test
 	dasall_runtime_cancellation_token_unit_test
 	dasall_agent_fsm_unit_test
+	dasall_budget_controller_unit_test
 	${DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_tool_invocation_context_surface_unit_test

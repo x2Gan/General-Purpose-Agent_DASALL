@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #420
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-008 定义 IBudgetController 与 BudgetDecision
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-007 已完成并推送后，RT-TODO-008 成为 015/017/021 共用的最小预算基础任务；如果不先冻结预算控制 public surface，后续实现会在 orchestrator、recovery 和 telemetry 之间重复发明预算拒绝语义。
+2. 本轮最小判别点是：runtime 是否已经拥有只做“预算事实判断”的稳定接口面，且是否直接复用了 frozen 的 `RuntimeBudget` / `BudgetSnapshot` 而不是再造一层预算 schema；若否，后续 budget 实现很容易再次重解释五维预算。
+3. 本轮只收敛 header-only interface/types 和 surface test，不提前实现 `BudgetController.cpp`。
+
+### 改动
+
+1. 新增 `runtime/include/budget/BudgetDecision.h`：
+   - 定义 `BudgetInitializeRequest`、`BudgetConsumeRequest`、`BudgetDecision`、`BudgetViolationClass`；
+   - 直接复用 contracts 侧 `RuntimeBudget`、`BudgetSnapshot`、`BudgetType`；
+   - 把预算拒绝分类映射到 006 已冻结的 `RuntimeErrorCode`。
+2. 新增 `runtime/include/budget/IBudgetController.h`：
+   - 冻结 `initialize(...)`、`consume(...)`、`snapshot()`、`can_continue()`、`can_replan()`、`can_call_tool()` 六个最小 public 方法；
+   - 保持预算控制器只输出事实判断，不直接执行取消、恢复或降级。
+3. 新增 `tests/unit/runtime/BudgetControllerTest.cpp`：
+   - 用本地 test double 验证合法 budget 初始化、五维 snapshot 暴露和准入判断；
+   - 验证 `max_tool_calls` 超限后会输出 `ToolCallExhausted` 和 `RT_E_302_TOOL_CALL_OVERRUN`。
+4. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册 `dasall_budget_controller_unit_test`；
+   - 把 `BudgetControllerTest` 纳入 runtime/unit 聚合列表。
+5. 新增 `docs/todos/runtime/deliverables/RT-TODO-008-IBudgetController与BudgetDecision设计收敛.md`：
+   - 固定 budget public surface 的 request/decision/violation 边界；
+   - 固定 008 直接复用 `RuntimeBudget` / `BudgetSnapshot`，不再引入第二套 budget snapshot 语义。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_budget_controller_unit_test`
+   - 结果：通过；008 的新增 public headers 可被独立编译并成功链接。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `BudgetControllerTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回泛化错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_budget_controller_unit_test && ctest --test-dir build-ci -R BudgetControllerTest --output-on-failure`
+   - 结果：通过；1/1 test passed。
+3. 设计文档与 TODO 口径检查：
+   - `rg -n "RT-TODO-008|IBudgetController|BudgetDecision|BudgetControllerTest|BudgetViolationClass" docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-008-IBudgetController与BudgetDecision设计收敛.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：用于提交前一致性复核。
+
+### 结果
+
+1. RT-TODO-008 已完成，runtime 现在具备稳定的 `IBudgetController` public contract 和预算 supporting types；后续 015/017 可以直接复用统一的 budget decision 和 violation shape，而不再拼裸字符串或局部枚举。
+2. 008 已把 `RuntimeBudget` / `BudgetSnapshot` 固定为唯一预算输入和快照表达，保证 runtime 不重解释 contracts 冻结的五维预算语义。
+
+### 下一步
+
+1. 进入 RT-TODO-009，定义 checkpoint/recovery include 面，把 `ICheckpointManager`、`CheckpointBuildTypes`、`IRecoveryManager`、`ResumePlan` 的 public surface 显式落盘。
+
+### 风险
+
+1. 本轮只冻结了 budget public surface，还没有实现真实扣减点；若后续 015 在 turn/tool/replan/latency 扣减时偏离当前 `BudgetConsumeRequest` 语义，会重新引入预算口径漂移。
+2. 当前 `can_continue()` / `can_replan()` / `can_call_tool()` 只由 test double 演示最小行为，真实“继续/重规划/工具调用”组合判定仍需 015 与 orchestrator 集成时继续钉实。
+
 ## 记录 #419
 
 - 日期：2026-04-22
