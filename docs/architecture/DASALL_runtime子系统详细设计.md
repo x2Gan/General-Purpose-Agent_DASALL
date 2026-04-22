@@ -1273,6 +1273,43 @@ runtime/
 └── CMakeLists.txt
 ```
 
+##### 8.1.1 runtime 测试拓扑与 caller fixture
+
+```text
+tests/
+├── unit/
+│   └── runtime/
+│       ├── CMakeLists.txt
+│       ├── RuntimeControlPlaneSurfaceTest.cpp
+│       ├── RuntimeSmokeTest.cpp
+│       ├── AgentFsmTest.cpp
+│       ├── BudgetControllerTest.cpp
+│       ├── CheckpointManagerTest.cpp
+│       └── ...
+├── integration/
+│   └── agent_loop/
+│       ├── CMakeLists.txt
+│       ├── RuntimeUnaryFixtureIntegrationTest.cpp
+│       ├── RuntimeUnaryIntegrationTest.cpp
+│       ├── RuntimeResumeIntegrationTest.cpp
+│       ├── RuntimeSafeModeIntegrationTest.cpp
+│       └── RuntimeHealthMaintenanceIntegrationTest.cpp
+└── fixtures/
+  └── runtime/
+    ├── RuntimeCallerFixture.h
+    ├── RuntimeDependencyFixture.h
+    ├── RuntimeCheckpointFixture.h
+    └── checkpoints/
+```
+
+测试拓扑与 caller fixture 的固定规则如下：
+
+1. `tests/unit/runtime/` 只承载 runtime-owned 组件单测和 control-plane surface smoke；它验证 public surface、状态机、预算、checkpoint、恢复等 module-local 边界，不承担跨模块联调证明。
+2. `RuntimeControlPlaneSurfaceTest` 是后续替代旧 `RuntimeSmokeTest` Gate 语义的目标入口；`RuntimeSmokeTest` 在 RT-TODO-025 完成前只保留 build-liveness 含义。
+3. `tests/integration/agent_loop/` 必须显式分层：`RuntimeUnaryFixtureIntegrationTest` 属于 subsystem-local fixture gate，`RuntimeUnaryIntegrationTest` / `RuntimeResumeIntegrationTest` / `RuntimeSafeModeIntegrationTest` 属于真集成或带 blocker 的跨模块 gate。
+4. `tests/fixtures/runtime/` 下的 caller fixture 只允许组装 `AgentFacade`、`AgentOrchestrator`、fail-closed stub、null adapter 和 deterministic checkpoint/session 资产；它不能伪造“真实 public interface 已 ready”的证据。
+5. discoverability 必须以顶层 `ctest -N` 为准：runtime unit target、runtime integration target 与 runtime fixture 资产路径都要可被静态发现，而不是靠临时手工命令或散落在 smoke 里的隐式入口。
+
 ### 8.2 分阶段实施计划
 
 | 阶段 | 目标 | 关键任务 | 完成判定 |
@@ -1311,6 +1348,14 @@ runtime/
 | concurrency | 主循环 + Recovery Thread 并发 checkpoint 读写、Scheduler 队列背压溢出、CancellationToken 跨线程传播 | 验证并发安全设计 §6.14 |
 | compatibility | desktop_full、edge_balanced、edge_minimal 至少三档 profile | 验证能力裁剪、budget 差异与 degrade 行为 |
 
+#### 9.1.1 discoverability 与 fixture 边界规则
+
+1. `tests/unit/runtime/CMakeLists.txt`、`tests/integration/agent_loop/CMakeLists.txt` 和顶层 `tests/integration/CMakeLists.txt` 必须共同提供 runtime discoverability；缺任何一处都不能视为 topology ready。
+2. caller fixture 只服务 runtime-local gate 和 deterministic regression；fixture 资产必须集中在 `tests/fixtures/runtime/`，不允许散落到 production 目录伪装成运行时依赖。
+3. subsystem-local fixture gate 与 true cross-module integration gate 的命名必须可从测试文件名直接区分，避免把 `RuntimeUnaryFixtureIntegrationTest` 误记成 `RuntimeUnaryIntegrationTest` 的替代证据。
+4. 任何仍依赖 fail-closed stub 或 null adapter 的用例，都只能给出 runtime-local ready 结论，不能给出 true integration pass 结论。
+5. 旧 smoke 用例在 RT-TODO-025 前必须继续保留，但其结论只能写入 build-liveness，不得出现在 Gate pass 证据表中。
+
 ### 9.2 关键单元测试建议
 
 1. AgentFsmTest：覆盖所有显式状态与非法转移拒绝。
@@ -1339,6 +1384,16 @@ runtime/
 2. 恢复链路：Tool failure -> ReflectionDecision -> RecoveryOutcome -> retry/replan/abort_safe。
 3. Resume 链路：WaitingConfirm / WaitingTool checkpoint -> process restart -> resume。
 4. Degrade 链路：budget overrun / llm failover denied -> FailedSafe / Degraded / SafeMode。
+
+对上述路径，测试拓扑与 caller fixture 的落位必须进一步固定为：
+
+| 路径 | 目标文件 | seam / fixture 规则 | 结论边界 |
+|---|---|---|---|
+| runtime control-plane surface | `tests/unit/runtime/RuntimeControlPlaneSurfaceTest.cpp` | 只验证 `AgentFacade`、`AgentOrchestrator` 和 runtime public surface 的 discoverability；允许 stub/null adapter | 只证明 runtime public surface ready |
+| unary fixture 主链 | `tests/integration/agent_loop/RuntimeUnaryFixtureIntegrationTest.cpp` | caller fixture + fail-closed stub/null adapter；不得依赖真实跨模块端口 | 只证明 subsystem-local ready |
+| unary 真集成主链 | `tests/integration/agent_loop/RuntimeUnaryIntegrationTest.cpp` | 必须绑定真实 public interface；若依赖未 ready 则保持 Blocked | 才能证明 true integration ready |
+| resume / replay | `tests/integration/agent_loop/RuntimeResumeIntegrationTest.cpp`、`RuntimeCheckpointReplayRegressionTest.cpp` | runtime-owned checkpoint fixture 可用于 replay regression；真实持久化 round-trip 仍需看 blocker 状态 | 可证明 runtime-owned resume 语义，不自动等于真端口持久化 ready |
+| safe mode / health | `tests/integration/agent_loop/RuntimeSafeModeIntegrationTest.cpp`、`RuntimeHealthMaintenanceIntegrationTest.cpp` | 可复用 caller fixture，但必须显式标注是 runtime-local 还是 true dependency unavailable 注入 | 只按测试实际 seam 选择给出结论 |
 
 ### 9.5 失败注入测试点
 

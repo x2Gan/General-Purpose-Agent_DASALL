@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #416
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Design convergence 轮次
+- 任务：RT-TODO-004 收敛 runtime 测试拓扑与 caller fixture
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-003 已完成并推送后，RT-TODO-004 成为本轮串行链的最后一个前置补设计任务；它直接决定后续 RT-TODO-025 的 discoverability 和 fixture gate 接线是否有稳定真值源。
+2. 本轮最小判别点是：runtime 详设是否已经把 `tests/unit/runtime/`、`tests/integration/agent_loop/` 和 caller fixture 的边界写清，并且显式区分 subsystem-local fixture gate 与 true integration gate。
+3. 由于当前仓库尚未实际接线 runtime test targets，本轮只做设计收敛，不提前实现 `CMakeLists.txt` 或测试文件。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`：
+   - 新增 8.1.1，固定 runtime 测试拓扑目录树、`RuntimeControlPlaneSurfaceTest` 的目标语义和 caller fixture 规则；
+   - 新增 9.1.1，固定 discoverability 责任和 fixture gate / true integration gate 的命名边界；
+   - 扩展 9.4，把 control-plane surface、fixture 主链、真集成主链、resume/replay、safe mode/health 的测试落点与结论边界成表。
+2. 新增 `docs/todos/runtime/deliverables/RT-TODO-004-runtime测试拓扑与fixture收敛.md`：
+   - 记录本地证据、AWS Hexagonal Architecture 外部参考、拓扑与 fixture 矩阵、流程时序、Design -> Build 映射和风险回退。
+3. 更新 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 将 RT-TODO-004 从 `NotStarted` 回写为 `Done`；
+   - 在 blocker 校准表中把 RT-BLK-06 标记为“部分解阻”，明确设计侧已完成，但 discoverability 的实际接线仍待 RT-TODO-025。
+
+### 验证
+
+1. 文档一致性检索：
+   - `rg -n "tests/unit/runtime|tests/integration/agent_loop|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeSafeModeIntegrationTest" docs/architecture/DASALL_runtime子系统详细设计.md docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-004-runtime测试拓扑与fixture收敛.md`
+   - 结果：通过；runtime 测试拓扑与 caller fixture 规则已在 architecture / TODO / deliverable 三处形成一致口径。
+
+### 结果
+
+1. RT-TODO-004 已完成，runtime 现在具备可直接指导 RT-TODO-025 的测试拓扑、discoverability 和 caller fixture 分层规则。
+2. RT-BLK-06 仅得到部分解阻：设计侧 topology/fixure 已冻结，但 `ctest -N` 级别的实际 discoverability 仍需 RT-TODO-025 的 Build 落盘才能完成。
+
+### 下一步
+
+1. 设计与接缝收敛阶段 001~004 已完成；下一轮如果继续推进，应进入 RT-TODO-005，开始 runtime include 布局与 CMake 骨架的 Build 落地。
+
+### 风险
+
+1. 如果后续 RT-TODO-025 继续把 `RuntimeSmokeTest` 当成 Gate 证据，而不引入 `RuntimeControlPlaneSurfaceTest`，会直接违背本轮冻结的 topology 规则，需要回退。
+2. 如果后续 caller fixture 资产没有统一落到 `tests/fixtures/runtime/`，discoverability 和证据分层会再次混乱，需要回退到 8.1.1 与 9.1.1 的集中式布局。
+
 ## 记录 #415
 
 - 日期：2026-04-22
