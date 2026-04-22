@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #412
+
+- 日期：2026-04-22
+- 阶段：knowledge/专项 TODO Gate evidence closeout 轮次
+- 任务：KNO-TODO-031 回写 knowledge 专项 Gate 与交付证据
+- 状态：已完成
+
+### 任务选择
+
+1. 030 与 033 已分别完成并推送后，专项 TODO 串行链只剩 031 这个阶段 H 收口任务，因此本轮不再改 knowledge 实现，只做 gate 证据统一回写。
+2. 031 的目标不是补新测试，而是把 027/028/029/030/032/033 已存在的 targeted evidence 统一整理成可审计的 gate 结论，并把残余 blocker 与后继动作显式写回。
+3. 本轮最关键的判别点是：knowledge 自身 gate 是否全绿，还是只是被仓库级 aggregate 噪音拖住；如果存在 knowledge 内部 blocker，031 必须如实记录而不能误宣称完成态全绿。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-031-knowledge专项Gate与交付证据收敛.md`：
+   - 汇总 build / discoverability / knowledge-scoped ctest / retrieval quality gate / aggregate integration 的命令证据；
+   - 显式拆分 PASS、PARTIAL 与外部噪音；
+   - 记录 `FreshnessControllerTest.cpp` 语法破损和 infra diagnostics aggregate 污染两个残余问题。
+2. 更新 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`：
+   - 将 031 从 `NotStarted` 改为 `Done`；
+   - 把 031 自身无阻塞、但残余 blocker 已回写的结论落到交付物列。
+3. 更新 `docs/worklog/DASALL_开发执行记录.md`：
+   - 新增本轮 Gate 收口记录，沉淀 031 的命令证据、结论和下一步建议。
+
+### 验证
+
+1. `build-ci` 证据采样：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+   - 结果：configure/generate 通过。
+2. build 侧：
+   - `cmake --build build-ci --target dasall_knowledge dasall_unit_tests`
+   - 结果：`dasall_knowledge` 构建通过；`dasall_unit_tests` 在 `tests/unit/knowledge/FreshnessControllerTest.cpp` 处失败，错误为非法 `}#include <algorithm>` 拼接与重复 `main()`。
+3. discoverability 与 knowledge 范围回归：
+   - `ctest --test-dir build-ci -N`
+   - `ctest --test-dir build-ci --output-on-failure -R "Knowledge|dasall_knowledge"`
+   - 结果：总测试数 `601`；knowledge 命名范围 20/20 Passed。
+4. quality gate：
+   - `ctest --test-dir build-ci -R RetrievalQualityRegressionTest --output-on-failure`
+   - 结果：1/1 Passed。
+5. aggregate integration 补充：
+   - 复用同日 `cmake --build build-ci --target dasall_integration_tests` 采样日志；
+   - 结果：aggregate 共 65 条测试，其中 knowledge 6 条全部 Passed；但 target 仍被既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败拖住。
+
+### 结果
+
+1. 031 已完成，knowledge 专项 gate 证据链已闭合，不再依赖散落在 027~033 各轮中的口头说明。
+2. 当前 knowledge 结论是“证据完备但未 full-green”：discoverability、knowledge 命名范围回归、quality regression 与 refresh/rollback integration 为 PASS；unit aggregate 与 integration aggregate 分别被 `FreshnessControllerTest.cpp` 语法破损和 infra diagnostics 污染拖住。
+3. 因此，本轮完成态表示 030/033/031 串行链已按要求收口，不表示 knowledge 专项已经没有残余 blocker。
+
+### 下一步
+
+1. 若继续推进，应单独拆 atomic task 修复 `tests/unit/knowledge/FreshnessControllerTest.cpp`，恢复 `dasall_unit_tests` full-green。
+2. 若要恢复聚合 integration 全绿，需要另行处理仓库级 `InfraDiagnosticsSmokeTest` / `InfraDiagnosticsIntegrationTest` 失败。
+
+### 风险
+
+1. `ctest -R "Knowledge|dasall_knowledge"` 不包含 `RetrievalQualityRegressionTest`，后续若只跑该 regex 会误丢 quality gate；必须继续保留单独的 retrieval quality 命令证据。
+2. 如果后续汇报只引用 aggregate target 结果，会把 knowledge 自身通过的 6 条 integration tests 一并误判为失败；必须继续拆分 knowledge slice 与仓库级 aggregate 噪音。
+
 ## 记录 #411
 
 - 日期：2026-04-22
