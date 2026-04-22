@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #411
+
+- 日期：2026-04-22
+- 阶段：knowledge/专项 TODO Build refresh loop integration 轮次
+- 任务：KNO-TODO-033 验证 request_refresh → ingest → snapshot swap → retrieve 端到端集成闭环
+- 状态：已完成
+
+### 任务选择
+
+1. 030 已完成并推送后，专项 TODO 中最直接的缺口就是评审 D-4 指出的 refresh 闭环 integration 测试，因此本轮顺序推进到 033，而不提前汇总 031。
+2. 032 已经证明 real refresh owner 链可运行，020 已经证明 writer rollback 语义存在，因此 033 的最小闭环是把两者抬升到 integration 层，而不是再改 facade 或 writer 生产代码。
+3. 033 需要同时回答三个问题：refresh 成功后 retrieve 是否读取新 snapshot、并发 refresh 是否被 busy guard 拒绝、swap/activation 失败后 last-known-good 是否仍然守住读路径。
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-033-refresh-loop-integration设计收敛.md`：
+   - 固定 033 只负责 refresh/retrieve integration harness；
+   - 锁定 inventory 镜像、条件变量阻塞和 `mark_active` 失败注入三个关键实现点；
+   - 输出 Design -> Build 映射与 Build 三件套。
+2. 新增 `tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp`：
+   - 组装真实 `KnowledgeServiceFacade + IngestionCoordinator + IndexWriter + IndexReader + QueryNormalizer + CorpusRouter + RecallCoordinator + Reranker + EvidenceAssembler` lexical refresh/retrieve 链；
+   - 在 refresh 成功后通过 inventory 重建保证更新文档会被识别为 `updated_sources`，从而删除旧 chunk；
+   - 覆盖 1 条成功闭环、1 条 busy reject、1 条 rollback 断言。
+3. 更新 `tests/integration/knowledge/CMakeLists.txt`：
+   - 注册 `dasall_knowledge_refresh_loop_integration_test`；
+   - 接入 `knowledge/src` include 与 `dasall_sqlite3`。
+
+### 验证
+
+1. `build-ci` 先重配置以纳入新 target：
+   - `cmake -S . -B build-ci -G "Unix Makefiles"`
+2. 定向构建：
+   - `cmake --build build-ci --target dasall_knowledge_refresh_loop_integration_test`
+   - 结果：构建通过。
+3. 定向测试：
+   - `ctest --test-dir build-ci -R KnowledgeRefreshLoopTest --output-on-failure`
+   - 结果：1/1 Passed。
+4. `Build_CMakeTools`：
+   - `dasall_knowledge_refresh_loop_integration_test`
+   - 结果：构建通过。
+5. `RunCtest_CMakeTools`：
+   - 对 `KnowledgeRefreshLoopTest` 仍返回仓库已知工具态错误 `生成失败`；
+   - 结论：不作为 033 代码失败信号，继续以 build-ci 定向命令作为主验收证据。
+6. 聚合验收补充：
+   - `cmake --build build-ci --target dasall_integration_tests`
+   - 聚合执行中 `KnowledgeRefreshLoopTest` Passed；
+   - 但 aggregate target 最终仍被仓库既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败拖住。
+
+### 结果
+
+1. 033 已完成，knowledge 现在具备可执行的 refresh loop integration gate，而不是只在 unit 层分散证明 refresh 和 rollback。
+2. 成功闭环、busy reject、swap failure rollback 三条语义现在都能通过单一 integration 入口做自动回归。
+3. 本轮没有新增生产语义，只补足了真实组合根下的端到端验证，说明 033 保持在既定边界内，没有越界扩张到 031。
+
+### 下一步
+
+1. 进入 `KNO-TODO-031`，汇总 030/033 的 build、integration、quality 与 aggregate blocker 证据，完成专项 Gate 收口。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 对 knowledge integration 测试仍存在通用 `生成失败` 工具态问题，本轮继续依赖 build-ci 定向命令作为主验证证据。
+2. `dasall_integration_tests` aggregate target 仍受无关的 infra diagnostics 失败污染；031 需要把该残余风险统一收口为仓库级 blocker，而不是误记为 033 缺陷。
+
 ## 记录 #410
 
 - 日期：2026-04-22

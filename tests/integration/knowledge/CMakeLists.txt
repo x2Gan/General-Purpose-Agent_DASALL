@@ -63,6 +63,13 @@ dasall_add_knowledge_integration_test(
   "integration;knowledge"
 )
 
+dasall_add_knowledge_integration_test(
+  dasall_knowledge_refresh_loop_integration_test
+  KnowledgeRefreshLoopTest
+  KnowledgeRefreshLoopTest.cpp
+  "integration;knowledge"
+)
+
 target_include_directories(dasall_knowledge_retrieval_smoke_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/knowledge/src
@@ -89,6 +96,16 @@ target_include_directories(dasall_knowledge_retrieval_quality_regression_integra
 )
 
 target_link_libraries(dasall_knowledge_retrieval_quality_regression_integration_test
+  PRIVATE
+    dasall_sqlite3
+)
+
+target_include_directories(dasall_knowledge_refresh_loop_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_link_libraries(dasall_knowledge_refresh_loop_integration_test
   PRIVATE
     dasall_sqlite3
 )
