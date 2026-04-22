@@ -74,13 +74,13 @@ Knowledge 子系统不是：
 | contracts 准入 | `contracts/include/boundary/InterfaceCatalog.h`、`WP05-T012-接口准入评估单.md` | `IKnowledgeService` 当前是 `AwaitingSupportingContracts`，接口必须先落在 knowledge/include |
 | Context 投影 | `contracts/include/context/ContextPacket.h` | 当前共享证据投影面只有 `retrieval_evidence: vector<string>`，结构化证据仍需 module-local |
 | profile 约束 | `docs/architecture/DASALL_profiles模块详细设计.md` 与 `profiles/*/runtime_policy.yaml` | 知识链路必须复用 `enabled_modules.knowledge`、`memory_vector`、`token_budget_policy`、`capability_cache_policy` |
-| 工程现状 | `knowledge/CMakeLists.txt`、`knowledge/src/placeholder.cpp`、`tests/unit/knowledge/CMakeLists.txt` | 模块已有静态库入口但实现为空，占位单测未接线，尚未形成任何知识链路 |
-| 交付现状 | `docs/todos/knowledge/` 与 deliverables 缺失 | 知识子系统尚无专属 TODO 与收敛文档，说明设计和 Build 任务尚未进入闭环 |
+| 工程现状 | `knowledge/include/`、`knowledge/src/{config,evidence,facade,health,index,ingest,query,rerank,retrieve}`、`tests/unit/knowledge/CMakeLists.txt` | 模块已形成 public include、检索/索引/观测主链和可编译测试入口，`placeholder.cpp` 仅剩骨架占位，不再代表主实现状态 |
+| 交付现状 | `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/knowledge/deliverables/KNO-TODO-001..033*.md`、`docs/worklog/DASALL_开发执行记录.md` | 知识子系统已具备专项 TODO、deliverables、worklog 与 Gate 证据链，设计与 Build 已进入闭环推进阶段 |
 
 现状结论必须明确为两句话：
 
 1. architecture ready：Knowledge 的系统级职责、层级位置和相邻边界已经在架构/蓝图/ADR 中明确。
-2. implementation not ready：knowledge/ 仍是占位模块，缺少 public headers、检索管线、索引治理、测试门禁和交付证据。
+2. implementation baseline landed：knowledge/ 已落盘 public headers、检索/索引/证据/观测主链、unit/integration 测试与专项交付证据；当前重点已从“占位实现”转向“质量门稳定、语义收敛与文档同步”。
 
 ## 2. 约束清单
 
@@ -136,33 +136,33 @@ Must-Not：
 | 观察项 | 当前状态 | 证据 | 结论 |
 |---|---|---|---|
 | knowledge 构建入口 | 已存在 | `knowledge/CMakeLists.txt` | 已有 `dasall_knowledge` 静态库目标 |
-| knowledge 源码实现 | 占位 | `knowledge/src/placeholder.cpp` | 当前无真实检索逻辑、索引治理或证据组装实现 |
-| knowledge 公共头文件 | 缺失 | knowledge/ 目录仅含 `CMakeLists.txt` 与 `src/` | `IKnowledgeService` 和 module-local types 尚未落盘 |
-| Query plane | 缺失 | 当前无 `query/`、`retrieve/`、`rerank/` 目录 | 没有查询归一化、语料路由、混合召回或重排组件 |
-| Ingestion / Index plane | 缺失 | 当前无 `ingest/`、`index/` 目录 | 没有文档分块、索引构建、版本账本和增量更新实现 |
-| Vector backend bridge | 缺失 | 工作区无 knowledge -> memory/vector 桥接接口 | 向量链路复用方式尚未工程化 |
-| 可观测与健康 | 缺失 | 当前无 KnowledgeTelemetry/HealthProbe 代码 | 检索退化与索引漂移无法被监控 |
-| unit tests | 占位 | `tests/unit/knowledge/CMakeLists.txt` | 无任何知识模块单元测试目标 |
-| integration tests | 缺失 | `tests/integration/CMakeLists.txt` 未纳入 knowledge 子目录 | 无 `integration` smoke、failure、profile 用例 |
-| contracts 支撑对象 | 缺失 | `contracts/include/**/*Knowledge*`、`**/*Retrieval*` 均不存在 | `IKnowledgeService` 仍需停留在模块内 |
+| knowledge 源码实现 | 已落地 | `knowledge/src/{config,evidence,facade,health,index,ingest,query,rerank,retrieve}`、`knowledge/src/KnowledgeBuildSkeleton.cpp` | 已具备真实检索逻辑、索引治理与证据组装主链，`placeholder.cpp` 不再代表实现成熟度 |
+| knowledge 公共头文件 | 已落地 | `knowledge/include/IKnowledgeService.h`、`knowledge/include/KnowledgeTypes.h`、`knowledge/include/KnowledgeErrors.h` | `IKnowledgeService` 与 module-local supporting types 已按模块边界落盘 |
+| Query plane | 已落地 | `knowledge/src/query/`、`knowledge/src/retrieve/`、`knowledge/src/rerank/` | 已实现查询归一化、语料路由、sparse/dense recall 协调与重排组件 |
+| Ingestion / Index plane | 已落地 | `knowledge/src/ingest/`、`knowledge/src/index/` | 已实现文档扫描、规范化、分块、索引读写、版本账本与 refresh 主链 |
+| Vector backend bridge | 已落地 | `knowledge/include/retrieve/IVectorRecallStore.h`、`knowledge/src/retrieve/VectorRetrieverBridge.cpp` | 向量链路已通过窄接口桥接复用，不强绑 memory/llm 实现 |
+| 可观测与健康 | 已落地 | `knowledge/src/health/KnowledgeTelemetry.cpp`、`knowledge/src/health/KnowledgeHealthProbe.cpp` | 检索退化、健康快照与观测桥已接线，后续重点转为质量门稳定 |
+| unit tests | 已落地 | `tests/unit/knowledge/*.cpp`、`tests/unit/knowledge/CMakeLists.txt` | 已具备 query/router/retrieval/evidence/index/health 等单测矩阵，聚合健康需持续守护 |
+| integration tests | 已落地 | `tests/integration/knowledge/*.cpp`、`tests/integration/knowledge/CMakeLists.txt` | 已具备 smoke、failure-degrade、profile、quality regression、refresh loop 等集成用例 |
+| contracts 支撑对象 | 按设计保持 module-local | `knowledge/include/IKnowledgeService.h`、`knowledge/include/KnowledgeTypes.h` | supporting objects 未上升到 contracts，当前实现与模块边界约束一致 |
 | 共享投影面 | 已存在 | `contracts/include/context/ContextPacket.h` | 当前唯一共享证据面是 `retrieval_evidence: vector<string>` |
 | profile 开关 | 已存在 | `profiles/desktop_full/runtime_policy.yaml`、`edge_minimal/runtime_policy.yaml` | `knowledge` 与 `memory_vector` 已具备 enable/disable 基线 |
-| 专项设计收敛 | 缺失 | `docs/todos/knowledge/**` 不存在 | 知识子系统尚无 TODO/交付物/Gate 证据链 |
+| 专项设计收敛 | 已落地 | `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/knowledge/deliverables/*.md`、`docs/worklog/DASALL_开发执行记录.md` | 已形成专项 TODO、交付物、质量门与执行记录闭环 |
 
 ### 3.2 现状-目标差距表
 
 | 目标能力 | 当前状态 | 关键差距 | 风险等级 | 优先级 |
 |---|---|---|---|---|
-| Runtime-facing 检索接口 | 缺失 | 没有 `IKnowledgeService` 和 `KnowledgeTypes` 公共头 | High | P0 |
-| lexical 检索最小闭环 | 缺失 | 没有 corpus catalog、关键词检索、basic evidence projection | High | P0 |
-| vector/hybrid 检索 | 缺失 | 没有 vector bridge、candidate merge、RRF/Rerank 逻辑 | High | P1 |
-| 证据组装 | 缺失 | 没有 `EvidenceSlice`/`EvidenceBundle` 以及 `ContextPacket.retrieval_evidence` 投影逻辑 | High | P0 |
-| 索引新鲜度治理 | 缺失 | 没有 ingestion pipeline、增量更新、版本账本和 rebuild 流程 | High | P1 |
-| profile 兼容退化 | 缺失 | 没有 knowledge=true + memory_vector=false 的 lexical-only 路径 | High | P0 |
-| 异常和退化观测 | 缺失 | 没有 logs/metrics/trace/audit/health 口径 | Medium | P1 |
-| 单元测试门禁 | 缺失 | 没有 unit test 可验证 query/router/evidence logic | High | P0 |
-| 集成测试门禁 | 缺失 | 没有 integration smoke/failure/profile 用例 | High | P0 |
-| TODO / deliverables 证据 | 缺失 | 无知识子系统设计/Build 收口轨迹 | Medium | P1 |
+| Runtime-facing 检索接口 | 已落地 | 重点转为 facade 语义收敛、错误映射与边界回归测试 | Medium | P0 |
+| lexical 检索最小闭环 | 已落地 | 重点转为 retrieval regression gate、语言/过滤语义与快照稳定性 | Medium | P0 |
+| vector/hybrid 检索 | 已落地（可选能力） | 重点转为 backend availability、degrade 语义与 lane failure 观测 | Medium | P1 |
+| 证据组装 | 已落地 | 重点转为 projection 预算、coverage notes 与跨模块投影一致性 | Medium | P1 |
+| 索引新鲜度治理 | 已落地 | 重点转为 refresh loop 稳定性、聚合单测健康与回滚语义守护 | Medium | P1 |
+| profile 兼容退化 | 已落地 | 需持续验证 lexical-only fallback 与 profile 投影一致性 | Medium | P1 |
+| 异常和退化观测 | 已落地 | 需继续扩大 aggregate gate 稳定性和 CI 噪声隔离 | Medium | P1 |
+| 单元测试门禁 | 已落地但聚合待稳 | 需持续保持知识单测聚合可编译、可发现、可复现 | High | P0 |
+| 集成测试门禁 | 已落地 | 需持续把 smoke / degrade / quality regression 与聚合 CI 分层治理 | Medium | P0 |
+| TODO / deliverables 证据 | 已落地 | 需保持 TODO、deliverable、worklog 与实现现状同步 | Low | P1 |
 
 ### 3.3 风险冲突识别
 
@@ -177,11 +177,11 @@ Must-Not：
 
 ### 3.4 现状结论
 
-当前最合理的推进方式不是继续扩张 contracts，而是：
+当前最合理的推进方式不是把 Knowledge 继续描述为“待实现模块”，而是在既有落地基线上继续做收口：
 
-1. 先在 knowledge/include 建立 module public interface 和 supporting types。
-2. 先打通 lexical-only 的最小证据链，再增量打开 hybrid/vector。
-3. 用 Runtime 主调 + evidence projection handoff 收敛同层边界，避免 memory 直依赖 knowledge 实现。
+1. 以已落盘的 `knowledge/include` public surface 与 `knowledge/src/*` 主链为基础，持续收敛 facade 语义、错误映射与边界守卫。
+2. 以 lexical-only / hybrid 两条已落地链路为基线，继续稳定 retrieval quality gate、refresh loop 与 profile compatibility。
+3. 以 Runtime 主调 + evidence projection handoff 为既定边界，优先修复质量门、文档同步与聚合测试健康，而不是重开一轮 from-scratch 设计。
 
 ## 4. 候选方案对比
 

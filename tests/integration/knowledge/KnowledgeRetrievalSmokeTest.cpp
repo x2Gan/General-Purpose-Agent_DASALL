@@ -326,7 +326,7 @@ class SqliteLexicalIndexFixture {
   return query;
 }
 
-[[nodiscard]] CorpusDescriptor make_descriptor() {
+[[nodiscard]] CorpusDescriptor make_descriptor(std::string default_language = "zh-CN") {
   CorpusDescriptor descriptor;
   descriptor.corpus_id = "adr-normative";
   descriptor.display_name = "ADR Normative";
@@ -345,7 +345,7 @@ class SqliteLexicalIndexFixture {
       {"baseline_class", "knowledge"},
       {"owner_module", "knowledge"},
       {"refresh_strategy", "manual"},
-      {"default_language", "zh-CN"},
+      {"default_language", std::move(default_language)},
   };
   return descriptor;
 }
@@ -379,7 +379,7 @@ struct KnowledgeSmokeHarness {
   std::int64_t now_ms = 12000;
   std::unique_ptr<dasall::knowledge::IKnowledgeService> knowledge_service;
 
-  KnowledgeSmokeHarness()
+  explicit KnowledgeSmokeHarness(std::string corpus_language = "zh-CN")
       : query_normalizer(make_normalize_policy()),
         sparse_retriever(SparseRetrieverDeps{
             .search_index = [this](const SparseIndexSearchRequest& request) {
@@ -412,10 +412,10 @@ struct KnowledgeSmokeHarness {
         "ADR-0001#policy",
         9500,
         AuthorityLevel::Normative,
-        "zh-CN",
+      corpus_language,
         {"normative"});
 
-    const bool catalog_replaced = corpus_catalog.replace_all({make_descriptor()});
+    const bool catalog_replaced = corpus_catalog.replace_all({make_descriptor(corpus_language)});
     assert_true(catalog_replaced,
                 "knowledge smoke harness should install a consistent corpus descriptor");
 
@@ -508,11 +508,22 @@ void test_knowledge_retrieval_smoke_returns_non_empty_context_projection() {
               "knowledge retrieval smoke projection should retain the citation ref");
 }
 
+void test_knowledge_retrieval_smoke_keeps_en_corpus_retrievable_for_session_queries() {
+  KnowledgeSmokeHarness harness("en");
+  const auto evidence = retrieve_runtime_projection(*harness.knowledge_service, make_query());
+
+  assert_true(!evidence.context_projection.empty(),
+              "session-scoped queries should not implicitly filter out english corpora");
+  assert_true(evidence.context_projection.front().find("ADR-0001#policy") != std::string::npos,
+              "english corpus retrieval should still preserve the citation ref");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_knowledge_retrieval_smoke_returns_non_empty_context_projection();
+    test_knowledge_retrieval_smoke_keeps_en_corpus_retrievable_for_session_queries();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

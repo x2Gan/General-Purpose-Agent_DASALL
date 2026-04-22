@@ -56,6 +56,12 @@ namespace {
   return KnowledgeErrorCode::InternalError;
 }
 
+[[nodiscard]] std::optional<std::string> derive_required_language(
+    const KnowledgeQuery& query) {
+  (void)query;
+  return std::nullopt;
+}
+
 [[nodiscard]] rerank::RerankPolicy make_rerank_policy(const KnowledgeQuery& query) {
   rerank::RerankPolicy policy;
   policy.top_k = query.top_k;
@@ -212,7 +218,7 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
   retrieve::RecallRequest recall_request;
   recall_request.normalized_query = *normalize_result.normalized_query;
   recall_request.plan = *route_result.plan;
-  recall_request.required_language = query.session_id.has_value() ? std::optional<std::string>("zh-CN") : std::nullopt;
+  recall_request.required_language = derive_required_language(query);
   auto recall_result = deps_.recall(recall_request);
   if (!recall_result.has_consistent_values()) {
     return fail_closed(query, route_result.plan->mode,
