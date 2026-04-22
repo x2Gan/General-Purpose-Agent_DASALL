@@ -111,6 +111,9 @@ class AgentOrchestrator final {
   AgentOrchestrator(const AgentOrchestrator&) = delete;
   AgentOrchestrator& operator=(const AgentOrchestrator&) = delete;
 
+  void seed_for_test(const std::optional<SessionSnapshot>& session_snapshot,
+                     const std::vector<contracts::Checkpoint>& checkpoints);
+
   [[nodiscard]] OrchestratorRunResult run_once(const contracts::AgentRequest& request);
   [[nodiscard]] OrchestratorRunResult continue_from_checkpoint(
       const ResumePlan& plan,

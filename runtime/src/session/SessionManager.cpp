@@ -5,6 +5,11 @@
 
 namespace dasall::runtime {
 
+void SessionManager::seed_for_test(const SessionSnapshot& session_snapshot) {
+  const std::lock_guard<std::mutex> lock(session_mutex_);
+  stored_snapshot_ = session_snapshot;
+}
+
 SessionLoadResult SessionManager::load_session(
     const SessionLoadRequest& request) const {
   if (!request.has_minimum_requirements()) {

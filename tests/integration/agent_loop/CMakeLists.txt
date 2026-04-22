@@ -40,6 +40,18 @@ dasall_add_runtime_agent_loop_integration_test(
 )
 
 dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_resume_integration_test
+  RuntimeResumeIntegrationTest
+  RuntimeResumeIntegrationTest.cpp
+)
+
+dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_checkpoint_replay_regression_test
+  RuntimeCheckpointReplayRegressionTest
+  RuntimeCheckpointReplayRegressionTest.cpp
+)
+
+dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_checkpoint_replay_compatibility_integration_test
   RuntimeCheckpointReplayCompatibilityTest
   RuntimeCheckpointReplayCompatibilityTest.cpp

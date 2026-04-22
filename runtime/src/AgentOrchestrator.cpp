@@ -414,6 +414,18 @@ const char* orchestrator_stage_name(const OrchestratorStage stage) {
 AgentOrchestrator::AgentOrchestrator(OrchestratorComposition composition)
     : composition_(std::move(composition)), scheduler_(2, 16) {}
 
+void AgentOrchestrator::seed_for_test(
+    const std::optional<SessionSnapshot>& session_snapshot,
+    const std::vector<contracts::Checkpoint>& checkpoints) {
+  for (const auto& checkpoint : checkpoints) {
+    checkpoint_manager_.seed_for_test(checkpoint);
+  }
+
+  if (session_snapshot.has_value()) {
+    session_manager_.seed_for_test(*session_snapshot);
+  }
+}
+
 std::unique_ptr<IAgentFsm> AgentOrchestrator::build_fsm(const RuntimeState initial_state) const {
   if (composition_.fsm_factory) {
     return composition_.fsm_factory(initial_state);
@@ -1568,6 +1580,41 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
           contracts::AgentResultStatus::Failed,
           kRuntimeOrchestratorSkeletonInternalErrorCode,
           "continue_from_checkpoint failed to re-enter main loop",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+  } else if (plan.target_state == RuntimeState::WaitingExternal) {
+    if (const auto failure = apply_steps(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::MainLoop),
+            {{.to_state = RuntimeState::Reflecting,
+              .reason = "external result replayed",
+              .guards = {TransitionGuardFact::ExternalResultAvailable}},
+             {.to_state = RuntimeState::Reasoning,
+              .reason = "reflection continue path",
+              .guards = {TransitionGuardFact::ReflectionContinue}},
+             {.to_state = RuntimeState::Responding,
+              .reason = "resume direct response",
+              .guards = {TransitionGuardFact::DirectResponseReady}}});
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          synthetic_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "continue_from_checkpoint failed to resume waiting external state",
           make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
                              failure->detail,
                              failure->stage,

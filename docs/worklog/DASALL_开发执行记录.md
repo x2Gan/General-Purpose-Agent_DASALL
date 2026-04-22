@@ -1,5 +1,68 @@
 # DASALL 开发执行记录
 
+## 记录 #439
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO runtime-local gates 与兼容性任务
+- 任务：RT-TODO-028 验证 RuntimeResumeIntegration 与 checkpoint replay regression
+- 状态：已完成
+
+### 任务选择
+
+1. 026 之后，runtime public control-plane 仍缺一段关键链路：`AgentFacade::resume(...)` 还没有把 waiting session / checkpoint 锚点分发给 `AgentOrchestrator::handle_waiting_state(...)`，因此 028 的最小控制面仍然是 facade，而不是单独的 session/checkpoint controller。
+2. 本轮最小判别点有两个：
+   - facade 是否能从 waiting clarify 主链恢复到 completed result；
+   - 024 的 replay fixture 是否能经由 runtime-owned resume 路径完成 replay success 与 schema mismatch reject，而不只停在 `CheckpointManager` 的局部判断。
+3. 028 不推进 027 的 true integration，也不触碰 029 的 profile compatibility；新增 seam 只服务 runtime-local stub/seed 与 replay regression。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-028-RuntimeResumeIntegration与ReplayRegression设计收敛.md`：
+   - 固定 facade resume dispatcher、runtime-local stub/seed seam 与 waiting external replay 的设计边界。
+2. 新增 `runtime/include/RuntimeDependencySet.h`：
+   - 将 `RuntimeDependencySet` 明确定义为 runtime-local stub/seed seam；
+   - 提供 `local_stub_ports`、`seeded_waiting_session` 与 `seeded_checkpoints`。
+3. 更新 `runtime/src/session/SessionManager.h/.cpp` 与 `runtime/src/AgentOrchestrator.h/.cpp`：
+   - 增加测试侧 seed 能力，把 waiting session 与 checkpoint fixture 注入 runtime-local in-memory store；
+   - 为 `continue_from_checkpoint(...)` 增加 `WaitingExternal -> Reflecting -> Reasoning -> Responding` replay 路径。
+4. 更新 `runtime/src/AgentFacade.cpp`：
+   - 在 init 阶段根据 `RuntimeDependencySet` 构建 orchestrator stub 配置并预装 seeded state；
+   - `handle(...)` 在 waiting path 上缓存 active waiting session；
+   - `resume(...)` 现在会校验 active waiting session / checkpoint 锚点并转发到 `handle_waiting_state(...)`。
+5. 更新 `tests/fixtures/runtime/RuntimeUnaryFixture.h`：
+   - 沉淀 waiting dependency set、seeded resume dependency set、waiting session snapshot 与完整 resume request 组装器。
+6. 更新 `tests/integration/agent_loop/CMakeLists.txt` 并新增两个 integration tests：
+   - `RuntimeResumeIntegrationTest.cpp`：验证 facade waiting clarify -> resume success 主链；
+   - `RuntimeCheckpointReplayRegressionTest.cpp`：复用 024 的 waiting-tool / schema-v2 fixture，验证 replay success 与 incompatible schema reject。
+
+### 验证
+
+1. 028 窄验证：
+   - 命令：`cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_unary_fixture_integration_test dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test && ctest --test-dir build-ci -R "^(RuntimeControlPlaneSurfaceTest|AgentOrchestratorControllerAssemblyTest|RuntimeUnaryFixtureIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest)$" --output-on-failure`
+   - 结果：`RuntimeControlPlaneSurfaceTest`、`AgentOrchestratorControllerAssemblyTest`、`RuntimeUnaryFixtureIntegrationTest`、`RuntimeResumeIntegrationTest`、`RuntimeCheckpointReplayRegressionTest` 5/5 通过。
+2. discoverability 验证：
+   - 命令：`ctest --test-dir build-ci -N | rg "RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeUnaryFixtureIntegrationTest|AgentOrchestratorControllerAssemblyTest|RuntimeControlPlaneSurfaceTest"`
+   - 结果：resume / replay regression 入口已进入顶层 CTest discoverability。
+3. 任务级 acceptance：
+   - 命令：`cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "^(RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest)$" --output-on-failure`
+   - 结果：`RuntimeResumeIntegrationTest`、`RuntimeCheckpointReplayRegressionTest` 与同组 runtime integration tests 在聚合中全部通过；但 `dasall_integration_tests` 最终仍被既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败阻塞，属于 runtime 外部聚合问题。
+
+### 结果
+
+1. RT-TODO-028 已完成，`AgentFacade::resume(...)` 现在具备 waiting session / checkpoint dispatcher，runtime public control-plane resume 已真正闭环。
+2. 024 的 waiting-tool replay fixture 已能经由 runtime-owned resume 路径回放到 completed result，schema-v2 fixture 也能在同一路径上显式拒绝。
+3. `RuntimeDependencySet` 已成为后续 runtime-local gates 的统一 stub/seed seam，这为 029/030 提供了 profile / health / safe-mode 相关的最小测试装配入口。
+4. 本轮仍只证明 runtime-owned resume 语义，不替代 027 的 true cross-module integration ready。
+
+### 下一步
+
+1. 进入 RT-TODO-029，围绕 `RuntimePolicySnapshot` 建立 `desktop_full`、`edge_balanced`、`edge_minimal` 三档 profile compatibility gate。
+
+### 风险
+
+1. `RuntimeDependencySet` 当前只用于 runtime-local stub/seed，不应被误用成 production dependency container；若后续扩展真实依赖，需要单独冻结 public seam。
+2. `dasall_integration_tests` 的全量通过仍受 infra 既有两条 diagnostics integration 失败阻塞；后续若执行聚合 acceptance，必须把它们记为仓库级 blocker，而不是 runtime 回归。
+
 ## 记录 #438
 
 - 日期：2026-04-22

@@ -11,6 +11,8 @@ class SessionManager final : public ISessionManager {
  public:
   SessionManager() = default;
 
+    void seed_for_test(const SessionSnapshot& session_snapshot);
+
   [[nodiscard]] SessionLoadResult load_session(
       const SessionLoadRequest& request) const override;
   [[nodiscard]] PrepareTurnResult prepare_turn(

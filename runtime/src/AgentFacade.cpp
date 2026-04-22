@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "AgentOrchestrator.h"
+#include "RuntimeDependencySet.h"
 #include "error/ResultCode.h"
 
 namespace dasall::runtime {
@@ -15,6 +16,7 @@ struct RuntimeCompositionRoot {
   std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot;
   std::shared_ptr<RuntimeDependencySet> dependency_set;
   std::unique_ptr<AgentOrchestrator> orchestrator;
+  std::optional<SessionSnapshot> waiting_session;
   bool degraded = false;
 };
 
@@ -47,24 +49,50 @@ struct RuntimeCompositionRoot {
   return result;
 }
 
-[[nodiscard]] HandleOptions normalize_resume_options(const ResumeHandleRequest& request) {
-  HandleOptions options = request.override_options.value_or(HandleOptions{});
-  if (options.request_id.empty()) {
-    options.request_id = request.request_id;
+[[nodiscard]] StubMainLoopExit to_stub_main_loop_exit(
+    const RuntimeStubMainLoopExit main_loop_exit) {
+  switch (main_loop_exit) {
+    case RuntimeStubMainLoopExit::DirectResponse:
+      return StubMainLoopExit::DirectResponse;
+    case RuntimeStubMainLoopExit::ToolRound:
+      return StubMainLoopExit::ToolRound;
+    case RuntimeStubMainLoopExit::WaitingClarify:
+      return StubMainLoopExit::WaitingClarify;
   }
-  if (options.session_id.empty()) {
-    options.session_id = request.session_id;
+
+  return StubMainLoopExit::DirectResponse;
+}
+
+[[nodiscard]] StubRecoveryExit to_stub_recovery_exit(
+    const RuntimeStubRecoveryExit recovery_exit) {
+  switch (recovery_exit) {
+    case RuntimeStubRecoveryExit::ContinueResponse:
+      return StubRecoveryExit::ContinueResponse;
+    case RuntimeStubRecoveryExit::AbortSafe:
+      return StubRecoveryExit::AbortSafe;
   }
-  if (!options.checkpoint_ref.has_value()) {
-    options.checkpoint_ref = request.checkpoint_ref;
-  }
-  if (options.entrypoint.empty()) {
-    options.entrypoint = "resume";
-  }
-  if (options.trace_context.empty()) {
-    options.trace_context = request.trace_context;
-  }
-  return options;
+
+  return StubRecoveryExit::ContinueResponse;
+}
+
+[[nodiscard]] OrchestratorStubPorts make_orchestrator_stub_ports(
+    const RuntimeDependencySet& dependency_set) {
+  return OrchestratorStubPorts{
+      .reject_preflight = dependency_set.local_stub_ports.reject_preflight,
+      .main_loop_exit = to_stub_main_loop_exit(
+          dependency_set.local_stub_ports.main_loop_exit),
+      .recovery_exit = to_stub_recovery_exit(
+          dependency_set.local_stub_ports.recovery_exit),
+      .success_response_text = dependency_set.local_stub_ports.success_response_text,
+      .fail_safe_response_text = dependency_set.local_stub_ports.fail_safe_response_text,
+      .waiting_response_text = dependency_set.local_stub_ports.waiting_response_text,
+  };
+}
+
+[[nodiscard]] bool is_active_waiting_session(const SessionSnapshot& session_snapshot) {
+  return session_snapshot.has_active_checkpoint() &&
+         session_snapshot.pending_interaction.has_value() &&
+         session_snapshot.pending_interaction->active();
 }
 
 }  // namespace
@@ -84,19 +112,24 @@ class AgentFacade::State {
       return result;
     }
 
+    auto orchestrator = std::make_unique<AgentOrchestrator>(OrchestratorComposition{
+        .runtime_instance_id = request.runtime_instance_id,
+        .profile_id = request.profile_id,
+        .policy_snapshot = request.policy_snapshot,
+        .dependency_set = request.dependency_set,
+        .stub_ports = make_orchestrator_stub_ports(*request.dependency_set),
+        .fsm_factory = {},
+    });
+    orchestrator->seed_for_test(request.dependency_set->seeded_waiting_session,
+                                request.dependency_set->seeded_checkpoints);
+
     root_ = RuntimeCompositionRoot{
         .runtime_instance_id = request.runtime_instance_id,
         .profile_id = request.profile_id,
         .policy_snapshot = request.policy_snapshot,
         .dependency_set = request.dependency_set,
-      .orchestrator = std::make_unique<AgentOrchestrator>(OrchestratorComposition{
-        .runtime_instance_id = request.runtime_instance_id,
-        .profile_id = request.profile_id,
-        .policy_snapshot = request.policy_snapshot,
-        .dependency_set = request.dependency_set,
-          .stub_ports = {},
-          .fsm_factory = {},
-      }),
+        .orchestrator = std::move(orchestrator),
+        .waiting_session = request.dependency_set->seeded_waiting_session,
         .degraded = false,
     };
     initialized_ = true;
@@ -118,7 +151,9 @@ class AgentFacade::State {
                                 "runtime facade is missing orchestrator composition");
     }
 
-    return root_.orchestrator->run_once(request).agent_result;
+    const auto run_result = root_.orchestrator->run_once(request);
+    update_waiting_session(run_result);
+    return run_result.agent_result;
   }
 
   contracts::AgentResult resume(const ResumeHandleRequest& request) {
@@ -134,11 +169,35 @@ class AgentFacade::State {
                                 "resume request is missing required checkpoint anchors");
     }
 
-    const HandleOptions options = normalize_resume_options(request);
-    (void)options;
-    return make_failed_result(optional_string(request.request_id),
-                              optional_string(request.trace_context),
-                              "runtime resume skeleton is not wired to checkpoint/session flow yet");
+    if (!root_.orchestrator) {
+      return make_failed_result(optional_string(request.request_id),
+                                optional_string(request.trace_context),
+                                "runtime facade is missing orchestrator composition");
+    }
+
+    if (!root_.waiting_session.has_value() ||
+        !is_active_waiting_session(*root_.waiting_session)) {
+      return make_failed_result(optional_string(request.request_id),
+                                optional_string(request.trace_context),
+                                "runtime facade has no active waiting session for resume request");
+    }
+
+    if (root_.waiting_session->session_id != request.session_id) {
+      return make_failed_result(optional_string(request.request_id),
+                                optional_string(request.trace_context),
+                                "runtime resume request session does not match active waiting session");
+    }
+
+    if (root_.waiting_session->active_checkpoint_ref != request.checkpoint_ref) {
+      return make_failed_result(optional_string(request.request_id),
+                                optional_string(request.trace_context),
+                                "runtime resume request checkpoint does not match active waiting anchor");
+    }
+
+    const auto run_result = root_.orchestrator->handle_waiting_state(*root_.waiting_session,
+                                                                     request);
+    update_waiting_session(run_result);
+    return run_result.agent_result;
   }
 
   bool stop(std::uint32_t timeout_ms) {
@@ -149,6 +208,19 @@ class AgentFacade::State {
   }
 
  private:
+  void update_waiting_session(const OrchestratorRunResult& run_result) {
+    if (!run_result.effective_session.has_value()) {
+      return;
+    }
+
+    if (is_active_waiting_session(*run_result.effective_session)) {
+      root_.waiting_session = run_result.effective_session;
+      return;
+    }
+
+    root_.waiting_session = std::nullopt;
+  }
+
   bool initialized_ = false;
   RuntimeCompositionRoot root_;
 };
