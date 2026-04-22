@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #429
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-017 实现 RecoveryManager
+- 状态：已完成
+
+### 任务选择
+
+1. 016 完成后，017 是 runtime 恢复链路的直接收口任务；如果不把 `ReflectionDecision`、预算快照与 checkpoint resume seam 真正汇合成控制器，后续 021 的 orchestrator 仍只能依赖 fake recovery double。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `RecoveryManager`，能真实输出 admit / reject / escalate 三态，并让 retry/replan/token 语义、budget exhaustion degrade 和 abort_safe safe-failure 路径可执行。
+3. 本轮只实现恢复控制器，不提前接真实工具重发、planner 重规划或 compensation backend。
+
+### 改动
+
+1. 新增 `runtime/src/recovery/RecoveryManager.h` 与 `runtime/src/recovery/RecoveryManager.cpp`：
+   - 实现私有 `RecoveryManager` 类并承接 `IRecoveryManager`；
+   - 在 `evaluate(...)` 中复用 `validate_recovery_request_field_rules(...)` 做嵌套证据校验；
+   - 复用 016 的 `CheckpointManager::make_resume_plan()` 做 retry/continue 路径的 resume compatibility gate；
+   - 复用 015 的 `BudgetSnapshot` 事实，在预算耗尽时把恢复准入升级到 degraded path；
+   - 落地 `RetryStep` / `Replan` / `AbortSafe` / budget-exhausted-degrade 四类最小计划；
+   - 在 `apply(...)` 中对 `abort_safe` / `degrade` 分别输出 `RT_E_510_SAFE_MODE_ENTERED` / `RT_E_511_DEGRADE_ENTERED`。
+2. 更新 `tests/unit/runtime/RecoveryManagerTest.cpp`：
+   - 用真实 `RecoveryManager` 替换 009 的 fake 测试双；
+   - 保留 replay-safe admit、unsafe replay reject、abort_safe escalate 断言；
+   - 新增 `Replan` 生成新 `retry_idempotency_token` 的断言；
+   - 新增 budget exhaustion -> degrade escalation 与 `apply()` 错误码断言。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `RecoveryManager.cpp` 接入 `dasall_runtime`；
+   - 让 `dasall_runtime_recovery_manager_unit_test` 可读取 `runtime/src` 私有头。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-017-RecoveryManager设计收敛.md`：
+   - 固定 admit/reject/escalate 三态、token 语义、015/016 复用关系与 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_recovery_manager_unit_test`
+   - 结果：首次构建失败，定位到 `RecoveryManager::execute()` 中 `checkpoint_ref` 的 `std::optional<std::string>` 三元表达式类型不匹配；修复后重跑通过。
+2. 测试执行：
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_recovery_manager_unit_test && ctest --test-dir build-ci -R "^RecoveryManagerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-017 已完成，runtime 现在具备真实 `RecoveryManager`，后续 orchestrator 可直接消费 admit / reject / escalate 三态的恢复计划。
+2. `ReflectionDecision` 不再被 runtime 静态忽略：`RetryStep`、`Replan`、`AbortSafe` 已分别落到可验证的控制动作上。
+3. 017 已显式复用 015 的预算事实和 016 的 checkpoint/resume gate，避免 recovery 侧再出现第二套 budget 或 checkpoint compatibility 规则。
+
+### 下一步
+
+1. 检查 `RT-BLK-01` 的解阻任务；若可在当前仓库内闭环，则先完成 blocker recovery，再进入 RT-TODO-018 `SessionManager`。
+2. 若 `RT-BLK-01` 仍未解，则转入 RT-TODO-019 `Scheduler`，保持控制器串行推进不断档。
+
+### 风险
+
+1. 当前 `retry_idempotency_token` 语义通过 `RecoveryExecutionPlan.detail` 落出最小可验证证据，足够支撑 017 行为测试；如果 021 需要 orchestrator 结构化消费该 token，应优先在 runtime-private supporting type 内部收敛，而不是把 token 解释散到调用方字符串解析。
+2. `execute(...)` 目前只投影最小的 `RecoveryOutcome`，还没有接 planner/tool/compensation concrete owner；后续接真实执行端口时，应保持 017 的 admit/reject/escalate 判定不回退成“边执行边决定”。
+
 ## 记录 #428
 
 - 日期：2026-04-22

@@ -3,144 +3,21 @@
 #include <optional>
 #include <string>
 
+#include "recovery/RecoveryManager.h"
 #include "recovery/IRecoveryManager.h"
 #include "support/TestAssertions.h"
 
 namespace {
-
-class FakeRecoveryManager final : public dasall::runtime::IRecoveryManager {
- public:
-  [[nodiscard]] dasall::runtime::RecoveryExecutionPlan evaluate(
-      const dasall::contracts::RecoveryRequest& request) const override {
-    using dasall::contracts::CheckpointState;
-    using dasall::contracts::ReflectionDecisionKind;
-    using dasall::runtime::ResumePlan;
-    using dasall::runtime::RuntimeErrorCode;
-    using dasall::runtime::RuntimeState;
-    using dasall::runtime::SafeFailureHint;
-    using dasall::runtime::make_recovery_escalation_plan;
-    using dasall::runtime::make_recovery_execution_plan;
-    using dasall::runtime::make_recovery_rejection_plan;
-    using dasall::runtime::resume_target_state;
-
-    if (!request.checkpoint.has_value() || !request.checkpoint->checkpoint_id.has_value()) {
-      return make_recovery_rejection_plan(
-          "recovery evaluation requires checkpoint_ref",
-          RuntimeErrorCode::RT_E_500_RECOVERY_REJECTED);
-    }
-
-    if (!request.idempotency_and_side_effect_report.has_value() ||
-        !request.idempotency_and_side_effect_report->replay_safe.has_value()) {
-      return make_recovery_rejection_plan(
-          "recovery evaluation requires replay-safety evidence",
-          RuntimeErrorCode::RT_E_500_RECOVERY_REJECTED);
-    }
-
-    if (!request.idempotency_and_side_effect_report->replay_safe.value()) {
-      return make_recovery_rejection_plan(
-          request.idempotency_and_side_effect_report->non_replayable_reason.value_or(
-              std::string("replay rejected because side effects are not replay-safe")),
-          RuntimeErrorCode::RT_E_500_RECOVERY_REJECTED);
-    }
-
-    if (request.reflection_decision.has_value() &&
-        request.reflection_decision->decision_kind == ReflectionDecisionKind::AbortSafe) {
-      return make_recovery_escalation_plan(
-          "reflection requested abort_safe escalation",
-          SafeFailureHint{
-              .enter_safe_mode = true,
-              .enter_degraded_mode = false,
-              .reason = "abort_safe should enter a supervised recovery path",
-          });
-    }
-
-    const auto checkpoint_state = request.checkpoint->state.value_or(CheckpointState::Running);
-    const auto target_state = resume_target_state(checkpoint_state).value_or(RuntimeState::Reasoning);
-    return make_recovery_execution_plan(
-        "retry_step",
-        "replay-safe retry admitted by fake recovery manager",
-        ResumePlan{
-            .checkpoint_ref = *request.checkpoint->checkpoint_id,
-            .target_state = target_state,
-            .checkpoint_state = checkpoint_state,
-            .resume_reason = "retry last failed step",
-            .pending_action = request.checkpoint->pending_action,
-            .policy_snapshot_ref = std::nullopt,
-            .requires_operator_intervention = false,
-        });
-  }
-
-  [[nodiscard]] dasall::contracts::RecoveryOutcome execute(
-      const dasall::runtime::RecoveryExecutionPlan& plan) override {
-    if (!plan.executable()) {
-      return dasall::contracts::RecoveryOutcome{
-          .executed_action = std::string("rejected"),
-          .final_runtime_state = std::string("FailedSafe"),
-          .updated_retry_count = std::nullopt,
-          .checkpoint_ref = std::nullopt,
-          .compensation_result_ref = std::nullopt,
-          .rejection_reason = plan.detail,
-          .escalation_reason = std::nullopt,
-      };
-    }
-
-    return dasall::contracts::RecoveryOutcome{
-        .executed_action = plan.planned_action,
-        .final_runtime_state = plan.resume_plan.has_value()
-                                   ? std::optional<std::string>(std::string(
-                                         dasall::runtime::runtime_state_name(
-                                             plan.resume_plan->target_state)))
-                                   : std::optional<std::string>(std::string("Reasoning")),
-        .updated_retry_count = 2,
-        .checkpoint_ref = plan.resume_plan.has_value()
-                              ? std::optional<std::string>(plan.resume_plan->checkpoint_ref)
-                              : std::nullopt,
-        .compensation_result_ref = std::nullopt,
-        .rejection_reason = std::nullopt,
-        .escalation_reason = plan.escalated() ? std::optional<std::string>(plan.detail)
-                                              : std::nullopt,
-    };
-  }
-
-  [[nodiscard]] dasall::runtime::RecoveryApplyResult apply(
-      const dasall::contracts::RecoveryOutcome& outcome) override {
-    if (!outcome.executed_action.has_value()) {
-      return dasall::runtime::RecoveryApplyResult{
-          .applied = false,
-          .error_code = dasall::runtime::RuntimeErrorCode::RT_E_500_RECOVERY_REJECTED,
-          .detail = "recovery outcome is missing executed_action",
-      };
-    }
-
-    last_outcome_ = outcome;
-    return dasall::runtime::RecoveryApplyResult{
-        .applied = outcome.executed_action.value() != "rejected",
-        .error_code = outcome.executed_action.value() == "rejected"
-                          ? std::optional<dasall::runtime::RuntimeErrorCode>(
-                                dasall::runtime::RuntimeErrorCode::RT_E_500_RECOVERY_REJECTED)
-                          : std::nullopt,
-        .detail = outcome.executed_action.value() == "rejected"
-                      ? "rejected outcomes are not applied"
-                      : "recovery outcome applied to fake runtime state",
-    };
-  }
-
-  [[nodiscard]] const std::optional<dasall::contracts::RecoveryOutcome>& last_outcome() const {
-    return last_outcome_;
-  }
-
- private:
-  std::optional<dasall::contracts::RecoveryOutcome> last_outcome_;
-};
-
 [[nodiscard]] dasall::contracts::RecoveryRequest make_recovery_request(
     const bool replay_safe,
     const dasall::contracts::ReflectionDecisionKind decision_kind =
-        dasall::contracts::ReflectionDecisionKind::RetryStep) {
+        dasall::contracts::ReflectionDecisionKind::RetryStep,
+    const bool safe_to_replan = true,
+    const bool budget_exhausted = false) {
   const dasall::contracts::ErrorInfo error_info{
       .failure_type = dasall::contracts::ResultCodeCategory::Runtime,
       .retryable = true,
-      .safe_to_replan = true,
+      .safe_to_replan = safe_to_replan,
       .details = {
           .code = 5001,
           .message = "tool execution failed",
@@ -191,7 +68,11 @@ class FakeRecoveryManager final : public dasall::runtime::IRecoveryManager {
           .belief_state_ref = std::string("belief-200"),
           .retry_count = 1,
           .created_at = 1700000202,
-          .tags = std::vector<std::string>{"rt.schema_version=1", "rt.fsm_state_enum_version=1"},
+          .tags = std::vector<std::string>{
+            "rt.schema_version=1",
+            "rt.fsm_state_enum_version=1",
+            "rt.budget_schema_version=1",
+          },
       },
       .idempotency_and_side_effect_report =
           dasall::contracts::IdempotencyAndSideEffectReport{
@@ -204,7 +85,20 @@ class FakeRecoveryManager final : public dasall::runtime::IRecoveryManager {
                                                  "irreversible side effect already observed"),
           },
       .retry_count = 1,
-      .runtime_budget_snapshot = std::nullopt,
+        .runtime_budget_snapshot = budget_exhausted
+                       ? std::optional<dasall::contracts::BudgetSnapshot>(
+                           dasall::contracts::BudgetSnapshot{
+                             .snapshot_at_ms = 1700000203,
+                             .entries = {
+                               {.budget_type = dasall::contracts::BudgetType::Replan,
+                              .current = 2,
+                              .max = 1,
+                              .remaining = -1,
+                              .reject_reason = std::string("replan exhausted")},
+                             },
+                             .overall_reject_reason = std::string("budget exhausted"),
+                           })
+                       : std::nullopt,
   };
 }
 
@@ -218,7 +112,7 @@ int main() {
   using dasall::tests::support::assert_true;
 
   try {
-    FakeRecoveryManager manager;
+    dasall::runtime::RecoveryManager manager;
 
     const auto admitted_plan = manager.evaluate(make_recovery_request(true));
     assert_true(admitted_plan.executable(), "replay-safe recovery request should be admitted");
@@ -241,12 +135,41 @@ int main() {
     assert_true(apply_result.applied, "admitted recovery outcome should apply successfully");
     assert_true(manager.last_outcome().has_value(), "apply should retain last recovery outcome");
 
-    const auto rejected_plan = manager.evaluate(make_recovery_request(false));
+    const auto replan_plan = manager.evaluate(
+      make_recovery_request(true, ReflectionDecisionKind::Replan));
+    assert_true(replan_plan.executable(), "replan reflection should be admitted when budget allows");
+    assert_equal("replan", replan_plan.planned_action,
+           "replan reflection should select replan action");
+    assert_true(replan_plan.detail.find("new retry_idempotency_token=replan:chk-200:2") !=
+            std::string::npos,
+          "replan admission should generate a new retry idempotency token");
+
+    const auto replan_outcome = manager.execute(replan_plan);
+    assert_equal("Planning", replan_outcome.final_runtime_state.value_or(std::string()),
+           "replan execution should move runtime into Planning state");
+
+    const auto rejected_plan = manager.evaluate(make_recovery_request(false, ReflectionDecisionKind::RetryStep, false));
     assert_true(!rejected_plan.executable(), "unsafe replay should be rejected");
     assert_true(rejected_plan.admission == RecoveryAdmission::Reject,
                 "unsafe replay should produce Reject admission state");
     assert_true(rejected_plan.error_code == RuntimeErrorCode::RT_E_500_RECOVERY_REJECTED,
                 "unsafe replay should map to RT_E_500_RECOVERY_REJECTED");
+
+    const auto degraded_plan = manager.evaluate(
+      make_recovery_request(true, ReflectionDecisionKind::RetryStep, true, true));
+    assert_true(degraded_plan.escalated(),
+          "budget exhaustion should escalate into degraded recovery path");
+    assert_true(degraded_plan.safe_failure_hint.has_value() &&
+            degraded_plan.safe_failure_hint->enter_degraded_mode,
+          "budget exhaustion should request degraded mode entry");
+
+    const auto degraded_outcome = manager.execute(degraded_plan);
+    assert_equal("degrade", degraded_outcome.executed_action.value_or(std::string()),
+           "degraded escalation should execute degrade action");
+    const auto degraded_apply = manager.apply(degraded_outcome);
+    assert_true(degraded_apply.applied &&
+            degraded_apply.error_code == RuntimeErrorCode::RT_E_511_DEGRADE_ENTERED,
+          "degrade outcome should apply and expose RT_E_511_DEGRADE_ENTERED");
 
     const auto escalated_plan = manager.evaluate(
         make_recovery_request(true, ReflectionDecisionKind::AbortSafe));
@@ -256,6 +179,14 @@ int main() {
                 "escalation path should expose safe failure hint");
     assert_true(escalated_plan.safe_failure_hint->enter_safe_mode,
                 "abort_safe escalation should request safe mode entry");
+
+    const auto escalated_outcome = manager.execute(escalated_plan);
+    assert_equal("abort_safe", escalated_outcome.executed_action.value_or(std::string()),
+           "abort_safe escalation should execute abort_safe action");
+    const auto escalated_apply = manager.apply(escalated_outcome);
+    assert_true(escalated_apply.applied &&
+            escalated_apply.error_code == RuntimeErrorCode::RT_E_510_SAFE_MODE_ENTERED,
+          "abort_safe outcome should apply and expose RT_E_510_SAFE_MODE_ENTERED");
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

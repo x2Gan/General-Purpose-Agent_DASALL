@@ -8,6 +8,7 @@ target_sources(dasall_runtime
     src/checkpoint/CheckpointStateMapper.cpp
     src/fsm/AgentFsm.cpp
     src/fsm/TransitionGuardTable.cpp
+    src/recovery/RecoveryManager.cpp
 )
 
 target_compile_features(dasall_runtime PUBLIC cxx_std_20)
