@@ -691,6 +691,14 @@ Recovery Context 规则：
 | services | 仅限启动自检、诊断、只读探测等受限路径 | Service result facts | Runtime -> services limited use |
 | multi_agent | delegate / merge / recall（后置） | MultiAgentResult | Runtime 主控调用，阶段 J 默认可关闭 |
 
+RuntimeDependencySet 对上述调用面的唯一接缝约束如下：
+
+1. `AgentOrchestrator`、`SessionManager`、`RecoveryManager` 等 runtime 组件只看到 module public interface 或 runtime-local seam，不允许看到任何下游实现类。
+2. 当 profile 明确关闭某能力，或阶段 J 默认不启用该子域时，`RuntimeDependencySet` 必须注入 `null adapter`，让主循环通过显式 capability disabled 语义收敛，而不是通过空指针或缺省实现兜底。
+3. 当相邻模块 public interface 尚未稳定、但 runtime 必须验证自身控制平面闭环时，`RuntimeDependencySet` 必须注入 `fail-closed stub`；stub 只能返回受审计的 unavailable / blocked 结果，不能伪造成功路径。
+4. 只有当相邻模块已提供 public interface 且专项 blocker 明确解除时，`RuntimeDependencySet` 才允许绑定真实适配器进入 true integration 路径。
+5. seam 的可切换权归 `RuntimeDependencySet` 与 profile 投影视图，不归 `AgentFacade`、`AgentOrchestrator` 或测试调用方临时分支判断。
+
 ### 6.14 线程模型与并发安全
 
 架构基线定义了五类线程，本节将其细化为 Runtime 组件级的线程归属、锁顺序和快照语义，以弥补设计到实现之间的并发安全缺口。
@@ -1165,6 +1173,32 @@ CheckpointManager 的任务拆分建议优先顺序：
 | RuntimeEventBus | 事件类型来源、订阅边界、是否同步/异步、是否允许背压 | 完整事件系统 DSL |
 | RuntimeTelemetryBridge | 关键字段口径、日志/指标/trace/audit 对齐关系 | exporter 内部实现细节 |
 | RuntimeDependencySet | 组合根职责、注入对象清单、fail-closed stub 策略 | 完整 DI 容器框架 |
+
+##### 6.24.12.1 RuntimeDependencySet 与相邻模块 seam 口径
+
+| 依赖域 | RuntimeDependencySet 注入形态 | 真实接线前置条件 | 未就绪时策略 | 文件落点 |
+|---|---|---|---|---|
+| llm | `llm::ILLMManager` 或等价 runtime-facing seam | llm public interface 已稳定且 profile 允许模型调用 | profile 禁用时用 `null adapter`；接口不匹配时 fail-closed | 后续 Build 落于 `runtime/include/RuntimeDependencySet.h`、`runtime/src/RuntimeDependencySet.cpp` |
+| cognition | runtime-facing cognition public interface | cognition 子系统 public interface 已稳定 | 若仅验证 runtime-local 主循环，可用 fail-closed stub 返回 deterministic reject / reflection unavailable | 同上 |
+| memory | runtime-facing session/context/checkpoint seam | memory 提供 session / context / checkpoint public interface | 未解阻前必须使用 fail-closed stub；不得直连 backend；若 profile 关闭 experience 扩展，可保留 `null adapter` 子口 | 同上 |
+| tools | runtime-facing invoke seam | tools public interface 已稳定且当前 profile 开启 tool lane | profile 禁用工具时用 `null adapter`；接口未 ready 时用 fail-closed stub，返回 capability unavailable | 同上 |
+| knowledge | runtime-facing retrieve seam | knowledge public interface 已稳定且当前 profile 开启 retrieve lane | profile 关闭检索时用 `null adapter`；接口未 ready 时用 fail-closed stub | 同上 |
+| services | limited self-check / diagnose seam | 仅在启动自检、健康诊断、只读探测路径启用 | 默认 `null adapter`；禁止扩展成常规执行主路径 | 同上 |
+| multi_agent | `MultiAgentGateway` 或等价 runtime-facing seam | 阶段 L 启动且 multi_agent public interface 稳定 | 阶段 J 默认 `null adapter`，不以 stub 冒充多 Agent ready | 同上 |
+
+RuntimeDependencySet 的组合根职责进一步固定为：
+
+1. 持有 profile 投影视图和 enabled_modules 判定结果，统一决定 live adapter / null adapter / fail-closed stub 的装配。
+2. 向 `AgentFacade` / `AgentOrchestrator` 暴露稳定的 runtime-owned dependency graph，而不是把每个测试或入口调用方都变成临时 DI 容器。
+3. 对每个未就绪子域输出明确的 capability state，供 telemetry、safe mode 和 fixture integration 复用。
+4. 不承担业务编排、状态推进或恢复裁定；它只负责依赖装配和 seam 选择。
+
+对应的最小顺序约束为：
+
+1. `AgentFacade::init()` 先读取 `RuntimePolicySnapshot` 与 enabled_modules，再构建 `RuntimeDependencySet`。
+2. `RuntimeDependencySet` 构建完成前，`AgentOrchestrator` 不得开始 preflight。
+3. runtime-local fixture gate 只能通过 `fail-closed stub` / `null adapter` 验证 runtime 自身控制平面，不得把其结果外推为 true integration ready。
+4. true integration gate 只在相邻模块 public interface ready 且 blocker 清零后，允许把对应 seam 切换到真实适配器。
 
 #### 6.24.13 组件级设计到任务拆分的最小映射规则
 

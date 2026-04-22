@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #415
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Design convergence 轮次
+- 任务：RT-TODO-003 收敛 RuntimeDependencySet 与相邻模块 seam
+- 状态：已完成
+
+### 任务选择
+
+1. RT-BLK-04 已经由 001/002 解除后，RT-TODO-003 成为进入 runtime-local fixture gate 前必须先冻结的唯一 seam 任务；继续推进它可以直接解阻 RT-BLK-05。
+2. 本轮最小判别点是：runtime 详设是否仍只描述“RuntimeDependencySet 是轻量组合根”，却没有写清 public interface、`null adapter`、`fail-closed stub` 和 true integration 切换规则。
+3. 该任务仍属于设计收敛，不需要提前改 `runtime/include` 或测试代码；只需要把相邻模块 seam 的唯一口径和组合根责任固化到 architecture/TODO/deliverable。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`：
+   - 在 6.13 下新增 RuntimeDependencySet 的唯一接缝约束，固定 public interface、`null adapter`、`fail-closed stub` 与真实适配器的切换原则；
+   - 在 6.24.12 下新增 6.24.12.1，补齐依赖域矩阵、组合根职责和最小顺序约束。
+2. 新增 `docs/todos/runtime/deliverables/RT-TODO-003-RuntimeDependencySet-seam收敛.md`：
+   - 记录本地证据、AWS Hexagonal Architecture 外部参考、seam 矩阵、流程时序、Design -> Build 映射和风险回退。
+3. 更新 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 将 RT-TODO-003 从 `NotStarted` 回写为 `Done`；
+   - 在 blocker 校准表中把 RT-BLK-05 标记为“已解阻”，明确后续装配与 runtime-local fixture gate 可以复用这份 seam 真值源。
+
+### 验证
+
+1. 文档一致性检索：
+   - `rg -n "RuntimeDependencySet|fail-closed stub|null adapter|public interface" docs/architecture/DASALL_runtime子系统详细设计.md docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-003-RuntimeDependencySet-seam收敛.md`
+   - 结果：通过；RuntimeDependencySet 与相邻模块 seam 规则已在 architecture / TODO / deliverable 三处形成一致口径。
+
+### 结果
+
+1. RT-TODO-003 已完成，RuntimeDependencySet 不再只是“轻量组合根”的抽象描述，而是具备可直接转译为后续 Build 装配规则的 seam 真值源。
+2. RT-BLK-05 已解阻；后续 RT-TODO-020/021/026 可在不猜测 seam 选择逻辑的前提下继续推进。
+
+### 下一步
+
+1. 进入 RT-TODO-004，收敛 runtime 测试拓扑与 caller fixture 的 discoverability、fixture 边界和 subsystem-local / true integration 分层规则，并在完成后单独提交。
+
+### 风险
+
+1. 如果后续 runtime-local fixture gate 继续把 fail-closed stub 结果外推为 true integration ready，会重新引入假阳性，需要回退到 6.13 和 6.24.12.1 的分层规则。
+2. RT-TODO-003 只解除了 seam 不唯一问题，没有证明 memory / tools / knowledge 的真实 public interface 已稳定；RT-BLK-01 仍需后续真集成任务继续追踪。
+
 ## 记录 #414
 
 - 日期：2026-04-22
