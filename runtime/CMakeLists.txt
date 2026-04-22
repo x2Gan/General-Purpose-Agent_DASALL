@@ -10,6 +10,7 @@ target_sources(dasall_runtime
     src/fsm/AgentFsm.cpp
     src/fsm/TransitionGuardTable.cpp
     src/recovery/RecoveryManager.cpp
+    src/safety/SafeModeController.cpp
     src/scheduling/Scheduler.cpp
     src/session/SessionManager.cpp
 )

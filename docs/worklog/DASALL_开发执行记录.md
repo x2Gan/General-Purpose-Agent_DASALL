@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #434
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 安全、观测与 replay 基础任务
+- 任务：RT-TODO-022 实现 SafeModeController
+- 状态：已完成
+
+### 任务选择
+
+1. 021 已把 abort-safe、degrade 与 waiting->resume 的 runtime-local 控制器闭环接好，022 是把这些终态统一收口为独立安全模式控制器的直接前置；如果没有 `SafeModeController`，023 的 health/telemetry hooks 只能围绕分散的错误分支工作，无法形成可审计的模式事实。
+2. 本轮最小判别点是：runtime 是否已经具备一个 runtime-private `SafeModeController`，能消费 policy、budget、recovery 与 health/watchdog 事实，并把 `PolicyForbidden`、`BudgetExhausted`、`RecoveryExhausted`、`DependencyUnavailable`、`WatchdogTimeout` 五类触发稳定折叠到 `FailedSafe`、`Degraded`、`SafeMode` 或 `Normal` 退出判定。
+3. 根据 ADR-008 和 runtime 详设 6.24.11，本轮只做 runtime-private 模式裁定，不让 `SafeModeController` 接管 orchestrator 主循环，也不扩 shared contracts。
+
+### 改动
+
+1. 新增 `runtime/src/safety/SafeModeController.h` 与 `runtime/src/safety/SafeModeController.cpp`：
+   - 定义 `SafeModeTriggerKind`、`SafeModeState`、`SafeModeAction`、`SafeModeTrigger`、`SafeModeDecision` 与 `SafeModeExitRequest`；
+   - 落地 `evaluate_entry(...)`，把 policy forbidden、watchdog timeout、budget exhausted、dependency unavailable、recovery exhausted 五类触发折叠到 `FailedSafe/Degraded/SafeMode`；
+   - 落地 `evaluate_exit(...)` 与 `current_mode()`，只在 dependencies、watchdog、operator clear、budget restore 全恢复时退回 `Normal`。
+2. 新增 `tests/unit/runtime/SafeModeControllerTest.cpp`：
+   - 覆盖 budget degrade、dependency outage -> abort-safe、policy forbidden -> safe mode、recovery exhausted -> degraded、exit blocked / exit accepted 等路径；
+   - 断言 `selected_fallback`、`RT_E_501/510/511` 与 `current_mode()` 行为一致。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `SafeModeController.cpp` 接入 `dasall_runtime`；
+   - 新增 `dasall_runtime_safe_mode_controller_unit_test` 目标与 `SafeModeControllerTest` 注册。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-022-SafeModeController设计收敛.md`：
+   - 固定 022 的触发分类、声明式降级链、退出条件、Design->Build 三件套与 runtime-private 边界。
+
+### 验证
+
+1. 窄目标构建：
+   - 命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime_safe_mode_controller_unit_test`
+   - 结果：首次失败，定位到 `SafeModeController.cpp` 使用了仅对测试侧可见的 `"safety/SafeModeController.h"` include 路径；改为同目录私有头后重建通过。
+2. 测试执行：
+   - 命令：`ctest --test-dir build-ci -R "^SafeModeControllerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+3. 质量修正：
+   - 编译阶段发现 `SafeModeControllerTest.cpp` 的聚合初始化缺失字段告警；补全显式 `std::nullopt` 初始化后重建与复跑，结果保持通过。
+
+### 结果
+
+1. RT-TODO-022 已完成，runtime 现在具备独立的 runtime-private `SafeModeController`，可把预算、依赖、恢复与策略失败统一收口到可审计的安全模式裁定结果。
+2. 022 严格沿用 `RuntimePolicySnapshot::degrade_policy.fallback_chain` 做声明式选择，没有新增 shared contracts，也没有让控制器反向拥有 orchestrator 主循环。
+3. `evaluate_exit(...)` 的退出条件已被单元测试锁定，后续 023/030 可以围绕稳定的 mode fact 接线 health、telemetry 与 safe mode integration，而不是继续散落在 recovery 分支里判断。
+
+### 下一步
+
+1. 进入 RT-TODO-023，实现 `RuntimeTelemetryBridge`、`RuntimeEventBus`、`RuntimeHealthProbe` 与 `BackgroundMaintenance hooks`，把 022 的 mode fact、017 的 recovery fact、021 的 orchestrator fact 接到统一观测与 health 事实面。
+
+### 风险
+
+1. 本轮只证明 `SafeModeController` 的 runtime-private 分类与退出判定；它还没有接入真实 telemetry/event bus/health hook，端到端 safe mode 可观测性仍要在 RT-TODO-023、RT-TODO-030 收口。
+2. `allow_tool_skip` 目前只作为 6.21.2 声明式降级链中的可识别 fallback step 被保留，并被折叠为 `Degraded` 事实；更细的 tool-scope skip 行为仍需后续任务在实际调度面上固化。
+
 ## 记录 #433
 
 - 日期：2026-04-22

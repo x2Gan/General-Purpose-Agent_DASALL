@@ -46,6 +46,10 @@ add_executable(dasall_runtime_scheduler_surface_unit_test
   SchedulerTest.cpp
 )
 
+add_executable(dasall_runtime_safe_mode_controller_unit_test
+  SafeModeControllerTest.cpp
+)
+
 add_executable(dasall_runtime_checkpoint_state_mapper_unit_test
   CheckpointStateMapperTest.cpp
 )
@@ -166,6 +170,17 @@ target_include_directories(dasall_runtime_scheduler_surface_unit_test
     ${PROJECT_SOURCE_DIR}/runtime/src
 )
 
+target_link_libraries(dasall_runtime_safe_mode_controller_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+)
+
+target_include_directories(dasall_runtime_safe_mode_controller_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+)
+
 target_link_libraries(dasall_runtime_checkpoint_state_mapper_unit_test
   PRIVATE
     dasall_test_support
@@ -200,6 +215,7 @@ dasall_apply_common_options(dasall_runtime_recovery_manager_unit_test)
 dasall_apply_common_options(dasall_runtime_session_type_surface_unit_test)
 dasall_apply_common_options(dasall_runtime_session_manager_unit_test)
 dasall_apply_common_options(dasall_runtime_scheduler_surface_unit_test)
+dasall_apply_common_options(dasall_runtime_safe_mode_controller_unit_test)
 dasall_apply_common_options(dasall_runtime_checkpoint_state_mapper_unit_test)
 dasall_apply_common_options(dasall_runtime_transition_guard_table_unit_test)
 
@@ -238,6 +254,9 @@ set_tests_properties(SessionManagerTest PROPERTIES LABELS "unit")
 
 add_test(NAME SchedulerTest COMMAND dasall_runtime_scheduler_surface_unit_test)
 set_tests_properties(SchedulerTest PROPERTIES LABELS "unit")
+
+add_test(NAME SafeModeControllerTest COMMAND dasall_runtime_safe_mode_controller_unit_test)
+set_tests_properties(SafeModeControllerTest PROPERTIES LABELS "unit")
 
 add_test(NAME CheckpointStateMapperTest COMMAND dasall_runtime_checkpoint_state_mapper_unit_test)
 set_tests_properties(CheckpointStateMapperTest PROPERTIES LABELS "unit")
