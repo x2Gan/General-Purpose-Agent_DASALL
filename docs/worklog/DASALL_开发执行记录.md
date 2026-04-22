@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #433
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Orchestrator 两阶段任务
+- 任务：RT-TODO-021 AgentOrchestrator 全控制器集成
+- 状态：已完成
+
+### 任务选择
+
+1. 020 完成后，021 是 022 SafeModeController、026 unary fixture integration 和 028 resume/replay gate 的直接前置；如果 orchestrator 仍停在 deterministic stub round ports，后续 runtime 主控闭环只能停留在骨架层。
+2. 本轮最小判别点是：在不宣称真端口 ready 的前提下，`AgentOrchestrator` 是否已经真实装配 `SessionManager`、`BudgetController`、`CheckpointManager`、`RecoveryManager` 与 `Scheduler`，并让 direct success、tool->abort_safe、waiting->resume 三条 runtime-local 路径都可执行。
+3. 受 RT-TODO-003 的 seam 约束，本轮继续停在 runtime-local 证明层，不接 `AgentFacade`，也不把 `RuntimeDependencySet` 的前向声明误写成 true integration ready。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.h` 与 `runtime/src/AgentOrchestrator.cpp`：
+   - 把 `AgentOrchestrator` 从 stub-only 骨架扩成真实持有 `SessionManager`、`BudgetController`、`CheckpointManager`、`RecoveryManager`、`Scheduler` 的 runtime-private 装配器；
+   - 扩展 `OrchestratorRunResult`，输出 effective session、checkpoint、recovery outcome、scheduler backpressure 与 resume plan；
+   - 让 `run_once(...)` 在 runtime-local 范围内跑通 direct success、tool->abort_safe、waiting clarify 三条路径；
+   - 新增 `continue_from_checkpoint(...)` 与 `handle_waiting_state(...)`，把 waiting session/checkpoint anchor 恢复回 completed 路径。
+2. 新增 `tests/unit/runtime/AgentOrchestratorControllerAssemblyTest.cpp`：
+   - 覆盖 direct success 路径，断言 completion checkpoint、schema tag 与 session persistence 成立；
+   - 覆盖 tool->abort_safe 路径，断言 scheduler backpressure、recovery outcome 与 failed checkpoint 成立；
+   - 覆盖 waiting->resume 路径，断言 paused checkpoint、resume plan、`handle_waiting_state(...)` 恢复 completed 的闭环成立。
+3. 更新 `tests/unit/runtime/CMakeLists.txt`：
+   - 新增 `dasall_runtime_agent_orchestrator_controller_assembly_unit_test` 目标与 `AgentOrchestratorControllerAssemblyTest` 注册。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-021-AgentOrchestrator全控制器集成设计收敛.md`：
+   - 固定 021 的装配边界、锁顺序实现策略、Design->Build 三件套与“不外推 true integration ready”的结论。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_agent_orchestrator_controller_assembly_unit_test`
+   - 结果：首次构建失败，定位到 `AcquireWorkerRequest/ReleaseWorkerRequest` 字段误用；修正后重跑通过。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回仓库已知工具态错误 `生成失败`。
+   - fallback：`cmake --build build-ci --target dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_agent_orchestrator_skeleton_unit_test && ctest --test-dir build-ci -R "^(AgentOrchestratorControllerAssemblyTest|AgentOrchestratorSkeletonTest)$" --output-on-failure`
+   - 结果：首次失败，定位到 abort-safe `RecoveryRequest` 的 `error_info.source_ref` 未满足 ToolExecution contract guard；修正为 `tool_call` 对齐后复跑通过；最终 2/2 tests passed。
+
+### 结果
+
+1. RT-TODO-021 已完成，runtime 现在具备真实的 orchestrator controller assembly，`run_once(...)`、`continue_from_checkpoint(...)`、`handle_waiting_state(...)` 已可消费 015~019 的 runtime-local 控制器。
+2. direct success、tool->abort_safe、waiting->resume 三条最小路径都已通过自动化验证，同时 020 的 `AgentOrchestratorSkeletonTest` 回归通过，说明 021 没有破坏既有五段 topology 证明。
+3. 021 仍严格停在 subsystem-local 证明层：`AgentFacade` 未接线，`RuntimeDependencySet` 仍未具备真实定义，因此本轮不能外推 true integration ready。
+
+### 下一步
+
+1. 进入 RT-TODO-022，实现 `SafeModeController`，把 021 已落地的 abort-safe / degrade 终态继续收口到独立安全模式控制器。
+
+### 风险
+
+1. 当前 `continue_from_checkpoint(...)` 只对 021 所需的 waiting clarify 恢复路径给出最小 runtime-local 实现；更完整的 replay/compatibility 仍要在 RT-TODO-024、028 通过 golden fixture 与 replay regression 收口。
+2. `AgentFacade` 仍未接 `AgentOrchestrator`，这不是 021 的遗漏，而是 `RuntimeDependencySet` 还没有真实实现；后续若直接把 021 结果对外暴露，必须先完成对应 seam 解阻，避免制造假联调 ready。
+
 ## 记录 #432
 
 - 日期：2026-04-22
