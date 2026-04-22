@@ -1,5 +1,66 @@
 # DASALL 开发执行记录
 
+## 记录 #430
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-018 实现 SessionManager
+- 状态：已完成
+
+### 任务选择
+
+1. 017 完成后，018 是 resume/control-plane 主链的直接前置；如果 session snapshot、waiting state 与 checkpoint anchor 仍停留在 fake surface，021 的 orchestrator controller assembly 仍无法稳定消费真实 session seam。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `SessionManager`，能真实承接 `load_session/prepare_turn/persist_turn/bind_checkpoint_ref/build_resume_seed` 五个接口，并让 waiting state 与 checkpoint anchor 规则可执行。
+3. `RT-BLK-01` 仍阻 true-port session persist 和 true integration，但 018 的完成判定本身允许“fail-closed stub 下可测”；同时其解阻条件包含“完成 003 或相邻模块提供 stub”，而 003 已完成，因此本轮按 runtime-local in-memory store 路径推进，不宣称真端口 ready。
+
+### 改动
+
+1. 新增 `runtime/src/session/SessionManager.h` 与 `runtime/src/session/SessionManager.cpp`：
+   - 实现私有 `SessionManager` 类并承接 `ISessionManager`；
+   - 用 `session_mutex_` 保护最小内存存储 `stored_snapshot_`；
+   - 落地 `load_session(...)` 的 create-or-load、checkpoint anchor mismatch reject 与 fail-closed create 语义；
+   - 落地 `prepare_turn(...)` 的 waiting-state / expected checkpoint 一致性校验；
+   - 落地 `persist_turn(...)` / `bind_checkpoint_ref(...)` 的 checkpoint anchor 写回；
+   - 落地 `build_resume_seed(...)` 的最小恢复事实构建，并显式保持“不越权生成 `ResumePlan`”边界。
+2. 新增 `tests/unit/runtime/SessionManagerTest.cpp`：
+   - 用真实 `SessionManager` 替换 010 阶段的 fake surface 蓝图；
+   - 覆盖 new session create、checkpoint bind、waiting snapshot prepare、resume seed build、persist terminal turn 主闭环；
+   - 新增 `load_session(...)` 对 mismatched checkpoint anchor 的拒绝断言；
+   - 保留 resume seed mismatched anchor reject 断言，锁定 session/checkpoint 边界。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `SessionManager.cpp` 接入 `dasall_runtime`；
+   - 新增 `dasall_runtime_session_manager_unit_test`，并为其开放 `runtime/src` 私有头 include path。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-018-SessionManager设计收敛.md`：
+   - 固定 runtime-local in-memory store 语义、`ResumeSeed` 边界、RT-BLK-01 下的 fail-closed stub 策略与 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_session_manager_unit_test`
+   - 结果：通过；真实控制器与新增行为测试成功编译链接。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回仓库已知工具态错误 `生成失败`。
+   - 直接二进制验证：`./build/vscode-linux-ninja/tests/unit/runtime/dasall_runtime_session_manager_unit_test`
+   - 结果：通过；二进制正常退出。
+3. 最终验收：
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_session_manager_unit_test && ctest --test-dir build-ci -R "^SessionManagerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-018 已完成，runtime 现在具备真实 `SessionManager`，后续 021 可直接消费 session snapshot、waiting interaction、checkpoint anchor 与 `ResumeSeed` 事实。
+2. `RT-BLK-01` 对 true integration 仍成立，但 018 已在 003 提供的 fail-closed seam 基础上完成 runtime-local 控制器收口；专项状态仍只能写为 subsystem-local ready，不能外推真端口 session persist ready。
+3. session 与 checkpoint 的边界现在由真实控制器锁定：session 侧只输出最小恢复事实，checkpoint compatibility / resume plan 继续留在 016/028 收口。
+
+### 下一步
+
+1. 进入 RT-TODO-019，实现 `Scheduler`，把队列深度、overflow disposition、worker saturation 与 `CancellationToken` 绑定语义落成真实调度控制器。
+
+### 风险
+
+1. 当前 `SessionManager` 只提供 runtime-local in-memory store 语义，已足够支撑 018 与 021 的控制器装配验证；后续接真实 session persistence seam 时，应保持 waiting state / checkpoint anchor 一致性裁定继续集中在控制器内，而不是把规则扩散到 backend adapter。
+2. `RunCtest_CMakeTools` 在本仓库仍不稳定，因此 018 的最终验收继续使用 `build-ci` fallback；如果后续 CMake preset/test preset 工具态恢复，应优先回到精确 test tool 验证。
+
 ## 记录 #429
 
 - 日期：2026-04-22

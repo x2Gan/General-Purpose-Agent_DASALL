@@ -9,6 +9,7 @@ target_sources(dasall_runtime
     src/fsm/AgentFsm.cpp
     src/fsm/TransitionGuardTable.cpp
     src/recovery/RecoveryManager.cpp
+    src/session/SessionManager.cpp
 )
 
 target_compile_features(dasall_runtime PUBLIC cxx_std_20)

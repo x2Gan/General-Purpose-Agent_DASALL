@@ -30,6 +30,10 @@ add_executable(dasall_runtime_session_type_surface_unit_test
   SessionTypeSurfaceTest.cpp
 )
 
+add_executable(dasall_runtime_session_manager_unit_test
+  SessionManagerTest.cpp
+)
+
 add_executable(dasall_runtime_scheduler_surface_unit_test
   SchedulerTest.cpp
 )
@@ -104,7 +108,18 @@ target_include_directories(dasall_runtime_recovery_manager_unit_test
     ${PROJECT_SOURCE_DIR}/runtime/src
 )
 
+target_include_directories(dasall_runtime_session_manager_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+)
+
 target_link_libraries(dasall_runtime_session_type_surface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+)
+
+target_link_libraries(dasall_runtime_session_manager_unit_test
   PRIVATE
     dasall_test_support
     dasall_runtime
@@ -146,6 +161,7 @@ dasall_apply_common_options(dasall_budget_controller_unit_test)
 dasall_apply_common_options(dasall_runtime_checkpoint_manager_unit_test)
 dasall_apply_common_options(dasall_runtime_recovery_manager_unit_test)
 dasall_apply_common_options(dasall_runtime_session_type_surface_unit_test)
+dasall_apply_common_options(dasall_runtime_session_manager_unit_test)
 dasall_apply_common_options(dasall_runtime_scheduler_surface_unit_test)
 dasall_apply_common_options(dasall_runtime_checkpoint_state_mapper_unit_test)
 dasall_apply_common_options(dasall_runtime_transition_guard_table_unit_test)
@@ -173,6 +189,9 @@ set_tests_properties(RecoveryManagerTest PROPERTIES LABELS "unit")
 
 add_test(NAME SessionTypeSurfaceTest COMMAND dasall_runtime_session_type_surface_unit_test)
 set_tests_properties(SessionTypeSurfaceTest PROPERTIES LABELS "unit")
+
+add_test(NAME SessionManagerTest COMMAND dasall_runtime_session_manager_unit_test)
+set_tests_properties(SessionManagerTest PROPERTIES LABELS "unit")
 
 add_test(NAME SchedulerTest COMMAND dasall_runtime_scheduler_surface_unit_test)
 set_tests_properties(SchedulerTest PROPERTIES LABELS "unit")
