@@ -1026,10 +1026,33 @@ Memory 有 checkpoint worker、Knowledge 有 index refresh、LLM 有 health prob
 | 边界 | 不拥有 ContextPacket 装配权；不拥有 FSM 推进权；不决定恢复动作 |
 | 输入数据 | request_id、session_id、checkpoint_ref、AgentResult draft、turn facts |
 | 输出数据 | SessionSnapshot、SessionPersistResult、ResumeSeed |
-| 关键 module-local 对象 | SessionSnapshot、PendingInteractionState、TurnPersistPlan、SessionConsistencyReport |
+| 关键 module-local 对象 | SessionSnapshot、PendingInteractionState、TurnPersistPlan、ResumeSeed |
 | 建议接口 | `load_session(...)`、`prepare_turn(...)`、`persist_turn(...)`、`bind_checkpoint_ref(...)`、`build_resume_seed(...)` |
 | 关键执行流 | 根据 session_id 装载已有会话与 checkpoint anchor；在 turn 收敛后提交本轮结果、等待态或终态元数据；为 resume 构建最小恢复种子 |
 | 失败语义 | 会话缺失可按配置走新建路径；会话不一致或 checkpoint 锚点损坏必须 fail-closed |
+
+##### 6.24.5.1 SessionManager supporting types 口径
+
+| 对象 | 角色 | 建议字段概要 | 约束与落盘位置 |
+|---|---|---|---|
+| `SessionSnapshot` | `SessionManager::load_session()` 的主输出，承载单次 turn 进入编排前的会话真值视图 | `session_id`、`request_id`、`turn_index`、`active_checkpoint_ref`、`fsm_state`、`budget_snapshot_ref`、`pending_interaction`、`last_result_summary` | 必须是 read-mostly 快照，不暴露底层存储句柄；后续 Build 落于 `runtime/include/session/SessionTypes.h` |
+| `PendingInteractionState` | Waiting/confirm/clarify 等待态的最小恢复对象，挂在 `SessionSnapshot` 与 waiting checkpoint 上 | `interaction_kind`、`prompt_token`、`deadline_ms`、`blocking_reason`、`resume_channel`、`input_schema_hint` | 只描述等待态与恢复入口，不嵌入完整用户输入历史；允许空值表示当前无 pending interaction |
+| `TurnPersistPlan` | `SessionManager::persist_turn()` 的 module-local 写回计划，收敛 turn 终态、checkpoint 锚点与审计摘要 | `session_id`、`request_id`、`turn_index`、`terminal_state`、`checkpoint_ref`、`writeback_mode`、`audit_summary`、`next_resume_seed_ref` | 作为持久化计划而不是存储结果；后续 Build 由 `runtime/src/session/SessionManager.cpp` 内部消费，不进入 contracts |
+| `ResumeSeed` | `SessionManager::build_resume_seed()` 的最小恢复种子，供 resume/checkpoint 路径组装后续 `ResumePlan` | `session_id`、`request_id`、`checkpoint_ref`、`fsm_state`、`pending_interaction`、`policy_snapshot_ref`、`resume_reason` | 只能承载 runtime-owned 恢复事实，不复制完整 `AgentRequest` 或 raw payload；后续 Build 落于 `runtime/include/session/SessionTypes.h` |
+
+这些 supporting types 进一步遵守以下规则：
+
+1. `SessionSnapshot` 是运行前事实快照，`TurnPersistPlan` 是运行后写回计划，二者不复用同一对象以避免把读取态和写回态混层。
+2. `PendingInteractionState` 必须可被 checkpoint 引用和 resume 路径复用，但它只保存等待态所需的最小恢复事实，不承担完整对话存档职责。
+3. `ResumeSeed` 是 runtime-owned 恢复种子，不直接越过 `CheckpointManager` 生成 `ResumePlan`；resume compatibility 与 schema/version 校验仍由 checkpoint 侧裁定。
+4. `SessionConsistencyReport` 保留为 SessionManager 内部 helper，不进入当前 public supporting types 口径。
+
+对应的最小顺序约束为：
+
+1. `load_session() -> SessionSnapshot` 发生在 `AgentOrchestrator` preflight 入口。
+2. `prepare_turn()` 可以读取 `SessionSnapshot` 和 `PendingInteractionState`，但不能直接修改持久化存储。
+3. `persist_turn() -> TurnPersistPlan` 发生在 terminal/waiting 收敛阶段，并在成功后更新 checkpoint anchor。
+4. `build_resume_seed() -> ResumeSeed -> CheckpointManager::make_resume_plan()` 构成 resume 种子链，session 侧只负责提供最小恢复事实。
 
 #### 6.24.6 AgentFSM
 

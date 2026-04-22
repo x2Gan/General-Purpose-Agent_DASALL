@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #414
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Design convergence 轮次
+- 任务：RT-TODO-002 补齐 SessionManager supporting types 口径
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-001 已完成并推送后，RT-TODO-002 成为 RT-BLK-04 的剩余必做项；继续执行它可以在不越界到 runtime seam 或测试拓扑的前提下，把 supporting types 缺口一次性收口。
+2. 本轮最小判别点是：6.24.5 是否仍停留在 SessionManager 的类级职责描述，且 `ResumeSeed` 未进入关键对象列表；若是，则 RT-TODO-010 仍没有可复用的 public type 基线。
+3. 由于 RT-TODO-002 仍是设计收敛任务，本轮保持文档-only 边界，不提前触碰 `runtime/include/session` 或测试代码。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`：
+   - 将 6.24.5 的关键对象从 `SessionConsistencyReport` 校正为 `ResumeSeed`；
+   - 新增 6.24.5.1，补齐 `SessionSnapshot`、`PendingInteractionState`、`TurnPersistPlan`、`ResumeSeed` 的字段概要、边界规则、文件落点和最小顺序约束。
+2. 新增 `docs/todos/runtime/deliverables/RT-TODO-002-SessionManager-supporting-types口径收敛.md`：
+   - 记录本地证据、Temporal 外部参考、四个 supporting types 的职责边界、流程时序、Design -> Build 映射和风险回退。
+3. 更新 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 将 RT-TODO-002 从 `NotStarted` 回写为 `Done`；
+   - 在 blocker 校准表中把 RT-BLK-04 标记为“已解阻”，明确 001+002 已完成 supporting types 成表收敛。
+
+### 验证
+
+1. 文档一致性检索：
+   - `rg -n "SessionSnapshot|PendingInteractionState|TurnPersistPlan|ResumeSeed" docs/architecture/DASALL_runtime子系统详细设计.md docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-002-SessionManager-supporting-types口径收敛.md`
+   - 结果：通过；四个 supporting types 已在 architecture / TODO / deliverable 三处形成一致口径。
+
+### 结果
+
+1. RT-TODO-002 已完成，SessionManager supporting types 不再停留在类级描述，后续 RT-TODO-010 可直接复用本轮冻结的字段和职责边界。
+2. RT-BLK-04 已解阻；AgentFacade / SessionManager supporting types 现在都具备后续 public surface 任务可直接引用的设计真值源。
+
+### 下一步
+
+1. 进入 RT-TODO-003，收敛 `RuntimeDependencySet`、fail-closed stub、null adapter 与相邻模块 runtime-facing seam 的唯一口径，并在完成后单独提交。
+
+### 风险
+
+1. 如果后续 RT-TODO-010 把 `SessionSnapshot` 和 `TurnPersistPlan` 合并成单一可变对象，会重新引入读态/写回态混层，需要回退到 6.24.5.1 的分层口径。
+2. 如果后续 checkpoint 设计要求 `ResumeSeed` 自行做 schema/version 裁定，则说明 SessionManager 越权侵入 checkpoint 责任，必须把兼容判断回退到 `CheckpointManager::make_resume_plan()`。
+
 ## 记录 #413
 
 - 日期：2026-04-22
