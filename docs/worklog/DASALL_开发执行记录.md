@@ -1,5 +1,64 @@
 # DASALL 开发执行记录
 
+## 记录 #418
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-006 定义 RuntimeErrorCode 与 CancellationToken
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-005 已完成并推送后，RT-TODO-006 成为 008/011/017 等后续任务共享的最小基础设施任务；如果不先冻结错误码域和取消令牌，后续 budget、scheduler、recovery 会继续各自携带裸整数和临时取消语义。
+2. 本轮最小判别点是：runtime 是否已经拥有稳定的 `RT_E_*` module-local 错误域，以及一个可复制、可绑定 deadline、跨线程可见的 `CancellationToken` public type；若否，后续公共面会继续分叉。
+3. 本轮只做 header-only public surface 与 unit tests，不提前把 token 接进 Scheduler 或 Recovery 的实现路径。
+
+### 改动
+
+1. 新增 `runtime/include/RuntimeErrorCode.h`：
+   - 落下 `RT_E_100` ~ `RT_E_603` 的稳定枚举值；
+   - 提供按 1xx~6xx 六个段分类的最小 helper，统一后续 telemetry/recovery 的错误域入口。
+2. 新增 `runtime/include/CancellationToken.h`：
+   - 用共享状态模型实现可复制 token；
+   - 支持 `cancel()`、`bind_deadline()`、`is_cancelled()`，并把 deadline 触发折叠为稳定的已取消状态。
+3. 新增 `tests/unit/runtime/RuntimeErrorCodeTest.cpp` 与 `tests/unit/runtime/CancellationTokenTest.cpp`：
+   - 前者验证码值唯一性、域分类和越界拒绝；
+   - 后者验证初始态、手动取消、deadline 取消和跨线程可见性。
+4. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册两条 runtime unit tests；
+   - 把对应 executable targets 纳入 `dasall_unit_tests` 聚合列表。
+5. 新增 `docs/todos/runtime/deliverables/RT-TODO-006-RuntimeErrorCode与CancellationToken设计收敛.md`：
+   - 固定 `RuntimeErrorCode` 继续保持 runtime-local；
+   - 固定 `CancellationToken` 只承担 cooperative cancellation 与 deadline 绑定，不替代 BudgetController。
+
+### 验证
+
+1. 设计文档检索：
+   - `rg -n "RT-TODO-006|RuntimeErrorCode|CancellationToken|RT_E_|bind_deadline" docs/todos/runtime/deliverables/RT-TODO-006-RuntimeErrorCode与CancellationToken设计收敛.md`
+   - 结果：通过；006 的设计边界、Build 三件套和测试目标已在 deliverable 中固定。
+2. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_error_code_unit_test`、`dasall_runtime_cancellation_token_unit_test`
+   - 结果：通过；两条 runtime unit target 均编译并链接成功。
+3. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `RuntimeErrorCodeTest`、`CancellationTokenTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回泛化错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_error_code_unit_test dasall_runtime_cancellation_token_unit_test && ctest --test-dir build-ci -R 'RuntimeErrorCodeTest|CancellationTokenTest' --output-on-failure`
+   - 结果：通过；2/2 tests passed。
+
+### 结果
+
+1. RT-TODO-006 已完成，runtime 现在具备稳定的 `RT_E_*` public 错误域和可复制的 `CancellationToken` 公共面；后续 008/011/017/019 可以直接复用，而不必重复发明类型。
+2. `CancellationToken` 的跨线程可见性和 deadline 触发已经被独立单测钉住；RunCtest_CMakeTools 的泛化失败被 `build-ci` fallback 证据覆盖，没有阻塞任务闭环。
+
+### 下一步
+
+1. 进入 RT-TODO-007，定义 `IAgentFsm` 与 `StateTransitionTypes`，把 17 态状态机和转移输入/输出类型显式落到 runtime public include。
+
+### 风险
+
+1. 本轮只冻结了 `CancellationToken` 公共面，还没有把 token 绑定到 Scheduler Ticket；如果后续 011/019 忘记接线，这里的单测不会自动证明真实传播链成立。
+2. `RuntimeErrorCode` 目前只提供码段分类 helper；后续 telemetry 若绕过该 helper 直接拼裸整数，会重新引入错误域漂移，需要回退到本轮公共面。
+
 ## 记录 #417
 
 - 日期：2026-04-22

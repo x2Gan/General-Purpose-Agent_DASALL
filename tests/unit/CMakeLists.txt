@@ -109,6 +109,8 @@ set(DASALL_WATCHDOG_UNIT_TEST_EXECUTABLE_TARGETS
 
 set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_smoke_test
+	dasall_runtime_error_code_unit_test
+	dasall_runtime_cancellation_token_unit_test
 	${DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_tool_invocation_context_surface_unit_test
