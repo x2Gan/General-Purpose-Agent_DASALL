@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #421
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-009 定义 checkpoint/recovery include 面
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-008 已完成并推送后，RT-TODO-009 成为 012/016/017/024 共用的 checkpoint/recovery 接缝任务；如果不先冻结 checkpoint lifecycle 与 recovery admit/execute/apply 的 public surface，后续实现会在 orchestrator、session 和 recovery 之间继续重复发明恢复计划与 reject shape。
+2. 本轮最小判别点是：runtime 是否已经拥有稳定的 `ICheckpointManager` / `IRecoveryManager` 方法面，以及 checkpoint version tag helpers、`ResumePlan`、`CheckpointBuildRequest`、`RecoveryExecutionPlan` 这些 supporting types；若否，016/017 很容易再把 version gate 和 recovery 语义写散到局部 helper。
+3. 本轮只收敛 header-only interface/types 和 surface tests，不提前实现 `CheckpointManager.cpp` 或 `RecoveryManager.cpp`。
+
+### 改动
+
+1. 新增 `runtime/include/checkpoint/CheckpointBuildTypes.h`：
+   - 定义 `CheckpointBuildRequest`、`CheckpointBuildResult`、`CheckpointPersistResult`、`CheckpointLoadResult`、`CheckpointConsistencyReport`；
+   - 固定 `rt.schema_version`、`rt.fsm_state_enum_version`、`rt.budget_schema_version` 三个保留 version tag key；
+   - 通过稳定的 `key=value` helper 适配 shared `Checkpoint.tags` 仍是 `std::vector<std::string>` 的 contracts 约束。
+2. 新增 `runtime/include/recovery/ResumePlan.h`：
+   - 冻结 `ResumePlan`、`ResumePlanDecision`、`ResumePlanViolation`；
+   - 固定 `Paused -> WaitingClarify`、`WaitingConfirm -> WaitingConfirm`、`WaitingTool -> WaitingExternal`、`Running -> Reasoning` 的保守恢复映射；
+   - 对 terminal / unspecified checkpoint 暴露显式 reject surface。
+3. 新增 `runtime/include/checkpoint/ICheckpointManager.h` 与 `runtime/include/recovery/IRecoveryManager.h`：
+   - 冻结 `build_checkpoint/save/load/validate/make_resume_plan` 与 `evaluate/execute/apply` 的最小方法面；
+   - 补足 `RecoveryExecutionPlan`、`RecoveryApplyResult`、`SafeFailureHint` 等 recovery supporting types。
+4. 新增 `tests/unit/runtime/CheckpointManagerTest.cpp` 与 `tests/unit/runtime/RecoveryManagerTest.cpp`：
+   - 用本地 fake manager 验证 version tag 写入/读取、waiting checkpoint resume、schema mismatch reject、terminal checkpoint reject；
+   - 验证 recovery 的 admit / reject / escalate 三态，以及 `RecoveryOutcome` 的最小执行结果面。
+5. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册 `dasall_runtime_checkpoint_manager_unit_test` 与 `dasall_runtime_recovery_manager_unit_test`；
+   - 把 `CheckpointManagerTest`、`RecoveryManagerTest` 纳入 runtime/unit 聚合列表。
+6. 新增 `docs/todos/runtime/deliverables/RT-TODO-009-ICheckpointManager与IRecoveryManager设计收敛.md`：
+   - 固定 checkpoint/recovery public surface 的边界、version tag 口径、ResumePlan 状态映射与 Design -> Build 映射；
+   - 明确 009 只冻结 include 面，不越权实现持久化、恢复算法或 replay regression gate。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_checkpoint_manager_unit_test`、`dasall_runtime_recovery_manager_unit_test`
+   - 结果：通过；009 的新增 public headers 与两个 surface tests 可被独立编译并成功链接。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `CheckpointManagerTest` 与 `RecoveryManagerTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回泛化错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_checkpoint_manager_unit_test dasall_runtime_recovery_manager_unit_test && ctest --test-dir build-ci -R 'CheckpointManagerTest|RecoveryManagerTest' --output-on-failure`
+   - 结果：通过；2/2 tests passed。
+3. 设计文档与 TODO 口径检查：
+   - `rg -n "RT-TODO-009|ICheckpointManager|IRecoveryManager|ResumePlan|CheckpointBuildRequest|RecoveryExecutionPlan" docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-009-ICheckpointManager与IRecoveryManager设计收敛.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：用于提交前一致性复核。
+
+### 结果
+
+1. RT-TODO-009 已完成，runtime 现在具备稳定的 checkpoint/recovery public surface；后续 012/016/017 可以直接复用 `CheckpointBuildRequest`、version tag helpers、`ResumePlan` 与 `RecoveryExecutionPlan`，不再各自定义局部恢复计划对象。
+2. 009 已把 version metadata 固定为 `key=value` tag helper 口径，并把 load/resume 的 reject shape 收敛到结构化 result 类型，保证后续实现不会再散落魔法字符串。
+
+### 下一步
+
+1. 进入 RT-TODO-010，定义 `ISessionManager` 与 session public types，把 `SessionSnapshot`、`PendingInteractionState`、`ResumeSeed` 的 include 面显式落盘。
+
+### 风险
+
+1. 本轮只冻结了 checkpoint/recovery include 面，还没有实现真实存储、resume compatibility 细则与 replay regression；016/017/024 若偏离当前 supporting types 和 version tag helper，会重新引入接缝漂移。
+2. `ResumePlan` 当前对 `Running` 采用保守 `Reasoning` 映射，真实恢复粒度仍需 010 的 session public types 与 016 的实现共同钉实。
+
 ## 记录 #420
 
 - 日期：2026-04-22
