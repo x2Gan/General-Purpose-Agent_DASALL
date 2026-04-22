@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #435
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 安全、观测与 replay 基础任务
+- 任务：RT-TODO-023 实现 RuntimeTelemetryBridge、RuntimeEventBus、RuntimeHealthProbe 与 BackgroundMaintenance hooks
+- 状态：已完成
+
+### 任务选择
+
+1. 022 已把 safe mode / degraded / failed-safe 终态收口成独立控制器；如果 023 不尽快把这些 mode fact、017 的 recovery fact 和 021 的 orchestrator fact 统一接到可观测与 health 事实面，后续 024 replay 兼容与 030 safe mode integration 都只能围绕分散分支做断言，无法形成稳定 gate 证据。
+2. 本轮最小判别点是：runtime 是否已经具备一套 runtime-private 的共享事件面，使 `RuntimeEventBus` 负责背压和分发，`RuntimeTelemetryBridge` 负责归一化发射，`RuntimeHealthProbe` 负责 sample 聚合，`BackgroundMaintenanceHooks` 负责 idle tick 发布，而不把 exporter / dispatch thread / 真实健康采样提前伪装为 ready。
+3. 依据 runtime 详设 6.14.2 / 6.14.4 / 6.18 / 6.23 / 6.24.12，本轮只收口字段口径、背压语义和 provider seam，不扩 shared ABI，不外推真实 exporter 或线程模型已 ready。
+
+### 改动
+
+1. 新增 `runtime/src/telemetry/RuntimeEventBus.h` 与 `runtime/src/telemetry/RuntimeEventBus.cpp`：
+   - 固定 `RuntimeEventEnvelope`、`RuntimeEventContext`、`RuntimeEventSubscription` 与 `RuntimeEventPublishResult`；
+   - 落地 `publish/subscribe/unsubscribe/dispatch_pending`；
+   - 让非审计事件在超深度时丢弃最旧 non-audit，审计事件不走同一 drop 逻辑，并累计 `drop_count()`。
+2. 新增 `runtime/src/telemetry/RuntimeTelemetryBridge.h` 与 `runtime/src/telemetry/RuntimeTelemetryBridge.cpp`：
+   - 落地 `emit_transition(...)`、`emit_budget_reject(...)`、`emit_recovery_reject(...)`、`emit_safe_mode(...)`；
+   - 统一传播 `request_id/session_id/trace_id/turn_id/checkpoint_id` 与 `RT_E_*`；
+   - 把 transition、budget reject、recovery reject 与 safe mode 事实统一转成 event envelope，并可选发布到 EventBus。
+3. 新增 `runtime/src/health/RuntimeHealthProbe.h` 与 `runtime/src/health/RuntimeHealthProbe.cpp`：
+   - 定义 `RuntimeHealthSample` 与 `IRuntimeHealthSignalProvider` provider seam；
+   - 落地 `collect_snapshot()` 与 `probe()`，把 dependency/watchdog/event bus/telemetry/maintenance/safe mode 事实聚合成 `infra::HealthSnapshot` / `ProbeResult`；
+   - provider 缺失或 sample 不一致时 fail-closed。
+4. 新增 `runtime/src/maintenance/BackgroundMaintenanceHooks.h` 与 `runtime/src/maintenance/BackgroundMaintenanceHooks.cpp`：
+   - 定义 `BackgroundMaintenanceTick`；
+   - 落地 `publish_idle_tick(...)`，把 idle maintenance 时机规范化成 runtime maintenance event。
+5. 新增 `tests/unit/runtime/RuntimeEventBusTest.cpp`、`RuntimeTelemetryBridgeTest.cpp`、`RuntimeHealthProbeTest.cpp`、`RuntimeBackgroundMaintenanceHookTest.cpp`：
+   - 覆盖 event dispatch、non-audit overflow、audit 保留、telemetry correlation、RT_E_* 映射、health 聚合与 maintenance publish 行为。
+6. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把四个实现文件接入 `dasall_runtime`；
+   - 新增四个 unit target 与 CTest 注册。
+7. 新增 `docs/todos/runtime/deliverables/RT-TODO-023-ObservabilityHealthMaintenance设计收敛.md`：
+   - 固定 023 的共享事件字段面、provider seam、maintenance hook 边界与 Design->Build 三件套。
+
+### 验证
+
+1. EventBus 核心切片：
+   - 命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime_event_bus_unit_test && ctest --test-dir build-ci -R "^RuntimeEventBusTest$" --output-on-failure`
+   - 结果：首次因 `build-ci` 未重新生成目标而失败；重新 configure 后通过；随后修正 `RuntimeEventBusTest.cpp` 忽略 `subscribe()` 返回值的 warning，并复跑通过。
+2. 023 全量窄验证：
+   - 命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime_event_bus_unit_test dasall_runtime_telemetry_bridge_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test && ctest --test-dir build-ci -R "^(RuntimeEventBusTest|RuntimeTelemetryBridgeTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest)$" --output-on-failure`
+   - 结果：4/4 tests passed。
+
+### 结果
+
+1. RT-TODO-023 已完成，runtime 现在具备统一的共享事件字段面，`RuntimeEventBus`、`RuntimeTelemetryBridge`、`RuntimeHealthProbe` 与 `BackgroundMaintenanceHooks` 已有稳定的 runtime-private 行为闭环。
+2. 023 没有提前实现 exporter、真实 dispatch thread 或 live health wiring，而是把字段口径、背压、provider seam 和 maintenance publish 先冻结到可测试层，这符合 6.24.12 对轻量组件的要求。
+3. `request_id/session_id/trace_id/turn_id/checkpoint_id` 与 `RT_E_*` 已能在 transition / budget reject / recovery reject / safe mode 上统一传播；event bus overflow、telemetry degraded、maintenance backlog 和 provider 缺失也都能折叠到 health 视图。
+
+### 下一步
+
+1. 进入 RT-TODO-024，补齐 contracts 字段级与 checkpoint replay 兼容验证，优先围绕 golden checkpoint fixture、字段级 contract 与稳定 `ResumePlan` / reject 语义收口。
+
+### 风险
+
+1. 023 当前只冻结了 runtime-private 结构化事件和 health sample 聚合；真实 exporter、跨线程 dispatch 和 live provider wiring 仍需后续任务接线，但这些接线必须复用当前字段口径，不能再各自发明事件结构。
+2. 审计事件当前通过“单独保留、不走 non-audit drop 逻辑”满足 6.14.4 的首版要求；若后续引入真实异步 dispatch，需要继续保持这一语义，而不是把 audit 事件重新并入可丢弃队列。
+
 ## 记录 #434
 
 - 日期：2026-04-22

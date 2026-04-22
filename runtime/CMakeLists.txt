@@ -9,10 +9,14 @@ target_sources(dasall_runtime
     src/checkpoint/CheckpointStateMapper.cpp
     src/fsm/AgentFsm.cpp
     src/fsm/TransitionGuardTable.cpp
+    src/health/RuntimeHealthProbe.cpp
+    src/maintenance/BackgroundMaintenanceHooks.cpp
     src/recovery/RecoveryManager.cpp
     src/safety/SafeModeController.cpp
     src/scheduling/Scheduler.cpp
     src/session/SessionManager.cpp
+    src/telemetry/RuntimeEventBus.cpp
+    src/telemetry/RuntimeTelemetryBridge.cpp
 )
 
 target_compile_features(dasall_runtime PUBLIC cxx_std_20)
