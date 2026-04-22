@@ -52,6 +52,12 @@ dasall_add_runtime_agent_loop_integration_test(
 )
 
 dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_profile_compatibility_integration_test
+  RuntimeProfileCompatibilityTest
+  RuntimeProfileCompatibilityTest.cpp
+)
+
+dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_checkpoint_replay_compatibility_integration_test
   RuntimeCheckpointReplayCompatibilityTest
   RuntimeCheckpointReplayCompatibilityTest.cpp

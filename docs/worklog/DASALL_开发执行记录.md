@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #440
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO runtime-local gates 与兼容性任务
+- 任务：RT-TODO-029 验证 RuntimeProfileCompatibility
+- 状态：已完成
+
+### 任务选择
+
+1. 028 之后，runtime-local gates 已经覆盖 unary、resume 和 replay；接下来最小且无前置 blocker 的任务就是 029，因为它只需要在既有 profile 资产链上补一条 compatibility gate，不依赖 027 的真端口或 030 的 safe-mode / health 收口。
+2. 本轮最小判别点是：`desktop_full`、`edge_balanced`、`edge_minimal` 三档 profile 是否已经通过真实 `RuntimePolicySnapshot` 投影视图暴露出预算、降级和模块 enablement 的差异，而这些差异是否仍与共享 `ProfileCompatibilityValidator` 一致。
+3. 029 不改 runtime production 逻辑；若需要修改 production 才能让测试成立，说明问题不在 gate 缺失，而在 provider / profile 资产本身，应升级为 blocker。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-029-RuntimeProfileCompatibility设计收敛.md`：
+   - 固定 029 只走真实 profile 资产链和 shared validator，不允许测试私有 YAML 解析或手工拼 snapshot。
+2. 更新 `tests/integration/agent_loop/CMakeLists.txt`：
+   - 注册 `dasall_runtime_profile_compatibility_integration_test` / `RuntimeProfileCompatibilityTest`。
+3. 新增 `tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp`：
+   - 通过 `ProfileCatalog -> BuildProfileResolver -> RuntimePolicyProvider` 加载 `desktop_full`、`edge_balanced`、`edge_minimal`；
+   - 断言 `RuntimePolicySnapshot` 上的 runtime budget、history/compression、model route、stale-read、degrade、audit、remote diagnostics 与 manifest enablement 差异；
+   - 复用 `ProfileCompatibilityValidator` 验证 shared compatibility 结论仍为 `Compatible`；
+   - 读取 agent_loop CMake，验证 discoverability 注册存在。
+
+### 验证
+
+1. 029 窄验证：
+   - 命令：`cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime_profile_compatibility_integration_test && ctest --test-dir build-ci -R "^RuntimeProfileCompatibilityTest$" --output-on-failure`
+   - 结果：`RuntimeProfileCompatibilityTest` 通过。
+2. discoverability 验证：
+   - 命令：`ctest --test-dir build-ci -N | rg "RuntimeProfileCompatibilityTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest"`
+   - 结果：runtime profile compatibility gate 已进入顶层 CTest discoverability，并与 028 的 resume / replay gates 并存。
+3. 任务级 acceptance：
+   - 命令：`cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "^RuntimeProfileCompatibilityTest$" --output-on-failure`
+   - 结果：`RuntimeProfileCompatibilityTest` 与同组 runtime integration tests 在聚合中全部通过；但 `dasall_integration_tests` 仍被既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败阻塞，属于 runtime 外部聚合问题。
+
+### 结果
+
+1. RT-TODO-029 已完成，runtime 现在具备直接锚定 `RuntimePolicySnapshot` 的三档 profile compatibility gate。
+2. `desktop_full`、`edge_balanced`、`edge_minimal` 三档 profile 的 budget / degrade / enablement 差异已经在真实 profile 资产链上被二值断言，不依赖测试私有映射。
+3. runtime profile gate 与 shared `ProfileCompatibilityValidator` 保持一致，没有出现 runtime 自己的一套兼容语义。
+
+### 下一步
+
+1. 进入 RT-TODO-030，把 safe mode、health、cancellation 和 concurrency gate 一次性收口到 runtime 的最后一组 control-plane integration / unit 验证中。
+
+### 风险
+
+1. 当前 029 只覆盖三档主 profile；若后续要把 `cloud_full` / `factory_test` 也纳入 runtime gate，应作为新增 compatibility 扩展任务，而不是在本轮追加入 scope。
+2. `dasall_integration_tests` 的全量通过仍受 infra diagnostics 两条既有失败阻塞；后续做 030 的聚合 acceptance 时，仍需把它们单独记为仓库级 blocker。
+
 ## 记录 #439
 
 - 日期：2026-04-22
