@@ -974,6 +974,28 @@ Memory 有 checkpoint worker、Knowledge 有 index refresh、LLM 有 health prob
 | 关键执行流 | 初始化时加载 RuntimePolicySnapshot 并构建 RuntimeDependencySet；处理请求时只做参数归一化和错误兜底，再委托 AgentOrchestrator；停机时驱动 flush / checkpoint / background stop |
 | 失败语义 | init 失败不得部分激活；handle 失败必须返回标准 AgentResult；stop 失败必须至少留下审计与日志 |
 
+##### 6.24.3.1 AgentFacade supporting types 口径
+
+| 对象 | 角色 | 建议字段概要 | 约束与落盘位置 |
+|---|---|---|---|
+| `AgentInitRequest` | `AgentFacade::init()` 的组合根输入，承载启动期依赖与 profile 生效视图 | `runtime_instance_id`、`profile_id`、`policy_snapshot`、`dependency_set`、`boot_reason`、`cold_start` | 只允许携带 runtime-owned 初始化事实，不重复包装下游实现细节；后续 Build 落于 `runtime/include/AgentTypes.h`，由 `runtime/src/AgentFacade.cpp` 消费 |
+| `AgentInitResult` | 初始化结果与 readiness 快照，给 apps / access 判断 runtime 是否可接单 | `accepted`、`runtime_instance_id`、`resolved_profile_id`、`degraded`、`health_summary`、`error_code`、`diagnostics` | 必须是 fail-closed 结果对象；若 `accepted=false`，不得留下部分激活的组合根；后续 Build 落于 `runtime/include/AgentTypes.h` |
+| `HandleOptions` | `AgentFacade::handle()` 的调用期附加控制面输入 | `request_id`、`session_id`、`caller_id`、`entrypoint`、`checkpoint_ref`、`timeout_override_ms`、`trace_context` | 只承载 handle-scoped 元数据，不复制 `contracts::AgentRequest` 的业务载荷；允许空 `checkpoint_ref`，但不得直接携带 raw provider payload |
+| `ResumeHandleRequest` | `AgentFacade::resume()` 的最小恢复输入，定位既有 waiting/checkpoint 执行实例 | `request_id`、`session_id`、`checkpoint_ref`、`resume_reason`、`resume_token`、`trace_context`、`override_options` | 只引用 checkpoint/session 锚点与恢复意图，不重新声明完整请求体；后续 Build 落于 `runtime/include/AgentTypes.h`，由 `SessionManager`/`CheckpointManager` 协同消费 |
+
+这些 supporting types 进一步遵守以下规则：
+
+1. `AgentInitRequest` 与 `AgentInitResult` 属于 boot-time 对象，不能复用到单次 turn handle/resume 路径。
+2. `HandleOptions` 与 `ResumeHandleRequest` 都是 module-local public types，不进入 contracts；上游 apps 只通过 runtime public surface 使用它们。
+3. `ResumeHandleRequest` 必须保持“引用既有执行实例”的语义，恢复所需的业务事实由 checkpoint、session 与 profile 投影视图补齐，而不是在入口再次传入整包请求。
+4. `AgentFacade` 仅负责参数归一化、生命周期兜底与错误折叠；这些对象不得扩大成第二套编排上下文或下游端口适配层。
+
+对应的最小顺序约束为：
+
+1. `AgentInitRequest -> AgentInitResult` 只发生在 runtime 接单前的单次初始化路径。
+2. `contracts::AgentRequest + HandleOptions -> AgentOrchestrator::run_once()` 构成 unary handle 入口。
+3. `ResumeHandleRequest -> SessionManager::load_session()/CheckpointManager::make_resume_plan()` 构成 resume 入口，成功后才允许交给 `AgentOrchestrator::continue_from_checkpoint()`。
+
 #### 6.24.4 AgentOrchestrator
 
 | 设计面 | 说明 |

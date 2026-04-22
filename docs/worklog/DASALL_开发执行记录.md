@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #413
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Design convergence 轮次
+- 任务：RT-TODO-001 补齐 AgentFacade supporting types 口径
+- 状态：已完成
+
+### 任务选择
+
+1. 用户要求按 project-implementation-cycle 技能串行推进 RT-TODO-001 ~ 004，并且每个原子任务单独提交，因此本轮只选择最前置、最小且可独立闭合的 RT-TODO-001。
+2. RT-TODO-001 无前置 TODO 依赖，自身就是 RT-BLK-04 的解阻任务之一；在 RT-TODO-002 未完成前，最合理的做法是先冻结 AgentFacade supporting types 口径，再进入 SessionManager supporting types。
+3. 本轮的判别点很明确：如果 runtime 详设中仍只有 `AgentInitRequest`、`AgentInitResult`、`HandleOptions`、`ResumeHandleRequest` 的点名而无字段/职责/落盘位置表，则任务未完成；反之可作为后续 RT-TODO-005 的设计输入。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`：
+   - 在 6.24.3 下新增 6.24.3.1，补齐 `AgentInitRequest`、`AgentInitResult`、`HandleOptions`、`ResumeHandleRequest` 的角色、字段概要、边界规则和未来文件落点；
+   - 增加 AgentFacade init/handle/resume 的最小顺序约束，固定 resume 输入只引用既有执行实例。
+2. 新增 `docs/todos/runtime/deliverables/RT-TODO-001-AgentFacade-supporting-types口径收敛.md`：
+   - 记录本地证据、Temporal 外部参考、supporting types 明细、流程时序、文件范围、Design -> Build 映射和风险回退。
+3. 更新 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 将 RT-TODO-001 状态从 `NotStarted` 回写为 `Done`；
+   - 把验收命令扩展到 deliverable 文档，确保证据链可直接检索。
+
+### 验证
+
+1. 文档一致性检索：
+   - `rg -n "AgentInitRequest|AgentInitResult|HandleOptions|ResumeHandleRequest" docs/architecture/DASALL_runtime子系统详细设计.md docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/runtime/deliverables/RT-TODO-001-AgentFacade-supporting-types口径收敛.md`
+   - 结果：通过；四个 supporting types 已在 architecture / TODO / deliverable 三处形成一致口径。
+
+### 结果
+
+1. RT-TODO-001 已完成，AgentFacade supporting types 不再只有对象名，后续 RT-TODO-005 可直接复用本轮冻结的字段与边界。
+2. RT-BLK-04 仅得到部分解阻；仍需完成 RT-TODO-002 才能把 AgentFacade / SessionManager supporting types 整体收口。
+
+### 下一步
+
+1. 进入 RT-TODO-002，补齐 `SessionSnapshot`、`PendingInteractionState`、`TurnPersistPlan`、`ResumeSeed` 的 supporting types 口径，并在完成后单独提交。
+
+### 风险
+
+1. 如果后续 RT-TODO-005 直接把 `HandleOptions` 扩成第二份业务请求体，会破坏本轮冻结的“控制平面元数据 only”边界，需要回退到 6.24.3.1 的口径。
+2. 如果 resume 实现要求入口重复传入完整请求体，则说明 checkpoint/session 最小恢复种子不足，应在 RT-TODO-002 或后续 checkpoint 设计内修补，而不是扩张 AgentFacade 输入。
+
 ## 记录 #412
 
 - 日期：2026-04-22
