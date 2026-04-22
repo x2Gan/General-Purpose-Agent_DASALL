@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #426
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-014 实现 AgentFsm
+- 状态：已完成
+
+### 任务选择
+
+1. 013 完成后，014 是状态机链路的直接收口任务；如果不把 `IAgentFsm` 接口落成真实实现，后续 020/021 的 orchestrator 主循环仍然只能依赖 fake state machine。
+2. 本轮最小判别点是：runtime 是否已经拥有一个只持有显式状态、复用 `TransitionGuardTable`、并能返回结构化 `TransitionRejectionReason` 的 `AgentFsm`。
+3. 本轮只收口 FSM 行为，不引入 session/budget/checkpoint/recovery 等相邻控制器依赖。
+
+### 改动
+
+1. 新增 `runtime/src/fsm/AgentFsm.h` 与 `runtime/src/fsm/AgentFsm.cpp`：
+   - 实现私有 `AgentFsm` 类并承接 `IAgentFsm`；
+   - 使用 `state_mutex_` 保护 `current_state_`，符合 6.14.2 锁顺序中的 L1 约束；
+   - 在 `can_enter(...)` / `transition(...)` 中复用 `TransitionGuardTable` 做合法边和 guard 校验；
+   - 对 `SourceStateMismatch`、`IllegalTransition`、`MissingGuardFact`、`TerminalStateExit` 生成结构化 rejection outcome；
+   - 将 `SafeMode` 定义为真实终态，保留 `Completed -> Idle` 合法边。
+2. 更新 `tests/unit/runtime/AgentFsmTest.cpp`：
+   - 用真实 `AgentFsm` 替换 007 的 fake surface test；
+   - 覆盖 `Reasoning -> WaitingClarify`、`Reflecting -> Reasoning`、`Completed -> Idle` 成功路径；
+   - 覆盖 source mismatch、非法边、缺失 guard 和 terminal exit 拒绝路径。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `AgentFsm.cpp` 接入 `dasall_runtime`；
+   - 让 `dasall_agent_fsm_unit_test` 可读取 `runtime/src` 私有头。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-014-AgentFsm设计收敛.md`：
+   - 固定私有实现边界、状态推进顺序、终态集合与 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_agent_fsm_unit_test`
+   - 结果：通过；`AgentFsm.cpp` 和升级后的行为测试可成功编译链接。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_agent_fsm_unit_test && ctest --test-dir build-ci -R "^AgentFsmTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-014 已完成，runtime 现在具备真实 `AgentFsm`，后续 orchestrator 可直接依赖它推进 Waiting/FailedSafe/Completed 等显式状态。
+2. 非法转移现在具备统一 rejection reason 出口，014 不再依赖 007 时期的 fake 测试双写逻辑。
+
+### 下一步
+
+1. 进入 RT-TODO-015，实现 `BudgetController`，把 6.24.7 的五维预算准入与拒绝逻辑落地成真实控制器。
+
+### 风险
+
+1. `is_terminal(...)` 当前只把 `SafeMode` 视为终态，这是依据 6.7.4 的显式出边集合推导出来的；如果后续 orchestrator 需要把 `Completed` 也当作流程终点，应由 orchestrator 侧生命周期逻辑负责，而不是回退到 FSM 内部更改终态定义。
+2. rejection detail 目前采用最小结构化文案，已足够支撑单测和后续遥测桥消费；若 023 要求更强的错误码映射，届时应在桥接层投影 RT_E_2xx，而不在 014 提前耦合错误码域。
+
 ## 记录 #425
 
 - 日期：2026-04-22
