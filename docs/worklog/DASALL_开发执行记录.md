@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #423
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO Build-ready public surface 轮次
+- 任务：RT-TODO-011 定义 IScheduler 与 SchedulerTicket
+- 状态：已完成
+
+### 任务选择
+
+1. RT-TODO-010 完成后，011 是本轮 Build-ready 接口任务的最后一个 scheduler public surface 任务；如果不先把 queue priority、overflow disposition、worker lease budget 和 cancellation binding 固定到 include 面，后续 019 的真实 `Scheduler.cpp` 很容易把并发约束和失败策略埋成实现细节。
+2. 本轮最小判别点是：runtime 是否已经拥有可编译、可测试的 `IScheduler` 四方法面，以及 `SchedulerTicket` / `SchedulerTicketRequest` / `SchedulerBackpressureState` / `WorkerLeaseBudget` 这些支持类型；若没有，RT-TC007 与 RT-TC013 的约束就无法在后续实现期自动验证。
+3. 本轮只冻结 scheduling headers 和 surface test，不提前实现真实队列、锁顺序和 `queue_mutex`。
+
+### 改动
+
+1. 新增 `runtime/include/scheduling/SchedulerTicket.h`：
+   - 固定 `SchedulerPriorityClass`、`SchedulerOverflowDisposition`、`SchedulerBackpressureSignal`；
+   - 固定 `WorkerLeaseBudget`、`SchedulerTicketRequest`、`SchedulerTicket`、`SchedulerBackpressureState`；
+   - 让 `SchedulerTicket` 直接持有 `CancellationToken`，满足 worker ticket 取消传播的 public seam 要求。
+2. 新增 `runtime/include/scheduling/IScheduler.h`：
+   - 冻结 `enqueue(...)`、`acquire_worker(...)`、`release_worker(...)`、`backpressure_state()` 四个最小 public 方法；
+   - 固定 `AcquireWorkerRequest`、`SchedulerEnqueueResult`、`AcquireWorkerResult`、`ReleaseWorkerRequest/Result` 这些结果对象。
+3. 新增 `tests/unit/runtime/SchedulerTest.cpp`：
+   - 用本地 fake scheduler 验证前台队列深度 1 的 reject-new 语义；
+   - 验证恢复队列溢出时返回 `EnterFailedSafe`；
+   - 验证维护队列溢出时执行 `DropOldest`；
+   - 验证 worker saturation backpressure 与 ticket 对 `CancellationToken` 的绑定传播。
+4. 更新 `tests/unit/runtime/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`：
+   - 注册 `dasall_runtime_scheduler_surface_unit_test`；
+   - 把 `SchedulerTest` 纳入 runtime/unit 聚合列表。
+5. 新增 `docs/todos/runtime/deliverables/RT-TODO-011-IScheduler与SchedulerTicket设计收敛.md`：
+   - 固定 queue/backpressure/cancellation binding 的设计边界；
+   - 给出 Design -> Build 映射与精确验收命令。
+
+### 验证
+
+1. 窄目标构建：
+   - ListBuildTargets_CMakeTools：确认 `dasall_runtime_scheduler_surface_unit_test` 已进入可构建目标。
+   - Build_CMakeTools：`dasall_runtime_scheduler_surface_unit_test`
+   - 结果：通过；新增 scheduling headers 与 surface test 可独立编译并成功链接。
+2. 测试发现与执行：
+   - ListTests_CMakeTools：确认 `SchedulerTest` 已进入测试列表。
+   - RunCtest_CMakeTools：失败，返回已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_scheduler_surface_unit_test && ctest --test-dir build-ci -R "^SchedulerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+3. 验收口径修正：
+   - 初始 `-R SchedulerTest` 会额外命中 `MetricsReaderSchedulerTest`，因此本轮将验收命令收敛为 `-R "^SchedulerTest$"`，避免后续证据漂移。
+
+### 结果
+
+1. RT-TODO-011 已完成，runtime 现在具备稳定的 scheduling public surface；019 可以直接在此基础上实现真实队列、锁顺序和背压策略，而不再重定义 ticket/budget/result 对象。
+2. scheduler public surface 已把前台 busy、恢复 FailedSafe、维护 drop-oldest、worker saturation 四类 backpressure/overflow 语义显式化，不再依赖隐式实现行为。
+
+### 下一步
+
+1. 当前 005~011 Build-ready public surface 任务已闭环；若继续推进 runtime 专项 TODO，下一项按主表顺序进入 RT-TODO-012 `实现 CheckpointStateMapper`。
+
+### 风险
+
+1. 本轮只冻结 include 面，尚未实现真实 `Scheduler.cpp`、锁顺序和并发门禁；019 若偏离当前 `WorkerLeaseBudget` / `SchedulerBackpressureState` / `CancellationToken` 绑定口径，会重新引入实现层与接口层漂移。
+2. `SchedulerBackpressureState` 只暴露 dominant signal 与队列深度，不直接替代 recovery/safe-mode 裁定；后续若尝试让 scheduler 自己决定 `FailedSafe` 进入逻辑，应回退到本轮边界。
+
 ## 记录 #422
 
 - 日期：2026-04-22
