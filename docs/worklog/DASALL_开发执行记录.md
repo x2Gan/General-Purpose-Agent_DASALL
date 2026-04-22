@@ -1,5 +1,62 @@
 # DASALL 开发执行记录
 
+## 记录 #428
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 控制器与控制平面实现轮次
+- 任务：RT-TODO-016 实现 CheckpointManager
+- 状态：已完成
+
+### 任务选择
+
+1. 015 完成后，016 是 017 与后续 orchestrator resume/control-plane 闭环的直接前置；如果不先把 checkpoint 生命周期控制器落成真实实现，恢复链仍只能停留在 009 的 public seam 和 fake test double。
+2. 本轮最小判别点是：runtime 是否已经拥有一个 module-local 的 `CheckpointManager`，能把 accepted transition outcome 折叠成合法 checkpoint，完成 save/load/validate/make_resume_plan 的最小闭环，并显式校验 version tags。
+3. 本轮只实现 checkpoint 控制器，不提前接入外部持久化 backend、SessionManager 或 RecoveryManager 联调。
+
+### 改动
+
+1. 新增 `runtime/src/checkpoint/CheckpointManager.h` 与 `runtime/src/checkpoint/CheckpointManager.cpp`：
+   - 实现私有 `CheckpointManager` 类并承接 `ICheckpointManager`；
+   - 用 `ckpt_mutex_` 保护最小内存存储 `stored_checkpoint_`；
+   - 在 `build_checkpoint(...)` 中复用 012 的 `CheckpointStateMapper::to_checkpoint_state(...)` 折叠 `resolved_state`，并对 hint/state 漂移做一致性拒绝；
+   - 落地 `validate(...)` 的字段、waiting-state `pending_action`、version tag 与 resume compatibility 校验；
+   - 落地 `save(...)` / `load(...)` 的最小内存持久化语义，以及 `make_resume_plan(...)` 的 resumable/rejected 生成。
+2. 更新 `tests/unit/runtime/CheckpointManagerTest.cpp`：
+   - 用真实 `CheckpointManager` 替换 009 的 fake 测试双；
+   - 保留 build/save/load/resume 的主闭环断言；
+   - 追加“hint 缺失时由 mapper 派生 checkpoint state”的行为断言，直接锁定 012 -> 016 的复用关系；
+   - 保留 unsupported schema version load reject 与 terminal checkpoint resume reject 断言。
+3. 更新 `runtime/CMakeLists.txt` 与 `tests/unit/runtime/CMakeLists.txt`：
+   - 把 `CheckpointManager.cpp` 接入 `dasall_runtime`；
+   - 让 `dasall_runtime_checkpoint_manager_unit_test` 可读取 `runtime/src` 私有头。
+4. 新增 `docs/todos/runtime/deliverables/RT-TODO-016-CheckpointManager设计收敛.md`：
+   - 固定 mapper 折叠规则、version tag gate、waiting-state `pending_action` 约束与 Build 三件套。
+
+### 验证
+
+1. 窄目标构建：
+   - Build_CMakeTools：`dasall_runtime_checkpoint_manager_unit_test`
+   - 结果：通过；真实控制器与升级后的行为测试成功编译链接。
+2. 测试执行：
+   - RunCtest_CMakeTools：失败，返回已知工具态错误 `生成失败`。
+   - fallback：`cmake -S . -B build-ci -G 'Unix Makefiles' && cmake --build build-ci --target dasall_runtime_checkpoint_manager_unit_test && ctest --test-dir build-ci -R "^CheckpointManagerTest$" --output-on-failure`
+   - 结果：通过；1/1 test passed。
+
+### 结果
+
+1. RT-TODO-016 已完成，runtime 现在具备真实 `CheckpointManager`，后续 017/018/021 可直接消费稳定的 checkpoint build/save/load/resume 语义。
+2. 012 的状态折叠规则不再停留在独立工具函数层；016 已显式复用 mapper，避免 checkpoint state 在 `TransitionGuardTable` hint 和 runtime control-plane 之间发生漂移。
+3. runtime checkpoint version tags 现在由真实控制器统一写入并在 load/resume 前校验，resume reject 路径不再依赖 fake test 逻辑。
+
+### 下一步
+
+1. 进入 RT-TODO-017，实现 `RecoveryManager`，把 015 的预算拒绝、016 的 checkpoint/resume seam 和 6.17 的 retry/replan/admission 规则串成真实恢复裁定控制器。
+
+### 风险
+
+1. 当前 `save(...)` / `load(...)` 只提供最小内存存储语义，已足够支撑 runtime-local 单测；后续接外部 persistence seam 时，应保持 016 的 validate/version gate 在控制器内集中，不要把兼容裁定扩散到 backend adapter。
+2. `seed_for_test(...)` 仅用于把不兼容 checkpoint 注入最小内存存储以覆盖 load reject；后续若 checkpoint fixture 或真实 store ready，应优先由 fixture/store 注入替换该测试辅助入口，而不是把测试注入口向 public ABI 扩散。
+
 ## 记录 #427
 
 - 日期：2026-04-22
