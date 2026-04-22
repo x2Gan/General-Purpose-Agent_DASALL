@@ -1,0 +1,14 @@
+# RT-TODO-024 valid terminal fixture that must not resume
+checkpoint_id=chk-024-terminal
+state=Succeeded
+step_id=terminal-round-024
+working_memory_snapshot=wm:runtime:024:terminal
+pending_action=
+request_id=req-024-terminal
+goal_id=goal-024-terminal
+belief_state_ref=belief-024-terminal
+created_at=1700000004030
+tag.rt.schema_version=1
+tag.rt.fsm_state_enum_version=1
+tag.rt.budget_schema_version=1
+tag.audit=integration

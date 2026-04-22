@@ -3,6 +3,7 @@
 add_test(NAME infra_integration_topology_smoke COMMAND ${CMAKE_COMMAND} -E true)
 set_tests_properties(infra_integration_topology_smoke PROPERTIES LABELS "integration")
 
+add_subdirectory(agent_loop)
 add_subdirectory(infra)
 add_subdirectory(profiles)
 add_subdirectory(platform)
@@ -13,6 +14,7 @@ add_subdirectory(knowledge)
 add_subdirectory(llm)
 
 set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
+	${DASALL_RUNTIME_AGENT_LOOP_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	dasall_infra_diagnostics_smoke_integration_test
 	dasall_infra_audit_health_integration_test
 	dasall_config_runtime_patch_integration_test

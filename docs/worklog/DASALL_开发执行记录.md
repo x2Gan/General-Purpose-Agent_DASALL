@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #436
+
+- 日期：2026-04-22
+- 阶段：runtime/专项 TODO 安全、观测与 replay 基础任务
+- 任务：RT-TODO-024 Contracts 字段级与 checkpoint replay 兼容验证
+- 状态：已完成
+
+### 任务选择
+
+1. 022 和 023 已分别冻结 safe-mode 控制面与 observability/health 事实面；如果 024 不继续把 shared contract 字段边界和 runtime-owned replay 兼容语义收口到可重复执行的 fixture regression，后续 028/030 的 resume / safe-mode gate 只能建立在“逻辑上应该如此”的假设上，而不是 golden evidence。
+2. 本轮最小判别点是：在不宣称真实持久化 round-trip ready 的前提下，既有 contract tests 是否仍保持字段边界不回退，且同一 golden checkpoint fixture 反复进入 `CheckpointManager::validate/load/make_resume_plan` 时，是否能稳定得到相同 `ResumePlan` 或相同 reject 语义。
+3. 根据 runtime 详设 6.20、9.3、9.4 与附录 A，本轮只补 runtime-owned fixtures 和 replay compatibility integration，不新增 shared contract object，不把 fixture replay 结果外推为真端口持久化 ready。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-024-CheckpointReplayCompatibility设计收敛.md`：
+   - 固定 024 复用既有 contract tests、golden fixture 的输入面、`CheckpointManager` replay 判别点与 Build 三件套。
+2. 新增 `tests/fixtures/runtime/checkpoints/` 下四个 golden checkpoint fixtures：
+   - `replay_waiting_tool_v1.fixture`：合法 waiting-tool fixture；
+   - `replay_waiting_tool_schema_v2.fixture`：schema version mismatch；
+   - `replay_waiting_tool_missing_pending_action.fixture`：waiting state 缺失 `pending_action`；
+   - `replay_terminal_succeeded_v1.fixture`：字段合法但 terminal，不可 resume。
+3. 新增 `tests/integration/agent_loop/CMakeLists.txt` 与 `tests/integration/agent_loop/RuntimeCheckpointReplayCompatibilityTest.cpp`：
+   - 用简单 `key=value` parser 读取 fixture；
+   - 直接打在 `CheckpointManager::validate/load/make_resume_plan`；
+   - 覆盖 repeated replay stability、schema mismatch reject、missing pending_action reject、terminal resume reject。
+4. 更新 `tests/integration/CMakeLists.txt`：
+   - 把 `agent_loop` integration 子目录接入顶层 discoverability。
+
+### 验证
+
+1. 验收命令：
+   - `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_contract_tests dasall_runtime_checkpoint_replay_compatibility_integration_test && ctest --test-dir build-ci -R "^(RuntimeBudgetContractTest|CheckpointFieldContractTest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeCheckpointReplayCompatibilityTest)$" --output-on-failure`
+2. 结果：
+   - 既有 `RuntimeBudgetContractTest`、`CheckpointFieldContractTest`、`ReflectionDecisionContractTest`、`RecoveryRequestContractTest`、`RecoveryOutcomeContractTest` 全部通过；
+   - 新增 `RuntimeCheckpointReplayCompatibilityTest` 通过；
+   - 最终 6/6 tests passed。
+
+### 结果
+
+1. RT-TODO-024 已完成，runtime 现在具备 runtime-owned golden checkpoint fixture replay regression，能稳定证明合法 fixture 的 `ResumePlan` 不漂移，且 schema mismatch / missing pending_action / terminal checkpoint 的 reject 语义不会静默变化。
+2. 024 没有改动 `CheckpointManager` 业务逻辑或 shared contracts，而是把 replay 兼容验证直接建立在现有真实裁定面上，这比重写一套测试私有逻辑更符合 durable execution 的证据要求。
+3. 既有 contract tests 和新的 replay compatibility integration 已合并成 024 的单轮验收，shared 字段边界与 runtime-owned replay 语义现在可以一起回归。
+
+### 下一步
+
+1. 进入 RT-TODO-025 / 028，继续把 runtime unit/integration 拓扑与 resume/replay regression 扩成完整 gate，其中 024 的 fixtures 应复用为后续 replay regression 的稳定输入，而不是重新生成一套临时 checkpoint 样本。
+
+### 风险
+
+1. 当前 golden checkpoint fixtures 是 runtime-owned 文本样本，不代表真实 backend 持久化 round-trip；如果未来 backend serialization 发生变化，仍需要在 028 追加 round-trip regression，而不能只依赖 024 的 fixture parser。
+2. 024 已经把 schema mismatch、missing pending_action 和 terminal reject 固化下来；后续若 `CheckpointState` / `ResumePlan` 规则扩展，必须同步升级 fixtures 和 integration test，否则 replay 兼容性很容易在无意间漂移。
+
 ## 记录 #435
 
 - 日期：2026-04-22
