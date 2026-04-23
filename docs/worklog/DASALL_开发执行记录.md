@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #451
+
+- 日期：2026-04-23
+- 阶段：access/主链实现
+- 任务：ACC-TODO-014 实现 SubjectResolver
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-014 位于 access admission 主链最前段，负责把入口包和多源主体 hints 收敛成稳定的 SubjectIdentity / challenge / reject 结论；如果它不先冻结，后续 ACC-TODO-015 AuthenticatorChain 只能重复解析 peer uid、JWT、token 和 simulator hints，造成职责交叉。
+2. 本轮最小判别点是：能否在不扩 public ABI 的前提下，把 local trusted、一致身份、identity conflict、remote challenge 四条分支压成 module-local 输出对象，并用 3 个定向单测直接区分。实际实现表明，`access/src` 内部头就足以承载 `PeerMetadata`、`ResolverView`、`ChallengePlan` 和 `SubjectResolveOutcome`。
+3. 设计还要求 fail-closed，不允许“缺身份事实就生成匿名主体”。结合 OWASP Authentication Cheat Sheet 对 re-authentication / challenge 和 generic failure 的建议，本轮把“缺失关键信息 -> challenge 或 reject”落成了 resolver 的默认语义。
+
+### 改动
+
+1. 新增 `access/src/SubjectResolver.h` 与 `access/src/SubjectResolver.cpp`：
+   - 落盘 `PeerMetadata`、`ResolverView`、`ChallengePlan`、`SubjectResolveOutcome` 四个 internal supporting types；
+   - 实现 `resolve()`、`derive_channel_ref()`、`derive_local_subject()`、`build_challenge_plan()`；
+   - 固定 local trusted 仅限 `cli/daemon + eligible_for_local_trusted + allowlist`，多源身份冲突显式拒绝，远程缺身份走 challenge。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/SubjectResolver.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/SubjectResolverTest.cpp`、`SubjectResolverLocalTrustedTest.cpp`、`SubjectResolverChallengeTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`：
+   - 覆盖一致身份、identity conflict、local trusted allowlist、remote challenge 与 challenge-disabled reject。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-014-SubjectResolver收敛.md`：
+   - 收口边界、数据模型、决策规则、外部参考、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-014 标记为 Done，并补充交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_subject_resolver_unit_test`、`dasall_access_subject_resolver_local_trusted_unit_test`、`dasall_access_subject_resolver_challenge_unit_test`。
+   - 结果：3 个目标均编译链接成功。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "SubjectResolver(Test|LocalTrustedTest|ChallengeTest)" --output-on-failure`
+   - 结果：100% tests passed，3/3 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "SubjectResolver(Test|LocalTrustedTest|ChallengeTest)"`
+   - 结果：`SubjectResolverTest`、`SubjectResolverLocalTrustedTest`、`SubjectResolverChallengeTest` 均可被发现。
+4. 补充说明：
+   - `RunCtest_CMakeTools` 本轮在当前工作区返回“生成失败”，但 active preset 的实际测试目录位于 `build/vscode-linux-ninja`，因此最终以该目录下的定向 `ctest` 结果作为验收证据。
+
+### 结果
+
+1. ACC-TODO-014 已完成，access 现在拥有单一的主体解析入口，不再需要让 AuthenticatorChain 或后续组件重复理解 local trusted、remote missing identity 和 conflict 语义。
+2. `SubjectResolver` 保持 module-local，没有把 `PeerMetadata` / `ChallengePlan` 等 supporting types 提升到 `access/include/`，符合 access internal orchestration 的边界约束。
+3. 后续 ACC-TODO-015 可以直接消费 `SubjectResolveOutcome`，把工作聚焦到 credential 校验、challenge 映射和 fail-closed 认证链，而不是再次解析入口 hints。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-015，基于 `SubjectResolveOutcome` 实现 AuthenticatorChain，并复用相同的定向 build + ctest + discoverability 验收链。
+
+### 风险
+
+1. 当前 `SubjectResolver` 只冻结了 v1 需要的 JWT / token / mTLS / simulator / local trusted 五类 hints；若后续入口增加更复杂的 federation 或设备证明，必须继续扩 internal supporting types，而不是把实验性字段直接塞进 `SubjectIdentity` 公共面。
+
 ## 记录 #450
 
 - 日期：2026-04-23

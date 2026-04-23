@@ -98,6 +98,24 @@ dasall_add_access_unit_test(
   ProtocolAdapterRegistryConflictTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_subject_resolver_unit_test
+  SubjectResolverTest
+  SubjectResolverTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_subject_resolver_local_trusted_unit_test
+  SubjectResolverLocalTrustedTest
+  SubjectResolverLocalTrustedTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_subject_resolver_challenge_unit_test
+  SubjectResolverChallengeTest
+  SubjectResolverChallengeTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

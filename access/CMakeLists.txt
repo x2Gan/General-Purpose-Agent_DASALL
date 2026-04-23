@@ -28,6 +28,7 @@ target_sources(dasall_access
     src/daemon/DaemonProtocolAdapter.cpp
     src/ProtocolAdapterRegistry.cpp
     src/ProtocolErrorMapper.cpp
+    src/SubjectResolver.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS
