@@ -26,6 +26,7 @@ target_sources(dasall_access
     src/placeholder.cpp
     src/AccessConfigAdapter.cpp
     src/daemon/DaemonProtocolAdapter.cpp
+    src/ProtocolAdapterRegistry.cpp
     src/ProtocolErrorMapper.cpp
   PUBLIC
     FILE_SET public_headers

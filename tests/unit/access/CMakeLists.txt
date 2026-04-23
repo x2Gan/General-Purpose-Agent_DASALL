@@ -5,6 +5,11 @@ macro(dasall_add_access_unit_test target_name test_name source_file)
     ${source_file}
   )
 
+  target_include_directories(${target_name}
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/access/src
+  )
+
   target_link_libraries(${target_name}
     PRIVATE
       dasall_test_support
@@ -79,6 +84,18 @@ dasall_add_access_unit_test(
   dasall_access_config_projection_unit_test
   AccessConfigProjectionTest
   AccessConfigProjectionTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_protocol_adapter_registry_unit_test
+  ProtocolAdapterRegistryTest
+  ProtocolAdapterRegistryTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_protocol_adapter_registry_conflict_unit_test
+  ProtocolAdapterRegistryConflictTest
+  ProtocolAdapterRegistryConflictTest.cpp
 )
 
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
