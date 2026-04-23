@@ -3,10 +3,12 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
 #include "AgentFacade.h"
+#include "IMemoryManager.h"
 #include "IAgent.h"
 #include "RuntimeUnaryFixture.h"
 #include "agent/AgentResult.h"
@@ -19,6 +21,43 @@ namespace {
 using dasall::contracts::Checkpoint;
 using dasall::contracts::CheckpointState;
 using dasall::runtime::make_checkpoint_tag;
+
+class ReadyReplayMemoryManager final : public dasall::memory::IMemoryManager {
+ public:
+  dasall::contracts::ResultCode init(const dasall::memory::MemoryConfig&) override {
+    return static_cast<dasall::contracts::ResultCode>(0);
+  }
+
+  void shutdown() noexcept override {}
+
+  [[nodiscard]] dasall::memory::ContextAssemblyResult prepare_context(
+      const dasall::memory::MemoryContextRequest& request) override {
+    dasall::memory::ContextAssemblyResult result;
+    result.context_packet.request_id = request.request_id;
+    result.context_packet.user_turn = request.goal_summary;
+    result.context_packet.current_goal_summary = request.goal_summary;
+    result.context_packet.recent_history = std::vector<std::string>{};
+    result.context_packet.latest_observation_digest_summary =
+        request.latest_observation_digest_summary;
+    result.context_packet.active_tools = request.visible_tools;
+    return result;
+  }
+
+  [[nodiscard]] dasall::memory::WritebackResult write_back(
+      const dasall::memory::MemoryWritebackRequest&) override {
+    return {};
+  }
+
+  [[nodiscard]] dasall::memory::WorkingMemoryExportResult export_working_memory_snapshot(
+      const dasall::memory::WorkingMemoryExportRequest&) override {
+    return {};
+  }
+
+  [[nodiscard]] dasall::memory::MaintenanceReport run_maintenance(
+      const dasall::memory::MaintenanceRequest&) override {
+    return {};
+  }
+};
 
 [[nodiscard]] std::string trim(std::string value) {
   auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
@@ -138,12 +177,15 @@ void test_valid_waiting_tool_fixture_replays_through_runtime_resume_path() {
       "tool_callback",
       "application/json");
 
+      auto dependency_set = make_seeded_resume_dependency_set(session_snapshot, checkpoint);
+      dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
+
   std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
   const auto init_result = agent->init(make_init_request(
       "rt-028-replay",
       "desktop_full",
       "runtime-replay-fixture",
-      make_seeded_resume_dependency_set(session_snapshot, checkpoint)));
+        dependency_set));
   assert_true(init_result.is_ready(), "replay regression requires a ready facade");
 
   const auto result = agent->resume(make_resume_request(
@@ -151,7 +193,7 @@ void test_valid_waiting_tool_fixture_replays_through_runtime_resume_path() {
       checkpoint.checkpoint_id.value_or(std::string()),
       "resume-028-replay",
       "external tool result received",
-      "resume-token-028-replay",
+      std::string(),
       "trace-028-replay"));
 
   assert_true(result.status.has_value() && *result.status == AgentResultStatus::Completed,
@@ -189,12 +231,15 @@ void test_schema_mismatch_fixture_is_rejected_through_runtime_resume_path() {
       "tool_callback",
       "application/json");
 
+      auto dependency_set = make_seeded_resume_dependency_set(session_snapshot, checkpoint);
+      dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
+
   std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
   const auto init_result = agent->init(make_init_request(
       "rt-028-schema",
       "desktop_full",
       "runtime-replay-fixture",
-      make_seeded_resume_dependency_set(session_snapshot, checkpoint)));
+        dependency_set));
   assert_true(init_result.is_ready(), "schema reject regression requires a ready facade");
 
   const auto result = agent->resume(make_resume_request(
@@ -202,7 +247,7 @@ void test_schema_mismatch_fixture_is_rejected_through_runtime_resume_path() {
       checkpoint.checkpoint_id.value_or(std::string()),
       "resume-028-schema",
       "external tool result received",
-      "resume-token-028-schema",
+      std::string(),
       "trace-028-schema"));
 
   assert_true(result.status.has_value() && *result.status == AgentResultStatus::Failed,

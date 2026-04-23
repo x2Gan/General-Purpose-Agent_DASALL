@@ -49,6 +49,12 @@ struct HandleOptions {
   std::string trace_context;
 };
 
+[[nodiscard]] inline std::string make_resume_binding_token(
+    const std::string& session_id,
+    const std::string& checkpoint_ref) {
+  return std::string("resume-bind:") + session_id + ":" + checkpoint_ref;
+}
+
 struct ResumeHandleRequest {
   std::string request_id;
   std::string session_id;

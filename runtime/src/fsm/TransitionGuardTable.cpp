@@ -140,8 +140,14 @@ struct TransitionRule {
       TransitionRule{
           .from_state = RuntimeState::Reflecting,
           .to_state = RuntimeState::FailedSafe,
-          .guard = require_any({TransitionGuardFact::RecoveryAbortSafe,
-                                TransitionGuardFact::RecoveryDegrade}),
+          .guard = require_all({TransitionGuardFact::RecoveryAbortSafe}),
+          .checkpoint_strategy =
+            checkpoint_hint(CheckpointMutationKind::Write, CheckpointState::Failed),
+        },
+        TransitionRule{
+          .from_state = RuntimeState::Reflecting,
+          .to_state = RuntimeState::Degraded,
+          .guard = require_all({TransitionGuardFact::RecoveryDegrade}),
           .checkpoint_strategy =
               checkpoint_hint(CheckpointMutationKind::Write, CheckpointState::Failed),
       },
@@ -159,6 +165,20 @@ struct TransitionRule {
           .checkpoint_strategy =
               checkpoint_hint(CheckpointMutationKind::Retain, CheckpointState::Failed),
       },
+        TransitionRule{
+          .from_state = RuntimeState::Degraded,
+          .to_state = RuntimeState::Responding,
+          .guard = no_guards(),
+          .checkpoint_strategy =
+            checkpoint_hint(CheckpointMutationKind::Retain, CheckpointState::Failed),
+        },
+        TransitionRule{
+          .from_state = RuntimeState::SafeMode,
+          .to_state = RuntimeState::Responding,
+          .guard = no_guards(),
+          .checkpoint_strategy =
+            checkpoint_hint(CheckpointMutationKind::Retain, CheckpointState::Failed),
+        },
       TransitionRule{
           .from_state = RuntimeState::Responding,
           .to_state = RuntimeState::Auditing,

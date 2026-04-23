@@ -194,6 +194,13 @@ class AgentFacade::State {
                                 "runtime resume request checkpoint does not match active waiting anchor");
     }
 
+    if (request.resume_token !=
+        make_resume_binding_token(request.session_id, request.checkpoint_ref)) {
+      return make_failed_result(optional_string(request.request_id),
+                                optional_string(request.trace_context),
+                                "runtime resume request token does not match waiting checkpoint binding");
+    }
+
     const auto run_result = root_.orchestrator->handle_waiting_state(*root_.waiting_session,
                                                                      request);
     update_waiting_session(run_result);

@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 
+#include "AgentTypes.h"
 #include "session/SessionManager.h"
 #include "support/TestAssertions.h"
 
@@ -101,6 +102,7 @@ int main() {
         dasall::runtime::BuildResumeSeedRequest{
             .session_snapshot = waiting_snapshot,
             .checkpoint_ref = "chk-018",
+            .resume_token = dasall::runtime::make_resume_binding_token("session-018", "chk-018"),
             .resume_reason = "resume after user clarification",
             .policy_snapshot_ref = std::string("policy-018"),
         });
@@ -110,6 +112,10 @@ int main() {
                 "resume seed should satisfy minimum requirements");
     assert_true(resume_seed_result.resume_seed->pending_interaction.has_value(),
                 "resume seed should carry pending interaction state");
+    assert_equal(
+        dasall::runtime::make_resume_binding_token("session-018", "chk-018"),
+        resume_seed_result.resume_seed->resume_token,
+        "resume seed should preserve the resume binding token");
 
     const auto persist_result = manager.persist_turn(
         dasall::runtime::SessionPersistRequest{
@@ -127,6 +133,7 @@ int main() {
         dasall::runtime::BuildResumeSeedRequest{
             .session_snapshot = waiting_snapshot,
             .checkpoint_ref = "chk-other",
+            .resume_token = dasall::runtime::make_resume_binding_token("session-018", "chk-other"),
             .resume_reason = "resume with wrong anchor",
             .policy_snapshot_ref = std::nullopt,
         });

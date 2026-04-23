@@ -64,6 +64,7 @@ struct ResumeSeed {
   std::string session_id;
   std::string request_id;
   std::string checkpoint_ref;
+  std::string resume_token;
   RuntimeState fsm_state = RuntimeState::Idle;
   std::optional<PendingInteractionState> pending_interaction;
   std::optional<std::string> policy_snapshot_ref;
@@ -71,7 +72,7 @@ struct ResumeSeed {
 
   [[nodiscard]] bool has_minimum_requirements() const {
     return !session_id.empty() && !request_id.empty() && !checkpoint_ref.empty() &&
-           !resume_reason.empty();
+           !resume_token.empty() && !resume_reason.empty();
   }
 };
 
@@ -145,12 +146,13 @@ struct BindCheckpointRefRequest {
 struct BuildResumeSeedRequest {
   SessionSnapshot session_snapshot;
   std::string checkpoint_ref;
+  std::string resume_token;
   std::string resume_reason;
   std::optional<std::string> policy_snapshot_ref;
 
   [[nodiscard]] bool has_minimum_requirements() const {
     return !session_snapshot.session_id.empty() && !session_snapshot.request_id.empty() &&
-           !checkpoint_ref.empty() && !resume_reason.empty();
+           !checkpoint_ref.empty() && !resume_token.empty() && !resume_reason.empty();
   }
 };
 

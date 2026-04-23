@@ -182,8 +182,9 @@ struct RuleCase {
   return request;
 }
 
+template <std::size_t N>
 [[nodiscard]] bool is_expected_legal(
-    const std::array<RuleCase, 22>& rule_cases,
+  const std::array<RuleCase, N>& rule_cases,
     const dasall::runtime::RuntimeState from_state,
     const dasall::runtime::RuntimeState to_state) {
   for (const auto& rule_case : rule_cases) {
@@ -209,7 +210,7 @@ int main() {
   using dasall::tests::support::assert_true;
 
   try {
-    const std::array<RuleCase, 22> kRuleCases{{
+    const std::array<RuleCase, 25> kRuleCases{{
         {RuntimeState::Idle,
          RuntimeState::Receiving,
          {TransitionGuardFact::AgentRequestAvailable,
@@ -296,9 +297,15 @@ int main() {
          false},
         {RuntimeState::Reflecting,
          RuntimeState::FailedSafe,
+         {TransitionGuardFact::RecoveryAbortSafe},
          {},
-         {TransitionGuardFact::RecoveryAbortSafe,
-          TransitionGuardFact::RecoveryDegrade},
+         CheckpointMutationKind::Write,
+         CheckpointState::Failed,
+         false},
+        {RuntimeState::Reflecting,
+         RuntimeState::Degraded,
+         {TransitionGuardFact::RecoveryDegrade},
+         {},
          CheckpointMutationKind::Write,
          CheckpointState::Failed,
          false},
@@ -310,6 +317,20 @@ int main() {
          CheckpointState::Running,
          false},
         {RuntimeState::FailedSafe,
+         RuntimeState::Responding,
+         {},
+         {},
+         CheckpointMutationKind::Retain,
+         CheckpointState::Failed,
+         false},
+        {RuntimeState::Degraded,
+         RuntimeState::Responding,
+         {},
+         {},
+         CheckpointMutationKind::Retain,
+         CheckpointState::Failed,
+         false},
+        {RuntimeState::SafeMode,
          RuntimeState::Responding,
          {},
          {},

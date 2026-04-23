@@ -14,6 +14,9 @@ class BudgetController final : public IBudgetController {
   BudgetController() = default;
 
   [[nodiscard]] BudgetDecision initialize(const BudgetInitializeRequest& request) override;
+    [[nodiscard]] BudgetDecision restore(
+            const contracts::BudgetSnapshot& snapshot,
+            std::uint64_t started_at_ms);
   [[nodiscard]] BudgetDecision consume(const BudgetConsumeRequest& request) override;
   [[nodiscard]] contracts::BudgetSnapshot snapshot() const override;
   [[nodiscard]] BudgetDecision can_continue() const override;

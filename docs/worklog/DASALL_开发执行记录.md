@@ -1,5 +1,118 @@
 # DASALL 开发执行记录
 
+## 记录 #445
+
+- 日期：2026-04-23
+- 阶段：runtime/031 clean-build gate 复验与证据回写
+- 任务：重跑 RT-TODO-031 clean-build gate，并在 stale context 修复后重新收口专项证据
+- 状态：已完成
+
+### 任务选择
+
+1. `continue_from_checkpoint()` stale context 修复已经落地，但 031 的证据仍停留在修复前的写法；如果不重新从零跑 `build-ci` clean-build gate，031 就不能证明“最新 runtime 主链”仍满足 33/33 通过。
+2. 本轮最小判别点不是再扩测试矩阵，而是沿用 031 文档既定的一条 configure + build + anchored `ctest` 验收链，确认最新代码是否仍能在空 build 目录上复现全绿。
+3. 若第一次 clean-build 暴露真实回归，则不能只把失败记到 worklog；必须先修复，再重跑同一条 gate，最后再回写证据。
+
+### 改动
+
+1. 更新 `tests/integration/agent_loop/RuntimeCheckpointReplayRegressionTest.cpp`：
+   - 为 replay resume regression 注入最小 `IMemoryManager` seam；
+   - 让 valid waiting-tool fixture 在新的 resume context refresh 语义下继续通过 facade resume 路径。
+2. 更新 `tests/integration/agent_loop/CMakeLists.txt`：
+   - 为 `dasall_runtime_checkpoint_replay_regression_test` 补 `dasall_memory` 链接依赖，支撑最小 memory seam 编译。
+3. 更新 `docs/todos/runtime/deliverables/RT-TODO-031-runtime专项Gate与证据收口.md`：
+   - 回写 2026-04-23 最新 clean-build 复验结果；
+   - 明确 031 当前覆盖了 resume context refresh 与 replay regression 对齐后的最新 runtime 主链。
+4. 更新 `docs/worklog/DASALL_开发执行记录.md`：
+   - 新增本条 #445，记录“先暴露 replay regression、再修复、最后重跑 33/33 gate”的闭环证据。
+
+### 验证
+
+1. 031 clean-build gate 首轮复验：
+   - 命令：`cd /home/gangan/DASALL && rm -rf build-ci && cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_error_code_unit_test dasall_runtime_cancellation_token_unit_test dasall_agent_fsm_unit_test dasall_budget_controller_unit_test dasall_runtime_checkpoint_manager_unit_test dasall_runtime_recovery_manager_unit_test dasall_runtime_scheduler_surface_unit_test dasall_runtime_transition_guard_table_unit_test dasall_runtime_checkpoint_state_mapper_unit_test dasall_runtime_session_type_surface_unit_test dasall_runtime_session_manager_unit_test dasall_runtime_safe_mode_controller_unit_test dasall_runtime_agent_orchestrator_skeleton_unit_test dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_telemetry_bridge_unit_test dasall_runtime_event_bus_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test dasall_contract_runtime_budget_test dasall_contract_checkpoint_field_test dasall_contract_main_flow_e2e_test dasall_contract_reflection_decision_test dasall_contract_recovery_request_test dasall_contract_recovery_outcome_test dasall_runtime_unary_fixture_integration_test dasall_runtime_unary_integration_test dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test dasall_runtime_profile_compatibility_integration_test dasall_runtime_safe_mode_integration_test dasall_runtime_health_maintenance_integration_test dasall_runtime_checkpoint_replay_compatibility_integration_test && ctest --test-dir build-ci -R "^(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|MainFlowContractE2ETest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|RuntimeCheckpointReplayCompatibilityTest)$" --output-on-failure`
+   - 结果：32/33 通过，唯一失败项为 `RuntimeCheckpointReplayRegressionTest`，报错 `valid waiting-tool fixture should replay to a completed result`。
+2. replay regression 窄验证：
+   - 命令：`cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R "^RuntimeCheckpointReplayRegressionTest$" --output-on-failure`
+   - 结果：1/1 通过，说明 replay fixture 已与新的 resume context refresh 语义对齐。
+3. 031 clean-build gate 最终复验：
+   - 命令：`cd /home/gangan/DASALL && rm -rf build-ci && cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_error_code_unit_test dasall_runtime_cancellation_token_unit_test dasall_agent_fsm_unit_test dasall_budget_controller_unit_test dasall_runtime_checkpoint_manager_unit_test dasall_runtime_recovery_manager_unit_test dasall_runtime_scheduler_surface_unit_test dasall_runtime_transition_guard_table_unit_test dasall_runtime_checkpoint_state_mapper_unit_test dasall_runtime_session_type_surface_unit_test dasall_runtime_session_manager_unit_test dasall_runtime_safe_mode_controller_unit_test dasall_runtime_agent_orchestrator_skeleton_unit_test dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_telemetry_bridge_unit_test dasall_runtime_event_bus_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test dasall_contract_runtime_budget_test dasall_contract_checkpoint_field_test dasall_contract_main_flow_e2e_test dasall_contract_reflection_decision_test dasall_contract_recovery_request_test dasall_contract_recovery_outcome_test dasall_runtime_unary_fixture_integration_test dasall_runtime_unary_integration_test dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test dasall_runtime_profile_compatibility_integration_test dasall_runtime_safe_mode_integration_test dasall_runtime_health_maintenance_integration_test dasall_runtime_checkpoint_replay_compatibility_integration_test && ctest --test-dir build-ci -R "^(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|MainFlowContractE2ETest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|RuntimeCheckpointReplayCompatibilityTest)$" --output-on-failure`
+   - 结果：33/33 通过，`100% tests passed, 0 tests failed out of 33`。
+
+### 结果
+
+1. RT-TODO-031 已完成最新 clean-build 复验，当前 runtime 主链在 stale context 修复与 replay regression 对齐后仍可从零 build 目录复现 33/33 通过。
+2. 本轮没有扩大 031 的测试矩阵，而是修复了一条被 clean-build gate 真正揭露的 replay regression；这说明 031 现在不仅是“历史通过记录”，而是对当前 runtime 状态仍有判别力的 gate。
+3. `RuntimeCheckpointReplayRegressionTest` 已重新和 facade resume / context refresh 语义保持一致，031 文档与 worklog 的证据口径也已同步更新。
+
+### 下一步
+
+1. 若继续推进 runtime 交付审计，可以把本轮 031 最新 clean-build 结果回链到专项 TODO / deliverable 索引，但不需要再扩大 33 测试矩阵。
+
+### 风险
+
+1. 031 这次 clean-build 过程中仍出现了 tools / contract 侧若干编译 warning，但它们没有阻断 gate；后续若仓库把 warning 升级为 error，需要单独处理这些非 runtime 语义问题。
+
+## 记录 #444
+
+- 日期：2026-04-23
+- 阶段：runtime/review 闭环后的主链修正与 clean-build gate 升级
+- 任务：修复 runtime resume / safe-mode 主链并将 031 证据升级为 clean-build gate
+- 状态：已完成
+
+### 任务选择
+
+1. review 已经明确指出 runtime 当前最关键的工程缺口不再是“有没有测试”，而是“resume 语义是否真正闭环、SafeModeController 是否真的进入 orchestrator 主链、031 证据是否仍停留在旧 build 目录口径”。
+2. 本轮最小可判别路径是先把 SafeModeController 接入真实 recovery round，再补一条 facade 层 `resume_token` 负路径，最后用一次 clean-build 33 测试矩阵把 031 证据收口到可复现 gate。
+3. 若 clean-build 33 测试矩阵不能通过，则本轮不能仅凭窄测试通过就宣称 runtime 交付已收敛。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.h` 与 `runtime/src/AgentOrchestrator.cpp`：
+   - 增加 `SafeModeController` 成员并接入真实 recovery round；
+   - 让 RecoveryManager 只提供 recovery fact，terminal runtime state 统一由 `SafeModeController::evaluate_entry(...)` 决定；
+   - 为 runtime-local assembly 增加 `BudgetExhausted` recovery stub，稳定覆盖 budget degrade 主链；
+   - fail-safe / degraded / safe-mode 终态现在统一走同一段 checkpoint + terminalize + session persist 流程。
+2. 更新 `runtime/src/fsm/TransitionGuardTable.cpp` 与 `tests/unit/runtime/TransitionGuardTableTest.cpp`：
+   - 新增 `Reflecting -> Degraded`；
+   - 新增 `Degraded -> Responding` 与 `SafeMode -> Responding`；
+   - 移除 `RecoveryDegrade` 走 `Reflecting -> FailedSafe` 的旧双轨判定。
+3. 更新 `tests/unit/runtime/AgentOrchestratorControllerAssemblyTest.cpp`：
+   - 增加 profile-driven safe terminal state 验证；
+   - 证明相同 `degrade` recovery fact 会因为 `allow_budget_degrade` 不同而分别收敛到 `Degraded` 与 `FailedSafe`。
+4. 更新 `tests/integration/agent_loop/RuntimeResumeIntegrationTest.cpp`：
+   - 新增 mismatched `resume_token` 负面集成场景，验证 facade 入口会拒绝错误绑定 token。
+5. 重写 `docs/todos/runtime/deliverables/RT-TODO-031-runtime专项Gate与证据收口.md`：
+   - 将 031 证据口径从 `build/vscode-linux-ninja` current-build 复验升级为 `build-ci` clean-build one-shot gate；
+   - 固定 33 个 runtime gate target + 33 条 anchored `ctest` 矩阵作为唯一权威验收链。
+
+### 验证
+
+1. SafeMode 主链窄验证：
+   - 命令：`cd /home/gangan/DASALL && cmake --build build-ci --target dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_transition_guard_table_unit_test && ctest --test-dir build-ci -R "^(AgentOrchestratorControllerAssemblyTest|TransitionGuardTableTest)$" --output-on-failure`
+   - 结果：2/2 通过。
+2. resume token 负路径窄验证：
+   - 命令：`cd /home/gangan/DASALL && cmake --build build-ci --target dasall_runtime_resume_integration_test && ctest --test-dir build-ci -R "^RuntimeResumeIntegrationTest$" --output-on-failure`
+   - 结果：1/1 通过。
+3. 031 clean-build gate：
+   - 命令：`cd /home/gangan/DASALL && rm -rf build-ci && cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_runtime_control_plane_surface_unit_test dasall_runtime_error_code_unit_test dasall_runtime_cancellation_token_unit_test dasall_agent_fsm_unit_test dasall_budget_controller_unit_test dasall_runtime_checkpoint_manager_unit_test dasall_runtime_recovery_manager_unit_test dasall_runtime_scheduler_surface_unit_test dasall_runtime_transition_guard_table_unit_test dasall_runtime_checkpoint_state_mapper_unit_test dasall_runtime_session_type_surface_unit_test dasall_runtime_session_manager_unit_test dasall_runtime_safe_mode_controller_unit_test dasall_runtime_agent_orchestrator_skeleton_unit_test dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_telemetry_bridge_unit_test dasall_runtime_event_bus_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test dasall_contract_runtime_budget_test dasall_contract_checkpoint_field_test dasall_contract_main_flow_e2e_test dasall_contract_reflection_decision_test dasall_contract_recovery_request_test dasall_contract_recovery_outcome_test dasall_runtime_unary_fixture_integration_test dasall_runtime_unary_integration_test dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test dasall_runtime_profile_compatibility_integration_test dasall_runtime_safe_mode_integration_test dasall_runtime_health_maintenance_integration_test dasall_runtime_checkpoint_replay_compatibility_integration_test && ctest --test-dir build-ci -R "^(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|MainFlowContractE2ETest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|RuntimeCheckpointReplayCompatibilityTest)$" --output-on-failure`
+   - 结果：33/33 通过，`100% tests passed, 0 tests failed out of 33`。
+4. IDE 工具状态记录：
+   - `RunCtest_CMakeTools` 仍会返回泛化“生成失败”；本轮继续按仓库既有约定，以显式 `build-ci` configure/build/ctest 结果作为权威证据。
+
+### 结果
+
+1. runtime 的 SafeModeController 已进入真实 recovery 主链，profile policy 与 recovery terminal state 不再各自做终态裁定。
+2. runtime 现在有一条真实的 `resume_token` 负面集成证据，证明 facade 入口会拒绝错误绑定的 resume 请求。
+3. RT-TODO-031 已从 current-build 复验升级为 clean-build one-shot gate，且本轮 33 测试矩阵已在零 build 目录上复现通过。
+
+### 下一步
+
+1. 若继续补强 runtime recovery 面，优先增加 malformed checkpoint budget sidecar / missing budget dimensions 的显式回归测试，而不是继续扩大当前 gate 的语义边界。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 的工具状态问题仍未消失，因此后续 runtime gate 仍应以显式 `build-ci` 命令为主，避免把 IDE 工具噪声误判为功能回归。
+
 ## 记录 #443
 
 - 日期：2026-04-23

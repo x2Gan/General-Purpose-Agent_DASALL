@@ -4,10 +4,52 @@
 #include <string>
 
 #include "AgentFacade.h"
+#include "IMemoryManager.h"
 #include "IAgent.h"
 #include "RuntimeUnaryFixture.h"
 #include "agent/AgentResult.h"
 #include "support/TestAssertions.h"
+
+namespace {
+
+class ReadyResumeMemoryManager final : public dasall::memory::IMemoryManager {
+ public:
+  dasall::contracts::ResultCode init(const dasall::memory::MemoryConfig&) override {
+    return static_cast<dasall::contracts::ResultCode>(0);
+  }
+
+  void shutdown() noexcept override {}
+
+  [[nodiscard]] dasall::memory::ContextAssemblyResult prepare_context(
+      const dasall::memory::MemoryContextRequest& request) override {
+    dasall::memory::ContextAssemblyResult result;
+    result.context_packet.request_id = request.request_id;
+    result.context_packet.user_turn = request.goal_summary;
+    result.context_packet.current_goal_summary = request.goal_summary;
+    result.context_packet.recent_history = std::vector<std::string>{};
+    result.context_packet.latest_observation_digest_summary =
+        request.latest_observation_digest_summary;
+    result.context_packet.active_tools = request.visible_tools;
+    return result;
+  }
+
+  [[nodiscard]] dasall::memory::WritebackResult write_back(
+      const dasall::memory::MemoryWritebackRequest&) override {
+    return {};
+  }
+
+  [[nodiscard]] dasall::memory::WorkingMemoryExportResult export_working_memory_snapshot(
+      const dasall::memory::WorkingMemoryExportRequest&) override {
+    return {};
+  }
+
+  [[nodiscard]] dasall::memory::MaintenanceReport run_maintenance(
+      const dasall::memory::MaintenanceRequest&) override {
+    return {};
+  }
+};
+
+}  // namespace
 
 int main() {
   using dasall::contracts::AgentResultStatus;
@@ -23,11 +65,14 @@ int main() {
   try {
     std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
 
+    auto dependency_set = make_waiting_dependency_set();
+    dependency_set->memory_manager = std::make_shared<ReadyResumeMemoryManager>();
+
     const auto init_result = agent->init(make_init_request(
         "rt-028-resume",
         "desktop_full",
         "runtime-resume-fixture",
-        make_waiting_dependency_set()));
+      dependency_set));
     assert_true(init_result.is_ready(), "runtime resume integration requires a ready facade");
 
     const auto waiting_result = agent->handle(
@@ -50,7 +95,7 @@ int main() {
                             initial_checkpoint_ref,
                             "resume-028",
                             "user clarification received",
-                            "resume-token-028",
+                std::string(),
                             "trace-resume-028"));
 
     assert_true(resumed_result.status.has_value() &&
@@ -66,6 +111,44 @@ int main() {
     assert_equal("runtime orchestrator skeleton completed",
                  resumed_result.response_text.value_or(std::string()),
                  "resume integration path should return the direct-success response");
+
+    std::unique_ptr<IAgent> rejecting_agent = std::make_unique<AgentFacade>();
+    auto rejecting_dependency_set = make_waiting_dependency_set();
+    rejecting_dependency_set->memory_manager = std::make_shared<ReadyResumeMemoryManager>();
+    const auto rejecting_init_result = rejecting_agent->init(make_init_request(
+      "rt-028-resume-reject",
+      "desktop_full",
+      "runtime-resume-fixture",
+      rejecting_dependency_set));
+    assert_true(rejecting_init_result.is_ready(),
+          "negative resume integration requires a ready facade");
+
+    const auto rejecting_waiting_result = rejecting_agent->handle(
+      make_agent_request("req-028-wait-reject",
+                 "session-028-reject",
+                 "trace-028-reject",
+                 "need clarification"));
+    assert_true(rejecting_waiting_result.checkpoint_ref.has_value() &&
+            !rejecting_waiting_result.checkpoint_ref->empty(),
+          "negative resume integration path should expose a resumable checkpoint");
+
+    const auto rejected_resume_result = rejecting_agent->resume(
+      make_resume_request("session-028-reject",
+                *rejecting_waiting_result.checkpoint_ref,
+                "resume-028-reject",
+                "user clarification received",
+                "resume-token-mismatch",
+                "trace-resume-028-reject"));
+
+    assert_true(rejected_resume_result.status.has_value() &&
+            *rejected_resume_result.status == AgentResultStatus::Failed,
+          "resume integration should reject mismatched resume tokens");
+    assert_true(rejected_resume_result.task_completed == false,
+          "mismatched resume token must not mark task_completed=true");
+    assert_true(rejected_resume_result.response_text.has_value() &&
+            rejected_resume_result.response_text->find(
+              "token does not match waiting checkpoint binding") != std::string::npos,
+          "mismatched resume token should surface a binding rejection detail");
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

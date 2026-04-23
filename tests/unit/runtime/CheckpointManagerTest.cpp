@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "AgentTypes.h"
 #include "checkpoint/CheckpointManager.h"
 #include "support/TestAssertions.h"
 
@@ -31,8 +32,12 @@ namespace {
 }  // namespace
 
 int main() {
+  using dasall::contracts::BudgetSnapshot;
+  using dasall::contracts::BudgetSnapshotEntry;
+  using dasall::contracts::BudgetType;
   using dasall::contracts::CheckpointState;
   using dasall::runtime::CheckpointConsistencyIssue;
+  using dasall::runtime::ResumeSeed;
   using dasall::runtime::ResumePlanViolation;
   using dasall::runtime::RuntimeErrorCode;
   using dasall::runtime::RuntimeState;
@@ -98,7 +103,17 @@ int main() {
             .belief_state_ref = std::string("belief-001"),
             .retry_count = 1,
             .created_at_ms = 1700000001,
-            .runtime_budget_snapshot = std::nullopt,
+            .runtime_budget_snapshot = BudgetSnapshot{
+              .snapshot_at_ms = 1700000001,
+              .entries = {
+                BudgetSnapshotEntry{.budget_type = BudgetType::Token, .current = 64, .max = 1024, .remaining = 960, .reject_reason = std::nullopt},
+                BudgetSnapshotEntry{.budget_type = BudgetType::Turn, .current = 1, .max = 8, .remaining = 7, .reject_reason = std::nullopt},
+                BudgetSnapshotEntry{.budget_type = BudgetType::ToolCall, .current = 0, .max = 4, .remaining = 4, .reject_reason = std::nullopt},
+                BudgetSnapshotEntry{.budget_type = BudgetType::Latency, .current = 450, .max = 2500, .remaining = 2050, .reject_reason = std::nullopt},
+                BudgetSnapshotEntry{.budget_type = BudgetType::Replan, .current = 0, .max = 2, .remaining = 2, .reject_reason = std::nullopt},
+              },
+              .overall_reject_reason = std::nullopt,
+            },
             .tags = {"audit=unit"},
         });
 
@@ -135,6 +150,10 @@ int main() {
     assert_true(load_result.checkpoint.has_value(), "load should return checkpoint payload");
     assert_true(load_result.report.issue == CheckpointConsistencyIssue::None,
                 "loaded checkpoint should remain consistent");
+    assert_true(load_result.runtime_budget_snapshot.has_value(),
+          "load should preserve runtime budget snapshot sidecar");
+    assert_true(load_result.runtime_budget_snapshot->entries.size() == 5,
+          "runtime budget snapshot should preserve all budget dimensions");
 
     const auto resume_plan = manager.make_resume_plan(*load_result.checkpoint);
     assert_true(resume_plan.resumable, "paused waiting checkpoint should yield a resume plan");
@@ -145,6 +164,33 @@ int main() {
                 "waiting resume plan should preserve pending action");
     assert_true(!resume_plan.plan->requires_operator_intervention,
                 "clarification checkpoint should not require operator intervention");
+
+    const auto seeded_resume_plan = manager.make_resume_plan(
+      *load_result.checkpoint,
+      ResumeSeed{
+        .session_id = "session-001",
+        .request_id = "req-001",
+        .checkpoint_ref = "chk-001",
+        .resume_token = dasall::runtime::make_resume_binding_token("session-001", "chk-001"),
+        .fsm_state = RuntimeState::WaitingClarify,
+        .pending_interaction = std::nullopt,
+        .policy_snapshot_ref = std::string("policy-001"),
+        .resume_reason = "resume after clarification",
+      });
+    assert_true(seeded_resume_plan.resumable,
+          "resume seed should enrich a valid checkpoint into a resumable plan");
+    assert_equal(
+      std::string("resume after clarification"),
+      seeded_resume_plan.plan->resume_reason,
+      "resume plan should preserve resume seed reason");
+    assert_equal(
+      std::string("policy-001"),
+      seeded_resume_plan.plan->policy_snapshot_ref.value_or(std::string()),
+      "resume plan should preserve resume seed policy snapshot ref");
+    assert_equal(
+      dasall::runtime::make_resume_binding_token("session-001", "chk-001"),
+      seeded_resume_plan.plan->resume_token,
+      "resume plan should preserve resume seed token");
 
     dasall::contracts::Checkpoint incompatible_checkpoint = *build_result.checkpoint;
     incompatible_checkpoint.checkpoint_id = std::string("chk-unsupported");

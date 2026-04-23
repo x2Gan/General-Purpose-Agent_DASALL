@@ -179,6 +179,7 @@ ResumeSeedResult SessionManager::build_resume_seed(
           .session_id = request.session_snapshot.session_id,
           .request_id = request.session_snapshot.request_id,
           .checkpoint_ref = request.checkpoint_ref,
+        .resume_token = request.resume_token,
           .fsm_state = request.session_snapshot.fsm_state,
           .pending_interaction = request.session_snapshot.pending_interaction,
           .policy_snapshot_ref = request.policy_snapshot_ref,

@@ -30,6 +30,8 @@ constexpr std::int32_t kRuntimeOrchestratorSkeletonPreflightRejectedCode = 5004;
 constexpr std::int32_t kRuntimeOrchestratorSkeletonInternalErrorCode = 5005;
 constexpr std::int32_t kRuntimeOrchestratorWaitingCode = 5006;
 constexpr std::int32_t kRuntimeOrchestratorLiveUnaryFailedCode = 5007;
+constexpr std::int32_t kRuntimeOrchestratorDegradedCode = 5008;
+constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
 
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -108,6 +110,107 @@ constexpr std::int32_t kRuntimeOrchestratorLiveUnaryFailedCode = 5007;
       budget_value(runtime_budget.max_latency_ms, 1500U));
   context_request.external_evidence = composition.dependency_set->external_evidence;
   return context_request;
+}
+
+[[nodiscard]] std::optional<contracts::RuntimeBudget> runtime_budget_from_snapshot(
+    const contracts::BudgetSnapshot& snapshot) {
+  contracts::RuntimeBudget runtime_budget;
+  bool has_token = false;
+  bool has_turn = false;
+  bool has_tool_call = false;
+  bool has_latency = false;
+  bool has_replan = false;
+
+  for (const auto& entry : snapshot.entries) {
+    switch (entry.budget_type) {
+      case contracts::BudgetType::Token:
+        runtime_budget.max_tokens = entry.max;
+        has_token = true;
+        break;
+      case contracts::BudgetType::Turn:
+        runtime_budget.max_turns = entry.max;
+        has_turn = true;
+        break;
+      case contracts::BudgetType::ToolCall:
+        runtime_budget.max_tool_calls = entry.max;
+        has_tool_call = true;
+        break;
+      case contracts::BudgetType::Latency:
+        runtime_budget.max_latency_ms = entry.max;
+        has_latency = true;
+        break;
+      case contracts::BudgetType::Replan:
+        runtime_budget.max_replan_count = entry.max;
+        has_replan = true;
+        break;
+    }
+  }
+
+  if (!has_token || !has_turn || !has_tool_call || !has_latency || !has_replan) {
+    return std::nullopt;
+  }
+
+  return runtime_budget;
+}
+
+[[nodiscard]] memory::MemoryContextRequest make_resume_memory_context_request(
+    const contracts::AgentRequest& request,
+    const ResumePlan& plan,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition,
+    const contracts::RuntimeBudget& runtime_budget) {
+  auto context_request =
+      make_memory_context_request(request, goal_id, composition, runtime_budget);
+  context_request.stage = plan.target_state == RuntimeState::WaitingExternal
+                              ? std::string{"reflection"}
+                              : std::string{"reasoning"};
+  context_request.latest_observation_digest_summary = plan.resume_reason.empty()
+                                                          ? std::string{"resume checkpoint requested a fresh context packet"}
+                                                          : plan.resume_reason;
+  return context_request;
+}
+
+[[nodiscard]] std::string context_assembly_failure_detail(
+    const memory::ContextAssemblyResult& context_result,
+    const std::string& fallback_detail) {
+  if (!context_result.warnings.empty()) {
+    return context_result.warnings.front();
+  }
+
+  if (!context_result.compression_notes.empty()) {
+    return context_result.compression_notes.front();
+  }
+
+  if (!context_result.dropped_sections.empty()) {
+    return context_result.dropped_sections.front();
+  }
+
+  return fallback_detail;
+}
+
+[[nodiscard]] memory::ContextAssemblyResult prepare_resume_context(
+    const OrchestratorComposition& composition,
+    const contracts::AgentRequest& request,
+    const ResumePlan& plan,
+    const std::string& goal_id,
+    const contracts::RuntimeBudget& runtime_budget) {
+  if (composition.dependency_set == nullptr ||
+      composition.dependency_set->memory_manager == nullptr) {
+    memory::ContextAssemblyResult unavailable_result;
+    unavailable_result.result_code = contracts::ResultCode::RuntimeRetryExhausted;
+    unavailable_result.degraded = true;
+    unavailable_result.warnings.push_back(
+        "runtime resume path requires a memory manager to refresh context");
+    return unavailable_result;
+  }
+
+  return composition.dependency_set->memory_manager->prepare_context(
+      make_resume_memory_context_request(
+          request,
+          plan,
+          goal_id,
+          composition,
+          runtime_budget));
 }
 
 [[nodiscard]] cognition::CognitionStepRequest make_cognition_step_request(
@@ -426,7 +529,9 @@ struct SavedCheckpointResult {
     };
   }
 
-  const auto persist_result = checkpoint_manager.save(*build_result.checkpoint);
+  const auto persist_result = checkpoint_manager.save(
+      *build_result.checkpoint,
+      build_result.runtime_budget_snapshot);
   if (persist_result.failed()) {
     return SavedCheckpointResult{
         .checkpoint = std::nullopt,
@@ -579,6 +684,177 @@ struct SessionUpdateResult {
   };
 }
 
+    [[nodiscard]] contracts::BudgetSnapshot make_exhausted_budget_snapshot(
+      contracts::BudgetSnapshot budget_snapshot,
+      const contracts::BudgetType budget_type,
+      std::string detail) {
+      for (auto& entry : budget_snapshot.entries) {
+      if (entry.budget_type == budget_type) {
+        entry.current = entry.max + 1;
+        entry.remaining = -1;
+        entry.reject_reason = detail;
+        budget_snapshot.overall_reject_reason = entry.reject_reason;
+        return budget_snapshot;
+      }
+      }
+
+      budget_snapshot.overall_reject_reason = std::move(detail);
+      return budget_snapshot;
+    }
+
+    [[nodiscard]] contracts::RecoveryRequest make_budget_exhausted_recovery_request(
+      const contracts::AgentRequest& request,
+      const contracts::Checkpoint& checkpoint,
+      contracts::BudgetSnapshot budget_snapshot,
+      const std::string& goal_id) {
+      auto exhausted_budget_snapshot = make_exhausted_budget_snapshot(
+        std::move(budget_snapshot),
+        contracts::BudgetType::ToolCall,
+        "runtime-local tool-call budget exhausted");
+
+      const auto error_info = contracts::ErrorInfo{
+        .failure_type = contracts::ResultCodeCategory::Runtime,
+        .retryable = true,
+        .safe_to_replan = false,
+        .details = contracts::ErrorDetails{
+            .code = 5001,
+            .message = "tool round exhausted runtime budget",
+          .stage = "tool_round",
+        },
+        .source_ref = contracts::ErrorSourceRefMinimal{
+            .ref_type = "tool_call",
+            .ref_id = "tool-call-001",
+        },
+      };
+
+      return contracts::RecoveryRequest{
+        .reflection_decision = contracts::ReflectionDecision{
+          .request_id = request.request_id,
+          .decision_kind = contracts::ReflectionDecisionKind::AbortSafe,
+          .rationale = std::string("runtime-local budget exhaustion escalated to degrade"),
+          .goal_id = goal_id,
+          .confidence = 1.0F,
+          .relevant_observation_refs = std::vector<std::string>{"obs-tool-budget-exhausted"},
+          .hint_ref = std::string("hint-budget-exhausted"),
+          .created_at = current_time_ms(),
+          .tags = std::vector<std::string>{"unit=orchestrator", "recovery=budget_exhausted"},
+        },
+        .error_info = error_info,
+        .latest_observation = contracts::Observation{
+          .observation_id = std::string("obs-tool-budget-exhausted"),
+          .source = contracts::ObservationSource::ToolExecution,
+          .success = false,
+          .payload = std::string("{}"),
+          .created_at = current_time_ms(),
+          .error = error_info,
+          .side_effects = std::nullopt,
+          .tool_call_id = std::string("tool-call-001"),
+          .worker_task_id = std::nullopt,
+          .request_id = request.request_id,
+          .goal_id = goal_id,
+          .duration_ms = 12,
+          .tags = std::vector<std::string>{"unit=orchestrator", "recovery=budget_exhausted"},
+        },
+        .checkpoint = checkpoint,
+        .idempotency_and_side_effect_report = contracts::IdempotencyAndSideEffectReport{
+          .replay_safe = true,
+          .idempotency_key = std::string("resume-") + request.request_id.value_or("req"),
+          .side_effects_present = false,
+          .non_replayable_reason = std::nullopt,
+        },
+        .retry_count = 1,
+        .runtime_budget_snapshot = std::move(exhausted_budget_snapshot),
+      };
+    }
+
+[[nodiscard]] BudgetViolationClass exhausted_budget_violation(
+    const contracts::BudgetType budget_type) {
+  switch (budget_type) {
+    case contracts::BudgetType::Token:
+      return BudgetViolationClass::TokenExhausted;
+    case contracts::BudgetType::Turn:
+      return BudgetViolationClass::TurnExhausted;
+    case contracts::BudgetType::ToolCall:
+      return BudgetViolationClass::ToolCallExhausted;
+    case contracts::BudgetType::Latency:
+      return BudgetViolationClass::LatencyExhausted;
+    case contracts::BudgetType::Replan:
+      return BudgetViolationClass::ReplanExhausted;
+  }
+
+  return BudgetViolationClass::SnapshotUnavailable;
+}
+
+[[nodiscard]] std::optional<BudgetDecision> exhausted_budget_decision(
+    const std::optional<contracts::BudgetSnapshot>& budget_snapshot) {
+  if (!budget_snapshot.has_value()) {
+    return std::nullopt;
+  }
+
+  for (const auto& entry : budget_snapshot->entries) {
+    if (entry.current > entry.max || entry.reject_reason.has_value()) {
+      return make_budget_rejected_decision(
+          exhausted_budget_violation(entry.budget_type),
+          entry.reject_reason.value_or(
+              budget_snapshot->overall_reject_reason.value_or(std::string("budget exhausted"))),
+          entry.budget_type);
+    }
+  }
+
+  if (budget_snapshot->overall_reject_reason.has_value()) {
+    return make_budget_rejected_decision(
+        BudgetViolationClass::SnapshotUnavailable,
+        *budget_snapshot->overall_reject_reason);
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] SafeModeDecision evaluate_safe_mode_for_recovery(
+    SafeModeController& safe_mode_controller,
+    const contracts::RecoveryOutcome& recovery_outcome,
+    const std::optional<contracts::BudgetSnapshot>& budget_snapshot) {
+  const auto budget_decision = exhausted_budget_decision(budget_snapshot);
+  return safe_mode_controller.evaluate_entry(
+      SafeModeTrigger{
+          .trigger_kind = budget_decision.has_value()
+                              ? SafeModeTriggerKind::BudgetExhausted
+                              : SafeModeTriggerKind::RecoveryExhausted,
+          .budget_decision = budget_decision,
+          .recovery_outcome = recovery_outcome,
+          .error_code = std::nullopt,
+          .health_signal = std::nullopt,
+          .detail = budget_decision.has_value()
+                        ? budget_decision->detail
+                        : recovery_outcome.escalation_reason.value_or(
+                              std::string("recovery exhausted without explicit escalation reason")),
+      });
+}
+
+[[nodiscard]] std::int32_t safe_terminal_result_code(const RuntimeState terminal_state) {
+  switch (terminal_state) {
+    case RuntimeState::Degraded:
+      return kRuntimeOrchestratorDegradedCode;
+    case RuntimeState::SafeMode:
+      return kRuntimeOrchestratorSafeModeCode;
+    case RuntimeState::FailedSafe:
+    default:
+      return kRuntimeOrchestratorSkeletonFailedSafeCode;
+  }
+}
+
+[[nodiscard]] std::string safe_terminal_label(const RuntimeState terminal_state) {
+  switch (terminal_state) {
+    case RuntimeState::Degraded:
+      return "degraded";
+    case RuntimeState::SafeMode:
+      return "safe-mode";
+    case RuntimeState::FailedSafe:
+    default:
+      return "fail-safe";
+  }
+}
+
 }  // namespace
 
 const char* orchestrator_stage_name(const OrchestratorStage stage) {
@@ -599,7 +875,9 @@ const char* orchestrator_stage_name(const OrchestratorStage stage) {
 }
 
 AgentOrchestrator::AgentOrchestrator(OrchestratorComposition composition)
-    : composition_(std::move(composition)), scheduler_(2, 16) {}
+    : composition_(std::move(composition)),
+      scheduler_(2, 16),
+      safe_mode_controller_(composition_.policy_snapshot) {}
 
 void AgentOrchestrator::seed_for_test(
     const std::optional<SessionSnapshot>& session_snapshot,
@@ -611,6 +889,12 @@ void AgentOrchestrator::seed_for_test(
   if (session_snapshot.has_value()) {
     session_manager_.seed_for_test(*session_snapshot);
   }
+}
+
+void AgentOrchestrator::seed_checkpoint_for_test(
+    const contracts::Checkpoint& checkpoint,
+    std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot) {
+  checkpoint_manager_.seed_for_test(checkpoint, std::move(runtime_budget_snapshot));
 }
 
 std::unique_ptr<IAgentFsm> AgentOrchestrator::build_fsm(const RuntimeState initial_state) const {
@@ -1604,11 +1888,18 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
         BuildResumeSeedRequest{
             .session_snapshot = *bound_session.snapshot,
             .checkpoint_ref = saved_waiting_checkpoint.checkpoint->checkpoint_id.value_or(std::string()),
+        .resume_token = make_resume_binding_token(
+          bound_session.snapshot->session_id,
+          saved_waiting_checkpoint.checkpoint->checkpoint_id.value_or(std::string())),
             .resume_reason = std::string("resume after user clarification"),
             .policy_snapshot_ref = composition_.default_policy_snapshot_ref,
         });
-    const auto resume_plan_result = checkpoint_manager_.make_resume_plan(
-        *saved_waiting_checkpoint.checkpoint);
+    const auto resume_plan_result = resume_seed_result.built()
+                      ? checkpoint_manager_.make_resume_plan(
+                          *saved_waiting_checkpoint.checkpoint,
+                          *resume_seed_result.resume_seed)
+                      : checkpoint_manager_.make_resume_plan(
+                          *saved_waiting_checkpoint.checkpoint);
 
     run_result.effective_session = bound_session.snapshot;
     run_result.checkpoint = saved_waiting_checkpoint.checkpoint;
@@ -1920,39 +2211,77 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
 
     const RuntimeState recovery_round_before = fsm->current_state();
     run_result.used_recovery_round = true;
-    if (composition_.stub_ports.recovery_exit == StubRecoveryExit::AbortSafe) {
-      const auto recovery_request = make_abort_safe_recovery_request(
-          normalized_request,
-          *waiting_checkpoint.checkpoint,
-          budget_controller_.snapshot(),
-          goal_id);
+    if (composition_.stub_ports.recovery_exit == StubRecoveryExit::AbortSafe ||
+      composition_.stub_ports.recovery_exit == StubRecoveryExit::BudgetExhausted) {
+      const auto recovery_request =
+        composition_.stub_ports.recovery_exit == StubRecoveryExit::BudgetExhausted
+          ? make_budget_exhausted_recovery_request(
+            normalized_request,
+            *waiting_checkpoint.checkpoint,
+            budget_controller_.snapshot(),
+            goal_id)
+          : make_abort_safe_recovery_request(
+            normalized_request,
+            *waiting_checkpoint.checkpoint,
+            budget_controller_.snapshot(),
+            goal_id);
       const auto execution_plan = recovery_manager_.evaluate(recovery_request);
       run_result.recovery_outcome = recovery_manager_.execute(execution_plan);
       const auto apply_result = recovery_manager_.apply(*run_result.recovery_outcome);
-      StateTransitionOutcome failed_safe_outcome;
-      if (const auto failure = apply_step(
-              *fsm,
-              orchestrator_stage_name(OrchestratorStage::RecoveryRound),
-              TransitionStep{.to_state = RuntimeState::FailedSafe,
-                             .reason = "abort_safe applied by recovery manager",
-                             .guards = {TransitionGuardFact::RecoveryAbortSafe}},
-              &failed_safe_outcome);
-          failure.has_value()) {
+      const auto safe_mode_decision = evaluate_safe_mode_for_recovery(
+          safe_mode_controller_,
+          *run_result.recovery_outcome,
+          recovery_request.runtime_budget_snapshot);
+      const auto target_runtime_state = safe_mode_decision.target_runtime_state.value_or(
+          RuntimeState::FailedSafe);
+
+      StateTransitionOutcome terminal_outcome;
+      std::optional<TransitionFailure> transition_failure;
+      if (target_runtime_state == RuntimeState::SafeMode) {
+        transition_failure = apply_steps(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+            {{.to_state = RuntimeState::Degraded,
+              .reason = safe_mode_decision.detail,
+              .guards = {TransitionGuardFact::RecoveryDegrade}},
+             {.to_state = RuntimeState::SafeMode,
+              .reason = safe_mode_decision.detail,
+              .guards = {TransitionGuardFact::SafeModeTriggerSatisfied}}},
+            &terminal_outcome);
+      } else if (target_runtime_state == RuntimeState::Degraded) {
+        transition_failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+            TransitionStep{.to_state = RuntimeState::Degraded,
+                           .reason = safe_mode_decision.detail,
+                           .guards = {TransitionGuardFact::RecoveryDegrade}},
+            &terminal_outcome);
+      } else {
+        transition_failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+            TransitionStep{.to_state = RuntimeState::FailedSafe,
+                           .reason = safe_mode_decision.detail,
+                           .guards = {TransitionGuardFact::RecoveryAbortSafe}},
+            &terminal_outcome);
+      }
+
+      if (transition_failure.has_value()) {
         push_trace(&run_result.stage_trace,
                    OrchestratorStage::RecoveryRound,
                    recovery_round_before,
-                   failure->state_before,
+                   transition_failure->state_before,
                    true,
-                   failure->detail);
+                   transition_failure->detail);
         run_result.agent_result = make_result(
             normalized_request,
             RuntimeState::Failed,
             contracts::AgentResultStatus::Failed,
             kRuntimeOrchestratorSkeletonInternalErrorCode,
-            "runtime orchestrator could not enter fail-safe after recovery escalation",
+            "runtime orchestrator could not enter the safe terminal state after recovery escalation",
             make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
-                               failure->detail,
-                               failure->stage,
+                               transition_failure->detail,
+                               transition_failure->stage,
                                RuntimeState::Failed),
             std::nullopt,
             goal_id);
@@ -1960,13 +2289,16 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
         return run_result;
       }
 
-      const auto failed_checkpoint = build_and_save_checkpoint(
+      const auto checkpoint_label = safe_terminal_label(target_runtime_state);
+      const auto terminal_checkpoint = build_and_save_checkpoint(
           checkpoint_manager_,
           CheckpointBuildRequest{
-              .transition_outcome = failed_safe_outcome,
-              .checkpoint_id = std::string("chk-failsafe-") + *normalized_request.request_id,
-              .step_id = std::string("failsafe-") + *normalized_request.request_id,
-              .working_memory_snapshot = std::string("wm:failsafe:") + *normalized_request.request_id,
+              .transition_outcome = terminal_outcome,
+              .checkpoint_id = std::string("chk-") + checkpoint_label + "-" +
+                               *normalized_request.request_id,
+              .step_id = checkpoint_label + "-" + *normalized_request.request_id,
+              .working_memory_snapshot = std::string("wm:") + checkpoint_label + ":" +
+                                         *normalized_request.request_id,
               .pending_action = std::string(),
               .request_id = normalized_request.request_id,
               .goal_id = goal_id,
@@ -1974,23 +2306,23 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
               .retry_count = 1,
               .created_at_ms = normalized_request.created_at,
               .runtime_budget_snapshot = budget_controller_.snapshot(),
-              .tags = {"path=failsafe"},
+              .tags = {std::string("path=") + checkpoint_label},
           });
-      if (!failed_checkpoint.saved()) {
+      if (!terminal_checkpoint.saved()) {
         push_trace(&run_result.stage_trace,
                    OrchestratorStage::RecoveryRound,
                    recovery_round_before,
                    fsm->current_state(),
                    true,
-                   failed_checkpoint.detail);
+                   terminal_checkpoint.detail);
         run_result.agent_result = make_result(
             normalized_request,
             RuntimeState::Failed,
             contracts::AgentResultStatus::Failed,
             kRuntimeOrchestratorSkeletonInternalErrorCode,
-            "runtime orchestrator failed to save fail-safe checkpoint",
+            "runtime orchestrator failed to save safe terminal checkpoint",
             make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
-                               failed_checkpoint.detail,
+                               terminal_checkpoint.detail,
                                orchestrator_stage_name(OrchestratorStage::RecoveryRound),
                                RuntimeState::Failed),
             std::nullopt,
@@ -1998,20 +2330,20 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
         run_result.final_state = RuntimeState::Failed;
         return run_result;
       }
-      run_result.checkpoint = failed_checkpoint.checkpoint;
+      run_result.checkpoint = terminal_checkpoint.checkpoint;
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::RecoveryRound,
                  recovery_round_before,
                  fsm->current_state(),
                  true,
-                 apply_result.detail);
+                 safe_mode_decision.detail.empty() ? apply_result.detail : safe_mode_decision.detail);
 
       const RuntimeState terminalize_before = fsm->current_state();
       if (const auto failure = apply_steps(
               *fsm,
               orchestrator_stage_name(OrchestratorStage::Terminalize),
               {{.to_state = RuntimeState::Responding,
-                .reason = "emit fail-safe response",
+                .reason = std::string("emit ") + checkpoint_label + " response",
                 .guards = {}},
                {.to_state = RuntimeState::Auditing,
                 .reason = "response materialized",
@@ -2034,7 +2366,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
             RuntimeState::Failed,
             contracts::AgentResultStatus::Failed,
             kRuntimeOrchestratorSkeletonInternalErrorCode,
-            "runtime orchestrator failed to terminalize fail-safe path",
+          "runtime orchestrator failed to terminalize the safe terminal path",
             make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
                                failure->detail,
                                failure->stage,
@@ -2048,9 +2380,9 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       const auto persisted_session = persist_terminal_session(
           session_manager_,
           session_snapshot,
-          RuntimeState::FailedSafe,
+          target_runtime_state,
           run_result.checkpoint->checkpoint_id,
-          composition_.default_audit_summary + " fail-safe");
+          composition_.default_audit_summary + " " + checkpoint_label);
       if (persisted_session.updated()) {
         run_result.effective_session = persisted_session.snapshot;
       }
@@ -2059,18 +2391,28 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                  terminalize_before,
                  fsm->current_state(),
                  true,
-                 "fail-safe response audited and persisted");
-      run_result.final_state = fsm->current_state();
+             std::string("safe terminal response audited and persisted as ") +
+               runtime_state_name(target_runtime_state));
+        run_result.final_state = target_runtime_state;
+        const auto safe_terminal_error_code = safe_mode_decision.error_code.has_value()
+                            ? static_cast<std::int32_t>(
+                                *safe_mode_decision.error_code)
+                            : apply_result.error_code.has_value()
+                                ? static_cast<std::int32_t>(
+                                  *apply_result.error_code)
+                                : kRuntimeOrchestratorSkeletonFailedSafeCode;
       run_result.agent_result = make_result(
           normalized_request,
           run_result.final_state,
           contracts::AgentResultStatus::Failed,
-          kRuntimeOrchestratorSkeletonFailedSafeCode,
+          safe_terminal_result_code(target_runtime_state),
           composition_.stub_ports.fail_safe_response_text,
-          make_runtime_error(kRuntimeOrchestratorSkeletonFailedSafeCode,
-                             "abort_safe outcome applied",
+          make_runtime_error(safe_terminal_error_code,
+                   safe_mode_decision.detail.empty()
+                     ? apply_result.detail
+                     : safe_mode_decision.detail,
                              orchestrator_stage_name(OrchestratorStage::RecoveryRound),
-                             RuntimeState::FailedSafe),
+                   target_runtime_state),
           run_result.checkpoint->checkpoint_id,
           goal_id);
       return run_result;
@@ -2279,8 +2621,12 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
   contracts::AgentRequest synthetic_request;
   synthetic_request.request_id = session_snapshot.request_id;
   synthetic_request.session_id = session_snapshot.session_id;
-  synthetic_request.trace_id = std::string("trace-resume-") + session_snapshot.session_id;
-  synthetic_request.user_input = std::string("resume-from-checkpoint");
+  synthetic_request.trace_id = plan.resume_token.empty()
+                                   ? std::string("trace-resume-") + session_snapshot.session_id
+                                   : std::string("trace-resume-") + plan.resume_token;
+  synthetic_request.user_input = plan.resume_reason.empty()
+                                     ? std::string("resume-from-checkpoint")
+                                     : plan.resume_reason;
   synthetic_request.request_channel = contracts::RequestChannel::Cli;
   synthetic_request.created_at = current_time_ms();
   const auto goal_id = composition_.default_goal_id;
@@ -2321,11 +2667,16 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
     return run_result;
   }
 
-  const auto budget_decision = budget_controller_.initialize(
-      BudgetInitializeRequest{
-          .runtime_budget = composition_.default_runtime_budget,
-          .started_at_ms = composition_.budget_started_at_ms,
-      });
+    const auto budget_decision = load_result.runtime_budget_snapshot.has_value()
+                     ? budget_controller_.restore(
+                       *load_result.runtime_budget_snapshot,
+                       load_result.runtime_budget_snapshot->snapshot_at_ms
+                         .value_or(composition_.budget_started_at_ms))
+                     : budget_controller_.initialize(
+                       BudgetInitializeRequest{
+                         .runtime_budget = composition_.default_runtime_budget,
+                         .started_at_ms = composition_.budget_started_at_ms,
+                       });
   if (budget_decision.rejected()) {
     run_result.agent_result = make_result(
         synthetic_request,
@@ -2350,7 +2701,65 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
              fsm->current_state(),
              fsm->current_state(),
              true,
-             "continue_from_checkpoint loaded checkpoint and initialized budget");
+         load_result.runtime_budget_snapshot.has_value()
+           ? "continue_from_checkpoint loaded checkpoint and restored budget snapshot"
+           : "continue_from_checkpoint loaded checkpoint and initialized default budget");
+
+  const auto resume_runtime_budget = load_result.runtime_budget_snapshot.has_value()
+                                         ? runtime_budget_from_snapshot(
+                                               *load_result.runtime_budget_snapshot)
+                                         : std::optional<contracts::RuntimeBudget>(
+                                               composition_.default_runtime_budget);
+  if (!resume_runtime_budget.has_value()) {
+    run_result.agent_result = make_result(
+        synthetic_request,
+        RuntimeState::Failed,
+        contracts::AgentResultStatus::Failed,
+        kRuntimeOrchestratorSkeletonInternalErrorCode,
+        "runtime orchestrator could not project the resume budget into a context request",
+        make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                           "budget snapshot could not be converted back into runtime budget limits",
+                           orchestrator_stage_name(OrchestratorStage::MainLoop),
+                           RuntimeState::Failed),
+        std::nullopt,
+        goal_id);
+    run_result.final_state = RuntimeState::Failed;
+    return run_result;
+  }
+
+  const auto context_result = prepare_resume_context(
+      composition_,
+      synthetic_request,
+      plan,
+      goal_id,
+      *resume_runtime_budget);
+  if (context_result.result_code.has_value() || context_result.degraded) {
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::MainLoop,
+               fsm->current_state(),
+               fsm->current_state(),
+               true,
+               context_result.result_code.has_value()
+                   ? "resume context assembly returned a failure result"
+                   : "resume context assembly returned a degraded packet");
+    run_result.agent_result = make_result(
+        synthetic_request,
+        RuntimeState::Failed,
+        contracts::AgentResultStatus::Failed,
+        kRuntimeOrchestratorSkeletonInternalErrorCode,
+        "runtime resume path could not assemble a refreshed context packet",
+        make_runtime_error(
+            kRuntimeOrchestratorSkeletonInternalErrorCode,
+            context_assembly_failure_detail(
+                context_result,
+                "memory context assembly did not produce a ready packet for resume"),
+            orchestrator_stage_name(OrchestratorStage::MainLoop),
+            RuntimeState::Failed),
+        std::nullopt,
+        goal_id);
+    run_result.final_state = RuntimeState::Failed;
+    return run_result;
+  }
 
   const RuntimeState main_loop_before = fsm->current_state();
   if (plan.target_state == RuntimeState::WaitingClarify) {
@@ -2366,7 +2775,7 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
                          TransitionGuardFact::SessionLoaded,
                          TransitionGuardFact::BudgetInitialized}},
              {.to_state = RuntimeState::Reasoning,
-              .reason = "resume context ready",
+                      .reason = "resume context refreshed through memory manager",
               .guards = {TransitionGuardFact::ContextAssembled}},
              {.to_state = RuntimeState::Responding,
               .reason = "resume direct response",
@@ -2434,7 +2843,7 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
              main_loop_before,
              fsm->current_state(),
              true,
-             "resume plan re-entered runtime-local response path");
+             "resume plan refreshed context and re-entered runtime-local response path");
   push_trace(&run_result.stage_trace,
              OrchestratorStage::ToolRound,
              fsm->current_state(),
@@ -2649,6 +3058,7 @@ OrchestratorRunResult AgentOrchestrator::handle_waiting_state(
       BuildResumeSeedRequest{
           .session_snapshot = *prepare_result.effective_session,
           .checkpoint_ref = request.checkpoint_ref,
+        .resume_token = request.resume_token,
           .resume_reason = request.resume_reason,
           .policy_snapshot_ref = composition_.default_policy_snapshot_ref,
       });
@@ -2701,7 +3111,9 @@ OrchestratorRunResult AgentOrchestrator::handle_waiting_state(
     return run_result;
   }
 
-  const auto resume_plan_decision = checkpoint_manager_.make_resume_plan(*checkpoint_load.checkpoint);
+  const auto resume_plan_decision = checkpoint_manager_.make_resume_plan(
+      *checkpoint_load.checkpoint,
+      *resume_seed_result.resume_seed);
   if (resume_plan_decision.rejected() || !resume_plan_decision.plan.has_value()) {
     contracts::AgentRequest synthetic_request;
     synthetic_request.request_id = request.request_id;

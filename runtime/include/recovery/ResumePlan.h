@@ -76,6 +76,7 @@ struct ResumePlan {
   std::string checkpoint_ref;
   RuntimeState target_state = RuntimeState::Idle;
   contracts::CheckpointState checkpoint_state = contracts::CheckpointState::Unspecified;
+  std::string resume_token;
   std::string resume_reason;
   std::optional<std::string> pending_action;
   std::optional<std::string> policy_snapshot_ref;

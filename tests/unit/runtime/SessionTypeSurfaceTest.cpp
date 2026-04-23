@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 
+#include "AgentTypes.h"
 #include "session/ISessionManager.h"
 #include "support/TestAssertions.h"
 
@@ -175,6 +176,7 @@ class FakeSessionManager final : public dasall::runtime::ISessionManager {
             .session_id = request.session_snapshot.session_id,
             .request_id = request.session_snapshot.request_id,
             .checkpoint_ref = request.checkpoint_ref,
+        .resume_token = request.resume_token,
             .fsm_state = request.session_snapshot.fsm_state,
             .pending_interaction = request.session_snapshot.pending_interaction,
             .policy_snapshot_ref = request.policy_snapshot_ref,
@@ -272,6 +274,7 @@ int main() {
         dasall::runtime::BuildResumeSeedRequest{
             .session_snapshot = waiting_snapshot,
             .checkpoint_ref = "chk-010",
+        .resume_token = dasall::runtime::make_resume_binding_token("session-010", "chk-010"),
             .resume_reason = "resume after user clarification",
             .policy_snapshot_ref = std::string("policy-010"),
         });
@@ -281,6 +284,10 @@ int main() {
                 "resume seed should satisfy minimum requirements");
     assert_true(resume_seed_result.resume_seed->pending_interaction.has_value(),
                 "resume seed should carry pending interaction state");
+    assert_equal(
+      dasall::runtime::make_resume_binding_token("session-010", "chk-010"),
+      resume_seed_result.resume_seed->resume_token,
+      "resume seed should preserve the resume binding token");
 
     const auto persist_result = manager.persist_turn(
         dasall::runtime::SessionPersistRequest{
@@ -298,6 +305,7 @@ int main() {
         dasall::runtime::BuildResumeSeedRequest{
             .session_snapshot = waiting_snapshot,
             .checkpoint_ref = "chk-other",
+        .resume_token = dasall::runtime::make_resume_binding_token("session-010", "chk-other"),
             .resume_reason = "resume with wrong anchor",
             .policy_snapshot_ref = std::nullopt,
         });

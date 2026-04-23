@@ -99,14 +99,37 @@ CheckpointBuildResult CheckpointManager::build_checkpoint(
   };
 
   const auto report = validate(checkpoint);
+  if (report.consistent && checkpoint.checkpoint_id.has_value()) {
+    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+    pending_runtime_budget_snapshots_[*checkpoint.checkpoint_id] =
+        request.runtime_budget_snapshot;
+  }
+
   return CheckpointBuildResult{
       .checkpoint = report.consistent ? std::optional<contracts::Checkpoint>(checkpoint)
                                       : std::nullopt,
       .report = report,
+      .runtime_budget_snapshot = request.runtime_budget_snapshot,
   };
 }
 
 CheckpointPersistResult CheckpointManager::save(const contracts::Checkpoint& checkpoint) {
+  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot;
+  if (checkpoint.checkpoint_id.has_value()) {
+    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+    const auto iterator = pending_runtime_budget_snapshots_.find(*checkpoint.checkpoint_id);
+    if (iterator != pending_runtime_budget_snapshots_.end()) {
+      runtime_budget_snapshot = iterator->second;
+      pending_runtime_budget_snapshots_.erase(iterator);
+    }
+  }
+
+  return save(checkpoint, runtime_budget_snapshot);
+}
+
+CheckpointPersistResult CheckpointManager::save(
+    const contracts::Checkpoint& checkpoint,
+    const std::optional<contracts::BudgetSnapshot>& runtime_budget_snapshot) {
   const auto report = validate(checkpoint);
   if (!report.consistent) {
     return CheckpointPersistResult{
@@ -118,7 +141,11 @@ CheckpointPersistResult CheckpointManager::save(const contracts::Checkpoint& che
   }
 
   const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-  stored_checkpoint_ = checkpoint;
+    stored_checkpoints_[checkpoint.checkpoint_id.value()] = StoredCheckpointRecord{
+      .checkpoint = checkpoint,
+      .runtime_budget_snapshot = runtime_budget_snapshot,
+    };
+    pending_runtime_budget_snapshots_.erase(checkpoint.checkpoint_id.value());
   return CheckpointPersistResult{
       .persisted = true,
       .checkpoint_ref = checkpoint.checkpoint_id,
@@ -129,10 +156,11 @@ CheckpointPersistResult CheckpointManager::save(const contracts::Checkpoint& che
 
 CheckpointLoadResult CheckpointManager::load(const std::string& checkpoint_ref) const {
   std::optional<contracts::Checkpoint> checkpoint;
+  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot;
   {
     const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-    if (!stored_checkpoint_.has_value() || !stored_checkpoint_->checkpoint_id.has_value() ||
-        stored_checkpoint_->checkpoint_id.value() != checkpoint_ref) {
+    const auto iterator = stored_checkpoints_.find(checkpoint_ref);
+    if (iterator == stored_checkpoints_.end()) {
       return CheckpointLoadResult{
           .checkpoint = std::nullopt,
           .report = reject_checkpoint(
@@ -143,7 +171,8 @@ CheckpointLoadResult CheckpointManager::load(const std::string& checkpoint_ref) 
       };
     }
 
-    checkpoint = stored_checkpoint_;
+    checkpoint = iterator->second.checkpoint;
+    runtime_budget_snapshot = iterator->second.runtime_budget_snapshot;
   }
 
   const auto report = validate(*checkpoint);
@@ -152,6 +181,7 @@ CheckpointLoadResult CheckpointManager::load(const std::string& checkpoint_ref) 
       .report = report,
       .error_code = report.consistent ? std::nullopt : report.error_code,
       .detail = report.consistent ? "checkpoint loaded from memory store" : report.detail,
+      .runtime_budget_snapshot = report.consistent ? runtime_budget_snapshot : std::nullopt,
   };
 }
 
@@ -300,6 +330,7 @@ ResumePlanDecision CheckpointManager::make_resume_plan(
           .checkpoint_ref = *checkpoint.checkpoint_id,
           .target_state = *target_state,
           .checkpoint_state = *checkpoint.state,
+          .resume_token = std::string(),
           .resume_reason = "resume plan synthesized from checkpoint",
           .pending_action = checkpoint.pending_action,
           .policy_snapshot_ref = std::nullopt,
@@ -309,9 +340,51 @@ ResumePlanDecision CheckpointManager::make_resume_plan(
       "checkpoint is resumable");
 }
 
-void CheckpointManager::seed_for_test(const contracts::Checkpoint& checkpoint) {
+ResumePlanDecision CheckpointManager::make_resume_plan(
+    const contracts::Checkpoint& checkpoint,
+    const ResumeSeed& resume_seed) const {
+  if (!resume_seed.has_minimum_requirements()) {
+    return make_rejected_resume_plan(
+        ResumePlanViolation::CheckpointInvalid,
+        "resume seed must include checkpoint_ref, resume_token and resume_reason");
+  }
+
+  const auto base_decision = make_resume_plan(checkpoint);
+  if (base_decision.rejected() || !base_decision.plan.has_value()) {
+    return base_decision;
+  }
+
+  if (base_decision.plan->checkpoint_ref != resume_seed.checkpoint_ref) {
+    return make_rejected_resume_plan(
+        ResumePlanViolation::CheckpointInvalid,
+        "resume seed checkpoint_ref does not match checkpoint anchor");
+  }
+
+  if (checkpoint.request_id.has_value() && checkpoint.request_id != resume_seed.request_id) {
+    return make_rejected_resume_plan(
+        ResumePlanViolation::CheckpointInvalid,
+        "resume seed request_id does not match checkpoint request_id");
+  }
+
+  auto plan = *base_decision.plan;
+  plan.resume_token = resume_seed.resume_token;
+  plan.resume_reason = resume_seed.resume_reason;
+  plan.policy_snapshot_ref = resume_seed.policy_snapshot_ref;
+  return make_resume_plan_decision(plan, "checkpoint is resumable with session resume seed");
+}
+
+void CheckpointManager::seed_for_test(
+    const contracts::Checkpoint& checkpoint,
+    std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot) {
   const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-  stored_checkpoint_ = checkpoint;
+  if (!checkpoint.checkpoint_id.has_value() || checkpoint.checkpoint_id->empty()) {
+    return;
+  }
+
+  stored_checkpoints_[*checkpoint.checkpoint_id] = StoredCheckpointRecord{
+      .checkpoint = checkpoint,
+      .runtime_budget_snapshot = std::move(runtime_budget_snapshot),
+  };
 }
 
 }  // namespace dasall::runtime

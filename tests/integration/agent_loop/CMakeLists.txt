@@ -51,6 +51,11 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeResumeIntegrationTest.cpp
 )
 
+target_link_libraries(dasall_runtime_resume_integration_test
+  PRIVATE
+    dasall_memory
+)
+
 target_link_libraries(dasall_runtime_unary_integration_test
   PRIVATE
     dasall_cognition
@@ -76,6 +81,11 @@ dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_checkpoint_replay_regression_test
   RuntimeCheckpointReplayRegressionTest
   RuntimeCheckpointReplayRegressionTest.cpp
+)
+
+target_link_libraries(dasall_runtime_checkpoint_replay_regression_test
+  PRIVATE
+    dasall_memory
 )
 
 dasall_add_runtime_agent_loop_integration_test(

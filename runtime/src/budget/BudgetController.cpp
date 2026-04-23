@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 
+#include "checkpoint/BudgetSnapshotGuards.h"
 #include "checkpoint/RuntimeBudgetGuards.h"
 
 namespace dasall::runtime {
@@ -62,6 +63,47 @@ namespace {
   };
 }
 
+[[nodiscard]] std::optional<contracts::RuntimeBudget> runtime_budget_from_snapshot(
+    const contracts::BudgetSnapshot& snapshot) {
+  contracts::RuntimeBudget runtime_budget;
+  bool has_token = false;
+  bool has_turn = false;
+  bool has_tool_call = false;
+  bool has_latency = false;
+  bool has_replan = false;
+
+  for (const auto& entry : snapshot.entries) {
+    switch (entry.budget_type) {
+      case contracts::BudgetType::Token:
+        runtime_budget.max_tokens = entry.max;
+        has_token = true;
+        break;
+      case contracts::BudgetType::Turn:
+        runtime_budget.max_turns = entry.max;
+        has_turn = true;
+        break;
+      case contracts::BudgetType::ToolCall:
+        runtime_budget.max_tool_calls = entry.max;
+        has_tool_call = true;
+        break;
+      case contracts::BudgetType::Latency:
+        runtime_budget.max_latency_ms = entry.max;
+        has_latency = true;
+        break;
+      case contracts::BudgetType::Replan:
+        runtime_budget.max_replan_count = entry.max;
+        has_replan = true;
+        break;
+    }
+  }
+
+  if (!has_token || !has_turn || !has_tool_call || !has_latency || !has_replan) {
+    return std::nullopt;
+  }
+
+  return runtime_budget;
+}
+
 }  // namespace
 
 BudgetDecision BudgetController::initialize(const BudgetInitializeRequest& request) {
@@ -83,6 +125,57 @@ BudgetDecision BudgetController::initialize(const BudgetInitializeRequest& reque
   runtime_budget_ = request.runtime_budget;
   snapshot_ = build_initial_snapshot(runtime_budget_, started_at_ms_);
   return make_budget_allowed_decision(std::nullopt, "budget initialized");
+}
+
+BudgetDecision BudgetController::restore(
+    const contracts::BudgetSnapshot& snapshot,
+    const std::uint64_t started_at_ms) {
+  const auto snapshot_guard = contracts::validate_budget_snapshot(snapshot);
+  if (!snapshot_guard.ok) {
+    const std::lock_guard<std::mutex> lock(budget_mutex_);
+    initialized_ = false;
+    started_at_ms_ = 0;
+    runtime_budget_ = {};
+    snapshot_ = {};
+    return make_budget_rejected_decision(
+        BudgetViolationClass::SnapshotUnavailable,
+        std::string(snapshot_guard.reason));
+  }
+
+  const auto runtime_budget = runtime_budget_from_snapshot(snapshot);
+  if (!runtime_budget.has_value()) {
+    const std::lock_guard<std::mutex> lock(budget_mutex_);
+    initialized_ = false;
+    started_at_ms_ = 0;
+    runtime_budget_ = {};
+    snapshot_ = {};
+    return make_budget_rejected_decision(
+        BudgetViolationClass::SnapshotUnavailable,
+        "budget snapshot is missing one or more dimensions");
+  }
+
+  const auto guard_result = contracts::validate_runtime_budget(*runtime_budget);
+  if (!guard_result.ok) {
+    const std::lock_guard<std::mutex> lock(budget_mutex_);
+    initialized_ = false;
+    started_at_ms_ = 0;
+    runtime_budget_ = {};
+    snapshot_ = {};
+    return make_budget_rejected_decision(
+        BudgetViolationClass::ConfigurationInvalid,
+        std::string(guard_result.reason));
+  }
+
+  const std::lock_guard<std::mutex> lock(budget_mutex_);
+  initialized_ = true;
+  started_at_ms_ = started_at_ms;
+  runtime_budget_ = *runtime_budget;
+  snapshot_ = snapshot;
+  if (!snapshot_.snapshot_at_ms.has_value()) {
+    snapshot_.snapshot_at_ms = started_at_ms_;
+  }
+  refresh_overall_reject_reason_locked();
+  return make_budget_allowed_decision(std::nullopt, "budget restored from checkpoint snapshot");
 }
 
 BudgetDecision BudgetController::consume(const BudgetConsumeRequest& request) {

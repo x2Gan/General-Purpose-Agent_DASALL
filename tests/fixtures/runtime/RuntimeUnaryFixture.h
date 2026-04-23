@@ -164,14 +164,18 @@ inline runtime::ResumeHandleRequest make_resume_request(
         std::string checkpoint_ref,
         std::string request_id = "resume-unary-fixture",
         std::string resume_reason = "user clarification received",
-        std::string resume_token = "resume-token-unary-fixture",
+        std::string resume_token = std::string(),
         std::string trace_context = "trace-resume-unary-fixture") {
     runtime::ResumeHandleRequest request;
     request.request_id = std::move(request_id);
     request.session_id = std::move(session_id);
     request.checkpoint_ref = std::move(checkpoint_ref);
     request.resume_reason = std::move(resume_reason);
-    request.resume_token = std::move(resume_token);
+    request.resume_token = resume_token.empty()
+                               ? runtime::make_resume_binding_token(
+                                     request.session_id,
+                                     request.checkpoint_ref)
+                               : std::move(resume_token);
     request.trace_context = std::move(trace_context);
     return request;
 }

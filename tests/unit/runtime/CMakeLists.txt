@@ -110,6 +110,7 @@ target_link_libraries(dasall_runtime_agent_orchestrator_controller_assembly_unit
   PRIVATE
     dasall_test_support
     dasall_runtime
+    dasall_memory
 )
 
 target_include_directories(dasall_runtime_agent_orchestrator_controller_assembly_unit_test

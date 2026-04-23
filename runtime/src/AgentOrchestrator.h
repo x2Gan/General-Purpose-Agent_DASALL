@@ -19,6 +19,7 @@
 #include "fsm/StateTransitionTypes.h"
 #include "recovery/RecoveryManager.h"
 #include "recovery/ResumePlan.h"
+#include "safety/SafeModeController.h"
 #include "scheduling/Scheduler.h"
 #include "scheduling/SchedulerTicket.h"
 #include "session/SessionManager.h"
@@ -35,6 +36,7 @@ enum class StubMainLoopExit : std::uint8_t {
 enum class StubRecoveryExit : std::uint8_t {
   ContinueResponse = 0,
   AbortSafe,
+  BudgetExhausted,
 };
 
 struct OrchestratorStubPorts {
@@ -113,6 +115,9 @@ class AgentOrchestrator final {
 
   void seed_for_test(const std::optional<SessionSnapshot>& session_snapshot,
                      const std::vector<contracts::Checkpoint>& checkpoints);
+  void seed_checkpoint_for_test(
+      const contracts::Checkpoint& checkpoint,
+      std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot = std::nullopt);
 
   [[nodiscard]] OrchestratorRunResult run_once(const contracts::AgentRequest& request);
   [[nodiscard]] OrchestratorRunResult continue_from_checkpoint(
@@ -131,6 +136,7 @@ class AgentOrchestrator final {
   RecoveryManager recovery_manager_;
   Scheduler scheduler_;
   SessionManager session_manager_;
+  SafeModeController safe_mode_controller_;
   std::uint64_t next_sequence_ = 1;
 };
 

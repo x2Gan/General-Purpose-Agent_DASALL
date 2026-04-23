@@ -118,6 +118,7 @@ struct CheckpointConsistencyReport {
 struct CheckpointBuildResult {
   std::optional<contracts::Checkpoint> checkpoint;
   CheckpointConsistencyReport report;
+  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot = std::nullopt;
 
   [[nodiscard]] bool built() const {
     return checkpoint.has_value() && report.consistent;
@@ -140,6 +141,7 @@ struct CheckpointLoadResult {
   CheckpointConsistencyReport report;
   std::optional<RuntimeErrorCode> error_code;
   std::string detail;
+  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot = std::nullopt;
 
   [[nodiscard]] bool loaded() const {
     return checkpoint.has_value() && report.consistent && !error_code.has_value();
