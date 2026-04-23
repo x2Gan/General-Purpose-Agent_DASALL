@@ -132,7 +132,7 @@
 1. 可直接做到 L3 的对象：`RuntimeErrorCode`、`CancellationToken`、`IAgentFsm`、`StateTransitionTypes`、`IBudgetController`、`CheckpointStateMapper`、`TransitionGuardTable`，以及 frozen contracts 的消费口径。
 2. 可安全做到 L2 的对象：`ICheckpointManager`、`IRecoveryManager`、`ISessionManager`、`IScheduler`、`AgentFacade`、`AgentOrchestrator`、`SessionManager`、`Scheduler`、`SafeModeController`、`RuntimeHealthProbe`、`RuntimeProfileCompatibilityTest` 对应的 fixture 组合层。
 3. 只能停在 L1 的对象：`RuntimeTelemetryBridge`、`RuntimeEventBus`、`BackgroundMaintenanceHooks`、`RuntimeDependencySet` 私有 helper 细节。
-4. 仍然 blocked 的对象：true cross-module unary integration 与真端口持久化 round-trip，原因是相邻模块 runtime-facing public interface 未全部落位。
+4. 仍需单独跟踪的对象：更宽范围的 true-port session persist round-trip 与 dependency unavailable live route；但 unary true integration 已由 027 的最小 public seam + live wiring 路径解阻，不再属于当前 blocked 项。
 
 ### 4.2 评估表
 
@@ -147,7 +147,7 @@
 | `IScheduler` / `SchedulerTicket` | 6.14.4、6.24.10 | L2 | 接口与策略明确，可先公共面后实现 |
 | `RuntimeTelemetryBridge` / `RuntimeEventBus` / `RuntimeHealthProbe` / `BackgroundMaintenanceHooks` / `RuntimeDependencySet` | 6.12、6.18、6.23、6.24.12 | L1/L2 | Telemetry、EventBus、maintenance 保持轻量，health probe 可独立收敛并测试 |
 | `RuntimeUnaryFixtureIntegration` | 7、8.3、9.4 | L2 | 先做 topology/fixture/stub，作为 runtime-local gate |
-| `RuntimeUnaryIntegration` | 7、8.3、9.4 | Blocked | 只有相邻模块 public interface 落位后才能作为真集成 gate |
+| `RuntimeUnaryIntegration` | 7、8.3、9.4 | L2 | 027 已以最小 cognition seam + runtime live wiring 通过 true unary integration gate |
 
 ## 5. Design -> TODO 映射表
 
@@ -228,7 +228,7 @@
 | RT-TODO-028 | Done | 验证 RuntimeResumeIntegration 与 checkpoint replay regression | runtime 详设 7、8.2 J2/J3、9.4、9.5、9.6；RT-TC016、RT-TC018 | 9.4 集成测试路径 #3 Resume；9.5 failure injection；附录 A replay-safe 改进项 | L2 | `tests/integration/agent_loop/RuntimeResumeIntegrationTest.cpp`、`tests/integration/agent_loop/RuntimeCheckpointReplayRegressionTest.cpp` | waiting-state resume、incompatible schema reject、golden checkpoint replay regression | `RuntimeResumeIntegrationTest`、`RuntimeCheckpointReplayRegressionTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "(RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest)" --output-on-failure` | 018、021、024、025、026 | 无 | — | `runtime/include/RuntimeDependencySet.h`、`runtime/src/AgentFacade.cpp`、`runtime/src/AgentOrchestrator.h`、`runtime/src/AgentOrchestrator.cpp`、`runtime/src/session/SessionManager.h`、`runtime/src/session/SessionManager.cpp`、`tests/fixtures/runtime/RuntimeUnaryFixture.h`、更新后的 `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/agent_loop/RuntimeResumeIntegrationTest.cpp`、`tests/integration/agent_loop/RuntimeCheckpointReplayRegressionTest.cpp`、`docs/todos/runtime/deliverables/RT-TODO-028-RuntimeResumeIntegration与ReplayRegression设计收敛.md` | `RuntimeResumeIntegrationTest`、`RuntimeCheckpointReplayRegressionTest`、`RuntimeControlPlaneSurfaceTest`、`AgentOrchestratorControllerAssemblyTest` 与 `RuntimeUnaryFixtureIntegrationTest` 全部通过；`ctest -N` 可发现 resume / replay regression 入口；`dasall_integration_tests` 聚合中新增 runtime tests 全部通过，但整体仍受既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败阻塞，不属于本轮 runtime 回归 |
 | RT-TODO-029 | Done | 验证 RuntimeProfileCompatibility | runtime 详设 9.1 compatibility、10.3 灰度策略；RT-TC023 | 9.1 compatibility 行；10.3 按 profile 灰度策略 | L2 | `tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp` | `desktop_full`、`edge_balanced`、`edge_minimal` 至少三档 profile 下的 runtime_budget、degrade、enablement 差异 | `RuntimeProfileCompatibilityTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R RuntimeProfileCompatibilityTest --output-on-failure` | 015、021、023、025、026 | 无 | — | 更新后的 `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp`、`docs/todos/runtime/deliverables/RT-TODO-029-RuntimeProfileCompatibility设计收敛.md` | `RuntimeProfileCompatibilityTest` 通过；`ctest -N` 可发现 profile compatibility gate；`dasall_integration_tests` 聚合中新的 runtime profile gate 已通过，但整体仍受既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败阻塞，不属于本轮 runtime 回归 |
 | RT-TODO-030 | Done | 验证 RuntimeSafeMode、Health、Cancellation 与 Concurrency Gate | runtime 详设 6.14、6.16、6.21、6.23、9.1、9.6；RT-TC007、RT-TC013、RT-TC015、RT-TC019、RT-TC020 | 9.5 失败注入测试点；9.6 RT-GATE-02 / RT-GATE-08；8.2 J4 health 收口 | L2 | `tests/integration/agent_loop/RuntimeSafeModeIntegrationTest.cpp`、`tests/integration/agent_loop/RuntimeHealthMaintenanceIntegrationTest.cpp`、`tests/unit/runtime/` | safe mode、health degrade、idle maintenance、cancel、backpressure、lock-order stress | `RuntimeSafeModeIntegrationTest`、`RuntimeHealthMaintenanceIntegrationTest`、`CancellationTokenTest`、`SchedulerTest`、`RuntimeHealthProbeTest`、`RuntimeBackgroundMaintenanceHookTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -R "(RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|CancellationTokenTest|SchedulerTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest)" --output-on-failure` | 019、022、023、025、026 | 无 | — | `runtime/src/safety/SafeModeController.cpp`、更新后的 `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/agent_loop/RuntimeSafeModeIntegrationTest.cpp`、`tests/integration/agent_loop/RuntimeHealthMaintenanceIntegrationTest.cpp`、更新后的 `tests/unit/runtime/SchedulerTest.cpp`、`docs/todos/runtime/deliverables/RT-TODO-030-RuntimeSafeMode与HealthMaintenance设计收敛.md` | `RuntimeSafeModeIntegrationTest`、`RuntimeHealthMaintenanceIntegrationTest`、`CancellationTokenTest`、`SchedulerTest`、`RuntimeHealthProbeTest` 与 `RuntimeBackgroundMaintenanceHookTest` 全部通过；`ctest -N` 可发现两条新 runtime integration gate；`SafeModeController` 已改为正确解释真实 profile 的 budget degrade / failover route；`dasall_unit_tests` 仍受既有 `tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 语法损坏阻塞，`dasall_integration_tests` 仍受既有 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 失败阻塞，不属于本轮 runtime 回归 |
-| RT-TODO-031 | NotStarted | 回写 runtime 专项 Gate 与交付证据 | runtime 详设 9.6、11、12；成熟子系统 TODO 与 worklog 基线；RT-TC021、RT-TC022 | 9.6 Gate 建议清单；§11 回退策略；已交付子系统 blocker-first 回写风格 | L2 | `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md` | Gate 结论、blocker 状态、runtime-local 与 true integration 分层证据、残余风险、命令证据 | 全量门禁复验与证据双写回 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_runtime dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci -R "(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeCheckpointReplayCompatibilityTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|MainFlowContractE2ETest)" --output-on-failure` | 027 ~ 030 | 无 | — | 更新后的 TODO、worklog、deliverables 回链记录 | 每个 Gate 都有命令证据和状态回写；runtime-local fixture gate 与 true integration gate 的结论分开记录；残余 blocker 与风险终态明确 |
+| RT-TODO-031 | Done | 回写 runtime 专项 Gate 与交付证据 | runtime 详设 9.6、11、12；成熟子系统 TODO 与 worklog 基线；RT-TC021、RT-TC022 | 9.6 Gate 建议清单；§11 回退策略；已交付子系统 blocker-first 回写风格 | L2 | `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md`、`docs/todos/runtime/deliverables/RT-TODO-031-runtime专项Gate与证据收口.md` | Gate 结论、blocker 状态、runtime-local 与 true integration 分层证据、残余风险、命令证据 | 33 条 runtime gate 相关测试的 discoverability 与 current-build matrix 复验 | `ctest --test-dir build/vscode-linux-ninja -N | rg "RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|MainFlowContractE2ETest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|RuntimeCheckpointReplayCompatibilityTest" && cmake --build build/vscode-linux-ninja --target dasall_runtime_safe_mode_controller_unit_test dasall_runtime_event_bus_unit_test dasall_runtime_telemetry_bridge_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test dasall_runtime_unary_fixture_integration_test dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test dasall_runtime_profile_compatibility_integration_test dasall_runtime_safe_mode_integration_test dasall_runtime_health_maintenance_integration_test dasall_runtime_checkpoint_replay_compatibility_integration_test && ctest --test-dir build/vscode-linux-ninja -R "^(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeCheckpointReplayCompatibilityTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|MainFlowContractE2ETest)$" --output-on-failure` | 027 ~ 030 | 无 | — | 更新后的 TODO、worklog、deliverables 回链记录 | Gate-RT-01 ~ Gate-RT-06 可追溯到前序 deliverable / worklog；Gate-RT-07 ~ Gate-RT-12 具备当前命令证据；runtime-local fixture gate 与 true integration gate 的结论分开记录；残余 external blocker 与风险终态明确 |
 
 ## 7. 执行顺序建议
 
@@ -242,7 +242,7 @@
 | D Orchestrator 两阶段 | 020、021 | 020 先（骨架+stub），021 后（全控制器集成，但仍只证明 runtime-local 闭环） | 先验证主循环 topology，再接入全量控制器 |
 | E 安全、观测与 replay 基础 | 022、023、024 | 022 先，023 与 024 可并行 | 收口 safe mode、telemetry、health/maintenance 与 checkpoint compatibility |
 | F runtime-local gates 与兼容性 | 025、026、028、029、030 | 025 先；026、028、029 可并行；030 在 022/023 后 | runtime-local fixture gate、resume/replay、profile、safe mode/health/concurrency 都先于真集成 gate |
-| G true cross-module integration | 027 | 仅在 RT-BLK-01 解阻后执行 | 027 阻塞时，专项状态只能写为 subsystem-local ready，不能外推全链 ready |
+| G true cross-module integration | 027 | 已于 2026-04-23 完成 | Gate-RT-11 已通过，但结论只覆盖 unary true integration，不外推更宽 live-route ready |
 | H 证据与 blocker 收口 | 031 | 串行 | 所有 Gate、blocker、残余风险、下一步动作集中回写 |
 
 ### 7.2 必过门禁表
@@ -266,7 +266,7 @@
 
 | Blocker ID | 对应设计 Blocker | 阻塞项 | 当前影响 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|---|
-| RT-BLK-01 | RT-BLK-001 | memory、tools、knowledge runtime-facing public interface 未全部落位 | true unary integration、true-port session persist、dependency unavailable 路径不能直接用真实端口验证 | 完成 RT-TODO-003，或相邻模块提供 public interface 与 fail-closed stub | 解阻前只验证 runtime 自身逻辑，不宣称真端口 ready |
+| RT-BLK-01 | RT-BLK-001 | 相邻模块 runtime-facing public interface 未形成可供 unary gate 消费的最小闭环（已解阻） | 不再阻塞 true unary integration；更宽 true-port session persist 与 dependency unavailable live route 仍属后续扩展 | 已由 RT-TODO-027 通过 cognition seam + runtime live wiring + integration fixture 完成最小解阻 | 若 Gate-RT-11 回归失败，则回退为 fixture-only 结论并重新校准 |
 | RT-BLK-02 | RT-BLK-002 | llm streaming supporting objects 未冻结 | streaming 正式接线不可作为阶段 J 门禁 | 由 contracts owner 完成 supporting-object 收口 | 明确排除 streaming |
 | RT-BLK-03 | RT-BLK-003 | multi_agent 阶段顺序未开始 | 多 Agent 协同闭环不能作为前置完成条件 | 阶段 L 再进入 | 本专项只保留扩展点 |
 | RT-BLK-04 | 详设 8.3 隐含 | `AgentFacade` / `SessionManager` supporting types 未成表 | `IAgent`、`ISessionManager` 只能停在类级 | 完成 RT-TODO-001、002 | 解阻前只做 L2 级 public surface |
@@ -277,7 +277,7 @@
 
 | Blocker ID | 校准时间 | 校准结果 | 剩余阻塞范围 | 备注 |
 |---|---|---|---|---|
-| RT-BLK-01 | — | — | — | — |
+| RT-BLK-01 | 2026-04-23 | 已解阻（限 Gate-RT-11 unary true integration） | true-port session persist、dependency unavailable live route 等更宽 live path，不属于当前专项 gate | RT-TODO-027 已通过 `RuntimeUnaryIntegrationTest` 与 `MainFlowContractE2ETest`；knowledge / llm 不再是 unary gate 的前置条件 |
 | RT-BLK-02 | — | — | — | — |
 | RT-BLK-03 | — | — | — | — |
 | RT-BLK-04 | 2026-04-22 | 已解阻 | RT-TODO-005、RT-TODO-010 等依赖 supporting types 成表的 public surface 任务 | RT-TODO-001 与 RT-TODO-002 已完成，AgentFacade / SessionManager supporting types 口径已冻结 |
@@ -329,26 +329,29 @@ ctest --test-dir build-ci -R "(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTe
 
 ### 9.4 Gate 执行证据表
 
+> Gate-RT-01 ~ Gate-RT-06 复用前序任务各自的原始验收命令；Gate-RT-07 ~ Gate-RT-12 复用 RT-TODO-031 交付物 §8 中的 current-build discoverability / full matrix 命令。
+
 | Gate ID | 执行时间 | 执行命令 | 执行结果 | subsystem-local 结论 | cross-module blocker | 后继动作 |
 |---|---|---|---|---|---|---|
-| Gate-RT-01 | — | — | — | — | — | — |
-| Gate-RT-02 | — | — | — | — | — | — |
-| Gate-RT-03 | — | — | — | — | — | — |
-| Gate-RT-04 | — | — | — | — | — | — |
-| Gate-RT-05 | — | — | — | — | — | — |
-| Gate-RT-06 | — | — | — | — | — | — |
-| Gate-RT-07 | — | — | — | — | — | — |
-| Gate-RT-08 | — | — | — | — | — | — |
-| Gate-RT-09 | — | — | — | — | — | — |
-| Gate-RT-10 | — | — | — | — | — | — |
-| Gate-RT-11 | — | — | — | — | — | — |
-| Gate-RT-12 | — | — | — | — | — | — |
+| Gate-RT-01 | 2026-04-22 | 前序任务原始验收命令 | Pass | supporting types、seam 与 topology 口径已冻结 | 无 | 作为 005 ~ 025 的设计真值继续复用 |
+| Gate-RT-02 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | runtime public surface 与 control-plane surface gate 通过；旧 smoke 不计 Gate | 无 | 保持 build-liveness 与 Gate 语义分离 |
+| Gate-RT-03 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | FSM / state mapping / guard rules 全绿 | 无 | 维持规则表与实现一致 |
+| Gate-RT-04 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | budget / checkpoint / recovery / session primitive 全绿 | 无 | 继续以 contract + replay regression 守卫 |
+| Gate-RT-05 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | cancel / backpressure / lock-order 语义全绿 | 无 | 维持 scheduler stress |
+| Gate-RT-06 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | telemetry / health / background maintenance 可验证 | 无 | 维持 runtime-private observability gate |
+| Gate-RT-07 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | runtime-local unary fixture loop 通过 | 已与 Gate-RT-11 分层 | 不得替代 true integration 结论 |
+| Gate-RT-08 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | replay 与 resume compatibility 通过 | 无 | 继续锚定 golden checkpoint fixtures |
+| Gate-RT-09 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | profile compatibility 通过 | 无 | 维持 shared validator 对齐 |
+| Gate-RT-10 | 2026-04-23 | RT-TODO-031 current-build full matrix | Pass | safe mode / health degrade / failure injection 通过 | 无 | 继续与 external aggregate blocker 分账 |
+| Gate-RT-11 | 2026-04-23 | RT-TODO-027 unary true-integration 命令 + RT-TODO-031 current-build full matrix | Pass | true cross-module unary gate 通过 | RT-BLK-01 已对 unary gate 解阻 | 更宽 live routes 需单独建 gate |
+| Gate-RT-12 | 2026-04-23 | RT-TODO-031 discoverability + current-build full matrix | Pass | runtime-local / true integration / external blockers 已分账回写 | RT-BLK-01 已解阻，仓库级 residual blockers 已单列 | 后续仅跟踪 external blocker 与新增 gate 需求 |
 
 ### 9.5 Gate 写回规则
 
 1. Gate-RT-07 通过只能证明 runtime-local fixture 闭环成立，不能替代 Gate-RT-11。
 2. 若 RT-BLK-01 未解，Gate-RT-11 的状态必须写为 Blocked，不得写为 Pass。
 3. `dasall_runtime_smoke_test` 与当前 `RuntimeSmokeTest.cpp` 只能出现在 build-liveness 记录里，不能写入任何 Gate 通过证据。
+4. 若 `ctest -N` 已能发现 Gate 测试，但 executable 缺失导致 `Not Run`，必须先补建具体 target，再判断是真失败还是 build completeness 缺口。
 
 ## 10. 风险与回退策略
 
@@ -391,15 +394,13 @@ ctest --test-dir build-ci -R "(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTe
 
 1. L3：`RuntimeErrorCode`、`CancellationToken`、`IAgentFsm`、`StateTransitionTypes`、`IBudgetController`、`CheckpointStateMapper`、`TransitionGuardTable`，以及 frozen contracts 的消费口径。
 2. L2：`AgentFacade`、`ISessionManager` / `SessionManager`、`ICheckpointManager` / `CheckpointManager`、`IRecoveryManager` / `RecoveryManager`、`IScheduler` / `Scheduler`、`AgentOrchestrator`（骨架 + runtime-local 全集成）、`SafeModeController`、`RuntimeHealthProbe`、`RuntimeProfileCompatibilityTest` 对应的 fixture 组合层。
-3. L1 / Blocked：`RuntimeTelemetryBridge`、`RuntimeEventBus`、`BackgroundMaintenanceHooks`、`RuntimeDependencySet` 的私有 helper 细节，以及依赖相邻模块 public interface 的 true integration 路径。
+3. L1：`RuntimeTelemetryBridge`、`RuntimeEventBus`、`BackgroundMaintenanceHooks`、`RuntimeDependencySet` 的私有 helper 细节；更宽范围的 true-port live routes 仍属后续扩展，但 unary true integration 已完成。
 
 ### 11.3 后续建议
 
-1. 先执行 RT-TODO-001 ~ 004，冻结 supporting types、port seam、runtime-local fixture matrix 与 test topology。
-2. 再执行 RT-TODO-005 ~ 024，把 runtime 从 placeholder-only 收敛为可编译、可测、具备 replay compatibility 约束的控制平面骨架与控制器集合。
-3. 执行 RT-TODO-025、026、028、029、030，先把 runtime-local fixture gate、resume/replay、profile、safe mode 与 health gate 跑通。
-4. 仅在 RT-BLK-01 解阻后执行 RT-TODO-027；027 未通过前，不得把专项状态写成全链 ready。
-5. 最后执行 RT-TODO-031，分开回写 runtime-local 结论、true integration 结论、残余 blocker 与后续动作。
+1. runtime 专项 001 ~ 031 已完成；后续若继续扩范围，应优先围绕 true-port session persist、dependency unavailable live route 等更宽路径新增独立 gate，而不是回填到 Gate-RT-11。
+2. 仓库级全量绿灯仍需单独处理 external blocker：`tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 语法损坏，以及 `InfraDiagnosticsSmokeTest` / `InfraDiagnosticsIntegrationTest` 失败。
+3. 后续如再做专项回写，继续沿用“task deliverable -> TODO 状态 -> worklog -> current-build 复验”四层证据链，不回到混合 gate 或单点测试证明。
 
 ## 12. 未决问题处置表
 
@@ -410,6 +411,6 @@ ctest --test-dir build-ci -R "(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTe
 | RT-OQ-01 | 详设 §12 OQ-1 | multi_agent 编排协议尚未稳定 | 本专项排除 | 无 | RT-BLK-03 覆盖；阶段 L 再进入 |
 | RT-OQ-02 | 详设 §12 OQ-2 | streaming supporting objects（ChunkEnvelope 等）冻结时间不确定 | 本专项排除 | 无 | RT-BLK-02 覆盖；Stage J 不含 streaming Gate |
 | RT-OQ-03 | 详设 §12 OQ-3 | checkpoint schema 版本升级策略未最终确定 | 本专项 partial 覆盖 | RT-TODO-016、024、028 | version tag 写入、compatibility contract 与 replay regression 已纳入；跨大版本迁移留后续 |
-| RT-OQ-04 | 详设 §12 OQ-4 | 相邻模块 runtime-facing public interface 落位时间不确定 | 本专项 mitigate | RT-TODO-003、026、027、031 | fail-closed stub + seam 唯一原则；RT-BLK-01 持续追踪；fixture gate 与 true integration gate 分开记录 |
+| RT-OQ-04 | 详设 §12 OQ-4 | 相邻模块 runtime-facing public interface 落位时间不确定 | 本专项 mitigate | RT-TODO-003、026、027、031 | fail-closed stub + seam 唯一原则仍成立；RT-BLK-01 已对 unary gate 解阻；fixture gate 与 true integration gate 继续分开记录 |
 | RT-OQ-05 | 详设 §12 OQ-5 | recovery retry 超限后的人工干预接口未定义 | 本专项 partial 覆盖 | RT-TODO-017 | retry admission 含 max_retry 上限；超限后进入 FailedSafe -> audit；人工干预 API 留后续 |
 | RT-OQ-06 | 详设 6.23 / 8.2 J4 | health probe 与 background maintenance 的默认 cadence 尚未冻结 | 本专项 partial 覆盖 | RT-TODO-023、030 | 首版先固化字段、non-blocking 行为与 Gate；具体 cadence 后续由 profile 与 ops_policy 收口 |

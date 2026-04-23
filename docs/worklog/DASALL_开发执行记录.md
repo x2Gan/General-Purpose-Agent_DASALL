@@ -1,5 +1,62 @@
 # DASALL 开发执行记录
 
+## 记录 #443
+
+- 日期：2026-04-23
+- 阶段：runtime/专项 TODO gate 证据与 blocker 收口任务
+- 任务：RT-TODO-031 回写 runtime 专项 Gate 与交付证据
+- 状态：已完成
+
+### 任务选择
+
+1. 027 已完成并推送后，runtime 专项剩余的唯一原子任务就是 031；如果不先做 031，专项 TODO 仍会停留在“测试已通过、状态与证据未回写”的半完成状态。
+2. 本轮最小判别点不是再改 runtime 实现，而是确认专项 Gate 证据能否在当前工作区的 active build 面上重复执行；若不能，就必须先区分“真实 gate 回归失败”和“current-build completeness 缺口”。
+3. 031 还必须把 RT-BLK-01 的解阻状态与仓库级外部 blocker 分账，否则 027 的 true integration 通过会继续被历史 Blocked 叙事覆盖。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-031-runtime专项Gate与证据收口.md`：
+   - 固定 031 的证据方法：Gate-RT-01 ~ 06 追溯前序 deliverable / worklog，Gate-RT-07 ~ 11 在当前 `build/vscode-linux-ninja` 上统一复验，Gate-RT-12 回写专项 SSOT 与 residual blocker 分账。
+2. 更新 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 将 RT-TODO-031 标记为 Done；
+   - 回写 RT-BLK-01 的 blocker 描述与 2026-04-23 校准结果，明确其已对 Gate-RT-11 unary true integration 解阻；
+   - 回写 Gate-RT-01 ~ Gate-RT-12 的专项证据表，明确 Gate-RT-07 与 Gate-RT-11 的分层关系；
+   - 把后续建议切换成“外部 blocker 与更宽 live-route gate”的后续动作，而不是继续沿用执行前计划文本。
+3. 更新 `docs/worklog/DASALL_开发执行记录.md`：
+   - 新增本条 031 记录，固定 current-build discoverability、补建缺失 executable、重跑 full matrix 和 residual blocker 分账结论。
+
+### 验证
+
+1. discoverability 复验：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N | rg "RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|MainFlowContractE2ETest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|RuntimeCheckpointReplayCompatibilityTest"`
+   - 结果：33 条 runtime 专项相关测试均可被 CTest 发现。
+2. full matrix 首轮探针：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -R "^(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeCheckpointReplayCompatibilityTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|MainFlowContractE2ETest)$" --output-on-failure`
+   - 结果：12 条测试 `Not Run`，根因均为 current build 目录缺少 executable，而非断言失败。
+3. current-build completeness 修复：
+   - 命令：`cmake --build build/vscode-linux-ninja --target dasall_runtime_safe_mode_controller_unit_test dasall_runtime_event_bus_unit_test dasall_runtime_telemetry_bridge_unit_test dasall_runtime_health_probe_unit_test dasall_runtime_background_maintenance_hook_unit_test dasall_runtime_unary_fixture_integration_test dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test dasall_runtime_profile_compatibility_integration_test dasall_runtime_safe_mode_integration_test dasall_runtime_health_maintenance_integration_test dasall_runtime_checkpoint_replay_compatibility_integration_test`
+   - 结果：缺失 runtime unit / integration executable 全部补建成功。
+4. full matrix 复验：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -R "^(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTest|CancellationTokenTest|AgentFsmTest|BudgetControllerTest|CheckpointManagerTest|RecoveryManagerTest|SchedulerTest|TransitionGuardTableTest|CheckpointStateMapperTest|SessionTypeSurfaceTest|SessionManagerTest|SafeModeControllerTest|AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeEventBusTest|RuntimeHealthProbeTest|RuntimeBackgroundMaintenanceHookTest|RuntimeBudgetContractTest|CheckpointFieldContractTest|ReflectionDecisionContractTest|RecoveryRequestContractTest|RecoveryOutcomeContractTest|RuntimeCheckpointReplayCompatibilityTest|RuntimeUnaryFixtureIntegrationTest|RuntimeUnaryIntegrationTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeProfileCompatibilityTest|RuntimeSafeModeIntegrationTest|RuntimeHealthMaintenanceIntegrationTest|MainFlowContractE2ETest)$" --output-on-failure`
+   - 结果：33/33 通过，`100% tests passed, 0 tests failed out of 33`。
+
+### 结果
+
+1. RT-TODO-031 已完成，runtime 专项 TODO 现在具备可追溯的 blocker 校准表、Gate 执行证据表和 residual risk 分账。
+2. Gate-RT-07 与 Gate-RT-11 已正式分层回写：026 的 runtime-local fixture gate 不再被误当成 true integration 证据，027 的 unary true integration 通过也不再被历史 blocker 文案覆盖。
+3. RT-BLK-01 已对 Gate-RT-11 的 unary gate 解阻；remaining work 只剩更宽 true-port live routes 的后续扩展，不再属于当前专项 blocker。
+4. 当前工作区的 runtime 专项 current-build 证据已经闭环；如果后续再出现“CTest 可发现但 executable 缺失”，应先按本轮流程补建 target，再判断 gate 是否真的回归。
+
+### 下一步
+
+1. 若继续推进 runtime，应单独为 true-port session persist、dependency unavailable live route 等更宽路径新增 gate，而不是回填到 Gate-RT-11。
+2. 仓库级全量绿灯需要转到 external blocker 收口：`tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 语法损坏，以及 `InfraDiagnosticsSmokeTest` / `InfraDiagnosticsIntegrationTest` 失败。
+
+### 风险
+
+1. 如果后续直接用 `dasall_unit_tests` / `dasall_integration_tests` 的聚合结果代表 runtime 专项结论，会再次把 external blocker 混入 runtime 证据，破坏 031 刚建立的分账规则。
+2. Gate-RT-11 当前只证明 unary success path；未来若要扩大到更宽 live route，必须新增独立 gate 和证据表，而不是改写现有 Gate-RT-11 含义。
+
 ## 记录 #442
 
 - 日期：2026-04-23
