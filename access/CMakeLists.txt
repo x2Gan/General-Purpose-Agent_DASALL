@@ -4,6 +4,7 @@ set(DASALL_ACCESS_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(DASALL_ACCESS_PUBLIC_HEADERS
   include/AccessErrors.h
   include/AccessTypes.h
+  include/daemon/DaemonProtocolAdapter.h
   include/IAccessGateway.h
   include/IAccessRuntimeBridge.h
   include/IAdmissionController.h
@@ -24,6 +25,7 @@ target_sources(dasall_access
   PRIVATE
     src/placeholder.cpp
     src/AccessConfigAdapter.cpp
+    src/daemon/DaemonProtocolAdapter.cpp
     src/ProtocolErrorMapper.cpp
   PUBLIC
     FILE_SET public_headers
@@ -45,6 +47,7 @@ target_include_directories(dasall_access
 target_link_libraries(dasall_access
   PUBLIC
     dasall_contracts
+    dasall_platform
   PRIVATE
     dasall_infra
 )

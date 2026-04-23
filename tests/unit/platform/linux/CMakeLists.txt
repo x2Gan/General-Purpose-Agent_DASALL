@@ -178,6 +178,21 @@ dasall_apply_common_options(dasall_unix_ipc_provider_unit_test)
 add_test(NAME UnixIpcProviderTest COMMAND dasall_unix_ipc_provider_unit_test)
 set_tests_properties(UnixIpcProviderTest PROPERTIES LABELS "unit")
 
+add_executable(dasall_unix_ipc_provider_peer_identity_unit_test
+  UnixIpcProviderPeerIdentityTest.cpp
+)
+
+target_link_libraries(dasall_unix_ipc_provider_peer_identity_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_unix_ipc_provider_peer_identity_unit_test)
+
+add_test(NAME UnixIpcProviderPeerIdentityTest COMMAND dasall_unix_ipc_provider_peer_identity_unit_test)
+set_tests_properties(UnixIpcProviderPeerIdentityTest PROPERTIES LABELS "unit")
+
 add_executable(dasall_hal_availability_bridge_unit_test
   HalAvailabilityBridgeTest.cpp
 )

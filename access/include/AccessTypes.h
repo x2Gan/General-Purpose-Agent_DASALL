@@ -35,6 +35,16 @@ struct SubjectIdentity {
   std::optional<std::string> auth_metadata;  // 补充数据
 };
 
+// LocalPeerUidFact - daemon 本地控制面 peer 身份事实
+struct LocalPeerUidFact {
+  std::string actor_ref;
+  std::uint32_t peer_uid = 0;
+  std::uint32_t peer_gid = 0;
+  std::uint32_t peer_pid = 0;
+  bool is_local_socket_peer = false;
+  bool eligible_for_local_trusted = false;
+};
+
 // AccessDecisionProof - 授权裁定证据
 struct AccessDecisionProof {
   std::string decision;                      // Allow / Deny / RequireConfirmation

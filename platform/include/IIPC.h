@@ -50,6 +50,25 @@ struct IpcChannelHandle {
   }
 };
 
+struct PeerIdentitySnapshot {
+  std::uint32_t peer_uid = 0;
+  std::uint32_t peer_gid = 0;
+  std::uint32_t peer_pid = 0;
+  bool is_local_socket_peer = false;
+
+  [[nodiscard]] bool has_consistent_values() const {
+    if (!is_local_socket_peer) {
+      return true;
+    }
+
+    if (peer_uid == 0U || peer_gid == 0U || peer_pid == 0U) {
+      return false;
+    }
+
+    return true;
+  }
+};
+
 using IpcPayload = std::vector<std::uint8_t>;
 
 struct IpcSendResult {
@@ -87,6 +106,8 @@ class IIPC {
                                              const IpcPayload& payload) = 0;
   virtual PlatformResult<IpcReceiveResult> receive(const IpcChannelHandle& handle,
                                                    std::int32_t deadline_ms) = 0;
+  virtual PlatformResult<PeerIdentitySnapshot> describe_peer(
+      const IpcChannelHandle& handle) = 0;
   virtual PlatformResult<bool> close(const IpcChannelHandle& handle) = 0;
 };
 

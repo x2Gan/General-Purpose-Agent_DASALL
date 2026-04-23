@@ -23,6 +23,8 @@ class UnixIpcProvider final : public IIPC {
                                      const IpcPayload& payload) override;
   PlatformResult<IpcReceiveResult> receive(const IpcChannelHandle& handle,
                                            std::int32_t deadline_ms) override;
+  PlatformResult<PeerIdentitySnapshot> describe_peer(
+      const IpcChannelHandle& handle) override;
   PlatformResult<bool> close(const IpcChannelHandle& handle) override;
 
  private:
@@ -34,6 +36,7 @@ class UnixIpcProvider final : public IIPC {
     bool closed = false;
     bool peer_closed = false;
     std::uint32_t max_payload_bytes = 1048576U;
+    PeerIdentitySnapshot peer_identity;
   };
 
   [[nodiscard]] PlatformError make_error(PlatformErrorCode code,

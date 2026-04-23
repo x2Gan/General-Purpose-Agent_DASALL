@@ -67,6 +67,11 @@ void access_public_surface_is_discoverable() {
   dasall::tests::support::assert_true(
       !admission_result.admitted,
       "access interface surface test should see AccessAdmissionResult defaults");
+
+  const dasall::access::LocalPeerUidFact local_peer_fact{};
+  dasall::tests::support::assert_true(
+      !local_peer_fact.eligible_for_local_trusted,
+      "access interface surface test should expose LocalPeerUidFact defaults");
 }
 
 void access_gateway_state_enumeration_is_defined() {

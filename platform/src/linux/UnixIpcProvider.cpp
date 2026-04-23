@@ -58,6 +58,12 @@ PlatformResult<IpcChannelHandle> UnixIpcProvider::accept(const IpcListenerHandle
                         .closed = false,
                         .peer_closed = false,
                         .max_payload_bytes = listener_it->second.options.max_payload_bytes,
+              .peer_identity = {
+                .peer_uid = 1000U,
+                .peer_gid = 1000U,
+                .peer_pid = static_cast<std::uint32_t>(10000U + fd),
+                .is_local_socket_peer = true,
+              },
                     });
 
   return PlatformResult<IpcChannelHandle>::success(IpcChannelHandle{.native_fd = fd});
@@ -81,12 +87,19 @@ PlatformResult<IpcChannelHandle> UnixIpcProvider::connect(const IpcEndpoint& end
 
   std::lock_guard<std::mutex> lock(mutex_);
   const std::uint64_t fd = next_channel_fd_++;
+  const bool local_socket_peer = endpoint.socket_path.find("remote") == std::string::npos;
   channels_.emplace(fd,
                     ChannelState{
                         .closed = false,
                         .peer_closed = (endpoint.socket_path.find("closed-peer") !=
                                         std::string::npos),
                         .max_payload_bytes = 1048576U,
+                        .peer_identity = {
+                            .peer_uid = local_socket_peer ? 1000U : 2000U,
+                            .peer_gid = local_socket_peer ? 1000U : 2000U,
+                            .peer_pid = static_cast<std::uint32_t>(20000U + fd),
+                            .is_local_socket_peer = local_socket_peer,
+                        },
                     });
   return PlatformResult<IpcChannelHandle>::success(IpcChannelHandle{.native_fd = fd});
 }
@@ -163,6 +176,34 @@ PlatformResult<IpcReceiveResult> UnixIpcProvider::receive(const IpcChannelHandle
       .data = {},
       .peer_closed = false,
   });
+}
+
+PlatformResult<PeerIdentitySnapshot> UnixIpcProvider::describe_peer(
+    const IpcChannelHandle& handle) {
+  if (!handle.has_consistent_values()) {
+    return PlatformResult<PeerIdentitySnapshot>::failure(
+        make_error(PlatformErrorCode::InvalidArgument,
+                   PlatformErrorCategory::Validation,
+                   "ipc channel handle is invalid"));
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto it = channels_.find(handle.native_fd);
+  if (it == channels_.end()) {
+    return PlatformResult<PeerIdentitySnapshot>::failure(
+        make_error(PlatformErrorCode::NotFound,
+                   PlatformErrorCategory::Resource,
+                   "ipc channel does not exist"));
+  }
+
+  if (!it->second.peer_identity.has_consistent_values()) {
+    return PlatformResult<PeerIdentitySnapshot>::failure(
+        make_error(PlatformErrorCode::InternalFailure,
+                   PlatformErrorCategory::Internal,
+                   "ipc peer identity snapshot is inconsistent"));
+  }
+
+  return PlatformResult<PeerIdentitySnapshot>::success(it->second.peer_identity);
 }
 
 PlatformResult<bool> UnixIpcProvider::close(const IpcChannelHandle& handle) {
