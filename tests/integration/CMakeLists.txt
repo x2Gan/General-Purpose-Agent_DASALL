@@ -12,6 +12,7 @@ add_subdirectory(tools)
 add_subdirectory(memory)
 add_subdirectory(knowledge)
 add_subdirectory(llm)
+add_subdirectory(access)
 
 set(DASALL_RUNTIME_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	${DASALL_RUNTIME_AGENT_LOOP_INTEGRATION_TEST_EXECUTABLE_TARGETS}
@@ -47,6 +48,7 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	${DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+	${DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	PARENT_SCOPE
 )
 
@@ -78,4 +80,3 @@ add_custom_target(dasall_watchdog_integration_tests
 if(NOT DASALL_WATCHDOG_INTEGRATION_TEST_EXECUTABLE_TARGETS)
 	message(FATAL_ERROR "dasall_watchdog_integration_tests requires at least one registered watchdog integration test target")
 endif()
-

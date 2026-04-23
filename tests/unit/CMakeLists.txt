@@ -8,6 +8,7 @@ add_subdirectory(infra)
 add_subdirectory(platform)
 add_subdirectory(profiles)
 add_subdirectory(services)
+add_subdirectory(access)
 
 set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_log_event_unit_test
@@ -128,6 +129,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_background_maintenance_hook_unit_test
 	dasall_runtime_checkpoint_state_mapper_unit_test
 	dasall_runtime_transition_guard_table_unit_test
+	${DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_tool_invocation_context_surface_unit_test
