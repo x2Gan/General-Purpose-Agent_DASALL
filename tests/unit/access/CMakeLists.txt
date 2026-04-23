@@ -116,6 +116,24 @@ dasall_add_access_unit_test(
   SubjectResolverChallengeTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_authenticator_chain_unit_test
+  AuthenticatorChainTest
+  AuthenticatorChainTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_authenticator_chain_challenge_unit_test
+  AuthenticatorChainChallengeTest
+  AuthenticatorChainChallengeTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_authenticator_chain_secret_failure_unit_test
+  AuthenticatorChainSecretFailureTest
+  AuthenticatorChainSecretFailureTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

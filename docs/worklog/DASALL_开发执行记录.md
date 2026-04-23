@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #452
+
+- 日期：2026-04-23
+- 阶段：access/主链实现
+- 任务：ACC-TODO-015 实现 AuthenticatorChain
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-015 的目标是把 ACC-TODO-014 产出的 `SubjectResolveOutcome` 转成可执行的认证结论。如果它继续自己解析入口 hints，就会破坏 014 刚冻结的职责边界，因此本轮必须严格限定在“链选择 + 校验 + failure mapping”。
+2. 本轮最小判别点是：能否只依赖 `SubjectResolveOutcome` 和 `AccessAuthView`，完成 trusted success、resolver challenge 透传、secret backend failure 三类显式出口。实际实现表明，module-local `AuthenticationOutcome` 与 `AuthChallenge` 足以承载这三条路径。
+3. 设计要求 fail-closed。结合 OWASP Authentication Cheat Sheet 的 guidance，本轮把“resolver 已 challenge 则 challenge 优先”“secret backend 不可用则 reject”“认证失败后不降级到低安全默认放行”固定进认证链语义。
+
+### 改动
+
+1. 新增 `access/src/AuthenticatorChain.h` 与 `access/src/AuthenticatorChain.cpp`：
+   - 落盘 `AuthChallenge`、`AuthenticationOutcome` 两个 internal supporting types；
+   - 实现 `authenticate()`、`select_chain()`、`verify_credentials()`、`merge_subject_attributes()`、`map_failure_reason()`；
+   - 固定 local_trusted、jwt、token、mtls、simulator_stub 五类 v1 链选择与 fail-closed 语义。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/AuthenticatorChain.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/AuthenticatorChainTest.cpp`、`AuthenticatorChainChallengeTest.cpp`、`AuthenticatorChainSecretFailureTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`：
+   - 覆盖 trusted success、resolver challenge 透传和 secret backend failure。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-015-AuthenticatorChain收敛.md`：
+   - 收口边界、数据模型、决策规则、外部参考、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-015 标记为 Done，并补充交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_authenticator_chain_unit_test`、`dasall_access_authenticator_chain_challenge_unit_test`、`dasall_access_authenticator_chain_secret_failure_unit_test`。
+   - 结果：3 个目标均编译链接成功。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "AuthenticatorChain(Test|ChallengeTest|SecretFailureTest)" --output-on-failure`
+   - 结果：100% tests passed，3/3 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "AuthenticatorChain(Test|ChallengeTest|SecretFailureTest)"`
+   - 结果：`AuthenticatorChainTest`、`AuthenticatorChainChallengeTest`、`AuthenticatorChainSecretFailureTest` 均可被发现。
+
+### 结果
+
+1. ACC-TODO-015 已完成，access 主链现在具备 resolver -> authenticator 的连续内部边界，后续 PolicyGate 可以直接消费认证后的主体结论。
+2. 认证链没有重新解析 peer hints，也没有把 protocol-level challenge 细节抬升到公共面，继续保持 access internal orchestration 的封装边界。
+3. 对 secret backend outage 和缺失凭据的处理都保持 fail-closed，没有出现 fallback allow 或静默降级。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-016，基于已经收口的 authenticated subject 与 failure reason 实现 AccessPolicyGate。
+
+### 风险
+
+1. 当前 v1 只实现最小认证链选择与失败映射，还没有引入真实 JWT 签名校验、证书链验证或多轮 challenge 协议细节；后续扩展必须在保持现有 fail-closed 主语义不变的前提下增量推进。
+
 ## 记录 #451
 
 - 日期：2026-04-23
