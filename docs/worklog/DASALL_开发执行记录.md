@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #450
+
+- 日期：2026-04-23
+- 阶段：access/前置补设计与评审解阻
+- 任务：ACC-TODO-005 收敛 streaming 延后边界与 async/poll fallback Gate
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-005 的目标不是“让 StreamGateway ready”，而是把未冻结的 shared streaming lifecycle 收口成唯一 Gate。否则后续 `StreamGateway`、WS/MQTT adapter、observability/profile Gate 很容易一边写占位、一边又在文档里偷写成“可以并行实现”。
+2. 本轮最小判别点是：仓库内是否已经存在足以解除 stream attach/reconnect/replay cursor blocker 的上游 shared 证据。检查结果表明，Access 详设虽然已经描述了 stream path、reconnect/poll 与 WS/MQTT 差异，但 runtime / llm / contracts 并没有给出可作为 shared contract 的冻结锚点，因此 005 不能假装 external blocker 已消失。
+3. 同时，CLI 本地控制面详设已经明确“async receipt 是 v1 唯一认可的断线恢复路径”，而 004 又已经把 gateway v1 缩成 HTTP unary + accepted async receipt。因此 005 的正确闭环是：把 stream / WS / MQTT 统一压到 feature flag default-off + async receipt/poll fallback，而不是发明半成品 stream ready 口径。
+
+### 改动
+
+1. 新增 `docs/todos/access/deliverables/ACC-TODO-005-streaming延后边界与async-poll-fallback-gate收敛.md`：
+   - 记录本地证据、RFC 9110 `202 Accepted` 外部参考与 Gate 设计结论；
+   - 固定 `ACC-GATE-11` 为 Access 侧唯一 stream 准入门；
+   - 明确 `feature flag default-off`、`disabled/not ready` 与 `async receipt/query/poll` 的统一 fallback matrix。
+2. 更新 `docs/architecture/DASALL_access子系统详细设计.md`：
+   - 在 6.14.9 下新增统一的 streaming 延后 Gate matrix；
+   - 把 `StreamGateway` 的职责前提改成“只有 gate lifted 才允许 attach”；
+   - 明确无法安全退化的 stream 请求必须返回 disabled/not ready，不能伪造 `StreamAttached`；
+   - 在 10.2、10.3、11、12 中补齐 `ACC-GATE-11`、feature flag default-off、async receipt/poll fallback 与未决项回写。
+3. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-005 标记为 Done；
+   - 将 ACC-BLK-005 改写为“Access 侧已收口，外部 shared contract 仍未冻结”的长期阻塞；
+   - 把风险、Gate、可执行范围与后续建议统一改成“stream / WS / MQTT 维持延后 Gate，而不是普通 Blocked 任务”。
+
+### 验证
+
+1. 文档一致性验收：
+   - 命令：`cd /home/gangan/DASALL && rg -n "StreamGateway|feature flag|async receipt|poll fallback|default-off|disabled/not ready|ACC-GATE-11" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-005-streaming延后边界与async-poll-fallback-gate收敛.md`
+   - 结果：Access 详设、专项 TODO 与 deliverable 已统一到 `ACC-GATE-11`、feature flag default-off、async receipt/query/poll fallback、WS/MQTT disabled/not ready 的单一口径。
+
+### 结果
+
+1. ACC-TODO-005 已完成，Access 不再把“shared streaming lifecycle 未冻结”只写成抽象 blocker，而是形成了可以直接约束后续 Build / Test / Gate 回写的统一规则。
+2. ACC-BLK-005 没有被误判为“已经解阻”；它被正确降格为上游 shared contract 的外部冻结项，而 Access 自己该承担的延后 Gate 与 fallback 规则已经落定。
+3. 后续 035 等任务可以直接基于 005 的结论验证“未冻结能力保持 disabled/not ready 且回到 async receipt + poll”，而不是继续在 stream ready 与 deny-by-default 之间摇摆。
+
+### 下一步
+
+1. 用户要求的 ACC-TODO-001 ~ 005 前置补设计 / 解阻任务已全部完成；后续若继续推进，应转向剩余外部阻塞或进入 006+ Build 任务。
+
+### 风险
+
+1. 如果后续有人把 feature flag 从 default-off 变成默认开启、把纯订阅请求偷偷降级成 receipt、或在没有 shared contract 的前提下对外暴露 `ReconnectToken` / `StreamCursor` ABI，就会直接破坏本轮冻结的延后 Gate，需要回退到 `ACC-GATE-11 + async receipt/query/poll` 口径。
+
 ## 记录 #449
 
 - 日期：2026-04-23

@@ -1374,14 +1374,29 @@ sequenceDiagram
 1. shared streaming lifecycle 尚未在 runtime/llm/contracts 层完全冻结，因此 access 侧 stream 相关组件当前只能先做边界和失败语义冻结，不能把“完整 streaming 语义”当作首版硬门禁。
 2. WS、MQTT、daemon、simulator 入口虽然都遵循 `IProtocolAdapter` 家族，但它们的会话模型、peer trust、重连语义和测试策略差异显著，适合在 CLI/HTTP 稳定后按同一模板增量补齐。
 
+##### 延后 Gate 与 async/poll fallback matrix
+
+1. `ACC-GATE-11` 固定为 Access 侧唯一的流式准入门：在 runtime/llm/contracts 尚未共同冻结 `attach/reconnect/replay cursor` shared contract 前，`StreamGateway`、WS/MQTT route、upgrade、subscription 和任何“stream ready”表述一律不得进入 v1 Build-ready 结论。
+2. streaming feature flag 必须 default-off；只有同时满足“外部 shared lifecycle 已冻结”和“对应入口 listener / auth / replay tests 已具备”两类证据时，才允许把 `StreamGateway` 或 WS/MQTT adapter 从占位 Gate 提升到 Build 任务。
+3. Access v1 唯一默认可交付的断线恢复路径仍是 `AcceptedAsync -> AsyncTaskReceipt -> access.task.query / poll`；该路径优先于任何未冻结的长连接重连、cursor replay 或 subscription keepalive 承诺。
+
+流式延后 Gate 矩阵如下：
+
+| 场景 | 允许行为 | 禁止行为 | 必须回退 |
+|---|---|---|---|
+| 请求声明 `stream_requested=true`，但 feature flag 关闭或 shared lifecycle 未冻结 | 若原始业务语义可退化为 unary accepted async，则返回 `AcceptedAsync` + receipt；否则显式返回 disabled/not ready | 伪造 `StreamAttached`、创建未冻结的 session/reconnect token、把请求偷转成长连接 ready | `AsyncTaskReceipt` + `access.task.query` / poll instruction |
+| 请求携带 reconnect token / replay cursor，但 shared contract 未冻结 | 只允许查询 `AsyncTaskRegistry` / `ResultReplayCache` 中已有的 bounded result/ref | 承诺精确 frame replay、跨连接恢复完整订阅态、把 cursor 当 shared ABI | 返回 poll/query 结果或明确 not ready |
+| WS/MQTT upgrade、订阅 route 或 broker/topic attach | 路由定义可保留占位，但默认 disabled/not ready，listener 不绑定到 v1 ready 面 | 宣称 gateway/daemon 已支持 WS/MQTT ready、把 upgrade 当 HTTP-only 首版的隐含能力 | 文档与实现统一保持 disabled/not ready |
+| 慢消费者、channel unavailable、heartbeat 失败 | 断开本连接或拒绝 attach，并在 receipt 可用时提供 poll 指引 | 持有无界 buffer、阻塞 runtime/publisher 主链、把失败隐藏成“等待更多帧” | detach + async receipt/query/poll |
+
 ##### StreamGateway
 
-1. 职责：在 streaming feature flag 打开时，管理流式订阅、心跳、慢消费者隔离、短期重连和向 poll/replay 的受控回退。
+1. 职责：仅在 streaming feature flag 明确打开且 `ACC-GATE-11` 被外部冻结证据解除后，管理流式订阅、心跳、慢消费者隔离、短期重连和向 poll/replay 的受控回退。
 2. 非职责边界：不定义 shared stream contracts；不拥有 Runtime streaming 执行语义；不做业务级补偿；不保证无限缓冲或 exactly-once；不绕过 `AccessPolicyGate` 直接附着订阅。
 3. 核心数据定义：围绕 `StreamSubscriptionRequest`、`StreamSession`、`StreamFrame`、`StreamCursor`、`SlowConsumerState`、`ReconnectToken` 建模；内部缓冲建议为 bounded ring buffer，不允许无界队列。
 4. 公共/内部接口：保持 internal 级别；建议接口为 `attach_stream()`、`push_frame()`、`heartbeat()`、`detach_stream()`、`build_poll_fallback()`；在 shared lifecycle 未冻结前，不建议把 stream-specific ABI 放入 `access/include`。
-5. 关键执行流：`access.request.stream` 经授权后创建 stream session；publisher 或 runtime sidecar 产生 frame 时推入 session buffer；慢消费者达到上限则断开并返回 reconnect/poll 指引；若会话短暂断开且 replay cursor 仍在 TTL 内，可通过 replay cache 或 receipt query 恢复有限结果。
-6. 失败与回退语义：任何 attach、heartbeat、buffer overflow、channel unavailable 都必须显式可观测；当 shared lifecycle 语义不完整时，默认回退到 async receipt + poll，而不是宣称可靠流式重放；严禁持 L2 锁执行 socket write。
+5. 关键执行流：只有在 gate lifted 时，`access.request.stream` 才能经授权后创建 stream session；否则若请求可退化为 accepted async，则直接生成 receipt 并引导 query/poll；若不可退化，则立即返回 disabled/not ready。gate lifted 后，publisher 或 runtime sidecar 产生 frame 时推入 session buffer；慢消费者达到上限则断开并返回 reconnect/poll 指引；若会话短暂断开且 replay cursor 仍在 TTL 内，可通过 replay cache 或 receipt query 恢复有限结果。
+6. 失败与回退语义：任何 attach、heartbeat、buffer overflow、channel unavailable 都必须显式可观测；当 shared lifecycle 语义不完整时，默认回退到 async receipt + poll，而不是宣称可靠流式重放；若请求语义无法退化为 unary accepted async，则必须返回显式 not ready/disabled；严禁持 L2 锁执行 socket write。
 7. 测试与验收出口：首版只要求设计卡片与占位测试 `AccessStreamReconnectIntegrationTest.cpp`、`StreamGatewaySlowConsumerTest.cpp`；在 Phase A5 之前不作为硬 gate。
 
 ##### WS / MQTT / daemon / simulator adapters
@@ -1391,15 +1406,15 @@ sequenceDiagram
 3. 核心数据定义：WS 侧围绕 `WebSocketFrameSnapshot`、`SubscriptionHint` 建模；MQTT 侧围绕 `TopicRouteView`、`QoSHint` 建模；daemon 侧围绕 `UdsRequestFrame`、`LocalPeerUidFact` 建模；simulator 侧围绕 `SimulatorStimulusFrame`、`DeterministicSubjectStub` 建模。
 4. 公共/内部接口：公共面继续只实现 `IProtocolAdapter`；具体 adapter 仍建议留在各自 `apps/<entry>/src`；若后续出现共享 codec，可抽到 `access/src/codec/`，但不升级到 contracts。
 5. 关键执行流：WS/MQTT adapters 负责把状态化连接事实折叠为 packet 并在必要时携带 subscription hint；daemon adapter 负责本地 IPC/UDS 的 peer uid 与运维入口事实；simulator adapter 负责确定性测试输入和受控 subject stub；四者最终都只把稳定 packet 交给共享 access core。
-6. 失败与回退语义：WS/MQTT 首版不承诺完整 stream 语义；daemon 入口必须比 remote entry 更严格地区分 local trusted 与 override source；simulator adapter 只能在测试/工厂 profile 下启用；任何入口私有 parse failure 都应在 adapter 层尽早显式拒绝。
+6. 失败与回退语义：WS/MQTT 首版不承诺完整 stream 语义，且在 `ACC-GATE-11` 解除前默认 disabled/not ready；daemon 入口必须比 remote entry 更严格地区分 local trusted 与 override source；simulator adapter 只能在测试/工厂 profile 下启用；任何入口私有 parse failure 都应在 adapter 层尽早显式拒绝。
 7. 测试与验收出口：当前以接口冻结与占位测试为主，建议后续分别补 `WebSocketProtocolAdapterTest.cpp`、`MqttProtocolAdapterTest.cpp`、`DaemonProtocolAdapterTest.cpp`、`SimulatorProtocolAdapterTest.cpp`；Phase A5 前不把它们列为主 gate。
 
 扩展入口差异摘要如下：
 
 | 入口 | 会话模型 | 主要风险 | 当前冻结结论 |
 |---|---|---|---|
-| WebSocket | 长连接、状态化、可订阅 | 慢消费者、心跳、重连 | 先不承诺完整 stream lifecycle |
-| MQTT | topic 驱动、broker 中介 | topic 授权、QoS 语义、离线重投 | 首版只冻结 decode/encode 边界 |
+| WebSocket | 长连接、状态化、可订阅 | 慢消费者、心跳、重连 | feature flag default-off；不承诺 attach/reconnect/replay lifecycle |
+| MQTT | topic 驱动、broker 中介 | topic 授权、QoS 语义、离线重投 | feature flag default-off；首版只冻结 decode/encode 边界 |
 | daemon | 本地 IPC/UDS | peer uid 信任、运维入口越权 | 本地 trusted 也必须受 profile allowlist 约束 |
 | simulator | 测试/工厂刺激 | subject stub 越权、非生产入口渗透 | 仅在测试/工厂 profile 打开 |
 
@@ -1952,14 +1967,14 @@ tests/
 1. 先以 CLI + daemon unary 主链落地 access core，HTTP unary 可并行但受 transport 选型门控，不要求同步打开 WS/MQTT/simulator 全部能力。
 2. 通过 `enabled_modules.*_adapter` 和 entry executable 装配策略控制灰度范围；先启用 `cli_adapter`、`daemon_adapter`，再增量打开 `gateway_adapter`、`simulator_adapter`。
 3. 若 Runtime sidecar bridge 短期未收敛，可先以 `AgentRequest` + 最小 publish context 打通闭环，同时把高风险动作、override 和 diagnostics pull 保持 deny-by-default，不做假性放行。
-4. stream path 先 behind feature flag；断线重连优先回退到 receipt/query，而不是强行承诺流式重放完整语义。
+4. stream path 先 behind feature flag 且默认关闭；只有 shared streaming lifecycle 具备外部冻结证据时才允许打开。断线重连、upgrade 失败或 replay cursor 语义不完整时，统一回退到 receipt/query/poll，而不是强行承诺流式重放完整语义。
 
 ### 10.3 版本扩展预留点
 
 | 预留点 | 当前策略 | 后续扩展方向 |
 |---|---|---|
 | 主体上下文 shared admission | 继续 module-local | 当 Runtime/Policy/Access 主体对象冻结成熟后再评估是否升格为 shared supporting object |
-| streaming lifecycle | v1 非硬门禁 | 后续与 runtime/llm streaming 语义收敛后再冻结 |
+| streaming lifecycle | `ACC-GATE-11` 延后门；feature flag default-off + async/poll fallback | 后续与 runtime/llm streaming 语义收敛后再冻结 |
 | 协议适配器 | 先 CLI/daemon（HTTP 可并行） | 可增量加入 WS/MQTT/serial-console，不影响主链 |
 | 认证方式 | 先 local shell / peer uid / JWT / mTLS | 后续可扩展 OIDC、设备证书、工厂测试 stub |
 | diagnostics/override | 受控入口 | 后续可与 daemon 运维入口深度联动，但仍保持 fail-closed |
@@ -1973,7 +1988,7 @@ tests/
 | Runtime sidecar bridge 口径漂移 | Medium | Access 直接把 sidecar 抬升为 runtime public ABI，或让不同入口各自拼装 handoff | 维持 `RuntimeDispatchRequest -> RuntimeInvokeContext` 两段式 owner 规则 | 回退到 bridge-local adapter 吸收差异，禁止把 sidecar 回写 contracts / runtime public headers |
 | gateway transport scope 漂移 | Medium | 实现阶段重新引入 WS/MQTT、streaming route、重量级事件循环依赖或多 listener 混写 | 维持 `cpp-httplib` HTTP/1.1 unary + 独立 health listener + bounded worker queue 规则 | 回退到 HTTP-only、accepted async receipt、health 独立 listener，不宣称 WS/MQTT ready |
 | override / diagnostics schema 漂移 | Medium | Access 重新接受自由 patch、`trace_id/session_id` 公共 selector、inline artifact bytes 或宽松 remote target | 维持 `ConfigPatch` + `SnapshotQuery` / `SnapshotExportRequest` 唯一路径与 exact-match gate | 回退到 `snapshot_id` only + LocalFile/Json only + deny-by-default |
-| shared streaming lifecycle 未冻结 | Medium | StreamGateway 需要稳定句柄、取消、重连语义 | 与 runtime/llm streaming 设计收敛 | v1 退回 async receipt + poll |
+| shared streaming lifecycle 未冻结 | Medium | StreamGateway 需要稳定句柄、取消、重连语义 | 与 runtime/llm streaming 设计收敛，并解除 `ACC-GATE-11` | v1 保持 feature flag default-off，统一退回 async receipt + poll |
 | 结果发布与慢消费者冲突 | Medium | 流式/长连接消费者持续阻塞 | 完成慢消费者断连和 replay cache 设计 | 断开慢消费者并回退到轮询，不阻塞主链 |
 | access bootstrap 来源漂移 | Medium | apps 重新允许命令行逐字段覆盖 bootstrap，或 AccessConfigAdapter 直接解析 profile 原始文件 | 维持 typed bootstrap carrier + projection-only adapter 规则 | 回退到 `bootstrap_ref` + immutable view 模式，禁止第二来源和并行 schema |
 
@@ -1989,6 +2004,7 @@ tests/
 | `AccessBootstrapConfig` source-of-truth 与热更新边界未冻结 | 冻结为 typed bootstrap carrier + locator-only startup args + `SnapshotVersionFingerprint` invoke-scoped immutable 规则 | 6.11、6.20、AccessConfigAdapter |
 | override / diagnostics 入口 schema 未冻结 | override 复用 `ConfigPatch` v1；diagnostics pull 复用 `SnapshotQuery` / `SnapshotExportRequest`，并将 v1 selector 收口为 `snapshot_id` only | 6.11.4、6.11.5、6.12 |
 | gateway 首版 transport 与 HTTP-only 边界未冻结 | gateway v1 固定采用 `cpp-httplib` HTTP/1.1 unary listener + accepted async receipt + 独立 health listener；WS/MQTT 延后到 Phase A5 | 6.14.8、6.20.2 |
+| streaming 延后边界与 async/poll fallback Gate 未收敛 | 冻结为 `ACC-GATE-11`：StreamGateway / WS / MQTT 仅允许 feature flag default-off + 占位接口；attach/reconnect/replay cursor 未冻结时统一回退到 async receipt + poll，不进入 v1 ready 结论 | 6.14.9、10.2、10.3、11 |
 | `publish_result()` 签名不一致 | 统一为 `const PublishEnvelope&`，`PublishEnvelope` 已正式定义 | 6.7 |
 | 是否需要独立 receipt ownership proof | 采用 HMAC-SHA256 双因子方案（`actor_ref` + `ownership_token`） | 6.19.2 |
 | 缺少 AccessGateway 生命周期管理 | 新增 `AccessGatewayState` 状态机、`shutdown()`、`is_ready()` | 6.15.1、6.7 |
@@ -2006,6 +2022,7 @@ tests/
 
 ### 12.2 仍未决的问题
 
+1. runtime / llm / contracts 是否会冻结统一的 stream attach/reconnect/replay cursor shared contract；005 只完成了 Access 侧的延后 Gate 与 fallback 收口，没有把 streaming 提升为 Build-ready。
 2. 串口入口是否在 v1 纳入 access 正式 Build 目标，还是留给后续 platform/daemon 联调阶段。
 3. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
 4. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
