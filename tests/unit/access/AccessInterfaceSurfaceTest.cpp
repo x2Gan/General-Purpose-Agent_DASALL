@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <string_view>
 #include <type_traits>
 
 #include "AccessErrors.h"
@@ -117,6 +118,29 @@ void iaccess_gateway_lifecycle_methods_exist() {
       "IAccessGateway::shutdown(milliseconds) method should be defined");
 }
 
+void iaccess_runtime_bridge_methods_exist() {
+  constexpr bool dispatch_method_exists =
+      std::is_invocable_r_v<
+          dasall::access::RuntimeDispatchResult,
+          decltype(&dasall::access::IAccessRuntimeBridge::dispatch),
+          dasall::access::IAccessRuntimeBridge*,
+          const dasall::access::RuntimeDispatchRequest&>;
+  dasall::tests::support::assert_true(
+      dispatch_method_exists,
+      "IAccessRuntimeBridge::dispatch should be defined");
+
+  constexpr bool cancel_method_exists =
+      std::is_invocable_r_v<
+          bool,
+          decltype(&dasall::access::IAccessRuntimeBridge::cancel),
+          dasall::access::IAccessRuntimeBridge*,
+          std::string_view,
+          std::string_view>;
+  dasall::tests::support::assert_true(
+      cancel_method_exists,
+      "IAccessRuntimeBridge::cancel(request_id, actor_ref) should be defined");
+}
+
 }  // namespace
 
 int main() {
@@ -124,6 +148,7 @@ int main() {
     access_public_surface_is_discoverable();
     access_gateway_state_enumeration_is_defined();
     iaccess_gateway_lifecycle_methods_exist();
+        iaccess_runtime_bridge_methods_exist();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

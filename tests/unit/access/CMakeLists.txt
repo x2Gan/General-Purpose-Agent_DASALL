@@ -69,6 +69,12 @@ dasall_add_access_unit_test(
   AdmissionControllerSurfaceTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_runtime_bridge_surface_unit_test
+  RuntimeBridgeSurfaceTest
+  RuntimeBridgeSurfaceTest.cpp
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
