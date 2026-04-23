@@ -1772,13 +1772,13 @@ tests/
 |---|---|---|---|---|
 | Phase A1 | 建立 access core 骨架、公共接口与生命周期 | `IAccessGateway`（含 `shutdown/state/is_ready`）、`IProtocolAdapter`、`IAdmissionController`、`AccessTypes`、`AccessErrors`、`AccessGateway` 含状态机实现 | `AccessGatewayFacadeTest`、`AccessGatewayLifecycleTest` | `access/` 可独立编译，四个入口改为依赖共享 core，`Ready→Draining→ShutDown` 状态可自动断言 |
 | Phase A2 | 收敛 Admission 链、RequestNormalizer 和输入验证 | `SubjectResolver`、`AuthenticatorChain`、`AccessPolicyGate`、`AdmissionController`、`RequestNormalizer`、`RequestValidator` | `SubjectResolverTest`、`AccessPolicyGateTest`、`RequestNormalizerTest`、`RequestValidatorTest`、`RequestNormalizerConstraintProjectionTest` | 失败路径 fail-closed，payload 验证和 constraint_set 投影可断言 |
-| Phase A3 | 打通 Runtime bridge、unary 主链与错误映射 | `RuntimeBridge`（含 `cancel`）、`ResultPublisher`、`ProtocolErrorMapper`、HTTP/CLI publisher | `RuntimeBridgeTest`、`ResultPublisherTest`、`ProtocolErrorMapperTest`、`AccessGatewaySmokeIntegrationTest` | HTTP/CLI 最小入口可端到端提交并返回结果；错误码 → HTTP status / CLI exit code 映射全覆盖 |
+| Phase A3 | 打通 Runtime bridge、unary 主链与错误映射 | `RuntimeBridge`（含 `cancel`）、`ResultPublisher`、`ProtocolErrorMapper`、daemon/CLI publisher（HTTP publisher 可并行） | `RuntimeBridgeTest`、`ResultPublisherTest`、`ProtocolErrorMapperTest`、`CliDaemonSmokeIntegrationTest` | CLI/daemon 最小入口可端到端提交并返回结果；错误码 → HTTP status / CLI exit code 映射全覆盖 |
 | Phase A4 | 增加 async receipt / query / replay / cancel | `AsyncTaskRegistry`（含 ownership token）、`TaskQueryHandler`、`ResultReplayCache` | `AccessAsyncReceiptIntegrationTest`、`AsyncTaskRegistryOwnershipTest`、`AccessCancelFlowTest`、`AccessAdmissionFailureIntegrationTest` | 异步受理、receipt ownership 校验、取消转发、断线短期重放闭环可用 |
 | Phase A5 | 观测、health probe 与加固 | `AccessObservabilityBridge`、`HealthProbeHandler`、WS/MQTT adapter、安全头 | `AccessObservabilityIntegrationTest`、`AccessHealthProbeIntegrationTest`、失败注入用例 | 拒绝/失败/发布异常三类事件齐备；health probe 可达；集成测试可被 `ctest -N` 发现 |
 
 ### 8.3 最小可交付切分建议
 
-1. **最小可交付 1**：共享 access core + CLI/HTTP unary 提交链。
+1. **最小可交付 1**：共享 access core + CLI/daemon unary 提交链。
 2. **最小可交付 2**：Access PolicyGate + Idempotency + Runtime bridge 正常/拒绝路径。
 3. **最小可交付 3**：Async receipt + query + replay cache。
 4. **最小可交付 4**：WS/MQTT 与 StreamGateway 的受控增强版。
@@ -1793,6 +1793,12 @@ tests/
 | A4 | receipt 查询和结果重放路径可通过自动化集成测试验证 |
 | A5 | `ctest -N` 可发现至少 1 个 `integration` 标签的 access 用例，且关键观测事件齐备 |
 
+### 8.5 与 Access 专项 TODO 回链（2026-04-23）
+
+1. 执行主计划以 [docs/todos/access/DASALL_access子系统专项TODO.md](docs/todos/access/DASALL_access子系统专项TODO.md) 为准，采用“daemon 常驻服务 + CLI 独立进程经 IIPC/UDS 接入 Access 主链”的默认路径。
+2. 专项 TODO 中 ACC-TODO-025/029/037/038 已将本地控制面链路与跨子系统依赖显式拆分；其中 gateway transport 选型门（ACC-TODO-004）仅阻断 HTTP/gateway 路径，不阻断 CLI/daemon 本地主链。
+3. 本文档的 Phase A3、最小可交付和灰度策略与专项 TODO 已对齐；若后续发生口径差异，以“Runtime 单一主控、Access 单一接入 owner、CLI 不直连 runtime”为仲裁规则。
+
 ---
 
 ## 9. 测试与质量门
@@ -1803,7 +1809,7 @@ tests/
 |---|---|---|---|
 | 单元测试 | SubjectResolver、AuthenticatorChain、AccessPolicyGate、IdempotencyGuard、RequestNormalizer、RuntimeBridge、ResultPublisher | `SubjectResolverTest`、`AccessPolicyGateTest`、`IdempotencyGuardTest`、`RequestNormalizerTest`、`RuntimeBridgeTest`、`ResultPublisherTest` | 验证组件职责、失败原因码和 fail-closed 行为 |
 | 契约测试影响点 | `AgentRequest`/`AgentResult`/`ErrorInfo`/`IdentityMetadata` 边界不被 access 污染 | 复跑既有 contracts tests；新增 access 不得让 contract test 失败 | 保持 contracts 冻结一致性 |
-| 集成测试 | CLI/HTTP 提交闭环、async receipt/query、observability、失败注入 | `AccessGatewaySmokeIntegrationTest`、`AccessAsyncReceiptIntegrationTest`、`AccessObservabilityIntegrationTest`、`AccessAdmissionFailureIntegrationTest` | 验证 access 进入核心链路后的端到端行为 |
+| 集成测试 | CLI/daemon（默认）与 HTTP（可选）提交闭环、async receipt/query、observability、失败注入 | `CliDaemonSmokeIntegrationTest`、`AccessAsyncReceiptIntegrationTest`、`AccessObservabilityIntegrationTest`、`AccessAdmissionFailureIntegrationTest` | 验证 access 进入核心链路后的端到端行为 |
 | 失败注入测试 | secret 不可用、policy manager 不可用、queue 满、publisher 断连、慢消费者 | `AccessAdmissionFailureIntegrationTest`、`ResultPublisherFailureTest`、`StreamGatewaySlowConsumerTest` | 验证 fail-closed 与局部恢复路径 |
 | 兼容性检查 | profile 差异、入口差异、协议差异 | CLI vs HTTP 行为一致性；不同 profile 下 timeout/budget 投影一致性 | 避免不同入口和档位行为漂移 |
 
@@ -1838,8 +1844,8 @@ tests/
 
 ### 10.2 兼容迁移路径与灰度策略
 
-1. 先以 CLI + HTTP unary 主链落地 access core，不要求同步打开 WS/MQTT/daemon/simulator 全部能力。
-2. 通过 `enabled_modules.*_adapter` 和 entry executable 装配策略控制灰度范围；先启用 `cli_adapter`、`gateway_adapter`，再增量打开 `daemon_adapter`、`simulator_adapter`。
+1. 先以 CLI + daemon unary 主链落地 access core，HTTP unary 可并行但受 transport 选型门控，不要求同步打开 WS/MQTT/simulator 全部能力。
+2. 通过 `enabled_modules.*_adapter` 和 entry executable 装配策略控制灰度范围；先启用 `cli_adapter`、`daemon_adapter`，再增量打开 `gateway_adapter`、`simulator_adapter`。
 3. 若 Runtime sidecar bridge 短期未收敛，可先以 `AgentRequest` + 最小 publish context 打通闭环，同时把高风险动作、override 和 diagnostics pull 保持 deny-by-default，不做假性放行。
 4. stream path 先 behind feature flag；断线重连优先回退到 receipt/query，而不是强行承诺流式重放完整语义。
 
@@ -1849,7 +1855,7 @@ tests/
 |---|---|---|
 | 主体上下文 shared admission | 继续 module-local | 当 Runtime/Policy/Access 主体对象冻结成熟后再评估是否升格为 shared supporting object |
 | streaming lifecycle | v1 非硬门禁 | 后续与 runtime/llm streaming 语义收敛后再冻结 |
-| 协议适配器 | 先 CLI/HTTP | 可增量加入 WS/MQTT/serial-console，不影响主链 |
+| 协议适配器 | 先 CLI/daemon（HTTP 可并行） | 可增量加入 WS/MQTT/serial-console，不影响主链 |
 | 认证方式 | 先 local shell / peer uid / JWT / mTLS | 后续可扩展 OIDC、设备证书、工厂测试 stub |
 | diagnostics/override | 受控入口 | 后续可与 daemon 运维入口深度联动，但仍保持 fail-closed |
 
