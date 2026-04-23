@@ -791,8 +791,8 @@ sequenceDiagram
 |---|---|---|---|---|
 | `bootstrap_revision` | required | deployment bundle / ConfigCenter typed query | 否 | 启动事实快照版本；用于缓存、审计与 last-known-good fallback |
 | `entry_type` | required | deployment bundle / ConfigCenter typed query | 否 | 明确该 bootstrap 只适用于 `cli`、`daemon`、`gateway`、`simulator` 中之一 |
-| `listen_ref` | entry-specific | 启动参数 / deployment bundle | 否 | CLI 为 stdin/stdout；daemon 为 uds/tcp；gateway 为 http/ws/mqtt endpoint |
-| `allowed_protocols` | entry-specific | deployment bundle | 否 | gateway 默认 `http,ws`；mqtt 受 feature flag 控制 |
+| `listen_ref` | entry-specific | 启动参数 / deployment bundle | 否 | CLI 为 stdin/stdout；daemon 为 uds/tcp；gateway 首版为 HTTP/1.1 unary business listener；health probe listener 独立绑定 |
+| `allowed_protocols` | entry-specific | deployment bundle | 否 | gateway 首版固定 `http`；WS/MQTT 延后到 Phase A5/后续 gate，不在 v1 business listener 中启用 |
 | `peer_auth_mode` | `strict` | deployment bundle | 否 | remote 入口默认严格认证，本地 CLI/模拟器可使用本地身份模式 |
 | `auth_provider_ref` | empty | deployment bundle / secret ref | 否 | 指向 JWT issuer、mTLS CA、token verifier 等引用 |
 | `idempotency_window_ms` | `300000` | 启动配置 | 否 | 幂等窗口 5 分钟 |
@@ -1313,6 +1313,30 @@ sequenceDiagram
 | CLI | argv/stdin、本地用户、shell exit code | stdout/stderr、退出码映射 | 不做 challenge 往返，仅做本地 trusted/deny |
 | HTTP | path/query/body、headers、peer/mTLS/JWT facts | status code、response body、headers | 仅先支持 unary + async receipt，不承诺 WS/stream |
 
+##### 6.14.8.1 gateway 首版 transport 选型冻结
+
+调研学习结论：
+
+1. 当前仓库 `apps/gateway/CMakeLists.txt` 仅链接本项目目标，`third_party/` 也未预置 HTTP/WS/MQTT transport 依赖，因此 v1 transport 必须优先选择低引入成本、HTTP-only 的实现路径，而不是先引入泛化事件循环框架。
+2. shared streaming lifecycle 仍未冻结；若在 004 阶段直接采用把 WebSocket/MQTT 一并带入主路径的 transport 方案，会把 004 与 005 的边界重新混写。
+
+候选比较：
+
+| 候选 | 结论 | 原因 |
+|---|---|---|
+| `cpp-httplib` | 采纳 | 单文件 header-only，直接提供 HTTP/1.1 server/client 与可配置 task queue；足以承载 unary submit/query/cancel、accepted async receipt 与 health probe，不要求同步打开 WS/MQTT |
+| `libuv` | 不采纳 | 仅提供事件循环和 socket 抽象，仍需额外 HTTP parser / route 层；对 v1 最小 gateway 过宽 |
+| `Boost.Beast/Asio` | 不采纳 | 仓库当前无 Boost 依赖；同时覆盖 WebSocket 能力，容易把 004 的 HTTP-only 边界重新扩张 |
+| 自研最小 HTTP | 不采纳 | parser、安全头、超时、keep-alive 和错误映射的维护风险过高，不适合作为 v1 最小交付 |
+
+冻结结论：
+
+1. `apps/gateway` v1 transport 固定为基于 `cpp-httplib` 的 HTTP/1.1 unary listener；只承载 request/response、accepted async receipt 查询与 `/health/*`，不承诺 SSE、chunked stream、WebSocket 或 MQTT。
+2. 业务 listener 与 health listener 使用同一 HTTP transport 家族但独立绑定；health routes 不经过 Admission pipeline。
+3. 并发模型固定为 `1` 个 listen/accept 线程 + bounded worker task queue；每个 HTTP 请求在 worker 中走完整 Admission pipeline；不保留 connection-scoped Access 状态，keep-alive 仅作为 transport 优化而非业务语义。
+4. `HttpProtocolAdapter` 首版只需覆盖 HTTP unary submit、accepted async receipt query/cancel、health probe 与统一安全头/CORS gate；任何 WS/MQTT route、upgrade 或 subscription 语义在 v1 一律视为 disabled/not ready。
+5. `apps/gateway/CMakeLists.txt` 在 004 阶段只记录该选型与边界说明，不提前接入 WS/MQTT 依赖；具体第三方拉取与编译接线留到 ACC-TODO-026 实现阶段。
+
 ##### AccessObservabilityBridge
 
 1. 职责：统一 access 全链的日志、指标、追踪、审计字段口径，并把阶段事实桥接到 infra observability 能力。
@@ -1428,7 +1452,7 @@ Access 子系统不强制统一线程模型，但必须遵守以下约束：
 |---|---|---|
 | CLI 入口 | 单线程同步 | main 线程处理全部请求-响应往返 |
 | daemon 入口 | 单线程事件循环 或 线程池 | UDS accept 与 request dispatch 可共享事件循环或从 accept 派发到 worker |
-| gateway 入口 | 线程池 + connection-per-thread 或 事件驱动 | 取决于底层 transport 选型（libuv/asio/自研）；每个连接的 Admission pipeline 调用必须线程安全 |
+| gateway 入口 | 单 listen 线程 + bounded worker task queue | 首版固定为 HTTP/1.1 unary；health listener 独立绑定；每个请求的 Admission pipeline 调用必须线程安全 |
 | simulator 入口 | 单线程确定性 | 用于测试可重复性，不引入并发 |
 
 通用并发约束：
@@ -1686,10 +1710,11 @@ ownership_token = HMAC-SHA256(server_secret, receipt_id || actor_ref || request_
 #### 6.20.2 实现建议
 
 1. HTTP gateway 入口暴露 `/health/live`、`/health/ready`、`/health/startup` 三个端点，使用独立 listener，不经过 Admission pipeline。
-2. daemon 入口通过 UDS 上的特殊 command 或 signal response 提供 health 状态。
-3. CLI 和 simulator 无需 health probe。
-4. health probe 不暴露内部状态细节（adapter 列表、registry 大小、queue 深度等），仅返回二值状态；详细诊断通过 `access.diagnostics.pull` 授权路径获取。
-5. liveness 检查不得依赖外部服务（infra/policy、Runtime、secret backend），仅检查进程内存活状态。
+2. gateway business listener 与 health listener 都复用同一 HTTP/1.1 transport 家族，但绑定解耦；health 不与业务 listener 共享 Admission / async receipt 路由。
+3. daemon 入口通过 UDS 上的特殊 command 或 signal response 提供 health 状态。
+4. CLI 和 simulator 无需 health probe。
+5. health probe 不暴露内部状态细节（adapter 列表、registry 大小、queue 深度等），仅返回二值状态；详细诊断通过 `access.diagnostics.pull` 授权路径获取。
+6. liveness 检查不得依赖外部服务（infra/policy、Runtime、secret backend），仅检查进程内存活状态。
 
 #### 6.20.3 Access 侧 HTTP 安全头与 CORS
 
@@ -1946,7 +1971,7 @@ tests/
 | 项目 | 等级 | 触发条件 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|
 | Runtime sidecar bridge 口径漂移 | Medium | Access 直接把 sidecar 抬升为 runtime public ABI，或让不同入口各自拼装 handoff | 维持 `RuntimeDispatchRequest -> RuntimeInvokeContext` 两段式 owner 规则 | 回退到 bridge-local adapter 吸收差异，禁止把 sidecar 回写 contracts / runtime public headers |
-| HTTP/WS/MQTT 传输库选型未冻结 | Medium | gateway 需要真实网络接入实现 | 冻结 transport 选型或先用最小 HTTP 实现 | 先只落 CLI + daemon + simulator，本轮不承诺全协议 |
+| gateway transport scope 漂移 | Medium | 实现阶段重新引入 WS/MQTT、streaming route、重量级事件循环依赖或多 listener 混写 | 维持 `cpp-httplib` HTTP/1.1 unary + 独立 health listener + bounded worker queue 规则 | 回退到 HTTP-only、accepted async receipt、health 独立 listener，不宣称 WS/MQTT ready |
 | override / diagnostics schema 漂移 | Medium | Access 重新接受自由 patch、`trace_id/session_id` 公共 selector、inline artifact bytes 或宽松 remote target | 维持 `ConfigPatch` + `SnapshotQuery` / `SnapshotExportRequest` 唯一路径与 exact-match gate | 回退到 `snapshot_id` only + LocalFile/Json only + deny-by-default |
 | shared streaming lifecycle 未冻结 | Medium | StreamGateway 需要稳定句柄、取消、重连语义 | 与 runtime/llm streaming 设计收敛 | v1 退回 async receipt + poll |
 | 结果发布与慢消费者冲突 | Medium | 流式/长连接消费者持续阻塞 | 完成慢消费者断连和 replay cache 设计 | 断开慢消费者并回退到轮询，不阻塞主链 |
@@ -1963,6 +1988,7 @@ tests/
 | runtime bridge sidecar seam 未冻结 | 冻结为 `RuntimeDispatchRequest` module public + `RuntimeInvokeContext` bridge-local invoke shape + `IAccessRuntimeBridge::cancel()` 唯一 cancel surface | 6.6、6.18.3 |
 | `AccessBootstrapConfig` source-of-truth 与热更新边界未冻结 | 冻结为 typed bootstrap carrier + locator-only startup args + `SnapshotVersionFingerprint` invoke-scoped immutable 规则 | 6.11、6.20、AccessConfigAdapter |
 | override / diagnostics 入口 schema 未冻结 | override 复用 `ConfigPatch` v1；diagnostics pull 复用 `SnapshotQuery` / `SnapshotExportRequest`，并将 v1 selector 收口为 `snapshot_id` only | 6.11.4、6.11.5、6.12 |
+| gateway 首版 transport 与 HTTP-only 边界未冻结 | gateway v1 固定采用 `cpp-httplib` HTTP/1.1 unary listener + accepted async receipt + 独立 health listener；WS/MQTT 延后到 Phase A5 | 6.14.8、6.20.2 |
 | `publish_result()` 签名不一致 | 统一为 `const PublishEnvelope&`，`PublishEnvelope` 已正式定义 | 6.7 |
 | 是否需要独立 receipt ownership proof | 采用 HMAC-SHA256 双因子方案（`actor_ref` + `ownership_token`） | 6.19.2 |
 | 缺少 AccessGateway 生命周期管理 | 新增 `AccessGatewayState` 状态机、`shutdown()`、`is_ready()` | 6.15.1、6.7 |
@@ -1980,11 +2006,9 @@ tests/
 
 ### 12.2 仍未决的问题
 
-1. gateway 首版是否只做 HTTP unary，再把 WebSocket/MQTT 作为 Phase A5 扩展，而不是在 Phase A3 同步落地。
 2. 串口入口是否在 v1 纳入 access 正式 Build 目标，还是留给后续 platform/daemon 联调阶段。
-3. HTTP transport 选型（libuv/asio/beast/自研最小实现）对线程模型和 gateway 并发设计的影响尚待冻结。
-4. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
-5. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
+3. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
+4. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
 
 ### 12.3 后续 Build 原子任务建议顺序
 

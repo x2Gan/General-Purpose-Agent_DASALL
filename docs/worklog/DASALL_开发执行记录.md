@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #449
+
+- 日期：2026-04-23
+- 阶段：access/前置补设计与评审解阻
+- 任务：ACC-TODO-004 收敛 gateway 首版 transport 选型与 HTTP-only 边界
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-004 是 ACC-TODO-026 `HttpProtocolAdapter` 与 ACC-TODO-028 `HealthProbeHandler` 的共同前置；如果 gateway transport 与线程模型不先冻结，后续 HTTP adapter、health probe 和 gateway main 的实现很容易在依赖选择、listener 模型和首版范围上返工。
+2. 本轮最小判别点是：仓库里是否已经存在可复用的 HTTP/WS/MQTT transport 依赖。检查结果表明，`apps/gateway/CMakeLists.txt` 只链接内部目标，`third_party/` 也没有预置现成 transport，说明 004 不能假设已有网络栈，只能先冻结最小可承载的 HTTP-only 方案。
+3. 同时，Access 详设与专项 TODO 已经明确 `WS/MQTT/StreamGateway` 受 005 的 shared lifecycle Gate 约束，因此 004 的正确闭环不是“多协议并推”，而是把 gateway v1 固定成 HTTP unary + accepted async receipt + 独立 health listener。
+
+### 改动
+
+1. 新增 `docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md`：
+   - 对比 `cpp-httplib`、`libuv`、`Boost.Beast/Asio`、自研最小 HTTP 四类候选；
+   - 固定 gateway v1 为 `cpp-httplib` HTTP/1.1 unary transport；
+   - 固定独立 health listener、bounded worker queue 与 WS/MQTT 延后规则。
+2. 更新 `docs/architecture/DASALL_access子系统详细设计.md`：
+   - 在 `AccessBootstrapConfig` 字段表中把 gateway `listen_ref/allowed_protocols` 收口为 HTTP/1.1 unary only；
+   - 在 6.14.8 新增 gateway transport 冻结小节，给出候选比较、采纳理由和并发模型；
+   - 在 6.20.2 中把 health listener 与 business listener 的解耦关系落成明确规则；
+   - 将 11/12 中的 transport 未决项转为已解决，并把风险表改成 scope drift 风险而非“尚未选型”。
+3. 更新 `apps/gateway/CMakeLists.txt`：
+   - 仅补入设计说明注释，明确 v1 只承诺 HTTP/1.1 unary + accepted async receipt；
+   - 保持 WS/MQTT 依赖未接入，等待 005/026 的后续实现阶段。
+4. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-004 标记为 Done；
+   - 将 ACC-BLK-004 校准为“设计已解阻，剩余是 HTTP-only 实现接线”；
+   - 同步修正 003/004 完成后仍残留的旧 blocker 表述与可行性结论。
+
+### 验证
+
+1. 文档一致性验收：
+   - 命令：`cd /home/gangan/DASALL && rg -n "cpp-httplib|HTTP/1.1|accepted async receipt|health listener|WebSocket|MQTT|bounded worker" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md apps/gateway/CMakeLists.txt`
+   - 结果：Access 详设、专项 TODO、deliverable 与 gateway CMake 说明已经统一到 `cpp-httplib`、HTTP/1.1 unary、accepted async receipt、独立 health listener 与 WS/MQTT 延后边界。
+
+### 结果
+
+1. ACC-TODO-004 已完成，gateway v1 transport 不再处于 `libuv/asio/beast/自研` 的并列摇摆状态；后续 HTTP/gateway Build 可以直接按单一边界落盘。
+2. ACC-BLK-004 已从设计 blocker 降级为实现接线任务；ACC-TODO-026 / 028 可以直接围绕 HTTP-only transport family、health 独立 listener 和 bounded worker queue 建模。
+3. WS/MQTT 与 stream 相关语义没有被偷偷夹带进 004；它们继续留给 005 与后续 Phase A5，保持首版 scope 单一。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-005，收敛 streaming 延后边界与 async/poll fallback Gate。
+
+### 风险
+
+1. 如果后续实现阶段把 `cpp-httplib` 的可选能力扩成 WS/streaming 主路径、混写 health/business listener，或临时换成新的重量级事件循环依赖而不回写设计，会立即破坏本轮冻结的 HTTP-only 边界，需要回退到 `HTTP/1.1 unary + accepted async receipt + 独立 health listener`。
+
 ## 记录 #448
 
 - 日期：2026-04-23

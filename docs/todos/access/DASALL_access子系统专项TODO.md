@@ -3,7 +3,7 @@
 最近更新时间：2026-04-23
 阶段：Detailed Design -> Special TODO
 适用范围：access/、apps/cli、apps/daemon、apps/gateway、apps/simulator、tests/unit/access、tests/integration/access
-当前结论：Access 详设已经满足 L3/L2 混合拆分条件。`InboundPacket`、`SubjectIdentity`、`AccessDecisionProof`、`AccessErrorCode`、`RuntimeDispatchRequest`、`PublishEnvelope`、`AsyncTaskReceipt`、`IAccessGateway`、`IProtocolAdapter`、`IAdmissionController`、`IAccessRuntimeBridge`、`AccessBootstrapConfig`、`OverrideSourceFact`、`DiagnosticsSelectorFact` 已具备接口级或数据结构级拆分证据；剩余前置收敛重点转为 gateway 首版 transport 选型、shared streaming lifecycle 与 IIPC peer identity 接缝。因此本专项 TODO 采用“补设计解阻 -> 公共接口与骨架 -> 主链实现 -> 测试与 Gate 收口”的四段编排，默认以 daemon 常驻本地控制面承载 Access 主链，CLI 作为独立进程通过 IIPC/UDS 接入；gateway HTTP 路径受 transport 选型门控推进。
+当前结论：Access 详设已经满足 L3/L2 混合拆分条件。`InboundPacket`、`SubjectIdentity`、`AccessDecisionProof`、`AccessErrorCode`、`RuntimeDispatchRequest`、`PublishEnvelope`、`AsyncTaskReceipt`、`IAccessGateway`、`IProtocolAdapter`、`IAdmissionController`、`IAccessRuntimeBridge`、`AccessBootstrapConfig`、`OverrideSourceFact`、`DiagnosticsSelectorFact`、`HttpProtocolAdapter`、`HealthProbeHandler` 的边界与首版输入输出已经具备接口级或数据结构级拆分证据；剩余前置收敛重点转为 shared streaming lifecycle 与 IIPC peer identity 接缝。因此本专项 TODO 采用“补设计解阻 -> 公共接口与骨架 -> 主链实现 -> 测试与 Gate 收口”的四段编排，默认以 daemon 常驻本地控制面承载 Access 主链，CLI 作为独立进程通过 IIPC/UDS 接入；gateway 继续仅以 HTTP unary + async receipt 首版边界推进。
 
 ## 1. 文档头
 
@@ -143,7 +143,7 @@
 | `ProtocolAdapterRegistry` | 6.3、6.14.7 | L2 | 责任、内部接口和测试出口明确 | internal store 细节未成表 | 先 registry，再分别接 entry adapter |
 | `SubjectResolver` | 6.7.2、6.14.7 | L3 | 属性最小集、challenge 语义、失败路径明确 | 无实质缺口 | 直接进入 Build |
 | `AuthenticatorChain` | 6.3、6.14.7 | L3 | chain 行为、challenge/deny 语义和测试出口明确 | secret backend 适配细节依赖 infra seam | 可直接进入 Build |
-| `AccessPolicyGate` | 6.7.1、6.14.7 | L3 | taxonomy、override/diagnostics gate、fail-closed 规则明确 | override/diagnostics schema 仍待外部协同 | 先完成 submit/query/cancel 主路径，override/diagnostics 走 blocker |
+| `AccessPolicyGate` | 6.7.1、6.14.7 | L3 | taxonomy、override/diagnostics gate、fail-closed 规则明确 | override/diagnostics schema 已冻结，剩余是实现与测试接线 | 可直接推进 submit/query/cancel 主路径，再补 override/diagnostics gate 测试 |
 | `AdmissionController` | 6.13、6.14.7、6.21 | L3 | rate limit、idempotency、replay 规则明确 | 无实质缺口 | 直接进入 Build |
 | `RequestValidator` / `RequestNormalizer` | 6.16、6.21.3、6.14.8 | L3 | 字段规则、constraint_set 投影、ID 传播明确 | 无实质缺口 | 直接进入 Build |
 | `RuntimeBridge` | 6.7、6.18、6.14.8 | L2 | sync/async/reject 三出口明确 | runtime-facing public seam 未最终冻结 | 前置 ACC-TODO-001 |
@@ -151,7 +151,7 @@
 | `AsyncTaskRegistry` / `ResultReplayCache` | 6.10、6.19、6.21 | L3 | ownership proof、TTL、query、replay 规则明确 | HMAC secret rotation 规模化方案未定义 | v1 可先做单实例 / deployment secret 版本 |
 | `AccessConfigAdapter` | 6.11、6.14.8 | L2 | snapshot 视图与 immutable view 设计明确 | 落盘形态未冻结 | 前置 ACC-TODO-002 |
 | `AccessObservabilityBridge` | 6.12、6.14.8 | L2 | 事件、字段、audit 语义明确 | sink 对接是实现细节 | 直接进入 Build |
-| CLI client / HTTP adapters | 6.14.8、6.20 | L2 | 本地控制面与远程入口边界、首版测试出口明确 | gateway transport 选型未冻结 | 先做 CLI client，再做 HTTP unary/async |
+| CLI client / HTTP adapters | 6.14.8、6.20 | L2 | 本地控制面与远程入口边界、首版测试出口明确；HTTP-only transport 已冻结 | gateway adapter 与 health handler 仍未落实现 | CLI client 与 HTTP unary/async 可并行进入 Build |
 | daemon / simulator adapters | 6.14.9、6.15.3 | L2 | local trusted / deterministic stub 边界明确 | 入口细节未实现 | 在 CLI/daemon 稳定后进入 Build |
 | StreamGateway / WS / MQTT | 6.14.9、10.3、11 | L1 / Blocked | 边界、feature flag 和 fallback 语义明确 | shared lifecycle、attach/reconnect 语义未冻结 | 只允许补设计/占位 Gate，不进入正式 Build |
 
@@ -179,8 +179,8 @@
 |---|---|---|---|
 | runtime bridge 真接口未冻结 | RuntimeBridge 与 runtime public seam 返工 | ACC-TODO-001 | Bridge 实现任务不得宣称 Done |
 | `AccessBootstrapConfig` 落盘形态未冻结 | 配置与 profile 投影分叉 | ACC-TODO-002 | `AccessConfigAdapter` 与组合根只能停在 Blocked |
-| override / diagnostics schema 未冻结 | 高危入口越权或无法 Gate | ACC-TODO-003 | override / diagnostics 一律 deny-by-default |
-| gateway transport 选型未定 | HTTP adapter 接口和线程模型返工 | ACC-TODO-004 | HTTP 仅做选型后的最小 unary/async 范围 |
+| override / diagnostics schema 已冻结（2026-04-23） | `AccessPolicyGate` / observability tests 可直接建模 | ACC-TODO-003 | override / diagnostics 未实现部分继续按 deny-by-default 落测试，不再等待外部 schema |
+| gateway transport 选型已冻结（2026-04-23） | HTTP adapter 接口和线程模型不再漂移 | ACC-TODO-004 | HTTP 只按 HTTP-only unary/async + health 独立 listener 推进 |
 | IIPC peer identity seam 未冻结 | daemon local trusted 判定缺乏平台事实输入 | ACC-TODO-037 | local trusted 相关命令保持 fail-closed，不写 ready 结论 |
 | shared streaming lifecycle 未冻结 | stream / WS / MQTT 语义漂移 | ACC-TODO-005 | 只允许占位 Gate，不允许首版实现任务 |
 
@@ -193,7 +193,7 @@
 | ACC-TODO-001 | Done | 补齐 access-runtime bridge sidecar seam | Access 详设 6.6、6.7、6.18、12.2-1；CrossModuleDataProjectionMatrix 6 | `RuntimeDispatchRequest`、`IAccessRuntimeBridge`、access sidecar 投影 | L2 | Access 详设；本 TODO；必要时 runtime seam 说明文档 | `RuntimeDispatchRequest`、`RuntimeInvokeContext`、`IAccessRuntimeBridge::dispatch/cancel` | 文档一致性 | `rg -n "IAccessRuntimeBridge|RuntimeDispatchRequest|RuntimeInvokeContext|Access sidecar|cancel\(" docs/architecture/DASALL_access子系统详细设计.md docs/ssot/CrossModuleDataProjectionMatrix.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-001-access-runtime-bridge-sidecar-seam收敛.md` | 无 | 已解阻 | runtime-facing public seam 与 access sidecar 投影口径唯一 | 更新后的 Access 详设；本 TODO；[docs/todos/access/deliverables/ACC-TODO-001-access-runtime-bridge-sidecar-seam收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-001-access-runtime-bridge-sidecar-seam收敛.md) | bridge 输入输出、取消路径与 sidecar owner 可被后续 Build 任务直接引用，且不再存在两套 runtime seam 说法 |
 | ACC-TODO-002 | Done | 补齐 AccessBootstrapConfig schema 与治理投影源 | Access 详设 6.11、12.2-2；蓝图 3.2；计划文档阶段 K | 6.11 `AccessBootstrapConfig`、runtime governance views | L2 | Access 详设；本 TODO | `AccessBootstrapConfig`、`AccessAuthView`、`AccessAdmissionView`、`AccessPublishView`、`AccessRuntimeGovernanceView` | 文档一致性 | `rg -n "AccessBootstrapConfig|AccessAuthView|AccessAdmissionView|AccessPublishView|AccessRuntimeGovernanceView|SnapshotVersionFingerprint|runtime_budget|timeout_policy|ops_policy|infra.security_policy" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-002-AccessBootstrapConfig与治理投影源收敛.md` | 无 | 已解阻 | 配置 source-of-truth、热更新边界与 immutable view 规则冻结 | 更新后的 Access 详设；本 TODO；[docs/todos/access/deliverables/ACC-TODO-002-AccessBootstrapConfig与治理投影源收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-002-AccessBootstrapConfig与治理投影源收敛.md) | 启动事实配置、运行治理投影和 override 边界均具唯一口径，可直接进入 `AccessConfigAdapter` Build |
 | ACC-TODO-003 | Done | 补齐 override 与 diagnostics 入口 schema | Access 详设 6.7.1、6.11.4、6.11.5、6.12；infra/config 与 infra/diagnostics typed 对象 | `access.runtime_override.apply`、`access.diagnostics.pull` | L1 | Access 详设；本 TODO | `OverrideSourceFact`、`DiagnosticsSelectorFact`、artifact size / selector schema | 文档一致性 | `rg -n "ConfigPatch|OverrideSourceFact|DiagnosticsSelectorFact|SnapshotQuery|SnapshotExportRequest|snapshot_id|target_ref|max_artifact_bytes|allow proof" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md infra/include/diagnostics/DiagnosticsTypes.h` | 无 | 已解阻 | override 入口复用 `ConfigPatch` v1；diagnostics 入口复用 `SnapshotQuery` / `SnapshotExportRequest`，v1 selector 收口为 `snapshot_id` only | 更新后的 Access 详设；本 TODO；[docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md) | `OverrideSourceFact` / `DiagnosticsSelectorFact` 与 size / transport 规则形成唯一口径，ACC-TODO-016/035 可直接据此落测试 |
-| ACC-TODO-004 | NotStarted | 收敛 gateway 首版 transport 选型与 HTTP-only 边界 | Access 详设 6.14.8、12.2-3、12.2-5；蓝图 3.2 | HTTP unary + async receipt 首版边界 | L1 | Access 详设；本 TODO；`apps/gateway/CMakeLists.txt` 方案说明 | `HttpProtocolAdapter`、`HealthProbeHandler`、HTTP thread model | 文档一致性 | `rg -n "HTTP unary|WebSocket|MQTT|transport|gateway" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md` | 无 | ACC-BLK-004 | 首版明确只支持 HTTP unary + async receipt，transport 选型冻结 | 更新后的 Access 详设；本 TODO；选型记录 | gateway 首版范围与 transport 线程模型单一，不再允许 HTTP/WS/MQTT 三路并行启动 |
+| ACC-TODO-004 | Done | 收敛 gateway 首版 transport 选型与 HTTP-only 边界 | Access 详设 6.14.8、6.20.2、12.2-3、12.2-5；蓝图 3.2；gateway CMake 方案说明 | HTTP unary + async receipt 首版边界 | L1 | Access 详设；本 TODO；`apps/gateway/CMakeLists.txt` 方案说明 | `HttpProtocolAdapter`、`HealthProbeHandler`、HTTP thread model | 文档一致性 | `rg -n "cpp-httplib|HTTP/1.1|accepted async receipt|health listener|WebSocket|MQTT|bounded worker" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md apps/gateway/CMakeLists.txt` | 无 | 已解阻 | gateway 首版固定 `cpp-httplib` HTTP/1.1 unary listener + accepted async receipt + 独立 health listener，WS/MQTT 延后到 Phase A5 | 更新后的 Access 详设；本 TODO；[docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md) | gateway 首版范围、transport 族与线程模型形成唯一口径，ACC-TODO-026/028 可直接按 HTTP-only 边界进入 Build |
 | ACC-TODO-005 | Blocked | 收敛 streaming 延后边界与 async/poll fallback Gate | Access 详设 6.14.9、10.3、11；计划文档阶段 K | `StreamGateway`、WS/MQTT、async receipt + poll fallback | L1 | Access 详设；本 TODO | `StreamGateway` 占位接口、feature flag、fallback policy | 文档一致性 | `rg -n "StreamGateway|feature flag|async receipt|poll fallback|WS|MQTT" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md` | 无 | ACC-BLK-005 | shared streaming lifecycle、attach/reconnect/replay cursor 语义冻结 | 更新后的 Access 详设；本 TODO；阻塞记录 | stream / WS / MQTT 被明确标注为延后，不再出现在 v1 Done-ready Build 列表 |
 
 ### 6.2 骨架与公共接口面任务
@@ -255,7 +255,7 @@
 
 | 阶段 | 任务 | 编排建议 | 说明 |
 |---|---|---|---|
-| A 补设计与解阻 | 001 ~ 005 | 001 / 002 / 003 已完成；004 可独立推进；005 仍受外部协同阻塞 | 先冻结 seam、config、override/diagnostics schema 和 v1 范围，再允许接口和组合根落盘 |
+| A 补设计与解阻 | 001 ~ 005 | 001 / 002 / 003 / 004 已完成；005 仍受外部协同阻塞 | 先冻结 seam、config、override/diagnostics schema、gateway HTTP-only 边界与 v1 范围，再允许接口和组合根落盘 |
 | B 公共接口与骨架 | 006 ~ 012、037、038 | 006 串行起步；007~012 可按 surface 域并行；037/038 与骨架并行推进 | 先让 `access/include`、tests topology 与 CLI/daemon 本地接入路径成为稳定入口 |
 | C Admission 与 dispatch 主链 | 013 ~ 024 | 013 → 014/015 → 016/017/018 → 019 → 020/021 → 022/023 → 024 | 先 registry 和身份链，再 Admission、Normalizer、Bridge、Publisher、Async、Observability、Gateway |
 | D 入口壳层 | 025 ~ 030 | 029 / 025 优先并行；026 / 028 在 004 完成后推进；027 依赖 022 / 026；030 在 CLI/daemon 稳定后并行 | 首版先 CLI/daemon 本地控制面，再补 HTTP/gateway 与 simulator |
@@ -286,7 +286,7 @@
 | ACC-BLK-001 | 详设 12.2-1 | `IAccessRuntimeBridge` 与 runtime 真接口的 sidecar handoff 已在 access 侧冻结为 `RuntimeDispatchRequest -> RuntimeInvokeContext` 两段式；剩余风险仅是后续 Build 的 adapter/mock 落盘，不再是设计口径冲突 | 009、011、020 | 已由 ACC-TODO-001 完成解阻；后续只需维持 bridge-local adapter 吸收 runtime public seam 差异 | Bridge 仍不得被误写为 runtime live route ready，但 public seam 已可进入 Build |
 | ACC-BLK-002 | 详设 12.2-2 | `AccessBootstrapConfig` 已冻结为 typed bootstrap carrier，热更新仅作用于治理投影；剩余工作是后续 `AccessConfigAdapter` 代码与 tests 落盘，不再是设计口径 blocker | 012、028 | 已由 ACC-TODO-002 完成解阻；后续只需按 fingerprint 规则实现 immutable view 与 hot-update invalidation | `AccessConfigAdapter` 仍需用代码与测试证明 projection 行为，但不再停留在 placeholder 口径 |
 | ACC-BLK-003 | 已解阻（2026-04-23）：Access 侧已对齐 infra/config `ConfigPatch` v1 与 diagnostics `SnapshotQuery` / `SnapshotExportRequest`；v1 diagnostics pull 仅接受 `snapshot_id` selector，并冻结 LocalFile + Json + exact-match remote gate | 003、016、035 | 无；后续仅需按 schema 落 `AccessPolicyGate` / observability tests，并保持 deny-by-default 对未冻结 selector 生效 | 证据回链到 Access 详设 6.11.4、6.11.5、6.12 与 [docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md) | 若后续实现重新接受自由 patch、`trace_id/session_id` 公共 selector、inline artifact bytes 或宽松 remote target，则重新转为 Blocked |
-| ACC-BLK-004 | 详设 12.2-3、12.2-5 | gateway 首版 transport 选型和线程模型未冻结 | 004、026、028 | 明确 HTTP unary + async receipt 的 transport 和线程模型 | gateway 只做选型后的最小范围，不并推 WS/MQTT |
+| ACC-BLK-004 | 已解阻（2026-04-23）：gateway 首版 transport 已冻结为 `cpp-httplib` HTTP/1.1 unary listener + accepted async receipt + 独立 health listener；WS/MQTT 延后到 Phase A5，不进入 v1 business listener | 004、026、028 | 无；后续仅需按 HTTP-only 边界落 `HttpProtocolAdapter` / `HealthProbeHandler` 与相关单测 | 证据回链到 Access 详设 6.14.8、6.20.2、`apps/gateway/CMakeLists.txt` 与 [docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-004-gateway首版transport与HTTP-only边界收敛.md) | 若后续实现重新引入 WS/MQTT、streaming route、重量级事件循环依赖或混写 health/business listener，则重新转为 Blocked |
 | ACC-BLK-005 | 详设 10.3、11 | shared streaming lifecycle 未冻结 | 005、035 | runtime / llm / contracts 对 stream attach/reconnect/replay cursor 达成冻结结论 | stream / WS / MQTT 不进入 v1 Build-ready 任务 |
 | ACC-BLK-006 | 详设 12.2-6 | ownership token 的 HMAC secret 轮换和多实例同步方案未定义 | 022、027、033 | deployment secret 管理与 constant-time compare 规则固定 | v1 先按单实例 / 部署静态 secret 实现，规模化结论不外推 |
 | ACC-BLK-007 | daemon 本地控制面详设 6.3.3 | IIPC peer identity public seam 未冻结，daemon 本地 trusted 判定输入不足 | 029、033、037 | platform 冻结并实现 `IIPC::describe_peer()`（或等价接口） | 在解阻前仅开放不依赖 local trusted 的最小命令面，特权命令保持拒绝 |
@@ -298,7 +298,7 @@
 | ACC-BLK-001 | 高风险 | 是 | 不冻结 bridge seam，主链容易返工 |
 | ACC-BLK-002 | 中风险 | 是 | config source 不清，组合根与 health/probe 容易分叉 |
 | ACC-BLK-003 | 高风险 | 否，但阻断 override/diagnostics gate | 主线继续 deny-by-default |
-| ACC-BLK-004 | 中风险 | 是，对 gateway 主线阻断 | CLI 可先推进，HTTP 需选型后进入 Build |
+| ACC-BLK-004 | 中风险 | 否；设计已解阻，剩余是 HTTP-only 实现接线 | gateway 继续按 HTTP-only 边界推进，不外推 WS/MQTT ready |
 | ACC-BLK-005 | 中风险 | 否，但阻断 stream / WS / MQTT | 只能保留延后结论 |
 | ACC-BLK-006 | 中风险 | 否，但阻断规模化 receipt 结论 | 单实例实现可继续 |
 | ACC-BLK-007 | 高风险 | 否，但阻断 daemon local trusted 结论 | peer identity 未冻结前不得宣称本地特权入口 ready |
@@ -313,7 +313,7 @@
 | contract | `AgentRequest`、`AgentResult`、`IdentityMetadata` 不被 Access 污染 | `AgentRequestContractTest`、`AgentRequestFieldContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest` | 确保 Access 不把主体/认证/回执细节挤入 shared contracts |
 | integration | CLI/daemon（默认）与 HTTP（可选）unary、async receipt/query、failure/observability、health/probe、profile | `CliDaemonSmokeIntegrationTest`、`AccessAsyncReceiptIntegrationTest`、`AccessAdmissionFailureIntegrationTest`、`AccessObservabilityIntegrationTest`、`AccessHealthProbeIntegrationTest`、`AccessProfileCompatibilityTest` | 验证 Access 进入核心链路后的最小端到端行为 |
 | failure injection | secret backend failure、policy backend failure、queue full、channel unavailable、owner mismatch | `AuthenticatorChainSecretFailureTest`、`AccessPolicyBackendFailureTest`、`AdmissionReplayHitTest`、`ResultPublisherChannelFailureTest`、`AccessAdmissionFailureIntegrationTest` | 验证 fail-closed、fallback 与 evidence gap 可见 |
-| 延后 Gate | stream / WS / MQTT / diagnostics pull / override schema | Blocked only | 防止未冻结能力被错误标记为 ready |
+| 延后 Gate | stream / WS / MQTT | Blocked only | 防止未冻结能力被错误标记为 ready |
 
 ### 9.2 统一验收命令建议
 
@@ -357,7 +357,7 @@
 ### 10.2 回退策略
 
 1. 若 runtime seam 迟迟未冻结，回退策略是只保留 `AgentRequest` unary 主链接口占位，不外推 RuntimeBridge live route ready。
-2. 若 gateway transport 选型无法在当前阶段完成，回退策略是先交付 CLI/daemon unary + async receipt，并将 HTTP 维持在组合根占位或最小 stub。
+2. 若 gateway 选定的 HTTP-only transport 在实现阶段无法稳定接线，回退策略是先交付 CLI/daemon unary + async receipt，并将 HTTP 维持在最小 stub，不前推 WS/MQTT。
 3. 若 ownership token 规模化方案未冻结，回退策略是单实例 / 静态 deployment secret 版本，并在 TODO 与 Gate 结论中明确“不外推多实例 ready”。
 4. 若 override / diagnostics schema 未冻结，回退策略是入口 deny-by-default + audit，不提供任何灰色开关绕过。
 5. 若 stream / WS / MQTT 设计冻结继续延后，回退策略是保留 feature flag 与 Blocked 状态，统一回落到 async receipt + poll。
@@ -368,17 +368,17 @@
 
 可以，但不是无条件全量执行。
 
-当前可直接进入执行的范围是：ACC-TODO-001、002、004、006~034、037、038。ACC-TODO-003 与 ACC-TODO-005 仍属于外部协同阻塞项，ACC-TODO-035 与 ACC-TODO-036 受其收口约束，不能被写成 Done-ready Build 结论。默认先落地 CLI -> IIPC/UDS -> daemon -> access 主链，HTTP/gateway 在 transport 冻结后并行推进。
+当前可直接进入执行的范围是：ACC-TODO-001~004、006~034、037、038。ACC-TODO-005 仍属于外部协同阻塞项，ACC-TODO-035 与 ACC-TODO-036 受其收口约束，不能被写成 Done-ready Build 结论。默认先落地 CLI -> IIPC/UDS -> daemon -> access 主链，再按已冻结的 HTTP-only 边界并行推进 gateway。
 
 ### 11.2 当前可落到的最细粒度
 
 1. L3：public surface、supporting types、错误码、RequestValidator、RequestNormalizer、AdmissionController、AccessPolicyGate、ResultPublisher、AsyncTaskRegistry。
 2. L2：ProtocolAdapterRegistry、RuntimeBridge、AccessConfigAdapter、AccessObservabilityBridge、CLI/HTTP/daemon/simulator adapters、AccessGateway。
-3. L1 / Blocked：StreamGateway、WS/MQTT adapters、override/diagnostics transport schema。
+3. L1 / Blocked：StreamGateway、WS/MQTT adapters。
 
 ### 11.3 后续建议
 
-1. 先完成 001 / 002 / 004 和 006~012、037、038，保证 Access surface、CMake、discoverability、peer identity seam 与 CLI 依赖方向不再漂移。
+1. 先完成 001 / 002 / 003 / 004 和 006~012、037、038，保证 Access surface、override/diagnostics gate、gateway HTTP-only 边界、discoverability、peer identity seam 与 CLI 依赖方向不再漂移。
 2. 然后按 `SubjectResolver -> AuthenticatorChain -> AccessPolicyGate -> AdmissionController -> RequestValidator -> RequestNormalizer -> RuntimeBridge -> ResultPublisher -> AsyncTaskRegistry -> AccessGateway` 的顺序推进主链。
-3. 先打通 CLI/daemon 本地控制面主链，再并行打开 HTTP/gateway 与 simulator；stream / WS / MQTT 与 override / diagnostics 保持 Blocked，直到外部边界冻结。
+3. 先打通 CLI/daemon 本地控制面主链，再按 HTTP-only 边界并行打开 gateway 与 simulator；stream / WS / MQTT 保持 Blocked，直到外部边界冻结。
 4. 所有 Gate 结论必须在 ACC-TODO-036 回写到 TODO / deliverables / worklog，严禁用 build liveness 或 placeholder main 冒充 Access ready。
