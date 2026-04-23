@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #446
+
+- 日期：2026-04-23
+- 阶段：access/前置补设计与评审解阻
+- 任务：ACC-TODO-001 补齐 access-runtime bridge sidecar seam
+- 状态：已完成
+
+### 任务选择
+
+1. Access 专项 TODO 的执行顺序要求先完成 001~005 的补设计任务，再进入 006 之后的 public surface / build 落盘；其中 001 直接解阻 009、011、020，是当前最小且必须优先完成的原子任务。
+2. 当前详设 6.6、6.7、6.18 已经有局部 `RuntimeDispatchRequest` / `IAccessRuntimeBridge` / cancel 描述，但 12.2-1 仍保留“独立 handoff object”和“由 access adapter 吸收 sidecar”两套说法；如果不先收敛，后续 `AccessTypes.h` 与 `RuntimeBridge.cpp` 会在 public ABI 上返工。
+3. 本轮最小判别点不是实现 runtime live route，而是把 architecture、ssot、TODO 与 deliverable 四处文档统一到同一条 bridge seam 口径，并确认 ACC-BLK-001 从“设计冲突 blocker”降级为“后续 build adapter 风险”。
+
+### 改动
+
+1. 新增 `docs/todos/access/deliverables/ACC-TODO-001-access-runtime-bridge-sidecar-seam收敛.md`：
+   - 固定 `RuntimeDispatchRequest` 作为 access module public handoff；
+   - 固定 `RuntimeInvokeContext` 作为 `RuntimeBridge` bridge-local invoke shape；
+   - 固定 `IAccessRuntimeBridge::dispatch/cancel` 的边界、流程、Design->Build 映射与验收命令。
+2. 更新 `docs/architecture/DASALL_access子系统详细设计.md`：
+   - 在核心对象表中补入 `RuntimeInvokeContext` 并扩展 `RuntimeDispatchRequest` 字段摘要；
+   - 新增 6.18.3，冻结 `RuntimeDispatchRequest -> RuntimeInvokeContext` 两段式 bridge seam；
+   - 将 12.1 中的 runtime bridge seam 从“未解决问题”转为已解决项，并把 12.2-1 从未决列表移除。
+3. 更新 `docs/ssot/CrossModuleDataProjectionMatrix.md`：
+   - 将 access -> runtime 数据线补成两段 owner：`RequestNormalizer` 拥有 `RuntimeDispatchRequest`，`RuntimeBridge` 拥有 `RuntimeInvokeContext`；
+   - 明确不得由其他模块重复拥有 sidecar 投影权。
+4. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-001 标记为 Done；
+   - 将验收命令补齐为包含 `RuntimeInvokeContext` 和 deliverable 的统一检索链；
+   - 将 ACC-BLK-001 校准为“设计口径已解阻，后续只剩 build adapter 风险”。
+
+### 验证
+
+1. 文档一致性验收：
+   - 命令：`cd /home/gangan/DASALL && rg -n "IAccessRuntimeBridge|RuntimeDispatchRequest|RuntimeInvokeContext|Access sidecar|cancel\(" docs/architecture/DASALL_access子系统详细设计.md docs/ssot/CrossModuleDataProjectionMatrix.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-001-access-runtime-bridge-sidecar-seam收敛.md`
+   - 结果：四处文档均命中统一的 bridge seam 术语，`RuntimeDispatchRequest`、`RuntimeInvokeContext`、`IAccessRuntimeBridge::dispatch/cancel` 与 access sidecar owner 口径一致。
+
+### 结果
+
+1. ACC-TODO-001 已完成，`RuntimeDispatchRequest` 与 `IAccessRuntimeBridge` 的 public seam 不再存在“两套 runtime handoff 方案并存”的冲突。
+2. ACC-BLK-001 已从“设计未冻结 blocker”降级为“后续 build adapter / mock 落盘风险”；这允许 ACC-TODO-009、011、020 进入 Build 准备，而不会继续卡在文档层反复解释 seam。
+3. 本轮没有把 runtime live route 或 true integration ready 写成已完成；当前只冻结 access 侧 handoff owner 和 cancel surface，仍保持 runtime 主控边界。
+
+### 下一步
+
+1. 按专项 TODO 顺序继续执行 ACC-TODO-002，补齐 `AccessBootstrapConfig` schema 与治理投影源，再解阻 012 / 028。
+
+### 风险
+
+1. 若后续实现把 `RuntimeInvokeContext` 上抬到 `access/include` 或 runtime public headers，会重新引入第二套 ABI；需要坚持由 `RuntimeBridge` adapter 吸收 runtime seam 差异。
+
 ## 记录 #445
 
 - 日期：2026-04-23

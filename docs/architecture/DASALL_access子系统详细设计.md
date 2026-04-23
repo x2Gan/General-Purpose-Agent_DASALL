@@ -445,7 +445,8 @@ flowchart LR
 | `AccessAdmissionResult` | `admitted`、`replay_hit`、`reject_reason`、`challenge_hint`、`replay_result_ref` | 表达 Admission 链最终结论 | access module-local |
 | `AccessError` | `code`、`reason`、`detail`、`retryable`、`upstream_error` | access 侧统一错误表达，涵盖验证/认证/授权/准入/dispatch/发布/receipt 各类失败 | access module-local；`upstream_error` 可携带 shared `ErrorInfo` |
 | `AccessErrorCode` | 100–999 分组枚举 | access 错误码 taxonomy，支持协议映射 | access module-local；映射到 HTTP status / CLI exit code / gRPC code |
-| `RuntimeDispatchRequest` | `AgentRequest`、`SubjectIdentity`、`AccessDecisionProof`、`publish_mode`、`client_capability_view` | access -> runtime bridge 统一输入 | 只把 `AgentRequest` 暴露为 shared 对象，其余 sidecar 保持 module-local |
+| `RuntimeDispatchRequest` | `AgentRequest`、`SubjectIdentity`、`AccessDecisionProof`、`publish_mode`、`client_capability_view`、`dispatch_deadline`、`request_context` | access -> runtime bridge 统一输入 | `RequestNormalizer` 是唯一 owner；只把 `AgentRequest` 暴露为 shared 对象，其余 sidecar 保持 module-local |
+| `RuntimeInvokeContext` | `request_id`、`session_id`、`trace_id`、`actor_ref`、`operation`、`decision`、`dispatch_deadline` | `RuntimeBridge` 生成的 bridge-local invoke facts | 不进入 `access/include`；只作为 bridge-local adapter 到 runtime seam 的内部投影 |
 | `AsyncTaskReceipt` | `receipt_id`、`request_id`、`session_id`、`actor_ref`、`task_ref`、`expires_at`、`ownership_token` | 表达异步受理回执 | 当前不进入 contracts；避免在 async 语义未冻结前污染 shared 层 |
 | `PublishEnvelope` | `request_id`、`result_id`、`session_id`、`trace_id`、`channel_ref`、`protocol_kind`、`agent_result`、`protocol_status_hint`、`protocol_metadata`、`is_final` | 表达协议无关发布计划 | 以 `AgentResult` 为事实源，publish metadata 留在 module-local |
 | `AccessGatewayState` | `Uninitialized`、`Initializing`、`Ready`、`Draining`、`ShutDown` | 表达 AccessGateway 生命周期状态 | access module-local |
@@ -1104,9 +1105,9 @@ flowchart TD
 
 1. 职责：作为 access 到 runtime 的唯一 module-local bridge，负责把 `RuntimeDispatchRequest` 转换为 runtime 可消费的调用，并将同步完成、异步受理、runtime reject 三类结果映射为稳定的 `RuntimeDispatchResult`。
 2. 非职责边界：不拥有 Runtime 主循环；不做恢复裁定；不重试 runtime 调用；不保留长期业务状态；不替 runtime 生成业务级错误解释。
-3. 核心数据定义：围绕 `RuntimeDispatchRequest`、`RuntimeDispatchResult`、`RuntimeInvokeContext`、`DispatchDeadlineView`、`AsyncAcceptFact`、`RuntimeRejectReason` 建模；在 runtime 公开接口尚未完全收敛前，可引入 bridge-local adapter/stub 吸收 sidecar 适配。
-4. 公共/内部接口：公共面继续为 `IAccessRuntimeBridge::dispatch(const RuntimeDispatchRequest&)`；内部建议拆为 `dispatch_sync()`、`dispatch_async_capable()`、`map_runtime_result()`、`map_runtime_reject()`；不要把 runtime 内部对象直接透传到 `access/include`。
-5. 关键执行流：接收 normalizer 输出后，根据 `async_allowed/stream_requested` 与 runtime 能力视图选择 dispatch 模式；调用 runtime 公开入口或 bridge-local adapter；若 runtime 立即返回 `AgentResult` 则映射为 `Completed`；若 runtime 明确接受异步处理则映射为 `AcceptedAsync` 并附带 receipt seed；若 runtime 拒绝或 sidecar 不一致则返回 `Rejected` 和结构化错误引用。
+3. 核心数据定义：围绕 `RuntimeDispatchRequest`、`RuntimeDispatchResult`、`RuntimeInvokeContext`、`DispatchDeadlineView`、`AsyncAcceptFact`、`RuntimeRejectReason` 建模；其中 `RuntimeDispatchRequest` 保持 access module public，`RuntimeInvokeContext` 保持 bridge-local invoke shape，在 runtime 公开接口尚未完全收敛前由 adapter/stub 吸收 sidecar 差异。
+4. 公共/内部接口：公共面继续为 `IAccessRuntimeBridge::dispatch(const RuntimeDispatchRequest&)`；内部建议拆为 `build_invoke_context()`、`dispatch_sync()`、`dispatch_async_capable()`、`map_runtime_result()`、`map_runtime_reject()`；不要把 runtime 内部对象直接透传到 `access/include`，也不要要求 runtime 立即暴露新的 sidecar public type。
+5. 关键执行流：接收 normalizer 输出后，根据 `async_allowed/stream_requested` 与 runtime 能力视图选择 dispatch 模式；先生成 `RuntimeInvokeContext`，再调用 runtime 公开入口或 bridge-local adapter；若 runtime 立即返回 `AgentResult` 则映射为 `Completed`；若 runtime 明确接受异步处理则映射为 `AcceptedAsync` 并附带 receipt seed；若 runtime 拒绝或 sidecar 不一致则返回 `Rejected` 和结构化错误引用。
 6. 失败与回退语义：runtime 不可用、deadline 冲突、bridge sidecar 不一致时必须显式失败；bridge 不做隐式 retry 或补偿；runtime 已产生业务事实后，bridge 只负责映射结果，不得二次改写执行语义；streaming 未冻结时，不允许通过 bridge 虚构 `StreamAttached` 成功态。
 7. 测试与验收出口：推荐单测为 `RuntimeBridgeTest.cpp`、`RuntimeBridgeAsyncAcceptTest.cpp`、`RuntimeBridgeRejectMappingTest.cpp`；集成验收可与 `AccessGatewaySmokeIntegrationTest.cpp` 联动，验证 sync 和 accepted async 两条主支。
 
@@ -1543,6 +1544,14 @@ sequenceDiagram
 3. 若 Runtime 不支持 cancel 或任务已完成，Access 返回明确 `CancellationFailed` 而非虚假成功。
 4. 取消后 receipt 标记为 `Cancelled`，query 返回对应状态。
 
+#### 6.18.3 access-runtime bridge seam 冻结
+
+1. `RuntimeDispatchRequest` 固定为 access module public handoff，由 `RequestNormalizer` 作为唯一 owner 生成；apps 壳层、publisher、registry 或 runtime 都不能各自再拼一份 access sidecar。
+2. `RuntimeBridge` 固定负责把 `RuntimeDispatchRequest` 压缩为 bridge-local `RuntimeInvokeContext`，再通过 runtime 已有 public seam 或 bridge-local adapter 完成调用；这意味着 runtime-facing seam 的 v1 口径是“`AgentRequest` + invoke context”，而不是把 `SubjectIdentity` / `AccessDecisionProof` 直接拉进 runtime public headers。
+3. `RuntimeInvokeContext` 只承载 invoke 期最小事实：`request_id/session_id/trace_id`、`actor_ref`、`operation/target_ref`、`decision/policy_decision_ref`、`publish_mode`、`dispatch_deadline`、`async_allowed/stream_requested`。完整 headers、credential refs、peer 原始句柄继续停留在 access 私有域。
+4. cancel seam 固定为 `IAccessRuntimeBridge::cancel(request_id, actor_ref)`；ownership 校验和授权继续留在 access，`RuntimeBridge` 只把 cancel 事实映射到 runtime cancel stub 或后续稳定的 task-control seam，不在 `access/include` 暴露新的 runtime cancel 类型。
+5. 上述两段式 handoff 用于解阻 6.6/6.7/6.18 的 public surface 与后续 ACC-TODO-009、011、020；若 runtime public ABI 后续扩展，优先由 bridge-local adapter 吸收，而不是反向改写 access/include 或 contracts。
+
 ### 6.19 Session 管理与 Receipt 所有权验证
 
 #### 6.19.1 `session_id` 生成策略
@@ -1865,7 +1874,7 @@ tests/
 
 | 项目 | 等级 | 触发条件 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|
-| Runtime sidecar bridge 未定义 | High | Access 需要传递主体上下文与 policy proof，但 runtime 只接受裸 `AgentRequest` | 明确 `IAccessRuntimeBridge` 与 runtime stub/mock | 短期仅打通 `AgentRequest` unary 主链，高风险入口继续 deny-by-default |
+| Runtime sidecar bridge 口径漂移 | Medium | Access 直接把 sidecar 抬升为 runtime public ABI，或让不同入口各自拼装 handoff | 维持 `RuntimeDispatchRequest -> RuntimeInvokeContext` 两段式 owner 规则 | 回退到 bridge-local adapter 吸收差异，禁止把 sidecar 回写 contracts / runtime public headers |
 | HTTP/WS/MQTT 传输库选型未冻结 | Medium | gateway 需要真实网络接入实现 | 冻结 transport 选型或先用最小 HTTP 实现 | 先只落 CLI + daemon + simulator，本轮不承诺全协议 |
 | `runtime_override` 入口 schema/transport 尚未收敛 | Medium | Access 需要为 override 入口定义 bootstrap/config 接口 | 与 infra/config、profiles 明确 apply_override 路径和 actor proof | override 功能保持关闭，仅输出拒绝审计 |
 | shared streaming lifecycle 未冻结 | Medium | StreamGateway 需要稳定句柄、取消、重连语义 | 与 runtime/llm streaming 设计收敛 | v1 退回 async receipt + poll |
@@ -1880,6 +1889,7 @@ tests/
 
 | 原未决项 | 解决方案 | 参见章节 |
 |---|---|---|
+| runtime bridge sidecar seam 未冻结 | 冻结为 `RuntimeDispatchRequest` module public + `RuntimeInvokeContext` bridge-local invoke shape + `IAccessRuntimeBridge::cancel()` 唯一 cancel surface | 6.6、6.18.3 |
 | `publish_result()` 签名不一致 | 统一为 `const PublishEnvelope&`，`PublishEnvelope` 已正式定义 | 6.7 |
 | 是否需要独立 receipt ownership proof | 采用 HMAC-SHA256 双因子方案（`actor_ref` + `ownership_token`） | 6.19.2 |
 | 缺少 AccessGateway 生命周期管理 | 新增 `AccessGatewayState` 状态机、`shutdown()`、`is_ready()` | 6.15.1、6.7 |
@@ -1897,14 +1907,13 @@ tests/
 
 ### 12.2 仍未决的问题
 
-1. `IAccessRuntimeBridge` 与 runtime module public interface 的最终交界面是否需要独立 `RuntimeDispatchRequest` 对象，还是由 access 侧 adapter 吸收 sidecar 到 runtime 内部桥接层。
-2. `AccessBootstrapConfig` 的落盘形态应优先采用 deployment bundle、ConfigCenter typed query，还是先以 entry 启动参数表达最小集。
-3. gateway 首版是否只做 HTTP unary，再把 WebSocket/MQTT 作为 Phase A5 扩展，而不是在 Phase A3 同步落地。
-4. 串口入口是否在 v1 纳入 access 正式 Build 目标，还是留给后续 platform/daemon 联调阶段。
-5. HTTP transport 选型（libuv/asio/beast/自研最小实现）对线程模型和 gateway 并发设计的影响尚待冻结。
-6. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
-7. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
-8. `access.diagnostics.pull` 的 artifact 格式、大小限制和传输方式尚待与 infra/diagnostics 对齐。
+1. `AccessBootstrapConfig` 的落盘形态应优先采用 deployment bundle、ConfigCenter typed query，还是先以 entry 启动参数表达最小集。
+2. gateway 首版是否只做 HTTP unary，再把 WebSocket/MQTT 作为 Phase A5 扩展，而不是在 Phase A3 同步落地。
+3. 串口入口是否在 v1 纳入 access 正式 Build 目标，还是留给后续 platform/daemon 联调阶段。
+4. HTTP transport 选型（libuv/asio/beast/自研最小实现）对线程模型和 gateway 并发设计的影响尚待冻结。
+5. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
+6. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
+7. `access.diagnostics.pull` 的 artifact 格式、大小限制和传输方式尚待与 infra/diagnostics 对齐。
 
 ### 12.3 后续 Build 原子任务建议顺序
 

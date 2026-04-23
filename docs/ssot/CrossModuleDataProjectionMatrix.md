@@ -72,7 +72,8 @@ Owner：架构组 + Profiles/Runtime 负责人
 | 阶段 | Owner | 对象 / 字段 | 形态 | 投影规则 | 下游消费者 |
 |---|---|---|---|---|---|
 | 入口准入 | access | `InboundPacket`、`SubjectIdentity`、`AccessDecisionProof` | module-local、lossless | 在 access core 内完整保留主体、通道、授权证明与入口事实 | `RequestNormalizer` |
-| runtime bridge 归一化 | access | `RuntimeDispatchRequest` | module-local | `RequestNormalizer` 只把共享最小请求投影为 `AgentRequest`，其余主体/授权/发布上下文继续保留在 sidecar | `RuntimeBridge`、runtime |
+| runtime bridge 归一化 | access | `RuntimeDispatchRequest` | module-local | `RequestNormalizer` 是唯一 owner：只把共享最小请求投影为 `AgentRequest`，其余主体/授权/发布上下文继续保留在 sidecar | `RuntimeBridge`、runtime |
+| runtime invoke handoff | access | `RuntimeInvokeContext` | bridge-local、module-local | `RuntimeBridge` 是唯一 owner：把 `RuntimeDispatchRequest` 压缩为 invoke 期最小事实后，再对接 runtime public seam 或 bridge-local adapter；不要求 runtime 暴露新的 access sidecar public type | runtime adapter / runtime |
 | shared 主链 | contracts | `AgentRequest` / `AgentResult` | shared contracts | 共享面只承载 runtime 主链所需稳定字段；不承载 access 私有 proof、secret、peer 原始句柄 | runtime、上层入口 |
 | 观测 / 审计投影 | access | audit / metrics / tracing facts | module-local -> observability | `AccessObservabilityBridge` / `ResultPublisher` 只抽取最小必要字段：`request_id`、`trace_id`、`entry_type`、`actor_ref`、`auth_method`、`operation`、`target_ref`、`decision`、`policy_decision_ref`、`reason_code`、`publish_mode`、`outcome` | infra、审计、运维 |
 | 敏感字段保留 | access | headers、credential refs、peer 原始地址、认证秘密 | module-local private | 只允许以脱敏 ref 或 hash 形式进入 observability；不得进入 shared contracts 或普通结果回包 | access 内部 |
@@ -80,9 +81,10 @@ Owner：架构组 + Profiles/Runtime 负责人
 ### 6.2 v1 冻结规则
 
 1. `AgentRequest` 是 access -> runtime 的唯一 shared request；`SubjectIdentity` 与 `AccessDecisionProof` 不进入 contracts。
-2. runtime 可以消费 `RuntimeDispatchRequest` 中的 sidecar 事实做确认、审计关联和高风险动作门禁，但不得把整份 proof 或主体属性复制进 `AgentResult`。
-3. access 到 infra 的 audit 投影只保留可追责的最小事实集；认证秘密、headers 原文、peer 原始句柄必须留在 access 私有域。
-4. 如后续需要共享更稳定的 access 主体引用，只能新增单独的 shared ref 对象；在那之前不得把 `SubjectIdentity` 偷渡进 contracts。
+2. `RuntimeDispatchRequest` 是 access module public handoff，`RuntimeInvokeContext` 是 bridge-local invoke shape；前者由 `RequestNormalizer` 生成，后者由 `RuntimeBridge` 生成，任何其他模块都不得重复拥有 sidecar 投影权。
+3. runtime 可以消费 `RuntimeDispatchRequest` 或其下游 invoke context 中的 sidecar 事实做确认、审计关联和高风险动作门禁，但不得把整份 proof 或主体属性复制进 `AgentResult`。
+4. access 到 infra 的 audit 投影只保留可追责的最小事实集；认证秘密、headers 原文、peer 原始句柄必须留在 access 私有域。
+5. 如后续需要共享更稳定的 access 主体引用，只能新增单独的 shared ref 对象；在那之前不得把 `SubjectIdentity` 偷渡进 contracts。
 
 ## 7. 变更规则
 
