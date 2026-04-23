@@ -649,7 +649,7 @@ class IAccessRuntimeBridge {
 | `access.task.query` | `access.task` | 按 receipt/task 查询结果 | 仅允许原始主体、受托运维或诊断角色 |
 | `access.task.cancel` | `access.task` | 取消等待态/异步任务 | 默认仅允许原始主体或受控 ops |
 | `access.runtime_override.apply` | `access.override` | 运行期 patch 申请 | 仅允许受控运维/诊断入口 |
-| `access.diagnostics.pull` | `access.diagnostics` | 按 `trace_id/session_id` 拉取本地诊断 artifact | 仅 allow 证明 + diagnostics gate 双重通过时允许 |
+| `access.diagnostics.pull` | `access.diagnostics` | 按 `snapshot_id` 读取已脱敏 diagnostics snapshot，必要时导出本地 artifact | 仅 allow 证明 + diagnostics gate 双重通过时允许 |
 
 #### 6.7.2 Access 主体属性最小集
 
@@ -843,6 +843,61 @@ sequenceDiagram
 | 不允许 | 普通 HTTP 参数、query string、cookie、未签名环境变量、业务流量伪装成 override；也不允许修改 `AccessBootstrapConfig` 静态字段 |
 | 失败语义 | 任一来源、作用域、TTL、actor、base_version 或 allow proof 缺失都按 fail-closed 拒绝，并写 audit |
 
+##### 6.11.4.1 `OverrideSourceFact` 与 typed patch 对齐
+
+1. Access 不定义第二套 `runtime_override` patch body；入口 payload 直接复用 infra/config 已冻结的 `ConfigPatch` v1，对齐 `patch_id/source_kind/source_id/actor/target_scope/base_version/reason_code/expires_at/patches` 契约。
+2. Access 对 policy / audit / observability 只投影最小 metadata 与 path/op 摘要，不把 patch `value`、自由 JSON、原始 CLI 参数或 HTTP query string 直接带入 `OverrideSourceFact`。
+3. `ConfigPatch.patches` 在 access 入口侧必须非空；每个条目继续只允许 `replace` / `remove` 与稳定 `key_path`，空 patch、未知 op 或自由脚本表达式一律 fail-closed。
+
+| 字段 | 对齐来源 | 必填 | 说明 |
+|---|---|---|---|
+| `override_id` | `ConfigPatch.patch_id` | 是 | override 尝试与审计的稳定 ID；Access 不再自造第二个 patch id |
+| `source_kind` | `ConfigPatch.source_kind` | 是 | v1 只接受受控 `config_center_api`、`diagnostics_window`、`ops_command`、`automation_test` 来源 |
+| `source_ref` | `ConfigPatch.source_id` | 是 | 来源实例或入口标识；用于审计与 deny 追踪 |
+| `actor_ref` | `ConfigPatch.actor` | 是 | 受鉴权主体引用；缺失则直接拒绝 |
+| `target_scope` | `ConfigPatch.target_scope` | 是 | override 作用域；必须可映射到 access policy target |
+| `base_version` | `ConfigPatch.base_version` | 是 | 防 stale write 的最小版本锚点 |
+| `reason_code` | `ConfigPatch.reason_code` | 是 | 运维/诊断原因码；不得为空 |
+| `expires_at` | `ConfigPatch.expires_at` | 是 | `runtime_override` TTL；缺失则拒绝 |
+| `requested_paths` | `ConfigPatch.patches[*].key_path` 摘要 | 是 | 仅保留稳定路径集合，不保留 value 明文 |
+| `requested_ops` | `ConfigPatch.patches[*].op` 摘要 | 是 | v1 仅允许 `replace`、`remove` |
+
+补充规则：
+
+1. Access 只校验 `OverrideSourceFact` 元数据完整性、来源受控性与 allow proof 前置条件；路径白名单、高风险键“只收紧不放宽”和最终 merge 语义仍由 ConfigCenter / profiles validator 负责。
+2. 普通业务请求、cookie、query string、未签名环境变量即使能拼出形似 `ConfigPatch` 的对象，也不得进入 override 面；这类输入必须以 `access.runtime_override.denied` 审计并拒绝。
+
+#### 6.11.5 `access.diagnostics.pull` selector / transport 规则
+
+| 规则 | 设计结论 |
+|---|---|
+| Pull selector | v1 唯一公开 selector 固定为 `SnapshotQuery.snapshot_id`；`trace_id`、`session_id`、`request_id` 仅作为日志/审计关联上下文，不作为 pull selector |
+| Access 职责 | 认证入口主体、构造 `access.diagnostics.pull` 授权查询、把 selector/export 请求归一化为 `DiagnosticsSelectorFact` |
+| 允许 transport | v1 只允许 `get_snapshot(const SnapshotQuery&)` 与 `export_snapshot(const SnapshotExportRequest&)` 两条 typed 路径；Access 不直接内联返回原始 artifact bytes |
+| 默认 gate | 只有 allow proof + access 侧 diagnostics gate 通过时才允许进入 diagnostics service；远程导出仍需 infra/diagnostics 自身 gate 与 exact-match allow-list 再次通过 |
+| 失败语义 | 缺失 `snapshot_id`、出现未冻结 selector、`target_ref` 非法、target/format 未冻结或 allow proof 缺失都按 fail-closed 拒绝，并写 audit |
+
+##### 6.11.5.1 `DiagnosticsSelectorFact` schema
+
+1. Access v1 diagnostics pull 对齐 infra/diagnostics 已落盘的 `SnapshotQuery{snapshot_id}` 与 `SnapshotExportRequest{snapshot_id,target,format,target_ref}`；不再保留基于 `trace_id/session_id` 的自由查询面。
+2. `DiagnosticsSelectorFact` 只保留 selector 与导出 gate 所需的稳定字段，不复制 diagnostics snapshot 内容，也不把原始 artifact bytes 带回 access 主链。
+
+| 字段 | 对齐来源 | 必填 | 说明 |
+|---|---|---|---|
+| `selector_kind` | access private enum | 是 | v1 固定为 `snapshot_id` |
+| `selector_value` | `SnapshotQuery.snapshot_id` | 是 | 已脱敏 diagnostics snapshot 的稳定引用 |
+| `request_mode` | access private enum | 是 | `snapshot_get` 或 `snapshot_export` |
+| `export_target` | `SnapshotExportRequest.target` | 否 | 仅 `request_mode=snapshot_export` 时出现；沿用 `LocalFile` / `RemoteUpload` |
+| `export_format` | `SnapshotExportRequest.format` | 否 | 仅 `request_mode=snapshot_export` 时出现；沿用 `Json` / `TextArchive` |
+| `target_ref` | `SnapshotExportRequest.target_ref` | 否 | 导出目标引用；不得为空字符串或自由 URL 模板 |
+
+size / target / transport 约束：
+
+1. `snapshot_get` 只接受 `SnapshotQuery.snapshot_id`；未冻结 `trace_id`、`session_id`、`request_id` 选择器一律拒绝，待 infra/diagnostics 显式扩展 `SnapshotQuery` 后再开新 gate。
+2. `snapshot_export` 必须同时满足 `snapshot_id`、`target`、`format`、`target_ref` 齐备；其中 v1 唯一保证可成功的路径是 `ExportTarget::LocalFile + ExportFormat::Json + local://diagnostics/<artifact_name>.jsonl`。
+3. `ExportFormat::TextArchive` 在 v1 必须拒绝；`RemoteUpload` 默认拒绝，只有在 infra/diagnostics 显式开启 `infra.diagnostics.remote.enabled=true` 且 `target_ref` exact-match `infra.diagnostics.remote.allowed_targets` 时才允许继续。
+4. diagnostics 导出产物大小继续受 `infra.diagnostics.max_artifact_bytes` 约束；Access 侧只消费 `snapshot_id/export_id/size_bytes/checksum/created_at` 等稳定元数据，不把 artifact 内容反向塞入普通 entry 响应体。
+
 ### 6.12 可观测性（日志 / 指标 / 追踪 / 审计）
 
 | 类型 | 名称/事件 | 关键字段 | 触发时机 |
@@ -869,7 +924,7 @@ sequenceDiagram
 | 审计 | `access.auth.failed` | `actor_ref`、`peer_ref`、`reason_code`、`request_id` | 敏感认证失败 |
 | 审计 | `access.policy.denied` | `actor_ref`、`operation`、`target_type`、`policy_decision_ref` | 入口授权拒绝 |
 | 审计 | `access.runtime_override.requested` / `denied` / `applied` | `actor_ref`、`override_id`、`reason_code`、`target_scope` | override 尝试与结果 |
-| 审计 | `access.diagnostics.pull` | `actor_ref`、`selector_kind`、`selector_value`、`policy_decision_ref` | 诊断 artifact 拉取 |
+| 审计 | `access.diagnostics.pull` | `actor_ref`、`selector_kind`、`selector_value`、`request_mode`、`target_ref(optional)`、`policy_decision_ref` | 诊断 snapshot 读取或导出 |
 
 #### 6.12.1 Access-Runtime-Infra 审计语义映射
 
@@ -1076,9 +1131,9 @@ Access 侧 admission 已经拥有 actor / action / target 的归一化语义；R
 
 1. 职责：基于 access 自定义 action taxonomy、主体属性、通道属性、环境属性和目标属性构造 `PolicyQueryContext`，调用 `infra/policy` 完成 fail-closed 授权求值，并输出 `AccessDecisionProof`。
 2. 非职责边界：不定义 infra/policy 的共享语义；不做限流或幂等；不直接执行 override/diagnostics；不接管 result publish；不把匹配规则细节写回 shared contracts。
-3. 核心数据定义：围绕 `AccessPolicyEvaluationInput`、`AccessDecisionProof`、`OperationTargetView`、`AccessDecisionReasonCode`、`OverrideSourceFact`、`DiagnosticsSelectorFact` 建模；`AccessDecisionProof` 仍只把 allow/deny/require_confirmation 对齐到 shared 语义，其余证据保持 private。
+3. 核心数据定义：围绕 `AccessPolicyEvaluationInput`、`AccessDecisionProof`、`OperationTargetView`、`AccessDecisionReasonCode`、`OverrideSourceFact`、`DiagnosticsSelectorFact` 建模；其中 `OverrideSourceFact` 只保留 `ConfigPatch` 元数据与 path/op 摘要，`DiagnosticsSelectorFact` 只保留 `SnapshotQuery` / `SnapshotExportRequest` 的 selector 与导出 gate 事实；`AccessDecisionProof` 仍只把 allow/deny/require_confirmation 对齐到 shared 语义，其余证据保持 private。
 4. 公共/内部接口：保持 internal 级别；建议接口为 `evaluate_submit()`、`evaluate_task_query()`、`evaluate_override_request()`、`build_query_context()`、`map_policy_result()`；高风险动作单独暴露 helper，而不是把所有行为压进一个 `evaluate()` God method。
-5. 关键执行流：先根据请求类型派生 `operation/target_type`；若是 `runtime_override` 或 `diagnostics.pull`，先校验来源元数据完整性；再构造主体、通道、环境、目标属性并调用 `PolicyManager`；仅在明确获得 allow proof 时输出 `AccessDecisionProof`；若返回 require confirmation，则交由 access 入口侧转为 challenge/confirmation required，而不是当作 allow。
+5. 关键执行流：先根据请求类型派生 `operation/target_type`；若是 `runtime_override` 或 `diagnostics.pull`，先校验来源元数据、`snapshot_id`/TTL/target_ref 等结构完整性；再构造主体、通道、环境、目标属性并调用 `PolicyManager`；仅在明确获得 allow proof 时输出 `AccessDecisionProof`；若返回 require confirmation，则交由 access 入口侧转为 challenge/confirmation required，而不是当作 allow。
 6. 失败与回退语义：任何 query 构造失败、policy backend 不可用、proof 不完整、require confirmation 未满足都必须 deny；授权后不得再修改 operation/target 语义；普通业务流量伪装成 override/diagnostics 时必须审计并拒绝。
 7. 测试与验收出口：推荐单测为 `AccessPolicyGateTest.cpp`、`AccessPolicyOverrideGateTest.cpp`、`AccessPolicyBackendFailureTest.cpp`；验收要求 submit、task query、override 三类授权路径和 backend failure 均能二值断言。
 
@@ -1892,7 +1947,7 @@ tests/
 |---|---|---|---|---|
 | Runtime sidecar bridge 口径漂移 | Medium | Access 直接把 sidecar 抬升为 runtime public ABI，或让不同入口各自拼装 handoff | 维持 `RuntimeDispatchRequest -> RuntimeInvokeContext` 两段式 owner 规则 | 回退到 bridge-local adapter 吸收差异，禁止把 sidecar 回写 contracts / runtime public headers |
 | HTTP/WS/MQTT 传输库选型未冻结 | Medium | gateway 需要真实网络接入实现 | 冻结 transport 选型或先用最小 HTTP 实现 | 先只落 CLI + daemon + simulator，本轮不承诺全协议 |
-| `runtime_override` 入口 schema/transport 尚未收敛 | Medium | Access 需要为 override 入口定义 bootstrap/config 接口 | 与 infra/config、profiles 明确 apply_override 路径和 actor proof | override 功能保持关闭，仅输出拒绝审计 |
+| override / diagnostics schema 漂移 | Medium | Access 重新接受自由 patch、`trace_id/session_id` 公共 selector、inline artifact bytes 或宽松 remote target | 维持 `ConfigPatch` + `SnapshotQuery` / `SnapshotExportRequest` 唯一路径与 exact-match gate | 回退到 `snapshot_id` only + LocalFile/Json only + deny-by-default |
 | shared streaming lifecycle 未冻结 | Medium | StreamGateway 需要稳定句柄、取消、重连语义 | 与 runtime/llm streaming 设计收敛 | v1 退回 async receipt + poll |
 | 结果发布与慢消费者冲突 | Medium | 流式/长连接消费者持续阻塞 | 完成慢消费者断连和 replay cache 设计 | 断开慢消费者并回退到轮询，不阻塞主链 |
 | access bootstrap 来源漂移 | Medium | apps 重新允许命令行逐字段覆盖 bootstrap，或 AccessConfigAdapter 直接解析 profile 原始文件 | 维持 typed bootstrap carrier + projection-only adapter 规则 | 回退到 `bootstrap_ref` + immutable view 模式，禁止第二来源和并行 schema |
@@ -1907,6 +1962,7 @@ tests/
 |---|---|---|
 | runtime bridge sidecar seam 未冻结 | 冻结为 `RuntimeDispatchRequest` module public + `RuntimeInvokeContext` bridge-local invoke shape + `IAccessRuntimeBridge::cancel()` 唯一 cancel surface | 6.6、6.18.3 |
 | `AccessBootstrapConfig` source-of-truth 与热更新边界未冻结 | 冻结为 typed bootstrap carrier + locator-only startup args + `SnapshotVersionFingerprint` invoke-scoped immutable 规则 | 6.11、6.20、AccessConfigAdapter |
+| override / diagnostics 入口 schema 未冻结 | override 复用 `ConfigPatch` v1；diagnostics pull 复用 `SnapshotQuery` / `SnapshotExportRequest`，并将 v1 selector 收口为 `snapshot_id` only | 6.11.4、6.11.5、6.12 |
 | `publish_result()` 签名不一致 | 统一为 `const PublishEnvelope&`，`PublishEnvelope` 已正式定义 | 6.7 |
 | 是否需要独立 receipt ownership proof | 采用 HMAC-SHA256 双因子方案（`actor_ref` + `ownership_token`） | 6.19.2 |
 | 缺少 AccessGateway 生命周期管理 | 新增 `AccessGatewayState` 状态机、`shutdown()`、`is_ready()` | 6.15.1、6.7 |
@@ -1929,7 +1985,6 @@ tests/
 3. HTTP transport 选型（libuv/asio/beast/自研最小实现）对线程模型和 gateway 并发设计的影响尚待冻结。
 4. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
 5. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
-6. `access.diagnostics.pull` 的 artifact 格式、大小限制和传输方式尚待与 infra/diagnostics 对齐。
 
 ### 12.3 后续 Build 原子任务建议顺序
 

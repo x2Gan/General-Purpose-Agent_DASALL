@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #448
+
+- 日期：2026-04-23
+- 阶段：access/前置补设计与评审解阻
+- 任务：ACC-TODO-003 补齐 override 与 diagnostics 入口 schema
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-003 是 ACC-TODO-016 `AccessPolicyGate` 与 ACC-TODO-035 failure/observability/profile Gate 的共同前置；如果 override 与 diagnostics 仍停留在“只有原则、没有 typed schema”的状态，后续实现只能继续 deny-by-default，无法形成可测试的输入对象和审计字段。
+2. 本轮最小判别点是：仓库内是否已经存在足够稳定的上游 typed 事实，而不是继续等待外部协同。实际检查结果表明，infra/config 已冻结 `ConfigPatch` v1，infra/diagnostics 已在头文件中落盘 `SnapshotQuery` / `SnapshotExportRequest` / `IDiagnosticsService`，所以 Access 不需要再发明第二套 schema。
+3. 因此本轮的最小闭环是把这些上游 typed 对象投影成 Access 私有 `OverrideSourceFact` / `DiagnosticsSelectorFact`，同时把未冻结 selector 收口为 deny-by-default，解除 ACC-BLK-003 的设计 blocker 属性。
+
+### 改动
+
+1. 新增 `docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md`：
+   - 固定 override 入口直接复用 `ConfigPatch` v1；
+   - 固定 diagnostics pull 直接复用 `SnapshotQuery` / `SnapshotExportRequest`；
+   - 固定 v1 `snapshot_id` only selector、LocalFile + Json 默认成功路径、remote exact-match gate 与 metadata-only 返回语义。
+2. 更新 `docs/architecture/DASALL_access子系统详细设计.md`：
+   - 在 6.7 action taxonomy 中把 `access.diagnostics.pull` 从 `trace_id/session_id` 拉取收口为 `snapshot_id` 读取/导出；
+   - 新增 6.11.4.1，冻结 `OverrideSourceFact` 与 `ConfigPatch` v1 的字段对齐规则；
+   - 新增 6.11.5 / 6.11.5.1，冻结 `DiagnosticsSelectorFact`、`SnapshotQuery` / `SnapshotExportRequest` 对齐关系、artifact size / target / transport 规则；
+   - 更新 6.12 审计字段、AccessPolicyGate 核心数据定义，以及 11/12 的风险与未决项回写。
+3. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-003 标记为 Done；
+   - 将 ACC-BLK-003 校准为“设计已解阻，后续进入实现与测试阶段”；
+   - 更新专项概述和串并行编排，移除“override / diagnostics 入口 schema 仍待前置收敛”的旧表述。
+
+### 验证
+
+1. 文档一致性验收：
+   - 命令：`cd /home/gangan/DASALL && rg -n "ConfigPatch|OverrideSourceFact|DiagnosticsSelectorFact|SnapshotQuery|SnapshotExportRequest|snapshot_id|target_ref|max_artifact_bytes|allow proof" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-003-override与diagnostics入口schema收敛.md infra/include/diagnostics/DiagnosticsTypes.h`
+   - 结果：Access 详设、专项 TODO、deliverable 与 infra 头文件已统一到 `ConfigPatch` / `SnapshotQuery` / `SnapshotExportRequest` 三类 typed 对象；diagnostics pull 已收口为 `snapshot_id` only selector，artifact size / target 规则可追溯到 infra 真实对象与配置键。
+
+### 结果
+
+1. ACC-TODO-003 已完成，Access 不再需要为 override 与 diagnostics 入口自造独立 schema；实现阶段可直接围绕 `OverrideSourceFact` / `DiagnosticsSelectorFact` 建模。
+2. ACC-BLK-003 已从设计 blocker 降级为实现约束；后续 ACC-TODO-016 / 035 可以直接据此补单测、集成测试和审计字段断言。
+3. diagnostics pull 的 v1 selector 已收口为 `snapshot_id` only；`trace_id/session_id/request_id` 继续仅作关联上下文，避免在 Access 侧开放模糊查询面或二次 transport 协议。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-004，收敛 gateway 首版 transport 选型与 HTTP-only 边界。
+
+### 风险
+
+1. 如果后续实现重新接受自由 patch body、`trace_id/session_id` 公共 selector、inline artifact bytes 或宽松 remote target 匹配，则会直接破坏本轮冻结的最小权限边界，需要回退到 `snapshot_id` only + LocalFile/Json only + deny-by-default。
+
 ## 记录 #447
 
 - 日期：2026-04-23
