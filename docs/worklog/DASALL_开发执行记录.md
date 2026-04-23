@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #447
+
+- 日期：2026-04-23
+- 阶段：access/前置补设计与评审解阻
+- 任务：ACC-TODO-002 补齐 AccessBootstrapConfig schema 与治理投影源
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-001 已解阻 runtime bridge seam 后，ACC-TODO-002 是 012/028 的直接前置；如果 `AccessBootstrapConfig` 的 source-of-truth 与 hot-update 边界不先冻结，后续 `AccessConfigAdapter` 很容易重新引入第二配置源或直接解析 profile 原始 YAML。
+2. 当前详设已经有字段表和 `AccessConfigAdapter` 组件职责，说明缺口不是“没有字段”，而是“deployment bundle / ConfigCenter / 启动参数 / runtime snapshot”的 owner 没有被单一化，也缺少 fingerprint 规则。
+3. 本轮最小判别点是：把 `AccessBootstrapConfig` 固定为 typed bootstrap carrier，把启动参数降为 locator-only，把 runtime governance 投影固定为 invoke-scoped immutable view，并把 ACC-BLK-002 从设计 blocker 降级为实现任务。
+
+### 改动
+
+1. 新增 `docs/todos/access/deliverables/ACC-TODO-002-AccessBootstrapConfig与治理投影源收敛.md`：
+   - 冻结 `AccessBootstrapConfig` 的唯一 schema 与合法 carrier；
+   - 固定 `AccessAuthView`、`AccessAdmissionView`、`AccessPublishView`、`AccessRuntimeGovernanceView` 的职责边界；
+   - 固定 `SnapshotVersionFingerprint = bootstrap_revision + effective_profile_id + runtime_policy_generation`。
+2. 更新 `docs/architecture/DASALL_access子系统详细设计.md`：
+   - 扩写 6.11.1，明确 deployment bundle / ConfigCenter typed query 为唯一合法 carrier，启动参数只负责 `bootstrap_ref`；
+   - 在 6.11.2 中补入 `bootstrap_revision`、`entry_type` 与 last-known-good fallback 规则；
+   - 在 6.11.3 和 AccessConfigAdapter 段中补入 immutable view / fingerprint / hot-update 只影响下一次请求的规则；
+   - 将 12.1 中的配置 source-of-truth 问题转为已解决项，并从 12.2 未决列表移除。
+3. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-002 标记为 Done；
+   - 将验收命令扩展为覆盖治理视图与 fingerprint；
+   - 将 ACC-BLK-002 校准为“设计已解阻，剩余是实现与测试任务”。
+
+### 验证
+
+1. 文档一致性验收：
+   - 命令：`cd /home/gangan/DASALL && rg -n "AccessBootstrapConfig|AccessAuthView|AccessAdmissionView|AccessPublishView|AccessRuntimeGovernanceView|SnapshotVersionFingerprint|runtime_budget|timeout_policy|ops_policy|infra.security_policy" docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md docs/todos/access/deliverables/ACC-TODO-002-AccessBootstrapConfig与治理投影源收敛.md`
+   - 结果：详设、TODO 与 deliverable 已统一为 typed bootstrap carrier、locator-only startup args、invoke-scoped immutable governance view 和 fingerprint 规则。
+
+### 结果
+
+1. ACC-TODO-002 已完成，`AccessBootstrapConfig` 不再处于“deployment bundle / ConfigCenter / 启动参数三选一”的未定状态；access 现在拥有唯一 schema 和唯一 carrier 语义。
+2. ACC-BLK-002 已从设计 blocker 降级为实现任务风险；后续 ACC-TODO-012 可以直接以 `AccessConfigAdapter` projection-only 组件为前提推进。
+3. 本轮没有新增 profile 顶层键，也没有把 `AccessBootstrapConfig` 扩进 shared contracts，继续保持“启动事实归 access、运行治理归 profiles/runtime snapshot”的边界。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-003，补齐 override 与 diagnostics 入口 schema；若外部 infra 事实仍不足，则按 blocker recovery 输出最小阻塞与 deny-by-default 收口。
+
+### 风险
+
+1. 若后续 apps 重新允许命令行逐字段覆盖 bootstrap，或让 AccessConfigAdapter 直接解析 profile 原始 YAML，会立即破坏本轮冻结的 source-of-truth，需要回退到 locator-only 启动规则。
+
 ## 记录 #446
 
 - 日期：2026-04-23

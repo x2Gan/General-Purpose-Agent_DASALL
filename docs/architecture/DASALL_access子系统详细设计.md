@@ -779,15 +779,18 @@ sequenceDiagram
 #### 6.11.1 配置源分层原则
 
 1. **启动事实配置**：listen endpoint、broker/IPC endpoint、TLS secret ref、allowed auth methods、stream heartbeat、replay TTL 等，归 `AccessBootstrapConfig`，只在启动期读取，不进入当前已冻结 shared contracts。
-2. **运行治理投影**：优先复用 `runtime_budget.*`、`timeout_policy.*`、`ops_policy.*`、`infra.security_policy.*`、`infra.logging.*` 等既有快照视图，不再复制一套 access 运行策略。
-3. **受控 override**：Access 只接收来自 ConfigCenter/诊断/运维命令的已鉴权 typed patch；普通 HTTP 参数、cookie、CLI 环境变量不能直达 override 面。
+2. **唯一 schema / carrier**：`AccessBootstrapConfig` 的唯一 schema 归 access 所有，合法 carrier 固定为 deployment bundle 中落盘的 typed bootstrap asset 或 ConfigCenter typed query 返回的同 schema 快照；entry 启动参数只允许提供 `bootstrap_ref` / asset path / entry instance locator，不得逐字段直接承载业务配置。
+3. **运行治理投影**：优先复用 `runtime_budget.*`、`timeout_policy.*`、`ops_policy.*`、`infra.security_policy.*`、`infra.logging.*` 等既有快照视图，不再复制一套 access 运行策略。
+4. **受控 override**：Access 只接收来自 ConfigCenter/诊断/运维命令的已鉴权 typed patch；普通 HTTP 参数、cookie、CLI 环境变量不能直达 override 面，且 override 不能修改 `AccessBootstrapConfig` 静态字段。
 
 #### 6.11.2 `AccessBootstrapConfig` 建议字段
 
-下表字段是 access 启动配置对象，不等价于当前已冻结 `runtime_policy.yaml` 顶层逻辑域：
+下表字段是 access 启动配置对象，不等价于当前已冻结 `runtime_policy.yaml` 顶层逻辑域；建议该对象在 deployment bundle 与 ConfigCenter typed query 中保持同一 typed schema：
 
 | 字段 | 默认值 | 来源 | 热更新 | 说明 |
 |---|---|---|---|---|
+| `bootstrap_revision` | required | deployment bundle / ConfigCenter typed query | 否 | 启动事实快照版本；用于缓存、审计与 last-known-good fallback |
+| `entry_type` | required | deployment bundle / ConfigCenter typed query | 否 | 明确该 bootstrap 只适用于 `cli`、`daemon`、`gateway`、`simulator` 中之一 |
 | `listen_ref` | entry-specific | 启动参数 / deployment bundle | 否 | CLI 为 stdin/stdout；daemon 为 uds/tcp；gateway 为 http/ws/mqtt endpoint |
 | `allowed_protocols` | entry-specific | deployment bundle | 否 | gateway 默认 `http,ws`；mqtt 受 feature flag 控制 |
 | `peer_auth_mode` | `strict` | deployment bundle | 否 | remote 入口默认严格认证，本地 CLI/模拟器可使用本地身份模式 |
@@ -806,6 +809,12 @@ sequenceDiagram
 | `session_id_mode` | `auto` | 启动配置 | 否 | `auto` 表示服务端生成；`client_hint` 允许客户端通过 header 提供 |
 | `ownership_token_hmac_secret_ref` | required | deployment bundle / secret ref | 否 | receipt ownership token 的 HMAC 密钥引用 |
 
+冻结规则：
+
+1. entry 启动参数只允许解析 `bootstrap_ref` / 本地 asset 路径，不允许用 `--listen-ref`、`--dispatch-timeout` 这类逐字段参数在进程内拼出第二份 `AccessBootstrapConfig`。
+2. 如果 ConfigCenter 启动期不可用，允许回退到随 deployment 分发的 last-known-good bootstrap asset；若二者都缺失、schema 不合法或 `entry_type` 不匹配，则 Access `init()` 必须 fail-closed。
+3. `AccessBootstrapConfig` 不参与 runtime hot-update；任何运行期变化都必须通过后述治理投影视图和受控 `runtime_override` 收敛。
+
 #### 6.11.3 复用的运行治理投影
 
 | 已冻结键或视图 | 默认策略 | Access 使用方式 | `runtime_override` 规则 |
@@ -818,13 +827,20 @@ sequenceDiagram
 | `infra.security_policy.default_effect` | deny | PolicyGate 未命中规则时 fail-closed | 不由 access 改写 |
 | `infra.logging.export.enable_diag_pull` | false/按 profile | 诊断日志拉取前置 gate | runtime override 不得开启 |
 
+治理视图冻结规则：
+
+1. `AccessAuthView`、`AccessAdmissionView`、`AccessPublishView`、`AccessRuntimeGovernanceView` 都是 invoke-scoped immutable snapshot，不允许在同一请求生命周期内看到半新半旧视图。
+2. `AccessRuntimeGovernanceView` 只允许消费本表列出的现有键；若未来需要更多 access 配置，只能追加 access 内部视图或扩大上游冻结矩阵，不能私自新增 `runtime_policy.yaml` 顶层域。
+3. `SnapshotVersionFingerprint` 固定由 `bootstrap_revision + effective_profile_id + runtime_policy_generation` 组成；当任一分量变化时，下一次请求必须重建治理视图。
+4. 运行期热更新只影响下一次请求；进行中请求继续持有入口时刻绑定的 fingerprint，不回溯影响 Admission、Publish 或 ResultReplay 行为。
+
 #### 6.11.4 `runtime_override` 入口规则
 
 | 规则 | 设计结论 |
 |---|---|
 | 合法来源 | 仅允许受控运维命令、诊断入口、受鉴权 ConfigCenter `apply_override` API |
 | Access 职责 | 只负责认证入口主体、构造 `access.runtime_override.apply` 授权查询、校验来源元数据完整性 |
-| 不允许 | 普通 HTTP 参数、query string、cookie、未签名环境变量、业务流量伪装成 override |
+| 不允许 | 普通 HTTP 参数、query string、cookie、未签名环境变量、业务流量伪装成 override；也不允许修改 `AccessBootstrapConfig` 静态字段 |
 | 失败语义 | 任一来源、作用域、TTL、actor、base_version 或 allow proof 缺失都按 fail-closed 拒绝，并写 audit |
 
 ### 6.12 可观测性（日志 / 指标 / 追踪 / 审计）
@@ -1256,9 +1272,9 @@ sequenceDiagram
 
 1. 职责：把启动期 `AccessBootstrapConfig` 与运行期 profile/policy snapshot 投影为 access 内部可消费的治理视图，供 resolver/auth/policy/admission/publisher 使用。
 2. 非职责边界：不直接解析 profile 原始 YAML；不拥有第二套策略体系；不做授权决策；不决定 transport 绑定细节以外的业务逻辑；不把投影视图暴露成 shared contracts。
-3. 核心数据定义：围绕 `AccessBootstrapConfig`、`AccessAuthView`、`AccessAdmissionView`、`AccessPublishView`、`AccessRuntimeGovernanceView`、`SnapshotVersionFingerprint` 建模；建议所有 view 都是 immutable snapshot。
-4. 公共/内部接口：保持 internal 级别；建议接口为 `load_bootstrap_config()`、`build_auth_view()`、`build_admission_view()`、`build_publish_view()`、`refresh_runtime_governance()`、`is_snapshot_current()`；内部缓存建议按 snapshot version 做 invalidate。
-5. 关键执行流：启动期先读取 entry-specific bootstrap config，构造 listen/auth/replay/stream heartbeat 等静态视图；运行期再从 `RuntimePolicySnapshot` 提取 timeout、budget、ops/security 等动态治理投影；调用链在单次请求内固定使用同一版本 view，避免准入与发布看到不一致配置。
+3. 核心数据定义：围绕 `AccessBootstrapConfig`、`AccessAuthView`、`AccessAdmissionView`、`AccessPublishView`、`AccessRuntimeGovernanceView`、`SnapshotVersionFingerprint` 建模；建议所有 view 都是 immutable snapshot，其中 fingerprint 固定由 `bootstrap_revision + effective_profile_id + runtime_policy_generation` 组成。
+4. 公共/内部接口：保持 internal 级别；建议接口为 `load_bootstrap_config()`、`build_auth_view()`、`build_admission_view()`、`build_publish_view()`、`refresh_runtime_governance()`、`is_snapshot_current()`；内部缓存建议按 fingerprint 做 invalidate，而不是按自由字段变更逐项热改。
+5. 关键执行流：启动期先通过 deployment bundle 或 ConfigCenter typed query 读取 entry-specific bootstrap config，构造 listen/auth/replay/stream heartbeat 等静态视图；运行期再从 `RuntimePolicySnapshot` 提取 timeout、budget、ops/security 等动态治理投影；调用链在单次请求内固定使用同一版本 view，避免准入与发布看到不一致配置。
 6. 失败与回退语义：关键配置缺失或不一致时，`init()` 必须失败或返回 deny-oriented view；热更新只影响下一次请求，不回溯影响进行中请求；任何缺省都必须偏向收紧，而不是放宽入口治理。
 7. 测试与验收出口：推荐单测为 `AccessConfigAdapterTest.cpp`、`AccessConfigAdapterHotUpdateTest.cpp`、`AccessConfigProjectionProfileDiffTest.cpp`；验收要求 profile 差异和热更新缓存失效可自动断言。
 
@@ -1879,7 +1895,7 @@ tests/
 | `runtime_override` 入口 schema/transport 尚未收敛 | Medium | Access 需要为 override 入口定义 bootstrap/config 接口 | 与 infra/config、profiles 明确 apply_override 路径和 actor proof | override 功能保持关闭，仅输出拒绝审计 |
 | shared streaming lifecycle 未冻结 | Medium | StreamGateway 需要稳定句柄、取消、重连语义 | 与 runtime/llm streaming 设计收敛 | v1 退回 async receipt + poll |
 | 结果发布与慢消费者冲突 | Medium | 流式/长连接消费者持续阻塞 | 完成慢消费者断连和 replay cache 设计 | 断开慢消费者并回退到轮询，不阻塞主链 |
-| access 配置 schema 与 profiles 顶层域冲突 | Medium | 误把启动事实配置写进已冻结 `runtime_policy.yaml` 顶层域 | 把 access 启动配置显式限定为 `AccessBootstrapConfig` 私有 schema | 只复用现有 runtime governance 视图，不新增 profile 顶层键 |
+| access bootstrap 来源漂移 | Medium | apps 重新允许命令行逐字段覆盖 bootstrap，或 AccessConfigAdapter 直接解析 profile 原始文件 | 维持 typed bootstrap carrier + projection-only adapter 规则 | 回退到 `bootstrap_ref` + immutable view 模式，禁止第二来源和并行 schema |
 
 ---
 
@@ -1890,6 +1906,7 @@ tests/
 | 原未决项 | 解决方案 | 参见章节 |
 |---|---|---|
 | runtime bridge sidecar seam 未冻结 | 冻结为 `RuntimeDispatchRequest` module public + `RuntimeInvokeContext` bridge-local invoke shape + `IAccessRuntimeBridge::cancel()` 唯一 cancel surface | 6.6、6.18.3 |
+| `AccessBootstrapConfig` source-of-truth 与热更新边界未冻结 | 冻结为 typed bootstrap carrier + locator-only startup args + `SnapshotVersionFingerprint` invoke-scoped immutable 规则 | 6.11、6.20、AccessConfigAdapter |
 | `publish_result()` 签名不一致 | 统一为 `const PublishEnvelope&`，`PublishEnvelope` 已正式定义 | 6.7 |
 | 是否需要独立 receipt ownership proof | 采用 HMAC-SHA256 双因子方案（`actor_ref` + `ownership_token`） | 6.19.2 |
 | 缺少 AccessGateway 生命周期管理 | 新增 `AccessGatewayState` 状态机、`shutdown()`、`is_ready()` | 6.15.1、6.7 |
@@ -1907,13 +1924,12 @@ tests/
 
 ### 12.2 仍未决的问题
 
-1. `AccessBootstrapConfig` 的落盘形态应优先采用 deployment bundle、ConfigCenter typed query，还是先以 entry 启动参数表达最小集。
-2. gateway 首版是否只做 HTTP unary，再把 WebSocket/MQTT 作为 Phase A5 扩展，而不是在 Phase A3 同步落地。
-3. 串口入口是否在 v1 纳入 access 正式 Build 目标，还是留给后续 platform/daemon 联调阶段。
-4. HTTP transport 选型（libuv/asio/beast/自研最小实现）对线程模型和 gateway 并发设计的影响尚待冻结。
-5. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
-6. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
-7. `access.diagnostics.pull` 的 artifact 格式、大小限制和传输方式尚待与 infra/diagnostics 对齐。
+1. gateway 首版是否只做 HTTP unary，再把 WebSocket/MQTT 作为 Phase A5 扩展，而不是在 Phase A3 同步落地。
+2. 串口入口是否在 v1 纳入 access 正式 Build 目标，还是留给后续 platform/daemon 联调阶段。
+3. HTTP transport 选型（libuv/asio/beast/自研最小实现）对线程模型和 gateway 并发设计的影响尚待冻结。
+4. `ownership_token` 的 HMAC secret 轮换策略和多实例部署下的 secret 同步方案尚待定义。
+5. CLI 入口是否需要支持 `--async` 模式（提交后立即返回 receipt，后续 `--query receipt_id` 查询），还是始终同步阻塞。
+6. `access.diagnostics.pull` 的 artifact 格式、大小限制和传输方式尚待与 infra/diagnostics 对齐。
 
 ### 12.3 后续 Build 原子任务建议顺序
 
