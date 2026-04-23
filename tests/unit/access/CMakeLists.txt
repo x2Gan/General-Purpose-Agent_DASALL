@@ -45,6 +45,24 @@ dasall_add_access_unit_test(
   AccessGatewayLifecycleTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_supporting_types_unit_test
+  AccessSupportingTypesTest
+  AccessSupportingTypesTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_publish_envelope_unit_test
+  PublishEnvelopeTypesTest
+  PublishEnvelopeTypesTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_async_task_receipt_unit_test
+  AsyncTaskReceiptTypesTest
+  AsyncTaskReceiptTypesTest.cpp
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
