@@ -94,6 +94,17 @@ struct RuntimeDispatchResult {
   std::map<std::string, std::string> response_context;  // 响应上下文
 };
 
+// AccessAdmissionResult - Admission 统一准入结果
+struct AccessAdmissionResult {
+  bool admitted = false;                             // 是否准入
+  bool replay_hit = false;                           // 是否命中幂等重放
+  bool conflict_hit = false;                         // 是否发生幂等冲突
+  std::optional<std::string> ticket_ref;             // inflight 票据引用
+  std::optional<std::string> replay_receipt_ref;     // replay 命中时的回执引用
+  std::optional<std::string> reject_reason;          // 拒绝原因
+  std::optional<std::string> challenge_hint;         // challenge 提示
+};
+
 // AsyncTaskReceipt - 异步受理凭证
 struct AsyncTaskReceipt {
   std::string receipt_id;                                    // 凭证唯一 ID
