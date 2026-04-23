@@ -16,6 +16,7 @@ void access_public_surface_is_discoverable() {
   static_assert(std::is_enum_v<dasall::access::AccessDisposition>);
   static_assert(std::is_enum_v<dasall::access::AccessGatewayState>);
   static_assert(std::is_abstract_v<dasall::access::IAccessGateway>);
+    static_assert(std::is_abstract_v<dasall::access::IAdmissionController>);
   static_assert(std::is_abstract_v<dasall::access::IAccessRuntimeBridge>);
   static_assert(std::is_abstract_v<dasall::access::IProtocolAdapter>);
 
@@ -31,8 +32,26 @@ void access_public_surface_is_discoverable() {
 
   const dasall::access::RuntimeDispatchRequest request{
       .packet = packet,
+      .subject_identity = {
+          .actor_ref = "actor://local/tester",
+          .subject_type = "operator",
+          .auth_method = "local_trusted",
+          .trust_level = "trusted",
+          .tenant_ref = "tenant-default",
+          .auth_metadata = std::nullopt,
+      },
+      .decision_proof = {
+          .decision = "Allow",
+          .policy_decision_ref = "policy://default/rule-1",
+          .reason_code = "ALLOW",
+          .reason_description = std::nullopt,
+          .evaluated_at = std::nullopt,
+      },
+      .client_capability_view = "unary",
       .async_allowed = true,
       .stream_requested = false,
+      .request_context = {},
+      .access_deadline = std::nullopt,
   };
 
   dasall::tests::support::assert_equal(
@@ -42,6 +61,11 @@ void access_public_surface_is_discoverable() {
   dasall::tests::support::assert_true(
       request.async_allowed,
       "access interface surface test should preserve dispatch request flags");
+
+  const dasall::access::AccessAdmissionResult admission_result{};
+  dasall::tests::support::assert_true(
+      !admission_result.admitted,
+      "access interface surface test should see AccessAdmissionResult defaults");
 }
 
 void access_gateway_state_enumeration_is_defined() {

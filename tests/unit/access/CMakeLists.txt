@@ -63,6 +63,12 @@ dasall_add_access_unit_test(
   AsyncTaskReceiptTypesTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_admission_controller_surface_unit_test
+  AdmissionControllerSurfaceTest
+  AdmissionControllerSurfaceTest.cpp
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
