@@ -5,6 +5,15 @@
 
 namespace dasall::access {
 
+// AccessGateway 生命周期状态枚举
+enum class AccessGatewayState {
+  Uninitialized = 0,    // 未初始化：init() 前的初始状态
+  Initializing = 1,     // 正在初始化：注册 adapter、pipeline 阶段
+  Ready = 2,            // 就绪：唯一可接受新请求的状态
+  Draining = 3,         // 排空中：shutdown() 已触发，不再接受新请求
+  ShutDown = 4,         // 已终止：所有资源已释放，网关已停止
+};
+
 enum class AccessDisposition {
   Rejected = 0,
   Completed = 1,
