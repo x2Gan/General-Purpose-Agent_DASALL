@@ -23,6 +23,7 @@ endforeach()
 target_sources(dasall_access
   PRIVATE
     src/placeholder.cpp
+    src/ProtocolErrorMapper.cpp
   PUBLIC
     FILE_SET public_headers
     TYPE HEADERS
