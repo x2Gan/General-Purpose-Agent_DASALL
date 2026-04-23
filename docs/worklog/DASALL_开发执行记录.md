@@ -1,5 +1,66 @@
 # DASALL 开发执行记录
 
+## 记录 #442
+
+- 日期：2026-04-23
+- 阶段：runtime/专项 TODO true cross-module integration 任务
+- 任务：RT-TODO-027 验证 RuntimeUnaryIntegration 真端口成功链
+- 状态：已完成
+
+### 任务选择
+
+1. 026 已经证明 runtime-local unary fixture gate 成立，但这不能替代 true integration gate；按专项 TODO 的依赖顺序，下一项必须是 027，而不是继续扩 runtime-local 覆盖面。
+2. 本轮最小判别点是：是否只补最薄 cognition public seam 与 runtime live unary wiring，就足以打通 `AgentRequest -> ContextPacket -> cognition -> tools -> AgentResult`，而不需要把整个 cognition 子系统 TODO 一并做完。
+3. 如果该最小链路能通过，就说明 RT-BLK-01 对 Gate-RT-11 的真实阻塞面只是“缺 public seam 与 live 装配点”，而不是“相邻模块必须先全部完工”。
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RT-TODO-027-RuntimeUnaryIntegration设计收敛.md`：
+   - 固定 027 的最小设计边界：cognition 只新增 runtime-facing public seam，runtime 只新增 live unary wiring，concrete memory/tool 装配只留在 integration test。
+2. 更新 `cognition/CMakeLists.txt`、新增 `cognition/include/*` 与 `cognition/src/CognitionFacade.cpp`：
+   - 用 `ICognitionEngine`、`IResponseBuilder`、`CognitionTypes`、`ActionDecision`、`BeliefUpdateHint` 替代 placeholder-only 状态；
+   - 提供默认 `CognitionFacade` / `ResponseBuilder` 实现，负责最小决策与响应收口。
+3. 更新 `runtime/include/RuntimeDependencySet.h` 与 `runtime/src/AgentOrchestrator.cpp`：
+   - 在保留 runtime-local stub path 的同时，新增 live unary ports；
+   - 仅在 `memory_manager`、`cognition_engine`、`response_builder`、`tool_manager` 齐备时进入真端口主链；
+   - 全程复用既有合法 FSM 边，不新增临时状态边。
+4. 更新 `tests/integration/agent_loop/CMakeLists.txt` 并新增 `tests/integration/agent_loop/RuntimeUnaryIntegrationTest.cpp`：
+   - 通过 sqlite-backed memory manager、registry-backed builtin tool lane 与默认 cognition factories 组装 true integration fixture；
+   - 修复测试装配中的 descriptor、policy visibility/domain、builtin executor 对齐问题。
+5. 更新 `docs/todos/runtime/DASALL_runtime子系统专项TODO.md`：
+   - 将 RT-TODO-027 标记为 Done，并回写实际验收命令与交付物；
+   - 明确 true integration 结果的分层证据继续由 RT-TODO-031 统一写回。
+
+### 验证
+
+1. 027 构建验证：
+   - 命令：`cmake --build build/vscode-linux-ninja --target dasall_runtime_unary_integration_test`
+   - 结果：目标构建通过，说明 cognition 最小 public seam、runtime live unary path 与 integration target 链接关系成立。
+2. true integration gate：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -R "^RuntimeUnaryIntegrationTest$" --output-on-failure`
+   - 结果：`RuntimeUnaryIntegrationTest` 通过，主链真实经过 runtime、memory、cognition 与 tools public interface。
+3. contract 交叉验证：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -R "^MainFlowContractE2ETest$" --output-on-failure`
+   - 结果：`MainFlowContractE2ETest` 通过，说明真端口闭环没有破坏共享 contract 语义。
+4. discoverability 验证：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N | rg "RuntimeUnaryIntegrationTest|MainFlowContractE2ETest"`
+   - 结果：两条测试都可被 CTest 发现，可作为后续 Gate-RT-11 / Gate-RT-12 的正式证据输入。
+
+### 结果
+
+1. RT-TODO-027 已完成，runtime 现在具备真正经过相邻模块 public interface 的 unary success path gate。
+2. RT-BLK-01 对 Gate-RT-11 的最小解法已被验证：只需补 cognition public seam、runtime live wiring 与最小真端口装配，不需要把 knowledge / llm 整体实现一并推进。
+3. runtime-local gate 与 true integration gate 已被技术上分离：026 只证明 subsystem-local ready，027 则补齐了 true cross-module unary ready。
+
+### 下一步
+
+1. 进入 RT-TODO-031，把 Gate-RT-07 与 Gate-RT-11 的分层结论、RT-BLK-01 的解阻状态、残余仓库级 blocker 与命令证据统一回写到专项 TODO 与 worklog。
+
+### 风险
+
+1. 027 只证明 unary success path 的 true integration ready；更宽范围的 true-port session persist、dependency unavailable live route 仍需后续单独建 gate，不应由本轮外推。
+2. 当前工作区内 `RunCtest_CMakeTools` 仍报生成失败，因此本轮 true integration 证据统一采用 `build/vscode-linux-ninja` 上的直接 `ctest --test-dir ...` 结果；这属于工具链问题，不应误记为 runtime gate 失败。
+
 ## 记录 #441
 
 - 日期：2026-04-22

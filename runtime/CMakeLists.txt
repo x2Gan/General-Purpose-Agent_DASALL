@@ -30,6 +30,10 @@ target_link_libraries(dasall_runtime
   PUBLIC
     dasall_contracts
     dasall_profiles
+  PRIVATE
+    dasall_cognition
+    dasall_memory
+    dasall_tools
 )
 
 dasall_apply_common_options(dasall_runtime)

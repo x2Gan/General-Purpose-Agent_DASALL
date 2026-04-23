@@ -2,7 +2,7 @@ add_library(dasall_cognition STATIC)
 
 target_sources(dasall_cognition
   PRIVATE
-    src/placeholder.cpp
+    src/CognitionFacade.cpp
 )
 
 target_compile_features(dasall_cognition PUBLIC cxx_std_20)

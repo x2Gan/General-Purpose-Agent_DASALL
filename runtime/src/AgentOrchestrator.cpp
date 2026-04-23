@@ -1,11 +1,18 @@
 #include "AgentOrchestrator.h"
 
 #include <chrono>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "CognitionTypes.h"
+#include "ICognitionEngine.h"
+#include "IMemoryManager.h"
+#include "IResponseBuilder.h"
+#include "RuntimeDependencySet.h"
+#include "IToolManager.h"
 #include "checkpoint/CheckpointBuildTypes.h"
 #include "checkpoint/RecoveryRequest.h"
 #include "checkpoint/ReflectionDecision.h"
@@ -22,6 +29,7 @@ constexpr std::int32_t kRuntimeOrchestratorSkeletonFailedSafeCode = 5003;
 constexpr std::int32_t kRuntimeOrchestratorSkeletonPreflightRejectedCode = 5004;
 constexpr std::int32_t kRuntimeOrchestratorSkeletonInternalErrorCode = 5005;
 constexpr std::int32_t kRuntimeOrchestratorWaitingCode = 5006;
+constexpr std::int32_t kRuntimeOrchestratorLiveUnaryFailedCode = 5007;
 
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -31,6 +39,16 @@ constexpr std::int32_t kRuntimeOrchestratorWaitingCode = 5006;
 [[nodiscard]] std::string make_result_id(const RuntimeState final_state) {
   return std::string{"rt-orchestrator-"} + runtime_state_name(final_state) + "-" +
          std::to_string(current_time_ms());
+}
+
+[[nodiscard]] std::uint32_t budget_value(const std::optional<std::uint32_t>& value,
+                                         const std::uint32_t fallback) {
+  return value.value_or(fallback);
+}
+
+[[nodiscard]] bool has_live_unary_ports(const OrchestratorComposition& composition) {
+  return composition.dependency_set != nullptr &&
+         composition.dependency_set->has_live_unary_ports();
 }
 
 [[nodiscard]] contracts::AgentRequest normalize_request(
@@ -66,6 +84,175 @@ constexpr std::int32_t kRuntimeOrchestratorWaitingCode = 5006;
   }
 
   return composition.default_runtime_budget;
+}
+
+[[nodiscard]] memory::MemoryContextRequest make_memory_context_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition,
+    const contracts::RuntimeBudget& runtime_budget) {
+  memory::MemoryContextRequest context_request;
+  context_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  context_request.session_id = request.session_id.value_or(std::string{"session-live-unary"});
+  context_request.stage = "reasoning";
+  context_request.goal_summary = request.user_input.value_or(goal_id);
+  context_request.constraints_summary = composition.default_audit_summary;
+  context_request.latest_observation_digest_summary = std::string{};
+  context_request.visible_tools = composition.dependency_set->visible_tools;
+  if (context_request.visible_tools.empty()) {
+    context_request.visible_tools.push_back("agent.dataset");
+  }
+  context_request.token_budget_hint = static_cast<int>(
+      budget_value(runtime_budget.max_tokens, 2048U));
+  context_request.latency_budget_ms = static_cast<int>(
+      budget_value(runtime_budget.max_latency_ms, 1500U));
+  context_request.external_evidence = composition.dependency_set->external_evidence;
+  return context_request;
+}
+
+[[nodiscard]] cognition::CognitionStepRequest make_cognition_step_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition,
+    const contracts::ContextPacket& context_packet,
+    const contracts::RuntimeBudget& runtime_budget) {
+  cognition::CognitionStepRequest cognition_request;
+  cognition_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  cognition_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
+  cognition_request.profile_id = composition.profile_id;
+  cognition_request.goal_id = goal_id;
+  cognition_request.context_packet = context_packet;
+  cognition_request.belief_state = contracts::BeliefState{
+      .request_id = request.request_id,
+      .confirmed_facts = std::vector<std::string>{"runtime live unary context prepared"},
+      .hypotheses = std::vector<std::string>{"tool invocation will satisfy the unary request"},
+      .assumptions = std::vector<std::string>{"visible tool surface is registered"},
+      .evidence_refs = std::vector<std::string>{"runtime:memory_context"},
+      .confidence = 0.75F,
+      .goal_id = goal_id,
+      .created_at = current_time_ms(),
+      .tags = std::vector<std::string>{"runtime", "cognition", "true-integration"},
+  };
+  cognition_request.budget_context = cognition::BudgetContext{
+      .total_budget_tokens = budget_value(runtime_budget.max_tokens, 2048U),
+      .consumed_tokens = 0U,
+      .remaining_tokens = budget_value(runtime_budget.max_tokens, 2048U),
+      .budget_utilization = 0.0F,
+      .context_was_truncated = false,
+      .near_budget_limit = false,
+  };
+  return cognition_request;
+}
+
+[[nodiscard]] tools::ToolInvocationContext make_tool_invocation_context(
+    const contracts::AgentRequest& request,
+    const OrchestratorComposition& composition) {
+  return tools::ToolInvocationContext{
+      .caller_domain = std::string{"runtime.agent_orchestrator"},
+      .session_id = request.session_id,
+      .profile_snapshot = composition.policy_snapshot.get(),
+      .trace = tools::ToolTraceContext{
+          .trace_id = request.trace_id,
+          .span_id = std::nullopt,
+          .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::nullopt,
+  };
+}
+
+[[nodiscard]] contracts::ToolRequest make_tool_request(
+    const contracts::AgentRequest& request,
+    const contracts::RuntimeBudget& runtime_budget,
+    const cognition::decision::ActionDecision& action_decision,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition) {
+  contracts::ToolRequest tool_request;
+  const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  tool_request.request_id = request.request_id;
+  tool_request.tool_call_id = std::string{"tool-call-"} + request_id;
+  tool_request.tool_name = action_decision.tool_name.value_or(std::string{"agent.dataset"});
+  tool_request.invocation_kind = contracts::ToolInvocationKind::InformationQuery;
+  tool_request.arguments_payload =
+      action_decision.tool_arguments_payload.value_or(std::string{"{}"});
+  tool_request.created_at = request.created_at.value_or(current_time_ms());
+  tool_request.goal_id = goal_id;
+  tool_request.worker_task_id = composition.default_worker_id;
+  tool_request.runtime_budget = runtime_budget;
+  if (composition.policy_snapshot != nullptr) {
+    tool_request.timeout_ms = static_cast<std::uint32_t>(
+        composition.policy_snapshot->timeout_policy().tool.timeout_ms);
+  } else {
+    tool_request.timeout_ms = 1000U;
+  }
+  tool_request.idempotency_key = std::string{"idem-"} + request_id;
+  tool_request.tags = std::vector<std::string>{"runtime", "integration", "true-port"};
+  return tool_request;
+}
+
+[[nodiscard]] cognition::ReflectionRequest make_reflection_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition,
+    const contracts::ContextPacket& context_packet,
+    const contracts::Observation& latest_observation) {
+  cognition::ReflectionRequest reflection_request;
+  reflection_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  reflection_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
+  reflection_request.profile_id = composition.profile_id;
+  reflection_request.goal_id = goal_id;
+  reflection_request.context_packet = context_packet;
+  reflection_request.belief_state = contracts::BeliefState{
+      .request_id = request.request_id,
+      .confirmed_facts = std::vector<std::string>{"tool projection produced an observation"},
+      .hypotheses = std::vector<std::string>{"response builder can finalize the turn"},
+      .assumptions = std::vector<std::string>{"observation payload is user-safe"},
+      .evidence_refs = std::vector<std::string>{latest_observation.observation_id.value_or(std::string{"obs-live-unary"})},
+      .confidence = 0.85F,
+      .goal_id = goal_id,
+      .created_at = current_time_ms(),
+      .tags = std::vector<std::string>{"runtime", "reflection", "true-integration"},
+  };
+  reflection_request.latest_observation = latest_observation;
+  return reflection_request;
+}
+
+[[nodiscard]] cognition::ResponseBuildRequest make_response_build_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition,
+    const contracts::ContextPacket& context_packet,
+    const contracts::Observation& latest_observation,
+    const cognition::decision::ActionDecision& action_decision) {
+  cognition::ResponseBuildRequest response_request;
+  response_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  response_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
+  response_request.profile_id = composition.profile_id;
+  response_request.goal_id = goal_id;
+  response_request.context_packet = context_packet;
+  response_request.latest_observation = latest_observation;
+  response_request.action_decision = action_decision;
+  return response_request;
+}
+
+void finalize_live_agent_result(contracts::AgentResult* agent_result,
+                                const contracts::AgentRequest& request,
+                                const std::string& goal_id,
+                                const std::optional<std::string>& checkpoint_ref) {
+  if (agent_result == nullptr) {
+    return;
+  }
+
+  if (!agent_result->request_id.has_value()) {
+    agent_result->request_id = request.request_id;
+  }
+  if (!agent_result->trace_id.has_value()) {
+    agent_result->trace_id = request.trace_id;
+  }
+  agent_result->goal_id = goal_id;
+  agent_result->checkpoint_ref = checkpoint_ref;
+  if (!agent_result->created_at.has_value()) {
+    agent_result->created_at = current_time_ms();
+  }
 }
 
 [[nodiscard]] std::string effective_goal_id(
@@ -438,6 +625,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
   OrchestratorRunResult run_result;
   const auto normalized_request = normalize_request(request, next_sequence_++);
   const auto goal_id = effective_goal_id(normalized_request, composition_);
+  const auto runtime_budget = effective_runtime_budget(normalized_request, composition_);
 
   auto fsm = build_fsm(RuntimeState::Idle);
   if (!fsm) {
@@ -567,7 +755,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
   SessionSnapshot session_snapshot = *prepare_turn_result.effective_session;
   const auto budget_decision = budget_controller_.initialize(
       BudgetInitializeRequest{
-          .runtime_budget = effective_runtime_budget(normalized_request, composition_),
+        .runtime_budget = runtime_budget,
           .started_at_ms = composition_.budget_started_at_ms,
       });
   if (budget_decision.rejected()) {
@@ -636,6 +824,622 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
              load_result.created_new_session
                  ? "session created, budget initialized, preflight admitted"
                  : "session loaded, budget initialized, preflight admitted");
+
+  if (has_live_unary_ports(composition_)) {
+    const auto context_result = composition_.dependency_set->memory_manager->prepare_context(
+        make_memory_context_request(normalized_request, goal_id, composition_, runtime_budget));
+    if (context_result.result_code.has_value() || context_result.degraded) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 fsm->current_state(),
+                 fsm->current_state(),
+                 true,
+                 context_result.result_code.has_value()
+                     ? "memory context assembly returned a failure result"
+                     : "memory context assembly returned a degraded packet");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path could not assemble a non-degraded context packet",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             "memory context assembly did not produce a ready packet",
+                             orchestrator_stage_name(OrchestratorStage::MainLoop),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const RuntimeState main_loop_before = fsm->current_state();
+    StateTransitionOutcome reasoning_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::MainLoop),
+            TransitionStep{.to_state = RuntimeState::Reasoning,
+                           .reason = "context prepared through memory manager",
+                           .guards = {TransitionGuardFact::ContextAssembled}},
+            &reasoning_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime orchestrator hit an illegal main loop transition on the live unary path",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto continue_budget = budget_controller_.can_continue();
+    if (continue_budget.rejected()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 continue_budget.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path exhausted its budget before cognition",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             continue_budget.detail,
+                             orchestrator_stage_name(OrchestratorStage::MainLoop),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto cognition_result = composition_.dependency_set->cognition_engine->decide(
+        make_cognition_step_request(normalized_request,
+                                    goal_id,
+                                    composition_,
+                                    context_result.context_packet,
+                                    runtime_budget));
+    if (cognition_result.action_decision.decision_kind !=
+        cognition::decision::ActionDecisionKind::ExecuteAction) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 "cognition did not choose an executable action on the live unary path");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path requires cognition to select an executable action",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             "cognition returned a non-executable decision",
+                             orchestrator_stage_name(OrchestratorStage::MainLoop),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::MainLoop,
+               main_loop_before,
+               fsm->current_state(),
+               true,
+               "memory context assembly and cognition decide completed through live dependency ports");
+
+    const RuntimeState tool_round_before = fsm->current_state();
+    const auto tool_budget_decision = budget_controller_.can_call_tool();
+    if (tool_budget_decision.rejected()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 tool_budget_decision.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path rejected the tool call due to budget",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             tool_budget_decision.detail,
+                             orchestrator_stage_name(OrchestratorStage::ToolRound),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    StateTransitionOutcome to_tool_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::ToolRound),
+            TransitionStep{.to_state = RuntimeState::ToolCalling,
+                           .reason = "cognition selected a tool action through live ports",
+                           .guards = {TransitionGuardFact::ToolCallPlanned,
+                                      TransitionGuardFact::BudgetAllowsToolCall}},
+            &to_tool_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path could not enter tool calling",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto enqueue_result = scheduler_.enqueue(
+        SchedulerTicketRequest{
+            .ticket_id = std::string("ticket-") + *normalized_request.request_id,
+            .request_id = *normalized_request.request_id,
+            .session_id = normalized_request.session_id,
+            .priority_class = SchedulerPriorityClass::ForegroundInteractive,
+            .cancellation_token = CancellationToken{},
+            .checkpoint_ref = std::nullopt,
+            .queue_key = std::nullopt,
+        });
+    if (!enqueue_result.accepted || !enqueue_result.ticket.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 enqueue_result.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::FailedSafe,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonFailedSafeCode,
+          composition_.stub_ports.fail_safe_response_text,
+          make_runtime_error(kRuntimeOrchestratorSkeletonFailedSafeCode,
+                             enqueue_result.detail,
+                             orchestrator_stage_name(OrchestratorStage::ToolRound),
+                             RuntimeState::FailedSafe),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::FailedSafe;
+      return run_result;
+    }
+
+    const auto worker_result = scheduler_.acquire_worker(
+        AcquireWorkerRequest{
+            .worker_budget = WorkerLeaseBudget{.max_workers = 1, .busy_workers = 0},
+            .preferred_priority_class = SchedulerPriorityClass::ForegroundInteractive,
+            .preferred_ticket_id = enqueue_result.ticket->ticket_id,
+        });
+    if (!worker_result.acquired || !worker_result.ticket.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 worker_result.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::FailedSafe,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonFailedSafeCode,
+          composition_.stub_ports.fail_safe_response_text,
+          make_runtime_error(kRuntimeOrchestratorSkeletonFailedSafeCode,
+                             worker_result.detail,
+                             orchestrator_stage_name(OrchestratorStage::ToolRound),
+                             RuntimeState::FailedSafe),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::FailedSafe;
+      return run_result;
+    }
+
+    (void)budget_controller_.consume(BudgetConsumeRequest{
+        .budget_type = contracts::BudgetType::ToolCall,
+        .amount = 1,
+        .observed_at_ms = composition_.budget_started_at_ms + 1,
+        .detail = "tool call consumed through live integration path",
+    });
+
+    const auto tool_envelope = composition_.dependency_set->tool_manager->invoke(
+        make_tool_request(normalized_request,
+                          runtime_budget,
+                          cognition_result.action_decision,
+                          goal_id,
+                          composition_),
+        make_tool_invocation_context(normalized_request, composition_));
+    if (!tool_envelope.has_projection() || !tool_envelope.tool_result.has_value() ||
+        !tool_envelope.tool_result->success.value_or(false)) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 "tool manager did not produce a successful observation projection");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path could not complete a successful tool projection",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             tool_envelope.failure_reason_code.value_or(
+                                 std::string{"tool projection unavailable"}),
+                             orchestrator_stage_name(OrchestratorStage::ToolRound),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    StateTransitionOutcome waiting_external_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::ToolRound),
+            TransitionStep{.to_state = RuntimeState::WaitingExternal,
+                           .reason = "tool invocation completed and is ready for observation folding",
+                           .guards = {TransitionGuardFact::ToolDispatchSubmitted}},
+            &waiting_external_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path could not enter waiting external",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto waiting_checkpoint = build_and_save_checkpoint(
+        checkpoint_manager_,
+        CheckpointBuildRequest{
+            .transition_outcome = waiting_external_outcome,
+            .checkpoint_id = std::string("chk-live-tool-") + *normalized_request.request_id,
+            .step_id = std::string("live-tool-") + *normalized_request.request_id,
+            .working_memory_snapshot = std::string("wm:live-tool:") + *normalized_request.request_id,
+            .pending_action = std::string("wait for projected tool observation"),
+            .request_id = normalized_request.request_id,
+            .goal_id = goal_id,
+            .belief_state_ref = composition_.default_belief_state_ref,
+            .retry_count = 0,
+            .created_at_ms = normalized_request.created_at,
+            .runtime_budget_snapshot = budget_controller_.snapshot(),
+            .tags = {"path=live-tool"},
+        });
+    if (!waiting_checkpoint.saved()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 waiting_checkpoint.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path failed to save the tool checkpoint",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             waiting_checkpoint.detail,
+                             orchestrator_stage_name(OrchestratorStage::ToolRound),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto waiting_binding = bind_session_checkpoint(
+        session_manager_,
+        session_snapshot,
+        waiting_checkpoint.checkpoint->checkpoint_id.value_or(std::string{}),
+        RuntimeState::WaitingExternal,
+        make_pending_interaction(
+            composition_, PendingInteractionKind::WaitExternal, "await projected tool observation"));
+    if (!waiting_binding.updated()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 waiting_binding.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path failed to bind the tool checkpoint",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             waiting_binding.detail,
+                             orchestrator_stage_name(OrchestratorStage::ToolRound),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+    session_snapshot = *waiting_binding.snapshot;
+
+    StateTransitionOutcome reflecting_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::ToolRound),
+            TransitionStep{.to_state = RuntimeState::Reflecting,
+                           .reason = "tool observation projection is available",
+                           .guards = {TransitionGuardFact::ExternalResultAvailable}},
+            &reflecting_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path could not enter reflection",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto release_result = scheduler_.release_worker(
+        ReleaseWorkerRequest{
+            .ticket = *worker_result.ticket,
+            .worker_completed = true,
+        });
+    if (release_result.released) {
+      run_result.scheduler_backpressure = release_result.backpressure_state;
+    } else {
+      run_result.scheduler_backpressure = scheduler_.backpressure_state();
+    }
+
+    const auto latest_observation = *tool_envelope.observation;
+    (void)composition_.dependency_set->cognition_engine->reflect(
+        make_reflection_request(normalized_request,
+                                goal_id,
+                                composition_,
+                                context_result.context_packet,
+                                latest_observation));
+
+    StateTransitionOutcome continue_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::ToolRound),
+            TransitionStep{.to_state = RuntimeState::Reasoning,
+                           .reason = "reflection converged to final response",
+                           .guards = {TransitionGuardFact::ReflectionContinue}},
+            &continue_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path could not return to reasoning after reflection",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto response_build_result = composition_.dependency_set->response_builder->build(
+        make_response_build_request(normalized_request,
+                                    goal_id,
+                                    composition_,
+                                    context_result.context_packet,
+                                    latest_observation,
+                                    cognition_result.action_decision));
+
+    StateTransitionOutcome response_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::ToolRound),
+            TransitionStep{.to_state = RuntimeState::Responding,
+                           .reason = "response builder materialized the terminal payload",
+                           .guards = {TransitionGuardFact::DirectResponseReady}},
+            &response_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path could not enter responding",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    run_result.used_tool_round = true;
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::ToolRound,
+               tool_round_before,
+               fsm->current_state(),
+               true,
+               "scheduler, tool invocation, reflection, and response builder completed through live dependency ports");
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::RecoveryRound,
+               fsm->current_state(),
+               fsm->current_state(),
+               false,
+               "skipped because the live unary success path did not require recovery");
+
+    const RuntimeState terminalize_before = fsm->current_state();
+    StateTransitionOutcome completed_outcome;
+    if (const auto failure = apply_steps(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::Terminalize),
+            {{.to_state = RuntimeState::Auditing,
+              .reason = "response materialized",
+              .guards = {TransitionGuardFact::ResponseMaterialized}},
+             {.to_state = RuntimeState::Persisting,
+              .reason = "audit committed",
+              .guards = {TransitionGuardFact::AuditCommitted}},
+             {.to_state = RuntimeState::Completed,
+              .reason = "persistence confirmed",
+              .guards = {TransitionGuardFact::PersistenceConfirmed}}},
+            &completed_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::Terminalize,
+                 terminalize_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path failed during terminalize",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          waiting_checkpoint.checkpoint->checkpoint_id,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto final_checkpoint = build_and_save_checkpoint(
+        checkpoint_manager_,
+        CheckpointBuildRequest{
+            .transition_outcome = completed_outcome,
+            .checkpoint_id = std::string("chk-live-complete-") + *normalized_request.request_id,
+            .step_id = std::string("live-complete-") + *normalized_request.request_id,
+            .working_memory_snapshot = std::string("wm:live-complete:") + *normalized_request.request_id,
+            .pending_action = std::string(),
+            .request_id = normalized_request.request_id,
+            .goal_id = goal_id,
+            .belief_state_ref = composition_.default_belief_state_ref,
+            .retry_count = 0,
+            .created_at_ms = normalized_request.created_at,
+            .runtime_budget_snapshot = budget_controller_.snapshot(),
+            .tags = {"path=live-success"},
+        });
+    if (!final_checkpoint.saved()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::Terminalize,
+                 terminalize_before,
+                 fsm->current_state(),
+                 true,
+                 final_checkpoint.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime live unary path failed to save the completion checkpoint",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             final_checkpoint.detail,
+                             orchestrator_stage_name(OrchestratorStage::Terminalize),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto persisted_session = persist_terminal_session(
+        session_manager_,
+        session_snapshot,
+        RuntimeState::Completed,
+        final_checkpoint.checkpoint->checkpoint_id,
+        composition_.default_audit_summary + " live unary integration");
+    if (persisted_session.updated()) {
+      run_result.effective_session = persisted_session.snapshot;
+    }
+    run_result.checkpoint = final_checkpoint.checkpoint;
+    run_result.final_state = fsm->current_state();
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::Terminalize,
+               terminalize_before,
+               fsm->current_state(),
+               true,
+               "live unary response audited, checkpointed, and persisted");
+    run_result.agent_result = response_build_result.agent_result;
+    finalize_live_agent_result(&run_result.agent_result,
+                               normalized_request,
+                               goal_id,
+                               final_checkpoint.checkpoint->checkpoint_id);
+    return run_result;
+  }
 
   const RuntimeState main_loop_before = fsm->current_state();
   StateTransitionOutcome main_loop_outcome;
