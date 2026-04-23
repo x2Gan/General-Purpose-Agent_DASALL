@@ -141,6 +141,40 @@ void iaccess_runtime_bridge_methods_exist() {
       "IAccessRuntimeBridge::cancel(request_id, actor_ref) should be defined");
 }
 
+void access_config_supporting_surface_is_discoverable() {
+  dasall::access::AccessBootstrapConfig bootstrap_config;
+  bootstrap_config.bootstrap_revision = "bootstrap-rev-001";
+  bootstrap_config.entry_type = "gateway";
+
+  dasall::access::SnapshotVersionFingerprint fingerprint;
+  fingerprint.bootstrap_revision = bootstrap_config.bootstrap_revision;
+  fingerprint.effective_profile_id = "profile-default";
+  fingerprint.runtime_policy_generation = 1;
+
+  dasall::access::AccessAuthView auth_view;
+  dasall::access::AccessAdmissionView admission_view;
+  dasall::access::AccessPublishView publish_view;
+  dasall::access::AccessRuntimeGovernanceView governance_view;
+
+  dasall::tests::support::assert_equal(
+      std::string("bootstrap-rev-001"),
+      fingerprint.bootstrap_revision,
+      "Access config supporting surface should expose fingerprint metadata");
+  dasall::tests::support::assert_true(
+      auth_view.strict_auth_required,
+      "AccessAuthView.strict_auth_required should default to true");
+  dasall::tests::support::assert_true(
+      admission_view.default_deny,
+      "AccessAdmissionView.default_deny should default to true");
+  dasall::tests::support::assert_equal(
+      std::string("deny"),
+      governance_view.security_default_effect,
+      "AccessRuntimeGovernanceView.security_default_effect should default to deny");
+  dasall::tests::support::assert_true(
+      publish_view.max_payload_bytes > 0,
+      "AccessPublishView should expose payload guard fields");
+}
+
 }  // namespace
 
 int main() {
@@ -148,7 +182,8 @@ int main() {
     access_public_surface_is_discoverable();
     access_gateway_state_enumeration_is_defined();
     iaccess_gateway_lifecycle_methods_exist();
-        iaccess_runtime_bridge_methods_exist();
+    iaccess_runtime_bridge_methods_exist();
+    access_config_supporting_surface_is_discoverable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
