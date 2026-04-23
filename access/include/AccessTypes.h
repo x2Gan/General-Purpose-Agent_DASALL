@@ -1,9 +1,11 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace dasall::access {
 
@@ -103,6 +105,79 @@ struct AccessAdmissionResult {
   std::optional<std::string> replay_receipt_ref;     // replay 命中时的回执引用
   std::optional<std::string> reject_reason;          // 拒绝原因
   std::optional<std::string> challenge_hint;         // challenge 提示
+};
+
+// AccessBootstrapConfig - 启动事实配置
+struct AccessBootstrapConfig {
+  std::string bootstrap_revision;
+  std::string entry_type;
+
+  std::string listen_ref;
+  std::vector<std::string> allowed_protocols;
+  std::string peer_auth_mode = "strict";
+  std::optional<std::string> auth_provider_ref;
+
+  int idempotency_window_ms = 300000;
+  int max_inflight_requests = 256;
+  int dispatch_deadline_ms = 30000;
+
+  int result_replay_ttl_ms = 600000;
+  int stream_heartbeat_ms = 15000;
+  int slow_consumer_max_buffer = 32;
+  int drain_timeout_ms = 10000;
+
+  int max_payload_bytes = 1048576;
+  int max_user_input_bytes = 65536;
+  std::vector<std::string> cors_allowed_origins;
+  std::string session_id_mode = "auto";
+
+  std::vector<std::string> trusted_local_subjects;
+  std::optional<std::string> ownership_token_hmac_secret_ref;
+};
+
+// SnapshotVersionFingerprint - 配置快照版本锚点
+struct SnapshotVersionFingerprint {
+  std::string bootstrap_revision;
+  std::string effective_profile_id;
+  std::int64_t runtime_policy_generation = 0;
+};
+
+// AccessAuthView - 认证治理视图
+struct AccessAuthView {
+  std::string peer_auth_mode = "strict";
+  std::optional<std::string> auth_provider_ref;
+  std::vector<std::string> trusted_local_subjects;
+  bool strict_auth_required = true;
+};
+
+// AccessAdmissionView - 准入治理视图
+struct AccessAdmissionView {
+  int idempotency_window_ms = 300000;
+  int max_inflight_requests = 256;
+  int dispatch_deadline_ms = 30000;
+  bool default_deny = true;
+};
+
+// AccessPublishView - 发布治理视图
+struct AccessPublishView {
+  int result_replay_ttl_ms = 600000;
+  int stream_heartbeat_ms = 15000;
+  int slow_consumer_max_buffer = 32;
+  int drain_timeout_ms = 10000;
+  int max_payload_bytes = 1048576;
+  int max_user_input_bytes = 65536;
+  std::vector<std::string> cors_allowed_origins;
+};
+
+// AccessRuntimeGovernanceView - runtime/profile/infra 投影视图
+struct AccessRuntimeGovernanceView {
+  std::string runtime_budget_profile;
+  std::string timeout_policy_profile;
+  std::string ops_log_level;
+  std::string ops_trace_sample_ratio;
+  bool remote_diagnostics_enabled = false;
+  std::string security_default_effect = "deny";
+  bool diag_pull_enabled = false;
 };
 
 // AsyncTaskReceipt - 异步受理凭证
