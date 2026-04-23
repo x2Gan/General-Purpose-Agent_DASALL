@@ -103,6 +103,31 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_protocol_adapter_local_trusted_unit_test
 )
 
+add_executable(dasall_access_cli_ipc_client_unit_test
+  CliIpcClientTest.cpp
+  ../../../apps/cli/src/CliIpcClient.cpp
+)
+
+target_include_directories(dasall_access_cli_ipc_client_unit_test
+  PRIVATE
+    ../../../apps/cli/src
+)
+
+target_link_libraries(dasall_access_cli_ipc_client_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_access_cli_ipc_client_unit_test)
+
+add_test(NAME CliIpcClientTest COMMAND dasall_access_cli_ipc_client_unit_test)
+set_tests_properties(CliIpcClientTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_cli_ipc_client_unit_test
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
