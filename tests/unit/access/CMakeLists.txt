@@ -39,6 +39,12 @@ dasall_add_access_unit_test(
   AccessErrorMappingTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_gateway_lifecycle_unit_test
+  AccessGatewayLifecycleTest
+  AccessGatewayLifecycleTest.cpp
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
