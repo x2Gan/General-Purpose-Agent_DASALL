@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #466
+
+- 日期：2026-04-24
+- 阶段：cognition/前置补设计与评审门禁
+- 任务：COG-TODO-001 补齐 ICognitionEngine 公共接口口径评审
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-001 无前置依赖，是 COG-BLK-001 的直接解阻任务。
+2. 本轮只收敛 Runtime 对 cognition 的公共消费入口，不推进请求/结果对象头文件落盘，也不推动 shared contracts admission。
+3. 启动口径来自 project-implementation-cycle：研究学习 -> 设计交付 -> 文档门禁验收 -> TODO 回写 -> 提交推送。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_Agent_architecture.md`，将 `ICognitionEngine::step()` 草图替换为 `decide()` / `reflect()` / `IResponseBuilder::build()` 三入口口径。
+2. 更新 `docs/architecture/DASALL_Engineering_Blueprint.md`，补充 cognition 公共入口口径说明。
+3. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，补齐 COG-TODO-001 评审结论。
+4. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-001-ICognitionEngine公共接口口径收敛.md`。
+5. 更新 cognition 专项 TODO，将 COG-TODO-001 标记为 Done，并把 COG-BLK-001 标记为已解阻。
+
+### 验证
+
+1. `rg -n "ICognitionEngine|step\(|decide\(|reflect\(|build\(" docs/architecture/DASALL_Agent_architecture.md docs/architecture/DASALL_Engineering_Blueprint.md docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
+   - 结果：通过；cognition Build-ready 公共入口统一为 `decide()` / `reflect()` / `IResponseBuilder::build()`。剩余 `step()` 命中属于 runtime FSM 入口或历史说明。
+
+### 结果
+
+1. COG-BLK-001 已解阻。
+2. COG-TODO-007 / 010 / 023 后续可按三入口接口面推进。
+3. COG-TODO-002 / 003 / 004 仍需继续完成 stage taxonomy、runtime caller fixture、测试 fixture 口径收敛。
+
+### 下一步
+
+1. 进入 COG-TODO-002：收敛 cognition↔llm stage taxonomy 与 StageModelHint 映射表。
+
 ## 记录 #465
 
 - 日期：2026-04-24

@@ -411,6 +411,12 @@ Any → Failed → Degraded → SafeMode
 | `ReflectionEngine` | `Observation`, `ErrorInfo` | `ReflectionDecision` | 分析失败并给出重试/重规划/终止决策 |
 | `ResponseBuilder` | `ContextPacket`, 执行结果 | `AgentResult` | 汇总上下文生成最终回复 |
 
+**公共入口口径：**
+- Runtime 对 cognition 的可执行公共口径按 cognition 详设 §6.6.1 收敛为三条语义入口：
+  `ICognitionEngine::decide()`、`ICognitionEngine::reflect()`、`IResponseBuilder::build()`。
+- 旧架构草图中的单一 `ICognitionEngine::step()` 仅保留为历史草图语义，不作为 Build 或测试 fixture
+  的可执行接口；`CognitionStepRequest` 只服务决策入口，不承载反思结果或终态回复结果。
+
 **自评信号（必须显式输出）：**
 - 当前决策 `confidence`
 - 是否存在高不确定性假设 `high_uncertainty_assumption`

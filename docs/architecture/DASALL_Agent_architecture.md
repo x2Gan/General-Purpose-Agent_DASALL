@@ -1347,25 +1347,70 @@ public:
 
 #### 5.8.4 关键接口（建议）
 
+本节接口口径已按 cognition 详设 §6.6.1 收敛：Runtime 面向 cognition 不再消费单一
+`ICognitionEngine::step()` 草图，而是按“决策、反思、终态构造”三条语义入口调用。
+其中 `decide()` 与 `reflect()` 保持在 `ICognitionEngine`，终态回复构造由
+`IResponseBuilder::build()` 承接。`CognitionStepRequest` 仅作为决策入口请求对象，
+不再对应一个混合 `CognitionStepResult`。
+
 ```cpp
 struct CognitionStepRequest {
   GoalContract goal;
   ContextPacket context;
-  Observation latest_observation;
+  BeliefState belief;
+  std::optional<Observation> latest_observation;
+  StageExecutionHints execution_hints;
 };
 
-struct CognitionStepResult {
+struct CognitionDecisionResult {
   ResultCode code;
-  ActionDecision action;
-  ReflectionDecision reflection;
-  ErrorInfo error;
+  std::optional<ActionDecision> action_decision;
+  std::optional<BeliefUpdateHint> belief_update_hint;
+  std::optional<ErrorInfo> error;
+};
+
+struct ReflectionRequest {
+  GoalContract goal;
+  BeliefState belief;
+  Observation latest_observation;
+  std::optional<PlanGraph> active_plan;
+  StageExecutionHints execution_hints;
+};
+
+struct CognitionReflectionResult {
+  ResultCode code;
+  std::optional<ReflectionDecision> reflection_decision;
+  std::optional<BeliefUpdateHint> belief_update_hint;
+  std::optional<ErrorInfo> error;
+};
+
+struct ResponseBuildRequest {
+  GoalContract goal;
+  ContextPacket context;
+  BeliefState belief;
+  std::optional<Observation> latest_observation;
+  std::optional<ActionDecision> terminal_decision;
+  ResponseBuildHints build_hints;
+};
+
+struct ResponseBuildResult {
+  ResultCode code;
+  std::optional<AgentResult> agent_result;
+  std::optional<ErrorInfo> error;
 };
 
 class ICognitionEngine {
 public:
   virtual ~ICognitionEngine() = default;
   virtual bool init(const CognitionConfig& config) = 0;
-  virtual CognitionStepResult step(const CognitionStepRequest& request) = 0;
+  virtual CognitionDecisionResult decide(const CognitionStepRequest& request) = 0;
+  virtual CognitionReflectionResult reflect(const ReflectionRequest& request) = 0;
+};
+
+class IResponseBuilder {
+public:
+  virtual ~IResponseBuilder() = default;
+  virtual ResponseBuildResult build(const ResponseBuildRequest& request) = 0;
 };
 ```
 

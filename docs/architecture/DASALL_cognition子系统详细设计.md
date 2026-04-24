@@ -382,6 +382,12 @@ flowchart TD
 
 为避免把决策、反思、终态输出混成一个模糊的 step()，本设计把 cognition 公共接口拆为 decide、reflect、build_response 三个明确入口。该拆分只发生在 cognition 模块公共接口面，不进入共享契约。
 
+COG-TODO-001 评审结论：架构总览中的旧版 `ICognitionEngine::step()` 草图已收敛为历史参考，不再作为
+Runtime caller fixture、CognitionFacade 或接口面 Build 的可执行口径。后续实现只允许落盘
+`ICognitionEngine::decide()`、`ICognitionEngine::reflect()` 与 `IResponseBuilder::build()`；其中
+`build_response` 表示终态构造路径语义，具体接口名保持 `IResponseBuilder::build()`，避免在
+`ICognitionEngine` 上重新引入混合响应职责。
+
 ```cpp
 class ICognitionEngine {
 public:
