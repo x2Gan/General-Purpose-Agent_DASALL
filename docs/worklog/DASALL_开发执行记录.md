@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #459
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-022 实现 AsyncTaskRegistry 与 ResultReplayCache
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-022 是 async receipt 与 replay path 的基础能力，直接为 024 的 facade async 路径提供依赖。
+2. 本轮最小判别点是五类断言：accepted async 注册、owner/token 校验、TTL 过期、cache 命中、LRU 淘汰。
+3. 按 ACC-BLK-006 约束，先落 v1 单实例静态 secret，不扩张多实例轮换方案。
+
+### 改动
+
+1. 新增 `access/src/AsyncTaskRegistry.h` 与 `access/src/AsyncTaskRegistry.cpp`：
+   - 实现 `register_async_accept()`、`query_receipt()`、`validate_ownership()`、`mark_completed()`；
+   - 增加 constant-time token 比较与 TTL 过期清理；
+   - 以 module-local receipt 表保存异步状态。
+2. 新增 `access/src/ResultReplayCache.h` 与 `access/src/ResultReplayCache.cpp`：
+   - 实现 `put()`、`lookup()`、`erase()`、`evict_expired()`；
+   - 落盘固定容量 LRU 淘汰与 TTL 失效规则。
+3. 更新 `access/CMakeLists.txt`：
+   - 将 `src/AsyncTaskRegistry.cpp`、`src/ResultReplayCache.cpp` 接入 `dasall_access` 静态库。
+4. 新增 `tests/unit/access/AsyncTaskRegistryTest.cpp`、`AsyncTaskRegistryOwnershipTest.cpp`、`AsyncTaskRegistryExpiryTest.cpp`、`ResultReplayCacheTest.cpp`、`ResultReplayCacheEvictionTest.cpp`，并更新 `tests/unit/access/CMakeLists.txt`。
+5. 新增 `docs/todos/access/deliverables/ACC-TODO-022-AsyncTaskRegistry与ResultReplayCache收敛.md`。
+6. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-022 标记为 Done，并补交付物与验证证据。
+
+### 验证
+
+1. 聚合验收命令（受外部既有阻塞）：
+   - 命令：`cmake --build /home/gangan/DASALL/build-ci --target dasall_unit_tests && ctest --test-dir /home/gangan/DASALL/build-ci -R "AsyncTaskRegistry(Test|OwnershipTest|ExpiryTest)|ResultReplayCache(Test|EvictionTest)" --output-on-failure`
+   - 结果：在构建阶段被无关文件 `tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp` 语法错误阻塞。
+2. 定向构建 + 定向测试（任务验收证据）：
+   - 命令：`cmake --build /home/gangan/DASALL/build-ci --target dasall_access_async_task_registry_unit_test dasall_access_async_task_registry_ownership_unit_test dasall_access_async_task_registry_expiry_unit_test dasall_access_result_replay_cache_unit_test dasall_access_result_replay_cache_eviction_unit_test && ctest --test-dir /home/gangan/DASALL/build-ci -R "AsyncTaskRegistry(Test|OwnershipTest|ExpiryTest)|ResultReplayCache(Test|EvictionTest)" --output-on-failure`
+   - 结果：100% tests passed，5/5 通过。
+
+### 结果
+
+1. ACC-TODO-022 已完成，accepted async 回执注册与 ownership 校验路径已具备自动化断言。
+2. replay cache 已提供 TTL + LRU 语义，能支撑后续 query/replay 与 gateway facade 接线。
+3. ACC-BLK-006 在本任务范围内按 v1 规则已可执行，规模化轮换问题保留到后续任务处理。
+
+### 下一步
+
+1. 进入 ACC-TODO-023，实现 AccessObservabilityBridge 与事件字段集测试。
+
+### 风险
+
+1. ownership token 当前使用 v1 稳定哈希实现，后续若切换正式 HMAC 库需保证 token 比较与字段语义兼容。
+
 ## 记录 #458
 
 - 日期：2026-04-24

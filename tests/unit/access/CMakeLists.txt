@@ -254,6 +254,36 @@ dasall_add_access_unit_test(
   ResultPublisherChannelFailureTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_async_task_registry_unit_test
+  AsyncTaskRegistryTest
+  AsyncTaskRegistryTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_async_task_registry_ownership_unit_test
+  AsyncTaskRegistryOwnershipTest
+  AsyncTaskRegistryOwnershipTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_async_task_registry_expiry_unit_test
+  AsyncTaskRegistryExpiryTest
+  AsyncTaskRegistryExpiryTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_result_replay_cache_unit_test
+  ResultReplayCacheTest
+  ResultReplayCacheTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_result_replay_cache_eviction_unit_test
+  ResultReplayCacheEvictionTest
+  ResultReplayCacheEvictionTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

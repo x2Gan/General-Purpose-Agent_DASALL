@@ -25,11 +25,13 @@ target_sources(dasall_access
   PRIVATE
     src/placeholder.cpp
     src/AccessConfigAdapter.cpp
+    src/AsyncTaskRegistry.cpp
     src/AdmissionController.cpp
     src/AccessPolicyGate.cpp
     src/AuthenticatorChain.cpp
     src/RequestValidator.cpp
     src/RequestNormalizer.cpp
+    src/ResultReplayCache.cpp
     src/RuntimeBridge.cpp
     src/ResultPublisher.cpp
     src/daemon/DaemonProtocolAdapter.cpp
