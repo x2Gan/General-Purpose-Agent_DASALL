@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #469
+
+- 日期：2026-04-24
+- 阶段：cognition/前置补设计与评审门禁
+- 任务：COG-TODO-004 补齐 cognition 测试 fixture 设计口径
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-004 依赖 COG-TODO-001 ~ 003，本轮在公共接口、stage taxonomy 与 runtime caller seam 均已冻结后收敛 test fixture seam。
+2. 本轮只冻结 `MockLLMManager`、`MockCognitionFixture` 与 failure/profile scenario helper 的设计口径，不新增测试 header 或 CMake 接线。
+3. COG-BLK-004 被拆分为设计侧已解阻、实现侧仍待 COG-TODO-024 关闭。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，新增 §9.3.1 cognition 测试 fixture 口径，明确 `MockLLMManager`、`MockCognitionFixture`、FailureProfileScenario 的职责、非职责边界和消费测试。
+2. 更新 COG-D09，将测试支撑目标收敛为 `tests/mocks/include/MockLLMManager.h` 与 `MockCognitionFixture.h`。
+3. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-004-cognition测试fixture口径收敛.md`。
+4. 更新 cognition 专项 TODO，将 COG-TODO-004 标记为 Done，并记录 COG-BLK-004 设计侧解阻 / 实现侧待 COG-TODO-024。
+
+### 验证
+
+1. `rg -n "MockLLMManager|MockCognitionFixture|tests/mocks/include" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
+   - 结果：通过；fixture 角色、目录目标、COG-D09、COG-TODO-004 Done 状态与 COG-BLK-004 设计侧解阻记录均可检索。
+
+### 结果
+
+1. COG-TODO-001 ~ 004 前置补设计 / 评审门禁已全部完成。
+2. COG-BLK-004 设计侧已解阻；真实 mock header 与 integration discoverability 仍由 COG-TODO-024 / 025 落地。
+3. COG-TODO-020 / 022 / 023 / 026 ~ 029 后续可按统一 fixture 口径推进，但不得在 COG-TODO-024 前宣称 integration ready。
+
+### 下一步
+
+1. 进入 Build-ready 阶段：从 COG-TODO-005 / 006 开始建立 cognition include 与 unit test 拓扑。
+
 ## 记录 #468
 
 - 日期：2026-04-24

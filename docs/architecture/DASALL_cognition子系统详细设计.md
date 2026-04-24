@@ -166,7 +166,7 @@ flowchart LR
 | Response 路径 | 当前无 ResponseBuilder 落点 | 形成终态结果构造路径并映射 AgentResult | 高 | runtime 无法闭环用户输出 | DASALL_Agent_architecture.md 4.3、5.8；AgentResult.h |
 | 单元测试 | tests/unit/cognition/CMakeLists.txt 仅占位 | 建立单元测试拓扑和模块级回归 | 高 | 无法证明边界、schema、降级正确性 | tests/unit/cognition/CMakeLists.txt |
 | 集成测试 | 当前 runtime smoke test 只使用 MockMemoryStore、MockLLMAdapter、MockTool，未经过 cognition | 建立 runtime + cognition + llm + memory + tools 的集成路径 | 高 | 无法验证真正的主循环交接 | tests/unit/runtime/RuntimeSmokeTest.cpp |
-| 测试 mocks | 现有 mocks 仅覆盖 LLMAdapter、MemoryStore、Tool、ExecutionService | 增补 MockLLMManager、MockResponseBuilder、MockKnowledgeService 或 cognition-specific fixture | 中 | 集成与故障注入难以独立推进 | tests/mocks/include |
+| 测试 mocks | 现有 mocks 仅覆盖 LLMAdapter、MemoryStore、Tool、ExecutionService | 增补 MockLLMManager、MockCognitionFixture 等 cognition-specific fixture | 中 | 集成与故障注入难以独立推进 | tests/mocks/include |
 | 观测面 | cognition 无日志、指标、trace、审计约定 | 形成语义级观测字段集 | 中 | 后续调试只能看 llm/tools，认知决策不可解释 | DASALL_infrastructure子系统详细设计.md 24、136 |
 | Profile 投影 | profiles 文档要求 cognition 全档位必开，但 cognition 自身没有配置投影面 | 建立 CognitionConfigProjector，把 profile 运行策略投影到 cognition | 中 | 运行时差异被写死在代码里 | DASALL_profiles模块详细设计.md 571、605 |
 
@@ -1189,7 +1189,7 @@ struct CognitionStepRequest {
 | COG-D06 | 落地 BeliefUpdateSynthesizer 与 ReflectionEngine | 建立失败语义判断与写回提示 | cognition/src/belief/BeliefUpdateSynthesizer.cpp；cognition/src/reflection/ReflectionEngine.cpp | tests/unit/cognition/BeliefUpdateSynthesizerTest.cpp；ReflectionEngineDecisionTest.cpp | ctest --test-dir build-ci -R "(BeliefUpdateSynthesizer|ReflectionEngineDecision)Test" --output-on-failure | Reflection 只出建议 |
 | COG-D07 | 落地 ResponseBuilder 与模板降级 | 建立终态结果构造路径 | cognition/src/response/ResponseBuilder.cpp | tests/unit/cognition/ResponseBuilderAgentResultMappingTest.cpp；ResponseBuilderTemplateFallbackTest.cpp | ctest --test-dir build-ci -R "ResponseBuilder(AgentResultMapping|TemplateFallback)Test" --output-on-failure | 不能直接提交结果 |
 | COG-D08 | 落地 CognitionFacade、CognitionLlmBridge 与 StageOutputValidator | 串联 decide / reflect / build_response 并收口阶段 schema 校验 | cognition/src/CognitionFacade.cpp；cognition/src/llm/CognitionLlmBridge.cpp；cognition/src/validation/StageOutputValidator.cpp | tests/unit/cognition/CognitionFacadeFlowTest.cpp；tests/unit/cognition/CognitionLlmBridgeProjectionTest.cpp；tests/unit/cognition/StageOutputValidatorSchemaTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "(CognitionFacadeFlow|CognitionLlmBridgeProjection|StageOutputValidatorSchema)Test" --output-on-failure | 首版只做单智能体风格 cognition 路径 |
-| COG-D09 | 落地 CognitionTelemetry 与 test mocks | 建立语义级日志、指标、trace 与测试支撑 | cognition/src/observability/CognitionTelemetry.cpp；tests/mocks/include/MockLLMManager.h；MockResponseBuilderSupport.h | tests/unit/cognition/CognitionTelemetryFieldsTest.cpp；tests/unit/cognition/CognitionTelemetryRedactionTest.cpp；tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "(CognitionTelemetryFields|CognitionTelemetryRedaction|RuntimeCognitionLoopSmoke)Test" --output-on-failure | runtime smoke 从绕过 cognition 迁移为穿透 cognition |
+| COG-D09 | 落地 CognitionTelemetry 与 test mocks | 建立语义级日志、指标、trace 与测试支撑 | cognition/src/observability/CognitionTelemetry.cpp；tests/mocks/include/MockLLMManager.h；MockCognitionFixture.h | tests/unit/cognition/CognitionTelemetryFieldsTest.cpp；tests/unit/cognition/CognitionTelemetryRedactionTest.cpp；tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "(CognitionTelemetryFields|CognitionTelemetryRedaction|RuntimeCognitionLoopSmoke)Test" --output-on-failure | runtime smoke 从绕过 cognition 迁移为穿透 cognition |
 | COG-D10 | 建立 integration、failure、profile gates | 收口主链路与退化路径验证 | tests/integration/cognition/CognitionRuntimeIntegrationTest.cpp；CognitionFailureInjectionIntegrationTest.cpp；CognitionProfileCompatibilityTest.cpp | integration + failure + profile | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "Cognition(Runtime|FailureInjection|ProfileCompatibility)IntegrationTest" --output-on-failure | 形成模块交付门 |
 | COG-D11 | 落地 StageModelHint 结构与 BudgetContext 注入 | 实现 cognition→llm 模型提示投影和预算感知决策 | cognition/include/CognitionTypes.h（StageModelHint、BudgetContext、ContextSufficiencySignal）；cognition/src/llm/CognitionLlmBridge.cpp 投影逻辑 | tests/unit/cognition/StageModelHintProjectionTest.cpp；tests/unit/cognition/BudgetAwareDecisionTest.cpp | ctest --test-dir build-ci -R "(StageModelHintProjection|BudgetAwareDecision)Test" --output-on-failure | StageModelHint 可投影到 LLMGenerateRequest；BudgetContext 可影响 Planner 行为 |
 | COG-D12 | 落地跨子系统交互契约验证测试 | 验证 6.14 定义的 ActionDecision→FSM 映射、错误回流链、BeliefUpdateHint 写回时序 | tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp | CognitionRuntimeInteractionContractTest | ctest --test-dir build-ci -R "CognitionRuntimeInteractionContractTest" --output-on-failure | Runtime→Cognition→LLM 三方交互闭环可验证 |
@@ -1325,6 +1325,27 @@ ctest --test-dir build-ci -R "GoalContract|BeliefState|ContextPacket|Observation
 | 观察结果冲突 | latest Observation 与 BeliefState 冲突 | Reflection 建议 replan 或 clarification |
 | response 阶段失败 | response llm 路径失败 | ResponseBuilder 切换模板降级或返回 failed result |
 
+### 9.3.1 cognition 测试 fixture 设计口径（COG-TODO-004）
+
+COG-TODO-004 评审结论：cognition 测试支撑必须以 cognition-facing seams 为核心，
+不得继续把 runtime smoke、bridge projection、failure injection 或 profile gate 建在
+`MockLLMAdapter + MockTool` 的旧旁路路径上。`MockLLMAdapter` 仍可服务 llm 子系统或 legacy
+runtime smoke，但不能作为 COG-D09 / D10 / D12 的认知专项验收夹具。
+
+| Fixture / 支撑对象 | 建议文件范围 | 职责 | 非职责边界 | 主要消费测试 |
+|---|---|---|---|---|
+| MockLLMManager | `tests/mocks/include/MockLLMManager.h` | 模拟 cognition 看到的 `ILLMManager` 级调用面；按 `StageModelHint.stage_name` 与 `task_type` 编排成功响应、schema-invalid 响应、provider unavailable、timeout、empty result；记录 canonical stage key、budget hint、structured output 要求和 provider-private 字段剥离结果 | 不模拟 PromptRegistry / PromptComposer；不暴露 provider adapter 私有字段；不维护第二套 `perception -> planning` 或 `reasoning -> execution` 映射 | `CognitionLlmBridgeProjectionTest`、`CognitionLlmBridgeErrorMappingTest`、`StageModelHintProjectionTest`、`CognitionFailureInjectionIntegrationTest`、`CognitionProfileCompatibilityTest` |
+| MockCognitionFixture | `tests/mocks/include/MockCognitionFixture.h` | 构造 Runtime caller 形状的 `CognitionStepRequest`、`ReflectionRequest`、`ResponseBuildRequest`；固定 `caller_domain=runtime.agent_orchestrator`；提供 goal/context/belief/observation/budget 的最小合法样例；可脚本化 `ActionDecision` 与 `ResponseBuildResult`，并收集 Runtime FSM 期望 | 不替代 Runtime FSM；不构造 ToolRequest；不直接访问 MemoryStore / Tool / Knowledge 实现；不绕过 `ICognitionEngine` / `IResponseBuilder` 公共入口 | `RuntimeCognitionLoopSmokeTest`、`CognitionRuntimeIntegrationTest`、`CognitionRuntimeInteractionContractTest` |
+| FailureProfileScenario | 可先作为 `MockCognitionFixture` 内部 helper，集成测试稳定后再独立文件 | 复用五类失败样例（llm unavailable、schema violation、missing belief、contradictory observation、response fallback）和五档 profile smoke 样例；保证 failure / profile gate 使用同一套 canonical stage key、caller fixture 与 ErrorInfo 断言 | 不把失败重试、恢复准入或 profile route 归一化藏进测试私有逻辑；不让测试修正 production schema | `CognitionFailureInjectionIntegrationTest`、`CognitionProfileCompatibilityTest`、`CognitionRuntimeInteractionContractTest` |
+
+fixture 作用域约束：
+
+1. unit/cognition 使用 `MockLLMManager` 验证 stage hint projection、错误投影、provider-private redaction、schema validation 与 telemetry redaction；不需要 Runtime FSM。
+2. unit/runtime 使用 `MockCognitionFixture` 验证 Runtime caller handoff 与 ActionDecision→FSM 第一跳；不直接断言 LLM provider 行为。
+3. integration/cognition 组合两类 fixture，覆盖 Runtime→Cognition→LLM happy path、failure injection、profile compatibility 与 interaction contract。
+4. `MockResponseBuilderSupport` 不作为首版独立 seam；response builder 的测试支撑由 `MockCognitionFixture` 内部的 scripted response builder helper 承载，待 streaming 或多响应模式稳定后再拆出。
+5. COG-B03 设计侧由本节解阻；真实 header 与 CMake / test discoverability 仍由 COG-TODO-024 / 025 落地。
+
 ### 9.4 质量门建议清单
 
 | Gate | 条件 | 判定 |
@@ -1397,7 +1418,7 @@ ctest --test-dir build-ci -R "GoalContract|BeliefState|ContextPacket|Observation
 |---|---|---|---|---|
 | COG-B01 | ActionDecision、PlanGraph、ReplanResult 支撑契约未冻结 | IPlanner 与跨模块 schema 无法进入 shared admission | 保持模块内实现，并完成至少一轮真实集成测试证据 | 不走 contracts admission，只走 cognition 公共接口面 |
 | COG-B02 | runtime/include 当前未落盘公共接口面 | runtime 无法正式依赖 cognition 门面 | 补齐 runtime 公共接口面或在 apps/ 装配层先做 DI 接线 | 暂用 runtime smoke fixture 作为过渡，不宣称主链可交付 |
-| COG-B03 | tests/mocks 缺少 MockLLMManager 与 cognition fixture | 故障注入、集成测试无法高效编排 | 新增 tests/mocks/include/MockLLMManager.h 与 MockCognitionFixture.h | 单元测试先用阶段级 fake object，集成测试后置 |
+| COG-B03 | tests/mocks 缺少 MockLLMManager 与 cognition fixture | 故障注入、集成测试无法高效编排；设计侧已由 COG-TODO-004 冻结 fixture 口径，真实 header 仍待 COG-TODO-024 | 新增 tests/mocks/include/MockLLMManager.h 与 MockCognitionFixture.h | 单元测试先用阶段级 fake object，集成测试后置 |
 | COG-B04 | profile 到 cognition 的配置投影尚不存在 | edge/profile 兼容性无法验证 | 新增 CognitionConfigProjector 并在 profile tests 中使用 | 暂仅在 desktop_full 验证，不对其他 profile 宣称 ready |
 | COG-B05 | ResponseBuilder streaming 与 llm streaming lifecycle 未收口 | terminal streaming 行为不稳定 | v1 保持单次响应 + 模板降级 | 不开启流式 response gate |
 
