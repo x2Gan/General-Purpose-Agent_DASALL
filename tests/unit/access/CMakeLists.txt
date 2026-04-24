@@ -437,6 +437,61 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_output_formatter_unit_test
 )
 
+
+# ACC-TODO-026: HttpProtocolAdapterTest
+add_executable(dasall_access_http_protocol_adapter_unit_test
+  HttpProtocolAdapterTest.cpp
+  ../../../apps/gateway/src/HttpProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_http_protocol_adapter_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_http_protocol_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_http_protocol_adapter_unit_test)
+
+add_test(NAME HttpProtocolAdapterTest
+  COMMAND dasall_access_http_protocol_adapter_unit_test)
+set_tests_properties(HttpProtocolAdapterTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_http_protocol_adapter_unit_test
+)
+
+# ACC-TODO-026: HttpProtocolAdapterErrorMappingTest
+add_executable(dasall_access_http_protocol_adapter_error_mapping_unit_test
+  HttpProtocolAdapterErrorMappingTest.cpp
+  ../../../apps/gateway/src/HttpProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_http_protocol_adapter_error_mapping_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_http_protocol_adapter_error_mapping_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_http_protocol_adapter_error_mapping_unit_test)
+
+add_test(NAME HttpProtocolAdapterErrorMappingTest
+  COMMAND dasall_access_http_protocol_adapter_error_mapping_unit_test)
+set_tests_properties(HttpProtocolAdapterErrorMappingTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_http_protocol_adapter_error_mapping_unit_test
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()

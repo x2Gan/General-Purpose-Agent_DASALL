@@ -86,3 +86,11 @@ function(dasall_resolve_dependency)
     "Check third_party, third_party/.cache, or fetch settings."
   )
 endfunction()
+
+# cpp-httplib: header-only HTTP library used by dasall_gateway (ACC-TODO-026)
+dasall_resolve_dependency(
+  NAME cpp-httplib
+  FETCH_GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+  FETCH_GIT_TAG v0.15.3
+)
+
