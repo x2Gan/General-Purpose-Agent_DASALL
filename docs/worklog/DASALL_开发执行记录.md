@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #456
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-019 实现 RequestNormalizer
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-019 位于 Admission 与 RuntimeBridge 之间，是主链输入规范化与 contracts 投影稳定性的关键节点。
+2. 本轮最小判别点是四类断言：trace id 生成、身份投影、约束白名单投影、contracts guard 兼容性。
+3. 019 不扩展 public ABI，只在 access internal 层收敛 normalize 能力，保持原子边界。
+
+### 改动
+
+1. 新增 `access/src/RequestNormalizer.h` 与 `access/src/RequestNormalizer.cpp`：
+   - 新增 `RequestNormalizationOutput`；
+   - 实现 `normalize()`、`ensure_trace_ids()`、`project_agent_request()`、`build_publish_context()`；
+   - 实现 `request_id/session_id/trace_id` 自动生成/复用与 `constraint_set` 白名单投影。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/RequestNormalizer.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/RequestNormalizerTest.cpp`、`RequestNormalizerIdentityProjectionTest.cpp`、`RequestNormalizerConstraintProjectionTest.cpp`、`RequestNormalizerContractCompatibilityTest.cpp`，并更新 `tests/unit/access/CMakeLists.txt`。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-019-RequestNormalizer收敛.md`：
+   - 收口边界、流程、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-019 标记为 Done，并补充交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_request_normalizer_unit_test`、`dasall_access_request_normalizer_identity_projection_unit_test`、`dasall_access_request_normalizer_constraint_projection_unit_test`、`dasall_access_request_normalizer_contract_compatibility_unit_test`、`dasall_contract_tests`。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "RequestNormalizer(Test|IdentityProjectionTest|ConstraintProjectionTest|ContractCompatibilityTest)|AgentRequestContractTest|AgentResultContractTest" --output-on-failure`
+   - 结果：100% tests passed，8/8 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "RequestNormalizer(Test|IdentityProjectionTest|ConstraintProjectionTest|ContractCompatibilityTest)"`
+   - 结果：4 个 RequestNormalizer 测试均可发现。
+
+### 结果
+
+1. ACC-TODO-019 已完成，RequestNormalizer 可稳定生成标识、投影 AgentRequest，并输出发布上下文 seed。
+2. `constraint_set` 采用白名单投影，未治理 request_context 不会泄漏到 shared contracts。
+3. 通过 contracts guard 回归验证，确保投影后 `AgentRequest` 仍满足边界与字段规则。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-020，实现 RuntimeBridge 的 sync/accepted-async/reject 三出口与 cancel 转发。
+
+### 风险
+
+1. 当前 trace id 生成策略为模块内生成；后续若接入统一链路追踪服务，需要保持字段语义与兼容性不变。
+
 ## 记录 #455
 
 - 日期：2026-04-24

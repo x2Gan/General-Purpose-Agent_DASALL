@@ -194,6 +194,30 @@ dasall_add_access_unit_test(
   RequestValidatorInjectionTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_request_normalizer_unit_test
+  RequestNormalizerTest
+  RequestNormalizerTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_request_normalizer_identity_projection_unit_test
+  RequestNormalizerIdentityProjectionTest
+  RequestNormalizerIdentityProjectionTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_request_normalizer_constraint_projection_unit_test
+  RequestNormalizerConstraintProjectionTest
+  RequestNormalizerConstraintProjectionTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_request_normalizer_contract_compatibility_unit_test
+  RequestNormalizerContractCompatibilityTest
+  RequestNormalizerContractCompatibilityTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

@@ -29,6 +29,7 @@ target_sources(dasall_access
     src/AccessPolicyGate.cpp
     src/AuthenticatorChain.cpp
     src/RequestValidator.cpp
+    src/RequestNormalizer.cpp
     src/daemon/DaemonProtocolAdapter.cpp
     src/ProtocolAdapterRegistry.cpp
     src/ProtocolErrorMapper.cpp
