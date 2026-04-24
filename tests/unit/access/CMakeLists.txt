@@ -635,6 +635,10 @@ if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
 
+add_custom_target(dasall_access_unit_tests
+  DEPENDS ${DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS}
+)
+
 set(DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   ${DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS}
   PARENT_SCOPE

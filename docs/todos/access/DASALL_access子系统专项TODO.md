@@ -1,9 +1,9 @@
 # DASALL Access 子系统专项 TODO
 
-最近更新时间：2026-04-23
+最近更新时间：2026-04-24
 阶段：Detailed Design -> Special TODO
 适用范围：access/、apps/cli、apps/daemon、apps/gateway、apps/simulator、tests/unit/access、tests/integration/access
-当前结论：Access 详设已经满足 L3/L2 混合拆分条件。`InboundPacket`、`SubjectIdentity`、`AccessDecisionProof`、`AccessErrorCode`、`RuntimeDispatchRequest`、`PublishEnvelope`、`AsyncTaskReceipt`、`IAccessGateway`、`IProtocolAdapter`、`IAdmissionController`、`IAccessRuntimeBridge`、`AccessBootstrapConfig`、`OverrideSourceFact`、`DiagnosticsSelectorFact`、`HttpProtocolAdapter`、`HealthProbeHandler` 的边界与首版输入输出已经具备接口级或数据结构级拆分证据；streaming 路径也已在 Access 侧收口为延后 Gate + async/poll fallback，剩余外部前置约束转为上游 shared streaming lifecycle 冻结与 IIPC peer identity 接缝。因此本专项 TODO 采用“补设计解阻 -> 公共接口与骨架 -> 主链实现 -> 测试与 Gate 收口”的四段编排，默认以 daemon 常驻本地控制面承载 Access 主链，CLI 作为独立进程通过 IIPC/UDS 接入；gateway 继续仅以 HTTP unary + async receipt 首版边界推进。
+当前结论：Access 子系统的架构方向与 `access/ + apps/*` 双层工程落点正确，但 2026-04-24 交付评审判定当前实现仍是 Design Direction Ready、Implementation Not Ready、Release Gate Not Closed。001~038 已形成接口、组件和局部单元门的历史基础；后续不得把组件 Done 等同于 v1 可交付。新增 ACC-TODO-039~051 作为交付评审整改任务，优先闭合 clean rebuild、production pipeline、`AgentRequest` handoff、query/cancel、HTTP decode、安全治理、observability、集成 Gate、交付证据与 P2 硬化。
 
 ## 1. 文档头
 
@@ -24,12 +24,14 @@
 13. `docs/todos/contracts/deliverables/WP03-T014-AgentResult语义说明.md`
 14. 现有专项 TODO 基线：`docs/todos/runtime/DASALL_runtime子系统专项TODO.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/llm/DASALL_llm子系统专项TODO.md`、`docs/todos/services/DASALL_capability_services子系统专项TODO.md`
 15. 当前代码与构建现状：`access/CMakeLists.txt`、`access/include/AccessTypes.h`、`access/include/IAccessGateway.h`、`access/include/IAccessRuntimeBridge.h`、`access/include/IProtocolAdapter.h`、`access/src/placeholder.cpp`、`apps/cli/CMakeLists.txt`、`apps/cli/src/main.cpp`、`apps/gateway/CMakeLists.txt`、`apps/gateway/src/main.cpp`、`tests/CMakeLists.txt`、`tests/unit/CMakeLists.txt`、`tests/integration/CMakeLists.txt`
+16. 交付评审输入：`docs/todos/access/DASALL_Access子系统交付评审报告.md`，评审结论为 P0/P1/P2 分级整改，重点是“类已存在，主链未装配”。
 
 行业补强参照采用 Access 详设已内化的参考基线，不额外改写边界：
 
 1. Envoy HTTP filters：有序 decoder/encoder pipeline 与 terminal handler 思路。
 2. OWASP Authorization Cheat Sheet：deny-by-default、逐请求授权、fail-closed 和审计基线。
 3. IETF `Idempotency-Key` header draft：HTTP 幂等键格式与窗口语义。
+4. 接入层生产化通用实践：结构化协议解析、真实依赖 readiness、HMAC ownership token、clean rebuild 可重复验证、禁止以 stale binary 或 liveness ping 冒充业务主链证据。
 
 编制原则：
 
@@ -184,6 +186,23 @@
 | IIPC peer identity seam 未冻结 | daemon local trusted 判定缺乏平台事实输入 | ACC-TODO-037 | local trusted 相关命令保持 fail-closed，不写 ready 结论 |
 | shared streaming lifecycle 未冻结 | stream / WS / MQTT 语义漂移 | ACC-TODO-005 | 只允许占位 Gate + async/poll fallback，不允许首版实现任务 |
 
+### 5.3 交付评审结果 -> 整改任务映射
+
+| 评审问题 | 优先级 | 整改任务 | 落地说明 |
+|---|---|---|---|
+| `AccessGateway` 未装配 resolver/auth/policy/admission/validator/normalizer/runtime/publisher 主链 | P0 | ACC-TODO-041、042、049 | 先做 production pipeline，再让 daemon/gateway 组合根使用真实依赖，并以 integration 证据闭环 |
+| Access integration smoke 不是端到端主链验证，且 clean rebuild 曾失败 | P0 | ACC-TODO-039、049、050 | 先补 `dasall_access_tests` 和 clean rebuild，再将 034/035/036 从计划推进到可执行证据 |
+| `RuntimeDispatchRequest` 未承载 `AgentRequest`，normalizer 与 RuntimeBridge 断裂 | P0 | ACC-TODO-040、041、049 | bridge handoff 必须消费 normalizer 输出，并由 mock runtime 断言 shared contract 字段 |
+| async receipt query/cancel 未接 gateway/daemon，cancel 未转发 RuntimeBridge | P0 | ACC-TODO-043、046、049 | 功能路径与 ownership 安全路径分开落地，但最终 Gate 必须同时覆盖 |
+| HTTP adapter 未设置固定 `protocol_kind`，且 JSON 解码是 ad hoc scanner | P0 | ACC-TODO-044、049 | 按 HTTP-only 首版边界做结构化解析、header 白名单和输入 fail-closed |
+| `AccessConfigAdapter` 仍是占位 | P1 | ACC-TODO-045 | 将 bootstrap/profile/policy snapshot 投影为 immutable governance views，并补非法 schema fail init |
+| ownership token 仍使用 `std::hash` 与默认静态 secret | P1 | ACC-TODO-046 | 改 HMAC-SHA256、key rotation、constant-time compare 和 secret missing fail-closed |
+| `AccessPolicyGate` 仍是本地 snapshot stub | P1 | ACC-TODO-047 | 引入 `IAccessPolicyEvaluator`，production 接 infra/policy，snapshot 仅作测试 fake |
+| observability bridge 未接主链 | P1 | ACC-TODO-048、049 | 真实失败路径必须有 request_id/trace_id、日志、指标、追踪和审计事实 |
+| health readiness 硬编码 ready，daemon ping 绕过 AccessGateway | P1 | ACC-TODO-042、049 | readiness 聚合真实依赖；ping 只作 liveness，不作为 Access 主链证据 |
+| deliverables 状态与实际交付证据不一致 | P1 | ACC-TODO-050 | 更新旧报告、034/035/036、worklog 与 Gate 证据，明确 Release Gate Not Closed |
+| P2 工程硬化项未收敛 | P2 | ACC-TODO-051 | 删除 placeholder、强语义常量/枚举、shutdown audit、ID generator、registry 使用与 include 边界 |
+
 ## 6. 原子任务清单
 
 ### 6.1 前置补设计 / 评审解阻任务
@@ -249,35 +268,58 @@
 | ACC-TODO-037 | Done | 补齐 IIPC peer identity 接缝并固化 LocalPeerUidFact 输入 | daemon 本地控制面详设 6.3.3；Access 详设 6.14.9、6.15.3 | `IIPC::describe_peer()`、`PeerIdentitySnapshot`、`LocalPeerUidFact` | L2 | `platform/include/IIPC.h`、`platform/src/linux/UnixIpcProvider.cpp`、`access/src/daemon/DaemonProtocolAdapter.cpp` | `UnixIpcProviderPeerIdentityTest`、`DaemonProtocolAdapterLocalTrustedTest` | `cmake --build build-ci --target dasall_platform dasall_unit_tests && ctest --test-dir build-ci -R "UnixIpcProviderPeerIdentityTest|DaemonProtocolAdapterLocalTrustedTest" --output-on-failure` | 006 | ACC-BLK-007 ✅ 已解阻 | — | 更新后的 `platform/include/IIPC.h`、`platform/include/linux/UnixIpcProvider.h`、`platform/src/linux/UnixIpcProvider.cpp`、`access/include/AccessTypes.h`、`access/include/daemon/DaemonProtocolAdapter.h`、`access/src/daemon/DaemonProtocolAdapter.cpp`、相关单测与 CMake；[docs/todos/access/deliverables/ACC-TODO-037-IIPC-peer-identity接缝与LocalPeerUidFact输入收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-037-IIPC-peer-identity接缝与LocalPeerUidFact输入收敛.md) | IIPC peer identity public seam 已冻结并可返回 uid/gid/pid 事实，`UnixIpcProviderPeerIdentityTest` 与 `DaemonProtocolAdapterLocalTrustedTest` 定向通过，daemon 本地 trusted 判定不再依赖隐式假设 |
 | ACC-TODO-038 | Done | 纠正 apps/cli 依赖方向并固定 CLI -> IIPC/UDS -> daemon 路径 | CLI 本地控制面详设 5.1、6.2；Access 详设 6.14.8 | `CliIpcClient`、CLI CMake link set、direct runtime link removal | L2 | `apps/cli/CMakeLists.txt`、`apps/cli/src/main.cpp`、`apps/cli/src/CliIpcClient.cpp` | `CliIpcClientTest`、`CliDaemonPingIntegrationTest` | `cmake --build build-ci --target dasall_cli dasall_daemon dasall_unit_tests && ctest --test-dir build-ci -R "CliIpcClientTest|CliDaemonPingIntegrationTest" --output-on-failure` | 006 | 无 | — | 更新后的 `apps/cli/CMakeLists.txt`、`apps/cli/src/CliIpcClient.h`、`apps/cli/src/CliIpcClient.cpp`、`apps/cli/src/main.cpp`、相关 unit/integration 测试与 CMake；[docs/todos/access/deliverables/ACC-TODO-038-CLI依赖方向纠正与UDS路径收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-038-CLI依赖方向纠正与UDS路径收敛.md) | CLI target 已移除 direct runtime link，`CliIpcClientTest` 与 `CliDaemonPingIntegrationTest` 定向通过，CLI -> IIPC/UDS -> daemon 路径骨架完成落盘 |
 
+### 6.6 2026-04-24 交付评审整改任务
+
+本节用于承接 `DASALL_Access子系统交付评审报告.md` 的 P0/P1/P2 评审结果。001~038 的 Done 仅代表接口、组件或局部单元门已形成基础证据；039 起的任务才是 Access v1 release gate 的实际整改主线。
+
+| ID | 状态 | 优先级 | 任务标题 | 评审来源 | 落地范围 | 代码目标 | 测试目标 | 验收命令 | 前置依赖 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ACC-TODO-039 | Done | P0 | 闭合 Access clean rebuild 与聚合测试门 | P0-2、R0 | CMake、`tests/unit/access`、`tests/integration/access` | 已新增 `dasall_access_unit_tests`、`dasall_access_integration_tests` 与顶层 `dasall_access_tests` 聚合目标；已修复 `AccessGatewaySmokeIntegrationTest.cpp` `PublishEnvelope` designated initializer 字段顺序；Access 测试统一经 `access` label 进入 Gate | `ctest -L access` clean build 后 62/62 通过；`ctest -N -L access` 可发现 62 个 Access unit/integration；全仓 `ctest -N` 退出码为 0 但仍有非 Access 历史测试缺可执行文件提示 | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -L access --output-on-failure && ctest --test-dir build-ci -N` | 006、031、032、033 | clean rebuild 不依赖既有二进制；Access 聚合目标和 label 已成为后续所有 Gate 的入口；交付物：[ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md) |
+| ACC-TODO-040 | Pending | P0 | 修复 RuntimeBridge handoff，使 RuntimeDispatchRequest 承载 AgentRequest | P0-3、R2 | `access/include/AccessTypes.h`、`access/include/IAccessRuntimeBridge.h`、`access/src/RuntimeBridge.*`、`access/src/RequestNormalizer.*` | 在 `RuntimeDispatchRequest` 显式携带 `dasall::contracts::AgentRequest`，或将 bridge surface 收敛为 `dispatch(AgentRequest, RuntimeInvokeContext)`；`RequestNormalizationOutput.agent_request` 必须被主链消费 | 新增 `RuntimeBridgeAgentRequestHandoffTest`、`RequestNormalizerRuntimeBridgeCompatibilityTest` | `cmake --build build-ci --target dasall_access_tests dasall_contract_tests && ctest --test-dir build-ci -R "RuntimeBridgeAgentRequestHandoffTest|RequestNormalizerRuntimeBridgeCompatibilityTest|AgentRequestContractTest|AgentResultContractTest" --output-on-failure` | 001、011、019、020、039 | mock RuntimeBridge 收到的 `request_id/session_id/trace_id/user_input/request_channel` 与 normalizer 输出一致，sidecar 不污染 contracts |
+| ACC-TODO-041 | Pending | P0 | 实现 AccessGateway production pipeline 与依赖完整性校验 | P0-1、R1 | `access/src/AccessGateway.*`、新增 `AccessGatewayDependencies` 或 `AccessPipeline` | 将 resolver、authenticator、policy gate、admission、validator、normalizer、runtime bridge、publisher、async registry、replay cache、observability、config view 注入 `AccessGateway`；`init()` 对 P0 依赖缺失 fail-closed；`submit()` 串联真实 pipeline | 新增 `AccessGatewayProductionPipelineTest`、`AccessGatewayDependencyValidationTest`、`AccessGatewayRejectMappingTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessGatewayProductionPipelineTest|AccessGatewayDependencyValidationTest|AccessGatewayRejectMappingTest" --output-on-failure` | 013~023、039、040 | 默认构造或依赖缺失不能进入 Ready；成功、认证失败、授权拒绝、admission 拒绝、runtime reject、publish failure 均有主链断言 |
+| ACC-TODO-042 | Pending | P0 | 接通 daemon/gateway production 组合根与真实 readiness | P0-1、P1-5、P1-6、R1、R4 | `apps/daemon/src/*`、`apps/gateway/src/*` | daemon 和 gateway 不再默认构造空 `AccessGateway`；测试 profile 使用显式 mock pipeline，生产 profile 使用真实 dependencies；readiness 由 gateway state、adapter registry、RuntimeBridge、policy/config health 聚合；ping 仅保留 liveness 标记 | 新增 `DaemonAccessSubmitCompositionTest`、`GatewayAccessSubmitCompositionTest`、`AccessHealthReadinessIntegrationTest`、`CliDaemonSubmitIntegrationTest` | `cmake --build build-ci --target dasall_daemon dasall_gateway dasall_access_tests && ctest --test-dir build-ci -R "DaemonAccessSubmitCompositionTest|GatewayAccessSubmitCompositionTest|AccessHealthReadinessIntegrationTest|CliDaemonSubmitIntegrationTest" --output-on-failure` | 024、025、026、028、029、041 | daemon/gateway 主业务 submit 经过 AccessGateway 主链；pipeline 缺失时 readiness=false；ping 不再被写作 Access 主链证据 |
+| ACC-TODO-043 | Pending | P0 | 打通 async receipt query/cancel 与 RuntimeBridge cancel 转发 | P0-4、R2、R4 | `apps/gateway/src/TaskQueryHandler.*`、daemon IPC handler、`IAccessRuntimeBridge::cancel`、`AsyncTaskRegistry` | gateway 增加 `/v1/receipt/{id}` 与 `/v1/cancel/{id}`；daemon 增加 submit/query/cancel IPC operation；query/cancel 均执行 actor extraction、policy gate 与 ownership validation；cancel 结果以 RuntimeBridge 返回为准 | 新增 `AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessCancelForwardingTest`、`DaemonSubmitQueryCancelIntegrationTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessAsyncReceiptQueryCancelIntegrationTest|AccessCancelForwardingTest|DaemonSubmitQueryCancelIntegrationTest" --output-on-failure` | 016、020、022、027、041、042 | accepted async、owner query、owner cancel、non-owner 拒绝、expired/not found、runtime cancel rejected 路径均可二值断言 |
+| ACC-TODO-044 | Pending | P0 | 修复 HTTP adapter 首版 decode/encode 与输入安全 | P0-5、R4 | `apps/gateway/src/HttpProtocolAdapter.*`、gateway submit route | HTTP decode 固定 `entry_type="gateway"`、`protocol_kind="http_unary"`；使用结构化 JSON/parser wrapper；校验 method、path、content-type、body-size、idempotency-key；仅投影白名单 header 到 `request_context` | 新增 `HttpProtocolAdapterStructuredDecodeTest`、`HttpProtocolAdapterSecurityInputTest`、`GatewaySubmitRouteContractTest` | `cmake --build build-ci --target dasall_gateway dasall_access_tests && ctest --test-dir build-ci -R "HttpProtocolAdapterStructuredDecodeTest|HttpProtocolAdapterSecurityInputTest|GatewaySubmitRouteContractTest" --output-on-failure` | 026、039、041 | HTTP 入口生成的 packet 可通过 validator/normalizer；转义、嵌套、超限、非法 content-type 与 header 注入均 fail-closed |
+| ACC-TODO-045 | Pending | P1 | 实现 AccessConfigAdapter 生产级 profile/config 投影 | P1-1、R3 | `access/src/AccessConfigAdapter.*`、profiles/config bridge | 将 bootstrap config 与 profile/policy snapshot 投影为 immutable `AccessAuthView`、`AccessAdmissionView`、`AccessPublishView`、`AccessRuntimeGovernanceView`；支持 fingerprint、last-known-good、hot update invalidation；非法 schema fail init | 新增 `AccessConfigAdapterProjectionTest`、`AccessConfigAdapterInvalidSchemaTest`、`AccessProfileCompatibilityTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessConfigAdapterProjectionTest|AccessConfigAdapterInvalidSchemaTest|AccessProfileCompatibilityTest" --output-on-failure` | 002、012、039 | 至少两档 profile 下投影稳定；配置缺失或非法不会使用散落默认值进入 Ready |
+| ACC-TODO-046 | Pending | P1 | 将 async ownership token 改为正式 HMAC 与 secret rotation | P1-2、R3 | `access/src/AsyncTaskRegistry.*`、infra/secret seam | 使用 infra/secret deployment secret；token 包含 `key_id/issued_at/expires_at/receipt_id/actor_ref/request_id`；HMAC-SHA256 + base64url；constant-time compare；支持 current/previous key 验证；缺 secret 时禁用 async 或 init fail-closed | 新增 `AsyncTaskRegistryHmacOwnershipTest`、`AsyncTaskRegistrySecretRotationTest`、`AsyncTaskRegistryMissingSecretFailClosedTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AsyncTaskRegistryHmacOwnershipTest|AsyncTaskRegistrySecretRotationTest|AsyncTaskRegistryMissingSecretFailClosedTest" --output-on-failure` | 022、039 | 不再使用 `std::hash` 或静态默认 secret；rotation 与 expired/mismatch 路径可自动验证 |
+| ACC-TODO-047 | Pending | P1 | 引入 IAccessPolicyEvaluator 并接入 infra/policy 生产适配 | P1-3、R3 | `access/src/AccessPolicyGate.*`、infra/policy adapter | 定义 `IAccessPolicyEvaluator` seam；production 实现调用 infra/policy；snapshot backend 仅保留为 unit fake；policy input 包含 subject/channel/environment/operation/target/fingerprint；backend unavailable fail-closed | 新增 `AccessPolicyEvaluatorIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessPolicyInputAttributeTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessPolicyEvaluatorIntegrationTest|AccessPolicyBackendUnavailableIntegrationTest|AccessPolicyInputAttributeTest" --output-on-failure` | 016、039、045 | deny-by-default 与 per-request authorization 在生产 seam 中成立；策略失败产生 audit/metric anchor |
+| ACC-TODO-048 | Pending | P1 | 将 AccessObservabilityBridge 接入主链与基础设施 sink | P1-4、R3 | `access/src/AccessGateway.*`、`AccessObservabilityBridge.*`、infra logging/metrics/tracing/audit bridge | 在 request received、auth failed、policy denied、admission rejected、runtime rejected、publish failed、shutdown abandoned 路径发事件；reject result 携带 request_id/trace_id；sink 失败不得改变业务裁定 | 新增 `AccessObservabilityMainChainIntegrationTest`、`AccessRejectTraceAnchorTest`、`AccessPublishFailureAuditTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessObservabilityMainChainIntegrationTest|AccessRejectTraceAnchorTest|AccessPublishFailureAuditTest" --output-on-failure` | 023、041、047 | 三类关键事件不再只停留在对象单测，真实主链失败路径可被日志、指标、追踪、审计断言 |
+| ACC-TODO-049 | Pending | P0 | 扩展 Access v1 端到端集成 Gate 矩阵 | P0-2、R4、R5 | `tests/integration/access`、contract gate 汇聚 | 将 034/035 从计划文档推进为可执行测试；覆盖 CLI->daemon submit、HTTP->gateway submit、async receipt query/cancel、publish failure fallback、policy backend unavailable、health readiness、profile projection 与 contracts guard | `AccessGatewayPipelineIntegrationTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest` | `cmake --build build-ci --target dasall_access_tests dasall_contract_tests && ctest --test-dir build-ci -R "AccessGatewayPipelineIntegrationTest|CliDaemonSubmitIntegrationTest|HttpGatewaySubmitIntegrationTest|AccessAsyncReceiptQueryCancelIntegrationTest|AccessPolicyBackendUnavailableIntegrationTest|AccessHealthReadinessIntegrationTest|AccessProfileCompatibilityTest|AgentRequestContractTest|AgentResultContractTest|IdentityMetadataContractTest" --output-on-failure` | 039~048 | Access v1 release gate 以端到端主链证据为准，不再以 interface abstract、publish envelope 字段或 ping liveness 作为交付证据 |
+| ACC-TODO-050 | Pending | P1 | 校准 deliverables 状态、旧报告结论与复验证据 | P1-7、R5 | `docs/todos/access/*`、`docs/worklog/DASALL_开发执行记录.md` | 将旧 Build-Ready 结论标注为旧稿或替换；034/035/036 回写最新状态；每个 Done deliverable 补最新复验日期、clean build 命令、结果摘要；release gate 明确 Not Ready/Ready 条件 | 文档一致性复验，`rg` 检查旧结论、Gate、Blocked、测试名与证据路径 | `rg -n "Build-Ready|Release Gate|ACC-TODO-039|AccessGatewayPipelineIntegrationTest|AccessAsyncReceiptQueryCancelIntegrationTest|AccessObservabilityMainChainIntegrationTest" docs/todos/access docs/worklog/DASALL_开发执行记录.md` | 039、049 | TODO、deliverables、worklog 与交付评审结论一致；不再出现“组件 Done 即 release ready”的表述 |
+| ACC-TODO-051 | Pending | P2 | 收敛 P2 工程硬化项与 release polish | P2、R5 | `access/*`、`apps/gateway/*`、tests | 删除不再需要的 `src/placeholder.cpp`；为强语义字符串引入 enum class 或集中常量；shutdown 写 abandoned audit 并关闭 registry/cache；success mapping 与 error mapping 分离；ID 生成接统一 generator；AccessGateway 使用 registry decode/encode；明确 app-private internal include 边界 | 新增或补强 `AccessGatewayShutdownAuditTest`、`AccessStrongEnumContractTest`、`AccessIdGeneratorStabilityTest`、`ProtocolAdapterRegistryGatewayIntegrationTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessGatewayShutdownAuditTest|AccessStrongEnumContractTest|AccessIdGeneratorStabilityTest|ProtocolAdapterRegistryGatewayIntegrationTest" --output-on-failure` | 039、041、048 | P2 不阻断 P0 主链，但必须在 Access v1 release candidate 前完成或形成显式残余风险记录 |
+
 ## 7. 执行顺序建议
 
 ### 7.1 串并行编排
 
 | 阶段 | 任务 | 编排建议 | 说明 |
 |---|---|---|---|
-| A 补设计与解阻 | 001 ~ 005 | 001 / 002 / 003 / 004 已完成；005 仍受外部协同阻塞 | 先冻结 seam、config、override/diagnostics schema、gateway HTTP-only 边界与 v1 范围，再允许接口和组合根落盘 |
-| B 公共接口与骨架 | 006 ~ 012、037、038 | 006 串行起步；007~012 可按 surface 域并行；037/038 与骨架并行推进 | 先让 `access/include`、tests topology 与 CLI/daemon 本地接入路径成为稳定入口 |
-| C Admission 与 dispatch 主链 | 013 ~ 024 | 013 → 014/015 → 016/017/018 → 019 → 020/021 → 022/023 → 024 | 先 registry 和身份链，再 Admission、Normalizer、Bridge、Publisher、Async、Observability、Gateway |
-| D 入口壳层 | 025 ~ 030 | 029 / 025 优先并行；026 / 028 在 004 完成后推进；027 依赖 022 / 026；030 在 CLI/daemon 稳定后并行 | 首版先 CLI/daemon 本地控制面，再补 HTTP/gateway 与 simulator |
-| E 测试与 Gate 收口 | 031 ~ 036 | 031 / 032 并行；033 在 022/027/029/030/037 后；034 在 022/024/025/029 后；035 在 023/028/034 后；036 最后 | 先 unit，再 integration，再 Gate 与证据回写 |
+| A 历史基础校准 | 001 ~ 038 | 001~038 保留为设计、接口、组件和局部单元门基础；不得再以这些 Done 直接宣称 Access v1 Build-Ready | 先承认 2026-04-24 评审结论：当前 release gate 未闭合，034~036 仍要被 039~050 重新驱动 |
+| B R0 可重复构建门 | 039 | 039 单独前置，修复 clean rebuild、Access 聚合目标和 label/discoverability | 没有 clean rebuild 证据时，后续任何 ctest 通过都不能作为交付证据 |
+| C R1/R2 P0 主链修复 | 040 → 041 → 042 → 043；044 可在 041 后并行 | 先让 RuntimeBridge 承载 `AgentRequest`，再装配 AccessGateway production pipeline，然后接 daemon/gateway 组合根、query/cancel 与 HTTP decode | 这是 Access v1 的最短阻断链；041 完成前禁止把 daemon/gateway 默认空 pipeline 写为 ready |
+| D R3 P1 安全治理 | 045 → 046 / 047 → 048 | config 投影先固定治理视图；HMAC ownership 与 policy evaluator 可并行；observability 在主链和 policy seam 稳定后接入 | 安全治理不应晚于集成 Gate，否则 query/cancel、override、policy failure 的证据会返工 |
+| E R4 集成矩阵 | 049 | 049 汇聚 CLI/daemon、HTTP/gateway、async query/cancel、failure、health、profile、contracts | 034/035 必须从计划文档变成真实 integration test，不再用 ping 或抽象接口 smoke 代替主链 |
+| F R5 文档与 P2 硬化 | 050 → 051 | 050 先校准 deliverables、旧报告和 worklog；051 在 release candidate 前完成或记录残余风险 | 036 的 Gate 回写以 039~049 的实际证据为准，P2 不阻断 P0 修复但阻断 release polish |
 
 ### 7.2 必过门禁表
 
 | Gate ID | 对应设计或约束 | 通过条件 | 关联任务 |
 |---|---|---|---|
-| ACC-GATE-01 | 拓扑门 | `tests/unit/access`、`tests/integration/access` 已接入，`ctest -N` 可发现 Access tests | 006、031、034 |
-| ACC-GATE-02 | 边界门 | access 代码不直接依赖 `cognition/llm/tools/services/memory/knowledge` 实现头文件，且不把 sidecar 写入 contracts | 001、019、020、035 |
-| ACC-GATE-03 | contracts 一致性门 | `AgentRequest` / `AgentResult` / `IdentityMetadata` 相关 contract tests 全绿 | 019、035 |
-| ACC-GATE-04 | Admission fail-closed 门 | auth failed、policy backend failure、queue full、idempotency conflict 四类场景都拒绝且不进入 runtime | 015、016、017、032、035 |
-| ACC-GATE-05 | unary smoke 门 | CLI/daemon 或 CLI/HTTP 至少一条同步提交 -> publish 成功链通过 | 024、025、026、029、034 |
-| ACC-GATE-06 | async receipt 安全门 | accepted async、ownership validation、expired/not found/mismatch 路径均可自动验证 | 022、027、033、034 |
-| ACC-GATE-07 | 可观测完整性门 | `access.auth.failed`、`access.policy.denied`、`access.publish.failed` 三类事件字段稳定且可断言 | 023、035 |
-| ACC-GATE-08 | health/readiness 门 | gateway `/health/*` 与 daemon readiness 均二值可测，且健康探针不经过 Admission 主链 | 028、029、035 |
-| ACC-GATE-09 | 本地入口 trust 门 | daemon local trusted 和 simulator deterministic subject 受 profile / allowlist 控制，不越权 | 029、030、033 |
-| ACC-GATE-10 | override 源安全门 | override / diagnostics schema 未冻结前一律 deny-by-default，冻结后仅受控来源可过 | 003、016、035 |
-| ACC-GATE-11 | stream 延后门 | shared streaming lifecycle 未冻结前，WS/MQTT/stream 仅占位、feature flag default-off，并统一回退到 async receipt + poll，不出现在 v1 ready 结论中 | 005、035 |
-| ACC-GATE-12 | profile 投影门 | Access 对 `runtime_budget.*`、`timeout_policy.*`、`ops_policy.*`、`infra.security_policy.*` 的投影在至少两档 profile 下行为稳定 | 012、035 |
-| ACC-GATE-13 | 本地控制面链路门 | CLI target 不 direct link runtime，CLI 请求经 IIPC/UDS 进入 daemon/access 主链 | 025、029、037、038、034 |
+| ACC-GATE-01 | 拓扑门 | `tests/unit/access`、`tests/integration/access` 已接入，`ctest -N` 可发现 Access tests，且 `dasall_access_tests` clean build 可运行 | 006、031、034、039、049 |
+| ACC-GATE-02 | 边界门 | access 代码不直接依赖 `cognition/llm/tools/services/memory/knowledge` 实现头文件，且不把 sidecar 写入 contracts | 001、019、020、035、040、041、047 |
+| ACC-GATE-03 | contracts 一致性门 | `AgentRequest` / `AgentResult` / `IdentityMetadata` 相关 contract tests 全绿，RuntimeBridge 收到的是 normalizer 投影出的 `AgentRequest` | 019、035、040、049 |
+| ACC-GATE-04 | Admission fail-closed 门 | auth failed、policy backend failure、queue full、idempotency conflict 四类场景都拒绝且不进入 runtime | 015、016、017、032、035、041、047、049 |
+| ACC-GATE-05 | unary smoke 门 | CLI/daemon 或 CLI/HTTP 至少一条同步提交 -> production pipeline -> runtime mock -> publish 成功链通过 | 024、025、026、029、034、041、042、044、049 |
+| ACC-GATE-06 | async receipt 安全门 | accepted async、ownership validation、query、cancel、expired/not found/mismatch 路径均可自动验证 | 022、027、033、034、043、046、049 |
+| ACC-GATE-07 | 可观测完整性门 | `access.auth.failed`、`access.policy.denied`、`access.publish.failed` 三类事件在真实主链字段稳定且可断言 | 023、035、048、049 |
+| ACC-GATE-08 | health/readiness 门 | gateway `/health/*` 与 daemon readiness 均二值可测，健康探针不经过 Admission 主链，readiness 反映真实依赖 | 028、029、035、042、049 |
+| ACC-GATE-09 | 本地入口 trust 门 | daemon local trusted 和 simulator deterministic subject 受 profile / allowlist 控制，不越权且不绕过 Admission | 029、030、033、042、049 |
+| ACC-GATE-10 | override 源安全门 | override / diagnostics schema 未冻结前一律 deny-by-default，冻结后仅受控来源可过，并发 audit/metric anchor | 003、016、035、047、048、049 |
+| ACC-GATE-11 | stream 延后门 | shared streaming lifecycle 未冻结前，WS/MQTT/stream 仅占位、feature flag default-off，并统一回退到 async receipt + poll，不出现在 v1 ready 结论中 | 005、035、049、050 |
+| ACC-GATE-12 | profile 投影门 | Access 对 `runtime_budget.*`、`timeout_policy.*`、`ops_policy.*`、`infra.security_policy.*` 的投影在至少两档 profile 下行为稳定 | 012、035、045、049 |
+| ACC-GATE-13 | 本地控制面链路门 | CLI target 不 direct link runtime，CLI 请求经 IIPC/UDS 进入 daemon/access 主链 | 025、029、037、038、034、042、049 |
+| ACC-GATE-14 | production pipeline 门 | `AccessGateway::init()` 缺 resolver/auth/policy/admission/normalizer/runtime/publisher 等 P0 依赖时 fail-closed，默认空 pipeline 不能 Ready | 039、041、042、049 |
+| ACC-GATE-15 | 交付证据门 | TODO、deliverables、worklog 与最新 clean build / integration / contract 证据一致，旧 Build-Ready 结论已校准 | 039、049、050、051 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -290,6 +332,9 @@
 | ACC-BLK-005 | 已收口（2026-04-23）：ACC-TODO-005 已将 Access 侧 streaming 路径固定为 `ACC-GATE-11` 延后 Gate；在 runtime / llm / contracts 冻结 stream attach/reconnect/replay cursor 前，StreamGateway / WS / MQTT 仅允许 feature flag default-off + async receipt/poll fallback | 035、后续 stream tasks | runtime / llm / contracts 对 stream attach/reconnect/replay cursor 达成冻结结论，并形成可执行 listener / replay 测试入口 | StreamGateway / WS / MQTT 不进入 v1 Build-ready 任务；若需要断线恢复，统一回到 receipt/query/poll |
 | ACC-BLK-006 | 详设 12.2-6 | ownership token 的 HMAC secret 轮换和多实例同步方案未定义 | 022、027、033 | deployment secret 管理与 constant-time compare 规则固定 | v1 先按单实例 / 部署静态 secret 实现，规模化结论不外推 |
 | ACC-BLK-007 | 已解阻（2026-04-23）：platform 已冻结并实现 `IIPC::describe_peer()`，access 已落盘 `LocalPeerUidFact` 与 `DaemonProtocolAdapter` 输入接缝 | 029、033、037 | 无；后续仅需在 029/033 中基于该输入补齐 daemon local trusted 行为测试与入口接线 | 证据回链到 `platform/include/IIPC.h`、`platform/src/linux/UnixIpcProvider.cpp`、`access/src/daemon/DaemonProtocolAdapter.cpp` 与 [docs/todos/access/deliverables/ACC-TODO-037-IIPC-peer-identity接缝与LocalPeerUidFact输入收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-037-IIPC-peer-identity接缝与LocalPeerUidFact输入收敛.md) | 若后续实现绕过 `describe_peer()` 输入或在 peer identity 缺失时默认放行 local trusted，则重新转为 Blocked |
+| ACC-BLK-008 | 交付评审 P0-1/P0-3 | 当前 production path 仍存在“normalizer 生成 `AgentRequest`，但 RuntimeBridge public seam 未承载”的断裂，且 `AccessGateway` 默认空 pipeline 可进入 Ready | 034、036、040、041、042、049 | ACC-TODO-040 和 ACC-TODO-041 完成，且 `AccessGatewayProductionPipelineTest`、`RuntimeBridgeAgentRequestHandoffTest` 通过 | 禁止将 Access v1 标记为 Build-Ready；daemon/gateway 只能使用显式 mock pipeline 做测试 profile，不得冒充生产链路 |
+| ACC-BLK-009 | 已解阻（2026-04-24）：Access clean rebuild 与聚合测试门已由 ACC-TODO-039 闭合，`dasall_access_tests` 构建并运行 `ctest -L access` 62/62 通过 | 034、035、036、039、049、050 | 无；后续 034/035/036 仍需由 049/050 推进为真实端到端证据 | 证据回链到 `tests/CMakeLists.txt`、`tests/unit/access/CMakeLists.txt`、`tests/integration/access/CMakeLists.txt` 与 [docs/todos/access/deliverables/ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md) | 旧二进制证据不再采信；Access v1 release gate 仍需 ACC-TODO-040/041/049 闭合 production pipeline、AgentRequest handoff 与端到端矩阵 |
+| ACC-BLK-010 | 交付评审 P1-2/P1-3/P1-4 | ownership token、policy evaluator、observability 仍未接生产级安全治理闭环 | 043、046、047、048、049 | ACC-TODO-046、047、048 完成，并在 049 集成矩阵中覆盖 owner mismatch、policy backend unavailable 与关键审计事件 | async receipt/query/cancel 只能作为功能路径验证，不得外推为安全可交付 |
 
 ### 8.1 Blocker 校准记录
 
@@ -302,6 +347,9 @@
 | ACC-BLK-005 | 中风险 | 否；005 已完成延后 Gate 收口，但仍阻断 stream / WS / MQTT ready 宣称 | 只能保留 feature flag default-off + async/poll fallback 结论 |
 | ACC-BLK-006 | 中风险 | 否，但阻断规模化 receipt 结论 | 单实例实现可继续 |
 | ACC-BLK-007 | 已解阻 | 否；已从设计阻塞转为实现接线事项 | peer identity seam 已冻结，后续关注 029/033 的行为覆盖完整性 |
+| ACC-BLK-008 | 高风险 | 是 | 这是 2026-04-24 评审中最核心的 production pipeline blocker |
+| ACC-BLK-009 | 已解阻 | 否；clean rebuild 与 Access 聚合测试门已闭合 | 后续风险转入 ACC-TODO-049/050：仍需端到端 integration evidence 与交付证据校准 |
+| ACC-BLK-010 | 中风险 | 否，但阻断安全可交付结论 | P0 主链可先修复，最终 v1 需要 046~048 与 049 一并闭合 |
 
 ## 9. 验收与质量门
 
@@ -309,17 +357,17 @@
 
 | 测试层级 | 覆盖范围 | 关键用例 | 目标 |
 |---|---|---|---|
-| unit | public surface、identity/auth/policy/admission、validator、normalizer、bridge、publisher、async registry、replay cache、health、local entry adapters | `AccessInterfaceSurfaceTest`、`AccessGatewayLifecycleTest`、`SubjectResolverTest`、`AccessPolicyGateTest`、`AdmissionControllerTest`、`RequestNormalizerTest`、`RuntimeBridgeTest`、`ResultPublisherTest`、`AsyncTaskRegistryOwnershipTest`、`DaemonProtocolAdapterLocalTrustedTest` | 组件职责、失败原因码、sidecar 边界、fail-closed 行为可二值验证 |
+| unit | public surface、identity/auth/policy/admission、validator、normalizer、bridge、publisher、async registry、replay cache、health、local entry adapters、production pipeline dependency validation | `AccessInterfaceSurfaceTest`、`AccessGatewayLifecycleTest`、`SubjectResolverTest`、`AccessPolicyGateTest`、`AdmissionControllerTest`、`RequestNormalizerTest`、`RuntimeBridgeAgentRequestHandoffTest`、`ResultPublisherTest`、`AsyncTaskRegistryHmacOwnershipTest`、`DaemonProtocolAdapterLocalTrustedTest`、`AccessGatewayDependencyValidationTest` | 组件职责、失败原因码、sidecar 边界、fail-closed、HMAC ownership、pipeline 完整性可二值验证 |
 | contract | `AgentRequest`、`AgentResult`、`IdentityMetadata` 不被 Access 污染 | `AgentRequestContractTest`、`AgentRequestFieldContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest` | 确保 Access 不把主体/认证/回执细节挤入 shared contracts |
-| integration | CLI/daemon（默认）与 HTTP（可选）unary、async receipt/query、failure/observability、health/probe、profile | `CliDaemonSmokeIntegrationTest`、`AccessAsyncReceiptIntegrationTest`、`AccessAdmissionFailureIntegrationTest`、`AccessObservabilityIntegrationTest`、`AccessHealthProbeIntegrationTest`、`AccessProfileCompatibilityTest` | 验证 Access 进入核心链路后的最小端到端行为 |
+| integration | CLI/daemon（默认）与 HTTP（可选）unary、async receipt/query/cancel、failure/observability、health/probe、profile、production pipeline | `AccessGatewayPipelineIntegrationTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessAdmissionFailureIntegrationTest`、`AccessObservabilityMainChainIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest` | 验证 Access 进入核心链路后的最小端到端行为 |
 | failure injection | secret backend failure、policy backend failure、queue full、channel unavailable、owner mismatch | `AuthenticatorChainSecretFailureTest`、`AccessPolicyBackendFailureTest`、`AdmissionReplayHitTest`、`ResultPublisherChannelFailureTest`、`AccessAdmissionFailureIntegrationTest` | 验证 fail-closed、fallback 与 evidence gap 可见 |
 | 延后 Gate | stream / WS / MQTT | Gate frozen only | 防止未冻结能力被错误标记为 ready |
 
 ### 9.2 统一验收命令建议
 
-1. 核心 build + unit：`cmake --build build-ci --target dasall_access dasall_daemon dasall_cli dasall_platform dasall_unit_tests && ctest --test-dir build-ci -R "Access|CliIpcClient|HttpProtocolAdapter|DaemonProtocolAdapter|UnixIpcProviderPeerIdentity|SimulatorProtocolAdapter" --output-on-failure`
-2. contracts + integration：`cmake --build build-ci --target dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -R "CliDaemonSmokeIntegrationTest|AccessAsyncReceiptIntegrationTest|AccessAdmissionFailureIntegrationTest|AccessObservabilityIntegrationTest|AccessHealthProbeIntegrationTest|AccessProfileCompatibilityTest|AgentRequestContractTest|AgentResultContractTest|IdentityMetadataContractTest" --output-on-failure`
-3. discoverability：`ctest --test-dir build-ci -N | rg "Access"`
+1. 核心 clean build + Access 聚合：`cmake --build build-ci --target dasall_access dasall_access_tests && ctest --test-dir build-ci -L access --output-on-failure`
+2. contracts + integration：`cmake --build build-ci --target dasall_contract_tests dasall_access_tests && ctest --test-dir build-ci -R "AccessGatewayPipelineIntegrationTest|CliDaemonSubmitIntegrationTest|HttpGatewaySubmitIntegrationTest|AccessAsyncReceiptQueryCancelIntegrationTest|AccessPolicyBackendUnavailableIntegrationTest|AccessObservabilityMainChainIntegrationTest|AccessHealthReadinessIntegrationTest|AccessProfileCompatibilityTest|AgentRequestContractTest|AgentResultContractTest|IdentityMetadataContractTest" --output-on-failure`
+3. discoverability：`ctest --test-dir build-ci -N` 后确认 Access unit/integration 与 `dasall_access_tests` 目标存在。
 
 ### 9.3 质量门清单
 
@@ -338,6 +386,8 @@
 | ACC-GATE-11 | stream deferral | stream / WS / MQTT 未被冻结时不被写成 ready | 纠正文档 / 回退任务状态 |
 | ACC-GATE-12 | profile projection | 两档以上 profile 下 runtime budget / timeout / security 投影行为稳定 | 阻断 profile ready 结论 |
 | ACC-GATE-13 | 本地控制面链路 | CLI 不 direct link runtime，请求经 IIPC/UDS 进入 daemon/access 主链 | 阻断 CLI/daemon ready 结论 |
+| ACC-GATE-14 | production pipeline | `AccessGateway` 缺 P0 依赖时 fail-closed，生产 submit 串联完整 pipeline | 阻断 Access v1 release gate |
+| ACC-GATE-15 | 交付证据 | clean build、unit、integration、contract、deliverables、worklog 证据一致 | 阻断 Build-Ready / Release-Ready 文档结论 |
 
 ## 10. 风险与回退策略
 
@@ -353,6 +403,10 @@
 | ACC-R06 | 详设 3.3 主体信息缺口 | `actor_ref` / `ownership_token` 设计不稳，导致 query/cancel 泄露 | ownership token 规则或 local trusted 口径漂移 | 回退到 receipt query 只返回 not authorized / not found，阻断 async ready 结论 |
 | ACC-R07 | 详设 12.2 transport 选型 | gateway transport 过早绑定，后续线程模型返工 | 先写实现后补选型 | 保持 HTTP-only 最小实现，冻结 transport 后再扩张 |
 | ACC-R08 | 详设 10.3 stream 过早推进 | 在 shared lifecycle 未冻结前硬上 stream / WS / MQTT | 把 feature flag 当默认开启 | 回退到 async receipt + poll fallback，不再宣称 stream ready |
+| ACC-R09 | 交付评审 P0-1 | `AccessGateway` 仍是函数注入 facade，production pipeline 未装配 | 默认构造即可 Ready，或 daemon/gateway 用空 pipeline | 阻断 release gate，回退到 ACC-TODO-041/042 修复依赖完整性 |
+| ACC-R10 | 交付评审 P0-3 | `AgentRequest` 未进入 RuntimeBridge public handoff | normalizer 单测通过但 runtime mock 收不到 shared request | 回退到 ACC-TODO-040，先冻结 handoff 再继续集成 |
+| ACC-R11 | 交付评审 P0-2 | stale binary 掩盖 clean rebuild 失败 | 只运行旧 ctest，不重新构建 Access 测试目标 | 回退到 ACC-TODO-039，未闭合前所有 release 证据标记 Pending |
+| ACC-R12 | 交付评审 P1-2 | ownership token 使用 `std::hash` 或默认静态 secret | async receipt 开放 query/cancel 前未完成 HMAC | 回退到 fail-closed 或禁用 async receipt，直到 ACC-TODO-046 完成 |
 
 ### 10.2 回退策略
 
@@ -361,6 +415,8 @@
 3. 若 ownership token 规模化方案未冻结，回退策略是单实例 / 静态 deployment secret 版本，并在 TODO 与 Gate 结论中明确“不外推多实例 ready”。
 4. 若 override / diagnostics schema 未冻结，回退策略是入口 deny-by-default + audit，不提供任何灰色开关绕过。
 5. 若 stream / WS / MQTT 设计冻结继续延后，回退策略是保留 feature flag default-off 与延后 Gate 状态，统一回落到 async receipt + poll。
+6. 若 production pipeline 或 `AgentRequest` handoff 未完成，回退策略是保留组件级 Done 证据，但 release gate 保持 Not Ready，不允许 daemon/gateway 标记 ready。
+7. 若 clean rebuild 未闭合，回退策略是停止引用旧 ctest 结果，先完成 `dasall_access_tests` 聚合目标与 `ctest -L access`。
 
 ## 11. 可行性结论
 
@@ -368,17 +424,18 @@
 
 可以，但不是无条件全量执行。
 
-当前可直接进入执行的范围是：ACC-TODO-001~005、006~034、037、038。ACC-TODO-035 仍受外部 shared streaming lifecycle 冻结约束，ACC-TODO-036 必须沿用 005 已冻结的延后 Gate 口径，不能把 stream / WS / MQTT 写成 Done-ready Build 结论。默认先落地 CLI -> IIPC/UDS -> daemon -> access 主链，再按已冻结的 HTTP-only 边界并行推进 gateway。
+当前可直接进入执行的范围是：ACC-TODO-039~044 作为 P0 整改主线必须最先推进；ACC-TODO-045~048 作为 P1 安全治理与生产化治理并行跟进；ACC-TODO-049~051 负责 integration Gate、证据回写和 P2 硬化。001~038 保留为历史基础和前置依赖，不再作为 Access v1 可交付的最终证据。ACC-TODO-035/036 必须沿用 005 已冻结的延后 Gate 口径，不能把 stream / WS / MQTT 写成 Done-ready Build 结论。
 
 ### 11.2 当前可落到的最细粒度
 
 1. L3：public surface、supporting types、错误码、RequestValidator、RequestNormalizer、AdmissionController、AccessPolicyGate、ResultPublisher、AsyncTaskRegistry。
-2. L2：ProtocolAdapterRegistry、RuntimeBridge、AccessConfigAdapter、AccessObservabilityBridge、CLI/HTTP/daemon/simulator adapters、AccessGateway。
+2. L2：ProtocolAdapterRegistry、RuntimeBridge、AccessConfigAdapter、AccessObservabilityBridge、CLI/HTTP/daemon/simulator adapters、AccessGateway、AccessGateway production pipeline、Access integration gate matrix。
 3. L1 / 延后 Gate：StreamGateway、WS/MQTT adapters。
 
 ### 11.3 后续建议
 
-1. 先完成 001 / 002 / 003 / 004 / 005 和 006~012、037、038，保证 Access surface、override/diagnostics gate、gateway HTTP-only 边界、stream 延后 Gate、discoverability、peer identity seam 与 CLI 依赖方向不再漂移。
-2. 然后按 `SubjectResolver -> AuthenticatorChain -> AccessPolicyGate -> AdmissionController -> RequestValidator -> RequestNormalizer -> RuntimeBridge -> ResultPublisher -> AsyncTaskRegistry -> AccessGateway` 的顺序推进主链。
-3. 先打通 CLI/daemon 本地控制面主链，再按 HTTP-only 边界并行打开 gateway 与 simulator；stream / WS / MQTT 保持延后 Gate + feature flag default-off，直到外部边界冻结。
-4. 所有 Gate 结论必须在 ACC-TODO-036 回写到 TODO / deliverables / worklog，严禁用 build liveness 或 placeholder main 冒充 Access ready。
+1. 先完成 ACC-TODO-039，确保 Access 测试 clean rebuild、聚合目标和 `ctest -L access` 可重复通过。
+2. 然后按 `RuntimeBridge AgentRequest handoff -> AccessGateway production pipeline -> daemon/gateway composition root -> async query/cancel -> HTTP structured decode` 的顺序推进 ACC-TODO-040~044。
+3. P0 主链稳定后并行推进 ACC-TODO-045~048，把 config/profile、HMAC ownership、infra/policy 与 observability 接入真实主链。
+4. 最后用 ACC-TODO-049~051 收口 integration Gate、deliverables/worklog 证据和 P2 工程硬化；stream / WS / MQTT 保持延后 Gate + feature flag default-off，直到外部边界冻结。
+5. 所有 Gate 结论必须在 ACC-TODO-036 和 ACC-TODO-050 回写到 TODO / deliverables / worklog，严禁用 build liveness、placeholder main、abstract interface smoke 或 IPC ping 冒充 Access ready。

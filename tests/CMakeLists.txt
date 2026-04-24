@@ -18,6 +18,13 @@ add_custom_target(dasall_integration_tests
   DEPENDS ${DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 )
 
+add_custom_target(dasall_access_tests
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L access
+  DEPENDS
+    dasall_access_unit_tests
+    dasall_access_integration_tests
+)
+
 add_custom_target(dasall_wp04_contract_gate
   COMMAND ${CMAKE_COMMAND} -E env
     BUILD_DIR=${CMAKE_BINARY_DIR}

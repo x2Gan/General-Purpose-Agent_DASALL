@@ -14,8 +14,15 @@ void access_smoke_topology_is_discoverable() {
   const dasall::access::PublishEnvelope envelope{
       .request_id = "req-001",
       .result_id = "result-001",
-      .payload = "{\"status\":\"ok\"}",
+      .session_id = "session-001",
+      .trace_id = "trace-001",
+      .channel_ref = "channel://cli/local",
       .protocol_kind = "cli",
+      .agent_result = {},
+      .protocol_status_hint = "200",
+      .protocol_metadata = "{}",
+      .is_final = true,
+      .payload = "{\"status\":\"ok\"}",
   };
 
   dasall::tests::support::assert_equal(

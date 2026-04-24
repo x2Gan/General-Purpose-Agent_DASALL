@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #465
+
+- 日期：2026-04-24
+- 阶段：access/P0 交付评审整改
+- 任务：ACC-TODO-039 闭合 Access clean rebuild 与聚合测试门
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-039 是交付评审 P0-2 / R0 的第一项整改任务，前置依赖 006、031、032、033 均已 Done。
+2. ACC-BLK-009 的解阻条件正是完成 `dasall_access_tests` clean build 与 `ctest -L access`，因此本轮只处理 Access 测试聚合与 clean rebuild。
+3. 本轮不扩展 production pipeline、`AgentRequest` handoff 或端到端 integration 矩阵，这些继续由 040、041、049 承接。
+
+### 改动
+
+1. 新增 `dasall_access_unit_tests` 与 `dasall_access_integration_tests` 子聚合目标。
+2. 新增顶层 `dasall_access_tests`，构建 Access unit/integration 后运行 `ctest -L access`。
+3. 修复 `AccessGatewaySmokeIntegrationTest.cpp` 中 `PublishEnvelope` C++20 designated initializer 字段顺序。
+4. 新增交付物文档 `docs/todos/access/deliverables/ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md`。
+5. 更新 Access 专项 TODO：ACC-TODO-039 标记 Done，ACC-BLK-009 标记已解阻。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_access_tests --clean-first`
+   - 结果：通过；清理 837 个既有构建产物后重新构建 Access 聚合目标，并运行 62 个 `access` 标签测试，62/62 通过。
+2. `ctest --test-dir build-ci -L access --output-on-failure`
+   - 结果：通过；62/62 通过。
+3. `ctest --test-dir build-ci -N`
+   - 结果：退出码 0，可发现全仓 691 个测试；非 Access 历史测试仍会提示缺可执行文件。
+4. `ctest --test-dir build-ci -N -L access`
+   - 结果：通过；可发现 62 个 Access unit/integration 测试。
+
+### 结果
+
+1. ACC-TODO-039 已完成，Access clean rebuild 不再依赖 stale binary。
+2. `dasall_access_tests` 成为后续 040~049 的统一 Access Gate 入口。
+3. ACC-BLK-009 在 Access 侧已解阻，但 Access v1 release gate 仍需 040、041、049 继续闭合 production pipeline、`AgentRequest` handoff 与端到端证据矩阵。
+
+### 下一步
+
+1. 进入 ACC-TODO-040：修复 RuntimeBridge handoff，使 `RuntimeDispatchRequest` 承载 `AgentRequest`。
+2. 随后推进 ACC-TODO-041：实现 AccessGateway production pipeline 与依赖完整性校验。
+
 ## 记录 #464
 
 - 日期：2026-04-24
