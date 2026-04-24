@@ -547,6 +547,34 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_http_security_headers_unit_test
 )
 
+# ACC-TODO-027: AccessTaskQueryHandlerTest
+add_executable(dasall_access_task_query_handler_unit_test
+  AccessTaskQueryHandlerTest.cpp
+  ../../../apps/gateway/src/TaskQueryHandler.cpp
+)
+
+target_include_directories(dasall_access_task_query_handler_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+    ../../../access/src
+)
+
+target_link_libraries(dasall_access_task_query_handler_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_task_query_handler_unit_test)
+
+add_test(NAME AccessTaskQueryHandlerTest
+  COMMAND dasall_access_task_query_handler_unit_test)
+set_tests_properties(AccessTaskQueryHandlerTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_task_query_handler_unit_test
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
