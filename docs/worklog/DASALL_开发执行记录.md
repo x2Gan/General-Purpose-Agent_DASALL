@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #453
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-016 实现 AccessPolicyGate
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-016 位于认证链之后、Admission 之前，是 access fail-closed 门禁的核心段；若不先落政策门，017/018 的准入与校验都会失去稳定前置条件。
+2. 本轮最小判别点是：submit、task query、override 三条路径能否在 policy backend 不可用或来源事实不完整时明确拒绝，而不是默认放行。
+3. ACC-BLK-003 已解阻，因此 override 准入可直接按已冻结 schema 落地，不需要新增 blocker 修复任务。
+
+### 改动
+
+1. 新增 `access/src/AccessPolicyGate.h` 与 `access/src/AccessPolicyGate.cpp`：
+   - 落盘 `OperationTargetView`、`OverrideSourceFact`、`PolicyBackendSnapshot`、`AccessPolicyEvaluationInput`、`AccessPolicyEvaluationResult`；
+   - 实现 `evaluate_submit()`、`evaluate_task_query()`、`evaluate_override_request()`、`build_query_context()`、`map_policy_result()`；
+   - 固定未认证、policy backend 不可用、override 来源非法等路径为 fail-closed。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/AccessPolicyGate.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/AccessPolicyGateTest.cpp`、`AccessPolicyOverrideGateTest.cpp`、`AccessPolicyBackendFailureTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`：
+   - 覆盖 submit allow/deny、override source invalid/require confirmation、backend unavailable。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-016-AccessPolicyGate收敛.md`：
+   - 收口边界、数据模型、流程、决策规则、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-016 标记为 Done，并补交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_policy_gate_unit_test`、`dasall_access_policy_override_gate_unit_test`、`dasall_access_policy_backend_failure_unit_test`。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "AccessPolicy(GateTest|OverrideGateTest|BackendFailureTest)" --output-on-failure`
+   - 结果：100% tests passed，3/3 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "AccessPolicy(GateTest|OverrideGateTest|BackendFailureTest)"`
+   - 结果：3 个 AccessPolicyGate 测试均可发现。
+
+### 结果
+
+1. ACC-TODO-016 已完成，access 主链具备独立且 fail-closed 的策略门，不再把授权判定散落到入口壳层或 Admission 组件。
+2. override 高风险入口已绑定来源与结构完整性校验，未满足条件时统一拒绝并保留明确 reason。
+3. 本任务保持 module-local 边界，没有把 policy backend 具体实现或私有证据写入公共 ABI。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-017，实现 AdmissionController 并打通 busy/conflict/replay-hit/admit 四类准入路径。
+
+### 风险
+
+1. 当前 `PolicyBackendSnapshot` 是 v1 抽象输入；后续对接真实 infra/policy 时需保持 evaluate_* 接口和 fail-closed 语义稳定，避免引入默认放行分支。
+
 ## 记录 #452
 
 - 日期：2026-04-23
