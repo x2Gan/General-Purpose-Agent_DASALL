@@ -492,6 +492,61 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_http_protocol_adapter_error_mapping_unit_test
 )
 
+
+# ACC-TODO-028: AccessHealthProbeHandlerTest
+add_executable(dasall_access_health_probe_handler_unit_test
+  AccessHealthProbeHandlerTest.cpp
+  ../../../apps/gateway/src/HealthProbeHandler.cpp
+)
+
+target_include_directories(dasall_access_health_probe_handler_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_health_probe_handler_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_health_probe_handler_unit_test)
+
+add_test(NAME AccessHealthProbeHandlerTest
+  COMMAND dasall_access_health_probe_handler_unit_test)
+set_tests_properties(AccessHealthProbeHandlerTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_health_probe_handler_unit_test
+)
+
+# ACC-TODO-028: AccessHttpSecurityHeadersTest
+add_executable(dasall_access_http_security_headers_unit_test
+  AccessHttpSecurityHeadersTest.cpp
+  ../../../apps/gateway/src/HealthProbeHandler.cpp
+)
+
+target_include_directories(dasall_access_http_security_headers_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_http_security_headers_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_http_security_headers_unit_test)
+
+add_test(NAME AccessHttpSecurityHeadersTest
+  COMMAND dasall_access_http_security_headers_unit_test)
+set_tests_properties(AccessHttpSecurityHeadersTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_http_security_headers_unit_test
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()

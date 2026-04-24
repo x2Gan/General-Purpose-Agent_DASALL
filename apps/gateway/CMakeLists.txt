@@ -6,6 +6,7 @@
 add_executable(dasall_gateway
   src/main.cpp
   src/HttpProtocolAdapter.cpp
+    src/HealthProbeHandler.cpp
 )
 
 target_compile_features(dasall_gateway PRIVATE cxx_std_20)
