@@ -1,114 +1,95 @@
 #include <chrono>
 #include <exception>
 #include <iostream>
-#include <memory>
+#include <thread>
 
-#include "AccessTypes.h"
-#include "IAccessGateway.h"
+#include "AccessGateway.h"
 #include "support/TestAssertions.h"
 
 namespace {
 
 using dasall::access::AccessGatewayState;
-using dasall::access::IAccessGateway;
+using dasall::access::AccessGateway;
 using dasall::access::InboundPacket;
 using dasall::access::PublishEnvelope;
 using dasall::access::RuntimeDispatchResult;
 using dasall::access::AccessDisposition;
 
-// 简单的模拟实现用于验证接口与生命周期语义
-class MockAccessGateway : public IAccessGateway {
- public:
-  MockAccessGateway() : current_state_(AccessGatewayState::Uninitialized) {}
-
-  bool init() override {
-    current_state_ = AccessGatewayState::Initializing;
-    current_state_ = AccessGatewayState::Ready;
-    return true;
-  }
-
-  RuntimeDispatchResult submit(const InboundPacket& /*packet*/) override {
-    RuntimeDispatchResult result;
-    result.disposition = AccessDisposition::Rejected;
-    return result;
-  }
-
-  bool publish_result(const PublishEnvelope& /*envelope*/) override {
-    return true;
-  }
-
-  AccessGatewayState state() const override { return current_state_; }
-
-  bool is_ready() const override {
-    return current_state_ == AccessGatewayState::Ready;
-  }
-
-  void shutdown(std::chrono::milliseconds /*drain_timeout*/) override {
-    current_state_ = AccessGatewayState::Draining;
-    current_state_ = AccessGatewayState::ShutDown;
-  }
-
- private:
-  mutable AccessGatewayState current_state_;
-};
-
 void gateway_lifecycle_state_transitions_work() {
-  auto gateway = std::make_unique<MockAccessGateway>();
+  AccessGateway gateway(
+      [](const InboundPacket&) {
+        RuntimeDispatchResult result;
+        result.disposition = AccessDisposition::Completed;
+        return result;
+      },
+      [](const PublishEnvelope&) {
+        return true;
+      });
 
   // 初始状态应该是 Uninitialized
   dasall::tests::support::assert_equal(
       static_cast<int>(AccessGatewayState::Uninitialized),
-      static_cast<int>(gateway->state()),
+      static_cast<int>(gateway.state()),
       "initial state should be Uninitialized");
   dasall::tests::support::assert_true(
-      !gateway->is_ready(),
+      !gateway.is_ready(),
       "is_ready() should be false in Uninitialized state");
 
   // 调用 init() 后应该进入 Ready 状态
-  gateway->init();
+  dasall::tests::support::assert_true(
+      gateway.init(),
+      "init should succeed when gateway is uninitialized");
   dasall::tests::support::assert_equal(
       static_cast<int>(AccessGatewayState::Ready),
-      static_cast<int>(gateway->state()),
+      static_cast<int>(gateway.state()),
       "state should be Ready after init()");
   dasall::tests::support::assert_true(
-      gateway->is_ready(),
+      gateway.is_ready(),
       "is_ready() should be true in Ready state");
 
   // 调用 shutdown() 应该过渡到 Draining 再到 ShutDown
-  gateway->shutdown(std::chrono::milliseconds(1000));
+  gateway.shutdown(std::chrono::milliseconds(1000));
   dasall::tests::support::assert_equal(
       static_cast<int>(AccessGatewayState::ShutDown),
-      static_cast<int>(gateway->state()),
+      static_cast<int>(gateway.state()),
       "state should be ShutDown after shutdown()");
   dasall::tests::support::assert_true(
-      !gateway->is_ready(),
+      !gateway.is_ready(),
       "is_ready() should be false in ShutDown state");
 }
 
 void gateway_is_ready_is_binary_judgment() {
-  auto gateway = std::make_unique<MockAccessGateway>();
+  AccessGateway gateway(
+      [](const InboundPacket&) {
+        RuntimeDispatchResult result;
+        result.disposition = AccessDisposition::Completed;
+        return result;
+      },
+      {});
 
   // is_ready() 只在 Ready 状态为 true，其他所有状态为 false
   dasall::tests::support::assert_true(
-      !gateway->is_ready(),
+      !gateway.is_ready(),
       "is_ready() should be false for Uninitialized");
 
-  gateway->init();
   dasall::tests::support::assert_true(
-      gateway->is_ready(),
+      gateway.init(),
+      "init should succeed before ready-state check");
+  dasall::tests::support::assert_true(
+      gateway.is_ready(),
       "is_ready() should be true for Ready");
 
-  gateway->shutdown(std::chrono::milliseconds(1000));
+  gateway.shutdown(std::chrono::milliseconds(1000));
   dasall::tests::support::assert_true(
-      !gateway->is_ready(),
+      !gateway.is_ready(),
       "is_ready() should be false for ShutDown");
 }
 
 void gateway_state_const_method_is_safe() {
-  auto gateway = std::make_unique<MockAccessGateway>();
+  AccessGateway gateway;
 
   // state() 和 is_ready() 都是 const 方法，可以在 const 上下文中调用
-  const IAccessGateway& const_gateway = *gateway;
+  const AccessGateway& const_gateway = gateway;
 
   AccessGatewayState state = const_gateway.state();
   bool is_ready = const_gateway.is_ready();
@@ -123,16 +104,39 @@ void gateway_state_const_method_is_safe() {
 }
 
 void gateway_shutdown_timeout_parameter_accepted() {
-  auto gateway = std::make_unique<MockAccessGateway>();
-  gateway->init();
+  AccessGateway gateway(
+      [](const InboundPacket&) {
+        // 模拟短暂 in-flight 请求，验证 shutdown 会等待/超时后结束。
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        RuntimeDispatchResult result;
+        result.disposition = AccessDisposition::Completed;
+        return result;
+      },
+      {});
+  dasall::tests::support::assert_true(
+      gateway.init(),
+      "init should succeed before shutdown timeout check");
+
+  InboundPacket packet;
+  packet.packet_id = "pkt-024-lifecycle";
+  packet.entry_type = "gateway";
+  packet.protocol_kind = "http";
+
+  std::thread inflight([&gateway, packet]() {
+    (void)gateway.submit(packet);
+  });
 
   // shutdown() 接受 chrono::milliseconds 参数
   std::chrono::milliseconds timeout(5000);
-  gateway->shutdown(timeout);
+  gateway.shutdown(timeout);
+
+  if (inflight.joinable()) {
+    inflight.join();
+  }
 
   dasall::tests::support::assert_equal(
       static_cast<int>(AccessGatewayState::ShutDown),
-      static_cast<int>(gateway->state()),
+      static_cast<int>(gateway.state()),
       "shutdown with timeout parameter should work");
 }
 

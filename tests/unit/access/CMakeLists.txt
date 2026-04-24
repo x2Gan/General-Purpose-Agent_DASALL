@@ -296,6 +296,24 @@ dasall_add_access_unit_test(
   AccessObservabilityFieldSetTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_gateway_facade_unit_test
+  AccessGatewayFacadeTest
+  AccessGatewayFacadeTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_gateway_reject_path_unit_test
+  AccessGatewayRejectPathTest
+  AccessGatewayRejectPathTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_gateway_async_receipt_unit_test
+  AccessGatewayAsyncReceiptTest
+  AccessGatewayAsyncReceiptTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

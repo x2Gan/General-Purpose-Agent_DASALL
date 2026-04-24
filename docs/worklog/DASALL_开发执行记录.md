@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #461
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-024 实现 AccessGateway facade 与优雅关闭
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-024 是 access 主链汇聚点，负责将前序 013~023 组件收敛为统一入口 facade。
+2. 本轮最小判别点是四类路径：submit 主链、reject path、accepted async 回执、drain/shutdown 生命周期。
+3. 024 只实现 facade 编排与生命周期，不扩展 runtime 与 contracts 边界。
+
+### 改动
+
+1. 新增 `access/src/AccessGateway.h` 与 `access/src/AccessGateway.cpp`：
+   - 实现 `IAccessGateway` 全部接口；
+   - 实现 `run_submit_pipeline()`、inflight 计数 guard、drain 条件等待；
+   - 固化非 Ready 状态 reject 语义（`AccessErrorCode::ShuttingDown`）。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/AccessGateway.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/AccessGatewayFacadeTest.cpp`、`AccessGatewayRejectPathTest.cpp`、`AccessGatewayAsyncReceiptTest.cpp`。
+4. 更新 `tests/unit/access/AccessGatewayLifecycleTest.cpp`：
+   - 从 mock 生命周期切换到真实 `AccessGateway` 行为验证。
+5. 更新 `tests/unit/access/CMakeLists.txt`：
+   - 注册 024 新增测试目标。
+6. 新增 `docs/todos/access/deliverables/ACC-TODO-024-AccessGateway-facade与优雅关闭收敛.md`。
+7. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-024 标记为 Done，并补交付物与验证证据。
+
+### 验证
+
+1. 定向构建 + 定向测试：
+   - 命令：`cmake --build /home/gangan/DASALL/build-ci --target dasall_access_gateway_facade_unit_test dasall_access_gateway_reject_path_unit_test dasall_access_gateway_async_receipt_unit_test dasall_access_gateway_lifecycle_unit_test && ctest --test-dir /home/gangan/DASALL/build-ci -R "AccessGateway(FacadeTest|RejectPathTest|AsyncReceiptTest|LifecycleTest)" --output-on-failure`
+   - 结果：100% tests passed，4/4 通过。
+2. 生命周期复验：
+   - 命令：`cmake --build /home/gangan/DASALL/build-ci --target dasall_access_gateway_lifecycle_unit_test && ctest --test-dir /home/gangan/DASALL/build-ci -R "AccessGatewayLifecycleTest" --output-on-failure`
+   - 结果：1/1 通过。
+
+### 结果
+
+1. ACC-TODO-024 已完成，AccessGateway facade 能稳定覆盖 ready/reject/async/drain 主路径。
+2. shutdown 期间新请求拒绝语义和 inflight 排空机制已具备自动化断言。
+3. 为后续 CLI/daemon/gateway 组合根接线提供了统一 `IAccessGateway` concrete 实现。
+
+### 下一步
+
+1. 进入 ACC-TODO-025（CLI 纯客户端组合根）或 ACC-TODO-031/032（测试门收口）。
+
+### 风险
+
+1. 当前 facade 使用函数注入的 submit/publish backend；后续接真实组件时需补充组合根集成测试覆盖。
+
 ## 记录 #460
 
 - 日期：2026-04-24
