@@ -25,6 +25,7 @@ target_sources(dasall_access
   PRIVATE
     src/placeholder.cpp
     src/AccessConfigAdapter.cpp
+    src/AccessObservabilityBridge.cpp
     src/AsyncTaskRegistry.cpp
     src/AdmissionController.cpp
     src/AccessPolicyGate.cpp

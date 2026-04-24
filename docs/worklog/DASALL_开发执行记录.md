@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #460
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-023 实现 AccessObservabilityBridge
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-023 是 024 facade 串联前的观测桥接基础，确保失败路径具备统一字段锚点。
+2. 本轮最小判别点是两类断言：事件发送覆盖五个入口、发布失败事件字段集完整。
+3. 023 仅实现桥接层，不引入 runtime 调用与策略判定。
+
+### 改动
+
+1. 新增 `access/src/AccessObservabilityBridge.h` 与 `access/src/AccessObservabilityBridge.cpp`：
+   - 定义 `AccessObservabilityEvent` 和可注入 `EmitBackend`；
+   - 实现 `emit_request_received()`、`emit_auth_failed()`、`emit_policy_denied()`、`emit_dispatch_result()`、`emit_publish_failed()`；
+   - 明确观测发送失败仅返回 `false`，不抛异常且不改变业务流。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/AccessObservabilityBridge.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/AccessObservabilityBridgeTest.cpp`、`AccessObservabilityFieldSetTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-023-AccessObservabilityBridge收敛.md`。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-023 标记为 Done，并补交付物与验证证据。
+
+### 验证
+
+1. 定向构建 + 定向测试：
+   - 命令：`cmake --build /home/gangan/DASALL/build-ci --target dasall_access_observability_bridge_unit_test dasall_access_observability_field_set_unit_test && ctest --test-dir /home/gangan/DASALL/build-ci -R "AccessObservabilityBridgeTest|AccessObservabilityFieldSetTest" --output-on-failure`
+   - 结果：100% tests passed，2/2 通过。
+
+### 结果
+
+1. ACC-TODO-023 已完成，access 观测桥接已提供统一事件与字段收口。
+2. `access.publish.failed` 路径字段可自动断言，满足后续 integration gate 的字段完整性前置条件。
+3. 桥接失败语义已固定为 no-throw + no-control-flow-change。
+
+### 下一步
+
+1. 进入 ACC-TODO-024，实现 AccessGateway facade 与优雅关闭主链。
+
+### 风险
+
+1. 目前 event sink 为可注入回调；后续接入 infra observability 后需增加桥接稳定性回归测试。
+
 ## 记录 #459
 
 - 日期：2026-04-24
