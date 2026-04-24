@@ -575,6 +575,62 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_task_query_handler_unit_test
 )
 
+# ACC-TODO-030: SimulatorProtocolAdapterTest
+add_executable(dasall_access_simulator_protocol_adapter_unit_test
+  SimulatorProtocolAdapterTest.cpp
+  ../../../apps/simulator/src/SimulatorProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_simulator_protocol_adapter_unit_test
+  PRIVATE
+    ../../../apps/simulator/src
+    ../../../access/src
+)
+
+target_link_libraries(dasall_access_simulator_protocol_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_simulator_protocol_adapter_unit_test)
+
+add_test(NAME SimulatorProtocolAdapterTest
+  COMMAND dasall_access_simulator_protocol_adapter_unit_test)
+set_tests_properties(SimulatorProtocolAdapterTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_simulator_protocol_adapter_unit_test
+)
+
+# ACC-TODO-030: SimulatorProtocolAdapterDeterministicTest
+add_executable(dasall_access_simulator_protocol_adapter_deterministic_unit_test
+  SimulatorProtocolAdapterDeterministicTest.cpp
+  ../../../apps/simulator/src/SimulatorProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_simulator_protocol_adapter_deterministic_unit_test
+  PRIVATE
+    ../../../apps/simulator/src
+    ../../../access/src
+)
+
+target_link_libraries(dasall_access_simulator_protocol_adapter_deterministic_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_simulator_protocol_adapter_deterministic_unit_test)
+
+add_test(NAME SimulatorProtocolAdapterDeterministicTest
+  COMMAND dasall_access_simulator_protocol_adapter_deterministic_unit_test)
+set_tests_properties(SimulatorProtocolAdapterDeterministicTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_simulator_protocol_adapter_deterministic_unit_test
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
