@@ -176,6 +176,24 @@ dasall_add_access_unit_test(
   AdmissionReplayHitTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_request_validator_unit_test
+  RequestValidatorTest
+  RequestValidatorTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_request_validator_payload_limit_unit_test
+  RequestValidatorPayloadLimitTest
+  RequestValidatorPayloadLimitTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_request_validator_injection_unit_test
+  RequestValidatorInjectionTest
+  RequestValidatorInjectionTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

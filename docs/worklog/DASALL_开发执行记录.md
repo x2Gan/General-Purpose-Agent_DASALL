@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #455
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-018 实现 RequestValidator
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-018 位于 admission 与 normalizer 之间，是避免非法输入进入 runtime 的首层 fail-closed 关口。
+2. 本轮最小判别点是三段校验链路可独立断言：结构字段、payload 限制、header 注入防护。
+3. 018 仅落 access internal 组件与测试，不扩张 public ABI，保持原子任务边界稳定。
+
+### 改动
+
+1. 新增 `access/src/RequestValidator.h` 与 `access/src/RequestValidator.cpp`：
+   - 新增 `RequestValidationResult` 与 `RequestValidator`；
+   - 实现 `validate_packet()`、`validate_payload_limits()`、`validate_headers()`；
+   - 落盘协议白名单校验、payload/user_input 限制和 request_context CRLF/非法 key 字符拦截。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/RequestValidator.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/RequestValidatorTest.cpp`、`RequestValidatorPayloadLimitTest.cpp`、`RequestValidatorInjectionTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`：
+   - 覆盖通过路径、payload 超限路径、header 注入路径。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-018-RequestValidator收敛.md`：
+   - 收口边界、规则、流程、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-018 标记为 Done，并补交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_request_validator_unit_test`、`dasall_access_request_validator_payload_limit_unit_test`、`dasall_access_request_validator_injection_unit_test`。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "RequestValidator(Test|PayloadLimitTest|InjectionTest)" --output-on-failure`
+   - 结果：100% tests passed，3/3 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "RequestValidator(Test|PayloadLimitTest|InjectionTest)"`
+   - 结果：3 个 RequestValidator 测试均可发现。
+
+### 结果
+
+1. ACC-TODO-018 已完成，validate/payload/header 三段校验链路可稳定拒绝非法输入。
+2. payload 超限与 header 注入候选都会在 access 层返回 validation 错误，不进入 RuntimeBridge。
+3. 任务保持 module-local 实现，没有越过既定分层边界。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-019，实现 RequestNormalizer 的 `AgentRequest` 投影与上下文构建。
+
+### 风险
+
+1. request_context key 当前采用白名单字符集规则；后续若新增协议特例字段，需要显式扩展并补充回归测试。
+
 ## 记录 #454
 
 - 日期：2026-04-24
