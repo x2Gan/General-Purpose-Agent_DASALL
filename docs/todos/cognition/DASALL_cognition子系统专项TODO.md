@@ -3,7 +3,7 @@
 最近更新时间：2026-04-24
 阶段：Detailed Design -> Special TODO
 适用范围：cognition/
-当前结论：认知详设已经具备 L3/L2 混合粒度拆分条件；COG-TODO-001 已把 `ICognitionEngine` 公共口径收敛为 `decide()` / `reflect()` / `IResponseBuilder::build()` 三入口，COG-BLK-001 已解阻；COG-TODO-002 已把 cognition↔llm stage taxonomy 收敛为 `planning/execution/reflection/response` canonical key 与 StageModelHint 映射表，COG-BLK-002 已解阻；runtime↔cognition caller fixture 缺位、cognition-specific 测试夹具缺口两项仍必须显式以前置补设计或评审门禁解阻。
+当前结论：认知详设已经具备 L3/L2 混合粒度拆分条件；COG-TODO-001 已把 `ICognitionEngine` 公共口径收敛为 `decide()` / `reflect()` / `IResponseBuilder::build()` 三入口，COG-BLK-001 已解阻；COG-TODO-002 已把 cognition↔llm stage taxonomy 收敛为 `planning/execution/reflection/response` canonical key 与 StageModelHint 映射表，COG-BLK-002 已解阻；COG-TODO-003 已把 runtime↔cognition caller fixture 与 ActionDecision→FSM 第一跳口径收敛到 Runtime 真实 FSM 状态 / guard table，COG-BLK-003 已解阻；cognition-specific 测试夹具缺口仍必须显式以前置补设计或评审门禁解阻。
 
 ## 1. 文档头
 
@@ -87,7 +87,7 @@
 | COG-TC014 | 工程规范 3.6、3.7 | Must | 模块边界错误必须显式可观测；新增公共接口至少补 1 个 unit 或 contract 测试 | 每个任务都必须绑定明确测试目标与命令 |
 | COG-TC015 | 工程落地指引 阶段 I；SSOT `InfraIntegrationTopology` | Must | cognition 进入核心链路后必须补至少 1 条 integration smoke，并保证 `ctest -N` 可发现 | tests/integration/cognition 拓扑与 smoke gate 必须显式成任务 |
 | COG-TC016 | 当前代码现状；认知详设 3.1、11.2 | Must | 当前 cognition 仍是 placeholder，tests/unit/cognition 空白，runtime smoke 仍绕过 cognition | 首批任务必须先替换骨架与测试入口，不能直接宣称主链集成 ready |
-| COG-TC017 | 当前代码现状；认知详设 11.2 COG-B02 / COG-B03 | Must | runtime/include 未落盘，MockLLMManager / MockCognitionFixture 尚不存在 | Runtime 交互与故障注入任务必须先清 caller fixture 与 mock 支撑缺口 |
+| COG-TC017 | 当前代码现状；认知详设 11.2 COG-B02 / COG-B03 | Must | runtime/include 已具备 RuntimeDependencySet / FSM 等公共面，但 RuntimeCognitionLoopSmoke caller fixture 与 MockLLMManager / MockCognitionFixture 仍需显式收敛 | Runtime 交互与故障注入任务必须先清 caller fixture 与 mock 支撑缺口 |
 | COG-TC018 | 认知详设 6.14.4、6.16.3；ADR-006 | Must-Not | BeliefUpdateHint 写回和上下文重装配由 Runtime / Memory 裁定，cognition 只能发信号 | 不生成 cognition 直接写 memory 或直接 reload context 的任务 |
 
 ### 3.2 当前代码与测试现状证据
@@ -101,7 +101,7 @@
 | tests/integration/CMakeLists.txt | 当前只接入 infra / profiles / platform / services / tools / llm | cognition integration 拓扑完全缺失 |
 | tests/unit/runtime/RuntimeSmokeTest.cpp | 当前只通过 `MockLLMAdapter`、`MockMemoryStore`、`MockTool` 验证 smoke，不经过 cognition | runtime 当前仍处于“绕过 cognition 的冒烟模式” |
 | tests/mocks/include | 已有 `MockLLMAdapter.h`、`MockMemoryStore.h`、`MockTool.h`、`CapabilityServicesLoopbackFixture.h`、`MCPLoopbackServerFixture.h` | 通用脚手架存在，但 cognition-specific mock seam 缺失 |
-| runtime/include | 当前不存在 | runtime↔cognition 的正式公共依赖面尚未落盘 |
+| runtime/include | 已存在 RuntimeDependencySet、FSM、recovery、budget、session 等公共头；但 cognition caller fixture 尚未成为专用测试门 | runtime↔cognition 具备接线基础，仍需 COG-TODO-026/027 用专用 smoke / contract 验证真实消费 |
 | contracts/include/boundary/InterfaceCatalog.h | `IPlanner` 被标记为 `AwaitingSupportingContracts` | 不应在本专项内推动 planner / action / plan supporting types 进入 shared contracts |
 | profiles/include/RuntimePolicySnapshot.h | 已冻结 `model_profile.stage_routes`、`token_budget_policy`、`prompt_policy`、`timeout_policy`、`degrade_policy` 等策略快照输入面 | CognitionConfigProjector 可直接以 RuntimePolicySnapshot 作为唯一外部投影视图 |
 | tests/contract/CMakeLists.txt | 已注册 `GoalContractFieldContractTest`、`BeliefStateContractTest`、`ObservationContractTest`、`ContextPacketFieldContractTest`、`ReflectionDecisionContractTest`、`AgentResultContractTest`、`MainFlowContractE2ETest` | cognition 可直接复用现有 shared contracts gate，无需另建 shared contract 测试机制 |
@@ -132,7 +132,7 @@
 |---|---|---|---|---|---|
 | `CognitionStepRequest` / `CognitionDecisionResult` / `ReflectionRequest` / `CognitionReflectionResult` / `ResponseBuildRequest` / `ResponseBuildResult` | 6.6.1、6.6.2 | L3 | 字段、结果语义、错误出口、目录建议完整；COG-TODO-001 已统一 Runtime-facing 三入口口径 | 无 001 相关缺口；后续仍需按 module-public 落盘字段 | 可直接拆对象定义任务 |
 | `PlanGraph` / `PlanNode` / `ReplanResult` | 6.5.3、6.13.2 | L3 | 字段、DAG 约束、revision 规则、测试出口明确 | shared admission 暂不成熟，但不阻断 module-local 落盘 | 直接拆 module-public 类型任务，不推动 contracts |
-| `ActionDecision` / `BeliefUpdateHint` | 6.5.3、6.13.2、6.13.3、6.14.4 | L3 | 字段、rationale/confidence、merge mode、写回协议已明确 | ActionDecision→FSM 消费口径仍需 runtime fixture 固化 | 先保留 module-local，并把 runtime 消费口径独立成前置任务 |
+| `ActionDecision` / `BeliefUpdateHint` | 6.5.3、6.13.2、6.13.3、6.14.4 | L3 | 字段、rationale/confidence、merge mode、写回协议已明确；COG-TODO-003 已冻结 ActionDecision→FSM 第一跳映射与 caller fixture | 无 003 相关缺口 | 继续保持 module-local，并由后续 runtime smoke / interaction contract 验证 |
 | `StageModelHint` / `BudgetContext` / `ContextSufficiencySignal` | 6.14.2、6.14.5、6.16 | L3 | 字段与约束明确；COG-TODO-002 已冻结 `planning/execution/reflection/response` canonical stage key 与 cognition 组件映射表 | 无 002 相关缺口 | 可直接定义对象 |
 | `ICognitionEngine` / `IResponseBuilder` / `IPlanner` / `IReasoner` / `IReflectionEngine` | 6.6.1、6.6.3 | L3 | 接口名、方法名、输入输出、模块归属明确；COG-TODO-001 已确认 `ICognitionEngine::decide()` / `reflect()` 与 `IResponseBuilder::build()` 为唯一可执行口径 | 无 001 相关缺口 | 可在 COG-TODO-010 冻结接口 |
 | `CognitionConfig` / `StageExecutionHints` / `StageExecutionPlan` | 6.10、6.13.1、6.15、6.16 | L2 | 配置键、默认值、阶段策略来源与超时/预算规则明确 | 结构字段未完全成表 | 以配置投影和阶段策略组件任务落地，不强行细化到字段级 |
@@ -141,7 +141,7 @@
 | `InputBoundaryValidator` | 6.7、6.8、6.9、7.1 COG-D03 | L2 | invalid input、missing belief state、schema violation 等边界已有明确定义 | 具体 helper 集合未成表 | 直接按组件收口输入边界 |
 | `PerceptionEngine` | 6.13.2 | L2 | 核心数据、关键执行流、规则降级和测试出口明确 | `PerceptionRequest` 等内部 helper 未单独落盘 | 直接按组件任务推进 |
 | `Planner` | 6.13.2、6.16.2 | L2 | build_plan / replan 语义、budget 收紧规则、PlanGraph 约束明确 | 内部 request helper 未单独成表 | 直接按组件任务推进，并绑定 plan/budget 测试 |
-| `Reasoner` | 6.13.2、6.14.1 | L2 | candidate scoring、clarification threshold、delegate gate、response outline 已明确 | 与 runtime FSM 的消费接缝尚待收敛 | 组件实现与 runtime 交互契约分成两类任务 |
+| `Reasoner` | 6.13.2、6.14.1 | L2 | candidate scoring、clarification threshold、response outline 已明确；runtime FSM 消费接缝已由 COG-TODO-003 收敛 | delegate hint 首版仍关闭，后续如启用需另走交互契约扩展 | 组件实现与 runtime 交互契约分成两类任务 |
 | `ReflectionEngine` | 6.13.3、6.9.1 | L2 | 失败分类、goal gap、belief invalidation、suggestion-only 约束明确 | 无额外设计缺口 | 直接按组件任务推进 |
 | `BeliefUpdateSynthesizer` | 6.13.3、6.14.4 | L2 | delta 分类、evidence refs、merge mode、best-effort 写回协议明确 | runtime 写回 fixture 尚未冻结 | 组件实现先行，写回时序在交互契约任务收口 |
 | `ResponseBuilder` | 6.13.3、10.2 | L2 | llm/build/template fallback、AgentResult 映射、redaction 出口明确 | streaming 不在当前范围 | 直接按单次响应 + 模板降级路径推进 |
@@ -149,7 +149,7 @@
 | `StageOutputValidator` | 6.13.4 | L2 | required fields、enum、numeric bounds、plan graph / response invariants 明确 | `StageSchemaSpec` supporting fields 未完全成表 | 以组件级任务推进，不拆独立 schema admission |
 | `CognitionTelemetry` | 6.11、6.13.4 | L2 | 日志/指标/trace/audit 字段、redaction 和 fail-open 规则明确 | cognition-specific fixture 尚缺 | 先补 004 / 024，再推进组件落盘 |
 | `CognitionFacade` | 6.13.1、6.7、6.8 | L2 | 三入口流程、错误收口、降级语义、测试出口明确 | 接口口径、stage taxonomy、runtime fixture 三条接缝需先统一 | 作为中后期收口任务 |
-| `RuntimeCognitionLoopSmoke` / `CognitionRuntimeInteractionContract` | 7.1 COG-D09 / D12、8.2~8.3、6.14 | L0 | 目标测试名、消费场景和检查点明确 | runtime/include 缺失、当前 smoke 仍绕过 cognition | 先做 003、024、025，再推进 |
+| `RuntimeCognitionLoopSmoke` / `CognitionRuntimeInteractionContract` | 7.1 COG-D09 / D12、8.2~8.3、6.14 | L0 | 目标测试名、消费场景和检查点明确；COG-TODO-003 已冻结 caller fixture 与 FSM 第一跳口径 | cognition-specific mock seam 与 integration topology 尚缺 | 先做 024、025，再推进 |
 
 ## 5. Design -> TODO 映射表
 
@@ -189,7 +189,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | COG-TODO-001 | Done | 补齐 ICognitionEngine 公共接口口径评审 | 架构 5.8.4；蓝图 3.4 / 7；认知详设 6.6.1 | 6.6.1 `decide/reflect/build_response`；5.8.4 `step()` | L0 | 更新认知详设、架构/蓝图引用说明与本专项 TODO | `ICognitionEngine`、`IResponseBuilder`、`CognitionStepRequest` / `CognitionDecisionResult` 公开消费口径 | 文档一致性：`step()` 与三入口语义只能保留一套可执行口径 | `rg -n "ICognitionEngine|step\(|decide\(|reflect\(|build\(" docs/architecture/DASALL_Agent_architecture.md docs/architecture/DASALL_Engineering_Blueprint.md docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md` | 无 | 已解阻：COG-BLK-001 | 已完成 | docs/todos/cognition/deliverables/COG-TODO-001-ICognitionEngine公共接口口径收敛.md；更新后的认知详设 / 专项 TODO；验收命令已通过，cognition 可执行入口统一为 `decide()` / `reflect()` / `IResponseBuilder::build()` | Runtime 对 cognition 的公开入口不再同时存在互相冲突的 `step()` 与三入口描述；runtime 自身 FSM `step()` 不属于本冲突 |
 | COG-TODO-002 | Done | 收敛 cognition↔llm stage taxonomy 与 StageModelHint 映射表 | 认知详设 6.14.2；llm deliverable 035；RuntimePolicySnapshot.h | 6.14.2 `StageModelHint`；llm 真实 stage key `planning/execution/reflection/response` | L0 | 更新认知详设与本专项 TODO 的 stage 命名 / 投影约束 | `StageModelHint`、`stage_name`、`task_type`、`ModelProfile.stage_routes`、llm stage key | 文档一致性：认知阶段名、llm stage key、profile stage_routes 的唯一映射可检索 | `rg -n "planning|execution|reflection|response|perception|reasoning|StageModelHint|stage_routes" docs/architecture/DASALL_cognition子系统详细设计.md docs/architecture/DASALL_llm子系统详细设计.md docs/todos/llm/deliverables/LLM-TODO-035-profile-diff-integration设计收敛.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md` | 无 | 已解阻：COG-BLK-002 | 已完成 | docs/todos/cognition/deliverables/COG-TODO-002-stage-taxonomy与StageModelHint映射收敛.md；更新后的认知详设 / 专项 TODO；LLM-TODO-035 追认说明；验收命令已通过，canonical key 集合固定为 `planning/execution/reflection/response` | bridge / projector / profile gate 消费的 stage taxonomy 唯一，legacy alias 只能在 profile provider / projector 边界归一化，测试不得私有映射 |
-| COG-TODO-003 | NotStarted | 收敛 runtime↔cognition caller fixture 与 ActionDecision→FSM 口径 | 认知详设 6.14.1、8.2、11.2；当前 runtime 现状 | 6.14.1 ActionDecision→FSM；COG-B02 | L0 | 更新认知详设与本专项 TODO，冻结 tests/design gate 最小 caller fixture 形状 | `ActionDecision.decision_kind`、`CognitionStepRequest`、`ReflectionRequest`、`RuntimeCognitionLoopSmoke` | 文档一致性：caller_domain、goal/context/belief/observation handoff、FSM 转移口径可检索 | `rg -n "ActionDecision\.decision_kind|CognitionStepRequest|ReflectionRequest|RuntimeCognitionLoopSmoke|FSM" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md` | 无 | COG-BLK-003 | 完成本任务 | docs/todos/cognition/deliverables/COG-TODO-003-runtime-caller-fixture与FSM口径收敛.md；更新后的认知详设 / 专项 TODO | 仅当 runtime 消费 cognition 的最小 fixture 明确，且不再依赖当前绕过 cognition 的 smoke 口径时完成 |
+| COG-TODO-003 | Done | 收敛 runtime↔cognition caller fixture 与 ActionDecision→FSM 口径 | 认知详设 6.14.1、8.2、11.2；当前 runtime 现状 | 6.14.1 ActionDecision→FSM；COG-B02 | L0 | 更新认知详设与本专项 TODO，冻结 tests/design gate 最小 caller fixture 形状 | `ActionDecision.decision_kind`、`CognitionStepRequest`、`ReflectionRequest`、`RuntimeCognitionLoopSmoke`、`caller_domain` | 文档一致性：caller_domain、goal/context/belief/observation handoff、FSM 转移口径可检索 | `rg -n "ActionDecision\.decision_kind|CognitionStepRequest|ReflectionRequest|RuntimeCognitionLoopSmoke|caller_domain|FSM" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md` | 无 | 已解阻：COG-BLK-003 | 已完成 | docs/todos/cognition/deliverables/COG-TODO-003-runtime-caller-fixture与FSM口径收敛.md；更新后的认知详设 / 专项 TODO；验收命令已通过，ActionDecision→FSM 第一跳映射对齐 Runtime 真实状态 / guard table | runtime 消费 cognition 的最小 fixture 已明确；legacy `MockLLMAdapter + MockTool` smoke 不再作为 COG-TODO-026/027 的验收口径 |
 | COG-TODO-004 | NotStarted | 补齐 cognition 测试 fixture 设计口径 | 认知详设 8.1、11.2；当前 tests/mocks 现状 | 8.1 `tests/mocks/include/MockLLMManager.h`、`MockCognitionFixture.h` | L0 | 更新认知详设与本专项 TODO 的 mock seam 设计说明 | `MockLLMManager`、`MockCognitionFixture`、failure/profile smoke fixture 角色 | 文档一致性：cognition-specific mock seam 及其作用域可检索 | `rg -n "MockLLMManager|MockCognitionFixture|tests/mocks/include" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md` | COG-TODO-001 ~ 003 | COG-BLK-004 | 完成本任务 | docs/todos/cognition/deliverables/COG-TODO-004-cognition测试fixture口径收敛.md；更新后的认知详设 / 专项 TODO | 仅当 unit / integration / failure gate 所需 mock seam 明确，且不再复用当前过于粗糙的 `MockLLMAdapter` 路径时完成 |
 
 ### 6.2 Build-ready 对象、接口与骨架任务
@@ -269,7 +269,7 @@
 |---|---|---|---|---|---|
 | COG-BLK-001 | TODO 新增 | 已解阻：`ICognitionEngine` 公开口径已从旧 `step()` 草图收敛为 `decide()` / `reflect()` / `IResponseBuilder::build()` | COG-TODO-007 / 010 / 023 可按三入口推进，不再因公共口径冲突返工 | 已完成 COG-TODO-001，交付物：docs/todos/cognition/deliverables/COG-TODO-001-ICognitionEngine公共接口口径收敛.md | 保持接口与 supporting types module-local，不推进跨模块正式接线 |
 | COG-BLK-002 | TODO 新增 | 已解阻：cognition 与 llm 的 stage taxonomy 已统一为 `planning/execution/reflection/response` canonical key，并补齐 StageModelHint 映射表 | COG-TODO-009 / 011 / 012 / 020 / 029 可按 canonical key 推进，不再需要测试私有映射 | 已完成 COG-TODO-002，交付物：docs/todos/cognition/deliverables/COG-TODO-002-stage-taxonomy与StageModelHint映射收敛.md | 若旧 profile-source 仍有 `planner/responder`，归一化只能发生在 profile provider / projector 边界 |
-| COG-BLK-003 | 详设 B02 | runtime/include 未落盘，当前 runtime smoke 仍绕过 cognition | Runtime happy path、交互契约、写回时序验证无法直接落地 | 完成 COG-TODO-003，冻结 tests/design gate caller fixture 与 FSM 消费口径 | 在解阻前仅允许通过 cognition 单测与 façade 级 fake 流程验证 |
+| COG-BLK-003 | 详设 B02 | 已解阻：Runtime caller fixture 与 ActionDecision→FSM 第一跳口径已冻结；legacy runtime smoke 仍可保留为旧路径但不再作为 cognition gate | Runtime happy path、交互契约、写回时序已有设计验收口径，生产测试仍由 COG-TODO-026/027 落地 | 已完成 COG-TODO-003，交付物：docs/todos/cognition/deliverables/COG-TODO-003-runtime-caller-fixture与FSM口径收敛.md | 在 COG-TODO-026 前仍不宣称主链 ready，只允许用 fixture 口径推进 mock / topology |
 | COG-BLK-004 | 详设 B03 | 缺少 `MockLLMManager`、`MockCognitionFixture` 等 cognition-specific 测试支撑 | bridge、telemetry、integration、failure、profile gate 成本过高且易漂移 | 完成 COG-TODO-004 与 COG-TODO-024 | 暂以阶段级 fake object 做单测，不宣称 integration ready |
 | COG-BLK-005 | 详设 B01 | `IPlanner`、`PlanGraph`、`ActionDecision` supporting contracts 未冻结 | 任何 shared admission 或 breaking change 评审都不具备条件 | 继续沿用 module public surface；如需 admission，另起 contracts 评审 | 本专项内不推进 contracts 扩张，只保留 module-local / module-public 形态 |
 | COG-BLK-006 | 详设 B04 | profile→cognition 配置投影尚不存在，edge/profile 兼容性无法验证 | CognitionConfigProjector 受阻时缺乏阻塞追踪链路 | 完成 COG-TODO-011（CognitionConfigProjector）并在 profile tests 中使用 | 暂仅在 desktop_full 验证，不对其他 profile 宣称 ready |
@@ -346,8 +346,7 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
 
 1. 当前专项 TODO 可以直接进入执行，但执行顺序必须严格遵守“先解阻、再骨架、再主链、再 bridge / facade、最后 integration / gate”的顺序。
 2. 当前可直接落到的最细粒度是 L3 / L2 混合：请求/结果对象、PlanGraph / ActionDecision / BeliefUpdateHint、公共接口已能落到接口 / 数据结构级；StagePolicyResolver、五段组件、CognitionLlmBridge、StageOutputValidator、CognitionTelemetry、CognitionFacade 仍以组件级最稳妥。
-3. 当前不能直接细化到函数 / 集成级的阻断证据已从三类收敛为两类：
-   - runtime↔cognition caller fixture 与 FSM 消费口径尚未冻结。
+3. 当前不能直接细化到函数 / 集成级的阻断证据已从两类收敛为一类：
    - cognition-specific 测试 fixture 尚未落盘。
 4. 因此，本专项的建议执行策略是：
    - 先完成 COG-TODO-001 ~ 004。
@@ -395,3 +394,16 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
    - `rg -n "planning|execution|reflection|response|perception|reasoning|StageModelHint|stage_routes" docs/architecture/DASALL_cognition子系统详细设计.md docs/architecture/DASALL_llm子系统详细设计.md docs/todos/llm/deliverables/LLM-TODO-035-profile-diff-integration设计收敛.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
 5. 验收结论：PASS；canonical stage key 集合、StageModelHint 映射表、legacy alias 禁入边界与后续 Build 映射均可检索。
 6. Blocker：COG-BLK-002 已解阻；COG-TODO-009 / 011 / 012 / 020 / 029 可按 canonical key 继续推进。
+
+### 13.3 COG-TODO-003：runtime caller fixture 与 FSM 口径收敛（2026-04-24）
+
+1. 任务选择：COG-TODO-003 无前置依赖，是 COG-BLK-003 的最小解阻任务。
+2. 设计交付物：docs/todos/cognition/deliverables/COG-TODO-003-runtime-caller-fixture与FSM口径收敛.md。
+3. 架构回写：
+   - `docs/architecture/DASALL_cognition子系统详细设计.md` §6.14.1 已把 ActionDecision→FSM 映射对齐 Runtime 真实 `RuntimeState` / `TransitionGuardFact`。
+   - `CognitionStepRequest` / `ReflectionRequest` / `ResponseBuildRequest` 设计示例已补 `caller_domain`、request / trace / profile 字段。
+   - RuntimeCognitionLoopSmokeTest 口径已明确：不得再以 `MockLLMAdapter + MockTool` 旁路串接作为 cognition gate。
+4. 验收命令：
+   - `rg -n "ActionDecision\.decision_kind|CognitionStepRequest|ReflectionRequest|RuntimeCognitionLoopSmoke|caller_domain|FSM" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
+5. 验收结论：PASS；真实 Runtime FSM 状态映射、caller fixture 字段、RuntimeCognitionLoopSmoke 断言与 COG-BLK-003 解阻记录均可检索。
+6. Blocker：COG-BLK-003 已解阻；COG-TODO-026 / 027 后续可按此 caller fixture 口径落地 production smoke / interaction contract。

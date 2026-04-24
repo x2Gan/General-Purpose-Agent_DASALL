@@ -408,6 +408,10 @@ public:
 
 ```cpp
 struct CognitionStepRequest {
+  std::string caller_domain;
+  std::string request_id;
+  std::string trace_id;
+  std::string profile_id;
   dasall::contracts::GoalContract goal_contract;
   dasall::contracts::ContextPacket context_packet;
   std::optional<dasall::contracts::BeliefState> belief_state;
@@ -423,6 +427,10 @@ struct CognitionDecisionResult {
 };
 
 struct ReflectionRequest {
+  std::string caller_domain;
+  std::string request_id;
+  std::string trace_id;
+  std::string profile_id;
   dasall::contracts::GoalContract goal_contract;
   std::optional<dasall::contracts::BeliefState> belief_state;
   dasall::contracts::Observation latest_observation;
@@ -438,6 +446,10 @@ struct CognitionReflectionResult {
 };
 
 struct ResponseBuildRequest {
+  std::string caller_domain;
+  std::string request_id;
+  std::string trace_id;
+  std::string profile_id;
   dasall::contracts::GoalContract goal_contract;
   dasall::contracts::ContextPacket context_packet;
   std::optional<dasall::contracts::BeliefState> belief_state;
@@ -922,20 +934,47 @@ v1.0 已覆盖职责边界与依赖方向，但以下交互细节在跨模块集
 
 Runtime 的 AgentOrchestrator FSM 需要根据 ActionDecision.decision_kind 精确路由下一步状态转移。cognition 输出的 decision_kind 与 Runtime FSM 状态之间必须存在显式、无歧义的映射关系，否则集成时行为不可预期。
 
-| ActionDecision.decision_kind | Runtime FSM 目标状态 | 后续动作 | 说明 |
-|---|---|---|---|
-| ExecuteAction | ExecutingAction | Runtime 从 ActionDecision.tool_intent_hint 构造 ToolRequest，交 ToolManager 执行 | cognition 只提供 tool_intent_hint，不生成 ToolRequest |
-| DirectResponse | Responding | Runtime 调 IResponseBuilder.build()，直接构造 AgentResult | 适用于简单问答、无需工具的场景 |
-| AskClarification | WaitingClarify | Runtime 把 clarification_question 投递到 Access 层，等待用户补充 | 优先于猜测执行；confidence < clarification_threshold |
-| DelegateHint | DelegateEvaluating | Runtime 把 delegate_hint 交 MultiAgentCoordinator 评估 | 首版默认关闭（cognition.reasoner.allow_delegate_hint=false） |
-| ConvergeSafe | Responding | Runtime 视为安全收敛：用已有结论调 ResponseBuilder | 适用于预算耗尽或 plan 全部完成 |
-| NoDecision | ErrorHandling | Runtime 视为 cognition 无法给出建议：进入 RecoveryManager | 与 Reasoner 自身异常 ErrorInfo 不同，这是"推理完成但无可行候选" |
+COG-TODO-003 评审结论：本映射必须直接使用 runtime 详设 §6.7.4 与
+`runtime/include/fsm/StateTransitionTypes.h` 中的真实 RuntimeState / TransitionGuardFact 名称。旧版
+`ExecutingAction`、`DelegateEvaluating`、`ErrorHandling` 不是当前 Runtime FSM 状态，不得作为
+RuntimeCognitionLoopSmoke 或交互契约 fixture 的验收口径。
+
+| ActionDecision.decision_kind | Runtime FSM 起点 | Runtime FSM 目标状态 | 必需 guard / 后续动作 | 说明 |
+|---|---|---|---|---|
+| ExecuteAction | Reasoning | ToolCalling | `ToolCallPlanned` + `BudgetAllowsToolCall`；Runtime 从 `ActionDecision.tool_intent_hint` 或等价字段构造 ToolRequest，交 ToolManager 执行 | cognition 只提供工具意图，不生成 ToolRequest，不提交外部执行 |
+| DirectResponse | Reasoning | Responding | `DirectResponseReady`；Runtime 调 `IResponseBuilder.build()` 构造 AgentResult | 适用于简单问答、无需工具的场景 |
+| AskClarification | Reasoning | WaitingClarify | `ClarificationNeeded` + `ProfileAllowsClarify`；Runtime 把 `clarification_question` 投递到 Access 层，等待用户补充 | 优先于猜测执行；confidence < clarification_threshold |
+| ConvergeSafe | Reasoning | Responding | `DirectResponseReady`；Runtime 视为安全收敛，用已有结论调 ResponseBuilder | 适用于预算耗尽、plan 全部完成或无需继续执行的安全收敛 |
+| NoDecision | Reasoning | Failed | `RecoveryRejected`；Runtime 视为 cognition 无法给出可执行建议，进入失败 / 降级链 | 与 Reasoner 自身 ErrorInfo 不同，这是"推理完成但无可行候选" |
+| Future DelegateHint | Reasoning | 不启用 | 不启用；首版 ActionDecisionKind 不开放 delegate hint | 若后续开放，必须先由 COG-TODO-027 扩展交互契约和 Runtime FSM guard |
 
 约束：
 
-1. 本映射仅作为 cognition 侧的设计约定，最终生效需与 runtime 详细设计同步确认。
+1. 本映射是 RuntimeCognitionLoopSmokeTest 与 CognitionRuntimeInteractionContractTest 的唯一设计口径，必须与 runtime 真实 FSM guard table 同步维护。
 2. decision_kind 枚举只能在 cognition/include/decision/ActionDecision.h 定义，不进入共享契约，Runtime 通过 CognitionDecisionResult 的 tag 或 variant 消费。
 3. 若后续新增 decision_kind，必须同步更新此映射表和 Runtime FSM 转移规则。
+4. Runtime 可在 ToolCalling 后进入 WaitingExternal，并在 Observation 到达后进入 Reflecting；这属于 Runtime 外部执行生命周期，不改变 ActionDecision→FSM 的第一跳映射。
+
+Runtime↔Cognition caller fixture 最小形状：
+
+| Fixture 字段 | decide: CognitionStepRequest | reflect: ReflectionRequest | 说明 |
+|---|---|---|---|
+| `caller_domain` | `runtime.agent_orchestrator` | `runtime.agent_orchestrator` | 固定调用来源，禁止测试用例以匿名 caller 进入 cognition |
+| `request_id` / `trace_id` | 必填 | 必填 | 贯穿 Runtime stage_trace、cognition diagnostics、tool / response 后续证据 |
+| `profile_id` | 必填 | 必填 | 作为 StagePolicyResolver 与 profile route 投影输入 |
+| `goal_contract` / `goal_id` | 必填 | 必填 | Runtime 负责把 AgentRequest 归一化为 GoalContract 或等价 goal_id 语义 |
+| `context_packet` | 必填 | 必填 | Memory/ContextOrchestrator 已装配上下文，cognition 不重新 retrieve |
+| `belief_state` | 必填 | 必填 | 缺失时 InputBoundaryValidator fail-fast，不退化为 recent-history only |
+| `latest_observation` | 可选 | 必填 | decide 可处理首轮空 Observation；reflect 必须由 Runtime 提供外部结果 |
+| `budget_context` | 建议必填 | 建议必填 | 用于 plan cap、direct response / clarification threshold 与超预算降级 |
+
+RuntimeCognitionLoopSmokeTest 的最小断言：
+
+1. decide fixture 必须从 Runtime caller 构造，不再使用 `MockLLMAdapter + MockTool` 直接串联冒烟。
+2. ExecuteAction 决策必须使 Runtime 第一跳进入 `ToolCalling`，并携带 `ToolCallPlanned` / `BudgetAllowsToolCall` guard。
+3. DirectResponse / ConvergeSafe 决策必须进入 `Responding`，并调用 `IResponseBuilder.build()` 构造 AgentResult。
+4. AskClarification 决策必须进入 `WaitingClarify`，并写出可恢复的 pending action / checkpoint 语义。
+5. NoDecision 或 unknown future decision_kind 必须 fail-fast 到 `Failed` / recovery rejected 语义，不得默默回退到工具执行。
 
 #### 6.14.2 Cognition→LLM：StageModelHint 结构精化
 

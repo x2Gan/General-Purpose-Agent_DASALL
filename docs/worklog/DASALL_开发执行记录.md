@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #468
+
+- 日期：2026-04-24
+- 阶段：cognition/前置补设计与评审门禁
+- 任务：COG-TODO-003 收敛 runtime↔cognition caller fixture 与 ActionDecision→FSM 口径
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-003 无前置依赖，是 COG-BLK-003 的直接解阻任务。
+2. COG-TODO-001/002 已完成并推送，本轮继续收敛 runtime caller seam。
+3. 本轮只冻结 caller fixture 与 FSM 第一跳设计口径，不新增 runtime/cognition 生产测试实现。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，将 ActionDecision→FSM 映射对齐 Runtime 真实状态与 guard：`ToolCalling`、`WaitingClarify`、`Responding`、`Failed`。
+2. 在 `CognitionStepRequest`、`ReflectionRequest`、`ResponseBuildRequest` 设计示例中补 `caller_domain`、request / trace / profile 字段。
+3. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-003-runtime-caller-fixture与FSM口径收敛.md`。
+4. 更新 cognition 专项 TODO，将 COG-TODO-003 标记为 Done，并把 COG-BLK-003 标记为已解阻。
+
+### 验证
+
+1. `rg -n "ActionDecision\.decision_kind|CognitionStepRequest|ReflectionRequest|RuntimeCognitionLoopSmoke|caller_domain|FSM" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
+   - 结果：通过；Runtime 真实 FSM 状态映射、caller fixture 字段、RuntimeCognitionLoopSmoke 断言与 COG-BLK-003 解阻记录均可检索。
+
+### 结果
+
+1. COG-BLK-003 已解阻。
+2. COG-TODO-026 / 027 后续可按 Runtime caller fixture 口径推进 production smoke / interaction contract。
+3. COG-TODO-004 仍需完成 cognition 测试 fixture 设计口径收敛。
+
+### 下一步
+
+1. 进入 COG-TODO-004：补齐 cognition 测试 fixture 设计口径。
+
 ## 记录 #467
 
 - 日期：2026-04-24
