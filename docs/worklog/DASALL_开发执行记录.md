@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #467
+
+- 日期：2026-04-24
+- 阶段：cognition/前置补设计与评审门禁
+- 任务：COG-TODO-002 收敛 cognition↔llm stage taxonomy 与 StageModelHint 映射表
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-002 无前置依赖，是 COG-BLK-002 的直接解阻任务。
+2. 本轮只冻结 stage taxonomy、StageModelHint 映射与 owner 边界，不修改 profile provider 或 bridge 生产实现。
+3. COG-TODO-001 已完成并推送，本轮可按专项 TODO 顺序继续执行。
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，把 `StageModelHint.stage_name` 收敛为 `planning/execution/reflection/response` canonical key，并补 `task_type` 与 cognition 组件映射表。
+2. 更新 `docs/architecture/DASALL_llm子系统详细设计.md`，明确 `model_profile.stage_routes` 与 `LLMGenerateRequest.stage` 的 canonical key 集合。
+3. 更新 `docs/todos/llm/deliverables/LLM-TODO-035-profile-diff-integration设计收敛.md`，追认 COG-TODO-002 对 035 记录接缝的收敛结论。
+4. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-002-stage-taxonomy与StageModelHint映射收敛.md`。
+5. 更新 cognition 专项 TODO，将 COG-TODO-002 标记为 Done，并把 COG-BLK-002 标记为已解阻。
+
+### 验证
+
+1. `rg -n "planning|execution|reflection|response|perception|reasoning|StageModelHint|stage_routes" docs/architecture/DASALL_cognition子系统详细设计.md docs/architecture/DASALL_llm子系统详细设计.md docs/todos/llm/deliverables/LLM-TODO-035-profile-diff-integration设计收敛.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
+   - 结果：通过；canonical key、legacy alias 禁入边界与 StageModelHint 映射表均可检索。
+
+### 结果
+
+1. COG-BLK-002 已解阻。
+2. COG-TODO-009 / 011 / 012 / 020 / 029 后续可按 canonical stage key 推进。
+3. COG-TODO-003 / 004 仍需继续完成 runtime caller fixture 与测试 fixture 口径收敛。
+
+### 下一步
+
+1. 进入 COG-TODO-003：收敛 runtime↔cognition caller fixture 与 ActionDecision→FSM 口径。
+
 ## 记录 #466
 
 - 日期：2026-04-24

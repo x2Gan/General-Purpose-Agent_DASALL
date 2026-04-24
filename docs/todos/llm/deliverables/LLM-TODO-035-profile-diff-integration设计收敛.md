@@ -55,3 +55,11 @@
 1. 035 当前固定的是“profile 差异来自投影视图”的真实行为；若后续要把 `planner/responder` 这类 profile stage key 与 llm `planning/response` 统一成共享 taxonomy，应通过独立 owner 任务完成，而不能在 035 的 integration 测试里静默引入 stage 映射逻辑。
 2. 035 继续通过 prompt policy allowlist 固定 `cloud_full` 与 `edge_minimal` 的行为差异，但 trusted-source 的 profile 差异仍沿用 034 已记录的真实 manager 映射；若后续希望把 profile 的 trusted-source 差异也纳入 integration 矩阵，应单独扩 owner，而不是在本任务里把三类治理差异一次性耦合。
 3. 本轮为隔离 profile 变量继续使用最小 prompt package 与单次 unary dispatch；若后续想叠加 streaming、fallback exhausted 或 provider onboarding 变量，需要在新的 owner 用例中明确说明多变量交织带来的断言复杂度。
+
+## 7. COG-TODO-002 追认收敛
+
+日期：2026-04-24
+
+1. COG-TODO-002 已把 035 记录的 stage taxonomy 接缝收敛为正式 cognition↔llm 映射表。
+2. 投影后的 canonical stage key 只允许 `planning`、`execution`、`reflection`、`response`；`planner/responder` 保留为历史 profile-source alias 或 Prompt 包目录名，不再作为 `RuntimePolicySnapshot.model_profile.stage_routes` / `LLMGenerateRequest.stage` 的目标口径。
+3. 后续 profile / cognition integration 任务不得在测试里私有维护 stage mapping；若旧 YAML 或 provider 仍使用 `planner/responder`，归一化 owner 必须是 profile provider / projector，而不是测试 fixture。

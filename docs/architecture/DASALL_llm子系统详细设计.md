@@ -1382,6 +1382,7 @@ flowchart TB
 10. `GET /models` 返回的可用性结果不得直接覆盖 Provider Catalog 中的 context/pricing/effective_at 基线，除非经过显式验证与审计。
 11. thinking mode 的私有字段如 `reasoning_content` 不得被持久化到长期 history、shared contracts 或下一轮请求；若调用栈需要调试，只能进入短期、受限、可审计的内部诊断通道。
 12. ModelRouter 不得选择一个 `context_window` 或 `max_output_tokens_hard_limit` 明显不满足本次预算约束的模型；若只能降级，必须记录 selection reason 与降级原因。
+13. COG-TODO-002 后，`model_profile.stage_routes` 与 `LLMGenerateRequest.stage` 的 canonical key 集合固定为 `planning`、`execution`、`reflection`、`response`；`planner`、`responder`、`perception`、`reasoning` 只能作为 task_type、Prompt 包目录名或历史 profile-source alias，不得作为投影后的 stage route key。
 
 #### 6.10.4 DeepSeek chat / reasoner 默认策略
 
