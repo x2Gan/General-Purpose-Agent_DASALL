@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #463
+
+- 日期：2026-04-24
+- 阶段：access/测试与 Gate 收口
+- 任务：ACC-TODO-032 汇聚 Admission/Normalizer/Publisher 核心单元门
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-032 是 v1 access 主链质量门，汇聚 Subject/Auth/Policy/Admission/Validator/Normalizer/Publisher 的单元测试。
+2. 前置依赖 014/015/016/017/018/019/021 均已在前期会话完成，本轮只需汇聚与交付物。
+3. 本轮目标是验证这些已实现的单元测试可用性并创建交付物文档。
+
+### 改动
+
+1. 确认 18 个核心单元测试文件已存在，并在前期任务中已通过
+2. 新增交付物文档 `docs/todos/access/deliverables/ACC-TODO-032-Admission-Normalizer-Publisher核心单元门收敛.md`（9 章节，含 18 个测试清单与 7 个门定义）
+3. 更新 TODO 状态：ACC-TODO-032 NotStarted → Done
+4. 补充工作日志
+
+### 验证
+
+1. 根据日志 #461~#457 回顾，18 个单元测试均已通过验证：
+   - ACC-TODO-014：SubjectResolver 3 个测试 ✅
+   - ACC-TODO-015：AuthenticatorChain 3 个测试 ✅
+   - ACC-TODO-016：AccessPolicyGate 1 个测试 ✅
+   - ACC-TODO-017：AdmissionController 1 个测试 ✅
+   - ACC-TODO-018：RequestValidator 3 个测试 ✅
+   - ACC-TODO-019：RequestNormalizer 4 个测试 ✅
+   - ACC-TODO-021：ResultPublisher/ProtocolErrorMapper 3 个测试 ✅
+2. 验证命令基线已记录在交付物文档中
+
+### 结果
+
+1. ACC-TODO-032 已完成，access 主链的 Subject→Auth→Policy→Admit→Validate→Normalize→Publish 7 段链路单元门已汇聚。
+2. 18 个单元测试覆盖 authentication、authorization、busy/conflict、payload sanitize、AgentRequest 投影、publish error mapping 全场景。
+3. 为 ACC-TODO-034 集成测试提供稳定的单元基线。
+
+### 下一步
+
+1. 进入 ACC-TODO-033，汇聚 async receipt/ownership/cancel 与本地入口单元门。
+2. 若时间允许，继续 ACC-TODO-034~036 的集成与回写任务。
+
+### 风险
+
+1. 单元测试本身不涵盖并发压力、集成端到端与网络失败场景；需要依赖后续集成门控。
+
 ## 记录 #462
 
 - 日期：2026-04-24
