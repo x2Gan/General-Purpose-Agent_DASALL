@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #462
+
+- 日期：2026-04-24
+- 阶段：access/测试与 Gate 收口
+- 任务：ACC-TODO-031 汇聚 Access interface/lifecycle/registry 单元门
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-031 是 v1 access 首层质量门，汇聚已实现的 interface/lifecycle/registry 单元测试。
+2. 前置依赖 006/007/008/013 均已完成，可直接进行。
+3. 本轮目标是聚合、验证与回链交付物，不进行新增代码实现。
+
+### 改动
+
+1. 确认 4 个单元测试文件已存在：AccessInterfaceSurfaceTest.cpp、AccessGatewayLifecycleTest.cpp、ProtocolAdapterRegistryTest.cpp、ProtocolAdapterRegistryConflictTest.cpp
+2. 确认 4 个测试均已在 tests/unit/access/CMakeLists.txt 中注册
+3. 新增交付物文档 `docs/todos/access/deliverables/ACC-TODO-031-Access-interface-lifecycle-registry单元门收敛.md`（8 个章节，含验收命令与门控定义）
+4. 更新 TODO 状态：ACC-TODO-031 NotStarted → Done
+
+### 验证
+
+1. 定向构建四个单元测试目标：
+   - 命令：`cmake --build build-ci --target dasall_access_interface_surface_unit_test dasall_access_gateway_lifecycle_unit_test dasall_access_protocol_adapter_registry_unit_test dasall_access_protocol_adapter_registry_conflict_unit_test`
+   - 结果：SUCCESS，0 warnings
+2. 运行四个单元测试：
+   - 命令：`ctest --test-dir build-ci -R "AccessInterfaceSurfaceTest|AccessGatewayLifecycleTest|ProtocolAdapterRegistryTest|ProtocolAdapterRegistryConflictTest" --output-on-failure`
+   - 结果：100% tests passed (4/4)，总计 13 个用例通过
+
+### 结果
+
+1. ACC-TODO-031 已完成，access 公共接口层、生命周期、registry 三个单元门已验证可通过。
+2. 13 个单元测试覆盖 interface surface、lifecycle 四态、registry 注册/查找/冲突 场景。
+3. 为后续 integration 测试（034/035）提供稳定的 unit 基线。
+
+### 下一步
+
+1. 进入 ACC-TODO-032，汇聚 Admission/Normalizer/Publisher 核心单元门。
+
+### 风险
+
+1. 既有 tests/unit/knowledge/FreshnessControllerStalePolicyTest.cpp 编译错误会阻塞 `cmake --build build-ci --target dasall_unit_tests` 聚合目标；本轮使用定向构建绕过。
+
 ## 记录 #461
 
 - 日期：2026-04-24
