@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #457
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-020 实现 RuntimeBridge
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-020 位于 RequestNormalizer 之后，是 access 到 runtime 的唯一调用缝。
+2. 本轮最小判别点是 dispatch 三出口可断言（sync/accepted-async/reject）且 cancel 仅转发。
+3. 020 不引入 runtime 内部逻辑，只落 bridge-local 适配与映射，保持架构边界。
+
+### 改动
+
+1. 新增 `access/src/RuntimeBridge.h` 与 `access/src/RuntimeBridge.cpp`：
+   - 新增 `RuntimeBridge` concrete class（实现 `IAccessRuntimeBridge`）；
+   - 实现 `dispatch()` 前置 fail-closed 校验（`normalizer_ready` + Allow 决策）；
+   - 实现 `map_runtime_result()` 与 `map_runtime_reject()`；
+   - 实现 `cancel()` 参数校验与后端转发语义。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/RuntimeBridge.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/RuntimeBridgeTest.cpp`、`RuntimeBridgeAsyncAcceptTest.cpp`、`RuntimeBridgeRejectMappingTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-020-RuntimeBridge收敛.md`：
+   - 收口边界、流程、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-020 标记为 Done，并补 discoverability 细节说明。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_runtime_bridge_unit_test`、`dasall_access_runtime_bridge_async_accept_unit_test`、`dasall_access_runtime_bridge_reject_mapping_unit_test`。
+2. 定向测试（宽匹配）：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "RuntimeBridge(Test|AsyncAcceptTest|RejectMappingTest)" --output-on-failure`
+   - 结果：4/4 通过（含既有 `PluginRuntimeBridgeTest`）。
+3. 定向测试（精确过滤）：
+   - 命令：`ctest -R "^(RuntimeBridgeTest|RuntimeBridgeAsyncAcceptTest|RuntimeBridgeRejectMappingTest)$" --output-on-failure`
+   - 结果：100% tests passed，3/3 通过。
+4. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "RuntimeBridge(Test|AsyncAcceptTest|RejectMappingTest)"`
+   - 结果：4 个匹配测试可发现。
+
+### 结果
+
+1. ACC-TODO-020 已完成，RuntimeBridge 可稳定覆盖 sync/accepted-async/reject 三出口。
+2. accepted-async 在 runtime 未返回 receipt 时会自动补齐 fallback receipt，避免上游链路丢失回执。
+3. cancel 保持 forward-only 语义，不在 access 层引入额外裁定。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-021，实现 ResultPublisher 与 ProtocolErrorMapper 的发布映射与 channel failure 路径。
+
+### 风险
+
+1. 当前后端为 bridge-local 可注入适配；后续接入真实 runtime 时需保持映射语义与错误码稳定。
+
 ## 记录 #456
 
 - 日期：2026-04-24

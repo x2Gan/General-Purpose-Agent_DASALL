@@ -218,6 +218,24 @@ dasall_add_access_unit_test(
   RequestNormalizerContractCompatibilityTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_runtime_bridge_unit_test
+  RuntimeBridgeTest
+  RuntimeBridgeTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_runtime_bridge_async_accept_unit_test
+  RuntimeBridgeAsyncAcceptTest
+  RuntimeBridgeAsyncAcceptTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_runtime_bridge_reject_mapping_unit_test
+  RuntimeBridgeRejectMappingTest
+  RuntimeBridgeRejectMappingTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )
