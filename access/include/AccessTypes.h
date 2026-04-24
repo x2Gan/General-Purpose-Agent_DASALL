@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "agent/AgentResult.h"
+
 namespace dasall::access {
 
 // AccessGateway 生命周期状态枚举
@@ -91,6 +93,7 @@ struct PublishEnvelope {
   std::string trace_id;                      // 链路追踪 ID
   std::string channel_ref;                   // 内部通道引用
   std::string protocol_kind;
+  std::optional<dasall::contracts::AgentResult> agent_result;  // shared facts
   std::string protocol_status_hint;          // HTTP 状态码 hint
   std::string protocol_metadata;             // Protocol 特定元数据
   bool is_final = true;                      // 是否为最终响应

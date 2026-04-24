@@ -236,6 +236,24 @@ dasall_add_access_unit_test(
   RuntimeBridgeRejectMappingTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_result_publisher_unit_test
+  ResultPublisherTest
+  ResultPublisherTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_protocol_error_mapper_unit_test
+  ProtocolErrorMapperTest
+  ProtocolErrorMapperTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_result_publisher_channel_failure_unit_test
+  ResultPublisherChannelFailureTest
+  ResultPublisherChannelFailureTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

@@ -31,6 +31,7 @@ target_sources(dasall_access
     src/RequestValidator.cpp
     src/RequestNormalizer.cpp
     src/RuntimeBridge.cpp
+    src/ResultPublisher.cpp
     src/daemon/DaemonProtocolAdapter.cpp
     src/ProtocolAdapterRegistry.cpp
     src/ProtocolErrorMapper.cpp

@@ -1,4 +1,5 @@
 #include "AccessErrors.h"
+#include "ProtocolErrorMapper.h"
 
 namespace {
 
@@ -240,6 +241,40 @@ AccessProtocolErrorMapping map_access_error(const AccessErrorCode code) {
       1,
       "INTERNAL",
       "unknown access errors fall back to generic internal-error semantics");
+}
+
+AccessProtocolErrorMapping map_agent_result_to_protocol(
+    const dasall::contracts::AgentResult& result) {
+  if (!result.status.has_value()) {
+    return map_access_error(AccessErrorCode::InternalError);
+  }
+
+  switch (*result.status) {
+    case dasall::contracts::AgentResultStatus::Completed:
+      return make_protocol_mapping(
+          AccessErrorCode::IdempotencyReplayHit,
+          200,
+          0,
+          "OK",
+          "completed agent result should map to success semantics");
+    case dasall::contracts::AgentResultStatus::PartiallyCompleted:
+      return make_protocol_mapping(
+          AccessErrorCode::PublishTimeout,
+          202,
+          0,
+          "OK",
+          "partially completed result should map to accepted semantics");
+    case dasall::contracts::AgentResultStatus::Cancelled:
+      return map_access_error(AccessErrorCode::CancellationFailed);
+    case dasall::contracts::AgentResultStatus::Timeout:
+      return map_access_error(AccessErrorCode::RuntimeDispatchTimeout);
+    case dasall::contracts::AgentResultStatus::Failed:
+      return map_access_error(AccessErrorCode::RuntimeDispatchFailed);
+    case dasall::contracts::AgentResultStatus::Unspecified:
+      return map_access_error(AccessErrorCode::InternalError);
+  }
+
+  return map_access_error(AccessErrorCode::InternalError);
 }
 
 }  // namespace dasall::access

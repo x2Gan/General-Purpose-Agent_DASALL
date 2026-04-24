@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #458
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-021 实现 ResultPublisher 与 ProtocolErrorMapper
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-021 位于 RuntimeBridge 之后，是 `AgentResult` 到协议响应语义收敛与发布发送的关键出口。
+2. 本轮最小判别点是三类断言：envelope 构建、协议映射、通道失败显式错误。
+3. 021 在 access 层完成发布语义收敛，不扩张 runtime 与 contracts 边界。
+
+### 改动
+
+1. 更新 `access/include/AccessTypes.h`：
+   - 为 `PublishEnvelope` 新增 `agent_result` 可选字段，显式承载 shared 事实源。
+2. 新增 `access/src/ProtocolErrorMapper.h` 并更新 `access/src/ProtocolErrorMapper.cpp`：
+   - 新增 `map_agent_result_to_protocol(const AgentResult&)`；
+   - 统一 `AgentResultStatus` 到协议矩阵映射。
+3. 新增 `access/src/ResultPublisher.h` 与 `access/src/ResultPublisher.cpp`：
+   - 实现 `build_envelope()`、`map_protocol_status()`、`emit_publish()` 与 `publish()`；
+   - 发布失败显式映射 `PublishChannelUnavailable`。
+4. 更新 `access/CMakeLists.txt`：
+   - 将 `src/ResultPublisher.cpp` 接入 `dasall_access` 静态库。
+5. 新增 `tests/unit/access/ResultPublisherTest.cpp`、`ProtocolErrorMapperTest.cpp`、`ResultPublisherChannelFailureTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`。
+6. 新增 `docs/todos/access/deliverables/ACC-TODO-021-ResultPublisher与ProtocolErrorMapper收敛.md`。
+7. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-021 标记为 Done，并补交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_result_publisher_unit_test`、`dasall_access_protocol_error_mapper_unit_test`、`dasall_access_result_publisher_channel_failure_unit_test`。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "ResultPublisherTest|ProtocolErrorMapperTest|ResultPublisherChannelFailureTest" --output-on-failure`
+   - 结果：100% tests passed，3/3 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "ResultPublisherTest|ProtocolErrorMapperTest|ResultPublisherChannelFailureTest"`
+   - 结果：3 个测试均可发现。
+
+### 结果
+
+1. ACC-TODO-021 已完成，`AgentResult` 到协议响应映射链路稳定。
+2. 发布链路显式携带 `AgentResult` 事实源，避免发布阶段丢失 shared 语义。
+3. 通道发送失败不再静默，统一返回 `PublishChannelUnavailable` 并保留错误证据。
+
+### 下一步
+
+1. 建议进入 ACC-TODO-022，推进 AsyncTaskRegistry 与 ResultReplayCache。
+
+### 风险
+
+1. `PartiallyCompleted` 当前映射为 202 语义；若后续协议细则调整，需要保持向后兼容并补充映射回归测试。
+
 ## 记录 #457
 
 - 日期：2026-04-24
