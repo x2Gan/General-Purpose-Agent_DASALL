@@ -1,6 +1,8 @@
 add_executable(dasall_cli
   src/main.cpp
   src/CliIpcClient.cpp
+  src/CliCommandParser.cpp
+  src/CliOutputFormatter.cpp
 )
 
 target_compile_features(dasall_cli PRIVATE cxx_std_20)

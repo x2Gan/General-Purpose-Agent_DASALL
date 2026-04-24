@@ -384,6 +384,59 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_ipc_client_unit_test
 )
 
+# ACC-TODO-025: CliIpcClientUnavailableTest
+add_executable(dasall_access_cli_ipc_client_unavailable_unit_test
+  CliIpcClientUnavailableTest.cpp
+  ../../../apps/cli/src/CliIpcClient.cpp
+)
+
+target_include_directories(dasall_access_cli_ipc_client_unavailable_unit_test
+  PRIVATE
+    ../../../apps/cli/src
+)
+
+target_link_libraries(dasall_access_cli_ipc_client_unavailable_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_access_cli_ipc_client_unavailable_unit_test)
+
+add_test(NAME CliIpcClientUnavailableTest
+  COMMAND dasall_access_cli_ipc_client_unavailable_unit_test)
+set_tests_properties(CliIpcClientUnavailableTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_cli_ipc_client_unavailable_unit_test
+)
+
+# ACC-TODO-025: CliOutputFormatterTest
+add_executable(dasall_access_cli_output_formatter_unit_test
+  CliOutputFormatterTest.cpp
+  ../../../apps/cli/src/CliOutputFormatter.cpp
+)
+
+target_include_directories(dasall_access_cli_output_formatter_unit_test
+  PRIVATE
+    ../../../apps/cli/src
+)
+
+target_link_libraries(dasall_access_cli_output_formatter_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall_access_cli_output_formatter_unit_test)
+
+add_test(NAME CliOutputFormatterTest
+  COMMAND dasall_access_cli_output_formatter_unit_test)
+set_tests_properties(CliOutputFormatterTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_cli_output_formatter_unit_test
+)
+
 if(NOT DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access unit registration requires at least one test target")
 endif()
