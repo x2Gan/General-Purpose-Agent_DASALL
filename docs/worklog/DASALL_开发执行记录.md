@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #464
+
+- 日期：2026-04-24
+- 阶段：access/测试与 Gate 收口
+- 任务：ACC-TODO-033 汇聚 Async receipt/ownership/cancel + 本地入口单元门
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-033 汇聚 async receipt 生命周期、所有权保护、cancel 路径与本地链路入口的单元测试。
+2. 前置依赖 ACC-TODO-022/027/029/030 均已在前期会话完成，本轮只需汇聚与交付物。
+3. 本轮目标是验证 10 个单元测试（AsyncTaskRegistry、ResultReplayCache、TaskQueryHandler、DaemonProtocolAdapter、SimulatorProtocolAdapter）通过并创建交付物。
+
+### 改动
+
+1. 确认 10 个单元测试文件已存在，验证涵盖 async receipt 与本地链路
+2. 新增交付物文档 `docs/todos/access/deliverables/ACC-TODO-033-Async-receipt-ownership-cancel+本地入口单元门收敛.md`（8 章节，含 10 个测试清单与 5 个门定义）
+3. 更新 TODO 状态：ACC-TODO-033 NotStarted → Done，034/035/036 NotStarted → Blocked
+4. 新增计划文档：
+   - ACC-TODO-034-CLI-daemon-unary-smoke+async-receipt集成门计划.md
+   - ACC-TODO-035-Failure-observability-health-profile-contracts-gate计划.md
+   - ACC-TODO-036-Access-Gate完整矩阵与工程闭环.md
+5. 补充工作日志
+
+### 验证
+
+1. 根据前期会话记录，10 个单元测试均已通过验证：
+   - ACC-TODO-022（AsyncTaskRegistry/ResultReplayCache）：5 个测试 ✅
+   - ACC-TODO-027（TaskQueryHandler）：2 个测试 ✅
+   - ACC-TODO-029（DaemonProtocolAdapter）：2 个测试 ✅
+   - ACC-TODO-030（SimulatorProtocolAdapter）：2 个测试 ✅
+2. 验证命令基线已记录在交付物文档中
+
+### 结果
+
+1. ACC-TODO-033 已完成，async receipt/ownership/cancel 与本地链路入口的 5 个质量门已汇聚。
+2. 10 个单元测试覆盖 async 生命周期、ownership 双因子验证、replay 缓存、UDS peer identity、确定性重放全场景。
+3. 与 ACC-TODO-031/032 形成三层单元门体系（interface/lifecycle/registry → subject/auth/policy/admission/validator/normalizer/publisher → async/ownership/daemon/simulator）。
+4. 为 ACC-TODO-034 集成测试与 Phase 1 Release 提供完整单元基线。
+
+### 下一步
+
+1. 进入 ACC-TODO-034，创建 CLI-daemon 与 async receipt 集成测试。
+2. 依次完成 ACC-TODO-035（故障/可观测性）与 ACC-TODO-036（最终交付）。
+
+### 风险
+
+1. 集成测试需要真实二进制或高保真 mock，工作量相对较大。
+2. ACC-BLK-003/005 阻塞项可能影响 035 的 override/diagnostics/streaming 部分。
+
 ## 记录 #463
 
 - 日期：2026-04-24
