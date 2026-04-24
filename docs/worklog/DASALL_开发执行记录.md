@@ -1,5 +1,58 @@
 # DASALL 开发执行记录
 
+## 记录 #454
+
+- 日期：2026-04-24
+- 阶段：access/主链实现
+- 任务：ACC-TODO-017 实现 AdmissionController
+- 状态：已完成
+
+### 任务选择
+
+1. ACC-TODO-017 是 016 之后进入 runtime 之前的准入门，负责把并发配额和幂等语义收敛到唯一判定点。
+2. 本轮最小判别点是四类路径是否可二值断言：normal admit、quota busy、idempotency conflict、replay hit。
+3. 017 不引入 runtime 调用与长期存储，只落 admission 责任，确保任务原子边界稳定。
+
+### 改动
+
+1. 新增 `access/src/AdmissionController.h` 与 `access/src/AdmissionController.cpp`：
+   - 提供 `AdmissionController` concrete class（实现 `IAdmissionController`）；
+   - 落盘幂等签名、inflight ticket、completion replay 记录和窗口清理逻辑；
+   - 实现 `admit()`、`release_ticket()`、`record_completion()` 与内部协作函数。
+2. 更新 `access/CMakeLists.txt`：
+   - 将 `src/AdmissionController.cpp` 接入 `dasall_access` 静态库。
+3. 新增 `tests/unit/access/AdmissionControllerTest.cpp`、`RateLimitGateTest.cpp`、`IdempotencyGuardTest.cpp`、`AdmissionReplayHitTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`：
+   - 覆盖四类准入路径。
+4. 新增 `docs/todos/access/deliverables/ACC-TODO-017-AdmissionController收敛.md`：
+   - 收口边界、数据模型、流程、决策规则、Design -> Build 映射与验收命令。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`：
+   - 将 ACC-TODO-017 标记为 Done，并补交付物与 discoverability 证据。
+
+### 验证
+
+1. 定向构建：
+   - 通过 CMake Tools 构建 `dasall_access_admission_controller_core_unit_test`、`dasall_access_rate_limit_gate_unit_test`、`dasall_access_idempotency_guard_unit_test`、`dasall_access_admission_replay_hit_unit_test`。
+2. 定向测试：
+   - 命令：`cd /home/gangan/DASALL/build/vscode-linux-ninja && ctest -R "AdmissionControllerTest|RateLimitGateTest|IdempotencyGuardTest|AdmissionReplayHitTest" --output-on-failure`
+   - 结果：100% tests passed，4/4 通过。
+3. discoverability：
+   - 命令：`ctest --test-dir build/vscode-linux-ninja -N -R "AdmissionControllerTest|RateLimitGateTest|IdempotencyGuardTest|AdmissionReplayHitTest"`
+   - 结果：4 个 admission 测试均可发现。
+
+### 结果
+
+1. ACC-TODO-017 已完成，access 主链具备统一 admission 决策点，能够稳定区分 busy/conflict/replay-hit/admit。
+2. replay 命中不再进入重复 dispatch，避免幂等请求被错误当作新执行。
+3. 任务保持 module-local 实现，没有扩展 public ABI 或越权到 runtime 层。
+
+### 下一步
+
+1. 继续执行 ACC-TODO-018，实现 RequestValidator 并覆盖 payload 超限与注入路径。
+
+### 风险
+
+1. 当前幂等窗口为进程内内存态实现；后续若扩展多实例场景需保持 admit/release/record_completion 的外部语义不变。
+
 ## 记录 #453
 
 - 日期：2026-04-24

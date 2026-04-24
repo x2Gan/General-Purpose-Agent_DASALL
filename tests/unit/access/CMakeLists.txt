@@ -152,6 +152,30 @@ dasall_add_access_unit_test(
   AccessPolicyBackendFailureTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_admission_controller_core_unit_test
+  AdmissionControllerTest
+  AdmissionControllerTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_rate_limit_gate_unit_test
+  RateLimitGateTest
+  RateLimitGateTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_idempotency_guard_unit_test
+  IdempotencyGuardTest
+  IdempotencyGuardTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_admission_replay_hit_unit_test
+  AdmissionReplayHitTest
+  AdmissionReplayHitTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

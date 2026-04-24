@@ -25,6 +25,7 @@ target_sources(dasall_access
   PRIVATE
     src/placeholder.cpp
     src/AccessConfigAdapter.cpp
+    src/AdmissionController.cpp
     src/AccessPolicyGate.cpp
     src/AuthenticatorChain.cpp
     src/daemon/DaemonProtocolAdapter.cpp
