@@ -336,6 +336,29 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_protocol_adapter_local_trusted_unit_test
 )
 
+# ACC-TODO-029: DaemonProtocolAdapter 基础功能测试
+add_executable(dasall_access_daemon_protocol_adapter_unit_test
+  DaemonProtocolAdapterTest.cpp
+)
+
+target_link_libraries(dasall_access_daemon_protocol_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_access_daemon_protocol_adapter_unit_test)
+
+add_test(NAME DaemonProtocolAdapterTest
+  COMMAND dasall_access_daemon_protocol_adapter_unit_test
+)
+set_tests_properties(DaemonProtocolAdapterTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_protocol_adapter_unit_test
+)
+
 add_executable(dasall_access_cli_ipc_client_unit_test
   CliIpcClientTest.cpp
   ../../../apps/cli/src/CliIpcClient.cpp
