@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #470
+
+- 日期：2026-04-25
+- 阶段：cognition/Build-ready 骨架与公共 include
+- 任务：COG-TODO-005 新增 cognition 公共 include 布局与 CMake 骨架
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-005 无前置依赖；COG-TODO-001 ~ 004 已完成，接口口径、stage taxonomy、runtime caller seam 与 mock seam 设计侧均已解阻。
+2. 本轮只建立公共 include 承载面与 CMake 骨架，不提前冻结 COG-TODO-007 ~ 010 的字段表、PlanGraph / ActionDecision 细节或阶段接口方法签名。
+3. 当前代码已有部分 cognition 头和 `src/CognitionFacade.cpp`，但缺少 `IPlanner.h`、`IReasoner.h`、`IReflectionEngine.h`，且 `src/placeholder.cpp` 残留；本轮按 005 范围补齐并回写证据。
+
+### 改动
+
+1. 更新 `cognition/CMakeLists.txt`，为 `dasall_cognition` 登记 public header file set，并保留 `cognition/include` 作为公共 include 根。
+2. 新增 `cognition/include/IPlanner.h`、`cognition/include/IReasoner.h`、`cognition/include/IReflectionEngine.h`，作为后续 COG-TODO-010 接口签名冻结的承载头。
+3. 删除 `cognition/src/placeholder.cpp`，关闭 placeholder-only 残留。
+4. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-005-cognition公共include布局与CMake骨架.md`。
+5. 更新 cognition 专项 TODO，将 COG-TODO-005 标记为 Done，并记录构建与 placeholder 负例验收命令。
+6. 修复直接 validation blocker：删除 `FreshnessControllerStalePolicyTest.cpp` 的重复拼接内容，并补齐 `tests/unit/CMakeLists.txt` 中已注册但未构建的 21 个 unit test target 依赖。
+
+### 验证
+
+1. `cmake -S . -B build-ci-cog005 -G "Unix Makefiles" && cmake --build build-ci-cog005 --target dasall_cognition dasall_unit_tests`
+   - 结果：通过；Unix Makefiles 干净目录下 `dasall_cognition` 与 `dasall_unit_tests` 均通过，463 个 unit 测试全绿。
+2. `cmake --build build-ci --target dasall_cognition dasall_unit_tests`
+   - 结果：通过；现有 Ninja `build-ci` 下 463 个 unit 测试全绿。
+3. `test ! -e cognition/src/placeholder.cpp && ! rg -n "placeholder.cpp|keep_library_non_empty" cognition/CMakeLists.txt cognition/src cognition/include`
+   - 结果：通过；placeholder 残留负例检索为零。
+4. blocker recovery 说明：原始 `build-ci` 已由 Ninja 配置，不能再用 `-G "Unix Makefiles"` 复配；因此使用 `build-ci-cog005` 验证 Unix Makefiles 路径。
+
+### 结果
+
+1. COG-TODO-005 已完成，cognition 已具备真实公共 include 根与可构建骨架。
+2. `dasall_cognition` 不再依赖 `src/placeholder.cpp` 维持静态库非空。
+3. COG-TODO-006 仍需继续接线 `tests/unit/cognition` 与 `CognitionInterfaceSurfaceTest` discoverability。
+
+### 下一步
+
+1. 进入 COG-TODO-006：接线 cognition unit 测试入口，并让 `ctest -N` 可发现 `CognitionInterfaceSurfaceTest`。
+
 ## 记录 #469
 
 - 日期：2026-04-24

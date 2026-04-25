@@ -3,7 +3,7 @@
 最近更新时间：2026-04-24
 阶段：Detailed Design -> Special TODO
 适用范围：cognition/
-当前结论：认知详设已经具备 L3/L2 混合粒度拆分条件；COG-TODO-001 已把 `ICognitionEngine` 公共口径收敛为 `decide()` / `reflect()` / `IResponseBuilder::build()` 三入口，COG-BLK-001 已解阻；COG-TODO-002 已把 cognition↔llm stage taxonomy 收敛为 `planning/execution/reflection/response` canonical key 与 StageModelHint 映射表，COG-BLK-002 已解阻；COG-TODO-003 已把 runtime↔cognition caller fixture 与 ActionDecision→FSM 第一跳口径收敛到 Runtime 真实 FSM 状态 / guard table，COG-BLK-003 已解阻；COG-TODO-004 已冻结 `MockLLMManager`、`MockCognitionFixture`、failure/profile smoke fixture 的测试支撑口径，前置补设计 / 评审门禁已完成，真实 mock header 与 discoverability 仍由 COG-TODO-024 / 025 落地。
+当前结论：认知详设已经具备 L3/L2 混合粒度拆分条件；COG-TODO-001 已把 `ICognitionEngine` 公共口径收敛为 `decide()` / `reflect()` / `IResponseBuilder::build()` 三入口，COG-BLK-001 已解阻；COG-TODO-002 已把 cognition↔llm stage taxonomy 收敛为 `planning/execution/reflection/response` canonical key 与 StageModelHint 映射表，COG-BLK-002 已解阻；COG-TODO-003 已把 runtime↔cognition caller fixture 与 ActionDecision→FSM 第一跳口径收敛到 Runtime 真实 FSM 状态 / guard table，COG-BLK-003 已解阻；COG-TODO-004 已冻结 `MockLLMManager`、`MockCognitionFixture`、failure/profile smoke fixture 的测试支撑口径，前置补设计 / 评审门禁已完成；COG-TODO-005 已新增 cognition 公共 include 承载头与 CMake public header file set，并移除 `src/placeholder.cpp` 残留；真实 mock header 与 discoverability 仍由 COG-TODO-024 / 025 落地。
 
 ## 1. 文档头
 
@@ -94,9 +94,9 @@
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| cognition/CMakeLists.txt | `dasall_cognition` 当前仅编译 `src/placeholder.cpp`，PUBLIC include 指向尚未落盘的 `cognition/include` | cognition 已在构建图中，但仍是 placeholder-only 静态库 |
-| cognition/src/placeholder.cpp | 仅保留 `keep_library_non_empty()` 占位函数 | 生产实现尚未开始 |
-| cognition/include | 当前不存在 | 公共 ABI、模块公共类型与阶段接口均未落盘 |
+| cognition/CMakeLists.txt | `dasall_cognition` 当前编译 `src/CognitionFacade.cpp`，并通过 public header file set 登记 cognition 公共头 | cognition 已退出 placeholder-only 状态；unit discoverability 仍由 COG-TODO-006 接线 |
+| cognition/src/placeholder.cpp | 已由 COG-TODO-005 删除，CMake 源列表不再引用 placeholder | 后续不得用 placeholder 冒充生产骨架 |
+| cognition/include | 已落盘 `ICognitionEngine.h`、`IResponseBuilder.h`、`IPlanner.h`、`IReasoner.h`、`IReflectionEngine.h`、`CognitionConfig.h`、`CognitionTypes.h` 等承载头 | 公共 include 根已建立；字段/接口签名冻结继续由 COG-TODO-007 ~ 010 推进 |
 | tests/unit/cognition/CMakeLists.txt | 仅有 placeholder 注释 | cognition 单测拓扑尚未接线 |
 | tests/integration/CMakeLists.txt | 当前只接入 infra / profiles / platform / services / tools / llm | cognition integration 拓扑完全缺失 |
 | tests/unit/runtime/RuntimeSmokeTest.cpp | 当前只通过 `MockLLMAdapter`、`MockMemoryStore`、`MockTool` 验证 smoke，不经过 cognition | runtime 当前仍处于“绕过 cognition 的冒烟模式” |
@@ -196,7 +196,7 @@
 
 | ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| COG-TODO-005 | NotStarted | 新增 cognition 公共 include 布局与 CMake 骨架 | 认知详设 7.1 COG-D01、8.1、8.2；当前代码现状 | 8.1 目录建议 | L2 | 新增 `cognition/include/`、更新 `cognition/CMakeLists.txt`、替换 `src/placeholder.cpp` 唯一源列表 | `ICognitionEngine.h`、`IResponseBuilder.h`、`IPlanner.h`、`IReasoner.h`、`IReflectionEngine.h`、`CognitionConfig.h`、`CognitionTypes.h` 的落盘承载面 | build：`dasall_cognition` 不再仅依赖 placeholder；后续 gate 可承载 unit / integration 文件 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_cognition dasall_unit_tests` | 无 | 无 | 无 | docs/todos/cognition/deliverables/COG-TODO-005-cognition公共include布局与CMake骨架.md；cognition/CMakeLists.txt；cognition/include/ | 仅当 cognition 具备真实 include 根并可在不依赖单个 placeholder 源文件的前提下编译时完成 |
+| COG-TODO-005 | Done | 新增 cognition 公共 include 布局与 CMake 骨架 | 认知详设 7.1 COG-D01、8.1、8.2；当前代码现状 | 8.1 目录建议 | L2 | 新增 `cognition/include/`、更新 `cognition/CMakeLists.txt`、替换 `src/placeholder.cpp` 唯一源列表 | `ICognitionEngine.h`、`IResponseBuilder.h`、`IPlanner.h`、`IReasoner.h`、`IReflectionEngine.h`、`CognitionConfig.h`、`CognitionTypes.h` 的落盘承载面 | build：`dasall_cognition` 不再仅依赖 placeholder；后续 gate 可承载 unit / integration 文件 | `cmake -S . -B build-ci-cog005 -G "Unix Makefiles" && cmake --build build-ci-cog005 --target dasall_cognition dasall_unit_tests`；`cmake --build build-ci --target dasall_cognition dasall_unit_tests`；`test ! -e cognition/src/placeholder.cpp && ! rg -n "placeholder.cpp|keep_library_non_empty" cognition/CMakeLists.txt cognition/src cognition/include` | 无 | 无 | 无 | docs/todos/cognition/deliverables/COG-TODO-005-cognition公共include布局与CMake骨架.md；cognition/CMakeLists.txt；cognition/include/；验收命令已通过，public headers 已登记到 `dasall_cognition` file set | cognition 已具备真实 include 根，并可在不依赖单个 placeholder 源文件的前提下编译；`CognitionInterfaceSurfaceTest` discoverability 仍由 COG-TODO-006 完成 |
 | COG-TODO-006 | NotStarted | 接线 tests/unit/cognition 与 CognitionInterfaceSurfaceTest | 认知详设 7.1 COG-D01、8.1、9.1；工程规范 3.7 | 8.1 tests/unit/cognition；9.1 unit matrix | L2 | 更新 `tests/unit/cognition/CMakeLists.txt` 与 `tests/unit/CMakeLists.txt`，新增 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp` | `CognitionInterfaceSurfaceTest` | unit：`ctest -N` 能发现 cognition unit 入口 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -N | rg "CognitionInterfaceSurfaceTest"` | COG-TODO-005 | 无 | 无 | docs/todos/cognition/deliverables/COG-TODO-006-cognition-unit测试入口接线.md；tests/unit/cognition/CMakeLists.txt；tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp | 仅当 cognition unit 测试不再是空目录，且 `ctest -N` 可稳定发现入口时完成 |
 | COG-TODO-007 | NotStarted | 定义 CognitionConfig 与请求/结果对象族 | 认知详设 6.6.2、6.10、8.1；工程规范 3.2 | 6.6.2 request/result structs；8.1 `CognitionConfig.h`、`CognitionTypes.h`、`response/*` | L3 | 新增 `cognition/include/CognitionConfig.h`、`cognition/include/CognitionTypes.h`、`cognition/include/response/ResponseBuildRequest.h`、`cognition/include/response/ResponseBuildResult.h`、`cognition/include/perception/PerceptionResult.h` | `CognitionStepRequest`、`CognitionDecisionResult`、`ReflectionRequest`、`CognitionReflectionResult`、`ResponseBuildRequest`、`ResponseBuildResult`、`CognitionConfig` | unit：`CognitionInterfaceSurfaceTest`；contract 回归：Goal/Belief/Context/Observation 边界不回退 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_cognition dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -R "CognitionInterfaceSurfaceTest|GoalContractFieldContractTest|BeliefStateContractTest|ContextPacketFieldContractTest|ObservationContractTest" --output-on-failure` | COG-TODO-001、005、006 | COG-BLK-001 | 完成 COG-TODO-001 | docs/todos/cognition/deliverables/COG-TODO-007-CognitionConfig与请求结果对象收敛.md；对应 include 头文件 | 仅当请求/结果对象字段与详设一致，且未把运行控制字段混入 cognition 公共对象时完成 |
 | COG-TODO-008 | NotStarted | 定义 PlanGraph / PlanNode / ReplanResult 模块公共类型 | 认知详设 6.5.3、6.13.2、8.1；WP05-T011 / 012 | 6.5.3 PlanGraph / PlanNode / ReplanResult | L3 | 新增 `cognition/include/plan/PlanGraph.h`、`cognition/include/plan/ReplanResult.h` | `PlanGraph`、`PlanNode`、`ReplanResult` | unit：`CognitionInterfaceSurfaceTest`；后续 gate 复验：`PlannerPlanGraphTest` / `PlannerReplanTest` | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_cognition dasall_unit_tests && ctest --test-dir build-ci -R "CognitionInterfaceSurfaceTest" --output-on-failure` | COG-TODO-005、006 | 无 | 无 | docs/todos/cognition/deliverables/COG-TODO-008-PlanGraph与ReplanResult对象收敛.md；对应 include 头文件 | 仅当 DAG 基本字段、revision 语义与 open questions / success signal 字段稳定落盘，且未推动 shared admission 时完成 |
@@ -420,3 +420,18 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
    - `rg -n "MockLLMManager|MockCognitionFixture|tests/mocks/include" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md`
 5. 验收结论：PASS；MockLLMManager、MockCognitionFixture、tests/mocks/include 目录目标、COG-TODO-004 Done 状态与 COG-BLK-004 设计侧解阻记录均可检索。
 6. Blocker：COG-BLK-004 已完成设计侧解阻；COG-TODO-020 / 022 / 023 / 026 ~ 029 仍需等待 COG-TODO-024 把 mock header 真正落盘。
+
+### 13.5 COG-TODO-005：cognition 公共 include 布局与 CMake 骨架（2026-04-25）
+
+1. 任务选择：COG-TODO-005 无前置依赖；COG-TODO-001 ~ 004 已完成并解除了接口、stage taxonomy、runtime caller seam 与测试 seam 的设计侧阻塞。
+2. 设计交付物：docs/todos/cognition/deliverables/COG-TODO-005-cognition公共include布局与CMake骨架.md。
+3. 代码落点：
+   - `cognition/CMakeLists.txt` 已登记 `dasall_cognition` public header file set，并继续公开 `cognition/include`。
+   - 新增 `cognition/include/IPlanner.h`、`IReasoner.h`、`IReflectionEngine.h` 作为后续 COG-TODO-010 的阶段接口承载头。
+   - 删除 `cognition/src/placeholder.cpp`，`dasall_cognition` 不再依赖 placeholder-only 源。
+4. 验收命令：
+   - `cmake -S . -B build-ci-cog005 -G "Unix Makefiles" && cmake --build build-ci-cog005 --target dasall_cognition dasall_unit_tests`
+   - `cmake --build build-ci --target dasall_cognition dasall_unit_tests`
+   - `test ! -e cognition/src/placeholder.cpp && ! rg -n "placeholder.cpp|keep_library_non_empty" cognition/CMakeLists.txt cognition/src cognition/include`
+5. 验收结论：PASS；Unix Makefiles 干净目录与现有 Ninja `build-ci` 均通过，`dasall_unit_tests` 共 463 个 unit 测试全绿，placeholder 残留负例检索为零。
+6. 后续边界：COG-TODO-006 继续接线 `CognitionInterfaceSurfaceTest` discoverability；COG-TODO-007 ~ 010 继续字段与接口签名冻结，不在本轮提前完成。
