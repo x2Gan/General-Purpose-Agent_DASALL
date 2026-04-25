@@ -129,6 +129,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_background_maintenance_hook_unit_test
 	dasall_runtime_checkpoint_state_mapper_unit_test
 	dasall_runtime_transition_guard_table_unit_test
+	${DASALL_COGNITION_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}

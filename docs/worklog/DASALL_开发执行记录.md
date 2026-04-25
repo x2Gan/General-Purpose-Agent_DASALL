@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #471
+
+- 日期：2026-04-25
+- 阶段：cognition/Build-ready unit 测试拓扑
+- 任务：COG-TODO-006 接线 tests/unit/cognition 与 CognitionInterfaceSurfaceTest
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-006 依赖 COG-TODO-005；公共 include、`dasall_cognition` 骨架与 placeholder 清理已完成。
+2. 本轮只处理 cognition unit 测试入口、`CognitionInterfaceSurfaceTest` surface smoke 与顶层 `dasall_unit_tests` 聚合依赖。
+3. 本轮不提前冻结 COG-TODO-007 ~ 010 的请求/结果字段、PlanGraph/ReplanResult、StageModelHint 或阶段接口签名。
+
+### 改动
+
+1. 更新 `tests/unit/cognition/CMakeLists.txt`，替换 placeholder 注释为真实 test target 注册逻辑。
+2. 更新 `tests/unit/CMakeLists.txt`，把 `${DASALL_COGNITION_UNIT_TEST_EXECUTABLE_TARGETS}` 纳入顶层 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS`。
+3. 新增 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`，覆盖三入口签名、factory 链接、承载头 include，以及 legacy `step()` 不存在负例。
+4. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-006-cognition-unit测试入口接线.md`。
+5. 更新 cognition 专项 TODO，将 COG-TODO-006 标记为 Done，并记录 Makefiles 与既有 Ninja 构建目录的发现性证据。
+
+### 验证
+
+1. `cmake -S . -B build-ci-cog006 -G "Unix Makefiles"`
+   - 结果：通过；干净 Makefiles 构建目录配置完成。
+2. `cmake --build build-ci-cog006 --target dasall_unit_tests`
+   - 结果：通过；464 个 unit 测试全绿，label summary 包含 `cognition = 1 test`。
+3. `ctest --test-dir build-ci-cog006 -N | rg "CognitionInterfaceSurfaceTest"`
+   - 结果：通过；输出 `Test  #21: CognitionInterfaceSurfaceTest`。
+4. `ctest --test-dir build-ci-cog006 -R "CognitionInterfaceSurfaceTest" --output-on-failure`
+   - 结果：通过；1/1 passed。
+5. `cmake -S . -B build-ci && cmake --build build-ci --target dasall_unit_tests`
+   - 结果：通过；既有 Ninja `build-ci` 下 464 个 unit 测试全绿。
+6. `ctest --test-dir build-ci -N | rg "CognitionInterfaceSurfaceTest"`
+   - 结果：通过；既有 `build-ci` 也能发现 `CognitionInterfaceSurfaceTest`。
+
+### 结果
+
+1. COG-TODO-006 已完成，`tests/unit/cognition` 不再是空 placeholder 目录。
+2. `CognitionInterfaceSurfaceTest` 已进入顶层 unit 聚合并可被 `ctest -N` 稳定发现。
+3. Gate-COG-02 的 unit discoverability 部分已闭合；字段与接口冻结继续由 COG-TODO-007 ~ 010 推进。
+
+### 下一步
+
+1. 进入 COG-TODO-007：定义 CognitionConfig 与请求/结果对象族，并复用 `CognitionInterfaceSurfaceTest` 做公共面回归。
+
 ## 记录 #470
 
 - 日期：2026-04-25
