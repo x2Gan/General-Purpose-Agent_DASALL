@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #472
+
+- 日期：2026-04-26
+- 阶段：cognition/Build-ready 对象族冻结
+- 任务：COG-TODO-007 定义 CognitionConfig 与请求/结果对象族
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-007 依赖 COG-TODO-001、005、006；三项均已完成，COG-BLK-001 已由 COG-TODO-001 解阻。
+2. 本轮只冻结 CognitionConfig、decide/reflect/response/perception 请求与结果对象，不提前实现 COG-TODO-008 PlanGraph 或 COG-TODO-009 ActionDecision supporting types 的新语义。
+3. Runtime/cognition 现有 skeleton 已直接消费旧字段名，本轮同步做最小适配，保持行为骨架不扩张。
+
+### 改动
+
+1. 更新 `cognition/include/CognitionConfig.h`，落盘 §6.10 默认阈值、fallback、delegate hint 与 observability redaction 配置。
+2. 更新 `cognition/include/CognitionTypes.h`，冻结 `CognitionStepRequest`、`CognitionDecisionResult`、`ReflectionRequest`、`CognitionReflectionResult` 与调用级 hints。
+3. 新增 `cognition/include/response/ResponseBuildRequest.h`、`cognition/include/response/ResponseBuildResult.h` 与 `cognition/include/perception/PerceptionResult.h`，并登记到 `cognition/CMakeLists.txt` public header file set。
+4. 适配 `cognition/src/CognitionFacade.cpp` 与 `runtime/src/AgentOrchestrator.cpp`，按新字段和 optional result 处理骨架结果。
+5. 扩展 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`，覆盖配置默认值、对象字段正例、越界控制字段负例和新增 public headers。
+6. 修复验证 blocker：`tests/contract/plugin/CMakeLists.txt` 将 plugin contract executable target 列表回传父作用域，避免 Makefiles 下 contract tests 注册后未构建。
+7. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-007-CognitionConfig与请求结果对象收敛.md`，并更新 cognition 专项 TODO 状态。
+
+### 验证
+
+1. `cmake -S . -B build-ci-cog007 -G "Unix Makefiles"`
+   - 结果：通过。
+2. `cmake --build build-ci-cog007 --target dasall_cognition dasall_unit_tests dasall_contract_tests`
+   - 结果：通过；464 个 unit 测试全绿，152 个 contract 测试全绿。
+3. `ctest --test-dir build-ci-cog007 -R "CognitionInterfaceSurfaceTest|GoalContractFieldContractTest|BeliefStateContractTest|ContextPacketFieldContractTest|ObservationContractTest" --output-on-failure`
+   - 结果：通过；5/5 passed。
+4. `cmake --build build-ci --target dasall_cognition dasall_unit_tests dasall_contract_tests`
+   - 结果：通过；既有 Ninja `build-ci` 完成重配置、构建与 unit / contract 聚合测试。输出包含既有 policy catalog `-Waddress` 编译告警。
+
+### 结果
+
+1. COG-TODO-007 已完成，CognitionConfig 与请求/结果对象族进入 module-public 承载面。
+2. `CognitionDecisionResult`、`CognitionReflectionResult` 与 `ResponseBuildResult` 均保留显式错误出口，未把 runtime 恢复准入、publish channel、provider payload 或工具执行控制混入 cognition 公共对象。
+3. Goal/Belief/Context/Observation contract 回归通过，未扩张 shared contracts admission。
+
+### 下一步
+
+1. 进入 COG-TODO-008：定义 PlanGraph / PlanNode / ReplanResult 模块公共类型。
+
 ## 记录 #471
 
 - 日期：2026-04-25

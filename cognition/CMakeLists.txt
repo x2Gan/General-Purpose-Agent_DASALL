@@ -18,6 +18,9 @@ target_sources(dasall_cognition
       include/IResponseBuilder.h
       include/belief/BeliefUpdateHint.h
       include/decision/ActionDecision.h
+      include/perception/PerceptionResult.h
+      include/response/ResponseBuildRequest.h
+      include/response/ResponseBuildResult.h
 )
 
 target_compile_features(dasall_cognition PUBLIC cxx_std_20)

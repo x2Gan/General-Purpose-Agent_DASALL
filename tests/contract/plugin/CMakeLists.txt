@@ -18,6 +18,11 @@ function(dasall_register_plugin_contract_test executable_target_name ctest_name 
     PRIVATE
       dasall_infra
   )
+
+  set(DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS
+    "${DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS}"
+    PARENT_SCOPE
+  )
 endfunction()
 
 dasall_register_plugin_contract_test(

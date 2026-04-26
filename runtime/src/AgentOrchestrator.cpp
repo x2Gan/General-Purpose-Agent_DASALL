@@ -13,6 +13,7 @@
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
 #include "IToolManager.h"
+#include "agent/GoalContract.h"
 #include "checkpoint/CheckpointBuildTypes.h"
 #include "checkpoint/RecoveryRequest.h"
 #include "checkpoint/ReflectionDecision.h"
@@ -86,6 +87,21 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   }
 
   return composition.default_runtime_budget;
+}
+
+[[nodiscard]] contracts::GoalContract make_goal_contract(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id) {
+  contracts::GoalContract goal_contract;
+  goal_contract.goal_id = goal_id;
+  goal_contract.request_id = request.request_id;
+  goal_contract.goal_description = request.user_input.value_or(goal_id);
+  goal_contract.success_criteria =
+      "runtime live unary path materializes a tool observation and response";
+  goal_contract.status = contracts::GoalStatus::Active;
+  goal_contract.created_at = request.created_at.value_or(current_time_ms());
+  goal_contract.tags = std::vector<std::string>{"runtime", "cognition", "true-integration"};
+  return goal_contract;
 }
 
 [[nodiscard]] memory::MemoryContextRequest make_memory_context_request(
@@ -220,10 +236,11 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
     const contracts::ContextPacket& context_packet,
     const contracts::RuntimeBudget& runtime_budget) {
   cognition::CognitionStepRequest cognition_request;
+  cognition_request.caller_domain = "runtime.agent_orchestrator";
   cognition_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
   cognition_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
   cognition_request.profile_id = composition.profile_id;
-  cognition_request.goal_id = goal_id;
+  cognition_request.goal_contract = make_goal_contract(request, goal_id);
   cognition_request.context_packet = context_packet;
   cognition_request.belief_state = contracts::BeliefState{
       .request_id = request.request_id,
@@ -299,10 +316,11 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
     const contracts::ContextPacket& context_packet,
     const contracts::Observation& latest_observation) {
   cognition::ReflectionRequest reflection_request;
+  reflection_request.caller_domain = "runtime.agent_orchestrator";
   reflection_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
   reflection_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
   reflection_request.profile_id = composition.profile_id;
-  reflection_request.goal_id = goal_id;
+  reflection_request.goal_contract = make_goal_contract(request, goal_id);
   reflection_request.context_packet = context_packet;
   reflection_request.belief_state = contracts::BeliefState{
       .request_id = request.request_id,
@@ -327,13 +345,25 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
     const contracts::Observation& latest_observation,
     const cognition::decision::ActionDecision& action_decision) {
   cognition::ResponseBuildRequest response_request;
+  response_request.caller_domain = "runtime.agent_orchestrator";
   response_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
   response_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
   response_request.profile_id = composition.profile_id;
-  response_request.goal_id = goal_id;
+  response_request.goal_contract = make_goal_contract(request, goal_id);
   response_request.context_packet = context_packet;
+  response_request.belief_state = contracts::BeliefState{
+      .request_id = request.request_id,
+      .confirmed_facts = std::vector<std::string>{"tool projection produced an observation"},
+      .hypotheses = std::vector<std::string>{"response builder can finalize the turn"},
+      .assumptions = std::vector<std::string>{"observation payload is user-safe"},
+      .evidence_refs = std::vector<std::string>{latest_observation.observation_id.value_or(std::string{"obs-live-unary"})},
+      .confidence = 0.85F,
+      .goal_id = goal_id,
+      .created_at = current_time_ms(),
+      .tags = std::vector<std::string>{"runtime", "response", "true-integration"},
+  };
   response_request.latest_observation = latest_observation;
-  response_request.action_decision = action_decision;
+  response_request.terminal_decision = action_decision;
   return response_request;
 }
 
@@ -1199,7 +1229,8 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                                     composition_,
                                     context_result.context_packet,
                                     runtime_budget));
-    if (cognition_result.action_decision.decision_kind !=
+    if (!cognition_result.action_decision.has_value() ||
+        cognition_result.action_decision->decision_kind !=
         cognition::decision::ActionDecisionKind::ExecuteAction) {
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::MainLoop,
@@ -1359,7 +1390,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
     const auto tool_envelope = composition_.dependency_set->tool_manager->invoke(
         make_tool_request(normalized_request,
                           runtime_budget,
-                          cognition_result.action_decision,
+                          *cognition_result.action_decision,
                           goal_id,
                           composition_),
         make_tool_invocation_context(normalized_request, composition_));
@@ -1576,7 +1607,31 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                                     composition_,
                                     context_result.context_packet,
                                     latest_observation,
-                                    cognition_result.action_decision));
+                                    *cognition_result.action_decision));
+
+    if (!response_build_result.agent_result.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 "response builder did not materialize an AgentResult");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path could not materialize a response",
+          response_build_result.error_info.value_or(
+              make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                                 "response builder returned no AgentResult",
+                                 orchestrator_stage_name(OrchestratorStage::ToolRound),
+                                 RuntimeState::Failed)),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
 
     StateTransitionOutcome response_outcome;
     if (const auto failure = apply_step(
@@ -1717,7 +1772,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                fsm->current_state(),
                true,
                "live unary response audited, checkpointed, and persisted");
-    run_result.agent_result = response_build_result.agent_result;
+    run_result.agent_result = *response_build_result.agent_result;
     finalize_live_agent_result(&run_result.agent_result,
                                normalized_request,
                                goal_id,
