@@ -19,6 +19,8 @@ target_sources(dasall_cognition
       include/belief/BeliefUpdateHint.h
       include/decision/ActionDecision.h
       include/perception/PerceptionResult.h
+      include/plan/PlanGraph.h
+      include/plan/ReplanResult.h
       include/response/ResponseBuildRequest.h
       include/response/ResponseBuildResult.h
 )

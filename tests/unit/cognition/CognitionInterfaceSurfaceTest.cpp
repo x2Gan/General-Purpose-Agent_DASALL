@@ -22,6 +22,8 @@
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "perception/PerceptionResult.h"
+#include "plan/PlanGraph.h"
+#include "plan/ReplanResult.h"
 #include "response/ResponseBuildRequest.h"
 #include "response/ResponseBuildResult.h"
 #include "support/TestAssertions.h"
@@ -85,6 +87,27 @@ struct has_retry_after_member : std::false_type {};
 
 template <typename T>
 struct has_retry_after_member<T, std::void_t<decltype(std::declval<T>().retry_after_ms)>>
+    : std::true_type {};
+
+template <typename T, typename = void>
+struct has_deadline_ms_member : std::false_type {};
+
+template <typename T>
+struct has_deadline_ms_member<T, std::void_t<decltype(std::declval<T>().deadline_ms)>>
+    : std::true_type {};
+
+template <typename T, typename = void>
+struct has_lease_id_member : std::false_type {};
+
+template <typename T>
+struct has_lease_id_member<T, std::void_t<decltype(std::declval<T>().lease_id)>>
+    : std::true_type {};
+
+template <typename T, typename = void>
+struct has_worker_state_member : std::false_type {};
+
+template <typename T>
+struct has_worker_state_member<T, std::void_t<decltype(std::declval<T>().worker_state)>>
     : std::true_type {};
 
 template <typename T, typename = void>
@@ -331,6 +354,70 @@ void test_response_and_perception_object_headers_are_module_public() {
   static_assert(!has_provider_payload_member<PerceptionResult>::value);
 }
 
+void test_plan_graph_and_replan_object_headers_are_module_public() {
+  using dasall::cognition::plan::PlanEdge;
+  using dasall::cognition::plan::PlanGraph;
+  using dasall::cognition::plan::PlanNode;
+  using dasall::cognition::plan::PlanOpenQuestion;
+  using dasall::cognition::plan::ReplanResult;
+  using dasall::tests::support::assert_true;
+
+  static_assert(std::is_same_v<decltype(PlanNode{}.node_id), std::string>);
+  static_assert(std::is_same_v<decltype(PlanNode{}.objective), std::string>);
+  static_assert(std::is_same_v<decltype(PlanNode{}.success_signal), std::string>);
+  static_assert(std::is_same_v<decltype(PlanNode{}.action_kind_hint), std::string>);
+  static_assert(std::is_same_v<decltype(PlanNode{}.depends_on),
+                               std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(PlanNode{}.evidence_refs),
+                               std::vector<std::string>>);
+  static_assert(!has_deadline_ms_member<PlanNode>::value);
+  static_assert(!has_lease_id_member<PlanNode>::value);
+  static_assert(!has_worker_state_member<PlanNode>::value);
+
+  static_assert(std::is_same_v<decltype(PlanEdge{}.from_node_id), std::string>);
+  static_assert(std::is_same_v<decltype(PlanEdge{}.to_node_id), std::string>);
+  static_assert(std::is_same_v<decltype(PlanEdge{}.condition), std::string>);
+  static_assert(std::is_same_v<decltype(PlanEdge{}.evidence_refs),
+                               std::vector<std::string>>);
+  static_assert(!has_retry_after_member<PlanEdge>::value);
+
+  static_assert(std::is_same_v<decltype(PlanOpenQuestion{}.question_id), std::string>);
+  static_assert(std::is_same_v<decltype(PlanOpenQuestion{}.question), std::string>);
+  static_assert(std::is_same_v<decltype(PlanOpenQuestion{}.reason), std::string>);
+  static_assert(std::is_same_v<decltype(PlanOpenQuestion{}.blocks_plan), bool>);
+  static_assert(std::is_same_v<decltype(PlanOpenQuestion{}.evidence_refs),
+                               std::vector<std::string>>);
+  static_assert(!has_publish_channel_member<PlanOpenQuestion>::value);
+
+  static_assert(std::is_same_v<decltype(PlanGraph{}.plan_id), std::string>);
+  static_assert(std::is_same_v<decltype(PlanGraph{}.revision), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(PlanGraph{}.nodes), std::vector<PlanNode>>);
+  static_assert(std::is_same_v<decltype(PlanGraph{}.edges), std::vector<PlanEdge>>);
+  static_assert(std::is_same_v<decltype(PlanGraph{}.open_questions),
+                               std::vector<PlanOpenQuestion>>);
+  static_assert(std::is_same_v<decltype(PlanGraph{}.plan_rationale), std::string>);
+  static_assert(std::is_same_v<decltype(PlanGraph{}.estimated_complexity), std::uint32_t>);
+  static_assert(!has_tool_request_member<PlanGraph>::value);
+  static_assert(!has_recovery_request_member<PlanGraph>::value);
+  static_assert(!has_provider_payload_member<PlanGraph>::value);
+
+  static_assert(std::is_same_v<decltype(ReplanResult{}.new_plan), PlanGraph>);
+  static_assert(std::is_same_v<decltype(ReplanResult{}.replaced_node_ids),
+                               std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ReplanResult{}.replan_reason), std::string>);
+  static_assert(std::is_same_v<decltype(ReplanResult{}.confidence), float>);
+  static_assert(!has_retry_after_member<ReplanResult>::value);
+  static_assert(!has_recovery_request_member<ReplanResult>::value);
+
+  const PlanGraph default_plan;
+  assert_true(default_plan.revision == 0U, "plan revision should start at zero");
+  assert_true(default_plan.estimated_complexity == 0U,
+              "plan complexity should default to unknown/zero");
+  const PlanOpenQuestion default_question;
+  assert_true(default_question.blocks_plan,
+              "open questions should conservatively block plan execution by default");
+}
+
 void test_stage_component_headers_are_markers_not_publicly_constructible_components() {
   using dasall::cognition::IPlanner;
   using dasall::cognition::IReasoner;
@@ -364,6 +451,7 @@ int main() {
     test_decide_and_reflect_request_result_family_freezes_fields();
     test_response_builder_surface_freezes_public_entry();
     test_response_and_perception_object_headers_are_module_public();
+    test_plan_graph_and_replan_object_headers_are_module_public();
     test_stage_component_headers_are_markers_not_publicly_constructible_components();
     test_current_supporting_types_remain_module_public();
   } catch (const std::exception& ex) {

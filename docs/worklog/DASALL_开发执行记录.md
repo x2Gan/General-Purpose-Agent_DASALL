@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #473
+
+- 日期：2026-04-26
+- 阶段：cognition/Build-ready planning supporting types
+- 任务：COG-TODO-008 定义 PlanGraph / PlanNode / ReplanResult 模块公共类型
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-008 依赖 COG-TODO-005、006；公共 include / CMake 骨架与 cognition unit surface test 均已完成。
+2. COG-TODO-008 无 blocker，是当前 cognition Build-ready 对象任务中最早可执行的 NotStarted 行。
+3. 本轮只冻结 PlanGraph / PlanNode / ReplanResult 的 module-public 承载面，不实现 Planner / Replan 算法，不推动 shared contracts admission。
+
+### 改动
+
+1. 新增 `cognition/include/plan/PlanGraph.h`，定义 `PlanNode`、`PlanEdge`、`PlanOpenQuestion`、`PlanGraph`，并标记首版 schema baseline 为 `cognition.plan.v1`。
+2. 新增 `cognition/include/plan/ReplanResult.h`，定义 `ReplanResult`。
+3. 更新 `cognition/CMakeLists.txt`，把 `plan/PlanGraph.h` 与 `plan/ReplanResult.h` 纳入 `dasall_cognition` public header file set。
+4. 扩展 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`，覆盖 plan/replan 字段正例，以及 deadline、lease、worker state、tool request、recovery request、provider payload 等越界字段负例。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-008-PlanGraph与ReplanResult对象收敛.md`，并更新 cognition 专项 TODO 状态。
+
+### 验证
+
+1. `cmake -S . -B build-ci-cog008 -G "Unix Makefiles"`
+   - 结果：通过。
+2. `cmake --build build-ci-cog008 --target dasall_cognition dasall_unit_tests`
+   - 结果：通过；464 个 unit 测试全绿。输出包含既有 tools / llm / infra / services 编译告警。
+3. `ctest --test-dir build-ci-cog008 -R "CognitionInterfaceSurfaceTest" --output-on-failure`
+   - 结果：通过；1/1 passed。
+4. `cmake --build build-ci --target dasall_cognition dasall_unit_tests`
+   - 结果：通过；既有 Ninja `build-ci` 完成重配置、构建与 464 个 unit 测试。
+5. `ctest --test-dir build-ci -R "CognitionInterfaceSurfaceTest" --output-on-failure`
+   - 结果：通过；1/1 passed。
+
+### 结果
+
+1. COG-TODO-008 已完成，PlanGraph / PlanNode / ReplanResult 作为 cognition module-public 类型落盘。
+2. planning types 未进入 `contracts/`，也未扩张 `IPlanner` admission。
+3. DAG 字段、revision、open questions 与 success signal 已具备后续 Planner / StageOutputValidator 实现的稳定承载面。
+
+### 下一步
+
+1. 进入 COG-TODO-009：定义 ActionDecision / BeliefUpdateHint / StageModelHint / BudgetContext / ContextSufficiencySignal。
+
 ## 记录 #472
 
 - 日期：2026-04-26
