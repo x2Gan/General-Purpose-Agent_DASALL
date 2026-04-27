@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #495
+
+- 日期：2026-04-27
+- 阶段：cognition/stage output validator structured schema convergence
+- 任务：COG-TODO-035 将 StageOutputValidator 升级为结构化 JSON / schema 校验
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-021 已完成，`StageOutputValidator` public surface 与 focused validator tests 已存在，满足 035 的前置。
+2. 当前最小缺口是 `validate_stage_output()` 仍通过 substring/字符扫描判断 required field、enum、numeric 和 list 约束，无法可靠处理 whitespace、转义伪字段、nested array 和 malformed JSON。
+3. 本轮只收 stage payload 的结构化 schema 校验，不扩 shared utility，也不提前处理 COG-TODO-036 的 cognition integration placeholder alias 证据口径。
+
+### 改动
+
+1. 重建 `cognition/src/validation/StageOutputValidator.cpp`，在 private namespace 内新增窄 JSON string/value/object tokenizer，并把 required / enum / numeric / list 提取统一切到结构化 token 遍历。
+2. 同一文件新增 malformed JSON fail-closed 入口，让 payload 不是合法 top-level object 时立即返回 `ValidationIssueCode::MalformedJson`。
+3. 更新 `cognition/src/validation/StageOutputValidator.h`，为 malformed JSON 增加显式 issue code。
+4. 更新 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp`，补充 whitespace/order variation、escaped pseudo-field、nested array、字段类型错误和 malformed JSON 回归用例。
+5. 回写 `docs/todos/cognition/deliverables/COG-TODO-035-StageOutputValidator结构化校验收敛.md` 与 cognition 专项 TODO，固化设计、命令与验收结论。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_stage_output_validator_schema_unit_test","dasall_stage_output_validator_plan_graph_invariant_unit_test","dasall_stage_output_validator_response_envelope_unit_test"])`
+   - 结果：通过，`StageOutputValidator.cpp` 与三条 validator-focused unit targets 全部成功编译并链接。
+2. `RunCtest_CMakeTools(tests=["StageOutputValidatorSchemaTest","StageOutputValidatorPlanGraphInvariantTest","StageOutputValidatorResponseEnvelopeTest"])`
+   - 结果：通过。首轮仅暴露 array item tokenizer 把外层 `]` 误判为非法字符这一处 035 本地缺口；修正后复跑 `3/3` tests passed。
+   - 备注：工具 stderr 仍打印已知 `DartConfiguration.tcl` 缺失提示，但 result code=0 且 stdout 明确三条测试全部通过，按仓库基线计为有效证据。
+3. `get_errors(filePaths=[cognition/src/validation/StageOutputValidator.cpp, cognition/src/validation/StageOutputValidator.h, tests/unit/cognition/StageOutputValidatorSchemaTest.cpp])`
+   - 结果：无新增编辑器错误。
+
+### 结果
+
+1. COG-TODO-035 已完成，`StageOutputValidator` 不再依赖全文字符串扫描，而是先解析 top-level JSON object，再基于字段 token 做 required / enum / numeric / list 校验。
+2. escaped pseudo-field 不能再绕过 required field 校验；nested array list size 改为按 top-level item 计数；malformed JSON 现在统一 fail-closed 并有独立 issue code。
+3. 本轮未引入新的 shared / third-party JSON 依赖，parser 能力仍严格限制在 cognition private validator helper 内。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-035 改动。
+2. 下一轮进入 COG-TODO-036，移除 cognition integration placeholder alias 并重建 gate evidence 口径。
+
 ## 记录 #494
 
 - 日期：2026-04-27

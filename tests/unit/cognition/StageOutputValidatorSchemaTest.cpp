@@ -56,6 +56,17 @@ using dasall::tests::support::assert_true;
   };
 }
 
+[[nodiscard]] bool has_issue_code(const dasall::cognition::validation::ValidationResult& result,
+                                  ValidationIssueCode code,
+                                  const std::string& field_path) {
+  for (const auto& issue : result.issue_set.issues) {
+    if (issue.code == code && issue.field_path == field_path) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void test_validate_stage_output_accepts_well_formed_payload() {
   StageOutputValidator validator;
   const auto result = validator.validate_stage_output(
@@ -66,6 +77,22 @@ void test_validate_stage_output_accepts_well_formed_payload() {
   assert_true(result.ok, "well-formed stage output should pass schema validation");
   assert_true(result.issue_set.empty(),
               "well-formed stage output should not emit validation issues");
+}
+
+void test_validate_stage_output_accepts_whitespace_and_reordered_fields() {
+  StageOutputValidator validator;
+  const auto result = validator.validate_stage_output(
+      make_stage_result(
+          "{\n"
+          "  \"candidate_scores\" : [ \"execute_action\", \"fallback\" ],\n"
+          "  \"confidence\" : 0.82,\n"
+          "  \"decision_kind\" : \"ExecuteAction\"\n"
+          "}"),
+      make_schema_spec());
+
+  assert_true(result.ok, "whitespace and field order variation should remain valid JSON");
+  assert_true(result.issue_set.empty(),
+              "whitespace and field order variation should not emit validation issues");
 }
 
 void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations() {
@@ -83,6 +110,64 @@ void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations
   assert_equal(std::string("execution"), result.error_info->details.stage,
                "schema failures should be attributed to the validated stage");
 }
+
+  void test_validate_stage_output_rejects_escaped_pseudo_fields() {
+    StageOutputValidator validator;
+    const auto result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"confidence":0.82,"candidate_scores":["execute_action"],"note":"\"decision_kind\":\"ExecuteAction\""})"),
+      make_schema_spec());
+
+    assert_true(!result.ok, "escaped pseudo-fields inside strings must not satisfy required fields");
+    assert_true(has_issue_code(result,
+                 ValidationIssueCode::MissingRequiredField,
+                 "decision_kind"),
+          "missing decision_kind should be reported even when a string literal contains a pseudo-field");
+  }
+
+  void test_validate_stage_output_counts_only_top_level_array_items() {
+    StageOutputValidator validator;
+    const auto result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"decision_kind":"ExecuteAction","confidence":0.82,"candidate_scores":[[1,2],[3,4]]})"),
+      make_schema_spec());
+
+    assert_true(result.ok, "nested array members should count as two top-level list items, not four");
+    assert_true(result.issue_set.empty(),
+          "top-level list item counting should not emit validation issues for nested arrays");
+  }
+
+  void test_validate_stage_output_rejects_malformed_json() {
+    StageOutputValidator validator;
+    const auto result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"decision_kind":"ExecuteAction","confidence":0.82,"candidate_scores":["execute_action"] )"),
+      make_schema_spec());
+
+    assert_true(!result.ok, "malformed JSON must fail closed");
+    assert_equal(1, static_cast<int>(result.issue_set.issues.size()),
+           "malformed JSON should stop at a single malformed-json issue");
+    assert_true(result.issue_set.issues.front().code == ValidationIssueCode::MalformedJson,
+          "malformed payloads must surface the malformed-json issue code");
+  }
+
+  void test_validate_stage_output_rejects_field_type_mismatches() {
+    StageOutputValidator validator;
+    const auto result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"decision_kind":"ExecuteAction","confidence":"0.82","candidate_scores":{"primary":"execute_action"}})"),
+      make_schema_spec());
+
+    assert_true(!result.ok, "schema type mismatches must fail validation");
+    assert_true(has_issue_code(result,
+                 ValidationIssueCode::NumericOutOfRange,
+                 "confidence"),
+          "string confidence should surface a numeric validation issue");
+    assert_true(has_issue_code(result,
+                 ValidationIssueCode::ListSizeOutOfRange,
+                 "candidate_scores"),
+          "object candidate_scores should surface a list validation issue");
+  }
 
 void test_validate_action_decision_invariants_rejects_missing_execute_action_fields() {
   StageOutputValidator validator;
@@ -105,7 +190,12 @@ void test_validate_action_decision_invariants_rejects_missing_execute_action_fie
 int main() {
   try {
     test_validate_stage_output_accepts_well_formed_payload();
+    test_validate_stage_output_accepts_whitespace_and_reordered_fields();
     test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations();
+    test_validate_stage_output_rejects_escaped_pseudo_fields();
+    test_validate_stage_output_counts_only_top_level_array_items();
+    test_validate_stage_output_rejects_malformed_json();
+    test_validate_stage_output_rejects_field_type_mismatches();
     test_validate_action_decision_invariants_rejects_missing_execute_action_fields();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
