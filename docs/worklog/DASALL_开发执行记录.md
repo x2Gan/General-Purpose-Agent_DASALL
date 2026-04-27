@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #483
+
+- 日期：2026-04-27
+- 阶段：cognition/belief writeback hint implementation
+- 任务：COG-TODO-018 实现 BeliefUpdateSynthesizer
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-018 依赖 COG-TODO-008、009、010、017；四项均已完成，因此本轮不再受 `BeliefUpdateHint` 结构、`ReflectionDecision` 契约或 reflection failure attribution 缺口影响。
+2. 当前最小缺口是 cognition 仍没有独立 belief hint owner：decide / reflection 结果如何折叠为 delta-oriented `BeliefUpdateHint`、如何给出 `merge_mode` 建议、如何去重 evidence refs 仍停留在设计卡片，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 `BeliefUpdateSynthesizer` 私有实现、三条 belief-focused tests 与最小 CMake 接线，不提前进入 019 的 `ResponseBuilder`。
+
+### 改动
+
+1. 新增 `cognition/src/belief/BeliefUpdateSynthesizer.h`、`cognition/src/belief/BeliefUpdateSynthesizer.cpp`，实现 decide / reflection 路径的 delta 折叠、`merge_deltas()`、`normalize_evidence_refs()` 与无证据 delta 丢弃。
+2. 更新 `cognition/CMakeLists.txt`，将 belief synthesizer source 纳入 `dasall_cognition`。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_belief_update_synthesizer_unit_test`、`dasall_belief_update_merge_mode_unit_test`、`dasall_belief_update_evidence_dedup_unit_test` 并补 `cognition/src` 私有 include。
+4. 新增 `tests/unit/cognition/BeliefUpdateSynthesizerTest.cpp`、`tests/unit/cognition/BeliefUpdateMergeModeTest.cpp`、`tests/unit/cognition/BeliefUpdateEvidenceDedupTest.cpp`，覆盖 decide-path delta 折叠、reflection replace merge mode 与 evidence 去重。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-018-BeliefUpdateSynthesizer收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_belief_update_synthesizer_unit_test","dasall_belief_update_merge_mode_unit_test","dasall_belief_update_evidence_dedup_unit_test"])`
+   - 第一次结果：失败；局部编译错误为 `append_unique_delta()` 模板分支误访问 `evidence_ref` 字段。
+   - 修补同一 slice 后复跑：通过。
+2. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_belief_update_synthesizer_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_belief_update_merge_mode_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_belief_update_evidence_dedup_unit_test`
+   - 结果：通过；三条 belief-update-focused unit tests 全部零输出退出。
+
+### 结果
+
+1. COG-TODO-018 已完成，cognition 现在具备独立 `BeliefUpdateSynthesizer` owner，可稳定把 decide / reflection 结果折叠为 delta-oriented `BeliefUpdateHint`。
+2. `BeliefUpdateSynthesizer` 会在内部做 evidence 去重、merge mode 合并与无证据 delta 丢弃，保证写回提示仍是 best-effort、可审计、可由 Runtime / Memory 原子处理的建议对象。
+3. ADR-006 / 交互契约边界保持成立：写回时机与冲突消解仍归 Runtime / Memory，cognition 没有直接写 memory 或 reload context 的行为。
+
+### 下一步
+
+1. 进入 COG-TODO-019，实现 `ResponseBuilder`，围绕 `ActionDecision.response_outline`、`latest_observation`、template fallback 与 redaction 收口终态输出构造。
+
 ## 记录 #482
 
 - 日期：2026-04-27

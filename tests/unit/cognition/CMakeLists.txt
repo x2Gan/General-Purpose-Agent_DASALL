@@ -131,6 +131,24 @@ dasall_add_cognition_unit_test(
 	ReflectionEngineConservativeAbortTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_belief_update_synthesizer_unit_test
+	BeliefUpdateSynthesizerTest.cpp
+	BeliefUpdateSynthesizerTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_belief_update_merge_mode_unit_test
+	BeliefUpdateMergeModeTest.cpp
+	BeliefUpdateMergeModeTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_belief_update_evidence_dedup_unit_test
+	BeliefUpdateEvidenceDedupTest.cpp
+	BeliefUpdateEvidenceDedupTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -227,6 +245,21 @@ target_include_directories(dasall_reflection_engine_belief_invalidation_unit_tes
 )
 
 target_include_directories(dasall_reflection_engine_conservative_abort_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_belief_update_synthesizer_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_belief_update_merge_mode_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_belief_update_evidence_dedup_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )
