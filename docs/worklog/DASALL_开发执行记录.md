@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #488
+
+- 日期：2026-04-27
+- 阶段：cognition/telemetry implementation
+- 任务：COG-TODO-022 实现 CognitionTelemetry
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-024 已关闭 fixture blocker，且 COG-TODO-020、021 已分别冻结 bridge diagnostics 与 validator result surface，因此 022 已具备独立 telemetry owner 的最小实现条件。
+2. 当前最小缺口不是 façade orchestration，而是 cognition 仍缺少统一的 stage observability owner：started/completed/failed/degraded 事件、敏感字段 redaction 与 sink failure fail-open 还停留在设计卡片，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 telemetry 私有实现、telemetry sink mock、三条 telemetry-focused tests 和最小 CMake 接线，不提前进入 023 的 façade 主链。
+
+### 改动
+
+1. 新增 `cognition/src/observability/CognitionTelemetry.h`、`cognition/src/observability/CognitionTelemetry.cpp`，实现 `StageTelemetryContext`、`DecisionTelemetryRecord`、`DegradeTelemetryRecord`、`TelemetryEvent`、`TelemetryMetric`、`TelemetryEmitResult` 以及五个 telemetry emit 方法。
+2. 更新 `cognition/CMakeLists.txt`，将 telemetry source 纳入 `dasall_cognition`。
+3. 新增 `tests/mocks/include/MockCognitionTelemetrySink.h`，提供 recording / failure-injection sink，支撑 telemetry 字段、redaction 与 fail-open 测试。
+4. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_cognition_telemetry_fields_unit_test`、`dasall_cognition_telemetry_redaction_unit_test`、`dasall_cognition_telemetry_failure_isolation_unit_test`，并补 `cognition/src` include。
+5. 新增 `tests/unit/cognition/CognitionTelemetryFieldsTest.cpp`、`tests/unit/cognition/CognitionTelemetryRedactionTest.cpp`、`tests/unit/cognition/CognitionTelemetryFailureIsolationTest.cpp`，覆盖字段完整性、敏感字段裁剪与 sink failure isolation。
+6. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-022-CognitionTelemetry收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_telemetry_fields_unit_test","dasall_cognition_telemetry_redaction_unit_test","dasall_cognition_telemetry_failure_isolation_unit_test"])`
+   - 第一次结果：失败；`ErrorInfo` 的 `details.code`、`retryable`、`safe_to_replan` 为 optional，且 failure type 来自 `ResultCodeCategory`，首版 telemetry failure path 和 test 对 contracts surface 假设过宽。
+   - 同一 slice 修正 optional 访问和 failure type 映射后复跑：通过；三条 telemetry-focused test targets 全部编译链接成功。
+2. `RunCtest_CMakeTools(tests=["CognitionTelemetryFieldsTest","CognitionTelemetryRedactionTest","CognitionTelemetryFailureIsolationTest"])`
+   - 结果：失败，工具返回通用错误 `生成失败`；与仓库既有 CTest 工具态噪声一致，按仓库基线回退到显式二进制执行。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_telemetry_fields_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_telemetry_redaction_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_telemetry_failure_isolation_unit_test`
+   - 结果：通过；三条 telemetry 测试二进制全部零输出退出。
+
+### 结果
+
+1. COG-TODO-022 已完成，cognition 现在具备独立 `CognitionTelemetry` owner，可统一发射 stage started/completed/failed/degraded 观测事件。
+2. telemetry 现在会统一携带 request/goal/profile/stage/trace/result 等上下文字段，并对 `raw_prompt`、`provider_payload`、`reasoning_trace` 等敏感内容执行 redaction。
+3. telemetry 保持 fail-open owner 边界：任一 sink 抛错只会产出 diagnostics，不会阻断其他 sink，也不会改变 cognition 主链返回对象。
+
+### 下一步
+
+1. 执行 git scope 校验并提交/推送 022 相关文件。
+2. 进入 COG-TODO-023，实现 `CognitionFacade`，围绕 decide / reflect / build_response 三入口主链、受控降级与 bridge/validator/telemetry owner 串联收口。
+
 ## 记录 #487
 
 - 日期：2026-04-27

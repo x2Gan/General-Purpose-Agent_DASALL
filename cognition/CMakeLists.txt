@@ -5,6 +5,7 @@ target_sources(dasall_cognition
     src/CognitionFacade.cpp
     src/StagePolicyResolver.cpp
     src/llm/CognitionLlmBridge.cpp
+    src/observability/CognitionTelemetry.cpp
     src/response/ResponseBuilder.cpp
     src/planning/Planner.cpp
     src/planning/PlanGraphBuilder.cpp
