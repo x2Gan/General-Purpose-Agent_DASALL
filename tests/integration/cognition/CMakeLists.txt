@@ -61,9 +61,11 @@ dasall_add_cognition_integration_test(
   "integration;cognition"
 )
 
-dasall_add_cognition_integration_placeholder(
+dasall_add_cognition_integration_test(
   dasall_cognition_failure_injection_integration_test
   CognitionFailureInjectionIntegrationTest
+  CognitionFailureInjectionIntegrationTest.cpp
+  "integration;cognition;failure"
 )
 
 dasall_add_cognition_integration_placeholder(
