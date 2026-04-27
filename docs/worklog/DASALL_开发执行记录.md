@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #491
+
+- 日期：2026-04-27
+- 阶段：cognition/llm bridge mainline integration
+- 任务：COG-TODO-031 串联 CognitionLlmBridge 到 cognition 主链
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-020、023、024 均已 Done，满足 bridge、façade 与 mock 支撑前置。
+2. COG-TODO-031 的最小缺口是生产主链未注入 `ILLMManager`，导致 `CognitionLlmBridge` 只在独立 projection tests 中被证明。
+3. 本轮只收敛 cognition-side dependency struct、façade/response builder bridge 接线、mock 记录与 focused tests，不进入 COG-TODO-032 的 runtime profile 投影闭环。
+
+### 改动
+
+1. 新增 `cognition/include/CognitionDependencies.h`，并为 `create_cognition_engine()` / `create_response_builder()` 增加保留旧调用的 dependencies overload。
+2. 更新 `CognitionFacade`，在 `planning`、`execution`、`reflection` canonical stage 可选调用 `CognitionLlmBridge`；bridge failure 在允许降级时保留 deterministic rule path，否则 fail-fast 返回 `ErrorInfo`。
+3. 更新 `ResponseBuilder`，有 bridge 时通过 `response/final_response` 生成最终文本；无 bridge 时改为显式 `observation_projection`，不再把 observation projection 标成 `llm_projection`；bridge failure 可回退模板路径。
+4. 扩展 `MockLLMManager` 请求序列记录，更新 `MockCognitionFixture` 与 cognition integration fixture，把 `RuntimeDependencySet::llm_manager` 传入 cognition factories。
+5. 更新 focused unit / integration tests，并新增交付物 `docs/todos/cognition/deliverables/COG-TODO-031-CognitionLlmBridge主链接入收敛.md`，回写专项 TODO 状态与证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cognition dasall_cognition_interface_surface_unit_test dasall_cognition_facade_flow_unit_test dasall_response_builder_agent_result_mapping_unit_test dasall_response_builder_template_fallback_unit_test dasall_cognition_llm_bridge_projection_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "CognitionFacadeFlowTest|ResponseBuilder.*|CognitionLlmBridgeProjectionTest" --output-on-failure`
+   - 结果：通过，`5/5` tests passed。
+3. `cmake --build build-ci --target dasall_cognition_runtime_integration_test && ctest --test-dir build-ci -R "CognitionRuntimeIntegrationTest" --output-on-failure`
+   - 结果：通过，`1/1` tests passed。
+4. `cmake --build build-ci --target dasall_mock_cognition_fixture_surface_unit_test && ctest --test-dir build-ci -R "MockCognitionFixtureSurfaceTest" --output-on-failure`
+   - 结果：通过，`1/1` tests passed。
+
+### 结果
+
+1. COG-TODO-031 已完成，真实 focused 主链可证明 façade 与 response builder 经 `CognitionLlmBridge::invoke_stage()` 调用 `planning/execution/reflection/response` canonical stages。
+2. 无 bridge 场景仍 deterministic，并以 diagnostics 标记 `llm_bridge.unavailable:*`；response observation projection 不再伪装为 LLM projection。
+3. Runtime dependency set 已确认存在 `llm_manager` composition field，本轮以 fixture 传入闭环；profile 投影与生产 runtime 初始化策略留给 COG-TODO-032。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-031 改动。
+2. 下一轮建议推进 COG-TODO-032，收敛 Runtime profile 到 CognitionConfig 的生产注入闭环。
+
 ## 记录 #490
 
 - 日期：2026-04-27

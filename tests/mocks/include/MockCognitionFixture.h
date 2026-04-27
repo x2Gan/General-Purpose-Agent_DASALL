@@ -308,13 +308,21 @@ class MockCognitionFixture {
 
   [[nodiscard]] std::shared_ptr<dasall::cognition::ICognitionEngine> make_engine(
       const dasall::cognition::CognitionConfig& config = {}) const {
-    auto engine = dasall::cognition::create_cognition_engine(config);
+    auto engine = dasall::cognition::create_cognition_engine(
+        config,
+        dasall::cognition::CognitionRuntimeDependencies{
+            .llm_manager = llm_manager_,
+        });
     return std::shared_ptr<dasall::cognition::ICognitionEngine>(std::move(engine));
   }
 
   [[nodiscard]] std::shared_ptr<dasall::cognition::IResponseBuilder>
   make_response_builder(const dasall::cognition::CognitionConfig& config = {}) const {
-    auto builder = dasall::cognition::create_response_builder(config);
+    auto builder = dasall::cognition::create_response_builder(
+        config,
+        dasall::cognition::CognitionRuntimeDependencies{
+            .llm_manager = llm_manager_,
+        });
     return std::shared_ptr<dasall::cognition::IResponseBuilder>(std::move(builder));
   }
 

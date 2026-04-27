@@ -17,6 +17,7 @@
 #include "ToolManager.h"
 #include "checkpoint/RuntimeBudget.h"
 #include "execution/BuiltinExecutorLane.h"
+#include "MockLLMManager.h"
 #include "registry/ToolRegistry.h"
 #include "writeback/MemoryWritebackRequest.h"
 
@@ -84,11 +85,27 @@ inline std::shared_ptr<runtime::RuntimeDependencySet> make_true_integration_depe
     throw std::runtime_error("failed to seed memory manager for cognition runtime integration");
   }
 
+  auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
+  llm_manager->set_stage_result(
+      "response",
+      dasall::tests::mocks::MockLLMManager::make_success_result(
+          "runtime unary integration completed: " + seed_query,
+          "mock.route.response"));
+
   dependency_set->memory_manager = std::move(memory_manager);
+  dependency_set->llm_manager = llm_manager;
   dependency_set->cognition_engine =
-      std::shared_ptr<cognition::ICognitionEngine>(cognition::create_cognition_engine());
+      std::shared_ptr<cognition::ICognitionEngine>(cognition::create_cognition_engine(
+          cognition::CognitionConfig{},
+          cognition::CognitionRuntimeDependencies{
+              .llm_manager = llm_manager,
+          }));
   dependency_set->response_builder =
-      std::shared_ptr<cognition::IResponseBuilder>(cognition::create_response_builder());
+      std::shared_ptr<cognition::IResponseBuilder>(cognition::create_response_builder(
+          cognition::CognitionConfig{},
+          cognition::CognitionRuntimeDependencies{
+              .llm_manager = llm_manager,
+          }));
 
   auto registry = std::make_shared<tools::registry::ToolRegistry>();
   const auto registered = registry->register_builtin(contracts::ToolDescriptor{

@@ -1,19 +1,25 @@
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "IResponseBuilder.h"
+#include "MockLLMManager.h"
+#include "observation/ObservationSource.h"
 #include "support/TestAssertions.h"
 
 namespace {
 
 using dasall::cognition::CognitionConfig;
+using dasall::cognition::CognitionRuntimeDependencies;
 using dasall::cognition::ResponseBuildHints;
 using dasall::cognition::ResponseBuildRequest;
 using dasall::cognition::create_response_builder;
 using dasall::contracts::AgentResultStatus;
 using dasall::contracts::GoalStatus;
+using dasall::contracts::ObservationSource;
+using dasall::tests::mocks::MockLLMManager;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -79,6 +85,18 @@ using dasall::tests::support::assert_true;
       .key_points = {std::string("degraded response"), std::string("terminal state preserved")},
   };
   return decision;
+}
+
+[[nodiscard]] dasall::contracts::Observation make_observation() {
+  dasall::contracts::Observation observation;
+  observation.observation_id = std::string{"obs-031-bridge-failure"};
+  observation.source = ObservationSource::ToolExecution;
+  observation.success = true;
+  observation.payload = std::string{"{\"status\":\"ok\",\"summary\":\"bridge should rewrite this\"}"};
+  observation.created_at = 1712432100200;
+  observation.request_id = std::string{"req-019-template"};
+  observation.goal_id = std::string{"goal-019-template"};
+  return observation;
 }
 
 [[nodiscard]] ResponseBuildRequest make_request(bool allow_template_fallback = true) {
@@ -151,12 +169,48 @@ void test_response_builder_returns_explicit_error_when_template_fallback_is_disa
                "disabled template fallback should identify the mode-selection stage");
 }
 
+void test_response_builder_falls_back_when_bridge_returns_failure() {
+  auto llm_manager = std::make_shared<MockLLMManager>();
+  llm_manager->set_stage_result(
+      "response",
+      MockLLMManager::make_failure_result(
+          dasall::contracts::ResultCode::ProviderTimeout,
+          "provider timeout from response stage",
+          dasall::llm::LLMFailureCategory::AdapterTransport,
+          "mock.route.response"));
+  auto builder = create_response_builder(
+      CognitionConfig{},
+      CognitionRuntimeDependencies{
+          .llm_manager = llm_manager,
+      });
+  auto request = make_request(true);
+  request.latest_observation = make_observation();
+
+  const auto result = builder->build(request);
+
+  assert_equal(1,
+               llm_manager->generate_call_count(),
+               "response builder should call the llm manager through the bridge once");
+  assert_true(llm_manager->last_request().has_value() &&
+                  llm_manager->last_request()->stage == "response",
+              "response builder should project the canonical response stage");
+  assert_true(result.agent_result.has_value(),
+              "bridge failure with template fallback should still materialize an AgentResult");
+  assert_true(result.fallback_used,
+              "bridge failure should explicitly mark template fallback");
+  assert_true(contains_token(result.diagnostics, "response_llm_bridge_failed"),
+              "bridge failure should be visible in response diagnostics");
+  assert_true(contains_token(result.diagnostics, "response_template_fallback"),
+              "bridge failure should fall back through the existing template path");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_response_builder_uses_template_fallback_when_payload_is_absent();
     test_response_builder_returns_explicit_error_when_template_fallback_is_disabled();
+    test_response_builder_falls_back_when_bridge_returns_failure();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

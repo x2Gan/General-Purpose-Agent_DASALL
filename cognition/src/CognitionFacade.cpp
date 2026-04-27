@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "belief/BeliefUpdateSynthesizer.h"
+#include "llm/CognitionLlmBridge.h"
 #include "observability/CognitionTelemetry.h"
 #include "perception/PerceptionEngine.h"
 #include "planning/Planner.h"
@@ -20,6 +21,8 @@ namespace {
 
 using decision::ActionDecision;
 using decision::ActionDecisionKind;
+using llm_bridge::CognitionLlmBridge;
+using llm_bridge::StageLlmCallResult;
 using observability::DecisionTelemetryRecord;
 using observability::StageTelemetryContext;
 using observability::TelemetryEmitResult;
@@ -222,6 +225,85 @@ void apply_decision_failure(
   append_unique(result.diagnostics, std::move(diagnostic));
 }
 
+void apply_reflection_failure(
+    CognitionReflectionResult& result,
+    contracts::ResultCode result_code,
+    contracts::ErrorInfo error_info,
+    std::string diagnostic) {
+  result.result_code = result_code;
+  result.error_info = std::move(error_info);
+  append_unique(result.diagnostics, std::move(diagnostic));
+}
+
+[[nodiscard]] std::string optional_text(const std::optional<std::string>& value) {
+  return value.value_or(std::string{});
+}
+
+[[nodiscard]] StageModelHint make_bridge_model_hint(
+    std::string stage,
+    std::string task_type,
+    ModelCapabilityTier capability_tier,
+    bool requires_structured_output,
+    std::uint32_t max_output_tokens,
+    std::uint32_t deadline_ms) {
+  return StageModelHint{
+      .stage_name = std::move(stage),
+      .task_type = std::move(task_type),
+      .capability_tier = capability_tier,
+      .max_output_tokens = max_output_tokens,
+      .deadline_ms = deadline_ms,
+      .requires_structured_output = requires_structured_output,
+      .requires_reasoning_trace = capability_tier == ModelCapabilityTier::Advanced ||
+                                  capability_tier == ModelCapabilityTier::ReasoningHeavy,
+      .cost_sensitivity = 0.0F,
+      .preferred_provider = {},
+  };
+}
+
+[[nodiscard]] std::vector<std::string> make_decision_stage_messages(
+    const CognitionStepRequest& request,
+    const std::string& stage,
+    const std::string& task_type) {
+  std::vector<std::string> messages;
+  messages.push_back("stage=" + stage + "; task_type=" + task_type);
+  messages.push_back("goal=" + optional_text(request.goal_contract.goal_description));
+  messages.push_back("context=" + optional_text(request.context_packet.user_turn));
+  if (request.context_packet.current_goal_summary.has_value()) {
+    messages.push_back("goal_summary=" + *request.context_packet.current_goal_summary);
+  }
+  if (request.latest_observation.has_value() && request.latest_observation->payload.has_value()) {
+    messages.push_back("latest_observation=" + *request.latest_observation->payload);
+  }
+  return messages;
+}
+
+[[nodiscard]] std::vector<std::string> make_reflection_stage_messages(
+    const ReflectionRequest& request) {
+  std::vector<std::string> messages;
+  messages.push_back("stage=reflection; task_type=failure_analysis");
+  messages.push_back("goal=" + optional_text(request.goal_contract.goal_description));
+  messages.push_back("context=" + optional_text(request.context_packet.user_turn));
+  if (request.latest_observation.payload.has_value()) {
+    messages.push_back("latest_observation=" + *request.latest_observation.payload);
+  }
+  if (request.latest_observation.error.has_value()) {
+    messages.push_back("latest_error=" + request.latest_observation.error->details.message);
+  }
+  return messages;
+}
+
+void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
+                               const StageLlmCallResult& bridge_result,
+                               const std::string& stage) {
+  append_unique(diagnostics, std::string{"llm_bridge.invoked:"} + stage);
+  if (bridge_result.error_info.has_value()) {
+    append_unique(diagnostics, std::string{"llm_bridge.failed:"} + stage);
+  } else {
+    append_unique(diagnostics, std::string{"llm_bridge.completed:"} + stage);
+  }
+  append_unique(diagnostics, bridge_result.diagnostics);
+}
+
 [[nodiscard]] DecisionTelemetryRecord make_completed_record(const ActionDecision& decision) {
   return DecisionTelemetryRecord{
       .decision_kind = decision.decision_kind,
@@ -253,13 +335,18 @@ void apply_decision_failure(
 
 class CognitionFacade final : public ICognitionEngine {
  public:
-  explicit CognitionFacade(CognitionConfig config)
+  explicit CognitionFacade(CognitionConfig config,
+                           CognitionRuntimeDependencies dependencies = {})
       : config_(config),
         perception_engine_(config),
         planner_(config),
         reasoner_(config),
         reflection_engine_(config),
-        telemetry_(config) {}
+        telemetry_(config),
+        llm_bridge_(dependencies.llm_manager != nullptr
+                        ? std::make_shared<CognitionLlmBridge>(
+                              std::move(dependencies.llm_manager))
+                        : nullptr) {}
 
   [[nodiscard]] CognitionDecisionResult decide(
       const CognitionStepRequest& request) override {
@@ -377,6 +464,17 @@ class CognitionFacade final : public ICognitionEngine {
         should_recommend_context_reload(perception_result->confidence);
     append_unique(result.diagnostics, perception_result->diagnostics);
 
+    consume_decision_bridge_stage(request,
+                                  "planning",
+                                  "plan",
+                                  ModelCapabilityTier::Standard,
+                                  true,
+                                  512U,
+                                  result);
+    if (result.error_info.has_value()) {
+      return result;
+    }
+
     PlanningRequest planning_request;
     planning_request.caller_domain = request.caller_domain;
     planning_request.request_id = request.request_id;
@@ -427,6 +525,18 @@ class CognitionFacade final : public ICognitionEngine {
     reasoning_request.latest_observation = request.latest_observation;
     reasoning_request.budget_context = request.budget_context;
     reasoning_request.execution_hints = request.execution_hints;
+
+    consume_decision_bridge_stage(request,
+                                  "execution",
+                                  "action_decision",
+                                  ModelCapabilityTier::Standard,
+                                  true,
+                                  256U,
+                                  result);
+    if (result.error_info.has_value()) {
+      return result;
+    }
+
     const auto action_decision = reasoner_.decide(reasoning_request);
 
     const auto decision_validation =
@@ -459,6 +569,11 @@ class CognitionFacade final : public ICognitionEngine {
       const ReflectionRequest& request) {
     CognitionReflectionResult result;
 
+    consume_reflection_bridge_stage(request, result);
+    if (result.error_info.has_value()) {
+      return result;
+    }
+
     ReflectionAnalysisRequest analysis_request;
     analysis_request.caller_domain = request.caller_domain;
     analysis_request.request_id = request.request_id;
@@ -479,6 +594,107 @@ class CognitionFacade final : public ICognitionEngine {
     return result;
   }
 
+  void consume_decision_bridge_stage(const CognitionStepRequest& request,
+                                     const std::string& stage,
+                                     const std::string& task_type,
+                                     ModelCapabilityTier capability_tier,
+                                     bool requires_structured_output,
+                                     std::uint32_t max_output_tokens,
+                                     CognitionDecisionResult& result) const {
+    if (!llm_bridge_) {
+      append_unique(result.diagnostics, std::string{"llm_bridge.unavailable:"} + stage);
+      return;
+    }
+
+    llm_bridge::StageLlmCallRequest bridge_request;
+    bridge_request.request_id = request.request_id;
+    bridge_request.trace_id = request.trace_id;
+    bridge_request.llm_call_id = request.request_id + ":" + stage + ":" + task_type;
+    bridge_request.stage_name = stage;
+    bridge_request.task_type = task_type;
+    bridge_request.messages = make_decision_stage_messages(request, stage, task_type);
+    bridge_request.model_hint = make_bridge_model_hint(stage,
+                                                       task_type,
+                                                       capability_tier,
+                                                       requires_structured_output,
+                                                       max_output_tokens,
+                                                       request.execution_hints.low_latency_preferred
+                                                           ? 1000U
+                                                           : 2500U);
+    bridge_request.budget_context = request.budget_context;
+    bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
+        .schema_kind = requires_structured_output ? llm_bridge::StageSchemaKind::JsonObject
+                                                  : llm_bridge::StageSchemaKind::Text,
+        .output_schema_ref = requires_structured_output
+                                 ? std::string{"schema://cognition/"} + stage + "/" + task_type
+                                 : std::string{},
+        .allow_plain_text_fallback = !requires_structured_output,
+    };
+
+    const auto bridge_result = llm_bridge_->invoke_stage(bridge_request);
+    append_bridge_diagnostics(result.diagnostics, bridge_result, stage);
+    if (!bridge_result.error_info.has_value()) {
+      return;
+    }
+
+    if (request.execution_hints.degraded_path_allowed) {
+      append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
+      return;
+    }
+
+    apply_decision_failure(result,
+                           bridge_result.result_code.value_or(
+                               contracts::ResultCode::RuntimeRetryExhausted),
+                           *bridge_result.error_info,
+                           std::string{"decision_pipeline.llm_bridge_failed:"} + stage);
+  }
+
+  void consume_reflection_bridge_stage(const ReflectionRequest& request,
+                                       CognitionReflectionResult& result) const {
+    if (!llm_bridge_) {
+      append_unique(result.diagnostics, "llm_bridge.unavailable:reflection");
+      return;
+    }
+
+    llm_bridge::StageLlmCallRequest bridge_request;
+    bridge_request.request_id = request.request_id;
+    bridge_request.trace_id = request.trace_id;
+    bridge_request.llm_call_id = request.request_id + ":reflection:failure_analysis";
+    bridge_request.stage_name = "reflection";
+    bridge_request.task_type = "failure_analysis";
+    bridge_request.messages = make_reflection_stage_messages(request);
+    bridge_request.model_hint = make_bridge_model_hint("reflection",
+                                                       "failure_analysis",
+                                                       ModelCapabilityTier::Advanced,
+                                                       true,
+                                                       384U,
+                                                       request.execution_hints.low_latency_preferred
+                                                           ? 1000U
+                                                           : 2500U);
+    bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
+        .schema_kind = llm_bridge::StageSchemaKind::JsonObject,
+        .output_schema_ref = "schema://cognition/reflection/failure_analysis",
+        .allow_plain_text_fallback = false,
+    };
+
+    const auto bridge_result = llm_bridge_->invoke_stage(bridge_request);
+    append_bridge_diagnostics(result.diagnostics, bridge_result, "reflection");
+    if (!bridge_result.error_info.has_value()) {
+      return;
+    }
+
+    if (request.execution_hints.degraded_path_allowed) {
+      append_unique(result.diagnostics, "reflection_pipeline.llm_bridge_degraded:reflection");
+      return;
+    }
+
+    apply_reflection_failure(result,
+                             bridge_result.result_code.value_or(
+                                 contracts::ResultCode::RuntimeRetryExhausted),
+                             *bridge_result.error_info,
+                             "reflection_pipeline.llm_bridge_failed:reflection");
+  }
+
   CognitionConfig config_;
   perception::PerceptionEngine perception_engine_;
   planning::Planner planner_;
@@ -487,12 +703,19 @@ class CognitionFacade final : public ICognitionEngine {
   belief::BeliefUpdateSynthesizer belief_update_synthesizer_;
   validation::StageOutputValidator validator_;
   observability::CognitionTelemetry telemetry_;
+  std::shared_ptr<CognitionLlmBridge> llm_bridge_;
 };
 
 }  // namespace
 
 std::unique_ptr<ICognitionEngine> create_cognition_engine(const CognitionConfig& config) {
-  return std::make_unique<CognitionFacade>(config);
+  return std::make_unique<CognitionFacade>(config, CognitionRuntimeDependencies{});
+}
+
+std::unique_ptr<ICognitionEngine> create_cognition_engine(
+    const CognitionConfig& config,
+    CognitionRuntimeDependencies dependencies) {
+  return std::make_unique<CognitionFacade>(config, std::move(dependencies));
 }
 
 }  // namespace dasall::cognition

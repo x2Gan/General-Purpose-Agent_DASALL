@@ -13,12 +13,11 @@
 
 namespace {
 
-using dasall::cognition::create_cognition_engine;
-using dasall::cognition::create_response_builder;
 using dasall::cognition::decision::ActionDecisionKind;
 using dasall::contracts::AgentResultStatus;
 using dasall::contracts::ReflectionDecisionKind;
 using dasall::tests::mocks::MockCognitionFixture;
+using dasall::tests::mocks::MockLLMManager;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -33,10 +32,28 @@ using dasall::tests::support::assert_true;
   return false;
 }
 
+[[nodiscard]] bool contains_stage(
+    const std::vector<dasall::llm::LLMGenerateRequest>& requests,
+    const std::string& expected_stage) {
+  for (const auto& request : requests) {
+    if (request.stage == expected_stage) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
   MockCognitionFixture fixture;
-  auto engine = create_cognition_engine();
-  auto builder = create_response_builder();
+  fixture.llm_manager()->set_stage_result(
+      "response",
+      MockLLMManager::make_success_result(
+          "llm bridge composed the final response",
+          "mock.route.response",
+          std::string{"req-cognition-fixture"}));
+  auto engine = fixture.make_engine();
+  auto builder = fixture.make_response_builder();
 
   const auto decision_result = engine->decide(fixture.make_decide_request(true));
 
@@ -55,6 +72,10 @@ void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
               "clear actionable requests should retain sufficient context");
   assert_true(contains_value(decision_result.diagnostics, "decision_pipeline.completed"),
               "decide flow should stamp a pipeline completion diagnostic");
+  assert_true(contains_stage(fixture.llm_manager()->generate_requests(), "planning"),
+              "decide flow should invoke the bridge through the planning canonical stage");
+  assert_true(contains_stage(fixture.llm_manager()->generate_requests(), "execution"),
+              "decide flow should invoke the bridge through the execution canonical stage");
 
   const auto reflection_result =
       engine->reflect(fixture.make_reflection_request(fixture.make_observation(true)));
@@ -72,6 +93,8 @@ void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
               "reflection flow should synthesize a belief update hint");
   assert_true(contains_value(reflection_result.diagnostics, "reflection_pipeline.completed"),
               "reflection flow should stamp a pipeline completion diagnostic");
+  assert_true(contains_stage(fixture.llm_manager()->generate_requests(), "reflection"),
+              "reflection flow should invoke the bridge through the reflection canonical stage");
 
   const auto response_result = builder->build(
       fixture.make_response_request(*decision_result.action_decision, fixture.make_observation(true)));
@@ -84,11 +107,17 @@ void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
               "response builder should stamp the terminal agent status");
   assert_equal(static_cast<int>(AgentResultStatus::Completed),
                static_cast<int>(*response_result.agent_result->status),
-               "response builder should stay on the llm projection path when observation payload exists");
+               "response builder should stay on the bridge-backed path when observation payload exists");
   assert_true(!response_result.fallback_used,
               "response builder should avoid template fallback in the happy path");
-  assert_true(contains_value(response_result.diagnostics, "response_mode:llm_projection"),
-              "response builder should mark the llm projection response mode");
+  assert_true(contains_value(response_result.diagnostics, "response_mode:llm_bridge"),
+              "response builder should mark the bridge-backed response mode");
+  assert_true(contains_stage(fixture.llm_manager()->generate_requests(), "response"),
+              "response builder should invoke the bridge through the response canonical stage");
+  assert_true(response_result.agent_result->response_text.has_value() &&
+                  response_result.agent_result->response_text->find("llm bridge composed") !=
+                      std::string::npos,
+              "response builder should consume the bridge content instead of observation projection");
 }
 
 }  // namespace

@@ -24,6 +24,7 @@ target_sources(dasall_cognition
       ${CMAKE_CURRENT_SOURCE_DIR}/include
     FILES
       include/CognitionConfig.h
+      include/CognitionDependencies.h
       include/CognitionTypes.h
       include/ICognitionEngine.h
       include/IPlanner.h

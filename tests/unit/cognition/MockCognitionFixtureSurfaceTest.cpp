@@ -67,6 +67,10 @@ void test_mock_llm_manager_records_stage_requests_and_returns_scripted_results()
                "mock llm manager should preserve the stage key");
   assert_equal(std::string{"plan_graph"}, manager.last_request()->task_type,
                "mock llm manager should preserve the task type");
+  assert_true(manager.generate_requests().size() == 1U,
+              "mock llm manager should retain the generate request sequence");
+  assert_equal(std::string{"planning"}, manager.generate_requests().front().stage,
+               "recorded request sequence should preserve the stage key");
   assert_true(manager.last_request()->selection_hint != nullptr,
               "mock llm manager should preserve the routed selection hint");
   assert_true(result.has_consistent_values(),

@@ -121,8 +121,10 @@ void test_response_builder_maps_observation_payload_to_completed_agent_result() 
               "completed response path should materialize an AgentResult");
   assert_true(!result.fallback_used,
               "completed payload projection should not mark template fallback");
-  assert_true(contains_token(result.diagnostics, "response_mode:llm_projection"),
-              "completed response path should expose the llm projection diagnostic");
+  assert_true(contains_token(result.diagnostics, "response_mode:observation_projection"),
+              "completed response path should expose the deterministic observation projection diagnostic");
+  assert_true(contains_token(result.diagnostics, "llm_bridge.unavailable:response"),
+              "completed response path without dependencies should diagnose the missing bridge");
 
   const auto& agent_result = *result.agent_result;
   assert_true(agent_result.status == AgentResultStatus::Completed,
@@ -138,11 +140,11 @@ void test_response_builder_maps_observation_payload_to_completed_agent_result() 
                       std::string::npos,
               "response text should retain the structured dataset payload");
   assert_true(agent_result.structured_payload.has_value() &&
-                  agent_result.structured_payload->find("\"response_mode\":\"llm_projection\"") !=
+                  agent_result.structured_payload->find("\"response_mode\":\"observation_projection\"") !=
                       std::string::npos,
-              "structured payload should record the llm projection response mode");
+              "structured payload should record the observation projection response mode");
   assert_true(agent_result.tags.has_value() &&
-                  contains_token(*agent_result.tags, "response_mode:llm_projection"),
+                  contains_token(*agent_result.tags, "response_mode:observation_projection"),
               "AgentResult tags should preserve the response mode for downstream traces");
 }
 

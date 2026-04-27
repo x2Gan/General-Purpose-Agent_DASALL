@@ -201,6 +201,7 @@ void test_cognition_config_defaults_match_profile_projection_table() {
 
 void test_cognition_engine_surface_freezes_runtime_facing_entries() {
   using dasall::cognition::CognitionConfig;
+  using dasall::cognition::CognitionRuntimeDependencies;
   using dasall::cognition::CognitionDecisionResult;
   using dasall::cognition::CognitionReflectionResult;
   using dasall::cognition::CognitionStepRequest;
@@ -217,14 +218,26 @@ void test_cognition_engine_surface_freezes_runtime_facing_entries() {
   static_assert(std::is_same_v<decltype(&ICognitionEngine::reflect),
                                CognitionReflectionResult (ICognitionEngine::*)(
                                    const ReflectionRequest&)>);
-  static_assert(std::is_same_v<decltype(&create_cognition_engine),
-                               std::unique_ptr<ICognitionEngine> (*)(
-                                   const CognitionConfig&)>);
+  using EngineFactorySignature =
+      std::unique_ptr<ICognitionEngine> (*)(const CognitionConfig&);
+  using EngineDependencyFactorySignature =
+      std::unique_ptr<ICognitionEngine> (*)(const CognitionConfig&,
+                                            CognitionRuntimeDependencies);
+  static_assert(std::is_same_v<decltype(static_cast<EngineFactorySignature>(
+                                   &create_cognition_engine)),
+                               EngineFactorySignature>);
+  static_assert(std::is_same_v<decltype(static_cast<EngineDependencyFactorySignature>(
+                                   &create_cognition_engine)),
+                               EngineDependencyFactorySignature>);
   static_assert(!has_legacy_step_member<ICognitionEngine>::value);
   static_assert(!has_init_member<ICognitionEngine>::value);
 
   auto engine = create_cognition_engine(CognitionConfig{});
   assert_true(engine != nullptr, "cognition engine factory should return a usable interface");
+  auto engine_with_dependencies =
+      create_cognition_engine(CognitionConfig{}, CognitionRuntimeDependencies{});
+  assert_true(engine_with_dependencies != nullptr,
+              "cognition engine factory should accept optional runtime dependencies");
 }
 
 void test_decide_and_reflect_request_result_family_freezes_fields() {
@@ -306,6 +319,7 @@ void test_decide_and_reflect_request_result_family_freezes_fields() {
 
 void test_response_builder_surface_freezes_public_entry() {
   using dasall::cognition::CognitionConfig;
+  using dasall::cognition::CognitionRuntimeDependencies;
   using dasall::cognition::IResponseBuilder;
   using dasall::cognition::ResponseBuildRequest;
   using dasall::cognition::ResponseBuildResult;
@@ -317,12 +331,24 @@ void test_response_builder_surface_freezes_public_entry() {
   static_assert(std::is_same_v<decltype(&IResponseBuilder::build),
                                ResponseBuildResult (IResponseBuilder::*)(
                                    const ResponseBuildRequest&)>);
-  static_assert(std::is_same_v<decltype(&create_response_builder),
-                               std::unique_ptr<IResponseBuilder> (*)(
-                                   const CognitionConfig&)>);
+  using ResponseBuilderFactorySignature =
+      std::unique_ptr<IResponseBuilder> (*)(const CognitionConfig&);
+  using ResponseBuilderDependencyFactorySignature =
+      std::unique_ptr<IResponseBuilder> (*)(const CognitionConfig&,
+                                            CognitionRuntimeDependencies);
+  static_assert(std::is_same_v<decltype(static_cast<ResponseBuilderFactorySignature>(
+                                   &create_response_builder)),
+                               ResponseBuilderFactorySignature>);
+  static_assert(std::is_same_v<decltype(static_cast<ResponseBuilderDependencyFactorySignature>(
+                                   &create_response_builder)),
+                               ResponseBuilderDependencyFactorySignature>);
 
   auto builder = create_response_builder(CognitionConfig{});
   assert_true(builder != nullptr, "response builder factory should return a usable interface");
+  auto builder_with_dependencies =
+      create_response_builder(CognitionConfig{}, CognitionRuntimeDependencies{});
+  assert_true(builder_with_dependencies != nullptr,
+              "response builder factory should accept optional runtime dependencies");
 }
 
 void test_response_and_perception_object_headers_are_module_public() {

@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "CognitionConfig.h"
+#include "CognitionDependencies.h"
 #include "CognitionTypes.h"
 
 namespace dasall::cognition {
@@ -19,5 +20,8 @@ class ICognitionEngine {
 
 [[nodiscard]] std::unique_ptr<ICognitionEngine> create_cognition_engine(
     const CognitionConfig& config = {});
+[[nodiscard]] std::unique_ptr<ICognitionEngine> create_cognition_engine(
+    const CognitionConfig& config,
+    CognitionRuntimeDependencies dependencies);
 
 }  // namespace dasall::cognition

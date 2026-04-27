@@ -294,6 +294,11 @@ target_include_directories(dasall_cognition_facade_degraded_mode_unit_test
 		${CMAKE_SOURCE_DIR}
 )
 
+target_include_directories(dasall_response_builder_template_fallback_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/tests/mocks/include
+)
+
 target_include_directories(dasall_mock_cognition_fixture_surface_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
@@ -380,6 +385,11 @@ target_link_libraries(dasall_cognition_facade_flow_unit_test
 )
 
 target_link_libraries(dasall_cognition_facade_degraded_mode_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_response_builder_template_fallback_unit_test
 	PRIVATE
 		dasall_llm
 )

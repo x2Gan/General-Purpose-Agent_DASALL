@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
@@ -106,6 +107,7 @@ class MockLLMManager : public dasall::llm::ILLMManager {
       const dasall::llm::LLMGenerateRequest& request) override {
     ++generate_call_count_;
     last_request_ = request;
+    generate_requests_.push_back(request);
 
     if (generate_handler_) {
       return generate_handler_(request);
@@ -130,6 +132,7 @@ class MockLLMManager : public dasall::llm::ILLMManager {
       dasall::llm::IStreamObserver* observer) override {
     ++stream_generate_call_count_;
     last_stream_request_ = request;
+    stream_generate_requests_.push_back(request);
     last_stream_observer_ = observer;
 
     if (stream_handler_) {
@@ -176,6 +179,13 @@ class MockLLMManager : public dasall::llm::ILLMManager {
 
   void clear_stage_results() { stage_results_.clear(); }
 
+  void clear_recorded_requests() {
+    last_request_.reset();
+    last_stream_request_.reset();
+    generate_requests_.clear();
+    stream_generate_requests_.clear();
+  }
+
   void set_stream_handler(StreamHandler handler) { stream_handler_ = std::move(handler); }
 
   void set_health_handler(HealthHandler handler) { health_handler_ = std::move(handler); }
@@ -204,9 +214,17 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   [[nodiscard]] const std::optional<dasall::llm::LLMGenerateRequest>& last_request() const {
     return last_request_;
   }
+  [[nodiscard]] const std::vector<dasall::llm::LLMGenerateRequest>& generate_requests()
+      const {
+    return generate_requests_;
+  }
   [[nodiscard]] const std::optional<dasall::llm::LLMGenerateRequest>&
   last_stream_request() const {
     return last_stream_request_;
+  }
+  [[nodiscard]] const std::vector<dasall::llm::LLMGenerateRequest>& stream_generate_requests()
+      const {
+    return stream_generate_requests_;
   }
   [[nodiscard]] dasall::llm::IStreamObserver* last_stream_observer() const {
     return last_stream_observer_;
@@ -245,6 +263,8 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   std::optional<dasall::llm::LLMSubsystemConfig> last_init_config_;
   std::optional<dasall::llm::LLMGenerateRequest> last_request_;
   std::optional<dasall::llm::LLMGenerateRequest> last_stream_request_;
+  std::vector<dasall::llm::LLMGenerateRequest> generate_requests_;
+  std::vector<dasall::llm::LLMGenerateRequest> stream_generate_requests_;
   std::optional<dasall::llm::LLMManagerResult> generate_result_;
   std::unordered_map<std::string, dasall::llm::LLMManagerResult> stage_results_;
   dasall::llm::IStreamObserver* last_stream_observer_{nullptr};

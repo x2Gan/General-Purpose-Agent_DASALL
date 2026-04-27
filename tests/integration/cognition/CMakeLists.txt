@@ -21,6 +21,7 @@ macro(dasall_add_cognition_integration_test target_name test_name source_file la
       ${CMAKE_SOURCE_DIR}/tools/src
       ${CMAKE_SOURCE_DIR}/services/include
       ${CMAKE_SOURCE_DIR}/tests/fixtures/runtime
+      ${CMAKE_SOURCE_DIR}/tests/mocks/include
   )
 
   target_compile_definitions(${target_name}
