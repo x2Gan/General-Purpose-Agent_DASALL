@@ -429,6 +429,129 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   return composition.stub_ports.waiting_response_text;
 }
 
+[[nodiscard]] bool has_executable_action(
+    const std::optional<cognition::decision::ActionDecision>& action_decision) {
+  return action_decision.has_value() &&
+         action_decision->decision_kind ==
+             cognition::decision::ActionDecisionKind::ExecuteAction;
+}
+
+[[nodiscard]] bool has_decision_error_action_conflict(
+    const cognition::CognitionDecisionResult& decision_result) {
+  return has_executable_action(decision_result.action_decision) &&
+         (decision_result.error_info.has_value() || decision_result.result_code.has_value());
+}
+
+[[nodiscard]] contracts::ErrorInfo make_reflection_recovery_error(
+    const contracts::Observation& latest_observation,
+    const contracts::ReflectionDecision& reflection_decision) {
+  const auto decision_kind = reflection_decision.decision_kind.value_or(
+      contracts::ReflectionDecisionKind::AbortSafe);
+  return contracts::ErrorInfo{
+      .failure_type = contracts::ResultCodeCategory::Runtime,
+      .retryable = decision_kind !=
+                   contracts::ReflectionDecisionKind::AbortSafe,
+      .safe_to_replan = decision_kind ==
+                        contracts::ReflectionDecisionKind::Replan,
+      .details = contracts::ErrorDetails{
+          .code = kRuntimeOrchestratorLiveUnaryFailedCode,
+          .message = reflection_decision.rationale.value_or(
+              std::string{"reflection requested runtime recovery admission"}),
+          .stage = std::string{"recovery_round"},
+      },
+      .source_ref = contracts::ErrorSourceRefMinimal{
+          .ref_type = std::string{"tool_call"},
+          .ref_id = latest_observation.tool_call_id.value_or(std::string{"tool-call-missing"}),
+      },
+  };
+}
+
+[[nodiscard]] contracts::Observation make_reflection_recovery_observation(
+    const contracts::Observation& latest_observation,
+    const contracts::ErrorInfo& error_info) {
+  contracts::Observation failed_observation = latest_observation;
+  if (!failed_observation.observation_id.has_value() ||
+      failed_observation.observation_id->empty()) {
+    failed_observation.observation_id = std::string{"observation:reflection-recovery"};
+  }
+  failed_observation.success = false;
+  failed_observation.error = error_info;
+  if (!failed_observation.source.has_value()) {
+    failed_observation.source = contracts::ObservationSource::ToolExecution;
+  }
+  if (failed_observation.source == contracts::ObservationSource::ToolExecution) {
+    failed_observation.worker_task_id = std::nullopt;
+  }
+  if (!failed_observation.created_at.has_value()) {
+    failed_observation.created_at = current_time_ms();
+  }
+  if (!failed_observation.payload.has_value() || failed_observation.payload->empty()) {
+    failed_observation.payload = std::string{"{}"};
+  }
+  if (failed_observation.duration_ms.has_value() && *failed_observation.duration_ms <= 0) {
+    failed_observation.duration_ms = 1;
+  }
+  return failed_observation;
+}
+
+[[nodiscard]] contracts::IdempotencyAndSideEffectReport make_reflection_idempotency_report(
+    const contracts::ToolRequest& tool_request,
+    const tools::ToolInvocationEnvelope& tool_envelope) {
+  const auto side_effects_present =
+      tool_envelope.tool_result.has_value() &&
+      tool_envelope.tool_result->side_effects.has_value() &&
+      !tool_envelope.tool_result->side_effects->empty();
+
+  contracts::IdempotencyAndSideEffectReport report;
+  report.replay_safe = !side_effects_present;
+  report.idempotency_key =
+      tool_request.idempotency_key.has_value() && !tool_request.idempotency_key->empty()
+          ? tool_request.idempotency_key
+          : tool_request.tool_call_id;
+  report.side_effects_present = side_effects_present;
+  if (side_effects_present) {
+    report.non_replayable_reason =
+        "tool round observed side effects and cannot be replayed safely";
+  }
+  return report;
+}
+
+[[nodiscard]] contracts::RecoveryRequest make_reflection_recovery_request(
+    const contracts::Checkpoint& checkpoint,
+  const std::optional<contracts::BudgetSnapshot>& runtime_budget_snapshot,
+    const contracts::Observation& latest_observation,
+    const contracts::ReflectionDecision& reflection_decision,
+    const contracts::ToolRequest& tool_request,
+    const tools::ToolInvocationEnvelope& tool_envelope) {
+  const auto error_info = make_reflection_recovery_error(latest_observation, reflection_decision);
+  return contracts::RecoveryRequest{
+      .reflection_decision = reflection_decision,
+      .error_info = error_info,
+      .latest_observation =
+          make_reflection_recovery_observation(latest_observation, error_info),
+      .checkpoint = checkpoint,
+      .idempotency_and_side_effect_report =
+          make_reflection_idempotency_report(tool_request, tool_envelope),
+      .retry_count = checkpoint.retry_count,
+        .runtime_budget_snapshot = runtime_budget_snapshot,
+  };
+}
+
+[[nodiscard]] ResumePlan make_reflection_replan_resume_plan(
+    const contracts::Checkpoint& checkpoint,
+    const std::string& reason) {
+  return ResumePlan{
+      .checkpoint_ref = checkpoint.checkpoint_id.value_or(std::string{}),
+      .target_state = RuntimeState::Planning,
+      .checkpoint_state = checkpoint.state.value_or(contracts::CheckpointState::Unspecified),
+      .resume_token = std::string{},
+      .resume_reason = reason,
+      .pending_action = checkpoint.pending_action,
+      .policy_snapshot_ref = std::nullopt,
+      .requires_operator_intervention = false,
+  };
+}
+
 [[nodiscard]] cognition::CognitionStepRequest make_cognition_step_request(
     const contracts::AgentRequest& request,
     const std::string& goal_id,
@@ -1484,6 +1607,29 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       }
     }
 
+    if (has_decision_error_action_conflict(cognition_result)) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 "cognition returned an executable action together with error_info/result_code");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path rejected a conflicting cognition decision",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             "cognition returned an executable action together with error_info/result_code",
+                             orchestrator_stage_name(OrchestratorStage::MainLoop),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
     std::string belief_writeback_detail;
     if (should_write_back_belief_hint(cognition_result.belief_update_hint)) {
       const auto writeback_result = composition_.dependency_set->memory_manager->write_back(
@@ -1839,12 +1985,13 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
         .detail = "tool call consumed through live integration path",
     });
 
-    const auto tool_envelope = composition_.dependency_set->tool_manager->invoke(
-        make_tool_request(normalized_request,
+    const auto tool_request = make_tool_request(normalized_request,
                           runtime_budget,
                           *cognition_result.action_decision,
                           goal_id,
-                          composition_),
+                          composition_);
+    const auto tool_envelope = composition_.dependency_set->tool_manager->invoke(
+      tool_request,
         make_tool_invocation_context(normalized_request, composition_));
     if (!tool_envelope.has_projection() || !tool_envelope.tool_result.has_value() ||
         !tool_envelope.tool_result->success.value_or(false)) {
@@ -2015,12 +2162,303 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
     }
 
     const auto latest_observation = *tool_envelope.observation;
-    (void)composition_.dependency_set->cognition_engine->reflect(
+    const auto reflection_result = composition_.dependency_set->cognition_engine->reflect(
         make_reflection_request(normalized_request,
                                 goal_id,
                                 composition_,
                                 context_result.context_packet,
                                 latest_observation));
+
+    if (reflection_result.error_info.has_value() || reflection_result.result_code.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 "scheduler, tool invocation, and reflection completed through live dependency ports");
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::RecoveryRound,
+                 fsm->current_state(),
+                 fsm->current_state(),
+                 true,
+                 "cognition reflection returned an error surface and runtime failed closed");
+      run_result.used_tool_round = true;
+      run_result.used_recovery_round = true;
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path rejected the cognition reflection result",
+          reflection_result.error_info.value_or(
+              make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                                 "cognition reflection returned result_code without a recoverable reflection_decision",
+                                 orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+                                 RuntimeState::Failed)),
+          waiting_checkpoint.checkpoint->checkpoint_id,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    if (reflection_result.reflection_decision.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 "scheduler, tool invocation, and reflection completed through live dependency ports");
+
+      const auto recovery_request = make_reflection_recovery_request(
+          *waiting_checkpoint.checkpoint,
+          budget_controller_.snapshot(),
+          latest_observation,
+          *reflection_result.reflection_decision,
+          tool_request,
+          tool_envelope);
+      const auto recovery_plan = recovery_manager_.evaluate(recovery_request);
+      run_result.recovery_outcome = recovery_manager_.execute(recovery_plan);
+      const auto recovery_apply_result = recovery_manager_.apply(*run_result.recovery_outcome);
+
+      const RuntimeState recovery_round_before = fsm->current_state();
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::RecoveryRound,
+                 recovery_round_before,
+                 recovery_round_before,
+                 true,
+                 recovery_plan.detail.empty()
+                     ? "reflection decision was evaluated through RecoveryManager"
+                     : recovery_plan.detail);
+      run_result.used_tool_round = true;
+      run_result.used_recovery_round = true;
+
+      const auto executed_action =
+          run_result.recovery_outcome->executed_action.value_or(std::string{});
+      if (executed_action == "continue" || executed_action == "retry_step") {
+        if (!recovery_plan.resume_plan.has_value()) {
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path could not resume after reflection recovery",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 "recovery manager admitted a resume action without a resume plan",
+                                 orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+                                 RuntimeState::Failed),
+              waiting_checkpoint.checkpoint->checkpoint_id,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        auto resumed_result = continue_from_checkpoint(*recovery_plan.resume_plan, session_snapshot);
+        resumed_result.used_tool_round = true;
+        resumed_result.used_recovery_round = true;
+        resumed_result.recovery_outcome = run_result.recovery_outcome;
+        auto merged_trace = run_result.stage_trace;
+        merged_trace.insert(merged_trace.end(),
+                            resumed_result.stage_trace.begin(),
+                            resumed_result.stage_trace.end());
+        resumed_result.stage_trace = std::move(merged_trace);
+        return resumed_result;
+      }
+
+      if (executed_action == "replan") {
+        auto resumed_result = continue_from_checkpoint(
+            make_reflection_replan_resume_plan(
+                *waiting_checkpoint.checkpoint,
+                reflection_result.reflection_decision->rationale.value_or(
+                    std::string{"reflection requested a planning restart"})),
+            session_snapshot);
+        resumed_result.used_tool_round = true;
+        resumed_result.used_recovery_round = true;
+        resumed_result.recovery_outcome = run_result.recovery_outcome;
+        auto merged_trace = run_result.stage_trace;
+        merged_trace.insert(merged_trace.end(),
+                            resumed_result.stage_trace.begin(),
+                            resumed_result.stage_trace.end());
+        resumed_result.stage_trace = std::move(merged_trace);
+        return resumed_result;
+      }
+
+      if (executed_action == "abort_safe" || executed_action == "degrade") {
+        const auto safe_mode_decision = evaluate_safe_mode_for_recovery(
+            safe_mode_controller_,
+            *run_result.recovery_outcome,
+            recovery_request.runtime_budget_snapshot);
+        const auto target_runtime_state =
+            safe_mode_decision.target_runtime_state.value_or(RuntimeState::FailedSafe);
+
+        StateTransitionOutcome terminal_outcome;
+        std::optional<TransitionFailure> transition_failure;
+        if (target_runtime_state == RuntimeState::SafeMode) {
+          transition_failure = apply_steps(
+              *fsm,
+              orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+              {{.to_state = RuntimeState::Degraded,
+                .reason = safe_mode_decision.detail,
+                .guards = {TransitionGuardFact::RecoveryDegrade}},
+               {.to_state = RuntimeState::SafeMode,
+                .reason = safe_mode_decision.detail,
+                .guards = {TransitionGuardFact::SafeModeTriggerSatisfied}}},
+              &terminal_outcome);
+        } else if (target_runtime_state == RuntimeState::Degraded) {
+          transition_failure = apply_step(
+              *fsm,
+              orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+              TransitionStep{.to_state = RuntimeState::Degraded,
+                             .reason = safe_mode_decision.detail,
+                             .guards = {TransitionGuardFact::RecoveryDegrade}},
+              &terminal_outcome);
+        } else {
+          transition_failure = apply_step(
+              *fsm,
+              orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+              TransitionStep{.to_state = RuntimeState::FailedSafe,
+                             .reason = safe_mode_decision.detail,
+                             .guards = {TransitionGuardFact::RecoveryAbortSafe}},
+              &terminal_outcome);
+        }
+
+        if (transition_failure.has_value()) {
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path could not enter the safe terminal state after reflection recovery",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 transition_failure->detail,
+                                 transition_failure->stage,
+                                 RuntimeState::Failed),
+              waiting_checkpoint.checkpoint->checkpoint_id,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        const auto checkpoint_label = safe_terminal_label(target_runtime_state);
+        const auto terminal_checkpoint = build_and_save_checkpoint(
+            checkpoint_manager_,
+            CheckpointBuildRequest{
+                .transition_outcome = terminal_outcome,
+                .checkpoint_id = std::string("chk-") + checkpoint_label + "-" +
+                                 *normalized_request.request_id,
+                .step_id = checkpoint_label + "-" + *normalized_request.request_id,
+                .working_memory_snapshot = std::string("wm:") + checkpoint_label + ":" +
+                                           *normalized_request.request_id,
+                .pending_action = std::string(),
+                .request_id = normalized_request.request_id,
+                .goal_id = goal_id,
+                .belief_state_ref = composition_.default_belief_state_ref,
+                .retry_count = 1,
+                .created_at_ms = normalized_request.created_at,
+                .runtime_budget_snapshot = budget_controller_.snapshot(),
+                .tags = {std::string("path=") + checkpoint_label},
+            });
+        if (!terminal_checkpoint.saved()) {
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path failed to save reflection recovery terminal checkpoint",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 terminal_checkpoint.detail,
+                                 orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+                                 RuntimeState::Failed),
+              waiting_checkpoint.checkpoint->checkpoint_id,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        run_result.checkpoint = terminal_checkpoint.checkpoint;
+
+        if (const auto failure = apply_steps(
+                *fsm,
+                orchestrator_stage_name(OrchestratorStage::Terminalize),
+                {{.to_state = RuntimeState::Responding,
+                  .reason = std::string("emit ") + checkpoint_label + " response",
+                  .guards = {}},
+                 {.to_state = RuntimeState::Auditing,
+                  .reason = "response materialized",
+                  .guards = {TransitionGuardFact::ResponseMaterialized}},
+                 {.to_state = RuntimeState::Persisting,
+                  .reason = "audit committed",
+                  .guards = {TransitionGuardFact::AuditCommitted}},
+                 {.to_state = RuntimeState::Completed,
+                  .reason = "persistence confirmed",
+                  .guards = {TransitionGuardFact::PersistenceConfirmed}}});
+            failure.has_value()) {
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path failed to terminalize the reflection recovery safe path",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 failure->detail,
+                                 failure->stage,
+                                 RuntimeState::Failed),
+              run_result.checkpoint->checkpoint_id,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        const auto persisted_session = persist_terminal_session(
+            session_manager_,
+            session_snapshot,
+            target_runtime_state,
+            run_result.checkpoint->checkpoint_id,
+            composition_.default_audit_summary + " " + checkpoint_label);
+        if (persisted_session.updated()) {
+          run_result.effective_session = persisted_session.snapshot;
+        }
+
+        const auto safe_terminal_error_code = safe_mode_decision.error_code.has_value()
+                                                  ? static_cast<std::int32_t>(
+                                                        *safe_mode_decision.error_code)
+                                                  : recovery_apply_result.error_code.has_value()
+                                                        ? static_cast<std::int32_t>(
+                                                              *recovery_apply_result.error_code)
+                                                        : kRuntimeOrchestratorSkeletonFailedSafeCode;
+        run_result.final_state = target_runtime_state;
+        run_result.agent_result = make_result(
+            normalized_request,
+            run_result.final_state,
+            contracts::AgentResultStatus::Failed,
+            safe_terminal_result_code(target_runtime_state),
+            composition_.stub_ports.fail_safe_response_text,
+            make_runtime_error(safe_terminal_error_code,
+                               safe_mode_decision.detail.empty() ? recovery_apply_result.detail
+                                                                 : safe_mode_decision.detail,
+                               orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+                               target_runtime_state),
+            run_result.checkpoint->checkpoint_id,
+            goal_id);
+        return run_result;
+      }
+
+      const auto recovery_detail = run_result.recovery_outcome->rejection_reason.value_or(
+          run_result.recovery_outcome->escalation_reason.value_or(recovery_apply_result.detail));
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime live unary path rejected the reflection recovery outcome",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             recovery_detail,
+                             orchestrator_stage_name(OrchestratorStage::RecoveryRound),
+                             RuntimeState::Failed),
+          waiting_checkpoint.checkpoint->checkpoint_id,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
 
     StateTransitionOutcome continue_outcome;
     if (const auto failure = apply_step(
@@ -3269,7 +3707,39 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
   }
 
   const RuntimeState main_loop_before = fsm->current_state();
-  if (plan.target_state == RuntimeState::WaitingClarify) {
+  if (plan.target_state == RuntimeState::Planning) {
+    if (const auto failure = apply_steps(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::MainLoop),
+            {{.to_state = RuntimeState::Reasoning,
+              .reason = "resume planning after reflection recovery",
+              .guards = {TransitionGuardFact::ContextAssembled}},
+             {.to_state = RuntimeState::Responding,
+              .reason = "resume direct response",
+              .guards = {TransitionGuardFact::DirectResponseReady}}});
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          synthetic_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "continue_from_checkpoint failed to re-enter planning after reflection recovery",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+  } else if (plan.target_state == RuntimeState::WaitingClarify) {
     if (const auto failure = apply_steps(
             *fsm,
             orchestrator_stage_name(OrchestratorStage::MainLoop),

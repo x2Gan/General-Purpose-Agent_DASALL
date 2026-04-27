@@ -35,6 +35,8 @@ enum class FailureMode : std::uint8_t {
   MissingBeliefState,
   ContradictoryObservation,
   ResponseFallback,
+  DecisionExecuteConflict,
+  ReflectionErrorPriority,
 };
 
 class FailureInjectCognitionEngine final : public dasall::cognition::ICognitionEngine {
@@ -47,7 +49,9 @@ class FailureInjectCognitionEngine final : public dasall::cognition::ICognitionE
     dasall::cognition::CognitionDecisionResult result;
 
     if (mode_ == FailureMode::ContradictoryObservation ||
-        mode_ == FailureMode::ResponseFallback) {
+      mode_ == FailureMode::ResponseFallback ||
+      mode_ == FailureMode::DecisionExecuteConflict ||
+      mode_ == FailureMode::ReflectionErrorPriority) {
       dasall::cognition::decision::ActionDecision decision;
       decision.decision_kind =
           dasall::cognition::decision::ActionDecisionKind::ExecuteAction;
@@ -63,6 +67,20 @@ class FailureInjectCognitionEngine final : public dasall::cognition::ICognitionE
           .evidence_refs = {std::string{"tests:cognition-failure-injection"}},
       };
       result.action_decision = std::move(decision);
+      if (mode_ == FailureMode::DecisionExecuteConflict) {
+        result.result_code = dasall::contracts::ResultCode::ValidationFieldMissing;
+
+        dasall::contracts::ErrorInfo error;
+        error.failure_type = dasall::contracts::classify_result_code(*result.result_code);
+        error.retryable = false;
+        error.safe_to_replan = false;
+        error.details.code = static_cast<int>(*result.result_code);
+        error.details.stage = "cognition.decide";
+        error.details.message = "decision returned execute action together with an error";
+        error.source_ref.ref_type = "component";
+        error.source_ref.ref_id = "FailureInjectCognitionEngine";
+        result.error_info = error;
+      }
       return result;
     }
 
@@ -102,8 +120,29 @@ class FailureInjectCognitionEngine final : public dasall::cognition::ICognitionE
   }
 
   [[nodiscard]] dasall::cognition::CognitionReflectionResult reflect(
-      const dasall::cognition::ReflectionRequest&) override {
+      const dasall::cognition::ReflectionRequest& request) override {
     dasall::cognition::CognitionReflectionResult result;
+    if (mode_ == FailureMode::ReflectionErrorPriority) {
+      result.result_code = dasall::contracts::ResultCode::ProviderTimeout;
+
+      dasall::contracts::ErrorInfo error;
+      error.failure_type = dasall::contracts::classify_result_code(*result.result_code);
+      error.retryable = false;
+      error.safe_to_replan = false;
+      error.details.code = static_cast<int>(*result.result_code);
+      error.details.stage = "cognition.reflection";
+      error.details.message = "reflection emitted an explicit error surface";
+      error.source_ref.ref_type = "component";
+      error.source_ref.ref_id = "FailureInjectCognitionEngine.reflect";
+      result.error_info = error;
+
+      dasall::contracts::ReflectionDecision reflection_decision;
+      reflection_decision.request_id = request.request_id;
+      reflection_decision.goal_id = request.goal_contract.goal_id;
+      reflection_decision.decision_kind = dasall::contracts::ReflectionDecisionKind::AbortSafe;
+      reflection_decision.rationale = std::string{"reflection error should win over abort_safe suggestion"};
+      result.reflection_decision = std::move(reflection_decision);
+    }
     return result;
   }
 
@@ -204,6 +243,25 @@ void test_failure_injection_paths() {
   assert_true(response_fallback.response_text.has_value() &&
                   response_fallback.response_text->find("fallback") != std::string::npos,
               "response fallback case should surface explicit fallback response text");
+
+    const auto decision_execute_conflict =
+      run_case(FailureMode::DecisionExecuteConflict, "decision_execute_conflict");
+    assert_true(decision_execute_conflict.status == dasall::contracts::AgentResultStatus::Failed,
+          "executable action plus cognition error should fail closed at runtime boundary");
+    assert_true(decision_execute_conflict.error_info.has_value() &&
+            decision_execute_conflict.error_info->details.stage == "main_loop",
+          "decision execute conflict should be attributed to main_loop fail-closed handling");
+
+    const auto reflection_error_priority =
+      run_case(FailureMode::ReflectionErrorPriority, "reflection_error_priority");
+    assert_true(reflection_error_priority.status == dasall::contracts::AgentResultStatus::Failed,
+          "reflection error surface should take priority over any recovery suggestion");
+    assert_true(reflection_error_priority.error_info.has_value() &&
+            reflection_error_priority.error_info->details.stage == "cognition.reflection",
+          "reflection error priority should preserve the original cognition reflection stage");
+    assert_true(!reflection_error_priority.response_text.has_value() ||
+            reflection_error_priority.response_text->find("fail-safe") == std::string::npos,
+          "reflection error priority should fail before entering the fail-safe terminal response path");
 }
 
 }  // namespace

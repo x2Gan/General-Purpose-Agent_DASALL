@@ -27,6 +27,19 @@ using dasall::tests::runtime_fixture::make_true_integration_dependency_set;
 using dasall::tests::runtime_fixture::make_true_integration_init_request;
 using dasall::tests::support::assert_true;
 
+enum class ContractDecisionMode : std::uint8_t {
+  Executable = 0,
+  NonExecutable,
+};
+
+enum class ContractReflectionMode : std::uint8_t {
+  None = 0,
+  Continue,
+  RetryStep,
+  Replan,
+  AbortSafe,
+};
+
 class ContractProbeMemoryManager final : public dasall::memory::IMemoryManager {
  public:
   explicit ContractProbeMemoryManager(bool fail_writeback = false)
@@ -100,14 +113,17 @@ class ContractProbeMemoryManager final : public dasall::memory::IMemoryManager {
 
 class ContractProbeCognitionEngine final : public dasall::cognition::ICognitionEngine {
  public:
-  explicit ContractProbeCognitionEngine(bool executable)
-      : executable_(executable) {}
+  ContractProbeCognitionEngine(
+      ContractDecisionMode decision_mode,
+      ContractReflectionMode reflection_mode = ContractReflectionMode::None)
+      : decision_mode_(decision_mode),
+        reflection_mode_(reflection_mode) {}
 
   [[nodiscard]] dasall::cognition::CognitionDecisionResult decide(
       const dasall::cognition::CognitionStepRequest&) override {
     dasall::cognition::CognitionDecisionResult result;
 
-    if (executable_) {
+    if (decision_mode_ == ContractDecisionMode::Executable) {
       dasall::cognition::decision::ActionDecision decision;
       decision.decision_kind =
           dasall::cognition::decision::ActionDecisionKind::ExecuteAction;
@@ -164,13 +180,51 @@ class ContractProbeCognitionEngine final : public dasall::cognition::ICognitionE
   }
 
   [[nodiscard]] dasall::cognition::CognitionReflectionResult reflect(
-      const dasall::cognition::ReflectionRequest&) override {
+      const dasall::cognition::ReflectionRequest& request) override {
     dasall::cognition::CognitionReflectionResult result;
+    if (reflection_mode_ == ContractReflectionMode::None) {
+      return result;
+    }
+
+    dasall::contracts::ReflectionDecision reflection_decision;
+    reflection_decision.request_id = request.request_id;
+    reflection_decision.goal_id = request.goal_contract.goal_id;
+    reflection_decision.rationale = std::string{"contract probe reflection requested runtime recovery"};
+    reflection_decision.confidence = 0.67F;
+    reflection_decision.relevant_observation_refs =
+        std::vector<std::string>{request.latest_observation.observation_id.value_or(
+            std::string{"obs-contract-reflection"})};
+    reflection_decision.hint_ref = std::string{"tests:cognition-runtime-reflection-contract"};
+    reflection_decision.created_at = 1700000270;
+
+    switch (reflection_mode_) {
+      case ContractReflectionMode::Continue:
+        reflection_decision.decision_kind = dasall::contracts::ReflectionDecisionKind::Continue;
+        reflection_decision.rationale = std::string{"reflection requested continue resume"};
+        break;
+      case ContractReflectionMode::RetryStep:
+        reflection_decision.decision_kind = dasall::contracts::ReflectionDecisionKind::RetryStep;
+        reflection_decision.rationale = std::string{"reflection requested retry of the waiting tool step"};
+        break;
+      case ContractReflectionMode::Replan:
+        reflection_decision.decision_kind = dasall::contracts::ReflectionDecisionKind::Replan;
+        reflection_decision.rationale = std::string{"reflection requested replan before response"};
+        break;
+      case ContractReflectionMode::AbortSafe:
+        reflection_decision.decision_kind = dasall::contracts::ReflectionDecisionKind::AbortSafe;
+        reflection_decision.rationale = std::string{"reflection requested abort_safe"};
+        break;
+      case ContractReflectionMode::None:
+        break;
+    }
+
+    result.reflection_decision = std::move(reflection_decision);
     return result;
   }
 
  private:
-  bool executable_;
+  ContractDecisionMode decision_mode_;
+  ContractReflectionMode reflection_mode_;
 };
 
 void test_action_decision_execute_action_maps_to_runtime_progress() {
@@ -183,7 +237,7 @@ void test_action_decision_execute_action_maps_to_runtime_progress() {
     auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
     dependency_set->memory_manager = contract_memory_manager;
   dependency_set->cognition_engine =
-      std::make_shared<ContractProbeCognitionEngine>(true);
+      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::Executable);
 
   dasall::runtime::AgentFacade facade;
   const auto init_result = facade.init(make_true_integration_init_request(
@@ -224,7 +278,7 @@ void test_non_executable_decision_is_rejected_by_runtime_contract() {
     auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
     dependency_set->memory_manager = contract_memory_manager;
   dependency_set->cognition_engine =
-      std::make_shared<ContractProbeCognitionEngine>(false);
+      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::NonExecutable);
 
   dasall::runtime::AgentFacade facade;
   const auto init_result = facade.init(make_true_integration_init_request(
@@ -273,27 +327,140 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
   auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>(true);
   dependency_set->memory_manager = contract_memory_manager;
   dependency_set->cognition_engine =
-      std::make_shared<ContractProbeCognitionEngine>(true);
+      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::Executable);
 
-  dasall::runtime::AgentFacade facade;
-  const auto init_result = facade.init(make_true_integration_init_request(
+    dasall::runtime::AgentFacade facade;
+    const auto init_result = facade.init(make_true_integration_init_request(
       dependency_set,
       "rt-027-writeback-fail",
       "desktop_full",
       "cognition-runtime-contract-writeback-fail"));
-  assert_true(init_result.accepted,
-              "writeback failure case should initialize AgentFacade");
+    assert_true(init_result.accepted,
+          "writeback failure case should initialize AgentFacade");
 
-  const auto result = facade.handle(make_agent_request(
+    const auto result = facade.handle(make_agent_request(
       "req-027-writeback-fail",
       "session-027-writeback-fail",
       "trace-027-writeback-fail",
       "query interaction contract writeback failure"));
 
-  assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
-              "best-effort belief writeback failure should not override the completed runtime result");
-  assert_true(contract_memory_manager->write_back_calls == 1,
-              "writeback failure case should still attempt the cognition belief projection once");
+    assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+          "best-effort belief writeback failure should not override the completed runtime result");
+    assert_true(contract_memory_manager->write_back_calls == 1,
+          "writeback failure case should still attempt the cognition belief projection once");
+
+    if (dependency_set->memory_manager != nullptr) {
+    dependency_set->memory_manager->shutdown();
+    }
+    cleanup_database_artifacts(database_path);
+  }
+
+  void test_reflection_continue_retry_and_replan_reenter_runtime_paths() {
+    const struct ReflectionCase {
+    ContractReflectionMode mode;
+    std::string case_id;
+    } cases[] = {
+      {ContractReflectionMode::Continue, "reflection_continue"},
+      {ContractReflectionMode::RetryStep, "reflection_retry"},
+      {ContractReflectionMode::Replan, "reflection_replan"},
+    };
+
+    for (const auto& test_case : cases) {
+    const auto database_path = make_temp_database_path("dasall-cognition-runtime-contract-" +
+                               test_case.case_id);
+    cleanup_database_artifacts(database_path);
+
+    const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+    auto dependency_set = make_true_integration_dependency_set(
+      config,
+      "session-027-" + test_case.case_id,
+      "turn-027-" + test_case.case_id + "-001",
+      "query interaction contract " + test_case.case_id);
+    dependency_set->memory_manager = std::make_shared<ContractProbeMemoryManager>();
+    dependency_set->cognition_engine = std::make_shared<ContractProbeCognitionEngine>(
+      ContractDecisionMode::Executable,
+      test_case.mode);
+
+    dasall::runtime::AgentFacade facade;
+    const auto init_result = facade.init(make_true_integration_init_request(
+      dependency_set,
+      "rt-027-" + test_case.case_id,
+      "desktop_full",
+      "cognition-runtime-contract-" + test_case.case_id));
+    assert_true(init_result.accepted,
+          "reflection contract case should initialize AgentFacade");
+
+    const auto result = facade.handle(make_agent_request(
+      "req-027-" + test_case.case_id,
+      "session-027-" + test_case.case_id,
+      "trace-027-" + test_case.case_id,
+      "query interaction contract " + test_case.case_id));
+
+    const auto status_value = result.status.has_value()
+                    ? std::to_string(static_cast<int>(*result.status))
+                    : std::string{"none"};
+    const auto result_detail = result.error_info.has_value()
+                     ? result.error_info->details.stage + ":" +
+                       result.error_info->details.message
+                     : result.response_text.value_or(std::string{"no-response"});
+
+    assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+          std::string("reflection case should re-enter a completed runtime path: ") +
+            test_case.case_id +
+            " status=" +
+            status_value +
+            " detail=" + result_detail);
+    assert_true(result.checkpoint_ref.has_value() && !result.checkpoint_ref->empty(),
+          std::string("reflection case should persist a terminal checkpoint: ") +
+            test_case.case_id);
+
+    if (dependency_set->memory_manager != nullptr) {
+      dependency_set->memory_manager->shutdown();
+    }
+    cleanup_database_artifacts(database_path);
+    }
+  }
+
+  void test_reflection_abort_safe_stops_mainline() {
+    const auto database_path = make_temp_database_path("dasall-cognition-runtime-contract-reflection-abort");
+    cleanup_database_artifacts(database_path);
+
+    const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+    auto dependency_set = make_true_integration_dependency_set(
+      config,
+      "session-027-reflection-abort",
+      "turn-027-reflection-abort-001",
+      "query interaction contract reflection abort");
+    dependency_set->memory_manager = std::make_shared<ContractProbeMemoryManager>();
+    dependency_set->cognition_engine = std::make_shared<ContractProbeCognitionEngine>(
+      ContractDecisionMode::Executable,
+      ContractReflectionMode::AbortSafe);
+
+  dasall::runtime::AgentFacade facade;
+  const auto init_result = facade.init(make_true_integration_init_request(
+      dependency_set,
+      "rt-027-reflection-abort",
+      "desktop_full",
+      "cognition-runtime-contract-reflection-abort"));
+  assert_true(init_result.accepted,
+          "reflection abort case should initialize AgentFacade");
+
+  const auto result = facade.handle(make_agent_request(
+      "req-027-reflection-abort",
+      "session-027-reflection-abort",
+      "trace-027-reflection-abort",
+      "query interaction contract reflection abort"));
+
+    assert_true(result.status == dasall::contracts::AgentResultStatus::Failed,
+          "abort_safe reflection should stop the mainline and return a failed safe-path result");
+    assert_true(result.error_info.has_value() &&
+            result.error_info->details.stage == "recovery_round",
+          "abort_safe reflection should surface recovery_round diagnostics");
+    assert_true(result.response_text.has_value() &&
+            result.response_text->find("fail-safe") != std::string::npos,
+          "abort_safe reflection should emit the fail-safe response text");
+    assert_true(result.checkpoint_ref.has_value() && !result.checkpoint_ref->empty(),
+          "abort_safe reflection should still persist a terminal checkpoint");
 
   if (dependency_set->memory_manager != nullptr) {
     dependency_set->memory_manager->shutdown();
@@ -308,6 +475,8 @@ int main() {
     test_action_decision_execute_action_maps_to_runtime_progress();
     test_non_executable_decision_is_rejected_by_runtime_contract();
     test_belief_writeback_failure_does_not_override_completed_result();
+    test_reflection_continue_retry_and_replan_reenter_runtime_paths();
+    test_reflection_abort_safe_stops_mainline();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

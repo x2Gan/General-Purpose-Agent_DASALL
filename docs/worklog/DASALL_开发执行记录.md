@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #494
+
+- 日期：2026-04-27
+- 阶段：runtime/reflection decision and error surface consumption
+- 任务：COG-TODO-034 Runtime 消费 ReflectionDecision 并统一 cognition 错误面
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-017、026、027、028 已完成，`ReflectionDecision` surface、runtime unary happy-path、interaction contract 与 failure injection baseline 已具备，满足 034 的前置。
+2. 当前最小缺口是 `AgentOrchestrator` live unary path 在 tool round 后会调用 `reflect()` 但直接丢弃结果，同时没有显式拒绝 executable action 与 cognition error 并存的冲突结果。
+3. 本轮只收 runtime 对 reflection suggestion 和 cognition error surface 的解释，不提前进入 COG-TODO-035 的 structured schema 校验，也不处理 COG-TODO-036 的 gate evidence 口径。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.cpp`，新增 executable action 与 `error_info/result_code` 冲突的 fail-closed guard，并把真实 `reflection_decision` 投影为 `RecoveryRequest` 后交由 `RecoveryManager::evaluate/execute/apply` 处理。
+2. 同一文件新增 synthetic reflection failure observation / idempotency report helper，归一化 `payload`、`duration_ms`、`worker_task_id` 并为 Continue / RetryStep 路径补齐 retry idempotency evidence，确保 recovery admission 满足现有 guards。
+3. 同一文件补 `continue_from_checkpoint()` 的 `Planning` 分支，让 `Replan` 可以回到既有 planning path，而不是在 orchestrator 内新造第二套控制流。
+4. 更新 `tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp`，新增 Continue / RetryStep / Replan / AbortSafe 四类 reflection decision 的 deterministic runtime 行为断言。
+5. 更新 `tests/integration/cognition/CognitionFailureInjectionIntegrationTest.cpp`，新增 executable+error conflict fail-closed 与 reflection error priority 场景。
+6. 回写 `docs/todos/cognition/deliverables/COG-TODO-034-Runtime反思决策与错误面收敛.md` 与 cognition 专项 TODO，固化设计、命令与验收结论。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_runtime_interaction_contract_integration_test","dasall_cognition_failure_injection_integration_test"])`
+   - 结果：首轮失败只暴露 034 本地 safe-path 接线字段错误；修正后复跑通过。
+2. `RunCtest_CMakeTools(tests=["CognitionRuntimeInteractionContractTest","CognitionFailureInjectionIntegrationTest","ReflectionDecisionContractTest"])`
+   - 结果：通过；中途根据 interaction contract 失败信息补齐了 synthetic failure observation 的 guard 归一化与 Continue/RetryStep 的 idempotency fallback，最终 `3/3` tests passed。
+3. `get_errors(filePaths=[runtime/src/AgentOrchestrator.cpp, tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp, tests/integration/cognition/CognitionFailureInjectionIntegrationTest.cpp])`
+   - 结果：无新增编辑器错误。
+
+### 结果
+
+1. COG-TODO-034 已完成，runtime 不再丢弃 `reflect()` 结果，真实 `ReflectionDecision` 现在会通过 `RecoveryManager` 映射到 continue / retry_step / replan / abort_safe 现有路径。
+2. decision path 上 executable action 与 cognition error 并存时现在会立即 fail-closed；reflection path 上 cognition 自带 error surface 时优先失败，不再解释 suggestion。
+3. 034 的聚焦 interaction / failure / contract 证据已闭合，runtime 对 reflection suggestion 的解释继续保持 ADR-007 的 suggestion-only 边界。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-034 改动。
+2. 下一轮进入 COG-TODO-035，收敛 `StageOutputValidator` 的结构化 JSON / schema 校验。
+
 ## 记录 #493
 
 - 日期：2026-04-27
