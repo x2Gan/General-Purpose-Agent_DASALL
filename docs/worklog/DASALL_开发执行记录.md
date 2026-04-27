@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #479
+
+- 日期：2026-04-27
+- 阶段：cognition/perception stage implementation
+- 任务：COG-TODO-014 实现 PerceptionEngine
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-014 依赖 COG-TODO-007、010、011、012、013；五项均已完成，因此本轮不再受对象定义、配置投影、阶段策略或输入边界 blocker 影响。
+2. 当前最小缺口是感知阶段尚未拥有独立 owner：意图提取、实体抽取、歧义检测和澄清问题还混在文档卡片中，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 PerceptionEngine 私有实现、focused tests 和最小 CMake 接线，不提前把它并入完整 façade 主链。
+
+### 改动
+
+1. 新增 `cognition/src/perception/PerceptionEngine.h`、`cognition/src/perception/PerceptionEngine.cpp`，实现 `perceive()`、`extract_entities()`、`detect_ambiguities()`、`derive_clarification_questions()`、规则降级和输出校验。
+2. 更新 `cognition/CMakeLists.txt`，将 `PerceptionEngine.cpp` 纳入 `dasall_cognition`。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_perception_engine_unit_test`、`dasall_perception_clarification_rule_unit_test` 并补 `cognition/src` 私有 include。
+4. 新增 `tests/unit/cognition/PerceptionEngineTest.cpp`、`tests/unit/cognition/PerceptionClarificationRuleTest.cpp`，覆盖 actionable 感知路径、歧义澄清路径和 rule fallback on/off 差异；同时复用既有 `PerceptionBoundaryValidationTest` 做边界复验。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-014-PerceptionEngine收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_perception_engine_unit_test","dasall_perception_clarification_rule_unit_test","dasall_perception_boundary_validation_unit_test"])`
+   - 第一次结果：通过，但首次 focused run 暴露歧义路径置信度未压到澄清阈值以下的局部行为偏差。
+   - 修补同一 slice 后复跑：通过。
+2. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_perception_engine_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_perception_clarification_rule_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_perception_boundary_validation_unit_test`
+   - 第一次结果：失败，`PerceptionEngineTest` 断言歧义路径置信度应低于澄清阈值未满足。
+   - 修补同一 slice 后复跑：通过；三项感知相关 unit tests 全部零输出退出。
+
+### 结果
+
+1. COG-TODO-014 已完成，感知阶段现在具备独立私有 owner，可稳定输出 `PerceptionResult`，并在歧义场景优先给出保守澄清路径。
+2. `PerceptionEngine` 保持 cognition 私有 supporting component，没有扩张为 public/shared contract，也没有直接介入计划、动作或恢复逻辑。
+3. COG-TODO-015 可直接消费 `PerceptionResult` 进入 `Planner` / `PlanGraphBuilder`，不再重复感知层的缺槽判断。
+
+### 下一步
+
+1. 进入 COG-TODO-015，实现 `Planner` 与 `PlanGraphBuilder`，把 `PerceptionResult`、GoalContract、BeliefState、ContextPacket 收敛为可验证的 `PlanGraph`。
+
 ## 记录 #478
 
 - 日期：2026-04-27

@@ -4,6 +4,7 @@ target_sources(dasall_cognition
   PRIVATE
     src/CognitionFacade.cpp
     src/StagePolicyResolver.cpp
+    src/perception/PerceptionEngine.cpp
     src/validation/InputBoundaryValidator.cpp
     src/config/CognitionConfigProjector.cpp
   PUBLIC
