@@ -3,6 +3,8 @@
 #include <chrono>
 #include <utility>
 
+#include "ICognitionEngine.h"
+#include "IResponseBuilder.h"
 #include "AgentOrchestrator.h"
 #include "RuntimeDependencySet.h"
 #include "error/ResultCode.h"
@@ -95,6 +97,61 @@ struct RuntimeCompositionRoot {
          session_snapshot.pending_interaction->active();
 }
 
+[[nodiscard]] bool compose_cognition_ports_if_needed(
+    const AgentInitRequest& request,
+    AgentInitResult& result) {
+  if (request.dependency_set == nullptr || request.policy_snapshot == nullptr) {
+    return false;
+  }
+
+  const auto needs_cognition_engine = request.dependency_set->cognition_engine == nullptr;
+  const auto needs_response_builder = request.dependency_set->response_builder == nullptr;
+  if (!needs_cognition_engine && !needs_response_builder) {
+    return true;
+  }
+
+  if (needs_cognition_engine) {
+    auto cognition_engine = cognition::create_cognition_engine(
+        *request.policy_snapshot,
+        cognition::CognitionRuntimeDependencies{
+            .llm_manager = request.dependency_set->llm_manager,
+            .policy_snapshot = request.policy_snapshot,
+        });
+    if (!cognition_engine) {
+      result.health_summary =
+          "runtime facade rejected policy snapshot during cognition engine composition";
+      result.error_code = static_cast<std::int32_t>(contracts::ResultCode::PolicyDenied);
+      result.diagnostics =
+          "cognition_engine composition failed: runtime policy snapshot missing canonical stage routes or profile projection";
+      return false;
+    }
+    request.dependency_set->cognition_engine =
+        std::shared_ptr<cognition::ICognitionEngine>(cognition_engine.release());
+  }
+
+  if (needs_response_builder) {
+    auto response_builder = cognition::create_response_builder(
+        *request.policy_snapshot,
+        cognition::CognitionRuntimeDependencies{
+            .llm_manager = request.dependency_set->llm_manager,
+            .policy_snapshot = request.policy_snapshot,
+        });
+    if (!response_builder) {
+      result.health_summary =
+          "runtime facade rejected policy snapshot during response builder composition";
+      result.error_code = static_cast<std::int32_t>(contracts::ResultCode::PolicyDenied);
+      result.diagnostics =
+          "response_builder composition failed: runtime policy snapshot missing canonical stage routes or profile projection";
+      return false;
+    }
+    request.dependency_set->response_builder =
+        std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
+  }
+
+  result.diagnostics = "cognition_ports=composed_from_policy_snapshot";
+  return true;
+}
+
 }  // namespace
 
 class AgentFacade::State {
@@ -112,9 +169,17 @@ class AgentFacade::State {
       return result;
     }
 
+    if (!request.policy_snapshot->effective_profile_id().empty()) {
+      result.resolved_profile_id = request.policy_snapshot->effective_profile_id();
+    }
+
+    if (!compose_cognition_ports_if_needed(request, result)) {
+      return result;
+    }
+
     auto orchestrator = std::make_unique<AgentOrchestrator>(OrchestratorComposition{
         .runtime_instance_id = request.runtime_instance_id,
-        .profile_id = request.profile_id,
+        .profile_id = result.resolved_profile_id,
         .policy_snapshot = request.policy_snapshot,
         .dependency_set = request.dependency_set,
         .stub_ports = make_orchestrator_stub_ports(*request.dependency_set),
@@ -125,7 +190,7 @@ class AgentFacade::State {
 
     root_ = RuntimeCompositionRoot{
         .runtime_instance_id = request.runtime_instance_id,
-        .profile_id = request.profile_id,
+      .profile_id = result.resolved_profile_id,
         .policy_snapshot = request.policy_snapshot,
         .dependency_set = request.dependency_set,
         .orchestrator = std::move(orchestrator),
@@ -135,7 +200,9 @@ class AgentFacade::State {
     initialized_ = true;
 
     result.accepted = true;
-    result.health_summary = "runtime facade skeleton initialized";
+    result.health_summary = result.diagnostics.empty()
+                                ? "runtime facade skeleton initialized"
+                                : "runtime facade initialized with policy-projected cognition ports";
     return result;
   }
 

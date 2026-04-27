@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #492
+
+- 日期：2026-04-27
+- 阶段：cognition/runtime profile injection closure
+- 任务：COG-TODO-032 收敛 Runtime profile 到 CognitionConfig 的生产注入闭环
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-011、012、029 已完成，projector、resolver 与 profile compatibility baseline 已具备，满足 032 的前置。
+2. 当前最小缺口是 runtime true integration fixture 仍预装 `CognitionConfig{}`，导致 profile compatibility 主要证明 `profile_id` 分支，没有证明 `RuntimePolicySnapshot` 被 runtime 初始化路径和 cognition 主链真实消费。
+3. 本轮只收敛 snapshot-aware cognition factories、runtime init 组合根、resolver/bridge 请求贯通和 profile integration 证据，不进入 COG-TODO-033 / 034 的 runtime 语义消费。
+
+### 改动
+
+1. 更新 `cognition/include/CognitionDependencies.h`、`ICognitionEngine.h`、`IResponseBuilder.h`，新增 snapshot-aware factory overload，并允许 runtime 把 `policy_snapshot` 作为 cognition composition dependency 传入。
+2. 更新 `cognition/src/config/CognitionConfigProjector.cpp` 与 `cognition/src/llm/CognitionLlmBridge.cpp`，让 canonical stage route 经 `StageModelHint.preferred_provider` 进入真实 `LLMRequest.model_route`。
+3. 更新 `cognition/src/CognitionFacade.cpp` 与 `cognition/src/response/ResponseBuilder.cpp`，在存在 runtime policy snapshot 时真实消费 `StagePolicyResolver` 输出，并把 route、deadline、max_output_tokens、`factory_test` 模板优先语义贯通到运行链。
+4. 更新 `runtime/src/AgentFacade.cpp`，仅在缺失 live cognition ports 时用 snapshot 组合 `cognition_engine` / `response_builder`，避免覆写 failure injection 与 contract tests 中显式注入的自定义 ports。
+5. 更新 `tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h`、`tests/integration/cognition/CognitionProfileCompatibilityTest.cpp` 与相关 unit tests，移除预装默认 config 的假 fixture，改为 profile-aware canonical stage route matrix，并新增 missing response route init fail-closed 负例。
+6. 回写 `docs/todos/cognition/deliverables/COG-TODO-032-RuntimeProfile到CognitionConfig注入收敛.md` 与 cognition 专项 TODO，固化设计、命令与验证证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_interface_surface_unit_test","dasall_cognition_config_projection_unit_test","dasall_stage_policy_resolver_profile_diff_unit_test","dasall_cognition_profile_compatibility_integration_test"])`
+   - 结果：首轮失败，仅暴露 `CognitionInterfaceSurfaceTest.cpp` 对 `RuntimePolicySnapshot.h` 的 include 路径错误；修正后复跑通过。
+2. `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest","CognitionConfigProjectionTest","StagePolicyResolverProfileDiffTest","CognitionProfileCompatibilityTest"])`
+   - 结果：通过，`4/4` tests passed。
+3. `get_errors(filePaths=[cognition/src/CognitionFacade.cpp, cognition/src/response/ResponseBuilder.cpp, runtime/src/AgentFacade.cpp, tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h, tests/integration/cognition/CognitionProfileCompatibilityTest.cpp, tests/unit/cognition/CognitionConfigProjectionTest.cpp, tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp])`
+   - 结果：无新增编辑器错误。
+
+### 结果
+
+1. COG-TODO-032 已完成，runtime init 现在能在缺失 live cognition ports 时通过 snapshot-aware cognition factory 真正完成 `RuntimePolicySnapshot -> CognitionConfig` 投影。
+2. `CognitionProfileCompatibilityTest` 不再只看 terminal status，而能证明 route、deadline、token budget 与 `factory_test` 模板优先策略都真实进入 cognition 主链和 bridge request。
+3. 缺失 canonical response route 的 snapshot 会在 init 阶段 fail-closed；自定义 cognition ports 仍保留注入优先级，没有被 runtime 组合根无条件覆写。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-032 改动。
+2. 下一轮进入 COG-TODO-033，收敛 Runtime 对 `BeliefUpdateHint` 与 `ContextSufficiencySignal` 的语义消费。
+
 ## 记录 #491
 
 - 日期：2026-04-27

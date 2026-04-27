@@ -3,8 +3,10 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -86,26 +88,10 @@ inline std::shared_ptr<runtime::RuntimeDependencySet> make_true_integration_depe
   }
 
   auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
-  llm_manager->set_stage_result(
-      "response",
-      dasall::tests::mocks::MockLLMManager::make_success_result(
-          "runtime unary integration completed: " + seed_query,
-          "mock.route.response"));
+  llm_manager->set_default_content("runtime unary integration completed: " + seed_query);
 
   dependency_set->memory_manager = std::move(memory_manager);
   dependency_set->llm_manager = llm_manager;
-  dependency_set->cognition_engine =
-      std::shared_ptr<cognition::ICognitionEngine>(cognition::create_cognition_engine(
-          cognition::CognitionConfig{},
-          cognition::CognitionRuntimeDependencies{
-              .llm_manager = llm_manager,
-          }));
-  dependency_set->response_builder =
-      std::shared_ptr<cognition::IResponseBuilder>(cognition::create_response_builder(
-          cognition::CognitionConfig{},
-          cognition::CognitionRuntimeDependencies{
-              .llm_manager = llm_manager,
-          }));
 
   auto registry = std::make_shared<tools::registry::ToolRegistry>();
   const auto registered = registry->register_builtin(contracts::ToolDescriptor{
@@ -154,13 +140,45 @@ inline std::shared_ptr<runtime::RuntimeDependencySet> make_true_integration_depe
 }
 
 inline std::shared_ptr<const profiles::RuntimePolicySnapshot>
-make_true_integration_policy_snapshot(const std::string& profile_id) {
+make_true_integration_policy_snapshot(const std::string& profile_id,
+                                                                            const std::optional<std::string>& omitted_stage = std::nullopt) {
+    auto route_name = [&](std::string_view stage_name) {
+        return profile_id + "." + std::string(stage_name) + ".primary";
+    };
+    auto fallback_route_name = [&](std::string_view stage_name) {
+        return profile_id + "." + std::string(stage_name) + ".fallback";
+    };
+
   profiles::ModelProfile model_profile;
-  model_profile.stage_routes.emplace("main", profiles::ModelRoutePolicy{
-                                                 .route = "mock-primary",
-                                                 .fallback_route = std::string{"mock-fallback"},
-                                                 .streaming_enabled = false,
-                                             });
+    const auto emplace_stage_route = [&](std::string_view stage_name, bool streaming_enabled) {
+        if (omitted_stage.has_value() && *omitted_stage == stage_name) {
+            return;
+        }
+
+        model_profile.stage_routes.emplace(
+                std::string(stage_name),
+                profiles::ModelRoutePolicy{
+                        .route = route_name(stage_name),
+                        .fallback_route = fallback_route_name(stage_name),
+                        .streaming_enabled = streaming_enabled,
+                });
+    };
+    emplace_stage_route("planning", false);
+    emplace_stage_route("execution", false);
+    emplace_stage_route("reflection", false);
+    emplace_stage_route("response", profile_id != "edge_minimal");
+
+    const auto llm_timeout_ms = profile_id == "edge_minimal"
+                                                                    ? 900
+                                                                    : profile_id == "edge_balanced"
+                                                                                ? 1200
+                                                                                : profile_id == "factory_test" ? 1400 : 1800;
+    const auto max_output_tokens = profile_id == "edge_minimal"
+                                                                         ? 256U
+                                                                         : profile_id == "edge_balanced"
+                                                                                     ? 384U
+                                                                                     : profile_id == "factory_test" ? 320U : 512U;
+    const auto max_latency_ms = static_cast<std::uint32_t>(llm_timeout_ms + 400);
 
   return std::make_shared<const profiles::RuntimePolicySnapshot>(
       1U,
@@ -169,13 +187,13 @@ make_true_integration_policy_snapshot(const std::string& profile_id) {
           .max_tokens = 2048U,
           .max_turns = 6U,
           .max_tool_calls = 2U,
-          .max_latency_ms = 2000U,
+                    .max_latency_ms = max_latency_ms,
           .max_replan_count = 2U,
       },
       std::move(model_profile),
       profiles::TokenBudgetPolicy{
           .max_input_tokens = 2048U,
-          .max_output_tokens = 512U,
+                    .max_output_tokens = max_output_tokens,
           .max_history_turns = 8U,
           .compression_threshold = 1024U,
       },
@@ -196,7 +214,7 @@ make_true_integration_policy_snapshot(const std::string& profile_id) {
           .allow_budget_degrade = true,
       },
       profiles::TimeoutPolicy{
-          .llm = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
+          .llm = profiles::TimeoutBudget{.timeout_ms = llm_timeout_ms, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
           .tool = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
           .mcp = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
           .workflow = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
@@ -221,11 +239,12 @@ inline runtime::AgentInitRequest make_true_integration_init_request(
     std::shared_ptr<runtime::RuntimeDependencySet> dependency_set,
     const std::string& runtime_instance_id,
     const std::string& profile_id,
-    const std::string& boot_reason) {
+        const std::string& boot_reason,
+        const std::optional<std::string>& omitted_stage = std::nullopt) {
   runtime::AgentInitRequest request;
   request.runtime_instance_id = runtime_instance_id;
   request.profile_id = profile_id;
-  request.policy_snapshot = make_true_integration_policy_snapshot(profile_id);
+    request.policy_snapshot = make_true_integration_policy_snapshot(profile_id, omitted_stage);
   request.dependency_set = std::move(dependency_set);
   request.boot_reason = boot_reason;
   request.cold_start = true;

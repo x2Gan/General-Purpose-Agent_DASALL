@@ -179,7 +179,7 @@ std::optional<StageModelHint> CognitionConfigProjector::derive_stage_model_hint(
   hint.requires_reasoning_trace =
       requires_reasoning_trace(stage_name, task_type, hint.capability_tier);
   hint.cost_sensitivity = derive_cost_sensitivity(snapshot.effective_profile_id());
-  hint.preferred_provider.clear();
+  hint.preferred_provider = route_it->second.route;
   return hint;
 }
 

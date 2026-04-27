@@ -1,12 +1,17 @@
 #include "ICognitionEngine.h"
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "RuntimePolicySnapshot.h"
+#include "StagePolicyResolver.h"
 #include "belief/BeliefUpdateSynthesizer.h"
+#include "config/CognitionConfigProjector.h"
 #include "llm/CognitionLlmBridge.h"
 #include "observability/CognitionTelemetry.h"
 #include "perception/PerceptionEngine.h"
@@ -26,6 +31,7 @@ using llm_bridge::StageLlmCallResult;
 using observability::DecisionTelemetryRecord;
 using observability::StageTelemetryContext;
 using observability::TelemetryEmitResult;
+using policy::StageExecutionPlan;
 using validation::InputBoundaryValidationResult;
 
 [[nodiscard]] std::string default_response_summary(const CognitionStepRequest& request) {
@@ -239,6 +245,19 @@ void apply_reflection_failure(
   return value.value_or(std::string{});
 }
 
+[[nodiscard]] const StageModelHint* find_stage_model_hint(
+    const StageExecutionPlan& plan,
+    std::string_view stage_name,
+    std::string_view task_type) {
+  for (const auto& hint : plan.stage_model_hints) {
+    if (hint.stage_name == stage_name && hint.task_type == task_type) {
+      return &hint;
+    }
+  }
+
+  return nullptr;
+}
+
 [[nodiscard]] StageModelHint make_bridge_model_hint(
     std::string stage,
     std::string task_type,
@@ -346,7 +365,8 @@ class CognitionFacade final : public ICognitionEngine {
         llm_bridge_(dependencies.llm_manager != nullptr
                         ? std::make_shared<CognitionLlmBridge>(
                               std::move(dependencies.llm_manager))
-                        : nullptr) {}
+          : nullptr),
+      policy_snapshot_(std::move(dependencies.policy_snapshot)) {}
 
   [[nodiscard]] CognitionDecisionResult decide(
       const CognitionStepRequest& request) override {
@@ -424,9 +444,52 @@ class CognitionFacade final : public ICognitionEngine {
       const CognitionStepRequest& request) {
     CognitionDecisionResult result;
 
+    std::optional<StageExecutionPlan> decision_plan;
+    if (policy_snapshot_ != nullptr) {
+      decision_plan = policy::StagePolicyResolver::resolve_decide_plan(*policy_snapshot_, request);
+      if (!decision_plan.has_value()) {
+        apply_decision_failure(
+            result,
+            contracts::ResultCode::PolicyDenied,
+            make_error_info(contracts::ResultCode::PolicyDenied,
+                            "cognition.decide.policy",
+                            "runtime policy snapshot could not produce a decision stage plan",
+                            "cognition::policy::StagePolicyResolver"),
+            "decision_pipeline.policy_projection_failed");
+        return result;
+      }
+    }
+
+    const auto* planning_hint = decision_plan.has_value()
+                                    ? find_stage_model_hint(*decision_plan, "planning", "plan")
+                                    : nullptr;
+    const auto* execution_hint = decision_plan.has_value()
+                                     ? find_stage_model_hint(
+                                           *decision_plan, "execution", "action_decision")
+                                     : nullptr;
+    if (decision_plan.has_value() && (planning_hint == nullptr || execution_hint == nullptr)) {
+      apply_decision_failure(
+          result,
+          contracts::ResultCode::PolicyDenied,
+          make_error_info(contracts::ResultCode::PolicyDenied,
+                          "cognition.decide.policy",
+                          "runtime policy snapshot did not expose the required bridge hints",
+                          "cognition::policy::StagePolicyResolver"),
+          "decision_pipeline.policy_hints_missing");
+      return result;
+    }
+
+    const auto max_plan_nodes =
+        decision_plan.has_value() ? decision_plan->max_plan_nodes : config_.max_plan_nodes;
+    const auto max_plan_depth =
+        decision_plan.has_value() ? decision_plan->max_plan_depth : config_.max_plan_depth;
+    const auto rule_fallback_enabled =
+        request.execution_hints.degraded_path_allowed &&
+        (!decision_plan.has_value() || decision_plan->rule_fallback_enabled);
+
     const auto perception_result = perception_engine_.perceive(request);
     if (!perception_result.has_value()) {
-      if (request.execution_hints.degraded_path_allowed) {
+      if (rule_fallback_enabled) {
         result.action_decision = make_clarification_fallback(
             request,
             "decision pipeline degraded to clarification because perception produced no safe output");
@@ -470,7 +533,8 @@ class CognitionFacade final : public ICognitionEngine {
                                   ModelCapabilityTier::Standard,
                                   true,
                                   512U,
-                                  result);
+                                  result,
+                                  planning_hint);
     if (result.error_info.has_value()) {
       return result;
     }
@@ -489,9 +553,9 @@ class CognitionFacade final : public ICognitionEngine {
     const auto plan_graph = planner_.build_plan(planning_request);
 
     const auto plan_validation = validator_.validate_plan_graph_invariants(
-      plan_graph, config_.max_plan_nodes, config_.max_plan_depth);
+        plan_graph, max_plan_nodes, max_plan_depth);
     if (!plan_validation.ok) {
-      if (request.execution_hints.degraded_path_allowed) {
+      if (rule_fallback_enabled) {
         result.action_decision = make_clarification_fallback(
             request,
             "decision pipeline degraded to clarification because plan invariants failed validation");
@@ -532,7 +596,8 @@ class CognitionFacade final : public ICognitionEngine {
                                   ModelCapabilityTier::Standard,
                                   true,
                                   256U,
-                                  result);
+                                  result,
+                                  execution_hint);
     if (result.error_info.has_value()) {
       return result;
     }
@@ -569,7 +634,39 @@ class CognitionFacade final : public ICognitionEngine {
       const ReflectionRequest& request) {
     CognitionReflectionResult result;
 
-    consume_reflection_bridge_stage(request, result);
+    const auto reflection_plan = policy_snapshot_ != nullptr
+                                     ? policy::StagePolicyResolver::resolve_reflection_plan(
+                                           *policy_snapshot_, request)
+                                     : std::optional<StageExecutionPlan>{};
+    if (policy_snapshot_ != nullptr && !reflection_plan.has_value()) {
+      apply_reflection_failure(
+          result,
+          contracts::ResultCode::PolicyDenied,
+          make_error_info(contracts::ResultCode::PolicyDenied,
+                          "cognition.reflection.policy",
+                          "runtime policy snapshot could not produce a reflection stage plan",
+                          "cognition::policy::StagePolicyResolver"),
+          "reflection_pipeline.policy_projection_failed");
+      return result;
+    }
+
+    const auto* reflection_hint = reflection_plan.has_value()
+                                      ? find_stage_model_hint(
+                                            *reflection_plan, "reflection", "failure_analysis")
+                                      : nullptr;
+    if (reflection_plan.has_value() && reflection_hint == nullptr) {
+      apply_reflection_failure(
+          result,
+          contracts::ResultCode::PolicyDenied,
+          make_error_info(contracts::ResultCode::PolicyDenied,
+                          "cognition.reflection.policy",
+                          "runtime policy snapshot did not expose the reflection bridge hint",
+                          "cognition::policy::StagePolicyResolver"),
+          "reflection_pipeline.policy_hints_missing");
+      return result;
+    }
+
+    consume_reflection_bridge_stage(request, result, reflection_hint);
     if (result.error_info.has_value()) {
       return result;
     }
@@ -600,7 +697,8 @@ class CognitionFacade final : public ICognitionEngine {
                                      ModelCapabilityTier capability_tier,
                                      bool requires_structured_output,
                                      std::uint32_t max_output_tokens,
-                                     CognitionDecisionResult& result) const {
+                                     CognitionDecisionResult& result,
+                                     const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, std::string{"llm_bridge.unavailable:"} + stage);
       return;
@@ -613,14 +711,16 @@ class CognitionFacade final : public ICognitionEngine {
     bridge_request.stage_name = stage;
     bridge_request.task_type = task_type;
     bridge_request.messages = make_decision_stage_messages(request, stage, task_type);
-    bridge_request.model_hint = make_bridge_model_hint(stage,
-                                                       task_type,
-                                                       capability_tier,
-                                                       requires_structured_output,
-                                                       max_output_tokens,
-                                                       request.execution_hints.low_latency_preferred
-                                                           ? 1000U
-                                                           : 2500U);
+    bridge_request.model_hint = stage_model_hint != nullptr
+                    ? *stage_model_hint
+                    : make_bridge_model_hint(
+                        stage,
+                        task_type,
+                        capability_tier,
+                        requires_structured_output,
+                        max_output_tokens,
+                        request.execution_hints.low_latency_preferred ? 1000U
+                                              : 2500U);
     bridge_request.budget_context = request.budget_context;
     bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
         .schema_kind = requires_structured_output ? llm_bridge::StageSchemaKind::JsonObject
@@ -650,7 +750,8 @@ class CognitionFacade final : public ICognitionEngine {
   }
 
   void consume_reflection_bridge_stage(const ReflectionRequest& request,
-                                       CognitionReflectionResult& result) const {
+                                       CognitionReflectionResult& result,
+                                       const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, "llm_bridge.unavailable:reflection");
       return;
@@ -663,14 +764,16 @@ class CognitionFacade final : public ICognitionEngine {
     bridge_request.stage_name = "reflection";
     bridge_request.task_type = "failure_analysis";
     bridge_request.messages = make_reflection_stage_messages(request);
-    bridge_request.model_hint = make_bridge_model_hint("reflection",
-                                                       "failure_analysis",
-                                                       ModelCapabilityTier::Advanced,
-                                                       true,
-                                                       384U,
-                                                       request.execution_hints.low_latency_preferred
-                                                           ? 1000U
-                                                           : 2500U);
+    bridge_request.model_hint = stage_model_hint != nullptr
+                    ? *stage_model_hint
+                    : make_bridge_model_hint(
+                        "reflection",
+                        "failure_analysis",
+                        ModelCapabilityTier::Advanced,
+                        true,
+                        384U,
+                        request.execution_hints.low_latency_preferred ? 1000U
+                                              : 2500U);
     bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
         .schema_kind = llm_bridge::StageSchemaKind::JsonObject,
         .output_schema_ref = "schema://cognition/reflection/failure_analysis",
@@ -704,6 +807,7 @@ class CognitionFacade final : public ICognitionEngine {
   validation::StageOutputValidator validator_;
   observability::CognitionTelemetry telemetry_;
   std::shared_ptr<CognitionLlmBridge> llm_bridge_;
+  std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot_;
 };
 
 }  // namespace
@@ -716,6 +820,21 @@ std::unique_ptr<ICognitionEngine> create_cognition_engine(
     const CognitionConfig& config,
     CognitionRuntimeDependencies dependencies) {
   return std::make_unique<CognitionFacade>(config, std::move(dependencies));
+}
+
+std::unique_ptr<ICognitionEngine> create_cognition_engine(
+    const profiles::RuntimePolicySnapshot& snapshot,
+    CognitionRuntimeDependencies dependencies) {
+  const auto config = config::CognitionConfigProjector::project_config(snapshot);
+  if (!config.has_value()) {
+    return nullptr;
+  }
+
+  if (dependencies.policy_snapshot == nullptr) {
+    dependencies.policy_snapshot =
+        std::make_shared<const profiles::RuntimePolicySnapshot>(snapshot);
+  }
+  return std::make_unique<CognitionFacade>(*config, std::move(dependencies));
 }
 
 }  // namespace dasall::cognition

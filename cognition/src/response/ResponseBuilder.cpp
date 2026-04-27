@@ -11,6 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "StagePolicyResolver.h"
+#include "RuntimePolicySnapshot.h"
+#include "config/CognitionConfigProjector.h"
 #include "llm/CognitionLlmBridge.h"
 #include "validation/InputBoundaryValidator.h"
 
@@ -40,6 +43,19 @@ struct ResponseEnvelope {
 
 using llm_bridge::CognitionLlmBridge;
 using llm_bridge::StageLlmCallResult;
+
+[[nodiscard]] const StageModelHint* find_stage_model_hint(
+    const policy::StageExecutionPlan& plan,
+    std::string_view stage_name,
+    std::string_view task_type) {
+  for (const auto& hint : plan.stage_model_hints) {
+    if (hint.stage_name == stage_name && hint.task_type == task_type) {
+      return &hint;
+    }
+  }
+
+  return nullptr;
+}
 
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -234,9 +250,13 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
   return outcome;
 }
 
-[[nodiscard]] bool template_fallback_enabled(const CognitionConfig& config,
-                                             const ResponseBuildRequest& request) {
-  return config.response.template_fallback_enabled && request.build_hints.allow_template_fallback;
+[[nodiscard]] bool template_fallback_enabled(
+    const CognitionConfig& config,
+    const ResponseBuildRequest& request,
+    const policy::StageExecutionPlan* response_plan = nullptr) {
+  const auto enabled_in_config = config.response.template_fallback_enabled;
+  const auto enabled_in_plan = response_plan == nullptr || response_plan->template_fallback_enabled;
+  return enabled_in_config && enabled_in_plan && request.build_hints.allow_template_fallback;
 }
 
 [[nodiscard]] std::optional<std::string> observation_payload(const ResponseBuildRequest& request) {
@@ -249,8 +269,15 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
 
 [[nodiscard]] ResponseMode select_response_mode(const CognitionConfig& config,
                                                 const ResponseBuildRequest& request,
-                                                bool bridge_available) {
-  const auto template_allowed = template_fallback_enabled(config, request);
+                                                bool bridge_available,
+                                                const policy::StageExecutionPlan* response_plan = nullptr) {
+  const auto template_allowed = template_fallback_enabled(config, request, response_plan);
+  if (response_plan != nullptr &&
+      response_plan->fallback_mode == policy::StageFallbackMode::TemplatePreferred &&
+      template_allowed) {
+    return ResponseMode::TemplateFallback;
+  }
+
   if (request.build_hints.prefer_template && template_allowed) {
     return ResponseMode::TemplateFallback;
   }
@@ -270,7 +297,12 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
   return ResponseMode::Unavailable;
 }
 
-[[nodiscard]] StageModelHint make_response_model_hint(const ResponseBuildRequest& request) {
+[[nodiscard]] StageModelHint make_response_model_hint(const ResponseBuildRequest& request,
+                                                      const StageModelHint* stage_model_hint) {
+  if (stage_model_hint != nullptr) {
+    return *stage_model_hint;
+  }
+
   return StageModelHint{
       .stage_name = "response",
       .task_type = "final_response",
@@ -309,7 +341,8 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
 
 [[nodiscard]] llm_bridge::StageLlmCallRequest make_response_stage_call_request(
     const ResponseBuildRequest& request,
-    const std::string& payload) {
+  const std::string& payload,
+  const StageModelHint* stage_model_hint) {
   llm_bridge::StageLlmCallRequest bridge_request;
   bridge_request.request_id = request.request_id;
   bridge_request.trace_id = request.trace_id;
@@ -317,7 +350,7 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
   bridge_request.stage_name = "response";
   bridge_request.task_type = "final_response";
   bridge_request.messages = make_response_messages(request, payload);
-  bridge_request.model_hint = make_response_model_hint(request);
+  bridge_request.model_hint = make_response_model_hint(request, stage_model_hint);
   bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
       .schema_kind = llm_bridge::StageSchemaKind::Text,
       .output_schema_ref = {},
@@ -442,7 +475,8 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
 [[nodiscard]] ResponseBuildResult build_with_llm_bridge(
     const CognitionConfig& config,
     const ResponseBuildRequest& request,
-    const CognitionLlmBridge& bridge);
+  const CognitionLlmBridge& bridge,
+  const policy::StageExecutionPlan* response_plan = nullptr);
 
 [[nodiscard]] ResponseBuildResult build_with_template(const CognitionConfig& config,
                                                       const ResponseBuildRequest& request) {
@@ -492,7 +526,8 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
 [[nodiscard]] ResponseBuildResult build_with_llm_bridge(
     const CognitionConfig& config,
     const ResponseBuildRequest& request,
-    const CognitionLlmBridge& bridge) {
+    const CognitionLlmBridge& bridge,
+    const policy::StageExecutionPlan* response_plan) {
   const auto payload = observation_payload(request);
   if (!payload.has_value()) {
     return build_error_result(contracts::ResultCode::RuntimeRetryExhausted,
@@ -501,10 +536,21 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
                               "response_observation_payload_missing");
   }
 
+  const auto* response_hint = response_plan != nullptr
+                                  ? find_stage_model_hint(
+                                        *response_plan, "response", "final_response")
+                                  : nullptr;
+  if (response_plan != nullptr && response_hint == nullptr) {
+    return build_error_result(contracts::ResultCode::PolicyDenied,
+                              "cognition.response.policy",
+                              "runtime policy snapshot did not expose the response bridge hint",
+                              "response_policy_hints_missing");
+  }
+
   const auto bridge_result =
-      bridge.invoke_stage(make_response_stage_call_request(request, *payload));
+      bridge.invoke_stage(make_response_stage_call_request(request, *payload, response_hint));
   if (bridge_result.error_info.has_value()) {
-    if (template_fallback_enabled(config, request)) {
+    if (template_fallback_enabled(config, request, response_plan)) {
       auto fallback = build_with_template(config, request);
       fallback.diagnostics.push_back("response_llm_bridge_failed");
       append_bridge_diagnostics(fallback.diagnostics, bridge_result);
@@ -517,7 +563,7 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
   if (!bridge_result.response.has_value() ||
       !bridge_result.response->content_payload.has_value() ||
       bridge_result.response->content_payload->empty()) {
-    if (template_fallback_enabled(config, request)) {
+    if (template_fallback_enabled(config, request, response_plan)) {
       auto fallback = build_with_template(config, request);
       fallback.diagnostics.push_back("response_llm_bridge_empty_payload");
       append_bridge_diagnostics(fallback.diagnostics, bridge_result);
@@ -585,7 +631,8 @@ class ResponseBuilder final : public IResponseBuilder {
         llm_bridge_(dependencies.llm_manager != nullptr
                         ? std::make_shared<CognitionLlmBridge>(
                               std::move(dependencies.llm_manager))
-                        : nullptr) {}
+        : nullptr),
+    policy_snapshot_(std::move(dependencies.policy_snapshot)) {}
 
   [[nodiscard]] ResponseBuildResult build(
       const ResponseBuildRequest& request) override {
@@ -597,9 +644,27 @@ class ResponseBuilder final : public IResponseBuilder {
       return result;
     }
 
-    switch (select_response_mode(config_, request, llm_bridge_ != nullptr)) {
+    const auto response_plan = policy_snapshot_ != nullptr
+                                   ? policy::StagePolicyResolver::resolve_response_plan(
+                                         *policy_snapshot_, request)
+                                   : std::optional<policy::StageExecutionPlan>{};
+    if (policy_snapshot_ != nullptr && !response_plan.has_value()) {
+      return build_error_result(contracts::ResultCode::PolicyDenied,
+                                "cognition.response.policy",
+                                "runtime policy snapshot could not produce a response stage plan",
+                                "response_policy_projection_failed");
+    }
+
+    switch (select_response_mode(config_,
+                                 request,
+                                 llm_bridge_ != nullptr,
+                                 response_plan.has_value() ? &(*response_plan) : nullptr)) {
       case ResponseMode::LlmBridge:
-        return build_with_llm_bridge(config_, request, *llm_bridge_);
+        return build_with_llm_bridge(
+            config_,
+            request,
+            *llm_bridge_,
+            response_plan.has_value() ? &(*response_plan) : nullptr);
       case ResponseMode::ObservationProjection:
         return build_with_observation_projection(config_, request);
       case ResponseMode::TemplateFallback:
@@ -620,6 +685,7 @@ class ResponseBuilder final : public IResponseBuilder {
  private:
   CognitionConfig config_;
   std::shared_ptr<CognitionLlmBridge> llm_bridge_;
+  std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot_;
 };
 
 }  // namespace
@@ -632,6 +698,21 @@ std::unique_ptr<IResponseBuilder> create_response_builder(
     const CognitionConfig& config,
     CognitionRuntimeDependencies dependencies) {
   return std::make_unique<ResponseBuilder>(config, std::move(dependencies));
+}
+
+std::unique_ptr<IResponseBuilder> create_response_builder(
+    const profiles::RuntimePolicySnapshot& snapshot,
+    CognitionRuntimeDependencies dependencies) {
+  const auto config = config::CognitionConfigProjector::project_config(snapshot);
+  if (!config.has_value()) {
+    return nullptr;
+  }
+
+  if (dependencies.policy_snapshot == nullptr) {
+    dependencies.policy_snapshot =
+        std::make_shared<const profiles::RuntimePolicySnapshot>(snapshot);
+  }
+  return std::make_unique<ResponseBuilder>(*config, std::move(dependencies));
 }
 
 }  // namespace dasall::cognition

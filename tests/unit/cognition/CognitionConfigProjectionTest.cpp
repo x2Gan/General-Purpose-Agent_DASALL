@@ -148,6 +148,8 @@ void test_derive_stage_model_hint_preserves_canonical_stage_keys_and_profile_sha
                "max output tokens should project from the token budget policy");
   assert_equal(1800, static_cast<int>(hint->deadline_ms),
                "deadline should project from the llm timeout lane");
+  assert_equal(std::string("llm.plan.primary"), hint->preferred_provider,
+               "preferred provider should carry the canonical planning route from the runtime policy snapshot");
 }
 
 void test_derive_stage_model_hint_handles_response_and_reflection_defaults() {

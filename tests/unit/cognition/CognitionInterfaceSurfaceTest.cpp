@@ -17,6 +17,7 @@
 #include "IReasoner.h"
 #include "IReflectionEngine.h"
 #include "IResponseBuilder.h"
+#include "../../../profiles/include/RuntimePolicySnapshot.h"
 #include "belief/BeliefUpdateHint.h"
 #include "decision/ActionDecision.h"
 #include "error/ErrorInfo.h"
@@ -78,6 +79,84 @@ template <typename T>
 struct has_publish_channel_member<T,
                                   std::void_t<decltype(std::declval<T>().publish_channel)>>
     : std::true_type {};
+
+[[nodiscard]] dasall::profiles::RuntimePolicySnapshot make_interface_surface_snapshot() {
+  using dasall::profiles::CapabilityCachePolicy;
+  using dasall::profiles::DegradePolicy;
+  using dasall::profiles::ExecutionPolicy;
+  using dasall::profiles::ModelProfile;
+  using dasall::profiles::ModelRoutePolicy;
+  using dasall::profiles::OpsPolicy;
+  using dasall::profiles::PromptPolicy;
+  using dasall::profiles::RuntimePolicySnapshot;
+  using dasall::profiles::TimeoutBudget;
+  using dasall::profiles::TimeoutPolicy;
+  using dasall::profiles::TokenBudgetPolicy;
+
+  return RuntimePolicySnapshot{
+      1U,
+      "desktop_full",
+      dasall::contracts::RuntimeBudget{.max_tokens = 2048U,
+                                       .max_turns = 6U,
+                                       .max_tool_calls = 2U,
+                                       .max_latency_ms = 1800U,
+                                       .max_replan_count = 2U},
+      ModelProfile{.stage_routes = {
+                       {"planning",
+                        ModelRoutePolicy{.route = "desktop_full.planning.primary",
+                                         .fallback_route = "desktop_full.planning.fallback",
+                                         .streaming_enabled = false}},
+                       {"execution",
+                        ModelRoutePolicy{.route = "desktop_full.execution.primary",
+                                         .fallback_route = "desktop_full.execution.fallback",
+                                         .streaming_enabled = false}},
+                       {"reflection",
+                        ModelRoutePolicy{.route = "desktop_full.reflection.primary",
+                                         .fallback_route = "desktop_full.reflection.fallback",
+                                         .streaming_enabled = false}},
+                       {"response",
+                        ModelRoutePolicy{.route = "desktop_full.response.primary",
+                                         .fallback_route = "desktop_full.response.fallback",
+                                         .streaming_enabled = true}},
+                   }},
+      TokenBudgetPolicy{.max_input_tokens = 2048U,
+                        .max_output_tokens = 512U,
+                        .max_history_turns = 8U,
+                        .compression_threshold = 1024U},
+      PromptPolicy{.allowed_prompt_releases = {"stable"},
+                   .trusted_sources = {"profiles"},
+                   .tool_visibility_rules = {"builtin:all"}},
+      CapabilityCachePolicy{.refresh_interval_ms = 1000,
+                            .expire_after_ms = 2000,
+                            .stale_read_allowed = false,
+                            .failure_backoff_ms = 100},
+      DegradePolicy{.fallback_chain = {"safe_mode"},
+                    .allow_model_failover = true,
+                    .allow_budget_degrade = true},
+      TimeoutPolicy{.llm = TimeoutBudget{.timeout_ms = 1800,
+                                         .retry_budget = 1U,
+                                         .circuit_breaker_threshold = 2U},
+                    .tool = TimeoutBudget{.timeout_ms = 1000,
+                                          .retry_budget = 1U,
+                                          .circuit_breaker_threshold = 2U},
+                    .mcp = TimeoutBudget{.timeout_ms = 1000,
+                                         .retry_budget = 1U,
+                                         .circuit_breaker_threshold = 2U},
+                    .workflow = TimeoutBudget{.timeout_ms = 1000,
+                                              .retry_budget = 1U,
+                                              .circuit_breaker_threshold = 2U}},
+      ExecutionPolicy{.requires_high_risk_confirmation = true,
+                      .safe_mode_enabled = true,
+                      .audit_level = "full",
+                      .allowed_tool_domains = {"builtin"}},
+      OpsPolicy{.log_level = "info",
+                .metrics_granularity = "core",
+                .trace_sample_ratio = 0.25,
+                .remote_diagnostics_enabled = false,
+                .upgrade_strategy = "rolling"},
+      2U,
+  };
+}
 
 template <typename T, typename = void>
 struct has_target_platform_member : std::false_type {};
@@ -208,6 +287,7 @@ void test_cognition_engine_surface_freezes_runtime_facing_entries() {
   using dasall::cognition::ICognitionEngine;
   using dasall::cognition::ReflectionRequest;
   using dasall::cognition::create_cognition_engine;
+  using dasall::profiles::RuntimePolicySnapshot;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_abstract_v<ICognitionEngine>);
@@ -223,12 +303,18 @@ void test_cognition_engine_surface_freezes_runtime_facing_entries() {
   using EngineDependencyFactorySignature =
       std::unique_ptr<ICognitionEngine> (*)(const CognitionConfig&,
                                             CognitionRuntimeDependencies);
+    using EngineSnapshotFactorySignature =
+      std::unique_ptr<ICognitionEngine> (*)(const RuntimePolicySnapshot&,
+                        CognitionRuntimeDependencies);
   static_assert(std::is_same_v<decltype(static_cast<EngineFactorySignature>(
                                    &create_cognition_engine)),
                                EngineFactorySignature>);
   static_assert(std::is_same_v<decltype(static_cast<EngineDependencyFactorySignature>(
                                    &create_cognition_engine)),
                                EngineDependencyFactorySignature>);
+    static_assert(std::is_same_v<decltype(static_cast<EngineSnapshotFactorySignature>(
+                     &create_cognition_engine)),
+                   EngineSnapshotFactorySignature>);
   static_assert(!has_legacy_step_member<ICognitionEngine>::value);
   static_assert(!has_init_member<ICognitionEngine>::value);
 
@@ -238,6 +324,10 @@ void test_cognition_engine_surface_freezes_runtime_facing_entries() {
       create_cognition_engine(CognitionConfig{}, CognitionRuntimeDependencies{});
   assert_true(engine_with_dependencies != nullptr,
               "cognition engine factory should accept optional runtime dependencies");
+    auto engine_from_snapshot =
+      create_cognition_engine(make_interface_surface_snapshot(), CognitionRuntimeDependencies{});
+    assert_true(engine_from_snapshot != nullptr,
+          "cognition engine factory should accept runtime policy snapshot composition");
 }
 
 void test_decide_and_reflect_request_result_family_freezes_fields() {
@@ -324,6 +414,7 @@ void test_response_builder_surface_freezes_public_entry() {
   using dasall::cognition::ResponseBuildRequest;
   using dasall::cognition::ResponseBuildResult;
   using dasall::cognition::create_response_builder;
+  using dasall::profiles::RuntimePolicySnapshot;
   using dasall::tests::support::assert_true;
 
   static_assert(std::is_abstract_v<IResponseBuilder>);
@@ -336,12 +427,18 @@ void test_response_builder_surface_freezes_public_entry() {
   using ResponseBuilderDependencyFactorySignature =
       std::unique_ptr<IResponseBuilder> (*)(const CognitionConfig&,
                                             CognitionRuntimeDependencies);
+    using ResponseBuilderSnapshotFactorySignature =
+      std::unique_ptr<IResponseBuilder> (*)(const RuntimePolicySnapshot&,
+                        CognitionRuntimeDependencies);
   static_assert(std::is_same_v<decltype(static_cast<ResponseBuilderFactorySignature>(
                                    &create_response_builder)),
                                ResponseBuilderFactorySignature>);
   static_assert(std::is_same_v<decltype(static_cast<ResponseBuilderDependencyFactorySignature>(
                                    &create_response_builder)),
                                ResponseBuilderDependencyFactorySignature>);
+    static_assert(std::is_same_v<decltype(static_cast<ResponseBuilderSnapshotFactorySignature>(
+                     &create_response_builder)),
+                   ResponseBuilderSnapshotFactorySignature>);
 
   auto builder = create_response_builder(CognitionConfig{});
   assert_true(builder != nullptr, "response builder factory should return a usable interface");
@@ -349,6 +446,10 @@ void test_response_builder_surface_freezes_public_entry() {
       create_response_builder(CognitionConfig{}, CognitionRuntimeDependencies{});
   assert_true(builder_with_dependencies != nullptr,
               "response builder factory should accept optional runtime dependencies");
+    auto builder_from_snapshot =
+      create_response_builder(make_interface_surface_snapshot(), CognitionRuntimeDependencies{});
+    assert_true(builder_from_snapshot != nullptr,
+          "response builder factory should accept runtime policy snapshot composition");
 }
 
 void test_response_and_perception_object_headers_are_module_public() {

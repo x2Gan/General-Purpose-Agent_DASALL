@@ -289,6 +289,9 @@ dasall::llm::LLMGenerateRequest CognitionLlmBridge::build_llm_request(
   if (request.model_hint.deadline_ms > 0U) {
     llm_request.request.timeout_ms = request.model_hint.deadline_ms;
   }
+  if (!request.model_hint.preferred_provider.empty()) {
+    llm_request.request.model_route = request.model_hint.preferred_provider;
+  }
   llm_request.request.response_format = response_format(request);
   if (requires_structured_output(request) && !request.schema_spec.output_schema_ref.empty()) {
     llm_request.request.output_schema_ref = request.schema_spec.output_schema_ref;
