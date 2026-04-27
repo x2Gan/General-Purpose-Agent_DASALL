@@ -77,6 +77,24 @@ dasall_add_cognition_unit_test(
 	PerceptionClarificationRuleTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_planner_plan_graph_unit_test
+	PlannerPlanGraphTest.cpp
+	PlannerPlanGraphTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_planner_replan_unit_test
+	PlannerReplanTest.cpp
+	PlannerReplanTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_planner_node_budget_unit_test
+	PlannerNodeBudgetTest.cpp
+	PlannerNodeBudgetTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -128,6 +146,21 @@ target_include_directories(dasall_perception_engine_unit_test
 )
 
 target_include_directories(dasall_perception_clarification_rule_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_planner_plan_graph_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_planner_replan_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_planner_node_budget_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

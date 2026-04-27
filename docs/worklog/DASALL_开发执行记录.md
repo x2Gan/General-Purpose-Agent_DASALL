@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #480
+
+- 日期：2026-04-27
+- 阶段：cognition/planning stage implementation
+- 任务：COG-TODO-015 实现 Planner 与 PlanGraphBuilder
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-015 依赖 COG-TODO-007、008、010、011、012、013；六项均已完成，且 014 已补齐可消费的 `PerceptionResult`，因此本轮不再受 planning supporting type、profile 投影或输入边界 blocker 影响。
+2. 当前最小缺口是 planning 阶段仍没有独立 owner：DAG 展开、open question 路径、budget 压缩与 replan 修补还停留在设计卡片中，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 `Planner` / `PlanGraphBuilder` 私有实现、三条 planner-focused tests 与最小 CMake 接线，不提前进入 016 的 `Reasoner`。
+
+### 改动
+
+1. 新增 `cognition/src/planning/Planner.h`、`cognition/src/planning/Planner.cpp`，以私有 `Planner` 实现 `IPlanner::build_plan()` / `replan()`。
+2. 新增 `cognition/src/planning/PlanGraphBuilder.h`、`cognition/src/planning/PlanGraphBuilder.cpp`，实现 clarification open question 路径、DAG 展开、budget 压缩、replan graph 修补与图约束校验。
+3. 更新 `cognition/CMakeLists.txt`，将 planning sources 纳入 `dasall_cognition`。
+4. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_planner_plan_graph_unit_test`、`dasall_planner_replan_unit_test`、`dasall_planner_node_budget_unit_test` 并补 `cognition/src` 私有 include。
+5. 新增 `tests/unit/cognition/PlannerPlanGraphTest.cpp`、`tests/unit/cognition/PlannerReplanTest.cpp`、`tests/unit/cognition/PlannerNodeBudgetTest.cpp`，覆盖 DAG 构建、replan revision、budget 压缩和 open question 路径。
+6. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-015-Planner与PlanGraphBuilder收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_planner_plan_graph_unit_test","dasall_planner_replan_unit_test","dasall_planner_node_budget_unit_test"])`
+   - 第一次结果：失败，局部暴露 `PlannerReplanTest.cpp` 使用了不存在的错误分类枚举，且三条 planner tests 同时出现 `CognitionConfig` 聚合初始化告警。
+   - 修补同一 slice 后复跑：通过。
+2. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_planner_plan_graph_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_planner_replan_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_planner_node_budget_unit_test`
+   - 结果：通过；三条 planner-focused unit tests 全部零输出退出。
+
+### 结果
+
+1. COG-TODO-015 已完成，planning 阶段现在具备独立私有 owner，可稳定输出合法 `PlanGraph`，并在 observation failure 下输出保持 `plan_id` 稳定、`revision` 递增的 `ReplanResult`。
+2. `PlanGraphBuilder` 保持 cognition 私有 supporting component，没有把 planning 逻辑倒灌到 shared contracts、runtime 或 reasoner。
+3. budget-aware planning 已在 planning slice 内显式收口，中预算与高预算下的节点压缩都可自动化验证。
+
+### 下一步
+
+1. 进入 COG-TODO-016，实现 `Reasoner` 与 `DecisionProjector`，在稳定 `PlanGraph` 输出之上完成下一步动作裁定与澄清阈值决策。
+
 ## 记录 #479
 
 - 日期：2026-04-27
