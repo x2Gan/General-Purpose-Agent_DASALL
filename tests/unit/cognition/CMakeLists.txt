@@ -53,6 +53,18 @@ dasall_add_cognition_unit_test(
 	BudgetAwareDecisionTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_perception_boundary_validation_unit_test
+	PerceptionBoundaryValidationTest.cpp
+	PerceptionBoundaryValidationTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_cognition_facade_invalid_input_unit_test
+	CognitionFacadeInvalidInputTest.cpp
+	CognitionFacadeInvalidInputTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -89,6 +101,11 @@ target_include_directories(dasall_stage_policy_resolver_profile_diff_unit_test
 )
 
 target_include_directories(dasall_budget_aware_decision_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_perception_boundary_validation_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #478
+
+- 日期：2026-04-27
+- 阶段：cognition/input boundary validation
+- 任务：COG-TODO-013 实现 InputBoundaryValidator
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-013 依赖 COG-TODO-007、010；二者均已完成，且 011 / 012 已补齐配置投影与 request-level stage policy，因此本轮可以直接收敛输入边界。
+2. 当前最小缺口是 invalid input 仍散落在 `CognitionFacade.cpp` 的局部判断中，只覆盖 `context_packet.user_turn/current_goal_summary`，缺失 goal / belief / observation 时仍可能落入静默降级路径。
+3. 本轮只关闭 private validator seam、三入口 fail-fast 路径和 focused tests，不提前进入 `PerceptionEngine` 或 `StageOutputValidator` 实现。
+
+### 改动
+
+1. 新增 `cognition/src/validation/InputBoundaryValidator.h`、`cognition/src/validation/InputBoundaryValidator.cpp`，统一实现 `validate_decide_request()`、`validate_reflection_request()`、`validate_response_request()`，并输出标准化 `ErrorInfo`。
+2. 更新 `cognition/src/CognitionFacade.cpp`，让 `decide()`、`reflect()` 与 `ResponseBuilder::build()` 在入口统一 fail-fast，invalid input 直接返回 `ValidationFieldMissing` 而不是最近历史兜底结果。
+3. 更新 `cognition/CMakeLists.txt` 与 `tests/unit/cognition/CMakeLists.txt`，接入 validator 源并注册两个 focused unit targets。
+4. 新增 `tests/unit/cognition/PerceptionBoundaryValidationTest.cpp`、`tests/unit/cognition/CognitionFacadeInvalidInputTest.cpp`，覆盖 validator 本体、façade fail-fast 和 response builder 显式错误出口。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-013-InputBoundaryValidator收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `ListBuildTargets_CMakeTools()`
+   - 结果：新 target `dasall_perception_boundary_validation_unit_test`、`dasall_cognition_facade_invalid_input_unit_test` 可被发现。
+2. `Build_CMakeTools(buildTargets=["dasall_perception_boundary_validation_unit_test","dasall_cognition_facade_invalid_input_unit_test"])`
+   - 结果：通过。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_perception_boundary_validation_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_facade_invalid_input_unit_test`
+   - 结果：通过；两项 focused unit tests 均零输出退出。
+
+### 结果
+
+1. COG-TODO-013 已完成，invalid input 现统一映射为显式 `ErrorInfo`，不再静默降级为 recent-history only。
+2. `InputBoundaryValidator` 保持 cognition 私有 supporting component，没有扩张为 public include 或 shared contract。
+3. COG-TODO-014 可直接复用该 validator 作为 `PerceptionEngine` 的入口边界，不必复制 required-field 检查。
+
+### 下一步
+
+1. 进入 COG-TODO-014，实现 `PerceptionEngine` 的最小感知链，并在现有输入边界 fail-fast 之上补齐实体抽取、歧义检测和规则降级。
+
 ## 记录 #477
 
 - 日期：2026-04-27

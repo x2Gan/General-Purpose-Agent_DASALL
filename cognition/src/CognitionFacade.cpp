@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "IResponseBuilder.h"
+#include "validation/InputBoundaryValidator.h"
 
 namespace dasall::cognition {
 namespace {
@@ -16,27 +17,6 @@ constexpr const char* kDefaultToolName = "agent.dataset";
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-}
-
-[[nodiscard]] contracts::ErrorInfo make_cognition_error(
-    contracts::ResultCode code,
-    std::string message,
-    std::string stage) {
-  const auto stage_ref = stage;
-  return contracts::ErrorInfo{
-      .failure_type = contracts::classify_result_code(code),
-      .retryable = false,
-      .safe_to_replan = false,
-      .details = contracts::ErrorDetails{
-          .code = static_cast<int>(code),
-          .message = std::move(message),
-          .stage = std::move(stage),
-      },
-      .source_ref = contracts::ErrorSourceRefMinimal{
-          .ref_type = "cognition",
-          .ref_id = stage_ref,
-      },
-  };
 }
 
 [[nodiscard]] std::string choose_tool_name(const contracts::ContextPacket& context_packet) {
@@ -71,6 +51,46 @@ constexpr const char* kDefaultToolName = "agent.dataset";
   return result;
 }
 
+[[nodiscard]] bool should_recommend_context_reload(
+    const validation::InputBoundaryValidationResult& validation_result) {
+  return std::any_of(validation_result.missing_fields.begin(),
+                     validation_result.missing_fields.end(),
+                     [](const std::string& field_name) {
+                       return field_name.starts_with("context_packet.") ||
+                              field_name.starts_with("belief_state.") ||
+                              field_name.starts_with("latest_observation.");
+                     });
+}
+
+void apply_invalid_decide_result(
+    CognitionDecisionResult& result,
+    const validation::InputBoundaryValidationResult& validation_result) {
+  result.result_code = contracts::ResultCode::ValidationFieldMissing;
+  result.error_info = validation_result.error_info;
+  result.context_sufficiency.context_sufficient = false;
+  result.context_sufficiency.context_confidence = 0.0F;
+  result.context_sufficiency.missing_evidence_hints = validation_result.missing_fields;
+  result.context_sufficiency.recommend_context_reload =
+      should_recommend_context_reload(validation_result);
+  result.diagnostics.push_back("invalid_input");
+}
+
+void apply_invalid_reflection_result(
+    CognitionReflectionResult& result,
+    const validation::InputBoundaryValidationResult& validation_result) {
+  result.result_code = contracts::ResultCode::ValidationFieldMissing;
+  result.error_info = validation_result.error_info;
+  result.diagnostics.push_back("invalid_input");
+}
+
+void apply_invalid_response_result(
+    ResponseBuildResult& result,
+    const validation::InputBoundaryValidationResult& validation_result) {
+  result.result_code = contracts::ResultCode::ValidationFieldMissing;
+  result.error_info = validation_result.error_info;
+  result.diagnostics.push_back("invalid_input");
+}
+
 class CognitionFacade final : public ICognitionEngine {
  public:
   explicit CognitionFacade(CognitionConfig config) : config_(std::move(config)) {}
@@ -78,39 +98,14 @@ class CognitionFacade final : public ICognitionEngine {
   [[nodiscard]] CognitionDecisionResult decide(
       const CognitionStepRequest& request) override {
     CognitionDecisionResult result;
-    result.context_sufficiency.context_sufficient =
-        request.context_packet.user_turn.has_value() &&
-        request.context_packet.current_goal_summary.has_value();
-
-    if (!result.context_sufficiency.context_sufficient) {
-      result.result_code = contracts::ResultCode::ValidationFieldMissing;
-      result.error_info = make_cognition_error(
-          contracts::ResultCode::ValidationFieldMissing,
-          "context_packet is missing user_turn or current_goal_summary",
-          "cognition.decide");
-      result.context_sufficiency.context_confidence = 0.0F;
-      result.context_sufficiency.recommend_context_reload = true;
-      result.context_sufficiency.missing_evidence_hints = {"user_turn", "current_goal_summary"};
-      decision::ActionDecision action_decision;
-      action_decision.decision_kind = decision::ActionDecisionKind::AskClarification;
-      action_decision.confidence = 1.0F;
-        action_decision.clarification_needed = true;
-      action_decision.clarification_question =
-          std::string("additional goal or user input is required before execution can continue");
-      action_decision.rationale =
-          std::string("context_packet is missing the minimal fields required for true integration");
-        action_decision.candidate_scores = {
-          decision::CandidateDecisionScore{
-            .candidate_name = "ask_clarification",
-            .score = 1.0F,
-            .rationale = std::string("required context fields are missing"),
-          },
-        };
-      result.action_decision = action_decision;
-      result.diagnostics.push_back("context_packet_missing_required_fields");
+    const auto validation_result =
+        validation::InputBoundaryValidator::validate_decide_request(request);
+    if (!validation_result.ok()) {
+      apply_invalid_decide_result(result, validation_result);
       return result;
     }
 
+    result.context_sufficiency.context_sufficient = true;
     result.context_sufficiency.context_confidence = 0.9F;
     decision::ActionDecision action_decision;
     action_decision.decision_kind = decision::ActionDecisionKind::ExecuteAction;
@@ -156,6 +151,13 @@ class CognitionFacade final : public ICognitionEngine {
   [[nodiscard]] CognitionReflectionResult reflect(
       const ReflectionRequest& request) override {
     CognitionReflectionResult result;
+    const auto validation_result =
+        validation::InputBoundaryValidator::validate_reflection_request(request);
+    if (!validation_result.ok()) {
+      apply_invalid_reflection_result(result, validation_result);
+      return result;
+    }
+
     contracts::ReflectionDecision reflection_decision;
     reflection_decision.request_id = request.request_id;
     reflection_decision.goal_id = request.goal_contract.goal_id;
@@ -185,6 +187,12 @@ class ResponseBuilder final : public IResponseBuilder {
   [[nodiscard]] ResponseBuildResult build(
       const ResponseBuildRequest& request) override {
     ResponseBuildResult result;
+    const auto validation_result =
+        validation::InputBoundaryValidator::validate_response_request(request);
+    if (!validation_result.ok()) {
+      apply_invalid_response_result(result, validation_result);
+      return result;
+    }
 
     if (request.latest_observation.has_value() &&
         request.latest_observation->payload.has_value()) {
