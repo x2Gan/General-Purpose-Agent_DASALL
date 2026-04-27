@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #475
+
+- 日期：2026-04-27
+- 阶段：cognition/Build-ready interface surface freeze
+- 任务：COG-TODO-010 定义 ICognitionEngine / IResponseBuilder / IPlanner / IReasoner / IReflectionEngine 接口
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-010 依赖 COG-TODO-001、005、006、007、008、009；上述任务均已完成，工作树在 009 推送后保持 clean state。
+2. 当前最小改动面集中在 `cognition/include/IPlanner.h`、`IReasoner.h`、`IReflectionEngine.h` 与 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`；`ICognitionEngine.h` / `IResponseBuilder.h` 已符合 001 口径，不需要重新开实现 slice。
+3. 关键风险是旧 `init()` / `IReflectionEngine::reflect()` 文档口径回流，以及误触 `IPlanner` shared admission；因此本轮优先锁定接口签名与 contract smoke 回归。
+
+### 改动
+
+1. 更新 `cognition/include/IPlanner.h`，新增 `PlanningRequest`、`ReplanRequest`，并落盘 `build_plan()` / `replan()` 纯抽象签名。
+2. 更新 `cognition/include/IReasoner.h`，新增 `ReasoningRequest`，并落盘 `decide()` 纯抽象签名。
+3. 更新 `cognition/include/IReflectionEngine.h`，新增 `ReflectionAnalysisRequest`，并落盘 `analyze()` 纯抽象签名。
+4. 更新 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`，补充阶段接口签名断言、request struct 字段断言，以及 `ICognitionEngine::init()` / `IReflectionEngine::reflect()` 负例约束。
+5. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，移除 6.6.1 代码片段中的 `init()`，并补充工厂装配口径与阶段 supporting request struct 的 module-public 边界说明。
+6. 更新 cognition 专项 TODO，并新增交付物 `docs/todos/cognition/deliverables/COG-TODO-010-cognition公共接口面收敛.md`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_interface_surface_unit_test"])`
+   - 结果：通过；接口面 unit target 编译与链接成功。
+2. `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest"])`
+   - 结果：失败，返回通用错误“生成失败”；与仓库既有 CMake Tools test generation 问题一致。
+3. `./build-ci/tests/unit/cognition/dasall_cognition_interface_surface_unit_test`
+   - 结果：通过；二进制执行成功。
+4. `Build_CMakeTools(buildTargets=["dasall_contract_interface_admission_test"])`
+   - 结果：通过。
+5. `./build-ci/tests/contract/dasall_contract_interface_admission_test`
+   - 结果：通过；7/7 passed，`IPlanner` 仍保持 postponed admission。
+
+### 结果
+
+1. COG-TODO-010 已完成，runtime-facing cognition 公共入口保持 `decide()` / `reflect()` / `build()`，未重新引入 `init()` 两阶段生命周期。
+2. `IPlanner`、`IReasoner`、`IReflectionEngine` 已从 marker-only skeleton 收敛为具备稳定方法签名的 module-public 接口，并带有对应 supporting request structs。
+3. `IPlanner` admission 状态未发生变化，shared contracts 仍维持 `AwaitingSupportingContracts` 语义。
+
+### 下一步
+
+1. 进入 COG-TODO-011 / 012 / 013，开始 `CognitionConfigProjector`、`StagePolicyResolver` 与 `InputBoundaryValidator` 的实现侧原子任务。
+
 ## 记录 #474
 
 - 日期：2026-04-27

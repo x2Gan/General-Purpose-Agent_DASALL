@@ -386,22 +386,28 @@ COG-TODO-001 评审结论：架构总览中的旧版 `ICognitionEngine::step()` 
 Runtime caller fixture、CognitionFacade 或接口面 Build 的可执行口径。后续实现只允许落盘
 `ICognitionEngine::decide()`、`ICognitionEngine::reflect()` 与 `IResponseBuilder::build()`；其中
 `build_response` 表示终态构造路径语义，具体接口名保持 `IResponseBuilder::build()`，避免在
-`ICognitionEngine` 上重新引入混合响应职责。
+`ICognitionEngine` 上重新引入混合响应职责。对象装配由 `create_cognition_engine()` /
+`create_response_builder()` 工厂完成，不再重新引入两阶段 `init()` 生命周期。
 
 ```cpp
 class ICognitionEngine {
 public:
   virtual ~ICognitionEngine() = default;
-  virtual bool init(const CognitionConfig& config) = 0;
   virtual CognitionDecisionResult decide(const CognitionStepRequest& request) = 0;
   virtual CognitionReflectionResult reflect(const ReflectionRequest& request) = 0;
 };
+
+std::unique_ptr<ICognitionEngine> create_cognition_engine(
+    const CognitionConfig& config = {});
 
 class IResponseBuilder {
 public:
   virtual ~IResponseBuilder() = default;
   virtual ResponseBuildResult build(const ResponseBuildRequest& request) = 0;
 };
+
+std::unique_ptr<IResponseBuilder> create_response_builder(
+    const CognitionConfig& config = {});
 ```
 
 #### 6.6.2 支撑请求与结果对象建议
@@ -471,14 +477,14 @@ struct ResponseBuildResult {
 class IPlanner {
 public:
   virtual ~IPlanner() = default;
-  virtual PlanGraph build_plan(const PlanningRequest& request) = 0;
-  virtual ReplanResult replan(const ReplanRequest& request) = 0;
+  virtual plan::PlanGraph build_plan(const PlanningRequest& request) = 0;
+  virtual plan::ReplanResult replan(const ReplanRequest& request) = 0;
 };
 
 class IReasoner {
 public:
   virtual ~IReasoner() = default;
-  virtual ActionDecision decide(const ReasoningRequest& request) = 0;
+  virtual decision::ActionDecision decide(const ReasoningRequest& request) = 0;
 };
 
 class IReflectionEngine {
@@ -488,6 +494,10 @@ public:
       const ReflectionAnalysisRequest& request) = 0;
 };
 ```
+
+阶段 supporting request structs 保持与对应接口头同层落盘，继续停留在 cognition 模块公共接口面，
+不把 `PlanningRequest` / `ReplanRequest` / `ReasoningRequest` /
+`ReflectionAnalysisRequest` 提升到 shared contracts。
 
 接口语义说明：
 

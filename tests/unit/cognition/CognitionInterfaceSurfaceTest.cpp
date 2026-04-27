@@ -37,6 +37,18 @@ template <typename T>
 struct has_legacy_step_member<T, std::void_t<decltype(&T::step)>> : std::true_type {};
 
 template <typename T, typename = void>
+struct has_init_member : std::false_type {};
+
+template <typename T>
+struct has_init_member<T, std::void_t<decltype(&T::init)>> : std::true_type {};
+
+template <typename T, typename = void>
+struct has_reflect_member : std::false_type {};
+
+template <typename T>
+struct has_reflect_member<T, std::void_t<decltype(&T::reflect)>> : std::true_type {};
+
+template <typename T, typename = void>
 struct has_agent_result_member : std::false_type {};
 
 template <typename T>
@@ -209,6 +221,7 @@ void test_cognition_engine_surface_freezes_runtime_facing_entries() {
                                std::unique_ptr<ICognitionEngine> (*)(
                                    const CognitionConfig&)>);
   static_assert(!has_legacy_step_member<ICognitionEngine>::value);
+  static_assert(!has_init_member<ICognitionEngine>::value);
 
   auto engine = create_cognition_engine(CognitionConfig{});
   assert_true(engine != nullptr, "cognition engine factory should return a usable interface");
@@ -441,17 +454,101 @@ void test_plan_graph_and_replan_object_headers_are_module_public() {
               "open questions should conservatively block plan execution by default");
 }
 
-void test_stage_component_headers_are_markers_not_publicly_constructible_components() {
+void test_stage_component_headers_freeze_public_interfaces() {
+  using dasall::cognition::BudgetContext;
   using dasall::cognition::IPlanner;
   using dasall::cognition::IReasoner;
   using dasall::cognition::IReflectionEngine;
+  using dasall::cognition::PlanningRequest;
+  using dasall::cognition::ReasoningRequest;
+  using dasall::cognition::ReflectionAnalysisRequest;
+  using dasall::cognition::ReplanRequest;
+  using dasall::cognition::StageExecutionHints;
+  using dasall::cognition::perception::PerceptionResult;
+  using dasall::cognition::plan::PlanGraph;
+  using dasall::cognition::plan::ReplanResult;
+  using dasall::contracts::BeliefState;
+  using dasall::contracts::ContextPacket;
+  using dasall::contracts::ErrorInfo;
+  using dasall::contracts::GoalContract;
+  using dasall::contracts::Observation;
+  using dasall::contracts::ReflectionDecision;
 
+  static_assert(std::is_abstract_v<IPlanner>);
+  static_assert(std::is_abstract_v<IReasoner>);
+  static_assert(std::is_abstract_v<IReflectionEngine>);
   static_assert(std::has_virtual_destructor_v<IPlanner>);
   static_assert(std::has_virtual_destructor_v<IReasoner>);
   static_assert(std::has_virtual_destructor_v<IReflectionEngine>);
+  static_assert(std::is_same_v<decltype(&IPlanner::build_plan),
+                               PlanGraph (IPlanner::*)(const PlanningRequest&)>);
+  static_assert(std::is_same_v<decltype(&IPlanner::replan),
+                               ReplanResult (IPlanner::*)(const ReplanRequest&)>);
+  static_assert(std::is_same_v<decltype(&IReasoner::decide),
+                               dasall::cognition::decision::ActionDecision (
+                                   IReasoner::*)(const ReasoningRequest&)>);
+  static_assert(std::is_same_v<decltype(&IReflectionEngine::analyze),
+                               ReflectionDecision (IReflectionEngine::*)(
+                                   const ReflectionAnalysisRequest&)>);
   static_assert(!std::is_default_constructible_v<IPlanner>);
   static_assert(!std::is_default_constructible_v<IReasoner>);
   static_assert(!std::is_default_constructible_v<IReflectionEngine>);
+  static_assert(!has_reflect_member<IReflectionEngine>::value);
+
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.caller_domain), std::string>);
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.goal_contract), GoalContract>);
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.context_packet), ContextPacket>);
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.belief_state), BeliefState>);
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.perception_result),
+                               PerceptionResult>);
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.budget_context),
+                               std::optional<BudgetContext>>);
+  static_assert(std::is_same_v<decltype(PlanningRequest{}.execution_hints),
+                               StageExecutionHints>);
+  static_assert(!has_recovery_request_member<PlanningRequest>::value);
+
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.caller_domain), std::string>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.goal_contract), GoalContract>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.context_packet), ContextPacket>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.belief_state), BeliefState>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.active_plan), PlanGraph>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.latest_observation), Observation>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.budget_context),
+                               std::optional<BudgetContext>>);
+  static_assert(std::is_same_v<decltype(ReplanRequest{}.execution_hints),
+                               StageExecutionHints>);
+  static_assert(!has_recovery_request_member<ReplanRequest>::value);
+
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.caller_domain), std::string>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.goal_contract), GoalContract>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.context_packet), ContextPacket>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.belief_state), BeliefState>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.perception_result),
+                               PerceptionResult>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.active_plan), PlanGraph>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.latest_observation),
+                               std::optional<Observation>>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.budget_context),
+                               std::optional<BudgetContext>>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.execution_hints),
+                               StageExecutionHints>);
+  static_assert(!has_tool_request_member<ReasoningRequest>::value);
+
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.caller_domain),
+                               std::string>);
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.goal_contract),
+                               GoalContract>);
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.belief_state),
+                               BeliefState>);
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.latest_observation),
+                               Observation>);
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.error_info),
+                               std::optional<ErrorInfo>>);
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.active_plan),
+                               std::optional<PlanGraph>>);
+  static_assert(std::is_same_v<decltype(ReflectionAnalysisRequest{}.execution_hints),
+                               StageExecutionHints>);
+  static_assert(!has_recovery_request_member<ReflectionAnalysisRequest>::value);
 }
 
 void test_current_supporting_types_remain_module_public() {
@@ -586,7 +683,7 @@ int main() {
     test_response_builder_surface_freezes_public_entry();
     test_response_and_perception_object_headers_are_module_public();
     test_plan_graph_and_replan_object_headers_are_module_public();
-    test_stage_component_headers_are_markers_not_publicly_constructible_components();
+    test_stage_component_headers_freeze_public_interfaces();
     test_current_supporting_types_remain_module_public();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
