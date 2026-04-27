@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #477
+
+- 日期：2026-04-27
+- 阶段：cognition/stage policy resolution
+- 任务：COG-TODO-012 实现 StagePolicyResolver
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-012 依赖 COG-TODO-002、007、011；三项均已完成，因此本轮不再受 stage taxonomy 或 profile 投影缺口阻塞。
+2. 当前最小缺口是 request 级阶段策略仍未统一收口：deadline、fallback mode、budget-aware plan cap 和 profile 差异还没有单一 owner。
+3. 本轮只收敛 resolver 私有组件与 focused tests，不提前触及 façade、bridge 或阶段实现本体。
+
+### 改动
+
+1. 新增 `cognition/src/StagePolicyResolver.h`、`cognition/src/StagePolicyResolver.cpp`，定义私有 `StageExecutionPlan` / `StageFallbackMode`，并实现 `resolve_decide_plan()`、`resolve_reflection_plan()`、`resolve_response_plan()`、`derive_stage_model_hint()`。
+2. 更新 `cognition/CMakeLists.txt`，将 resolver 源纳入 `dasall_cognition`。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增三个 focused unit targets，并为其补 `dasall_profiles` 链接和 `cognition/src` 私有 include。
+4. 新增 `tests/unit/cognition/StagePolicyResolverTest.cpp`、`StagePolicyResolverProfileDiffTest.cpp`、`BudgetAwareDecisionTest.cpp`，覆盖默认策略、profile 差异、缺失 canonical route 负例和 budget-aware 收紧逻辑。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-012-StagePolicyResolver收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_stage_policy_resolver_unit_test","dasall_stage_policy_resolver_profile_diff_unit_test","dasall_budget_aware_decision_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["StagePolicyResolverTest","StagePolicyResolverProfileDiffTest","BudgetAwareDecisionTest"])`
+   - 结果：失败，返回仓库已知通用错误“生成失败”。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_stage_policy_resolver_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_stage_policy_resolver_profile_diff_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_budget_aware_decision_unit_test`
+   - 结果：通过；三项 focused unit tests 均通过。
+
+### 结果
+
+1. COG-TODO-012 已完成，request 级阶段启停、deadline、fallback mode、budget-aware planning cap 与 profile 差异已有统一 resolver owner。
+2. `StageExecutionPlan` 保持 cognition 私有 supporting type，没有扩张为 public/shared contract。
+3. 012 产物可直接为 013 的输入边界校验和后续 014~019 阶段实现提供统一阶段策略面。
+
+### 下一步
+
+1. 进入 COG-TODO-013，实现 `InputBoundaryValidator`，把 invalid input 与缺失关键边界统一映射为显式 `ErrorInfo` 语义。
+
 ## 记录 #476
 
 - 日期：2026-04-27

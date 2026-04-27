@@ -3,6 +3,7 @@ add_library(dasall_cognition STATIC)
 target_sources(dasall_cognition
   PRIVATE
     src/CognitionFacade.cpp
+    src/StagePolicyResolver.cpp
     src/config/CognitionConfigProjector.cpp
   PUBLIC
     FILE_SET public_headers

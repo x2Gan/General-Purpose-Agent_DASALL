@@ -35,12 +35,60 @@ dasall_add_cognition_unit_test(
 	CognitionConfigProjectionTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_stage_policy_resolver_unit_test
+	StagePolicyResolverTest.cpp
+	StagePolicyResolverTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_stage_policy_resolver_profile_diff_unit_test
+	StagePolicyResolverProfileDiffTest.cpp
+	StagePolicyResolverProfileDiffTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_budget_aware_decision_unit_test
+	BudgetAwareDecisionTest.cpp
+	BudgetAwareDecisionTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
 )
 
 target_include_directories(dasall_cognition_config_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_link_libraries(dasall_stage_policy_resolver_unit_test
+	PRIVATE
+		dasall_profiles
+)
+
+target_link_libraries(dasall_stage_policy_resolver_profile_diff_unit_test
+	PRIVATE
+		dasall_profiles
+)
+
+target_link_libraries(dasall_budget_aware_decision_unit_test
+	PRIVATE
+		dasall_profiles
+)
+
+target_include_directories(dasall_stage_policy_resolver_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_stage_policy_resolver_profile_diff_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_budget_aware_decision_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )
