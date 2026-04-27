@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #493
+
+- 日期：2026-04-27
+- 阶段：runtime/belief and context signal consumption
+- 任务：COG-TODO-033 Runtime 消费 BeliefUpdateHint 与 ContextSufficiencySignal
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-018、026、027 已完成，`BeliefUpdateHint` public surface 与 runtime unary integration baseline 已具备，满足 033 的前置。
+2. 当前最小缺口是 `AgentOrchestrator` live unary path 只消费 `action_decision`，没有证明 cognition 返回的 belief/context signals 被 runtime owner 使用。
+3. 本轮只收 decision path 的 belief writeback 与一次 bounded context refresh，不提前进入 COG-TODO-034 的 reflection decision 解释。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.cpp`，新增 cognition belief writeback helper，把 `BeliefUpdateHint` 投影成最小 `MemoryWritebackRequest`，并以 best-effort 方式写回 memory。
+2. 同一文件新增一次 replan-budgeted context refresh：在无显式 cognition error 且 `recommend_context_reload=true` 时，runtime 额外执行一次 `prepare_context()` 后重试 `decide()`。
+3. 同一文件在 refresh 失败或重试后仍无 executable action 时，复用既有 waiting-clarify checkpoint/session binding/resume plan 语义，不再把 context-insufficient case 一律 hard fail。
+4. 更新 `tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp`，新增 counting memory manager 断言 writeback、bounded refresh 和 writeback failure best-effort。
+5. 更新 `tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp` 与 `tests/unit/runtime/CMakeLists.txt`，把 smoke 证据从 response payload 切到 sqlite memory 落库，并补 `memory/src` include。
+6. 回写 `docs/todos/cognition/deliverables/COG-TODO-033-Runtime消费Belief与Context信号收敛.md` 与 cognition 专项 TODO，固化设计、命令和验收结论。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_cognition_loop_smoke_unit_test","dasall_cognition_runtime_interaction_contract_integration_test"])`
+   - 结果：首轮失败，仅暴露 smoke test 私有 include 路径与 interaction contract 错误 ResultCode 两个局部接线问题；修正后复跑通过。
+2. `RunCtest_CMakeTools(tests=["RuntimeCognitionLoopSmokeTest","CognitionRuntimeInteractionContractTest"])`
+   - 结果：通过，`2/2` tests passed。
+3. `Build_CMakeTools(buildTargets=["dasall_cognition_failure_injection_integration_test"])` + `RunCtest_CMakeTools(tests=["CognitionFailureInjectionTest"])`
+   - 结果：通过，显式 cognition error surface 未被 clarification degrade 吞掉。
+4. `get_errors(filePaths=[runtime/src/AgentOrchestrator.cpp, tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp, tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp, tests/unit/runtime/CMakeLists.txt])`
+   - 结果：无新增编辑器错误。
+
+### 结果
+
+1. COG-TODO-033 已完成，runtime 现在会真实消费 `BeliefUpdateHint`，并经 memory seam 投影为最小 turn/summary/facts。
+2. `recommend_context_reload=true` 的无显式错误场景现在会触发恰好一次额外 context refresh；若仍无法形成 executable action，则进入 waiting clarify 并保持 turn 可恢复。
+3. belief writeback failure 保持 best-effort，不覆盖 completed 终态；显式 cognition error 继续 fail-closed。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-033 改动。
+2. 下一轮进入 COG-TODO-034，收敛 Runtime 对 `ReflectionDecision` 的解释与 cognition 错误面统一。
+
 ## 记录 #492
 
 - 日期：2026-04-27

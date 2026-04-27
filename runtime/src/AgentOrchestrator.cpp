@@ -229,6 +229,206 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
           runtime_budget));
 }
 
+[[nodiscard]] std::string join_strings(const std::vector<std::string>& values,
+                                       const std::string& separator) {
+  std::string joined;
+  for (const auto& value : values) {
+    if (value.empty()) {
+      continue;
+    }
+    if (!joined.empty()) {
+      joined += separator;
+    }
+    joined += value;
+  }
+  return joined;
+}
+
+[[nodiscard]] bool has_confirmed_fact_deltas(
+    const cognition::belief::BeliefUpdateHint& hint) {
+  for (const auto& delta : hint.confirmed_facts_delta) {
+    if (delta.delta_kind == cognition::belief::BeliefDeltaKind::Upsert && !delta.fact.empty()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+[[nodiscard]] bool should_write_back_belief_hint(
+    const std::optional<cognition::belief::BeliefUpdateHint>& hint) {
+  if (!hint.has_value()) {
+    return false;
+  }
+
+  return has_confirmed_fact_deltas(*hint) || !hint->missing_evidence_refs.empty() ||
+         !hint->hypotheses_delta.empty() || !hint->assumptions_delta.empty();
+}
+
+[[nodiscard]] std::uint32_t belief_confidence_score(
+    const std::optional<float>& confidence_hint) {
+  if (!confidence_hint.has_value()) {
+    return 75U;
+  }
+
+  int score = static_cast<int>(*confidence_hint * 100.0F);
+  if (*confidence_hint > 1.0F) {
+    score = static_cast<int>(*confidence_hint);
+  }
+  if (score < 0) {
+    score = 0;
+  }
+  if (score > 100) {
+    score = 100;
+  }
+  return static_cast<std::uint32_t>(score);
+}
+
+[[nodiscard]] std::string belief_summary_text(
+    const cognition::belief::BeliefUpdateHint& hint) {
+  std::vector<std::string> summary_fragments;
+  for (const auto& delta : hint.confirmed_facts_delta) {
+    if (delta.delta_kind == cognition::belief::BeliefDeltaKind::Upsert && !delta.fact.empty()) {
+      summary_fragments.push_back(delta.fact);
+    }
+  }
+  if (!hint.missing_evidence_refs.empty()) {
+    summary_fragments.push_back(
+        std::string{"missing evidence refs: "} + join_strings(hint.missing_evidence_refs, ", "));
+  }
+
+  if (summary_fragments.empty()) {
+    return "runtime projected cognition belief update";
+  }
+
+  return join_strings(summary_fragments, "; ");
+}
+
+[[nodiscard]] memory::MemoryWritebackRequest make_belief_writeback_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const cognition::belief::BeliefUpdateHint& hint,
+    const cognition::CognitionDecisionResult& decision_result) {
+  const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  const auto session_id = request.session_id.value_or(std::string{"session-live-unary"});
+  const auto created_at = request.created_at.value_or(current_time_ms());
+  const auto summary_text = belief_summary_text(hint);
+  const auto confidence_score = belief_confidence_score(hint.confidence_hint);
+
+  memory::MemoryWritebackRequest writeback_request;
+  writeback_request.session_id = session_id;
+  writeback_request.turn.turn_id = request_id + "-cognition-belief";
+  writeback_request.turn.session_id = session_id;
+  writeback_request.turn.user_input = request.user_input.value_or(goal_id);
+  writeback_request.turn.agent_response = summary_text;
+  writeback_request.turn.created_at = created_at;
+  writeback_request.turn.tags = std::vector<std::string>{"runtime", "cognition", "belief_writeback"};
+
+  writeback_request.summary_candidate = contracts::SummaryMemory{};
+  writeback_request.summary_candidate->summary_text = summary_text;
+  writeback_request.summary_candidate->source_turn_ids =
+      std::vector<std::string>{*writeback_request.turn.turn_id};
+  if (decision_result.action_decision.has_value() &&
+      decision_result.action_decision->rationale.has_value() &&
+      !decision_result.action_decision->rationale->empty()) {
+    writeback_request.summary_candidate->decisions_made =
+        std::vector<std::string>{*decision_result.action_decision->rationale};
+  }
+
+  std::vector<std::string> confirmed_facts;
+  for (const auto& delta : hint.confirmed_facts_delta) {
+    if (delta.delta_kind != cognition::belief::BeliefDeltaKind::Upsert || delta.fact.empty()) {
+      continue;
+    }
+
+    confirmed_facts.push_back(delta.fact);
+    memory::FactCandidate fact_candidate;
+    fact_candidate.fact.fact_text = delta.fact;
+    fact_candidate.fact.source_turn_ids =
+        std::vector<std::string>{*writeback_request.turn.turn_id};
+    fact_candidate.fact.confidence_score = confidence_score;
+    fact_candidate.fact.created_at = created_at;
+    fact_candidate.fact.fact_type = "cognition_belief";
+    if (!hint.missing_evidence_refs.empty()) {
+      fact_candidate.fact.tags = hint.missing_evidence_refs;
+    }
+    fact_candidate.extraction_source = "runtime.cognition.belief_hint";
+    writeback_request.fact_candidates.push_back(std::move(fact_candidate));
+  }
+
+  if (!confirmed_facts.empty()) {
+    writeback_request.summary_candidate->confirmed_facts = std::move(confirmed_facts);
+  }
+
+  return writeback_request;
+}
+
+[[nodiscard]] std::string make_context_reload_reason(
+    const cognition::ContextSufficiencySignal& signal) {
+  if (!signal.missing_evidence_hints.empty()) {
+    return std::string{"cognition requested context reload for: "} +
+           join_strings(signal.missing_evidence_hints, ", ");
+  }
+
+  return "cognition requested context reload before executing the action";
+}
+
+[[nodiscard]] memory::MemoryContextRequest make_context_reload_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const OrchestratorComposition& composition,
+    const contracts::RuntimeBudget& runtime_budget,
+    const cognition::ContextSufficiencySignal& signal) {
+  auto context_request =
+      make_memory_context_request(request, goal_id, composition, runtime_budget);
+  context_request.stage = "reasoning_reload";
+  context_request.latest_observation_digest_summary = make_context_reload_reason(signal);
+  for (const auto& hint : signal.missing_evidence_hints) {
+    if (!hint.empty()) {
+      context_request.external_evidence.push_back(std::string{"cognition.missing_evidence:"} + hint);
+    }
+  }
+  return context_request;
+}
+
+[[nodiscard]] bool should_consume_context_signal(
+    const cognition::CognitionDecisionResult& decision_result) {
+  return !decision_result.error_info.has_value() && !decision_result.result_code.has_value();
+}
+
+[[nodiscard]] bool should_degrade_to_waiting_clarify(
+    const cognition::CognitionDecisionResult& decision_result) {
+  if (!should_consume_context_signal(decision_result)) {
+    return false;
+  }
+
+  if (decision_result.action_decision.has_value() &&
+      decision_result.action_decision->clarification_needed) {
+    return true;
+  }
+
+  return !decision_result.context_sufficiency.context_sufficient ||
+         decision_result.context_sufficiency.recommend_context_reload ||
+         !decision_result.context_sufficiency.missing_evidence_hints.empty();
+}
+
+[[nodiscard]] std::string clarification_response_text(
+    const OrchestratorComposition& composition,
+    const cognition::CognitionDecisionResult& decision_result) {
+  if (decision_result.action_decision.has_value() &&
+      decision_result.action_decision->clarification_question.has_value() &&
+      !decision_result.action_decision->clarification_question->empty()) {
+    return *decision_result.action_decision->clarification_question;
+  }
+
+  if (!decision_result.context_sufficiency.missing_evidence_hints.empty()) {
+    return std::string{"need clarification before action execution: "} +
+           join_strings(decision_result.context_sufficiency.missing_evidence_hints, ", ");
+  }
+
+  return composition.stub_ports.waiting_response_text;
+}
+
 [[nodiscard]] cognition::CognitionStepRequest make_cognition_step_request(
     const contracts::AgentRequest& request,
     const std::string& goal_id,
@@ -1151,7 +1351,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                  : "session loaded, budget initialized, preflight admitted");
 
   if (has_live_unary_ports(composition_)) {
-    const auto context_result = composition_.dependency_set->memory_manager->prepare_context(
+    auto context_result = composition_.dependency_set->memory_manager->prepare_context(
         make_memory_context_request(normalized_request, goal_id, composition_, runtime_budget));
     if (context_result.result_code.has_value() || context_result.degraded) {
       push_trace(&run_result.stage_trace,
@@ -1234,15 +1434,247 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       return run_result;
     }
 
-    const auto cognition_result = composition_.dependency_set->cognition_engine->decide(
+    auto cognition_result = composition_.dependency_set->cognition_engine->decide(
         make_cognition_step_request(normalized_request,
                                     goal_id,
                                     composition_,
                                     context_result.context_packet,
                                     runtime_budget));
+    bool context_reload_attempted = false;
+    std::string context_reload_detail;
+    if ((!cognition_result.action_decision.has_value() ||
+         cognition_result.action_decision->decision_kind !=
+             cognition::decision::ActionDecisionKind::ExecuteAction) &&
+        should_consume_context_signal(cognition_result) &&
+        cognition_result.context_sufficiency.recommend_context_reload) {
+      const auto replan_budget = budget_controller_.can_replan();
+      if (!replan_budget.rejected()) {
+        context_reload_attempted = true;
+        (void)budget_controller_.consume(BudgetConsumeRequest{
+            .budget_type = contracts::BudgetType::Replan,
+            .amount = 1,
+            .observed_at_ms = static_cast<std::uint64_t>(current_time_ms()),
+            .detail = "context reload consumed one replan budget on the live unary path",
+        });
+
+        auto refreshed_context_result = composition_.dependency_set->memory_manager->prepare_context(
+            make_context_reload_request(normalized_request,
+                                        goal_id,
+                                        composition_,
+                                        runtime_budget,
+                                        cognition_result.context_sufficiency));
+        if (!refreshed_context_result.result_code.has_value() && !refreshed_context_result.degraded) {
+          context_result = std::move(refreshed_context_result);
+          cognition_result = composition_.dependency_set->cognition_engine->decide(
+              make_cognition_step_request(normalized_request,
+                                          goal_id,
+                                          composition_,
+                                          context_result.context_packet,
+                                          runtime_budget));
+          context_reload_detail =
+              "cognition requested one bounded context reload before the final action decision";
+        } else {
+          context_reload_detail = refreshed_context_result.result_code.has_value()
+                                      ? "cognition requested a context reload but memory refresh failed"
+                                      : "cognition requested a context reload but refreshed context remained degraded";
+        }
+      } else {
+        context_reload_detail =
+            "cognition requested a context reload but runtime replan budget was exhausted";
+      }
+    }
+
+    std::string belief_writeback_detail;
+    if (should_write_back_belief_hint(cognition_result.belief_update_hint)) {
+      const auto writeback_result = composition_.dependency_set->memory_manager->write_back(
+          make_belief_writeback_request(normalized_request,
+                                       goal_id,
+                                       *cognition_result.belief_update_hint,
+                                       cognition_result));
+      if (writeback_result.result_code.has_value()) {
+        belief_writeback_detail = "cognition belief hint writeback failed best-effort";
+      } else if (writeback_result.degraded || writeback_result.partial) {
+        belief_writeback_detail = "cognition belief hint writeback completed as a partial success";
+      } else {
+        belief_writeback_detail = "cognition belief hint writeback committed through memory seam";
+      }
+    }
+
     if (!cognition_result.action_decision.has_value() ||
         cognition_result.action_decision->decision_kind !=
         cognition::decision::ActionDecisionKind::ExecuteAction) {
+      if (should_degrade_to_waiting_clarify(cognition_result)) {
+        StateTransitionOutcome waiting_outcome;
+        if (const auto failure = apply_step(
+                *fsm,
+                orchestrator_stage_name(OrchestratorStage::MainLoop),
+                TransitionStep{.to_state = RuntimeState::WaitingClarify,
+                               .reason = "clarification required after cognition context evaluation",
+                               .guards = {TransitionGuardFact::ClarificationNeeded,
+                                          TransitionGuardFact::ProfileAllowsClarify}},
+                &waiting_outcome);
+            failure.has_value()) {
+          push_trace(&run_result.stage_trace,
+                     OrchestratorStage::MainLoop,
+                     main_loop_before,
+                     failure->state_before,
+                     true,
+                     failure->detail);
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path could not enter waiting clarify after cognition signaled missing context",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 failure->detail,
+                                 failure->stage,
+                                 RuntimeState::Failed),
+              std::nullopt,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        const auto clarify_text = clarification_response_text(composition_, cognition_result);
+        const auto saved_waiting_checkpoint = build_and_save_checkpoint(
+            checkpoint_manager_,
+            CheckpointBuildRequest{
+                .transition_outcome = waiting_outcome,
+                .checkpoint_id = std::string("chk-live-clarify-") + *normalized_request.request_id,
+                .step_id = std::string("live-clarify-") + *normalized_request.request_id,
+                .working_memory_snapshot = std::string("wm:clarify:") + *normalized_request.request_id,
+                .pending_action = clarify_text,
+                .request_id = normalized_request.request_id,
+                .goal_id = goal_id,
+                .belief_state_ref = composition_.default_belief_state_ref,
+                .retry_count = 0,
+                .created_at_ms = normalized_request.created_at,
+                .runtime_budget_snapshot = budget_controller_.snapshot(),
+                .tags = {"path=live-clarify"},
+            });
+        if (!saved_waiting_checkpoint.saved()) {
+          push_trace(&run_result.stage_trace,
+                     OrchestratorStage::MainLoop,
+                     main_loop_before,
+                     fsm->current_state(),
+                     true,
+                     saved_waiting_checkpoint.detail);
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path failed to save a clarification checkpoint",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 saved_waiting_checkpoint.detail,
+                                 orchestrator_stage_name(OrchestratorStage::MainLoop),
+                                 RuntimeState::Failed),
+              std::nullopt,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        const auto pending_interaction = make_pending_interaction(
+            composition_, PendingInteractionKind::Clarify, clarify_text);
+        const auto bound_session = bind_session_checkpoint(
+            session_manager_,
+            session_snapshot,
+            saved_waiting_checkpoint.checkpoint->checkpoint_id.value_or(std::string()),
+            RuntimeState::WaitingClarify,
+            pending_interaction);
+        if (!bound_session.updated()) {
+          push_trace(&run_result.stage_trace,
+                     OrchestratorStage::MainLoop,
+                     main_loop_before,
+                     fsm->current_state(),
+                     true,
+                     bound_session.detail);
+          run_result.agent_result = make_result(
+              normalized_request,
+              RuntimeState::Failed,
+              contracts::AgentResultStatus::Failed,
+              kRuntimeOrchestratorSkeletonInternalErrorCode,
+              "runtime live unary path failed to bind clarification checkpoint to session",
+              make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                                 bound_session.detail,
+                                 orchestrator_stage_name(OrchestratorStage::MainLoop),
+                                 RuntimeState::Failed),
+              std::nullopt,
+              goal_id);
+          run_result.final_state = RuntimeState::Failed;
+          return run_result;
+        }
+
+        const auto resume_seed_result = session_manager_.build_resume_seed(
+            BuildResumeSeedRequest{
+                .session_snapshot = *bound_session.snapshot,
+                .checkpoint_ref =
+                    saved_waiting_checkpoint.checkpoint->checkpoint_id.value_or(std::string()),
+                .resume_token = make_resume_binding_token(
+                    bound_session.snapshot->session_id,
+                    saved_waiting_checkpoint.checkpoint->checkpoint_id.value_or(std::string())),
+                .resume_reason = std::string("resume after runtime clarification"),
+                .policy_snapshot_ref = composition_.default_policy_snapshot_ref,
+            });
+        const auto resume_plan_result =
+            resume_seed_result.built()
+                ? checkpoint_manager_.make_resume_plan(*saved_waiting_checkpoint.checkpoint,
+                                                       *resume_seed_result.resume_seed)
+                : checkpoint_manager_.make_resume_plan(*saved_waiting_checkpoint.checkpoint);
+
+        run_result.effective_session = bound_session.snapshot;
+        run_result.checkpoint = saved_waiting_checkpoint.checkpoint;
+        if (resume_seed_result.built() && resume_plan_result.resumable &&
+            resume_plan_result.plan.has_value()) {
+          run_result.resume_plan = resume_plan_result.plan;
+        }
+        run_result.final_state = RuntimeState::WaitingClarify;
+
+        std::string waiting_detail = context_reload_detail.empty()
+                                         ? "cognition signaled missing context and runtime entered waiting clarify"
+                                         : context_reload_detail;
+        if (!belief_writeback_detail.empty()) {
+          waiting_detail += "; ";
+          waiting_detail += belief_writeback_detail;
+        }
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::MainLoop,
+                   main_loop_before,
+                   fsm->current_state(),
+                   true,
+                   waiting_detail);
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::ToolRound,
+                   fsm->current_state(),
+                   fsm->current_state(),
+                   false,
+                   "skipped because clarification degrade keeps the live unary turn resumable");
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::RecoveryRound,
+                   fsm->current_state(),
+                   fsm->current_state(),
+                   false,
+                   "skipped because clarification degrade does not enter recovery");
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::Terminalize,
+                   fsm->current_state(),
+                   fsm->current_state(),
+                   false,
+                   "skipped because clarification degrade keeps the turn resumable");
+        run_result.agent_result = make_result(
+            normalized_request,
+            RuntimeState::WaitingClarify,
+            contracts::AgentResultStatus::PartiallyCompleted,
+            kRuntimeOrchestratorWaitingCode,
+            clarify_text,
+            std::nullopt,
+            saved_waiting_checkpoint.checkpoint->checkpoint_id,
+            goal_id);
+        return run_result;
+      }
+
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::MainLoop,
                  main_loop_before,
@@ -1270,7 +1702,16 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                main_loop_before,
                fsm->current_state(),
                true,
-               "memory context assembly and cognition decide completed through live dependency ports");
+               [&context_reload_detail, &belief_writeback_detail, context_reload_attempted]() {
+                 std::string detail = context_reload_attempted && !context_reload_detail.empty()
+                                          ? context_reload_detail
+                                          : "memory context assembly and cognition decide completed through live dependency ports";
+                 if (!belief_writeback_detail.empty()) {
+                   detail += "; ";
+                   detail += belief_writeback_detail;
+                 }
+                 return detail;
+               }());
 
     const RuntimeState tool_round_before = fsm->current_state();
     const auto tool_budget_decision = budget_controller_.can_call_tool();

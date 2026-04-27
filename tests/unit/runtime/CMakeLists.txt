@@ -296,6 +296,7 @@ target_include_directories(dasall_runtime_cognition_loop_smoke_unit_test
   PRIVATE
     ${PROJECT_SOURCE_DIR}/runtime/src
     ${PROJECT_SOURCE_DIR}/cognition/include
+    ${PROJECT_SOURCE_DIR}/memory/src
     ${PROJECT_SOURCE_DIR}/tools/src
     ${PROJECT_SOURCE_DIR}/services/include
     ${PROJECT_SOURCE_DIR}/tests/fixtures/runtime
