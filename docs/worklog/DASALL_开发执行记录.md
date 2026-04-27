@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #476
+
+- 日期：2026-04-27
+- 阶段：cognition/config projection
+- 任务：COG-TODO-011 实现 CognitionConfigProjector
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-011 依赖 COG-TODO-002、007、010；三项均已完成，因此本轮是可直接执行的最小原子任务。
+2. 当前唯一未解链路是 COG-BLK-006：profile→cognition 投影视图不存在，导致后续 012 / 029 缺少统一配置入口。
+3. 最近邻已有 `knowledge/src/config/KnowledgeConfigProjector.*` 与配套 unit test，可直接复用“private header + unit seam”实现模式，不需要扩 public API。
+
+### 改动
+
+1. 新增 `cognition/src/config/CognitionConfigProjector.h`、`cognition/src/config/CognitionConfigProjector.cpp`，实现 `project_config()` 与 `derive_stage_model_hint()`，并在内部通过 `merge_profile_defaults()` 收敛五档 profile 默认策略。
+2. 更新 `cognition/CMakeLists.txt`，接入 projector 源文件、`cognition/src` 私有 include 与 `dasall_profiles` 私有依赖。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_cognition_config_projection_unit_test`，并为该测试补 `dasall_profiles` 与 `cognition/src` 私有 include。
+4. 新增 `tests/unit/cognition/CognitionConfigProjectionTest.cpp`，覆盖 profile 投影、canonical stage hint、缺失 canonical route 与 legacy alias 负例。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-011-CognitionConfigProjector收敛.md`，并回写 cognition 专项 TODO、关闭 COG-BLK-006。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_config_projection_unit_test"])`
+   - 第一次结果：失败，暴露 `cognition/src` 私有 include 缺口。
+   - 修补同一 slice 后复跑：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionConfigProjectionTest"])`
+   - 结果：失败，返回仓库已知通用错误“生成失败”。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_config_projection_unit_test`
+   - 结果：通过；projector 正例与负例断言全部通过。
+
+### 结果
+
+1. COG-TODO-011 已完成，cognition 配置现可直接从 `RuntimePolicySnapshot` 投影，不再缺 profile→cognition 配置链路。
+2. canonical stage key 仍保持 `planning/execution/reflection/response`；`derive_stage_model_hint()` 明确拒绝 legacy alias。
+3. COG-BLK-006 已解阻，COG-TODO-012 可直接在 projector 之上实现 `StagePolicyResolver`。
+
+### 下一步
+
+1. 进入 COG-TODO-012，补齐 `StageExecutionPlan` supporting types 与 `StagePolicyResolver` 的阶段启停 / deadline / budget-aware 解析逻辑。
+
 ## 记录 #475
 
 - 日期：2026-04-27

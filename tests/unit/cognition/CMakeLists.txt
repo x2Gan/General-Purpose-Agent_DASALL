@@ -29,6 +29,22 @@ dasall_add_cognition_unit_test(
 	CognitionInterfaceSurfaceTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_cognition_config_projection_unit_test
+	CognitionConfigProjectionTest.cpp
+	CognitionConfigProjectionTest
+)
+
+target_link_libraries(dasall_cognition_config_projection_unit_test
+	PRIVATE
+		dasall_profiles
+)
+
+target_include_directories(dasall_cognition_config_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
 if(NOT DASALL_COGNITION_UNIT_TEST_EXECUTABLE_TARGETS)
 	message(FATAL_ERROR "cognition unit registration requires at least one test target")
 endif()
