@@ -78,6 +78,10 @@ add_executable(dasall_runtime_transition_guard_table_unit_test
   TransitionGuardTableTest.cpp
 )
 
+add_executable(dasall_runtime_cognition_loop_smoke_unit_test
+  RuntimeCognitionLoopSmokeTest.cpp
+)
+
 target_link_libraries(dasall_runtime_smoke_test
   PRIVATE
     dasall_test_support
@@ -279,6 +283,29 @@ target_include_directories(dasall_runtime_transition_guard_table_unit_test
     ${PROJECT_SOURCE_DIR}/runtime/src
 )
 
+target_link_libraries(dasall_runtime_cognition_loop_smoke_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+    dasall_memory
+    dasall_sqlite3
+    dasall_tools
+)
+
+target_include_directories(dasall_runtime_cognition_loop_smoke_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+    ${PROJECT_SOURCE_DIR}/cognition/include
+    ${PROJECT_SOURCE_DIR}/tools/src
+    ${PROJECT_SOURCE_DIR}/services/include
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/runtime
+)
+
+target_compile_definitions(dasall_runtime_cognition_loop_smoke_unit_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
 dasall_apply_common_options(dasall_runtime_smoke_test)
 dasall_apply_common_options(dasall_runtime_control_plane_surface_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_skeleton_unit_test)
@@ -299,6 +326,7 @@ dasall_apply_common_options(dasall_runtime_health_probe_unit_test)
 dasall_apply_common_options(dasall_runtime_background_maintenance_hook_unit_test)
 dasall_apply_common_options(dasall_runtime_checkpoint_state_mapper_unit_test)
 dasall_apply_common_options(dasall_runtime_transition_guard_table_unit_test)
+dasall_apply_common_options(dasall_runtime_cognition_loop_smoke_unit_test)
 
 add_test(NAME RuntimeBuildLivenessSmokeTest COMMAND dasall_runtime_smoke_test)
 set_tests_properties(RuntimeBuildLivenessSmokeTest PROPERTIES LABELS "build-liveness;runtime")
@@ -317,6 +345,9 @@ set_tests_properties(RuntimeErrorCodeTest PROPERTIES LABELS "unit")
 
 add_test(NAME CancellationTokenTest COMMAND dasall_runtime_cancellation_token_unit_test)
 set_tests_properties(CancellationTokenTest PROPERTIES LABELS "unit")
+
+add_test(NAME RuntimeCognitionLoopSmokeTest COMMAND dasall_runtime_cognition_loop_smoke_unit_test)
+set_tests_properties(RuntimeCognitionLoopSmokeTest PROPERTIES LABELS "unit;runtime")
 
 add_test(NAME AgentFsmTest COMMAND dasall_agent_fsm_unit_test)
 set_tests_properties(AgentFsmTest PROPERTIES LABELS "unit")

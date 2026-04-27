@@ -288,12 +288,23 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
     const OrchestratorComposition& composition) {
   contracts::ToolRequest tool_request;
   const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  const auto* tool_hint = action_decision.tool_intent_hint.has_value()
+                              ? &(*action_decision.tool_intent_hint)
+                              : nullptr;
   tool_request.request_id = request.request_id;
   tool_request.tool_call_id = std::string{"tool-call-"} + request_id;
-  tool_request.tool_name = action_decision.tool_name.value_or(std::string{"agent.dataset"});
+  if (tool_hint != nullptr && !tool_hint->tool_name.empty()) {
+    tool_request.tool_name = tool_hint->tool_name;
+  } else {
+    tool_request.tool_name = std::string{"agent.dataset"};
+  }
   tool_request.invocation_kind = contracts::ToolInvocationKind::InformationQuery;
-  tool_request.arguments_payload =
-      action_decision.tool_arguments_payload.value_or(std::string{"{}"});
+  if (tool_hint != nullptr && !tool_hint->argument_hints.empty()) {
+    tool_request.arguments_payload =
+        std::string{"{\"query\":\""} + tool_hint->argument_hints.front() + "\"}";
+  } else {
+    tool_request.arguments_payload = std::string{"{}"};
+  }
   tool_request.created_at = request.created_at.value_or(current_time_ms());
   tool_request.goal_id = goal_id;
   tool_request.worker_task_id = composition.default_worker_id;

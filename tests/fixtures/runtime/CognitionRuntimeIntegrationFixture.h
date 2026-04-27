@@ -1,0 +1,218 @@
+#pragma once
+
+#include <chrono>
+#include <filesystem>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "AgentTypes.h"
+#include "../../../cognition/include/ICognitionEngine.h"
+#include "../../../memory/include/IMemoryManager.h"
+#include "../../../cognition/include/IResponseBuilder.h"
+#include "RuntimeDependencySet.h"
+#include "RuntimePolicySnapshot.h"
+#include "ToolManager.h"
+#include "checkpoint/RuntimeBudget.h"
+#include "execution/BuiltinExecutorLane.h"
+#include "registry/ToolRegistry.h"
+#include "writeback/MemoryWritebackRequest.h"
+
+namespace dasall::tests::runtime_fixture {
+
+inline std::filesystem::path make_temp_database_path(const std::string& stem) {
+  const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+  return std::filesystem::temp_directory_path() /
+         (stem + "-" + std::to_string(timestamp) + ".db");
+}
+
+inline void cleanup_database_artifacts(const std::filesystem::path& database_path) {
+  (void)std::filesystem::remove(database_path);
+  (void)std::filesystem::remove(database_path.string() + "-wal");
+  (void)std::filesystem::remove(database_path.string() + "-shm");
+}
+
+inline memory::MemoryConfig make_sqlite_config(const std::filesystem::path& database_path,
+                                               const std::string& migrations_dir) {
+  memory::MemoryConfig config;
+  config.storage.backend = memory::StorageBackend::Sqlite;
+  config.storage.db_path = database_path.string();
+  config.storage.migrations_dir = migrations_dir;
+  config.vector.enabled = false;
+  return config;
+}
+
+inline std::shared_ptr<runtime::RuntimeDependencySet> make_true_integration_dependency_set(
+    const memory::MemoryConfig& config,
+    const std::string& session_id,
+    const std::string& turn_id,
+    const std::string& seed_query) {
+  auto dependency_set = std::make_shared<runtime::RuntimeDependencySet>();
+
+  std::shared_ptr<memory::IMemoryManager> memory_manager(memory::create_memory_manager(config));
+  const auto init_code = memory_manager->init(config);
+  if (static_cast<int>(init_code) != 0) {
+    throw std::runtime_error("failed to initialize sqlite-backed memory manager");
+  }
+
+  memory::MemoryWritebackRequest writeback_request;
+  writeback_request.session_id = session_id;
+  writeback_request.turn.turn_id = turn_id;
+  writeback_request.turn.session_id = session_id;
+  writeback_request.turn.user_input = seed_query;
+  writeback_request.turn.agent_response = "seed cognition runtime integration context";
+  writeback_request.summary_candidate = contracts::SummaryMemory{};
+  writeback_request.summary_candidate->summary_text =
+      "cognition runtime integration seeded context";
+  writeback_request.summary_candidate->confirmed_facts =
+      std::vector<std::string>{"cognition runtime integration context is available"};
+
+  memory::FactCandidate fact_candidate;
+  fact_candidate.fact.fact_text = "cognition runtime integration context is available";
+  fact_candidate.fact.fact_type = "status";
+  fact_candidate.fact.confidence_score = 90U;
+  fact_candidate.fact.source_turn_ids = std::vector<std::string>{turn_id};
+  fact_candidate.extraction_source = "integration-test";
+  writeback_request.fact_candidates.push_back(std::move(fact_candidate));
+
+  const auto writeback_result = memory_manager->write_back(writeback_request);
+  if (writeback_result.result_code.has_value()) {
+    throw std::runtime_error("failed to seed memory manager for cognition runtime integration");
+  }
+
+  dependency_set->memory_manager = std::move(memory_manager);
+  dependency_set->cognition_engine =
+      std::shared_ptr<cognition::ICognitionEngine>(cognition::create_cognition_engine());
+  dependency_set->response_builder =
+      std::shared_ptr<cognition::IResponseBuilder>(cognition::create_response_builder());
+
+  auto registry = std::make_shared<tools::registry::ToolRegistry>();
+  const auto registered = registry->register_builtin(contracts::ToolDescriptor{
+      .tool_name = std::string{"agent.dataset"},
+      .display_name = std::string{"Agent Dataset"},
+      .category = contracts::ToolCategory::Information,
+      .capability_tier = contracts::ToolCapabilityTier::Preview,
+      .is_read_only = true,
+      .supports_compensation = false,
+      .default_timeout_ms = 30000U,
+      .input_schema_ref = std::string{"schema://tools/agent.dataset/input/v1"},
+      .output_schema_ref = std::string{"schema://tools/agent.dataset/output/v1"},
+      .required_scopes = std::vector<std::string>{"tools.read"},
+      .tags = std::vector<std::string>{"builtin", "query"},
+      .version = std::string{"1.0.0"},
+  });
+  if (!registered) {
+    throw std::runtime_error("failed to register agent.dataset descriptor");
+  }
+
+  auto builtin_lane = std::make_shared<tools::execution::BuiltinExecutorLane>(
+      tools::execution::BuiltinExecutorLaneDependencies{
+          .registry = registry,
+          .service_bridge = nullptr,
+          .execution_service = nullptr,
+          .data_service = nullptr,
+          .now_ms = {},
+      });
+
+  tools::manager::ToolManagerDependencies tool_dependencies;
+  tool_dependencies.registry = std::move(registry);
+  tool_dependencies.executor = [builtin_lane](const auto& execution_request) {
+    return builtin_lane->execute(
+        execution_request.tool_ir,
+        tools::ToolExecutionContext{
+            .invocation_context = execution_request.invocation_context,
+            .lane_key = execution_request.route_decision.lane_key,
+        });
+  };
+  dependency_set->tool_manager =
+      std::make_shared<tools::ToolManager>(std::move(tool_dependencies));
+  dependency_set->visible_tools = {"agent.dataset"};
+  dependency_set->external_evidence = {"runtime:cognition-integration"};
+
+  return dependency_set;
+}
+
+inline std::shared_ptr<const profiles::RuntimePolicySnapshot>
+make_true_integration_policy_snapshot(const std::string& profile_id) {
+  profiles::ModelProfile model_profile;
+  model_profile.stage_routes.emplace("main", profiles::ModelRoutePolicy{
+                                                 .route = "mock-primary",
+                                                 .fallback_route = std::string{"mock-fallback"},
+                                                 .streaming_enabled = false,
+                                             });
+
+  return std::make_shared<const profiles::RuntimePolicySnapshot>(
+      1U,
+      profile_id,
+      contracts::RuntimeBudget{
+          .max_tokens = 2048U,
+          .max_turns = 6U,
+          .max_tool_calls = 2U,
+          .max_latency_ms = 2000U,
+          .max_replan_count = 2U,
+      },
+      std::move(model_profile),
+      profiles::TokenBudgetPolicy{
+          .max_input_tokens = 2048U,
+          .max_output_tokens = 512U,
+          .max_history_turns = 8U,
+          .compression_threshold = 1024U,
+      },
+      profiles::PromptPolicy{
+          .allowed_prompt_releases = {"stable"},
+          .trusted_sources = {"runtime"},
+          .tool_visibility_rules = {"builtin:agent.dataset"},
+      },
+      profiles::CapabilityCachePolicy{
+          .refresh_interval_ms = 1000,
+          .expire_after_ms = 5000,
+          .stale_read_allowed = false,
+          .failure_backoff_ms = 100,
+      },
+      profiles::DegradePolicy{
+          .fallback_chain = {"safe_mode"},
+          .allow_model_failover = true,
+          .allow_budget_degrade = true,
+      },
+      profiles::TimeoutPolicy{
+          .llm = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
+          .tool = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
+          .mcp = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
+          .workflow = profiles::TimeoutBudget{.timeout_ms = 1000, .retry_budget = 1U, .circuit_breaker_threshold = 2U},
+      },
+      profiles::ExecutionPolicy{
+          .requires_high_risk_confirmation = true,
+          .safe_mode_enabled = true,
+          .audit_level = "full",
+          .allowed_tool_domains = {"builtin"},
+      },
+      profiles::OpsPolicy{
+          .log_level = "info",
+          .metrics_granularity = "detailed",
+          .trace_sample_ratio = 1.0,
+          .remote_diagnostics_enabled = false,
+          .upgrade_strategy = "rolling",
+      },
+      2U);
+}
+
+inline runtime::AgentInitRequest make_true_integration_init_request(
+    std::shared_ptr<runtime::RuntimeDependencySet> dependency_set,
+    const std::string& runtime_instance_id,
+    const std::string& profile_id,
+    const std::string& boot_reason) {
+  runtime::AgentInitRequest request;
+  request.runtime_instance_id = runtime_instance_id;
+  request.profile_id = profile_id;
+  request.policy_snapshot = make_true_integration_policy_snapshot(profile_id);
+  request.dependency_set = std::move(dependency_set);
+  request.boot_reason = boot_reason;
+  request.cold_start = true;
+  return request;
+}
+
+}  // namespace dasall::tests::runtime_fixture
