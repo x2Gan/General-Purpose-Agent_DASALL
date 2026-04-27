@@ -94,10 +94,18 @@ class CognitionFacade final : public ICognitionEngine {
       decision::ActionDecision action_decision;
       action_decision.decision_kind = decision::ActionDecisionKind::AskClarification;
       action_decision.confidence = 1.0F;
+        action_decision.clarification_needed = true;
       action_decision.clarification_question =
           std::string("additional goal or user input is required before execution can continue");
       action_decision.rationale =
           std::string("context_packet is missing the minimal fields required for true integration");
+        action_decision.candidate_scores = {
+          decision::CandidateDecisionScore{
+            .candidate_name = "ask_clarification",
+            .score = 1.0F,
+            .rationale = std::string("required context fields are missing"),
+          },
+        };
       result.action_decision = action_decision;
       result.diagnostics.push_back("context_packet_missing_required_fields");
       return result;
@@ -106,18 +114,41 @@ class CognitionFacade final : public ICognitionEngine {
     result.context_sufficiency.context_confidence = 0.9F;
     decision::ActionDecision action_decision;
     action_decision.decision_kind = decision::ActionDecisionKind::ExecuteAction;
+      action_decision.selected_node_id = std::string("plan-node:default");
     action_decision.confidence = 0.8F;
-    action_decision.tool_name = choose_tool_name(request.context_packet);
-    action_decision.tool_arguments_payload =
-        std::string("{\"query\":\"") + *request.context_packet.user_turn + "\"}";
     action_decision.rationale =
         std::string("runtime true integration minimal path selects a visible tool");
-    action_decision.evidence_refs = std::vector<std::string>{"cognition:decide"};
+      action_decision.tool_intent_hint = decision::ToolIntentHint{
+        .tool_name = choose_tool_name(request.context_packet),
+        .intent_summary = std::string("query current user turn through runtime tool governance"),
+        .argument_hints = {std::string("query=") + *request.context_packet.user_turn},
+        .evidence_refs = {"cognition:decide"},
+      };
+      action_decision.candidate_scores = {
+        decision::CandidateDecisionScore{
+          .candidate_name = "execute_action",
+          .score = 0.8F,
+          .rationale = std::string("tool route is available and context is sufficient"),
+        },
+        decision::CandidateDecisionScore{
+          .candidate_name = "direct_response",
+          .score = 0.35F,
+          .rationale = std::string("user turn implies a governed lookup before final response"),
+        },
+      };
     result.action_decision = action_decision;
     result.belief_update_hint = belief::BeliefUpdateHint{
-        .confirmed_facts = {"cognition decision path executed"},
-        .evidence_refs = {"cognition:decide"},
-        .merge_mode = "append",
+        .confirmed_facts_delta = {
+          belief::FactDelta{.fact = "cognition decision path executed"},
+        },
+      .hypotheses_delta = {},
+      .assumptions_delta = {},
+        .evidence_refs_delta = {
+          belief::EvidenceRefDelta{.evidence_ref = "cognition:decide"},
+        },
+      .missing_evidence_refs = {},
+        .confidence_hint = 0.8F,
+        .merge_mode = belief::BeliefMergeMode::Append,
     };
     return result;
   }
@@ -167,8 +198,8 @@ class ResponseBuilder final : public IResponseBuilder {
     }
 
     const auto fallback_text = request.terminal_decision.has_value() &&
-                                       request.terminal_decision->response_text.has_value()
-                                   ? *request.terminal_decision->response_text
+                     request.terminal_decision->response_outline.has_value()
+                   ? request.terminal_decision->response_outline->summary
                                    : std::string("runtime unary integration completed without observation payload");
     result.agent_result = make_result(
         request,

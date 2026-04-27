@@ -27,6 +27,25 @@ struct StageExecutionHints {
   std::optional<std::string> profile_variant_hint;
 };
 
+enum class ModelCapabilityTier : std::uint8_t {
+  Lightweight = 0,
+  Standard = 1,
+  Advanced = 2,
+  ReasoningHeavy = 3,
+};
+
+struct StageModelHint {
+  std::string stage_name;
+  std::string task_type;
+  ModelCapabilityTier capability_tier = ModelCapabilityTier::Standard;
+  std::uint32_t max_output_tokens = 0;
+  std::uint32_t deadline_ms = 0;
+  bool requires_structured_output = false;
+  bool requires_reasoning_trace = false;
+  float cost_sensitivity = 0.0F;
+  std::string preferred_provider;
+};
+
 struct BudgetContext {
   std::uint32_t total_budget_tokens = 0;
   std::uint32_t consumed_tokens = 0;

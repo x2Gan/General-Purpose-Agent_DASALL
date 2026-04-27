@@ -83,6 +83,29 @@ struct has_tool_request_member<T, std::void_t<decltype(std::declval<T>().tool_re
     : std::true_type {};
 
 template <typename T, typename = void>
+struct has_tool_name_member : std::false_type {};
+
+template <typename T>
+struct has_tool_name_member<T, std::void_t<decltype(std::declval<T>().tool_name)>>
+  : std::true_type {};
+
+template <typename T, typename = void>
+struct has_tool_arguments_payload_member : std::false_type {};
+
+template <typename T>
+struct has_tool_arguments_payload_member<T,
+                    std::void_t<decltype(
+                      std::declval<T>().tool_arguments_payload)>>
+  : std::true_type {};
+
+template <typename T, typename = void>
+struct has_response_text_member : std::false_type {};
+
+template <typename T>
+struct has_response_text_member<T, std::void_t<decltype(std::declval<T>().response_text)>>
+  : std::true_type {};
+
+template <typename T, typename = void>
 struct has_retry_after_member : std::false_type {};
 
 template <typename T>
@@ -432,13 +455,124 @@ void test_stage_component_headers_are_markers_not_publicly_constructible_compone
 }
 
 void test_current_supporting_types_remain_module_public() {
+  using dasall::cognition::BudgetContext;
+  using dasall::cognition::ContextSufficiencySignal;
+  using dasall::cognition::ModelCapabilityTier;
+  using dasall::cognition::StageModelHint;
+  using dasall::cognition::belief::AssumptionDelta;
+  using dasall::cognition::belief::BeliefDeltaKind;
+  using dasall::cognition::belief::BeliefMergeMode;
   using dasall::cognition::belief::BeliefUpdateHint;
+  using dasall::cognition::belief::EvidenceRefDelta;
+  using dasall::cognition::belief::FactDelta;
+  using dasall::cognition::belief::HypothesisDelta;
   using dasall::cognition::decision::ActionDecision;
   using dasall::cognition::decision::ActionDecisionKind;
+  using dasall::cognition::decision::CandidateDecisionScore;
+  using dasall::cognition::decision::DelegateHint;
+  using dasall::cognition::decision::ResponseOutline;
+  using dasall::cognition::decision::ToolIntentHint;
+  using dasall::tests::support::assert_true;
 
   static_assert(std::is_same_v<decltype(ActionDecision{}.decision_kind),
                                ActionDecisionKind>);
-  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.merge_mode), std::string>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.selected_node_id),
+                               std::optional<std::string>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.rationale),
+                               std::optional<std::string>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.confidence), float>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.clarification_needed), bool>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.clarification_question),
+                               std::optional<std::string>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.tool_intent_hint),
+                               std::optional<ToolIntentHint>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.delegate_hint),
+                               std::optional<DelegateHint>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.response_outline),
+                               std::optional<ResponseOutline>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.candidate_scores),
+                               std::vector<CandidateDecisionScore>>);
+  static_assert(!has_tool_name_member<ActionDecision>::value);
+  static_assert(!has_tool_arguments_payload_member<ActionDecision>::value);
+  static_assert(!has_response_text_member<ActionDecision>::value);
+
+  static_assert(std::is_same_v<decltype(ToolIntentHint{}.tool_name), std::string>);
+  static_assert(std::is_same_v<decltype(ToolIntentHint{}.intent_summary), std::string>);
+  static_assert(std::is_same_v<decltype(ToolIntentHint{}.argument_hints),
+                               std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ToolIntentHint{}.evidence_refs),
+                               std::vector<std::string>>);
+
+  static_assert(std::is_same_v<decltype(DelegateHint{}.delegate_target), std::string>);
+  static_assert(std::is_same_v<decltype(DelegateHint{}.rationale), std::string>);
+  static_assert(std::is_same_v<decltype(DelegateHint{}.confidence), float>);
+
+  static_assert(std::is_same_v<decltype(ResponseOutline{}.summary), std::string>);
+  static_assert(std::is_same_v<decltype(ResponseOutline{}.key_points),
+                               std::vector<std::string>>);
+
+  static_assert(std::is_same_v<decltype(CandidateDecisionScore{}.candidate_name),
+                               std::string>);
+  static_assert(std::is_same_v<decltype(CandidateDecisionScore{}.score), float>);
+  static_assert(std::is_same_v<decltype(CandidateDecisionScore{}.rationale),
+                               std::optional<std::string>>);
+
+  static_assert(std::is_same_v<decltype(FactDelta{}.fact), std::string>);
+  static_assert(std::is_same_v<decltype(FactDelta{}.delta_kind), BeliefDeltaKind>);
+  static_assert(std::is_same_v<decltype(HypothesisDelta{}.hypothesis), std::string>);
+  static_assert(std::is_same_v<decltype(HypothesisDelta{}.delta_kind), BeliefDeltaKind>);
+  static_assert(std::is_same_v<decltype(AssumptionDelta{}.assumption), std::string>);
+  static_assert(std::is_same_v<decltype(AssumptionDelta{}.delta_kind), BeliefDeltaKind>);
+  static_assert(std::is_same_v<decltype(EvidenceRefDelta{}.evidence_ref), std::string>);
+  static_assert(std::is_same_v<decltype(EvidenceRefDelta{}.delta_kind), BeliefDeltaKind>);
+
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.confirmed_facts_delta),
+                               std::vector<FactDelta>>);
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.hypotheses_delta),
+                               std::vector<HypothesisDelta>>);
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.assumptions_delta),
+                               std::vector<AssumptionDelta>>);
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.evidence_refs_delta),
+                               std::vector<EvidenceRefDelta>>);
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.missing_evidence_refs),
+                               std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.confidence_hint),
+                               std::optional<float>>);
+  static_assert(std::is_same_v<decltype(BeliefUpdateHint{}.merge_mode), BeliefMergeMode>);
+
+  static_assert(std::is_same_v<decltype(StageModelHint{}.stage_name), std::string>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.task_type), std::string>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.capability_tier),
+                               ModelCapabilityTier>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.max_output_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.deadline_ms), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.requires_structured_output), bool>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.requires_reasoning_trace), bool>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.cost_sensitivity), float>);
+  static_assert(std::is_same_v<decltype(StageModelHint{}.preferred_provider), std::string>);
+
+  static_assert(std::is_same_v<decltype(BudgetContext{}.total_budget_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(BudgetContext{}.consumed_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(BudgetContext{}.remaining_tokens), std::uint32_t>);
+  static_assert(std::is_same_v<decltype(BudgetContext{}.budget_utilization), float>);
+  static_assert(std::is_same_v<decltype(BudgetContext{}.context_was_truncated), bool>);
+  static_assert(std::is_same_v<decltype(BudgetContext{}.near_budget_limit), bool>);
+
+  static_assert(std::is_same_v<decltype(ContextSufficiencySignal{}.context_sufficient), bool>);
+  static_assert(std::is_same_v<decltype(ContextSufficiencySignal{}.context_confidence), float>);
+  static_assert(std::is_same_v<decltype(ContextSufficiencySignal{}.missing_evidence_hints),
+                               std::vector<std::string>>);
+  static_assert(std::is_same_v<decltype(ContextSufficiencySignal{}.recommend_context_reload),
+                               bool>);
+
+  const StageModelHint default_hint;
+  assert_true(default_hint.preferred_provider.empty(),
+              "stage model hints should default to router-selected providers");
+  const ContextSufficiencySignal default_signal;
+  assert_true(default_signal.context_sufficient,
+              "context sufficiency defaults should stay optimistic until evaluated");
+  assert_true(!default_signal.recommend_context_reload,
+              "context reload should require an explicit cognition recommendation");
 }
 
 }  // namespace

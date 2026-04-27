@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #474
+
+- 日期：2026-04-27
+- 阶段：cognition/Build-ready decision and budget supporting types
+- 任务：COG-TODO-009 定义 ActionDecision / BeliefUpdateHint / StageModelHint / BudgetContext / ContextSufficiencySignal
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-009 依赖 COG-TODO-002、005、006；三项均已完成，COG-BLK-002 已解阻。
+2. 本轮只冻结 009 supporting types 与最小 façade 直接消费者，不提前推进 010 接口签名或 020 之后的 bridge/validator 实现。
+3. 当前 `ActionDecision.h`、`BeliefUpdateHint.h` 仍保留旧 string payload 形状，是 009 的最小可执行修复面。
+
+### 改动
+
+1. 更新 `cognition/include/decision/ActionDecision.h`，改为 `tool_intent_hint`、`response_outline`、`candidate_scores` 等 module-local 语义对象，并移除旧 `tool_name` / `tool_arguments_payload` / `response_text` public 字段。
+2. 更新 `cognition/include/belief/BeliefUpdateHint.h`，引入 delta-oriented `FactDelta` / `HypothesisDelta` / `AssumptionDelta` / `EvidenceRefDelta`、`BeliefDeltaKind` 与 `BeliefMergeMode`。
+3. 更新 `cognition/include/CognitionTypes.h`，新增 `ModelCapabilityTier` 与 `StageModelHint`，保留 `BudgetContext`、`ContextSufficiencySignal` 为 module-public 信号对象。
+4. 更新 `cognition/src/CognitionFacade.cpp`，同步最小骨架对新 supporting types 的直接消费。
+5. 更新 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`，补 009 字段正例与旧字段负例。
+6. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-009-ActionDecision与BudgetContext对象收敛.md`，并更新 cognition 专项 TODO 状态。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cognition`
+   - 结果：首次失败，直接暴露 `CognitionFacade.cpp` 仍引用旧字段；修补同一 slice 后复跑通过。
+2. `Build_CMakeTools(buildTargets=["dasall_cognition_interface_surface_unit_test"])`
+   - 结果：通过；认知 surface test 专用 target 已构建。
+3. `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest"])`
+   - 结果：失败，返回通用错误“生成失败”；与仓库已知 CMake Tools 测试执行器问题一致。
+4. `cmake --build build-ci --target dasall_cognition_interface_surface_unit_test && ctest --test-dir build-ci -R "^CognitionInterfaceSurfaceTest$" --output-on-failure`
+   - 结果：通过；`CognitionInterfaceSurfaceTest` 1/1 passed。
+
+### 结果
+
+1. COG-TODO-009 已完成，ActionDecision / BeliefUpdateHint / StageModelHint / BudgetContext / ContextSufficiencySignal 全部保持 module-local / module-public 形态。
+2. `StageModelHint.stage_name` 已按 canonical stage key 落盘，未把 legacy alias 或 llm 私有 key 带入 cognition public surface。
+3. 旧 tool payload 风格字段已退出 `ActionDecision` 公共头，后续 Runtime 只能通过 `tool_intent_hint` 消费语义提示。
+
+### 下一步
+
+1. 进入 COG-TODO-010：定义 `ICognitionEngine` / `IResponseBuilder` / `IPlanner` / `IReasoner` / `IReflectionEngine` 接口。
+
 ## 记录 #473
 
 - 日期：2026-04-26
