@@ -95,6 +95,24 @@ dasall_add_cognition_unit_test(
 	PlannerNodeBudgetTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_reasoner_action_decision_unit_test
+	ReasonerActionDecisionTest.cpp
+	ReasonerActionDecisionTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_reasoner_clarification_threshold_unit_test
+	ReasonerClarificationThresholdTest.cpp
+	ReasonerClarificationThresholdTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_reasoner_conflict_resolution_unit_test
+	ReasonerConflictResolutionTest.cpp
+	ReasonerConflictResolutionTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -161,6 +179,21 @@ target_include_directories(dasall_planner_replan_unit_test
 )
 
 target_include_directories(dasall_planner_node_budget_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reasoner_action_decision_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reasoner_clarification_threshold_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reasoner_conflict_resolution_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

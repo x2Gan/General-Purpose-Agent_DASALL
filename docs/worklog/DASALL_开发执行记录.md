@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #481
+
+- 日期：2026-04-27
+- 阶段：cognition/reasoning stage implementation
+- 任务：COG-TODO-016 实现 Reasoner 与 DecisionProjector
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-016 依赖 COG-TODO-007、008、009、010、012、013、015；七项均已完成，因此本轮不再受 supporting type、stage policy、输入边界或 planning 输出缺口影响。
+2. 当前最小缺口是 reasoning 阶段仍没有独立 owner：执行 / 直答 / 澄清 / 安全收敛四类候选还停留在设计卡片和 runtime 映射表中，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 `Reasoner` / `DecisionProjector` 私有实现、三条 reasoner-focused tests 与最小 CMake 接线，不提前进入 017 的 `ReflectionEngine`。
+
+### 改动
+
+1. 新增 `cognition/src/reasoning/Reasoner.h`、`cognition/src/reasoning/Reasoner.cpp`，实现规则式 candidate scoring、clarification gate、budget-safe converge、active node 解析与阈值校验。
+2. 新增 `cognition/src/reasoning/DecisionProjector.h`、`cognition/src/reasoning/DecisionProjector.cpp`，统一投影 `tool_intent_hint`、`response_outline` 与 `candidate_scores`。
+3. 更新 `cognition/CMakeLists.txt`，将 reasoning sources 纳入 `dasall_cognition`。
+4. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_reasoner_action_decision_unit_test`、`dasall_reasoner_clarification_threshold_unit_test`、`dasall_reasoner_conflict_resolution_unit_test` 并补 `cognition/src` 私有 include。
+5. 新增 `tests/unit/cognition/ReasonerActionDecisionTest.cpp`、`tests/unit/cognition/ReasonerClarificationThresholdTest.cpp`、`tests/unit/cognition/ReasonerConflictResolutionTest.cpp`，覆盖执行 / 直答、澄清阈值、冲突与安全收敛路径。
+6. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-016-Reasoner与DecisionProjector收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_reasoner_action_decision_unit_test","dasall_reasoner_clarification_threshold_unit_test","dasall_reasoner_conflict_resolution_unit_test"])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_reasoner_action_decision_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_reasoner_clarification_threshold_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_reasoner_conflict_resolution_unit_test`
+   - 第一次结果：失败；定位到 terminal direct-response plan 被误判为 `ExecuteAction`。
+   - 修补同一 slice 后复跑：通过；三条 reasoner-focused unit tests 全部零输出退出。
+
+### 结果
+
+1. COG-TODO-016 已完成，reasoning 阶段现在具备独立私有 owner，可稳定在 `ExecuteAction`、`DirectResponse`、`AskClarification`、`ConvergeSafe` 之间做保守裁定。
+2. `DecisionProjector` 把 tool hint、response outline 与 candidate scores 统一收口到 `ActionDecision`，同时保持 cognition 不直接生成 ToolRequest。
+3. Runtime 第一跳需要的决策种类已经在 016 slice 内可自动化验证，不再依赖后续 façade 或 integration 才能发现基础 decision kind 偏差。
+
+### 下一步
+
+1. 进入 COG-TODO-017，实现 `ReflectionEngine`，围绕 latest observation、plan 偏差与 belief invalidation 收口 suggestion-only 反思语义。
+
 ## 记录 #480
 
 - 日期：2026-04-27
