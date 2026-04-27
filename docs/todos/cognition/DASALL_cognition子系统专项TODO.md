@@ -5,6 +5,8 @@
 适用范围：cognition/
 当前结论：认知详设已经具备 L3/L2 混合粒度拆分条件；COG-TODO-001 已把 `ICognitionEngine` 公共口径收敛为 `decide()` / `reflect()` / `IResponseBuilder::build()` 三入口，COG-BLK-001 已解阻；COG-TODO-002 已把 cognition↔llm stage taxonomy 收敛为 `planning/execution/reflection/response` canonical key 与 StageModelHint 映射表，COG-BLK-002 已解阻；COG-TODO-003 已把 runtime↔cognition caller fixture 与 ActionDecision→FSM 第一跳口径收敛到 Runtime 真实 FSM 状态 / guard table，COG-BLK-003 已解阻；COG-TODO-004 已冻结 `MockLLMManager`、`MockCognitionFixture`、failure/profile smoke fixture 的测试支撑口径，前置补设计 / 评审门禁已完成；COG-TODO-024 已新增真实 `MockLLMManager` / `MockCognitionFixture` header 与 narrow surface test，COG-BLK-004 已关闭；COG-TODO-020 已新增 `CognitionLlmBridge` 私有 owner 与 focused bridge tests；COG-TODO-021 已新增 `StageOutputValidator` 私有 owner、schema / graph / response focused tests，并把阶段输出合法性收口为 fail-closed 校验；COG-TODO-022 已新增 `CognitionTelemetry` 私有 owner、统一 stage fields、redaction 和 sink failure fail-open tests；COG-TODO-023 已把 `CognitionFacade` 从 stub 收敛为实际 orchestration owner，并以 flow / degraded / invalid focused tests 验证三入口闭环；cognition integration discoverability 继续由 COG-TODO-025 收口。
 
+评审后补充结论（2026-04-27）：COG-TODO-001 ~ 030 构成当前可执行基线，但代码评审发现 bridge 主链接入、profile 投影闭环、Runtime 语义信号消费、结构化 schema 校验和 integration 证据可信度仍存在生产可用性缺口；本次新增 COG-TODO-031 ~ 038 作为后续补强任务，不改变 001 ~ 030 的历史完成状态。
+
 ## 1. 文档头
 
 本文档严格基于以下输入生成：
@@ -165,6 +167,7 @@
 | mocks 支撑、integration 拓扑、runtime happy path | 8.1、8.2、9.1；11.2 | 测试支撑 / topology / smoke | COG-TODO-024 ~ 026 | 先把测试脚手架和 discoverability 接入，再做主成功链 |
 | 交互契约、失败注入、profile 兼容 | 6.14、6.15、6.16；7.1 COG-D10、D12 | 集成 / 失败 / profile gate | COG-TODO-027 ~ 029 | 验证 runtime↔cognition↔llm 三方接缝、故障和 profile 差异 |
 | Gate 与交付证据回写 | 9.4、11.2、12.2 | 文档 / 交付证据 | COG-TODO-030 | 收敛命令证据、阻塞变化、风险残留 |
+| 评审后生产闭环补强 | 6.10、6.13.4、6.14、6.15、6.16；9.1、9.4 | 接线 / 集成 / 负例 / 证据补强 | COG-TODO-031 ~ 038 | 把 bridge 主链接入、profile 生产投影、Runtime 语义信号消费、结构化 schema 校验和真实 gate evidence 收敛为后续补强闭环 |
 
 ### 5.2 映射覆盖性检查
 
@@ -173,11 +176,11 @@
 | 接口定义类任务 | 是 | COG-TODO-007 ~ 010 |
 | 数据结构定义类任务 | 是 | COG-TODO-007 ~ 009 |
 | 生命周期与初始化类任务 | 是 | COG-TODO-005、011、012、023 |
-| 适配器 / 桥接类任务 | 是 | COG-TODO-020、022、024 |
-| 异常与错误处理类任务 | 是 | COG-TODO-013、017、021、028 |
-| 配置与 Profile 裁剪类任务 | 是 | COG-TODO-001、002、011、012、029 |
-| 测试与门禁类任务 | 是 | COG-TODO-006、024 ~ 030 |
-| 文档 / 交付证据回写类任务 | 是 | COG-TODO-001 ~ 004、030 |
+| 适配器 / 桥接类任务 | 是 | COG-TODO-020、022、024、031 |
+| 异常与错误处理类任务 | 是 | COG-TODO-013、017、021、028、034、035 |
+| 配置与 Profile 裁剪类任务 | 是 | COG-TODO-001、002、011、012、029、032 |
+| 测试与门禁类任务 | 是 | COG-TODO-006、024 ~ 030、036、037 |
+| 文档 / 交付证据回写类任务 | 是 | COG-TODO-001 ~ 004、030、038 |
 
 ## 6. 原子任务清单
 
@@ -233,6 +236,21 @@
 | COG-TODO-029 | Done | 验证 CognitionProfileCompatibility | 认知详设 6.10.2、9.1、9.4；llm deliverable 035；profiles 详设 | `CognitionProfileCompatibilityTest`；五档 profile 策略 | L2 | 新增 `tests/integration/cognition/CognitionProfileCompatibilityTest.cpp` | desktop_full / cloud_full / edge_balanced / edge_minimal / factory_test 下的阶段启停、plan cap、fallback 与 route 策略 | integration：五档 profile 都有明确通过或拒绝结论 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "CognitionProfileCompatibilityTest" --output-on-failure` | COG-TODO-002、011、012、020、023、024、025 | COG-BLK-002、COG-BLK-004 | 已完成 | docs/todos/cognition/deliverables/COG-TODO-029-CognitionProfileCompatibility收敛.md；`tests/integration/cognition/CognitionProfileCompatibilityTest.cpp`；`tests/integration/cognition/CMakeLists.txt` | 已完成：`CognitionProfileCompatibilityTest` 通过，五档 profile 的策略差异通过统一投影视图收敛且给出明确通过/拒绝结论 |
 | COG-TODO-030 | Done | 回写 cognition 专项 Gate 与交付证据 | 认知详设 9.4、11.2、12.2；文档治理基线 | Gate-COG-*；COG-BLK-* | L2 | 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md` | Gate 结论、阻塞变化、风险残留、命令证据 | process：全部 gate 命令、通过/残余结论、后续动作回写齐备 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_cognition dasall_unit_tests dasall_contract_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoopSmoke|GoalContractFieldContractTest|BeliefStateContractTest|ContextPacketFieldContractTest|ObservationContractTest|ReflectionDecisionContractTest|AgentResultContractTest|MainFlowContractE2ETest"` | COG-TODO-026 ~ 029 | 无 | 已完成 | 更新后的专项 TODO、对应 deliverables、docs/worklog/DASALL_开发执行记录.md；`docs/todos/cognition/deliverables/COG-TODO-030-cognition专项Gate与交付证据回写收敛.md` | 已完成：`ctest -N` 发现 733 tests；聚焦 gate regex `25/25` 通过；全量 integration 聚合存在 infra/plugin 既有残余，已在交付物与 worklog 回写风险及后续动作 |
 
+### 6.5 评审后补强任务（COG-TODO-031 ~ 038）
+
+说明：本节来源于 2026-04-27 对 `docs/todos/cognition/deliverables/`、`cognition/`、单元测试与集成测试的专项评审。任务目标是把“已可编译、可聚焦测试”的 cognition 基线继续推进到更可信的生产闭环；新增任务不得回改 COG-TODO-001 ~ 030 的 Done 结论，只补齐后续缺口和证据。
+
+| ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| COG-TODO-031 | Todo | 串联 CognitionLlmBridge 到 cognition 主链 | 评审发现：`CognitionLlmBridge` 已实现但 `CognitionFacade` / `ResponseBuilder` 生产路径未注入 `ILLMManager`，当前 bridge tests 只证明独立投影 | 6.13.4、6.14.2；COG-TODO-020、023 | L2 | 为 cognition composition root 增加非破坏性依赖注入面，允许 `CognitionFacade` 与 `ResponseBuilder` 在 planning / execution / reflection / response canonical stage 中消费 `CognitionLlmBridge`；保留无 LLM 时的规则 / 模板降级路径 | `create_cognition_engine()`、`create_response_builder()`、`CognitionFacade`、`ResponseBuilder`、`CognitionLlmBridge`、`MockLLMManager` | unit + integration：mock llm manager 记录 stage 调用；bridge unavailable 显式降级或失败；response path 不再把 observation projection 伪装为 LLM projection | `cmake --build build-ci --target dasall_cognition dasall_cognition_facade_flow_unit_test dasall_response_builder_template_fallback_unit_test dasall_cognition_llm_bridge_projection_unit_test && ctest --test-dir build-ci -R "CognitionFacadeFlowTest|ResponseBuilder.*|CognitionLlmBridgeProjectionTest" --output-on-failure` | COG-TODO-020、023、024 | 需要确认 runtime dependency_set 是否已有可传入 `ILLMManager` 的 composition root | 若当前 runtime composition root 缺少 llm manager，先以 cognition-side dependency struct 和 tests/mocks 闭环，不扩大 shared contracts | docs/todos/cognition/deliverables/COG-TODO-031-CognitionLlmBridge主链接入收敛.md；相关 cognition 源码与测试 | 真实主链至少一条 focused test 能证明 `CognitionLlmBridge::invoke_stage()` 被 façade 或 response builder 通过 canonical stage 调用；无 bridge 时行为仍 deterministic 且有 diagnostics |
+| COG-TODO-032 | Todo | 收敛 Runtime profile 到 CognitionConfig 的生产注入闭环 | 评审发现：profile compatibility 集成测试主要切换 `profile_id`，未断言 `CognitionConfigProjector` 投影结果被 runtime 初始化路径消费 | 6.10.2、6.13.1、6.15.3；COG-TODO-011、012、029 | L2 | 在 runtime 初始化或 cognition factory 边界显式执行 `RuntimePolicySnapshot -> CognitionConfig` 投影，并把 `StagePolicyResolver` 使用的 config 与当前 profile 绑定；缺失 canonical stage route 时 fail-closed | `AgentFacade::init()`、runtime dependency composition、`CognitionConfigProjector`、`StagePolicyResolver`、`RuntimePolicySnapshot` | integration：五档 profile 断言 plan cap、fallback、deadline、stage route 与 `factory_test` 模板策略真实生效；缺失 route 负例被拒绝 | `cmake --build build-ci --target dasall_cognition_config_projection_unit_test dasall_stage_policy_resolver_profile_diff_unit_test dasall_cognition_profile_compatibility_integration_test && ctest --test-dir build-ci -R "CognitionConfigProjectionTest|StagePolicyResolverProfileDiffTest|CognitionProfileCompatibilityTest" --output-on-failure` | COG-TODO-011、012、029 | 当前 true integration fixture 可能未构造完整 canonical stage_routes | 先补 profile fixture 与 projection assertions，再接 runtime composition root | docs/todos/cognition/deliverables/COG-TODO-032-RuntimeProfile到CognitionConfig注入收敛.md；profile integration 测试更新 | `CognitionProfileCompatibilityTest` 不只检查 terminal status，还能证明五档 profile 的 cognition 差异被实际消费；placeholder / fake profile 结论不能计入 gate |
+| COG-TODO-033 | Todo | Runtime 消费 BeliefUpdateHint 与 ContextSufficiencySignal | 评审发现：`CognitionDecisionResult` 已携带 belief / context 信号，但 `AgentOrchestrator` 主链未证明写回与 context reload recommendation 被消费 | 6.14.4、6.14.5、6.16；COG-TODO-018、027 | L2 | 在 Runtime 侧增加 bounded best-effort 处理：`BeliefUpdateHint` 只经 Memory seam 写回，不由 cognition 直接访问 Memory；`ContextSufficiencySignal.recommend_context_reload` 触发受预算和重试次数约束的上下文刷新或澄清降级 | `AgentOrchestrator::run_once()`、runtime cognition handoff helper、`BeliefUpdateHint`、`ContextSufficiencySignal`、memory mock / true integration fixture | unit + integration：可观察到 memory writeback 调用或事实落库；reload recommendation 触发一次受限重取；写回失败不覆盖主决策错误 | `cmake --build build-ci --target dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -R "RuntimeCognitionLoopSmokeTest|CognitionRuntimeInteractionContractTest|Memory.*Contract|BeliefStateContractTest" --output-on-failure` | COG-TODO-018、026、027 | Memory 写回 API 若无适配 BeliefUpdateHint 的入口，需要先做 runtime-local projector | 不把 BeliefUpdateHint 推入 shared contracts；仅在 runtime boundary 做投影 | docs/todos/cognition/deliverables/COG-TODO-033-Runtime消费Belief与Context信号收敛.md；runtime / fixture / integration 更新 | interaction contract 能断言 belief hint 和 context signal 被 Runtime 消费，而不是仅由 mock cognition 返回后丢弃 |
+| COG-TODO-034 | Todo | Runtime 消费 ReflectionDecision 并统一 cognition 错误面 | 评审发现：`AgentOrchestrator` 当前调用 `reflect()` 后丢弃结果并固定继续；同时 decision result 若同时含 action 与 error 缺少 fail-closed 断言 | 6.14.1、6.14.3、6.15；ADR-007；COG-TODO-017、027、028 | L2 | Runtime 显式解释 `CognitionReflectionResult.reflection_decision`，将 Continue / RetryStep / Replan / AbortSafe 映射到现有 FSM 与 RecoveryManager 准入；同时校验 cognition result 中 `error_info` 与可执行 action 的互斥规则 | `AgentOrchestrator::run_once()`、`make_reflection_request()`、`CognitionDecisionResult`、`CognitionReflectionResult`、`ReflectionDecision` | unit + integration：reflection abort 停止主链；retry / replan 进入既有恢复或规划路径；error+execute 冲突 fail-closed；cognition error 优先级可追溯 | `cmake --build build-ci --target dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -R "RuntimeCognitionLoopSmokeTest|CognitionRuntimeInteractionContractTest|CognitionFailureInjectionIntegrationTest|ReflectionDecisionContractTest" --output-on-failure` | COG-TODO-017、026、027、028 | 需要避免 cognition 越权执行恢复动作 | 只由 Runtime / RecoveryManager 解释 suggestion，cognition 继续保持 suggestion-only | docs/todos/cognition/deliverables/COG-TODO-034-Runtime反思决策与错误面收敛.md；runtime / failure integration 更新 | `reflect()` 结果不再被丢弃；所有 reflection 分支与冲突结果都有 deterministic terminal behavior 和测试覆盖 |
+| COG-TODO-035 | Todo | 将 StageOutputValidator 升级为结构化 JSON / schema 校验 | 评审发现：当前 validator 对 llm payload 的 required field / enum / numeric / list 检查依赖字符串扫描，无法可靠处理空白、转义、嵌套和伪字段 | 6.13.4、6.15.1；COG-TODO-021 | L2 | 使用仓库认可的 JSON 解析能力或新增 cognition 私有窄 JSON 解析工具，把 `StageOutputValidator::validate_stage_output()` 从 substring 判定升级为结构化字段遍历；schema spec 继续保持 module-private | `StageOutputValidator`、`StageSchemaSpec`、`ValidationIssueSet`、`StageLlmCallResult.response.content_payload` | unit：覆盖合法 JSON 空白 / 顺序变化、字符串转义伪字段、嵌套数组、字段类型错误、malformed JSON fail-closed | `cmake --build build-ci --target dasall_stage_output_validator_schema_unit_test dasall_stage_output_validator_plan_graph_invariant_unit_test dasall_stage_output_validator_response_envelope_unit_test && ctest --test-dir build-ci -R "StageOutputValidator.*" --output-on-failure` | COG-TODO-021、028 | 若仓库当前无 JSON 依赖，需要评估是否引入三方库或实现最小 parser | 优先复用既有依赖；若新增 parser，仅限 cognition private helper，不暴露为 shared utility | docs/todos/cognition/deliverables/COG-TODO-035-StageOutputValidator结构化校验收敛.md；validator 与 tests 更新 | 伪字段字符串不能绕过 schema；malformed JSON 必须 fail-closed；既有 graph / response invariant tests 保持通过 |
+| COG-TODO-036 | Todo | 移除 cognition integration placeholder alias 并重建证据口径 | 评审发现：`CognitionProfileCompatibilityIntegrationTest` 由 `cmake -E true` placeholder 注册，COG-TODO-030 的聚焦 gate 统计可能把 alias 当作真实测试 | 8.1、9.1、9.4；COG-TODO-025、030 | L2 | 删除或改名为非 gate 的 discoverability alias；`DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS` 只包含真实 executable target；更新 ctest regex 与证据文档，避免 placeholder 计入通过率 | `tests/integration/cognition/CMakeLists.txt`、`CognitionProfileCompatibilityTest`、Gate-COG-10 evidence | process + integration：`ctest -N` 中 cognition gate 名称均可回溯到真实 executable；无 `cmake -E true` cognition gate | `cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -N | rg "Cognition" && ! rg -n "CognitionProfileCompatibilityIntegrationTest|cmake -E true" tests/integration/cognition docs/todos/cognition/deliverables/COG-TODO-030-cognition专项Gate与交付证据回写收敛.md` | COG-TODO-025、029、030 | 需要确认历史别名是否被外部 CI 引用 | 如 CI 需要旧名，改为真实 executable 的 add_test alias，不允许 `cmake -E true` | docs/todos/cognition/deliverables/COG-TODO-036-cognitionIntegration证据口径收敛.md；CMake 与 gate 文档更新 | cognition 聚焦 gate 的 test count 不再包含空跑测试；所有通过项都有真实二进制或真实测试命令 |
+| COG-TODO-037 | Todo | 补齐评审缺口的负例回归矩阵 | 评审发现：现有 focused tests 多验证 happy path 和独立组件，缺少能防止 bridge 未接入、profile 未投影、runtime 丢弃语义信号、schema 字符串绕过的回归矩阵 | 9.1、9.2、9.4；COG-TODO-031 ~ 036 | L2 | 新增或增强 cognition review regression tests，覆盖本轮评审发现的关键负例；把这些 tests 纳入 cognition gate regex | `tests/unit/cognition/*`、`tests/integration/cognition/*`、`tests/unit/runtime/*`、`tests/fixtures/runtime/*` | unit + integration：至少覆盖 bridge not invoked 失败、missing canonical route fail-closed、belief/context signal observed、reflection abort observed、schema pseudo-field rejected、placeholder alias absent | `cmake --build build-ci --target dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci --output-on-failure -R "Cognition.*(Bridge|Profile|Review|Interaction|Failure)|RuntimeCognitionLoopSmoke|StageOutputValidator"` | COG-TODO-031 ~ 036 | 依赖前序补强任务提供可观察 seam | 每个负例先绑定一个明确 owner，不在同一测试里混合多个失败原因 | docs/todos/cognition/deliverables/COG-TODO-037-cognition评审负例矩阵收敛.md；新增 review regression 测试 | 任一关键缺口回归时 focused gate 能失败；负例测试说明清楚失败归因，不依赖日志人工判断 |
+| COG-TODO-038 | Todo | 回写评审后 Gate、worklog 与残余风险 | 评审发现：COG-TODO-030 已记录聚焦 gate 25/25 和全量 integration 残余，但未包含本轮评审发现的后继补强项与证据修正 | 9.4、10.1、11.2、12.2 | L2 | 更新专项 TODO、对应 deliverables、`docs/worklog/DASALL_开发执行记录.md`，补齐 Gate-COG-11 结论、COG-R13 ~ R18 状态、全量 integration 残余与后续动作 | Gate-COG-11、COG-R13 ~ R18、COG-TODO-031 ~ 037 evidence | process：文档能追溯每个评审发现的任务、代码证据、测试命令和剩余风险 | `rg -n "COG-TODO-031|Gate-COG-11|COG-R13|CognitionProfileCompatibilityIntegrationTest|cmake -E true" docs/todos/cognition docs/worklog/DASALL_开发执行记录.md tests/integration/cognition/CMakeLists.txt` | COG-TODO-031 ~ 037 | 无 | 所有前序补强任务有明确通过或残余结论 | docs/todos/cognition/deliverables/COG-TODO-038-cognition评审后Gate与风险回写收敛.md；专项 TODO 与 worklog 更新 | 文档不再宣称“生产全量 ready”而缺少证据；001 ~ 030 基线、031 ~ 037 补强结果和残余风险三者边界清晰 |
+
 ## 7. 执行顺序建议
 
 ### 7.1 串并行编排（Step 5 输出）
@@ -247,6 +265,7 @@
 | F 测试支撑与拓扑 | COG-TODO-024 ~ 025 | 024 先行；025 紧随 | 没有认知专用 mocks 和 integration discoverability，就不推进 happy path / failure / profile gate |
 | G 运行链路与质量门 | COG-TODO-026 ~ 029 | 026 先 happy path；027 再交互契约；028 / 029 可并行 | 先打通主成功链，再收口失败注入与 profile 兼容 |
 | H 交付证据 | COG-TODO-030 | 串行 | 所有 Gate 通过 / 残余风险与 blocker 状态集中回写 |
+| I 评审后补强闭环 | COG-TODO-031 ~ 038 | 031 / 032 先补生产接线；033 / 034 串联 Runtime 语义消费；035 / 036 可并行；037 统一负例矩阵；038 收口证据 | 把“可执行基线”推进为更可信的生产可用闭环，避免 bridge、profile、runtime signal、schema 和 gate evidence 只停留在局部证明 |
 
 ### 7.2 必过门禁表
 
@@ -262,6 +281,7 @@
 | Gate-COG-08 | 详设 Gate-04 | Runtime happy path 门 | COG-TODO-026 后 | `RuntimeCognitionLoopSmokeTest` 与 `CognitionRuntimeIntegrationTest` 通过 | 不宣称主链 ready，回退到 facade / fixture / topology |
 | Gate-COG-09 | 详设 Gate-05/09 | 交互契约与失败门 | COG-TODO-027 ~ 028 后 | 交互契约、错误回流、failure injection 全部通过且 shared contracts 不回退 | 回退到 runtime seam / schema validator / bridge |
 | Gate-COG-10 | 详设 Gate-06 | Profile 兼容与证据门 | COG-TODO-029 ~ 030 后 | 五档 profile 结论明确，Gate 证据与残余风险全部回写 | 保持专项为“部分可执行”，不得宣称全量 ready |
+| Gate-COG-11 | 评审后新增 | 生产闭环补强门 | COG-TODO-031 ~ 038 后 | bridge 主链接入、profile 生产投影、Runtime 语义信号消费、structured schema、真实 integration evidence 与负例矩阵全部通过 | 保持专项为“可执行基线 + 待补强”，不得宣称 production ready |
 
 ## 8. 阻塞项与解阻条件
 
@@ -309,12 +329,13 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
 | Gate-COG-08 | 详设 Gate-04 | runtime happy path 通过 | COG-TODO-026 |
 | Gate-COG-09 | 详设 Gate-05/09 | 交互契约与 failure injection 通过 | COG-TODO-027 ~ 028 |
 | Gate-COG-10 | 详设 Gate-06 | profile compatibility 与交付证据回写完成 | COG-TODO-029 ~ 030 |
+| Gate-COG-11 | 评审后新增 | bridge / profile / runtime signals / reflection / schema / evidence 的生产闭环补强通过 | COG-TODO-031 ~ 038 |
 
 ## 10. 风险与回退策略
 
 ### 10.1 风险表
 
-说明：COG-R01 ~ R08 与认知详设 §11.1 保持 ID 一致，确保跨文档可追溯。COG-R09 ~ R12 为本专项 TODO 新增的工程执行风险。
+说明：COG-R01 ~ R08 与认知详设 §11.1 保持 ID 一致，确保跨文档可追溯。COG-R09 ~ R12 为本专项 TODO 新增的工程执行风险；COG-R13 ~ R18 为 2026-04-27 评审后新增的生产闭环补强风险。
 
 | Risk ID | 对应设计 Risk | 风险 | 等级 | 影响 | 缓解动作 |
 |---|---|---|---|---|---|
@@ -330,6 +351,12 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
 | COG-R10 | TODO 新增 | 公共接口口径继续漂移，导致 runtime 消费反复返工 | High | interface / types / facade 全链返工 | 001 先行，任何实现前先统一 `step()` vs 三入口口径 |
 | COG-R11 | TODO 新增 | cognition↔llm stage taxonomy 不一致，桥接和 profile 测试引入隐藏映射 | High | bridge / projector / profile gate 不可信 | 002 先行，StageModelHint 与 `stage_routes` 使用同一 taxonomy |
 | COG-R12 | TODO 新增 | telemetry 泄漏 provider-private 字段或原始上下文 | High | 违反 llm / ADR 边界，形成合规与调试风险 | 020 / 021 / 022 必须覆盖 redaction 和 fail-open |
+| COG-R13 | 评审后新增 | `CognitionLlmBridge` 只在 focused tests 中存在，主链未真实调用 | High | llm bridge、schema 与 profile route 证据失真 | COG-TODO-031 通过 dependency injection 和 mock recording 证明主链调用 |
+| COG-R14 | 评审后新增 | profile compatibility 只验证 terminal status，未证明 profile→cognition 投影被消费 | High | edge_minimal / factory_test 等策略差异可能虚假通过 | COG-TODO-032 强制断言 `CognitionConfigProjector` 与 `StagePolicyResolver` 的生产注入结果 |
+| COG-R15 | 评审后新增 | Runtime 丢弃 `BeliefUpdateHint`、`ContextSufficiencySignal` 或 `ReflectionDecision` | High | cognition 返回的语义信号无法影响 memory、context refresh、retry / abort 行为 | COG-TODO-033 / 034 补 runtime 消费路径和交互契约断言 |
+| COG-R16 | 评审后新增 | `StageOutputValidator` 依赖字符串扫描，schema 可被伪字段或 malformed JSON 绕过 | High | LLM 输出校验不可信，failure gate 可能漏判 | COG-TODO-035 升级结构化 JSON / schema 校验并补负例 |
+| COG-R17 | 评审后新增 | integration placeholder alias 被计入 cognition gate 通过率 | Medium | 交付证据膨胀，真实测试覆盖被高估 | COG-TODO-036 移除或转换为真实 executable alias，重建 test count |
+| COG-R18 | 评审后新增 | COG-TODO-030 证据与后续缺口边界不清，容易误读为 production ready | Medium | 后续补强优先级丢失，全量 integration 残余被弱化 | COG-TODO-038 回写 Gate-COG-11、风险状态和 worklog |
 
 ### 10.2 回退策略
 
@@ -341,6 +368,7 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
 | response llm 路径不稳定 | ResponseBuilder 保持单次响应 + 模板降级，不引入 streaming |
 | shared admission 被要求提前推进 | 明确退回 contracts 评审流程，本专项继续仅维护 cognition module public surface |
 | edge_minimal Planner/Reasoner 降级路径缺失 | Planner/Reasoner 可降级为 rule-based 固定路径（skip plan / hardcoded decide），通过 012 / 029 验证降级行为而非关闭 cognition |
+| 评审后补强任务影响既有 Done 记录 | 保留 COG-TODO-001 ~ 030 的完成证据不回写为失败；新增缺口统一进入 COG-TODO-031 ~ 038 和 Gate-COG-11 |
 
 ## 11. 可行性结论
 
@@ -353,6 +381,7 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
    - 然后并行推进 COG-TODO-005 ~ 019 的 module-local / module-public Build 任务。
    - 再收口 COG-TODO-020 ~ 029 的跨模块接缝与 Gate。
 5. 001 ~ 004 与 024 已完成前置解阻，本专项可按当前文档进入 Build 实施；在 COG-TODO-025 完成前，不应把 runtime happy path、profile gate 或 llm integration discoverability 宣称为 ready。
+6. 评审后新增的 COG-TODO-031 ~ 038 是 001 ~ 030 之后的生产闭环补强：它们不否定当前可执行基线，但在完成 Gate-COG-11 前，不应把 cognition 宣称为已具备完整 production-ready 证据。
 
 ## 12. 未决问题处置表
 
