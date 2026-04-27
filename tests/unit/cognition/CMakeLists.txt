@@ -113,6 +113,24 @@ dasall_add_cognition_unit_test(
 	ReasonerConflictResolutionTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_reflection_engine_decision_unit_test
+	ReflectionEngineDecisionTest.cpp
+	ReflectionEngineDecisionTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_reflection_engine_belief_invalidation_unit_test
+	ReflectionEngineBeliefInvalidationTest.cpp
+	ReflectionEngineBeliefInvalidationTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_reflection_engine_conservative_abort_unit_test
+	ReflectionEngineConservativeAbortTest.cpp
+	ReflectionEngineConservativeAbortTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -194,6 +212,21 @@ target_include_directories(dasall_reasoner_clarification_threshold_unit_test
 )
 
 target_include_directories(dasall_reasoner_conflict_resolution_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reflection_engine_decision_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reflection_engine_belief_invalidation_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reflection_engine_conservative_abort_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #482
+
+- 日期：2026-04-27
+- 阶段：cognition/reflection stage implementation
+- 任务：COG-TODO-017 实现 ReflectionEngine
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-017 依赖 COG-TODO-007、008、009、010、012、013；六项均已完成，因此本轮 reflection 实现不再受 supporting request types、shared `ReflectionDecision` 边界或 perception/planning 输入缺口影响。
+2. 当前最小缺口是 cognition 仍没有独立 reflection owner：failure attribution、goal gap、belief invalidation 与 suggestion-only recovery semantics 仍停留在设计卡片，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 `ReflectionEngine` 私有实现、三条 reflection-focused tests 与最小 CMake 接线，不提前进入 018 的 `BeliefUpdateSynthesizer`。
+
+### 改动
+
+1. 新增 `cognition/src/reflection/ReflectionEngine.h`、`cognition/src/reflection/ReflectionEngine.cpp`，实现 failure classification、goal-gap 评估、belief invalidation 检测、`ReflectionDecision` 投影与 contract 自检。
+2. 更新 `cognition/CMakeLists.txt`，将 reflection source 纳入 `dasall_cognition`。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_reflection_engine_decision_unit_test`、`dasall_reflection_engine_belief_invalidation_unit_test`、`dasall_reflection_engine_conservative_abort_unit_test` 并补 `cognition/src` 私有 include。
+4. 新增 `tests/unit/cognition/ReflectionEngineDecisionTest.cpp`、`tests/unit/cognition/ReflectionEngineBeliefInvalidationTest.cpp`、`tests/unit/cognition/ReflectionEngineConservativeAbortTest.cpp`，覆盖 retry/continue、belief invalidation replan 与高风险 abort-safe。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-017-ReflectionEngine收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_reflection_engine_decision_unit_test","dasall_reflection_engine_belief_invalidation_unit_test","dasall_reflection_engine_conservative_abort_unit_test"])`
+   - 第一次结果：失败；局部编译错误为 `ReflectionEngine::analyze()` 签名误加 `const`，未真正 override `IReflectionEngine::analyze()`。
+   - 修补同一 slice 后复跑：通过。
+2. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_reflection_engine_decision_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_reflection_engine_belief_invalidation_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_reflection_engine_conservative_abort_unit_test`
+   - 结果：通过；三条 reflection-focused unit tests 全部零输出退出。
+
+### 结果
+
+1. COG-TODO-017 已完成，cognition 现在具备独立 `ReflectionEngine` owner，可稳定在 `Continue`、`RetryStep`、`Replan`、`AbortSafe` 之间做 suggestion-only 裁定。
+2. `ReflectionEngine` 会在输出 `ReflectionDecision` 后自检 shared contract，并在内部投影失配时回落到最小合法 `AbortSafe` suggestion，避免无效对象穿透到 Runtime。
+3. ADR-007 边界保持成立：reflection 仍只负责 failure semantics 与 hint，不拥有恢复 admission、执行或 scheduling 字段。
+
+### 下一步
+
+1. 进入 COG-TODO-018，实现 `BeliefUpdateSynthesizer`，围绕 `ReflectionDecision`、新 observation 与既有 `BeliefState` 的合并策略收口 `BeliefUpdateHint`。
+
 ## 记录 #481
 
 - 日期：2026-04-27
