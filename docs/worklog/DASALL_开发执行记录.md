@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #489
+
+- 日期：2026-04-27
+- 阶段：cognition/facade orchestration implementation
+- 任务：COG-TODO-023 实现 CognitionFacade
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-020、021、022 已分别冻结 bridge supporting surface、validator fail-closed result surface 和 telemetry stage field owner，因此 023 已具备把 façade 从 stub 收口为 orchestration owner 的最小实现条件。
+2. 当前最小缺口不再是单个 stage owner，而是 cognition 仍缺少统一的 decide / reflect 主链编排、invalid-input 显式错误出口保持，以及 perception routing gap 下的受控降级路径。
+3. 本轮只收敛 façade orchestration、两条 façade-focused tests、最小 CMake 接线和证据回写，不提前进入 runtime smoke / interaction contract。
+
+### 改动
+
+1. 更新 `cognition/src/CognitionFacade.cpp`，将 façade 从最小 stub 改为可执行 orchestration owner：`decide()` 串联 `PerceptionEngine -> Planner -> StageOutputValidator(plan) -> Reasoner -> StageOutputValidator(action)`，`reflect()` 串联 `ReflectionEngine -> BeliefUpdateSynthesizer`，并统一发射 telemetry started/completed/failed。
+2. 在 façade 中补齐 controlled degrade path：当 perception 无法生成安全输出且 `degraded_path_allowed=true` 时，退化为 `AskClarification`，只返回 clarification suggestion、belief update hint 和 context reload 建议，不越权执行外部动作。
+3. 恢复 invalid-input compatibility：`apply_invalid_decide_result()` 继续把 validator `missing_fields` 回写到 `ContextSufficiencySignal.missing_evidence_hints`，保持 013 建立的显式错误出口不回归。
+4. 新增 `tests/unit/cognition/CognitionFacadeFlowTest.cpp`，通过 `create_cognition_engine()` + `create_response_builder()` 组合验证模块级三入口闭环。
+5. 新增 `tests/unit/cognition/CognitionFacadeDegradedModeTest.cpp`，覆盖 perception routing gap 下的 clarification degrade path；更新 `tests/unit/cognition/CMakeLists.txt` 注册两条新测试并补 fixture 依赖。
+6. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-023-CognitionFacade收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_facade_invalid_input_unit_test","dasall_cognition_facade_flow_unit_test","dasall_cognition_facade_degraded_mode_unit_test"])`
+   - 第一次结果：失败；暴露的都是 023 本地接口对齐问题，包括 contracts optional shape、`ErrorInfo.source_ref` 字段、`ValidationResult.ok` 访问和 telemetry `[[nodiscard]]` 处理。
+   - 同一 slice 修正后复跑：通过；三个 façade-focused test targets 全部编译链接成功。
+2. `RunCtest_CMakeTools(tests=["CognitionFacadeInvalidInputTest","CognitionFacadeFlowTest","CognitionFacadeDegradedModeTest"])`
+   - 结果：失败，工具返回通用错误 `生成失败`；与仓库既有 CTest 工具态噪声一致，按仓库基线回退到显式二进制执行。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_facade_invalid_input_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_facade_flow_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_facade_degraded_mode_unit_test`
+   - 第一次结果：失败；`CognitionFacadeInvalidInputTest` 暴露 missing field projection 回归。
+   - 回补 `missing_evidence_hints` 后复跑：通过；三条 façade 测试二进制全部零输出退出。
+
+### 结果
+
+1. COG-TODO-023 已完成，cognition 现在具备实际可执行的 `CognitionFacade` orchestration owner，而不是硬编码 stub。
+2. façade 保持了公共边界：response 入口仍由独立 `IResponseBuilder` 提供，023 只通过模块级组合测试验证三入口闭环，没有回卷 public API。
+3. façade 保持了架构边界：没有自建 retry/circuit breaker，没有直接提交最终 `AgentResult`，也没有越权触发 runtime 恢复或外部执行。
+
+### 下一步
+
+1. 执行 git scope 校验并提交/推送 023 相关文件。
+2. 进入 COG-TODO-025 / 026，优先完成 cognition integration discoverability 与 runtime 主成功链 smoke。
+
 ## 记录 #488
 
 - 日期：2026-04-27

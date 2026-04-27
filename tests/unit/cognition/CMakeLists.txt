@@ -66,6 +66,18 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_cognition_facade_flow_unit_test
+	CognitionFacadeFlowTest.cpp
+	CognitionFacadeFlowTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_cognition_facade_degraded_mode_unit_test
+	CognitionFacadeDegradedModeTest.cpp
+	CognitionFacadeDegradedModeTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_perception_engine_unit_test
 	PerceptionEngineTest.cpp
 	PerceptionEngineTest
@@ -272,6 +284,16 @@ target_include_directories(dasall_perception_boundary_validation_unit_test
 		${CMAKE_SOURCE_DIR}/cognition/src
 )
 
+target_include_directories(dasall_cognition_facade_flow_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}
+)
+
+target_include_directories(dasall_cognition_facade_degraded_mode_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}
+)
+
 target_include_directories(dasall_mock_cognition_fixture_surface_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
@@ -348,6 +370,16 @@ target_link_libraries(dasall_stage_output_validator_plan_graph_invariant_unit_te
 )
 
 target_link_libraries(dasall_stage_output_validator_response_envelope_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_cognition_facade_flow_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_cognition_facade_degraded_mode_unit_test
 	PRIVATE
 		dasall_llm
 )

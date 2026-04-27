@@ -1,149 +1,492 @@
 #include "ICognitionEngine.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "belief/BeliefUpdateSynthesizer.h"
+#include "observability/CognitionTelemetry.h"
+#include "perception/PerceptionEngine.h"
+#include "planning/Planner.h"
+#include "reasoning/Reasoner.h"
+#include "reflection/ReflectionEngine.h"
 #include "validation/InputBoundaryValidator.h"
+#include "validation/StageOutputValidator.h"
 
 namespace dasall::cognition {
 namespace {
 
-constexpr const char* kDefaultToolName = "agent.dataset";
+using decision::ActionDecision;
+using decision::ActionDecisionKind;
+using observability::DecisionTelemetryRecord;
+using observability::StageTelemetryContext;
+using observability::TelemetryEmitResult;
+using validation::InputBoundaryValidationResult;
 
-[[nodiscard]] std::string choose_tool_name(const contracts::ContextPacket& context_packet) {
-  if (context_packet.active_tools.has_value()) {
-    const auto& tools = *context_packet.active_tools;
-    const auto selected = std::find_if(tools.begin(), tools.end(), [](const std::string& tool) {
-      return !tool.empty();
-    });
-    if (selected != tools.end()) {
-      return *selected;
-    }
+[[nodiscard]] std::string default_response_summary(const CognitionStepRequest& request) {
+  if (request.context_packet.current_goal_summary.has_value() &&
+      !request.context_packet.current_goal_summary->empty()) {
+    return *request.context_packet.current_goal_summary;
   }
 
-  return kDefaultToolName;
+  return *request.goal_contract.goal_description;
 }
 
-[[nodiscard]] bool should_recommend_context_reload(
-    const validation::InputBoundaryValidationResult& validation_result) {
-  return std::any_of(validation_result.missing_fields.begin(),
-                     validation_result.missing_fields.end(),
-                     [](const std::string& field_name) {
-                       return field_name.starts_with("context_packet.") ||
-                              field_name.starts_with("belief_state.") ||
-                              field_name.starts_with("latest_observation.");
-                     });
+[[nodiscard]] std::string require_goal_id(const contracts::GoalContract& goal_contract) {
+  return goal_contract.goal_id.value_or(std::string{});
+}
+
+[[nodiscard]] std::string derive_model_hint_tier(const CognitionStepRequest& request) {
+  if (request.execution_hints.low_latency_preferred) {
+    return "economy";
+  }
+
+  if (request.budget_context.has_value() && request.budget_context->near_budget_limit) {
+    return "balanced";
+  }
+
+  return "standard";
+}
+
+[[nodiscard]] std::string derive_model_hint_tier(const ReflectionRequest& request) {
+  if (request.context_packet.policy_digest.has_value() &&
+      request.context_packet.policy_digest->find("economy") != std::string::npos) {
+    return "economy";
+  }
+
+  return "standard";
+}
+
+[[nodiscard]] StageTelemetryContext make_stage_context(
+    const CognitionStepRequest& request,
+    std::string stage,
+    bool fallback_used,
+    std::optional<contracts::ResultCode> result_code = std::nullopt) {
+  return StageTelemetryContext{
+      .request_id = request.request_id,
+      .goal_id = require_goal_id(request.goal_contract),
+      .profile_id = request.profile_id,
+      .stage = std::move(stage),
+      .trace_id = request.trace_id,
+      .model_hint_tier = derive_model_hint_tier(request),
+      .fallback_used = fallback_used,
+      .result_code = result_code.has_value()
+                         ? std::optional<int>(static_cast<int>(*result_code))
+                         : std::nullopt,
+  };
+}
+
+[[nodiscard]] StageTelemetryContext make_stage_context(
+    const ReflectionRequest& request,
+    std::string stage,
+    bool fallback_used,
+    std::optional<contracts::ResultCode> result_code = std::nullopt) {
+  return StageTelemetryContext{
+      .request_id = request.request_id,
+      .goal_id = require_goal_id(request.goal_contract),
+      .profile_id = request.profile_id,
+      .stage = std::move(stage),
+      .trace_id = request.trace_id,
+      .model_hint_tier = derive_model_hint_tier(request),
+      .fallback_used = fallback_used,
+      .result_code = result_code.has_value()
+                         ? std::optional<int>(static_cast<int>(*result_code))
+                         : std::nullopt,
+  };
+}
+
+void append_unique(std::vector<std::string>& target, std::string value) {
+  if (value.empty()) {
+    return;
+  }
+
+  if (std::find(target.begin(), target.end(), value) == target.end()) {
+    target.push_back(std::move(value));
+  }
+}
+
+void append_unique(std::vector<std::string>& target, const std::vector<std::string>& values) {
+  for (const auto& value : values) {
+    append_unique(target, value);
+  }
+}
+
+void ignore_emit_result(TelemetryEmitResult) {}
+
+[[nodiscard]] contracts::ErrorInfo make_error_info(
+    contracts::ResultCode result_code,
+    std::string stage,
+    std::string message,
+    std::string source_component) {
+  contracts::ErrorInfo error_info;
+  error_info.failure_type = contracts::classify_result_code(result_code);
+  error_info.retryable = false;
+  error_info.safe_to_replan = false;
+  error_info.details.code = static_cast<int>(result_code);
+  error_info.details.stage = std::move(stage);
+  error_info.details.message = std::move(message);
+  error_info.source_ref.ref_type = "component";
+  error_info.source_ref.ref_id = std::move(source_component);
+  return error_info;
+}
+
+[[nodiscard]] bool should_recommend_context_reload(float context_confidence) {
+  return context_confidence < 0.45F;
+}
+
+[[nodiscard]] std::vector<std::string> collect_missing_evidence(
+    const perception::PerceptionResult& perception_result) {
+  std::vector<std::string> missing_evidence;
+  for (const auto& ambiguity : perception_result.ambiguities) {
+    append_unique(missing_evidence, ambiguity.missing_evidence_refs);
+  }
+  for (const auto& clarification_question : perception_result.clarification_questions) {
+    append_unique(missing_evidence, clarification_question.evidence_refs);
+  }
+  return missing_evidence;
+}
+
+[[nodiscard]] ActionDecision make_clarification_fallback(
+    const CognitionStepRequest& request,
+    std::string rationale) {
+  ActionDecision decision;
+  decision.decision_kind = ActionDecisionKind::AskClarification;
+  decision.rationale = std::move(rationale);
+  decision.confidence = std::max(0.55F, request.belief_state.confidence.value_or(0.35F));
+  decision.clarification_needed = true;
+  decision.clarification_question =
+      "What concrete target or evidence should cognition confirm before continuing?";
+  decision.response_outline = decision::ResponseOutline{
+      .summary = default_response_summary(request),
+      .key_points = {"Await user clarification before executing external actions."},
+  };
+  decision.candidate_scores.push_back(decision::CandidateDecisionScore{
+      .candidate_name = "ask_clarification",
+      .score = decision.confidence,
+      .rationale = "fallback clarification path retained safety after perception failure",
+  });
+  return decision;
+}
+
+[[nodiscard]] ActionDecision make_converge_safe_fallback(
+    const CognitionStepRequest& request,
+    std::string rationale) {
+  ActionDecision decision;
+  decision.decision_kind = ActionDecisionKind::ConvergeSafe;
+  decision.rationale = std::move(rationale);
+  decision.confidence = std::max(0.60F, request.belief_state.confidence.value_or(0.40F));
+  decision.response_outline = decision::ResponseOutline{
+      .summary = default_response_summary(request),
+      .key_points = {"Return a bounded response without external execution."},
+  };
+  decision.candidate_scores.push_back(decision::CandidateDecisionScore{
+      .candidate_name = "converge_safe",
+      .score = decision.confidence,
+      .rationale = "fallback safe convergence preserved runtime ownership",
+  });
+  return decision;
 }
 
 void apply_invalid_decide_result(
     CognitionDecisionResult& result,
-    const validation::InputBoundaryValidationResult& validation_result) {
+    const InputBoundaryValidationResult& validation_result) {
   result.result_code = contracts::ResultCode::ValidationFieldMissing;
   result.error_info = validation_result.error_info;
   result.context_sufficiency.context_sufficient = false;
   result.context_sufficiency.context_confidence = 0.0F;
   result.context_sufficiency.missing_evidence_hints = validation_result.missing_fields;
-  result.context_sufficiency.recommend_context_reload =
-      should_recommend_context_reload(validation_result);
+  result.context_sufficiency.recommend_context_reload = true;
   result.diagnostics.push_back("invalid_input");
 }
 
 void apply_invalid_reflection_result(
     CognitionReflectionResult& result,
-    const validation::InputBoundaryValidationResult& validation_result) {
+    const InputBoundaryValidationResult& validation_result) {
   result.result_code = contracts::ResultCode::ValidationFieldMissing;
   result.error_info = validation_result.error_info;
   result.diagnostics.push_back("invalid_input");
 }
 
+void apply_decision_failure(
+    CognitionDecisionResult& result,
+    contracts::ResultCode result_code,
+    contracts::ErrorInfo error_info,
+    std::string diagnostic) {
+  result.result_code = result_code;
+  result.error_info = std::move(error_info);
+  result.context_sufficiency.context_sufficient = false;
+  result.context_sufficiency.context_confidence = 0.0F;
+  result.context_sufficiency.recommend_context_reload = true;
+  append_unique(result.diagnostics, std::move(diagnostic));
+}
+
+[[nodiscard]] DecisionTelemetryRecord make_completed_record(const ActionDecision& decision) {
+  return DecisionTelemetryRecord{
+      .decision_kind = decision.decision_kind,
+      .confidence = decision.confidence,
+      .candidate_scores = decision.candidate_scores,
+      .selected_node_id = decision.selected_node_id,
+      .clarification_needed = decision.clarification_needed,
+      .clarification_question = decision.clarification_question,
+      .response_summary = decision.response_outline.has_value()
+                              ? std::optional<std::string>(decision.response_outline->summary)
+                              : std::nullopt,
+      .audit_refs = {},
+  };
+}
+
+[[nodiscard]] DecisionTelemetryRecord make_reflection_record(
+    const contracts::ReflectionDecision& decision) {
+  return DecisionTelemetryRecord{
+      .decision_kind = dasall::cognition::decision::ActionDecisionKind::NoDecision,
+      .confidence = 0.0F,
+      .candidate_scores = {},
+      .selected_node_id = std::nullopt,
+      .clarification_needed = false,
+      .clarification_question = std::nullopt,
+      .response_summary = decision.rationale,
+      .audit_refs = {},
+  };
+}
+
 class CognitionFacade final : public ICognitionEngine {
  public:
-  explicit CognitionFacade(CognitionConfig config) : config_(std::move(config)) {}
+  explicit CognitionFacade(CognitionConfig config)
+      : config_(config),
+        perception_engine_(config),
+        planner_(config),
+        reasoner_(config),
+        reflection_engine_(config),
+        telemetry_(config) {}
 
   [[nodiscard]] CognitionDecisionResult decide(
       const CognitionStepRequest& request) override {
-    CognitionDecisionResult result;
     const auto validation_result =
         validation::InputBoundaryValidator::validate_decide_request(request);
+    auto telemetry_context = make_stage_context(request, "execution", false);
+    ignore_emit_result(telemetry_.emit_stage_started(telemetry_context));
+
     if (!validation_result.ok()) {
+      CognitionDecisionResult result;
       apply_invalid_decide_result(result, validation_result);
+      telemetry_context.result_code =
+          static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
 
-    result.context_sufficiency.context_sufficient = true;
-    result.context_sufficiency.context_confidence = 0.9F;
-    decision::ActionDecision action_decision;
-    action_decision.decision_kind = decision::ActionDecisionKind::ExecuteAction;
-      action_decision.selected_node_id = std::string("plan-node:default");
-    action_decision.confidence = 0.8F;
-    action_decision.rationale =
-        std::string("runtime true integration minimal path selects a visible tool");
-      action_decision.tool_intent_hint = decision::ToolIntentHint{
-        .tool_name = choose_tool_name(request.context_packet),
-        .intent_summary = std::string("query current user turn through runtime tool governance"),
-        .argument_hints = {std::string("query=") + *request.context_packet.user_turn},
-        .evidence_refs = {"cognition:decide"},
-      };
-      action_decision.candidate_scores = {
-        decision::CandidateDecisionScore{
-          .candidate_name = "execute_action",
-          .score = 0.8F,
-          .rationale = std::string("tool route is available and context is sufficient"),
-        },
-        decision::CandidateDecisionScore{
-          .candidate_name = "direct_response",
-          .score = 0.35F,
-          .rationale = std::string("user turn implies a governed lookup before final response"),
-        },
-      };
-    result.action_decision = action_decision;
-    result.belief_update_hint = belief::BeliefUpdateHint{
-        .confirmed_facts_delta = {
-          belief::FactDelta{.fact = "cognition decision path executed"},
-        },
-      .hypotheses_delta = {},
-      .assumptions_delta = {},
-        .evidence_refs_delta = {
-          belief::EvidenceRefDelta{.evidence_ref = "cognition:decide"},
-        },
-      .missing_evidence_refs = {},
-        .confidence_hint = 0.8F,
-        .merge_mode = belief::BeliefMergeMode::Append,
-    };
+    auto result = run_decision_pipeline(request);
+    const auto fallback_used = std::find(result.diagnostics.begin(), result.diagnostics.end(),
+                                         "decision_pipeline.degraded") !=
+                               result.diagnostics.end();
+    telemetry_context = make_stage_context(request, "execution", fallback_used, result.result_code);
+
+    if (result.error_info.has_value()) {
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
+      return result;
+    }
+
+    if (result.action_decision.has_value()) {
+      const auto record = make_completed_record(*result.action_decision);
+      if (result.action_decision->decision_kind == ActionDecisionKind::AskClarification) {
+        ignore_emit_result(
+            telemetry_.emit_clarification_requested(telemetry_context, record));
+      }
+      ignore_emit_result(telemetry_.emit_stage_completed(telemetry_context, record));
+    }
+
     return result;
   }
 
   [[nodiscard]] CognitionReflectionResult reflect(
       const ReflectionRequest& request) override {
-    CognitionReflectionResult result;
     const auto validation_result =
         validation::InputBoundaryValidator::validate_reflection_request(request);
+    auto telemetry_context = make_stage_context(request, "reflection", false);
+    ignore_emit_result(telemetry_.emit_stage_started(telemetry_context));
+
     if (!validation_result.ok()) {
+      CognitionReflectionResult result;
       apply_invalid_reflection_result(result, validation_result);
+      telemetry_context.result_code =
+          static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
 
-    contracts::ReflectionDecision reflection_decision;
-    reflection_decision.request_id = request.request_id;
-    reflection_decision.goal_id = request.goal_contract.goal_id;
-    reflection_decision.decision_kind = request.latest_observation.success.value_or(false)
-                                           ? contracts::ReflectionDecisionKind::Continue
-                                           : contracts::ReflectionDecisionKind::AbortSafe;
-    reflection_decision.confidence = request.latest_observation.success.value_or(false) ? 0.9F : 0.2F;
-    reflection_decision.rationale = std::string("minimal cognition reflection keeps control in runtime");
-    if (request.latest_observation.observation_id.has_value()) {
-      reflection_decision.relevant_observation_refs =
-          std::vector<std::string>{*request.latest_observation.observation_id};
+    auto result = run_reflection_pipeline(request);
+    telemetry_context = make_stage_context(request, "reflection", false, result.result_code);
+
+    if (result.error_info.has_value()) {
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
+      return result;
     }
-    reflection_decision.tags = std::vector<std::string>{"cognition", "reflection"};
-    result.reflection_decision = reflection_decision;
-    result.diagnostics.push_back("reflection_minimal_path");
+
+    if (result.reflection_decision.has_value()) {
+      ignore_emit_result(telemetry_.emit_stage_completed(
+          telemetry_context, make_reflection_record(*result.reflection_decision)));
+    }
+
     return result;
   }
 
  private:
+  [[nodiscard]] CognitionDecisionResult run_decision_pipeline(
+      const CognitionStepRequest& request) {
+    CognitionDecisionResult result;
+
+    const auto perception_result = perception_engine_.perceive(request);
+    if (!perception_result.has_value()) {
+      if (request.execution_hints.degraded_path_allowed) {
+        result.action_decision = make_clarification_fallback(
+            request,
+            "decision pipeline degraded to clarification because perception produced no safe output");
+        result.context_sufficiency.context_sufficient = false;
+        result.context_sufficiency.context_confidence =
+            request.belief_state.confidence.value_or(0.25F);
+        result.context_sufficiency.recommend_context_reload = true;
+        result.context_sufficiency.missing_evidence_hints = {"context_packet.user_turn"};
+        belief::BeliefUpdateHint belief_update_hint;
+        belief_update_hint.missing_evidence_refs = {"context_packet.user_turn"};
+        belief_update_hint.confidence_hint = 0.25F;
+        belief_update_hint.merge_mode = belief::BeliefMergeMode::Merge;
+        result.belief_update_hint = std::move(belief_update_hint);
+        append_unique(result.diagnostics, "decision_pipeline.degraded");
+        append_unique(result.diagnostics, "decision_pipeline.perception_unavailable");
+        return result;
+      }
+
+      apply_decision_failure(
+          result,
+          contracts::ResultCode::RuntimeRetryExhausted,
+          make_error_info(contracts::ResultCode::RuntimeRetryExhausted,
+                          "cognition.decide.perception",
+                          "perception engine could not derive a safe cognition result",
+                          "cognition::perception::PerceptionEngine"),
+          "decision_pipeline.perception_unavailable");
+      return result;
+    }
+
+    result.context_sufficiency.context_sufficient = !perception_result->requires_clarification;
+    result.context_sufficiency.context_confidence = perception_result->confidence;
+    result.context_sufficiency.missing_evidence_hints = collect_missing_evidence(*perception_result);
+    result.context_sufficiency.recommend_context_reload =
+        perception_result->requires_clarification ||
+        should_recommend_context_reload(perception_result->confidence);
+    append_unique(result.diagnostics, perception_result->diagnostics);
+
+    PlanningRequest planning_request;
+    planning_request.caller_domain = request.caller_domain;
+    planning_request.request_id = request.request_id;
+    planning_request.trace_id = request.trace_id;
+    planning_request.profile_id = request.profile_id;
+    planning_request.goal_contract = request.goal_contract;
+    planning_request.context_packet = request.context_packet;
+    planning_request.belief_state = request.belief_state;
+    planning_request.perception_result = *perception_result;
+    planning_request.budget_context = request.budget_context;
+    planning_request.execution_hints = request.execution_hints;
+    const auto plan_graph = planner_.build_plan(planning_request);
+
+    const auto plan_validation = validator_.validate_plan_graph_invariants(
+      plan_graph, config_.max_plan_nodes, config_.max_plan_depth);
+    if (!plan_validation.ok) {
+      if (request.execution_hints.degraded_path_allowed) {
+        result.action_decision = make_clarification_fallback(
+            request,
+            "decision pipeline degraded to clarification because plan invariants failed validation");
+        result.context_sufficiency.context_sufficient = false;
+        result.context_sufficiency.context_confidence =
+            std::min(result.context_sufficiency.context_confidence, 0.35F);
+        result.context_sufficiency.recommend_context_reload = true;
+        append_unique(result.context_sufficiency.missing_evidence_hints, "active_plan");
+        append_unique(result.diagnostics, "decision_pipeline.degraded");
+        append_unique(result.diagnostics, "decision_pipeline.plan_validation_failed");
+        return result;
+      }
+
+      apply_decision_failure(result,
+                             contracts::ResultCode::ValidationFieldMissing,
+                             *plan_validation.error_info,
+                             "decision_pipeline.plan_validation_failed");
+      return result;
+    }
+
+    ReasoningRequest reasoning_request;
+    reasoning_request.caller_domain = request.caller_domain;
+    reasoning_request.request_id = request.request_id;
+    reasoning_request.trace_id = request.trace_id;
+    reasoning_request.profile_id = request.profile_id;
+    reasoning_request.goal_contract = request.goal_contract;
+    reasoning_request.context_packet = request.context_packet;
+    reasoning_request.belief_state = request.belief_state;
+    reasoning_request.perception_result = *perception_result;
+    reasoning_request.active_plan = plan_graph;
+    reasoning_request.latest_observation = request.latest_observation;
+    reasoning_request.budget_context = request.budget_context;
+    reasoning_request.execution_hints = request.execution_hints;
+    const auto action_decision = reasoner_.decide(reasoning_request);
+
+    const auto decision_validation =
+        validator_.validate_action_decision_invariants(action_decision);
+    if (!decision_validation.ok) {
+      if (request.execution_hints.degraded_path_allowed) {
+        result.action_decision = make_converge_safe_fallback(
+            request,
+            "decision pipeline converged safe because decision invariants failed validation");
+        append_unique(result.diagnostics, "decision_pipeline.degraded");
+        append_unique(result.diagnostics, "decision_pipeline.action_validation_failed");
+      } else {
+        apply_decision_failure(result,
+                               contracts::ResultCode::ValidationFieldMissing,
+                               *decision_validation.error_info,
+                               "decision_pipeline.action_validation_failed");
+        return result;
+      }
+    } else {
+      result.action_decision = action_decision;
+    }
+
+    result.belief_update_hint = belief_update_synthesizer_.synthesize_from_decide(
+        *perception_result, *result.action_decision, request.latest_observation);
+    append_unique(result.diagnostics, "decision_pipeline.completed");
+    return result;
+  }
+
+  [[nodiscard]] CognitionReflectionResult run_reflection_pipeline(
+      const ReflectionRequest& request) {
+    CognitionReflectionResult result;
+
+    ReflectionAnalysisRequest analysis_request;
+    analysis_request.caller_domain = request.caller_domain;
+    analysis_request.request_id = request.request_id;
+    analysis_request.trace_id = request.trace_id;
+    analysis_request.profile_id = request.profile_id;
+    analysis_request.latest_observation = request.latest_observation;
+    analysis_request.goal_contract = request.goal_contract;
+    analysis_request.belief_state = request.belief_state;
+    analysis_request.error_info = request.latest_observation.error;
+    analysis_request.active_plan = std::nullopt;
+    analysis_request.execution_hints = request.execution_hints;
+
+    const auto reflection_decision = reflection_engine_.analyze(analysis_request);
+    result.reflection_decision = reflection_decision;
+    result.belief_update_hint = belief_update_synthesizer_.synthesize_from_reflection(
+        reflection_decision, request.belief_state, request.latest_observation);
+    append_unique(result.diagnostics, "reflection_pipeline.completed");
+    return result;
+  }
+
   CognitionConfig config_;
+  perception::PerceptionEngine perception_engine_;
+  planning::Planner planner_;
+  reasoning::Reasoner reasoner_;
+  reflection::ReflectionEngine reflection_engine_;
+  belief::BeliefUpdateSynthesizer belief_update_synthesizer_;
+  validation::StageOutputValidator validator_;
+  observability::CognitionTelemetry telemetry_;
 };
 
 }  // namespace
