@@ -149,6 +149,24 @@ dasall_add_cognition_unit_test(
 	BeliefUpdateEvidenceDedupTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_response_builder_agent_result_mapping_unit_test
+	ResponseBuilderAgentResultMappingTest.cpp
+	ResponseBuilderAgentResultMappingTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_response_builder_template_fallback_unit_test
+	ResponseBuilderTemplateFallbackTest.cpp
+	ResponseBuilderTemplateFallbackTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_response_builder_redaction_unit_test
+	ResponseBuilderRedactionTest.cpp
+	ResponseBuilderRedactionTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles

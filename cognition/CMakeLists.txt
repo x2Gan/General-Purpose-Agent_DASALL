@@ -4,6 +4,7 @@ target_sources(dasall_cognition
   PRIVATE
     src/CognitionFacade.cpp
     src/StagePolicyResolver.cpp
+    src/response/ResponseBuilder.cpp
     src/planning/Planner.cpp
     src/planning/PlanGraphBuilder.cpp
     src/reasoning/Reasoner.cpp

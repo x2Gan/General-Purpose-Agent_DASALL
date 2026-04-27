@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #484
+
+- 日期：2026-04-27
+- 阶段：cognition/terminal response construction implementation
+- 任务：COG-TODO-019 实现 ResponseBuilder
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-019 依赖 COG-TODO-007、009、010、012、013；五项均已完成，因此本轮不再受 response request/result 对象、`ActionDecision.response_outline`、stage taxonomy、response policy 或输入边界缺口影响。
+2. 当前最小缺口是 cognition 仍没有独立 response owner：`ResponseBuilder` 逻辑内嵌在 `CognitionFacade.cpp`，只有最小 observation/template 路径，缺少独立 source、focused tests 和 redaction/explicit-error 语义。
+3. 本轮只收敛 `ResponseBuilder` 私有实现、三条 response-focused tests、最小 CMake 接线与证据回写，不提前进入 020 的 `CognitionLlmBridge` 或 024 的 cognition-specific mocks。
+
+### 改动
+
+1. 新增 `cognition/src/response/ResponseBuilder.cpp`，实现 `select_response_mode()`、`build_with_llm()`、`build_with_template()`、`redact_unsafe_fields()`、`clamp_output_size()`、`build_structured_payload()` 与显式错误出口。
+2. 更新 `cognition/src/CognitionFacade.cpp`，移除内嵌 `ResponseBuilder` 实现，使 façade 重新只承载 `ICognitionEngine` 的 `decide()` / `reflect()` 入口。
+3. 更新 `cognition/CMakeLists.txt`，将 response source 纳入 `dasall_cognition`。
+4. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_response_builder_agent_result_mapping_unit_test`、`dasall_response_builder_template_fallback_unit_test`、`dasall_response_builder_redaction_unit_test`。
+5. 新增 `tests/unit/cognition/ResponseBuilderAgentResultMappingTest.cpp`、`tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp`、`tests/unit/cognition/ResponseBuilderRedactionTest.cpp`，覆盖 completed projection、template fallback / fallback-disabled error、redaction on/off。
+6. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-019-ResponseBuilder收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition"])`
+   - 第一次结果：通过，但暴露 `CognitionFacade.cpp` 遗留未使用 helper 与 `ResponseBuilder.cpp` 聚合初始化告警。
+   - 修补同一 slice 后复跑：通过，`dasall_cognition` 干净编译。
+2. `Build_CMakeTools(buildTargets=["dasall_response_builder_agent_result_mapping_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["ResponseBuilderAgentResultMappingTest"])`
+   - 结果：失败，工具返回通用错误 `生成失败`；按仓库既有基线回退到显式二进制执行。
+4. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_response_builder_agent_result_mapping_unit_test`
+   - 结果：通过；零输出退出。
+5. `cmake --build build/vscode-linux-ninja --target dasall_response_builder_template_fallback_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_response_builder_template_fallback_unit_test`
+   - 结果：通过；模板降级正例和 fallback-disabled 负例均零输出退出。
+6. `cmake --build build/vscode-linux-ninja --target dasall_response_builder_redaction_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_response_builder_redaction_unit_test`
+   - 结果：通过；默认 redaction 与显式关闭 redaction 两条分支均零输出退出。
+7. `cmake --build build/vscode-linux-ninja --target dasall_response_builder_agent_result_mapping_unit_test dasall_response_builder_template_fallback_unit_test dasall_response_builder_redaction_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_response_builder_agent_result_mapping_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_response_builder_template_fallback_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_response_builder_redaction_unit_test`
+   - 结果：通过；最终 focused acceptance run 成功，Ninja 报告 `no work to do` 后三条二进制串行零输出退出。
+
+### 结果
+
+1. COG-TODO-019 已完成，cognition 现在具备独立 `ResponseBuilder` owner，可稳定在 completed projection、template fallback 与 explicit error 三态之间收口终态输出。
+2. `ResponseBuilder` 会对 `reasoning_content`、`raw_prompt`、`prompt_bundle`、`provider_payload`、`api_token`、`authorization`、`secret_key` 等字段做显式裁剪，并把被掩码内容记录到 `omitted_details`，避免 provider-private 载荷穿透到 `AgentResult`。
+3. streaming 边界保持成立：本轮仍是单次响应 + 模板降级，没有提前引入 `CognitionLlmBridge`、多响应模式或用户通道提交逻辑。
+
+### 下一步
+
+1. 进入 COG-TODO-024，先落 `MockLLMManager` 与 `MockCognitionFixture`，解除 COG-BLK-004，再为 COG-TODO-020 / 022 / 023 的 bridge、telemetry 与 façade 收口准备统一测试支撑。
+
 ## 记录 #483
 
 - 日期：2026-04-27

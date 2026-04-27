@@ -1,23 +1,15 @@
 #include "ICognitionEngine.h"
 
 #include <algorithm>
-#include <chrono>
-#include <memory>
 #include <string>
 #include <utility>
 
-#include "IResponseBuilder.h"
 #include "validation/InputBoundaryValidator.h"
 
 namespace dasall::cognition {
 namespace {
 
 constexpr const char* kDefaultToolName = "agent.dataset";
-
-[[nodiscard]] std::int64_t current_time_ms() {
-  const auto now = std::chrono::system_clock::now().time_since_epoch();
-  return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-}
 
 [[nodiscard]] std::string choose_tool_name(const contracts::ContextPacket& context_packet) {
   if (context_packet.active_tools.has_value()) {
@@ -31,24 +23,6 @@ constexpr const char* kDefaultToolName = "agent.dataset";
   }
 
   return kDefaultToolName;
-}
-
-[[nodiscard]] contracts::AgentResult make_result(const ResponseBuildRequest& request,
-                                                 contracts::AgentResultStatus status,
-                                                 std::int32_t result_code,
-                                                 std::string response_text) {
-  contracts::AgentResult result;
-  result.result_id = request.request_id + "-cognition-response";
-  result.status = status;
-  result.result_code = result_code;
-  result.response_text = std::move(response_text);
-  result.task_completed = (status == contracts::AgentResultStatus::Completed);
-  result.created_at = current_time_ms();
-  result.request_id = request.request_id;
-  result.trace_id = request.trace_id;
-  result.goal_id = request.goal_contract.goal_id;
-  result.tags = std::vector<std::string>{"cognition", "response_builder"};
-  return result;
 }
 
 [[nodiscard]] bool should_recommend_context_reload(
@@ -77,14 +51,6 @@ void apply_invalid_decide_result(
 
 void apply_invalid_reflection_result(
     CognitionReflectionResult& result,
-    const validation::InputBoundaryValidationResult& validation_result) {
-  result.result_code = contracts::ResultCode::ValidationFieldMissing;
-  result.error_info = validation_result.error_info;
-  result.diagnostics.push_back("invalid_input");
-}
-
-void apply_invalid_response_result(
-    ResponseBuildResult& result,
     const validation::InputBoundaryValidationResult& validation_result) {
   result.result_code = contracts::ResultCode::ValidationFieldMissing;
   result.error_info = validation_result.error_info;
@@ -180,60 +146,10 @@ class CognitionFacade final : public ICognitionEngine {
   CognitionConfig config_;
 };
 
-class ResponseBuilder final : public IResponseBuilder {
- public:
-  explicit ResponseBuilder(CognitionConfig config) : config_(std::move(config)) {}
-
-  [[nodiscard]] ResponseBuildResult build(
-      const ResponseBuildRequest& request) override {
-    ResponseBuildResult result;
-    const auto validation_result =
-        validation::InputBoundaryValidator::validate_response_request(request);
-    if (!validation_result.ok()) {
-      apply_invalid_response_result(result, validation_result);
-      return result;
-    }
-
-    if (request.latest_observation.has_value() &&
-        request.latest_observation->payload.has_value()) {
-      result.agent_result = make_result(
-          request,
-          contracts::AgentResultStatus::Completed,
-          0,
-          std::string("runtime unary integration completed: ") +
-              *request.latest_observation->payload);
-      return result;
-    }
-
-    const auto fallback_text = request.terminal_decision.has_value() &&
-                     request.terminal_decision->response_outline.has_value()
-                   ? request.terminal_decision->response_outline->summary
-                                   : std::string("runtime unary integration completed without observation payload");
-    result.agent_result = make_result(
-        request,
-        contracts::AgentResultStatus::PartiallyCompleted,
-        0,
-        fallback_text);
-    result.fallback_used = true;
-    result.diagnostics.push_back(
-        config_.response.template_fallback_enabled
-            ? std::string("response_template_fallback_enabled")
-            : std::string("response_template_fallback_disabled_but_minimal_result_returned"));
-    return result;
-  }
-
- private:
-  CognitionConfig config_;
-};
-
 }  // namespace
 
 std::unique_ptr<ICognitionEngine> create_cognition_engine(const CognitionConfig& config) {
   return std::make_unique<CognitionFacade>(config);
-}
-
-std::unique_ptr<IResponseBuilder> create_response_builder(const CognitionConfig& config) {
-  return std::make_unique<ResponseBuilder>(config);
 }
 
 }  // namespace dasall::cognition
