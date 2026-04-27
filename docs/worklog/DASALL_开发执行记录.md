@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #490
+
+- 日期：2026-04-27
+- 阶段：cognition/gate evidence consolidation
+- 任务：COG-TODO-030 回写 cognition 专项 Gate 与交付证据
+- 状态：已完成
+
+### 任务选择
+
+1. `COG-TODO-026 ~ 029` 已全部完成且已推送，满足 COG-TODO-030 前置依赖。
+2. 当前最小闭环缺口是把 Gate-COG-* 状态、阻塞项变化、命令证据与残余风险统一回写到 TODO/worklog/deliverable。
+3. 本轮只执行证据收口，不扩张到 infra/plugin 缺陷修复实现。
+
+### 改动
+
+1. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-030-cognition专项Gate与交付证据回写收敛.md`，回写 Gate-COG-01 ~ 10 结论、blocker 变化、命令证据、风险残留与后续动作。
+2. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`，将 `COG-TODO-030` 从 `NotStarted` 回写为 `Done`，补齐交付物路径与完成判定说明。
+3. 将聚合门禁中的仓库既有噪声（infra/plugin）显式记录为 residual risk，避免误判为 cognition 回归。
+
+### 验证
+
+1. `cmake -S . -B build-ci`
+   - 结果：通过（沿用 `build-ci` 的 Ninja 生成器缓存）。
+2. `cmake --build build-ci --target dasall_cognition dasall_unit_tests dasall_contract_tests dasall_integration_tests`
+   - 结果：部分通过；`contract` 聚合全绿，`integration` 聚合含仓库既有失败。
+   - 失败摘要：`InfraDiagnosticsSmokeTest` failed；`InfraDiagnosticsIntegrationTest`、`PluginAuditTraceIntegrationTest`、`PluginFailureObservabilityIntegrationTest`、`ProfilePluginMatrixIntegrationTest` not run（缺失可执行文件）。
+3. `ctest --test-dir build-ci -N`
+   - 结果：通过，`Total Tests: 733`。
+4. `ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoopSmoke|GoalContractFieldContractTest|BeliefStateContractTest|ContextPacketFieldContractTest|ObservationContractTest|ReflectionDecisionContractTest|AgentResultContractTest|MainFlowContractE2ETest"`
+   - 结果：通过，`25/25` tests passed。
+
+### 结果
+
+1. COG-TODO-030 已完成；Gate-COG-* 状态、命令证据、残余风险与后续动作已完成文档闭环。
+2. Gate-COG-10 按 cognition 责任域判定通过（聚焦矩阵全绿），并保留全量 integration 的 infra/plugin 残余风险注记。
+3. blocker 状态维持：`COG-BLK-001/002/003/004/006` 已解阻，`COG-BLK-005` 仍为 non-blocking governance 约束。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-030 回写改动。
+2. 在 infra/plugin 责任域补齐缺失可执行目标后，复跑全量 `dasall_integration_tests` 以清空残余风险。
+
 ## 记录 #489
 
 - 日期：2026-04-27
