@@ -167,6 +167,12 @@ dasall_add_cognition_unit_test(
 	ResponseBuilderRedactionTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_mock_cognition_fixture_surface_unit_test
+	MockCognitionFixtureSurfaceTest.cpp
+	MockCognitionFixtureSurfaceTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -208,6 +214,11 @@ target_include_directories(dasall_budget_aware_decision_unit_test
 )
 
 target_include_directories(dasall_perception_boundary_validation_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_mock_cognition_fixture_surface_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

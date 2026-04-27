@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #485
+
+- 日期：2026-04-27
+- 阶段：cognition/testing seam unblock implementation
+- 任务：COG-TODO-024 新增 MockLLMManager 与 MockCognitionFixture
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-020、022、023 与 026 ~ 029 均直接或间接受 COG-BLK-004 约束；在 COG-TODO-004 已冻结 `MockLLMManager` / `MockCognitionFixture` 职责边界后，本轮先执行实现侧最小解阻任务 COG-TODO-024。
+2. 当前最小缺口不是 bridge、telemetry 或 façade 本身，而是 cognition 仍缺少 manager-level llm double 与 runtime caller shape fixture，导致后续测试只能借用 `MockLLMAdapter` / `MockTool` 旧路径，无法准确覆盖 cognition 边界。
+3. 本轮只收敛真实 mock header、一个 narrow surface test、最小 CMake 接线与文档证据回写，不提前进入 025 的 integration topology 或 020/022/023 的 production owner 实现。
+
+### 改动
+
+1. 新增 `tests/mocks/include/MockLLMManager.h`，以 `llm::ILLMManager` 为唯一 public seam 实现 scripted stage result / failure helper、generate handler、调用记录与 health check 计数。
+2. 新增 `tests/mocks/include/MockCognitionFixture.h`，固定 `runtime.agent_orchestrator` caller shape，生成 `GoalContract`、`ContextPacket`、`BeliefState`、`Observation`、`CognitionStepRequest`、`ReflectionRequest`、`ResponseBuildRequest` 及最小 response helper。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_mock_cognition_fixture_surface_unit_test` 并补 `cognition/src` 私有 include。
+4. 新增 `tests/unit/cognition/MockCognitionFixtureSurfaceTest.cpp`，覆盖 llm manager scripted behavior、runtime caller request helper 与 shared cognition owner surface。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-024-cognition测试fixture实现收敛.md`，并回写 cognition 专项 TODO，关闭 COG-BLK-004。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_mock_cognition_fixture_surface_unit_test"])`
+   - 第一次结果：失败；局部编译错误为 `MockCognitionFixtureSurfaceTest.cpp` 使用的 `ModelSelectionHint` include path 未被当前目标直接解析。
+   - 修补同一 slice 后复跑：通过；目标成功完成编译与链接。
+2. `ListTests_CMakeTools`
+   - 结果：通过；`MockCognitionFixtureSurfaceTest` 已被测试发现。
+3. `RunCtest_CMakeTools(tests=["MockCognitionFixtureSurfaceTest"])`
+   - 结果：失败，工具返回通用错误 `生成失败`；与仓库既有 CTest 工具态噪声一致，按仓库基线回退显式二进制执行。
+4. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_mock_cognition_fixture_surface_unit_test`
+   - 结果：通过；零输出退出，说明新 mock seam 已可被当前 cognition public surface 直接消费。
+
+### 结果
+
+1. COG-TODO-024 已完成，真实 `MockLLMManager` / `MockCognitionFixture` header 已落盘，COG-BLK-004 关闭。
+2. cognition 后续 bridge、telemetry、facade、runtime smoke、failure/profile integration 现在可以统一复用 cognition-specific mock seam，而不再借用 `MockLLMAdapter` / `MockTool` 旧路径伪装 cognition gate。
+3. 本轮没有提前宣称 integration discoverability ready；`tests/integration/cognition/` 拓扑与 `ctest -N` 下游用例发现仍由 COG-TODO-025、026、028、029 继续收口。
+
+### 下一步
+
+1. 执行 git scope 校验并提交/推送 024 相关文件。
+2. 进入 COG-TODO-020，实现 `CognitionLlmBridge`，围绕 stage hint 投影、错误映射、budget hint 与 provider-private 字段剥离收口 bridge 行为。
+
 ## 记录 #484
 
 - 日期：2026-04-27
