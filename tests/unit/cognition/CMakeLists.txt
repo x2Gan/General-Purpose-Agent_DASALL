@@ -191,6 +191,24 @@ dasall_add_cognition_unit_test(
 	StageModelHintProjectionTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_stage_output_validator_schema_unit_test
+	StageOutputValidatorSchemaTest.cpp
+	StageOutputValidatorSchemaTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_stage_output_validator_plan_graph_invariant_unit_test
+	StageOutputValidatorPlanGraphInvariantTest.cpp
+	StageOutputValidatorPlanGraphInvariantTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_stage_output_validator_response_envelope_unit_test
+	StageOutputValidatorResponseEnvelopeTest.cpp
+	StageOutputValidatorResponseEnvelopeTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -256,6 +274,21 @@ target_include_directories(dasall_stage_model_hint_projection_unit_test
 		${CMAKE_SOURCE_DIR}/cognition/src
 )
 
+target_include_directories(dasall_stage_output_validator_schema_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_stage_output_validator_plan_graph_invariant_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_stage_output_validator_response_envelope_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
 target_link_libraries(dasall_cognition_llm_bridge_projection_unit_test
 	PRIVATE
 		dasall_llm
@@ -267,6 +300,21 @@ target_link_libraries(dasall_cognition_llm_bridge_error_mapping_unit_test
 )
 
 target_link_libraries(dasall_stage_model_hint_projection_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_stage_output_validator_schema_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_stage_output_validator_plan_graph_invariant_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_stage_output_validator_response_envelope_unit_test
 	PRIVATE
 		dasall_llm
 )

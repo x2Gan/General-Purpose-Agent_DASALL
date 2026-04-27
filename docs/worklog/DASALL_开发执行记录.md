@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #487
+
+- 日期：2026-04-27
+- 阶段：cognition/stage output validation implementation
+- 任务：COG-TODO-021 实现 StageOutputValidator
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-020 已冻结 `StageLlmCallResult` 与 canonical stage hint，COG-TODO-008、009、019 已冻结 `PlanGraph`、`ActionDecision`、`ResponseBuildResult`，因此 021 已具备独立 validator owner 的最小实现条件。
+2. 当前最小缺口不是 telemetry 或 façade 主链，而是 cognition 仍缺少统一的 stage output fail-closed 校验器：required fields、enum、numeric bounds、plan graph invariants 与 response envelope consistency 还停留在设计卡片，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 validator 私有实现、三条 validator-focused tests 和最小 CMake 接线，不提前进入 022 的语义观测或 023 的 façade orchestration。
+
+### 改动
+
+1. 新增 `cognition/src/validation/StageOutputValidator.h`、`cognition/src/validation/StageOutputValidator.cpp`，实现 `StageSchemaSpec`、`ValidationIssue` / `ValidationIssueSet` / `ValidationResult` 以及 `validate_stage_output()`、`validate_plan_graph_invariants()`、`validate_action_decision_invariants()`、`validate_response_envelope()`。
+2. 更新 `cognition/CMakeLists.txt`，将 validator source 纳入 `dasall_cognition`。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_stage_output_validator_schema_unit_test`、`dasall_stage_output_validator_plan_graph_invariant_unit_test`、`dasall_stage_output_validator_response_envelope_unit_test`，并补 `cognition/src` include 与 `dasall_llm` 链接。
+4. 新增 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp`、`tests/unit/cognition/StageOutputValidatorPlanGraphInvariantTest.cpp`、`tests/unit/cognition/StageOutputValidatorResponseEnvelopeTest.cpp`，覆盖 schema fail-closed、plan graph depth cap / DAG invariants 与 response fallback envelope consistency。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-021-StageOutputValidator收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_stage_output_validator_schema_unit_test","dasall_stage_output_validator_plan_graph_invariant_unit_test","dasall_stage_output_validator_response_envelope_unit_test"])`
+   - 第一次结果：失败；plan / response 两个 validator tests 未链接 `dasall_llm`，无法解析 `CognitionLlmBridge.h` 间接包含的 llm public headers。
+   - 同一 slice 补齐依赖后复跑：通过；三条 validator-focused test targets 全部编译链接成功。
+2. `RunCtest_CMakeTools(tests=["StageOutputValidatorSchemaTest","StageOutputValidatorPlanGraphInvariantTest","StageOutputValidatorResponseEnvelopeTest"])`
+   - 结果：失败，工具返回通用错误 `生成失败`；与仓库既有 CTest 工具态噪声一致，按仓库基线回退到显式二进制执行。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_stage_output_validator_schema_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_stage_output_validator_plan_graph_invariant_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_stage_output_validator_response_envelope_unit_test`
+   - 结果：通过；三条 validator 测试二进制全部零输出退出。
+
+### 结果
+
+1. COG-TODO-021 已完成，cognition 现在具备独立 `StageOutputValidator` owner，可对 schema-level payload、plan graph、action decision 和 response envelope 做统一 fail-closed 校验。
+2. validator 现在会把 required fields、enum、numeric bounds、list size、DAG / depth cap、fallback / error surface 不一致统一映射为显式 `ValidationIssue` 与 `ErrorInfo`，不再依赖隐式放行。
+3. validator 保持纯校验 owner 边界：本轮没有引入 llm 调用、prompt/routing、自修复、retry 或 runtime result submit 逻辑。
+
+### 下一步
+
+1. 执行 git scope 校验并提交/推送 021 相关文件。
+2. 进入 COG-TODO-022，实现 `CognitionTelemetry`，围绕 stage started/completed/failed、redaction 与 sink failure fail-open 收口语义观测。
+
 ## 记录 #486
 
 - 日期：2026-04-27
