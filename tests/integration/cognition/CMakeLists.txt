@@ -54,9 +54,11 @@ dasall_add_cognition_integration_test(
   "integration;cognition"
 )
 
-dasall_add_cognition_integration_placeholder(
+dasall_add_cognition_integration_test(
   dasall_cognition_runtime_interaction_contract_integration_test
   CognitionRuntimeInteractionContractTest
+  CognitionRuntimeInteractionContractTest.cpp
+  "integration;cognition"
 )
 
 dasall_add_cognition_integration_placeholder(
