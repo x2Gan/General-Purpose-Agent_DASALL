@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #486
+
+- 日期：2026-04-27
+- 阶段：cognition/llm bridge implementation
+- 任务：COG-TODO-020 实现 CognitionLlmBridge
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-024 已关闭 COG-BLK-004，且 COG-TODO-002、007、009、010 已冻结 canonical stage key、输入对象与 `StageModelHint`，因此 020 现在是 021 / 022 / 023 之前的最小 bridge owner 收口任务。
+2. 当前最小缺口不是 façade 主链，而是 cognition 仍没有独立 llm bridge owner：stage/schema/budget 到 `LLMGenerateRequest` 的投影、llm failure 归一化与 provider-private 字段剥离还停留在设计卡片，没有可执行私有组件与 focused tests。
+3. 本轮只收敛 bridge 私有实现、三条 bridge-focused tests 和最小 CMake 接线，不提前进入 021 的 schema invariant、022 的 telemetry 或 023 的 façade orchestration。
+
+### 改动
+
+1. 新增 `cognition/src/llm/CognitionLlmBridge.h`、`cognition/src/llm/CognitionLlmBridge.cpp`，实现 `StageLlmCallRequest`、`StageSchemaSpec`、`StageBudgetHint`、`StageLlmCallResult`、`LlmFailureProjection` 以及 `invoke_stage()`、`build_llm_request()`、`derive_budget_hint()`、`normalize_llm_response()`、`project_llm_failure()`。
+2. 更新 `cognition/CMakeLists.txt`，将 bridge source 纳入 `dasall_cognition`，并补 `dasall_llm` 私有依赖。
+3. 更新 `tests/unit/cognition/CMakeLists.txt`，新增 `dasall_cognition_llm_bridge_projection_unit_test`、`dasall_cognition_llm_bridge_error_mapping_unit_test`、`dasall_stage_model_hint_projection_unit_test`，并补 `cognition/src` include 与 `dasall_llm` 链接。
+4. 新增 `tests/unit/cognition/CognitionLlmBridgeProjectionTest.cpp`、`tests/unit/cognition/CognitionLlmBridgeErrorMappingTest.cpp`、`tests/unit/cognition/StageModelHintProjectionTest.cpp`，覆盖 stage/schema/budget 投影、llm failure surface 与 canonical stage hint projection。
+5. 新增交付物 `docs/todos/cognition/deliverables/COG-TODO-020-CognitionLlmBridge收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_llm_bridge_projection_unit_test","dasall_cognition_llm_bridge_error_mapping_unit_test","dasall_stage_model_hint_projection_unit_test"])`
+   - 第一次结果：失败；`CognitionLlmBridge.h` 误用了 `llm/...` include 路径。
+   - 第二次结果：失败；bridge tests 只有 `ModelSelectionHint` 前置声明，无法解引用，且 `sanitize_payload()` helper 携带无收益 `nodiscard` 告警。
+   - 同一 slice 修补后复跑：通过；三条 bridge-focused test targets 全部编译链接成功。
+2. `RunCtest_CMakeTools(tests=["CognitionLlmBridgeProjectionTest","CognitionLlmBridgeErrorMappingTest","StageModelHintProjectionTest"])`
+   - 结果：失败，工具返回通用错误 `生成失败`；与仓库既有 CTest 工具态噪声一致，按仓库基线回退到显式二进制执行。
+3. `./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_llm_bridge_projection_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_cognition_llm_bridge_error_mapping_unit_test && ./build/vscode-linux-ninja/tests/unit/cognition/dasall_stage_model_hint_projection_unit_test`
+   - 结果：通过；三条桥接测试二进制全部零输出退出。
+
+### 结果
+
+1. COG-TODO-020 已完成，cognition 现在具备独立 `CognitionLlmBridge` owner，可稳定把 canonical stage hint、schema 约束和 budget 提示投影到 `LLMGenerateRequest`。
+2. bridge 会在成功路径中裁剪 `reasoning_content`、`provider_payload`、`raw_prompt`、`authorization`、`secret_key` 等 provider-private 内容，并把 redaction / budget 压力保留为 warnings 与 diagnostics。
+3. bridge 保持 fail-fast 边界：本轮没有引入 prompt release 选择、message 组装、retry 或 circuit breaker 逻辑，继续把韧性控制留在 llm / runtime owner。
+
+### 下一步
+
+1. 执行 git scope 校验并提交/推送 020 相关文件。
+2. 进入 COG-TODO-021，实现 `StageOutputValidator`，围绕 stage schema、graph invariant 与 response envelope fail-closed 校验收口阶段结果合法性。
+
 ## 记录 #485
 
 - 日期：2026-04-27

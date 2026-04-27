@@ -173,6 +173,24 @@ dasall_add_cognition_unit_test(
 	MockCognitionFixtureSurfaceTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_cognition_llm_bridge_projection_unit_test
+	CognitionLlmBridgeProjectionTest.cpp
+	CognitionLlmBridgeProjectionTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_cognition_llm_bridge_error_mapping_unit_test
+	CognitionLlmBridgeErrorMappingTest.cpp
+	CognitionLlmBridgeErrorMappingTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_stage_model_hint_projection_unit_test
+	StageModelHintProjectionTest.cpp
+	StageModelHintProjectionTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -221,6 +239,36 @@ target_include_directories(dasall_perception_boundary_validation_unit_test
 target_include_directories(dasall_mock_cognition_fixture_surface_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_cognition_llm_bridge_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_cognition_llm_bridge_error_mapping_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_stage_model_hint_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_link_libraries(dasall_cognition_llm_bridge_projection_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_cognition_llm_bridge_error_mapping_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_stage_model_hint_projection_unit_test
+	PRIVATE
+		dasall_llm
 )
 
 target_include_directories(dasall_perception_engine_unit_test

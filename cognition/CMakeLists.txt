@@ -4,6 +4,7 @@ target_sources(dasall_cognition
   PRIVATE
     src/CognitionFacade.cpp
     src/StagePolicyResolver.cpp
+    src/llm/CognitionLlmBridge.cpp
     src/response/ResponseBuilder.cpp
     src/planning/Planner.cpp
     src/planning/PlanGraphBuilder.cpp
@@ -49,6 +50,7 @@ target_link_libraries(dasall_cognition
   PUBLIC
     dasall_contracts
   PRIVATE
+    dasall_llm
     dasall_profiles
 )
 
