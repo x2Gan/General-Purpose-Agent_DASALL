@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #507
+
+- 日期：2026-04-28
+- 阶段：daemon/supervisor notify surface
+- 任务：DMD-TODO-008 实现 DaemonSupervisorAdapter 最小通知面
+- 状态：已完成
+
+### 任务选择
+
+1. 006 已完成并推送后，daemon 壳层拆分的下一个显式编号任务就是 008；其 blocker 不是独立 TODO，而是 DMD-BLK-002 对 supervisor/watchdog surface 未冻结的约束。
+2. 当前最小缺口不是 watchdog 组件能力不足，而是 daemon 侧缺少一条稳定的 v1 notify seam，导致 035 的部署/supervisor 契约无法落在确定的 owner surface 上。
+3. 本轮只冻结 no-op + `IWatchdogService` bridge 的最小接口，不把 systemd fd/notify 或 daemon 自恢复裁定带入 v1。
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonSupervisorAdapter.h` 与 `apps/daemon/src/DaemonSupervisorAdapter.cpp`，定义：
+   - `DaemonSupervisorAdapterOptions`
+   - `notify_ready()`
+   - `notify_stopping()`
+   - `tick_watchdog()`
+   - `watchdog_active()`
+2. adapter 默认走 no-op；仅当 `watchdog_enabled=true` 且注入 `IWatchdogService` 时，桥接到 `register_entity(...)`、`heartbeat(...)` 与 `unregister_entity(...)`。
+3. `tick_watchdog()` 为 daemon 维护最小 heartbeat sequence 和 deadline，但 watchdog 失败只通过 `WatchdogOperationResult` 返回，不在 adapter 内做隐藏 retry 或恢复裁定。
+4. 更新 `apps/daemon/CMakeLists.txt`，把 supervisor adapter 纳入 `dasall_daemon` 构建。
+5. 新增 `tests/unit/apps/daemon/DaemonSupervisorAdapterTest.cpp`，覆盖 no-op path、watchdog bridge 与 failure surfacing。
+6. 更新 `tests/unit/apps/daemon/CMakeLists.txt`，注册 `DaemonSupervisorAdapterTest`。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-008-DaemonSupervisorAdapter收敛.md`，并回写 daemon 专项 TODO，清除 DMD-BLK-002。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+   - 结果：通过，supervisor adapter 纳入 daemon 构建图后无编译回归。
+2. `Build_CMakeTools(buildTargets=["dasall_daemon_supervisor_adapter_unit_test","dasall_watchdog_service_interface_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["DaemonSupervisorAdapterTest","WatchdogServiceInterfaceTest"])`
+   - 结果：通过，两条测试均 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. daemon v1 的最小 supervisor/watchdog notify surface 已冻结为 no-op + `IWatchdogService` bridge。
+2. watchdog 失败只上抛，不由 daemon adapter 自行恢复裁定，满足 008 的完成判定。
+3. DMD-BLK-002 已清除，035 后续可以在这一最小 seam 之上继续收敛部署/运维契约。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-008 改动。
+2. 进入 DMD-TODO-009，把 lifecycle/listener/signal/supervisor seam 收口进 `DaemonBootstrap` 组合根。
+
 ## 记录 #506
 
 - 日期：2026-04-28

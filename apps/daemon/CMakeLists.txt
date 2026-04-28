@@ -10,6 +10,8 @@ add_executable(dasall_daemon
   src/DaemonListenerHost.h
   src/DaemonSignalHandler.cpp
   src/DaemonSignalHandler.h
+  src/DaemonSupervisorAdapter.cpp
+  src/DaemonSupervisorAdapter.h
 )
 
 target_compile_features(dasall_daemon PRIVATE cxx_std_20)
