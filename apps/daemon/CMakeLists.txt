@@ -1,6 +1,7 @@
 add_executable(dasall_daemon
   src/main.cpp
   src/DaemonBootstrap.cpp
+  src/DaemonConfig.h
 )
 
 target_compile_features(dasall_daemon PRIVATE cxx_std_20)

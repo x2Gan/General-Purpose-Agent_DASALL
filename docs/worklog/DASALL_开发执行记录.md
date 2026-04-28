@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #500
+
+- 日期：2026-04-28
+- 阶段：daemon/config baseline
+- 任务：DMD-TODO-002 定义 DaemonBootstrapConfig 与 DaemonProcessContext
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-001 已完成并推送，满足 schema/config 基线顺序；DMD-TODO-002 本身无额外前置，适合作为下一轮配置冻结任务。
+2. 当前最小缺口是 `apps/daemon` 只有硬编码 socket path 和常量，没有统一配置类型承载，也没有 `DaemonProcessContext` 作为后续 build/config validator 的组合根载体。
+3. 为承载本轮 unit test，额外补了一条最小 `tests/unit/apps/daemon` 接线；该接线只服务 002 的 focused validation，不等价于 DMD-TODO-023 完成。
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonConfig.h`，定义 `DaemonStartupMode`、`DaemonConfigSource`、`DaemonConfigConflict`、`DaemonBootstrapConfig` 与 `DaemonProcessContext`。
+2. `DaemonBootstrapConfig` 吸收详设 6.10.2 的 v1 配置键，并通过 `has_consistent_values()` 提供 socket path、worker、TTL、grace window、payload/backlog 的基础一致性断言。
+3. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonConfig.h` 加入 daemon target 源列表。
+4. 新增 `tests/unit/apps/daemon/CMakeLists.txt` 与 `tests/unit/apps/daemon/DaemonBootstrapConfigTest.cpp`，并更新 `tests/unit/CMakeLists.txt` 接入最小 apps/daemon unit test host。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-002-DaemonBootstrapConfig收敛.md`，并回写 daemon 专项 TODO 状态。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_daemon_bootstrap_config_unit_test && ctest --test-dir build-ci -R "^DaemonBootstrapConfigTest$" --output-on-failure`
+   - 结果：通过，`DaemonBootstrapConfigTest` 1/1 通过。
+
+### 结果
+
+1. daemon v1 配置键不再只散落在文档和 `main.cpp` 常量里，而是有统一类型承载。
+2. `DaemonProcessContext` 与 `DaemonConfigConflict` 已具备最小结构，可直接服务 DMD-TODO-003 的 profile 投影和 DMD-TODO-004 的 validator。
+3. apps/daemon 单测已经有最小宿主，但 daemon topology 的统一 discoverability 仍保留给 DMD-TODO-023 后续收口。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-002 改动。
+
 ## 记录 #499
 
 - 日期：2026-04-28

@@ -9,6 +9,7 @@ add_subdirectory(platform)
 add_subdirectory(profiles)
 add_subdirectory(services)
 add_subdirectory(access)
+add_subdirectory(apps/daemon)
 
 set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_log_event_unit_test
@@ -131,6 +132,7 @@ set(DASALL_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_runtime_transition_guard_table_unit_test
 	${DASALL_COGNITION_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS}
+	${DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_UNIT_TEST_EXECUTABLE_TARGETS}
 	dasall_tool_invocation_context_surface_unit_test
