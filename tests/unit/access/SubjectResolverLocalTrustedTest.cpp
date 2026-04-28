@@ -66,12 +66,44 @@ void rejects_local_peer_without_allowlist_support() {
                "missing allowlist support should not silently downgrade to trusted");
 }
 
+void rejects_daemon_entry_when_local_peer_identity_is_missing() {
+  using dasall::access::InboundPacket;
+  using dasall::access::PeerMetadata;
+  using dasall::access::ResolverView;
+  using dasall::access::SubjectResolver;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  SubjectResolver resolver;
+  InboundPacket packet;
+  packet.entry_type = "daemon";
+  packet.protocol_kind = "ipc_uds";
+
+  PeerMetadata peer_metadata;
+  peer_metadata.local_peer.actor_ref = "local://uid/1001";
+  peer_metadata.local_peer.peer_uid = 1001;
+  peer_metadata.local_peer.is_local_socket_peer = false;
+  peer_metadata.local_peer.eligible_for_local_trusted = false;
+
+  ResolverView view;
+  view.trusted_local_subjects.push_back("local://uid/1001");
+
+  const auto outcome = resolver.resolve(packet, peer_metadata, view);
+  assert_true(outcome.rejected,
+              "daemon entry should fail closed when local peer identity is missing");
+  assert_true(outcome.reject_reason.has_value(),
+              "daemon fail-closed path should expose explicit reject reason");
+  assert_equal(std::string("missing_local_peer_identity"), *outcome.reject_reason,
+               "daemon fail-closed path should preserve local peer missing reason");
+}
+
 }  // namespace
 
 int main() {
   try {
     resolves_local_trusted_subject_when_actor_is_allowlisted();
     rejects_local_peer_without_allowlist_support();
+    rejects_daemon_entry_when_local_peer_identity_is_missing();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

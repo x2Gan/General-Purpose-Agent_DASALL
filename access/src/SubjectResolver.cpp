@@ -16,6 +16,10 @@ namespace {
   return entry_type == "cli" || entry_type == "daemon";
 }
 
+[[nodiscard]] bool is_daemon_entry_type(const std::string_view entry_type) {
+  return entry_type == "daemon";
+}
+
 [[nodiscard]] std::string stable_value_or_unknown(const std::string_view value) {
   return value.empty() ? std::string("unknown") : std::string(value);
 }
@@ -122,6 +126,15 @@ SubjectResolveOutcome SubjectResolver::resolve(const InboundPacket& packet,
       local_subject.has_value()) {
     outcome.resolved = true;
     outcome.subject_identity = *local_subject;
+    return outcome;
+  }
+
+  // daemon 是本地控制面入口：缺失可验证的 local peer identity 时必须 fail-closed。
+  if (is_daemon_entry_type(packet.entry_type) &&
+      (!peer_metadata.local_peer.is_local_socket_peer ||
+       !peer_metadata.local_peer.eligible_for_local_trusted)) {
+    outcome.rejected = true;
+    outcome.reject_reason = std::string("missing_local_peer_identity");
     return outcome;
   }
 

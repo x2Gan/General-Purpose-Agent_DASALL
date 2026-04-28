@@ -111,6 +111,12 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_daemon_peer_identity_fail_closed_unit_test
+  DaemonPeerIdentityFailClosedTest
+  DaemonPeerIdentityFailClosedTest.cpp
+)
+
+dasall_add_access_unit_test(
   dasall_access_subject_resolver_challenge_unit_test
   SubjectResolverChallengeTest
   SubjectResolverChallengeTest.cpp

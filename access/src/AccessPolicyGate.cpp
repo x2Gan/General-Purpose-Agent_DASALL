@@ -19,6 +19,24 @@ namespace {
          kAllowedSourceTypes.end();
 }
 
+[[nodiscard]] bool is_local_trusted_daemon_subject(
+    const AccessPolicyEvaluationInput& input) {
+  if (input.packet.entry_type != "daemon") {
+    return true;
+  }
+
+  const auto& subject = input.authentication.subject_identity;
+  if (subject.auth_method != "local_trusted") {
+    return false;
+  }
+
+  if (subject.actor_ref.empty()) {
+    return false;
+  }
+
+  return subject.actor_ref.rfind("local://uid/", 0U) == 0U;
+}
+
 [[nodiscard]] AccessPolicyEvaluationResult make_denied_result(
     const std::string_view reason_code,
     const std::string_view decision_ref = "policy://access/deny") {
@@ -117,6 +135,10 @@ AccessPolicyEvaluationResult AccessPolicyGate::evaluate_override_request(
     const PolicyBackendSnapshot& backend) const {
   if (!input.authentication.authenticated) {
     return make_denied_result("authentication_required");
+  }
+
+  if (!is_local_trusted_daemon_subject(input)) {
+    return make_denied_result("daemon_peer_identity_required");
   }
 
   if (!source_fact.has_consistent_values() ||

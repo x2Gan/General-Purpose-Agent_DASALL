@@ -2,11 +2,69 @@
 #include <iostream>
 #include <memory>
 
+#include "PlatformResult.h"
 #include "daemon/DaemonProtocolAdapter.h"
+#include "error/ResultCode.h"
 #include "linux/UnixIpcProvider.h"
 #include "support/TestAssertions.h"
 
 namespace {
+
+class FailingDescribePeerIpc final : public dasall::platform::IIPC {
+ public:
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle> listen(
+      const dasall::platform::IpcEndpoint&,
+      const dasall::platform::ListenOptions&) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle>::success(
+        dasall::platform::IpcListenerHandle{.native_fd = 1U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle> accept(
+      const dasall::platform::IpcListenerHandle&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle>::success(
+        dasall::platform::IpcChannelHandle{.native_fd = 2U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle> connect(
+      const dasall::platform::IpcEndpoint&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle>::success(
+        dasall::platform::IpcChannelHandle{.native_fd = 3U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcSendResult> send(
+      const dasall::platform::IpcChannelHandle&,
+      const dasall::platform::IpcPayload&) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcSendResult>::success(
+        dasall::platform::IpcSendResult{.bytes_sent = 0U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcReceiveResult> receive(
+      const dasall::platform::IpcChannelHandle&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcReceiveResult>::success(
+        dasall::platform::IpcReceiveResult{});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::PeerIdentitySnapshot>
+  describe_peer(const dasall::platform::IpcChannelHandle&) override {
+    return dasall::platform::PlatformResult<dasall::platform::PeerIdentitySnapshot>::failure(
+        dasall::platform::PlatformError{
+            .code = dasall::platform::PlatformErrorCode::NotFound,
+            .category = dasall::platform::PlatformErrorCategory::IPC,
+            .retryable_hint = false,
+            .syscall_name = "getsockopt",
+            .errno_value = 2,
+            .detail = "peer identity unavailable",
+        });
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<bool> close(
+      const dasall::platform::IpcChannelHandle&) override {
+    return dasall::platform::PlatformResult<bool>::success(true);
+  }
+};
 
 void test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path() {
   using dasall::access::daemon::DaemonProtocolAdapter;
@@ -57,12 +115,35 @@ void test_daemon_protocol_adapter_marks_remote_peer_as_not_trusted() {
               "remote endpoint should not be eligible for local trusted");
 }
 
+void test_daemon_protocol_adapter_describe_peer_failure_is_fail_closed() {
+  using dasall::access::daemon::DaemonProtocolAdapter;
+  using dasall::platform::IpcChannelHandle;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<FailingDescribePeerIpc>();
+  DaemonProtocolAdapter adapter(ipc);
+
+  IpcChannelHandle channel;
+  channel.native_fd = 33U;
+
+  const auto fact = adapter.describe_local_peer_uid_fact(
+      channel, "actor://daemon/local-missing-peer");
+  assert_equal(std::string("actor://daemon/local-missing-peer"), fact.actor_ref,
+               "describe_peer failure path should preserve actor_ref");
+  assert_true(!fact.is_local_socket_peer,
+              "describe_peer failure should not infer local socket peer");
+  assert_true(!fact.eligible_for_local_trusted,
+              "describe_peer failure should fail closed for local trusted eligibility");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path();
     test_daemon_protocol_adapter_marks_remote_peer_as_not_trusted();
+    test_daemon_protocol_adapter_describe_peer_failure_is_fail_closed();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;
