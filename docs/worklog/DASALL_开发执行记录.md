@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #502
+
+- 日期：2026-04-28
+- 阶段：daemon/config validator and validate-only
+- 任务：DMD-TODO-004 实现 DaemonConfigValidator 与 validate-only 路径
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-002 已完成并推送，满足 004 的唯一前置。
+2. 当前最小缺口是 daemon 仍没有 bind 前 config validator，`main.cpp` 也没有 validate-only 路径，导致配置错误只能在启动期混入 listener 初始化后暴露。
+3. 本轮只收 validator 和 minimal CLI parse，不扩到完整 ConfigCenter/配置文件读取，实现边界严格停在 6.10.3 的 v1 校验规则。
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonConfigValidator.h` 与 `apps/daemon/src/DaemonConfigValidator.cpp`，定义 validator error/result 和 `validate_config()`、`validate_conflicts()`、`validate_reload_keys()`、`validate_only()`。
+2. validator 新增 payload upper bound、flags/config conflict、restart-only reload key 三类 v1 结构化失败出口。
+3. 更新 `apps/daemon/src/main.cpp`，增加 `--validate-only` / `--socket-path` 最小参数解析，并在创建 `UnixIpcProvider` 之前执行 config validation。
+4. 正常启动路径改为消费 `DaemonBootstrapConfig.socket_path` 与 `shutdown_grace_ms`，不再写死旧 socket path 常量。
+5. 更新 `apps/daemon/CMakeLists.txt` 与 `tests/unit/apps/daemon/CMakeLists.txt`，新增 `DaemonConfigValidatorTest` focused unit gate。
+6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-004-DaemonConfigValidator收敛.md`，并回写 daemon 专项 TODO。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_daemon dasall_daemon_config_validator_unit_test && ctest --test-dir build-ci -R "^DaemonConfigValidatorTest$" --output-on-failure`
+   - 结果：通过，`dasall_daemon` 编译成功，`DaemonConfigValidatorTest` 1/1 通过。
+
+### 结果
+
+1. daemon 配置非法现在能在 listener bind 前失败，不再依赖运行期副作用才能暴露错误。
+2. validate-only 已具最小入口，成功时不会创建 `UnixIpcProvider` listener。
+3. DMD-TODO-005/006/033 后续可以直接复用这组 validator 结果类型和 restart-only key 守门逻辑。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-004 改动。
+
 ## 记录 #501
 
 - 日期：2026-04-28
