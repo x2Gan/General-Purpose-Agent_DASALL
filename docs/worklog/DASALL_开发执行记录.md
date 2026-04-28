@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #506
+
+- 日期：2026-04-28
+- 阶段：daemon/listener host split
+- 任务：DMD-TODO-006 实现 DaemonListenerHost direct-bind 监听层
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-029 已完成并推送，DMD-BLK-004 已清除，006 成为 daemon 壳层拆分中最直接可执行的下一步。
+2. 当前最小缺口是 `DaemonBootstrap::run()` 仍直接持有 `listen/accept/close` 主循环；若不先抽出 listener host，009 的 bootstrap 组合根仍会继续混合 lifecycle、listener 与 connection handler 三类职责。
+3. 本轮只抽 direct-bind 监听层，不提前改写 decode/submit/publish，也不提前做 UDS 权限或 stale socket 安全策略。
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonListenerHost.h` 与 `apps/daemon/src/DaemonListenerHost.cpp`，提供 `bind(...)`、`set_connection_handler(...)`、`accept_loop(...)` 与 `close()`。
+2. `DaemonListenerHost` 使用 `PlatformResult<bool>` 保留 listener bind/accept/close 的 platform error 语义，并把 `Timeout` 视为正常轮询事件。
+3. 更新 `apps/daemon/src/DaemonBootstrap.h` 与 `apps/daemon/src/DaemonBootstrap.cpp`：
+   - 新增 `listener_host_` 成员；
+   - `run(...)` 通过 listener host 完成 bind 与 accept loop；
+   - bootstrap 只保留 lifecycle、gateway readiness 与 `handle_connection(...)` 装配职责。
+4. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonListenerHost` 纳入 `dasall_daemon` 构建。
+5. 新增 `tests/unit/apps/daemon/DaemonListenerHostTest.cpp`，用 scripted fake IIPC 覆盖 bind 参数、accept timeout、close 后拒绝和 listener error mapping。
+6. 更新 `tests/unit/apps/daemon/CMakeLists.txt`：注册 `DaemonListenerHostTest`，并让 `DaemonLoopbackFixtureTest` target 链上新的 listener host 依赖。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-006-DaemonListenerHost收敛.md`，并回写 daemon 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+   - 结果：通过，listener host 抽离后 daemon 主构建保持稳定。
+2. `Build_CMakeTools(buildTargets=["dasall_daemon_listener_host_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+   - 结果：首轮失败，暴露 `DaemonListenerHostTest` target 缺少 `dasall_platform` 公开头依赖；补齐链接依赖后复跑通过。
+3. `RunCtest_CMakeTools(tests=["DaemonListenerHostTest","DaemonLoopbackFixtureTest"])`
+   - 结果：通过，`DaemonListenerHostTest` 与 `DaemonLoopbackFixtureTest` 均 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. daemon direct-bind listener 主循环已经从 bootstrap 中抽离，006 的拆分目标成立。
+2. `DaemonListenerHost` 现在拥有稳定的 unit seam，可单独验证 bind/accept/close 行为而不依赖 bootstrap 其余职责。
+3. 029 建立的 loopback fixture 继续通过，说明 006 没有破坏 daemon request/response 闭环。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-006 改动。
+2. 进入 DMD-TODO-008 的 blocker recovery，实现 v1 no-op + infra watchdog event 的最小 supervisor notify surface。
+
 ## 记录 #505
 
 - 日期：2026-04-28

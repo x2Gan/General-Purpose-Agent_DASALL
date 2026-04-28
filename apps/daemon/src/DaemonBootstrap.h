@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "DaemonLifecycleController.h"
+#include "DaemonListenerHost.h"
 #include "IAccessGateway.h"
 #include "IIPC.h"
 #include "daemon/DaemonProtocolAdapter.h"
@@ -13,7 +14,7 @@ namespace dasall::apps::daemon {
 /// DaemonBootstrap — daemon 本地控制面服务端生命周期管理
 ///
 /// 职责：
-///   1. 在 UDS 端点上创建监听器并循环接受 CLI 连接
+  ///   1. 组装 listener host，在 UDS 端点上创建监听器并循环接受 CLI 连接
 ///   2. 对每条连接：receive → peer identity → decode → IAccessGateway.submit → encode
 ///   3. 将 LocalPeerUidFact 注入 InboundPacket 以驱动 local trusted 判定
 ///   4. 响应 stop() 请求，完成当前请求后退出循环
@@ -48,6 +49,7 @@ class DaemonBootstrap {
 
   std::shared_ptr<dasall::platform::IIPC> ipc_;
   std::shared_ptr<dasall::access::IAccessGateway> gateway_;
+  DaemonListenerHost listener_host_;
   DaemonLifecycleController lifecycle_;
   std::atomic<bool> stop_requested_{false};
 
@@ -57,8 +59,6 @@ class DaemonBootstrap {
   // receive 超时（毫秒）
   static constexpr std::int32_t kReceiveDeadlineMs = 5000;
 
-  // 最大 payload 字节数（防止超大请求）
-  static constexpr std::uint32_t kMaxPayloadBytes = 1048576;
 };
 
 }  // namespace dasall::apps::daemon

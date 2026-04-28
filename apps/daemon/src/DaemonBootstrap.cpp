@@ -10,7 +10,9 @@ namespace dasall::apps::daemon {
 DaemonBootstrap::DaemonBootstrap(
     std::shared_ptr<dasall::platform::IIPC> ipc,
     std::shared_ptr<dasall::access::IAccessGateway> gateway)
-    : ipc_(std::move(ipc)), gateway_(std::move(gateway)) {}
+    : ipc_(std::move(ipc)),
+      gateway_(std::move(gateway)),
+      listener_host_(ipc_) {}
 
 bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
   if (!ipc_ || !gateway_) {
@@ -31,40 +33,29 @@ bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
     return false;
   }
 
-  // 创建 UDS 监听器
-  dasall::platform::ListenOptions listen_opts;
-  listen_opts.backlog = 8;
-  listen_opts.max_payload_bytes = kMaxPayloadBytes;
-
-  const auto listener_result = ipc_->listen(endpoint, listen_opts);
-  if (!listener_result.ok() || !listener_result.value.has_value()) {
+  const auto bind_result = listener_host_.bind(endpoint);
+  if (!bind_result.ok()) {
     (void)lifecycle_.mark_failed();
     return false;
   }
+
+  listener_host_.set_connection_handler(
+      [this](const dasall::platform::IpcChannelHandle& channel) {
+        return handle_connection(channel);
+      });
 
   if (!lifecycle_.mark_ready()) {
+    (void)listener_host_.close();
     (void)lifecycle_.mark_failed();
     return false;
   }
 
-  const auto& listener = *listener_result.value;
-
-  // 事件循环：接受连接并处理
-  while (!stop_requested_.load()) {
-    const auto accept_result = ipc_->accept(listener, kAcceptDeadlineMs);
-    if (!accept_result.ok()) {
-      // accept 超时是正常情况（用于检测 stop_requested_）
-      continue;
-    }
-    if (!accept_result.value.has_value()) {
-      continue;
-    }
-
-    const auto& channel = *accept_result.value;
-    (void)handle_connection(channel);
-
-    // 关闭连接（忽略关闭错误）
-    (void)ipc_->close(channel);
+  const auto loop_result =
+      listener_host_.accept_loop(stop_requested_, kAcceptDeadlineMs);
+  (void)listener_host_.close();
+  if (!loop_result.ok() || !loop_result.value.value_or(false)) {
+    (void)lifecycle_.mark_failed();
+    return false;
   }
 
   return true;

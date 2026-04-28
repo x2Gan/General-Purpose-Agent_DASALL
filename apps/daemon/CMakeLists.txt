@@ -6,6 +6,8 @@ add_executable(dasall_daemon
   src/DaemonConfigValidator.h
   src/DaemonLifecycleController.cpp
   src/DaemonLifecycleController.h
+  src/DaemonListenerHost.cpp
+  src/DaemonListenerHost.h
   src/DaemonSignalHandler.cpp
   src/DaemonSignalHandler.h
 )
