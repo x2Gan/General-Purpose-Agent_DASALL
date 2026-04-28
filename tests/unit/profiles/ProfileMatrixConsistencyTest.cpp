@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "BuildProfileResolver.h"
+#include "DaemonProfileProjection.h"
 #include "ProfileCatalog.h"
 #include "ProfileCompatibilityValidator.h"
 #include "ProfileError.h"
@@ -50,9 +51,26 @@ namespace {
   return enabled_adapters;
 }
 
+void assert_daemon_keys_are_present(const dasall::profiles::ParsedProfileYaml& parsed_yaml) {
+  using dasall::tests::support::assert_true;
+
+  assert_true(parsed_yaml.scalar_values.contains(std::string(dasall::profiles::kDaemonSocketPathKey)),
+              "daemon.socket_path should be present in every baseline profile asset");
+  assert_true(parsed_yaml.scalar_values.contains(std::string(dasall::profiles::kDaemonListenBacklogKey)),
+              "daemon.listen_backlog should be present in every baseline profile asset");
+  assert_true(parsed_yaml.scalar_values.contains(std::string(dasall::profiles::kDaemonDispatchTimeoutKey)),
+              "daemon.dispatch_timeout_ms should be present in every baseline profile asset");
+  assert_true(parsed_yaml.scalar_values.contains(std::string(dasall::profiles::kDaemonDiagEnabledKey)),
+              "daemon.diag.enabled should be present in every baseline profile asset");
+  assert_true(parsed_yaml.scalar_values.contains(std::string(dasall::profiles::kDaemonWatchdogEnabledKey)),
+              "daemon.watchdog.enabled should be present in every baseline profile asset");
+}
+
 void test_resolver_and_runtime_assets_stay_matrix_consistent_for_all_profiles() {
   using dasall::profiles::BuildProfileResolveRequest;
   using dasall::profiles::BuildProfileResolver;
+  using dasall::profiles::DaemonProfileProjection;
+  using dasall::profiles::DaemonProfileProjectionRequest;
   using dasall::profiles::ParsedProfileYaml;
   using dasall::profiles::ProfileCatalog;
   using dasall::profiles::ProfileCompatibilityState;
@@ -69,6 +87,7 @@ void test_resolver_and_runtime_assets_stay_matrix_consistent_for_all_profiles() 
               "precondition: discovered baseline profiles should have unique ids and complete metadata");
 
   const BuildProfileResolver resolver(catalog);
+  const DaemonProfileProjection daemon_projection(catalog);
   const RuntimePolicyProvider provider(catalog);
   const ProfileCompatibilityValidator validator;
 
@@ -84,6 +103,14 @@ void test_resolver_and_runtime_assets_stay_matrix_consistent_for_all_profiles() 
 
     const ParsedProfileYaml parsed_yaml = parse_profile_yaml_file(descriptor.asset_paths.runtime_policy_path);
     assert_true(parsed_yaml.ok, "runtime policy asset should parse when checking matrix consistency");
+  assert_daemon_keys_are_present(parsed_yaml);
+
+  const auto daemon_result = daemon_projection.load(DaemonProfileProjectionRequest{
+    .profile_id = descriptor.profile_id,
+  });
+  assert_true(daemon_result.ok(), "daemon profile projection should load every baseline profile");
+  assert_true(daemon_result.settings->defaulted_keys.empty(),
+        "baseline daemon profile projection should not rely on implicit defaults");
 
     const auto enabled_modules = extract_enabled_modules(parsed_yaml);
     const auto enabled_adapters = extract_enabled_adapters(enabled_modules);

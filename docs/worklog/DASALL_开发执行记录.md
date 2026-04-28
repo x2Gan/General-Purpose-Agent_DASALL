@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #501
+
+- 日期：2026-04-28
+- 阶段：daemon/profile projection baseline
+- 任务：DMD-TODO-003 收敛 daemon Profile 配置投影来源并清除 DMD-BLK-001
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-002 已完成并推送，满足 DMD-TODO-003 的直接前置。
+2. 003 的显性阻塞是 DMD-BLK-001：五档 profile 资产完全缺少 daemon 键，导致 daemon config 仍只能退回 `main.cpp` 常量。
+3. 本轮采用 blocker recovery + 原任务合并闭环：先补 profile 资产和 profiles 侧 projection helper，再用 focused tests 验证 blocker 已消除并完成 003。
+
+### 改动
+
+1. 新增 `profiles/include/DaemonProfileProjection.h` 与 `profiles/src/DaemonProfileProjection.cpp`，定义 `DaemonProfileSettings` 与 `DaemonProfileProjection::load()`，由 `profiles` 自己消费 profile 资产，不反向依赖 `apps/daemon`。
+2. 五个 baseline profile 的 `runtime_policy.yaml` 全部新增 `daemon.socket_path`、`daemon.listen_backlog`、`daemon.dispatch_timeout_ms`、`daemon.diag.enabled`、`daemon.watchdog.enabled`。
+3. 新增 `tests/unit/profiles/DaemonProfileProjectionTest.cpp` 并更新 `tests/unit/profiles/CMakeLists.txt`，覆盖五档 profile 投影、显式键映射与非法 daemon key 拒绝。
+4. 更新 `tests/unit/profiles/ProfileMatrixConsistencyTest.cpp`，把 DMD-BLK-001 转成自动化断言：每个 baseline profile 都必须携带 daemon 关键键，且 projection helper 不得回退到隐式默认值。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-003-daemon-profile配置投影收敛.md`，并回写 daemon 专项 TODO 与 blocker 表。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_daemon_profile_projection_unit_test dasall_profile_matrix_consistency_unit_test && ctest --test-dir build-ci -R "^(DaemonProfileProjectionTest|ProfileMatrixConsistencyTest)$" --output-on-failure`
+   - 结果：通过，`DaemonProfileProjectionTest` 与 `ProfileMatrixConsistencyTest` 共 2/2 通过。
+
+### 结果
+
+1. DMD-BLK-001 已由代码与 profile 资产双向清除，daemon 配置不再依赖 `main.cpp` 的旁路常量。
+2. `profiles` 到 `apps/daemon` 的依赖方向保持正确；daemon profile projection 现在停留在 `profiles` 模块内部，并通过 helper 暴露稳定 settings。
+3. DMD-TODO-027 后续可以直接复用这组 daemon profile baseline 证据，不必再重复解阻 profile 键缺失问题。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-003 改动。
+
 ## 记录 #500
 
 - 日期：2026-04-28

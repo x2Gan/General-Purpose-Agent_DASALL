@@ -186,6 +186,14 @@ infra:
 		max_entities: 2048
 		safe_mode:
 			scan_interval_ms: 2000
+daemon:
+	socket_path: /tmp/dasall/control.sock
+	listen_backlog: 32
+	dispatch_timeout_ms: 5000
+	diag:
+		enabled: false
+	watchdog:
+		enabled: false
 ops_policy:
 	log_level: info
 	metrics_granularity: full
