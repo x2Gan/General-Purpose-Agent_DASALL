@@ -65,6 +65,18 @@ dasall_add_cognition_integration_test(
   "integration;cognition;profile"
 )
 
+dasall_add_cognition_integration_test(
+  dasall_cognition_review_regression_integration_test
+  CognitionReviewRegressionTest
+  CognitionReviewRegressionTest.cpp
+  "integration;cognition;review"
+)
+
+target_compile_definitions(dasall_cognition_review_regression_integration_test
+  PRIVATE
+    DASALL_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 if(NOT DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "cognition integration registration requires at least one test target")
 endif()
