@@ -3,6 +3,7 @@
 #include <atomic>
 #include <memory>
 
+#include "DaemonLifecycleController.h"
 #include "IAccessGateway.h"
 #include "IIPC.h"
 #include "daemon/DaemonProtocolAdapter.h"
@@ -47,6 +48,7 @@ class DaemonBootstrap {
 
   std::shared_ptr<dasall::platform::IIPC> ipc_;
   std::shared_ptr<dasall::access::IAccessGateway> gateway_;
+  DaemonLifecycleController lifecycle_;
   std::atomic<bool> stop_requested_{false};
 
   // accept 超时（毫秒）：控制退出检测频率

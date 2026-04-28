@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #503
+
+- 日期：2026-04-28
+- 阶段：daemon/lifecycle controller split
+- 任务：DMD-TODO-005 实现 DaemonLifecycleController 状态机
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-002 和 DMD-TODO-004 已完成，满足 005 的显式前置。
+2. 当前最小缺口是 daemon 壳层仍只有 `stop_requested_` 和 `gateway_->is_ready()` 这类隐式生命周期判断，缺少独立可测的状态推进、draining 拒绝新请求与 timeout 语义。
+3. 本轮只收 lifecycle controller 本体、bootstrap 轻量接线和 focused unit gate，不提前进入 listener host、signal handler、supervisor 或完整 graceful shutdown 主链。
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonLifecycleController.h` 与 `apps/daemon/src/DaemonLifecycleController.cpp`，定义 `DaemonLifecycleState`、`DaemonLifecycleObservation`、`DaemonShutdownResult` 以及 `start()`、`mark_binding()`、`mark_ready()`、`mark_failed()`、`begin_request()`、`finish_request()`、`shutdown(timeout)`。
+2. 状态机使用 mutex + condition variable 管理 inflight request 计数，使 `shutdown(timeout)` 能稳定表达 draining success 与 timeout/abandoned 事实。
+3. 更新 `apps/daemon/src/DaemonBootstrap.h` 与 `apps/daemon/src/DaemonBootstrap.cpp`，把 start/bind/ready/fail/stop 的状态推进轻量迁移到 lifecycle 组件，不再只依赖 `stop_requested_`。
+4. 更新 `apps/daemon/CMakeLists.txt` 与 `tests/unit/apps/daemon/CMakeLists.txt`，纳入 lifecycle 组件和 `DaemonLifecycleControllerTest`。
+5. 新增 `tests/unit/apps/daemon/DaemonLifecycleControllerTest.cpp`，覆盖合法转移、非法转移、draining 拒绝新请求、drain timeout 与 failed 观测语义。
+6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-005-DaemonLifecycleController收敛.md`，并回写 daemon 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+   - 结果：通过，`dasall_daemon` 成功重编译，说明 lifecycle 接线未破坏现有 daemon 壳层。
+2. `Build_CMakeTools(buildTargets=["dasall_daemon_lifecycle_controller_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["DaemonLifecycleControllerTest"])`
+   - 结果：通过，`DaemonLifecycleControllerTest` 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. daemon v1 lifecycle 现在有独立 owner，不再把状态机隐藏在 bootstrap 的布尔分支里。
+2. `Draining`、`Failed` 与 `Stopped` 都有显式新请求行为和观测语义，可直接服务后续 signal、graceful shutdown 和 health/readiness 任务。
+3. DMD-TODO-007 可以直接复用这组 lifecycle 语义；DMD-TODO-006 和 DMD-TODO-009 仍需在进入实现前先处理 DMD-BLK-004 / DMD-TODO-029。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-005 改动。
+
 ## 记录 #502
 
 - 日期：2026-04-28

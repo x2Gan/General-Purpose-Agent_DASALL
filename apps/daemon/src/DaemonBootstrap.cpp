@@ -17,7 +17,17 @@ bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
     return false;
   }
 
+  if (!lifecycle_.start()) {
+    return false;
+  }
+
   if (!gateway_->is_ready()) {
+    (void)lifecycle_.mark_failed();
+    return false;
+  }
+
+  if (!lifecycle_.mark_binding()) {
+    (void)lifecycle_.mark_failed();
     return false;
   }
 
@@ -28,6 +38,12 @@ bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
 
   const auto listener_result = ipc_->listen(endpoint, listen_opts);
   if (!listener_result.ok() || !listener_result.value.has_value()) {
+    (void)lifecycle_.mark_failed();
+    return false;
+  }
+
+  if (!lifecycle_.mark_ready()) {
+    (void)lifecycle_.mark_failed();
     return false;
   }
 
@@ -56,6 +72,7 @@ bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
 
 void DaemonBootstrap::stop() {
   stop_requested_.store(true);
+  (void)lifecycle_.shutdown(std::chrono::milliseconds::zero());
 }
 
 bool DaemonBootstrap::handle_connection(
