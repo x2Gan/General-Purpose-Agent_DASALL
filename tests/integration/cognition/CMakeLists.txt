@@ -37,17 +37,6 @@ macro(dasall_add_cognition_integration_test target_name test_name source_file la
   list(APPEND DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS ${target_name})
 endmacro()
 
-macro(dasall_add_cognition_integration_placeholder target_name test_name)
-  add_custom_target(${target_name}
-    COMMAND ${CMAKE_COMMAND} -E true
-  )
-
-  add_test(NAME ${test_name} COMMAND ${CMAKE_COMMAND} -E true)
-  set_tests_properties(${test_name} PROPERTIES LABELS "integration;cognition")
-
-  list(APPEND DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS ${target_name})
-endmacro()
-
 dasall_add_cognition_integration_test(
   dasall_cognition_runtime_integration_test
   CognitionRuntimeIntegrationTest
@@ -74,11 +63,6 @@ dasall_add_cognition_integration_test(
   CognitionProfileCompatibilityTest
   CognitionProfileCompatibilityTest.cpp
   "integration;cognition;profile"
-)
-
-dasall_add_cognition_integration_placeholder(
-  dasall_cognition_profile_compatibility_alias_integration_test
-  CognitionProfileCompatibilityIntegrationTest
 )
 
 if(NOT DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS)

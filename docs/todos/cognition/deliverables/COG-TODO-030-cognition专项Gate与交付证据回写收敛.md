@@ -23,8 +23,9 @@
 结果摘要：
 
 1. discoverability：`Total Tests: 733`。
-2. 聚焦 gate regex：`25/25` 通过（100%）。
-3. 全量 integration 聚合目标存在仓库既有残余：
+2. 原始 `25/25` 统计包含后续评审确认的 profile compatibility 历史空跑别名，因此该计数不能继续作为真实通过率口径。
+3. 经 COG-TODO-036 收敛后，cognition integration profile 证据应只统计真实测试名 `CognitionProfileCompatibilityTest`，不得再把历史空跑别名计入通过率。
+4. 全量 integration 聚合目标存在仓库既有残余：
    - `InfraDiagnosticsSmokeTest` failed
    - `InfraDiagnosticsIntegrationTest` not run（可执行文件缺失）
    - `PluginAuditTraceIntegrationTest` not run（可执行文件缺失）
@@ -44,7 +45,7 @@
 | Gate-COG-07 | Pass | COG-TODO-024 ~ 025 交付物；`ctest -N` | cognition integration 可发现 |
 | Gate-COG-08 | Pass | `RuntimeCognitionLoopSmokeTest`、`CognitionRuntimeIntegrationTest` | runtime happy path 已打通 |
 | Gate-COG-09 | Pass | `CognitionRuntimeInteractionContractTest`、`CognitionFailureInjectionIntegrationTest` | 交互契约与失败链路通过 |
-| Gate-COG-10 | Pass（聚焦）；Residual（全量） | 本任务命令证据 + COG-TODO-029 | profile compatibility 与证据回写已完成；全量 integration 仍有 infra/plugin 既有残余 |
+| Gate-COG-10 | Pass（聚焦，口径待 036 更正）；Residual（全量） | 本任务命令证据 + COG-TODO-029 + COG-TODO-036 | profile compatibility 与证据回写已完成；原始聚焦计数含历史空跑别名，036 后应以真实 `CognitionProfileCompatibilityTest` 重建统计；全量 integration 仍有 infra/plugin 既有残余 |
 
 ## 4. 风险残留与后续动作
 
