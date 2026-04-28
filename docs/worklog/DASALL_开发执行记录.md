@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #509
+
+- 日期：2026-04-28
+- 阶段：daemon/include boundary convergence
+- 任务：DMD-TODO-010 收敛 daemon composition root 的跨模块 include 边界
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-009 已完成后，010 成为 daemon 壳层拆分链上的直接后继；当前最小缺口不是 daemon 生命周期或 pipeline 行为，而是 `apps/daemon` 仍通过 `access/src/AccessGateway.h` 跨模块拿内部实现头。
+2. 010 挂着的 DMD-BLK-003 属于可在本轮最小修复的上下文阻塞：蓝图和编码规范已明确接口优先，只差把“允许 concrete include 还是新增 public factory”落成可执行结论。
+3. 本轮只处理 daemon composition root include 边界，不顺手扩到 `apps/gateway`、submit pipeline、RuntimeBridge 或 health/router 任务。
+
+### 改动
+
+1. 新增 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`：
+   - 定义 `AccessGatewayFactoryOptions`；
+   - 暴露 `create_access_gateway()` public seam；
+   - 在 access 模块内部桥接到 `AccessGateway` concrete。
+2. 更新 `access/CMakeLists.txt`，把 factory public header/source 接入 `dasall_access`。
+3. 更新 `apps/daemon/src/main.cpp`：
+   - 移除 `AccessGateway.h` include；
+   - 改用 `create_access_gateway()` 获取默认 gateway。
+4. 更新 `apps/daemon/CMakeLists.txt`，删除 `access/src` PRIVATE include dir。
+5. 更新 `tests/unit/access/AccessInterfaceSurfaceTest.cpp`，补 public factory 可发现性与 lifecycle 初态断言。
+6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-010-daemon-composition-root-include边界收敛.md`，并回写 daemon 专项 TODO，清除 DMD-BLK-003。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_interface_surface_unit_test"])`
+   - 结果：首轮失败，只暴露 `AccessInterfaceSurfaceTest` 对枚举断言重载使用错误；修正后复跑通过。
+2. `RunCtest_CMakeTools(tests=["AccessInterfaceSurfaceTest"])`
+   - 结果：通过，1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+3. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+   - 结果：通过，证明 daemon 已不依赖 `access/src` include dir 仍可构建。
+
+### 结果
+
+1. daemon composition root 现在通过 `access/include/AccessGatewayFactory.h` 获取 `IAccessGateway`，不再跨模块 include access internal header。
+2. DMD-BLK-003 已清除，010 的评审结论已落成可执行代码与测试证据，而不是停留在口头约定。
+3. `AccessInterfaceSurfaceTest` 回归通过，表明 public factory 已成为稳定可发现的 access module public surface。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-010 改动。
+2. 进入 DMD-TODO-011，继续收敛 daemon frame decode/encode 与 Access 主链接线前的协议边界。
+
 ## 记录 #508
 
 - 日期：2026-04-28

@@ -1,8 +1,10 @@
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 
+#include "AccessGatewayFactory.h"
 #include "AccessErrors.h"
 #include "AccessTypes.h"
 #include "IAccessGateway.h"
@@ -72,6 +74,15 @@ void access_public_surface_is_discoverable() {
   dasall::tests::support::assert_true(
       !local_peer_fact.eligible_for_local_trusted,
       "access interface surface test should expose LocalPeerUidFact defaults");
+
+  auto gateway = dasall::access::create_access_gateway();
+  dasall::tests::support::assert_true(
+      static_cast<bool>(gateway),
+      "access interface surface test should create gateway through public factory");
+  dasall::tests::support::assert_equal(
+      static_cast<int>(dasall::access::AccessGatewayState::Uninitialized),
+      static_cast<int>(gateway->state()),
+      "factory-created gateway should expose public lifecycle state before init");
 }
 
 void access_gateway_state_enumeration_is_defined() {

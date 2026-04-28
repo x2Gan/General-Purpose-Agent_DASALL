@@ -28,8 +28,6 @@ target_link_libraries(dasall_daemon
 target_include_directories(dasall_daemon
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    # access/src 内部头文件（AccessGateway.h 等 concrete class）
-    ${CMAKE_SOURCE_DIR}/access/src
 )
 
 dasall_apply_common_options(dasall_daemon)

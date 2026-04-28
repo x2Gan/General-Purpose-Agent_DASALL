@@ -25,12 +25,9 @@
 #include "DaemonConfig.h"
 #include "DaemonConfigValidator.h"
 #include "DaemonSignalHandler.h"
+#include "AccessGatewayFactory.h"
 #include "IAccessGateway.h"
 #include "linux/UnixIpcProvider.h"
-
-// AccessGateway 是 internal 实现，通过 access/src 路径包含
-// （CMakeLists.txt 已将 access/src 加入 PRIVATE include dirs）
-#include "AccessGateway.h"
 
 namespace {
 
@@ -104,9 +101,9 @@ int main(int argc, char* argv[]) {
   // 1. 创建 IIPC provider（Linux UDS 实现）
   auto ipc = std::make_shared<dasall::platform::linux::UnixIpcProvider>();
 
-  // 2. 构造 AccessGateway（v1: 使用空 submit pipeline 和 publish backend 占位）
-  //    注：实际生产中需注入完整的主链 pipeline（含 Validator / Admission / RuntimeBridge）
-  auto gateway = std::make_shared<dasall::access::AccessGateway>();
+  // 2. 通过 access public factory 构造默认 gateway concrete。
+  //    v1 仍保留空 submit pipeline / publish backend 占位，后续由 pipeline factory 接线。
+  auto gateway = dasall::access::create_access_gateway();
   if (!gateway->init()) {
     std::cerr << "[dasall_daemon] AccessGateway init failed\n";
     return 1;

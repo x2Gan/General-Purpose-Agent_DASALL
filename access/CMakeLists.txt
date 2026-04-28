@@ -2,6 +2,7 @@ add_library(dasall_access STATIC)
 
 set(DASALL_ACCESS_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(DASALL_ACCESS_PUBLIC_HEADERS
+  include/AccessGatewayFactory.h
   include/AccessErrors.h
   include/AccessTypes.h
   include/daemon/DaemonProtocolTypes.h
@@ -27,6 +28,7 @@ target_sources(dasall_access
     src/placeholder.cpp
     src/AccessConfigAdapter.cpp
     src/AccessGateway.cpp
+    src/AccessGatewayFactory.cpp
     src/AccessObservabilityBridge.cpp
     src/AsyncTaskRegistry.cpp
     src/AdmissionController.cpp
