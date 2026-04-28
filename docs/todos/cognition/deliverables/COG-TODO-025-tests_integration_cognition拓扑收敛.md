@@ -15,12 +15,11 @@
 ## 2. 变更结论
 
 1. 在 `tests/integration/CMakeLists.txt` 新增 `add_subdirectory(cognition)`，并把 `${DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS}` 聚合进 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS`。
-2. 新增 `tests/integration/cognition/CMakeLists.txt`，注册 cognition integration 拓扑占位用例（`cmake -E true`）：
+2. 新增 `tests/integration/cognition/CMakeLists.txt`，先完成 cognition integration 拓扑 discoverability 注册；该早期临时空跑注册已在后续 COG-TODO-036 收敛为真实 executable 口径：
    - `CognitionRuntimeIntegrationTest`
    - `CognitionRuntimeInteractionContractTest`
    - `CognitionFailureInjectionIntegrationTest`
    - `CognitionProfileCompatibilityTest`
-   - `CognitionProfileCompatibilityIntegrationTest`（为兼容当前 TODO 验收正则增加的别名）
 3. 新增 target 聚合变量 `DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS` 并 `PARENT_SCOPE` 回传顶层 integration 聚合。
 
 ## 3. 验证证据
@@ -28,12 +27,12 @@
 1. 任务原始命令（Unix Makefiles）在当前环境失败：`build-ci` 目录已有 Ninja 生成缓存，出现 generator mismatch。
 2. 按仓库已知基线改用现有 `build-ci` 完成配置与发现性验证：
    - `cmake -S . -B build-ci`
-   - `ctest --test-dir build-ci -N | rg "Cognition(Runtime|FailureInjection|ProfileCompatibility)IntegrationTest|CognitionRuntimeInteractionContractTest"`
+   - `ctest --test-dir build-ci -N | rg "Cognition(Runtime|FailureInjection|ProfileCompatibility)Test|CognitionRuntimeInteractionContractTest"`
 3. 命令输出已发现以下 cognition integration 用例：
    - `CognitionRuntimeIntegrationTest`
    - `CognitionRuntimeInteractionContractTest`
    - `CognitionFailureInjectionIntegrationTest`
-   - `CognitionProfileCompatibilityIntegrationTest`
+   - `CognitionProfileCompatibilityTest`
 4. `cmake --build build-ci --target dasall_integration_tests` 当前受仓库现存 `runtime/src/AgentOrchestrator.cpp` 字段不匹配错误阻塞（`ActionDecision.tool_name` / `tool_arguments_payload` 不存在），不属于本任务改动引入。
 
 ## 4. 完成判定

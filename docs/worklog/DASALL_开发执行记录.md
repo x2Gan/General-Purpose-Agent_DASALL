@@ -1,5 +1,116 @@
 # DASALL 开发执行记录
 
+## 记录 #498
+
+- 日期：2026-04-28
+- 阶段：cognition/review gate and residual risk writeback
+- 任务：COG-TODO-038 回写评审后 Gate、worklog 与残余风险
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-036、037 已完成并已推送，满足 038 的前置。
+2. 当前最小缺口是专项 TODO 与 worklog 仍缺少 Gate-COG-11 当前结论、COG-R13 ~ R18 状态，以及旧空跑证据在 cognition 文档树中的残留清理。
+3. 本轮只收文档与证据口径，不扩张到新的生产代码实现。
+
+### 改动
+
+1. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`，将 COG-TODO-038 回写为 Done，并新增 Gate-COG-11 当前状态与 COG-R13 ~ R18 风险状态表。
+2. 更新 `docs/todos/cognition/deliverables/COG-TODO-025-tests_integration_cognition拓扑收敛.md` 与 `docs/todos/cognition/deliverables/COG-TODO-036-cognitionIntegration证据口径收敛.md`，移除历史空跑别名/空命令的字面残留。
+3. 新增 `docs/todos/cognition/deliverables/COG-TODO-038-cognition评审后Gate与风险回写收敛.md`，集中收录 Gate-COG-11 结论、风险状态、repo-wide integration 残余与后续动作。
+4. 回写本工作日志，补齐 036 ~ 038 的执行轨迹。
+
+### 验证
+
+1. `rg -n "Gate-COG-11|COG-R1[3-8]|COG-TODO-03[6-8]" docs/todos/cognition docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过，专项 TODO、deliverables 与 worklog 均能追溯 036 ~ 038 的 gate/risk 结论。
+2. `rg -n "CognitionReviewRegressionTest|CognitionProfileCompatibilityTest" tests/integration/cognition/CMakeLists.txt docs/todos/cognition`
+   - 结果：通过，cognition 文档树与 integration CMake 均指向真实 review/profile executable 证据。
+
+### 结果
+
+1. Gate-COG-11 已具当前结论：cognition 责任域补强闭环通过，repo-wide integration 残余继续显式保留。
+2. COG-R13 ~ R17 已关闭，COG-R18 变为 Mitigated，后续只保留 infra/plugin 聚合残余。
+3. 038 完成后，036 ~ 038 的设计、验证、worklog 与交付证据闭环已补齐。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-038 改动。
+
+## 记录 #497
+
+- 日期：2026-04-28
+- 阶段：cognition/review regression matrix hardening
+- 任务：COG-TODO-037 补齐评审缺口的负例回归矩阵
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-031 ~ 036 已完成，bridge/profile/runtime/schema 的可观察 seam 已具备，满足 037 的前置。
+2. 当前最小缺口是评审指出的关键负例缺少专用 gate，尤其是 bridge 调用回归和 integration 注册面回退仍没有单独的 review regression test。
+3. 本轮只新增 review regression test 和矩阵文档，不修改 cognition 生产语义。
+
+### 改动
+
+1. 新增 `tests/integration/cognition/CognitionReviewRegressionTest.cpp`，覆盖 canonical bridge 调用、missing canonical route fail-closed 与 integration 注册面不得回退到历史空跑别名。
+2. 更新 `tests/integration/cognition/CMakeLists.txt`，注册 `dasall_cognition_review_regression_integration_test` 与 `CognitionReviewRegressionTest`。
+3. 新增 `docs/todos/cognition/deliverables/COG-TODO-037-cognition评审负例矩阵收敛.md`，并回写 cognition 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_review_regression_integration_test","dasall_cognition_runtime_interaction_contract_integration_test","dasall_stage_output_validator_schema_unit_test","dasall_cognition_facade_flow_unit_test","dasall_response_builder_template_fallback_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionReviewRegressionTest","CognitionFacadeFlowTest","CognitionRuntimeInteractionContractTest","StageOutputValidatorSchemaTest","ResponseBuilderTemplateFallbackTest"])`
+   - 结果：通过；工具 stderr 仍打印已知 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. 评审缺口现在有明确矩阵入口，不再依赖人工比对日志判断 bridge/missing-route/placeholder/schema/runtime signal 是否回归。
+2. response stage bridge 仍由 `CognitionFacadeFlowTest` 与 `ResponseBuilderTemplateFallbackTest` 组合守护，review regression 不再误伤允许的模板回退路径。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-037 改动。
+2. 下一轮进入 COG-TODO-038，回写 Gate-COG-11、风险状态与 worklog。
+
+## 记录 #496
+
+- 日期：2026-04-28
+- 阶段：cognition/integration evidence normalization
+- 任务：COG-TODO-036 移除 cognition integration placeholder alias 并重建证据口径
+- 状态：已完成
+
+### 任务选择
+
+1. COG-TODO-025、029、030 已完成并具备可读证据，满足 036 的前置。
+2. 当前最小缺口是 profile compatibility 历史空跑别名仍会进入 discoverability 与 Gate-COG-10 统计，导致通过率口径失真。
+3. 本轮只收 integration CMake 和 gate 文档证据，不扩张到新的生产逻辑。
+
+### 改动
+
+1. 更新 `tests/integration/cognition/CMakeLists.txt`，移除 profile compatibility 历史空跑别名注册与对应 placeholder helper。
+2. 新增 `docs/todos/cognition/deliverables/COG-TODO-036-cognitionIntegration证据口径收敛.md`，并回写专项 TODO。
+3. 更新 `docs/todos/cognition/deliverables/COG-TODO-030-cognition专项Gate与交付证据回写收敛.md`，把 Gate-COG-10 证据改写为真实 executable 口径。
+
+### 验证
+
+1. `cmake -S . -B build-ci`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -N | rg "Cognition"`
+   - 结果：通过，discoverability 保留真实 cognition tests。
+3. `rg -n "CognitionProfileCompatibilityTest|CognitionReviewRegressionTest" tests/integration/cognition/CMakeLists.txt docs/todos/cognition/deliverables/COG-TODO-030-cognition专项Gate与交付证据回写收敛.md`
+   - 结果：通过。
+
+### 结果
+
+1. cognition integration 聚合变量已只包含真实 executable target。
+2. Gate-COG-10 不再把历史空跑别名计入通过率。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 COG-TODO-036 改动。
+2. 下一轮进入 COG-TODO-037，补齐评审缺口的负例回归矩阵。
+
 ## 记录 #495
 
 - 日期：2026-04-27
