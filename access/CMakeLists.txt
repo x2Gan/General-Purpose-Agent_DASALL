@@ -4,6 +4,7 @@ set(DASALL_ACCESS_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(DASALL_ACCESS_PUBLIC_HEADERS
   include/AccessErrors.h
   include/AccessTypes.h
+  include/daemon/DaemonProtocolTypes.h
   include/daemon/DaemonProtocolAdapter.h
   include/IAccessGateway.h
   include/IAccessRuntimeBridge.h

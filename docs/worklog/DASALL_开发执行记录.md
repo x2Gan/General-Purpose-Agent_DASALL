@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #499
+
+- 日期：2026-04-28
+- 阶段：daemon/schema baseline
+- 任务：DMD-TODO-001 定义 daemon v1 命令 taxonomy 与 UDS frame 类型
+- 状态：已完成
+
+### 任务选择
+
+1. 用户已明确要求按 project-implementation-cycle 串行推进 DMD-TODO-001 ~ 004，本轮按技能约束只选择第一个最小可执行原子任务 DMD-TODO-001。
+2. DMD-TODO-001 无前置依赖，且它直接决定后续 adapter、CLI、health 与 policy 任务的协议边界，适合作为 schema/config 基线的首轮提交。
+3. 当前代码缺口局部且明确：`DaemonProtocolAdapter` 内只存在隐式字符串字段，没有正式 `UdsRequestFrame` / `UdsResponseFrame` 类型头。
+
+### 改动
+
+1. 新增 `access/include/daemon/DaemonProtocolTypes.h`，冻结 daemon v1 的 `DaemonCommandKind`、`DaemonAsyncPreference`、`UdsResponseDisposition`、`DaemonFrameDecodeError`、`UdsRequestFrame` 与 `UdsResponseFrame`。
+2. 在同一头文件中新增 `classify_daemon_command()`、`is_read_only_daemon_command()` 与 `is_mutating_daemon_command()`，固化 `ping/run/status/cancel/readiness/diag` taxonomy，并兼容 `submit`/`diagnostics` 历史别名。
+3. 更新 `access/CMakeLists.txt`，把新类型头加入 `dasall_access` public headers。
+4. 新增 `tests/unit/access/DaemonProtocolTypesTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`，为 schema 默认值、taxonomy、读写分类和 unknown path 提供 focused unit gate。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-001-daemon命令taxonomy与frame类型收敛.md`，并回写 daemon 专项 TODO 状态。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "DaemonProtocolTypesTest" --output-on-failure`
+   - 结果：失败，原因不是代码而是 `build-ci` 既有缓存已经使用 `Ninja` 生成器，和命令中的 `Unix Makefiles` 不一致。
+2. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_access_daemon_protocol_types_unit_test && ctest --test-dir build-ci -R "^DaemonProtocolTypesTest$" --output-on-failure`
+   - 结果：通过，`DaemonProtocolTypesTest` 1/1 通过。
+3. `get_errors(filePaths=[access/include/daemon/DaemonProtocolTypes.h, tests/unit/access/DaemonProtocolTypesTest.cpp, access/CMakeLists.txt, tests/unit/access/CMakeLists.txt])`
+   - 结果：无新增编辑器错误。
+
+### 结果
+
+1. daemon v1 command taxonomy 已有正式类型承载，后续 `DaemonProtocolAdapter` 与 CLI-daemon 协议实现不再需要从文档反推字段。
+2. `UdsRequestFrame` / `UdsResponseFrame` 已留在 access daemon surface，没有扩散到 `contracts/`。
+3. focused validation 证明新协议类型和单测入口已接入当前仓库的 `build-ci` / `Ninja` 验证链路。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-001 改动。
+
 ## 记录 #498
 
 - 日期：2026-04-28

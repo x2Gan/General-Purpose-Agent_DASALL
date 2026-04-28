@@ -314,6 +314,12 @@ dasall_add_access_unit_test(
   AccessGatewayAsyncReceiptTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_daemon_protocol_types_unit_test
+  DaemonProtocolTypesTest
+  DaemonProtocolTypesTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )
