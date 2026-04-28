@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 
+#include "DaemonSocketPolicy.h"
 #include "PlatformError.h"
 
 namespace dasall::apps::daemon {
@@ -31,6 +32,9 @@ DaemonListenerHost::DaemonListenerHost(
 
 dasall::platform::PlatformResult<bool> DaemonListenerHost::bind(
     const dasall::platform::IpcEndpoint& endpoint) {
+  const DaemonSocketPolicy socket_policy =
+      DaemonSocketPolicy::for_current_process();
+
   if (!ipc_) {
     return dasall::platform::PlatformResult<bool>::failure(make_error(
         dasall::platform::PlatformErrorCode::InvalidArgument,
@@ -45,7 +49,28 @@ dasall::platform::PlatformResult<bool> DaemonListenerHost::bind(
         "listener endpoint is invalid"));
   }
 
-  const auto listener_result = ipc_->listen(endpoint, listen_options_);
+  const auto preflight = preflight_bind_endpoint(endpoint, socket_policy);
+  if (!preflight.ok()) {
+    return dasall::platform::PlatformResult<bool>::failure(*preflight.error);
+  }
+
+  auto listener_result = ipc_->listen(endpoint, listen_options_);
+  if ((!listener_result.ok() || !listener_result.value.has_value()) &&
+      listener_result.error.has_value() &&
+      listener_result.error->code ==
+          dasall::platform::PlatformErrorCode::AddressInUse) {
+    const auto cleanup_result =
+        try_cleanup_stale_socket(endpoint.socket_path, socket_policy);
+    if (!cleanup_result.ok()) {
+      return dasall::platform::PlatformResult<bool>::failure(
+          *cleanup_result.error);
+    }
+
+    if (cleanup_result.value.value_or(false)) {
+      listener_result = ipc_->listen(endpoint, listen_options_);
+    }
+  }
+
   if (!listener_result.ok() || !listener_result.value.has_value()) {
     if (listener_result.error.has_value()) {
       return dasall::platform::PlatformResult<bool>::failure(

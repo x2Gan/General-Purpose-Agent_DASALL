@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include "DaemonSocketPolicy.h"
+
 namespace dasall::apps::daemon {
 namespace {
 
@@ -40,11 +42,13 @@ DaemonConfigValidationResult DaemonConfigValidationResult::failure(
 
 DaemonConfigValidationResult DaemonConfigValidator::validate_config(
     const DaemonBootstrapConfig& config) const {
-  if (config.socket_path.empty() || !config.socket_path.starts_with('/')) {
+  const auto socket_path_validation =
+      validate_socket_path(config.socket_path, DaemonSocketPolicy::for_current_process());
+  if (!socket_path_validation.ok()) {
     return DaemonConfigValidationResult::failure(
         DaemonConfigValidationError::InvalidSocketPath,
         {"daemon.socket_path"},
-        "daemon.socket_path must be a non-empty absolute path");
+        socket_path_validation.error->detail);
   }
 
   if (config.max_payload_bytes == 0U ||

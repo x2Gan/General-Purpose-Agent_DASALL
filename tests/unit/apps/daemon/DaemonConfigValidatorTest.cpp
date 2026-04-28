@@ -1,13 +1,33 @@
 #include <exception>
+#include <filesystem>
 #include <iostream>
+#include <string_view>
 #include <string>
 #include <vector>
+
+#include <unistd.h>
 
 #include "DaemonConfig.h"
 #include "DaemonConfigValidator.h"
 #include "support/TestAssertions.h"
 
 namespace {
+
+namespace fs = std::filesystem;
+
+[[nodiscard]] fs::path make_temp_directory(std::string_view stem) {
+  const auto unique_id = std::to_string(::getpid()) + "-" +
+                         std::to_string(fs::file_time_type::clock::now().time_since_epoch().count());
+  const fs::path temp_root = fs::temp_directory_path() /
+                             (std::string(stem) + "-" + unique_id);
+  fs::create_directories(temp_root);
+  return temp_root;
+}
+
+void cleanup_path(const fs::path& path) {
+  std::error_code error;
+  fs::remove_all(path, error);
+}
 
 void test_validate_config_accepts_v1_defaults() {
   using dasall::apps::daemon::DaemonBootstrapConfig;
@@ -35,6 +55,51 @@ void test_validate_config_rejects_empty_socket_path() {
   assert_equal(static_cast<int>(DaemonConfigValidationError::InvalidSocketPath),
                static_cast<int>(*result.error_code),
                "empty socket_path should map to InvalidSocketPath");
+}
+
+void test_validate_config_rejects_path_traversal_components() {
+  using dasall::apps::daemon::DaemonBootstrapConfig;
+  using dasall::apps::daemon::DaemonConfigValidationError;
+  using dasall::apps::daemon::DaemonConfigValidator;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  DaemonBootstrapConfig config;
+  config.socket_path = "/tmp/dasall/../control.sock";
+
+  const DaemonConfigValidator validator;
+  const auto result = validator.validate_config(config);
+  assert_true(!result.ok(), "DaemonConfigValidator should reject socket paths with traversal components");
+  assert_equal(static_cast<int>(DaemonConfigValidationError::InvalidSocketPath),
+               static_cast<int>(*result.error_code),
+               "path traversal should map to InvalidSocketPath");
+}
+
+void test_validate_config_rejects_world_writable_parent_directory() {
+  using dasall::apps::daemon::DaemonBootstrapConfig;
+  using dasall::apps::daemon::DaemonConfigValidationError;
+  using dasall::apps::daemon::DaemonConfigValidator;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const fs::path temp_root = make_temp_directory("daemon-config-validator");
+  const fs::path socket_parent = temp_root / "socket-root";
+  fs::create_directories(socket_parent);
+  fs::permissions(socket_parent,
+                  static_cast<fs::perms>(0777),
+                  fs::perm_options::replace);
+
+  DaemonBootstrapConfig config;
+  config.socket_path = (socket_parent / "control.sock").string();
+
+  const DaemonConfigValidator validator;
+  const auto result = validator.validate_config(config);
+  cleanup_path(temp_root);
+
+  assert_true(!result.ok(), "DaemonConfigValidator should reject world-writable socket parent directories");
+  assert_equal(static_cast<int>(DaemonConfigValidationError::InvalidSocketPath),
+               static_cast<int>(*result.error_code),
+               "unsafe parent directory should map to InvalidSocketPath");
 }
 
 void test_validate_config_rejects_payload_limit_above_upper_bound() {
@@ -114,6 +179,8 @@ int main() {
   try {
     test_validate_config_accepts_v1_defaults();
     test_validate_config_rejects_empty_socket_path();
+    test_validate_config_rejects_path_traversal_components();
+    test_validate_config_rejects_world_writable_parent_directory();
     test_validate_config_rejects_payload_limit_above_upper_bound();
     test_validate_conflicts_rejects_flag_and_config_file_mismatch();
     test_validate_reload_keys_rejects_restart_only_keys();

@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #510
+
+- 日期：2026-04-28
+- 阶段：daemon/uds endpoint security hardening
+- 任务：DMD-TODO-032 收敛 UDS endpoint 权限、stale socket 与 bind 安全策略
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonSocketPolicy.h` 与 `apps/daemon/src/DaemonSocketPolicy.cpp`，统一实现 `validate_socket_path()`、`preflight_bind_endpoint()`、`try_cleanup_stale_socket()`。
+2. 更新 `apps/daemon/src/DaemonConfigValidator.cpp`，将 `daemon.socket_path` 校验切换为统一 socket policy。
+3. 更新 `apps/daemon/src/DaemonListenerHost.cpp`，在 bind 前执行 preflight，并在 `AddressInUse` 时按策略尝试 stale socket 安全清理后重试。
+4. 更新 `apps/daemon/CMakeLists.txt` 与 `tests/unit/apps/daemon/CMakeLists.txt`，将新 helper 及新增测试目标纳入构建。
+5. 新增 `tests/unit/apps/daemon/DaemonSocketPolicyTest.cpp` 与 `tests/unit/apps/daemon/DaemonListenerHostBindConflictTest.cpp`，并扩展 `tests/unit/apps/daemon/DaemonConfigValidatorTest.cpp`、`tests/unit/apps/daemon/DaemonListenerHostTest.cpp`。
+6. 新增交付文档 `docs/todos/daemon/deliverables/DMD-TODO-032-UDS-endpoint安全策略收敛.md`，回写专项 TODO 状态与证据。
+
+### 验证
+
+1. `DaemonSocketPolicyTest`：通过。
+2. `DaemonListenerHostBindConflictTest`：通过。
+3. `DaemonConfigValidatorTest`：通过。
+4. `DaemonListenerHostTest`：通过。
+
+### 结果
+
+1. daemon socket 策略实现单点收敛，validator 与 listener 不再各自维护分散规则。
+2. stale socket 只在 owner/group/mode 匹配且 liveness probe 失败时清理，活动 socket 明确拒绝并保留。
+3. `daemon.socket_path` 不再依赖硬编码 `/tmp`，且路径穿越、父目录 world-writable 等风险路径被 fail-closed。
+
 ## 记录 #509
 
 - 日期：2026-04-28
@@ -7,22 +36,11 @@
 - 任务：DMD-TODO-010 收敛 daemon composition root 的跨模块 include 边界
 - 状态：已完成
 
-### 任务选择
-
-1. DMD-TODO-009 已完成后，010 成为 daemon 壳层拆分链上的直接后继；当前最小缺口不是 daemon 生命周期或 pipeline 行为，而是 `apps/daemon` 仍通过 `access/src/AccessGateway.h` 跨模块拿内部实现头。
-2. 010 挂着的 DMD-BLK-003 属于可在本轮最小修复的上下文阻塞：蓝图和编码规范已明确接口优先，只差把“允许 concrete include 还是新增 public factory”落成可执行结论。
-3. 本轮只处理 daemon composition root include 边界，不顺手扩到 `apps/gateway`、submit pipeline、RuntimeBridge 或 health/router 任务。
-
 ### 改动
 
-1. 新增 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`：
-   - 定义 `AccessGatewayFactoryOptions`；
-   - 暴露 `create_access_gateway()` public seam；
-   - 在 access 模块内部桥接到 `AccessGateway` concrete。
+1. 新增 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`。
 2. 更新 `access/CMakeLists.txt`，把 factory public header/source 接入 `dasall_access`。
-3. 更新 `apps/daemon/src/main.cpp`：
-   - 移除 `AccessGateway.h` include；
-   - 改用 `create_access_gateway()` 获取默认 gateway。
+3. 更新 `apps/daemon/src/main.cpp`，改用 `create_access_gateway()` 获取 gateway。
 4. 更新 `apps/daemon/CMakeLists.txt`，删除 `access/src` PRIVATE include dir。
 5. 更新 `tests/unit/access/AccessInterfaceSurfaceTest.cpp`，补 public factory 可发现性与 lifecycle 初态断言。
 6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-010-daemon-composition-root-include边界收敛.md`，并回写 daemon 专项 TODO，清除 DMD-BLK-003。

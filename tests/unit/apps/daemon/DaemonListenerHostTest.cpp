@@ -1,17 +1,25 @@
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 #include "DaemonListenerHost.h"
 #include "PlatformError.h"
 #include "support/TestAssertions.h"
 
 namespace {
+
+namespace fs = std::filesystem;
 
 using dasall::apps::daemon::DaemonListenerHost;
 using dasall::platform::IpcChannelHandle;
@@ -28,6 +36,29 @@ using dasall::platform::PlatformErrorCode;
 using dasall::platform::PlatformResult;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
+
+class ScopedTempDirectory {
+ public:
+  explicit ScopedTempDirectory(std::string_view stem)
+      : path_(fs::temp_directory_path() /
+              (std::string(stem) + "-" + std::to_string(::getpid()) + "-" +
+               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
+    fs::create_directories(path_);
+    fs::permissions(path_, static_cast<fs::perms>(0700), fs::perm_options::replace);
+  }
+
+  ~ScopedTempDirectory() {
+    std::error_code error;
+    fs::remove_all(path_, error);
+  }
+
+  [[nodiscard]] const fs::path& path() const {
+    return path_;
+  }
+
+ private:
+  fs::path path_;
+};
 
 [[nodiscard]] PlatformError make_error(PlatformErrorCode code,
                                        PlatformErrorCategory category,
@@ -112,9 +143,10 @@ class ScriptedIpc final : public dasall::platform::IIPC {
 void test_bind_passes_expected_direct_bind_options() {
   auto ipc = std::make_shared<ScriptedIpc>();
   DaemonListenerHost host(ipc);
+  ScopedTempDirectory temp_root("daemon-listener-host-bind");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/daemon-listener.sock";
+  endpoint.socket_path = (temp_root.path() / "daemon-listener.sock").string();
 
   const auto bind_result = host.bind(endpoint);
   assert_true(bind_result.ok(), "bind should succeed for valid endpoint");
@@ -143,8 +175,9 @@ void test_accept_loop_tolerates_timeout_dispatches_connection_and_closes_channel
       PlatformResult<IpcChannelHandle>::success(IpcChannelHandle{.native_fd = 77U}));
 
   DaemonListenerHost host(ipc);
+  ScopedTempDirectory temp_root("daemon-listener-host-timeout");
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/daemon-listener-timeout.sock";
+  endpoint.socket_path = (temp_root.path() / "daemon-listener-timeout.sock").string();
   const auto bind_result = host.bind(endpoint);
   assert_true(bind_result.ok(), "bind should succeed before accept loop test");
 
@@ -174,9 +207,10 @@ void test_accept_loop_tolerates_timeout_dispatches_connection_and_closes_channel
 void test_close_rejects_future_accept_loops() {
   auto ipc = std::make_shared<ScriptedIpc>();
   DaemonListenerHost host(ipc);
+  ScopedTempDirectory temp_root("daemon-listener-host-close");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/daemon-listener-close.sock";
+  endpoint.socket_path = (temp_root.path() / "daemon-listener-close.sock").string();
   const auto bind_result = host.bind(endpoint);
   assert_true(bind_result.ok(), "bind should succeed before close test");
 
@@ -201,8 +235,9 @@ void test_accept_loop_maps_listener_errors() {
       "listener accept permission denied")));
 
   DaemonListenerHost host(ipc);
+  ScopedTempDirectory temp_root("daemon-listener-host-error");
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/daemon-listener-error.sock";
+  endpoint.socket_path = (temp_root.path() / "daemon-listener-error.sock").string();
   const auto bind_result = host.bind(endpoint);
   assert_true(bind_result.ok(), "bind should succeed before listener error mapping test");
 
