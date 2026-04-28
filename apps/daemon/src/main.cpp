@@ -27,8 +27,11 @@
 #include "DaemonConfig.h"
 #include "DaemonConfigValidator.h"
 #include "DaemonSignalHandler.h"
+#include "AccessErrors.h"
 #include "AccessGatewayFactory.h"
 #include "IAccessGateway.h"
+#include "AgentFacade.h"
+#include "agent/AgentResult.h"
 #include "linux/UnixIpcProvider.h"
 
 namespace {
@@ -76,6 +79,67 @@ struct ParsedDaemonArgs {
   return parsed;
 }
 
+[[nodiscard]] std::optional<std::string> dispatch_context_value(
+    const dasall::access::RuntimeDispatchRequest& request,
+    const std::string& key) {
+  const auto it = request.request_context.find(key);
+  if (it == request.request_context.end() || it->second.empty()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+[[nodiscard]] std::int64_t now_epoch_millis() {
+  const auto now = std::chrono::system_clock::now().time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+}
+
+[[nodiscard]] dasall::contracts::AgentRequest project_agent_request(
+    const dasall::access::RuntimeDispatchRequest& request) {
+  dasall::contracts::AgentRequest agent_request;
+  const auto request_id =
+      dispatch_context_value(request, "request_id").value_or(request.packet.packet_id);
+  agent_request.request_id = request_id;
+  agent_request.session_id = dispatch_context_value(request, "session_id")
+                                 .value_or(std::string("session:") + request_id);
+  agent_request.trace_id = dispatch_context_value(request, "trace_id")
+                               .value_or(std::string("trace:") + request_id);
+  agent_request.user_input = request.packet.payload;
+  agent_request.request_channel = dasall::contracts::RequestChannel::Daemon;
+  agent_request.created_at = now_epoch_millis();
+  if (const auto idempotency_key =
+          dispatch_context_value(request, "idempotency_key");
+      idempotency_key.has_value()) {
+    agent_request.idempotency_key = *idempotency_key;
+  }
+  return agent_request;
+}
+
+[[nodiscard]] dasall::access::RuntimeDispatchResult
+map_agent_result_to_dispatch_result(
+    const dasall::contracts::AgentResult& agent_result) {
+  dasall::access::RuntimeDispatchResult dispatch_result;
+  const auto uninitialized_runtime =
+      agent_result.status.has_value() &&
+      *agent_result.status == dasall::contracts::AgentResultStatus::Failed &&
+      agent_result.response_text.has_value() &&
+      agent_result.response_text->find("not initialized") != std::string::npos;
+
+  if (uninitialized_runtime) {
+    dispatch_result.disposition = dasall::access::AccessDisposition::Rejected;
+    dispatch_result.error_ref = "runtime_bridge_unavailable";
+    dispatch_result.response_context["error_code"] = std::to_string(
+        static_cast<int>(dasall::access::AccessErrorCode::RuntimeBridgeUnavailable));
+    dispatch_result.response_context["error_detail"] = *agent_result.response_text;
+    return dispatch_result;
+  }
+
+  dispatch_result.disposition = dasall::access::AccessDisposition::Completed;
+  dispatch_result.publish_envelope = dasall::access::PublishEnvelope{};
+  dispatch_result.publish_envelope->agent_result = agent_result;
+  return dispatch_result;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -104,12 +168,21 @@ int main(int argc, char* argv[]) {
   auto ipc = std::make_shared<dasall::platform::linux::UnixIpcProvider>();
 
   // 2. 通过 daemon pipeline factory 构造完整 submit pipeline。
+  auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+
   dasall::access::DaemonAccessPipelineOptions pipeline_options;
   pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
   pipeline_options.publish_view.max_payload_bytes =
       static_cast<int>(parsed.config.max_payload_bytes);
   pipeline_options.auth_view.trusted_local_subjects = {
       "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
+  pipeline_options.runtime_dispatch_backend =
+      [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
+          -> dasall::access::RuntimeDispatchResult {
+        const auto agent_request = project_agent_request(request);
+        const auto agent_result = runtime_facade->handle(agent_request);
+        return map_agent_result_to_dispatch_result(agent_result);
+      };
 
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));

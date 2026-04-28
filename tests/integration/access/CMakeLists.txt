@@ -44,6 +44,32 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_daemon_ping_integration_test
 )
 
+add_executable(dasall_access_daemon_unary_runtime_bridge_integration_test
+  DaemonUnaryRuntimeBridgeTest.cpp
+)
+
+target_include_directories(dasall_access_daemon_unary_runtime_bridge_integration_test
+  PRIVATE
+    ../../../cognition/include
+)
+
+target_link_libraries(dasall_access_daemon_unary_runtime_bridge_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_runtime
+    dasall_cognition
+)
+
+dasall_apply_common_options(dasall_access_daemon_unary_runtime_bridge_integration_test)
+
+add_test(NAME DaemonUnaryRuntimeBridgeTest COMMAND dasall_access_daemon_unary_runtime_bridge_integration_test)
+set_tests_properties(DaemonUnaryRuntimeBridgeTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_unary_runtime_bridge_integration_test
+)
+
 if(NOT DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access integration registration requires at least one test target")
 endif()
