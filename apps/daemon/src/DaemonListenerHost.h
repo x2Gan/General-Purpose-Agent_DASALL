@@ -21,6 +21,8 @@ class DaemonListenerHost {
   [[nodiscard]] dasall::platform::PlatformResult<bool> bind(
       const dasall::platform::IpcEndpoint& endpoint);
 
+    void set_listen_options(const dasall::platform::ListenOptions& options);
+
   void set_connection_handler(ConnectionHandler handler);
 
   [[nodiscard]] dasall::platform::PlatformResult<bool> accept_loop(
@@ -34,6 +36,10 @@ class DaemonListenerHost {
  private:
   std::shared_ptr<dasall::platform::IIPC> ipc_;
   std::optional<dasall::platform::IpcListenerHandle> listener_;
+    dasall::platform::ListenOptions listen_options_{
+            .backlog = kListenBacklog,
+            .max_payload_bytes = kMaxPayloadBytes,
+    };
   ConnectionHandler connection_handler_;
   bool closed_ = false;
 

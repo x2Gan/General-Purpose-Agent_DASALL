@@ -112,8 +112,22 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // 3. 构造 DaemonBootstrap（通过 IAccessGateway 接口传入）
-  dasall::apps::daemon::DaemonBootstrap bootstrap(ipc, gateway);
+  const auto context = dasall::apps::daemon::DaemonBootstrap::build(
+      parsed.config,
+      dasall::apps::daemon::DaemonBootstrap::BuildDependencies{
+          .ipc = ipc,
+          .access_gateway = gateway,
+          .watchdog_service = nullptr,
+          .effective_profile_id = "daemon.direct_bind.v1",
+          .config_revision = std::nullopt,
+      });
+  if (!context.has_value()) {
+    std::cerr << "[dasall_daemon] bootstrap build failed\n";
+    return 1;
+  }
+
+  // 3. 构造 DaemonBootstrap（通过 build(config) 产出的只读 process context 驱动）
+  dasall::apps::daemon::DaemonBootstrap bootstrap;
   dasall::apps::daemon::DaemonSignalHandler signal_handler;
   if (!signal_handler.install_handlers()) {
     std::cerr << "[dasall_daemon] signal handler install failed\n";
@@ -121,15 +135,13 @@ int main(int argc, char* argv[]) {
   }
 
   // 4. 启动 UDS 服务端
-  dasall::platform::IpcEndpoint endpoint;
-  endpoint.socket_path = parsed.config.socket_path;
-
-  std::cout << "[dasall_daemon] starting on " << endpoint.socket_path << "\n";
+  std::cout << "[dasall_daemon] starting on "
+            << context->bootstrap_config.socket_path << "\n";
 
   bool run_ok = false;
   std::atomic<bool> run_finished{false};
-  std::thread daemon_thread([&bootstrap, &endpoint, &run_ok, &run_finished]() {
-    run_ok = bootstrap.run(endpoint);
+  std::thread daemon_thread([&bootstrap, &context, &run_ok, &run_finished]() {
+    run_ok = bootstrap.run(*context);
     run_finished.store(true);
   });
 

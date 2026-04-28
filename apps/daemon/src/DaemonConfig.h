@@ -13,6 +13,10 @@ namespace dasall::platform {
 class IIPC;
 }
 
+namespace dasall::infra::watchdog {
+class IWatchdogService;
+}
+
 namespace dasall::apps::daemon {
 
 enum class DaemonStartupMode {
@@ -84,6 +88,7 @@ struct DaemonProcessContext {
   std::string effective_profile_id;
   std::shared_ptr<dasall::platform::IIPC> ipc;
   std::shared_ptr<dasall::access::IAccessGateway> access_gateway;
+  std::shared_ptr<dasall::infra::watchdog::IWatchdogService> watchdog_service;
   std::optional<std::string> config_revision;
 
   [[nodiscard]] bool has_consistent_values() const {

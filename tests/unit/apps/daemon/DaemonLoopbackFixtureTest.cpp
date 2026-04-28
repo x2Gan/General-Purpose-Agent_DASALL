@@ -39,6 +39,7 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
   using namespace std::chrono_literals;
 
   using dasall::apps::daemon::DaemonBootstrap;
+  using dasall::apps::daemon::DaemonBootstrapConfig;
   using dasall::platform::IpcEndpoint;
   using dasall::platform::IpcPayload;
   using dasall::platform::linux::UnixIpcProvider;
@@ -46,14 +47,29 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
 
   auto ipc = std::make_shared<UnixIpcProvider>();
   auto gateway = std::make_shared<ReadyGateway>();
-  DaemonBootstrap bootstrap(ipc, gateway);
+  DaemonBootstrapConfig config;
+  config.socket_path = "/tmp/daemon-loopback.sock";
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/daemon-loopback.sock";
+  endpoint.socket_path = config.socket_path;
+
+  const auto context = DaemonBootstrap::build(
+      config,
+      DaemonBootstrap::BuildDependencies{
+          .ipc = ipc,
+          .access_gateway = gateway,
+          .watchdog_service = nullptr,
+          .effective_profile_id = "daemon.loopback.fixture",
+          .config_revision = std::nullopt,
+      });
+  assert_true(context.has_value(),
+              "daemon loopback fixture should build a process context before run(context)");
+
+  DaemonBootstrap bootstrap;
 
   bool run_ok = false;
-  std::thread daemon_thread([&bootstrap, &endpoint, &run_ok]() {
-    run_ok = bootstrap.run(endpoint);
+  std::thread daemon_thread([&bootstrap, &context, &run_ok]() {
+    run_ok = bootstrap.run(*context);
   });
 
   const auto stop_and_join = [&bootstrap, &daemon_thread]() {

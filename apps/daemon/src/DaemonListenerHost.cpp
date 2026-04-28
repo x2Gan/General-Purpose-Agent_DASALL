@@ -45,11 +45,7 @@ dasall::platform::PlatformResult<bool> DaemonListenerHost::bind(
         "listener endpoint is invalid"));
   }
 
-  dasall::platform::ListenOptions listen_options;
-  listen_options.backlog = kListenBacklog;
-  listen_options.max_payload_bytes = kMaxPayloadBytes;
-
-  const auto listener_result = ipc_->listen(endpoint, listen_options);
+  const auto listener_result = ipc_->listen(endpoint, listen_options_);
   if (!listener_result.ok() || !listener_result.value.has_value()) {
     if (listener_result.error.has_value()) {
       return dasall::platform::PlatformResult<bool>::failure(
@@ -65,6 +61,15 @@ dasall::platform::PlatformResult<bool> DaemonListenerHost::bind(
   listener_ = *listener_result.value;
   closed_ = false;
   return dasall::platform::PlatformResult<bool>::success(true);
+}
+
+void DaemonListenerHost::set_listen_options(
+    const dasall::platform::ListenOptions& options) {
+  if (!options.has_consistent_values()) {
+    return;
+  }
+
+  listen_options_ = options;
 }
 
 void DaemonListenerHost::set_connection_handler(ConnectionHandler handler) {

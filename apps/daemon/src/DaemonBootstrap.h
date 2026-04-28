@@ -2,9 +2,12 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 
+#include "DaemonConfig.h"
 #include "DaemonLifecycleController.h"
 #include "DaemonListenerHost.h"
+#include "DaemonSupervisorAdapter.h"
 #include "IAccessGateway.h"
 #include "IIPC.h"
 #include "daemon/DaemonProtocolAdapter.h"
@@ -25,15 +28,34 @@ namespace dasall::apps::daemon {
 ///   - 优雅关闭：stop() 设置标志，run() 在下次 accept 超时后退出
 class DaemonBootstrap {
  public:
+  struct BuildDependencies {
+    std::shared_ptr<dasall::platform::IIPC> ipc;
+    std::shared_ptr<dasall::access::IAccessGateway> access_gateway;
+    std::shared_ptr<dasall::infra::watchdog::IWatchdogService> watchdog_service;
+    std::string effective_profile_id = "daemon.default";
+    std::optional<std::string> config_revision;
+
+    [[nodiscard]] bool has_consistent_values() const {
+      return ipc != nullptr && access_gateway != nullptr &&
+             !effective_profile_id.empty();
+    }
+  };
+
+  DaemonBootstrap() = default;
+
   /// 构造 DaemonBootstrap。
   /// @param ipc       IIPC 实现，用于监听和 accept
   /// @param gateway   已初始化的 IAccessGateway 实现（调用者负责 init()）
   DaemonBootstrap(std::shared_ptr<dasall::platform::IIPC> ipc,
                   std::shared_ptr<dasall::access::IAccessGateway> gateway);
 
-  /// 在指定端点启动监听并进入事件循环（阻塞直到 stop() 被调用）。
+  [[nodiscard]] static std::optional<DaemonProcessContext> build(
+      const DaemonBootstrapConfig& config,
+      BuildDependencies dependencies);
+
+  /// 在指定上下文中启动监听并进入事件循环（阻塞直到 stop() 被调用）。
   /// @return 若监听启动失败返回 false；正常退出返回 true
-  [[nodiscard]] bool run(const dasall::platform::IpcEndpoint& endpoint);
+  [[nodiscard]] bool run(const DaemonProcessContext& context);
 
   /// 请求停止事件循环。线程安全。
   void stop();
@@ -47,17 +69,18 @@ class DaemonBootstrap {
   /// 构建 ping 响应 JSON。
   [[nodiscard]] static std::string make_ping_response();
 
+  void configure_from_context(const DaemonProcessContext& context);
+
   std::shared_ptr<dasall::platform::IIPC> ipc_;
   std::shared_ptr<dasall::access::IAccessGateway> gateway_;
-  DaemonListenerHost listener_host_;
+  std::optional<DaemonListenerHost> listener_host_;
+  std::optional<DaemonSupervisorAdapter> supervisor_adapter_;
   DaemonLifecycleController lifecycle_;
   std::atomic<bool> stop_requested_{false};
+  std::int32_t receive_deadline_ms_ = 5000;
 
   // accept 超时（毫秒）：控制退出检测频率
   static constexpr std::int32_t kAcceptDeadlineMs = 500;
-
-  // receive 超时（毫秒）
-  static constexpr std::int32_t kReceiveDeadlineMs = 5000;
 
 };
 

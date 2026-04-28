@@ -1,7 +1,6 @@
 #include "DaemonBootstrap.h"
 
 #include <cstdint>
-#include <iostream>
 #include <string>
 #include <utility>
 
@@ -11,11 +10,42 @@ DaemonBootstrap::DaemonBootstrap(
     std::shared_ptr<dasall::platform::IIPC> ipc,
     std::shared_ptr<dasall::access::IAccessGateway> gateway)
     : ipc_(std::move(ipc)),
-      gateway_(std::move(gateway)),
-      listener_host_(ipc_) {}
+      gateway_(std::move(gateway)) {
+  if (ipc_) {
+    listener_host_.emplace(ipc_);
+  }
+}
 
-bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
-  if (!ipc_ || !gateway_) {
+std::optional<DaemonProcessContext> DaemonBootstrap::build(
+    const DaemonBootstrapConfig& config,
+    BuildDependencies dependencies) {
+  if (!config.has_consistent_values() || !dependencies.has_consistent_values()) {
+    return std::nullopt;
+  }
+
+  if (!dependencies.access_gateway->is_ready()) {
+    return std::nullopt;
+  }
+
+  return DaemonProcessContext{
+      .bootstrap_config = config,
+      .effective_profile_id = std::move(dependencies.effective_profile_id),
+      .ipc = std::move(dependencies.ipc),
+      .access_gateway = std::move(dependencies.access_gateway),
+      .watchdog_service = std::move(dependencies.watchdog_service),
+      .config_revision = std::move(dependencies.config_revision),
+  };
+}
+
+bool DaemonBootstrap::run(const DaemonProcessContext& context) {
+  if (!context.has_consistent_values()) {
+    return false;
+  }
+
+  stop_requested_.store(false);
+  configure_from_context(context);
+
+  if (!ipc_ || !gateway_ || !listener_host_.has_value()) {
     return false;
   }
 
@@ -33,26 +63,36 @@ bool DaemonBootstrap::run(const dasall::platform::IpcEndpoint& endpoint) {
     return false;
   }
 
-  const auto bind_result = listener_host_.bind(endpoint);
+  dasall::platform::IpcEndpoint endpoint;
+  endpoint.socket_path = context.bootstrap_config.socket_path;
+
+  const auto bind_result = listener_host_->bind(endpoint);
   if (!bind_result.ok()) {
     (void)lifecycle_.mark_failed();
     return false;
   }
 
-  listener_host_.set_connection_handler(
+  listener_host_->set_connection_handler(
       [this](const dasall::platform::IpcChannelHandle& channel) {
         return handle_connection(channel);
       });
 
   if (!lifecycle_.mark_ready()) {
-    (void)listener_host_.close();
+    (void)listener_host_->close();
     (void)lifecycle_.mark_failed();
     return false;
   }
 
+  if (supervisor_adapter_.has_value()) {
+    (void)supervisor_adapter_->notify_ready();
+  }
+
   const auto loop_result =
-      listener_host_.accept_loop(stop_requested_, kAcceptDeadlineMs);
-  (void)listener_host_.close();
+      listener_host_->accept_loop(stop_requested_, kAcceptDeadlineMs);
+  if (supervisor_adapter_.has_value()) {
+    (void)supervisor_adapter_->notify_stopping();
+  }
+  (void)listener_host_->close();
   if (!loop_result.ok() || !loop_result.value.value_or(false)) {
     (void)lifecycle_.mark_failed();
     return false;
@@ -66,6 +106,25 @@ void DaemonBootstrap::stop() {
   (void)lifecycle_.shutdown(std::chrono::milliseconds::zero());
 }
 
+void DaemonBootstrap::configure_from_context(const DaemonProcessContext& context) {
+  ipc_ = context.ipc;
+  gateway_ = context.access_gateway;
+  listener_host_.emplace(ipc_);
+  listener_host_->set_listen_options(dasall::platform::ListenOptions{
+      .backlog = context.bootstrap_config.listen_backlog,
+      .max_payload_bytes = context.bootstrap_config.max_payload_bytes,
+  });
+  supervisor_adapter_.emplace(
+      context.watchdog_service,
+      DaemonSupervisorAdapterOptions{
+          .watchdog_enabled = context.bootstrap_config.watchdog_enabled,
+          .watchdog_entity_id = "daemon.main_loop",
+          .watchdog_timeout_ms = 15000U,
+          .watchdog_grace_ms = 2000U,
+      });
+  receive_deadline_ms_ = context.bootstrap_config.dispatch_timeout_ms;
+}
+
 bool DaemonBootstrap::handle_connection(
     const dasall::platform::IpcChannelHandle& channel) {
   if (!channel.has_consistent_values()) {
@@ -73,7 +132,7 @@ bool DaemonBootstrap::handle_connection(
   }
 
   // 接收请求 payload
-  const auto recv_result = ipc_->receive(channel, kReceiveDeadlineMs);
+  const auto recv_result = ipc_->receive(channel, receive_deadline_ms_);
   if (!recv_result.ok()) {
     return false;
   }

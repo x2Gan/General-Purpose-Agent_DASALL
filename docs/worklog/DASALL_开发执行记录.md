@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #508
+
+- 日期：2026-04-28
+- 阶段：daemon/bootstrap composition root
+- 任务：DMD-TODO-009 接线 DaemonBootstrap::build 组合根
+- 状态：已完成
+
+### 任务选择
+
+1. 008 已完成并推送后，daemon 壳层拆分剩余的最后一项就是 009；此时 lifecycle、listener、signal、supervisor seam 已分别落型，适合在 bootstrap owner 处统一收口。
+2. 当前最小缺口是 `DaemonProcessContext` 虽已在 002 定义，但还没有真正进入 daemon 启动链，`main.cpp` 仍直接以旧构造器 + `run(endpoint)` 驱动 bootstrap。
+3. 本轮只收口 build/config/context/listener/supervisor 组合根，不提前扩展 frame codec、health/router 或 shutdown gate。
+
+### 改动
+
+1. 更新 `apps/daemon/src/DaemonConfig.h`，为 `DaemonProcessContext` 增加可选 `watchdog_service` 句柄。
+2. 更新 `apps/daemon/src/DaemonListenerHost.{h,cpp}`，新增 `set_listen_options(...)`，让 bootstrap 能从 config 注入 backlog / payload budget。
+3. 更新 `apps/daemon/src/DaemonBootstrap.{h,cpp}`：
+   - 新增 `BuildDependencies` 与 `build(config, dependencies)`；
+   - 新增 `run(context)`；
+   - 从 context 派生 listener listen options、dispatch timeout 与 supervisor adapter。
+4. 更新 `apps/daemon/src/main.cpp`，切换到 `DaemonBootstrap::build(...)` + `run(*context)` 启动路径。
+5. 新增 `tests/unit/apps/daemon/DaemonBootstrapTest.cpp`，覆盖 build success、build failure 与 gateway not ready failure path。
+6. 更新 `tests/unit/apps/daemon/DaemonLoopbackFixtureTest.cpp` 与 `tests/unit/apps/daemon/CMakeLists.txt`，让 loopback fixture 改走 build/run context 路径，并注册 `DaemonBootstrapTest`。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-009-DaemonBootstrap组合根收敛.md`，并回写 daemon 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+   - 结果：通过，build/run 组合根改造没有破坏 daemon 主构建。
+2. `Build_CMakeTools(buildTargets=["dasall_daemon_bootstrap_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+   - 结果：首轮失败，暴露 loopback fixture target 缺少 `dasall_infra` 公开头依赖，且 test fake gateway 使用了不存在的枚举值；补齐依赖并修正 fake gateway 后复跑通过。
+3. `RunCtest_CMakeTools(tests=["DaemonBootstrapTest","DaemonLoopbackFixtureTest"])`
+   - 结果：通过，两条测试均 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. daemon 现在具备显式 `build(config)` / `run(context)` 组合根路径，`main.cpp` 不再走旧的裸 endpoint 启动方式。
+2. `DaemonBootstrapTest` 已证明 invalid config / missing deps 不返回半初始化 context，gateway not ready 也不会进入 bind/accept。
+3. `DaemonLoopbackFixtureTest` 回归通过，说明 009 没有破坏既有 request/response loopback 成功路径。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-009 改动。
+2. daemon 壳层拆分专项 005/006/007/008/009 已全部完成；后续应转入 010、019、024 等下一批 Gate/集成任务。
+
 ## 记录 #507
 
 - 日期：2026-04-28
