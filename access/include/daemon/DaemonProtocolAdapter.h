@@ -9,6 +9,7 @@
 #include "AccessTypes.h"
 #include "IIPC.h"
 #include "IProtocolAdapter.h"
+#include "daemon/DaemonProtocolTypes.h"
 
 namespace dasall::access::daemon {
 
@@ -64,6 +65,11 @@ class DaemonProtocolAdapter : public dasall::access::IProtocolAdapter {
       std::string actor_ref) const;
 
  private:
+    [[nodiscard]] bool parse_uds_request_frame(InboundPacket& packet) const;
+
+    [[nodiscard]] UdsResponseFrame build_uds_response_frame(
+     const PublishEnvelope& envelope) const;
+
   std::shared_ptr<dasall::platform::IIPC> ipc_;
   dasall::platform::IpcChannelHandle active_channel_;
   std::vector<std::uint8_t> active_payload_;

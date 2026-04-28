@@ -15,10 +15,69 @@
 #include <vector>
 
 #include "daemon/DaemonProtocolAdapter.h"
+#include "PlatformResult.h"
+#include "daemon/DaemonProtocolTypes.h"
 #include "linux/UnixIpcProvider.h"
 #include "support/TestAssertions.h"
 
 namespace {
+
+class CapturingIpc final : public dasall::platform::IIPC {
+ public:
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle> listen(
+      const dasall::platform::IpcEndpoint&,
+      const dasall::platform::ListenOptions&) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle>::success(
+        dasall::platform::IpcListenerHandle{.native_fd = 11U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle> accept(
+      const dasall::platform::IpcListenerHandle&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle>::success(
+        dasall::platform::IpcChannelHandle{.native_fd = 12U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle> connect(
+      const dasall::platform::IpcEndpoint&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle>::success(
+        dasall::platform::IpcChannelHandle{.native_fd = 13U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcSendResult> send(
+      const dasall::platform::IpcChannelHandle&,
+      const dasall::platform::IpcPayload& payload) override {
+    sent_payload = payload;
+    return dasall::platform::PlatformResult<dasall::platform::IpcSendResult>::success(
+        dasall::platform::IpcSendResult{.bytes_sent = payload.size()});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcReceiveResult> receive(
+      const dasall::platform::IpcChannelHandle&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcReceiveResult>::success(
+        dasall::platform::IpcReceiveResult{});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::PeerIdentitySnapshot>
+  describe_peer(const dasall::platform::IpcChannelHandle&) override {
+    return dasall::platform::PlatformResult<dasall::platform::PeerIdentitySnapshot>::success(
+        dasall::platform::PeerIdentitySnapshot{
+            .peer_uid = 1000U,
+            .peer_gid = 1000U,
+            .peer_pid = 4242U,
+            .is_local_socket_peer = true,
+        });
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<bool> close(
+      const dasall::platform::IpcChannelHandle&) override {
+    return dasall::platform::PlatformResult<bool>::success(true);
+  }
+
+  dasall::platform::IpcPayload sent_payload;
+};
 
 /// -----------------------------------------------------------------------
 /// 测试 can_handle() 匹配逻辑
@@ -118,8 +177,9 @@ void test_daemon_adapter_decode_submit_extracts_fields() {
 
   const std::string submit_json =
       R"({"schema_version":"1","request_id":"pkt-029","trace_id":"trace-029",)"
-      R"("command":"submit","payload":"hello world","args":{"peer_ref":"cli-user"},)"
-      R"("async_preference":false})";
+      R"("session_hint":"session-029","idempotency_key":"idem-029",)"
+      R"("command":"submit","payload":"hello world",)"
+      R"("args":{"peer_ref":"cli-user","route":"safe"},"async_preference":true})";
   std::vector<std::uint8_t> payload(submit_json.begin(), submit_json.end());
   adapter.set_active_channel(channel, payload);
 
@@ -131,8 +191,8 @@ void test_daemon_adapter_decode_submit_extracts_fields() {
                "decode should extract payload");
   assert_equal(std::string("cli-user"), packet.peer_ref,
                "decode should extract peer_ref");
-  assert_true(!packet.async_preferred,
-              "async_preferred should be false");
+  assert_true(packet.async_preferred,
+              "async_preference=true should decode as async_preferred=true");
 }
 
 void test_daemon_adapter_decode_malformed_frame_returns_empty_packet() {
@@ -158,6 +218,41 @@ void test_daemon_adapter_decode_malformed_frame_returns_empty_packet() {
               "malformed frame should not decode into a valid inbound packet");
 }
 
+void test_daemon_adapter_encode_accepted_async_response_frame() {
+  using dasall::access::PublishEnvelope;
+  using dasall::access::daemon::DaemonProtocolAdapter;
+  using dasall::platform::IpcChannelHandle;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<CapturingIpc>();
+  DaemonProtocolAdapter adapter(ipc);
+
+  IpcChannelHandle channel;
+  channel.native_fd = 7U;
+  adapter.set_active_channel(channel, {});
+
+  PublishEnvelope envelope;
+  envelope.request_id = "req-011";
+  envelope.trace_id = "trace-011";
+  envelope.protocol_status_hint = "202";
+  envelope.result_id = "receipt-011";
+
+  const bool encoded = adapter.encode(envelope);
+  assert_true(encoded, "encode should succeed when ipc send succeeds");
+
+  const std::string payload(ipc->sent_payload.begin(), ipc->sent_payload.end());
+  assert_true(payload.find("\"schema_version\":\"1\"") != std::string::npos,
+              "encoded payload should include schema_version");
+  assert_true(payload.find("\"request_id\":\"req-011\"") != std::string::npos,
+              "encoded payload should include request_id");
+  assert_true(payload.find("\"trace_id\":\"trace-011\"") != std::string::npos,
+              "encoded payload should include trace_id");
+  assert_true(payload.find("\"disposition\":\"accepted_async\"") != std::string::npos,
+              "encoded payload should include accepted_async disposition");
+  assert_true(payload.find("\"receipt_ref\":\"receipt-011\"") != std::string::npos,
+              "accepted_async response should include receipt_ref");
+}
+
 }  // namespace
 
 int main() {
@@ -168,6 +263,7 @@ int main() {
     test_daemon_adapter_decode_ping_sets_packet_id();
     test_daemon_adapter_decode_submit_extracts_fields();
     test_daemon_adapter_decode_malformed_frame_returns_empty_packet();
+    test_daemon_adapter_encode_accepted_async_response_frame();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonProtocolAdapterTest] FAILED: " << ex.what() << '\n';
     return 1;

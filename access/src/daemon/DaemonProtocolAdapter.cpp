@@ -11,6 +11,8 @@ namespace dasall::access::daemon {
 
 namespace {
 
+constexpr std::size_t kMaxDaemonFramePayloadBytes = 1024U * 1024U;
+
 [[nodiscard]] UdsResponseDisposition map_disposition(const PublishEnvelope& envelope) {
   if (!envelope.protocol_status_hint.empty()) {
     const int status = std::atoi(envelope.protocol_status_hint.c_str());
@@ -82,13 +84,25 @@ InboundPacket DaemonProtocolAdapter::decode() {
     return packet;
   }
 
+  if (!parse_uds_request_frame(packet)) {
+    return InboundPacket{};
+  }
+
+  return packet;
+}
+
+bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const {
+  if (active_payload_.empty()) {
+    return false;
+  }
+
   const std::string_view payload_view(
       reinterpret_cast<const char*>(active_payload_.data()),
       active_payload_.size());
 
-  const auto decoded = decode_request_frame(payload_view, active_payload_.size());
+  const auto decoded = decode_request_frame(payload_view, kMaxDaemonFramePayloadBytes);
   if (!decoded.ok()) {
-    return packet;
+    return false;
   }
 
   packet.entry_type = "daemon";
@@ -107,7 +121,7 @@ InboundPacket DaemonProtocolAdapter::decode() {
     packet.peer_ref = peer_ref->second;
   }
 
-  return packet;
+  return true;
 }
 
 bool DaemonProtocolAdapter::encode(const PublishEnvelope& envelope) {
@@ -115,7 +129,8 @@ bool DaemonProtocolAdapter::encode(const PublishEnvelope& envelope) {
     return false;
   }
 
-  const std::string response_json = encode_response_frame(build_response_frame(envelope));
+  const std::string response_json =
+      encode_response_frame(build_uds_response_frame(envelope));
 
   dasall::platform::IpcPayload payload;
   payload.reserve(response_json.size());
@@ -125,6 +140,11 @@ bool DaemonProtocolAdapter::encode(const PublishEnvelope& envelope) {
 
   const auto result = ipc_->send(active_channel_, payload);
   return result.ok();
+}
+
+UdsResponseFrame DaemonProtocolAdapter::build_uds_response_frame(
+    const PublishEnvelope& envelope) const {
+  return build_response_frame(envelope);
 }
 
 LocalPeerUidFact DaemonProtocolAdapter::describe_local_peer_uid_fact(
