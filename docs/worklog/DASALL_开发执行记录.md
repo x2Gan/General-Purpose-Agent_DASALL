@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #511
+
+- 日期：2026-04-28
+- 阶段：daemon/frame codec hardening
+- 任务：DMD-TODO-030 硬化 daemon frame codec、schema_version 与错误映射
+- 状态：已完成
+
+### 改动
+
+1. 新增 `access/include/daemon/DaemonFrameCodec.h` 与 `access/src/daemon/DaemonFrameCodec.cpp`，集中实现 daemon v1 request decode、response encode、UTF-8 校验、字段白名单和错误映射。
+2. 更新 `access/CMakeLists.txt`，把 codec public header/source 接入 `dasall_access`。
+3. 更新 `access/src/daemon/DaemonProtocolAdapter.cpp`，删除本地字符串扫描 helper，统一复用 `DaemonFrameCodec`。
+4. 新增 `tests/unit/access/DaemonFrameCodecTest.cpp` 与 `tests/unit/access/DaemonFrameCodecMalformedTest.cpp`，覆盖正例、escaping、schema/version、未知 command、payload 过大、非 UTF-8 与截断 payload。
+5. 更新 `tests/unit/access/DaemonProtocolAdapterTest.cpp` 与 `tests/unit/access/CMakeLists.txt`，让 adapter 测试切到 v1 frame schema，并注册两条 codec focused tests。
+6. 新增交付文档 `docs/todos/daemon/deliverables/DMD-TODO-030-daemon-frame-codec安全硬化.md`，并回写 daemon 专项 TODO 状态与证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_frame_codec_unit_test","dasall_access_daemon_frame_codec_malformed_unit_test","dasall_access_daemon_protocol_adapter_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonFrameCodecTest","DaemonFrameCodecMalformedTest","DaemonProtocolAdapterTest"])`
+   - 结果：通过，3/3 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. daemon frame 的安全敏感字段已经从 `DaemonProtocolAdapter` 的散落字符串扫描迁移到集中 codec。
+2. malformed frame 在 adapter 层被 fail-closed，不再伪装成有效 `InboundPacket` 进入 Access/Runtime。
+3. response encode 已统一处理引号、反斜杠和换行 escaping，为 DMD-TODO-011、019、031 提供稳定 wire baseline。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-030 改动。
+2. 进入 DMD-TODO-011，继续收敛 `DaemonProtocolAdapter` 的 frame decode/encode 与错误响应承载语义。
+
 ## 记录 #510
 
 - 日期：2026-04-28

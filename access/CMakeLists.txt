@@ -5,6 +5,7 @@ set(DASALL_ACCESS_PUBLIC_HEADERS
   include/AccessGatewayFactory.h
   include/AccessErrors.h
   include/AccessTypes.h
+  include/daemon/DaemonFrameCodec.h
   include/daemon/DaemonProtocolTypes.h
   include/daemon/DaemonProtocolAdapter.h
   include/IAccessGateway.h
@@ -39,6 +40,7 @@ target_sources(dasall_access
     src/ResultReplayCache.cpp
     src/RuntimeBridge.cpp
     src/ResultPublisher.cpp
+    src/daemon/DaemonFrameCodec.cpp
     src/daemon/DaemonProtocolAdapter.cpp
     src/ProtocolAdapterRegistry.cpp
     src/ProtocolErrorMapper.cpp

@@ -1,106 +1,56 @@
 #include "daemon/DaemonProtocolAdapter.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <string>
-#include <string_view>
 #include <utility>
+
+#include "daemon/DaemonFrameCodec.h"
 
 namespace dasall::access::daemon {
 
-// ============================================================================
-// 内部工具函数 — JSON 最小集解析与序列化
-// ============================================================================
-
 namespace {
 
-/// 从 JSON 字符串中提取指定字段的字符串值（简单语义扫描，不处理嵌套）。
-/// 若字段不存在返回空字符串。
-[[nodiscard]] std::string extract_json_string(std::string_view json,
-                                              std::string_view key) {
-  // 构造 "key": 搜索模式
-  const std::string search_key = std::string("\"") + std::string(key) + "\":";
-  const auto pos = json.find(search_key);
-  if (pos == std::string_view::npos) {
-    return {};
-  }
-
-  // 跳过键和可能的空白
-  auto start = pos + search_key.size();
-  while (start < json.size() && (json[start] == ' ' || json[start] == '\t')) {
-    ++start;
-  }
-  if (start >= json.size()) {
-    return {};
-  }
-
-  // 字符串值以双引号包围
-  if (json[start] != '"') {
-    return {};
-  }
-  ++start;
-  const auto end = json.find('"', start);
-  if (end == std::string_view::npos) {
-    return {};
-  }
-  return std::string(json.substr(start, end - start));
-}
-
-/// 从 JSON 字符串中提取布尔值字段（简单语义扫描）。
-[[nodiscard]] bool extract_json_bool(std::string_view json,
-                                     std::string_view key,
-                                     bool default_value = false) {
-  const std::string search_key = std::string("\"") + std::string(key) + "\":";
-  const auto pos = json.find(search_key);
-  if (pos == std::string_view::npos) {
-    return default_value;
-  }
-
-  auto start = pos + search_key.size();
-  while (start < json.size() && (json[start] == ' ' || json[start] == '\t')) {
-    ++start;
-  }
-  if (start >= json.size()) {
-    return default_value;
-  }
-
-  // 匹配 true/false 字面量
-  if (json.substr(start, 4) == "true") {
-    return true;
-  }
-  if (json.substr(start, 5) == "false") {
-    return false;
-  }
-  return default_value;
-}
-
-/// 将 PublishEnvelope 序列化为最小 JSON 响应。
-[[nodiscard]] std::string envelope_to_json(const dasall::access::PublishEnvelope& envelope) {
-  // 根据 protocol_status_hint 判断整体状态
-  const bool is_error =
-      !envelope.protocol_status_hint.empty() &&
-      (envelope.protocol_status_hint[0] == '4' ||
-       envelope.protocol_status_hint[0] == '5');
-
-  std::string json = "{";
-  json += "\"status\":\"";
-  json += is_error ? "rejected" : "accepted";
-  json += "\"";
-
-  if (!envelope.request_id.empty()) {
-    json += ",\"request_id\":\"" + envelope.request_id + "\"";
-  }
-  if (!envelope.result_id.empty()) {
-    json += ",\"result_id\":\"" + envelope.result_id + "\"";
-  }
-  if (!envelope.payload.empty()) {
-    json += ",\"result\":\"" + envelope.payload + "\"";
-  }
+[[nodiscard]] UdsResponseDisposition map_disposition(const PublishEnvelope& envelope) {
   if (!envelope.protocol_status_hint.empty()) {
-    json += ",\"http_status\":\"" + envelope.protocol_status_hint + "\"";
+    const int status = std::atoi(envelope.protocol_status_hint.c_str());
+    if (status == 202) {
+      return UdsResponseDisposition::AcceptedAsync;
+    }
+    if (status == 503) {
+      return UdsResponseDisposition::NotReady;
+    }
+    if (status >= 200 && status < 300) {
+      return UdsResponseDisposition::Completed;
+    }
   }
 
-  json += "}";
-  return json;
+  return UdsResponseDisposition::Rejected;
+}
+
+[[nodiscard]] UdsResponseFrame build_response_frame(const PublishEnvelope& envelope) {
+  UdsResponseFrame frame;
+  frame.request_id = envelope.request_id;
+  frame.trace_id = envelope.trace_id;
+  if (!envelope.session_id.empty()) {
+    frame.session_id = envelope.session_id;
+  }
+  frame.disposition = map_disposition(envelope);
+
+  if (frame.disposition == UdsResponseDisposition::AcceptedAsync &&
+      !envelope.result_id.empty()) {
+    frame.receipt_ref = envelope.result_id;
+  }
+
+  if (frame.disposition == UdsResponseDisposition::Rejected && !envelope.payload.empty()) {
+    frame.error_ref = envelope.payload;
+  }
+
+  if (envelope.agent_result.has_value()) {
+    frame.agent_result = envelope.agent_result;
+  }
+
+  return frame;
 }
 
 }  // namespace
@@ -132,25 +82,29 @@ InboundPacket DaemonProtocolAdapter::decode() {
     return packet;
   }
 
-  // 将原始字节转换为 JSON 字符串
-  const std::string_view json_view(
+  const std::string_view payload_view(
       reinterpret_cast<const char*>(active_payload_.data()),
       active_payload_.size());
+
+  const auto decoded = decode_request_frame(payload_view, active_payload_.size());
+  if (!decoded.ok()) {
+    return packet;
+  }
 
   packet.entry_type = "daemon";
   packet.protocol_kind = "ipc_uds";
 
-  // 提取各字段
-  packet.packet_id = extract_json_string(json_view, "packet_id");
-  packet.payload = extract_json_string(json_view, "payload");
-  packet.peer_ref = extract_json_string(json_view, "peer_ref");
-  packet.async_preferred = extract_json_bool(json_view, "async_preferred", false);
+  packet.packet_id = decoded.frame.command_kind() == DaemonCommandKind::Ping
+                         ? std::string("ping")
+                         : (!decoded.frame.request_id.empty() ? decoded.frame.request_id
+                                                              : decoded.frame.command);
+  packet.payload = decoded.frame.payload;
+  packet.async_preferred =
+      decoded.frame.async_preference == DaemonAsyncPreference::PreferAsync;
 
-  // op 字段用于特殊命令处理（ping 等）
-  const std::string op = extract_json_string(json_view, "op");
-  if (op == "ping") {
-    packet.payload = "ping";
-    packet.packet_id = "ping";
+  const auto peer_ref = decoded.frame.args.find("peer_ref");
+  if (peer_ref != decoded.frame.args.end()) {
+    packet.peer_ref = peer_ref->second;
   }
 
   return packet;
@@ -161,7 +115,7 @@ bool DaemonProtocolAdapter::encode(const PublishEnvelope& envelope) {
     return false;
   }
 
-  const std::string response_json = envelope_to_json(envelope);
+  const std::string response_json = encode_response_frame(build_response_frame(envelope));
 
   dasall::platform::IpcPayload payload;
   payload.reserve(response_json.size());

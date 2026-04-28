@@ -89,8 +89,7 @@ void test_daemon_adapter_decode_ping_sets_packet_id() {
   IpcChannelHandle channel;
   channel.native_fd = 1;
 
-  // 构造 ping JSON payload
-  const std::string ping_json = R"({"op":"ping"})";
+  const std::string ping_json = R"({"schema_version":"1","command":"ping"})";
   std::vector<std::uint8_t> payload(ping_json.begin(), ping_json.end());
   adapter.set_active_channel(channel, payload);
 
@@ -117,10 +116,10 @@ void test_daemon_adapter_decode_submit_extracts_fields() {
   IpcChannelHandle channel;
   channel.native_fd = 1;
 
-  // 构造 submit JSON payload
   const std::string submit_json =
-      R"({"op":"submit","packet_id":"pkt-029","payload":"hello world",)"
-      R"("peer_ref":"cli-user","async_preferred":false})";
+      R"({"schema_version":"1","request_id":"pkt-029","trace_id":"trace-029",)"
+      R"("command":"submit","payload":"hello world","args":{"peer_ref":"cli-user"},)"
+      R"("async_preference":false})";
   std::vector<std::uint8_t> payload(submit_json.begin(), submit_json.end());
   adapter.set_active_channel(channel, payload);
 
@@ -136,6 +135,29 @@ void test_daemon_adapter_decode_submit_extracts_fields() {
               "async_preferred should be false");
 }
 
+void test_daemon_adapter_decode_malformed_frame_returns_empty_packet() {
+  using dasall::access::daemon::DaemonProtocolAdapter;
+  using dasall::platform::IpcChannelHandle;
+  using dasall::platform::linux::UnixIpcProvider;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<UnixIpcProvider>();
+  DaemonProtocolAdapter adapter(ipc);
+
+  IpcChannelHandle channel;
+  channel.native_fd = 1;
+
+  const std::string malformed_json =
+      R"({"schema_version":"1","command":"run","payload":"unterminated")";
+  std::vector<std::uint8_t> payload(malformed_json.begin(), malformed_json.end());
+  adapter.set_active_channel(channel, payload);
+
+  const auto packet = adapter.decode();
+
+  assert_true(packet.entry_type.empty(),
+              "malformed frame should not decode into a valid inbound packet");
+}
+
 }  // namespace
 
 int main() {
@@ -145,6 +167,7 @@ int main() {
     test_daemon_adapter_decode_empty_payload_returns_empty_packet();
     test_daemon_adapter_decode_ping_sets_packet_id();
     test_daemon_adapter_decode_submit_extracts_fields();
+    test_daemon_adapter_decode_malformed_frame_returns_empty_packet();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonProtocolAdapterTest] FAILED: " << ex.what() << '\n';
     return 1;

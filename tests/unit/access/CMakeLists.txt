@@ -320,6 +320,18 @@ dasall_add_access_unit_test(
   DaemonProtocolTypesTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_daemon_frame_codec_unit_test
+  DaemonFrameCodecTest
+  DaemonFrameCodecTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_daemon_frame_codec_malformed_unit_test
+  DaemonFrameCodecMalformedTest
+  DaemonFrameCodecMalformedTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )
