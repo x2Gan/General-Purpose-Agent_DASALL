@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -29,7 +31,9 @@ class UnixIpcProvider final : public IIPC {
 
  private:
   struct ListenerState {
+    IpcEndpoint endpoint;
     ListenOptions options;
+    std::deque<std::uint64_t> pending_server_channels;
   };
 
   struct ChannelState {
@@ -37,6 +41,8 @@ class UnixIpcProvider final : public IIPC {
     bool peer_closed = false;
     std::uint32_t max_payload_bytes = 1048576U;
     PeerIdentitySnapshot peer_identity;
+    std::optional<std::uint64_t> peer_channel_fd;
+    std::deque<IpcPayload> inbound_payloads;
   };
 
   [[nodiscard]] PlatformError make_error(PlatformErrorCode code,

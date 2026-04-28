@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #505
+
+- 日期：2026-04-28
+- 阶段：daemon/iipc loopback unblock
+- 任务：DMD-TODO-029 补齐 IIPC 双向 request/response loopback 解阻门
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-006 与 DMD-TODO-009 虽已进入 Ready，但仍被 DMD-BLK-004 卡住；若不先解阻，listener host 与 bootstrap 组合根的单测都无法证明 request/response 闭环。
+2. 当前最小缺口不在 daemon 业务逻辑，而在 `UnixIpcProvider` 仍把 `connect/send`、`accept/receive` 分成互不共享 payload 的假通道，导致现有 ping 验证只能证明 client send 成功。
+3. 本轮只补 platform loopback fixture 与 daemon loopback fixture，不提前实现 006 的 listener host 拆分，也不修改 `IIPC` 公共语义。
+
+### 改动
+
+1. 更新 `platform/include/linux/UnixIpcProvider.h`，为 listener 增加 endpoint / pending server channel 队列，为 channel 增加 peer channel 引用与 inbound payload queue。
+2. 更新 `platform/src/linux/UnixIpcProvider.cpp`：
+   - `listen(...)` 保存 endpoint；
+   - `connect(...)` 为匹配 listener 创建 client/server 成对 channel；
+   - `accept(...)` 返回 pending server channel；
+   - `send(...)` 把 payload 投递到 peer queue；
+   - `receive(...)` 先消费队列，再回报 `peer_closed`；
+   - `close(...)` 向 peer 传播 close 事实。
+3. 新增 `tests/unit/platform/linux/UnixIpcProviderLoopbackTest.cpp`，覆盖双向收发、close propagation 与 payload-too-large。
+4. 新增 `tests/unit/apps/daemon/DaemonLoopbackFixtureTest.cpp`，通过 `DaemonBootstrap` + ready fake gateway 验证 daemon listener 消费 ping 并把 response 回传给 client。
+5. 更新 `tests/unit/platform/linux/CMakeLists.txt` 与 `tests/unit/apps/daemon/CMakeLists.txt`，注册两条 focused unit tests。
+6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-029-IIPC-loopback解阻收敛.md`，并回写 daemon 专项 TODO，清除 DMD-BLK-004。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_platform"])`
+   - 结果：通过；首轮暴露 `-Wmissing-field-initializers` 警告，已在同轮补齐新增字段的显式初始化。
+2. `Build_CMakeTools(buildTargets=["dasall_platform","dasall_unix_ipc_provider_loopback_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+   - 结果：通过，029 所需 provider 与两条新 test targets 均成功编译。
+3. `RunCtest_CMakeTools(tests=["UnixIpcProviderLoopbackTest","DaemonLoopbackFixtureTest","UnixIpcProviderPeerIdentityTest"])`
+   - 结果：通过，三条测试全部 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. `UnixIpcProvider` 已具备测试可用的双向 request/response loopback，不再只返回“send 成功”的假阳性。
+2. daemon loopback fixture 已能证明请求 payload 被 listener 消费，且响应 payload 被 client 读取，DMD-BLK-004 已清除。
+3. DMD-TODO-006 与 DMD-TODO-009 现在可以继续推进，不再受 IIPC loopback 缺口阻塞。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-029 改动。
+2. 进入 DMD-TODO-006，拆出 `DaemonListenerHost` 并以刚落地的 loopback fixture 作为 direct-bind 单测底座。
+
 ## 记录 #504
 
 - 日期：2026-04-28
