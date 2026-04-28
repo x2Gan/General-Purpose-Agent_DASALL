@@ -24949,3 +24949,54 @@ EOF`
 - 当前骨架已可配置，但尚未建立统一 warning、sanitizer、build type 策略。
 - tests 目录为占位，后续需引入 GoogleTest 并替换 placeholder 测试目标。
 - 当前 apps 为占位可执行，后续应改为依赖真实 runtime 接口与装配层。
+
+## 记录 #453
+
+- 日期：2026-04-28
+- 阶段：daemon/Access 主链接线
+- 任务：DMD-TODO-013 接线 daemon AccessGateway 完整 submit pipeline
+- 状态：已完成
+
+### 任务选择
+
+1. `DMD-TODO-013` 前置 `DMD-TODO-010/011/012` 已完成，且无 BLOCK 任务阻塞，可直接执行。
+2. 当前 `apps/daemon/src/main.cpp` 仍通过 `create_access_gateway()` 使用空 submit pipeline，无法满足“unknown/auth deny/payload too large 不进入 Runtime”的验收要求。
+
+### 改动
+
+1. 更新 `access/include/AccessGatewayFactory.h`：
+   - 新增 `DaemonAccessPipelineOptions`。
+   - 新增 `create_daemon_access_gateway()`。
+2. 更新 `access/src/AccessGatewayFactory.cpp`：
+   - 新增 `build_daemon_submit_pipeline()`。
+   - 串联 `RequestValidator`、`SubjectResolver`、`AuthenticatorChain`、`AccessPolicyGate`、`AdmissionController`、`RequestNormalizer`、`RuntimeBridge`、`ResultPublisher`。
+   - 固定 `unknown_command`、认证失败、payload 超限的 runtime 前拒绝路径。
+3. 更新 `apps/daemon/src/main.cpp`：
+   - daemon 组合根改为调用 `create_daemon_access_gateway()`。
+   - 将 `max_payload_bytes` 与本地 uid allowlist 投影到 pipeline options。
+4. 新增 `tests/unit/apps/daemon/DaemonAccessPipelineFactoryTest.cpp`：
+   - 验证 `unknown/auth deny/payload too large` 均不进入 runtime backend。
+   - 验证 valid submit 可进入 runtime backend。
+5. 更新 `tests/unit/apps/daemon/CMakeLists.txt`：
+   - 注册 `DaemonAccessPipelineFactoryTest`。
+6. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：
+   - `DMD-TODO-013` 状态从 `Ready` 更新为 `Done`。
+7. 新增交付物文档：
+   - `docs/todos/daemon/deliverables/DMD-TODO-013-daemon-AccessGateway-pipeline收敛.md`。
+
+### 验证
+
+1. 构建：
+   - CMake Tools 构建 `dasall_daemon` 与 `dasall_unit_tests`，代码编译通过。
+2. 定向测试（RunCtest_CMakeTools）：
+   - `DaemonAccessPipelineFactoryTest` 通过。
+   - `AccessGatewayFacadeTest` 通过。
+   - `AdmissionControllerTest` 通过。
+   - `RequestNormalizerTest` 通过。
+   - `ResultPublisherTest` 通过。
+
+### 结果
+
+1. daemon 已具备可执行 submit pipeline，不再依赖 `AccessGateway` 空 pipeline。
+2. 验收条件“unknown command、auth deny、payload too large 不进入 Runtime”已通过单测固化。
+3. `DMD-TODO-013` 可进入后续 `DMD-TODO-014` runtime unary bridge 接线阶段。

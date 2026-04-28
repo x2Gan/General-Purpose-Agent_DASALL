@@ -280,3 +280,24 @@ set_tests_properties(DaemonSocketPolicyTest PROPERTIES LABELS "unit;daemon")
 list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_daemon_socket_policy_unit_test
 )
+
+add_executable(dasall_daemon_access_pipeline_factory_unit_test
+  DaemonAccessPipelineFactoryTest.cpp
+)
+
+target_link_libraries(dasall_daemon_access_pipeline_factory_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_daemon_access_pipeline_factory_unit_test)
+
+add_test(NAME DaemonAccessPipelineFactoryTest
+  COMMAND dasall_daemon_access_pipeline_factory_unit_test
+)
+set_tests_properties(DaemonAccessPipelineFactoryTest PROPERTIES LABELS "unit;daemon")
+
+list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_daemon_access_pipeline_factory_unit_test
+)

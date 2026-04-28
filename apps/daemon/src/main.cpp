@@ -19,6 +19,8 @@
 #include <memory>
 #include <string_view>
 #include <thread>
+#include <utility>
+#include <unistd.h>
 #include <vector>
 
 #include "DaemonBootstrap.h"
@@ -101,9 +103,16 @@ int main(int argc, char* argv[]) {
   // 1. 创建 IIPC provider（Linux UDS 实现）
   auto ipc = std::make_shared<dasall::platform::linux::UnixIpcProvider>();
 
-  // 2. 通过 access public factory 构造默认 gateway concrete。
-  //    v1 仍保留空 submit pipeline / publish backend 占位，后续由 pipeline factory 接线。
-  auto gateway = dasall::access::create_access_gateway();
+  // 2. 通过 daemon pipeline factory 构造完整 submit pipeline。
+  dasall::access::DaemonAccessPipelineOptions pipeline_options;
+  pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
+  pipeline_options.publish_view.max_payload_bytes =
+      static_cast<int>(parsed.config.max_payload_bytes);
+  pipeline_options.auth_view.trusted_local_subjects = {
+      "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
+
+  auto gateway = dasall::access::create_daemon_access_gateway(
+      std::move(pipeline_options));
   if (!gateway->init()) {
     std::cerr << "[dasall_daemon] AccessGateway init failed\n";
     return 1;
