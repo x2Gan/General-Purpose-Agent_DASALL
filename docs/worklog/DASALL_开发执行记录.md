@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #504
+
+- 日期：2026-04-28
+- 阶段：daemon/controlled signal response
+- 任务：DMD-TODO-007 实现 DaemonSignalHandler 受控 signal 响应
+- 状态：已完成
+
+### 任务选择
+
+1. DMD-TODO-005 已完成并推送，满足 007 的唯一前置。
+2. 当前最小缺口是 `main.cpp` 仍用全局 bootstrap 裸指针和 `std::signal()` 直接触发 stop 路径；在 005 引入 lifecycle mutex/condition-variable 后，这条路径已经不适合继续留在异步 signal 上下文里。
+3. 本轮只收 signal-safe intent 记录、main 主线程消费和 focused unit gate，不提前做热更配置应用或 graceful shutdown 排空扩展。
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonSignalHandler.h` 与 `apps/daemon/src/DaemonSignalHandler.cpp`，定义 `install_handlers()`、`request_shutdown()`、`request_reload()`、`shutdown_requested()`、`reload_requested()`、`last_signal()` 与 `clear_requests()`。
+2. `DaemonSignalHandler` 使用 `sig_atomic_t` 保存 shutdown/reload/last-signal 最小事实，并通过静态 dispatcher 统一接收 SIGTERM、SIGINT、SIGHUP。
+3. 更新 `apps/daemon/src/main.cpp`，移除全局 bootstrap 裸指针与旧 `on_shutdown_signal()`，改由主线程轮询 signal intent，并在普通线程上下文中调用 `bootstrap.stop()` 或记录 reload intent。
+4. 同一文件把 `bootstrap.run()` 放到单独线程执行，使主线程能继续承担 signal owner 语义而不在 handler 中执行业务逻辑。
+5. 更新 `apps/daemon/CMakeLists.txt` 与 `tests/unit/apps/daemon/CMakeLists.txt`，纳入 signal handler 源文件和 `DaemonSignalHandlerTest`。
+6. 新增 `tests/unit/apps/daemon/DaemonSignalHandlerTest.cpp`，覆盖 SIGTERM、SIGINT shutdown intent 与 SIGHUP reload-only intent。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-007-DaemonSignalHandler收敛.md`，并回写 daemon 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+   - 结果：通过，`dasall_daemon` 成功重编译，说明主线程轮询 + run thread 接线未破坏现有 daemon 启动路径。
+2. `Build_CMakeTools(buildTargets=["dasall_daemon_signal_handler_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["DaemonSignalHandlerTest"])`
+   - 结果：通过，`DaemonSignalHandlerTest` 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. daemon signal 路径现在只记录 intent，不再把复杂 shutdown 逻辑放入异步 signal handler。
+2. `main.cpp` 已去除全局 bootstrap 裸指针，SIGHUP 仅形成 reload intent，不越权触发实际配置热更。
+3. DMD-TODO-009 后续可以直接复用这条 signal-safe seam；进入 DMD-TODO-006 和 DMD-TODO-009 前仍需先完成 DMD-TODO-029 解 DMD-BLK-004。
+
+### 下一步
+
+1. 按仓库提交规范提交并推送 DMD-TODO-007 改动。
+
 ## 记录 #503
 
 - 日期：2026-04-28

@@ -6,6 +6,8 @@ add_executable(dasall_daemon
   src/DaemonConfigValidator.h
   src/DaemonLifecycleController.cpp
   src/DaemonLifecycleController.h
+  src/DaemonSignalHandler.cpp
+  src/DaemonSignalHandler.h
 )
 
 target_compile_features(dasall_daemon PRIVATE cxx_std_20)

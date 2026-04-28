@@ -13,15 +13,18 @@
 ///   - 本地控制面优先于 HTTP/gateway；CLI 经 IIPC/UDS 进入本链路
 
 #include <csignal>
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <memory>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "DaemonBootstrap.h"
 #include "DaemonConfig.h"
 #include "DaemonConfigValidator.h"
+#include "DaemonSignalHandler.h"
 #include "IAccessGateway.h"
 #include "linux/UnixIpcProvider.h"
 
@@ -30,16 +33,6 @@
 #include "AccessGateway.h"
 
 namespace {
-
-/// 全局 bootstrap 指针，用于信号处理器中调用 stop()
-dasall::apps::daemon::DaemonBootstrap* g_bootstrap = nullptr;
-
-/// SIGTERM/SIGINT 信号处理器：请求优雅关闭
-extern "C" void on_shutdown_signal(int /*signal*/) {
-  if (g_bootstrap != nullptr) {
-    g_bootstrap->stop();
-  }
-}
 
 struct ParsedDaemonArgs {
   dasall::apps::daemon::DaemonBootstrapConfig config;
@@ -121,20 +114,44 @@ int main(int argc, char* argv[]) {
 
   // 3. 构造 DaemonBootstrap（通过 IAccessGateway 接口传入）
   dasall::apps::daemon::DaemonBootstrap bootstrap(ipc, gateway);
-  g_bootstrap = &bootstrap;
+  dasall::apps::daemon::DaemonSignalHandler signal_handler;
+  if (!signal_handler.install_handlers()) {
+    std::cerr << "[dasall_daemon] signal handler install failed\n";
+    return 1;
+  }
 
-  // 4. 注册信号处理器（优雅关闭）
-  std::signal(SIGTERM, on_shutdown_signal);
-  std::signal(SIGINT, on_shutdown_signal);
-
-  // 5. 启动 UDS 服务端
+  // 4. 启动 UDS 服务端
   dasall::platform::IpcEndpoint endpoint;
   endpoint.socket_path = parsed.config.socket_path;
 
   std::cout << "[dasall_daemon] starting on " << endpoint.socket_path << "\n";
-  const bool run_ok = bootstrap.run(endpoint);
 
-  // 6. 优雅关闭 AccessGateway
+  bool run_ok = false;
+  std::atomic<bool> run_finished{false};
+  std::thread daemon_thread([&bootstrap, &endpoint, &run_ok, &run_finished]() {
+    run_ok = bootstrap.run(endpoint);
+    run_finished.store(true);
+  });
+
+  while (!run_finished.load()) {
+    if (signal_handler.shutdown_requested()) {
+      bootstrap.stop();
+      break;
+    }
+
+    if (signal_handler.reload_requested()) {
+      std::cout << "[dasall_daemon] reload requested by signal "
+                << signal_handler.last_signal()
+                << " (not applied in v1)\n";
+      signal_handler.clear_requests();
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  daemon_thread.join();
+
+  // 5. 优雅关闭 AccessGateway
   gateway->shutdown(std::chrono::milliseconds(parsed.config.shutdown_grace_ms));
 
   std::cout << "[dasall_daemon] stopped (run=" << (run_ok ? "ok" : "failed") << ")\n";
