@@ -10,12 +10,15 @@
 #include "AccessGateway.h"
 #include "AccessPolicyGate.h"
 #include "AdmissionController.h"
+#include "AsyncTaskRegistry.h"
 #include "AuthenticatorChain.h"
 #include "RequestNormalizer.h"
 #include "RequestValidator.h"
 #include "ResultPublisher.h"
 #include "RuntimeBridge.h"
 #include "SubjectResolver.h"
+#include "daemon/DaemonResponseBuilderWithReceipt.h"
+#include "daemon/DaemonTaskQueryHandler.h"
 
 namespace dasall::access {
 
@@ -65,6 +68,95 @@ namespace {
   return fact;
 }
 
+struct DaemonStatusQueryPayload {
+  std::string receipt_ref;
+  std::string actor_ref;
+  std::string ownership_token;
+};
+
+[[nodiscard]] std::optional<DaemonStatusQueryPayload> parse_status_query_payload(
+    std::string_view payload) {
+  if (payload.empty()) {
+    return std::nullopt;
+  }
+
+  DaemonStatusQueryPayload parsed;
+  std::size_t start = 0U;
+  while (start <= payload.size()) {
+    const std::size_t end = payload.find(';', start);
+    const std::string_view item = end == std::string_view::npos
+                                      ? payload.substr(start)
+                                      : payload.substr(start, end - start);
+    if (!item.empty()) {
+      const std::size_t eq = item.find('=');
+      if (eq == std::string_view::npos || eq == 0U || eq + 1U > item.size()) {
+        return std::nullopt;
+      }
+
+      const std::string key(item.substr(0U, eq));
+      const std::string value(item.substr(eq + 1U));
+      if (key == "receipt_ref") {
+        parsed.receipt_ref = value;
+      } else if (key == "actor_ref") {
+        parsed.actor_ref = value;
+      } else if (key == "ownership_token") {
+        parsed.ownership_token = value;
+      }
+    }
+
+    if (end == std::string_view::npos) {
+      break;
+    }
+    start = end + 1U;
+  }
+
+  if (parsed.receipt_ref.empty() || parsed.actor_ref.empty() ||
+      parsed.ownership_token.empty()) {
+    return std::nullopt;
+  }
+
+  return parsed;
+}
+
+[[nodiscard]] RuntimeDispatchResult make_status_dispatch_result(
+    const daemon::DaemonTaskQueryResult& query_result,
+    std::string_view request_id) {
+  RuntimeDispatchResult result;
+  PublishEnvelope envelope;
+  envelope.request_id = std::string(request_id);
+  envelope.result_id = query_result.receipt_ref;
+  envelope.protocol_kind = "ipc_uds";
+  envelope.payload = query_result.task_status;
+
+  using QueryStatus = daemon::DaemonTaskQueryStatus;
+  switch (query_result.status) {
+    case QueryStatus::Active:
+    case QueryStatus::Completed:
+    case QueryStatus::Cancelled:
+      result.disposition = AccessDisposition::Completed;
+      envelope.protocol_status_hint = "200";
+      break;
+    case QueryStatus::Missing:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "status_missing";
+      envelope.protocol_status_hint = "404";
+      break;
+    case QueryStatus::Expired:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "status_expired";
+      envelope.protocol_status_hint = "410";
+      break;
+    case QueryStatus::OwnerMismatch:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "status_owner_mismatch";
+      envelope.protocol_status_hint = "403";
+      break;
+  }
+
+  result.publish_envelope = std::move(envelope);
+  return result;
+}
+
 [[nodiscard]] std::shared_ptr<AccessGateway::SubmitPipeline>
 build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
   auto request_validator =
@@ -82,6 +174,12 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
       options.runtime_dispatch_backend,
       options.runtime_cancel_backend);
   auto result_publisher = std::make_shared<ResultPublisher>();
+    auto async_task_registry = std::make_shared<AsyncTaskRegistry>(
+      "daemon-access-secret-v1");
+    auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
+      async_task_registry);
+    auto task_query_handler = std::make_shared<daemon::DaemonTaskQueryHandler>(
+      *async_task_registry);
 
   auto submit_pipeline =
       std::make_shared<AccessGateway::SubmitPipeline>(
@@ -93,7 +191,26 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
            request_normalizer,
            runtime_bridge,
            result_publisher,
+           receipt_builder,
+           task_query_handler,
            options](const InboundPacket& packet) -> RuntimeDispatchResult {
+            if (packet.packet_id == "status") {
+              const auto query_payload = parse_status_query_payload(packet.payload);
+              if (!query_payload.has_value()) {
+                return make_rejected_result(AccessErrorCode::ValidationRejected,
+                                            "status_query_payload_invalid");
+              }
+
+              const daemon::DaemonTaskOwner owner{
+                  .actor_ref = query_payload->actor_ref,
+                  .ownership_token = query_payload->ownership_token,
+              };
+              const auto query_result = task_query_handler->handle_status(
+                  query_payload->receipt_ref,
+                  owner);
+              return make_status_dispatch_result(query_result, packet.packet_id);
+            }
+
             if (packet.packet_id == "unknown" || packet.packet_id == "unknown_command") {
               return make_rejected_result(AccessErrorCode::ValidationRejected,
                                           "unknown_command");
@@ -189,6 +306,26 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
             if (admission_result.ticket_ref.has_value()) {
               admission_controller->record_completion(*admission_result.ticket_ref,
                                                       dispatch_result);
+            }
+
+            if (dispatch_result.disposition == AccessDisposition::AcceptedAsync) {
+              const auto receipt = receipt_builder->register_and_build_receipt(
+                  normalized.runtime_request,
+                  dispatch_result);
+              if (receipt != nullptr) {
+                dispatch_result.receipt_ref = receipt->receipt_id;
+                if (!dispatch_result.publish_envelope.has_value()) {
+                  dispatch_result.publish_envelope = PublishEnvelope{};
+                }
+                dispatch_result.publish_envelope->request_id =
+                    normalized.runtime_request.packet.packet_id;
+                dispatch_result.publish_envelope->result_id = receipt->receipt_id;
+                dispatch_result.publish_envelope->protocol_kind =
+                    normalized.runtime_request.packet.protocol_kind;
+                dispatch_result.publish_envelope->protocol_status_hint = "202";
+                dispatch_result.publish_envelope->payload = "accepted_async";
+                dispatch_result.publish_envelope->receipt = *receipt;
+              }
             }
 
             if (dispatch_result.disposition == AccessDisposition::Rejected &&

@@ -605,6 +605,31 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_task_query_handler_unit_test
 )
 
+add_executable(dasall_access_daemon_task_query_handler_unit_test
+  DaemonTaskQueryHandlerTest.cpp
+)
+
+target_include_directories(dasall_access_daemon_task_query_handler_unit_test
+  PRIVATE
+    ../../../access/src
+)
+
+target_link_libraries(dasall_access_daemon_task_query_handler_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_daemon_task_query_handler_unit_test)
+
+add_test(NAME DaemonTaskQueryHandlerTest
+  COMMAND dasall_access_daemon_task_query_handler_unit_test)
+set_tests_properties(DaemonTaskQueryHandlerTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_task_query_handler_unit_test
+)
+
 # ACC-TODO-030: SimulatorProtocolAdapterTest
 add_executable(dasall_access_simulator_protocol_adapter_unit_test
   SimulatorProtocolAdapterTest.cpp

@@ -112,10 +112,18 @@ bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const
   packet.entry_type = "daemon";
   packet.protocol_kind = "ipc_uds";
 
-  packet.packet_id = decoded.frame.command_kind() == DaemonCommandKind::Ping
-                         ? std::string("ping")
-                         : (!decoded.frame.request_id.empty() ? decoded.frame.request_id
-                                                              : decoded.frame.command);
+  const auto command_kind = decoded.frame.command_kind();
+  if (command_kind == DaemonCommandKind::Ping ||
+      command_kind == DaemonCommandKind::Status ||
+      command_kind == DaemonCommandKind::Cancel ||
+      command_kind == DaemonCommandKind::Readiness ||
+      command_kind == DaemonCommandKind::Diagnostics) {
+    packet.packet_id = decoded.frame.command;
+  } else {
+    packet.packet_id = !decoded.frame.request_id.empty()
+                           ? decoded.frame.request_id
+                           : decoded.frame.command;
+  }
   packet.payload = decoded.frame.payload;
   packet.async_preferred =
       decoded.frame.async_preference == DaemonAsyncPreference::PreferAsync;
@@ -123,6 +131,19 @@ bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const
   const auto peer_ref = decoded.frame.args.find("peer_ref");
   if (peer_ref != decoded.frame.args.end()) {
     packet.peer_ref = peer_ref->second;
+  }
+
+  if (command_kind == DaemonCommandKind::Status && packet.payload.empty()) {
+    const auto receipt_ref = decoded.frame.args.find("receipt_ref");
+    const auto actor_ref = decoded.frame.args.find("actor_ref");
+    const auto ownership_token = decoded.frame.args.find("ownership_token");
+    if (receipt_ref != decoded.frame.args.end() &&
+        actor_ref != decoded.frame.args.end() &&
+        ownership_token != decoded.frame.args.end()) {
+      packet.payload = "receipt_ref=" + receipt_ref->second +
+                       ";actor_ref=" + actor_ref->second +
+                       ";ownership_token=" + ownership_token->second;
+    }
   }
 
   return true;
