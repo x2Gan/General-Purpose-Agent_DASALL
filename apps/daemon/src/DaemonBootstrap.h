@@ -66,9 +66,6 @@ class DaemonBootstrap {
   [[nodiscard]] bool handle_connection(
       const dasall::platform::IpcChannelHandle& channel);
 
-  /// 构建 ping 响应 JSON。
-  [[nodiscard]] static std::string make_ping_response();
-
   void configure_from_context(const DaemonProcessContext& context);
 
   std::shared_ptr<dasall::platform::IIPC> ipc_;

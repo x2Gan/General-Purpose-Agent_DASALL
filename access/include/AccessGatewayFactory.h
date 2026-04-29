@@ -32,6 +32,12 @@ struct DaemonAccessPipelineOptions {
 
     bool policy_backend_available = true;
     bool allow_submit = true;
+    bool daemon_listener_ready = true;
+    bool daemon_gateway_ready = true;
+    bool daemon_bridge_reachable = true;
+    bool daemon_diagnostics_enabled = false;
+    std::string daemon_version = "v1";
+    std::string daemon_profile_id = "daemon.default";
 
     RuntimeDispatchBackend runtime_dispatch_backend{};
     RuntimeCancelBackend runtime_cancel_backend{};

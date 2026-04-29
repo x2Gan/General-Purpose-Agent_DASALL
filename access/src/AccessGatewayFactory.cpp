@@ -17,6 +17,8 @@
 #include "ResultPublisher.h"
 #include "RuntimeBridge.h"
 #include "SubjectResolver.h"
+#include "daemon/DaemonHealthService.h"
+#include "daemon/DaemonProtocolTypes.h"
 #include "daemon/DaemonResponseBuilderWithReceipt.h"
 #include "daemon/DaemonTaskQueryHandler.h"
 
@@ -209,6 +211,68 @@ struct DaemonStatusQueryPayload {
   return result;
 }
 
+[[nodiscard]] RuntimeDispatchResult make_ping_dispatch_result(
+    const daemon::DaemonHealthSnapshot& snapshot,
+    const InboundPacket& packet) {
+  RuntimeDispatchResult result;
+  result.disposition = AccessDisposition::Completed;
+
+  PublishEnvelope envelope;
+  envelope.request_id = packet.packet_id;
+  envelope.result_id = packet.packet_id;
+  envelope.protocol_kind = packet.protocol_kind;
+  envelope.protocol_status_hint = "200";
+  envelope.payload =
+      "{\"daemon_version\":\"" + snapshot.ping.daemon_version +
+      "\",\"schema_version\":\"" + snapshot.ping.schema_version +
+      "\",\"profile_id\":\"" + snapshot.ping.profile_id +
+      "\",\"request_id\":\"" + snapshot.ping.request_id +
+      "\",\"readiness\":\"" + snapshot.ping.readiness_summary + "\"}";
+  result.publish_envelope = std::move(envelope);
+  return result;
+}
+
+[[nodiscard]] RuntimeDispatchResult make_readiness_dispatch_result(
+    const daemon::DaemonHealthSnapshot& snapshot,
+    const InboundPacket& packet) {
+  RuntimeDispatchResult result;
+  PublishEnvelope envelope;
+  envelope.request_id = packet.packet_id;
+  envelope.result_id = packet.packet_id;
+  envelope.protocol_kind = packet.protocol_kind;
+
+  if (snapshot.readiness.state == daemon::DaemonReadinessState::Ready) {
+    result.disposition = AccessDisposition::Completed;
+    envelope.protocol_status_hint = "200";
+  } else {
+    result.disposition = AccessDisposition::Rejected;
+    result.error_ref = "daemon_not_ready";
+    envelope.protocol_status_hint = "503";
+  }
+
+  std::string reasons_payload;
+  for (std::size_t index = 0; index < snapshot.readiness.degraded_reasons.size();
+       ++index) {
+    if (index > 0U) {
+      reasons_payload += ",";
+    }
+    reasons_payload += snapshot.readiness.degraded_reasons[index];
+  }
+
+  envelope.payload = "{\"state\":\"" + snapshot.ping.readiness_summary +
+                    "\",\"lifecycle_ready\":" +
+                    (snapshot.readiness.lifecycle_ready ? "true" : "false") +
+                    ",\"listener_ready\":" +
+                    (snapshot.readiness.listener_ready ? "true" : "false") +
+                    ",\"gateway_ready\":" +
+                    (snapshot.readiness.gateway_ready ? "true" : "false") +
+                    ",\"bridge_reachable\":" +
+                    (snapshot.readiness.bridge_reachable ? "true" : "false") +
+                    ",\"degraded_reasons\":\"" + reasons_payload + "\"}";
+  result.publish_envelope = std::move(envelope);
+  return result;
+}
+
 [[nodiscard]] std::shared_ptr<AccessGateway::SubmitPipeline>
 build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
   auto request_validator =
@@ -226,12 +290,16 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
       options.runtime_dispatch_backend,
       options.runtime_cancel_backend);
   auto result_publisher = std::make_shared<ResultPublisher>();
-    auto async_task_registry = std::make_shared<AsyncTaskRegistry>(
+  auto async_task_registry = std::make_shared<AsyncTaskRegistry>(
       "daemon-access-secret-v1");
-    auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
+  auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
       async_task_registry);
-    auto task_query_handler = std::make_shared<daemon::DaemonTaskQueryHandler>(
+  auto task_query_handler = std::make_shared<daemon::DaemonTaskQueryHandler>(
       *async_task_registry);
+  auto health_service = std::make_shared<daemon::DaemonHealthService>(
+      options.daemon_version,
+      std::string(daemon::kDaemonProtocolSchemaVersion),
+      options.daemon_profile_id);
 
   auto submit_pipeline =
       std::make_shared<AccessGateway::SubmitPipeline>(
@@ -245,7 +313,40 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
            result_publisher,
            receipt_builder,
            task_query_handler,
+           health_service,
            options](const InboundPacket& packet) -> RuntimeDispatchResult {
+            if (packet.packet_id == "ping") {
+              daemon::DaemonHealthInput input;
+              input.lifecycle_ready = true;
+              input.listener_ready = options.daemon_listener_ready;
+              input.gateway_ready = options.daemon_gateway_ready;
+              input.bridge_reachable =
+                  options.daemon_bridge_reachable &&
+                  static_cast<bool>(options.runtime_dispatch_backend);
+              input.diagnostics_enabled = options.daemon_diagnostics_enabled;
+              if (!input.bridge_reachable) {
+                input.degraded_reasons.push_back("runtime_bridge_unreachable");
+              }
+              const auto snapshot = health_service->snapshot(input, packet.packet_id);
+              return make_ping_dispatch_result(snapshot, packet);
+            }
+
+            if (packet.packet_id == "readiness") {
+              daemon::DaemonHealthInput input;
+              input.lifecycle_ready = true;
+              input.listener_ready = options.daemon_listener_ready;
+              input.gateway_ready = options.daemon_gateway_ready;
+              input.bridge_reachable =
+                  options.daemon_bridge_reachable &&
+                  static_cast<bool>(options.runtime_dispatch_backend);
+              input.diagnostics_enabled = options.daemon_diagnostics_enabled;
+              if (!input.bridge_reachable) {
+                input.degraded_reasons.push_back("runtime_bridge_unreachable");
+              }
+              const auto snapshot = health_service->snapshot(input, packet.packet_id);
+              return make_readiness_dispatch_result(snapshot, packet);
+            }
+
             if (packet.packet_id == "status") {
               const auto query_payload = parse_status_query_payload(packet.payload);
               if (!query_payload.has_value()) {

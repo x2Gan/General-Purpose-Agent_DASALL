@@ -350,6 +350,24 @@ dasall_add_access_unit_test(
   DaemonHealthServiceTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_daemon_ping_command_unit_test
+  DaemonPingCommandTest
+  DaemonPingCommandTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_daemon_readiness_command_unit_test
+  DaemonReadinessCommandTest
+  DaemonReadinessCommandTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_daemon_ping_router_unit_test
+  DaemonPingDoesNotBypassRouterTest
+  DaemonPingDoesNotBypassRouterTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )

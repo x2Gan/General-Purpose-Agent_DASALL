@@ -176,6 +176,12 @@ int main(int argc, char* argv[]) {
       static_cast<int>(parsed.config.max_payload_bytes);
   pipeline_options.auth_view.trusted_local_subjects = {
       "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
+    pipeline_options.daemon_diagnostics_enabled = parsed.config.diag_enabled;
+    pipeline_options.daemon_profile_id = "daemon.direct_bind.v1";
+    pipeline_options.daemon_version = "v1";
+    pipeline_options.daemon_listener_ready = true;
+    pipeline_options.daemon_gateway_ready = true;
+    pipeline_options.daemon_bridge_reachable = true;
   pipeline_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {

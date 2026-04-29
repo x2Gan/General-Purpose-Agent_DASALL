@@ -1,6 +1,5 @@
 #include "DaemonBootstrap.h"
 
-#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -169,18 +168,6 @@ bool DaemonBootstrap::handle_connection(
     }
   }
 
-  // 处理 ping 特殊命令（绕过 AccessGateway 直接响应）
-  if (packet.packet_id == "ping") {
-    const std::string pong = make_ping_response();
-    dasall::platform::IpcPayload pong_payload;
-    pong_payload.reserve(pong.size());
-    for (const char c : pong) {
-      pong_payload.push_back(static_cast<std::uint8_t>(c));
-    }
-    const auto send_result = ipc_->send(channel, pong_payload);
-    return send_result.ok();
-  }
-
   // 通过 IAccessGateway 主链处理请求
   const auto dispatch_result = gateway_->submit(packet);
 
@@ -205,9 +192,4 @@ bool DaemonBootstrap::handle_connection(
       dispatch_result.error_ref.value_or("rejected");
   return adapter.encode(reject_envelope);
 }
-
-std::string DaemonBootstrap::make_ping_response() {
-  return R"({"status":"ok","service":"dasall-daemon"})";
-}
-
 }  // namespace dasall::apps::daemon
