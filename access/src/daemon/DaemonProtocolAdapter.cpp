@@ -133,15 +133,20 @@ bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const
     packet.peer_ref = peer_ref->second;
   }
 
-  if (command_kind == DaemonCommandKind::Status && packet.payload.empty()) {
+  if ((command_kind == DaemonCommandKind::Status ||
+       command_kind == DaemonCommandKind::Cancel) &&
+      packet.payload.empty()) {
     const auto receipt_ref = decoded.frame.args.find("receipt_ref");
-    const auto actor_ref = decoded.frame.args.find("actor_ref");
     const auto ownership_token = decoded.frame.args.find("ownership_token");
     if (receipt_ref != decoded.frame.args.end() &&
-        actor_ref != decoded.frame.args.end() &&
         ownership_token != decoded.frame.args.end()) {
+      const auto actor_ref = decoded.frame.args.find("actor_ref");
+      std::string actor_segment;
+      if (actor_ref != decoded.frame.args.end()) {
+        actor_segment = ";actor_ref=" + actor_ref->second;
+      }
       packet.payload = "receipt_ref=" + receipt_ref->second +
-                       ";actor_ref=" + actor_ref->second +
+                       actor_segment +
                        ";ownership_token=" + ownership_token->second;
     }
   }

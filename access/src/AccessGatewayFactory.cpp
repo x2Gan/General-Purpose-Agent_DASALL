@@ -110,8 +110,7 @@ struct DaemonStatusQueryPayload {
     start = end + 1U;
   }
 
-  if (parsed.receipt_ref.empty() || parsed.actor_ref.empty() ||
-      parsed.ownership_token.empty()) {
+  if (parsed.receipt_ref.empty() || parsed.ownership_token.empty()) {
     return std::nullopt;
   }
 
@@ -150,6 +149,59 @@ struct DaemonStatusQueryPayload {
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "status_owner_mismatch";
       envelope.protocol_status_hint = "403";
+      break;
+    case QueryStatus::CancelForwardFailed:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "status_cancel_forward_failed";
+      envelope.protocol_status_hint = "503";
+      break;
+  }
+
+  result.publish_envelope = std::move(envelope);
+  return result;
+}
+
+[[nodiscard]] RuntimeDispatchResult make_cancel_dispatch_result(
+    const daemon::DaemonTaskQueryResult& query_result,
+    std::string_view request_id) {
+  RuntimeDispatchResult result;
+  PublishEnvelope envelope;
+  envelope.request_id = std::string(request_id);
+  envelope.result_id = query_result.receipt_ref;
+  envelope.protocol_kind = "ipc_uds";
+  envelope.payload = query_result.task_status;
+
+  using QueryStatus = daemon::DaemonTaskQueryStatus;
+  switch (query_result.status) {
+    case QueryStatus::Cancelled:
+      result.disposition = AccessDisposition::Completed;
+      envelope.protocol_status_hint = "200";
+      break;
+    case QueryStatus::Missing:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "cancel_missing";
+      envelope.protocol_status_hint = "404";
+      break;
+    case QueryStatus::Expired:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "cancel_expired";
+      envelope.protocol_status_hint = "410";
+      break;
+    case QueryStatus::OwnerMismatch:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "cancel_owner_mismatch";
+      envelope.protocol_status_hint = "403";
+      break;
+    case QueryStatus::CancelForwardFailed:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "cancel_forward_failed";
+      envelope.protocol_status_hint = "503";
+      break;
+    case QueryStatus::Active:
+    case QueryStatus::Completed:
+      result.disposition = AccessDisposition::Rejected;
+      result.error_ref = "cancel_unexpected_state";
+      envelope.protocol_status_hint = "409";
       break;
   }
 
@@ -256,6 +308,27 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
               return make_rejected_result(AccessErrorCode::AuthorizationDenied,
                                           policy_result.reject_reason.value_or(
                                               std::string("authorization_denied")));
+            }
+
+            if (packet.packet_id == "cancel") {
+              const auto cancel_payload = parse_status_query_payload(packet.payload);
+              if (!cancel_payload.has_value()) {
+                return make_rejected_result(AccessErrorCode::ValidationRejected,
+                                            "cancel_query_payload_invalid");
+              }
+
+              const daemon::DaemonTaskOwner owner{
+                  .actor_ref = auth_outcome.subject_identity.actor_ref,
+                  .ownership_token = cancel_payload->ownership_token,
+              };
+              const auto cancel_result = task_query_handler->handle_cancel(
+                  cancel_payload->receipt_ref,
+                  owner,
+                  [runtime_bridge](std::string_view request_id,
+                                   std::string_view actor_ref) {
+                    return runtime_bridge->cancel(request_id, actor_ref);
+                  });
+              return make_cancel_dispatch_result(cancel_result, packet.packet_id);
             }
 
             RuntimeDispatchRequest runtime_request;
