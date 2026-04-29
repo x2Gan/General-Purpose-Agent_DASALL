@@ -6,6 +6,7 @@ set(DASALL_ACCESS_PUBLIC_HEADERS
   include/AccessErrors.h
   include/AccessTypes.h
   include/daemon/DaemonFrameCodec.h
+  include/daemon/DaemonHealthTypes.h
   include/daemon/DaemonProtocolTypes.h
   include/daemon/DaemonProtocolAdapter.h
   include/daemon/DaemonResponseBuilderWithReceipt.h
@@ -43,6 +44,7 @@ target_sources(dasall_access
     src/RuntimeBridge.cpp
     src/ResultPublisher.cpp
     src/daemon/DaemonFrameCodec.cpp
+    src/daemon/DaemonHealthService.cpp
     src/daemon/DaemonProtocolAdapter.cpp
     src/daemon/DaemonResponseBuilderWithReceipt.cpp
     src/daemon/DaemonTaskQueryHandler.cpp

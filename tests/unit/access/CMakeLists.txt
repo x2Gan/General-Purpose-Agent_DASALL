@@ -344,6 +344,12 @@ dasall_add_access_unit_test(
   DaemonFrameCodecMalformedTest.cpp
 )
 
+dasall_add_access_unit_test(
+  dasall_access_daemon_health_service_unit_test
+  DaemonHealthServiceTest
+  DaemonHealthServiceTest.cpp
+)
+
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test
   DaemonProtocolAdapterLocalTrustedTest.cpp
 )
