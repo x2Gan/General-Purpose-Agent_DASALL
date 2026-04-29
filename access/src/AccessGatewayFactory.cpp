@@ -17,6 +17,7 @@
 #include "ResultPublisher.h"
 #include "RuntimeBridge.h"
 #include "SubjectResolver.h"
+#include "daemon/DaemonDiagnosticsHandler.h"
 #include "daemon/DaemonHealthService.h"
 #include "daemon/DaemonProtocolTypes.h"
 #include "daemon/DaemonResponseBuilderWithReceipt.h"
@@ -113,6 +114,30 @@ struct DaemonStatusQueryPayload {
   }
 
   if (parsed.receipt_ref.empty() || parsed.ownership_token.empty()) {
+    return std::nullopt;
+  }
+
+  return parsed;
+}
+
+struct DaemonDiagPayload {
+  std::string command_name;
+};
+
+[[nodiscard]] std::optional<DaemonDiagPayload> parse_diag_payload(
+    std::string_view payload) {
+  if (payload.empty()) {
+    return std::nullopt;
+  }
+
+  constexpr std::string_view kPrefix = "command_name=";
+  if (!payload.starts_with(kPrefix)) {
+    return std::nullopt;
+  }
+
+  DaemonDiagPayload parsed;
+  parsed.command_name = std::string(payload.substr(kPrefix.size()));
+  if (parsed.command_name.empty()) {
     return std::nullopt;
   }
 
@@ -300,6 +325,9 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
       options.daemon_version,
       std::string(daemon::kDaemonProtocolSchemaVersion),
       options.daemon_profile_id);
+    auto diagnostics_handler = std::make_shared<daemon::DaemonDiagnosticsHandler>(
+      options.diagnostics_service,
+      options.daemon_diagnostics_enabled);
 
   auto submit_pipeline =
       std::make_shared<AccessGateway::SubmitPipeline>(
@@ -314,6 +342,7 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
            receipt_builder,
            task_query_handler,
            health_service,
+           diagnostics_handler,
            options](const InboundPacket& packet) -> RuntimeDispatchResult {
             if (packet.packet_id == "ping") {
               daemon::DaemonHealthInput input;
@@ -409,6 +438,33 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
               return make_rejected_result(AccessErrorCode::AuthorizationDenied,
                                           policy_result.reject_reason.value_or(
                                               std::string("authorization_denied")));
+            }
+
+            if (packet.packet_id == "diag" || packet.packet_id == "diagnostics") {
+              const auto diag_payload = parse_diag_payload(packet.payload);
+              if (!diag_payload.has_value()) {
+                return make_rejected_result(AccessErrorCode::ValidationRejected,
+                                            "diag_command_invalid");
+              }
+
+              PolicyBackendSnapshot diag_backend = policy_backend;
+              diag_backend.allow_submit = false;
+                diag_backend.allow_diagnostics = true;
+              const auto diag_policy_result = policy_gate->evaluate_diagnostics_request(
+                  policy_input,
+                  diag_payload->command_name,
+                  diag_backend);
+              if (!diag_policy_result.allowed) {
+                return make_rejected_result(
+                    AccessErrorCode::AuthorizationDenied,
+                    diag_policy_result.reject_reason.value_or(
+                        std::string("diag_command_denied")));
+              }
+
+              return diagnostics_handler->handle_diag(
+                  diag_payload->command_name,
+                  packet.packet_id,
+                  auth_outcome.subject_identity.actor_ref);
             }
 
             if (packet.packet_id == "cancel") {

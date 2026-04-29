@@ -129,6 +129,27 @@ AccessPolicyEvaluationResult AccessPolicyGate::evaluate_task_query(
   return map_policy_result(*query_context, backend, false);
 }
 
+AccessPolicyEvaluationResult AccessPolicyGate::evaluate_diagnostics_request(
+    const AccessPolicyEvaluationInput& input,
+    const std::string_view command_name,
+    const PolicyBackendSnapshot& backend) const {
+  if (!input.authentication.authenticated) {
+    return make_denied_result("authentication_required");
+  }
+
+  if (!is_local_trusted_daemon_subject(input)) {
+    return make_denied_result("daemon_peer_identity_required");
+  }
+
+  const auto query_context = build_query_context(
+      input, "diagnostics_read", "diagnostics_command", command_name);
+  if (!query_context.has_value()) {
+    return make_denied_result("malformed_policy_context");
+  }
+
+  return map_policy_result(*query_context, backend, false);
+}
+
 AccessPolicyEvaluationResult AccessPolicyGate::evaluate_override_request(
     const AccessPolicyEvaluationInput& input,
     const OverrideSourceFact& source_fact,
@@ -189,6 +210,7 @@ AccessPolicyEvaluationResult AccessPolicyGate::map_policy_result(
   const bool allow_result =
       (query_context.operation == "submit" && backend.allow_submit) ||
       (query_context.operation == "task_query" && backend.allow_task_query) ||
+      (query_context.operation == "diagnostics_read" && backend.allow_diagnostics) ||
       (query_context.operation == "runtime_override" && backend.allow_override);
 
   if (allow_result) {

@@ -37,6 +37,7 @@ struct PolicyBackendSnapshot {
   bool backend_available = true;
   bool allow_submit = true;
   bool allow_task_query = true;
+  bool allow_diagnostics = false;
   bool allow_override = false;
   bool require_confirmation_for_override = false;
   std::string decision_ref = "policy://access/default";
@@ -68,6 +69,11 @@ class AccessPolicyGate {
   [[nodiscard]] AccessPolicyEvaluationResult evaluate_task_query(
       const AccessPolicyEvaluationInput& input,
       std::string_view task_ref,
+      const PolicyBackendSnapshot& backend) const;
+
+    [[nodiscard]] AccessPolicyEvaluationResult evaluate_diagnostics_request(
+      const AccessPolicyEvaluationInput& input,
+      std::string_view command_name,
       const PolicyBackendSnapshot& backend) const;
 
   [[nodiscard]] AccessPolicyEvaluationResult evaluate_override_request(

@@ -7,6 +7,10 @@
 #include "AccessTypes.h"
 #include "IAccessGateway.h"
 
+namespace dasall::infra::diagnostics {
+class IDiagnosticsService;
+}
+
 namespace dasall::access {
 
 struct AccessGatewayFactoryOptions {
@@ -38,6 +42,7 @@ struct DaemonAccessPipelineOptions {
     bool daemon_diagnostics_enabled = false;
     std::string daemon_version = "v1";
     std::string daemon_profile_id = "daemon.default";
+    std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
 
     RuntimeDispatchBackend runtime_dispatch_backend{};
     RuntimeCancelBackend runtime_cancel_backend{};

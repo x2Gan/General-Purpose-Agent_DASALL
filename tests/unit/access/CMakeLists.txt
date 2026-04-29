@@ -8,6 +8,7 @@ macro(dasall_add_access_unit_test target_name test_name source_file)
   target_include_directories(${target_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/access/src
+      ${CMAKE_SOURCE_DIR}/infra/include
   )
 
   target_link_libraries(${target_name}
@@ -366,6 +367,18 @@ dasall_add_access_unit_test(
   dasall_access_daemon_ping_router_unit_test
   DaemonPingDoesNotBypassRouterTest
   DaemonPingDoesNotBypassRouterTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_daemon_diagnostics_handler_unit_test
+  DaemonDiagnosticsHandlerTest
+  DaemonDiagnosticsHandlerTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_diagnostics_command_policy_unit_test
+  DiagnosticsCommandPolicyTest
+  DiagnosticsCommandPolicyTest.cpp
 )
 
 add_executable(dasall_access_daemon_protocol_adapter_local_trusted_unit_test

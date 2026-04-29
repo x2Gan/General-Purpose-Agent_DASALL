@@ -44,6 +44,7 @@ target_sources(dasall_access
     src/RuntimeBridge.cpp
     src/ResultPublisher.cpp
     src/daemon/DaemonFrameCodec.cpp
+    src/daemon/DaemonDiagnosticsHandler.cpp
     src/daemon/DaemonHealthService.cpp
     src/daemon/DaemonProtocolAdapter.cpp
     src/daemon/DaemonResponseBuilderWithReceipt.cpp
