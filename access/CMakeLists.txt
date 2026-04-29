@@ -8,6 +8,7 @@ set(DASALL_ACCESS_PUBLIC_HEADERS
   include/daemon/DaemonFrameCodec.h
   include/daemon/DaemonProtocolTypes.h
   include/daemon/DaemonProtocolAdapter.h
+  include/daemon/DaemonResponseBuilderWithReceipt.h
   include/IAccessGateway.h
   include/IAccessRuntimeBridge.h
   include/IAdmissionController.h
@@ -42,6 +43,7 @@ target_sources(dasall_access
     src/ResultPublisher.cpp
     src/daemon/DaemonFrameCodec.cpp
     src/daemon/DaemonProtocolAdapter.cpp
+    src/daemon/DaemonResponseBuilderWithReceipt.cpp
     src/ProtocolAdapterRegistry.cpp
     src/ProtocolErrorMapper.cpp
     src/SubjectResolver.cpp

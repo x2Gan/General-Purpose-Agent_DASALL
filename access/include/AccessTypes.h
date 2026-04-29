@@ -86,6 +86,18 @@ struct RuntimeDispatchRequest {
   std::optional<std::string> access_deadline;
 };
 
+// AsyncTaskReceipt - 异步受理凭证（必须在 PublishEnvelope 之前定义）
+struct AsyncTaskReceipt {
+  std::string receipt_id;                                    // 凭证唯一 ID
+  std::string request_id;                                    // 原始请求 ID
+  std::string session_id;                                    // 原始会话 ID
+  std::string actor_ref;                                     // 原始调用者（所有权验证）
+  std::string task_ref;                                      // Runtime 任务引用
+  std::chrono::steady_clock::time_point expires_at;          // TTL 过期时间
+  std::string ownership_token;                               // HMAC 所有权验证令牌
+  std::optional<std::string> initial_status;                 // 初始任务状态快照
+};
+
 struct PublishEnvelope {
   std::string request_id;
   std::string result_id;
@@ -98,6 +110,7 @@ struct PublishEnvelope {
   std::string protocol_metadata;             // Protocol 特定元数据
   bool is_final = true;                      // 是否为最终响应
   std::string payload;                       // 原 payload 字段保持兼容
+  std::optional<AsyncTaskReceipt> receipt;   // accepted_async 响应时包含 receipt
 };
 
 struct RuntimeDispatchResult {
@@ -191,18 +204,6 @@ struct AccessRuntimeGovernanceView {
   bool remote_diagnostics_enabled = false;
   std::string security_default_effect = "deny";
   bool diag_pull_enabled = false;
-};
-
-// AsyncTaskReceipt - 异步受理凭证
-struct AsyncTaskReceipt {
-  std::string receipt_id;                                    // 凭证唯一 ID
-  std::string request_id;                                    // 原始请求 ID
-  std::string session_id;                                    // 原始会话 ID
-  std::string actor_ref;                                     // 原始调用者（所有权验证）
-  std::string task_ref;                                      // Runtime 任务引用
-  std::chrono::steady_clock::time_point expires_at;          // TTL 过期时间
-  std::string ownership_token;                               // HMAC 所有权验证令牌
-  std::optional<std::string> initial_status;                 // 初始任务状态快照
 };
 
 }  // namespace dasall::access

@@ -279,6 +279,12 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_daemon_accepted_async_receipt_unit_test
+  DaemonAcceptedAsyncReceiptTest
+  DaemonAcceptedAsyncReceiptTest.cpp
+)
+
+dasall_add_access_unit_test(
   dasall_access_result_replay_cache_unit_test
   ResultReplayCacheTest
   ResultReplayCacheTest.cpp

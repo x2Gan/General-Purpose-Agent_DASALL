@@ -39,9 +39,13 @@ constexpr std::size_t kMaxDaemonFramePayloadBytes = 1024U * 1024U;
   }
   frame.disposition = map_disposition(envelope);
 
-  if (frame.disposition == UdsResponseDisposition::AcceptedAsync &&
-      !envelope.result_id.empty()) {
-    frame.receipt_ref = envelope.result_id;
+  if (frame.disposition == UdsResponseDisposition::AcceptedAsync) {
+    // 优先使用 receipt 中的 receipt_id；否则回退到 result_id
+    if (envelope.receipt && !envelope.receipt->receipt_id.empty()) {
+      frame.receipt_ref = envelope.receipt->receipt_id;
+    } else if (!envelope.result_id.empty()) {
+      frame.receipt_ref = envelope.result_id;
+    }
   }
 
   if (frame.disposition == UdsResponseDisposition::Rejected && !envelope.payload.empty()) {
