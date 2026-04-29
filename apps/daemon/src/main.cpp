@@ -232,7 +232,7 @@ int main(int argc, char* argv[]) {
 
   while (!run_finished.load()) {
     if (signal_handler.shutdown_requested()) {
-      bootstrap.stop();
+      bootstrap.stop(std::chrono::milliseconds(parsed.config.shutdown_grace_ms));
       break;
     }
 
@@ -247,9 +247,6 @@ int main(int argc, char* argv[]) {
   }
 
   daemon_thread.join();
-
-  // 5. 优雅关闭 AccessGateway
-  gateway->shutdown(std::chrono::milliseconds(parsed.config.shutdown_grace_ms));
 
   std::cout << "[dasall_daemon] stopped (run=" << (run_ok ? "ok" : "failed") << ")\n";
   return run_ok ? 0 : 1;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <optional>
 
@@ -57,8 +58,9 @@ class DaemonBootstrap {
   /// @return 若监听启动失败返回 false；正常退出返回 true
   [[nodiscard]] bool run(const DaemonProcessContext& context);
 
-  /// 请求停止事件循环。线程安全。
-  void stop();
+  /// 请求停止事件循环并执行优雅排空。线程安全。
+  void stop(std::chrono::milliseconds drain_timeout =
+                std::chrono::milliseconds::zero());
 
  private:
   /// 处理单条已接受的连接（receive → decode → submit → encode）。

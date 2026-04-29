@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string_view>
@@ -18,9 +19,11 @@ struct AccessGatewayFactoryOptions {
       std::function<RuntimeDispatchResult(const InboundPacket& packet)>;
   using PublishBackend =
       std::function<bool(const PublishEnvelope& envelope)>;
+    using ShutdownObserver = std::function<void(std::size_t abandoned_requests)>;
 
   SubmitPipeline submit_pipeline{};
   PublishBackend publish_backend{};
+    ShutdownObserver shutdown_observer{};
 };
 
 struct DaemonAccessPipelineOptions {

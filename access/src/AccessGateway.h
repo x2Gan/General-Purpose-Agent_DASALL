@@ -16,9 +16,11 @@ class AccessGateway final : public IAccessGateway {
  public:
   using SubmitPipeline = std::function<RuntimeDispatchResult(const InboundPacket& packet)>;
   using PublishBackend = std::function<bool(const PublishEnvelope& envelope)>;
+  using ShutdownObserver = std::function<void(std::size_t abandoned_requests)>;
 
   AccessGateway(SubmitPipeline submit_pipeline = {},
-                PublishBackend publish_backend = {});
+                PublishBackend publish_backend = {},
+                ShutdownObserver shutdown_observer = {});
 
   [[nodiscard]] bool init() override;
 
@@ -48,6 +50,7 @@ class AccessGateway final : public IAccessGateway {
 
   SubmitPipeline submit_pipeline_;
   PublishBackend publish_backend_;
+  ShutdownObserver shutdown_observer_;
 
   std::atomic<AccessGatewayState> state_{AccessGatewayState::Uninitialized};
 

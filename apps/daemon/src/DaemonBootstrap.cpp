@@ -100,9 +100,15 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
   return true;
 }
 
-void DaemonBootstrap::stop() {
+void DaemonBootstrap::stop(std::chrono::milliseconds drain_timeout) {
   stop_requested_.store(true);
-  (void)lifecycle_.shutdown(std::chrono::milliseconds::zero());
+  if (listener_host_.has_value()) {
+    (void)listener_host_->close();
+  }
+  if (gateway_) {
+    gateway_->shutdown(drain_timeout);
+  }
+  (void)lifecycle_.shutdown(drain_timeout);
 }
 
 void DaemonBootstrap::configure_from_context(const DaemonProcessContext& context) {
@@ -129,6 +135,19 @@ bool DaemonBootstrap::handle_connection(
   if (!channel.has_consistent_values()) {
     return false;
   }
+
+  if (!lifecycle_.begin_request()) {
+    return false;
+  }
+
+  struct RequestScope final {
+    DaemonLifecycleController* lifecycle = nullptr;
+    ~RequestScope() {
+      if (lifecycle != nullptr) {
+        lifecycle->finish_request();
+      }
+    }
+  } request_scope{.lifecycle = &lifecycle_};
 
   // 接收请求 payload
   const auto recv_result = ipc_->receive(channel, receive_deadline_ms_);

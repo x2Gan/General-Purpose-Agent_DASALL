@@ -175,6 +175,39 @@ list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_daemon_bootstrap_unit_test
 )
 
+add_executable(dasall_daemon_graceful_shutdown_unit_test
+  DaemonGracefulShutdownTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSupervisorAdapter.cpp
+)
+
+target_include_directories(dasall_daemon_graceful_shutdown_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+)
+
+target_link_libraries(dasall_daemon_graceful_shutdown_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_platform
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_daemon_graceful_shutdown_unit_test)
+
+add_test(NAME DaemonGracefulShutdownTest
+  COMMAND dasall_daemon_graceful_shutdown_unit_test
+)
+set_tests_properties(DaemonGracefulShutdownTest PROPERTIES LABELS "unit;daemon")
+
+list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_daemon_graceful_shutdown_unit_test
+)
+
 add_executable(dasall_daemon_lifecycle_controller_unit_test
   DaemonLifecycleControllerTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp

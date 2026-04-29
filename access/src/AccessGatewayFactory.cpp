@@ -300,7 +300,9 @@ struct DaemonDiagPayload {
 }
 
 [[nodiscard]] std::shared_ptr<AccessGateway::SubmitPipeline>
-build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
+build_daemon_submit_pipeline(
+  const DaemonAccessPipelineOptions& options,
+  std::shared_ptr<AccessObservabilityBridge> observability_bridge) {
   auto request_validator =
       std::make_shared<RequestValidator>(options.publish_view,
                                          options.bootstrap_config.allowed_protocols);
@@ -316,7 +318,6 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
       options.runtime_dispatch_backend,
       options.runtime_cancel_backend);
   auto result_publisher = std::make_shared<ResultPublisher>();
-  auto observability_bridge = std::make_shared<AccessObservabilityBridge>();
   auto async_task_registry = std::make_shared<AsyncTaskRegistry>(
       "daemon-access-secret-v1");
   auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
@@ -603,16 +604,25 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
 std::shared_ptr<IAccessGateway> create_access_gateway(
     AccessGatewayFactoryOptions options) {
   return std::make_shared<AccessGateway>(std::move(options.submit_pipeline),
-                                         std::move(options.publish_backend));
+                                         std::move(options.publish_backend),
+                                         std::move(options.shutdown_observer));
 }
 
 std::shared_ptr<IAccessGateway> create_daemon_access_gateway(
     DaemonAccessPipelineOptions options) {
-  auto pipeline = build_daemon_submit_pipeline(options);
+  auto observability_bridge = std::make_shared<AccessObservabilityBridge>();
+  auto pipeline = build_daemon_submit_pipeline(options, observability_bridge);
   AccessGatewayFactoryOptions gateway_options;
   if (pipeline != nullptr) {
     gateway_options.submit_pipeline = *pipeline;
   }
+  gateway_options.shutdown_observer =
+      [observability_bridge](std::size_t abandoned_requests) {
+        (void)observability_bridge->emit_shutdown_abandoned(
+            "DRAINING",
+            "daemon-access-gateway",
+            static_cast<std::uint32_t>(abandoned_requests));
+      };
   return create_access_gateway(std::move(gateway_options));
 }
 

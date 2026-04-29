@@ -6,9 +6,11 @@
 namespace dasall::access {
 
 AccessGateway::AccessGateway(SubmitPipeline submit_pipeline,
-                             PublishBackend publish_backend)
+                             PublishBackend publish_backend,
+                             ShutdownObserver shutdown_observer)
     : submit_pipeline_(std::move(submit_pipeline)),
-      publish_backend_(std::move(publish_backend)) {}
+      publish_backend_(std::move(publish_backend)),
+      shutdown_observer_(std::move(shutdown_observer)) {}
 
 bool AccessGateway::init() {
   AccessGatewayState expected = AccessGatewayState::Uninitialized;
@@ -60,9 +62,16 @@ void AccessGateway::shutdown(std::chrono::milliseconds drain_timeout) {
   state_.store(AccessGatewayState::Draining);
 
   std::unique_lock<std::mutex> lock(inflight_mutex_);
-  inflight_drained_cv_.wait_for(lock, drain_timeout, [this]() {
+  const bool drained = inflight_drained_cv_.wait_for(lock, drain_timeout, [this]() {
     return inflight_requests_ == 0;
   });
+
+  const auto abandoned_requests = inflight_requests_;
+  lock.unlock();
+
+  if (!drained && abandoned_requests > 0 && shutdown_observer_) {
+    shutdown_observer_(abandoned_requests);
+  }
 
   state_.store(AccessGatewayState::ShutDown);
 }
