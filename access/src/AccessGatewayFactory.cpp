@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "AccessGateway.h"
+#include "AccessObservabilityBridge.h"
 #include "AccessPolicyGate.h"
 #include "AdmissionController.h"
 #include "AsyncTaskRegistry.h"
@@ -315,6 +316,7 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
       options.runtime_dispatch_backend,
       options.runtime_cancel_backend);
   auto result_publisher = std::make_shared<ResultPublisher>();
+  auto observability_bridge = std::make_shared<AccessObservabilityBridge>();
   auto async_task_registry = std::make_shared<AsyncTaskRegistry>(
       "daemon-access-secret-v1");
   auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
@@ -339,11 +341,20 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
            request_normalizer,
            runtime_bridge,
            result_publisher,
+           observability_bridge,
            receipt_builder,
            task_query_handler,
            health_service,
            diagnostics_handler,
            options](const InboundPacket& packet) -> RuntimeDispatchResult {
+            (void)observability_bridge->emit_daemon_request_fact(
+                packet,
+                packet.packet_id,
+                std::string_view{},
+                std::string_view{},
+                "READY",
+                packet.peer_ref);
+
             if (packet.packet_id == "ping") {
               daemon::DaemonHealthInput input;
               input.lifecycle_ready = true;
@@ -411,6 +422,14 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
             const auto auth_outcome =
                 authenticator_chain->authenticate(resolved_subject, options.auth_view);
             if (!auth_outcome.authenticated) {
+              if (auth_outcome.failure_reason.has_value() &&
+                  *auth_outcome.failure_reason == "authentication_failed") {
+                (void)observability_bridge->emit_peer_identity_denied(
+                    packet.packet_id,
+                    std::string_view{},
+                    "NOT_READY",
+                    packet.peer_ref);
+              }
               if (auth_outcome.requires_challenge()) {
                 return make_rejected_result(AccessErrorCode::AuthenticationChallengeRequired,
                                             auth_outcome.challenge->reason_code);
@@ -555,6 +574,12 @@ build_daemon_submit_pipeline(const DaemonAccessPipelineOptions& options) {
                 dispatch_result.publish_envelope->protocol_status_hint = "202";
                 dispatch_result.publish_envelope->payload = "accepted_async";
                 dispatch_result.publish_envelope->receipt = *receipt;
+                (void)observability_bridge->emit_receipt_event(
+                    normalized.runtime_request.packet.packet_id,
+                    normalized.runtime_request.packet.packet_id,
+                    std::string_view{},
+                    "READY",
+                    receipt->receipt_id);
               }
             }
 

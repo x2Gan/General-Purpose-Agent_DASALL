@@ -51,6 +51,32 @@ class AccessObservabilityBridge final {
       AccessErrorCode error_code,
       std::string_view detail) const;
 
+  [[nodiscard]] bool emit_daemon_request_fact(
+      const InboundPacket& packet,
+      std::string_view request_id,
+      std::string_view session_id,
+      std::string_view trace_id,
+      std::string_view daemon_state,
+      std::string_view connection_ref) const;
+
+  [[nodiscard]] bool emit_receipt_event(
+      std::string_view request_id,
+      std::string_view session_id,
+      std::string_view trace_id,
+      std::string_view daemon_state,
+      std::string_view receipt_ref) const;
+
+  [[nodiscard]] bool emit_peer_identity_denied(
+      std::string_view request_id,
+      std::string_view trace_id,
+      std::string_view daemon_state,
+      std::string_view connection_ref) const;
+
+  [[nodiscard]] bool emit_shutdown_abandoned(
+      std::string_view daemon_state,
+      std::string_view connection_ref,
+      std::uint32_t abandoned_requests) const;
+
  private:
   [[nodiscard]] bool emit_event(AccessObservabilityEvent event) const;
 

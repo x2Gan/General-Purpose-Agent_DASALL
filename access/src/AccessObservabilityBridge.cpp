@@ -113,6 +113,67 @@ bool AccessObservabilityBridge::emit_publish_failed(
   return emit_event(std::move(event));
 }
 
+bool AccessObservabilityBridge::emit_daemon_request_fact(
+    const InboundPacket& packet,
+    const std::string_view request_id,
+    const std::string_view session_id,
+    const std::string_view trace_id,
+    const std::string_view daemon_state,
+    const std::string_view connection_ref) const {
+  AccessObservabilityEvent event;
+  event.name = "daemon.request.fact";
+  event.fields["request_id"] = std::string(request_id);
+  event.fields["session_id"] = std::string(session_id);
+  event.fields["trace_id"] = std::string(trace_id);
+  event.fields["daemon_state"] = std::string(daemon_state);
+  event.fields["connection_ref"] = std::string(connection_ref);
+  event.fields["entry_type"] = packet.entry_type;
+  event.fields["protocol_kind"] = packet.protocol_kind;
+  return emit_event(std::move(event));
+}
+
+bool AccessObservabilityBridge::emit_receipt_event(
+    const std::string_view request_id,
+    const std::string_view session_id,
+    const std::string_view trace_id,
+    const std::string_view daemon_state,
+    const std::string_view receipt_ref) const {
+  AccessObservabilityEvent event;
+  event.name = "daemon.receipt.event";
+  event.fields["request_id"] = std::string(request_id);
+  event.fields["session_id"] = std::string(session_id);
+  event.fields["trace_id"] = std::string(trace_id);
+  event.fields["daemon_state"] = std::string(daemon_state);
+  event.fields["receipt_ref"] = std::string(receipt_ref);
+  return emit_event(std::move(event));
+}
+
+bool AccessObservabilityBridge::emit_peer_identity_denied(
+    const std::string_view request_id,
+    const std::string_view trace_id,
+    const std::string_view daemon_state,
+    const std::string_view connection_ref) const {
+  AccessObservabilityEvent event;
+  event.name = "daemon.peer_identity.denied";
+  event.fields["request_id"] = std::string(request_id);
+  event.fields["trace_id"] = std::string(trace_id);
+  event.fields["daemon_state"] = std::string(daemon_state);
+  event.fields["connection_ref"] = std::string(connection_ref);
+  return emit_event(std::move(event));
+}
+
+bool AccessObservabilityBridge::emit_shutdown_abandoned(
+    const std::string_view daemon_state,
+    const std::string_view connection_ref,
+    const std::uint32_t abandoned_requests) const {
+  AccessObservabilityEvent event;
+  event.name = "daemon.shutdown.abandoned";
+  event.fields["daemon_state"] = std::string(daemon_state);
+  event.fields["connection_ref"] = std::string(connection_ref);
+  event.fields["abandoned_requests"] = std::to_string(abandoned_requests);
+  return emit_event(std::move(event));
+}
+
 bool AccessObservabilityBridge::emit_event(AccessObservabilityEvent event) const {
   if (!backend_) {
     return false;

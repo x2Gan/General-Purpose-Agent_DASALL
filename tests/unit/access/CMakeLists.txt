@@ -310,6 +310,12 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_daemon_observability_field_set_unit_test
+  DaemonObservabilityFieldSetTest
+  DaemonObservabilityFieldSetTest.cpp
+)
+
+dasall_add_access_unit_test(
   dasall_access_gateway_facade_unit_test
   AccessGatewayFacadeTest
   AccessGatewayFacadeTest.cpp
