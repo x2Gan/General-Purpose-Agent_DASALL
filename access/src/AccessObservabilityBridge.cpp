@@ -174,6 +174,18 @@ bool AccessObservabilityBridge::emit_shutdown_abandoned(
   return emit_event(std::move(event));
 }
 
+bool AccessObservabilityBridge::emit_reload_denied(
+    const std::string_view daemon_state,
+    const std::string_view rejected_key,
+    const std::string_view reason_code) const {
+  AccessObservabilityEvent event;
+  event.name = "daemon.reload.denied";
+  event.fields["daemon_state"] = std::string(daemon_state);
+  event.fields["rejected_key"] = std::string(rejected_key);
+  event.fields["reason_code"] = std::string(reason_code);
+  return emit_event(std::move(event));
+}
+
 bool AccessObservabilityBridge::emit_event(AccessObservabilityEvent event) const {
   if (!backend_) {
     return false;

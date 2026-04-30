@@ -77,6 +77,11 @@ class AccessObservabilityBridge final {
       std::string_view connection_ref,
       std::uint32_t abandoned_requests) const;
 
+  [[nodiscard]] bool emit_reload_denied(
+      std::string_view daemon_state,
+      std::string_view rejected_key,
+      std::string_view reason_code) const;
+
  private:
   [[nodiscard]] bool emit_event(AccessObservabilityEvent event) const;
 

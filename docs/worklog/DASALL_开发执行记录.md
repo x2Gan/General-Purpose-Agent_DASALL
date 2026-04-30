@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #513
+
+- 日期：2026-04-30
+- 阶段：daemon/hot-reload allowlist and config snapshot switch
+- 任务：DMD-TODO-033 实现 SIGHUP hot-reload allowlist 与配置快照切换
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonConfigReloader.{h,cpp}`，冻结 allowlist 热更键并实现快照切换。
+2. 更新 `apps/daemon/src/DaemonConfig.h`，补充 `log_level` 默认值并纳入配置一致性。
+3. 更新 `apps/daemon/src/main.cpp`，将 SIGHUP 从“仅 intent”推进到 reloader apply，并在拒绝路径输出 `daemon.reload.denied` 审计字段。
+4. 更新 `access/src/AccessObservabilityBridge.{h,cpp}`，新增 `emit_reload_denied()` 事件接口与实现。
+5. 新增 `tests/unit/apps/daemon/DaemonConfigReloadTest.cpp`，覆盖 allowlist 生效、restart-only 拒绝、last-known-good 保持与拒绝审计回调。
+6. 更新 `tests/unit/apps/daemon/CMakeLists.txt` 注册 `DaemonConfigReloadTest`，更新 `tests/unit/apps/daemon/DaemonBootstrapConfigTest.cpp` 断言 `log_level` 默认值。
+7. 更新 `tests/unit/access/DaemonObservabilityFieldSetTest.cpp`，固定 `daemon.reload.denied` 字段集合。
+8. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：DMD-TODO-033 状态改为 Done 并补测试证据。
+9. 新增交付物文档 `docs/todos/daemon/deliverables/DMD-TODO-033-daemon-hot-reload-allowlist收敛.md`。
+
+### 验证
+
+1. `Build_CMakeTools`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonConfigReloadTest","DaemonSignalHandlerTest","DaemonObservabilityFieldSetTest"])`
+   - 结果：通过，3/3 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. SIGHUP 热更从 intent 升级为可执行的 allowlist + snapshot 机制。
+2. restart-only 配置键拒绝行为与审计字段稳定可断言，不会污染运行中快照。
+3. DMD-TODO-033 已达到完成判定，并与 TODO/deliverable/worklog 形成追溯闭环。
+
 ## 记录 #512
 
 - 日期：2026-04-30

@@ -25,6 +25,7 @@
 
 #include "DaemonBootstrap.h"
 #include "DaemonConfig.h"
+#include "DaemonConfigReloader.h"
 #include "DaemonConfigValidator.h"
 #include "DaemonSignalHandler.h"
 #include "AccessErrors.h"
@@ -214,6 +215,19 @@ int main(int argc, char* argv[]) {
   // 3. 构造 DaemonBootstrap（通过 build(config) 产出的只读 process context 驱动）
   dasall::apps::daemon::DaemonBootstrap bootstrap;
   dasall::apps::daemon::DaemonSignalHandler signal_handler;
+
+  dasall::apps::daemon::DaemonConfigReloader config_reloader(
+      parsed.config,
+      [](const std::vector<std::string>& rejected_keys,
+         const std::string& reason) {
+        for (const auto& key : rejected_keys) {
+          std::cout << "[dasall_daemon] audit daemon.reload.denied"
+                    << " daemon_state=ready"
+                    << " rejected_key=" << key
+                    << " reason_code=" << reason << "\n";
+        }
+      });
+
   if (!signal_handler.install_handlers()) {
     std::cerr << "[dasall_daemon] signal handler install failed\n";
     return 1;
@@ -237,9 +251,12 @@ int main(int argc, char* argv[]) {
     }
 
     if (signal_handler.reload_requested()) {
+      const auto reload_result =
+          config_reloader.apply_reload_snapshot(parsed.config);
       std::cout << "[dasall_daemon] reload requested by signal "
-                << signal_handler.last_signal()
-                << " (not applied in v1)\n";
+                << signal_handler.last_signal() << ": "
+                << (reload_result.ok() ? "applied" : "rejected")
+                << " reason=" << reload_result.reason << "\n";
       signal_handler.clear_requests();
     }
 

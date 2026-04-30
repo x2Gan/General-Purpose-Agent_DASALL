@@ -58,6 +58,7 @@ struct DaemonBootstrapConfig {
   bool diag_enabled = false;
   bool override_enabled = false;
   bool watchdog_enabled = false;
+  std::string log_level = "info";
   std::string log_format = "json";
   DaemonStartupMode startup_mode = DaemonStartupMode::DirectBind;
 
@@ -79,7 +80,7 @@ struct DaemonBootstrapConfig {
       return false;
     }
 
-    return !log_format.empty();
+    return !log_level.empty() && !log_format.empty();
   }
 };
 

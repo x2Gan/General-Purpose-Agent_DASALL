@@ -54,9 +54,14 @@ void daemon_observability_events_expose_required_field_set() {
                   "conn-021",
                   3),
               "shutdown abandoned emission should return backend success");
+  assert_true(bridge.emit_reload_denied(
+                  "ready",
+                  "daemon.socket_path",
+                  "reload_rejected_restart_only_keys"),
+              "reload denied emission should return backend success");
 
-  assert_equal(static_cast<std::size_t>(4), captured.size(),
-               "daemon observability test should capture four events");
+  assert_equal(static_cast<std::size_t>(5), captured.size(),
+               "daemon observability test should capture five events");
 
   const auto& request_event = captured.at(0);
   assert_equal(std::string("daemon.request.fact"), request_event.name,
@@ -99,6 +104,16 @@ void daemon_observability_events_expose_required_field_set() {
                "shutdown event should preserve daemon_state");
   assert_equal(std::string("3"), shutdown_event.fields.at("abandoned_requests"),
                "shutdown event should encode abandoned request count");
+
+  const auto& reload_denied_event = captured.at(4);
+  assert_equal(std::string("daemon.reload.denied"), reload_denied_event.name,
+               "reload denied event should use daemon reload denied name");
+  assert_equal(std::string("ready"), reload_denied_event.fields.at("daemon_state"),
+               "reload denied event should preserve daemon_state");
+  assert_equal(std::string("daemon.socket_path"), reload_denied_event.fields.at("rejected_key"),
+               "reload denied event should preserve rejected key");
+  assert_equal(std::string("reload_rejected_restart_only_keys"), reload_denied_event.fields.at("reason_code"),
+               "reload denied event should preserve reason code");
 }
 
 }  // namespace

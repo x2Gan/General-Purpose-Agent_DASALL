@@ -41,6 +41,8 @@ void test_bootstrap_config_defaults_match_v1_design() {
               "DaemonBootstrapConfig.override_enabled should default to disabled");
   assert_true(!config.watchdog_enabled,
               "DaemonBootstrapConfig.watchdog_enabled should default to disabled");
+  assert_equal(std::string("info"), config.log_level,
+               "DaemonBootstrapConfig.log_level should default to info");
   assert_true(config.has_consistent_values(),
               "DaemonBootstrapConfig defaults should be internally consistent");
 }
