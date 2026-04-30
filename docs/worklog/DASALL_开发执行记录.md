@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #512
+
+- 日期：2026-04-30
+- 阶段：daemon/graceful shutdown drain and abandoned audit
+- 任务：DMD-TODO-022 实现 graceful shutdown 排空与 abandoned 审计
+- 状态：已完成
+
+### 改动
+
+1. 回收并确认 `apps/daemon/src/DaemonLifecycleController.cpp` 的 Draining 排空语义：`shutdown(timeout)` 在超时场景返回 `abandoned_requests`，并在正常排空时进入 `Stopped`。
+2. 回收并确认 `apps/daemon/src/DaemonBootstrap.cpp` 的 shutdown 收口顺序：`stop(timeout)` 同时触发 listener 关闭、gateway shutdown 与 lifecycle draining。
+3. 回收并确认 `access/src/AccessGateway.cpp` + `access/src/AccessObservabilityBridge.cpp` 的 abandoned 审计链路：超时 inflight 通过 shutdown observer 写出 `daemon.shutdown.abandoned` 事件。
+4. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-022 从 `Ready` 更新为 `Done` 并补充 2026-04-30 验收证据。
+5. 新增交付文档 `docs/todos/daemon/deliverables/DMD-TODO-022-daemon-graceful-shutdown收敛.md`。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["DaemonGracefulShutdownTest","AccessGatewayLifecycleTest","DaemonShutdownAbandonedAuditTest"])`
+   - 结果：通过，3/3 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+
+### 结果
+
+1. DMD-TODO-022 的三项完成判定（Draining 拒绝新请求、排空等待、超时 abandoned 审计）均已具备自动化证据。
+2. daemon 仍遵守 ADR 边界：仅负责生命周期排空与关闭，不引入业务恢复裁定。
+3. 专项 TODO 与 deliverables、worklog 已形成可追溯闭环。
+
 ## 记录 #511
 
 - 日期：2026-04-28
