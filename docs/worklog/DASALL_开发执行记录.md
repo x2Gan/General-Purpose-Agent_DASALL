@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #514
+
+- 日期：2026-05-01
+- 阶段：daemon/unit topology discoverability closure
+- 任务：DMD-TODO-023 注册 tests/unit/apps/daemon 拓扑
+- 状态：已完成
+
+### 改动
+
+1. 确认 `tests/unit/apps/daemon/CMakeLists.txt` 已注册 daemon 壳层单测目标，并将目标写入 `DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS`。
+2. 确认 `tests/unit/CMakeLists.txt` 已通过 `add_subdirectory(apps/daemon)` 引入 daemon unit 拓扑，并将 daemon target 列表并入 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS`。
+3. 新增 `docs/todos/daemon/deliverables/DMD-TODO-023-tests_unit_apps_daemon拓扑收敛.md`，固定 focused build + discoverability 证据。
+4. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-023 更新为 Done，并把验收命令从过宽的 `dasall_unit_tests` 聚合目标收敛为 daemon topology 所需的 focused build 命令。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_daemon_bootstrap_unit_test dasall_daemon_lifecycle_controller_unit_test dasall_daemon_listener_host_unit_test dasall_daemon_config_validator_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -N | rg "Daemon(Bootstrap|LifecycleController|ListenerHost|ConfigValidator)Test"`
+   - 结果：通过，发现 `DaemonListenerHostTest`、`DaemonBootstrapTest`、`DaemonLifecycleControllerTest`、`DaemonConfigValidatorTest`。
+3. `cmake --build build-ci --target dasall_unit_tests`
+   - 结果：未作为本任务主验收信号采用；该聚合目标会执行全仓 unit tests，当前受仓库既有 `RuntimeControlPlaneSurfaceTest`、`RuntimeCognitionLoopSmokeTest` 等 runtime failure 污染，不适合作为 daemon topology discoverability 任务的完成依据。
+
+### 结果
+
+1. DMD-TODO-023 已形成“拓扑已落地 + focused 验收可跑 + TODO/deliverable/worklog 可追溯”的闭环。
+2. DMD-TODO-024 的前置依赖现已满足；035 的剩余 blocker 收敛为真实 daemon ping 集成缺失，而不再是 unit topology 未注册。
+
 ## 记录 #513
 
 - 日期：2026-04-30
