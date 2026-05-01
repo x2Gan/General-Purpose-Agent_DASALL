@@ -254,6 +254,11 @@ struct DaemonDiagPayload {
       "\",\"profile_id\":\"" + snapshot.ping.profile_id +
       "\",\"request_id\":\"" + snapshot.ping.request_id +
       "\",\"readiness\":\"" + snapshot.ping.readiness_summary + "\"}";
+  dasall::contracts::AgentResult ping_response;
+  ping_response.request_id = packet.packet_id;
+  ping_response.response_text = envelope.payload;
+  ping_response.task_completed = true;
+  envelope.agent_result = std::move(ping_response);
   result.publish_envelope = std::move(envelope);
   return result;
 }
@@ -295,6 +300,11 @@ struct DaemonDiagPayload {
                     ",\"bridge_reachable\":" +
                     (snapshot.readiness.bridge_reachable ? "true" : "false") +
                     ",\"degraded_reasons\":\"" + reasons_payload + "\"}";
+  dasall::contracts::AgentResult readiness_response;
+  readiness_response.request_id = packet.packet_id;
+  readiness_response.response_text = envelope.payload;
+  readiness_response.task_completed = true;
+  envelope.agent_result = std::move(readiness_response);
   result.publish_envelope = std::move(envelope);
   return result;
 }

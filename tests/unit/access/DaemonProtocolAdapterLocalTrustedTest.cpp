@@ -79,6 +79,9 @@ void test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path() {
   IpcEndpoint endpoint;
   endpoint.socket_path = "/tmp/local-control.sock";
 
+  const auto listener = ipc->listen(endpoint, dasall::platform::ListenOptions{});
+  assert_true(listener.ok(), "listen should succeed before trusted local peer connect");
+
   const auto channel = ipc->connect(endpoint, 10);
   assert_true(channel.ok(), "connect should provide a local channel for trusted test");
 
@@ -104,6 +107,9 @@ void test_daemon_protocol_adapter_marks_remote_peer_as_not_trusted() {
 
   IpcEndpoint endpoint;
   endpoint.socket_path = "/tmp/remote-control.sock";
+
+  const auto listener = ipc->listen(endpoint, dasall::platform::ListenOptions{});
+  assert_true(listener.ok(), "listen should succeed before remote-marked peer connect");
 
   const auto channel = ipc->connect(endpoint, 10);
   assert_true(channel.ok(), "connect should succeed for remote-marked endpoint");

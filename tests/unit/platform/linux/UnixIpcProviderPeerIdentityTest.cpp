@@ -17,6 +17,9 @@ void test_unix_ipc_provider_describe_peer_returns_local_identity_for_uds_channel
   IpcEndpoint endpoint;
   endpoint.socket_path = "/tmp/daemon-control.sock";
 
+  const auto listener = provider.listen(endpoint, dasall::platform::ListenOptions{});
+  assert_true(listener.ok(), "listen should succeed before local uds peer connect");
+
   const auto channel = provider.connect(endpoint, 10);
   assert_true(channel.ok(), "connect should succeed for local uds endpoint");
 

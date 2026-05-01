@@ -1,6 +1,8 @@
 #include "linux/UnixIpcProvider.h"
 
+#include <chrono>
 #include <optional>
+#include <thread>
 #include <utility>
 
 namespace dasall::platform::linux {
@@ -78,18 +80,10 @@ PlatformResult<IpcChannelHandle> UnixIpcProvider::accept(const IpcListenerHandle
     return PlatformResult<IpcChannelHandle>::success(IpcChannelHandle{.native_fd = fd});
   }
 
-  const std::uint64_t fd = next_channel_fd_++;
-  channels_.emplace(fd,
-                    ChannelState{
-                        .closed = false,
-                        .peer_closed = false,
-                        .max_payload_bytes = listener_it->second.options.max_payload_bytes,
-                        .peer_identity = make_peer_identity(fd, true, 10000U),
-                      .peer_channel_fd = std::nullopt,
-                      .inbound_payloads = {},
-                    });
-
-  return PlatformResult<IpcChannelHandle>::success(IpcChannelHandle{.native_fd = fd});
+  return PlatformResult<IpcChannelHandle>::failure(
+      make_error(PlatformErrorCode::Timeout,
+                 PlatformErrorCategory::IPC,
+                 "accept timed out before peer connection"));
 }
 
 PlatformResult<IpcChannelHandle> UnixIpcProvider::connect(const IpcEndpoint& endpoint,
@@ -151,19 +145,10 @@ PlatformResult<IpcChannelHandle> UnixIpcProvider::connect(const IpcEndpoint& end
         IpcChannelHandle{.native_fd = client_fd});
   }
 
-  const auto fd = next_channel_fd_++;
-  channels_.emplace(fd,
-                    ChannelState{
-                        .closed = false,
-                        .peer_closed = peer_closed,
-                        .max_payload_bytes = 1048576U,
-                        .peer_identity = make_peer_identity(fd,
-                                                            local_socket_peer,
-                                                            20000U),
-                      .peer_channel_fd = std::nullopt,
-                      .inbound_payloads = {},
-                    });
-  return PlatformResult<IpcChannelHandle>::success(IpcChannelHandle{.native_fd = fd});
+  return PlatformResult<IpcChannelHandle>::failure(
+      make_error(PlatformErrorCode::Timeout,
+                 PlatformErrorCategory::IPC,
+                 "connect timed out before listener became available"));
 }
 
 PlatformResult<IpcSendResult> UnixIpcProvider::send(const IpcChannelHandle& handle,
@@ -224,53 +209,56 @@ PlatformResult<IpcReceiveResult> UnixIpcProvider::receive(const IpcChannelHandle
                    "ipc channel handle or deadline is invalid"));
   }
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  auto it = channels_.find(handle.native_fd);
-  if (it == channels_.end()) {
-    return PlatformResult<IpcReceiveResult>::failure(
-        make_error(PlatformErrorCode::NotFound,
-                   PlatformErrorCategory::Resource,
-                   "ipc channel does not exist"));
-  }
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(deadline_ms);
+  while (true) {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = channels_.find(handle.native_fd);
+      if (it == channels_.end()) {
+        return PlatformResult<IpcReceiveResult>::failure(
+            make_error(PlatformErrorCode::NotFound,
+                       PlatformErrorCategory::Resource,
+                       "ipc channel does not exist"));
+      }
 
-  if (!it->second.inbound_payloads.empty()) {
-    auto payload = std::move(it->second.inbound_payloads.front());
-    it->second.inbound_payloads.pop_front();
-    return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
-        .data = std::move(payload),
-        .peer_closed = false,
-    });
-  }
+      if (!it->second.inbound_payloads.empty()) {
+        auto payload = std::move(it->second.inbound_payloads.front());
+        it->second.inbound_payloads.pop_front();
+        return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
+            .data = std::move(payload),
+            .peer_closed = false,
+        });
+      }
 
-  if (it->second.peer_closed) {
-    return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
-        .data = {},
-        .peer_closed = true,
-    });
-  }
+      if (it->second.peer_closed) {
+        return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
+            .data = {},
+            .peer_closed = true,
+        });
+      }
 
-  if (deadline_ms == 0) {
-    return PlatformResult<IpcReceiveResult>::failure(
-        make_error(PlatformErrorCode::Timeout,
-                   PlatformErrorCategory::IPC,
-                   "ipc receive timed out before payload arrival"));
-  }
-
-  if (it->second.peer_channel_fd.has_value()) {
-    const auto peer_it = channels_.find(*it->second.peer_channel_fd);
-    if (peer_it == channels_.end() || peer_it->second.closed) {
-      it->second.peer_closed = true;
-      return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
-          .data = {},
-          .peer_closed = true,
-      });
+      if (it->second.peer_channel_fd.has_value()) {
+        const auto peer_it = channels_.find(*it->second.peer_channel_fd);
+        if (peer_it == channels_.end() || peer_it->second.closed) {
+          it->second.peer_closed = true;
+          return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
+              .data = {},
+              .peer_closed = true,
+          });
+        }
+      }
     }
-  }
 
-  return PlatformResult<IpcReceiveResult>::success(IpcReceiveResult{
-      .data = {},
-      .peer_closed = false,
-  });
+    if (std::chrono::steady_clock::now() >= deadline) {
+      return PlatformResult<IpcReceiveResult>::failure(
+          make_error(PlatformErrorCode::Timeout,
+                     PlatformErrorCategory::IPC,
+                     "ipc receive timed out before payload arrival"));
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
 }
 
 PlatformResult<PeerIdentitySnapshot> UnixIpcProvider::describe_peer(

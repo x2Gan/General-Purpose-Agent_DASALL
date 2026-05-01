@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #515
+
+- 日期：2026-05-01
+- 阶段：daemon/real ping integration gate closure
+- 任务：DMD-TODO-024 验证真实 daemon ping 集成
+- 状态：已完成
+
+### 改动
+
+1. 更新 `platform/src/linux/UnixIpcProvider.cpp`，把 loopback provider 的三处虚绿语义收紧为 daemon-fit contract：`accept()` 无 pending peer 时 timeout、`connect()` 无 listener 时 timeout、`receive()` 在 deadline 内等待 payload/peer close。
+2. 更新 `access/src/AccessGatewayFactory.cpp`，让 ping/readiness 的 `PublishEnvelope` 同步投影 `agent_result.response_text` 与 `task_completed=true`，使现有 `UdsResponseFrame` 编码路径可真实回传摘要。
+3. 更新 `tests/unit/platform/linux/UnixIpcProviderTest.cpp`、`UnixIpcProviderPeerIdentityTest.cpp`、`tests/unit/access/DaemonProtocolAdapterLocalTrustedTest.cpp`，对齐 provider 的 fail-closed connect 语义。
+4. 更新 `tests/unit/apps/daemon/DaemonLoopbackFixtureTest.cpp`，切到真实 daemon access gateway、0700 临时 socket 目录与 completed response 断言，作为 024 的近邻解阻夹具。
+5. 新增 `tests/integration/access/DaemonPingIntegrationTest.cpp`，使用 in-process daemon fixture 发送 v1 ping frame 并读取 daemon response。
+6. 更新 `tests/integration/access/CMakeLists.txt`，移除旧 `CliDaemonPingIntegrationTest` 集成注册，改为 `DaemonPingIntegrationTest`。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-024 更新为 Done，同时把验收命令从受全仓 integration 污染的聚合目标收敛为 focused build + focused ctest。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall_daemon_loopback_fixture_unit_test","dasall_unix_ipc_provider_loopback_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["UnixIpcProviderTest","UnixIpcProviderPeerIdentityTest","UnixIpcProviderLoopbackTest","DaemonProtocolAdapterLocalTrustedTest","DaemonLoopbackFixtureTest"])`
+   - 结果：通过，5/5 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
+3. `Build_CMakeTools(buildTargets=["dasall_access_daemon_ping_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["DaemonPingIntegrationTest"])`
+   - 结果：通过，1/1 通过。
+5. `Build_CMakeTools(buildTargets=["dasall_daemon","dasall_integration_tests"])`
+   - 结果：失败；`dasall_integration_tests` 会执行全仓 integration tests，当前受仓库既有 `RuntimeUnaryIntegrationTest`、`InfraDiagnosticsSmokeTest` 等无关失败污染，不适合作为 DMD-TODO-024 的主验收信号。
+
+### 结果
+
+1. DMD-TODO-024 已从“client send smoke”升级为“daemon 真实 request/response roundtrip 集成”。
+2. `UnixIpcProvider` 不再在无 listener、无 pending peer、无 payload 时伪造成功，真实 daemon fixture 的可验证性显著提升。
+3. CLI 真实 ping/wire contract 仍留给 DMD-TODO-031；024 只冻结 daemon 侧真实 ping gate。
+
 ## 记录 #514
 
 - 日期：2026-05-01

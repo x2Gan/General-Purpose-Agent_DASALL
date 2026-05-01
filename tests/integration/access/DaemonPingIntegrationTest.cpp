@@ -52,20 +52,20 @@ std::shared_ptr<dasall::access::IAccessGateway> build_gateway() {
   options.bootstrap_config.allowed_protocols = {"ipc_uds"};
   options.auth_view.trusted_local_subjects = {"local://uid/1000"};
   options.daemon_version = "v1";
-  options.daemon_profile_id = "daemon.loopback.fixture";
+  options.daemon_profile_id = "daemon.ping.integration";
   options.runtime_dispatch_backend = [](const auto&) {
     return dasall::access::RuntimeDispatchResult{};
   };
 
   auto gateway = dasall::access::create_daemon_access_gateway(std::move(options));
   assert_true(gateway != nullptr,
-              "daemon loopback fixture should build a real access gateway");
+              "daemon ping integration should build a real access gateway");
   assert_true(gateway->init(),
-              "daemon loopback fixture gateway should initialize");
+              "daemon ping integration gateway should initialize");
   return gateway;
 }
 
-void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
+void test_daemon_ping_roundtrip_returns_response_payload() {
   using namespace std::chrono_literals;
 
   using dasall::apps::daemon::DaemonBootstrap;
@@ -75,9 +75,10 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
   using dasall::platform::linux::UnixIpcProvider;
   using dasall::tests::support::assert_true;
 
+  ScopedTempDirectory temp_root("daemon-ping-integration");
   auto ipc = std::make_shared<UnixIpcProvider>();
   auto gateway = build_gateway();
-  ScopedTempDirectory temp_root("daemon-loopback-fixture");
+
   DaemonBootstrapConfig config;
   config.socket_path = (temp_root.path() / "control.sock").string();
 
@@ -90,14 +91,13 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
           .ipc = ipc,
           .access_gateway = gateway,
           .watchdog_service = nullptr,
-          .effective_profile_id = "daemon.loopback.fixture",
+          .effective_profile_id = "daemon.ping.integration",
           .config_revision = std::nullopt,
       });
   assert_true(context.has_value(),
-              "daemon loopback fixture should build a process context before run(context)");
+              "daemon ping integration should build a process context before run(context)");
 
   DaemonBootstrap bootstrap;
-
   bool run_ok = false;
   std::thread daemon_thread([&bootstrap, &context, &run_ok]() {
     run_ok = bootstrap.run(*context);
@@ -123,10 +123,10 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
       std::this_thread::sleep_for(10ms);
     }
     assert_true(client_channel.has_value(),
-                "client should connect to daemon loopback listener once bound");
+                "daemon ping integration client should connect once daemon listener is bound");
 
     const std::string ping_json =
-      R"({"schema_version":"1","command":"ping"})";
+        R"({"schema_version":"1","request_id":"ping-itg-001","command":"ping"})";
     IpcPayload payload;
     payload.reserve(ping_json.size());
     for (const char ch : ping_json) {
@@ -134,7 +134,7 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
     }
 
     const auto send_result = ipc->send(*client_channel, payload);
-    assert_true(send_result.ok(), "client should send ping payload through loopback channel");
+    assert_true(send_result.ok(), "daemon ping integration should send ping payload successfully");
 
     std::string response_text;
     bool received_response = false;
@@ -144,7 +144,7 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
         assert_true(receive_result.error.has_value() &&
                         receive_result.error->code ==
                             dasall::platform::PlatformErrorCode::Timeout,
-                    "client polling should only observe timeout before daemon response arrives");
+                    "daemon ping integration polling should only observe timeout before response arrives");
         std::this_thread::sleep_for(10ms);
         continue;
       }
@@ -161,19 +161,19 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
     }
 
     assert_true(received_response,
-                "daemon loopback fixture should expose response payload to client");
+                "daemon ping integration should receive daemon response payload");
     assert_true(response_text.find("\"disposition\":\"completed\"") !=
-            std::string::npos,
-          "daemon ping response should surface completed disposition");
+                    std::string::npos,
+                "daemon ping integration should surface completed disposition");
     assert_true(response_text.find("\\\"daemon_version\\\":\\\"v1\\\"") !=
-            std::string::npos,
-          "daemon ping response should carry daemon version summary");
+                    std::string::npos,
+                "daemon ping integration should surface daemon version in response payload");
     assert_true(response_text.find("\\\"readiness\\\":\\\"READY\\\"") !=
-            std::string::npos,
-          "daemon ping response should carry readiness summary");
+                    std::string::npos,
+                "daemon ping integration should surface readiness summary in response payload");
 
     stop_and_join();
-    assert_true(run_ok, "daemon bootstrap loopback fixture should stop cleanly");
+    assert_true(run_ok, "daemon ping integration daemon thread should stop cleanly");
   } catch (...) {
     stop_and_join();
     throw;
@@ -184,9 +184,9 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
 
 int main() {
   try {
-    test_daemon_loopback_fixture_consumes_request_and_returns_response();
+    test_daemon_ping_roundtrip_returns_response_payload();
   } catch (const std::exception& ex) {
-    std::cerr << "[DaemonLoopbackFixtureTest] FAILED: " << ex.what() << '\n';
+    std::cerr << "[DaemonPingIntegrationTest] FAILED: " << ex.what() << '\n';
     return 1;
   }
 

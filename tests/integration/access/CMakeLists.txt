@@ -19,29 +19,35 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_gateway_smoke_integration_test
 )
 
-add_executable(dasall_access_cli_daemon_ping_integration_test
-  CliDaemonPingIntegrationTest.cpp
-  ../../../apps/cli/src/CliIpcClient.cpp
+add_executable(dasall_access_daemon_ping_integration_test
+  DaemonPingIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSupervisorAdapter.cpp
 )
 
-target_include_directories(dasall_access_cli_daemon_ping_integration_test
+target_include_directories(dasall_access_daemon_ping_integration_test
   PRIVATE
-    ../../../apps/cli/src
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
 )
 
-target_link_libraries(dasall_access_cli_daemon_ping_integration_test
+target_link_libraries(dasall_access_daemon_ping_integration_test
   PRIVATE
     dasall_test_support
+    dasall_access
+    dasall_infra
     dasall_platform
 )
 
-dasall_apply_common_options(dasall_access_cli_daemon_ping_integration_test)
+dasall_apply_common_options(dasall_access_daemon_ping_integration_test)
 
-add_test(NAME CliDaemonPingIntegrationTest COMMAND dasall_access_cli_daemon_ping_integration_test)
-set_tests_properties(CliDaemonPingIntegrationTest PROPERTIES LABELS "integration;access")
+add_test(NAME DaemonPingIntegrationTest COMMAND dasall_access_daemon_ping_integration_test)
+set_tests_properties(DaemonPingIntegrationTest PROPERTIES LABELS "integration;access")
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
-  dasall_access_cli_daemon_ping_integration_test
+  dasall_access_daemon_ping_integration_test
 )
 
 add_executable(dasall_access_daemon_unary_runtime_bridge_integration_test
