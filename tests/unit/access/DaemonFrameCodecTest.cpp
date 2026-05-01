@@ -83,12 +83,88 @@ void test_encode_response_frame_escapes_user_controlled_fields() {
               "response frame should escape quoted error_ref");
 }
 
+void test_encode_request_frame_writes_v1_cli_envelope() {
+  using dasall::access::daemon::DaemonAsyncPreference;
+  using dasall::access::daemon::UdsRequestFrame;
+  using dasall::access::daemon::encode_request_frame;
+  using dasall::tests::support::assert_true;
+
+  UdsRequestFrame frame;
+  frame.request_id = "req-031";
+  frame.trace_id = "trace-031";
+  frame.command = "status";
+  frame.args.emplace("receipt_ref", "receipt-031");
+  frame.args.emplace("ownership_token", "owner-token");
+  frame.payload = "";
+  frame.async_preference = DaemonAsyncPreference::PreferSync;
+
+  const std::string encoded = encode_request_frame(frame);
+
+  assert_true(encoded.find("\"schema_version\":\"1\"") != std::string::npos,
+              "request frame should include schema version");
+  assert_true(encoded.find("\"command\":\"status\"") != std::string::npos,
+              "request frame should include command");
+  assert_true(encoded.find("\"receipt_ref\":\"receipt-031\"") != std::string::npos,
+              "request frame should encode args map entries");
+  assert_true(encoded.find("\"async_preference\":false") != std::string::npos,
+              "request frame should encode sync preference as false");
+}
+
+void test_decode_response_frame_extracts_disposition_receipt_and_payload() {
+  using dasall::access::daemon::DaemonFrameDecodeError;
+  using dasall::access::daemon::DecodedDaemonResponseFrame;
+  using dasall::access::daemon::UdsResponseDisposition;
+  using dasall::access::daemon::UdsResponseFrame;
+  using dasall::access::daemon::decode_response_frame;
+  using dasall::access::daemon::encode_response_frame;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  dasall::contracts::AgentResult agent_result;
+  agent_result.result_id = "result-031";
+  agent_result.response_text = std::string("pong {\"readiness\":\"READY\"}");
+  agent_result.task_completed = true;
+
+  UdsResponseFrame frame;
+  frame.request_id = "req-031";
+  frame.trace_id = "trace-031";
+  frame.disposition = UdsResponseDisposition::Completed;
+  frame.exit_code_hint = 200;
+  frame.receipt_ref = "receipt-031";
+  frame.agent_result = agent_result;
+
+  const std::string encoded = encode_response_frame(frame);
+  const DecodedDaemonResponseFrame decoded = decode_response_frame(encoded, 1024U);
+
+  assert_equal(static_cast<int>(DaemonFrameDecodeError::None),
+               static_cast<int>(decoded.error),
+               "encoded response frame should round-trip through decoder");
+  assert_equal(static_cast<int>(UdsResponseDisposition::Completed),
+               static_cast<int>(decoded.frame.disposition),
+               "response decoder should preserve disposition");
+  assert_true(decoded.frame.receipt_ref.has_value(),
+              "response decoder should extract receipt_ref");
+  assert_equal(std::string("receipt-031"), *decoded.frame.receipt_ref,
+               "response decoder should preserve receipt_ref");
+  assert_true(decoded.frame.exit_code_hint.has_value(),
+              "response decoder should extract exit_code_hint");
+  assert_equal(200, *decoded.frame.exit_code_hint,
+               "response decoder should preserve exit_code_hint");
+  assert_true(decoded.frame.agent_result.has_value(),
+              "response decoder should extract nested agent_result");
+  assert_equal(std::string("pong {\"readiness\":\"READY\"}"),
+               *decoded.frame.agent_result->response_text,
+               "response decoder should preserve escaped response_text");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_decode_request_frame_extracts_v1_fields_and_escapes();
     test_encode_response_frame_escapes_user_controlled_fields();
+    test_encode_request_frame_writes_v1_cli_envelope();
+    test_decode_response_frame_extracts_disposition_receipt_and_payload();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonFrameCodecTest] FAILED: " << ex.what() << '\n';
     return 1;

@@ -11,8 +11,20 @@ struct CliCommand {
   /// 命令名称（"ping" / "submit" / ...）
   std::string name;
 
-  /// 可选的 payload JSON（submit 命令使用）
+  /// 可选的 payload JSON（run/submit 命令使用）
   std::optional<std::string> payload;
+
+  /// 异步任务查询/取消所需 receipt_ref。
+  std::optional<std::string> receipt_ref;
+
+  /// receipt 所属权校验令牌。
+  std::optional<std::string> ownership_token;
+
+  /// 可选主体引用；仅在显式传入时带入请求。
+  std::optional<std::string> actor_ref;
+
+  /// diagnostics 子命令名。
+  std::optional<std::string> diag_command;
 
   /// 原始参数列表（供诊断用）
   std::vector<std::string> raw_args;
@@ -26,7 +38,12 @@ struct CliCommand {
 ///
 /// 支持命令：
 ///   ping                      — 健康检查
-///   submit <json_payload>     — 提交 InboundPacket JSON
+///   readiness                 — 读取 daemon readiness 摘要
+///   run <json_payload>        — 提交 InboundPacket JSON
+///   submit <json_payload>     — run 的兼容别名
+///   status <receipt_ref> <ownership_token> [actor_ref]
+///   cancel <receipt_ref> <ownership_token> [actor_ref]
+///   diag <command_name>       — 隐藏运维命令，默认不出现在 usage 中
 ///
 /// 错误处理：
 ///   - 参数不合法时返回 std::nullopt

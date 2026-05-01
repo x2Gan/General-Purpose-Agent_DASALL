@@ -18,9 +18,24 @@ struct DecodedDaemonRequestFrame {
   }
 };
 
+struct DecodedDaemonResponseFrame {
+  UdsResponseFrame frame;
+  DaemonFrameDecodeError error = DaemonFrameDecodeError::None;
+
+  [[nodiscard]] bool ok() const {
+    return error == DaemonFrameDecodeError::None;
+  }
+};
+
 [[nodiscard]] DecodedDaemonRequestFrame decode_request_frame(
     std::string_view payload,
     std::size_t max_payload_bytes = 1024U * 1024U);
+
+[[nodiscard]] DecodedDaemonResponseFrame decode_response_frame(
+    std::string_view payload,
+    std::size_t max_payload_bytes = 1024U * 1024U);
+
+[[nodiscard]] std::string encode_request_frame(const UdsRequestFrame& frame);
 
 [[nodiscard]] std::string encode_response_frame(const UdsResponseFrame& frame);
 

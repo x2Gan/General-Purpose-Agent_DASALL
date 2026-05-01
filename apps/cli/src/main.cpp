@@ -38,33 +38,108 @@ int main(int argc, char* argv[]) {
   endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
 
   const dasall::apps::cli::CliIpcClient client(ipc, endpoint);
+  const auto is_success_disposition = [](const dasall::apps::cli::DaemonClientResponse& response) {
+    return response.is_completed() || response.is_accepted_async();
+  };
 
   // 3. 执行命令
   if (cmd->name == "ping") {
-    const bool ok = client.ping_daemon();
-    if (ok) {
-      std::cout << dasall::apps::cli::CliOutputFormatter::format_ping_success("")
-                << '\n';
-      return EXIT_SUCCESS;
-    } else {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_ping_failure()
+    const auto response = client.ping_daemon();
+    if (!response.ok()) {
+      std::cerr << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
+                       response.failure_reason)
                 << '\n';
       return EXIT_FAILURE;
     }
+
+    std::cout << dasall::apps::cli::CliOutputFormatter::format_ping_success(response)
+              << '\n';
+    return response.is_completed() ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
-  if (cmd->name == "submit") {
-    const bool ok = client.send_payload(cmd->payload.value_or("{}"));
-    if (ok) {
-      std::cout << dasall::apps::cli::CliOutputFormatter::format_submit_success("")
-                << '\n';
-      return EXIT_SUCCESS;
-    } else {
+  if (cmd->name == "readiness") {
+    const auto response = client.read_readiness();
+    if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
-                       "submit failed — daemon unavailable")
+                       response.failure_reason)
                 << '\n';
       return EXIT_FAILURE;
     }
+
+    std::cout
+        << dasall::apps::cli::CliOutputFormatter::format_readiness_success(
+               response)
+        << '\n';
+    return response.is_completed() ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+
+  if (cmd->name == "run") {
+    const auto response = client.submit(cmd->payload.value_or("{}"));
+    if (!response.ok()) {
+      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
+                       response.failure_reason)
+                << '\n';
+      return EXIT_FAILURE;
+    }
+
+    std::cout
+        << dasall::apps::cli::CliOutputFormatter::format_submit_success(
+               response)
+        << '\n';
+    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+
+  if (cmd->name == "status") {
+    const auto response = client.query_status(
+        cmd->receipt_ref.value_or(""),
+        cmd->ownership_token.value_or(""),
+        cmd->actor_ref.value_or(""));
+    if (!response.ok()) {
+      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
+                       response.failure_reason)
+                << '\n';
+      return EXIT_FAILURE;
+    }
+
+    std::cout
+        << dasall::apps::cli::CliOutputFormatter::format_status_success(
+               response)
+        << '\n';
+    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+
+  if (cmd->name == "cancel") {
+    const auto response = client.cancel(
+        cmd->receipt_ref.value_or(""),
+        cmd->ownership_token.value_or(""),
+        cmd->actor_ref.value_or(""));
+    if (!response.ok()) {
+      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
+                       response.failure_reason)
+                << '\n';
+      return EXIT_FAILURE;
+    }
+
+    std::cout
+        << dasall::apps::cli::CliOutputFormatter::format_cancel_success(
+               response)
+        << '\n';
+    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+
+  if (cmd->name == "diag") {
+    const auto response = client.run_diagnostics(cmd->diag_command.value_or(""));
+    if (!response.ok()) {
+      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
+                       response.failure_reason)
+                << '\n';
+      return EXIT_FAILURE;
+    }
+
+    std::cout << dasall::apps::cli::CliOutputFormatter::format_diag_success(
+                     response)
+              << '\n';
+    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
   // 不可达（parse 已验证命令名合法）

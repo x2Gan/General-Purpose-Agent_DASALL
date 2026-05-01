@@ -21,6 +21,7 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
 
 add_executable(dasall_access_daemon_ping_integration_test
   DaemonPingIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
@@ -30,6 +31,7 @@ add_executable(dasall_access_daemon_ping_integration_test
 
 target_include_directories(dasall_access_daemon_ping_integration_test
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/cli/src
     ${CMAKE_SOURCE_DIR}/apps/daemon/src
 )
 

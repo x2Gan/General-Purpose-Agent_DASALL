@@ -451,6 +451,7 @@ target_include_directories(dasall_access_cli_ipc_client_unit_test
 target_link_libraries(dasall_access_cli_ipc_client_unit_test
   PRIVATE
     dasall_test_support
+    dasall_access
     dasall_platform
 )
 
@@ -461,6 +462,33 @@ set_tests_properties(CliIpcClientTest PROPERTIES LABELS "unit;access")
 
 list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_ipc_client_unit_test
+)
+
+add_executable(dasall_access_cli_ipc_client_response_unit_test
+  CliIpcClientResponseTest.cpp
+  ../../../apps/cli/src/CliIpcClient.cpp
+)
+
+target_include_directories(dasall_access_cli_ipc_client_response_unit_test
+  PRIVATE
+    ../../../apps/cli/src
+)
+
+target_link_libraries(dasall_access_cli_ipc_client_response_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_access_cli_ipc_client_response_unit_test)
+
+add_test(NAME CliIpcClientResponseTest
+  COMMAND dasall_access_cli_ipc_client_response_unit_test)
+set_tests_properties(CliIpcClientResponseTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_cli_ipc_client_response_unit_test
 )
 
 # ACC-TODO-025: CliIpcClientUnavailableTest
@@ -477,6 +505,7 @@ target_include_directories(dasall_access_cli_ipc_client_unavailable_unit_test
 target_link_libraries(dasall_access_cli_ipc_client_unavailable_unit_test
   PRIVATE
     dasall_test_support
+    dasall_access
     dasall_platform
 )
 
@@ -490,9 +519,35 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_ipc_client_unavailable_unit_test
 )
 
-# ACC-TODO-025: CliOutputFormatterTest
+# DMD-TODO-031: CliDaemonCommandParserTest
+add_executable(dasall_access_cli_command_parser_unit_test
+  CliDaemonCommandParserTest.cpp
+  ../../../apps/cli/src/CliCommandParser.cpp
+)
+
+target_include_directories(dasall_access_cli_command_parser_unit_test
+  PRIVATE
+    ../../../apps/cli/src
+)
+
+target_link_libraries(dasall_access_cli_command_parser_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall_access_cli_command_parser_unit_test)
+
+add_test(NAME CliDaemonCommandParserTest
+  COMMAND dasall_access_cli_command_parser_unit_test)
+set_tests_properties(CliDaemonCommandParserTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_cli_command_parser_unit_test
+)
+
+# DMD-TODO-031: CliDaemonOutputFormatterTest
 add_executable(dasall_access_cli_output_formatter_unit_test
-  CliOutputFormatterTest.cpp
+  CliDaemonOutputFormatterTest.cpp
   ../../../apps/cli/src/CliOutputFormatter.cpp
 )
 
@@ -504,13 +559,14 @@ target_include_directories(dasall_access_cli_output_formatter_unit_test
 target_link_libraries(dasall_access_cli_output_formatter_unit_test
   PRIVATE
     dasall_test_support
+    dasall_access
 )
 
 dasall_apply_common_options(dasall_access_cli_output_formatter_unit_test)
 
-add_test(NAME CliOutputFormatterTest
+add_test(NAME CliDaemonOutputFormatterTest
   COMMAND dasall_access_cli_output_formatter_unit_test)
-set_tests_properties(CliOutputFormatterTest PROPERTIES LABELS "unit;access")
+set_tests_properties(CliDaemonOutputFormatterTest PROPERTIES LABELS "unit;access")
 
 list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_output_formatter_unit_test

@@ -1,5 +1,6 @@
 #include "daemon/DaemonFrameCodec.h"
 
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -15,12 +16,14 @@ struct JsonValue {
   enum class Kind {
     String,
     Bool,
+    Integer,
     Object,
   };
 
   Kind kind = Kind::String;
   std::string string_value;
   bool bool_value = false;
+  int integer_value = 0;
   std::unordered_map<std::string, JsonValue> object_value;
 };
 
@@ -100,6 +103,11 @@ class JsonReader {
       out.kind = JsonValue::Kind::Bool;
       out.bool_value = false;
       return true;
+    }
+
+    if (current == '-' || (current >= '0' && current <= '9')) {
+      out.kind = JsonValue::Kind::Integer;
+      return parse_integer(out.integer_value);
     }
 
     return false;
@@ -237,6 +245,38 @@ class JsonReader {
 
     append_utf8(code_point, out);
     return true;
+  }
+
+  [[nodiscard]] bool parse_integer(int& out) {
+    const std::size_t start = index_;
+    if (input_[index_] == '-') {
+      ++index_;
+      if (at_end()) {
+        return false;
+      }
+    }
+
+    if (input_[index_] == '0') {
+      ++index_;
+      if (!at_end() && input_[index_] >= '0' && input_[index_] <= '9') {
+        return false;
+      }
+    } else {
+      if (input_[index_] < '1' || input_[index_] > '9') {
+        return false;
+      }
+
+      while (!at_end() && input_[index_] >= '0' && input_[index_] <= '9') {
+        ++index_;
+      }
+    }
+
+    const std::string_view integer_text = input_.substr(start, index_ - start);
+    const auto parse_result = std::from_chars(integer_text.data(),
+                                              integer_text.data() + integer_text.size(),
+                                              out);
+    return parse_result.ec == std::errc{} &&
+           parse_result.ptr == integer_text.data() + integer_text.size();
   }
 
   static void append_utf8(const std::uint32_t code_point, std::string& out) {
@@ -378,6 +418,19 @@ class JsonReader {
   return it->second.bool_value;
 }
 
+[[nodiscard]] std::optional<int> integer_field(
+    const std::unordered_map<std::string, JsonValue>& object,
+    std::string_view key) {
+  const auto it = object.find(std::string(key));
+  if (it == object.end()) {
+    return std::nullopt;
+  }
+  if (it->second.kind != JsonValue::Kind::Integer) {
+    return std::nullopt;
+  }
+  return it->second.integer_value;
+}
+
 [[nodiscard]] bool has_only_known_request_fields(
     const std::unordered_map<std::string, JsonValue>& object) {
   for (const auto& [key, _] : object) {
@@ -385,6 +438,36 @@ class JsonReader {
         key != "session_hint" && key != "idempotency_key" && key != "command" &&
         key != "args" && key != "payload" && key != "async_preference") {
       return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool has_only_known_agent_result_fields(
+    const std::unordered_map<std::string, JsonValue>& object) {
+  for (const auto& [key, _] : object) {
+    if (key != "result_id" && key != "response_text" && key != "request_id" &&
+        key != "trace_id" && key != "task_completed") {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool has_only_known_response_fields(
+    const std::unordered_map<std::string, JsonValue>& object) {
+  for (const auto& [key, value] : object) {
+    if (key != "schema_version" && key != "request_id" && key != "trace_id" &&
+        key != "session_id" && key != "disposition" && key != "exit_code_hint" &&
+        key != "receipt_ref" && key != "error_ref" && key != "agent_result") {
+      return false;
+    }
+
+    if (key == "agent_result") {
+      if (value.kind != JsonValue::Kind::Object ||
+          !has_only_known_agent_result_fields(value.object_value)) {
+        return false;
+      }
     }
   }
   return true;
@@ -466,6 +549,24 @@ class JsonReader {
   }
 
   return "rejected";
+}
+
+[[nodiscard]] std::optional<UdsResponseDisposition> disposition_from_name(
+    std::string_view disposition) {
+  if (disposition == "rejected") {
+    return UdsResponseDisposition::Rejected;
+  }
+  if (disposition == "completed") {
+    return UdsResponseDisposition::Completed;
+  }
+  if (disposition == "accepted_async") {
+    return UdsResponseDisposition::AcceptedAsync;
+  }
+  if (disposition == "not_ready") {
+    return UdsResponseDisposition::NotReady;
+  }
+
+  return std::nullopt;
 }
 
 [[nodiscard]] std::string error_name(const DaemonFrameDecodeError error) {
@@ -582,6 +683,137 @@ DecodedDaemonRequestFrame decode_request_frame(
   }
 
   return result;
+}
+
+DecodedDaemonResponseFrame decode_response_frame(
+    std::string_view payload,
+    const std::size_t max_payload_bytes) {
+  DecodedDaemonResponseFrame result;
+
+  if (payload.empty()) {
+    result.error = DaemonFrameDecodeError::EmptyPayload;
+    return result;
+  }
+
+  if (payload.size() > max_payload_bytes) {
+    result.error = DaemonFrameDecodeError::PayloadTooLarge;
+    return result;
+  }
+
+  if (!is_valid_utf8(payload)) {
+    result.error = DaemonFrameDecodeError::MalformedEnvelope;
+    return result;
+  }
+
+  std::unordered_map<std::string, JsonValue> root;
+  JsonReader reader(payload);
+  if (!reader.parse_root_object(root) || !has_only_known_response_fields(root)) {
+    result.error = DaemonFrameDecodeError::MalformedEnvelope;
+    return result;
+  }
+
+  const auto schema_version = string_field(root, "schema_version");
+  if (!schema_version.has_value()) {
+    result.error = DaemonFrameDecodeError::MissingSchemaVersion;
+    return result;
+  }
+  if (*schema_version != kDaemonProtocolSchemaVersion) {
+    result.error = DaemonFrameDecodeError::UnsupportedSchemaVersion;
+    return result;
+  }
+
+  const auto disposition = string_field(root, "disposition");
+  if (!disposition.has_value() || disposition->empty()) {
+    result.error = DaemonFrameDecodeError::MalformedEnvelope;
+    return result;
+  }
+  const auto parsed_disposition = disposition_from_name(*disposition);
+  if (!parsed_disposition.has_value()) {
+    result.error = DaemonFrameDecodeError::MalformedEnvelope;
+    return result;
+  }
+
+  result.frame.schema_version = *schema_version;
+  result.frame.request_id = string_field(root, "request_id").value_or(std::string());
+  result.frame.trace_id = string_field(root, "trace_id").value_or(std::string());
+  result.frame.disposition = *parsed_disposition;
+
+  if (const auto session_id = string_field(root, "session_id"); session_id.has_value()) {
+    result.frame.session_id = *session_id;
+  }
+  if (const auto exit_code_hint = integer_field(root, "exit_code_hint");
+      exit_code_hint.has_value()) {
+    result.frame.exit_code_hint = *exit_code_hint;
+  }
+  if (const auto receipt_ref = string_field(root, "receipt_ref"); receipt_ref.has_value()) {
+    result.frame.receipt_ref = *receipt_ref;
+  }
+  if (const auto error_ref = string_field(root, "error_ref"); error_ref.has_value()) {
+    result.frame.error_ref = *error_ref;
+  }
+
+  const auto agent_result_it = root.find("agent_result");
+  if (agent_result_it != root.end()) {
+    dasall::contracts::AgentResult agent_result;
+    const auto& agent_result_object = agent_result_it->second.object_value;
+
+    if (const auto result_id = string_field(agent_result_object, "result_id");
+        result_id.has_value()) {
+      agent_result.result_id = *result_id;
+    }
+    if (const auto response_text = string_field(agent_result_object, "response_text");
+        response_text.has_value()) {
+      agent_result.response_text = *response_text;
+    }
+    if (const auto request_id = string_field(agent_result_object, "request_id");
+        request_id.has_value()) {
+      agent_result.request_id = *request_id;
+    }
+    if (const auto trace_id = string_field(agent_result_object, "trace_id");
+        trace_id.has_value()) {
+      agent_result.trace_id = *trace_id;
+    }
+    if (const auto task_completed = bool_field(agent_result_object, "task_completed");
+        task_completed.has_value()) {
+      agent_result.task_completed = *task_completed;
+    }
+
+    result.frame.agent_result = agent_result;
+  }
+
+  return result;
+}
+
+std::string encode_request_frame(const UdsRequestFrame& frame) {
+  std::string output = "{";
+  output += "\"schema_version\":\"" + escape_json_string(frame.schema_version) + "\"";
+  output += ",\"request_id\":\"" + escape_json_string(frame.request_id) + "\"";
+  output += ",\"trace_id\":\"" + escape_json_string(frame.trace_id) + "\"";
+
+  if (frame.session_hint.has_value()) {
+    output += ",\"session_hint\":\"" + escape_json_string(*frame.session_hint) + "\"";
+  }
+  if (frame.idempotency_key.has_value()) {
+    output += ",\"idempotency_key\":\"" + escape_json_string(*frame.idempotency_key) + "\"";
+  }
+
+  output += ",\"command\":\"" + escape_json_string(frame.command) + "\"";
+  output += ",\"args\":{";
+  bool first_arg = true;
+  for (const auto& [key, value] : frame.args) {
+    if (!first_arg) {
+      output += ',';
+    }
+    output += "\"" + escape_json_string(key) + "\":\"" +
+              escape_json_string(value) + "\"";
+    first_arg = false;
+  }
+  output += '}';
+  output += ",\"payload\":\"" + escape_json_string(frame.payload) + "\"";
+  output += ",\"async_preference\":";
+  output += frame.async_preference == DaemonAsyncPreference::PreferAsync ? "true" : "false";
+  output += '}';
+  return output;
 }
 
 std::string encode_response_frame(const UdsResponseFrame& frame) {

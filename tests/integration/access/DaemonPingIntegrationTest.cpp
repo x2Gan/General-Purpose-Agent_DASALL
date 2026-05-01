@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "AccessGatewayFactory.h"
+#include "CliIpcClient.h"
 #include "DaemonBootstrap.h"
 #include "PlatformError.h"
 #include "linux/UnixIpcProvider.h"
@@ -172,6 +173,17 @@ void test_daemon_ping_roundtrip_returns_response_payload() {
     assert_true(response_text.find("\\\"readiness\\\":\\\"READY\\\"") !=
                     std::string::npos,
                 "daemon ping integration should surface readiness summary in response payload");
+
+    const dasall::apps::cli::CliIpcClient cli_client(client_ipc, endpoint, 50);
+    const auto cli_response = cli_client.ping_daemon();
+    assert_true(cli_response.ok(),
+          "daemon ping integration should let cli client parse daemon response");
+    assert_true(cli_response.is_completed(),
+          "daemon ping integration should let cli client observe completed disposition");
+    assert_true(cli_response.response_text.has_value(),
+          "daemon ping integration should let cli client extract response text");
+    assert_true(cli_response.response_text->find("READY") != std::string::npos,
+          "daemon ping integration should let cli client surface readiness summary");
 
     stop_and_join();
     assert_true(run_ok, "daemon ping integration daemon thread should stop cleanly");

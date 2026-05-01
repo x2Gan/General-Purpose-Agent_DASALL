@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #517
+
+- 日期：2026-05-02
+- 阶段：daemon/cli wire contract closure
+- 任务：DMD-TODO-031 收敛 CLI-daemon v1 命令与响应解析契约
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/daemon/DaemonFrameCodec.h` 与 `access/src/daemon/DaemonFrameCodec.cpp`，新增 `encode_request_frame()` / `decode_response_frame()`，让 CLI 直接复用共享 daemon frame codec，而不是本地手写 request/response parser。
+2. 更新 `apps/cli/src/CliIpcClient.h` / `CliIpcClient.cpp`，新增 `DaemonClientResponse`，把 CLI 从 `connect/send -> bool` 切到 `request/response -> structured response`，并补齐 `ping/run/status/cancel/readiness/diag` 六条命令路径。
+3. 更新 `apps/cli/src/CliCommandParser.h` / `CliCommandParser.cpp` 与 `apps/cli/src/main.cpp`，支持 `run/status/cancel/readiness/diag` 参数形状，保留 `submit` 为 `run` 兼容别名，并按 daemon disposition 决定 CLI 退出码。
+4. 更新 `apps/cli/src/CliOutputFormatter.h` / `CliOutputFormatter.cpp`，让输出基于 `completed/accepted_async/rejected/not_ready`、`receipt_ref`、`error_ref`、`response_text` 生成稳定文本。
+5. 更新 `tests/unit/access/CMakeLists.txt` 与 `tests/integration/access/CMakeLists.txt`，新增 `CliIpcClientResponseTest`、`CliDaemonCommandParserTest`、`CliDaemonOutputFormatterTest`，并让 `DaemonPingIntegrationTest` 链接 `CliIpcClient.cpp`。
+6. 更新 `tests/unit/access/CliIpcClientTest.cpp`、`CliIpcClientUnavailableTest.cpp`，新增 `CliIpcClientResponseTest.cpp`、`CliDaemonCommandParserTest.cpp`、`CliDaemonOutputFormatterTest.cpp`，用 scripted IPC 覆盖 accepted_async/not_ready/rejected 与 fail-closed。
+7. 更新 `tests/integration/access/DaemonPingIntegrationTest.cpp`，在真实 daemon roundtrip 中追加 `CliIpcClient::ping_daemon()` 断言，证明 CLI 已能读取 pong/readiness。
+8. 新增 `docs/todos/daemon/deliverables/DMD-TODO-031-CLI-daemon-wire-contract收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-031 更新为 Done，同时清除 `DMD-BLK-007`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_frame_codec_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonFrameCodecTest"])`
+   - 结果：通过，1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
+3. `Build_CMakeTools(buildTargets=["dasall_cli","dasall_access_cli_ipc_client_unit_test","dasall_access_cli_ipc_client_response_unit_test","dasall_access_cli_ipc_client_unavailable_unit_test","dasall_access_cli_command_parser_unit_test","dasall_access_cli_output_formatter_unit_test","dasall_access_daemon_ping_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonCommandParserTest","CliDaemonOutputFormatterTest","DaemonPingIntegrationTest"])`
+   - 结果：通过，6/6 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
+
+### 结果
+
+1. DMD-TODO-031 已从“CLI 只做 send smoke”收敛为“CLI 读取并解析 daemon v1 wire response”。
+2. `accepted_async/rejected/not_ready/receipt` 四类响应语义已在 CLI 单测和真实 ping 集成中可验证。
+3. `DMD-BLK-007` 已清除，后续 daemon unary/status/cancel/async 集成不再受客户端响应链路缺失阻塞。
+
 ## 记录 #516
 
 - 日期：2026-05-02
