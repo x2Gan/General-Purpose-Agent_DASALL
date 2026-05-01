@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #516
+
+- 日期：2026-05-02
+- 阶段：daemon/deployment and supervisor contract closure
+- 任务：DMD-TODO-035 收敛 daemon 部署与 supervisor 交付契约
+- 状态：已完成
+
+### 改动
+
+1. 更新 `platform/src/linux/UnixIpcProvider.cpp` / `platform/include/linux/UnixIpcProvider.h`，将 provider 从单进程 loopback 夹具收敛为真实 `AF_UNIX`/`SOCK_SEQPACKET` transport，并补齐 listener/channel close 与 `SO_PEERCRED`。
+2. 更新 `apps/daemon/src/DaemonListenerHost.cpp`，使 stop/close 会关闭真实 listener fd，并让 accept loop 在停机并发下正常退出。
+3. 更新 `tests/unit/platform/linux/UnixIpcProviderTest.cpp`、`UnixIpcProviderLoopbackTest.cpp`、`UnixIpcProviderPeerIdentityTest.cpp`、`tests/unit/access/DaemonProtocolAdapterLocalTrustedTest.cpp`，改用唯一临时 socket 路径，避免 stale socket 影响真实 UDS 验证。
+4. 更新 `tests/unit/apps/daemon/DaemonLoopbackFixtureTest.cpp` 与 `tests/integration/access/DaemonPingIntegrationTest.cpp`，让 daemon/client 使用分离的 `UnixIpcProvider` 实例，阻断“共享同一 provider 内存状态”的虚绿路径。
+5. 收敛 `docs/deploy/daemon/README.md` 与 `docs/deploy/daemon/ACCEPTANCE_CHECKLIST.md`，使 smoke 步骤、`SOCK_SEQPACKET` 用法和真实控制台输出一致；新增 `docs/todos/daemon/deliverables/DMD-TODO-035-daemon部署与supervisor交付契约.md` 并回写专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_unix_ipc_provider_loopback_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall_daemon_loopback_fixture_unit_test","dasall_access_daemon_ping_integration_test","dasall_daemon"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["UnixIpcProviderTest","UnixIpcProviderPeerIdentityTest","UnixIpcProviderLoopbackTest","DaemonProtocolAdapterLocalTrustedTest","DaemonLoopbackFixtureTest","DaemonPingIntegrationTest"])`
+   - 结果：通过，6/6 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
+3. `Build_CMakeTools(buildTargets=["dasall_daemon_config_validator_unit_test","dasall_daemon_graceful_shutdown_unit_test","dasall_access_daemon_ping_integration_test","dasall_daemon"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["DaemonConfigValidatorTest","DaemonGracefulShutdownTest","DaemonPingIntegrationTest"])`
+   - 结果：通过，3/3 通过。
+5. 本地 smoke：
+   - `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --validate-only --socket-path /tmp/dasall-dmd035/control.sock` -> 输出 `config validation passed without creating listener resources`。
+   - `./build/vscode-linux-ninja/apps/cli/dasall_cli ping` -> daemon 未启动时输出 unavailable。
+   - `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --socket-path /tmp/dasall-dmd035/control.sock` + Python `socket.AF_UNIX/socket.SOCK_SEQPACKET` -> 可读回 ping/readiness response，且文件系统中真实出现 `control.sock`。
+   - `kill -TERM <daemon-pid>` -> 输出 `[dasall_daemon] stopped (run=ok)`。
+
+### 结果
+
+1. DMD-TODO-035 已不再是“部署文档草稿评审门”，而是“真实 direct-bind v1 运维契约 + 可复现 smoke”闭环。
+2. daemon 现在可以被外部原生 UDS client 连接，035 不再依赖测试私有 loopback 状态。
+3. v1 supervisor 契约已冻结为 `Type=simple` + no-op/watchdog bridge seam；socket activation 保持 v2 非交付项。
+
 ## 记录 #515
 
 - 日期：2026-05-01

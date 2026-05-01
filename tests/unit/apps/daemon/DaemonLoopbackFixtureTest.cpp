@@ -75,7 +75,8 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
   using dasall::platform::linux::UnixIpcProvider;
   using dasall::tests::support::assert_true;
 
-  auto ipc = std::make_shared<UnixIpcProvider>();
+  auto daemon_ipc = std::make_shared<UnixIpcProvider>();
+  auto client_ipc = std::make_shared<UnixIpcProvider>();
   auto gateway = build_gateway();
   ScopedTempDirectory temp_root("daemon-loopback-fixture");
   DaemonBootstrapConfig config;
@@ -87,7 +88,7 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
   const auto context = DaemonBootstrap::build(
       config,
       DaemonBootstrap::BuildDependencies{
-          .ipc = ipc,
+          .ipc = daemon_ipc,
           .access_gateway = gateway,
           .watchdog_service = nullptr,
           .effective_profile_id = "daemon.loopback.fixture",
@@ -115,7 +116,7 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
 
     std::optional<dasall::platform::IpcChannelHandle> client_channel;
     for (int attempt = 0; attempt < 20; ++attempt) {
-      const auto client = ipc->connect(endpoint, 10);
+      const auto client = client_ipc->connect(endpoint, 10);
       if (client.ok() && client.value.has_value()) {
         client_channel = *client.value;
         break;
@@ -133,13 +134,13 @@ void test_daemon_loopback_fixture_consumes_request_and_returns_response() {
       payload.push_back(static_cast<std::uint8_t>(ch));
     }
 
-    const auto send_result = ipc->send(*client_channel, payload);
+    const auto send_result = client_ipc->send(*client_channel, payload);
     assert_true(send_result.ok(), "client should send ping payload through loopback channel");
 
     std::string response_text;
     bool received_response = false;
     for (int attempt = 0; attempt < 20; ++attempt) {
-      const auto receive_result = ipc->receive(*client_channel, 10);
+      const auto receive_result = client_ipc->receive(*client_channel, 10);
       if (!receive_result.ok()) {
         assert_true(receive_result.error.has_value() &&
                         receive_result.error->code ==

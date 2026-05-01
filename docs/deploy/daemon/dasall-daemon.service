@@ -1,0 +1,26 @@
+[Unit]
+Description=DASALL daemon local control plane (direct-bind v1)
+Documentation=/home/gangan/DASALL/docs/deploy/daemon/README.md
+After=network.target
+
+[Service]
+Type=simple
+User=dasall
+Group=dasall
+RuntimeDirectory=dasall
+RuntimeDirectoryMode=0750
+UMask=007
+WorkingDirectory=/home/gangan/DASALL
+ExecStartPre=/home/gangan/DASALL/build-ci/apps/daemon/dasall_daemon --validate-only --socket-path /run/dasall/control.sock
+ExecStart=/home/gangan/DASALL/build-ci/apps/daemon/dasall_daemon --socket-path /run/dasall/control.sock
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=5s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

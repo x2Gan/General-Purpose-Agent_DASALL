@@ -1,10 +1,40 @@
+#include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
+#include <string>
+#include <system_error>
+
+#include <unistd.h>
 
 #include "linux/UnixIpcProvider.h"
 #include "support/TestAssertions.h"
 
 namespace {
+
+namespace fs = std::filesystem;
+
+class ScopedTempDirectory {
+ public:
+  explicit ScopedTempDirectory(const std::string& stem)
+      : path_(fs::temp_directory_path() /
+              (stem + "-" + std::to_string(::getpid()) + "-" +
+               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
+    fs::create_directories(path_);
+  }
+
+  ~ScopedTempDirectory() {
+    std::error_code error;
+    fs::remove_all(path_, error);
+  }
+
+  [[nodiscard]] const fs::path& path() const {
+    return path_;
+  }
+
+ private:
+  fs::path path_;
+};
 
 using dasall::platform::IpcEndpoint;
 using dasall::platform::IpcPayload;
@@ -16,9 +46,10 @@ using dasall::tests::support::assert_true;
 
 void test_loopback_transfers_payload_bidirectionally() {
   UnixIpcProvider provider;
+  ScopedTempDirectory temp_root("unix-ipc-provider-loopback");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/loopback.sock";
+  endpoint.socket_path = (temp_root.path() / "loopback.sock").string();
 
   ListenOptions options;
   options.max_payload_bytes = 16U;
@@ -52,9 +83,10 @@ void test_loopback_transfers_payload_bidirectionally() {
 
 void test_loopback_reports_peer_closed_after_close_propagation() {
   UnixIpcProvider provider;
+  ScopedTempDirectory temp_root("unix-ipc-provider-loopback-close");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/loopback-close.sock";
+  endpoint.socket_path = (temp_root.path() / "loopback-close.sock").string();
 
   const auto listener = provider.listen(endpoint, ListenOptions{});
   assert_true(listener.ok(), "listen should succeed for close propagation test");
@@ -83,9 +115,10 @@ void test_loopback_reports_peer_closed_after_close_propagation() {
 
 void test_loopback_enforces_listener_payload_budget() {
   UnixIpcProvider provider;
+  ScopedTempDirectory temp_root("unix-ipc-provider-loopback-budget");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/loopback-budget.sock";
+  endpoint.socket_path = (temp_root.path() / "loopback-budget.sock").string();
 
   ListenOptions options;
   options.max_payload_bytes = 3U;

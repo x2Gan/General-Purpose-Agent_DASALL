@@ -1,0 +1,18 @@
+{
+  "daemon": {
+    "socket_path": "/run/dasall/control.sock",
+    "listen_backlog": 32,
+    "max_payload_bytes": 1048576,
+    "dispatch_timeout_ms": 5000,
+    "shutdown_grace_ms": 3000,
+    "receipt_ttl_sec": 3600,
+    "accept_workers": 1,
+    "dispatch_workers": 4,
+    "diag_enabled": false,
+    "override_enabled": false,
+    "watchdog_enabled": false,
+    "log_level": "info",
+    "log_format": "json",
+    "startup_mode": "direct_bind"
+  }
+}

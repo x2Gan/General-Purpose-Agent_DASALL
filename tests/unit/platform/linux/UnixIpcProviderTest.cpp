@@ -1,10 +1,40 @@
+#include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
+#include <string>
+#include <system_error>
+
+#include <unistd.h>
 
 #include "support/TestAssertions.h"
 #include "linux/UnixIpcProvider.h"
 
 namespace {
+
+namespace fs = std::filesystem;
+
+class ScopedTempDirectory {
+ public:
+  explicit ScopedTempDirectory(const std::string& stem)
+      : path_(fs::temp_directory_path() /
+              (stem + "-" + std::to_string(::getpid()) + "-" +
+               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
+    fs::create_directories(path_);
+  }
+
+  ~ScopedTempDirectory() {
+    std::error_code error;
+    fs::remove_all(path_, error);
+  }
+
+  [[nodiscard]] const fs::path& path() const {
+    return path_;
+  }
+
+ private:
+  fs::path path_;
+};
 
 void test_unix_ipc_provider_reports_address_in_use_and_payload_too_large() {
   using dasall::platform::IpcEndpoint;
@@ -15,9 +45,10 @@ void test_unix_ipc_provider_reports_address_in_use_and_payload_too_large() {
   using dasall::tests::support::assert_true;
 
   UnixIpcProvider provider;
+  ScopedTempDirectory temp_root("unix-ipc-provider-test");
 
   IpcEndpoint busy_endpoint;
-  busy_endpoint.socket_path = "/tmp/in-use.sock";
+  busy_endpoint.socket_path = (temp_root.path() / "in-use.sock").string();
   ListenOptions listen_options;
   const auto busy_listen = provider.listen(busy_endpoint, listen_options);
   assert_true(!busy_listen.ok(), "listen should fail for in-use endpoint pattern");
@@ -25,7 +56,7 @@ void test_unix_ipc_provider_reports_address_in_use_and_payload_too_large() {
               "in-use endpoint should map to AddressInUse");
 
   IpcEndpoint normal_endpoint;
-  normal_endpoint.socket_path = "/tmp/ipc.sock";
+  normal_endpoint.socket_path = (temp_root.path() / "ipc.sock").string();
   ListenOptions limited_payload_options;
   limited_payload_options.max_payload_bytes = 4;
   const auto listener = provider.listen(normal_endpoint, limited_payload_options);
@@ -57,15 +88,22 @@ void test_unix_ipc_provider_reports_peer_closed() {
   using dasall::tests::support::assert_true;
 
   UnixIpcProvider provider;
+  ScopedTempDirectory temp_root("unix-ipc-provider-closed-peer");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/closed-peer.sock";
+  endpoint.socket_path = (temp_root.path() / "closed-peer.sock").string();
 
   const auto listener = provider.listen(endpoint, dasall::platform::ListenOptions{});
   assert_true(listener.ok(), "listen should succeed for closed peer test endpoint");
 
   const auto connected = provider.connect(endpoint, 10);
   assert_true(connected.ok(), "connect should succeed for test endpoint");
+
+  const auto accepted = provider.accept(*listener.value, 10);
+  assert_true(accepted.ok(), "accept should succeed before close propagation");
+
+  const auto closed = provider.close(*accepted.value);
+  assert_true(closed.ok(), "closing accepted server channel should succeed");
 
   const auto received = provider.receive(*connected.value, 10);
   assert_true(received.ok(), "receive should return peer_closed payload when peer is closed");

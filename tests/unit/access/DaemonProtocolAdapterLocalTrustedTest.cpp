@@ -1,6 +1,12 @@
+#include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <system_error>
+
+#include <unistd.h>
 
 #include "PlatformResult.h"
 #include "daemon/DaemonProtocolAdapter.h"
@@ -9,6 +15,30 @@
 #include "support/TestAssertions.h"
 
 namespace {
+
+namespace fs = std::filesystem;
+
+class ScopedTempDirectory {
+ public:
+  explicit ScopedTempDirectory(const std::string& stem)
+      : path_(fs::temp_directory_path() /
+              (stem + "-" + std::to_string(::getpid()) + "-" +
+               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
+    fs::create_directories(path_);
+  }
+
+  ~ScopedTempDirectory() {
+    std::error_code error;
+    fs::remove_all(path_, error);
+  }
+
+  [[nodiscard]] const fs::path& path() const {
+    return path_;
+  }
+
+ private:
+  fs::path path_;
+};
 
 class FailingDescribePeerIpc final : public dasall::platform::IIPC {
  public:
@@ -75,15 +105,19 @@ void test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path() {
 
   auto ipc = std::make_shared<UnixIpcProvider>();
   DaemonProtocolAdapter adapter(ipc);
+  ScopedTempDirectory temp_root("daemon-local-trusted");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/local-control.sock";
+  endpoint.socket_path = (temp_root.path() / "local-control.sock").string();
 
   const auto listener = ipc->listen(endpoint, dasall::platform::ListenOptions{});
   assert_true(listener.ok(), "listen should succeed before trusted local peer connect");
 
   const auto channel = ipc->connect(endpoint, 10);
   assert_true(channel.ok(), "connect should provide a local channel for trusted test");
+
+  const auto accepted = ipc->accept(*listener.value, 10);
+  assert_true(accepted.ok(), "accept should succeed before trusted local peer projection");
 
   const auto fact = adapter.describe_local_peer_uid_fact(*channel.value, "actor://local/operator");
   assert_equal(std::string("actor://local/operator"), fact.actor_ref,
@@ -104,15 +138,19 @@ void test_daemon_protocol_adapter_marks_remote_peer_as_not_trusted() {
 
   auto ipc = std::make_shared<UnixIpcProvider>();
   DaemonProtocolAdapter adapter(ipc);
+  ScopedTempDirectory temp_root("daemon-remote-trusted");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/remote-control.sock";
+  endpoint.socket_path = (temp_root.path() / "remote-control.sock").string();
 
   const auto listener = ipc->listen(endpoint, dasall::platform::ListenOptions{});
   assert_true(listener.ok(), "listen should succeed before remote-marked peer connect");
 
   const auto channel = ipc->connect(endpoint, 10);
   assert_true(channel.ok(), "connect should succeed for remote-marked endpoint");
+
+  const auto accepted = ipc->accept(*listener.value, 10);
+  assert_true(accepted.ok(), "accept should succeed before remote-marked peer projection");
 
   const auto fact = adapter.describe_local_peer_uid_fact(*channel.value, "actor://remote/operator");
   assert_true(!fact.is_local_socket_peer,

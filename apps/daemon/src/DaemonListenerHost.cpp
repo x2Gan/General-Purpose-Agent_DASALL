@@ -135,6 +135,10 @@ dasall::platform::PlatformResult<bool> DaemonListenerHost::accept_loop(
   while (!stop_requested.load() && !closed_) {
     const auto accept_result = ipc_->accept(*listener_, accept_deadline_ms);
     if (!accept_result.ok()) {
+      if (closed_ || stop_requested.load()) {
+        break;
+      }
+
       if (accept_result.error.has_value() &&
           accept_result.error->code ==
               dasall::platform::PlatformErrorCode::Timeout) {
@@ -185,6 +189,10 @@ dasall::platform::PlatformResult<bool> DaemonListenerHost::close() {
   }
 
   closed_ = true;
+  if (ipc_) {
+    (void)ipc_->close(
+        dasall::platform::IpcChannelHandle{.native_fd = listener_->native_fd});
+  }
   listener_.reset();
   return dasall::platform::PlatformResult<bool>::success(true);
 }
