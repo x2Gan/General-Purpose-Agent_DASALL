@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #520
+
+- 日期：2026-05-02
+- 阶段：daemon/failure shutdown profile gate closure
+- 任务：DMD-TODO-027 验证 daemon failure、shutdown 与 profile 兼容门
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/access/DaemonFailureInjectionIntegrationTest.cpp`，覆盖 bind conflict、peer identity unsupported 与 runtime timeout 注入三类 failure path。
+2. 新增 `tests/integration/access/DaemonProfileCompatibilityTest.cpp`，遍历五档 baseline profile，验证 profile 投影下 unary 主链保持一致，且 diagnostics 默认关闭。
+3. 更新 `tests/integration/access/CMakeLists.txt`，注册 `DaemonFailureInjectionTest` 与 `DaemonProfileCompatibilityTest` 两个 focused integration targets。
+4. 新增 `docs/todos/daemon/deliverables/DMD-TODO-027-daemon-failure-profile-gate收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-027 更新为 Done，focused 验收命令与 gate 证据同步收敛。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_failure_injection_integration_test","dasall_access_daemon_profile_compatibility_integration_test","dasall_daemon_graceful_shutdown_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonFailureInjectionTest","DaemonGracefulShutdownTest","DaemonProfileCompatibilityTest"])`
+   - 结果：通过，3/3 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效 focused gate 证据。
+
+### 结果
+
+1. DMD-TODO-027 已从“依赖 unit test 与 profile 投影单测分散证明”收敛为“failure injection + graceful shutdown + profile compatibility”三段式 focused gate。
+2. daemon 对 bind conflict、peer identity unsupported、runtime timeout 注入均有稳定 fail-closed 表现，且 unsupported peer 不会误入 runtime backend。
+3. baseline profiles 五档下 unary 主链保持一致，diag 默认关闭不会通过代码分叉改变主流程。
+
 ## 记录 #519
 
 - 日期：2026-05-02
