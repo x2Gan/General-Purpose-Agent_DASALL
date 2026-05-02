@@ -2,6 +2,8 @@ add_executable(dasall_daemon
   src/main.cpp
   src/DaemonBootstrap.cpp
   src/DaemonConfig.h
+  src/DaemonEntryConfigLoader.cpp
+  src/DaemonEntryConfigLoader.h
   src/DaemonConfigReloader.cpp
   src/DaemonConfigReloader.h
   src/DaemonConfigValidator.cpp
@@ -26,6 +28,7 @@ target_link_libraries(dasall_daemon
     dasall_runtime
     dasall_contracts
     dasall_infra
+    dasall_profiles
     dasall_platform
 )
 

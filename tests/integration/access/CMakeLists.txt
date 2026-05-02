@@ -294,6 +294,7 @@ add_executable(dasall_access_daemon_profile_compatibility_integration_test
   DaemonProfileCompatibilityTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonEntryConfigLoader.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp

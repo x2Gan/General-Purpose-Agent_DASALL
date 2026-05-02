@@ -5,7 +5,7 @@
 #include <string>
 
 #include "DaemonIntegrationHarness.h"
-#include "DaemonProfileProjection.h"
+#include "DaemonEntryConfigLoader.h"
 #include "ProfileCatalog.h"
 
 namespace {
@@ -15,8 +15,8 @@ using dasall::access::DaemonAccessPipelineOptions;
 using dasall::access::PublishEnvelope;
 using dasall::access::RuntimeDispatchRequest;
 using dasall::access::RuntimeDispatchResult;
-using dasall::profiles::DaemonProfileProjection;
-using dasall::profiles::DaemonProfileProjectionRequest;
+using dasall::apps::daemon::DaemonEntryConfigLoader;
+using dasall::apps::daemon::DaemonEntryConfigLoadRequest;
 using dasall::profiles::ProfileCatalog;
 using dasall::tests::integration::access_support::DaemonIntegrationHarness;
 using dasall::tests::support::assert_equal;
@@ -34,22 +34,25 @@ void baseline_profiles_keep_diag_disabled_without_forking_unary_flow() {
   assert_equal(5, static_cast<int>(listed.profiles.size()),
                "daemon profile compatibility should cover five baseline profiles");
 
-  const DaemonProfileProjection projection(catalog);
+  const DaemonEntryConfigLoader loader;
   for (const auto& descriptor : listed.profiles) {
-    const auto projected = projection.load(DaemonProfileProjectionRequest{
-        .profile_id = descriptor.profile_id,
+    const auto projected = loader.load(DaemonEntryConfigLoadRequest{
+        .profiles_root = repository_root() / "profiles",
+        .requested_profile_id = descriptor.profile_id,
+      .deployment_config_path = std::nullopt,
+      .socket_path_override = std::nullopt,
     });
-    assert_true(projected.ok() && projected.settings.has_value(),
-                "daemon profile compatibility should project daemon settings for every baseline profile");
+    assert_true(projected.ok() && projected.entry_config.has_value(),
+                "daemon profile compatibility should project daemon entry settings for every baseline profile");
 
     int runtime_calls = 0;
     DaemonAccessPipelineOptions options;
     options.bootstrap_config.allowed_protocols = {"ipc_uds"};
     options.auth_view.trusted_local_subjects = {"local://uid/1000"};
-    options.daemon_profile_id = projected.settings->effective_profile_id;
-    options.daemon_diagnostics_enabled = projected.settings->diag_enabled;
+    options.daemon_profile_id = projected.entry_config->effective_profile_id;
+    options.daemon_diagnostics_enabled = projected.entry_config->bootstrap_config.diag_enabled;
     options.runtime_dispatch_backend =
-        [&runtime_calls, profile_id = projected.settings->effective_profile_id](
+        [&runtime_calls, profile_id = projected.entry_config->effective_profile_id](
             const RuntimeDispatchRequest& request) {
           ++runtime_calls;
 
@@ -74,10 +77,10 @@ void baseline_profiles_keep_diag_disabled_without_forking_unary_flow() {
         };
 
     dasall::apps::daemon::DaemonBootstrapConfig config;
-    config.listen_backlog = projected.settings->listen_backlog;
-    config.dispatch_timeout_ms = projected.settings->dispatch_timeout_ms;
-    config.diag_enabled = projected.settings->diag_enabled;
-    config.watchdog_enabled = projected.settings->watchdog_enabled;
+    config.listen_backlog = projected.entry_config->bootstrap_config.listen_backlog;
+    config.dispatch_timeout_ms = projected.entry_config->bootstrap_config.dispatch_timeout_ms;
+    config.diag_enabled = projected.entry_config->bootstrap_config.diag_enabled;
+    config.watchdog_enabled = projected.entry_config->bootstrap_config.watchdog_enabled;
 
     DaemonIntegrationHarness harness(std::move(options), config);
 
@@ -86,7 +89,7 @@ void baseline_profiles_keep_diag_disabled_without_forking_unary_flow() {
                 "daemon profile compatibility should keep unary path available across baseline profiles");
     assert_true(run_response.response_text.has_value(),
                 "daemon profile compatibility should preserve runtime response text");
-    assert_true(run_response.response_text->find(projected.settings->effective_profile_id) !=
+    assert_true(run_response.response_text->find(projected.entry_config->effective_profile_id) !=
                     std::string::npos,
                 "daemon profile compatibility should preserve effective profile id in runtime response");
 

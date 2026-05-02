@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #525
+
+- 日期：2026-05-02
+- 阶段：daemon/entry profile-config wiring
+- 任务：DMD-TODO-038 将 profile/config snapshot 真正接入 daemon 入口组合根
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/daemon/src/DaemonEntryConfigLoader.h/.cpp`，统一合成 default `desktop_full` profile、runtime snapshot generation、deployment snapshot (`--config-file`) 与 `--socket-path` override。
+2. 更新 `apps/daemon/src/main.cpp`，新增 `--profile-id` / `--config-file` 参数，并让 daemon startup / validate-only 都先走 entry loader，再把真实 `effective_profile_id` 与 `config_revision` 注入 `DaemonBootstrap::build()`。
+3. 更新 `apps/daemon/CMakeLists.txt`，把 entry loader 纳入 `dasall_daemon` 并补齐 `dasall_profiles` 依赖。
+4. 新增 `tests/unit/apps/daemon/DaemonEntryConfigProjectionTest.cpp`，覆盖默认 profile、YAML/JSON deployment snapshot 与 flags/config 冲突语义。
+5. 更新 `tests/integration/access/DaemonProfileCompatibilityTest.cpp` 与对应 CMake，使 baseline profile compatibility smoke 改走 entry loader，而不是 helper 级 direct projection。
+6. 更新 `docs/deploy/daemon/README.md` 与 `ACCEPTANCE_CHECKLIST.md`，同步 `--profile-id` / `--config-file` surface 与配置冲突治理口径。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-038-daemon入口profile-config接线收敛.md`，并回写专项 TODO，将 DMD-TODO-038 更新为 Done。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_daemon dasall_daemon_entry_config_projection_unit_test dasall_daemon_profile_projection_unit_test dasall_access_daemon_profile_compatibility_integration_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "DaemonEntryConfigProjectionTest|DaemonProfileProjectionTest|DaemonProfileCompatibilityTest|DaemonBootstrapTest" --output-on-failure`
+   - 结果：通过，4/4 测试通过。
+
+### 结果
+
+1. daemon 真实 binary entry 不再把 profile/config snapshot 能力停留在 helper/harness；`main.cpp` 已通过单一 loader 消费 profile projection、runtime snapshot generation 与 deployment snapshot。
+2. daemon ping/readiness 所需 profile 元数据已由真实 entry result 驱动，不再依赖 `main.cpp` 中硬编码的 profile 常量。
+3. DMD-TODO-038 已完成，并为 DMD-TODO-039 的 fresh reload candidate source 提供了可复用的入口解析链。
+
 ## 记录 #524
 
 - 日期：2026-05-02

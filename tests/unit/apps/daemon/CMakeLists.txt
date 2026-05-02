@@ -259,6 +259,34 @@ list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_daemon_bootstrap_config_unit_test
 )
 
+add_executable(dasall_daemon_entry_config_projection_unit_test
+  DaemonEntryConfigProjectionTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonEntryConfigLoader.cpp
+)
+
+target_include_directories(dasall_daemon_entry_config_projection_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/include
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+)
+
+target_link_libraries(dasall_daemon_entry_config_projection_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_daemon_entry_config_projection_unit_test)
+
+add_test(NAME DaemonEntryConfigProjectionTest
+  COMMAND dasall_daemon_entry_config_projection_unit_test
+)
+set_tests_properties(DaemonEntryConfigProjectionTest PROPERTIES LABELS "unit;daemon")
+
+list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_daemon_entry_config_projection_unit_test
+)
+
 add_executable(dasall_daemon_config_reload_unit_test
   DaemonConfigReloadTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonConfigReloader.cpp

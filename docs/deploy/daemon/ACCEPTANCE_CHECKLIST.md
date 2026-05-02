@@ -78,5 +78,5 @@ kill -TERM <daemon-pid>
 1. service 样例必须使用 `Type=simple`，不得伪装 `Type=notify`。
 2. 文档必须明确 socket activation 为 v2 非交付项。
 3. 配置样例必须与 `DaemonBootstrapConfig` 键集合对齐。
-4. README 必须明确：当前二进制不直接消费 YAML/JSON 配置文件。
+4. README 必须明确：当前二进制可通过 `--config-file` 受控读取 YAML/JSON deployment snapshot，并继续遵守 flags/config file 冲突拒绝语义。
 5. readiness smoke 必须通过 CLI 消费真实 UDS 响应验证，而不是只验证 send 成功。

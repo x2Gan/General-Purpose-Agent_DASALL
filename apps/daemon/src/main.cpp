@@ -12,11 +12,12 @@
 ///   - 所有客户端请求经 AccessGateway 主链（Admission/Policy/Normalizer/RuntimeBridge）
 ///   - 本地控制面优先于 HTTP/gateway；CLI 经 IIPC/UDS 进入本链路
 
-#include <csignal>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -25,6 +26,7 @@
 
 #include "DaemonBootstrap.h"
 #include "DaemonConfig.h"
+#include "DaemonEntryConfigLoader.h"
 #include "DaemonConfigReloader.h"
 #include "DaemonConfigValidator.h"
 #include "DaemonSignalHandler.h"
@@ -38,14 +40,29 @@
 namespace {
 
 struct ParsedDaemonArgs {
-  dasall::apps::daemon::DaemonBootstrapConfig config;
   bool validate_only = false;
+  std::optional<std::string> profile_id;
+  std::optional<std::filesystem::path> deployment_config_path;
+  std::optional<std::string> socket_path_override;
   bool ok = true;
   std::string error;
 };
 
 [[nodiscard]] ParsedDaemonArgs parse_daemon_args(int argc, char* argv[]) {
   ParsedDaemonArgs parsed;
+
+  const auto set_unique_option = [&parsed](auto* slot,
+                                           auto value,
+                                           std::string_view option_name) {
+    if (slot->has_value()) {
+      parsed.ok = false;
+      parsed.error = std::string(option_name) + " cannot be specified more than once";
+      return false;
+    }
+
+    *slot = std::move(value);
+    return true;
+  };
 
   for (int index = 1; index < argc; ++index) {
     const std::string_view arg(argv[index]);
@@ -56,8 +73,12 @@ struct ParsedDaemonArgs {
     }
 
     if (arg.starts_with("--socket-path=")) {
-      parsed.config.socket_path =
-          std::string(arg.substr(std::string_view("--socket-path=").size()));
+      if (!set_unique_option(
+              &parsed.socket_path_override,
+              std::string(arg.substr(std::string_view("--socket-path=").size())),
+              "--socket-path")) {
+        return parsed;
+      }
       continue;
     }
 
@@ -68,7 +89,62 @@ struct ParsedDaemonArgs {
         return parsed;
       }
 
-      parsed.config.socket_path = argv[++index];
+      if (!set_unique_option(&parsed.socket_path_override,
+                             std::string(argv[++index]),
+                             "--socket-path")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--profile-id=")) {
+      if (!set_unique_option(
+              &parsed.profile_id,
+              std::string(arg.substr(std::string_view("--profile-id=").size())),
+              "--profile-id")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg == "--profile-id") {
+      if (index + 1 >= argc) {
+        parsed.ok = false;
+        parsed.error = "--profile-id requires a value";
+        return parsed;
+      }
+
+      if (!set_unique_option(&parsed.profile_id,
+                             std::string(argv[++index]),
+                             "--profile-id")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--config-file=")) {
+      if (!set_unique_option(
+              &parsed.deployment_config_path,
+              std::filesystem::path(
+                  arg.substr(std::string_view("--config-file=").size())),
+              "--config-file")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg == "--config-file") {
+      if (index + 1 >= argc) {
+        parsed.ok = false;
+        parsed.error = "--config-file requires a value";
+        return parsed;
+      }
+
+      if (!set_unique_option(&parsed.deployment_config_path,
+                             std::filesystem::path(argv[++index]),
+                             "--config-file")) {
+        return parsed;
+      }
       continue;
     }
 
@@ -150,14 +226,44 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  const dasall::apps::daemon::DaemonEntryConfigLoader entry_loader;
+  const auto entry_config = entry_loader.load(
+      dasall::apps::daemon::DaemonEntryConfigLoadRequest{
+          .profiles_root = std::filesystem::current_path() / "profiles",
+          .requested_profile_id = parsed.profile_id.value_or(
+              dasall::apps::daemon::kDefaultDaemonEntryProfileId),
+          .deployment_config_path = parsed.deployment_config_path,
+          .socket_path_override = parsed.socket_path_override,
+      });
+  if (!entry_config.ok() || !entry_config.entry_config.has_value()) {
+    std::cerr << "[dasall_daemon] entry config load failed: "
+              << entry_config.message << "\n";
+    return 1;
+  }
+
+  const auto& entry = *entry_config.entry_config;
+
   const dasall::apps::daemon::DaemonConfigValidator config_validator;
   const auto validation = parsed.validate_only
-                              ? config_validator.validate_only(parsed.config)
-                              : config_validator.validate_config(parsed.config);
+                              ? config_validator.validate_only(
+                                    entry.bootstrap_config,
+                                    entry.conflicts)
+                              : config_validator.validate_config(
+                                    entry.bootstrap_config);
   if (!validation.ok()) {
     std::cerr << "[dasall_daemon] config validation failed: "
               << validation.message << "\n";
     return 1;
+  }
+
+  if (!parsed.validate_only) {
+    const auto conflict_validation =
+        config_validator.validate_conflicts(entry.conflicts);
+    if (!conflict_validation.ok()) {
+      std::cerr << "[dasall_daemon] config validation failed: "
+                << conflict_validation.message << "\n";
+      return 1;
+    }
   }
 
   if (parsed.validate_only) {
@@ -174,15 +280,12 @@ int main(int argc, char* argv[]) {
   dasall::access::DaemonAccessPipelineOptions pipeline_options;
   pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
   pipeline_options.publish_view.max_payload_bytes =
-      static_cast<int>(parsed.config.max_payload_bytes);
+      static_cast<int>(entry.bootstrap_config.max_payload_bytes);
   pipeline_options.auth_view.trusted_local_subjects = {
       "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
-    pipeline_options.daemon_diagnostics_enabled = parsed.config.diag_enabled;
-    pipeline_options.daemon_profile_id = "daemon.direct_bind.v1";
+    pipeline_options.daemon_diagnostics_enabled = entry.bootstrap_config.diag_enabled;
+    pipeline_options.daemon_profile_id = entry.effective_profile_id;
     pipeline_options.daemon_version = "v1";
-    pipeline_options.daemon_listener_ready = true;
-    pipeline_options.daemon_gateway_ready = true;
-    pipeline_options.daemon_bridge_reachable = true;
   pipeline_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {
@@ -190,6 +293,12 @@ int main(int argc, char* argv[]) {
         const auto agent_result = runtime_facade->handle(agent_request);
         return map_agent_result_to_dispatch_result(agent_result);
       };
+    pipeline_options.daemon_listener_ready =
+      entry.bootstrap_config.has_consistent_values();
+    pipeline_options.daemon_gateway_ready =
+      static_cast<bool>(pipeline_options.runtime_dispatch_backend);
+    pipeline_options.daemon_bridge_reachable =
+      static_cast<bool>(pipeline_options.runtime_dispatch_backend);
 
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));
@@ -199,13 +308,13 @@ int main(int argc, char* argv[]) {
   }
 
   const auto context = dasall::apps::daemon::DaemonBootstrap::build(
-      parsed.config,
+      entry.bootstrap_config,
       dasall::apps::daemon::DaemonBootstrap::BuildDependencies{
           .ipc = ipc,
           .access_gateway = gateway,
           .watchdog_service = nullptr,
-          .effective_profile_id = "daemon.direct_bind.v1",
-          .config_revision = std::nullopt,
+        .effective_profile_id = entry.effective_profile_id,
+        .config_revision = entry.config_revision,
       });
   if (!context.has_value()) {
     std::cerr << "[dasall_daemon] bootstrap build failed\n";
@@ -217,7 +326,7 @@ int main(int argc, char* argv[]) {
   dasall::apps::daemon::DaemonSignalHandler signal_handler;
 
   dasall::apps::daemon::DaemonConfigReloader config_reloader(
-      parsed.config,
+      entry.bootstrap_config,
       [](const std::vector<std::string>& rejected_keys,
          const std::string& reason) {
         for (const auto& key : rejected_keys) {
@@ -246,13 +355,13 @@ int main(int argc, char* argv[]) {
 
   while (!run_finished.load()) {
     if (signal_handler.shutdown_requested()) {
-      bootstrap.stop(std::chrono::milliseconds(parsed.config.shutdown_grace_ms));
+      bootstrap.stop(std::chrono::milliseconds(entry.bootstrap_config.shutdown_grace_ms));
       break;
     }
 
     if (signal_handler.reload_requested()) {
       const auto reload_result =
-          config_reloader.apply_reload_snapshot(parsed.config);
+          config_reloader.apply_reload_snapshot(entry.bootstrap_config);
       std::cout << "[dasall_daemon] reload requested by signal "
                 << signal_handler.last_signal() << ": "
                 << (reload_result.ok() ? "applied" : "rejected")
