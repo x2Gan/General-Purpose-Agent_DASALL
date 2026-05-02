@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -74,6 +75,22 @@ struct PeerCredentials final {
   }
 
   return native_fd;
+}
+
+[[nodiscard]] bool apply_filesystem_socket_permissions(
+    const IpcEndpoint& endpoint,
+    const int native_fd) {
+  if (endpoint.use_abstract_namespace) {
+    return true;
+  }
+
+  if (::chmod(endpoint.socket_path.c_str(), 0600) == 0) {
+    return true;
+  }
+
+  (void)::unlink(endpoint.socket_path.c_str());
+  (void)::close(native_fd);
+  return false;
 }
 
 [[nodiscard]] bool is_retryable_connect_errno(const int error_value) {
@@ -237,6 +254,17 @@ PlatformResult<IpcListenerHandle> UnixIpcProvider::listen(const IpcEndpoint& end
                    std::string("bind() failed for socket path '") + endpoint.socket_path +
                        "': " + std::strerror(error_value),
                    "bind",
+                   error_value));
+  }
+
+  if (!apply_filesystem_socket_permissions(endpoint, native_fd)) {
+    const int error_value = errno;
+    return PlatformResult<IpcListenerHandle>::failure(
+        make_error(map_errno_code(error_value, false),
+                   map_errno_category(error_value),
+                   std::string("chmod() failed for socket path '") + endpoint.socket_path +
+                       "': " + std::strerror(error_value),
+                   "chmod",
                    error_value));
   }
 

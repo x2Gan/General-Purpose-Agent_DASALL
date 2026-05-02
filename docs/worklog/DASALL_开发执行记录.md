@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #524
+
+- 日期：2026-05-02
+- 阶段：daemon/socket mode hardening
+- 任务：DMD-TODO-037 收敛真实 UDS socket mode 与 stale restart 安全回归
+- 状态：已完成
+
+### 改动
+
+1. 更新 `platform/src/linux/UnixIpcProvider.cpp`，让非 abstract namespace UDS 在 `bind()` 后立即执行 `chmod(..., 0600)`；若权限收敛失败则 `unlink + close` fail-closed 退出。
+2. 更新 `tests/unit/platform/linux/UnixIpcProviderTest.cpp`，新增真实 socket mode=0600 与 listener close unlink 断言。
+3. 新增 `tests/integration/access/DaemonSocketIntegrationSupport.h`，为 037 的 socket mode / stale restart 两条集成烟测提供最小共用 helper。
+4. 新增 `tests/integration/access/DaemonSocketModeIntegrationTest.cpp` 与 `DaemonStaleSocketRecoveryIntegrationTest.cpp`，并更新 `tests/integration/access/CMakeLists.txt` 注册 focused targets。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-037-UDS权限与stale-restart收敛.md`，并回写专项 TODO，将 DMD-TODO-037 更新为 Done。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_unix_ipc_provider_unit_test && ctest --test-dir build-ci -R "^UnixIpcProviderTest$" --output-on-failure`
+   - 结果：通过。
+2. `cmake --build build-ci --target dasall_daemon dasall_daemon_socket_policy_unit_test dasall_unix_ipc_provider_unit_test dasall_access_daemon_ping_integration_test dasall_access_daemon_socket_mode_integration_test dasall_access_daemon_stale_socket_recovery_integration_test && ctest --test-dir build-ci -R "DaemonSocketPolicyTest|UnixIpcProviderTest|DaemonSocketModeIntegrationTest|DaemonStaleSocketRecoveryIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
+   - 结果：通过，5/5 测试通过。
+
+### 结果
+
+1. 真实 daemon socket mode 已从依赖进程默认 umask 的不稳定状态，收敛为 daemon policy 需要的 0600。
+2. DMD-TODO-032 的 stale cleanup 规则不需要放宽；在真实 socket mode 对齐后，restart-safe 恢复已可直接成立。
+3. DMD-TODO-037 已完成，为 DMD-TODO-038/039 的入口 loader 与 hot-reload 复验清除了运行面权限噪声。
+
 ## 记录 #523
 
 - 日期：2026-05-02

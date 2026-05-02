@@ -5,6 +5,7 @@
 #include <string>
 #include <system_error>
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "support/TestAssertions.h"
@@ -116,12 +117,48 @@ void test_unix_ipc_provider_reports_peer_closed() {
               "send on closed peer should map to PeerClosed");
 }
 
+void test_unix_ipc_provider_applies_secure_socket_mode_and_unlinks_on_close() {
+  using dasall::platform::IpcChannelHandle;
+  using dasall::platform::IpcEndpoint;
+  using dasall::platform::ListenOptions;
+  using dasall::platform::linux::UnixIpcProvider;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  UnixIpcProvider provider;
+  ScopedTempDirectory temp_root("unix-ipc-provider-mode");
+
+  IpcEndpoint endpoint;
+  endpoint.socket_path = (temp_root.path() / "mode.sock").string();
+
+  const auto listener = provider.listen(endpoint, ListenOptions{});
+  assert_true(listener.ok(), "listen should create a real unix socket for mode checks");
+
+  struct stat socket_stat {};
+  const auto stat_result = ::lstat(endpoint.socket_path.c_str(), &socket_stat);
+  assert_equal(0, stat_result,
+               "listen should materialize a filesystem socket path");
+  assert_true(S_ISSOCK(socket_stat.st_mode),
+              "listen should create a unix socket entry on disk");
+  assert_equal(0600,
+               static_cast<int>(socket_stat.st_mode & 0777),
+               "listen should apply secure daemon-compatible socket mode");
+
+  const auto close_result = provider.close(
+      IpcChannelHandle{.native_fd = listener.value->native_fd});
+  assert_true(close_result.ok(),
+              "closing a listener handle should succeed through the shared close path");
+  assert_true(!fs::exists(endpoint.socket_path),
+              "closing a listener handle should unlink the filesystem socket path");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_unix_ipc_provider_reports_address_in_use_and_payload_too_large();
     test_unix_ipc_provider_reports_peer_closed();
+    test_unix_ipc_provider_applies_secure_socket_mode_and_unlinks_on_close();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
