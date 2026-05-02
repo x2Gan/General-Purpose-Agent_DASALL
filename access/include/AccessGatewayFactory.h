@@ -14,6 +14,8 @@ class IDiagnosticsService;
 
 namespace dasall::access {
 
+class AsyncTaskRegistry;
+
 struct AccessGatewayFactoryOptions {
   using SubmitPipeline =
       std::function<RuntimeDispatchResult(const InboundPacket& packet)>;
@@ -46,6 +48,7 @@ struct DaemonAccessPipelineOptions {
     std::string daemon_version = "v1";
     std::string daemon_profile_id = "daemon.default";
     std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
+    std::shared_ptr<AsyncTaskRegistry> async_task_registry;
 
     RuntimeDispatchBackend runtime_dispatch_backend{};
     RuntimeCancelBackend runtime_cancel_backend{};

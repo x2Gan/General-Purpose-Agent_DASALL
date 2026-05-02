@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+## 记录 #519
+
+- 日期：2026-05-02
+- 阶段：daemon/async status cancel gate closure
+- 任务：DMD-TODO-026 验证 daemon async/status/cancel 闭环
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`，为 daemon pipeline 增加可注入 `AsyncTaskRegistry` seam，并修正 status/cancel 响应的 wire 投影：completed/active/cancelled 通过 `agent_result.response_text` 暴露，rejected 分支输出稳定错误键。
+2. 新增 `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`，覆盖 accepted_async receipt、owner status active/completed/cancelled、status owner mismatch、cancel owner mismatch 与 TTL expired。
+3. 更新 `tests/integration/access/CMakeLists.txt`，注册 `DaemonReceiptFlowIntegrationTest` 并为该 target 增补 `access/src` include 以复用 `AsyncTaskRegistry`。
+4. 新增 `docs/todos/daemon/deliverables/DMD-TODO-026-daemon-async-status-cancel收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-026 更新为 Done，清除已失效的 blocker 标注并收敛 focused 验收命令。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_receipt_flow_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonReceiptFlowIntegrationTest"])`
+   - 结果：通过，1/1 通过。
+3. `Build_CMakeTools(buildTargets=["dasall_access_daemon_task_query_handler_unit_test","dasall_access_daemon_cancel_command_unit_test","dasall_access_daemon_receipt_flow_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["DaemonTaskQueryHandlerTest","DaemonCancelCommandTest","DaemonReceiptFlowIntegrationTest"])`
+   - 结果：通过，3/3 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效 focused gate 证据。
+
+### 结果
+
+1. DMD-TODO-026 已从“status/cancel 仅有单测推断”收敛为“真实 daemon receipt flow integration gate”。
+2. accepted_async -> status(active/completed) -> cancel(cancelled) -> TTL expired 四类状态均已具备自动化证据。
+3. receipt 不能被跨主体滥用，owner mismatch 不会触发 runtime cancel backend，满足 async/status/cancel 闭环的 fail-closed 要求。
+
 ## 记录 #518
 
 - 日期：2026-05-02

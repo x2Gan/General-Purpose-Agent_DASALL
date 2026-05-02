@@ -118,6 +118,40 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_reject_path_integration_test
 )
 
+add_executable(dasall_access_daemon_receipt_flow_integration_test
+  DaemonReceiptFlowIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSupervisorAdapter.cpp
+)
+
+target_include_directories(dasall_access_daemon_receipt_flow_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/src
+    ${CMAKE_SOURCE_DIR}/apps/cli/src
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+)
+
+target_link_libraries(dasall_access_daemon_receipt_flow_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_infra
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_access_daemon_receipt_flow_integration_test)
+
+add_test(NAME DaemonReceiptFlowIntegrationTest COMMAND dasall_access_daemon_receipt_flow_integration_test)
+set_tests_properties(DaemonReceiptFlowIntegrationTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_receipt_flow_integration_test
+)
+
 add_executable(dasall_access_daemon_unary_runtime_bridge_integration_test
   DaemonUnaryRuntimeBridgeTest.cpp
 )

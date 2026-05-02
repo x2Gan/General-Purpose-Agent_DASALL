@@ -162,25 +162,37 @@ struct DaemonDiagPayload {
     case QueryStatus::Cancelled:
       result.disposition = AccessDisposition::Completed;
       envelope.protocol_status_hint = "200";
+      {
+        dasall::contracts::AgentResult agent_result;
+        agent_result.request_id = std::string(request_id);
+        agent_result.response_text = query_result.task_status;
+        agent_result.task_completed =
+            query_result.status != QueryStatus::Active;
+        envelope.agent_result = std::move(agent_result);
+      }
       break;
     case QueryStatus::Missing:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "status_missing";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "404";
       break;
     case QueryStatus::Expired:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "status_expired";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "410";
       break;
     case QueryStatus::OwnerMismatch:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "status_owner_mismatch";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "403";
       break;
     case QueryStatus::CancelForwardFailed:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "status_cancel_forward_failed";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "503";
       break;
   }
@@ -204,31 +216,43 @@ struct DaemonDiagPayload {
     case QueryStatus::Cancelled:
       result.disposition = AccessDisposition::Completed;
       envelope.protocol_status_hint = "200";
+      {
+        dasall::contracts::AgentResult agent_result;
+        agent_result.request_id = std::string(request_id);
+        agent_result.response_text = query_result.task_status;
+        agent_result.task_completed = true;
+        envelope.agent_result = std::move(agent_result);
+      }
       break;
     case QueryStatus::Missing:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "cancel_missing";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "404";
       break;
     case QueryStatus::Expired:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "cancel_expired";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "410";
       break;
     case QueryStatus::OwnerMismatch:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "cancel_owner_mismatch";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "403";
       break;
     case QueryStatus::CancelForwardFailed:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "cancel_forward_failed";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "503";
       break;
     case QueryStatus::Active:
     case QueryStatus::Completed:
       result.disposition = AccessDisposition::Rejected;
       result.error_ref = "cancel_unexpected_state";
+      envelope.payload = *result.error_ref;
       envelope.protocol_status_hint = "409";
       break;
   }
@@ -328,8 +352,10 @@ build_daemon_submit_pipeline(
       options.runtime_dispatch_backend,
       options.runtime_cancel_backend);
   auto result_publisher = std::make_shared<ResultPublisher>();
-  auto async_task_registry = std::make_shared<AsyncTaskRegistry>(
-      "daemon-access-secret-v1");
+  auto async_task_registry = options.async_task_registry
+                                 ? options.async_task_registry
+                                 : std::make_shared<AsyncTaskRegistry>(
+                                       "daemon-access-secret-v1");
   auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
       async_task_registry);
   auto task_query_handler = std::make_shared<daemon::DaemonTaskQueryHandler>(
