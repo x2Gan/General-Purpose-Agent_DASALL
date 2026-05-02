@@ -14,7 +14,7 @@
 
 ### 2.1 旧集成为什么是虚绿
 
-1. 原 `tests/integration/access/CliDaemonPingIntegrationTest.cpp` 只验证 `CliIpcClient` 调用 `IIPC::connect/send` 返回 true，没有启动 daemon，也没有读取 response。
+1. 原 legacy send-only ping smoke 只验证 `CliIpcClient` 调用 `IIPC::connect/send` 返回 true，没有启动 daemon，也没有读取 response。
 2. `UnixIpcProvider` 的 loopback 语义仍残留三处“假成功”路径：
    - `accept()` 在无待接连接时伪造 server channel。
    - `connect()` 在无 listener 时仍返回 standalone channel。
@@ -58,7 +58,7 @@
    - 发送 `{"schema_version":"1","request_id":"ping-itg-001","command":"ping"}`。
    - 读取并断言 response payload。
 6. 更新 `tests/integration/access/CMakeLists.txt`：
-   - 取消旧 `CliDaemonPingIntegrationTest` 的集成注册。
+   - 取消旧 legacy send-only ping smoke 的集成注册。
    - 注册新的 `DaemonPingIntegrationTest` target/test。
 
 ## 5. Validation

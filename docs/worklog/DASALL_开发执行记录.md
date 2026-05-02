@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #527
+
+- 日期：2026-05-02
+- 阶段：daemon/doc-and-evidence revalidation
+- 任务：DMD-TODO-040 清理过期文档、陈旧测试并回写专项复验证据
+- 状态：已完成
+
+### 改动
+
+1. 删除 `tests/integration/access/CliDaemonPingIntegrationTest.cpp`，移除未注册的 legacy send-only ping smoke 文件。
+2. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项评审报告_2026-05-02.md` 与 `deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，清理已过期的 readiness 缺口/旧 smoke 直引表述。
+3. 更新 `tests/unit/apps/daemon/CMakeLists.txt`，补齐 `apps/daemon` unit-test 拓扑对 `access/include` 的可见性，消除 `DaemonEndpointDefaults.h` 的假性构建失败。
+4. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 `DMD-TODO-040` 标记为 Done、补齐 `Gate-DMD-10` PASS，并把专项当前结论与 §11 执行结论推进到 close-ready。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-040-daemon文档与证据复验收敛.md`，集中回写 `Gate-DMD-05` / `07` / `09` / `10` 的复验证据。
+
+### 验证
+
+1. `rg -n "当前 CLI 尚未消费 readiness 响[应]|CliDaemonPingIntegrationTe(st)|专项状态从 fully-close[d]" docs/deploy/daemon docs/todos/daemon tests/integration/access`
+   - 结果：无匹配。
+2. `RunCtest_CMakeTools(tests=["DaemonPingIntegrationTest","CliDaemonCommandParserTest","DaemonConfigReloadTest","DaemonProfileCompatibilityTest"])`
+   - 结果：通过，4/4 测试通过；stderr 中 `DartConfiguration.tcl` 缺失提示为仓库既有工具链噪声，不影响 focused 结论。
+
+### 结果
+
+1. daemon 专项文档与测试拓扑中的过期字面口径已清除，legacy send-only ping smoke 不再留在仓库中。
+2. `apps/daemon` unit-test 拓扑已恢复为可见共享 daemon public 头的状态，不再因 `DaemonEndpointDefaults.h` 产生假性失败。
+3. `Gate-DMD-05` / `Gate-DMD-07` / `Gate-DMD-09` 已完成整改后的 focused 复验，`Gate-DMD-10` 已补齐并 PASS。
+4. daemon 本地控制面专项 `DMD-TODO-001` ~ `DMD-TODO-040` 已全部完成，专项状态恢复为 close-ready。
+
 ## 记录 #526
 
 - 日期：2026-05-02

@@ -40,8 +40,8 @@
 | daemon entry 运行时硬编码 | [apps/daemon/src/main.cpp:181-185](../../../apps/daemon/src/main.cpp#L181-L185)；[apps/daemon/src/main.cpp:207](../../../apps/daemon/src/main.cpp#L207)；[apps/daemon/src/main.cpp:255](../../../apps/daemon/src/main.cpp#L255) | 证明 profile/readiness 元数据和 reload snapshot 仍是硬编码或重复使用初始值 |
 | socket policy 要求 | [apps/daemon/src/DaemonSocketPolicy.cpp:183](../../../apps/daemon/src/DaemonSocketPolicy.cpp#L183) | 证明 policy 目标 socket mode 为 `0600` |
 | 真实 listener 实现 | [platform/src/linux/UnixIpcProvider.cpp:229](../../../platform/src/linux/UnixIpcProvider.cpp#L229)；[platform/src/linux/UnixIpcProvider.cpp:243](../../../platform/src/linux/UnixIpcProvider.cpp#L243) | 证明实际 listen 路径执行了 `bind()` / `listen()`，但当前可见路径中没有把 socket mode 主动收敛到 `0600` |
-| 部署文档口径 | [docs/deploy/daemon/README.md:48](../../deploy/daemon/README.md#L48) | 证明部署文档仍保留“CLI 尚未消费 readiness”表述 |
-| 陈旧测试文件 | [tests/integration/access/CliDaemonPingIntegrationTest.cpp:11](../../../tests/integration/access/CliDaemonPingIntegrationTest.cpp#L11)；[tests/integration/access/CliDaemonPingIntegrationTest.cpp:20](../../../tests/integration/access/CliDaemonPingIntegrationTest.cpp#L20) | 证明仓库仍保留旧 socket path、旧 bool 风格 send-only smoke 文件 |
+| 部署文档口径 | [docs/deploy/daemon/README.md:48](../../deploy/daemon/README.md#L48) | 证明当时部署文档仍保留 readiness 消费缺口说明 |
+| 陈旧测试文件 | daemon legacy send-only ping smoke（后续已由 DMD-TODO-040 清理） | 证明当时仓库仍保留旧 socket path、旧 bool 风格 send-only smoke 文件 |
 | historical gate baseline | [docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md:22](deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md#L22)；[docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md:24](deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md#L24)；[docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md:26](deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md#L26) | 证明 `Gate-DMD-05/07/09` 的第一轮 focused evidence 已落盘 |
 | real smoke baseline | [docs/todos/daemon/deliverables/DMD-TODO-035-daemon部署与supervisor交付契约.md:70-81](deliverables/DMD-TODO-035-daemon部署与supervisor交付契约.md#L70-L81) | 证明 validate-only、daemon unavailable、custom socket path start、Python UDS ping/readiness、graceful stop 均已有落盘 smoke 证据 |
 
@@ -122,9 +122,9 @@
 
 证据：
 
-1. 部署 README 仍写着“当前 CLI 尚未消费 readiness 响应”，见 [docs/deploy/daemon/README.md:48](../../deploy/daemon/README.md#L48)。
-2. 仓库中仍保留旧的 [CliDaemonPingIntegrationTest.cpp](../../../tests/integration/access/CliDaemonPingIntegrationTest.cpp#L11-L31)，其中继续使用 `"/tmp/dasall-daemon-control.sock"`，见 [line 20](../../../tests/integration/access/CliDaemonPingIntegrationTest.cpp#L20)。
-3. 对 `**/CMakeLists.txt` 检索 `CliDaemonPingIntegrationTest` 的结果为 0 matches，说明该文件当前不在构建注册路径中，属于“留在仓库里但不再代表权威测试拓扑”的陈旧资产。
+1. 部署 README 当时仍保留 readiness 消费缺口说明，见 [docs/deploy/daemon/README.md:48](../../deploy/daemon/README.md#L48)。
+2. 仓库当时仍保留旧的 send-only ping smoke 文件，并继续使用 `"/tmp/dasall-daemon-control.sock"` 这一旧 socket path。
+3. 对 `**/CMakeLists.txt` 检索 legacy ping smoke 的结果为 0 matches，说明该文件当时已不在构建注册路径中，属于“留在仓库里但不再代表权威测试拓扑”的陈旧资产。
 4. `DMD-TODO-028` 已明确“不得再把历史 send-only smoke 写成 daemon 已交付事实”，见 [DMD-TODO-028:49](deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md#L49)。
 
 影响：

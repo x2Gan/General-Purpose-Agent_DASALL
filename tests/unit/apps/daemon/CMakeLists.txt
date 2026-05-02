@@ -1,5 +1,7 @@
 set(DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS)
 
+include_directories(${CMAKE_SOURCE_DIR}/access/include)
+
 add_executable(dasall_daemon_signal_handler_unit_test
   DaemonSignalHandlerTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSignalHandler.cpp
