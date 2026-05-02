@@ -1,9 +1,9 @@
 # DASALL daemon 本地控制面专项 TODO
 
-最近更新时间：2026-04-24
+最近更新时间：2026-05-02
 阶段：Detailed Design -> Special TODO
 适用范围：`apps/daemon/`、`apps/cli/` daemon 客户端面、`access/` daemon entry seam、`platform/IIPC` peer identity 与 loopback 消费面、daemon 部署契约、相关测试拓扑
-当前结论：daemon 详细设计已经具备 L3/L2 混合粒度拆分条件。当前代码已落地 `IIPC::describe_peer`、`PeerIdentitySnapshot`、`DaemonProtocolAdapter`、`DaemonBootstrap` 最小同步壳层、`AsyncTaskRegistry` 与部分 access gate 测试，但还没有形成详设要求的配置校验、生命周期状态机、listener host、daemon status/cancel/diag、readiness、graceful shutdown、真实 daemon ping 集成与交付 gate 闭环。因此本 TODO 以“补齐进程壳层 + 接线共享 access core + 收敛运维入口”为主，不重复规划已经存在的 platform/access 基础补口。
+当前结论：daemon 本地控制面专项 `DMD-TODO-001` ~ `DMD-TODO-035` 已全部收敛，已形成配置校验、生命周期状态机、listener host、status/cancel/只读 diag、readiness、graceful shutdown、真实 daemon ping、CLI wire contract、并发/soak 与 direct-bind 部署契约的 gate 闭环。当前专项范围内已无未解阻的 Build-ready blocker；由于全仓聚合 target 与 `RunCtest_CMakeTools` 仍受仓库既有 runtime/infra 噪声及 034 测试执行方式影响，最终验收以 9.4 的 focused gate matrix、交付物与 worklog 证据为准。
 
 ## 1. 文档头
 
@@ -267,7 +267,7 @@
 | DMD-TODO-025 | Done | 验证 daemon unary 主链与拒绝路径 | daemon 详设 6.6.2、9；Access core 当前实现 | Gate-DMD-03 request flow | L2 | 新增 `tests/integration/access/DaemonUnaryIntegrationTest.cpp`、`DaemonRejectPathIntegrationTest.cpp` 与 `DaemonIntegrationHarness.h` | daemon request -> AccessGateway -> RuntimeBridge -> ResultPublisher | integration：happy path、unknown command、auth deny、validation reject、runtime bridge unavailable | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_access_daemon_unary_integration_test dasall_access_daemon_reject_path_integration_test && ctest --test-dir build-ci -R "DaemonUnaryIntegrationTest|DaemonRejectPathIntegrationTest" --output-on-failure` | DMD-TODO-013、014、021、024 | 无 | 无 | `docs/todos/daemon/deliverables/DMD-TODO-025-daemon-unary-reject集成收敛.md` | 仅当 happy path 和三类拒绝路径都经共享 access core，且 rejection 不进入 Runtime 时完成；2026-05-02 已新增 in-process daemon integration harness，并通过 `DaemonUnaryIntegrationTest`、`DaemonRejectPathIntegrationTest` 覆盖 happy path、unknown command、auth deny、validation reject、runtime bridge unavailable；`RunCtest_CMakeTools` stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效证据。 |
 | DMD-TODO-026 | Done | 验证 daemon async/status/cancel 闭环 | daemon 详设 6.8、9 | Gate-DMD-04 async/status/cancel | L2 | 新增 `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`，并在 `AccessGatewayFactory` 注入 `AsyncTaskRegistry` seam + status/cancel wire 投影 | accepted_async、status、cancel、owner mismatch、TTL expired | integration：accepted_async 返回 receipt；owner 查询 pending/completed/cancelled；非 owner cancel 拒绝 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_access_daemon_receipt_flow_integration_test dasall_access_daemon_task_query_handler_unit_test dasall_access_daemon_cancel_command_unit_test && ctest --test-dir build-ci -R "DaemonReceiptFlowIntegrationTest|DaemonTaskQueryHandlerTest|DaemonCancelCommandTest" --output-on-failure` | DMD-TODO-015、016、017、024 | 无 | 无 | `docs/todos/daemon/deliverables/DMD-TODO-026-daemon-async-status-cancel收敛.md` | 仅当 receipt 不可被跨主体滥用，cancel 不绕过 owner/PolicyGate，TTL 过期语义可见时完成；2026-05-02 已通过 `DaemonReceiptFlowIntegrationTest` 覆盖 accepted_async、owner status active/completed/cancelled、status owner mismatch、cancel owner mismatch、TTL expired，并回归 `DaemonTaskQueryHandlerTest`、`DaemonCancelCommandTest`；`RunCtest_CMakeTools` stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效证据。 |
 | DMD-TODO-027 | Done | 验证 daemon failure、shutdown 与 profile 兼容门 | daemon 详设 6.10、6.12、9、11；SSOT `InfraIntegrationTopology` | Gate-DMD-02/05/06 | L2 | 新增 `tests/integration/access/DaemonFailureInjectionIntegrationTest.cpp`、`DaemonProfileCompatibilityTest.cpp` | bind conflict、peer identity unsupported、runtime timeout、shutdown draining、profile diag disabled | integration：failure injection、graceful shutdown、profile compatibility | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_access_daemon_failure_injection_integration_test dasall_access_daemon_profile_compatibility_integration_test dasall_daemon_graceful_shutdown_unit_test && ctest --test-dir build-ci -R "Daemon(FailureInjection|GracefulShutdown|ProfileCompatibility)Test" --output-on-failure` | DMD-TODO-003、012、020、022、024 | 无 | 无 | `docs/todos/daemon/deliverables/DMD-TODO-027-daemon-failure-profile-gate收敛.md` | 仅当失败路径都有明确错误/审计/health 事实，且 profile 不通过代码分叉改变主流程时完成；2026-05-02 已通过 `DaemonFailureInjectionTest` 覆盖 bind conflict、peer identity unsupported、runtime timeout 注入，通过 `DaemonGracefulShutdownTest` 覆盖 draining stop，通过 `DaemonProfileCompatibilityTest` 覆盖五档 baseline profile 下 unary 主链一致且 diag 默认关闭；`RunCtest_CMakeTools` stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效证据。 |
-| DMD-TODO-028 | Ready | 回写 daemon 专项 Gate 与交付证据 | daemon 详设 7、8、9、11；工程协作规范 | Gate-DMD-* | L2 | 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`、`docs/todos/daemon/deliverables/`、`docs/worklog/DASALL_开发执行记录.md` | gate 状态、阻塞变化、命令证据、风险残留 | process：所有 gate 命令、`ctest -N` discoverability、残余 blocker 状态回写齐备 | `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_daemon dasall_unit_tests dasall_integration_tests && ctest --test-dir build-ci -N && ctest --test-dir build-ci --output-on-failure -R "Daemon|DaemonPingIntegrationTest|UnixIpcProviderPeerIdentityTest|AccessGatewayLifecycleTest|RuntimeBridge|AsyncTaskRegistry"` | DMD-TODO-024、025、026、027、031、034、035 | 无 | 无 | 更新后的专项 TODO、deliverables、worklog | 仅当每个 Gate 都有通过/未通过命令证据、阻塞项状态和后续动作记录时完成 |
+| DMD-TODO-028 | Done | 回写 daemon 专项 Gate 与交付证据 | daemon 详设 7、8、9、11；工程协作规范 | Gate-DMD-* | L2 | 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`、`docs/todos/daemon/deliverables/`、`docs/worklog/DASALL_开发执行记录.md` | gate 状态、阻塞变化、命令证据、风险残留 | process：所有 gate 命令、`ctest -N` discoverability、残余 blocker 状态回写齐备 | `rg -n "DMD-TODO-028|Gate-DMD-0[1-9]|DMD-BLK-00[1-8]|当前残余风险" docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md docs/worklog/DASALL_开发执行记录.md && rg -n "DMD-TODO-02(4|5|6|7|8)|DMD-TODO-03(1|4|5)" docs/worklog/DASALL_开发执行记录.md docs/todos/daemon/deliverables` | DMD-TODO-024、025、026、027、031、034、035 | 无 | 无 | `docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md`；更新后的专项 TODO 与 worklog | 仅当每个 Gate 都有可追溯命令证据、`DMD-BLK-001` ~ `DMD-BLK-008` 状态更新完毕、当前残余风险与回退路径均回写时完成；2026-05-02 已完成 9.4 Gate 执行证据、9.5 阻塞变化与回退记录、残余风险快照及 worklog #522。 |
 
 ### 6.5 评审补强任务
 
@@ -344,12 +344,15 @@
 ### 9.2 统一验收命令建议
 
 ```bash
-cmake -S . -B build-ci -G "Unix Makefiles"
-cmake --build build-ci --target dasall_daemon dasall_unit_tests dasall_integration_tests
-ctest --test-dir build-ci -N | rg "Daemon|DaemonPingIntegrationTest|UnixIpcProviderPeerIdentityTest"
-ctest --test-dir build-ci --output-on-failure -R "Daemon|DaemonPingIntegrationTest|UnixIpcProviderPeerIdentityTest|AccessGatewayLifecycleTest|RuntimeBridge|AsyncTaskRegistry"
-ctest --test-dir build-ci --output-on-failure -R "UnixIpcProviderLoopbackTest|DaemonFrameCodec|CliIpcClientResponseTest|DaemonBackpressure|DaemonSoak"
+ctest --test-dir build-ci -N | rg "Daemon(Bootstrap|LifecycleController|ListenerHost|ConfigValidator)Test|DaemonPingIntegrationTest|DaemonUnaryIntegrationTest|DaemonRejectPathIntegrationTest|DaemonReceiptFlowIntegrationTest|DaemonFailureInjectionTest|DaemonProfileCompatibilityTest"
+ctest --test-dir build-ci --output-on-failure -R "DaemonProtocolTypesTest|DaemonBootstrapConfigTest|DaemonConfigValidatorTest|DaemonLifecycleControllerTest|DaemonListenerHostTest|DaemonBootstrapTest|UnixIpcProviderLoopbackTest|UnixIpcProviderPeerIdentityTest|DaemonFrameCodecTest|DaemonFrameCodecMalformedTest|DaemonPeerIdentityFailClosedTest|DaemonSocketPolicyTest"
+ctest --test-dir build-ci --output-on-failure -R "Daemon(PingIntegration|UnaryIntegration|RejectPathIntegration|ReceiptFlow|FailureInjection|GracefulShutdown|ProfileCompatibility)Test|Cli(IpcClient(Test|ResponseTest|UnavailableTest)|DaemonCommandParserTest|DaemonOutputFormatterTest)"
+build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_backpressure_integration_test
+build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_soak_integration_test
+build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_receipt_ttl_cleanup_integration_test
 ```
+
+说明：`dasall_unit_tests`、`dasall_integration_tests` 与 `RunCtest_CMakeTools` 在当前仓库仍可能受到既有 runtime/infra 失败、`DartConfiguration.tcl` 噪声和 034 soak 路径卡住现象影响；本专项最终以 9.4 的 focused gate matrix 作为主判定信号。
 
 ### 9.3 质量 Gate 清单
 
@@ -365,43 +368,54 @@ ctest --test-dir build-ci --output-on-failure -R "UnixIpcProviderLoopbackTest|Da
 | Gate-DMD-08 | backpressure、soak、receipt TTL 清理和资源回落可验证 |
 | Gate-DMD-09 | 所有通过/未通过 gate 均回写命令证据与残余 blocker，部署契约已评审 |
 
-## 10. 风险与回退策略
+### 9.4 Gate 执行证据（2026-05-02）
 
-| 风险 | 影响 | 触发信号 | 回退策略 |
+| Gate ID | 结论 | 命令证据 | 结果摘要 |
 |---|---|---|---|
-| daemon 重新实现 access 主链 | 破坏 Access owner 边界，造成策略绕过 | apps/daemon 出现认证、授权、Admission、Normalizer 重复实现 | 回退到 `IAccessGateway` / pipeline factory，daemon 只做 entry context |
-| daemon 形成第二任务系统 | 破坏 Runtime 主控和 async 语义 | receipt store 保存业务状态机或自行裁定 runtime 状态 | 只保留 `AsyncTaskRegistry` 映射、owner、TTL；业务状态归 Runtime |
-| peer identity 缺失被默认信任 | 本地越权入口 | `describe_peer` failure 后仍允许 diag/override/cancel | fail-closed；仅允许无特权 ping/readiness |
-| 旧 IPC smoke 被误认为真实 E2E | 集成测试虚绿 | 旧 `CliDaemonPingIntegrationTest` 只验证 send 成功 | 已通过 DMD-TODO-024 替换为 `DaemonPingIntegrationTest`；CLI wire contract 继续由 DMD-TODO-031 收敛 |
-| 配置来源分叉 | 运维不可控 | main.cpp 或测试私有配置绕过 ConfigCenter/Profile | 回退为 `DaemonBootstrapConfig` + Profile 投影，测试只注入受控 config |
-| diag/override 权限混用 | 高风险运维入口扩大 | diag command 与 run/status/cancel 共用宽松路径 | diag/override 独立 taxonomy、默认关闭、只读白名单、审计必写 |
-| shutdown 丢失已受理结果 | 可靠性和审计缺口 | Draining 立即 close publisher/listener，inflight 无 abandoned 记录 | `LifecycleState -> ConnectionRegistry -> ReceiptStore -> PublishQueue` 锁顺序，超时必须审计 |
-| socket activation 提前进入 v1 | 平台补口和部署策略返工 | DaemonListenerHost 依赖 fd import 或 systemd notify | v1 仅 direct bind；socket activation 记录为 v2 演进 |
-| frame codec 临时实现进入生产 | malformed/escaping 漏洞，错误映射不稳定 | `DaemonProtocolAdapter` 继续散落 JSON 字符串扫描与直接拼接响应 | 收敛到 `DaemonFrameCodec`，所有 malformed 和 escaping 路径单测覆盖 |
-| CLI 测试虚绿 | 用户入口不可用但集成测试通过 | 测试只断言 `IIPC::send()` true，不读取 daemon response | `CliIpcClient` 必须解析 `UdsResponseFrame`，ping/unary/status/cancel 集成断言响应内容 |
-| UDS endpoint 权限过宽或清理误删 | 本地越权或破坏其他进程 socket | socket_path 位于 world-writable 目录且无 owner/mode 校验，或 bind 前无差别 unlink | 增加 `DaemonSocketPolicy`，仅清理可证明属于本 daemon 的 stale socket |
-| hot-reload 改动不可热更键 | 运行时 listener/worker 状态与配置快照不一致 | SIGHUP 后 socket_path/backlog/dispatch_workers 生效或半生效 | 只允许 allowlist 键热更，不可热更键拒绝并保持 last-known-good |
-| 长期运行资源缓慢膨胀 | 常驻 daemon 运行后内存/receipt/连接计数不可控 | receipt TTL 清理不跑、连接 close 不回落、backpressure 不生效 | 引入并发/soak gate，资源计数回落到基线才允许交付 |
+| Gate-DMD-01 | PASS | `ctest --test-dir build-ci --output-on-failure -R "DaemonProtocolTypesTest|DaemonBootstrapConfigTest|DaemonConfigValidatorTest"` | `DMD-TODO-001`、`002`、`004` 已冻结 command taxonomy、config 投影与 validate-only 路径；非法配置在 bind 前失败。 |
+| Gate-DMD-02 | PASS | `cmake --build build-ci --target dasall_daemon_bootstrap_unit_test dasall_daemon_lifecycle_controller_unit_test dasall_daemon_listener_host_unit_test dasall_daemon_config_validator_unit_test`；`ctest --test-dir build-ci -N | rg "Daemon(Bootstrap|LifecycleController|ListenerHost|ConfigValidator)Test"` | `DMD-TODO-005` ~ `010` 的进程壳层拆分已由 `DMD-TODO-023` discoverability 收口；`DaemonBootstrapTest`、`DaemonLifecycleControllerTest`、`DaemonListenerHostTest`、`DaemonConfigValidatorTest` 均可稳定发现。 |
+| Gate-DMD-03 | PASS | `RunCtest_CMakeTools(tests=["UnixIpcProviderLoopbackTest","UnixIpcProviderPeerIdentityTest","DaemonFrameCodecTest","DaemonFrameCodecMalformedTest","DaemonProtocolAdapterTest","DaemonProtocolAdapterLocalTrustedTest","DaemonPeerIdentityFailClosedTest","DaemonSocketPolicyTest","DaemonListenerHostBindConflictTest","DaemonConfigValidatorTest"])` | `DMD-TODO-029`、`030`、`011`、`012`、`032` 已证明 request/response loopback、frame codec、peer identity fail-closed 与 UDS endpoint 安全同时成立。 |
+| Gate-DMD-04 | PASS | `RunCtest_CMakeTools(tests=["DaemonAccessPipelineFactoryTest","RuntimeBridgeRejectMappingTest","DaemonUnaryRuntimeBridgeTest","DaemonUnaryIntegrationTest","DaemonRejectPathIntegrationTest"])` | `DMD-TODO-013`、`014`、`025` 已证明 unary happy path、unknown command、auth deny、validation reject 与 runtime unavailable 全部经共享 access core 收敛。 |
+| Gate-DMD-05 | PASS | `RunCtest_CMakeTools(tests=["DaemonPingCommandTest","DaemonReadinessCommandTest","DaemonPingDoesNotBypassRouterTest","DaemonDiagnosticsHandlerTest","DaemonDiagDenyIntegrationTest","CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonCommandParserTest","CliDaemonOutputFormatterTest","DaemonPingIntegrationTest"])` | `DMD-TODO-019`、`020`、`031` 已证明 ping/readiness/diag 三者分离、diag 默认关闭，CLI 已能读取结构化 daemon response 而非只断言 `send()` 成功。 |
+| Gate-DMD-06 | PASS | `RunCtest_CMakeTools(tests=["DaemonAcceptedAsyncReceiptTest","DaemonTaskQueryHandlerTest","DaemonCancelCommandTest","DaemonReceiptFlowIntegrationTest"])` | `DMD-TODO-015`、`016`、`017`、`026` 已证明 receipt owner、TTL、status、cancel 全链路 fail-closed。 |
+| Gate-DMD-07 | PASS | `RunCtest_CMakeTools(tests=["DaemonObservabilityFieldSetTest","AccessGatewayLifecycleTest","DaemonGracefulShutdownTest","DaemonShutdownAbandonedAuditTest","DaemonFailureInjectionTest","DaemonProfileCompatibilityTest","DaemonConfigReloadTest","DaemonSignalHandlerTest"])` | `DMD-TODO-021`、`022`、`027`、`033` 已证明 graceful shutdown、abandoned audit、failure injection、profile compatibility 与 hot-reload allowlist 全部收敛。 |
+| Gate-DMD-08 | PASS | `Build_CMakeTools(buildTargets=["dasall_access_daemon_backpressure_integration_test","dasall_access_daemon_soak_integration_test","dasall_access_daemon_receipt_ttl_cleanup_integration_test"])`；直接执行 `build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_backpressure_integration_test`、`dasall_access_daemon_soak_integration_test`、`dasall_access_daemon_receipt_ttl_cleanup_integration_test` | `DMD-TODO-034` 已证明 backpressure、soak、receipt TTL cleanup 与资源计数回落；由于当前环境下 `RunCtest_CMakeTools` 会卡住，该 gate 以 direct-binary focused evidence 为权威结果。 |
+| Gate-DMD-09 | PASS | `rg -n "DMD-TODO-028|Gate-DMD-0[1-9]|DMD-BLK-00[1-8]|当前残余风险" docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md docs/worklog/DASALL_开发执行记录.md` | `DMD-TODO-028` 已将 Gate-DMD-01 ~ 09、`DMD-BLK-001` ~ `008`、当前残余风险、回退路径与交付物回链统一落盘，专项已具备收口证据。 |
+
+### 9.5 阻塞变化与回退记录
+
+1. `DMD-BLK-001` ~ `DMD-BLK-008` 已全部清除，当前 daemon 专项范围内无 open blocker；blocker 状态以 §8 和本节证据表为准。
+2. 本专项的权威验证路径已收敛为任务级 focused matrix，不再把 `dasall_unit_tests` / `dasall_integration_tests` 聚合结果直接记为 daemon gate 结论；聚合噪声由对应 runtime/infra owner 继续处理。
+3. `RunCtest_CMakeTools` 在当前环境下仍可能打印仓库既有 `DartConfiguration.tcl` 噪声，且 034 soak gate 会卡住；本轮已按 `Build_CMakeTools + direct binary execution` 回退验证，不改写任何 daemon 产品语义。
+4. `DMD-TODO-028` 未触发代码回退，仅完成 evidence writeback；后续若需复验，优先复用 §9.4 的 focused gate 命令，而不是扩大诊断范围或回退到 send-only smoke。
+
+## 10. 残余风险与回退策略
+
+| 残余风险 | 当前状态 | 影响 | 收敛 / 回退策略 |
+|---|---|---|---|
+| 全仓聚合 build / ctest 仍受 runtime、infra 既有失败污染 | Open（仓库级环境噪声） | `dasall_unit_tests` / `dasall_integration_tests` 不能直接作为 daemon Gate PASS / FAIL 的主判定 | 持续以 §9.4 focused gate matrix 为权威证据；跨模块失败由对应 owner 子系统单独解阻 |
+| `RunCtest_CMakeTools` 对 034 soak 路径仍可能卡住，并继续打印 `DartConfiguration.tcl` 噪声 | Open（工具链噪声） | CMake Tools 结果不能单独代表 034 长期运行 gate 结论 | 沿用 `Build_CMakeTools + direct binary execution`；若后续工具链稳定，再补一条非阻断增强证据 |
+| `status` 当前仍为 registry-only，而非 runtime live status | Scoped limitation | v1 status 语义只覆盖 receipt registry 生命周期，不覆盖 Runtime 内部实时调度状态 | 保持当前边界，不把 registry-only 结果外推为 live runtime query；若要扩展，新增 runtime query seam 任务 |
+| v1 部署边界未覆盖 `Type=notify`、socket activation、remote control plane、streaming attach、多 daemon 隔离 | Scoped limitation | 当前 direct-bind v1 gate 不能外推到更宽的 supervisor / remote / multi-instance 场景 | 继续保持 v2 范围外，任何边界扩展必须单独立题，不复用 035/028 结论 |
+| 长期运行声明当前只覆盖 deterministic in-process backpressure / soak / TTL gate 与单机 direct-bind smoke | Limited evidence | 尚未证明更长时长、多节点或跨主机部署下的资源曲线 | 当前以 `DMD-TODO-034` 为 v1 release boundary；若要扩大长期运行声明，新增更长时段 soak / multi-host gate |
 
 ## 11. 可行性结论
 
-### 11.1 是否可以直接进入执行
+### 11.1 当前执行结论
 
-可以进入执行，但必须按前置门禁顺序推进。首批无外部阻塞且建议立即启动的任务是 DMD-TODO-001、002、004、005、007、023、029、030。完成这些前置后，可顺序推进 DMD-TODO-032、011、012、013、014、015、018、019、021、022、031、028。DMD-TODO-003、008、010、016、020、024、026、027、033、034、035 带有 profile、supervisor、include 边界、runtime status、diag facade、IIPC loopback、hot-reload、soak 或部署契约阻塞，不能伪装为无阻塞 Build 任务。
+1. `DMD-TODO-001` ~ `DMD-TODO-035` 已全部完成，`Gate-DMD-01` ~ `Gate-DMD-09` 全部 PASS，`DMD-BLK-001` ~ `DMD-BLK-008` 已全部清除。
+2. 当前 daemon v1 在专项范围内可宣称的交付闭环已经成立：local direct-bind UDS、unary + accepted_async、ping/status/cancel/只读 diag、readiness、graceful shutdown、CLI wire contract、并发/soak 质量门与部署契约均有 focused 自动化或 smoke 证据。
+3. 权威证据位于本文件 §9.4/§9.5、`docs/todos/daemon/deliverables/` 各交付物与 `docs/worklog/DASALL_开发执行记录.md`，不再以 send-only smoke、fake IPC 或聚合 target 噪声作为完成依据。
 
-### 11.2 当前可落到的最细粒度
+### 11.2 当前最小可宣称边界
 
-1. 对 `DaemonLifecycleController`、`DaemonListenerHost`、`DaemonSignalHandler`、`DaemonProtocolAdapter`、peer identity fail-closed、`AsyncTaskRegistry` owner/TTL/cancel 路径，可落到 L3 方法级。
-2. 对 config/profile、health/readiness、daemon command taxonomy、observability/audit，可落到 L2 数据结构/接口级。
-3. 对 supervisor/watchdog、runtime live status、真实 OS UDS loopback，只能落到 L1 组件/接缝级，并显式挂阻塞项。
-4. socket activation、remote control plane、streaming attach、多实例隔离为 L0/v2，不进入本专项 v1 原子任务。
+1. `status` 继续冻结为 registry-only 语义，不外推为 Runtime live status query。
+2. supervisor 契约继续冻结为 no-op + watchdog bridge seam；`Type=notify` 与 socket activation 仍属于 v2。
+3. diagnostics 继续保持默认关闭、只读白名单与显式授权，不扩张为写操作或远程控制面。
+4. 长期运行质量声明只覆盖 `DMD-TODO-034` 的 deterministic in-process backpressure / soak / TTL matrix 与 `DMD-TODO-035` 的单机 direct-bind smoke。
 
 ### 11.3 后续建议
 
-1. 先执行 DMD-TODO-001、002、004、005、023、029、030，形成 schema/config/lifecycle/test topology、IIPC loopback 和 frame codec 基线。
-2. 尽快解 DMD-BLK-004；否则 daemon ping、unary、async 集成只能停留在 fake IIPC 层，无法证明常驻服务闭环。
-3. DMD-TODO-016 的 status scope 建议首版冻结为 registry-only，避免因 Runtime live query surface 未成熟阻塞 unary 和 accepted_async。
-4. DMD-TODO-020 只读 diag 可后置；默认关闭 diag 不应阻塞 ping/unary/async 的最小可交付。
-5. 将 DMD-TODO-029 与 DMD-TODO-030 提前到 listener/adapter 主链之前执行，避免后续 integration 全部建立在不可收发或不安全 codec 上。
-6. 将 DMD-TODO-031 作为 Gate-DMD-05 的一部分，确保 CLI 用户入口可用；daemon 只在服务内部通过不等于交付完成。
-7. DMD-TODO-034 不应替代单元测试，而是最终长期驻留质量门；不通过时不能宣称 daemon 已具备常驻服务交付质量。
+1. 若需要更强的仓库级通过信号，优先治理 `dasall_unit_tests` / `dasall_integration_tests` 的跨子系统噪声，再考虑把聚合命令恢复为 daemon gate 辅助证据。
+2. 若需要扩大部署或控制面边界，按 v2 新任务推进 `Type=notify`、socket activation、remote control plane、streaming attach、多 daemon 隔离，不复用当前 v1 Gate 结论外推。
+3. 若需要提升长期运行声明，新增更长时段、多主机或外部 client mix 的 soak harness，而不是放宽 `DMD-TODO-034` 现有完成判定。

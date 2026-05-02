@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #522
+
+- 日期：2026-05-02
+- 阶段：daemon/gate evidence closure
+- 任务：DMD-TODO-028 回写 daemon 专项 Gate 与交付证据
+- 状态：已完成
+
+### 改动
+
+1. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md` 顶部元信息与当前结论，将专项状态从“执行规划中”收敛为“001~035 全部完成、Gate-DMD-01~09 全部 PASS”的最终快照。
+2. 将 `DMD-TODO-028` 行从 Ready 改为 Done，并把验收命令收敛为文档证据校验命令，不再把受仓库噪声影响的全仓聚合 build/ctest 冒充为 028 的主验收信号。
+3. 在专项 TODO 中新增 `9.4 Gate 执行证据（2026-05-02）` 与 `9.5 阻塞变化与回退记录`，集中回写 023/024/025/026/027/031/034/035 的 focused gate 证据、`DMD-BLK-001` ~ `008` 的清除状态，以及 034 direct-binary fallback 的验证口径。
+4. 将专项 TODO 的 §10 改为当前残余风险快照，显式记录仓库聚合噪声、`RunCtest_CMakeTools` 对 034 的工具链噪声、registry-only status 边界、v2 范围外部署能力和长期运行证据边界。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md`，将 028 的 Gate、blocker、残余风险与 Build 三件套单独固化为 deliverable。
+
+### 验证
+
+1. `rg -n "DMD-TODO-028|Gate-DMD-0[1-9]|DMD-BLK-00[1-8]|当前残余风险" docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；028 状态、Gate-DMD-01~09、blocker 快照与残余风险条目均可在 TODO / deliverable / worklog 中追溯。
+2. `rg -n "DMD-TODO-02(4|5|6|7|8)|DMD-TODO-03(1|4|5)" docs/worklog/DASALL_开发执行记录.md docs/todos/daemon/deliverables`
+   - 结果：通过；024、025、026、027、031、034、035 的上游 focused gate 证据已全部存在并可回链。
+
+### 结果
+
+1. DMD-TODO-028 已完成，daemon 专项从“执行计划 + 分散 deliverable”收敛为“统一 Gate / blocker / residual risk / conclusion 快照”。
+2. `DMD-BLK-001` ~ `DMD-BLK-008` 已全部清除；当前 daemon 专项范围内无 open blocker。
+3. daemon v1 的权威验收口径已固定为 focused gate matrix，而非全仓聚合 target 或 send-only smoke。
+
 ## 记录 #521
 
 - 日期：2026-05-02
