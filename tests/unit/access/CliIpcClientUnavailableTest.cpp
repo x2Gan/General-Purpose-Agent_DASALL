@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "CliIpcClient.h"
+#include "daemon/DaemonEndpointDefaults.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -107,7 +108,7 @@ void test_cli_ipc_client_ping_fails_when_daemon_is_unavailable() {
 
   auto ipc = std::make_shared<FailingConnectIpc>();
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
 
   const CliIpcClient client(ipc, endpoint, 10);
   const auto response = client.ping_daemon();

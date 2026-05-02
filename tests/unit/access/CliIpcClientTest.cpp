@@ -4,6 +4,7 @@
 #include <string>
 
 #include "CliIpcClient.h"
+#include "daemon/DaemonEndpointDefaults.h"
 #include "daemon/DaemonFrameCodec.h"
 #include "support/TestAssertions.h"
 
@@ -124,7 +125,7 @@ void test_cli_ipc_client_ping_encodes_v1_request_and_parses_response() {
   ipc->response_text = make_completed_response("cli-ping", "pong READY");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
 
   const CliIpcClient client(ipc, endpoint, 10);
   const auto response = client.ping_daemon();
@@ -156,7 +157,7 @@ void test_cli_ipc_client_status_encodes_receipt_owner_arguments() {
   ipc->response_text = make_completed_response("cli-status", "completed");
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
 
   const CliIpcClient client(ipc, endpoint, 10);
   const auto response =

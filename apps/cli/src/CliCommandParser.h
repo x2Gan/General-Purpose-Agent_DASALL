@@ -11,6 +11,9 @@ struct CliCommand {
   /// 命令名称（"ping" / "submit" / ...）
   std::string name;
 
+  /// 可选 daemon socket path 覆盖；缺省时由 CLI 使用共享默认值。
+  std::optional<std::string> socket_path;
+
   /// 可选的 payload JSON（run/submit 命令使用）
   std::optional<std::string> payload;
 

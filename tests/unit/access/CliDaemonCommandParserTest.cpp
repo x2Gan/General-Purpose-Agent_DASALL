@@ -70,6 +70,52 @@ void test_parse_diag_and_missing_status_token_reject() {
               "status command should reject missing ownership token");
 }
 
+  void test_parse_socket_path_override_and_reject_invalid_forms() {
+    using dasall::apps::cli::CliCommandParser;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    const char* prefixed_argv[] = {
+      "dasall_cli", "--socket-path", "/tmp/dasall/override.sock", "ping"};
+    const auto prefixed_cmd = CliCommandParser::parse(4, prefixed_argv);
+    assert_true(prefixed_cmd.has_value(),
+          "global socket-path option should parse before command name");
+    assert_equal(std::string("/tmp/dasall/override.sock"),
+           *prefixed_cmd->socket_path,
+           "socket-path option should be preserved on parsed command");
+    assert_equal(std::string("ping"), prefixed_cmd->name,
+           "ping should remain the command name after extracting socket-path");
+
+    const char* suffixed_argv[] = {
+      "dasall_cli", "status", "receipt-031", "owner-token",
+      "--socket-path=/tmp/dasall/override.sock"};
+    const auto suffixed_cmd = CliCommandParser::parse(5, suffixed_argv);
+    assert_true(suffixed_cmd.has_value(),
+          "socket-path option should parse after command arguments");
+    assert_equal(std::string("/tmp/dasall/override.sock"),
+           *suffixed_cmd->socket_path,
+           "inline socket-path option should be preserved on parsed command");
+
+    const char* duplicate_argv[] = {
+      "dasall_cli", "--socket-path", "/tmp/dasall/a.sock",
+      "--socket-path=/tmp/dasall/b.sock", "ping"};
+    const auto duplicate_cmd = CliCommandParser::parse(5, duplicate_argv);
+    assert_true(!duplicate_cmd.has_value(),
+          "duplicate socket-path options should be rejected");
+
+    const char* missing_value_argv[] = {"dasall_cli", "--socket-path", "ping"};
+    const auto missing_value_cmd = CliCommandParser::parse(3, missing_value_argv);
+    assert_true(!missing_value_cmd.has_value(),
+          "socket-path option without value should be rejected");
+
+    const char* default_argv[] = {"dasall_cli", "ping"};
+    const auto default_cmd = CliCommandParser::parse(2, default_argv);
+    assert_true(default_cmd.has_value(),
+          "ping should continue to parse without socket-path override");
+    assert_true(!default_cmd->socket_path.has_value(),
+          "default CLI path resolution should remain deferred to shared constant");
+  }
+
 }  // namespace
 
 int main() {
@@ -77,6 +123,7 @@ int main() {
     test_parse_run_and_submit_alias();
     test_parse_status_and_cancel_arguments();
     test_parse_diag_and_missing_status_token_reject();
+    test_parse_socket_path_override_and_reject_invalid_forms();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

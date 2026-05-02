@@ -4,6 +4,7 @@
 #include <string>
 
 #include "CliIpcClient.h"
+#include "daemon/DaemonEndpointDefaults.h"
 #include "daemon/DaemonFrameCodec.h"
 #include "support/TestAssertions.h"
 
@@ -130,7 +131,7 @@ void test_cli_ipc_client_submit_surfaces_accepted_async_receipt() {
       std::string("queued"));
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
 
   const CliIpcClient client(ipc, endpoint, 10);
   const auto response = client.submit(R"({"input":"hello"})");
@@ -159,7 +160,7 @@ void test_cli_ipc_client_readiness_surfaces_not_ready_disposition() {
       std::string("NOT_READY"));
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
 
   const CliIpcClient client(ipc, endpoint, 10);
   const auto response = client.read_readiness();
@@ -187,7 +188,7 @@ void test_cli_ipc_client_status_surfaces_rejected_error() {
       std::string("rejected"));
 
   IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
 
   const CliIpcClient client(ipc, endpoint, 10);
   const auto response = client.query_status("receipt-031", "owner-token");

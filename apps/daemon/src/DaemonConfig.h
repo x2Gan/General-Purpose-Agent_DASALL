@@ -5,6 +5,8 @@
 #include <optional>
 #include <string>
 
+#include "daemon/DaemonEndpointDefaults.h"
+
 namespace dasall::access {
 class IAccessGateway;
 }
@@ -47,7 +49,7 @@ struct DaemonConfigConflict {
 };
 
 struct DaemonBootstrapConfig {
-  std::string socket_path = "/tmp/dasall/control.sock";
+  std::string socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
   std::uint32_t listen_backlog = 32U;
   std::uint32_t max_payload_bytes = 1048576U;
   std::int32_t dispatch_timeout_ms = 5000;

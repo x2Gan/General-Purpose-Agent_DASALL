@@ -39,8 +39,6 @@ chmod 700 /tmp/dasall-dmd035
 
 通过条件：daemon 未启动时返回非 0，并输出 `[dasall_cli] daemon ping: FAILED — daemon unavailable or timeout`。
 
-说明：当前 CLI 固定连接 `/tmp/dasall-daemon-control.sock`，这一条只用于验证 unavailable 负路径，不用于验证下文的自定义 socket path。
-
 ### 3.3 start
 
 ```bash
@@ -53,29 +51,19 @@ chmod 700 /tmp/dasall-dmd035
 ### 3.4 ping + readiness
 
 ```bash
-python3 - <<'PY'
-import json
-import socket
+./build-ci/apps/cli/dasall_cli \
+  --socket-path /tmp/dasall-dmd035/control.sock \
+  ping
 
-for command in ("ping", "readiness"):
-    client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-    client.connect("/tmp/dasall-dmd035/control.sock")
-    client.sendall(json.dumps({
-        "schema_version": "1",
-        "request_id": f"acceptance-{command}",
-        "command": command,
-        "args": {},
-        "payload": ""
-    }).encode())
-    print(command, client.recv(4096).decode())
-    client.close()
-PY
+./build-ci/apps/cli/dasall_cli \
+  --socket-path /tmp/dasall-dmd035/control.sock \
+  readiness
 ```
 
 通过条件：
 
-1. `ping` 响应包含 `daemon_version`、`schema_version`、`profile_id`。
-2. `readiness` 响应包含 `state` 与 `listener_ready`、`gateway_ready`、`bridge_reachable`。
+1. `ping` 输出包含 `daemon_version`、`schema_version`、`profile_id`。
+2. `readiness` 输出包含 `state` 与 `listener_ready`、`gateway_ready`、`bridge_reachable`。
 
 ### 3.5 graceful stop
 
@@ -91,4 +79,4 @@ kill -TERM <daemon-pid>
 2. 文档必须明确 socket activation 为 v2 非交付项。
 3. 配置样例必须与 `DaemonBootstrapConfig` 键集合对齐。
 4. README 必须明确：当前二进制不直接消费 YAML/JSON 配置文件。
-5. readiness smoke 必须通过真实 UDS 响应验证，而不是只验证 CLI send 成功。
+5. readiness smoke 必须通过 CLI 消费真实 UDS 响应验证，而不是只验证 send 成功。

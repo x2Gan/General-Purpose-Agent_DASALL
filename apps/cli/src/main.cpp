@@ -19,6 +19,7 @@
 #include "CliCommandParser.h"
 #include "CliIpcClient.h"
 #include "CliOutputFormatter.h"
+#include "daemon/DaemonEndpointDefaults.h"
 #include "linux/UnixIpcProvider.h"
 
 int main(int argc, char* argv[]) {
@@ -35,7 +36,8 @@ int main(int argc, char* argv[]) {
   // 2. 构造 IIPC provider 和 CliIpcClient
   auto ipc = std::make_shared<dasall::platform::linux::UnixIpcProvider>();
   dasall::platform::IpcEndpoint endpoint;
-  endpoint.socket_path = "/tmp/dasall-daemon-control.sock";
+  endpoint.socket_path = cmd->socket_path.value_or(
+      dasall::access::daemon::kDefaultDaemonSocketPath);
 
   const dasall::apps::cli::CliIpcClient client(ipc, endpoint);
   const auto is_success_disposition = [](const dasall::apps::cli::DaemonClientResponse& response) {

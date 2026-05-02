@@ -42,10 +42,10 @@
 | 项目 | v1 契约 | 说明 |
 |---|---|---|
 | 启动模式 | direct-bind only | `DaemonStartupMode::SocketActivated` 仅保留类型枚举，不是当前交付模式 |
-| 监听面 | UDS 本地 socket | 默认值见 [apps/daemon/src/DaemonConfig.h](../../../apps/daemon/src/DaemonConfig.h)，部署建议改为 `/run/dasall/control.sock` |
+| 监听面 | UDS 本地 socket | 默认值见 [access/include/daemon/DaemonEndpointDefaults.h](../../../access/include/daemon/DaemonEndpointDefaults.h) 与 [apps/daemon/src/DaemonConfig.h](../../../apps/daemon/src/DaemonConfig.h)，部署建议改为 `/run/dasall/control.sock` |
 | 参数 | `--validate-only`、`--socket-path` | 其余 daemon 键当前仍由 profile/deployment 设计持有，未暴露为 CLI |
 | 配置文件 | 仅提供部署样例，不被二进制直接读取 | 当前样例用于运维对齐与未来 ConfigCenter/config file loader 收口 |
-| readiness | 通过 daemon command router 返回 JSON 响应 | 当前 CLI 尚未消费 readiness 响应，运维 smoke 需走原始 UDS frame |
+| readiness | 通过 daemon command router 返回 JSON 响应 | CLI 现已消费 ping/readiness 响应；可走默认 socket_path 或 `--socket-path` 覆盖 |
 | graceful stop | `SIGTERM` | daemon 进入 Draining，拒绝新请求并排空 inflight |
 | reload | `SIGHUP` | 只允许 allowlist 键热更；socket path/backlog/startup mode 不可热更 |
 | watchdog | no-op 或内部 watchdog bridge | 不承诺 systemd `WatchdogSec=` 对接 |
@@ -117,8 +117,6 @@ chmod 700 /tmp/dasall-dmd035
 
 期望结果：在 daemon 未启动时返回非 0，并输出 `[dasall_cli] daemon ping: FAILED — daemon unavailable or timeout`。
 
-补充说明：当前 CLI 仍硬编码 `/tmp/dasall-daemon-control.sock`，这一步只用于验证 fail-closed 的 unavailable 路径，不用于验证本页自定义 socket path 的运行态连通性。
-
 ### 7.3 start
 
 ```bash
@@ -133,36 +131,22 @@ chmod 700 /tmp/dasall-dmd035
 
 ### 7.4 ping / readiness
 
-当前 CLI 只具备 `ping` send-path，不消费响应体。运维若要验证 daemon 返回的 `pong` / readiness JSON，使用与 daemon transport 对齐的 `SOCK_SEQPACKET` 原始 UDS frame：
+CLI 现已消费 daemon `ping` / `readiness` 响应，可直接使用与部署 socket_path 对齐的入口参数：
 
 ```bash
-python3 - <<'PY'
-import json
-import socket
+./build-ci/apps/cli/dasall_cli \
+  --socket-path /tmp/dasall-dmd035/control.sock \
+  ping
 
-def call(command: str):
-    client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-    client.connect("/tmp/dasall-dmd035/control.sock")
-    payload = json.dumps({
-        "schema_version": "1",
-        "request_id": f"ops-{command}-1",
-        "command": command,
-        "args": {},
-        "payload": ""
-    }).encode()
-    client.sendall(payload)
-    print(client.recv(4096).decode())
-    client.close()
-
-call("ping")
-call("readiness")
-PY
+./build-ci/apps/cli/dasall_cli \
+  --socket-path /tmp/dasall-dmd035/control.sock \
+  readiness
 ```
 
 期望结果：
 
-1. `ping` 响应包含 `daemon_version`、`schema_version`、`profile_id`、`request_id`、`readiness`。
-2. `readiness` 响应包含 `state`，并带 `lifecycle_ready`、`listener_ready`、`gateway_ready`、`bridge_reachable` 等字段。
+1. `ping` 输出包含 `daemon_version`、`schema_version`、`profile_id`、`request_id`、`readiness`。
+2. `readiness` 输出包含 `state`，并带 `lifecycle_ready`、`listener_ready`、`gateway_ready`、`bridge_reachable` 等字段。
 
 ### 7.5 graceful stop
 
@@ -181,5 +165,5 @@ kill -TERM <daemon-pid>
 ## 9. 回退与演进边界
 
 1. 若部署环境要求 `Type=notify`、`WatchdogSec=` 或 `.socket` 单元，则属于 v2 演进，不应在 v1 service 样例上做局部补丁冒充支持。
-2. 若需要 readiness 通过 CLI 正式消费，应回到 DMD-TODO-031 收敛 CLI-daemon wire contract，而不是在部署层扩展私有脚本协议。
-3. 真实 daemon ping 自动化已由 DMD-TODO-024 提供；若后续需要 unary/async/failure/profile 级 daemon E2E，继续推进 DMD-TODO-025、026、027。
+2. CLI 的默认 endpoint 已与 daemon 默认 socket_path 对齐；若部署路径与默认值不同，继续通过 `--socket-path` 做显式覆盖，而不是在部署层扩展私有脚本协议。
+3. 真实 daemon ping 自动化已由 DMD-TODO-024 与 DMD-TODO-036 提供；若后续需要 unary/async/failure/profile 级 daemon E2E，继续推进 DMD-TODO-025、026、027。

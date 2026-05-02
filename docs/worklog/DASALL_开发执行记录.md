@@ -1,5 +1,38 @@
 # DASALL 开发执行记录
 
+## 记录 #523
+
+- 日期：2026-05-02
+- 阶段：daemon/endpoint contract hardening
+- 任务：DMD-TODO-036 收敛 daemon/CLI 默认 endpoint 与 CLI socket-path 覆盖
+- 状态：已完成
+
+### 改动
+
+1. 新增 `access/include/daemon/DaemonEndpointDefaults.h`，冻结 `kDefaultDaemonSocketPath` 为 daemon/CLI 共用默认 endpoint 常量。
+2. 更新 `apps/daemon/src/DaemonConfig.h`，让 `DaemonBootstrapConfig::socket_path` 直接复用共享默认值，而不是保留 daemon private 字符串字面量。
+3. 更新 `apps/cli/src/CliCommandParser.*` 与 `apps/cli/src/main.cpp`：
+   - `CliCommand` 新增 `socket_path` 可选字段；
+   - parser 支持 `--socket-path <path>` / `--socket-path=<path>`；
+   - CLI 入口默认回退到共享常量，并在显式传入时连接 override path。
+4. 更新 `tests/unit/access/CliDaemonCommandParserTest.cpp`、`CliIpcClientTest.cpp`、`CliIpcClientResponseTest.cpp`、`CliIpcClientUnavailableTest.cpp`，补齐 endpoint 覆盖正反例并移除旧默认路径漂移。
+5. 新增 `tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp` 并更新 `tests/integration/access/CMakeLists.txt`，验证 CLI 在默认值与显式 socket-path 两条路径下都能正向 ping daemon。
+6. 更新 `docs/deploy/daemon/README.md` 与 `docs/deploy/daemon/ACCEPTANCE_CHECKLIST.md`，删除“CLI 固定连接旧路径 / 不消费 readiness”的历史说明，改为通过 CLI 直接执行 `ping` / `readiness` smoke。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-036-daemon-cli-endpoint统一与覆盖收敛.md`，并回写专项 TODO，将 DMD-TODO-036 标记为 Done。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cli dasall_daemon dasall_access_cli_command_parser_unit_test dasall_access_cli_ipc_client_unit_test dasall_access_cli_ipc_client_response_unit_test dasall_access_cli_ipc_client_unavailable_unit_test dasall_access_daemon_ping_integration_test dasall_access_cli_daemon_socket_path_integration_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonSocketPathIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
+   - 结果：通过，6/6 测试通过。
+
+### 结果
+
+1. CLI 与 daemon 默认 socket_path 已从“两个硬编码字符串”收敛为“一个共享默认值 + 一个受控 override surface”。
+2. deployment 文档不再需要用“CLI 仍固定连接旧路径”来解释 smoke 偏差，035 的 direct-bind 文档口径恢复一致。
+3. DMD-TODO-036 已完成，为 DMD-TODO-037 的真实 socket mode / stale restart 回归提供稳定的运行面基线。
+
 ## 记录 #522
 
 - 日期：2026-05-02
