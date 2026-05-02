@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #518
+
+- 日期：2026-05-02
+- 阶段：daemon/unary and reject integration gate closure
+- 任务：DMD-TODO-025 验证 daemon unary 主链与拒绝路径
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/access/DaemonIntegrationHarness.h`，统一封装 in-process daemon 启动、CLI/raw frame roundtrip 与清理逻辑，供 daemon unary/reject 集成测试复用。
+2. 新增 `tests/integration/access/DaemonUnaryIntegrationTest.cpp`，验证 CLI `run` 请求经 daemon -> AccessGateway -> runtime dispatch backend -> response encode 的 happy path 闭环。
+3. 新增 `tests/integration/access/DaemonRejectPathIntegrationTest.cpp`，覆盖 unknown command、auth deny、validation reject、runtime bridge unavailable 四类拒绝路径，并断言 runtime backend 未被误调用。
+4. 更新 `tests/integration/access/CMakeLists.txt`，注册 `DaemonUnaryIntegrationTest` 与 `DaemonRejectPathIntegrationTest` 两个 focused integration target。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-025-daemon-unary-reject集成收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-025 更新为 Done，收敛 focused 验收命令与证据摘要。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_unary_integration_test","dasall_access_daemon_reject_path_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonUnaryIntegrationTest","DaemonRejectPathIntegrationTest"])`
+   - 结果：通过，2/2 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效 focused gate 证据。
+
+### 结果
+
+1. DMD-TODO-025 已从“依赖单测与 ping 基线推断 unary 可用”收敛为“真实 daemon roundtrip + access reject 矩阵可验证”。
+2. happy path 已证明请求通过共享 access core 进入 runtime backend，并保留 `request_id`、`actor_ref` 与 payload。
+3. unknown command、auth deny、validation reject、runtime bridge unavailable 四类拒绝路径均已具备 integration 级 fail-closed 证据，且 rejection 不进入 Runtime。
+
 ## 记录 #517
 
 - 日期：2026-05-02
