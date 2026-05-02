@@ -46,7 +46,7 @@
 | 配置文件 | 通过 `--config-file` 受控读取 YAML/JSON deployment snapshot | flags 与 config file 同键冲突时拒绝启动，而不是静默取其一 |
 | readiness | 通过 daemon command router 返回 JSON 响应 | CLI 现已消费 ping/readiness 响应；可走默认 socket_path 或 `--socket-path` 覆盖 |
 | graceful stop | `SIGTERM` | daemon 进入 Draining，拒绝新请求并排空 inflight |
-| reload | `SIGHUP` | 只允许 allowlist 键热更；socket path/backlog/startup mode 不可热更 |
+| reload | `SIGHUP` | 重新读取当前 `--profile-id` / `--config-file` 对应的 fresh snapshot；只允许 allowlist 键热更，restart-only key 保持拒绝并审计 |
 | watchdog | no-op 或内部 watchdog bridge | 不承诺 systemd `WatchdogSec=` 对接 |
 | socket activation | v2 范围外 | 当前不交付 fd import，也不建议配置 `.socket` 单元 |
 

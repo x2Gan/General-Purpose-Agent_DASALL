@@ -80,3 +80,4 @@ kill -TERM <daemon-pid>
 3. 配置样例必须与 `DaemonBootstrapConfig` 键集合对齐。
 4. README 必须明确：当前二进制可通过 `--config-file` 受控读取 YAML/JSON deployment snapshot，并继续遵守 flags/config file 冲突拒绝语义。
 5. readiness smoke 必须通过 CLI 消费真实 UDS 响应验证，而不是只验证 send 成功。
+6. `SIGHUP` reload 必须重新读取当前 profile/config snapshot；allowlisted key 可生效，restart-only key 继续拒绝并保留稳定审计原因。

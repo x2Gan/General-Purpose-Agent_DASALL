@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -49,6 +50,7 @@ struct DaemonAccessPipelineOptions {
     bool daemon_diagnostics_enabled = false;
     std::string daemon_version = "v1";
     std::string daemon_profile_id = "daemon.default";
+    std::shared_ptr<std::atomic_bool> daemon_diagnostics_enabled_state;
     std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
     std::shared_ptr<AsyncTaskRegistry> async_task_registry;
     PublishBackend publish_backend{};

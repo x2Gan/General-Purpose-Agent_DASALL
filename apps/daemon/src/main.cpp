@@ -18,6 +18,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -227,14 +228,14 @@ int main(int argc, char* argv[]) {
   }
 
   const dasall::apps::daemon::DaemonEntryConfigLoader entry_loader;
-  const auto entry_config = entry_loader.load(
-      dasall::apps::daemon::DaemonEntryConfigLoadRequest{
-          .profiles_root = std::filesystem::current_path() / "profiles",
-          .requested_profile_id = parsed.profile_id.value_or(
-              dasall::apps::daemon::kDefaultDaemonEntryProfileId),
-          .deployment_config_path = parsed.deployment_config_path,
-          .socket_path_override = parsed.socket_path_override,
-      });
+  const dasall::apps::daemon::DaemonEntryConfigLoadRequest entry_request{
+      .profiles_root = std::filesystem::current_path() / "profiles",
+      .requested_profile_id = parsed.profile_id.value_or(
+          dasall::apps::daemon::kDefaultDaemonEntryProfileId),
+      .deployment_config_path = parsed.deployment_config_path,
+      .socket_path_override = parsed.socket_path_override,
+  };
+  const auto entry_config = entry_loader.load(entry_request);
   if (!entry_config.ok() || !entry_config.entry_config.has_value()) {
     std::cerr << "[dasall_daemon] entry config load failed: "
               << entry_config.message << "\n";
@@ -276,6 +277,8 @@ int main(int argc, char* argv[]) {
 
   // 2. 通过 daemon pipeline factory 构造完整 submit pipeline。
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+  auto diagnostics_enabled_state =
+      std::make_shared<std::atomic_bool>(entry.bootstrap_config.diag_enabled);
 
   dasall::access::DaemonAccessPipelineOptions pipeline_options;
   pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
@@ -283,7 +286,8 @@ int main(int argc, char* argv[]) {
       static_cast<int>(entry.bootstrap_config.max_payload_bytes);
   pipeline_options.auth_view.trusted_local_subjects = {
       "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
-    pipeline_options.daemon_diagnostics_enabled = entry.bootstrap_config.diag_enabled;
+  pipeline_options.daemon_diagnostics_enabled = diagnostics_enabled_state->load();
+  pipeline_options.daemon_diagnostics_enabled_state = diagnostics_enabled_state;
     pipeline_options.daemon_profile_id = entry.effective_profile_id;
     pipeline_options.daemon_version = "v1";
   pipeline_options.runtime_dispatch_backend =
@@ -325,17 +329,23 @@ int main(int argc, char* argv[]) {
   dasall::apps::daemon::DaemonBootstrap bootstrap;
   dasall::apps::daemon::DaemonSignalHandler signal_handler;
 
-  dasall::apps::daemon::DaemonConfigReloader config_reloader(
-      entry.bootstrap_config,
+  const auto emit_reload_denied =
       [](const std::vector<std::string>& rejected_keys,
          const std::string& reason) {
-        for (const auto& key : rejected_keys) {
+        const std::vector<std::string> keys = rejected_keys.empty()
+                                                  ? std::vector<std::string>{"daemon.config"}
+                                                  : rejected_keys;
+        for (const auto& key : keys) {
           std::cout << "[dasall_daemon] audit daemon.reload.denied"
                     << " daemon_state=ready"
                     << " rejected_key=" << key
                     << " reason_code=" << reason << "\n";
         }
-      });
+      };
+
+  dasall::apps::daemon::DaemonConfigReloader config_reloader(
+      entry.bootstrap_config,
+      emit_reload_denied);
 
   if (!signal_handler.install_handlers()) {
     std::cerr << "[dasall_daemon] signal handler install failed\n";
@@ -360,8 +370,32 @@ int main(int argc, char* argv[]) {
     }
 
     if (signal_handler.reload_requested()) {
-      const auto reload_result =
-          config_reloader.apply_reload_snapshot(entry.bootstrap_config);
+      dasall::apps::daemon::DaemonReloadResult reload_result;
+      const auto reload_entry = entry_loader.load(entry_request);
+      if (!reload_entry.ok() || !reload_entry.entry_config.has_value()) {
+        emit_reload_denied({}, "reload_candidate_unavailable");
+        reload_result.reason = "reload_candidate_unavailable";
+      } else {
+        const auto conflict_validation =
+            config_validator.validate_conflicts(reload_entry.entry_config->conflicts);
+        if (!conflict_validation.ok()) {
+          std::vector<std::string> rejected_keys;
+          rejected_keys.reserve(reload_entry.entry_config->conflicts.size());
+          for (const auto& conflict : reload_entry.entry_config->conflicts) {
+            rejected_keys.push_back(conflict.key);
+          }
+          emit_reload_denied(rejected_keys, "reload_rejected_conflict");
+          reload_result.rejected_keys = std::move(rejected_keys);
+          reload_result.reason = "reload_rejected_conflict";
+        } else {
+          reload_result = config_reloader.apply_reload_snapshot(
+              reload_entry.entry_config->bootstrap_config);
+          if (reload_result.ok()) {
+            diagnostics_enabled_state->store(
+                config_reloader.active_snapshot().diag_enabled);
+          }
+        }
+      }
       std::cout << "[dasall_daemon] reload requested by signal "
                 << signal_handler.last_signal() << ": "
                 << (reload_result.ok() ? "applied" : "rejected")

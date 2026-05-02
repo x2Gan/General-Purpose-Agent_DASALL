@@ -473,6 +473,35 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_diag_deny_integration_test
 )
 
+add_executable(dasall_access_daemon_hot_reload_integration_test
+  DaemonHotReloadIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonConfigReloader.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonEntryConfigLoader.cpp
+)
+
+target_include_directories(dasall_access_daemon_hot_reload_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/include
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+)
+
+target_link_libraries(dasall_access_daemon_hot_reload_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_infra
+    dasall_profiles
+)
+
+dasall_apply_common_options(dasall_access_daemon_hot_reload_integration_test)
+
+add_test(NAME DaemonHotReloadIntegrationTest COMMAND dasall_access_daemon_hot_reload_integration_test)
+set_tests_properties(DaemonHotReloadIntegrationTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_hot_reload_integration_test
+)
+
 if(NOT DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "access integration registration requires at least one test target")
 endif()

@@ -30,15 +30,25 @@ namespace {
 
 DaemonDiagnosticsHandler::DaemonDiagnosticsHandler(
     std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service,
-    const bool diagnostics_enabled)
+    const bool diagnostics_enabled,
+    std::shared_ptr<std::atomic_bool> diagnostics_enabled_state)
     : diagnostics_service_(std::move(diagnostics_service)),
-      diagnostics_enabled_(diagnostics_enabled) {}
+      diagnostics_enabled_(diagnostics_enabled),
+      diagnostics_enabled_state_(std::move(diagnostics_enabled_state)) {}
+
+bool DaemonDiagnosticsHandler::diagnostics_enabled() const {
+  if (diagnostics_enabled_state_) {
+    return diagnostics_enabled_state_->load();
+  }
+
+  return diagnostics_enabled_;
+}
 
 RuntimeDispatchResult DaemonDiagnosticsHandler::handle_diag(
     const std::string_view command_name,
     const std::string_view request_id,
     const std::string_view actor_ref) const {
-  if (!diagnostics_enabled_) {
+  if (!diagnostics_enabled()) {
     return make_rejected_diag_result(std::string(request_id), "diag_disabled", "403");
   }
 

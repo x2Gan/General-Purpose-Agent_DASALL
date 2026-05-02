@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #526
+
+- 日期：2026-05-02
+- 阶段：daemon/fresh reload candidate wiring
+- 任务：DMD-TODO-039 收敛 hot-reload 真实快照源与正向复验门
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/daemon/src/main.cpp`，让 `SIGHUP` reload 复用 DMD-TODO-038 的 `DaemonEntryConfigLoadRequest` 与 entry loader 重新读取 fresh snapshot，而不是重复 apply 初始 config。
+2. 更新 `access/include/AccessGatewayFactory.h`、`access/src/AccessGatewayFactory.cpp` 与 `access/src/daemon/DaemonDiagnosticsHandler.*`，引入 `daemon_diagnostics_enabled_state` 共享状态接缝，使 running daemon 可观察到 `diag_enabled` 的热更结果。
+3. 新增 `tests/integration/access/DaemonHotReloadIntegrationTest.cpp`，验证 fresh snapshot reload 会让 diagnostics gate 从 `diag_disabled` 变为 completed，并继续拒绝 restart-only `daemon.socket_path` 变更。
+4. 更新 `tests/integration/access/CMakeLists.txt` 与 `tests/unit/apps/daemon/CMakeLists.txt`，补齐 hot-reload integration 与 reload unit 的编译接线。
+5. 更新 `docs/deploy/daemon/README.md` 与 `ACCEPTANCE_CHECKLIST.md`，同步 SIGHUP fresh snapshot 语义与 restart-only reject 口径。
+6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-039-daemon热重载真实快照收敛.md`，并回写专项 TODO，将 DMD-TODO-039 更新为 Done。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_daemon dasall_daemon_signal_handler_unit_test dasall_daemon_config_reload_unit_test dasall_access_daemon_hot_reload_integration_test dasall_access_daemon_observability_field_set_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "DaemonConfigReloadTest|DaemonHotReloadIntegrationTest|DaemonSignalHandlerTest|DaemonObservabilityFieldSetTest" --output-on-failure`
+   - 结果：通过，4/4 测试通过。
+
+### 结果
+
+1. SIGHUP 现在会重读当前 profile/config snapshot，而不是重复 apply 进程启动时的初始值。
+2. `diag_enabled` 已成为真实运行态可观察的 allowlisted hot-reload key，证明 039 不再停留在 helper 内部快照层面。
+3. DMD-TODO-039 已完成，并为 DMD-TODO-040 的文档/证据复验提供真实 hot-reload gate。
+
 ## 记录 #525
 
 - 日期：2026-05-02

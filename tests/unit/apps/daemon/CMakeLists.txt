@@ -294,6 +294,7 @@ add_executable(dasall_daemon_config_reload_unit_test
 
 target_include_directories(dasall_daemon_config_reload_unit_test
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/include
     ${CMAKE_SOURCE_DIR}/apps/daemon/src
 )
 

@@ -364,9 +364,10 @@ build_daemon_submit_pipeline(
       options.daemon_version,
       std::string(daemon::kDaemonProtocolSchemaVersion),
       options.daemon_profile_id);
-    auto diagnostics_handler = std::make_shared<daemon::DaemonDiagnosticsHandler>(
+  auto diagnostics_handler = std::make_shared<daemon::DaemonDiagnosticsHandler>(
       options.diagnostics_service,
-      options.daemon_diagnostics_enabled);
+      options.daemon_diagnostics_enabled,
+      options.daemon_diagnostics_enabled_state);
 
   auto submit_pipeline =
       std::make_shared<AccessGateway::SubmitPipeline>(
@@ -384,6 +385,11 @@ build_daemon_submit_pipeline(
            health_service,
            diagnostics_handler,
            options](const InboundPacket& packet) -> RuntimeDispatchResult {
+            const bool diagnostics_enabled =
+              options.daemon_diagnostics_enabled_state
+                ? options.daemon_diagnostics_enabled_state->load()
+                : options.daemon_diagnostics_enabled;
+
             (void)observability_bridge->emit_daemon_request_fact(
                 packet,
                 packet.packet_id,
@@ -400,7 +406,7 @@ build_daemon_submit_pipeline(
               input.bridge_reachable =
                   options.daemon_bridge_reachable &&
                   static_cast<bool>(options.runtime_dispatch_backend);
-              input.diagnostics_enabled = options.daemon_diagnostics_enabled;
+              input.diagnostics_enabled = diagnostics_enabled;
               if (!input.bridge_reachable) {
                 input.degraded_reasons.push_back("runtime_bridge_unreachable");
               }
@@ -416,7 +422,7 @@ build_daemon_submit_pipeline(
               input.bridge_reachable =
                   options.daemon_bridge_reachable &&
                   static_cast<bool>(options.runtime_dispatch_backend);
-              input.diagnostics_enabled = options.daemon_diagnostics_enabled;
+              input.diagnostics_enabled = diagnostics_enabled;
               if (!input.bridge_reachable) {
                 input.degraded_reasons.push_back("runtime_bridge_unreachable");
               }
