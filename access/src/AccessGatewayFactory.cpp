@@ -351,7 +351,7 @@ build_daemon_submit_pipeline(
   auto runtime_bridge = std::make_shared<RuntimeBridge>(
       options.runtime_dispatch_backend,
       options.runtime_cancel_backend);
-  auto result_publisher = std::make_shared<ResultPublisher>();
+  auto result_publisher = std::make_shared<ResultPublisher>(options.publish_backend);
   auto async_task_registry = options.async_task_registry
                                  ? options.async_task_registry
                                  : std::make_shared<AsyncTaskRegistry>(

@@ -5,6 +5,11 @@
 
 namespace dasall::apps::daemon {
 
+DaemonBootstrap::~DaemonBootstrap() {
+  request_dispatch_stop(false);
+  stop_dispatch_workers();
+}
+
 DaemonBootstrap::DaemonBootstrap(
     std::shared_ptr<dasall::platform::IIPC> ipc,
     std::shared_ptr<dasall::access::IAccessGateway> gateway)
@@ -43,6 +48,13 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
 
   stop_requested_.store(false);
   configure_from_context(context);
+  {
+    std::lock_guard<std::mutex> lock(dispatch_mutex_);
+    pending_channels_.clear();
+    dispatch_stop_requested_ = false;
+    dispatch_failed_ = false;
+  }
+  processing_connections_.store(0U);
 
   if (!ipc_ || !gateway_ || !listener_host_.has_value()) {
     return false;
@@ -62,21 +74,27 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
     return false;
   }
 
+  start_dispatch_workers(context.bootstrap_config.dispatch_workers);
+
   dasall::platform::IpcEndpoint endpoint;
   endpoint.socket_path = context.bootstrap_config.socket_path;
 
   const auto bind_result = listener_host_->bind(endpoint);
   if (!bind_result.ok()) {
+    request_dispatch_stop(true);
+    stop_dispatch_workers();
     (void)lifecycle_.mark_failed();
     return false;
   }
 
   listener_host_->set_connection_handler(
       [this](const dasall::platform::IpcChannelHandle& channel) {
-        return handle_connection(channel);
+        return !enqueue_connection(channel);
       });
 
   if (!lifecycle_.mark_ready()) {
+    request_dispatch_stop(true);
+    stop_dispatch_workers();
     (void)listener_host_->close();
     (void)lifecycle_.mark_failed();
     return false;
@@ -88,11 +106,12 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
 
   const auto loop_result =
       listener_host_->accept_loop(stop_requested_, kAcceptDeadlineMs);
+  stop_dispatch_workers();
   if (supervisor_adapter_.has_value()) {
     (void)supervisor_adapter_->notify_stopping();
   }
   (void)listener_host_->close();
-  if (!loop_result.ok() || !loop_result.value.value_or(false)) {
+  if (!loop_result.ok() || !loop_result.value.value_or(false) || dispatch_failed_) {
     (void)lifecycle_.mark_failed();
     return false;
   }
@@ -109,6 +128,11 @@ void DaemonBootstrap::stop(std::chrono::milliseconds drain_timeout) {
     gateway_->shutdown(drain_timeout);
   }
   (void)lifecycle_.shutdown(drain_timeout);
+}
+
+std::size_t DaemonBootstrap::active_connection_count() const {
+  std::lock_guard<std::mutex> lock(dispatch_mutex_);
+  return pending_channels_.size() + processing_connections_.load();
 }
 
 void DaemonBootstrap::configure_from_context(const DaemonProcessContext& context) {
@@ -130,14 +154,14 @@ void DaemonBootstrap::configure_from_context(const DaemonProcessContext& context
   receive_deadline_ms_ = context.bootstrap_config.dispatch_timeout_ms;
 }
 
-bool DaemonBootstrap::handle_connection(
+DaemonBootstrap::ConnectionHandlingDisposition DaemonBootstrap::handle_connection(
     const dasall::platform::IpcChannelHandle& channel) {
   if (!channel.has_consistent_values()) {
-    return false;
+    return ConnectionHandlingDisposition::FatalError;
   }
 
   if (!lifecycle_.begin_request()) {
-    return false;
+    return ConnectionHandlingDisposition::Dropped;
   }
 
   struct RequestScope final {
@@ -152,15 +176,15 @@ bool DaemonBootstrap::handle_connection(
   // 接收请求 payload
   const auto recv_result = ipc_->receive(channel, receive_deadline_ms_);
   if (!recv_result.ok()) {
-    return false;
+    return ConnectionHandlingDisposition::FatalError;
   }
   if (!recv_result.value.has_value() || recv_result.value->peer_closed) {
-    return false;
+    return ConnectionHandlingDisposition::Dropped;
   }
 
   const auto& raw_payload = recv_result.value->data;
   if (raw_payload.empty()) {
-    return false;
+    return ConnectionHandlingDisposition::Dropped;
   }
 
   // 构造 DaemonProtocolAdapter 并注入连接上下文
@@ -174,7 +198,7 @@ bool DaemonBootstrap::handle_connection(
   // 解码请求 -> InboundPacket
   auto packet = adapter.decode();
   if (packet.entry_type.empty()) {
-    return false;
+    return ConnectionHandlingDisposition::FatalError;
   }
 
   // 将 peer identity 注入 packet.peer_ref（以 "local_trusted:" 前缀标记）
@@ -192,7 +216,9 @@ bool DaemonBootstrap::handle_connection(
 
   // 若有 PublishEnvelope 则直接编码发回
   if (dispatch_result.publish_envelope.has_value()) {
-    return adapter.encode(*dispatch_result.publish_envelope);
+    return adapter.encode(*dispatch_result.publish_envelope)
+               ? ConnectionHandlingDisposition::Completed
+               : ConnectionHandlingDisposition::FatalError;
   }
 
   // 异步接受：生成最小 accepted 响应
@@ -201,7 +227,9 @@ bool DaemonBootstrap::handle_connection(
     async_envelope.protocol_status_hint = "202";
     async_envelope.result_id =
         dispatch_result.receipt_ref.value_or("async-receipt");
-    return adapter.encode(async_envelope);
+    return adapter.encode(async_envelope)
+           ? ConnectionHandlingDisposition::Completed
+           : ConnectionHandlingDisposition::FatalError;
   }
 
   // 拒绝路径：生成 rejected 响应
@@ -209,6 +237,105 @@ bool DaemonBootstrap::handle_connection(
   reject_envelope.protocol_status_hint = "400";
   reject_envelope.payload =
       dispatch_result.error_ref.value_or("rejected");
-  return adapter.encode(reject_envelope);
+  return adapter.encode(reject_envelope)
+             ? ConnectionHandlingDisposition::Completed
+             : ConnectionHandlingDisposition::FatalError;
+}
+
+bool DaemonBootstrap::enqueue_connection(
+    const dasall::platform::IpcChannelHandle& channel) {
+  std::lock_guard<std::mutex> lock(dispatch_mutex_);
+  if (dispatch_stop_requested_ || dispatch_failed_) {
+    return false;
+  }
+
+  pending_channels_.push_back(channel);
+  dispatch_cv_.notify_one();
+  return true;
+}
+
+void DaemonBootstrap::start_dispatch_workers(const std::uint32_t worker_count) {
+  dispatch_workers_.clear();
+  dispatch_workers_.reserve(worker_count);
+  for (std::uint32_t index = 0; index < worker_count; ++index) {
+    dispatch_workers_.emplace_back([this]() {
+      dispatch_worker_loop();
+    });
+  }
+}
+
+void DaemonBootstrap::stop_dispatch_workers() {
+  {
+    std::lock_guard<std::mutex> lock(dispatch_mutex_);
+    dispatch_stop_requested_ = true;
+  }
+  dispatch_cv_.notify_all();
+
+  for (auto& worker : dispatch_workers_) {
+    if (worker.joinable()) {
+      worker.join();
+    }
+  }
+  dispatch_workers_.clear();
+
+  std::deque<dasall::platform::IpcChannelHandle> abandoned_channels;
+  {
+    std::lock_guard<std::mutex> lock(dispatch_mutex_);
+    abandoned_channels.swap(pending_channels_);
+  }
+
+  for (const auto& channel : abandoned_channels) {
+    if (ipc_ != nullptr) {
+      (void)ipc_->close(channel);
+    }
+  }
+}
+
+void DaemonBootstrap::dispatch_worker_loop() {
+  while (true) {
+    std::optional<dasall::platform::IpcChannelHandle> channel;
+    {
+      std::unique_lock<std::mutex> lock(dispatch_mutex_);
+      dispatch_cv_.wait(lock, [this]() {
+        return dispatch_stop_requested_ || !pending_channels_.empty();
+      });
+
+      if (pending_channels_.empty()) {
+        if (dispatch_stop_requested_) {
+          return;
+        }
+        continue;
+      }
+
+      channel = pending_channels_.front();
+      pending_channels_.pop_front();
+      ++processing_connections_;
+    }
+
+    const auto disposition = handle_connection(*channel);
+    const auto close_result = ipc_ != nullptr
+                                  ? ipc_->close(*channel)
+                                  : dasall::platform::PlatformResult<bool>::success(true);
+    --processing_connections_;
+
+    if (disposition == ConnectionHandlingDisposition::FatalError || !close_result.ok()) {
+      request_dispatch_stop(true);
+      return;
+    }
+  }
+}
+
+void DaemonBootstrap::request_dispatch_stop(const bool fatal_error) {
+  stop_requested_.store(true);
+  if (listener_host_.has_value()) {
+    (void)listener_host_->close();
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(dispatch_mutex_);
+    dispatch_failed_ = dispatch_failed_ || fatal_error;
+    dispatch_stop_requested_ = true;
+  }
+  dispatch_cv_.notify_all();
 }
 }  // namespace dasall::apps::daemon

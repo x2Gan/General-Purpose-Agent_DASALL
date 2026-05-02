@@ -2,8 +2,14 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstddef>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <thread>
+#include <vector>
 
 #include "DaemonConfig.h"
 #include "DaemonLifecycleController.h"
@@ -29,6 +35,12 @@ namespace dasall::apps::daemon {
 ///   - 优雅关闭：stop() 设置标志，run() 在下次 accept 超时后退出
 class DaemonBootstrap {
  public:
+  enum class ConnectionHandlingDisposition {
+    Completed = 0,
+    Dropped,
+    FatalError,
+  };
+
   struct BuildDependencies {
     std::shared_ptr<dasall::platform::IIPC> ipc;
     std::shared_ptr<dasall::access::IAccessGateway> access_gateway;
@@ -43,6 +55,7 @@ class DaemonBootstrap {
   };
 
   DaemonBootstrap() = default;
+  ~DaemonBootstrap();
 
   /// 构造 DaemonBootstrap。
   /// @param ipc       IIPC 实现，用于监听和 accept
@@ -62,12 +75,19 @@ class DaemonBootstrap {
   void stop(std::chrono::milliseconds drain_timeout =
                 std::chrono::milliseconds::zero());
 
+    [[nodiscard]] std::size_t active_connection_count() const;
+
  private:
   /// 处理单条已接受的连接（receive → decode → submit → encode）。
-  /// @return 若成功完成整个处理流程返回 true
-  [[nodiscard]] bool handle_connection(
+    [[nodiscard]] ConnectionHandlingDisposition handle_connection(
       const dasall::platform::IpcChannelHandle& channel);
 
+    [[nodiscard]] bool enqueue_connection(
+      const dasall::platform::IpcChannelHandle& channel);
+    void start_dispatch_workers(std::uint32_t worker_count);
+    void stop_dispatch_workers();
+    void dispatch_worker_loop();
+    void request_dispatch_stop(bool fatal_error);
   void configure_from_context(const DaemonProcessContext& context);
 
   std::shared_ptr<dasall::platform::IIPC> ipc_;
@@ -77,6 +97,13 @@ class DaemonBootstrap {
   DaemonLifecycleController lifecycle_;
   std::atomic<bool> stop_requested_{false};
   std::int32_t receive_deadline_ms_ = 5000;
+  mutable std::mutex dispatch_mutex_;
+  std::condition_variable dispatch_cv_;
+  std::deque<dasall::platform::IpcChannelHandle> pending_channels_;
+  std::vector<std::thread> dispatch_workers_;
+  std::atomic<std::size_t> processing_connections_{0U};
+  bool dispatch_stop_requested_ = false;
+  bool dispatch_failed_ = false;
 
   // accept 超时（毫秒）：控制退出检测频率
   static constexpr std::int32_t kAcceptDeadlineMs = 500;

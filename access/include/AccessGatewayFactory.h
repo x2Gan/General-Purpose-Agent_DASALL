@@ -33,6 +33,8 @@ struct DaemonAccessPipelineOptions {
             std::function<RuntimeDispatchResult(const RuntimeDispatchRequest& request)>;
     using RuntimeCancelBackend =
             std::function<bool(std::string_view request_id, std::string_view actor_ref)>;
+    using PublishBackend =
+        std::function<bool(const PublishEnvelope& envelope)>;
 
     AccessBootstrapConfig bootstrap_config{};
     AccessAuthView auth_view{};
@@ -49,6 +51,7 @@ struct DaemonAccessPipelineOptions {
     std::string daemon_profile_id = "daemon.default";
     std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
     std::shared_ptr<AsyncTaskRegistry> async_task_registry;
+    PublishBackend publish_backend{};
 
     RuntimeDispatchBackend runtime_dispatch_backend{};
     RuntimeCancelBackend runtime_cancel_backend{};

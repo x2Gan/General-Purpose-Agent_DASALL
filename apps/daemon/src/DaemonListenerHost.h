@@ -13,6 +13,8 @@ namespace dasall::apps::daemon {
 
 class DaemonListenerHost {
  public:
+  // 返回 true 表示 listener 应在 handler 返回后立即关闭该 channel；
+  // 返回 false 表示 handler 已接管 channel 生命周期（例如异步 dispatch worker）。
   using ConnectionHandler =
       std::function<bool(const dasall::platform::IpcChannelHandle& channel)>;
 

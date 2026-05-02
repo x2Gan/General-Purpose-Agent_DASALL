@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #521
+
+- 日期：2026-05-02
+- 阶段：daemon/concurrency soak gate closure
+- 任务：DMD-TODO-034 验证 daemon 并发背压与长期运行 soak gate
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`，为 daemon pipeline 增加可注入 `publish_backend` seam，支撑 publish failure soak 场景。
+2. 更新 `access/src/AsyncTaskRegistry.*`，补齐显式 `prune_expired()` 与计数清理路径，让 `receipt_active_count()` 能对齐 TTL 清理后的真实基线。
+3. 更新 `apps/daemon/src/DaemonBootstrap.*` 与 `DaemonListenerHost.*`，将 daemon 从单连接同步处理收敛为受控 dispatch worker 队列，并暴露 `active_connection_count()` 以验证资源回落。
+4. 更新 `tests/integration/access/DaemonIntegrationHarness.h`，收敛唯一临时 socket、per-request deadline 覆写与 `active_connection_count()` 观测，避免共享 `/tmp` socket 污染。
+5. 新增 `tests/integration/access/DaemonInProcessFixture.h`、`DaemonLoadScenario.h`、`DaemonBackpressureIntegrationTest.cpp`、`DaemonSoakIntegrationTest.cpp`、`DaemonReceiptTtlCleanupIntegrationTest.cpp`，并更新 `tests/integration/access/CMakeLists.txt` 注册三条 focused integration targets。
+6. 新增 `docs/todos/daemon/deliverables/DMD-TODO-034-daemon-concurrency-soak-gate.md`，并回写专项 TODO：将 DMD-TODO-034 更新为 Done，收敛 backpressure/soak/TTL cleanup gate 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_backpressure_integration_test","dasall_access_daemon_soak_integration_test","dasall_access_daemon_receipt_ttl_cleanup_integration_test"])`
+   - 结果：通过。
+2. 直接执行 `build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_backpressure_integration_test`
+   - 结果：通过，退出码 0。
+3. 直接执行 `build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_soak_integration_test`
+   - 结果：通过，退出码 0。
+4. 直接执行 `build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_receipt_ttl_cleanup_integration_test`
+   - 结果：通过，退出码 0。
+
+### 结果
+
+1. daemon 现已具备受控 dispatch worker 入口，不再停留在“配置上有 dispatch_workers、实现上仍单线程”的状态。
+2. backpressure gate 已证明高并发 overflow 经 Admission 拒绝，不会被幂等 replay 或串行时序误判掩盖。
+3. soak gate 已证明 repeated waves 下 publish failure 不会造成 `active_connection_count()` 无界增长，draining 期间新请求被拒绝，已在途请求可以在排空窗口内完成。
+4. receipt TTL cleanup gate 已证明 expired receipt 可见、可清理，且 `receipt_active_count()` 能回落到基线。
+
 ## 记录 #520
 
 - 日期：2026-05-02

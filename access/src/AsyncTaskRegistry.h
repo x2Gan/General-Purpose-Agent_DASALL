@@ -43,6 +43,8 @@ class AsyncTaskRegistry final {
       const std::string& receipt_id,
       std::string_view task_status);
 
+  [[nodiscard]] std::size_t prune_expired();
+
   [[nodiscard]] std::size_t size() const;
 
  private:
@@ -63,6 +65,9 @@ class AsyncTaskRegistry final {
   [[nodiscard]] static bool constant_time_equals(
       std::string_view lhs,
       std::string_view rhs);
+
+  [[nodiscard]] std::size_t prune_expired_locked(
+      std::chrono::steady_clock::time_point now);
 
   void erase_expired_locked(const std::string& receipt_id);
 

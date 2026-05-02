@@ -161,19 +161,21 @@ dasall::platform::PlatformResult<bool> DaemonListenerHost::accept_loop(
     }
 
     const auto& channel = *accept_result.value;
-    (void)connection_handler_(channel);
+    const bool close_after_handler = connection_handler_(channel);
 
-    const auto close_result = ipc_->close(channel);
-    if (!close_result.ok()) {
-      if (close_result.error.has_value()) {
-        return dasall::platform::PlatformResult<bool>::failure(
-            *close_result.error);
+    if (close_after_handler) {
+      const auto close_result = ipc_->close(channel);
+      if (!close_result.ok()) {
+        if (close_result.error.has_value()) {
+          return dasall::platform::PlatformResult<bool>::failure(
+              *close_result.error);
+        }
+
+        return dasall::platform::PlatformResult<bool>::failure(make_error(
+            dasall::platform::PlatformErrorCode::InternalFailure,
+            dasall::platform::PlatformErrorCategory::Internal,
+            "listener channel close failed without platform error"));
       }
-
-      return dasall::platform::PlatformResult<bool>::failure(make_error(
-          dasall::platform::PlatformErrorCode::InternalFailure,
-          dasall::platform::PlatformErrorCategory::Internal,
-          "listener channel close failed without platform error"));
     }
   }
 

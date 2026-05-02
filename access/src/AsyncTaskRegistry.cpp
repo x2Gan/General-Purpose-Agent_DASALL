@@ -101,6 +101,8 @@ bool AsyncTaskRegistry::validate_ownership(
     const std::string_view actor_ref,
     const std::string_view ownership_token) {
   std::lock_guard<std::mutex> lock(mutex_);
+  const auto removed = prune_expired_locked(std::chrono::steady_clock::now());
+  (void)removed;
 
   const auto it = receipts_.find(receipt_id);
   if (it == receipts_.end()) {
@@ -125,6 +127,8 @@ bool AsyncTaskRegistry::mark_completed(
     const std::string& receipt_id,
     const std::string_view task_status) {
   std::lock_guard<std::mutex> lock(mutex_);
+  const auto removed = prune_expired_locked(std::chrono::steady_clock::now());
+  (void)removed;
 
   const auto it = receipts_.find(receipt_id);
   if (it == receipts_.end()) {
@@ -142,8 +146,16 @@ bool AsyncTaskRegistry::mark_completed(
   return true;
 }
 
+std::size_t AsyncTaskRegistry::prune_expired() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return prune_expired_locked(std::chrono::steady_clock::now());
+}
+
 std::size_t AsyncTaskRegistry::size() const {
   std::lock_guard<std::mutex> lock(mutex_);
+  const auto removed = const_cast<AsyncTaskRegistry*>(this)->prune_expired_locked(
+      std::chrono::steady_clock::now());
+  (void)removed;
   return receipts_.size();
 }
 
@@ -192,6 +204,22 @@ bool AsyncTaskRegistry::constant_time_equals(
 
 void AsyncTaskRegistry::erase_expired_locked(const std::string& receipt_id) {
   receipts_.erase(receipt_id);
+}
+
+std::size_t AsyncTaskRegistry::prune_expired_locked(
+    const std::chrono::steady_clock::time_point now) {
+  std::size_t removed = 0U;
+  for (auto it = receipts_.begin(); it != receipts_.end();) {
+    if (now >= it->second.receipt.expires_at) {
+      it = receipts_.erase(it);
+      ++removed;
+      continue;
+    }
+
+    ++it;
+  }
+
+  return removed;
 }
 
 }  // namespace dasall::access

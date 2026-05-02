@@ -102,7 +102,9 @@ class DaemonIntegrationHarness {
         gateway_->init(),
         "daemon integration harness gateway should initialize");
 
-    if (config.socket_path.empty()) {
+    const auto default_socket_path =
+      dasall::apps::daemon::DaemonBootstrapConfig{}.socket_path;
+    if (config.socket_path.empty() || config.socket_path == default_socket_path) {
       config.socket_path = (temp_root_.path() / "control.sock").string();
     }
     endpoint_.socket_path = config.socket_path;
@@ -141,16 +143,25 @@ class DaemonIntegrationHarness {
     daemon_thread_ = std::thread([this]() {
       run_ok_ = bootstrap_.run(*context_);
     });
-    wait_until_ready();
+    try {
+      wait_until_ready();
+    } catch (...) {
+      bootstrap_.stop();
+      if (daemon_thread_.joinable()) {
+        daemon_thread_.join();
+      }
+      throw;
+    }
     started_ = true;
   }
 
-  void stop() {
+  void stop(
+      const std::chrono::milliseconds drain_timeout = std::chrono::milliseconds::zero()) {
     if (stopped_) {
       return;
     }
 
-    bootstrap_.stop();
+    bootstrap_.stop(drain_timeout);
     if (daemon_thread_.joinable()) {
       daemon_thread_.join();
     }
@@ -161,6 +172,10 @@ class DaemonIntegrationHarness {
     return run_ok_;
   }
 
+  [[nodiscard]] std::size_t active_connection_count() const {
+    return bootstrap_.active_connection_count();
+  }
+
   [[nodiscard]] dasall::apps::cli::CliIpcClient make_client() const {
     return dasall::apps::cli::CliIpcClient(
         client_ipc_, endpoint_, connect_deadline_ms_);
@@ -168,9 +183,15 @@ class DaemonIntegrationHarness {
 
   [[nodiscard]] dasall::apps::cli::DaemonClientResponse send_frame(
       const dasall::access::daemon::UdsRequestFrame& frame) const {
+    return send_frame(frame, connect_deadline_ms_);
+  }
+
+  [[nodiscard]] dasall::apps::cli::DaemonClientResponse send_frame(
+      const dasall::access::daemon::UdsRequestFrame& frame,
+      const std::int32_t deadline_ms) const {
     dasall::apps::cli::DaemonClientResponse response;
 
-    const auto channel = client_ipc_->connect(endpoint_, connect_deadline_ms_);
+    const auto channel = client_ipc_->connect(endpoint_, deadline_ms);
     if (!channel.ok() || !channel.value.has_value()) {
       response.failure_reason = channel.error.has_value()
                                     ? channel.error->detail
@@ -188,7 +209,7 @@ class DaemonIntegrationHarness {
       return response;
     }
 
-    const auto received = client_ipc_->receive(*channel.value, connect_deadline_ms_);
+    const auto received = client_ipc_->receive(*channel.value, deadline_ms);
     (void)client_ipc_->close(*channel.value);
     if (!received.ok() || !received.value.has_value()) {
       response.failure_reason = received.error.has_value()
@@ -227,18 +248,23 @@ class DaemonIntegrationHarness {
   void wait_until_ready() const {
     using namespace std::chrono_literals;
 
-    for (int attempt = 0; attempt < 20; ++attempt) {
+    std::string last_error = "daemon listener did not accept connections before timeout";
+    for (int attempt = 0; attempt < 100; ++attempt) {
       const auto channel = client_ipc_->connect(endpoint_, 10);
       if (channel.ok() && channel.value.has_value()) {
         (void)client_ipc_->close(*channel.value);
         return;
       }
-      std::this_thread::sleep_for(10ms);
+      if (channel.error.has_value() && !channel.error->detail.empty()) {
+        last_error = channel.error->detail;
+      }
+      std::this_thread::sleep_for(20ms);
     }
 
     dasall::tests::support::assert_true(
         false,
-        "daemon integration harness should connect once daemon listener is bound");
+        "daemon integration harness should connect once daemon listener is bound: " +
+            last_error);
   }
 
   std::shared_ptr<dasall::platform::linux::UnixIpcProvider> daemon_ipc_;
