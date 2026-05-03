@@ -148,7 +148,7 @@ void hot_reload_consumes_fresh_snapshot_and_updates_diag_gate() {
              "daemon:\n"
              "  socket_path: /tmp/dasall/reload.sock\n"
              "  diag_enabled: true\n"
-             "  log_format: text\n");
+         "  log_format: json\n");
   const auto allowlisted_candidate = loader.load(request);
   assert_true(allowlisted_candidate.ok() && allowlisted_candidate.entry_config.has_value(),
               "hot reload integration should load a fresh allowlisted candidate from config file");
@@ -157,6 +157,10 @@ void hot_reload_consumes_fresh_snapshot_and_updates_diag_gate() {
       allowlisted_candidate.entry_config->bootstrap_config);
   assert_true(allowlisted_result.ok(),
               "hot reload integration should apply allowlisted reload keys from a fresh candidate");
+    assert_equal(1, static_cast<int>(allowlisted_result.changed_keys.size()),
+           "hot reload integration should only expose daemon.diag_enabled as a changed reload key");
+    assert_equal(std::string("daemon.diag_enabled"), allowlisted_result.changed_keys.front(),
+           "hot reload integration should only apply daemon.diag_enabled at runtime");
   diagnostics_state->store(reloader.active_snapshot().diag_enabled);
 
   const auto accepted = gateway->submit(make_diag_packet());
@@ -172,20 +176,48 @@ void hot_reload_consumes_fresh_snapshot_and_updates_diag_gate() {
 
   write_file(config_path,
              "daemon:\n"
-             "  socket_path: /tmp/dasall/reload-v2.sock\n"
+             "  socket_path: /tmp/dasall/reload.sock\n"
              "  diag_enabled: true\n"
              "  log_format: text\n");
+  const auto bootstrap_only_candidate = loader.load(request);
+  assert_true(bootstrap_only_candidate.ok() && bootstrap_only_candidate.entry_config.has_value(),
+              "hot reload integration should still load fresh candidates before bootstrap-only validation");
+
+  const auto bootstrap_only_rejected = reloader.apply_reload_snapshot(
+      bootstrap_only_candidate.entry_config->bootstrap_config);
+  assert_true(!bootstrap_only_rejected.ok(),
+              "hot reload integration should reject log_format after the runtime allowlist is narrowed");
+  assert_equal(1, static_cast<int>(bootstrap_only_rejected.rejected_keys.size()),
+               "bootstrap-only reload rejection should surface one rejected key");
+  assert_equal(std::string("daemon.log_format"), bootstrap_only_rejected.rejected_keys.front(),
+               "bootstrap-only reload rejection should preserve the rejected log_format key");
+  assert_equal(std::string("reload_rejected_restart_only_keys"), audited_reason,
+               "bootstrap-only reload rejection should preserve the stable audit reason");
+  assert_equal(std::string("daemon.log_format"), audited_keys.front(),
+               "bootstrap-only reload rejection should preserve the stable audit key");
+
+  diagnostics_state->store(reloader.active_snapshot().diag_enabled);
+  const auto still_accepted = gateway->submit(make_diag_packet());
+  assert_equal(static_cast<int>(AccessDisposition::Completed),
+               static_cast<int>(still_accepted.disposition),
+               "bootstrap-only rejection should preserve the last-known-good diag gate state");
+
+  write_file(config_path,
+             "daemon:\n"
+             "  socket_path: /tmp/dasall/reload-v2.sock\n"
+             "  diag_enabled: true\n"
+             "  log_format: json\n");
   const auto restart_only_candidate = loader.load(request);
   assert_true(restart_only_candidate.ok() && restart_only_candidate.entry_config.has_value(),
               "hot reload integration should still load fresh candidates before restart-only validation");
 
-  const auto rejected_result = reloader.apply_reload_snapshot(
+  const auto restart_only_rejected = reloader.apply_reload_snapshot(
       restart_only_candidate.entry_config->bootstrap_config);
-  assert_true(!rejected_result.ok(),
+  assert_true(!restart_only_rejected.ok(),
               "hot reload integration should reject restart-only socket_path changes from a fresh candidate");
-  assert_equal(static_cast<std::size_t>(1), rejected_result.rejected_keys.size(),
+  assert_equal(1, static_cast<int>(restart_only_rejected.rejected_keys.size()),
                "restart-only reload rejection should surface one rejected key");
-  assert_equal(std::string("daemon.socket_path"), rejected_result.rejected_keys.front(),
+  assert_equal(std::string("daemon.socket_path"), restart_only_rejected.rejected_keys.front(),
                "restart-only reload rejection should preserve socket_path key");
   assert_equal(std::string("reload_rejected_restart_only_keys"), audited_reason,
                "restart-only reload rejection should preserve the stable audit reason");
@@ -193,9 +225,9 @@ void hot_reload_consumes_fresh_snapshot_and_updates_diag_gate() {
                "restart-only reload rejection should preserve the stable audit key");
 
   diagnostics_state->store(reloader.active_snapshot().diag_enabled);
-  const auto still_accepted = gateway->submit(make_diag_packet());
+  const auto still_completed = gateway->submit(make_diag_packet());
   assert_equal(static_cast<int>(AccessDisposition::Completed),
-               static_cast<int>(still_accepted.disposition),
+               static_cast<int>(still_completed.disposition),
                "restart-only rejection should preserve the last-known-good diag gate state");
 
   fs::remove_all(temp_root);

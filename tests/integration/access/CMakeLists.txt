@@ -190,6 +190,37 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_unary_integration_test
 )
 
+add_executable(dasall_access_daemon_binary_unary_smoke_integration_test
+  DaemonBinaryUnarySmokeTest.cpp
+)
+
+target_compile_definitions(dasall_access_daemon_binary_unary_smoke_integration_test
+  PRIVATE
+    DASALL_DAEMON_BINARY_PATH="$<TARGET_FILE:dasall_daemon>"
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall_cli>"
+    DASALL_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_access_daemon_binary_unary_smoke_integration_test
+  PRIVATE
+    dasall_test_support
+)
+
+add_dependencies(dasall_access_daemon_binary_unary_smoke_integration_test
+  dasall_daemon
+  dasall_cli
+)
+
+dasall_apply_common_options(dasall_access_daemon_binary_unary_smoke_integration_test)
+
+add_test(NAME DaemonBinaryUnarySmokeTest
+  COMMAND dasall_access_daemon_binary_unary_smoke_integration_test)
+set_tests_properties(DaemonBinaryUnarySmokeTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_binary_unary_smoke_integration_test
+)
+
 add_executable(dasall_access_daemon_reject_path_integration_test
   DaemonRejectPathIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp

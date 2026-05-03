@@ -582,6 +582,7 @@ DaemonEntryConfigLoadResult DaemonEntryConfigLoader::load(
   entry_config.bootstrap_config = std::move(bootstrap_config);
   entry_config.requested_profile_id = request.requested_profile_id;
   entry_config.effective_profile_id = runtime_snapshot.snapshot->effective_profile_id();
+  entry_config.runtime_policy_snapshot = runtime_snapshot.snapshot;
   entry_config.config_revision = build_config_revision(
       runtime_snapshot.snapshot->effective_profile_id(),
       runtime_snapshot.snapshot->generation(),

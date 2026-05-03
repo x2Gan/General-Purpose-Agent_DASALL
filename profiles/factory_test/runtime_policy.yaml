@@ -26,11 +26,19 @@ runtime_budget:
 	max_latency_ms: 6000
 	max_replan_count: 2
 model_profile:
-	planner:
+	planning:
 		route: lan.diagnostic
 		fallback_route: local.small
 		streaming_enabled: false
-	responder:
+	execution:
+		route: lan.diagnostic
+		fallback_route: local.small
+		streaming_enabled: false
+	reflection:
+		route: lan.diagnostic
+		fallback_route: local.small
+		streaming_enabled: false
+	response:
 		route: local.small
 		fallback_route: lan.diagnostic
 		streaming_enabled: true

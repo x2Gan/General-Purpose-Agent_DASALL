@@ -35,6 +35,7 @@
 #include "AccessGatewayFactory.h"
 #include "IAccessGateway.h"
 #include "AgentFacade.h"
+#include "RuntimeDependencySet.h"
 #include "agent/AgentResult.h"
 #include "linux/UnixIpcProvider.h"
 
@@ -214,8 +215,23 @@ map_agent_result_to_dispatch_result(
 
   dispatch_result.disposition = dasall::access::AccessDisposition::Completed;
   dispatch_result.publish_envelope = dasall::access::PublishEnvelope{};
+  dispatch_result.publish_envelope->protocol_status_hint = "200";
   dispatch_result.publish_envelope->agent_result = agent_result;
   return dispatch_result;
+}
+
+[[nodiscard]] dasall::runtime::AgentInitRequest build_daemon_agent_init_request(
+    const dasall::apps::daemon::DaemonEntryConfig& entry) {
+  dasall::runtime::AgentInitRequest init_request;
+  init_request.runtime_instance_id =
+      "daemon.local-control-plane:" + entry.effective_profile_id;
+  init_request.profile_id = entry.effective_profile_id;
+  init_request.policy_snapshot = entry.runtime_policy_snapshot;
+  init_request.dependency_set =
+      std::make_shared<dasall::runtime::RuntimeDependencySet>();
+  init_request.boot_reason = "daemon-local-control-plane";
+  init_request.cold_start = true;
+  return init_request;
 }
 
 }  // namespace
@@ -277,6 +293,23 @@ int main(int argc, char* argv[]) {
 
   // 2. 通过 daemon pipeline factory 构造完整 submit pipeline。
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+  const auto runtime_init_result = runtime_facade->init(
+      build_daemon_agent_init_request(entry));
+  if (!runtime_init_result.is_ready()) {
+    std::cerr << "[dasall_daemon] runtime init failed: "
+              << (runtime_init_result.health_summary.empty()
+                      ? "runtime facade init rejected"
+                      : runtime_init_result.health_summary);
+    if (!runtime_init_result.diagnostics.empty()) {
+      std::cerr << " (" << runtime_init_result.diagnostics << ")";
+    }
+    std::cerr << "\n";
+    return 1;
+  }
+
+  const std::string daemon_profile_id = runtime_init_result.resolved_profile_id.empty()
+                                            ? entry.effective_profile_id
+                                            : runtime_init_result.resolved_profile_id;
   auto diagnostics_enabled_state =
       std::make_shared<std::atomic_bool>(entry.bootstrap_config.diag_enabled);
 
@@ -288,8 +321,8 @@ int main(int argc, char* argv[]) {
       "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
   pipeline_options.daemon_diagnostics_enabled = diagnostics_enabled_state->load();
   pipeline_options.daemon_diagnostics_enabled_state = diagnostics_enabled_state;
-    pipeline_options.daemon_profile_id = entry.effective_profile_id;
-    pipeline_options.daemon_version = "v1";
+  pipeline_options.daemon_profile_id = daemon_profile_id;
+  pipeline_options.daemon_version = "v1";
   pipeline_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {
@@ -297,12 +330,10 @@ int main(int argc, char* argv[]) {
         const auto agent_result = runtime_facade->handle(agent_request);
         return map_agent_result_to_dispatch_result(agent_result);
       };
-    pipeline_options.daemon_listener_ready =
+  pipeline_options.daemon_listener_ready =
       entry.bootstrap_config.has_consistent_values();
-    pipeline_options.daemon_gateway_ready =
-      static_cast<bool>(pipeline_options.runtime_dispatch_backend);
-    pipeline_options.daemon_bridge_reachable =
-      static_cast<bool>(pipeline_options.runtime_dispatch_backend);
+  pipeline_options.daemon_gateway_ready = true;
+  pipeline_options.daemon_bridge_reachable = runtime_init_result.is_ready();
 
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));
@@ -317,7 +348,7 @@ int main(int argc, char* argv[]) {
           .ipc = ipc,
           .access_gateway = gateway,
           .watchdog_service = nullptr,
-        .effective_profile_id = entry.effective_profile_id,
+          .effective_profile_id = daemon_profile_id,
         .config_revision = entry.config_revision,
       });
   if (!context.has_value()) {

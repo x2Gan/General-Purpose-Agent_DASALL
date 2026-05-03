@@ -33,8 +33,10 @@ namespace {
       },
       ModelProfile{
           .stage_routes = {
-              {"planner", ModelRoutePolicy{.route = "cloud.reasoning", .fallback_route = "lan.general"}},
-              {"responder", ModelRoutePolicy{.route = "cloud.general", .fallback_route = "local.small"}},
+            {"planning", ModelRoutePolicy{.route = "cloud.reasoning", .fallback_route = "lan.general"}},
+            {"execution", ModelRoutePolicy{.route = "cloud.reasoning", .fallback_route = "lan.general"}},
+            {"reflection", ModelRoutePolicy{.route = "cloud.reasoning", .fallback_route = "lan.general"}},
+            {"response", ModelRoutePolicy{.route = "cloud.general", .fallback_route = "local.small"}},
           },
       },
       TokenBudgetPolicy{.max_input_tokens = 4000U,
@@ -87,7 +89,7 @@ namespace {
       .patches = {
           ProfileOverridePatch{.path = "runtime_budget.max_tokens", .value = "6144"},
           ProfileOverridePatch{.path = "ops_policy.log_level", .value = "warn"},
-          ProfileOverridePatch{.path = "model_profile.planner.fallback_route", .value = "lan.safe"},
+          ProfileOverridePatch{.path = "model_profile.planning.fallback_route", .value = "lan.safe"},
       },
   };
 }
@@ -135,7 +137,7 @@ void test_overlay_composer_applies_deployment_then_runtime_precedence() {
                "runtime override should win over deployment override on runtime budget");
   assert_equal(std::string("debug"), result.snapshot->ops_policy().log_level,
                "runtime override should win over deployment override on ops log level");
-  assert_equal(std::string("lan.safe"), *result.snapshot->model_profile().stage_routes.at("planner").fallback_route,
+  assert_equal(std::string("lan.safe"), *result.snapshot->model_profile().stage_routes.at("planning").fallback_route,
                "deployment override should remain effective when runtime override does not replace the same key");
   assert_equal(250, static_cast<int>(result.snapshot->capability_cache_policy().refresh_interval_ms),
                "runtime override should update runtime-tunable cache policy field");

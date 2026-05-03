@@ -1,6 +1,6 @@
 # DMD-TODO-028 daemon 专项 Gate 与交付证据收敛
 
-日期：2026-05-02
+日期：2026-05-03
 任务：DMD-TODO-028
 状态：Done
 
@@ -18,10 +18,10 @@
 | Gate-DMD-01 | PASS | `ctest --test-dir build-ci --output-on-failure -R "DaemonProtocolTypesTest|DaemonBootstrapConfigTest|DaemonConfigValidatorTest"` | `DMD-TODO-001`、`002`、`004` 已冻结 command taxonomy、config 投影与 validate-only。 |
 | Gate-DMD-02 | PASS | `cmake --build build-ci --target dasall_daemon_bootstrap_unit_test dasall_daemon_lifecycle_controller_unit_test dasall_daemon_listener_host_unit_test dasall_daemon_config_validator_unit_test`；`ctest --test-dir build-ci -N | rg "Daemon(Bootstrap|LifecycleController|ListenerHost|ConfigValidator)Test"` | `DMD-TODO-005` ~ `010` 的进程壳层拆分已由 `DMD-TODO-023` 收口为可发现的 focused topology。 |
 | Gate-DMD-03 | PASS | `RunCtest_CMakeTools(tests=["UnixIpcProviderLoopbackTest","UnixIpcProviderPeerIdentityTest","DaemonFrameCodecTest","DaemonFrameCodecMalformedTest","DaemonProtocolAdapterTest","DaemonProtocolAdapterLocalTrustedTest","DaemonPeerIdentityFailClosedTest","DaemonSocketPolicyTest","DaemonListenerHostBindConflictTest","DaemonConfigValidatorTest"])` | `DMD-TODO-029`、`030`、`011`、`012`、`032` 已证明 IIPC/codec/peer identity/UDS endpoint 安全闭环。 |
-| Gate-DMD-04 | PASS | `RunCtest_CMakeTools(tests=["DaemonAccessPipelineFactoryTest","RuntimeBridgeRejectMappingTest","DaemonUnaryRuntimeBridgeTest","DaemonUnaryIntegrationTest","DaemonRejectPathIntegrationTest"])` | `DMD-TODO-013`、`014`、`025` 已证明 unary happy / reject path 全部经 access core。 |
+| Gate-DMD-04 | PASS | `RunCtest_CMakeTools(tests=["DaemonAccessPipelineFactoryTest","RuntimeBridgeRejectMappingTest","DaemonUnaryRuntimeBridgeTest","DaemonUnaryIntegrationTest","DaemonRejectPathIntegrationTest","DaemonBinaryUnarySmokeTest"])` | `DMD-TODO-013`、`014`、`025` 已证明 unary happy / reject path 全部经 access core，且 built `dasall_daemon` + built `dasall_cli` 的 real binary unary smoke 已通过真实 `main.cpp` 组合根。 |
 | Gate-DMD-05 | PASS | `RunCtest_CMakeTools(tests=["DaemonPingCommandTest","DaemonReadinessCommandTest","DaemonPingDoesNotBypassRouterTest","DaemonDiagnosticsHandlerTest","DaemonDiagDenyIntegrationTest","CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonCommandParserTest","CliDaemonOutputFormatterTest","DaemonPingIntegrationTest"])` | `DMD-TODO-019`、`020`、`031` 已证明 ping/readiness/diag 语义分离，CLI 已能读取稳定 daemon response。 |
 | Gate-DMD-06 | PASS | `RunCtest_CMakeTools(tests=["DaemonAcceptedAsyncReceiptTest","DaemonTaskQueryHandlerTest","DaemonCancelCommandTest","DaemonReceiptFlowIntegrationTest"])` | `DMD-TODO-015`、`016`、`017`、`026` 已证明 receipt owner/TTL/status/cancel fail-closed。 |
-| Gate-DMD-07 | PASS | `RunCtest_CMakeTools(tests=["DaemonObservabilityFieldSetTest","AccessGatewayLifecycleTest","DaemonGracefulShutdownTest","DaemonShutdownAbandonedAuditTest","DaemonFailureInjectionTest","DaemonProfileCompatibilityTest","DaemonConfigReloadTest","DaemonSignalHandlerTest"])` | `DMD-TODO-021`、`022`、`027`、`033` 已证明 graceful shutdown、failure injection、profile compatibility 与 hot-reload allowlist 闭环。 |
+| Gate-DMD-07 | PASS | `RunCtest_CMakeTools(tests=["DaemonObservabilityFieldSetTest","AccessGatewayLifecycleTest","DaemonGracefulShutdownTest","DaemonShutdownAbandonedAuditTest","DaemonFailureInjectionTest","DaemonProfileCompatibilityTest","DaemonConfigReloadTest","DaemonSignalHandlerTest","DaemonHotReloadIntegrationTest"])` | `DMD-TODO-021`、`022`、`027`、`033`、`039` 已证明 graceful shutdown、failure injection、profile compatibility 与 `daemon.diag_enabled` 单键 hot-reload 闭环；`daemon.log_format`、`daemon.socket_path` 等非 allowlisted 键继续拒绝。 |
 | Gate-DMD-08 | PASS | `Build_CMakeTools(buildTargets=["dasall_access_daemon_backpressure_integration_test","dasall_access_daemon_soak_integration_test","dasall_access_daemon_receipt_ttl_cleanup_integration_test"])`；直接执行三条已构建测试二进制 | `DMD-TODO-034` 已证明 backpressure、soak、TTL cleanup 与资源计数回落；direct-binary evidence 是当前环境下的权威结果。 |
 | Gate-DMD-09 | PASS | `rg -n "DMD-TODO-028|Gate-DMD-0[1-9]|DMD-BLK-00[1-8]|当前残余风险" docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md docs/worklog/DASALL_开发执行记录.md` | TODO、deliverable 与 worklog 已同时包含 Gate、blocker、残余风险与最终结论。 |
 
@@ -44,8 +44,8 @@
 
 ## 5. 评审结论
 
-1. `DMD-TODO-028` 通过。daemon 专项 `DMD-TODO-001` ~ `035` 已全部完成，`Gate-DMD-01` ~ `09` 全部 PASS。
-2. 当前专项内可宣称的 v1 交付边界已经闭环：local direct-bind UDS、unary + accepted_async、ping/status/cancel/只读 diag、readiness、graceful shutdown、CLI wire contract、并发/soak 与部署契约。
+1. `DMD-TODO-028` 通过。daemon 专项 `DMD-TODO-001` ~ `040` 已全部完成，`Gate-DMD-01` ~ `10` 全部 PASS。
+2. 当前专项内可宣称的 v1 交付边界已经闭环：local direct-bind UDS、real daemon/CLI unary smoke、accepted_async、ping/status/cancel/只读 diag、readiness、graceful shutdown、CLI wire contract、并发/soak 与部署契约。
 3. 本文件与专项 TODO / worklog 共同构成 Gate-DMD-09 的最终快照，不再允许把历史 send-only smoke、fake IPC 或聚合 target 噪声写成 daemon 已交付事实。
 
 ## 6. Build 三件套

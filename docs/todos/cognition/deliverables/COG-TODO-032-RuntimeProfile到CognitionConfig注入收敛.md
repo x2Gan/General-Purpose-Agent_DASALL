@@ -50,7 +50,9 @@
 7. `runtime/src/AgentFacade.cpp`
 8. `tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h`
 9. `tests/integration/cognition/CognitionProfileCompatibilityTest.cpp`
-10. 如需编译面校验，补 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`
+10. `tests/integration/cognition/CognitionRuntimePolicyProjectionIntegrationTest.cpp`
+11. `tests/integration/cognition/CMakeLists.txt`
+12. 如需编译面校验，补 `tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp`
 
 ## 5. 流程与时序
 
@@ -84,8 +86,8 @@
 |---|---|---|---|---|
 | B1 | 新增 snapshot-aware cognition factory overload，并把 route 写入 `StageModelHint.preferred_provider` | interface surface 编译不回退 | `cmake --build build-ci --target dasall_cognition_interface_surface_unit_test dasall_cognition_config_projection_unit_test` | 若 public overload 造成歧义，保留 config overload 不动并为 snapshot overload 使用显式类型 |
 | B2 | 在 `CognitionFacade` / `ResponseBuilder` 真实消费 `StagePolicyResolver` 输出 | focused unit 继续通过，bridge request 可观察 deadline/route | `cmake --build build-ci --target dasall_stage_policy_resolver_profile_diff_unit_test dasall_cognition_profile_compatibility_integration_test` | 若 resolver 接线影响既有 deterministic path，仅在存在 snapshot 时启用 |
-| B3 | 在 `AgentFacade::init()` 对缺失 live cognition ports 的 true integration 路径执行装配 | profile integration 证明 runtime init 消费 snapshot | `ctest --test-dir build-ci -R "CognitionProfileCompatibilityTest" --output-on-failure` | 若故障注入 tests 依赖自定义 ports，init 只对缺失 ports 执行装配 |
-| B4 | 重建 true integration fixture 的 canonical profile snapshots 与负例 | profile matrix 覆盖 route/deadline/template preference/missing route | `ctest --test-dir build-ci -R "CognitionConfigProjectionTest|StagePolicyResolverProfileDiffTest|CognitionProfileCompatibilityTest" --output-on-failure` | 若某 profile 仍无真实 route，直接记为 fail-closed，不再使用 placeholder 结论 |
+| B3 | 在 `AgentFacade::init()` 对缺失 live cognition ports 的 true integration 路径执行装配，并新增 provider-driven projection gate | focused integration 证明 runtime init 消费真实 profile asset，而不是手工 snapshot fixture | `Build_CMakeTools()`；`RunCtest_CMakeTools(tests=["CognitionRuntimePolicyProjectionIntegrationTest"])` | 若更宽的 response 语义尚未冻结，projection gate 只观察 planning/execution/reflection 的 route/deadline/output budget，不把 COG-TODO-040 混入 032 |
+| B4 | 保持 canonical route schema、overlay、runtime profile 与 capability integration focused regression 不回退 | provider/runtime/profile 基线继续稳定，032 结论不依赖更宽的 response terminal-status 口径 | `RunCtest_CMakeTools(tests=["ProfileRuntimePolicySchemaContractTest","ProfileOverlayComposerTest","ProfilesBuildRuntimeIntegrationTest","RuntimeProfileCompatibilityTest","CapabilityServicesProfileIntegrationTest","CognitionRuntimePolicyProjectionIntegrationTest"])` | 若 broader profile compatibility 与 response bridge 语义仍有张力，保留为独立 TODO，不回退本轮 provider canonicalization 结论 |
 
 ## 8. D Gate
 
@@ -95,17 +97,15 @@ Gate = PASS。
 
 ## 9. Build 验证证据
 
-1. `Build_CMakeTools(buildTargets=["dasall_cognition_interface_surface_unit_test","dasall_cognition_config_projection_unit_test","dasall_stage_policy_resolver_profile_diff_unit_test","dasall_cognition_profile_compatibility_integration_test"])`
-	- 结果：首轮失败，仅暴露 `CognitionInterfaceSurfaceTest.cpp` 对 `RuntimePolicySnapshot.h` 的 include 路径错误；同一 slice 改为显式相对路径后复跑通过，四个 target 全部编译链接成功。
-2. `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest","CognitionConfigProjectionTest","StagePolicyResolverProfileDiffTest","CognitionProfileCompatibilityTest"])`
-	- 结果：通过，4 条测试全部通过。
+1. `Build_CMakeTools()`
+	- 结果：通过，受影响的 cognition integration targets 已重新编译并成功链接，包括 `dasall_cognition_profile_compatibility_integration_test` 与 `dasall_cognition_runtime_policy_projection_integration_test`。
+2. `RunCtest_CMakeTools(tests=["ProfileRuntimePolicySchemaContractTest","ProfileOverlayComposerTest","ProfilesBuildRuntimeIntegrationTest","RuntimeProfileCompatibilityTest","CapabilityServicesProfileIntegrationTest","CognitionRuntimePolicyProjectionIntegrationTest"])`
+	- 结果：通过，6 条 tests 全部通过；stderr 中 `DartConfiguration.tcl` 缺失仍是仓库既有 CMake Tools 噪声，不影响 focused 结论。
 	- 关键覆盖点：
-	  - `CognitionInterfaceSurfaceTest` 固定 snapshot-aware factory overload 的 public surface。
-	  - `CognitionConfigProjectionTest` 断言 `preferred_provider` 真实携带 canonical route。
-	  - `StagePolicyResolverProfileDiffTest` 继续验证 plan cap / template preference / missing route fail-closed 的 resolver 语义未回退。
-	  - `CognitionProfileCompatibilityTest` 断言 runtime init 真正用 snapshot 组合 missing live ports，并在真实 `LLMGenerateRequest` 上观察到 route、deadline、max_output_tokens 与 `factory_test` 模板优先策略；缺失 response route 时 init 被拒绝。
-3. `get_errors(filePaths=[cognition/src/CognitionFacade.cpp, cognition/src/response/ResponseBuilder.cpp, runtime/src/AgentFacade.cpp, tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h, tests/integration/cognition/CognitionProfileCompatibilityTest.cpp, tests/unit/cognition/CognitionConfigProjectionTest.cpp, tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp])`
-	- 结果：无新增编辑器错误。
+	  - `ProfileRuntimePolicySchemaContractTest` 固定 canonical stage route schema，不再允许回退到 `planner` / `responder` 旧词汇。
+	  - `ProfileOverlayComposerTest` 与 `RuntimeProfileCompatibilityTest` 证明真实 provider snapshot 与 overlay/runtime profile 断言已切换到 `planning` / `execution` / `reflection` / `response`。
+	  - `CapabilityServicesProfileIntegrationTest` 证明依赖真实 provider snapshot 的周边 profile integration 没有被 canonicalization 回归破坏。
+	  - `CognitionRuntimePolicyProjectionIntegrationTest` 以真实 profile asset -> `RuntimePolicyProvider` -> `AgentFacade::init()` -> planning/execution/reflection bridge request 为权威证据，断言 route、deadline、max_output_tokens 都来自真实 snapshot，而不是手工 fixture。
 
 ## 10. 完成判定
 
@@ -113,5 +113,6 @@ COG-TODO-032 已完成。
 
 1. Runtime 现在可以在缺失 live cognition ports 时，通过 snapshot-aware cognition factories 在 `AgentFacade::init()` 中显式执行 `RuntimePolicySnapshot -> CognitionConfig` 投影，不再依赖 fixture 预埋 `CognitionConfig{}`。
 2. `CognitionFacade` 与 `ResponseBuilder` 在存在 runtime policy snapshot 时真实消费 `StagePolicyResolver` 输出；bridge 请求上的 `model_route`、`timeout_ms`、`max_output_tokens` 由 snapshot 投影而来，不再退回 stage-name 默认值。
-3. `factory_test` 在真实运行链上表现为模板优先的部分完成路径，非 factory profiles 继续走 response bridge；缺失 canonical response route 的负例在 runtime init 阶段 fail-closed。
-4. 032 没有把 projector 或 resolver 扩张成 shared utility，也没有覆写故障注入或契约测试中显式装配的自定义 cognition ports；自定义 ports 仍由 runtime 组合根保留注入优先级。
+3. 032 的当前权威 integration evidence 已切换为 `CognitionRuntimePolicyProjectionIntegrationTest`：它直接证明真实 profile asset 经 provider/runtime init 进入 live cognition stage request，不再依赖 `CognitionProfileCompatibilityTest` 所携带的手工 snapshot fixture 或更宽的 response 语义假设。
+4. non-factory profile 是否必须发出 response bridge request、`edge_minimal` 的 terminal status 应如何冻结，继续留在 COG-TODO-040 处理；这些未冻结语义不再作为 032 的完成判据。
+5. 032 没有把 projector 或 resolver 扩张成 shared utility，也没有覆写故障注入或契约测试中显式装配的自定义 cognition ports；自定义 ports 仍由 runtime 组合根保留注入优先级。

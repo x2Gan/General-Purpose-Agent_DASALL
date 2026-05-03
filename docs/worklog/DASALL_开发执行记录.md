@@ -1,5 +1,61 @@
 # DASALL 开发执行记录
 
+## 记录 #529
+
+- 日期：2026-05-03
+- 阶段：cognition/provider-driven evidence refresh
+- 任务：回写 COG-TODO-032 的 provider-driven 验收 gate，替代旧的手工 snapshot fixture 口径
+- 状态：已完成
+
+### 改动
+
+1. 更新 `docs/todos/cognition/deliverables/COG-TODO-032-RuntimeProfile到CognitionConfig注入收敛.md`，把 032 的权威 integration evidence 从 `CognitionProfileCompatibilityTest` 切换为新的 `CognitionRuntimePolicyProjectionIntegrationTest`。
+2. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 的 COG-TODO-032 条目，同步新的 focused 验收命令、交付物与完成判定，避免 TODO / deliverable 继续引用旧的 profile compatibility 口径。
+3. 本记录明确替代记录 #490 中“032 以 `CognitionProfileCompatibilityTest` 作为权威验收 gate”的旧表述；broader response bridge 语义继续保留在 COG-TODO-040 处理。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过，受影响的 cognition integration targets 已重新编译并成功链接。
+2. `RunCtest_CMakeTools(tests=["ProfileRuntimePolicySchemaContractTest","ProfileOverlayComposerTest","ProfilesBuildRuntimeIntegrationTest","RuntimeProfileCompatibilityTest","CapabilityServicesProfileIntegrationTest","CognitionRuntimePolicyProjectionIntegrationTest"])`
+   - 结果：通过，`6/6` tests passed；stderr 中 `DartConfiguration.tcl` 缺失仍是仓库既有 CMake Tools 噪声，不影响 focused 结论。
+
+### 结果
+
+1. COG-TODO-032 当前以真实 profile asset -> `RuntimePolicyProvider` -> `AgentFacade::init()` -> planning/execution/reflection bridge request 的自动化链路作为权威验收证据，不再依赖手工 snapshot fixture 或 `CognitionProfileCompatibilityTest` 的更宽行为面。
+2. canonical stage route vocabulary、overlay/runtime profile 投影和 capability 周边集成都已通过 focused regression 保持稳定，本轮文档口径已与当前实现和新 gate 对齐。
+3. non-factory response bridge 是否强制、`edge_minimal` terminal status 应如何冻结，继续留给 COG-TODO-040，不再混入 032 的完成判定。
+
+## 记录 #528
+
+- 日期：2026-05-03
+- 阶段：daemon/runtime init and gate hardening
+- 任务：评审整改落地：真实 `AgentFacade::init`、binary unary smoke 与 diag-only hot-reload 收敛
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/daemon/src/DaemonEntryConfigLoader.h/.cpp`，让 entry result 直接保留 runtime policy snapshot，供真实 `main.cpp` 启动路径复用。
+2. 更新 `runtime/src/AgentFacade.cpp`，恢复 stub-only dependency set 的 init 直通语义；当依赖集不请求 live cognition ports 时，不再强制从 policy snapshot 组合 cognition ports。
+3. 更新 `apps/daemon/src/main.cpp`，在 gateway/build 前真实调用 `AgentFacade::init()`，并为 unary happy path 补齐 protocol `200` hint，消除 real binary 路径上“response 有了但 disposition 仍是 rejected”的偏差。
+4. 更新 `apps/daemon/src/DaemonConfigReloader.cpp` 与 `tests/unit/apps/daemon/DaemonConfigReloadTest.cpp`，把 hot-reload allowlist 收窄为 `daemon.diag_enabled` 单键，并把 `log_format` / `watchdog_enabled` / `receipt_ttl_sec` / `override_enabled` 收回到启动期语义。
+5. 更新 `tests/integration/access/DaemonHotReloadIntegrationTest.cpp`，正向验证 `diag_enabled` 热更可观察，反向验证 `daemon.log_format` 与 `daemon.socket_path` 都会被拒绝。
+6. 新增 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp` 并更新 `tests/integration/access/CMakeLists.txt`，让 built `dasall_daemon` + built `dasall_cli run` 成为 `Gate-DMD-04` 的真实 binary smoke；同步对齐 `DaemonUnaryRuntimeBridgeTest.cpp` 的 protocol hint。
+7. 更新 daemon architecture/deploy/TODO/deliverable/worklog 文档，把 Gate-DMD-04、Gate-DMD-07 与部署 smoke 证据同步到当前实现。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_daemon","dasall_runtime_unary_fixture_integration_test","dasall_access_daemon_unary_runtime_bridge_integration_test","dasall_daemon_entry_config_projection_unit_test","dasall_daemon_config_reload_unit_test","dasall_access_daemon_hot_reload_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["RuntimeUnaryFixtureIntegrationTest","DaemonUnaryRuntimeBridgeTest","DaemonEntryConfigProjectionTest","DaemonConfigReloadTest","DaemonHotReloadIntegrationTest","DaemonBinaryUnarySmokeTest"])`
+   - 结果：通过，6/6 测试通过；stderr 中 `DartConfiguration.tcl` 缺失提示仍为仓库既有 CMake Tools 噪声，不影响 focused 结论。
+
+### 结果
+
+1. `main.cpp` 现在会真实走 `AgentFacade::init()` 启动路径，并通过 `DaemonBinaryUnarySmokeTest` 证明 built daemon + built cli unary happy path 已打通。
+2. runtime stub-only init 不再被 cognition canonical stage route 约束误伤，`RuntimeUnaryFixtureIntegrationTest` 已再次证明空依赖 skeleton path 可用。
+3. daemon hot-reload live surface 已明确收窄为 `daemon.diag_enabled` 单键；`Gate-DMD-07` 与部署文档已同步到真实运行态消费者边界。
+
 ## 记录 #527
 
 - 日期：2026-05-02

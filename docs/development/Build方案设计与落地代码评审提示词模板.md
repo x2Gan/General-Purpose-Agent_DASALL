@@ -12,24 +12,19 @@
 
 ### 上下文
 - 项目根目录：/home/gangan/DASALL
-- 当前日期：2026-4-13
-- 评审范围：
-  1. docs/architecture/DASALL_llm子系统详细设计.md
-  2. docs/todos/llm/DASALL_llm子系统专项TODO.md
-  3. docs/todos/llm/DASALL_llm子系统TODO落地实施步骤指引.md
-  4. docs/todos/llm/deliverables
+- 当前日期：2026-5-3
+- 评审范围：Daemon本地控制面
 - 权威约束来源（必须遵循）：
 1. 架构与方案设计文档
 2. ADR/SSOT
 
 ### 本次评审对象
-- 方案文档：docs/architecture/DASALL_llm子系统详细设计.md
-- 设计收敛：docs/todos/llm/deliverables
-- 代码改动：llm/
+- 方案文档：docs/architecture/DASALL_daemon本地控制面详细设计.md
+- 设计收敛：docs/todos/daemon/deliverables
+- 代码改动：apps/daemon
 - 任务来源：
   1. docs/architecture/DASSALL_Agent_architecture.md
-  2. docs/todos/llm/DASALL_llm子系统专项TODO.md
-  3. docs/todos/llm/DASALL_llm子系统TODO落地实施步骤指引.md
+  2. docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
 - 验收命令：自动生成
 
 ### 评审要求

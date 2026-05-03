@@ -174,23 +174,41 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
                "edge_minimal should keep the smallest compression threshold");
 
   assert_equal(std::string("cloud.reasoning"),
-               desktop.snapshot->model_profile().stage_routes.at("planner").route,
-               "desktop_full should route planner traffic to cloud.reasoning");
-  assert_equal(std::string("lan.general"),
-               edge_balanced.snapshot->model_profile().stage_routes.at("planner").route,
-               "edge_balanced should route planner traffic to lan.general");
-  assert_equal(std::string("local.small"),
-               edge_minimal.snapshot->model_profile().stage_routes.at("planner").route,
-               "edge_minimal should route planner traffic to local.small");
+               desktop.snapshot->model_profile().stage_routes.at("planning").route,
+               "desktop_full should route planning traffic to cloud.reasoning");
+  assert_equal(std::string("cloud.reasoning"),
+               desktop.snapshot->model_profile().stage_routes.at("execution").route,
+               "desktop_full should route execution traffic to cloud.reasoning");
+  assert_equal(std::string("cloud.reasoning"),
+               desktop.snapshot->model_profile().stage_routes.at("reflection").route,
+               "desktop_full should route reflection traffic to cloud.reasoning");
   assert_equal(std::string("cloud.general"),
-               desktop.snapshot->model_profile().stage_routes.at("responder").route,
-               "desktop_full should route responder traffic to cloud.general");
+               desktop.snapshot->model_profile().stage_routes.at("response").route,
+               "desktop_full should route response traffic to cloud.general");
   assert_equal(std::string("lan.general"),
-               edge_balanced.snapshot->model_profile().stage_routes.at("responder").route,
-               "edge_balanced should route responder traffic to lan.general");
+               edge_balanced.snapshot->model_profile().stage_routes.at("planning").route,
+               "edge_balanced should route planning traffic to lan.general");
+  assert_equal(std::string("lan.general"),
+               edge_balanced.snapshot->model_profile().stage_routes.at("execution").route,
+               "edge_balanced should route execution traffic to lan.general");
+  assert_equal(std::string("lan.general"),
+               edge_balanced.snapshot->model_profile().stage_routes.at("reflection").route,
+               "edge_balanced should route reflection traffic to lan.general");
+  assert_equal(std::string("lan.general"),
+               edge_balanced.snapshot->model_profile().stage_routes.at("response").route,
+               "edge_balanced should route response traffic to lan.general");
   assert_equal(std::string("local.small"),
-               edge_minimal.snapshot->model_profile().stage_routes.at("responder").route,
-               "edge_minimal should route responder traffic to local.small");
+               edge_minimal.snapshot->model_profile().stage_routes.at("planning").route,
+               "edge_minimal should route planning traffic to local.small");
+  assert_equal(std::string("local.small"),
+               edge_minimal.snapshot->model_profile().stage_routes.at("execution").route,
+               "edge_minimal should route execution traffic to local.small");
+  assert_equal(std::string("local.small"),
+               edge_minimal.snapshot->model_profile().stage_routes.at("reflection").route,
+               "edge_minimal should route reflection traffic to local.small");
+  assert_equal(std::string("local.small"),
+               edge_minimal.snapshot->model_profile().stage_routes.at("response").route,
+               "edge_minimal should route response traffic to local.small");
 
   assert_true(!desktop.snapshot->capability_cache_policy().stale_read_allowed,
               "desktop_full should keep stale capability reads disabled");

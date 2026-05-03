@@ -1,6 +1,6 @@
 # DASALL daemon v1 部署与 supervisor 交付契约
 
-更新时间：2026-05-02
+更新时间：2026-05-03
 适用范围：DASALL 本地控制面 direct-bind v1 交付
 
 ## 1. 目的与范围
@@ -11,7 +11,7 @@
 
 1. direct-bind Unix Domain Socket 本地监听。
 2. `--validate-only`、`--socket-path`、`--profile-id` 与 `--config-file` 四个受控入口参数。
-3. `SIGTERM` 优雅关闭与 `SIGHUP` allowlist hot-reload intent。
+3. `SIGTERM` 优雅关闭与 `SIGHUP` 单键 allowlist hot-reload（当前仅 `daemon.diag_enabled`）。
 4. supervisor 最小契约：ready/stopping/watchdog 语义在 daemon 内部已冻结为 no-op 或 `IWatchdogService` bridge，但不对外承诺 `sd_notify()`、`Type=notify` 或 socket activation fd import。
 
 以下内容明确不属于 v1 交付：
@@ -24,7 +24,7 @@
 
 ### 2.1 仓库内证据
 
-1. [apps/daemon/src/main.cpp](../../../apps/daemon/src/main.cpp) 已通过 `DaemonEntryConfigLoader` 接入默认 `desktop_full` profile、`--profile-id`、`--config-file` 与 `--socket-path` override，并在 validate-only 成功时直接退出，不创建 listener。
+1. [apps/daemon/src/main.cpp](../../../apps/daemon/src/main.cpp) 已通过 `DaemonEntryConfigLoader` 接入默认 `desktop_full` profile、`--profile-id`、`--config-file` 与 `--socket-path` override，并在真实启动路径上调用 `runtime::AgentFacade::init()`；validate-only 成功时仍直接退出，不创建 listener。
 2. [apps/daemon/src/DaemonConfigValidator.cpp](../../../apps/daemon/src/DaemonConfigValidator.cpp) 已冻结 socket path、payload 上限、flags/config conflict 与 reload key 校验语义。
 3. [apps/daemon/src/DaemonBootstrap.cpp](../../../apps/daemon/src/DaemonBootstrap.cpp) 已实现 direct-bind listener、ready 后 accept loop、`SIGTERM` 停机排空与 supervisor adapter 接线。
 4. [apps/daemon/src/DaemonSupervisorAdapter.cpp](../../../apps/daemon/src/DaemonSupervisorAdapter.cpp) 已冻结 v1 supervisor seam：`notify_ready()`、`notify_stopping()`、`tick_watchdog()`。
@@ -46,7 +46,7 @@
 | 配置文件 | 通过 `--config-file` 受控读取 YAML/JSON deployment snapshot | flags 与 config file 同键冲突时拒绝启动，而不是静默取其一 |
 | readiness | 通过 daemon command router 返回 JSON 响应 | CLI 现已消费 ping/readiness 响应；可走默认 socket_path 或 `--socket-path` 覆盖 |
 | graceful stop | `SIGTERM` | daemon 进入 Draining，拒绝新请求并排空 inflight |
-| reload | `SIGHUP` | 重新读取当前 `--profile-id` / `--config-file` 对应的 fresh snapshot；只允许 allowlist 键热更，restart-only key 保持拒绝并审计 |
+| reload | `SIGHUP` | 重新读取当前 `--profile-id` / `--config-file` 对应的 fresh snapshot；当前仅 `daemon.diag_enabled` 允许热更，其它 daemon 键继续拒绝并审计 |
 | watchdog | no-op 或内部 watchdog bridge | 不承诺 systemd `WatchdogSec=` 对接 |
 | socket activation | v2 范围外 | 当前不交付 fd import，也不建议配置 `.socket` 单元 |
 
@@ -147,7 +147,17 @@ CLI 现已消费 daemon `ping` / `readiness` 响应，可直接使用与部署 s
 1. `ping` 输出包含 `daemon_version`、`schema_version`、`profile_id`、`request_id`、`readiness`。
 2. `readiness` 输出包含 `state`，并带 `lifecycle_ready`、`listener_ready`、`gateway_ready`、`bridge_reachable` 等字段。
 
-### 7.5 graceful stop
+### 7.5 unary run
+
+```bash
+./build-ci/apps/cli/dasall_cli \
+  --socket-path /tmp/dasall-dmd035/control.sock \
+  run '{"prompt":"binary smoke"}'
+```
+
+期望结果：返回 0，且输出包含 `[dasall_cli] submit: completed` 和 `runtime orchestrator skeleton completed`。
+
+### 7.6 graceful stop
 
 ```bash
 kill -TERM <daemon-pid>
@@ -160,7 +170,8 @@ kill -TERM <daemon-pid>
 1. [docs/deploy/daemon/daemon.example.json](daemon.example.json) 与 [docs/deploy/daemon/daemon.example.yaml](daemon.example.yaml) 是 deployment contract projection，同时可通过 `--config-file` 作为当前入口 loader 的输入样例。
 2. 当前 daemon 二进制默认使用 `desktop_full` profile；若需要切换 profile，可通过 `--profile-id <id>` 显式选择。
 3. `--socket-path` 这类 flags 仍只用于入口选择与局部 override；若与 config file 中的同键值冲突，daemon 会拒绝启动。
-4. 后续若要扩展更多 daemon 键的 runtime loader surface，仍必须继续遵守“配置文件优先、重复键冲突即拒绝启动”的现有 validator 语义。
+4. 当前 `SIGHUP` 只接受 `daemon.diag_enabled`；`log_level`、`log_format`、`watchdog_enabled`、`receipt_ttl_sec`、`override_enabled` 等键仍按启动期配置处理。
+5. 后续若要扩展更多 daemon 键的 runtime loader surface，仍必须继续遵守“配置文件优先、重复键冲突即拒绝启动”的现有 validator 语义。
 
 ## 9. 回退与演进边界
 

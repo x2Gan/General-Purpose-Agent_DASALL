@@ -1,11 +1,13 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "DaemonConfig.h"
+#include "RuntimePolicySnapshot.h"
 
 namespace dasall::apps::daemon {
 
@@ -28,12 +30,14 @@ struct DaemonEntryConfig {
   DaemonBootstrapConfig bootstrap_config;
   std::string requested_profile_id;
   std::string effective_profile_id;
+  std::shared_ptr<const profiles::RuntimePolicySnapshot> runtime_policy_snapshot;
   std::optional<std::string> config_revision;
   std::vector<DaemonConfigConflict> conflicts;
 
   [[nodiscard]] bool has_consistent_values() const {
     return bootstrap_config.has_consistent_values() && !requested_profile_id.empty() &&
-           !effective_profile_id.empty();
+           !effective_profile_id.empty() && runtime_policy_snapshot != nullptr &&
+           runtime_policy_snapshot->has_consistent_values();
   }
 };
 
@@ -42,7 +46,7 @@ struct DaemonEntryConfigLoadResult {
   std::string message;
 
   [[nodiscard]] bool ok() const {
-    return entry_config.has_value();
+    return entry_config.has_value() && entry_config->has_consistent_values();
   }
 };
 

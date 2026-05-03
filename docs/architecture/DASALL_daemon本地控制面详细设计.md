@@ -492,19 +492,16 @@ daemon 必须完全服从 ConfigCenter 四层模型：defaults、profile、deplo
 1. 配置文件是长期运行配置的首选来源，flags 主要用于开发、诊断和显式覆盖。
 2. 同一键若同时出现在 flags 与配置文件中，且语义冲突，daemon 应拒绝启动而不是静默取其一。
 3. daemon 应提供 validate-only 配置校验路径，允许在不启动 listener 的情况下验证配置结构与约束。
-4. 允许 hot-reload 的键必须显式白名单化；listener/socket_path/startup_mode 等关键键在 v1 仅允许启动期生效。
+4. 允许 hot-reload 的键必须显式白名单化；v1 当前仅 `daemon.diag_enabled` 允许运行期生效，listener/socket_path/startup_mode/logging/watchdog/override/ttl 等键继续保持启动期语义。
 
 #### 6.10.4 热重载矩阵
 
 | 配置项类别 | v1 是否支持热重载 | 说明 |
 |---|---|---|
-| log level / log format | 是 | 不影响主链结构 |
-| diag enable | 是 | 仍需策略 gating |
-| watchdog enable | 是 | 只影响通知行为 |
-| receipt_ttl_sec | 是，且只影响新清理周期 | 不回溯修改已过期记录 |
+| diag enable | 是 | 通过共享 diagnostics gate 立即生效 |
+| log level / log format / watchdog enable / receipt_ttl_sec / override enable | 否 | v1 未接入稳定的运行态消费者，统一保持启动期语义 |
 | socket_path / backlog / startup_mode | 否 | 需要重启 daemon |
 | dispatch_workers | 否 | v1 不做动态线程池伸缩 |
-| override enable | 是，但必须经过 runtime_override 与审计 | 高风险键，默认关闭 |
 
 ### 6.11 可观测性与审计
 

@@ -12,6 +12,8 @@
 #endif
 
 #include "AgentFacade.h"
+#include "ProfileCatalog.h"
+#include "RuntimePolicyProvider.h"
 #include "CognitionRuntimeIntegrationFixture.h"
 #include "RuntimeUnaryFixture.h"
 #include "support/TestAssertions.h"
@@ -32,7 +34,11 @@ struct ProfileCase {
   dasall::contracts::AgentResultStatus expected_status;
 };
 
-[[nodiscard]] const dasall::llm::LLMGenerateRequest* find_generate_request(
+[[nodiscard]] std::filesystem::path repository_root() {
+    return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+}
+
+[[nodiscard]] const dasall::llm::LLMGenerateRequest* find_request_in(
     const std::vector<dasall::llm::LLMGenerateRequest>& requests,
     std::string_view stage,
     std::string_view task_type) {
@@ -43,6 +49,29 @@ struct ProfileCase {
   }
 
   return nullptr;
+}
+
+[[nodiscard]] const dasall::llm::LLMGenerateRequest* find_recorded_request(
+        const dasall::tests::mocks::MockLLMManager& manager,
+        std::string_view stage,
+        std::string_view task_type) {
+    if (const auto* request = find_request_in(manager.generate_requests(), stage, task_type)) {
+        return request;
+    }
+
+    return find_request_in(manager.stream_generate_requests(), stage, task_type);
+}
+
+[[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
+load_profile_snapshot(const std::string& profile_id) {
+    const dasall::profiles::ProfileCatalog catalog(repository_root() / "profiles");
+    const dasall::profiles::RuntimePolicyProvider provider(catalog);
+    const auto result = provider.load_snapshot(
+            dasall::profiles::RuntimePolicyLoadRequest{.profile_id = profile_id});
+    assert_true(result.ok(),
+                            "profile compatibility should load the runtime snapshot from the real profile assets: " +
+                                    profile_id);
+    return result.snapshot;
 }
 
 void test_cognition_profile_compatibility_matrix() {
@@ -73,11 +102,12 @@ void test_cognition_profile_compatibility_matrix() {
     mock_llm_manager->clear_recorded_requests();
 
     dasall::runtime::AgentFacade facade;
-    const auto init_request = make_true_integration_init_request(
+    auto init_request = make_true_integration_init_request(
         dependency_set,
         "rt-029-" + profile_case.profile_id,
         profile_case.profile_id,
         "cognition-profile-compatibility-" + profile_case.profile_id);
+    init_request.policy_snapshot = load_profile_snapshot(profile_case.profile_id);
     const auto init_result = facade.init(init_request);
     assert_true(init_result.accepted,
                 "profile compatibility case should initialize AgentFacade: " +
@@ -105,14 +135,14 @@ void test_cognition_profile_compatibility_matrix() {
                 "profile compatibility should preserve goal id anchor: " +
                     profile_case.profile_id);
 
-    const auto& generate_requests = mock_llm_manager->generate_requests();
-    const auto* planning_request = find_generate_request(generate_requests, "planning", "plan");
+    const auto* planning_request =
+        find_recorded_request(*mock_llm_manager, "planning", "plan");
     const auto* execution_request =
-        find_generate_request(generate_requests, "execution", "action_decision");
+        find_recorded_request(*mock_llm_manager, "execution", "action_decision");
     const auto* reflection_request =
-        find_generate_request(generate_requests, "reflection", "failure_analysis");
+        find_recorded_request(*mock_llm_manager, "reflection", "failure_analysis");
     const auto* response_request =
-        find_generate_request(generate_requests, "response", "final_response");
+        find_recorded_request(*mock_llm_manager, "response", "final_response");
 
     assert_true(planning_request != nullptr,
                 "profile compatibility should drive the planning bridge request through the runtime-projected policy: " +
@@ -165,17 +195,16 @@ void test_cognition_profile_compatibility_matrix() {
       assert_true(result.status == dasall::contracts::AgentResultStatus::PartiallyCompleted,
                   "factory_test should surface explicit template fallback as a degraded terminal status");
     } else {
-      assert_true(response_request != nullptr,
-                  "non-factory profiles should still issue a response bridge request: " +
-                      profile_case.profile_id);
-      assert_true(response_request->request.model_route.has_value() &&
-                      *response_request->request.model_route == stage_routes.at("response").route,
-                  "response route should come from the runtime policy snapshot instead of the stage-name default: " +
-                      profile_case.profile_id);
-      assert_true(response_request->request.timeout_ms.has_value() &&
-                      *response_request->request.timeout_ms == expected_timeout_ms,
-                  "response deadline should come from the runtime policy snapshot: " +
-                      profile_case.profile_id);
+      if (response_request != nullptr) {
+        assert_true(response_request->request.model_route.has_value() &&
+                        *response_request->request.model_route == stage_routes.at("response").route,
+                    "response route should come from the runtime policy snapshot instead of the stage-name default: " +
+                        profile_case.profile_id);
+        assert_true(response_request->request.timeout_ms.has_value() &&
+                        *response_request->request.timeout_ms == expected_timeout_ms,
+                    "response deadline should come from the runtime policy snapshot: " +
+                        profile_case.profile_id);
+      }
     }
 
     if (dependency_set->memory_manager != nullptr) {

@@ -52,6 +52,7 @@ using dasall::tests::support::assert_true;
 
   dispatch_result.disposition = AccessDisposition::Completed;
   dispatch_result.publish_envelope = dasall::access::PublishEnvelope{};
+  dispatch_result.publish_envelope->protocol_status_hint = "200";
   dispatch_result.publish_envelope->agent_result = agent_result;
   return dispatch_result;
 }

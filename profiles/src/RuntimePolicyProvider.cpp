@@ -80,6 +80,24 @@ template <typename T>
   return it->second;
 }
 
+[[nodiscard]] std::optional<ModelRoutePolicy> get_model_route_policy(
+        const ParsedProfileYaml& parsed_yaml,
+        const std::string& stage_name) {
+    const std::string stage_prefix = "model_profile." + stage_name;
+    const auto route = get_string(parsed_yaml.scalar_values, stage_prefix + ".route");
+    const auto streaming_enabled =
+            get_bool(parsed_yaml.scalar_values, stage_prefix + ".streaming_enabled");
+    if (!route.has_value() || !streaming_enabled.has_value()) {
+        return std::nullopt;
+    }
+
+    return ModelRoutePolicy{
+            .route = *route,
+            .fallback_route = get_string(parsed_yaml.scalar_values, stage_prefix + ".fallback_route"),
+            .streaming_enabled = *streaming_enabled,
+    };
+}
+
 [[nodiscard]] std::optional<RuntimePolicySnapshot> build_snapshot(
     const std::string& requested_profile_id,
     const ParsedProfileYaml& parsed_yaml) {
@@ -90,9 +108,12 @@ template <typename T>
     return std::nullopt;
   }
 
-  const auto planner_route = get_string(parsed_yaml.scalar_values, "model_profile.planner.route");
-  const auto responder_route = get_string(parsed_yaml.scalar_values, "model_profile.responder.route");
-  if (!planner_route.has_value() || !responder_route.has_value()) {
+    const auto planning_route = get_model_route_policy(parsed_yaml, "planning");
+    const auto execution_route = get_model_route_policy(parsed_yaml, "execution");
+    const auto reflection_route = get_model_route_policy(parsed_yaml, "reflection");
+    const auto response_route = get_model_route_policy(parsed_yaml, "response");
+    if (!planning_route.has_value() || !execution_route.has_value() ||
+            !reflection_route.has_value() || !response_route.has_value()) {
     return std::nullopt;
   }
 
@@ -159,10 +180,6 @@ template <typename T>
       get_bool(parsed_yaml.scalar_values, "ops_policy.remote_diagnostics_enabled");
   const auto ops_upgrade_strategy = get_string(parsed_yaml.scalar_values, "ops_policy.upgrade_strategy");
 
-  const auto planner_streaming_enabled =
-      get_bool(parsed_yaml.scalar_values, "model_profile.planner.streaming_enabled");
-  const auto responder_streaming_enabled =
-      get_bool(parsed_yaml.scalar_values, "model_profile.responder.streaming_enabled");
     if (!worker_threads.has_value() || !max_tokens.has_value() || !max_turns.has_value() ||
       !max_latency_ms.has_value() || !max_replan_count.has_value() ||
       !max_input_tokens.has_value() || !max_output_tokens.has_value() ||
@@ -173,8 +190,7 @@ template <typename T>
       !execution_requires_confirmation.has_value() || !execution_safe_mode.has_value() ||
       !execution_audit_level.has_value() || !ops_log_level.has_value() ||
       !ops_metrics_granularity.has_value() || !ops_trace_sample_ratio.has_value() ||
-      !ops_remote_diagnostics_enabled.has_value() || !ops_upgrade_strategy.has_value() ||
-      !planner_streaming_enabled.has_value() || !responder_streaming_enabled.has_value()) {
+            !ops_remote_diagnostics_enabled.has_value() || !ops_upgrade_strategy.has_value()) {
     return std::nullopt;
   }
 
@@ -227,20 +243,10 @@ template <typename T>
       },
       ModelProfile{
           .stage_routes = {
-              {"planner",
-               ModelRoutePolicy{
-                   .route = *planner_route,
-                   .fallback_route = get_string(parsed_yaml.scalar_values,
-                                                "model_profile.planner.fallback_route"),
-                   .streaming_enabled = *planner_streaming_enabled,
-               }},
-              {"responder",
-               ModelRoutePolicy{
-                   .route = *responder_route,
-                   .fallback_route = get_string(parsed_yaml.scalar_values,
-                                                "model_profile.responder.fallback_route"),
-                   .streaming_enabled = *responder_streaming_enabled,
-               }},
+              {"planning", *planning_route},
+              {"execution", *execution_route},
+              {"reflection", *reflection_route},
+              {"response", *response_route},
           },
       },
       TokenBudgetPolicy{

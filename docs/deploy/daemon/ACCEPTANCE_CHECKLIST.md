@@ -2,7 +2,7 @@
 
 ## 1. 适用范围
 
-本清单用于 direct-bind v1 本地控制面交付验收。通过条件不是“systemd 已接入所有高级能力”，而是本地运维者可以按文档独立完成 validate、start、ping/readiness、daemon unavailable 与 graceful stop。
+本清单用于 direct-bind v1 本地控制面交付验收。通过条件不是“systemd 已接入所有高级能力”，而是本地运维者可以按文档独立完成 validate、start、ping/readiness、real unary run、daemon unavailable 与 graceful stop。
 
 ## 2. 前置条件
 
@@ -65,7 +65,17 @@ chmod 700 /tmp/dasall-dmd035
 1. `ping` 输出包含 `daemon_version`、`schema_version`、`profile_id`。
 2. `readiness` 输出包含 `state` 与 `listener_ready`、`gateway_ready`、`bridge_reachable`。
 
-### 3.5 graceful stop
+### 3.5 unary run
+
+```bash
+./build-ci/apps/cli/dasall_cli \
+  --socket-path /tmp/dasall-dmd035/control.sock \
+  run '{"prompt":"binary smoke"}'
+```
+
+通过条件：返回 0，且输出包含 `[dasall_cli] submit: completed` 与 `runtime orchestrator skeleton completed`。
+
+### 3.6 graceful stop
 
 ```bash
 kill -TERM <daemon-pid>
@@ -80,4 +90,5 @@ kill -TERM <daemon-pid>
 3. 配置样例必须与 `DaemonBootstrapConfig` 键集合对齐。
 4. README 必须明确：当前二进制可通过 `--config-file` 受控读取 YAML/JSON deployment snapshot，并继续遵守 flags/config file 冲突拒绝语义。
 5. readiness smoke 必须通过 CLI 消费真实 UDS 响应验证，而不是只验证 send 成功。
-6. `SIGHUP` reload 必须重新读取当前 profile/config snapshot；allowlisted key 可生效，restart-only key 继续拒绝并保留稳定审计原因。
+6. `SIGHUP` reload 必须重新读取当前 profile/config snapshot；当前仅 `daemon.diag_enabled` 可生效，其它 daemon 键继续拒绝并保留稳定审计原因。
+7. 真实 daemon binary + built CLI 的 unary smoke 必须通过，而不是只依赖 in-process fixture 或 helper 级 happy path。

@@ -53,6 +53,11 @@ void test_loader_defaults_to_desktop_profile_projection() {
   assert_equal(std::string("desktop_full"),
                result.entry_config->effective_profile_id,
                "daemon entry loader should preserve the effective profile id from runtime snapshot");
+  assert_true(result.entry_config->runtime_policy_snapshot != nullptr,
+              "daemon entry loader should retain the runtime policy snapshot for the real main init path");
+  assert_equal(std::string("desktop_full"),
+               result.entry_config->runtime_policy_snapshot->effective_profile_id(),
+               "daemon entry loader should retain the effective profile id on the cached runtime snapshot");
   assert_equal(std::string("/tmp/dasall/control.sock"),
                result.entry_config->bootstrap_config.socket_path,
                "daemon entry loader should keep baseline daemon socket_path from the desktop profile");
@@ -91,6 +96,8 @@ void test_loader_applies_yaml_deployment_overrides() {
   assert_equal(std::string("edge_balanced"),
                result.entry_config->effective_profile_id,
                "daemon entry loader should preserve the requested effective profile");
+  assert_true(result.entry_config->runtime_policy_snapshot != nullptr,
+              "daemon entry loader should retain the runtime snapshot when deployment overrides are present");
   assert_equal(std::string("/tmp/dasall/entry-loader.sock"),
                result.entry_config->bootstrap_config.socket_path,
                "daemon entry loader should overlay deployment socket_path");

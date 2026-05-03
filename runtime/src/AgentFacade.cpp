@@ -110,6 +110,16 @@ struct RuntimeCompositionRoot {
     return true;
   }
 
+  const auto requires_policy_projected_cognition_ports =
+      request.dependency_set->memory_manager != nullptr ||
+      request.dependency_set->tool_manager != nullptr ||
+      request.dependency_set->llm_manager != nullptr ||
+      request.dependency_set->knowledge_service != nullptr;
+  if (!requires_policy_projected_cognition_ports) {
+    result.diagnostics = "cognition_ports=stub_runtime_path";
+    return true;
+  }
+
   if (needs_cognition_engine) {
     auto cognition_engine = cognition::create_cognition_engine(
         *request.policy_snapshot,
@@ -184,6 +194,7 @@ class AgentFacade::State {
         .dependency_set = request.dependency_set,
         .stub_ports = make_orchestrator_stub_ports(*request.dependency_set),
         .fsm_factory = {},
+        .default_runtime_budget = request.policy_snapshot->runtime_budget(),
     });
     orchestrator->seed_for_test(request.dependency_set->seeded_waiting_session,
                                 request.dependency_set->seeded_checkpoints);

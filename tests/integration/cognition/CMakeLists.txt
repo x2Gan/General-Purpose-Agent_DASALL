@@ -66,6 +66,13 @@ dasall_add_cognition_integration_test(
 )
 
 dasall_add_cognition_integration_test(
+  dasall_cognition_runtime_policy_projection_integration_test
+  CognitionRuntimePolicyProjectionIntegrationTest
+  CognitionRuntimePolicyProjectionIntegrationTest.cpp
+  "integration;cognition;profile"
+)
+
+dasall_add_cognition_integration_test(
   dasall_cognition_review_regression_integration_test
   CognitionReviewRegressionTest
   CognitionReviewRegressionTest.cpp

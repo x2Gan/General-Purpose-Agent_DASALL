@@ -26,11 +26,19 @@ runtime_budget:
 	max_latency_ms: 5000
 	max_replan_count: 1
 model_profile:
-	planner:
+	planning:
 		route: local.small
 		fallback_route: builtin_only
 		streaming_enabled: false
-	responder:
+	execution:
+		route: local.small
+		fallback_route: builtin_only
+		streaming_enabled: false
+	reflection:
+		route: local.small
+		fallback_route: builtin_only
+		streaming_enabled: false
+	response:
 		route: local.small
 		fallback_route: builtin_only
 		streaming_enabled: true

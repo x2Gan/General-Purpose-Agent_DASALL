@@ -113,10 +113,7 @@ std::vector<std::string> DaemonConfigReloader::collect_changed_keys(
 }
 
 bool DaemonConfigReloader::is_allowlisted_reload_key(const std::string& key) {
-  return key == "daemon.log_level" || key == "daemon.log_format" ||
-         key == "daemon.diag_enabled" || key == "daemon.watchdog_enabled" ||
-         key == "daemon.receipt_ttl_sec" ||
-         key == "daemon.override_enabled";
+  return key == "daemon.diag_enabled";
 }
 
 }  // namespace dasall::apps::daemon
