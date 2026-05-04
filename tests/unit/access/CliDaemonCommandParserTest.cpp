@@ -9,6 +9,8 @@ namespace {
 
 void test_parse_run_and_submit_alias() {
   using dasall::apps::cli::CliCommandParser;
+  using dasall::apps::cli::CliAsyncPreference;
+  using dasall::apps::cli::CliOutputMode;
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
@@ -24,10 +26,46 @@ void test_parse_run_and_submit_alias() {
               "submit alias should parse with payload");
   assert_equal(std::string("run"), submit_cmd->name,
                "submit alias should canonicalize to run");
+
+  const char* flagged_argv[] = {
+      "dasall_cli",
+      "--json",
+      "--timeout-ms=1500",
+      "run",
+      "--async",
+      "--request-id",
+      "req-006",
+      "--session",
+      "session-006",
+      "--trace-id=trace-006",
+      "--quiet",
+      "--no-input",
+      "{\"input\":\"hello\"}"};
+  const auto flagged_cmd = CliCommandParser::parse(13, flagged_argv);
+  assert_true(flagged_cmd.has_value(),
+              "run command should capture stable CLI option model fields");
+  assert_true(flagged_cmd->output_mode == CliOutputMode::Json,
+              "run command should capture json output mode");
+  assert_true(flagged_cmd->timeout_ms.has_value() &&
+                  *flagged_cmd->timeout_ms == 1500,
+              "run command should capture timeout_ms value");
+  assert_true(flagged_cmd->async_preference == CliAsyncPreference::Async,
+              "run command should capture async preference");
+  assert_equal(std::string("req-006"), *flagged_cmd->request_id,
+               "run command should capture explicit request_id");
+  assert_equal(std::string("session-006"), *flagged_cmd->session_hint,
+               "run command should capture session hint");
+  assert_equal(std::string("trace-006"), *flagged_cmd->trace_id,
+               "run command should capture explicit trace_id");
+  assert_true(flagged_cmd->quiet,
+              "run command should capture quiet mode");
+  assert_true(flagged_cmd->no_input,
+              "run command should capture no-input mode");
 }
 
 void test_parse_status_and_cancel_arguments() {
   using dasall::apps::cli::CliCommandParser;
+  using dasall::apps::cli::CliSelectorKind;
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
@@ -37,6 +75,10 @@ void test_parse_status_and_cancel_arguments() {
   assert_true(status_cmd.has_value(), "status command should parse receipt query args");
   assert_equal(std::string("receipt-031"), *status_cmd->receipt_ref,
                "status command should capture receipt_ref");
+  assert_true(status_cmd->selector_kind == CliSelectorKind::Receipt,
+              "status command should classify legacy positional lookup as receipt selector");
+  assert_equal(std::string("receipt-031"), *status_cmd->selector_value,
+               "status command should preserve selector_value for receipt lookups");
   assert_equal(std::string("owner-token"), *status_cmd->ownership_token,
                "status command should capture ownership token");
   assert_equal(std::string("local://uid/1000"), *status_cmd->actor_ref,
@@ -68,6 +110,18 @@ void test_parse_diag_and_missing_status_token_reject() {
   const auto invalid_status = CliCommandParser::parse(3, invalid_status_argv);
   assert_true(!invalid_status.has_value(),
               "status command should reject missing ownership token");
+
+  const char* invalid_scope_argv[] = {
+      "dasall_cli", "status", "--async", "receipt-031", "owner-token"};
+  const auto invalid_scope = CliCommandParser::parse(5, invalid_scope_argv);
+  assert_true(!invalid_scope.has_value(),
+              "status command should reject run-only async flag");
+
+  const char* duplicate_request_id_argv[] = {
+      "dasall_cli", "run", "--request-id=req-1", "--request-id", "req-2", "{}"};
+  const auto duplicate_request_id = CliCommandParser::parse(6, duplicate_request_id_argv);
+  assert_true(!duplicate_request_id.has_value(),
+              "run command should reject duplicate stable option assignments");
 }
 
   void test_parse_socket_path_override_and_reject_invalid_forms() {

@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #533
+
+- 日期：2026-05-04
+- 阶段：cli/build-surface
+- 任务：CLI-TODO-006 定义 `CliCommand` 扩展选项模型
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/CliCommandParser.h`，为 `CliCommand` 新增 `output_mode`、`timeout_ms`、`async_preference`、`request_id`、`session_hint`、`trace_id`、`quiet`、`no_input`、`selector_kind`、`selector_value` 等稳定字段，并以枚举显式表达输出模式、异步偏好和 selector 类型。
+2. 更新 `apps/cli/src/CliCommandParser.cpp`，为现有 parser 增加最小稳定 flag 捕获与作用域校验：支持 `--json`、`--timeout-ms`、`--async`、`--request-id`、`--session`、`--trace-id`、`--quiet`、`--no-input`，并把 legacy `status/cancel` positional 查询同步投影到 `selector_kind` / `selector_value`。
+3. 更新 `tests/unit/access/CliDaemonCommandParserTest.cpp`，新增稳定字段捕获、duplicate option reject、run-only flag illegal-scope reject 断言，确保 `CliCommand` 字段不是“只在头文件声明但没有真实 parse owner”的悬空模型。
+4. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-006` 标记为 Done，并把 Wave 2 调整为 006 完成后的后续执行状态。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest"])`
+   - 结果：通过，新增的稳定字段捕获与 duplicate/illegal-scope reject 断言均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+2. `Build_CMakeTools()`
+   - 结果：通过，当前 CMake 构建状态干净，没有因 `CliCommand` 字段扩展引入编译或链接错误。
+
+### 结果
+
+1. `CliCommand` 已不再停留在旧的 socket/payload/receipt/token/actor/diag 最小集，v1 稳定 flags 与 selector 模型已经有了单一字段归属。
+2. 当前 parser 已能把这些稳定字段收进 `CliCommand`，但还没有完成 `help/version` 和 v1 公开 `status/cancel` flag schema 的最终切换，这部分继续留在 `CLI-TODO-007`。
+3. `CLI-TODO-008` 现在可以直接以 `CliCommand` 的稳定字段为输入，继续抽离 `CliRequestBuilder`，而不需要再反向修改命令模型。
+
 ## 记录 #532
 
 - 日期：2026-05-04

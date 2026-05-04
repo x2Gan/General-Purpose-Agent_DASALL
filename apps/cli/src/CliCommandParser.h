@@ -6,6 +6,22 @@
 
 namespace dasall::apps::cli {
 
+enum class CliOutputMode {
+  Human,
+  Json,
+};
+
+enum class CliAsyncPreference {
+  Sync,
+  Async,
+};
+
+enum class CliSelectorKind {
+  None,
+  Receipt,
+  RequestId,
+};
+
 /// 已解析的 CLI 命令结构
 struct CliCommand {
   /// 命令名称（"ping" / "submit" / ...）
@@ -20,8 +36,39 @@ struct CliCommand {
   /// 异步任务查询/取消所需 receipt_ref。
   std::optional<std::string> receipt_ref;
 
+  /// status/cancel 所使用的稳定 selector 类型。
+  CliSelectorKind selector_kind = CliSelectorKind::None;
+
+  /// selector 的稳定值。当前 receipt 路径会与 receipt_ref 同步；后续
+  /// request-id 路径会在同一字段中承载目标 request_id。
+  std::optional<std::string> selector_value;
+
   /// receipt 所属权校验令牌。
   std::optional<std::string> ownership_token;
+
+  /// 客户端输出模式；v1 缺省为人类可读。
+  CliOutputMode output_mode = CliOutputMode::Human;
+
+  /// 客户端等待上限；缺省时由调用方/部署默认值决定。
+  std::optional<int> timeout_ms;
+
+  /// 是否显式要求 accepted_async。
+  CliAsyncPreference async_preference = CliAsyncPreference::Sync;
+
+  /// 显式指定的请求 ID。
+  std::optional<std::string> request_id;
+
+  /// 提供给 daemon 的 session hint。
+  std::optional<std::string> session_hint;
+
+  /// 显式指定的 trace ID。
+  std::optional<std::string> trace_id;
+
+  /// 是否抑制非必要 stderr 信息。
+  bool quiet = false;
+
+  /// 是否禁止交互式提示。
+  bool no_input = false;
 
   /// 可选主体引用；仅在显式传入时带入请求。
   std::optional<std::string> actor_ref;
