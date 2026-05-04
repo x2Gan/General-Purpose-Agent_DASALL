@@ -2,6 +2,7 @@ add_executable(dasall_cli
   src/main.cpp
   src/CliIpcClient.cpp
   src/CliCommandParser.cpp
+  src/CliExitDecision.cpp
   src/CliOutputFormatter.cpp
 )
 

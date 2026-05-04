@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #534
+
+- 日期：2026-05-04
+- 阶段：cli/build-surface
+- 任务：CLI-TODO-009 实现 `CliExitDecision` 与本地退出码决策
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/CliExitDecision.h` 与 `apps/cli/src/CliExitDecision.cpp`，把 CLI v1 `0/2/3/4/5/6/7` 退出码矩阵集中到单一 owner，并按“先本地 transport/protocol、再 daemon disposition、再稳定 `error_ref` 事实”的顺序做裁定。
+2. 更新 `apps/cli/src/main.cpp` 与 `apps/cli/CMakeLists.txt`，让 CLI 入口改为统一调用 `CliExitDecision`，不再把所有失败路径压缩成 `EXIT_FAILURE`，同时把新的 exit decision 源文件接入 `dasall_cli` 构建。
+3. 更新 `tests/contract/access/CMakeLists.txt`，将 `CliExitCodeContractTest` 从 reserved/fail-closed placeholder 替换为真实 contract target，并保留 `CliJsonOutputContractTest` 继续作为 010/012 前的 reserved 入口。
+4. 新增 `tests/contract/access/CliExitCodeContractTest.cpp`，锁定参数错误、daemon 不可达、协议错误、success-like、access deny、retryable/not_ready、business failure 等场景的 CLI v1 退出码与 outcome family。
+5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-009` 标记为 Done，并明确 012 的剩余范围已收敛为 JSON contract 与 exit code 扩展场景。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过，`CliExitDecision`、主程序入口与新的 contract target 都成功进入当前 CMake 构建图。
+2. `RunCtest_CMakeTools(tests=["CliExitCodeContractTest","AccessErrorMappingTest"])`
+   - 结果：通过，新的 `CliExitCodeContractTest` 与既有 `AccessErrorMappingTest` 均 `1/1` passed；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+
+### 结果
+
+1. CLI 退出码现在不再是简单的 success/failure 二元值；`main()` 已能稳定区分参数错误、daemon 不可达、认证授权拒绝、业务失败、可重试失败和协议错误。
+2. `CliExitCodeContractTest` 已经从 reserved topology 进入真实断言阶段，因此 009 的 exit code contract 不再依赖后续 binary/integration gate 间接证明。
+3. 当前实现仍基于本地 failure path、daemon disposition 与稳定 `error_ref` 事实推导 exit family，没有扩展 UDS response schema；这保证了 009 不会把范围扩到 daemon protocol 变更，但也意味着 010/012 仍需继续完成 JSON envelope 与 binary-facing contract 收口。
+
 ## 记录 #533
 
 - 日期：2026-05-04

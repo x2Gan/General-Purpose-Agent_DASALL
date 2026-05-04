@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "CliCommandParser.h"
+#include "CliExitDecision.h"
 #include "CliIpcClient.h"
 #include "CliOutputFormatter.h"
 #include "daemon/DaemonEndpointDefaults.h"
@@ -30,7 +31,7 @@ int main(int argc, char* argv[]) {
                      "invalid arguments")
               << '\n';
     std::cerr << dasall::apps::cli::CliCommandParser::usage_string();
-    return EXIT_FAILURE;
+    return dasall::apps::cli::make_argument_error_decision().exit_code;
   }
 
   // 2. 构造 IIPC provider 和 CliIpcClient
@@ -40,8 +41,9 @@ int main(int argc, char* argv[]) {
       dasall::access::daemon::kDefaultDaemonSocketPath);
 
   const dasall::apps::cli::CliIpcClient client(ipc, endpoint);
-  const auto is_success_disposition = [](const dasall::apps::cli::DaemonClientResponse& response) {
-    return response.is_completed() || response.is_accepted_async();
+  const auto exit_code_for = [&](const dasall::apps::cli::DaemonClientResponse& response) {
+    return dasall::apps::cli::decide_exit_for_response(response, cmd->output_mode)
+        .exit_code;
   };
 
   // 3. 执行命令
@@ -51,12 +53,12 @@ int main(int argc, char* argv[]) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
                        response.failure_reason)
                 << '\n';
-      return EXIT_FAILURE;
+      return exit_code_for(response);
     }
 
     std::cout << dasall::apps::cli::CliOutputFormatter::format_ping_success(response)
               << '\n';
-    return response.is_completed() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return exit_code_for(response);
   }
 
   if (cmd->name == "readiness") {
@@ -65,14 +67,14 @@ int main(int argc, char* argv[]) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
                 << '\n';
-      return EXIT_FAILURE;
+      return exit_code_for(response);
     }
 
     std::cout
         << dasall::apps::cli::CliOutputFormatter::format_readiness_success(
                response)
         << '\n';
-    return response.is_completed() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return exit_code_for(response);
   }
 
   if (cmd->name == "run") {
@@ -81,14 +83,14 @@ int main(int argc, char* argv[]) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
                 << '\n';
-      return EXIT_FAILURE;
+      return exit_code_for(response);
     }
 
     std::cout
         << dasall::apps::cli::CliOutputFormatter::format_submit_success(
                response)
         << '\n';
-    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return exit_code_for(response);
   }
 
   if (cmd->name == "status") {
@@ -100,14 +102,14 @@ int main(int argc, char* argv[]) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
                 << '\n';
-      return EXIT_FAILURE;
+      return exit_code_for(response);
     }
 
     std::cout
         << dasall::apps::cli::CliOutputFormatter::format_status_success(
                response)
         << '\n';
-    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return exit_code_for(response);
   }
 
   if (cmd->name == "cancel") {
@@ -119,14 +121,14 @@ int main(int argc, char* argv[]) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
                 << '\n';
-      return EXIT_FAILURE;
+      return exit_code_for(response);
     }
 
     std::cout
         << dasall::apps::cli::CliOutputFormatter::format_cancel_success(
                response)
         << '\n';
-    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return exit_code_for(response);
   }
 
   if (cmd->name == "diag") {
@@ -135,13 +137,13 @@ int main(int argc, char* argv[]) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
                 << '\n';
-      return EXIT_FAILURE;
+      return exit_code_for(response);
     }
 
     std::cout << dasall::apps::cli::CliOutputFormatter::format_diag_success(
                      response)
               << '\n';
-    return is_success_disposition(response) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return exit_code_for(response);
   }
 
   // 不可达（parse 已验证命令名合法）
