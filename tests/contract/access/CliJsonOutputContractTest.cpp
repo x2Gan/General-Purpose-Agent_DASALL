@@ -94,6 +94,36 @@ void test_accepted_async_json_contract_keeps_receipt_and_null_error() {
               "accepted_async contract must stay on CLI exit code 0");
 }
 
+void test_run_completed_json_contract_keeps_session_and_final_result_projection() {
+  auto response = make_response(UdsResponseDisposition::Completed,
+                                std::nullopt,
+                                std::nullopt,
+                                std::string("runtime orchestrator skeleton completed"),
+                                true);
+  response.request_id = "req-run-042";
+  response.trace_id = "trace-run-042";
+  response.session_id = std::string("session-run-042");
+
+  const auto decision = decide_exit_for_response(response, CliOutputMode::Json);
+  const auto json = dasall::apps::cli::CliOutputFormatter::format_json_output(
+      "run", response, decision);
+
+  assert_true(json.find("\"command\":\"run\"") != std::string::npos,
+              "run-completed contract must keep canonical run command name");
+  assert_true(json.find("\"session_id\":\"session-run-042\"") !=
+                  std::string::npos,
+              "run-completed contract must expose daemon session_id when available");
+  assert_true(json.find("\"receipt_ref\":null") != std::string::npos,
+              "run-completed contract must keep receipt_ref null on synchronous completion");
+  assert_true(
+      json.find(
+          "\"result\":{\"response_text\":\"runtime orchestrator skeleton completed\",\"task_completed\":true}") !=
+          std::string::npos,
+      "run-completed contract must keep the final result projection under result");
+  assert_true(json.find("\"error\":null") != std::string::npos,
+              "run-completed contract must keep error null on success");
+}
+
 void test_failure_json_contract_projects_error_object_and_local_dispositions() {
   auto denied = make_response(UdsResponseDisposition::Rejected,
                               std::nullopt,
@@ -108,9 +138,20 @@ void test_failure_json_contract_projects_error_object_and_local_dispositions() {
   assert_true(denied_json.find("\"kind\":\"access_denied\"") !=
                   std::string::npos,
               "failure contract must classify authorization denials as access_denied");
+  assert_true(denied_json.find("\"reason\":\"authorization_denied\"") !=
+                  std::string::npos,
+              "failure contract must keep the stable authorization reason in error.reason");
   assert_true(denied_json.find("\"error_ref\":\"authorization_denied\"") !=
                   std::string::npos,
               "failure contract must preserve daemon/access error_ref");
+  assert_true(denied_json.find("\"access_error_code\":300") !=
+                  std::string::npos,
+              "failure contract must project the stable access error code for authorization denies");
+  assert_true(denied_json.find("\"access_error_domain\":\"authorization\"") !=
+                  std::string::npos,
+              "failure contract must project the stable access error domain for authorization denies");
+  assert_true(denied_json.find("\"retryable\":false") != std::string::npos,
+              "failure contract must preserve non-retryable authorization deny semantics");
   assert_true(denied_json.find("\"result\":null") != std::string::npos,
               "failure contract must keep result null");
   assert_true(denied_json.find("\"exit_code\":4") != std::string::npos,
@@ -143,6 +184,7 @@ int main() {
   try {
     test_ping_json_contract_uses_stable_cli_projection_envelope();
     test_accepted_async_json_contract_keeps_receipt_and_null_error();
+        test_run_completed_json_contract_keeps_session_and_final_result_projection();
     test_failure_json_contract_projects_error_object_and_local_dispositions();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';

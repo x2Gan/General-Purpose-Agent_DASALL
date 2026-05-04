@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #538
+
+- 日期：2026-05-05
+- 阶段：cli/contract-gate
+- 任务：CLI-TODO-012 补齐 CLI JSON contract tests 与 exit code 扩展场景
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/CliAccessErrorProjection.h`，把 CLI 对 daemon/access `error_ref` 的 alias 归类收敛为单一 helper，统一把 `authorization_denied`、`authentication_required`、`status_owner_mismatch`、`cancel_forward_failed`、`status_expired` 等稳定错误名映射到 access error code。
+2. 更新 `apps/cli/src/CliExitDecision.cpp`，改为复用共享 helper 归类 access error，避免 exit decision 与 formatter 对同一 `error_ref` 维护两份不同的本地映射规则。
+3. 更新 `apps/cli/src/CliOutputFormatter.cpp`，在稳定 JSON error object 中真正输出 `access_error_code`、`access_error_domain`、`retryable`，不再把 daemon/access failure 一律退化成三项全 `null`。
+4. 更新 `tests/contract/access/CliJsonOutputContractTest.cpp`，补齐 `run completed`、`authorization_denied`、`daemon_unavailable` 的扩展断言，锁定 `session_id`、同步完成路径、`error.reason` 和 access error facts 投影。
+5. 更新 `tests/contract/access/CliExitCodeContractTest.cpp`，补齐 `idempotency_replay_hit`、`authentication_required`、`diag_disabled`、`cancel_forward_failed`、`status_expired` 等扩展 exit code 场景，确保 CLI v1 的 success/access-deny/retryable/business 四族不会只被最小 happy-path 覆盖。
+6. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-012` 标记为 Done，并把专项剩余范围收敛到 `CLI-TODO-013` binary/integration gate 与 `CLI-TODO-014` 证据收口。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["AccessErrorMappingTest","CliJsonOutputContractTest","CliExitCodeContractTest"])`
+   - 结果：通过，expanded JSON/exit contract 全部通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+2. `Build_CMakeTools()`
+   - 结果：通过；在修正 `CliOutputFormatter.cpp` 中 `retryable` JSON 字段的本地字符串拼接编译错误后，CLI app、unit 与 contract 目标均恢复干净构建面。
+
+### 结果
+
+1. CLI 的稳定 JSON envelope 现在不再只锁顶层主键；对于 access/daemon failure，`error` 子对象也已经被 contract 自动化锁住，尤其是 `access_error_code/domain/retryable` 不再是未实现占位。
+2. `CliExitCodeContractTest` 不再只覆盖最小 `0/2/3/4/5/6/7` 族；replay-hit、authentication alias、diagnostics deny、receipt failure 等扩展路径已进入真实矩阵，因此 013 可以专注在 built binary 的 CLI surface，而不必回头补本地 exit family 的语义缺口。
+3. Wave 4 已从“contract -> integration”推进到只剩 integration gate，后续只需验证 built `dasall_cli` 在 sync/async、显式 `request_id` / `trace_id` 和 stdout/stderr 责任边界上的真实行为。
+
 ## 记录 #537
 
 - 日期：2026-05-05

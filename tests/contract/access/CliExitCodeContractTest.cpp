@@ -99,6 +99,14 @@ void test_success_like_paths_map_to_exit_code_0() {
   assert_equal(0,
                accepted_decision.exit_code,
                "accepted_async with receipt_ref should map to success exit code 0");
+
+  const auto replay_hit = decide_exit_for_response(
+      make_response(UdsResponseDisposition::Rejected, std::string("idempotency_replay_hit")));
+  assert_equal(0,
+               replay_hit.exit_code,
+               "idempotency replay hits should stay on CLI exit 0 as a success-like replay path");
+  assert_true(replay_hit.outcome_family == CliOutcomeFamily::Success,
+              "idempotency replay hits should stay in the success family");
 }
 
 void test_validation_and_access_denials_keep_the_frozen_cli_families() {
@@ -121,6 +129,18 @@ void test_validation_and_access_denials_keep_the_frozen_cli_families() {
   assert_equal(4,
                owner_mismatch.exit_code,
                "receipt ownership mismatches should stay on CLI exit 4");
+
+    const auto authentication_required = decide_exit_for_response(
+      make_response(UdsResponseDisposition::Rejected, std::string("authentication_required")));
+    assert_equal(4,
+           authentication_required.exit_code,
+           "authentication challenge aliases should stay on CLI exit 4");
+
+    const auto diag_disabled = decide_exit_for_response(
+      make_response(UdsResponseDisposition::Rejected, std::string("diag_disabled")));
+    assert_equal(4,
+           diag_disabled.exit_code,
+           "diagnostics authorization rejects should stay on CLI exit 4");
 }
 
 void test_retryable_paths_map_to_exit_code_6_and_ignore_exit_code_hint() {
@@ -142,6 +162,12 @@ void test_retryable_paths_map_to_exit_code_6_and_ignore_exit_code_hint() {
   assert_true(timeout_decision.diagnostic_hint.find("runtime_dispatch_timeout") !=
                   std::string::npos,
               "retryable failures should keep the stable error_ref in diagnostics");
+
+  const auto cancel_forward_failed = decide_exit_for_response(
+      make_response(UdsResponseDisposition::Rejected, std::string("cancel_forward_failed")));
+  assert_equal(6,
+               cancel_forward_failed.exit_code,
+               "cancellation-forward failures should stay on CLI exit 6 as retryable receipt failures");
 }
 
 void test_remaining_daemon_rejects_map_to_exit_code_5() {
@@ -152,6 +178,12 @@ void test_remaining_daemon_rejects_map_to_exit_code_5() {
                "non-retryable daemon rejects should stay on CLI exit 5");
   assert_true(publish_failure.outcome_family == CliOutcomeFamily::BusinessFailure,
               "non-retryable daemon rejects should stay in business-failure family");
+
+  const auto receipt_expired = decide_exit_for_response(
+      make_response(UdsResponseDisposition::Rejected, std::string("status_expired")));
+  assert_equal(5,
+               receipt_expired.exit_code,
+               "expired receipt queries should stay on CLI exit 5 as non-access-deny receipt failures");
 }
 
 }  // namespace

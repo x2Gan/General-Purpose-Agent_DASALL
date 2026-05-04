@@ -3,6 +3,9 @@
 #include <string_view>
 #include <string>
 
+#include "AccessErrors.h"
+#include "CliAccessErrorProjection.h"
+
 namespace dasall::apps::cli {
 
 namespace {
@@ -98,6 +101,10 @@ constexpr std::string_view kCliJsonSchemaVersion = "cli.output.v1";
   return *input ? "true" : "false";
 }
 
+[[nodiscard]] std::string json_nullable_int(const std::optional<int>& input) {
+  return input.has_value() ? std::to_string(*input) : "null";
+}
+
 [[nodiscard]] std::string json_disposition(const DaemonClientResponse& response,
                                            const CliExitDecision& decision) {
   switch (decision.outcome_family) {
@@ -164,14 +171,33 @@ constexpr std::string_view kCliJsonSchemaVersion = "cli.output.v1";
     return "null";
   }
 
+  const auto access_error_code = response.error_ref.has_value()
+                                     ? classify_access_error_ref(*response.error_ref)
+                                     : std::nullopt;
+  const auto access_error_descriptor = access_error_code.has_value()
+                                           ? std::optional(
+                                                 dasall::access::describe_access_error(
+                                                     *access_error_code))
+                                           : std::nullopt;
+
   std::string output = "{";
   output += "\"kind\":" + json_string(json_error_kind(decision));
   output += ",\"reason\":" +
             json_nullable_text(decision.diagnostic_hint);
   output += ",\"error_ref\":" + json_nullable_string(response.error_ref);
-  output += ",\"access_error_code\":null";
-  output += ",\"access_error_domain\":null";
-  output += ",\"retryable\":null";
+  output += ",\"access_error_code\":" +
+            json_nullable_int(access_error_code.has_value()
+                                  ? std::optional(static_cast<int>(*access_error_code))
+                                  : std::nullopt);
+  output += ",\"access_error_domain\":" +
+            (access_error_descriptor.has_value()
+                 ? json_string(dasall::access::access_error_domain_name(
+                       access_error_descriptor->domain))
+                 : std::string("null"));
+  output += ",\"retryable\":";
+  output += access_error_descriptor.has_value()
+                ? (access_error_descriptor->retryable ? "true" : "false")
+                : "null";
   output += '}';
   return output;
 }
