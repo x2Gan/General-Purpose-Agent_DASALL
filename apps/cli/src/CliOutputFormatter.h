@@ -3,6 +3,7 @@
 #include <string>
 #include <string_view>
 
+#include "CliExitDecision.h"
 #include "CliIpcClient.h"
 
 namespace dasall::apps::cli {
@@ -19,6 +20,15 @@ namespace dasall::apps::cli {
 ///   - 仅做字符串变换，不执行 IPC
 class CliOutputFormatter {
  public:
+  [[nodiscard]] static std::string format_command_human_output(
+      std::string_view command,
+      const DaemonClientResponse& response);
+
+  [[nodiscard]] static std::string format_json_output(
+      std::string_view command,
+      const DaemonClientResponse& response,
+      const CliExitDecision& decision);
+
   /// 格式化 ping 成功响应。
   /// @param response 守护进程返回的结构化响应
   /// @return 人类可读的成功消息

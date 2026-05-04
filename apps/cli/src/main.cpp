@@ -31,22 +31,22 @@ constexpr std::string_view kCliLocalVersion = "v1";
 constexpr std::string_view kCliOutputSchemaVersion = "cli.output.v1";
 constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
 
-[[nodiscard]] std::string format_version_output(
-    const dasall::apps::cli::CliOutputMode output_mode) {
-  if (output_mode == dasall::apps::cli::CliOutputMode::Json) {
-    return std::string("{\"schema_version\":\"") +
-           std::string(kCliOutputSchemaVersion) +
-           "\",\"command\":\"version\",\"request_id\":null,"
-           "\"trace_id\":null,\"session_id\":null,"
-           "\"disposition\":\"completed\",\"receipt_ref\":null,"
-           "\"result\":{\"response_text\":\"dasall_cli v1; schema_support=cli.output.v1; "
-           "build_metadata=build-metadata-unavailable\",\"task_completed\":true},"
-           "\"error\":null,\"warnings\":[],\"exit_code\":0}";
-  }
-
+[[nodiscard]] std::string format_version_human_output() {
   return std::string("dasall_cli ") + std::string(kCliLocalVersion) +
          "\nschema support: " + std::string(kCliOutputSchemaVersion) +
          "\nbuild metadata: " + std::string(kCliBuildMetadata);
+}
+
+[[nodiscard]] dasall::apps::cli::DaemonClientResponse make_version_response() {
+  dasall::apps::cli::DaemonClientResponse response;
+  response.transport_ok = true;
+  response.parse_ok = true;
+  response.disposition = dasall::access::daemon::UdsResponseDisposition::Completed;
+  response.response_text = std::string("dasall_cli v1; schema_support=") +
+                           std::string(kCliOutputSchemaVersion) +
+                           "; build_metadata=" + std::string(kCliBuildMetadata);
+  response.task_completed = true;
+  return response;
 }
 
 }  // namespace
@@ -74,8 +74,17 @@ int main(int argc, char* argv[]) {
   }
 
   if (cmd->name == "version") {
-    std::cout << format_version_output(cmd->output_mode) << '\n';
-    return EXIT_SUCCESS;
+    const auto response = make_version_response();
+    const auto decision = dasall::apps::cli::decide_exit_for_response(
+        response, cmd->output_mode);
+    if (cmd->output_mode == dasall::apps::cli::CliOutputMode::Json) {
+      std::cout << dasall::apps::cli::CliOutputFormatter::format_json_output(
+                       "version", response, decision)
+                << '\n';
+    } else {
+      std::cout << format_version_human_output() << '\n';
+    }
+    return decision.exit_code;
   }
 
   // 2. 构造 IIPC provider 和 CliIpcClient
@@ -86,103 +95,72 @@ int main(int argc, char* argv[]) {
 
     const dasall::apps::cli::CliIpcClient client(
       ipc, endpoint, cmd->timeout_ms.value_or(1000));
-  const auto exit_code_for = [&](const dasall::apps::cli::DaemonClientResponse& response) {
-    return dasall::apps::cli::decide_exit_for_response(response, cmd->output_mode)
-        .exit_code;
+    const auto emit_daemon_response = [&](std::string_view command_name,
+                                          const dasall::apps::cli::DaemonClientResponse& response) {
+      const auto decision = dasall::apps::cli::decide_exit_for_response(
+          response, cmd->output_mode);
+
+      if (cmd->output_mode == dasall::apps::cli::CliOutputMode::Json) {
+        std::cout << dasall::apps::cli::CliOutputFormatter::format_json_output(
+                         command_name, response, decision)
+                  << '\n';
+        return decision.exit_code;
+      }
+
+      std::ostream& stream =
+          decision.primary_output_stream ==
+                  dasall::apps::cli::CliPrimaryOutputStream::Stdout
+              ? std::cout
+              : std::cerr;
+
+      if (!response.ok()) {
+        if (command_name == "ping") {
+          stream << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
+                        response.failure_reason)
+                 << '\n';
+        } else {
+          stream << dasall::apps::cli::CliOutputFormatter::format_error(
+                        response.failure_reason)
+                 << '\n';
+        }
+        return decision.exit_code;
+      }
+
+      stream << dasall::apps::cli::CliOutputFormatter::format_command_human_output(
+                    command_name, response)
+             << '\n';
+      return decision.exit_code;
   };
 
   // 3. 执行命令
   if (cmd->name == "ping") {
     const auto response = client.invoke(*cmd);
-    if (!response.ok()) {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
-                       response.failure_reason)
-                << '\n';
-      return exit_code_for(response);
-    }
-
-    std::cout << dasall::apps::cli::CliOutputFormatter::format_ping_success(response)
-              << '\n';
-    return exit_code_for(response);
+      return emit_daemon_response("ping", response);
   }
 
   if (cmd->name == "readiness") {
     const auto response = client.invoke(*cmd);
-    if (!response.ok()) {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
-                       response.failure_reason)
-                << '\n';
-      return exit_code_for(response);
-    }
-
-    std::cout
-        << dasall::apps::cli::CliOutputFormatter::format_readiness_success(
-               response)
-        << '\n';
-    return exit_code_for(response);
+      return emit_daemon_response("readiness", response);
   }
 
   if (cmd->name == "run") {
     const auto response = client.invoke(*cmd);
-    if (!response.ok()) {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
-                       response.failure_reason)
-                << '\n';
-      return exit_code_for(response);
-    }
-
-    std::cout
-        << dasall::apps::cli::CliOutputFormatter::format_submit_success(
-               response)
-        << '\n';
-    return exit_code_for(response);
+      return emit_daemon_response("run", response);
   }
 
   if (cmd->name == "status") {
     const auto response = client.invoke(*cmd);
-    if (!response.ok()) {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
-                       response.failure_reason)
-                << '\n';
-      return exit_code_for(response);
-    }
-
-    std::cout
-        << dasall::apps::cli::CliOutputFormatter::format_status_success(
-               response)
-        << '\n';
-    return exit_code_for(response);
+      return emit_daemon_response("status", response);
   }
 
   if (cmd->name == "cancel") {
     const auto response = client.invoke(*cmd);
-    if (!response.ok()) {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
-                       response.failure_reason)
-                << '\n';
-      return exit_code_for(response);
-    }
-
-    std::cout
-        << dasall::apps::cli::CliOutputFormatter::format_cancel_success(
-               response)
-        << '\n';
-    return exit_code_for(response);
+      return emit_daemon_response("cancel", response);
   }
 
   if (cmd->name == "diag") {
     const auto response = client.invoke(*cmd);
-    if (!response.ok()) {
-      std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
-                       response.failure_reason)
-                << '\n';
-      return exit_code_for(response);
-    }
-
-    std::cout << dasall::apps::cli::CliOutputFormatter::format_diag_success(
-                     response)
-              << '\n';
-    return exit_code_for(response);
+      return emit_daemon_response("diag", response);
   }
 
   // 不可达（parse 已验证命令名合法）

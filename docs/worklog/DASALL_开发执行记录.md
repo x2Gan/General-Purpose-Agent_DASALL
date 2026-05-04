@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #537
+
+- 日期：2026-05-05
+- 阶段：cli/build-surface
+- 任务：CLI-TODO-010 实现 `CliOutputFormatter` 的 human/JSON 双格式输出
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/CliOutputFormatter.h` 与 `apps/cli/src/CliOutputFormatter.cpp`，新增通用 human formatter 与 `format_json_output()`，按 `cli.output.v1` 固定输出 `schema_version/command/request_id/trace_id/session_id/disposition/receipt_ref/result/error/warnings/exit_code`，并为 `daemon_unavailable`、`protocol_error`、`accepted_async`、`rejected` 等场景投影稳定 disposition 与 error kind。
+2. 更新 `apps/cli/src/main.cpp`，让 daemon-facing 命令统一先计算 `CliExitDecision` 再做输出路由：`--json` 模式始终只向 stdout 输出单个 JSON document，human 模式则按 `CliPrimaryOutputStream` 将成功结果写 stdout、失败结果写 stderr；同时把本地 `version --json` 切到同一 formatter envelope。
+3. 更新 `tests/unit/access/CliDaemonOutputFormatterTest.cpp`，新增对 completed JSON envelope 和 local transport failure JSON envelope 的断言，确保 formatter 不再停留在 human-only 文本。
+4. 更新 `tests/contract/access/CMakeLists.txt`，将 `CliJsonOutputContractTest` 从 reserved/fail-closed placeholder 替换为真实 contract target；新增 `tests/contract/access/CliJsonOutputContractTest.cpp`，锁定 `ping` success、`run accepted_async`、`authorization_denied` 与 `daemon_unavailable` 的稳定 JSON 主键与 exit code 投影。
+5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-010` 标记为 Done，并同步清理已过时的 `CliJsonOutputContractTest` reserved-entrypoint 描述，把剩余范围收敛到 012/013/014 的扩展 contract/binary gate。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过，formatter、主程序输出路由与新的 JSON contract target 均进入真实构建图。
+2. `RunCtest_CMakeTools(tests=["CliDaemonOutputFormatterTest","CliJsonOutputContractTest"])`
+   - 结果：通过，formatter unit 与真实 `CliJsonOutputContractTest` 均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+3. `./build/vscode-linux-ninja/apps/cli/dasall_cli ping --json --socket-path /tmp/dasall-cli-010-missing.sock` 与 `./build/vscode-linux-ninja/apps/cli/dasall_cli ping --socket-path /tmp/dasall-cli-010-missing.sock`
+   - 结果：通过，前者在 daemon 不可达时只向 stdout 输出 `daemon_unavailable` JSON envelope 且 stderr 为空；后者只向 stderr 输出 human failure 文本且 stdout 为空。
+4. `./build/vscode-linux-ninja/apps/cli/dasall_cli version --json`
+   - 结果：通过，本地 `version --json` 与 daemon-facing `--json` 共用同一 `cli.output.v1` envelope 主键。
+
+### 结果
+
+1. CLI 已不再是“formatter 支持 human、main 自己手搓零散 JSON”的双轨实现；`CliOutputFormatter` 现在是 human/JSON 输出 contract 的单一 owner。
+2. `CliJsonOutputContractTest` 已从 reserved placeholder 进入真实断言阶段，因此 010 之后 `--json` 的基础 envelope 不再只存在于详设或 TODO，而是有自动化 contract 锁定。
+3. `main()` 已开始按 `CliExitDecision` 做 stdout/stderr 路由，`--json` 失败路径也会稳定落 stdout；后续 `CLI-TODO-012/013` 只需继续扩展场景矩阵和 binary 集成门，而不必再回头修 formatter 的 contract owner 或输出流分离基础设施。
+
 ## 记录 #536
 
 - 日期：2026-05-05
