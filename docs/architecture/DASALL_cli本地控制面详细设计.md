@@ -92,7 +92,7 @@ flowchart LR
 2. 运维诊断链：先 ping 判断守护状态，再在授权前提下使用 diag health、diag queue、diag threads。
 3. 脚本集成链：统一使用子命令模型，配合 --json、退出码和 request_id 做自动化调用。
 
-需要特别说明的是：本设计已经冻结了命令族和通用交互方式，但 run 的业务参数形态、status 和 cancel 的精确参数名仍属于后续 Build 阶段需要继续冻结的内容。因此当前文档对“怎么用”的说明是能力级和命令级说明，不是最终 man page。
+需要特别说明的是：本设计现已冻结 `run`、`status`、`cancel`、`help`、`version` 的参数 schema 与 usage skeleton；后续 Build 阶段只允许补 parser、formatter、request builder 和帮助示例，不得再改动公开参数名、selector 规则或 endpoint override 命名。当前仍保留为后续冻结项的只有 `--json` envelope 与 `CliExitDecision` 契约，它们由后续 CLI 契约任务单独收口。
 
 ## 2. 约束清单
 
@@ -286,7 +286,12 @@ flowchart LR
 | diag queue | 触发 diagnostics 的 queue.stats | 只读命令，受策略控制 | 是 |
 | diag threads | 触发 diagnostics 的 thread.dump | 只读命令，受策略控制 | 是 |
 | help | 显示顶层或子命令帮助 | 本地生成 | 否 |
-| version | 显示 CLI 版本，并可对比 daemon 版本 | 本地或 ping 补全 | 否 |
+| version | 显示 CLI 本地版本、schema 支持范围与 build metadata | 本地生成，不主动触达 daemon | 否 |
+
+补充说明：
+
+1. `submit` 与 `readiness` 若因兼容需要暂时保留，只能作为隐藏兼容入口存在，不属于 v1 公开命令面，也不得出现在顶层 help 中。
+2. `version` 的 daemon 版本对比能力不纳入 v1 稳定 contract；如后续需要，只能以显式加法 flag 或独立子命令扩展，而不是让 `version` 隐式发起 ping。
 
 #### 6.4.2 参数与输入约定
 
@@ -307,9 +312,35 @@ flowchart LR
 | --request-id | 显式指定 request_id | 主要用于重试与对账 |
 | --session | 提供 session hint | 仅作 hint，不代表授权 |
 | --trace-id | 显式指定 trace_id | 便于跨 CLI/daemon/runtime 追踪 |
-| --socket | 覆盖本地 socket path | 仅允许开发或受控部署使用 |
+| --socket-path | 覆盖本地 socket path | v1 唯一稳定命名；仅允许开发或受控部署使用 |
 | --quiet | 抑制非必要 stderr 信息 | 不影响 stdout 结果 |
 | --no-input | 禁止交互式提示 | 脚本模式推荐 |
+
+#### 6.4.3.1 v1 稳定参数 schema
+
+通用规则：
+
+1. `--json`、`--timeout-ms`、`--socket-path`、`--quiet`、`--no-input` 属于 CLI UX / transport 级 flag；除特别注明外，允许出现在子命令前后，只要 parser 能以无歧义方式解析。
+2. `--async` 只适用于 `run`；`status`、`cancel`、`help`、`version` 传入该 flag 时必须 fail-closed。
+3. `-h` / `--help` 只表示帮助；无论附在顶层还是子命令尾部，都应优先显示帮助文本，而不是继续执行 daemon RPC。
+4. `--socket-path` 只适用于会触达 daemon 的命令：`run`、`status`、`cancel`、`ping`、`diag`；`help`、`version` 不接受该 flag。
+5. `actor_ref` 不属于 v1 公开 CLI 参数。对 `status`、`cancel` 的主体识别依赖 daemon 基于 local peer identity 推导，不再要求用户显式传入 actor 标识。
+
+| 命令 | 稳定 usage skeleton | 必填参数 | 可选参数 | Reject 规则 |
+|---|---|---|---|---|
+| `run` | `dasall run <request_json_or_->` | 一个请求输入源：`<request_json>` 或 `-` | `--async`、`--request-id <id>`、`--session <hint>`、`--trace-id <id>`、`--timeout-ms <ms>`、`--json`、`--socket-path <path>`、`--quiet`、`--no-input` | 不接受公开 `submit` 别名、`--socket`、公开 `--actor-ref` |
+| `status` | `dasall status (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>)` | 恰好一个 selector；若走 receipt 路径则必须带 `--ownership-token` | `--timeout-ms <ms>`、`--json`、`--socket-path <path>`、`--quiet` | 不接受 positional `receipt_ref ownership_token actor_ref` 作为 v1 公开 schema；`--async`、公开 `--actor-ref`、混用 selector 都必须拒绝 |
+| `cancel` | `dasall cancel (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>)` | 恰好一个 selector；若走 receipt 路径则必须带 `--ownership-token` | `--timeout-ms <ms>`、`--json`、`--socket-path <path>`、`--quiet` | 不接受 positional `receipt_ref ownership_token actor_ref` 作为 v1 公开 schema；`--async`、公开 `--actor-ref`、混用 selector 都必须拒绝 |
+| `help` | `dasall help [command] [subcommand]` | 无 | 顶层 `-h/--help`；命令级 `<command> --help` | 不接受 `--json`、`--socket-path` 或任何触网行为 |
+| `version` | `dasall version` | 无 | `--json`、`--quiet` | 不接受 `--socket-path`、daemon 自动探测或 `--daemon` 一类扩展 flag |
+
+补充规则：
+
+1. `run` 的 `-` 明确表示从 `stdin` 读取请求体；若后续实现支持“未显式给出 payload 且 `stdin` 非 TTY 时自动读 stdin”，该行为只能作为 `run -` 的兼容简写，不得改变公开 usage skeleton。
+2. `status/cancel` 的 selector 固定为二选一：`--receipt` 路径面向 accepted receipt 回查，`--request-id` 路径面向显式 request replay / timeout 后补查。两种路径不得混用。
+3. `--ownership-token` 只属于 receipt 路径；`--request-id` 路径传入该 flag 时必须被 parser 拒绝，避免把 receipt ownership 模型混入 request replay 语义。
+4. help 保持 human-only；脚本若需要机器可读元信息，应使用 `version --json` 或命令本身的 `--json` 输出，而不是消费帮助文本。
+5. `version` 默认只报告 CLI 本地版本、schema 支持范围与 build metadata；daemon 兼容性检查留给后续显式加法扩展，而不是把 `version` 变成隐式 ping。
 
 #### 6.4.4 退出码映射
 
@@ -345,7 +376,7 @@ flowchart LR
 | diag queue | 看队列状态 | 用于分析 daemon 内部排队与背压状态 | 受控只读快照 |
 | diag threads | 看线程状态 | 用于分析守护线程执行态与阻塞线索 | 受控只读快照 |
 | help | 看帮助 | 无参数或显式 help 都应可获取命令说明 | 本地生成的帮助信息 |
-| version | 看版本 | 用于查看 CLI 本身版本，必要时补充 daemon 对比信息 | 版本与兼容提示 |
+| version | 看版本 | 用于查看 CLI 本地版本、schema 支持范围与 build metadata；daemon 对比不属于 v1 稳定 contract | 版本与兼容提示 |
 
 按典型场景划分，推荐交互顺序如下：
 

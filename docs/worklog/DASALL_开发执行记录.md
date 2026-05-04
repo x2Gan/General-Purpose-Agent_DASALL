@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #530
+
+- 日期：2026-05-04
+- 阶段：cli/design-contract-freeze
+- 任务：CLI-TODO-001 补齐 run/status/cancel/help/version 参数 schema 与 usage 文案
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md`，集中回写本地证据、CLIG / kubectl 参考、公开命令面冻结结论以及 Design -> Build 映射。
+2. 更新 `docs/architecture/DASALL_cli本地控制面详细设计.md`，将 `run/status/cancel/help/version` 的参数 schema、selector 规则、`--socket-path` 稳定命名、compat surface 边界与 version local-only 策略回链到权威详设。
+3. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-001` 标记为 Done，清除 `CLI-BLK-001`，并把 `CLI-TODO-006/007/008` 从“参数未冻结”状态切换为可执行的 Build 前置任务。
+
+### 验证
+
+1. 文档检索：围绕 `run/status/cancel/help/version`、`--socket-path`、`submit/readiness`、version local-only 的关键锚点已在详设、专项 TODO 与 deliverable 三处同时出现。
+   - 结果：通过，CLI-TODO-001 的冻结口径不再停留在单一文件。
+2. `RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest"])`
+   - 结果：通过，`1/1` tests passed；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声，不影响 focused 结论。
+
+### 结果
+
+1. CLI v1 公开命令面的参数 contract 已从“能力级冻结、参数级待定”推进为“参数 schema 与 usage skeleton 已冻结”，后续 parser/request builder 不再需要猜测用户面参数名。
+2. `--socket-path` 已成为唯一稳定的 endpoint override 名称，`--socket` 不再作为公开 alias；`submit/readiness` 被降级为隐藏兼容 surface，不进入顶层 help。
+3. `status/cancel` 的公开 schema 已切换为显式 selector + receipt ownership token 模型，`actor_ref` 不再进入公开帮助面；`version` 也已收敛为 local-only 视图，不再承担隐式 daemon 探测。
+
 ## 记录 #529
 
 - 日期：2026-05-03
