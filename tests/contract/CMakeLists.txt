@@ -112,6 +112,8 @@ function(dasall_register_ota_contract_test executable_target_name ctest_name sou
   )
 endfunction()
 
+add_subdirectory(access)
+
 # smoke group
 dasall_register_contract_test(
   dasall_contract_smoke_test

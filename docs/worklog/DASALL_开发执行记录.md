@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #532
+
+- 日期：2026-05-04
+- 阶段：cli/topology-discoverability
+- 任务：CLI-TODO-011 提前注册 CLI unit 与 contract 拓扑 discoverability
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/unit/apps/cli/CMakeLists.txt`，把 `CliIpcClientTest`、`CliIpcClientResponseTest`、`CliIpcClientUnavailableTest`、`CliDaemonCommandParserTest`、`CliDaemonOutputFormatterTest` 收敛到 CLI 自有 unit topology，并追加 `cli` 归属标签。
+2. 更新 `tests/unit/CMakeLists.txt` 与 `tests/unit/access/CMakeLists.txt`，接入新的 `apps/cli` 子树并移除 access 下的重复 CLI test 注册，避免同名 test 在两个拓扑重复声明。
+3. 新增 `tests/contract/access/CMakeLists.txt` 并更新 `tests/contract/CMakeLists.txt`，为 `CliJsonOutputContractTest`、`CliExitCodeContractTest` 建立 fail-closed reserved entrypoint，使 discoverability 与真实 contract 实现解耦。
+4. 新增 `docs/todos/cli/deliverables/CLI-TODO-011-CLI测试topology与discoverability接线.md`，回写 003~005 基线复核、topology 设计结论与 reserved contract 入口策略。
+5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-011` 标记为 Done，解阻 `CLI-BLK-003`，并把 `CLI-TODO-012` 切换为等待 009/010 实现的 NotStarted 状态。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过，新的 unit/contract CMake 拓扑可以完成重新配置与编译，不需要修改 CLI 业务代码。
+2. `ctest --test-dir build/vscode-linux-ninja -N | rg "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonOutputFormatterTest|CliJsonOutputContractTest|CliExitCodeContractTest"`
+   - 结果：通过，5 个现有 CLI unit tests 与 2 个预留 contract 入口都进入顶层 discoverability；reserved contract 入口仍保持 fail-closed，不会误报 `CLI-TODO-012` 完成。
+3. 003~005 基线复核：`RunCtest_CMakeTools(tests=["CliIpcClientTest","CliIpcClientUnavailableTest"])`、`RunCtest_CMakeTools(tests=["CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonCommandParserTest","CliDaemonOutputFormatterTest","DaemonPingIntegrationTest"])`、`RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest","CliDaemonSocketPathIntegrationTest","DaemonPingIntegrationTest"])`
+   - 结果：均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声，不影响 focused 结论。
+
+### 结果
+
+1. CLI 测试不再只有 `tests/unit/access` 这一条入口，后续 parser / client / formatter 单测可以继续复用原文件但由 CLI 自有 topology 管理。
+2. `CliJsonOutputContractTest` 与 `CliExitCodeContractTest` 的测试名已经稳定下来，`CLI-TODO-012` 只需替换 reserved entrypoint 为真实断言实现，不需要再改 discoverability 命名。
+3. `CLI-TODO-003`、`CLI-TODO-004`、`CLI-TODO-005` 已完成代码级复核，现有代码、focused tests 与历史交付物一致，本轮无需回补基线实现。
+
 ## 记录 #531
 
 - 日期：2026-05-04
