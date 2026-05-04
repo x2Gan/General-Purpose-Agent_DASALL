@@ -3,9 +3,9 @@
 最近更新时间：2026-05-04
 阶段：Detailed Design -> Special TODO
 适用范围：`apps/cli/` 纯客户端入口壳层、CLI 到 daemon 的本地 IPC client 面、CLI 用户面契约、CLI 相关单测/契约测试/集成门禁与交付证据回写
-当前结论：CLI 专项已完成首个补设计解阻任务，当前仓库已经完成 CLI 纯客户端依赖方向、CLI-daemon wire contract、shared endpoint 默认值以及 `CLI-TODO-001` 的命令参数 schema/usage 冻结。剩余未完成面集中在 `--json` stable envelope、`CliExitDecision`、CLI 自有测试拓扑与脚本化质量门；后续 Build 任务不再需要猜测 `run/status/cancel/help/version` 的公开参数 contract。
+当前结论：CLI 专项已完成两项补设计解阻任务，当前仓库已经完成 CLI 纯客户端依赖方向、CLI-daemon wire contract、shared endpoint 默认值、`CLI-TODO-001` 的命令参数 schema/usage 冻结，以及 `CLI-TODO-002` 的 CLI projection JSON envelope / `CliExitDecision` 冻结。剩余未完成面集中在 `CliCommand` 字段落位、parser/help/version、request builder、formatter/exit decision 实现、CLI 自有测试拓扑与脚本化质量门；后续 Build 任务不再需要猜测公开参数或脚本化 contract。
 
-评估修订要点（2026-05-04）：本次复核后补充冻结 7 个执行口径：`access::map_access_error()` 只作为 access 错误事实与协议映射输入，CLI v1 退出码仍由 `CliExitDecision` 投影为 `0/2/3/4/5/6/7`；CLI v1 socket 覆盖的稳定用户面命名已由 `CLI-TODO-001` 冻结为 `--socket-path`，`--socket` 不再作为公开 alias；platform peer identity 不阻塞 `apps/cli` 客户端任务，但继续作为 daemon/access 端到端本地控制面的外部依赖跟踪；CLI unit topology 与 contract topology 需要提前落点；新增未决问题处置表、统一验收命令与“持续证据回写 + 最终收口”的 `CLI-TODO-014`。
+评估修订要点（2026-05-04）：本次复核后补充冻结 9 个执行口径：`access::map_access_error()` 只作为 access 错误事实与协议映射输入，CLI v1 退出码仍由 `CliExitDecision` 投影为 `0/2/3/4/5/6/7`；`CLI-TODO-002` 已将 `--json` 收敛为 CLI projection envelope，固定顶层 `result/error/warnings` 位置、`schema_version=cli.output.v1`、`daemon_unavailable` / `protocol_error` 本地 disposition 与 stdout/stderr 归属；`exit_code_hint` 降级为 diagnostics hint，不得替代最终 exit 决策；CLI v1 socket 覆盖的稳定用户面命名已由 `CLI-TODO-001` 冻结为 `--socket-path`，`--socket` 不再作为公开 alias；platform peer identity 不阻塞 `apps/cli` 客户端任务，但继续作为 daemon/access 端到端本地控制面的外部依赖跟踪；CLI unit topology 与 contract topology 需要提前落点；新增未决问题处置表、统一验收命令与“持续证据回写 + 最终收口”的 `CLI-TODO-014`。
 
 ## 1. 文档头
 
@@ -34,6 +34,7 @@
 7. CLI v1 socket 覆盖 flag 已冻结为 `--socket-path`；详设 6.4.3 中旧的 `--socket` 已由 `CLI-TODO-001` 回链修订，不再作为公开 alias。
 8. platform peer identity 是本地控制面端到端安全闭环的外部依赖，不归入 `apps/cli` 客户端代码目标，但必须在风险、未决问题与执行顺序中持续跟踪。
 9. CLI 测试拓扑应尽早独立建账：unit 从 `tests/unit/access` 的历史寄存状态迁出或镜像注册到 `tests/unit/apps/cli`，contract 落到 `tests/contract/access`，避免 JSON/exit code 契约只能停留在文档中。
+10. CLI v1 `--json` 已冻结为 CLI projection envelope：stdout 输出唯一 JSON document，`warnings` 为顶层数组、`error` 为顶层对象，`CliExitDecision` 负责最终 `0/2/3/4/5/6/7` 投影。
 
 ## 2. 子系统目标与范围
 
@@ -75,7 +76,7 @@
 | CLI-daemon wire contract | 已完成 | `CliIpcClient` 已执行 `connect/send/receive/close` 往返并解析 `UdsResponseFrame` |
 | 默认 endpoint 与 `--socket-path` | 已完成 | shared `kDefaultDaemonSocketPath` 已接入，`CliDaemonSocketPathIntegrationTest` 已覆盖默认/显式覆盖；`CLI-TODO-001` 已将详设中的 `--socket` 漂移收敛为仅保留 `--socket-path` 的公开命名 |
 | 命令参数口径 | 已补设计冻结 | `CLI-TODO-001` 已冻结 `run/status/cancel/help/version` 的 usage skeleton、`--socket-path` 稳定命名、selector 规则与 version local-only 边界；Build 侧仍待 parser/request builder 对齐实现 |
-| JSON 输出与退出码矩阵 | 未完成 | `CliOutputFormatter` 仅生成人类可读文本；`main.cpp` 只返回 `EXIT_SUCCESS` / `EXIT_FAILURE` |
+| JSON 输出与退出码矩阵 | 已补设计冻结 | `CLI-TODO-002` 已冻结 `cli.output.v1` envelope、stdout/stderr 归属、`DaemonClientResponse` CLI projection 边界，以及 access error fact -> CLI `0/2/3/4/5/6/7` 投影矩阵；Build 侧仍待 formatter / exit decision / contract tests 落盘 |
 | CLI 自有测试拓扑 | 未完成 | CLI 单测当前仍挂在 `tests/unit/access`；契约测试目录与用例未落盘 |
 | platform peer identity 外部依赖 | 外部未闭环 | 不阻塞 CLI 客户端任务，但阻塞 daemon/access 端到端 local trusted、auth deny 与 diag 授权场景的最终闭环 |
 
@@ -93,7 +94,7 @@
 | CLI-TC006 | CLI 详设 6.4.2、6.4.3；当前实现 | Must | 默认人类可读；`--json`、`--timeout-ms`、`--async`、`--request-id`、`--session`、`--trace-id`、`--quiet`、`--no-input` 属于 v1 flags 面；socket 覆盖稳定命名冻结为 `--socket-path` | 解析器和输出层需要按 flags 表补全，且 `CLI-TODO-001` 必须回链修订详设中 `--socket` / `--socket-path` 的命名漂移 |
 | CLI-TC007 | CLI 详设 6.4.4 | Must | CLI 退出码必须区分 `0/2/3/4/5/6/7` | `main.cpp` 当前仅 `EXIT_SUCCESS/EXIT_FAILURE` 不满足最终契约 |
 | CLI-TC008 | CLI 详设 1.6；`CLI-TODO-001` deliverable | Cleared | `run` 的业务参数形态、`status`/`cancel` 的精确参数名、help/version usage skeleton 已由 `CLI-TODO-001` 冻结；剩余工作转为 parser/request builder 实现对齐 | `CLI-TODO-006/007/008` 可直接按冻结 contract 进入 Build，不再需要猜测用户面参数名 |
-| CLI-TC009 | CLI 详设 12 未决问题 3 | Evidence Gap | `--json` 是镜像 `AgentResult` 还是 CLI projection 尚未冻结 | JSON formatter、contract tests、脚本化稳定性门必须以前置补设计任务解阻 |
+| CLI-TC009 | CLI 详设 6.4.2、6.4.4、12；`CLI-TODO-002` deliverable | Cleared | `--json` 已冻结为 CLI projection envelope；`CliExitDecision` 已绑定 local parse/transport/protocol/access facts 到 `0/2/3/4/5/6/7` 的投影顺序 | `CLI-TODO-009/010/012/013` 不再需要猜测 JSON 主键、stdout/stderr 归属或 exit family |
 | CLI-TC010 | 工程规范 3.2、3.3、4.1 | Must | 公共接口放 include，测试目录与产品目录应保持镜像 | CLI 单测最终应从 `tests/unit/access` 收敛到明确 CLI 测试拓扑 |
 | CLI-TC011 | 工程规范 3.7 | Must | 新增公共接口时同步增加 unit 或 contract 测试 | `CliRequestBuilder`、`CliExitDecision`、JSON contract 不能只写实现不补测试 |
 | CLI-TC012 | 现有交付 `ACC-TODO-025/038` | Evidence | CLI 纯客户端组合根和 UDS endpoint 基线已完成 | 专项 TODO 不能再把纯客户端依赖方向写成未开始任务 |
@@ -106,10 +107,10 @@
 
 | 证据对象 | 当前状态 | 对 CLI TODO 的含义 |
 |---|---|---|
-| `apps/cli/src/CliIpcClient.cpp` | 已能编码 request frame、接收响应并解析 `DaemonClientResponse` | transport baseline 已就绪，但 request shaping 仍散落在匿名 helper，尚未形成 `CliRequestBuilder` |
+| `apps/cli/src/CliIpcClient.cpp` | 已能编码 request frame、接收响应并解析 `DaemonClientResponse` | transport baseline 已就绪；`CLI-TODO-002` 已冻结 `DaemonClientResponse` 需要补齐 access error code/domain/retryable 这组 CLI projection facts，供 exit decision / JSON envelope 复用 |
 | `apps/cli/src/CliCommandParser.h/.cpp` | 支持 `ping/readiness/run/submit/status/cancel/diag` 和 `--socket-path`；不支持 `help/version` 与详设 flags 表 | parser 是可直接落到函数级的实现锚点；`CLI-TODO-001` 已冻结公开参数 contract，后续只需把现有最小/兼容 surface 对齐到稳定 schema |
-| `apps/cli/src/CliOutputFormatter.h/.cpp` | 仅输出人类可读字符串；不区分 stdout/stderr 责任边界下的 JSON 投影 | JSON contract 与脚本化稳定性仍未落盘 |
-| `apps/cli/src/main.cpp` | 已完成命令分发，但只返回成功/失败二值退出 | `CliExitDecision` 尚未落盘，不能支撑详设退出码矩阵 |
+| `apps/cli/src/CliOutputFormatter.h/.cpp` | 仅输出人类可读字符串；不区分 stdout/stderr 责任边界下的 JSON 投影 | `CLI-TODO-002` 已冻结 JSON 主键、`error/warnings` 摆放和 stdout/stderr 归属；剩余工作是 human/json 双格式实现与 contract tests |
+| `apps/cli/src/main.cpp` | 已完成命令分发，但只返回成功/失败二值退出 | `CLI-TODO-002` 已冻结 `CliExitDecision` 的顺序与矩阵；剩余工作是把 `0/2/3/4/5/6/7` 决策真正落到主程序退出路径 |
 | `tests/unit/access/CliDaemonCommandParserTest.cpp` | 已覆盖最小命令面和 `--socket-path` 解析 | 可复用为 parser/help/version/flags 扩展测试入口 |
 | `tests/unit/access/CliIpcClientTest.cpp`、`CliIpcClientResponseTest.cpp`、`CliIpcClientUnavailableTest.cpp` | 已覆盖 request encode、response parse、daemon unavailable fail-closed | 可复用为 request shaping 与 local transport failure 断言入口 |
 | `tests/unit/access/CliDaemonOutputFormatterTest.cpp` | 已覆盖最小 disposition 文本输出 | 可复用为 human mode 扩展入口，但当前未覆盖 `--json` |
@@ -134,8 +135,8 @@
 
 1. 详设已给出核心子组件、核心对象字段、主流程、异常流程、目录与测试出口，满足 L2/L3 拆分多数条件。
 2. 当前代码已经存在 `CliCommandParser`、`CliIpcClient`、`CliOutputFormatter` 和相关 focused tests，可以直接从现有实现面继续拆分，而不是从零发明类名。
-3. 真正阻止纯 L3 的缺口已从两类收敛为一类：`CLI-TC009` 的 JSON envelope / exit decision 未冻结；它会影响 formatter、exit code 和 contract tests 的最终接口面。
-4. 因此本专项仍需先完成 `CLI-TODO-002`，随后 parser/request builder/formatter 任务即可按已冻结 contract 进入 Build。
+3. 当前已不存在剩余的用户面补设计缺口：参数 schema、JSON envelope、stdout/stderr 归属与 exit family 均已冻结，后续 Build 任务不再需要重新讨论公开 contract。
+4. 因此本专项可以直接进入 topology + Build 阶段：`CLI-TODO-006/007/008` 可按已冻结命令/输出 contract 推进，`CLI-TODO-009/010/012` 则只剩实现与 contract topology 问题。
 
 ### 4.2 粒度可行性评估表
 
@@ -144,10 +145,10 @@
 | 命令族与通用交互方式 | 1.6、6.4.1 | L2 | `run/status/cancel/ping/diag/help/version` 已冻结到命令级；`CLI-TODO-001` 已补齐参数表与 usage skeleton | 剩余缺口不再是命令参数，而是 JSON/exit code 契约 | 直接进入 `CLI-TODO-006/007/008` 的 parser/request builder Build |
 | `CliCommand` / `CliCommandParser` | 6.1、6.4.2、6.4.3 | L3 | 现有类与函数已存在，focused parser tests 已存在 | 详设 flags 表尚未落到字段级 | `CLI-TODO-006/007` 直接落到类型与函数级 |
 | `CliIpcClient` | 6.1、6.3.2、6.5 | L3 | request/response roundtrip 已存在，response parse tests 已存在 | request shaping 仍在匿名 helper，未承载完整 flags 字段 | 在 `CLI-TODO-008` 中抽离 `CliRequestBuilder` 并复用现有 tests |
-| `CliOutputFormatter` | 6.1、6.4.2、6.4.4 | L2 | human 输出与 disposition 文本已存在 | `--json` envelope、stdout/stderr 边界与 warnings 布局未冻结 | 先 `CLI-TODO-002` 冻结，再做 `CLI-TODO-010` |
-| `CliExitDecision` | 6.3.1、6.4.4 | L2 | 详设已有对象名和退出码集合；access 已有错误 code/domain 与协议映射证据 | CLI 本地 parse/transport/protocol 路径如何投影到 `0/2/3/4/5/6/7` 未冻结，且不能直接沿用 access 既有 `1/75/77` 通用 CLI 映射 | `CLI-TODO-002/009` 两步完成 |
+| `CliOutputFormatter` | 6.1、6.4.2、6.4.4 | L2 | human 输出与 disposition 文本已存在；`CLI-TODO-002` 已冻结 JSON 主键、`error/warnings` 位置与 stdout/stderr contract | 剩余缺口是 human/json 双格式实现与 contract tests 落盘 | 直接进入 `CLI-TODO-009/010/012` |
+| `CliExitDecision` | 6.3.1、6.4.4 | L2 | `CLI-TODO-002` 已冻结 local parse/transport/protocol/access facts 到 `0/2/3/4/5/6/7` 的投影顺序；access 已有错误 code/domain 证据 | 缺失的是对象与 `main()` 落盘，不再是 contract 选择 | 直接进入 `CLI-TODO-009` |
 | help/version | 1.6、6.4.1、6.4.5 | L2 | 命令名、usage skeleton、`version` local-only 策略与 help 责任边界已由 `CLI-TODO-001` 冻结 | 剩余缺口是 parser/help/version 实现落盘 | 进入 `CLI-TODO-007` 实现，不再需要额外补设计 |
-| CLI contract tests | 7、9、12 未决问题 3 | L2 | 详设已明确 `CliJsonOutputContractTest`、`CliExitCodeContractTest` | 目录、CMake、golden schema 未落盘 | `CLI-TODO-012` 直接按详设测试名落盘 |
+| CLI contract tests | 7、9、12 未决问题 3 | L2 | 详设已明确 `CliJsonOutputContractTest`、`CliExitCodeContractTest`，`CLI-TODO-002` 已冻结场景与主键 | 目录、CMake、golden schema 未落盘 | `CLI-TODO-011/012` 直接按已冻结场景落盘 |
 | CLI unit topology | 工程规范 4.1；当前 tests 现状 | L2 | 现有 CLI unit tests 可复用 | `tests/unit/apps/cli` 当前不存在 | `CLI-TODO-011` 负责 topology 收敛与 discoverability |
 
 ## 5. Design -> TODO 映射表
@@ -157,7 +158,7 @@
 | Design 结论 | 设计锚点 | TODO 类型 | 对应任务 ID | 映射说明 |
 |---|---|---|---|---|
 | CLI 命令族已冻结，但参数口径不是最终 man page | 1.6、6.4.1、6.4.2、6.4.3 | 补设计 / 接口冻结 | `CLI-TODO-001` | 先冻结 `run/status/cancel/help/version` 参数矩阵，并回链修订 `--socket` / `--socket-path` 命名漂移，再动 parser/help/version 代码 |
-| `--json`、退出码、stdout/stderr 分离是脚本化稳定接口 | 6.4.2、6.4.4、7、9、12 未决问题 3 | 补设计 / 契约冻结 | `CLI-TODO-002` | 解决 JSON envelope 与 exit decision 口径；明确 access error code/domain 是输入事实、CLI `0/2/3/4/5/6/7` 是最终用户面投影 |
+| `--json`、退出码、stdout/stderr 分离是脚本化稳定接口 | 6.4.2、6.4.4、7、9、12 未决问题 3 | 补设计 / 契约冻结 | `CLI-TODO-002` | 已完成：JSON envelope 与 exit decision 口径已冻结，明确 access error code/domain/retryable 是输入事实、CLI `0/2/3/4/5/6/7` 是最终用户面投影 |
 | CLI 纯客户端依赖方向与 UDS client 骨架已经存在 | 1.2、6.2、7 | 现状继承 | `CLI-TODO-003` | 复用 access 交付，不重复规划 runtime 直连或本地主链 |
 | CLI-daemon roundtrip 已完成 request/response parse | 6.3.2、6.5、9 | 现状继承 | `CLI-TODO-004` | 复用 DMD-TODO-031 基线，把后续工作聚焦到用户面契约 |
 | shared endpoint default 与 `--socket-path` 覆盖已完成 | 6.4.3、6.7.1、6.10、7 | 配置 / 入口契约 | `CLI-TODO-005` | 复用 DMD-TODO-036，不再把 socket 覆盖面写成新任务；只在 `CLI-TODO-001` 中冻结命名兼容策略 |
@@ -188,7 +189,7 @@
 | Task ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | CLI-TODO-001 | Done | 补齐 run/status/cancel/help/version 参数 schema 与 usage 文案 | CLI 详设 1.6、6.4.1、6.4.2、6.4.3；当前 `CliCommandParser` 仅有最小 positional 面；详设 `--socket` 与实现 `--socket-path` 命名漂移 | 1.6 参数 schema 冻结；6.4.2 参数约定；6.4.3 flags 表与 socket flag 命名 | L2 | `docs/architecture/DASALL_cli本地控制面详细设计.md`；`docs/todos/cli/DASALL_cli本地控制面专项TODO.md`；`docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md` | `CliCommand`；`CliCommandParser::parse()`；`CliCommandParser::usage_string()`；`--socket-path` 命名与兼容 surface policy | 复用 `CliDaemonCommandParserTest` 作为当前 parser 锚点；Build 阶段继续扩展 flags/帮助面正反例 | `rg -n "run|status|cancel|help|version|--socket-path|--socket|submit|readiness" docs/architecture/DASALL_cli本地控制面详细设计.md docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md && ctest --test-dir build-ci -R "CliDaemonCommandParserTest" --output-on-failure` | 无 | 已解阻 | `docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md`；更新后的 CLI 详设与专项 TODO | 仅当 `run/status/cancel/help/version` 的参数名、selector 规则、`--socket-path` 稳定命名、compat surface 边界和 version local-only 策略都能被二值核对时完成 |
-| CLI-TODO-002 | NotStarted | 补齐 `--json` envelope 与 `CliExitDecision` 契约 | CLI 详设 6.4.2、6.4.4、7、9、12 未决问题 3；`AccessErrorMappingTest` 已冻结 access 错误 code/domain 与既有协议映射 | 6.4.4 退出码映射；7 Design -> Build；9 Contract；12 OQ-3 | L2 | `docs/architecture/DASALL_cli本地控制面详细设计.md`；`docs/todos/cli/DASALL_cli本地控制面专项TODO.md` | `CliOutputFormatter`；`DaemonClientResponse`；`CliExitDecision`；access error code/domain -> CLI local exit projection | 复用 `AccessErrorMappingTest`、`CliDaemonOutputFormatterTest`，并在文档中冻结 `CliJsonOutputContractTest`、`CliExitCodeContractTest` 验收面 | `rg -n "CliJsonOutputContractTest|CliExitCodeContractTest|--json|退出码|CliExitDecision|map_access_error|0/2/3/4/5/6/7" docs/architecture/DASALL_cli本地控制面详细设计.md docs/todos/cli/DASALL_cli本地控制面专项TODO.md && ctest --test-dir build-ci -R "AccessErrorMappingTest|CliDaemonOutputFormatterTest" --output-on-failure` | 无 | `CLI-BLK-002` | 冻结 JSON 主键、stdout/stderr 归属、`access::map_access_error()` 的输入事实复用规则，以及 CLI `0/2/3/4/5/6/7` local path 投影矩阵 | 更新后的 CLI 详设与本专项 TODO；JSON/exit code 契约矩阵 | 仅当 `--json` 主键、warnings/error 放置位置、transport/protocol/error/disposition 到 CLI v1 退出码的映射都可直接评审，不再残留“镜像 AgentResult 还是 CLI projection”的未决项时完成 |
+| CLI-TODO-002 | Done | 补齐 `--json` envelope 与 `CliExitDecision` 契约 | CLI 详设 6.4.2、6.4.4、7、9、12 未决问题 3；`AccessErrorMappingTest` 已冻结 access 错误 code/domain 与既有协议映射 | 6.4.2 JSON envelope；6.4.4 退出码映射；7 Design -> Build；9 Contract | L2 | `docs/architecture/DASALL_cli本地控制面详细设计.md`；`docs/todos/cli/DASALL_cli本地控制面专项TODO.md`；`docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md` | `CliOutputFormatter`；`DaemonClientResponse`；`CliExitDecision`；access error code/domain/retryable -> CLI local exit projection | 复用 `AccessErrorMappingTest`、`CliDaemonOutputFormatterTest` 作为当前实现锚点；Build 阶段继续新增 `CliJsonOutputContractTest`、`CliExitCodeContractTest` | `rg -n "CliJsonOutputContractTest|CliExitCodeContractTest|cli.output.v1|daemon_unavailable|protocol_error|CliExitDecision|0/2/3/4/5/6/7" docs/architecture/DASALL_cli本地控制面详细设计.md docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md && ctest --test-dir build-ci -R "AccessErrorMappingTest|CliDaemonOutputFormatterTest" --output-on-failure` | 无 | 已解阻 | `docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md`；更新后的 CLI 详设与专项 TODO | 仅当 `--json` 主键、`warnings/error` 放置位置、`daemon_unavailable/protocol_error` 本地 disposition、stdout/stderr 归属，以及 transport/protocol/access facts -> CLI v1 退出码的映射都可直接评审时完成 |
 
 ### 6.2 已完成基线任务
 
@@ -205,16 +206,16 @@
 | CLI-TODO-006 | NotStarted | 定义 `CliCommand` 扩展选项模型 | CLI 详设 6.4.3、6.7.3；当前 `CliCommand` 仅承载 socket/payload/receipt/token/actor/diag | 6.4.3 通用 flags；6.7.3 CLI 本地 UX 配置 | L2 | `apps/cli/src/CliCommandParser.h` | `CliCommand`：`output_mode`、`timeout_ms`、`async_preference`、`request_id`、`session_hint`、`trace_id`、`quiet`、`no_input`、selector 类型与 ownership token | 扩展 `CliDaemonCommandParserTest`，验证字段捕获、duplicate/illegal-scope reject | `ctest --test-dir build-ci -R "CliDaemonCommandParserTest" --output-on-failure` | `CLI-TODO-001` | 无 | `CLI-TODO-001` 已冻结 flags 作用域与字段含义，可直接进入实现 | 更新后的 `CliCommandParser.h` 与专项 TODO 对应节 | 仅当详设 flags 表中的每个 v1 选项都映射到 `CliCommand` 稳定字段，且无重复/悬空字段时完成 |
 | CLI-TODO-007 | NotStarted | 实现 `CliCommandParser` 的 flags、help、version 校验 | CLI 详设 1.6、6.4.1、6.4.2、6.4.3；当前 parser 无 `help/version`，也不校验 flags 作用域 | 命令面与 usage；冻结 contract -> parser 口径 | L3 | `apps/cli/src/CliCommandParser.cpp`；`apps/cli/src/main.cpp` | `CliCommandParser::parse()`；`CliCommandParser::usage_string()`；`main()` 的 `help/version` dispatch | 扩展 `CliDaemonCommandParserTest` 覆盖 `help`、`version` 与 `--async`/`--json`/`--quiet` 作用域错误 | `ctest --test-dir build-ci -R "CliDaemonCommandParserTest" --output-on-failure` | `CLI-TODO-001`、`CLI-TODO-006` | 无 | 参数矩阵与 help/version 输出责任边界已冻结；待 `CLI-TODO-006` 完成字段落点后实施 | 更新后的 parser/main；专项 TODO 对应节 | 仅当 `help`、`version`、各命令 flags 作用域和非法组合都可由 parser 二值判定时完成 |
 | CLI-TODO-008 | NotStarted | 实现 `CliRequestBuilder` 与 request frame shaping | CLI 详设 6.1、6.3.1、6.4.3、6.5；当前 request shaping 仍在 `CliIpcClient.cpp` 匿名 helper | `CliRequestBuilder`；`UdsRequestFrame` 字段装配 | L2 | `apps/cli/src/CliRequestBuilder.h`；`apps/cli/src/CliRequestBuilder.cpp`；`apps/cli/CMakeLists.txt`；`apps/cli/src/CliIpcClient.cpp` | `CliRequestBuilder`；`UdsRequestFrame`；`CliIpcClient::send_request()` 调用面 | 扩展 `CliIpcClientTest`、`CliIpcClientResponseTest` 断言 `request_id`、`trace_id`、`session_hint`、`async_preference`、`deadline_ms`、`output_mode` | `ctest --test-dir build-ci -R "CliIpcClientTest|CliIpcClientResponseTest" --output-on-failure` | `CLI-TODO-001`、`CLI-TODO-006` | 无 | 参数矩阵已冻结；待 `CliCommand` 完整字段落位后实施 builder 对齐 | 新增 builder 文件；更新后的 client 测试 | 仅当 request frame 的 v1 字段都有单一 owner，且 `CliIpcClient` 不再自行拼装业务级 request 参数时完成 |
-| CLI-TODO-009 | Blocked | 实现 `CliExitDecision` 与本地退出码决策 | CLI 详设 6.3.1、6.4.4；`access::map_access_error()` 已冻结 access 错误 code/domain 与既有协议映射 | `CliExitDecision`；CLI v1 `0/2/3/4/5/6/7` | L2 | `apps/cli/src/CliExitDecision.h`；`apps/cli/src/CliExitDecision.cpp`；`apps/cli/src/main.cpp`；`apps/cli/CMakeLists.txt` | `CliExitDecision`；`main()` 退出路径；`DaemonClientResponse` + local failure path + access error code/domain 到 exit decision 的投影 | 复用 `AccessErrorMappingTest`，新增/落盘 `CliExitCodeContractTest` | `ctest --test-dir build-ci -R "AccessErrorMappingTest|CliExitCodeContractTest" --output-on-failure` | `CLI-TODO-002`、`CLI-TODO-011` | `CLI-BLK-002` | `CLI-TODO-002` 冻结 CLI local path 到 exit code 的最终矩阵；`CLI-TODO-011` 提供 contract topology | 更新后的 exit decision/main/formatter；contract 测试或其注册面 | 仅当参数错误=2、daemon 不可达=3、认证授权拒绝=4、业务失败=5、超时/取消=6、协议错误=7、成功/accepted=0 均可二值断言，且不直接沿用 access 既有 `1/75/77` 映射时完成 |
-| CLI-TODO-010 | Blocked | 实现 `CliOutputFormatter` 的 human/JSON 双格式输出 | CLI 详设 6.1、6.4.2、6.4.3、6.4.4、9；当前 formatter 仅有 human 文本 | human mode / `--json` stable envelope / stdout-stderr split | L2 | `apps/cli/src/CliOutputFormatter.h`；`apps/cli/src/CliOutputFormatter.cpp`；`apps/cli/src/main.cpp` | `CliOutputFormatter::format_*()`；`DaemonClientResponse`；`CliExitDecision` | 扩展 `CliDaemonOutputFormatterTest`，并落盘 `CliJsonOutputContractTest` | `ctest --test-dir build-ci -R "CliDaemonOutputFormatterTest|CliJsonOutputContractTest" --output-on-failure` | `CLI-TODO-002`、`CLI-TODO-009` | `CLI-BLK-002` | JSON 主键、warnings/error 摆放、human/json 切换边界冻结 | 更新后的 formatter/main；contract 测试或其注册面 | 仅当默认 human 输出保留、`--json` 输出稳定 envelope、成功路径 stdout 不混入错误提示且 stderr 不承载业务结果时完成 |
+| CLI-TODO-009 | Blocked | 实现 `CliExitDecision` 与本地退出码决策 | CLI 详设 6.3.1、6.4.4；`access::map_access_error()` 已冻结 access 错误 code/domain 与既有协议映射 | `CliExitDecision`；CLI v1 `0/2/3/4/5/6/7` | L2 | `apps/cli/src/CliExitDecision.h`；`apps/cli/src/CliExitDecision.cpp`；`apps/cli/src/main.cpp`；`apps/cli/CMakeLists.txt` | `CliExitDecision`；`main()` 退出路径；`DaemonClientResponse` + local failure path + access error code/domain/retryable 到 exit decision 的投影 | 复用 `AccessErrorMappingTest`，新增/落盘 `CliExitCodeContractTest` | `ctest --test-dir build-ci -R "AccessErrorMappingTest|CliExitCodeContractTest" --output-on-failure` | `CLI-TODO-002`、`CLI-TODO-011` | `CLI-BLK-003` | `CLI-TODO-002` 已冻结 CLI local path 到 exit code 的最终矩阵；待 `CLI-TODO-011` 提供 contract topology | 更新后的 exit decision/main/formatter；contract 测试或其注册面 | 仅当参数错误=2、daemon 不可达=3、认证授权拒绝=4、业务失败=5、超时/取消或暂不可完成=6、协议错误=7、成功/accepted=0 均可二值断言，且不直接沿用 access 既有 `1/75/77` 映射时完成 |
+| CLI-TODO-010 | NotStarted | 实现 `CliOutputFormatter` 的 human/JSON 双格式输出 | CLI 详设 6.1、6.4.2、6.4.3、6.4.4、9；当前 formatter 仅有 human 文本 | human mode / `--json` stable envelope / stdout-stderr split | L2 | `apps/cli/src/CliOutputFormatter.h`；`apps/cli/src/CliOutputFormatter.cpp`；`apps/cli/src/main.cpp` | `CliOutputFormatter::format_*()`；`DaemonClientResponse`；`CliExitDecision` | 扩展 `CliDaemonOutputFormatterTest`，并落盘 `CliJsonOutputContractTest` | `ctest --test-dir build-ci -R "CliDaemonOutputFormatterTest|CliJsonOutputContractTest" --output-on-failure` | `CLI-TODO-002`、`CLI-TODO-009` | 无 | JSON 主键、warnings/error 摆放、human/json 切换边界已冻结；待 `CLI-TODO-009` 落 exit decision 后实施 | 更新后的 formatter/main；contract 测试或其注册面 | 仅当默认 human 输出保留、`--json` 输出稳定 envelope、成功路径 stdout 不混入错误提示且 stderr 不承载业务结果时完成 |
 
 ### 6.4 测试、门禁与证据任务
 
 | Task ID | 状态 | 任务标题 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | CLI-TODO-011 | NotStarted | 提前注册 CLI unit 与 contract 拓扑 discoverability | 工程规范 4.1；当前 CLI 单测仍位于 `tests/unit/access`；当前 `tests/contract/access` 不存在 | CLI own unit topology；CLI contract topology | L2 | `tests/unit/apps/cli/CMakeLists.txt`；`tests/unit/CMakeLists.txt`；`tests/contract/access/CMakeLists.txt`；`tests/contract/CMakeLists.txt` | CLI 单测聚合列表；contract 测试接入点；过渡期 mirror registration 策略 | `ctest -N` 发现现有 CLI unit tests，并预留 `CliJsonOutputContractTest`、`CliExitCodeContractTest` 的 contract 接入点 | `ctest --test-dir build-ci -N | rg "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonOutputFormatterTest|CliJsonOutputContractTest|CliExitCodeContractTest"` | `CLI-TODO-001`、`CLI-TODO-002` | `CLI-BLK-003` | 命令/JSON/exit contract 命名已冻结，可稳定命名测试目标；必要时 unit 保留过渡期 mirror registration | 新增/更新的 unit 与 contract CMake 拓扑；专项 TODO 对应节 | 仅当 CLI unit tests 可由 CLI 自有拓扑发现，contract/access 目录和 CMake 接线存在，且后续契约测试不再需要临时挂靠 `tests/unit/access` 时完成 |
-| CLI-TODO-012 | Blocked | 新增 CLI JSON 与 exit code contract tests | CLI 详设 7、9、12 未决问题 3；`CLI-TODO-011` 提供 contract topology | `CliJsonOutputContractTest`；`CliExitCodeContractTest` | L2 | `tests/contract/access/CliJsonOutputContractTest.cpp`；`tests/contract/access/CliExitCodeContractTest.cpp` | `CliJsonOutputContractTest`；`CliExitCodeContractTest` | `ctest --test-dir build-ci -R "CliJsonOutputContractTest|CliExitCodeContractTest" --output-on-failure` | `CLI-TODO-002`、`CLI-TODO-009`、`CLI-TODO-010`、`CLI-TODO-011` | `CLI-BLK-002`、`CLI-BLK-003` | JSON envelope 与 exit code contract 已冻结；contract topology 已可接入 | 新增 contract 测试用例 | 仅当 `ping`、`run completed`、`accepted_async`、`auth deny`、`daemon unavailable` 等场景的 JSON 主键与 CLI v1 退出码均可自动化锁定时完成 |
-| CLI-TODO-013 | Blocked | 验证 CLI binary 的 async、显式 ID 与 stdout/stderr 集成门 | CLI 详设 6.4.3、6.5、9；现有 `DaemonBinaryUnarySmokeTest`、`DaemonReceiptFlowIntegrationTest`、`CliDaemonSocketPathIntegrationTest` | `run --async`；`--request-id`；`--trace-id`；脚本化 I/O | L2 | `apps/cli/src/main.cpp`；`tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`；`tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`；`tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp` | 复用现有 integration tests，扩展 CLI binary 场景覆盖 async、显式 IDs、stdout/stderr 责任边界 | `ctest --test-dir build-ci -R "CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest|DaemonReceiptFlowIntegrationTest" --output-on-failure` | `CLI-TODO-008`、`CLI-TODO-009`、`CLI-TODO-010`、`CLI-TODO-012` | `CLI-BLK-002` | parser、request builder、formatter、contract tests 均已落盘 | 更新后的 integration tests；专项 TODO 对应节 | 仅当 built `dasall_cli` 能在 sync/async 两条路径下正确携带显式 `request_id` / `trace_id`，且成功结果只落 stdout、错误提示只落 stderr 时完成 |
+| CLI-TODO-012 | Blocked | 新增 CLI JSON 与 exit code contract tests | CLI 详设 7、9、12 未决问题 3；`CLI-TODO-011` 提供 contract topology | `CliJsonOutputContractTest`；`CliExitCodeContractTest` | L2 | `tests/contract/access/CliJsonOutputContractTest.cpp`；`tests/contract/access/CliExitCodeContractTest.cpp` | `CliJsonOutputContractTest`；`CliExitCodeContractTest` | `ctest --test-dir build-ci -R "CliJsonOutputContractTest|CliExitCodeContractTest" --output-on-failure` | `CLI-TODO-002`、`CLI-TODO-009`、`CLI-TODO-010`、`CLI-TODO-011` | `CLI-BLK-003` | JSON envelope 与 exit code contract 已冻结；待 `CLI-TODO-011` 提供 topology 并由 `CLI-TODO-009/010` 落实现 | 新增 contract 测试用例 | 仅当 `ping`、`run completed`、`accepted_async`、`auth deny`、`daemon unavailable` 等场景的 JSON 主键与 CLI v1 退出码均可自动化锁定时完成 |
+| CLI-TODO-013 | NotStarted | 验证 CLI binary 的 async、显式 ID 与 stdout/stderr 集成门 | CLI 详设 6.4.3、6.5、9；现有 `DaemonBinaryUnarySmokeTest`、`DaemonReceiptFlowIntegrationTest`、`CliDaemonSocketPathIntegrationTest` | `run --async`；`--request-id`；`--trace-id`；脚本化 I/O | L2 | `apps/cli/src/main.cpp`；`tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`；`tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`；`tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp` | 复用现有 integration tests，扩展 CLI binary 场景覆盖 async、显式 IDs、stdout/stderr 责任边界 | `ctest --test-dir build-ci -R "CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest|DaemonReceiptFlowIntegrationTest" --output-on-failure` | `CLI-TODO-008`、`CLI-TODO-009`、`CLI-TODO-010`、`CLI-TODO-012` | 无 | parser、request builder、formatter、contract tests 均已落盘；若 peer identity 外部依赖仍未闭环，只能在 auth deny / diag 覆盖范围上标注降级 | 更新后的 integration tests；专项 TODO 对应节 | 仅当 built `dasall_cli` 能在 sync/async 两条路径下正确携带显式 `request_id` / `trace_id`，且成功结果只落 stdout、错误提示只落 stderr 时完成 |
 | CLI-TODO-014 | NotStarted | 持续证据回写与 CLI 专项最终收口 | 工程规范 6/7；专项 TODO 基线；当前 CLI 交付散落在 access/daemon 文档 | CLI 专项证据闭环；Gate-CLI-06 | L2 | `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`；`docs/worklog/DASALL_开发执行记录.md`；必要时 `docs/todos/cli/deliverables/` | 每任务 focused evidence 回写；Gate/Blocker/Risk/OQ 状态最终复验 | 文档证据检查 + focused gate 复跑摘要 | `rg -n "CLI-TODO-00[1-9]|CLI-TODO-01[0-4]|Gate-CLI-0[1-6]|CLI-BLK-00[1-4]|CLI-OQ-00[1-7]|CLI-RISK-00[1-8]" docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/worklog/DASALL_开发执行记录.md` | `CLI-TODO-001` ~ `CLI-TODO-013` | 无 | 每个前序任务完成时已即时回写 focused evidence；收口时只做一致性复验、残余风险与外部依赖状态更新 | 更新后的专项 TODO、worklog 与可选 deliverables | 仅当所有已完成任务都有 focused 证据、Gate-CLI-05/06 状态明确、Blocker/Risk/OQ 均完成更新，并注明 platform peer identity 等外部依赖是否仍残留时完成 |
 
 ## 7. 执行顺序建议
@@ -223,7 +224,7 @@
 
 | 波次 | 任务 ID | 串并行建议 | 说明 |
 |---|---|---|---|
-| Wave 0 | `CLI-TODO-001 -> CLI-TODO-002` | 串行 | 两项都是补设计任务，决定 parser、formatter、exit code、contract tests 的边界；完成后解锁 topology 与 Build 任务 |
+| Wave 0 | `CLI-TODO-001 -> CLI-TODO-002` | 已完成 | 两项补设计任务已完成，命令参数 contract 与脚本化 contract 均已冻结；后续进入 topology 与 Build 任务 |
 | Wave 1 | `CLI-TODO-003 ~ CLI-TODO-005`；`CLI-TODO-011` | 基线继承 + topology 先行 | 003~005 作为已完成证据继承；011 在契约命名冻结后先建立 unit/contract 可发现拓扑，避免后续测试继续挂靠 access |
 | Wave 2 | `CLI-TODO-006` 与 `CLI-TODO-009` | 可并行 | 006 依赖参数 schema；009 依赖 JSON/exit design freeze 与 topology；两者解不同 blocker |
 | Wave 3 | `CLI-TODO-007 -> CLI-TODO-008`；`CLI-TODO-010` | `007/008` 串行；`010` 可与 `008` 并行收尾 | parser/help/version 先于 request builder；formatter 依赖 009，但不依赖 builder 完成 |
@@ -246,7 +247,7 @@
 | Blocker ID | 对应设计 Blocker | 阻塞内容 | 影响任务 | 解阻条件 | 最小解阻动作 |
 |---|---|---|---|---|---|
 | CLI-BLK-001 | CLI 详设 1.6 | 已解阻：`CLI-TODO-001` 已冻结 `run/status/cancel/help/version` 参数 schema、selector 规则、`--socket-path` 稳定命名与 version local-only 边界 | 已对 `CLI-TODO-006/007/008` 解阻；`CLI-TODO-013` 不再受命令 schema 未冻结影响 | 详设、专项 TODO 与 deliverable 三处口径一致；parser tests 可直接按冻结 contract 扩展 | 后续 Build 任务按已冻结 contract 落实现，不再回到“猜参数名”阶段 |
-| CLI-BLK-002 | CLI 详设 12 未决问题 3；6.4.4 | `--json` 是镜像 `AgentResult` 还是 CLI projection 未冻结；`CliExitDecision` 也未绑定 transport/disposition/local parse path；access error code/domain 到 CLI `0/2/3/4/5/6/7` 的投影规则未冻结 | `CLI-TODO-002`、`CLI-TODO-009`、`CLI-TODO-010`、`CLI-TODO-012`、`CLI-TODO-013` | 冻结 JSON envelope 主键、stdout/stderr 归属、local path -> CLI exit code 映射 | 先完成 `CLI-TODO-002`，复用 `AccessErrorMappingTest` 作为 access 错误事实证据，但单独补出 CLI 本地矩阵 |
+| CLI-BLK-002 | CLI 详设 12 未决问题 3；6.4.4 | 已解阻：`CLI-TODO-002` 已冻结 `cli.output.v1` envelope、`warnings/error` 顶层位置、`daemon_unavailable/protocol_error` 本地 disposition、stdout/stderr 归属，以及 access error facts -> CLI `0/2/3/4/5/6/7` 的投影矩阵 | 已对 `CLI-TODO-009/010/012/013` 清除脚本化 contract 不确定性；剩余阻塞转向 topology 与实现落盘 | 详设、专项 TODO 与 deliverable 三处口径一致；focused tests 仍以 access error mapping 与 formatter 现状为最近锚点 | 后续实现任务按已冻结 contract 落盘，不再回到“镜像 AgentResult 还是 CLI projection”的讨论 |
 | CLI-BLK-003 | 工程规范 4.1；当前 tests 现状 | CLI 自有 unit/contract topology 尚未建立，当前 tests 仍散落在 `tests/unit/access` 且无 `tests/contract/access` 接线 | `CLI-TODO-011`、`CLI-TODO-012`、`CLI-TODO-014` | 建立 `tests/unit/apps/cli` discoverability 与 `tests/contract/access` contract 注册面 | 先完成 `CLI-TODO-011`，必要时过渡期保留旧注册路径直到 `ctest -N` 稳定 |
 | CLI-BLK-004 | CLI 详设 6.3.3、6.9、11、12 未决问题 1 | platform peer identity 补口未完全闭环，影响 daemon/access 的 local trusted、auth deny、diag 授权端到端证据 | `CLI-TODO-013`、`CLI-TODO-014` | platform 侧补口设计或 TODO 明确 owner、接口形态与验收命令；在未完成前集成门禁必须标注降级覆盖范围 | 回链 platform/access TODO，不把 peer identity 实现塞入 CLI 专项；未解阻前仅宣称 CLI 客户端面完成 |
 
@@ -293,8 +294,8 @@ cmake --build build-ci --target dasall_cli dasall_daemon \
 | Risk ID | 对应设计 Risk | 风险内容 | 影响面 | 回退策略 |
 |---|---|---|---|---|
 | CLI-RISK-001 | CLI 详设 1.6 | 参数 schema 冻结若直接照当前最小 positional 代码推进，后续 CLI man page 与脚本兼容将返工 | parser、help、version、binary smoke | 先完成 `CLI-TODO-001`；若评审未通过，保留当前最小 positional surface，不合并新 flags |
-| CLI-RISK-002 | CLI 详设 12 未决问题 3 | `--json` envelope 一旦先实现后补文档，脚本调用方会绑定错误主键 | formatter、contract tests、自动化脚本 | `--json` 在 `CLI-TODO-002` 完成前不宣称稳定接口；必要时仅保留 human mode |
-| CLI-RISK-003 | CLI 详设 6.4.4 | exit code 从二值切到矩阵后，现有脚本可能依赖旧的 0/1 行为 | CLI 自动化集成、binary smoke | 先落 `CliExitCodeContractTest`，再切主程序退出路径；若回归，临时保留旧行为仅用于开发 profile |
+| CLI-RISK-002 | CLI 详设 6.4.2、12 未决问题 3 | 若后续实现直接暴露 raw `AgentResult` / `UdsResponseFrame`，会破坏已冻结的 CLI projection envelope | formatter、contract tests、自动化脚本 | 已由 `CLI-TODO-002` 固定 `cli.output.v1` 主键与 `result/error/warnings` 位置；实现阶段必须以 `CliJsonOutputContractTest` 锁定 |
+| CLI-RISK-003 | CLI 详设 6.4.4 | 若后续实现直接复用 access 既有 `1/75/77` 或继续返回旧 `0/1`，会违背 CLI v1 exit family | CLI 自动化集成、binary smoke | 已由 `CLI-TODO-002` 固定 `0/2/3/4/5/6/7` 与投影顺序；实现阶段必须以 `CliExitCodeContractTest` 锁定 |
 | CLI-RISK-004 | 工程规范 4.1；当前 tests 现状 | 测试拓扑从 `tests/unit/access` 收敛到 `tests/unit/apps/cli` 时，容易导致 discoverability 断裂 | CI / `ctest -N` / 维护入口 | 过渡期允许镜像注册，待 `ctest -N` 稳定后再移除旧接线 |
 | CLI-RISK-005 | CLI 详设 6.4.1、6.4.5 | 若后续实现回退到 daemon 自动探测或 version 触网，会把 CLI version 重新做成伪运维入口 | `help/version` 文案、用户预期 | 已由 `CLI-TODO-001` 冻结 `version` local-only；后续扩展只能走显式加法 surface |
 | CLI-RISK-006 | CLI 详设 6.4.3；当前实现 | 若后续实现重新接受公开 `--socket`，会破坏脚本兼容与 help 文案一致性 | parser、usage、integration smoke、文档 | 已由 `CLI-TODO-001` 冻结 `--socket-path` 为唯一稳定命名；`--socket` 不得回归为公开 alias |
@@ -303,11 +304,11 @@ cmake --build build-ci --target dasall_cli dasall_daemon \
 
 ## 11. 可行性结论
 
-1. 本专项 TODO 可以直接进入执行，且首个补设计解阻任务 `CLI-TODO-001` 已完成；当前剩余的补设计前置只剩 `CLI-TODO-002`。
-2. 当前可安全落到的最细粒度为：`CliCommandParser::parse()`、`CliIpcClient::send_request()`、`CliOutputFormatter::format_*()` 和 `main()` 退出路径的 `L3` 任务；`CliRequestBuilder`、`CliExitDecision` 与 `--json` envelope 仍是 `L2`。
-3. 当前阻止进一步细化到纯函数级的核心证据缺口只剩一类：详设未决问题明确保留了 `--json` 是否镜像 `AgentResult` 的选择，以及由此派生的 exit decision / stdout-stderr contract。
-4. 因此当前结论不是 “Blocked”，而是 “CLI 参数面已解阻，下一步必须先完成 `CLI-TODO-002` 再推进 formatter/exit code Build”。若绕过该任务直接推进实现，最可能返工的是 JSON envelope 和退出码契约，而不是 transport 层。
-5. 建议执行策略：先完成 `CLI-TODO-002` 冻结脚本化 contract，再提前建立 CLI unit/contract topology，随后复用已完成的 wire/endpoint 基线，把 CLI 专项集中收口为脚本可消费、测试可发现、证据可持续回写的独立交付面。
+1. 本专项 TODO 可以直接进入执行，且两项补设计解阻任务 `CLI-TODO-001/002` 已完成；当前剩余前置从“用户面 contract 未冻结”收敛为“测试 topology 与实现落盘”。
+2. 当前可安全落到的最细粒度为：`CliCommandParser::parse()`、`CliIpcClient::send_request()`、`CliOutputFormatter::format_*()` 和 `main()` 退出路径的 `L3` 任务；`CliRequestBuilder`、`CliExitDecision` 与 contract topology 仍是 `L2` 实现对象，但不再是设计未决。
+3. 当前已不存在会阻止纯函数级推进的用户面证据缺口；命令参数、JSON 主键、stdout/stderr 归属与 exit family 均可直接引用文档进行二值核对。
+4. 因此当前结论不是 “Blocked”，而是 “CLI 用户面已冻结，下一步应并行推进 `CLI-TODO-011` 与 `CLI-TODO-006/007/008/009/010`”。若绕过这些冻结结论直接按当前最小实现习惯落盘，最可能返工的是 JSON projection 与 exit family，而不是 transport 层。
+5. 建议执行策略：先完成 `CLI-TODO-011` 建立 topology，同时按已冻结 contract 推进 parser/request builder/exit decision/formatter，再把 JSON/exit contract tests 与 binary/integration 门串起来，最终通过 `CLI-TODO-014` 收口证据。
 6. 当前专项完成态的边界必须写清：`apps/cli` 客户端面可以独立完成；若 platform peer identity 仍未闭环，则本地控制面端到端安全场景只能标为外部依赖残余，不能宣称全链路 close-ready。
 
 ## 12. 未决问题处置表
@@ -316,8 +317,8 @@ cmake --build build-ci --target dasall_cli dasall_daemon \
 |---|---|---|---|---|---|
 | CLI-OQ-001 | CLI 详设 12.1 | platform peer identity 能力最终扩展 IIPC 还是 side-interface | 转外部 platform/access 决策；CLI 专项只回链，不实现 | `CLI-BLK-004`、`CLI-RISK-007`、platform peer identity TODO | platform 侧 owner、接口形态、验收命令明确；CLI Gate-CLI-05/06 标注残余或解除 |
 | CLI-OQ-002 | CLI 详设 12.2 | ping 是否直接暴露 `profile_id` 与 build hash | 已在 `CLI-TODO-001` 冻结为保守口径：ping 继续优先暴露 schema/readiness 摘要，`version` 只报告 CLI 本地 build metadata；daemon 对比保持后续加法扩展 | `CLI-TODO-001`、`CLI-TODO-010` | ping/version 输出字段在详设与 TODO 中可二值核对，formatter tests 覆盖 |
-| CLI-OQ-003 | CLI 详设 12.3 | `--json` 是镜像 `AgentResult` 还是 CLI projection | 纳入 `CLI-TODO-002`；优先冻结为 CLI projection envelope，避免把 contracts 内部对象直接暴露为 CLI 稳定用户面 | `CLI-TODO-002`、`CLI-TODO-010`、`CLI-TODO-012` | JSON 主键、error/warnings、disposition、request_id/trace_id、receipt/result 投影均有 contract tests |
+| CLI-OQ-003 | CLI 详设 12.3 | `--json` 是镜像 `AgentResult` 还是 CLI projection | 已在 `CLI-TODO-002` 冻结为 CLI projection envelope；固定 `cli.output.v1`、顶层 `result/error/warnings`、本地 `daemon_unavailable/protocol_error` disposition，并禁止 raw `AgentResult` 直出 | `CLI-TODO-002`、`CLI-TODO-010`、`CLI-TODO-012` | JSON 主键、error/warnings、disposition、request_id/trace_id、receipt/result 投影均有 contract tests |
 | CLI-OQ-004 | CLI 详设 12.4 | v1 是否允许 CLI 在开发场景尝试拉起 daemon | 已收敛为否；CLI v1 不自动拉起 daemon，`version` 也不隐式触达 daemon，避免客户端承担 daemon lifecycle | `CLI-TODO-001`、`CLI-TODO-002`、`CLI-TODO-009`、`CLI-TODO-013` | daemon unavailable contract / integration 覆盖 exit 3，文档不宣称 auto-start |
 | CLI-OQ-005 | CLI 详设 12.5 | diag 是否开放 log query artifact_ref | 延后；v1 仅保留 `diag health`、`diag queue`、`diag threads` 三个受控只读方向，是否开放取决于 infra/diagnostics 实现节奏 | `CLI-TODO-001`、`CLI-BLK-004`、infra/diagnostics TODO | parser/help 明确 diag 子命令范围；未授权与未启用路径 fail-closed |
 | CLI-OQ-006 | 本次评估新增 | `--socket` 与 `--socket-path` 命名漂移 | 已在 `CLI-TODO-001` 回链详设；v1 稳定用户面只保留 `--socket-path`，`--socket` 不再作为公开 alias | `CLI-TODO-001`、`CLI-RISK-006` | 详设、TODO、usage、parser tests 与 integration smoke 使用同一主命名 |
-| CLI-OQ-007 | 本次评估新增 | access 既有 `cli_exit_code` 与 CLI v1 `0/2/3/4/5/6/7` 的关系 | 澄清为“access error facts 输入 + CLI local projection 输出”；不得把 access `1/75/77` 当 CLI v1 最终契约 | `CLI-TODO-002`、`CLI-TODO-009`、`CLI-TODO-012` | `CliExitCodeContractTest` 锁定 CLI v1 矩阵，`AccessErrorMappingTest` 仅作为 access error mapping regression |
+| CLI-OQ-007 | 本次评估新增 | access 既有 `cli_exit_code` 与 CLI v1 `0/2/3/4/5/6/7` 的关系 | 已在 `CLI-TODO-002` 冻结为“access error code/domain/retryable 输入 + CLI local projection 输出”；`map_access_error().cli_exit_code` 不得进入最终用户面契约 | `CLI-TODO-002`、`CLI-TODO-009`、`CLI-TODO-012` | `CliExitCodeContractTest` 锁定 CLI v1 矩阵，`AccessErrorMappingTest` 仅作为 access error mapping regression |

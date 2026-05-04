@@ -92,7 +92,7 @@ flowchart LR
 2. 运维诊断链：先 ping 判断守护状态，再在授权前提下使用 diag health、diag queue、diag threads。
 3. 脚本集成链：统一使用子命令模型，配合 --json、退出码和 request_id 做自动化调用。
 
-需要特别说明的是：本设计现已冻结 `run`、`status`、`cancel`、`help`、`version` 的参数 schema 与 usage skeleton；后续 Build 阶段只允许补 parser、formatter、request builder 和帮助示例，不得再改动公开参数名、selector 规则或 endpoint override 命名。当前仍保留为后续冻结项的只有 `--json` envelope 与 `CliExitDecision` 契约，它们由后续 CLI 契约任务单独收口。
+需要特别说明的是：本设计现已冻结 `run`、`status`、`cancel`、`help`、`version` 的参数 schema 与 usage skeleton，以及 `--json` envelope / `CliExitDecision` 的脚本化 contract；后续 Build 阶段只允许补 parser、formatter、request builder、exit decision、contract tests 和帮助示例，不得再改动公开参数名、JSON 主键、stdout/stderr 归属、selector 规则或 endpoint override 命名。
 
 ## 2. 约束清单
 
@@ -245,9 +245,10 @@ flowchart LR
 | CliParsedCommand | command、subcommand、args、stdin_mode、output_mode、deadline_ms | 仅表达客户端输入，不含授权结果 | apps/cli private |
 | UdsRequestFrame | schema_version、client_version、command、args、request_id、trace_id、session_hint、idempotency_key、async_preference、output_mode、deadline_ms、payload | 必须可序列化为单个 IpcPayload；不得直接承载 AgentRequest 内部实现细节 | access daemon adapter module-local |
 | LocalPeerUidFact | uid、gid、pid、transport_kind、socket_path | 来自平台 peer identity 查询；缺失即 fail-closed | access daemon adapter module-local |
-| UdsResponseFrame | schema_version、request_id、trace_id、session_id、disposition、exit_code_hint、receipt_ref、agent_result、error_ref、warnings | disposition 仅允许 Completed、Accepted、Rejected | access daemon adapter module-local |
+| UdsResponseFrame | schema_version、request_id、trace_id、session_id、disposition、exit_code_hint、receipt_ref、agent_result、error_ref | disposition 仅允许 Completed、AcceptedAsync、Rejected、NotReady；`exit_code_hint` 只作调试/日志 hint，不得替代 CLI v1 退出码裁定 | access daemon adapter module-local |
+| DaemonClientResponse | transport_ok、parse_ok、peer_closed、failure_reason、request_id、trace_id、session_id、disposition、exit_code_hint、receipt_ref、error_ref、response_text、task_completed、access_error_code、access_error_domain、access_error_retryable | 是 CLI 本地 projection，而不是 `AgentResult` 镜像；access error facts 仅在 daemon 明确返回时填写；不得把 raw `AgentResult` 直接暴露成稳定 JSON | apps/cli private |
 | DaemonReceiptRecord | receipt_ref、request_id、runtime_task_ref、status、created_at、expires_at | TTL 到期必须清理；不承载业务执行语义 | access daemon private |
-| CliExitDecision | exit_code、stdout_plan、stderr_plan | exit_code 只允许有限集合 | apps/cli private |
+| CliExitDecision | exit_code、primary_output_stream、json_mode、outcome_family、diagnostic_hint | exit_code 只允许 `0/2/3/4/5/6/7`；必须先判本地 parse/transport/protocol，再判 daemon/access facts；`exit_code_hint` 只可作为 diagnostics hint | apps/cli private |
 
 #### 6.3.2 核心接口
 
@@ -296,11 +297,64 @@ flowchart LR
 #### 6.4.2 参数与输入约定
 
 1. 默认采用子命令优先模型：dasall run、dasall status、dasall cancel、dasall diag health。
-2. 默认输出为人类可读；传入 --json 时输出稳定 JSON 结构。
+2. 默认输出为人类可读；传入 --json 时输出稳定 CLI projection envelope，而不是 raw `AgentResult`。
 3. stdout 只承载结果；stderr 只承载错误、警告、进度和诊断提示。
 4. --help、-h 在顶层和每个子命令都可用；无参数时输出 concise help。
 5. 若命令需要 stdin 而 stdin 为 TTY 且用户未提供必要参数，CLI 可以提示；若 stdin 非 TTY 或传入 --no-input，则不得交互式提示。
 6. 特权输入不得通过普通 flag 传入敏感秘密；如需额外凭证，应走 stdin、受控文件或 OS credential store。
+
+#### 6.4.2.1 v1 `--json` stable envelope
+
+`--json` 在 v1 冻结为 CLI projection envelope，而不是 `contracts::AgentResult` 或 `UdsResponseFrame` 的直接镜像。脚本调用方绑定的是 CLI 稳定用户面，因此 envelope 只能暴露 `DaemonClientResponse` 与 `CliExitDecision` 这两个 CLI 本地对象能够稳定表达的字段。
+
+稳定输出规则：
+
+1. 进入稳定命令面且 `--json` 生效后，stdout 必须输出且只输出一个 JSON document；stderr 只允许承载附加 human diagnostics，并受 `--quiet` 抑制。
+2. `help` 不属于 `--json` contract；`version --json`、`ping --json`、`run/status/cancel --json` 必须共用同一 envelope 主键。
+3. `warnings` 固定放在顶层数组；`error` 固定放在顶层对象；不得把 warnings 嵌入 `error`，也不得把错误详情混入 `result.response_text`。
+4. `exit_code_hint` 当前只保留为 daemon/CLI 调试 hint，不进入 v1 稳定主键，也不得覆盖 `CliExitDecision` 的最终退出码。
+
+| JSON 主键 | 类型 | 语义 | 出现规则 |
+|---|---|---|---|
+| `schema_version` | string | 固定为 `cli.output.v1` | 总是出现 |
+| `command` | string | 稳定公开命令名；兼容 alias 必须先 canonicalize | 总是出现 |
+| `request_id` | string or null | CLI/daemon 对账 ID | daemon 响应或客户端已生成时出现；否则为 `null` |
+| `trace_id` | string or null | 跨 CLI/daemon/runtime 的追踪 ID | 与 `request_id` 同步出现或为 `null` |
+| `session_id` | string or null | daemon 返回的 session 事实 | 无则 `null` |
+| `disposition` | string | `completed`、`accepted_async`、`rejected`、`not_ready`、`daemon_unavailable`、`protocol_error` 之一 | 总是出现 |
+| `receipt_ref` | string or null | accepted_async 或 receipt 查询引用 | 无则 `null` |
+| `result` | object or null | CLI 可公开消费的结果投影 | 成功或 accepted_async 时出现；其余为 `null` |
+| `error` | object or null | CLI 可公开消费的错误投影 | 失败时出现；成功时为 `null` |
+| `warnings` | array | 非致命告警列表；元素字段固定为 `code`、`message` | 总是出现，默认空数组 |
+| `exit_code` | integer | `CliExitDecision` 的最终 CLI v1 退出码 | 总是出现 |
+
+`result` 子对象只允许以下主键：
+
+| 子键 | 类型 | 语义 |
+|---|---|---|
+| `response_text` | string or null | 对用户稳定暴露的结果文本或摘要 |
+| `task_completed` | bool or null | runtime 是否给出 final completion 事实 |
+
+`error` 子对象只允许以下主键：
+
+| 子键 | 类型 | 语义 |
+|---|---|---|
+| `kind` | string | `argument`、`transport`、`access_denied`、`business`、`timeout_or_cancel`、`protocol` 之一 |
+| `reason` | string or null | CLI 本地失败原因或 access default reason |
+| `error_ref` | string or null | daemon/access 返回的稳定错误引用 |
+| `access_error_code` | integer or null | access error facts 的数值 code；本地 transport/protocol 失败为 `null` |
+| `access_error_domain` | string or null | `validation`、`authentication`、`authorization`、`admission`、`runtime_dispatch`、`publish`、`receipt`、`internal` 之一；本地失败为 `null` |
+| `retryable` | bool or null | access/local 失败是否可重试；未知则 `null` |
+
+场景冻结：
+
+| 场景 | `disposition` | `result` | `error` | `exit_code` |
+|---|---|---|---|---|
+| `ping` 成功 | `completed` | `response_text` 携带 readiness 摘要 | `null` | `0` |
+| `run --async` 被接受 | `accepted_async` | `task_completed=false` 或 `null`；并返回 `receipt_ref` | `null` | `0` |
+| 认证/授权拒绝 | `rejected` | `null` | `kind=access_denied`，并带 `access_error_domain`/`error_ref` | `4` |
+| daemon 不可达 | `daemon_unavailable` | `null` | `kind=transport`，`reason` 来自本地 transport failure | `3` |
+| 响应损坏或协议不兼容 | `protocol_error` | `null` | `kind=protocol` | `7` |
 
 #### 6.4.3 通用 flags
 
@@ -351,8 +405,29 @@ flowchart LR
 | 3 | daemon 不可达 | connect 超时、socket 不存在、listener 不可用 |
 | 4 | 认证或授权拒绝 | local peer 不可信、命令未授权、diag/override 被拒绝 |
 | 5 | 执行业务失败 | Runtime 返回失败 AgentResult |
-| 6 | 超时或取消 | 客户端超时、服务端取消、用户取消 |
+| 6 | 超时、取消或暂不可完成 | 客户端超时、服务端取消、用户取消、not_ready 或其他明确可重试失败 |
 | 7 | 协议或版本错误 | schema_version 不兼容、响应损坏、未知 disposition |
+
+#### 6.4.4.1 `CliExitDecision` v1 投影规则
+
+`CliExitDecision` 必须按“先本地、后协议、再 daemon/access facts”的顺序做单一路径裁定，禁止直接沿用 `access::map_access_error().cli_exit_code` 的既有 `1/75/77`。
+
+| 输入事实 | 输出 exit code | 说明 |
+|---|---|---|
+| CLI parser/flag 校验失败 | `2` | 包括缺参、非法 selector 组合、flag 作用域错误 |
+| 本地 IPC 配置非法，或 connect/send/receive 失败，或 peer 提前关闭 | `3` | 属于 daemon unavailable / local transport failure |
+| 响应 decode 失败、schema/disposition 不兼容、`accepted_async` 缺少 `receipt_ref` | `7` | 属于 protocol/version contract 破坏 |
+| `disposition=completed` 或 `accepted_async`，且无 daemon failure facts | `0` | 包括 replay-hit 这类 success-like 结果 |
+| `access_error_domain=validation` | `2` | daemon 侧验证拒绝仍视为用户输入错误 |
+| `access_error_domain=authentication`、`authorization`，或 `access_error_code=ReceiptOwnerMismatch` | `4` | 认证、授权、receipt 权属拒绝统一归到 access deny 族 |
+| `disposition=not_ready`，或 `access_error_retryable=true` 且不属于 access deny | `6` | 包括 timeout、cancel、queue full、shutting down、bridge unavailable 等可重试/暂不可完成情形 |
+| 其余 daemon-side reject / failure | `5` | 包括 non-retryable runtime/publish/internal/receipt failure |
+
+补充规则：
+
+1. `access::map_access_error()` 与 `describe_access_error()` 只提供 access error 的 code/domain/retryable/default_reason 事实与既有协议映射证据；CLI v1 最终退出码必须由 `CliExitDecision` 单独投影。
+2. `exit_code_hint` 若后续被 daemon 填充，只能进入日志、遥测或 `warnings`，不得改变上述矩阵。
+3. `daemon_unavailable` 与 `protocol_error` 都属于 CLI 本地 projection，不要求 daemon 返回特定 `error_ref`；脚本应依赖 `disposition` + `exit_code` + `error.kind`，而不是猜测 stderr 文本。
 
 #### 6.4.5 典型使用方式
 
@@ -562,7 +637,7 @@ daemon 健康输出分三层：
 | local trusted 基于 peer identity | 对 IIPC 做加法型扩展 | 没有 peer identity 就无法安全做本地主体验证 | platform/include/IIPC.h、platform/src/linux/UnixIpcProvider.cpp | unit：UnixIpcProviderPeerIdentityTest | cmake --build build-ci --target dasall_platform && ctest --test-dir build-ci -R UnixIpcProviderPeerIdentityTest --output-on-failure | 当前平台接口缺口 |
 | accepted_async 闭环 | 新增 ReceiptStore 与 status/cancel | 保证长任务与断线恢复 | access/src/daemon/ReceiptStore.cpp、apps/cli/src/CliRequestBuilder.cpp | integration：CliAsyncReceiptIntegrationTest、CliCancelIntegrationTest | cmake --build build-ci --target dasall_cli dasall_daemon && ctest --test-dir build-ci -R "CliAsyncReceiptIntegrationTest|CliCancelIntegrationTest" --output-on-failure | 依赖 Runtime cancel/query 能力 |
 | diagnostics 命令受控开放 | 接 diagnostics/health 子域正式接口 | 让 diag 命令不是旁路脚本而是受控能力 | access/src/daemon/DaemonHealthService.cpp、apps/cli/src/CliCommandParser.cpp | integration：CliDiagHealthIntegrationTest、CliDiagDenyIntegrationTest | cmake --build build-ci --target dasall_cli dasall_daemon && ctest --test-dir build-ci -R "CliDiagHealthIntegrationTest|CliDiagDenyIntegrationTest" --output-on-failure | 依赖 infra/diagnostics、infra/health 实现 |
-| CLI 机器可读输出稳定 | 冻结 --json 与 exit code 契约 | 保证脚本化能力和未来兼容性 | apps/cli/src/CliOutputFormatter.cpp | contract：CliJsonOutputContractTest、CliExitCodeContractTest | ctest --test-dir build-ci -R "CliJsonOutputContractTest|CliExitCodeContractTest" --output-on-failure | 依赖响应对象冻结 |
+| CLI 机器可读输出稳定 | 冻结 --json 与 exit code 契约 | 保证脚本化能力和未来兼容性；`DaemonClientResponse` 只暴露 CLI projection，`CliExitDecision` 负责最终投影 | apps/cli/src/CliIpcClient.cpp、apps/cli/src/CliOutputFormatter.cpp、apps/cli/src/CliExitDecision.cpp | contract：CliJsonOutputContractTest、CliExitCodeContractTest | ctest --test-dir build-ci -R "CliJsonOutputContractTest|CliExitCodeContractTest" --output-on-failure | 依赖 CLI projection / exit matrix 已冻结 |
 | 观测字段闭环 | 在 CLI、daemon、runtime 之间透传 request_id/trace_id | 让诊断与日志可对账 | apps/cli/src/*、access/src/* | integration：CliTracePropagationIntegrationTest | ctest --test-dir build-ci -R CliTracePropagationIntegrationTest --output-on-failure | 依赖 infra/logging/tracing |
 
 ## 8. 实施计划与里程碑
@@ -641,8 +716,8 @@ daemon 健康输出分三层：
 
 1. platform 的 peer identity 能力最终是扩展 IIPC 还是引入独立 side-interface，需要在 platform 详细设计层补一条正式决策。
 2. ping 的返回对象是否直接暴露 profile_id 与 build hash，需要和版本治理策略再对齐一次。
-3. --json 的稳定输出是直接镜像 AgentResult，还是输出一个 CLI 投影对象，需要在契约测试前冻结。
-4. v1 是否允许 CLI 在开发场景下尝试拉起 daemon，还是完全依赖外部 supervisor，需要结合部署策略决定。
+3. `--json` 的稳定输出已在 CLI-TODO-002 收敛为 CLI projection envelope：固定 `schema_version=cli.output.v1`、顶层 `result/error/warnings` 位置，以及 `DaemonClientResponse` + `CliExitDecision` 的字段边界；后续只允许补实现与 contract tests。
+4. v1 不允许 CLI 在开发场景下尝试拉起 daemon；daemon unavailable 统一投影为 `disposition=daemon_unavailable`、exit `3` 和稳定 transport error envelope。
 5. diag 是否在 v1 就开放 log query artifact_ref，还是仅保留 health.snapshot、queue.stats、thread.dump 三个只读命令，需要和 infra/diagnostics 实现节奏对齐。
 
 后续任务建议：

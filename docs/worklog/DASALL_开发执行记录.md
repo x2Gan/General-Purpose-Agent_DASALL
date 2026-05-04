@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #531
+
+- 日期：2026-05-04
+- 阶段：cli/design-contract-freeze
+- 任务：CLI-TODO-002 补齐 `--json` envelope 与 `CliExitDecision` 契约
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md`，集中回写 CLI projection envelope、stdout/stderr 归属、`daemon_unavailable/protocol_error` 本地 disposition 与 access fact -> CLI exit family 的冻结结论。
+2. 更新 `docs/architecture/DASALL_cli本地控制面详细设计.md`，补齐 `DaemonClientResponse` / `CliExitDecision` 字段语义，冻结 `cli.output.v1` 主键、`result/error/warnings` 摆放以及 `0/2/3/4/5/6/7` 投影规则。
+3. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-002` 标记为 Done，清除 `CLI-BLK-002`，并把 `CLI-TODO-009/010/012/013` 从“脚本化 contract 未冻结”状态切换为实现或 topology 阶段。
+
+### 验证
+
+1. 文档检索：围绕 `cli.output.v1`、`daemon_unavailable`、`protocol_error`、`CliExitDecision`、`0/2/3/4/5/6/7` 的关键锚点已在详设、专项 TODO 与 deliverable 三处同时出现。
+   - 结果：通过，CLI-TODO-002 的脚本化 contract 不再停留在单一文件。
+2. `RunCtest_CMakeTools(tests=["AccessErrorMappingTest", "CliDaemonOutputFormatterTest"])`
+   - 结果：通过，`AccessErrorMappingTest` 与 `CliDaemonOutputFormatterTest` 均 `1/1` passed；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声，不影响 focused 结论。
+
+### 结果
+
+1. CLI v1 `--json` 已明确冻结为 CLI projection envelope，不再讨论是否直接镜像 `AgentResult`；脚本应绑定 `cli.output.v1`、顶层 `result/error/warnings` 与 `disposition + exit_code`。
+2. `CliExitDecision` 已从“只有退出码集合”推进到“有单一路径顺序、有 access fact 复用规则、但不复用 access `1/75/77`”的稳定 contract。
+3. `exit_code_hint` 已被降级为 diagnostics hint，`daemon_unavailable` / `protocol_error` 被提升为 CLI 本地 projection disposition，后续 formatter 与 binary 集成门可以直接按此扩展。
+
 ## 记录 #530
 
 - 日期：2026-05-04
