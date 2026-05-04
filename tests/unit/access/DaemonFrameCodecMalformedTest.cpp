@@ -115,6 +115,16 @@ void test_truncated_payload_is_rejected() {
                "malformed error should project stable reason code");
 }
 
+void test_unknown_output_mode_is_rejected() {
+  using dasall::access::daemon::DaemonFrameDecodeError;
+
+  assert_decode_error(
+      R"({"schema_version":"1","command":"run","payload":"{}","output_mode":"yaml"})",
+      1024U,
+      DaemonFrameDecodeError::MalformedEnvelope,
+      "unknown output_mode should fail closed");
+}
+
 }  // namespace
 
 int main() {
@@ -125,6 +135,7 @@ int main() {
     test_payload_too_large_is_rejected();
     test_non_utf8_payload_is_rejected();
     test_truncated_payload_is_rejected();
+    test_unknown_output_mode_is_rejected();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonFrameCodecMalformedTest] FAILED: " << ex.what() << '\n';
     return 1;

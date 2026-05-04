@@ -26,6 +26,11 @@ enum class DaemonAsyncPreference {
   PreferAsync = 1,
 };
 
+enum class DaemonOutputMode {
+  Human = 0,
+  Json = 1,
+};
+
 enum class UdsResponseDisposition {
   Rejected = 0,
   Completed = 1,
@@ -95,6 +100,8 @@ struct UdsRequestFrame {
   std::map<std::string, std::string> args;
   std::string payload;
   DaemonAsyncPreference async_preference = DaemonAsyncPreference::PreferSync;
+  DaemonOutputMode output_mode = DaemonOutputMode::Human;
+  std::optional<int> deadline_ms;
 
   [[nodiscard]] DaemonCommandKind command_kind() const {
     return classify_daemon_command(command);

@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 
+#include "CliCommandParser.h"
 #include "IIPC.h"
 #include "daemon/DaemonProtocolTypes.h"
 
@@ -54,6 +55,7 @@ class CliIpcClient {
                dasall::platform::IpcEndpoint endpoint,
                std::int32_t connect_deadline_ms = 1000);
 
+  [[nodiscard]] DaemonClientResponse invoke(const CliCommand& command) const;
   [[nodiscard]] DaemonClientResponse ping_daemon() const;
   [[nodiscard]] DaemonClientResponse submit(std::string_view payload) const;
   [[nodiscard]] DaemonClientResponse query_status(

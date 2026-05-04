@@ -4,6 +4,7 @@
 #include <string>
 #include <utility>
 
+#include "CliRequestBuilder.h"
 #include "daemon/DaemonFrameCodec.h"
 
 namespace dasall::apps::cli {
@@ -24,19 +25,6 @@ namespace {
     const dasall::platform::IpcPayload& payload) {
   return std::string(reinterpret_cast<const char*>(payload.data()),
                      payload.size());
-}
-
-[[nodiscard]] std::string make_request_id(std::string_view command_name) {
-  return std::string("cli-") + std::string(command_name);
-}
-
-[[nodiscard]] dasall::access::daemon::UdsRequestFrame make_request_frame(
-    std::string_view command_name) {
-  dasall::access::daemon::UdsRequestFrame frame;
-  frame.request_id = make_request_id(command_name);
-  frame.trace_id = frame.request_id + "-trace";
-  frame.command = std::string(command_name);
-  return frame;
 }
 
 void populate_response_fields(
@@ -64,51 +52,74 @@ CliIpcClient::CliIpcClient(std::shared_ptr<dasall::platform::IIPC> ipc,
       endpoint_(std::move(endpoint)),
       connect_deadline_ms_(connect_deadline_ms) {}
 
+DaemonClientResponse CliIpcClient::invoke(const CliCommand& command) const {
+  auto frame = CliRequestBuilder::build(command);
+  if (!frame.has_value()) {
+    DaemonClientResponse response;
+    response.failure_reason = "invalid cli daemon request";
+    return response;
+  }
+
+  return send_request(*frame);
+}
+
 DaemonClientResponse CliIpcClient::ping_daemon() const {
-  return send_request(make_request_frame("ping"));
+  CliCommand command;
+  command.name = "ping";
+  return invoke(command);
 }
 
 DaemonClientResponse CliIpcClient::submit(const std::string_view payload) const {
-  auto frame = make_request_frame("run");
-  frame.payload = std::string(payload);
-  return send_request(frame);
+  CliCommand command;
+  command.name = "run";
+  command.payload = std::string(payload);
+  return invoke(command);
 }
 
 DaemonClientResponse CliIpcClient::query_status(
     const std::string_view receipt_ref,
     const std::string_view ownership_token,
     const std::string_view actor_ref) const {
-  auto frame = make_request_frame("status");
-  frame.args.emplace("receipt_ref", std::string(receipt_ref));
-  frame.args.emplace("ownership_token", std::string(ownership_token));
+  CliCommand command;
+  command.name = "status";
+  command.selector_kind = CliSelectorKind::Receipt;
+  command.selector_value = std::string(receipt_ref);
+  command.receipt_ref = std::string(receipt_ref);
+  command.ownership_token = std::string(ownership_token);
   if (!actor_ref.empty()) {
-    frame.args.emplace("actor_ref", std::string(actor_ref));
+    command.actor_ref = std::string(actor_ref);
   }
-  return send_request(frame);
+  return invoke(command);
 }
 
 DaemonClientResponse CliIpcClient::cancel(
     const std::string_view receipt_ref,
     const std::string_view ownership_token,
     const std::string_view actor_ref) const {
-  auto frame = make_request_frame("cancel");
-  frame.args.emplace("receipt_ref", std::string(receipt_ref));
-  frame.args.emplace("ownership_token", std::string(ownership_token));
+  CliCommand command;
+  command.name = "cancel";
+  command.selector_kind = CliSelectorKind::Receipt;
+  command.selector_value = std::string(receipt_ref);
+  command.receipt_ref = std::string(receipt_ref);
+  command.ownership_token = std::string(ownership_token);
   if (!actor_ref.empty()) {
-    frame.args.emplace("actor_ref", std::string(actor_ref));
+    command.actor_ref = std::string(actor_ref);
   }
-  return send_request(frame);
+  return invoke(command);
 }
 
 DaemonClientResponse CliIpcClient::read_readiness() const {
-  return send_request(make_request_frame("readiness"));
+  CliCommand command;
+  command.name = "readiness";
+  return invoke(command);
 }
 
 DaemonClientResponse CliIpcClient::run_diagnostics(
     const std::string_view command_name) const {
-  auto frame = make_request_frame("diag");
-  frame.payload = std::string("command_name=") + std::string(command_name);
-  return send_request(frame);
+  CliCommand command;
+  command.name = "diag";
+  command.diag_command = std::string(command_name);
+  return invoke(command);
 }
 
 DaemonClientResponse CliIpcClient::send_request(

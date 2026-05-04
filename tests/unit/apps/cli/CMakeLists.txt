@@ -24,6 +24,7 @@ dasall_add_cli_unit_test(
   CliIpcClientTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliIpcClientTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliRequestBuilder.cpp
 )
 
 target_link_libraries(dasall_cli_ipc_client_unit_test
@@ -40,6 +41,7 @@ dasall_add_cli_unit_test(
   CliIpcClientResponseTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliIpcClientResponseTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliRequestBuilder.cpp
 )
 
 target_link_libraries(dasall_cli_ipc_client_response_unit_test
@@ -56,6 +58,7 @@ dasall_add_cli_unit_test(
   CliIpcClientUnavailableTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliIpcClientUnavailableTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliRequestBuilder.cpp
 )
 
 target_link_libraries(dasall_cli_ipc_client_unavailable_unit_test

@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "CliCommandParser.h"
 #include "CliIpcClient.h"
 #include "daemon/DaemonEndpointDefaults.h"
 #include "daemon/DaemonFrameCodec.h"
@@ -180,12 +181,65 @@ void test_cli_ipc_client_status_encodes_receipt_owner_arguments() {
               "status request should encode actor_ref when explicitly provided");
 }
 
+void test_cli_ipc_client_invoke_shapes_v1_request_context() {
+  using dasall::apps::cli::CliAsyncPreference;
+  using dasall::apps::cli::CliCommand;
+  using dasall::apps::cli::CliIpcClient;
+  using dasall::apps::cli::CliOutputMode;
+  using dasall::platform::IpcEndpoint;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<ScriptedIpc>();
+  ipc->response_text = make_completed_response("req-032", "accepted");
+
+  IpcEndpoint endpoint;
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
+
+  CliCommand command;
+  command.name = "run";
+  command.payload = R"({"input":"hello"})";
+  command.request_id = "req-032";
+  command.trace_id = "trace-032";
+  command.session_hint = "session-032";
+  command.async_preference = CliAsyncPreference::Async;
+  command.output_mode = CliOutputMode::Json;
+  command.timeout_ms = 250;
+
+  const CliIpcClient client(ipc, endpoint, 250);
+  const auto response = client.invoke(command);
+
+  assert_true(response.ok(),
+              "cli invoke should preserve transport success while shaping request frame");
+  assert_true(ipc->last_sent_payload.find("\"request_id\":\"req-032\"") !=
+                  std::string::npos,
+              "invoke should preserve explicit request_id");
+  assert_true(ipc->last_sent_payload.find("\"trace_id\":\"trace-032\"") !=
+                  std::string::npos,
+              "invoke should preserve explicit trace_id");
+  assert_true(ipc->last_sent_payload.find("\"session_hint\":\"session-032\"") !=
+                  std::string::npos,
+              "invoke should encode session_hint when provided");
+  assert_true(ipc->last_sent_payload.find("\"idempotency_key\":\"req-032\"") !=
+                  std::string::npos,
+              "invoke should derive run idempotency key from request_id");
+  assert_true(ipc->last_sent_payload.find("\"async_preference\":true") !=
+                  std::string::npos,
+              "invoke should encode async preference for run requests");
+  assert_true(ipc->last_sent_payload.find("\"output_mode\":\"json\"") !=
+                  std::string::npos,
+              "invoke should encode output mode into request frame");
+  assert_true(ipc->last_sent_payload.find("\"deadline_ms\":250") !=
+                  std::string::npos,
+              "invoke should encode timeout into request deadline field");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_cli_ipc_client_ping_encodes_v1_request_and_parses_response();
     test_cli_ipc_client_status_encodes_receipt_owner_arguments();
+    test_cli_ipc_client_invoke_shapes_v1_request_context();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

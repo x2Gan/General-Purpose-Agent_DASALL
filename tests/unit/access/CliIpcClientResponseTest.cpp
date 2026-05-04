@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "CliCommandParser.h"
 #include "CliIpcClient.h"
 #include "daemon/DaemonEndpointDefaults.h"
 #include "daemon/DaemonFrameCodec.h"
@@ -36,6 +37,7 @@ dasall::platform::IpcPayload make_payload(std::string_view text) {
 class ScriptedIpc final : public dasall::platform::IIPC {
  public:
   std::string response_text;
+  std::string last_sent_payload;
 
   dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle> listen(
       const dasall::platform::IpcEndpoint&,
@@ -65,6 +67,8 @@ class ScriptedIpc final : public dasall::platform::IIPC {
   dasall::platform::PlatformResult<dasall::platform::IpcSendResult> send(
       const dasall::platform::IpcChannelHandle&,
       const dasall::platform::IpcPayload& payload) override {
+    last_sent_payload.assign(reinterpret_cast<const char*>(payload.data()),
+                 payload.size());
     return dasall::platform::PlatformResult<dasall::platform::IpcSendResult>::success(
         dasall::platform::IpcSendResult{.bytes_sent = payload.size()});
   }
@@ -146,6 +150,64 @@ void test_cli_ipc_client_submit_surfaces_accepted_async_receipt() {
                "cli submit should preserve receipt_ref");
 }
 
+void test_cli_ipc_client_invoke_preserves_request_context_on_async_response() {
+  using dasall::access::daemon::UdsResponseDisposition;
+  using dasall::apps::cli::CliAsyncPreference;
+  using dasall::apps::cli::CliCommand;
+  using dasall::apps::cli::CliIpcClient;
+  using dasall::apps::cli::CliOutputMode;
+  using dasall::platform::IpcEndpoint;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<ScriptedIpc>();
+  ipc->response_text = make_response(
+    UdsResponseDisposition::AcceptedAsync,
+    std::string("receipt-032"),
+    std::nullopt,
+    std::string("queued"));
+
+  IpcEndpoint endpoint;
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
+
+  CliCommand command;
+  command.name = "run";
+  command.payload = R"({"input":"world"})";
+  command.request_id = "req-accepted-032";
+  command.trace_id = "trace-accepted-032";
+  command.session_hint = "session-accepted-032";
+  command.async_preference = CliAsyncPreference::Async;
+  command.output_mode = CliOutputMode::Json;
+  command.timeout_ms = 750;
+
+  const CliIpcClient client(ipc, endpoint, 750);
+  const auto response = client.invoke(command);
+
+  assert_true(response.ok(),
+        "cli invoke should continue to parse accepted_async responses");
+  assert_true(response.is_accepted_async(),
+        "cli invoke should preserve accepted_async disposition");
+  assert_true(response.receipt_ref.has_value(),
+        "cli invoke should still surface accepted_async receipt_ref");
+  assert_equal(std::string("receipt-032"), *response.receipt_ref,
+         "cli invoke should preserve accepted_async receipt_ref");
+  assert_true(ipc->last_sent_payload.find("\"request_id\":\"req-accepted-032\"") !=
+          std::string::npos,
+        "cli invoke should encode explicit request_id on accepted_async path");
+  assert_true(ipc->last_sent_payload.find("\"trace_id\":\"trace-accepted-032\"") !=
+          std::string::npos,
+        "cli invoke should encode explicit trace_id on accepted_async path");
+  assert_true(ipc->last_sent_payload.find("\"session_hint\":\"session-accepted-032\"") !=
+          std::string::npos,
+        "cli invoke should encode session hint on accepted_async path");
+  assert_true(ipc->last_sent_payload.find("\"output_mode\":\"json\"") !=
+          std::string::npos,
+        "cli invoke should encode output mode on accepted_async path");
+  assert_true(ipc->last_sent_payload.find("\"deadline_ms\":750") !=
+          std::string::npos,
+        "cli invoke should encode deadline on accepted_async path");
+}
+
 void test_cli_ipc_client_readiness_surfaces_not_ready_disposition() {
   using dasall::access::daemon::UdsResponseDisposition;
   using dasall::apps::cli::CliIpcClient;
@@ -209,6 +271,7 @@ void test_cli_ipc_client_status_surfaces_rejected_error() {
 int main() {
   try {
     test_cli_ipc_client_submit_surfaces_accepted_async_receipt();
+    test_cli_ipc_client_invoke_preserves_request_context_on_async_response();
     test_cli_ipc_client_readiness_surfaces_not_ready_disposition();
     test_cli_ipc_client_status_surfaces_rejected_error();
   } catch (const std::exception& ex) {

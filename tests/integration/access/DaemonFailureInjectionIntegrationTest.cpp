@@ -180,6 +180,8 @@ class UnsupportedPeerIpc final : public dasall::platform::IIPC {
             .args = {},
             .payload = "peer identity unsupported",
             .async_preference = dasall::access::daemon::DaemonAsyncPreference::PreferSync,
+        .output_mode = dasall::access::daemon::DaemonOutputMode::Human,
+        .deadline_ms = std::nullopt,
         });
     result.data.assign(request_text.begin(), request_text.end());
     result.peer_closed = false;

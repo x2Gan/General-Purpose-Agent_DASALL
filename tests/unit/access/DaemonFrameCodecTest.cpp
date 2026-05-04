@@ -10,6 +10,7 @@ namespace {
 void test_decode_request_frame_extracts_v1_fields_and_escapes() {
   using dasall::access::daemon::DaemonAsyncPreference;
   using dasall::access::daemon::DaemonFrameDecodeError;
+  using dasall::access::daemon::DaemonOutputMode;
   using dasall::access::daemon::decode_request_frame;
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
@@ -18,7 +19,7 @@ void test_decode_request_frame_extracts_v1_fields_and_escapes() {
       R"({"schema_version":"1","request_id":"req-030","trace_id":"trace-030",)"
       R"("session_hint":"session-030","idempotency_key":"idem-030","command":"run",)"
       R"("args":{"peer_ref":"cli-user","mode":"safe"},"payload":"hello \"daemon\"",)"
-      R"("async_preference":true})";
+      R"("async_preference":true,"output_mode":"json","deadline_ms":1500})";
 
   const auto decoded = decode_request_frame(payload, 1024U);
 
@@ -50,6 +51,13 @@ void test_decode_request_frame_extracts_v1_fields_and_escapes() {
   assert_equal(static_cast<int>(DaemonAsyncPreference::PreferAsync),
                static_cast<int>(decoded.frame.async_preference),
                "codec should project async_preference=true to PreferAsync");
+  assert_equal(static_cast<int>(DaemonOutputMode::Json),
+               static_cast<int>(decoded.frame.output_mode),
+               "codec should decode output_mode=json into request frame");
+  assert_true(decoded.frame.deadline_ms.has_value(),
+              "codec should decode deadline_ms when provided");
+  assert_equal(1500, *decoded.frame.deadline_ms,
+               "codec should preserve deadline_ms value");
 }
 
 void test_encode_response_frame_escapes_user_controlled_fields() {
@@ -85,6 +93,7 @@ void test_encode_response_frame_escapes_user_controlled_fields() {
 
 void test_encode_request_frame_writes_v1_cli_envelope() {
   using dasall::access::daemon::DaemonAsyncPreference;
+  using dasall::access::daemon::DaemonOutputMode;
   using dasall::access::daemon::UdsRequestFrame;
   using dasall::access::daemon::encode_request_frame;
   using dasall::tests::support::assert_true;
@@ -97,6 +106,8 @@ void test_encode_request_frame_writes_v1_cli_envelope() {
   frame.args.emplace("ownership_token", "owner-token");
   frame.payload = "";
   frame.async_preference = DaemonAsyncPreference::PreferSync;
+  frame.output_mode = DaemonOutputMode::Json;
+  frame.deadline_ms = 900;
 
   const std::string encoded = encode_request_frame(frame);
 
@@ -108,6 +119,10 @@ void test_encode_request_frame_writes_v1_cli_envelope() {
               "request frame should encode args map entries");
   assert_true(encoded.find("\"async_preference\":false") != std::string::npos,
               "request frame should encode sync preference as false");
+  assert_true(encoded.find("\"output_mode\":\"json\"") != std::string::npos,
+              "request frame should encode output mode as stable string value");
+  assert_true(encoded.find("\"deadline_ms\":900") != std::string::npos,
+              "request frame should encode deadline_ms when provided");
 }
 
 void test_decode_response_frame_extracts_disposition_receipt_and_payload() {

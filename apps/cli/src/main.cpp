@@ -84,7 +84,8 @@ int main(int argc, char* argv[]) {
   endpoint.socket_path = cmd->socket_path.value_or(
       dasall::access::daemon::kDefaultDaemonSocketPath);
 
-  const dasall::apps::cli::CliIpcClient client(ipc, endpoint);
+    const dasall::apps::cli::CliIpcClient client(
+      ipc, endpoint, cmd->timeout_ms.value_or(1000));
   const auto exit_code_for = [&](const dasall::apps::cli::DaemonClientResponse& response) {
     return dasall::apps::cli::decide_exit_for_response(response, cmd->output_mode)
         .exit_code;
@@ -92,7 +93,7 @@ int main(int argc, char* argv[]) {
 
   // 3. 执行命令
   if (cmd->name == "ping") {
-    const auto response = client.ping_daemon();
+    const auto response = client.invoke(*cmd);
     if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
                        response.failure_reason)
@@ -106,7 +107,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (cmd->name == "readiness") {
-    const auto response = client.read_readiness();
+    const auto response = client.invoke(*cmd);
     if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
@@ -122,7 +123,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (cmd->name == "run") {
-    const auto response = client.submit(cmd->payload.value_or("{}"));
+    const auto response = client.invoke(*cmd);
     if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
@@ -138,10 +139,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (cmd->name == "status") {
-    const auto response = client.query_status(
-        cmd->receipt_ref.value_or(""),
-        cmd->ownership_token.value_or(""),
-        cmd->actor_ref.value_or(""));
+    const auto response = client.invoke(*cmd);
     if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
@@ -157,10 +155,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (cmd->name == "cancel") {
-    const auto response = client.cancel(
-        cmd->receipt_ref.value_or(""),
-        cmd->ownership_token.value_or(""),
-        cmd->actor_ref.value_or(""));
+    const auto response = client.invoke(*cmd);
     if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)
@@ -176,7 +171,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (cmd->name == "diag") {
-    const auto response = client.run_diagnostics(cmd->diag_command.value_or(""));
+    const auto response = client.invoke(*cmd);
     if (!response.ok()) {
       std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
                        response.failure_reason)

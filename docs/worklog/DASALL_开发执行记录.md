@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+## 记录 #536
+
+- 日期：2026-05-05
+- 阶段：cli/build-surface
+- 任务：CLI-TODO-008 实现 `CliRequestBuilder` 与 request frame shaping
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/CliRequestBuilder.h` 与 `apps/cli/src/CliRequestBuilder.cpp`，把 daemon-facing 命令的 request shaping 从 `CliIpcClient.cpp` 匿名 helper 收敛为单一 owner，并按命令类型统一装配 `request_id`、`trace_id`、`session_hint`、`idempotency_key`、`async_preference`、`output_mode`、`deadline_ms`、payload/selector 字段。
+2. 更新 `apps/cli/src/CliIpcClient.h` 与 `apps/cli/src/CliIpcClient.cpp`，新增 `CliIpcClient::invoke(const CliCommand&)`，让 `ping/run/status/cancel/readiness/diag` 都通过 builder 生成 `UdsRequestFrame`，不再在 client 内部按命令各自拼装 request 参数。
+3. 更新 `apps/cli/src/main.cpp`，daemon-facing 分支统一改为调用 `client.invoke(*cmd)`，并把 `--timeout-ms` 同步接到 client 的 connect/receive deadline，使 `CliCommand` 中的稳定字段真正进入 request/build 路径。
+4. 更新 `access/include/daemon/DaemonProtocolTypes.h` 与 `access/src/daemon/DaemonFrameCodec.cpp`，为 `UdsRequestFrame` 补齐 `output_mode`、`deadline_ms` 字段并扩展 codec 的 encode/decode/known-field 校验，使 request frame 能真实承载 v1 稳定上下文，而不是只停留在 CLI 私有结构里。
+5. 更新 `tests/unit/access/CliIpcClientTest.cpp`、`tests/unit/access/CliIpcClientResponseTest.cpp`、`tests/unit/access/DaemonFrameCodecTest.cpp` 与 `tests/unit/access/DaemonFrameCodecMalformedTest.cpp`，锁定 builder/codec 对 `request_id`、`trace_id`、`session_hint`、`async_preference`、`output_mode`、`deadline_ms` 的装配与 fail-closed 语义；同时补齐 `tests/integration/access/DaemonFailureInjectionIntegrationTest.cpp` 的新字段初始化，消除本次改动引入的编译 warning。
+6. 更新 `apps/cli/CMakeLists.txt`、`tests/unit/apps/cli/CMakeLists.txt` 与 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 builder 文件接入 CLI 构建/单测拓扑，并把 `CLI-TODO-008` 标记为 Done。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过，`CliRequestBuilder`、扩展后的 `UdsRequestFrame`/codec、`CliIpcClient::invoke()` 及相关 CLI/integration target 均进入真实构建图。
+2. `RunCtest_CMakeTools(tests=["CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","DaemonFrameCodecTest","DaemonFrameCodecMalformedTest"])`
+   - 结果：通过，builder/codec 的稳定字段装配、accepted_async 响应保持、不可用路径 fail-closed 以及未知 `output_mode` reject 均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+3. `Build_CMakeTools()`
+   - 结果：通过，在补齐 `DaemonFailureInjectionIntegrationTest.cpp` 的 `deadline_ms` 初始化后，新增字段不再给该 integration target 留下本轮引入的编译 warning。
+
+### 结果
+
+1. request frame 的 v1 稳定字段现在有了单一 owner：`CliRequestBuilder` 负责从 `CliCommand` 生成 daemon-facing `UdsRequestFrame`，`CliIpcClient` 不再散落匿名 helper 去拼各类业务参数。
+2. `request_id/trace_id/session_hint/async_preference/output_mode/deadline_ms` 已从 CLI 私有字段真正进入协议层 request frame，并被 codec 自动化锁定，因此后续 010/012 不需要再猜测这些字段是否只是“解析到但未发出”。
+3. `main()` 已改走 builder 驱动的 invoke 路径，`--timeout-ms` 也开始影响 client deadline；后续 `CLI-TODO-010` 可以直接围绕 formatter 和 `cli.output.v1` envelope 收口，而不必再回头补 request shaping owner。
+
 ## 记录 #535
 
 - 日期：2026-05-05

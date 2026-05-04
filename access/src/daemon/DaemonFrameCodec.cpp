@@ -436,7 +436,8 @@ class JsonReader {
   for (const auto& [key, _] : object) {
     if (key != "schema_version" && key != "request_id" && key != "trace_id" &&
         key != "session_hint" && key != "idempotency_key" && key != "command" &&
-        key != "args" && key != "payload" && key != "async_preference") {
+        key != "args" && key != "payload" && key != "async_preference" &&
+        key != "output_mode" && key != "deadline_ms") {
       return false;
     }
   }
@@ -569,6 +570,29 @@ class JsonReader {
   return std::nullopt;
 }
 
+[[nodiscard]] std::string output_mode_name(const DaemonOutputMode output_mode) {
+  switch (output_mode) {
+    case DaemonOutputMode::Human:
+      return "human";
+    case DaemonOutputMode::Json:
+      return "json";
+  }
+
+  return "human";
+}
+
+[[nodiscard]] std::optional<DaemonOutputMode> output_mode_from_name(
+    std::string_view output_mode) {
+  if (output_mode == "human") {
+    return DaemonOutputMode::Human;
+  }
+  if (output_mode == "json") {
+    return DaemonOutputMode::Json;
+  }
+
+  return std::nullopt;
+}
+
 [[nodiscard]] std::string error_name(const DaemonFrameDecodeError error) {
   switch (error) {
     case DaemonFrameDecodeError::None:
@@ -680,6 +704,18 @@ DecodedDaemonRequestFrame decode_request_frame(
   if (const auto async_preference = bool_field(root, "async_preference");
       async_preference.has_value() && *async_preference) {
     result.frame.async_preference = DaemonAsyncPreference::PreferAsync;
+  }
+  if (const auto output_mode = string_field(root, "output_mode"); output_mode.has_value()) {
+    const auto parsed_output_mode = output_mode_from_name(*output_mode);
+    if (!parsed_output_mode.has_value()) {
+      result.error = DaemonFrameDecodeError::MalformedEnvelope;
+      return result;
+    }
+    result.frame.output_mode = *parsed_output_mode;
+  }
+  if (const auto deadline_ms = integer_field(root, "deadline_ms");
+      deadline_ms.has_value()) {
+    result.frame.deadline_ms = *deadline_ms;
   }
 
   return result;
@@ -812,6 +848,10 @@ std::string encode_request_frame(const UdsRequestFrame& frame) {
   output += ",\"payload\":\"" + escape_json_string(frame.payload) + "\"";
   output += ",\"async_preference\":";
   output += frame.async_preference == DaemonAsyncPreference::PreferAsync ? "true" : "false";
+  output += ",\"output_mode\":\"" + output_mode_name(frame.output_mode) + "\"";
+  if (frame.deadline_ms.has_value()) {
+    output += ",\"deadline_ms\":" + std::to_string(*frame.deadline_ms);
+  }
   output += '}';
   return output;
 }
