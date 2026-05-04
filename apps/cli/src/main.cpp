@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include "CliCommandParser.h"
 #include "CliExitDecision.h"
@@ -22,6 +24,32 @@
 #include "CliOutputFormatter.h"
 #include "daemon/DaemonEndpointDefaults.h"
 #include "linux/UnixIpcProvider.h"
+
+namespace {
+
+constexpr std::string_view kCliLocalVersion = "v1";
+constexpr std::string_view kCliOutputSchemaVersion = "cli.output.v1";
+constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
+
+[[nodiscard]] std::string format_version_output(
+    const dasall::apps::cli::CliOutputMode output_mode) {
+  if (output_mode == dasall::apps::cli::CliOutputMode::Json) {
+    return std::string("{\"schema_version\":\"") +
+           std::string(kCliOutputSchemaVersion) +
+           "\",\"command\":\"version\",\"request_id\":null,"
+           "\"trace_id\":null,\"session_id\":null,"
+           "\"disposition\":\"completed\",\"receipt_ref\":null,"
+           "\"result\":{\"response_text\":\"dasall_cli v1; schema_support=cli.output.v1; "
+           "build_metadata=build-metadata-unavailable\",\"task_completed\":true},"
+           "\"error\":null,\"warnings\":[],\"exit_code\":0}";
+  }
+
+  return std::string("dasall_cli ") + std::string(kCliLocalVersion) +
+         "\nschema support: " + std::string(kCliOutputSchemaVersion) +
+         "\nbuild metadata: " + std::string(kCliBuildMetadata);
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
   // 1. 解析命令行参数
@@ -32,6 +60,22 @@ int main(int argc, char* argv[]) {
               << '\n';
     std::cerr << dasall::apps::cli::CliCommandParser::usage_string();
     return dasall::apps::cli::make_argument_error_decision().exit_code;
+  }
+
+  if (cmd->name == "help") {
+    const std::string_view command_name =
+        cmd->help_path.empty() ? std::string_view{} : cmd->help_path[0];
+    const std::string_view subcommand_name =
+        cmd->help_path.size() >= 2 ? std::string_view(cmd->help_path[1])
+                                   : std::string_view{};
+    std::cout << dasall::apps::cli::CliCommandParser::usage_string(
+                     command_name, subcommand_name);
+    return EXIT_SUCCESS;
+  }
+
+  if (cmd->name == "version") {
+    std::cout << format_version_output(cmd->output_mode) << '\n';
+    return EXIT_SUCCESS;
   }
 
   // 2. 构造 IIPC provider 和 CliIpcClient

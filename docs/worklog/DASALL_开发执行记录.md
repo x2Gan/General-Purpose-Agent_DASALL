@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #535
+
+- 日期：2026-05-05
+- 阶段：cli/build-surface
+- 任务：CLI-TODO-007 实现 `CliCommandParser` 的 flags、help、version 校验
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/CliCommandParser.h` 与 `apps/cli/src/CliCommandParser.cpp`，为 `CliCommand` 增加 `help_path`，补齐空调用默认 help、显式 `help`、命令级 `--help/-h`、`version` local-only 命令识别，以及 `help/version` 对 `--json`、`--socket-path`、`--timeout-ms` 等 flag 的命令级作用域约束。
+2. 更新 `CliCommandParser::usage_string()`，按 `run/status/cancel/version/ping/readiness/diag` 输出与详设一致的 usage skeleton，不再只有旧的最小 `--socket-path + positional` 说明。
+3. 更新 `apps/cli/src/main.cpp`，将 `help` 与 `version` 提前到 local-only 分支处理，避免无意义地初始化 IIPC client，并为 `version --json` 提供最小稳定本地输出。
+4. 更新 `tests/unit/access/CliDaemonCommandParserTest.cpp`，新增空调用默认 help、显式 `help diag health`、命令级 `run --help`、`version --json --quiet`、`help --json` reject、`version --socket-path/--timeout-ms` reject 等正反例。
+5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-007` 标记为 Done，并把 Wave 3 顺序推进到 008/010。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest"])`
+   - 结果：通过，新增的 help/version 解析、usage skeleton 与 local-only flag 约束断言均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+2. `Build_CMakeTools()`
+   - 结果：通过，parser/main 的 local-only 分支与帮助文本更新已进入真实构建图。
+3. `./build/vscode-linux-ninja/apps/cli/dasall_cli --help && ./build/vscode-linux-ninja/apps/cli/dasall_cli version --json`
+   - 结果：通过，built CLI 能输出顶层 usage skeleton，并在不触达 daemon 的前提下输出 `version --json` 的本地结果。
+
+### 结果
+
+1. CLI 已不再把 `help`、`version` 当成 parse failure；空调用、显式 `help`、命令级 `--help` 都会进入本地帮助路径。
+2. `version` 现在是明确的 local-only 命令，parser 与 main 会拒绝 daemon/transport 级 flags，不再把本地版本查看误导成潜在 RPC 调用。
+3. parser 的 usage skeleton 已与冻结详设对齐，后续 `CLI-TODO-008` 可以直接围绕稳定参数面实现 request builder，而不必再修 usage/help contract。
+
 ## 记录 #534
 
 - 日期：2026-05-04

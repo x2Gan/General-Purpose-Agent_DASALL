@@ -124,51 +124,130 @@ void test_parse_diag_and_missing_status_token_reject() {
               "run command should reject duplicate stable option assignments");
 }
 
-  void test_parse_socket_path_override_and_reject_invalid_forms() {
-    using dasall::apps::cli::CliCommandParser;
-    using dasall::tests::support::assert_equal;
-    using dasall::tests::support::assert_true;
+void test_parse_help_and_version_commands() {
+  using dasall::apps::cli::CliCommandParser;
+  using dasall::apps::cli::CliOutputMode;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
 
-    const char* prefixed_argv[] = {
+  const char* default_help_argv[] = {"dasall_cli"};
+  const auto default_help_cmd = CliCommandParser::parse(1, default_help_argv);
+  assert_true(default_help_cmd.has_value(),
+              "empty invocation should fall back to local help command");
+  assert_equal(std::string("help"), default_help_cmd->name,
+               "empty invocation should canonicalize to help");
+  assert_true(default_help_cmd->help_path.empty(),
+              "top-level help should not fabricate a command path");
+
+  const char* explicit_help_argv[] = {"dasall_cli", "help", "diag", "health"};
+  const auto explicit_help_cmd = CliCommandParser::parse(4, explicit_help_argv);
+  assert_true(explicit_help_cmd.has_value(),
+              "explicit help command should parse local help path");
+  assert_equal(std::string("help"), explicit_help_cmd->name,
+               "explicit help should preserve local help command name");
+  assert_equal(2,
+               static_cast<int>(explicit_help_cmd->help_path.size()),
+               "explicit help should preserve command and subcommand path");
+  assert_equal(std::string("diag"), explicit_help_cmd->help_path[0],
+               "explicit help should preserve command segment");
+  assert_equal(std::string("health"), explicit_help_cmd->help_path[1],
+               "explicit help should preserve subcommand segment");
+
+  const char* help_flag_argv[] = {"dasall_cli", "run", "--help"};
+  const auto help_flag_cmd = CliCommandParser::parse(3, help_flag_argv);
+  assert_true(help_flag_cmd.has_value(),
+              "command-level --help should canonicalize to local help");
+  assert_equal(std::string("help"), help_flag_cmd->name,
+               "command-level --help should switch to help command");
+  assert_equal(1,
+               static_cast<int>(help_flag_cmd->help_path.size()),
+               "command-level --help should preserve target command path");
+  assert_equal(std::string("run"), help_flag_cmd->help_path[0],
+               "command-level --help should target the original command");
+
+  const char* version_argv[] = {"dasall_cli", "version", "--json", "--quiet"};
+  const auto version_cmd = CliCommandParser::parse(4, version_argv);
+  assert_true(version_cmd.has_value(),
+              "version command should accept local-only json and quiet flags");
+  assert_equal(std::string("version"), version_cmd->name,
+               "version command should parse as local-only version command");
+  assert_true(version_cmd->output_mode == CliOutputMode::Json,
+              "version command should preserve json output mode for local dispatch");
+  assert_true(version_cmd->quiet,
+              "version command should preserve quiet flag for local dispatch");
+
+  const auto version_usage = CliCommandParser::usage_string("version");
+  assert_true(version_usage.find("version [--json] [--quiet]") != std::string::npos,
+              "version usage should expose the frozen local-only usage skeleton");
+}
+
+void test_reject_invalid_help_and_version_flag_combinations() {
+  using dasall::apps::cli::CliCommandParser;
+  using dasall::tests::support::assert_true;
+
+  const char* help_json_argv[] = {"dasall_cli", "help", "--json"};
+  const auto help_json_cmd = CliCommandParser::parse(3, help_json_argv);
+  assert_true(!help_json_cmd.has_value(),
+              "help command should reject json mode because help is human-only");
+
+  const char* version_socket_argv[] = {
+      "dasall_cli", "version", "--socket-path", "/tmp/dasall.sock"};
+  const auto version_socket_cmd = CliCommandParser::parse(4, version_socket_argv);
+  assert_true(!version_socket_cmd.has_value(),
+              "version command should reject daemon socket flags because it is local-only");
+
+  const char* version_timeout_argv[] = {
+      "dasall_cli", "version", "--timeout-ms", "50"};
+  const auto version_timeout_cmd = CliCommandParser::parse(4, version_timeout_argv);
+  assert_true(!version_timeout_cmd.has_value(),
+              "version command should reject transport timeout flags because it is local-only");
+}
+
+void test_parse_socket_path_override_and_reject_invalid_forms() {
+  using dasall::apps::cli::CliCommandParser;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const char* prefixed_argv[] = {
       "dasall_cli", "--socket-path", "/tmp/dasall/override.sock", "ping"};
-    const auto prefixed_cmd = CliCommandParser::parse(4, prefixed_argv);
-    assert_true(prefixed_cmd.has_value(),
-          "global socket-path option should parse before command name");
-    assert_equal(std::string("/tmp/dasall/override.sock"),
-           *prefixed_cmd->socket_path,
-           "socket-path option should be preserved on parsed command");
-    assert_equal(std::string("ping"), prefixed_cmd->name,
-           "ping should remain the command name after extracting socket-path");
+  const auto prefixed_cmd = CliCommandParser::parse(4, prefixed_argv);
+  assert_true(prefixed_cmd.has_value(),
+              "global socket-path option should parse before command name");
+  assert_equal(std::string("/tmp/dasall/override.sock"),
+               *prefixed_cmd->socket_path,
+               "socket-path option should be preserved on parsed command");
+  assert_equal(std::string("ping"), prefixed_cmd->name,
+               "ping should remain the command name after extracting socket-path");
 
-    const char* suffixed_argv[] = {
+  const char* suffixed_argv[] = {
       "dasall_cli", "status", "receipt-031", "owner-token",
       "--socket-path=/tmp/dasall/override.sock"};
-    const auto suffixed_cmd = CliCommandParser::parse(5, suffixed_argv);
-    assert_true(suffixed_cmd.has_value(),
-          "socket-path option should parse after command arguments");
-    assert_equal(std::string("/tmp/dasall/override.sock"),
-           *suffixed_cmd->socket_path,
-           "inline socket-path option should be preserved on parsed command");
+  const auto suffixed_cmd = CliCommandParser::parse(5, suffixed_argv);
+  assert_true(suffixed_cmd.has_value(),
+              "socket-path option should parse after command arguments");
+  assert_equal(std::string("/tmp/dasall/override.sock"),
+               *suffixed_cmd->socket_path,
+               "inline socket-path option should be preserved on parsed command");
 
-    const char* duplicate_argv[] = {
+  const char* duplicate_argv[] = {
       "dasall_cli", "--socket-path", "/tmp/dasall/a.sock",
       "--socket-path=/tmp/dasall/b.sock", "ping"};
-    const auto duplicate_cmd = CliCommandParser::parse(5, duplicate_argv);
-    assert_true(!duplicate_cmd.has_value(),
-          "duplicate socket-path options should be rejected");
+  const auto duplicate_cmd = CliCommandParser::parse(5, duplicate_argv);
+  assert_true(!duplicate_cmd.has_value(),
+              "duplicate socket-path options should be rejected");
 
-    const char* missing_value_argv[] = {"dasall_cli", "--socket-path", "ping"};
-    const auto missing_value_cmd = CliCommandParser::parse(3, missing_value_argv);
-    assert_true(!missing_value_cmd.has_value(),
-          "socket-path option without value should be rejected");
+  const char* missing_value_argv[] = {"dasall_cli", "--socket-path", "ping"};
+  const auto missing_value_cmd = CliCommandParser::parse(3, missing_value_argv);
+  assert_true(!missing_value_cmd.has_value(),
+              "socket-path option without value should be rejected");
 
-    const char* default_argv[] = {"dasall_cli", "ping"};
-    const auto default_cmd = CliCommandParser::parse(2, default_argv);
-    assert_true(default_cmd.has_value(),
-          "ping should continue to parse without socket-path override");
-    assert_true(!default_cmd->socket_path.has_value(),
-          "default CLI path resolution should remain deferred to shared constant");
-  }
+  const char* default_argv[] = {"dasall_cli", "ping"};
+  const auto default_cmd = CliCommandParser::parse(2, default_argv);
+  assert_true(default_cmd.has_value(),
+              "ping should continue to parse without socket-path override");
+  assert_true(!default_cmd->socket_path.has_value(),
+              "default CLI path resolution should remain deferred to shared constant");
+}
 
 }  // namespace
 
@@ -177,6 +256,8 @@ int main() {
     test_parse_run_and_submit_alias();
     test_parse_status_and_cancel_arguments();
     test_parse_diag_and_missing_status_token_reject();
+    test_parse_help_and_version_commands();
+    test_reject_invalid_help_and_version_flag_combinations();
     test_parse_socket_path_override_and_reject_invalid_forms();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';

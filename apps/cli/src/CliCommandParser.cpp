@@ -3,6 +3,7 @@
 #include <charconv>
 #include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace dasall::apps::cli {
@@ -20,6 +21,22 @@ struct ParsedStableFlags {
   bool quiet = false;
   bool no_input = false;
 };
+
+[[nodiscard]] bool has_local_only_flags(const ParsedStableFlags& flags) {
+  return flags.socket_path.has_value() || flags.timeout_ms.has_value() ||
+         flags.async_preference == CliAsyncPreference::Async ||
+         flags.request_id.has_value() || flags.session_hint.has_value() ||
+         flags.trace_id.has_value() || flags.no_input;
+}
+
+[[nodiscard]] bool validate_help_scope(const ParsedStableFlags& flags) {
+  return flags.output_mode == CliOutputMode::Human && !flags.quiet &&
+         !has_local_only_flags(flags);
+}
+
+[[nodiscard]] bool validate_version_scope(const ParsedStableFlags& flags) {
+  return !has_local_only_flags(flags);
+}
 
 [[nodiscard]] bool parse_int_value(std::string_view text, int& value) {
   if (text.empty()) {
@@ -125,7 +142,18 @@ void apply_flags_to_command(const ParsedStableFlags& flags, CliCommand& cmd) {
 
 [[nodiscard]] bool validate_flag_scope(std::string_view command_name,
                                        const ParsedStableFlags& flags) {
+  if (command_name == "help") {
+    return validate_help_scope(flags);
+  }
+
+  if (command_name == "version") {
+    return validate_version_scope(flags);
+  }
+
   const bool is_run_like = command_name == "run" || command_name == "submit";
+  const bool is_daemon_query = command_name == "ping" || command_name == "readiness" ||
+                               command_name == "status" || command_name == "cancel" ||
+                               command_name == "diag" || command_name == "diagnostics";
 
   if (flags.async_preference == CliAsyncPreference::Async && !is_run_like) {
     return false;
@@ -137,14 +165,44 @@ void apply_flags_to_command(const ParsedStableFlags& flags, CliCommand& cmd) {
     return false;
   }
 
+  if ((flags.socket_path.has_value() || flags.timeout_ms.has_value()) &&
+      !(is_run_like || is_daemon_query)) {
+    return false;
+  }
+
   return true;
+}
+
+[[nodiscard]] CliCommand make_help_command(std::vector<std::string> help_path) {
+  CliCommand cmd;
+  cmd.name = "help";
+  cmd.help_path = std::move(help_path);
+  return cmd;
+}
+
+[[nodiscard]] std::vector<std::string> build_help_path(
+    const std::vector<std::string>& positional_args,
+    const bool explicit_help_command) {
+  if (positional_args.empty()) {
+    return {};
+  }
+
+  if (explicit_help_command) {
+    if (positional_args.size() == 1) {
+      return {};
+    }
+    return std::vector<std::string>(positional_args.begin() + 1,
+                                    positional_args.end());
+  }
+
+  return positional_args;
 }
 
 }  // namespace
 
 std::optional<CliCommand> CliCommandParser::parse(int argc,
                                                    char const* const* argv) {
-  if (argc < 2 || argv == nullptr) {
+  if (argc < 1 || argv == nullptr) {
     return std::nullopt;
   }
 
@@ -155,16 +213,19 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
       cmd.raw_args.emplace_back(argv[i]);
     }
   }
-  if (cmd.raw_args.empty()) {
-    return std::nullopt;
-  }
 
   std::vector<std::string> positional_args;
   positional_args.reserve(cmd.raw_args.size());
   ParsedStableFlags flags;
+  bool help_requested = false;
 
   for (std::size_t index = 0; index < cmd.raw_args.size(); ++index) {
     const std::string_view arg(cmd.raw_args[index]);
+
+    if (arg == "-h" || arg == "--help") {
+      help_requested = true;
+      continue;
+    }
 
     if (arg == "--json") {
       if (flags.output_mode == CliOutputMode::Json) {
@@ -242,6 +303,22 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
     positional_args.push_back(cmd.raw_args[index]);
   }
 
+  if (cmd.raw_args.empty()) {
+    return make_help_command({});
+  }
+
+  if (help_requested) {
+    const bool explicit_help_command = !positional_args.empty() && positional_args[0] == "help";
+    if (!validate_help_scope(flags)) {
+      return std::nullopt;
+    }
+
+    auto help_cmd = make_help_command(
+        build_help_path(positional_args, explicit_help_command));
+    help_cmd.raw_args = cmd.raw_args;
+    return help_cmd;
+  }
+
   if (positional_args.empty()) {
     return std::nullopt;
   }
@@ -254,6 +331,18 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
   apply_flags_to_command(flags, cmd);
 
   if (cmd.name == "ping" || cmd.name == "readiness") {
+    return cmd;
+  }
+
+  if (cmd.name == "help") {
+    cmd.help_path = build_help_path(positional_args, true);
+    return cmd;
+  }
+
+  if (cmd.name == "version") {
+    if (positional_args.size() != 1) {
+      return std::nullopt;
+    }
     return cmd;
   }
 
@@ -296,17 +385,70 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
   return std::nullopt;
 }
 
-std::string CliCommandParser::usage_string() {
-  return "Usage: dasall_cli [--socket-path <path>] <command> [args]\n"
-         "Options:\n"
-         "  --socket-path <path>                      Override daemon unix socket path\n"
-         "Commands:\n"
-         "  ping                                      Send a health check to dasall daemon\n"
-         "  readiness                                 Read daemon readiness summary\n"
-         "  run <json_payload>                        Submit a request to dasall daemon\n"
-         "  submit <json_payload>                     Backward-compatible alias for run\n"
-         "  status <receipt_ref> <ownership_token>    Query async receipt status\n"
-         "  cancel <receipt_ref> <ownership_token>    Cancel an async receipt\n";
+std::string CliCommandParser::usage_string(std::string_view command_name,
+                                           std::string_view subcommand_name) {
+  if (command_name == "run") {
+    return "Usage: dasall_cli run <request_json_or_-> [--async] [--request-id <id>] "
+           "[--session <hint>] [--trace-id <id>] [--timeout-ms <ms>] [--json] "
+           "[--socket-path <path>] [--quiet] [--no-input]\n";
+  }
+
+  if (command_name == "status") {
+    return "Usage: dasall_cli status (--receipt <receipt_ref> --ownership-token <token> | "
+           "--request-id <request_id>) [--timeout-ms <ms>] [--json] "
+           "[--socket-path <path>] [--quiet]\n";
+  }
+
+  if (command_name == "cancel") {
+    return "Usage: dasall_cli cancel (--receipt <receipt_ref> --ownership-token <token> | "
+           "--request-id <request_id>) [--timeout-ms <ms>] [--json] "
+           "[--socket-path <path>] [--quiet]\n";
+  }
+
+  if (command_name == "version") {
+    return "Usage: dasall_cli version [--json] [--quiet]\n";
+  }
+
+  if (command_name == "ping") {
+    return "Usage: dasall_cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+  }
+
+  if (command_name == "readiness") {
+    return "Usage: dasall_cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+  }
+
+  if (command_name == "diag") {
+    if (subcommand_name == "health") {
+      return "Usage: dasall_cli diag health [--json] [--timeout-ms <ms>] "
+             "[--socket-path <path>] [--quiet]\n";
+    }
+
+    if (subcommand_name == "queue") {
+      return "Usage: dasall_cli diag queue [--json] [--timeout-ms <ms>] "
+             "[--socket-path <path>] [--quiet]\n";
+    }
+
+    if (subcommand_name == "threads") {
+      return "Usage: dasall_cli diag threads [--json] [--timeout-ms <ms>] "
+             "[--socket-path <path>] [--quiet]\n";
+    }
+
+    return "Usage: dasall_cli diag <health|queue|threads> [--json] [--timeout-ms <ms>] "
+           "[--socket-path <path>] [--quiet]\n";
+  }
+
+  return "Usage:\n"
+         "  dasall_cli help [command] [subcommand]\n"
+         "  dasall_cli version [--json] [--quiet]\n"
+         "  dasall_cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
+         "  dasall_cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
+         "  dasall_cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "
+         "[--trace-id <id>] [--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet] [--no-input]\n"
+         "  dasall_cli status (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "
+         "[--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet]\n"
+         "  dasall_cli cancel (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "
+         "[--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet]\n"
+         "  dasall_cli diag <health|queue|threads> [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
 }
 
 }  // namespace dasall::apps::cli

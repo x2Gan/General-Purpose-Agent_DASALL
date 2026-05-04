@@ -76,6 +76,9 @@ struct CliCommand {
   /// diagnostics 子命令名。
   std::optional<std::string> diag_command;
 
+  /// 本地 help 命令所请求的命令路径，如 {"diag", "health"}。
+  std::vector<std::string> help_path;
+
   /// 原始参数列表（供诊断用）
   std::vector<std::string> raw_args;
 };
@@ -107,7 +110,9 @@ class CliCommandParser {
                                                         char const* const* argv);
 
   /// 返回使用说明字符串（供 help / error 提示用）
-  [[nodiscard]] static std::string usage_string();
+  [[nodiscard]] static std::string usage_string(
+      std::string_view command_name = {},
+      std::string_view subcommand_name = {});
 };
 
 }  // namespace dasall::apps::cli
