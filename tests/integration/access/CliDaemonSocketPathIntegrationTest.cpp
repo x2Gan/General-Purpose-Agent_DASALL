@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "AccessGatewayFactory.h"
+#include "CliBinaryTestSupport.h"
 #include "CliCommandParser.h"
 #include "CliIpcClient.h"
 #include "DaemonBootstrap.h"
@@ -23,6 +24,10 @@
 #include "daemon/DaemonEndpointDefaults.h"
 #include "linux/UnixIpcProvider.h"
 #include "support/TestAssertions.h"
+
+#ifndef DASALL_CLI_BINARY_PATH
+#error "DASALL_CLI_BINARY_PATH must be defined"
+#endif
 
 namespace {
 
@@ -299,12 +304,94 @@ void test_cli_socket_path_override_roundtrip_reaches_custom_endpoint() {
               "socket-path override integration should stop daemon cleanly");
 }
 
+  void test_cli_binary_socket_override_and_output_stream_split() {
+    const fs::path socket_path =
+      fs::temp_directory_path() /
+      (std::string("dasall-cli-binary-socket-") + std::to_string(::getpid())) /
+      "control.sock";
+    const fs::path missing_socket =
+      fs::temp_directory_path() /
+      (std::string("dasall-cli-missing-socket-") + std::to_string(::getpid())) /
+      "missing.sock";
+    ScopedSocketPath scoped_path(socket_path, true);
+    RunningDaemon daemon(socket_path.string(), "daemon.cli.binary.override");
+
+    const auto success = dasall::tests::integration::access_support::run_process_capture_split(
+      {
+        DASALL_CLI_BINARY_PATH,
+        "--socket-path",
+        socket_path.string(),
+        "ping",
+      },
+      fs::current_path());
+    assert_equal(0,
+           success.exit_code,
+           "socket-path integration should let built CLI ping over explicit socket override; stdout=" +
+             success.stdout_text + " stderr=" + success.stderr_text);
+    assert_true(success.stdout_text.find("[dasall_cli] ping: completed") !=
+            std::string::npos,
+          "socket-path integration should surface ping success on stdout; stdout=" +
+            success.stdout_text);
+    assert_true(success.stdout_text.find("READY") != std::string::npos,
+          "socket-path integration should preserve daemon readiness payload on stdout; stdout=" +
+            success.stdout_text);
+    assert_true(success.stderr_text.empty(),
+          "socket-path integration should keep successful ping output off stderr; stderr=" +
+            success.stderr_text);
+
+    daemon.stop();
+    assert_true(daemon.stopped_cleanly(),
+          "socket-path integration should stop the daemon cleanly before missing-socket checks");
+
+    const auto human_failure = dasall::tests::integration::access_support::run_process_capture_split(
+      {
+        DASALL_CLI_BINARY_PATH,
+        "--socket-path",
+        missing_socket.string(),
+        "ping",
+      },
+      fs::current_path());
+    assert_equal(3,
+           human_failure.exit_code,
+           "socket-path integration should map missing daemon socket to exit 3 in human mode; stdout=" +
+             human_failure.stdout_text + " stderr=" + human_failure.stderr_text);
+    assert_true(human_failure.stdout_text.empty(),
+          "socket-path integration should keep human ping failure off stdout; stdout=" +
+            human_failure.stdout_text);
+    assert_true(human_failure.stderr_text.find("[dasall_cli] daemon ping: FAILED") !=
+            std::string::npos,
+          "socket-path integration should report human ping failure on stderr; stderr=" +
+            human_failure.stderr_text);
+
+    const auto json_failure = dasall::tests::integration::access_support::run_process_capture_split(
+      {
+        DASALL_CLI_BINARY_PATH,
+        "--socket-path",
+        missing_socket.string(),
+        "ping",
+        "--json",
+      },
+      fs::current_path());
+    assert_equal(3,
+           json_failure.exit_code,
+           "socket-path integration should map missing daemon socket to exit 3 in JSON mode; stdout=" +
+             json_failure.stdout_text + " stderr=" + json_failure.stderr_text);
+    assert_true(json_failure.stderr_text.empty(),
+          "socket-path integration should keep JSON ping failure off stderr; stderr=" +
+            json_failure.stderr_text);
+    assert_true(json_failure.stdout_text.find("\"disposition\":\"daemon_unavailable\"") !=
+            std::string::npos,
+          "socket-path integration should preserve daemon_unavailable disposition in JSON mode; stdout=" +
+            json_failure.stdout_text);
+  }
+
 }  // namespace
 
 int main() {
   try {
     test_cli_default_socket_path_roundtrip_uses_shared_default();
     test_cli_socket_path_override_roundtrip_reaches_custom_endpoint();
+    test_cli_binary_socket_override_and_output_stream_split();
   } catch (const std::exception& ex) {
     std::cerr << "[CliDaemonSocketPathIntegrationTest] FAILED: " << ex.what()
               << '\n';

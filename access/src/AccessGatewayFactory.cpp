@@ -46,6 +46,18 @@ namespace {
   return result;
 }
 
+[[nodiscard]] std::string request_context_or_default(
+    const RuntimeDispatchRequest& request,
+    std::string_view key,
+    std::string fallback) {
+  const auto it = request.request_context.find(std::string(key));
+  if (it == request.request_context.end() || it->second.empty()) {
+    return fallback;
+  }
+
+  return it->second;
+}
+
 [[nodiscard]] LocalPeerUidFact parse_local_peer_fact(const InboundPacket& packet) {
   LocalPeerUidFact fact;
 
@@ -557,6 +569,12 @@ build_daemon_submit_pipeline(
             runtime_request.async_allowed = packet.async_preferred;
             runtime_request.stream_requested = packet.stream_requested;
             runtime_request.request_context["request_id"] = packet.packet_id;
+            if (packet.trace_id.has_value() && !packet.trace_id->empty()) {
+              runtime_request.request_context["trace_id"] = *packet.trace_id;
+            }
+            if (packet.session_hint.has_value() && !packet.session_hint->empty()) {
+              runtime_request.request_context["session_id"] = *packet.session_hint;
+            }
             runtime_request.request_context["idempotency_key"] = packet.packet_id;
 
             const auto validation_result =
@@ -605,22 +623,38 @@ build_daemon_submit_pipeline(
                   normalized.runtime_request,
                   dispatch_result);
               if (receipt != nullptr) {
+              const std::string request_id = request_context_or_default(
+                normalized.runtime_request,
+                "request_id",
+                normalized.runtime_request.packet.packet_id);
+              const std::string session_id = request_context_or_default(
+                normalized.runtime_request,
+                "session_id",
+                "session:" + request_id);
+              const std::string trace_id = request_context_or_default(
+                normalized.runtime_request,
+                "trace_id",
+                "trace:" + request_id);
                 dispatch_result.receipt_ref = receipt->receipt_id;
                 if (!dispatch_result.publish_envelope.has_value()) {
                   dispatch_result.publish_envelope = PublishEnvelope{};
                 }
-                dispatch_result.publish_envelope->request_id =
-                    normalized.runtime_request.packet.packet_id;
+              dispatch_result.publish_envelope->request_id = request_id;
                 dispatch_result.publish_envelope->result_id = receipt->receipt_id;
+              dispatch_result.publish_envelope->session_id = session_id;
+              dispatch_result.publish_envelope->trace_id = trace_id;
+              dispatch_result.publish_envelope->channel_ref =
+                normalized.runtime_request.packet.entry_type + "://" +
+                normalized.runtime_request.packet.protocol_kind;
                 dispatch_result.publish_envelope->protocol_kind =
                     normalized.runtime_request.packet.protocol_kind;
                 dispatch_result.publish_envelope->protocol_status_hint = "202";
                 dispatch_result.publish_envelope->payload = "accepted_async";
                 dispatch_result.publish_envelope->receipt = *receipt;
                 (void)observability_bridge->emit_receipt_event(
-                    normalized.runtime_request.packet.packet_id,
-                    normalized.runtime_request.packet.packet_id,
-                    std::string_view{},
+                request_id,
+                session_id,
+                trace_id,
                     "READY",
                     receipt->receipt_id);
               }

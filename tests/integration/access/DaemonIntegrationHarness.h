@@ -181,6 +181,10 @@ class DaemonIntegrationHarness {
         client_ipc_, endpoint_, connect_deadline_ms_);
   }
 
+  [[nodiscard]] const std::string& socket_path() const {
+    return endpoint_.socket_path;
+  }
+
   [[nodiscard]] dasall::apps::cli::DaemonClientResponse send_frame(
       const dasall::access::daemon::UdsRequestFrame& frame) const {
     return send_frame(frame, connect_deadline_ms_);

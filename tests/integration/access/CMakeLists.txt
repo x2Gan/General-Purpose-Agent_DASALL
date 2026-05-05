@@ -139,12 +139,21 @@ target_include_directories(dasall_access_cli_daemon_socket_path_integration_test
     ${CMAKE_SOURCE_DIR}/apps/daemon/src
 )
 
+target_compile_definitions(dasall_access_cli_daemon_socket_path_integration_test
+  PRIVATE
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall_cli>"
+)
+
 target_link_libraries(dasall_access_cli_daemon_socket_path_integration_test
   PRIVATE
     dasall_test_support
     dasall_access
     dasall_infra
     dasall_platform
+)
+
+add_dependencies(dasall_access_cli_daemon_socket_path_integration_test
+  dasall_cli
 )
 
 dasall_apply_common_options(dasall_access_cli_daemon_socket_path_integration_test)
@@ -271,12 +280,21 @@ target_include_directories(dasall_access_daemon_receipt_flow_integration_test
     ${CMAKE_SOURCE_DIR}/apps/daemon/src
 )
 
+target_compile_definitions(dasall_access_daemon_receipt_flow_integration_test
+  PRIVATE
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall_cli>"
+)
+
 target_link_libraries(dasall_access_daemon_receipt_flow_integration_test
   PRIVATE
     dasall_test_support
     dasall_access
     dasall_infra
     dasall_platform
+)
+
+add_dependencies(dasall_access_daemon_receipt_flow_integration_test
+  dasall_cli
 )
 
 dasall_apply_common_options(dasall_access_daemon_receipt_flow_integration_test)

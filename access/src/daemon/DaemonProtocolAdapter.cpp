@@ -125,6 +125,10 @@ bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const
                            : decoded.frame.command;
   }
   packet.payload = decoded.frame.payload;
+  if (!decoded.frame.trace_id.empty()) {
+    packet.trace_id = decoded.frame.trace_id;
+  }
+  packet.session_hint = decoded.frame.session_hint;
   packet.async_preferred =
       decoded.frame.async_preference == DaemonAsyncPreference::PreferAsync;
 

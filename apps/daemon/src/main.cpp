@@ -196,8 +196,15 @@ struct ParsedDaemonArgs {
 
 [[nodiscard]] dasall::access::RuntimeDispatchResult
 map_agent_result_to_dispatch_result(
-    const dasall::contracts::AgentResult& agent_result) {
+  const dasall::access::RuntimeDispatchRequest& request,
+  dasall::contracts::AgentResult agent_result) {
   dasall::access::RuntimeDispatchResult dispatch_result;
+  const auto request_id =
+    dispatch_context_value(request, "request_id").value_or(request.packet.packet_id);
+  const auto session_id = dispatch_context_value(request, "session_id")
+                .value_or(std::string("session:") + request_id);
+  const auto trace_id = dispatch_context_value(request, "trace_id")
+              .value_or(std::string("trace:") + request_id);
   const auto uninitialized_runtime =
       agent_result.status.has_value() &&
       *agent_result.status == dasall::contracts::AgentResultStatus::Failed &&
@@ -213,9 +220,26 @@ map_agent_result_to_dispatch_result(
     return dispatch_result;
   }
 
+  if (!agent_result.request_id.has_value() || agent_result.request_id->empty()) {
+    agent_result.request_id = request_id;
+  }
+  if (!agent_result.trace_id.has_value() || agent_result.trace_id->empty()) {
+    agent_result.trace_id = trace_id;
+  }
+
   dispatch_result.disposition = dasall::access::AccessDisposition::Completed;
   dispatch_result.publish_envelope = dasall::access::PublishEnvelope{};
+  dispatch_result.publish_envelope->request_id = request_id;
+  dispatch_result.publish_envelope->result_id =
+      agent_result.result_id.value_or(std::string("result:") + request_id);
+  dispatch_result.publish_envelope->session_id = session_id;
+  dispatch_result.publish_envelope->trace_id = trace_id;
+  dispatch_result.publish_envelope->channel_ref =
+      request.packet.entry_type + "://" + request.packet.protocol_kind;
+  dispatch_result.publish_envelope->protocol_kind = request.packet.protocol_kind;
   dispatch_result.publish_envelope->protocol_status_hint = "200";
+  dispatch_result.publish_envelope->payload =
+      agent_result.response_text.value_or(std::string());
   dispatch_result.publish_envelope->agent_result = agent_result;
   return dispatch_result;
 }
@@ -328,7 +352,7 @@ int main(int argc, char* argv[]) {
           -> dasall::access::RuntimeDispatchResult {
         const auto agent_request = project_agent_request(request);
         const auto agent_result = runtime_facade->handle(agent_request);
-        return map_agent_result_to_dispatch_result(agent_result);
+        return map_agent_result_to_dispatch_result(request, agent_result);
       };
   pipeline_options.daemon_listener_ready =
       entry.bootstrap_config.has_consistent_values();

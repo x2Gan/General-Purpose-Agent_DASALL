@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "CliBinaryTestSupport.h"
 #include "support/TestAssertions.h"
 
 #ifndef DASALL_DAEMON_BINARY_PATH
@@ -62,76 +63,8 @@ class ScopedTempDirectory {
   fs::path path_;
 };
 
-struct ProcessResult {
-  int exit_code = -1;
-  std::string output;
-};
-
 [[nodiscard]] fs::path repository_root() {
   return fs::path(DASALL_REPOSITORY_ROOT);
-}
-
-[[nodiscard]] ProcessResult run_process_capture(
-    const std::vector<std::string>& args,
-    const fs::path& working_directory) {
-  int output_pipe[2];
-  if (::pipe(output_pipe) != 0) {
-    throw std::runtime_error("failed to create output pipe");
-  }
-
-  const pid_t pid = ::fork();
-  if (pid < 0) {
-    ::close(output_pipe[0]);
-    ::close(output_pipe[1]);
-    throw std::runtime_error("failed to fork child process");
-  }
-
-  if (pid == 0) {
-    ::dup2(output_pipe[1], STDOUT_FILENO);
-    ::dup2(output_pipe[1], STDERR_FILENO);
-    ::close(output_pipe[0]);
-    ::close(output_pipe[1]);
-
-    if (::chdir(working_directory.c_str()) != 0) {
-      std::perror("chdir");
-      std::_Exit(127);
-    }
-
-    std::vector<char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const auto& arg : args) {
-      argv.push_back(const_cast<char*>(arg.c_str()));
-    }
-    argv.push_back(nullptr);
-
-    ::execv(argv.front(), argv.data());
-    std::perror("execv");
-    std::_Exit(127);
-  }
-
-  ::close(output_pipe[1]);
-
-  std::string output;
-  std::array<char, 4096> buffer {};
-  ssize_t read_count = 0;
-  while ((read_count = ::read(output_pipe[0], buffer.data(), buffer.size())) > 0) {
-    output.append(buffer.data(), static_cast<std::size_t>(read_count));
-  }
-  ::close(output_pipe[0]);
-
-  int status = 0;
-  if (::waitpid(pid, &status, 0) < 0) {
-    throw std::runtime_error("failed to wait for child process");
-  }
-
-  ProcessResult result;
-  result.output = std::move(output);
-  if (WIFEXITED(status)) {
-    result.exit_code = WEXITSTATUS(status);
-  } else if (WIFSIGNALED(status)) {
-    result.exit_code = 128 + WTERMSIG(status);
-  }
-  return result;
 }
 
 class ScopedDaemonProcess {
@@ -240,7 +173,7 @@ class ScopedDaemonProcess {
 [[nodiscard]] bool wait_for_ping_ready(const fs::path& socket_path) {
   const auto root = repository_root();
   for (int attempt = 0; attempt < 100; ++attempt) {
-    const auto ping = run_process_capture(
+    const auto ping = dasall::tests::integration::access_support::run_process_capture_split(
         {
             DASALL_CLI_BINARY_PATH,
             "--socket-path",
@@ -272,7 +205,7 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
               "binary unary smoke should observe daemon ping readiness before issuing cli run; daemon log=" +
                   daemon.read_log());
 
-  const auto run = run_process_capture(
+    const auto run = dasall::tests::integration::access_support::run_process_capture_split(
       {
           DASALL_CLI_BINARY_PATH,
           "--socket-path",
@@ -284,11 +217,52 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
 
   assert_equal(0, run.exit_code,
                "binary unary smoke should complete cli run through the built daemon main path; output=" +
-                   run.output + " daemon_log=" + daemon.read_log());
-  assert_true(run.output.find("[dasall_cli] submit: completed") != std::string::npos,
-              "binary unary smoke should surface completed cli output; output=" + run.output);
-  assert_true(run.output.find("runtime orchestrator skeleton completed") != std::string::npos,
-              "binary unary smoke should surface the runtime skeleton response text; output=" + run.output);
+           run.stdout_text + run.stderr_text + " daemon_log=" + daemon.read_log());
+  assert_true(run.stdout_text.find("[dasall_cli] run: completed") != std::string::npos,
+        "binary unary smoke should surface completed cli stdout; stdout=" +
+          run.stdout_text);
+  assert_true(run.stdout_text.find("runtime orchestrator skeleton completed") !=
+          std::string::npos,
+        "binary unary smoke should surface the runtime skeleton response text on stdout; stdout=" +
+          run.stdout_text);
+  assert_true(run.stderr_text.empty(),
+        "binary unary smoke should keep successful human output off stderr; stderr=" +
+          run.stderr_text);
+
+  const auto json_run =
+    dasall::tests::integration::access_support::run_process_capture_split(
+      {
+        DASALL_CLI_BINARY_PATH,
+        "--socket-path",
+        socket_path.string(),
+        "run",
+        "{\"prompt\":\"binary smoke json\"}",
+        "--json",
+        "--request-id",
+        "cli-013-sync",
+        "--trace-id",
+        "cli-013-sync-trace",
+      },
+      root);
+
+  assert_equal(0, json_run.exit_code,
+         "binary unary smoke should keep JSON run on exit 0; stdout=" +
+           json_run.stdout_text + " stderr=" + json_run.stderr_text);
+  assert_true(json_run.stderr_text.empty(),
+        "binary unary smoke should keep successful JSON output off stderr; stderr=" +
+          json_run.stderr_text);
+  assert_true(json_run.stdout_text.find("\"disposition\":\"completed\"") !=
+          std::string::npos,
+        "binary unary smoke should keep completed disposition in JSON output; stdout=" +
+          json_run.stdout_text);
+  assert_true(json_run.stdout_text.find("\"request_id\":\"cli-013-sync\"") !=
+          std::string::npos,
+        "binary unary smoke should preserve explicit request_id in JSON output; stdout=" +
+          json_run.stdout_text);
+  assert_true(json_run.stdout_text.find("\"trace_id\":\"cli-013-sync-trace\"") !=
+          std::string::npos,
+        "binary unary smoke should preserve explicit trace_id in JSON output; stdout=" +
+          json_run.stdout_text);
 
   assert_equal(0, daemon.stop(),
                "binary unary smoke should stop the daemon cleanly; daemon_log=" + daemon.read_log());

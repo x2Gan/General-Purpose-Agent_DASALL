@@ -1,12 +1,18 @@
 #include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
 
 #include "AsyncTaskRegistry.h"
+#include "CliBinaryTestSupport.h"
 #include "DaemonIntegrationHarness.h"
+
+#ifndef DASALL_CLI_BINARY_PATH
+#error "DASALL_CLI_BINARY_PATH must be defined"
+#endif
 
 namespace {
 
@@ -216,6 +222,95 @@ void expired_receipt_returns_status_expired() {
               "daemon expiry flow should stop the daemon cleanly after expiry checks");
 }
 
+  void accepted_async_binary_json_preserves_explicit_ids_and_stdout_routing() {
+    auto registry = std::make_shared<AsyncTaskRegistry>("daemon-receipt-secret", 30s);
+    DaemonIntegrationHarness harness(
+      make_async_options(registry, "receipt:async-binary"));
+
+    const auto accepted = dasall::tests::integration::access_support::run_process_capture_split(
+      {
+        DASALL_CLI_BINARY_PATH,
+        "--socket-path",
+        harness.socket_path(),
+        "run",
+        "{\"prompt\":\"queue async work\"}",
+        "--async",
+        "--json",
+        "--request-id",
+        "cli-013-async",
+        "--trace-id",
+        "cli-013-async-trace",
+      },
+      std::filesystem::current_path());
+    assert_equal(0,
+           accepted.exit_code,
+           "daemon receipt flow should keep accepted_async CLI binary path on exit 0; stdout=" +
+             accepted.stdout_text + " stderr=" + accepted.stderr_text);
+    assert_true(accepted.stderr_text.empty(),
+          "daemon receipt flow should keep accepted_async JSON output off stderr; stderr=" +
+            accepted.stderr_text);
+    assert_true(accepted.stdout_text.find("\"disposition\":\"accepted_async\"") !=
+            std::string::npos,
+          "daemon receipt flow should preserve accepted_async disposition in built CLI output; stdout=" +
+            accepted.stdout_text);
+    assert_true(accepted.stdout_text.find("\"request_id\":\"cli-013-async\"") !=
+            std::string::npos,
+          "daemon receipt flow should preserve explicit request_id in built CLI output; stdout=" +
+            accepted.stdout_text);
+    assert_true(accepted.stdout_text.find("\"trace_id\":\"cli-013-async-trace\"") !=
+            std::string::npos,
+          "daemon receipt flow should preserve explicit trace_id in built CLI output; stdout=" +
+            accepted.stdout_text);
+
+    const auto receipt_ref =
+      dasall::tests::integration::access_support::extract_json_string_field(
+        accepted.stdout_text,
+        "receipt_ref");
+    assert_true(receipt_ref.has_value() && !receipt_ref->empty(),
+          "daemon receipt flow should return receipt_ref in built CLI accepted_async JSON output; stdout=" +
+            accepted.stdout_text);
+
+    const auto receipt_query = registry->query_receipt(*receipt_ref);
+    assert_true(receipt_query.receipt.has_value(),
+          "daemon receipt flow should register built CLI accepted_async receipts in registry");
+    const auto& receipt = *receipt_query.receipt;
+    assert_equal(std::string("cli-013-async"),
+           receipt.request_id,
+           "daemon receipt flow should preserve explicit request_id in async receipt storage");
+
+    const auto status = dasall::tests::integration::access_support::run_process_capture_split(
+      {
+        DASALL_CLI_BINARY_PATH,
+        "--socket-path",
+        harness.socket_path(),
+        "status",
+        receipt.receipt_id,
+        receipt.ownership_token,
+        receipt.actor_ref,
+        "--json",
+      },
+      std::filesystem::current_path());
+    assert_equal(0,
+           status.exit_code,
+           "daemon receipt flow should let built CLI query status for accepted receipts; stdout=" +
+             status.stdout_text + " stderr=" + status.stderr_text);
+    assert_true(status.stderr_text.empty(),
+          "daemon receipt flow should keep successful status JSON output off stderr; stderr=" +
+            status.stderr_text);
+    assert_true(status.stdout_text.find("\"disposition\":\"completed\"") !=
+            std::string::npos,
+          "daemon receipt flow should keep completed envelope for status query output; stdout=" +
+            status.stdout_text);
+    assert_true(status.stdout_text.find("\"response_text\":\"active\"") !=
+            std::string::npos,
+          "daemon receipt flow should surface active task status in built CLI JSON output; stdout=" +
+            status.stdout_text);
+
+    harness.stop();
+    assert_true(harness.daemon_stopped_cleanly(),
+          "daemon receipt flow should stop the daemon cleanly after built CLI async checks");
+  }
+
 }  // namespace
 
 int main() {
@@ -223,6 +318,7 @@ int main() {
     accepted_async_status_roundtrip_covers_active_completed_and_owner_mismatch();
     cancel_roundtrip_rejects_owner_mismatch_and_marks_cancelled();
     expired_receipt_returns_status_expired();
+    accepted_async_binary_json_preserves_explicit_ids_and_stdout_routing();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonReceiptFlowIntegrationTest] FAILED: " << ex.what() << '\n';
     return 1;

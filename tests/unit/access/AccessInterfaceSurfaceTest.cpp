@@ -29,6 +29,8 @@ void access_public_surface_is_discoverable() {
       .protocol_kind = "uds",
       .peer_ref = "peer://local/operator",
       .payload = "{\"op\":\"ping\"}",
+      .trace_id = std::nullopt,
+      .session_hint = std::nullopt,
       .async_preferred = false,
       .stream_requested = false,
   };

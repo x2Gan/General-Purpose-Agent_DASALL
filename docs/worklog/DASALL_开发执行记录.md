@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #539
+
+- 日期：2026-05-05
+- 阶段：cli/integration-gate
+- 任务：CLI-TODO-013 验证 CLI binary 的 async、显式 ID 与 stdout/stderr 集成门
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/AccessTypes.h`、`access/src/daemon/DaemonProtocolAdapter.cpp` 与 `access/src/AccessGatewayFactory.cpp`，把 UDS request frame 中的 `trace_id/session_hint` 透传进 access 入口 `request_context`，避免 built `dasall_cli` 的显式 `trace_id` 在 daemon/access 入口被丢失后退化为 normalizer 自动生成值。
+2. 更新 `apps/daemon/src/main.cpp`，让 real daemon main 的 completed publish envelope 也补齐 `request_id/session_id/trace_id/channel_ref/protocol_kind`，从而使 built `dasall_cli run --json` 在真实 daemon main 路径下也能稳定回显显式 ID，而不再只在 in-process fixture 中成立。
+3. 新增 `tests/integration/access/CliBinaryTestSupport.h`，并更新 `tests/integration/access/DaemonIntegrationHarness.h` 与 `tests/integration/access/CMakeLists.txt`，为 built CLI binary probe 提供统一的 stdout/stderr 捕获、JSON 字段提取和 socket path 暴露能力，同时把 `dasall_cli` 接入相关 integration target 依赖。
+4. 更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`，在 real daemon main 路径下补齐 human success 只落 stdout、JSON success 保留显式 `request_id/trace_id` 的断言，防止 sync completed 行为只在手工探测中成立。
+5. 更新 `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`，新增 built `dasall_cli run --async --json` 与 `status --json` 的真实 binary gate，锁定 accepted_async disposition、显式 `request_id/trace_id`、receipt registry 中的原始 request ownership，以及成功 JSON 路径不落 stderr。
+6. 更新 `tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp`，新增 built `dasall_cli` 对显式 `--socket-path` success 和 missing-socket human/json failure 的 stdout/stderr 分流断言；同时更新 `tests/unit/access/AccessInterfaceSurfaceTest.cpp`，补齐 `InboundPacket` 新字段默认初始化以消除本次改动引入的编译告警。
+7. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-013` 标记为 Done，并把专项剩余范围收敛到 `CLI-TODO-014` 的最终证据收口；同时明确 Gate-CLI-05 已由真实 integration tests 锁定，而 platform peer identity 仍为外部依赖。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过；access/daemon 透传改动、built CLI binary probe helper 与新增 integration assertions 均进入真实构建图。
+2. `RunCtest_CMakeTools(tests=["CliDaemonSocketPathIntegrationTest","DaemonBinaryUnarySmokeTest","DaemonReceiptFlowIntegrationTest"])`
+   - 结果：通过；Gate-CLI-05 对应的三项 binary/integration tests 全部通过。stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+3. `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --socket-path <tmp>` + `./build/vscode-linux-ninja/apps/cli/dasall_cli --socket-path <tmp> run --json --request-id cli-013-sync --trace-id cli-013-sync-trace '{"prompt":"sync probe"}'`
+   - 结果：通过，real daemon main 路径下 `request_id=cli-013-sync` 与 `trace_id=cli-013-sync-trace` 已稳定回到 CLI JSON envelope，且 stderr 为空。
+
+### 结果
+
+1. Gate-CLI-05 已不再依赖手工终端探测：sync completed、async accepted_async、显式 `request_id/trace_id` 与 stdout/stderr 责任边界都已被真实 integration tests 锁住。
+2. CLI binary 表面的显式 ID 不再只在 request builder 和 contract 层成立；daemon/access 入口链现在会把 `trace_id/session_hint` 继续带到 normalizer、publish envelope 和最终 JSON 输出，因此 built `dasall_cli` 的 sync/async 路径都具备真实脚本化可判定性。
+3. CLI 专项剩余范围已经收敛到 `CLI-TODO-014` 的证据收口；但 platform peer identity 仍是外部依赖，因此当前结论仍然只是“CLI 客户端面完成”，不是本地控制面 auth/diag 全链路安全闭环完成。
+
 ## 记录 #538
 
 - 日期：2026-05-05

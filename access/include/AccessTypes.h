@@ -62,6 +62,8 @@ struct InboundPacket {
   std::string protocol_kind;
   std::string peer_ref;
   std::string payload;
+  std::optional<std::string> trace_id;
+  std::optional<std::string> session_hint;
   bool async_preferred = false;
   bool stream_requested = false;
 };
