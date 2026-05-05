@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #540
+
+- 日期：2026-05-05
+- 阶段：cli/closeout
+- 任务：CLI-TODO-014 持续证据回写与 CLI 专项最终收口
+- 状态：已完成
+
+### 改动
+
+1. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 CLI 专项当前结论、当前状态摘要、`CLI-TODO-014` 行、Wave 5、Gate-CLI-06、测试矩阵、统一验收命令与可行性结论全部收敛到 close-ready 完成态，并明确剩余残余仅是 `CLI-BLK-004` / `CLI-RISK-007` / `CLI-OQ-001` 所指向的 platform peer identity 外部依赖。
+2. 新增 `docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md`，把 CLI 专项 close-ready 的边界声明、任务证据索引、Gate/Blocker/Risk/OQ 收口状态和统一验收命令汇总为单独 deliverable，避免最终结论只散落在 TODO 行文里。
+3. 本条 worklog 记录为 `CLI-TODO-014` 提供 focused closeout 证据，并把前序 `CLI-TODO-012` / `CLI-TODO-013` 的 contract 与 binary gate 结果正式汇入 CLI 专项最终完成态。
+
+### 验证
+
+1. `rg -n "CLI-TODO-00[1-9]|CLI-TODO-01[0-4]|Gate-CLI-0[1-6]|CLI-BLK-00[1-4]|CLI-OQ-00[1-7]|CLI-RISK-00[1-8]" docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；CLI 专项 TODO、014 deliverable 与 worklog 均具备任务、Gate、Blocker、Risk、OQ 的可检索锚点，满足 close-ready 文档证据要求。
+2. `ListTests_CMakeTools()`
+   - 结果：通过；`CliDaemonCommandParserTest`、`CliIpcClientTest`、`CliIpcClientResponseTest`、`CliIpcClientUnavailableTest`、`CliDaemonOutputFormatterTest`、`CliJsonOutputContractTest`、`CliExitCodeContractTest`、`CliDaemonSocketPathIntegrationTest`、`DaemonBinaryUnarySmokeTest`、`DaemonReceiptFlowIntegrationTest` 均保持 discoverable。
+3. `RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest","CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonOutputFormatterTest","AccessErrorMappingTest","CliJsonOutputContractTest","CliExitCodeContractTest","CliDaemonSocketPathIntegrationTest","DaemonBinaryUnarySmokeTest","DaemonReceiptFlowIntegrationTest"])`
+   - 结果：通过；CLI close-ready 所依赖的 unit、contract、integration focused gate 全部通过。stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+
+### 结果
+
+1. CLI 专项 `CLI-TODO-001` 至 `CLI-TODO-014` 现已形成完整闭环，当前状态可正式表述为 close-ready，而不再是“只剩 014 待收口”。
+2. `Gate-CLI-06` 已被文档证据、discoverability 与 focused gate 复验共同锁定；CLI 客户端用户面后续不再存在待完成 Build 任务。
+3. platform peer identity 仍是唯一保留的外部依赖，因此本轮结论继续保持为“CLI 客户端面完成并 close-ready”，不提升为本地控制面 auth/diag 全链路安全闭环完成。
+
 ## 记录 #539
 
 - 日期：2026-05-05
