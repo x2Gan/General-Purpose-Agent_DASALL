@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #541
+
+- 日期：2026-05-05
+- 阶段：cli/peer-identity-closeout
+- 任务：回收 CLI-BLK-004 / CLI-RISK-007 / CLI-OQ-001，完成本地控制面 peer identity 外部依赖收口
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/access/DaemonDiagDenyIntegrationTest.cpp`，在既有 diagnostics deny 集成门上补入两条真实 UDS peer identity 路径：allowlisted 本机 uid 的 diagnostics success，以及 non-allowlisted 本机 uid 的 diagnostics reject；不再依赖手写 `peer_ref=local_trusted:*` 来伪造 local trusted 场景。
+2. 更新 `tests/integration/access/CMakeLists.txt`，为 `dasall_access_daemon_diag_deny_integration_test` 接入 `CliIpcClient.cpp` 与 daemon bootstrap/lifecycle/listener/socket-policy/supervisor 源，补齐 `apps/cli/src` 与 `apps/daemon/src` include 面，使 real UDS integration harness 能在该测试目标内独立编译链接。
+3. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md` 与 `docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md`，将 `CLI-BLK-004`、`CLI-RISK-007`、`CLI-OQ-001` 从残余项改写为已回收状态，并把 `UnixIpcProviderPeerIdentityTest`、`DaemonProtocolAdapterLocalTrustedTest`、`DaemonPeerIdentityFailClosedTest`、`DaemonFailureInjectionTest`、`DaemonDiagDenyIntegrationTest` 纳入 close-ready gate 与统一验收命令。
+4. 本条 worklog 作为 platform/access owner 侧 peer identity 收口的证据回写，补足 CLI closeout 之前缺失的真实 UDS allow/reject 正向证明。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_diag_deny_integration_test"])`
+   - 结果：通过；新增 real UDS peer identity 集成门已进入真实构建图。
+2. `RunCtest_CMakeTools(tests=["DaemonDiagDenyIntegrationTest"])`
+   - 结果：通过；真实 UDS diagnostics allow/reject 两条路径均通过。stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+3. `RunCtest_CMakeTools(tests=["DaemonDiagDenyIntegrationTest","DaemonFailureInjectionTest","DaemonProtocolAdapterLocalTrustedTest","DaemonPeerIdentityFailClosedTest","UnixIpcProviderPeerIdentityTest"])`
+   - 结果：通过；provider、adapter、fail-closed 与 real UDS allow/reject 证据形成同一组 focused matrix。stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
+
+### 结果
+
+1. CLI closeout 之前保留的 peer identity 外部依赖现已完成回收，`CLI-BLK-004`、`CLI-RISK-007`、`CLI-OQ-001` 不再构成专项残余项。
+2. 本地控制面在 peer identity 相关的 local trusted、auth deny 与 diag 授权路径上，现已同时具备 provider/unit、adapter/unit、fail-closed integration 与 real UDS allow/reject integration 证据。
+3. CLI 专项后续无需再保留“只完成客户端面、未完成 auth/diag 安全闭环”的保守口径；后续只需把上述 gate 作为回归基线持续维护。
+
 ## 记录 #540
 
 - 日期：2026-05-05
