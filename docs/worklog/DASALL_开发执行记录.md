@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #558
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-015 修复 diagnostics execute/store/get retained snapshot round-trip
+- 状态：已完成
+
+### 改动
+
+1. 更新 `infra/src/diagnostics/CommandExecutor.cpp`、`infra/src/diagnostics/SnapshotAssembler.cpp` 与 `infra/src/diagnostics/ExportManager.cpp`，把 diagnostics 内部固定写死的 RFC3339 时间 stub 改成实时 UTC 时间，避免新生成的 retained snapshot 在 retention 清理时被立即识别为过期数据。
+2. 保持 `DiagnosticsServiceFacade`、`SnapshotStore` 与 retained snapshot contract 不扩字段、不改错误语义，仅修复 execute -> store -> get/export round-trip 上游时间源，使 get/export 能稳定命中同一 retained snapshot。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-015` 标记为 Done，并把 11.1 的当前串行执行位推进到 `INT-TODO-016`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_infra_diagnostics_smoke_integration_test, dasall_infra_diagnostics_integration_test, dasall_diagnostics_snapshot_store_contract_unit_test)`
+   - 结果：通过；diagnostics round-trip 修复与 smoke/integration/unit targets 均成功编译链接。
+2. `RunCtest_CMakeTools(tests=InfraDiagnosticsSmokeTest, InfraDiagnosticsIntegrationTest, DiagnosticsSnapshotStoreContractTest)`
+   - 结果：通过；`InfraDiagnosticsSmokeTest` 已恢复 execute -> get_snapshot -> export_snapshot round-trip，`InfraDiagnosticsIntegrationTest` 与 retained snapshot contract unit test 均未回退，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+
+### 结果
+
+1. `INT-BLK-04` 的 implementation round-trip 已打通：diagnostics 新生成的 retained snapshot 不会再因为过期时间 stub 被 store/get 路径即时裁剪，`InfraDiagnosticsSmokeTest` 转绿。
+2. 015 保持了 004/011 冻结的 contract 与 fixture 边界，没有通过放宽 retention 规则或修改 snapshot contract 来掩盖问题，而是修复了 execute/export 使用的时间源根因。
+3. 下一步串行任务为 `INT-TODO-016`，继续统一 tools/services success-error-code 三元语义。
+
 ## 记录 #557
 
 - 日期：2026-05-06

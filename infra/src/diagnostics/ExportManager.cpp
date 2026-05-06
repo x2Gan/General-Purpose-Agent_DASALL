@@ -4,6 +4,10 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -32,7 +36,14 @@ constexpr std::array<std::uint32_t, 64> kSha256RoundConstants = {
 };
 
 [[nodiscard]] std::string current_time_rfc3339_stub() {
-  return "2026-04-07T13:00:00Z";
+  const auto now = std::chrono::system_clock::now();
+  const auto now_time = std::chrono::system_clock::to_time_t(now);
+  std::tm utc_time{};
+  gmtime_r(&now_time, &utc_time);
+
+  std::ostringstream stream;
+  stream << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%SZ");
+  return stream.str();
 }
 
 [[nodiscard]] std::uint32_t rotate_right(std::uint32_t value, std::uint32_t shift) {

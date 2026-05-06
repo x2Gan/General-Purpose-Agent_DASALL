@@ -1,5 +1,9 @@
 #include "diagnostics/CommandExecutor.h"
 
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <string_view>
 #include <utility>
 
@@ -11,7 +15,14 @@ namespace {
 constexpr std::string_view kCommandExecutorSourceRef = "CommandExecutor";
 
 [[nodiscard]] std::string current_time_rfc3339_stub() {
-  return "2026-04-07T19:00:00Z";
+  const auto now = std::chrono::system_clock::now();
+  const auto now_time = std::chrono::system_clock::to_time_t(now);
+  std::tm utc_time{};
+  gmtime_r(&now_time, &utc_time);
+
+  std::ostringstream stream;
+  stream << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%SZ");
+  return stream.str();
 }
 
 [[nodiscard]] std::string build_command_ref(std::string_view command_name) {

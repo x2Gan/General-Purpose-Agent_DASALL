@@ -1,12 +1,23 @@
 #include "diagnostics/SnapshotAssembler.h"
 
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 namespace dasall::infra::diagnostics {
 namespace {
 
 [[nodiscard]] std::string fallback_collected_at() {
-  return "2026-04-07T20:00:00Z";
+  const auto now = std::chrono::system_clock::now();
+  const auto now_time = std::chrono::system_clock::to_time_t(now);
+  std::tm utc_time{};
+  gmtime_r(&now_time, &utc_time);
+
+  std::ostringstream stream;
+  stream << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%SZ");
+  return stream.str();
 }
 
 [[nodiscard]] std::string fallback_summary() {
