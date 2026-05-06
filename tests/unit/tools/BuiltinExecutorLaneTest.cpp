@@ -222,7 +222,7 @@ void test_builtin_executor_lane_dispatches_action_and_preserves_side_effects() {
   auto data_service = std::make_shared<FakeDataService>();
   execution_service->execute_handler = [](const auto&) {
     return dasall::services::ExecutionCommandResult{
-        .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+                .code = std::nullopt,
         .execution_id = std::string("exec-builtin-action"),
         .payload_json = std::string("{\"stdout\":\"ok\"}"),
         .side_effects = {"terminal.executed"},
@@ -267,7 +267,7 @@ void test_builtin_executor_lane_dispatches_query_and_marks_cache_hits() {
   auto data_service = std::make_shared<FakeDataService>();
   data_service->query_handler = [](const auto&) {
     return dasall::services::DataQueryResult{
-        .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+                .code = std::nullopt,
         .rows_json = std::string("[{\"status\":\"ready\"}]"),
         .from_cache = true,
         .error = std::nullopt,
@@ -315,7 +315,7 @@ void test_builtin_executor_lane_dispatches_diagnose_through_execution_service() 
   auto data_service = std::make_shared<FakeDataService>();
   execution_service->diagnose_handler = [](const auto&) {
     return dasall::services::ExecutionDiagnoseResult{
-        .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+                .code = std::nullopt,
         .target_reachable = true,
         .report_json = std::string("{\"health\":\"ok\"}"),
         .error = std::nullopt,

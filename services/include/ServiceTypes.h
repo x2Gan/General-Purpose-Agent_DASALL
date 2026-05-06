@@ -33,6 +33,56 @@ struct ServiceCallContext {
 
 using SerializedJson = std::string;
 
+[[nodiscard]] inline std::optional<contracts::ResultCode> service_result_effective_failure_code(
+		const std::optional<contracts::ResultCode>& code,
+		const std::optional<contracts::ErrorInfo>& error) {
+	if (code.has_value()) {
+		return code;
+	}
+
+	if (!error.has_value() || !error->details.code.has_value()) {
+		return std::nullopt;
+	}
+
+	const auto classification =
+			contracts::classify_result_code_value(*error->details.code);
+	if (!classification.ok) {
+		return std::nullopt;
+	}
+
+	return static_cast<contracts::ResultCode>(*error->details.code);
+}
+
+[[nodiscard]] inline bool service_result_has_consistent_triad(
+		const std::optional<contracts::ResultCode>& code,
+		const std::optional<contracts::ErrorInfo>& error) {
+	if (code.has_value() != error.has_value()) {
+		return false;
+	}
+
+	if (!error.has_value()) {
+		return true;
+	}
+
+	if (error->failure_type.has_value() &&
+			contracts::classify_result_code(*code) != *error->failure_type) {
+		return false;
+	}
+
+	if (error->details.code.has_value() &&
+			*error->details.code != static_cast<int>(*code)) {
+		return false;
+	}
+
+	return true;
+}
+
+[[nodiscard]] inline bool service_result_succeeded(
+		const std::optional<contracts::ResultCode>& code,
+		const std::optional<contracts::ErrorInfo>& error) {
+	return !code.has_value() && !error.has_value();
+}
+
 struct ExecutionCommandRequest {
 	ServiceCallContext context;
 	CapabilityTargetRef target;
@@ -72,36 +122,68 @@ struct ExecutionDiagnoseRequest {
 };
 
 struct ExecutionCommandResult {
-	contracts::ResultCode code;
+	std::optional<contracts::ResultCode> code;
 	std::string execution_id;
 	SerializedJson payload_json;
 	std::vector<std::string> side_effects;
 	std::vector<std::string> compensation_hints;
 	std::optional<contracts::ErrorInfo> error;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		return service_result_has_consistent_triad(code, error);
+	}
+
+	[[nodiscard]] bool succeeded() const {
+		return service_result_succeeded(code, error);
+	}
 };
 
 struct ExecutionQueryResult {
-	contracts::ResultCode code;
+	std::optional<contracts::ResultCode> code;
 	std::string state;
 	SerializedJson snapshot_json;
 	bool from_cache;
 	std::optional<contracts::ErrorInfo> error;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		return service_result_has_consistent_triad(code, error);
+	}
+
+	[[nodiscard]] bool succeeded() const {
+		return service_result_succeeded(code, error);
+	}
 };
 
 struct ExecutionSubscriptionResult {
-	contracts::ResultCode code;
+	std::optional<contracts::ResultCode> code;
 	SerializedJson events_json;
 	std::optional<std::string> next_cursor;
 	bool resync_required;
 	std::uint32_t dropped_count;
 	std::optional<contracts::ErrorInfo> error;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		return service_result_has_consistent_triad(code, error);
+	}
+
+	[[nodiscard]] bool succeeded() const {
+		return service_result_succeeded(code, error);
+	}
 };
 
 struct ExecutionDiagnoseResult {
-	contracts::ResultCode code;
+	std::optional<contracts::ResultCode> code;
 	bool target_reachable;
 	SerializedJson report_json;
 	std::optional<contracts::ErrorInfo> error;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		return service_result_has_consistent_triad(code, error);
+	}
+
+	[[nodiscard]] bool succeeded() const {
+		return service_result_succeeded(code, error);
+	}
 };
 
 struct DataQueryRequest {
@@ -118,16 +200,32 @@ struct DataCatalogRequest {
 };
 
 struct DataQueryResult {
-	contracts::ResultCode code;
+	std::optional<contracts::ResultCode> code;
 	SerializedJson rows_json;
 	bool from_cache;
 	std::optional<contracts::ErrorInfo> error;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		return service_result_has_consistent_triad(code, error);
+	}
+
+	[[nodiscard]] bool succeeded() const {
+		return service_result_succeeded(code, error);
+	}
 };
 
 struct DataCatalogResult {
-	contracts::ResultCode code;
+	std::optional<contracts::ResultCode> code;
 	SerializedJson catalog_json;
 	std::optional<contracts::ErrorInfo> error;
+
+	[[nodiscard]] bool has_consistent_values() const {
+		return service_result_has_consistent_triad(code, error);
+	}
+
+	[[nodiscard]] bool succeeded() const {
+		return service_result_succeeded(code, error);
+	}
 };
 
 }  // namespace dasall::services

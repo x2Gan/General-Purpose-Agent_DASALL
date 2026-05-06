@@ -100,7 +100,7 @@ ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCal
     auto stream_it = streams_.find(stream_key);
     if (stream_it == streams_.end()) {
       return emit_metrics(ExecutionSubscriptionResult{
-          .code = contracts::ResultCode::ToolExecutionFailed,
+          .code = std::nullopt,
           .events_json = "[]",
           .next_cursor = request.cursor,
           .resync_required = false,
@@ -143,7 +143,7 @@ ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCal
   }
 
   return emit_metrics(ExecutionSubscriptionResult{
-      .code = contracts::ResultCode::ToolExecutionFailed,
+      .code = std::nullopt,
       .events_json = build_events_json(selected_events),
       .next_cursor = next_cursor,
       .resync_required = false,

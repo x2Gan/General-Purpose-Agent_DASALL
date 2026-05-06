@@ -47,33 +47,33 @@ class ResultMapper {
       const AdapterReceipt& receipt,
       const std::vector<std::string>& compensation_hints,
       std::string execution_id = {},
-      contracts::ResultCode success_code = contracts::ResultCode::ToolExecutionFailed) const;
+      std::optional<contracts::ResultCode> success_code = std::nullopt) const;
 
   [[nodiscard]] ExecutionQueryResult to_execution_query_result(
       const AdapterReceipt& receipt,
       std::string state = {},
       bool from_cache = false,
-      contracts::ResultCode success_code = contracts::ResultCode::ToolExecutionFailed) const;
+      std::optional<contracts::ResultCode> success_code = std::nullopt) const;
 
   [[nodiscard]] ExecutionSubscriptionResult to_execution_subscription_result(
       const AdapterReceipt& receipt,
       std::optional<std::string> next_cursor = std::nullopt,
       std::uint32_t dropped_count = 0U,
-      contracts::ResultCode success_code = contracts::ResultCode::ToolExecutionFailed) const;
+      std::optional<contracts::ResultCode> success_code = std::nullopt) const;
 
   [[nodiscard]] ExecutionDiagnoseResult to_execution_diagnose_result(
       const AdapterReceipt& receipt,
       bool target_reachable_on_success = true,
-      contracts::ResultCode success_code = contracts::ResultCode::ToolExecutionFailed) const;
+      std::optional<contracts::ResultCode> success_code = std::nullopt) const;
 
   [[nodiscard]] DataQueryResult to_data_query_result(
       const AdapterReceipt& receipt,
       bool from_cache = false,
-      contracts::ResultCode success_code = contracts::ResultCode::ToolExecutionFailed) const;
+      std::optional<contracts::ResultCode> success_code = std::nullopt) const;
 
   [[nodiscard]] DataCatalogResult to_data_catalog_result(
       const AdapterReceipt& receipt,
-      contracts::ResultCode success_code = contracts::ResultCode::ToolExecutionFailed) const;
+      std::optional<contracts::ResultCode> success_code = std::nullopt) const;
 };
 
 [[nodiscard]] std::string_view service_error_class_name(ServiceErrorClass error_class);

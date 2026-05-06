@@ -208,6 +208,13 @@ namespace {
   return contracts::ResultCode::ToolExecutionFailed;
 }
 
+[[nodiscard]] contracts::ResultCode effective_failure_code_for(
+    const std::optional<contracts::ResultCode>& result_code,
+    const std::optional<contracts::ErrorInfo>& error) {
+  const auto effective_code = service_result_effective_failure_code(result_code, error);
+  return effective_code.value_or(contracts::ResultCode::ToolExecutionFailed);
+}
+
 [[nodiscard]] std::string receipt_error_message(const AdapterReceipt& receipt) {
   if (!receipt.provider_status_code.empty()) {
     return receipt.provider_status_code;
@@ -314,7 +321,7 @@ void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
                                        const ExecutionCommandResult& result) {
   if (result.error.has_value()) {
     mark_error(scope,
-               result.code,
+               effective_failure_code_for(result.code, result.error),
                result.error->details.message,
                result.error->details.stage.empty() ? std::string("execution_command_lane")
                                                    : result.error->details.stage);
@@ -328,7 +335,7 @@ void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
                                        const ExecutionQueryResult& result) {
   if (result.error.has_value()) {
     mark_error(scope,
-               result.code,
+               effective_failure_code_for(result.code, result.error),
                result.error->details.message,
                result.error->details.stage.empty() ? std::string("execution_query_lane")
                                                    : result.error->details.stage);
@@ -342,7 +349,7 @@ void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
                                        const ExecutionDiagnoseResult& result) {
   if (result.error.has_value()) {
     mark_error(scope,
-               result.code,
+               effective_failure_code_for(result.code, result.error),
                result.error->details.message,
                result.error->details.stage.empty() ? std::string("execution_diagnose_service")
                                                    : result.error->details.stage);
@@ -360,7 +367,7 @@ void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
   }
   if (result.error.has_value()) {
     mark_error(scope,
-               result.code,
+               effective_failure_code_for(result.code, result.error),
                result.error->details.message,
                result.error->details.stage.empty() ? std::string("data_query_lane")
                                                    : result.error->details.stage);
@@ -374,7 +381,7 @@ void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
                                        const DataCatalogResult& result) {
   if (result.error.has_value()) {
     mark_error(scope,
-               result.code,
+               effective_failure_code_for(result.code, result.error),
                result.error->details.message,
                result.error->details.stage.empty() ? std::string("data_query_lane")
                                                    : result.error->details.stage);

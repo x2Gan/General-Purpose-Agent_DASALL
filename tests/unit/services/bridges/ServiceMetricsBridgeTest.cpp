@@ -172,7 +172,7 @@ void test_service_metrics_bridge_emits_frozen_metric_families_and_samples() {
   const auto data_result = bridge.record_data_query_result(
       "status",
       DataQueryResult{
-          .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+        .code = std::nullopt,
           .rows_json = "[{\"id\":1}]",
           .from_cache = true,
           .error = std::nullopt,
@@ -298,7 +298,7 @@ void test_service_metrics_bridge_degrades_when_meter_record_fails() {
       "toggle",
       "service-primary",
       ExecutionCommandResult{
-          .code = ResultCode::ToolExecutionFailed,
+        .code = std::nullopt,
           .execution_id = "exec-025-fail",
           .payload_json = "{}",
           .side_effects = {},
@@ -341,7 +341,7 @@ void test_service_metrics_bridge_treats_disabled_observability_as_noop() {
       "toggle",
       "service-primary",
       ExecutionCommandResult{
-          .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+        .code = std::nullopt,
           .execution_id = "exec-025-disabled",
           .payload_json = "{}",
           .side_effects = {},

@@ -65,7 +65,7 @@ class ScriptedAuditLogger final : public dasall::infra::audit::IAuditLogger {
     std::string execution_id,
     std::vector<std::string> side_effects) {
   return dasall::services::ExecutionCommandResult{
-      .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+      .code = std::nullopt,
       .execution_id = std::move(execution_id),
       .payload_json = "{\"status\":\"ok\"}",
       .side_effects = std::move(side_effects),

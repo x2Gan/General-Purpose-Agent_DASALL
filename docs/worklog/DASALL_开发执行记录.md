@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #559
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-016 统一 tools/services success-error-code 三元语义
+- 状态：已完成
+
+### 改动
+
+1. 更新 `services/include/ServiceTypes.h`，将 execution/data 结果对象的 `code` 统一收敛为 optional failure-code 语义，并补充 triad consistency helpers，明确成功路径必须同时满足 `code` 与 `error` 为空，失败路径必须同时携带失败 `code` 与结构化 `error`。
+2. 更新 `tools/src/execution/BuiltinExecutorLane.cpp` 与 `services/src/mapping/ResultMapper.*`，让 default execution/data service 不再给 success payload 填 `ToolExecutionFailed`，并让 `BuiltinExecutorLane::map_service_result()` 在遇到 `failure code + null error` 这类混合态时显式拒收并合成一致的工具失败结果。
+3. 适配 `services/src/bridges/ServiceMetricsBridge.cpp`、`services/src/bridges/ServiceTraceBridge.cpp`、`services/src/bridges/ServiceAuditBridge.cpp` 对 optional failure-code 的消费路径，并同步更新 `tests/unit/services/`、`tests/unit/tools/` 中原本固化伪成功码的用例；新增 `tests/unit/tools/BuiltinExecutorLaneResultCodeTest.cpp` 锁住 triad gate。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-016` 标记为 Done，并将 11.1 当前串行位推进到 `INT-TODO-017`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_builtin_executor_lane_result_code_unit_test)`
+   - 结果：通过；新的 triad unit gate 成功编译链接。
+2. `RunCtest_CMakeTools(tests=BuiltinExecutorLaneResultCodeTest)`
+   - 结果：通过；`BuiltinExecutorLane` 已拒绝 `failure code + null error` 混合态，并接受无伪失败码的 success payload。
+3. `Build_CMakeTools(target=dasall_tool_services_smoke_integration_test, dasall_services_smoke_integration_test)`
+   - 结果：通过；tools -> services smoke 相关可执行文件成功编译。
+4. `RunCtest_CMakeTools(tests=ToolServicesSmokeIntegrationTest, CapabilityServicesSmokeIntegrationTest)`
+   - 结果：通过；tools -> services 主链在 triad 收敛后无回退。
+5. `Build_CMakeTools(target=dasall_builtin_executor_lane_unit_test, dasall_builtin_executor_lane_result_code_unit_test, dasall_service_facade_unit_test, dasall_service_audit_bridge_unit_test, dasall_service_metrics_bridge_unit_test, dasall_service_trace_bridge_unit_test)`
+   - 结果：通过；本轮触达的 tools/services unit targets 全部成功编译。
+6. `RunCtest_CMakeTools(tests=BuiltinExecutorLaneTest, BuiltinExecutorLaneResultCodeTest, ServiceFacadeTest, ServiceAuditBridgeTest, ServiceMetricsBridgeTest, ServiceTraceBridgeTest)`
+   - 结果：通过；triad 语义和相关 bridges/unit surfaces 保持一致。
+7. `Build_CMakeTools(target=dasall_unit_tests, dasall_integration_tests)`
+   - 结果：聚合 target 触发仓库既有无关失败 `RuntimeControlPlaneSurfaceTest`，不属于本轮 016 变更面；已改用 focused targets 完成本任务验收，既存 `DartConfiguration.tcl` 噪声亦不影响 pass/fail 结论。
+
+### 结果
+
+1. tools/services 结果对象不再用 `ToolExecutionFailed` 伪装 success，`payload`、`error`、`code` 三元语义在 shared surface 上保持一致。
+2. `BuiltinExecutorLane` 不再只看 `error` 判 success，任何带失败码却缺少错误体的 service result 都会在 unit gate 被拒绝并折叠为一致失败。
+3. 下一串行任务为 `INT-TODO-017`，继续对齐 `RuntimePolicySnapshot` 与 recovery context 在 runtime 执行点的消费。
+
 ## 记录 #558
 
 - 日期：2026-05-06

@@ -142,13 +142,20 @@ enum class ServiceMetricsGranularity {
   return "Unknown";
 }
 
+[[nodiscard]] std::string effective_error_code_label(
+    const std::optional<contracts::ResultCode>& result_code,
+    const std::optional<contracts::ErrorInfo>& error) {
+  const auto effective_code = service_result_effective_failure_code(result_code, error);
+  return effective_code.has_value() ? result_code_label(*effective_code) : std::string("Unknown");
+}
+
 [[nodiscard]] std::string error_code_label_for(const std::optional<contracts::ErrorInfo>& error,
-                                               contracts::ResultCode result_code) {
+                                               const std::optional<contracts::ResultCode>& result_code) {
   if (!error.has_value()) {
     return std::string(kServiceMetricNoErrorCodeLabel);
   }
 
-  return result_code_label(result_code);
+  return effective_error_code_label(result_code, error);
 }
 
 [[nodiscard]] std::string outcome_for_command_result(const ExecutionCommandResult& result) {

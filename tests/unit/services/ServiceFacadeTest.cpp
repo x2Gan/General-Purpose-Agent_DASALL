@@ -71,7 +71,7 @@ void test_service_facade_implements_public_interfaces_and_delegates() {
         assert_equal(std::string("toggle"), request.action,
                      "execute should forward the action unchanged");
         return dasall::services::ExecutionCommandResult{
-            .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+          .code = std::nullopt,
             .execution_id = "exec-010",
             .payload_json = "{\"status\":\"ok\"}",
             .side_effects = {"state.changed"},
@@ -86,7 +86,7 @@ void test_service_facade_implements_public_interfaces_and_delegates() {
         assert_equal(std::string("inventory"), request.dataset,
                      "query should forward dataset unchanged");
         return dasall::services::DataQueryResult{
-            .code = dasall::contracts::ResultCode::ToolExecutionFailed,
+          .code = std::nullopt,
             .rows_json = "[]",
             .from_cache = true,
             .error = std::nullopt,
@@ -140,7 +140,7 @@ void test_service_facade_rejects_invalid_context_before_delegate() {
   assert_true(!execute_called,
               "execute should not reach the injected handler when context normalization fails");
   assert_equal(static_cast<int>(dasall::contracts::ResultCode::ValidationFieldMissing),
-               static_cast<int>(result.code),
+               static_cast<int>(result.code.value_or(dasall::contracts::ResultCode::ToolExecutionFailed)),
                "invalid context should surface a validation result code");
   assert_true(result.error.has_value(), "invalid context should surface structured error info");
   assert_equal(std::string("request_id is required"), result.error->details.message,

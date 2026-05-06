@@ -99,7 +99,7 @@ class DefaultExecutionService final : public dasall::services::IExecutionService
  public:
   ExecutionCommandResult execute(const ExecutionCommandRequest& request) override {
     return ExecutionCommandResult{
-        .code = ResultCode::ToolExecutionFailed,
+  .code = std::nullopt,
         .execution_id = std::string("builtin.exec:") + request.target.target_id,
         .payload_json = std::string("{\"status\":\"executed\",\"action\":\"") +
                         request.action + "\",\"target\":\"" + request.target.target_id +
@@ -153,7 +153,7 @@ class DefaultExecutionService final : public dasall::services::IExecutionService
 
   ExecutionDiagnoseResult diagnose(const ExecutionDiagnoseRequest& request) override {
     return ExecutionDiagnoseResult{
-        .code = ResultCode::ToolExecutionFailed,
+        .code = std::nullopt,
         .target_reachable = true,
         .report_json = std::string("{\"status\":\"reachable\",\"capability\":\"") +
                        request.target.capability_id + "\"}",
@@ -166,7 +166,7 @@ class DefaultDataService final : public dasall::services::IDataService {
  public:
   DataQueryResult query(const DataQueryRequest& request) override {
     return DataQueryResult{
-        .code = ResultCode::ToolExecutionFailed,
+  .code = std::nullopt,
         .rows_json = std::string("{\"dataset\":\"") + request.dataset +
                      "\",\"projection\":\"" + request.projection + "\"}",
         .from_cache = request.freshness == dasall::services::ServiceDataFreshness::allow_stale,
@@ -176,7 +176,7 @@ class DefaultDataService final : public dasall::services::IDataService {
 
   DataCatalogResult list_capabilities(const DataCatalogRequest& request) override {
     return DataCatalogResult{
-        .code = ResultCode::ToolExecutionFailed,
+        .code = std::nullopt,
         .catalog_json = std::string("{\"target_class\":\"") + request.target_class + "\"}",
         .error = std::nullopt,
     };
@@ -375,11 +375,19 @@ ToolResult BuiltinExecutorLane::map_service_result(
     const ToolIR& tool_ir,
     const ToolExecutionContext& execution_context,
     const ExecutionCommandResult& result) const {
+  if (!result.has_consistent_values()) {
+    return build_failure_result(tool_ir,
+                                execution_context,
+                                ResultCode::ToolExecutionFailed,
+                                "builtin.executor.service_result_inconsistent",
+                                "tools.builtin.action");
+  }
+
   return ToolResult{
       .request_id = tool_ir.request_id,
       .tool_call_id = tool_ir.tool_call_id,
       .tool_name = tool_ir.tool_name,
-      .success = !result.error.has_value(),
+      .success = result.succeeded(),
       .payload = result.payload_json.empty() ? std::nullopt
                                              : std::optional<std::string>(result.payload_json),
       .error = result.error,
@@ -398,6 +406,14 @@ ToolResult BuiltinExecutorLane::map_service_result(
     const ToolIR& tool_ir,
     const ToolExecutionContext& execution_context,
     const DataQueryResult& result) const {
+  if (!result.has_consistent_values()) {
+    return build_failure_result(tool_ir,
+                                execution_context,
+                                ResultCode::ToolExecutionFailed,
+                                "builtin.executor.service_result_inconsistent",
+                                "tools.builtin.query");
+  }
+
   auto tags = build_tags(std::string("query"), execution_context);
   if (result.from_cache) {
     tags.push_back("cache:hit");
@@ -407,7 +423,7 @@ ToolResult BuiltinExecutorLane::map_service_result(
       .request_id = tool_ir.request_id,
       .tool_call_id = tool_ir.tool_call_id,
       .tool_name = tool_ir.tool_name,
-      .success = !result.error.has_value(),
+      .success = result.succeeded(),
       .payload = result.rows_json.empty() ? std::nullopt
                                           : std::optional<std::string>(result.rows_json),
       .error = result.error,
@@ -424,11 +440,19 @@ ToolResult BuiltinExecutorLane::map_service_result(
     const ToolIR& tool_ir,
     const ToolExecutionContext& execution_context,
     const ExecutionDiagnoseResult& result) const {
+  if (!result.has_consistent_values()) {
+    return build_failure_result(tool_ir,
+                                execution_context,
+                                ResultCode::ToolExecutionFailed,
+                                "builtin.executor.service_result_inconsistent",
+                                "tools.builtin.diagnose");
+  }
+
   return ToolResult{
       .request_id = tool_ir.request_id,
       .tool_call_id = tool_ir.tool_call_id,
       .tool_name = tool_ir.tool_name,
-      .success = !result.error.has_value(),
+      .success = result.succeeded(),
       .payload = result.report_json.empty() ? std::nullopt
                                             : std::optional<std::string>(result.report_json),
       .error = result.error,

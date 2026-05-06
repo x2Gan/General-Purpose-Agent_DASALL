@@ -43,6 +43,13 @@ constexpr std::string_view kServiceAuditBridgeSourceRef = "ServiceAuditBridge";
   return "Unknown";
 }
 
+[[nodiscard]] std::string effective_result_code_name(
+    const std::optional<contracts::ResultCode>& result_code,
+    const std::optional<contracts::ErrorInfo>& error) {
+  const auto effective_code = service_result_effective_failure_code(result_code, error);
+  return effective_code.has_value() ? result_code_name(*effective_code) : std::string("Unknown");
+}
+
 [[nodiscard]] std::string describe_write_failure(
     const infra::AuditWriteOutcome& write_outcome) {
   if (!write_outcome.has_consistent_state()) {
@@ -129,7 +136,7 @@ void append_result_side_effects(std::vector<std::string>* side_effects,
   }
 
   append_key_value_side_effect(side_effects, "result_code",
-                               result_code_name(result.code));
+                               effective_result_code_name(result.code, result.error));
   append_key_value_side_effect(side_effects, "error_stage",
                                result.error->details.stage);
   append_key_value_side_effect(side_effects, "error_ref",

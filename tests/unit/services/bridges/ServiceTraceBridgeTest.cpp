@@ -370,7 +370,7 @@ void test_service_trace_bridge_sets_from_cache_attribute_for_data_query_results(
                                      &target);
   bridge.complete_span(&span,
                        DataQueryResult{
-                           .code = ResultCode::ToolExecutionFailed,
+                 .code = std::nullopt,
                            .rows_json = "[{\"id\":1}]",
                            .from_cache = true,
                            .error = std::nullopt,

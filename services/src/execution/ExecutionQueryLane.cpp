@@ -169,7 +169,7 @@ ExecutionQueryResult ExecutionQueryLane::query_state(const ServiceCallContext& c
       const auto cached_snapshot = dependencies_.load_cached_snapshot(request);
       if (cached_snapshot.has_value()) {
         ExecutionQueryResult cached_result{
-            .code = contracts::ResultCode::ToolExecutionFailed,
+          .code = std::nullopt,
             .state = cached_snapshot->state,
             .snapshot_json = cached_snapshot->snapshot_json,
             .from_cache = true,

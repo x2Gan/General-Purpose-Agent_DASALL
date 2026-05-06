@@ -232,6 +232,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_builtin_executor_lane_result_code_unit_test
+	BuiltinExecutorLaneResultCodeTest.cpp
+	BuiltinExecutorLaneResultCodeTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_tool_audit_bridge_unit_test
 	ToolAuditBridgeTest.cpp
 	ToolAuditBridgeTest

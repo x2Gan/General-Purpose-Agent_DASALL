@@ -363,10 +363,11 @@ ExecutionCommandResult ResultMapper::to_execution_command_result(
     const AdapterReceipt& receipt,
     const std::vector<std::string>& compensation_hints,
     std::string execution_id,
-    contracts::ResultCode success_code) const {
+    std::optional<contracts::ResultCode> success_code) const {
   const auto mapped = map_result(receipt, compensation_hints);
   return ExecutionCommandResult{
-      .code = mapped.success ? success_code : mapped.code,
+      .code = mapped.success ? success_code
+                             : std::optional<contracts::ResultCode>(mapped.code),
       .execution_id = std::move(execution_id),
       .payload_json = mapped.payload_json,
       .side_effects = mapped.side_effects,
@@ -379,10 +380,11 @@ ExecutionQueryResult ResultMapper::to_execution_query_result(
     const AdapterReceipt& receipt,
     std::string state,
     bool from_cache,
-    contracts::ResultCode success_code) const {
+    std::optional<contracts::ResultCode> success_code) const {
   const auto mapped = map_result(receipt, {});
   return ExecutionQueryResult{
-      .code = mapped.success ? success_code : mapped.code,
+      .code = mapped.success ? success_code
+                             : std::optional<contracts::ResultCode>(mapped.code),
       .state = mapped.success ? std::move(state) : std::string{},
       .snapshot_json = mapped.success ? mapped.payload_json : std::string{},
       .from_cache = from_cache,
@@ -394,12 +396,13 @@ ExecutionSubscriptionResult ResultMapper::to_execution_subscription_result(
     const AdapterReceipt& receipt,
     std::optional<std::string> next_cursor,
     std::uint32_t dropped_count,
-    contracts::ResultCode success_code) const {
+  std::optional<contracts::ResultCode> success_code) const {
   const auto mapped = map_result(receipt, {});
   const auto subscription_dropped_count =
       mapped.resync_required ? dropped_count : mapped.dropped_count;
   return ExecutionSubscriptionResult{
-      .code = mapped.success ? success_code : mapped.code,
+    .code = mapped.success ? success_code
+               : std::optional<contracts::ResultCode>(mapped.code),
       .events_json = mapped.success ? mapped.payload_json : std::string{},
       .next_cursor = mapped.success ? std::move(next_cursor) : std::nullopt,
       .resync_required = mapped.resync_required,
@@ -411,10 +414,11 @@ ExecutionSubscriptionResult ResultMapper::to_execution_subscription_result(
 ExecutionDiagnoseResult ResultMapper::to_execution_diagnose_result(
     const AdapterReceipt& receipt,
     bool target_reachable_on_success,
-    contracts::ResultCode success_code) const {
+    std::optional<contracts::ResultCode> success_code) const {
   const auto mapped = map_result(receipt, {});
   return ExecutionDiagnoseResult{
-      .code = mapped.success ? success_code : mapped.code,
+      .code = mapped.success ? success_code
+                             : std::optional<contracts::ResultCode>(mapped.code),
       .target_reachable = mapped.success ? target_reachable_on_success : false,
       .report_json = mapped.success ? mapped.payload_json : std::string{},
       .error = mapped.error,
@@ -424,10 +428,11 @@ ExecutionDiagnoseResult ResultMapper::to_execution_diagnose_result(
 DataQueryResult ResultMapper::to_data_query_result(
     const AdapterReceipt& receipt,
     bool from_cache,
-    contracts::ResultCode success_code) const {
+    std::optional<contracts::ResultCode> success_code) const {
   const auto mapped = map_result(receipt, {});
   return DataQueryResult{
-      .code = mapped.success ? success_code : mapped.code,
+      .code = mapped.success ? success_code
+                             : std::optional<contracts::ResultCode>(mapped.code),
       .rows_json = mapped.success ? mapped.payload_json : std::string{},
       .from_cache = from_cache,
       .error = mapped.error,
@@ -436,10 +441,11 @@ DataQueryResult ResultMapper::to_data_query_result(
 
 DataCatalogResult ResultMapper::to_data_catalog_result(
     const AdapterReceipt& receipt,
-    contracts::ResultCode success_code) const {
+    std::optional<contracts::ResultCode> success_code) const {
   const auto mapped = map_result(receipt, {});
   return DataCatalogResult{
-      .code = mapped.success ? success_code : mapped.code,
+      .code = mapped.success ? success_code
+                             : std::optional<contracts::ResultCode>(mapped.code),
       .catalog_json = mapped.success ? mapped.payload_json : std::string{},
       .error = mapped.error,
   };
