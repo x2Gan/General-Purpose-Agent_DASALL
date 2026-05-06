@@ -283,6 +283,13 @@ flowchart LR
 | cognition -> memory | 只消费 Runtime 传入的 ContextPacket、BeliefState | 自己拉 MemoryStore、自己重组历史和知识证据 | ADR-006；DASALL_memory子系统详细设计.md MEM-C009 |
 | cognition -> infra | 使用 logging/metrics/tracing/audit 抽象写观测 | 在 cognition 内自行定义第二套观测协议 | DASALL_infrastructure子系统详细设计.md |
 
+#### 6.1.1 RecoveryContextBoundary 系统回链
+
+1. cognition 与 runtime 之间的 Recovery Context 边界，以 [../ssot/RecoveryContextBoundary.md](../ssot/RecoveryContextBoundary.md) 为单一真相来源；本节只说明 cognition 侧允许消费的事实，不再私自定义恢复执行上下文。
+2. cognition 允许消费 `Observation`、`ErrorInfo`、`GoalContract`、`BeliefState`、budget hint、risk/latency hint 与阶段级 `deadline_ms` 提示；这些对象用于反思、重规划与响应构造的语义判断。
+3. cognition 明确禁止直接消费 `retry budget` 原始值、retry counter、`idempotency` token、补偿句柄、`circuit` state、`RecoveryOutcome`、`rejection_reason`、`escalation_reason`、raw checkpoint blob 与 provider private payload。
+4. 若 runtime 需要把恢复拒绝、升级或降级的结果反馈给 cognition，必须先投影为新的 `Observation` / `ErrorInfo` / 受控 `GoalContract` 事实；cognition 不接收 runtime 内部执行控制对象本身。
+
 ### 6.2 子组件清单与职责
 
 | 组件 | 类型 | 职责 | 主要输入 | 主要输出 |

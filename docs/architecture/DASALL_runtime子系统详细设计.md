@@ -670,6 +670,13 @@ Recovery Context 规则：
 2. RecoveryManager 必须基于本表中的 runtime 独占事实做 admit / reject / escalate 裁定，不能把裁定责任回退给 cognition。
 3. 若后续需要系统级 SSOT，本表即为 Runtime 侧基线，不得与 cognition 或 access 文档产生相反解释。
 
+#### 6.11.2 RecoveryContextBoundary 系统回链
+
+1. Recovery Context 的系统级单一真相来源固定为 [../ssot/RecoveryContextBoundary.md](../ssot/RecoveryContextBoundary.md)；本节保留为 runtime 执行控制面的本地回链。
+2. runtime 继续独占 `retry budget`、retry counter、`idempotency`、补偿句柄、`circuit` state、checkpoint recoverability 与 session / worker deadline 等执行控制事实；cognition 只允许接收预算提示、阶段级 `deadline_ms` 提示和投影后的 `Observation` / `ErrorInfo`。
+3. `RecoveryOutcome`、`rejection_reason`、`escalation_reason`、`retry_idempotency_token` 与 raw checkpoint / provider private payload 等对象禁止直接回流到 cognition；若需要被下一轮认知使用，必须先转换为新的可审计事实。
+4. `INT-TODO-007` 关闭的是系统级边界歧义；后续 `INT-TODO-017` 才负责把 `AgentOrchestrator` / `RecoveryManager::evaluate/apply` 的代码使用点对齐到这份 SSOT。
+
 ### 6.12 可观测性设计
 
 | 类别 | 关键事件 / 指标 | 最小要求 |

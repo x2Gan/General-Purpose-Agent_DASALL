@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #549
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-007 提升 Recovery Context 边界表为系统 SSOT
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/RecoveryContextBoundary.md`，冻结 Recovery Context 的 cognition 可见事实、runtime 独占事实、禁止回流项，以及 `retry budget`、`idempotency`、`circuit`、`deadline`、补偿句柄的字段级归属。
+2. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`，新增 `6.11.2 RecoveryContextBoundary 系统回链`，把 RecoveryManager / AgentOrchestrator 的执行控制事实与禁止回流规则回链到新 SSOT。
+3. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，新增 `6.1.1 RecoveryContextBoundary 系统回链`，明确 cognition 只消费投影事实和阶段级 `deadline_ms` 提示，不消费原始 retry/circuit/idempotency 上下文。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-007` 标记为 Done，并把系统级设计冻结序列推进到 `INT-TODO-026`。
+
+### 验证
+
+1. `rg -n "retry budget|idempotency|circuit|deadline|禁止回流|Recovery Context" docs/ssot/RecoveryContextBoundary.md`
+   - 结果：通过；新 SSOT 已覆盖恢复上下文的关键字段归属与禁止回流清单。
+2. `rg -n "retry budget|idempotency|circuit|deadline|禁止回流|Recovery Context" docs/ssot/RecoveryContextBoundary.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_cognition子系统详细设计.md`
+   - 结果：通过；SSOT、runtime 详设与 cognition 详设对建议权与执行权分离的字段级表述一致。
+
+### 结果
+
+1. Recovery Context 边界已从 runtime 局部表提升为系统 SSOT，后续 017 不再允许 runtime 或 cognition 通过私有假设重解释 retry/circuit/idempotency/deadline 的归属。
+2. `RecoveryOutcome`、`retry_idempotency_token`、补偿句柄、raw checkpoint / provider private payload 等对象现在被正式列入禁止回流清单；如需让 cognition 感知，只能先投影为新的 `Observation` / `ErrorInfo` 事实。
+3. 系统级设计冻结序列下一步只剩 `INT-TODO-026`，用于收敛 health cadence / config / event publish boundary。
+
 ## 记录 #548
 
 - 日期：2026-05-06
