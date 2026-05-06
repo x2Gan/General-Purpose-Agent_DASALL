@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "context/RetrievalEvidenceRef.h"
 #include "error/ErrorInfo.h"
 
 namespace dasall::knowledge {
@@ -212,6 +213,7 @@ struct KnowledgeRetrieveResult {
 	bool ok = false;
 	RetrievalMode mode = RetrievalMode::LexicalOnly;
 	std::optional<EvidenceBundle> evidence;
+	std::vector<dasall::contracts::RetrievalEvidenceRef> retrieval_evidence_refs;
 	std::optional<dasall::contracts::ErrorInfo> error;
 
 	[[nodiscard]] bool has_consistent_values() const {
@@ -219,7 +221,17 @@ struct KnowledgeRetrieveResult {
 			return false;
 		}
 
+		if (evidence.has_value() &&
+				retrieval_evidence_refs.size() > evidence->slices.size()) {
+			return false;
+		}
+
 		return (!evidence.has_value() || evidence->has_consistent_values()) &&
+					 std::all_of(retrieval_evidence_refs.begin(),
+								retrieval_evidence_refs.end(),
+								[](const dasall::contracts::RetrievalEvidenceRef& ref) {
+									return ref.has_consistent_values();
+								}) &&
 					 detail::has_error_shape(error) && (ok || error.has_value());
 	}
 };

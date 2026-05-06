@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #556
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-013 打通 knowledge -> runtime -> memory/cognition 的 structured evidence 主链
+- 状态：已完成
+
+### 改动
+
+1. 更新 `knowledge/include/KnowledgeTypes.h` 与 `knowledge/src/facade/KnowledgeService.cpp`，为 `KnowledgeRetrieveResult` 增加 additive `retrieval_evidence_refs` supporting surface，并基于 `ranked_hits + corpus catalog + evidence.slices` 生成 `source_kind`、`trust_level`、`freshness`、`anchor_locator` 完整共享投影。
+2. 更新 `runtime/src/AgentOrchestrator.cpp`，在 live unary `make_memory_context_request()` 中接入 `knowledge_service->retrieve()`，把 `context_projection` 合并进 `external_evidence`，同时把结构化 `retrieval_evidence_refs` handoff 到 memory。
+3. 更新 `tests/integration/knowledge/KnowledgeRetrievalSmokeTest.cpp`、`tests/integration/knowledge/RuntimeKnowledgeEvidenceIntegrationTest.cpp` 与 `tests/integration/knowledge/CMakeLists.txt`，新增 runtime knowledge evidence integration gate，并把 smoke 断言扩展到 shared structured evidence projection。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-013` 标记为 Done，并把 11.1 的当前串行执行位推进到 `INT-TODO-014`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_knowledge_retrieval_smoke_integration_test, dasall_runtime_knowledge_evidence_integration_test)`
+   - 结果：通过；knowledge shared projection、runtime handoff 与新增 integration executable 均成功编译链接。
+2. `RunCtest_CMakeTools(tests=dasall_knowledge_retrieval_smoke_integration_test, RuntimeKnowledgeEvidenceIntegrationTest)`
+   - 结果：通过；real knowledge smoke 与 runtime->memory->cognition structured evidence gate 均转绿，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+
+### 结果
+
+1. `INT-BLK-03` 的 implementation 主链已完成：knowledge 现在能够产出最小 `RetrievalEvidenceRef` 共享投影，runtime 会把文本 evidence 与 structured refs 一起 handoff 给 memory/cognition。
+2. 013 让 `RetrievalEvidenceProjectionV1` 在真实检索与 true integration 路径上都可执行，至少一条 `evidence_ref/source_ref/freshness` 主链可以稳定保留到 cognition consume 面。
+3. 下一步串行任务为 `INT-TODO-014`，继续落实 required/optional ports 与 degraded path 行为。
+
 ## 记录 #555
 
 - 日期：2026-05-06

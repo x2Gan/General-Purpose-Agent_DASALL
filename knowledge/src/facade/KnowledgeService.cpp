@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <exception>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 namespace dasall::knowledge::facade {
@@ -84,6 +86,134 @@ namespace {
                                            "knowledge_service_facade.request_refresh",
                                            std::string(ref_id));
   return result;
+}
+
+[[nodiscard]] std::string collapse_whitespace(std::string_view text) {
+  std::string collapsed;
+  collapsed.reserve(text.size());
+  bool last_was_space = false;
+  for (const char raw_character : text) {
+    const auto character = static_cast<unsigned char>(raw_character);
+    if (std::isspace(character) != 0) {
+      if (!collapsed.empty() && !last_was_space) {
+        collapsed.push_back(' ');
+      }
+      last_was_space = true;
+      continue;
+    }
+
+    collapsed.push_back(static_cast<char>(character));
+    last_was_space = false;
+  }
+
+  if (!collapsed.empty() && collapsed.back() == ' ') {
+    collapsed.pop_back();
+  }
+  return collapsed;
+}
+
+[[nodiscard]] std::string source_kind_name(const SourceKind source_kind) {
+  switch (source_kind) {
+    case SourceKind::File:
+      return "file";
+    case SourceKind::ConfigSnapshot:
+      return "config_snapshot";
+    case SourceKind::CuratedBundle:
+      return "curated_bundle";
+  }
+
+  return "file";
+}
+
+[[nodiscard]] std::string trust_level_name(const TrustLevel trust_level) {
+  switch (trust_level) {
+    case TrustLevel::Trusted:
+      return "trusted";
+    case TrustLevel::Quarantined:
+      return "quarantined";
+    case TrustLevel::Unregistered:
+      return "unregistered";
+  }
+
+  return "trusted";
+}
+
+[[nodiscard]] std::string freshness_name(const FreshnessState freshness) {
+  switch (freshness) {
+    case FreshnessState::Fresh:
+      return "fresh";
+    case FreshnessState::StaleAllowed:
+      return "stale_allowed";
+    case FreshnessState::StaleRejected:
+      return "stale_rejected";
+    case FreshnessState::Unknown:
+      return "unknown";
+  }
+
+  return "unknown";
+}
+
+[[nodiscard]] std::optional<std::string> anchor_locator_from_citation_ref(
+    std::string_view citation_ref) {
+  const auto anchor_begin = citation_ref.find('#');
+  if (anchor_begin == std::string_view::npos ||
+      anchor_begin + 1U >= citation_ref.size()) {
+    return std::nullopt;
+  }
+
+  return std::string(citation_ref.substr(anchor_begin + 1U));
+}
+
+[[nodiscard]] std::vector<contracts::RetrievalEvidenceRef> build_retrieval_evidence_refs(
+    const rerank::RankedHitSet& ranked_hits,
+    const EvidenceBundle& evidence,
+    const index::CorpusCatalogSnapshot& catalog) {
+  std::vector<contracts::RetrievalEvidenceRef> refs;
+  refs.reserve(evidence.slices.size());
+
+  std::vector<std::string> seen_chunk_ids;
+  std::size_t slice_index = 0U;
+  for (const auto& ranked_hit : ranked_hits.hits) {
+    if (slice_index >= evidence.slices.size()) {
+      break;
+    }
+
+    if (!ranked_hit.has_consistent_values()) {
+      continue;
+    }
+
+    if (std::find(seen_chunk_ids.begin(),
+                  seen_chunk_ids.end(),
+                  ranked_hit.hit.chunk_id) != seen_chunk_ids.end()) {
+      continue;
+    }
+
+    if (collapse_whitespace(ranked_hit.hit.raw_snippet).empty()) {
+      continue;
+    }
+
+    seen_chunk_ids.push_back(ranked_hit.hit.chunk_id);
+
+    const auto descriptor = catalog.find_by_id(ranked_hit.hit.corpus_id);
+    const auto& slice = evidence.slices[slice_index++];
+    if (!descriptor.has_value()) {
+      continue;
+    }
+
+    contracts::RetrievalEvidenceRef ref;
+    ref.evidence_ref = slice.evidence_id;
+    ref.source_ref = slice.citation_ref;
+    ref.source_kind = source_kind_name(descriptor->source_kind);
+    ref.summary_text = slice.snippet;
+    ref.trust_level = trust_level_name(descriptor->trust_level);
+    ref.freshness = freshness_name(slice.freshness);
+    ref.anchor_locator = anchor_locator_from_citation_ref(slice.citation_ref);
+    if (ref.has_consistent_values()) {
+      refs.push_back(std::move(ref));
+    }
+  }
+
+  return refs;
 }
 
 }  // namespace
@@ -273,6 +403,10 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
   result.ok = true;
   result.mode = route_result.plan->mode;
   result.evidence = std::move(evidence);
+  result.retrieval_evidence_refs = build_retrieval_evidence_refs(
+      ranked_hits,
+      *result.evidence,
+      catalog);
 
   if (deps_.emit_retrieve_event) {
     KnowledgeTelemetryEvent event;

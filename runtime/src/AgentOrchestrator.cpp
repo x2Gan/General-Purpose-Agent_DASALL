@@ -1,5 +1,6 @@
 #include "AgentOrchestrator.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -9,6 +10,7 @@
 
 #include "CognitionTypes.h"
 #include "ICognitionEngine.h"
+#include "IKnowledgeService.h"
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
@@ -52,6 +54,48 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
 [[nodiscard]] bool has_live_unary_ports(const OrchestratorComposition& composition) {
   return composition.dependency_set != nullptr &&
          composition.dependency_set->has_live_unary_ports();
+}
+
+void append_unique_string(std::vector<std::string>& destination,
+                          const std::string& value) {
+  if (value.empty()) {
+    return;
+  }
+
+  if (std::find(destination.begin(), destination.end(), value) == destination.end()) {
+    destination.push_back(value);
+  }
+}
+
+void append_retrieval_evidence_ref(
+    std::vector<contracts::RetrievalEvidenceRef>& destination,
+    const contracts::RetrievalEvidenceRef& value) {
+  if (!value.has_consistent_values()) {
+    return;
+  }
+
+  const auto duplicate = std::find_if(destination.begin(), destination.end(),
+                                      [&value](const auto& existing) {
+                                        return existing.evidence_ref == value.evidence_ref;
+                                      });
+  if (duplicate == destination.end()) {
+    destination.push_back(value);
+  }
+}
+
+[[nodiscard]] knowledge::KnowledgeQuery make_knowledge_query(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id) {
+  knowledge::KnowledgeQuery query;
+  query.request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  query.session_id = request.session_id;
+  query.goal_id = goal_id;
+  query.query_text = request.user_input.value_or(goal_id);
+  query.query_kind = knowledge::KnowledgeQueryKind::PolicyEvidence;
+  query.top_k = 4U;
+  query.max_context_projection_items = 4U;
+  query.retrieval_evidence_budget_hint = 256U;
+  return query;
 }
 
 [[nodiscard]] contracts::AgentRequest normalize_request(
@@ -125,6 +169,18 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   context_request.latency_budget_ms = static_cast<int>(
       budget_value(runtime_budget.max_latency_ms, 1500U));
   context_request.external_evidence = composition.dependency_set->external_evidence;
+  if (composition.dependency_set->knowledge_service != nullptr) {
+    const auto knowledge_result = composition.dependency_set->knowledge_service->retrieve(
+        make_knowledge_query(request, goal_id));
+    if (knowledge_result.ok && knowledge_result.evidence.has_value()) {
+      for (const auto& projection_line : knowledge_result.evidence->context_projection) {
+        append_unique_string(context_request.external_evidence, projection_line);
+      }
+      for (const auto& ref : knowledge_result.retrieval_evidence_refs) {
+        append_retrieval_evidence_ref(context_request.retrieval_evidence_refs, ref);
+      }
+    }
+  }
   return context_request;
 }
 

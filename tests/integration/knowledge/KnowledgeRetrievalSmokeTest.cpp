@@ -33,6 +33,7 @@ using dasall::knowledge::IndexManifest;
 using dasall::knowledge::KnowledgeConfigSnapshot;
 using dasall::knowledge::KnowledgeQuery;
 using dasall::knowledge::KnowledgeQueryKind;
+using dasall::knowledge::KnowledgeRetrieveResult;
 using dasall::knowledge::RefreshResult;
 using dasall::knowledge::RefreshStatus;
 using dasall::knowledge::RetrievalMode;
@@ -480,8 +481,9 @@ struct KnowledgeSmokeHarness {
   }
 };
 
-[[nodiscard]] EvidenceBundle retrieve_runtime_projection(dasall::knowledge::IKnowledgeService& service,
-                                                         const KnowledgeQuery& query) {
+[[nodiscard]] KnowledgeRetrieveResult retrieve_runtime_result(
+  dasall::knowledge::IKnowledgeService& service,
+  const KnowledgeQuery& query) {
   const auto result = service.retrieve(query);
   assert_true(result.ok,
               "knowledge retrieval smoke should complete successfully through the service interface");
@@ -491,12 +493,13 @@ struct KnowledgeSmokeHarness {
               "knowledge retrieval smoke should stay on the lexical-only route");
   assert_true(result.evidence.has_value(),
               "knowledge retrieval smoke should return an evidence bundle");
-  return *result.evidence;
+  return result;
 }
 
 void test_knowledge_retrieval_smoke_returns_non_empty_context_projection() {
   KnowledgeSmokeHarness harness;
-  const auto evidence = retrieve_runtime_projection(*harness.knowledge_service, make_query());
+  const auto result = retrieve_runtime_result(*harness.knowledge_service, make_query());
+  const auto& evidence = *result.evidence;
 
   assert_true(!evidence.context_projection.empty(),
               "knowledge retrieval smoke should return at least one context projection line");
@@ -506,16 +509,30 @@ void test_knowledge_retrieval_smoke_returns_non_empty_context_projection() {
               "knowledge retrieval smoke projection should surface the normative authority label");
   assert_true(evidence.context_projection.front().find("ADR-0001#policy") != std::string::npos,
               "knowledge retrieval smoke projection should retain the citation ref");
+  assert_true(!result.retrieval_evidence_refs.empty(),
+              "knowledge retrieval smoke should project structured evidence refs alongside text projection");
+  assert_equal(std::string{"file"},
+               result.retrieval_evidence_refs.front().source_kind,
+               "knowledge retrieval smoke should preserve source_kind in the shared evidence projection");
+  assert_equal(std::string{"trusted"},
+               result.retrieval_evidence_refs.front().trust_level,
+               "knowledge retrieval smoke should preserve trust_level in the shared evidence projection");
+  assert_equal(std::string{"fresh"},
+               result.retrieval_evidence_refs.front().freshness,
+               "knowledge retrieval smoke should preserve freshness in the shared evidence projection");
 }
 
 void test_knowledge_retrieval_smoke_keeps_en_corpus_retrievable_for_session_queries() {
   KnowledgeSmokeHarness harness("en");
-  const auto evidence = retrieve_runtime_projection(*harness.knowledge_service, make_query());
+  const auto result = retrieve_runtime_result(*harness.knowledge_service, make_query());
+  const auto& evidence = *result.evidence;
 
   assert_true(!evidence.context_projection.empty(),
               "session-scoped queries should not implicitly filter out english corpora");
   assert_true(evidence.context_projection.front().find("ADR-0001#policy") != std::string::npos,
               "english corpus retrieval should still preserve the citation ref");
+  assert_true(!result.retrieval_evidence_refs.empty(),
+              "english corpus retrieval should still preserve structured evidence refs");
 }
 
 }  // namespace

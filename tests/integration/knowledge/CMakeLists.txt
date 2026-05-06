@@ -43,6 +43,13 @@ dasall_add_knowledge_integration_test(
 )
 
 dasall_add_knowledge_integration_test(
+  dasall_runtime_knowledge_evidence_integration_test
+  RuntimeKnowledgeEvidenceIntegrationTest
+  RuntimeKnowledgeEvidenceIntegrationTest.cpp
+  "integration;knowledge;runtime"
+)
+
+dasall_add_knowledge_integration_test(
   dasall_knowledge_failure_degrade_integration_test
   dasall_knowledge_failure_degrade_integration_test
   KnowledgeFailureDegradeTest.cpp
@@ -77,6 +84,30 @@ target_include_directories(dasall_knowledge_retrieval_smoke_integration_test
 
 target_link_libraries(dasall_knowledge_retrieval_smoke_integration_test
   PRIVATE
+    dasall_sqlite3
+)
+
+target_include_directories(dasall_runtime_knowledge_evidence_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/src
+    ${CMAKE_SOURCE_DIR}/memory/include
+    ${CMAKE_SOURCE_DIR}/runtime/include
+    ${CMAKE_SOURCE_DIR}/services/include
+    ${CMAKE_SOURCE_DIR}/tests/fixtures/runtime
+    ${CMAKE_SOURCE_DIR}/tools/src
+)
+
+target_compile_definitions(dasall_runtime_knowledge_evidence_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_link_libraries(dasall_runtime_knowledge_evidence_integration_test
+  PRIVATE
+    dasall_runtime
+    dasall_memory
+    dasall_cognition
+    dasall_tools
     dasall_sqlite3
 )
 

@@ -24,6 +24,8 @@ target_compile_features(dasall_runtime PUBLIC cxx_std_20)
 target_include_directories(dasall_runtime
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/include
 )
 
 target_link_libraries(dasall_runtime
