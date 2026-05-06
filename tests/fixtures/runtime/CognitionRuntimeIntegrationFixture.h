@@ -133,6 +133,8 @@ inline std::shared_ptr<runtime::RuntimeDependencySet> make_true_integration_depe
   };
   dependency_set->tool_manager =
       std::make_shared<tools::ToolManager>(std::move(tool_dependencies));
+    dependency_set->local_stub_ports.main_loop_exit =
+            runtime::RuntimeStubMainLoopExit::ToolRound;
   dependency_set->visible_tools = {"agent.dataset"};
   dependency_set->external_evidence = {"runtime:cognition-integration"};
 

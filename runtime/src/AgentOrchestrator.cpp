@@ -698,6 +698,7 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   };
   response_request.latest_observation = latest_observation;
   response_request.terminal_decision = action_decision;
+  response_request.build_hints.prefer_observation_projection = true;
   return response_request;
 }
 
@@ -2201,7 +2202,9 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       return run_result;
     }
 
-    if (reflection_result.reflection_decision.has_value()) {
+    if (reflection_result.reflection_decision.has_value() &&
+      reflection_result.reflection_decision->decision_kind !=
+        contracts::ReflectionDecisionKind::Continue) {
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::ToolRound,
                  tool_round_before,

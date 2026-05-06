@@ -15,6 +15,7 @@ namespace dasall::cognition {
 
 struct ResponseBuildHints {
   bool prefer_template = false;
+  bool prefer_observation_projection = false;
   bool allow_template_fallback = true;
   std::uint32_t max_summary_chars = 0;
   std::vector<std::string> required_sections;

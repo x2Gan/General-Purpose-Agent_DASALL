@@ -131,6 +131,8 @@ make_true_integration_dependency_set(const dasall::memory::MemoryConfig& config)
       };
     dependency_set->tool_manager =
       std::make_shared<dasall::tools::ToolManager>(std::move(tool_dependencies));
+    dependency_set->local_stub_ports.main_loop_exit =
+        dasall::runtime::RuntimeStubMainLoopExit::ToolRound;
   dependency_set->visible_tools = {"agent.dataset"};
   dependency_set->external_evidence = {"runtime:true-unary-integration"};
   return dependency_set;
@@ -218,6 +220,10 @@ void test_runtime_unary_integration_traverses_live_ports() {
 
   const auto config = make_sqlite_config(database_path);
   auto dependency_set = make_true_integration_dependency_set(config);
+  const auto readiness = dependency_set->describe_readiness();
+  assert_true(readiness.has_required_ports,
+              "runtime unary integration should assemble live required ports before init: " +
+                  readiness.summary());
 
   dasall::runtime::AgentFacade facade;
   const auto init_result = facade.init(make_true_integration_init_request(dependency_set));
@@ -279,7 +285,8 @@ void test_runtime_unary_integration_traverses_live_ports() {
   assert_true(result.response_text.has_value() &&
                   result.response_text->find("runtime unary integration completed:") != std::string::npos &&
                   result.response_text->find("\"dataset\":\"agent.dataset\"") != std::string::npos,
-              "runtime unary integration should return the projected builtin query payload in AgentResult");
+          "runtime unary integration should return the projected builtin query payload in AgentResult: " +
+            failure_detail);
 
   dependency_set->memory_manager->shutdown();
   cleanup_database_artifacts(database_path);

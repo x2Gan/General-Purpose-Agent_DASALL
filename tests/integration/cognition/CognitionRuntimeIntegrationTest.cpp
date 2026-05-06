@@ -45,6 +45,21 @@ void test_cognition_runtime_integration_happy_path() {
                          "trace-026-integration",
                          "query cognition runtime integration"));
 
+    const auto failure_detail = std::string{"status="} +
+              (result.status == dasall::contracts::AgentResultStatus::Completed
+                ? std::string{"Completed"}
+                : result.status == dasall::contracts::AgentResultStatus::PartiallyCompleted
+                   ? std::string{"PartiallyCompleted"}
+                   : result.status == dasall::contracts::AgentResultStatus::Failed
+                      ? std::string{"Failed"}
+                      : std::string{"Other"}) +
+              " result_code=" +
+              (result.result_code.has_value()
+                ? std::to_string(*result.result_code)
+                : std::string{"<unset>"}) +
+              " response_text=" +
+              result.response_text.value_or(std::string{"<unset>"});
+
   assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
               "cognition runtime integration should produce a completed AgentResult");
   assert_true(result.task_completed.value_or(false),
@@ -56,7 +71,8 @@ void test_cognition_runtime_integration_happy_path() {
   assert_true(result.response_text.has_value() &&
                   result.response_text->find("runtime unary integration completed:") !=
                       std::string::npos,
-              "cognition runtime integration should include runtime+cognition completion message");
+          "cognition runtime integration should include runtime+cognition completion message: " +
+            failure_detail);
 
   if (dependency_set->memory_manager != nullptr) {
     dependency_set->memory_manager->shutdown();

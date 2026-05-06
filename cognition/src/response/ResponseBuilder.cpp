@@ -282,6 +282,11 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
     return ResponseMode::TemplateFallback;
   }
 
+  if (observation_payload(request).has_value() &&
+      request.build_hints.prefer_observation_projection) {
+    return ResponseMode::ObservationProjection;
+  }
+
   if (observation_payload(request).has_value() && bridge_available) {
     return ResponseMode::LlmBridge;
   }

@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #555
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-012 修复 ResponseBuilder 与 runtime 最终响应合同
+- 状态：已完成
+
+### 改动
+
+1. 更新 `cognition/include/response/ResponseBuildRequest.h` 与 `cognition/src/response/ResponseBuilder.cpp`，新增 `prefer_observation_projection` 提示位，并让 true integration 默认 observation payload 在可用时优先走 observation projection，而不是被可用 llm bridge 抢占默认成功路径。
+2. 更新 `runtime/src/AgentOrchestrator.cpp`，修正 live unary path 对 reflection 决策的消费语义：successful observation 的 `Continue` 不再进入 recovery/resume，而是继续进入 `ResponseBuilder` 最终响应路径；同时保留 runtime 只补 request/trace/goal/checkpoint 等审计锚点。
+3. 更新 `tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h`、`tests/integration/agent_loop/RuntimeUnaryIntegrationTest.cpp`、`tests/integration/cognition/CognitionRuntimeIntegrationTest.cpp`，把 true integration 依赖集与 gate 断言对齐到 live unary response contract，并补充失败细节输出，避免 fixture path 与 true integration gate 再次混淆。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-012` 标记为 Done，并把 11.1 当前串行执行位推进到 `INT-TODO-013`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_runtime_unary_integration_test, dasall_cognition_runtime_integration_test)`
+   - 结果：通过；response builder/runtime 改动与两条 focused integration executables 均成功编译链接。
+2. `RunCtest_CMakeTools(tests=RuntimeUnaryIntegrationTest, CognitionRuntimeIntegrationTest)`
+   - 结果：通过；两条 true integration gates 均转绿，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+
+### 结果
+
+1. `INT-BLK-02` 的 Build 落地已完成：true integration path 不再把 successful reflection `Continue` 误消费为 recovery/resume，也不再回落到 `runtime orchestrator skeleton completed` 的假成功文本。
+2. 012 让 `UnaryResponseContract` 在代码层真正可执行：runtime 继续只补审计锚点，最终 `response_text/status/task_completed` 由 response mode 决定，observation projection baseline 与 Gate-INT-03 重新对齐。
+3. 下一步串行任务为 `INT-TODO-013`，继续打通 knowledge -> runtime -> memory/cognition 的 structured evidence 主链。
+
 ## 记录 #554
 
 - 日期：2026-05-06
