@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #550
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-026 收敛 health cadence / config / event publish boundary
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/HealthCadenceAndEventBoundary.md`，冻结 `HealthConfigPolicy`、`ProbeScheduler`、`ITimer` seam、event publish fallback、cognition health probe 与 `diag_enabled` / richer diagnostics sink 的边界关系。
+2. 更新 `docs/architecture/DASALL_infra_health模块详细设计.md`，把 event publish failure 收口到 logging/metrics/audit/local cache fallback，并新增 `6.9.1 HealthCadenceAndEventBoundary 系统回链`。
+3. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md` 与 `docs/architecture/DASALL_profiles模块详细设计.md`，明确 runtime 只消费 cadence 投影、profiles 持有 `infra.health.*` 键语义、`ops_policy.remote_diagnostics_enabled` / `diag_enabled` 只控制 richer diagnostics sink。
+4. 更新 infra/runtime/cognition/integration TODO 与 blocker 台账：将 `HLT-TODO-009` 从 Blocked 调整为 Not Started，保留 `HLT-TODO-012` 的 event bus 阻塞，并将 `INT-TODO-026` 标记为 Done。
+
+### 验证
+
+1. `rg -n "cadence|ProbeScheduler|HealthConfigPolicy|event publish|ITimer|diag_enabled|health probe" docs/ssot/HealthCadenceAndEventBoundary.md`
+   - 结果：通过；新 SSOT 已覆盖 026 需要冻结的 cadence/config/event publish/health probe 关键对象。
+2. `rg -n "cadence|ProbeScheduler|HealthConfigPolicy|event publish|ITimer|diag_enabled|health probe" docs/ssot/HealthCadenceAndEventBoundary.md docs/architecture/DASALL_infra_health模块详细设计.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_profiles模块详细设计.md docs/todos/infrastructure/DASALL_infrastructure_health组件专项TODO.md docs/todos/runtime/DASALL_runtime子系统专项TODO.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md platform/include/ITimer.h`
+   - 结果：通过；SSOT、infra/runtime/profiles 详设、子系统 TODO 与既有 `ITimer` seam 的口径一致。
+
+### 结果
+
+1. health 残项已被重新分账为“可执行基线”和“仍待 bus 扩展”；`HLT-BLK-001` 不再作为 stale blocker 存在，`HLT-TODO-009` 可以沿既有 `ITimer` seam 直接进入实现。
+2. event publish 最小接口仍未冻结，但 fallback rule 已被系统级固定：在 sink 缺失或接口未冻结时，只允许 logging/metrics/audit/local cache 路径，不得宣称 bus-ready。
+3. 用户请求的系统级设计冻结集合 `001~007、025、026` 现已全部完成；下一步若继续 Build，最直接消费这些 SSOT 的任务是 `017`、`027`、`029`。
+
 ## 记录 #549
 
 - 日期：2026-05-06

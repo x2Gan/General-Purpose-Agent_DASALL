@@ -444,7 +444,7 @@ ctest --test-dir build-ci --output-on-failure -R "Cognition|RuntimeCognitionLoop
 |---|---|---|---|---|---|
 | COG-OQ01 | 详设 §12 | ContextPacket 中 BeliefState 应否必填 | 采纳：首版 BeliefState 设为必填，default 为空 snapshot | COG-TODO-007 | 避免下游组件对可空字段做防御式编程 |
 | COG-OQ03 | 详设 §12 | IPlanner 是否需要支持 delegate hint | 延后：首版关闭 delegate hint，IPlanner 只接受 Goal→PlanGraph | COG-TODO-016 | 待多代理子系统就绪后再开放 delegation 扩展 |
-| COG-OQ05 | 详设 §12 | CognitionTelemetry 的 HealthProbe 如何实现 | 延后：首版 HealthProbe 先用 metrics 汇聚（last_latency / error_count），不引入独立 probe endpoint | COG-TODO-022 | 复杂度低优先；后续可扩展为主动探针 |
+| COG-OQ05 | 详设 §12 | CognitionTelemetry 的 HealthProbe 如何实现 | 设计收口：首版继续用 metrics 汇聚（last_latency / error_count）作为被动 health probe 输入，不引入独立 probe endpoint、独立 cadence 或独立 event publish 通道；系统口径由 INT-TODO-026 / `HealthCadenceAndEventBoundary` 冻结 | COG-TODO-022 | 复杂度低优先；后续若扩展为主动探针，必须先回到 system cadence SSOT |
 | COG-OQ06 | 详设 §12 | BudgetContext 首版是否 optional | 采纳：首版 BudgetContext 设为 optional，缺省时使用 profile 默认 budget | COG-TODO-009 | 降低首版集成门槛，但要求 015 验证 budget-tight 收缩行为 |
 | COG-OQ08 | 详设 §12 | StageModelHint 中 preferred_provider 如何处理 | 采纳：preferred_provider 字段保留，默认值为空字符串（llm 自行选择）| COG-TODO-009 | 不强制指定 provider，保持 llm 路由自主权 |
 | COG-OQ09 | 详设 §12 | StageOutputValidator 的 schema 版本化策略 | 延后：首版 schema 使用 header comment 标记版本，不引入独立 schema registry | COG-TODO-008、009 | 首版保持简单；schema registry 作为后续演进点 |

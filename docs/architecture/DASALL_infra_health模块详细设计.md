@@ -267,7 +267,7 @@ infra/health 非职责：
 恢复动作：
 1. 探针超时：记录超时指标并触发降级事件。
 2. 持续失败：标记 failed_components，输出 RecoveryHint。
-3. 事件发布失败：重试发布并记录 audit/log 指标。
+3. 事件发布失败：先提交本地快照与 transition version，记录 `infra_health_event_publish_fail_total`，并走 logging/metrics/audit/local cache fallback；待 event publish 最小接口冻结后再补 external bus retry。
 4. 策略非法：快速失败并返回 INF_E_HEALTH_POLICY_INVALID。
 
 兜底策略：
@@ -288,6 +288,13 @@ infra/health 非职责：
 | infra.health.event_on_transition_only | true | 默认/Profile | 仅状态变化时发事件 |
 | infra.health.recovery_hint.enabled | true | Profile/部署 | 是否发布恢复建议 |
 | infra.health.probe.groups.critical | logging,secret,config | Profile/部署 | 关键探针分组 |
+
+#### 6.9.1 HealthCadenceAndEventBoundary 系统回链
+
+1. health cadence / config / event publish 的系统级单一真相来源固定为 [../ssot/HealthCadenceAndEventBoundary.md](../ssot/HealthCadenceAndEventBoundary.md)；本节继续作为 infra/health 本地默认表与 `HealthConfigPolicy` 的直接依据。
+2. `HealthConfigPolicy` 必须按“模块默认值 < Profile 基线 < deployment override”合成 cadence 与阈值结果；`ProbeScheduler` 只能沿 `platform::ITimer` seam 运转，`HLT-BLK-001` 不再作为纯抽象前置 blocker 存在。
+3. event publish 最小接口未冻结或 sink 缺失时，`HealthEventPublisher` 仍必须完成本地状态提交，并保留 logging/metrics fallback； richer diagnostics / audit sink 可受 `ops_policy.remote_diagnostics_enabled` 或 app/bootstrap `diag_enabled` 控制，但这些开关不得关闭基础 health signal。
+4. cognition health probe 首版继续走 metrics 聚合输入，不引入独立 endpoint 或独立 cadence；因此 infra/health 保持 system cadence owner 身份。
 
 ### 6.10 可观测性设计
 

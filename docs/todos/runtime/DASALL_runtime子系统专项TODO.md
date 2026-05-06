@@ -413,4 +413,4 @@ ctest --test-dir build-ci -R "(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTe
 | RT-OQ-03 | 详设 §12 OQ-3 | checkpoint schema 版本升级策略未最终确定 | 本专项 partial 覆盖 | RT-TODO-016、024、028 | version tag 写入、compatibility contract 与 replay regression 已纳入；跨大版本迁移留后续 |
 | RT-OQ-04 | 详设 §12 OQ-4 | 相邻模块 runtime-facing public interface 落位时间不确定 | 本专项 mitigate | RT-TODO-003、026、027、031 | fail-closed stub + seam 唯一原则仍成立；RT-BLK-01 已对 unary gate 解阻；fixture gate 与 true integration gate 继续分开记录 |
 | RT-OQ-05 | 详设 §12 OQ-5 | recovery retry 超限后的人工干预接口未定义 | 本专项 partial 覆盖 | RT-TODO-017 | retry admission 含 max_retry 上限；超限后进入 FailedSafe -> audit；人工干预 API 留后续 |
-| RT-OQ-06 | 详设 6.23 / 8.2 J4 | health probe 与 background maintenance 的默认 cadence 尚未冻结 | 本专项 partial 覆盖 | RT-TODO-023、030 | 首版先固化字段、non-blocking 行为与 Gate；具体 cadence 后续由 profile 与 ops_policy 收口 |
+| RT-OQ-06 | 详设 6.23 / 8.2 J4 | health probe 与 background maintenance 的默认 cadence 尚未冻结 | 已由 INT-TODO-026 / `HealthCadenceAndEventBoundary` 完成设计冻结 | RT-TODO-023、030 | 当前只剩 runtime consume points 与 Gate 落地；default cadence、non-blocking 行为与 event publish fallback 已由 system SSOT 收口 |

@@ -941,6 +941,13 @@ Memory 有 checkpoint worker、Knowledge 有 index refresh、LLM 有 health prob
 
 约束：后台任务不得阻塞 Main Loop Thread；若下游健康探测发现关键依赖不可用，通过 RuntimeEventBus 通知 SafeModeController。
 
+#### 6.23.1 HealthCadenceAndEventBoundary 系统回链
+
+1. runtime 关于 health cadence / config / event publish 的系统级单一真相来源固定为 [../ssot/HealthCadenceAndEventBoundary.md](../ssot/HealthCadenceAndEventBoundary.md)。
+2. runtime background health probe 只消费 `HealthConfigPolicy` 合成后的 `infra.health.*` cadence / timeout 投影，在启动时和空闲窗口以 non-blocking 方式触发；`AgentOrchestrator` 不得硬编码第二套 health cadence。
+3. event publish sink 未冻结或暂不可用时，runtime 只接受 logging/metrics/local cache fallback，不把 event publish failure 直接升级成主状态机失败；`ops_policy.remote_diagnostics_enabled` 只影响 richer diagnostics sink，不改写 health probe cadence。
+4. cognition health probe 继续采纳 metrics 聚合视图，不在 runtime 内新增独立 scheduler、独立 endpoint 或额外 event publish 通道。
+
 ### 6.24 组件级详细设计补强（用于任务拆分）
 
 #### 6.24.1 评估结论

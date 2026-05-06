@@ -615,6 +615,13 @@ load/save 语义冻结：
 5. `infra.watchdog.*` 延续既有冻结结论：默认/Profile/部署三层为主，运行时不允许修改 timeout、scan、event queue 等关键监管阈值。
 6. 三个子域都必须在五档 profile 资产中显式落盘，不允许依赖“缺省即采用模块默认值”来省略键。
 
+#### HealthCadenceAndEventBoundary 系统回链
+
+1. health cadence / config / event publish 的系统级单一真相来源固定为 [../ssot/HealthCadenceAndEventBoundary.md](../ssot/HealthCadenceAndEventBoundary.md)。
+2. `infra.health.liveness.interval_ms`、`infra.health.readiness.interval_ms`、`infra.health.probe.timeout_ms`、`infra.health.event_on_transition_only`、`infra.health.recovery_hint.enabled` 由 `HealthConfigPolicy` 消费并投影到 runtime / infra；这些键不允许进入 `runtime_override`。
+3. `ops_policy.remote_diagnostics_enabled` 与 app/bootstrap `diag_enabled` 只控制 richer diagnostics / event publish sink 的开关，不改写 base cadence、`ProbeScheduler` 行为或 logging/metrics fallback。
+4. runtime 与 cognition 都是 health probe / cadence 的消费者，不是 profile 键语义 owner；任何新增 cadence 字段都必须先回到 `infra.health.*` 和本 SSOT 冻结。
+
 评审依据：
 1. 本地证据：五档 `runtime_policy.yaml` 现已统一承载 `infra.plugin`、`infra.health`、`infra.metrics`、`infra.watchdog`，且 `ProfileRuntimePolicySchemaContractTest` 负责持续校验键存在性。
 2. 组件设计依据：health 6.9 已冻结 `infra.health.*`，watchdog 6.9 已冻结 `infra.watchdog.*`，metrics 6.9 在本轮统一收敛到 `infra.metrics.*`。
