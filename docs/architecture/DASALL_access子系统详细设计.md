@@ -1662,6 +1662,14 @@ sequenceDiagram
 4. cancel seam 固定为 `IAccessRuntimeBridge::cancel(request_id, actor_ref)`；ownership 校验和授权继续留在 access，`RuntimeBridge` 只把 cancel 事实映射到 runtime cancel stub 或后续稳定的 task-control seam，不在 `access/include` 暴露新的 runtime cancel 类型。
 5. 上述两段式 handoff 用于解阻 6.6/6.7/6.18 的 public surface 与后续 ACC-TODO-009、011、020；若 runtime public ABI 后续扩展，优先由 bridge-local adapter 吸收，而不是反向改写 access/include 或 contracts。
 
+#### 6.18.4 AccessUnaryProductionPathV1 回链
+
+1. Access v1 unary production path 的系统级单一真相来源固定为 [../ssot/AccessUnaryProductionPathV1.md](../ssot/AccessUnaryProductionPathV1.md)；本详设负责承接实现分层，不再允许 app 组合根、局部 fixture 或 health handler 各自定义 handoff/readiness 口径。
+2. `RuntimeDispatchRequest` 继续作为 access module public handoff，但其 production 口径必须满足：`RequestNormalizer` 是唯一 owner，`AgentRequest` 必须进入 public handoff，本地 sidecar 只保留主体、授权、publish hint 与 adapter facts；`request_context` 不能继续充当 shared request 字段的唯一运输通道。
+3. `AccessGateway::init()` 的 readiness 口径固定为 production pipeline 依赖完整性校验通过后才能进入 `Ready`；默认构造、空 pipeline、空 runtime bridge 或缺失 resolver/auth/policy/admission/normalizer/publisher 的场景只能作为 fail-closed 或 test profile 行为，不能外推为 production ready。
+4. daemon / gateway production 组合根必须装配真实 dependency bundle；显式 mock pipeline、mock runtime bridge、ping-only health 和手工 `set_ready(true)` 只允许存在于测试 profile 或 fixture 中，并且不能作为 Access v1 交付证据。
+5. 该回链直接解阻 INT-TODO-025 的设计冻结；后续 INT-TODO-027、INT-TODO-028、INT-TODO-030 分别承担代码落地、安全治理与 Gate 证据收口。
+
 ### 6.19 Session 管理与 Receipt 所有权验证
 
 #### 6.19.1 `session_id` 生成策略

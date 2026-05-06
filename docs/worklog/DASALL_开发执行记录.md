@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #546
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-025 收敛 AccessUnaryProductionPathV1 与 production/test profile 边界
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/AccessUnaryProductionPathV1.md`，冻结 Access v1 unary production path 的主链拓扑、`RuntimeDispatchRequest`/`AgentRequest` handoff 规则、`AccessGateway` readiness 合同，以及 production profile 与 test profile 的 mock pipeline 使用边界。
+2. 更新 `docs/architecture/DASALL_access子系统详细设计.md`，新增 `6.18.4 AccessUnaryProductionPathV1 回链`，把 handoff、production pipeline、readiness 与 app 组合根职责统一回链到新 SSOT。
+3. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md` 与 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `ACC-TODO-040/041/042` 和 `INT-TODO-025` 绑定到同一份 SSOT，并将系统层写回为“设计冻结已完成，但 INT-BLK-06 仍待 027/028/030 通过代码与 Gate 解阻”。
+
+### 验证
+
+1. `rg -n "AgentRequest|RuntimeDispatchRequest|submit_pipeline_not_configured|gateway_not_ready_or_shutting_down|readiness|mock pipeline|INT-TODO-027|ACC-TODO-040|AccessGateway" docs/ssot/AccessUnaryProductionPathV1.md`
+   - 结果：通过；新 SSOT 已覆盖 handoff、readiness、mock pipeline 边界与 Build 映射。
+2. `rg -n "AgentRequest|RuntimeDispatchRequest|submit_pipeline_not_configured|gateway_not_ready_or_shutting_down|readiness|mock pipeline" docs/ssot/AccessUnaryProductionPathV1.md docs/architecture/DASALL_access子系统详细设计.md docs/todos/access/DASALL_access子系统专项TODO.md access/include/AccessTypes.h access/src/AccessGateway.cpp access/src/RuntimeBridge.cpp apps/gateway/src/main.cpp`
+   - 结果：通过；SSOT、详设、子系统 TODO 与当前代码基线对齐，能够明确指出当前仍存在的 `AgentRequest` handoff 断裂、空 pipeline Ready 和 health readiness 硬编码问题。
+3. `rg -n "INT-TODO-025|INT-BLK-06|AccessUnaryProductionPathV1|production path|mock pipeline" docs/todos/integration/DASALL_系统集成专项TODO.md docs/todos/access/DASALL_access子系统专项TODO.md`
+   - 结果：通过；系统 TODO 与 Access TODO 已对齐为“025 完成设计冻结，INT-BLK-06 仍待 Build 闭合”。
+
+### 结果
+
+1. Access v1 unary production ingress 的 design contract 已从 Access 子系统局部结论提升为系统 SSOT，后续 027/028/030 不再允许在 handoff、readiness 或 mock pipeline 边界上重新开口。
+2. 现有代码中的三处基线偏差已被正式记录为 Build 修复入口：`RuntimeDispatchRequest` 未承载 `AgentRequest`、`AccessGateway::init()` 空 pipeline 也可进入 `Ready`、gateway 组合根将 health readiness 手工写为 `true`。
+3. INT-BLK-06 仍未解阻，但其设计层歧义已被清除；下一步应返回系统级 SSOT 冻结序列，继续推进 `INT-TODO-005` 的 Gate 矩阵与证据分层规则。
+
 ## 记录 #545
 
 - 日期：2026-05-06
