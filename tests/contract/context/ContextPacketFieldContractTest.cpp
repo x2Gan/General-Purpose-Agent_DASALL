@@ -28,6 +28,7 @@
 namespace {
 
 using dasall::contracts::ContextPacket;
+using dasall::contracts::RetrievalEvidenceRef;
 using dasall::contracts::validate_context_packet_boundary;
 using dasall::contracts::validate_context_packet_field_rules;
 using dasall::contracts::validate_context_packet_required_fields;
@@ -64,6 +65,16 @@ void test_p2_full_optional() {
   pkt.summary_memory = "Previous session covered deployment pipeline.";
   pkt.retrieval_evidence =
       std::vector<std::string>{"doc:deploy-spec", "kb:rollback-procedure"};
+    pkt.retrieval_evidence_refs = std::vector<RetrievalEvidenceRef>{
+      RetrievalEvidenceRef{
+        .evidence_ref = "evidence-deploy-001",
+        .source_ref = "doc:deploy-spec",
+        .source_kind = "file",
+        .summary_text = "Deployment specification summary",
+        .trust_level = "high",
+        .freshness = "Fresh",
+        .anchor_locator = "section:rollback",
+      }};
   pkt.latest_observation_digest_summary =
       "Deployment #55 succeeded with zero errors.";
   pkt.active_tools = std::vector<std::string>{"deploy_tool", "log_tool"};
@@ -232,17 +243,46 @@ void test_n13_active_tools_empty_entry() {
   assert_true(!r.ok, "N13: active_tools with empty entry must fail L3");
 }
 
+// N14: retrieval_evidence_refs is an empty vector — L3 rejects.
+void test_n14_empty_retrieval_evidence_refs_vector() {
+  auto pkt = make_valid_packet();
+  pkt.retrieval_evidence_refs = std::vector<RetrievalEvidenceRef>{};
+
+  auto r = validate_context_packet_field_rules(pkt);
+  assert_true(!r.ok,
+              "N14: empty retrieval_evidence_refs vector must fail L3");
+}
+
+// N15: retrieval_evidence_refs contains an inconsistent ref — L3 rejects.
+void test_n15_inconsistent_retrieval_evidence_ref() {
+  auto pkt = make_valid_packet();
+  pkt.retrieval_evidence_refs = std::vector<RetrievalEvidenceRef>{
+      RetrievalEvidenceRef{
+          .evidence_ref = "",
+          .source_ref = "doc:deploy-spec",
+          .source_kind = "file",
+          .summary_text = "Deployment specification summary",
+          .trust_level = "high",
+          .freshness = "Fresh",
+          .anchor_locator = std::nullopt,
+      }};
+
+  auto r = validate_context_packet_field_rules(pkt);
+  assert_true(!r.ok,
+              "N15: inconsistent retrieval_evidence_ref must fail L3");
+}
+
 // ===========================================================================
 // Negative cases: tags violations (L3)
 // ===========================================================================
 
-// N14: tags is an empty vector — L3 rejects.
-void test_n14_empty_tags_vector() {
+// N16: tags is an empty vector — L3 rejects.
+void test_n16_empty_tags_vector() {
   auto pkt = make_valid_packet();
   pkt.tags = std::vector<std::string>{};
 
   auto r = validate_context_packet_field_rules(pkt);
-  assert_true(!r.ok, "N14: empty tags vector must fail L3");
+  assert_true(!r.ok, "N16: empty tags vector must fail L3");
 }
 
 // ===========================================================================
@@ -269,7 +309,7 @@ int run_all_tests() {
   run(test_p3_first_turn, "P3_first_turn");
   run(test_p4_partial_optional, "P4_partial_optional");
 
-  // Negative cases (14).
+  // Negative cases (16).
   run(test_n1_missing_request_id, "N1_missing_request_id");
   run(test_n2_empty_request_id, "N2_empty_request_id");
   run(test_n3_missing_user_turn, "N3_missing_user_turn");
@@ -283,7 +323,11 @@ int run_all_tests() {
   run(test_n11_empty_belief_state_summary, "N11_empty_belief_summary");
   run(test_n12_empty_retrieval_evidence_vector, "N12_empty_evidence_vec");
   run(test_n13_active_tools_empty_entry, "N13_tools_empty_entry");
-  run(test_n14_empty_tags_vector, "N14_empty_tags_vector");
+    run(test_n14_empty_retrieval_evidence_refs_vector,
+      "N14_empty_evidence_refs_vec");
+    run(test_n15_inconsistent_retrieval_evidence_ref,
+      "N15_inconsistent_evidence_ref");
+    run(test_n16_empty_tags_vector, "N16_empty_tags_vector");
 
   std::cout << "ContextPacketFieldContractTest: " << passed << " passed, "
             << failed << " failed\n";

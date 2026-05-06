@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #551
+
+- 日期：2026-05-06
+- 阶段：integration/build-surface
+- 任务：INT-TODO-008 引入 RetrievalEvidenceRef 与 ContextPacket additive fields
+- 状态：已完成
+
+### 改动
+
+1. 新增 `contracts/include/context/RetrievalEvidenceRef.h`，落盘 additive + optional 的最小结构化 evidence supporting contract，固定 `evidence_ref`、`source_ref`、`source_kind`、`summary_text`、`trust_level`、`freshness`、可选 `anchor_locator` 七字段与 `has_consistent_values()` 一致性校验。
+2. 更新 `contracts/include/context/ContextPacket.h`，为 `retrieval_evidence` 增补并行的 `retrieval_evidence_refs` supporting field，保持旧 `std::vector<std::string>` 路径继续兼容。
+3. 更新 `contracts/include/context/ContextPacketGuards.h`，新增 `retrieval_evidence_refs` 的非空向量与单条 ref 一致性校验，避免 additive field 退化成无约束容器。
+4. 更新 `tests/contract/context/ContextPacketMainFlowContractTest.cpp`、`tests/contract/context/ContextPacketFieldContractTest.cpp`，并新增 `tests/contract/context/RetrievalEvidenceRefContractTest.cpp`；同时更新 `tests/contract/CMakeLists.txt` 注册新 contract test 入口。
+5. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-008` 标记为 Done，并把任务验收口径校正为仓库中的真实测试名。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_contract_tests)`
+   - 结果：通过；008 新增 supporting contract 与 ContextPacket/guards/tests 均可编译入 contract target。
+2. `RunCtest_CMakeTools(tests=ContextPacketMainFlowContractTest, ContextPacketFieldContractTest, RetrievalEvidenceRefContractTest)`
+   - 结果：通过；三条 focused contract tests 全绿，验证 additive field、field guards 与 supporting contract 一致性。
+
+### 结果
+
+1. `INT-BLK-03` 在 contracts 层的第一步 Build 落地已经完成：shared contracts 现在具备最小 `RetrievalEvidenceRef`，且 `ContextPacket` 可以并行承载文本 evidence 与结构化 refs。
+2. 008 保持了 additive + optional 约束，没有破坏现有 `retrieval_evidence` 文本路径，也没有把 `EvidenceSlice` / `EvidenceBundle` 整体抬升进 shared contracts。
+3. 下一步串行任务为 `INT-TODO-009`，继续把 `MemoryContextRequest` 与 `ContextOrchestrator` 的 evidence surface 扩到结构化 refs，同时保持旧字符串路径兼容。
+
 ## 记录 #550
 
 - 日期：2026-05-06

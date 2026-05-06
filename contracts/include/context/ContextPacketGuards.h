@@ -113,8 +113,8 @@ inline ContextPacketGuardResult validate_context_packet_boundary(
 //      token_budget_report, belief_state_summary), if present,
 //      must be non-empty ("carry meaningful content or omit",
 //      per WP03-T003 §4.3).
-//   3) Optional vector fields (retrieval_evidence, active_tools),
-//      if present, must be non-empty vectors with no empty strings.
+//   3) Optional vector fields (retrieval_evidence, retrieval_evidence_refs,
+//      active_tools), if present, must be non-empty and structurally valid.
 //   4) tags, if present, must be a non-empty vector with no empty strings
 //      (consistent with AgentRequest/GoalContract/BeliefState tags).
 //
@@ -156,6 +156,29 @@ inline ContextPacketGuardResult validate_context_packet_field_rules(
             .ok = false,
             .reason =
                 "retrieval_evidence must not contain empty strings",
+        };
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // O2b-rule: retrieval_evidence_refs — if present, must be non-empty and
+  // each ref must satisfy RetrievalEvidenceRef::has_consistent_values().
+  // -----------------------------------------------------------------------
+  if (pkt.retrieval_evidence_refs.has_value()) {
+    if (pkt.retrieval_evidence_refs->empty()) {
+      return ContextPacketGuardResult{
+          .ok = false,
+          .reason =
+              "retrieval_evidence_refs must contain at least one item when present",
+      };
+    }
+    for (const auto& ref : *pkt.retrieval_evidence_refs) {
+      if (!ref.has_consistent_values()) {
+        return ContextPacketGuardResult{
+            .ok = false,
+            .reason =
+                "retrieval_evidence_refs must contain only consistent evidence refs",
         };
       }
     }

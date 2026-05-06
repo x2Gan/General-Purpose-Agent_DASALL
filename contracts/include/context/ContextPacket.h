@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "context/RetrievalEvidenceRef.h"
+
 namespace dasall::contracts {
 
 // ---------------------------------------------------------------------------
@@ -30,12 +32,15 @@ namespace dasall::contracts {
 //   2. current_goal / goal_contract       (Required: current_goal_summary)
 //   3. recent_history                     (Required)
 //   4. summary_memory                     (Optional)
-//   5. retrieval_evidence                 (Optional)
+//   5. retrieval_evidence                 (Optional; textual view)
 //   6. latest_observation_digest          (Optional)
 //   7. active_tools / visible_capabilities(Optional)
 //   8. policy_digest                      (Optional)
 //   9. token_budget_report                (Optional)
 //  10. belief_state / fact view           (Optional)
+//
+// INT-TODO-008 adds RetrievalEvidenceRef[] as a supporting contract for slot 5
+// without changing the original 10-slot semantic taxonomy.
 //
 // What ContextPacket is NOT (WP03-T010 frozen, ADR-006 §6.1/§8):
 //   - NOT a prompt message: final_messages, rendered_prompt, provider_payload
@@ -108,7 +113,7 @@ struct ContextPacket {
   std::optional<std::vector<std::string>> recent_history;
 
   // -----------------------------------------------------------------------
-  // Optional fields (WP03-T010, 9 items)
+  // Optional fields (WP03-T010 base 9 items + INT-TODO-008 supporting ref view)
   // -----------------------------------------------------------------------
 
   // Condensed long-term / summary memory content. Absent when no
@@ -121,6 +126,12 @@ struct ContextPacket {
   // was performed in the current round.
   // Architecture 3.8.5 item 5, ADR-006 §6.1 item 5.
   std::optional<std::vector<std::string>> retrieval_evidence;
+
+  // Additive + optional structured provenance view for retrieval_evidence.
+  // Preserves evidence_ref/source_ref/source_kind/summary_text/trust_level/
+  // freshness/(optional) anchor_locator without lifting full EvidenceSlice or
+  // EvidenceBundle into shared contracts.
+  std::optional<std::vector<RetrievalEvidenceRef>> retrieval_evidence_refs;
 
   // Most recent ObservationDigest summary text. Absent on the first
   // turn when no observation has been collected. This is a text

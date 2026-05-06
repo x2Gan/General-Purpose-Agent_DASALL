@@ -1632,6 +1632,14 @@ dasall_register_contract_test(
   context
 )
 
+# context group (INT-TODO-008-B)
+dasall_register_contract_test(
+  dasall_contract_retrieval_evidence_ref_test
+  RetrievalEvidenceRefContractTest
+  context/RetrievalEvidenceRefContractTest.cpp
+  context
+)
+
 # checkpoint group (WP03-T012-B)
 dasall_register_contract_test(
   dasall_contract_checkpoint_test

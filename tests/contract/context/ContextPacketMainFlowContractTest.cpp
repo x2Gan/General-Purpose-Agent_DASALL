@@ -29,6 +29,7 @@
 namespace {
 
 using dasall::contracts::ContextPacket;
+using dasall::contracts::RetrievalEvidenceRef;
 using dasall::tests::support::assert_true;
 
 // ---------------------------------------------------------------------------
@@ -55,6 +56,25 @@ ContextPacket make_full_context_packet() {
       "Previous session established CI monitoring for project DASALL.";
   pkt.retrieval_evidence =
       std::vector<std::string>{"doc:ci-pipeline-spec-v2", "kb:build-metrics"};
+    pkt.retrieval_evidence_refs = std::vector<RetrievalEvidenceRef>{
+      RetrievalEvidenceRef{
+        .evidence_ref = "evidence-ci-001",
+        .source_ref = "doc:ci-pipeline-spec-v2",
+        .source_kind = "file",
+        .summary_text = "CI pipeline spec v2 summary",
+        .trust_level = "trusted",
+        .freshness = "Fresh",
+        .anchor_locator = "section:gate-int-02",
+      },
+      RetrievalEvidenceRef{
+        .evidence_ref = "evidence-ci-002",
+        .source_ref = "kb:build-metrics",
+        .source_kind = "curated_bundle",
+        .summary_text = "Build metrics knowledge bundle",
+        .trust_level = "high",
+        .freshness = "StaleAllowed",
+          .anchor_locator = std::nullopt,
+      }};
   pkt.latest_observation_digest_summary =
       "Build #142 passed with 98% coverage; 2 flaky tests detected.";
   pkt.active_tools =
@@ -91,7 +111,7 @@ void test_minimal_packet_construction() {
 // P2: Full ContextPacket with all optional fields set.
 void test_full_packet_construction() {
   auto pkt = make_full_context_packet();
-  // Verify all 10 ADR-006 slots are present.
+  // Verify all 10 ADR-006 slots plus the additive structured evidence view.
   assert_true(pkt.user_turn.has_value(), "P2: user_turn present");
   assert_true(pkt.current_goal_summary.has_value(),
               "P2: current_goal_summary present");
@@ -99,6 +119,8 @@ void test_full_packet_construction() {
   assert_true(pkt.summary_memory.has_value(), "P2: summary_memory present");
   assert_true(pkt.retrieval_evidence.has_value(),
               "P2: retrieval_evidence present");
+  assert_true(pkt.retrieval_evidence_refs.has_value(),
+              "P2: retrieval_evidence_refs present");
   assert_true(pkt.latest_observation_digest_summary.has_value(),
               "P2: latest_observation_digest_summary present");
   assert_true(pkt.active_tools.has_value(), "P2: active_tools present");
@@ -124,6 +146,8 @@ void test_first_turn_packet() {
   // Optional fields are absent on first turn.
   assert_true(!pkt.summary_memory.has_value(),
               "P3: summary_memory absent on first turn");
+  assert_true(!pkt.retrieval_evidence_refs.has_value(),
+              "P3: retrieval_evidence_refs absent on first turn");
   assert_true(!pkt.latest_observation_digest_summary.has_value(),
               "P3: observation_digest absent on first turn");
   assert_true(!pkt.belief_state_summary.has_value(),
@@ -155,6 +179,8 @@ void test_default_constructed_all_nullopt() {
               "N1: current_goal_summary defaults to nullopt");
   assert_true(!pkt.recent_history.has_value(),
               "N1: recent_history defaults to nullopt");
+  assert_true(!pkt.retrieval_evidence_refs.has_value(),
+              "N1: retrieval_evidence_refs defaults to nullopt");
 }
 
 // N2: Missing request_id (nullopt) — incomplete packet.
