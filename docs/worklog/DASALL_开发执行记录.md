@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #569
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-023 接线系统级 Gate discoverability 与 one-shot acceptance 命令
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/VerifySystemGateDiscoverability.cmake`，把 `ctest -N` discoverability 校验落成可执行脚本：脚本会根据正式 Gate test 清单构造 anchored regex，并在 one-shot 执行前逐条确认关键 tests 都已进入当前 build 的 CTest 拓扑。
+2. 更新 `tests/integration/CMakeLists.txt` 与 `tests/contract/CMakeLists.txt`，分别导出 Gate-INT-03~07 与 regression smoke 的正式 test-name / executable-target 清单，避免 one-shot acceptance 再回退到手工散写 regex。
+3. 更新 `tests/CMakeLists.txt`，新增 `dasall_gate_int_09` custom target：先运行 discoverability verifier，再在同一入口内执行当前阶段的 system gate one-shot acceptance；该 target 当前覆盖 `MainFlowContractE2ETest`、`ServiceResultSemanticsContractTest`、`BuiltinExecutorLaneResultCodeTest`、Gate-INT-03~07 相关 integration tests，以及 tool/services/llm/knowledge 的 regression smoke matrix。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-023` 标记为 Done，并把统一验收命令收敛到 `dasall_gate_int_09`；同时明确当前 one-shot 入口尚未吸收 Access v1 gate，避免提前外推到 030。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_09)`
+   - 结果：通过；target 先完成 `ctest -N` discoverability 校验，再完成当前阶段的 one-shot acceptance，涵盖 `MainFlowContractE2ETest`、`ServiceResultSemanticsContractTest`、`BuiltinExecutorLaneResultCodeTest`、`RuntimeUnaryIntegrationTest`、`CognitionRuntimeIntegrationTest`、`RuntimeEvidenceProjectionIntegrationTest`、`KnowledgeEvidencePreservationTest`、`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`、`RuntimeRequiredOptionalPortsIntegrationTest`、`RuntimeProfileCompatibilityTest`、`ToolServicesSmokeIntegrationTest`、`CapabilityServicesSmokeIntegrationTest`、`LLMSubsystemSmokeIntegrationTest` 与 `dasall_knowledge_retrieval_smoke_integration_test`。
+
+### 结果
+
+1. Gate-INT-09 已不再只是 TODO 里的命令草案：discoverability 与 one-shot acceptance 现在共享一条正式入口 `dasall_gate_int_09`，并对“关键 Gate test 必须先被 `ctest -N` 发现，随后再进入 acceptance”负责。
+2. 018~022 固化出来的 Gate-INT-03~07 已首次被 one-shot 方式成组复验；tool/services/llm/knowledge 的 regression smoke 也被一起纳入当前阶段 acceptance matrix，避免统一验收只看主 Gate 而漏掉既有绿色切片。
+3. Access v1 production gate 仍保持独立边界，尚未被吸收到 `dasall_gate_int_09`；下一串行任务为 `INT-TODO-030`，继续固化 Gate-INT-08 与 Access 证据分层。
+
 ## 记录 #568
 
 - 日期：2026-05-06

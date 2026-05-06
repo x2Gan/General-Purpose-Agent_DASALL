@@ -1690,6 +1690,18 @@ dasall_register_contract_test(
 
 set_tests_properties(MainFlowContractE2ETest PROPERTIES LABELS "contract;e2e;gate-int-03;default-unary-gate")
 
+set(DASALL_SYSTEM_GATE_ACCEPTANCE_CONTRACT_TEST_NAMES
+  MainFlowContractE2ETest
+  ServiceResultSemanticsContractTest
+  PARENT_SCOPE
+)
+
+set(DASALL_SYSTEM_GATE_ACCEPTANCE_CONTRACT_TEST_EXECUTABLE_TARGETS
+  dasall_contract_main_flow_e2e_test
+  dasall_contract_service_result_semantics_test
+  PARENT_SCOPE
+)
+
 # smoke group (WP03-T016-B)
 dasall_register_contract_test(
   dasall_contract_main_flow_overlap_test
