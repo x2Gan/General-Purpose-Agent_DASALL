@@ -2,6 +2,10 @@ add_executable(dasall_memory_interface_compile_unit_test
 	MemoryInterfaceCompileTest.cpp
 )
 
+add_executable(dasall_memory_evidence_projection_compile_unit_test
+	MemoryEvidenceProjectionCompileTest.cpp
+)
+
 add_executable(dasall_vector_memory_adapter_unit_test
 	VectorMemoryAdapterTest.cpp
 )
@@ -66,6 +70,10 @@ add_executable(dasall_memory_context_orchestrator_unit_test
 	ContextOrchestratorTest.cpp
 )
 
+add_executable(dasall_memory_context_orchestrator_evidence_unit_test
+	ContextOrchestratorEvidenceProjectionTest.cpp
+)
+
 add_executable(dasall_memory_context_orchestrator_degraded_unit_test
 	ContextOrchestratorDegradedTest.cpp
 )
@@ -99,6 +107,12 @@ add_executable(dasall_memory_maintenance_checkpoint_unit_test
 )
 
 target_link_libraries(dasall_memory_interface_compile_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_evidence_projection_compile_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_test_support
@@ -198,6 +212,12 @@ target_link_libraries(dasall_memory_compression_summarizer_unit_test
 )
 
 target_link_libraries(dasall_memory_context_orchestrator_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_context_orchestrator_evidence_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_test_support
@@ -309,6 +329,11 @@ target_include_directories(dasall_memory_context_orchestrator_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_context_orchestrator_evidence_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_context_orchestrator_degraded_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -375,6 +400,11 @@ target_compile_definitions(dasall_memory_interface_compile_unit_test
 		DASALL_MEMORY_SOURCE_DIR="${CMAKE_SOURCE_DIR}/memory/src"
 )
 
+target_compile_definitions(dasall_memory_evidence_projection_compile_unit_test
+	PRIVATE
+		DASALL_MEMORY_PUBLIC_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/memory/include"
+)
+
 target_compile_definitions(dasall_memory_writeback_core_unit_test
 	PRIVATE
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
@@ -391,6 +421,7 @@ target_compile_definitions(dasall_memory_maintenance_checkpoint_unit_test
 )
 
 dasall_apply_common_options(dasall_memory_interface_compile_unit_test)
+dasall_apply_common_options(dasall_memory_evidence_projection_compile_unit_test)
 dasall_apply_common_options(dasall_vector_memory_adapter_unit_test)
 dasall_apply_common_options(dasall_memory_manager_lifecycle_unit_test)
 dasall_apply_common_options(dasall_memory_manager_smoke_unit_test)
@@ -407,6 +438,7 @@ dasall_apply_common_options(dasall_memory_context_budget_unit_test)
 dasall_apply_common_options(dasall_memory_compression_coordinator_unit_test)
 dasall_apply_common_options(dasall_memory_compression_summarizer_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_unit_test)
+dasall_apply_common_options(dasall_memory_context_orchestrator_evidence_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_degraded_unit_test)
 dasall_apply_common_options(dasall_memory_conflict_resolver_unit_test)
 dasall_apply_common_options(dasall_memory_conflict_resolver_degraded_unit_test)
@@ -418,6 +450,9 @@ dasall_apply_common_options(dasall_memory_maintenance_checkpoint_unit_test)
 
 add_test(NAME MemoryInterfaceCompileTest COMMAND dasall_memory_interface_compile_unit_test)
 set_tests_properties(MemoryInterfaceCompileTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME MemoryEvidenceProjectionCompileTest COMMAND dasall_memory_evidence_projection_compile_unit_test)
+set_tests_properties(MemoryEvidenceProjectionCompileTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME VectorMemoryAdapterTest COMMAND dasall_vector_memory_adapter_unit_test)
 set_tests_properties(VectorMemoryAdapterTest PROPERTIES LABELS "unit;memory")
@@ -467,6 +502,9 @@ set_tests_properties(CompressionCoordinatorSummarizerTest PROPERTIES LABELS "uni
 add_test(NAME ContextOrchestratorTest COMMAND dasall_memory_context_orchestrator_unit_test)
 set_tests_properties(ContextOrchestratorTest PROPERTIES LABELS "unit;memory")
 
+add_test(NAME ContextOrchestratorEvidenceProjectionTest COMMAND dasall_memory_context_orchestrator_evidence_unit_test)
+set_tests_properties(ContextOrchestratorEvidenceProjectionTest PROPERTIES LABELS "unit;memory")
+
 add_test(NAME ContextOrchestratorDegradedTest COMMAND dasall_memory_context_orchestrator_degraded_unit_test)
 set_tests_properties(ContextOrchestratorDegradedTest PROPERTIES LABELS "unit;memory")
 
@@ -493,6 +531,7 @@ set_tests_properties(MemoryMaintenanceCheckpointTest PROPERTIES LABELS "unit;mem
 
 set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_interface_compile_unit_test
+	dasall_memory_evidence_projection_compile_unit_test
 	dasall_vector_memory_adapter_unit_test
 	dasall_memory_manager_lifecycle_unit_test
 	dasall_memory_manager_smoke_unit_test
@@ -509,6 +548,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_compression_coordinator_unit_test
 	dasall_memory_compression_summarizer_unit_test
 	dasall_memory_context_orchestrator_unit_test
+	dasall_memory_context_orchestrator_evidence_unit_test
 	dasall_memory_context_orchestrator_degraded_unit_test
 	dasall_memory_conflict_resolver_unit_test
 	dasall_memory_conflict_resolver_degraded_unit_test

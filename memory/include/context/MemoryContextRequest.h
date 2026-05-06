@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include "context/RetrievalEvidenceRef.h"
+
 namespace dasall::memory {
 
 struct MemoryContextRequest {
@@ -16,6 +18,7 @@ struct MemoryContextRequest {
   int token_budget_hint = 4096;
   int latency_budget_ms = 0;
   std::vector<std::string> external_evidence;
+  std::vector<contracts::RetrievalEvidenceRef> retrieval_evidence_refs;
 };
 
 }  // namespace dasall::memory

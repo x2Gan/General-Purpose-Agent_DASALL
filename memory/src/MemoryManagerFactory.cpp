@@ -49,6 +49,11 @@ class BootstrapContextOrchestrator final : public IContextOrchestrator {
       result.context_packet.retrieval_evidence = request.external_evidence;
     }
 
+    if (!request.retrieval_evidence_refs.empty()) {
+      result.context_packet.retrieval_evidence_refs =
+          request.retrieval_evidence_refs;
+    }
+
     if (!request.constraints_summary.empty()) {
       result.context_packet.policy_digest = request.constraints_summary;
     }

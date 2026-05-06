@@ -21,6 +21,7 @@ struct SlotProjection {
   std::vector<std::string> recent_history;
   std::string summary_memory;
   std::vector<std::string> retrieval_evidence;
+  std::vector<contracts::RetrievalEvidenceRef> retrieval_evidence_refs;
   std::string latest_observation_digest_summary;
   std::vector<std::string> active_tools;
   std::string policy_digest;
@@ -370,6 +371,12 @@ contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request
   if (!request.visible_tools.empty()) {
     packet.active_tools = request.visible_tools;
   }
+  if (!request.external_evidence.empty()) {
+    packet.retrieval_evidence = request.external_evidence;
+  }
+  if (!request.retrieval_evidence_refs.empty()) {
+    packet.retrieval_evidence_refs = request.retrieval_evidence_refs;
+  }
   if (!request.constraints_summary.empty()) {
     packet.policy_digest = request.constraints_summary;
   }
@@ -389,6 +396,7 @@ SlotProjection project_slots(const CandidateSet& candidates,
     projection.summary_memory = *candidates.latest_summary->summary_text;
   }
   projection.retrieval_evidence = build_retrieval_evidence_entries(candidates);
+  projection.retrieval_evidence_refs = request.retrieval_evidence_refs;
   projection.latest_observation_digest_summary =
       request.latest_observation_digest_summary;
   projection.active_tools = request.visible_tools;
@@ -471,6 +479,14 @@ std::vector<std::string> detect_dropped_sections(
   if (projection.retrieval_evidence.size() >
       packet.retrieval_evidence.value_or(std::vector<std::string>{}).size()) {
     append_unique(dropped_sections, "retrieval_evidence");
+  }
+
+  const auto projected_ref_count = projection.retrieval_evidence_refs.size();
+  const auto packet_ref_count = packet.retrieval_evidence_refs.has_value()
+                                    ? packet.retrieval_evidence_refs->size()
+                                    : 0U;
+  if (projected_ref_count > packet_ref_count) {
+    append_unique(dropped_sections, "retrieval_evidence_refs");
   }
 
   if (!projection.latest_observation_digest_summary.empty() &&
@@ -650,6 +666,10 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
       false);
   if (!retrieval_evidence.empty()) {
     packet.retrieval_evidence = retrieval_evidence;
+  }
+
+  if (!projection.retrieval_evidence_refs.empty()) {
+    packet.retrieval_evidence_refs = projection.retrieval_evidence_refs;
   }
 
   const auto latest_observation = trim_text_to_token_limit(

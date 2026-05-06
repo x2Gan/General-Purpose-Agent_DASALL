@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #552
+
+- 日期：2026-05-06
+- 阶段：integration/build-surface
+- 任务：INT-TODO-009 扩展 MemoryContextRequest 与 ContextOrchestrator evidence surface
+- 状态：已完成
+
+### 改动
+
+1. 更新 `memory/include/context/MemoryContextRequest.h`，为 memory 请求面新增 `retrieval_evidence_refs`，使 `external_evidence` 文本投影与结构化 refs 在 public surface 上并行存在。
+2. 更新 `memory/src/context/ContextOrchestrator.cpp`，让 nominal path 与 degraded fallback path 都能把 `retrieval_evidence_refs` 从 request 投影到 `ContextPacket`，同时继续保留 `retrieval_evidence` 文本槽位。
+3. 更新 `memory/src/MemoryManagerFactory.cpp`，补齐 bootstrap `IContextOrchestrator::assemble()` 对结构化 refs 的直通映射，避免依赖未就绪时丢失 citation / freshness supporting surface。
+4. 新增 `tests/unit/memory/ContextOrchestratorEvidenceProjectionTest.cpp` 与 `tests/unit/memory/MemoryEvidenceProjectionCompileTest.cpp`，并更新 `tests/unit/memory/CMakeLists.txt` 注册新的 focused memory tests。
+5. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-009` 标记为 Done，并把下一串行执行位推进到 `INT-TODO-010`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_memory)`
+   - 结果：通过；memory library 中的 request/orchestrator/bootstrap evidence surface 可编译。
+2. `Build_CMakeTools(target=dasall_memory_context_orchestrator_evidence_unit_test, dasall_memory_evidence_projection_compile_unit_test)`
+   - 结果：通过；009 新增的两个 focused test executable 已被 CMake 发现并成功链接。
+3. `RunCtest_CMakeTools(tests=ContextOrchestratorEvidenceProjectionTest, MemoryEvidenceProjectionCompileTest)`
+   - 结果：通过；验证 memory 侧保留文本 evidence 的同时，将 `RetrievalEvidenceRef` 投影到 `ContextPacket`。
+
+### 结果
+
+1. `INT-BLK-03` 在 memory 层的第二步 Build 落地已经完成：`MemoryContextRequest`、`ContextOrchestrator` 与 bootstrap fallback 现在都能承载结构化 refs，而不破坏旧字符串 evidence 路径。
+2. 009 保持了 003/008 冻结的 additive + optional 约束，没有把 richer knowledge evidence 结构整体抬升进 memory public surface，只共享最小 `RetrievalEvidenceRef` 投影。
+3. 下一步串行任务为 `INT-TODO-010`，继续收敛 `RuntimeDependencySet` required / optional readiness surface。
+
 ## 记录 #551
 
 - 日期：2026-05-06
