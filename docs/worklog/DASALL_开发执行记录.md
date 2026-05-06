@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #547
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-005 收敛系统级 Gate 矩阵与证据分层规则
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/SystemIntegrationGateMatrix.md`，冻结 subsystem smoke、fixture gate、true integration gate、discoverability / one-shot acceptance / worklog 的分层关系与命令权威来源。
+2. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-005` 标记为 Done，并把 `INT-BLK-05` 回写为“aggregate 噪音仍存在，但 targeted command 优先级已被正式冻结”。
+3. 将 `Gate-INT-01~09` 的责任边界、回写位置与回退动作提升为系统 SSOT，作为后续 018~024、030 的统一前置规则。
+
+### 验证
+
+1. `rg -n "Gate-INT-|fixture gate|true integration|discoverability|worklog" docs/ssot/SystemIntegrationGateMatrix.md`
+   - 结果：通过；新 SSOT 已覆盖 Gate 分层、discoverability 与 worklog 责任。
+2. `rg -n "Gate-INT-|fixture gate|true integration|discoverability|worklog" docs/ssot/SystemIntegrationGateMatrix.md docs/todos/integration/DASALL_系统集成专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；SSOT、专项 TODO 与 worklog 已对齐到同一套系统 Gate 口径。
+
+### 结果
+
+1. 系统层正式承认四层证据分工：subsystem smoke、fixture gate、true integration、discoverability/worklog；后续不能再用局部绿灯覆盖系统红灯。
+2. `INT-BLK-05` 仍未消失，但其治理方式已经明确：在 023 完成 discoverability / one-shot 落地前，targeted build / ctest / rg 是正式验收依据。
+3. 系统级 SSOT 冻结序列下一步应继续推进 `INT-TODO-006`，把 RuntimePolicySnapshot consumer matrix 提升为统一系统契约。
+
 ## 记录 #546
 
 - 日期：2026-05-06
