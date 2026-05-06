@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #548
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-006 提升 RuntimePolicySnapshot consumer matrix 为系统 SSOT
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/RuntimePolicyConsumerMatrix.md`，冻结 `RuntimePolicySnapshot` 的 semantic owner、snapshot lifecycle owner、override owner，以及 runtime / cognition / llm / tools / knowledge / memory / infra 的 typed projection、override 与 hot-reload 语义。
+2. 更新 `docs/architecture/DASALL_profiles模块详细设计.md`，新增 `6.5.2 RuntimePolicyConsumerMatrix 系统回链`，把 profiles 6.5.1 的局部矩阵提升为系统 SSOT 回链，而不再允许各模块局部改写共享键语义。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-006` 标记为 Done，并把下一步冻结序列推进到 `INT-TODO-007`。
+
+### 验证
+
+1. `rg -n "consumer|owner|override|hot-reload|runtime_budget|timeout|degrade" docs/ssot/RuntimePolicyConsumerMatrix.md`
+   - 结果：通过；新 SSOT 已覆盖 consumer / owner / override / hot-reload 与关键策略域。
+2. `rg -n "consumer|owner|override|hot-reload|runtime_budget|timeout|degrade" docs/ssot/RuntimePolicyConsumerMatrix.md docs/architecture/DASALL_profiles模块详细设计.md`
+   - 结果：通过；系统 SSOT 与 profiles 详设对 semantic owner、typed projection、override 白名单和 hot-reload 生效边界表述一致。
+
+### 结果
+
+1. `RuntimePolicySnapshot` 的系统级消费矩阵已从 profiles 局部矩阵提升为系统 SSOT，后续 017 不再允许 runtime / cognition / tools / memory / knowledge / infra 各自重解释共享键。
+2. `runtime_budget`、`timeout_policy`、`degrade_policy`、`execution_policy`、`ops_policy` 的 override / hot-reload 规则已经固定：默认不支持 mid-turn 改写，允许热生效的键必须显式列入矩阵。
+3. 系统级 SSOT 冻结序列下一步应继续推进 `INT-TODO-007`，把 Recovery Context 边界表提升为同级系统契约。
+
 ## 记录 #547
 
 - 日期：2026-05-06

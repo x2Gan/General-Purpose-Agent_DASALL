@@ -357,6 +357,13 @@ profiles 模块非职责：
 2. 若 consumer 需要新的 typed view 字段，应优先从现有域派生；只有现有域无法表达时，才允许申请新增 top-level domain。
 3. 新增 consumer 或新增域时，必须同步更新本表和对应模块的 projection tests。
 
+#### 6.5.2 RuntimePolicyConsumerMatrix 系统回链
+
+1. `RuntimePolicySnapshot` 的系统级 consumer / owner / override / hot-reload 规则，以 [../ssot/RuntimePolicyConsumerMatrix.md](../ssot/RuntimePolicyConsumerMatrix.md) 为单一真相来源；本节保留为 profiles 侧实现与 validator 的本地回链。
+2. profiles 继续作为 `runtime_budget.*`、`timeout_policy.*`、`degrade_policy.*`、`execution_policy.*`、`ops_policy.*` 的 semantic owner；runtime 继续作为完整快照 lifecycle owner；其余模块只能消费批准的 typed projection。
+3. 任何模块若要新增 consumer、扩展 override 白名单或改变 hot-reload 生效时机，必须先更新 `RuntimePolicyConsumerMatrix`，再更新本详设和对应模块详设；不得只在实现或局部文档中私自改口径。
+4. `INT-TODO-006` 关闭的是系统级语义歧义；后续 `INT-TODO-017` 才负责把 runtime 执行点与 projection tests 对齐到这份矩阵。
+
 ### 6.6 核心接口语义定义
 
 建议头文件分布：profiles/include/
