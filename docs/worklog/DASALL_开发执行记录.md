@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #568
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-022 新增 tools/services 状态语义 contract Gate
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/contract/tool/ServiceResultSemanticsContractTest.cpp`，将 `services/include/ServiceTypes.h` 中的 shared triad 语义显式提升为 contract：success 结果继续保持 code-free，failure triad 必须由 `ResultCode`、`ErrorInfo.failure_type` 与 `ErrorInfo.details.code` 一致闭合，且允许从 `ErrorInfo.details.code` 推导有效失败码。
+2. 更新 `tests/contract/CMakeLists.txt`，注册 `ServiceResultSemanticsContractTest`，并赋予 `gate-int-07` / `tools-services-result-semantics-gate` 标签，使 tools/services 状态语义拥有 contract 层正式入口。
+3. 更新 `tests/unit/tools/CMakeLists.txt` 与 `tests/CMakeLists.txt`，把 `BuiltinExecutorLaneResultCodeTest` 纳入同一组 Gate 标签，并新增窄 custom target `dasall_gate_int_07`，收敛 contract + unit 的 focused gate 入口。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-022` 标记为 Done，把交付物/验收命令收敛到 `dasall_gate_int_07`，并将当前串行位推进到 `INT-TODO-023`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_07)`
+   - 结果：通过；新的 Gate target 成功执行 `BuiltinExecutorLaneResultCodeTest` 与 `ServiceResultSemanticsContractTest`，label summary 同时出现 `gate-int-07` 与 `tools-services-result-semantics-gate`。
+
+### 结果
+
+1. Gate-INT-07 已不再依赖“只有 BuiltinExecutorLane unit test 能看见 triad inconsistency”的局部证据；services shared result triad 现在有了独立 contract 入口，并与 lane result-code unit 一起收敛为正式 Gate。
+2. tools/services 的 success/error/code 统一语义现在可在 contract + unit 双层同时守住：shared `ServiceTypes` triad 若漂移，`ServiceResultSemanticsContractTest` 会先红；lane 映射若回退，`BuiltinExecutorLaneResultCodeTest` 会继续补位。
+3. 下一串行任务为 `INT-TODO-023`，继续接线系统级 Gate discoverability 与 one-shot acceptance 命令。
+
 ## 记录 #567
 
 - 日期：2026-05-06

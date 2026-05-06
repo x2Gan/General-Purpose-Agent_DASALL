@@ -1383,6 +1383,22 @@ dasall_register_contract_test(
   tool
 )
 
+dasall_register_contract_test(
+  dasall_contract_service_result_semantics_test
+  ServiceResultSemanticsContractTest
+  tool/ServiceResultSemanticsContractTest.cpp
+  tool
+)
+
+target_include_directories(dasall_contract_service_result_semantics_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/services/include
+)
+
+set_tests_properties(ServiceResultSemanticsContractTest PROPERTIES
+  LABELS "contract;tool;gate-int-07;tools-services-result-semantics-gate"
+)
+
 # llm group (WP05-T010-B)
 dasall_register_contract_test(
   dasall_contract_llm_request_response_test

@@ -48,6 +48,13 @@ add_custom_target(dasall_gate_int_06
     dasall_llm_smoke_integration_test
 )
 
+add_custom_target(dasall_gate_int_07
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L gate-int-07
+  DEPENDS
+    dasall_contract_service_result_semantics_test
+    dasall_builtin_executor_lane_result_code_unit_test
+)
+
 add_custom_target(dasall_access_tests
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L access
   DEPENDS

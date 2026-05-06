@@ -237,6 +237,10 @@ dasall_add_tools_behavior_test(
 	BuiltinExecutorLaneResultCodeTest
 )
 
+set_tests_properties(BuiltinExecutorLaneResultCodeTest PROPERTIES LABELS
+	"unit;tools;gate-int-07;tools-services-result-semantics-gate"
+)
+
 dasall_add_tools_behavior_test(
 	dasall_tool_audit_bridge_unit_test
 	ToolAuditBridgeTest.cpp
