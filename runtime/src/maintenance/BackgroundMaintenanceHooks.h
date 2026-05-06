@@ -29,6 +29,7 @@ struct BackgroundMaintenanceTick {
 struct BackgroundMaintenanceHookOptions {
   std::function<std::int64_t()> now_ms;
   std::string event_name_prefix = "runtime.maintenance";
+  std::function<void(const RuntimeEventEnvelope& event)> fallback_sink = nullptr;
 };
 
 class BackgroundMaintenanceHooks final {

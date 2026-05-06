@@ -154,17 +154,21 @@ set(DASALL_INFRA_SECRET_PRIVATE_HEADERS
 )
 
 set(DASALL_INFRA_HEALTH_SOURCES
+  src/health/HealthConfigPolicy.cpp
   src/health/HealthMonitorFacade.cpp
   src/health/ProbeRegistry.cpp
   src/health/ProbeExecutor.cpp
+  src/health/ProbeScheduler.cpp
   src/health/HealthEvaluator.cpp
   src/health/RecoveryHintEmitter.cpp
 )
 
 set(DASALL_INFRA_HEALTH_PRIVATE_HEADERS
+  src/health/HealthConfigPolicy.h
   src/health/HealthMonitorFacade.h
   src/health/ProbeRegistry.h
   src/health/ProbeExecutor.h
+  src/health/ProbeScheduler.h
   src/health/HealthEvaluator.h
   src/health/RecoveryHintEmitter.h
 )
@@ -320,6 +324,7 @@ set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
+  include/health/HealthConfigTypes.h
   include/health/HealthErrors.h
   include/health/HealthStateTypes.h
   include/health/IHealthMonitor.h

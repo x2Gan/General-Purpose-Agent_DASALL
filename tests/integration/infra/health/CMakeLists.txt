@@ -25,3 +25,26 @@ dasall_register_health_integration_test(
   HealthWiringIntegrationTest
   HealthWiringIntegrationTest.cpp
 )
+
+add_executable(dasall_infra_health_cadence_integration_test
+  InfraHealthCadenceIntegrationTest.cpp
+)
+
+target_include_directories(dasall_infra_health_cadence_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/runtime/src
+)
+
+target_link_libraries(dasall_infra_health_cadence_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+    dasall_runtime
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_infra_health_cadence_integration_test)
+
+add_test(NAME InfraHealthCadenceIntegrationTest COMMAND dasall_infra_health_cadence_integration_test)
+set_tests_properties(InfraHealthCadenceIntegrationTest PROPERTIES LABELS "integration;health")

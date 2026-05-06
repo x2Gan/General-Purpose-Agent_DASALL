@@ -51,6 +51,10 @@ RuntimeHealthProbe::RuntimeHealthProbe(
     std::shared_ptr<IRuntimeHealthSignalProvider> signal_provider,
     RuntimeHealthProbeOptions options)
     : signal_provider_(std::move(signal_provider)), options_(std::move(options)) {
+  if (!options_.health_config.is_valid()) {
+    options_.health_config = infra::HealthResolvedConfig{};
+  }
+
   if (options_.detail_namespace.empty()) {
     options_.detail_namespace = std::string(kRuntimeHealthDetailNamespace);
   }
@@ -58,15 +62,18 @@ RuntimeHealthProbe::RuntimeHealthProbe(
   if (!options_.now_ms) {
     options_.now_ms = [this]() { return current_time_unix_ms(); };
   }
+
+  descriptor_ = make_descriptor(options_.health_config);
 }
 
-infra::ProbeDescriptor RuntimeHealthProbe::make_descriptor() {
+infra::ProbeDescriptor RuntimeHealthProbe::make_descriptor(
+    const infra::HealthResolvedConfig& config) {
   return infra::ProbeDescriptor{
       .probe_name = std::string(kRuntimeHealthProbeName),
       .group = std::string(kRuntimeHealthProbeGroup),
       .criticality = infra::ProbeCriticality::Critical,
-      .interval_ms = kRuntimeHealthProbeIntervalMs,
-      .timeout_ms = kRuntimeHealthProbeTimeoutMs,
+      .interval_ms = static_cast<std::int64_t>(config.readiness_interval_ms),
+      .timeout_ms = static_cast<std::int64_t>(config.probe_timeout_ms),
   };
 }
 
@@ -160,9 +167,11 @@ RuntimeHealthSample RuntimeHealthProbe::fallback_sample(std::string component) c
 }
 
 infra::HealthSnapshot RuntimeHealthProbe::collect_snapshot() {
-  RuntimeHealthSample sample = signal_provider_ != nullptr
-                                   ? signal_provider_->sample(kRuntimeHealthProbeTimeoutMs)
-                                   : fallback_sample("runtime.signal_provider");
+  RuntimeHealthSample sample =
+      signal_provider_ != nullptr
+          ? signal_provider_->sample(
+                static_cast<std::int64_t>(options_.health_config.probe_timeout_ms))
+          : fallback_sample("runtime.signal_provider");
   if (!sample.has_consistent_values()) {
     sample = fallback_sample("runtime.health_sample");
   }

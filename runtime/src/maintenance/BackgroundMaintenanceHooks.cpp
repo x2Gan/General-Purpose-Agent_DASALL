@@ -27,7 +27,11 @@ BackgroundMaintenanceHooks::BackgroundMaintenanceHooks(
 
 RuntimeEventPublishResult BackgroundMaintenanceHooks::publish_idle_tick(
     const BackgroundMaintenanceTick& tick) {
+  const auto event = make_idle_tick_event(tick);
   if (event_bus_ == nullptr) {
+    if (options_.fallback_sink) {
+      options_.fallback_sink(event);
+    }
     return RuntimeEventPublishResult{
         .accepted = false,
         .dropped_oldest = false,
@@ -36,7 +40,12 @@ RuntimeEventPublishResult BackgroundMaintenanceHooks::publish_idle_tick(
     };
   }
 
-  return event_bus_->publish(make_idle_tick_event(tick));
+  const auto publish_result = event_bus_->publish(event);
+  if (!publish_result.accepted && options_.fallback_sink) {
+    options_.fallback_sink(event);
+  }
+
+  return publish_result;
 }
 
 std::int64_t BackgroundMaintenanceHooks::default_now_ms() {

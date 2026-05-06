@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "health/HealthConfigTypes.h"
 #include "health/HealthStateTypes.h"
 #include "health/IHealthProbe.h"
 
@@ -16,8 +17,6 @@ namespace dasall::runtime {
 
 inline constexpr std::string_view kRuntimeHealthProbeName = "runtime.control_plane";
 inline constexpr std::string_view kRuntimeHealthProbeGroup = "readiness";
-inline constexpr std::int64_t kRuntimeHealthProbeIntervalMs = 5000;
-inline constexpr std::int64_t kRuntimeHealthProbeTimeoutMs = 100;
 inline constexpr std::string_view kRuntimeHealthDetailNamespace = "status://runtime/health";
 
 struct RuntimeHealthSample {
@@ -43,6 +42,7 @@ class IRuntimeHealthSignalProvider {
 };
 
 struct RuntimeHealthProbeOptions {
+  infra::HealthResolvedConfig health_config{};
   std::string detail_namespace = std::string(kRuntimeHealthDetailNamespace);
   std::function<std::int64_t()> now_ms;
 };
@@ -62,7 +62,8 @@ class RuntimeHealthProbe final : public infra::IHealthProbe {
   [[nodiscard]] infra::HealthSnapshot snapshot() const;
 
  private:
-  [[nodiscard]] static infra::ProbeDescriptor make_descriptor();
+  [[nodiscard]] static infra::ProbeDescriptor make_descriptor(
+      const infra::HealthResolvedConfig& config);
   [[nodiscard]] static infra::HealthSnapshot build_snapshot(
       const RuntimeHealthSample& sample,
       std::uint64_t version);
@@ -77,7 +78,7 @@ class RuntimeHealthProbe final : public infra::IHealthProbe {
 
   std::shared_ptr<IRuntimeHealthSignalProvider> signal_provider_;
   RuntimeHealthProbeOptions options_{};
-  infra::ProbeDescriptor descriptor_ = make_descriptor();
+  infra::ProbeDescriptor descriptor_{};
   mutable std::mutex snapshot_mutex_;
   std::optional<RuntimeHealthSample> latest_sample_;
   std::optional<infra::HealthSnapshot> latest_snapshot_;

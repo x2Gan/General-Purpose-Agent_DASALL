@@ -111,6 +111,32 @@ void test_runtime_health_probe_fails_closed_when_signal_provider_is_missing() {
               "missing signal provider should be surfaced in failed_components");
 }
 
+void test_runtime_health_probe_consumes_health_config_projection_for_descriptor() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  dasall::infra::HealthResolvedConfig config;
+  config.readiness_interval_ms = 9000U;
+  config.probe_timeout_ms = 750U;
+
+  RuntimeHealthProbe probe(nullptr, RuntimeHealthProbeOptions{
+                                        .health_config = config,
+                                        .detail_namespace = "status://runtime/health",
+                                        .now_ms = []() { return 1700000002200LL; },
+                                    });
+
+  const auto& descriptor = probe.descriptor();
+
+  assert_true(descriptor.has_required_fields(),
+              "runtime health probe should keep a valid descriptor after cadence projection injection");
+  assert_equal(9000,
+               static_cast<int>(descriptor.interval_ms),
+               "runtime health probe should consume readiness cadence from the health config projection");
+  assert_equal(750,
+               static_cast<int>(descriptor.timeout_ms),
+               "runtime health probe should consume timeout budget from the health config projection");
+}
+
 }  // namespace
 
 int main() {
@@ -118,6 +144,7 @@ int main() {
     test_runtime_health_probe_reports_healthy_snapshot_when_all_signals_are_green();
     test_runtime_health_probe_marks_degraded_components_when_event_bus_and_telemetry_are_stressed();
     test_runtime_health_probe_fails_closed_when_signal_provider_is_missing();
+    test_runtime_health_probe_consumes_health_config_projection_for_descriptor();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

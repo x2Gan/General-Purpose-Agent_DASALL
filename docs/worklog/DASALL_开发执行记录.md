@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #563
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-029 落 HealthConfigPolicy / ProbeScheduler baseline 并校准 event publish fallback
+- 状态：已完成
+
+### 改动
+
+1. 新增 `infra/include/health/HealthConfigTypes.h`、`infra/src/health/HealthConfigPolicy.h/.cpp` 与 `infra/src/health/ProbeScheduler.h/.cpp`，冻结 health 6.9 的默认 cadence / threshold 投影视图，落实 `default < profile < deploy` 合成顺序与 `validate_thresholds()` 校验，并沿 `platform::ITimer` seam 补齐 `start/stop/tick_once()` baseline；`ITimer` 缺失时会进入同步 fallback，而不会私自切换到 sleep loop 或第二套 timer 抽象。
+2. 更新 `runtime/src/health/RuntimeHealthProbe.h/.cpp` 与 `runtime/src/maintenance/BackgroundMaintenanceHooks.h/.cpp`：runtime health probe 改为消费 `HealthResolvedConfig` 的 readiness cadence / timeout 投影，不再自带第二套私有 cadence 默认值；background maintenance hooks 在 event sink 缺失或拒收时会保留本地 fallback 事件，而不是只剩静默 fail-closed。
+3. 新增 `tests/unit/infra/health/HealthConfigPolicyTest.cpp`、`tests/unit/infra/health/ProbeSchedulerTest.cpp`、`tests/integration/infra/health/InfraHealthCadenceIntegrationTest.cpp`，并更新 `tests/unit/infra/CMakeLists.txt`、`tests/integration/infra/health/CMakeLists.txt`、`tests/unit/runtime/RuntimeHealthProbeTest.cpp`、`tests/unit/runtime/RuntimeBackgroundMaintenanceHookTest.cpp`：分别锁住默认值/覆盖顺序/非法阈值、`ITimer` 调度与 fallback、runtime cadence consume 与 maintenance fallback evidence。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-029` 标记为 Done，并把当前串行位推进说明从 028 更新到 029 完成态。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_health_config_policy_unit_test, dasall_probe_scheduler_unit_test, dasall_infra_health_cadence_integration_test, dasall_runtime_background_maintenance_hook_unit_test, dasall_runtime_health_probe_unit_test)`
+   - 结果：通过；029 新增的 health baseline 实现、runtime cadence consume 校准与 fallback seam 全部成功编译链接。
+2. `RunCtest_CMakeTools(tests=HealthConfigPolicyTest, ProbeSchedulerTest, InfraHealthCadenceIntegrationTest, RuntimeBackgroundMaintenanceHookTest, RuntimeHealthProbeTest)`
+   - 结果：通过；5 个 focused gates 全绿，`build/vscode-linux-ninja` 仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+3. `cmake --build build-ci --target dasall_health_config_policy_unit_test dasall_probe_scheduler_unit_test dasall_infra_health_cadence_integration_test dasall_runtime_background_maintenance_hook_unit_test dasall_runtime_health_probe_unit_test`
+   - 结果：通过；`build-ci` 目录沿既有 Ninja 生成器完成 029 相关窄编译，补齐双轨验证证据而未引入聚合 access/infra 噪声目标。
+
+### 结果
+
+1. `HealthConfigPolicy` 已不再缺位：health cadence / timeout / threshold 的系统默认值、Profile/部署覆盖优先级与阈值关系现在有了单一合成入口，且明确不开放 `runtime_override`。
+2. `ProbeScheduler` 已沿既有 `ITimer` seam 落地最小可执行骨架；timer provider 缺失时，系统会退化到同步 `tick_once()` + fallback evidence，而不会再把“timer seam 缺失”当成 stale blocker。
+3. runtime 现在只消费 health cadence 投影，background maintenance 在 event sink 缺失时仍会保留本地 fallback 事件证据；因此 event bus 尚未冻结并不会闭锁 `evaluate_now()` 或健康可观测性。
+
 ## 记录 #562
 
 - 日期：2026-05-06

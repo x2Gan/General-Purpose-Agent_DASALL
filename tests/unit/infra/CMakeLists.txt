@@ -1829,6 +1829,47 @@ dasall_apply_common_options(dasall_health_monitor_facade_unit_test)
 add_test(NAME HealthMonitorFacadeTest COMMAND dasall_health_monitor_facade_unit_test)
 set_tests_properties(HealthMonitorFacadeTest PROPERTIES LABELS "unit;health")
 
+add_executable(dasall_health_config_policy_unit_test
+  health/HealthConfigPolicyTest.cpp
+)
+
+target_include_directories(dasall_health_config_policy_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_health_config_policy_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_health_config_policy_unit_test)
+
+add_test(NAME HealthConfigPolicyTest COMMAND dasall_health_config_policy_unit_test)
+set_tests_properties(HealthConfigPolicyTest PROPERTIES LABELS "unit;health")
+
+add_executable(dasall_probe_scheduler_unit_test
+  health/ProbeSchedulerTest.cpp
+)
+
+target_include_directories(dasall_probe_scheduler_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_probe_scheduler_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_probe_scheduler_unit_test)
+
+add_test(NAME ProbeSchedulerTest COMMAND dasall_probe_scheduler_unit_test)
+set_tests_properties(ProbeSchedulerTest PROPERTIES LABELS "unit;health")
+
 add_executable(dasall_probe_registry_unit_test
   health/ProbeRegistryTest.cpp
 )

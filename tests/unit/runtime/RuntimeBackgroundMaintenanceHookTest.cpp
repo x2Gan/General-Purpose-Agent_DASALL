@@ -80,9 +80,19 @@ void test_background_maintenance_hooks_publish_idle_tick_events_to_runtime_event
 }
 
 void test_background_maintenance_hooks_fail_closed_without_event_bus() {
+  using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
-  BackgroundMaintenanceHooks hooks(nullptr);
+  std::vector<RuntimeEventEnvelope> fallback_events;
+  BackgroundMaintenanceHooks hooks(
+      nullptr,
+      BackgroundMaintenanceHookOptions{
+          .now_ms = []() { return 1700000003009LL; },
+          .event_name_prefix = "runtime.maintenance",
+          .fallback_sink = [&fallback_events](const RuntimeEventEnvelope& event) {
+            fallback_events.push_back(event);
+          },
+      });
 
   const auto publish_result = hooks.publish_idle_tick(BackgroundMaintenanceTick{
       .tick_sequence = 1U,
@@ -98,6 +108,11 @@ void test_background_maintenance_hooks_fail_closed_without_event_bus() {
 
   assert_true(!publish_result.accepted,
               "publish_idle_tick should fail closed when no RuntimeEventBus is available");
+  assert_equal(1,
+               static_cast<int>(fallback_events.size()),
+               "publish_idle_tick should preserve a local fallback event when no RuntimeEventBus is available");
+  assert_true(has_attribute(fallback_events.front(), "health_probe_due", "false"),
+              "local fallback events should preserve the idle tick health attribute set");
 }
 
 }  // namespace
