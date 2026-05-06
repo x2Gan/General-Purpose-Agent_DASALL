@@ -56,6 +56,29 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
          composition.dependency_set->has_live_unary_ports();
 }
 
+[[nodiscard]] std::string make_tool_call_id(const contracts::AgentRequest& request) {
+  return std::string{"tool-call-"} +
+         request.request_id.value_or(std::string{"req-live-unary"});
+}
+
+[[nodiscard]] std::string make_recovery_binding_token(
+    const contracts::AgentRequest& request,
+    const contracts::Checkpoint& checkpoint) {
+  return make_resume_binding_token(
+      request.session_id.value_or(std::string{"session-live-unary"}),
+      checkpoint.checkpoint_id.value_or(std::string{"chk-live-unary"}));
+}
+
+[[nodiscard]] std::uint32_t pending_interaction_timeout_ms(
+    const OrchestratorComposition& composition) {
+  if (composition.policy_snapshot != nullptr) {
+    return static_cast<std::uint32_t>(
+        composition.policy_snapshot->timeout_policy().workflow.timeout_ms);
+  }
+
+  return 60000U;
+}
+
 void append_unique_string(std::vector<std::string>& destination,
                           const std::string& value) {
   if (value.empty()) {
@@ -667,11 +690,12 @@ void append_retrieval_evidence_ref(
     const OrchestratorComposition& composition) {
   contracts::ToolRequest tool_request;
   const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  const auto tool_call_id = make_tool_call_id(request);
   const auto* tool_hint = action_decision.tool_intent_hint.has_value()
                               ? &(*action_decision.tool_intent_hint)
                               : nullptr;
   tool_request.request_id = request.request_id;
-  tool_request.tool_call_id = std::string{"tool-call-"} + request_id;
+  tool_request.tool_call_id = tool_call_id;
   if (tool_hint != nullptr && !tool_hint->tool_name.empty()) {
     tool_request.tool_name = tool_hint->tool_name;
   } else {
@@ -694,7 +718,7 @@ void append_retrieval_evidence_ref(
   } else {
     tool_request.timeout_ms = 1000U;
   }
-  tool_request.idempotency_key = std::string{"idem-"} + request_id;
+  tool_request.idempotency_key = tool_call_id;
   tool_request.tags = std::vector<std::string>{"runtime", "integration", "true-port"};
   return tool_request;
 }
@@ -921,7 +945,8 @@ void push_trace(std::vector<OrchestratorStageTrace>* trace,
       .interaction_kind = interaction_kind,
       .prompt_token = composition.waiting_prompt_token + "-" +
                       pending_interaction_kind_name(interaction_kind),
-      .deadline_ms = static_cast<std::int64_t>(current_time_ms() + 60000),
+      .deadline_ms = static_cast<std::int64_t>(
+          current_time_ms() + pending_interaction_timeout_ms(composition)),
       .blocking_reason = blocking_reason,
       .resume_channel = composition.waiting_resume_channel,
       .input_schema_hint = composition.waiting_input_schema_hint,
@@ -1050,6 +1075,7 @@ struct SessionUpdateResult {
     const contracts::Checkpoint& checkpoint,
     const contracts::BudgetSnapshot& budget_snapshot,
     const std::string& goal_id) {
+  const auto tool_call_id = make_tool_call_id(request);
   const auto error_info = contracts::ErrorInfo{
       .failure_type = contracts::ResultCodeCategory::Runtime,
       .retryable = true,
@@ -1061,7 +1087,7 @@ struct SessionUpdateResult {
       },
       .source_ref = contracts::ErrorSourceRefMinimal{
           .ref_type = "tool_call",
-          .ref_id = "tool-call-001",
+          .ref_id = tool_call_id,
       },
   };
 
@@ -1086,7 +1112,7 @@ struct SessionUpdateResult {
           .created_at = current_time_ms(),
           .error = error_info,
           .side_effects = std::nullopt,
-          .tool_call_id = std::string("tool-call-001"),
+          .tool_call_id = tool_call_id,
           .worker_task_id = std::nullopt,
           .request_id = request.request_id,
           .goal_id = goal_id,
@@ -1096,7 +1122,7 @@ struct SessionUpdateResult {
       .checkpoint = checkpoint,
       .idempotency_and_side_effect_report = contracts::IdempotencyAndSideEffectReport{
           .replay_safe = true,
-          .idempotency_key = std::string("resume-") + request.request_id.value_or("req"),
+          .idempotency_key = make_recovery_binding_token(request, checkpoint),
           .side_effects_present = false,
           .non_replayable_reason = std::nullopt,
       },
@@ -1128,6 +1154,7 @@ struct SessionUpdateResult {
       const contracts::Checkpoint& checkpoint,
       contracts::BudgetSnapshot budget_snapshot,
       const std::string& goal_id) {
+      const auto tool_call_id = make_tool_call_id(request);
       auto exhausted_budget_snapshot = make_exhausted_budget_snapshot(
         std::move(budget_snapshot),
         contracts::BudgetType::ToolCall,
@@ -1144,7 +1171,7 @@ struct SessionUpdateResult {
         },
         .source_ref = contracts::ErrorSourceRefMinimal{
             .ref_type = "tool_call",
-            .ref_id = "tool-call-001",
+            .ref_id = tool_call_id,
         },
       };
 
@@ -1169,7 +1196,7 @@ struct SessionUpdateResult {
           .created_at = current_time_ms(),
           .error = error_info,
           .side_effects = std::nullopt,
-          .tool_call_id = std::string("tool-call-001"),
+          .tool_call_id = tool_call_id,
           .worker_task_id = std::nullopt,
           .request_id = request.request_id,
           .goal_id = goal_id,
@@ -1179,7 +1206,7 @@ struct SessionUpdateResult {
         .checkpoint = checkpoint,
         .idempotency_and_side_effect_report = contracts::IdempotencyAndSideEffectReport{
           .replay_safe = true,
-          .idempotency_key = std::string("resume-") + request.request_id.value_or("req"),
+          .idempotency_key = make_recovery_binding_token(request, checkpoint),
           .side_effects_present = false,
           .non_replayable_reason = std::nullopt,
         },

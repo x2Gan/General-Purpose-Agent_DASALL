@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #560
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-017 对齐 RuntimePolicySnapshot 与 Recovery Context 在 runtime 执行点的消费
+- 状态：已完成
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.cpp`，新增 runtime-owned `tool_call_id` / recovery binding token helper，并把 live tool request 的 `idempotency_key` 收敛为 `tool_call_id` 复用值；同时让 waiting interaction 的 `deadline_ms` 从 `RuntimePolicySnapshot.timeout_policy().workflow.timeout_ms` 绑定，而不是固定 `+60000ms` 私有常量。
+2. 同一文件将 synthetic abort-safe / budget-exhausted recovery request 的 `tool_call_id`、`ErrorInfo.source_ref.ref_id` 与 `idempotency_and_side_effect_report.idempotency_key` 改为 request/checkpoint 派生的 runtime-owned 标识，不再使用 `tool-call-001` / `resume-<request_id>` 这类私有猜测字符串。
+3. 新增 `tests/integration/agent_loop/RuntimePolicyConsumerIntegrationTest.cpp` 与 `tests/integration/agent_loop/RuntimeRecoveryContextIntegrationTest.cpp`，并更新 `tests/integration/agent_loop/CMakeLists.txt` 注册新 gate：前者锁住 workflow deadline 与 tool timeout/idempotency 的 policy consume points，后者锁住 `RecoveryManager::evaluate/apply` 对 resume binding token 与 runtime budget snapshot 的消费语义。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-017` 标记为 Done，并把 11.1 当前串行位推进到 `INT-TODO-027`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_runtime_policy_consumer_integration_test, dasall_runtime_recovery_context_integration_test)`
+   - 结果：通过；017 新增的两个 integration targets 成功编译链接。
+2. `RunCtest_CMakeTools(tests=RuntimePolicyConsumerIntegrationTest, RuntimeRecoveryContextIntegrationTest)`
+   - 结果：通过；workflow deadline、tool timeout/idempotency 和 recovery binding token / budget snapshot 两组 focused gates 均转绿，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+3. `Build_CMakeTools(target=dasall_integration_tests)`
+   - 结果：聚合 target 在本轮新 tests 通过后仍命中仓库既有无关失败 `RuntimeUnaryFixtureIntegrationTest`、`RuntimeResumeIntegrationTest`、`RuntimeCheckpointReplayRegressionTest` 的 “requires a ready facade” 旧红灯；不属于 017 变更面，已保留为后续系统 gate blocker 证据。
+
+### 结果
+
+1. runtime 在 017 覆盖的执行点上已不再用私有常量解释 shared policy 与 recovery context：waiting deadline 绑定 workflow timeout，tool idempotency 复用 runtime-owned `tool_call_id`，synthetic recovery request 复用 session/checkpoint 绑定 token。
+2. `RecoveryManager::evaluate/apply` 的 runtime-owned 恢复上下文消费已被新的 integration gate 锁住：resume binding token 会作为 opaque retry evidence 被原样复用，budget snapshot exhaustion 会稳定走 degraded escalation，而不会回退到 cognition 私有解释。
+3. 下一串行任务为 `INT-TODO-027`，继续修复 Access `AgentRequest` handoff、production pipeline 与 readiness。
+
 ## 记录 #559
 
 - 日期：2026-05-06

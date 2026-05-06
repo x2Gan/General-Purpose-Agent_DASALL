@@ -57,6 +57,18 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeResumeIntegrationTest.cpp
 )
 
+dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_policy_consumer_integration_test
+  RuntimePolicyConsumerIntegrationTest
+  RuntimePolicyConsumerIntegrationTest.cpp
+)
+
+dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_recovery_context_integration_test
+  RuntimeRecoveryContextIntegrationTest
+  RuntimeRecoveryContextIntegrationTest.cpp
+)
+
 target_link_libraries(dasall_runtime_resume_integration_test
   PRIVATE
     dasall_memory
@@ -75,6 +87,13 @@ target_link_libraries(dasall_runtime_required_optional_ports_integration_test
     dasall_cognition
     dasall_memory
     dasall_sqlite3
+    dasall_tools
+)
+
+target_link_libraries(dasall_runtime_policy_consumer_integration_test
+  PRIVATE
+    dasall_cognition
+    dasall_memory
     dasall_tools
 )
 
