@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #564
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-018 修复并固化 default unary 主 Gate
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/cognition/CMakeLists.txt` 与 `tests/contract/CMakeLists.txt`，把 `RuntimeUnaryIntegrationTest`、`CognitionRuntimeIntegrationTest`、`MainFlowContractE2ETest` 统一挂到 `gate-int-03` / `default-unary-gate` 标签下，避免 Gate-INT-03 继续依赖手工拼接测试名。
+2. 更新 `tests/CMakeLists.txt`，新增窄 custom target `dasall_gate_int_03`，让 default unary 主 Gate 具备单独的 CMake 入口，并显式依赖上述三条 executable targets。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-018` 标记为 Done，把交付物/验收命令收敛到 `dasall_gate_int_03`，并将当前串行位推进到 `INT-TODO-019`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_03)`
+   - 结果：通过；新的 Gate target 会稳定执行 `MainFlowContractE2ETest`、`RuntimeUnaryIntegrationTest`、`CognitionRuntimeIntegrationTest` 三条主 Gate，label summary 同时出现 `gate-int-03` 与 `default-unary-gate`。
+
+### 结果
+
+1. Gate-INT-03 已不再只是“测试名清单”：它现在有统一 label、统一 target 和统一 focused 入口，能够把 contract + runtime integration + cognition integration 作为同一条 default unary 主 Gate 执行。
+2. `RuntimeUnaryFixtureIntegrationTest` 继续保留为 runtime-local fixture 证据，但不会再与 Gate-INT-03 混淆；default unary 主门的正式入口收敛为 `dasall_gate_int_03`。
+3. 下一串行任务为 `INT-TODO-019`，继续新增 structured evidence preservation integration Gate。
+
 ## 记录 #563
 
 - 日期：2026-05-06

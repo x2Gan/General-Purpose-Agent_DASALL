@@ -44,6 +44,10 @@ dasall_add_cognition_integration_test(
   "integration;cognition"
 )
 
+set_tests_properties(CognitionRuntimeIntegrationTest PROPERTIES
+  LABELS "integration;cognition;gate-int-03;default-unary-gate"
+)
+
 dasall_add_cognition_integration_test(
   dasall_cognition_runtime_interaction_contract_integration_test
   CognitionRuntimeInteractionContractTest

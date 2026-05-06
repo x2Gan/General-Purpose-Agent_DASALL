@@ -1672,6 +1672,8 @@ dasall_register_contract_test(
   e2e
 )
 
+set_tests_properties(MainFlowContractE2ETest PROPERTIES LABELS "contract;e2e;gate-int-03;default-unary-gate")
+
 # smoke group (WP03-T016-B)
 dasall_register_contract_test(
   dasall_contract_main_flow_overlap_test

@@ -45,6 +45,10 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeUnaryIntegrationTest.cpp
 )
 
+set_tests_properties(RuntimeUnaryIntegrationTest PROPERTIES
+  LABELS "integration;runtime;gate-int-03;default-unary-gate"
+)
+
 dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_required_optional_ports_integration_test
   RuntimeRequiredOptionalPortsIntegrationTest
