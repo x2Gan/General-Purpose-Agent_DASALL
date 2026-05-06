@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #571
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-024 回写系统集成 Gate、交付物与 worklog 证据
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/integration/deliverables/INT-TODO-024-系统集成Gate与交付证据回写收口.md`，把 `Gate-INT-01 ~ 09` 的当前状态、正式命令、长期交付物路径、后继任务与残余风险集中收口为长期 deliverable，不再只散落在 TODO 行和 worklog 记录中。
+2. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-024` 标记为 Done，并把正式验收收敛到“`dasall_gate_int_09` + `dasall_gate_int_08` + 当前 build `ctest -N` + deliverable / review / worklog 回写”的证据闭环。
+3. 更新 `docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md`，新增 `Gate` 证据闭环附录：保留当天初始评审问题叙述，同时把 `INT-TODO-018 ~ 023、030` 已完成的 Gate-INT-03 ~ 09 正式命令、长期路径、下一步与残余风险写成当前口径，避免 review doc 继续停留在初始红灯判断。
+
+### 验证
+
+1. `ctest --test-dir build/vscode-linux-ninja -N`
+   - 结果：通过；当前 build 可统一发现 Gate-INT-03 ~ 09 对应的正式 test-name / labels / targets，不再依赖手工散写测试名。
+2. `rg -n "Gate-INT-|INT-TODO-024|dasall_gate_int_08|dasall_gate_int_09|记录 #56[4-9]|记录 #570|记录 #571" docs/todos/integration/DASALL_系统集成专项TODO.md docs/todos/integration/deliverables/INT-TODO-024-系统集成Gate与交付证据回写收口.md docs/worklog/DASALL_开发执行记录.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md docs/ssot/SystemIntegrationGateMatrix.md`
+   - 结果：通过；Gate-INT-03 ~ 09 的正式命令、TODO 状态、deliverable、review addendum 与 worklog 记录已对齐，且 `INT-TODO-024` 本身具备独立可追溯证据。
+
+### 结果
+
+1. Gate-INT-09 现在不再只是 “discoverability + one-shot acceptance” 的命令层定义；它已经补齐 TODO、deliverable、worklog、review doc 四类长期证据资产，满足 `SystemIntegrationGateMatrix` 对 operations / evidence gate 的定义。
+2. `dasall_gate_int_09` 继续承担当前阶段 `Gate-INT-03 ~ 07` 与 regression smoke 的 one-shot acceptance，`dasall_gate_int_08` 继续承担 Access focused release gate；二者与当前 build `ctest -N` 一起构成系统级正式命令口径。
+3. 当前用户请求的系统集成串行范围 `INT-TODO-018 ~ 024、030` 已全部完成；后续若继续系统集成专项，需要重新指定新的未完成任务，而不是再重复文档闭环。
+
 ## 记录 #570
 
 - 日期：2026-05-06

@@ -242,7 +242,7 @@
 | INT-TODO-021 | Done | 新增 required/optional ports 与 degraded mode integration/profile Gate | INT-TODO-001；INT-TODO-014；INT-TODO-017 | default mode、degraded mode、profile compatibility、readiness tag | L2 | `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/llm/CMakeLists.txt`、`tests/CMakeLists.txt` | `RuntimeRequiredOptionalPortsIntegrationTest`、`RuntimeProfileCompatibilityTest`、`LLMSubsystemSmokeIntegrationTest`、`gate-int-06` label、`required-optional-degraded-gate` label、`dasall_gate_int_06` | `RuntimeRequiredOptionalPortsIntegrationTest`、`RuntimeProfileCompatibilityTest`、`LLMSubsystemSmokeIntegrationTest` | `Build_CMakeTools(target=dasall_gate_int_06)` | 014、017 | INT-BLK-01 | port mode 语义和 consume points 已落地 | 新增 Gate-INT-06 labels / `dasall_gate_int_06` target 与 focused evidence | required / optional / degraded / profile compatibility 在 `gate-int-06` / `required-optional-degraded-gate` discoverability 下稳定复现 |
 | INT-TODO-022 | Done | 新增 tools/services 状态语义 contract Gate | INT-TODO-016 | success/error/code 统一语义，避免结果码漂移重新出现 | L2 | `tests/contract/tool/ServiceResultSemanticsContractTest.cpp`、`tests/contract/CMakeLists.txt`、`tests/unit/tools/CMakeLists.txt`、`tests/CMakeLists.txt` | `ServiceResultSemanticsContractTest`、`BuiltinExecutorLaneResultCodeTest`、`gate-int-07` label、`tools-services-result-semantics-gate` label、`dasall_gate_int_07` | `ServiceResultSemanticsContractTest`、`BuiltinExecutorLaneResultCodeTest` | `Build_CMakeTools(target=dasall_gate_int_07)` | 016 | 无 | 统一语义实现完成 | 新增 `ServiceResultSemanticsContractTest`、Gate-INT-07 labels / `dasall_gate_int_07` target 与 focused evidence | result semantics 发生回退时能在 `gate-int-07` / `tools-services-result-semantics-gate` 下被 unit/contract 第一时间拦截 |
 | INT-TODO-023 | Done | 接线系统级 Gate discoverability 与 one-shot acceptance 命令 | INT-TODO-005；TODO 格式标准 | `ctest -N` discoverability、聚合 target、聚焦 test regex、统一验收命令 | L2 | `tests/VerifySystemGateDiscoverability.cmake`、`tests/integration/CMakeLists.txt`、`tests/contract/CMakeLists.txt`、`tests/CMakeLists.txt`、`docs/todos/integration/DASALL_系统集成专项TODO.md` | `DASALL_SYSTEM_GATE_ACCEPTANCE_*` 清单、discoverability verifier、`dasall_gate_int_09` one-shot target | `ctest -N`、focused integration matrix | `Build_CMakeTools(target=dasall_gate_int_09)` | 018、019、020、021、022 | INT-BLK-05 | 关键 Gate 已具 discoverability 与稳定命名 | 新增 discoverability verifier、`dasall_gate_int_09` target 与更新后的 TODO 文档 | `ctest -N` discoverability 与 one-shot acceptance 已收敛到同一条正式入口，且当前只覆盖 Gate-INT-03~07 与 regression smoke matrix |
-| INT-TODO-024 | NotStarted | 回写系统集成 Gate、交付物与 worklog 证据 | INT-TODO-005；DASALL 开发执行规范 | 专项 TODO、deliverables、集成评审报告、开发执行记录之间的证据闭环 | L2 | `docs/todos/integration/DASALL_系统集成专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md`、`docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md` | Gate evidence、blocker status、residual risk | 文档一致性与 current-build 复验 | `rg -n "Gate-INT-|INT-TODO-|RuntimeUnaryIntegrationTest|InfraDiagnosticsSmokeTest|RuntimeEvidenceProjectionIntegrationTest" docs/todos/integration/DASALL_系统集成专项TODO.md docs/worklog/DASALL_开发执行记录.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md && ctest --test-dir build-ci -N` | 023 | INT-BLK-05 | discoverability 与 focused matrix 已稳定 | 更新后的 TODO / worklog / review doc | 每个 Gate 有命令证据、交付物路径、当前状态、后继任务和残余风险，不再只靠口头结论 |
+| INT-TODO-024 | Done | 回写系统集成 Gate、交付物与 worklog 证据 | INT-TODO-005；DASALL 开发执行规范 | 专项 TODO、deliverables、集成评审报告、开发执行记录之间的证据闭环 | L2 | `docs/todos/integration/DASALL_系统集成专项TODO.md`、`docs/todos/integration/deliverables/INT-TODO-024-系统集成Gate与交付证据回写收口.md`、`docs/worklog/DASALL_开发执行记录.md`、`docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md` | Gate evidence、blocker status、residual risk、review addendum | 文档一致性与 current-build 复验 | `rg -n "Gate-INT-|INT-TODO-024|dasall_gate_int_08|dasall_gate_int_09|记录 #56[4-9]|记录 #570|记录 #571" docs/todos/integration/DASALL_系统集成专项TODO.md docs/todos/integration/deliverables/INT-TODO-024-系统集成Gate与交付证据回写收口.md docs/worklog/DASALL_开发执行记录.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md docs/ssot/SystemIntegrationGateMatrix.md && ctest --test-dir build/vscode-linux-ninja -N` | 023、030 | INT-BLK-05 | discoverability、one-shot 与 Access focused matrix 已稳定 | 新增 deliverable、更新后的 TODO / worklog / review doc | 每个 Gate 现在都有正式命令、长期交付物路径、当前状态、后继任务和残余风险，review doc 与 worklog 不再落后于 Gate 实际状态 |
 | INT-TODO-030 | Done | 固化 Access v1 production Gate 与证据分层 | INT-TODO-025；INT-TODO-027；INT-TODO-028；ACC-TODO-034/035/036/049/050 | Access v1 release gate、CLI->daemon、HTTP->gateway、async receipt、health readiness、profile/contracts guard、Access 证据回写 | L2 | `tests/integration/access/`、`tests/contract/`、`docs/todos/access/`、`docs/todos/integration/`、`docs/worklog/DASALL_开发执行记录.md` | `AccessGatewayPipelineIntegrationTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`、`gate-int-08` label、`access-v1-production-gate` label、`dasall_gate_int_08` | Access v1 E2E / contract gate 与文档回写 | `Build_CMakeTools(target=dasall_gate_int_08)` | 027、028 | INT-BLK-06 | Access 主链与安全治理 focused tests 已稳定 | Gate-INT-08 aliases / labels / target 与 Access TODO / worklog 回写 | Access v1 不再以 mock pipeline、ping liveness 或局部 envelope 字段作为 release 证据，且系统 TODO / 子系统 TODO / worklog 三处口径一致 |
 
 ## 7. 执行顺序建议
@@ -318,7 +318,7 @@
 Build_CMakeTools(target=dasall_gate_int_09)
 ```
 
-说明：当前 one-shot acceptance 已收敛 018 ~ 023 的关键 Gate 与 regression smoke matrix；`Gate-INT-08` 已由 `INT-TODO-030` 固化为独立 focused 入口 `Build_CMakeTools(target=dasall_gate_int_08)`，在 `INT-TODO-024` 吸收文档证据闭环前仍保持与 `dasall_gate_int_09` 分离。
+说明：当前 one-shot acceptance 继续由 `Build_CMakeTools(target=dasall_gate_int_09)` 收敛 018 ~ 023 的关键 Gate 与 regression smoke matrix；`Gate-INT-08` 仍保留独立 focused 入口 `Build_CMakeTools(target=dasall_gate_int_08)`。自 `INT-TODO-024` 起，两条命令与 `ctest --test-dir build/vscode-linux-ninja -N`、deliverable、worklog、review doc 共同构成系统级长期证据闭环。
 
 ### 9.3 质量门清单
 
@@ -367,7 +367,7 @@ Build_CMakeTools(target=dasall_gate_int_09)
 
 ### 11.1 是否可直接进入执行
 
-可以，但不建议直接并行打包多个 Build 行。当前 001、002、003、004、005、006、007、008、009、010、011、012、013、014、015、016、017、018、019、020、021、022、023、025、026、027、028、029、030 已完成；当前用户请求的 Gate 固化任务已经把 Access v1 production ingress 收敛到 `dasall_gate_int_08`，若继续系统串行推进，下一候选位为 `INT-TODO-024` 的文档证据闭环任务。
+可以，但不建议直接并行打包多个 Build 行。当前 001、002、003、004、005、006、007、008、009、010、011、012、013、014、015、016、017、018、019、020、021、022、023、024、025、026、027、028、029、030 已完成；当前用户请求的系统 Gate 固化与文档证据闭环任务已全部落盘，若继续推进系统集成专项，需要重新选定未在本轮请求中的后续任务。
 
 ### 11.2 当前最细可执行粒度
 
@@ -380,7 +380,7 @@ Build_CMakeTools(target=dasall_gate_int_09)
 1. 先做设计冻结，不要一开始就同时改 runtime、memory、knowledge、infra、access 多条实现线。
 2. 第一轮 Build 只聚焦 012、015、016、027 四个最直接对现有红灯、高风险语义与 Access 主链断裂负责的任务。
 3. 第二轮 Build 再推进 013、014、017、028、029，把 structured evidence、required/optional semantics、Access 安全治理与 health residual 接入系统主链或 post-unary 队列。
-4. 最后用 018 ~ 024、030 统一收口 Gate、discoverability 与 worklog 证据。
+4. 018 ~ 024、030 已完成 Gate、discoverability、deliverable、review 与 worklog 证据收口；后续若扩展 Gate 矩阵，必须复用同样的长期证据回写规则。
 
 ## 12. 未决问题处置表
 
