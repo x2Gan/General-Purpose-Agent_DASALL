@@ -6,6 +6,10 @@ add_executable(dasall_runtime_control_plane_surface_unit_test
   RuntimeControlPlaneSurfaceTest.cpp
 )
 
+add_executable(dasall_runtime_dependency_set_readiness_unit_test
+  RuntimeDependencySetReadinessTest.cpp
+)
+
 add_executable(dasall_runtime_agent_orchestrator_skeleton_unit_test
   AgentOrchestratorSkeletonTest.cpp
 )
@@ -89,6 +93,12 @@ target_link_libraries(dasall_runtime_smoke_test
 )
 
 target_link_libraries(dasall_runtime_control_plane_surface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+)
+
+target_link_libraries(dasall_runtime_dependency_set_readiness_unit_test
   PRIVATE
     dasall_test_support
     dasall_runtime
@@ -309,6 +319,7 @@ target_compile_definitions(dasall_runtime_cognition_loop_smoke_unit_test
 
 dasall_apply_common_options(dasall_runtime_smoke_test)
 dasall_apply_common_options(dasall_runtime_control_plane_surface_unit_test)
+dasall_apply_common_options(dasall_runtime_dependency_set_readiness_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_skeleton_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_controller_assembly_unit_test)
 dasall_apply_common_options(dasall_runtime_error_code_unit_test)
@@ -334,6 +345,9 @@ set_tests_properties(RuntimeBuildLivenessSmokeTest PROPERTIES LABELS "build-live
 
 add_test(NAME RuntimeControlPlaneSurfaceTest COMMAND dasall_runtime_control_plane_surface_unit_test)
 set_tests_properties(RuntimeControlPlaneSurfaceTest PROPERTIES LABELS "unit;runtime")
+
+add_test(NAME RuntimeDependencySetReadinessTest COMMAND dasall_runtime_dependency_set_readiness_unit_test)
+set_tests_properties(RuntimeDependencySetReadinessTest PROPERTIES LABELS "unit;runtime")
 
 add_test(NAME AgentOrchestratorSkeletonTest COMMAND dasall_runtime_agent_orchestrator_skeleton_unit_test)
 set_tests_properties(AgentOrchestratorSkeletonTest PROPERTIES LABELS "unit")

@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #553
+
+- 日期：2026-05-06
+- 阶段：integration/build-surface
+- 任务：INT-TODO-010 收敛 RuntimeDependencySet required/optional readiness surface
+- 状态：已完成
+
+### 改动
+
+1. 更新 `runtime/include/RuntimeDependencySet.h`，新增 `RuntimeDependencyReadiness` supporting surface，把 required / optional 缺口、`degraded` marker、`ready/fail_closed/degraded` readiness label 与 summary 聚合到 `RuntimeDependencySet` 自身。
+2. 保留 `has_live_unary_ports()` 只表示 core required ports 存活，同时通过 `describe_readiness()` 显式区分 default-ready 与 degraded-ready，落实 `SingleAgentRuntimePortMatrix` 的 frozen 语义。
+3. 新增 `tests/unit/runtime/RuntimeDependencySetReadinessTest.cpp`，覆盖 required ports 缺失、仅 optional ports 缺失、全部端口 live 三条主分支；并更新 `tests/unit/runtime/CMakeLists.txt` 注册 focused runtime readiness test。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-010` 标记为 Done，并把下一串行执行位推进到 `INT-TODO-011`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_runtime_dependency_set_readiness_unit_test)`
+   - 结果：通过；新的 runtime readiness target 与依赖库成功编译链接。
+2. `RunCtest_CMakeTools(tests=RuntimeDependencySetReadinessTest)`
+   - 结果：通过；验证 `RuntimeDependencySet` 对 required / optional / degraded / ready 的区分符合 SSOT。
+
+### 结果
+
+1. `INT-BLK-01` 在 runtime header surface 的第一步 Build 落地已经完成：`RuntimeDependencySet` 不再只输出一个模糊的布尔值，而是显式暴露 fail-closed、degraded、ready 三态 readiness 口径。
+2. 010 保持了 001 冻结的边界：`has_live_unary_ports()` 仍只代表 core required seam 存活，knowledge / llm 的 optional 缺口只会体现在 `describe_readiness()` 的 degraded-ready 语义里。
+3. 下一步串行任务为 `INT-TODO-011`，继续补齐 diagnostics retained snapshot fixture 与 store/get seam。
+
 ## 记录 #552
 
 - 日期：2026-05-06
