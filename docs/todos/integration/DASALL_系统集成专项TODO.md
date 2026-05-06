@@ -130,13 +130,13 @@
 
 1. architecture ready 结论仍成立，但 integration ready 结论尚不能给出。
 2. 现在最大的浪费不是“缺少更多设计对象”，而是“主链已接通后仍未优先处理明确红灯”。
-3. Access TODO 中 034 ~ 051 与 ACC-BLK-008 / 010 反映的是系统 ingress 主链仍未闭合，必须提升为当前主线任务，而不是继续留在子系统局部清单里。
+3. Access 专项中真正仍需继续作为系统残余跟踪的，已经收敛为 044 ~ 048、051 与 `ACC-BLK-010`；034 ~ 043、049、050 及 `ACC-BLK-008` 已由当前代码、focused tests 与 `Gate-INT-08` 收口，不再构成“系统 ingress 主链未闭合”的现态判断。
 4. HLT-TODO-009 / 012 / 014 与 RT-OQ-06 仍具系统级意义，但其中 platform timer seam 已在代码中存在，当前更适合重定级为“post-unary 可执行残项”，而不是继续作为纯设计 blocker 挂起。
 5. 因此 TODO 应围绕少数关键 Gate 收口，同时把 deferred residual 按“当前主线 / 后置 blocker / late-scope OQ”三类分账，而不是平均分配到所有子系统功能扩张上。
 
 ### 3.3 子系统残项吸收结论
 
-1. Access 残项是本轮唯一必须提升为系统主线的专项 TODO 集合：当前代码已验证 `apps/gateway/src/main.cpp` 仍默认构造空 `AccessGateway`，`access/src/AccessGateway.cpp` 也仍允许空 pipeline 进入 `Ready`，不能继续用局部 smoke 代替 production ingress 证据。
+1. Access 残项已完成系统主线吸收：025/027/028/030 与 Access TODO 的 034 ~ 043、049、050 已把 production/test profile、`AgentRequest` handoff、production pipeline / readiness、async receipt/query/cancel 与 focused ingress gate 收口为长期证据；当前仅余 044 ~ 048、051 与 `ACC-BLK-010` 作为更广 release polish / 安全治理范围。
 2. diagnostics retained snapshot 尽管组件专项 TODO 已收口，但 `tests/integration/infra/InfraDiagnosticsSmokeTest.cpp` 仍红，因此继续保留为系统级 Gate，而不是回退到 infra 局部跟踪。
 3. health/watchdog 残项需要重新定级：`ITimer` / `PosixTimerProvider` 已落盘，`HealthConfigPolicy`、`ProbeScheduler` 和 cadence 校准可进入 post-unary 执行队列；真正仍阻塞的是 event publish 最小接口未冻结。
 4. LLM streaming/shared admission、Access stream attach/reconnect/replay cursor、CLI diag artifact_ref、metrics OTLP、secret KMS、memory `sqlite-vss` concrete backend、cognition delegate hint / schema registry、runtime checkpoint major upgrade / manual intervention API 不进入当前 unary 验收主线，但必须显式记录在 blocker / OQ 表中，避免被误写成“已完成”或“默认纳入下一轮 Build”。
@@ -280,8 +280,8 @@
 | INT-BLK-03 | TODO 新增 | structured evidence shared projection 未经 contracts admission | 已由 003 完成设计冻结解阻；后续转入 008、009、013、019 的 contracts / runtime / integration 落地 | 完成 003 并通过 contracts additive 策略确认 | admission 未完成前，保留旧文本路径，禁止私有字段横向扩散 |
 | INT-BLK-04 | TODO 新增 | diagnostics retained snapshot contract / fixture 未冻结 | 已由 004 完成设计冻结解阻；后续转入 011、015、020 的 seam、round-trip 与 gate 落地 | 完成 004 并冻结 snapshot contract | 冻结前只做局部调试，不宣称 diagnostics ready |
 | INT-BLK-05 | 工具链已知问题 | aggregate build/test 容易被外部或无关问题污染；但 005 已冻结“targeted build/ctest 优先于 aggregate one-shot”的命令权威规则 | 023、024 的 one-shot 验收仍可能受噪音影响 | 使用 targeted build/ctest；必要时单列 residual blocker | 若 aggregate 噪音未清，保留 focused command 作为正式验收依据 |
-| INT-BLK-06 | Access 残项吸收 | 已由 025 完成 production/test profile 与 readiness 口径冻结；当前剩余 `AgentRequest` handoff、空 pipeline Ready 与安全治理的代码/ Gate 闭合 | 027、028、030 仍无法宣称 ingress production ready | 完成 025、027、028，并使 focused Access Gate 转绿 | 在解阻前，daemon/gateway 只能显式使用 mock pipeline 作为测试 profile，不得冒充 production 证据 |
-| INT-BLK-07 | health/watchdog 重定级 | 已由 026 完成设计冻结；当前剩余是 `HLT-TODO-012` 的 external bus 最小接口与 029 的代码/测试落地，不再是 system cadence 歧义 | 029、HLT-TODO-012、RT-TODO-030 | 完成 029，并在 HLT-TODO-012 中沿已冻结 fallback rule 落 event publish surface | event publish 未冻结前，仅允许同步 evaluate、日志/指标 fallback 与局部缓存，不宣称 bus-ready |
+| INT-BLK-06 | Access 残项吸收 | 已解阻（2026-05-06 校准）：025 已冻结 production/test profile 与 readiness 口径，027/028 已闭合 `AgentRequest` handoff、production pipeline / readiness 与最小安全治理主链，030 已把 focused Access Gate 固化为 `Gate-INT-08` | 不再阻断 001 ~ 030；更广 release polish / 安全治理残余转入 Access 专项 TODO 的 046~048、051 与 `ACC-BLK-010` | 无；后续若扩张更广 release 结论，再按 Access focused matrix 新开任务 | focused ingress 证据继续以 `Build_CMakeTools(target=dasall_gate_int_08)` 为准，不把 mock pipeline 或 ping liveness 外推为 release evidence |
+| INT-BLK-07 | health/watchdog 重定级 | 已解阻（2026-05-06 校准）：026 已完成 cadence / config / event publish fallback 边界冻结，029 已落完 `HealthConfigPolicy`、`ProbeScheduler` 与 runtime consume baseline | 不再阻断 001 ~ 030；external bus / cadence 扩展仅保留为 `HLT-TODO-012` / `RT-TODO-030` 的 post-unary 范围 | 无；后续若推进 external bus 最小接口，再按 health/runtime 专项 TODO 单列任务 | event publish 未冻结前继续仅使用同步 evaluate、日志/指标 fallback 与局部缓存，不宣称 bus-ready |
 | INT-BLK-08 | deferred streaming | Access stream attach/reconnect/replay cursor 与 LLM shared stream admission 仍未冻结 | 不阻断 001 ~ 030，但阻断后续 streaming 任务与任何 stream-ready 结论 | runtime/llm/contracts 冻结 cancel/ownership/backpressure/shared handle 语义并形成消费者矩阵 | 保持 feature flag default-off + receipt/query/poll fallback，不把 streaming 写入当前 unary gate |
 | INT-BLK-09 | deferred optional backend | `sqlite-vss` concrete backend、KMS backend、OTLP exporter 依赖与夹具未冻结 | 不阻断当前 unary Gate，但阻断 optional backend 扩张与相关 release ready 结论 | 明确 third_party / SDK / fixture 策略并补 focused tests | 继续保持 unavailable / noop / file backend baseline，不让 optional backend 反向拖垮主链 |
 
@@ -289,13 +289,13 @@
 
 | Blocker ID | 校准时间 | 校准结果 | 剩余阻塞范围 | 备注 |
 |---|---|---|---|---|
-| INT-BLK-01 | 2026-05-06 | 已解阻 | 后续仅剩 010、014、021 的实现与 gate 固化 | 由 `docs/ssot/SingleAgentRuntimePortMatrix.md` 与 runtime 详设回链关闭 |
-| INT-BLK-02 | 2026-05-06 | 已解阻 | 后续仅剩 012、018 的实现与主 Gate 固化 | 由 `docs/ssot/UnaryResponseContract.md` 与 runtime/cognition 详设回链关闭 |
-| INT-BLK-03 | 2026-05-06 | 已解阻 | 后续仅剩 008、009、013、019 的实现与 gate 固化 | 由 `docs/ssot/RetrievalEvidenceProjectionV1.md` 与总矩阵回链关闭 |
-| INT-BLK-04 | 2026-05-06 | 已解阻 | 后续仅剩 011、015、020 的实现与 gate 固化 | 由 `docs/ssot/DiagnosticsRetainedSnapshotContract.md` 与 infra diagnostics 详设回链关闭 |
-| INT-BLK-05 | 2026-05-06 | 已知可绕行 | one-shot aggregate 验收层；005 已完成命令权威规则冻结 | 使用 targeted 命令即可推进，待 023/024 再把 discoverability / one-shot 落为可执行 Gate |
-| INT-BLK-06 | 2026-05-06 | 未解阻 | 设计冻结已完成；剩余 Access production path、安全治理与 Access Gate 的实现闭合 | 由 `docs/ssot/AccessUnaryProductionPathV1.md`、Access 详设与 Access 专项 TODO 回链确认 025 已完成 |
-| INT-BLK-07 | 2026-05-06 | 已解阻（设计冻结完成） | 剩余 health event bus / cadence consume build residual | `HealthCadenceAndEventBoundary` 已冻结 `ITimer` seam、default cadence、event publish fallback 与 cognition health probe 关系；剩余只转入 029 / HLT-TODO-012 / RT-TODO-030 的实现与 Gate |
+| INT-BLK-01 | 2026-05-06 | 已解阻 | 当前 integration track 已无剩余阻塞；010、014、021 已完成并闭合 required/optional + degraded gate 链路 | 由 `docs/ssot/SingleAgentRuntimePortMatrix.md`、runtime 详设与 `Gate-INT-06` focused evidence 回链关闭 |
+| INT-BLK-02 | 2026-05-06 | 已解阻 | 当前 integration track 已无剩余阻塞；012、018 已完成并闭合 unary response contract + `Gate-INT-03` 主链 | 由 `docs/ssot/UnaryResponseContract.md`、runtime/cognition 详设与 `Gate-INT-03` focused evidence 回链关闭 |
+| INT-BLK-03 | 2026-05-06 | 已解阻 | 当前 integration track 已无剩余阻塞；008、009、013、019 已完成并闭合 evidence projection + `Gate-INT-04` | 由 `docs/ssot/RetrievalEvidenceProjectionV1.md`、相关详设与 `Gate-INT-04` focused evidence 回链关闭 |
+| INT-BLK-04 | 2026-05-06 | 已解阻 | 当前 integration track 已无剩余阻塞；011、015、020 已完成并闭合 diagnostics retained snapshot + `Gate-INT-05` | 由 `docs/ssot/DiagnosticsRetainedSnapshotContract.md`、infra diagnostics 详设与 `Gate-INT-05` focused evidence 回链关闭 |
+| INT-BLK-05 | 2026-05-06 | 已知可绕行 | aggregate / one-shot 噪音 residual 仍存在；023/024 已把 discoverability、one-shot 与证据回写落为正式 Gate 口径 | focused command、current-build `ctest -N` 与 deliverable / worklog 为正式证据入口 |
+| INT-BLK-06 | 2026-05-06 | 已解阻 | 当前 integration track 已无剩余阻塞；025、027、028、030 已闭合 Access production path / safety focused gate | `Gate-INT-08` 已转为长期 focused release evidence；更广 release polish 转入 Access 专项 TODO 的 046~048、051 |
+| INT-BLK-07 | 2026-05-06 | 已解阻 | 当前 integration track 已无剩余阻塞；026、029 已落完 health cadence baseline，external bus 保持 post-unary 扩展 | `HLT-TODO-012` / `RT-TODO-030` 仅保留扩展范围，不再阻断当前 unary Gate |
 | INT-BLK-08 | 2026-05-06 | 延后跟踪 | streaming / shared admission late scope | 来源于 ACC-BLK-005、LLM-BLK-005、LLM-BLK-006 |
 | INT-BLK-09 | 2026-05-06 | 延后跟踪 | optional backend late scope | 来源于 MEM-TODO-035、SEC-BLK-003、MET-BLK-005 |
 
