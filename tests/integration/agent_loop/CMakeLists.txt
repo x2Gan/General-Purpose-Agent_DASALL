@@ -55,6 +55,10 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeRequiredOptionalPortsIntegrationTest.cpp
 )
 
+set_tests_properties(RuntimeRequiredOptionalPortsIntegrationTest PROPERTIES
+  LABELS "integration;runtime;gate-int-06;required-optional-degraded-gate"
+)
+
 dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_evidence_projection_integration_test
   RuntimeEvidenceProjectionIntegrationTest
@@ -176,6 +180,10 @@ dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_profile_compatibility_integration_test
   RuntimeProfileCompatibilityTest
   RuntimeProfileCompatibilityTest.cpp
+)
+
+set_tests_properties(RuntimeProfileCompatibilityTest PROPERTIES
+  LABELS "integration;runtime;gate-int-06;required-optional-degraded-gate"
 )
 
 dasall_add_runtime_agent_loop_integration_test(

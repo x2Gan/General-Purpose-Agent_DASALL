@@ -31,6 +31,10 @@ dasall_add_llm_integration_test(
   "integration;llm"
 )
 
+set_tests_properties(LLMSubsystemSmokeIntegrationTest PROPERTIES
+  LABELS "integration;llm;gate-int-06;required-optional-degraded-gate"
+)
+
 dasall_add_llm_integration_test(
   dasall_deepseek_dual_mode_selection_integration_test
   DeepSeekDualModeSelectionIntegrationTest

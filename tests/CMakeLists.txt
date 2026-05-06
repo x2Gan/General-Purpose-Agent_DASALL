@@ -40,6 +40,14 @@ add_custom_target(dasall_gate_int_05
     dasall_infra_diagnostics_integration_test
 )
 
+add_custom_target(dasall_gate_int_06
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L gate-int-06
+  DEPENDS
+    dasall_runtime_required_optional_ports_integration_test
+    dasall_runtime_profile_compatibility_integration_test
+    dasall_llm_smoke_integration_test
+)
+
 add_custom_target(dasall_access_tests
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L access
   DEPENDS

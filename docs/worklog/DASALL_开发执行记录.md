@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #567
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-021 新增 required/optional ports 与 degraded mode integration/profile Gate
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/agent_loop/CMakeLists.txt`，把 `RuntimeRequiredOptionalPortsIntegrationTest` 与 `RuntimeProfileCompatibilityTest` 统一挂到 `gate-int-06` / `required-optional-degraded-gate` 标签下，不再只停留在泛 `integration;runtime` 标签。
+2. 更新 `tests/integration/llm/CMakeLists.txt`，将 `LLMSubsystemSmokeIntegrationTest` 纳入同一组 `gate-int-06` / `required-optional-degraded-gate` 标签，使其作为 Gate-INT-06 的 profile/adapter supporting evidence，而不是仅留在回归 smoke 列表里。
+3. 更新 `tests/CMakeLists.txt`，新增窄 custom target `dasall_gate_int_06`，让 required/optional ports 与 degraded semantics Gate 拥有独立 CMake 入口，并显式依赖 runtime required/optional、runtime profile compatibility 与 llm smoke 三条 executable targets。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-021` 标记为 Done，把交付物/验收命令收敛到 `dasall_gate_int_06`，并将当前串行位推进到 `INT-TODO-022`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_06)`
+   - 结果：通过；新的 Gate target 成功执行 `RuntimeRequiredOptionalPortsIntegrationTest`、`RuntimeProfileCompatibilityTest`、`LLMSubsystemSmokeIntegrationTest` 三条 gate/supporting tests，label summary 同时出现 `gate-int-06` 与 `required-optional-degraded-gate`。
+
+### 结果
+
+1. Gate-INT-06 已从“几条 focused test 的手工组合”提升为可稳定发现和执行的 required/optional + degraded semantics 系统 Gate；后续 023 可以直接复用 `gate-int-06` 进行 discoverability / one-shot 收口。
+2. `LLMSubsystemSmokeIntegrationTest` 的角色已被重新定界：它仍可继续承担 llm regression smoke 保护，但在 021 之后也作为 Gate-INT-06 的 supporting evidence，避免 TODO 矩阵与实际 CMake discoverability 脱节。
+3. 下一串行任务为 `INT-TODO-022`，继续新增 tools/services 状态语义 contract Gate。
+
 ## 记录 #566
 
 - 日期：2026-05-06
