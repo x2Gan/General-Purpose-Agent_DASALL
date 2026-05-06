@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "agent/AgentRequest.h"
 #include "agent/AgentResult.h"
 
 namespace dasall::access {
@@ -73,6 +74,10 @@ struct RuntimeDispatchRequest {
   // === 新增：认证与授权 sidecar ===
   SubjectIdentity subject_identity;          // 认证主体事实
   AccessDecisionProof decision_proof;        // 授权裁定证据
+
+  // public handoff：shared AgentRequest 必须在 Access -> Runtime 边界显式承载，
+  // 不能只靠 request_context sidecar 重投影。
+  dasall::contracts::AgentRequest agent_request;
   
   // 客户端能力视图（stream 能力判定）
   std::string client_capability_view;

@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #561
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-027 修复 Access AgentRequest handoff、production pipeline 与 readiness
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/AccessTypes.h`、`access/src/RequestNormalizer.cpp` 与 `access/src/RuntimeBridge.cpp`，让 `RuntimeDispatchRequest` 显式承载 shared `AgentRequest` public handoff，`RequestNormalizer` 在 normalize 阶段把 `agent_request` 同步写入 runtime request，`RuntimeBridge` 则改为基于 public handoff 做 field guard、response context 回填与 fallback receipt 生成，不再把 `request_context` 当成唯一 request/session/trace 来源。
+2. 更新 `access/src/AccessGateway.cpp`、`access/include/AccessGatewayFactory.h`、`access/src/AccessGatewayFactory.cpp`，让 `AccessGateway::init()` 在 submit pipeline 缺失时 fail-closed，新增 `create_gateway_access_gateway()` production factory，并把 gateway submit pipeline 与 daemon submit pipeline 统一收敛到 `RequestValidator -> SubjectResolver -> AuthenticatorChain -> AccessPolicyGate -> AdmissionController -> RequestNormalizer -> RuntimeBridge` 主链，不再允许空壳 gateway 冒充 Ready。
+3. 更新 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp`：daemon runtime backend 改为直接消费 public handoff 的 `request.agent_request`，去掉本地 `project_agent_request()` 重投影；gateway main 改为经 `create_gateway_access_gateway()` 装配 production surface，并把 readiness 绑定到 `gateway->is_ready()`，不再手工 `set_ready(true)`。
+4. 新增 `tests/unit/access/RuntimeBridgeAgentRequestHandoffTest.cpp`、`RequestNormalizerRuntimeBridgeCompatibilityTest.cpp`、`AccessGatewayProductionPipelineTest.cpp`、`AccessGatewayDependencyValidationTest.cpp` 与 `tests/integration/access/DaemonAccessSubmitCompositionTest.cpp`、`GatewayAccessSubmitCompositionTest.cpp`、`AccessHealthReadinessIntegrationTest.cpp`，并更新 `tests/unit/access/CMakeLists.txt`、`tests/integration/access/CMakeLists.txt` 注册 focused gates，锁住 public handoff、空 pipeline fail-closed、daemon/gateway factory composition 与 health readiness 的真实依赖关系。
+5. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-027` 标记为 Done，并把 11.1 当前串行位推进到 `INT-TODO-028`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_access_runtime_bridge_agent_request_handoff_unit_test, dasall_access_request_normalizer_runtime_bridge_compatibility_unit_test, dasall_access_gateway_production_pipeline_unit_test, dasall_access_gateway_dependency_validation_unit_test, dasall_access_daemon_submit_composition_integration_test, dasall_access_gateway_submit_composition_integration_test, dasall_access_health_readiness_integration_test)`
+   - 结果：通过；027 新增的 unit/integration focused targets 全部成功编译链接。
+2. `RunCtest_CMakeTools(tests=RuntimeBridgeTest, RuntimeBridgeAsyncAcceptTest, RuntimeBridgeAgentRequestHandoffTest, RequestNormalizerRuntimeBridgeCompatibilityTest, AccessGatewayProductionPipelineTest, AccessGatewayDependencyValidationTest, DaemonAccessSubmitCompositionTest, GatewayAccessSubmitCompositionTest, AccessHealthReadinessIntegrationTest)`
+   - 结果：通过；public handoff、gateway fail-closed、daemon/gateway composition 与 health readiness focused gates 全绿，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+3. `Build_CMakeTools(target=dasall_daemon, dasall_gateway)`
+   - 结果：通过；daemon/gateway app targets 在本轮入口壳层改动后保持可编译。
+
+### 结果
+
+1. Access v1 unary production path 已不再依赖 `request_context` sidecar 来重投影 shared request facts：`AgentRequest` 会从 `RequestNormalizer` 进入 `RuntimeDispatchRequest` public handoff，`RuntimeBridge` 与 daemon runtime backend 直接消费同一份 handoff 对象。
+2. `AccessGateway` 不再允许空 pipeline 进入 `Ready`，gateway production surface 也不再靠手工 `health.set_ready(true)` 冒充 readiness；factory 组合出的 daemon/gateway submit path 与 health probe 现在都以真实 pipeline/backed runtime seam 为准。
+3. 下一串行任务为 `INT-TODO-028`，继续打通 Access async ownership / policy / observability 安全治理闭环。
+
 ## 记录 #560
 
 - 日期：2026-05-06

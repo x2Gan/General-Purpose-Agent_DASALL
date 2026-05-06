@@ -18,6 +18,11 @@ bool AccessGateway::init() {
     return expected == AccessGatewayState::Ready;
   }
 
+  if (!submit_pipeline_) {
+    state_.store(AccessGatewayState::Uninitialized);
+    return false;
+  }
+
   state_.store(AccessGatewayState::Ready);
   return true;
 }

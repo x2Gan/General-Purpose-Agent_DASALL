@@ -50,6 +50,7 @@ RequestNormalizationOutput RequestNormalizer::normalize(
   const TraceIdentityBundle ids = ensure_trace_ids(request);
   output.agent_request = project_agent_request(request, ids);
   output.publish_context = build_publish_context(request, ids);
+  output.runtime_request.agent_request = output.agent_request;
 
   output.runtime_request.request_context["request_id"] = ids.request_id;
   output.runtime_request.request_context["session_id"] = ids.session_id;

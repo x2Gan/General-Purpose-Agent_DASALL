@@ -17,19 +17,19 @@
 ///   - CORS 默认禁用，通过 SecurityConfig::cors_allowed_origins 白名单启用
 
 #include <csignal>
+#include <chrono>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <string>
 
 // cpp-httplib：header-only HTTP/1.1 库
 #include "httplib.h"
 
+#include "AccessGatewayFactory.h"
 #include "HttpProtocolAdapter.h"
 #include "IAccessGateway.h"
-#include "linux/UnixIpcProvider.h"
 #include "HealthProbeHandler.h"
-
-// AccessGateway concrete class（通过 access/src PRIVATE include）
-#include "AccessGateway.h"
 
 namespace {
 
@@ -47,10 +47,17 @@ extern "C" void on_shutdown_signal(int /*signal*/) {
 }  // namespace
 
 int main() {
-  // 1. 构造 AccessGateway
-  auto gateway = std::make_shared<dasall::access::AccessGateway>();
+  dasall::access::gateway::SecurityConfig sec_cfg;
+
+  dasall::access::GatewayAccessPipelineOptions gateway_options;
+  gateway_options.bootstrap_config.entry_type = "gateway";
+  gateway_options.bootstrap_config.allowed_protocols = {"http"};
+  gateway_options.publish_view.cors_allowed_origins = sec_cfg.cors_allowed_origins;
+
+  auto gateway = dasall::access::create_gateway_access_gateway(
+      std::move(gateway_options));
   if (!gateway->init()) {
-    std::cerr << "[dasall_gateway] AccessGateway init failed\n";
+    std::cerr << "[dasall_gateway] AccessGateway init failed: production submit pipeline unavailable\n";
     return 1;
   }
 
@@ -63,113 +70,110 @@ int main() {
   g_server = &srv;
 
   // 4. POST /v1/submit — HTTP unary 请求入口
-    // 安全配置（首版 CORS 禁用，由 deployment bundle 的 cors_allowed_origins 启用）
-    dasall::access::gateway::SecurityConfig sec_cfg;
+  // 健康探针处理器
+  dasall::access::gateway::HealthProbeHandler health;
+  health.set_started(true);
+  health.set_ready(gateway->is_ready());
 
-    // 健康探针处理器
-    dasall::access::gateway::HealthProbeHandler health;
-    health.set_started(true);
-    health.set_ready(true);
+  /// 辅助：将安全头合并到 httplib::Response
+  auto apply_sec = [&](httplib::Response& res,
+                       const std::string& origin = "",
+                       const std::string& req_id = "") {
+    std::map<std::string, std::string> h;
+    dasall::access::gateway::apply_security_headers(h, sec_cfg, origin, req_id);
+    for (const auto& [k, v] : h) {
+      res.set_header(k.c_str(), v.c_str());
+    }
+  };
 
-    /// 辅助：将安全头合并到 httplib::Response
-    auto apply_sec = [&](httplib::Response& res,
-                          const std::string& origin = "",
-                          const std::string& req_id = "") {
-      std::map<std::string, std::string> h;
-      dasall::access::gateway::apply_security_headers(h, sec_cfg, origin, req_id);
-      for (const auto& [k, v] : h) {
-        res.set_header(k.c_str(), v.c_str());
-      }
-    };
+  // 4a. GET /health/live
+  srv.Get("/health/live", [&health, &apply_sec](const httplib::Request& req,
+                                                 httplib::Response& res) {
+    const auto r = health.handle_live();
+    res.status = r.status_code;
+    res.set_content(r.body, "text/plain");
+    apply_sec(res, req.get_header_value("Origin"));
+  });
 
-    // 4a. GET /health/live
-    srv.Get("/health/live", [&health, &apply_sec](const httplib::Request& req,
-                                                   httplib::Response& res) {
-      const auto r = health.handle_live();
-      res.status = r.status_code;
-      res.set_content(r.body, "text/plain");
-      apply_sec(res, req.get_header_value("Origin"));
-    });
+  // 4b. GET /health/ready
+  srv.Get("/health/ready", [&health, &apply_sec](const httplib::Request& req,
+                                                  httplib::Response& res) {
+    const auto r = health.handle_ready();
+    res.status = r.status_code;
+    res.set_content(r.body, "text/plain");
+    apply_sec(res, req.get_header_value("Origin"));
+  });
 
-    // 4b. GET /health/ready
-    srv.Get("/health/ready", [&health, &apply_sec](const httplib::Request& req,
+  // 4c. GET /health/startup
+  srv.Get("/health/startup", [&health, &apply_sec](const httplib::Request& req,
                                                     httplib::Response& res) {
-      const auto r = health.handle_ready();
-      res.status = r.status_code;
-      res.set_content(r.body, "text/plain");
-      apply_sec(res, req.get_header_value("Origin"));
-    });
+    const auto r = health.handle_startup();
+    res.status = r.status_code;
+    res.set_content(r.body, "text/plain");
+    apply_sec(res, req.get_header_value("Origin"));
+  });
 
-    // 4c. GET /health/startup
-    srv.Get("/health/startup", [&health, &apply_sec](const httplib::Request& req,
-                                                      httplib::Response& res) {
-      const auto r = health.handle_startup();
-      res.status = r.status_code;
-      res.set_content(r.body, "text/plain");
-      apply_sec(res, req.get_header_value("Origin"));
-    });
+  // 4d. OPTIONS preflight — 不经过 Admission，直接回应 204
+  srv.Options(".*", [&apply_sec](const httplib::Request& req,
+                                  httplib::Response& res) {
+    res.status = 204;
+    apply_sec(res, req.get_header_value("Origin"));
+  });
 
-    // 4d. OPTIONS preflight — 不经过 Admission，直接回应 204
-    srv.Options(".*", [&apply_sec](const httplib::Request& req,
-                                    httplib::Response& res) {
-      res.status = 204;
-      apply_sec(res, req.get_header_value("Origin"));
-    });
+  // 4e. POST /v1/submit — HTTP unary 请求入口
+  srv.Post("/v1/submit", [&gateway, &apply_sec](const httplib::Request& req,
+                                                 httplib::Response& res) {
+    dasall::access::gateway::HttpProtocolAdapter adapter;
 
-    // 4e. POST /v1/submit — HTTP unary 请求入口
-    srv.Post("/v1/submit", [&gateway, &apply_sec](const httplib::Request& req,
-                                                   httplib::Response& res) {
-      dasall::access::gateway::HttpProtocolAdapter adapter;
+    dasall::access::gateway::HttpRequestContext ctx;
+    ctx.method = req.method;
+    ctx.path = req.path;
+    ctx.body = req.body;
+    for (const auto& [k, v] : req.headers) {
+      ctx.headers[k] = v;
+    }
 
-      dasall::access::gateway::HttpRequestContext ctx;
-      ctx.method = req.method;
-      ctx.path = req.path;
-      ctx.body = req.body;
-      for (const auto& [k, v] : req.headers) {
-        ctx.headers[k] = v;
-      }
+    adapter.set_active_request(ctx);
+    auto packet = adapter.decode();
 
-      adapter.set_active_request(ctx);
-      auto packet = adapter.decode();
+    const std::string origin = req.get_header_value("Origin");
+    const std::string req_id = req.get_header_value("X-Request-Id");
 
-      const std::string origin = req.get_header_value("Origin");
-      const std::string req_id = req.get_header_value("X-Request-Id");
-
-      if (packet.entry_type.empty()) {
-        res.status = 400;
-        res.set_content(R"({"error":"invalid request body"})", "application/json");
-        apply_sec(res, origin, req_id);
-        return;
-      }
-
-      const auto result = gateway->submit(packet);
-
-      if (result.publish_envelope.has_value()) {
-        (void)adapter.encode(*result.publish_envelope);
-      } else {
-        dasall::access::PublishEnvelope fallback;
-        fallback.protocol_status_hint =
-            (result.disposition == dasall::access::AccessDisposition::AcceptedAsync)
-                ? "202"
-                : "400";
-        fallback.result_id = result.receipt_ref.value_or("");
-        fallback.payload = result.error_ref.value_or("");
-        (void)adapter.encode(fallback);
-      }
-
-      const auto& http_res = adapter.active_response();
-      res.status = http_res.status_code;
-      res.set_content(http_res.body, "application/json");
+    if (packet.entry_type.empty()) {
+      res.status = 400;
+      res.set_content(R"({"error":"invalid request body"})", "application/json");
       apply_sec(res, origin, req_id);
-    });
+      return;
+    }
 
-    // 5. 启动监听
-    const int port = 8080;
-    std::cout << "[dasall_gateway] listening on :" << port << "\n";
-    srv.listen("0.0.0.0", port);
+    const auto result = gateway->submit(packet);
 
-    // 6. 优雅关闭
-    gateway->shutdown(std::chrono::milliseconds(5000));
-    std::cout << "[dasall_gateway] stopped\n";
-    return 0;
-  }
+    if (result.publish_envelope.has_value()) {
+      (void)adapter.encode(*result.publish_envelope);
+    } else {
+      dasall::access::PublishEnvelope fallback;
+      fallback.protocol_status_hint =
+          (result.disposition == dasall::access::AccessDisposition::AcceptedAsync)
+              ? "202"
+              : "400";
+      fallback.result_id = result.receipt_ref.value_or("");
+      fallback.payload = result.error_ref.value_or("");
+      (void)adapter.encode(fallback);
+    }
+
+    const auto& http_res = adapter.active_response();
+    res.status = http_res.status_code;
+    res.set_content(http_res.body, "application/json");
+    apply_sec(res, origin, req_id);
+  });
+
+  // 5. 启动监听
+  const int port = 8080;
+  std::cout << "[dasall_gateway] listening on :" << port << "\n";
+  srv.listen("0.0.0.0", port);
+
+  // 6. 优雅关闭
+  gateway->shutdown(std::chrono::milliseconds(5000));
+  std::cout << "[dasall_gateway] stopped\n";
+  return 0;
+}

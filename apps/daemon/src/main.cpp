@@ -161,37 +161,29 @@ struct ParsedDaemonArgs {
 [[nodiscard]] std::optional<std::string> dispatch_context_value(
     const dasall::access::RuntimeDispatchRequest& request,
     const std::string& key) {
+  if (key == "request_id" && request.agent_request.request_id.has_value() &&
+      !request.agent_request.request_id->empty()) {
+    return request.agent_request.request_id;
+  }
+  if (key == "session_id" && request.agent_request.session_id.has_value() &&
+      !request.agent_request.session_id->empty()) {
+    return request.agent_request.session_id;
+  }
+  if (key == "trace_id" && request.agent_request.trace_id.has_value() &&
+      !request.agent_request.trace_id->empty()) {
+    return request.agent_request.trace_id;
+  }
+  if (key == "idempotency_key" &&
+      request.agent_request.idempotency_key.has_value() &&
+      !request.agent_request.idempotency_key->empty()) {
+    return *request.agent_request.idempotency_key;
+  }
+
   const auto it = request.request_context.find(key);
   if (it == request.request_context.end() || it->second.empty()) {
     return std::nullopt;
   }
   return it->second;
-}
-
-[[nodiscard]] std::int64_t now_epoch_millis() {
-  const auto now = std::chrono::system_clock::now().time_since_epoch();
-  return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-}
-
-[[nodiscard]] dasall::contracts::AgentRequest project_agent_request(
-    const dasall::access::RuntimeDispatchRequest& request) {
-  dasall::contracts::AgentRequest agent_request;
-  const auto request_id =
-      dispatch_context_value(request, "request_id").value_or(request.packet.packet_id);
-  agent_request.request_id = request_id;
-  agent_request.session_id = dispatch_context_value(request, "session_id")
-                                 .value_or(std::string("session:") + request_id);
-  agent_request.trace_id = dispatch_context_value(request, "trace_id")
-                               .value_or(std::string("trace:") + request_id);
-  agent_request.user_input = request.packet.payload;
-  agent_request.request_channel = dasall::contracts::RequestChannel::Daemon;
-  agent_request.created_at = now_epoch_millis();
-  if (const auto idempotency_key =
-          dispatch_context_value(request, "idempotency_key");
-      idempotency_key.has_value()) {
-    agent_request.idempotency_key = *idempotency_key;
-  }
-  return agent_request;
 }
 
 [[nodiscard]] dasall::access::RuntimeDispatchResult
@@ -350,8 +342,7 @@ int main(int argc, char* argv[]) {
   pipeline_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {
-        const auto agent_request = project_agent_request(request);
-        const auto agent_result = runtime_facade->handle(agent_request);
+        const auto agent_result = runtime_facade->handle(request.agent_request);
         return map_agent_result_to_dispatch_result(request, agent_result);
       };
   pipeline_options.daemon_listener_ready =

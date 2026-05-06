@@ -20,6 +20,12 @@ namespace {
   request.request_context["request_id"] = "req-020-async";
   request.request_context["session_id"] = "sess-020-async";
   request.request_context["trace_id"] = "trace-020-async";
+  request.agent_request.request_id = "req-020-async";
+  request.agent_request.session_id = "sess-020-async";
+  request.agent_request.trace_id = "trace-020-async";
+  request.agent_request.user_input = request.packet.payload;
+  request.agent_request.request_channel = dasall::contracts::RequestChannel::Gateway;
+  request.agent_request.created_at = 1700000000100;
   return request;
 }
 

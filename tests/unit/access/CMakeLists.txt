@@ -232,6 +232,12 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_runtime_bridge_agent_request_handoff_unit_test
+  RuntimeBridgeAgentRequestHandoffTest
+  RuntimeBridgeAgentRequestHandoffTest.cpp
+)
+
+dasall_add_access_unit_test(
   dasall_access_runtime_bridge_async_accept_unit_test
   RuntimeBridgeAsyncAcceptTest
   RuntimeBridgeAsyncAcceptTest.cpp
@@ -247,6 +253,24 @@ dasall_add_access_unit_test(
   dasall_access_result_publisher_unit_test
   ResultPublisherTest
   ResultPublisherTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_request_normalizer_runtime_bridge_compatibility_unit_test
+  RequestNormalizerRuntimeBridgeCompatibilityTest
+  RequestNormalizerRuntimeBridgeCompatibilityTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_gateway_production_pipeline_unit_test
+  AccessGatewayProductionPipelineTest
+  AccessGatewayProductionPipelineTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_gateway_dependency_validation_unit_test
+  AccessGatewayDependencyValidationTest
+  AccessGatewayDependencyValidationTest.cpp
 )
 
 dasall_add_access_unit_test(

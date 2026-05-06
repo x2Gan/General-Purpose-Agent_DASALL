@@ -3,7 +3,37 @@
 #include <string>
 #include <utility>
 
+#include "agent/AgentRequestGuards.h"
+
 namespace dasall::access {
+
+namespace {
+
+[[nodiscard]] std::optional<std::string> agent_request_value(
+    const RuntimeDispatchRequest& request,
+    const std::string_view key) {
+  if (key == "request_id" && request.agent_request.request_id.has_value() &&
+      !request.agent_request.request_id->empty()) {
+    return request.agent_request.request_id;
+  }
+  if (key == "session_id" && request.agent_request.session_id.has_value() &&
+      !request.agent_request.session_id->empty()) {
+    return request.agent_request.session_id;
+  }
+  if (key == "trace_id" && request.agent_request.trace_id.has_value() &&
+      !request.agent_request.trace_id->empty()) {
+    return request.agent_request.trace_id;
+  }
+  if (key == "idempotency_key" &&
+      request.agent_request.idempotency_key.has_value() &&
+      !request.agent_request.idempotency_key->empty()) {
+    return *request.agent_request.idempotency_key;
+  }
+
+  return std::nullopt;
+}
+
+}  // namespace
 
 RuntimeBridge::RuntimeBridge(DispatchBackend dispatch_backend, CancelBackend cancel_backend)
     : dispatch_backend_(std::move(dispatch_backend)),
@@ -24,6 +54,17 @@ RuntimeDispatchResult RuntimeBridge::dispatch(const RuntimeDispatchRequest& requ
         AccessErrorCode::AuthorizationDenied,
         "runtime bridge only dispatches Allow decision requests",
         std::string("decision_proof is not allow"));
+  }
+
+  const auto agent_request_guard =
+      dasall::contracts::validate_agent_request_field_rules(request.agent_request);
+  if (!agent_request_guard.ok) {
+    return map_runtime_reject(
+        AccessErrorCode::ValidationRejected,
+        "runtime bridge requires valid public AgentRequest handoff",
+        agent_request_guard.reason.empty()
+          ? std::optional<std::string>("agent_request field guard failed")
+          : std::optional<std::string>(std::string(agent_request_guard.reason)));
   }
 
   if (!dispatch_backend_) {
@@ -53,20 +94,23 @@ RuntimeDispatchResult RuntimeBridge::map_runtime_result(
   RuntimeDispatchResult mapped = backend_result;
 
   // 统一补齐追踪上下文，避免 runtime 返回分支丢失 request/session/trace。
-  if (const auto request_id = context_value(request, "request_id"); request_id.has_value()) {
+  if (const auto request_id = agent_request_value(request, "request_id");
+      request_id.has_value()) {
     mapped.response_context["request_id"] = *request_id;
   }
-  if (const auto session_id = context_value(request, "session_id"); session_id.has_value()) {
+  if (const auto session_id = agent_request_value(request, "session_id");
+      session_id.has_value()) {
     mapped.response_context["session_id"] = *session_id;
   }
-  if (const auto trace_id = context_value(request, "trace_id"); trace_id.has_value()) {
+  if (const auto trace_id = agent_request_value(request, "trace_id");
+      trace_id.has_value()) {
     mapped.response_context["trace_id"] = *trace_id;
   }
 
   if (mapped.disposition == AccessDisposition::AcceptedAsync &&
       !mapped.receipt_ref.has_value()) {
     const auto fallback_request_id =
-        context_value(request, "request_id").value_or(request.packet.packet_id);
+        agent_request_value(request, "request_id").value_or(request.packet.packet_id);
     mapped.receipt_ref = std::string("receipt:") + fallback_request_id;
   }
 
@@ -90,6 +134,11 @@ RuntimeDispatchResult RuntimeBridge::map_runtime_reject(
 std::optional<std::string> RuntimeBridge::context_value(
     const RuntimeDispatchRequest& request,
     const std::string& key) {
+  if (const auto public_value = agent_request_value(request, key);
+      public_value.has_value()) {
+    return public_value;
+  }
+
   const auto it = request.request_context.find(key);
   if (it == request.request_context.end() || it->second.empty()) {
     return std::nullopt;

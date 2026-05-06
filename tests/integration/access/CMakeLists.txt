@@ -263,6 +263,72 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_reject_path_integration_test
 )
 
+add_executable(dasall_access_daemon_submit_composition_integration_test
+  DaemonAccessSubmitCompositionTest.cpp
+)
+
+target_link_libraries(dasall_access_daemon_submit_composition_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_daemon_submit_composition_integration_test)
+
+add_test(NAME DaemonAccessSubmitCompositionTest
+  COMMAND dasall_access_daemon_submit_composition_integration_test)
+set_tests_properties(DaemonAccessSubmitCompositionTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_submit_composition_integration_test
+)
+
+add_executable(dasall_access_gateway_submit_composition_integration_test
+  GatewayAccessSubmitCompositionTest.cpp
+)
+
+target_link_libraries(dasall_access_gateway_submit_composition_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_gateway_submit_composition_integration_test)
+
+add_test(NAME GatewayAccessSubmitCompositionTest
+  COMMAND dasall_access_gateway_submit_composition_integration_test)
+set_tests_properties(GatewayAccessSubmitCompositionTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_gateway_submit_composition_integration_test
+)
+
+add_executable(dasall_access_health_readiness_integration_test
+  AccessHealthReadinessIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/gateway/src/HealthProbeHandler.cpp
+)
+
+target_include_directories(dasall_access_health_readiness_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway/src
+)
+
+target_link_libraries(dasall_access_health_readiness_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_health_readiness_integration_test)
+
+add_test(NAME AccessHealthReadinessIntegrationTest
+  COMMAND dasall_access_health_readiness_integration_test)
+set_tests_properties(AccessHealthReadinessIntegrationTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_health_readiness_integration_test
+)
+
 add_executable(dasall_access_daemon_receipt_flow_integration_test
   DaemonReceiptFlowIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
