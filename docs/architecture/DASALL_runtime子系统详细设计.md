@@ -1018,6 +1018,15 @@ Memory 有 checkpoint worker、Knowledge 有 index refresh、LLM 有 health prob
 | 核心内部阶段 | preflight、main_loop、tool_round、recovery_round、terminalize |
 | 失败语义 | 任何下游失败都先折叠为 Observation / ErrorInfo / governance result，再决定是 continue、recover、degrade 还是 safe fail |
 
+##### 6.24.4.1 UnaryResponseContract 回链
+
+default unary 主链的最终响应合同以 [../ssot/UnaryResponseContract.md](../ssot/UnaryResponseContract.md) 为唯一 SSOT；runtime 在该合同中的职责固定为：
+
+1. `AgentOrchestrator` 保留最终 `AgentResult` 提交权，但对 `ResponseBuilder` 成功返回的 draft 只允许补齐 `request_id`、`trace_id`、`goal_id`、`checkpoint_ref`、`created_at` 等审计锚点，不得重写 `response_text` 与 `status` 的成功语义。
+2. `Completed` 只允许对应 `llm_bridge` 或 `observation projection` 成功路径；如果 cognition 走 `llm fallback` / template fallback，runtime 必须保留 `PartiallyCompleted`，不能在 terminalize 阶段把它提升为 `Completed`。
+3. true integration path 的成功合同由 `RuntimeUnaryIntegrationTest` 与 `CognitionRuntimeIntegrationTest` 共同守护：至少要求 `status=Completed`、`task_completed=true`、`response_text` 非空，且 publish 前已补齐 `goal_id` 与 `checkpoint_ref`。
+4. `RuntimeUnaryFixtureIntegrationTest` 仍可验证 runtime-local terminal path，但它不是 default unary 最终响应合同的 owner；fixture path 不得覆盖 true integration 断言。
+
 建议把 AgentOrchestrator 继续拆成以下 Build 粒度：
 
 1. preflight：加载 profile、session、checkpoint 和预算初始快照。

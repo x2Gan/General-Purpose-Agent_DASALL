@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #543
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-002 收敛 AgentResult 最终响应合同与 projection 规则
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/UnaryResponseContract.md`，冻结 default unary true integration path 下 `response_text`、`status`、observation projection、llm fallback、fixture vs true integration 的统一合同，并明确 `Completed` / `PartiallyCompleted` 的 mode 映射。
+2. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`，新增 `6.24.4.1 UnaryResponseContract 回链`，把 `AgentOrchestrator` 的最终提交权边界固定为“只补审计锚点，不重写成功路径语义”。
+3. 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`，新增 `6.4.1 ResponseBuilder 的 UnaryResponseContract 口径`，固定 `llm_bridge -> observation projection -> template_fallback` 的 mode 选择与状态映射。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-002` 标记为 Done，并把 `INT-BLK-02` 从“未统一”回写为“设计冻结已完成，后续转入 012/018 的 Build 与 Gate 固化”。
+
+### 验证
+
+1. `rg -n "response_text|observation projection|llm fallback|Completed|PartiallyCompleted|RuntimeUnaryIntegrationTest|CognitionRuntimeIntegrationTest|INT-TODO-012|INT-TODO-018" docs/ssot/UnaryResponseContract.md`
+   - 结果：通过；新 SSOT 文档已包含 response contract 关键术语、状态切分和 012/018 的 Design -> Build 映射。
+2. `rg -n "response_text|observation projection|llm fallback|Completed|RuntimeUnaryIntegrationTest|CognitionRuntimeIntegrationTest" docs/ssot/UnaryResponseContract.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_cognition子系统详细设计.md`
+   - 结果：通过；SSOT、runtime 详设与 cognition 详设已经对齐到同一套最终响应合同锚点。
+3. `rg -n "INT-TODO-002|INT-BLK-02|UnaryResponseContract" docs/todos/integration/DASALL_系统集成专项TODO.md`
+   - 结果：通过；专项 TODO 已同步回写任务完成状态与 blocker 解阻状态。
+
+### 结果
+
+1. `INT-BLK-02` 的设计层阻塞已解除，`ResponseBuilder`、`AgentOrchestrator` 与 true integration gate 现在共享同一份 `UnaryResponseContract`。
+2. 当前 Gate-INT-03 的成功定义已冻结为 observation projection 的 `Completed` 基线；template fallback 与 llm fallback 只允许进入 `PartiallyCompleted` 或失败语义。
+3. 集成专项下一步应继续推进 `INT-TODO-003`，冻结 RetrievalEvidenceRef 的最小结构化共享投影，避免主链在 evidence 语义上继续扁平化。
+
 ## 记录 #542
 
 - 日期：2026-05-06

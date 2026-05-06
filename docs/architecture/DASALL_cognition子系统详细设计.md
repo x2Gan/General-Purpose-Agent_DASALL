@@ -336,6 +336,16 @@ flowchart TD
 | BeliefUpdateSynthesizer | BeliefState、Observation | BeliefUpdateHint | cognition internal | Memory write transaction |
 | CognitionLlmBridge | LLMRequest/LLMResponse 类公共接口 | StageModelHint、StageSchemaSpec | cognition -> llm 公共接口 | provider 内部实现 |
 
+#### 6.4.1 ResponseBuilder 的 UnaryResponseContract 口径
+
+`ResponseBuilder` 的 default unary 最终响应合同以 [../ssot/UnaryResponseContract.md](../ssot/UnaryResponseContract.md) 为单一真相来源，cognition 侧固定遵循以下规则：
+
+1. mode 选择顺序固定为：`TemplatePreferred` / `prefer_template` -> `llm_bridge` -> `observation projection` -> `template_fallback` -> `unavailable`；其中 `llm fallback` 特指 llm bridge 失败或空 payload 后转入 `template_fallback`。
+2. `llm_bridge` 与 `observation projection` 成功路径只能返回 `AgentResult(status=Completed)`；`template_fallback` 只能返回 `AgentResult(status=PartiallyCompleted)`，不得借由模板文本继续宣称 `Completed`。
+3. `observation projection` 的当前 true integration 基线要求保留 `runtime unary integration completed:` 前缀，并把 redacted / clamped 的 observation payload 投影到 `response_text`。
+4. `template_fallback` 的 summary seed 优先级固定为：`terminal_decision.response_outline.summary` -> `latest_observation.payload` -> `context_packet.current_goal_summary` -> `goal_contract.goal_description`；该路径必须显式携带 `fallback_used=true`。
+5. `RuntimeUnaryIntegrationTest` 与 `CognitionRuntimeIntegrationTest` 共同锁定 `Completed` 成功路径；任何 cognition 内部模板降级、仅返回 draft、或无 payload 的 unavailable 路径，都只能作为降级/失败语义处理，不能当作 true integration pass。
+
 ### 6.5 核心对象与 contracts 对齐关系
 
 #### 6.5.1 共享契约直接复用对象
