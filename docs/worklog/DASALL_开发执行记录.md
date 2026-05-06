@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #542
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-001 收敛 default unary required/optional ports 矩阵
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/SingleAgentRuntimePortMatrix.md`，冻结 default single-agent unary 下 `memory/cognition/tools/knowledge/llm` 的 required / optional / fail-closed / degraded 语义，并明确 `knowledge` / `llm` 只允许在显式 degraded 下缺失，不再允许继续宣称 default-ready。
+2. 更新 `docs/architecture/DASALL_runtime子系统详细设计.md`，新增 `6.24.12.2 default unary required / optional port matrix`，把 `RuntimeDependencySet` 的 seam 口径回链到新 SSOT，并明确 `has_live_unary_ports()` 仅是核心 required ports 的最小检查，不等于 default unary ready。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-001` 标记为 Done，并把 `INT-BLK-01` 从“未解阻”回写为“已由设计冻结解除，后续转入 010/014/021 的 Build 与 Gate 落地”。
+
+### 验证
+
+1. `rg -n "required|optional|fail-closed|degraded|knowledge_service|llm_manager|INT-TODO-010|INT-TODO-014|INT-TODO-021" docs/ssot/SingleAgentRuntimePortMatrix.md`
+   - 结果：通过；新 SSOT 文档已包含 required/optional 定义、矩阵条目以及 010/014/021 的 Design -> Build 映射。
+2. `rg -n "required|optional|fail-closed|degraded|knowledge_service|llm_manager" docs/ssot/SingleAgentRuntimePortMatrix.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md`
+   - 结果：通过；SSOT、runtime 详设与集成评审三处对齐到同一套 required/optional 与 degraded 关键词锚点。
+3. `rg -n "INT-TODO-001|INT-BLK-01|SingleAgentRuntimePortMatrix" docs/todos/integration/DASALL_系统集成专项TODO.md`
+   - 结果：通过；专项 TODO 已同步回写任务完成状态与 blocker 解阻状态。
+
+### 结果
+
+1. `INT-OQ-01` 已被采纳并冻结为系统 SSOT：`knowledge` / `llm` 对 default-ready 声明为必需，对 degraded 运行为可选。
+2. `INT-BLK-01` 的设计层阻塞已解除，后续 010/014/021 可以基于统一矩阵推进 readiness surface、runtime degraded 行为与 integration/profile gate。
+3. 集成专项下一步应继续推进 `INT-TODO-002`，锁定 unary 最终响应合同，避免 default unary 主 Gate 在 Build 前继续承受语义漂移。
+
 ## 记录 #541
 
 - 日期：2026-05-05

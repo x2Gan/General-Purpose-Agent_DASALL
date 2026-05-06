@@ -1186,6 +1186,25 @@ CheckpointManager 的任务拆分建议优先顺序：
 | services | limited self-check / diagnose seam | 仅在启动自检、健康诊断、只读探测路径启用 | 默认 `null adapter`；禁止扩展成常规执行主路径 | 同上 |
 | multi_agent | `MultiAgentGateway` 或等价 runtime-facing seam | 阶段 L 启动且 multi_agent public interface 稳定 | 阶段 J 默认 `null adapter`，不以 stub 冒充多 Agent ready | 同上 |
 
+##### 6.24.12.2 default unary required / optional port matrix
+
+为消除 `RuntimeDependencySet`、集成评审与后续 readiness surface 的歧义，default single-agent unary 的端口口径以 [../ssot/SingleAgentRuntimePortMatrix.md](../ssot/SingleAgentRuntimePortMatrix.md) 为唯一 SSOT，并在 runtime 侧固定为以下解释：
+
+1. `memory`、`cognition`、`tools` 属于核心 `required` ports；缺任一项都必须在 init / preflight 阶段 fail-closed。
+2. `knowledge`、`llm` 对“系统能否继续运行”是 `optional`，但对“是否可以声明 default unary ready”是 `required`；缺失时只能进入显式 `degraded`，不得继续宣称 default-ready。
+3. `tools` 若被 profile 显式关闭，只能通过 runtime-owned `null adapter` 保持 seam 完整；调用方不得以 `nullptr` 绕过组合根语义。
+4. `RuntimeDependencySet::has_live_unary_ports()` 只允许表达“核心 required ports 已具备”的最小判断，不能继续被解释为 default unary ready；default-ready 与 degraded-ready 需要在后续 Build 中拆成更细粒度的 readiness surface。
+
+对应的 default unary matrix 摘要如下：
+
+| 端口域 | 当前字段 | 模式 | 缺失时语义 | Gate 归属 |
+|---|---|---|---|---|
+| memory | `memory_manager` | `required` | fail-closed；不得绕过 ADR-006 的上下文装配权 | `Gate-INT-01`、`Gate-INT-06` |
+| cognition | `cognition_engine`、`response_builder` | `required` | fail-closed；不得以 observation fallback 冒充完整 response path | `Gate-INT-01`、`Gate-INT-03` |
+| tools | `tool_manager` | `required` | 原始端口缺失时 fail-closed；非默认 profile 才允许 `null adapter` | `Gate-INT-01`、`Gate-INT-06` |
+| knowledge | `knowledge_service` | `optional` | 允许 `degraded`，但不满足 default-ready | `Gate-INT-01`、`Gate-INT-06` |
+| llm | `llm_manager` | `optional` | 允许 `degraded` / fallback，但不满足 default-ready | `Gate-INT-01`、`Gate-INT-03`、`Gate-INT-06` |
+
 RuntimeDependencySet 的组合根职责进一步固定为：
 
 1. 持有 profile 投影视图和 enabled_modules 判定结果，统一决定 live adapter / null adapter / fail-closed stub 的装配。

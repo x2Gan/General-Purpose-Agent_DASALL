@@ -199,7 +199,7 @@
 
 | Task ID | Status | 任务标题 | 设计依据 | 精确范围 | 粒度 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置任务 | 关联阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| INT-TODO-001 | NotStarted | 收敛默认 unary required/optional ports 矩阵 | 集成评审 GINT-02；runtime 详设；ADR-008 | `memory/cognition/tools/knowledge/llm` 在 default unary 中的 `required / optional / fail-closed / degraded` 语义 | L3 | `docs/ssot/SingleAgentRuntimePortMatrix.md`、`docs/architecture/DASALL_runtime子系统详细设计.md` | `SingleAgentRuntimePortMatrix`、`RuntimeDependencySet::has_live_unary_ports` 语义表 | 文档一致性检查 | `rg -n "required|optional|fail-closed|degraded|knowledge_service|llm_manager" docs/ssot/SingleAgentRuntimePortMatrix.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md` | 无 | INT-BLK-01 | 完成该矩阵并获 runtime/knowledge/llm 三方确认 | `docs/ssot/SingleAgentRuntimePortMatrix.md` | 矩阵明确列出每个 port 的模式、消费者、失败语义和 gate 归属，后续 Build 不再凭口头约定解释 |
+| INT-TODO-001 | Done | 收敛默认 unary required/optional ports 矩阵 | 集成评审 GINT-02；runtime 详设；ADR-008 | `memory/cognition/tools/knowledge/llm` 在 default unary 中的 `required / optional / fail-closed / degraded` 语义 | L3 | `docs/ssot/SingleAgentRuntimePortMatrix.md`、`docs/architecture/DASALL_runtime子系统详细设计.md` | `SingleAgentRuntimePortMatrix`、`RuntimeDependencySet::has_live_unary_ports` 语义表 | 文档一致性检查 | `rg -n "required|optional|fail-closed|degraded|knowledge_service|llm_manager" docs/ssot/SingleAgentRuntimePortMatrix.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md` | 无 | INT-BLK-01 | 已通过 `docs/ssot/SingleAgentRuntimePortMatrix.md` 与 runtime 详设回链完成设计冻结 | `docs/ssot/SingleAgentRuntimePortMatrix.md` | 矩阵明确列出每个 port 的模式、消费者、失败语义和 gate 归属，后续 Build 不再凭口头约定解释 |
 | INT-TODO-002 | NotStarted | 收敛 AgentResult 最终响应合同与 projection 规则 | 集成评审 GINT-01；cognition/response 设计 | `response_text`、`status`、`observation projection`、`llm fallback`、`fixture vs true integration` 预期 | L3 | `docs/ssot/UnaryResponseContract.md`、`docs/architecture/DASALL_runtime子系统详细设计.md`、`docs/architecture/DASALL_cognition子系统详细设计.md` | `UnaryResponseContract`、`ResponseBuilder` 拼装规则 | 文档一致性检查 | `rg -n "response_text|observation projection|llm fallback|Completed|RuntimeUnaryIntegrationTest|CognitionRuntimeIntegrationTest" docs/ssot/UnaryResponseContract.md docs/architecture/DASALL_runtime子系统详细设计.md docs/architecture/DASALL_cognition子系统详细设计.md` | 无 | INT-BLK-02 | 明确 contract 并同步 runtime/cognition/test fixture 口径 | `docs/ssot/UnaryResponseContract.md` | contract 明确后，任何集成测试断言都能回链到同一份规则文档 |
 | INT-TODO-003 | NotStarted | 收敛 RetrievalEvidenceRef 最小结构化共享投影 | 集成评审 GINT-03；CrossModuleDataProjectionMatrix | evidence_ref、source_ref、source_kind、summary_text、trust_level、freshness、anchor_locator 最小字段 | L3 | `docs/ssot/RetrievalEvidenceProjectionV1.md`、`docs/ssot/CrossModuleDataProjectionMatrix.md` | `RetrievalEvidenceRef` 字段表与 projection rule | 文档一致性检查 | `rg -n "evidence_ref|source_ref|source_kind|summary_text|trust_level|freshness|anchor_locator" docs/ssot/RetrievalEvidenceProjectionV1.md docs/ssot/CrossModuleDataProjectionMatrix.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md` | 无 | INT-BLK-03 | contracts owner 同意 additive + optional 策略 | `docs/ssot/RetrievalEvidenceProjectionV1.md` | 字段表与 projection 规则冻结，且明确哪些字段禁止进入 shared contracts |
 | INT-TODO-004 | NotStarted | 收敛 diagnostics retained snapshot 契约与测试拓扑 | 集成评审 GINT-04；infra diagnostics 详设 | execute/store/get/export round-trip、retention、snapshot id、fixture topology、failure mode | L3 | `docs/ssot/DiagnosticsRetainedSnapshotContract.md`、`docs/architecture/DASALL_infra_diagnostics模块详细设计.md` | `DiagnosticsRetainedSnapshotContract`、`snapshot_id`、retention rule | 文档一致性检查 | `rg -n "retained snapshot|execute|get_snapshot|export|retention|snapshot_id" docs/ssot/DiagnosticsRetainedSnapshotContract.md docs/architecture/DASALL_infra_diagnostics模块详细设计.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md` | 无 | INT-BLK-04 | diagnostics owner 确认 round-trip contract 和 fixture 结构 | `docs/ssot/DiagnosticsRetainedSnapshotContract.md` | retained snapshot 的输入、持久化、回读、导出和拒绝语义被同一份契约固定 |
@@ -275,7 +275,7 @@
 
 | Blocker ID | 对应设计 Blocker | 阻塞项 | 当前影响 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|---|
-| INT-BLK-01 | TODO 新增 | default unary required/optional product mode 未冻结 | 010、014、021 无法稳定判断 ready 与 degraded | 完成 001 并通过相关 owner 评审 | 未冻结前，只允许 fixture / docs 级验证，不宣布 default ready |
+| INT-BLK-01 | TODO 新增 | default unary required/optional product mode 未冻结 | 已由 001 完成设计冻结解阻；后续转入 010、014、021 的 Build 与 Gate 落地 | 完成 001 并通过相关 owner 评审 | 未冻结前，只允许 fixture / docs 级验证，不宣布 default ready |
 | INT-BLK-02 | TODO 新增 | unary response contract 与 fixture 期望未统一 | 012、018 容易出现测试与实现互相解释 | 完成 002 并同步 runtime/cognition/test fixture | 未统一前，不扩大 response builder 分支 |
 | INT-BLK-03 | TODO 新增 | structured evidence shared projection 未经 contracts admission | 008、009、013、019 无法稳定推进 | 完成 003 并通过 contracts additive 策略确认 | admission 未完成前，保留旧文本路径，禁止私有字段横向扩散 |
 | INT-BLK-04 | TODO 新增 | diagnostics retained snapshot contract / fixture 未冻结 | 011、015、020 会反复修改测试预期 | 完成 004 并冻结 snapshot contract | 冻结前只做局部调试，不宣称 diagnostics ready |
@@ -289,7 +289,7 @@
 
 | Blocker ID | 校准时间 | 校准结果 | 剩余阻塞范围 | 备注 |
 |---|---|---|---|---|
-| INT-BLK-01 | 2026-05-06 | 未解阻 | required/optional mode 相关实现与 gate | 来源于集成评审 GINT-02 |
+| INT-BLK-01 | 2026-05-06 | 已解阻 | 后续仅剩 010、014、021 的实现与 gate 固化 | 由 `docs/ssot/SingleAgentRuntimePortMatrix.md` 与 runtime 详设回链关闭 |
 | INT-BLK-02 | 2026-05-06 | 未解阻 | unary 主 Gate 修复与固化 | 来源于集成评审 GINT-01 |
 | INT-BLK-03 | 2026-05-06 | 未解阻 | structured evidence surface、主链投影与 gate | 来源于集成评审 GINT-03 |
 | INT-BLK-04 | 2026-05-06 | 未解阻 | diagnostics retained snapshot 实现与 gate | 来源于集成评审 GINT-04 |
@@ -368,7 +368,7 @@ ctest --test-dir build-ci -R "(RuntimeUnaryIntegrationTest|CognitionRuntimeInteg
 
 ### 11.1 是否可直接进入执行
 
-可以，但不建议直接从 Build 任务起步。最合理的起点是 001、002、003、004 四个设计冻结任务并行，然后立即接 005、006、007 把系统级 SSOT 补齐。
+可以，但不建议直接从 Build 任务起步。当前 001 已完成设计冻结；下一批最合理的串行起点是 002、003、004、025，随后接 005、006、007、026 把系统级 SSOT 补齐。
 
 ### 11.2 当前最细可执行粒度
 
