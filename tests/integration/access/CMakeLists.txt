@@ -329,6 +329,50 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_health_readiness_integration_test
 )
 
+add_executable(dasall_access_observability_main_chain_integration_test
+  AccessObservabilityMainChainIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_access_observability_main_chain_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_observability_main_chain_integration_test)
+
+add_test(NAME AccessObservabilityMainChainIntegrationTest
+  COMMAND dasall_access_observability_main_chain_integration_test)
+set_tests_properties(AccessObservabilityMainChainIntegrationTest PROPERTIES LABELS "integration;access")
+
+add_test(NAME AccessPolicyBackendUnavailableIntegrationTest
+  COMMAND dasall_access_observability_main_chain_integration_test)
+set_tests_properties(AccessPolicyBackendUnavailableIntegrationTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_observability_main_chain_integration_test
+)
+
+add_executable(dasall_access_publish_failure_audit_integration_test
+  AccessPublishFailureAuditTest.cpp
+)
+
+target_link_libraries(dasall_access_publish_failure_audit_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_publish_failure_audit_integration_test)
+
+add_test(NAME AccessPublishFailureAuditTest
+  COMMAND dasall_access_publish_failure_audit_integration_test)
+set_tests_properties(AccessPublishFailureAuditTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_publish_failure_audit_integration_test
+)
+
 add_executable(dasall_access_daemon_receipt_flow_integration_test
   DaemonReceiptFlowIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
@@ -367,6 +411,14 @@ dasall_apply_common_options(dasall_access_daemon_receipt_flow_integration_test)
 
 add_test(NAME DaemonReceiptFlowIntegrationTest COMMAND dasall_access_daemon_receipt_flow_integration_test)
 set_tests_properties(DaemonReceiptFlowIntegrationTest PROPERTIES LABELS "integration;access")
+
+add_test(NAME AccessAsyncReceiptQueryCancelIntegrationTest
+  COMMAND dasall_access_daemon_receipt_flow_integration_test)
+set_tests_properties(AccessAsyncReceiptQueryCancelIntegrationTest PROPERTIES LABELS "integration;access")
+
+add_test(NAME DaemonSubmitQueryCancelIntegrationTest
+  COMMAND dasall_access_daemon_receipt_flow_integration_test)
+set_tests_properties(DaemonSubmitQueryCancelIntegrationTest PROPERTIES LABELS "integration;access")
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_receipt_flow_integration_test

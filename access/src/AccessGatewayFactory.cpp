@@ -1,5 +1,6 @@
 #include "AccessGatewayFactory.h"
 
+#include <chrono>
 #include <charconv>
 #include <memory>
 #include <optional>
@@ -27,6 +28,18 @@
 namespace dasall::access {
 
 namespace {
+
+[[nodiscard]] std::shared_ptr<AccessObservabilityBridge> make_observability_bridge(
+    const AccessObservabilityEmitBackend& emit_backend) {
+  if (!emit_backend) {
+    return std::make_shared<AccessObservabilityBridge>();
+  }
+
+  return std::make_shared<AccessObservabilityBridge>(
+      [emit_backend](const AccessObservabilityEvent& event) {
+        return emit_backend(event.name, event.fields);
+      });
+}
 
 [[nodiscard]] RuntimeDispatchResult make_rejected_result(AccessErrorCode error_code,
                                                          std::string error_ref) {
@@ -69,6 +82,26 @@ namespace {
   }
 
   return it->second;
+}
+
+[[nodiscard]] RuntimeDispatchRequest build_policy_denied_observability_request(
+    const InboundPacket& packet,
+    const AuthenticationOutcome& auth_outcome,
+    const AccessPolicyEvaluationResult& policy_result) {
+  RuntimeDispatchRequest request;
+  request.packet = packet;
+  request.subject_identity = auth_outcome.subject_identity;
+  request.decision_proof = policy_result.decision_proof;
+  request.request_context["request_id"] = packet.packet_id;
+  request.request_context["operation"] = "access.request.submit";
+  request.request_context["target_type"] = "access.entry";
+  if (packet.trace_id.has_value() && !packet.trace_id->empty()) {
+    request.request_context["trace_id"] = *packet.trace_id;
+  }
+  if (packet.session_hint.has_value() && !packet.session_hint->empty()) {
+    request.request_context["session_id"] = *packet.session_hint;
+  }
+  return request;
 }
 
 [[nodiscard]] LocalPeerUidFact parse_local_peer_fact(const InboundPacket& packet) {
@@ -553,6 +586,15 @@ build_daemon_submit_pipeline(
                                           policy_result.decision_proof.reason_code);
             }
             if (!policy_result.allowed) {
+              const auto policy_request =
+                build_policy_denied_observability_request(
+                  packet,
+                  auth_outcome,
+                  policy_result);
+              (void)observability_bridge->emit_policy_denied(
+                policy_request,
+                policy_result.reject_reason.value_or(
+                  std::string("authorization_denied")));
               return make_rejected_result(AccessErrorCode::AuthorizationDenied,
                                           policy_result.reject_reason.value_or(
                                               std::string("authorization_denied")));
@@ -656,11 +698,21 @@ build_daemon_submit_pipeline(
               return make_rejected_result(error.code, error.reason);
             }
 
+            const auto dispatch_started_at = std::chrono::steady_clock::now();
             auto dispatch_result = runtime_bridge->dispatch(normalized.runtime_request);
+            const auto dispatch_latency_ms =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - dispatch_started_at)
+                .count();
             if (admission_result.ticket_ref.has_value()) {
               admission_controller->record_completion(*admission_result.ticket_ref,
                                                       dispatch_result);
             }
+
+            (void)observability_bridge->emit_dispatch_result(
+              normalized.runtime_request,
+              dispatch_result,
+              dispatch_latency_ms);
 
             if (dispatch_result.disposition == AccessDisposition::AcceptedAsync) {
               const auto receipt = receipt_builder->register_and_build_receipt(
@@ -710,6 +762,14 @@ build_daemon_submit_pipeline(
               const auto publish_attempt =
                   result_publisher->publish(normalized.runtime_request,
                                            *dispatch_result.publish_envelope->agent_result);
+              if (!publish_attempt.published && publish_attempt.error.has_value()) {
+                (void)observability_bridge->emit_publish_failed(
+                    publish_attempt.envelope,
+                    publish_attempt.error->code,
+                    publish_attempt.error->detail.empty()
+                        ? publish_attempt.error->reason
+                        : publish_attempt.error->detail);
+              }
               dispatch_result.publish_envelope = publish_attempt.envelope;
             }
 
@@ -810,6 +870,14 @@ build_gateway_submit_pipeline(
                                       policy_result.decision_proof.reason_code);
         }
         if (!policy_result.allowed) {
+          const auto policy_request = build_policy_denied_observability_request(
+            packet,
+            auth_outcome,
+            policy_result);
+          (void)observability_bridge->emit_policy_denied(
+            policy_request,
+            policy_result.reject_reason.value_or(
+              std::string("authorization_denied")));
           return make_rejected_result(
               AccessErrorCode::AuthorizationDenied,
               policy_result.reject_reason.value_or(
@@ -866,11 +934,21 @@ build_gateway_submit_pipeline(
           return make_rejected_result(error.code, error.reason);
         }
 
+        const auto dispatch_started_at = std::chrono::steady_clock::now();
         auto dispatch_result = runtime_bridge->dispatch(normalized.runtime_request);
+        const auto dispatch_latency_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - dispatch_started_at)
+                .count();
         if (admission_result.ticket_ref.has_value()) {
           admission_controller->record_completion(*admission_result.ticket_ref,
                                                   dispatch_result);
         }
+
+        (void)observability_bridge->emit_dispatch_result(
+            normalized.runtime_request,
+            dispatch_result,
+            dispatch_latency_ms);
 
         if (dispatch_result.disposition == AccessDisposition::Rejected &&
             dispatch_result.publish_envelope.has_value() &&
@@ -878,6 +956,14 @@ build_gateway_submit_pipeline(
           const auto publish_attempt =
               result_publisher->publish(normalized.runtime_request,
                                         *dispatch_result.publish_envelope->agent_result);
+          if (!publish_attempt.published && publish_attempt.error.has_value()) {
+            (void)observability_bridge->emit_publish_failed(
+                publish_attempt.envelope,
+                publish_attempt.error->code,
+                publish_attempt.error->detail.empty()
+                    ? publish_attempt.error->reason
+                    : publish_attempt.error->detail);
+          }
           dispatch_result.publish_envelope = publish_attempt.envelope;
         }
 
@@ -898,7 +984,8 @@ std::shared_ptr<IAccessGateway> create_access_gateway(
 
 std::shared_ptr<IAccessGateway> create_daemon_access_gateway(
     DaemonAccessPipelineOptions options) {
-  auto observability_bridge = std::make_shared<AccessObservabilityBridge>();
+  auto observability_bridge =
+      make_observability_bridge(options.observability_emit_backend);
   auto pipeline = build_daemon_submit_pipeline(options, observability_bridge);
   AccessGatewayFactoryOptions gateway_options;
   if (pipeline != nullptr) {
@@ -916,7 +1003,8 @@ std::shared_ptr<IAccessGateway> create_daemon_access_gateway(
 
 std::shared_ptr<IAccessGateway> create_gateway_access_gateway(
     GatewayAccessPipelineOptions options) {
-  auto observability_bridge = std::make_shared<AccessObservabilityBridge>();
+  auto observability_bridge =
+      make_observability_bridge(options.observability_emit_backend);
   auto pipeline = build_gateway_submit_pipeline(options, observability_bridge);
 
   AccessGatewayFactoryOptions gateway_options;

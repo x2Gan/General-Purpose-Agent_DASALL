@@ -1,5 +1,38 @@
 # DASALL 开发执行记录
 
+## 记录 #562
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-028 打通 Access async ownership / policy / observability 安全治理闭环
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`，为 daemon/gateway production factory 增加可注入的 observability emit seam，并把 `access.policy.denied`、`access.runtime.dispatched`、`access.publish.failed` 接到真实 submit 主链；publish failure 现在会保留错误 detail 做审计，而不会改变原始业务裁定。
+2. 新增 `tests/integration/access/AccessObservabilityMainChainIntegrationTest.cpp` 与 `tests/integration/access/AccessPublishFailureAuditTest.cpp`，并更新 `tests/integration/access/CMakeLists.txt`：前者锁住成功主链与 policy backend unavailable fail-closed 的 observability 发射，后者锁住 reject + publish backend failure 时的 publish_failed 审计锚点。
+3. 更新 `tests/integration/access/CMakeLists.txt` 与 `tests/unit/access/CMakeLists.txt`，为 `AccessAsyncReceiptQueryCancelIntegrationTest`、`DaemonSubmitQueryCancelIntegrationTest`、`AccessCancelForwardingTest`、`AsyncTaskRegistryHmacOwnershipTest`、`AccessPolicyBackendUnavailableIntegrationTest` 补充 discoverability 别名，使 028 的 focused gate 名称与 TODO 验收口径对齐。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-028` 标记为 Done，并把 11.1 当前串行位推进到 `INT-TODO-029`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_access)`
+   - 结果：通过；新增 observability seam 和主链事件发射后，access 静态库保持可编译。
+2. `RunCtest_CMakeTools(tests=AccessAsyncReceiptQueryCancelIntegrationTest, AccessCancelForwardingTest, DaemonSubmitQueryCancelIntegrationTest, AsyncTaskRegistryHmacOwnershipTest, AccessPolicyBackendUnavailableIntegrationTest, AccessObservabilityMainChainIntegrationTest, AccessPublishFailureAuditTest)`
+   - 结果：通过；7 个 focused gates 全绿，`build/vscode-linux-ninja` 仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+3. `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessAsyncReceiptQueryCancelIntegrationTest|AccessCancelForwardingTest|DaemonSubmitQueryCancelIntegrationTest|AsyncTaskRegistryHmacOwnershipTest|AccessPolicyBackendUnavailableIntegrationTest|AccessObservabilityMainChainIntegrationTest|AccessPublishFailureAuditTest" --output-on-failure`
+   - 结果：命中既有环境差异；`build-ci` 目录先前已按 Ninja 生成器配置，直接切 `Unix Makefiles` 会报 generator mismatch。
+4. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_access_daemon_receipt_flow_integration_test dasall_access_daemon_cancel_command_unit_test dasall_access_async_task_registry_ownership_unit_test dasall_access_observability_main_chain_integration_test dasall_access_publish_failure_audit_integration_test && ctest --test-dir build-ci -R "AccessAsyncReceiptQueryCancelIntegrationTest|AccessCancelForwardingTest|DaemonSubmitQueryCancelIntegrationTest|AsyncTaskRegistryHmacOwnershipTest|AccessPolicyBackendUnavailableIntegrationTest|AccessObservabilityMainChainIntegrationTest|AccessPublishFailureAuditTest" --output-on-failure`
+   - 结果：通过；targeted build-ci/Ninja focused targets 与 7 个 focused gates 全部通过。
+5. `cmake --build build-ci --target dasall_access_tests`
+   - 结果：聚合 access label target 仍受既有 `AccessPolicyOverrideGateTest` 失败与未预编译 `dasall_cli_ipc_client_*` executables 缺失影响；不属于 028 变更面，已按 INT-TC010 使用 targeted targets 作为正式验收依据。
+
+### 结果
+
+1. Access async receipt query/cancel、owner mismatch、runtime cancel forwarding 与 policy backend unavailable 现在都能以系统集成 TODO 规定的 focused gate 名称被稳定发现和执行，不再停留在零散旧测试名或局部单测层。
+2. observability 不再只是 `AccessObservabilityBridge` 的对象级单测：daemon/gateway 组合根现可接入真实 emit backend，并在 policy deny、runtime dispatch、publish failure 三条主链路径上保留 request_id/result_id/error detail 审计锚点，同时保持业务裁定不被 side effect 反向污染。
+3. 下一串行任务为 `INT-TODO-029`，继续落 `HealthConfigPolicy` / `ProbeScheduler` baseline 并校准 event publish fallback。
+
 ## 记录 #561
 
 - 日期：2026-05-06

@@ -3,7 +3,9 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include "AccessTypes.h"
@@ -16,6 +18,10 @@ class IDiagnosticsService;
 namespace dasall::access {
 
 class AsyncTaskRegistry;
+
+using AccessObservabilityEmitBackend =
+    std::function<bool(std::string_view event_name,
+                       const std::map<std::string, std::string>& fields)>;
 
 struct AccessGatewayFactoryOptions {
   using SubmitPipeline =
@@ -54,6 +60,7 @@ struct DaemonAccessPipelineOptions {
   std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
   std::shared_ptr<AsyncTaskRegistry> async_task_registry;
   PublishBackend publish_backend{};
+    AccessObservabilityEmitBackend observability_emit_backend{};
 
   RuntimeDispatchBackend runtime_dispatch_backend{};
   RuntimeCancelBackend runtime_cancel_backend{};
@@ -73,6 +80,7 @@ struct GatewayAccessPipelineOptions {
   bool policy_backend_available = true;
   bool allow_submit = true;
   PublishBackend publish_backend{};
+    AccessObservabilityEmitBackend observability_emit_backend{};
 
   RuntimeDispatchBackend runtime_dispatch_backend{};
 };

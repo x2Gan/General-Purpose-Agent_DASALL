@@ -297,6 +297,10 @@ dasall_add_access_unit_test(
   AsyncTaskRegistryOwnershipTest.cpp
 )
 
+add_test(NAME AsyncTaskRegistryHmacOwnershipTest
+  COMMAND dasall_access_async_task_registry_ownership_unit_test)
+set_tests_properties(AsyncTaskRegistryHmacOwnershipTest PROPERTIES LABELS "unit;access")
+
 dasall_add_access_unit_test(
   dasall_access_async_task_registry_expiry_unit_test
   AsyncTaskRegistryExpiryTest
@@ -645,6 +649,10 @@ dasall_apply_common_options(dasall_access_daemon_cancel_command_unit_test)
 add_test(NAME DaemonCancelCommandTest
   COMMAND dasall_access_daemon_cancel_command_unit_test)
 set_tests_properties(DaemonCancelCommandTest PROPERTIES LABELS "unit;access")
+
+add_test(NAME AccessCancelForwardingTest
+  COMMAND dasall_access_daemon_cancel_command_unit_test)
+set_tests_properties(AccessCancelForwardingTest PROPERTIES LABELS "unit;access")
 
 list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_cancel_command_unit_test
