@@ -15,6 +15,7 @@ namespace dasall::infra::diagnostics {
 namespace {
 
 constexpr std::string_view kDiagnosticsServiceFacadeSourceRef = "DiagnosticsServiceFacade";
+constexpr std::string_view kReadonlyDiagnosticsPolicyRef = "policy://diagnostics/readonly";
 
 [[nodiscard]] std::int64_t current_time_unix_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -78,6 +79,15 @@ constexpr std::string_view kDiagnosticsServiceFacadeSourceRef = "DiagnosticsServ
                                        std::string(kDiagnosticsServiceFacadeSourceRef));
 }
 
+[[nodiscard]] CommandDecision make_readonly_allowed_decision() {
+  return CommandDecision{
+      .allowed = true,
+      .reason_code = {},
+      .policy_ref = std::string(kReadonlyDiagnosticsPolicyRef),
+      .denied_rule_id = {},
+  };
+}
+
 }  // namespace
 
 DiagnosticsServiceFacade::DiagnosticsServiceFacade(DiagnosticsServiceFacadeOptions options)
@@ -119,6 +129,11 @@ std::optional<std::string> DiagnosticsServiceFacade::safe_mode_reason() const {
 
 void DiagnosticsServiceFacade::inject_snapshot_store_commit_failure_for_test(std::string reason) {
   snapshot_store_.inject_commit_failure_for_test(std::move(reason));
+}
+
+void DiagnosticsServiceFacade::inject_snapshot_store_current_time_for_test(
+    std::string now_rfc3339) {
+  snapshot_store_.inject_current_time_for_test(std::move(now_rfc3339));
 }
 
 DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCommand& command) {
@@ -220,12 +235,7 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
                                     : std::string("diagnostics command execution failed"),
         std::string("diagnostics.execute"),
         std::string(kDiagnosticsServiceFacadeSourceRef),
-        CommandDecision{
-            .allowed = true,
-            .reason_code = std::string(),
-            .policy_ref = std::string("policy://diagnostics/readonly"),
-            .denied_rule_id = std::string(),
-        });
+      make_readonly_allowed_decision());
   }
 
   (void)metrics_bridge_.emit(DiagnosticsMetricSignal{
@@ -266,12 +276,7 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
                                     : std::string("diagnostics redaction failed"),
         std::string("diagnostics.redact"),
         std::string(kDiagnosticsServiceFacadeSourceRef),
-        CommandDecision{
-            .allowed = true,
-            .reason_code = std::string(),
-            .policy_ref = std::string("policy://diagnostics/readonly"),
-            .denied_rule_id = std::string(),
-        });
+      make_readonly_allowed_decision());
   }
 
   snapshot = std::move(redaction.snapshot);
@@ -301,12 +306,7 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
         store_result.error.has_value() ? store_result.error->details.stage
                                        : std::string("diagnostics.store_snapshot"),
         std::string(kDiagnosticsServiceFacadeSourceRef),
-        CommandDecision{
-            .allowed = true,
-            .reason_code = std::string(),
-            .policy_ref = std::string("policy://diagnostics/readonly"),
-            .denied_rule_id = std::string(),
-        });
+      make_readonly_allowed_decision());
   }
 
   (void)metrics_bridge_.emit(DiagnosticsMetricSignal{
@@ -319,14 +319,8 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::execute(const DiagnosticsCom
   });
 
   reset_failures();
-  return DiagnosticsSnapshotResult::success(
-      std::move(snapshot),
-      CommandDecision{
-          .allowed = true,
-          .reason_code = {},
-          .policy_ref = std::string("policy://diagnostics/readonly"),
-          .denied_rule_id = {},
-      });
+    return DiagnosticsSnapshotResult::success(std::move(snapshot),
+                        make_readonly_allowed_decision());
 }
 
 DiagnosticsSnapshotResult DiagnosticsServiceFacade::get_snapshot(const SnapshotQuery& query) {
@@ -350,12 +344,7 @@ DiagnosticsSnapshotResult DiagnosticsServiceFacade::get_snapshot(const SnapshotQ
   }
 
   return DiagnosticsSnapshotResult::success(*snapshot,
-                                            CommandDecision{
-                                                .allowed = true,
-                                                .reason_code = {},
-                                                .policy_ref = std::string("policy://diagnostics/readonly"),
-                                                .denied_rule_id = {},
-                                            });
+                                            make_readonly_allowed_decision());
 }
 
 SnapshotExportResult DiagnosticsServiceFacade::export_snapshot(

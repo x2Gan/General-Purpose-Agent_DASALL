@@ -1444,9 +1444,28 @@ add_executable(dasall_diagnostics_snapshot_export_unit_test
   DiagnosticsSnapshotExportTest.cpp
 )
 
+add_executable(dasall_diagnostics_fixture_surface_unit_test
+  DiagnosticsFixtureSurfaceTest.cpp
+)
+
+add_executable(dasall_diagnostics_snapshot_store_contract_unit_test
+  DiagnosticsSnapshotStoreContractTest.cpp
+)
+
 target_include_directories(dasall_diagnostics_snapshot_export_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_include_directories(dasall_diagnostics_fixture_surface_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests/fixtures/infra
+)
+
+target_include_directories(dasall_diagnostics_snapshot_store_contract_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/tests/fixtures/infra
 )
 
 target_link_libraries(dasall_diagnostics_snapshot_export_unit_test
@@ -1455,10 +1474,30 @@ target_link_libraries(dasall_diagnostics_snapshot_export_unit_test
     dasall_infra
 )
 
+target_link_libraries(dasall_diagnostics_fixture_surface_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+target_link_libraries(dasall_diagnostics_snapshot_store_contract_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
 dasall_apply_common_options(dasall_diagnostics_snapshot_export_unit_test)
+dasall_apply_common_options(dasall_diagnostics_fixture_surface_unit_test)
+dasall_apply_common_options(dasall_diagnostics_snapshot_store_contract_unit_test)
 
 add_test(NAME DiagnosticsSnapshotExportTest COMMAND dasall_diagnostics_snapshot_export_unit_test)
 set_tests_properties(DiagnosticsSnapshotExportTest PROPERTIES LABELS "unit")
+
+add_test(NAME DiagnosticsFixtureSurfaceTest COMMAND dasall_diagnostics_fixture_surface_unit_test)
+set_tests_properties(DiagnosticsFixtureSurfaceTest PROPERTIES LABELS "unit")
+
+add_test(NAME DiagnosticsSnapshotStoreContractTest COMMAND dasall_diagnostics_snapshot_store_contract_unit_test)
+set_tests_properties(DiagnosticsSnapshotStoreContractTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_diagnostics_redaction_unit_test
   DiagnosticsRedactionTest.cpp

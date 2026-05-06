@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #554
+
+- 日期：2026-05-06
+- 阶段：integration/build-surface
+- 任务：INT-TODO-011 补 diagnostics retained snapshot fixture 与 store/get seam
+- 状态：已完成
+
+### 改动
+
+1. 更新 `infra/src/diagnostics/DiagnosticsServiceFacade.h/.cpp`，补充 `inject_snapshot_store_current_time_for_test()` test seam，并将 readonly-allowed `CommandDecision` 收口为单一 helper，固定 retained snapshot `execute/get_snapshot` 的 policy 语义。
+2. 新增 `tests/fixtures/infra/DiagnosticsSnapshotFixture.h`，冻结 diagnostics retained snapshot 的 fixture schema：execute command、retained snapshot、snapshot query、本地 JSON export request、summary / actor_ref / evidence refs 约束。
+3. 新增 `tests/unit/infra/DiagnosticsSnapshotStoreContractTest.cpp` 与 `tests/unit/infra/DiagnosticsFixtureSurfaceTest.cpp`，并更新 `tests/unit/infra/CMakeLists.txt` 注册两条 focused infra unit tests。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-011` 标记为 Done，并把 11.1 的当前请求状态更新为 008~011 已全部完成。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_infra, dasall_diagnostics_snapshot_store_contract_unit_test, dasall_diagnostics_fixture_surface_unit_test)`
+   - 结果：通过；infra library、新增 facade seam 和两条 diagnostics focused tests 均成功编译链接。
+2. `RunCtest_CMakeTools(tests=DiagnosticsSnapshotStoreContractTest, DiagnosticsFixtureSurfaceTest)`
+   - 结果：通过；验证 retained snapshot fixture schema 稳定，且 `execute -> store -> get_snapshot` seam 可在固定 retention 时钟下稳定 round-trip。
+
+### 结果
+
+1. `INT-BLK-04` 在 diagnostics fixture/store-get surface 的第一步 Build 落地已经完成：retained snapshot 的 fixture schema、store/get seam 与 focused tests 已从 smoke 隐含语义中分离出来。
+2. 011 让 diagnostics retained snapshot 的测试基线获得了稳定时钟 seam，避免 `CommandExecutor` stub 时间与 `SnapshotStore` retention 时间漂移导致的伪失败。
+3. 当前用户请求的骨架与公共接口面任务 `INT-TODO-008 ~ INT-TODO-011` 已全部完成，并已具备逐任务提交/推送的收口条件。
+
 ## 记录 #553
 
 - 日期：2026-05-06

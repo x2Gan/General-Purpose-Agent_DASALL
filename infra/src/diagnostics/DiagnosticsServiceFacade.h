@@ -36,6 +36,7 @@ class DiagnosticsServiceFacade final : public IDiagnosticsService {
   [[nodiscard]] std::uint32_t consecutive_failures() const;
   [[nodiscard]] std::optional<std::string> safe_mode_reason() const;
   void inject_snapshot_store_commit_failure_for_test(std::string reason);
+  void inject_snapshot_store_current_time_for_test(std::string now_rfc3339);
 
   [[nodiscard]] DiagnosticsSnapshotResult execute(const DiagnosticsCommand& command) override;
   [[nodiscard]] DiagnosticsSnapshotResult get_snapshot(const SnapshotQuery& query) override;
