@@ -1,5 +1,6 @@
 #include "AgentFacade.h"
 
+#include <algorithm>
 #include <chrono>
 #include <utility>
 
@@ -19,6 +20,7 @@ struct RuntimeCompositionRoot {
   std::shared_ptr<RuntimeDependencySet> dependency_set;
   std::unique_ptr<AgentOrchestrator> orchestrator;
   std::optional<SessionSnapshot> waiting_session;
+  RuntimeDependencyReadiness readiness;
   bool degraded = false;
 };
 
@@ -33,6 +35,58 @@ struct RuntimeCompositionRoot {
   }
 
   return value;
+}
+
+void append_diagnostic_fragment(std::string& diagnostics,
+                                const std::string& fragment) {
+  if (fragment.empty()) {
+    return;
+  }
+
+  if (!diagnostics.empty()) {
+    diagnostics += ";";
+  }
+  diagnostics += fragment;
+}
+
+void append_unique_tag(std::vector<std::string>& tags,
+                       const std::string& tag) {
+  if (tag.empty()) {
+    return;
+  }
+
+  if (std::find(tags.begin(), tags.end(), tag) == tags.end()) {
+    tags.push_back(tag);
+  }
+}
+
+[[nodiscard]] bool degraded_ready_allowed(
+    const profiles::RuntimePolicySnapshot& snapshot) {
+  const auto& degrade_policy = snapshot.degrade_policy();
+  return degrade_policy.allow_model_failover || degrade_policy.allow_budget_degrade;
+}
+
+void apply_runtime_readiness_tags(const RuntimeDependencyReadiness& readiness,
+                                  contracts::AgentResult& result) {
+  if (!readiness.degraded) {
+    return;
+  }
+
+  if (!result.tags.has_value()) {
+    result.tags = std::vector<std::string>{};
+  }
+
+  append_unique_tag(*result.tags, "runtime_readiness:degraded");
+  for (const auto& port : readiness.missing_optional_ports) {
+    append_unique_tag(*result.tags, std::string{"runtime_missing_optional:"} + port);
+    if (port == "knowledge") {
+      append_unique_tag(*result.tags, "knowledge_unavailable");
+    } else if (port == "llm") {
+      append_unique_tag(*result.tags, "llm_unavailable");
+    } else {
+      append_unique_tag(*result.tags, port + "_unavailable");
+    }
+  }
 }
 
 [[nodiscard]] contracts::AgentResult make_failed_result(
@@ -187,6 +241,25 @@ class AgentFacade::State {
       return result;
     }
 
+    const auto readiness = request.dependency_set->describe_readiness();
+    append_diagnostic_fragment(result.diagnostics,
+                               std::string{"readiness="} + readiness.summary());
+    if (!readiness.has_required_ports) {
+      result.health_summary =
+          "runtime facade rejected missing required dependency ports";
+      result.error_code =
+          static_cast<std::int32_t>(contracts::ResultCode::RuntimeRetryExhausted);
+      return result;
+    }
+
+    if (readiness.degraded && !degraded_ready_allowed(*request.policy_snapshot)) {
+      result.health_summary =
+          "runtime facade rejected degraded optional-port init under current profile";
+      result.error_code =
+          static_cast<std::int32_t>(contracts::ResultCode::PolicyDenied);
+      return result;
+    }
+
     auto orchestrator = std::make_unique<AgentOrchestrator>(OrchestratorComposition{
         .runtime_instance_id = request.runtime_instance_id,
         .profile_id = result.resolved_profile_id,
@@ -206,14 +279,18 @@ class AgentFacade::State {
         .dependency_set = request.dependency_set,
         .orchestrator = std::move(orchestrator),
         .waiting_session = request.dependency_set->seeded_waiting_session,
-        .degraded = false,
+        .readiness = readiness,
+        .degraded = readiness.degraded,
     };
     initialized_ = true;
 
     result.accepted = true;
-    result.health_summary = result.diagnostics.empty()
-                                ? "runtime facade skeleton initialized"
-                                : "runtime facade initialized with policy-projected cognition ports";
+    result.degraded = readiness.degraded;
+    result.health_summary = readiness.degraded
+                                ? "runtime facade initialized in degraded mode"
+                                : result.diagnostics.empty()
+                                      ? "runtime facade skeleton initialized"
+                                      : "runtime facade initialized with policy-projected cognition ports";
     return result;
   }
 
@@ -229,7 +306,8 @@ class AgentFacade::State {
                                 "runtime facade is missing orchestrator composition");
     }
 
-    const auto run_result = root_.orchestrator->run_once(request);
+    auto run_result = root_.orchestrator->run_once(request);
+    apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);
     update_waiting_session(run_result);
     return run_result.agent_result;
   }
@@ -279,8 +357,9 @@ class AgentFacade::State {
                                 "runtime resume request token does not match waiting checkpoint binding");
     }
 
-    const auto run_result = root_.orchestrator->handle_waiting_state(*root_.waiting_session,
-                                                                     request);
+    auto run_result = root_.orchestrator->handle_waiting_state(*root_.waiting_session,
+                                                               request);
+    apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);
     update_waiting_session(run_result);
     return run_result.agent_result;
   }

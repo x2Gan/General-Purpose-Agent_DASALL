@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #557
+
+- 日期：2026-05-06
+- 阶段：integration/implementation
+- 任务：INT-TODO-014 落实 required/optional ports 与 degraded path 行为
+- 状态：已完成
+
+### 改动
+
+1. 更新 `runtime/src/AgentFacade.cpp`，让 init 路径真正消费 `RuntimeDependencySet::describe_readiness()`，把 optional `knowledge/llm` 缺口投影到 `AgentInitResult.degraded`、`health_summary` 与 `diagnostics`，并在 profile 不允许 degraded 时保留 fail-closed 入口。
+2. 同步更新 `runtime/src/AgentFacade.cpp` 的 `handle()/resume()` 出口，为 optional 端口缺失的运行结果追加 `runtime_readiness:degraded`、`knowledge_unavailable`、`llm_unavailable` 等审计 tags，避免把 degraded unary 伪装成 default-ready。
+3. 新增 `tests/integration/agent_loop/RuntimeRequiredOptionalPortsIntegrationTest.cpp`，并更新 `tests/integration/agent_loop/CMakeLists.txt` 注册新 integration gate，覆盖 `knowledge + llm` 缺口时的 degraded init/result tagging 行为。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-014` 标记为 Done，并把 11.1 的当前串行执行位推进到 `INT-TODO-015`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_runtime_required_optional_ports_integration_test, dasall_runtime_profile_compatibility_integration_test)`
+   - 结果：通过；runtime readiness 变更、新 integration target 与 profile compatibility target 均成功编译链接。
+2. `RunCtest_CMakeTools(tests=RuntimeRequiredOptionalPortsIntegrationTest, RuntimeProfileCompatibilityTest)`
+   - 结果：通过；optional port gap 的 degraded readiness 与 profile degrade policy 投影一致，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
+3. `RunCtest_CMakeTools(tests=RuntimeUnaryIntegrationTest)`
+   - 结果：通过；014 的 readiness tag 改动未回退既有 unary 主链集成路径。
+
+### 结果
+
+1. `INT-BLK-01` 的 implementation 主链继续收口：runtime 不再把 `knowledge/llm` 缺口静默视为 default-ready，而是以显式 `degraded` readiness 和审计 tag 对外暴露 optional port gap。
+2. 014 把 `SingleAgentRuntimePortMatrix` 的 optional-port 语义落到了运行期 surface：`AgentInitResult` 现在能区分 ready 与 degraded-ready，`AgentResult` 也会保留缺失端口的审计标签。
+3. 下一步串行任务为 `INT-TODO-015`，继续修复 diagnostics execute/store/get retained snapshot round-trip。
+
 ## 记录 #556
 
 - 日期：2026-05-06
