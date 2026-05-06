@@ -279,6 +279,12 @@ add_test(NAME DaemonAccessSubmitCompositionTest
   COMMAND dasall_access_daemon_submit_composition_integration_test)
 set_tests_properties(DaemonAccessSubmitCompositionTest PROPERTIES LABELS "integration;access")
 
+add_test(NAME CliDaemonSubmitIntegrationTest
+  COMMAND dasall_access_daemon_submit_composition_integration_test)
+set_tests_properties(CliDaemonSubmitIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
+
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_submit_composition_integration_test
 )
@@ -298,6 +304,18 @@ dasall_apply_common_options(dasall_access_gateway_submit_composition_integration
 add_test(NAME GatewayAccessSubmitCompositionTest
   COMMAND dasall_access_gateway_submit_composition_integration_test)
 set_tests_properties(GatewayAccessSubmitCompositionTest PROPERTIES LABELS "integration;access")
+
+add_test(NAME HttpGatewaySubmitIntegrationTest
+  COMMAND dasall_access_gateway_submit_composition_integration_test)
+set_tests_properties(HttpGatewaySubmitIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
+
+add_test(NAME AccessGatewayPipelineIntegrationTest
+  COMMAND dasall_access_gateway_submit_composition_integration_test)
+set_tests_properties(AccessGatewayPipelineIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_gateway_submit_composition_integration_test
@@ -323,7 +341,9 @@ dasall_apply_common_options(dasall_access_health_readiness_integration_test)
 
 add_test(NAME AccessHealthReadinessIntegrationTest
   COMMAND dasall_access_health_readiness_integration_test)
-set_tests_properties(AccessHealthReadinessIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(AccessHealthReadinessIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_health_readiness_integration_test
@@ -347,7 +367,9 @@ set_tests_properties(AccessObservabilityMainChainIntegrationTest PROPERTIES LABE
 
 add_test(NAME AccessPolicyBackendUnavailableIntegrationTest
   COMMAND dasall_access_observability_main_chain_integration_test)
-set_tests_properties(AccessPolicyBackendUnavailableIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(AccessPolicyBackendUnavailableIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_observability_main_chain_integration_test
@@ -414,7 +436,9 @@ set_tests_properties(DaemonReceiptFlowIntegrationTest PROPERTIES LABELS "integra
 
 add_test(NAME AccessAsyncReceiptQueryCancelIntegrationTest
   COMMAND dasall_access_daemon_receipt_flow_integration_test)
-set_tests_properties(AccessAsyncReceiptQueryCancelIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(AccessAsyncReceiptQueryCancelIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 add_test(NAME DaemonSubmitQueryCancelIntegrationTest
   COMMAND dasall_access_daemon_receipt_flow_integration_test)
@@ -487,6 +511,12 @@ dasall_apply_common_options(dasall_access_daemon_profile_compatibility_integrati
 
 add_test(NAME DaemonProfileCompatibilityTest COMMAND dasall_access_daemon_profile_compatibility_integration_test)
 set_tests_properties(DaemonProfileCompatibilityTest PROPERTIES LABELS "integration;access")
+
+add_test(NAME AccessProfileCompatibilityTest
+  COMMAND dasall_access_daemon_profile_compatibility_integration_test)
+set_tests_properties(AccessProfileCompatibilityTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_profile_compatibility_integration_test

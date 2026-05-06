@@ -55,6 +55,20 @@ add_custom_target(dasall_gate_int_07
     dasall_builtin_executor_lane_result_code_unit_test
 )
 
+add_custom_target(dasall_gate_int_08
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L gate-int-08
+  DEPENDS
+    dasall_contract_agent_request_test
+    dasall_contract_agent_result_test
+    dasall_contract_identity_metadata_test
+    dasall_access_daemon_submit_composition_integration_test
+    dasall_access_gateway_submit_composition_integration_test
+    dasall_access_daemon_receipt_flow_integration_test
+    dasall_access_observability_main_chain_integration_test
+    dasall_access_health_readiness_integration_test
+    dasall_access_daemon_profile_compatibility_integration_test
+)
+
 set(DASALL_SYSTEM_GATE_ACCEPTANCE_TEST_NAMES
   ${DASALL_SYSTEM_GATE_ACCEPTANCE_CONTRACT_TEST_NAMES}
   BuiltinExecutorLaneResultCodeTest

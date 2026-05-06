@@ -204,6 +204,10 @@ dasall_register_contract_test(
   smoke
 )
 
+set_tests_properties(IdentityMetadataContractTest PROPERTIES
+  LABELS "contract;smoke;gate-int-08;access-v1-production-gate"
+)
+
 dasall_register_contract_test(
   dasall_contract_infra_context_boundary_test
   InfraContextBoundaryContractTest
@@ -1504,6 +1508,10 @@ dasall_register_contract_test(
   agent
 )
 
+set_tests_properties(AgentRequestContractTest PROPERTIES
+  LABELS "contract;agent;gate-int-08;access-v1-production-gate"
+)
+
 # agent group (WP03-T003-B)
 dasall_register_contract_test(
   dasall_contract_agent_request_field_test
@@ -1678,6 +1686,10 @@ dasall_register_contract_test(
   AgentResultContractTest
   agent/AgentResultContractTest.cpp
   agent
+)
+
+set_tests_properties(AgentResultContractTest PROPERTIES
+  LABELS "contract;agent;gate-int-08;access-v1-production-gate"
 )
 
 # e2e group (WP03-T015-B)

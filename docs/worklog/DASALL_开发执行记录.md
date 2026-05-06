@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #570
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-030 固化 Access v1 production Gate 与证据分层
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/access/CMakeLists.txt`，为当前已稳定的 Access focused executables 增补 formal alias test-name：`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessProfileCompatibilityTest`，并把 `AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest` 一起挂到 `gate-int-08` / `access-v1-production-gate` 标签下。
+2. 更新 `tests/contract/CMakeLists.txt` 与 `tests/CMakeLists.txt`，把 `AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest` 纳入同一组 Gate 标签，并新增窄 custom target `dasall_gate_int_08`，使 Access v1 unary focused ingress 拥有独立 CMake 入口。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md` 与 `docs/todos/access/DASALL_access子系统专项TODO.md`：将 `INT-TODO-030` 标记为 Done，把 Access focused release gate 明确收敛到 `Build_CMakeTools(target=dasall_gate_int_08)`，并校准 Access TODO 当前结论、049/050 与 blocker 口径，避免继续把 mock pipeline、ping liveness 或局部 envelope 字段写成 release evidence。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_08)`
+   - 结果：通过；target 成功执行 `IdentityMetadataContractTest`、`AgentRequestContractTest`、`AgentResultContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessProfileCompatibilityTest`，label summary 同时出现 `gate-int-08` 与 `access-v1-production-gate`。
+
+### 结果
+
+1. Gate-INT-08 已从 Access TODO 中的计划态测试名，提升为当前 build 可以稳定发现和执行的 focused release gate；Access v1 unary ingress 证据现在以 formal alias test-name、gate label 与独立 target 为准。
+2. Access TODO / integration TODO / worklog 三处口径已对齐：当前 focused gate 只对 CLI->daemon、HTTP->gateway、async receipt、policy unavailable、health readiness、profile/contracts guard 负责，不再把 mock pipeline、ping liveness 或局部字段当作 release evidence。
+3. `dasall_gate_int_09` 继续只承接 018~023 的 one-shot acceptance matrix；Access v1 focused gate 暂时保持独立入口，等待后续 `INT-TODO-024` 统一吸收文档级证据闭环。
+
 ## 记录 #569
 
 - 日期：2026-05-06
