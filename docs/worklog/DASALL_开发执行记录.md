@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #566
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-020 修复并固化 diagnostics retained snapshot Gate
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/infra/CMakeLists.txt`，把 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest` 统一挂到 `gate-int-05` / `diagnostics-retained-snapshot-gate` 标签下，不再只停留在泛 `integration` 标签。
+2. 更新 `tests/CMakeLists.txt`，新增窄 custom target `dasall_gate_int_05`，让 retained snapshot Gate 拥有独立的 CMake 入口，并显式依赖 diagnostics smoke/integration 两条 executable targets。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-020` 标记为 Done，把交付物/验收命令收敛到 `dasall_gate_int_05`，并将当前串行位推进到 `INT-TODO-021`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_05)`
+   - 结果：通过；新的 Gate target 成功执行 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest`，label summary 同时出现 `gate-int-05` 与 `diagnostics-retained-snapshot-gate`。
+
+### 结果
+
+1. Gate-INT-05 已从“两个 diagnostics 集成测试名”提升为可稳定发现和执行的 retained snapshot 系统 Gate；后续 023 可以直接复用 `gate-int-05` 进行 discoverability / one-shot 收口。
+2. diagnostics retained snapshot 的系统级证据不再依赖局部 smoke 口头说明，而是通过统一 label 与独立 target 固化到测试拓扑中。
+3. 下一串行任务为 `INT-TODO-021`，继续新增 required/optional ports 与 degraded mode integration/profile Gate。
+
 ## 记录 #565
 
 - 日期：2026-05-06

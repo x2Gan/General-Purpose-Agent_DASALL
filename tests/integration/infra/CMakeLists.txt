@@ -16,7 +16,7 @@ target_include_directories(dasall_infra_diagnostics_smoke_integration_test
 dasall_apply_common_options(dasall_infra_diagnostics_smoke_integration_test)
 
 add_test(NAME InfraDiagnosticsSmokeTest COMMAND dasall_infra_diagnostics_smoke_integration_test)
-set_tests_properties(InfraDiagnosticsSmokeTest PROPERTIES LABELS "integration")
+set_tests_properties(InfraDiagnosticsSmokeTest PROPERTIES LABELS "integration;diagnostics;gate-int-05;diagnostics-retained-snapshot-gate")
 
 add_executable(dasall_infra_diagnostics_integration_test
   InfraDiagnosticsIntegrationTest.cpp
@@ -36,7 +36,7 @@ target_include_directories(dasall_infra_diagnostics_integration_test
 dasall_apply_common_options(dasall_infra_diagnostics_integration_test)
 
 add_test(NAME InfraDiagnosticsIntegrationTest COMMAND dasall_infra_diagnostics_integration_test)
-set_tests_properties(InfraDiagnosticsIntegrationTest PROPERTIES LABELS "integration")
+set_tests_properties(InfraDiagnosticsIntegrationTest PROPERTIES LABELS "integration;diagnostics;gate-int-05;diagnostics-retained-snapshot-gate")
 
 add_subdirectory(audit)
 add_subdirectory(config)
