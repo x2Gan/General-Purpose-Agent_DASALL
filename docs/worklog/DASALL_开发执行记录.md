@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #544
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-003 收敛 RetrievalEvidenceRef 最小结构化共享投影
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/RetrievalEvidenceProjectionV1.md`，冻结 `RetrievalEvidenceRef` 的七个最小共享字段：`evidence_ref`、`source_ref`、`source_kind`、`summary_text`、`trust_level`、`freshness`、可选 `anchor_locator`，并明确 additive + optional 演进约束。
+2. 更新 `docs/ssot/CrossModuleDataProjectionMatrix.md`，将 Knowledge 证据线从“纯字符串投影”升级为“`RetrievalEvidenceRef[] + std::vector<std::string>` 并存”的总矩阵口径，并明确 `EvidenceBundle` 仍是 source-of-truth。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-003` 标记为 Done，并把 `INT-BLK-03` 从“shared projection 未经 admission”回写为“字段边界已冻结，后续转入 008/009/013/019”。
+
+### 验证
+
+1. `rg -n "evidence_ref|source_ref|source_kind|summary_text|trust_level|freshness|anchor_locator|INT-TODO-008|INT-TODO-009|INT-TODO-013|INT-TODO-019|additive \+ optional" docs/ssot/RetrievalEvidenceProjectionV1.md`
+   - 结果：通过；新 SSOT 文档已包含最小字段集、兼容约束和后续 Build 映射。
+2. `rg -n "evidence_ref|source_ref|source_kind|summary_text|trust_level|freshness|anchor_locator" docs/ssot/RetrievalEvidenceProjectionV1.md docs/ssot/CrossModuleDataProjectionMatrix.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md`
+   - 结果：通过；新 SSOT、总矩阵和集成评审三处已经对齐到同一套字段边界。
+3. `rg -n "INT-TODO-003|INT-BLK-03|RetrievalEvidenceProjectionV1" docs/todos/integration/DASALL_系统集成专项TODO.md`
+   - 结果：通过；专项 TODO 已同步回写任务完成状态与 blocker 解阻状态。
+
+### 结果
+
+1. `INT-BLK-03` 的设计层阻塞已解除，后续 contracts/memory/runtime/knowledge 的 Build 可直接围绕同一份 `RetrievalEvidenceProjectionV1` 推进。
+2. 结构化 evidence 的共享面已经被限制在最小 supporting contract，避免把 `EvidenceSlice` / `EvidenceBundle` 整体抬升进 contracts。
+3. 集成专项下一步应继续推进 `INT-TODO-004`，冻结 diagnostics retained snapshot 契约与测试拓扑，避免另一条系统红灯继续反复漂移。
+
 ## 记录 #543
 
 - 日期：2026-05-06

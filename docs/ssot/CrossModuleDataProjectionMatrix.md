@@ -24,7 +24,7 @@ Owner：架构组 + Profiles/Runtime 负责人
 
 | 数据线 | 上游事实源 | 唯一投影责任 | 下游可见对象 | v1 共享形态 | 禁止事项 |
 |---|---|---|---|---|---|
-| Knowledge 证据 | Knowledge 的 `KnowledgeRetrieveResult` 中 `EvidenceBundle/EvidenceSlice` | `Knowledge` 负责结构化证据组装，`runtime` 负责跨模块转运到 memory | `MemoryContextRequest.external_evidence`、`ContextPacket.retrieval_evidence`、观测/审计 evidence refs | `std::vector<std::string>` 文本切片 | 不得把 `retrieval_evidence` 反解为结构化证据对象 |
+| Knowledge 证据 | Knowledge 的 `KnowledgeRetrieveResult` 中 `EvidenceBundle/EvidenceSlice` | `Knowledge` 负责结构化证据组装，`runtime` 负责跨模块转运到 memory | `MemoryContextRequest.external_evidence`、`MemoryContextRequest.retrieval_evidence_refs`、`ContextPacket.retrieval_evidence`、`ContextPacket.retrieval_evidence_refs`、观测/审计 evidence refs | `RetrievalEvidenceRef[] + std::vector<std::string>` 并存 | 不得把 `EvidenceSlice` / `EvidenceBundle` 整体抬升进 shared contracts |
 | Tool 执行结果 | `ToolResult` | `tools::ResultProjector` | `Observation`、`ObservationDigest`、audit facts、`ToolInvocationEnvelope` | `Observation` / `ObservationDigest` shared contracts | 不得把 raw payload 直接回灌 prompt、`ContextPacket` 或长期 memory |
 | Access sidecar | `SubjectIdentity`、`AccessDecisionProof`、`RuntimeDispatchRequest` | `access::RequestNormalizer` 负责 runtime bridge sidecar，`AccessObservabilityBridge` 负责 audit projection | `AgentRequest`、`RuntimeDispatchRequest`、audit/metrics/tracing facts | 共享面只有 `AgentRequest` / `AgentResult` | 不得把主体属性、认证秘密、完整 proof 塞进 shared contracts |
 
@@ -35,16 +35,17 @@ Owner：架构组 + Profiles/Runtime 负责人
 | 阶段 | Owner | 对象 / 字段 | 形态 | 投影规则 | 下游消费者 |
 |---|---|---|---|---|---|
 | 检索完成 | knowledge | `KnowledgeRetrieveResult.context_projection`、`EvidenceBundle`、`EvidenceSlice` | 结构化、lossless、module-local | 作为当前请求内结构化证据 source of truth，保留 `evidence_ref`、`source_type`、`confidence`、freshness 等字段 | runtime |
-| runtime -> memory | runtime | `MemoryContextRequest.external_evidence` | `std::vector<std::string>`、lossy | 按 rerank 后顺序，把面向 memory/context 的文本切片投影为字符串；只保留可直接用于上下文装配的摘要文本 | memory `CandidateCollector` |
-| memory -> contracts | memory | `ContextPacket.retrieval_evidence` | `std::vector<std::string>`、lossy | 从 `vector_hits + external_evidence` 生成面向 llm 的检索证据文本槽位；该字段只表达“可展示证据摘要”，不是结构化证据事实源 | runtime / llm / cognition |
+| runtime -> memory | runtime | `MemoryContextRequest.external_evidence`、`MemoryContextRequest.retrieval_evidence_refs` | `std::vector<std::string>` + `RetrievalEvidenceRef[]`，文本为 lossy、refs 为最小结构化 shared projection | 按 rerank 后顺序保留两条并行视图：文本切片继续服务上下文装配；`RetrievalEvidenceRef` 仅保留 `evidence_ref/source_ref/source_kind/summary_text/trust_level/freshness/optional anchor_locator` | memory `CandidateCollector`、ContextOrchestrator |
+| memory -> contracts | memory | `ContextPacket.retrieval_evidence`、`ContextPacket.retrieval_evidence_refs` | `std::vector<std::string>` + `RetrievalEvidenceRef[]` | `retrieval_evidence` 继续表达面向 llm 的文本证据槽位；`retrieval_evidence_refs` 负责 provenance / freshness / citation preserve，不得被当成 source-of-truth 本体 | runtime / llm / cognition |
 | 观测与审计 | knowledge + runtime | evidence refs / source ids / freshness facts | 结构化事实、module-local | 结构化引用继续留在知识侧结果或 runtime invoke-scoped 事实集中，供 observability / audit / recovery 使用 | infra、runtime |
 
 ### 4.2 v1 冻结规则
 
-1. `external_evidence` 与 `retrieval_evidence` 都是文本投影视图，不承诺保留 `EvidenceSlice` 的全部结构化字段。
-2. `EvidenceBundle` 才是知识证据的结构化事实源；如需保留 `evidence_ref`、`source_type`、`confidence`，必须沿 runtime invoke-scoped sidecar 或观测事实传播，不能指望从字符串恢复。
+1. `external_evidence` 与 `retrieval_evidence` 继续保留为文本投影视图；新增的 `retrieval_evidence_refs` 只承担最小结构化共享职责，不替代文本槽位。
+2. `EvidenceBundle` 才是知识证据的结构化事实源；`RetrievalEvidenceRef` 只是 additive + optional 的 supporting contract，不承诺保留 `EvidenceSlice` 的全部结构化字段。
 3. `external_evidence` 的单条元素必须是经过裁剪和脱敏的文本切片，不得直接塞入数据库行、原始 JSON、二进制句柄或未经治理的长文。
-4. 当后续确需跨模块共享结构化证据时，新增独立 projection object；在那之前，任何模块不得私自把 `std::vector<std::string>` 扩写为自定义结构体 ABI。
+4. `RetrievalEvidenceRef` 的共享字段固定为 `evidence_ref`、`source_ref`、`source_kind`、`summary_text`、`trust_level`、`freshness`、可选 `anchor_locator`；`confidence`、`tags`、`coverage_notes`、catalog metadata 继续保留 module-local。
+5. 任何 consumer 都不得从 `std::vector<std::string>` 反解结构化字段，也不得把 `RetrievalEvidenceRef` 反向视为 knowledge source-of-truth。
 
 ## 5. ToolResult -> Observation / ObservationDigest
 
