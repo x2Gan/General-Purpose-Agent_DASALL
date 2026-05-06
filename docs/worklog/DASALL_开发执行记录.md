@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #565
+
+- 日期：2026-05-06
+- 阶段：integration/gate-closure
+- 任务：INT-TODO-019 新增 structured evidence preservation integration Gate
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/agent_loop/RuntimeEvidenceProjectionIntegrationTest.cpp`，用 runtime live unary 真链路锁住 knowledge -> runtime -> cognition 的 structured evidence handoff，明确断言 `evidence_ref`、`freshness` 与 citation-bearing text evidence 会一起进入 `ContextPacket`。
+2. 新增 `tests/integration/knowledge/KnowledgeEvidencePreservationTest.cpp`，把 knowledge 侧 evidence preservation gate 从旧 smoke/failure 名称里拆出来：正向路径验证 shared structured refs 与 citation/freshness 保留，负向路径验证 stale snapshot reject 时不会泄漏 evidence bundle 或 structured refs。
+3. 更新 `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/knowledge/CMakeLists.txt` 与 `tests/CMakeLists.txt`，把两条新测试统一挂到 `gate-int-04` / `structured-evidence-gate` 标签下，并新增窄 custom target `dasall_gate_int_04`。
+4. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-019` 标记为 Done，把交付物/验收命令收敛到 `dasall_gate_int_04`，并将当前串行位推进到 `INT-TODO-020`。
+
+### 验证
+
+1. `Build_CMakeTools(target=dasall_gate_int_04)`
+   - 结果：通过；新的 Gate target 成功编译并执行 `RuntimeEvidenceProjectionIntegrationTest`、`KnowledgeEvidencePreservationTest` 两条 gate，label summary 同时出现 `gate-int-04` 与 `structured-evidence-gate`。
+
+### 结果
+
+1. Gate-INT-04 现在有了与 013 旧回归测试分离的正式入口：主链 evidence preservation 与 stale reject fail-closed 由同一条 gate 统一收敛，而不是继续散落在 `RuntimeKnowledgeEvidenceIntegrationTest`、`KnowledgeRetrievalSmokeTest` 与 `KnowledgeFailureDegradeTest` 之间。
+2. structured evidence 的正向与拒绝语义都已经进入系统 Gate 口径；后续 023 可以直接复用 `gate-int-04` / `structured-evidence-gate` 进行 discoverability 和 one-shot 收口。
+3. 下一串行任务为 `INT-TODO-020`，继续修复并固化 diagnostics retained snapshot Gate。
+
 ## 记录 #564
 
 - 日期：2026-05-06

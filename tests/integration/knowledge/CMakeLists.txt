@@ -50,6 +50,13 @@ dasall_add_knowledge_integration_test(
 )
 
 dasall_add_knowledge_integration_test(
+  dasall_knowledge_evidence_preservation_integration_test
+  KnowledgeEvidencePreservationTest
+  KnowledgeEvidencePreservationTest.cpp
+  "integration;knowledge;gate-int-04;structured-evidence-gate"
+)
+
+dasall_add_knowledge_integration_test(
   dasall_knowledge_failure_degrade_integration_test
   dasall_knowledge_failure_degrade_integration_test
   KnowledgeFailureDegradeTest.cpp
@@ -108,6 +115,16 @@ target_link_libraries(dasall_runtime_knowledge_evidence_integration_test
     dasall_memory
     dasall_cognition
     dasall_tools
+    dasall_sqlite3
+)
+
+target_include_directories(dasall_knowledge_evidence_preservation_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_link_libraries(dasall_knowledge_evidence_preservation_integration_test
+  PRIVATE
     dasall_sqlite3
 )
 
