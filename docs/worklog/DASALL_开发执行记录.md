@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #545
+
+- 日期：2026-05-06
+- 阶段：integration/design-freeze
+- 任务：INT-TODO-004 收敛 diagnostics retained snapshot 契约与测试拓扑
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/DiagnosticsRetainedSnapshotContract.md`，冻结 diagnostics retained snapshot 的 execute -> store -> get_snapshot -> export round-trip 契约、`snapshot_id` / retention 规则，以及 smoke/unit/integration 的测试拓扑分层。
+2. 更新 `docs/architecture/DASALL_infra_diagnostics模块详细设计.md`，新增 `6.6.1 retained snapshot round-trip contract`，把 execute/store/get/export 的 retained snapshot 规则和 `InfraDiagnosticsSmokeTest` 的职责回链到新 SSOT。
+3. 更新 `docs/todos/integration/DASALL_系统集成专项TODO.md`，将 `INT-TODO-004` 标记为 Done，并把 `INT-BLK-04` 从“contract / fixture 未冻结”回写为“设计契约已冻结，后续转入 011/015/020”。
+
+### 验证
+
+1. `rg -n "retained snapshot|execute|get_snapshot|export|retention|snapshot_id|InfraDiagnosticsSmokeTest|INT-TODO-011|INT-TODO-015|INT-TODO-020" docs/ssot/DiagnosticsRetainedSnapshotContract.md`
+   - 结果：通过；新 SSOT 文档已包含 retained snapshot round-trip、测试拓扑和后续 Build 映射。
+2. `rg -n "retained snapshot|execute|get_snapshot|export|retention|snapshot_id" docs/ssot/DiagnosticsRetainedSnapshotContract.md docs/architecture/DASALL_infra_diagnostics模块详细设计.md docs/architecture/DASALL_全局子系统集成评审报告-2026-05-06.md`
+   - 结果：通过；SSOT、infra diagnostics 详设与集成评审已对齐到同一套 retained snapshot 契约锚点。
+3. `rg -n "INT-TODO-004|INT-BLK-04|DiagnosticsRetainedSnapshotContract" docs/todos/integration/DASALL_系统集成专项TODO.md`
+   - 结果：通过；专项 TODO 已同步回写任务完成状态与 blocker 解阻状态。
+
+### 结果
+
+1. `INT-BLK-04` 的设计层阻塞已解除，后续 011/015/020 可以直接围绕 store/get seam、round-trip smoke 与 gate discoverability 推进。
+2. diagnostics retained snapshot 的回读和导出现在有了单一契约：成功路径必须基于已存储的 redacted snapshot，remote export 在默认配置下必须拒绝。
+3. 集成专项下一步应继续推进 `INT-TODO-025`，先收敛 AccessUnaryProductionPathV1 与 production/test profile 边界，再回到系统级 Gate 和 SSOT 收口任务。
+
 ## 记录 #544
 
 - 日期：2026-05-06

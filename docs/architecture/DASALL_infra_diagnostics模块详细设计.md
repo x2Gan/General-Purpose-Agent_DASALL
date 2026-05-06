@@ -351,6 +351,15 @@ target / format / gate 矩阵：
 7. INF_E_DIAG_EXPORT_FAIL
 8. INF_E_DIAG_REMOTE_EXPORT_DISABLED
 
+#### 6.6.1 retained snapshot round-trip contract
+
+retained snapshot 的 execute/store/get/export 统一合同以 [../ssot/DiagnosticsRetainedSnapshotContract.md](../ssot/DiagnosticsRetainedSnapshotContract.md) 为单一真相来源；infra diagnostics 详设在实现层固定遵循以下规则：
+
+1. `execute()` 成功返回前必须完成 redaction、snapshot 组装和 store，且向调用方暴露合法 `snapshot_id`；不得把未落盘的临时 snapshot 冒充 retained snapshot。
+2. `get_snapshot(snapshot_id)` 只能从 SnapshotStore 回读已经脱敏的 retained snapshot；回读时 `summary`、`command.actor_ref` 与 `evidence_refs` 等 redacted 字段必须与 execute 成功时保持稳定。
+3. `export_snapshot()` 只能基于已存储的 retained snapshot 导出；`LocalFile + Json` 是 v1 唯一允许成功的导出契约，`RemoteUpload` 在默认配置下必须映射到 remote-disabled 错误。
+4. `InfraDiagnosticsSmokeTest` 是 retained snapshot round-trip 的最小 success gate；`DiagnosticsSnapshotStoreContractTest` / `DiagnosticsFixtureSurfaceTest` 固定 store/get seam 与 fixture topology；`InfraDiagnosticsIntegrationTest` 负责验证 export/audit bridge 协同，但不替代 smoke 的最小 round-trip 断言。
+
 ### 6.7 主流程时序（正常）
 
 1. 调用方提交 DiagnosticsCommand。
