@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #580
+
+- 日期：2026-05-07
+- 阶段：packaging/build
+- 任务：PKG-TODO-006 为 CLI / daemon 二进制补齐系统安装名与 install 规则
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/CMakeLists.txt`，把 `dasall-cli` 的系统安装名显式收敛为 `dasall`，并把 CLI install 规则收回 owning 子目录。
+2. 更新 `apps/daemon/CMakeLists.txt` 与 `apps/CMakeLists.txt`，把 daemon install 规则收回 owning 子目录，并保留顶层 apps 聚合层只负责 subdirectory 组合。
+3. 更新 `CMakeLists.txt`，把默认或遗留的 `/usr/local` install prefix 收敛到 `/usr`，使 `DESTDIR + cmake --install` 的 stage tree 与 packaging TODO 中的 `/usr/bin`、`/usr/sbin` 目标一致。
+4. 更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`，让 binary smoke 使用 build-root 下的受控临时目录承载 socket，不再被 `/tmp` 路径策略误拦。
+5. 更新 `runtime/src/AgentFacade.cpp`，恢复 runtime-local stub path 对最小空 `RuntimeDependencySet` 的初始化接受语义，解开 `RuntimeControlPlaneSurfaceTest` 与 `DaemonBinaryUnarySmokeTest` 的共同回归 blocker。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["RuntimeControlPlaneSurfaceTest"])`
+   - 结果：先失败，定位到 `AgentFacade::init()` 误把 runtime-local stub path 也当成 missing required dependency ports；修复后通过。
+2. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-cli dasall-daemon dasall-cli_json_output_contract_test dasall-cli_exit_code_contract_test dasall_access_daemon_binary_unary_smoke_integration_test && ctest --test-dir build-ci -R "CliJsonOutputContractTest|CliExitCodeContractTest|DaemonBinaryUnarySmokeTest" --output-on-failure && rm -rf stage/pkg && DESTDIR="$PWD/stage/pkg" cmake --install build-ci && test -x stage/pkg/usr/bin/dasall && test -x stage/pkg/usr/sbin/dasall-daemon`
+   - 结果：通过；contract 两条与 binary smoke 全绿，stage install 实际产出 `stage/pkg/usr/bin/dasall` 与 `stage/pkg/usr/sbin/dasall-daemon`。
+
+### 结果
+
+1. PKG-TODO-006 已把 v1 packaging 主线中的 CLI / daemon 系统安装名从 target 内部名收敛到操作系统稳定名，并让 stage install 与 `/usr` 布局保持一致。
+2. 本轮顺带清除了一个真实回归 blocker：runtime-local stub init 与 binary unary smoke 不再因为 `/tmp` socket policy 或 `AgentFacade::init()` 的最小空桩拒绝而失败。
+3. `dasall-common` 资产安装面、repo-relative path 收敛与 `debian/` metadata/payload skeleton 仍待 PKG-TODO-007 ~ 009 继续推进。
+
 ## 记录 #579
 
 - 日期：2026-05-07

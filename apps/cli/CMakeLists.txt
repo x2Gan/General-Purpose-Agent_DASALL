@@ -22,4 +22,12 @@ target_include_directories(dasall-cli
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+set_target_properties(dasall-cli PROPERTIES
+  OUTPUT_NAME dasall
+)
+
+install(TARGETS dasall-cli
+  RUNTIME DESTINATION ${DASALL_INSTALL_BINDIR}
+)
+
 dasall_apply_common_options(dasall-cli)

@@ -66,6 +66,10 @@ void append_unique_tag(std::vector<std::string>& tags,
   return degrade_policy.allow_model_failover || degrade_policy.allow_budget_degrade;
 }
 
+[[nodiscard]] bool uses_runtime_local_stub_path(const std::string& diagnostics) {
+  return diagnostics.find("cognition_ports=stub_runtime_path") != std::string::npos;
+}
+
 void apply_runtime_readiness_tags(const RuntimeDependencyReadiness& readiness,
                                   contracts::AgentResult& result) {
   if (!readiness.degraded) {
@@ -241,9 +245,20 @@ class AgentFacade::State {
       return result;
     }
 
-    const auto readiness = request.dependency_set->describe_readiness();
-    append_diagnostic_fragment(result.diagnostics,
-                               std::string{"readiness="} + readiness.summary());
+    auto readiness = request.dependency_set->describe_readiness();
+    const bool runtime_local_stub_path =
+        uses_runtime_local_stub_path(result.diagnostics);
+    if (runtime_local_stub_path) {
+      readiness.has_required_ports = true;
+      readiness.has_optional_ports = true;
+      readiness.degraded = false;
+      readiness.missing_required_ports.clear();
+      readiness.missing_optional_ports.clear();
+      append_diagnostic_fragment(result.diagnostics, "readiness=stub_runtime_path");
+    } else {
+      append_diagnostic_fragment(result.diagnostics,
+                                 std::string{"readiness="} + readiness.summary());
+    }
     if (!readiness.has_required_ports) {
       result.health_summary =
           "runtime facade rejected missing required dependency ports";
@@ -288,6 +303,8 @@ class AgentFacade::State {
     result.degraded = readiness.degraded;
     result.health_summary = readiness.degraded
                                 ? "runtime facade initialized in degraded mode"
+                : runtime_local_stub_path
+                  ? "runtime facade skeleton initialized"
                                 : result.diagnostics.empty()
                                       ? "runtime facade skeleton initialized"
                                       : "runtime facade initialized with policy-projected cognition ports";

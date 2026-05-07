@@ -67,6 +67,10 @@ class ScopedTempDirectory {
   return fs::path(DASALL_REPOSITORY_ROOT);
 }
 
+[[nodiscard]] fs::path daemon_build_root() {
+  return fs::path(DASALL_DAEMON_BINARY_PATH).parent_path().parent_path().parent_path();
+}
+
 class ScopedDaemonProcess {
  public:
   ScopedDaemonProcess(std::string binary_path,
@@ -190,7 +194,9 @@ class ScopedDaemonProcess {
 }
 
 void daemon_binary_unary_smoke_completes_with_real_main_init() {
-  ScopedTempDirectory temp_root("dasall-daemon-binary-unary");
+  const auto runtime_root = daemon_build_root() / "test-runtime";
+  fs::create_directories(runtime_root);
+  ScopedTempDirectory temp_root((runtime_root / "dasall-daemon-binary-unary").string());
   const auto socket_path = temp_root.path() / "control.sock";
   const auto log_path = temp_root.path() / "daemon.log";
   const auto root = repository_root();

@@ -37,6 +37,14 @@ target_include_directories(dasall-daemon
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+set_target_properties(dasall-daemon PROPERTIES
+  OUTPUT_NAME dasall-daemon
+)
+
+install(TARGETS dasall-daemon
+  RUNTIME DESTINATION ${DASALL_INSTALL_SBINDIR}
+)
+
 dasall_apply_common_options(dasall-daemon)
 
 
