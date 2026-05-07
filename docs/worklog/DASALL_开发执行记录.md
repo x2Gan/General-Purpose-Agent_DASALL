@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #574
+
+- 日期：2026-05-07
+- 阶段：cli/config-design-freeze
+- 任务：CLCFG-TODO-003 冻结 InstallState、ActionPlan schema 与配置文件事务语义
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/cli/deliverables/CLCFG-TODO-003-state-plan-transaction冻结.md`，集中冻结 `InstallState` 六态闭集、`ConfigActionPlan` 的 v1 顶层键集合，以及 `ConfigFileWriteTransaction` 的事务写入/回滚序列。
+2. 更新 `docs/architecture/DASALL_cli_config交互式部署配置设计.md`，把 `InstallState` 明确为闭集，修正 action plan 从嵌套 `service_actions` 到顶层 `service_*` 键的一致 schema，并补齐“同目录临时文件 + 文件/目录 fsync + rename + validate-only + rollback”的固定事务顺序。
+3. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-003 标记为 Done，并把 003 的验收命令升级为显式检查 `service_validate_requested`、`manual_followups`、`blocked_actions` 与事务关键字。
+
+### 验证
+
+1. `rg -n "FreshInstall|BootstrapPending|ConfiguredStopped|ConfiguredRunning|Drifted|Unsupported|file_writes|secret_writes|service_validate_requested|service_reload_required|service_restart_required|service_start_requested|service_enable_requested|manual_followups|blocked_actions|rename|fsync" docs/architecture/DASALL_cli_config交互式部署配置设计.md docs/todos/cli/deliverables/CLCFG-TODO-003-state-plan-transaction冻结.md`
+   - 结果：通过；`InstallState` 六态闭集、plan 顶层 `service_*` / `manual_followups` / `blocked_actions` 键，以及“同目录临时文件 + 文件/目录 `fsync` + rename + validate-only + rollback”的事务序列，已在设计文档与 003 deliverable 中形成统一口径。
+
+### 结果
+
+1. CLCFG-TODO-003 已把 `InstallState`、`ConfigActionPlan` 与 `ConfigFileWriteTransaction` 收敛为单点文档契约，后续实现不再需要在 `InstallStateProbe`、`ConfigDiffPlanner`、`DaemonConfigFileStore` 里临时发明新状态、新 plan 键或半提交回滚步骤。
+2. action plan 示例已去掉与 002 冻结口径冲突的 `service_actions` / `operator_access_actions` / group relogin follow-up，后续 P0 只允许消费顶层 `service_*`、`manual_followups` 与 `blocked_actions`。
+
 ## 记录 #573
 
 - 日期：2026-05-07
@@ -23,6 +46,7 @@
 
 1. CLCFG-TODO-002 已把 CLI config、packaging 与 daemon 三方关于安装态 socket/operator/access model 的唯一口径固定为：`/run/dasall/daemon.sock` + `0600 root/sudo-only` + `dasall config`。
 2. 后续 PKG-TODO-013/014、CLCFG-TODO-010/012/013 不再允许重新发明“加 `dasall` 组即可访问”或“安装后继续使用 `dasall-cli`”的 operator 主路径；若要开放 `0660 dasall group`，必须作为独立 future 任务重新冻结。
+
 
 ## 记录 #572
 
