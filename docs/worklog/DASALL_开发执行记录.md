@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #578
+
+- 日期：2026-05-07
+- 阶段：packaging/install-surface
+- 任务：PKG-TODO-005 引入 GNUInstallDirs 与顶层 install surface 骨架
+- 状态：已完成
+
+### 改动
+
+1. 更新 `CMakeLists.txt`，引入 `GNUInstallDirs` 并冻结顶层共享安装变量，为后续 CLI/daemon/common assets 的 install surface 提供统一骨架。
+2. 更新 `apps/CMakeLists.txt`，仅把 v1 交付面的 `dasall-cli` 与 `dasall-daemon` 接入 install skeleton，保持 `gateway` / `simulator` 仍是 build-only 目标，避免 install 面过宽。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，将 PKG-TODO-005 标记为 Done，并回写 `PKG-BLK-01` 已由 005 解阻；同时注明当前本地验证仍沿用 CMake 默认 `/usr/local` prefix，正式 `/usr` 与最终安装命名继续由后续任务收敛。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-cli dasall-daemon dasall_profiles && rm -rf stage/pkg && DESTDIR="$PWD/stage/pkg" cmake --install build-ci && find stage/pkg -maxdepth 4 | sort`
+   - 结果：通过；stage tree 已不再为空，并实际出现 `stage/pkg/usr/local/bin/dasall-cli` 与 `stage/pkg/usr/local/sbin/dasall-daemon`，说明 `cmake --install` 不再依赖手工拷贝 build 产物。
+
+### 结果
+
+1. PKG-BLK-01 已关闭；004/006/007/009 后续可以建立在真实 `cmake --install` 输出之上，而不是继续围绕“完全没有 install surface”的假设工作。
+2. 005 只解出了 install skeleton，不等于 `/usr/bin/dasall`、`/usr/sbin/dasall-daemon`、`/usr/share/dasall` 或 `debian/tmp` payload 已全部到位；这些继续分别由 006/007/008/009 收敛。
+
 ## 记录 #577
 
 - 日期：2026-05-07
