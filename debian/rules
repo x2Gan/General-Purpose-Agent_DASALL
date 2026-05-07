@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+BUILD_DIR := obj-$(DEB_HOST_GNU_TYPE)
+
+%:
+	dh $@ --buildsystem=cmake --builddirectory=$(BUILD_DIR)
+
+override_dh_auto_configure:
+	dh_auto_configure --builddirectory=$(BUILD_DIR) -- \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr
+
+override_dh_installsystemd:
+	dh_installsystemd --no-start --no-enable
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	ctest --test-dir $(BUILD_DIR) --output-on-failure \
+		-R '^(CliJsonOutputContractTest|CliExitCodeContractTest|DaemonPingIntegrationTest|CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest)$$'
+else
+	@echo "Skipping tests because DEB_BUILD_OPTIONS contains nocheck"
+endif

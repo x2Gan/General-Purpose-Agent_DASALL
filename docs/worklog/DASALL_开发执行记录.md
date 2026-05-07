@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #582
+
+- 日期：2026-05-07
+- 阶段：packaging/build
+- 任务：PKG-TODO-008 新建 Debian source package 元数据骨架
+- 状态：已完成
+
+### 改动
+
+1. 新增 `debian/control`，按四包矩阵落 source stanza 与 `dasall` / `dasall-cli` / `dasall-daemon` / `dasall-common` 四个 binary package stanza，冻结 `Build-Depends: debhelper-compat (= 13), cmake, ninja-build, pkgconf`、`Rules-Requires-Root: no` 与 `Testsuite: autopkgtest`。
+2. 新增 `debian/changelog`、`debian/rules`、`debian/source/format`、`debian/copyright`，建立 v1 source package skeleton，并在 `debian/rules` 中固定 `dh` + CMake/Ninja + `--no-start --no-enable` 的首版打包入口。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，把 PKG-TODO-008 标记为 Done，同步 `debian/` 当前状态、source metadata 进度与 PKG-BLK-04 解阻状态。
+
+### 验证
+
+1. `dpkg-parsechangelog && dpkg-checkbuilddeps --admindir="$PWD/.pkgadm" && test -x debian/rules && sed -n '1,120p' debian/control`
+   - 结果：通过；`dpkg-parsechangelog` 能正确解析 `0.1.0-1` / `noble` / changelog timestamp，`debian/rules` 已具可执行位，`debian/control` 四包矩阵与 frozen Build-Depends 落盘成功。
+2. 说明：当前宿主机未安装系统级 `debhelper-compat`，且无 sudo；因此验收时使用仓库内 rootless `.pkgadm` 状态库补充 `debhelper-compat (= 13)` 的最小 build-deps 元数据，仅用于 008 source metadata 语法/依赖自洽校验，不改仓库交付内容。
+
+### 结果
+
+1. PKG-TODO-008 已把 `debian/` 从“完全缺失”推进到“source package 必需元数据齐备”，为 009 的 `.install` / service / postinst / autopkgtest skeleton 提供了可消费入口。
+2. 008 没有尝试落 `.install`、systemd unit、maintainer scripts 或 package-local payload tree；这些仍然由 PKG-TODO-009 独立承接。
+3. 后续如果要在当前宿主机直接执行 `dpkg-buildpackage`，仍需补系统级或等效 rootless 的 `debhelper` 可执行环境；这属于 009 构包验收的环境面约束，而不是 008 source metadata 的内容缺陷。
+
 ## 记录 #581
 
 - 日期：2026-05-07

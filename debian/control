@@ -1,0 +1,67 @@
+Source: dasall
+Section: utils
+Priority: optional
+Maintainer: x2Gan <Whisky.Gan@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ ninja-build,
+ pkgconf
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/x2Gan/General-Purpose-Agent_DASALL
+Vcs-Git: https://github.com/x2Gan/General-Purpose-Agent_DASALL.git
+Vcs-Browser: https://github.com/x2Gan/General-Purpose-Agent_DASALL
+Testsuite: autopkgtest
+
+Package: dasall
+Architecture: all
+Depends:
+ ${misc:Depends},
+ dasall-cli (= ${binary:Version}),
+ dasall-daemon (= ${binary:Version}),
+ dasall-common (= ${binary:Version})
+Description: DASALL meta package
+ DASALL is a local-first Agent OS distribution for Ubuntu.
+ .
+ This package is a meta package that pulls in the supported
+ CLI, daemon and shared runtime assets.
+
+Package: dasall-cli
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ dasall-common (= ${binary:Version})
+Recommends:
+ dasall-daemon (= ${binary:Version})
+Description: DASALL local control plane client
+ The DASALL CLI sends local control requests to the DASALL daemon
+ over the Unix domain socket.
+ .
+ Install this package on operator workstations or nodes that need
+ the supported command line surface.
+
+Package: dasall-daemon
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ adduser,
+ dasall-common (= ${binary:Version})
+Description: DASALL local control plane daemon
+ The DASALL daemon hosts the local control plane and owns the
+ Unix domain socket used by the CLI.
+ .
+ The service is installed but not enabled or started automatically
+ on first install. Operators must complete first deployment steps
+ explicitly before enabling the service.
+
+Package: dasall-common
+Architecture: all
+Depends:
+ ${misc:Depends}
+Description: DASALL shared runtime assets and baseline profiles
+ This package contains shared read-only assets required by the
+ supported DASALL runtime packages, including baseline profiles and
+ LLM prompt/provider assets.

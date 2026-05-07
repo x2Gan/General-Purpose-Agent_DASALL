@@ -1,0 +1,13 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: DASALL
+Upstream-Contact: x2Gan <Whisky.Gan@gmail.com>
+Source: https://github.com/x2Gan/General-Purpose-Agent_DASALL
+
+Files: *
+Copyright: 2026 x2Gan
+License: DASALL-Proprietary
+ This package is distributed for DASALL packaging work within the
+ DASALL project boundary.
+ .
+ Redistribution, modification, or external distribution requires
+ prior written authorization from the DASALL maintainer.
