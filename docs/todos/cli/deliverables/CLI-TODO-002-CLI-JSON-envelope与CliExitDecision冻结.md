@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-04
-来源 TODO：docs/todos/cli/DASALL_cli本地控制面专项TODO.md
+来源 TODO：docs/todos/cli/DASALL-cli本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -126,7 +126,7 @@
 
 ## 6. Validation
 
-1. `rg -n "CliJsonOutputContractTest|CliExitCodeContractTest|cli.output.v1|daemon_unavailable|protocol_error|CliExitDecision|0/2/3/4/5/6/7" docs/architecture/DASALL_cli本地控制面详细设计.md docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md`
+1. `rg -n "CliJsonOutputContractTest|CliExitCodeContractTest|cli.output.v1|daemon_unavailable|protocol_error|CliExitDecision|0/2/3/4/5/6/7" docs/architecture/DASALL-cli本地控制面详细设计.md docs/todos/cli/DASALL-cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md`
 2. `ctest --test-dir build-ci -R "AccessErrorMappingTest|CliDaemonOutputFormatterTest" --output-on-failure`
 
 结果摘要：

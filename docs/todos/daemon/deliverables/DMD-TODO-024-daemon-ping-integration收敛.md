@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-01
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -63,7 +63,7 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall_daemon_loopback_fixture_unit_test","dasall_unix_ipc_provider_loopback_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall-daemon_loopback_fixture_unit_test","dasall_unix_ipc_provider_loopback_unit_test"])`
 2. `RunCtest_CMakeTools(tests=["UnixIpcProviderTest","UnixIpcProviderPeerIdentityTest","UnixIpcProviderLoopbackTest","DaemonProtocolAdapterLocalTrustedTest","DaemonLoopbackFixtureTest"])`
 3. `Build_CMakeTools(buildTargets=["dasall_access_daemon_ping_integration_test"])`
 4. `RunCtest_CMakeTools(tests=["DaemonPingIntegrationTest"])`

@@ -9,7 +9,7 @@
 1. [docs/architecture/DASALL_access子系统详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_access子系统详细设计.md) 已经把 `StreamGateway` 定义为 access core 内部组件，并明确 shared streaming lifecycle 未冻结时不能把完整 stream 语义当作首版硬门禁；但在本轮前，缺少一个可直接引用的统一 Gate matrix，去约束 attach/reconnect/replay cursor、WS/MQTT route 与 async/poll fallback 的默认行为。
 2. [docs/todos/access/DASALL_access子系统专项TODO.md](/home/gangan/DASALL/docs/todos/access/DASALL_access子系统专项TODO.md) 已把 `StreamGateway / WS / MQTT` 标成 `L1 / Blocked`，但在本轮前仍主要停留在“阻塞存在”的描述，没有把 Access 侧必须采取的 `feature flag default-off + async receipt/poll fallback` 收成唯一口径。
 3. [docs/architecture/DASALL_access子系统详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_access子系统详细设计.md) 已在 ACC-TODO-004 中冻结 gateway 首版为 HTTP-only unary + accepted async receipt + 独立 health listener；因此 005 的正确方向不是给 gateway 增补流式 ready，而是把未冻结的 stream/WS/MQTT 明确排除出 v1 ready 面。
-4. [docs/architecture/DASALL_cli本地控制面详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL_cli本地控制面详细设计.md) 已明确“async receipt 是 v1 唯一认可的断线恢复路径”，并要求如果 run 返回 receipt，就通过 status/query 获取结果而不是假设 CLI 会保持长连接。这为 Access 侧把流式失败统一回落到 receipt/query/poll 提供了现成上游约束。
+4. [docs/architecture/DASALL-cli本地控制面详细设计.md](/home/gangan/DASALL/docs/architecture/DASALL-cli本地控制面详细设计.md) 已明确“async receipt 是 v1 唯一认可的断线恢复路径”，并要求如果 run 返回 receipt，就通过 status/query 获取结果而不是假设 CLI 会保持长连接。这为 Access 侧把流式失败统一回落到 receipt/query/poll 提供了现成上游约束。
 
 ## 2. 外部参考
 

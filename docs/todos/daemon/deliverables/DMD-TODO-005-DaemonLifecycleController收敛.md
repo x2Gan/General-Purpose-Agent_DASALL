@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -51,14 +51,14 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_lifecycle_controller_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_lifecycle_controller_unit_test"])`
 3. `RunCtest_CMakeTools(tests=["DaemonLifecycleControllerTest"])`
 
 结果摘要：
 
-1. `dasall_daemon` 编译通过，说明 lifecycle 组件已接入当前 daemon 壳层而未破坏已有 bootstrap 路径。
-2. `dasall_daemon_lifecycle_controller_unit_test` 编译通过。
+1. `dasall-daemon` 编译通过，说明 lifecycle 组件已接入当前 daemon 壳层而未破坏已有 bootstrap 路径。
+2. `dasall-daemon_lifecycle_controller_unit_test` 编译通过。
 3. `DaemonLifecycleControllerTest` 1/1 通过；CTest stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
 
 ## 6. 完成判定

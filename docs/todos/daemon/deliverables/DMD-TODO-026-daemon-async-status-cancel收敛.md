@@ -40,7 +40,7 @@
 2. `access/src/AccessGatewayFactory.cpp`
 3. `tests/integration/access/CMakeLists.txt`
 4. `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`
-5. `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`
+5. `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`
 
 ## 4. 验证证据
 

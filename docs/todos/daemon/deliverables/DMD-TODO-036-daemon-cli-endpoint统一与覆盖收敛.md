@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-02
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -55,11 +55,11 @@
 7. 更新 `docs/deploy/daemon/README.md` 与 `docs/deploy/daemon/ACCEPTANCE_CHECKLIST.md`：
    - 删除“CLI 固定连接旧路径”的补充说明。
    - 删除“CLI 尚未消费 readiness 响应”的旧口径。
-   - 将 ping/readiness smoke 改为直接使用 `dasall_cli --socket-path ...`。
+   - 将 ping/readiness smoke 改为直接使用 `dasall-cli --socket-path ...`。
 
 ## 5. Validation
 
-1. `cmake --build build-ci --target dasall_cli dasall_daemon dasall_access_cli_command_parser_unit_test dasall_access_cli_ipc_client_unit_test dasall_access_cli_ipc_client_response_unit_test dasall_access_cli_ipc_client_unavailable_unit_test dasall_access_daemon_ping_integration_test dasall_access_cli_daemon_socket_path_integration_test`
+1. `cmake --build build-ci --target dasall-cli dasall-daemon dasall_access_cli_command_parser_unit_test dasall_access_cli_ipc_client_unit_test dasall_access_cli_ipc_client_response_unit_test dasall_access_cli_ipc_client_unavailable_unit_test dasall_access_daemon_ping_integration_test dasall_access_cli_daemon_socket_path_integration_test`
 2. `ctest --test-dir build-ci -R "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonSocketPathIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
 
 结果摘要：

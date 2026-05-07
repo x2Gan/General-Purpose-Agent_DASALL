@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -16,7 +16,7 @@
 
 1. DMD-TODO-006 的唯一直接 owner 代码就是 `DaemonBootstrap::run()` 中的 `listen -> accept -> handle_connection -> close` 循环；在 005/007 完成后，bootstrap 已经承担 lifecycle 与 signal 配合，再继续把监听细节留在同一个类里，会阻碍 009 的组合根收敛。
 2. DMD-TODO-029 已为 in-memory loopback 建立双向 request/response seam，这意味着 006 现在可以在不触碰 decode/submit 逻辑的前提下，把监听层独立成可单测的 direct-bind 组件。
-3. 本轮最便宜的判别点是：`dasall_daemon` 能否继续编译，以及新的 `DaemonListenerHostTest` 能否单独覆盖 bind 参数、accept timeout、close 后拒绝和 listener error mapping。
+3. 本轮最便宜的判别点是：`dasall-daemon` 能否继续编译，以及新的 `DaemonListenerHostTest` 能否单独覆盖 bind 参数、accept timeout、close 后拒绝和 listener error mapping。
 
 ### 2.2 设计结论
 
@@ -29,7 +29,7 @@
 
 | 设计结论 | Build 落点 | 验收信号 |
 |---|---|---|
-| listener 主循环从 bootstrap 抽离 | `apps/daemon/src/DaemonListenerHost.{h,cpp}` | `dasall_daemon` 可继续编译并运行原有 bootstrap 主链 |
+| listener 主循环从 bootstrap 抽离 | `apps/daemon/src/DaemonListenerHost.{h,cpp}` | `dasall-daemon` 可继续编译并运行原有 bootstrap 主链 |
 | bootstrap 只装配 listener host 和 connection handler | `apps/daemon/src/DaemonBootstrap.{h,cpp}` | `DaemonLoopbackFixtureTest` 继续通过 |
 | direct-bind 参数与错误映射可单测 | `tests/unit/apps/daemon/DaemonListenerHostTest.cpp` | bind 参数、timeout、close 后拒绝、listener error mapping 全部可断言 |
 | listener host 纳入 daemon 构建与 unit test 拓扑 | `apps/daemon/CMakeLists.txt`、`tests/unit/apps/daemon/CMakeLists.txt` | `DaemonListenerHostTest` target 被 CTest 发现并通过 |
@@ -45,7 +45,7 @@
    - 引入 `DaemonListenerHost listener_host_` 成员。
    - `run(...)` 不再直接调用 `ipc_->listen()` / `ipc_->accept()` / `ipc_->close()`，改为委托给 listener host。
    - connection handler 继续复用原有 `handle_connection(...)`，因此 decode/submit/publish 语义保持不变。
-3. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonListenerHost` 纳入 `dasall_daemon`。
+3. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonListenerHost` 纳入 `dasall-daemon`。
 4. 新增 `tests/unit/apps/daemon/DaemonListenerHostTest.cpp`，使用 scripted fake IIPC 覆盖：
    - bind 参数转发
    - accept timeout 后继续轮询
@@ -57,14 +57,14 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_listener_host_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_listener_host_unit_test","dasall-daemon_loopback_fixture_unit_test"])`
 3. `RunCtest_CMakeTools(tests=["DaemonListenerHostTest","DaemonLoopbackFixtureTest"])`
 
 结果摘要：
 
-1. `dasall_daemon` 编译通过，说明 listener host 抽离没有破坏 daemon 主构建。
-2. `dasall_daemon_listener_host_unit_test` 与 `dasall_daemon_loopback_fixture_unit_test` 编译通过。
+1. `dasall-daemon` 编译通过，说明 listener host 抽离没有破坏 daemon 主构建。
+2. `dasall-daemon_listener_host_unit_test` 与 `dasall-daemon_loopback_fixture_unit_test` 编译通过。
 3. `DaemonListenerHostTest` 通过，证明 direct-bind 参数、timeout、close 后拒绝与 listener error mapping 已稳定可测。
 4. `DaemonLoopbackFixtureTest` 回归通过，证明 006 没有破坏 029 建立的 daemon request/response loopback 主链。
 5. CTest stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。

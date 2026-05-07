@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-03
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -55,7 +55,7 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon","dasall_daemon_signal_handler_unit_test","dasall_daemon_config_reload_unit_test","dasall_access_daemon_hot_reload_integration_test","dasall_access_daemon_observability_field_set_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall-daemon_signal_handler_unit_test","dasall-daemon_config_reload_unit_test","dasall_access_daemon_hot_reload_integration_test","dasall_access_daemon_observability_field_set_unit_test"])`
 2. `ctest --test-dir build-ci -R "DaemonConfigReloadTest|DaemonHotReloadIntegrationTest|DaemonSignalHandlerTest|DaemonObservabilityFieldSetTest" --output-on-failure`
 
 结果摘要：

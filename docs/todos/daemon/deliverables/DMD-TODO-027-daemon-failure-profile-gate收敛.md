@@ -38,14 +38,14 @@
 1. `tests/integration/access/CMakeLists.txt`
 2. `tests/integration/access/DaemonFailureInjectionIntegrationTest.cpp`
 3. `tests/integration/access/DaemonProfileCompatibilityTest.cpp`
-4. `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`
+4. `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`
 
 ## 4. 验证证据
 
 执行命令：
 
 ```text
-Build_CMakeTools(buildTargets=["dasall_access_daemon_failure_injection_integration_test","dasall_access_daemon_profile_compatibility_integration_test","dasall_daemon_graceful_shutdown_unit_test"])
+Build_CMakeTools(buildTargets=["dasall_access_daemon_failure_injection_integration_test","dasall_access_daemon_profile_compatibility_integration_test","dasall-daemon_graceful_shutdown_unit_test"])
 RunCtest_CMakeTools(tests=["DaemonFailureInjectionTest","DaemonGracefulShutdownTest","DaemonProfileCompatibilityTest"])
 ```
 

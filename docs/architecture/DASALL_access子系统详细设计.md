@@ -144,7 +144,7 @@ Must-Not：
 | 观察项 | 当前状态 | 证据 | 结论 |
 |---|---|---|---|
 | apps 构建入口 | 已存在 | `apps/CMakeLists.txt` | 入口目录已接入总工程，但仅负责 add_subdirectory |
-| 四个入口可执行 | 已存在 | `apps/*/CMakeLists.txt` | `dasall_cli`、`dasall_daemon`、`dasall_gateway`、`dasall_simulator` 目标已存在 |
+| 四个入口可执行 | 已存在 | `apps/*/CMakeLists.txt` | `dasall-cli`、`dasall-daemon`、`dasall_gateway`、`dasall_simulator` 目标已存在 |
 | 入口源码 | 占位 | `apps/*/src/main.cpp` | 当前 main 仅输出 placeholder，没有任何 access 主链逻辑 |
 | 共享 access core | 骨架已建立 | 仓库已有 `access/include`、`access/src` 与 `dasall_access` 静态库目标 | Access 已形成独立子系统工程根，但核心接口与实现仍未收敛 |
 | 协议适配器 | 缺失 | 仓库无 `ProtocolAdapter`、`InboundPacket` 相关头/源文件 | 入口协议事实尚未统一 |

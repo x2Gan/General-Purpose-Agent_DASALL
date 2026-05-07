@@ -3,7 +3,7 @@
 - 任务 ID: DMD-TODO-013
 - 完成日期: 2026-04-28
 - 状态: Done
-- 对应设计: docs/architecture/DASALL_daemon本地控制面详细设计.md 6.6.2
+- 对应设计: docs/architecture/DASALL-daemon本地控制面详细设计.md 6.6.2
 
 ## 1. 目标与边界
 
@@ -46,7 +46,7 @@
 ## 3. 验证证据
 
 1. 构建：
-   - 通过 CMake Tools 构建 `dasall_daemon` 与 `dasall_unit_tests`（编译链通过）。
+   - 通过 CMake Tools 构建 `dasall-daemon` 与 `dasall_unit_tests`（编译链通过）。
 2. 定向测试：
    - `DaemonAccessPipelineFactoryTest` 通过。
    - `AccessGatewayFacadeTest` 通过。

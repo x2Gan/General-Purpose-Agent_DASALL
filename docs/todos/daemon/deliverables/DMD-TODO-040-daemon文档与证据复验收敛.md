@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-02
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -28,18 +28,18 @@
 
 | 设计结论 | Build 落点 | 验收信号 |
 |---|---|---|
-| 过期文档口径需要清除 | `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`、`DASALL_daemon本地控制面专项评审报告_2026-05-02.md`、`deliverables/DMD-TODO-024-daemon-ping-integration收敛.md` | negative grep 不再命中过期短语 |
+| 过期文档口径需要清除 | `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`、`DASALL-daemon本地控制面专项评审报告_2026-05-02.md`、`deliverables/DMD-TODO-024-daemon-ping-integration收敛.md` | negative grep 不再命中过期短语 |
 | legacy send-only ping smoke 需要退出仓库 | `tests/integration/access` 中的旧未注册 ping smoke 文件 | 文件已删除，且现有 `DaemonPingIntegrationTest` 继续通过 |
-| close-ready 结论需要补 Gate-DMD-10 | `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`、本交付物、`docs/worklog/DASALL_开发执行记录.md` | Gate-DMD-10 PASS，且 `Gate-DMD-05` / `07` / `09` 复验证据可追溯 |
+| close-ready 结论需要补 Gate-DMD-10 | `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`、本交付物、`docs/worklog/DASALL_开发执行记录.md` | Gate-DMD-10 PASS，且 `Gate-DMD-05` / `07` / `09` 复验证据可追溯 |
 
 ## 4. 落盘结果
 
 1. 删除 `tests/integration/access` 中旧的未注册 send-only ping smoke 文件，彻底移除历史遗留入口。
-2. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项评审报告_2026-05-02.md`：
+2. 更新 `docs/todos/daemon/DASALL-daemon本地控制面专项评审报告_2026-05-02.md`：
    - 把当时的过期文档/测试问题改写为历史性描述；
    - 去除对已删除 legacy 文件的直接路径引用。
 3. 更新 `docs/todos/daemon/deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，把旧 smoke 描述统一为 legacy send-only ping smoke，避免继续保留已删除文件名。
-4. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：
+4. 更新 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：
    - 将当前结论切换为 `DMD-TODO-001` ~ `040` 全部完成、专项恢复 close-ready；
    - 将 `DMD-TODO-040` 更新为 Done；
    - 在 §9.4 补齐 `Gate-DMD-10` PASS；

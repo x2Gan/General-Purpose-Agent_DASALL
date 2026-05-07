@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-02
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -58,7 +58,7 @@
 ## 5. Validation
 
 1. `cmake --build build-ci --target dasall_unix_ipc_provider_unit_test && ctest --test-dir build-ci -R "^UnixIpcProviderTest$" --output-on-failure`
-2. `cmake --build build-ci --target dasall_daemon dasall_daemon_socket_policy_unit_test dasall_unix_ipc_provider_unit_test dasall_access_daemon_ping_integration_test dasall_access_daemon_socket_mode_integration_test dasall_access_daemon_stale_socket_recovery_integration_test && ctest --test-dir build-ci -R "DaemonSocketPolicyTest|UnixIpcProviderTest|DaemonSocketModeIntegrationTest|DaemonStaleSocketRecoveryIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
+2. `cmake --build build-ci --target dasall-daemon dasall-daemon_socket_policy_unit_test dasall_unix_ipc_provider_unit_test dasall_access_daemon_ping_integration_test dasall_access_daemon_socket_mode_integration_test dasall_access_daemon_stale_socket_recovery_integration_test && ctest --test-dir build-ci -R "DaemonSocketPolicyTest|UnixIpcProviderTest|DaemonSocketModeIntegrationTest|DaemonStaleSocketRecoveryIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
 
 结果摘要：
 

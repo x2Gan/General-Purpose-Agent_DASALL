@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -33,12 +33,12 @@
 ## 4. Validation
 
 1. `cmake -S . -B build-ci -G Ninja`
-2. `cmake --build build-ci --target dasall_daemon dasall_daemon_config_validator_unit_test`
+2. `cmake --build build-ci --target dasall-daemon dasall-daemon_config_validator_unit_test`
 3. `ctest --test-dir build-ci -R "^DaemonConfigValidatorTest$" --output-on-failure`
 
 结果摘要：
 
-1. `dasall_daemon` 编译通过，证明 validate-only 入口和正常启动路径都已接入新 validator。
+1. `dasall-daemon` 编译通过，证明 validate-only 入口和正常启动路径都已接入新 validator。
 2. `DaemonConfigValidatorTest` 通过，覆盖默认成功、空 socket path、payload 上限、flags/config conflict、restart-only reload key 与 validate-only 成功路径。
 3. daemon 现在可以在 listener bind 前失败，且 validate-only 不再依赖创建 IPC 资源来验证配置。
 

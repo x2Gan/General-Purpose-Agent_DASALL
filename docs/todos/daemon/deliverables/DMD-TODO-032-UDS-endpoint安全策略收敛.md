@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -38,7 +38,7 @@
 2. `DaemonListenerHostBindConflictTest` 覆盖活动 socket 拒绝与 stale socket 清理后重试。
 3. `DaemonConfigValidatorTest` 间接覆盖 socket_path 校验。
 4. `DaemonListenerHostTest` 回归通过，证明 listener 主流程未被破坏。
-5. `dasall_daemon` 编译通过。
+5. `dasall-daemon` 编译通过。
 
 ## 4. 参考资料
 

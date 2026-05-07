@@ -47,5 +47,5 @@
 - `access/src/daemon/DaemonProtocolAdapter.cpp`
 - `tests/unit/access/DaemonCancelCommandTest.cpp`
 - `tests/unit/access/CMakeLists.txt`
-- `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`
+- `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`
 - `docs/todos/daemon/deliverables/DMD-TODO-017-daemon-cancel-routing收敛.md`

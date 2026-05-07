@@ -9,7 +9,7 @@
 1. 已在仓库根目录完成构建：
 
 ```bash
-cmake --build build-ci --target dasall_daemon dasall_cli
+cmake --build build-ci --target dasall-daemon dasall-cli
 ```
 
 2. 已准备安全 socket 目录：
@@ -24,38 +24,38 @@ chmod 700 /tmp/dasall-dmd035
 ### 3.1 validate-only
 
 ```bash
-./build-ci/apps/daemon/dasall_daemon \
+./build-ci/apps/daemon/dasall-daemon \
   --validate-only \
   --socket-path /tmp/dasall-dmd035/control.sock
 ```
 
-通过条件：返回 0，且输出 `[dasall_daemon] config validation passed without creating listener resources`。
+通过条件：返回 0，且输出 `[dasall-daemon] config validation passed without creating listener resources`。
 
 ### 3.2 daemon unavailable
 
 ```bash
-./build-ci/apps/cli/dasall_cli ping
+./build-ci/apps/cli/dasall-cli ping
 ```
 
-通过条件：daemon 未启动时返回非 0，并输出 `[dasall_cli] daemon ping: FAILED — daemon unavailable or timeout`。
+通过条件：daemon 未启动时返回非 0，并输出 `[dasall-cli] daemon ping: FAILED — daemon unavailable or timeout`。
 
 ### 3.3 start
 
 ```bash
-./build-ci/apps/daemon/dasall_daemon \
+./build-ci/apps/daemon/dasall-daemon \
   --socket-path /tmp/dasall-dmd035/control.sock
 ```
 
-通过条件：控制台输出 `[dasall_daemon] starting on /tmp/dasall-dmd035/control.sock`，进程持续存活。
+通过条件：控制台输出 `[dasall-daemon] starting on /tmp/dasall-dmd035/control.sock`，进程持续存活。
 
 ### 3.4 ping + readiness
 
 ```bash
-./build-ci/apps/cli/dasall_cli \
+./build-ci/apps/cli/dasall-cli \
   --socket-path /tmp/dasall-dmd035/control.sock \
   ping
 
-./build-ci/apps/cli/dasall_cli \
+./build-ci/apps/cli/dasall-cli \
   --socket-path /tmp/dasall-dmd035/control.sock \
   readiness
 ```
@@ -68,12 +68,12 @@ chmod 700 /tmp/dasall-dmd035
 ### 3.5 unary run
 
 ```bash
-./build-ci/apps/cli/dasall_cli \
+./build-ci/apps/cli/dasall-cli \
   --socket-path /tmp/dasall-dmd035/control.sock \
   run '{"prompt":"binary smoke"}'
 ```
 
-通过条件：返回 0，且输出包含 `[dasall_cli] submit: completed` 与 `runtime orchestrator skeleton completed`。
+通过条件：返回 0，且输出包含 `[dasall-cli] submit: completed` 与 `runtime orchestrator skeleton completed`。
 
 ### 3.6 graceful stop
 
@@ -81,7 +81,7 @@ chmod 700 /tmp/dasall-dmd035
 kill -TERM <daemon-pid>
 ```
 
-通过条件：daemon 输出 `[dasall_daemon] stopped (run=ok)`；若有 inflight 请求，遵守 Draining 排空或输出 abandoned 审计事实。
+通过条件：daemon 输出 `[dasall-daemon] stopped (run=ok)`；若有 inflight 请求，遵守 Draining 排空或输出 abandoned 审计事实。
 
 ## 4. 契约检查项
 

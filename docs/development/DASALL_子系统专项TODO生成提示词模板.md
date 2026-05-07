@@ -92,7 +92,7 @@
 
 请严格基于以下输入设计工程实施计划、生成专项 TODO，不得脱离上下文臆造边界：
 
-1. 详细设计文档：docs/architecture/DASALL_daemon本地控制面详细设计.md
+1. 详细设计文档：docs/architecture/DASALL-daemon本地控制面详细设计.md
 2. 架构文档：docs/architecture/DASALL_Agent_architecture.md
 3. 工程蓝图：docs/architecture/DASALL_Engineering_Blueprint.md
 4. 相关 ADR：docs/adr/ + ssot

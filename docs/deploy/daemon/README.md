@@ -29,7 +29,7 @@
 3. [apps/daemon/src/DaemonBootstrap.cpp](../../../apps/daemon/src/DaemonBootstrap.cpp) 已实现 direct-bind listener、ready 后 accept loop、`SIGTERM` 停机排空与 supervisor adapter 接线。
 4. [apps/daemon/src/DaemonSupervisorAdapter.cpp](../../../apps/daemon/src/DaemonSupervisorAdapter.cpp) 已冻结 v1 supervisor seam：`notify_ready()`、`notify_stopping()`、`tick_watchdog()`。
 5. [tests/integration/access/DaemonPingIntegrationTest.cpp](../../../tests/integration/access/DaemonPingIntegrationTest.cpp) 已证明 daemon fixture 可真实消费 ping frame 并返回 completed response。
-6. [docs/architecture/DASALL_daemon本地控制面详细设计.md](../../../docs/architecture/DASALL_daemon本地控制面详细设计.md) 6.9.3、10、11 已把 supervisor/watchdog/socket activation 演进边界写清。
+6. [docs/architecture/DASALL-daemon本地控制面详细设计.md](../../../docs/architecture/DASALL-daemon本地控制面详细设计.md) 6.9.3、10、11 已把 supervisor/watchdog/socket activation 演进边界写清。
 
 ### 2.2 外部参考
 
@@ -92,7 +92,7 @@
 
 ```bash
 cmake -S . -B build-ci -G "Unix Makefiles"
-cmake --build build-ci --target dasall_daemon dasall_cli
+cmake --build build-ci --target dasall-daemon dasall-cli
 ```
 
 ### 7.1 validate-only
@@ -101,20 +101,20 @@ cmake --build build-ci --target dasall_daemon dasall_cli
 mkdir -p /tmp/dasall-dmd035
 chmod 700 /tmp/dasall-dmd035
 
-./build-ci/apps/daemon/dasall_daemon \
+./build-ci/apps/daemon/dasall-daemon \
   --validate-only \
   --socket-path /tmp/dasall-dmd035/control.sock
 ```
 
-期望结果：输出 `[dasall_daemon] config validation passed without creating listener resources` 并返回 0。
+期望结果：输出 `[dasall-daemon] config validation passed without creating listener resources` 并返回 0。
 
 ### 7.2 daemon unavailable
 
 ```bash
-./build-ci/apps/cli/dasall_cli ping
+./build-ci/apps/cli/dasall-cli ping
 ```
 
-期望结果：在 daemon 未启动时返回非 0，并输出 `[dasall_cli] daemon ping: FAILED — daemon unavailable or timeout`。
+期望结果：在 daemon 未启动时返回非 0，并输出 `[dasall-cli] daemon ping: FAILED — daemon unavailable or timeout`。
 
 ### 7.3 start
 
@@ -122,22 +122,22 @@ chmod 700 /tmp/dasall-dmd035
 mkdir -p /tmp/dasall-dmd035
 chmod 700 /tmp/dasall-dmd035
 
-./build-ci/apps/daemon/dasall_daemon \
+./build-ci/apps/daemon/dasall-daemon \
   --socket-path /tmp/dasall-dmd035/control.sock
 ```
 
-期望结果：输出 `[dasall_daemon] starting on /tmp/dasall-dmd035/control.sock`，进程持续运行直到收到 `SIGTERM`。
+期望结果：输出 `[dasall-daemon] starting on /tmp/dasall-dmd035/control.sock`，进程持续运行直到收到 `SIGTERM`。
 
 ### 7.4 ping / readiness
 
 CLI 现已消费 daemon `ping` / `readiness` 响应，可直接使用与部署 socket_path 对齐的入口参数：
 
 ```bash
-./build-ci/apps/cli/dasall_cli \
+./build-ci/apps/cli/dasall-cli \
   --socket-path /tmp/dasall-dmd035/control.sock \
   ping
 
-./build-ci/apps/cli/dasall_cli \
+./build-ci/apps/cli/dasall-cli \
   --socket-path /tmp/dasall-dmd035/control.sock \
   readiness
 ```
@@ -150,12 +150,12 @@ CLI 现已消费 daemon `ping` / `readiness` 响应，可直接使用与部署 s
 ### 7.5 unary run
 
 ```bash
-./build-ci/apps/cli/dasall_cli \
+./build-ci/apps/cli/dasall-cli \
   --socket-path /tmp/dasall-dmd035/control.sock \
   run '{"prompt":"binary smoke"}'
 ```
 
-期望结果：返回 0，且输出包含 `[dasall_cli] submit: completed` 和 `runtime orchestrator skeleton completed`。
+期望结果：返回 0，且输出包含 `[dasall-cli] submit: completed` 和 `runtime orchestrator skeleton completed`。
 
 ### 7.6 graceful stop
 
@@ -163,7 +163,7 @@ CLI 现已消费 daemon `ping` / `readiness` 响应，可直接使用与部署 s
 kill -TERM <daemon-pid>
 ```
 
-期望结果：daemon 输出 `[dasall_daemon] stopped (run=ok)` 或在超时场景留下 abandoned 审计事实后退出；不再接受新请求。
+期望结果：daemon 输出 `[dasall-daemon] stopped (run=ok)` 或在超时场景留下 abandoned 审计事实后退出；不再接受新请求。
 
 ## 8. 配置样例使用原则
 

@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -32,7 +32,7 @@
 | v1 默认 no-op，不要求 supervisor 存在 | `apps/daemon/src/DaemonSupervisorAdapter.{h,cpp}` | `DaemonSupervisorAdapterTest` 断言无 watchdog 配置时三类 notify 均成功 |
 | watchdog bridge 复用 `IWatchdogService` public seam | `DaemonSupervisorAdapter::notify_ready/notify_stopping/tick_watchdog` | unit test 能观察 register/unregister/heartbeat 被正确调用 |
 | failure 只上抛，不自行恢复 | `tick_watchdog()` / `notify_ready()` 直接返回 `WatchdogOperationResult` | failure surfacing test 断言无隐藏 retry / deactivation |
-| daemon build 图纳入 supervisor adapter | `apps/daemon/CMakeLists.txt`、`tests/unit/apps/daemon/CMakeLists.txt` | `dasall_daemon` 与 `DaemonSupervisorAdapterTest` target 均可构建 |
+| daemon build 图纳入 supervisor adapter | `apps/daemon/CMakeLists.txt`、`tests/unit/apps/daemon/CMakeLists.txt` | `dasall-daemon` 与 `DaemonSupervisorAdapterTest` target 均可构建 |
 
 ## 4. 落盘结果
 
@@ -42,7 +42,7 @@
    - `tick_watchdog()` 在 bridge active 时发送 heartbeat，并维护显式 heartbeat sequence。
    - `notify_stopping()` 注销 daemon watched entity。
    - 默认无 watchdog service 或 `watchdog_enabled=false` 时，所有入口均返回 no-op success。
-2. 更新 `apps/daemon/CMakeLists.txt`，把 supervisor adapter 纳入 `dasall_daemon`。
+2. 更新 `apps/daemon/CMakeLists.txt`，把 supervisor adapter 纳入 `dasall-daemon`。
 3. 新增 `tests/unit/apps/daemon/DaemonSupervisorAdapterTest.cpp`，覆盖：
    - no-op path
    - watchdog bridge ready/tick/stopping 主链
@@ -51,13 +51,13 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_supervisor_adapter_unit_test","dasall_watchdog_service_interface_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_supervisor_adapter_unit_test","dasall_watchdog_service_interface_unit_test"])`
 3. `RunCtest_CMakeTools(tests=["DaemonSupervisorAdapterTest","WatchdogServiceInterfaceTest"])`
 
 结果摘要：
 
-1. `dasall_daemon` 编译通过，说明新增 supervisor adapter 未破坏 daemon 现有构建图。
+1. `dasall-daemon` 编译通过，说明新增 supervisor adapter 未破坏 daemon 现有构建图。
 2. `DaemonSupervisorAdapterTest` 通过，证明 v1 no-op path、watchdog bridge 和 failure surfacing 语义已冻结。
 3. `WatchdogServiceInterfaceTest` 回归通过，说明 008 复用的是已冻结的 infra watchdog public seam，而不是新造 daemon 专用接口。
 4. CTest stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。

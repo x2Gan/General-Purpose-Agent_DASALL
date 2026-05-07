@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-04
-来源 TODO：docs/todos/cli/DASALL_cli本地控制面专项TODO.md
+来源 TODO：docs/todos/cli/DASALL-cli本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -15,9 +15,9 @@
 
 ### 2.1 本地证据
 
-1. `docs/architecture/DASALL_cli本地控制面详细设计.md` 在 1.6 明确了命令族已冻结到能力级，但仍保留“`run` 业务参数形态、`status/cancel` 精确参数名属于后续 Build 冻结”的口径，导致 parser/help 任务无法直接开工。
+1. `docs/architecture/DASALL-cli本地控制面详细设计.md` 在 1.6 明确了命令族已冻结到能力级，但仍保留“`run` 业务参数形态、`status/cancel` 精确参数名属于后续 Build 冻结”的口径，导致 parser/help 任务无法直接开工。
 2. `apps/cli/src/CliCommandParser.h/.cpp` 当前只支持最小 positional 形态，并暴露 `submit`、`readiness`、`actor_ref` 等兼容/过渡 surface；这些实现锚点不能直接等同于 v1 公开 contract。
-3. `docs/todos/cli/DASALL_cli本地控制面专项TODO.md` 已将 `CLI-TODO-001` 明确为 `CLI-BLK-001` 的解阻任务，要求同时收敛参数矩阵、usage 文案责任边界与 `--socket-path` 稳定命名。
+3. `docs/todos/cli/DASALL-cli本地控制面专项TODO.md` 已将 `CLI-TODO-001` 明确为 `CLI-BLK-001` 的解阻任务，要求同时收敛参数矩阵、usage 文案责任边界与 `--socket-path` 稳定命名。
 
 ### 2.2 外部参考
 
@@ -73,7 +73,7 @@
 
 ## 5. Validation
 
-1. `rg -n "run/status/cancel|--socket-path|--socket|submit|readiness|help|version" docs/architecture/DASALL_cli本地控制面详细设计.md docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md`
+1. `rg -n "run/status/cancel|--socket-path|--socket|submit|readiness|help|version" docs/architecture/DASALL-cli本地控制面详细设计.md docs/todos/cli/DASALL-cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md`
 2. `ctest --test-dir build-ci -R "CliDaemonCommandParserTest" --output-on-failure`
 
 结果摘要：

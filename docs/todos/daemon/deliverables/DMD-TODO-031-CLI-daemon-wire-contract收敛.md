@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-02
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -65,7 +65,7 @@
 
 1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_frame_codec_unit_test"])`
 2. `RunCtest_CMakeTools(tests=["DaemonFrameCodecTest"])`
-3. `Build_CMakeTools(buildTargets=["dasall_cli","dasall_access_cli_ipc_client_unit_test","dasall_access_cli_ipc_client_response_unit_test","dasall_access_cli_ipc_client_unavailable_unit_test","dasall_access_cli_command_parser_unit_test","dasall_access_cli_output_formatter_unit_test","dasall_access_daemon_ping_integration_test"])`
+3. `Build_CMakeTools(buildTargets=["dasall-cli","dasall_access_cli_ipc_client_unit_test","dasall_access_cli_ipc_client_response_unit_test","dasall_access_cli_ipc_client_unavailable_unit_test","dasall_access_cli_command_parser_unit_test","dasall_access_cli_output_formatter_unit_test","dasall_access_daemon_ping_integration_test"])`
 4. `RunCtest_CMakeTools(tests=["CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonCommandParserTest","CliDaemonOutputFormatterTest","DaemonPingIntegrationTest"])`
 
 结果摘要：

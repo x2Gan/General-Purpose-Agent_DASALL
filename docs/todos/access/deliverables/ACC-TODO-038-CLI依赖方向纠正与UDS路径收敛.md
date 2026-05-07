@@ -77,8 +77,8 @@
 
 ```bash
 cmake --build build-ci --target \
-  dasall_cli \
-  dasall_daemon \
+  dasall-cli \
+  dasall-daemon \
   dasall_access_cli_ipc_client_unit_test \
   dasall_access_cli_daemon_ping_integration_test && \
 ctest --test-dir build-ci -R "CliIpcClientTest|CliDaemonPingIntegrationTest" --output-on-failure

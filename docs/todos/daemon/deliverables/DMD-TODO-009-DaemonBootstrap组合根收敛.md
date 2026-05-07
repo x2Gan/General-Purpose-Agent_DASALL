@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -33,7 +33,7 @@
 | 设计结论 | Build 落点 | 验收信号 |
 |---|---|---|
 | build 失败不返回半初始化 context | `apps/daemon/src/DaemonBootstrap.{h,cpp}` | `DaemonBootstrapTest` 断言 invalid config / missing deps 返回空 context |
-| run(context) 消费 listener/supervisor seam | `DaemonBootstrap::run(context)`、`DaemonListenerHost::set_listen_options(...)` | `dasall_daemon` 编译通过，`DaemonLoopbackFixtureTest` 回归通过 |
+| run(context) 消费 listener/supervisor seam | `DaemonBootstrap::run(context)`、`DaemonListenerHost::set_listen_options(...)` | `dasall-daemon` 编译通过，`DaemonLoopbackFixtureTest` 回归通过 |
 | process context 承载 watchdog bridge | `apps/daemon/src/DaemonConfig.h` | context 成功路径保留 watchdog service、profile id、config revision |
 | main 切到 build/run 组合根路径 | `apps/daemon/src/main.cpp` | `main` 不再手工拼 endpoint + 裸 run(endpoint) |
 
@@ -61,13 +61,13 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_bootstrap_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_bootstrap_unit_test","dasall-daemon_loopback_fixture_unit_test"])`
 3. `RunCtest_CMakeTools(tests=["DaemonBootstrapTest","DaemonLoopbackFixtureTest"])`
 
 结果摘要：
 
-1. `dasall_daemon` 编译通过，说明 build/run 组合根改造没有破坏主构建。
+1. `dasall-daemon` 编译通过，说明 build/run 组合根改造没有破坏主构建。
 2. `DaemonBootstrapTest` 通过，证明 invalid config / missing deps 不返回 context，gateway not ready 不进入 bind/accept。
 3. `DaemonLoopbackFixtureTest` 回归通过，证明 build(config) / run(context) 成功路径仍能驱动 daemon 消费 ping 并回传 response。
 4. CTest stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。

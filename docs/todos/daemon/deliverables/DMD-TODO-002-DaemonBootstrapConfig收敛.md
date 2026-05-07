@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -30,7 +30,7 @@
 ## 4. Validation
 
 1. `cmake -S . -B build-ci -G Ninja`
-2. `cmake --build build-ci --target dasall_daemon_bootstrap_config_unit_test`
+2. `cmake --build build-ci --target dasall-daemon_bootstrap_config_unit_test`
 3. `ctest --test-dir build-ci -R "^DaemonBootstrapConfigTest$" --output-on-failure`
 
 结果摘要：

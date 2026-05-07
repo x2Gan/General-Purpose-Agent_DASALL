@@ -252,7 +252,7 @@
 4. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_access_daemon_receipt_flow_integration_test dasall_access_daemon_cancel_command_unit_test dasall_access_async_task_registry_ownership_unit_test dasall_access_observability_main_chain_integration_test dasall_access_publish_failure_audit_integration_test && ctest --test-dir build-ci -R "AccessAsyncReceiptQueryCancelIntegrationTest|AccessCancelForwardingTest|DaemonSubmitQueryCancelIntegrationTest|AsyncTaskRegistryHmacOwnershipTest|AccessPolicyBackendUnavailableIntegrationTest|AccessObservabilityMainChainIntegrationTest|AccessPublishFailureAuditTest" --output-on-failure`
    - 结果：通过；targeted build-ci/Ninja focused targets 与 7 个 focused gates 全部通过。
 5. `cmake --build build-ci --target dasall_access_tests`
-   - 结果：聚合 access label target 仍受既有 `AccessPolicyOverrideGateTest` 失败与未预编译 `dasall_cli_ipc_client_*` executables 缺失影响；不属于 028 变更面，已按 INT-TC010 使用 targeted targets 作为正式验收依据。
+   - 结果：聚合 access label target 仍受既有 `AccessPolicyOverrideGateTest` 失败与未预编译 `dasall-cli_ipc_client_*` executables 缺失影响；不属于 028 变更面，已按 INT-TC010 使用 targeted targets 作为正式验收依据。
 
 ### 结果
 
@@ -281,7 +281,7 @@
    - 结果：通过；027 新增的 unit/integration focused targets 全部成功编译链接。
 2. `RunCtest_CMakeTools(tests=RuntimeBridgeTest, RuntimeBridgeAsyncAcceptTest, RuntimeBridgeAgentRequestHandoffTest, RequestNormalizerRuntimeBridgeCompatibilityTest, AccessGatewayProductionPipelineTest, AccessGatewayDependencyValidationTest, DaemonAccessSubmitCompositionTest, GatewayAccessSubmitCompositionTest, AccessHealthReadinessIntegrationTest)`
    - 结果：通过；public handoff、gateway fail-closed、daemon/gateway composition 与 health readiness focused gates 全绿，运行期仍有既存 `DartConfiguration.tcl` 缺失噪声，但不影响 pass/fail 结论。
-3. `Build_CMakeTools(target=dasall_daemon, dasall_gateway)`
+3. `Build_CMakeTools(target=dasall-daemon, dasall_gateway)`
    - 结果：通过；daemon/gateway app targets 在本轮入口壳层改动后保持可编译。
 
 ### 结果
@@ -835,7 +835,7 @@
 
 1. 更新 `tests/integration/access/DaemonDiagDenyIntegrationTest.cpp`，在既有 diagnostics deny 集成门上补入两条真实 UDS peer identity 路径：allowlisted 本机 uid 的 diagnostics success，以及 non-allowlisted 本机 uid 的 diagnostics reject；不再依赖手写 `peer_ref=local_trusted:*` 来伪造 local trusted 场景。
 2. 更新 `tests/integration/access/CMakeLists.txt`，为 `dasall_access_daemon_diag_deny_integration_test` 接入 `CliIpcClient.cpp` 与 daemon bootstrap/lifecycle/listener/socket-policy/supervisor 源，补齐 `apps/cli/src` 与 `apps/daemon/src` include 面，使 real UDS integration harness 能在该测试目标内独立编译链接。
-3. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md` 与 `docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md`，将 `CLI-BLK-004`、`CLI-RISK-007`、`CLI-OQ-001` 从残余项改写为已回收状态，并把 `UnixIpcProviderPeerIdentityTest`、`DaemonProtocolAdapterLocalTrustedTest`、`DaemonPeerIdentityFailClosedTest`、`DaemonFailureInjectionTest`、`DaemonDiagDenyIntegrationTest` 纳入 close-ready gate 与统一验收命令。
+3. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md` 与 `docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md`，将 `CLI-BLK-004`、`CLI-RISK-007`、`CLI-OQ-001` 从残余项改写为已回收状态，并把 `UnixIpcProviderPeerIdentityTest`、`DaemonProtocolAdapterLocalTrustedTest`、`DaemonPeerIdentityFailClosedTest`、`DaemonFailureInjectionTest`、`DaemonDiagDenyIntegrationTest` 纳入 close-ready gate 与统一验收命令。
 4. 本条 worklog 作为 platform/access owner 侧 peer identity 收口的证据回写，补足 CLI closeout 之前缺失的真实 UDS allow/reject 正向证明。
 
 ### 验证
@@ -862,13 +862,13 @@
 
 ### 改动
 
-1. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 CLI 专项当前结论、当前状态摘要、`CLI-TODO-014` 行、Wave 5、Gate-CLI-06、测试矩阵、统一验收命令与可行性结论全部收敛到 close-ready 完成态，并明确剩余残余仅是 `CLI-BLK-004` / `CLI-RISK-007` / `CLI-OQ-001` 所指向的 platform peer identity 外部依赖。
+1. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 CLI 专项当前结论、当前状态摘要、`CLI-TODO-014` 行、Wave 5、Gate-CLI-06、测试矩阵、统一验收命令与可行性结论全部收敛到 close-ready 完成态，并明确剩余残余仅是 `CLI-BLK-004` / `CLI-RISK-007` / `CLI-OQ-001` 所指向的 platform peer identity 外部依赖。
 2. 新增 `docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md`，把 CLI 专项 close-ready 的边界声明、任务证据索引、Gate/Blocker/Risk/OQ 收口状态和统一验收命令汇总为单独 deliverable，避免最终结论只散落在 TODO 行文里。
 3. 本条 worklog 记录为 `CLI-TODO-014` 提供 focused closeout 证据，并把前序 `CLI-TODO-012` / `CLI-TODO-013` 的 contract 与 binary gate 结果正式汇入 CLI 专项最终完成态。
 
 ### 验证
 
-1. `rg -n "CLI-TODO-00[1-9]|CLI-TODO-01[0-4]|Gate-CLI-0[1-6]|CLI-BLK-00[1-4]|CLI-OQ-00[1-7]|CLI-RISK-00[1-8]" docs/todos/cli/DASALL_cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md docs/worklog/DASALL_开发执行记录.md`
+1. `rg -n "CLI-TODO-00[1-9]|CLI-TODO-01[0-4]|Gate-CLI-0[1-6]|CLI-BLK-00[1-4]|CLI-OQ-00[1-7]|CLI-RISK-00[1-8]" docs/todos/cli/DASALL-cli本地控制面专项TODO.md docs/todos/cli/deliverables/CLI-TODO-014-CLI专项最终收口.md docs/worklog/DASALL_开发执行记录.md`
    - 结果：通过；CLI 专项 TODO、014 deliverable 与 worklog 均具备任务、Gate、Blocker、Risk、OQ 的可检索锚点，满足 close-ready 文档证据要求。
 2. `ListTests_CMakeTools()`
    - 结果：通过；`CliDaemonCommandParserTest`、`CliIpcClientTest`、`CliIpcClientResponseTest`、`CliIpcClientUnavailableTest`、`CliDaemonOutputFormatterTest`、`CliJsonOutputContractTest`、`CliExitCodeContractTest`、`CliDaemonSocketPathIntegrationTest`、`DaemonBinaryUnarySmokeTest`、`DaemonReceiptFlowIntegrationTest` 均保持 discoverable。
@@ -890,13 +890,13 @@
 
 ### 改动
 
-1. 更新 `access/include/AccessTypes.h`、`access/src/daemon/DaemonProtocolAdapter.cpp` 与 `access/src/AccessGatewayFactory.cpp`，把 UDS request frame 中的 `trace_id/session_hint` 透传进 access 入口 `request_context`，避免 built `dasall_cli` 的显式 `trace_id` 在 daemon/access 入口被丢失后退化为 normalizer 自动生成值。
-2. 更新 `apps/daemon/src/main.cpp`，让 real daemon main 的 completed publish envelope 也补齐 `request_id/session_id/trace_id/channel_ref/protocol_kind`，从而使 built `dasall_cli run --json` 在真实 daemon main 路径下也能稳定回显显式 ID，而不再只在 in-process fixture 中成立。
-3. 新增 `tests/integration/access/CliBinaryTestSupport.h`，并更新 `tests/integration/access/DaemonIntegrationHarness.h` 与 `tests/integration/access/CMakeLists.txt`，为 built CLI binary probe 提供统一的 stdout/stderr 捕获、JSON 字段提取和 socket path 暴露能力，同时把 `dasall_cli` 接入相关 integration target 依赖。
+1. 更新 `access/include/AccessTypes.h`、`access/src/daemon/DaemonProtocolAdapter.cpp` 与 `access/src/AccessGatewayFactory.cpp`，把 UDS request frame 中的 `trace_id/session_hint` 透传进 access 入口 `request_context`，避免 built `dasall-cli` 的显式 `trace_id` 在 daemon/access 入口被丢失后退化为 normalizer 自动生成值。
+2. 更新 `apps/daemon/src/main.cpp`，让 real daemon main 的 completed publish envelope 也补齐 `request_id/session_id/trace_id/channel_ref/protocol_kind`，从而使 built `dasall-cli run --json` 在真实 daemon main 路径下也能稳定回显显式 ID，而不再只在 in-process fixture 中成立。
+3. 新增 `tests/integration/access/CliBinaryTestSupport.h`，并更新 `tests/integration/access/DaemonIntegrationHarness.h` 与 `tests/integration/access/CMakeLists.txt`，为 built CLI binary probe 提供统一的 stdout/stderr 捕获、JSON 字段提取和 socket path 暴露能力，同时把 `dasall-cli` 接入相关 integration target 依赖。
 4. 更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`，在 real daemon main 路径下补齐 human success 只落 stdout、JSON success 保留显式 `request_id/trace_id` 的断言，防止 sync completed 行为只在手工探测中成立。
-5. 更新 `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`，新增 built `dasall_cli run --async --json` 与 `status --json` 的真实 binary gate，锁定 accepted_async disposition、显式 `request_id/trace_id`、receipt registry 中的原始 request ownership，以及成功 JSON 路径不落 stderr。
-6. 更新 `tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp`，新增 built `dasall_cli` 对显式 `--socket-path` success 和 missing-socket human/json failure 的 stdout/stderr 分流断言；同时更新 `tests/unit/access/AccessInterfaceSurfaceTest.cpp`，补齐 `InboundPacket` 新字段默认初始化以消除本次改动引入的编译告警。
-7. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-013` 标记为 Done，并把专项剩余范围收敛到 `CLI-TODO-014` 的最终证据收口；同时明确 Gate-CLI-05 已由真实 integration tests 锁定，而 platform peer identity 仍为外部依赖。
+5. 更新 `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`，新增 built `dasall-cli run --async --json` 与 `status --json` 的真实 binary gate，锁定 accepted_async disposition、显式 `request_id/trace_id`、receipt registry 中的原始 request ownership，以及成功 JSON 路径不落 stderr。
+6. 更新 `tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp`，新增 built `dasall-cli` 对显式 `--socket-path` success 和 missing-socket human/json failure 的 stdout/stderr 分流断言；同时更新 `tests/unit/access/AccessInterfaceSurfaceTest.cpp`，补齐 `InboundPacket` 新字段默认初始化以消除本次改动引入的编译告警。
+7. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-013` 标记为 Done，并把专项剩余范围收敛到 `CLI-TODO-014` 的最终证据收口；同时明确 Gate-CLI-05 已由真实 integration tests 锁定，而 platform peer identity 仍为外部依赖。
 
 ### 验证
 
@@ -904,13 +904,13 @@
    - 结果：通过；access/daemon 透传改动、built CLI binary probe helper 与新增 integration assertions 均进入真实构建图。
 2. `RunCtest_CMakeTools(tests=["CliDaemonSocketPathIntegrationTest","DaemonBinaryUnarySmokeTest","DaemonReceiptFlowIntegrationTest"])`
    - 结果：通过；Gate-CLI-05 对应的三项 binary/integration tests 全部通过。stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
-3. `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --socket-path <tmp>` + `./build/vscode-linux-ninja/apps/cli/dasall_cli --socket-path <tmp> run --json --request-id cli-013-sync --trace-id cli-013-sync-trace '{"prompt":"sync probe"}'`
+3. `./build/vscode-linux-ninja/apps/daemon/dasall-daemon --socket-path <tmp>` + `./build/vscode-linux-ninja/apps/cli/dasall-cli --socket-path <tmp> run --json --request-id cli-013-sync --trace-id cli-013-sync-trace '{"prompt":"sync probe"}'`
    - 结果：通过，real daemon main 路径下 `request_id=cli-013-sync` 与 `trace_id=cli-013-sync-trace` 已稳定回到 CLI JSON envelope，且 stderr 为空。
 
 ### 结果
 
 1. Gate-CLI-05 已不再依赖手工终端探测：sync completed、async accepted_async、显式 `request_id/trace_id` 与 stdout/stderr 责任边界都已被真实 integration tests 锁住。
-2. CLI binary 表面的显式 ID 不再只在 request builder 和 contract 层成立；daemon/access 入口链现在会把 `trace_id/session_hint` 继续带到 normalizer、publish envelope 和最终 JSON 输出，因此 built `dasall_cli` 的 sync/async 路径都具备真实脚本化可判定性。
+2. CLI binary 表面的显式 ID 不再只在 request builder 和 contract 层成立；daemon/access 入口链现在会把 `trace_id/session_hint` 继续带到 normalizer、publish envelope 和最终 JSON 输出，因此 built `dasall-cli` 的 sync/async 路径都具备真实脚本化可判定性。
 3. CLI 专项剩余范围已经收敛到 `CLI-TODO-014` 的证据收口；但 platform peer identity 仍是外部依赖，因此当前结论仍然只是“CLI 客户端面完成”，不是本地控制面 auth/diag 全链路安全闭环完成。
 
 ## 记录 #538
@@ -927,7 +927,7 @@
 3. 更新 `apps/cli/src/CliOutputFormatter.cpp`，在稳定 JSON error object 中真正输出 `access_error_code`、`access_error_domain`、`retryable`，不再把 daemon/access failure 一律退化成三项全 `null`。
 4. 更新 `tests/contract/access/CliJsonOutputContractTest.cpp`，补齐 `run completed`、`authorization_denied`、`daemon_unavailable` 的扩展断言，锁定 `session_id`、同步完成路径、`error.reason` 和 access error facts 投影。
 5. 更新 `tests/contract/access/CliExitCodeContractTest.cpp`，补齐 `idempotency_replay_hit`、`authentication_required`、`diag_disabled`、`cancel_forward_failed`、`status_expired` 等扩展 exit code 场景，确保 CLI v1 的 success/access-deny/retryable/business 四族不会只被最小 happy-path 覆盖。
-6. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-012` 标记为 Done，并把专项剩余范围收敛到 `CLI-TODO-013` binary/integration gate 与 `CLI-TODO-014` 证据收口。
+6. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-012` 标记为 Done，并把专项剩余范围收敛到 `CLI-TODO-013` binary/integration gate 与 `CLI-TODO-014` 证据收口。
 
 ### 验证
 
@@ -940,7 +940,7 @@
 
 1. CLI 的稳定 JSON envelope 现在不再只锁顶层主键；对于 access/daemon failure，`error` 子对象也已经被 contract 自动化锁住，尤其是 `access_error_code/domain/retryable` 不再是未实现占位。
 2. `CliExitCodeContractTest` 不再只覆盖最小 `0/2/3/4/5/6/7` 族；replay-hit、authentication alias、diagnostics deny、receipt failure 等扩展路径已进入真实矩阵，因此 013 可以专注在 built binary 的 CLI surface，而不必回头补本地 exit family 的语义缺口。
-3. Wave 4 已从“contract -> integration”推进到只剩 integration gate，后续只需验证 built `dasall_cli` 在 sync/async、显式 `request_id` / `trace_id` 和 stdout/stderr 责任边界上的真实行为。
+3. Wave 4 已从“contract -> integration”推进到只剩 integration gate，后续只需验证 built `dasall-cli` 在 sync/async、显式 `request_id` / `trace_id` 和 stdout/stderr 责任边界上的真实行为。
 
 ## 记录 #537
 
@@ -955,7 +955,7 @@
 2. 更新 `apps/cli/src/main.cpp`，让 daemon-facing 命令统一先计算 `CliExitDecision` 再做输出路由：`--json` 模式始终只向 stdout 输出单个 JSON document，human 模式则按 `CliPrimaryOutputStream` 将成功结果写 stdout、失败结果写 stderr；同时把本地 `version --json` 切到同一 formatter envelope。
 3. 更新 `tests/unit/access/CliDaemonOutputFormatterTest.cpp`，新增对 completed JSON envelope 和 local transport failure JSON envelope 的断言，确保 formatter 不再停留在 human-only 文本。
 4. 更新 `tests/contract/access/CMakeLists.txt`，将 `CliJsonOutputContractTest` 从 reserved/fail-closed placeholder 替换为真实 contract target；新增 `tests/contract/access/CliJsonOutputContractTest.cpp`，锁定 `ping` success、`run accepted_async`、`authorization_denied` 与 `daemon_unavailable` 的稳定 JSON 主键与 exit code 投影。
-5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-010` 标记为 Done，并同步清理已过时的 `CliJsonOutputContractTest` reserved-entrypoint 描述，把剩余范围收敛到 012/013/014 的扩展 contract/binary gate。
+5. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-010` 标记为 Done，并同步清理已过时的 `CliJsonOutputContractTest` reserved-entrypoint 描述，把剩余范围收敛到 012/013/014 的扩展 contract/binary gate。
 
 ### 验证
 
@@ -963,9 +963,9 @@
    - 结果：通过，formatter、主程序输出路由与新的 JSON contract target 均进入真实构建图。
 2. `RunCtest_CMakeTools(tests=["CliDaemonOutputFormatterTest","CliJsonOutputContractTest"])`
    - 结果：通过，formatter unit 与真实 `CliJsonOutputContractTest` 均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
-3. `./build/vscode-linux-ninja/apps/cli/dasall_cli ping --json --socket-path /tmp/dasall-cli-010-missing.sock` 与 `./build/vscode-linux-ninja/apps/cli/dasall_cli ping --socket-path /tmp/dasall-cli-010-missing.sock`
+3. `./build/vscode-linux-ninja/apps/cli/dasall-cli ping --json --socket-path /tmp/dasall-cli-010-missing.sock` 与 `./build/vscode-linux-ninja/apps/cli/dasall-cli ping --socket-path /tmp/dasall-cli-010-missing.sock`
    - 结果：通过，前者在 daemon 不可达时只向 stdout 输出 `daemon_unavailable` JSON envelope 且 stderr 为空；后者只向 stderr 输出 human failure 文本且 stdout 为空。
-4. `./build/vscode-linux-ninja/apps/cli/dasall_cli version --json`
+4. `./build/vscode-linux-ninja/apps/cli/dasall-cli version --json`
    - 结果：通过，本地 `version --json` 与 daemon-facing `--json` 共用同一 `cli.output.v1` envelope 主键。
 
 ### 结果
@@ -988,7 +988,7 @@
 3. 更新 `apps/cli/src/main.cpp`，daemon-facing 分支统一改为调用 `client.invoke(*cmd)`，并把 `--timeout-ms` 同步接到 client 的 connect/receive deadline，使 `CliCommand` 中的稳定字段真正进入 request/build 路径。
 4. 更新 `access/include/daemon/DaemonProtocolTypes.h` 与 `access/src/daemon/DaemonFrameCodec.cpp`，为 `UdsRequestFrame` 补齐 `output_mode`、`deadline_ms` 字段并扩展 codec 的 encode/decode/known-field 校验，使 request frame 能真实承载 v1 稳定上下文，而不是只停留在 CLI 私有结构里。
 5. 更新 `tests/unit/access/CliIpcClientTest.cpp`、`tests/unit/access/CliIpcClientResponseTest.cpp`、`tests/unit/access/DaemonFrameCodecTest.cpp` 与 `tests/unit/access/DaemonFrameCodecMalformedTest.cpp`，锁定 builder/codec 对 `request_id`、`trace_id`、`session_hint`、`async_preference`、`output_mode`、`deadline_ms` 的装配与 fail-closed 语义；同时补齐 `tests/integration/access/DaemonFailureInjectionIntegrationTest.cpp` 的新字段初始化，消除本次改动引入的编译 warning。
-6. 更新 `apps/cli/CMakeLists.txt`、`tests/unit/apps/cli/CMakeLists.txt` 与 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 builder 文件接入 CLI 构建/单测拓扑，并把 `CLI-TODO-008` 标记为 Done。
+6. 更新 `apps/cli/CMakeLists.txt`、`tests/unit/apps/cli/CMakeLists.txt` 与 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 builder 文件接入 CLI 构建/单测拓扑，并把 `CLI-TODO-008` 标记为 Done。
 
 ### 验证
 
@@ -1018,7 +1018,7 @@
 2. 更新 `CliCommandParser::usage_string()`，按 `run/status/cancel/version/ping/readiness/diag` 输出与详设一致的 usage skeleton，不再只有旧的最小 `--socket-path + positional` 说明。
 3. 更新 `apps/cli/src/main.cpp`，将 `help` 与 `version` 提前到 local-only 分支处理，避免无意义地初始化 IIPC client，并为 `version --json` 提供最小稳定本地输出。
 4. 更新 `tests/unit/access/CliDaemonCommandParserTest.cpp`，新增空调用默认 help、显式 `help diag health`、命令级 `run --help`、`version --json --quiet`、`help --json` reject、`version --socket-path/--timeout-ms` reject 等正反例。
-5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-007` 标记为 Done，并把 Wave 3 顺序推进到 008/010。
+5. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-007` 标记为 Done，并把 Wave 3 顺序推进到 008/010。
 
 ### 验证
 
@@ -1026,7 +1026,7 @@
    - 结果：通过，新增的 help/version 解析、usage skeleton 与 local-only flag 约束断言均通过；stderr 中 `DartConfiguration.tcl` 缺失仍为仓库既有 CMake Tools 噪声。
 2. `Build_CMakeTools()`
    - 结果：通过，parser/main 的 local-only 分支与帮助文本更新已进入真实构建图。
-3. `./build/vscode-linux-ninja/apps/cli/dasall_cli --help && ./build/vscode-linux-ninja/apps/cli/dasall_cli version --json`
+3. `./build/vscode-linux-ninja/apps/cli/dasall-cli --help && ./build/vscode-linux-ninja/apps/cli/dasall-cli version --json`
    - 结果：通过，built CLI 能输出顶层 usage skeleton，并在不触达 daemon 的前提下输出 `version --json` 的本地结果。
 
 ### 结果
@@ -1045,10 +1045,10 @@
 ### 改动
 
 1. 新增 `apps/cli/src/CliExitDecision.h` 与 `apps/cli/src/CliExitDecision.cpp`，把 CLI v1 `0/2/3/4/5/6/7` 退出码矩阵集中到单一 owner，并按“先本地 transport/protocol、再 daemon disposition、再稳定 `error_ref` 事实”的顺序做裁定。
-2. 更新 `apps/cli/src/main.cpp` 与 `apps/cli/CMakeLists.txt`，让 CLI 入口改为统一调用 `CliExitDecision`，不再把所有失败路径压缩成 `EXIT_FAILURE`，同时把新的 exit decision 源文件接入 `dasall_cli` 构建。
+2. 更新 `apps/cli/src/main.cpp` 与 `apps/cli/CMakeLists.txt`，让 CLI 入口改为统一调用 `CliExitDecision`，不再把所有失败路径压缩成 `EXIT_FAILURE`，同时把新的 exit decision 源文件接入 `dasall-cli` 构建。
 3. 更新 `tests/contract/access/CMakeLists.txt`，将 `CliExitCodeContractTest` 从 reserved/fail-closed placeholder 替换为真实 contract target，并保留 `CliJsonOutputContractTest` 继续作为 010/012 前的 reserved 入口。
 4. 新增 `tests/contract/access/CliExitCodeContractTest.cpp`，锁定参数错误、daemon 不可达、协议错误、success-like、access deny、retryable/not_ready、business failure 等场景的 CLI v1 退出码与 outcome family。
-5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-009` 标记为 Done，并明确 012 的剩余范围已收敛为 JSON contract 与 exit code 扩展场景。
+5. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-009` 标记为 Done，并明确 012 的剩余范围已收敛为 JSON contract 与 exit code 扩展场景。
 
 ### 验证
 
@@ -1075,7 +1075,7 @@
 1. 更新 `apps/cli/src/CliCommandParser.h`，为 `CliCommand` 新增 `output_mode`、`timeout_ms`、`async_preference`、`request_id`、`session_hint`、`trace_id`、`quiet`、`no_input`、`selector_kind`、`selector_value` 等稳定字段，并以枚举显式表达输出模式、异步偏好和 selector 类型。
 2. 更新 `apps/cli/src/CliCommandParser.cpp`，为现有 parser 增加最小稳定 flag 捕获与作用域校验：支持 `--json`、`--timeout-ms`、`--async`、`--request-id`、`--session`、`--trace-id`、`--quiet`、`--no-input`，并把 legacy `status/cancel` positional 查询同步投影到 `selector_kind` / `selector_value`。
 3. 更新 `tests/unit/access/CliDaemonCommandParserTest.cpp`，新增稳定字段捕获、duplicate option reject、run-only flag illegal-scope reject 断言，确保 `CliCommand` 字段不是“只在头文件声明但没有真实 parse owner”的悬空模型。
-4. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-006` 标记为 Done，并把 Wave 2 调整为 006 完成后的后续执行状态。
+4. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-006` 标记为 Done，并把 Wave 2 调整为 006 完成后的后续执行状态。
 
 ### 验证
 
@@ -1103,7 +1103,7 @@
 2. 更新 `tests/unit/CMakeLists.txt` 与 `tests/unit/access/CMakeLists.txt`，接入新的 `apps/cli` 子树并移除 access 下的重复 CLI test 注册，避免同名 test 在两个拓扑重复声明。
 3. 新增 `tests/contract/access/CMakeLists.txt` 并更新 `tests/contract/CMakeLists.txt`，为 `CliJsonOutputContractTest`、`CliExitCodeContractTest` 建立 fail-closed reserved entrypoint，使 discoverability 与真实 contract 实现解耦。
 4. 新增 `docs/todos/cli/deliverables/CLI-TODO-011-CLI测试topology与discoverability接线.md`，回写 003~005 基线复核、topology 设计结论与 reserved contract 入口策略。
-5. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-011` 标记为 Done，解阻 `CLI-BLK-003`，并把 `CLI-TODO-012` 切换为等待 009/010 实现的 NotStarted 状态。
+5. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-011` 标记为 Done，解阻 `CLI-BLK-003`，并把 `CLI-TODO-012` 切换为等待 009/010 实现的 NotStarted 状态。
 
 ### 验证
 
@@ -1130,8 +1130,8 @@
 ### 改动
 
 1. 新增 `docs/todos/cli/deliverables/CLI-TODO-002-CLI-JSON-envelope与CliExitDecision冻结.md`，集中回写 CLI projection envelope、stdout/stderr 归属、`daemon_unavailable/protocol_error` 本地 disposition 与 access fact -> CLI exit family 的冻结结论。
-2. 更新 `docs/architecture/DASALL_cli本地控制面详细设计.md`，补齐 `DaemonClientResponse` / `CliExitDecision` 字段语义，冻结 `cli.output.v1` 主键、`result/error/warnings` 摆放以及 `0/2/3/4/5/6/7` 投影规则。
-3. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-002` 标记为 Done，清除 `CLI-BLK-002`，并把 `CLI-TODO-009/010/012/013` 从“脚本化 contract 未冻结”状态切换为实现或 topology 阶段。
+2. 更新 `docs/architecture/DASALL-cli本地控制面详细设计.md`，补齐 `DaemonClientResponse` / `CliExitDecision` 字段语义，冻结 `cli.output.v1` 主键、`result/error/warnings` 摆放以及 `0/2/3/4/5/6/7` 投影规则。
+3. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-002` 标记为 Done，清除 `CLI-BLK-002`，并把 `CLI-TODO-009/010/012/013` 从“脚本化 contract 未冻结”状态切换为实现或 topology 阶段。
 
 ### 验证
 
@@ -1156,8 +1156,8 @@
 ### 改动
 
 1. 新增 `docs/todos/cli/deliverables/CLI-TODO-001-CLI命令schema与usage文案冻结.md`，集中回写本地证据、CLIG / kubectl 参考、公开命令面冻结结论以及 Design -> Build 映射。
-2. 更新 `docs/architecture/DASALL_cli本地控制面详细设计.md`，将 `run/status/cancel/help/version` 的参数 schema、selector 规则、`--socket-path` 稳定命名、compat surface 边界与 version local-only 策略回链到权威详设。
-3. 更新 `docs/todos/cli/DASALL_cli本地控制面专项TODO.md`，将 `CLI-TODO-001` 标记为 Done，清除 `CLI-BLK-001`，并把 `CLI-TODO-006/007/008` 从“参数未冻结”状态切换为可执行的 Build 前置任务。
+2. 更新 `docs/architecture/DASALL-cli本地控制面详细设计.md`，将 `run/status/cancel/help/version` 的参数 schema、selector 规则、`--socket-path` 稳定命名、compat surface 边界与 version local-only 策略回链到权威详设。
+3. 更新 `docs/todos/cli/DASALL-cli本地控制面专项TODO.md`，将 `CLI-TODO-001` 标记为 Done，清除 `CLI-BLK-001`，并把 `CLI-TODO-006/007/008` 从“参数未冻结”状态切换为可执行的 Build 前置任务。
 
 ### 验证
 
@@ -1212,12 +1212,12 @@
 3. 更新 `apps/daemon/src/main.cpp`，在 gateway/build 前真实调用 `AgentFacade::init()`，并为 unary happy path 补齐 protocol `200` hint，消除 real binary 路径上“response 有了但 disposition 仍是 rejected”的偏差。
 4. 更新 `apps/daemon/src/DaemonConfigReloader.cpp` 与 `tests/unit/apps/daemon/DaemonConfigReloadTest.cpp`，把 hot-reload allowlist 收窄为 `daemon.diag_enabled` 单键，并把 `log_format` / `watchdog_enabled` / `receipt_ttl_sec` / `override_enabled` 收回到启动期语义。
 5. 更新 `tests/integration/access/DaemonHotReloadIntegrationTest.cpp`，正向验证 `diag_enabled` 热更可观察，反向验证 `daemon.log_format` 与 `daemon.socket_path` 都会被拒绝。
-6. 新增 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp` 并更新 `tests/integration/access/CMakeLists.txt`，让 built `dasall_daemon` + built `dasall_cli run` 成为 `Gate-DMD-04` 的真实 binary smoke；同步对齐 `DaemonUnaryRuntimeBridgeTest.cpp` 的 protocol hint。
+6. 新增 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp` 并更新 `tests/integration/access/CMakeLists.txt`，让 built `dasall-daemon` + built `dasall-cli run` 成为 `Gate-DMD-04` 的真实 binary smoke；同步对齐 `DaemonUnaryRuntimeBridgeTest.cpp` 的 protocol hint。
 7. 更新 daemon architecture/deploy/TODO/deliverable/worklog 文档，把 Gate-DMD-04、Gate-DMD-07 与部署 smoke 证据同步到当前实现。
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon","dasall_runtime_unary_fixture_integration_test","dasall_access_daemon_unary_runtime_bridge_integration_test","dasall_daemon_entry_config_projection_unit_test","dasall_daemon_config_reload_unit_test","dasall_access_daemon_hot_reload_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_runtime_unary_fixture_integration_test","dasall_access_daemon_unary_runtime_bridge_integration_test","dasall-daemon_entry_config_projection_unit_test","dasall-daemon_config_reload_unit_test","dasall_access_daemon_hot_reload_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test"])`
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["RuntimeUnaryFixtureIntegrationTest","DaemonUnaryRuntimeBridgeTest","DaemonEntryConfigProjectionTest","DaemonConfigReloadTest","DaemonHotReloadIntegrationTest","DaemonBinaryUnarySmokeTest"])`
    - 结果：通过，6/6 测试通过；stderr 中 `DartConfiguration.tcl` 缺失提示仍为仓库既有 CMake Tools 噪声，不影响 focused 结论。
@@ -1238,9 +1238,9 @@
 ### 改动
 
 1. 删除 `tests/integration/access/CliDaemonPingIntegrationTest.cpp`，移除未注册的 legacy send-only ping smoke 文件。
-2. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项评审报告_2026-05-02.md` 与 `deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，清理已过期的 readiness 缺口/旧 smoke 直引表述。
+2. 更新 `docs/todos/daemon/DASALL-daemon本地控制面专项评审报告_2026-05-02.md` 与 `deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，清理已过期的 readiness 缺口/旧 smoke 直引表述。
 3. 更新 `tests/unit/apps/daemon/CMakeLists.txt`，补齐 `apps/daemon` unit-test 拓扑对 `access/include` 的可见性，消除 `DaemonEndpointDefaults.h` 的假性构建失败。
-4. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 `DMD-TODO-040` 标记为 Done、补齐 `Gate-DMD-10` PASS，并把专项当前结论与 §11 执行结论推进到 close-ready。
+4. 更新 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 `DMD-TODO-040` 标记为 Done、补齐 `Gate-DMD-10` PASS，并把专项当前结论与 §11 执行结论推进到 close-ready。
 5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-040-daemon文档与证据复验收敛.md`，集中回写 `Gate-DMD-05` / `07` / `09` / `10` 的复验证据。
 
 ### 验证
@@ -1275,7 +1275,7 @@
 
 ### 验证
 
-1. `cmake --build build-ci --target dasall_daemon dasall_daemon_signal_handler_unit_test dasall_daemon_config_reload_unit_test dasall_access_daemon_hot_reload_integration_test dasall_access_daemon_observability_field_set_unit_test`
+1. `cmake --build build-ci --target dasall-daemon dasall-daemon_signal_handler_unit_test dasall-daemon_config_reload_unit_test dasall_access_daemon_hot_reload_integration_test dasall_access_daemon_observability_field_set_unit_test`
    - 结果：通过。
 2. `ctest --test-dir build-ci -R "DaemonConfigReloadTest|DaemonHotReloadIntegrationTest|DaemonSignalHandlerTest|DaemonObservabilityFieldSetTest" --output-on-failure`
    - 结果：通过，4/4 测试通过。
@@ -1297,7 +1297,7 @@
 
 1. 新增 `apps/daemon/src/DaemonEntryConfigLoader.h/.cpp`，统一合成 default `desktop_full` profile、runtime snapshot generation、deployment snapshot (`--config-file`) 与 `--socket-path` override。
 2. 更新 `apps/daemon/src/main.cpp`，新增 `--profile-id` / `--config-file` 参数，并让 daemon startup / validate-only 都先走 entry loader，再把真实 `effective_profile_id` 与 `config_revision` 注入 `DaemonBootstrap::build()`。
-3. 更新 `apps/daemon/CMakeLists.txt`，把 entry loader 纳入 `dasall_daemon` 并补齐 `dasall_profiles` 依赖。
+3. 更新 `apps/daemon/CMakeLists.txt`，把 entry loader 纳入 `dasall-daemon` 并补齐 `dasall_profiles` 依赖。
 4. 新增 `tests/unit/apps/daemon/DaemonEntryConfigProjectionTest.cpp`，覆盖默认 profile、YAML/JSON deployment snapshot 与 flags/config 冲突语义。
 5. 更新 `tests/integration/access/DaemonProfileCompatibilityTest.cpp` 与对应 CMake，使 baseline profile compatibility smoke 改走 entry loader，而不是 helper 级 direct projection。
 6. 更新 `docs/deploy/daemon/README.md` 与 `ACCEPTANCE_CHECKLIST.md`，同步 `--profile-id` / `--config-file` surface 与配置冲突治理口径。
@@ -1305,7 +1305,7 @@
 
 ### 验证
 
-1. `cmake --build build-ci --target dasall_daemon dasall_daemon_entry_config_projection_unit_test dasall_daemon_profile_projection_unit_test dasall_access_daemon_profile_compatibility_integration_test`
+1. `cmake --build build-ci --target dasall-daemon dasall-daemon_entry_config_projection_unit_test dasall-daemon_profile_projection_unit_test dasall_access_daemon_profile_compatibility_integration_test`
    - 结果：通过。
 2. `ctest --test-dir build-ci -R "DaemonEntryConfigProjectionTest|DaemonProfileProjectionTest|DaemonProfileCompatibilityTest|DaemonBootstrapTest" --output-on-failure`
    - 结果：通过，4/4 测试通过。
@@ -1335,7 +1335,7 @@
 
 1. `cmake --build build-ci --target dasall_unix_ipc_provider_unit_test && ctest --test-dir build-ci -R "^UnixIpcProviderTest$" --output-on-failure`
    - 结果：通过。
-2. `cmake --build build-ci --target dasall_daemon dasall_daemon_socket_policy_unit_test dasall_unix_ipc_provider_unit_test dasall_access_daemon_ping_integration_test dasall_access_daemon_socket_mode_integration_test dasall_access_daemon_stale_socket_recovery_integration_test && ctest --test-dir build-ci -R "DaemonSocketPolicyTest|UnixIpcProviderTest|DaemonSocketModeIntegrationTest|DaemonStaleSocketRecoveryIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
+2. `cmake --build build-ci --target dasall-daemon dasall-daemon_socket_policy_unit_test dasall_unix_ipc_provider_unit_test dasall_access_daemon_ping_integration_test dasall_access_daemon_socket_mode_integration_test dasall_access_daemon_stale_socket_recovery_integration_test && ctest --test-dir build-ci -R "DaemonSocketPolicyTest|UnixIpcProviderTest|DaemonSocketModeIntegrationTest|DaemonStaleSocketRecoveryIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
    - 结果：通过，5/5 测试通过。
 
 ### 结果
@@ -1366,7 +1366,7 @@
 
 ### 验证
 
-1. `cmake --build build-ci --target dasall_cli dasall_daemon dasall_access_cli_command_parser_unit_test dasall_access_cli_ipc_client_unit_test dasall_access_cli_ipc_client_response_unit_test dasall_access_cli_ipc_client_unavailable_unit_test dasall_access_daemon_ping_integration_test dasall_access_cli_daemon_socket_path_integration_test`
+1. `cmake --build build-ci --target dasall-cli dasall-daemon dasall_access_cli_command_parser_unit_test dasall_access_cli_ipc_client_unit_test dasall_access_cli_ipc_client_response_unit_test dasall_access_cli_ipc_client_unavailable_unit_test dasall_access_daemon_ping_integration_test dasall_access_cli_daemon_socket_path_integration_test`
    - 结果：通过。
 2. `ctest --test-dir build-ci -R "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonSocketPathIntegrationTest|DaemonPingIntegrationTest" --output-on-failure`
    - 结果：通过，6/6 测试通过。
@@ -1386,7 +1386,7 @@
 
 ### 改动
 
-1. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md` 顶部元信息与当前结论，将专项状态从“执行规划中”收敛为“001~035 全部完成、Gate-DMD-01~09 全部 PASS”的最终快照。
+1. 更新 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md` 顶部元信息与当前结论，将专项状态从“执行规划中”收敛为“001~035 全部完成、Gate-DMD-01~09 全部 PASS”的最终快照。
 2. 将 `DMD-TODO-028` 行从 Ready 改为 Done，并把验收命令收敛为文档证据校验命令，不再把受仓库噪声影响的全仓聚合 build/ctest 冒充为 028 的主验收信号。
 3. 在专项 TODO 中新增 `9.4 Gate 执行证据（2026-05-02）` 与 `9.5 阻塞变化与回退记录`，集中回写 023/024/025/026/027/031/034/035 的 focused gate 证据、`DMD-BLK-001` ~ `008` 的清除状态，以及 034 direct-binary fallback 的验证口径。
 4. 将专项 TODO 的 §10 改为当前残余风险快照，显式记录仓库聚合噪声、`RunCtest_CMakeTools` 对 034 的工具链噪声、registry-only status 边界、v2 范围外部署能力和长期运行证据边界。
@@ -1394,7 +1394,7 @@
 
 ### 验证
 
-1. `rg -n "DMD-TODO-028|Gate-DMD-0[1-9]|DMD-BLK-00[1-8]|当前残余风险" docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md docs/worklog/DASALL_开发执行记录.md`
+1. `rg -n "DMD-TODO-028|Gate-DMD-0[1-9]|DMD-BLK-00[1-8]|当前残余风险" docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md docs/todos/daemon/deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md docs/worklog/DASALL_开发执行记录.md`
    - 结果：通过；028 状态、Gate-DMD-01~09、blocker 快照与残余风险条目均可在 TODO / deliverable / worklog 中追溯。
 2. `rg -n "DMD-TODO-02(4|5|6|7|8)|DMD-TODO-03(1|4|5)" docs/worklog/DASALL_开发执行记录.md docs/todos/daemon/deliverables`
    - 结果：通过；024、025、026、027、031、034、035 的上游 focused gate 证据已全部存在并可回链。
@@ -1451,11 +1451,11 @@
 1. 新增 `tests/integration/access/DaemonFailureInjectionIntegrationTest.cpp`，覆盖 bind conflict、peer identity unsupported 与 runtime timeout 注入三类 failure path。
 2. 新增 `tests/integration/access/DaemonProfileCompatibilityTest.cpp`，遍历五档 baseline profile，验证 profile 投影下 unary 主链保持一致，且 diagnostics 默认关闭。
 3. 更新 `tests/integration/access/CMakeLists.txt`，注册 `DaemonFailureInjectionTest` 与 `DaemonProfileCompatibilityTest` 两个 focused integration targets。
-4. 新增 `docs/todos/daemon/deliverables/DMD-TODO-027-daemon-failure-profile-gate收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-027 更新为 Done，focused 验收命令与 gate 证据同步收敛。
+4. 新增 `docs/todos/daemon/deliverables/DMD-TODO-027-daemon-failure-profile-gate收敛.md`，并回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-027 更新为 Done，focused 验收命令与 gate 证据同步收敛。
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_failure_injection_integration_test","dasall_access_daemon_profile_compatibility_integration_test","dasall_daemon_graceful_shutdown_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_failure_injection_integration_test","dasall_access_daemon_profile_compatibility_integration_test","dasall-daemon_graceful_shutdown_unit_test"])`
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["DaemonFailureInjectionTest","DaemonGracefulShutdownTest","DaemonProfileCompatibilityTest"])`
    - 结果：通过，3/3 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库当前基线计为有效 focused gate 证据。
@@ -1478,7 +1478,7 @@
 1. 更新 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`，为 daemon pipeline 增加可注入 `AsyncTaskRegistry` seam，并修正 status/cancel 响应的 wire 投影：completed/active/cancelled 通过 `agent_result.response_text` 暴露，rejected 分支输出稳定错误键。
 2. 新增 `tests/integration/access/DaemonReceiptFlowIntegrationTest.cpp`，覆盖 accepted_async receipt、owner status active/completed/cancelled、status owner mismatch、cancel owner mismatch 与 TTL expired。
 3. 更新 `tests/integration/access/CMakeLists.txt`，注册 `DaemonReceiptFlowIntegrationTest` 并为该 target 增补 `access/src` include 以复用 `AsyncTaskRegistry`。
-4. 新增 `docs/todos/daemon/deliverables/DMD-TODO-026-daemon-async-status-cancel收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-026 更新为 Done，清除已失效的 blocker 标注并收敛 focused 验收命令。
+4. 新增 `docs/todos/daemon/deliverables/DMD-TODO-026-daemon-async-status-cancel收敛.md`，并回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-026 更新为 Done，清除已失效的 blocker 标注并收敛 focused 验收命令。
 
 ### 验证
 
@@ -1510,7 +1510,7 @@
 2. 新增 `tests/integration/access/DaemonUnaryIntegrationTest.cpp`，验证 CLI `run` 请求经 daemon -> AccessGateway -> runtime dispatch backend -> response encode 的 happy path 闭环。
 3. 新增 `tests/integration/access/DaemonRejectPathIntegrationTest.cpp`，覆盖 unknown command、auth deny、validation reject、runtime bridge unavailable 四类拒绝路径，并断言 runtime backend 未被误调用。
 4. 更新 `tests/integration/access/CMakeLists.txt`，注册 `DaemonUnaryIntegrationTest` 与 `DaemonRejectPathIntegrationTest` 两个 focused integration target。
-5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-025-daemon-unary-reject集成收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-025 更新为 Done，收敛 focused 验收命令与证据摘要。
+5. 新增 `docs/todos/daemon/deliverables/DMD-TODO-025-daemon-unary-reject集成收敛.md`，并回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-025 更新为 Done，收敛 focused 验收命令与证据摘要。
 
 ### 验证
 
@@ -1541,7 +1541,7 @@
 5. 更新 `tests/unit/access/CMakeLists.txt` 与 `tests/integration/access/CMakeLists.txt`，新增 `CliIpcClientResponseTest`、`CliDaemonCommandParserTest`、`CliDaemonOutputFormatterTest`，并让 `DaemonPingIntegrationTest` 链接 `CliIpcClient.cpp`。
 6. 更新 `tests/unit/access/CliIpcClientTest.cpp`、`CliIpcClientUnavailableTest.cpp`，新增 `CliIpcClientResponseTest.cpp`、`CliDaemonCommandParserTest.cpp`、`CliDaemonOutputFormatterTest.cpp`，用 scripted IPC 覆盖 accepted_async/not_ready/rejected 与 fail-closed。
 7. 更新 `tests/integration/access/DaemonPingIntegrationTest.cpp`，在真实 daemon roundtrip 中追加 `CliIpcClient::ping_daemon()` 断言，证明 CLI 已能读取 pong/readiness。
-8. 新增 `docs/todos/daemon/deliverables/DMD-TODO-031-CLI-daemon-wire-contract收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-031 更新为 Done，同时清除 `DMD-BLK-007`。
+8. 新增 `docs/todos/daemon/deliverables/DMD-TODO-031-CLI-daemon-wire-contract收敛.md`，并回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-031 更新为 Done，同时清除 `DMD-BLK-007`。
 
 ### 验证
 
@@ -1549,7 +1549,7 @@
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["DaemonFrameCodecTest"])`
    - 结果：通过，1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
-3. `Build_CMakeTools(buildTargets=["dasall_cli","dasall_access_cli_ipc_client_unit_test","dasall_access_cli_ipc_client_response_unit_test","dasall_access_cli_ipc_client_unavailable_unit_test","dasall_access_cli_command_parser_unit_test","dasall_access_cli_output_formatter_unit_test","dasall_access_daemon_ping_integration_test"])`
+3. `Build_CMakeTools(buildTargets=["dasall-cli","dasall_access_cli_ipc_client_unit_test","dasall_access_cli_ipc_client_response_unit_test","dasall_access_cli_ipc_client_unavailable_unit_test","dasall_access_cli_command_parser_unit_test","dasall_access_cli_output_formatter_unit_test","dasall_access_daemon_ping_integration_test"])`
    - 结果：通过。
 4. `RunCtest_CMakeTools(tests=["CliIpcClientTest","CliIpcClientResponseTest","CliIpcClientUnavailableTest","CliDaemonCommandParserTest","CliDaemonOutputFormatterTest","DaemonPingIntegrationTest"])`
    - 结果：通过，6/6 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
@@ -1577,19 +1577,19 @@
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_unix_ipc_provider_loopback_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall_daemon_loopback_fixture_unit_test","dasall_access_daemon_ping_integration_test","dasall_daemon"])`
+1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_unix_ipc_provider_loopback_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall-daemon_loopback_fixture_unit_test","dasall_access_daemon_ping_integration_test","dasall-daemon"])`
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["UnixIpcProviderTest","UnixIpcProviderPeerIdentityTest","UnixIpcProviderLoopbackTest","DaemonProtocolAdapterLocalTrustedTest","DaemonLoopbackFixtureTest","DaemonPingIntegrationTest"])`
    - 结果：通过，6/6 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
-3. `Build_CMakeTools(buildTargets=["dasall_daemon_config_validator_unit_test","dasall_daemon_graceful_shutdown_unit_test","dasall_access_daemon_ping_integration_test","dasall_daemon"])`
+3. `Build_CMakeTools(buildTargets=["dasall-daemon_config_validator_unit_test","dasall-daemon_graceful_shutdown_unit_test","dasall_access_daemon_ping_integration_test","dasall-daemon"])`
    - 结果：通过。
 4. `RunCtest_CMakeTools(tests=["DaemonConfigValidatorTest","DaemonGracefulShutdownTest","DaemonPingIntegrationTest"])`
    - 结果：通过，3/3 通过。
 5. 本地 smoke：
-   - `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --validate-only --socket-path /tmp/dasall-dmd035/control.sock` -> 输出 `config validation passed without creating listener resources`。
-   - `./build/vscode-linux-ninja/apps/cli/dasall_cli ping` -> daemon 未启动时输出 unavailable。
-   - `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --socket-path /tmp/dasall-dmd035/control.sock` + Python `socket.AF_UNIX/socket.SOCK_SEQPACKET` -> 可读回 ping/readiness response，且文件系统中真实出现 `control.sock`。
-   - `kill -TERM <daemon-pid>` -> 输出 `[dasall_daemon] stopped (run=ok)`。
+   - `./build/vscode-linux-ninja/apps/daemon/dasall-daemon --validate-only --socket-path /tmp/dasall-dmd035/control.sock` -> 输出 `config validation passed without creating listener resources`。
+   - `./build/vscode-linux-ninja/apps/cli/dasall-cli ping` -> daemon 未启动时输出 unavailable。
+   - `./build/vscode-linux-ninja/apps/daemon/dasall-daemon --socket-path /tmp/dasall-dmd035/control.sock` + Python `socket.AF_UNIX/socket.SOCK_SEQPACKET` -> 可读回 ping/readiness response，且文件系统中真实出现 `control.sock`。
+   - `kill -TERM <daemon-pid>` -> 输出 `[dasall-daemon] stopped (run=ok)`。
 
 ### 结果
 
@@ -1612,11 +1612,11 @@
 4. 更新 `tests/unit/apps/daemon/DaemonLoopbackFixtureTest.cpp`，切到真实 daemon access gateway、0700 临时 socket 目录与 completed response 断言，作为 024 的近邻解阻夹具。
 5. 新增 `tests/integration/access/DaemonPingIntegrationTest.cpp`，使用 in-process daemon fixture 发送 v1 ping frame 并读取 daemon response。
 6. 更新 `tests/integration/access/CMakeLists.txt`，移除旧 `CliDaemonPingIntegrationTest` 集成注册，改为 `DaemonPingIntegrationTest`。
-7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，并回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-024 更新为 Done，同时把验收命令从受全仓 integration 污染的聚合目标收敛为 focused build + focused ctest。
+7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-024-daemon-ping-integration收敛.md`，并回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-024 更新为 Done，同时把验收命令从受全仓 integration 污染的聚合目标收敛为 focused build + focused ctest。
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall_daemon_loopback_fixture_unit_test","dasall_unix_ipc_provider_loopback_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall-daemon_loopback_fixture_unit_test","dasall_unix_ipc_provider_loopback_unit_test"])`
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["UnixIpcProviderTest","UnixIpcProviderPeerIdentityTest","UnixIpcProviderLoopbackTest","DaemonProtocolAdapterLocalTrustedTest","DaemonLoopbackFixtureTest"])`
    - 结果：通过，5/5 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -1624,7 +1624,7 @@
    - 结果：通过。
 4. `RunCtest_CMakeTools(tests=["DaemonPingIntegrationTest"])`
    - 结果：通过，1/1 通过。
-5. `Build_CMakeTools(buildTargets=["dasall_daemon","dasall_integration_tests"])`
+5. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_integration_tests"])`
    - 结果：失败；`dasall_integration_tests` 会执行全仓 integration tests，当前受仓库既有 `RuntimeUnaryIntegrationTest`、`InfraDiagnosticsSmokeTest` 等无关失败污染，不适合作为 DMD-TODO-024 的主验收信号。
 
 ### 结果
@@ -1645,11 +1645,11 @@
 1. 确认 `tests/unit/apps/daemon/CMakeLists.txt` 已注册 daemon 壳层单测目标，并将目标写入 `DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS`。
 2. 确认 `tests/unit/CMakeLists.txt` 已通过 `add_subdirectory(apps/daemon)` 引入 daemon unit 拓扑，并将 daemon target 列表并入 `DASALL_UNIT_TEST_EXECUTABLE_TARGETS`。
 3. 新增 `docs/todos/daemon/deliverables/DMD-TODO-023-tests_unit_apps_daemon拓扑收敛.md`，固定 focused build + discoverability 证据。
-4. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-023 更新为 Done，并把验收命令从过宽的 `dasall_unit_tests` 聚合目标收敛为 daemon topology 所需的 focused build 命令。
+4. 回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-023 更新为 Done，并把验收命令从过宽的 `dasall_unit_tests` 聚合目标收敛为 daemon topology 所需的 focused build 命令。
 
 ### 验证
 
-1. `cmake --build build-ci --target dasall_daemon_bootstrap_unit_test dasall_daemon_lifecycle_controller_unit_test dasall_daemon_listener_host_unit_test dasall_daemon_config_validator_unit_test`
+1. `cmake --build build-ci --target dasall-daemon_bootstrap_unit_test dasall-daemon_lifecycle_controller_unit_test dasall-daemon_listener_host_unit_test dasall-daemon_config_validator_unit_test`
    - 结果：通过。
 2. `ctest --test-dir build-ci -N | rg "Daemon(Bootstrap|LifecycleController|ListenerHost|ConfigValidator)Test"`
    - 结果：通过，发现 `DaemonListenerHostTest`、`DaemonBootstrapTest`、`DaemonLifecycleControllerTest`、`DaemonConfigValidatorTest`。
@@ -1677,7 +1677,7 @@
 5. 新增 `tests/unit/apps/daemon/DaemonConfigReloadTest.cpp`，覆盖 allowlist 生效、restart-only 拒绝、last-known-good 保持与拒绝审计回调。
 6. 更新 `tests/unit/apps/daemon/CMakeLists.txt` 注册 `DaemonConfigReloadTest`，更新 `tests/unit/apps/daemon/DaemonBootstrapConfigTest.cpp` 断言 `log_level` 默认值。
 7. 更新 `tests/unit/access/DaemonObservabilityFieldSetTest.cpp`，固定 `daemon.reload.denied` 字段集合。
-8. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：DMD-TODO-033 状态改为 Done 并补测试证据。
+8. 回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：DMD-TODO-033 状态改为 Done 并补测试证据。
 9. 新增交付物文档 `docs/todos/daemon/deliverables/DMD-TODO-033-daemon-hot-reload-allowlist收敛.md`。
 
 ### 验证
@@ -1705,7 +1705,7 @@
 1. 回收并确认 `apps/daemon/src/DaemonLifecycleController.cpp` 的 Draining 排空语义：`shutdown(timeout)` 在超时场景返回 `abandoned_requests`，并在正常排空时进入 `Stopped`。
 2. 回收并确认 `apps/daemon/src/DaemonBootstrap.cpp` 的 shutdown 收口顺序：`stop(timeout)` 同时触发 listener 关闭、gateway shutdown 与 lifecycle draining。
 3. 回收并确认 `access/src/AccessGateway.cpp` + `access/src/AccessObservabilityBridge.cpp` 的 abandoned 审计链路：超时 inflight 通过 shutdown observer 写出 `daemon.shutdown.abandoned` 事件。
-4. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：将 DMD-TODO-022 从 `Ready` 更新为 `Done` 并补充 2026-04-30 验收证据。
+4. 回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：将 DMD-TODO-022 从 `Ready` 更新为 `Done` 并补充 2026-04-30 验收证据。
 5. 新增交付文档 `docs/todos/daemon/deliverables/DMD-TODO-022-daemon-graceful-shutdown收敛.md`。
 
 ### 验证
@@ -1804,7 +1804,7 @@
    - 结果：首轮失败，只暴露 `AccessInterfaceSurfaceTest` 对枚举断言重载使用错误；修正后复跑通过。
 2. `RunCtest_CMakeTools(tests=["AccessInterfaceSurfaceTest"])`
    - 结果：通过，1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
-3. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+3. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
    - 结果：通过，证明 daemon 已不依赖 `access/src` include dir 仍可构建。
 
 ### 结果
@@ -1846,9 +1846,9 @@
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
    - 结果：通过，build/run 组合根改造没有破坏 daemon 主构建。
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_bootstrap_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_bootstrap_unit_test","dasall-daemon_loopback_fixture_unit_test"])`
    - 结果：首轮失败，暴露 loopback fixture target 缺少 `dasall_infra` 公开头依赖，且 test fake gateway 使用了不存在的枚举值；补齐依赖并修正 fake gateway 后复跑通过。
 3. `RunCtest_CMakeTools(tests=["DaemonBootstrapTest","DaemonLoopbackFixtureTest"])`
    - 结果：通过，两条测试均 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -1887,16 +1887,16 @@
    - `watchdog_active()`
 2. adapter 默认走 no-op；仅当 `watchdog_enabled=true` 且注入 `IWatchdogService` 时，桥接到 `register_entity(...)`、`heartbeat(...)` 与 `unregister_entity(...)`。
 3. `tick_watchdog()` 为 daemon 维护最小 heartbeat sequence 和 deadline，但 watchdog 失败只通过 `WatchdogOperationResult` 返回，不在 adapter 内做隐藏 retry 或恢复裁定。
-4. 更新 `apps/daemon/CMakeLists.txt`，把 supervisor adapter 纳入 `dasall_daemon` 构建。
+4. 更新 `apps/daemon/CMakeLists.txt`，把 supervisor adapter 纳入 `dasall-daemon` 构建。
 5. 新增 `tests/unit/apps/daemon/DaemonSupervisorAdapterTest.cpp`，覆盖 no-op path、watchdog bridge 与 failure surfacing。
 6. 更新 `tests/unit/apps/daemon/CMakeLists.txt`，注册 `DaemonSupervisorAdapterTest`。
 7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-008-DaemonSupervisorAdapter收敛.md`，并回写 daemon 专项 TODO，清除 DMD-BLK-002。
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
    - 结果：通过，supervisor adapter 纳入 daemon 构建图后无编译回归。
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_supervisor_adapter_unit_test","dasall_watchdog_service_interface_unit_test"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_supervisor_adapter_unit_test","dasall_watchdog_service_interface_unit_test"])`
    - 结果：通过。
 3. `RunCtest_CMakeTools(tests=["DaemonSupervisorAdapterTest","WatchdogServiceInterfaceTest"])`
    - 结果：通过，两条测试均 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -1933,16 +1933,16 @@
    - 新增 `listener_host_` 成员；
    - `run(...)` 通过 listener host 完成 bind 与 accept loop；
    - bootstrap 只保留 lifecycle、gateway readiness 与 `handle_connection(...)` 装配职责。
-4. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonListenerHost` 纳入 `dasall_daemon` 构建。
+4. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonListenerHost` 纳入 `dasall-daemon` 构建。
 5. 新增 `tests/unit/apps/daemon/DaemonListenerHostTest.cpp`，用 scripted fake IIPC 覆盖 bind 参数、accept timeout、close 后拒绝和 listener error mapping。
 6. 更新 `tests/unit/apps/daemon/CMakeLists.txt`：注册 `DaemonListenerHostTest`，并让 `DaemonLoopbackFixtureTest` target 链上新的 listener host 依赖。
 7. 新增 `docs/todos/daemon/deliverables/DMD-TODO-006-DaemonListenerHost收敛.md`，并回写 daemon 专项 TODO。
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
    - 结果：通过，listener host 抽离后 daemon 主构建保持稳定。
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_listener_host_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_listener_host_unit_test","dasall-daemon_loopback_fixture_unit_test"])`
    - 结果：首轮失败，暴露 `DaemonListenerHostTest` target 缺少 `dasall_platform` 公开头依赖；补齐链接依赖后复跑通过。
 3. `RunCtest_CMakeTools(tests=["DaemonListenerHostTest","DaemonLoopbackFixtureTest"])`
    - 结果：通过，`DaemonListenerHostTest` 与 `DaemonLoopbackFixtureTest` 均 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -1990,7 +1990,7 @@
 
 1. `Build_CMakeTools(buildTargets=["dasall_platform"])`
    - 结果：通过；首轮暴露 `-Wmissing-field-initializers` 警告，已在同轮补齐新增字段的显式初始化。
-2. `Build_CMakeTools(buildTargets=["dasall_platform","dasall_unix_ipc_provider_loopback_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+2. `Build_CMakeTools(buildTargets=["dasall_platform","dasall_unix_ipc_provider_loopback_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall-daemon_loopback_fixture_unit_test"])`
    - 结果：通过，029 所需 provider 与两条新 test targets 均成功编译。
 3. `RunCtest_CMakeTools(tests=["UnixIpcProviderLoopbackTest","DaemonLoopbackFixtureTest","UnixIpcProviderPeerIdentityTest"])`
    - 结果：通过，三条测试全部 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -2031,9 +2031,9 @@
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-   - 结果：通过，`dasall_daemon` 成功重编译，说明主线程轮询 + run thread 接线未破坏现有 daemon 启动路径。
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_signal_handler_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+   - 结果：通过，`dasall-daemon` 成功重编译，说明主线程轮询 + run thread 接线未破坏现有 daemon 启动路径。
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_signal_handler_unit_test"])`
    - 结果：通过。
 3. `RunCtest_CMakeTools(tests=["DaemonSignalHandlerTest"])`
    - 结果：通过，`DaemonSignalHandlerTest` 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -2072,9 +2072,9 @@
 
 ### 验证
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-   - 结果：通过，`dasall_daemon` 成功重编译，说明 lifecycle 接线未破坏现有 daemon 壳层。
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_lifecycle_controller_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+   - 结果：通过，`dasall-daemon` 成功重编译，说明 lifecycle 接线未破坏现有 daemon 壳层。
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_lifecycle_controller_unit_test"])`
    - 结果：通过。
 3. `RunCtest_CMakeTools(tests=["DaemonLifecycleControllerTest"])`
    - 结果：通过，`DaemonLifecycleControllerTest` 1/1 通过；工具 stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
@@ -2113,8 +2113,8 @@
 
 ### 验证
 
-1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_daemon dasall_daemon_config_validator_unit_test && ctest --test-dir build-ci -R "^DaemonConfigValidatorTest$" --output-on-failure`
-   - 结果：通过，`dasall_daemon` 编译成功，`DaemonConfigValidatorTest` 1/1 通过。
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-daemon dasall-daemon_config_validator_unit_test && ctest --test-dir build-ci -R "^DaemonConfigValidatorTest$" --output-on-failure`
+   - 结果：通过，`dasall-daemon` 编译成功，`DaemonConfigValidatorTest` 1/1 通过。
 
 ### 结果
 
@@ -2149,7 +2149,7 @@
 
 ### 验证
 
-1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_daemon_profile_projection_unit_test dasall_profile_matrix_consistency_unit_test && ctest --test-dir build-ci -R "^(DaemonProfileProjectionTest|ProfileMatrixConsistencyTest)$" --output-on-failure`
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-daemon_profile_projection_unit_test dasall_profile_matrix_consistency_unit_test && ctest --test-dir build-ci -R "^(DaemonProfileProjectionTest|ProfileMatrixConsistencyTest)$" --output-on-failure`
    - 结果：通过，`DaemonProfileProjectionTest` 与 `ProfileMatrixConsistencyTest` 共 2/2 通过。
 
 ### 结果
@@ -2185,7 +2185,7 @@
 
 ### 验证
 
-1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_daemon_bootstrap_config_unit_test && ctest --test-dir build-ci -R "^DaemonBootstrapConfigTest$" --output-on-failure`
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-daemon_bootstrap_config_unit_test && ctest --test-dir build-ci -R "^DaemonBootstrapConfigTest$" --output-on-failure`
    - 结果：通过，`DaemonBootstrapConfigTest` 1/1 通过。
 
 ### 结果
@@ -26698,7 +26698,7 @@ EOF`
    - 验证 valid submit 可进入 runtime backend。
 5. 更新 `tests/unit/apps/daemon/CMakeLists.txt`：
    - 注册 `DaemonAccessPipelineFactoryTest`。
-6. 更新 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：
+6. 更新 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：
    - `DMD-TODO-013` 状态从 `Ready` 更新为 `Done`。
 7. 新增交付物文档：
    - `docs/todos/daemon/deliverables/DMD-TODO-013-daemon-AccessGateway-pipeline收敛.md`。
@@ -26706,7 +26706,7 @@ EOF`
 ### 验证
 
 1. 构建：
-   - CMake Tools 构建 `dasall_daemon` 与 `dasall_unit_tests`，代码编译通过。
+   - CMake Tools 构建 `dasall-daemon` 与 `dasall_unit_tests`，代码编译通过。
 2. 定向测试（RunCtest_CMakeTools）：
    - `DaemonAccessPipelineFactoryTest` 通过。
    - `AccessGatewayFacadeTest` 通过。

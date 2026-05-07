@@ -19,12 +19,12 @@
 2. ADR/SSOT
 
 ### 本次评审对象
-- 方案文档：docs/architecture/DASALL_daemon本地控制面详细设计.md
+- 方案文档：docs/architecture/DASALL-daemon本地控制面详细设计.md
 - 设计收敛：docs/todos/daemon/deliverables
 - 代码改动：apps/daemon
 - 任务来源：
   1. docs/architecture/DASSALL_Agent_architecture.md
-  2. docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+  2. docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 - 验收命令：自动生成
 
 ### 评审要求

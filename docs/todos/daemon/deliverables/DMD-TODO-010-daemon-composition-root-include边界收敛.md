@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -36,7 +36,7 @@
 | 设计结论 | Build 落点 | 验收信号 |
 |---|---|---|
 | access 对 apps 暴露受控组合接缝 | `access/include/AccessGatewayFactory.h`、`access/src/AccessGatewayFactory.cpp`、`access/CMakeLists.txt` | public header 可被 `dasall_access` 导出，`AccessInterfaceSurfaceTest` 可直接 include |
-| daemon 不再 include access internal header | `apps/daemon/src/main.cpp`、`apps/daemon/CMakeLists.txt` | `dasall_daemon` 在不依赖 `access/src` include dir 的情况下编译通过 |
+| daemon 不再 include access internal header | `apps/daemon/src/main.cpp`、`apps/daemon/CMakeLists.txt` | `dasall-daemon` 在不依赖 `access/src` include dir 的情况下编译通过 |
 | factory 属于 public surface 而非 concrete 泄漏 | `tests/unit/access/AccessInterfaceSurfaceTest.cpp` | 测试通过 public header 创建 gateway 并验证生命周期入口 |
 
 ## 4. D Gate
@@ -49,7 +49,7 @@
 2. Build 三件套已锁定：
    - 代码目标：`access/include` + `access/src` 新增 factory，移除 daemon 对 `access/src` 的 include 依赖；
    - 测试目标：扩展 `AccessInterfaceSurfaceTest`；
-   - 验收命令：构建 `dasall_daemon` 与运行 `AccessInterfaceSurfaceTest`。
+   - 验收命令：构建 `dasall-daemon` 与运行 `AccessInterfaceSurfaceTest`。
 3. 范围保持在 DMD-TODO-010 内，没有顺手扩张到 daemon pipeline、gateway main、runtime bridge 或其它相邻原子任务。
 
 ## 5. 落盘结果
@@ -71,7 +71,7 @@
 6. 更新 `tests/unit/access/AccessInterfaceSurfaceTest.cpp`：
    - 补 factory 可发现性断言；
    - 通过 public surface 验证 factory-created gateway 的生命周期初态。
-7. 回写 `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`：
+7. 回写 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`：
    - DMD-TODO-010 改为 Done；
    - DMD-BLK-003 标记清除。
 
@@ -81,7 +81,7 @@
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["AccessInterfaceSurfaceTest"])`
    - 结果：通过，1/1 passed；CTest 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0。
-3. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
+3. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
    - 结果：通过，证明 daemon 在不依赖 `access/src` include dir 的情况下仍可构建。
 
 ## 7. 完成判定
@@ -90,4 +90,4 @@ DMD-TODO-010 已完成。判定依据：
 
 1. `apps/daemon` 已不再 include 或依赖 `access/src/AccessGateway.h`。
 2. `access/include` 已提供稳定的 `create_access_gateway()` public seam，daemon 仅消费 `IAccessGateway` + public factory。
-3. `AccessInterfaceSurfaceTest` 与 `dasall_daemon` 构建同时通过，证明 include 边界收敛没有破坏默认生命周期入口。
+3. `AccessInterfaceSurfaceTest` 与 `dasall-daemon` 构建同时通过，证明 include 边界收敛没有破坏默认生命周期入口。

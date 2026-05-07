@@ -140,7 +140,7 @@ CLI                    DaemonBootstrap         DaemonProtocolAdapter  AccessGate
 ## 5. 验收命令
 
 ```bash
-cmake --build /home/gangan/DASALL/build-ci --target dasall_daemon \
+cmake --build /home/gangan/DASALL/build-ci --target dasall-daemon \
   dasall_access_daemon_protocol_adapter_unit_test \
   dasall_access_daemon_protocol_adapter_local_trusted_unit_test \
   && ctest --test-dir /home/gangan/DASALL/build-ci \
@@ -152,7 +152,7 @@ cmake --build /home/gangan/DASALL/build-ci --target dasall_daemon \
 
 ## 6. 验收结果（Done）
 
-- **构建**：`dasall_daemon`、`dasall_access_daemon_protocol_adapter_unit_test`、`dasall_access_daemon_protocol_adapter_local_trusted_unit_test` 全部通过 ✅
+- **构建**：`dasall-daemon`、`dasall_access_daemon_protocol_adapter_unit_test`、`dasall_access_daemon_protocol_adapter_local_trusted_unit_test` 全部通过 ✅
 - **测试**：2/2 通过（`DaemonProtocolAdapterTest`、`DaemonProtocolAdapterLocalTrustedTest`）✅
 - **完成时间**：2025-07-10
 - **状态**：Done

@@ -36,8 +36,8 @@
 
 | 命令 | 格式 | 说明 |
 |---|---|---|
-| `ping` | `dasall_cli ping` | 向 daemon 发送健康检查请求 |
-| `submit` | `dasall_cli submit <json>` | 向 daemon 提交 InboundPacket JSON |
+| `ping` | `dasall-cli ping` | 向 daemon 发送健康检查请求 |
+| `submit` | `dasall-cli submit <json>` | 向 daemon 提交 InboundPacket JSON |
 
 ### 2.2 fail-closed 行为
 
@@ -75,7 +75,7 @@
 ## 4. 验收命令
 
 ```bash
-cmake --build /home/gangan/DASALL/build-ci --target dasall_cli \
+cmake --build /home/gangan/DASALL/build-ci --target dasall-cli \
   dasall_access_cli_ipc_client_unit_test \
   dasall_access_cli_ipc_client_unavailable_unit_test \
   dasall_access_cli_output_formatter_unit_test \
@@ -88,7 +88,7 @@ cmake --build /home/gangan/DASALL/build-ci --target dasall_cli \
 
 ## 5. 验收结果（Done）
 
-- **构建**：`dasall_cli`、`dasall_access_cli_ipc_client_unit_test`、`dasall_access_cli_ipc_client_unavailable_unit_test`、`dasall_access_cli_output_formatter_unit_test` 全部通过 ✅
+- **构建**：`dasall-cli`、`dasall_access_cli_ipc_client_unit_test`、`dasall_access_cli_ipc_client_unavailable_unit_test`、`dasall_access_cli_output_formatter_unit_test` 全部通过 ✅
 - **测试**：3/3 通过（`CliIpcClientTest`、`CliIpcClientUnavailableTest`、`CliOutputFormatterTest`）✅
 - **完成时间**：2025-07-10
 - **状态**：Done

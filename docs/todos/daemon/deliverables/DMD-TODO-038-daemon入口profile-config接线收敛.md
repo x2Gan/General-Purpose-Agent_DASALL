@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-02
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -46,7 +46,7 @@
    - `validate-only` 与正常启动路径都先走 `DaemonEntryConfigLoader`；
    - `DaemonBootstrap::build()` 现在接收真实 `effective_profile_id` 与 `config_revision`；
    - ping/readiness 所需的 profile/readiness 元数据不再由 `main.cpp` 手写常量。
-3. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonEntryConfigLoader.cpp` 编进 `dasall_daemon`，并补齐 `dasall_profiles` 依赖。
+3. 更新 `apps/daemon/CMakeLists.txt`，把 `DaemonEntryConfigLoader.cpp` 编进 `dasall-daemon`，并补齐 `dasall_profiles` 依赖。
 4. 新增 `tests/unit/apps/daemon/DaemonEntryConfigProjectionTest.cpp`：
    - 验证默认 `desktop_full` baseline；
    - 验证 YAML deployment snapshot overlay；
@@ -58,7 +58,7 @@
 
 ## 5. Validation
 
-1. `cmake --build build-ci --target dasall_daemon dasall_daemon_entry_config_projection_unit_test dasall_daemon_profile_projection_unit_test dasall_access_daemon_profile_compatibility_integration_test`
+1. `cmake --build build-ci --target dasall-daemon dasall-daemon_entry_config_projection_unit_test dasall-daemon_profile_projection_unit_test dasall_access_daemon_profile_compatibility_integration_test`
 2. `ctest --test-dir build-ci -R "DaemonEntryConfigProjectionTest|DaemonProfileProjectionTest|DaemonProfileCompatibilityTest|DaemonBootstrapTest" --output-on-failure`
 
 结果摘要：

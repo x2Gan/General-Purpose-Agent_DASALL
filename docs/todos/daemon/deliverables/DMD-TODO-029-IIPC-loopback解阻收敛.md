@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -57,7 +57,7 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_platform","dasall_unix_ipc_provider_loopback_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_daemon_loopback_fixture_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall_platform","dasall_unix_ipc_provider_loopback_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall-daemon_loopback_fixture_unit_test"])`
 2. `RunCtest_CMakeTools(tests=["UnixIpcProviderLoopbackTest","DaemonLoopbackFixtureTest","UnixIpcProviderPeerIdentityTest"])`
 
 结果摘要：

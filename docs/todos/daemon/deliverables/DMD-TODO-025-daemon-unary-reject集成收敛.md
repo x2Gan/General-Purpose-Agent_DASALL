@@ -37,8 +37,8 @@
 
 新增 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`，覆盖：
 
-1. 启动 built `dasall_daemon` binary，走真实 `main.cpp -> AgentFacade::init()` 路径，而不是 in-process harness。
-2. 使用 built `dasall_cli` 先执行 `ping` 等待 daemon ready，再执行 `run '{"prompt":"binary smoke"}'`。
+1. 启动 built `dasall-daemon` binary，走真实 `main.cpp -> AgentFacade::init()` 路径，而不是 in-process harness。
+2. 使用 built `dasall-cli` 先执行 `ping` 等待 daemon ready，再执行 `run '{"prompt":"binary smoke"}'`。
 3. 断言 CLI 返回 `submit: completed`，且响应文本包含 `runtime orchestrator skeleton completed`，证明 real binary wiring 与 protocol disposition 都正确。
 
 ## 3. 修改文件
@@ -48,14 +48,14 @@
 3. `tests/integration/access/DaemonRejectPathIntegrationTest.cpp`
 4. `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`
 5. `tests/integration/access/CMakeLists.txt`
-6. `docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md`
+6. `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`
 
 ## 4. 验证证据
 
 执行命令：
 
 ```text
-Build_CMakeTools(buildTargets=["dasall_daemon","dasall_cli","dasall_access_daemon_unary_integration_test","dasall_access_daemon_reject_path_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test"])
+Build_CMakeTools(buildTargets=["dasall-daemon","dasall-cli","dasall_access_daemon_unary_integration_test","dasall_access_daemon_reject_path_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test"])
 RunCtest_CMakeTools(tests=["DaemonUnaryIntegrationTest","DaemonRejectPathIntegrationTest","DaemonBinaryUnarySmokeTest"])
 ```
 
@@ -71,4 +71,4 @@ RunCtest_CMakeTools(tests=["DaemonUnaryIntegrationTest","DaemonRejectPathIntegra
 1. 未修改 daemon / access 生产主链，仅通过集成测试验证现有实现。
 2. happy path 和 reject path 都经共享 access core，不通过测试私有 mock 绕过 `SubjectResolver`、`RequestValidator` 或 `RuntimeBridge`。
 3. reject 场景均断言 runtime backend 未被调用，满足“拒绝不进入 Runtime”的完成判定。
-4. real unary smoke 通过 built `dasall_daemon` + built `dasall_cli` 复验了真实 `main.cpp` 组合根，不再把 helper/harness green 误记为 binary gate 已通过。
+4. real unary smoke 通过 built `dasall-daemon` + built `dasall-cli` 复验了真实 `main.cpp` 组合根，不再把 helper/harness green 误记为 binary gate 已通过。

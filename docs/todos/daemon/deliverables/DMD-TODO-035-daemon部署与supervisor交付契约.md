@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-05-02
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -58,27 +58,27 @@
 
 ### 5.1 Focused build/test
 
-1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_unix_ipc_provider_loopback_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall_daemon_loopback_fixture_unit_test","dasall_access_daemon_ping_integration_test","dasall_daemon"])`
+1. `Build_CMakeTools(buildTargets=["dasall_unix_ipc_provider_unit_test","dasall_unix_ipc_provider_peer_identity_unit_test","dasall_unix_ipc_provider_loopback_unit_test","dasall_access_daemon_protocol_adapter_local_trusted_unit_test","dasall-daemon_loopback_fixture_unit_test","dasall_access_daemon_ping_integration_test","dasall-daemon"])`
    - 结果：通过。
 2. `RunCtest_CMakeTools(tests=["UnixIpcProviderTest","UnixIpcProviderPeerIdentityTest","UnixIpcProviderLoopbackTest","DaemonProtocolAdapterLocalTrustedTest","DaemonLoopbackFixtureTest","DaemonPingIntegrationTest"])`
    - 结果：通过，6/6 通过。
-3. `Build_CMakeTools(buildTargets=["dasall_daemon_config_validator_unit_test","dasall_daemon_graceful_shutdown_unit_test","dasall_access_daemon_ping_integration_test","dasall_daemon"])`
+3. `Build_CMakeTools(buildTargets=["dasall-daemon_config_validator_unit_test","dasall-daemon_graceful_shutdown_unit_test","dasall_access_daemon_ping_integration_test","dasall-daemon"])`
    - 结果：通过。
 4. `RunCtest_CMakeTools(tests=["DaemonConfigValidatorTest","DaemonGracefulShutdownTest","DaemonPingIntegrationTest"])`
    - 结果：通过，3/3 通过。
 
 ### 5.2 Real smoke
 
-1. `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --validate-only --socket-path /tmp/dasall-dmd035/control.sock`
-   - 结果：输出 `[dasall_daemon] config validation passed without creating listener resources`。
-2. `./build/vscode-linux-ninja/apps/cli/dasall_cli ping`
-   - 结果：在 daemon 未启动时输出 `[dasall_cli] daemon ping: FAILED — daemon unavailable or timeout`。
-3. `./build/vscode-linux-ninja/apps/daemon/dasall_daemon --socket-path /tmp/dasall-dmd035/control.sock`
-   - 结果：输出 `[dasall_daemon] starting on /tmp/dasall-dmd035/control.sock`，并在 `/tmp/dasall-dmd035/control.sock` 创建真实 Unix socket。
+1. `./build/vscode-linux-ninja/apps/daemon/dasall-daemon --validate-only --socket-path /tmp/dasall-dmd035/control.sock`
+   - 结果：输出 `[dasall-daemon] config validation passed without creating listener resources`。
+2. `./build/vscode-linux-ninja/apps/cli/dasall-cli ping`
+   - 结果：在 daemon 未启动时输出 `[dasall-cli] daemon ping: FAILED — daemon unavailable or timeout`。
+3. `./build/vscode-linux-ninja/apps/daemon/dasall-daemon --socket-path /tmp/dasall-dmd035/control.sock`
+   - 结果：输出 `[dasall-daemon] starting on /tmp/dasall-dmd035/control.sock`，并在 `/tmp/dasall-dmd035/control.sock` 创建真实 Unix socket。
 4. 原生 Python UDS smoke（`socket.AF_UNIX` + `socket.SOCK_SEQPACKET`）
    - 结果：`ping` 与 `readiness` 都能读回 completed response；`agent_result.response_text` 中分别包含 `daemon_version` / `readiness` 摘要与 readiness state 字段。
 5. `kill -TERM <daemon-pid>`
-   - 结果：输出 `[dasall_daemon] stopped (run=ok)`。
+   - 结果：输出 `[dasall-daemon] stopped (run=ok)`。
 
 ## 6. 完成判定
 

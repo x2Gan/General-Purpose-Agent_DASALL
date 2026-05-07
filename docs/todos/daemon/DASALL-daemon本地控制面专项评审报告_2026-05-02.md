@@ -16,7 +16,7 @@
 
 ### 1.1 总体结论
 
-1. 方案层面：daemon 详细设计、ADR 边界和专项 TODO 的主体方向是一致的，daemon 仍被限定为本地 Access owner，而不是第二 Runtime 主控；这一点在 [详细设计约束段](../../architecture/DASALL_daemon本地控制面详细设计.md#L102-L110) 与 [专项 TODO 当前结论](DASALL_daemon本地控制面专项TODO.md#L1-L6) 上是一致的。
+1. 方案层面：daemon 详细设计、ADR 边界和专项 TODO 的主体方向是一致的，daemon 仍被限定为本地 Access owner，而不是第二 Runtime 主控；这一点在 [详细设计约束段](../../architecture/DASALL-daemon本地控制面详细设计.md#L102-L110) 与 [专项 TODO 当前结论](DASALL-daemon本地控制面专项TODO.md#L1-L6) 上是一致的。
 2. 代码层面：当前实现已具备真实 `AF_UNIX` / `SOCK_SEQPACKET` transport、focused ping/readiness 闭环和 direct-bind 部署样例，但 entry config/profile/reload 真接线、CLI 默认 endpoint、一致的 socket 权限面和文档/测试口径仍未完成闭环。
 3. 交付层面：`Gate-DMD-05`、`Gate-DMD-07`、`Gate-DMD-09` 的历史 focused evidence 已存在，但它们代表的是“首轮收敛基线”，不能继续外推为当前专项已 fully closed；这也是专项 TODO 已追加 `DMD-TODO-036` ~ `040` 并引入 `Gate-DMD-10` 的根因。
 
@@ -34,7 +34,7 @@
 
 | 证据面 | 位置 | 结论用途 |
 |---|---|---|
-| 方案边界与四层配置模型 | [docs/architecture/DASALL_daemon本地控制面详细设计.md:367](../../architecture/DASALL_daemon本地控制面详细设计.md#L367)；[docs/architecture/DASALL_daemon本地控制面详细设计.md:469](../../architecture/DASALL_daemon本地控制面详细设计.md#L469) | 证明 daemon 应服从 `defaults -> profile -> deployment_override -> runtime_override` 的配置加载链 |
+| 方案边界与四层配置模型 | [docs/architecture/DASALL-daemon本地控制面详细设计.md:367](../../architecture/DASALL-daemon本地控制面详细设计.md#L367)；[docs/architecture/DASALL-daemon本地控制面详细设计.md:469](../../architecture/DASALL-daemon本地控制面详细设计.md#L469) | 证明 daemon 应服从 `defaults -> profile -> deployment_override -> runtime_override` 的配置加载链 |
 | daemon 默认 socket 配置 | [apps/daemon/src/DaemonConfig.h:50](../../../apps/daemon/src/DaemonConfig.h#L50) | 证明 daemon 当前默认值为 `/tmp/dasall/control.sock` |
 | CLI 默认 endpoint | [apps/cli/src/main.cpp:38](../../../apps/cli/src/main.cpp#L38) | 证明 CLI 当前硬编码连接 `/tmp/dasall-daemon-control.sock` |
 | daemon entry 运行时硬编码 | [apps/daemon/src/main.cpp:181-185](../../../apps/daemon/src/main.cpp#L181-L185)；[apps/daemon/src/main.cpp:207](../../../apps/daemon/src/main.cpp#L207)；[apps/daemon/src/main.cpp:255](../../../apps/daemon/src/main.cpp#L255) | 证明 profile/readiness 元数据和 reload snapshot 仍是硬编码或重复使用初始值 |
@@ -49,13 +49,13 @@
 
 ### 3.1 一致项
 
-1. daemon 的权责边界没有漂移。设计文档明确要求 daemon 只做本地控制面与 access owner，不得形成第二主循环或第二恢复裁定点；当前专项 TODO 仍沿用这一边界，没有把 daemon 扩张成新的主控平面，见 [详细设计约束段](../../architecture/DASALL_daemon本地控制面详细设计.md#L102-L110)。
-2. “首轮收敛基线 + 回归整改”的结构现在是正确的。专项 TODO 已把 `DMD-TODO-036` ~ `DMD-TODO-040` 接到 6.5，并新增 `Gate-DMD-10`，这与本次评估发现的缺口是一一对应的，见 [专项 TODO 当前结论](DASALL_daemon本地控制面专项TODO.md#L1-L6)。
+1. daemon 的权责边界没有漂移。设计文档明确要求 daemon 只做本地控制面与 access owner，不得形成第二主循环或第二恢复裁定点；当前专项 TODO 仍沿用这一边界，没有把 daemon 扩张成新的主控平面，见 [详细设计约束段](../../architecture/DASALL-daemon本地控制面详细设计.md#L102-L110)。
+2. “首轮收敛基线 + 回归整改”的结构现在是正确的。专项 TODO 已把 `DMD-TODO-036` ~ `DMD-TODO-040` 接到 6.5，并新增 `Gate-DMD-10`，这与本次评估发现的缺口是一一对应的，见 [专项 TODO 当前结论](DASALL-daemon本地控制面专项TODO.md#L1-L6)。
 3. gate / deliverable 的使用方式是正确的。`DMD-TODO-028` 已明确 historical gate 证据只能作为 focused baseline，不能再把 send-only smoke 或聚合噪声误写成“已交付事实”，见 [DMD-TODO-028 评审结论](deliverables/DMD-TODO-028-daemon专项Gate与交付证据收敛.md#L49)。
 
 ### 3.2 不一致项
 
-1. 设计要求 daemon 完全服从 ConfigCenter 四层模型，但真实 `main.cpp` 仍未把该模型接到入口组合根，见 [四层模型要求](../../architecture/DASALL_daemon本地控制面详细设计.md#L469) 与 [main.cpp entry 硬编码段](../../../apps/daemon/src/main.cpp#L181-L185)。
+1. 设计要求 daemon 完全服从 ConfigCenter 四层模型，但真实 `main.cpp` 仍未把该模型接到入口组合根，见 [四层模型要求](../../architecture/DASALL-daemon本地控制面详细设计.md#L469) 与 [main.cpp entry 硬编码段](../../../apps/daemon/src/main.cpp#L181-L185)。
 2. 设计与 policy 要求 socket 权限面受控，但当前代码只声明了 `0600` 目标，没有在真实 bind 路径上形成可见的权限收敛动作，见 [DaemonSocketPolicy.cpp:183](../../../apps/daemon/src/DaemonSocketPolicy.cpp#L183) 与 [UnixIpcProvider.cpp:229-243](../../../platform/src/linux/UnixIpcProvider.cpp#L229-L243)。
 3. 部署文档仍保留“CLI 尚未消费 readiness”说法，但 current CLI 已经具备 `readiness` 命令和 response parser；文档与代码不再一致，见 [apps/cli/src/main.cpp](../../../apps/cli/src/main.cpp#L47-L64) 与 [docs/deploy/daemon/README.md:48](../../deploy/daemon/README.md#L48)。
 
@@ -67,7 +67,7 @@
 
 证据：
 
-1. 设计要求 daemon “完全服从 ConfigCenter 四层模型：defaults、profile、deployment_override、runtime_override”，见 [详细设计:469](../../architecture/DASALL_daemon本地控制面详细设计.md#L469)。
+1. 设计要求 daemon “完全服从 ConfigCenter 四层模型：defaults、profile、deployment_override、runtime_override”，见 [详细设计:469](../../architecture/DASALL-daemon本地控制面详细设计.md#L469)。
 2. 当前入口仍直接写死 `daemon_profile_id = "daemon.direct_bind.v1"`、`daemon_listener_ready = true`、`daemon_gateway_ready = true`、`daemon_bridge_reachable = true`，见 [main.cpp:181-185](../../../apps/daemon/src/main.cpp#L181-L185)。
 3. `DaemonBootstrap::build()` 仍接收硬编码的 `.effective_profile_id = "daemon.direct_bind.v1"`，见 [main.cpp:207](../../../apps/daemon/src/main.cpp#L207)。
 4. 收到 reload signal 时，reloader 直接重复 `apply_reload_snapshot(parsed.config)`，没有 fresh snapshot source，见 [main.cpp:255](../../../apps/daemon/src/main.cpp#L255)。
@@ -88,7 +88,7 @@
 
 1. daemon 默认值是 `"/tmp/dasall/control.sock"`，见 [DaemonConfig.h:50](../../../apps/daemon/src/DaemonConfig.h#L50)。
 2. CLI 默认连接值是 `"/tmp/dasall-daemon-control.sock"`，见 [apps/cli/src/main.cpp:38](../../../apps/cli/src/main.cpp#L38)。
-3. 专项 TODO 已把这一问题吸收到 `DMD-TODO-036`，说明当前仓库也已承认该契约尚未收口，见 [专项 TODO 当前结论](DASALL_daemon本地控制面专项TODO.md#L1-L6)。
+3. 专项 TODO 已把这一问题吸收到 `DMD-TODO-036`，说明当前仓库也已承认该契约尚未收口，见 [专项 TODO 当前结论](DASALL-daemon本地控制面专项TODO.md#L1-L6)。
 
 影响：
 
@@ -154,7 +154,7 @@
 
 当前专项 TODO 已与本次评估结论基本一致，判断如下：
 
-1. 一致：顶部状态已从 fully-closed 调整为 reopen hardening，见 [专项 TODO 当前结论](DASALL_daemon本地控制面专项TODO.md#L1-L6)。
+1. 一致：顶部状态已从 fully-closed 调整为 reopen hardening，见 [专项 TODO 当前结论](DASALL-daemon本地控制面专项TODO.md#L1-L6)。
 2. 一致：`DMD-TODO-036` ~ `DMD-TODO-040` 覆盖了 endpoint、socket mode/stale restart、profile/config entry、reload snapshot、文档/证据复验五个整改面。
 3. 一致：`Gate-DMD-10` 已成为新的最终复验门，用来阻止“只凭历史 PASS 继续宣告专项完成”。
 4. 仍需执行：在 `036` ~ `040` 完成前，不应恢复任何“专项 fully closed / 已可合并收口”的表述。

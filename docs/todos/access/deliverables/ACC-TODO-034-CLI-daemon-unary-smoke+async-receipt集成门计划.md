@@ -25,8 +25,8 @@ status: Blocked
 
 | 测试 | 目标 | 依赖 |
 |---|---|---|
-| CliDaemonSmokeIntegrationTest | CLI 通过 UDS 连接 daemon，发送 unary 请求，收到 response | dasall_cli, dasall_daemon |
-| AccessAsyncReceiptIntegrationTest | Unary 返回 202 accepted，query 返回 receipt，cancel 生效 | dasall_daemon, AsyncTaskRegistry |
+| CliDaemonSmokeIntegrationTest | CLI 通过 UDS 连接 daemon，发送 unary 请求，收到 response | dasall-cli, dasall-daemon |
+| AccessAsyncReceiptIntegrationTest | Unary 返回 202 accepted，query 返回 receipt，cancel 生效 | dasall-daemon, AsyncTaskRegistry |
 
 ### 2.2 所需工作
 

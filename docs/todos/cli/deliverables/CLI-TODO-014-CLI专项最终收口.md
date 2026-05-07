@@ -2,7 +2,7 @@
 
 日期：2026-05-05
 状态：Done
-任务来源：`docs/todos/cli/DASALL_cli本地控制面专项TODO.md`
+任务来源：`docs/todos/cli/DASALL-cli本地控制面专项TODO.md`
 
 ## 1. 收口目标
 
@@ -10,15 +10,15 @@
 
 本轮收口回链以下冻结依据：
 
-1. `docs/architecture/DASALL_cli本地控制面详细设计.md` 中对 CLI v1 命令面、`--json` envelope、`CliExitDecision`、stdout/stderr 归属、focused gate 与外部依赖边界的冻结定义。
-2. `docs/todos/cli/DASALL_cli本地控制面专项TODO.md` 中 `CLI-TODO-001` 至 `CLI-TODO-013` 的已完成实现、Gate-CLI-01 至 Gate-CLI-05 的 focused 证据，以及 `CLI-BLK-004` 对 platform peer identity 外部依赖的历史跟踪与本轮解除回写。
+1. `docs/architecture/DASALL-cli本地控制面详细设计.md` 中对 CLI v1 命令面、`--json` envelope、`CliExitDecision`、stdout/stderr 归属、focused gate 与外部依赖边界的冻结定义。
+2. `docs/todos/cli/DASALL-cli本地控制面专项TODO.md` 中 `CLI-TODO-001` 至 `CLI-TODO-013` 的已完成实现、Gate-CLI-01 至 Gate-CLI-05 的 focused 证据，以及 `CLI-BLK-004` 对 platform peer identity 外部依赖的历史跟踪与本轮解除回写。
 3. `docs/worklog/DASALL_开发执行记录.md` 中 `#538`、`#539`、`#540`、`#541` 及更早 CLI 任务记录，作为实现与验证证据链。
 
 ## 2. 收口结论
 
 CLI 专项当前可确认进入 close-ready 状态，结论边界如下：
 
-1. `apps/cli` 纯客户端依赖方向、稳定命令 schema、`CliRequestBuilder`、`CliExitDecision`、human/JSON formatter、JSON/exit code contract，以及 built `dasall_cli` 的 sync/async 显式 ID 与 stdout/stderr binary gate 已全部落地。
+1. `apps/cli` 纯客户端依赖方向、稳定命令 schema、`CliRequestBuilder`、`CliExitDecision`、human/JSON formatter、JSON/exit code contract，以及 built `dasall-cli` 的 sync/async 显式 ID 与 stdout/stderr binary gate 已全部落地。
 2. CLI 用户面 contract 已由 unit、contract、integration 三层 focused gate 锁定，不再依赖手工终端探测或文档占位。
 3. CLI 专项仍然只声明 `apps/cli` 客户端面完成并 close-ready，不把 platform/access 的实现职责搬入 CLI；但此前作为外部依赖跟踪的 peer identity 链路现已由 platform/access owner 侧通过 provider、adapter、fail-closed 与 real UDS allow/reject gate 完成收口，因此不再保留 `CLI-BLK-004` / `CLI-RISK-007` / `CLI-OQ-001` 残余。
 
@@ -66,7 +66,7 @@ CLI 专项当前可确认进入 close-ready 状态，结论边界如下：
 本专项 close-ready 统一验收命令沿用专项 TODO 中的一条 one-shot focused gate，并补入 peer identity closure gate：
 
 ```bash
-cmake --build build-ci --target dasall_cli dasall_daemon dasall_access_daemon_diag_deny_integration_test dasall_access_daemon_failure_injection_integration_test dasall_access_daemon_protocol_adapter_local_trusted_unit_test dasall_access_daemon_peer_identity_fail_closed_unit_test dasall_unix_ipc_provider_peer_identity_unit_test \
+cmake --build build-ci --target dasall-cli dasall-daemon dasall_access_daemon_diag_deny_integration_test dasall_access_daemon_failure_injection_integration_test dasall_access_daemon_protocol_adapter_local_trusted_unit_test dasall_access_daemon_peer_identity_fail_closed_unit_test dasall_unix_ipc_provider_peer_identity_unit_test \
   && ctest --test-dir build-ci -N \
     | rg "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonOutputFormatterTest|CliJsonOutputContractTest|CliExitCodeContractTest|CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest|DaemonReceiptFlowIntegrationTest|UnixIpcProviderPeerIdentityTest|DaemonProtocolAdapterLocalTrustedTest|DaemonPeerIdentityFailClosedTest|DaemonFailureInjectionTest|DaemonDiagDenyIntegrationTest" \
   && ctest --test-dir build-ci -R "CliDaemonCommandParserTest|CliIpcClientTest|CliIpcClientResponseTest|CliIpcClientUnavailableTest|CliDaemonOutputFormatterTest|AccessErrorMappingTest|CliJsonOutputContractTest|CliExitCodeContractTest|CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest|DaemonReceiptFlowIntegrationTest|UnixIpcProviderPeerIdentityTest|DaemonProtocolAdapterLocalTrustedTest|DaemonPeerIdentityFailClosedTest|DaemonFailureInjectionTest|DaemonDiagDenyIntegrationTest" --output-on-failure

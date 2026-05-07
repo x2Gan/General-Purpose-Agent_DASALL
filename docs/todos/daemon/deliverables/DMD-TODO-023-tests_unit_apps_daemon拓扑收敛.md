@@ -25,7 +25,7 @@ DMD-TODO-023 已完成。`tests/unit/apps/daemon` 的单元测试拓扑已经实
 
 ## 验收
 
-1. `cmake --build build-ci --target dasall_daemon_bootstrap_unit_test dasall_daemon_lifecycle_controller_unit_test dasall_daemon_listener_host_unit_test dasall_daemon_config_validator_unit_test`
+1. `cmake --build build-ci --target dasall-daemon_bootstrap_unit_test dasall-daemon_lifecycle_controller_unit_test dasall-daemon_listener_host_unit_test dasall-daemon_config_validator_unit_test`
    - 结果：通过。
 2. `ctest --test-dir build-ci -N | rg "Daemon(Bootstrap|LifecycleController|ListenerHost|ConfigValidator)Test"`
    - 结果：通过，稳定发现 `DaemonListenerHostTest`、`DaemonBootstrapTest`、`DaemonLifecycleControllerTest`、`DaemonConfigValidatorTest`。

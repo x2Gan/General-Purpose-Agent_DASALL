@@ -2,7 +2,7 @@
 
 状态：Done
 日期：2026-04-28
-来源 TODO：docs/todos/daemon/DASALL_daemon本地控制面专项TODO.md
+来源 TODO：docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md
 
 ## 1. 任务边界
 
@@ -27,7 +27,7 @@
 
 | 设计结论 | Build 落点 | 验收信号 |
 |---|---|---|
-| main 不再持有全局 bootstrap 裸指针 | `apps/daemon/src/DaemonSignalHandler.{h,cpp}` + `apps/daemon/src/main.cpp` | `DaemonSignalHandlerTest` 与 `dasall_daemon` 编译通过 |
+| main 不再持有全局 bootstrap 裸指针 | `apps/daemon/src/DaemonSignalHandler.{h,cpp}` + `apps/daemon/src/main.cpp` | `DaemonSignalHandlerTest` 与 `dasall-daemon` 编译通过 |
 | signal handler 只记录 intent，不直接执行业务逻辑 | `request_shutdown()`、`request_reload()`、`shutdown_requested()`、`reload_requested()` | SIGTERM/SIGINT 只置 shutdown intent，SIGHUP 只置 reload intent |
 | shutdown 必须由主线程消费 signal intent 后执行 | `main.cpp` 轮询 `DaemonSignalHandler` 并在正常线程调用 `bootstrap.stop()` | signal handler 代码不再直接触达 bootstrap |
 | reload 在 v1 只形成事实，不直接应用配置 | `main.cpp` 对 SIGHUP 打印最小提示并清理 intent | 007 不引入 reload side effect |
@@ -52,14 +52,14 @@
 
 ## 5. Validation
 
-1. `Build_CMakeTools(buildTargets=["dasall_daemon"])`
-2. `Build_CMakeTools(buildTargets=["dasall_daemon_signal_handler_unit_test"])`
+1. `Build_CMakeTools(buildTargets=["dasall-daemon"])`
+2. `Build_CMakeTools(buildTargets=["dasall-daemon_signal_handler_unit_test"])`
 3. `RunCtest_CMakeTools(tests=["DaemonSignalHandlerTest"])`
 
 结果摘要：
 
-1. `dasall_daemon` 编译通过，说明主线程轮询 + run thread 的接线没有破坏现有 daemon 启动路径。
-2. `dasall_daemon_signal_handler_unit_test` 编译通过。
+1. `dasall-daemon` 编译通过，说明主线程轮询 + run thread 的接线没有破坏现有 daemon 启动路径。
+2. `dasall-daemon_signal_handler_unit_test` 编译通过。
 3. `DaemonSignalHandlerTest` 1/1 通过；CTest stderr 仍打印仓库既有 `DartConfiguration.tcl` 缺失提示，但返回码为 0，按仓库基线计为有效证据。
 
 ## 6. 完成判定
