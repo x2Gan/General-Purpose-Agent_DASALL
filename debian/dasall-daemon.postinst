@@ -1,0 +1,48 @@
+#!/bin/sh
+set -eu
+
+create_dasall_group() {
+	if ! getent group dasall >/dev/null 2>&1; then
+		addgroup --system dasall
+	fi
+}
+
+create_dasall_user() {
+	if ! getent passwd dasall >/dev/null 2>&1; then
+		adduser \
+			--system \
+			--ingroup dasall \
+			--home /var/lib/dasall \
+			--no-create-home \
+			--disabled-login \
+			--shell /usr/sbin/nologin \
+			dasall
+	fi
+}
+
+print_first_install_hint() {
+	cat <<'EOF'
+DASALL was installed successfully.
+The daemon was not started automatically.
+
+Next steps:
+	1. Select the runtime profile in /etc/default/dasall-daemon
+	2. Review daemon overrides in /etc/dasall/daemon.json
+	3. Validate: . /etc/default/dasall-daemon && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json
+	4. Start: systemctl enable --now dasall-daemon.service
+EOF
+}
+
+case "${1:-}" in
+	configure)
+		create_dasall_group
+		create_dasall_user
+		if [ -z "${2:-}" ]; then
+			print_first_install_hint
+		fi
+		;;
+esac
+
+#DEBHELPER#
+
+exit 0

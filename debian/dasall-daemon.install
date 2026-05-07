@@ -1,0 +1,3 @@
+usr/sbin/dasall-daemon
+debian/package-assets/dasall-daemon/etc/default/dasall-daemon etc/default/
+debian/package-assets/dasall-daemon/etc/dasall/daemon.json etc/dasall/

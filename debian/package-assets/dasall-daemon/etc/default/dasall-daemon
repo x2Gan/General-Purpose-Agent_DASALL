@@ -1,0 +1,2 @@
+# v1 ownership: profile selection only; daemon.* stays in /etc/dasall/daemon.json
+DASALL_DAEMON_PROFILE_ID=desktop_full

@@ -4,6 +4,9 @@ find_package(Threads REQUIRED)
 
 if(NOT TARGET dasall_sqlite3)
   set(DASALL_SQLITE_AUTOCONF_VERSION 3460100)
+  set(DASALL_SQLITE_AMALGAMATION_WRAPPER
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/store/sqlite/SqliteAmalgamation.c
+  )
   set(DASALL_SQLITE_AUTOCONF_URL
     "https://www.sqlite.org/2024/sqlite-autoconf-${DASALL_SQLITE_AUTOCONF_VERSION}.tar.gz"
   )
@@ -18,10 +21,10 @@ if(NOT TARGET dasall_sqlite3)
   endif()
 
   add_library(dasall_sqlite3 STATIC
-    ${dasall_sqlite_autoconf_SOURCE_DIR}/sqlite3.c
+    ${DASALL_SQLITE_AMALGAMATION_WRAPPER}
   )
   set_source_files_properties(
-    ${dasall_sqlite_autoconf_SOURCE_DIR}/sqlite3.c
+    ${DASALL_SQLITE_AMALGAMATION_WRAPPER}
     PROPERTIES LANGUAGE C
   )
 

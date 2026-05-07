@@ -1,0 +1,28 @@
+[Unit]
+Description=DASALL local control plane daemon
+After=local-fs.target
+ConditionPathExists=/etc/dasall/daemon.json
+
+[Service]
+Type=simple
+Environment=DASALL_DAEMON_PROFILE_ID=desktop_full
+EnvironmentFile=-/etc/default/dasall-daemon
+User=dasall
+Group=dasall
+RuntimeDirectory=dasall
+RuntimeDirectoryMode=0770
+StateDirectory=dasall
+StateDirectoryMode=0750
+UMask=007
+ExecStartPre=/usr/sbin/dasall-daemon --validate-only --profile-id=${DASALL_DAEMON_PROFILE_ID} --config-file /etc/dasall/daemon.json
+ExecStart=/usr/sbin/dasall-daemon --profile-id=${DASALL_DAEMON_PROFILE_ID} --config-file /etc/dasall/daemon.json
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

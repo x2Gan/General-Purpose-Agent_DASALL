@@ -1,0 +1,7 @@
+Tests: pkg-smoke-local-control-plane
+Depends: @, systemd
+Restrictions: needs-root, isolation-machine
+
+Tests: pkg-smoke-common-assets
+Depends: @
+Restrictions: isolation-container

@@ -1,0 +1,10 @@
+{
+  "daemon": {
+    "socket_path": "/run/dasall/daemon.sock",
+    "startup_mode": "direct_bind",
+    "diag_enabled": false,
+    "override_enabled": false,
+    "watchdog_enabled": false,
+    "log_format": "text"
+  }
+}

@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #583
+
+- 日期：2026-05-07
+- 阶段：packaging/build
+- 任务：PKG-TODO-009 新建 binary package payload skeleton 与 service/config/doc 骨架
+- 状态：已完成
+
+### 改动
+
+1. 新增并更新 `debian/dasall-cli.install`、`debian/dasall-daemon.install`、`debian/dasall-common.install`、`debian/dasall-daemon.service`、`debian/dasall-daemon.postinst`、`debian/dasall-daemon.README.Debian` 与 `debian/tests/control`，落下 daemon/service/config/doc 与 common asset 的 binary package skeleton。
+2. 更新 `debian/rules`，固定 `DASALL_ENABLE_TESTS=OFF`、`DH_DATAFILES`、`override_dh_installsystemd --no-start --no-enable` 等 rootless packaging 入口；同时更新 `memory/CMakeLists.txt` 并新增 `memory/src/store/sqlite/SqliteAmalgamation.c`，使 package build 使用仓库内 SQLite wrapper translation unit，而不再依赖外部 cache object path。
+3. 将 daemon 静态 conffile 从会被 `dh_prep` 清理的 staging 目录迁移到 `debian/package-assets/dasall-daemon/etc/default/dasall-daemon` 与 `debian/package-assets/dasall-daemon/etc/dasall/daemon.json`，并通过 `debian/dasall-daemon.install` 显式安装到 `/etc/default/` 与 `/etc/dasall/`；同步更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，把 PKG-TODO-009 标记为 Done，并回写 binary package skeleton 已闭合的当前状态。
+
+### 验证
+
+1. `env PATH="/home/gangan/.cache/dasall-packaging/toolroot/usr/bin:$PATH" PERL5LIB="/home/gangan/.cache/dasall-packaging/toolroot/usr/share/perl5" unshare -Urm --mount-proc sh -c 'mount --bind /home/gangan/.cache/dasall-packaging/toolroot/usr/share/misc /usr/share/misc && dpkg-buildpackage --admindir="$PWD/.pkgadm" -us -uc -b > .tmp/pkg009-build.log 2>&1'`
+   - 结果：通过；`.tmp/pkg009-build.log` 出现 `dh_install`、`dh_installsystemd`、`dh_builddeb`、四个 `dpkg-deb: building package` 与 `dpkg-buildpackage: info: binary-only upload (no source included)`，证明 rootless 构包闭环已打通。
+2. `dpkg-deb -c ../dasall-daemon_0.1.0-1_amd64.deb | rg "etc/default/dasall-daemon|etc/dasall/daemon.json|usr/lib/systemd/system/dasall-daemon.service|usr/share/doc/dasall-daemon/README.Debian"`
+   - 结果：通过；daemon 包实际包含 `/etc/default/dasall-daemon`、`/etc/dasall/daemon.json`、`/usr/lib/systemd/system/dasall-daemon.service` 与 `/usr/share/doc/dasall-daemon/README.Debian`。
+3. `dpkg-deb -c ../dasall-common_0.1.0-1_all.deb | rg "usr/share/dasall/(profiles|llm/prompts|llm/providers)"`
+   - 结果：通过；`dasall-common` 继续包含五档 profile 与 LLM prompt/provider baseline 资产树，没有因为 009 的 skeleton 补齐而回归。
+
+### 结果
+
+1. PKG-TODO-009 已把 packaging 主线从“只有 source metadata skeleton”推进到“可 rootless 构包并产出四个 `.deb` 的 source/binary skeleton”；`PKG-GATE-03` 已具备正式通过证据。
+2. 009 的最后一个真实缺口是 daemon conffile install surface：`/etc/default/dasall-daemon` 与 `/etc/dasall/daemon.json` 现在已通过 stable package-local payload tree 进入产物，不再依赖会被 `dh_prep` 清空的 `debian/dasall-daemon/` staging 路径。
+3. packaging 主线后续不再需要回头补 source/binary skeleton，剩余工作收敛为 010~014 的安装态路径/运行模式收敛，以及 016/017/018 的 installed-package QA 与 gate 证据收口。
+
 ## 记录 #582
 
 - 日期：2026-05-07

@@ -1,0 +1,41 @@
+DASALL on Ubuntu
+================
+
+This package installs the DASALL daemon but does not start it automatically
+on first install.
+
+First deployment steps
+----------------------
+
+1. Select the runtime profile in /etc/default/dasall-daemon.
+   The shipped default is desktop_full.
+
+2. Review daemon overrides in /etc/dasall/daemon.json.
+   This file only supports daemon.* keys.
+
+3. Validate the deployment configuration:
+
+	. /etc/default/dasall-daemon && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json
+
+4. Enable and start the daemon explicitly:
+
+   systemctl enable --now dasall-daemon.service
+
+5. Verify the service:
+
+   systemctl status dasall-daemon.service
+   dasall ping --json
+
+Runtime paths
+-------------
+
+Read-only assets: /usr/share/dasall/
+Configuration:    /etc/default/dasall-daemon and /etc/dasall/daemon.json
+Runtime socket:   /run/dasall/daemon.sock
+State data:       /var/lib/dasall/
+
+Local CLI access
+----------------
+
+The v1 operator path is root/sudo-only. Run the installed CLI with sudo until a
+future non-root access model is explicitly introduced.
