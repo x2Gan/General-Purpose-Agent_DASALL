@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #579
+
+- 日期：2026-05-07
+- 阶段：packaging/design-freeze
+- 任务：PKG-TODO-004 冻结统一安装态布局 owner 与 path resolver 归属
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/packaging/deliverables/PKG-TODO-004-InstallLayout与PathResolver归属冻结.md`，把安装态路径模型的唯一 owner、shared public surface 落位、四类 canonical path 的责任划分，以及对 010/011/012/013 的后续约束收敛为单点交付物。
+2. 更新 `docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md`，在 7.5 下补充 `InstallLayout` / path resolver 的 owner 归属，并把 7.10.8 的安装面前提明确收敛到 `infra/config::InstallLayout`。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，将 PKG-TODO-004 标记为 Done，并把 `PKG-BLK-02` 收敛为“owner 已冻结、repo-relative path 实现仍待 010/011/012 落地”的状态。
+
+### 验证
+
+1. `rg -n "InstallLayout|/usr/share/dasall|/etc/dasall|/run/dasall|/var/lib/dasall|current_path\(\)|baseline_root|kDefaultDaemonSocketPath" docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-004-InstallLayout与PathResolver归属冻结.md apps/daemon/src/main.cpp access/include/daemon/DaemonEndpointDefaults.h profiles/include/ProfileCatalog.h llm/include/LLMSubsystemConfig.h`
+   - 结果：通过；详设、专项 TODO、004 deliverable 与现有代码锚点已共同收敛为 `infra/config::InstallLayout` 的唯一 owner 口径，并保留 `kDefaultDaemonSocketPath`、`current_path()/profiles`、`baseline_root` 这些待改实现作为后续 010/011/012 的明确输入。
+
+### 结果
+
+1. PKG-TODO-004 已消除“安装态路径模型到底归谁拥有”的设计歧义；后续 010/011/012/013 不需要再在 access、daemon、profiles、llm 四处重复发明路径 owner。
+2. PKG-BLK-02 暂未关闭，但已从“owner 和调用边界不清楚”收敛为“实现仍保留 repo-relative 默认值”；只要 010/011/012 按 `infra/include/config/InstallLayout.h` 落地，就能直接进入代码收敛与测试闭环。
+
 ## 记录 #578
 
 - 日期：2026-05-07

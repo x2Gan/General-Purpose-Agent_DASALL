@@ -297,6 +297,16 @@
 
 这不是推翻现有 daemon 设计，而是把其开发友好默认值映射成符合 Ubuntu 发行物约束的生产默认值。
 
+#### 7.5.1 InstallLayout 与 path resolver 归属
+
+为了避免 `/tmp`、repo-relative assets root、`WorkingDirectory` 伪修复和 module-local 字符串常量继续扩散，v1 进一步冻结以下 owner 边界：
+
+1. 安装态路径模型的唯一 owner 固定为 `infra/config` 组件；后续共享 public surface 统一落在 `infra/include/config/InstallLayout.h`。
+2. 这个 shared surface 至少要导出 `/usr/share/dasall`、`/usr/share/dasall/profiles`、`/usr/share/dasall/llm/prompts`、`/usr/share/dasall/llm/providers`、`/etc/dasall/daemon.json`、`/run/dasall/daemon.sock`、`/var/lib/dasall` 这几类 canonical installed path。
+3. `access` 只消费 canonical daemon socket path，不再拥有安装态 socket root 的最终定义；`apps/daemon` 只消费已解析好的 `profiles_root` / `daemon_config_path` / `socket_path`，不再自行根据 `cwd` 或局部规则派生。
+4. `profiles` 与 `llm` 只消费各自的 installed asset root，不再把 `"profiles"`、`"llm/assets/prompts"`、`"llm/assets/providers"` 这类 repo-relative 默认值视为 package-mode owner。
+5. 不采纳把该模型继续留在 access/apps/daemon/llm/profiles 各自默认值里、或通过 `systemd WorkingDirectory=/usr/share/dasall` 补洞的方案。
+
 ### 7.6 配置与资产策略
 
 #### 7.6.1 配置层次
@@ -622,6 +632,7 @@ v1 建议把自定义 maintainer scripts 压缩到最低：
 3. LLM Prompt/Provider baseline root 不再依赖仓库相对路径。
 4. CLI / daemon 的默认 socket 常量切换到 `/run/dasall/daemon.sock`。
 5. `ExecStartPre --validate-only` 所依赖的配置与资产解析路径在 systemd 下可稳定工作。
+6. 上述安装态路径由 `infra/config::InstallLayout` 统一导出，不再分散在 access、daemon main、profiles catalog 与 LLM config 默认值中。
 
 这些不是“额外优化项”，而是 package-ready 的硬前提。
 
