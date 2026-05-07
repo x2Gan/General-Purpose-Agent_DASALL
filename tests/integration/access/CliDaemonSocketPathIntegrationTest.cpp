@@ -249,7 +249,7 @@ class RunningDaemon {
 }
 
 void test_cli_default_socket_path_roundtrip_uses_shared_default() {
-  const char* argv[] = {"dasall_cli", "ping"};
+  const char* argv[] = {"dasall-cli", "ping"};
   const auto command = CliCommandParser::parse(2, argv);
   assert_true(command.has_value(),
               "default socket-path integration should parse ping command without override");
@@ -279,7 +279,7 @@ void test_cli_socket_path_override_roundtrip_reaches_custom_endpoint() {
       (std::string("dasall-cli-socket-") + std::to_string(::getpid())) /
       "control.sock";
   const std::string socket_path_text = socket_path.string();
-  const char* argv[] = {"dasall_cli", "--socket-path", socket_path_text.c_str(), "ping"};
+  const char* argv[] = {"dasall-cli", "--socket-path", socket_path_text.c_str(), "ping"};
   const auto command = CliCommandParser::parse(4, argv);
   assert_true(command.has_value(),
               "socket-path override integration should parse explicit override option");
@@ -328,7 +328,7 @@ void test_cli_socket_path_override_roundtrip_reaches_custom_endpoint() {
            success.exit_code,
            "socket-path integration should let built CLI ping over explicit socket override; stdout=" +
              success.stdout_text + " stderr=" + success.stderr_text);
-    assert_true(success.stdout_text.find("[dasall_cli] ping: completed") !=
+    assert_true(success.stdout_text.find("[dasall-cli] ping: completed") !=
             std::string::npos,
           "socket-path integration should surface ping success on stdout; stdout=" +
             success.stdout_text);
@@ -358,7 +358,7 @@ void test_cli_socket_path_override_roundtrip_reaches_custom_endpoint() {
     assert_true(human_failure.stdout_text.empty(),
           "socket-path integration should keep human ping failure off stdout; stdout=" +
             human_failure.stdout_text);
-    assert_true(human_failure.stderr_text.find("[dasall_cli] daemon ping: FAILED") !=
+    assert_true(human_failure.stderr_text.find("[dasall-cli] daemon ping: FAILED") !=
             std::string::npos,
           "socket-path integration should report human ping failure on stderr; stderr=" +
             human_failure.stderr_text);

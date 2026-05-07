@@ -255,7 +255,7 @@ map_agent_result_to_dispatch_result(
 int main(int argc, char* argv[]) {
   const ParsedDaemonArgs parsed = parse_daemon_args(argc, argv);
   if (!parsed.ok) {
-    std::cerr << "[dasall_daemon] argument parse failed: " << parsed.error << "\n";
+    std::cerr << "[dasall-daemon] argument parse failed: " << parsed.error << "\n";
     return 1;
   }
 
@@ -269,7 +269,7 @@ int main(int argc, char* argv[]) {
   };
   const auto entry_config = entry_loader.load(entry_request);
   if (!entry_config.ok() || !entry_config.entry_config.has_value()) {
-    std::cerr << "[dasall_daemon] entry config load failed: "
+    std::cerr << "[dasall-daemon] entry config load failed: "
               << entry_config.message << "\n";
     return 1;
   }
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
                               : config_validator.validate_config(
                                     entry.bootstrap_config);
   if (!validation.ok()) {
-    std::cerr << "[dasall_daemon] config validation failed: "
+    std::cerr << "[dasall-daemon] config validation failed: "
               << validation.message << "\n";
     return 1;
   }
@@ -293,14 +293,14 @@ int main(int argc, char* argv[]) {
     const auto conflict_validation =
         config_validator.validate_conflicts(entry.conflicts);
     if (!conflict_validation.ok()) {
-      std::cerr << "[dasall_daemon] config validation failed: "
+      std::cerr << "[dasall-daemon] config validation failed: "
                 << conflict_validation.message << "\n";
       return 1;
     }
   }
 
   if (parsed.validate_only) {
-    std::cout << "[dasall_daemon] " << validation.message << "\n";
+    std::cout << "[dasall-daemon] " << validation.message << "\n";
     return 0;
   }
 
@@ -312,7 +312,7 @@ int main(int argc, char* argv[]) {
   const auto runtime_init_result = runtime_facade->init(
       build_daemon_agent_init_request(entry));
   if (!runtime_init_result.is_ready()) {
-    std::cerr << "[dasall_daemon] runtime init failed: "
+    std::cerr << "[dasall-daemon] runtime init failed: "
               << (runtime_init_result.health_summary.empty()
                       ? "runtime facade init rejected"
                       : runtime_init_result.health_summary);
@@ -353,7 +353,7 @@ int main(int argc, char* argv[]) {
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));
   if (!gateway->init()) {
-    std::cerr << "[dasall_daemon] AccessGateway init failed\n";
+    std::cerr << "[dasall-daemon] AccessGateway init failed\n";
     return 1;
   }
 
@@ -367,7 +367,7 @@ int main(int argc, char* argv[]) {
         .config_revision = entry.config_revision,
       });
   if (!context.has_value()) {
-    std::cerr << "[dasall_daemon] bootstrap build failed\n";
+    std::cerr << "[dasall-daemon] bootstrap build failed\n";
     return 1;
   }
 
@@ -382,7 +382,7 @@ int main(int argc, char* argv[]) {
                                                   ? std::vector<std::string>{"daemon.config"}
                                                   : rejected_keys;
         for (const auto& key : keys) {
-          std::cout << "[dasall_daemon] audit daemon.reload.denied"
+          std::cout << "[dasall-daemon] audit daemon.reload.denied"
                     << " daemon_state=ready"
                     << " rejected_key=" << key
                     << " reason_code=" << reason << "\n";
@@ -394,12 +394,12 @@ int main(int argc, char* argv[]) {
       emit_reload_denied);
 
   if (!signal_handler.install_handlers()) {
-    std::cerr << "[dasall_daemon] signal handler install failed\n";
+    std::cerr << "[dasall-daemon] signal handler install failed\n";
     return 1;
   }
 
   // 4. 启动 UDS 服务端
-  std::cout << "[dasall_daemon] starting on "
+  std::cout << "[dasall-daemon] starting on "
             << context->bootstrap_config.socket_path << "\n";
 
   bool run_ok = false;
@@ -442,7 +442,7 @@ int main(int argc, char* argv[]) {
           }
         }
       }
-      std::cout << "[dasall_daemon] reload requested by signal "
+      std::cout << "[dasall-daemon] reload requested by signal "
                 << signal_handler.last_signal() << ": "
                 << (reload_result.ok() ? "applied" : "rejected")
                 << " reason=" << reload_result.reason << "\n";
@@ -454,7 +454,7 @@ int main(int argc, char* argv[]) {
 
   daemon_thread.join();
 
-  std::cout << "[dasall_daemon] stopped (run=" << (run_ok ? "ok" : "failed") << ")\n";
+  std::cout << "[dasall-daemon] stopped (run=" << (run_ok ? "ok" : "failed") << ")\n";
   return run_ok ? 0 : 1;
 }
 

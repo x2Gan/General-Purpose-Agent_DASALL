@@ -88,19 +88,19 @@ dasall_apply_common_options(dasall_runtime_policy_provider_unit_test)
 add_test(NAME RuntimePolicyProviderTest COMMAND dasall_runtime_policy_provider_unit_test)
 set_tests_properties(RuntimePolicyProviderTest PROPERTIES LABELS "unit")
 
-add_executable(dasall_daemon_profile_projection_unit_test
+add_executable(dasall-daemon_profile_projection_unit_test
   DaemonProfileProjectionTest.cpp
 )
 
-target_link_libraries(dasall_daemon_profile_projection_unit_test
+target_link_libraries(dasall-daemon_profile_projection_unit_test
   PRIVATE
     dasall_test_support
     dasall_profiles
 )
 
-dasall_apply_common_options(dasall_daemon_profile_projection_unit_test)
+dasall_apply_common_options(dasall-daemon_profile_projection_unit_test)
 
-add_test(NAME DaemonProfileProjectionTest COMMAND dasall_daemon_profile_projection_unit_test)
+add_test(NAME DaemonProfileProjectionTest COMMAND dasall-daemon_profile_projection_unit_test)
 set_tests_properties(DaemonProfileProjectionTest PROPERTIES LABELS "unit")
 
 add_executable(dasall_profile_compatibility_validator_unit_test

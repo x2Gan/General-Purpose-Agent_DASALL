@@ -218,7 +218,7 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
   assert_equal(0, run.exit_code,
                "binary unary smoke should complete cli run through the built daemon main path; output=" +
            run.stdout_text + run.stderr_text + " daemon_log=" + daemon.read_log());
-  assert_true(run.stdout_text.find("[dasall_cli] run: completed") != std::string::npos,
+  assert_true(run.stdout_text.find("[dasall-cli] run: completed") != std::string::npos,
         "binary unary smoke should surface completed cli stdout; stdout=" +
           run.stdout_text);
   assert_true(run.stdout_text.find("runtime orchestrator skeleton completed") !=

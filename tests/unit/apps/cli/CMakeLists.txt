@@ -20,81 +20,81 @@ macro(dasall_add_cli_unit_test target_name test_name source_file)
 endmacro()
 
 dasall_add_cli_unit_test(
-  dasall_cli_ipc_client_unit_test
+  dasall-cli_ipc_client_unit_test
   CliIpcClientTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliIpcClientTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliRequestBuilder.cpp
 )
 
-target_link_libraries(dasall_cli_ipc_client_unit_test
+target_link_libraries(dasall-cli_ipc_client_unit_test
   PRIVATE
     dasall_test_support
     dasall_access
     dasall_platform
 )
 
-dasall_apply_common_options(dasall_cli_ipc_client_unit_test)
+dasall_apply_common_options(dasall-cli_ipc_client_unit_test)
 
 dasall_add_cli_unit_test(
-  dasall_cli_ipc_client_response_unit_test
+  dasall-cli_ipc_client_response_unit_test
   CliIpcClientResponseTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliIpcClientResponseTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliRequestBuilder.cpp
 )
 
-target_link_libraries(dasall_cli_ipc_client_response_unit_test
+target_link_libraries(dasall-cli_ipc_client_response_unit_test
   PRIVATE
     dasall_test_support
     dasall_access
     dasall_platform
 )
 
-dasall_apply_common_options(dasall_cli_ipc_client_response_unit_test)
+dasall_apply_common_options(dasall-cli_ipc_client_response_unit_test)
 
 dasall_add_cli_unit_test(
-  dasall_cli_ipc_client_unavailable_unit_test
+  dasall-cli_ipc_client_unavailable_unit_test
   CliIpcClientUnavailableTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliIpcClientUnavailableTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliRequestBuilder.cpp
 )
 
-target_link_libraries(dasall_cli_ipc_client_unavailable_unit_test
+target_link_libraries(dasall-cli_ipc_client_unavailable_unit_test
   PRIVATE
     dasall_test_support
     dasall_access
     dasall_platform
 )
 
-dasall_apply_common_options(dasall_cli_ipc_client_unavailable_unit_test)
+dasall_apply_common_options(dasall-cli_ipc_client_unavailable_unit_test)
 
 dasall_add_cli_unit_test(
-  dasall_cli_command_parser_unit_test
+  dasall-cli_command_parser_unit_test
   CliDaemonCommandParserTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliDaemonCommandParserTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliCommandParser.cpp
 )
 
-target_link_libraries(dasall_cli_command_parser_unit_test
+target_link_libraries(dasall-cli_command_parser_unit_test
   PRIVATE
     dasall_test_support
 )
 
-dasall_apply_common_options(dasall_cli_command_parser_unit_test)
+dasall_apply_common_options(dasall-cli_command_parser_unit_test)
 
 dasall_add_cli_unit_test(
-  dasall_cli_output_formatter_unit_test
+  dasall-cli_output_formatter_unit_test
   CliDaemonOutputFormatterTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliDaemonOutputFormatterTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliOutputFormatter.cpp
 )
 
-target_link_libraries(dasall_cli_output_formatter_unit_test
+target_link_libraries(dasall-cli_output_formatter_unit_test
   PRIVATE
     dasall_test_support
     dasall_access
 )
 
-dasall_apply_common_options(dasall_cli_output_formatter_unit_test)
+dasall_apply_common_options(dasall-cli_output_formatter_unit_test)

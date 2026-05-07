@@ -388,67 +388,67 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
 std::string CliCommandParser::usage_string(std::string_view command_name,
                                            std::string_view subcommand_name) {
   if (command_name == "run") {
-    return "Usage: dasall_cli run <request_json_or_-> [--async] [--request-id <id>] "
+    return "Usage: dasall-cli run <request_json_or_-> [--async] [--request-id <id>] "
            "[--session <hint>] [--trace-id <id>] [--timeout-ms <ms>] [--json] "
            "[--socket-path <path>] [--quiet] [--no-input]\n";
   }
 
   if (command_name == "status") {
-    return "Usage: dasall_cli status (--receipt <receipt_ref> --ownership-token <token> | "
+    return "Usage: dasall-cli status (--receipt <receipt_ref> --ownership-token <token> | "
            "--request-id <request_id>) [--timeout-ms <ms>] [--json] "
            "[--socket-path <path>] [--quiet]\n";
   }
 
   if (command_name == "cancel") {
-    return "Usage: dasall_cli cancel (--receipt <receipt_ref> --ownership-token <token> | "
+    return "Usage: dasall-cli cancel (--receipt <receipt_ref> --ownership-token <token> | "
            "--request-id <request_id>) [--timeout-ms <ms>] [--json] "
            "[--socket-path <path>] [--quiet]\n";
   }
 
   if (command_name == "version") {
-    return "Usage: dasall_cli version [--json] [--quiet]\n";
+    return "Usage: dasall-cli version [--json] [--quiet]\n";
   }
 
   if (command_name == "ping") {
-    return "Usage: dasall_cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+    return "Usage: dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
   }
 
   if (command_name == "readiness") {
-    return "Usage: dasall_cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+    return "Usage: dasall-cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
   }
 
   if (command_name == "diag") {
     if (subcommand_name == "health") {
-      return "Usage: dasall_cli diag health [--json] [--timeout-ms <ms>] "
+      return "Usage: dasall-cli diag health [--json] [--timeout-ms <ms>] "
              "[--socket-path <path>] [--quiet]\n";
     }
 
     if (subcommand_name == "queue") {
-      return "Usage: dasall_cli diag queue [--json] [--timeout-ms <ms>] "
+      return "Usage: dasall-cli diag queue [--json] [--timeout-ms <ms>] "
              "[--socket-path <path>] [--quiet]\n";
     }
 
     if (subcommand_name == "threads") {
-      return "Usage: dasall_cli diag threads [--json] [--timeout-ms <ms>] "
+      return "Usage: dasall-cli diag threads [--json] [--timeout-ms <ms>] "
              "[--socket-path <path>] [--quiet]\n";
     }
 
-    return "Usage: dasall_cli diag <health|queue|threads> [--json] [--timeout-ms <ms>] "
+    return "Usage: dasall-cli diag <health|queue|threads> [--json] [--timeout-ms <ms>] "
            "[--socket-path <path>] [--quiet]\n";
   }
 
   return "Usage:\n"
-         "  dasall_cli help [command] [subcommand]\n"
-         "  dasall_cli version [--json] [--quiet]\n"
-         "  dasall_cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
-         "  dasall_cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
-         "  dasall_cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "
+         "  dasall-cli help [command] [subcommand]\n"
+         "  dasall-cli version [--json] [--quiet]\n"
+         "  dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
+         "  dasall-cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
+         "  dasall-cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "
          "[--trace-id <id>] [--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet] [--no-input]\n"
-         "  dasall_cli status (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "
+         "  dasall-cli status (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "
          "[--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet]\n"
-         "  dasall_cli cancel (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "
+         "  dasall-cli cancel (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "
          "[--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet]\n"
-         "  dasall_cli diag <health|queue|threads> [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+         "  dasall-cli diag <health|queue|threads> [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
 }
 
 }  // namespace dasall::apps::cli

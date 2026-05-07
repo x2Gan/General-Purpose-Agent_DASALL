@@ -32,7 +32,7 @@ constexpr std::string_view kCliJsonSchemaVersion = "cli.output.v1";
 [[nodiscard]] std::string format_action_response(
     std::string_view action,
     const DaemonClientResponse& response) {
-  std::string out = "[dasall_cli] ";
+  std::string out = "[dasall-cli] ";
   out += std::string(action);
   out += ": ";
   out += disposition_text(response);
@@ -242,7 +242,7 @@ std::string CliOutputFormatter::format_readiness_success(
 }
 
 std::string CliOutputFormatter::format_ping_failure(std::string_view reason) {
-  std::string out = "[dasall_cli] daemon ping: FAILED";
+  std::string out = "[dasall-cli] daemon ping: FAILED";
   if (!reason.empty()) {
     out += " - ";
     out += reason;
@@ -271,7 +271,7 @@ std::string CliOutputFormatter::format_diag_success(
 }
 
 std::string CliOutputFormatter::format_error(std::string_view reason) {
-  std::string out = "[dasall_cli] error";
+  std::string out = "[dasall-cli] error";
   if (!reason.empty()) {
     out += ": ";
     out += reason;

@@ -1,4 +1,4 @@
-add_executable(dasall_daemon
+add_executable(dasall-daemon
   src/main.cpp
   src/DaemonBootstrap.cpp
   src/DaemonConfig.h
@@ -20,9 +20,9 @@ add_executable(dasall_daemon
   src/DaemonSupervisorAdapter.h
 )
 
-target_compile_features(dasall_daemon PRIVATE cxx_std_20)
+target_compile_features(dasall-daemon PRIVATE cxx_std_20)
 
-target_link_libraries(dasall_daemon
+target_link_libraries(dasall-daemon
   PRIVATE
     dasall_access
     dasall_runtime
@@ -32,11 +32,11 @@ target_link_libraries(dasall_daemon
     dasall_platform
 )
 
-target_include_directories(dasall_daemon
+target_include_directories(dasall-daemon
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-dasall_apply_common_options(dasall_daemon)
+dasall_apply_common_options(dasall-daemon)
 
 

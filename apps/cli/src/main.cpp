@@ -32,7 +32,7 @@ constexpr std::string_view kCliOutputSchemaVersion = "cli.output.v1";
 constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
 
 [[nodiscard]] std::string format_version_human_output() {
-  return std::string("dasall_cli ") + std::string(kCliLocalVersion) +
+  return std::string("dasall-cli ") + std::string(kCliLocalVersion) +
          "\nschema support: " + std::string(kCliOutputSchemaVersion) +
          "\nbuild metadata: " + std::string(kCliBuildMetadata);
 }
@@ -42,7 +42,7 @@ constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
   response.transport_ok = true;
   response.parse_ok = true;
   response.disposition = dasall::access::daemon::UdsResponseDisposition::Completed;
-  response.response_text = std::string("dasall_cli v1; schema_support=") +
+  response.response_text = std::string("dasall-cli v1; schema_support=") +
                            std::string(kCliOutputSchemaVersion) +
                            "; build_metadata=" + std::string(kCliBuildMetadata);
   response.task_completed = true;

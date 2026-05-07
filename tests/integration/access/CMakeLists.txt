@@ -141,7 +141,7 @@ target_include_directories(dasall_access_cli_daemon_socket_path_integration_test
 
 target_compile_definitions(dasall_access_cli_daemon_socket_path_integration_test
   PRIVATE
-    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall_cli>"
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall-cli>"
 )
 
 target_link_libraries(dasall_access_cli_daemon_socket_path_integration_test
@@ -153,7 +153,7 @@ target_link_libraries(dasall_access_cli_daemon_socket_path_integration_test
 )
 
 add_dependencies(dasall_access_cli_daemon_socket_path_integration_test
-  dasall_cli
+  dasall-cli
 )
 
 dasall_apply_common_options(dasall_access_cli_daemon_socket_path_integration_test)
@@ -205,8 +205,8 @@ add_executable(dasall_access_daemon_binary_unary_smoke_integration_test
 
 target_compile_definitions(dasall_access_daemon_binary_unary_smoke_integration_test
   PRIVATE
-    DASALL_DAEMON_BINARY_PATH="$<TARGET_FILE:dasall_daemon>"
-    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall_cli>"
+    DASALL_DAEMON_BINARY_PATH="$<TARGET_FILE:dasall-daemon>"
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall-cli>"
     DASALL_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
@@ -216,8 +216,8 @@ target_link_libraries(dasall_access_daemon_binary_unary_smoke_integration_test
 )
 
 add_dependencies(dasall_access_daemon_binary_unary_smoke_integration_test
-  dasall_daemon
-  dasall_cli
+  dasall-daemon
+  dasall-cli
 )
 
 dasall_apply_common_options(dasall_access_daemon_binary_unary_smoke_integration_test)
@@ -414,7 +414,7 @@ target_include_directories(dasall_access_daemon_receipt_flow_integration_test
 
 target_compile_definitions(dasall_access_daemon_receipt_flow_integration_test
   PRIVATE
-    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall_cli>"
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall-cli>"
 )
 
 target_link_libraries(dasall_access_daemon_receipt_flow_integration_test
@@ -426,7 +426,7 @@ target_link_libraries(dasall_access_daemon_receipt_flow_integration_test
 )
 
 add_dependencies(dasall_access_daemon_receipt_flow_integration_test
-  dasall_cli
+  dasall-cli
 )
 
 dasall_apply_common_options(dasall_access_daemon_receipt_flow_integration_test)
