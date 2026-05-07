@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #572
+
+- 日期：2026-05-07
+- 阶段：cli/config-design-freeze
+- 任务：CLCFG-TODO-001 冻结 config v1 命令 grammar、TTY/non-TTY 与 exit contract
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/cli/deliverables/CLCFG-TODO-001-config-grammar与TTY语义冻结.md`，集中冻结 `config/show/plan/validate/apply --from-file --no-input` 的 v1 命令面、TTY/non-TTY fail-closed 规则，以及 config 本地工作流对既有 `CliExitDecision` `0/2/3/4/5/6/7` family 的复用策略。
+2. 更新 `docs/architecture/DASALL_cli_config交互式部署配置设计.md`，把 `config apply` 的 stable grammar 收敛为 `--from-file <path> --no-input`，补齐“非交互子命令绝不 prompt”和 config-specific exit contract，避免后续 parser/main/workflow 在实现期继续临时决定 headless apply 与本地退出码。
+3. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-001 标记为 Done，并在当前结论中显式回写 grammar/TTY/exit contract 已冻结、而 002~005 仍待继续完成的阶段事实。
+
+### 验证
+
+1. `rg -n "config show|config plan|config validate|config apply|TTY|--from-file|--no-input|dry-run|CliExitDecision|0/2/3/4/5/6/7" docs/architecture/DASALL_cli_config交互式部署配置设计.md docs/architecture/DASALL-cli本地控制面详细设计.md docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md docs/todos/cli/deliverables/CLCFG-TODO-001-config-grammar与TTY语义冻结.md`
+   - 结果：通过；config 设计、CLI 详设、专项 TODO 与 001 deliverable 已共同出现统一的命令族、TTY fail-closed、`apply --from-file --no-input` 与 `CliExitDecision` family 口径。
+
+### 结果
+
+1. CLCFG-TODO-001 已形成单一设计口径：后续 CLCFG-TODO-006、011、012、013、014、015 只允许补 parser、coordinator、formatter 与测试，不再允许重新定义 config 命令 grammar、TTY 行为或对外 exit family。
+2. `config` 无子命令的交互式 wizard 与 `show/plan/validate/apply --from-file --no-input` 的非交互路径已经在文档层解耦，后续 Build 可直接围绕同一 plan/apply 内核推进，而不会再出现“apply 是否允许半交互”或“非 TTY 是否偷偷提示确认”的灰区。
+
 ## 记录 #571
 
 - 日期：2026-05-06

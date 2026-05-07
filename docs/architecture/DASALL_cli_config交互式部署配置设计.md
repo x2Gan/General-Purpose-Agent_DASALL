@@ -212,7 +212,7 @@ dasall-cli config
 dasall-cli config show
 dasall-cli config plan [--from-file <path>] [--dry-run]
 dasall-cli config validate
-dasall-cli config apply --from-file <path>
+dasall-cli config apply --from-file <path> --no-input
 ```
 
 其中：
@@ -221,14 +221,32 @@ dasall-cli config apply --from-file <path>
 2. `dasall-cli config show`：只读展示当前 canonical 配置摘要、service 状态与缺失项。
 3. `dasall-cli config plan`：只生成 action plan，不写文件、不写 secret、不启动服务；`--dry-run` 是其语义别名或兼容 flag。
 4. `dasall-cli config validate`：只做配置校验，不执行 start/enable。
-5. `dasall-cli config apply --from-file <path>`：为后续自动化和 CI 预留的无交互入口；首版可延后完整 headless apply，但 plan/validate 语义应先冻结。
+5. `dasall-cli config apply --from-file <path> --no-input`：P0 唯一允许的无交互 mutating 入口；首版可先落最小 headless apply，但 `--from-file` 与 `--no-input` 的语义必须先冻结。
 
 命令语义约束：
 
 1. `config` 无子命令时要求 TTY；非 TTY 默认 fail-closed，并提示使用 `config plan --from-file` 或 `config apply --from-file`。
 2. `config show` 必须允许非 root 执行，但只能读取权限允许的摘要；无法读取的项显示 `unavailable`，不能要求提权后才展示全部页面。
 3. `config plan` 和 `config validate` 不得修改系统状态。
-4. `config apply --from-file` 必须要求 `--no-input` 或等价确认策略，避免 CI 中隐式卡在交互提示。
+4. `config show`、`config plan`、`config validate` 无论是否在 TTY 中执行，都不得弹出 prompt、masked input 或确认页。
+5. `config apply --from-file` 必须要求 `--no-input` 或等价确认策略，避免 CI 中隐式卡在交互提示。
+6. `--help` / `-h` 在顶层和各级子命令都应优先显示帮助文本并返回成功，不得继续执行文件探测、校验或 service 动作。
+
+### 5.1.1 config exit contract
+
+`config` 命令族必须复用 CLI v1 既有 `CliExitDecision` family，不得引入新的对外退出码。对外 exit code 固定继续收敛到 `0/2/3/4/5/6/7`：
+
+| 场景 | exit code | 说明 |
+|---|---|---|
+| `help`、`show`、`plan`、`validate`、`apply` 成功完成 | `0` | 包括交互式 wizard 成功结束和 `plan --dry-run` 成功输出 |
+| 参数/usage/TTY 契约错误 | `2` | 包括未知子命令、非法 flag 组合、非 TTY 调用交互式 `config`、`apply` 缺少 `--from-file` 或 `--no-input` |
+| 本地依赖或本地执行入口不可用 | `3` | 包括必须调用的本地 binary / helper 不可执行 |
+| 权限不足或 operator access 模型拒绝 | `4` | 包括需要 root/sudo 的 mutating 调用和 P0 `0600 root/sudo-only` 模型下的非特权写路径 |
+| 确定性配置失败 | `5` | 包括 `validate-only` 失败、文件事务失败、rollback 失败 |
+| 可重试或待外部条件满足的阻断 | `6` | 包括可恢复的 preflight block、短暂 not-ready 或待手工解阻后可重试的 service action 阻塞 |
+| config 本地 contract / projection 不变量破坏 | `7` | 包括 parser / coordinator / formatter 之间不应到达的内部契约冲突 |
+
+`config` 本地工作流后续可以引入 `local_argument_error`、`local_permission_required`、`local_dependency_unavailable`、`local_validation_failed`、`local_retryable_block` 等内部 disposition，但只能投影到上述既有 exit family，不能新增第八种对外退出码。
 
 ### 5.2 为什么 `config` 不是 daemon RPC
 
