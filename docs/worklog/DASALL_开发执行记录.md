@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #576
+
+- 日期：2026-05-07
+- 阶段：packaging/design-freeze
+- 任务：PKG-TODO-002 冻结 package-mode profile 选择接缝与配置 ownership
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/packaging/deliverables/PKG-TODO-002-package-mode-profile接缝与配置ownership冻结.md`，把 v1 package-mode 的唯一 profile 入口、`EnvironmentFile -> --profile-id` 编排关系，以及 `/etc/dasall/daemon.json` 仅承载 `daemon.*` 的 ownership 收敛为单点交付物。
+2. 更新 `docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md`，修正 7.7 与 7.10.9 中分裂的 service/config 口径，使 `ExecStartPre` / `ExecStart`、首次安装提示和 README 模板都统一消费 `DASALL_DAEMON_PROFILE_ID` 与 `/etc/dasall/daemon.json`。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，将 PKG-TODO-002 标记为 Done，并回写 `PKG-BLK-03` 已由 002 的 package-mode seam freeze 解阻。
+
+### 验证
+
+1. `rg -n "DASALL_DAEMON_PROFILE_ID|/etc/default/dasall-daemon|/etc/dasall/daemon.json|EnvironmentFile|daemon\.\*" docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-002-package-mode-profile接缝与配置ownership冻结.md`
+   - 结果：通过；详设、专项 TODO 与 002 deliverable 已共同收敛为 `/etc/default/dasall-daemon` + `EnvironmentFile` + `--profile-id` 的 profile 入口，以及 `/etc/dasall/daemon.json` 仅承载 `daemon.*` 覆盖的唯一口径。
+
+### 结果
+
+1. PKG-TODO-002 已把 package-mode 输入面从“service 模板、README、设计说明各说各话”提升为唯一契约；009/013 后续实现不需要再判断 profile 入口到底在 schema 还是在 EnvironmentFile。
+2. PKG-BLK-03 可视为关闭；如果未来确实要把 `profile_id` 并入 deployment config schema，必须新开增量任务并同时补 parser、tests、迁移与文档，而不是回退 v1 基线。
+
 ## 记录 #575
 
 - 日期：2026-05-07
