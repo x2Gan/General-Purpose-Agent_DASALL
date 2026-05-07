@@ -1,0 +1,4 @@
+interface:
+  display_name: "Active Coding Rules"
+  short_description: "Karpathy-inspired coding guardrails"
+  default_prompt: "Use $active-coding-rules to make a small, verifiable coding change without overcomplicating it."
