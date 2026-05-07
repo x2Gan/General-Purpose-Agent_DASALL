@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #581
+
+- 日期：2026-05-07
+- 阶段：packaging/build
+- 任务：PKG-TODO-007 为 profiles / LLM baseline 资产补齐 dasall-common install surface
+- 状态：已完成
+
+### 改动
+
+1. 更新 `profiles/CMakeLists.txt`，把五档 baseline profile 目录显式安装到 `${DASALL_INSTALL_PROFILESDIR}`，并保留 `desktop_full`、`cloud_full`、`edge_balanced`、`edge_minimal`、`factory_test` 五个目录层级。
+2. 更新 `llm/CMakeLists.txt`，把 `llm/assets/prompts` 与 `llm/assets/providers` 安装到 `${DASALL_INSTALL_LLM_DATADIR}`，使 `dasall-common` stage tree 出现 `/usr/share/dasall/llm/prompts` 与 `/usr/share/dasall/llm/providers`。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，把 PKG-TODO-007 标记为 Done，并同步资产安装面已落地后的 current-state / build-track 口径。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_profile_catalog_unit_test dasall_runtime_policy_provider_unit_test dasall_llm_subsystem_config_projection_unit_test && ctest --test-dir build-ci -R "ProfileCatalogTest|RuntimePolicyProviderTest|LLMSubsystemConfigProjectionTest" --output-on-failure && rm -rf stage/pkg && DESTDIR="$PWD/stage/pkg" cmake --install build-ci && test -f stage/pkg/usr/share/dasall/profiles/desktop_full/runtime_policy.yaml && test -f stage/pkg/usr/share/dasall/llm/prompts/planner/default/manifest.yaml && test -f stage/pkg/usr/share/dasall/llm/providers/catalog.yaml`
+   - 结果：通过；三条 profile/LLM unit tests 全绿，stage install 实际产出五档 profile 树、`llm/prompts/planner/default` 与 `llm/providers/catalog.yaml` / `deepseek/manifest.yaml`。
+
+### 结果
+
+1. PKG-TODO-007 已把 `dasall-common` 的静态资产安装面从“源码树散落、无法 stage install”推进到“可由 `cmake --install` 稳定产出 `/usr/share/dasall/profiles` 与 `/usr/share/dasall/llm/*`”。
+2. 007 只解决 asset payload install，不改变 `ProfileCatalog`、daemon main、`LLMSubsystemConfig.h` 中的 repo-relative consumer 默认值；这些继续由 010/011/012 处理。
+3. 进入 008 前，packaging 主线关于 install surface 的剩余重点已从“有没有安装面”收敛到 `debian/` source metadata 与 binary payload skeleton 的落盘。
+
 ## 记录 #580
 
 - 日期：2026-05-07

@@ -62,4 +62,10 @@ target_link_libraries(dasall_llm
     dasall_infra
 )
 
+install(DIRECTORY
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/prompts
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/providers
+  DESTINATION ${DASALL_INSTALL_LLM_DATADIR}
+)
+
 dasall_apply_common_options(dasall_llm)
