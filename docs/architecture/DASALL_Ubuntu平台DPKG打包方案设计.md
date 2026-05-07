@@ -591,6 +591,12 @@ v1 建议把自定义 maintainer scripts 压缩到最低：
 | `pkg-smoke-local-control-plane` | `@, systemd` | `needs-root`, `isolation-machine` | 服务能启动、socket 存在、CLI `ping` / `readiness` / `version` 工作 |
 | `pkg-smoke-common-assets` | `@` | `isolation-container` 或空 | 五档 profile 与两类 LLM baseline 资产全部存在 |
 
+这里进一步冻结两条运行策略：
+
+1. `pkg-smoke-local-control-plane` 的正式 gate 必须跑在 machine-level isolation testbed；本地与 CI 的保守默认值都是 qemu。不要用 `null` virtualization 或忽略 `isolation-machine` restriction 的方式替代正式验收。
+2. `pkg-smoke-common-assets` 可以作为本地 quick loop 单独跑在 container/unshare 类 testbed，但如果 CI 要给出 package-ready 结论，它仍应包含在同一套正式 `autopkgtest` suite 内。
+3. `autopkgtest --validate .` 只用于 metadata validate，不等于 installed-package gate 已通过。
+
 `pkg-smoke-local-control-plane` 建议检查步骤：
 
 1. `systemctl enable --now dasall-daemon.service`
@@ -1167,12 +1173,20 @@ v1 采用标准 Ubuntu 路径：
 
 正式工程实现时，建议至少具备以下 gate：
 
-1. `lintian` 静态检查
-2. clean install smoke
-3. upgrade smoke
-4. remove / purge smoke
-5. `autopkgtest` 本地控制面用例
-6. 内部 APT 仓库签名与索引一致性检查
+1. build-tree preflight：package 相关 contract / integration 切片
+2. `dpkg-buildpackage -us -uc -b` package build gate
+3. `lintian` 静态检查
+4. clean install + explicit start smoke
+5. upgrade smoke
+6. remove / purge smoke
+7. `autopkgtest` installed-package 用例
+8. 内部 APT 仓库签名与索引一致性检查
+
+这里的发布口径也一起冻结：
+
+1. 只通过 preflight、package build、`lintian`，最多只能宣称 build-ready packaging skeleton。
+2. 只有 install/upgrade/remove-purge smoke 与 `autopkgtest` 也全部闭合，才允许宣称 package-ready。
+3. `lintian` 是包产物静态分析 gate；fresh install / upgrade / remove-purge 是本地 rootful lifecycle gate；`autopkgtest` 是标准 testbed 上的 installed-package gate，三者不得混层。
 
 建议的 `autopkgtest` 最小场景：
 

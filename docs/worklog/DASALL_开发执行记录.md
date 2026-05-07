@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #577
+
+- 日期：2026-05-07
+- 阶段：packaging/design-freeze
+- 任务：PKG-TODO-003 冻结 v1 packaging QA gate 与 autopkgtest 运行策略
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/packaging/deliverables/PKG-TODO-003-QA-Gate与autopkgtest策略冻结.md`，把 v1 QA gate 分层、`lintian` 与 `autopkgtest` 的职责边界、本地与 CI 的最小 testbed 策略，以及 build-ready / package-ready 的声明边界收敛为单点交付物。
+2. 新增 `scripts/packaging/README.md` 并同步 `docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md`，明确 packaging 入口拆成 build-tree preflight、local rootful lifecycle smoke 与 qemu `autopkgtest` 三类执行面，同时冻结 `pkg-smoke-local-control-plane` 的 authoritative machine-level isolation 策略。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，将 PKG-TODO-003 标记为 Done，并把 `PKG-BLK-05` 收敛为“策略已冻结、剩余实现待 016/017/018 落地”的状态。
+
+### 验证
+
+1. `rg -n "autopkgtest|lintian|preflight|install smoke|upgrade smoke|remove|purge|qemu|package-ready|build-ready" docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-003-QA-Gate与autopkgtest策略冻结.md scripts/packaging/README.md`
+   - 结果：通过；详设、专项 TODO、003 deliverable 与 packaging README 已共同收敛为“build-tree preflight / `lintian` / local rootful smoke / qemu `autopkgtest`”的单一口径，并明确 build-ready 与 package-ready 的不同声明条件。
+
+### 结果
+
+1. PKG-TODO-003 已消除 installed-package QA 设计层面的歧义；后续 015/016/017 可以直接围绕固定 gate 分层落实现，而不必再争论 `lintian`、rootful smoke 与 `autopkgtest` 谁来覆盖什么。
+2. PKG-BLK-05 暂未关闭，但已从“策略和 testbed 约定缺失”收敛为“缺 autopkgtest metadata/scripts 与本地 lifecycle harness 实现”；在 016/017 完成前，专项仍只能宣称 build-ready packaging skeleton，不能宣称 package-ready。
+
 ## 记录 #576
 
 - 日期：2026-05-07
