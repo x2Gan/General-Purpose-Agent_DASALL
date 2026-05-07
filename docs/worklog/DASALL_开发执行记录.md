@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #573
+
+- 日期：2026-05-07
+- 阶段：cli/config-design-freeze
+- 任务：CLCFG-TODO-002 冻结 P0 安装态 socket canonical path、root/sudo-only operator access model 与命令安装名
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/cli/deliverables/CLCFG-TODO-002-socket与operator-model冻结.md`，集中冻结安装态 canonical socket=`/run/dasall/daemon.sock`、P0 `0600 root/sudo-only` operator model，以及开发态 `dasall-cli config` 与安装态 `dasall config` 的双层命名映射。
+2. 更新 `docs/architecture/DASALL_cli_config交互式部署配置设计.md`，把 socket/operator/install-name 从“二选一待定”改为单点结论，并把 `OperatorAccessPage` 收敛为只读 access 解释页，不再承诺 `dasall` 组主路径。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md` 与 `docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md`，把 packaging 侧仍残留的 `0660` 想象改写为“future only”，并显式回链 daemon `DMD-TODO-037` 的真实 socket mode=`0600` 结论。
+4. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-002 标记为 Done，并回写 001/002 已共同冻结 grammar/TTY/exit 与 socket/operator/install-name 的阶段事实。
+
+### 验证
+
+1. `rg -n "0600 root/sudo-only|0660 dasall group|后续演进|/run/dasall|/usr/bin/dasall|dasall-cli" docs/architecture/DASALL_cli_config交互式部署配置设计.md docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/daemon/DASALL-daemon本地控制面专项TODO.md docs/todos/cli/deliverables/CLCFG-TODO-002-socket与operator-model冻结.md`
+   - 结果：通过；config 设计、packaging TODO、daemon TODO 与 002 deliverable 已共同收敛为 `/run/dasall/daemon.sock`、`0600 root/sudo-only`、安装态 `dasall config`，且 `0660 dasall group` 仅保留在后续演进语境。
+
+### 结果
+
+1. CLCFG-TODO-002 已把 CLI config、packaging 与 daemon 三方关于安装态 socket/operator/access model 的唯一口径固定为：`/run/dasall/daemon.sock` + `0600 root/sudo-only` + `dasall config`。
+2. 后续 PKG-TODO-013/014、CLCFG-TODO-010/012/013 不再允许重新发明“加 `dasall` 组即可访问”或“安装后继续使用 `dasall-cli`”的 operator 主路径；若要开放 `0660 dasall group`，必须作为独立 future 任务重新冻结。
+
 ## 记录 #572
 
 - 日期：2026-05-07
@@ -22,6 +46,7 @@
 
 1. CLCFG-TODO-001 已形成单一设计口径：后续 CLCFG-TODO-006、011、012、013、014、015 只允许补 parser、coordinator、formatter 与测试，不再允许重新定义 config 命令 grammar、TTY 行为或对外 exit family。
 2. `config` 无子命令的交互式 wizard 与 `show/plan/validate/apply --from-file --no-input` 的非交互路径已经在文档层解耦，后续 Build 可直接围绕同一 plan/apply 内核推进，而不会再出现“apply 是否允许半交互”或“非 TTY 是否偷偷提示确认”的灰区。
+
 
 ## 记录 #571
 

@@ -1,9 +1,9 @@
 # DASALL daemon 本地控制面专项 TODO
 
-最近更新时间：2026-05-03
+最近更新时间：2026-05-07
 阶段：Detailed Design -> Special TODO
 适用范围：`apps/daemon/`、`apps/cli/` daemon 客户端面、`access/` daemon entry seam、`platform/IIPC` peer identity 与 loopback 消费面、daemon 部署契约、相关测试拓扑
-当前结论：daemon 本地控制面专项 `DMD-TODO-001` ~ `DMD-TODO-040` 已全部完成。`main.cpp` 已接入真实 `AgentFacade::init` 启动路径，`Gate-DMD-04` 已补入 `DaemonBinaryUnarySmokeTest`，`Gate-DMD-07` 已收敛为仅 `daemon.diag_enabled` 可热更且完成 focused 复验，`Gate-DMD-10` 继续保持 PASS。当前无新增外部 blocker；本轮可恢复为 close-ready 结论，后续仅保留仓库级工具链噪声与 v2 范围外能力作为残余风险。
+当前结论：daemon 本地控制面专项 `DMD-TODO-001` ~ `DMD-TODO-040` 已全部完成。`main.cpp` 已接入真实 `AgentFacade::init` 启动路径，`Gate-DMD-04` 已补入 `DaemonBinaryUnarySmokeTest`，`Gate-DMD-07` 已收敛为仅 `daemon.diag_enabled` 可热更且完成 focused 复验，`Gate-DMD-10` 继续保持 PASS。当前无新增外部 blocker；本轮可恢复为 close-ready 结论，后续仅保留仓库级工具链噪声与 v2 范围外能力作为残余风险。另，`DMD-TODO-037` 已收敛的真实 socket mode=`0600` 已在 2026-05-07 被 CLI config `CLCFG-TODO-002` 复用为安装态 root/sudo-only operator model 基线，当前分支不再对外承诺 `dasall` 组主路径。
 
 ## 1. 文档头
 
