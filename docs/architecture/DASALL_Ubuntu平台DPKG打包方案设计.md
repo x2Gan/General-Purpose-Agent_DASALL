@@ -632,19 +632,17 @@ v1 建议把自定义 maintainer scripts 压缩到最低：
 Source: dasall
 Section: utils
 Priority: optional
-Maintainer: <DASALL Maintainer Team> <packaging@example.com>
+Maintainer: x2Gan <Whisky.Gan@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
  cmake,
  ninja-build,
- pkgconf,
- <native-build-dependency-1>,
- <native-build-dependency-2>
+ pkgconf
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
-Homepage: https://<project-homepage>
-Vcs-Git: https://<vcs-git-url>
-Vcs-Browser: https://<vcs-browser-url>
+Homepage: https://github.com/x2Gan/General-Purpose-Agent_DASALL
+Vcs-Git: https://github.com/x2Gan/General-Purpose-Agent_DASALL.git
+Vcs-Browser: https://github.com/x2Gan/General-Purpose-Agent_DASALL
 Testsuite: autopkgtest
 
 Package: dasall
@@ -702,7 +700,7 @@ Description: DASALL shared runtime assets and baseline profiles
 
 字段约束：
 
-1. `Build-Depends` 中的 `<native-build-dependency-*>` 必须由首轮 `dpkg-checkbuilddeps` 实测补齐，不能长期保留占位。
+1. `Build-Depends` 在 noble 基线先冻结为 `debhelper-compat (= 13), cmake, ninja-build, pkgconf`；`g++`/`make` 等 build-essential 依赖按 Debian Policy 7.7 不显式列入 control。
 2. `dasall-daemon` 若继续在 `postinst` 使用 `adduser` / `addgroup`，就应把 `adduser` 显式列入运行时依赖。
 3. `dasall` 是 meta package，不要给它再塞 payload 文件。
 

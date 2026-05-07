@@ -1,5 +1,28 @@
 # DASALL 开发执行记录
 
+## 记录 #575
+
+- 日期：2026-05-07
+- 阶段：packaging/design-freeze
+- 任务：PKG-TODO-001 实测并冻结 Build-Depends / Depends / Architecture 矩阵
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/packaging/deliverables/PKG-TODO-001-依赖矩阵冻结.md`，把 Ubuntu noble 基线下的 Build-Depends、四包 Depends/Recommends、`Architecture: any/all` 归属与 `adduser` 运行时依赖集中冻结为单点交付物。
+2. 更新 `docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md`，去掉 `debian/control` 草案中的 `<native-build-dependency-*>` 与仓库 URL 占位，将 source stanza 先收敛为 `debhelper-compat (= 13), cmake, ninja-build, pkgconf` 与实际 GitHub 仓库地址。
+3. 更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，将 PKG-TODO-001 标记为 Done，并回写 `PKG-BLK-04` 已由 noble 依赖盘点解阻的阶段事实。
+
+### 验证
+
+1. `rg -n "Build-Depends|Architecture: any|Architecture: all|adduser|dasall-common|dasall-daemon" docs/architecture/DASALL_Ubuntu平台DPKG打包方案设计.md docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-001-依赖矩阵冻结.md`
+   - 结果：通过；详设、专项 TODO 与 001 deliverable 已共同收敛为 noble 基线 Build-Depends=`debhelper-compat (= 13), cmake, ninja-build, pkgconf`，并统一保留四包 `Architecture: any/all` 与 `adduser -> dasall-daemon` 的运行时依赖口径。
+
+### 结果
+
+1. PKG-TODO-001 已把 008/009 后续要消费的依赖矩阵从“含占位的 control 草案”提升为可直接引用的唯一文档契约；后续若新增系统 `-dev` 包，必须回链到新的 CMake / link 证据，而不能再在 control 草案中预埋占位。
+2. `dasall` / `dasall-cli` / `dasall-daemon` / `dasall-common` 的 v1 包关系已不再依赖口头约定，PKG-BLK-04 可视为关闭，后续 source metadata skeleton 可以直接继续推进。
+
 ## 记录 #574
 
 - 日期：2026-05-07
