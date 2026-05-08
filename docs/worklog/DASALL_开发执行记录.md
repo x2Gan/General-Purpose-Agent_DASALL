@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #593
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-008 新增 InstallStateProbe 与 ConfigCapabilityResolver 骨架
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/InstallStateProbe.h` 与 `apps/cli/src/config/InstallStateProbe.cpp`，把 canonical files、daemon config validity、secret readiness、systemd/service facts、ping/readiness 结果收敛到 `InstallStateFacts -> InstallStateProbeResult` 的纯投影骨架，并按 CLCFG-TODO-003 冻结的六态闭集输出 `FreshInstall`、`BootstrapPending`、`ConfiguredStopped`、`ConfiguredRunning`、`Drifted`、`Unsupported`。
+2. 新增 `apps/cli/src/config/ConfigCapabilityResolver.h` 与 `apps/cli/src/config/ConfigCapabilityResolver.cpp`，把 LLM secret onboarding、validate/service manager 能力和 `ToolSkillPageMode=hidden|summary_only|editable` 的 capability gating 收敛到单一 resolver，而不是把判断散落到未来页面代码里。
+3. 新增 `tests/unit/apps/cli/InstallStateProbeTest.cpp` 与 `tests/unit/apps/cli/ConfigCapabilityResolverTest.cpp`，覆盖 fresh install、bootstrap pending、configured running、drifted、unsupported 以及 hidden/summary_only/editable 三档 tool-skill page mode 的 focused 正反例。
+4. 更新 `tests/unit/apps/cli/CMakeLists.txt` 与 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，分别接入新的 unit targets，并将 CLCFG-TODO-008 标记为 Done。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-install_state_probe_unit_test dasall-config_capability_resolver_unit_test && ctest --preset vscode-linux-ninja -R "^InstallStateProbeTest$|^ConfigCapabilityResolverTest$" --output-on-failure`
+   - 结果：通过；`InstallStateProbeTest` 与 `ConfigCapabilityResolverTest` 全绿，说明六态投影与 capability gating 骨架已经从页面流程中剥离为可独立回归的纯组件。
+
+### 结果
+
+1. CLCFG-TODO-008 已为后续 `config show/plan/validate` 和交互式 wizard 提供稳定的“当前状态 + capability 集”输入层，后续 010/011 不再需要在 coordinator 或页面代码里临时拼接这些判断。
+2. `InstallStateProbe` 现在已经把 canonical/service/readiness 到六态 `InstallState` 的映射固化为单一函数 owner，后续 012/014 可以直接围绕 gap 列表组织页面与 summary。
+3. `ConfigCapabilityResolver` 已把 `ToolSkillPageMode` 和 LLM secret onboarding 的 gating 前置到单一组件，后续 011/017 可以直接消费 resolver 结果，而不再重新发明 hidden/summary-only/editable 条件。
+
 ## 记录 #592
 
 - 日期：2026-05-08

@@ -114,6 +114,35 @@ target_link_libraries(dasall-config_command_types_unit_test
 dasall_apply_common_options(dasall-config_command_types_unit_test)
 
 dasall_add_cli_unit_test(
+  dasall-install_state_probe_unit_test
+  InstallStateProbeTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/InstallStateProbeTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-install_state_probe_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-install_state_probe_unit_test)
+
+dasall_add_cli_unit_test(
+  dasall-config_capability_resolver_unit_test
+  ConfigCapabilityResolverTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigCapabilityResolverTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
+)
+
+target_link_libraries(dasall-config_capability_resolver_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_capability_resolver_unit_test)
+
+dasall_add_cli_unit_test(
   dasall-cli_output_formatter_unit_test
   CliDaemonOutputFormatterTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliDaemonOutputFormatterTest.cpp
