@@ -1,6 +1,6 @@
 # DASALL infrastructure 子系统 secret 组件专项 TODO
 
-最近更新时间：2026-04-04  
+最近更新时间：2026-05-08
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/secret
 
@@ -106,6 +106,12 @@
 6. 缺失点：KMS 身份与限流策略、integration 顶层接线、审计/健康统一注册点细节。
 
 当前最小可执行粒度：接口/数据结构级（L2），局部函数/方法骨架（L3）。
+
+补充结论（2026-05-08）：
+
+1. 为支撑 CLI config 的 P1 onboarding，secret owner 接受 `infra/secret` internal `SecretBootstrapWriter` 或等价 transaction seam，作为 bootstrap-only 写入面。
+2. `ISecretManager` 公共接口继续维持 `get/materialize/release/rotate/revoke/inspect` 六入口，不吸收 bootstrap `create/set` 能力。
+3. install-mode file backend root 继续对齐 `/var/lib/dasall/secrets`；成功返回 redacted `auth_ref=secret://llm/providers/<provider_ref>`，失败不得留下半成品 record 或 `auth_ref`。
 
 ### 4.2 粒度可行性评估表（Step 2 输出）
 
@@ -284,6 +290,7 @@
 | SEC-BLK-001 | RESOLVED | file backend 配置语义已冻结，`FileSecretBackendTest` 在 `ctest -L secret` 内通过 | 不再阻塞 file backend 最小实现 |
 | SEC-BLK-002 | RESOLVED | rotation validator / grace period 语义已冻结，`SecretRotationCoordinatorTest` 与 `SecretRotationWorkflowTest` 在 `ctest -L secret` 内通过 | rollback / stale handle 证据已保留 |
 | SEC-BLK-003 | BLOCKED | KMS 身份、限流、超时和测试夹具仍未冻结 | 后续若继续推进 KmsSecretBackend，需先解阻并另起 v2 任务 |
+| CLCFG-TODO-004 | ALIGNED | CLI config P1 已把 bootstrap-only internal seam、install-mode root `/var/lib/dasall/secrets` 与 redacted `auth_ref` 命名回链到 secret owner | 后续若实现 `SecretBootstrapWriter`，只能作为 `infra/secret` internal surface 落盘，不得扩张 `ISecretManager` 公共 ABI |
 | SEC-BLK-004 | RESOLVED | audit sink contract 6.10.1 已冻结，`SecretAuditBridgeTest` 与 `SecretFailureInjectionTest` 在 `ctest -L secret` 内通过 | audit write failure 证据已保留 |
 | SEC-BLK-005 | RESOLVED | top-level integration topology 已解阻，`SecretRotationWorkflowTest` 与 `SecretFailureInjectionTest` 已纳入 `ctest -N -L secret` | integration discoverability 不再阻塞 |
 | 回退/失败语义 | PASS | `SecretRotationCoordinatorTest` 覆盖 validator reject / rollback fail；`SecretFailureInjectionTest` 覆盖 backend unavailable / audit write fail | 当前 guardrail 已具备回退与失败证据 |

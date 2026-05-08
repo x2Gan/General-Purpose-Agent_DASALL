@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #589
+
+- 日期：2026-05-08
+- 阶段：cli/design
+- 任务：CLCFG-TODO-004 冻结 bootstrap-only secret import seam 与 secret:// 投影契约
+- 状态：已完成
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_cli_config交互式部署配置设计.md`，把 `SecretBootstrapWriter` owner、`SecretProvisioningResult` 最小输出、install-mode root=`/var/lib/dasall/secrets`、`auth_ref=secret://llm/providers/<provider_ref>` 命名与导入失败回滚语义写成单点设计契约。
+2. 更新 `docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md` 与 `docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md`，让 secret owner 明确接受 bootstrap-only internal seam，并把 `CFG-BLK-003` 从“secret 接口未冻结”收敛为已解阻状态。
+3. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-004 标记为 Done、把 `CLCFG-BLK-002` 回写为已解阻，并新增交付物 `docs/todos/cli/deliverables/CLCFG-TODO-004-secret-bootstrap-seam冻结.md`。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && rg -n "SecretBootstrapWriter|secret://|auth_ref|bootstrap-only|CFG-BLK-003|FileSecretBackend|SecretManagerFacade" docs/architecture/DASALL_cli_config交互式部署配置设计.md docs/todos/infrastructure/DASALL_infrastructure_secret组件专项TODO.md docs/todos/infrastructure/DASALL_infrastructure_config组件专项TODO.md docs/todos/cli/deliverables/CLCFG-TODO-004-secret-bootstrap-seam冻结.md`
+   - 结果：通过；命中主设计、infra secret TODO、infra config TODO 与本轮 deliverable 中的 owner、projection、install root 与 reader path 约束，`CFG-BLK-003` 不再保留“secret 接口未冻结”的旧口径。
+
+### 结果
+
+1. 004 已把 secret bootstrap seam 从“以后再补写入 API”的口头假设，收敛为 `infra/secret` internal writer 的明确契约。
+2. `secret://` / `auth_ref` 投影规则已经形成 config/secret/config-center 三方统一口径；后续 `SecretRefResolver` 与 CLI onboarding 不再受文档歧义阻塞。
+3. P1 仍未进入实现，但当前阻塞已从“设计未冻结”缩小为 `CLCFG-TODO-016/021` 的具体代码与测试任务。
+
 ## 记录 #588
 
 - 日期：2026-05-08
