@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #595
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-010 新增 ServiceManagerAdapter、PrivilegeProbe 与 ConfigPreflightChecker
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/PrivilegeProbe.h` 与 `apps/cli/src/config/PrivilegeProbe.cpp`，把 root/TTY 探测与 `require_root_for_write()` 判定集中到单一 probe，而不是让后续 coordinator、wizard 页面或 apply executor 自己拼 `geteuid()` / `isatty()` 和 service/file-write 的 root requirement 逻辑。
+2. 新增 `apps/cli/src/config/ServiceManagerAdapter.h` 与 `apps/cli/src/config/ServiceManagerAdapter.cpp`，把 `ConfigActionPlan` 顶层 `service_reload_required` / `service_restart_required` / `service_start_requested` / `service_enable_requested` 映射为稳定的 `systemctl` argv 序列，并在非 systemd 环境下降级为稳定的 `manual_followups` 与 `blocked_actions`，避免页面代码直接拼 shell 命令。
+3. 新增 `apps/cli/src/config/ConfigPreflightChecker.h` 与 `apps/cli/src/config/ConfigPreflightChecker.cpp`，把 daemon binary availability、canonical 文件可写性、canonical socket path、`--validate-only` 命令构造与执行结果解释收敛到单一 preflight owner，并输出稳定 failure reasons，而不是把 preflight 阻断条件散落在 future workflow 中。
+4. 新增 `tests/unit/apps/cli/ServiceManagerAdapterTest.cpp` 与 `tests/unit/apps/cli/ConfigPreflightCheckerTest.cpp`，并更新 `tests/unit/apps/cli/CMakeLists.txt` 注册 `dasall-service_manager_adapter_unit_test`、`dasall-config_preflight_checker_unit_test` 两个 focused targets；同步更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-010 标记为 Done。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-service_manager_adapter_unit_test dasall-config_preflight_checker_unit_test && ctest --preset vscode-linux-ninja -R "^ServiceManagerAdapterTest$|^ConfigPreflightCheckerTest$" --output-on-failure`
+   - 结果：通过；`ServiceManagerAdapterTest` 与 `ConfigPreflightCheckerTest` 全绿，说明 `systemctl` action 规划/降级、root requirement 判定与 `--validate-only` preflight success/failure 分支已经形成 focused 可回归组件面。
+
+### 结果
+
+1. CLCFG-TODO-010 已把 service action 与 preflight 从 future coordinator/wizard 页面中剥离为稳定组件 owner；后续 011/012/013 不再需要在 workflow 代码里直接拼 `systemctl` argv 或重复实现 root/non-root、validate-only blocker 逻辑。
+2. `ServiceManagerAdapter` 现在已经把 non-systemd degrade 收敛为固定 `manual_followups` / `blocked_actions` 输出；后续 summary formatter 与 review/apply 页面可以直接消费这些结果，而不是再做环境特判。
+3. `ConfigPreflightChecker` 已能独立产出稳定 reason strings，例如 `root_required_for_config_write` 与 `daemon_validate_only_failed`；后续 plan/summary/exit contract 可以围绕这些稳定 token 组织输出，而不必重新发明错误分类。
+
 ## 记录 #594
 
 - 日期：2026-05-08

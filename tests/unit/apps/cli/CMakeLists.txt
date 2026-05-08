@@ -158,6 +158,37 @@ target_link_libraries(dasall-daemon_config_file_store_unit_test
 dasall_apply_common_options(dasall-daemon_config_file_store_unit_test)
 
 dasall_add_cli_unit_test(
+  dasall-service_manager_adapter_unit_test
+  ServiceManagerAdapterTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ServiceManagerAdapterTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-service_manager_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-service_manager_adapter_unit_test)
+
+dasall_add_cli_unit_test(
+  dasall-config_preflight_checker_unit_test
+  ConfigPreflightCheckerTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigPreflightCheckerTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-config_preflight_checker_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_preflight_checker_unit_test)
+
+dasall_add_cli_unit_test(
   dasall-cli_output_formatter_unit_test
   CliDaemonOutputFormatterTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliDaemonOutputFormatterTest.cpp
