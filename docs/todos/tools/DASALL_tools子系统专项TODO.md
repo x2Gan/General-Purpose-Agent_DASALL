@@ -1,9 +1,15 @@
 # DASALL Tools 子系统专项 TODO
 
-最近更新时间：2026-04-17（完成 TOOL-TODO-042，tools 专项 Gate 与交付证据收口）
+最近更新时间：2026-05-08（补 CLI config CLCFG-TODO-005 的 operator-facing capability boundary 回链）
 阶段：Detailed Design -> Special TODO
 适用范围：tools/
 当前结论：A~G 阶段与 TOOL-TODO-001~042 已在 tools 子系统范围内闭合；`ToolServicesSmokeIntegrationTest`、`ToolObservabilityIntegrationTest`、`ToolWorkflowFailureIntegrationTest`、`ToolMCPFallbackIntegrationTest`、`ToolPluginStdioMCPIntegrationTest`、`ToolSkillRuntimeIntegrationTest`、`ToolPluginSkillBundleIntegrationTest`、`ToolProfileIntegrationTest` 已覆盖 builtin/workflow/MCP/skill/profile 主链，build-ci `ctest -N` 总测试数为 499，unit 296/296、contract 152/152 全部通过，integration 聚合为 49/51 通过，剩余失败仅为既有跨模块 `InfraDiagnosticsSmokeTest` 与 `InfraDiagnosticsIntegrationTest`，不属于 tools 回归；Gate-TOOL-01 ~ Gate-TOOL-10 已具备明确命令证据并完成回写。generic MCP ready 仍只收敛到 loopback / plugin-stdio hybrid 证据，external skill importer 仍受 sample scope 与 feature flag 约束，runtime 生产 caller adapter 仍保持跨模块后续事项，不在本专项内误写成已交付事实。
+
+补充结论（2026-05-08，供 CLI config 的 CLCFG-TODO-005 回链）：
+
+1. tools owner 将 operator-facing deployment config surface 与 internal runtime 显式分离：`SkillRegistry`、`SkillRuntime`、`PluginSkillBundleImporter` 已落盘，不等于 CLI `config` 可以提供 editable deployment controls。
+2. P0/P1 对 `ToolSkillPage` 只允许 `hidden` 或 `summary_only`；若已有 active bundle/plugin/skill capability 被 profile 或 plugin snapshot 检测到，可显示 bundle/source/allowlist/profile constraints/revoke/audit 摘要，但不出现 enable/disable 或 importer toggle。
+3. `editable` 只属于 P2，且前提是 deployment config owner、stable bridge detection、source-scoped revoke 与 audit path 全部冻结；external skill importer 继续保持 explicit opt-in / feature flag，不作为默认安装能力。
 
 ## 1. 文档头
 

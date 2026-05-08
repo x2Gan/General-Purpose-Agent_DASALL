@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #590
+
+- 日期：2026-05-08
+- 阶段：cli/design
+- 任务：CLCFG-TODO-005 冻结 ToolSkillPage 的 P0/P1/P2 capability 边界与未决问题处置
+- 状态：已完成
+
+### 改动
+
+1. 更新 `docs/architecture/DASALL_cli_config交互式部署配置设计.md`，把 `ToolSkillPageMode=hidden|summary_only|editable`、P0/P1/P2 边界、editable 前提与 source-scoped revoke / audit 约束写成单点设计契约。
+2. 更新 `docs/todos/tools/DASALL_tools子系统专项TODO.md`，把 tools owner 对 operator-facing deployment surface 与 internal runtime 的边界、P0/P1 summary-only 语义以及 external importer default-off 处置显式回链给 CLI config。
+3. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-005 标记为 Done、把 `CLCFG-BLK-003` 回写为已解阻，并新增交付物 `docs/todos/cli/deliverables/CLCFG-TODO-005-toolskill-capability边界冻结.md`。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && rg -n "ToolSkillPage|capability-gated|allowlist|PluginSkillBundleImporter|SkillRegistry|SkillRuntime" docs/architecture/DASALL_cli_config交互式部署配置设计.md docs/todos/tools/DASALL_tools子系统专项TODO.md docs/todos/cli/deliverables/CLCFG-TODO-005-toolskill-capability边界冻结.md`
+   - 结果：通过；命中主设计、tools owner TODO 与本轮 deliverable 中的 mode 矩阵、editable 前提、summary-only 约束和 external importer default-off 处置，`CLCFG-BLK-003` 不再保留“operator-facing surface 未冻结”的旧口径。
+
+### 结果
+
+1. 005 已把 ToolSkillPage 从“隐藏或只读”的原则性描述，收敛为 `hidden` / `summary_only` / `editable` 的明确模式矩阵。
+2. tools internal/runtime 能力与 operator-facing deployment surface 的边界现在已经写成单一结论；后续 `config` 不再有理由把 `SkillRegistry` / `SkillRuntime` / importer 的已落盘事实误渲染成 editable UI。
+3. `CLCFG-BLK-003` 已被缩小为后续实现任务 `CLCFG-TODO-017` 的代码与测试问题，不再是设计未冻结的问题。
+
 ## 记录 #589
 
 - 日期：2026-05-08
