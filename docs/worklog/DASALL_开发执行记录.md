@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #585
+
+- 日期：2026-05-08
+- 阶段：packaging/build
+- 任务：PKG-TODO-011 引入 install-aware asset root 并修复 daemon profile 发现路径
+- 状态：已完成
+
+### 改动
+
+1. 新增 `infra/include/config/InstallLayout.h` 与 `infra/src/config/InstallLayout.cpp`，把安装态路径模型正式落到 `infra/config::InstallLayout`：导出 canonical `/usr/share/dasall`、`/usr/share/dasall/profiles`、`/usr/share/dasall/llm/*`、`/etc/dasall/daemon.json`、`/run/dasall/daemon.sock` 与 `/var/lib/dasall`，并实现“优先安装态、缺失时回退到编译期 source tree 资产根”的 install-aware resolver。
+2. 更新 `infra/CMakeLists.txt`、`apps/daemon/src/main.cpp`，把 daemon 入口的 `DaemonEntryConfigLoadRequest.profiles_root` 从 `current_path()/profiles` 收敛为 `resolve_install_layout().profiles_root`，消除 daemon main 对 repo-root `cwd` 的直接依赖。
+3. 新增 `tests/unit/apps/daemon/DaemonInstalledAssetRootTest.cpp` 与对应 CMake target，并更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`，让 binary smoke 从临时目录启动 daemon，实际证明 daemon profile 发现路径不再要求工作目录位于仓库根。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-daemon_entry_config_projection_unit_test dasall_daemon_installed_asset_root_unit_test dasall_access_daemon_binary_unary_smoke_integration_test && ctest --test-dir build-ci -R '^(DaemonEntryConfigProjectionTest|DaemonInstalledAssetRootTest|DaemonBinaryUnarySmokeTest)$' --output-on-failure`
+   - 结果：通过；`DaemonEntryConfigProjectionTest`、`DaemonInstalledAssetRootTest` 与 `DaemonBinaryUnarySmokeTest` 3/3 全绿，且 binary smoke 现已在临时工作目录下完成 daemon 启动与 CLI `run` roundtrip。
+
+### 结果
+
+1. PKG-TODO-011 已把 daemon profile 资产发现从 repo-root `cwd` 假设推进到 `infra/config::InstallLayout` 的单点 owner；systemd/validate-only/binary smoke 现在共享同一条 install-aware 路径解析口径。
+2. 011 没有通过 `WorkingDirectory=/usr/share/dasall` 伪修复问题；build-tree daemon binary 现在依赖编译期 source tree fallback，而不是运行时 `cwd`。
+3. `PKG-BLK-02` 已从“daemon + LLM 双侧 repo-relative path”收窄到只剩 012：LLM Prompt / Provider baseline root 仍需切到 `InstallLayout` 导出的安装态路径模型。
+
 ## 记录 #584
 
 - 日期：2026-05-08

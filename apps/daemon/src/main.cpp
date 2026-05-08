@@ -37,6 +37,7 @@
 #include "AgentFacade.h"
 #include "RuntimeDependencySet.h"
 #include "agent/AgentResult.h"
+#include "config/InstallLayout.h"
 #include "linux/UnixIpcProvider.h"
 
 namespace {
@@ -259,9 +260,10 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  const auto install_layout = dasall::infra::config::resolve_install_layout();
   const dasall::apps::daemon::DaemonEntryConfigLoader entry_loader;
   const dasall::apps::daemon::DaemonEntryConfigLoadRequest entry_request{
-      .profiles_root = std::filesystem::current_path() / "profiles",
+      .profiles_root = install_layout.profiles_root,
       .requested_profile_id = parsed.profile_id.value_or(
           dasall::apps::daemon::kDefaultDaemonEntryProfileId),
       .deployment_config_path = parsed.deployment_config_path,

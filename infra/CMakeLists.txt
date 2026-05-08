@@ -42,6 +42,7 @@ set(DASALL_INFRA_CORE_SOURCES
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
   src/config/ConfigCenterFacade.cpp
+  src/config/InstallLayout.cpp
   src/config/ConfigPublisher.cpp
   src/config/ConfigLoader.cpp
   src/config/ConfigMerger.cpp
@@ -373,6 +374,7 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/LogEvent.h
   include/config/ConfigTypes.h
   include/config/ConfigErrors.h
+  include/config/InstallLayout.h
   include/config/IConfigCenter.h
   include/config/ConfigCenterFacade.h
   include/config/ConfigPublisher.h
@@ -438,6 +440,11 @@ set_target_properties(dasall_infra PROPERTIES
 )
 
 target_compile_features(dasall_infra PUBLIC cxx_std_20)
+
+target_compile_definitions(dasall_infra
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
+)
 
 target_include_directories(dasall_infra
   PUBLIC

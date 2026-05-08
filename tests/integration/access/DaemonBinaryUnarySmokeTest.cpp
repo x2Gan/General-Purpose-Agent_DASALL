@@ -203,7 +203,7 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
 
   ScopedDaemonProcess daemon(
       DASALL_DAEMON_BINARY_PATH,
-      root,
+      temp_root.path(),
       socket_path,
       log_path);
 

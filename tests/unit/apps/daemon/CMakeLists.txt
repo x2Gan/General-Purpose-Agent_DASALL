@@ -261,6 +261,27 @@ list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
   dasall-daemon_bootstrap_config_unit_test
 )
 
+add_executable(dasall_daemon_installed_asset_root_unit_test
+  DaemonInstalledAssetRootTest.cpp
+)
+
+target_link_libraries(dasall_daemon_installed_asset_root_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_daemon_installed_asset_root_unit_test)
+
+add_test(NAME DaemonInstalledAssetRootTest
+  COMMAND dasall_daemon_installed_asset_root_unit_test
+)
+set_tests_properties(DaemonInstalledAssetRootTest PROPERTIES LABELS "unit;daemon")
+
+list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_daemon_installed_asset_root_unit_test
+)
+
 add_executable(dasall-daemon_entry_config_projection_unit_test
   DaemonEntryConfigProjectionTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonEntryConfigLoader.cpp
