@@ -12,6 +12,8 @@
 
 namespace dasall::profiles {
 
+inline constexpr std::string_view kDefaultDaemonSocketPath = "/run/dasall/daemon.sock";
+
 inline constexpr std::string_view kDaemonSocketPathKey = "daemon.socket_path";
 inline constexpr std::string_view kDaemonListenBacklogKey = "daemon.listen_backlog";
 inline constexpr std::string_view kDaemonDispatchTimeoutKey = "daemon.dispatch_timeout_ms";
@@ -20,7 +22,7 @@ inline constexpr std::string_view kDaemonWatchdogEnabledKey = "daemon.watchdog.e
 
 struct DaemonProfileSettings {
   std::string effective_profile_id;
-  std::string socket_path = "/tmp/dasall/control.sock";
+  std::string socket_path = std::string(kDefaultDaemonSocketPath);
   std::uint32_t listen_backlog = 32U;
   std::int32_t dispatch_timeout_ms = 5000;
   bool diag_enabled = false;

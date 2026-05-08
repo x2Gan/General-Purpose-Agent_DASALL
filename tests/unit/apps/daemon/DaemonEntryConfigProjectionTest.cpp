@@ -58,7 +58,7 @@ void test_loader_defaults_to_desktop_profile_projection() {
   assert_equal(std::string("desktop_full"),
                result.entry_config->runtime_policy_snapshot->effective_profile_id(),
                "daemon entry loader should retain the effective profile id on the cached runtime snapshot");
-  assert_equal(std::string("/tmp/dasall/control.sock"),
+  assert_equal(std::string("/run/dasall/daemon.sock"),
                result.entry_config->bootstrap_config.socket_path,
                "daemon entry loader should keep baseline daemon socket_path from the desktop profile");
   assert_true(result.entry_config->config_revision.has_value() &&

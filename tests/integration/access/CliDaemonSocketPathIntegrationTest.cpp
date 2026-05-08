@@ -249,6 +249,8 @@ class RunningDaemon {
 }
 
 void test_cli_default_socket_path_roundtrip_uses_shared_default() {
+  using dasall::platform::IpcEndpoint;
+
   const char* argv[] = {"dasall-cli", "ping"};
   const auto command = CliCommandParser::parse(2, argv);
   assert_true(command.has_value(),
@@ -256,8 +258,24 @@ void test_cli_default_socket_path_roundtrip_uses_shared_default() {
   assert_true(!command->socket_path.has_value(),
               "default socket-path integration should defer to shared fallback constant");
 
-  ScopedSocketPath scoped_path(
-      fs::path(dasall::access::daemon::kDefaultDaemonSocketPath));
+  const fs::path default_socket_path(
+      dasall::access::daemon::kDefaultDaemonSocketPath);
+  IpcEndpoint default_endpoint;
+  default_endpoint.socket_path = default_socket_path.string();
+  const auto preflight = dasall::apps::daemon::preflight_bind_endpoint(
+      default_endpoint, DaemonSocketPolicy::for_current_process());
+  if (!preflight.ok()) {
+    assert_true(
+        preflight.error.has_value() &&
+            preflight.error->code ==
+                dasall::platform::PlatformErrorCode::PermissionDenied,
+        "default socket-path integration should fail closed with permission denied "
+        "when the canonical /run socket cannot be materialized by the current "
+        "operator");
+    return;
+  }
+
+  ScopedSocketPath scoped_path(default_socket_path);
   RunningDaemon daemon(resolve_socket_path(*command), "daemon.cli.default");
 
   const auto response = daemon.make_client(resolve_socket_path(*command)).ping_daemon();

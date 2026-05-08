@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #584
+
+- 日期：2026-05-08
+- 阶段：packaging/build
+- 任务：PKG-TODO-010 切换 canonical socket 默认值到 `/run/dasall/daemon.sock`
+- 状态：已完成
+
+### 改动
+
+1. 更新 `access/include/daemon/DaemonEndpointDefaults.h`、`profiles/include/DaemonProfileProjection.h` 与五档 `profiles/*/runtime_policy.yaml`，把 CLI/daemon/profile baseline 的 canonical socket 默认值统一收敛到 `/run/dasall/daemon.sock`。
+2. 更新 `tests/unit/apps/daemon/DaemonBootstrapConfigTest.cpp`、`tests/unit/apps/daemon/DaemonEntryConfigProjectionTest.cpp` 与 `tests/unit/profiles/DaemonProfileProjectionTest.cpp`，把直接断言旧 `/tmp/dasall/control.sock` 的单测收敛为新的 canonical `/run` 路径。
+3. 更新 `tests/integration/access/CliDaemonSocketPathIntegrationTest.cpp`，让默认 socket 集成测试在可 materialize `/run/dasall/daemon.sock` 的环境中继续做真实 roundtrip，而在非 root / 无权限环境中稳定 fail-closed 到 `PermissionDenied`；同步更新 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，将 PKG-TODO-010 标记为 Done，并把 `PKG-BLK-02` 收窄为 011/012 剩余的 asset-root / `cwd` 假设问题。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall-daemon_bootstrap_config_unit_test dasall-daemon_profile_projection_unit_test dasall-daemon_entry_config_projection_unit_test dasall_access_cli_daemon_socket_path_integration_test dasall_access_daemon_binary_unary_smoke_integration_test && ctest --test-dir build-ci -R '^(DaemonBootstrapConfigTest|DaemonProfileProjectionTest|DaemonEntryConfigProjectionTest|CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest)$' --output-on-failure`
+   - 结果：通过；5/5 tests passed，证明默认 socket 常量、profile projection、entry loader、CLI 默认 socket 行为与 binary smoke 全部已收敛到 `/run/dasall/daemon.sock` 语义。
+
+### 结果
+
+1. PKG-TODO-010 已把 daemon/CLI 的 shared default 与五档 baseline profile 从开发态 `/tmp/dasall/control.sock` 完整迁移到生产态 `/run/dasall/daemon.sock`。
+2. 010 没有引入新的 `/tmp` fallback；对于非 root operator，默认 socket 的 integration 现在明确证明 canonical `/run` 路径会 fail-closed，而不是继续偷偷依赖开发态可写目录。
+3. packaging 主线关于安装态路径收敛的剩余核心缺口已经缩到 011/012：daemon profile asset root 仍依赖 `current_path()/profiles`，LLM baseline root 仍依赖 repo-relative 默认值。
+
 ## 记录 #583
 
 - 日期：2026-05-07

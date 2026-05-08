@@ -14,7 +14,7 @@ void test_bootstrap_config_defaults_match_v1_design() {
   using dasall::tests::support::assert_true;
 
   const DaemonBootstrapConfig config;
-  assert_equal(std::string("/tmp/dasall/control.sock"), config.socket_path,
+  assert_equal(std::string("/run/dasall/daemon.sock"), config.socket_path,
                "DaemonBootstrapConfig.socket_path should match v1 default");
   assert_equal(32, static_cast<int>(config.listen_backlog),
                "DaemonBootstrapConfig.listen_backlog should match v1 default");

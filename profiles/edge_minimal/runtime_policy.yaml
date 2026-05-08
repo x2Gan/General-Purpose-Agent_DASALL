@@ -187,7 +187,7 @@ infra:
 		safe_mode:
 			scan_interval_ms: 4000
 daemon:
-	socket_path: /tmp/dasall/control.sock
+	socket_path: /run/dasall/daemon.sock
 	listen_backlog: 32
 	dispatch_timeout_ms: 5000
 	diag:

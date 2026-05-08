@@ -73,7 +73,7 @@ void test_projection_maps_explicit_daemon_profile_values() {
   assert_true(result.ok(), "desktop_full daemon profile projection should load");
   assert_equal(std::string("desktop_full"), result.settings->effective_profile_id,
                "projection should preserve profile id");
-  assert_equal(std::string("/tmp/dasall/control.sock"), result.settings->socket_path,
+  assert_equal(std::string("/run/dasall/daemon.sock"), result.settings->socket_path,
                "projection should load explicit daemon socket_path");
   assert_equal(32, static_cast<int>(result.settings->listen_backlog),
                "projection should load explicit daemon listen_backlog");
@@ -105,7 +105,7 @@ void test_projection_rejects_invalid_daemon_key_values() {
              "\ttarget_platform: linux-x86_64\n"
              "\tsupport_level: ga\n"
              "daemon:\n"
-             "\tsocket_path: /tmp/dasall/control.sock\n"
+             "\tsocket_path: /run/dasall/daemon.sock\n"
              "\tlisten_backlog: 0\n"
              "\tdispatch_timeout_ms: 5000\n"
              "\tdiag:\n"
