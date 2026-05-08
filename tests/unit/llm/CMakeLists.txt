@@ -6,6 +6,10 @@ add_executable(dasall_llm_subsystem_config_projection_unit_test
 	LLMSubsystemConfigProjectionTest.cpp
 )
 
+add_executable(dasall_llm_baseline_asset_path_unit_test
+	LLMBaselineAssetPathTest.cpp
+)
+
 add_executable(dasall_provider_config_projection_unit_test
 	ProviderConfigProjectionTest.cpp
 )
@@ -153,6 +157,12 @@ target_link_libraries(dasall_llm_subsystem_config_projection_unit_test
 		dasall_test_support
 		dasall_llm
 		dasall_profiles
+)
+
+target_link_libraries(dasall_llm_baseline_asset_path_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
 )
 
 target_link_libraries(dasall_provider_config_projection_unit_test
@@ -378,6 +388,7 @@ target_compile_definitions(dasall_provider_model_metadata_parse_unit_test
 
 dasall_apply_common_options(dasall_llm_interface_surface_unit_test)
 dasall_apply_common_options(dasall_llm_subsystem_config_projection_unit_test)
+dasall_apply_common_options(dasall_llm_baseline_asset_path_unit_test)
 dasall_apply_common_options(dasall_provider_config_projection_unit_test)
 dasall_apply_common_options(dasall_mock_llm_adapter_surface_unit_test)
 dasall_apply_common_options(dasall_prompt_asset_package_parse_unit_test)
@@ -418,6 +429,9 @@ set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME LLMSubsystemConfigProjectionTest COMMAND dasall_llm_subsystem_config_projection_unit_test)
 set_tests_properties(LLMSubsystemConfigProjectionTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMBaselineAssetPathTest COMMAND dasall_llm_baseline_asset_path_unit_test)
+set_tests_properties(LLMBaselineAssetPathTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME ProviderConfigProjectionTest COMMAND dasall_provider_config_projection_unit_test)
 set_tests_properties(ProviderConfigProjectionTest PROPERTIES LABELS "unit;llm")

@@ -15,6 +15,7 @@
 #include "LLMManagerResult.h"
 #include "NormalizedUsageRecord.h"
 #include "TokenEstimate.h"
+#include "config/InstallLayout.h"
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "llm/LLMRequest.h"
@@ -343,10 +344,13 @@ void test_llm_subsystem_config_surface_freezes_projection_helpers() {
       .activation_flag = true,
     };
 
-  assert_true(overlay.prompt_asset_sources.baseline_root == "llm/assets/prompts",
-              "PromptAssetSourceConfig should freeze llm/assets/prompts as the default prompt baseline root");
-  assert_true(overlay.provider_catalog_sources.baseline_root == "llm/assets/providers",
-              "ProviderCatalogSourceConfig should freeze llm/assets/providers as the default provider baseline root");
+  const auto install_layout = dasall::infra::config::resolve_install_layout();
+  assert_true(overlay.prompt_asset_sources.baseline_root ==
+                  install_layout.llm_prompts_root.string(),
+              "PromptAssetSourceConfig should default to the install-aware prompt baseline root");
+  assert_true(overlay.provider_catalog_sources.baseline_root ==
+                  install_layout.llm_providers_root.string(),
+              "ProviderCatalogSourceConfig should default to the install-aware provider baseline root");
   assert_true(overlay.prompt_selector_overlay.active_scene.empty(),
               "PromptSelectorOverlay should default active_scene to empty so no selector override is forced");
     assert_true(provider_runtime_view.has_consistent_values(),

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "LLMAdapterConfig.h"
+#include "config/InstallLayout.h"
 #include "provider/ProviderDescriptor.h"
 #include "prompt/PromptPolicyInput.h"
 
@@ -16,6 +17,14 @@ class RuntimePolicySnapshot;
 }
 
 namespace dasall::llm {
+
+[[nodiscard]] inline std::string default_prompt_baseline_root() {
+  return dasall::infra::config::resolve_install_layout().llm_prompts_root.string();
+}
+
+[[nodiscard]] inline std::string default_provider_baseline_root() {
+  return dasall::infra::config::resolve_install_layout().llm_providers_root.string();
+}
 
 struct LLMStageRouteConfig {
   std::string route;
@@ -28,7 +37,7 @@ struct LLMStageRouteConfig {
 };
 
 struct PromptAssetSourceConfig {
-  std::string baseline_root = "llm/assets/prompts";
+  std::string baseline_root = default_prompt_baseline_root();
   std::string deployment_root;
   std::string snapshot_cache_root;
   std::uint32_t cache_ttl_ms = 0U;
@@ -50,7 +59,7 @@ struct PromptSelectorOverlay {
 };
 
 struct ProviderCatalogSourceConfig {
-  std::string baseline_root = "llm/assets/providers";
+  std::string baseline_root = default_provider_baseline_root();
   std::string deployment_root;
   std::string snapshot_cache_root;
   bool signature_required = true;

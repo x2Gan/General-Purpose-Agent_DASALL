@@ -5,6 +5,7 @@
 
 #include "LLMSubsystemConfig.h"
 #include "RuntimePolicySnapshot.h"
+#include "config/InstallLayout.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -86,6 +87,7 @@ void test_projector_maps_runtime_policy_snapshot_into_llm_consumer_view() {
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
+  const auto install_layout = dasall::infra::config::resolve_install_layout();
   const auto config = project_llm_subsystem_config(make_runtime_policy_snapshot());
 
   assert_true(config.has_value(),
@@ -100,10 +102,12 @@ void test_projector_maps_runtime_policy_snapshot_into_llm_consumer_view() {
                "planner route should come directly from the model profile stage map");
   assert_true(config->stage_routes.at("planner").streaming_enabled,
               "projected planner route should preserve streaming_enabled policy");
-  assert_equal(std::string("llm/assets/prompts"), config->prompt_asset_sources.baseline_root,
-               "default prompt baseline root should stay module-local under llm/assets/prompts");
-  assert_equal(std::string("llm/assets/providers"), config->provider_catalog_sources.baseline_root,
-               "default provider baseline root should stay module-local under llm/assets/providers");
+  assert_equal(install_layout.llm_prompts_root.string(),
+               config->prompt_asset_sources.baseline_root,
+               "default prompt baseline root should follow the install-aware layout prompt root");
+  assert_equal(install_layout.llm_providers_root.string(),
+               config->provider_catalog_sources.baseline_root,
+               "default provider baseline root should follow the install-aware layout provider root");
   assert_true(config->prompt_selector_overlay.active_scene.empty(),
               "default active_scene should stay empty so PromptRegistry can fall back to profile/package selectors");
   assert_true(config->prompt_selector_overlay.active_persona.empty(),

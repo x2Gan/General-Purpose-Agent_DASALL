@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #586
+
+- 日期：2026-05-08
+- 阶段：packaging/build
+- 任务：PKG-TODO-012 切换 LLM Prompt / Provider baseline root 到安装态路径
+- 状态：已完成
+
+### 改动
+
+1. 更新 `llm/include/LLMSubsystemConfig.h`，让 `PromptAssetSourceConfig.baseline_root` 与 `ProviderCatalogSourceConfig.baseline_root` 不再写死 `llm/assets/*`，而是直接消费 `infra/config::resolve_install_layout()` 导出的 install-aware asset root。
+2. 更新 `llm/CMakeLists.txt`，把 `dasall_llm` 对 `dasall_infra` 的依赖提升为 public，使新的 `LLMSubsystemConfig` public header 可以稳定暴露 `InstallLayout` shared surface 给 llm consumers。
+3. 更新 `tests/unit/llm/LLMSubsystemConfigProjectionTest.cpp`、`tests/unit/llm/InterfaceSurfaceTest.cpp`，并新增 `tests/unit/llm/LLMBaselineAssetPathTest.cpp` 与对应 CMake target；同步把 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md` 中 PKG-TODO-012 标记为 Done，并正式关闭 `PKG-BLK-02`。
+
+### 验证
+
+1. `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_llm_subsystem_config_projection_unit_test dasall_llm_baseline_asset_path_unit_test dasall_llm_interface_surface_unit_test && ctest --test-dir build-ci -R '^(LLMSubsystemConfigProjectionTest|LLMBaselineAssetPathTest|LLMInterfaceSurfaceTest)$' --output-on-failure`
+   - 结果：通过；`LLMSubsystemConfigProjectionTest`、`LLMBaselineAssetPathTest` 与 `LLMInterfaceSurfaceTest` 3/3 全绿，证明 llm baseline root 默认值已经切到 install-aware 路径模型，且 public interface 断言同步收敛。
+
+### 结果
+
+1. PKG-TODO-012 已把 LLM Prompt / Provider baseline root 从 module-local repo-relative 字符串迁移到 `infra/config::InstallLayout` 导出的统一路径模型，至此 010/011/012 三项路径收敛实现全部闭环。
+2. 012 没有把 build-tree 开发态重新绑回 `cwd`；当安装态资产不存在时，默认 baseline root 会沿用 011 引入的 source-tree fallback，因此既满足 package-mode owner 收敛，也不破坏现有 llm build-tree 测试。
+3. `PKG-BLK-02` 已正式解阻；packaging 主线现在可以转向 013 的 service/config/postinst 语义与 014 的 operator docs / manpage 安装面。
+
 ## 记录 #585
 
 - 日期：2026-05-08

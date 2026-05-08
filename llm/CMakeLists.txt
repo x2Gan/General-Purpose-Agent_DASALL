@@ -58,7 +58,6 @@ target_include_directories(dasall_llm
 target_link_libraries(dasall_llm
   PUBLIC
     dasall_contracts
-  PRIVATE
     dasall_infra
 )
 
