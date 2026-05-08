@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #591
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-006 扩展 CLI parser/main 以支持 config 子命令族
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/CliCommandParser.h` 与 `apps/cli/src/CliCommandParser.cpp`，为 `CliCommand` 新增 `CliConfigCommandKind`、`config_from_file`、`config_dry_run` 三个 config parser 字段，并按冻结 grammar 接入 `config/show/plan/validate/apply` 的 parse/usage 规则，显式拒绝把 daemon transport flags 漏到本地 config 命令族。
+2. 更新 `apps/cli/src/main.cpp`，把 `config` 接到和 `help/version` 同层级的 local-only dispatch：交互式 `config` 在非 TTY 下按参数契约 fail-closed，其余 subcommand 先落本地 skeleton stub，确保不会误入 daemon IPC 主链。
+3. 更新 `tests/unit/apps/cli/CMakeLists.txt` 并新增 `tests/unit/apps/cli/ConfigCommandParserTest.cpp`，为 config 命令族建立专属 parser 回归入口，覆盖 `show/plan/validate/apply` 正例与 `--dry-run`、`--from-file`、`--no-input`、daemon transport flags 的负例矩阵。
+4. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-006 标记为 Done，并把专项顶部当前结论从“Build Not Started”刷新为“P0 Build 已启动”。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --preset vscode-linux-ninja && cmake --build --preset vscode-linux-ninja --target dasall-cli dasall-cli_command_parser_unit_test dasall-config_command_parser_unit_test && ctest --preset vscode-linux-ninja -R "CliDaemonCommandParserTest|ConfigCommandParserTest" --output-on-failure`
+   - 结果：通过；`CliDaemonCommandParserTest` 与新增的 `ConfigCommandParserTest` 均通过，说明 config parser grammar、usage 与 local-only dispatch skeleton 没有回归既有 daemon-facing 命令解析面。
+
+### 结果
+
+1. CLI 现在已经能把 `config` 命令族识别为本地命令，而不是 parse failure 或潜在 daemon RPC；`show/plan/validate/apply` 的 grammar 已与 CLCFG-TODO-001 的冻结文本对齐。
+2. `config plan --from-file`、`config plan --dry-run`、`config apply --from-file --no-input` 已具备稳定 parser owner，后续 CLCFG-TODO-007/011 可以直接在这些字段之上落类型面与 coordinator，而不必再次修改命令 grammar。
+3. `ConfigCommandParserTest` 已成为 config parser 的专属 focused 回归入口；后续 `CLCFG-TODO-019` 可以在此基础上继续扩张 contract/unit 覆盖，而不必再借挂既有 access parser 测试。
+
 ## 记录 #590
 
 - 日期：2026-05-08

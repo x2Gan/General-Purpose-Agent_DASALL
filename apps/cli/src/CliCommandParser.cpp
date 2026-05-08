@@ -22,6 +22,11 @@ struct ParsedStableFlags {
   bool no_input = false;
 };
 
+struct ParsedConfigFlags {
+  std::optional<std::string> from_file;
+  bool dry_run = false;
+};
+
 [[nodiscard]] bool has_local_only_flags(const ParsedStableFlags& flags) {
   return flags.socket_path.has_value() || flags.timeout_ms.has_value() ||
          flags.async_preference == CliAsyncPreference::Async ||
@@ -173,6 +178,82 @@ void apply_flags_to_command(const ParsedStableFlags& flags, CliCommand& cmd) {
   return true;
 }
 
+[[nodiscard]] CliConfigCommandKind parse_config_command_kind(
+    const std::vector<std::string>& positional_args) {
+  if (positional_args.size() == 1) {
+    return CliConfigCommandKind::Wizard;
+  }
+
+  if (positional_args.size() != 2) {
+    return CliConfigCommandKind::None;
+  }
+
+  const std::string_view subcommand = positional_args[1];
+  if (subcommand == "show") {
+    return CliConfigCommandKind::Show;
+  }
+
+  if (subcommand == "plan") {
+    return CliConfigCommandKind::Plan;
+  }
+
+  if (subcommand == "validate") {
+    return CliConfigCommandKind::Validate;
+  }
+
+  if (subcommand == "apply") {
+    return CliConfigCommandKind::Apply;
+  }
+
+  return CliConfigCommandKind::None;
+}
+
+[[nodiscard]] bool uses_daemon_transport_flags(const ParsedStableFlags& flags) {
+  return flags.socket_path.has_value() || flags.timeout_ms.has_value() ||
+         flags.async_preference == CliAsyncPreference::Async ||
+         flags.request_id.has_value() || flags.session_hint.has_value() ||
+         flags.trace_id.has_value() || flags.quiet;
+}
+
+[[nodiscard]] bool validate_config_scope(
+    const CliConfigCommandKind command_kind,
+    const ParsedStableFlags& flags,
+    const ParsedConfigFlags& config_flags,
+    const std::vector<std::string>& positional_args) {
+  if (command_kind == CliConfigCommandKind::None ||
+      uses_daemon_transport_flags(flags)) {
+    return false;
+  }
+
+  switch (command_kind) {
+    case CliConfigCommandKind::Wizard:
+      return positional_args.size() == 1 && !config_flags.from_file.has_value() &&
+             !config_flags.dry_run && !flags.no_input &&
+             flags.output_mode == CliOutputMode::Human;
+    case CliConfigCommandKind::Show:
+    case CliConfigCommandKind::Validate:
+      return positional_args.size() == 2 && !config_flags.from_file.has_value() &&
+             !config_flags.dry_run && !flags.no_input;
+    case CliConfigCommandKind::Plan:
+      return positional_args.size() == 2 && !flags.no_input;
+    case CliConfigCommandKind::Apply:
+      return positional_args.size() == 2 && config_flags.from_file.has_value() &&
+             !config_flags.dry_run && flags.no_input;
+    case CliConfigCommandKind::None:
+      return false;
+  }
+
+  return false;
+}
+
+void apply_config_flags_to_command(const ParsedConfigFlags& flags,
+                                   const CliConfigCommandKind command_kind,
+                                   CliCommand& cmd) {
+  cmd.config_command = command_kind;
+  cmd.config_from_file = flags.from_file;
+  cmd.config_dry_run = flags.dry_run;
+}
+
 [[nodiscard]] CliCommand make_help_command(std::vector<std::string> help_path) {
   CliCommand cmd;
   cmd.name = "help";
@@ -217,6 +298,7 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
   std::vector<std::string> positional_args;
   positional_args.reserve(cmd.raw_args.size());
   ParsedStableFlags flags;
+  ParsedConfigFlags config_flags;
   bool help_requested = false;
 
   for (std::size_t index = 0; index < cmd.raw_args.size(); ++index) {
@@ -300,6 +382,21 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
       continue;
     }
 
+    if (arg == "--dry-run") {
+      if (!assign_bool_flag(config_flags.dry_run)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--from-file=") || arg == "--from-file") {
+      if (!parse_long_flag_with_value(arg, "--from-file", index,
+                                      cmd.raw_args, config_flags.from_file)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
     positional_args.push_back(cmd.raw_args[index]);
   }
 
@@ -324,6 +421,19 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
   }
 
   cmd.name = positional_args[0];
+
+  if (cmd.name == "config") {
+    const auto config_command = parse_config_command_kind(positional_args);
+    if (!validate_config_scope(config_command, flags, config_flags,
+                               positional_args)) {
+      return std::nullopt;
+    }
+
+    apply_flags_to_command(flags, cmd);
+    apply_config_flags_to_command(config_flags, config_command, cmd);
+    return cmd;
+  }
+
   if (!validate_flag_scope(cmd.name, flags)) {
     return std::nullopt;
   }
@@ -409,6 +519,31 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
     return "Usage: dasall-cli version [--json] [--quiet]\n";
   }
 
+  if (command_name == "config") {
+    if (subcommand_name == "show") {
+      return "Usage: dasall-cli config show [--json]\n";
+    }
+
+    if (subcommand_name == "plan") {
+      return "Usage: dasall-cli config plan [--from-file <path>] [--dry-run] [--json]\n";
+    }
+
+    if (subcommand_name == "validate") {
+      return "Usage: dasall-cli config validate [--json]\n";
+    }
+
+    if (subcommand_name == "apply") {
+      return "Usage: dasall-cli config apply --from-file <path> --no-input [--json]\n";
+    }
+
+    return "Usage:\n"
+           "  dasall-cli config\n"
+           "  dasall-cli config show [--json]\n"
+           "  dasall-cli config plan [--from-file <path>] [--dry-run] [--json]\n"
+           "  dasall-cli config validate [--json]\n"
+           "  dasall-cli config apply --from-file <path> --no-input [--json]\n";
+  }
+
   if (command_name == "ping") {
     return "Usage: dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
   }
@@ -440,6 +575,11 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
   return "Usage:\n"
          "  dasall-cli help [command] [subcommand]\n"
          "  dasall-cli version [--json] [--quiet]\n"
+      "  dasall-cli config\n"
+      "  dasall-cli config show [--json]\n"
+      "  dasall-cli config plan [--from-file <path>] [--dry-run] [--json]\n"
+      "  dasall-cli config validate [--json]\n"
+      "  dasall-cli config apply --from-file <path> --no-input [--json]\n"
          "  dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
          "  dasall-cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
          "  dasall-cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "

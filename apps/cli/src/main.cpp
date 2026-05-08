@@ -18,6 +18,8 @@
 #include <string>
 #include <string_view>
 
+#include <unistd.h>
+
 #include "CliCommandParser.h"
 #include "CliExitDecision.h"
 #include "CliIpcClient.h"
@@ -47,6 +49,62 @@ constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
                            "; build_metadata=" + std::string(kCliBuildMetadata);
   response.task_completed = true;
   return response;
+}
+
+[[nodiscard]] dasall::apps::cli::DaemonClientResponse make_local_error_response(
+    std::string_view reason,
+    const bool parse_ok) {
+  dasall::apps::cli::DaemonClientResponse response;
+  response.transport_ok = true;
+  response.parse_ok = parse_ok;
+  response.disposition = dasall::access::daemon::UdsResponseDisposition::Rejected;
+  response.failure_reason = std::string(reason);
+  return response;
+}
+
+[[nodiscard]] std::string_view config_command_name(
+    const dasall::apps::cli::CliCommand& command) {
+  using dasall::apps::cli::CliConfigCommandKind;
+
+  switch (command.config_command) {
+    case CliConfigCommandKind::Wizard:
+      return "config";
+    case CliConfigCommandKind::Show:
+      return "config.show";
+    case CliConfigCommandKind::Plan:
+      return "config.plan";
+    case CliConfigCommandKind::Validate:
+      return "config.validate";
+    case CliConfigCommandKind::Apply:
+      return "config.apply";
+    case CliConfigCommandKind::None:
+      return "config";
+  }
+
+  return "config";
+}
+
+int emit_local_response(
+    std::string_view command_name,
+    const dasall::apps::cli::DaemonClientResponse& response,
+    const dasall::apps::cli::CliExitDecision& decision) {
+  if (decision.json_mode) {
+    std::cout << dasall::apps::cli::CliOutputFormatter::format_json_output(
+                     command_name, response, decision)
+              << '\n';
+    return decision.exit_code;
+  }
+
+  std::ostream& stream =
+      decision.primary_output_stream ==
+              dasall::apps::cli::CliPrimaryOutputStream::Stdout
+          ? std::cout
+          : std::cerr;
+  stream << dasall::apps::cli::CliOutputFormatter::format_error(
+                response.failure_reason.empty() ? decision.diagnostic_hint
+                                               : response.failure_reason)
+         << '\n';
+  return decision.exit_code;
 }
 
 }  // namespace
@@ -85,6 +143,27 @@ int main(int argc, char* argv[]) {
       std::cout << format_version_human_output() << '\n';
     }
     return decision.exit_code;
+  }
+
+  if (cmd->name == "config") {
+    if (cmd->config_command == dasall::apps::cli::CliConfigCommandKind::Wizard &&
+        ::isatty(STDIN_FILENO) == 0) {
+      constexpr std::string_view kNonTtyConfigHint =
+          "interactive config requires a TTY; use 'dasall-cli config plan --from-file <path>' or 'dasall-cli config apply --from-file <path> --no-input'";
+      const auto decision = dasall::apps::cli::make_argument_error_decision(
+          cmd->output_mode, kNonTtyConfigHint);
+      return emit_local_response(
+          config_command_name(*cmd),
+          make_local_error_response(kNonTtyConfigHint, true),
+          decision);
+    }
+
+    constexpr std::string_view kConfigWorkflowStub =
+        "config local workflow skeleton is registered but not implemented yet";
+    const auto response = make_local_error_response(kConfigWorkflowStub, false);
+    const auto decision = dasall::apps::cli::decide_exit_for_response(
+        response, cmd->output_mode);
+    return emit_local_response(config_command_name(*cmd), response, decision);
   }
 
   // 2. 构造 IIPC provider 和 CliIpcClient

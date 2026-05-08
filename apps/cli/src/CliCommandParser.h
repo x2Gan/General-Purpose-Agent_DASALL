@@ -23,6 +23,15 @@ enum class CliSelectorKind {
   RequestId,
 };
 
+enum class CliConfigCommandKind {
+  None,
+  Wizard,
+  Show,
+  Plan,
+  Validate,
+  Apply,
+};
+
 /// 已解析的 CLI 命令结构
 struct CliCommand {
   /// 命令名称（"ping" / "submit" / ...）
@@ -77,6 +86,15 @@ struct CliCommand {
   /// diagnostics 子命令名。
   std::optional<std::string> diag_command;
 
+  /// config 本地工作流子命令类型。
+  CliConfigCommandKind config_command = CliConfigCommandKind::None;
+
+  /// config headless 入口所使用的 desired state 文件路径。
+  std::optional<std::string> config_from_file;
+
+  /// config plan 的 dry-run 兼容标志。
+  bool config_dry_run = false;
+
   /// 本地 help 命令所请求的命令路径，如 {"diag", "health"}。
   std::vector<std::string> help_path;
 
@@ -98,6 +116,7 @@ struct CliCommand {
 ///   status <receipt_ref> <ownership_token> [actor_ref]
 ///   cancel <receipt_ref> <ownership_token> [actor_ref]
 ///   diag <command_name>       — 隐藏运维命令，默认不出现在 usage 中
+///   config [show|plan|validate|apply] — 本地部署配置工作流命令族
 ///
 /// 错误处理：
 ///   - 参数不合法时返回 std::nullopt
