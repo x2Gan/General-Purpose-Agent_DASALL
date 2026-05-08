@@ -1,0 +1,69 @@
+.TH DASALL 1 "2026-05-08" "DASALL" "User Commands"
+.SH NAME
+dasall \- installed DASALL command-line client
+.SH SYNOPSIS
+.B dasall
+.I command
+[options]
+.SH DESCRIPTION
+.B dasall
+is the installed command name for the DASALL CLI shipped by the Debian and
+Ubuntu packages. The source-tree target name
+.B dasall-cli
+is not part of the package-facing operator surface.
+
+The v1 local control-plane operator path is root/sudo-only. Use
+.B sudo dasall
+for local daemon operations.
+.SH COMMANDS
+.TP
+.B help
+Show command usage.
+.TP
+.B version
+Print CLI version and schema support information.
+.TP
+.B ping
+Query daemon reachability.
+.TP
+.B readiness
+Query daemon readiness summary.
+.TP
+.BI "run " JSON_PAYLOAD
+Submit a unary request payload.
+.TP
+.BI "status " RECEIPT_REF " " OWNERSHIP_TOKEN " [" ACTOR_REF "]"
+Query the status of an async receipt.
+.TP
+.BI "cancel " RECEIPT_REF " " OWNERSHIP_TOKEN " [" ACTOR_REF "]"
+Cancel an async receipt.
+.SH PACKAGE-MODE DEPLOYMENT
+For package-mode deployment, the canonical operator workflow name is:
+
+.B sudo dasall config
+
+The canonical files remain:
+.TP
+.I /etc/default/dasall-daemon
+Profile selection only.
+.TP
+.I /etc/dasall/daemon.json
+Daemon override file. Only
+.B daemon.*
+keys are supported.
+
+Validate a deployment configuration with:
+
+.B . /etc/default/dasall-daemon && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json
+.SH FILES
+.TP
+.I /usr/bin/dasall
+Installed CLI command.
+.TP
+.I /usr/sbin/dasall-daemon
+Installed daemon binary.
+.TP
+.I /usr/share/doc/dasall-daemon/README.Debian
+Package deployment notes.
+.SH SEE ALSO
+.BR dasall-daemon (8)

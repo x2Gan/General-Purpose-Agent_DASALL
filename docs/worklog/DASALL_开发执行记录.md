@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #588
+
+- 日期：2026-05-08
+- 阶段：packaging/build
+- 任务：PKG-TODO-014 补齐 operator docs、manpage 与首次部署文档安装面
+- 状态：已完成
+
+### 改动
+
+1. 更新 `debian/dasall-daemon.README.Debian`，把首次部署步骤与 PKG-TODO-013 已冻结的 postinst 文案重新对齐到 `sudo dasall config`、canonical 文件双入口、`sudo dasall ping --json` 校验，以及安装态公开命令名固定为 `dasall`。
+2. 新增 `debian/dasall.1` 与 `debian/dasall-cli.manpages`，把 CLI 安装态 manpage 交给 `dh_installman` 自动安装到 `dasall-cli` 包内，同时明确 source-tree `dasall-cli` 只保留为仓库 target 名，不属于 package-facing operator surface。
+3. 同步把 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md` 中 PKG-TODO-014 标记为 Done，并刷新专项顶部当前结论，使 010~014 的 packaging 主线全部闭合。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && tmpdir=/tmp/dasall-pkg014-validate && rm -rf "$tmpdir" && mkdir -p "$tmpdir/.pkgadm" && : > "$tmpdir/.pkgadm/status" && rsync -a --delete --exclude='.git' --exclude='build' --exclude='build-*' --exclude='obj-x86_64-linux-gnu' --exclude='.tmp' --exclude='.pkgadm' --exclude='debian/.debhelper' --exclude='debian/dasall' --exclude='debian/dasall-cli' --exclude='debian/dasall-common' --exclude='debian/dasall-daemon' --exclude='debian/tmp' --exclude='debian/*.debhelper.log' --exclude='debian/*.substvars' --exclude='debian/*debhelper*' --exclude='debian/files' "$PWD/" "$tmpdir/" && cd "$tmpdir" && env PATH="/home/gangan/.cache/dasall-packaging/toolroot/usr/bin:$PATH" PERL5LIB="/home/gangan/.cache/dasall-packaging/toolroot/usr/share/perl5" dpkg-buildpackage --admindir="$tmpdir/.pkgadm" -us -uc -b -d`
+   - 结果：通过；clean copy 中 `dh_installdocs` 自动安装 `debian/dasall-daemon.README.Debian`，`dh_installman` 自动安装 `debian/dasall.1` 到 `dasall-cli` binary package。
+2. `dpkg-deb -c /tmp/dasall-daemon_0.1.0-1_amd64.deb | rg 'usr/share/doc/dasall-daemon/README.Debian' && dpkg-deb -c /tmp/dasall-cli_0.1.0-1_amd64.deb | rg 'usr/share/man/man1/dasall.1' && gzip -dc /tmp/pkg014-cli-data/usr/share/man/man1/dasall.1.gz | sed -n '1,160p' && sed -n '1,120p' /tmp/pkg014-daemon-data/usr/share/doc/dasall-daemon/README.Debian`
+   - 结果：通过；`dasall-cli` 包中已出现 `/usr/share/man/man1/dasall.1.gz`，`dasall-daemon` 包中已出现 `/usr/share/doc/dasall-daemon/README.Debian`，且安装后文本同时包含 `dasall`、`sudo dasall config` 与 P0 `root/sudo-only` 口径。
+
+### 结果
+
+1. PKG-TODO-014 已把安装态 operator docs surface 从“只有 daemon README skeleton、没有 CLI manpage”推进到带 `dh_installman` 自动安装的正式 manpage surface，同时没有把源码树 target 名 `dasall-cli` 泄露回 package-facing onboarding。
+2. 010~014 这段 packaging 主线现在已经全部闭合；后续 packaging 主线只剩 build-time preflight、autopkgtest metadata、rootful smoke harness 与最终 gate/evidence 收口。
+3. 014 没有越界进入 CLI `config` 实现本身；本轮只负责把安装态公开命令名、README.Debian 和 manpage 文案统一到 `dasall` / `sudo dasall config` / root-sudo-only operator contract。
+
 ## 记录 #587
 
 - 日期：2026-05-08

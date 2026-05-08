@@ -7,11 +7,12 @@ on first install.
 First deployment steps
 ----------------------
 
-1. Select the runtime profile in /etc/default/dasall-daemon.
-   The shipped default is desktop_full.
+1. P0 operator path is root/sudo-only.
+   Run the installed operator workflow as: sudo dasall config
 
-2. Review daemon overrides in /etc/dasall/daemon.json.
-   This file only supports daemon.* keys.
+2. Canonical files remain:
+   - /etc/default/dasall-daemon for profile selection
+   - /etc/dasall/daemon.json for daemon.* overrides
 
 3. Validate the deployment configuration:
 
@@ -24,7 +25,7 @@ First deployment steps
 5. Verify the service:
 
    systemctl status dasall-daemon.service
-   dasall ping --json
+   sudo dasall ping --json
 
 Runtime paths
 -------------
@@ -37,5 +38,8 @@ State data:       /var/lib/dasall/
 Local CLI access
 ----------------
 
-The v1 operator path is root/sudo-only. Run the installed CLI with sudo until a
-future non-root access model is explicitly introduced.
+The installed command name is dasall. The source-tree name dasall-cli is not
+part of the package-facing operator surface.
+
+The v1 operator path is root/sudo-only. Use sudo dasall for local daemon
+operations until a future non-root access model is explicitly introduced.
