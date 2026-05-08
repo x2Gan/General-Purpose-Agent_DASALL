@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #594
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-009 新增 DaemonConfigFileStore 与配置事务 helper
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/DaemonConfigFileStore.h` 与 `apps/cli/src/config/DaemonConfigFileStore.cpp`，把 `/etc/default/dasall-daemon` 与 `/etc/dasall/daemon.json` 的 canonical 读写、当前快照加载、`DASALL_DAEMON_PROFILE_ID` 解析、最小 JSON 语法校验、同目录 `.tmp` 原子替换、权限保留与 `.last-known-good` 备份收敛到单一 file store owner。
+2. 在 `write_desired()` 中接入最小真实事务语义：先验证现有 `daemon.json` 不是 invalid JSON，再按目标文件逐个写入；若后续写入失败，则通过 `rollback_last_write()` 自动恢复之前已成功写入的 canonical 文件，避免 future coordinator 或 apply executor 直接拼接 `/etc` 文件写回细节。
+3. 新增 `tests/unit/apps/cli/DaemonConfigFileStoreTest.cpp` 并更新 `tests/unit/apps/cli/CMakeLists.txt`，为成功写入、部分失败回滚、权限保留与 invalid JSON 拒绝建立 focused unit target `dasall-daemon_config_file_store_unit_test`。
+4. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-009 标记为 Done，并把专项顶部当前结论刷新到“006/007/008/009 已完成”。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-daemon_config_file_store_unit_test && ctest --preset vscode-linux-ninja -R "^DaemonConfigFileStoreTest$" --output-on-failure`
+   - 结果：通过；`DaemonConfigFileStoreTest` 全绿，说明 canonical 文件事务语义已经覆盖成功写入、部分失败自动回滚、权限保留与 invalid JSON fail-closed 四条核心分支。
+
+### 结果
+
+1. CLCFG-TODO-009 已把 daemon canonical 文件格式与原子写回步骤从后续 workflow/coordinator 中剥离为单一 file-store owner，后续 010/011/013 不再需要直接拼写 `/etc/default/dasall-daemon` 或 `/etc/dasall/daemon.json` 的格式与写回时序。
+2. `ConfigFileWriteTransaction` 的真实事务 helper 现在已经具备 focused 自动化覆盖；后续 `config apply --from-file` 可以在同一条写入与回滚管线上继续扩 action plan，而不是在执行器里重新发明备份恢复逻辑。
+3. 本轮验证继续采用 config-focused target，而不是聚合 `dasall_unit_tests`，以避免仓库既有 cognition/llm include-path 噪声污染 009 的完成信号。
+
 ## 记录 #593
 
 - 日期：2026-05-08
