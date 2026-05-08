@@ -1,21 +1,32 @@
 #include <exception>
 #include <iostream>
 
+#include "config/ConfigCapabilityResolver.h"
 #include "config/ConfigSummaryFormatter.h"
+#include "config/ToolSkillPage.h"
 #include "support/TestAssertions.h"
 
 namespace {
 
 dasall::apps::cli::config::ConfigSummaryView make_summary_fixture() {
   using dasall::apps::cli::config::ConfigApplyResult;
+  using dasall::apps::cli::config::ConfigCapabilityInputs;
+  using dasall::apps::cli::config::ConfigCapabilityResolver;
   using dasall::apps::cli::config::ConfigSecretSummaryEntry;
   using dasall::apps::cli::config::ConfigSummaryView;
   using dasall::apps::cli::config::InstallState;
+  using dasall::apps::cli::config::ToolSkillPage;
 
   ConfigSummaryView summary;
+  ConfigCapabilityResolver capability_resolver;
+  ConfigCapabilityInputs capability_inputs;
+  capability_inputs.active_tooling_detected = true;
+
   summary.profile_id = "desktop_full";
   summary.socket_path = "/run/dasall/daemon.sock";
   summary.log_format = "json";
+  summary.tool_skill_page =
+      ToolSkillPage{}.render(capability_resolver.resolve(capability_inputs));
   summary.secret_refs.push_back(ConfigSecretSummaryEntry{
       .ref = "secret://llm/providers/deepseek-prod",
       .status = "configured",
@@ -59,6 +70,10 @@ void test_format_human_projects_profile_service_and_next_steps() {
               "ConfigSummaryFormatter should only project redacted secret refs in human output");
   assert_true(human.find("use sudo dasall config") != std::string::npos,
               "ConfigSummaryFormatter should include operator access guidance in human output");
+  assert_true(human.find("tool_skill.mode: summary_only") != std::string::npos &&
+                  human.find("tool_skill.controls_enabled: false") !=
+                      std::string::npos,
+              "ConfigSummaryFormatter should project the tool/skill summary mode and control state in human output");
   assert_true(human.find("completed_actions:\n- restart\n- enable") !=
                   std::string::npos,
               "ConfigSummaryFormatter should render completed service actions in human output");
@@ -85,6 +100,9 @@ void test_format_json_emits_stable_summary_schema_and_apply_result() {
   assert_true(json.find("\"operator_access_hint\":\"use sudo dasall config to modify install-state files\"") !=
                   std::string::npos,
               "ConfigSummaryFormatter should include operator access guidance in JSON output");
+  assert_true(json.find("\"tool_skill\":{\"mode\":\"summary_only\",\"controls_enabled\":false") !=
+                  std::string::npos,
+              "ConfigSummaryFormatter should expose the tool/skill capability summary in JSON output");
   assert_true(json.find("\"outcome\":\"applied\"") != std::string::npos,
               "ConfigSummaryFormatter should embed apply_result summary in JSON output");
   assert_true(json.find("\"completed_actions\":[\"restart\",\"enable\"]") !=

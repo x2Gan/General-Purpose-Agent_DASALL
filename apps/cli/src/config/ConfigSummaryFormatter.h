@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "config/ConfigCommandTypes.h"
+#include "config/ToolSkillPage.h"
 
 namespace dasall::apps::cli::config {
 
@@ -22,6 +23,7 @@ struct ConfigSummaryView {
   std::string profile_id;
   std::string socket_path;
   std::string log_format = "json";
+  ToolSkillPageView tool_skill_page;
   std::vector<ConfigSecretSummaryEntry> secret_refs;
   bool service_installed = false;
   bool service_running = false;

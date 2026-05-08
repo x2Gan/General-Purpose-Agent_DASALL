@@ -83,6 +83,10 @@ bool ConfigSummaryView::is_well_formed() const {
     return false;
   }
 
+  if (!tool_skill_page.is_well_formed()) {
+    return false;
+  }
+
   for (const auto& secret_ref : secret_refs) {
     if (!secret_ref.is_well_formed()) {
       return false;
@@ -100,6 +104,17 @@ std::string ConfigSummaryFormatter::format_human(const ConfigSummaryView& summar
   output += summary.socket_path;
   output += "\ndaemon.log_format: ";
   output += summary.log_format;
+  output += "\ntool_skill.mode: ";
+  output += std::string(to_string(summary.tool_skill_page.mode));
+  output += "\ntool_skill.controls_enabled: ";
+  output += bool_text(summary.tool_skill_page.controls_enabled);
+  output += "\ntool_skill.banner: ";
+  output += summary.tool_skill_page.banner;
+  output += '\n';
+  append_string_list(output, "tool_skill.summary_items",
+                     summary.tool_skill_page.summary_items);
+  append_string_list(output, "tool_skill.constraints",
+                     summary.tool_skill_page.constraints);
   output += "\nservice: installed=";
   output += bool_text(summary.service_installed);
   output += ", running=";
@@ -155,6 +170,17 @@ std::string ConfigSummaryFormatter::format_json(const ConfigSummaryView& summary
   output += ",\"daemon\":{";
   output += "\"socket_path\":" + json_string(summary.socket_path);
   output += ",\"log_format\":" + json_string(summary.log_format);
+  output += "}";
+  output += ",\"tool_skill\":{";
+  output += "\"mode\":" +
+            json_string(to_string(summary.tool_skill_page.mode));
+  output += ",\"controls_enabled\":" +
+            bool_text(summary.tool_skill_page.controls_enabled);
+  output += ",\"banner\":" + json_string(summary.tool_skill_page.banner);
+  output += ",\"summary_items\":" +
+            json_string_array(summary.tool_skill_page.summary_items);
+  output += ",\"constraints\":" +
+            json_string_array(summary.tool_skill_page.constraints);
   output += "}";
   output += ",\"service\":{";
   output += "\"installed\":" + bool_text(summary.service_installed);

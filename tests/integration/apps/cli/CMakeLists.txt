@@ -52,6 +52,8 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
@@ -70,6 +72,8 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
@@ -88,6 +92,8 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
@@ -106,6 +112,8 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
@@ -124,6 +132,8 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )

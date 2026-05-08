@@ -169,6 +169,21 @@ target_link_libraries(dasall-config_capability_resolver_unit_test
 dasall_apply_common_options(dasall-config_capability_resolver_unit_test)
 
 dasall_add_cli_config_unit_test(
+  dasall-tool_skill_page_unit_test
+  ToolSkillPageTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ToolSkillPageTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
+)
+
+target_link_libraries(dasall-tool_skill_page_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-tool_skill_page_unit_test)
+
+dasall_add_cli_config_unit_test(
   dasall-daemon_config_file_store_unit_test
   DaemonConfigFileStoreTest
   ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/DaemonConfigFileStoreTest.cpp
@@ -264,6 +279,8 @@ dasall_add_cli_config_unit_test(
   ConfigSummaryFormatterTest
   ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigSummaryFormatterTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
 )
 
@@ -288,6 +305,8 @@ dasall_add_cli_config_unit_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
@@ -313,6 +332,8 @@ dasall_add_cli_config_unit_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
@@ -338,6 +359,8 @@ dasall_add_cli_config_unit_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ToolSkillPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCapabilityResolver.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )

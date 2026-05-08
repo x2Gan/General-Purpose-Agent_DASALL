@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #603
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-017 实现 ToolSkillPage capability 摘要与 P2 可编辑预留
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/ToolSkillPage.h` 与 `apps/cli/src/config/ToolSkillPage.cpp`，把 tools/skills operator surface 的 `hidden` / `summary_only` / `editable` 三态投影收敛到单一页面组件：当前 `render()` 会根据 `ConfigCapabilityResolver` 的输出生成稳定的 banner、summary items、constraints 与 `controls_enabled` 标记，明确 P0/P1 只允许隐藏或只读摘要，P2 才允许出现 editable 预留。
+2. 更新 `apps/cli/src/config/ConfigSummaryFormatter.h`、`apps/cli/src/config/ConfigSummaryFormatter.cpp`、`apps/cli/src/config/CliConfigWorkflowCoordinator.cpp` 与 `apps/cli/CMakeLists.txt`，把 `ToolSkillPage` 视图接到 `ConfigSummaryView`、human/JSON summary formatter，以及 `config show` / apply summary 的 workflow owner 中；当前 workflow 在未探测到 active tooling 时默认投影 `tool_skill.mode=hidden`，从而避免 P0/P1 summary 误导 operator 认为默认安装已开放 skills/tools 可编辑 controls。
+3. 更新 `tests/unit/apps/cli/CMakeLists.txt`、`tests/integration/apps/cli/CMakeLists.txt`、新增 `tests/unit/apps/cli/ToolSkillPageTest.cpp`，并扩展 `tests/unit/apps/cli/ConfigSummaryFormatterTest.cpp` 与 `tests/unit/apps/cli/ConfigShowWorkflowTest.cpp`，同时把 `ConfigShowValidateIntegrationTest` 纳入回归矩阵，确保 resolver、page、summary formatter 与 show/validate surface 对 hidden / summary_only / editable capability 的投影保持一致。
+
+### 验证
+
+1. `Build_CMakeTools`：构建 `dasall-tool_skill_page_unit_test`、`dasall-config_summary_formatter_unit_test`、`dasall-config_show_workflow_unit_test`
+   - 结果：通过；ToolSkillPage 新组件、summary formatter 与 config show 接线完成重编译。
+2. `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^(ToolSkillPageTest|ConfigSummaryFormatterTest|ConfigShowWorkflowTest)$' --output-on-failure`
+   - 结果：通过；`ToolSkillPageTest`、`ConfigSummaryFormatterTest` 与 `ConfigShowWorkflowTest` 全绿，证明页面三态渲染、summary formatter 输出与 show surface 接线正确。
+3. `Build_CMakeTools`：构建 `dasall-cli`、`dasall-config_capability_resolver_unit_test`、`dasall_cli_config_show_validate_integration_test`
+   - 结果：通过；期间暴露 `dasall-cli` 主目标遗漏 `ConfigCapabilityResolver.cpp` 的链接缺符号，已在同切片修复并复验通过。
+4. `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^(ConfigCapabilityResolverTest|ToolSkillPageTest|ConfigSummaryFormatterTest|ConfigShowWorkflowTest|ConfigShowValidateIntegrationTest)$' --output-on-failure`
+   - 结果：通过；5 个 focused unit/integration tests 全绿，证明 resolver 既有契约未回归，CLI/config summary surface 与 show/validate 相邻路径保持稳定。
+
+### 结果
+
+1. CLCFG-TODO-017 已把 tools/skills capability 从“仅在设计文档中冻结”推进到真实 build-tree summary surface：`config show` 与 apply summary 现在会稳定投影 `tool_skill.mode`、controls 状态以及 capability 约束，不再让 P0/P1 默认安装看起来像已经开放 skills/tools 任意修改。
+2. `ConfigCapabilityResolver` 继续作为单一 source of truth；`ToolSkillPage` 只是消费其 mode 输出形成 operator-facing summary，不新增 active plugin set 写入路径，也不绕过 tools owner/policy gate。
+3. P2 editable 仍然只是受控预留：当前 build-tree 没有引入真实 editable controls 或 source/importer allowlist 变更，后续只有在 tools owner operator-facing surface 真正冻结后，才允许扩展到可写页面。
+
+### 下一步
+
+1. 建议进入 CLCFG-TODO-019，补齐 config focused unit / contract 回归矩阵，把 `ConfigCapabilityResolver`、`ToolSkillPage` 与 summary/output contract 一并纳入统一 focused gate。
+
+### 风险
+
+1. 当前 workflow 对 tools/skills 的运行态探测仍默认落在 `hidden`，因为 active tooling detection 与 operator-facing owner surface 还没有真实 build-tree 输入；`summary_only` / `editable` 目前由 unit test 证明，而非真实安装态探测链路。
+2. `RunCtest_CMakeTools` 在当前仓库仍返回通用 `生成失败`，因此 017 的验收继续依赖 `build/vscode-linux-ninja` 下的 focused `ctest` 命令，直到工具态恢复。
+
 ## 记录 #602
 
 - 日期：2026-05-08

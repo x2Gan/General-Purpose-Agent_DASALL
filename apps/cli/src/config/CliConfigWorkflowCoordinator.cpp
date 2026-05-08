@@ -494,10 +494,21 @@ void append_string_list(std::string& output,
 
 [[nodiscard]] ConfigSummaryView build_summary(
     const ObservedConfigState& observed_state) {
+  ConfigCapabilityResolver capability_resolver;
+  ConfigCapabilityInputs capability_inputs;
+  capability_inputs.daemon_validate_only_available =
+      observed_state.facts.install_payload_complete;
+  capability_inputs.systemd_available = observed_state.facts.systemd_available;
+  capability_inputs.secret_bootstrap_writer_available = true;
+  capability_inputs.secret_backend_available = true;
+  ToolSkillPage tool_skill_page;
+
   ConfigSummaryView summary;
   summary.profile_id = observed_state.desired.profile_id;
   summary.socket_path = observed_state.desired.daemon.socket_path;
   summary.log_format = observed_state.desired.daemon.log_format;
+  summary.tool_skill_page =
+      tool_skill_page.render(capability_resolver.resolve(capability_inputs));
   summary.service_installed = observed_state.facts.service_installed;
   summary.service_running = observed_state.facts.service_running;
   summary.service_enabled = observed_state.facts.service_enabled;
@@ -936,10 +947,20 @@ void append_string_list(std::string& output,
     const InstallStateFacts& facts,
     const ConfigActionPlan& plan,
     const ConfigApplyResult& apply_result) {
+  ConfigCapabilityResolver capability_resolver;
+  ConfigCapabilityInputs capability_inputs;
+  capability_inputs.daemon_validate_only_available = facts.install_payload_complete;
+  capability_inputs.systemd_available = facts.systemd_available;
+  capability_inputs.secret_bootstrap_writer_available = true;
+  capability_inputs.secret_backend_available = true;
+  ToolSkillPage tool_skill_page;
+
   ConfigSummaryView summary;
   summary.profile_id = desired.profile_id;
   summary.socket_path = desired.daemon.socket_path;
   summary.log_format = desired.daemon.log_format;
+  summary.tool_skill_page =
+      tool_skill_page.render(capability_resolver.resolve(capability_inputs));
   summary.service_installed = facts.service_installed;
   summary.service_running = facts.service_running ||
                             contains_string(apply_result.completed_actions,

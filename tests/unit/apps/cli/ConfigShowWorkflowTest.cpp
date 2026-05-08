@@ -80,6 +80,8 @@ void test_run_show_projects_summary_from_canonical_files() {
                   result.output.find("daemon.socket_path: /run/dasall/daemon.sock") !=
                       std::string::npos,
               "config show should project profile and socket path from canonical files");
+  assert_true(result.output.find("tool_skill.mode: hidden") != std::string::npos,
+              "config show should expose the hidden tool/skill capability summary until operator tooling is detected");
 }
 
 void test_run_show_surfaces_invalid_daemon_json_as_incomplete_item() {
