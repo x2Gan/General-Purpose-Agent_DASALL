@@ -10,10 +10,10 @@ EnvironmentFile=-/etc/default/dasall-daemon
 User=dasall
 Group=dasall
 RuntimeDirectory=dasall
-RuntimeDirectoryMode=0770
+RuntimeDirectoryMode=0700
 StateDirectory=dasall
 StateDirectoryMode=0750
-UMask=007
+UMask=0077
 ExecStartPre=/usr/sbin/dasall-daemon --validate-only --profile-id=${DASALL_DAEMON_PROFILE_ID} --config-file /etc/dasall/daemon.json
 ExecStart=/usr/sbin/dasall-daemon --profile-id=${DASALL_DAEMON_PROFILE_ID} --config-file /etc/dasall/daemon.json
 Restart=on-failure

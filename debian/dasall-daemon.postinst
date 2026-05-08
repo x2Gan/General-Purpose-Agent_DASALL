@@ -26,8 +26,8 @@ DASALL was installed successfully.
 The daemon was not started automatically.
 
 Next steps:
-	1. Select the runtime profile in /etc/default/dasall-daemon
-	2. Review daemon overrides in /etc/dasall/daemon.json
+	1. P0 operator path is root/sudo-only: sudo dasall config
+	2. Canonical files: /etc/default/dasall-daemon (profile) and /etc/dasall/daemon.json (daemon.*)
 	3. Validate: . /etc/default/dasall-daemon && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json
 	4. Start: systemctl enable --now dasall-daemon.service
 EOF

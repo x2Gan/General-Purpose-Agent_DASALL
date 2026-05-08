@@ -1,5 +1,31 @@
 # DASALL 开发执行记录
 
+## 记录 #587
+
+- 日期：2026-05-08
+- 阶段：packaging/build
+- 任务：PKG-TODO-013 落 package-mode service/config 语义与 daemon 首次部署输入面
+- 状态：已完成
+
+### 改动
+
+1. 更新 `debian/dasall-daemon.service`，保留 `EnvironmentFile + --profile-id + --config-file` 这条已冻结的 package-mode 接缝，同时把 `RuntimeDirectoryMode` 从 `0770` 收紧到 `0700`、`UMask` 从 `007` 收紧到 `0077`，避免 systemd unit 继续泄露 group-oriented 默认权限暗示。
+2. 更新 `debian/dasall-daemon.postinst`，把首次安装提示从“直接编辑文件 + validate + start”的旧文案收敛为 `sudo dasall config` 的安装态公开入口，并明确 canonical 文件仍然是 `/etc/default/dasall-daemon` 与 `/etc/dasall/daemon.json`。
+3. 更新 `debian/package-assets/dasall-daemon/etc/default/dasall-daemon`，补充 `P0 root/sudo-only` operator 注释；同步把 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md` 中 PKG-TODO-013 标记为 Done，并刷新专项顶部当前结论。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && tmpdir=/tmp/dasall-pkg013-validate && rm -rf "$tmpdir" && mkdir -p "$tmpdir" && rsync -a --delete --exclude='.git' --exclude='build' --exclude='build-*' --exclude='obj-x86_64-linux-gnu' --exclude='.tmp' --exclude='debian/.debhelper' --exclude='debian/dasall' --exclude='debian/dasall-cli' --exclude='debian/dasall-common' --exclude='debian/dasall-daemon' --exclude='debian/tmp' --exclude='debian/*.debhelper.log' --exclude='debian/*.substvars' --exclude='debian/*debhelper*' --exclude='debian/files' "$PWD/" "$tmpdir/" && cd "$tmpdir" && env PATH="/home/gangan/.cache/dasall-packaging/toolroot/usr/bin:$PATH" PERL5LIB="/home/gangan/.cache/dasall-packaging/toolroot/usr/share/perl5" dpkg-buildpackage --admindir="$tmpdir/.pkgadm" -us -uc -b`
+   - 结果：通过；在排除了 workspace 现有 `build*` 产物与 `debian/.debhelper` 生成态的临时 clean copy 中，`dpkg-buildpackage` 成功产出新的 `dasall-daemon_0.1.0-1_amd64.deb`。
+2. `pkg=/tmp/dasall-daemon_0.1.0-1_amd64.deb && inspect_dir=/home/gangan/DASALL/build-ci/pkg-inspect-daemon && data_dir=/tmp/pkg013-daemon-data && rm -rf "$inspect_dir" "$data_dir" && mkdir -p "$inspect_dir" "$data_dir" && dpkg-deb -c "$pkg" | rg 'etc/default/dasall-daemon|etc/dasall/daemon.json|usr/lib/systemd/system/dasall-daemon.service' && dpkg-deb -e "$pkg" "$inspect_dir" && dpkg-deb -x "$pkg" "$data_dir" && rg -n 'DASALL was installed successfully|sudo dasall config|enable --now dasall-daemon.service|#DEBHELPER#' "$inspect_dir/postinst" && rg -n 'RuntimeDirectoryMode=0700|UMask=0077|ExecStartPre=|ExecStart=' "$data_dir/usr/lib/systemd/system/dasall-daemon.service" && rg -n 'root/sudo-only|DASALL_DAEMON_PROFILE_ID=desktop_full' "$data_dir/etc/default/dasall-daemon"`
+   - 结果：通过；`.deb` 中已同时包含 `/etc/default/dasall-daemon`、`/etc/dasall/daemon.json` 与 `dasall-daemon.service`，且 control-area `postinst`、unit 文件和 EnvironmentFile 注释都已经落到新的 root/sudo-only 口径。
+
+### 结果
+
+1. PKG-TODO-013 已把 daemon package 的 service/config/postinst 语义从“仍带 group-oriented 暗示的 skeleton”推进到更严格的 P0 `root/sudo-only` operator 口径，同时没有改写 PKG-TODO-002 已冻结的 `EnvironmentFile + --profile-id + --config-file` 入口边界。
+2. 013 没有越界去补 `dasall config` 的 CLI 实现；本轮只负责把 packaging 安装面公开命令名、systemd runtime 权限和 canonical 文件入口统一到同一条对外语义，CLI workflow 实现仍留在独立 config 专项中继续推进。
+3. packaging 主线关于 daemon package 的下一步已收敛到 PKG-TODO-014：README.Debian、manpage 与首次部署文档安装面需要继续跟 postinst 统一到 `dasall config` + P0 `root/sudo-only` onboarding。
+
 ## 记录 #586
 
 - 日期：2026-05-08

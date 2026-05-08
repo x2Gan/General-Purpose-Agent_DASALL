@@ -1,2 +1,3 @@
 # v1 ownership: profile selection only; daemon.* stays in /etc/dasall/daemon.json
+# P0 operator path stays root/sudo-only; use sudo dasall config or edit the canonical files explicitly.
 DASALL_DAEMON_PROFILE_ID=desktop_full
