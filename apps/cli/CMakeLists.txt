@@ -16,6 +16,7 @@ add_executable(dasall-cli
   src/config/ConfigPlanFormatter.cpp
   src/config/ConfigSummaryFormatter.cpp
   src/config/InteractivePromptEngine.cpp
+  src/config/LlmSecretPage.cpp
 )
 
 target_compile_features(dasall-cli PRIVATE cxx_std_20)
@@ -30,6 +31,7 @@ target_link_libraries(dasall-cli
 
 target_include_directories(dasall-cli
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 

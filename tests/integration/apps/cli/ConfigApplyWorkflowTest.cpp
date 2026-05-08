@@ -70,6 +70,7 @@ void write_text_file(const fs::path& path, std::string_view content) {
   dependencies.service_command_runner = [](const auto&) {
     return dasall::apps::cli::config::ServiceCommandResult{};
   };
+  dependencies.secret_root_dir = workspace / "var/lib/dasall/secrets";
   return CliConfigWorkflowCoordinator(std::move(dependencies));
 }
 
@@ -135,12 +136,71 @@ void test_apply_from_file_rolls_summary_to_failed_state_when_write_fails() {
   cleanup_path(workspace);
 }
 
+void test_apply_from_file_materializes_secret_from_owner_only_import_file() {
+  using dasall::apps::cli::CliCommand;
+  using dasall::apps::cli::CliConfigCommandKind;
+  using dasall::tests::support::assert_true;
+
+  const fs::path workspace = make_temp_directory("config-apply-secret-import");
+  const fs::path import_file = workspace / "secrets/provider.key";
+  const fs::path desired_file = workspace / "desired-secret.yaml";
+  write_text_file(import_file, "deepseek-file-secret\n");
+  std::error_code permissions_error;
+  fs::permissions(import_file,
+                  fs::perms::owner_read | fs::perms::owner_write,
+                  fs::perm_options::replace,
+                  permissions_error);
+  write_text_file(desired_file,
+            std::string("schema_version: dasall.config.apply.v1\n") +
+              "profile_id: desktop_full\n"
+              "daemon:\n"
+              "  socket_path: /run/dasall/daemon.sock\n"
+              "  log_format: json\n"
+              "  diag_enabled: false\n"
+              "  override_enabled: false\n"
+              "  watchdog_enabled: false\n"
+              "service:\n"
+              "  start_now: false\n"
+              "  enable_on_boot: false\n"
+              "operator_access:\n"
+              "  add_users: []\n"
+              "secrets:\n"
+              "  refs:\n"
+              "    - ref: secret://llm/providers/deepseek-prod\n"
+              "      source: file:" +
+              import_file.string() +
+              "\n"
+              "      auth_profile_name: primary\n");
+
+  auto coordinator = make_coordinator(workspace);
+
+  CliCommand command;
+  command.name = "config";
+  command.config_command = CliConfigCommandKind::Apply;
+  command.config_from_file = desired_file.string();
+  command.no_input = true;
+
+  const auto result = coordinator.run(command);
+  const auto secret_text = read_text_file(
+      workspace / "var/lib/dasall/secrets/llm/providers/deepseek-prod.secret");
+
+  assert_true(result.handled && result.success,
+              "config apply --from-file should materialize owner-only import-file secrets through the LLM secret page and bootstrap writer");
+  assert_true(result.output.find("secret://llm/providers/deepseek-prod (configured)") != std::string::npos,
+              "config apply summary should project only the redacted secret ref after file-backed onboarding succeeds");
+  assert_true(secret_text.find("deepseek-file-secret") == std::string::npos,
+              "config apply --from-file should not persist the plaintext secret into the bootstrap backend file");
+
+  cleanup_path(workspace);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_apply_from_file_writes_canonical_files();
     test_apply_from_file_rolls_summary_to_failed_state_when_write_fails();
+    test_apply_from_file_materializes_secret_from_owner_only_import_file();
   } catch (const std::exception& ex) {
     std::cerr << "ConfigApplyWorkflowTest failed: " << ex.what() << '\n';
     return 1;

@@ -10,10 +10,12 @@
 #include "config/ConfigDiffPlanner.h"
 #include "config/DaemonConfigFileStore.h"
 #include "config/InstallStateProbe.h"
+#include "config/LlmSecretPage.h"
 #include "config/ConfigSummaryFormatter.h"
 #include "config/InteractivePromptEngine.h"
 #include "config/PrivilegeProbe.h"
 #include "config/ServiceManagerAdapter.h"
+#include "secret/SecretBootstrapWriter.h"
 
 namespace dasall::apps::cli::config {
 
@@ -45,6 +47,8 @@ struct CliConfigWorkflowDependencies {
   std::optional<PrivilegeContext> privilege_context;
   InteractivePromptEngine::InputHandler prompt_input_handler;
   InteractivePromptEngine::ConfirmHandler prompt_confirm_handler;
+  LlmSecretPage::StdinReader secret_stdin_reader;
+  std::filesystem::path secret_root_dir = "/var/lib/dasall/secrets";
 };
 
 class CliConfigWorkflowCoordinator {
@@ -77,6 +81,8 @@ class CliConfigWorkflowCoordinator {
   InstallStateProbe install_state_probe_;
   ServiceManagerAdapter service_manager_;
   InteractivePromptEngine prompt_engine_;
+  dasall::infra::secret::SecretBootstrapWriter secret_bootstrap_writer_;
+  LlmSecretPage llm_secret_page_;
 };
 
 }  // namespace dasall::apps::cli::config

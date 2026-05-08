@@ -79,6 +79,7 @@ void cleanup_path(const fs::path& path) {
   };
   dependencies.prompt_input_handler = std::move(input_handler);
   dependencies.prompt_confirm_handler = std::move(confirm_handler);
+  dependencies.secret_root_dir = workspace / "var/lib/dasall/secrets";
   return CliConfigWorkflowCoordinator(std::move(dependencies));
 }
 
@@ -111,6 +112,7 @@ void test_fresh_install_wizard_reuses_defaults_and_applies_plan() {
   std::vector<PromptRequest> seen_prompts;
   std::vector<std::string> seen_confirms;
   std::vector<std::optional<bool>> confirm_answers = {
+      std::nullopt,
       std::nullopt,
       std::nullopt,
       std::nullopt,

@@ -31,3 +31,9 @@ dasall_register_secret_integration_test(
   SecretFailureInjectionTest
   SecretFailureInjectionTest.cpp
 )
+
+dasall_register_secret_integration_test(
+  dasall_secret_bootstrap_writer_integration_test
+  SecretBootstrapWriterIntegrationTest
+  SecretBootstrapWriterIntegrationTest.cpp
+)

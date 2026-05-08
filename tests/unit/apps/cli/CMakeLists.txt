@@ -29,7 +29,13 @@ macro(dasall_add_cli_config_unit_test target_name test_name source_file)
   target_include_directories(${target_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/apps/cli/src
+      ${CMAKE_SOURCE_DIR}/infra/src
       ${CMAKE_SOURCE_DIR}/access/include
+  )
+
+  target_link_libraries(${target_name}
+    PRIVATE
+      dasall_infra
   )
 
   add_test(NAME ${test_name} COMMAND ${target_name})
@@ -223,6 +229,22 @@ target_link_libraries(dasall-interactive_prompt_engine_unit_test
 dasall_apply_common_options(dasall-interactive_prompt_engine_unit_test)
 
 dasall_add_cli_config_unit_test(
+  dasall-llm_secret_page_unit_test
+  LlmSecretPageTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/LlmSecretPageTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-llm_secret_page_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-llm_secret_page_unit_test)
+
+dasall_add_cli_config_unit_test(
   dasall-config_plan_formatter_unit_test
   ConfigPlanFormatterTest
   ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigPlanFormatterTest.cpp
@@ -263,6 +285,7 @@ dasall_add_cli_config_unit_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
@@ -287,6 +310,7 @@ dasall_add_cli_config_unit_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
@@ -311,6 +335,7 @@ dasall_add_cli_config_unit_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/LlmSecretPage.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp

@@ -115,9 +115,29 @@ std::optional<DesiredConfigSnapshot> ConfigDiffPlanner::load_desired_from_file(
 
   DesiredConfigSnapshot desired;
   DesiredConfigSection section = DesiredConfigSection::Root;
+  std::optional<DesiredSecretRefInput> pending_secret_ref;
+  bool parsing_secret_refs = false;
   std::istringstream stream(content);
   std::string raw_line;
   std::size_t line_number = 0;
+
+  const auto flush_pending_secret_ref = [&]() -> bool {
+    if (!pending_secret_ref.has_value()) {
+      return true;
+    }
+
+    if (!pending_secret_ref->is_well_formed()) {
+      assign_error(error_message,
+                   "desired-state secret ref is incomplete: line " +
+                       std::to_string(line_number));
+      return false;
+    }
+
+    desired.secrets.refs.push_back(std::move(*pending_secret_ref));
+    pending_secret_ref.reset();
+    return true;
+  };
+
   while (std::getline(stream, raw_line)) {
     ++line_number;
     if (!raw_line.empty() && raw_line.back() == '\r') {
@@ -130,6 +150,44 @@ std::optional<DesiredConfigSnapshot> ConfigDiffPlanner::load_desired_from_file(
 
     const std::size_t indent = raw_line.find_first_not_of(' ');
     if (indent == std::string::npos) {
+      continue;
+    }
+
+    if (parsing_secret_refs && indent <= 2U) {
+      if (!flush_pending_secret_ref()) {
+        return std::nullopt;
+      }
+      parsing_secret_refs = false;
+    }
+
+    if (parsing_secret_refs && indent == 4U && trimmed.starts_with('-')) {
+      if (!flush_pending_secret_ref()) {
+        return std::nullopt;
+      }
+
+      const std::string item = trim_copy(trimmed.substr(1U));
+      const auto item_delimiter = item.find(':');
+      if (item_delimiter == std::string::npos) {
+        assign_error(error_message,
+                     "invalid secret ref list item, expected - ref: ...: line " +
+                         std::to_string(line_number));
+        return std::nullopt;
+      }
+
+      const std::string item_key = trim_copy(item.substr(0, item_delimiter));
+      const std::string item_value = trim_copy(item.substr(item_delimiter + 1U));
+      if (item_key != "ref" || item_value.empty()) {
+        assign_error(error_message,
+                     "secret ref list items must start with ref: <auth_ref>: line " +
+                         std::to_string(line_number));
+        return std::nullopt;
+      }
+
+      pending_secret_ref = DesiredSecretRefInput{
+          .ref = unquote_copy(item_value),
+          .source = {},
+          .auth_profile_name = std::nullopt,
+      };
       continue;
     }
 
@@ -150,6 +208,33 @@ std::optional<DesiredConfigSnapshot> ConfigDiffPlanner::load_desired_from_file(
 
     const std::string key = trim_copy(trimmed.substr(0, delimiter));
     const std::string value = trim_copy(trimmed.substr(delimiter + 1U));
+
+    if (parsing_secret_refs && indent == 6U) {
+      if (!pending_secret_ref.has_value()) {
+        assign_error(error_message,
+                     "secret ref attributes require a preceding - ref item: line " +
+                         std::to_string(line_number));
+        return std::nullopt;
+      }
+
+      if (key == "source") {
+        pending_secret_ref->source = unquote_copy(value);
+        continue;
+      }
+      if (key == "auth_profile_name") {
+        const std::string auth_profile_name = unquote_copy(value);
+        pending_secret_ref->auth_profile_name =
+            auth_profile_name.empty()
+                ? std::nullopt
+                : std::make_optional(auth_profile_name);
+        continue;
+      }
+
+      assign_error(error_message,
+                   "unsupported secret ref key '" + key + "': line " +
+                       std::to_string(line_number));
+      return std::nullopt;
+    }
 
     if (indent == 0) {
       if (value.empty()) {
@@ -263,6 +348,12 @@ std::optional<DesiredConfigSnapshot> ConfigDiffPlanner::load_desired_from_file(
           desired.secrets.refs.clear();
           continue;
         }
+        if (key == "refs" && value.empty()) {
+          desired.secrets.refs.clear();
+          pending_secret_ref.reset();
+          parsing_secret_refs = true;
+          continue;
+        }
         break;
       case DesiredConfigSection::Root:
         break;
@@ -271,6 +362,10 @@ std::optional<DesiredConfigSnapshot> ConfigDiffPlanner::load_desired_from_file(
     assign_error(error_message,
                  "unsupported desired-state key '" + key + "' in section: line " +
                      std::to_string(line_number));
+    return std::nullopt;
+  }
+
+  if (!flush_pending_secret_ref()) {
     return std::nullopt;
   }
 
@@ -365,11 +460,6 @@ ConfigActionPlan ConfigDiffPlanner::build_plan(
     plan.blocked_actions.emplace_back("operator_access_apply_not_supported");
     plan.manual_followups.emplace_back(
         "apply operator access changes manually until CLCFG-TODO-015 lands");
-  }
-  if (!desired.secrets.refs.empty()) {
-    plan.blocked_actions.emplace_back("secret_bootstrap_apply_not_supported");
-    plan.manual_followups.emplace_back(
-        "provision secrets through the future bootstrap writer from CLCFG-TODO-016");
   }
 
   return plan;

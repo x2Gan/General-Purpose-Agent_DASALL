@@ -73,6 +73,7 @@ void write_text_file(const fs::path& path, std::string_view content) {
   };
   dependencies.prompt_input_handler = std::move(input_handler);
   dependencies.prompt_confirm_handler = std::move(confirm_handler);
+  dependencies.secret_root_dir = workspace / "var/lib/dasall/secrets";
   return CliConfigWorkflowCoordinator(std::move(dependencies));
 }
 
@@ -100,6 +101,7 @@ void test_interactive_wizard_reuses_current_values_for_existing_config() {
   std::vector<PromptRequest> seen_prompts;
   std::vector<std::string> seen_confirms;
   std::vector<std::optional<bool>> confirm_answers = {
+      std::nullopt,
       std::nullopt,
       std::nullopt,
       std::nullopt,

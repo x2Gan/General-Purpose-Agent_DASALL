@@ -91,6 +91,7 @@ struct DesiredOperatorAccessSettings {
 struct DesiredSecretRefInput {
   std::string ref;
   std::string source;
+  std::optional<std::string> auth_profile_name;
 
   [[nodiscard]] bool is_well_formed() const;
 };

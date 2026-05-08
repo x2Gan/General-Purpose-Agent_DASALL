@@ -103,6 +103,7 @@ void seed_existing_config(const fs::path& workspace) {
     };
   };
   dependencies.service_command_runner = std::move(service_command_runner);
+  dependencies.secret_root_dir = workspace / "var/lib/dasall/secrets";
   return CliConfigWorkflowCoordinator(std::move(dependencies));
 }
 

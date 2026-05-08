@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #602
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-016 实现 SecretBootstrapWriter 与 LLMSecretPage P1 onboarding
+- 状态：已完成
+
+### 改动
+
+1. 新增 `infra/src/secret/SecretBootstrapWriter.h`、`infra/src/secret/SecretBootstrapWriter.cpp` 并更新 `infra/CMakeLists.txt`，把 bootstrap-only secret import 写入收敛到 infra secret internal seam：当前实现固定 install-mode root=`/var/lib/dasall/secrets`、`auth_ref=secret://llm/providers/<provider_ref>`，对 provider ref 做 fail-closed 校验，并以 owner-only temp-file + rename 方式生成与 `FileSecretBackend` 兼容的 secret record。
+2. 新增 `apps/cli/src/config/LlmSecretPage.h`、`apps/cli/src/config/LlmSecretPage.cpp`，并更新 `apps/cli/src/config/ConfigCommandTypes.h`、`apps/cli/src/config/ConfigDiffPlanner.cpp`、`apps/cli/src/config/CliConfigWorkflowCoordinator.h`、`apps/cli/src/config/CliConfigWorkflowCoordinator.cpp` 与 `apps/cli/CMakeLists.txt`，把 `prompt`、`stdin`、`file:` 三种 secret 输入源接入 `config apply --from-file` 与 wizard review/apply 主路径；`DesiredSecretRefInput` 现在支持 `auth_profile_name`，planner 可解析 `secrets.refs` 列表，coordinator 会在 canonical file writes 与 validate-only 成功后统一执行 secret bootstrap，并在失败时回滚前序文件写入。
+3. 更新 `tests/unit/apps/cli/CMakeLists.txt`、`tests/integration/apps/cli/CMakeLists.txt`，新增 `tests/unit/apps/cli/LlmSecretPageTest.cpp`、`tests/integration/infra/secret/SecretBootstrapWriterIntegrationTest.cpp`，并扩展 `tests/unit/apps/cli/ConfigDiffPlannerTest.cpp`、`tests/integration/apps/cli/ConfigApplyWorkflowTest.cpp`、`tests/integration/apps/cli/ConfigFreshInstallWorkflowTest.cpp`、`tests/integration/apps/cli/ConfigInteractiveWizardTest.cpp` 与 `tests/integration/apps/cli/ConfigModifyExistingWorkflowTest.cpp`，让页面层、parser、apply/wizard 接线和底层 secret 读链都具备 focused 回归出口。
+
+### 验证
+
+1. `Build_CMakeTools`：构建 `dasall-cli`、`dasall-config_diff_planner_unit_test`、`dasall-llm_secret_page_unit_test`、`dasall_cli_config_apply_integration_test`、`dasall_cli_config_fresh_install_workflow_integration_test`、`dasall_cli_config_interactive_wizard_integration_test`、`dasall_cli_config_modify_existing_workflow_integration_test`、`dasall_file_secret_backend_unit_test`、`dasall_secret_manager_facade_unit_test`
+   - 结果：通过；CLI/config/infra secret 切片全部完成重编译，`LlmSecretPageTest` 首轮暴露的构造与 lambda 局部编译问题已在同切片修复后重编成功。
+2. `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^(LlmSecretPageTest|ConfigDiffPlannerTest|ConfigApplyWorkflowTest|ConfigFreshInstallWorkflowTest|ConfigInteractiveWizardTest|ConfigModifyExistingWorkflowTest|SecretBootstrapWriterIntegrationTest|FileSecretBackendTest|SecretManagerFacadeTest)$' --output-on-failure`
+   - 结果：通过；9 个 focused tests 全绿，证明 prompt/stdin/import-file 三种输入、secret record 落盘兼容性、apply/wizard secret 接线与 redacted summary 约束都已具备 build-tree 证据。
+
+### 结果
+
+1. CLCFG-TODO-016 已把 P1 secret onboarding 从“设计冻结/口头承诺”推进到真实 build-tree 能力：`config apply --from-file` 与交互式 wizard 现在都能通过 bootstrap-only seam 写入 provider secret，而不扩张 `ISecretManager` 公共 ABI，也不把 secret 回写进 `daemon.json`。
+2. `FileSecretBackend` / `SecretManagerFacade` 读链兼容性已被 focused integration 证实：writer 输出的 record 可直接被既有 backend 读取，`auth_ref` 始终投影为 redacted `secret://llm/providers/<provider_ref>`，unsafe provider ref 会 fail-closed。
+3. P1 仍只可宣称 build-tree ready：installed-package smoke、autopkgtest metadata 与 one-shot validator 仍后置到 CLCFG-TODO-021/022，暂不对外宣称 installed-package LLM onboarding ready。
+
+### 下一步
+
+1. 进入 CLCFG-TODO-017，实现 ToolSkillPage capability 摘要与 P2 editable 预留，并继续守住 P0/P1 hidden-or-summary-only 边界。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 在当前仓库仍返回通用 `生成失败`，因此 config/secret 切片的验收仍需显式使用 `build/vscode-linux-ninja` 下的 focused `ctest` 命令，直到工具态恢复。
+2. `debian/tests/pkg-smoke-local-control-plane` 与 `scripts/packaging/validate_cli_config_v1.sh` 尚未落盘，CLCFG-GATE-05/06 前不应把本轮结果外推为 installed-package ready。
+
 ## 记录 #601
 
 - 日期：2026-05-08

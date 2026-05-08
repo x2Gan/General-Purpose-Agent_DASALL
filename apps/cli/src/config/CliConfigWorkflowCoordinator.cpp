@@ -42,8 +42,6 @@ constexpr std::string_view kValidateDaemonConfigMissing =
   "config validate requires a canonical daemon.json before validate-only can run";
 constexpr std::string_view kApplyFromFileMissing =
   "config apply requires --from-file <path> to specify the desired-state document";
-constexpr std::string_view kApplySecretWritesBlocked =
-  "config apply cannot materialize secret writes until CLCFG-TODO-016 lands";
 constexpr std::string_view kWizardNoInputNotAllowed =
   "interactive config does not support --no-input; use config apply --from-file <path> --no-input";
 constexpr std::string_view kWizardApplyCancelled =
@@ -634,6 +632,11 @@ void append_string_list(std::string& output,
   return output;
 }
 
+[[nodiscard]] std::string make_llm_auth_ref(
+    const std::string_view provider_ref) {
+  return "secret://llm/providers/" + std::string(provider_ref);
+}
+
 [[nodiscard]] std::string wizard_state_banner(
     const ObservedConfigState& observed_state) {
   std::string banner = "[WelcomeAndStatePage]\ncurrent_state: ";
@@ -701,6 +704,30 @@ void append_string_list(std::string& output,
   desired.daemon.watchdog_enabled = prompt_engine.prompt_confirm(
       "[DaemonConfigPage]\nEnable daemon watchdog integration?",
       desired.daemon.watchdog_enabled);
+    if (prompt_engine.prompt_confirm(
+        "[LLMSecretPage]\nProvision or rotate an LLM provider secret?",
+        false)) {
+    const auto provider_ref = prompt_engine
+                    .prompt_text(
+                      "llm.provider_ref",
+                      "[LLMSecretPage]\nEnter LLM provider ref")
+                    .value;
+    if (!provider_ref.empty()) {
+      const auto auth_profile_name = prompt_engine
+                       .prompt_text(
+                         "llm.auth_profile_name",
+                         "[LLMSecretPage]\nEnter optional provider auth profile name")
+                       .value;
+      desired.secrets.refs.clear();
+      desired.secrets.refs.push_back(DesiredSecretRefInput{
+        .ref = make_llm_auth_ref(provider_ref),
+        .source = "prompt",
+        .auth_profile_name = auth_profile_name.empty()
+                     ? std::nullopt
+                     : std::make_optional(auth_profile_name),
+      });
+    }
+    }
   desired.service.start_now = prompt_engine.prompt_confirm(
       "[ServiceActionPage]\nStart dasall-daemon after validation?",
       observed_state.facts.service_running);
@@ -717,17 +744,12 @@ void append_string_list(std::string& output,
     const ConfigActionPlan& plan,
     const DaemonConfigFileStore& file_store,
     const ConfigPreflightChecker& preflight_checker,
-  const ServiceManagerAdapter& service_manager,
+    const ServiceManagerAdapter& service_manager,
+    const LlmSecretPage& llm_secret_page,
+    const dasall::infra::secret::SecretBootstrapWriter& secret_bootstrap_writer,
     const ValidateOnlyRunner& validate_only_runner,
-  const ServiceCommandRunner& service_command_runner,
+    const ServiceCommandRunner& service_command_runner,
     std::optional<PrivilegeContext> privilege_context) {
-  if (!plan.secret_writes.empty()) {
-    return make_failure_result(command,
-                               CliConfigWorkflowStatus::ApplyRendered,
-                               6,
-                               std::string(kApplySecretWritesBlocked));
-  }
-
   ConfigActionPlan preflight_plan = plan;
   preflight_plan.service_validate_requested = false;
   const auto preflight_result = preflight_checker.run(
@@ -818,6 +840,40 @@ void append_string_list(std::string& output,
     }
   }
 
+  if (!plan.secret_writes.empty()) {
+    const auto secret_apply_result = llm_secret_page.collect_and_apply(
+        desired.secrets, secret_bootstrap_writer);
+    apply_result.written_secret_refs = secret_apply_result.written_secret_refs;
+    if (!secret_apply_result.succeeded()) {
+      std::string rollback_error;
+      apply_result.rollback_performed = file_store.rollback_last_write(
+          write_result.transaction, &rollback_error);
+      apply_result.outcome = kConfigApplyOutcomeFailedRolledBack;
+      apply_result.blocked_actions = secret_apply_result.blocked_actions;
+      if (!secret_apply_result.error_message.empty()) {
+        apply_result.blocked_actions.push_back(secret_apply_result.error_message);
+      }
+      if (!rollback_error.empty()) {
+        apply_result.blocked_actions.push_back(rollback_error);
+      }
+      ConfigSummaryView summary = build_apply_summary(desired,
+                                                     observed_state.facts,
+                                                     plan,
+                                                     apply_result);
+      return CliConfigWorkflowResult{
+          .handled = true,
+          .success = false,
+          .status = CliConfigWorkflowStatus::ApplyRendered,
+          .exit_code = 5,
+          .command_name = std::string(workflow_command_name(command.config_command)),
+          .output = format_apply_output(command, summary),
+          .failure_reason = secret_apply_result.error_message.empty()
+                                ? std::string("config apply secret bootstrap failed")
+                                : secret_apply_result.error_message,
+      };
+    }
+  }
+
   const auto service_execution_plan = service_manager.plan_service_actions(
       plan, observed_state.facts.systemd_available);
   const auto service_apply_result = service_manager.apply(
@@ -895,6 +951,18 @@ void append_string_list(std::string& output,
                                             "enable");
   summary.operator_access_hint = std::string(kOperatorAccessHint);
   summary.incomplete_items = plan.blocked_actions;
+  for (const auto& secret_ref : desired.secrets.refs) {
+    const bool configured = contains_string(apply_result.written_secret_refs,
+                                            secret_ref.ref);
+    summary.secret_refs.push_back(ConfigSecretSummaryEntry{
+        .ref = secret_ref.ref,
+        .status = configured ? "configured" : "missing",
+    });
+    if (configured) {
+      add_unique_string(summary.incomplete_items,
+                        "runtime verification pending");
+    }
+  }
   summary.next_steps = apply_result.manual_followups;
   summary.apply_result = apply_result;
   return summary;
@@ -996,7 +1064,11 @@ CliConfigWorkflowCoordinator::CliConfigWorkflowCoordinator(
         return environment;
       }()),
       prompt_engine_(dependencies_.prompt_input_handler,
-                     dependencies_.prompt_confirm_handler) {
+                     dependencies_.prompt_confirm_handler),
+      secret_bootstrap_writer_(dasall::infra::secret::SecretBootstrapWriterOptions{
+          .root_dir = dependencies_.secret_root_dir,
+      }),
+      llm_secret_page_(prompt_engine_, dependencies_.secret_stdin_reader) {
   if (!dependencies_.validate_only_runner) {
     dependencies_.validate_only_runner = default_validate_only_runner;
   }
@@ -1142,6 +1214,8 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
                                     file_store_,
                                     preflight_checker_,
                                     service_manager_,
+                                    llm_secret_page_,
+                                    secret_bootstrap_writer_,
                                     dependencies_.validate_only_runner,
                                     dependencies_.service_command_runner,
                                     dependencies_.privilege_context);
@@ -1190,6 +1264,8 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
                                     file_store_,
                                     preflight_checker_,
                                     service_manager_,
+                                    llm_secret_page_,
+                                    secret_bootstrap_writer_,
                                     dependencies_.validate_only_runner,
                                     dependencies_.service_command_runner,
                                     dependencies_.privilege_context);

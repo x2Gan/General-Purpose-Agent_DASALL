@@ -118,12 +118,52 @@ void test_load_desired_from_file_rejects_unsupported_schema() {
               "ConfigDiffPlanner should fail closed when the desired-state schema_version is not the frozen v1 value");
 }
 
+void test_load_desired_from_file_parses_secret_refs_with_sources() {
+  using dasall::apps::cli::config::ConfigDiffPlanner;
+  using dasall::tests::support::assert_true;
+
+  const fs::path workspace = make_temp_directory("config-diff-secret-refs");
+  const fs::path desired_file = workspace / "desired.yaml";
+  write_text_file(desired_file,
+                  "schema_version: dasall.config.apply.v1\n"
+                  "profile_id: desktop_full\n"
+                  "daemon:\n"
+                  "  socket_path: /run/dasall/daemon.sock\n"
+                  "  log_format: json\n"
+                  "  diag_enabled: false\n"
+                  "  override_enabled: false\n"
+                  "  watchdog_enabled: false\n"
+                  "service:\n"
+                  "  start_now: false\n"
+                  "  enable_on_boot: false\n"
+                  "operator_access:\n"
+                  "  add_users: []\n"
+                  "secrets:\n"
+                  "  refs:\n"
+                  "    - ref: secret://llm/providers/deepseek-prod\n"
+                  "      source: stdin\n"
+                  "      auth_profile_name: primary\n");
+
+  ConfigDiffPlanner planner;
+  std::string error_message;
+  const auto desired = planner.load_desired_from_file(desired_file, &error_message);
+  cleanup_path(workspace);
+
+  assert_true(desired.has_value() && error_message.empty() &&
+                  desired->secrets.refs.size() == 1U &&
+                  desired->secrets.refs.front().ref == "secret://llm/providers/deepseek-prod" &&
+                  desired->secrets.refs.front().source == "stdin" &&
+                  desired->secrets.refs.front().auth_profile_name == std::optional<std::string>("primary"),
+              "ConfigDiffPlanner should parse secrets.refs multi-line entries with source and auth_profile_name metadata for headless onboarding");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_load_desired_from_file_and_build_plan_projects_canonical_changes();
     test_load_desired_from_file_rejects_unsupported_schema();
+    test_load_desired_from_file_parses_secret_refs_with_sources();
   } catch (const std::exception& ex) {
     std::cerr << "ConfigDiffPlannerTest failed: " << ex.what() << '\n';
     return 1;
