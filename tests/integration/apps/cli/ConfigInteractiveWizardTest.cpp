@@ -3,30 +3,18 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include <unistd.h>
 
-#include "CliBinaryTestSupport.h"
 #include "config/CliConfigWorkflowCoordinator.h"
 #include "support/TestAssertions.h"
-
-#ifndef DASALL_CLI_BINARY_PATH
-#error "DASALL_CLI_BINARY_PATH must be defined"
-#endif
-
-#ifndef DASALL_REPOSITORY_ROOT
-#error "DASALL_REPOSITORY_ROOT must be defined"
-#endif
 
 namespace {
 
 namespace fs = std::filesystem;
-
-using dasall::tests::integration::access_support::run_process_capture_split;
-using dasall::tests::support::assert_equal;
-using dasall::tests::support::assert_true;
 
 [[nodiscard]] fs::path make_temp_directory(std::string_view stem) {
   const auto unique_id = std::to_string(::getpid()) + "-" +
@@ -41,6 +29,12 @@ using dasall::tests::support::assert_true;
 void cleanup_path(const fs::path& path) {
   std::error_code error;
   fs::remove_all(path, error);
+}
+
+void write_text_file(const fs::path& path, std::string_view content) {
+  fs::create_directories(path.parent_path());
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  stream << content;
 }
 
 [[nodiscard]] std::string read_text_file(const fs::path& path) {
@@ -79,40 +73,35 @@ void cleanup_path(const fs::path& path) {
   return CliConfigWorkflowCoordinator(std::move(dependencies));
 }
 
-void test_fresh_install_entrypoint_is_discoverable_via_help() {
-  const fs::path cli_binary = DASALL_CLI_BINARY_PATH;
-  const fs::path repository_root = DASALL_REPOSITORY_ROOT;
-  assert_true(fs::exists(cli_binary),
-              "config integration topology should build the dasall CLI binary before help smoke runs");
-
-  const auto result = run_process_capture_split(
-      {cli_binary.string(), "config", "--help"}, repository_root);
-
-  assert_equal(result.exit_code, 0,
-               "config integration topology smoke should expose config help without daemon or install-state prerequisites");
-  assert_true(result.stdout_text.find("dasall-cli config") != std::string::npos,
-              "config integration topology smoke should print the config command family help text");
-  assert_true(result.stdout_text.find("config show") != std::string::npos &&
-                  result.stdout_text.find("config plan") != std::string::npos &&
-                  result.stdout_text.find("config validate") != std::string::npos,
-              "config integration topology smoke should list the non-interactive config entrypoints");
-}
-
-void test_fresh_install_wizard_reuses_defaults_and_applies_plan() {
+void test_interactive_wizard_reuses_current_values_for_existing_config() {
   using dasall::apps::cli::CliCommand;
   using dasall::apps::cli::CliConfigCommandKind;
   using dasall::apps::cli::config::ConfirmRequest;
   using dasall::apps::cli::config::PromptRequest;
+  using dasall::tests::support::assert_true;
 
-  const fs::path workspace = make_temp_directory("config-fresh-install-wizard");
+  const fs::path workspace = make_temp_directory("config-existing-wizard");
+  write_text_file(workspace / "etc/default/dasall-daemon",
+                  "DASALL_DAEMON_PROFILE_ID=edge_balanced\n");
+  write_text_file(workspace / "etc/dasall/daemon.json",
+                  "{\n"
+                  "  \"daemon\": {\n"
+                  "    \"socket_path\": \"/run/dasall/daemon.sock\",\n"
+                  "    \"log_format\": \"text\",\n"
+                  "    \"diag_enabled\": false,\n"
+                  "    \"override_enabled\": false,\n"
+                  "    \"watchdog_enabled\": false\n"
+                  "  }\n"
+                  "}\n");
+
   std::vector<PromptRequest> seen_prompts;
   std::vector<std::string> seen_confirms;
   std::vector<std::optional<bool>> confirm_answers = {
       std::nullopt,
       std::nullopt,
       std::nullopt,
-      true,
-      false,
+      std::nullopt,
+      std::nullopt,
       true,
   };
   std::size_t confirm_index = 0;
@@ -136,25 +125,23 @@ void test_fresh_install_wizard_reuses_defaults_and_applies_plan() {
   const auto result = coordinator.run(command);
 
   assert_true(result.handled && result.success,
-              "fresh-install config wizard should succeed when defaults are accepted and review is confirmed");
-  assert_true(fs::exists(workspace / "etc/default/dasall-daemon") &&
-                  fs::exists(workspace / "etc/dasall/daemon.json"),
-              "fresh-install config wizard should materialize both canonical files");
+              "existing-config wizard should succeed when the operator accepts current values and confirms apply");
   assert_true(seen_prompts.size() == 3 &&
-                  seen_prompts[0].default_value == "desktop_full" &&
+                  seen_prompts[0].default_value == "edge_balanced" &&
                   seen_prompts[1].default_value == "/run/dasall/daemon.sock" &&
-                  seen_prompts[2].default_value == "json",
-              "fresh-install config wizard should prefill profile and daemon prompts with P0 defaults");
+                  seen_prompts[2].default_value == "text",
+              "interactive config wizard should reuse the current profile and daemon settings as prompt defaults");
+  assert_true(seen_confirms.back().find("file_writes:\n- (none)") != std::string::npos,
+              "interactive config wizard review should project an empty file-write diff when the operator keeps current values");
   assert_true(read_text_file(workspace / "etc/default/dasall-daemon")
-                      .find("DASALL_DAEMON_PROFILE_ID=desktop_full") !=
-                  std::string::npos,
-              "fresh-install config wizard should persist the default desktop_full profile when the operator accepts defaults");
-  assert_true(seen_confirms.back().find("[ReviewAndApplyPage]") != std::string::npos &&
-                  seen_confirms.back().find("[OperatorAccessPage]") != std::string::npos &&
-                  seen_confirms.back().find("dasall group") == std::string::npos,
-              "fresh-install config wizard review should surface the P0 operator access hint without reviving group-based guidance");
-  assert_true(result.output.find("apply_outcome: applied") != std::string::npos,
-              "fresh-install config wizard should end with a summary page showing an applied outcome");
+                      .find("DASALL_DAEMON_PROFILE_ID=edge_balanced") !=
+                  std::string::npos &&
+                  read_text_file(workspace / "etc/dasall/daemon.json")
+                      .find("\"log_format\": \"text\"") != std::string::npos,
+              "interactive config wizard should preserve current canonical values when the operator accepts all defaults");
+  assert_true(result.output.find("profile: edge_balanced") != std::string::npos &&
+                  result.output.find("daemon.log_format: text") != std::string::npos,
+              "interactive config wizard summary should reflect the current values that were reused during the edit flow");
 
   cleanup_path(workspace);
 }
@@ -163,13 +150,12 @@ void test_fresh_install_wizard_reuses_defaults_and_applies_plan() {
 
 int main() {
   try {
-    test_fresh_install_entrypoint_is_discoverable_via_help();
-    test_fresh_install_wizard_reuses_defaults_and_applies_plan();
+    test_interactive_wizard_reuses_current_values_for_existing_config();
   } catch (const std::exception& ex) {
-    std::cerr << "ConfigFreshInstallWorkflowTest failed: " << ex.what() << '\n';
+    std::cerr << "ConfigInteractiveWizardTest failed: " << ex.what() << '\n';
     return 1;
   }
 
-  std::cout << "ConfigFreshInstallWorkflowTest passed\n";
+  std::cout << "ConfigInteractiveWizardTest passed\n";
   return 0;
 }

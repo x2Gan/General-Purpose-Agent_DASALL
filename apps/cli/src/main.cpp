@@ -13,11 +13,13 @@
 ///   - fail-closed：连接失败 / 解析失败均以非零退出码退出
 
 #include <cstdlib>
+#include <cctype>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <string_view>
 
+#include <termios.h>
 #include <unistd.h>
 
 #include "CliCommandParser.h"
@@ -83,6 +85,70 @@ constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
   }
 
   return "config";
+}
+
+[[nodiscard]] std::string prompt_suffix(std::string_view default_value) {
+  if (default_value.empty()) {
+    return ": ";
+  }
+
+  return std::string(" [default: ") + std::string(default_value) + "]: ";
+}
+
+[[nodiscard]] std::optional<std::string> read_prompt_input(
+    const dasall::apps::cli::config::PromptRequest& request) {
+  std::cout << request.message << prompt_suffix(request.default_value) << std::flush;
+
+  std::string input;
+  if (request.masked) {
+    termios original_mode{};
+    if (::tcgetattr(STDIN_FILENO, &original_mode) == 0) {
+      termios masked_mode = original_mode;
+      masked_mode.c_lflag &= static_cast<unsigned long>(~ECHO);
+      ::tcsetattr(STDIN_FILENO, TCSAFLUSH, &masked_mode);
+      const bool read_ok = static_cast<bool>(std::getline(std::cin, input));
+      ::tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_mode);
+      std::cout << '\n';
+      if (!read_ok) {
+        return std::nullopt;
+      }
+      return input;
+    }
+  }
+
+  if (!std::getline(std::cin, input)) {
+    return std::nullopt;
+  }
+  return input;
+}
+
+[[nodiscard]] std::optional<bool> read_confirm_input(
+    const dasall::apps::cli::config::ConfirmRequest& request) {
+  const std::string suffix = request.default_value ? " [Y/n]: " : " [y/N]: ";
+  while (true) {
+    std::cout << request.message << suffix << std::flush;
+    std::string input;
+    if (!std::getline(std::cin, input)) {
+      return std::nullopt;
+    }
+    if (input.empty()) {
+      return std::nullopt;
+    }
+
+    for (char& current : input) {
+      current = static_cast<char>(std::tolower(static_cast<unsigned char>(current)));
+    }
+    if (input == "y" || input == "yes" || input == "true") {
+      return true;
+    }
+    if (input == "n" || input == "no" || input == "false") {
+      return false;
+    }
+
+    std::cerr << dasall::apps::cli::CliOutputFormatter::format_error(
+                     "please answer yes or no")
+              << '\n';
+  }
 }
 
 int emit_local_response(
@@ -159,7 +225,11 @@ int main(int argc, char* argv[]) {
           decision);
     }
 
-      const dasall::apps::cli::config::CliConfigWorkflowCoordinator coordinator;
+        dasall::apps::cli::config::CliConfigWorkflowDependencies dependencies;
+        dependencies.prompt_input_handler = read_prompt_input;
+        dependencies.prompt_confirm_handler = read_confirm_input;
+        const dasall::apps::cli::config::CliConfigWorkflowCoordinator coordinator(
+          std::move(dependencies));
       const auto workflow_result = coordinator.run(*cmd);
       if (!workflow_result.handled) {
         constexpr std::string_view kUnhandledConfigWorkflow =

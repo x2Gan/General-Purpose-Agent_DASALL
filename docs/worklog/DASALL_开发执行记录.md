@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #600
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-014 实现交互式 P0 wizard 页面与当前值复用
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/config/CliConfigWorkflowCoordinator.h` 与 `apps/cli/src/config/CliConfigWorkflowCoordinator.cpp`，为 workflow 依赖面引入 prompt handler 注入，并把 `config` 默认 wizard 路径接到同一条 plan/apply 管线：当前实现会先基于 `InstallStateProbe` 的观察态构造 `WelcomeAndStatePage`、`ProfileSelectionPage`、`DaemonConfigPage`、`ServiceActionPage`、`ReviewAndApplyPage` 的最小 prompt 流，然后复用 013 的 apply helper 写 canonical files 与产出最终 summary。
+2. 更新 `apps/cli/src/main.cpp`，把真实终端 `stdin/stdout` prompt/confirm handler 注入 coordinator，使 `dasall-cli config` 在 TTY 中不再走空 handler 默认值路径；confirm review 中显式携带 `OperatorAccessPage` 提示，并继续固定为 P0 `use sudo dasall config` 口径，不重新引入 `dasall` 组主路径。
+3. 更新 `tests/integration/apps/cli/CMakeLists.txt`、`tests/integration/apps/cli/ConfigFreshInstallWorkflowTest.cpp`、新增 `tests/integration/apps/cli/ConfigInteractiveWizardTest.cpp`，并更新 `tests/unit/apps/cli/CMakeLists.txt` 为所有直接编译 coordinator 的测试补齐 `InteractivePromptEngine.cpp` 依赖；新的 focused integration 现在覆盖 fresh install 的默认值复用、existing config 的 current-value reuse，以及 review page 中不误导 group-based operator access 的约束。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-cli dasall_cli_config_fresh_install_workflow_integration_test dasall_cli_config_interactive_wizard_integration_test && ctest --preset vscode-linux-ninja -R "ConfigFreshInstallWorkflowTest|ConfigInteractiveWizardTest" --output-on-failure`
+   - 结果：通过；`ConfigFreshInstallWorkflowTest` 与 `ConfigInteractiveWizardTest` 全绿，说明 fresh install 与 existing config 两条交互路径都已能复用当前值/默认值、生成 review plan 并落盘 canonical 配置。
+
+### 结果
+
+1. CLCFG-TODO-014 已把 config workflow 从“只有非交互 show/plan/validate/apply”推进到真正的交互式 P0 wizard：在 TTY 中运行 `dasall-cli config` 时，operator 现在可以按页式 prompt 完成 profile、daemon 与 service 选择，并在 review 确认后复用同一条 013 apply 管线完成写入。
+2. current-value reuse 已形成稳定 owner：fresh install 默认预填 `desktop_full` / `/run/dasall/daemon.sock` / `json`，existing config 则会把当前 `profile_id`、`daemon.socket_path` 与 `daemon.log_format` 作为 prompt 默认值，不再把已有配置重置为新默认值。
+3. P0 operator access 口径继续守住 `0600 root/sudo-only`：review prompt 会明确展示 `use sudo dasall config to modify install-state files`，且 focused integration 已验证 wizard 不会重新把 `dasall` 组 access 写回主路径；真正的 service action apply/restart/enable 仍留待 CLCFG-TODO-015 完成。
+
 ## 记录 #599
 
 - 日期：2026-05-08

@@ -11,6 +11,7 @@
 #include "config/DaemonConfigFileStore.h"
 #include "config/InstallStateProbe.h"
 #include "config/ConfigSummaryFormatter.h"
+#include "config/InteractivePromptEngine.h"
 #include "config/PrivilegeProbe.h"
 
 namespace dasall::apps::cli::config {
@@ -40,6 +41,8 @@ struct CliConfigWorkflowDependencies {
   ConfigPreflightEnvironment preflight_environment;
   ValidateOnlyRunner validate_only_runner;
   std::optional<PrivilegeContext> privilege_context;
+  InteractivePromptEngine::InputHandler prompt_input_handler;
+  InteractivePromptEngine::ConfirmHandler prompt_confirm_handler;
 };
 
 class CliConfigWorkflowCoordinator {
@@ -70,6 +73,7 @@ class CliConfigWorkflowCoordinator {
   ConfigPreflightChecker preflight_checker_;
   ConfigDiffPlanner diff_planner_;
   InstallStateProbe install_state_probe_;
+  InteractivePromptEngine prompt_engine_;
 };
 
 }  // namespace dasall::apps::cli::config
