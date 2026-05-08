@@ -4,6 +4,7 @@ add_test(NAME infra_integration_topology_smoke COMMAND ${CMAKE_COMMAND} -E true)
 set_tests_properties(infra_integration_topology_smoke PROPERTIES LABELS "integration")
 
 add_subdirectory(agent_loop)
+add_subdirectory(apps)
 add_subdirectory(infra)
 add_subdirectory(profiles)
 add_subdirectory(platform)
@@ -46,6 +47,7 @@ set(DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS
 	dasall_linux_platform_bootstrap_integration_test
 	${DASALL_SERVICES_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_TOOLS_INTEGRATION_TEST_EXECUTABLE_TARGETS}
+	${DASALL_APPS_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_KNOWLEDGE_INTEGRATION_TEST_EXECUTABLE_TARGETS}
 	${DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS}

@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #597
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-018 优先建立 config unit / integration topology 与 discoverability
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/unit/apps/cli/CMakeLists.txt`，把 config 专属单测从既有 `unit;access;cli` 借挂标签中拆出，新增 `dasall_add_cli_config_unit_test()` 宏，并统一为 `unit;cli;config` 标签，避免后续 `ConfigCommandParserTest`、`InstallStateProbeTest`、formatter/preflight/file-store 等 focused 验证继续混入 access-only discoverability。
+2. 新增 `tests/integration/apps/CMakeLists.txt`、`tests/integration/apps/cli/CMakeLists.txt` 与 `tests/integration/apps/cli/ConfigFreshInstallWorkflowTest.cpp`，为 config workflow 建立独立的 integration 目录、`integration;cli;config` 标签和首个 discoverability smoke 入口；该测试先用 `dasall config --help` 验证 fresh-install 入口在 CLI 二进制中可见，而不是继续借挂 `tests/integration/access`。
+3. 更新 `tests/integration/CMakeLists.txt`，把新的 apps/cli integration targets 纳入 `DASALL_INTEGRATION_TEST_EXECUTABLE_TARGETS` 聚合，确保 `ctest -N` 与后续 `dasall_integration_tests` 都能发现 config 自己的 integration 入口；同步更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-018 标记为 Done。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --preset vscode-linux-ninja && cmake --build --preset vscode-linux-ninja --target dasall-config_command_parser_unit_test dasall-install_state_probe_unit_test dasall_cli_config_fresh_install_workflow_integration_test && ctest --preset vscode-linux-ninja -N | rg "ConfigCommandParserTest|InstallStateProbeTest|ConfigFreshInstallWorkflowTest"`
+   - 结果：通过；`ConfigCommandParserTest`、`InstallStateProbeTest` 与 `ConfigFreshInstallWorkflowTest` 均可被 `ctest -N` 独立发现，说明 config 单测/集成测试拓扑与标签已经从 access 借挂状态收敛为独立 discoverability 入口。
+
+### 结果
+
+1. CLCFG-TODO-018 已为后续 CLCFG-TODO-012/014/020 提供独立的 config unit/integration 测试承载面；后续 workflow 实现不再需要把测试继续塞进 `tests/unit/access` 或 `tests/integration/access`。
+2. `unit;cli;config` 与 `integration;cli;config` 标签已经落盘，后续 focused gate 与 discoverability 检查可以直接围绕 config 本地工作流筛选，而不是依赖 access 标签的旁路命中。
+3. 当前 `ConfigFreshInstallWorkflowTest` 先承担 topology smoke 角色；随着 014/020 落地，可在同一测试名与目录下逐步扩成真实 fresh-install workflow 覆盖，而不必再次迁移 discoverability 入口。
+
 ## 记录 #596
 
 - 日期：2026-05-08
