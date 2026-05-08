@@ -10,6 +10,7 @@ add_executable(dasall-cli
   src/config/DaemonConfigFileStore.cpp
   src/config/InstallStateProbe.cpp
   src/config/ConfigPreflightChecker.cpp
+  src/config/ConfigDiffPlanner.cpp
   src/config/PrivilegeProbe.cpp
   src/config/ConfigPlanFormatter.cpp
   src/config/ConfigSummaryFormatter.cpp

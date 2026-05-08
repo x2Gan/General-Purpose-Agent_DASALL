@@ -1,0 +1,15 @@
+schema_version: dasall.config.apply.v1
+profile_id: desktop_full
+daemon:
+  socket_path: /run/dasall/daemon.sock
+  log_format: json
+  diag_enabled: false
+  override_enabled: false
+  watchdog_enabled: false
+service:
+  start_now: false
+  enable_on_boot: false
+operator_access:
+  add_users: []
+secrets:
+  refs: []

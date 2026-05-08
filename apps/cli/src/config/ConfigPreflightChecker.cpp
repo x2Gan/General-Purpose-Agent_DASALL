@@ -45,8 +45,16 @@ void add_unique_string(std::vector<std::string>& values,
     return true;
   }
 
-  const auto parent = path.parent_path();
-  return !parent.empty() && ::access(parent.c_str(), W_OK) == 0;
+  auto candidate = path.parent_path();
+  while (!candidate.empty()) {
+    std::error_code error;
+    if (fs::exists(candidate, error)) {
+      return !error && ::access(candidate.c_str(), W_OK) == 0;
+    }
+    candidate = candidate.parent_path();
+  }
+
+  return false;
 }
 
 [[nodiscard]] bool systemd_runtime_available() {

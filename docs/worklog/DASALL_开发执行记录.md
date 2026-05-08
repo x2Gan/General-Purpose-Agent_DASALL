@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #599
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-013 实现 ConfigDiffPlanner、apply executor 与 `config apply --from-file`
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/ConfigDiffPlanner.h` 与 `apps/cli/src/config/ConfigDiffPlanner.cpp`，把 minimal desired-state 文件解析、current-vs-desired diff 生成、canonical defaults/daemon 写入规划，以及 service validate/start/enable 的 plan 推导统一收口到单一 planner owner；当前 parser 明确只接受 v1 schema 和 inline empty list，遇到未冻结的 list surface 会 fail-closed。
+2. 更新 `apps/cli/src/config/CliConfigWorkflowCoordinator.*`、`apps/cli/src/config/ConfigPreflightChecker.cpp` 与 `apps/cli/CMakeLists.txt`，把 `config plan --from-file` 接到 diff planner，把 `config apply --from-file` 接到 headless apply/rollback 管线，并把 preflight 的 canonical 文件可写性检查修正为向上查找最近已存在父目录，避免 fresh install 场景因为中间目录尚未创建而被误判为不可写。
+3. 新增 `tests/fixtures/apps/cli/config/desired_state_minimal.yaml`、`tests/unit/apps/cli/ConfigDiffPlannerTest.cpp` 与 `tests/integration/apps/cli/ConfigApplyWorkflowTest.cpp`，并更新 `tests/unit/apps/cli/CMakeLists.txt`、`tests/integration/apps/cli/CMakeLists.txt` 与 `tests/unit/apps/cli/ConfigPlanWorkflowTest.cpp`，让 desired-state parser、from-file diff plan 与 apply/rollback 路径都有 focused unit/integration 回归出口。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --preset vscode-linux-ninja && cmake --build --preset vscode-linux-ninja --target dasall-cli dasall-config_diff_planner_unit_test dasall-config_plan_workflow_unit_test dasall_cli_config_apply_integration_test && ctest --preset vscode-linux-ninja -R "ConfigDiffPlannerTest|ConfigPlanWorkflowTest|ConfigApplyWorkflowTest" --output-on-failure`
+   - 结果：通过；`ConfigDiffPlannerTest`、`ConfigPlanWorkflowTest` 与 `ConfigApplyWorkflowTest` 全绿，证明 desired-state 解析、from-file diff 投影、headless apply 成功写入，以及写入失败时的失败态 summary/保留旧文件行为已经具备 focused 自动化证据。
+
+### 结果
+
+1. CLCFG-TODO-013 已把 config workflow 从“只读 current-state 闭环”推进到“共享 action plan 的 from-file plan/apply 闭环”：`config plan --from-file` 现在会基于当前观察态生成 desired-state diff，`config apply --from-file` 会在无交互模式下复用同一计划管线写入 canonical sink，并在后置 validate-only 失败时回滚最近一次事务写入。
+2. `ConfigPreflightChecker` 现在不再要求目标文件的直接父目录必须预先存在；它会向上找到最近的已存在父目录做可写性判断，这修复了 fresh install 场景下 `config apply` 被误报 `canonical_defaults_not_writable`/`canonical_daemon_config_not_writable` 的根因。
+3. service start/restart/enable 目前仍以 manual followups 的形式留在 apply summary 中，secret/operator-access list surface 继续 fail-closed，后续 CLCFG-TODO-014/015/016 可以在不改 grammar 和 action plan owner 的前提下继续扩交互页面、service action 执行与 secret bootstrap。
+
 ## 记录 #598
 
 - 日期：2026-05-08

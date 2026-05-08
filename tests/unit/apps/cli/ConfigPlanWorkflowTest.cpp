@@ -82,27 +82,55 @@ void test_run_plan_projects_read_only_validate_action_for_current_state() {
               "config plan should project state_before and the derived validate-only action");
 }
 
-void test_run_plan_rejects_from_file_until_diff_planner_exists() {
+void test_run_plan_from_file_projects_desired_state_diff() {
   using dasall::apps::cli::CliCommand;
   using dasall::apps::cli::CliConfigCommandKind;
-  using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
-  auto coordinator = make_coordinator(make_temp_directory("config-plan-from-file"));
+  const fs::path workspace = make_temp_directory("config-plan-from-file");
+  write_text_file(workspace / "etc/default/dasall-daemon",
+                  "DASALL_DAEMON_PROFILE_ID=factory_test\n");
+  write_text_file(workspace / "etc/dasall/daemon.json",
+                  "{\n"
+                  "  \"daemon\": {\n"
+                  "    \"socket_path\": \"/run/dasall/daemon.sock\",\n"
+                  "    \"log_format\": \"json\",\n"
+                  "    \"diag_enabled\": false,\n"
+                  "    \"override_enabled\": false,\n"
+                  "    \"watchdog_enabled\": false\n"
+                  "  }\n"
+                  "}\n");
+  write_text_file(workspace / "desired.yaml",
+                  "schema_version: dasall.config.apply.v1\n"
+                  "profile_id: desktop_full\n"
+                  "daemon:\n"
+                  "  socket_path: /run/dasall/daemon.sock\n"
+                  "  log_format: json\n"
+                  "  diag_enabled: true\n"
+                  "  override_enabled: false\n"
+                  "  watchdog_enabled: false\n"
+                  "service:\n"
+                  "  start_now: false\n"
+                  "  enable_on_boot: false\n"
+                  "operator_access:\n"
+                  "  add_users: []\n"
+                  "secrets:\n"
+                  "  refs: []\n");
+
+  auto coordinator = make_coordinator(workspace);
   CliCommand command;
   command.name = "config";
   command.config_command = CliConfigCommandKind::Plan;
-  command.config_from_file = "/tmp/dasall-config-desired.yaml";
+  command.config_from_file = (workspace / "desired.yaml").string();
 
   const auto result = coordinator.run(command);
-  cleanup_path(fs::path(*command.config_from_file).parent_path().parent_path());
+  cleanup_path(workspace);
 
-  assert_true(result.handled && !result.success,
-              "config plan should fail closed when desired-state diff planning is not implemented yet");
-  assert_equal(2, result.exit_code,
-               "config plan --from-file should map to the local argument error exit family before CLCFG-TODO-013 lands");
-  assert_true(result.output.find("CLCFG-TODO-013") != std::string::npos,
-              "config plan --from-file should point at the pending diff planner task rather than silently ignoring the file input");
+  assert_true(result.handled && result.success,
+              "config plan --from-file should render a desired-state diff once ConfigDiffPlanner is available");
+  assert_true(result.output.find("profile_id") != std::string::npos &&
+                  result.output.find("daemon.diag_enabled") != std::string::npos,
+              "config plan --from-file should project changed defaults and daemon keys into the action plan output");
 }
 
 }  // namespace
@@ -110,7 +138,7 @@ void test_run_plan_rejects_from_file_until_diff_planner_exists() {
 int main() {
   try {
     test_run_plan_projects_read_only_validate_action_for_current_state();
-    test_run_plan_rejects_from_file_until_diff_planner_exists();
+    test_run_plan_from_file_projects_desired_state_diff();
   } catch (const std::exception& ex) {
     std::cerr << "ConfigPlanWorkflowTest failed: " << ex.what() << '\n';
     return 1;

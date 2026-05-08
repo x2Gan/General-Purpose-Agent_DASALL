@@ -40,6 +40,10 @@ constexpr std::string_view kValidateProfileMissing =
   "config validate requires a canonical profile selection in /etc/default/dasall-daemon";
 constexpr std::string_view kValidateDaemonConfigMissing =
   "config validate requires a canonical daemon.json before validate-only can run";
+constexpr std::string_view kApplyFromFileMissing =
+  "config apply requires --from-file <path> to specify the desired-state document";
+constexpr std::string_view kApplySecretWritesBlocked =
+  "config apply cannot materialize secret writes until CLCFG-TODO-016 lands";
 
 struct ObservedConfigState {
   DaemonConfigStoreSnapshot snapshot;
@@ -474,6 +478,20 @@ void append_string_list(std::string& output,
   return plan;
 }
 
+[[nodiscard]] std::vector<std::string> build_service_followups(
+    const ConfigActionPlan& plan) {
+  std::vector<std::string> followups;
+  if (plan.service_restart_required) {
+    followups.emplace_back("systemctl restart dasall-daemon.service");
+  } else if (plan.service_start_requested) {
+    followups.emplace_back("systemctl start dasall-daemon.service");
+  }
+  if (plan.service_enable_requested) {
+    followups.emplace_back("systemctl enable dasall-daemon.service");
+  }
+  return followups;
+}
+
 [[nodiscard]] std::string join_command(
     const std::vector<std::string>& command) {
   if (command.empty()) {
@@ -506,6 +524,33 @@ void append_string_list(std::string& output,
     return 5;
   }
   return 7;
+}
+
+[[nodiscard]] ConfigSummaryView build_apply_summary(
+    const DesiredConfigSnapshot& desired,
+    const InstallStateFacts& facts,
+    const ConfigActionPlan& plan,
+    const ConfigApplyResult& apply_result) {
+  ConfigSummaryView summary;
+  summary.profile_id = desired.profile_id;
+  summary.socket_path = desired.daemon.socket_path;
+  summary.log_format = desired.daemon.log_format;
+  summary.service_installed = facts.service_installed;
+  summary.service_running = false;
+  summary.service_enabled = false;
+  summary.operator_access_hint = std::string(kOperatorAccessHint);
+  summary.incomplete_items = plan.blocked_actions;
+  summary.next_steps = build_service_followups(plan);
+  summary.apply_result = apply_result;
+  return summary;
+}
+
+[[nodiscard]] std::string format_apply_output(
+    const dasall::apps::cli::CliCommand& command,
+    const ConfigSummaryView& summary) {
+  return render_for_output_mode(command,
+                                ConfigSummaryFormatter::format_human(summary),
+                                ConfigSummaryFormatter::format_json(summary));
 }
 
 [[nodiscard]] std::string format_validation_human(
@@ -629,13 +674,6 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
       return render_summary(command, build_summary(*observed_state));
     }
     case dasall::apps::cli::CliConfigCommandKind::Plan: {
-      if (command.config_from_file.has_value()) {
-        return make_failure_result(command,
-                                   CliConfigWorkflowStatus::WorkflowFailed,
-                                   2,
-                                   std::string(kPlanFromFileNotReady));
-      }
-
       std::string error_message;
       const auto observed_state = load_observed_state(
           file_store_, dependencies_.preflight_environment,
@@ -646,6 +684,23 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
                                    5,
                                    std::move(error_message));
       }
+      if (command.config_from_file.has_value()) {
+        std::string parse_error;
+        const auto desired = diff_planner_.load_desired_from_file(
+            *command.config_from_file, &parse_error);
+        if (!desired.has_value()) {
+          return make_failure_result(command,
+                                     CliConfigWorkflowStatus::WorkflowFailed,
+                                     2,
+                                     std::move(parse_error));
+        }
+        return render_plan(command,
+                           diff_planner_.build_plan(observed_state->desired,
+                                                    *desired,
+                                                    observed_state->probe_result.state,
+                                                    file_store_.paths()));
+      }
+
       return render_plan(command, build_read_only_plan(*observed_state));
     }
     case dasall::apps::cli::CliConfigCommandKind::Validate: {
@@ -681,14 +736,160 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
           validate_plan,
           observed_state->desired,
           dependencies_.validate_only_runner,
-          std::nullopt);
+          dependencies_.privilege_context);
       return render_validation(command,
                                preflight_result.ok,
                                observed_state->probe_result.state,
                                preflight_result);
     }
+    case dasall::apps::cli::CliConfigCommandKind::Apply: {
+      if (!command.config_from_file.has_value()) {
+        return make_failure_result(command,
+                                   CliConfigWorkflowStatus::ApplyRendered,
+                                   2,
+                                   std::string(kApplyFromFileMissing));
+      }
+
+      std::string parse_error;
+      const auto desired = diff_planner_.load_desired_from_file(
+          *command.config_from_file, &parse_error);
+      if (!desired.has_value()) {
+        return make_failure_result(command,
+                                   CliConfigWorkflowStatus::ApplyRendered,
+                                   2,
+                                   std::move(parse_error));
+      }
+
+      std::string observe_error;
+      const auto observed_state = load_observed_state(
+          file_store_, dependencies_.preflight_environment,
+          install_state_probe_, &observe_error);
+      if (!observed_state.has_value()) {
+        return make_failure_result(command,
+                                   CliConfigWorkflowStatus::ApplyRendered,
+                                   5,
+                                   std::move(observe_error));
+      }
+
+      const auto plan = diff_planner_.build_plan(observed_state->desired,
+                                                 *desired,
+                                                 observed_state->probe_result.state,
+                                                 file_store_.paths());
+      if (!plan.secret_writes.empty()) {
+        return make_failure_result(command,
+                                   CliConfigWorkflowStatus::ApplyRendered,
+                                   6,
+                                   std::string(kApplySecretWritesBlocked));
+      }
+
+      ConfigActionPlan preflight_plan = plan;
+      preflight_plan.service_validate_requested = false;
+      const auto preflight_result = preflight_checker_.run(
+          preflight_plan,
+          *desired,
+          dependencies_.validate_only_runner,
+          dependencies_.privilege_context);
+      if (!preflight_result.ok) {
+        ConfigApplyResult apply_result;
+        apply_result.outcome = kConfigApplyOutcomeBlocked;
+        apply_result.state_before = observed_state->probe_result.state;
+        apply_result.state_after = observed_state->probe_result.state;
+        apply_result.blocked_actions = preflight_result.failure_reasons;
+        ConfigSummaryView summary = build_apply_summary(*desired,
+                                                       observed_state->facts,
+                                                       plan,
+                                                       apply_result);
+        return CliConfigWorkflowResult{
+            .handled = true,
+            .success = false,
+            .status = CliConfigWorkflowStatus::ApplyRendered,
+            .exit_code = exit_code_for_preflight(preflight_result),
+            .command_name = std::string(workflow_command_name(command.config_command)),
+            .output = format_apply_output(command, summary),
+            .failure_reason = "config apply preflight failed",
+        };
+      }
+
+      const auto write_result = file_store_.write_desired(*desired);
+      ConfigApplyResult apply_result;
+      apply_result.state_before = observed_state->probe_result.state;
+      apply_result.state_after = plan.state_after_expected;
+      for (const auto& operation : write_result.transaction.operations) {
+        apply_result.written_files.push_back(operation.target_path.string());
+      }
+
+      if (!write_result.success) {
+        apply_result.outcome = write_result.rolled_back
+                                   ? kConfigApplyOutcomeFailedRolledBack
+                                   : kConfigApplyOutcomeBlocked;
+        apply_result.rollback_performed = write_result.rolled_back;
+        apply_result.blocked_actions.push_back(write_result.error_message);
+        ConfigSummaryView summary = build_apply_summary(*desired,
+                                                       observed_state->facts,
+                                                       plan,
+                                                       apply_result);
+        return CliConfigWorkflowResult{
+            .handled = true,
+            .success = false,
+            .status = CliConfigWorkflowStatus::ApplyRendered,
+            .exit_code = 5,
+            .command_name = std::string(workflow_command_name(command.config_command)),
+            .output = format_apply_output(command, summary),
+            .failure_reason = write_result.error_message,
+        };
+      }
+
+      if (plan.service_validate_requested) {
+        ConfigActionPlan validate_plan;
+        validate_plan.service_validate_requested = true;
+        const auto validate_result = preflight_checker_.run(
+            validate_plan,
+            *desired,
+            dependencies_.validate_only_runner,
+            dependencies_.privilege_context);
+        if (!validate_result.ok) {
+          std::string rollback_error;
+          apply_result.rollback_performed = file_store_.rollback_last_write(
+              write_result.transaction, &rollback_error);
+          apply_result.outcome = kConfigApplyOutcomeFailedRolledBack;
+          apply_result.blocked_actions = validate_result.failure_reasons;
+          if (!rollback_error.empty()) {
+            apply_result.blocked_actions.push_back(rollback_error);
+          }
+          ConfigSummaryView summary = build_apply_summary(*desired,
+                                                         observed_state->facts,
+                                                         plan,
+                                                         apply_result);
+          return CliConfigWorkflowResult{
+              .handled = true,
+              .success = false,
+              .status = CliConfigWorkflowStatus::ApplyRendered,
+              .exit_code = exit_code_for_preflight(validate_result),
+              .command_name = std::string(workflow_command_name(command.config_command)),
+              .output = format_apply_output(command, summary),
+              .failure_reason = "config apply validate-only failed after writing canonical files",
+          };
+        }
+      }
+
+      apply_result.outcome = kConfigApplyOutcomeApplied;
+      apply_result.applied = true;
+      apply_result.manual_followups = build_service_followups(plan);
+      ConfigSummaryView summary = build_apply_summary(*desired,
+                                                     observed_state->facts,
+                                                     plan,
+                                                     apply_result);
+      return CliConfigWorkflowResult{
+          .handled = true,
+          .success = true,
+          .status = CliConfigWorkflowStatus::ApplyRendered,
+          .exit_code = 0,
+          .command_name = std::string(workflow_command_name(command.config_command)),
+          .output = format_apply_output(command, summary),
+          .failure_reason = {},
+      };
+    }
     case dasall::apps::cli::CliConfigCommandKind::Wizard:
-    case dasall::apps::cli::CliConfigCommandKind::Apply:
     case dasall::apps::cli::CliConfigCommandKind::None:
       break;
   }

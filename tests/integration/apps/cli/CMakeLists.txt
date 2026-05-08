@@ -47,9 +47,25 @@ dasall_add_cli_config_integration_test(
   ConfigShowValidateIntegrationTest
   ${CMAKE_SOURCE_DIR}/tests/integration/apps/cli/ConfigShowValidateIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigDiffPlanner.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
+)
+
+dasall_add_cli_config_integration_test(
+  dasall_cli_config_apply_integration_test
+  ConfigApplyWorkflowTest
+  ${CMAKE_SOURCE_DIR}/tests/integration/apps/cli/ConfigApplyWorkflowTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigDiffPlanner.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp

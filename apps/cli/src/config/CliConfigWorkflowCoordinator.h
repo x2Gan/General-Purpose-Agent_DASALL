@@ -7,9 +7,11 @@
 #include "CliCommandParser.h"
 #include "config/ConfigPreflightChecker.h"
 #include "config/ConfigCommandTypes.h"
+#include "config/ConfigDiffPlanner.h"
 #include "config/DaemonConfigFileStore.h"
 #include "config/InstallStateProbe.h"
 #include "config/ConfigSummaryFormatter.h"
+#include "config/PrivilegeProbe.h"
 
 namespace dasall::apps::cli::config {
 
@@ -19,6 +21,7 @@ enum class CliConfigWorkflowStatus {
   PlanRendered,
   SummaryRendered,
   ValidationRendered,
+  ApplyRendered,
   WorkflowFailed,
 };
 
@@ -36,6 +39,7 @@ struct CliConfigWorkflowDependencies {
   DaemonConfigFileStorePaths store_paths;
   ConfigPreflightEnvironment preflight_environment;
   ValidateOnlyRunner validate_only_runner;
+  std::optional<PrivilegeContext> privilege_context;
 };
 
 class CliConfigWorkflowCoordinator {
@@ -64,6 +68,7 @@ class CliConfigWorkflowCoordinator {
   CliConfigWorkflowDependencies dependencies_;
   DaemonConfigFileStore file_store_;
   ConfigPreflightChecker preflight_checker_;
+  ConfigDiffPlanner diff_planner_;
   InstallStateProbe install_state_probe_;
 };
 
