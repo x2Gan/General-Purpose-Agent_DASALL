@@ -9,6 +9,7 @@ macro(dasall_add_cli_unit_test target_name test_name source_file)
   target_include_directories(${target_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/apps/cli/src
+      ${CMAKE_SOURCE_DIR}/access/include
   )
 
   add_test(NAME ${test_name} COMMAND ${target_name})
@@ -97,6 +98,20 @@ target_link_libraries(dasall-config_command_parser_unit_test
 )
 
 dasall_apply_common_options(dasall-config_command_parser_unit_test)
+
+dasall_add_cli_unit_test(
+  dasall-config_command_types_unit_test
+  ConfigCommandTypesTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigCommandTypesTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-config_command_types_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_command_types_unit_test)
 
 dasall_add_cli_unit_test(
   dasall-cli_output_formatter_unit_test

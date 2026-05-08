@@ -1,5 +1,32 @@
 # DASALL 开发执行记录
 
+## 记录 #592
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-007 定义 config 类型面：InstallState、ActionPlan、DesiredConfig、ApplyResult
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/ConfigCommandTypes.h` 与 `apps/cli/src/config/ConfigCommandTypes.cpp`，把 `InstallState` 六态闭集、`ConfigActionPlan` 顶层 schema、最小 `DesiredConfigSnapshot` 与 `ConfigApplyResult` 收敛到单一类型 owner，并补上 `to_string()` / `install_state_from_string()`、`is_well_formed()` 与 `succeeded()` 这类轻量 helper，避免后续 probe/planner/store/coordinator 在各自实现里重复发明字段语义。
+2. 新增 `tests/unit/apps/cli/ConfigCommandTypesTest.cpp`，覆盖六态 round-trip、action plan 必填键、desired snapshot 默认值与 apply result 成功投影四组 focused 断言。
+3. 更新 `tests/unit/apps/cli/CMakeLists.txt`，为 `ConfigCommandTypesTest` 注册专属 unit target，并补齐 `access/include` 暴露，让 config 类型面可以直接复用共享 daemon socket 默认值常量，而不再复制安装态路径字面量。
+4. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-007 标记为 Done，并把专项顶部当前结论刷新到“006/007 已完成”。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-config_command_types_unit_test && ctest --preset vscode-linux-ninja -R "^ConfigCommandTypesTest$" --output-on-failure`
+   - 结果：通过；`ConfigCommandTypesTest` 全绿，说明 `InstallState`、`ConfigActionPlan`、`DesiredConfigSnapshot` 与 `ConfigApplyResult` 的类型面和 helper 在 focused 目标中可独立编译、链接与断言。
+2. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall_unit_tests`
+   - 结果：失败，但失败点位于仓库既有 cognition/llm include-path 问题：`tests/unit/cognition/MockCognitionFixtureSurfaceTest.cpp` 通过 `llm/include/LLMSubsystemConfig.h` 引入 `config/InstallLayout.h` 时缺少 `infra/include` 暴露；该错误不在本轮 config 类型面改动范围内，因此本任务仍以 focused target 作为完成证据，并将聚合门问题留待后续仓库级测试拓扑修复。
+
+### 结果
+
+1. CLCFG-TODO-007 已为后续 008/009/011 提供稳定的数据模型底座；`InstallStateProbe`、`ConfigDiffPlanner`、`DaemonConfigFileStore` 与 `CliConfigWorkflowCoordinator` 现在都可以直接复用同一组字段与 helper，而不必再各自定义枚举和 plan key。
+2. `DesiredConfigSnapshot` 已把 install-mode socket 默认值、最小 daemon/service/operator/secrets desired state 收口到单一点，后续 `config apply --from-file` 与交互式 wizard 可以共享同一目标配置快照模型。
+3. `dasall_unit_tests` 聚合构建当前仍受 cognition/llm 的既有 include-path 问题影响；这是一条独立仓库级验证噪声，不改变 007 的 focused 类型面结论，但需要在后续测试拓扑或依赖暴露任务中单独解掉。
+
 ## 记录 #591
 
 - 日期：2026-05-08
