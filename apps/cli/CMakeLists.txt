@@ -5,6 +5,11 @@ add_executable(dasall-cli
   src/CliCommandParser.cpp
   src/CliExitDecision.cpp
   src/CliOutputFormatter.cpp
+  src/config/ConfigCommandTypes.cpp
+  src/config/CliConfigWorkflowCoordinator.cpp
+  src/config/ConfigPlanFormatter.cpp
+  src/config/ConfigSummaryFormatter.cpp
+  src/config/InteractivePromptEngine.cpp
 )
 
 target_compile_features(dasall-cli PRIVATE cxx_std_20)

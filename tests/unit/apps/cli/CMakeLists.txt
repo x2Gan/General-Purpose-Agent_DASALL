@@ -189,6 +189,50 @@ target_link_libraries(dasall-config_preflight_checker_unit_test
 dasall_apply_common_options(dasall-config_preflight_checker_unit_test)
 
 dasall_add_cli_unit_test(
+  dasall-interactive_prompt_engine_unit_test
+  InteractivePromptEngineTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/InteractivePromptEngineTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
+)
+
+target_link_libraries(dasall-interactive_prompt_engine_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-interactive_prompt_engine_unit_test)
+
+dasall_add_cli_unit_test(
+  dasall-config_plan_formatter_unit_test
+  ConfigPlanFormatterTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigPlanFormatterTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-config_plan_formatter_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_plan_formatter_unit_test)
+
+dasall_add_cli_unit_test(
+  dasall-config_summary_formatter_unit_test
+  ConfigSummaryFormatterTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigSummaryFormatterTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+)
+
+target_link_libraries(dasall-config_summary_formatter_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_summary_formatter_unit_test)
+
+dasall_add_cli_unit_test(
   dasall-cli_output_formatter_unit_test
   CliDaemonOutputFormatterTest
   ${CMAKE_SOURCE_DIR}/tests/unit/access/CliDaemonOutputFormatterTest.cpp

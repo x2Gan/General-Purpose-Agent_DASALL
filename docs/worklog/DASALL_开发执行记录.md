@@ -1,5 +1,30 @@
 # DASALL 开发执行记录
 
+## 记录 #596
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-011 新增 WorkflowCoordinator、PromptEngine、PlanFormatter 与 SummaryFormatter 骨架
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/cli/src/config/CliConfigWorkflowCoordinator.h` 与 `apps/cli/src/config/CliConfigWorkflowCoordinator.cpp`，把 `config` 本地 workflow 的后续 owner 固定到单一 coordinator，并先冻结 `run()` / `render_plan()` / `render_summary()` 这类命令驱动与投影边界，而不是让 012/014 直接在 `main.cpp` 中散落 `show/plan/validate/apply` 分支逻辑。
+2. 新增 `apps/cli/src/config/InteractivePromptEngine.h` 与 `apps/cli/src/config/InteractivePromptEngine.cpp`，把文本 prompt、masked secret prompt、confirm prompt 的默认值复用和 handler seam 收敛到单一 prompt owner；当前实现保持纯组件，不直接绑定 TTY I/O，便于后续 014 复用与 focused 回归。
+3. 新增 `apps/cli/src/config/ConfigPlanFormatter.h` / `.cpp` 与 `apps/cli/src/config/ConfigSummaryFormatter.h` / `.cpp`，把 `ConfigActionPlan` 的 human/JSON 投影与 `ConfigSummaryView` 的 human/JSON 投影收敛到稳定 formatter owner，而不是把 review/summary 输出散落到 future workflow 页面中。
+4. 新增 `tests/unit/apps/cli/InteractivePromptEngineTest.cpp`、`tests/unit/apps/cli/ConfigPlanFormatterTest.cpp`、`tests/unit/apps/cli/ConfigSummaryFormatterTest.cpp`，并更新 `apps/cli/CMakeLists.txt` 与 `tests/unit/apps/cli/CMakeLists.txt`，确保 011 的 skeleton owner 能通过 `dasall-cli` 编译和 focused 单测验证；同步更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-011 标记为 Done。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-cli dasall-interactive_prompt_engine_unit_test dasall-config_plan_formatter_unit_test dasall-config_summary_formatter_unit_test && ctest --preset vscode-linux-ninja -R "^InteractivePromptEngineTest$|^ConfigPlanFormatterTest$|^ConfigSummaryFormatterTest$" --output-on-failure`
+   - 结果：通过；`InteractivePromptEngineTest`、`ConfigPlanFormatterTest`、`ConfigSummaryFormatterTest` 全绿，说明默认值复用、masked prompt 语义，以及 plan/summary human+JSON 投影已经形成 focused 可回归骨架。
+
+### 结果
+
+1. CLCFG-TODO-011 已把 workflow/prompt/formatter 的 owner 面从 `main.cpp` stub 中提前剥离出来；后续 012/014 可以在不扩散输出字符串和 prompt 规则的前提下，把 `show/plan/validate` 与 interactive wizard 真接线到这些稳定组件上。
+2. `InteractivePromptEngine` 现在已经把“空输入复用默认值”和“secret 输入默认 masked”冻结成可测试行为；后续页面状态机不再需要自己处理这两类低层交互细节。
+3. `ConfigPlanFormatter` 与 `ConfigSummaryFormatter` 已提供稳定 human/JSON 投影出口；后续 contract test、workflow integration 和 installed-package summary 文案可以围绕这两个单一 formatter owner 收敛，而不是在 review page、summary page、README 或 postinst 中重复造字符串模板。
+
 ## 记录 #595
 
 - 日期：2026-05-08
