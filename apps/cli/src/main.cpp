@@ -24,6 +24,7 @@
 #include "CliExitDecision.h"
 #include "CliIpcClient.h"
 #include "CliOutputFormatter.h"
+#include "config/CliConfigWorkflowCoordinator.h"
 #include "daemon/DaemonEndpointDefaults.h"
 #include "linux/UnixIpcProvider.h"
 
@@ -158,12 +159,25 @@ int main(int argc, char* argv[]) {
           decision);
     }
 
-    constexpr std::string_view kConfigWorkflowStub =
-        "config local workflow skeleton is registered but not implemented yet";
-    const auto response = make_local_error_response(kConfigWorkflowStub, false);
-    const auto decision = dasall::apps::cli::decide_exit_for_response(
-        response, cmd->output_mode);
-    return emit_local_response(config_command_name(*cmd), response, decision);
+      const dasall::apps::cli::config::CliConfigWorkflowCoordinator coordinator;
+      const auto workflow_result = coordinator.run(*cmd);
+      if (!workflow_result.handled) {
+        constexpr std::string_view kUnhandledConfigWorkflow =
+          "config local workflow dispatch failed to handle command";
+        const auto response = make_local_error_response(kUnhandledConfigWorkflow,
+                                false);
+        const auto decision = dasall::apps::cli::decide_exit_for_response(
+          response, cmd->output_mode);
+        return emit_local_response(config_command_name(*cmd), response, decision);
+      }
+
+      std::ostream& stream =
+        cmd->output_mode == dasall::apps::cli::CliOutputMode::Json ||
+            workflow_result.success
+          ? std::cout
+          : std::cerr;
+      stream << workflow_result.output << '\n';
+      return workflow_result.exit_code;
   }
 
   // 2. 构造 IIPC provider 和 CliIpcClient

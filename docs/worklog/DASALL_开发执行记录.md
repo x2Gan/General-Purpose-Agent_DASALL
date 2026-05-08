@@ -1,5 +1,29 @@
 # DASALL 开发执行记录
 
+## 记录 #598
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-012 分步实现 `config show`、`config plan/dry-run`、`config validate` 非交互工作流
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/main.cpp`、`apps/cli/CMakeLists.txt` 与 `apps/cli/src/config/CliConfigWorkflowCoordinator.*`，把 `config` 本地命令从 main 的统一 stub 切换到真正的 workflow coordinator：`show` 现在会基于 canonical files 构造 `ConfigSummaryView`，`plan/dry-run` 会基于当前观察态输出只读 action plan，`validate` 会复用 `ConfigPreflightChecker` 驱动 `dasall-daemon --validate-only` 的无副作用校验路径。
+2. 更新 `apps/cli/src/config/DaemonConfigFileStore.h` 与 `apps/cli/src/config/DaemonConfigFileStore.cpp`，让 `load_current()` 可以在保留 `write_desired()` fail-closed 语义的同时暴露 `daemon_config_valid` 观察态；这样 `config show/plan` 遇到 invalid `daemon.json` 时可以投影 `Drifted`/`daemon_config_invalid`，而不是直接把只读观察链路短路成硬失败。
+3. 新增 `tests/unit/apps/cli/ConfigShowWorkflowTest.cpp`、`tests/unit/apps/cli/ConfigPlanWorkflowTest.cpp`、`tests/unit/apps/cli/ConfigValidateWorkflowTest.cpp` 与 `tests/integration/apps/cli/ConfigShowValidateIntegrationTest.cpp`，并更新两处 CMakeLists，把 `show/plan/validate` 的 focused unit/integration 出口正式接到 `unit;cli;config` / `integration;cli;config` 拓扑上。
+
+### 验证
+
+1. `cd /home/gangan/DASALL && cmake --preset vscode-linux-ninja && cmake --build --preset vscode-linux-ninja --target dasall-cli dasall-config_show_workflow_unit_test dasall-config_plan_workflow_unit_test dasall-config_validate_workflow_unit_test dasall_cli_config_show_validate_integration_test && ctest --preset vscode-linux-ninja -R "ConfigShowWorkflowTest|ConfigPlanWorkflowTest|ConfigValidateWorkflowTest|ConfigShowValidateIntegrationTest" --output-on-failure`
+   - 结果：通过；`ConfigShowWorkflowTest`、`ConfigPlanWorkflowTest`、`ConfigValidateWorkflowTest` 与 `ConfigShowValidateIntegrationTest` 全绿，说明 `show`、`plan/dry-run`、`validate` 的非交互只读链路已经具备独立输出契约和 focused 回归出口。
+
+### 结果
+
+1. CLCFG-TODO-012 已把 config 本地命令从“parser/main 已能识别，但 workflow 仍整体 stub”推进到真正可用的只读闭环：`show` 能读取 canonical sink 并输出 summary，`plan/dry-run` 能在不写系统状态的前提下生成 current-state plan，`validate` 能调用 `--validate-only` 并返回独立的 validation summary。
+2. `config plan --from-file` 目前保持 fail-closed，并在输出中显式指向 CLCFG-TODO-013；这避免了在 012 阶段把 desired-state diff planner 偷做进只读 workflow，同时也保住了 parser grammar 已冻结的语义面。
+3. `DaemonConfigFileStore::load_current()` 现在对 invalid `daemon.json` 暴露“可观察但不可写”的状态位；后续 013/014 在 apply/wizard 路径里仍可继续复用 file-store 的 strict write gate，而 show/plan 不再被同一个 fail-closed 行为误伤。
+
 ## 记录 #597
 
 - 日期：2026-05-08

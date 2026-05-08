@@ -3,11 +3,14 @@ set(DASALL_APPS_CLI_INTEGRATION_TEST_EXECUTABLE_TARGETS)
 macro(dasall_add_cli_config_integration_test target_name test_name source_file)
   add_executable(${target_name}
     ${source_file}
+    ${ARGN}
   )
 
   target_include_directories(${target_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/tests/integration/access
+      ${CMAKE_SOURCE_DIR}/apps/cli/src
+      ${CMAKE_SOURCE_DIR}/access/include
   )
 
   target_compile_definitions(${target_name}
@@ -37,6 +40,20 @@ dasall_add_cli_config_integration_test(
   dasall_cli_config_fresh_install_workflow_integration_test
   ConfigFreshInstallWorkflowTest
   ${CMAKE_SOURCE_DIR}/tests/integration/apps/cli/ConfigFreshInstallWorkflowTest.cpp
+)
+
+dasall_add_cli_config_integration_test(
+  dasall_cli_config_show_validate_integration_test
+  ConfigShowValidateIntegrationTest
+  ${CMAKE_SOURCE_DIR}/tests/integration/apps/cli/ConfigShowValidateIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
 )
 
 if(NOT DASALL_APPS_CLI_INTEGRATION_TEST_EXECUTABLE_TARGETS)

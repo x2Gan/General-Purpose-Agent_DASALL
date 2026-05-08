@@ -7,6 +7,10 @@ add_executable(dasall-cli
   src/CliOutputFormatter.cpp
   src/config/ConfigCommandTypes.cpp
   src/config/CliConfigWorkflowCoordinator.cpp
+  src/config/DaemonConfigFileStore.cpp
+  src/config/InstallStateProbe.cpp
+  src/config/ConfigPreflightChecker.cpp
+  src/config/PrivilegeProbe.cpp
   src/config/ConfigPlanFormatter.cpp
   src/config/ConfigSummaryFormatter.cpp
   src/config/InteractivePromptEngine.cpp

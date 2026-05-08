@@ -252,6 +252,69 @@ target_link_libraries(dasall-config_summary_formatter_unit_test
 
 dasall_apply_common_options(dasall-config_summary_formatter_unit_test)
 
+dasall_add_cli_config_unit_test(
+  dasall-config_show_workflow_unit_test
+  ConfigShowWorkflowTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigShowWorkflowTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
+)
+
+target_link_libraries(dasall-config_show_workflow_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_show_workflow_unit_test)
+
+dasall_add_cli_config_unit_test(
+  dasall-config_plan_workflow_unit_test
+  ConfigPlanWorkflowTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigPlanWorkflowTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
+)
+
+target_link_libraries(dasall-config_plan_workflow_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_plan_workflow_unit_test)
+
+dasall_add_cli_config_unit_test(
+  dasall-config_validate_workflow_unit_test
+  ConfigValidateWorkflowTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/ConfigValidateWorkflowTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
+)
+
+target_link_libraries(dasall-config_validate_workflow_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall-config_validate_workflow_unit_test)
+
 dasall_add_cli_unit_test(
   dasall-cli_output_formatter_unit_test
   CliDaemonOutputFormatterTest

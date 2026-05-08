@@ -20,6 +20,7 @@ struct DaemonConfigFileStorePaths {
 struct DaemonConfigStoreSnapshot {
   bool defaults_file_exists = false;
   bool daemon_config_file_exists = false;
+  bool daemon_config_valid = false;
   std::optional<std::string> profile_id;
   std::string defaults_file_text;
   std::string daemon_config_json;

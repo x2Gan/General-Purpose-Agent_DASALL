@@ -419,6 +419,7 @@ std::optional<DaemonConfigStoreSnapshot> DaemonConfigFileStore::load_current(
   snapshot.defaults_file_exists = std::filesystem::exists(paths_.defaults_file);
   snapshot.daemon_config_file_exists =
       std::filesystem::exists(paths_.daemon_config_file);
+  snapshot.daemon_config_valid = !snapshot.daemon_config_file_exists;
 
   if (snapshot.defaults_file_exists &&
       !read_text_file(paths_.defaults_file, &snapshot.defaults_file_text,
@@ -432,12 +433,8 @@ std::optional<DaemonConfigStoreSnapshot> DaemonConfigFileStore::load_current(
                         error_message)) {
       return std::nullopt;
     }
-    if (!validate_json_string(snapshot.daemon_config_json)) {
-      assign_error(error_message,
-                   "daemon config json is not valid JSON: " +
-                       paths_.daemon_config_file.string());
-      return std::nullopt;
-    }
+    snapshot.daemon_config_valid =
+        validate_json_string(snapshot.daemon_config_json);
   }
 
   return snapshot;
@@ -452,8 +449,15 @@ ConfigFileWriteResult DaemonConfigFileStore::write_desired(
   }
 
   std::string load_error;
-  if (!load_current(&load_error).has_value()) {
+  const auto current_snapshot = load_current(&load_error);
+  if (!current_snapshot.has_value()) {
     result.error_message = std::move(load_error);
+    return result;
+  }
+  if (current_snapshot->daemon_config_file_exists &&
+      !current_snapshot->daemon_config_valid) {
+    result.error_message = "daemon config json is not valid JSON: " +
+                           paths_.daemon_config_file.string();
     return result;
   }
 
