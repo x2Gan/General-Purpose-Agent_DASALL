@@ -36,6 +36,7 @@ dasall::apps::cli::config::ConfigSummaryView make_summary_fixture() {
       .rollback_performed = false,
       .written_files = {"/etc/dasall/daemon.json"},
       .written_secret_refs = {"secret://llm/providers/deepseek-prod"},
+      .completed_actions = {"restart", "enable"},
       .manual_followups = {"systemctl status dasall-daemon.service"},
       .blocked_actions = {},
   };
@@ -58,6 +59,9 @@ void test_format_human_projects_profile_service_and_next_steps() {
               "ConfigSummaryFormatter should only project redacted secret refs in human output");
   assert_true(human.find("use sudo dasall config") != std::string::npos,
               "ConfigSummaryFormatter should include operator access guidance in human output");
+  assert_true(human.find("completed_actions:\n- restart\n- enable") !=
+                  std::string::npos,
+              "ConfigSummaryFormatter should render completed service actions in human output");
   assert_true(human.find("systemctl enable --now dasall-daemon.service") !=
                   std::string::npos,
               "ConfigSummaryFormatter should include next-step guidance in human output");
@@ -83,6 +87,9 @@ void test_format_json_emits_stable_summary_schema_and_apply_result() {
               "ConfigSummaryFormatter should include operator access guidance in JSON output");
   assert_true(json.find("\"outcome\":\"applied\"") != std::string::npos,
               "ConfigSummaryFormatter should embed apply_result summary in JSON output");
+  assert_true(json.find("\"completed_actions\":[\"restart\",\"enable\"]") !=
+                  std::string::npos,
+              "ConfigSummaryFormatter should expose completed service actions in JSON output");
   assert_true(json.find("\"next_steps\":[\"systemctl enable --now dasall-daemon.service\"]") !=
                   std::string::npos,
               "ConfigSummaryFormatter should include stable next_steps arrays in JSON output");

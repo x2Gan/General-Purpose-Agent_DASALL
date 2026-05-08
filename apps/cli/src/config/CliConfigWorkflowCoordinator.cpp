@@ -120,6 +120,17 @@ void add_unique_string(std::vector<std::string>& values,
   values.emplace_back(value);
 }
 
+[[nodiscard]] bool contains_string(const std::vector<std::string>& values,
+                                   std::string_view expected) {
+  for (const auto& value : values) {
+    if (value == expected) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 [[nodiscard]] std::string bool_text(const bool value) {
   return value ? "true" : "false";
 }
@@ -319,6 +330,81 @@ void skip_json_whitespace(std::string_view json, std::size_t& index) {
   return result;
 }
 
+[[nodiscard]] ServiceCommandResult default_service_command_runner(
+    const ServiceManagerCommand& command) {
+  ServiceCommandResult result;
+  if (command.argv.empty()) {
+    result.exit_code = 127;
+    result.stderr_text = "service command is empty";
+    return result;
+  }
+
+  int stdout_pipe[2];
+  int stderr_pipe[2];
+  if (::pipe(stdout_pipe) != 0 || ::pipe(stderr_pipe) != 0) {
+    result.exit_code = 127;
+    result.stderr_text = "failed to create service command pipes";
+    return result;
+  }
+
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    ::close(stdout_pipe[0]);
+    ::close(stdout_pipe[1]);
+    ::close(stderr_pipe[0]);
+    ::close(stderr_pipe[1]);
+    result.exit_code = 127;
+    result.stderr_text = "failed to fork service command child";
+    return result;
+  }
+
+  if (pid == 0) {
+    ::dup2(stdout_pipe[1], STDOUT_FILENO);
+    ::dup2(stderr_pipe[1], STDERR_FILENO);
+    ::close(stdout_pipe[0]);
+    ::close(stdout_pipe[1]);
+    ::close(stderr_pipe[0]);
+    ::close(stderr_pipe[1]);
+
+    std::vector<char*> argv;
+    argv.reserve(command.argv.size() + 1U);
+    for (const auto& arg : command.argv) {
+      argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    ::execvp(argv.front(), argv.data());
+    std::perror("execvp");
+    std::_Exit(127);
+  }
+
+  ::close(stdout_pipe[1]);
+  ::close(stderr_pipe[1]);
+
+  std::thread stdout_reader([&result, fd = stdout_pipe[0]]() {
+    result.stdout_text = read_all_from_fd(fd);
+    ::close(fd);
+  });
+  std::thread stderr_reader([&result, fd = stderr_pipe[0]]() {
+    result.stderr_text = read_all_from_fd(fd);
+    ::close(fd);
+  });
+
+  int status = 0;
+  if (::waitpid(pid, &status, 0) < 0) {
+    result.exit_code = 127;
+    result.stderr_text = "failed to wait for service command child";
+  } else if (WIFEXITED(status)) {
+    result.exit_code = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    result.exit_code = 128 + WTERMSIG(status);
+  }
+
+  stdout_reader.join();
+  stderr_reader.join();
+  return result;
+}
+
 [[nodiscard]] InstallStateFacts build_install_state_facts(
     const DaemonConfigStoreSnapshot& snapshot,
     const ConfigPreflightEnvironment& environment) {
@@ -482,20 +568,6 @@ void append_string_list(std::string& output,
   return plan;
 }
 
-[[nodiscard]] std::vector<std::string> build_service_followups(
-    const ConfigActionPlan& plan) {
-  std::vector<std::string> followups;
-  if (plan.service_restart_required) {
-    followups.emplace_back("systemctl restart dasall-daemon.service");
-  } else if (plan.service_start_requested) {
-    followups.emplace_back("systemctl start dasall-daemon.service");
-  }
-  if (plan.service_enable_requested) {
-    followups.emplace_back("systemctl enable dasall-daemon.service");
-  }
-  return followups;
-}
-
 [[nodiscard]] std::string join_command(
     const std::vector<std::string>& command) {
   if (command.empty()) {
@@ -645,7 +717,9 @@ void append_string_list(std::string& output,
     const ConfigActionPlan& plan,
     const DaemonConfigFileStore& file_store,
     const ConfigPreflightChecker& preflight_checker,
+  const ServiceManagerAdapter& service_manager,
     const ValidateOnlyRunner& validate_only_runner,
+  const ServiceCommandRunner& service_command_runner,
     std::optional<PrivilegeContext> privilege_context) {
   if (!plan.secret_writes.empty()) {
     return make_failure_result(command,
@@ -744,9 +818,48 @@ void append_string_list(std::string& output,
     }
   }
 
+  const auto service_execution_plan = service_manager.plan_service_actions(
+      plan, observed_state.facts.systemd_available);
+  const auto service_apply_result = service_manager.apply(
+      service_execution_plan,
+      service_command_runner);
+  apply_result.completed_actions = service_apply_result.completed_actions;
+  apply_result.manual_followups = service_apply_result.manual_followups;
+  apply_result.blocked_actions.insert(apply_result.blocked_actions.end(),
+                                      service_apply_result.blocked_actions.begin(),
+                                      service_apply_result.blocked_actions.end());
+  if (plan.service_restart_required || plan.service_start_requested) {
+    apply_result.state_after =
+        contains_string(apply_result.completed_actions, "restart") ||
+                contains_string(apply_result.completed_actions, "start")
+            ? InstallState::ConfiguredRunning
+            : InstallState::ConfiguredStopped;
+  }
+  if (!service_apply_result.success) {
+    apply_result.outcome = kConfigApplyOutcomeBlocked;
+    apply_result.applied = true;
+    add_unique_string(apply_result.manual_followups,
+                      "systemctl status dasall-daemon.service");
+    add_unique_string(apply_result.manual_followups,
+                      "journalctl -u dasall-daemon.service -n 50 --no-pager");
+    apply_result.blocked_actions.push_back(service_apply_result.error_message);
+    ConfigSummaryView summary = build_apply_summary(desired,
+                                                   observed_state.facts,
+                                                   plan,
+                                                   apply_result);
+    return CliConfigWorkflowResult{
+        .handled = true,
+        .success = false,
+        .status = CliConfigWorkflowStatus::ApplyRendered,
+        .exit_code = 6,
+        .command_name = std::string(workflow_command_name(command.config_command)),
+        .output = format_apply_output(command, summary),
+        .failure_reason = service_apply_result.error_message,
+    };
+  }
+
   apply_result.outcome = kConfigApplyOutcomeApplied;
   apply_result.applied = true;
-  apply_result.manual_followups = build_service_followups(plan);
   ConfigSummaryView summary = build_apply_summary(desired,
                                                  observed_state.facts,
                                                  plan,
@@ -772,11 +885,17 @@ void append_string_list(std::string& output,
   summary.socket_path = desired.daemon.socket_path;
   summary.log_format = desired.daemon.log_format;
   summary.service_installed = facts.service_installed;
-  summary.service_running = false;
-  summary.service_enabled = false;
+  summary.service_running = facts.service_running ||
+                            contains_string(apply_result.completed_actions,
+                                            "restart") ||
+                            contains_string(apply_result.completed_actions,
+                                            "start");
+  summary.service_enabled = facts.service_enabled ||
+                            contains_string(apply_result.completed_actions,
+                                            "enable");
   summary.operator_access_hint = std::string(kOperatorAccessHint);
   summary.incomplete_items = plan.blocked_actions;
-  summary.next_steps = build_service_followups(plan);
+  summary.next_steps = apply_result.manual_followups;
   summary.apply_result = apply_result;
   return summary;
 }
@@ -880,6 +999,9 @@ CliConfigWorkflowCoordinator::CliConfigWorkflowCoordinator(
                      dependencies_.prompt_confirm_handler) {
   if (!dependencies_.validate_only_runner) {
     dependencies_.validate_only_runner = default_validate_only_runner;
+  }
+  if (!dependencies_.service_command_runner) {
+    dependencies_.service_command_runner = default_service_command_runner;
   }
 }
 
@@ -1019,7 +1141,9 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
                                     plan,
                                     file_store_,
                                     preflight_checker_,
+                                    service_manager_,
                                     dependencies_.validate_only_runner,
+                                    dependencies_.service_command_runner,
                                     dependencies_.privilege_context);
     }
     case dasall::apps::cli::CliConfigCommandKind::Wizard: {
@@ -1065,7 +1189,9 @@ CliConfigWorkflowResult CliConfigWorkflowCoordinator::run(
                                     plan,
                                     file_store_,
                                     preflight_checker_,
+                                    service_manager_,
                                     dependencies_.validate_only_runner,
+                                    dependencies_.service_command_runner,
                                     dependencies_.privilege_context);
     }
     case dasall::apps::cli::CliConfigCommandKind::None:

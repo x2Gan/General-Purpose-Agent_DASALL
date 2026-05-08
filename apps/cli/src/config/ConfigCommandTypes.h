@@ -120,6 +120,7 @@ struct ConfigApplyResult {
   bool rollback_performed = false;
   std::vector<std::string> written_files;
   std::vector<std::string> written_secret_refs;
+  std::vector<std::string> completed_actions;
   std::vector<std::string> manual_followups;
   std::vector<std::string> blocked_actions;
 

@@ -125,6 +125,16 @@ std::string ConfigSummaryFormatter::format_human(const ConfigSummaryView& summar
   }
   output += "apply_outcome: ";
   output += summary.apply_result.outcome;
+  output += "\ncompleted_actions:\n";
+  if (summary.apply_result.completed_actions.empty()) {
+    output += "- (none)\n";
+  } else {
+    for (const auto& action : summary.apply_result.completed_actions) {
+      output += "- ";
+      output += action;
+      output += "\n";
+    }
+  }
   output += "\noperator_access: ";
   output += summary.operator_access_hint.empty() ? "(none)"
                                                  : summary.operator_access_hint;
@@ -186,6 +196,8 @@ std::string ConfigSummaryFormatter::format_json(const ConfigSummaryView& summary
             json_string_array(summary.apply_result.written_files);
   output += ",\"written_secret_refs\":" +
             json_string_array(summary.apply_result.written_secret_refs);
+  output += ",\"completed_actions\":" +
+            json_string_array(summary.apply_result.completed_actions);
   output += ",\"manual_followups\":" +
             json_string_array(summary.apply_result.manual_followups);
   output += ",\"blocked_actions\":" +

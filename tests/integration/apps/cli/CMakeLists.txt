@@ -45,6 +45,7 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
@@ -61,6 +62,7 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
@@ -77,6 +79,7 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
@@ -93,6 +96,24 @@ dasall_add_cli_config_integration_test(
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigDiffPlanner.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigCommandTypes.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/PrivilegeProbe.cpp
+)
+
+dasall_add_cli_config_integration_test(
+  dasall_cli_config_modify_existing_workflow_integration_test
+  ConfigModifyExistingWorkflowTest
+  ${CMAKE_SOURCE_DIR}/tests/integration/apps/cli/ConfigModifyExistingWorkflowTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/CliConfigWorkflowCoordinator.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/DaemonConfigFileStore.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InstallStateProbe.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPreflightChecker.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigDiffPlanner.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ServiceManagerAdapter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/InteractivePromptEngine.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigPlanFormatter.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/config/ConfigSummaryFormatter.cpp

@@ -68,6 +68,9 @@ void write_text_file(const fs::path& path, std::string_view content) {
         .stderr_text = {},
     };
   };
+  dependencies.service_command_runner = [](const auto&) {
+    return dasall::apps::cli::config::ServiceCommandResult{};
+  };
   dependencies.prompt_input_handler = std::move(input_handler);
   dependencies.prompt_confirm_handler = std::move(confirm_handler);
   return CliConfigWorkflowCoordinator(std::move(dependencies));

@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #601
+
+- 日期：2026-05-08
+- 阶段：cli/build
+- 任务：CLCFG-TODO-015 分切片接入 service action 编排与安装态 onboarding UX
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/cli/src/config/ConfigCommandTypes.h`、`apps/cli/src/config/CliConfigWorkflowCoordinator.h`、`apps/cli/src/config/CliConfigWorkflowCoordinator.cpp` 与 `apps/cli/src/config/ConfigSummaryFormatter.cpp`，把 `ServiceManagerAdapter::plan_service_actions()` / `apply()` 接到 shared apply helper：`config apply --from-file` 与 wizard review/apply 现在会在 canonical files 与 `--validate-only` 成功后统一执行 restart/start/enable runner，并把 `completed_actions`、failure reason、manual followups 投影到 human/JSON summary，而不是继续停留在纯提示层。
+2. 更新 `apps/cli/CMakeLists.txt`、`tests/unit/apps/cli/CMakeLists.txt` 与 `tests/integration/apps/cli/CMakeLists.txt`，为主二进制和所有直接编译 coordinator 的测试补齐 `ServiceManagerAdapter.cpp` 依赖，并新增 `tests/integration/apps/cli/ConfigModifyExistingWorkflowTest.cpp`，覆盖 existing-config modify 场景下 service restart/enable 的成功与失败路径。
+3. 更新 `tests/integration/apps/cli/ConfigApplyWorkflowTest.cpp`、`tests/integration/apps/cli/ConfigFreshInstallWorkflowTest.cpp`、`tests/integration/apps/cli/ConfigInteractiveWizardTest.cpp` 与 `tests/unit/apps/cli/ConfigSummaryFormatterTest.cpp`，统一注入 no-op `service_command_runner` 避免测试误触真实 `systemctl`，同时让 summary formatter 对 executed service actions 具备 focused 回归出口。
+4. 复验 `debian/dasall-daemon.README.Debian`、`debian/dasall-daemon.postinst`、`debian/dasall.1`、`debian/dasall-cli.install` 与 `debian/tests/control`，确认 installed `sudo dasall config`、`/usr/bin/dasall` 与 `systemctl enable --now dasall-daemon.service` 的 onboarding 文案已经对齐；autopkgtest smoke script 与 one-shot validator 仍明确后置到 CLCFG-TODO-021/022。
+
+### 验证
+
+1. `Build_CMakeTools`：构建 `dasall-cli`、`dasall_integration_tests`、`dasall-config_summary_formatter_unit_test`
+   - 结果：相关 CLI/config 目标完成重编译；聚合 `dasall_integration_tests` 会顺带触发两个既有 runtime integration failure（`RuntimeResumeIntegrationTest`、`RuntimeCheckpointReplayRegressionTest` 均报 `requires a ready facade`），与 CLCFG-TODO-015 切片无关，因此后续验收收敛到 focused ctest。
+2. `cd /home/gangan/DASALL && ctest --preset vscode-linux-ninja -R "ConfigSummaryFormatterTest|ConfigFreshInstallWorkflowTest|ConfigInteractiveWizardTest|ConfigApplyWorkflowTest|ConfigModifyExistingWorkflowTest|CliDaemonSocketPathIntegrationTest" --output-on-failure && rg -n "dasall config|README.Debian|enable --now dasall-daemon.service|/usr/bin/dasall" debian`
+   - 结果：通过；6 个直接相关测试全绿，且 `debian` 资产确认 installed command alias 与 onboarding 文案一致。
+
+### 结果
+
+1. CLCFG-TODO-015 已把 service action owner 从“summary/manual followups”推进到真正执行路径：`config apply --from-file` 与 wizard review/apply 现在会在同一 helper 下执行 restart/start/enable，并把已执行动作写入 `ConfigApplyResult` / summary。
+2. existing modify 路径已有 focused integration 证据；service action 失败会返回非零 apply 结果与显式 `failure_reason`，不再悄悄降级成“只给人工提示”。
+3. installed onboarding 文案已与 packaging 资产对齐：source tree 仍使用 `dasall-cli config`，installed path 使用 `sudo dasall config` 与 `systemctl enable --now dasall-daemon.service`；但 autopkgtest smoke 与 one-shot validator 尚未落盘，因此当前仍只可宣称 build-tree ready，不宣称 installed-package ready。
+
+### 下一步
+
+1. 进入 CLCFG-TODO-016，实现 `SecretBootstrapWriter` 与 `LlmSecretPage` 的 P1 onboarding，并继续保持 `auth_ref`/redacted summary 的冻结边界。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 在当前仓库仍返回通用 `生成失败`，短期内需要继续用 focused `ctest` 命令补齐 config 侧验收证据，直到工具态恢复。
+2. `debian/tests/pkg-smoke-local-control-plane` 与 `scripts/packaging/validate_cli_config_v1.sh` 仍缺，CLCFG-GATE-04/05/06 前不应把本轮结果外推为 installed-package ready。
+
 ## 记录 #600
 
 - 日期：2026-05-08
