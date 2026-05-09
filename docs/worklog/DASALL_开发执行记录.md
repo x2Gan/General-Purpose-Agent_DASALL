@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+## 记录 #604
+
+- 日期：2026-05-09
+- 阶段：cli/build
+- 任务：CLCFG-TODO-019 补齐 config focused unit / contract 回归矩阵
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/contract/access/ConfigOutputContractTest.cpp`，把 `config plan`、`config show` 与 `config validate` 的 human/JSON stable schema、`config.validate` 的 deterministic failure exit family，以及 redacted secret summary / operator access hint 等关键投影收敛为单一 contract 入口，避免 `ConfigPlanFormatterTest`、`ConfigSummaryFormatterTest` 与 workflow unit tests 只能各自证明局部输出而缺少统一 contract gate。
+2. 更新 `tests/contract/access/CMakeLists.txt`，把 `ConfigOutputContractTest` 接入既有 access/cli contract topology，并显式打上 `contract;smoke;access;cli;config` 标签；该 target 直接复用 `CliConfigWorkflowCoordinator.cpp` 与 config formatter / capability / file-store / preflight / service 相关源文件，确保 contract target 与真实 config output owner 保持同一链接面，不再停留在 reserved entrypoint。
+3. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-019 标记为 Done，并把 focused unit/contract gate 的实际验收命令、`ConfigOutputContractTest` 接线结论以及 build-tree 当前状态回写到专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-config_output_contract_test"])`
+   - 结果：通过；新增 contract target 完成配置、编译和链接，说明 config output contract 已进入 CMake topology。
+2. `RunCtest_CMakeTools(tests=["ConfigOutputContractTest"])`
+   - 结果：失败；工具返回通用“生成失败”，与仓库当前已知的 CMake Tools 测试执行器状态问题一致，不作为功能失败处理。
+3. `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^ConfigOutputContractTest$' --output-on-failure`
+   - 结果：通过；新增 contract test 单独执行成功，证明 `config plan/show/validate` 的 stable output/exit contract 已落盘并可回归。
+4. `cd /home/gangan/DASALL && cmake --build --preset vscode-linux-ninja --target dasall-config_command_parser_unit_test dasall-config_command_types_unit_test dasall-install_state_probe_unit_test dasall-config_capability_resolver_unit_test dasall-daemon_config_file_store_unit_test dasall-config_diff_planner_unit_test dasall-config_plan_formatter_unit_test dasall-config_summary_formatter_unit_test dasall-config_output_contract_test && ctest --test-dir build/vscode-linux-ninja -R '^(ConfigCommandParserTest|ConfigCommandTypesTest|InstallStateProbeTest|ConfigCapabilityResolverTest|DaemonConfigFileStoreTest|ConfigDiffPlannerTest|ConfigPlanFormatterTest|ConfigSummaryFormatterTest|ConfigOutputContractTest)$' --output-on-failure`
+   - 结果：通过；9 个 focused unit/contract tests 全绿，证明 parser、types、state probe、capability、file store、diff planner、plan/summary formatter 与新的 config output contract 已形成统一 focused gate。
+
+### 结果
+
+1. CLCFG-TODO-019 已从“unit tests 大体存在但缺少 config output contract”推进到真正的 focused unit/contract gate：`ConfigOutputContractTest` 现在把 `config plan/show/validate` 的稳定 schema 和本地 exit family 绑定到同一个 contract 入口。
+2. 019 没有引入新的业务实现或额外配置面；本轮只补足 contract topology 和 gate 证据，保持在详细设计 13/14 约束下的最小闭环。
+3. CLCFG-GATE-03 的测试面现在具备 build-tree 证据，但 rootful/systemd workflow 与 installed-package validator 仍留给 CLCFG-TODO-020/021/022，当前结论仍是 build-tree ready、非 installed-package ready。
+
+### 下一步
+
+1. 进入 CLCFG-TODO-020，补齐 `ConfigDriftRepairWorkflowTest` 与 non-systemd/service-action 相关 P0 workflow integration gate。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 仍然对单个 config contract test 返回通用“生成失败”，因此 019 以及后续 020/021 的 focused 验收仍需继续保留 `build/vscode-linux-ninja` 下的 anchored `ctest` 回退路径，直到工具态恢复。
+
 ## 记录 #603
 
 - 日期：2026-05-08
