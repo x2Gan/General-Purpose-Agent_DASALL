@@ -2,9 +2,9 @@
 
 ## 1. 目的
 
-这个目录承载 Ubuntu DPKG v1 的 packaging 验证入口。`PKG-TODO-003` 先冻结运行策略与 gate 分层；`PKG-TODO-016` 已落 `debian/tests/*` installed-package smoke 脚本，rootful lifecycle harness 继续由后续原子任务补齐。
+这个目录承载 Ubuntu DPKG v1 的 packaging 验证入口。`PKG-TODO-003` 先冻结运行策略与 gate 分层；`PKG-TODO-016` 已落 `debian/tests/*` installed-package smoke 脚本，`PKG-TODO-017` 已补齐本地 rootful lifecycle harness，并在本机通过 `dpkg-buildpackage -us -uc -b` + `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` 完成 fresh install / explicit start / upgrade / remove-purge 验收。
 
-当前结论只有一条：不要把 build-tree preflight、local installed-package smoke、`autopkgtest` 混成同一种验证。
+当前结论只有一条：不要把 build-tree preflight、local installed-package smoke、`autopkgtest` 混成同一种验证；当前剩余正式 gate 只包括 `lintian`、qemu authoritative `autopkgtest` 和证据收口。
 
 ## 2. Gate 入口
 
@@ -41,14 +41,17 @@
 2. 若 CI 输出 package-ready 结论，则必须额外执行 qemu testbed 上的 `autopkgtest` installed-package run。
 3. local rootful lifecycle smoke 与 qemu `autopkgtest` 共同组成 installed-package gate；缺一不可。
 
-## 4. 计划中的文件
+## 4. 已落盘文件
 
-后续会逐步补齐以下文件：
+当前目录已经落盘以下 packaging validator / smoke harness：
 
 1. `scripts/packaging/validate_ubuntu_dpkg_v1.sh`
 2. `scripts/packaging/pkg_smoke_install.sh`
 3. `scripts/packaging/pkg_smoke_upgrade.sh`
 4. `scripts/packaging/pkg_smoke_remove_purge.sh`
+
+仍按需待定的只有：
+
 5. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
 
 ## 5. 不做什么

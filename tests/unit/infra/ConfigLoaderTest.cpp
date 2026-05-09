@@ -19,6 +19,22 @@ namespace {
   return std::filesystem::temp_directory_path() / "dasall-config-loader-test";
 }
 
+class ScopedCurrentPath {
+ public:
+  explicit ScopedCurrentPath(std::filesystem::path next_path)
+      : original_path_(std::filesystem::current_path()) {
+    std::filesystem::current_path(std::move(next_path));
+  }
+
+  ~ScopedCurrentPath() {
+    std::error_code error;
+    std::filesystem::current_path(original_path_, error);
+  }
+
+ private:
+  std::filesystem::path original_path_;
+};
+
 void write_text_file(const std::filesystem::path& path, std::string_view content) {
   std::filesystem::create_directories(path.parent_path());
   std::ofstream stream(path);
@@ -153,12 +169,34 @@ void test_config_loader_rejects_invalid_profile_and_missing_managed_sources() {
               "ConfigLoader should map runtime overlay lookup failures to the frozen provider category");
 }
 
+void test_config_loader_uses_install_aware_root_when_repository_root_is_unspecified() {
+  using dasall::infra::config::ConfigLoader;
+  using dasall::tests::support::assert_true;
+
+  const std::filesystem::path workspace_root = test_workspace_root() / "cwd-independence";
+  std::filesystem::remove_all(workspace_root);
+  std::filesystem::create_directories(workspace_root);
+
+  {
+    ScopedCurrentPath cwd(workspace_root);
+    ConfigLoader loader;
+    const auto profile = loader.load_profile("desktop_full");
+    assert_true(profile.loaded && profile.document.is_valid(),
+                "ConfigLoader should resolve frozen profiles from the install-aware root when repository_root is unspecified");
+    assert_true(profile.document.layer_ref.source_id == "profiles/desktop_full/runtime_policy.yaml",
+                "ConfigLoader should keep profile source ids stable when using the install-aware root");
+  }
+
+  std::filesystem::remove_all(workspace_root);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_config_loader_reads_four_layers_with_frozen_source_ids_and_versions();
     test_config_loader_rejects_invalid_profile_and_missing_managed_sources();
+    test_config_loader_uses_install_aware_root_when_repository_root_is_unspecified();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

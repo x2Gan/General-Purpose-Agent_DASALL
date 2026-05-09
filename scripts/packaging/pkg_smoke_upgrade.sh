@@ -76,7 +76,7 @@ prepare_installed_state() {
 prepare_operator_change() {
   log 'recording operator-owned conffile change'
   run_root_sh "sed -i 's/\"diag_enabled\": false/\"diag_enabled\": true/' /etc/dasall/daemon.json"
-  run_root_sh 'grep -Fq '"'"'"diag_enabled"'"'"': true' /etc/dasall/daemon.json'
+  run_root_sh "grep -Fq '\"diag_enabled\": true' /etc/dasall/daemon.json"
 }
 
 perform_upgrade() {
@@ -88,7 +88,7 @@ perform_upgrade() {
 
 verify_upgrade_outcome() {
   verify_packages_installed
-  run_root_sh 'grep -Fq '"'"'"diag_enabled"'"'"': true' /etc/dasall/daemon.json'
+  run_root_sh "grep -Fq '\"diag_enabled\": true' /etc/dasall/daemon.json"
   run_root_sh '! systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1'
   run_root_sh '! systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'
   run_root_sh '. /etc/default/dasall-daemon && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json'

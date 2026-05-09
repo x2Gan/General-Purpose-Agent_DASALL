@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "config/ConfigErrors.h"
+#include "config/InstallLayout.h"
 
 namespace dasall::infra::config {
 namespace {
@@ -27,6 +28,29 @@ struct ParsedYamlDocument {
   bool ok = false;
   std::string error;
 };
+
+[[nodiscard]] std::filesystem::path weakly_canonical_or_input(
+    const std::filesystem::path& path) {
+  std::error_code error;
+  const std::filesystem::path canonical = std::filesystem::weakly_canonical(path, error);
+  return error ? path : canonical;
+}
+
+[[nodiscard]] bool path_exists_noexcept(const std::filesystem::path& path) {
+  std::error_code error;
+  return std::filesystem::exists(path, error) && !error;
+}
+
+[[nodiscard]] bool path_is_directory_noexcept(const std::filesystem::path& path) {
+  std::error_code error;
+  return std::filesystem::is_directory(path, error) && !error;
+}
+
+[[nodiscard]] bool looks_like_repository_root(const std::filesystem::path& path) {
+  return path_exists_noexcept(path / "profiles") &&
+         path_exists_noexcept(path / "infra") &&
+         path_exists_noexcept(path / "tests");
+}
 
 [[nodiscard]] std::string trim_copy(std::string value) {
   const auto begin = value.find_first_not_of(" \t\r\n");
@@ -417,14 +441,24 @@ ConfigLoader::ConfigLoader(ConfigLoaderOptions options) : options_(std::move(opt
 
 std::filesystem::path ConfigLoader::resolve_repository_root() const {
   if (!options_.repository_root.empty()) {
-    return std::filesystem::weakly_canonical(options_.repository_root);
+    return weakly_canonical_or_input(options_.repository_root);
   }
 
-  std::filesystem::path cursor = std::filesystem::current_path();
+  const InstallLayout install_layout = resolve_install_layout();
+  if (install_layout.has_consistent_values() &&
+      path_is_directory_noexcept(install_layout.profiles_root)) {
+    return weakly_canonical_or_input(install_layout.readonly_assets_root);
+  }
+
+  std::error_code current_path_error;
+  std::filesystem::path cursor = std::filesystem::current_path(current_path_error);
+  if (current_path_error) {
+    return weakly_canonical_or_input(install_layout.readonly_assets_root);
+  }
+
+  const std::filesystem::path initial_current_path = cursor;
   while (!cursor.empty()) {
-    if (std::filesystem::exists(cursor / "profiles") &&
-        std::filesystem::exists(cursor / "infra") &&
-        std::filesystem::exists(cursor / "tests")) {
+    if (looks_like_repository_root(cursor)) {
       return cursor;
     }
 
@@ -436,7 +470,7 @@ std::filesystem::path ConfigLoader::resolve_repository_root() const {
     cursor = parent;
   }
 
-  return std::filesystem::current_path();
+  return initial_current_path;
 }
 
 ConfigLoadResult ConfigLoader::load_default() {

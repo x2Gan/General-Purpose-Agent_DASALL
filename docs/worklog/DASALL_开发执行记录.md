@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #607
+
+- 日期：2026-05-09
+- 阶段：packaging/build
+- 任务：PKG-TODO-017 新增 fresh-install / explicit-enable / upgrade / remove-purge smoke harness
+- 状态：已完成
+
+### 改动
+
+1. 更新 `scripts/packaging/pkg_smoke_install.sh`，移除对安装态 `dasall config` 子命令的超范围断言，并把 explicit start 验证收敛回专项 TODO 冻结的 `systemctl enable --now dasall-daemon.service` 路径，保持 fresh install、显式启动、socket owner/mode 与 `dasall ping/readiness/version` 验收口径一致。
+2. 更新 `infra/src/config/ConfigLoader.cpp` 与 `tests/unit/infra/ConfigLoaderTest.cpp`：在 017 rootful smoke 首轮实跑暴露 daemon 运行期仍会从当前工作目录向上推断 repo 根、导致 service 用户触发 `/home/gangan/DASALL/profiles` 权限错误后，改为默认优先走 `infra/config::resolve_install_layout()` 返回的 install-aware 只读资产根，并新增“临时 cwd 下未显式传 `repository_root` 仍能加载 frozen profile”回归测试。
+3. 更新 `scripts/packaging/pkg_smoke_upgrade.sh`，修复 conffile 保留断言中的 shell 引号错误，使 upgrade smoke 能稳定验证 `/etc/dasall/daemon.json` 上的 operator-owned `diag_enabled` 变更在重新安装后仍被保留。
+4. 回写 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md` 与 `scripts/packaging/README.md`，将 PKG-TODO-017 标记为 Done，并同步 Package Gate 06 Passed、已落盘 lifecycle harness、剩余 authoritative `autopkgtest` / `lintian` / evidence 收口范围。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_config_loader_unit_test"])`
+   - 结果：通过；install-aware root 解析修复与新增回归测试完成编译和链接。
+2. `./build/vscode-linux-ninja/tests/unit/infra/dasall_config_loader_unit_test`
+   - 结果：通过；新增“临时 cwd 下默认 ConfigLoader 仍能加载 frozen profile”回归场景成功，证明根因修复有效。
+3. `sudo apt-get install -y debhelper`
+   - 结果：通过；解除宿主机缺失 `debhelper-compat (= 13)` 导致 `dpkg-buildpackage -us -uc -b` 无法执行的环境阻塞。
+4. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；重新产出包含本轮修复的 `dasall`、`dasall-cli`、`dasall-daemon`、`dasall-common` 四个 `.deb` 与对应 `.changes`/`.buildinfo`。
+5. `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh`
+   - 结果：通过；fresh install、显式启动、upgrade/conffile、remove/purge 三段 lifecycle smoke 全绿，证明 PKG-TODO-017 的 one-shot validator 已可自动回归。
+
+### 结果
+
+1. PKG-TODO-017 已从“脚本已落盘但缺正式 rootful 验收”推进到“代码、根因修复、正式 one-shot 验收均完成”：本机现已确认 Package Gate 04/05/06 全部通过。
+2. 017 首轮失败暴露的真正根因不在 maintainer script，而在 `ConfigLoader` 仍会依赖 cwd/repo 探测 profile 资产根；本轮已把该问题收敛到 `infra/config` owner 修复，而不是通过 `systemd WorkingDirectory` 或 smoke 脚本绕开。
+3. packaging 专项当前剩余范围已收敛到 PKG-TODO-018：`lintian`、qemu authoritative `autopkgtest` 与 gate/evidence 收口，而不再是本地 lifecycle harness 缺口。
+
+### 下一步
+
+1. 进入 PKG-TODO-018，回写 packaging gate / deliverable / worklog 与残余风险，并补齐 `lintian` 与 authoritative `autopkgtest` 的正式证据。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 对 focused `ConfigLoaderTest` 仍返回通用“生成失败”，因此 017 的窄单测验收继续采用 `build/vscode-linux-ninja` 下的直接测试二进制回退路径；该问题是工具态限制，不是本轮代码失败。
+2. authoritative `autopkgtest` 与 `lintian` 尚未在本轮执行，因此虽然 local lifecycle gate 已闭环，但还不能把当前结论升级为 package-ready closeout。
+
 ## 记录 #606
 
 - 日期：2026-05-09

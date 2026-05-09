@@ -12,15 +12,6 @@ CLI_DEB="${ARTIFACT_DIR}/dasall-cli_${VERSION}_${ARCH}.deb"
 DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
 
-CONFIG_SMOKE_DIR=/tmp/dasall-cli-config-smoke
-CONFIG_IMPORT_FILE="${CONFIG_SMOKE_DIR}/deepseek.key"
-CONFIG_DESIRED_FILE="${CONFIG_SMOKE_DIR}/desired.yaml"
-CONFIG_SHOW_JSON="${CONFIG_SMOKE_DIR}/show-before.json"
-CONFIG_VALIDATE_JSON="${CONFIG_SMOKE_DIR}/validate.json"
-CONFIG_PLAN_JSON="${CONFIG_SMOKE_DIR}/plan.json"
-CONFIG_APPLY_JSON="${CONFIG_SMOKE_DIR}/apply.json"
-CONFIG_AFTER_JSON="${CONFIG_SMOKE_DIR}/show-after.json"
-
 log() {
   printf '[pkg-smoke-install] %s\n' "$*"
 }
@@ -73,7 +64,6 @@ run_root_sh() {
 
 cleanup() {
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
-  run_root rm -rf "${CONFIG_SMOKE_DIR}" >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT
@@ -85,7 +75,6 @@ reset_existing_state() {
     dpkg -P dasall dasall-daemon dasall-cli dasall-common >/dev/null 2>&1 || true
     rm -f /var/lib/dasall/pkg-smoke-state
     rm -rf /var/lib/dasall/secrets
-    rm -rf /tmp/dasall-cli-config-smoke
   '
 }
 
@@ -116,79 +105,15 @@ verify_validate_only() {
   run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json'
 }
 
-prepare_config_smoke_dir() {
-  run_root_sh "rm -rf '${CONFIG_SMOKE_DIR}' && mkdir -p '${CONFIG_SMOKE_DIR}' && chmod 700 '${CONFIG_SMOKE_DIR}'"
-}
-
-verify_config_show_and_validate() {
-  log 'verifying installed dasall config show/validate commands'
-  prepare_config_smoke_dir
-  run_root_sh "dasall config show --json > '${CONFIG_SHOW_JSON}'"
-  run_root_sh "grep -Fq '\"schema_version\":\"dasall.config.summary.v1\"' '${CONFIG_SHOW_JSON}'"
-  run_root_sh "dasall config validate --json > '${CONFIG_VALIDATE_JSON}'"
-  run_root_sh "grep -Fq '\"schema_version\":\"dasall.config.validate.v1\"' '${CONFIG_VALIDATE_JSON}'"
-}
-
-prepare_config_apply_fixture() {
-  log 'preparing config apply secret import fixture'
-  prepare_config_smoke_dir
-  run_root_sh ". /etc/default/dasall-daemon
-: \"\${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}\"
-cat <<'EOF' > '${CONFIG_IMPORT_FILE}'
-deepseek-file-secret
-EOF
-chmod 600 '${CONFIG_IMPORT_FILE}'
-cat <<EOF > '${CONFIG_DESIRED_FILE}'
-schema_version: dasall.config.apply.v1
-profile_id: \${DASALL_DAEMON_PROFILE_ID}
-daemon:
-  socket_path: /run/dasall/daemon.sock
-  log_format: text
-  diag_enabled: true
-  override_enabled: false
-  watchdog_enabled: false
-service:
-  start_now: true
-  enable_on_boot: true
-operator_access:
-  add_users: []
-secrets:
-  refs:
-    - ref: secret://llm/providers/deepseek-prod
-      source: file:${CONFIG_IMPORT_FILE}
-      auth_profile_name: primary
-EOF
-chmod 600 '${CONFIG_DESIRED_FILE}'"
-}
-
 verify_explicit_start() {
-  log 'verifying daemon stays stopped until explicit config apply'
+  log 'verifying daemon stays stopped until explicit service enable/start'
   run_root_sh '! systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1'
   run_root_sh '! systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'
 
-  prepare_config_apply_fixture
-
-  run_root_sh "dasall config plan --from-file '${CONFIG_DESIRED_FILE}' --json > '${CONFIG_PLAN_JSON}'"
-  run_root_sh "grep -Fq '\"schema_version\":\"dasall.config.plan.v1\"' '${CONFIG_PLAN_JSON}'"
-  run_root_sh "grep -Fq '\"ref\":\"secret://llm/providers/deepseek-prod\"' '${CONFIG_PLAN_JSON}'"
-  run_root_sh "grep -Fq '\"service_start_requested\":true' '${CONFIG_PLAN_JSON}'"
-
-  run_root_sh "dasall config apply --from-file '${CONFIG_DESIRED_FILE}' --no-input --json > '${CONFIG_APPLY_JSON}'"
-  run_root_sh "grep -Fq '\"outcome\":\"applied\"' '${CONFIG_APPLY_JSON}'"
-  run_root_sh "grep -Fq '\"written_secret_refs\":[\"secret://llm/providers/deepseek-prod\"]' '${CONFIG_APPLY_JSON}'"
-
-  run_root_sh "grep -Fq '\"log_format\": \"text\"' /etc/dasall/daemon.json"
-  run_root_sh "grep -Fq '\"diag_enabled\": true' /etc/dasall/daemon.json"
-  run_root test -f /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
-  run_root_sh "! grep -Fq 'deepseek-file-secret' /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret"
-
-  run_root_sh "dasall config show --json > '${CONFIG_AFTER_JSON}'"
-  run_root_sh "grep -Fq '\"ref\":\"secret://llm/providers/deepseek-prod\"' '${CONFIG_AFTER_JSON}'"
-  run_root_sh "grep -Fq '\"status\":\"configured\"' '${CONFIG_AFTER_JSON}'"
-  run_root_sh "grep -Fq '\"running\":true' '${CONFIG_AFTER_JSON}'"
-  run_root_sh "grep -Fq '\"enabled\":true' '${CONFIG_AFTER_JSON}'"
+  run_root systemctl enable --now dasall-daemon.service
 
   run_root systemctl is-active --quiet dasall-daemon.service
+  run_root systemctl is-enabled --quiet dasall-daemon.service
   run_root test -S /run/dasall/daemon.sock
   run_root_sh 'test "$(stat -c "%U:%G" /run/dasall/daemon.sock)" = "dasall:dasall"'
   run_root_sh 'test "$(stat -c "%a" /run/dasall/daemon.sock)" = "600"'
@@ -238,7 +163,6 @@ verify_packages_installed
 verify_service_not_started
 verify_installed_files
 verify_validate_only
-verify_config_show_and_validate
 
 if [ "$EXPLICIT_START_CHECK" -eq 1 ]; then
   verify_explicit_start
