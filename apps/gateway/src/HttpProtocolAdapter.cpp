@@ -95,6 +95,17 @@ dasall::access::InboundPacket HttpProtocolAdapter::decode() {
   packet.entry_type = extract_json_string(body, "entry_type");
   packet.peer_ref = extract_json_string(body, "peer_ref");
   packet.payload = extract_json_string(body, "payload");
+  packet.protocol_kind = "http";
+
+  const auto trace_id = extract_json_string(body, "trace_id");
+  if (!trace_id.empty()) {
+    packet.trace_id = trace_id;
+  }
+
+  const auto session_hint = extract_json_string(body, "session_hint");
+  if (!session_hint.empty()) {
+    packet.session_hint = session_hint;
+  }
 
   // peer_ref 默认为 HTTP remote 标记（不是 local trusted）
   if (packet.peer_ref.empty()) {

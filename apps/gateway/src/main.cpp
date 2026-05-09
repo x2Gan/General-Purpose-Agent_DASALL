@@ -16,22 +16,221 @@
 ///   - 所有响应写入固定安全头（X-Content-Type-Options 等）
 ///   - CORS 默认禁用，通过 SecurityConfig::cors_allowed_origins 白名单启用
 
-#include <csignal>
+#include <atomic>
+#include <charconv>
 #include <chrono>
+#include <csignal>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 
 // cpp-httplib：header-only HTTP/1.1 库
 #include "httplib.h"
 
+#include "AccessErrors.h"
 #include "AccessGatewayFactory.h"
 #include "HttpProtocolAdapter.h"
 #include "IAccessGateway.h"
 #include "HealthProbeHandler.h"
+#include "AgentFacade.h"
+#include "RuntimeDependencySet.h"
+#include "agent/AgentResult.h"
+#include "config/InstallLayout.h"
+#include "ProfileCatalog.h"
+#include "RuntimePolicyProvider.h"
 
 namespace {
+
+constexpr char kDefaultGatewayProfileId[] = "desktop_full";
+constexpr int kDefaultGatewayListenPort = 8080;
+
+struct ParsedGatewayArgs {
+  std::optional<std::string> profile_id;
+  std::optional<int> port;
+  bool ok = true;
+  std::string error;
+};
+
+[[nodiscard]] ParsedGatewayArgs parse_gateway_args(int argc, char* argv[]) {
+  ParsedGatewayArgs parsed;
+
+  const auto parse_port = [&parsed](std::string_view port_text) -> std::optional<int> {
+    int port = 0;
+    const auto* begin = port_text.data();
+    const auto* end = begin + port_text.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, port);
+    if (ec != std::errc{} || ptr != end || port <= 0 || port > 65535) {
+      parsed.ok = false;
+      parsed.error = "--port must be an integer within 1..65535";
+      return std::nullopt;
+    }
+
+    return port;
+  };
+
+  const auto set_unique_option = [&parsed](auto* slot,
+                                           auto value,
+                                           std::string_view option_name) {
+    if (slot->has_value()) {
+      parsed.ok = false;
+      parsed.error = std::string(option_name) + " cannot be specified more than once";
+      return false;
+    }
+
+    *slot = std::move(value);
+    return true;
+  };
+
+  for (int index = 1; index < argc; ++index) {
+    const std::string_view arg(argv[index]);
+
+    if (arg.starts_with("--profile-id=")) {
+      if (!set_unique_option(
+              &parsed.profile_id,
+              std::string(arg.substr(std::string_view("--profile-id=").size())),
+              "--profile-id")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg == "--profile-id") {
+      if (index + 1 >= argc) {
+        parsed.ok = false;
+        parsed.error = "--profile-id requires a value";
+        return parsed;
+      }
+
+      if (!set_unique_option(&parsed.profile_id,
+                             std::string(argv[++index]),
+                             "--profile-id")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--port=")) {
+      const auto parsed_port = parse_port(
+          arg.substr(std::string_view("--port=").size()));
+      if (!parsed_port.has_value() ||
+          !set_unique_option(&parsed.port, *parsed_port, "--port")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    if (arg == "--port") {
+      if (index + 1 >= argc) {
+        parsed.ok = false;
+        parsed.error = "--port requires a value";
+        return parsed;
+      }
+
+      const auto parsed_port = parse_port(argv[++index]);
+      if (!parsed_port.has_value() ||
+          !set_unique_option(&parsed.port, *parsed_port, "--port")) {
+        return parsed;
+      }
+      continue;
+    }
+
+    parsed.ok = false;
+    parsed.error = std::string("unsupported argument: ") + std::string(arg);
+    return parsed;
+  }
+
+  return parsed;
+}
+
+[[nodiscard]] std::optional<std::string> dispatch_context_value(
+    const dasall::access::RuntimeDispatchRequest& request,
+    const std::string& key) {
+  if (key == "request_id" && request.agent_request.request_id.has_value() &&
+      !request.agent_request.request_id->empty()) {
+    return request.agent_request.request_id;
+  }
+  if (key == "session_id" && request.agent_request.session_id.has_value() &&
+      !request.agent_request.session_id->empty()) {
+    return request.agent_request.session_id;
+  }
+  if (key == "trace_id" && request.agent_request.trace_id.has_value() &&
+      !request.agent_request.trace_id->empty()) {
+    return request.agent_request.trace_id;
+  }
+
+  const auto it = request.request_context.find(key);
+  if (it == request.request_context.end() || it->second.empty()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+[[nodiscard]] dasall::access::RuntimeDispatchResult map_agent_result_to_dispatch_result(
+    const dasall::access::RuntimeDispatchRequest& request,
+    dasall::contracts::AgentResult agent_result) {
+  dasall::access::RuntimeDispatchResult dispatch_result;
+  const auto request_id =
+      dispatch_context_value(request, "request_id").value_or(request.packet.packet_id);
+  const auto session_id = dispatch_context_value(request, "session_id")
+                              .value_or(std::string("session:") + request_id);
+  const auto trace_id = dispatch_context_value(request, "trace_id")
+                            .value_or(std::string("trace:") + request_id);
+  const auto uninitialized_runtime =
+      agent_result.status.has_value() &&
+      *agent_result.status == dasall::contracts::AgentResultStatus::Failed &&
+      agent_result.response_text.has_value() &&
+      agent_result.response_text->find("not initialized") != std::string::npos;
+
+  if (uninitialized_runtime) {
+    dispatch_result.disposition = dasall::access::AccessDisposition::Rejected;
+    dispatch_result.error_ref = "runtime_bridge_unavailable";
+    dispatch_result.response_context["error_code"] = std::to_string(
+        static_cast<int>(dasall::access::AccessErrorCode::RuntimeBridgeUnavailable));
+    dispatch_result.response_context["error_detail"] = *agent_result.response_text;
+    return dispatch_result;
+  }
+
+  if (!agent_result.request_id.has_value() || agent_result.request_id->empty()) {
+    agent_result.request_id = request_id;
+  }
+  if (!agent_result.trace_id.has_value() || agent_result.trace_id->empty()) {
+    agent_result.trace_id = trace_id;
+  }
+
+  dispatch_result.disposition = dasall::access::AccessDisposition::Completed;
+  dispatch_result.publish_envelope = dasall::access::PublishEnvelope{};
+  dispatch_result.publish_envelope->request_id = request_id;
+  dispatch_result.publish_envelope->result_id =
+      agent_result.result_id.value_or(std::string("result:") + request_id);
+  dispatch_result.publish_envelope->session_id = session_id;
+  dispatch_result.publish_envelope->trace_id = trace_id;
+  dispatch_result.publish_envelope->channel_ref =
+      request.packet.entry_type + "://" + request.packet.protocol_kind;
+  dispatch_result.publish_envelope->protocol_kind = request.packet.protocol_kind;
+  dispatch_result.publish_envelope->protocol_status_hint = "200";
+  dispatch_result.publish_envelope->payload =
+      agent_result.response_text.value_or(std::string());
+  dispatch_result.publish_envelope->agent_result = std::move(agent_result);
+  return dispatch_result;
+}
+
+[[nodiscard]] dasall::runtime::AgentInitRequest build_gateway_agent_init_request(
+    std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> policy_snapshot) {
+  dasall::runtime::AgentInitRequest init_request;
+  const std::string effective_profile_id = policy_snapshot->effective_profile_id();
+  init_request.runtime_instance_id = "gateway.http-unary:" + effective_profile_id;
+  init_request.profile_id = effective_profile_id;
+  init_request.policy_snapshot = std::move(policy_snapshot);
+  init_request.dependency_set =
+      std::make_shared<dasall::runtime::RuntimeDependencySet>();
+  init_request.boot_reason = "gateway-http-entry";
+  init_request.cold_start = true;
+  return init_request;
+}
 
 /// 全局运行标志，用于信号处理器
 std::atomic<bool> g_stop_requested{false};
@@ -46,13 +245,52 @@ extern "C" void on_shutdown_signal(int /*signal*/) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+  const ParsedGatewayArgs parsed = parse_gateway_args(argc, argv);
+  if (!parsed.ok) {
+    std::cerr << "[dasall_gateway] argument parse failed: " << parsed.error << "\n";
+    return 1;
+  }
+
+  const auto install_layout = dasall::infra::config::resolve_install_layout();
+  const dasall::profiles::ProfileCatalog catalog(install_layout.profiles_root);
+  const dasall::profiles::RuntimePolicyProvider runtime_policy_provider(catalog);
+  const auto runtime_snapshot = runtime_policy_provider.load_snapshot(
+      dasall::profiles::RuntimePolicyLoadRequest{
+          .profile_id = parsed.profile_id.value_or(kDefaultGatewayProfileId),
+      });
+  if (!runtime_snapshot.ok() || !runtime_snapshot.snapshot) {
+    std::cerr << "[dasall_gateway] runtime policy snapshot load failed for requested profile\n";
+    return 1;
+  }
+
+  auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+  const auto runtime_init_result = runtime_facade->init(
+      build_gateway_agent_init_request(runtime_snapshot.snapshot));
+  if (!runtime_init_result.is_ready()) {
+    std::cerr << "[dasall_gateway] runtime init failed: "
+              << (runtime_init_result.health_summary.empty()
+                      ? "runtime facade init rejected"
+                      : runtime_init_result.health_summary);
+    if (!runtime_init_result.diagnostics.empty()) {
+      std::cerr << " (" << runtime_init_result.diagnostics << ")";
+    }
+    std::cerr << "\n";
+    return 1;
+  }
+
   dasall::access::gateway::SecurityConfig sec_cfg;
 
   dasall::access::GatewayAccessPipelineOptions gateway_options;
   gateway_options.bootstrap_config.entry_type = "gateway";
   gateway_options.bootstrap_config.allowed_protocols = {"http"};
   gateway_options.publish_view.cors_allowed_origins = sec_cfg.cors_allowed_origins;
+  gateway_options.runtime_dispatch_backend =
+      [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
+          -> dasall::access::RuntimeDispatchResult {
+        const auto agent_result = runtime_facade->handle(request.agent_request);
+        return map_agent_result_to_dispatch_result(request, agent_result);
+      };
 
   auto gateway = dasall::access::create_gateway_access_gateway(
       std::move(gateway_options));
@@ -73,7 +311,7 @@ int main() {
   // 健康探针处理器
   dasall::access::gateway::HealthProbeHandler health;
   health.set_started(true);
-  health.set_ready(gateway->is_ready());
+  health.set_ready(gateway->is_ready() && runtime_init_result.is_ready());
 
   /// 辅助：将安全头合并到 httplib::Response
   auto apply_sec = [&](httplib::Response& res,
@@ -168,9 +406,14 @@ int main() {
   });
 
   // 5. 启动监听
-  const int port = 8080;
-  std::cout << "[dasall_gateway] listening on :" << port << "\n";
-  srv.listen("0.0.0.0", port);
+  const int port = parsed.port.value_or(kDefaultGatewayListenPort);
+  std::cout << "[dasall_gateway] listening on :" << port
+            << " profile=" << runtime_init_result.resolved_profile_id << "\n";
+  if (!srv.listen("0.0.0.0", port)) {
+    std::cerr << "[dasall_gateway] listen failed on :" << port << "\n";
+    gateway->shutdown(std::chrono::milliseconds(5000));
+    return 1;
+  }
 
   // 6. 优雅关闭
   gateway->shutdown(std::chrono::milliseconds(5000));

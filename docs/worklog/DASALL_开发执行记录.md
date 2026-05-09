@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #612
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-006 接入 gateway binary production runtime backend 与 unary smoke
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/gateway/src/main.cpp`：新增最小 `--profile-id` / `--port` 参数解析，使用 install layout + `ProfileCatalog` + `RuntimePolicyProvider` 加载 `desktop_full` runtime policy snapshot，初始化 `AgentFacade`，并把真实 `runtime_dispatch_backend` 注入 `GatewayAccessPipelineOptions`，使 production backend owner 回到 gateway app composition root。
+2. 更新 `apps/gateway/CMakeLists.txt`：为 gateway binary 补充 `dasall_profiles` 链接依赖，支撑 runtime policy snapshot 的生产路径加载。
+3. 更新 `apps/gateway/src/HttpProtocolAdapter.cpp` 与 `tests/unit/access/HttpProtocolAdapterTest.cpp`：将 gateway HTTP 请求固定投影为 `protocol_kind=http`，并透传 `trace_id` / `session_hint`，修复真实 binary path 仍被 `missing_required_packet_metadata` 拒绝的局部根因。
+4. 更新 `tests/integration/access/CMakeLists.txt`：新增可执行的 `dasall_access_gateway_submit_composition_test` custom target，并注册 `GatewayBinaryUnarySmokeTest` 与 `dasall_access_gateway_binary_unary_smoke_integration_test` custom target，使 `Build_CMakeTools` 可直接执行 gateway composition/smoke 验收。
+5. 新增 `tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`：用真实 `dasall_gateway` binary 启动 HTTP listener，轮询 `/health/ready`，再通过 `POST /v1/submit` 验证请求已进入 runtime backend，而不是停留在工厂内 fixture。
+6. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-006` 标记为 Done，并同步 gateway 当前状态、binary smoke 与剩余 gate 缺口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_gateway","dasall_access_gateway_submit_composition_test"])`
+   - 结果：通过；gateway main 的 production backend wiring 已完成编译并通过 submit composition custom target。
+2. `Build_CMakeTools(buildTargets=["dasall_gateway","dasall_access_gateway_submit_composition_test","dasall_access_gateway_binary_unary_smoke_integration_test"])`
+   - 结果：通过；真实 gateway binary unary smoke 已证明 `/health/ready` 与 `POST /v1/submit` 都走通 production runtime backend。
+3. `Build_CMakeTools(buildTargets=["dasall_access_http_protocol_adapter_unit_test"])`
+   - 结果：通过；HTTP adapter 新增的 `protocol_kind=http` 与 `trace_id/session_hint` 投影单测完成编译链接。
+
+### 结果
+
+1. `INTFIX-TODO-006` 已完成；gateway binary 不再因缺 `runtime_dispatch_backend` 在 init 时 fail-closed，真实 app composition root 已装配 production runtime facade。
+2. 006 首轮 binary smoke 失败暴露的根因不在 gateway main，而在 `HttpProtocolAdapter::decode()` 没有投影 `protocol_kind` / `trace_id` / `session_hint`；本轮已把这个缺口收敛到最邻近的 protocol adapter owner，而不是在 smoke 中放宽断言。
+3. gateway 当前已经具备真实 unary binary smoke，但缺 backend 的 fail-closed regression、Gate-INT-10 wiring 与统一 startup diagnostics 仍留给 `INTFIX-TODO-009` / `010` / `011` 收口。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-007`，拆分 `AgentInitResult` 的 entrypoint readiness 语义，避免 daemon/gateway 继续把 `accepted` 混写成 production ready。
+
+### 风险
+
+1. 006 仍沿用空 `RuntimeDependencySet` 的 skeleton runtime path；在 `INTFIX-TODO-008` 完成前，gateway smoke 只能证明 production backend wiring 已闭环，不能外推为 live dependency unary ready。
+2. gateway binary smoke 当前覆盖的是成功路径；缺 backend fail-closed regression 与 startup diagnostics 统一 artifact 尚未进入正式 gate，仍需 009/011 收口。
+
 ## 记录 #611
 
 - 日期：2026-05-09

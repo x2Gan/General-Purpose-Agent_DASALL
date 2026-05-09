@@ -68,6 +68,8 @@ void test_decode_extracts_entry_type_from_body() {
   const auto packet = adapter.decode();
   assert_true(packet.entry_type == "task.submit",
               "decode should extract entry_type from JSON body");
+  assert_true(packet.protocol_kind == "http",
+              "decode should stamp protocol_kind=http for gateway requests");
 }
 
 /// 验证 decode 对无 peer_ref 的请求注入 "http_remote" 默认值
@@ -86,6 +88,25 @@ void test_decode_injects_http_remote_peer_ref_when_absent() {
   const auto packet = adapter.decode();
   assert_true(packet.peer_ref == "http_remote",
               "decode should inject 'http_remote' when peer_ref absent");
+}
+
+void test_decode_extracts_trace_and_session_metadata() {
+  using dasall::access::gateway::HttpProtocolAdapter;
+  using dasall::access::gateway::HttpRequestContext;
+  using dasall::tests::support::assert_true;
+
+  HttpProtocolAdapter adapter;
+  HttpRequestContext ctx;
+  ctx.method = "POST";
+  ctx.path = "/v1/submit";
+  ctx.body = R"({"entry_type":"task.submit","trace_id":"trace-gateway-001","session_hint":"session-gateway-001"})";
+  adapter.set_active_request(ctx);
+
+  const auto packet = adapter.decode();
+  assert_true(packet.trace_id.has_value() && *packet.trace_id == "trace-gateway-001",
+              "decode should extract trace_id from JSON body");
+  assert_true(packet.session_hint.has_value() && *packet.session_hint == "session-gateway-001",
+              "decode should extract session_hint from JSON body");
 }
 
 /// 验证 encode 正确填充 HttpResponseContext
@@ -126,6 +147,7 @@ int main() {
     test_decode_empty_request_returns_empty_entry_type();
     test_decode_extracts_entry_type_from_body();
     test_decode_injects_http_remote_peer_ref_when_absent();
+    test_decode_extracts_trace_and_session_metadata();
     test_encode_fills_response_context();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
