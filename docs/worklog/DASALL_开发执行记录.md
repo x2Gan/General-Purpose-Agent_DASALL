@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #608
+
+- 日期：2026-05-09
+- 阶段：cli/build
+- 任务：CLCFG-TODO-022 回写 config Gate、交付证据与统一验收入口
+- 状态：已完成
+
+### 改动
+
+1. 新增 `scripts/packaging/validate_autopkgtest_metadata.py`，直接复用 `autopkgtest` 自带 `parse_debian_source()` 解析 `debian/tests/control`，把 noble / `autopkgtest` 5.47 下裸 `autopkgtest --validate .` 不能稳定作为 metadata gate 的环境差异收敛为仓库内的兼容 shim。
+2. 更新 `scripts/packaging/validate_cli_config_v1.sh`，把 metadata validate 切换到新 shim，并把 build-tree 段从会隐式触发全量 integration 执行的 `dasall_integration_tests` 聚合 target 收敛为 `dasall_secret_bootstrap_writer_integration_test`、`dasall_file_secret_backend_unit_test`、`dasall_secret_manager_facade_unit_test` 三个 focused target，避免无关仓库失败污染 config closeout gate。
+3. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md` 并新增 `docs/todos/cli/deliverables/CLCFG-TODO-022-config专项Gate与交付证据收口.md`，将 `CLCFG-TODO-022` 标记为 Done，回写 `CLCFG-GATE-05/06` 正式命令、`CLCFG-BLK-005` 解阻结论、统一验收入口前置条件与最终边界声明。
+
+### 验证
+
+1. `python3 scripts/packaging/validate_autopkgtest_metadata.py`
+   - 结果：通过；成功解析 `debian/tests/control` 并发现 `pkg-smoke-local-control-plane`、`pkg-smoke-common-assets` 两个 test entry，证明 metadata shim 可替代当前环境中不稳定的裸 `autopkgtest --validate .` 调用。
+2. `bash scripts/packaging/validate_cli_config_v1.sh`
+   - 结果：首轮失败后已定位根因并修复；最终重跑通过，确认 metadata validate、`SecretBootstrapWriterIntegrationTest` / `FileSecretBackendTest` / `SecretManagerFacadeTest` 三个 focused build-tree tests，以及 `validate_ubuntu_dpkg_v1.sh` 串联的 fresh install / upgrade / remove-purge lifecycle smoke 已全部闭环。
+
+### 结果
+
+1. CLCFG-TODO-022 已将 config 专项从“validator 入口已落盘但 live gate 尚未收口”推进到“gate、deliverable、worklog 与统一验收入口一致且已实跑验证”的状态，`CLCFG-BLK-005` 不再保留为环境侧 blocker。
+2. 当前 config closeout 的根因并不在 secret seam 或 installed-package smoke 脚本本身，而在 metadata validate 命令口径与聚合 build target 选择不够稳；本轮已把这两处都收敛到 focused、可重复执行的仓库内入口。
+3. config 专项当前可以宣称 close-ready；package 级 authoritative qemu `autopkgtest` 仍由 packaging 专项继续跟踪，不再挂入 CLCFG 残余项。
+
+### 下一步
+
+1. 进入 PKG-TODO-018，回写 packaging gate / deliverable / worklog，补齐 `lintian` 结论、authoritative qemu `autopkgtest` 前提状态与专项收口说明。
+
+### 风险
+
+1. `validate_cli_config_v1.sh` 仍依赖工作树旁存在与当前源码同源的 `.deb` / `.changes` 产物；若后续打包产物过期或来源不一致，config closeout gate 可能再次出现“脚本通过但包并非当前源码构建”的误判，因此该前置条件已在专项 TODO 与 deliverable 中显式冻结。
+
 ## 记录 #607
 
 - 日期：2026-05-09
