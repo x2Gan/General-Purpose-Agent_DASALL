@@ -1670,6 +1670,14 @@ sequenceDiagram
 4. daemon / gateway production 组合根必须装配真实 dependency bundle；显式 mock pipeline、mock runtime bridge、ping-only health 和手工 `set_ready(true)` 只允许存在于测试 profile 或 fixture 中，并且不能作为 Access v1 交付证据。
 5. 该回链直接解阻 INT-TODO-025 的设计冻结；后续 INT-TODO-027、INT-TODO-028、INT-TODO-030 分别承担代码落地、安全治理与 Gate 证据收口。
 
+#### 6.18.5 GatewayBinaryProductionPathV1 回链
+
+1. gateway binary 的 production composition rule 以 [../ssot/GatewayBinaryProductionPathV1.md](../ssot/GatewayBinaryProductionPathV1.md) 为唯一 SSOT；`apps/gateway/src/main.cpp` 或其 app-local helper 是 `GatewayAccessPipelineOptions::runtime_dispatch_backend` 的 production owner，不能依赖 `AccessGatewayFactory` 内建 fallback。
+2. gateway binary 只允许从 install layout、profile/config 投影视图、gateway entry bind/security 配置和 runtime-facing app-local bridge 构造 production submit pipeline；tests/fixtures 专用 fake config view 或 mock pipeline 开关不得进入默认 app path。
+3. `access::create_gateway_access_gateway()` 已明确要求 `runtime_dispatch_backend` 非空；因此缺 backend 时必须保持 `production submit pipeline unavailable` 等价的 fail-closed 语义，而不是以空 pipeline 继续启动 gateway HTTP submit 主链。
+4. `gateway->is_ready()` 只表达 `AccessGateway` facade readiness；gateway binary 的 `/health/ready` 还必须绑定 production `runtime_dispatch_backend` 已装配这一前提，不能用 ping-only health、局部 mock pipeline 或手工 ready 覆盖 production 结论。
+5. 该回链直接解阻 INTFIX-TODO-002；后续 INTFIX-TODO-006、INTFIX-TODO-009、INTFIX-TODO-011 分别承担 gateway production composition patch、binary smoke 与 startup diagnostics 收口。
+
 ### 6.19 Session 管理与 Receipt 所有权验证
 
 #### 6.19.1 `session_id` 生成策略
