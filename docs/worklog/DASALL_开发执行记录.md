@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #611
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-005 修复 DaemonBinaryUnarySmokeTest readiness 与启动诊断基线
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`：将 binary smoke 的临时目录 stem 收敛为短路径，避免 Unix domain socket path 超出 `sockaddr_un` 容量；同时在 ping readiness 超时前先停 daemon，再回写 `socket_path`、路径长度、exit code 与 daemon log，避免失败 artifact 继续为空。
+2. 更新 `apps/daemon/src/DaemonSocketPolicy.cpp`：在 `validate_socket_path()` 阶段直接 fail-fast 拒绝超长 UDS 路径，把此前隐含在 listen/bind 深处的路径容量问题提升为显式 validation error。
+3. 更新 `apps/daemon/src/DaemonBootstrap.cpp`：为 process context、gateway readiness、lifecycle transition、listener bind、accept loop 与 dispatch worker 失败路径补充 stderr 诊断，确保 daemon binary 再次失败时 log 中可直接看到 what/why。
+4. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-005` 标记为 Done，并同步 packaging preflight 与 daemon 可诊断性基线的最新事实。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_binary_unary_smoke_integration_test"])`
+   - 结果：通过；smoke harness 与 daemon 相关目标完成重编译链接。
+2. `Build_CMakeTools(buildTargets=["dasall_packaging_preflight_tests"])`
+   - 结果：通过；`CliJsonOutputContractTest`、`CliExitCodeContractTest`、`DaemonPingIntegrationTest`、`CliDaemonSocketPathIntegrationTest`、`DaemonBinaryUnarySmokeTest` 的系统 gate discoverability / acceptance 全部恢复绿态。
+3. `Build_CMakeTools(buildTargets=["dasall_access_daemon_binary_unary_smoke_integration_test","dasall_packaging_preflight_tests"])`
+   - 结果：通过；确认 005 的最终验收命令稳定通过。
+4. 手工判别检查：在用户拥有的短路径 `build/vscode-linux-ninja/test-runtime/d.sock` 下启动 `dasall-daemon` 并通过 `dasall-cli ping`
+   - 结果：通过；短路径可立即 ready，而之前代表性的 smoke socket path 长度为 `123`，进一步确认根因是 test harness 构造的 UDS 路径超长。
+
+### 结果
+
+1. `INTFIX-TODO-005` 已完成；`dasall_packaging_preflight_tests` 不再被 `DaemonBinaryUnarySmokeTest` 阻塞，build-tree daemon app-binary / release-preflight 重新转绿。
+2. 本轮根因不在 runtime 主链本身，而在 smoke harness 生成的 Unix socket path 超出 `sockaddr_un` 容量；同时旧 harness 在 readiness 超时时先读 log 后停 daemon，放大了“空日志”现象。
+3. daemon 启动失败的最小可诊断性基线已经补齐：即使后续再次在 bind/accept/dispatch 阶段失败，也能在 daemon log 或 smoke artifact 中直接看到阶段与 detail，而不是只剩 `run=failed`。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-006`，为 `apps/gateway` 接入 production runtime backend 组合根，并补齐 gateway binary smoke。
+
+### 风险
+
+1. 当前只修复了 daemon app-binary / packaging preflight 路径；gateway binary 缺 production runtime backend 的问题仍未解，`Gate-INT-10` 还不能宣称整体收口。
+2. runtime readiness 的 `accepted/degraded/stub/default-ready` 语义仍待 `INTFIX-TODO-007` 正式拆分；在该任务完成前，不应把当前 daemon smoke 绿态外推为 live default unary ready。
+
 ## 记录 #610
 
 - 日期：2026-05-09

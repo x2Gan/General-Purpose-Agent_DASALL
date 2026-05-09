@@ -1,5 +1,6 @@
 #include "DaemonBootstrap.h"
 
+#include <iostream>
 #include <string>
 #include <utility>
 
@@ -43,6 +44,7 @@ std::optional<DaemonProcessContext> DaemonBootstrap::build(
 
 bool DaemonBootstrap::run(const DaemonProcessContext& context) {
   if (!context.has_consistent_values()) {
+    std::cerr << "[dasall-daemon] bootstrap run failed: inconsistent process context\n";
     return false;
   }
 
@@ -57,19 +59,23 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
   processing_connections_.store(0U);
 
   if (!ipc_ || !gateway_ || !listener_host_.has_value()) {
+    std::cerr << "[dasall-daemon] bootstrap run failed: missing ipc/gateway/listener host\n";
     return false;
   }
 
   if (!lifecycle_.start()) {
+    std::cerr << "[dasall-daemon] bootstrap run failed: lifecycle start rejected\n";
     return false;
   }
 
   if (!gateway_->is_ready()) {
+    std::cerr << "[dasall-daemon] bootstrap run failed: access gateway not ready\n";
     (void)lifecycle_.mark_failed();
     return false;
   }
 
   if (!lifecycle_.mark_binding()) {
+    std::cerr << "[dasall-daemon] bootstrap run failed: lifecycle binding transition rejected\n";
     (void)lifecycle_.mark_failed();
     return false;
   }
@@ -81,6 +87,12 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
 
   const auto bind_result = listener_host_->bind(endpoint);
   if (!bind_result.ok()) {
+    if (bind_result.error.has_value() && !bind_result.error->detail.empty()) {
+      std::cerr << "[dasall-daemon] listener bind failed: "
+                << bind_result.error->detail << "\n";
+    } else {
+      std::cerr << "[dasall-daemon] listener bind failed\n";
+    }
     request_dispatch_stop(true);
     stop_dispatch_workers();
     (void)lifecycle_.mark_failed();
@@ -93,6 +105,7 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
       });
 
   if (!lifecycle_.mark_ready()) {
+    std::cerr << "[dasall-daemon] bootstrap run failed: lifecycle ready transition rejected\n";
     request_dispatch_stop(true);
     stop_dispatch_workers();
     (void)listener_host_->close();
@@ -111,7 +124,25 @@ bool DaemonBootstrap::run(const DaemonProcessContext& context) {
     (void)supervisor_adapter_->notify_stopping();
   }
   (void)listener_host_->close();
-  if (!loop_result.ok() || !loop_result.value.value_or(false) || dispatch_failed_) {
+  if (!loop_result.ok()) {
+    if (loop_result.error.has_value() && !loop_result.error->detail.empty()) {
+      std::cerr << "[dasall-daemon] listener accept loop failed: "
+                << loop_result.error->detail << "\n";
+    } else {
+      std::cerr << "[dasall-daemon] listener accept loop failed\n";
+    }
+    (void)lifecycle_.mark_failed();
+    return false;
+  }
+
+  if (!loop_result.value.value_or(false)) {
+    std::cerr << "[dasall-daemon] listener accept loop stopped before successful shutdown\n";
+    (void)lifecycle_.mark_failed();
+    return false;
+  }
+
+  if (dispatch_failed_) {
+    std::cerr << "[dasall-daemon] request dispatch worker failed\n";
     (void)lifecycle_.mark_failed();
     return false;
   }

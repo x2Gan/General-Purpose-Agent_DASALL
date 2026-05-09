@@ -67,10 +67,6 @@ class ScopedTempDirectory {
   return fs::path(DASALL_REPOSITORY_ROOT);
 }
 
-[[nodiscard]] fs::path daemon_build_root() {
-  return fs::path(DASALL_DAEMON_BINARY_PATH).parent_path().parent_path().parent_path();
-}
-
 class ScopedDaemonProcess {
  public:
   ScopedDaemonProcess(std::string binary_path,
@@ -194,9 +190,7 @@ class ScopedDaemonProcess {
 }
 
 void daemon_binary_unary_smoke_completes_with_real_main_init() {
-  const auto runtime_root = daemon_build_root() / "test-runtime";
-  fs::create_directories(runtime_root);
-  ScopedTempDirectory temp_root((runtime_root / "dasall-daemon-binary-unary").string());
+  ScopedTempDirectory temp_root("dasall-daemon-binary-unary");
   const auto socket_path = temp_root.path() / "control.sock";
   const auto log_path = temp_root.path() / "daemon.log";
   const auto root = repository_root();
@@ -207,11 +201,18 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
       socket_path,
       log_path);
 
-  assert_true(wait_for_ping_ready(socket_path),
-              "binary unary smoke should observe daemon ping readiness before issuing cli run; daemon log=" +
-                  daemon.read_log());
+  if (!wait_for_ping_ready(socket_path)) {
+    const auto daemon_exit_code = daemon.stop();
+    assert_true(false,
+                "binary unary smoke should observe daemon ping readiness before issuing cli run; socket_path=" +
+                    socket_path.string() +
+                    " socket_path_length=" +
+                    std::to_string(socket_path.string().size()) +
+                    " daemon_exit_code=" + std::to_string(daemon_exit_code) +
+                    " daemon_log=" + daemon.read_log());
+  }
 
-    const auto run = dasall::tests::integration::access_support::run_process_capture_split(
+  const auto run = dasall::tests::integration::access_support::run_process_capture_split(
       {
           DASALL_CLI_BINARY_PATH,
           "--socket-path",

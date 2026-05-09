@@ -227,6 +227,15 @@ dasall::platform::PlatformResult<bool> validate_socket_path(
         "daemon.socket_path must include a socket filename"));
   }
 
+  sockaddr_un address {};
+  const std::string raw_path = parsed_path.string();
+  if (raw_path.size() >= sizeof(address.sun_path)) {
+    return dasall::platform::PlatformResult<bool>::failure(make_error(
+        dasall::platform::PlatformErrorCode::InvalidArgument,
+        dasall::platform::PlatformErrorCategory::Validation,
+        "daemon.socket_path exceeds sockaddr_un capacity: " + raw_path));
+  }
+
   return validate_parent_directory(parsed_path.parent_path(), policy, true);
 }
 
