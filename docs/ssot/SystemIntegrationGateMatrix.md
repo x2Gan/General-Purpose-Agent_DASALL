@@ -62,6 +62,16 @@ discoverability、one-shot acceptance 与 worklog 不是附属文档工作，而
 2. one-shot acceptance 命令负责定义当前阶段的正式验收入口。
 3. worklog 负责把 Gate 状态、命令、结果、阻塞项与回退动作写回长期记录。
 
+### 2.5 binary entrypoint readiness
+
+app-binary 层的 readiness 以 `docs/ssot/BinaryEntrypointReadinessV1.md` 为唯一 SSOT，并固定采用以下分层：
+
+1. `accepted` 只表示 runtime init 或 app-local composition root 被接纳进入后续启动流程，不等于 `default-ready`。
+2. `degraded`、`stub-ready`、`default-ready`、`bridge-reachable`、`health-ready` 必须分别记录，不能再通过单一 `is_ready()` 或 ping/liveness 结果混写。
+3. `stub-ready` 只能作为开发烟测、局部 bootstrap 或 blocker 复现证据；不得外推为 release-ready、package-ready 或 production unary ready。
+4. `bridge-reachable` 只表示 app binary 到 runtime submit bridge 可达，不覆盖 `default-ready` 或 `health-ready`。
+5. `health-ready` 只能在真实 unary entrypoint 与 production submit path 已就绪时宣称 ready；health probe 不得绕过 app-binary readiness owner 语义。
+
 ## 3. Gate 矩阵
 
 | Gate | 证据层级 | 正式对象 | 正式命令 / 证据 | 通过标准 | 回写位置 | 回退动作 |
