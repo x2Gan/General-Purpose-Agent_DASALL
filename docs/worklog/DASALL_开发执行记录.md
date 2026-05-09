@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+## 记录 #605
+
+- 日期：2026-05-09
+- 阶段：cli/build
+- 任务：CLCFG-TODO-020 补齐 P0 workflow 集成与 drift repair 门
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/apps/cli/ConfigDriftRepairWorkflowTest.cpp`，把 020 当前缺失的两条 P0 workflow 分支收敛为独立 integration gate：一条验证 drifted `daemon.json` 会在 `config show` 中给出 `config validate` 导向；另一条分别验证 systemd 可用时的 drift repair apply、以及 non-systemd 环境下的 blocked_actions/manual_followups degrade，不再依赖现有 fresh install / modify tests 间接覆盖。
+2. 更新 `tests/integration/apps/cli/CMakeLists.txt`，注册 `dasall_cli_config_drift_repair_workflow_integration_test` 与 `ConfigDriftRepairWorkflowTest`，并沿用既有 config workflow integration target 的直接源清单，确保新的 drift gate 与真实 coordinator / file-store / preflight / service owner 保持同一链接面。
+3. 更新 `apps/cli/src/config/DaemonConfigFileStore.cpp` 与 `tests/unit/apps/cli/DaemonConfigFileStoreTest.cpp`：在首轮 drift integration 验证暴露 `write_desired()` 对既有无效 `daemon.json` 的硬拒绝后，改为允许在 drifted repair 路径下通过原子覆盖修复无效 canonical 文件，并把 unit test 从“invalid JSON 拒绝”改成“invalid JSON repair overwrite”，使 file-store 语义与 020 的 workflow 目标一致。
+4. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-020 标记为 Done，回写 drift repair gate、file-store 语义修正与 focused 验收命令，同时同步当前结论中的 build-tree 能力边界。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cli_config_drift_repair_workflow_integration_test"])`
+   - 结果：通过；新 drift repair integration target 完成配置、编译和链接。
+2. `RunCtest_CMakeTools(tests=["ConfigDriftRepairWorkflowTest"])`
+   - 结果：失败；工具返回通用“生成失败”，与 019 同样属于当前仓库已知的 CMake Tools 测试执行器问题，不作为功能失败处理。
+3. `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^ConfigDriftRepairWorkflowTest$' --output-on-failure`
+   - 结果：首轮失败，直接暴露 `DaemonConfigFileStore::write_desired()` 仍把无效既有 `daemon.json` 当成硬阻塞，说明 020 不是纯测试缺口而是存在局部根因缺陷；修复后重跑通过，证明 drift repair gate 与 non-systemd degrade gate 已真正打通。
+4. `Build_CMakeTools(buildTargets=["dasall-daemon_config_file_store_unit_test"])` + `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^DaemonConfigFileStoreTest$' --output-on-failure`
+   - 结果：通过；file store 单测现在稳定验证 invalid existing `daemon.json` 会被原子覆盖为 canonical JSON，而不是继续以 deterministic 拒绝结束。
+5. `Build_CMakeTools(buildTargets=["dasall_cli_config_apply_integration_test"])` + `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^ConfigApplyWorkflowTest$' --output-on-failure`
+   - 结果：通过；既有 apply/from-file integration gate 未因 drift repair 语义修正而回归，说明 020 的根因修复仍守住 013 的已交付路径。
+
+### 结果
+
+1. CLCFG-TODO-020 已从“缺少 drift repair integration test”推进为真实的 P0 workflow gate：`ConfigDriftRepairWorkflowTest` 现在覆盖 drifted summary guidance、systemd-backed drift repair apply 与 non-systemd degrade 三条稳定分支。
+2. 020 证明了此前的 file-store 语义存在局部设计/实现错位：如果继续保留“invalid JSON 拒绝”，则 drifted repair 只能停留在只读探测而无法进入 apply 修复；本轮已把该错位收敛到 `DaemonConfigFileStore` owner 上修复，而不是在 workflow test 中绕开。
+3. CLCFG-GATE-04 的 build-tree 侧关键缺口已补齐，但 rootful/systemd smoke、installed-package validator 与 autopkgtest 仍留给 CLCFG-TODO-021/022，因此当前结论仍是 build-tree ready、非 installed-package ready。
+
+### 下一步
+
+1. 进入 CLCFG-TODO-021，补齐 secret onboarding 与 installed-package smoke / `autopkgtest --validate` / `validate_cli_config_v1.sh` gate，并继续隔离当前工作树里未跟踪的 packaging 辅助文件，避免与 020 的 build-tree 证据混改。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 对 config focused tests 仍返回通用“生成失败”，因此 020 以及后续 021/022 的 focused 验收仍需继续使用 `build/vscode-linux-ninja` 下的 anchored `ctest` 回退路径，直到工具态恢复。
+2. 020 虽已打通 build-tree drift repair，但 rootful/systemd 安装态 smoke 与 one-shot validator 仍未落盘；在 CLCFG-TODO-021/022 完成前，不应把当前结论升级成 installed-package ready。
+
 ## 记录 #604
 
 - 日期：2026-05-09

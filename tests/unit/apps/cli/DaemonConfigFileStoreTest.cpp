@@ -134,7 +134,7 @@ void test_write_desired_preserves_existing_permissions() {
               "DaemonConfigFileStore should preserve daemon.json permissions across atomic rename");
 }
 
-void test_write_desired_rejects_invalid_existing_daemon_json() {
+void test_write_desired_overwrites_invalid_existing_daemon_json() {
   using dasall::apps::cli::config::DaemonConfigFileStore;
   using dasall::apps::cli::config::DaemonConfigFileStorePaths;
   using dasall::tests::support::assert_true;
@@ -152,12 +152,17 @@ void test_write_desired_rejects_invalid_existing_daemon_json() {
       .daemon_config_file = daemon_path,
   });
   const auto result = store.write_desired(make_desired("factory_test"));
-  assert_true(!result.success,
-              "DaemonConfigFileStore should reject writes when existing daemon.json is not valid JSON");
-  assert_true(result.error_message.find("not valid JSON") != std::string::npos,
-              "DaemonConfigFileStore should surface invalid JSON as a deterministic file store error");
-  assert_true(read_text_file(daemon_path) == "{ invalid json\n",
-              "DaemonConfigFileStore should leave invalid daemon.json untouched when rejecting the write");
+    assert_true(result.success,
+          "DaemonConfigFileStore should atomically replace invalid daemon.json when applying a repaired desired state");
+    assert_true(read_text_file(defaults_path).find("factory_test") !=
+            std::string::npos,
+          "DaemonConfigFileStore should still rewrite defaults when repairing an invalid daemon.json state");
+      const auto daemon_text = read_text_file(daemon_path);
+      assert_true(daemon_text.find("\"socket_path\": \"/run/dasall/daemon.sock\"") !=
+                std::string::npos &&
+              daemon_text.find("\"log_format\": \"json\"") !=
+                std::string::npos,
+          "DaemonConfigFileStore should replace invalid daemon.json with the rendered canonical JSON");
 }
 
 }  // namespace
@@ -167,7 +172,7 @@ int main() {
     test_write_desired_creates_canonical_files_and_loads_snapshot();
     test_write_desired_rolls_back_when_second_file_write_fails();
     test_write_desired_preserves_existing_permissions();
-    test_write_desired_rejects_invalid_existing_daemon_json();
+    test_write_desired_overwrites_invalid_existing_daemon_json();
   } catch (const std::exception& ex) {
     std::cerr << "DaemonConfigFileStoreTest failed: " << ex.what() << '\n';
     return 1;

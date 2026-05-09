@@ -454,12 +454,6 @@ ConfigFileWriteResult DaemonConfigFileStore::write_desired(
     result.error_message = std::move(load_error);
     return result;
   }
-  if (current_snapshot->daemon_config_file_exists &&
-      !current_snapshot->daemon_config_valid) {
-    result.error_message = "daemon config json is not valid JSON: " +
-                           paths_.daemon_config_file.string();
-    return result;
-  }
 
   const std::vector<std::pair<std::filesystem::path, std::string>> writes = {
       {paths_.defaults_file, render_defaults_file(desired)},
