@@ -69,6 +69,36 @@ add_custom_target(dasall_gate_int_08
     dasall_access_daemon_profile_compatibility_integration_test
 )
 
+set(DASALL_PACKAGING_PREFLIGHT_TEST_NAMES
+  CliJsonOutputContractTest
+  CliExitCodeContractTest
+  DaemonPingIntegrationTest
+  CliDaemonSocketPathIntegrationTest
+  DaemonBinaryUnarySmokeTest
+)
+
+string(JOIN "," DASALL_PACKAGING_PREFLIGHT_EXPECTED_TESTS_CSV
+  ${DASALL_PACKAGING_PREFLIGHT_TEST_NAMES}
+)
+
+set(DASALL_PACKAGING_PREFLIGHT_EXECUTABLE_TARGETS
+  dasall-cli_json_output_contract_test
+  dasall-cli_exit_code_contract_test
+  dasall_access_daemon_ping_integration_test
+  dasall_access_cli_daemon_socket_path_integration_test
+  dasall_access_daemon_binary_unary_smoke_integration_test
+)
+
+add_custom_target(dasall_packaging_preflight_tests
+  COMMAND ${CMAKE_COMMAND}
+    -DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}
+    -DBUILD_DIR=${CMAKE_BINARY_DIR}
+    -DEXPECTED_TESTS_CSV=${DASALL_PACKAGING_PREFLIGHT_EXPECTED_TESTS_CSV}
+    -DRUN_ACCEPTANCE=ON
+    -P ${CMAKE_SOURCE_DIR}/tests/VerifySystemGateDiscoverability.cmake
+  DEPENDS ${DASALL_PACKAGING_PREFLIGHT_EXECUTABLE_TARGETS}
+)
+
 set(DASALL_SYSTEM_GATE_ACCEPTANCE_TEST_NAMES
   ${DASALL_SYSTEM_GATE_ACCEPTANCE_CONTRACT_TEST_NAMES}
   BuiltinExecutorLaneResultCodeTest
