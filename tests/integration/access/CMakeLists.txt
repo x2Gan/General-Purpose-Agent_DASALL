@@ -353,14 +353,52 @@ add_test(NAME GatewayBinaryUnarySmokeTest
   COMMAND dasall_access_gateway_binary_unary_smoke_integration_test_bin)
 set_tests_properties(GatewayBinaryUnarySmokeTest PROPERTIES LABELS "integration;access")
 
+add_executable(dasall_access_gateway_missing_backend_binary_fixture
+  GatewayBinaryMissingBackendFixture.cpp
+)
+
+target_link_libraries(dasall_access_gateway_missing_backend_binary_fixture
+  PRIVATE
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_gateway_missing_backend_binary_fixture)
+
+add_executable(dasall_access_gateway_binary_missing_backend_regression_test
+  GatewayBinaryMissingBackendRegressionTest.cpp
+)
+
+target_compile_definitions(dasall_access_gateway_binary_missing_backend_regression_test
+  PRIVATE
+    DASALL_GATEWAY_MISSING_BACKEND_BINARY_PATH="$<TARGET_FILE:dasall_access_gateway_missing_backend_binary_fixture>"
+)
+
+target_link_libraries(dasall_access_gateway_binary_missing_backend_regression_test
+  PRIVATE
+    dasall_test_support
+)
+
+add_dependencies(dasall_access_gateway_binary_missing_backend_regression_test
+  dasall_access_gateway_missing_backend_binary_fixture
+)
+
+dasall_apply_common_options(dasall_access_gateway_binary_missing_backend_regression_test)
+
+add_test(NAME GatewayBinaryMissingBackendRegressionTest
+  COMMAND dasall_access_gateway_binary_missing_backend_regression_test)
+set_tests_properties(GatewayBinaryMissingBackendRegressionTest PROPERTIES LABELS "integration;access")
+
 add_custom_target(dasall_access_gateway_binary_unary_smoke_integration_test
   COMMAND $<TARGET_FILE:dasall_access_gateway_binary_unary_smoke_integration_test_bin>
+  COMMAND $<TARGET_FILE:dasall_access_gateway_binary_missing_backend_regression_test>
   DEPENDS dasall_access_gateway_binary_unary_smoke_integration_test_bin
+          dasall_access_gateway_binary_missing_backend_regression_test
   USES_TERMINAL
 )
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_gateway_binary_unary_smoke_integration_test_bin
+  dasall_access_gateway_binary_missing_backend_regression_test
 )
 
 add_executable(dasall_access_daemon_runtime_live_dependency_composition_integration_test

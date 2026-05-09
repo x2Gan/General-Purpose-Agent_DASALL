@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #615
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-009 新增 gateway app-binary unary smoke 与 fail-closed 回归
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`：将 happy-path binary smoke 从旧的 skeleton 文案断言收敛为更稳的 app-main/runtime-handoff 证据，改为检查真实 `dasall_gateway` 启动日志中的 `runtime readiness=` 投影，以及 HTTP envelope 中的 `result_id`、`status=200` 与非空 `payload`，避免继续把 008 前的 stub 输出当成长期契约。
+2. 新增 `tests/integration/access/GatewayBinaryMissingBackendFixture.cpp`：提供一个 test-only gateway binary fixture，在故意不注入 `runtime_dispatch_backend` 时复现 app-level fail-closed path，并输出与 gateway main 对齐的 `AccessGateway init failed: production submit pipeline unavailable` 错误消息。
+3. 新增 `tests/integration/access/GatewayBinaryMissingBackendRegressionTest.cpp`：以独立进程方式执行上述 fixture，锁定“缺 backend 必须退出且不得假装 ready”的 binary-surface regression，而不是只在 factory/in-process 层依赖 `AccessHealthReadinessIntegrationTest`。
+4. 更新 `tests/integration/access/CMakeLists.txt`：注册 `GatewayBinaryMissingBackendRegressionTest`，并将其并入既有 custom target `dasall_access_gateway_binary_unary_smoke_integration_test`，使 009 的单一 gateway binary 验收入口同时覆盖 happy path 与 missing-backend fail-closed path。
+5. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-009` 标记为 Done，并同步 gateway 当前状态与剩余 `Gate-INT-10` / startup diagnostics 缺口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_gateway_submit_composition_test","dasall_access_gateway_binary_unary_smoke_integration_test"])`
+   - 结果：通过；gateway submit composition 邻近守护保持绿态，更新后的 binary smoke custom target 也已顺序执行 happy-path smoke 与 missing-backend regression 两条路径。
+2. `ctest --test-dir build/vscode-linux-ninja -R '^(GatewayAccessSubmitCompositionTest|GatewayBinaryUnarySmokeTest|GatewayBinaryMissingBackendRegressionTest)$' --output-on-failure`
+   - 结果：3/3 通过；证明新增 regression 已被 CTest 正式注册，而不是只在 custom target 下偶然执行。
+
+### 结果
+
+1. `INTFIX-TODO-009` 已完成；gateway app-binary 现在同时具备真实 happy-path unary smoke 与 missing-backend fail-closed regression，两者都在进程边界被锁定。
+2. 009 没有修改 gateway 生产入口的公开参数或注入新测试开关，而是通过 test-only fixture 补上“缺 backend 就退出”的 binary-surface 证据，保持 006 冻结下来的 production path owner 不漂移。
+3. 当前 remaining gap 已收敛为 `INTFIX-TODO-010` / `011` / `012`：即 `Gate-INT-10` wiring、startup diagnostics / artifact 统一规范，以及最终 Gate / worklog / deliverable 收口。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-010`，把 gateway/daemon app-binary smoke 与 packaging preflight discoverability 接到正式的 `Gate-INT-10` target 上。
+
+### 风险
+
+1. 009 锁定了 missing-backend fail-closed，但还没有统一 release-preflight target；在 010 完成前，gateway app-binary 绿态仍主要依赖 focused custom target 与显式 `ctest` 证据。
+2. gateway startup diagnostics 仍只覆盖当前已有错误输出；更完整的 failure stage / artifact 规范仍待 011 收口。
+
 ## 记录 #614
 
 - 日期：2026-05-09
