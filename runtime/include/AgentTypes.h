@@ -11,6 +11,28 @@ namespace dasall::runtime {
 
 class RuntimeDependencySet;
 
+enum class AgentInitReadinessLevel : std::uint8_t {
+  Rejected = 0,
+  StubReady,
+  DegradedReady,
+  DefaultReady,
+};
+
+[[nodiscard]] inline const char* to_string(const AgentInitReadinessLevel level) {
+  switch (level) {
+    case AgentInitReadinessLevel::Rejected:
+      return "rejected";
+    case AgentInitReadinessLevel::StubReady:
+      return "stub-ready";
+    case AgentInitReadinessLevel::DegradedReady:
+      return "degraded-ready";
+    case AgentInitReadinessLevel::DefaultReady:
+      return "default-ready";
+  }
+
+  return "rejected";
+}
+
 struct AgentInitRequest {
   std::string runtime_instance_id;
   std::string profile_id;
@@ -33,6 +55,40 @@ struct AgentInitResult {
   std::string health_summary;
   std::int32_t error_code = 0;
   std::string diagnostics;
+
+  [[nodiscard]] AgentInitReadinessLevel readiness_level() const {
+    if (!accepted) {
+      return AgentInitReadinessLevel::Rejected;
+    }
+
+    if (diagnostics.find("entrypoint_ready=stub-ready") != std::string::npos ||
+        diagnostics.find("readiness=stub_runtime_path") != std::string::npos) {
+      return AgentInitReadinessLevel::StubReady;
+    }
+
+    if (degraded ||
+        diagnostics.find("entrypoint_ready=degraded-ready") != std::string::npos) {
+      return AgentInitReadinessLevel::DegradedReady;
+    }
+
+    return AgentInitReadinessLevel::DefaultReady;
+  }
+
+  [[nodiscard]] bool stub_ready() const {
+    return readiness_level() == AgentInitReadinessLevel::StubReady;
+  }
+
+  [[nodiscard]] bool degraded_ready() const {
+    return readiness_level() == AgentInitReadinessLevel::DegradedReady;
+  }
+
+  [[nodiscard]] bool default_ready() const {
+    return readiness_level() == AgentInitReadinessLevel::DefaultReady;
+  }
+
+  [[nodiscard]] std::string readiness_label() const {
+    return to_string(readiness_level());
+  }
 
   [[nodiscard]] bool is_ready() const {
     return accepted;

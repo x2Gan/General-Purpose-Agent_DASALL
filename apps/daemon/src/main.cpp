@@ -313,7 +313,8 @@ int main(int argc, char* argv[]) {
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
   const auto runtime_init_result = runtime_facade->init(
       build_daemon_agent_init_request(entry));
-  if (!runtime_init_result.is_ready()) {
+  const bool runtime_entry_accepted = runtime_init_result.accepted;
+  if (!runtime_entry_accepted) {
     std::cerr << "[dasall-daemon] runtime init failed: "
               << (runtime_init_result.health_summary.empty()
                       ? "runtime facade init rejected"
@@ -324,6 +325,8 @@ int main(int argc, char* argv[]) {
     std::cerr << "\n";
     return 1;
   }
+  std::cout << "[dasall-daemon] runtime readiness="
+            << runtime_init_result.readiness_label() << "\n";
 
   const std::string daemon_profile_id = runtime_init_result.resolved_profile_id.empty()
                                             ? entry.effective_profile_id
@@ -350,7 +353,7 @@ int main(int argc, char* argv[]) {
   pipeline_options.daemon_listener_ready =
       entry.bootstrap_config.has_consistent_values();
   pipeline_options.daemon_gateway_ready = true;
-  pipeline_options.daemon_bridge_reachable = runtime_init_result.is_ready();
+  pipeline_options.daemon_bridge_reachable = runtime_entry_accepted;
 
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));

@@ -301,6 +301,12 @@ class AgentFacade::State {
 
     result.accepted = true;
     result.degraded = readiness.degraded;
+    append_diagnostic_fragment(
+      result.diagnostics,
+      std::string{"entrypoint_ready="} +
+        (runtime_local_stub_path
+           ? "stub-ready"
+           : readiness.degraded ? "degraded-ready" : "default-ready"));
     result.health_summary = readiness.degraded
                                 ? "runtime facade initialized in degraded mode"
                 : runtime_local_stub_path

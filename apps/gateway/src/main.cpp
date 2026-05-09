@@ -267,7 +267,8 @@ int main(int argc, char* argv[]) {
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
   const auto runtime_init_result = runtime_facade->init(
       build_gateway_agent_init_request(runtime_snapshot.snapshot));
-  if (!runtime_init_result.is_ready()) {
+  const bool runtime_entry_accepted = runtime_init_result.accepted;
+  if (!runtime_entry_accepted) {
     std::cerr << "[dasall_gateway] runtime init failed: "
               << (runtime_init_result.health_summary.empty()
                       ? "runtime facade init rejected"
@@ -278,6 +279,8 @@ int main(int argc, char* argv[]) {
     std::cerr << "\n";
     return 1;
   }
+  std::cout << "[dasall_gateway] runtime readiness="
+            << runtime_init_result.readiness_label() << "\n";
 
   dasall::access::gateway::SecurityConfig sec_cfg;
 
@@ -311,7 +314,7 @@ int main(int argc, char* argv[]) {
   // 健康探针处理器
   dasall::access::gateway::HealthProbeHandler health;
   health.set_started(true);
-  health.set_ready(gateway->is_ready() && runtime_init_result.is_ready());
+  health.set_ready(gateway->is_ready() && runtime_entry_accepted);
 
   /// 辅助：将安全头合并到 httplib::Response
   auto apply_sec = [&](httplib::Response& res,

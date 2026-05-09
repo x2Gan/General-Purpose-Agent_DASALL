@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #613
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-007 拆分 AgentInitResult readiness 语义并修正入口消费
+- 状态：已完成
+
+### 改动
+
+1. 更新 `runtime/include/AgentTypes.h`：新增 `AgentInitReadinessLevel` 与 `readiness_level()` / `stub_ready()` / `degraded_ready()` / `default_ready()` / `readiness_label()` helper，在保留 `is_ready()` 兼容语义的同时，把 entrypoint 语义从单一 `accepted` 布尔提升为结构化投影。
+2. 更新 `runtime/src/AgentFacade.cpp`：在 accepted init path 中追加 `entrypoint_ready=stub-ready|degraded-ready|default-ready` diagnostics 片段，使 runtime init 结果不再只靠外部字符串约定推断 readiness。
+3. 更新 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp`：入口放行条件改为显式消费 `runtime_init_result.accepted`，并把 `runtime_init_result.readiness_label()` 作为 startup 投影输出，避免继续用 `is_ready()` 混写 accepted、bridge reachability 与 health semantics。
+4. 新增 `tests/unit/runtime/AgentInitResultReadinessTest.cpp`，并更新 `tests/unit/runtime/CMakeLists.txt`、`tests/unit/CMakeLists.txt`：为 rejected / stub-ready / degraded-ready / default-ready 四种语义增加专用单测 target `dasall_runtime_agent_init_result_readiness_unit_test`。
+5. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-007` 标记为 Done，并同步 runtime readiness 当前状态与剩余 live baseline 缺口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_agent_init_result_readiness_unit_test","dasall_gate_int_06"])`
+   - 结果：通过；新的 readiness 单测完成编译链接，既有 `RuntimeRequiredOptionalPortsIntegrationTest` / `RuntimeProfileCompatibilityTest` / `LLMSubsystemSmokeIntegrationTest` 维持 `gate-int-06` 全绿。
+2. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_gateway"])`
+   - 结果：通过；daemon/gateway 入口消费修正完成编译链接，没有引入 app binary 构建回退。
+
+### 结果
+
+1. `INTFIX-TODO-007` 已完成；`AgentInitResult` 现在可以稳定区分 rejected、stub-ready、degraded-ready、default-ready，daemon/gateway 入口不再把 `is_ready()` 当成唯一外部 readiness 结论。
+2. 007 没有引入第二套 runtime 状态机，而是把现有 `accepted`、`degraded` 与 `stub_runtime_path` 诊断提升成结构化 helper，并在 accepted path 中补上明确的 `entrypoint_ready=*` 投影，符合 `BinaryEntrypointReadinessV1` 的最小变更原则。
+3. 当前剩余缺口已收敛到 `INTFIX-TODO-008`：daemon/gateway 仍沿用空 `RuntimeDependencySet` 的 skeleton/runtime-local stub 路径，因此即便 entrypoint 语义已分层，也还不能宣称 live default unary baseline ready。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-008`，为 daemon/gateway 建立最小 live runtime dependency composition baseline，并让 `default-ready` 从语义 helper 变成真实可达路径。
+
+### 风险
+
+1. 007 只修正了 readiness 语义与入口投影，没有改变 runtime dependency graph；在 008 完成前，daemon/gateway 仍可能稳定落在 `stub-ready` 或 `degraded-ready`，不能外推为 production live default unary。
+2. `Gate-INT-10` 与 startup diagnostics 的 release 层采信边界仍待 009/010/011 收口；当前 007 只保证 entrypoint 术语不再混写，并不直接等价于 release-ready。
+
 ## 记录 #612
 
 - 日期：2026-05-09
