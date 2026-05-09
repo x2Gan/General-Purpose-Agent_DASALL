@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #614
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-008 建立 daemon/gateway live runtime dependency composition baseline
+- 状态：已完成
+
+### 改动
+
+1. 新增 `apps/runtime_support/include/RuntimeLiveDependencyComposition.h`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与对应 CMake target `dasall_apps_runtime_support`：把 app-level runtime composition owner 收敛为共享 helper，显式装配 `memory_manager`、`cognition_engine`、`response_builder`、`tool_manager` 四个 required ports，并保留 `knowledge_service` / `llm_manager` 缺失以稳定输出 degraded baseline。
+2. 更新 `apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp` 以及各自 CMakeLists：daemon/gateway runtime init request 不再传空 `RuntimeDependencySet`，而是通过新的 app helper 先完成最小 live dependency composition，再进入 `AgentFacade::init()`；若 composition helper 失败，则 app main 直接 fail-closed 并输出明确错误。
+3. 更新 `tests/integration/access/CMakeLists.txt` 并新增 `DaemonRuntimeLiveDependencyCompositionTest.cpp`、`GatewayRuntimeLiveDependencyCompositionTest.cpp`：为 daemon/gateway 分别补 focused composition tests 和 custom acceptance targets `dasall_access_daemon_runtime_live_dependency_composition_test`、`dasall_access_gateway_runtime_live_dependency_composition_test`，锁定“required ports live、optional 缺失 -> degraded-ready、不是 stub-ready”的 app-binary baseline。
+4. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-008` 标记为 Done，并同步 daemon/gateway/runtime readiness 当前状态与剩余 `Gate-INT-10` / startup diagnostics 缺口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_unary_integration_test","dasall_access_daemon_runtime_live_dependency_composition_test","dasall_access_gateway_runtime_live_dependency_composition_test"])`
+   - 结果：通过；新的 daemon/gateway composition custom targets 已完成编译并执行通过，同时 `dasall_runtime_unary_integration_test` 保持可编译。
+2. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_gateway"])`
+   - 结果：通过；daemon/gateway 入口接入 live dependency helper 后完成重新编译链接，没有引入新的 app binary 构建回退。
+3. `RunCtest_CMakeTools(tests=["RuntimeUnaryIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`
+   - 结果：返回泛化 `生成失败`；按仓库既定 fallback 规则转为显式 `ctest` 验证，不将该工具状态视为功能失败。
+4. `ctest --test-dir build/vscode-linux-ninja -R '^(RuntimeUnaryIntegrationTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure`
+   - 结果：3/3 通过；`RuntimeUnaryIntegrationTest`、`DaemonRuntimeLiveDependencyCompositionTest`、`GatewayRuntimeLiveDependencyCompositionTest` 全绿，证明 008 没有把 runtime unary 主链打回 stub path。
+
+### 结果
+
+1. `INTFIX-TODO-008` 已完成；daemon/gateway app root 现在都不再把空 `RuntimeDependencySet` 当作默认入口，而是显式装配 required live ports，再将缺失的 knowledge/llm 投影为 degraded-ready。
+2. 008 没有把 live baseline owner 下沉给 `AgentFacade`，而是保持在 app composition root；`AgentFacade` 继续只消费 composition 结果并输出 readiness/diagnostics，符合 `RuntimeAppCompositionV1` 的 owner 边界。
+3. 当前 remaining gap 已从“live dependency baseline 缺失”收敛为 `INTFIX-TODO-009` / `010` / `011`：即 gateway app-binary gate、`Gate-INT-10` 和 startup diagnostics / failure artifact 统一收口。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-009`，新增 gateway app-binary unary smoke 的 fail-closed regression，并把 app-binary gate 与 `Gate-INT-10` 前置条件收紧到真实 binary surface。
+
+### 风险
+
+1. 008 建立的是“required live + optional 缺失 => degraded-ready”的最小基线，不等价于 full default-ready；在 knowledge/llm optional ports 被真实接入前，daemon/gateway 仍不应宣称 live default unary ready。
+2. `RunCtest_CMakeTools` 仍可能对 focused tests 返回泛化 `生成失败`；当前轮次已经用 build-tree `ctest` fallback 验证通过，但后续 Gate 收口文档仍需继续沿用这条冻结规则。
+
 ## 记录 #613
 
 - 日期：2026-05-09

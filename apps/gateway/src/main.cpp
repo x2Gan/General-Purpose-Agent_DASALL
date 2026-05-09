@@ -38,6 +38,7 @@
 #include "HealthProbeHandler.h"
 #include "AgentFacade.h"
 #include "RuntimeDependencySet.h"
+#include "RuntimeLiveDependencyComposition.h"
 #include "agent/AgentResult.h"
 #include "config/InstallLayout.h"
 #include "ProfileCatalog.h"
@@ -47,6 +48,15 @@ namespace {
 
 constexpr char kDefaultGatewayProfileId[] = "desktop_full";
 constexpr int kDefaultGatewayListenPort = 8080;
+
+struct AgentInitRequestBuildResult {
+  dasall::runtime::AgentInitRequest request;
+  std::string error;
+
+  [[nodiscard]] bool ok() const {
+    return error.empty() && request.has_minimum_requirements();
+  }
+};
 
 struct ParsedGatewayArgs {
   std::optional<std::string> profile_id;
@@ -218,18 +228,31 @@ struct ParsedGatewayArgs {
   return dispatch_result;
 }
 
-[[nodiscard]] dasall::runtime::AgentInitRequest build_gateway_agent_init_request(
+[[nodiscard]] AgentInitRequestBuildResult build_gateway_agent_init_request(
     std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> policy_snapshot) {
+  const auto runtime_composition =
+      dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+          policy_snapshot,
+          "gateway.http-unary");
+  if (!runtime_composition.ok()) {
+    return AgentInitRequestBuildResult{
+        .request = {},
+        .error = runtime_composition.error,
+    };
+  }
+
   dasall::runtime::AgentInitRequest init_request;
   const std::string effective_profile_id = policy_snapshot->effective_profile_id();
   init_request.runtime_instance_id = "gateway.http-unary:" + effective_profile_id;
   init_request.profile_id = effective_profile_id;
   init_request.policy_snapshot = std::move(policy_snapshot);
-  init_request.dependency_set =
-      std::make_shared<dasall::runtime::RuntimeDependencySet>();
+  init_request.dependency_set = runtime_composition.dependency_set;
   init_request.boot_reason = "gateway-http-entry";
   init_request.cold_start = true;
-  return init_request;
+  return AgentInitRequestBuildResult{
+      .request = std::move(init_request),
+      .error = {},
+  };
 }
 
 /// 全局运行标志，用于信号处理器
@@ -265,8 +288,15 @@ int main(int argc, char* argv[]) {
   }
 
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+  const auto runtime_init_request =
+      build_gateway_agent_init_request(runtime_snapshot.snapshot);
+  if (!runtime_init_request.ok()) {
+    std::cerr << "[dasall_gateway] runtime dependency composition failed: "
+              << runtime_init_request.error << "\n";
+    return 1;
+  }
   const auto runtime_init_result = runtime_facade->init(
-      build_gateway_agent_init_request(runtime_snapshot.snapshot));
+      runtime_init_request.request);
   const bool runtime_entry_accepted = runtime_init_result.accepted;
   if (!runtime_entry_accepted) {
     std::cerr << "[dasall_gateway] runtime init failed: "

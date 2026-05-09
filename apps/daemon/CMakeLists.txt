@@ -25,6 +25,7 @@ target_compile_features(dasall-daemon PRIVATE cxx_std_20)
 target_link_libraries(dasall-daemon
   PRIVATE
     dasall_access
+    dasall_apps_runtime_support
     dasall_runtime
     dasall_contracts
     dasall_infra

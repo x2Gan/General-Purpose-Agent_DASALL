@@ -363,6 +363,64 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_gateway_binary_unary_smoke_integration_test_bin
 )
 
+add_executable(dasall_access_daemon_runtime_live_dependency_composition_integration_test
+  DaemonRuntimeLiveDependencyCompositionTest.cpp
+)
+
+target_link_libraries(dasall_access_daemon_runtime_live_dependency_composition_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_profiles
+    dasall_runtime
+)
+
+dasall_apply_common_options(dasall_access_daemon_runtime_live_dependency_composition_integration_test)
+
+add_test(NAME DaemonRuntimeLiveDependencyCompositionTest
+  COMMAND dasall_access_daemon_runtime_live_dependency_composition_integration_test)
+set_tests_properties(DaemonRuntimeLiveDependencyCompositionTest PROPERTIES LABELS "integration;access")
+
+add_custom_target(dasall_access_daemon_runtime_live_dependency_composition_test
+  COMMAND $<TARGET_FILE:dasall_access_daemon_runtime_live_dependency_composition_integration_test>
+  DEPENDS dasall_access_daemon_runtime_live_dependency_composition_integration_test
+  USES_TERMINAL
+)
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_runtime_live_dependency_composition_integration_test
+)
+
+add_executable(dasall_access_gateway_runtime_live_dependency_composition_integration_test
+  GatewayRuntimeLiveDependencyCompositionTest.cpp
+)
+
+target_link_libraries(dasall_access_gateway_runtime_live_dependency_composition_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_profiles
+    dasall_runtime
+)
+
+dasall_apply_common_options(dasall_access_gateway_runtime_live_dependency_composition_integration_test)
+
+add_test(NAME GatewayRuntimeLiveDependencyCompositionTest
+  COMMAND dasall_access_gateway_runtime_live_dependency_composition_integration_test)
+set_tests_properties(GatewayRuntimeLiveDependencyCompositionTest PROPERTIES LABELS "integration;access")
+
+add_custom_target(dasall_access_gateway_runtime_live_dependency_composition_test
+  COMMAND $<TARGET_FILE:dasall_access_gateway_runtime_live_dependency_composition_integration_test>
+  DEPENDS dasall_access_gateway_runtime_live_dependency_composition_integration_test
+  USES_TERMINAL
+)
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_gateway_runtime_live_dependency_composition_integration_test
+)
+
 add_executable(dasall_access_health_readiness_integration_test
   AccessHealthReadinessIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/gateway/src/HealthProbeHandler.cpp

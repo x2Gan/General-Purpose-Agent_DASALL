@@ -1,4 +1,5 @@
 add_subdirectory(cli)
+add_subdirectory(runtime_support)
 add_subdirectory(daemon)
 add_subdirectory(gateway)
 add_subdirectory(simulator)
