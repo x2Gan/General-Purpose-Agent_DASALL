@@ -1242,6 +1242,14 @@ RuntimeDependencySet 的组合根职责进一步固定为：
 3. runtime-local fixture gate 只能通过 `fail-closed stub` / `null adapter` 验证 runtime 自身控制平面，不得把其结果外推为 true integration ready。
 4. true integration gate 只在相邻模块 public interface ready 且 blocker 清零后，允许把对应 seam 切换到真实适配器。
 
+##### 6.24.12.3 RuntimeAppCompositionV1 回链
+
+1. daemon / gateway app binary 的 runtime production composition 以 [../ssot/RuntimeAppCompositionV1.md](../ssot/RuntimeAppCompositionV1.md) 为唯一 SSOT；`RuntimeDependencySet` 的 production composition owner 固定为各自 `main.cpp` 或 app-local helper，而不是 `AgentFacade` 的隐藏 fallback。
+2. `SingleAgentRuntimePortMatrix` 只定义 required / optional / degraded 的端口口径；`RuntimeAppCompositionV1` 进一步规定 app binary 必须把这些端口装配成受控的 `RuntimeDependencySet`，不能用空 dependency set 冒充 `default unary` production composition。
+3. stub runtime path 只允许用于 runtime-local 开发烟测、受控 binary smoke 或 blocker 复现；只要 diagnostics 出现 `stub_runtime_path` 或等价标签，该 binary 就不得外推为 `default unary` ready、`Gate-INT-10` ready 或 release-preflight ready。
+4. daemon 当前空 `RuntimeDependencySet` 只能继续被解释为 stub runtime path 基线；gateway 在缺 runtime init request 与 `RuntimeDependencySet` owner 时必须保持 fail-closed，而不是以 access health surface 暗示 runtime production composition 已闭合。
+5. 该回链直接解阻 INTFIX-TODO-004；后续 INTFIX-TODO-007、INTFIX-TODO-008 分别承担 readiness surface 拆分与 live dependency composition baseline 落地。
+
 #### 6.24.13 组件级设计到任务拆分的最小映射规则
 
 为了让后续任务拆分稳定，建议对每个 P0 组件至少满足以下五项：
