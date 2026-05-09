@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+. /etc/default/dasall-daemon
+: "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}"
+
+cleanup() {
+  systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
+}
+
+trap cleanup EXIT
+
+/usr/sbin/dasall-daemon \
+  --validate-only \
+  --profile-id="${DASALL_DAEMON_PROFILE_ID}" \
+  --config-file /etc/dasall/daemon.json
+
+systemctl daemon-reload
+systemctl enable --now dasall-daemon.service
+systemctl is-active --quiet dasall-daemon.service
+
+test -S /run/dasall/daemon.sock
+test "$(stat -c '%U:%G' /run/dasall/daemon.sock)" = "dasall:dasall"
+test "$(stat -c '%a' /run/dasall/daemon.sock)" = "600"
+
+dasall ping --json >/dev/null
+dasall readiness --json >/dev/null
+dasall version >/dev/null

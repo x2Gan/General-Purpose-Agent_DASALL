@@ -2,7 +2,7 @@
 
 ## 1. 目的
 
-这个目录承载 Ubuntu DPKG v1 的 packaging 验证入口。`PKG-TODO-003` 先冻结运行策略与 gate 分层；真正的脚本和 `debian/tests/*` 会在后续原子任务落地。
+这个目录承载 Ubuntu DPKG v1 的 packaging 验证入口。`PKG-TODO-003` 先冻结运行策略与 gate 分层；`PKG-TODO-016` 已落 `debian/tests/*` installed-package smoke 脚本，rootful lifecycle harness 继续由后续原子任务补齐。
 
 当前结论只有一条：不要把 build-tree preflight、local installed-package smoke、`autopkgtest` 混成同一种验证。
 
@@ -33,6 +33,7 @@
 
 2. 后续若 `pkg-smoke-common-assets` 被拆成纯资产检查，可允许它在 container/unshare 类 testbed 上单独快速回归。
 3. 这种 quick loop 不能替代 `pkg-smoke-local-control-plane` 的 machine-isolation gate。
+4. 部分 Ubuntu 24.04 `autopkgtest` 版本在 `--validate` 仍会触发 testbed setup；遇到这种版本差异时，可以用仅包装 `parse_debian_source()` 的本地兼容 shim 保持同一命令口径，但不能把它当成 installed-package run。
 
 ### 3.3 CI 最小要求
 
