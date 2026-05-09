@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #610
+
+- 日期：2026-05-09
+- 阶段：integration/planning
+- 任务：系统集成修复补充优化专项规划
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`，作为 2026-05-09 集成复核后的接续专项计划。
+2. 将当前复核结论拆分为 `INTFIX-TODO-001` ~ `INTFIX-TODO-012`：binary readiness 语义、gateway production path、Gate-INT-10、runtime app composition、daemon/gateway binary smoke、runtime readiness 拆分、live dependency baseline、startup diagnostics 与证据收口。
+3. 引入行业实践映射：Practical Test Pyramid / Consumer-Driven Contracts、Twelve-Factor Config、Google SRE monitoring、OpenTelemetry traces 与 durable execution readiness 分层。
+
+### 验证
+
+1. 规划文档已按 DASALL 专项 TODO 标准包含 Design Track、Build Track、任务表、阻塞项、测试矩阵、统一验收命令、风险与后续 backlog。
+2. 本记录只回写规划产物；未修改产品代码，未声称 `dasall_packaging_preflight_tests` 已修复。
+
+### 结果
+
+1. 5 月 6 日 `Gate-INT-08/09` 绿态继续保留为 focused integration 证据。
+2. 5 月 9 日新增的 release/app-binary 缺口被单独收敛到接续专项，不再与已完成的 `INT-TODO-001~030` 混写。
+3. 推荐下一轮从 `INTFIX-TODO-001` 启动，随后推进 `INTFIX-TODO-003` 与 `INTFIX-TODO-005`，优先恢复 daemon binary/package preflight 可诊断绿态。
+
+### 风险
+
+1. 当前仍未修复 `DaemonBinaryUnarySmokeTest` 失败；该问题必须进入 `INTFIX-TODO-005` 执行轮次。
+2. gateway binary 仍缺 production runtime backend；该问题必须进入 `INTFIX-TODO-006` 执行轮次。
+3. daemon/gateway live dependency baseline 仍未落地；在 `INTFIX-TODO-008` 完成前，不应把 skeleton unary smoke 外推为 live default unary ready。
+
 ## 记录 #609
 
 - 日期：2026-05-09
