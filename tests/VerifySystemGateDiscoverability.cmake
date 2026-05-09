@@ -14,9 +14,22 @@ if(NOT DEFINED RUN_ACCEPTANCE)
   set(RUN_ACCEPTANCE OFF)
 endif()
 
+if(NOT DEFINED DISCOVERABILITY_LABELS_CSV)
+  set(DISCOVERABILITY_LABELS_CSV "")
+endif()
+
 string(REPLACE "," ";" expected_tests "${EXPECTED_TESTS_CSV}")
 string(JOIN "|" test_regex_body ${expected_tests})
 set(TEST_REGEX "^(${test_regex_body})$")
+
+macro(verify_expected_tests discoverability_output discoverability_context)
+  foreach(test_name IN LISTS expected_tests)
+    string(FIND "${discoverability_output}" "${test_name}" found_index)
+    if(found_index EQUAL -1)
+      message(FATAL_ERROR "System gate discoverability missing test: ${test_name}\n${discoverability_context}\n${discoverability_output}")
+    endif()
+  endforeach()
+endmacro()
 
 execute_process(
   COMMAND ${CTEST_COMMAND} -N -R ${TEST_REGEX}
@@ -30,16 +43,31 @@ if(NOT ctest_result EQUAL 0)
   message(FATAL_ERROR "ctest -N failed: ${ctest_error}\n${ctest_output}")
 endif()
 
-string(REPLACE "," ";" expected_tests "${EXPECTED_TESTS_CSV}")
-
-foreach(test_name IN LISTS expected_tests)
-  string(FIND "${ctest_output}" "${test_name}" found_index)
-  if(found_index EQUAL -1)
-    message(FATAL_ERROR "System gate discoverability missing test: ${test_name}\n${ctest_output}")
-  endif()
-endforeach()
+verify_expected_tests("${ctest_output}" "ctest -N -R ${TEST_REGEX}")
 
 message(STATUS "Verified system gate discoverability for ${EXPECTED_TESTS_CSV}")
+
+if(NOT DISCOVERABILITY_LABELS_CSV STREQUAL "")
+  string(REPLACE "," ";" discoverability_labels "${DISCOVERABILITY_LABELS_CSV}")
+
+  foreach(label_name IN LISTS discoverability_labels)
+    execute_process(
+      COMMAND ${CTEST_COMMAND} -N -L ${label_name} -R ${TEST_REGEX}
+      WORKING_DIRECTORY ${BUILD_DIR}
+      RESULT_VARIABLE label_result
+      OUTPUT_VARIABLE label_output
+      ERROR_VARIABLE label_error
+    )
+
+    if(NOT label_result EQUAL 0)
+      message(FATAL_ERROR "ctest -N -L ${label_name} failed: ${label_error}\n${label_output}")
+    endif()
+
+    verify_expected_tests("${label_output}" "ctest -N -L ${label_name} -R ${TEST_REGEX}")
+  endforeach()
+
+  message(STATUS "Verified labeled system gate discoverability for ${DISCOVERABILITY_LABELS_CSV}")
+endif()
 
 if(RUN_ACCEPTANCE)
   execute_process(

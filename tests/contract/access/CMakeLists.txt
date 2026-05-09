@@ -21,7 +21,7 @@ target_link_libraries(dasall-cli_json_output_contract_test
 dasall_apply_common_options(dasall-cli_json_output_contract_test)
 
 add_test(NAME CliJsonOutputContractTest COMMAND dasall-cli_json_output_contract_test)
-set_tests_properties(CliJsonOutputContractTest PROPERTIES LABELS "contract;smoke;access;cli")
+set_tests_properties(CliJsonOutputContractTest PROPERTIES LABELS "contract;smoke;access;cli;release-preflight-gate")
 
 list(APPEND DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS dasall-cli_json_output_contract_test)
 
@@ -47,7 +47,7 @@ target_link_libraries(dasall-cli_exit_code_contract_test
 dasall_apply_common_options(dasall-cli_exit_code_contract_test)
 
 add_test(NAME CliExitCodeContractTest COMMAND dasall-cli_exit_code_contract_test)
-set_tests_properties(CliExitCodeContractTest PROPERTIES LABELS "contract;smoke;access;cli")
+set_tests_properties(CliExitCodeContractTest PROPERTIES LABELS "contract;smoke;access;cli;release-preflight-gate")
 
 list(APPEND DASALL_CONTRACT_TEST_EXECUTABLE_TARGETS dasall-cli_exit_code_contract_test)
 

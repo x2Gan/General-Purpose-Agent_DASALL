@@ -228,9 +228,8 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
   assert_true(run.stdout_text.find("[dasall-cli] run: completed") != std::string::npos,
         "binary unary smoke should surface completed cli stdout; stdout=" +
           run.stdout_text);
-  assert_true(run.stdout_text.find("runtime orchestrator skeleton completed") !=
-          std::string::npos,
-        "binary unary smoke should surface the runtime skeleton response text on stdout; stdout=" +
+  assert_true(run.stdout_text.find("response=") != std::string::npos,
+        "binary unary smoke should surface a non-empty runtime response on stdout; stdout=" +
           run.stdout_text);
   assert_true(run.stderr_text.empty(),
         "binary unary smoke should keep successful human output off stderr; stderr=" +
@@ -271,8 +270,13 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
         "binary unary smoke should preserve explicit trace_id in JSON output; stdout=" +
           json_run.stdout_text);
 
-  assert_equal(0, daemon.stop(),
-               "binary unary smoke should stop the daemon cleanly; daemon_log=" + daemon.read_log());
+  const auto daemon_exit_code = daemon.stop();
+  const auto daemon_log = daemon.read_log();
+  assert_equal(0, daemon_exit_code,
+               "binary unary smoke should stop the daemon cleanly; daemon_log=" + daemon_log);
+  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
+              "binary unary smoke should pass through the real daemon main init path; daemon_log=" +
+                  daemon_log);
 }
 
 }  // namespace

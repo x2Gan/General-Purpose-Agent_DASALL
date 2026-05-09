@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #616
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-010 接线 Gate-INT-10 release/app-binary preflight target
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/VerifySystemGateDiscoverability.cmake`：在原有 `ctest -N -R` 名称发现性校验之外，新增可选的 label discoverability 校验，使同一批预期测试可以被 `release-preflight-gate` 和 `gate-int-10` 这样的标签稳定发现，而不是只靠手工约定 target 名称。
+2. 更新 `tests/contract/access/CMakeLists.txt` 与 `tests/integration/access/CMakeLists.txt`：为 packaging preflight 涉及的 CLI contract / daemon integration 条目统一打上 `release-preflight-gate` 标签，并为 `CliDaemonSocketPathIntegrationTest`、`DaemonBinaryUnarySmokeTest`、`GatewayBinaryUnarySmokeTest`、`GatewayBinaryMissingBackendRegressionTest` 额外打上 `gate-int-10`，把 build-tree app-binary gate 与 package-related preflight 的 discoverability 入口分层固定下来。
+3. 更新 `tests/CMakeLists.txt`：新增独立 custom target `dasall_gate_int_10`，以 daemon/gateway app-binary smoke 和 socket path discoverability 为核心输入；同时让 `dasall_packaging_preflight_tests` 也通过 `release-preflight-gate` label 接入同一 discoverability verifier，从而形成两个正式的 build-tree release-preflight 命令入口。
+4. 更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`：将遗留的 `runtime orchestrator skeleton completed` 断言替换为当前 live/degraded baseline 下稳定成立的 CLI response 语义与 `[dasall-daemon] runtime readiness=` 启动日志证据，避免 008 之后继续把 skeleton 文案当作长期契约。
+5. 更新 `scripts/packaging/README.md` 与 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：同步 build-tree preflight 的正式命令从“单一 packaging preflight target”收敛为 `dasall_gate_int_10` + `dasall_packaging_preflight_tests` 双入口，并回写当前剩余缺口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_gate_int_10","dasall_packaging_preflight_tests"])`
+   - 结果：通过；`dasall_packaging_preflight_tests` 已验证 `release-preflight-gate` 标签 discoverability 与 packaging 相关 acceptance，`dasall_gate_int_10` 已验证 `gate-int-10` / `release-preflight-gate` 双标签 discoverability 以及 daemon/gateway app-binary smoke acceptance。
+
+### 结果
+
+1. `INTFIX-TODO-010` 已完成；build-tree `release-preflight` 现在被拆成两个正式入口：`dasall_gate_int_10` 负责 app-binary smoke，`dasall_packaging_preflight_tests` 负责 package-related preflight，二者都带可执行 discoverability 证据。
+2. 010 没有把 `Gate-INT-10` 吞并进 `packaging_preflight`，也没有让 `Gate-INT-08/09` 继续外推到 release-ready；相反，它把“局部系统绿”和“app-binary / preflight 绿”分成了可二值验证的两个 target。
+3. 当前 remaining gap 已收敛为 `INTFIX-TODO-011` / `012`：即 startup diagnostics / preflight artifact 规范统一，以及专项 Gate / deliverable / 残余风险的最终文档收口。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-011`，统一 daemon/gateway 启动失败的阶段、错误码、配置路径与 artifact 路径输出，并补 focused diagnostics tests。
+
+### 风险
+
+1. 010 解决的是 discoverability 与 gate wiring，不等于 startup diagnostics 已统一；当前 daemon/gateway 的失败证据格式仍然不完全同构，011 之前还不能宣称 preflight artifact 规范已冻结。
+2. `release-preflight-gate` 标签现在只覆盖 build-tree preflight，不覆盖 installed-package qemu / `autopkgtest`；后者仍由 packaging 专项 owner 维护，不能在 010 的 worklog 中混写为已通过。
+
 ## 记录 #615
 
 - 日期：2026-05-09

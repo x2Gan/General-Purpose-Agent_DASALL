@@ -10,12 +10,14 @@
 
 | Gate | 目标 | 代表命令 | 归属任务 |
 |---|---|---|---|
-| build-tree preflight | 在源码树内验证 package 相关 contract / integration 切片 | `cmake --build <build-dir> --target dasall_packaging_preflight_tests` | PKG-TODO-015 |
+| build-tree preflight | 在源码树内分别验证 app-binary gate 与 package 相关 contract / integration preflight 切片 | `cmake --build <build-dir> --target dasall_gate_int_10 && cmake --build <build-dir> --target dasall_packaging_preflight_tests` | INTFIX-TODO-010 / PKG-TODO-015 |
 | package build | 生成四包 `.deb` / `.changes` 产物 | `dpkg-buildpackage -us -uc -b` | PKG-TODO-009 |
 | static package scan | 对包产物跑 policy/static analysis | `lintian ../*.changes` | PKG-TODO-015 |
 | local installed-package smoke | fresh install、explicit enable/start、upgrade、remove/purge | `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` | PKG-TODO-017 |
 | autopkgtest metadata validate | 校验 `debian/tests/control` 语法与元数据 | `python3 scripts/packaging/validate_autopkgtest_metadata.py` | PKG-TODO-016 |
 | autopkgtest installed-package run | 在 testbed 中验证安装后的包行为 | `autopkgtest ../dasall_*.changes -- qemu <image-or-config>` | PKG-TODO-016 |
+
+补充约束：`dasall_gate_int_10` 只承载 build-tree app-binary smoke（daemon/gateway 真实 binary + socket path discoverability），`dasall_packaging_preflight_tests` 继续承载 package 相关 contract / daemon preflight 切片；两者都通过 `release-preflight-gate` label 接入 discoverability verifier，但彼此不互相替代。
 
 ## 3. testbed 策略
 

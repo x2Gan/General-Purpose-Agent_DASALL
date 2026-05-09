@@ -46,7 +46,7 @@ target_link_libraries(dasall_access_daemon_ping_integration_test
 dasall_apply_common_options(dasall_access_daemon_ping_integration_test)
 
 add_test(NAME DaemonPingIntegrationTest COMMAND dasall_access_daemon_ping_integration_test)
-set_tests_properties(DaemonPingIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(DaemonPingIntegrationTest PROPERTIES LABELS "integration;access;release-preflight-gate")
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_ping_integration_test
@@ -160,7 +160,7 @@ dasall_apply_common_options(dasall_access_cli_daemon_socket_path_integration_tes
 
 add_test(NAME CliDaemonSocketPathIntegrationTest
   COMMAND dasall_access_cli_daemon_socket_path_integration_test)
-set_tests_properties(CliDaemonSocketPathIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(CliDaemonSocketPathIntegrationTest PROPERTIES LABELS "integration;access;gate-int-10;release-preflight-gate")
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_cli_daemon_socket_path_integration_test
@@ -224,7 +224,7 @@ dasall_apply_common_options(dasall_access_daemon_binary_unary_smoke_integration_
 
 add_test(NAME DaemonBinaryUnarySmokeTest
   COMMAND dasall_access_daemon_binary_unary_smoke_integration_test)
-set_tests_properties(DaemonBinaryUnarySmokeTest PROPERTIES LABELS "integration;access")
+set_tests_properties(DaemonBinaryUnarySmokeTest PROPERTIES LABELS "integration;access;gate-int-10;release-preflight-gate")
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_binary_unary_smoke_integration_test
@@ -351,7 +351,7 @@ dasall_apply_common_options(dasall_access_gateway_binary_unary_smoke_integration
 
 add_test(NAME GatewayBinaryUnarySmokeTest
   COMMAND dasall_access_gateway_binary_unary_smoke_integration_test_bin)
-set_tests_properties(GatewayBinaryUnarySmokeTest PROPERTIES LABELS "integration;access")
+set_tests_properties(GatewayBinaryUnarySmokeTest PROPERTIES LABELS "integration;access;gate-int-10;release-preflight-gate")
 
 add_executable(dasall_access_gateway_missing_backend_binary_fixture
   GatewayBinaryMissingBackendFixture.cpp
@@ -386,7 +386,7 @@ dasall_apply_common_options(dasall_access_gateway_binary_missing_backend_regress
 
 add_test(NAME GatewayBinaryMissingBackendRegressionTest
   COMMAND dasall_access_gateway_binary_missing_backend_regression_test)
-set_tests_properties(GatewayBinaryMissingBackendRegressionTest PROPERTIES LABELS "integration;access")
+set_tests_properties(GatewayBinaryMissingBackendRegressionTest PROPERTIES LABELS "integration;access;gate-int-10;release-preflight-gate")
 
 add_custom_target(dasall_access_gateway_binary_unary_smoke_integration_test
   COMMAND $<TARGET_FILE:dasall_access_gateway_binary_unary_smoke_integration_test_bin>

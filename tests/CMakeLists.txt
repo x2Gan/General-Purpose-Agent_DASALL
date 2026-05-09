@@ -94,9 +94,39 @@ add_custom_target(dasall_packaging_preflight_tests
     -DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}
     -DBUILD_DIR=${CMAKE_BINARY_DIR}
     -DEXPECTED_TESTS_CSV=${DASALL_PACKAGING_PREFLIGHT_EXPECTED_TESTS_CSV}
+    -DDISCOVERABILITY_LABELS_CSV=release-preflight-gate
     -DRUN_ACCEPTANCE=ON
     -P ${CMAKE_SOURCE_DIR}/tests/VerifySystemGateDiscoverability.cmake
   DEPENDS ${DASALL_PACKAGING_PREFLIGHT_EXECUTABLE_TARGETS}
+)
+
+set(DASALL_GATE_INT_10_TEST_NAMES
+  CliDaemonSocketPathIntegrationTest
+  DaemonBinaryUnarySmokeTest
+  GatewayBinaryUnarySmokeTest
+  GatewayBinaryMissingBackendRegressionTest
+)
+
+string(JOIN "," DASALL_GATE_INT_10_EXPECTED_TESTS_CSV
+  ${DASALL_GATE_INT_10_TEST_NAMES}
+)
+
+set(DASALL_GATE_INT_10_EXECUTABLE_TARGETS
+  dasall_access_cli_daemon_socket_path_integration_test
+  dasall_access_daemon_binary_unary_smoke_integration_test
+  dasall_access_gateway_binary_unary_smoke_integration_test_bin
+  dasall_access_gateway_binary_missing_backend_regression_test
+)
+
+add_custom_target(dasall_gate_int_10
+  COMMAND ${CMAKE_COMMAND}
+    -DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}
+    -DBUILD_DIR=${CMAKE_BINARY_DIR}
+    -DEXPECTED_TESTS_CSV=${DASALL_GATE_INT_10_EXPECTED_TESTS_CSV}
+    -DDISCOVERABILITY_LABELS_CSV=gate-int-10,release-preflight-gate
+    -DRUN_ACCEPTANCE=ON
+    -P ${CMAKE_SOURCE_DIR}/tests/VerifySystemGateDiscoverability.cmake
+  DEPENDS ${DASALL_GATE_INT_10_EXECUTABLE_TARGETS}
 )
 
 set(DASALL_SYSTEM_GATE_ACCEPTANCE_TEST_NAMES
