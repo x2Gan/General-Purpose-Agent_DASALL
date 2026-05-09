@@ -4,21 +4,81 @@ set -eu
 . /etc/default/dasall-daemon
 : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}"
 
+CONFIG_SMOKE_DIR=$(mktemp -d /tmp/dasall-cli-config-smoke.XXXXXX)
+IMPORT_FILE="${CONFIG_SMOKE_DIR}/deepseek.key"
+DESIRED_FILE="${CONFIG_SMOKE_DIR}/desired.yaml"
+SHOW_BEFORE_JSON="${CONFIG_SMOKE_DIR}/show-before.json"
+VALIDATE_JSON="${CONFIG_SMOKE_DIR}/validate.json"
+PLAN_JSON="${CONFIG_SMOKE_DIR}/plan.json"
+APPLY_JSON="${CONFIG_SMOKE_DIR}/apply.json"
+SHOW_AFTER_JSON="${CONFIG_SMOKE_DIR}/show-after.json"
+
 cleanup() {
   systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
+  rm -rf "${CONFIG_SMOKE_DIR}"
 }
 
 trap cleanup EXIT
+
+cat <<'EOF' > "${IMPORT_FILE}"
+deepseek-file-secret
+EOF
+chmod 600 "${IMPORT_FILE}"
+
+cat <<EOF > "${DESIRED_FILE}"
+schema_version: dasall.config.apply.v1
+profile_id: ${DASALL_DAEMON_PROFILE_ID}
+daemon:
+  socket_path: /run/dasall/daemon.sock
+  log_format: text
+  diag_enabled: true
+  override_enabled: false
+  watchdog_enabled: false
+service:
+  start_now: true
+  enable_on_boot: true
+operator_access:
+  add_users: []
+secrets:
+  refs:
+    - ref: secret://llm/providers/deepseek-prod
+      source: file:${IMPORT_FILE}
+      auth_profile_name: primary
+EOF
+chmod 600 "${DESIRED_FILE}"
 
 /usr/sbin/dasall-daemon \
   --validate-only \
   --profile-id="${DASALL_DAEMON_PROFILE_ID}" \
   --config-file /etc/dasall/daemon.json
 
-systemctl daemon-reload
-systemctl enable --now dasall-daemon.service
-systemctl is-active --quiet dasall-daemon.service
+dasall config show --json > "${SHOW_BEFORE_JSON}"
+grep -Fq '"schema_version":"dasall.config.summary.v1"' "${SHOW_BEFORE_JSON}"
 
+dasall config validate --json > "${VALIDATE_JSON}"
+grep -Fq '"schema_version":"dasall.config.validate.v1"' "${VALIDATE_JSON}"
+
+dasall config plan --from-file "${DESIRED_FILE}" --json > "${PLAN_JSON}"
+grep -Fq '"schema_version":"dasall.config.plan.v1"' "${PLAN_JSON}"
+grep -Fq '"ref":"secret://llm/providers/deepseek-prod"' "${PLAN_JSON}"
+grep -Fq '"service_start_requested":true' "${PLAN_JSON}"
+
+dasall config apply --from-file "${DESIRED_FILE}" --no-input --json > "${APPLY_JSON}"
+grep -Fq '"outcome":"applied"' "${APPLY_JSON}"
+grep -Fq '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' "${APPLY_JSON}"
+
+grep -Fq '"log_format": "text"' /etc/dasall/daemon.json
+grep -Fq '"diag_enabled": true' /etc/dasall/daemon.json
+test -f /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+! grep -Fq 'deepseek-file-secret' /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+
+dasall config show --json > "${SHOW_AFTER_JSON}"
+grep -Fq '"ref":"secret://llm/providers/deepseek-prod"' "${SHOW_AFTER_JSON}"
+grep -Fq '"status":"configured"' "${SHOW_AFTER_JSON}"
+grep -Fq '"running":true' "${SHOW_AFTER_JSON}"
+grep -Fq '"enabled":true' "${SHOW_AFTER_JSON}"
+
+systemctl is-active --quiet dasall-daemon.service
 test -S /run/dasall/daemon.sock
 test "$(stat -c '%U:%G' /run/dasall/daemon.sock)" = "dasall:dasall"
 test "$(stat -c '%a' /run/dasall/daemon.sock)" = "600"

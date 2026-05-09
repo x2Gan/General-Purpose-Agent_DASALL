@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #606
+
+- 日期：2026-05-09
+- 阶段：cli/build
+- 任务：CLCFG-TODO-021 补齐 secret onboarding 与 installed-package smoke / autopkgtest 门
+- 状态：已完成
+
+### 改动
+
+1. 更新 `debian/tests/pkg-smoke-local-control-plane`，把原先只覆盖 `validate-only` + `systemctl enable --now` 的 installed-package smoke 扩展为真实的 `dasall config` 主路径：现在脚本会生成 owner-only import file 与 desired-state YAML，依次验证 `config show --json`、`config validate --json`、`config plan --from-file --json`、`config apply --from-file --no-input --json`，并检查 redacted `secret://llm/providers/deepseek-prod`、`/var/lib/dasall/secrets` 下的 bootstrap record、canonical `daemon.json` 更新、service running/enabled 与 socket 权限。
+2. 更新 `scripts/packaging/pkg_smoke_install.sh`，使本地 rootful lifecycle smoke 与 autopkgtest 入口保持同一安装态 config 语义：基础 install smoke 现在固定覆盖 `dasall config show/validate`，`--explicit-start-check` 则改为通过 `config plan/apply` 显式完成 secret onboarding 与 service start/enable，而不是直接绕过 config workflow 调 `systemctl enable --now`。
+3. 新增 `scripts/packaging/validate_cli_config_v1.sh`，并将 `scripts/packaging/pkg_smoke_upgrade.sh`、`pkg_smoke_remove_purge.sh`、`validate_ubuntu_dpkg_v1.sh` 一并纳入正式 validator 链，形成“`autopkgtest --validate` -> build-tree secret regressions -> 本地 rootful package lifecycle smoke”的 one-shot 入口。
+4. 更新 `docs/todos/cli/DASALL_cli_config交互式部署配置专项TODO.md`，将 CLCFG-TODO-021 标记为 Done，回写 installed-package smoke / validator 入口已落盘的事实，并把 `CLCFG-BLK-004` 解阻、`CLCFG-BLK-005` 收敛为环境侧 live gate 限制。
+
+### 验证
+
+1. `sh -n debian/tests/pkg-smoke-local-control-plane`
+   - 结果：通过；autopkgtest authoritative smoke 脚本语法有效。
+2. `sh -n scripts/packaging/pkg_smoke_install.sh && sh -n scripts/packaging/validate_cli_config_v1.sh && sh -n scripts/packaging/validate_ubuntu_dpkg_v1.sh && sh -n scripts/packaging/pkg_smoke_upgrade.sh && sh -n scripts/packaging/pkg_smoke_remove_purge.sh`
+   - 结果：通过；本地 rootful smoke / validator 链的 shell 语法有效。
+3. `chmod +x debian/tests/pkg-smoke-local-control-plane scripts/packaging/pkg_smoke_install.sh scripts/packaging/pkg_smoke_upgrade.sh scripts/packaging/pkg_smoke_remove_purge.sh scripts/packaging/validate_ubuntu_dpkg_v1.sh scripts/packaging/validate_cli_config_v1.sh && test -x debian/tests/pkg-smoke-local-control-plane && test -x scripts/packaging/validate_cli_config_v1.sh`
+   - 结果：通过；autopkgtest smoke 与统一 validator 入口均具备 executable bit。
+4. `autopkgtest --validate .`
+   - 结果：未执行成功；当前环境缺少 `autopkgtest` 命令，因此 metadata validate 无法在本机复验，但这暴露的是环境缺口而不是 repo 代码回归。
+5. `Build_CMakeTools(buildTargets=["dasall_secret_bootstrap_writer_integration_test","dasall_file_secret_backend_unit_test","dasall_secret_manager_facade_unit_test"])`
+   - 结果：通过；021 复用的 secret build-tree gates 均已构建就绪。
+6. `RunCtest_CMakeTools(tests=["SecretBootstrapWriterIntegrationTest","FileSecretBackendTest","SecretManagerFacadeTest"])`
+   - 结果：失败；工具再次返回通用“生成失败”，延续 019/020 已知工具态问题，不作为功能失败处理。
+7. `cd /home/gangan/DASALL && ctest --test-dir build/vscode-linux-ninja -R '^(SecretBootstrapWriterIntegrationTest|FileSecretBackendTest|SecretManagerFacadeTest)$' --output-on-failure`
+   - 结果：通过；3 个 secret-focused unit/integration tests 全绿，证明 021 新增的 installed-package smoke 没有破坏已交付的 secret bootstrap seam 与读链契约。
+8. `Build_CMakeTools(buildTargets=["dasall_integration_tests"])`
+   - 结果：构建阶段本身推进到 `ctest -L integration` 聚合执行，但因仓库既有的 `RuntimeResumeIntegrationTest` / `RuntimeCheckpointReplayRegressionTest` 失败而整体返回非零；该结果与 021 改动无关，因此未作为本任务功能失败处理。
+9. `cd /home/gangan/DASALL && id -u && sudo -n true`
+   - 结果：返回当前用户非 root 且 `sudo` 需要密码；因此本机无法无交互实跑 `validate_cli_config_v1.sh` 的 rootful package smoke 段。
+
+### 结果
+
+1. CLCFG-TODO-021 已把 secret onboarding 从“仅有 build-tree seam”推进到“同时具备 installed-package smoke / validator 入口”：`pkg-smoke-local-control-plane` 和 `pkg_smoke_install.sh` 现在都会走真实的 `dasall config` plan/apply 路径，而不是绕过 workflow 直接操作 systemd。
+2. `validate_cli_config_v1.sh` 已成为 config 专项的正式 one-shot validator 入口，能够把 autopkgtest metadata、secret build-tree 回归和本地 rootful lifecycle smoke 串成同一条验收链；这使 `CLCFG-BLK-004` 从能力缺口转为 closeout 任务。
+3. 当前环境仍然缺少 `autopkgtest` 与 passwordless sudo，因此 021 可以确认“gate 代码与脚本已落盘、build-tree secret regressions 全绿”，但不能在本机声称 installed-package live smoke 已实跑完成；该环境侧证据需在 CLCFG-TODO-022 的正式 rootful/autopkgtest 条件下补齐。
+
+### 下一步
+
+1. 进入 CLCFG-TODO-022，回写 config gate / deliverable / worklog 与统一验收入口，把 021 已落盘的 validator 与环境限制整理为正式 closeout 证据。
+
+### 风险
+
+1. `RunCtest_CMakeTools` 对这组 secret-focused tests 仍返回通用“生成失败”，因此 021 以及后续 022 的 focused 验收仍需继续保留 `build/vscode-linux-ninja` 下的 anchored `ctest` 回退路径，直到工具态恢复。
+2. `validate_cli_config_v1.sh` 已落盘，但若执行环境缺少 `autopkgtest` 或无交互 root 条件，则只能完成脚本静态验收和 build-tree secret gate，不能把 installed-package smoke 结果写成已实跑事实。
+
 ## 记录 #605
 
 - 日期：2026-05-09
