@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #618
+
+- 日期：2026-05-09
+- 阶段：integration/docs
+- 任务：INTFIX-TODO-012 回写系统集成修复 Gate 与后续优化路线
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/integration/deliverables/INTFIX-TODO-012-系统集成修复Gate与证据收口.md`：把 `Gate-INT-08` / `09` / `10`、build-tree `release-preflight`、startup diagnostics / preflight artifact 规范与后续优化 backlog 收敛为单一长期交付物，并明确了正式命令、长期资产路径、后继归属与残余风险。
+2. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-012` 标记为 Done，把“当前结论”改为专项修复主线已全部闭环，并把 `§11 可行性结论` 从执行前建议改为“后续转入 backlog / 新专项”的最终态表述。
+3. 更新 `docs/worklog/DASALL_开发执行记录.md`：补写本条最终收口记录，使 2026-05-09 当天 `#615` ~ `#618` 形成 gateway binary、Gate-INT-10、startup diagnostics 和最终证据闭环的完整顺序链。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_gate_int_08","dasall_gate_int_09","dasall_gate_int_10","dasall_packaging_preflight_tests"])`
+   - 结果：通过；`Gate-INT-08` / `09` / `10` 与 `dasall_packaging_preflight_tests` 均完成 discoverability / acceptance / build-tree `release-preflight` 验证，证明 012 的 Gate 回写不是脱离代码状态的文档更新。
+2. `rg -n "INTFIX-TODO-012|Gate-INT-10|release-preflight|记录 #" docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md docs/todos/integration/deliverables/INTFIX-TODO-012-系统集成修复Gate与证据收口.md docs/worklog/DASALL_开发执行记录.md docs/ssot/SystemIntegrationGateMatrix.md`
+   - 结果：通过；TODO、deliverable、worklog 与 `SystemIntegrationGateMatrix` 的 Gate-INT-10 / release-preflight 命名和最终状态已保持一致。
+
+### 结果
+
+1. `INTFIX-TODO-012` 已完成；本轮系统集成修复专项的代码 Gate、preflight 证据、worklog 记录与 deliverable 文档现已全部闭环。
+2. 012 没有新增任何实现逻辑，而是把 001~011 的正式命令、状态、残余风险和后续优化路线固定到长期资产，确保后续不会再出现“代码已绿但文档仍停留在修复前”的状态漂移。
+3. 当前主线任务全部结束；后续若继续推进，只能从 backlog 或新的专项 TODO 原子任务重新起轮。
+
+### 下一步
+
+1. 无主线修复后续步骤；如需继续推进，请从 installed-package qemu gate、optional ports default-ready、gateway HTTP hardening、OTel exporter 或 longer-running binary soak 等 backlog 项中另开原子任务。
+
+### 风险
+
+1. 即使 012 已收口，build-tree `release-preflight` 仍不等于 installed-package gate；`autopkgtest` / qemu 仍需在 packaging 专项中独立维护。
+2. 当前 deliverable 记录的是 2026-05-09 的稳定基线；后续若 Gate target、label、正式命令或后续优化 owner 发生变化，必须同步更新 TODO、worklog 和新的接续 deliverable。
+
 ## 记录 #617
 
 - 日期：2026-05-09
