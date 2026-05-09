@@ -55,7 +55,7 @@
 | 优化项 | 触发条件 | 下一归属 | 不纳入本轮修复主线的原因 |
 |---|---|---|---|
 | gateway HTTP release hardening | gateway unary production path 长期稳定后 | access / gateway 后续专项 | 当前已完成 production submit path 与 binary smoke，公网协议 hardening 不再是本轮红灯根因 |
-| installed-package qemu gate 串联 Gate-INT-10 | build-tree `release-preflight` 持续稳定后 | packaging 专项 | 需要重新构包、testbed 与 `autopkgtest` 环境，不应阻断本地修复闭环 |
+| installed-package qemu gate 串联 Gate-INT-10 | build-tree `release-preflight` 持续稳定后 | packaging 专项 | 已通过 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh` 固化顺序入口；正式 installed-package 结论仍取决于调用方提供 qemu image / virt-server 并完成 `autopkgtest` |
 | optional ports 从 degraded-ready 走向 default-ready | knowledge / llm optional backend 达到可维护基线后 | runtime / apps runtime_support | 当前只完成 required live baseline，继续扩 optional ports 会把修复任务放大 |
 | OTel-compatible trace exporter | startup diagnostics 字段与 retained snapshot 冻结后 | infra / observability 后续任务 | exporter 属于 optional backend，不影响当前 build-tree `release-preflight` 判断 |
 | longer-running binary soak / chaos | app-binary smoke 与 startup diagnostics 长期稳定后 | integration / release confidence 后续任务 | 属于 release confidence 扩展，不是当前修复主线的 blocking gap |

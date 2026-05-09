@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #619
+
+- 日期：2026-05-09
+- 阶段：packaging/gate
+- 任务：installed-package qemu 与 autopkgtest gate 串联 Gate-INT-10
+- 状态：已完成
+
+### 改动
+
+1. 新增 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`：把 `dasall_gate_int_10`、`dasall_packaging_preflight_tests`、`dpkg-buildpackage -us -uc -b`、`validate_autopkgtest_metadata.py` 与 qemu `autopkgtest` 串成一条显式 release handoff 命令，并要求调用方通过 `--` 传入 qemu image / virt-server 配置。
+2. 更新 `scripts/packaging/README.md` 与 `docs/ssot/SystemIntegrationGateMatrix.md`：明确该脚本只证明 build-tree `release-preflight` 到 installed-package qemu gate 的顺序关系，不把 PKG-GATE-07 吞并进 `Gate-INT-10`。
+3. 更新 integration / packaging TODO 与 deliverable：将 backlog 项从“待重构”推进为“已有串联入口，正式 qemu run 仍需环境参数”的状态，并补充长期风险说明。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_gate_int_10","dasall_packaging_preflight_tests"])`
+   - 结果：通过；证明串联入口的 build-tree 前置 gate 当前仍为绿态。
+2. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；产物清单包含 `dasall-cli_0.1.0-1_amd64.deb`、`dasall-common_0.1.0-1_all.deb`、`dasall-daemon_0.1.0-1_amd64.deb`、`dasall_0.1.0-1_all.deb` 与 `dasall_0.1.0-1_amd64.buildinfo`。
+3. `sh -n scripts/packaging/validate_gate_int_10_installed_package_qemu.sh && sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh --help`
+   - 结果：通过；脚本语法与参数说明可用。
+4. `python3 scripts/packaging/validate_autopkgtest_metadata.py`
+   - 结果：通过；`debian/tests/control` 继续发现 `pkg-smoke-local-control-plane` 与 `pkg-smoke-common-assets` 两条 installed-package tests。
+5. `rg -n "validate_gate_int_10_installed_package_qemu|PKG-GATE-07|Gate-INT-10" scripts/packaging/README.md docs/ssot/SystemIntegrationGateMatrix.md docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；脚本入口、Gate owner 与 TODO/worklog 证据口径保持一致。
+
+### 结果
+
+1. installed-package qemu / `autopkgtest` 已具备仓库内串联入口，可在 CI 或 release 环境中以一条命令保证 `Gate-INT-10` 通过后再进入 PKG-GATE-07。
+2. 本轮没有固化任何本机 `/tmp/pkg018-*` 路径，也没有使用 `null` virtualization 或 `--ignore-restrictions=isolation-machine` 作为正式 gate。
+3. 本机当前未发现可复用 qemu image，因此本轮只验证到脚本、metadata 与 build-tree 前置 gate；正式 installed-package qemu run 需要调用方提供 image / virt-server 配置。
+
+### 下一步
+
+1. 在 CI / release runner 中配置 qemu image 后，执行 `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>` 并归档完整 `autopkgtest` 日志。
+
+### 风险
+
+1. qemu image 生命周期与 runner 权限仍是环境责任；脚本不会下载、创建或缓存 testbed image。
+2. package-ready 结论仍需同时维护 local lifecycle smoke、qemu `autopkgtest` 与 `lintian` 证据；本脚本只覆盖 Gate-INT-10 到 PKG-GATE-07 的顺序串联。
+
 ## 记录 #618
 
 - 日期：2026-05-09

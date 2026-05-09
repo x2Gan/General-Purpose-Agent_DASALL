@@ -16,8 +16,11 @@
 | local installed-package smoke | fresh install、explicit enable/start、upgrade、remove/purge | `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` | PKG-TODO-017 |
 | autopkgtest metadata validate | 校验 `debian/tests/control` 语法与元数据 | `python3 scripts/packaging/validate_autopkgtest_metadata.py` | PKG-TODO-016 |
 | autopkgtest installed-package run | 在 testbed 中验证安装后的包行为 | `autopkgtest ../dasall_*.changes -- qemu <image-or-config>` | PKG-TODO-016 |
+| Gate-INT-10 -> qemu autopkgtest 串联 | 先验证 build-tree `release-preflight`，再重新构包并执行 qemu installed-package run | `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>` | INTFIX backlog / PKG-GATE-07 |
 
 补充约束：`dasall_gate_int_10` 只承载 build-tree app-binary smoke（daemon/gateway 真实 binary + socket path discoverability），`dasall_packaging_preflight_tests` 继续承载 package 相关 contract / daemon preflight 切片；两者都通过 `release-preflight-gate` label 接入 discoverability verifier，但彼此不互相替代。
+
+`validate_gate_int_10_installed_package_qemu.sh` 是二者之间的串联入口，不改变 Gate owner：脚本在同一轮内依次执行 `dasall_gate_int_10`、`dasall_packaging_preflight_tests`、`dpkg-buildpackage -us -uc -b`、`validate_autopkgtest_metadata.py` 与 qemu `autopkgtest`。它证明 installed-package gate 只在 build-tree `release-preflight` 通过后运行，但 qemu / `autopkgtest` 结果仍归 PKG-GATE-07，不回写为 `Gate-INT-10` 本身。
 
 ## 3. testbed 策略
 
@@ -42,6 +45,7 @@
 1. CI 至少串行执行 build-tree preflight、package build、`lintian`。
 2. 若 CI 输出 package-ready 结论，则必须额外执行 qemu testbed 上的 `autopkgtest` installed-package run。
 3. local rootful lifecycle smoke 与 qemu `autopkgtest` 共同组成 installed-package gate；缺一不可。
+4. 若 CI 需要证明 `Gate-INT-10` 与 installed-package qemu gate 的顺序关系，应使用 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`，并显式传入 qemu image 或 virt-server 配置。
 
 ## 4. 已落盘文件
 
@@ -52,10 +56,11 @@
 3. `scripts/packaging/pkg_smoke_upgrade.sh`
 4. `scripts/packaging/pkg_smoke_remove_purge.sh`
 5. `scripts/packaging/validate_autopkgtest_metadata.py`
+6. `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`
 
 仍按需待定的只有：
 
-6. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
+7. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
 
 ## 5. 不做什么
 

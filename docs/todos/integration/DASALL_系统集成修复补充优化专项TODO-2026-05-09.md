@@ -199,7 +199,7 @@ Build_CMakeTools(buildTargets=["dasall_gate_int_08","dasall_gate_int_09","dasall
 | 优化项 | 触发条件 | 不纳入当前 P0 的原因 |
 |---|---|---|
 | gateway HTTP release hardening | gateway binary unary smoke 绿后 | 当前先修组合根，不扩公网协议治理 |
-| installed-package qemu gate 回归串联 Gate-INT-10 | build-tree release preflight 绿后 | 需重新构包与 root/qemu 环境，不应阻断本地修复 |
+| installed-package qemu gate 回归串联 Gate-INT-10 | build-tree release preflight 绿后 | 已新增 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh` 作为串联入口；正式 qemu run 仍需调用方提供 image / virt-server 配置，不阻断本地修复 |
 | OTel-compatible trace exporter | startup diagnostics 与 trace context 字段稳定后 | exporter 是 optional backend，不影响 P0 readiness |
 | longer-running binary soak | app-binary smoke 稳定后 | 属于 release confidence 扩展，不是当前红灯根因 |
 | streaming / async trace links | unary release gate 稳定后 | streaming 不在当前 unary 修复主线 |

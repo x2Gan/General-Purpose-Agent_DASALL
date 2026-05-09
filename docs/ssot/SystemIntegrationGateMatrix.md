@@ -124,6 +124,7 @@ release 证据固定拆成以下四层，避免继续用 focused integration 绿
 2. 若 `RunCtest_CMakeTools` 返回泛化 `生成失败`，该结果本身不构成功能失败；应回退到 focused `Build_CMakeTools` target 输出、显式 `ctest --test-dir build-ci ...` 和 preflight artifact 作为正式证据。
 3. `Gate-INT-08`、`Gate-INT-09` 或局部 Access / runtime focused smoke 的绿态，不得覆盖 `packaging_preflight`、daemon binary smoke 或 gateway binary smoke 的红灯。
 4. installed-package gate 继续以 packaging 专项中的 rootless package validation、qemu / `autopkgtest` 等命令为权威，不归 `Gate-INT-10` 吞并。
+5. 当需要在同一轮 release 验证中证明二者顺序关系时，正式串联入口为 `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>`：该入口必须先通过 `dasall_gate_int_10` 与 `dasall_packaging_preflight_tests`，再重新构包并执行 qemu `autopkgtest`。该串联只表达 handoff / ordering，不改变 `Gate-INT-10` 与 PKG-GATE-07 的 owner 边界。
 
 ## 5. worklog 与 TODO 回写责任
 

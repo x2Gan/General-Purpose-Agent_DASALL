@@ -56,6 +56,7 @@
 1. qemu 本地运行依赖临时 shim 跳过 KVM 预检；CI 或具备 `/dev/kvm` 权限的环境应直接使用标准 `autopkgtest-virt-qemu`，不把该 shim 固化进仓库。
 2. `lintian` 仍提示 daemon binary 缺 manpage；当前不阻塞 v1 package-ready，但后续若要求 daemon-facing operator docs 完整，应新增 `dasall-daemon(8)` 或等价说明。
 3. package gate 证据依赖 `.changes` 与当前源码同源；后续执行 PKG gate 前必须先重新 `dpkg-buildpackage -us -uc -b`，避免复用 stale `.deb`。
+4. Gate-INT-10 与 installed-package qemu gate 的顺序关系已由 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh` 固化；后续 CI / release run 应显式传入 qemu image 或 virt-server 配置，不能复用本机 `/tmp/pkg018-*` 临时路径作为长期配置。
 
 ## 7. 后续范围冻结
 

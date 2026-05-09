@@ -228,6 +228,14 @@
 | PKG-GATE-07 | `AUTOPKGTEST_QEMU_DISABLE_KVM=1 /usr/bin/autopkgtest /tmp/pkg018-adt-src ../dasall_0.1.0-1_amd64.changes -- /tmp/pkg018-adtshim/bin/autopkgtest-virt-qemu --timeout-reboot=180 /tmp/pkg018-autopkgtest/autopkgtest-noble-amd64.img` | PKG-TODO-016、017、018 |
 | PKG-GATE-08 | `lintian ../dasall_0.1.0-1_amd64.changes` | PKG-TODO-017、018 |
 
+Gate-INT-10 到 PKG-GATE-07 的串联入口为：
+
+```bash
+sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>
+```
+
+该命令先执行 build-tree `dasall_gate_int_10` 与 `dasall_packaging_preflight_tests`，再重新 `dpkg-buildpackage -us -uc -b` 并运行 qemu `autopkgtest`；它只固定顺序关系，不把 installed-package 结果并入 `Gate-INT-10`。
+
 ### 9.4 统一验收命令
 
 正式 one-shot 验收命令冻结为：
