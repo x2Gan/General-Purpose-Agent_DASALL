@@ -226,6 +226,7 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
     assert_true(false,
                 "gateway binary smoke should observe /health/ready before submit; port=" +
                     std::to_string(port) +
+                    " artifact_path=" + log_path.string() +
                     " gateway_exit_code=" + std::to_string(gateway_exit_code) +
                     " gateway_log=" + gateway.read_log());
   }
@@ -240,26 +241,31 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
 
   assert_true(static_cast<bool>(response),
               "gateway binary smoke should receive an HTTP response; gateway_log=" +
-                  gateway.read_log());
+                  gateway.read_log() + " artifact_path=" + log_path.string());
   assert_equal(200,
                response->status,
                "gateway binary smoke should complete POST /v1/submit through the built gateway main path; body=" +
-                   response->body + " gateway_log=" + gateway.read_log());
+                   response->body + " gateway_log=" + gateway.read_log() +
+                   " artifact_path=" + log_path.string());
       assert_true(response->body.find("\"result_id\":\"") != std::string::npos,
             "gateway binary smoke should surface a result_id from runtime backend handoff; body=" +
-              response->body + " gateway_log=" + gateway.read_log());
+              response->body + " gateway_log=" + gateway.read_log() +
+              " artifact_path=" + log_path.string());
       assert_true(response->body.find("\"status\":\"200\"") != std::string::npos,
             "gateway binary smoke should preserve protocol status hint 200 in the HTTP envelope; body=" +
-              response->body + " gateway_log=" + gateway.read_log());
+              response->body + " gateway_log=" + gateway.read_log() +
+              " artifact_path=" + log_path.string());
     assert_true(response->body.find("\"payload\":\"") != std::string::npos,
           "gateway binary smoke should surface non-empty runtime payload in the HTTP envelope; body=" +
-            response->body + " gateway_log=" + gateway.read_log());
+            response->body + " gateway_log=" + gateway.read_log() +
+            " artifact_path=" + log_path.string());
 
     const auto gateway_exit_code = gateway.stop();
     const auto gateway_log = gateway.read_log();
     assert_true(gateway_log.find("[dasall_gateway] runtime readiness=") != std::string::npos,
           "gateway binary smoke should pass through the real gateway main init path; gateway_exit_code=" +
-            std::to_string(gateway_exit_code) + " gateway_log=" + gateway_log);
+            std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
+            " gateway_log=" + gateway_log);
 }
 
 }  // namespace

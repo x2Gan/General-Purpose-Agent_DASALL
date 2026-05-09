@@ -37,6 +37,7 @@
 #include "IAccessGateway.h"
 #include "HealthProbeHandler.h"
 #include "AgentFacade.h"
+#include "ProfileError.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
 #include "agent/AgentResult.h"
@@ -64,6 +65,34 @@ struct ParsedGatewayArgs {
   bool ok = true;
   std::string error;
 };
+
+struct GatewayStartupFailureContext {
+  dasall::infra::config::InstallLayout install_layout;
+  std::string requested_profile_id;
+  int requested_port = kDefaultGatewayListenPort;
+};
+
+void emit_gateway_startup_failure(const GatewayStartupFailureContext& context,
+                                  std::string_view stage,
+                                  std::string_view error_code,
+                                  std::string_view detail,
+                                  std::string_view runtime_diagnostics = {}) {
+  std::cerr << "[dasall_gateway] startup failure"
+            << " stage=" << stage
+            << " error_code=" << error_code
+            << " trace_id=startup:gateway:" << stage
+            << " requested_profile=" << context.requested_profile_id
+            << " assets_root=" << context.install_layout.readonly_assets_root.string()
+            << " profiles_root=" << context.install_layout.profiles_root.string()
+            << " listen_port=" << context.requested_port;
+  if (!runtime_diagnostics.empty()) {
+    std::cerr << " runtime_diagnostics=" << runtime_diagnostics;
+  }
+  if (!detail.empty()) {
+    std::cerr << " detail=" << detail;
+  }
+  std::cerr << "\n";
+}
 
 [[nodiscard]] ParsedGatewayArgs parse_gateway_args(int argc, char* argv[]) {
   ParsedGatewayArgs parsed;
@@ -269,21 +298,37 @@ extern "C" void on_shutdown_signal(int /*signal*/) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  const auto install_layout = dasall::infra::config::resolve_install_layout();
   const ParsedGatewayArgs parsed = parse_gateway_args(argc, argv);
+  GatewayStartupFailureContext failure_context{
+      .install_layout = install_layout,
+      .requested_profile_id = parsed.profile_id.has_value()
+                                  ? *parsed.profile_id
+                                  : std::string(kDefaultGatewayProfileId),
+      .requested_port = parsed.port.value_or(kDefaultGatewayListenPort),
+  };
   if (!parsed.ok) {
-    std::cerr << "[dasall_gateway] argument parse failed: " << parsed.error << "\n";
+    emit_gateway_startup_failure(failure_context,
+                                 "argument-parse",
+                                 "GATEWAY_E_ARGUMENT_PARSE_FAILED",
+                                 parsed.error);
     return 1;
   }
 
-  const auto install_layout = dasall::infra::config::resolve_install_layout();
   const dasall::profiles::ProfileCatalog catalog(install_layout.profiles_root);
   const dasall::profiles::RuntimePolicyProvider runtime_policy_provider(catalog);
   const auto runtime_snapshot = runtime_policy_provider.load_snapshot(
       dasall::profiles::RuntimePolicyLoadRequest{
-          .profile_id = parsed.profile_id.value_or(kDefaultGatewayProfileId),
+          .profile_id = failure_context.requested_profile_id,
       });
   if (!runtime_snapshot.ok() || !runtime_snapshot.snapshot) {
-    std::cerr << "[dasall_gateway] runtime policy snapshot load failed for requested profile\n";
+    emit_gateway_startup_failure(
+        failure_context,
+        "runtime-policy-load",
+        runtime_snapshot.error_code.has_value()
+            ? dasall::profiles::profile_error_code_name(*runtime_snapshot.error_code)
+            : std::string_view{"GATEWAY_E_RUNTIME_POLICY_SNAPSHOT_LOAD_FAILED"},
+        "runtime policy snapshot load failed for requested profile");
     return 1;
   }
 
@@ -291,22 +336,24 @@ int main(int argc, char* argv[]) {
   const auto runtime_init_request =
       build_gateway_agent_init_request(runtime_snapshot.snapshot);
   if (!runtime_init_request.ok()) {
-    std::cerr << "[dasall_gateway] runtime dependency composition failed: "
-              << runtime_init_request.error << "\n";
+    emit_gateway_startup_failure(failure_context,
+                                 "runtime-dependency-composition",
+                                 "GATEWAY_E_RUNTIME_COMPOSITION_FAILED",
+                                 runtime_init_request.error);
     return 1;
   }
   const auto runtime_init_result = runtime_facade->init(
       runtime_init_request.request);
   const bool runtime_entry_accepted = runtime_init_result.accepted;
   if (!runtime_entry_accepted) {
-    std::cerr << "[dasall_gateway] runtime init failed: "
-              << (runtime_init_result.health_summary.empty()
-                      ? "runtime facade init rejected"
-                      : runtime_init_result.health_summary);
-    if (!runtime_init_result.diagnostics.empty()) {
-      std::cerr << " (" << runtime_init_result.diagnostics << ")";
-    }
-    std::cerr << "\n";
+    emit_gateway_startup_failure(
+        failure_context,
+        "runtime-init",
+        "GATEWAY_E_RUNTIME_INIT_FAILED",
+        runtime_init_result.health_summary.empty()
+            ? "runtime facade init rejected"
+            : runtime_init_result.health_summary,
+        runtime_init_result.diagnostics);
     return 1;
   }
   std::cout << "[dasall_gateway] runtime readiness="
@@ -328,7 +375,10 @@ int main(int argc, char* argv[]) {
   auto gateway = dasall::access::create_gateway_access_gateway(
       std::move(gateway_options));
   if (!gateway->init()) {
-    std::cerr << "[dasall_gateway] AccessGateway init failed: production submit pipeline unavailable\n";
+    emit_gateway_startup_failure(failure_context,
+                                 "access-gateway-init",
+                                 "GATEWAY_E_ACCESS_GATEWAY_INIT_FAILED",
+                                 "production submit pipeline unavailable");
     return 1;
   }
 
@@ -443,7 +493,10 @@ int main(int argc, char* argv[]) {
   std::cout << "[dasall_gateway] listening on :" << port
             << " profile=" << runtime_init_result.resolved_profile_id << "\n";
   if (!srv.listen("0.0.0.0", port)) {
-    std::cerr << "[dasall_gateway] listen failed on :" << port << "\n";
+    emit_gateway_startup_failure(failure_context,
+                                 "listen",
+                                 "GATEWAY_E_LISTEN_FAILED",
+                                 "listen failed on 0.0.0.0:" + std::to_string(port));
     gateway->shutdown(std::chrono::milliseconds(5000));
     return 1;
   }

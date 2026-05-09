@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #617
+
+- 日期：2026-05-09
+- 阶段：integration/build
+- 任务：INTFIX-TODO-011 补齐 startup diagnostics 与 preflight artifact 规范
+- 状态：已完成
+
+### 改动
+
+1. 更新 `apps/daemon/src/main.cpp`：新增统一的 daemon startup failure reporter，在参数解析、entry config load、config validation、runtime composition、runtime init、AccessGateway init、bootstrap build 与 signal handler install 等失败分支统一输出 `stage`、`error_code`、`trace_id`、`requested_profile`、`assets_root`、`profiles_root`、`daemon_config_path`、`socket_path` 以及 `detail` / `runtime_diagnostics`。
+2. 更新 `apps/gateway/src/main.cpp`：新增统一的 gateway startup failure reporter，在参数解析、runtime policy load、runtime composition、runtime init、AccessGateway init 与 listen 失败分支统一输出 `stage`、`error_code`、`trace_id`、`requested_profile`、`assets_root`、`profiles_root`、`listen_port` 以及 `detail` / `runtime_diagnostics`；其中 profile load 失败直接复用 `ProfileErrorCode` 的正式名称。
+3. 新增 `tests/integration/access/DaemonStartupDiagnosticsTest.cpp` 与 `tests/integration/access/GatewayStartupDiagnosticsTest.cpp`，并更新 `tests/integration/access/CMakeLists.txt`：分别用 daemon 的 socket policy 失败与 gateway 的 invalid profile 输入，锁定新的 startup diagnostics 字段，同时将 stderr 落盘为 artifact，并通过 custom targets `dasall_access_daemon_startup_diagnostics_test`、`dasall_access_gateway_startup_diagnostics_test` 提供 focused 验收入口。
+4. 更新 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp` 与 `tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`：在现有 binary smoke 的失败消息中补充 `artifact_path=`，确保 app-binary / preflight 失败时能直接定位对应日志文件，而不是只有内联日志文本。
+5. 更新 `docs/todos/integration/DASALL_系统集成修复补充优化专项TODO-2026-05-09.md`：将 `INTFIX-TODO-011` 标记为 Done，并同步“当前结论 / 当前状态”到统一 startup diagnostics 已完成、剩余只待 012 收口的口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_startup_diagnostics_test","dasall_access_gateway_startup_diagnostics_test"])`
+   - 结果：通过；daemon/gateway 新增的 startup diagnostics custom targets 均可完成编译链接并执行通过。
+2. `ctest --test-dir build/vscode-linux-ninja -R '^(DaemonStartupDiagnosticsTest|GatewayStartupDiagnosticsTest)$' --output-on-failure`
+   - 结果：2/2 通过；证明两条 diagnostics tests 已完成 CTest 注册，且 `release-preflight-gate` 标签 discoverability 也保持稳定。
+
+### 结果
+
+1. `INTFIX-TODO-011` 已完成；daemon/gateway 现在都能在启动失败时输出统一的 `stage` / `error_code` / `trace_id` / 路径类字段，preflight 测试失败时也会显式回写 `artifact_path`。
+2. 011 没有把 diagnostics 抽成新的 shared runtime owner，而是把 reporter 保持在 app composition root，符合 ADR-006/007/008 以及 `BinaryEntrypointReadinessV1` / `GatewayBinaryProductionPathV1` 的边界。
+3. 当前 remaining gap 已收敛为 `INTFIX-TODO-012`：即最终 Gate / deliverable / 残余风险 / 后续优化路线的文档闭环。
+
+### 下一步
+
+1. 进入 `INTFIX-TODO-012`，统一回写专项 TODO、deliverable 与 worklog，形成本轮系统集成修复的最终 Gate 证据包与后续优化 backlog。
+
+### 风险
+
+1. 当前 reporter 直接输出 key=value 明文 detail；若后续 startup 失败链路引入 secret-bearing 字段，必须继续遵守 redaction 规则，不能把敏感值带入 diagnostics。
+2. 011 统一了 build-tree app-binary / preflight diagnostics，但没有扩大到 installed-package `autopkgtest` artifact 协议；那部分仍由 packaging 专项 owner 单独维护。
+
 ## 记录 #616
 
 - 日期：2026-05-09

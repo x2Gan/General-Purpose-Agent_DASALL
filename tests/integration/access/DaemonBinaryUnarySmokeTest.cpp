@@ -208,6 +208,7 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
                     socket_path.string() +
                     " socket_path_length=" +
                     std::to_string(socket_path.string().size()) +
+                    " artifact_path=" + log_path.string() +
                     " daemon_exit_code=" + std::to_string(daemon_exit_code) +
                     " daemon_log=" + daemon.read_log());
   }
@@ -224,7 +225,8 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
 
   assert_equal(0, run.exit_code,
                "binary unary smoke should complete cli run through the built daemon main path; output=" +
-           run.stdout_text + run.stderr_text + " daemon_log=" + daemon.read_log());
+         run.stdout_text + run.stderr_text + " artifact_path=" + log_path.string() +
+         " daemon_log=" + daemon.read_log());
   assert_true(run.stdout_text.find("[dasall-cli] run: completed") != std::string::npos,
         "binary unary smoke should surface completed cli stdout; stdout=" +
           run.stdout_text);
@@ -273,7 +275,8 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
   const auto daemon_exit_code = daemon.stop();
   const auto daemon_log = daemon.read_log();
   assert_equal(0, daemon_exit_code,
-               "binary unary smoke should stop the daemon cleanly; daemon_log=" + daemon_log);
+           "binary unary smoke should stop the daemon cleanly; artifact_path=" + log_path.string() +
+             " daemon_log=" + daemon_log);
   assert_true(daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
               "binary unary smoke should pass through the real daemon main init path; daemon_log=" +
                   daemon_log);

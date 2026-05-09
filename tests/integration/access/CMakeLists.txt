@@ -230,6 +230,41 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_binary_unary_smoke_integration_test
 )
 
+add_executable(dasall_access_daemon_startup_diagnostics_integration_test
+  DaemonStartupDiagnosticsTest.cpp
+)
+
+target_compile_definitions(dasall_access_daemon_startup_diagnostics_integration_test
+  PRIVATE
+    DASALL_DAEMON_BINARY_PATH="$<TARGET_FILE:dasall-daemon>"
+    DASALL_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_access_daemon_startup_diagnostics_integration_test
+  PRIVATE
+    dasall_test_support
+)
+
+add_dependencies(dasall_access_daemon_startup_diagnostics_integration_test
+  dasall-daemon
+)
+
+dasall_apply_common_options(dasall_access_daemon_startup_diagnostics_integration_test)
+
+add_test(NAME DaemonStartupDiagnosticsTest
+  COMMAND dasall_access_daemon_startup_diagnostics_integration_test)
+set_tests_properties(DaemonStartupDiagnosticsTest PROPERTIES LABELS "integration;access;release-preflight-gate")
+
+add_custom_target(dasall_access_daemon_startup_diagnostics_test
+  COMMAND $<TARGET_FILE:dasall_access_daemon_startup_diagnostics_integration_test>
+  DEPENDS dasall_access_daemon_startup_diagnostics_integration_test
+  USES_TERMINAL
+)
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_daemon_startup_diagnostics_integration_test
+)
+
 add_executable(dasall_access_daemon_reject_path_integration_test
   DaemonRejectPathIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
@@ -352,6 +387,37 @@ dasall_apply_common_options(dasall_access_gateway_binary_unary_smoke_integration
 add_test(NAME GatewayBinaryUnarySmokeTest
   COMMAND dasall_access_gateway_binary_unary_smoke_integration_test_bin)
 set_tests_properties(GatewayBinaryUnarySmokeTest PROPERTIES LABELS "integration;access;gate-int-10;release-preflight-gate")
+
+add_executable(dasall_access_gateway_startup_diagnostics_integration_test
+  GatewayStartupDiagnosticsTest.cpp
+)
+
+target_compile_definitions(dasall_access_gateway_startup_diagnostics_integration_test
+  PRIVATE
+    DASALL_GATEWAY_BINARY_PATH="$<TARGET_FILE:dasall_gateway>"
+    DASALL_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_access_gateway_startup_diagnostics_integration_test
+  PRIVATE
+    dasall_test_support
+)
+
+add_dependencies(dasall_access_gateway_startup_diagnostics_integration_test
+  dasall_gateway
+)
+
+dasall_apply_common_options(dasall_access_gateway_startup_diagnostics_integration_test)
+
+add_test(NAME GatewayStartupDiagnosticsTest
+  COMMAND dasall_access_gateway_startup_diagnostics_integration_test)
+set_tests_properties(GatewayStartupDiagnosticsTest PROPERTIES LABELS "integration;access;release-preflight-gate")
+
+add_custom_target(dasall_access_gateway_startup_diagnostics_test
+  COMMAND $<TARGET_FILE:dasall_access_gateway_startup_diagnostics_integration_test>
+  DEPENDS dasall_access_gateway_startup_diagnostics_integration_test
+  USES_TERMINAL
+)
 
 add_executable(dasall_access_gateway_missing_backend_binary_fixture
   GatewayBinaryMissingBackendFixture.cpp

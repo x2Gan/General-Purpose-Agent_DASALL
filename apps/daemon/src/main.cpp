@@ -61,6 +61,41 @@ struct ParsedDaemonArgs {
   std::string error;
 };
 
+struct DaemonStartupFailureContext {
+  dasall::infra::config::InstallLayout install_layout;
+  std::string requested_profile_id;
+  std::optional<std::filesystem::path> config_path;
+  std::optional<std::string> socket_path;
+};
+
+void emit_daemon_startup_failure(const DaemonStartupFailureContext& context,
+                                 std::string_view stage,
+                                 std::string_view error_code,
+                                 std::string_view detail,
+                                 std::string_view runtime_diagnostics = {}) {
+  std::cerr << "[dasall-daemon] startup failure"
+            << " stage=" << stage
+            << " error_code=" << error_code
+            << " trace_id=startup:daemon:" << stage
+            << " requested_profile=" << context.requested_profile_id
+            << " assets_root=" << context.install_layout.readonly_assets_root.string()
+            << " profiles_root=" << context.install_layout.profiles_root.string()
+            << " daemon_config_path=" << context.install_layout.daemon_config_path.string();
+  if (context.config_path.has_value()) {
+    std::cerr << " config_path=" << context.config_path->string();
+  }
+  if (context.socket_path.has_value() && !context.socket_path->empty()) {
+    std::cerr << " socket_path=" << *context.socket_path;
+  }
+  if (!runtime_diagnostics.empty()) {
+    std::cerr << " runtime_diagnostics=" << runtime_diagnostics;
+  }
+  if (!detail.empty()) {
+    std::cerr << " detail=" << detail;
+  }
+  std::cerr << "\n";
+}
+
 [[nodiscard]] ParsedDaemonArgs parse_daemon_args(int argc, char* argv[]) {
   ParsedDaemonArgs parsed;
 
@@ -277,29 +312,41 @@ map_agent_result_to_dispatch_result(
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  const auto install_layout = dasall::infra::config::resolve_install_layout();
   const ParsedDaemonArgs parsed = parse_daemon_args(argc, argv);
+  DaemonStartupFailureContext failure_context{
+      .install_layout = install_layout,
+      .requested_profile_id = parsed.profile_id.value_or(
+          dasall::apps::daemon::kDefaultDaemonEntryProfileId),
+      .config_path = parsed.deployment_config_path,
+      .socket_path = parsed.socket_path_override,
+  };
   if (!parsed.ok) {
-    std::cerr << "[dasall-daemon] argument parse failed: " << parsed.error << "\n";
+    emit_daemon_startup_failure(failure_context,
+                                "argument-parse",
+                                "DAEMON_E_ARGUMENT_PARSE_FAILED",
+                                parsed.error);
     return 1;
   }
 
-  const auto install_layout = dasall::infra::config::resolve_install_layout();
   const dasall::apps::daemon::DaemonEntryConfigLoader entry_loader;
   const dasall::apps::daemon::DaemonEntryConfigLoadRequest entry_request{
       .profiles_root = install_layout.profiles_root,
-      .requested_profile_id = parsed.profile_id.value_or(
-          dasall::apps::daemon::kDefaultDaemonEntryProfileId),
+      .requested_profile_id = failure_context.requested_profile_id,
       .deployment_config_path = parsed.deployment_config_path,
       .socket_path_override = parsed.socket_path_override,
   };
   const auto entry_config = entry_loader.load(entry_request);
   if (!entry_config.ok() || !entry_config.entry_config.has_value()) {
-    std::cerr << "[dasall-daemon] entry config load failed: "
-              << entry_config.message << "\n";
+    emit_daemon_startup_failure(failure_context,
+                                "entry-config-load",
+                                "DAEMON_E_ENTRY_CONFIG_LOAD_FAILED",
+                                entry_config.message);
     return 1;
   }
 
   const auto& entry = *entry_config.entry_config;
+  failure_context.socket_path = entry.bootstrap_config.socket_path;
 
   const dasall::apps::daemon::DaemonConfigValidator config_validator;
   const auto validation = parsed.validate_only
@@ -309,8 +356,10 @@ int main(int argc, char* argv[]) {
                               : config_validator.validate_config(
                                     entry.bootstrap_config);
   if (!validation.ok()) {
-    std::cerr << "[dasall-daemon] config validation failed: "
-              << validation.message << "\n";
+    emit_daemon_startup_failure(failure_context,
+                                "config-validation",
+                                "DAEMON_E_CONFIG_VALIDATION_FAILED",
+                                validation.message);
     return 1;
   }
 
@@ -318,8 +367,10 @@ int main(int argc, char* argv[]) {
     const auto conflict_validation =
         config_validator.validate_conflicts(entry.conflicts);
     if (!conflict_validation.ok()) {
-      std::cerr << "[dasall-daemon] config validation failed: "
-                << conflict_validation.message << "\n";
+      emit_daemon_startup_failure(failure_context,
+                                  "config-validation",
+                                  "DAEMON_E_CONFIG_CONFLICTS_FAILED",
+                                  conflict_validation.message);
       return 1;
     }
   }
@@ -336,22 +387,24 @@ int main(int argc, char* argv[]) {
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
   const auto runtime_init_request = build_daemon_agent_init_request(entry);
   if (!runtime_init_request.ok()) {
-    std::cerr << "[dasall-daemon] runtime dependency composition failed: "
-              << runtime_init_request.error << "\n";
+    emit_daemon_startup_failure(failure_context,
+                                "runtime-dependency-composition",
+                                "DAEMON_E_RUNTIME_COMPOSITION_FAILED",
+                                runtime_init_request.error);
     return 1;
   }
   const auto runtime_init_result = runtime_facade->init(
       runtime_init_request.request);
   const bool runtime_entry_accepted = runtime_init_result.accepted;
   if (!runtime_entry_accepted) {
-    std::cerr << "[dasall-daemon] runtime init failed: "
-              << (runtime_init_result.health_summary.empty()
-                      ? "runtime facade init rejected"
-                      : runtime_init_result.health_summary);
-    if (!runtime_init_result.diagnostics.empty()) {
-      std::cerr << " (" << runtime_init_result.diagnostics << ")";
-    }
-    std::cerr << "\n";
+    emit_daemon_startup_failure(
+        failure_context,
+        "runtime-init",
+        "DAEMON_E_RUNTIME_INIT_FAILED",
+        runtime_init_result.health_summary.empty()
+            ? "runtime facade init rejected"
+            : runtime_init_result.health_summary,
+        runtime_init_result.diagnostics);
     return 1;
   }
   std::cout << "[dasall-daemon] runtime readiness="
@@ -387,7 +440,10 @@ int main(int argc, char* argv[]) {
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));
   if (!gateway->init()) {
-    std::cerr << "[dasall-daemon] AccessGateway init failed\n";
+    emit_daemon_startup_failure(failure_context,
+                                "access-gateway-init",
+                                "DAEMON_E_ACCESS_GATEWAY_INIT_FAILED",
+                                "AccessGateway init returned false");
     return 1;
   }
 
@@ -401,7 +457,10 @@ int main(int argc, char* argv[]) {
         .config_revision = entry.config_revision,
       });
   if (!context.has_value()) {
-    std::cerr << "[dasall-daemon] bootstrap build failed\n";
+    emit_daemon_startup_failure(failure_context,
+                                "bootstrap-build",
+                                "DAEMON_E_BOOTSTRAP_BUILD_FAILED",
+                                "DaemonBootstrap::build returned null context");
     return 1;
   }
 
@@ -428,7 +487,10 @@ int main(int argc, char* argv[]) {
       emit_reload_denied);
 
   if (!signal_handler.install_handlers()) {
-    std::cerr << "[dasall-daemon] signal handler install failed\n";
+    emit_daemon_startup_failure(failure_context,
+                                "signal-handler-install",
+                                "DAEMON_E_SIGNAL_HANDLER_INSTALL_FAILED",
+                                "daemon signal handler install failed");
     return 1;
   }
 
