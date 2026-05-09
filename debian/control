@@ -21,7 +21,7 @@ Depends:
  dasall-cli (= ${binary:Version}),
  dasall-daemon (= ${binary:Version}),
  dasall-common (= ${binary:Version})
-Description: DASALL meta package
+Description: Meta package for the DASALL local control plane
  DASALL is a local-first Agent OS distribution for Ubuntu.
  .
  This package is a meta package that pulls in the supported

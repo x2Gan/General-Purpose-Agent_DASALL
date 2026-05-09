@@ -40,6 +40,12 @@
 .vscode/
 .idea/
 
+# Local packaging state
+/.pkgadm/
+
+# Local third-party caches
+/third_party/.cache/
+
 # OS files
 .DS_Store
 Thumbs.db

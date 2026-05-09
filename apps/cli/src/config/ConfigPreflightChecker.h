@@ -22,7 +22,7 @@ using ValidateOnlyRunner =
     std::function<ValidateOnlyResult(const std::vector<std::string>&)>;
 
 struct ConfigPreflightEnvironment {
-  std::filesystem::path daemon_binary = "/usr/bin/dasall-daemon";
+  std::filesystem::path daemon_binary = "/usr/sbin/dasall-daemon";
   std::filesystem::path defaults_file = "/etc/default/dasall-daemon";
   std::filesystem::path daemon_config_file = "/etc/dasall/daemon.json";
   std::optional<bool> systemd_available;

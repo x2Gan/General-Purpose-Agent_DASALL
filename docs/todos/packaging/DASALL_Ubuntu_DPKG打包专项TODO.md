@@ -3,7 +3,7 @@
 最近更新时间：2026-05-09
 阶段：Detailed Design -> Special TODO
 适用范围：`debian/`、顶层/子模块 CMake install surface、`apps/cli`、`apps/daemon`、`access/include/daemon`、`llm/include`、`profiles/`、`tests/contract/access`、`tests/integration/access`、`scripts/packaging`
-当前结论：Ubuntu DPKG 打包设计已 Ready，工程实现已进入 Implementation In Progress / Package Gate 06 Passed。当前仓库已具备 `dasall-cli`、`dasall-daemon`、`dasall_profiles`、LLM baseline 资产、一套 Debian source/binary package 骨架和一组可复用的 contract/integration tests；其中 PKG-TODO-001 已冻结 Ubuntu noble 基线下的 Build-Depends / Depends / Architecture 四包矩阵，PKG-TODO-002 已冻结 v1 package-mode profile 接缝=`/etc/default/dasall-daemon` + `EnvironmentFile` + `--profile-id` 且把 `/etc/dasall/daemon.json` 收敛为 `daemon.*` override-only conffile，PKG-TODO-003 已冻结 v1 QA gate 分层=`build-tree preflight -> package build -> lintian -> local rootful smoke -> autopkgtest` 与 qemu authoritative testbed 策略，PKG-TODO-004 已冻结统一安装态路径模型的唯一 owner=`infra/config::InstallLayout` 与共享 public surface=`infra/include/config/InstallLayout.h`，PKG-TODO-005 已引入 GNUInstallDirs 与顶层 install surface skeleton，使 `DESTDIR + cmake --install` 能产出非空 stage tree，PKG-TODO-006 已把 CLI / daemon 的系统安装名与默认安装前缀收敛到 `/usr/bin/dasall` 与 `/usr/sbin/dasall-daemon`，PKG-TODO-007 已把五档 profile 与 LLM prompt/provider baseline 资产落到 `/usr/share/dasall/` install surface，PKG-TODO-008 已落 `debian/control`、`changelog`、`rules`、`source/format`、`copyright` 五个 source-level 必需文件，PKG-TODO-009 已补齐 `.install` / systemd unit / postinst / README.Debian / `debian/tests/control` / package-local payload tree，并在 rootless toolroot + synthetic `.pkgadm` 环境下成功执行 `dpkg-buildpackage -us -uc -b` 产出四个 `.deb`。此外 PKG-TODO-010/011/012 已完成安装态 socket、daemon profile asset root 与 LLM baseline root 的路径收敛，PKG-TODO-013 已把 daemon package 的 service runtime mode、EnvironmentFile 注释与 postinst 首装提示统一到 `sudo dasall config` + P0 `root/sudo-only` operator 口径，PKG-TODO-014 已补齐 `README.Debian`、`dasall.1` 与 `dh_installman` 安装面，使安装态 operator docs/manpage 统一到 `dasall` / `sudo dasall config` / root-sudo-only 文案，PKG-TODO-015 已新增 `dasall_packaging_preflight_tests` 统一 build-time preflight 入口并在 `build-ci` 上通过 discoverability + focused acceptance 验收，PKG-TODO-016 已落 `debian/tests/pkg-smoke-local-control-plane` 与 `debian/tests/pkg-smoke-common-assets` 两个 installed-package smoke 脚本，并通过 `autopkgtest --validate .` metadata 校验与 executable bit 验收，PKG-TODO-017 已补齐 `pkg_smoke_install.sh`、`pkg_smoke_upgrade.sh`、`pkg_smoke_remove_purge.sh` 与 `validate_ubuntu_dpkg_v1.sh`，并在本机通过 `dpkg-buildpackage -us -uc -b` 与 `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` 完成 fresh install / explicit start / upgrade / remove-purge 生命周期验收。当前待完成项已收敛为 `lintian` static scan、qemu authoritative `autopkgtest` 与 package-ready 证据收口；但不应再回退到 `0660 dasall group`、安装态 `dasall-cli` 文案，或把 `null`/ignore-restrictions 误当成正式 `autopkgtest` gate。
+当前结论：Ubuntu DPKG 打包设计已 Ready，工程实现已完成 PKG-TODO-001 ~ 018 的 v1 package gate closeout。当前仓库已具备 `dasall-cli`、`dasall-daemon`、`dasall-common`、`dasall` 四包 source/binary package 骨架、安装态路径模型、operator docs/manpage、build-time preflight、installed-package smoke、local lifecycle harness、lintian static scan 与 qemu authoritative `autopkgtest` 证据。PKG-TODO-018 已将 Package Gate 07/08 收口为：`AUTOPKGTEST_QEMU_DISABLE_KVM=1 /usr/bin/autopkgtest /tmp/pkg018-adt-src ../dasall_0.1.0-1_amd64.changes -- /tmp/pkg018-adtshim/bin/autopkgtest-virt-qemu --timeout-reboot=180 /tmp/pkg018-autopkgtest/autopkgtest-noble-amd64.img` 结果 `pkg-smoke-local-control-plane PASS`、`pkg-smoke-common-assets PASS`、`RC=0`；`lintian ../dasall_0.1.0-1_amd64.changes` 结果 `RC=0`，仅余 `initial-upload-closes-no-bugs` 与 `dasall-daemon: no-manual-page [usr/sbin/dasall-daemon]` 两类已评审 warning。当前可宣称 v1 package gate closed / package-ready evidence complete；仍不得回退到 `0660 dasall group`、安装态 `dasall-cli` 文案，或把 `null`/ignore-restrictions 误当成正式 `autopkgtest` gate。
 
 ## 1. 概述与目标
 
@@ -62,18 +62,18 @@
 | `CMakeLists.txt` | 已引入 GNUInstallDirs 与共享安装变量，但仍未把 `/usr` prefix 直接固化到本地默认 preset | 顶层 install surface skeleton 已建立，正式 packaging prefix 继续由后续 `debian/rules` 配置驱动 |
 | `profiles/CMakeLists.txt` | 已为五档 profile baseline 安装到 `/usr/share/dasall/profiles/` 补齐 install 规则 | `dasall-common` 已具稳定的 profile 资产安装面 |
 | `apps/cli/CMakeLists.txt`、`apps/daemon/CMakeLists.txt` | executable target 已在 owning 子目录显式声明 install 规则，CLI/daemon 系统安装名已收敛到 `dasall` 与 `dasall-daemon` | stage install 已可直接产出 `/usr/bin/dasall` 与 `/usr/sbin/dasall-daemon` |
-| `access/include/daemon/DaemonEndpointDefaults.h` | `kDefaultDaemonSocketPath` 仍是 `/tmp/dasall/control.sock` | 生产态 socket 路径尚未收敛到 `/run/dasall/daemon.sock` |
-| `apps/daemon/src/main.cpp` | 仍通过 `std::filesystem::current_path() / "profiles"` 发现 assets | 安装后二进制不能依赖 repo cwd |
-| `llm/include/LLMSubsystemConfig.h` | Prompt / Provider baseline root 默认仍是 `llm/assets/prompts` 与 `llm/assets/providers`；但 `llm/CMakeLists.txt` 已把 baseline 资产安装到 `/usr/share/dasall/llm/prompts` 与 `/usr/share/dasall/llm/providers` | LLM 安装态资产 payload 已存在，repo-relative consumer 默认值仍待 012 收敛 |
+| `access/include/daemon/DaemonEndpointDefaults.h` | `kDefaultDaemonSocketPath` 已收敛为 `/run/dasall/daemon.sock` | 生产态 socket 路径已与 package/systemd 路径模型一致 |
+| `apps/daemon/src/main.cpp` | 已通过 `infra/config::resolve_install_layout()` 投影 `profiles_root` | daemon 安装后二进制不再依赖 repo cwd 发现 profile assets |
+| `llm/include/LLMSubsystemConfig.h` | Prompt / Provider baseline root 默认已通过 `infra/config::resolve_install_layout()` 投影到 `/usr/share/dasall/llm/...` | LLM 安装态资产 payload 与 consumer 默认值已统一 |
 | `tests/contract/access/CMakeLists.txt` | 已有 `CliJsonOutputContractTest`、`CliExitCodeContractTest` | 可直接复用为 package preflight contract 基线 |
 | `tests/integration/access/CMakeLists.txt` | 已有 `DaemonPingIntegrationTest`、`CliDaemonSocketPathIntegrationTest`、`DaemonBinaryUnarySmokeTest` 等 | 可直接复用为 package preflight integration 基线 |
-| `debian/` | 已具 `control`、`changelog`、`rules`、`source/format`、`copyright` source skeleton，以及 `.install`、`dasall-daemon.service`、`dasall-daemon.postinst`、`dasall-daemon.README.Debian`、`debian/tests/control` 与 stable package-local payload tree；rootless `dpkg-buildpackage` 已可产出四包 | source/binary package skeleton 已建立，installed-package QA 仍待 016/017/018 补齐 |
+| `debian/` | 已具 `control`、`changelog`、`rules`、`source/format`、`copyright` source skeleton，以及 `.install`、`dasall-daemon.service`、`dasall-daemon.postinst`、`dasall-daemon.README.Debian`、`debian/tests/control` 与 stable package-local payload tree；`dpkg-buildpackage -us -uc -b` 已可产出四包，installed-package local lifecycle、qemu `autopkgtest` 与 `lintian` 均已有正式证据 | source/binary package skeleton 与 package-ready gate 已闭合 |
 
 ### 2.2 总体判断
 
-1. 设计层已经回答了“怎么打包”，但工程层还没有回答“如何生成可安装、可升级、可验证的 Debian 产物”。
-2. 当前 package-ready 的 P0 缺口已收敛到两类：安装态路径未收敛、installed-package gate 缺失。
-3. 现有 access/daemon/cli 的 contract/integration 测试足以作为打包前置验证切片，但还不足以替代真实 package install/upgrade/autopkgtest gate。
+1. 设计层已经回答了“怎么打包”，工程层也已通过 build、install、upgrade、remove/purge、lintian 与 qemu `autopkgtest` 证据回答“如何生成可安装、可升级、可验证的 Debian 产物”。
+2. 当前 package-ready 的 P0 缺口已关闭：安装态路径已收敛，installed-package gate 已有 local lifecycle 与 authoritative qemu 双证据。
+3. 现有 access/daemon/cli 的 contract/integration 测试继续作为打包前置验证切片；真实 package install/upgrade/autopkgtest gate 由 packaging harness 与 `debian/tests` 负责。
 
 ## 3. 约束条件
 
@@ -153,9 +153,9 @@
 | Task ID | Status | 任务标题 | 设计依据 | 精确范围 | 粒度 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置任务 | 关联阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | PKG-TODO-015 | Done | 新增 package-focused build-time preflight target | 7.10.5、7.14；当前已存在 access contract/integration slice | 把 package 相关 contract/integration 收敛为专用 custom target | L2 | `tests/CMakeLists.txt`；必要时 `tests/packaging/` 或 `scripts/packaging/packaging_preflight.cmake` | `dasall_packaging_preflight_tests` custom target | contract：`CliJsonOutputContractTest`、`CliExitCodeContractTest`；integration：`DaemonPingIntegrationTest`、`CliDaemonSocketPathIntegrationTest`、`DaemonBinaryUnarySmokeTest` | `cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_packaging_preflight_tests` | PKG-TODO-006、010、011、012 | 无 | 相关 preflight tests 已具稳定 discoverability | packaging preflight target | 仅当 package preflight 拥有统一 CMake 入口，且不再依赖散写 regex 才能复验时完成 |
-| PKG-TODO-016 | Done | 落 autopkgtest installed-package smoke 与 metadata 校验 | 7.10.7、7.14；`autopkgtest(1)` | `debian/tests/control`、`pkg-smoke-local-control-plane`、`pkg-smoke-common-assets`、metadata validate | L2 | `debian/tests/control`；`debian/tests/pkg-smoke-local-control-plane`；`debian/tests/pkg-smoke-common-assets`；必要时 `scripts/packaging/autopkgtest-*.cfg` | autopkgtest metadata 与 installed-package smoke | installed-package：autopkgtest validate/run | `autopkgtest --validate . && test -x debian/tests/pkg-smoke-local-control-plane && test -x debian/tests/pkg-smoke-common-assets` | PKG-TODO-003、009、013、015 | PKG-BLK-05 | autopkgtest testbed 策略已冻结 | autopkgtest control + scripts | 仅当 autopkgtest control 与两个 smoke script 全部落盘、可被 validate，且不再混淆 build-tree 与 installed-package 验证时完成 |
+| PKG-TODO-016 | Done | 落 autopkgtest installed-package smoke 与 metadata 校验 | 7.10.7、7.14；`autopkgtest(1)` | `debian/tests/control`、`pkg-smoke-local-control-plane`、`pkg-smoke-common-assets`、metadata validate | L2 | `debian/tests/control`；`debian/tests/pkg-smoke-local-control-plane`；`debian/tests/pkg-smoke-common-assets`；必要时 `scripts/packaging/autopkgtest-*.cfg` | autopkgtest metadata 与 installed-package smoke | installed-package：autopkgtest validate/run | `python3 scripts/packaging/validate_autopkgtest_metadata.py && test -x debian/tests/pkg-smoke-local-control-plane && test -x debian/tests/pkg-smoke-common-assets` | PKG-TODO-003、009、013、015 | PKG-BLK-05 | autopkgtest testbed 策略已冻结 | autopkgtest control + scripts | 仅当 autopkgtest control 与两个 smoke script 全部落盘、可被 validate，且不再混淆 build-tree 与 installed-package 验证时完成 |
 | PKG-TODO-017 | Done | 新增 fresh-install / explicit-enable / upgrade / remove-purge smoke harness | 7.7.3、7.12、7.14 | rootful 本地 smoke、upgrade 保留 conffile、remove/purge 语义、统一一键验收脚本 | L2 | `scripts/packaging/pkg_smoke_install.sh`；`scripts/packaging/pkg_smoke_upgrade.sh`；`scripts/packaging/pkg_smoke_remove_purge.sh`；`scripts/packaging/validate_ubuntu_dpkg_v1.sh` | install/upgrade/remove/purge harness | installed-package：fresh install、explicit start、upgrade、remove/purge smoke | `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` | PKG-TODO-009、013、015、016 | PKG-BLK-05 | 本地 rootful smoke 环境与 autopkgtest 前提就绪 | packaging smoke harness + one-shot validator | 仅当 package 验收拥有统一 one-shot 脚本，且 install/upgrade/remove/purge 语义都可自动回归时完成 |
-| PKG-TODO-018 | NotStarted | 回写 packaging Gate、交付证据与专项收口结论 | 7.14；本专项 TODO | Gate 状态、交付物、worklog、残余风险与后续范围冻结 | L2 | `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`；`docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md`；`docs/worklog/DASALL_开发执行记录.md` | `PKG-GATE-*`、交付证据矩阵、残余风险 | process + release evidence：gate 状态一致性 | `rg -n "PKG-GATE-|PKG-TODO-018|记录 #" docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md docs/worklog/DASALL_开发执行记录.md && bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` | PKG-TODO-015、016、017 | 无 | package preflight、installed-package gate 与 smoke harness 均已稳定 | Gate 收口 deliverable 与 worklog 证据 | 仅当每一条 packaging gate 都有正式命令、通过/失败结论、长期可追溯路径和残余风险说明时完成 |
+| PKG-TODO-018 | Done | 回写 packaging Gate、交付证据与专项收口结论 | 7.14；本专项 TODO | Gate 状态、交付物、worklog、残余风险与后续范围冻结 | L2 | `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`；`docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md`；`docs/worklog/DASALL_开发执行记录.md` | `PKG-GATE-*`、交付证据矩阵、残余风险 | process + release evidence：gate 状态一致性 | `rg -n "PKG-GATE-|PKG-TODO-018|记录 #609" docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md docs/worklog/DASALL_开发执行记录.md && python3 scripts/packaging/validate_autopkgtest_metadata.py` | PKG-TODO-015、016、017 | 无 | package preflight、installed-package gate 与 smoke harness 均已稳定；qemu `autopkgtest` 与 `lintian` 已补齐正式结果 | `docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md`；worklog `记录 #609` | 每一条 packaging gate 均已有正式命令、通过/失败结论、长期可追溯路径和残余风险说明 |
 
 ## 7. 执行顺序建议
 
@@ -167,8 +167,8 @@
 | B install surface 建骨架 | PKG-TODO-005 ~ 007 | 005 串行；006/007 可并行 | 先有 GNUInstallDirs/install surface，再分别接 CLI/daemon 与 common assets |
 | C `debian/` source/binary skeleton | PKG-TODO-008、009 | 串行 | 先 source metadata，再 binary payload/service/config/doc skeleton |
 | D 路径与运行模式收敛 | PKG-TODO-010 ~ 014 | 010/011/012 可并行；013 依赖 002/009/011；014 依赖 009/013 | 这是 package-ready 的核心实现段 |
-| E 测试与发布 gate | PKG-TODO-015 ~ 017 | 串行 | 先 preflight，再 autopkgtest metadata，再 install/upgrade/remove/purge 一键验收 |
-| F 交付证据收口 | PKG-TODO-018 | 串行 | 只有在正式 gate 稳定后才能收口 |
+| E 测试与发布 gate | PKG-TODO-015 ~ 017 | 已完成 | preflight、autopkgtest metadata、install/upgrade/remove/purge 一键验收均已落地 |
+| F 交付证据收口 | PKG-TODO-018 | 已完成 | qemu authoritative `autopkgtest`、`lintian` 与 evidence/worklog 已收口 |
 
 ### 7.2 必过门禁表
 
@@ -191,7 +191,7 @@
 | PKG-BLK-02 | ✅ 已解阻：PKG-TODO-010/011/012 已将 canonical socket、daemon profile asset root 与 LLM baseline root 全部收敛到 `infra/config::InstallLayout` 路径模型 | PKG-TODO-010、011、012 | install-aware path resolver 按 frozen owner 落地且相关 tests 全绿 | 已由 PKG-TODO-010、011、012 完成 | 若路径收敛暂时失败，不允许用 systemd `WorkingDirectory` 伪修复 |
 | PKG-BLK-03 | 已由 PKG-TODO-002 解阻：v1 package-mode profile 选择固定为 `/etc/default/dasall-daemon` + `EnvironmentFile` + `--profile-id`，`/etc/dasall/daemon.json` 固定为 `daemon.*` override-only | PKG-TODO-002、009、013 | 明确 v1 采用 `EnvironmentFile + --profile-id` 还是补新 schema | 已完成 | 若后续要把 `profile_id` 迁入 deployment config，必须新开 schema 扩展任务而不是改写 v1 基线 |
 | PKG-BLK-04 | ✅ 已解阻：`debian/control` 的 Build-Depends / Depends 已由 PKG-TODO-001 冻结，并由 PKG-TODO-008 落盘到 source metadata skeleton | PKG-TODO-001、008、009 | 目标 Ubuntu 版本上的依赖盘点完成 | 已由 PKG-TODO-001、008 完成 | 在依赖未冻结前，禁止给出“可直接构包”的结论 |
-| PKG-BLK-05 | installed-package QA 尚未完全收口：PKG-TODO-003 已冻结 `lintian` / `autopkgtest` / qemu testbed 策略，PKG-TODO-016 已补齐 `debian/tests` metadata/scripts，PKG-TODO-017 已补齐并通过本地 rootful smoke harness，剩余 authoritative `autopkgtest` 与最终 gate/evidence 收口待完成 | PKG-TODO-018 | QA 策略已冻结，且 authoritative testbed run 与 gate/evidence 全部落地 | 完成 PKG-TODO-018 | 若 testbed 暂缺，只能宣称“build-ready packaging skeleton”，不得宣称 package gate closed |
+| PKG-BLK-05 | ✅ 已解阻：PKG-TODO-003 已冻结 `lintian` / `autopkgtest` / qemu testbed 策略，PKG-TODO-016 已补齐 `debian/tests` metadata/scripts，PKG-TODO-017 已补齐并通过本地 rootful smoke harness，PKG-TODO-018 已补齐 qemu authoritative `autopkgtest`、`lintian` 与 gate/evidence/worklog 收口 | PKG-TODO-018 | QA 策略已冻结，且 authoritative testbed run 与 gate/evidence 全部落地 | 已完成 | 若未来 testbed 暂缺，只能宣称“build-ready packaging skeleton”，不得宣称 package gate closed |
 
 ## 9. 测试矩阵与统一验收命令
 
@@ -213,6 +213,7 @@
 | PKG-TODO-013 | `pkg-smoke-local-control-plane` | 验证 daemon 包的 service/config/postinst/README.Debian 组合语义 |
 | PKG-TODO-016 | `pkg-smoke-local-control-plane`、`pkg-smoke-common-assets` | 验证 installed-package smoke 与 autopkgtest metadata |
 | PKG-TODO-017 | `pkg_smoke_install.sh`、`pkg_smoke_upgrade.sh`、`pkg_smoke_remove_purge.sh` | 验证 fresh install、显式启动、升级、remove/purge 路径 |
+| PKG-TODO-018 | qemu `autopkgtest`、`lintian`、package build/local install evidence | 验证 Package Gate 07/08 与交付证据一致性 |
 
 ### 9.3 质量门矩阵
 
@@ -224,8 +225,8 @@
 | PKG-GATE-04 | `bash scripts/packaging/pkg_smoke_install.sh` | PKG-TODO-013、017 |
 | PKG-GATE-05 | `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check` | PKG-TODO-013、017 |
 | PKG-GATE-06 | `bash scripts/packaging/pkg_smoke_upgrade.sh` | PKG-TODO-017 |
-| PKG-GATE-07 | `autopkgtest ../dasall_*.changes -- qemu <ubuntu-testbed-image>` | PKG-TODO-016、017 |
-| PKG-GATE-08 | `lintian ../*.changes` | PKG-TODO-017、018 |
+| PKG-GATE-07 | `AUTOPKGTEST_QEMU_DISABLE_KVM=1 /usr/bin/autopkgtest /tmp/pkg018-adt-src ../dasall_0.1.0-1_amd64.changes -- /tmp/pkg018-adtshim/bin/autopkgtest-virt-qemu --timeout-reboot=180 /tmp/pkg018-autopkgtest/autopkgtest-noble-amd64.img` | PKG-TODO-016、017、018 |
+| PKG-GATE-08 | `lintian ../dasall_0.1.0-1_amd64.changes` | PKG-TODO-017、018 |
 
 ### 9.4 统一验收命令
 
@@ -235,15 +236,23 @@
 bash scripts/packaging/validate_ubuntu_dpkg_v1.sh
 ```
 
-在 PKG-TODO-017 完成之前，临时分段验收命令基线为：
+PKG-TODO-018 收口补充命令基线为：
 
 ```bash
 cmake -S . -B build-ci -G Ninja && \
 cmake --build build-ci --target dasall_packaging_preflight_tests && \
 dpkg-buildpackage -us -uc -b && \
-autopkgtest --validate . && \
+python3 scripts/packaging/validate_autopkgtest_metadata.py && \
 test -x debian/tests/pkg-smoke-local-control-plane && \
 test -x debian/tests/pkg-smoke-common-assets
+```
+
+正式 package-ready 证据追加以下 installed-package gates：
+
+```bash
+bash scripts/packaging/validate_ubuntu_dpkg_v1.sh
+AUTOPKGTEST_QEMU_DISABLE_KVM=1 /usr/bin/autopkgtest /tmp/pkg018-adt-src ../dasall_0.1.0-1_amd64.changes -- /tmp/pkg018-adtshim/bin/autopkgtest-virt-qemu --timeout-reboot=180 /tmp/pkg018-autopkgtest/autopkgtest-noble-amd64.img
+lintian ../dasall_0.1.0-1_amd64.changes
 ```
 
 ## 10. 风险与回退策略
@@ -258,10 +267,10 @@ test -x debian/tests/pkg-smoke-common-assets
 
 ## 11. 可行性结论
 
-1. 本专项可立即进入执行，不需要再重做总体打包设计；当前真正缺的是工程 install surface、路径收敛和 package QA。
-2. Install surface 与 `debian/` source/binary skeleton 已完成；PKG-TODO-010 ~ 016 已完成安装态路径收敛、build-time preflight 与 autopkgtest metadata/scripts 落地，下一阶段聚焦 PKG-TODO-017 的本地 rootful smoke harness，最后由 PKG-TODO-018 收口 gate 证据与残余风险。
-3. 当前最关键的 P0 不是 `debian/control` 文本本身，而是让 `cmake --install` 和安装态路径模型先成立；否则 `debian/` 目录只会变成无法稳定维护的手工拷贝层。
-4. 若执行中出现资源限制，允许把 `manpage`、`NEWS.Debian`、`sysusers.d`、`tmpfiles.d` 延后，但不允许延后 install surface、socket/path convergence、first-install UX 和 installed-package smoke。
+1. 本专项 v1 可行性结论为 package gate closed：install surface、路径收敛、source/binary package skeleton、local rootful lifecycle、qemu authoritative `autopkgtest` 与 `lintian` 均已有正式证据。
+2. PKG-TODO-018 已补齐最终 gate/evidence/worklog：qemu `autopkgtest` 两条 smoke 均 PASS 且 `RC=0`，`lintian` `RC=0` 且仅余已评审 warning，因此 PKG-BLK-05 已解阻。
+3. 当前最关键的 P0 边界是持续保持 `cmake --install`、`infra/config::InstallLayout` 与 `debian/*.install` 的同源关系；若后续包 payload 再出现 stale binary 或 repo-relative path，应先修 install/layout owner，而不是在 smoke 脚本中绕开。
+4. 后续资源限制仍允许把 `NEWS.Debian`、`sysusers.d`、`tmpfiles.d` 延后；但不得延后或削弱 install surface、socket/path convergence、first-install UX、local lifecycle smoke、qemu authoritative `autopkgtest` 与 lintian/evidence gate。
 
 ## 12. 未决问题处置表
 

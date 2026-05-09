@@ -58,15 +58,15 @@ void test_run_validate_executes_validate_only_runner() {
   CliConfigWorkflowDependencies dependencies;
   dependencies.store_paths.defaults_file = workspace / "etc/default/dasall-daemon";
   dependencies.store_paths.daemon_config_file = workspace / "etc/dasall/daemon.json";
-  dependencies.preflight_environment.daemon_binary = "/usr/bin/dasall-daemon";
   dependencies.preflight_environment.daemon_binary_available = true;
   dependencies.preflight_environment.systemd_available = true;
   dependencies.validate_only_runner = [&invoked](const auto& command) {
     invoked = true;
     dasall::tests::support::assert_true(
-        command.size() >= 5 && command[1] == "--validate-only" &&
+      command.size() >= 5 && command[0] == "/usr/sbin/dasall-daemon" &&
+        command[1] == "--validate-only" &&
             command[2] == "--config-file",
-        "config validate should invoke validate-only with canonical config-file arguments");
+      "config validate should invoke validate-only with the packaged daemon binary and canonical config-file arguments");
     return ValidateOnlyResult{
         .exit_code = 0,
         .stdout_text = "config validation passed",

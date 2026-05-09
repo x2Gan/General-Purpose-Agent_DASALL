@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #609
+
+- 日期：2026-05-09
+- 阶段：packaging/gate
+- 任务：PKG-TODO-018 回写 packaging Gate、交付证据与专项收口结论
+- 状态：已完成
+
+### 改动
+
+1. 修正 installed-package `dasall config validate --json` 的 validate-only daemon 路径：`ConfigPreflightEnvironment` 默认 daemon binary 从 `/usr/bin/dasall-daemon` 收敛为 `/usr/sbin/dasall-daemon`，并同步更新 config validate unit 与 config output contract fixture。
+2. 修正 `debian/dasall-cli.install`，明确从 `debian/tmp/usr/bin/dasall` 安装 CLI binary，避免 Debian package payload 继续消费旧 build tree 产物。
+3. 修正 `debian/tests/pkg-smoke-local-control-plane` 的 post-apply 断言边界：`config show` 只验证 schema 可渲染，service running/enabled、socket owner/mode 与 IPC readiness 继续由 `systemctl`、`stat`、`dasall ping/readiness/version` 作为权威检查。
+4. 回写 `docs/todos/packaging/DASALL_Ubuntu_DPKG打包专项TODO.md`，新增 `docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md`，将 PKG-TODO-018、PKG-BLK-05、PKG-GATE-07/08 与 §11 可行性结论收口到 package gate closed。
+
+### 验证
+
+1. `build/vscode-linux-ninja/tests/unit/apps/cli/dasall-config_validate_workflow_unit_test`
+   - 结果：通过；默认 validate-only command 已锁定 `/usr/sbin/dasall-daemon`。
+2. `build/vscode-linux-ninja/tests/contract/access/dasall-config_output_contract_test`
+   - 结果：通过；config validate JSON contract 与 installed-package daemon path 口径一致。
+3. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；重新产出 `dasall`、`dasall-cli`、`dasall-daemon`、`dasall-common` 四包与 `../dasall_0.1.0-1_amd64.changes`。
+4. `bash scripts/packaging/pkg_smoke_install.sh` 与 `sudo dasall config validate --json`
+   - 结果：通过；installed-package validate 输出 `"ok":true`、`"validate_only_passed":true`，且 `validate_only_command` 使用 `/usr/sbin/dasall-daemon`。
+5. `sudo sh -x debian/tests/pkg-smoke-local-control-plane`
+   - 结果：通过；`/tmp/pkg018-host-local-control-plane-trace-fixed3.log` 记录最终 `RC=0`。
+6. `AUTOPKGTEST_QEMU_DISABLE_KVM=1 /usr/bin/autopkgtest /tmp/pkg018-adt-src ../dasall_0.1.0-1_amd64.changes -- /tmp/pkg018-adtshim/bin/autopkgtest-virt-qemu --timeout-reboot=180 /tmp/pkg018-autopkgtest/autopkgtest-noble-amd64.img`
+   - 结果：通过；`/tmp/pkg018-autopkgtest-minsrc-fixed.log` 记录 `pkg-smoke-local-control-plane PASS`、`pkg-smoke-common-assets PASS`、最终 `RC=0`。
+7. `lintian ../dasall_0.1.0-1_amd64.changes`
+   - 结果：通过；`/tmp/pkg018-lintian.log` 记录 `RC=0`，仅余 `initial-upload-closes-no-bugs` 与 `dasall-daemon: no-manual-page [usr/sbin/dasall-daemon]` warning。
+8. `python3 scripts/packaging/validate_autopkgtest_metadata.py`
+   - 结果：通过；`debian/tests/control` 继续解析出 `pkg-smoke-local-control-plane` 与 `pkg-smoke-common-assets` 两条 installed-package smoke。
+
+### 结果
+
+1. PKG-TODO-018 已完成 gate/evidence/worklog 收口，PKG-BLK-05 解阻；v1 Ubuntu DPKG packaging 当前可以宣称 package gate closed / package-ready evidence complete。
+2. 本轮 qemu 首次失败暴露的根因不是 daemon/service 本身，而是 installed-package smoke 把 `config show` 当成 live systemd/secret state authority；修正后把状态权威还给 systemd、socket 与 IPC 检查，保持当前 CLI contract 的真实边界。
+3. `lintian` 当前无 blocker；daemon binary manpage warning 作为后续 polish，不阻塞 v1 package-ready gate。
+
+### 下一步
+
+1. 若进入发布自动化阶段，新开 APT repository / signing / CI qemu testbed 任务；不要把这些范围回填到 v1 packaging closeout。
+2. 若要增强 `config show` 的 live systemd/IPC 状态，应进入 CLI config 或 install-state probe 增量任务，而不是在 packaging smoke 中继续扩大断言。
+
+### 风险
+
+1. 当前 qemu 证据在宿主无 `/dev/kvm` 写权限的环境下使用临时 shim 与 `AUTOPKGTEST_QEMU_DISABLE_KVM=1`；CI 或具备 KVM 权限的环境应回到标准 qemu runner。
+2. `.changes` 与 `.deb` 必须与当前源码同源；后续复验 package gate 前仍需先重新构包，避免 stale payload 误判。
+
 ## 记录 #608
 
 - 日期：2026-05-09

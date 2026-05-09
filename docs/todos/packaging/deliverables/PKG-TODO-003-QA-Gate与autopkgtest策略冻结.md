@@ -46,7 +46,7 @@ v1 packaging QA 固定拆成五层，不允许混层：
    - 说明：这是安装生命周期语义门，不替代 `autopkgtest`。
 5. Gate E: autopkgtest gate
    - 目标：在标准 testbed 上验证安装后的二进制包，以及 `debian/tests/control` 元数据是否自洽。
-   - 代表命令：`autopkgtest --validate .` 与针对 `.changes`/`.deb` 的正式 testbed 运行。
+   - 代表命令：`python3 scripts/packaging/validate_autopkgtest_metadata.py` 与针对 `.changes`/`.deb` 的正式 testbed 运行。
 
 ### 3.2 `lintian` 与 `autopkgtest` 的职责边界
 
@@ -72,7 +72,7 @@ v1 `autopkgtest` 最少冻结两条测试：
 ### 3.4 本地与 CI 的最小运行策略
 
 1. 本地最小策略
-   - 元数据校验：`autopkgtest --validate .`
+   - 元数据校验：`python3 scripts/packaging/validate_autopkgtest_metadata.py`
    - authoritative smoke：优先使用 qemu testbed 运行完整 suite。
    - 快速资产回路：只在明确不涉及 `systemd`/machine isolation 时，才允许单独跑 `pkg-smoke-common-assets` 的 container/unshare 变体。
 2. CI 最小策略
@@ -114,7 +114,7 @@ v1 `autopkgtest` 最少冻结两条测试：
 
 4. autopkgtest metadata validate：
 
-   `autopkgtest --validate .`
+   `python3 scripts/packaging/validate_autopkgtest_metadata.py`
 
 5. authoritative autopkgtest run：
 

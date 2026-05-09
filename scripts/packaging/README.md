@@ -14,7 +14,7 @@
 | package build | 生成四包 `.deb` / `.changes` 产物 | `dpkg-buildpackage -us -uc -b` | PKG-TODO-009 |
 | static package scan | 对包产物跑 policy/static analysis | `lintian ../*.changes` | PKG-TODO-015 |
 | local installed-package smoke | fresh install、explicit enable/start、upgrade、remove/purge | `bash scripts/packaging/validate_ubuntu_dpkg_v1.sh` | PKG-TODO-017 |
-| autopkgtest metadata validate | 校验 `debian/tests/control` 语法与元数据 | `autopkgtest --validate .` | PKG-TODO-016 |
+| autopkgtest metadata validate | 校验 `debian/tests/control` 语法与元数据 | `python3 scripts/packaging/validate_autopkgtest_metadata.py` | PKG-TODO-016 |
 | autopkgtest installed-package run | 在 testbed 中验证安装后的包行为 | `autopkgtest ../dasall_*.changes -- qemu <image-or-config>` | PKG-TODO-016 |
 
 ## 3. testbed 策略
@@ -29,11 +29,11 @@
 
 1. 在没有完整 testbed 的场景下，开发者仍可先跑：
 
-   `autopkgtest --validate .`
+   `python3 scripts/packaging/validate_autopkgtest_metadata.py`
 
 2. 后续若 `pkg-smoke-common-assets` 被拆成纯资产检查，可允许它在 container/unshare 类 testbed 上单独快速回归。
 3. 这种 quick loop 不能替代 `pkg-smoke-local-control-plane` 的 machine-isolation gate。
-4. 部分 Ubuntu 24.04 `autopkgtest` 版本在 `--validate` 仍会触发 testbed setup；遇到这种版本差异时，可以用仅包装 `parse_debian_source()` 的本地兼容 shim 保持同一命令口径，但不能把它当成 installed-package run。
+4. 部分 Ubuntu 24.04 `autopkgtest` 版本在 `--validate` 仍会触发 testbed setup；本仓库已提供仅包装 `parse_debian_source()` 的本地兼容 shim `scripts/packaging/validate_autopkgtest_metadata.py` 作为 metadata quick loop，但不能把它当成 installed-package run。
 
 ### 3.3 CI 最小要求
 
@@ -49,10 +49,11 @@
 2. `scripts/packaging/pkg_smoke_install.sh`
 3. `scripts/packaging/pkg_smoke_upgrade.sh`
 4. `scripts/packaging/pkg_smoke_remove_purge.sh`
+5. `scripts/packaging/validate_autopkgtest_metadata.py`
 
 仍按需待定的只有：
 
-5. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
+6. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
 
 ## 5. 不做什么
 

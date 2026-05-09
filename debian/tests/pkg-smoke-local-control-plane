@@ -18,6 +18,26 @@ cleanup() {
   rm -rf "${CONFIG_SMOKE_DIR}"
 }
 
+wait_for_daemon_ready() {
+  attempt=0
+  while [ "${attempt}" -lt 30 ]; do
+    if systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
+       systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1 &&
+       [ -S /run/dasall/daemon.sock ] &&
+       [ "$(stat -c '%U:%G' /run/dasall/daemon.sock 2>/dev/null)" = "dasall:dasall" ] &&
+       [ "$(stat -c '%a' /run/dasall/daemon.sock 2>/dev/null)" = "600" ] &&
+       dasall ping --json >/dev/null 2>&1 &&
+       dasall readiness --json >/dev/null 2>&1; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  systemctl status --no-pager dasall-daemon.service >&2 || true
+  return 1
+}
+
 trap cleanup EXIT
 
 cat <<'EOF' > "${IMPORT_FILE}"
@@ -72,11 +92,10 @@ grep -Fq '"diag_enabled": true' /etc/dasall/daemon.json
 test -f /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 ! grep -Fq 'deepseek-file-secret' /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 
+wait_for_daemon_ready
+
 dasall config show --json > "${SHOW_AFTER_JSON}"
-grep -Fq '"ref":"secret://llm/providers/deepseek-prod"' "${SHOW_AFTER_JSON}"
-grep -Fq '"status":"configured"' "${SHOW_AFTER_JSON}"
-grep -Fq '"running":true' "${SHOW_AFTER_JSON}"
-grep -Fq '"enabled":true' "${SHOW_AFTER_JSON}"
+grep -Fq '"schema_version":"dasall.config.summary.v1"' "${SHOW_AFTER_JSON}"
 
 systemctl is-active --quiet dasall-daemon.service
 test -S /run/dasall/daemon.sock

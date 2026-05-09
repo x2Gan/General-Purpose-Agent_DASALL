@@ -109,7 +109,7 @@ using dasall::tests::support::assert_true;
   result.daemon_validate_only_available = true;
   result.validate_only_passed = false;
   result.validate_only_command = {
-      "/usr/bin/dasall-daemon",
+      "/usr/sbin/dasall-daemon",
       "--validate-only",
       "--config-file",
       "/etc/dasall/daemon.json",
