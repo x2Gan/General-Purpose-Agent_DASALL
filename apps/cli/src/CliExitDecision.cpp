@@ -59,6 +59,14 @@ constexpr int kCliExitProtocolError = 7;
   };
 }
 
+[[nodiscard]] bool is_nonfinal_status_query(
+    const DaemonClientResponse& response,
+    const std::string_view command_name) {
+  return command_name == "status" && response.is_completed() &&
+         response.task_completed.has_value() && !*response.task_completed &&
+         !response.error_ref.has_value();
+}
+
 }  // namespace
 
 CliExitDecision make_argument_error_decision(const CliOutputMode output_mode,
@@ -70,7 +78,8 @@ CliExitDecision make_argument_error_decision(const CliOutputMode output_mode,
 }
 
 CliExitDecision decide_exit_for_response(const DaemonClientResponse& response,
-                                         const CliOutputMode output_mode) {
+                                         const CliOutputMode output_mode,
+                                         const std::string_view command_name) {
   const bool json_mode = is_json_mode(output_mode);
 
   if (!response.transport_ok || response.peer_closed) {
@@ -99,7 +108,8 @@ CliExitDecision decide_exit_for_response(const DaemonClientResponse& response,
                                      : std::nullopt;
 
   if (response.is_completed() && response.task_completed.has_value() &&
-      !*response.task_completed && !response.error_ref.has_value()) {
+      !*response.task_completed && !response.error_ref.has_value() &&
+      !is_nonfinal_status_query(response, command_name)) {
     return make_decision(kCliExitBusinessFailure,
                          CliOutcomeFamily::BusinessFailure,
                          json_mode,

@@ -439,3 +439,21 @@
 3. ACC-TODO-049/050 已把 focused integration gate 与证据口径收敛到 `Gate-INT-08`；后续若 Gate 名称或矩阵变更，必须同步更新 TODO / worklog / system integration 记录。
 4. 最后用 ACC-TODO-051 收口 P2 工程硬化；stream / WS / MQTT 保持延后 Gate + feature flag default-off，直到外部边界冻结。
 5. 所有 Gate 结论必须继续回写到 TODO / deliverables / worklog，严禁用 build liveness、placeholder main、abstract interface smoke 或 IPC ping 冒充 Access ready。
+
+## 12. FULLINT-TODO-006 回链：Access ingress 业务链验证矩阵
+
+2026-05-11 `FULLINT-TODO-006` 已将 Access ingress 业务链矩阵回链到本专项：`docs/todos/integration/deliverables/FULLINT-TODO-006-Access-ingress业务链验证矩阵.md`。
+
+本次回链只冻结 build-tree `Gate-INT-08` 的 Access v1 focused ingress 证据，不把结果外推为 app-binary、installed-package、qemu 或 production release-ready。`dasall_gate_int_08` 已升级为 expected-test discoverability + acceptance，当前 expected tests 为：`AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`。
+
+矩阵解释：
+
+1. CLI/daemon submit 由 `DaemonAccessSubmitCompositionTest.cpp` 证明 public `AgentRequest` handoff 与 runtime call count。
+2. HTTP/gateway submit 由 `GatewayAccessSubmitCompositionTest.cpp` 证明 HTTP packet 经 gateway factory 进入 runtime backend。
+3. async receipt/query/cancel 由 `DaemonReceiptFlowIntegrationTest.cpp` 证明 receipt、owner mismatch、cancel forwarding 与 expired status。
+4. policy fail-closed/observability 由 `AccessObservabilityMainChainIntegrationTest.cpp` 证明 policy backend unavailable 不触达 runtime 且产生 denied event。
+5. health readiness 由 `AccessHealthReadinessIntegrationTest.cpp` 证明 gateway init failed -> 503，runtime backend configured -> 200；`default-ready/degraded-ready/stub-ready` 对外投影继续归 `FULLINT-TODO-007`。
+
+验证阻塞修复：矩阵升级后，`AccessAsyncReceiptQueryCancelIntegrationTest` 暴露 build-tree CLI binary status 查询会把 `response_text=active`、`task_completed=false` 误判为 `task_not_completed` / exit `5`。本轮已最小修复 `CliExitDecision` 的命令上下文：`status` active 查询保持 exit `0`，`run` completed/non-final 仍保持 exit `5`，并由 `CliExitCodeContractTest` 锁定正/负例。
+
+安装态边界：当前 `/usr/bin/dasall` 存在，daemon `active/enabled`，`sudo -n dasall ping/readiness --json` 返回 completed / READY；`status` / `cancel` missing receipt 返回 `status_missing` / `cancel_missing`，`diag health` 返回 `diag_disabled`。这些只作为当前包运行边界，不替代 `Gate-INT-08` 的 build-tree true-integration 证据，也不替代 `Gate-INT-10` 或 release runner qemu。

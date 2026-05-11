@@ -109,6 +109,32 @@ void test_success_like_paths_map_to_exit_code_0() {
               "idempotency replay hits should stay in the success family");
 }
 
+void test_status_active_query_stays_success_without_masking_run_incomplete() {
+  auto active_status = make_response(UdsResponseDisposition::Completed);
+  active_status.task_completed = false;
+  active_status.response_text = std::string("active");
+
+  const auto active_status_decision = decide_exit_for_response(
+      active_status, CliOutputMode::Json, "status");
+  assert_equal(0,
+               active_status_decision.exit_code,
+               "active status queries should report successful query transport on exit 0");
+  assert_true(active_status_decision.outcome_family == CliOutcomeFamily::Success,
+              "active status queries should stay in the success family");
+
+  auto incomplete_run = make_response(UdsResponseDisposition::Completed);
+  incomplete_run.task_completed = false;
+  incomplete_run.response_text = std::string("not completed");
+
+  const auto incomplete_run_decision = decide_exit_for_response(
+      incomplete_run, CliOutputMode::Json, "run");
+  assert_equal(5,
+               incomplete_run_decision.exit_code,
+               "non-status completed responses with task_completed=false should remain business failures");
+  assert_true(incomplete_run_decision.outcome_family == CliOutcomeFamily::BusinessFailure,
+              "non-status incomplete responses should stay in the business-failure family");
+}
+
 void test_validation_and_access_denials_keep_the_frozen_cli_families() {
   const auto validation = decide_exit_for_response(
       make_response(UdsResponseDisposition::Rejected, std::string("payload_size_limit_exceeded")));
@@ -194,6 +220,7 @@ int main() {
     test_transport_failures_map_to_daemon_unavailable();
     test_protocol_failures_map_to_exit_code_7();
     test_success_like_paths_map_to_exit_code_0();
+    test_status_active_query_stays_success_without_masking_run_incomplete();
     test_validation_and_access_denials_keep_the_frozen_cli_families();
     test_retryable_paths_map_to_exit_code_6_and_ignore_exit_code_hint();
     test_remaining_daemon_rejects_map_to_exit_code_5();

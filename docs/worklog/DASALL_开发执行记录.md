@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #626
+
+- 日期：2026-05-11
+- 阶段：integration/access
+- 任务：FULLINT-TODO-006 扩展 Access ingress 业务链验证矩阵
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/CMakeLists.txt`：将 `dasall_gate_int_08` 从纯 `ctest -L gate-int-08` 执行升级为 `VerifySystemGateDiscoverability.cmake` expected-test discoverability + label discoverability + acceptance。
+2. 新增 `DASALL_GATE_INT_08_TEST_NAMES`，显式锁定 `AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`。
+3. 修复 Gate-INT-08 升级暴露的 async status exit-code blocker：`CliExitDecision` 增加 command context，`status` active 查询保持 exit `0`，`run` completed/non-final 仍保持 exit `5`；`CliExitCodeContractTest` 增加正/负例。
+4. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-006-Access-ingress业务链验证矩阵.md`，按 CLI/daemon、HTTP/gateway、async receipt、policy fail-closed、health readiness、profile/contracts guard 拆分 Access ingress 证据。
+5. 更新 `docs/todos/access/DASALL_access子系统专项TODO.md`，回链本次矩阵并记录 `Gate-INT-08` 不外推到 app-binary、installed-package 或 qemu。
+6. 回写全量集成专项 TODO：`FULLINT-TODO-006` 状态更新为 Done，前置更新为 `001、005`。
+
+### 验证
+
+1. `sudo -n dasall ping --json` 与 `sudo -n dasall readiness --json`
+   - 结果：均返回 `disposition=completed`；readiness payload 含 `state=READY`、`bridge_reachable=true`。
+2. `sudo -n dasall status receipt:missing token local://uid/0 --json` 与 `sudo -n dasall cancel receipt:missing token local://uid/0 --json`
+   - 结果：均为预期负路径，exit `5`，分别返回 `status_missing` / `cancel_missing`。
+3. `sudo -n dasall diag health --json`
+   - 结果：预期门控，exit `4`，返回 `diag_disabled`。
+4. `Build_CMakeTools(buildTargets=["dasall_gate_int_08"])`
+   - 结果：首次暴露 `AccessAsyncReceiptQueryCancelIntegrationTest` 中 status active 被 CLI exit decision 误判为 `task_not_completed` 的 validation blocker；完成最小修复后复跑通过，target 输出 expected tests discoverability、`gate-int-08` / `access-v1-production-gate` label discoverability 与 acceptance passed。
+5. `rg -n "FULLINT-TODO-006|DASALL_GATE_INT_08_TEST_NAMES|Access ingress|status_missing|diag_disabled" tests/CMakeLists.txt docs/todos/integration docs/todos/access docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过，CMake 清单、交付物、Access TODO、全量集成 TODO 与 worklog 均可检索。
+
+### 结果
+
+1. `FULLINT-TODO-006` 已完成；Access ingress 证据不再只依赖历史 Gate 文档或标签空跑，而是由 expected-test 清单约束。
+2. 矩阵明确区分 build-tree `Gate-INT-08`、installed-package rootful 控制面、`Gate-INT-10` app-binary 和 release runner qemu，防止证据层级混写。
+3. `FULLINT-TODO-007` 仍需继续处理 daemon/gateway readiness 投影，尤其是 `default-ready`、`degraded-ready`、`stub-ready` 与对外 READY 语义的映射。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-007`，加严 daemon/gateway readiness 投影与 app-binary no-stub 断言。
+
 ## 记录 #625
 
 - 日期：2026-05-11

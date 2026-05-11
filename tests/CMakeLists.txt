@@ -55,18 +55,44 @@ add_custom_target(dasall_gate_int_07
     dasall_builtin_executor_lane_result_code_unit_test
 )
 
+set(DASALL_GATE_INT_08_TEST_NAMES
+  AgentRequestContractTest
+  AgentResultContractTest
+  IdentityMetadataContractTest
+  CliDaemonSubmitIntegrationTest
+  HttpGatewaySubmitIntegrationTest
+  AccessGatewayPipelineIntegrationTest
+  AccessAsyncReceiptQueryCancelIntegrationTest
+  AccessPolicyBackendUnavailableIntegrationTest
+  AccessHealthReadinessIntegrationTest
+  AccessProfileCompatibilityTest
+)
+
+string(JOIN "," DASALL_GATE_INT_08_EXPECTED_TESTS_CSV
+  ${DASALL_GATE_INT_08_TEST_NAMES}
+)
+
+set(DASALL_GATE_INT_08_EXECUTABLE_TARGETS
+  dasall_contract_agent_request_test
+  dasall_contract_agent_result_test
+  dasall_contract_identity_metadata_test
+  dasall_access_daemon_submit_composition_integration_test
+  dasall_access_gateway_submit_composition_integration_test
+  dasall_access_daemon_receipt_flow_integration_test
+  dasall_access_observability_main_chain_integration_test
+  dasall_access_health_readiness_integration_test
+  dasall_access_daemon_profile_compatibility_integration_test
+)
+
 add_custom_target(dasall_gate_int_08
-  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -L gate-int-08
-  DEPENDS
-    dasall_contract_agent_request_test
-    dasall_contract_agent_result_test
-    dasall_contract_identity_metadata_test
-    dasall_access_daemon_submit_composition_integration_test
-    dasall_access_gateway_submit_composition_integration_test
-    dasall_access_daemon_receipt_flow_integration_test
-    dasall_access_observability_main_chain_integration_test
-    dasall_access_health_readiness_integration_test
-    dasall_access_daemon_profile_compatibility_integration_test
+  COMMAND ${CMAKE_COMMAND}
+    -DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}
+    -DBUILD_DIR=${CMAKE_BINARY_DIR}
+    -DEXPECTED_TESTS_CSV=${DASALL_GATE_INT_08_EXPECTED_TESTS_CSV}
+    -DDISCOVERABILITY_LABELS_CSV=gate-int-08,access-v1-production-gate
+    -DRUN_ACCEPTANCE=ON
+    -P ${CMAKE_SOURCE_DIR}/tests/VerifySystemGateDiscoverability.cmake
+  DEPENDS ${DASALL_GATE_INT_08_EXECUTABLE_TARGETS}
 )
 
 set(DASALL_PACKAGING_PREFLIGHT_TEST_NAMES

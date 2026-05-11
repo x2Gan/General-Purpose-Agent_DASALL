@@ -37,6 +37,7 @@ struct CliExitDecision {
 
 [[nodiscard]] CliExitDecision decide_exit_for_response(
     const DaemonClientResponse& response,
-    CliOutputMode output_mode = CliOutputMode::Human);
+    CliOutputMode output_mode = CliOutputMode::Human,
+    std::string_view command_name = {});
 
 }  // namespace dasall::apps::cli

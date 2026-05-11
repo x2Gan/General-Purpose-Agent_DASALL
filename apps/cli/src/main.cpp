@@ -273,43 +273,43 @@ int main(int argc, char* argv[]) {
     effective_cmd.timeout_ms = default_timeout_ms_for(effective_cmd);
   }
 
-    const dasall::apps::cli::CliIpcClient client(
+  const dasall::apps::cli::CliIpcClient client(
       ipc, endpoint, *effective_cmd.timeout_ms);
-    const auto emit_daemon_response = [&](std::string_view command_name,
-                                          const dasall::apps::cli::DaemonClientResponse& response) {
-      const auto decision = dasall::apps::cli::decide_exit_for_response(
-          response, cmd->output_mode);
+  const auto emit_daemon_response = [&](std::string_view command_name,
+                                        const dasall::apps::cli::DaemonClientResponse& response) {
+    const auto decision = dasall::apps::cli::decide_exit_for_response(
+        response, cmd->output_mode, command_name);
 
-      if (cmd->output_mode == dasall::apps::cli::CliOutputMode::Json) {
-        std::cout << dasall::apps::cli::CliOutputFormatter::format_json_output(
-                         command_name, response, decision)
-                  << '\n';
-        return decision.exit_code;
-      }
-
-      std::ostream& stream =
-          decision.primary_output_stream ==
-                  dasall::apps::cli::CliPrimaryOutputStream::Stdout
-              ? std::cout
-              : std::cerr;
-
-      if (!response.ok()) {
-        if (command_name == "ping") {
-          stream << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
-                        response.failure_reason)
-                 << '\n';
-        } else {
-          stream << dasall::apps::cli::CliOutputFormatter::format_error(
-                        response.failure_reason)
-                 << '\n';
-        }
-        return decision.exit_code;
-      }
-
-      stream << dasall::apps::cli::CliOutputFormatter::format_command_human_output(
-                    command_name, response)
-             << '\n';
+    if (cmd->output_mode == dasall::apps::cli::CliOutputMode::Json) {
+      std::cout << dasall::apps::cli::CliOutputFormatter::format_json_output(
+                       command_name, response, decision)
+                << '\n';
       return decision.exit_code;
+    }
+
+    std::ostream& stream =
+        decision.primary_output_stream ==
+                dasall::apps::cli::CliPrimaryOutputStream::Stdout
+            ? std::cout
+            : std::cerr;
+
+    if (!response.ok()) {
+      if (command_name == "ping") {
+        stream << dasall::apps::cli::CliOutputFormatter::format_ping_failure(
+                      response.failure_reason)
+               << '\n';
+      } else {
+        stream << dasall::apps::cli::CliOutputFormatter::format_error(
+                      response.failure_reason)
+               << '\n';
+      }
+      return decision.exit_code;
+    }
+
+    stream << dasall::apps::cli::CliOutputFormatter::format_command_human_output(
+                  command_name, response)
+           << '\n';
+    return decision.exit_code;
   };
 
   // 3. 执行命令
