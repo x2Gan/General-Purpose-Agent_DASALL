@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #633
+
+- 日期：2026-05-11
+- 阶段：integration/packaging/installed-package
+- 任务：FULLINT-TODO-013 执行 installed-package 控制面 + 主功能矩阵
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-013-installed-package控制面主功能矩阵.md`：按 D/B 双轨记录 task selection、D Gate、Design -> Build 映射、fresh package build、fresh reinstall smoke、manual installed-package control-plane / LLM matrix、Knowledge/tools installed-package 缺口和残余 release blocker。
+2. 回写 `docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md`：`FULLINT-TODO-013` 标记 Done，验收命令更新为本轮真实 `dpkg-buildpackage`、`pkg_smoke_install.sh --explicit-start-check` 与人工 `dasall run` 输出；保留 `FULLINT-BLK-001` / `FULLINT-BLK-002` 后继边界。
+3. 本轮没有修改 production 代码、package smoke 脚本或 CMake/CTest 注册；任务要求的控制面和主功能矩阵已由真实 installed package 运行结果完成。
+
+### 验证
+
+1. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；`/tmp/dasall-fullint013/dpkg-buildpackage-final.exit` 记录 `dpkg_build_exit=0`。
+   - 产物：`../dasall-cli_0.1.0-1_amd64.deb`、`../dasall-common_0.1.0-1_all.deb`、`../dasall-daemon_0.1.0-1_amd64.deb`、`../dasall_0.1.0-1_all.deb`、`../dasall_0.1.0-1_amd64.changes`，时间戳 `2026-05-11 17:20`。
+2. `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；`/tmp/dasall-fullint013/pkg_smoke_install.exit` 记录 `pkg_smoke_exit=0`。
+   - 摘要：fresh reinstall 四包、validate-only、explicit start、ping/readiness、LLM `run`、missing receipt `status/cancel`、default `diag_disabled` 与 LLM assets 断言均通过。
+3. `sudo -n systemctl enable --now dasall-daemon.service`
+   - 结果：通过；人工矩阵阶段 daemon 为 `active` / `enabled`，`/run/dasall/daemon.sock` 为 `dasall:dasall 600`。
+4. `sudo -n dasall ping --json` / `sudo -n dasall readiness --json`
+   - 结果：通过；`ping` completed，`readiness` completed 且 payload 为 `state=DEGRADED`、`bridge_reachable=true`、`runtime_readiness=degraded-ready`。
+5. `sudo -n dasall run '{"prompt":"请用LLM回答：1+1等于几？只给出简短答案。"}' --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=completed`、`task_completed=true`、`llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`，响应内容为 `2`；断言 `agent.dataset_absent`。
+6. `sudo -n dasall status receipt:missing token local://uid/0 --json`
+   - 结果：通过；expected reject，exit `5`，`error_ref=status_missing`。
+7. `sudo -n dasall cancel receipt:missing token local://uid/0 --json`
+   - 结果：通过；expected reject，exit `5`，`error_ref=cancel_missing`。
+8. `sudo -n dasall diag health --json`
+   - 结果：通过；expected reject，exit `4`，`error_ref=diag_disabled`。
+9. `dasall --help` / `sudo -n dasall knowledge --help` / `sudo -n dasall tools --help`
+   - 结果：通过 as gap evidence；installed CLI surface 只列出 help/version/config/ping/readiness/run/status/cancel/diag，未暴露 Knowledge retrieve/refresh/health 或 tools 正向入口。
+10. `rg -n "multi_agent:" /usr/share/dasall/profiles/desktop_full/runtime_policy.yaml /usr/share/dasall/profiles/cloud_full/runtime_policy.yaml`
+    - 结果：通过；fresh installed assets 均为 `multi_agent: false`。
+
+### 结果
+
+1. `FULLINT-TODO-013` 已完成：L4 local installed-package fresh build + fresh reinstall + explicit daemon start + control-plane + LLM 主功能矩阵当轮通过。
+2. installed `run` 成功语义以 provider/model origin 为准，已确认 `llm.origin=deepseek-prod/deepseek-reasoner`，且未出现 `agent.dataset` fallback。
+3. `status_missing`、`cancel_missing`、`diag_disabled` 三条负路径均以真实 installed daemon 返回验证，未依赖既有单测/集测或旧文档完成状态。
+4. `FULLINT-BLK-001` 继续成立：本轮没有 qemu image / virt-server / release runner secret/network，因此不声明 L5 qemu 或 production release-ready。
+5. `FULLINT-BLK-002` 继续成立：Knowledge retrieve/refresh/health 与 tools 正向 installed-package 入口仍未暴露，分别转交 `FULLINT-TODO-014`、`FULLINT-TODO-016`。
+
+### 下一步
+
+1. 下一轮建议推进 `FULLINT-TODO-014`，为 Knowledge installed-package retrieve/refresh/health 增加正向入口或冻结可执行验证方案。
+2. Release 前仍需 `FULLINT-TODO-019` 在 release runner 执行 qemu `autopkgtest` / lintian / LLM 串联 gate。
+
 ## 记录 #632
 
 - 日期：2026-05-11
