@@ -14,6 +14,7 @@ struct DaemonHealthInput {
   bool gateway_ready = false;
   bool bridge_reachable = false;
   bool diagnostics_enabled = false;
+  std::string runtime_readiness_label = "default-ready";
   std::vector<std::string> degraded_reasons;
 };
 

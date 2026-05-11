@@ -394,7 +394,10 @@ int main(int argc, char* argv[]) {
   // 健康探针处理器
   dasall::access::gateway::HealthProbeHandler health;
   health.set_started(true);
-  health.set_ready(gateway->is_ready() && runtime_entry_accepted);
+  health.set_ready(gateway->is_ready() && runtime_entry_accepted &&
+                   !runtime_init_result.stub_ready());
+  health.set_readiness_detail(
+      "runtime_readiness=" + runtime_init_result.readiness_label());
 
   /// 辅助：将安全头合并到 httplib::Response
   auto apply_sec = [&](httplib::Response& res,

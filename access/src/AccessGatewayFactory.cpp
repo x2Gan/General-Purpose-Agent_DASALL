@@ -385,7 +385,8 @@ struct DaemonDiagPayload {
   envelope.result_id = packet.packet_id;
   envelope.protocol_kind = packet.protocol_kind;
 
-  if (snapshot.readiness.state == daemon::DaemonReadinessState::Ready) {
+  if (snapshot.readiness.state == daemon::DaemonReadinessState::Ready ||
+      snapshot.readiness.state == daemon::DaemonReadinessState::Degraded) {
     result.disposition = AccessDisposition::Completed;
     envelope.protocol_status_hint = "200";
   } else {
@@ -412,6 +413,8 @@ struct DaemonDiagPayload {
                     (snapshot.readiness.gateway_ready ? "true" : "false") +
                     ",\"bridge_reachable\":" +
                     (snapshot.readiness.bridge_reachable ? "true" : "false") +
+                    ",\"runtime_readiness\":\"" +
+                    snapshot.readiness.runtime_readiness_label + "\"" +
                     ",\"degraded_reasons\":\"" + reasons_payload + "\"}";
   dasall::contracts::AgentResult readiness_response;
   readiness_response.request_id = packet.packet_id;
@@ -496,6 +499,14 @@ build_daemon_submit_pipeline(
                   options.daemon_bridge_reachable &&
                   static_cast<bool>(options.runtime_dispatch_backend);
               input.diagnostics_enabled = diagnostics_enabled;
+              input.runtime_readiness_label =
+                  options.daemon_runtime_readiness_label;
+              if (input.runtime_readiness_label == "stub-ready") {
+                input.bridge_reachable = false;
+                input.degraded_reasons.push_back("runtime_entrypoint_stub_ready");
+              } else if (input.runtime_readiness_label == "degraded-ready") {
+                input.degraded_reasons.push_back("runtime_entrypoint_degraded_ready");
+              }
               if (!input.bridge_reachable) {
                 input.degraded_reasons.push_back("runtime_bridge_unreachable");
               }
@@ -512,6 +523,14 @@ build_daemon_submit_pipeline(
                   options.daemon_bridge_reachable &&
                   static_cast<bool>(options.runtime_dispatch_backend);
               input.diagnostics_enabled = diagnostics_enabled;
+              input.runtime_readiness_label =
+                  options.daemon_runtime_readiness_label;
+              if (input.runtime_readiness_label == "stub-ready") {
+                input.bridge_reachable = false;
+                input.degraded_reasons.push_back("runtime_entrypoint_stub_ready");
+              } else if (input.runtime_readiness_label == "degraded-ready") {
+                input.degraded_reasons.push_back("runtime_entrypoint_degraded_ready");
+              }
               if (!input.bridge_reachable) {
                 input.degraded_reasons.push_back("runtime_bridge_unreachable");
               }

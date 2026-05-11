@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace dasall::access::gateway {
@@ -18,9 +19,13 @@ ProbeResult HealthProbeHandler::handle_live() const {
 
 ProbeResult HealthProbeHandler::handle_ready() const {
   if (started_ && ready_) {
-    return ProbeResult{200, "READY"};
+    return ProbeResult{200, readiness_detail_.has_value()
+                                ? "READY " + *readiness_detail_
+                                : "READY"};
   }
-  return ProbeResult{503, "NOT_READY"};
+  return ProbeResult{503, readiness_detail_.has_value()
+                              ? "NOT_READY " + *readiness_detail_
+                              : "NOT_READY"};
 }
 
 ProbeResult HealthProbeHandler::handle_startup() const {

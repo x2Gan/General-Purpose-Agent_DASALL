@@ -457,3 +457,19 @@
 验证阻塞修复：矩阵升级后，`AccessAsyncReceiptQueryCancelIntegrationTest` 暴露 build-tree CLI binary status 查询会把 `response_text=active`、`task_completed=false` 误判为 `task_not_completed` / exit `5`。本轮已最小修复 `CliExitDecision` 的命令上下文：`status` active 查询保持 exit `0`，`run` completed/non-final 仍保持 exit `5`，并由 `CliExitCodeContractTest` 锁定正/负例。
 
 安装态边界：当前 `/usr/bin/dasall` 存在，daemon `active/enabled`，`sudo -n dasall ping/readiness --json` 返回 completed / READY；`status` / `cancel` missing receipt 返回 `status_missing` / `cancel_missing`，`diag health` 返回 `diag_disabled`。这些只作为当前包运行边界，不替代 `Gate-INT-08` 的 build-tree true-integration 证据，也不替代 `Gate-INT-10` 或 release runner qemu。
+
+## 13. FULLINT-TODO-007 回链：readiness 投影与 app-binary no-stub
+
+2026-05-11 `FULLINT-TODO-007` 已将 daemon/gateway readiness 投影与 app-binary no-stub 断言回链到本专项：`docs/todos/integration/deliverables/FULLINT-TODO-007-readiness-no-stub断言.md`。
+
+本次回链只冻结 build-tree `Gate-INT-10` 与相关 unit/focused 证据：daemon readiness payload 输出 `runtime_readiness`，gateway `/health/ready` 输出 `runtime_readiness=<label>`，`stub-ready` 不再被视为 bridge reachable，`degraded-ready` 显式保留为 degraded readiness，而不是伪装为 production `default-ready`。
+
+关键语义：
+
+1. daemon composition root 将 `AgentInitResult::readiness_label()` 传入 Access pipeline，并以 `!stub_ready()` 决定 bridge reachability。
+2. gateway health 只在 gateway ready、runtime entry accepted 且非 `stub-ready` 时返回 ready，同时保留 readiness detail。
+3. `DaemonReadinessCommandTest` 与 `DaemonHealthServiceTest` 锁定 `degraded-ready` / `runtime_readiness` 输出。
+4. `DaemonBinaryUnarySmokeTest` 与 `GatewayBinaryUnarySmokeTest` 锁定 app-binary 日志和 readiness 输出不得包含 `stub-ready` / `stub_runtime_path`。
+5. build-tree 普通用户无 `/var/lib/dasall/secrets` 权限时，`FileSecretBackend` 以 backend unavailable / not found 失败结果收敛，daemon CLI run fail-closed 为 `task_not_completed`，进程不崩溃、不回退 stub；gateway submit 保持受控响应。
+
+验证命令：`Build_CMakeTools(buildTargets=["dasall_runtime_agent_init_result_readiness_unit_test","dasall_gate_int_06","dasall_gate_int_10","dasall_file_secret_backend_unit_test"])`、`RunCtest_CMakeTools(tests=["AgentInitResultReadinessTest","FileSecretBackendTest","DaemonHealthServiceTest","DaemonReadinessCommandTest"])` 均已通过。

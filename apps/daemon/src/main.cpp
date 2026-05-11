@@ -458,6 +458,8 @@ int main(int argc, char* argv[]) {
   pipeline_options.diagnostics_service = diagnostics_service;
   pipeline_options.daemon_profile_id = daemon_profile_id;
   pipeline_options.daemon_version = "v1";
+  pipeline_options.daemon_runtime_readiness_label =
+      runtime_init_result.readiness_label();
   pipeline_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {
@@ -467,7 +469,8 @@ int main(int argc, char* argv[]) {
   pipeline_options.daemon_listener_ready =
       entry.bootstrap_config.has_consistent_values();
   pipeline_options.daemon_gateway_ready = true;
-  pipeline_options.daemon_bridge_reachable = runtime_entry_accepted;
+  pipeline_options.daemon_bridge_reachable =
+      runtime_entry_accepted && !runtime_init_result.stub_ready();
 
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));

@@ -21,6 +21,7 @@ DaemonHealthSnapshot DaemonHealthService::snapshot(
   output.readiness.gateway_ready = input.gateway_ready;
   output.readiness.bridge_reachable = input.bridge_reachable;
   output.readiness.diagnostics_enabled = input.diagnostics_enabled;
+  output.readiness.runtime_readiness_label = input.runtime_readiness_label;
   output.readiness.degraded_reasons = input.degraded_reasons;
 
   output.ping.daemon_version = daemon_version_;

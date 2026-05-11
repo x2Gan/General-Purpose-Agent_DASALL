@@ -30,6 +30,9 @@ void test_snapshot_reports_ready_when_all_dependencies_ready() {
   assert_equal(std::string("READY"),
                snapshot.ping.readiness_summary,
                "ping summary should expose READY status text");
+  assert_equal(std::string("default-ready"),
+               snapshot.readiness.runtime_readiness_label,
+               "readiness snapshot should default to default-ready runtime label");
 }
 
 void test_snapshot_reports_not_ready_when_bridge_unreachable() {
@@ -71,6 +74,7 @@ void test_snapshot_reports_degraded_when_reasons_present() {
   input.gateway_ready = true;
   input.bridge_reachable = true;
   input.diagnostics_enabled = true;
+  input.runtime_readiness_label = "degraded-ready";
   input.degraded_reasons = {"metrics_buffer_high"};
 
   const auto snapshot = service.snapshot(input, "req-018-degraded");
@@ -86,6 +90,9 @@ void test_snapshot_reports_degraded_when_reasons_present() {
                "ping summary should keep profile id for operations visibility");
   assert_true(snapshot.readiness.degraded_reasons.size() == 1U,
               "degraded reasons should be preserved in readiness snapshot");
+  assert_equal(std::string("degraded-ready"),
+               snapshot.readiness.runtime_readiness_label,
+               "degraded snapshot should preserve runtime readiness label");
 }
 
 }  // namespace

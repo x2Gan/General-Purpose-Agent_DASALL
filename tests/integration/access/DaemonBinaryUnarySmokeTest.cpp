@@ -213,6 +213,32 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
                     " daemon_log=" + daemon.read_log());
   }
 
+  const auto readiness =
+      dasall::tests::integration::access_support::run_process_capture_split(
+          {
+              DASALL_CLI_BINARY_PATH,
+              "--socket-path",
+              socket_path.string(),
+              "readiness",
+              "--json",
+          },
+          root);
+  assert_equal(0,
+               readiness.exit_code,
+               "binary unary smoke should keep daemon readiness query successful while exposing degraded state; stdout=" +
+                   readiness.stdout_text + " stderr=" + readiness.stderr_text);
+    assert_true(readiness.stdout_text.find("\\\"state\\\":\\\"DEGRADED\\\"") !=
+            std::string::npos,
+              "binary unary smoke should surface daemon degraded readiness in JSON payload; stdout=" +
+                  readiness.stdout_text);
+    assert_true(readiness.stdout_text.find("\\\"runtime_readiness\\\":\\\"degraded-ready\\\"") !=
+            std::string::npos,
+              "binary unary smoke should surface runtime degraded-ready label; stdout=" +
+                  readiness.stdout_text);
+  assert_true(readiness.stdout_text.find("stub-ready") == std::string::npos,
+              "binary unary smoke should reject stub-ready readiness projection; stdout=" +
+                  readiness.stdout_text);
+
   const auto run = dasall::tests::integration::access_support::run_process_capture_split(
       {
           DASALL_CLI_BINARY_PATH,
@@ -223,19 +249,30 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
       },
       root);
 
-  assert_equal(0, run.exit_code,
-               "binary unary smoke should complete cli run through the built daemon main path; output=" +
-         run.stdout_text + run.stderr_text + " artifact_path=" + log_path.string() +
-         " daemon_log=" + daemon.read_log());
-  assert_true(run.stdout_text.find("[dasall-cli] run: completed") != std::string::npos,
-        "binary unary smoke should surface completed cli stdout; stdout=" +
-          run.stdout_text);
-  assert_true(run.stdout_text.find("response=") != std::string::npos,
-        "binary unary smoke should surface a non-empty runtime response on stdout; stdout=" +
-          run.stdout_text);
-  assert_true(run.stderr_text.empty(),
-        "binary unary smoke should keep successful human output off stderr; stderr=" +
-          run.stderr_text);
+  const std::string run_output = run.stdout_text + run.stderr_text;
+  assert_true(run.exit_code == 0 || run.exit_code == 5,
+              "binary unary smoke should reach daemon runtime path and either complete or fail closed on unavailable LLM secret; output=" +
+                  run_output + " artifact_path=" + log_path.string() +
+                  " daemon_log=" + daemon.read_log());
+  assert_true(run_output.find("[dasall-cli] run: completed") != std::string::npos,
+              "binary unary smoke should surface completed daemon envelope; output=" +
+                  run_output);
+  assert_true(run_output.find("response=") != std::string::npos,
+              "binary unary smoke should surface a non-empty runtime response; output=" +
+                  run_output);
+  assert_true(run_output.find("stub-ready") == std::string::npos &&
+                  run_output.find("stub_runtime_path") == std::string::npos,
+              "binary unary smoke should not fall back to stub runtime path; output=" +
+                  run_output);
+  if (run.exit_code == 5) {
+    assert_true(run_output.find("runtime llm request failed") != std::string::npos,
+                "binary unary smoke should fail closed on LLM secret/runtime unavailability; output=" +
+                    run_output);
+  } else {
+    assert_true(run.stderr_text.empty(),
+                "binary unary smoke should keep successful human output off stderr; stderr=" +
+                    run.stderr_text);
+  }
 
   const auto json_run =
     dasall::tests::integration::access_support::run_process_capture_split(
@@ -253,11 +290,11 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
       },
       root);
 
-  assert_equal(0, json_run.exit_code,
-         "binary unary smoke should keep JSON run on exit 0; stdout=" +
-           json_run.stdout_text + " stderr=" + json_run.stderr_text);
+  assert_true(json_run.exit_code == 0 || json_run.exit_code == 5,
+              "binary unary smoke should keep JSON run on success or fail-closed business exit; stdout=" +
+                  json_run.stdout_text + " stderr=" + json_run.stderr_text);
   assert_true(json_run.stderr_text.empty(),
-        "binary unary smoke should keep successful JSON output off stderr; stderr=" +
+        "binary unary smoke should keep JSON output off stderr; stderr=" +
           json_run.stderr_text);
   assert_true(json_run.stdout_text.find("\"disposition\":\"completed\"") !=
           std::string::npos,
@@ -271,6 +308,15 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
           std::string::npos,
         "binary unary smoke should preserve explicit trace_id in JSON output; stdout=" +
           json_run.stdout_text);
+  assert_true(json_run.stdout_text.find("stub-ready") == std::string::npos &&
+                  json_run.stdout_text.find("stub_runtime_path") == std::string::npos,
+              "binary unary smoke JSON should not expose stub runtime path; stdout=" +
+                  json_run.stdout_text);
+  if (json_run.exit_code == 5) {
+    assert_true(json_run.stdout_text.find("task_not_completed") != std::string::npos,
+          "binary unary smoke JSON should fail closed with task_not_completed when LLM secret is unavailable; stdout=" +
+                    json_run.stdout_text);
+  }
 
   const auto daemon_exit_code = daemon.stop();
   const auto daemon_log = daemon.read_log();
@@ -280,6 +326,13 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
   assert_true(daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
               "binary unary smoke should pass through the real daemon main init path; daemon_log=" +
                   daemon_log);
+  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=degraded-ready") !=
+          std::string::npos,
+        "binary unary smoke should log degraded-ready instead of accepted-only readiness; daemon_log=" +
+          daemon_log);
+  assert_true(daemon_log.find("runtime readiness=stub-ready") == std::string::npos,
+        "binary unary smoke should fail if daemon main falls back to stub-ready; daemon_log=" +
+          daemon_log);
 }
 
 }  // namespace

@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #627
+
+- 日期：2026-05-11
+- 阶段：integration/access/runtime
+- 任务：FULLINT-TODO-007 加严 daemon/gateway readiness 投影与 app-binary no-stub 断言
+- 状态：已完成
+
+### 改动
+
+1. `DaemonAccessPipelineOptions`、`DaemonHealthInput`、`DaemonReadinessSnapshot` 增加 runtime readiness label 投影字段；daemon readiness payload 输出 `runtime_readiness`。
+2. daemon app root 将 `AgentInitResult::readiness_label()` 接入 Access pipeline，并以 `!stub_ready()` 决定 bridge reachability；`stub-ready` 不再被视为可用 bridge。
+3. gateway health handler 支持 readiness detail；`/health/ready` 输出 `runtime_readiness=<label>`，且只在 gateway ready、runtime accepted、非 `stub-ready` 时 ready。
+4. `DaemonHealthServiceTest`、`DaemonReadinessCommandTest`、`DaemonBinaryUnarySmokeTest`、`GatewayBinaryUnarySmokeTest` 增加 `degraded-ready` 与 no-stub 断言。
+5. Gate-INT-10 app-binary 验证暴露真实 blocker：live LLM manager 在普通用户 build-tree 环境访问 `/var/lib/dasall/secrets` permission denied，daemon 进程曾因 `std::filesystem::filesystem_error` 退出、gateway submit 返回 500。
+6. 修复 blocker：`FileSecretBackend` 的 root/path probing 改为 `std::error_code` 路径，权限受限时返回 backend unavailable / not found 失败结果；daemon run fail-closed 为 `task_not_completed`，进程不崩溃、不回退 stub。
+7. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-007-readiness-no-stub断言.md`，并回写全量集成 TODO 与 Access 专项 TODO。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_gate_int_10"])`
+   - 结果：通过；expected tests discoverability、`gate-int-10` / `release-preflight-gate` label discoverability 与 acceptance passed。
+2. `Build_CMakeTools(buildTargets=["dasall_runtime_agent_init_result_readiness_unit_test","dasall_gate_int_06","dasall_gate_int_10","dasall_file_secret_backend_unit_test"])`
+   - 结果：通过；Gate-INT-06 的 `RuntimeRequiredOptionalPortsIntegrationTest`、`RuntimeProfileCompatibilityTest`、`LLMSubsystemSmokeIntegrationTest` 均通过；Gate-INT-10 acceptance 通过。
+3. `RunCtest_CMakeTools(tests=["AgentInitResultReadinessTest","FileSecretBackendTest","DaemonHealthServiceTest","DaemonReadinessCommandTest"])`
+   - 结果：全部通过。
+
+### 结果
+
+1. `FULLINT-BLK-003` 已解阻：对外 readiness 不再由 `accepted` 偷换，`default-ready` / `degraded-ready` / `stub-ready` 分层可观测。
+2. `Gate-INT-10` app-binary smoke 已锁定 no-stub：binary 日志、readiness 输出与 CLI/HTTP 结果不得出现 `stub-ready` / `stub_runtime_path`。
+3. build-tree 无 `/var/lib/dasall/secrets` 权限时，当前结论是 fail-closed 而非 release success：daemon CLI run 可返回 `task_not_completed`，但 daemon/gateway 进程稳定且不回退 `agent.dataset` stub；installed-package / qemu / release runner 仍需独立证据。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-008`，补 gateway shutdown exit-code 断言。
+
 ## 记录 #626
 
 - 日期：2026-05-11

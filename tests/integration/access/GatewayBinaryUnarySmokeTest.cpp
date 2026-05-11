@@ -199,7 +199,7 @@ class ScopedGatewayProcess {
 
   for (int attempt = 0; attempt < 100; ++attempt) {
     if (auto response = client.Get("/health/ready")) {
-      if (response->status == 200 && response->body == "READY") {
+      if (response->status == 200 && response->body.starts_with("READY")) {
         return true;
       }
     }
@@ -231,9 +231,33 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
                     " gateway_log=" + gateway.read_log());
   }
 
+  {
+    httplib::Client readiness_client("127.0.0.1", port);
+    readiness_client.set_connection_timeout(1, 0);
+    readiness_client.set_read_timeout(1, 0);
+    const auto readiness = readiness_client.Get("/health/ready");
+    assert_true(static_cast<bool>(readiness),
+                "gateway binary smoke should receive a readiness response; gateway_log=" +
+                    gateway.read_log() + " artifact_path=" + log_path.string());
+    assert_equal(200,
+                 readiness->status,
+                 "gateway binary smoke should keep degraded runtime path health-ready but explicitly labeled; body=" +
+                     readiness->body + " gateway_log=" + gateway.read_log() +
+                     " artifact_path=" + log_path.string());
+    assert_true(readiness->body.find("runtime_readiness=degraded-ready") != std::string::npos,
+                "gateway readiness body should expose degraded runtime readiness; body=" +
+                    readiness->body + " gateway_log=" + gateway.read_log() +
+                    " artifact_path=" + log_path.string());
+    assert_true(readiness->body.find("stub-ready") == std::string::npos,
+                "gateway readiness body should not expose stub-ready on app-binary path; body=" +
+                    readiness->body + " gateway_log=" + gateway.read_log() +
+                    " artifact_path=" + log_path.string());
+  }
+
   httplib::Client client("127.0.0.1", port);
   client.set_connection_timeout(1, 0);
   client.set_read_timeout(1, 0);
+
   const auto response = client.Post(
       "/v1/submit",
       R"({"packet_id":"gateway-binary-smoke","entry_type":"gateway","peer_ref":"jwt:user://tenant-a/alice","payload":"binary smoke","trace_id":"gateway-binary-smoke-trace","session_hint":"gateway-binary-smoke-session"})",
@@ -247,25 +271,34 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
                "gateway binary smoke should complete POST /v1/submit through the built gateway main path; body=" +
                    response->body + " gateway_log=" + gateway.read_log() +
                    " artifact_path=" + log_path.string());
-      assert_true(response->body.find("\"result_id\":\"") != std::string::npos,
-            "gateway binary smoke should surface a result_id from runtime backend handoff; body=" +
-              response->body + " gateway_log=" + gateway.read_log() +
-              " artifact_path=" + log_path.string());
-      assert_true(response->body.find("\"status\":\"200\"") != std::string::npos,
-            "gateway binary smoke should preserve protocol status hint 200 in the HTTP envelope; body=" +
-              response->body + " gateway_log=" + gateway.read_log() +
-              " artifact_path=" + log_path.string());
-    assert_true(response->body.find("\"payload\":\"") != std::string::npos,
-          "gateway binary smoke should surface non-empty runtime payload in the HTTP envelope; body=" +
-            response->body + " gateway_log=" + gateway.read_log() +
-            " artifact_path=" + log_path.string());
+  assert_true(response->body.find("\"result_id\":\"") != std::string::npos,
+              "gateway binary smoke should surface a result_id from runtime backend handoff; body=" +
+                  response->body + " gateway_log=" + gateway.read_log() +
+                  " artifact_path=" + log_path.string());
+  assert_true(response->body.find("\"status\":\"200\"") != std::string::npos,
+              "gateway binary smoke should preserve protocol status hint 200 in the HTTP envelope; body=" +
+                  response->body + " gateway_log=" + gateway.read_log() +
+                  " artifact_path=" + log_path.string());
+  assert_true(response->body.find("\"payload\":\"") != std::string::npos,
+              "gateway binary smoke should surface non-empty runtime payload in the HTTP envelope; body=" +
+                  response->body + " gateway_log=" + gateway.read_log() +
+                  " artifact_path=" + log_path.string());
 
-    const auto gateway_exit_code = gateway.stop();
-    const auto gateway_log = gateway.read_log();
-    assert_true(gateway_log.find("[dasall_gateway] runtime readiness=") != std::string::npos,
-          "gateway binary smoke should pass through the real gateway main init path; gateway_exit_code=" +
-            std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
-            " gateway_log=" + gateway_log);
+  const auto gateway_exit_code = gateway.stop();
+  const auto gateway_log = gateway.read_log();
+  assert_true(gateway_log.find("[dasall_gateway] runtime readiness=") != std::string::npos,
+              "gateway binary smoke should pass through the real gateway main init path; gateway_exit_code=" +
+                  std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
+                  " gateway_log=" + gateway_log);
+  assert_true(gateway_log.find("[dasall_gateway] runtime readiness=degraded-ready") !=
+                  std::string::npos,
+              "gateway binary smoke should log degraded-ready instead of accepted-only readiness; gateway_exit_code=" +
+                  std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
+                  " gateway_log=" + gateway_log);
+  assert_true(gateway_log.find("runtime readiness=stub-ready") == std::string::npos,
+              "gateway binary smoke should fail if gateway main falls back to stub-ready; gateway_exit_code=" +
+                  std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
+                  " gateway_log=" + gateway_log);
 }
 
 }  // namespace

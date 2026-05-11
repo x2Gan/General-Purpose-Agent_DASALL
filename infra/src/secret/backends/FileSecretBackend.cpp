@@ -85,6 +85,18 @@ struct ParsedMaterializedSecret {
       std::string(kFileSecretBackendSourceRef));
 }
 
+[[nodiscard]] bool path_is_regular_file_noexcept(
+    const std::filesystem::path& path) {
+  std::error_code error;
+  const bool exists = std::filesystem::exists(path, error);
+  if (error || !exists) {
+    return false;
+  }
+
+  const bool regular = std::filesystem::is_regular_file(path, error);
+  return !error && regular;
+}
+
 [[nodiscard]] SecretLifecycleResult make_lifecycle_failure(std::string secret_name,
                                                            SecretErrorCode error_code,
                                                            std::string message,
@@ -354,8 +366,7 @@ SecretBackendFetchResult FileSecretBackend::fetch_record(const SecretQuery& quer
   }
 
   const auto secret_path = resolve_secret_path(query.secret_name);
-  if (!secret_path.has_value() || !std::filesystem::exists(*secret_path) ||
-      !std::filesystem::is_regular_file(*secret_path)) {
+  if (!secret_path.has_value() || !path_is_regular_file_noexcept(*secret_path)) {
     last_error_code_ = map_secret_error_code(SecretErrorCode::NotFound).result_code;
     return make_fetch_failure(SecretErrorCode::NotFound,
                               "file backend could not find the requested secret path under root_dir",
@@ -404,8 +415,7 @@ SecretMaterializationResult FileSecretBackend::materialize_record(
   }
 
   const auto secret_path = resolve_secret_path(record.descriptor.secret_name);
-  if (!secret_path.has_value() || !std::filesystem::exists(*secret_path) ||
-      !std::filesystem::is_regular_file(*secret_path)) {
+  if (!secret_path.has_value() || !path_is_regular_file_noexcept(*secret_path)) {
     last_error_code_ = map_secret_error_code(SecretErrorCode::NotFound).result_code;
     return make_materialize_failure(SecretErrorCode::NotFound,
                                     "file backend cannot materialize a missing secret path",
@@ -546,8 +556,14 @@ std::optional<std::filesystem::path> FileSecretBackend::resolve_secret_path(
 }
 
 bool FileSecretBackend::root_available() const {
-  return std::filesystem::exists(options_.root_dir) &&
-         std::filesystem::is_directory(options_.root_dir);
+  std::error_code error;
+  const bool exists = std::filesystem::exists(options_.root_dir, error);
+  if (error || !exists) {
+    return false;
+  }
+
+  const bool directory = std::filesystem::is_directory(options_.root_dir, error);
+  return !error && directory;
 }
 
 }  // namespace dasall::infra::secret

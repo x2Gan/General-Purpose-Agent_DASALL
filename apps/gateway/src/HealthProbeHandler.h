@@ -5,7 +5,7 @@
 /// 职责：
 ///   - 提供 /health/live、/health/ready、/health/startup 三个探针端点的纯逻辑处理
 ///   - 不经过 Admission pipeline，不依赖外部服务
-///   - 返回二值状态，不暴露内部状态细节
+///   - 默认返回二值状态；app binary 可追加 runtime readiness 语义标签
 ///
 /// 设计约束（Access 详设 6.20）：
 ///   - liveness 检查不依赖外部服务，仅检查进程内存活状态
@@ -16,6 +16,8 @@
 
 #include <string>
 #include <map>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace dasall::access::gateway {
@@ -45,6 +47,11 @@ class HealthProbeHandler {
   /// 置位"已就绪"状态（至少一个 adapter 已注册 + RuntimeBridge 可达）
   void set_ready(bool ready) { ready_ = ready; }
 
+  /// 追加对外 readiness 语义标签，如 runtime_readiness=degraded-ready。
+  void set_readiness_detail(std::string detail) {
+    readiness_detail_ = std::move(detail);
+  }
+
   /// Liveness probe：进程存活即 200 OK
   [[nodiscard]] ProbeResult handle_live() const;
 
@@ -57,6 +64,7 @@ class HealthProbeHandler {
  private:
   bool started_{false};
   bool ready_{false};
+  std::optional<std::string> readiness_detail_;
 };
 
 /// 将安全头写入 headers map（供 main.cpp 合并到 httplib::Response）
