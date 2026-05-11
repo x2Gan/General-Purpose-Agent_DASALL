@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #631
+
+- 日期：2026-05-11
+- 阶段：integration/access/runtime/memory
+- 任务：FULLINT-TODO-011 验证 async / cancel / replay / recovery 因果链
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/full_business_chain/FullIntAsyncRecoveryCausalityTest.cpp`：用真实 `AsyncTaskRegistry`、`ResultReplayCache`、`RuntimeBridge`、`RecoveryManager`、`CancellationToken` 与 SQLite memory manager 串起同一 `request_id/session_id/trace_id` 的 async receipt、ownership、replay、cancel forwarding、recovery retry/degrade 与 memory writeback 连续性。
+2. 新增 `tests/integration/full_business_chain/CMakeLists.txt`，注册 `dasall_fullint_011_async_recovery_causality` 与 CTest `FullIntAsyncRecoveryCausalityTest`，标签为 `integration;full-business-chain;fullint-011`。
+3. 更新 `tests/integration/CMakeLists.txt` 与 `tests/CMakeLists.txt`：新增 full business chain integration 子目录，纳入全业务链 discoverability。
+4. 更新 `tests/integration/agent_loop/RuntimeResumeIntegrationTest.cpp`：保持 waiting 入口走 runtime-local stub path，并在 resume 前注入 memory fixture，使旧 resume 测试按当前 `prepare_resume_context` 要求刷新 context。
+5. 新增并回填 `docs/todos/integration/deliverables/FULLINT-TODO-011-async-recovery因果链证据包.md`，记录 Design Gate、Build 结果、安装态 `run/status/cancel` 真实返回。
+6. 回写 `docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md` 与 `docs/ssot/BusinessChainIntegrationMatrix.md`：`FULLINT-TODO-011` 标记 Done，BC-04/BC-10/BC-15 更新为 build-tree L3 + installed L4 partial。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_fullint_011_async_recovery_causality"])`
+   - 结果：通过；新增 fullint-011 target 成功构建。
+2. `RunCtest_CMakeTools(tests=["FullIntAsyncRecoveryCausalityTest"])`
+   - 结果：通过；1/1 passed。
+3. `Build_CMakeTools(buildTargets=["dasall_runtime_resume_integration_test","dasall_fullint_011_async_recovery_causality"])`
+   - 结果：通过；runtime resume fixture 与新增 cross-chain test 均可构建。
+4. `RunCtest_CMakeTools(tests=["RuntimeResumeIntegrationTest","FullIntAsyncRecoveryCausalityTest","AccessAsyncReceiptQueryCancelIntegrationTest","RuntimeRecoveryContextIntegrationTest","MemoryWritebackIntegrationTest","MemoryFailureInjectionTest"])`
+   - 结果：通过；6 条 focused / cross-chain 测试均 passed。
+5. `Build_CMakeTools(buildTargets=["dasall_gate_int_08","dasall_full_business_chain_discoverability"])`
+   - 结果：通过；Gate-INT-08 acceptance passed，`FullIntAsyncRecoveryCausalityTest` 已进入 full business chain discoverability。
+6. `sudo -n dasall run '{"prompt":"FULLINT-011 async package probe"}' --async --request-id fullint-011-installed-1778487483 --trace-id trace-fullint-011-installed-1778487483 --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=completed`、`receipt_ref=null`、`exit_code=0`，并含 `llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`。
+7. `sudo -n dasall status --request-id fullint-011-installed-1778487483 --json --timeout-ms 120000`
+   - 结果：当前安装态 CLI 返回 `invalid arguments`，记录为 package parser 边界。
+8. `sudo -n dasall status --receipt receipt:fullint-011-missing --ownership-token token-missing --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=rejected`、`reason=status_missing`、`access_error_domain=receipt`、`exit_code=5`。
+9. `sudo -n dasall cancel --receipt receipt:fullint-011-missing --ownership-token token-missing --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=rejected`、`reason=cancel_missing`、`access_error_domain=receipt`、`exit_code=5`。
+
+### 结果
+
+1. `FULLINT-TODO-011` 已完成：build-tree 现在有一条独立 full-business-chain 测试证明 async receipt/cancel/replay/recovery/writeback 的同锚点因果连续性，不再只是组合既有 focused test 结论。
+2. Runtime resume focused test 的 fixture 漂移已修正；waiting 入口仍验证 stub waiting path，resume 前按当前实现要求注入 memory fixture，避免把 readiness 组合要求误读成 resume 语义失败。
+3. installed package 当前保持 L4 partial：`run --async` 真实返回 completed/no receipt，missing receipt status/cancel fail-closed，`status --request-id` 仍是 CLI parser 边界，不能外推为 installed async receipt ready。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-012` 前，应继续保持“新增独立 cross-chain 证据优先、focused tests 只作回归支撑”的口径。
+2. installed async receipt 正向路径、`status --request-id` parser 边界和 package lifecycle state path 仍应留给 `FULLINT-TODO-013` / `FULLINT-TODO-015` 处理。
+
 ## 记录 #630
 
 - 日期：2026-05-11

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "AgentFacade.h"
 #include "IMemoryManager.h"
@@ -66,7 +67,6 @@ int main() {
     std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
 
     auto dependency_set = make_waiting_dependency_set();
-    dependency_set->memory_manager = std::make_shared<ReadyResumeMemoryManager>();
 
     const auto init_result = agent->init(make_init_request(
         "rt-028-resume",
@@ -90,17 +90,21 @@ int main() {
                 "waiting integration path should expose the waiting response text");
 
     const auto initial_checkpoint_ref = *waiting_result.checkpoint_ref;
+    dependency_set->memory_manager = std::make_shared<ReadyResumeMemoryManager>();
     const auto resumed_result = agent->resume(
         make_resume_request("session-028",
                             initial_checkpoint_ref,
                             "resume-028",
                             "user clarification received",
-                std::string(),
+                            std::string(),
                             "trace-resume-028"));
+    const auto resumed_response_text =
+        resumed_result.response_text.value_or(std::string("<missing response_text>"));
 
     assert_true(resumed_result.status.has_value() &&
                     *resumed_result.status == AgentResultStatus::Completed,
-                "resume integration path should converge back to completed");
+                "resume integration path should converge back to completed: " +
+                    resumed_response_text);
     assert_true(resumed_result.task_completed == true,
                 "resume integration path should mark task_completed=true");
     assert_true(resumed_result.checkpoint_ref.has_value() &&
@@ -114,7 +118,6 @@ int main() {
 
     std::unique_ptr<IAgent> rejecting_agent = std::make_unique<AgentFacade>();
     auto rejecting_dependency_set = make_waiting_dependency_set();
-    rejecting_dependency_set->memory_manager = std::make_shared<ReadyResumeMemoryManager>();
     const auto rejecting_init_result = rejecting_agent->init(make_init_request(
       "rt-028-resume-reject",
       "desktop_full",
@@ -132,6 +135,7 @@ int main() {
             !rejecting_waiting_result.checkpoint_ref->empty(),
           "negative resume integration path should expose a resumable checkpoint");
 
+    rejecting_dependency_set->memory_manager = std::make_shared<ReadyResumeMemoryManager>();
     const auto rejected_resume_result = rejecting_agent->resume(
       make_resume_request("session-028-reject",
                 *rejecting_waiting_result.checkpoint_ref,

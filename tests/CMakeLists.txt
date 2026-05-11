@@ -183,6 +183,7 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES
   dasall_knowledge_retrieval_smoke_integration_test
   MemoryContextAssembleIntegrationTest
   MemoryWritebackIntegrationTest
+  FullIntAsyncRecoveryCausalityTest
   ToolServicesSmokeIntegrationTest
   CapabilityServicesSmokeIntegrationTest
   LLMSubsystemSmokeIntegrationTest
@@ -232,6 +233,7 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS
   dasall_knowledge_retrieval_smoke_integration_test
   dasall_memory_context_assemble_integration_test
   dasall_memory_writeback_integration_test
+  dasall_fullint_011_async_recovery_causality
   dasall_tool_services_smoke_integration_test
   dasall_services_smoke_integration_test
   dasall_llm_smoke_integration_test
