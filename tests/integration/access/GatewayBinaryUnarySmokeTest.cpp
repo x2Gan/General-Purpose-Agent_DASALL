@@ -286,6 +286,10 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
 
   const auto gateway_exit_code = gateway.stop();
   const auto gateway_log = gateway.read_log();
+  assert_equal(0,
+               gateway_exit_code,
+               "gateway binary smoke should stop the gateway process cleanly after successful submit; artifact_path=" +
+                   log_path.string() + " gateway_log=" + gateway_log);
   assert_true(gateway_log.find("[dasall_gateway] runtime readiness=") != std::string::npos,
               "gateway binary smoke should pass through the real gateway main init path; gateway_exit_code=" +
                   std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +

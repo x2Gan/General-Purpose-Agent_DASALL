@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #628
+
+- 日期：2026-05-11
+- 阶段：integration/access
+- 任务：FULLINT-TODO-008 补 gateway shutdown exit-code 断言
+- 状态：已完成
+
+### 改动
+
+1. 更新 `tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`：在 successful submit 后，对 `gateway.stop()` 返回的 `gateway_exit_code` 增加显式 `assert_equal(0, gateway_exit_code, ...)`。
+2. 失败消息保留 `artifact_path` 与 `gateway_log`，确保 shutdown 非零时能直接定位 app-binary 日志。
+3. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-008-gateway-shutdown-exit-code断言.md`，并回写全量集成专项 TODO。
+4. `FULLINT-BLK-005` 标记为部分解阻：shutdown exit-code 已覆盖，startup failure stage 仍归 `FULLINT-TODO-009`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_gateway_binary_unary_smoke_integration_test","dasall_gate_int_10"])`
+   - 结果：通过；gateway binary unary smoke 与 Gate-INT-10 acceptance 均通过。
+2. `RunCtest_CMakeTools(tests=["GatewayBinaryUnarySmokeTest"])`
+   - 结果：通过。
+
+### 结果
+
+1. `GatewayBinaryUnarySmokeTest` 现在会在 gateway shutdown 非 0 时直接失败，而不是只把 exit code 写入后续日志断言。
+2. BC-02 的 shutdown exit-code 缺口已完成；release-preflight 与 packaging_preflight 命令关系仍由 `FULLINT-TODO-010` 梳理。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-009`，扩展 startup diagnostics failure stage 覆盖。
+
 ## 记录 #627
 
 - 日期：2026-05-11
