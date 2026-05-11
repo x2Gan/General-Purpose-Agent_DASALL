@@ -20,6 +20,14 @@
 
 补充约束：`dasall_gate_int_10` 只承载 build-tree app-binary smoke（daemon/gateway 真实 binary + socket path discoverability），`dasall_packaging_preflight_tests` 继续承载 package 相关 contract / daemon preflight 切片；两者都通过 `release-preflight-gate` label 接入 discoverability verifier，但彼此不互相替代。
 
+单目标结果词汇固定如下，避免 CI / release note 误写：
+
+| 单独通过的目标 | 允许结论 | 禁止外推 |
+|---|---|---|
+| `dasall_gate_int_10` | app-binary smoke slice passed；daemon/gateway binary smoke 与 startup diagnostics 当前通过 | packaging preflight passed、installed-package ready、qemu passed |
+| `dasall_packaging_preflight_tests` | package preflight slice passed；package metadata / contract / daemon preflight 切片当前通过 | gateway binary ready、daemon/CLI binary ready、Gate-INT-10 passed、build-tree release-preflight complete |
+| 两者同轮均通过 | build-tree `release-preflight` complete | installed-package ready、qemu passed、production release-ready |
+
 `validate_gate_int_10_installed_package_qemu.sh` 是二者之间的串联入口，不改变 Gate owner：脚本在同一轮内依次执行 `dasall_gate_int_10`、`dasall_packaging_preflight_tests`、`dpkg-buildpackage -us -uc -b`、`validate_autopkgtest_metadata.py` 与 qemu `autopkgtest`。它证明 installed-package gate 只在 build-tree `release-preflight` 通过后运行，但 qemu / `autopkgtest` 结果仍归 PKG-GATE-07，不回写为 `Gate-INT-10` 本身。
 
 ## 3. installed-package 功能矩阵

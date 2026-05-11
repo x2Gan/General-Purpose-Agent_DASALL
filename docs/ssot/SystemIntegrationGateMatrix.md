@@ -125,6 +125,9 @@ release 证据固定拆成以下四层，避免继续用 focused integration 绿
 3. `Gate-INT-08`、`Gate-INT-09` 或局部 Access / runtime focused smoke 的绿态，不得覆盖 `packaging_preflight`、daemon binary smoke 或 gateway binary smoke 的红灯。
 4. installed-package gate 继续以 packaging 专项中的 rootless package validation、qemu / `autopkgtest` 等命令为权威，不归 `Gate-INT-10` 吞并。
 5. 当需要在同一轮 release 验证中证明二者顺序关系时，正式串联入口为 `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>`：该入口必须先通过 `dasall_gate_int_10` 与 `dasall_packaging_preflight_tests`，再重新构包并执行 qemu `autopkgtest`。该串联只表达 handoff / ordering，不改变 `Gate-INT-10` 与 PKG-GATE-07 的 owner 边界。
+6. 单跑 `dasall_packaging_preflight_tests` 只允许写为 package preflight slice passed；不得写为 gateway binary ready、daemon/CLI binary ready、Gate-INT-10 passed 或 build-tree release-preflight complete。
+7. 单跑 `dasall_gate_int_10` 只允许写为 app-binary smoke slice passed；不得写为 packaging preflight passed 或 installed-package ready。
+8. 只有 `dasall_gate_int_10` 与 `dasall_packaging_preflight_tests` 在同一证据包中都通过，才能写为 build-tree `release-preflight` complete；若任一目标未跑或失败，必须记录为 partial / blocked。
 
 ## 5. worklog 与 TODO 回写责任
 

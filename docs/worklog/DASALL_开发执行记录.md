@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+## 记录 #630
+
+- 日期：2026-05-11
+- 阶段：integration/packaging
+- 任务：FULLINT-TODO-010 梳理 packaging preflight 与 Gate-INT-10 命令关系
+- 状态：已完成
+
+### 改动
+
+1. 更新 `docs/ssot/SystemIntegrationGateMatrix.md`：在 `Gate-INT-10` / `release-preflight` fallback rule 中新增单目标结果词汇，明确单跑 `dasall_packaging_preflight_tests` 只代表 package preflight slice passed。
+2. 更新 `scripts/packaging/README.md`：新增单目标结果词汇表，拆分 `dasall_gate_int_10`、`dasall_packaging_preflight_tests`、两者同轮均通过与 qemu 串联脚本的允许结论和禁止外推。
+3. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-010-packaging-preflight与Gate-INT-10命令关系.md`，冻结 build-tree release-preflight 的命令 owner 和 completion 条件。
+4. 回写全量集成专项 TODO：`FULLINT-TODO-010` 标记 Done，完成判定更新为两个 target 同轮均通过才可写为 build-tree `release-preflight` complete。
+
+### 验证
+
+1. `rg -n "dasall_gate_int_10|dasall_packaging_preflight_tests|gateway binary|daemon/CLI|release-preflight" docs/ssot/SystemIntegrationGateMatrix.md scripts/packaging/README.md docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md`
+   - 结果：通过；SystemIntegrationGateMatrix、packaging README 与本专项 TODO 均可检索到目标命令和禁止外推说明。
+2. `git diff --check`
+   - 结果：通过。
+
+### 结果
+
+1. 单跑 `dasall_packaging_preflight_tests` 不再能被误写为 gateway binary ready、daemon/CLI binary ready、Gate-INT-10 passed 或 build-tree release-preflight complete。
+2. 单跑 `dasall_gate_int_10` 也不再能被误写为 packaging preflight passed、installed-package ready 或 qemu passed。
+3. build-tree `release-preflight` complete 的最小表述条件固定为 `dasall_gate_int_10` 与 `dasall_packaging_preflight_tests` 同轮均通过。
+
+### 下一步
+
+1. `FULLINT-TODO-005 ~ 010` 已完成并逐项推送；后续进入 011 以后任务前，应重新按前置任务和阻塞项选择下一颗原子任务。
+
 ## 记录 #629
 
 - 日期：2026-05-11
