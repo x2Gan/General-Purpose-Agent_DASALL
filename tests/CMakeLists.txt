@@ -129,6 +129,103 @@ add_custom_target(dasall_gate_int_10
   DEPENDS ${DASALL_GATE_INT_10_EXECUTABLE_TARGETS}
 )
 
+set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES
+  CliDaemonSubmitIntegrationTest
+  HttpGatewaySubmitIntegrationTest
+  AccessGatewayPipelineIntegrationTest
+  AccessPolicyBackendUnavailableIntegrationTest
+  AccessAsyncReceiptQueryCancelIntegrationTest
+  AccessHealthReadinessIntegrationTest
+  AccessProfileCompatibilityTest
+  DaemonPingIntegrationTest
+  CliDaemonSocketPathIntegrationTest
+  DaemonBinaryUnarySmokeTest
+  GatewayBinaryUnarySmokeTest
+  GatewayBinaryMissingBackendRegressionTest
+  DaemonStartupDiagnosticsTest
+  GatewayStartupDiagnosticsTest
+  DaemonRuntimeLiveDependencyCompositionTest
+  GatewayRuntimeLiveDependencyCompositionTest
+  RuntimeUnaryIntegrationTest
+  CognitionRuntimeIntegrationTest
+  RuntimeRequiredOptionalPortsIntegrationTest
+  RuntimeProfileCompatibilityTest
+  RuntimeRecoveryContextIntegrationTest
+  RuntimeCheckpointReplayRegressionTest
+  RuntimeEvidenceProjectionIntegrationTest
+  KnowledgeEvidencePreservationTest
+  dasall_knowledge_retrieval_smoke_integration_test
+  MemoryContextAssembleIntegrationTest
+  MemoryWritebackIntegrationTest
+  ToolServicesSmokeIntegrationTest
+  CapabilityServicesSmokeIntegrationTest
+  LLMSubsystemSmokeIntegrationTest
+  ProfilesBuildRuntimeIntegrationTest
+  InfraDiagnosticsSmokeTest
+  InfraDiagnosticsIntegrationTest
+  CliJsonOutputContractTest
+  CliExitCodeContractTest
+)
+
+string(JOIN "," DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXPECTED_TESTS_CSV
+  ${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES}
+)
+
+set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES
+  "BC-17:multi_agent_coordinator_runtime_gate_missing"
+)
+
+string(JOIN "," DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES_CSV
+  ${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES}
+)
+
+set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS
+  dasall_access_daemon_submit_composition_integration_test
+  dasall_access_gateway_submit_composition_integration_test
+  dasall_access_observability_main_chain_integration_test
+  dasall_access_daemon_receipt_flow_integration_test
+  dasall_access_health_readiness_integration_test
+  dasall_access_daemon_profile_compatibility_integration_test
+  dasall_access_daemon_ping_integration_test
+  dasall_access_cli_daemon_socket_path_integration_test
+  dasall_access_daemon_binary_unary_smoke_integration_test
+  dasall_access_gateway_binary_unary_smoke_integration_test_bin
+  dasall_access_gateway_binary_missing_backend_regression_test
+  dasall_access_daemon_startup_diagnostics_integration_test
+  dasall_access_gateway_startup_diagnostics_integration_test
+  dasall_access_daemon_runtime_live_dependency_composition_integration_test
+  dasall_access_gateway_runtime_live_dependency_composition_integration_test
+  dasall_runtime_unary_integration_test
+  dasall_cognition_runtime_integration_test
+  dasall_runtime_required_optional_ports_integration_test
+  dasall_runtime_profile_compatibility_integration_test
+  dasall_runtime_recovery_context_integration_test
+  dasall_runtime_checkpoint_replay_regression_test
+  dasall_runtime_evidence_projection_integration_test
+  dasall_knowledge_evidence_preservation_integration_test
+  dasall_knowledge_retrieval_smoke_integration_test
+  dasall_memory_context_assemble_integration_test
+  dasall_memory_writeback_integration_test
+  dasall_tool_services_smoke_integration_test
+  dasall_services_smoke_integration_test
+  dasall_llm_smoke_integration_test
+  dasall_profiles_build_runtime_integration_test
+  dasall_infra_diagnostics_smoke_integration_test
+  dasall_infra_diagnostics_integration_test
+  dasall-cli_json_output_contract_test
+  dasall-cli_exit_code_contract_test
+)
+
+add_custom_target(dasall_full_business_chain_discoverability
+  COMMAND ${CMAKE_COMMAND}
+    -DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}
+    -DBUILD_DIR=${CMAKE_BINARY_DIR}
+    -DEXPECTED_TESTS_CSV=${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXPECTED_TESTS_CSV}
+    -DEXPECTED_MISSING_GATES_CSV=${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES_CSV}
+    -P ${CMAKE_SOURCE_DIR}/tests/VerifySystemGateDiscoverability.cmake
+  DEPENDS ${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS}
+)
+
 set(DASALL_SYSTEM_GATE_ACCEPTANCE_TEST_NAMES
   ${DASALL_SYSTEM_GATE_ACCEPTANCE_CONTRACT_TEST_NAMES}
   BuiltinExecutorLaneResultCodeTest

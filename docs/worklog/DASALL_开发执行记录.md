@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #625
+
+- 日期：2026-05-11
+- 阶段：integration/discoverability
+- 任务：FULLINT-TODO-005 新增全量业务链 discoverability verifier 清单
+- 状态：已完成
+
+### 改动
+
+1. 扩展 `tests/VerifySystemGateDiscoverability.cmake`：新增 `EXPECTED_MISSING_GATES_CSV`，对 `BC-xx:<marker>` 形式的 explicit missing gate marker 做机器校验，避免用不存在的测试伪装通过。
+2. 更新 `tests/CMakeLists.txt`：新增 `dasall_full_business_chain_discoverability` target，覆盖 Access ingress、runtime/cognition/memory/knowledge/llm/tools/services/profiles/infra、Gate-INT-10 app-binary 与 release-preflight 代表 CTest 名称。
+3. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-005-全量业务链discoverability清单.md`：记录 BC-01~BC-17 的代表 CTest / missing marker、当前 installed-package 控制面结果和不外推边界。
+4. 回写专项 TODO：`FULLINT-TODO-005` 状态更新为 Done，并把 `BC-17:multi_agent_coordinator_runtime_gate_missing` 作为当前唯一显式 missing gate。
+
+### 验证
+
+1. `command -v dasall`、`dpkg-query -W -f='${binary:Package} ${Version} ${Status}\n' 'dasall*'`、`systemctl is-active/is-enabled dasall-daemon.service`
+   - 结果：`/usr/bin/dasall` 存在；`dasall`、`dasall-cli`、`dasall-common`、`dasall-daemon` 均为 `0.1.0-1 install ok installed`；daemon 为 `active/enabled`。
+2. `sudo -n dasall ping --json` 与 `sudo -n dasall readiness --json`
+   - 结果：均返回 `disposition=completed`；ping payload `readiness=READY`，readiness payload 含 `state=READY`、`lifecycle_ready=true`、`listener_ready=true`、`gateway_ready=true`、`bridge_reachable=true`。
+3. `sudo -n dasall status receipt:missing token local://uid/0 --json` 与 `sudo -n dasall cancel receipt:missing token local://uid/0 --json`
+   - 结果：均为预期负路径，exit `5`，分别返回 `status_missing` / `cancel_missing`。
+4. `sudo -n dasall diag health --json`
+   - 结果：预期门控，exit `4`，返回 `diag_disabled`。
+5. `Build_CMakeTools(buildTargets=["dasall_full_business_chain_discoverability"])`
+   - 结果：通过，新增 target 完成 build-tree `ctest -N` discoverability 校验。
+6. `rg -n "dasall_full_business_chain_discoverability|BC-17:multi_agent|FULLINT-TODO-005|status_missing|diag_disabled" tests docs/todos/integration docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过，代码 target、missing marker、交付物、TODO 与 worklog 均可检索。
+
+### 结果
+
+1. `FULLINT-TODO-005` 已完成；BC-01~BC-16 均有当前 CTest 可发现代表入口，BC-17 明确标记为 missing gate。
+2. 新增 discoverability target 只证明 build-tree 测试入口存在，不吞并 `Gate-INT-10` app-binary acceptance、installed-package local smoke 或 release runner qemu owner。
+3. 本轮安装态证据只支持当前机器 rootful local control-plane 与负路径门控，不宣称 production installed-package release-ready。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-006`，扩展 Access ingress 业务链验证矩阵，按 CLI/HTTP/async/security/readiness 拆分现有真实入口与缺口。
+
 ## 记录 #624
 
 - 日期：2026-05-11

@@ -18,6 +18,10 @@ if(NOT DEFINED DISCOVERABILITY_LABELS_CSV)
   set(DISCOVERABILITY_LABELS_CSV "")
 endif()
 
+if(NOT DEFINED EXPECTED_MISSING_GATES_CSV)
+  set(EXPECTED_MISSING_GATES_CSV "")
+endif()
+
 string(REPLACE "," ";" expected_tests "${EXPECTED_TESTS_CSV}")
 string(JOIN "|" test_regex_body ${expected_tests})
 set(TEST_REGEX "^(${test_regex_body})$")
@@ -46,6 +50,18 @@ endif()
 verify_expected_tests("${ctest_output}" "ctest -N -R ${TEST_REGEX}")
 
 message(STATUS "Verified system gate discoverability for ${EXPECTED_TESTS_CSV}")
+
+if(NOT EXPECTED_MISSING_GATES_CSV STREQUAL "")
+  string(REPLACE "," ";" expected_missing_gates "${EXPECTED_MISSING_GATES_CSV}")
+
+  foreach(missing_gate IN LISTS expected_missing_gates)
+    if(NOT missing_gate MATCHES "^BC-[0-9][0-9]:[A-Za-z0-9_.-]+$")
+      message(FATAL_ERROR "Invalid explicit missing gate marker: ${missing_gate}")
+    endif()
+  endforeach()
+
+  message(STATUS "Verified explicit missing gate markers for ${EXPECTED_MISSING_GATES_CSV}")
+endif()
 
 if(NOT DISCOVERABILITY_LABELS_CSV STREQUAL "")
   string(REPLACE "," ";" discoverability_labels "${DISCOVERABILITY_LABELS_CSV}")
