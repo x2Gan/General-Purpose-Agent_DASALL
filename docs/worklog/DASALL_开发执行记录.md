@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #629
+
+- 日期：2026-05-11
+- 阶段：integration/access/infra
+- 任务：FULLINT-TODO-009 扩展 startup diagnostics failure stage 覆盖
+- 状态：已完成
+
+### 改动
+
+1. `apps/daemon/src/main.cpp` 新增显式 diagnostics forced-stage fixture：`DASALL_DAEMON_STARTUP_DIAGNOSTICS_FORCE_STAGE` 可稳定触发 `runtime-dependency-composition`、`runtime-init`、`access-gateway-init` startup failure 输出。
+2. `apps/gateway/src/main.cpp` 新增 `DASALL_GATEWAY_STARTUP_DIAGNOSTICS_FORCE_STAGE` forced-stage fixture，覆盖 gateway runtime composition/init/AccessGateway init failure stage。
+3. daemon app root 在 `DaemonBootstrap::run()` 返回失败时输出统一 startup diagnostics：`stage=listener-bind`、`error_code=DAEMON_E_LISTENER_BIND_FAILED`、`trace_id=startup:daemon:listener-bind`。
+4. `DaemonStartupDiagnosticsTest` 增加 forced runtime stage 覆盖和 active Unix socket listener-bind 真实冲突 fixture，并统一断言 prefix、stage、error_code、trace_id、assets/profiles/socket 字段。
+5. `GatewayStartupDiagnosticsTest` 增加 forced runtime stage 覆盖和 occupied TCP port listen 真实冲突 fixture，并统一断言 prefix、stage、error_code、trace_id、assets/profiles/listen_port 字段。
+6. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-009-startup-diagnostics-stage覆盖.md`，并回写全量集成专项 TODO；`FULLINT-BLK-005` 标记已解阻。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_startup_diagnostics_test","dasall_access_gateway_startup_diagnostics_test"])`
+   - 结果：通过；两个 startup diagnostics test target 均构建并执行通过。
+2. `RunCtest_CMakeTools(tests=["DaemonStartupDiagnosticsTest","GatewayStartupDiagnosticsTest"])`
+   - 结果：通过；daemon/gateway startup diagnostics CTest 均 passed。
+3. `get_errors` on changed C++ files
+   - 结果：无 VS Code diagnostics。
+
+### 结果
+
+1. `FULLINT-TODO-009` 已完成；startup diagnostics 覆盖不再停留在 daemon config-validation 和 gateway runtime-policy-load。
+2. runtime dependency composition、runtime init、AccessGateway init 均可通过真实 app binary 的显式 fixture 稳定触发并断言日志字段。
+3. gateway listen 与 daemon listener-bind 使用真实资源冲突验证；daemon listener bind 失败已接入统一 startup failure reporter。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-010`，梳理 packaging preflight 与 Gate-INT-10 命令关系，避免单跑 `dasall_packaging_preflight_tests` 被误读为 gateway binary ready。
+
 ## 记录 #628
 
 - 日期：2026-05-11

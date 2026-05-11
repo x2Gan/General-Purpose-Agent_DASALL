@@ -19,6 +19,7 @@
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <cstdlib>
 #include <csignal>
 #include <iostream>
 #include <map>
@@ -49,6 +50,8 @@ namespace {
 
 constexpr char kDefaultGatewayProfileId[] = "desktop_full";
 constexpr int kDefaultGatewayListenPort = 8080;
+constexpr char kGatewayStartupDiagnosticsForceStageEnv[] =
+  "DASALL_GATEWAY_STARTUP_DIAGNOSTICS_FORCE_STAGE";
 
 struct AgentInitRequestBuildResult {
   dasall::runtime::AgentInitRequest request;
@@ -92,6 +95,11 @@ void emit_gateway_startup_failure(const GatewayStartupFailureContext& context,
     std::cerr << " detail=" << detail;
   }
   std::cerr << "\n";
+}
+
+[[nodiscard]] bool gateway_startup_stage_forced(std::string_view stage) {
+  const char* forced_stage = std::getenv(kGatewayStartupDiagnosticsForceStageEnv);
+  return forced_stage != nullptr && stage == forced_stage;
 }
 
 [[nodiscard]] ParsedGatewayArgs parse_gateway_args(int argc, char* argv[]) {
@@ -333,6 +341,13 @@ int main(int argc, char* argv[]) {
   }
 
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+  if (gateway_startup_stage_forced("runtime-dependency-composition")) {
+    emit_gateway_startup_failure(failure_context,
+                                 "runtime-dependency-composition",
+                                 "GATEWAY_E_RUNTIME_COMPOSITION_FAILED",
+                                 "forced startup diagnostics failure");
+    return 1;
+  }
   const auto runtime_init_request =
       build_gateway_agent_init_request(runtime_snapshot.snapshot);
   if (!runtime_init_request.ok()) {
@@ -340,6 +355,14 @@ int main(int argc, char* argv[]) {
                                  "runtime-dependency-composition",
                                  "GATEWAY_E_RUNTIME_COMPOSITION_FAILED",
                                  runtime_init_request.error);
+    return 1;
+  }
+  if (gateway_startup_stage_forced("runtime-init")) {
+    emit_gateway_startup_failure(failure_context,
+                                 "runtime-init",
+                                 "GATEWAY_E_RUNTIME_INIT_FAILED",
+                                 "forced startup diagnostics failure",
+                                 "forced-runtime-init-diagnostics");
     return 1;
   }
   const auto runtime_init_result = runtime_facade->init(
@@ -374,6 +397,13 @@ int main(int argc, char* argv[]) {
 
   auto gateway = dasall::access::create_gateway_access_gateway(
       std::move(gateway_options));
+  if (gateway_startup_stage_forced("access-gateway-init")) {
+    emit_gateway_startup_failure(failure_context,
+                                 "access-gateway-init",
+                                 "GATEWAY_E_ACCESS_GATEWAY_INIT_FAILED",
+                                 "forced startup diagnostics failure");
+    return 1;
+  }
   if (!gateway->init()) {
     emit_gateway_startup_failure(failure_context,
                                  "access-gateway-init",

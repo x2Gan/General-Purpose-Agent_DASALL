@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -43,6 +44,9 @@
 #include "linux/UnixIpcProvider.h"
 
 namespace {
+
+constexpr char kDaemonStartupDiagnosticsForceStageEnv[] =
+  "DASALL_DAEMON_STARTUP_DIAGNOSTICS_FORCE_STAGE";
 
 struct AgentInitRequestBuildResult {
   dasall::runtime::AgentInitRequest request;
@@ -95,6 +99,11 @@ void emit_daemon_startup_failure(const DaemonStartupFailureContext& context,
     std::cerr << " detail=" << detail;
   }
   std::cerr << "\n";
+}
+
+[[nodiscard]] bool daemon_startup_stage_forced(std::string_view stage) {
+  const char* forced_stage = std::getenv(kDaemonStartupDiagnosticsForceStageEnv);
+  return forced_stage != nullptr && stage == forced_stage;
 }
 
 [[nodiscard]] dasall::apps::daemon::DaemonSocketPolicy
@@ -398,12 +407,27 @@ int main(int argc, char* argv[]) {
 
   // 2. 通过 daemon pipeline factory 构造完整 submit pipeline。
   auto runtime_facade = std::make_shared<dasall::runtime::AgentFacade>();
+  if (daemon_startup_stage_forced("runtime-dependency-composition")) {
+    emit_daemon_startup_failure(failure_context,
+                                "runtime-dependency-composition",
+                                "DAEMON_E_RUNTIME_COMPOSITION_FAILED",
+                                "forced startup diagnostics failure");
+    return 1;
+  }
   const auto runtime_init_request = build_daemon_agent_init_request(entry);
   if (!runtime_init_request.ok()) {
     emit_daemon_startup_failure(failure_context,
                                 "runtime-dependency-composition",
                                 "DAEMON_E_RUNTIME_COMPOSITION_FAILED",
                                 runtime_init_request.error);
+    return 1;
+  }
+  if (daemon_startup_stage_forced("runtime-init")) {
+    emit_daemon_startup_failure(failure_context,
+                                "runtime-init",
+                                "DAEMON_E_RUNTIME_INIT_FAILED",
+                                "forced startup diagnostics failure",
+                                "forced-runtime-init-diagnostics");
     return 1;
   }
   const auto runtime_init_result = runtime_facade->init(
@@ -474,6 +498,13 @@ int main(int argc, char* argv[]) {
 
   auto gateway = dasall::access::create_daemon_access_gateway(
       std::move(pipeline_options));
+  if (daemon_startup_stage_forced("access-gateway-init")) {
+    emit_daemon_startup_failure(failure_context,
+                                "access-gateway-init",
+                                "DAEMON_E_ACCESS_GATEWAY_INIT_FAILED",
+                                "forced startup diagnostics failure");
+    return 1;
+  }
   if (!gateway->init()) {
     emit_daemon_startup_failure(failure_context,
                                 "access-gateway-init",
@@ -584,6 +615,13 @@ int main(int argc, char* argv[]) {
   }
 
   daemon_thread.join();
+
+  if (!run_ok) {
+    emit_daemon_startup_failure(failure_context,
+                                "listener-bind",
+                                "DAEMON_E_LISTENER_BIND_FAILED",
+                                "daemon listener bind or run failed");
+  }
 
   std::cout << "[dasall-daemon] stopped (run=" << (run_ok ? "ok" : "failed") << ")\n";
   return run_ok ? 0 : 1;
