@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+## 记录 #623
+
+- 日期：2026-05-11
+- 阶段：integration/runtime
+- 任务：FULLINT-TODO-003 建立 runtime/cognition/memory/llm 主链证据包
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-003-runtime-cognition-memory-llm主链证据包.md`：基于当轮 installed-package `dasall run` 与当前源码调用链，冻结 runtime / memory / llm / cognition 的实证层级和不可外推边界。
+2. 将 `FULLINT-TODO-003` 回写为 Done：installed `run` 已证明 runtime -> memory context -> production `ILLMManager` -> checkpoint / session persistence -> `AgentResult` 不是空响应，也没有 `agent.dataset` fallback。
+3. 明确记录一个重要边界：当前 production LLM direct path 不会在该 installed `run` 中执行 cognition `decide()`，因此 cognition decision / reflection / belief writeback 只记为 L2/source evidence，不能被本轮 L4 installed run 冒充为已证明。
+
+### 验证
+
+1. `sudo -n dasall run '{"prompt":"请用LLM回答：3+4等于几？只给出简短答案。"}' --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=completed`、`task_completed=true`、`llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`，响应正文为 `7`，未出现 `agent.dataset`。
+2. `sudo -n journalctl -u dasall-daemon.service -n 80 --no-pager`
+   - 结果：完成；最近 daemon 启动日志多次出现 `[dasall-daemon] runtime readiness=degraded-ready`，因此本轮不宣称 `default-ready`。
+3. `rg -n "has_production_llm_direct_path|prepare_context|llm_manager->generate|agent.dataset fallback is disabled|build_and_save_checkpoint|cognition_engine->decide|write_back" runtime/src/AgentOrchestrator.cpp apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp cognition/include/ICognitionEngine.h docs/todos/integration/deliverables/FULLINT-TODO-003-runtime-cognition-memory-llm主链证据包.md`
+   - 结果：通过；共发现 35 行源码 / 交付物锚点。
+4. `rg -n "llm.origin=deepseek-prod/deepseek-reasoner|degraded-ready|cognition L4 未证明|agent.dataset|FULLINT-TODO-003|task_completed=true" docs/todos/integration/deliverables/FULLINT-TODO-003-runtime-cognition-memory-llm主链证据包.md docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md`
+   - 结果：通过；LLM origin、degraded-ready、cognition L4 未证明与 dataset guard 均可检索。
+
+### 结果
+
+1. `FULLINT-TODO-003` 已完成；主链证据包可以证明当前 installed unary 主功能不是空响应，且成功语义来自 DeepSeek-compatible provider origin。
+2. memory context assembly 在源码中是 production LLM direct path 的前置 guard：context failure/degraded 会导致 runtime 失败，不会静默降级为成功。
+3. cognition 在当前证据包中保持 honesty boundary：composition root 与 non-direct path seam 存在，但 installed L4 run 未证明 cognition decision 已执行。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-004`，校准 profile enablement 与 multi_agent 声明边界，避免 profile 中 `multi_agent=true` 被误读为 runtime-ready。
+2. 后续 `FULLINT-TODO-012` / `016` 需要补 cognition/tool/service 非 direct path 的更强 positive evidence。
+
+### 风险
+
+1. DeepSeek provider、网络和 secret 注入仍是外部运行前提；本轮只记录 origin 和 outcome，不记录 secret 值。
+2. daemon readiness 当前仍是 `degraded-ready` 日志信号，需由 `FULLINT-TODO-007` 继续加严对外 readiness 投影。
+
 ## 记录 #622
 
 - 日期：2026-05-11
