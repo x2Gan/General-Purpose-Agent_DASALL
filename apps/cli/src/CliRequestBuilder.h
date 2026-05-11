@@ -50,7 +50,8 @@ class CliRequestBuilder {
         return std::nullopt;
       }
 
-      frame.payload = std::string("command_name=") + *command.diag_command;
+      frame.payload = std::string("command_name=") +
+                      canonical_diag_command(*command.diag_command);
       return frame;
     }
 
@@ -94,6 +95,20 @@ class CliRequestBuilder {
     return output_mode == CliOutputMode::Json
                ? dasall::access::daemon::DaemonOutputMode::Json
                : dasall::access::daemon::DaemonOutputMode::Human;
+  }
+
+  [[nodiscard]] static std::string canonical_diag_command(
+      const std::string_view command_name) {
+    if (command_name == "health") {
+      return "health.snapshot";
+    }
+    if (command_name == "queue") {
+      return "queue.stats";
+    }
+    if (command_name == "threads") {
+      return "thread.dump";
+    }
+    return std::string(command_name);
   }
 
   [[nodiscard]] static std::optional<dasall::access::daemon::UdsRequestFrame>

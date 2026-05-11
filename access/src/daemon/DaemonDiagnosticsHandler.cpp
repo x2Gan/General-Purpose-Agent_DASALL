@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "agent/AgentResult.h"
 #include "diagnostics/DiagnosticsTypes.h"
 
 namespace dasall::access::daemon {
@@ -65,7 +66,7 @@ RuntimeDispatchResult DaemonDiagnosticsHandler::handle_diag(
   dasall::infra::diagnostics::DiagnosticsCommand command;
   command.command_id = std::string(request_id);
   command.command_name = std::string(command_name);
-  command.request_scope = "daemon.local_control_plane";
+  command.request_scope = "runtime";
   command.timeout_ms = 1000U;
   command.actor_ref = std::string(actor_ref);
 
@@ -84,6 +85,11 @@ RuntimeDispatchResult DaemonDiagnosticsHandler::handle_diag(
   envelope.protocol_kind = "ipc_uds";
   envelope.protocol_status_hint = "200";
   envelope.payload = execute_result.snapshot.summary;
+  dasall::contracts::AgentResult agent_result;
+  agent_result.request_id = std::string(request_id);
+  agent_result.response_text = execute_result.snapshot.summary;
+  agent_result.task_completed = true;
+  envelope.agent_result = std::move(agent_result);
   result.publish_envelope = std::move(envelope);
   return result;
 }

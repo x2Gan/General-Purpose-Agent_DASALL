@@ -9,4 +9,5 @@ target_link_libraries(dasall_test_support
   INTERFACE
     dasall_build_options
     dasall_contracts
+    dasall_llm
 )

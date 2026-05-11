@@ -70,7 +70,7 @@ degrade_policy:
 	allow_budget_degrade: true
 timeout_policy:
 	llm:
-		timeout_ms: 3500
+		timeout_ms: 30000
 		retry_budget: 2
 		circuit_breaker_threshold: 5
 	tool:

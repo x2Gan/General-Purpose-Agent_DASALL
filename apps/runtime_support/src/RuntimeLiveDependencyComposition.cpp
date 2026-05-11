@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "ICognitionEngine.h"
+#include "LLMProductionFactory.h"
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
@@ -47,10 +48,20 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
   dependency_set->memory_manager = std::move(memory_manager);
 
+  auto llm_result = llm::create_production_llm_manager(*policy_snapshot);
+  if (!llm_result.ok()) {
+    return RuntimeDependencyCompositionResult{
+                .dependency_set = nullptr,
+        .error = std::string("llm manager composition failed for ") +
+                 std::string(composition_owner) + ": " + llm_result.error,
+    };
+  }
+  dependency_set->llm_manager = std::move(llm_result.manager);
+
   auto cognition_engine = cognition::create_cognition_engine(
       *policy_snapshot,
       cognition::CognitionRuntimeDependencies{
-          .llm_manager = nullptr,
+          .llm_manager = dependency_set->llm_manager,
           .policy_snapshot = policy_snapshot,
       });
   if (!cognition_engine) {
@@ -66,7 +77,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   auto response_builder = cognition::create_response_builder(
       *policy_snapshot,
       cognition::CognitionRuntimeDependencies{
-          .llm_manager = nullptr,
+        .llm_manager = dependency_set->llm_manager,
           .policy_snapshot = policy_snapshot,
       });
   if (!response_builder) {
@@ -79,7 +90,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
 
-  dependency_set->tool_manager = std::make_shared<tools::ToolManager>();
+  dependency_set->tool_manager = std::make_shared<dasall::tools::ToolManager>();
   dependency_set->visible_tools = {"agent.dataset"};
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +

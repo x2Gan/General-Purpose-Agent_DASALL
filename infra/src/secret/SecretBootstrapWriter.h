@@ -24,6 +24,7 @@ struct SecretBootstrapWriterOptions {
   std::string rotation_policy_ref = "rotation/manual";
   std::string owner_ref = "llm-config";
   std::string initial_version = "v1";
+  std::string runtime_reader_group = "dasall";
 };
 
 struct SecretBootstrapRequest {

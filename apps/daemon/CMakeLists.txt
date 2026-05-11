@@ -36,6 +36,7 @@ target_link_libraries(dasall-daemon
 target_include_directories(dasall-daemon
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/infra/src
 )
 
 set_target_properties(dasall-daemon PROPERTIES

@@ -39,6 +39,7 @@
 #include "RuntimeLiveDependencyComposition.h"
 #include "agent/AgentResult.h"
 #include "config/InstallLayout.h"
+#include "diagnostics/DiagnosticsServiceFacade.h"
 #include "linux/UnixIpcProvider.h"
 
 namespace {
@@ -94,6 +95,15 @@ void emit_daemon_startup_failure(const DaemonStartupFailureContext& context,
     std::cerr << " detail=" << detail;
   }
   std::cerr << "\n";
+}
+
+[[nodiscard]] dasall::apps::daemon::DaemonSocketPolicy
+resolve_validate_only_socket_policy() {
+  if (::geteuid() != 0) {
+    return dasall::apps::daemon::DaemonSocketPolicy::for_current_process();
+  }
+
+  return dasall::apps::daemon::DaemonSocketPolicy::for_daemon_service_account_or_current_process();
 }
 
 [[nodiscard]] ParsedDaemonArgs parse_daemon_args(int argc, char* argv[]) {
@@ -349,10 +359,13 @@ int main(int argc, char* argv[]) {
   failure_context.socket_path = entry.bootstrap_config.socket_path;
 
   const dasall::apps::daemon::DaemonConfigValidator config_validator;
+    const auto validate_only_socket_policy = resolve_validate_only_socket_policy();
   const auto validation = parsed.validate_only
                               ? config_validator.validate_only(
                                     entry.bootstrap_config,
-                                    entry.conflicts)
+              entry.conflicts,
+              {},
+              validate_only_socket_policy)
                               : config_validator.validate_config(
                                     entry.bootstrap_config);
   if (!validation.ok()) {
@@ -415,15 +428,34 @@ int main(int argc, char* argv[]) {
                                             : runtime_init_result.resolved_profile_id;
   auto diagnostics_enabled_state =
       std::make_shared<std::atomic_bool>(entry.bootstrap_config.diag_enabled);
+  auto diagnostics_service =
+      std::make_shared<dasall::infra::diagnostics::DiagnosticsServiceFacade>(
+          dasall::infra::diagnostics::DiagnosticsServiceFacadeOptions{
+              .safe_mode_failure_threshold = 5,
+              .snapshot_retention_days = 7,
+              .snapshot_max_count = 500,
+              .profile_id = daemon_profile_id,
+              .metrics_provider = nullptr,
+              .audit_logger = nullptr,
+          });
+  if (!diagnostics_service->start()) {
+    emit_daemon_startup_failure(failure_context,
+                                "diagnostics-service-start",
+                                "DAEMON_E_DIAGNOSTICS_START_FAILED",
+                                "DiagnosticsServiceFacade start returned false");
+    return 1;
+  }
 
   dasall::access::DaemonAccessPipelineOptions pipeline_options;
   pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
   pipeline_options.publish_view.max_payload_bytes =
       static_cast<int>(entry.bootstrap_config.max_payload_bytes);
   pipeline_options.auth_view.trusted_local_subjects = {
-      "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid()))};
+      "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid())),
+      "local://uid/0"};
   pipeline_options.daemon_diagnostics_enabled = diagnostics_enabled_state->load();
   pipeline_options.daemon_diagnostics_enabled_state = diagnostics_enabled_state;
+  pipeline_options.diagnostics_service = diagnostics_service;
   pipeline_options.daemon_profile_id = daemon_profile_id;
   pipeline_options.daemon_version = "v1";
   pipeline_options.runtime_dispatch_backend =

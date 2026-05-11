@@ -1,0 +1,26 @@
+schema_version: "1"
+min_loader_version: "1"
+package_id: responder.default
+prompt_id: responder
+version: "2026.05.10"
+stage: response
+eval_status: stable
+release_scope: stable
+output_schema_ref: schema://responder/default
+trusted_source: profiles
+default_release: true
+source_uri: prompt://responder/default
+language: zh-cn
+model_family: openai_compatible
+task_types:
+  - answer
+template_slots:
+  - user_goal
+  - constraints
+tool_hints: []
+tags:
+  - responder
+  - baseline
+profile_tags:
+  - desktop_full
+  - cloud_full

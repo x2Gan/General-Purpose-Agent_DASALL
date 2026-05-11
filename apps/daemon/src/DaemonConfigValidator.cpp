@@ -41,9 +41,10 @@ DaemonConfigValidationResult DaemonConfigValidationResult::failure(
 }
 
 DaemonConfigValidationResult DaemonConfigValidator::validate_config(
-    const DaemonBootstrapConfig& config) const {
+    const DaemonBootstrapConfig& config,
+    const DaemonSocketPolicy& socket_policy) const {
   const auto socket_path_validation =
-      validate_socket_path(config.socket_path, DaemonSocketPolicy::for_current_process());
+      validate_socket_path(config.socket_path, socket_policy);
   if (!socket_path_validation.ok()) {
     return DaemonConfigValidationResult::failure(
         DaemonConfigValidationError::InvalidSocketPath,
@@ -105,8 +106,9 @@ DaemonConfigValidationResult DaemonConfigValidator::validate_reload_keys(
 DaemonConfigValidationResult DaemonConfigValidator::validate_only(
     const DaemonBootstrapConfig& config,
     const std::vector<DaemonConfigConflict>& conflicts,
-    const std::vector<std::string>& reload_keys) const {
-  const auto config_validation = validate_config(config);
+    const std::vector<std::string>& reload_keys,
+    const DaemonSocketPolicy& socket_policy) const {
+  const auto config_validation = validate_config(config, socket_policy);
   if (!config_validation.ok()) {
     return config_validation;
   }

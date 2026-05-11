@@ -11,8 +11,10 @@
 #include "CognitionTypes.h"
 #include "ICognitionEngine.h"
 #include "IKnowledgeService.h"
+#include "ILLMManager.h"
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
+#include "LLMGenerateRequest.h"
 #include "RuntimeDependencySet.h"
 #include "IToolManager.h"
 #include "agent/GoalContract.h"
@@ -77,6 +79,90 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   }
 
   return 60000U;
+}
+
+[[nodiscard]] bool has_production_llm_direct_path(
+    const OrchestratorComposition& composition) {
+  if (composition.dependency_set == nullptr ||
+      composition.dependency_set->llm_manager == nullptr ||
+      composition.policy_snapshot == nullptr) {
+    return false;
+  }
+
+  const auto& evidence = composition.dependency_set->external_evidence;
+  return std::any_of(evidence.begin(), evidence.end(), [](const auto& value) {
+    return value.find("required-live-baseline") != std::string::npos;
+  });
+}
+
+[[nodiscard]] std::optional<std::string> model_route_for_stage(
+    const OrchestratorComposition& composition,
+    const std::string& stage) {
+  if (composition.policy_snapshot == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto& stage_routes = composition.policy_snapshot->model_profile().stage_routes;
+  const auto route_it = stage_routes.find(stage);
+  if (route_it == stage_routes.end() || route_it->second.route.empty()) {
+    return std::nullopt;
+  }
+
+  return route_it->second.route;
+}
+
+[[nodiscard]] llm::LLMGenerateRequest make_runtime_response_llm_request(
+    const contracts::AgentRequest& request,
+    const OrchestratorComposition& composition,
+    const contracts::RuntimeBudget& runtime_budget) {
+  contracts::LLMRequest llm_request;
+  llm_request.request_id = request.request_id;
+  llm_request.llm_call_id = std::string("llm-call-") +
+                            request.request_id.value_or(std::string{"req-live-unary"});
+  llm_request.model_route = model_route_for_stage(composition, "response").value_or(
+      model_route_for_stage(composition, "planning").value_or(std::string{"cloud.general"}));
+  llm_request.request_mode = contracts::LLMRequestMode::Unary;
+  llm_request.messages = std::vector<std::string>{request.user_input.value_or(std::string{})};
+  llm_request.created_at = request.created_at.value_or(current_time_ms());
+  llm_request.output_schema_ref = "schema://responder/default";
+  llm_request.response_format = "text";
+  llm_request.runtime_budget = runtime_budget;
+  llm_request.max_output_tokens = budget_value(runtime_budget.max_tokens, 1024U);
+  llm_request.timeout_ms = composition.policy_snapshot != nullptr
+                               ? static_cast<std::uint32_t>(
+                                     composition.policy_snapshot->timeout_policy().llm.timeout_ms)
+                               : 30000U;
+  llm_request.tags = std::vector<std::string>{
+      "runtime",
+      "production",
+      std::string("user_goal=") + request.user_input.value_or(std::string{}),
+      std::string("constraints=") +
+          "installed package run must answer through ILLMManager and must not use agent.dataset",
+  };
+
+  return llm::LLMGenerateRequest{
+      .stage = "response",
+      .task_type = "answer",
+      .request = std::move(llm_request),
+      .prompt_release_id_override = std::nullopt,
+      .selection_hint = nullptr,
+  };
+}
+
+[[nodiscard]] std::string make_llm_response_text(
+    const llm::LLMManagerResult& result) {
+  const auto& response = *result.response;
+  std::string response_text = "llm.origin=" + result.resolved_route;
+  if (response.model_name.has_value() && !response.model_name->empty()) {
+    response_text += " model=" + *response.model_name;
+  }
+  if (response.finish_reason.has_value() && !response.finish_reason->empty()) {
+    response_text += " finish_reason=" + *response.finish_reason;
+  }
+  response_text += "\n";
+  response_text += response.content_payload.value_or(
+      response.refusal_reason.value_or(std::string{"LLM returned an empty response"}));
+  return response_text;
 }
 
 void append_unique_string(std::vector<std::string>& destination,
@@ -1556,6 +1642,250 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
              load_result.created_new_session
                  ? "session created, budget initialized, preflight admitted"
                  : "session loaded, budget initialized, preflight admitted");
+
+  if (has_live_unary_ports(composition_) && has_production_llm_direct_path(composition_)) {
+    auto context_result = composition_.dependency_set->memory_manager->prepare_context(
+        make_memory_context_request(normalized_request, goal_id, composition_, runtime_budget));
+    if (context_result.result_code.has_value() || context_result.degraded) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 fsm->current_state(),
+                 fsm->current_state(),
+                 true,
+                 context_result.result_code.has_value()
+                     ? "memory context assembly returned a failure result before llm dispatch"
+                     : "memory context assembly returned a degraded packet before llm dispatch");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime llm path could not assemble a non-degraded context packet",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             context_assembly_failure_detail(
+                                 context_result,
+                                 "runtime llm path requires a complete context packet"),
+                             orchestrator_stage_name(OrchestratorStage::MainLoop),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const RuntimeState main_loop_before = fsm->current_state();
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::MainLoop),
+            TransitionStep{.to_state = RuntimeState::Reasoning,
+                           .reason = "context assembled before production llm response",
+                           .guards = {TransitionGuardFact::ContextAssembled}});
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime orchestrator could not enter llm reasoning",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto llm_result = composition_.dependency_set->llm_manager->generate(
+        make_runtime_response_llm_request(normalized_request, composition_, runtime_budget));
+    if (!llm_result.response.has_value() || llm_result.resolved_route.empty()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 "production llm request failed; agent.dataset fallback is disabled");
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime llm request failed; agent.dataset fallback is disabled",
+          llm_result.error.has_value()
+              ? llm_result.error
+              : std::optional<contracts::ErrorInfo>(make_runtime_error(
+                    kRuntimeOrchestratorLiveUnaryFailedCode,
+                    "llm manager returned no response",
+                    orchestrator_stage_name(OrchestratorStage::MainLoop),
+                    RuntimeState::Failed)),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    StateTransitionOutcome responding_outcome;
+    if (const auto failure = apply_step(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::MainLoop),
+            TransitionStep{.to_state = RuntimeState::Responding,
+                           .reason = "production llm response materialized",
+                           .guards = {TransitionGuardFact::DirectResponseReady}},
+            &responding_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime orchestrator could not enter llm responding",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::MainLoop,
+               main_loop_before,
+               fsm->current_state(),
+               true,
+               "production run completed through ILLMManager response path");
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::ToolRound,
+               fsm->current_state(),
+               fsm->current_state(),
+               false,
+               "skipped because production llm response path does not use agent.dataset");
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::RecoveryRound,
+               fsm->current_state(),
+               fsm->current_state(),
+               false,
+               "skipped because production llm response path succeeded");
+
+    const RuntimeState terminalize_before = fsm->current_state();
+    StateTransitionOutcome completed_outcome;
+    if (const auto failure = apply_steps(
+            *fsm,
+            orchestrator_stage_name(OrchestratorStage::Terminalize),
+            {{.to_state = RuntimeState::Auditing,
+              .reason = "llm response materialized",
+              .guards = {TransitionGuardFact::ResponseMaterialized}},
+             {.to_state = RuntimeState::Persisting,
+              .reason = "llm response audit committed",
+              .guards = {TransitionGuardFact::AuditCommitted}},
+             {.to_state = RuntimeState::Completed,
+              .reason = "llm response persisted",
+              .guards = {TransitionGuardFact::PersistenceConfirmed}}},
+            &completed_outcome);
+        failure.has_value()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::Terminalize,
+                 terminalize_before,
+                 failure->state_before,
+                 true,
+                 failure->detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime orchestrator failed during llm terminalize",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             failure->detail,
+                             failure->stage,
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto final_checkpoint = build_and_save_checkpoint(
+        checkpoint_manager_,
+        CheckpointBuildRequest{
+            .transition_outcome = completed_outcome,
+            .checkpoint_id = std::string("chk-llm-complete-") + *normalized_request.request_id,
+            .step_id = std::string("llm-complete-") + *normalized_request.request_id,
+            .working_memory_snapshot = std::string("wm:llm:") + *normalized_request.request_id,
+            .pending_action = std::string(),
+            .request_id = normalized_request.request_id,
+            .goal_id = goal_id,
+            .belief_state_ref = composition_.default_belief_state_ref,
+            .retry_count = 0,
+            .created_at_ms = normalized_request.created_at,
+            .runtime_budget_snapshot = budget_controller_.snapshot(),
+            .tags = {"path=llm", "origin=ILLMManager"},
+        });
+    if (!final_checkpoint.saved()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::Terminalize,
+                 terminalize_before,
+                 fsm->current_state(),
+                 true,
+                 final_checkpoint.detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorSkeletonInternalErrorCode,
+          "runtime orchestrator failed to save llm completion checkpoint",
+          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                             final_checkpoint.detail,
+                             orchestrator_stage_name(OrchestratorStage::Terminalize),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    const auto persisted_session = persist_terminal_session(
+        session_manager_,
+        session_snapshot,
+        RuntimeState::Completed,
+        final_checkpoint.checkpoint->checkpoint_id,
+        composition_.default_audit_summary + " llm response");
+    if (persisted_session.updated()) {
+      run_result.effective_session = persisted_session.snapshot;
+    }
+    run_result.checkpoint = final_checkpoint.checkpoint;
+    run_result.final_state = fsm->current_state();
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::Terminalize,
+               terminalize_before,
+               fsm->current_state(),
+               true,
+               "llm response audited, checkpointed, and persisted");
+    run_result.agent_result = make_result(
+        normalized_request,
+        run_result.final_state,
+        contracts::AgentResultStatus::Completed,
+        kRuntimeOrchestratorSkeletonCompletedCode,
+        make_llm_response_text(llm_result),
+        std::nullopt,
+        final_checkpoint.checkpoint->checkpoint_id,
+        goal_id);
+    return run_result;
+  }
 
   if (has_live_unary_ports(composition_)) {
     auto context_result = composition_.dependency_set->memory_manager->prepare_context(

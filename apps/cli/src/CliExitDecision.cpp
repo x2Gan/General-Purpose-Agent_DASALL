@@ -98,6 +98,14 @@ CliExitDecision decide_exit_for_response(const DaemonClientResponse& response,
                                      ? classify_access_error_ref(*response.error_ref)
                                      : std::nullopt;
 
+  if (response.is_completed() && response.task_completed.has_value() &&
+      !*response.task_completed && !response.error_ref.has_value()) {
+    return make_decision(kCliExitBusinessFailure,
+                         CliOutcomeFamily::BusinessFailure,
+                         json_mode,
+                         build_diagnostic_hint(response, "task_not_completed"));
+  }
+
   if ((response.is_completed() || response.is_accepted_async()) &&
       !response.error_ref.has_value()) {
     return make_decision(kCliExitSuccess,

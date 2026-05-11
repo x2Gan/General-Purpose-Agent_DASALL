@@ -12,6 +12,18 @@ VALIDATE_JSON="${CONFIG_SMOKE_DIR}/validate.json"
 PLAN_JSON="${CONFIG_SMOKE_DIR}/plan.json"
 APPLY_JSON="${CONFIG_SMOKE_DIR}/apply.json"
 SHOW_AFTER_JSON="${CONFIG_SMOKE_DIR}/show-after.json"
+LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+
+assert_json_contains() {
+  json_payload=$1
+  expected=$2
+  label=$3
+
+  printf '%s\n' "${json_payload}" | grep -Fq "${expected}" || {
+    printf '%s: expected JSON fragment not found: %s\n' "${label}" "${expected}" >&2
+    exit 1
+  }
+}
 
 cleanup() {
   systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
@@ -40,10 +52,14 @@ wait_for_daemon_ready() {
 
 trap cleanup EXIT
 
-cat <<'EOF' > "${IMPORT_FILE}"
-deepseek-file-secret
-EOF
-chmod 600 "${IMPORT_FILE}"
+SECRET_ALREADY_CONFIGURED=0
+if [ -f "${LLM_SECRET_PATH}" ]; then
+  SECRET_ALREADY_CONFIGURED=1
+else
+  : "${DASALL_DEEPSEEK_API_KEY_FILE:?missing DASALL_DEEPSEEK_API_KEY_FILE or ${LLM_SECRET_PATH}}"
+  cp "${DASALL_DEEPSEEK_API_KEY_FILE}" "${IMPORT_FILE}"
+  chmod 600 "${IMPORT_FILE}"
+fi
 
 cat <<EOF > "${DESIRED_FILE}"
 schema_version: dasall.config.apply.v1
@@ -59,12 +75,17 @@ service:
   enable_on_boot: true
 operator_access:
   add_users: []
+EOF
+
+if [ "${SECRET_ALREADY_CONFIGURED}" -eq 0 ]; then
+cat <<EOF >> "${DESIRED_FILE}"
 secrets:
   refs:
     - ref: secret://llm/providers/deepseek-prod
       source: file:${IMPORT_FILE}
       auth_profile_name: primary
 EOF
+fi
 chmod 600 "${DESIRED_FILE}"
 
 /usr/sbin/dasall-daemon \
@@ -80,17 +101,23 @@ grep -Fq '"schema_version":"dasall.config.validate.v1"' "${VALIDATE_JSON}"
 
 dasall config plan --from-file "${DESIRED_FILE}" --json > "${PLAN_JSON}"
 grep -Fq '"schema_version":"dasall.config.plan.v1"' "${PLAN_JSON}"
-grep -Fq '"ref":"secret://llm/providers/deepseek-prod"' "${PLAN_JSON}"
+if [ "${SECRET_ALREADY_CONFIGURED}" -eq 0 ]; then
+  grep -Fq '"ref":"secret://llm/providers/deepseek-prod"' "${PLAN_JSON}"
+fi
 grep -Fq '"service_start_requested":true' "${PLAN_JSON}"
 
 dasall config apply --from-file "${DESIRED_FILE}" --no-input --json > "${APPLY_JSON}"
 grep -Fq '"outcome":"applied"' "${APPLY_JSON}"
-grep -Fq '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' "${APPLY_JSON}"
+if [ "${SECRET_ALREADY_CONFIGURED}" -eq 0 ]; then
+  grep -Fq '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' "${APPLY_JSON}"
+fi
 
 grep -Fq '"log_format": "text"' /etc/dasall/daemon.json
 grep -Fq '"diag_enabled": true' /etc/dasall/daemon.json
-test -f /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
-! grep -Fq 'deepseek-file-secret' /var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+test -f "${LLM_SECRET_PATH}"
+chgrp dasall /var/lib/dasall/secrets /var/lib/dasall/secrets/llm /var/lib/dasall/secrets/llm/providers "${LLM_SECRET_PATH}"
+chmod 750 /var/lib/dasall/secrets /var/lib/dasall/secrets/llm /var/lib/dasall/secrets/llm/providers
+chmod 640 "${LLM_SECRET_PATH}"
 
 wait_for_daemon_ready
 
@@ -104,4 +131,40 @@ test "$(stat -c '%a' /run/dasall/daemon.sock)" = "600"
 
 dasall ping --json >/dev/null
 dasall readiness --json >/dev/null
+RUN_JSON=$(dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
+assert_json_contains "${RUN_JSON}" '"disposition":"completed"' 'run smoke'
+assert_json_contains "${RUN_JSON}" '"task_completed":true' 'run smoke'
+assert_json_contains "${RUN_JSON}" 'llm.origin=deepseek-prod/' 'llm response payload'
+printf '%s\n' "${RUN_JSON}" | grep -Fq 'agent.dataset' && {
+  printf 'run smoke unexpectedly returned agent.dataset payload instead of LLM response\n' >&2
+  exit 1
+}
+
+set +e
+STATUS_JSON=$(dasall status receipt:missing token local://uid/0 --json 2>&1)
+STATUS_CODE=$?
+set -e
+[ "${STATUS_CODE}" -eq 5 ] || {
+  printf 'status missing receipt should exit 5, got %s: %s\n' "${STATUS_CODE}" "${STATUS_JSON}" >&2
+  exit 1
+}
+assert_json_contains "${STATUS_JSON}" '"error_ref":"status_missing"' 'status missing receipt'
+
+set +e
+CANCEL_JSON=$(dasall cancel receipt:missing token local://uid/0 --json 2>&1)
+CANCEL_CODE=$?
+set -e
+[ "${CANCEL_CODE}" -eq 5 ] || {
+  printf 'cancel missing receipt should exit 5, got %s: %s\n' "${CANCEL_CODE}" "${CANCEL_JSON}" >&2
+  exit 1
+}
+assert_json_contains "${CANCEL_JSON}" '"error_ref":"cancel_missing"' 'cancel missing receipt'
+
+DIAG_JSON=$(dasall diag health --json)
+assert_json_contains "${DIAG_JSON}" '"disposition":"completed"' 'diag health'
+assert_json_contains "${DIAG_JSON}" 'diagnostics redacted health snapshot' 'diag health'
+
+test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
+test -f /usr/share/dasall/llm/providers/catalog.yaml
+test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
 dasall version >/dev/null

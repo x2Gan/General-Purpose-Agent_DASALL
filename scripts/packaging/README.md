@@ -22,15 +22,32 @@
 
 `validate_gate_int_10_installed_package_qemu.sh` 是二者之间的串联入口，不改变 Gate owner：脚本在同一轮内依次执行 `dasall_gate_int_10`、`dasall_packaging_preflight_tests`、`dpkg-buildpackage -us -uc -b`、`validate_autopkgtest_metadata.py` 与 qemu `autopkgtest`。它证明 installed-package gate 只在 build-tree `release-preflight` 通过后运行，但 qemu / `autopkgtest` 结果仍归 PKG-GATE-07，不回写为 `Gate-INT-10` 本身。
 
-## 3. testbed 策略
+## 3. installed-package 功能矩阵
 
-### 3.1 authoritative testbed
+`pkg_smoke_install.sh --explicit-start-check` 与 `debian/tests/pkg-smoke-local-control-plane` 不再只验安装生命周期；二者必须把安装后的本地控制面和主功能语义一起纳入 gate。
+
+| 功能面 | local lifecycle smoke | `pkg-smoke-local-control-plane` | 验收语义 |
+|---|---|---|---|
+| `run` / LLM | `dasall run ... --json` 必须同时包含 `"disposition":"completed"`、`"task_completed":true`、`llm.origin=deepseek-prod/`，且不得包含 `agent.dataset` | 同左 | 证明 installed daemon 的主功能链路通过 production `ILLMManager` 调用 DeepSeek；仅有 completed transport 或 builtin dataset 投影不算通过。 |
+| tools | `agent.dataset` 保留为 builtin 工具资产/管理面能力，不再作为 installed `run` 的主功能通过条件 | 同左 | 工具链路后续应以独立 tools/diag/registry 正向入口补验，避免把工具投影误当 LLM 主链路。 |
+| `status` | `status receipt:missing token local://uid/0 --json` 必须 exit 5 且 `status_missing` | 同左 | 缺失 receipt fail-closed，不误报成功。 |
+| `cancel` | `cancel receipt:missing token local://uid/0 --json` 必须 exit 5 且 `cancel_missing` | 同左 | 缺失 receipt fail-closed，不误报成功。 |
+| `diag` 默认门控 | 默认安装后 `diag health --json` 必须 exit 4 且 `diag_disabled` | 不适用，autopkgtest 会通过 config apply 启用 diag | 证明 diagnostics 不会绕过 daemon config gate。 |
+| `diag` 正向 | 不启用 diag，不跑正向 | config apply 写入 `diag_enabled: true` 后，`diag health --json` 必须 completed 且返回 diagnostics summary | 证明 CLI alias `health`、daemon allowlist、infra diagnostics service 和 UDS JSON 投影都可用。 |
+| LLM assets/config | 校验 planner/responder prompt、provider catalog、DeepSeek provider manifest 已安装；重装 smoke 会保留既有 DeepSeek secret 并恢复 `dasall` 组只读权限 | 使用既有 secret，或通过 `DASALL_DEEPSEEK_API_KEY_FILE` 导入；验证 secret 落盘且不明文保存 | 证明 installed package 具备真实 LLM 外呼所需资产、secret 权限和 runtime composition。 |
+| knowledge | 记录为 installed-package 未暴露独立 CLI 正向入口 | 同左 | v0.1.0 daemon live composition 仍以 memory/cognition/response/tools 为必需端口，knowledge 是 optional port；不得把缺少独立 knowledge 正向路径伪装成 package-ready 证据。 |
+
+矩阵中的 `knowledge` 行是显式缺口，不是通过项。后续若要宣称 “knowledge installed-package ready”，必须新增安装后可执行的 retrieve/refresh/health 正向命令或把 runtime live composition 接入真实 `IKnowledgeService`，再补上对应 smoke 断言。
+
+## 4. testbed 策略
+
+### 4.1 authoritative testbed
 
 1. `pkg-smoke-local-control-plane` 的正式 gate 固定使用 qemu 或其他 machine-level isolation testbed。
 2. 原因是该用例依赖 `systemd`、服务启停、socket 文件权限和 CLI 对安装后 daemon 的访问。
 3. 不把 `null` virtualization 或 `--ignore-restrictions=isolation-machine` 视为正式验收路径。
 
-### 3.2 local quick loop
+### 4.2 local quick loop
 
 1. 在没有完整 testbed 的场景下，开发者仍可先跑：
 
@@ -40,14 +57,14 @@
 3. 这种 quick loop 不能替代 `pkg-smoke-local-control-plane` 的 machine-isolation gate。
 4. 部分 Ubuntu 24.04 `autopkgtest` 版本在 `--validate` 仍会触发 testbed setup；本仓库已提供仅包装 `parse_debian_source()` 的本地兼容 shim `scripts/packaging/validate_autopkgtest_metadata.py` 作为 metadata quick loop，但不能把它当成 installed-package run。
 
-### 3.3 CI 最小要求
+### 4.3 CI 最小要求
 
 1. CI 至少串行执行 build-tree preflight、package build、`lintian`。
 2. 若 CI 输出 package-ready 结论，则必须额外执行 qemu testbed 上的 `autopkgtest` installed-package run。
 3. local rootful lifecycle smoke 与 qemu `autopkgtest` 共同组成 installed-package gate；缺一不可。
 4. 若 CI 需要证明 `Gate-INT-10` 与 installed-package qemu gate 的顺序关系，应使用 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`，并显式传入 qemu image 或 virt-server 配置。
 
-## 4. 已落盘文件
+## 5. 已落盘文件
 
 当前目录已经落盘以下 packaging validator / smoke harness：
 
@@ -62,7 +79,7 @@
 
 7. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
 
-## 5. 不做什么
+## 6. 不做什么
 
 1. 不在这个目录里复写仓库通用 CTest 入口。
 2. 不把 maintainer scripts、`debian/tests/*` 和 rootful lifecycle smoke 合并成一个黑盒脚本。

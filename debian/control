@@ -48,6 +48,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  adduser,
+ curl,
  dasall-common (= ${binary:Version})
 Description: DASALL local control plane daemon
  The DASALL daemon hosts the local control plane and owns the

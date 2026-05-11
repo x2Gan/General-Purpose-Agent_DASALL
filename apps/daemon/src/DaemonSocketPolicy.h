@@ -16,6 +16,7 @@ struct DaemonSocketPolicy {
   std::uint32_t required_socket_mode = 0600U;
 
   [[nodiscard]] static DaemonSocketPolicy for_current_process();
+    [[nodiscard]] static DaemonSocketPolicy for_daemon_service_account_or_current_process();
 
   [[nodiscard]] bool has_consistent_values() const;
 };

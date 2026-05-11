@@ -200,9 +200,7 @@ LocalPeerUidFact DaemonProtocolAdapter::describe_local_peer_uid_fact(
   fact.peer_gid = peer_snapshot.value->peer_gid;
   fact.peer_pid = peer_snapshot.value->peer_pid;
   fact.is_local_socket_peer = peer_snapshot.value->is_local_socket_peer;
-  // 安全约束：peer_uid 必须非零（排除 root）才可以 eligible_for_local_trusted
-  fact.eligible_for_local_trusted =
-      fact.is_local_socket_peer && fact.peer_uid != 0U;
+  fact.eligible_for_local_trusted = fact.is_local_socket_peer;
 
   return fact;
 }

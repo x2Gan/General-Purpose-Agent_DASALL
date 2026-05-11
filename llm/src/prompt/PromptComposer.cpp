@@ -88,6 +88,22 @@ std::string release_identifier(const PromptRelease& release) {
   return *release.prompt_id + "@" + *release.version;
 }
 
+std::optional<std::string> tag_value(const std::optional<std::vector<std::string>>& tags,
+                                     std::string_view key) {
+  if (!tags.has_value()) {
+    return std::nullopt;
+  }
+
+  const std::string prefix = std::string(key) + "=";
+  for (const auto& tag : *tags) {
+    if (tag.starts_with(prefix)) {
+      return tag.substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
 TemplateVariables make_template_variables(const PromptComposeRequest& request,
                                           const PromptRelease& release) {
   TemplateVariables variables;
@@ -114,6 +130,12 @@ TemplateVariables make_template_variables(const PromptComposeRequest& request,
   variables["prompt_version"] = optional_string(release.version);
   variables["release_scope"] = optional_string(release.release_scope);
   variables["trusted_source"] = optional_string(release.trusted_source);
+  if (auto user_goal = tag_value(request.tags, "user_goal"); user_goal.has_value()) {
+    variables["user_goal"] = std::move(*user_goal);
+  }
+  if (auto constraints = tag_value(request.tags, "constraints"); constraints.has_value()) {
+    variables["constraints"] = std::move(*constraints);
+  }
 
   return variables;
 }

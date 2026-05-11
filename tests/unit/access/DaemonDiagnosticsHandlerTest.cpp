@@ -86,6 +86,13 @@ void diag_handler_executes_whitelisted_command() {
                "whitelisted diagnostics command should complete");
   assert_true(result.publish_envelope.has_value(),
               "diagnostics completion should publish a response envelope");
+  assert_true(result.publish_envelope->agent_result.has_value(),
+              "diagnostics completion should project the summary as AgentResult for CLI JSON");
+  assert_equal(std::string("diag summary"),
+               *result.publish_envelope->agent_result->response_text,
+               "diagnostics AgentResult should preserve the snapshot summary");
+  assert_true(result.publish_envelope->agent_result->task_completed.value_or(false),
+              "diagnostics AgentResult should be marked completed on success");
   assert_equal(std::string("health.snapshot"), service->last_command_name,
                "diagnostics handler should forward whitelisted command to diagnostics service");
 }

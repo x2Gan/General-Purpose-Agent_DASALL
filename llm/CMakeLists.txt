@@ -23,6 +23,7 @@ endforeach()
 target_sources(dasall_llm
   PRIVATE
     src/LLMManager.cpp
+    src/LLMProductionFactory.cpp
     src/LLMSubsystemConfig.cpp
     src/TokenEstimator.cpp
     src/UsageAggregator.cpp
@@ -42,6 +43,7 @@ target_sources(dasall_llm
     src/provider/ProviderCatalogRepository.cpp
     src/route/AdapterRegistry.cpp
     src/route/ModelRouter.cpp
+    src/transport/CurlCommandLLMTransport.cpp
     src/placeholder.cpp
 )
 
@@ -52,7 +54,9 @@ target_include_directories(dasall_llm
     $<BUILD_INTERFACE:${DASALL_LLM_PUBLIC_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
   PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/profiles/include
+    ${PROJECT_SOURCE_DIR}/infra/src
 )
 
 target_link_libraries(dasall_llm

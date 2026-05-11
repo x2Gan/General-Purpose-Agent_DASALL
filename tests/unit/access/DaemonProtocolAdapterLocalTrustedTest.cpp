@@ -96,6 +96,60 @@ class FailingDescribePeerIpc final : public dasall::platform::IIPC {
   }
 };
 
+class RootDescribePeerIpc final : public dasall::platform::IIPC {
+ public:
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle> listen(
+      const dasall::platform::IpcEndpoint&,
+      const dasall::platform::ListenOptions&) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcListenerHandle>::success(
+        dasall::platform::IpcListenerHandle{.native_fd = 1U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle> accept(
+      const dasall::platform::IpcListenerHandle&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle>::success(
+        dasall::platform::IpcChannelHandle{.native_fd = 2U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle> connect(
+      const dasall::platform::IpcEndpoint&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcChannelHandle>::success(
+        dasall::platform::IpcChannelHandle{.native_fd = 3U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcSendResult> send(
+      const dasall::platform::IpcChannelHandle&,
+      const dasall::platform::IpcPayload&) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcSendResult>::success(
+        dasall::platform::IpcSendResult{.bytes_sent = 0U});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::IpcReceiveResult> receive(
+      const dasall::platform::IpcChannelHandle&,
+      std::int32_t) override {
+    return dasall::platform::PlatformResult<dasall::platform::IpcReceiveResult>::success(
+        dasall::platform::IpcReceiveResult{});
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<dasall::platform::PeerIdentitySnapshot>
+  describe_peer(const dasall::platform::IpcChannelHandle&) override {
+    return dasall::platform::PlatformResult<dasall::platform::PeerIdentitySnapshot>::success(
+        dasall::platform::PeerIdentitySnapshot{
+            .peer_uid = 0U,
+            .peer_gid = 0U,
+            .peer_pid = 4242U,
+            .is_local_socket_peer = true,
+        });
+  }
+
+  [[nodiscard]] dasall::platform::PlatformResult<bool> close(
+      const dasall::platform::IpcChannelHandle&) override {
+    return dasall::platform::PlatformResult<bool>::success(true);
+  }
+};
+
 void test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path() {
   using dasall::access::daemon::DaemonProtocolAdapter;
   using dasall::platform::IpcEndpoint;
@@ -128,6 +182,29 @@ void test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path() {
               "local trusted fact should expose non-zero uid");
   assert_true(fact.eligible_for_local_trusted,
               "local socket peer with non-zero uid should be eligible for local trusted");
+}
+
+void test_daemon_protocol_adapter_projects_root_peer_for_sudo_operator_path() {
+  using dasall::access::daemon::DaemonProtocolAdapter;
+  using dasall::platform::IpcChannelHandle;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<RootDescribePeerIpc>();
+  DaemonProtocolAdapter adapter(ipc);
+
+  IpcChannelHandle channel;
+  channel.native_fd = 33U;
+
+  const auto fact = adapter.describe_local_peer_uid_fact(channel, "actor://local/root");
+  assert_equal(std::string("actor://local/root"), fact.actor_ref,
+               "adapter should preserve actor_ref for sudo/root local peer fact");
+  assert_equal(0, static_cast<int>(fact.peer_uid),
+               "sudo/root local peer fact should preserve uid 0");
+  assert_true(fact.is_local_socket_peer,
+              "sudo/root peer over UDS should remain a local socket peer");
+  assert_true(fact.eligible_for_local_trusted,
+              "sudo/root peer over UDS should be eligible for P0 root/sudo-only local trusted access");
 }
 
 void test_daemon_protocol_adapter_marks_remote_peer_as_not_trusted() {
@@ -186,6 +263,7 @@ void test_daemon_protocol_adapter_describe_peer_failure_is_fail_closed() {
 int main() {
   try {
     test_daemon_protocol_adapter_projects_local_peer_fact_for_trusted_path();
+    test_daemon_protocol_adapter_projects_root_peer_for_sudo_operator_path();
     test_daemon_protocol_adapter_marks_remote_peer_as_not_trusted();
     test_daemon_protocol_adapter_describe_peer_failure_is_fail_closed();
   } catch (const std::exception& ex) {

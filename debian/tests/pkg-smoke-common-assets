@@ -7,5 +7,6 @@ for profile in desktop_full cloud_full edge_balanced edge_minimal factory_test; 
 done
 
 test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
+test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml
 test -f /usr/share/dasall/llm/providers/catalog.yaml
 test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml

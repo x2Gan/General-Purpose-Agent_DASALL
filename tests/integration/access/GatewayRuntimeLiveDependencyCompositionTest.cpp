@@ -56,10 +56,12 @@ void gateway_runtime_live_dependency_composition_establishes_degraded_baseline()
                   readiness.summary());
   assert_true(readiness.missing_required_ports.empty(),
               "gateway runtime live dependency composition should not leave required ports empty");
-  assert_true(contains_port(readiness.missing_optional_ports, "knowledge") &&
-                  contains_port(readiness.missing_optional_ports, "llm"),
-              "gateway runtime live dependency composition should name missing knowledge/llm optional ports: " +
+    assert_true(contains_port(readiness.missing_optional_ports, "knowledge") &&
+            !contains_port(readiness.missing_optional_ports, "llm"),
+          "gateway runtime live dependency composition should inject llm while naming missing knowledge: " +
                   readiness.summary());
+    assert_true(composition.dependency_set->llm_manager != nullptr,
+          "gateway runtime live dependency composition should expose a production ILLMManager");
 
   dasall::runtime::AgentInitRequest init_request;
   init_request.runtime_instance_id =
@@ -82,7 +84,7 @@ void gateway_runtime_live_dependency_composition_establishes_degraded_baseline()
               "gateway runtime live dependency composition should not fall back to stub-ready: " +
                   init_result.diagnostics);
   assert_true(!init_result.default_ready(),
-              "gateway runtime live dependency composition should not claim default-ready while knowledge/llm remain absent: " +
+          "gateway runtime live dependency composition should not claim default-ready while knowledge remains absent: " +
                   init_result.diagnostics);
 }
 

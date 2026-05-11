@@ -11,6 +11,8 @@ COMMON_DEB="${ARTIFACT_DIR}/dasall-common_${VERSION}_all.deb"
 CLI_DEB="${ARTIFACT_DIR}/dasall-cli_${VERSION}_${ARCH}.deb"
 DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
+LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+PRESERVED_SECRET_ROOT=
 
 log() {
   printf '[pkg-smoke-install] %s\n' "$*"
@@ -62,11 +64,43 @@ run_root_sh() {
   fi
 }
 
+assert_json_contains() {
+  json_payload=$1
+  expected=$2
+  label=$3
+
+  printf '%s\n' "$json_payload" | grep -Fq "$expected" || \
+    fail "${label}: expected JSON fragment not found: ${expected}"
+}
+
 cleanup() {
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
+  if [ -n "${PRESERVED_SECRET_ROOT}" ]; then
+    run_root rm -rf "${PRESERVED_SECRET_ROOT}" >/dev/null 2>&1 || true
+  fi
 }
 
 trap cleanup EXIT
+
+preserve_existing_llm_secret() {
+  require_root_access
+  if run_root test -f "${LLM_SECRET_PATH}"; then
+    PRESERVED_SECRET_ROOT=$(run_root mktemp -d /tmp/dasall-preserved-secret.XXXXXX)
+    run_root chmod 700 "${PRESERVED_SECRET_ROOT}"
+    run_root cp -p "${LLM_SECRET_PATH}" "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret"
+    log 'preserved existing DeepSeek secret for reinstall smoke'
+  fi
+}
+
+restore_preserved_llm_secret() {
+  [ -n "${PRESERVED_SECRET_ROOT}" ] || fail 'missing existing DeepSeek secret; configure secret://llm/providers/deepseek-prod before running LLM package smoke'
+  run_root test -f "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret"
+  run_root mkdir -p /var/lib/dasall/secrets/llm/providers
+  run_root cp -p "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret" "${LLM_SECRET_PATH}"
+  run_root chgrp dasall /var/lib/dasall/secrets /var/lib/dasall/secrets/llm /var/lib/dasall/secrets/llm/providers "${LLM_SECRET_PATH}"
+  run_root chmod 750 /var/lib/dasall/secrets /var/lib/dasall/secrets/llm /var/lib/dasall/secrets/llm/providers
+  run_root chmod 640 "${LLM_SECRET_PATH}"
+}
 
 reset_existing_state() {
   log 'resetting previous DASALL install state'
@@ -110,6 +144,8 @@ verify_explicit_start() {
   run_root_sh '! systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1'
   run_root_sh '! systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'
 
+  restore_preserved_llm_secret
+
   run_root systemctl enable --now dasall-daemon.service
 
   run_root systemctl is-active --quiet dasall-daemon.service
@@ -119,6 +155,38 @@ verify_explicit_start() {
   run_root_sh 'test "$(stat -c "%a" /run/dasall/daemon.sock)" = "600"'
   run_root dasall ping --json >/dev/null
   run_root dasall readiness --json >/dev/null
+  RUN_JSON=$(run_root dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
+  assert_json_contains "$RUN_JSON" '"disposition":"completed"' 'run smoke'
+  assert_json_contains "$RUN_JSON" '"task_completed":true' 'run smoke'
+  assert_json_contains "$RUN_JSON" 'llm.origin=deepseek-prod/' 'llm response payload'
+  printf '%s\n' "$RUN_JSON" | grep -Fq 'agent.dataset' && \
+    fail 'run smoke unexpectedly returned agent.dataset payload instead of LLM response'
+
+  set +e
+  STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)
+  STATUS_CODE=$?
+  set -e
+  [ "$STATUS_CODE" -eq 5 ] || fail "status missing receipt should exit 5, got ${STATUS_CODE}: ${STATUS_JSON}"
+  assert_json_contains "$STATUS_JSON" '"error_ref":"status_missing"' 'status missing receipt'
+
+  set +e
+  CANCEL_JSON=$(run_root dasall cancel receipt:missing token local://uid/0 --json 2>&1)
+  CANCEL_CODE=$?
+  set -e
+  [ "$CANCEL_CODE" -eq 5 ] || fail "cancel missing receipt should exit 5, got ${CANCEL_CODE}: ${CANCEL_JSON}"
+  assert_json_contains "$CANCEL_JSON" '"error_ref":"cancel_missing"' 'cancel missing receipt'
+
+  set +e
+  DIAG_JSON=$(run_root dasall diag health --json 2>&1)
+  DIAG_CODE=$?
+  set -e
+  [ "$DIAG_CODE" -eq 4 ] || fail "diag disabled should exit 4, got ${DIAG_CODE}: ${DIAG_JSON}"
+  assert_json_contains "$DIAG_JSON" '"error_ref":"diag_disabled"' 'diag disabled gate'
+
+  run_root test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
+  run_root test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml
+  run_root test -f /usr/share/dasall/llm/providers/catalog.yaml
+  run_root test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
   run_root dasall version >/dev/null
 }
 
@@ -157,6 +225,7 @@ require_artifact "$CLI_DEB"
 require_artifact "$DAEMON_DEB"
 require_artifact "$META_DEB"
 
+preserve_existing_llm_secret
 reset_existing_state
 install_packages
 verify_packages_installed

@@ -266,6 +266,36 @@ void test_cli_ipc_client_status_surfaces_rejected_error() {
                "cli status should preserve rejected error_ref");
 }
 
+void test_cli_ipc_client_diag_alias_uses_canonical_command_name() {
+  using dasall::access::daemon::UdsResponseDisposition;
+  using dasall::apps::cli::CliCommand;
+  using dasall::apps::cli::CliIpcClient;
+  using dasall::platform::IpcEndpoint;
+  using dasall::tests::support::assert_true;
+
+  auto ipc = std::make_shared<ScriptedIpc>();
+  ipc->response_text = make_response(UdsResponseDisposition::Completed,
+                                     std::nullopt,
+                                     std::nullopt,
+                                     std::string("diagnostics redacted health snapshot"));
+
+  IpcEndpoint endpoint;
+  endpoint.socket_path = dasall::access::daemon::kDefaultDaemonSocketPath;
+
+  CliCommand command;
+  command.name = "diag";
+  command.diag_command = "health";
+
+  const CliIpcClient client(ipc, endpoint, 10);
+  const auto response = client.invoke(command);
+
+  assert_true(response.ok(),
+              "cli diag alias request should parse a completed daemon response");
+  assert_true(ipc->last_sent_payload.find("command_name=health.snapshot") !=
+                  std::string::npos,
+              "cli diag health alias should frame health.snapshot for daemon diagnostics");
+}
+
 }  // namespace
 
 int main() {
@@ -274,6 +304,7 @@ int main() {
     test_cli_ipc_client_invoke_preserves_request_context_on_async_response();
     test_cli_ipc_client_readiness_surfaces_not_ready_disposition();
     test_cli_ipc_client_status_surfaces_rejected_error();
+    test_cli_ipc_client_diag_alias_uses_canonical_command_name();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

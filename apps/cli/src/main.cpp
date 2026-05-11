@@ -14,6 +14,7 @@
 
 #include <cstdlib>
 #include <cctype>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -35,6 +36,17 @@ namespace {
 constexpr std::string_view kCliLocalVersion = "v1";
 constexpr std::string_view kCliOutputSchemaVersion = "cli.output.v1";
 constexpr std::string_view kCliBuildMetadata = "build-metadata-unavailable";
+constexpr std::int32_t kDefaultDaemonIpcTimeoutMs = 1000;
+constexpr std::int32_t kDefaultRunIpcTimeoutMs = 120000;
+
+[[nodiscard]] std::int32_t default_timeout_ms_for(
+    const dasall::apps::cli::CliCommand& command) {
+  if (command.name == "run") {
+    return kDefaultRunIpcTimeoutMs;
+  }
+
+  return kDefaultDaemonIpcTimeoutMs;
+}
 
 [[nodiscard]] std::string format_version_human_output() {
   return std::string("dasall-cli ") + std::string(kCliLocalVersion) +
@@ -256,8 +268,13 @@ int main(int argc, char* argv[]) {
   endpoint.socket_path = cmd->socket_path.value_or(
       dasall::access::daemon::kDefaultDaemonSocketPath);
 
+  auto effective_cmd = *cmd;
+  if (!effective_cmd.timeout_ms.has_value()) {
+    effective_cmd.timeout_ms = default_timeout_ms_for(effective_cmd);
+  }
+
     const dasall::apps::cli::CliIpcClient client(
-      ipc, endpoint, cmd->timeout_ms.value_or(1000));
+      ipc, endpoint, *effective_cmd.timeout_ms);
     const auto emit_daemon_response = [&](std::string_view command_name,
                                           const dasall::apps::cli::DaemonClientResponse& response) {
       const auto decision = dasall::apps::cli::decide_exit_for_response(
@@ -296,33 +313,33 @@ int main(int argc, char* argv[]) {
   };
 
   // 3. 执行命令
-  if (cmd->name == "ping") {
-    const auto response = client.invoke(*cmd);
+  if (effective_cmd.name == "ping") {
+    const auto response = client.invoke(effective_cmd);
       return emit_daemon_response("ping", response);
   }
 
-  if (cmd->name == "readiness") {
-    const auto response = client.invoke(*cmd);
+  if (effective_cmd.name == "readiness") {
+    const auto response = client.invoke(effective_cmd);
       return emit_daemon_response("readiness", response);
   }
 
-  if (cmd->name == "run") {
-    const auto response = client.invoke(*cmd);
+  if (effective_cmd.name == "run") {
+    const auto response = client.invoke(effective_cmd);
       return emit_daemon_response("run", response);
   }
 
-  if (cmd->name == "status") {
-    const auto response = client.invoke(*cmd);
+  if (effective_cmd.name == "status") {
+    const auto response = client.invoke(effective_cmd);
       return emit_daemon_response("status", response);
   }
 
-  if (cmd->name == "cancel") {
-    const auto response = client.invoke(*cmd);
+  if (effective_cmd.name == "cancel") {
+    const auto response = client.invoke(effective_cmd);
       return emit_daemon_response("cancel", response);
   }
 
-  if (cmd->name == "diag") {
-    const auto response = client.invoke(*cmd);
+  if (effective_cmd.name == "diag") {
+    const auto response = client.invoke(effective_cmd);
       return emit_daemon_response("diag", response);
   }
 

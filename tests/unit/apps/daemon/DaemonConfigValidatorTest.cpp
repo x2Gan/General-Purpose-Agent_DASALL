@@ -34,8 +34,19 @@ void test_validate_config_accepts_v1_defaults() {
   using dasall::apps::daemon::DaemonConfigValidator;
   using dasall::tests::support::assert_true;
 
+  const fs::path temp_root = make_temp_directory("daemon-config-validator-defaults");
+  const fs::path socket_parent = temp_root / "socket-root";
+  fs::create_directories(socket_parent);
+  fs::permissions(socket_parent,
+                  static_cast<fs::perms>(0700),
+                  fs::perm_options::replace);
+
+  DaemonBootstrapConfig config;
+  config.socket_path = (socket_parent / "control.sock").string();
+
   const DaemonConfigValidator validator;
-  const auto result = validator.validate_config(DaemonBootstrapConfig{});
+  const auto result = validator.validate_config(config);
+  cleanup_path(temp_root);
   assert_true(result.ok(), "DaemonConfigValidator should accept v1 default bootstrap config");
 }
 
@@ -109,11 +120,20 @@ void test_validate_config_rejects_payload_limit_above_upper_bound() {
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
+  const fs::path temp_root = make_temp_directory("daemon-config-validator-payload");
+  const fs::path socket_parent = temp_root / "socket-root";
+  fs::create_directories(socket_parent);
+  fs::permissions(socket_parent,
+                  static_cast<fs::perms>(0700),
+                  fs::perm_options::replace);
+
   DaemonBootstrapConfig config;
+  config.socket_path = (socket_parent / "control.sock").string();
   config.max_payload_bytes = 4U * 1048576U + 1U;
 
   const DaemonConfigValidator validator;
   const auto result = validator.validate_config(config);
+  cleanup_path(temp_root);
   assert_true(!result.ok(), "DaemonConfigValidator should reject oversized max_payload_bytes");
   assert_equal(static_cast<int>(DaemonConfigValidationError::InvalidPayloadLimit),
                static_cast<int>(*result.error_code),
@@ -168,9 +188,57 @@ void test_validate_only_returns_success_without_listener_side_effects() {
   using dasall::apps::daemon::DaemonConfigValidator;
   using dasall::tests::support::assert_true;
 
+  const fs::path temp_root = make_temp_directory("daemon-config-validator-validate-only");
+  const fs::path socket_parent = temp_root / "socket-root";
+  fs::create_directories(socket_parent);
+  fs::permissions(socket_parent,
+                  static_cast<fs::perms>(0700),
+                  fs::perm_options::replace);
+
+  DaemonBootstrapConfig config;
+  config.socket_path = (socket_parent / "control.sock").string();
+
   const DaemonConfigValidator validator;
-  const auto result = validator.validate_only(DaemonBootstrapConfig{});
+  const auto result = validator.validate_only(config);
+  cleanup_path(temp_root);
   assert_true(result.ok(), "validate_only should succeed for valid config without listener side effects");
+}
+
+void test_validate_only_honors_explicit_socket_policy() {
+  using dasall::apps::daemon::DaemonBootstrapConfig;
+  using dasall::apps::daemon::DaemonConfigValidator;
+  using dasall::apps::daemon::DaemonSocketPolicy;
+  using dasall::tests::support::assert_true;
+
+  const fs::path temp_root = make_temp_directory("daemon-config-validator-policy");
+  const fs::path socket_parent = temp_root / "socket-root";
+  fs::create_directories(socket_parent);
+  fs::permissions(socket_parent,
+                  static_cast<fs::perms>(0700),
+                  fs::perm_options::replace);
+
+  DaemonBootstrapConfig config;
+  config.socket_path = (socket_parent / "control.sock").string();
+
+  DaemonSocketPolicy mismatched_policy = DaemonSocketPolicy::for_current_process();
+  mismatched_policy.expected_owner_uid =
+      mismatched_policy.expected_owner_uid == 0U ? 1U : 0U;
+  mismatched_policy.expected_owner_gid =
+      mismatched_policy.expected_owner_gid == 0U ? 1U : 0U;
+
+  const DaemonConfigValidator validator;
+  const auto rejected = validator.validate_only(config, {}, {}, mismatched_policy);
+  const auto accepted = validator.validate_only(
+      config,
+      {},
+      {},
+      DaemonSocketPolicy::for_current_process());
+  cleanup_path(temp_root);
+
+  assert_true(!rejected.ok(),
+              "validate_only should reject socket parents that do not match an explicit policy");
+  assert_true(accepted.ok(),
+              "validate_only should honor an explicit matching socket policy");
 }
 
 }  // namespace
@@ -185,6 +253,7 @@ int main() {
     test_validate_conflicts_rejects_flag_and_config_file_mismatch();
     test_validate_reload_keys_rejects_restart_only_keys();
     test_validate_only_returns_success_without_listener_side_effects();
+    test_validate_only_honors_explicit_socket_policy();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonConfigValidatorTest] FAILED: " << ex.what() << '\n';
     return 1;

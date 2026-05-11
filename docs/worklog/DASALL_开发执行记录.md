@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #620
+
+- 日期：2026-05-11
+- 阶段：packaging/runtime/llm
+- 任务：installed-package 单 Agent 主链路接入真实 DeepSeek LLM 并补齐 package smoke 功能矩阵
+- 状态：已完成
+
+### 改动
+
+1. 新增 production LLM 装配面：通过 `LLMProductionFactory` 与 curl transport 组装 `ILLMManager`，并由 daemon/runtime live composition 注入 runtime dependency set，保持 runtime 只依赖 `llm::ILLMManager` 的边界。
+2. 修正 `AgentOrchestrator` installed-package 主链路：在满足 production LLM direct path 条件时走 response-stage LLM request，返回 `llm.origin=<provider>/<model>`，并显式拒绝把 `agent.dataset` 当作 `run` 成功语义。
+3. 补齐 installed-package 运行约束：DeepSeek secret 以 `secret://llm/providers/deepseek-prod` 读取，secret 目录/文件对 `dasall` 组只读；systemd unit 允许网络 address family；`curl` 作为 daemon package runtime dependency 落盘。
+4. 补齐 responder prompt assets、CLI `run` 默认 IPC 等待窗口、full profile LLM timeout，以及 local/autopkgtest package smoke 对 `run`、`status`、`cancel`、`diag`、LLM assets/config、tools/knowledge 缺口的 installed-package 级断言矩阵。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过；`dasall-cli` 与相关目标完成编译链接。
+2. `RunCtest_CMakeTools(tests=["RuntimePolicyProviderTest","ProfileMatrixConsistencyTest","ProfileRuntimePolicySchemaContractTest","LLMSubsystemConfigProjectionTest","LLMManagerTimeoutPolicyTest","PromptComposerSlotMappingTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest","CliDaemonCommandParserTest","CliIpcClientResponseTest"])`
+   - 结果：10/10 通过；profile、LLM timeout/projection、prompt slot、runtime composition 与 CLI IPC/parser 回归保持绿色。
+3. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；重新生成 `dasall-common_0.1.0-1_all.deb`、`dasall-cli_0.1.0-1_amd64.deb`、`dasall-daemon_0.1.0-1_amd64.deb` 与 `dasall_0.1.0-1_all.deb`。
+4. `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；fresh install、explicit enable/start、daemon validate-only、ping/readiness、`run` LLM origin、`status`/`cancel` missing receipt、默认 `diag` gate 与 LLM assets 均完成 installed-package smoke。
+5. `sudo dasall run '{"prompt":"请用LLM回答：1+1等于几？只给出简短答案。"}' --json --timeout-ms 120000`
+   - 结果：通过；返回 `"disposition":"completed"`、`"task_completed":true`、`llm.origin=deepseek-prod/deepseek-reasoner`，退出码 `0`，未出现 `agent.dataset`。
+6. `systemctl is-active dasall-daemon.service && systemctl is-enabled dasall-daemon.service`
+   - 结果：`active` / `enabled`；安装态 daemon 最终保持可服务状态。
+
+### 结果
+
+1. v0.1.0 installed-package 的 `dasall run` 不再依赖 builtin dataset 假绿，而是通过 daemon production composition 真实调用 DeepSeek-compatible LLM。
+2. package smoke 已从“生命周期可用”升级为“控制面 + 主功能语义可用”的验收：LLM origin 是通过条件，`agent.dataset` 是失败条件。
+3. `knowledge` 在 installed-package 矩阵中被明确记录为缺少独立 CLI 正向入口的缺口，未被伪装成 ready；tools 的 `agent.dataset` 仅保留为资产/管理面能力，不再替代 LLM 主链路。
+
+### 下一步
+
+1. 若要宣称 `knowledge installed-package ready`，需要新增安装后可执行的 retrieve/refresh/health 正向入口，或让 daemon live composition 接入真实 `IKnowledgeService` 后再补 smoke。
+2. 若要降低外部 LLM 抖动对 release smoke 的影响，需要在保持 `llm.origin` 断言的前提下评估 retry budget、timeout 与 CI secret/testbed 策略。
+
+### 风险
+
+1. DeepSeek 调用依赖外部网络、provider 可用性与本机/CI secret 配置；secret 值不得进入日志、提交信息或测试输出。
+2. 本轮 local package smoke 已通过，但 qemu authoritative `autopkgtest` 仍需在具备 testbed 和 secret 注入能力的 release runner 中复跑归档。
+
 ## 记录 #619
 
 - 日期：2026-05-09

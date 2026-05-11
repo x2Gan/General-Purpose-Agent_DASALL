@@ -3,7 +3,9 @@
 #include <cerrno>
 #include <cstring>
 #include <filesystem>
+#include <grp.h>
 #include <optional>
+#include <pwd.h>
 #include <string>
 #include <system_error>
 
@@ -18,6 +20,38 @@ namespace dasall::apps::daemon {
 namespace {
 
 namespace fs = std::filesystem;
+
+inline constexpr char kDaemonServiceUser[] = "dasall";
+inline constexpr char kDaemonServiceGroup[] = "dasall";
+
+[[nodiscard]] DaemonSocketPolicy make_policy(
+    const std::uint32_t owner_uid,
+    const std::uint32_t owner_gid) {
+  return DaemonSocketPolicy{
+      .expected_owner_uid = owner_uid,
+      .expected_owner_gid = owner_gid,
+      .required_parent_mode = 0700U,
+      .required_socket_mode = 0600U,
+  };
+}
+
+[[nodiscard]] std::optional<std::uint32_t> lookup_user_id(const char* user_name) {
+  const auto* passwd_entry = ::getpwnam(user_name);
+  if (passwd_entry == nullptr) {
+    return std::nullopt;
+  }
+
+  return static_cast<std::uint32_t>(passwd_entry->pw_uid);
+}
+
+[[nodiscard]] std::optional<std::uint32_t> lookup_group_id(const char* group_name) {
+  const auto* group_entry = ::getgrnam(group_name);
+  if (group_entry == nullptr) {
+    return std::nullopt;
+  }
+
+  return static_cast<std::uint32_t>(group_entry->gr_gid);
+}
 
 [[nodiscard]] dasall::platform::PlatformError make_error(
     dasall::platform::PlatformErrorCode code,
@@ -176,12 +210,18 @@ namespace fs = std::filesystem;
 }  // namespace
 
 DaemonSocketPolicy DaemonSocketPolicy::for_current_process() {
-  return DaemonSocketPolicy{
-      .expected_owner_uid = static_cast<std::uint32_t>(::getuid()),
-      .expected_owner_gid = static_cast<std::uint32_t>(::getgid()),
-      .required_parent_mode = 0700U,
-      .required_socket_mode = 0600U,
-  };
+  return make_policy(static_cast<std::uint32_t>(::getuid()),
+                     static_cast<std::uint32_t>(::getgid()));
+}
+
+DaemonSocketPolicy DaemonSocketPolicy::for_daemon_service_account_or_current_process() {
+  const auto daemon_uid = lookup_user_id(kDaemonServiceUser);
+  const auto daemon_gid = lookup_group_id(kDaemonServiceGroup);
+  if (!daemon_uid.has_value() || !daemon_gid.has_value()) {
+    return for_current_process();
+  }
+
+  return make_policy(*daemon_uid, *daemon_gid);
 }
 
 bool DaemonSocketPolicy::has_consistent_values() const {

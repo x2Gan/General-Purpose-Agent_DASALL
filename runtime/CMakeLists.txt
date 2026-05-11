@@ -34,6 +34,7 @@ target_link_libraries(dasall_runtime
     dasall_profiles
   PRIVATE
     dasall_cognition
+    dasall_llm
     dasall_memory
     dasall_tools
 )
