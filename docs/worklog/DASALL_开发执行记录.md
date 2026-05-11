@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #622
+
+- 日期：2026-05-11
+- 阶段：integration/packaging
+- 任务：FULLINT-TODO-002 冻结 installed-package 与 build-tree 证据分层复核表
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-002-package证据分层复核.md`：将 build-tree `release-preflight`、installed-package local、qemu / `autopkgtest`、lintian、LLM origin 与 Knowledge installed-package gap 拆成 `PackageEvidenceLayer` 表。
+2. 将 `FULLINT-TODO-002` 回写为 Done，并显式挂接 `FULLINT-BLK-001`、`FULLINT-BLK-002`：qemu authoritative run 仍需 release runner / image / secret / network，Knowledge 仍需 installed retrieve / refresh / health 正向入口。
+3. 本轮没有使用现有单测 / 集测作为全量集成结论，而是直接执行当前已安装 `dasall` 包的 CLI / daemon / LLM 命令，并将 build-tree target 只记录为 L3 入口与 owner。
+
+### 验证
+
+1. `sudo -n dasall ping --json`、`sudo -n dasall readiness --json`
+   - 结果：通过；均返回 `disposition=completed`，readiness payload 包含 `state=READY`、`bridge_reachable=true`。
+2. `sudo -n dasall run '{"prompt":"请用LLM回答：1+1等于几？只给出简短答案。"}' --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=completed`、`task_completed=true`、`llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`，响应内容为 `2`，未命中 `agent.dataset`。
+3. `sudo -n dasall status receipt:missing token local://uid/0 --json` 与 `sudo -n dasall cancel receipt:missing token local://uid/0 --json`
+   - 结果：通过预期负路径；均 exit `5`，分别返回 `status_missing` / `cancel_missing`。
+4. `sudo -n dasall diag health --json` 与 `sudo -n dasall diag queue --json`
+   - 结果：通过预期门控；均 exit `4`，返回 `diag_disabled`。
+5. `python3 scripts/packaging/validate_autopkgtest_metadata.py`
+   - 结果：通过；发现 `pkg-smoke-local-control-plane`、`pkg-smoke-common-assets` 两条 tests。
+6. `lintian ../dasall_0.1.0-1_amd64.changes`
+   - 结果：RC=0；保留已知 warning：四个 `initial-upload-closes-no-bugs` 与 `dasall-daemon: no-manual-page [usr/sbin/dasall-daemon]`。
+7. `rg -n "dasall_gate_int_10|dasall_packaging_preflight_tests|pkg_smoke_install|validate_gate_int_10_installed_package_qemu|autopkgtest|llm.origin|FULLINT-TODO-002" docs/todos/integration/deliverables/FULLINT-TODO-002-package证据分层复核.md docs/todos/packaging docs/worklog/DASALL_开发执行记录.md scripts/packaging`
+   - 结果：通过；共发现 220 行相关追踪项。
+
+### 结果
+
+1. `FULLINT-TODO-002` 已完成；local installed LLM 主链、status/cancel 负路径、diag 默认门控、metadata 与 lintian 均有当轮实际命令证据。
+2. qemu authoritative `autopkgtest` 本轮未执行：本机虽存在 `autopkgtest`、`lintian`、`qemu-system-x86_64` 与 `.changes` artifact，但没有明确 image / virt-server / secret / network 记录，仍只能标记为 release-runner blocker。
+3. Knowledge installed-package 缺口被当轮 CLI surface 验证再次确认：help 中没有 `knowledge` / `retrieve` / `refresh` 正向入口，不能用 Gate-INT-04 或 runtime evidence projection 替代。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-003`，建立 runtime/cognition/memory/llm 主链证据包，并复用本轮 installed LLM origin 结果作为 L4 主功能信号之一。
+
+### 风险
+
+1. 本轮 LLM 主功能依赖外部 DeepSeek provider、网络与本机 secret；secret 值未进入日志、交付物或提交信息。
+2. 本轮没有执行 fresh reinstall package smoke，避免扰动当前 daemon 服务；该项留给 `FULLINT-TODO-013`。
+
 ## 记录 #621
 
 - 日期：2026-05-11
