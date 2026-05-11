@@ -43,6 +43,7 @@ add_subdirectory(access)
 add_subdirectory(apps)
 
 if(DASALL_ENABLE_TESTS)
+  include(CTest)
   enable_testing()
   add_subdirectory(tests)
 endif()
