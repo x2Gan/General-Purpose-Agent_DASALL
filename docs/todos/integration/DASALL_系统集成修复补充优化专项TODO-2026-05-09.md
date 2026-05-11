@@ -203,3 +203,56 @@ Build_CMakeTools(buildTargets=["dasall_gate_int_08","dasall_gate_int_09","dasall
 | OTel-compatible trace exporter | startup diagnostics 与 trace context 字段稳定后 | exporter 是 optional backend，不影响 P0 readiness |
 | longer-running binary soak | app-binary smoke 稳定后 | 属于 release confidence 扩展，不是当前红灯根因 |
 | streaming / async trace links | unary release gate 稳定后 | streaming 不在当前 unary 修复主线 |
+
+## 13. 2026-05-09 追加评审结论与首个 release 编译评估
+
+### 13.1 本轮评审输入
+
+本轮评审面向 `contracts/`、`profiles/`、`access/`、`apps/daemon/`、`apps/gateway/`、`apps/runtime_support/`、`runtime/`、`cognition/`、`llm/`、`tools/`、`memory/`、`knowledge/`、`services/`、`multi_agent/`、`platform/`、`infra/` 与 `tests/` 的现有落地代码，结合以下架构与 SSOT 进行复核：
+
+1. `docs/architecture/DASALL_架构设计文档.md`
+2. `docs/architecture/DASALL_Engineering_Blueprint.md`
+3. `docs/ssot/BinaryEntrypointReadinessV1.md`
+4. `docs/ssot/RuntimeAppCompositionV1.md`
+5. `docs/ssot/SingleAgentRuntimePortMatrix.md`
+6. `docs/ssot/SystemIntegrationGateMatrix.md`
+7. `docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md`
+8. `docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md`
+9. `docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md`
+
+### 13.2 评审结论摘要
+
+| 结论项 | 当前判断 | 证据与影响 | 后续动作建议 |
+|---|---|---|---|
+| Gate 现状 | build-tree 集成与 release-preflight 当前可通过 | `Build_CMakeTools(buildTargets=["dasall_gate_int_08","dasall_gate_int_09","dasall_gate_int_10","dasall_packaging_preflight_tests"])` 通过；说明本专项 001~012 的修复主线没有回退 | 保持该命令作为本地首个 release candidate 编译前置 Gate |
+| readiness 投影 | 仍有 P1 语义外推风险 | `compose_minimal_live_dependency_set()` 当前只装配 memory/cognition/response/tools required ports，`knowledge` / `llm` 仍缺失；runtime 会输出 `degraded-ready`，但 daemon/gateway 入口仍以 `accepted` 推导 bridge/health ready | 新开原子任务：把 `AgentInitReadinessLevel` 传入 daemon/gateway health/readiness，对外 `READY` 只允许 `default_ready()` 或明确降级语义 |
+| app-binary smoke | 仍有 P1 漏检 stub/degraded 的风险 | `AgentFacade` 保留 `stub_runtime_path`，当前 daemon/gateway smoke 主要断言 `runtime readiness=` 前缀、HTTP 200 与非空 payload，未显式拒绝 `stub-ready`，也未要求 `default-ready` | 新开原子任务：Gate-INT-10 smoke 显式断言不得出现 `stub-ready`；若目标是 release/default-ready，则必须断言 `default-ready` |
+| packaging preflight | 存在 P2 命令语义误读风险 | `dasall_packaging_preflight_tests` 只覆盖 CLI/daemon/package-related preflight，gateway binary 主要由 `dasall_gate_int_10` 覆盖；单跑 packaging preflight 不能代表 gateway binary 已验收 | 新开原子任务：要么把 gateway binary smoke 纳入 packaging preflight，要么在文档和 target 命名中明确其只代表 daemon/CLI package-related preflight |
+| profile / multi_agent | 存在 P2 profile 声明与实现落差 | `desktop_full` / `cloud_full` 已声明 `enabled_modules.multi_agent=true`，但 `multi_agent/` 仍为 placeholder；`RuntimePolicySnapshot` 当前不携带 enabled_modules 矩阵，runtime 无法按 profile 装配 Real/Null coordinator | 新开 Multi-Agent 或 Profile 专项原子任务：在实现 NullCoordinator/RealCoordinator 和禁用态 Gate 前，避免把 multi_agent 作为 GA runtime-ready 能力外推 |
+| startup diagnostics | 存在 P2 覆盖面不足 | 当前 diagnostics focused tests 主要覆盖 daemon config-validation 与 gateway runtime-policy-load；runtime composition/init、AccessGateway init、listen/bind 等真实 failure stage 仍缺 binary regression | 新开原子任务：补 runtime-dependency-composition、runtime-init、access-gateway-init、listen/bind 失败分支的 app-binary diagnostics tests |
+| gateway shutdown smoke | 存在 P3 测试断言缺口 | `GatewayBinaryUnarySmokeTest` 读取 `gateway_exit_code` 但未断言为 0；可能漏掉 submit 成功后 shutdown 非零退出 | 新开小修任务：补 `assert_equal(0, gateway_exit_code, ...)` |
+| evidence 数据面 | 当前不再作为主风险 | runtime 已将 knowledge 的 `RetrievalEvidenceRef` 投入 memory request，`ContextPacket` 保留 `retrieval_evidence_refs`，并由 `RuntimeEvidenceProjectionIntegrationTest` 锁住 evidence_ref / freshness / citation | 保持 Gate-INT-04 作为结构化证据主链回归 Gate |
+| tools / services 治理 | 当前未发现高风险动作绕过治理 | ToolManager 已串联 registry -> validator -> policy gate -> route -> executor -> projection；services 高风险 action 当前 fail-closed 到 CAP-GATE-08 | 后续按 tools/services 专项推进高风险确认闭环，不阻断本地首个 release candidate 编译 |
+
+### 13.3 首个 release 编译评估
+
+当前评估结论分三层：
+
+| 层级 | 是否可进入首个 release | 判断 |
+|---|---|---|
+| build-tree release candidate 编译 | 可以 | 当前 `Gate-INT-08` / `09` / `10` 与 `dasall_packaging_preflight_tests` 均已通过，daemon/gateway app-binary smoke、focused integration 与 package-related preflight 在 build tree 下没有阻塞首个 release candidate 编译。 |
+| Debian 二进制包构建 | 可以尝试进入首个 release 包构建 | 既有 worklog 已记录 `dpkg-buildpackage -us -uc -b` 通过；本轮追加评审只更新文档，不改变源码或 packaging 脚本。正式 release 包构建仍应在 release runner 上复跑 `dpkg-buildpackage -us -uc -b` 与 packaging metadata 检查。 |
+| production / installed-package release-ready | 暂不应宣称完全 ready | qemu `autopkgtest` 仍依赖外部 image / virt-server 配置；`degraded-ready` 与 `default-ready` 的 app health 投影仍需补齐；`multi_agent` profile 声明与 placeholder 实现仍需收敛。因此当前可定位为“首个本地 release candidate 可编译”，不应外推为“生产默认链路完整 ready”。 |
+
+结论：**当前可以编译首个本地 release candidate / build-tree release 版本**，前提是继续以 `dasall_gate_int_10` 与 `dasall_packaging_preflight_tests` 作为 release-preflight 双入口；**当前不建议宣称首个 production installed-package release 已完全就绪**，除非后续补齐 qemu `autopkgtest`、readiness default/degraded 投影、gateway smoke 退出码断言与 multi_agent/profile 收敛。
+
+### 13.4 建议新增后续优化项
+
+| 优化项 | 建议 owner | 不阻断当前编译的原因 | 阻断 release-ready 的条件 |
+|---|---|---|---|
+| Gate-INT-10 readiness 断言加严 | integration/access/runtime | 当前 app-binary smoke 已能证明真实入口可运行 | 若要宣称 default-ready / release-ready，必须拒绝 `stub-ready` 并明确处理 `degraded-ready` |
+| daemon/gateway health-ready 投影修正 | access/apps/runtime | 当前 degraded unary 可作为本地候选编译基线 | 若对外 readiness 返回 `READY`，必须绑定 default-ready 或明确 degraded health 语义 |
+| gateway binary shutdown exit-code 断言 | integration/access | 属小型测试补强，不影响当前编译 | 若 shutdown 非零仍被 smoke 放过，会影响 release 信心 |
+| packaging preflight 与 Gate-INT-10 命令关系收紧 | integration/packaging | 当前双命令一起跑已通过 | 若调用方只跑 `dasall_packaging_preflight_tests` 并据此宣称 gateway binary ready，会造成证据误读 |
+| installed-package qemu gate 正式运行 | packaging/release | 需要 release runner 与 qemu image 参数，本地不可强制阻断 build-tree candidate | 正式生产 release 必须归档 qemu `autopkgtest` 或等价 installed-package 证据 |
+| multi_agent profile enablement 收敛 | multi_agent/profiles/runtime | 当前 multi_agent 不在 unary 修复主线内 | 若 profile 声明 GA enabled，则必须有 Null/Real coordinator、禁用态 Gate 与 runtime 装配证据 |
