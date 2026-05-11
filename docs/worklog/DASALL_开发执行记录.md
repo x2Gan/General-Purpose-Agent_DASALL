@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #621
+
+- 日期：2026-05-11
+- 阶段：integration/docs
+- 任务：FULLINT-TODO-001 冻结全量业务链与证据矩阵
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/ssot/BusinessChainIntegrationMatrix.md`，把 BC-01~BC-17 的业务链编号、当前最高实证层、代码 / 运行证据、冻结结论、缺口与后继任务收敛为新的业务链 SSOT。
+2. 将 evidence layer 固定为 L0 source-code evidence、L1 focused / fixture、L2 true integration、L3 app-binary / build-tree release-preflight、L4 installed-package local、L5 release runner / qemu、L6 soak / chaos。
+3. 写入本轮真实 installed-package 快照：`dasall` / `dasall-cli` / `dasall-common` / `dasall-daemon` 均为 `0.1.0-1 install ok installed`，daemon `active/enabled`；普通用户 `dasall ping/readiness --json` 因 `/run/dasall/daemon.sock` 权限返回 `Permission denied`，`sudo -n dasall ping/readiness --json` 返回 completed / READY。
+4. 将 `FULLINT-TODO-001` 回写为 Done，并把新增 SSOT、实际包命令证据和普通用户 socket 权限限制写入任务行。
+
+### 验证
+
+1. `rg -n "BC-0|Gate-INT-|FULLINT-TODO|FULLINT-BLK" docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md docs/ssot/SystemIntegrationGateMatrix.md docs/ssot/BusinessChainIntegrationMatrix.md`
+   - 结果：通过；共发现 116 行矩阵 / Gate / TODO / blocker 追踪项。
+2. `rg -o "BC-[0-9]{2}" docs/ssot/BusinessChainIntegrationMatrix.md | sort -u | wc -l`
+   - 结果：通过；唯一业务链编号数量为 17。
+3. `rg -n "command -v dasall|sudo -n dasall ping|Permission denied|BC-17|multi_agent/src/placeholder.cpp" docs/ssot/BusinessChainIntegrationMatrix.md`
+   - 结果：通过；本轮安装态控制面、普通用户权限限制和 multi_agent 仅 placeholder 的真实代码状态均已写入 SSOT。
+
+### 结果
+
+1. `FULLINT-TODO-001` 已完成；业务链矩阵不再只散落在专项 TODO 和各子系统文档中，而是由 `BusinessChainIntegrationMatrix.md` 统一承载。
+2. 本轮未把历史 Gate 绿灯外推为 production ready：BC-08 knowledge installed-package 正向入口、BC-14/17 multi_agent enablement、BC-16 qemu / lintian / release runner 仍保持缺口状态。
+3. 本轮明确记录了安装态普通用户 socket 权限限制，因此 BC-01 只能宣称 rootful local control-plane 可用，不能宣称所有本地用户 ready。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-002`，冻结 installed-package 与 build-tree 证据分层复核表，并用当轮实际 package / LLM 命令复核 local smoke、LLM origin、qemu owner 与 knowledge gap。
+
+### 风险
+
+1. `BusinessChainIntegrationMatrix.md` 是 2026-05-11 当前代码和本机安装态快照；后续任一 Gate target、profile enablement、installed package 或 release runner 结果变化，都必须同步更新该 SSOT 与专项 TODO。
+
 ## 记录 #620
 
 - 日期：2026-05-11
