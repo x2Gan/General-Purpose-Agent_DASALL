@@ -83,11 +83,14 @@ template <typename T>
 
 void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix() {
   const auto desktop = load_profile("desktop_full", "linux-x86_64-workstation");
+  const auto cloud = load_profile("cloud_full", "linux-x86_64-server");
   const auto edge_balanced = load_profile("edge_balanced", "linux-arm64-embedded");
   const auto edge_minimal = load_profile("edge_minimal", "linux-arm64-embedded");
 
   assert_equal(std::string("desktop_full"), desktop.snapshot->effective_profile_id(),
                "runtime profile compatibility should preserve desktop_full as effective profile id");
+  assert_equal(std::string("cloud_full"), cloud.snapshot->effective_profile_id(),
+               "runtime profile compatibility should preserve cloud_full as effective profile id");
   assert_equal(std::string("edge_balanced"), edge_balanced.snapshot->effective_profile_id(),
                "runtime profile compatibility should preserve edge_balanced as effective profile id");
   assert_equal(std::string("edge_minimal"), edge_minimal.snapshot->effective_profile_id(),
@@ -105,8 +108,10 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
               "edge_balanced should keep tools_mcp enabled in the build manifest");
   assert_true(!edge_minimal.manifest.enables_module("tools_mcp"),
               "edge_minimal should disable tools_mcp in the build manifest");
-  assert_true(desktop.manifest.enables_module("multi_agent"),
-              "desktop_full should keep multi_agent enabled in the build manifest");
+  assert_true(!desktop.manifest.enables_module("multi_agent"),
+              "desktop_full should keep multi_agent disabled until a runtime coordinator is wired");
+  assert_true(!cloud.manifest.enables_module("multi_agent"),
+              "cloud_full should keep multi_agent disabled until a runtime coordinator is wired");
   assert_true(!edge_balanced.manifest.enables_module("multi_agent"),
               "edge_balanced should disable multi_agent in the build manifest");
   assert_true(!edge_minimal.manifest.enables_module("multi_agent"),

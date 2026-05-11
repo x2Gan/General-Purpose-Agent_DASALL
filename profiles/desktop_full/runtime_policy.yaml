@@ -14,7 +14,7 @@ enabled_modules:
 	memory_vector: true
 	memory_experience: true
 	knowledge: true
-	multi_agent: true
+	multi_agent: false
 	platform_hal: false
 	infra_observability: true
 runtime_budget:

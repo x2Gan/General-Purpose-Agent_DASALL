@@ -352,8 +352,10 @@ void test_profile_matrix_freeze_matches_blueprint_baselines() {
   const std::string factory_test =
       read_text_file(source_root() / "profiles/factory_test/runtime_policy.yaml");
 
-  assert_true(contains_text(desktop_full, "multi_agent: true"),
-              "desktop_full must keep multi_agent enabled");
+  assert_true(contains_text(desktop_full, "multi_agent: false"),
+              "desktop_full must keep multi_agent disabled until a runtime coordinator is wired");
+  assert_true(contains_text(cloud_full, "multi_agent: false"),
+              "cloud_full must keep multi_agent disabled until a runtime coordinator is wired");
   assert_true(contains_text(cloud_full, "llm_local_adapter: false"),
               "cloud_full must keep local adapter disabled in the baseline");
   assert_true(contains_text(edge_balanced, "llm_lan_adapter: true"),

@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+## 记录 #624
+
+- 日期：2026-05-11
+- 阶段：integration/profiles/multi_agent
+- 任务：FULLINT-TODO-004 校准 profile enablement 与 multi_agent 声明边界
+- 状态：已完成
+
+### 改动
+
+1. 完成 `FULLINT-BLK-004` 的 source 层最小解阻：将 `profiles/desktop_full/runtime_policy.yaml` 与 `profiles/cloud_full/runtime_policy.yaml` 的 `enabled_modules.multi_agent` 从 `true` 校准为 `false`。
+2. 更新 profile/schema Gate：`RuntimeProfileCompatibilityTest` 增加 `cloud_full` 覆盖，并要求 `desktop_full` / `cloud_full` 在 coordinator wired 前保持 `multi_agent` disabled；`ProfileRuntimePolicySchemaContractTest` 同步冻结 full profiles 的禁用态。
+3. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-004-profile-multi_agent声明边界校准.md`，记录 source 校准、installed package 旧资产差异、RuntimePolicySnapshot 边界和后续 Null/Real coordinator owner。
+4. 更新 `docs/ssot/BusinessChainIntegrationMatrix.md` 与专项 TODO：source full profiles 已禁用；installed package `0.1.0-1` 仍含旧版 `multi_agent: true` 资产，需后续 package rebuild/reinstall 后复核。
+
+### 验证
+
+1. `dpkg -L dasall-common dasall | rg 'profiles/.*/runtime_policy.yaml|multi_agent|dasall$|bin/dasall' || true`
+   - 结果：installed package 暴露 `/usr/share/dasall/profiles/*/runtime_policy.yaml`。
+2. `dasall --help >/tmp/fullint004-help.txt 2>&1 || true && rg -n "multi[-_ ]agent|agent|run|profile|help|command" /tmp/fullint004-help.txt`
+   - 结果：CLI help 无 multi-agent 入口，只显示 help/config/run 等控制面命令。
+3. `rg -n "multi_agent:" /usr/share/dasall/profiles/desktop_full/runtime_policy.yaml /usr/share/dasall/profiles/cloud_full/runtime_policy.yaml profiles/desktop_full/runtime_policy.yaml profiles/cloud_full/runtime_policy.yaml`
+   - 结果：校准前确认 installed/source full profiles 均为 `true`；校准后 source 已为 `false`，installed 旧资产仍需新包复核。
+4. `Build_CMakeTools(buildTargets=["dasall_runtime_profile_compatibility_integration_test","dasall_contract_profile_runtime_policy_schema_test","dasall_profile_matrix_consistency_unit_test"])`
+   - 结果：通过，result code 0。
+5. `RunCtest_CMakeTools(tests=["RuntimeProfileCompatibilityTest","ProfileRuntimePolicySchemaContractTest","ProfileMatrixConsistencyTest"])`
+   - 结果：通过，3/3 passed。
+
+### 结果
+
+1. `FULLINT-TODO-004` 已完成；source profile 文案不再把 multi_agent 写成 GA-ready 或 profile-enabled production path。
+2. `FULLINT-BLK-004` 已完成 source 层最小解阻；后续 Real/Null coordinator、Observation 折叠和 runtime owner 装配继续由 `FULLINT-TODO-018` 承接。
+3. 当前 installed package 与 source profile 存在预期差异：本轮不宣称安装态 profile 资产已更新，需后续 package rebuild/reinstall 后进入 `FULLINT-TODO-013` / `019` 复核。
+
+### 风险
+
+1. `multi_agent` 模块当前仍只有 placeholder 静态库，不能进入 release-ready 叙述。
+2. RuntimePolicySnapshot 仍无 typed `enabled_modules` 视图；后续若重新启用 multi_agent，必须先补 typed projection 与 coordinator Gate。
+
 ## 记录 #623
 
 - 日期：2026-05-11

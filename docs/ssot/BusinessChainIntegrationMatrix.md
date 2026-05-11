@@ -14,7 +14,7 @@
 2. 用 build-tree `release-preflight` 替代 installed-package / qemu / production 结论。
 3. 用历史文档绿灯替代本轮实际包运行状态。
 4. 把 `agent.dataset` fallback 当作 installed-package `run` 成功语义。
-5. 把 profile 中的 `enabled_modules.multi_agent=true` 解释成 multi_agent GA runtime-ready。
+5. 把 profile 中的 `enabled_modules.multi_agent` 解释成 multi_agent GA runtime-ready。
 
 ## 2. 本轮真实证据快照
 
@@ -28,7 +28,7 @@
 4. `runtime/src/AgentOrchestrator.cpp` 当前存在 production LLM direct path、`llm.origin=` 输出、`agent.dataset fallback is disabled` 失败文案、`make_knowledge_query()` 与 memory `write_back()` 调用点。
 5. `llm/src/LLMProductionFactory.cpp` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 当前提供 daemon/runtime live composition 的 LLM 生产装配入口。
 6. `multi_agent/` 当前只有 `multi_agent/src/placeholder.cpp` 与静态库骨架；未发现 `IMultiAgentCoordinator`、`NullMultiAgentCoordinator` 或 Runtime 装配点的真实实现。
-7. `profiles/desktop_full/runtime_policy.yaml` 与 `profiles/cloud_full/runtime_policy.yaml` 当前声明 `enabled_modules.multi_agent: true`，但 `profiles/include/RuntimePolicySnapshot.h` 当前未暴露 typed `enabled_modules.multi_agent` 视图。
+7. `profiles/desktop_full/runtime_policy.yaml` 与 `profiles/cloud_full/runtime_policy.yaml` 已校准为 `enabled_modules.multi_agent: false`；当前 installed package `0.1.0-1` 中的 `/usr/share/dasall/profiles/{desktop_full,cloud_full}/runtime_policy.yaml` 仍保留旧版 `true`，需等下一次 package rebuild/reinstall 才能完成安装态资产更新。
 
 ### 2.2 installed-package 运行证据
 
@@ -75,10 +75,10 @@
 | BC-11 | Tools governed execution | L2 | `agent.dataset` 仍作为 tool path 资产存在；runtime production LLM path明确禁用 dataset fallback | tools 作为受控工具链保留；不得再把 `agent.dataset` 作为 installed `run` 成功语义 | FULLINT-TODO-012、016 |
 | BC-12 | Capability Services execution/data/system | L2 | tools/services focused integration 文件存在；本轮未执行真实 platform/remote adapter | services 语义仍是 focused 层证据；高风险和真实 remote adapter 不进入当前 ready 结论 | FULLINT-TODO-012、016 |
 | BC-13 | Infra config / policy / secret / plugin / diagnostics / health | L3/L4 partial | daemon active/enabled；sudo readiness payload 含 lifecycle/listener/gateway/bridge；startup diagnostics tests 注册到 release-preflight | health/readiness 有安装态信号，但 default/degraded/stub 语义仍需 FULLINT-TODO-007 加严 | FULLINT-TODO-009、017 |
-| BC-14 | Profiles build/runtime policy activation | L0/L2 partial | `RuntimePolicySnapshot` 存在；profile YAML 有 `enabled_modules`；provider 当前未把 enabled modules 暴露为 typed snapshot 字段 | profile 策略激活可追溯，但 multi_agent enablement 与 runtime snapshot 装配不一致 | FULLINT-TODO-004、018 |
+| BC-14 | Profiles build/runtime policy activation | L0/L2 partial | `RuntimePolicySnapshot` 存在；profile YAML 有 `enabled_modules`；provider 当前未把 enabled modules 暴露为 typed snapshot 字段；source full profiles 已禁用 `multi_agent` | profile 策略激活可追溯；未实现 coordinator 前，source profile 不再声明 multi_agent enabled | FULLINT-TODO-004、018 |
 | BC-15 | Recovery / safe-mode / resume | L2 partial | runtime recovery/checkpoint types 与 tests存在；本轮未执行 checkpoint/resume installed path | recovery owner 仍归 Runtime；全链 retry/checkpoint/writeback continuity 后续验证 | FULLINT-TODO-011、018 |
 | BC-16 | Packaging / installed-package / release handoff | L4 | Debian packages `0.1.0-1` 已安装；daemon active/enabled；串联脚本存在；本轮 local sudo ping/readiness 成功 | local installed control-plane rootful 可用；qemu / lintian / LLM origin 仍需按层复验，不能由 L4 覆盖 L5 | FULLINT-TODO-002、013、019 |
-| BC-17 | Multi-agent coordination | L0 | `multi_agent` 当前仅静态库骨架和 placeholder；未发现 Null/Real coordinator 实现；desktop/cloud profile 声明 true | 多 Agent 目前是设计/声明层，不是 runtime-ready；必须保持阻塞项 FULLINT-BLK-004 | FULLINT-TODO-004、018 |
+| BC-17 | Multi-agent coordination | L0 | `multi_agent` 当前仅静态库骨架和 placeholder；未发现 Null/Real coordinator 实现；source desktop/cloud profile 已改为禁用态；installed package 仍是旧资产 | 多 Agent 目前是设计/声明层，不是 runtime-ready；FULLINT-BLK-004 已完成 source 层最小解阻，Real/Null coordinator 仍归 FULLINT-TODO-018 | FULLINT-TODO-004、018 |
 
 ## 5. Gate 映射
 
