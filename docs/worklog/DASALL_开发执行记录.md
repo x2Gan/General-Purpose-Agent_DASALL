@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #632
+
+- 日期：2026-05-11
+- 阶段：integration/knowledge/memory/llm/tools/services
+- 任务：FULLINT-TODO-012 执行知识/记忆/LLM/工具服务跨链回归
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/full_business_chain/FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest.cpp`：用真实 `KnowledgeServiceFacade` + SQLite FTS lexical snapshot 产出 `EvidenceBundle/RetrievalEvidenceRef`，再经 SQLite `MemoryManager` 组装 `ContextPacket`，由 `PromptComposer` 生成 provider-neutral `PromptComposeResult.messages`，交给 `MockLLMAdapter` 验证 provider handoff，最后通过 `ToolManager -> BuiltinExecutorLane -> CapabilityServicesLoopbackFixture` 进入 services lane / adapter / mapper 并产出 `ToolInvocationEnvelope/ObservationDigest`。
+2. 新测试同时覆盖负路径：过期 knowledge snapshot 返回 `IndexStaleRejected` 且不泄漏 evidence；缺失 tool descriptor 返回失败 `ToolResult` 且不伪造 `ObservationDigest`。
+3. 更新 `tests/integration/full_business_chain/CMakeLists.txt`：注册 `dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain` 与 CTest `FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest`，标签包含 `integration;full-business-chain;fullint-012;gate-int-04;gate-int-06;gate-int-07`。
+4. 更新 `tests/CMakeLists.txt`：将新增测试加入 `dasall_gate_int_04`、`dasall_gate_int_06`、`dasall_gate_int_07` 依赖，并纳入 full-business-chain discoverability 清单。
+5. 新增并回填 `docs/todos/integration/deliverables/FULLINT-TODO-012-知识记忆LLM工具服务跨链回归证据包.md`，记录 Design Gate、Build 结果、focused matrix 与 installed-package 探针。
+6. 回写 `docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md`：`FULLINT-TODO-012` 标记 Done，完成判定明确为 build-tree 跨链闭合 + installed-package L4 partial。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain"])`
+   - 结果：通过；新增 full-business-chain target 成功构建。
+2. `RunCtest_CMakeTools(tests=["FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest"])`
+   - 结果：通过；1/1 passed。
+3. `Build_CMakeTools(buildTargets=["dasall_gate_int_04","dasall_gate_int_06","dasall_gate_int_07"])`
+   - 结果：通过；Gate-INT-04/06/07 均把新增 FULLINT-012 测试纳入并通过。
+4. `RunCtest_CMakeTools(tests=["FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest","KnowledgeEvidencePreservationTest","MemoryContextAssembleIntegrationTest","LLMSubsystemSmokeIntegrationTest","ToolServicesSmokeIntegrationTest","CapabilityServicesSmokeIntegrationTest"])`
+   - 结果：通过；相邻 focused matrix 均 passed。
+5. `Build_CMakeTools(buildTargets=["dasall_full_business_chain_discoverability"])`
+   - 结果：通过；discoverability 清单已包含 `FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest`。
+6. `sudo -n dasall ping --json` / `sudo -n dasall readiness --json`
+   - 结果：通过；安装态控制面返回 READY。
+7. `sudo -n dasall run '{"prompt":"FULLINT-012 installed package cross-chain probe: answer with one concise sentence."}' --request-id fullint-012-installed-1778462558 --trace-id trace-fullint-012-installed-1778462558 --json --timeout-ms 120000`
+   - 结果：通过；返回 `disposition=completed`、`task_completed=true`、`exit_code=0`，且 `response_text` 包含 `llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`。
+8. `get_errors` on changed C++ / CMake files
+   - 结果：无 VS Code diagnostics。
+9. `git diff --check`
+   - 结果：通过。
+
+### 结果
+
+1. `FULLINT-TODO-012` 已完成：build-tree 现在有独立 full-business-chain 测试证明 knowledge evidence refs 经 memory context、prompt compose、provider handoff、tools/services loopback 到 ObservationDigest 不丢失关键 citation/source/route/digest 语义。
+2. Gate-INT-04/06/07 不再只依赖既有 focused slices；新增 FULLINT-012 测试已进入三个 gate target 与 full-business-chain discoverability。
+3. installed package 当前保持 L4 partial：`ping/readiness/run` 均可运行，`run` 真实返回 DeepSeek-compatible LLM origin；但本轮不声明 installed knowledge retrieve/refresh/health 或 runtime production tool caller 已 ready。
+
+### 下一步
+
+1. `FULLINT-TODO-013` 可继续扩展 installed-package 控制面 + 主功能矩阵。
+2. `FULLINT-TODO-014` 仍需冻结并实现 knowledge installed-package 正向入口验证。
+3. `FULLINT-TODO-016` 仍需收敛 tools/services runtime production caller 边界。
+
 ## 记录 #631
 
 - 日期：2026-05-11

@@ -31,6 +31,7 @@ add_custom_target(dasall_gate_int_04
   DEPENDS
     dasall_runtime_evidence_projection_integration_test
     dasall_knowledge_evidence_preservation_integration_test
+    dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain
 )
 
 add_custom_target(dasall_gate_int_05
@@ -46,6 +47,7 @@ add_custom_target(dasall_gate_int_06
     dasall_runtime_required_optional_ports_integration_test
     dasall_runtime_profile_compatibility_integration_test
     dasall_llm_smoke_integration_test
+    dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain
 )
 
 add_custom_target(dasall_gate_int_07
@@ -53,6 +55,7 @@ add_custom_target(dasall_gate_int_07
   DEPENDS
     dasall_contract_service_result_semantics_test
     dasall_builtin_executor_lane_result_code_unit_test
+    dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain
 )
 
 set(DASALL_GATE_INT_08_TEST_NAMES
@@ -184,6 +187,7 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES
   MemoryContextAssembleIntegrationTest
   MemoryWritebackIntegrationTest
   FullIntAsyncRecoveryCausalityTest
+  FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest
   ToolServicesSmokeIntegrationTest
   CapabilityServicesSmokeIntegrationTest
   LLMSubsystemSmokeIntegrationTest
@@ -234,6 +238,7 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS
   dasall_memory_context_assemble_integration_test
   dasall_memory_writeback_integration_test
   dasall_fullint_011_async_recovery_causality
+  dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain
   dasall_tool_services_smoke_integration_test
   dasall_services_smoke_integration_test
   dasall_llm_smoke_integration_test
