@@ -8,6 +8,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/evidence/EvidenceAssembler.h
   include/ingest/SourceScanner.h
   include/IKnowledgeService.h
+  include/KnowledgeServiceFactory.h
   include/KnowledgeErrors.h
   include/KnowledgeTypes.h
   include/health/FreshnessController.h
@@ -49,6 +50,7 @@ target_sources(dasall_knowledge
     src/ingest/IngestionCoordinator.cpp
     src/ingest/SourceScanner.cpp
     src/KnowledgeBuildSkeleton.cpp
+    src/KnowledgeServiceFactory.cpp
     src/index/CorpusCatalog.cpp
     src/index/IndexReader.cpp
     src/index/IndexWriter.cpp

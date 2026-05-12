@@ -124,6 +124,54 @@ void test_parse_diag_and_missing_status_token_reject() {
               "run command should reject duplicate stable option assignments");
 }
 
+void test_parse_knowledge_commands() {
+  using dasall::apps::cli::CliCommandParser;
+  using dasall::apps::cli::CliKnowledgeCommandKind;
+  using dasall::apps::cli::CliOutputMode;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const char* health_argv[] = {"dasall-cli", "knowledge", "health", "--json"};
+  const auto health_cmd = CliCommandParser::parse(4, health_argv);
+  assert_true(health_cmd.has_value(), "knowledge health should parse");
+  assert_equal(std::string("knowledge"), health_cmd->name,
+         "knowledge health should preserve canonical command name");
+  assert_true(health_cmd->knowledge_command == CliKnowledgeCommandKind::Health,
+        "knowledge health should classify health operation");
+  assert_true(health_cmd->output_mode == CliOutputMode::Json,
+        "knowledge health should accept json output mode");
+
+  const char* refresh_argv[] = {"dasall-cli", "knowledge", "refresh"};
+  const auto refresh_cmd = CliCommandParser::parse(3, refresh_argv);
+  assert_true(refresh_cmd.has_value(), "knowledge refresh should parse");
+  assert_true(refresh_cmd->knowledge_command == CliKnowledgeCommandKind::Refresh,
+        "knowledge refresh should classify refresh operation");
+
+  const char* retrieve_argv[] = {
+    "dasall-cli", "knowledge", "retrieve", "DeepSeek", "Chat"};
+  const auto retrieve_cmd = CliCommandParser::parse(5, retrieve_argv);
+  assert_true(retrieve_cmd.has_value(), "knowledge retrieve should parse query text");
+  assert_true(retrieve_cmd->knowledge_command == CliKnowledgeCommandKind::Retrieve,
+        "knowledge retrieve should classify retrieve operation");
+  assert_equal(std::string("DeepSeek Chat"), *retrieve_cmd->knowledge_query_text,
+         "knowledge retrieve should join query text tail");
+
+  const char* invalid_retrieve_argv[] = {"dasall-cli", "knowledge", "retrieve"};
+  const auto invalid_retrieve = CliCommandParser::parse(3, invalid_retrieve_argv);
+  assert_true(!invalid_retrieve.has_value(),
+        "knowledge retrieve should reject missing query text");
+
+  const char* invalid_health_argv[] = {
+    "dasall-cli", "knowledge", "health", "extra"};
+  const auto invalid_health = CliCommandParser::parse(4, invalid_health_argv);
+  assert_true(!invalid_health.has_value(),
+        "knowledge health should reject extra positional args");
+
+  const auto usage = CliCommandParser::usage_string("knowledge", "retrieve");
+  assert_true(usage.find("knowledge retrieve <query_text>") != std::string::npos,
+        "knowledge retrieve usage should expose query argument");
+}
+
 void test_parse_help_and_version_commands() {
   using dasall::apps::cli::CliCommandParser;
   using dasall::apps::cli::CliOutputMode;
@@ -256,6 +304,7 @@ int main() {
     test_parse_run_and_submit_alias();
     test_parse_status_and_cancel_arguments();
     test_parse_diag_and_missing_status_token_reject();
+    test_parse_knowledge_commands();
     test_parse_help_and_version_commands();
     test_reject_invalid_help_and_version_flag_combinations();
     test_parse_socket_path_override_and_reject_invalid_forms();

@@ -23,7 +23,10 @@
 |---|---|
 | `docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md` | 读取 `FULLINT-TODO-014`、`FULLINT-BLK-002` 和 BC-08/BC-16 的 owner 与完成判定。 |
 | `docs/todos/integration/deliverables/FULLINT-TODO-013-installed-package控制面主功能矩阵.md` | 继承 fresh package / installed daemon 的 L4 验证边界，不复用其旧缺口结论。 |
+| `apps/cli/src/CliCommandParser.cpp` / `CliRequestBuilder.h` | 确认 installed `dasall knowledge refresh/retrieve/health` CLI surface、payload 编码与 request 构建 owner。 |
+| `access/include/daemon/DaemonProtocolTypes.h` / `access/src/daemon/DaemonProtocolAdapter.cpp` | 确认 daemon protocol 为 Knowledge command 分配稳定 command kind，并能承载 encoded knowledge payload。 |
 | `access/src/AccessGatewayFactory.cpp` | 确认 `dasall knowledge` daemon dispatch owner，并修复 refresh 失败时的 domain error ref 暴露。 |
+| `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` / `apps/daemon/src/main.cpp` | 确认 installed daemon live composition 注入真实 installed `IKnowledgeService`，而非测试替身。 |
 | `knowledge/src/KnowledgeServiceFactory.cpp` | 确认 installed asset service factory 是 package runtime composition owner，并补齐 installed inventory state。 |
 | `knowledge/src/index/IndexWriter.cpp` | 定位 SQLite FTS sparse search 的 step 状态误判根因。 |
 | `scripts/packaging/pkg_smoke_install.sh` | 将 explicit-start package smoke 作为 installed `knowledge refresh/retrieve/health` 正向验收入口。 |
@@ -50,7 +53,7 @@
 
 | Design 决策 | Build / 验证落点 | 通过条件 |
 |---|---|---|
-| installed Knowledge owner 走 daemon dispatch | `access/src/AccessGatewayFactory.cpp` | `refresh/retrieve/health` 返回具体 payload；refresh rejected 时保留 service error ref |
+| installed Knowledge owner 走 CLI -> daemon dispatch -> installed service | `apps/cli/src/*`、`access/include/daemon/DaemonProtocolTypes.h`、`access/src/daemon/DaemonProtocolAdapter.cpp`、`access/src/AccessGatewayFactory.cpp`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、`apps/daemon/src/main.cpp` | `knowledge refresh/retrieve/health` 能从 installed CLI 进入 daemon，并由真实 installed `IKnowledgeService` 返回 payload；refresh rejected 时保留 service error ref |
 | SQLite FTS retrieve 成功语义按 `sqlite3_step()` 返回值判断 | `knowledge/src/index/IndexWriter.cpp` | focused probe 与 installed `retrieve "DeepSeek Chat"` 均返回 `ok=true` / positive slices |
 | installed factory 维护 source inventory | `knowledge/src/KnowledgeServiceFactory.cpp` | 重复 `request_refresh(CorpusChangeSet{})` / installed `knowledge refresh` 均 accepted |
 | build-tree 复现 installed factory path | `tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp` | 测试覆盖 refresh、重复 refresh、health fresh active snapshot、DeepSeek FTS evidence 与 retrieve |
@@ -72,6 +75,7 @@
 
 | 原子项 | 代码目标 | 测试目标 | 验收命令 | 结果 |
 |---|---|---|---|---|
+| B0 | CLI / daemon protocol / runtime composition plumbing | installed `knowledge` command surface 与 daemon live dependency injection | `RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest","DaemonProtocolTypesTest","DaemonFrameCodecTest","DaemonAccessPipelineFactoryTest","DaemonRuntimeLiveDependencyCompositionTest"])` + installed CLI matrix | PASS，CLI command、protocol kind、frame codec、pipeline factory 与 live composition 均覆盖 |
 | B1 | `knowledge/src/index/IndexWriter.cpp` | installed retrieve sparse search | focused build/test + installed `knowledge retrieve` | PASS，SQLite `SQLITE_DONE` 不再误判为 `search_execution_failed` |
 | B2 | `knowledge/src/KnowledgeServiceFactory.cpp` | installed factory repeated refresh | `KnowledgeInstalledAssetProbeIntegrationTest` + manual refresh twice | PASS，重复 refresh accepted |
 | B3 | `access/src/AccessGatewayFactory.cpp` | refresh failure diagnostics | package/CLI refresh path | PASS，非 Busy refresh failure 可透出 service `source_ref.ref_id` |
@@ -83,10 +87,14 @@
 
 | 文件 | 变更 | 结果 |
 |---|---|---|
+| `apps/cli/src/CliCommandParser.cpp`、`apps/cli/src/CliCommandParser.h`、`apps/cli/src/CliRequestBuilder.h`、`apps/cli/src/CliAccessErrorProjection.h`、`apps/cli/src/main.cpp` | 新增 installed `knowledge health/refresh/retrieve` CLI surface、参数解析、payload 构造与错误投影 | installed CLI 能把 Knowledge 请求稳定转成 daemon command |
+| `access/include/daemon/DaemonProtocolTypes.h`、`access/src/daemon/DaemonProtocolAdapter.cpp`、`access/include/AccessGatewayFactory.h` | 新增 Knowledge daemon command kind、payload 适配与 `IKnowledgeService` 注入槽位 | daemon protocol / Access pipeline 不再缺 Knowledge command surface |
+| `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、`apps/daemon/src/main.cpp`、`access/CMakeLists.txt`、`apps/runtime_support/CMakeLists.txt`、`knowledge/CMakeLists.txt` | live runtime composition 接入 installed asset knowledge service，并补齐构建链接 | package daemon 能在真实 install layout 下创建并使用 installed `IKnowledgeService` |
 | `knowledge/src/index/IndexWriter.cpp` | `perform_search()` 直接跟踪 `sqlite3_step()` 状态，允许 successful iteration 以 `SQLITE_DONE` 结束 | installed `retrieve` 不再被误报为 sparse search failure |
 | `knowledge/src/KnowledgeServiceFactory.cpp` | installed asset factory 新增 in-memory inventory state，通过 `SourceScanner` 和 catalog refresh 同步 source records | 重复 full refresh 不再把全部 installed asset 当作新增并向 seeded active DB 重复插入 chunks |
 | `access/src/AccessGatewayFactory.cpp` | refresh rejected 时优先返回 `ErrorInfo.source_ref.ref_id`，Busy 仍返回 `knowledge_refresh_busy` | 后续 refresh failure 不再被统一遮蔽为 generic `knowledge_refresh_failed` |
 | `knowledge/src/retrieve/RecallCoordinator.cpp` | sparse recall failure 保留具体 failure reason | retrieve 调试和 regression 断言可见具体 sparse error ref |
+| `tests/unit/access/CliDaemonCommandParserTest.cpp`、`tests/unit/access/DaemonProtocolTypesTest.cpp`、`tests/unit/access/DaemonFrameCodecTest.cpp`、`tests/unit/apps/daemon/DaemonAccessPipelineFactoryTest.cpp`、`tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` | 增补 CLI/protocol/pipeline/live composition focused coverage | plumbing 变更不只靠 package smoke 旁证 |
 | `scripts/packaging/pkg_smoke_install.sh` | explicit-start path 增加/校准 knowledge refresh、retrieve、health positive assertions | package smoke 可直接证明 installed Knowledge 正向入口 |
 
 ### 6.3 focused build / test
@@ -96,6 +104,7 @@
 | `Build_CMakeTools(buildTargets=["dasall_knowledge_installed_asset_probe_integration_test","dasall_recall_coordinator_degraded_unit_test"])` | PASS，result code 0 |
 | `RunCtest_CMakeTools(tests=["KnowledgeInstalledAssetProbeIntegrationTest","RecallCoordinatorDegradedTest"])` | PASS，2/2 passed |
 | `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_knowledge_installed_asset_probe_integration_test"])` | PASS，result code 0 |
+| `RunCtest_CMakeTools(tests=["CliDaemonCommandParserTest","DaemonProtocolTypesTest","DaemonFrameCodecTest","DaemonAccessPipelineFactoryTest","DaemonRuntimeLiveDependencyCompositionTest"])` | PASS，5/5 passed |
 
 ### 6.4 package build 与 explicit smoke
 
@@ -121,7 +130,7 @@
 |---|---|
 | 代码注释 | 本轮未新增叙事性注释；新增 inventory helper 与 step handling 采用局部函数/变量表达语义。 |
 | 正负例覆盖 | 正例：refresh、重复 refresh、retrieve、health；负例/退化：`RecallCoordinatorDegradedTest` 保留 sparse failure reason，health degraded reason `vector_backend_disabled` 明确记录。 |
-| 测试发现性 / 门禁入口 | focused target 与 CTest 已通过；package explicit smoke 已覆盖真实 installed CLI/daemon path。 |
+| 测试发现性 / 门禁入口 | focused target 与 CTest 已通过；CLI/protocol/pipeline/live composition tests 已通过；package explicit smoke 已覆盖真实 installed CLI/daemon path。 |
 | TODO / 交付物 / worklog 回写 | 本文件记录 D/B gate、命令和真实 package 结果；来源 TODO 与 worklog 同步回写。 |
 | 无关改动隔离 | `obj-x86_64-linux-gnu/`、打包副产物与其他生成文件不纳入提交。 |
 

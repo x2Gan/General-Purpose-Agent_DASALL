@@ -55,7 +55,8 @@ classify_access_error_ref(std::string_view error_ref) {
   }
 
   if (error_ref == "payload_size_limit_exceeded" ||
-      error_ref == "unknown_command" || error_ref == "diag_command_missing") {
+      error_ref == "unknown_command" || error_ref == "diag_command_missing" ||
+      error_ref == "knowledge_payload_invalid") {
     return AccessErrorCode::ValidationRejected;
   }
 
@@ -91,6 +92,13 @@ classify_access_error_ref(std::string_view error_ref) {
   }
 
   if (error_ref == "submit_pipeline_not_configured") {
+    return AccessErrorCode::RuntimeDispatchFailed;
+  }
+
+  if (error_ref == "knowledge_unavailable" ||
+      error_ref == "knowledge_refresh_busy" ||
+      error_ref == "knowledge_refresh_failed" ||
+      error_ref == "knowledge_retrieve_failed") {
     return AccessErrorCode::RuntimeDispatchFailed;
   }
 

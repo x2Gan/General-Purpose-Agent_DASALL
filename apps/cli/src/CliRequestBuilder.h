@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -53,6 +54,10 @@ class CliRequestBuilder {
       frame.payload = std::string("command_name=") +
                       canonical_diag_command(*command.diag_command);
       return frame;
+    }
+
+    if (frame.command == "knowledge") {
+      return build_knowledge_frame(command, frame);
     }
 
     return std::nullopt;
@@ -109,6 +114,67 @@ class CliRequestBuilder {
       return "thread.dump";
     }
     return std::string(command_name);
+  }
+
+  [[nodiscard]] static std::string knowledge_operation_name(
+      const CliKnowledgeCommandKind command_kind) {
+    switch (command_kind) {
+      case CliKnowledgeCommandKind::Health:
+        return "health";
+      case CliKnowledgeCommandKind::Retrieve:
+        return "retrieve";
+      case CliKnowledgeCommandKind::Refresh:
+        return "refresh";
+      case CliKnowledgeCommandKind::None:
+        break;
+    }
+    return {};
+  }
+
+  [[nodiscard]] static bool is_unreserved_payload_character(
+      const unsigned char character) {
+    return (std::isalnum(character) != 0) || character == '-' ||
+           character == '_' || character == '.' || character == '~' ||
+           character == ' ';
+  }
+
+  [[nodiscard]] static std::string percent_encode_payload_value(
+      std::string_view value) {
+    constexpr char kHex[] = "0123456789ABCDEF";
+    std::string encoded;
+    encoded.reserve(value.size());
+    for (const unsigned char character : value) {
+      if (is_unreserved_payload_character(character)) {
+        encoded.push_back(static_cast<char>(character));
+        continue;
+      }
+      encoded.push_back('%');
+      encoded.push_back(kHex[(character >> 4U) & 0x0FU]);
+      encoded.push_back(kHex[character & 0x0FU]);
+    }
+    return encoded;
+  }
+
+  [[nodiscard]] static std::optional<dasall::access::daemon::UdsRequestFrame>
+  build_knowledge_frame(const CliCommand& command,
+                        dasall::access::daemon::UdsRequestFrame frame) {
+    const auto operation = knowledge_operation_name(command.knowledge_command);
+    if (operation.empty()) {
+      return std::nullopt;
+    }
+
+    frame.args.emplace("operation", operation);
+    frame.payload = "operation=" + operation;
+    if (command.knowledge_command == CliKnowledgeCommandKind::Retrieve) {
+      if (!command.knowledge_query_text.has_value() ||
+          command.knowledge_query_text->empty()) {
+        return std::nullopt;
+      }
+      frame.args.emplace("query_text", *command.knowledge_query_text);
+      frame.payload += ";query_text=" +
+                       percent_encode_payload_value(*command.knowledge_query_text);
+    }
+    return frame;
   }
 
   [[nodiscard]] static std::optional<dasall::access::daemon::UdsRequestFrame>

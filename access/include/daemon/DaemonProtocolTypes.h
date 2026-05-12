@@ -19,6 +19,7 @@ enum class DaemonCommandKind {
   Cancel = 4,
   Readiness = 5,
   Diagnostics = 6,
+  Knowledge = 7,
 };
 
 enum class DaemonAsyncPreference {
@@ -68,6 +69,9 @@ enum class DaemonFrameDecodeError {
   }
   if (command == "diag" || command == "diagnostics") {
     return DaemonCommandKind::Diagnostics;
+  }
+  if (command == "knowledge") {
+    return DaemonCommandKind::Knowledge;
   }
   return DaemonCommandKind::Unknown;
 }

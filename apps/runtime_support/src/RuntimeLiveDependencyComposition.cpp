@@ -7,9 +7,11 @@
 #include "ICognitionEngine.h"
 #include "LLMProductionFactory.h"
 #include "IMemoryManager.h"
+#include "KnowledgeServiceFactory.h"
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
 #include "ToolManager.h"
+#include "config/InstallLayout.h"
 
 namespace dasall::apps::runtime_support {
 
@@ -96,6 +98,24 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       std::string("runtime:") + std::string(composition_owner) +
       ":required-live-baseline",
   };
+
+    const auto install_layout = infra::config::resolve_install_layout();
+    const auto knowledge_result = knowledge::create_installed_asset_knowledge_service(
+      knowledge::InstalledAssetKnowledgeServiceOptions{
+        .readonly_assets_root = install_layout.readonly_assets_root,
+        .state_root = install_layout.state_root,
+        .service_instance_id = std::string(composition_owner) + ":knowledge",
+      });
+    if (knowledge_result.ok()) {
+    dependency_set->knowledge_service = knowledge_result.service;
+    dependency_set->external_evidence.push_back(
+      std::string("runtime:") + std::string(composition_owner) +
+      ":knowledge-installed-assets");
+    } else {
+    dependency_set->external_evidence.push_back(
+      std::string("runtime:") + std::string(composition_owner) +
+      ":knowledge-unavailable:" + knowledge_result.error);
+    }
 
   return RuntimeDependencyCompositionResult{
       .dependency_set = std::move(dependency_set),

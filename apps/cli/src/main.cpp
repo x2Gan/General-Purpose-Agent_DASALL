@@ -343,6 +343,11 @@ int main(int argc, char* argv[]) {
       return emit_daemon_response("diag", response);
   }
 
+  if (effective_cmd.name == "knowledge") {
+    const auto response = client.invoke(effective_cmd);
+    return emit_daemon_response("knowledge", response);
+  }
+
   // 不可达（parse 已验证命令名合法）
   return EXIT_FAILURE;
 }

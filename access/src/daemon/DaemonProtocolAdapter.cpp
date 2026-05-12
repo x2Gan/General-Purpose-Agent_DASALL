@@ -117,7 +117,8 @@ bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const
       command_kind == DaemonCommandKind::Status ||
       command_kind == DaemonCommandKind::Cancel ||
       command_kind == DaemonCommandKind::Readiness ||
-      command_kind == DaemonCommandKind::Diagnostics) {
+      command_kind == DaemonCommandKind::Diagnostics ||
+      command_kind == DaemonCommandKind::Knowledge) {
     packet.packet_id = decoded.frame.command;
   } else {
     packet.packet_id = !decoded.frame.request_id.empty()

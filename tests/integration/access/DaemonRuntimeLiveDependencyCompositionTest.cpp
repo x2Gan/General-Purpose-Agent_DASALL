@@ -38,7 +38,7 @@ load_runtime_policy_snapshot() {
   return std::find(ports.begin(), ports.end(), expected_port) != ports.end();
 }
 
-void daemon_runtime_live_dependency_composition_establishes_degraded_baseline() {
+void daemon_runtime_live_dependency_composition_establishes_default_ready_baseline() {
   const auto policy_snapshot = load_runtime_policy_snapshot();
   const auto composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
@@ -52,17 +52,19 @@ void daemon_runtime_live_dependency_composition_establishes_degraded_baseline() 
   assert_true(readiness.has_required_ports,
               "daemon runtime live dependency composition should provide all required ports: " +
                   readiness.summary());
-  assert_true(readiness.degraded,
-              "daemon runtime live dependency composition should remain degraded while optional ports are missing: " +
-                  readiness.summary());
+    assert_true(!readiness.degraded,
+          "daemon runtime live dependency composition should not be degraded after live optional ports are composed: " +
+        readiness.summary());
   assert_true(readiness.missing_required_ports.empty(),
               "daemon runtime live dependency composition should not leave required ports empty");
-    assert_true(contains_port(readiness.missing_optional_ports, "knowledge") &&
-            !contains_port(readiness.missing_optional_ports, "llm"),
-          "daemon runtime live dependency composition should inject llm while naming missing knowledge: " +
-                  readiness.summary());
+      assert_true(!contains_port(readiness.missing_optional_ports, "knowledge") &&
+        !contains_port(readiness.missing_optional_ports, "llm"),
+      "daemon runtime live dependency composition should inject llm and knowledge: " +
+        readiness.summary());
     assert_true(composition.dependency_set->llm_manager != nullptr,
           "daemon runtime live dependency composition should expose a production ILLMManager");
+      assert_true(composition.dependency_set->knowledge_service != nullptr,
+      "daemon runtime live dependency composition should expose an installed-asset IKnowledgeService");
 
   dasall::runtime::AgentInitRequest init_request;
   init_request.runtime_instance_id =
@@ -78,22 +80,22 @@ void daemon_runtime_live_dependency_composition_establishes_degraded_baseline() 
   assert_true(init_result.accepted,
               "daemon runtime live dependency composition should keep init accepted: " +
                   init_result.health_summary + " (" + init_result.diagnostics + ")");
-  assert_true(init_result.degraded_ready(),
-              "daemon runtime live dependency composition should surface degraded-ready entrypoint: " +
-                  init_result.diagnostics);
+    assert_true(init_result.default_ready(),
+          "daemon runtime live dependency composition should surface default-ready entrypoint: " +
+            init_result.diagnostics);
   assert_true(!init_result.stub_ready(),
               "daemon runtime live dependency composition should not fall back to stub-ready: " +
                   init_result.diagnostics);
-  assert_true(!init_result.default_ready(),
-              "daemon runtime live dependency composition should not claim default-ready while knowledge remains absent: " +
-                  init_result.diagnostics);
+    assert_true(!init_result.degraded_ready(),
+          "daemon runtime live dependency composition should not remain degraded-ready after knowledge is composed: " +
+            init_result.diagnostics);
 }
 
 }  // namespace
 
 int main() {
   try {
-    daemon_runtime_live_dependency_composition_establishes_degraded_baseline();
+    daemon_runtime_live_dependency_composition_establishes_default_ready_baseline();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonRuntimeLiveDependencyCompositionTest] FAILED: " << ex.what() << '\n';
     return 1;

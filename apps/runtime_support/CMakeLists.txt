@@ -16,6 +16,8 @@ target_link_libraries(dasall_apps_runtime_support
     dasall_runtime
   PRIVATE
     dasall_cognition
+    dasall_infra
+    dasall_knowledge
     dasall_llm
     dasall_memory
     dasall_tools

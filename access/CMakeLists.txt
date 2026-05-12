@@ -75,6 +75,7 @@ target_link_libraries(dasall_access
     dasall_platform
   PRIVATE
     dasall_infra
+    dasall_knowledge
 )
 
 dasall_apply_common_options(dasall_access)

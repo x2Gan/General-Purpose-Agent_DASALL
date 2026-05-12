@@ -32,6 +32,13 @@ enum class CliConfigCommandKind {
   Apply,
 };
 
+enum class CliKnowledgeCommandKind {
+  None,
+  Health,
+  Retrieve,
+  Refresh,
+};
+
 /// 已解析的 CLI 命令结构
 struct CliCommand {
   /// 命令名称（"ping" / "submit" / ...）
@@ -86,6 +93,12 @@ struct CliCommand {
   /// diagnostics 子命令名。
   std::optional<std::string> diag_command;
 
+  /// knowledge installed-package 正向入口子命令类型。
+  CliKnowledgeCommandKind knowledge_command = CliKnowledgeCommandKind::None;
+
+  /// knowledge retrieve 的查询文本。
+  std::optional<std::string> knowledge_query_text;
+
   /// config 本地工作流子命令类型。
   CliConfigCommandKind config_command = CliConfigCommandKind::None;
 
@@ -116,6 +129,7 @@ struct CliCommand {
 ///   status <receipt_ref> <ownership_token> [actor_ref]
 ///   cancel <receipt_ref> <ownership_token> [actor_ref]
 ///   diag <command_name>       — 隐藏运维命令，默认不出现在 usage 中
+///   knowledge <health|retrieve|refresh> — Knowledge 安装态正向入口
 ///   config [show|plan|validate|apply] — 本地部署配置工作流命令族
 ///
 /// 错误处理：

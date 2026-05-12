@@ -480,6 +480,10 @@ int main(int argc, char* argv[]) {
   pipeline_options.daemon_diagnostics_enabled = diagnostics_enabled_state->load();
   pipeline_options.daemon_diagnostics_enabled_state = diagnostics_enabled_state;
   pipeline_options.diagnostics_service = diagnostics_service;
+  if (runtime_init_request.request.dependency_set != nullptr) {
+    pipeline_options.knowledge_service =
+        runtime_init_request.request.dependency_set->knowledge_service;
+  }
   pipeline_options.daemon_profile_id = daemon_profile_id;
   pipeline_options.daemon_version = "v1";
   pipeline_options.daemon_runtime_readiness_label =

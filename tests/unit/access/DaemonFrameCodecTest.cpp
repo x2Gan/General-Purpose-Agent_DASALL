@@ -125,6 +125,31 @@ void test_encode_request_frame_writes_v1_cli_envelope() {
               "request frame should encode deadline_ms when provided");
 }
 
+void test_decode_request_frame_accepts_knowledge_command() {
+  using dasall::access::daemon::DaemonCommandKind;
+  using dasall::access::daemon::DaemonFrameDecodeError;
+  using dasall::access::daemon::decode_request_frame;
+  using dasall::tests::support::assert_equal;
+
+  const std::string payload =
+      R"({"schema_version":"1","request_id":"req-knowledge","trace_id":"trace-knowledge",)"
+      R"("command":"knowledge","args":{"operation":"retrieve"},)"
+      R"("payload":"operation=retrieve;query_text=DeepSeek Chat",)"
+      R"("async_preference":false,"output_mode":"json"})";
+
+  const auto decoded = decode_request_frame(payload, 1024U);
+
+  assert_equal(static_cast<int>(DaemonFrameDecodeError::None),
+               static_cast<int>(decoded.error),
+               "knowledge command should decode as a known daemon command");
+  assert_equal(static_cast<int>(DaemonCommandKind::Knowledge),
+               static_cast<int>(decoded.frame.command_kind()),
+               "knowledge frame should expose Knowledge command kind");
+  assert_equal(std::string("operation=retrieve;query_text=DeepSeek Chat"),
+               decoded.frame.payload,
+               "knowledge frame should preserve operation payload");
+}
+
 void test_decode_response_frame_extracts_disposition_receipt_and_payload() {
   using dasall::access::daemon::DaemonFrameDecodeError;
   using dasall::access::daemon::DecodedDaemonResponseFrame;
@@ -179,6 +204,7 @@ int main() {
     test_decode_request_frame_extracts_v1_fields_and_escapes();
     test_encode_response_frame_escapes_user_controlled_fields();
     test_encode_request_frame_writes_v1_cli_envelope();
+    test_decode_request_frame_accepts_knowledge_command();
     test_decode_response_frame_extracts_disposition_receipt_and_payload();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonFrameCodecTest] FAILED: " << ex.what() << '\n';

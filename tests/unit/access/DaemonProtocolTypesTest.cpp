@@ -59,6 +59,9 @@ void test_command_taxonomy_classifies_v1_commands() {
   assert_equal(static_cast<int>(DaemonCommandKind::Diagnostics),
                static_cast<int>(classify_daemon_command("diag")),
                "diag should map to Diagnostics taxonomy");
+  assert_equal(static_cast<int>(DaemonCommandKind::Knowledge),
+               static_cast<int>(classify_daemon_command("knowledge")),
+               "knowledge should map to Knowledge taxonomy");
 }
 
 void test_command_taxonomy_preserves_read_only_and_mutating_split() {
@@ -79,6 +82,9 @@ void test_command_taxonomy_preserves_read_only_and_mutating_split() {
               "run should be treated as mutating command");
   assert_true(is_mutating_daemon_command(DaemonCommandKind::Cancel),
               "cancel should be treated as mutating command");
+  assert_true(!is_read_only_daemon_command(DaemonCommandKind::Knowledge) &&
+                  !is_mutating_daemon_command(DaemonCommandKind::Knowledge),
+              "knowledge command should leave operation mutability to the access handler");
 }
 
 void test_unknown_command_maps_to_unknown_kind() {

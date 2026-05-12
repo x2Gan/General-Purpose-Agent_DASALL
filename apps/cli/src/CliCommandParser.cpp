@@ -158,7 +158,8 @@ void apply_flags_to_command(const ParsedStableFlags& flags, CliCommand& cmd) {
   const bool is_run_like = command_name == "run" || command_name == "submit";
   const bool is_daemon_query = command_name == "ping" || command_name == "readiness" ||
                                command_name == "status" || command_name == "cancel" ||
-                               command_name == "diag" || command_name == "diagnostics";
+                               command_name == "diag" || command_name == "diagnostics" ||
+                               command_name == "knowledge";
 
   if (flags.async_preference == CliAsyncPreference::Async && !is_run_like) {
     return false;
@@ -259,6 +260,36 @@ void apply_config_flags_to_command(const ParsedConfigFlags& flags,
   cmd.name = "help";
   cmd.help_path = std::move(help_path);
   return cmd;
+}
+
+[[nodiscard]] CliKnowledgeCommandKind parse_knowledge_command_kind(
+    std::string_view subcommand) {
+  if (subcommand == "health") {
+    return CliKnowledgeCommandKind::Health;
+  }
+  if (subcommand == "retrieve") {
+    return CliKnowledgeCommandKind::Retrieve;
+  }
+  if (subcommand == "refresh") {
+    return CliKnowledgeCommandKind::Refresh;
+  }
+  return CliKnowledgeCommandKind::None;
+}
+
+[[nodiscard]] std::string join_positional_tail(
+    const std::vector<std::string>& positional_args,
+    std::size_t start_index) {
+  std::string joined;
+  for (std::size_t index = start_index; index < positional_args.size(); ++index) {
+    if (positional_args[index].empty()) {
+      continue;
+    }
+    if (!joined.empty()) {
+      joined.push_back(' ');
+    }
+    joined += positional_args[index];
+  }
+  return joined;
 }
 
 [[nodiscard]] std::vector<std::string> build_help_path(
@@ -491,6 +522,30 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
     return cmd;
   }
 
+  if (cmd.name == "knowledge") {
+    if (positional_args.size() < 2 || positional_args[1].empty()) {
+      return std::nullopt;
+    }
+
+    cmd.knowledge_command = parse_knowledge_command_kind(positional_args[1]);
+    switch (cmd.knowledge_command) {
+      case CliKnowledgeCommandKind::Health:
+      case CliKnowledgeCommandKind::Refresh:
+        if (positional_args.size() != 2) {
+          return std::nullopt;
+        }
+        return cmd;
+      case CliKnowledgeCommandKind::Retrieve:
+        cmd.knowledge_query_text = join_positional_tail(positional_args, 2U);
+        if (!cmd.knowledge_query_text.has_value() || cmd.knowledge_query_text->empty()) {
+          return std::nullopt;
+        }
+        return cmd;
+      case CliKnowledgeCommandKind::None:
+        return std::nullopt;
+    }
+  }
+
   // 未知命令
   return std::nullopt;
 }
@@ -572,6 +627,26 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
            "[--socket-path <path>] [--quiet]\n";
   }
 
+  if (command_name == "knowledge") {
+    if (subcommand_name == "health") {
+      return "Usage: dasall-cli knowledge health [--json] [--timeout-ms <ms>] "
+             "[--socket-path <path>] [--quiet]\n";
+    }
+
+    if (subcommand_name == "refresh") {
+      return "Usage: dasall-cli knowledge refresh [--json] [--timeout-ms <ms>] "
+             "[--socket-path <path>] [--quiet]\n";
+    }
+
+    if (subcommand_name == "retrieve") {
+      return "Usage: dasall-cli knowledge retrieve <query_text> [--json] "
+             "[--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+    }
+
+    return "Usage: dasall-cli knowledge <health|refresh|retrieve> [query_text] "
+           "[--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+  }
+
   return "Usage:\n"
          "  dasall-cli help [command] [subcommand]\n"
          "  dasall-cli version [--json] [--quiet]\n"
@@ -582,6 +657,8 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
       "  dasall-cli config apply --from-file <path> --no-input [--json]\n"
          "  dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
          "  dasall-cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
+         "  dasall-cli knowledge <health|refresh|retrieve> [query_text] [--json] [--timeout-ms <ms>] "
+         "[--socket-path <path>] [--quiet]\n"
          "  dasall-cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "
          "[--trace-id <id>] [--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet] [--no-input]\n"
          "  dasall-cli status (--receipt <receipt_ref> --ownership-token <token> | --request-id <request_id>) "

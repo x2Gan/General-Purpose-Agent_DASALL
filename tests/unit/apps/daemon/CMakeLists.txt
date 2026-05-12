@@ -400,6 +400,7 @@ target_link_libraries(dasall-daemon_access_pipeline_factory_unit_test
   PRIVATE
     dasall_test_support
     dasall_access
+    dasall_knowledge
 )
 
 dasall_apply_common_options(dasall-daemon_access_pipeline_factory_unit_test)

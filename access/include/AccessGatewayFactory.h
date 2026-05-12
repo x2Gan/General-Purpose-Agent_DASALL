@@ -15,6 +15,10 @@ namespace dasall::infra::diagnostics {
 class IDiagnosticsService;
 }
 
+namespace dasall::knowledge {
+class IKnowledgeService;
+}
+
 namespace dasall::access {
 
 class AsyncTaskRegistry;
@@ -59,6 +63,7 @@ struct DaemonAccessPipelineOptions {
   std::string daemon_runtime_readiness_label = "default-ready";
   std::shared_ptr<std::atomic_bool> daemon_diagnostics_enabled_state;
   std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
+    std::shared_ptr<dasall::knowledge::IKnowledgeService> knowledge_service;
   std::shared_ptr<AsyncTaskRegistry> async_task_registry;
   PublishBackend publish_backend{};
     AccessObservabilityEmitBackend observability_emit_backend{};
