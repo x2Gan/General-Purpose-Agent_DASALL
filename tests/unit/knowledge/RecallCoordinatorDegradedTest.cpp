@@ -133,9 +133,11 @@ void test_recall_coordinator_fails_when_both_lanes_fail() {
               "failure result must not masquerade as a partial success");
   assert_true(result.failure_reason_codes.size() == 2U,
               "dual-lane failure should keep both lane reason codes");
-  assert_true(std::find(result.failure_reason_codes.begin(),
-                        result.failure_reason_codes.end(),
-                        "sparse_index_unavailable") != result.failure_reason_codes.end(),
+  assert_true(std::any_of(result.failure_reason_codes.begin(),
+                          result.failure_reason_codes.end(),
+                          [](const std::string& reason_code) {
+                            return reason_code.rfind("sparse_index_unavailable", 0) == 0;
+                          }),
               "sparse lane failure should preserve provider reason code");
   assert_true(std::find(result.failure_reason_codes.begin(),
                         result.failure_reason_codes.end(),

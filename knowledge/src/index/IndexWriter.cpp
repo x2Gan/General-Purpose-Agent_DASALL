@@ -586,7 +586,8 @@ void write_manifest_sidecar(const std::filesystem::path& path, const IndexManife
 
     SparseIndexSearchResult result;
     result.ok = true;
-    while (sqlite3_step(statement.handle) == SQLITE_ROW) {
+    int step_status = SQLITE_ROW;
+    while ((step_status = sqlite3_step(statement.handle)) == SQLITE_ROW) {
       SparseSearchRow row;
       row.corpus_id = reinterpret_cast<const char*>(sqlite3_column_text(statement.handle, 0));
       row.document_id = reinterpret_cast<const char*>(sqlite3_column_text(statement.handle, 1));
@@ -626,8 +627,7 @@ void write_manifest_sidecar(const std::filesystem::path& path, const IndexManife
       }
     }
 
-    if (sqlite3_errcode(database.handle) != SQLITE_OK &&
-        sqlite3_errcode(database.handle) != SQLITE_DONE) {
+    if (step_status != SQLITE_DONE && step_status != SQLITE_ROW) {
       return make_search_error(KnowledgeErrorCode::IndexUnavailable,
                                sqlite3_errmsg(database.handle),
                                "index_writer.snapshot_search", "search_execution_failed");

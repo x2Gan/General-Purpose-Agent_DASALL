@@ -42,8 +42,12 @@ void append_unique(std::vector<std::string>& values, std::string value) {
 [[nodiscard]] std::string sparse_failure_reason_code(
     const std::optional<dasall::contracts::ErrorInfo>& error) {
   if (error.has_value() && error->details.code.has_value()) {
-    return std::string(knowledge_error_code_name(
+    const auto code_name = std::string(knowledge_error_code_name(
         static_cast<KnowledgeErrorCode>(*error->details.code)));
+    if (!error->source_ref.ref_id.empty() && error->source_ref.ref_id != code_name) {
+      return code_name + "_" + error->source_ref.ref_id;
+    }
+    return code_name;
   }
 
   return "unspecified";

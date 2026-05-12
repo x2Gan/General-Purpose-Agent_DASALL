@@ -73,6 +73,15 @@ assert_json_contains() {
     fail "${label}: expected JSON fragment not found: ${expected}"
 }
 
+assert_json_matches() {
+  json_payload=$1
+  expected_regex=$2
+  label=$3
+
+  printf '%s\n' "$json_payload" | grep -Eq "$expected_regex" || \
+    fail "${label}: expected JSON pattern not found: ${expected_regex}"
+}
+
 cleanup() {
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
   if [ -n "${PRESERVED_SECRET_ROOT}" ]; then
@@ -182,6 +191,23 @@ verify_explicit_start() {
   set -e
   [ "$DIAG_CODE" -eq 4 ] || fail "diag disabled should exit 4, got ${DIAG_CODE}: ${DIAG_JSON}"
   assert_json_contains "$DIAG_JSON" '"error_ref":"diag_disabled"' 'diag disabled gate'
+
+  KNOWLEDGE_REFRESH_JSON=$(run_root dasall knowledge refresh --json --timeout-ms 30000)
+  assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '"disposition":"completed"' 'knowledge refresh smoke'
+  assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"operation\":\"refresh\"' 'knowledge refresh payload'
+  assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"status\":\"accepted\"' 'knowledge refresh status'
+
+  KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall knowledge retrieve 'DeepSeek Chat' --json --timeout-ms 30000)
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '"disposition":"completed"' 'knowledge retrieve smoke'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"operation\":\"retrieve\"' 'knowledge retrieve payload'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"ok\":true' 'knowledge retrieve ok'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge retrieve slice count'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' 'knowledge retrieve installed provider evidence'
+
+  KNOWLEDGE_HEALTH_JSON=$(run_root dasall knowledge health --json --timeout-ms 30000)
+  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '"disposition":"completed"' 'knowledge health smoke'
+  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"operation\":\"health\"' 'knowledge health payload'
+  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"active_snapshot_id\":\"snapshot:' 'knowledge health active snapshot'
 
   run_root test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
   run_root test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml

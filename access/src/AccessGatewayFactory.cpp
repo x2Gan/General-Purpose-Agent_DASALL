@@ -1,18 +1,23 @@
 #include "AccessGatewayFactory.h"
 
+#include <cctype>
 #include <chrono>
 #include <charconv>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "AccessGateway.h"
 #include "AccessObservabilityBridge.h"
 #include "AccessPolicyGate.h"
 #include "AdmissionController.h"
 #include "AsyncTaskRegistry.h"
+#include "IKnowledgeService.h"
+#include "KnowledgeTypes.h"
 #include "AuthenticatorChain.h"
 #include "RequestNormalizer.h"
 #include "RequestValidator.h"
@@ -232,6 +237,334 @@ struct DaemonDiagPayload {
   }
 
   return parsed;
+}
+
+struct DaemonKnowledgePayload {
+  std::string operation;
+  std::string query_text;
+};
+
+[[nodiscard]] std::optional<unsigned char> decode_hex_digit(const char digit) {
+  if (digit >= '0' && digit <= '9') {
+    return static_cast<unsigned char>(digit - '0');
+  }
+  if (digit >= 'a' && digit <= 'f') {
+    return static_cast<unsigned char>(digit - 'a' + 10);
+  }
+  if (digit >= 'A' && digit <= 'F') {
+    return static_cast<unsigned char>(digit - 'A' + 10);
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::string> percent_decode_payload_value(
+    std::string_view value) {
+  std::string decoded;
+  decoded.reserve(value.size());
+  for (std::size_t index = 0U; index < value.size(); ++index) {
+    const char character = value[index];
+    if (character != '%') {
+      decoded.push_back(character);
+      continue;
+    }
+    if (index + 2U >= value.size()) {
+      return std::nullopt;
+    }
+    const auto high = decode_hex_digit(value[index + 1U]);
+    const auto low = decode_hex_digit(value[index + 2U]);
+    if (!high.has_value() || !low.has_value()) {
+      return std::nullopt;
+    }
+    decoded.push_back(static_cast<char>((*high << 4U) | *low));
+    index += 2U;
+  }
+  return decoded;
+}
+
+[[nodiscard]] std::optional<DaemonKnowledgePayload> parse_knowledge_payload(
+    std::string_view payload) {
+  if (payload.empty()) {
+    return std::nullopt;
+  }
+
+  DaemonKnowledgePayload parsed;
+  std::size_t start = 0U;
+  while (start <= payload.size()) {
+    const std::size_t end = payload.find(';', start);
+    const std::string_view item = end == std::string_view::npos
+                                      ? payload.substr(start)
+                                      : payload.substr(start, end - start);
+    if (!item.empty()) {
+      const std::size_t eq = item.find('=');
+      if (eq == std::string_view::npos || eq == 0U || eq + 1U > item.size()) {
+        return std::nullopt;
+      }
+
+      const std::string key(item.substr(0U, eq));
+      const auto decoded_value = percent_decode_payload_value(item.substr(eq + 1U));
+      if (!decoded_value.has_value()) {
+        return std::nullopt;
+      }
+      if (key == "operation") {
+        parsed.operation = *decoded_value;
+      } else if (key == "query_text") {
+        parsed.query_text = *decoded_value;
+      }
+    }
+
+    if (end == std::string_view::npos) {
+      break;
+    }
+    start = end + 1U;
+  }
+
+  if (parsed.operation != "health" && parsed.operation != "retrieve" &&
+      parsed.operation != "refresh") {
+    return std::nullopt;
+  }
+  if (parsed.operation == "retrieve" && parsed.query_text.empty()) {
+    return std::nullopt;
+  }
+  if (parsed.operation != "retrieve" && !parsed.query_text.empty()) {
+    return std::nullopt;
+  }
+
+  return parsed;
+}
+
+[[nodiscard]] std::string escape_json_string(std::string_view input) {
+  std::string output;
+  output.reserve(input.size() + 8U);
+  for (const unsigned char current : input) {
+    switch (current) {
+      case '"':
+        output += "\\\"";
+        break;
+      case '\\':
+        output += "\\\\";
+        break;
+      case '\b':
+        output += "\\b";
+        break;
+      case '\f':
+        output += "\\f";
+        break;
+      case '\n':
+        output += "\\n";
+        break;
+      case '\r':
+        output += "\\r";
+        break;
+      case '\t':
+        output += "\\t";
+        break;
+      default:
+        if (current < 0x20U) {
+          constexpr char kHex[] = "0123456789abcdef";
+          output += "\\u00";
+          output.push_back(kHex[(current >> 4U) & 0x0FU]);
+          output.push_back(kHex[current & 0x0FU]);
+        } else {
+          output.push_back(static_cast<char>(current));
+        }
+        break;
+    }
+  }
+  return output;
+}
+
+[[nodiscard]] std::string json_string(std::string_view input) {
+  return std::string("\"") + escape_json_string(input) + "\"";
+}
+
+[[nodiscard]] std::string json_array(const std::vector<std::string>& values) {
+  std::string output = "[";
+  for (std::size_t index = 0U; index < values.size(); ++index) {
+    if (index > 0U) {
+      output += ',';
+    }
+    output += json_string(values[index]);
+  }
+  output += ']';
+  return output;
+}
+
+[[nodiscard]] std::string bool_json(const bool value) {
+  return value ? "true" : "false";
+}
+
+[[nodiscard]] std::string health_state_name(const knowledge::HealthState state) {
+  switch (state) {
+    case knowledge::HealthState::Unknown:
+      return "unknown";
+    case knowledge::HealthState::Healthy:
+      return "healthy";
+    case knowledge::HealthState::Degraded:
+      return "degraded";
+    case knowledge::HealthState::Unhealthy:
+      return "unhealthy";
+  }
+  return "unknown";
+}
+
+[[nodiscard]] std::string freshness_state_name(const knowledge::FreshnessState state) {
+  switch (state) {
+    case knowledge::FreshnessState::Fresh:
+      return "fresh";
+    case knowledge::FreshnessState::StaleAllowed:
+      return "stale_allowed";
+    case knowledge::FreshnessState::StaleRejected:
+      return "stale_rejected";
+    case knowledge::FreshnessState::Unknown:
+      return "unknown";
+  }
+  return "unknown";
+}
+
+[[nodiscard]] std::string refresh_status_name(const knowledge::RefreshStatus status) {
+  switch (status) {
+    case knowledge::RefreshStatus::Accepted:
+      return "accepted";
+    case knowledge::RefreshStatus::Busy:
+      return "busy";
+    case knowledge::RefreshStatus::Failed:
+      return "failed";
+  }
+  return "failed";
+}
+
+[[nodiscard]] std::string retrieval_mode_name(const knowledge::RetrievalMode mode) {
+  switch (mode) {
+    case knowledge::RetrievalMode::LexicalOnly:
+      return "lexical_only";
+    case knowledge::RetrievalMode::DenseOnly:
+      return "dense_only";
+    case knowledge::RetrievalMode::Hybrid:
+      return "hybrid";
+  }
+  return "lexical_only";
+}
+
+[[nodiscard]] RuntimeDispatchResult make_knowledge_response(
+    const InboundPacket& packet,
+    std::string payload) {
+  RuntimeDispatchResult result;
+  result.disposition = AccessDisposition::Completed;
+
+  PublishEnvelope envelope;
+  envelope.request_id = packet.packet_id;
+  envelope.result_id = packet.packet_id;
+  envelope.protocol_kind = packet.protocol_kind;
+  envelope.protocol_status_hint = "200";
+  envelope.payload = payload;
+  dasall::contracts::AgentResult agent_result;
+  agent_result.request_id = packet.packet_id;
+  agent_result.response_text = std::move(payload);
+  agent_result.task_completed = true;
+  envelope.agent_result = std::move(agent_result);
+  result.publish_envelope = std::move(envelope);
+  return result;
+}
+
+[[nodiscard]] std::string format_knowledge_health_payload(
+    const knowledge::KnowledgeHealthSnapshot& snapshot) {
+  std::string payload = "{\"operation\":\"health\"";
+  payload += ",\"state\":" + json_string(health_state_name(snapshot.state));
+  payload += ",\"active_snapshot_id\":" + json_string(snapshot.active_snapshot_id);
+  payload += ",\"freshness_state\":" + json_string(freshness_state_name(snapshot.freshness_state));
+  payload += ",\"vector_backend_available\":" + bool_json(snapshot.vector_backend_available);
+  payload += ",\"last_known_good_available\":" + bool_json(snapshot.last_known_good_available);
+  payload += ",\"degraded_return_count\":" + std::to_string(snapshot.degraded_return_count);
+  payload += ",\"reason_codes\":" + json_array(snapshot.reason_codes);
+  payload += '}';
+  return payload;
+}
+
+[[nodiscard]] std::string format_knowledge_refresh_payload(
+    const knowledge::RefreshResult& refresh_result) {
+  std::string payload = "{\"operation\":\"refresh\"";
+  payload += ",\"status\":" + json_string(refresh_status_name(refresh_result.status));
+  payload += ",\"refresh_id\":" + json_string(refresh_result.refresh_id);
+  if (refresh_result.error.has_value()) {
+    payload += ",\"error_ref\":" +
+               json_string(refresh_result.error->source_ref.ref_id);
+  }
+  payload += '}';
+  return payload;
+}
+
+[[nodiscard]] std::string format_knowledge_retrieve_payload(
+    const knowledge::KnowledgeRetrieveResult& retrieve_result) {
+  std::size_t slice_count = 0U;
+  std::string first_citation;
+  std::string first_snippet;
+  if (retrieve_result.evidence.has_value()) {
+    slice_count = retrieve_result.evidence->slices.size();
+    if (!retrieve_result.evidence->slices.empty()) {
+      first_citation = retrieve_result.evidence->slices.front().citation_ref;
+      first_snippet = retrieve_result.evidence->slices.front().snippet;
+    }
+  }
+
+  std::string payload = "{\"operation\":\"retrieve\"";
+  payload += ",\"ok\":" + bool_json(retrieve_result.ok);
+  payload += ",\"mode\":" + json_string(retrieval_mode_name(retrieve_result.mode));
+  payload += ",\"slice_count\":" + std::to_string(slice_count);
+  payload += ",\"first_citation\":" + json_string(first_citation);
+  payload += ",\"first_snippet\":" + json_string(first_snippet);
+  if (retrieve_result.error.has_value()) {
+    payload += ",\"error_ref\":" +
+               json_string(retrieve_result.error->source_ref.ref_id);
+  }
+  payload += '}';
+  return payload;
+}
+
+[[nodiscard]] RuntimeDispatchResult make_knowledge_dispatch_result(
+    const InboundPacket& packet,
+    const DaemonKnowledgePayload& payload,
+    const std::shared_ptr<knowledge::IKnowledgeService>& knowledge_service) {
+  if (knowledge_service == nullptr) {
+    return make_rejected_result(AccessErrorCode::RuntimeDispatchFailed,
+                                "knowledge_unavailable");
+  }
+
+  if (payload.operation == "health") {
+    return make_knowledge_response(
+        packet,
+        format_knowledge_health_payload(knowledge_service->health_snapshot()));
+  }
+
+  if (payload.operation == "refresh") {
+    const auto refresh_result = knowledge_service->request_refresh(knowledge::CorpusChangeSet{});
+    if (refresh_result.status == knowledge::RefreshStatus::Accepted) {
+      return make_knowledge_response(packet,
+                                     format_knowledge_refresh_payload(refresh_result));
+    }
+    const auto failure_ref = refresh_result.error.has_value() &&
+                                     !refresh_result.error->source_ref.ref_id.empty()
+                                 ? refresh_result.error->source_ref.ref_id
+                                 : std::string("knowledge_refresh_failed");
+    return make_rejected_result(AccessErrorCode::RuntimeDispatchFailed,
+                                refresh_result.status == knowledge::RefreshStatus::Busy
+                                    ? "knowledge_refresh_busy"
+                                    : failure_ref);
+  }
+
+  knowledge::KnowledgeQuery query;
+  query.request_id = packet.packet_id.empty() ? "knowledge-retrieve" : packet.packet_id;
+  query.query_text = payload.query_text;
+  query.query_kind = knowledge::KnowledgeQueryKind::FactLookup;
+  query.top_k = 3U;
+  query.max_context_projection_items = 3U;
+  query.allow_stale = false;
+  const auto retrieve_result = knowledge_service->retrieve(query);
+  if (retrieve_result.ok) {
+    return make_knowledge_response(packet,
+                                   format_knowledge_retrieve_payload(retrieve_result));
+  }
+  return make_rejected_result(AccessErrorCode::RuntimeDispatchFailed,
+                              "knowledge_retrieve_failed");
 }
 
 [[nodiscard]] RuntimeDispatchResult make_status_dispatch_result(
@@ -617,6 +950,18 @@ build_daemon_submit_pipeline(
               return make_rejected_result(AccessErrorCode::AuthorizationDenied,
                                           policy_result.reject_reason.value_or(
                                               std::string("authorization_denied")));
+            }
+
+            if (packet.packet_id == "knowledge") {
+              const auto knowledge_payload = parse_knowledge_payload(packet.payload);
+              if (!knowledge_payload.has_value()) {
+                return make_rejected_result(AccessErrorCode::ValidationRejected,
+                                            "knowledge_payload_invalid");
+              }
+
+              return make_knowledge_dispatch_result(packet,
+                                                    *knowledge_payload,
+                                                    options.knowledge_service);
             }
 
             if (packet.packet_id == "diag" || packet.packet_id == "diagnostics") {

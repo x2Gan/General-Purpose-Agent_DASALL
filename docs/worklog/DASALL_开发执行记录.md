@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #634
+
+- 日期：2026-05-11
+- 阶段：integration/packaging/knowledge-installed-package
+- 任务：FULLINT-TODO-014 新增 knowledge installed-package 正向入口验证方案
+- 状态：已完成
+
+### 改动
+
+1. 修复 `knowledge/src/index/IndexWriter.cpp`：`perform_search()` 直接跟踪 `sqlite3_step()` 返回值，允许 SQLite FTS 查询以 `SQLITE_DONE` 成功收尾，避免 installed `knowledge retrieve` 被误判为 `search_execution_failed`。
+2. 修复 `knowledge/src/KnowledgeServiceFactory.cpp`：installed asset service factory 新增 in-memory source inventory state，并在 catalog refresh 后用 `SourceScanner` 重建 inventory，使重复 `knowledge refresh` 生成空 change batch 而不是对 seeded active DB 重复插入 chunks。
+3. 调整 `access/src/AccessGatewayFactory.cpp`：`knowledge refresh` rejected 时优先透出 service 层 `ErrorInfo.source_ref.ref_id`，`Busy` 仍保持 `knowledge_refresh_busy`，后续 package 调试不再只见 generic `knowledge_refresh_failed`。
+4. 调整 `knowledge/src/retrieve/RecallCoordinator.cpp` 与 `tests/unit/knowledge/RecallCoordinatorDegradedTest.cpp`：保留 sparse recall 具体 failure reason，并用 degraded regression 固化语义。
+5. 扩展 `tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp`：build-tree installed asset probe 现在覆盖 refresh、重复 refresh、health fresh active snapshot、DeepSeek SQLite FTS evidence 与 `retrieve("DeepSeek Chat")`。
+6. 更新 `scripts/packaging/pkg_smoke_install.sh`：`--explicit-start-check` 路径覆盖 installed `knowledge refresh/retrieve/health` 正向断言，并按稳定 evidence 语义检查 retrieve 结果。
+7. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-014-knowledge-installed-package正向入口验证方案.md`，回写 `docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md`：`FULLINT-TODO-014` 标记 Done，`FULLINT-BLK-002` 对 L4 local installed-package 解阻。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_knowledge_installed_asset_probe_integration_test","dasall_recall_coordinator_degraded_unit_test"])`
+   - 结果：通过；focused Knowledge installed asset probe 与 degraded recall unit target 均构建成功。
+2. `RunCtest_CMakeTools(tests=["KnowledgeInstalledAssetProbeIntegrationTest","RecallCoordinatorDegradedTest"])`
+   - 结果：通过；2/2 passed。
+3. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_knowledge_installed_asset_probe_integration_test"])`
+   - 结果：通过；daemon dispatch 相关 target 与 installed asset probe 均构建成功。
+4. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；exit `0`，生成 `/home/gangan/dasall-cli_0.1.0-1_amd64.deb`、`/home/gangan/dasall-common_0.1.0-1_all.deb`、`/home/gangan/dasall-daemon_0.1.0-1_amd64.deb`、`/home/gangan/dasall_0.1.0-1_all.deb`。
+5. `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；exit `0`，fresh reinstall 后 explicit daemon path 覆盖 Knowledge refresh/retrieve/health positive checks。
+6. `sudo -n dasall knowledge refresh --json --timeout-ms 30000`
+   - 结果：通过；exit `0`，`operation=refresh`、`disposition=completed`、`status=accepted`、`refresh_id=batch:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+7. 重复执行 `sudo -n dasall knowledge refresh --json --timeout-ms 30000`
+   - 结果：通过；exit `0`，重复空 batch refresh accepted，证明 installed refresh 幂等性闭合。
+8. `sudo -n dasall knowledge retrieve "DeepSeek Chat" --json --timeout-ms 30000`
+   - 结果：通过；exit `0`，`ok=true`、`slice_count=3`，首条 citation 为 `llm/providers/deepseek/models.yaml#char=1296-2056`，snippet 包含 `models. deepseek-chat. supports_tools=true`。
+9. `sudo -n dasall knowledge health --json --timeout-ms 30000`
+   - 结果：通过；exit `0`，`state=degraded`、`freshness_state=fresh`、active snapshot present，reason 为 `vector_backend_disabled`。该 degraded 是当前 installed lexical-only path 的预期语义。
+
+### 结果
+
+1. `FULLINT-TODO-014` 已完成：安装态现在能通过真实 CLI -> daemon AccessGateway -> installed `IKnowledgeService` 路径独立证明 `knowledge refresh/retrieve/health` 正向入口。
+2. `FULLINT-BLK-002` 对 L4 local installed-package 已解阻；不再只靠 build-tree `Gate-INT-04` 或既有文档完成状态宣称 Knowledge package-ready。
+3. `knowledge refresh` 重复执行不再失败；installed factory inventory 与 writer active snapshot seed 语义已对齐。
+4. `knowledge health` 的 `vector_backend_disabled` degraded 状态被记录为预期退化，完成判定以 `freshness_state=fresh`、active snapshot 和 retrieve positive slices 为准。
+5. `FULLINT-BLK-001` 仍成立：本轮没有执行 qemu / release runner authoritative gate，不声明 production release-ready。
+
+### 下一步
+
+1. 下一轮建议推进 `FULLINT-TODO-015`，复验 memory context/writeback installed-package 持久化风险。
+2. `FULLINT-TODO-016` 仍需收敛 tools/services runtime production caller 边界。
+
 ## 记录 #633
 
 - 日期：2026-05-11
