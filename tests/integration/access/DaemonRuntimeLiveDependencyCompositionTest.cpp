@@ -8,6 +8,7 @@
 #include <system_error>
 
 #include "AgentFacade.h"
+#include "IToolManager.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
 #include "agent/AgentRequest.h"
@@ -93,6 +94,10 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         !contains_port(readiness.missing_optional_ports, "llm"),
       "daemon runtime live dependency composition should inject llm and knowledge: " +
         readiness.summary());
+      assert_true(composition.dependency_set->tool_manager != nullptr,
+        "daemon runtime live dependency composition should expose a concrete IToolManager");
+      assert_true(contains_port(composition.dependency_set->visible_tools, "agent.dataset"),
+        "daemon runtime live dependency composition should advertise the registered runtime builtin tool surface");
     assert_true(composition.dependency_set->llm_manager != nullptr,
           "daemon runtime live dependency composition should expose a production ILLMManager");
       assert_true(composition.dependency_set->knowledge_service != nullptr,
@@ -121,6 +126,47 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
     assert_true(!init_result.degraded_ready(),
           "daemon runtime live dependency composition should not remain degraded-ready after knowledge is composed: " +
             init_result.diagnostics);
+
+    const auto tool_envelope = composition.dependency_set->tool_manager->invoke(
+      dasall::contracts::ToolRequest{
+        .request_id = std::string("req-daemon-live-tool"),
+        .tool_call_id = std::string("call-daemon-live-tool"),
+        .tool_name = std::string("agent.dataset"),
+        .invocation_kind = dasall::contracts::ToolInvocationKind::InformationQuery,
+        .arguments_payload = std::string("{\"scope\":\"session\"}"),
+        .created_at = 1710000000000,
+        .goal_id = std::string("goal-daemon-live-tool"),
+        .worker_task_id = std::string("worker-daemon-live-tool"),
+        .runtime_budget = std::nullopt,
+        .timeout_ms = 2500U,
+        .idempotency_key = std::string("idem-daemon-live-tool"),
+        .tags = std::vector<std::string>{"integration", "runtime", "tool"},
+      },
+      dasall::tools::ToolInvocationContext{
+        .caller_domain = std::string("runtime.agent_orchestrator"),
+        .session_id = std::string("session-daemon-live-tool"),
+        .profile_snapshot = policy_snapshot.get(),
+        .trace = {
+          .trace_id = std::string("trace-daemon-live-tool"),
+          .span_id = std::nullopt,
+          .parent_span_id = std::nullopt,
+        },
+        .confirmation_facts = std::nullopt,
+      });
+    assert_true(tool_envelope.tool_result.has_value() &&
+            tool_envelope.tool_result->success.value_or(false),
+          "daemon runtime live dependency composition should keep agent.dataset on the successful tools->services path");
+    assert_true(tool_envelope.route_facts.has_value() &&
+            tool_envelope.route_facts->route_kind.has_value() &&
+            *tool_envelope.route_facts->route_kind == "builtin",
+          "daemon runtime live dependency composition should keep runtime builtin calls on the governed builtin route");
+    assert_true(tool_envelope.observation.has_value() && tool_envelope.observation_digest.has_value(),
+          "daemon runtime live dependency composition should project runtime builtin calls into observation and digest together");
+    assert_true(tool_envelope.tool_result->payload.has_value() &&
+            tool_envelope.tool_result->payload->find("\"dataset\":\"agent.dataset\"") != std::string::npos,
+          "daemon runtime live dependency composition should preserve the builtin data-service payload through ToolResult projection");
+    assert_true(!tool_envelope.failure_reason_code.has_value(),
+          "daemon runtime live dependency composition should not surface a failure reason on the successful builtin query path");
 }
 
 }  // namespace

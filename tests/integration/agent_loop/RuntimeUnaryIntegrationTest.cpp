@@ -10,11 +10,13 @@
 #endif
 
 #include "AgentFacade.h"
+#include "IDataService.h"
 #include "ICognitionEngine.h"
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
 #include "RuntimeUnaryFixture.h"
 #include "ToolManager.h"
+#include "bridge/ToolServiceBridge.h"
 #include "execution/BuiltinExecutorLane.h"
 #include "registry/ToolRegistry.h"
 #include "support/TestAssertions.h"
@@ -24,6 +26,41 @@ namespace {
 
 using dasall::tests::runtime_fixture::make_agent_request;
 using dasall::tests::support::assert_true;
+
+class CaptureDataService final : public dasall::services::IDataService {
+ public:
+  dasall::services::DataQueryResult query(
+      const dasall::services::DataQueryRequest& request) override {
+    ++query_calls;
+    last_query_request = request;
+    return dasall::services::DataQueryResult{
+        .code = std::nullopt,
+        .rows_json = std::string{"{\"dataset\":\""} + request.dataset +
+                     "\",\"request_id\":\"" + request.context.request_id +
+                     "\",\"trace_id\":\"" + request.context.trace_id + "\"}",
+        .from_cache = false,
+        .error = std::nullopt,
+    };
+  }
+
+  dasall::services::DataCatalogResult list_capabilities(
+      const dasall::services::DataCatalogRequest& request) override {
+    return dasall::services::DataCatalogResult{
+        .code = std::nullopt,
+        .catalog_json = std::string{"{\"target_class\":\""} + request.target_class +
+                        "\"}",
+        .error = std::nullopt,
+    };
+  }
+
+  int query_calls = 0;
+  std::optional<dasall::services::DataQueryRequest> last_query_request;
+};
+
+struct RuntimeUnaryIntegrationFixture {
+  std::shared_ptr<dasall::runtime::RuntimeDependencySet> dependency_set;
+  std::shared_ptr<CaptureDataService> data_service;
+};
 
 [[nodiscard]] std::filesystem::path make_temp_database_path(const std::string& stem) {
   const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -49,9 +86,10 @@ void cleanup_database_artifacts(const std::filesystem::path& database_path) {
   return config;
 }
 
-[[nodiscard]] std::shared_ptr<dasall::runtime::RuntimeDependencySet>
-make_true_integration_dependency_set(const dasall::memory::MemoryConfig& config) {
+[[nodiscard]] RuntimeUnaryIntegrationFixture make_true_integration_dependency_set(
+    const dasall::memory::MemoryConfig& config) {
   auto dependency_set = std::make_shared<dasall::runtime::RuntimeDependencySet>();
+  auto data_service = std::make_shared<CaptureDataService>();
 
   std::shared_ptr<dasall::memory::IMemoryManager> memory_manager(
       dasall::memory::create_memory_manager(config));
@@ -113,9 +151,9 @@ make_true_integration_dependency_set(const dasall::memory::MemoryConfig& config)
       auto builtin_lane = std::make_shared<dasall::tools::execution::BuiltinExecutorLane>(
         dasall::tools::execution::BuiltinExecutorLaneDependencies{
           .registry = registry,
-          .service_bridge = nullptr,
+          .service_bridge = std::make_shared<dasall::tools::bridge::ToolServiceBridge>(),
           .execution_service = nullptr,
-          .data_service = nullptr,
+          .data_service = data_service,
           .now_ms = {},
         });
 
@@ -135,7 +173,10 @@ make_true_integration_dependency_set(const dasall::memory::MemoryConfig& config)
         dasall::runtime::RuntimeStubMainLoopExit::ToolRound;
   dependency_set->visible_tools = {"agent.dataset"};
   dependency_set->external_evidence = {"runtime:true-unary-integration"};
-  return dependency_set;
+  return RuntimeUnaryIntegrationFixture{
+      .dependency_set = std::move(dependency_set),
+      .data_service = std::move(data_service),
+  };
 }
 
   [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
@@ -219,7 +260,8 @@ void test_runtime_unary_integration_traverses_live_ports() {
   cleanup_database_artifacts(database_path);
 
   const auto config = make_sqlite_config(database_path);
-  auto dependency_set = make_true_integration_dependency_set(config);
+  auto fixture = make_true_integration_dependency_set(config);
+  auto dependency_set = fixture.dependency_set;
   const auto readiness = dependency_set->describe_readiness();
   assert_true(readiness.has_required_ports,
               "runtime unary integration should assemble live required ports before init: " +
@@ -287,6 +329,26 @@ void test_runtime_unary_integration_traverses_live_ports() {
                   result.response_text->find("\"dataset\":\"agent.dataset\"") != std::string::npos,
           "runtime unary integration should return the projected builtin query payload in AgentResult: " +
             failure_detail);
+  assert_true(fixture.data_service->query_calls == 1,
+              "runtime unary integration should dispatch exactly one builtin query through IDataService");
+  assert_true(fixture.data_service->last_query_request.has_value(),
+              "runtime unary integration should preserve the service query request for caller-boundary checks");
+  assert_true(fixture.data_service->last_query_request->dataset == "agent.dataset",
+              "runtime unary integration should preserve the selected builtin dataset name");
+  assert_true(fixture.data_service->last_query_request->context.request_id == "req-027",
+              "runtime unary integration should project runtime request_id into ServiceCallContext");
+  assert_true(fixture.data_service->last_query_request->context.session_id == "session-027",
+              "runtime unary integration should project runtime session_id into ServiceCallContext");
+  assert_true(fixture.data_service->last_query_request->context.trace_id == "trace-027",
+              "runtime unary integration should project runtime trace_id into ServiceCallContext");
+  assert_true(fixture.data_service->last_query_request->context.tool_call_id == "tool-call-req-027",
+              "runtime unary integration should derive a stable tool_call_id before entering IDataService");
+  assert_true(fixture.data_service->last_query_request->context.goal_id == *result.goal_id,
+              "runtime unary integration should preserve the resolved goal id across the tools->services boundary");
+  assert_true(fixture.data_service->last_query_request->context.budget_guard.has_value(),
+              "runtime unary integration should attach the runtime budget guard to ServiceCallContext");
+  assert_true(fixture.data_service->last_query_request->context.deadline_ms == 1000U,
+              "runtime unary integration should project the tool timeout policy into ServiceCallContext.deadline_ms");
 
   dependency_set->memory_manager->shutdown();
   cleanup_database_artifacts(database_path);

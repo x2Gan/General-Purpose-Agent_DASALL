@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #636
+
+- 日期：2026-05-12
+- 阶段：integration/runtime/tools/services-caller
+- 任务：FULLINT-TODO-016 收敛 tools/services runtime production caller 边界
+- 状态：已完成
+
+### 改动
+
+1. 调整 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：production composition 不再直接依赖空默认 `ToolManager()`；改为显式注册 runtime builtin descriptor `agent.dataset`，并装配 `ToolRegistry + BuiltinExecutorLane + ToolServiceBridge + ToolManager`，让 `visible_tools` 与真正进入治理链的 builtin surface 对齐。
+2. 调整 `apps/runtime_support/CMakeLists.txt`：为 runtime_support 目标显式补 `services/include` 与 `dasall_services` 依赖，收敛 tools->services compile boundary。
+3. 扩展 `tests/integration/agent_loop/RuntimeUnaryIntegrationTest.cpp`：新增 `CaptureDataService`，把 runtime unary fixture 的 builtin query 落到真实 `IDataService` seam，并断言 `request_id/session_id/trace_id/tool_call_id/goal_id/budget_guard/deadline_ms` 完整进入 `ServiceCallContext`。
+4. 扩展 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/CMakeLists.txt`：在 readiness baseline 之外新增 production `tool_manager->invoke(agent.dataset)` 正向断言，证明 daemon live composition 生成的 tool manager 不是空 surface，而是能真正产出 `ToolInvocationEnvelope + Observation + ObservationDigest`。
+5. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-016-tools-services-runtime-production-caller边界验证.md`，并回写专项 TODO：`FULLINT-TODO-016` 标记 Done，同时把 installed-package 手工 `run/status` 结果记录为 partial，不外推 L4 ready。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_runtime_live_dependency_composition_test"])`
+   - 结果：通过；修复 include / services link 后，runtime_support 与 daemon production composition 守护测试构建通过。
+2. `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：通过；新增 `tool_manager->invoke(agent.dataset)` 断言通过。
+3. `Build_CMakeTools(buildTargets=["dasall_runtime_unary_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["RuntimeUnaryIntegrationTest"])`
+   - 结果：通过；`CaptureDataService` 证明 runtime caller context 进入 `IDataService`。
+5. `Build_CMakeTools(buildTargets=["dasall_gate_int_07","dasall_runtime_unary_integration_test","dasall_access_daemon_runtime_live_dependency_composition_test"])`
+   - 结果：通过；`dasall_gate_int_07` 当轮执行并通过。
+6. `RunCtest_CMakeTools(tests=["ToolServicesSmokeIntegrationTest","RuntimeUnaryIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：通过；3/3 passed。
+7. `dpkg-buildpackage -us -uc -b -nc`
+   - 结果：通过；日志显示生成 `../dasall-common_0.1.0-1_all.deb`、`../dasall_0.1.0-1_all.deb`、`../dasall-cli_0.1.0-1_amd64.deb`、`../dasall-daemon_0.1.0-1_amd64.deb`。
+8. `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；脚本报告 `install smoke passed`。
+9. `sudo -n systemctl start dasall-daemon.service && sudo -n dasall ping --json`
+   - 结果：通过；`disposition=completed`，payload 显示 `readiness=READY`；daemon journal 显示 `runtime readiness=default-ready`。
+10. manual installed probes
+   - `sudo -n dasall run '{"prompt":"请用LLM回答：2+3等于几？只给出简短答案。"}' --json --timeout-ms 120000`：返回 `disposition=completed`，但 `error.reason=task_not_completed`，`exit_code=5`。
+   - `sudo -n dasall run '{"prompt":"如果当前运行路径支持工具调用，请调用 agent.dataset 并总结结果；如果当前路径不会进入工具调用，请明确说明。"}' --json --timeout-ms 120000`：返回 `disposition=accepted_async`、`receipt_ref=receipt-for-ticket-1`。
+   - `sudo -n dasall status --receipt receipt-for-ticket-1 --json`：返回 `disposition=rejected`、`error.reason=status_missing`、`access_error_domain=receipt`、`exit_code=5`。
+
+### 结果
+
+1. `FULLINT-TODO-016` 已完成：build-tree 现在能同时证明 runtime unary tool path fixture 与 production composition 都仍经 `registry -> validator -> policy -> route -> services -> projection`，没有绕过治理。
+2. 本轮没有扩改 `runtime/src/AgentOrchestrator.cpp` 或 `services/src/` 实现；本地代码检查表明 caller context helper 和 services interface seam 已存在，真实缺口在 production composition 没有把 advertised visible tool surface 接到真实注册的 ToolManager。
+3. installed-package 当前仍只可写为 partial：package smoke 未回退，但手工 simple `run` 仍给 `task_not_completed`，tool prompt 进入 `accepted_async` 后 receipt 查询落入 `status_missing`，因此不能把 tools/services runtime caller 写成 L4 ready。
+
+### 下一步
+
+1. 继续推进 `FULLINT-TODO-017`，扩展 Access / Infra release hardening 负路径。
+2. 若要提升 tools/services runtime caller 的 package 证据层级，需要单独冻结 installed-package async/tool receipt owner，再决定是否进入新的 package gate 任务；在此之前不得把本轮 L2 focused 结果外推为 L4/L5。
+
 ## 记录 #635
 
 - 日期：2026-05-12

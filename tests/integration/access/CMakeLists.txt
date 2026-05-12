@@ -478,6 +478,7 @@ target_link_libraries(dasall_access_daemon_runtime_live_dependency_composition_i
     dasall_infra
     dasall_profiles
     dasall_runtime
+    dasall_tools
 )
 
 target_compile_definitions(dasall_access_daemon_runtime_live_dependency_composition_integration_test

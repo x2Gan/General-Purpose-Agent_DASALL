@@ -13,7 +13,11 @@
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
 #include "ToolManager.h"
+#include "tool/ToolDescriptor.h"
 #include "config/InstallLayout.h"
+#include "execution/BuiltinExecutorLane.h"
+#include "bridge/ToolServiceBridge.h"
+#include "registry/ToolRegistry.h"
 
 namespace dasall::apps::runtime_support {
 namespace {
@@ -55,6 +59,51 @@ namespace fs = std::filesystem;
       (readonly_assets_root / "sql" / "memory").string();
   memory_config.vector.enabled = false;
   return memory_config;
+}
+
+[[nodiscard]] contracts::ToolDescriptor make_runtime_dataset_descriptor() {
+  return contracts::ToolDescriptor{
+      .tool_name = std::string{"agent.dataset"},
+      .display_name = std::string{"Agent Dataset"},
+      .category = contracts::ToolCategory::Information,
+      .capability_tier = contracts::ToolCapabilityTier::Preview,
+      .is_read_only = true,
+      .supports_compensation = false,
+      .default_timeout_ms = 30000U,
+      .input_schema_ref = std::string{"schema://tools/agent.dataset/input/v1"},
+      .output_schema_ref = std::string{"schema://tools/agent.dataset/output/v1"},
+      .required_scopes = std::vector<std::string>{"tools.read"},
+      .tags = std::vector<std::string>{"builtin", "query", "runtime"},
+      .version = std::string{"1.0.0"},
+  };
+}
+
+[[nodiscard]] std::shared_ptr<tools::ToolManager> compose_runtime_tool_manager() {
+  auto registry = std::make_shared<tools::registry::ToolRegistry>();
+  if (!registry->register_builtin(make_runtime_dataset_descriptor())) {
+    return nullptr;
+  }
+
+  auto builtin_lane = std::make_shared<tools::execution::BuiltinExecutorLane>(
+      tools::execution::BuiltinExecutorLaneDependencies{
+          .registry = registry,
+          .service_bridge = std::make_shared<tools::bridge::ToolServiceBridge>(),
+          .execution_service = nullptr,
+          .data_service = nullptr,
+          .now_ms = {},
+      });
+
+  tools::manager::ToolManagerDependencies dependencies;
+  dependencies.registry = registry;
+  dependencies.executor = [builtin_lane](const auto& execution_request) {
+    return builtin_lane->execute(
+        execution_request.tool_ir,
+        tools::ToolExecutionContext{
+            .invocation_context = execution_request.invocation_context,
+            .lane_key = execution_request.route_decision.lane_key,
+        });
+  };
+  return std::make_shared<tools::ToolManager>(std::move(dependencies));
 }
 
 }  // namespace
@@ -129,11 +178,17 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
 
-  dependency_set->tool_manager = std::make_shared<dasall::tools::ToolManager>();
+    dependency_set->tool_manager = compose_runtime_tool_manager();
+    if (dependency_set->tool_manager == nullptr) {
+    return make_error(std::string("tool manager composition failed for ") +
+              std::string(composition_owner));
+    }
   dependency_set->visible_tools = {"agent.dataset"};
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
       ":required-live-baseline",
+      std::string("runtime:") + std::string(composition_owner) +
+      ":tool-services-caller-ready",
   };
 
   const auto knowledge_result = knowledge::create_installed_asset_knowledge_service(
