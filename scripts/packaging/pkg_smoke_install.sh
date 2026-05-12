@@ -12,6 +12,7 @@ CLI_DEB="${ARTIFACT_DIR}/dasall-cli_${VERSION}_${ARCH}.deb"
 DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
 PRESERVED_SECRET_ROOT=
 
 log() {
@@ -64,6 +65,16 @@ run_root_sh() {
   fi
 }
 
+run_dasall_cli() {
+  require_root_access
+  if [ "$(id -u)" -eq 0 ]; then
+    require_command runuser
+    runuser -u dasall -- "$@"
+  else
+    sudo -u dasall "$@"
+  fi
+}
+
 assert_json_contains() {
   json_payload=$1
   expected=$2
@@ -82,6 +93,32 @@ assert_json_matches() {
     fail "${label}: expected JSON pattern not found: ${expected_regex}"
 }
 
+query_sqlite_scalar() {
+  db_path=$1
+  sql_query=$2
+  run_root python3 - "$db_path" "$sql_query" <<'PY'
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+sql_query = sys.argv[2]
+with sqlite3.connect(db_path) as connection:
+    row = connection.execute(sql_query).fetchone()
+    if row is None:
+        sys.exit(2)
+    print(row[0])
+PY
+}
+
+assert_positive_integer() {
+  value=$1
+  label=$2
+  case "$value" in
+    ''|*[!0-9]*) fail "${label}: expected a non-negative integer, got ${value}" ;;
+  esac
+  [ "$value" -ge 1 ] || fail "${label}: expected at least one row, got ${value}"
+}
+
 cleanup() {
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
   if [ -n "${PRESERVED_SECRET_ROOT}" ]; then
@@ -98,14 +135,54 @@ preserve_existing_llm_secret() {
     run_root chmod 700 "${PRESERVED_SECRET_ROOT}"
     run_root cp -p "${LLM_SECRET_PATH}" "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret"
     log 'preserved existing DeepSeek secret for reinstall smoke'
+  elif [ -n "${DASALL_DEEPSEEK_API_KEY_FILE:-}" ]; then
+    [ -f "${DASALL_DEEPSEEK_API_KEY_FILE}" ] || fail 'DASALL_DEEPSEEK_API_KEY_FILE does not point to a readable file'
+    PRESERVED_SECRET_ROOT=$(run_root mktemp -d /tmp/dasall-preserved-secret.XXXXXX)
+    run_root chmod 700 "${PRESERVED_SECRET_ROOT}"
+    run_root cp "${DASALL_DEEPSEEK_API_KEY_FILE}" "${PRESERVED_SECRET_ROOT}/deepseek-prod.key"
+    run_root chmod 600 "${PRESERVED_SECRET_ROOT}/deepseek-prod.key"
+    log 'preserved DeepSeek secret import file for reinstall smoke'
   fi
 }
 
 restore_preserved_llm_secret() {
-  [ -n "${PRESERVED_SECRET_ROOT}" ] || fail 'missing existing DeepSeek secret; configure secret://llm/providers/deepseek-prod before running LLM package smoke'
-  run_root test -f "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret"
-  run_root mkdir -p /var/lib/dasall/secrets/llm/providers
-  run_root cp -p "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret" "${LLM_SECRET_PATH}"
+  [ -n "${PRESERVED_SECRET_ROOT}" ] || fail 'missing DeepSeek secret; configure secret://llm/providers/deepseek-prod or set DASALL_DEEPSEEK_API_KEY_FILE before running LLM package smoke'
+
+  if run_root test -f "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret"; then
+    run_root mkdir -p /var/lib/dasall/secrets/llm/providers
+    run_root cp -p "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret" "${LLM_SECRET_PATH}"
+  else
+    run_root test -f "${PRESERVED_SECRET_ROOT}/deepseek-prod.key"
+    run_root_sh "
+      . /etc/default/dasall-daemon
+      : \"\${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}\"
+      cat > '${PRESERVED_SECRET_ROOT}/desired.yaml' <<EOF
+schema_version: dasall.config.apply.v1
+profile_id: \${DASALL_DAEMON_PROFILE_ID}
+daemon:
+  socket_path: /run/dasall/daemon.sock
+  log_format: text
+  diag_enabled: false
+  override_enabled: false
+  watchdog_enabled: false
+service:
+  start_now: false
+  enable_on_boot: false
+operator_access:
+  add_users: []
+secrets:
+  refs:
+    - ref: secret://llm/providers/deepseek-prod
+      source: file:${PRESERVED_SECRET_ROOT}/deepseek-prod.key
+      auth_profile_name: primary
+EOF
+      chmod 600 '${PRESERVED_SECRET_ROOT}/desired.yaml'
+      dasall config apply --from-file '${PRESERVED_SECRET_ROOT}/desired.yaml' --no-input --json >/dev/null
+    "
+    log 'imported DeepSeek secret for reinstall smoke from DASALL_DEEPSEEK_API_KEY_FILE'
+  fi
+
+  run_root test -f "${LLM_SECRET_PATH}"
   run_root chgrp dasall /var/lib/dasall/secrets /var/lib/dasall/secrets/llm /var/lib/dasall/secrets/llm/providers "${LLM_SECRET_PATH}"
   run_root chmod 750 /var/lib/dasall/secrets /var/lib/dasall/secrets/llm /var/lib/dasall/secrets/llm/providers
   run_root chmod 640 "${LLM_SECRET_PATH}"
@@ -117,6 +194,7 @@ reset_existing_state() {
     systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
     dpkg -P dasall dasall-daemon dasall-cli dasall-common >/dev/null 2>&1 || true
     rm -f /var/lib/dasall/pkg-smoke-state
+    rm -rf /var/lib/dasall/memory
     rm -rf /var/lib/dasall/secrets
   '
 }
@@ -162,14 +240,26 @@ verify_explicit_start() {
   run_root test -S /run/dasall/daemon.sock
   run_root_sh 'test "$(stat -c "%U:%G" /run/dasall/daemon.sock)" = "dasall:dasall"'
   run_root_sh 'test "$(stat -c "%a" /run/dasall/daemon.sock)" = "600"'
-  run_root dasall ping --json >/dev/null
-  run_root dasall readiness --json >/dev/null
-  RUN_JSON=$(run_root dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
+  run_dasall_cli dasall ping --json >/dev/null
+  run_dasall_cli dasall readiness --json >/dev/null
+  RUN_JSON=$(run_dasall_cli dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
   assert_json_contains "$RUN_JSON" '"disposition":"completed"' 'run smoke'
   assert_json_contains "$RUN_JSON" '"task_completed":true' 'run smoke'
   assert_json_contains "$RUN_JSON" 'llm.origin=deepseek-prod/' 'llm response payload'
   printf '%s\n' "$RUN_JSON" | grep -Fq 'agent.dataset' && \
     fail 'run smoke unexpectedly returned agent.dataset payload instead of LLM response'
+
+  require_command python3
+  run_root test -f /usr/share/dasall/sql/memory/V001__initial_schema.sql
+  run_root test -f "${MEMORY_DB_PATH}"
+  JOURNAL_MODE=$(query_sqlite_scalar "${MEMORY_DB_PATH}" 'PRAGMA journal_mode;')
+  [ "$JOURNAL_MODE" = "wal" ] || fail "memory sqlite journal mode should be wal, got ${JOURNAL_MODE}"
+  MEMORY_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('sessions','turns','summaries','facts','experiences');")
+  [ "$MEMORY_TABLE_COUNT" -eq 5 ] || fail "memory sqlite schema should expose five core tables, got ${MEMORY_TABLE_COUNT}"
+  MEMORY_TURN_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM turns WHERE user_input LIKE '%package smoke%' AND agent_response LIKE 'llm.origin=deepseek-prod/%';")
+  assert_positive_integer "$MEMORY_TURN_COUNT" 'memory sqlite llm turn writeback'
+  MEMORY_SUMMARY_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM summaries WHERE summary_text LIKE 'llm.origin=deepseek-prod/%';")
+  assert_positive_integer "$MEMORY_SUMMARY_COUNT" 'memory sqlite llm summary writeback'
 
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)

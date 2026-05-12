@@ -480,6 +480,11 @@ target_link_libraries(dasall_access_daemon_runtime_live_dependency_composition_i
     dasall_runtime
 )
 
+target_compile_definitions(dasall_access_daemon_runtime_live_dependency_composition_integration_test
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
 dasall_apply_common_options(dasall_access_daemon_runtime_live_dependency_composition_integration_test)
 
 add_test(NAME DaemonRuntimeLiveDependencyCompositionTest
@@ -507,6 +512,11 @@ target_link_libraries(dasall_access_gateway_runtime_live_dependency_composition_
     dasall_infra
     dasall_profiles
     dasall_runtime
+)
+
+target_compile_definitions(dasall_access_gateway_runtime_live_dependency_composition_integration_test
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
 dasall_apply_common_options(dasall_access_gateway_runtime_live_dependency_composition_integration_test)

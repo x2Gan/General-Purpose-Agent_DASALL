@@ -369,6 +369,26 @@ void append_retrieval_evidence_ref(
   return fallback_detail;
 }
 
+[[nodiscard]] bool is_tolerable_live_context_warning(const std::string& warning) {
+  return warning == "user_turn_fallback_goal_summary" ||
+         warning == "goal_summary_fallback_working_memory";
+}
+
+[[nodiscard]] bool live_context_degradation_is_fatal(
+    const memory::ContextAssemblyResult& context_result) {
+  if (!context_result.degraded) {
+    return false;
+  }
+
+  if (context_result.warnings.empty()) {
+    return true;
+  }
+
+  return !std::all_of(context_result.warnings.begin(),
+                      context_result.warnings.end(),
+                      is_tolerable_live_context_warning);
+}
+
 [[nodiscard]] memory::ContextAssemblyResult prepare_resume_context(
     const OrchestratorComposition& composition,
     const contracts::AgentRequest& request,
@@ -525,6 +545,34 @@ void append_retrieval_evidence_ref(
     writeback_request.summary_candidate->confirmed_facts = std::move(confirmed_facts);
   }
 
+  return writeback_request;
+}
+
+[[nodiscard]] memory::MemoryWritebackRequest make_llm_direct_writeback_request(
+    const contracts::AgentRequest& request,
+    const std::string& goal_id,
+    const std::string& response_text) {
+  const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  const auto session_id = request.session_id.value_or(std::string{"session-live-unary"});
+  const auto created_at = request.created_at.value_or(current_time_ms());
+
+  memory::MemoryWritebackRequest writeback_request;
+  writeback_request.session_id = session_id;
+  writeback_request.turn.turn_id = request_id + "-llm-response";
+  writeback_request.turn.session_id = session_id;
+  writeback_request.turn.user_input = request.user_input.value_or(goal_id);
+  writeback_request.turn.agent_response = response_text;
+  writeback_request.turn.created_at = created_at;
+  writeback_request.turn.tags = std::vector<std::string>{"runtime", "llm", "direct_response"};
+
+  writeback_request.summary_candidate = contracts::SummaryMemory{};
+  writeback_request.summary_candidate->summary_text = response_text;
+  writeback_request.summary_candidate->source_turn_ids =
+      std::vector<std::string>{*writeback_request.turn.turn_id};
+  writeback_request.summary_candidate->decisions_made =
+      std::vector<std::string>{"production llm direct response completed"};
+  writeback_request.summary_candidate->confirmed_facts =
+      std::vector<std::string>{"llm direct response persisted through memory writeback"};
   return writeback_request;
 }
 
@@ -1646,7 +1694,8 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
   if (has_live_unary_ports(composition_) && has_production_llm_direct_path(composition_)) {
     auto context_result = composition_.dependency_set->memory_manager->prepare_context(
         make_memory_context_request(normalized_request, goal_id, composition_, runtime_budget));
-    if (context_result.result_code.has_value() || context_result.degraded) {
+    if (context_result.result_code.has_value() ||
+      live_context_degradation_is_fatal(context_result)) {
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::MainLoop,
                  fsm->current_state(),
@@ -1731,6 +1780,8 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       return run_result;
     }
 
+    const auto response_text = make_llm_response_text(llm_result);
+
     StateTransitionOutcome responding_outcome;
     if (const auto failure = apply_step(
             *fsm,
@@ -1761,6 +1812,42 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       run_result.final_state = RuntimeState::Failed;
       return run_result;
     }
+
+    const auto llm_writeback_result = composition_.dependency_set->memory_manager->write_back(
+        make_llm_direct_writeback_request(normalized_request, goal_id, response_text));
+    if (llm_writeback_result.result_code.has_value() || llm_writeback_result.degraded ||
+        llm_writeback_result.partial) {
+      const std::string writeback_detail = llm_writeback_result.result_code.has_value()
+                                               ? "llm direct response memory writeback failed"
+                                               : "llm direct response memory writeback degraded or partial";
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::Terminalize,
+                 fsm->current_state(),
+                 fsm->current_state(),
+                 true,
+                 writeback_detail);
+      run_result.agent_result = make_result(
+          normalized_request,
+          RuntimeState::Failed,
+          contracts::AgentResultStatus::Failed,
+          kRuntimeOrchestratorLiveUnaryFailedCode,
+          "runtime llm path could not persist the response through memory writeback",
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                             writeback_detail,
+                             orchestrator_stage_name(OrchestratorStage::Terminalize),
+                             RuntimeState::Failed),
+          std::nullopt,
+          goal_id);
+      run_result.final_state = RuntimeState::Failed;
+      return run_result;
+    }
+
+    push_trace(&run_result.stage_trace,
+               OrchestratorStage::Terminalize,
+               fsm->current_state(),
+               fsm->current_state(),
+               true,
+               "llm direct response persisted through memory writeback");
 
     push_trace(&run_result.stage_trace,
                OrchestratorStage::MainLoop,
@@ -1880,7 +1967,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
         run_result.final_state,
         contracts::AgentResultStatus::Completed,
         kRuntimeOrchestratorSkeletonCompletedCode,
-        make_llm_response_text(llm_result),
+        response_text,
         std::nullopt,
         final_checkpoint.checkpoint->checkpoint_id,
         goal_id);

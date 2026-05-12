@@ -95,11 +95,73 @@ void test_runtime_cognition_loop_smoke() {
   cleanup_database_artifacts(database_path);
 }
 
+void test_runtime_live_llm_first_turn_context_fallback_reaches_writeback() {
+  const auto database_path = make_temp_database_path("dasall-runtime-live-llm-first-turn");
+  cleanup_database_artifacts(database_path);
+
+  const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+  auto dependency_set = make_true_integration_dependency_set(
+      config,
+      "session-live-first-turn-seed",
+      "turn-live-first-turn-seed",
+      "seed unrelated session");
+
+  auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
+  llm_manager->set_default_content("first turn live llm response");
+
+  dependency_set->llm_manager = llm_manager;
+  dependency_set->external_evidence = {"required-live-baseline"};
+
+  dasall::runtime::AgentFacade facade;
+  const auto init_result = facade.init(make_true_integration_init_request(
+      dependency_set, "rt-live-first-turn", "desktop_full", "runtime-live-first-turn"));
+  assert_true(init_result.accepted,
+              "runtime live first-turn smoke should initialize AgentFacade successfully");
+
+  const auto result = facade.handle(make_agent_request(
+      "req-live-first-turn", "session-live-first-turn", "trace-live-first-turn", "package smoke"));
+
+  assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+              "runtime live first-turn smoke should complete through ILLMManager despite benign context fallback");
+  assert_true(result.task_completed.value_or(false),
+              "runtime live first-turn smoke should set task_completed=true");
+  assert_true(result.response_text.has_value() &&
+                  result.response_text->find("llm.origin=desktop_full.response.primary") !=
+                      std::string::npos,
+              "runtime live first-turn smoke should expose the direct LLM origin");
+
+  auto store = dasall::memory::store::sqlite::create_sqlite_memory_store();
+  const auto open_result = store->open(config);
+  if (open_result.has_value()) {
+    throw std::runtime_error("failed to reopen sqlite store for first-turn runtime verification");
+  }
+
+  const auto session_bundle = store->load_session_bundle(dasall::memory::SessionLoadRequest{
+      .session_id = "session-live-first-turn",
+      .recent_turn_limit = 4,
+  });
+  assert_true(!session_bundle.recent_turns.empty(),
+              "runtime live first-turn smoke should persist a turn through memory writeback");
+
+  const auto summary = store->load_latest_summary("session-live-first-turn");
+  assert_true(summary.has_value() && summary->summary_text.has_value() &&
+                  summary->summary_text->find("llm.origin=desktop_full.response.primary") !=
+                      std::string::npos,
+              "runtime live first-turn smoke should persist an LLM origin summary");
+  store->close();
+
+  if (dependency_set->memory_manager != nullptr) {
+    dependency_set->memory_manager->shutdown();
+  }
+  cleanup_database_artifacts(database_path);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_runtime_cognition_loop_smoke();
+    test_runtime_live_llm_first_turn_context_fallback_reaches_writeback();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

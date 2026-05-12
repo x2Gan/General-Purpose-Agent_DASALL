@@ -1,8 +1,11 @@
 #include <algorithm>
+#include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <system_error>
 
 #include "AgentFacade.h"
 #include "RuntimeDependencySet.h"
@@ -18,6 +21,28 @@ namespace {
 using dasall::tests::support::assert_true;
 
 constexpr char kDefaultProfileId[] = "desktop_full";
+
+class TempStateRoot {
+ public:
+  explicit TempStateRoot(const std::string& stem)
+      : path_(std::filesystem::temp_directory_path() /
+              (stem + "-" + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::system_clock::now().time_since_epoch()).count()))) {
+    std::filesystem::create_directories(path_);
+  }
+
+  ~TempStateRoot() {
+    std::error_code error;
+    std::filesystem::remove_all(path_, error);
+  }
+
+  [[nodiscard]] const std::filesystem::path& path() const {
+    return path_;
+  }
+
+ private:
+  std::filesystem::path path_;
+};
 
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
 load_runtime_policy_snapshot() {
@@ -40,13 +65,20 @@ load_runtime_policy_snapshot() {
 
 void daemon_runtime_live_dependency_composition_establishes_default_ready_baseline() {
   const auto policy_snapshot = load_runtime_policy_snapshot();
+  const TempStateRoot state_root("dasall-daemon-runtime-live-memory");
   const auto composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           policy_snapshot,
-          "daemon.local-control-plane");
+      "daemon.local-control-plane",
+      dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+        .readonly_assets_root_override = std::filesystem::path(DASALL_SOURCE_ROOT),
+        .state_root_override = state_root.path(),
+      });
   assert_true(composition.ok(),
               "daemon runtime live dependency composition should materialize required ports: " +
                   composition.error);
+  assert_true(std::filesystem::exists(state_root.path() / "memory" / "memory.db"),
+        "daemon runtime live dependency composition should materialize sqlite memory state");
 
   const auto readiness = composition.dependency_set->describe_readiness();
   assert_true(readiness.has_required_ports,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -27,8 +28,14 @@ struct RuntimeDependencyCompositionResult {
   }
 };
 
+struct RuntimeLiveDependencyCompositionOptions {
+  std::filesystem::path readonly_assets_root_override;
+  std::filesystem::path state_root_override;
+};
+
 [[nodiscard]] RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
     std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot,
-    const std::string_view& composition_owner);
+    const std::string_view& composition_owner,
+    const RuntimeLiveDependencyCompositionOptions& options = {});
 
 }  // namespace dasall::apps::runtime_support

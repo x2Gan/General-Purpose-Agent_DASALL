@@ -1,3 +1,4 @@
 usr/share/dasall/profiles/
 usr/share/dasall/llm/prompts/
 usr/share/dasall/llm/providers/
+usr/share/dasall/sql/

@@ -123,3 +123,8 @@ target_link_libraries(dasall_memory
 )
 
 dasall_apply_common_options(dasall_memory)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/sql/memory
+  DESTINATION ${DASALL_INSTALL_DASALL_DATADIR}/sql
+  FILES_MATCHING PATTERN "*.sql"
+)

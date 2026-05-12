@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #635
+
+- 日期：2026-05-12
+- 阶段：integration/packaging/memory-installed-package
+- 任务：FULLINT-TODO-015 复验 memory context/writeback installed-package 持久化风险
+- 状态：已完成
+
+### 改动
+
+1. 调整 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与 public options：daemon/gateway live dependency composition 默认使用 installed layout，memory backend 改为 SQLite，state owner 为 `/var/lib/dasall/memory/memory.db`，migration dir 为 `/usr/share/dasall/sql/memory`；测试可覆盖 read-only assets root / state root。
+2. 调整 `memory/CMakeLists.txt` 与 `debian/dasall-common.install`：将 `sql/memory/*.sql` 安装进 `dasall-common` 的 `/usr/share/dasall/sql/memory/`。
+3. 调整 `runtime/src/AgentOrchestrator.cpp`：production LLM direct response 成功后调用 memory `write_back` 写入 turn + summary；若写回失败、degraded 或 partial，则 fail-closed，不再继续宣称完成。
+4. 扩展 `scripts/packaging/pkg_smoke_install.sh`：package smoke 在 explicit start 路径检查 migration asset、SQLite DB、WAL、core tables、`turns`/`summaries` LLM rows；同时支持 `DASALL_DEEPSEEK_API_KEY_FILE` import path，便于 fresh reinstall 后导入 `secret://llm/providers/deepseek-prod`。
+5. 扩展 `DaemonRuntimeLiveDependencyCompositionTest` 与 `GatewayRuntimeLiveDependencyCompositionTest`：使用 source root + temp state root 验证 live composition 可创建 SQLite `memory.db`，避免 build-tree 回归写入 `/var/lib/dasall`。
+6. 新增 `knowledge/include/KnowledgeServiceFactory.h`，补齐 installed asset knowledge service factory 的 public header，解除 CMake build blocker。
+7. 修复 runtime first-turn live context fallback：`user_turn_fallback_goal_summary` 与 `goal_summary_fallback_working_memory` 作为首轮空 session 的可容忍 context warning，不再阻断真实 LLM direct path；其他 degraded context 仍 fail-closed。
+8. 修复 package smoke socket user：explicit start 后的 `ping/readiness/run` 通过 `runuser -u dasall -- dasall ...` 执行，匹配 installed daemon socket `dasall:dasall 0600` 策略。
+9. 扩展 `RuntimeCognitionLoopSmokeTest`：新增 first-turn live LLM context fallback regression，证明空 session 首轮仍能进入 LLM 并写回 SQLite turn/summary。
+10. 新增并回填 `docs/todos/integration/deliverables/FULLINT-TODO-015-memory-installed-package持久化风险复验证据包.md`；回写专项 TODO：`FULLINT-BLK-006` 标记已解阻，`FULLINT-TODO-015` 标记 `Done`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_context_assemble_integration_test","dasall_memory_writeback_integration_test","dasall_access_daemon_runtime_live_dependency_composition_test","dasall_access_gateway_runtime_live_dependency_composition_test","dasall-daemon"])`
+   - 结果：通过；result code `0`。
+2. `RunCtest_CMakeTools(tests=["MemoryContextAssembleIntegrationTest","MemoryWritebackIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`
+   - 结果：通过；4/4 passed。
+3. `sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：通过。
+4. `Build_CMakeTools(buildTargets=["dasall_runtime_cognition_loop_smoke_unit_test","dasall-daemon","dasall-cli"])`
+   - 结果：通过；first-turn context fallback regression、daemon、CLI 均构建成功。
+5. `RunCtest_CMakeTools(tests=["RuntimeCognitionLoopSmokeTest"])`
+   - 结果：通过；新增 first-turn live LLM writeback 回归通过。
+6. `Build_CMakeTools()`
+   - 结果：通过；result code `0`，全量 CMake build 复验通过。
+7. `dpkg-buildpackage -us -uc -b -nc`
+   - 结果：通过；`/tmp/dasall-fullint015/dpkg-build-nc-final.exit` 为 `0`，已生成 `dasall-common`、`dasall-cli`、`dasall-daemon`、`dasall` 四包。先前 tee 进度日志对应的 `141` 是输出管道 SIGPIPE，不作为验收 exit。
+8. `DASALL_DEEPSEEK_API_KEY_FILE=<redacted local key file> bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；`/tmp/dasall-fullint015/pkg-smoke-context-fix.exit` 为 `0`，fresh reinstall、explicit daemon start、真实 installed `dasall run`、status/cancel/diag、Knowledge refresh/retrieve/health、memory SQLite row proof 断言均通过。
+9. installed DB row proof
+   - 结果：通过；`/tmp/dasall-fullint015/db-proof-final.log` 显示 `/var/lib/dasall/memory/memory.db` 存在，migration asset 存在，`journal_mode=wal`，`core_table_count=5`，`turns_total=1`，`summaries_total=1`，`turns_package_smoke_llm_origin=1`，`summaries_llm_origin=1`；sample prefix 为 `llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`。
+
+### 结果
+
+1. installed memory state owner、migration asset、daemon/gateway live composition SQLite 初始化、direct LLM memory writeback fail-closed 代码路径已落地并通过 build-tree focused 验证。
+2. 真实 installed `dasall run '{"prompt":"package smoke"}'` 已经经 DeepSeek provider 完成，并由 package smoke 与独立 SQLite 查询共同证明 `turns` / `summaries` rows 写入 `/var/lib/dasall/memory/memory.db`。
+3. 首轮空 session context fallback 已收敛为可容忍 warning，不再阻断 direct LLM；socket 权限也已按 installed `dasall` 用户执行路径修复。
+4. `FULLINT-TODO-015` 已完成；`FULLINT-BLK-006` 对 L4 local installed-package 解阻，BC-09 / BC-10 installed memory writeback 结论可升级为 passed。
+5. 用户提供的测试 DeepSeek key 只用于本地复验，不进入文档正文、仓库文件或提交；提交前清理临时 key / curl probe 文件。
+
+### 下一步
+
+1. 继续推进 `FULLINT-TODO-016`，收敛 tools/services runtime production caller 边界。
+2. Release 前仍需 `FULLINT-TODO-019` 在 release runner 执行 qemu `autopkgtest` / lintian / LLM 串联 gate；本轮 L4 local installed proof 不外推为 L5 production release-ready。
+
 ## 记录 #634
 
 - 日期：2026-05-11
