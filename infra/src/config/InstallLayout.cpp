@@ -1,5 +1,6 @@
 #include "config/InstallLayout.h"
 
+#include <cstdlib>
 #include <optional>
 #include <system_error>
 
@@ -11,6 +12,29 @@ namespace fs = std::filesystem;
 [[nodiscard]] bool path_is_directory(const fs::path& path) {
   std::error_code error;
   return fs::exists(path, error) && fs::is_directory(path, error);
+}
+
+[[nodiscard]] std::optional<fs::path> absolute_path_from_env(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return std::nullopt;
+  }
+
+  const fs::path path(value);
+  if (!path.is_absolute()) {
+    return std::nullopt;
+  }
+
+  return path;
+}
+
+[[nodiscard]] InstallLayout apply_env_overrides(InstallLayout layout) {
+  if (const auto state_root = absolute_path_from_env("DASALL_STATE_ROOT");
+      state_root.has_value()) {
+    layout.state_root = *state_root;
+  }
+
+  return layout;
 }
 
 [[nodiscard]] std::optional<InstallLayout> source_tree_install_layout() {
@@ -51,7 +75,7 @@ bool InstallLayout::has_consistent_values() const {
 }
 
 InstallLayout packaged_install_layout() {
-  return InstallLayout{
+  return apply_env_overrides(InstallLayout{
       .readonly_assets_root = "/usr/share/dasall",
       .profiles_root = "/usr/share/dasall/profiles",
       .llm_prompts_root = "/usr/share/dasall/llm/prompts",
@@ -59,7 +83,7 @@ InstallLayout packaged_install_layout() {
       .daemon_config_path = "/etc/dasall/daemon.json",
       .daemon_socket_path = "/run/dasall/daemon.sock",
       .state_root = "/var/lib/dasall",
-  };
+  });
 }
 
 InstallLayout resolve_install_layout() {

@@ -253,7 +253,7 @@ dasall_apply_common_options(dasall_access_daemon_startup_diagnostics_integration
 
 add_test(NAME DaemonStartupDiagnosticsTest
   COMMAND dasall_access_daemon_startup_diagnostics_integration_test)
-set_tests_properties(DaemonStartupDiagnosticsTest PROPERTIES LABELS "integration;access;release-preflight-gate")
+set_tests_properties(DaemonStartupDiagnosticsTest PROPERTIES LABELS "integration;access;gate-int-05;diagnostics-retained-snapshot-gate;release-preflight-gate")
 
 add_custom_target(dasall_access_daemon_startup_diagnostics_test
   COMMAND $<TARGET_FILE:dasall_access_daemon_startup_diagnostics_integration_test>
@@ -411,7 +411,7 @@ dasall_apply_common_options(dasall_access_gateway_startup_diagnostics_integratio
 
 add_test(NAME GatewayStartupDiagnosticsTest
   COMMAND dasall_access_gateway_startup_diagnostics_integration_test)
-set_tests_properties(GatewayStartupDiagnosticsTest PROPERTIES LABELS "integration;access;release-preflight-gate")
+set_tests_properties(GatewayStartupDiagnosticsTest PROPERTIES LABELS "integration;access;gate-int-05;diagnostics-retained-snapshot-gate;release-preflight-gate")
 
 add_custom_target(dasall_access_gateway_startup_diagnostics_test
   COMMAND $<TARGET_FILE:dasall_access_gateway_startup_diagnostics_integration_test>
@@ -604,7 +604,9 @@ dasall_apply_common_options(dasall_access_publish_failure_audit_integration_test
 
 add_test(NAME AccessPublishFailureAuditTest
   COMMAND dasall_access_publish_failure_audit_integration_test)
-set_tests_properties(AccessPublishFailureAuditTest PROPERTIES LABELS "integration;access")
+set_tests_properties(AccessPublishFailureAuditTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_publish_failure_audit_integration_test
@@ -892,7 +894,9 @@ target_link_libraries(dasall_access_daemon_diag_deny_integration_test
 dasall_apply_common_options(dasall_access_daemon_diag_deny_integration_test)
 
 add_test(NAME DaemonDiagDenyIntegrationTest COMMAND dasall_access_daemon_diag_deny_integration_test)
-set_tests_properties(DaemonDiagDenyIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(DaemonDiagDenyIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_diag_deny_integration_test

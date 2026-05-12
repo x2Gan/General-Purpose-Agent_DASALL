@@ -34,6 +34,7 @@ using dasall::tests::integration::access_support::ProcessResult;
 
 constexpr char kGatewayStartupDiagnosticsForceStageEnv[] =
   "DASALL_GATEWAY_STARTUP_DIAGNOSTICS_FORCE_STAGE";
+constexpr char kStateRootEnv[] = "DASALL_STATE_ROOT";
 
 class ScopedTempDirectory {
  public:
@@ -164,6 +165,9 @@ void assert_gateway_startup_failure(const ProcessResult& result,
 void gateway_startup_diagnostics_report_stage_error_code_and_artifact_path() {
   ScopedTempDirectory temp_root("dasall-gateway-startup-diag");
   const auto artifact_path = temp_root.path() / "gateway-startup.log";
+  const auto state_root = temp_root.path() / "state";
+  fs::create_directories(state_root);
+  ScopedEnvVar state_root_override(kStateRootEnv, state_root.string());
 
   const auto result = dasall::tests::integration::access_support::run_process_capture_split(
       {
@@ -201,7 +205,10 @@ void gateway_startup_diagnostics_report_stage_error_code_and_artifact_path() {
     for (const auto& [stage, error_code] : cases) {
     ScopedTempDirectory temp_root("dasall-gateway-startup-diag-forced");
     const auto artifact_path = temp_root.path() / (stage + ".log");
+    const auto state_root = temp_root.path() / "state";
+    fs::create_directories(state_root);
     ScopedEnvVar forced_stage(kGatewayStartupDiagnosticsForceStageEnv, stage);
+    ScopedEnvVar state_root_override(kStateRootEnv, state_root.string());
 
     const auto result = dasall::tests::integration::access_support::run_process_capture_split(
       {
@@ -222,6 +229,9 @@ void gateway_startup_diagnostics_report_stage_error_code_and_artifact_path() {
   void gateway_startup_diagnostics_report_listen_stage() {
     ScopedTempDirectory temp_root("dasall-gateway-startup-diag-listen");
     const auto artifact_path = temp_root.path() / "listen.log";
+    const auto state_root = temp_root.path() / "state";
+    fs::create_directories(state_root);
+    ScopedEnvVar state_root_override(kStateRootEnv, state_root.string());
     ScopedTcpListener occupied_port;
 
     const auto result = dasall::tests::integration::access_support::run_process_capture_split(

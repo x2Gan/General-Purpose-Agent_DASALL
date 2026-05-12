@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #637
+
+- 日期：2026-05-12
+- 阶段：integration/access/infra/release-hardening
+- 任务：FULLINT-TODO-017 扩展 Access / Infra release hardening 负路径
+- 状态：已完成
+
+### 改动
+
+1. 调整 `tests/integration/access/CMakeLists.txt`：把 `DaemonStartupDiagnosticsTest`、`GatewayStartupDiagnosticsTest` 纳入 `gate-int-05;diagnostics-retained-snapshot-gate`，把 `AccessPublishFailureAuditTest` 与 `DaemonDiagDenyIntegrationTest` 纳入 `gate-int-08;access-v1-production-gate`，让既有 hardening 负路径进入正式 gate 标签面。
+2. 调整 `tests/CMakeLists.txt`：`dasall_gate_int_05` 新增 daemon/gateway startup diagnostics executable 依赖，`DASALL_GATE_INT_08_TEST_NAMES` 与 `DASALL_GATE_INT_08_EXECUTABLE_TARGETS` 新增 publish failure audit / daemon diag deny，收口 `gate-int-08` discoverability / acceptance。
+3. 调整 `infra/src/config/InstallLayout.cpp`：新增 `DASALL_STATE_ROOT` 绝对路径覆盖缝隙，并扩展 `DaemonStartupDiagnosticsTest.cpp`、`GatewayStartupDiagnosticsTest.cpp` 在每个 case 固定临时 state root，解决当前用户态环境下 startup diagnostics 先被 `/var/lib/dasall/memory` 权限打断、无法命中 `listener-bind` / `listen` 的 same-round blocker。
+4. 新增 `docs/todos/integration/deliverables/FULLINT-TODO-017-Access-Infra-release-hardening负路径证据包.md`，并回写专项 TODO：`FULLINT-TODO-017` 标记 Done，收口结果明确区分 build-tree gate 证据、installed-package user-mode fail-closed 证据与 direct binary probe 证据。
+
+### 验证
+
+1. 首次 `Build_CMakeTools(buildTargets=["dasall_gate_int_05","dasall_gate_int_08"])`
+   - 结果：失败。
+   - 根因：`DaemonStartupDiagnosticsTest` 与 `GatewayStartupDiagnosticsTest` 先落入 `runtime-dependency-composition`，stderr 显示 `/var/lib/dasall/memory: Permission denied`，无法到达 `listener-bind` / `listen` 目标分支。
+2. 修复 state root override 后再次执行 `Build_CMakeTools(buildTargets=["dasall_gate_int_05","dasall_gate_int_08"])`
+   - 结果：通过。
+   - `gate-int-05`：`InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`、`DaemonStartupDiagnosticsTest`、`GatewayStartupDiagnosticsTest` 全部 passed。
+   - `gate-int-08`：discoverability / acceptance passed，expected list 已包含 `AccessPolicyBackendUnavailableIntegrationTest`、`AccessPublishFailureAuditTest`、`DaemonDiagDenyIntegrationTest`。
+3. installed command surface probes
+   - `command -v dasall dasall-daemon dasall_gateway`：存在 `/usr/bin/dasall`、`/usr/sbin/dasall-daemon`，无 installed `dasall_gateway`。
+   - `dasall --help` / `dasall diag --help`：确认当前 installed CLI 暴露 `ping/readiness/diag/config/run/status/cancel` 面。
+4. installed-package user-mode fail-closed probes
+   - `dasall ping --timeout-ms 100`：exit `3`，`connect() failed for socket path '/run/dasall/daemon.sock': Permission denied`。
+   - `dasall readiness --json`：exit `3`，JSON `disposition=daemon_unavailable`，`error.kind=transport`，`reason=connect() failed for socket path '/run/dasall/daemon.sock': Permission denied`。
+   - `dasall diag health` / `dasall diag queue`：均 exit `3`，同样返回 socket permission denied。
+5. direct daemon binary probe
+   - 用私有 0700 临时目录占用 Unix socket，并设置 `DASALL_STATE_ROOT=<temp>/state` 后运行 `build/vscode-linux-ninja/apps/daemon/dasall-daemon --socket-path <occupied>`。
+   - 结果：returncode `1`，stderr 含 `stage=listener-bind`、`error_code=DAEMON_E_LISTENER_BIND_FAILED`、`active unix socket cannot be removed during bind preflight`。
+6. direct gateway binary probe
+   - 占用 TCP 端口并设置 `DASALL_STATE_ROOT=<temp>/state` 后运行 `build/vscode-linux-ninja/apps/gateway/dasall_gateway --port 9999`。
+   - 结果：stderr 含 `stage=listen`、`error_code=GATEWAY_E_LISTEN_FAILED`、`detail=listen failed on 0.0.0.0:9999`。
+
+### 结果
+
+1. `FULLINT-TODO-017` 已完成：`policy backend unavailable`、`diagnostics denied`、`audit required`、`listen/bind fail-closed` 四类负路径都已进入正式 gate owner，并在当轮验证中得到真实结果。
+2. 本轮没有扩改 `AccessPolicyGate`、`DiagnosticsServiceFacade` 或 daemon/gateway startup failure owner；修复集中在 gate 接线和普通用户测试环境解阻，不改变默认 installed 行为。
+3. 当前 installed-package 证据仍只可写为 user-mode partial：普通用户 CLI / diagnostics 返回 transport permission denied 属于真实 fail-closed，但不等价于 daemon allowlisted diagnostics 正向路径；当前系统也没有 installed `dasall_gateway`，因此 gateway `listen` 证据属于 build-tree direct binary 层，不外推为 installed-package ready。
+
+### 下一步
+
+1. 继续推进 `FULLINT-TODO-018`，建立 multi_agent Null/Real coordinator 与禁用态 Gate 路线。
+2. release runner / qemu authoritative hardening 证据仍由 `FULLINT-TODO-019` 执行；在此之前不得把本轮 L2 build-tree + user-mode local installed 证据写成 L5 production release-ready。
+
 ## 记录 #636
 
 - 日期：2026-05-12

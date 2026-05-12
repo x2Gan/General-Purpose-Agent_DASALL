@@ -39,6 +39,8 @@ add_custom_target(dasall_gate_int_05
   DEPENDS
     dasall_infra_diagnostics_smoke_integration_test
     dasall_infra_diagnostics_integration_test
+    dasall_access_daemon_startup_diagnostics_integration_test
+    dasall_access_gateway_startup_diagnostics_integration_test
 )
 
 add_custom_target(dasall_gate_int_06
@@ -67,8 +69,10 @@ set(DASALL_GATE_INT_08_TEST_NAMES
   AccessGatewayPipelineIntegrationTest
   AccessAsyncReceiptQueryCancelIntegrationTest
   AccessPolicyBackendUnavailableIntegrationTest
+  AccessPublishFailureAuditTest
   AccessHealthReadinessIntegrationTest
   AccessProfileCompatibilityTest
+  DaemonDiagDenyIntegrationTest
 )
 
 string(JOIN "," DASALL_GATE_INT_08_EXPECTED_TESTS_CSV
@@ -83,8 +87,10 @@ set(DASALL_GATE_INT_08_EXECUTABLE_TARGETS
   dasall_access_gateway_submit_composition_integration_test
   dasall_access_daemon_receipt_flow_integration_test
   dasall_access_observability_main_chain_integration_test
+  dasall_access_publish_failure_audit_integration_test
   dasall_access_health_readiness_integration_test
   dasall_access_daemon_profile_compatibility_integration_test
+  dasall_access_daemon_diag_deny_integration_test
 )
 
 add_custom_target(dasall_gate_int_08

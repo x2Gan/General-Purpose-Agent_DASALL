@@ -35,6 +35,7 @@ using dasall::tests::integration::access_support::ProcessResult;
 
 constexpr char kDaemonStartupDiagnosticsForceStageEnv[] =
   "DASALL_DAEMON_STARTUP_DIAGNOSTICS_FORCE_STAGE";
+constexpr char kStateRootEnv[] = "DASALL_STATE_ROOT";
 
 class ScopedTempDirectory {
  public:
@@ -163,6 +164,9 @@ void daemon_startup_diagnostics_report_stage_error_code_and_artifact_path() {
   const auto artifact_path = temp_root.path() / "daemon-startup.log";
   const auto socket_path =
       fs::path("/tmp") / ("dasall-startup-diag-" + std::to_string(::getpid()) + ".sock");
+  const auto state_root = temp_root.path() / "state";
+  fs::create_directories(state_root);
+  ScopedEnvVar state_root_override(kStateRootEnv, state_root.string());
 
   const auto result = dasall::tests::integration::access_support::run_process_capture_split(
       {
@@ -200,7 +204,10 @@ void daemon_startup_diagnostics_report_stage_error_code_and_artifact_path() {
     ScopedTempDirectory temp_root("dasall-daemon-startup-diag-forced");
     const auto artifact_path = temp_root.path() / (stage + ".log");
     const auto socket_path = temp_root.path() / "daemon.sock";
+    const auto state_root = temp_root.path() / "state";
+    fs::create_directories(state_root);
     ScopedEnvVar forced_stage(kDaemonStartupDiagnosticsForceStageEnv, stage);
+    ScopedEnvVar state_root_override(kStateRootEnv, state_root.string());
 
     const auto result = dasall::tests::integration::access_support::run_process_capture_split(
       {
@@ -224,6 +231,9 @@ void daemon_startup_diagnostics_report_stage_error_code_and_artifact_path() {
     ScopedTempDirectory temp_root("dasall-daemon-startup-diag-listener-bind");
     const auto artifact_path = temp_root.path() / "listener-bind.log";
     const auto socket_path = temp_root.path() / "daemon.sock";
+    const auto state_root = temp_root.path() / "state";
+    fs::create_directories(state_root);
+    ScopedEnvVar state_root_override(kStateRootEnv, state_root.string());
     ScopedUnixSocketListener occupied_socket(socket_path);
 
     const auto result = dasall::tests::integration::access_support::run_process_capture_split(
