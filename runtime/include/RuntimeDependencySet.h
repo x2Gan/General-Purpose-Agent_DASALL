@@ -40,6 +40,12 @@ class IToolManager;
 
 }  // namespace dasall::tools
 
+namespace dasall::multi_agent {
+
+class IMultiAgentCoordinator;
+
+}  // namespace dasall::multi_agent
+
 namespace dasall::runtime {
 
 enum class RuntimeStubMainLoopExit : std::uint8_t {
@@ -116,6 +122,7 @@ class RuntimeDependencySet final {
   std::shared_ptr<cognition::ICognitionEngine> cognition_engine;
   std::shared_ptr<cognition::IResponseBuilder> response_builder;
   std::shared_ptr<tools::IToolManager> tool_manager;
+  std::shared_ptr<multi_agent::IMultiAgentCoordinator> multi_agent_coordinator;
   std::shared_ptr<knowledge::IKnowledgeService> knowledge_service;
   std::shared_ptr<llm::ILLMManager> llm_manager;
   std::vector<std::string> visible_tools;

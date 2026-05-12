@@ -1,5 +1,48 @@
 # DASALL 开发执行记录
 
+## 记录 #638
+
+- 日期：2026-05-12
+- 阶段：integration/multi_agent/runtime-gate
+- 任务：FULLINT-TODO-018 建立 multi_agent Null/Real coordinator 与禁用态 Gate 路线
+- 状态：已完成
+
+### 改动
+
+1. 新增 `multi_agent/include/MultiAgentTypes.h`、`multi_agent/include/IMultiAgentCoordinator.h`、`multi_agent/src/MultiAgentCoordinator.cpp`、`multi_agent/src/MultiAgentRuntimeFold.cpp`：冻结 `MultiAgentExecutionContext/Report/FoldResult`、Null/Real coordinator、`fold_multi_agent_report_for_runtime()` 与基于 `ToolCompensationHint` / `RecoveryRequest` sidecar 的最小协同实现。
+2. 调整 `profiles/include/RuntimePolicySnapshot.h`、`profiles/src/RuntimePolicyProvider.cpp`、`runtime/include/RuntimeDependencySet.h`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与相关 CMake：新增 typed `multi_agent_enabled()`，并让 live composition 显式注入 Null/Real coordinator，而不是继续用“无实现即无装配”表示禁用态。
+3. 新增 `tests/integration/multi_agent/` 三个 focused integration tests 与 `dasall_multi_agent_focus_integration_tests`；更新 `tests/integration/CMakeLists.txt`、`tests/CMakeLists.txt`，将 BC-17 从 `BC-17:multi_agent_coordinator_runtime_gate_missing` 升级为真实 discoverability 入口。
+4. 回写 `docs/todos/integration/deliverables/FULLINT-TODO-018-multi_agent-Null-Real-coordinator与禁用态Gate路线.md`、专项 TODO、`docs/ssot/BusinessChainIntegrationMatrix.md`，并为 `FULLINT-TODO-005` 历史 deliverable 增加 superseded 注记，避免旧 missing gate 结论继续冒充当前状态。
+
+### 验证
+
+1. 首次 `Build_CMakeTools(buildTargets=["dasall_multi_agent_focus_integration_tests"])`
+   - 结果：失败。
+   - 根因：`MultiAgentCoordinatorPipelineTest.cpp` 与 `MultiAgentRecoveryFoldIntegrationTest.cpp` 只包含了 `RuntimeLiveDependencyComposition.h` 的前置声明，没有包含 `RuntimeDependencySet.h` 完整类型；顺手补齐 `MultiAgentRequest` / `MultiAgentExecutionContext` 聚合初始化后，重新构建。
+2. 再次执行 `Build_CMakeTools(buildTargets=["dasall_multi_agent_focus_integration_tests"])`
+   - 结果：通过。
+   - discoverability / acceptance 同时通过：`MultiAgentDisabledByProfileIntegrationTest`、`MultiAgentCoordinatorPipelineTest`、`MultiAgentRecoveryFoldIntegrationTest` 全部被发现并执行成功。
+3. `Build_CMakeTools(buildTargets=["dasall_full_business_chain_discoverability"])`
+   - 结果：通过。
+   - 结论：BC-17 已纳入顶层 discoverability expected list，不再依赖 explicit missing gate marker。
+4. installed-package 当前边界复测
+   - `rg -n '^\s*multi_agent:' /usr/share/dasall/profiles/desktop_full/runtime_policy.yaml /usr/share/dasall/profiles/cloud_full/runtime_policy.yaml`：两处均为 `multi_agent: false`。
+   - `dasall --help | rg -n 'multi|run|status|cancel|knowledge|tools' || true`：可见 `knowledge/run/status/cancel`，无 multi-agent 独立 surface。
+   - `sudo -n dasall ping --json`：exit `0`，`disposition=completed`、`task_completed=true`、`profile_id=desktop_full`、`readiness=READY`。
+   - `sudo -n dasall readiness --json`：exit `0`，`disposition=completed`、`task_completed=true`、`state=READY`、`runtime_readiness=default-ready`、`bridge_reachable=true`。
+   - `sudo -n dasall run '{"prompt":"如果当前运行路径支持工具调用，请调用 agent.dataset 并总结结果；如果当前路径不会进入工具调用，请明确说明。"}' --json --timeout-ms 120000`：exit `5`，`disposition=completed`、`error.reason=task_not_completed`、无 `receipt_ref`。该结果覆盖了本轮较早的 `accepted_async` 观察。
+
+### 结果
+
+1. `FULLINT-TODO-018` 已完成：build-tree 现在能证明 disabled-by-default multi_agent sidecar、Null/Real coordinator 装配、Observation/recovery fold 和 Runtime/RecoveryManager owner 边界，不再停留在 placeholder / missing gate。
+2. BC-17 已从历史 `missing gate` 升级为真实 discoverability + focused acceptance，但这仍只是 L2 build-tree 结论；当前 installed-package 只证明 profile 资产禁用、控制面未回退、且无 multi-agent 正向 surface。
+3. 本轮没有把 multi_agent 扩张成完整 orchestrator-workers 平面，也没有把 `RecoveryOutcome` owner 从 Runtime 挪到 multi_agent；实现仍符合 ADR-008 的 sidecar 边界。
+
+### 下一步
+
+1. 进入 `FULLINT-TODO-019`，在 release runner 复跑 qemu / `autopkgtest` / lintian / installed-package LLM smoke，补齐 L5 authoritative packaging evidence。
+2. 如果后续需要提升 multi_agent 的 installed-package 证据层级，必须先冻结 package rebuild/reinstall、profile enablement 与命令/入口 surface；在此之前不得把本轮 L2 build-tree 结果写成 installed-package ready。
+
 ## 记录 #637
 
 - 日期：2026-05-12

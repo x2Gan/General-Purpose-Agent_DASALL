@@ -197,6 +197,9 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES
   ToolServicesSmokeIntegrationTest
   CapabilityServicesSmokeIntegrationTest
   LLMSubsystemSmokeIntegrationTest
+  MultiAgentDisabledByProfileIntegrationTest
+  MultiAgentCoordinatorPipelineTest
+  MultiAgentRecoveryFoldIntegrationTest
   ProfilesBuildRuntimeIntegrationTest
   InfraDiagnosticsSmokeTest
   InfraDiagnosticsIntegrationTest
@@ -206,14 +209,6 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES
 
 string(JOIN "," DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXPECTED_TESTS_CSV
   ${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_TEST_NAMES}
-)
-
-set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES
-  "BC-17:multi_agent_coordinator_runtime_gate_missing"
-)
-
-string(JOIN "," DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES_CSV
-  ${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES}
 )
 
 set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS
@@ -248,6 +243,9 @@ set(DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS
   dasall_tool_services_smoke_integration_test
   dasall_services_smoke_integration_test
   dasall_llm_smoke_integration_test
+  dasall_multi_agent_disabled_by_profile_integration_test
+  dasall_multi_agent_coordinator_pipeline_integration_test
+  dasall_multi_agent_recovery_fold_integration_test
   dasall_profiles_build_runtime_integration_test
   dasall_infra_diagnostics_smoke_integration_test
   dasall_infra_diagnostics_integration_test
@@ -260,7 +258,6 @@ add_custom_target(dasall_full_business_chain_discoverability
     -DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}
     -DBUILD_DIR=${CMAKE_BINARY_DIR}
     -DEXPECTED_TESTS_CSV=${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXPECTED_TESTS_CSV}
-    -DEXPECTED_MISSING_GATES_CSV=${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_MISSING_GATES_CSV}
     -P ${CMAKE_SOURCE_DIR}/tests/VerifySystemGateDiscoverability.cmake
   DEPENDS ${DASALL_FULL_BUSINESS_CHAIN_DISCOVERABILITY_EXECUTABLE_TARGETS}
 )

@@ -4,6 +4,8 @@
 任务来源：`docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md`
 任务目标：新增全量业务链 discoverability verifier 清单，确保 BC-01~BC-17 每条链路至少有一个当前代码可发现的代表测试，或被显式标记为 missing gate。
 
+更新注记（2026-05-12）：本交付物记录的是 `FULLINT-TODO-005` 完成当日的 discoverability 基线。BC-17 当时以 `BC-17:multi_agent_coordinator_runtime_gate_missing` 作为 explicit missing gate 收口；该状态已被 `FULLINT-TODO-018` 接入的 `MultiAgentDisabledByProfileIntegrationTest`、`MultiAgentCoordinatorPipelineTest`、`MultiAgentRecoveryFoldIntegrationTest` 和 `dasall_full_business_chain_discoverability` 新结果所覆盖，不应再视为当前状态。
+
 ## 1. 研究证据
 
 ### 1.1 本地代码证据

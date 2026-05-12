@@ -9,6 +9,7 @@
 #include "ICognitionEngine.h"
 #include "LLMProductionFactory.h"
 #include "IMemoryManager.h"
+#include "IMultiAgentCoordinator.h"
 #include "KnowledgeServiceFactory.h"
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
@@ -178,17 +179,26 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
 
-    dependency_set->tool_manager = compose_runtime_tool_manager();
-    if (dependency_set->tool_manager == nullptr) {
+  dependency_set->tool_manager = compose_runtime_tool_manager();
+  if (dependency_set->tool_manager == nullptr) {
     return make_error(std::string("tool manager composition failed for ") +
-              std::string(composition_owner));
-    }
+                      std::string(composition_owner));
+  }
+  dependency_set->multi_agent_coordinator =
+      multi_agent::create_multi_agent_coordinator(policy_snapshot->multi_agent_enabled());
+  if (dependency_set->multi_agent_coordinator == nullptr) {
+    return make_error(std::string("multi_agent coordinator composition failed for ") +
+                      std::string(composition_owner));
+  }
   dependency_set->visible_tools = {"agent.dataset"};
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
       ":required-live-baseline",
       std::string("runtime:") + std::string(composition_owner) +
       ":tool-services-caller-ready",
+      std::string("runtime:") + std::string(composition_owner) +
+      (policy_snapshot->multi_agent_enabled() ? ":multi-agent-enabled"
+                                              : ":multi-agent-disabled"),
   };
 
   const auto knowledge_result = knowledge::create_installed_asset_knowledge_service(

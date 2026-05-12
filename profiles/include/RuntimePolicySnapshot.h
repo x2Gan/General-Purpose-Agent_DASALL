@@ -147,7 +147,8 @@ class RuntimePolicySnapshot {
                         TimeoutPolicy timeout_policy,
                         ExecutionPolicy execution_policy,
                         OpsPolicy ops_policy,
-                        std::uint32_t worker_threads = 1U)
+                        std::uint32_t worker_threads = 1U,
+                        bool multi_agent_enabled = false)
       : generation_(generation),
         effective_profile_id_(std::move(effective_profile_id)),
         runtime_budget_(std::move(runtime_budget)),
@@ -159,7 +160,8 @@ class RuntimePolicySnapshot {
         timeout_policy_(std::move(timeout_policy)),
         execution_policy_(std::move(execution_policy)),
         ops_policy_(std::move(ops_policy)),
-        worker_threads_(worker_threads) {}
+        worker_threads_(worker_threads),
+        multi_agent_enabled_(multi_agent_enabled) {}
 
   [[nodiscard]] std::uint64_t generation() const {
     return generation_;
@@ -209,6 +211,10 @@ class RuntimePolicySnapshot {
     return worker_threads_;
   }
 
+  [[nodiscard]] bool multi_agent_enabled() const {
+    return multi_agent_enabled_;
+  }
+
   [[nodiscard]] bool has_consistent_values() const {
     return generation_ > 0U && !effective_profile_id_.empty() &&
            runtime_budget_.max_tokens.has_value() && runtime_budget_.max_turns.has_value() &&
@@ -235,6 +241,7 @@ class RuntimePolicySnapshot {
   ExecutionPolicy execution_policy_;
   OpsPolicy ops_policy_;
   std::uint32_t worker_threads_;
+  bool multi_agent_enabled_;
 };
 
 }  // namespace dasall::profiles

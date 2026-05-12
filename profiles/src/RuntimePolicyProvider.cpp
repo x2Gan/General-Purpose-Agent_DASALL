@@ -164,6 +164,8 @@ template <typename T>
       get_bool(parsed_yaml.scalar_values, "degrade_policy.allow_model_failover");
   const auto allow_budget_degrade =
       get_bool(parsed_yaml.scalar_values, "degrade_policy.allow_budget_degrade");
+  const auto multi_agent_enabled =
+      get_bool(parsed_yaml.scalar_values, "enabled_modules.multi_agent");
 
   const auto execution_requires_confirmation =
       get_bool(parsed_yaml.scalar_values, "execution_policy.requires_high_risk_confirmation");
@@ -186,7 +188,8 @@ template <typename T>
       !max_history_turns.has_value() || !compression_threshold.has_value() ||
       !cache_refresh_interval_ms.has_value() || !cache_expire_after_ms.has_value() ||
       !cache_stale_read_allowed.has_value() || !cache_failure_backoff_ms.has_value() ||
-      !allow_model_failover.has_value() || !allow_budget_degrade.has_value() ||
+    !allow_model_failover.has_value() || !allow_budget_degrade.has_value() ||
+    !multi_agent_enabled.has_value() ||
       !execution_requires_confirmation.has_value() || !execution_safe_mode.has_value() ||
       !execution_audit_level.has_value() || !ops_log_level.has_value() ||
       !ops_metrics_granularity.has_value() || !ops_trace_sample_ratio.has_value() ||
@@ -299,6 +302,7 @@ template <typename T>
           .upgrade_strategy = *ops_upgrade_strategy,
       },
       *worker_threads,
+      *multi_agent_enabled,
   };
 
   if (!snapshot.has_consistent_values()) {
