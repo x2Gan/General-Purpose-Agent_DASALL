@@ -27,7 +27,7 @@ struct CapturedEvent {
 [[nodiscard]] GatewayAccessPipelineOptions make_base_options(
     std::vector<CapturedEvent>* captured_events) {
   GatewayAccessPipelineOptions options;
-  options.bootstrap_config.allowed_protocols = {"http"};
+  options.bootstrap_config.allowed_protocols = {"http_unary"};
   options.publish_view.max_payload_bytes = 1024;
   options.observability_emit_backend =
       [captured_events](const std::string_view event_name,
@@ -45,7 +45,7 @@ struct CapturedEvent {
   InboundPacket packet;
   packet.packet_id = std::move(request_id);
   packet.entry_type = "gateway";
-  packet.protocol_kind = "http";
+  packet.protocol_kind = "http_unary";
   packet.peer_ref = "jwt:user://tenant-a/alice";
   packet.payload = "run";
   packet.trace_id = std::string("trace-028-observability");

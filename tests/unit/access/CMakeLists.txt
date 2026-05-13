@@ -494,6 +494,87 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_http_protocol_adapter_unit_test
 )
 
+# ACC-TODO-044: HttpProtocolAdapterStructuredDecodeTest
+add_executable(dasall_access_http_protocol_adapter_structured_decode_unit_test
+  HttpProtocolAdapterStructuredDecodeTest.cpp
+  ../../../apps/gateway/src/HttpProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_http_protocol_adapter_structured_decode_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_http_protocol_adapter_structured_decode_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_http_protocol_adapter_structured_decode_unit_test)
+
+add_test(NAME HttpProtocolAdapterStructuredDecodeTest
+  COMMAND dasall_access_http_protocol_adapter_structured_decode_unit_test)
+set_tests_properties(HttpProtocolAdapterStructuredDecodeTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_http_protocol_adapter_structured_decode_unit_test
+)
+
+# ACC-TODO-044: HttpProtocolAdapterSecurityInputTest
+add_executable(dasall_access_http_protocol_adapter_security_input_unit_test
+  HttpProtocolAdapterSecurityInputTest.cpp
+  ../../../apps/gateway/src/HttpProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_http_protocol_adapter_security_input_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_http_protocol_adapter_security_input_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_http_protocol_adapter_security_input_unit_test)
+
+add_test(NAME HttpProtocolAdapterSecurityInputTest
+  COMMAND dasall_access_http_protocol_adapter_security_input_unit_test)
+set_tests_properties(HttpProtocolAdapterSecurityInputTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_http_protocol_adapter_security_input_unit_test
+)
+
+# ACC-TODO-044: GatewaySubmitRouteContractTest
+add_executable(dasall_access_gateway_submit_route_contract_unit_test
+  GatewaySubmitRouteContractTest.cpp
+  ../../../apps/gateway/src/HttpProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_gateway_submit_route_contract_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+)
+
+target_link_libraries(dasall_access_gateway_submit_route_contract_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_gateway_submit_route_contract_unit_test)
+
+add_test(NAME GatewaySubmitRouteContractTest
+  COMMAND dasall_access_gateway_submit_route_contract_unit_test)
+set_tests_properties(GatewaySubmitRouteContractTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_gateway_submit_route_contract_unit_test
+)
+
 # ACC-TODO-026: HttpProtocolAdapterErrorMappingTest
 add_executable(dasall_access_http_protocol_adapter_error_mapping_unit_test
   HttpProtocolAdapterErrorMappingTest.cpp

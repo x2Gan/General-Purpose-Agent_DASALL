@@ -109,6 +109,15 @@ namespace {
   return request;
 }
 
+void project_packet_headers_to_request_context(const InboundPacket& packet,
+                                               RuntimeDispatchRequest& request) {
+  for (const auto& [key, value] : packet.headers) {
+    if (!key.empty() && !value.empty()) {
+      request.request_context[key] = value;
+    }
+  }
+}
+
 [[nodiscard]] LocalPeerUidFact parse_local_peer_fact(const InboundPacket& packet) {
   LocalPeerUidFact fact;
 
@@ -1025,7 +1034,10 @@ build_daemon_submit_pipeline(
             if (packet.session_hint.has_value() && !packet.session_hint->empty()) {
               runtime_request.request_context["session_id"] = *packet.session_hint;
             }
-            runtime_request.request_context["idempotency_key"] = packet.packet_id;
+            project_packet_headers_to_request_context(packet, runtime_request);
+            if (!runtime_request.request_context.contains("idempotency_key")) {
+              runtime_request.request_context["idempotency_key"] = packet.packet_id;
+            }
 
             const auto validation_result =
               request_validator->validate_packet(runtime_request);
@@ -1261,7 +1273,10 @@ build_gateway_submit_pipeline(
         if (packet.session_hint.has_value() && !packet.session_hint->empty()) {
           runtime_request.request_context["session_id"] = *packet.session_hint;
         }
-        runtime_request.request_context["idempotency_key"] = packet.packet_id;
+        project_packet_headers_to_request_context(packet, runtime_request);
+        if (!runtime_request.request_context.contains("idempotency_key")) {
+          runtime_request.request_context["idempotency_key"] = packet.packet_id;
+        }
 
         const auto validation_result = request_validator->validate_packet(runtime_request);
         if (!validation_result.accepted) {

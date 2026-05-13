@@ -21,7 +21,7 @@ void gateway_factory_hands_public_agent_request_to_runtime_backend() {
   int runtime_call_count = 0;
 
   GatewayAccessPipelineOptions options;
-  options.bootstrap_config.allowed_protocols = {"http"};
+  options.bootstrap_config.allowed_protocols = {"http_unary"};
   options.publish_view.max_payload_bytes = 64;
   options.runtime_dispatch_backend =
       [&captured_request, &runtime_call_count](const RuntimeDispatchRequest& request) {
@@ -41,7 +41,7 @@ void gateway_factory_hands_public_agent_request_to_runtime_backend() {
   InboundPacket packet;
   packet.packet_id = "req-027-gateway-compose";
   packet.entry_type = "gateway";
-  packet.protocol_kind = "http";
+  packet.protocol_kind = "http_unary";
   packet.peer_ref = "jwt:user://tenant-a/alice";
   packet.payload = "run";
   packet.trace_id = std::string("trace-027-gateway-compose");

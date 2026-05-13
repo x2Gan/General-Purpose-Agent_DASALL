@@ -33,7 +33,7 @@ struct CapturedEvent {
 [[nodiscard]] GatewayAccessPipelineOptions make_base_options(
     std::vector<CapturedEvent>* captured_events) {
   GatewayAccessPipelineOptions options;
-  options.bootstrap_config.allowed_protocols = {"http"};
+  options.bootstrap_config.allowed_protocols = {"http_unary"};
   options.publish_view.max_payload_bytes = 1024;
   options.publish_backend = [](const PublishEnvelope&) {
     return false;
@@ -54,7 +54,7 @@ struct CapturedEvent {
   InboundPacket packet;
   packet.packet_id = "req-028-publish-failure";
   packet.entry_type = "gateway";
-  packet.protocol_kind = "http";
+  packet.protocol_kind = "http_unary";
   packet.peer_ref = "jwt:user://tenant-a/alice";
   packet.payload = "run";
   packet.trace_id = std::string("trace-028-publish-failure");

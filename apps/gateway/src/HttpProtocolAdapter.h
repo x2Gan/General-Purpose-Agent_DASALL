@@ -1,15 +1,34 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
+#include "IAccessGateway.h"
 #include "AccessTypes.h"
 #include "IProtocolAdapter.h"
 
 namespace dasall::access::gateway {
+
+enum class HttpDecodeErrorCode {
+  None = 0,
+  InvalidMethod,
+  InvalidPath,
+  InvalidContentType,
+  PayloadTooLarge,
+  InvalidHeader,
+  InvalidIdempotencyKey,
+  MalformedJson,
+};
+
+struct HttpDecodeError {
+  HttpDecodeErrorCode code = HttpDecodeErrorCode::None;
+  int status_code = 400;
+  std::string reason;
+};
 
 /// HTTP 请求数据（由 apps/gateway/main.cpp 从 httplib 注入）
 struct HttpRequestContext {
@@ -47,7 +66,7 @@ struct HttpResponseContext {
 /// 职责：
 ///   1. can_handle("gateway", "http_unary") 匹配 HTTP unary 请求
 ///   2. set_active_request() 注入当前 HTTP 请求上下文
-///   3. decode() 将 HTTP 请求 → InboundPacket（从 JSON body 提取字段）
+///   3. decode() 将 HTTP 请求 → InboundPacket（固定 gateway/http_unary 并解析 body）
 ///   4. encode() 将 PublishEnvelope → HttpResponseContext
 ///
 /// 边界约束：
@@ -63,7 +82,8 @@ class HttpProtocolAdapter : public dasall::access::IProtocolAdapter {
                                 std::string_view transport_hint) const override;
 
   /// 实现 IProtocolAdapter::decode()。
-  /// 从 active_request_ JSON body 解析出 InboundPacket。
+  /// 从 active_request_ 解析出 InboundPacket。
+  /// 请求不满足 method/path/content-type/header/body 约束时返回空 packet。
   [[nodiscard]] dasall::access::InboundPacket decode() override;
 
   /// 实现 IProtocolAdapter::encode()。
@@ -75,16 +95,33 @@ class HttpProtocolAdapter : public dasall::access::IProtocolAdapter {
   /// 注入当前 HTTP 请求上下文（每次处理一个请求前调用）。
   void set_active_request(const HttpRequestContext& request);
 
+  /// 配置 decode 阶段允许的最大 body 字节数。
+  void set_max_request_body_bytes(std::size_t max_request_body_bytes);
+
   /// 获取最近一次 encode() 填充的响应上下文。
   [[nodiscard]] const HttpResponseContext& active_response() const;
+
+  /// 获取最近一次 decode() 的错误信息；成功时返回 empty。
+  [[nodiscard]] const std::optional<HttpDecodeError>& last_decode_error() const;
 
   /// 将 protocol_status_hint 字符串转换为 HTTP 状态码整数。
   /// 用于 encode() 内部和调用方状态码映射。
   [[nodiscard]] static int hint_to_status_code(std::string_view hint);
 
  private:
+  [[nodiscard]] dasall::access::InboundPacket fail_decode(HttpDecodeErrorCode code,
+                                                          int status_code,
+                                                          std::string reason);
+
   std::optional<HttpRequestContext> active_request_;
   HttpResponseContext active_response_;
+  std::optional<HttpDecodeError> last_decode_error_;
+  std::size_t max_request_body_bytes_ = 1024U * 1024U;
 };
+
+[[nodiscard]] HttpResponseContext handle_submit_request(
+    const HttpRequestContext& request,
+    dasall::access::IAccessGateway& gateway,
+    std::size_t max_request_body_bytes = 1024U * 1024U);
 
 }  // namespace dasall::access::gateway

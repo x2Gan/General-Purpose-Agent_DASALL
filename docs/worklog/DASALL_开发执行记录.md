@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #639
+
+- 日期：2026-05-13
+- 阶段：access/gateway/http-ingress-hardening
+- 任务：ACC-TODO-044 修复 HTTP adapter structured decode、submit route 与输入安全
+- 状态：已完成
+
+### 改动
+
+1. 调整 `access/include/AccessTypes.h`、`access/src/AccessGatewayFactory.cpp` 与 `access/src/SubjectResolver.cpp`：为 `InboundPacket` 增加 allowlisted `headers` sidecar；gateway/daemon submit pipeline 先投影 `packet.headers` 再决定 `idempotency_key` fallback；`http_unary` 与 `http` 均归入 HTTP challenge 语义。
+2. 调整 `apps/gateway/src/HttpProtocolAdapter.h/.cpp`：HTTP decode 改为结构化 top-level JSON parser wrapper；新增 `HttpDecodeError`、body-size 配置、`last_decode_error()` 与 `handle_submit_request()`；decode 固定 `entry_type="gateway"`、`protocol_kind="http_unary"`，并对 method/path/content-type/header injection/body-size/Idempotency-Key 做 fail-closed 校验；encode 改为 escape-safe JSON 输出。
+3. 调整 `apps/gateway/src/main.cpp`：`/v1/submit` 通过 `handle_submit_request()` 统一走 decode -> submit -> encode，request body 限制改为使用 bootstrap 配置值；gateway allowlist 固定为 `http_unary`。
+4. 新增 `tests/unit/access/HttpProtocolAdapterStructuredDecodeTest.cpp`、`tests/unit/access/HttpProtocolAdapterSecurityInputTest.cpp`、`tests/unit/access/GatewaySubmitRouteContractTest.cpp`，并更新 `tests/unit/access/HttpProtocolAdapterTest.cpp`、`tests/unit/access/HttpProtocolAdapterErrorMappingTest.cpp` 与 gateway 相关 integration tests 到 `http_unary` 口径。
+5. 回写 `docs/todos/access/DASALL_access子系统专项TODO.md` 与 `docs/todos/access/deliverables/ACC-TODO-044-HttpProtocolAdapter-structured-decode与输入安全收敛.md`，把 044 的代码目标、测试目标和验收证据固化为交付物。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过。
+   - 说明：增量构建成功编译 `dasall_gateway`、`dasall_access`、新旧 HTTP adapter 单测目标和受影响的 gateway integration targets。
+2. `RunCtest_CMakeTools(tests=["HttpProtocolAdapterTest","HttpProtocolAdapterErrorMappingTest","HttpProtocolAdapterStructuredDecodeTest","HttpProtocolAdapterSecurityInputTest","GatewaySubmitRouteContractTest"])`
+   - 结果：通过，5/5 passed。
+3. `RunCtest_CMakeTools(tests=["GatewayAccessSubmitCompositionTest","AccessObservabilityMainChainIntegrationTest","AccessPublishFailureAuditTest","AccessHealthReadinessIntegrationTest"])`
+   - 结果：通过，4/4 passed。
+4. 手工 gateway binary E2E（临时 `DASALL_STATE_ROOT`）
+   - `/health/ready`：`HTTP 200`。
+   - `/v1/submit` with `Content-Type: application/json`、`Idempotency-Key: idem-manual-044-ok`、`peer_ref="jwt:user://tenant-a/alice"`：`HTTP 200`，响应含 `result_id/status/payload`。
+5. 补充观察
+   - `GatewayBinaryUnarySmokeTest` 在临时 `DASALL_STATE_ROOT` 下已越过 `/var/lib/dasall/memory` 权限阻塞，但当前仍因 readiness label 期望 `degraded-ready` 与实际 `default-ready` 不一致而失败；该差异发生在 submit 前，不构成 044 当前完成阻断。
+
+### 结果
+
+1. `ACC-TODO-044` 已完成：gateway HTTP unary submit 入口不再依赖 ad hoc JSON scanner，`Idempotency-Key` 已可穿过 validator/normalizer 主链。
+2. 本轮没有扩改 auth source owner、runtime owner 或 health route owner；修复限定在 gateway submit ingress 和 Access request_context 投影的最小范围内。
+3. HTTP submit 的成功路径、拒绝路径和协议级 fail-closed 均已具备 focused tests 与一次真实二进制 E2E 证据。
+
+### 下一步
+
+1. 进入 `ACC-TODO-045`，把 `AccessBootstrapConfig` 与 profile/policy snapshot 投影收口到生产级 `AccessAuthView` / `AccessAdmissionView` / `AccessPublishView`。
+2. 如果后续需要把 `GatewayBinaryUnarySmokeTest` 重新纳入 authoritative gate，应先单独收敛 readiness label `default-ready/degraded-ready` 的历史期望漂移，避免把非 submit 断言混写成 044 的 blocker。
+
 ## 记录 #638
 
 - 日期：2026-05-12

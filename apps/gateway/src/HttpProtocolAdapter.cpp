@@ -1,42 +1,378 @@
 #include "HttpProtocolAdapter.h"
 
+#include <cctype>
 #include <charconv>
 #include <cstdint>
+#include <map>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace dasall::access::gateway {
 
 namespace {
 
-/// 从 JSON 字符串中按 key 提取字符串值（朴素实现，不依赖外部 JSON 库）
-std::string extract_json_string(std::string_view json, std::string_view key) {
-  // 查找 "key"
-  const std::string search_key = "\"" + std::string(key) + "\"";
-  const auto key_pos = json.find(search_key);
-  if (key_pos == std::string_view::npos) {
-    return {};
+enum class JsonValueKind {
+  String,
+  Boolean,
+  Other,
+};
+
+struct ParsedJsonValue {
+  JsonValueKind kind = JsonValueKind::Other;
+  std::string string_value;
+  bool bool_value = false;
+};
+
+struct DecodedSubmitBody {
+  std::string packet_id;
+  std::string peer_ref;
+  std::string payload;
+  std::optional<std::string> trace_id;
+  std::optional<std::string> session_hint;
+  bool async_preferred = false;
+  bool stream_requested = false;
+};
+
+void skip_ascii_ws(std::string_view text, std::size_t& cursor) {
+  while (cursor < text.size() &&
+         std::isspace(static_cast<unsigned char>(text[cursor])) != 0) {
+    ++cursor;
+  }
+}
+
+[[nodiscard]] std::string lower_ascii(std::string_view text) {
+  std::string lowered;
+  lowered.reserve(text.size());
+  for (const unsigned char character : text) {
+    lowered.push_back(static_cast<char>(std::tolower(character)));
+  }
+  return lowered;
+}
+
+[[nodiscard]] bool contains_header_injection(std::string_view text) {
+  for (const char character : text) {
+    if (character == '\r' || character == '\n' || character == '\0') {
+      return true;
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] std::optional<std::string> find_header_value(
+    const std::unordered_map<std::string, std::string>& headers,
+    std::string_view key) {
+  const std::string lowered_key = lower_ascii(key);
+  for (const auto& [name, value] : headers) {
+    if (lower_ascii(name) == lowered_key) {
+      return value;
+    }
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] bool has_valid_json_content_type(
+    const std::unordered_map<std::string, std::string>& headers) {
+  const auto content_type = find_header_value(headers, "content-type");
+  if (!content_type.has_value()) {
+    return false;
   }
 
-  // 找到 ':'
-  auto colon_pos = json.find(':', key_pos + search_key.size());
-  if (colon_pos == std::string_view::npos) {
-    return {};
+  const auto separator = content_type->find(';');
+  const std::string media_type = lower_ascii(
+      content_type->substr(0, separator == std::string::npos ? content_type->size()
+                                                              : separator));
+  return media_type == "application/json";
+}
+
+[[nodiscard]] bool headers_are_safe(
+    const std::unordered_map<std::string, std::string>& headers) {
+  std::size_t total_bytes = 0U;
+  for (const auto& [name, value] : headers) {
+    if (name.empty() || contains_header_injection(name) ||
+        contains_header_injection(value)) {
+      return false;
+    }
+
+    total_bytes += name.size() + value.size();
+    if (name.size() > 8192U || value.size() > 8192U || total_bytes > 65536U) {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool is_valid_idempotency_key(std::string_view key) {
+  if (key.empty() || key.size() > 256U) {
+    return false;
   }
 
-  // 跳过空白
-  auto val_start = json.find_first_not_of(" \t\r\n", colon_pos + 1);
-  if (val_start == std::string_view::npos || json[val_start] != '"') {
-    return {};
+  for (const unsigned char character : key) {
+    if (std::isalnum(character) == 0 && character != '_' && character != '-') {
+      return false;
+    }
   }
 
-  // 读取字符串值（简单扫描，不处理转义）
-  ++val_start;
-  const auto val_end = json.find('"', val_start);
-  if (val_end == std::string_view::npos) {
-    return {};
+  return true;
+}
+
+[[nodiscard]] std::optional<std::string> parse_json_string_token(
+    std::string_view text,
+    std::size_t& cursor) {
+  if (cursor >= text.size() || text[cursor] != '"') {
+    return std::nullopt;
   }
 
-  return std::string(json.substr(val_start, val_end - val_start));
+  std::string value;
+  ++cursor;
+  while (cursor < text.size()) {
+    const char character = text[cursor++];
+    if (character == '\\') {
+      if (cursor >= text.size()) {
+        return std::nullopt;
+      }
+
+      const char escaped = text[cursor++];
+      switch (escaped) {
+        case '"':
+        case '\\':
+        case '/':
+          value.push_back(escaped);
+          break;
+        case 'b':
+          value.push_back('\b');
+          break;
+        case 'f':
+          value.push_back('\f');
+          break;
+        case 'n':
+          value.push_back('\n');
+          break;
+        case 'r':
+          value.push_back('\r');
+          break;
+        case 't':
+          value.push_back('\t');
+          break;
+        default:
+          return std::nullopt;
+      }
+      continue;
+    }
+
+    if (character == '"') {
+      return value;
+    }
+
+    value.push_back(character);
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<ParsedJsonValue> parse_json_value(
+    std::string_view text,
+    std::size_t& cursor) {
+  skip_ascii_ws(text, cursor);
+  if (cursor >= text.size()) {
+    return std::nullopt;
+  }
+
+  if (text[cursor] == '"') {
+    const auto parsed = parse_json_string_token(text, cursor);
+    if (!parsed.has_value()) {
+      return std::nullopt;
+    }
+    return ParsedJsonValue{
+        .kind = JsonValueKind::String,
+        .string_value = *parsed,
+        .bool_value = false,
+    };
+  }
+
+  if (text.substr(cursor, 4) == "true") {
+    cursor += 4U;
+    return ParsedJsonValue{
+        .kind = JsonValueKind::Boolean,
+        .string_value = std::string(),
+        .bool_value = true,
+    };
+  }
+  if (text.substr(cursor, 5) == "false") {
+    cursor += 5U;
+    return ParsedJsonValue{
+        .kind = JsonValueKind::Boolean,
+        .string_value = std::string(),
+        .bool_value = false,
+    };
+  }
+
+  const std::size_t begin = cursor;
+  int nested_braces = 0;
+  int nested_brackets = 0;
+  while (cursor < text.size()) {
+    const char character = text[cursor];
+    if (character == '{') {
+      ++nested_braces;
+    } else if (character == '}') {
+      if (nested_braces == 0 && nested_brackets == 0) {
+        break;
+      }
+      --nested_braces;
+    } else if (character == '[') {
+      ++nested_brackets;
+    } else if (character == ']') {
+      --nested_brackets;
+    } else if (character == ',' && nested_braces == 0 && nested_brackets == 0) {
+      break;
+    }
+    ++cursor;
+  }
+
+  if (cursor == begin) {
+    return std::nullopt;
+  }
+
+  return ParsedJsonValue{
+      .kind = JsonValueKind::Other,
+      .string_value = std::string(),
+      .bool_value = false,
+  };
+}
+
+[[nodiscard]] std::optional<DecodedSubmitBody> parse_submit_body(std::string_view body) {
+  std::size_t cursor = 0U;
+  skip_ascii_ws(body, cursor);
+  if (cursor >= body.size() || body[cursor] != '{') {
+    return std::nullopt;
+  }
+  ++cursor;
+
+  DecodedSubmitBody decoded;
+  while (cursor < body.size()) {
+    skip_ascii_ws(body, cursor);
+    if (cursor < body.size() && body[cursor] == '}') {
+      ++cursor;
+      skip_ascii_ws(body, cursor);
+      if (cursor != body.size()) {
+        return std::nullopt;
+      }
+      return decoded;
+    }
+
+    const auto key = parse_json_string_token(body, cursor);
+    if (!key.has_value()) {
+      return std::nullopt;
+    }
+
+    skip_ascii_ws(body, cursor);
+    if (cursor >= body.size() || body[cursor] != ':') {
+      return std::nullopt;
+    }
+    ++cursor;
+
+    const auto value = parse_json_value(body, cursor);
+    if (!value.has_value()) {
+      return std::nullopt;
+    }
+
+    if (*key == "packet_id") {
+      if (value->kind != JsonValueKind::String) {
+        return std::nullopt;
+      }
+      decoded.packet_id = value->string_value;
+    } else if (*key == "peer_ref") {
+      if (value->kind != JsonValueKind::String) {
+        return std::nullopt;
+      }
+      decoded.peer_ref = value->string_value;
+    } else if (*key == "payload") {
+      if (value->kind != JsonValueKind::String) {
+        return std::nullopt;
+      }
+      decoded.payload = value->string_value;
+    } else if (*key == "trace_id") {
+      if (value->kind != JsonValueKind::String) {
+        return std::nullopt;
+      }
+      decoded.trace_id = value->string_value;
+    } else if (*key == "session_hint") {
+      if (value->kind != JsonValueKind::String) {
+        return std::nullopt;
+      }
+      decoded.session_hint = value->string_value;
+    } else if (*key == "async_preferred") {
+      if (value->kind != JsonValueKind::Boolean) {
+        return std::nullopt;
+      }
+      decoded.async_preferred = value->bool_value;
+    } else if (*key == "stream_requested") {
+      if (value->kind != JsonValueKind::Boolean) {
+        return std::nullopt;
+      }
+      decoded.stream_requested = value->bool_value;
+    }
+
+    skip_ascii_ws(body, cursor);
+    if (cursor < body.size() && body[cursor] == ',') {
+      ++cursor;
+      continue;
+    }
+    if (cursor < body.size() && body[cursor] == '}') {
+      ++cursor;
+      skip_ascii_ws(body, cursor);
+      if (cursor != body.size()) {
+        return std::nullopt;
+      }
+      return decoded;
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::string escape_json(std::string_view text) {
+  std::string escaped;
+  escaped.reserve(text.size());
+  for (const char character : text) {
+    switch (character) {
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '\b':
+        escaped += "\\b";
+        break;
+      case '\f':
+        escaped += "\\f";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped.push_back(character);
+        break;
+    }
+  }
+  return escaped;
+}
+
+[[nodiscard]] HttpResponseContext make_error_response(const HttpDecodeError& error) {
+  HttpResponseContext response;
+  response.status_code = error.status_code;
+  response.headers["Content-Type"] = "application/json";
+  response.body = "{\"error\":\"" + escape_json(error.reason) +
+                  "\",\"status\":\"" +
+                  std::to_string(error.status_code) + "\"}";
+  return response;
 }
 
 /// 将 PublishEnvelope 序列化为 JSON 字符串
@@ -51,7 +387,7 @@ std::string envelope_to_json(const dasall::access::PublishEnvelope& env) {
     json += '"';
     json += key;
     json += "\":\"";
-    json += val;
+    json += escape_json(val);
     json += '"';
   };
 
@@ -81,6 +417,7 @@ bool HttpProtocolAdapter::can_handle(std::string_view adapter_id,
 }
 
 dasall::access::InboundPacket HttpProtocolAdapter::decode() {
+  last_decode_error_.reset();
   dasall::access::InboundPacket packet;
 
   if (!active_request_.has_value() ||
@@ -88,28 +425,61 @@ dasall::access::InboundPacket HttpProtocolAdapter::decode() {
     return packet;
   }
 
-  const std::string_view body = active_request_->body;
-
-  // 从 JSON body 提取字段
-  packet.packet_id = extract_json_string(body, "packet_id");
-  packet.entry_type = extract_json_string(body, "entry_type");
-  packet.peer_ref = extract_json_string(body, "peer_ref");
-  packet.payload = extract_json_string(body, "payload");
-  packet.protocol_kind = "http";
-
-  const auto trace_id = extract_json_string(body, "trace_id");
-  if (!trace_id.empty()) {
-    packet.trace_id = trace_id;
+  if (active_request_->method != "POST" || active_request_->path != "/v1/submit") {
+    return fail_decode(active_request_->method != "POST"
+                           ? HttpDecodeErrorCode::InvalidMethod
+                           : HttpDecodeErrorCode::InvalidPath,
+                       active_request_->method != "POST" ? 405 : 404,
+                       active_request_->method != "POST" ? "invalid_method"
+                                                         : "invalid_path");
   }
 
-  const auto session_hint = extract_json_string(body, "session_hint");
-  if (!session_hint.empty()) {
-    packet.session_hint = session_hint;
+  if (!headers_are_safe(active_request_->headers)) {
+    return fail_decode(HttpDecodeErrorCode::InvalidHeader,
+                       400,
+                       "invalid_header");
   }
 
-  // peer_ref 默认为 HTTP remote 标记（不是 local trusted）
-  if (packet.peer_ref.empty()) {
-    packet.peer_ref = "http_remote";
+  if (!has_valid_json_content_type(active_request_->headers)) {
+    return fail_decode(HttpDecodeErrorCode::InvalidContentType,
+                       415,
+                       "invalid_content_type");
+  }
+
+  if (active_request_->body.size() > max_request_body_bytes_) {
+    return fail_decode(HttpDecodeErrorCode::PayloadTooLarge,
+                       413,
+                       "payload_too_large");
+  }
+
+  const auto decoded_body = parse_submit_body(active_request_->body);
+  if (!decoded_body.has_value()) {
+    return fail_decode(HttpDecodeErrorCode::MalformedJson,
+                       400,
+                       "malformed_json");
+  }
+
+  packet.packet_id = decoded_body->packet_id;
+  packet.entry_type = "gateway";
+  packet.protocol_kind = "http_unary";
+  packet.peer_ref = decoded_body->peer_ref.empty()
+                        ? std::string("http_remote")
+                        : decoded_body->peer_ref;
+  packet.payload = decoded_body->payload;
+  packet.trace_id = decoded_body->trace_id;
+  packet.session_hint = decoded_body->session_hint;
+  packet.async_preferred = decoded_body->async_preferred;
+  packet.stream_requested = decoded_body->stream_requested;
+
+  if (const auto idempotency_key =
+          find_header_value(active_request_->headers, "idempotency-key");
+      idempotency_key.has_value()) {
+    if (!is_valid_idempotency_key(*idempotency_key)) {
+      return fail_decode(HttpDecodeErrorCode::InvalidIdempotencyKey,
+                         400,
+                         "invalid_idempotency_key");
+    }
+    packet.headers["idempotency_key"] = *idempotency_key;
   }
 
   return packet;
@@ -129,10 +499,32 @@ void HttpProtocolAdapter::set_active_request(
   active_request_ = request;
   // 重置上次响应
   active_response_ = HttpResponseContext{};
+  last_decode_error_.reset();
+}
+
+void HttpProtocolAdapter::set_max_request_body_bytes(
+    std::size_t max_request_body_bytes) {
+  max_request_body_bytes_ = max_request_body_bytes;
 }
 
 const HttpResponseContext& HttpProtocolAdapter::active_response() const {
   return active_response_;
+}
+
+const std::optional<HttpDecodeError>& HttpProtocolAdapter::last_decode_error() const {
+  return last_decode_error_;
+}
+
+dasall::access::InboundPacket HttpProtocolAdapter::fail_decode(
+    HttpDecodeErrorCode code,
+    int status_code,
+    std::string reason) {
+  last_decode_error_ = HttpDecodeError{
+      .code = code,
+      .status_code = status_code,
+      .reason = std::move(reason),
+  };
+  return dasall::access::InboundPacket{};
 }
 
 int HttpProtocolAdapter::hint_to_status_code(std::string_view hint) {
@@ -146,6 +538,34 @@ int HttpProtocolAdapter::hint_to_status_code(std::string_view hint) {
     return 500;
   }
   return code;
+}
+
+HttpResponseContext handle_submit_request(const HttpRequestContext& request,
+                                          dasall::access::IAccessGateway& gateway,
+                                          std::size_t max_request_body_bytes) {
+  HttpProtocolAdapter adapter;
+  adapter.set_max_request_body_bytes(max_request_body_bytes);
+  adapter.set_active_request(request);
+
+  const auto packet = adapter.decode();
+  if (adapter.last_decode_error().has_value()) {
+    return make_error_response(*adapter.last_decode_error());
+  }
+
+  const auto result = gateway.submit(packet);
+  if (result.publish_envelope.has_value()) {
+    (void)adapter.encode(*result.publish_envelope);
+    return adapter.active_response();
+  }
+
+  dasall::access::PublishEnvelope fallback;
+  fallback.protocol_status_hint =
+      result.disposition == dasall::access::AccessDisposition::AcceptedAsync ? "202"
+                                                                             : "400";
+  fallback.result_id = result.receipt_ref.value_or("");
+  fallback.payload = result.error_ref.value_or("");
+  (void)adapter.encode(fallback);
+  return adapter.active_response();
 }
 
 }  // namespace dasall::access::gateway

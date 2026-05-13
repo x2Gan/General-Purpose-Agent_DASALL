@@ -386,8 +386,10 @@ int main(int argc, char* argv[]) {
 
   dasall::access::GatewayAccessPipelineOptions gateway_options;
   gateway_options.bootstrap_config.entry_type = "gateway";
-  gateway_options.bootstrap_config.allowed_protocols = {"http"};
+  gateway_options.bootstrap_config.allowed_protocols = {"http_unary"};
   gateway_options.publish_view.cors_allowed_origins = sec_cfg.cors_allowed_origins;
+    const std::size_t max_http_request_body_bytes =
+      static_cast<std::size_t>(gateway_options.bootstrap_config.max_payload_bytes);
   gateway_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {
@@ -475,10 +477,9 @@ int main(int argc, char* argv[]) {
   });
 
   // 4e. POST /v1/submit — HTTP unary 请求入口
-  srv.Post("/v1/submit", [&gateway, &apply_sec](const httplib::Request& req,
-                                                 httplib::Response& res) {
-    dasall::access::gateway::HttpProtocolAdapter adapter;
-
+  srv.Post("/v1/submit", [&gateway, &apply_sec, max_http_request_body_bytes](
+                                 const httplib::Request& req,
+                                 httplib::Response& res) {
     dasall::access::gateway::HttpRequestContext ctx;
     ctx.method = req.method;
     ctx.path = req.path;
@@ -487,37 +488,24 @@ int main(int argc, char* argv[]) {
       ctx.headers[k] = v;
     }
 
-    adapter.set_active_request(ctx);
-    auto packet = adapter.decode();
-
     const std::string origin = req.get_header_value("Origin");
     const std::string req_id = req.get_header_value("X-Request-Id");
 
-    if (packet.entry_type.empty()) {
-      res.status = 400;
-      res.set_content(R"({"error":"invalid request body"})", "application/json");
-      apply_sec(res, origin, req_id);
-      return;
-    }
-
-    const auto result = gateway->submit(packet);
-
-    if (result.publish_envelope.has_value()) {
-      (void)adapter.encode(*result.publish_envelope);
-    } else {
-      dasall::access::PublishEnvelope fallback;
-      fallback.protocol_status_hint =
-          (result.disposition == dasall::access::AccessDisposition::AcceptedAsync)
-              ? "202"
-              : "400";
-      fallback.result_id = result.receipt_ref.value_or("");
-      fallback.payload = result.error_ref.value_or("");
-      (void)adapter.encode(fallback);
-    }
-
-    const auto& http_res = adapter.active_response();
+    const auto http_res = dasall::access::gateway::handle_submit_request(
+        ctx,
+        *gateway,
+      max_http_request_body_bytes);
     res.status = http_res.status_code;
-    res.set_content(http_res.body, "application/json");
+    const auto content_type = http_res.headers.find("Content-Type");
+    res.set_content(http_res.body,
+                    content_type == http_res.headers.end()
+                        ? "application/json"
+                        : content_type->second.c_str());
+    for (const auto& [key, value] : http_res.headers) {
+      if (key != "Content-Type") {
+        res.set_header(key.c_str(), value.c_str());
+      }
+    }
     apply_sec(res, origin, req_id);
   });
 

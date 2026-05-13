@@ -34,7 +34,7 @@ void readiness_reflects_real_gateway_initialization() {
                "startup probe should stay STARTING when gateway init fails");
 
   GatewayAccessPipelineOptions options;
-  options.bootstrap_config.allowed_protocols = {"http"};
+  options.bootstrap_config.allowed_protocols = {"http_unary"};
   options.runtime_dispatch_backend = [](const RuntimeDispatchRequest&) {
     RuntimeDispatchResult result;
     result.disposition = AccessDisposition::Completed;

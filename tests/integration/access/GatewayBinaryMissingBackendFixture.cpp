@@ -5,7 +5,7 @@
 int main() {
   dasall::access::GatewayAccessPipelineOptions options;
   options.bootstrap_config.entry_type = "gateway";
-  options.bootstrap_config.allowed_protocols = {"http"};
+  options.bootstrap_config.allowed_protocols = {"http_unary"};
 
   auto gateway = dasall::access::create_gateway_access_gateway(std::move(options));
   if (!gateway->init()) {

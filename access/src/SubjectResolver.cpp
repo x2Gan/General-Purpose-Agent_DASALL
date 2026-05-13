@@ -209,7 +209,9 @@ ChallengePlan SubjectResolver::build_challenge_plan(
     const InboundPacket& packet,
     const std::string_view reason_code) const {
   const std::string challenge_type =
-      packet.protocol_kind == "http" ? "http_authenticate" : "credential_prompt";
+      (packet.protocol_kind == "http" || packet.protocol_kind == "http_unary")
+        ? "http_authenticate"
+        : "credential_prompt";
 
   return ChallengePlan{
       .challenge_type = challenge_type,

@@ -61,7 +61,8 @@ void test_encode_rejected_envelope_returns_400() {
   HttpRequestContext ctx;
   ctx.method = "POST";
   ctx.path = "/v1/submit";
-  ctx.body = R"({"entry_type":"task.submit"})";
+  ctx.headers["content-type"] = "application/json";
+  ctx.body = R"({"packet_id":"req-error-mapping","payload":"task.submit"})";
   adapter.set_active_request(ctx);
 
   PublishEnvelope env;
@@ -73,24 +74,26 @@ void test_encode_rejected_envelope_returns_400() {
               "encode with 400 hint should set response status to 400");
 }
 
-/// 验证 decode 不感知 HTTP method（仅用 body）
-void test_decode_parses_body_regardless_of_method() {
+/// 验证 decode 对非法 method fail-closed
+void test_decode_rejects_invalid_method() {
   using dasall::access::gateway::HttpProtocolAdapter;
   using dasall::access::gateway::HttpRequestContext;
   using dasall::tests::support::assert_true;
 
   HttpProtocolAdapter adapter;
   HttpRequestContext ctx;
-  ctx.method = "GET";  // 非 POST，body 仍能解析
+  ctx.method = "GET";
   ctx.path = "/v1/submit";
-  ctx.body = R"({"entry_type":"task.query","payload":"q"})";
+  ctx.headers["content-type"] = "application/json";
+  ctx.body = R"({"packet_id":"req-invalid-method","payload":"q"})";
   adapter.set_active_request(ctx);
 
   const auto packet = adapter.decode();
-  assert_true(packet.entry_type == "task.query",
-              "decode should extract entry_type regardless of HTTP method");
-  assert_true(packet.payload == "q",
-              "decode should extract payload field");
+  assert_true(packet.entry_type.empty(),
+              "decode should fail closed for non-POST submit methods");
+  assert_true(adapter.last_decode_error().has_value() &&
+                  adapter.last_decode_error()->status_code == 405,
+              "decode should surface 405 when method is not POST");
 }
 
 }  // namespace
@@ -103,7 +106,7 @@ int main() {
     test_hint_to_status_code_empty_returns_200();
     test_hint_to_status_code_invalid_returns_500();
     test_encode_rejected_envelope_returns_400();
-    test_decode_parses_body_regardless_of_method();
+    test_decode_rejects_invalid_method();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

@@ -52,7 +52,7 @@ void test_decode_empty_request_returns_empty_entry_type() {
               "decode without active_request should return empty entry_type");
 }
 
-/// 验证 decode 从 JSON body 正确提取 entry_type 和 peer_ref
+/// 验证 decode 固定 gateway/http_unary，并保留 body 中的业务字段
 void test_decode_extracts_entry_type_from_body() {
   using dasall::access::gateway::HttpProtocolAdapter;
   using dasall::access::gateway::HttpRequestContext;
@@ -62,14 +62,15 @@ void test_decode_extracts_entry_type_from_body() {
   HttpRequestContext ctx;
   ctx.method = "POST";
   ctx.path = "/v1/submit";
+  ctx.headers["content-type"] = "application/json";
   ctx.body = R"({"entry_type":"task.submit","peer_ref":"actor://test","payload":""})";
   adapter.set_active_request(ctx);
 
   const auto packet = adapter.decode();
-  assert_true(packet.entry_type == "task.submit",
-              "decode should extract entry_type from JSON body");
-  assert_true(packet.protocol_kind == "http",
-              "decode should stamp protocol_kind=http for gateway requests");
+  assert_true(packet.entry_type == "gateway",
+              "decode should normalize entry_type to gateway for HTTP submit");
+  assert_true(packet.protocol_kind == "http_unary",
+              "decode should stamp protocol_kind=http_unary for gateway requests");
 }
 
 /// 验证 decode 对无 peer_ref 的请求注入 "http_remote" 默认值
@@ -82,7 +83,8 @@ void test_decode_injects_http_remote_peer_ref_when_absent() {
   HttpRequestContext ctx;
   ctx.method = "POST";
   ctx.path = "/v1/submit";
-  ctx.body = R"({"entry_type":"task.ping"})";
+  ctx.headers["content-type"] = "application/json";
+  ctx.body = R"({"packet_id":"req-http-default-peer","payload":"ping"})";
   adapter.set_active_request(ctx);
 
   const auto packet = adapter.decode();
@@ -99,6 +101,7 @@ void test_decode_extracts_trace_and_session_metadata() {
   HttpRequestContext ctx;
   ctx.method = "POST";
   ctx.path = "/v1/submit";
+  ctx.headers["content-type"] = "application/json";
   ctx.body = R"({"entry_type":"task.submit","trace_id":"trace-gateway-001","session_hint":"session-gateway-001"})";
   adapter.set_active_request(ctx);
 
@@ -120,7 +123,8 @@ void test_encode_fills_response_context() {
   HttpRequestContext ctx;
   ctx.method = "POST";
   ctx.path = "/v1/submit";
-  ctx.body = R"({"entry_type":"task.submit"})";
+  ctx.headers["content-type"] = "application/json";
+  ctx.body = R"({"packet_id":"req-encode","payload":"task.submit"})";
   adapter.set_active_request(ctx);
 
   PublishEnvelope env;
