@@ -537,6 +537,35 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_gateway_runtime_live_dependency_composition_integration_test
 )
 
+add_executable(dasall_access_runtime_production_health_composition_integration_test
+  RuntimeProductionHealthCompositionTest.cpp
+)
+
+target_compile_definitions(dasall_access_runtime_production_health_composition_integration_test
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_access_runtime_production_health_composition_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_profiles
+    dasall_runtime
+    dasall_tools
+)
+
+dasall_apply_common_options(dasall_access_runtime_production_health_composition_integration_test)
+
+add_test(NAME RuntimeProductionHealthCompositionTest
+  COMMAND dasall_access_runtime_production_health_composition_integration_test)
+set_tests_properties(RuntimeProductionHealthCompositionTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_runtime_production_health_composition_integration_test
+)
+
 add_executable(dasall_access_health_readiness_integration_test
   AccessHealthReadinessIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/gateway/src/HealthProbeHandler.cpp

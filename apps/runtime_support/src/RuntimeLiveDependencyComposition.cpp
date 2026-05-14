@@ -1,12 +1,15 @@
 #include "RuntimeLiveDependencyComposition.h"
 
+#include <chrono>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <system_error>
 #include <utility>
 
 #include "ICognitionEngine.h"
+#include "ObservabilityLiveComposition.h"
 #include "LLMProductionFactory.h"
 #include "IMemoryManager.h"
 #include "IMultiAgentCoordinator.h"
@@ -15,6 +18,11 @@
 #include "RuntimeDependencySet.h"
 #include "ServiceLiveComposition.h"
 #include "ToolManager.h"
+#include "health/IHealthMonitor.h"
+#include "ops/ToolAuditBridge.h"
+#include "ops/ToolHealthProbe.h"
+#include "ops/ToolMetricsBridge.h"
+#include "ops/ToolTraceBridge.h"
 #include "tool/ToolDescriptor.h"
 #include "config/InstallLayout.h"
 #include "execution/BuiltinExecutorLane.h"
@@ -25,6 +33,170 @@ namespace dasall::apps::runtime_support {
 namespace {
 
 namespace fs = std::filesystem;
+
+[[nodiscard]] std::int64_t current_time_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
+struct RuntimeObservabilityBundle {
+  std::shared_ptr<infra::audit::IAuditLogger> audit_logger;
+  std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
+  std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;
+  std::shared_ptr<infra::IHealthMonitor> health_monitor;
+  std::shared_ptr<tools::ops::ToolAuditBridge> tool_audit_bridge;
+  std::shared_ptr<tools::ops::ToolMetricsBridge> tool_metrics_bridge;
+  std::shared_ptr<tools::ops::ToolTraceBridge> tool_trace_bridge;
+  std::shared_ptr<tools::ops::ToolHealthProbe> tool_health_probe;
+  std::vector<std::shared_ptr<infra::IHealthProbe>> health_probes;
+  std::string error;
+
+  [[nodiscard]] bool ok() const {
+    return audit_logger != nullptr && metrics_provider != nullptr &&
+           tracer_provider != nullptr && health_monitor != nullptr &&
+           tool_audit_bridge != nullptr && tool_metrics_bridge != nullptr &&
+           tool_trace_bridge != nullptr && tool_health_probe != nullptr &&
+           error.empty();
+  }
+};
+
+class RuntimeToolHealthSignalProvider final
+    : public tools::ops::IToolHealthSignalProvider {
+ public:
+  RuntimeToolHealthSignalProvider(
+      std::shared_ptr<tools::ops::ToolAuditBridge> audit_bridge,
+      std::shared_ptr<tools::ops::ToolMetricsBridge> metrics_bridge,
+      std::shared_ptr<tools::ops::ToolTraceBridge> trace_bridge,
+      std::function<std::int64_t()> now_ms)
+      : audit_bridge_(std::move(audit_bridge)),
+        metrics_bridge_(std::move(metrics_bridge)),
+        trace_bridge_(std::move(trace_bridge)),
+        now_ms_(std::move(now_ms)) {}
+
+  [[nodiscard]] tools::ops::ToolHealthSample sample(std::int64_t) override {
+    tools::ops::ToolHealthSample sample;
+    sample.registry.revision = 1U;
+    sample.registry.descriptor_catalog_ready = true;
+    sample.registry.delta_pipeline_degraded = false;
+    sample.builtin_lane.available = true;
+    sample.builtin_lane.concurrency_budget = 1U;
+    sample.workflow_lane.available = true;
+    sample.workflow_lane.concurrency_budget = 1U;
+    sample.mcp.session_ready = true;
+    sample.mcp.freshness = tools::CapabilityFreshness::fresh;
+    sample.mcp.stale_read_allowed = true;
+    sample.audit_bridge_degraded = audit_bridge_ == nullptr ||
+        audit_bridge_->get_status().degraded;
+    sample.metrics_bridge_degraded = metrics_bridge_ == nullptr ||
+        metrics_bridge_->is_degraded();
+    sample.trace_bridge_degraded = trace_bridge_ == nullptr ||
+        trace_bridge_->is_degraded();
+    sample.latency_ms = 0;
+    sample.sampled_at_unix_ms = now_ms_ != nullptr ? now_ms_() : current_time_ms();
+    sample.detail_ref = "status://runtime_support/tools/health";
+    return sample;
+  }
+
+ private:
+  std::shared_ptr<tools::ops::ToolAuditBridge> audit_bridge_;
+  std::shared_ptr<tools::ops::ToolMetricsBridge> metrics_bridge_;
+  std::shared_ptr<tools::ops::ToolTraceBridge> trace_bridge_;
+  std::function<std::int64_t()> now_ms_;
+};
+
+[[nodiscard]] std::string register_health_probe(
+    const std::shared_ptr<infra::IHealthMonitor>& health_monitor,
+    const std::string& probe_name,
+    const std::string& probe_group,
+    infra::IHealthProbe* probe) {
+  if (health_monitor == nullptr || probe == nullptr) {
+    return "health monitor registration requires concrete monitor and probe";
+  }
+
+  const auto result = health_monitor->register_probe(infra::HealthProbeRegistration{
+      .probe_name = probe_name,
+      .probe_group = probe_group,
+      .probe = probe,
+  });
+  if (!result.ok) {
+    return std::string("health probe registration failed for ") + probe_name;
+  }
+
+  return {};
+}
+
+[[nodiscard]] RuntimeObservabilityBundle compose_runtime_observability_bundle(
+    const profiles::RuntimePolicySnapshot& policy_snapshot) {
+  const auto live_observability = infra::compose_live_observability(
+      infra::ObservabilityLiveCompositionOptions{
+          .profile_id = policy_snapshot.effective_profile_id(),
+          .metrics_granularity = policy_snapshot.ops_policy().metrics_granularity,
+          .trace_sample_ratio = policy_snapshot.ops_policy().trace_sample_ratio,
+      });
+  if (!live_observability.ok()) {
+    return RuntimeObservabilityBundle{
+        .error = live_observability.error,
+    };
+  }
+
+  auto tool_audit_bridge = std::make_shared<tools::ops::ToolAuditBridge>(
+      live_observability.audit_logger.get());
+  auto tool_metrics_bridge = std::make_shared<tools::ops::ToolMetricsBridge>(
+      live_observability.metrics_provider,
+      tools::ops::ToolMetricsBridgeOptions{
+          .enabled = true,
+          .profile_id = policy_snapshot.effective_profile_id(),
+          .metrics_granularity = policy_snapshot.ops_policy().metrics_granularity,
+          .now_ms = []() {
+            return current_time_ms();
+          },
+      });
+  auto tool_trace_bridge = std::make_shared<tools::ops::ToolTraceBridge>(
+      live_observability.tracer_provider,
+      tools::ops::ToolTraceBridgeOptions{
+          .enabled = true,
+          .profile_id = policy_snapshot.effective_profile_id(),
+          .trace_sample_ratio = policy_snapshot.ops_policy().trace_sample_ratio,
+      });
+  auto tool_health_probe = std::make_shared<tools::ops::ToolHealthProbe>(
+      std::make_shared<RuntimeToolHealthSignalProvider>(
+          tool_audit_bridge,
+          tool_metrics_bridge,
+          tool_trace_bridge,
+          []() {
+            return current_time_ms();
+          }),
+      tools::ops::ToolHealthProbeOptions{
+          .now_ms = []() {
+            return current_time_ms();
+          },
+      });
+
+  if (const auto register_error = register_health_probe(
+          live_observability.health_monitor,
+          std::string(tools::ops::kToolHealthProbeName),
+          std::string(tools::ops::kToolHealthProbeGroup),
+          tool_health_probe.get());
+      !register_error.empty()) {
+    return RuntimeObservabilityBundle{
+        .error = register_error,
+    };
+  }
+
+  return RuntimeObservabilityBundle{
+      .audit_logger = live_observability.audit_logger,
+      .metrics_provider = live_observability.metrics_provider,
+      .tracer_provider = live_observability.tracer_provider,
+      .health_monitor = live_observability.health_monitor,
+      .tool_audit_bridge = tool_audit_bridge,
+      .tool_metrics_bridge = tool_metrics_bridge,
+      .tool_trace_bridge = tool_trace_bridge,
+      .tool_health_probe = tool_health_probe,
+      .health_probes = {tool_health_probe},
+      .error = {},
+  };
+}
 
 [[nodiscard]] RuntimeDependencyCompositionResult make_error(std::string error) {
   return RuntimeDependencyCompositionResult{
@@ -82,8 +254,12 @@ namespace fs = std::filesystem;
 
 [[nodiscard]] std::shared_ptr<tools::ToolManager> compose_runtime_tool_manager(
     std::shared_ptr<services::IExecutionService> execution_service,
-    std::shared_ptr<services::IDataService> data_service) {
-  if (execution_service == nullptr || data_service == nullptr) {
+    std::shared_ptr<services::IDataService> data_service,
+    const RuntimeObservabilityBundle& observability) {
+  if (execution_service == nullptr || data_service == nullptr ||
+      observability.tool_audit_bridge == nullptr ||
+      observability.tool_metrics_bridge == nullptr ||
+      observability.tool_trace_bridge == nullptr) {
     return nullptr;
   }
 
@@ -103,6 +279,10 @@ namespace fs = std::filesystem;
 
   tools::manager::ToolManagerDependencies dependencies;
   dependencies.registry = registry;
+  dependencies.metrics_bridge = observability.tool_metrics_bridge;
+  dependencies.trace_bridge = observability.tool_trace_bridge;
+  dependencies.audit_hooks =
+      tools::ops::ToolAuditBridge::bind_hooks(observability.tool_audit_bridge);
   dependencies.executor = [builtin_lane](const auto& execution_request) {
     return builtin_lane->execute(
         execution_request.tool_ir,
@@ -186,15 +366,61 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
 
-  const auto live_services = services::compose_live_services(*policy_snapshot);
+  const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
+  if (!observability.ok()) {
+    return make_error(std::string("runtime observability composition failed for ") +
+                      std::string(composition_owner) + ": " + observability.error);
+  }
+  dependency_set->audit_logger = observability.audit_logger;
+  dependency_set->metrics_provider = observability.metrics_provider;
+  dependency_set->tracer_provider = observability.tracer_provider;
+  dependency_set->health_monitor = observability.health_monitor;
+  dependency_set->health_probes = observability.health_probes;
+
+  const auto live_services = services::compose_live_services(
+      *policy_snapshot,
+      services::ServiceLiveCompositionOptions{
+          .execution_capability_id = "agent.terminal",
+          .data_capability_id = "agent.dataset",
+          .local_service_available = true,
+          .remote_service_available = false,
+          .remote_timeout = false,
+          .allow_route_degrade = true,
+          .local_platform_route_enabled = false,
+          .observability_enabled = true,
+          .observability_level = policy_snapshot->ops_policy().metrics_granularity,
+          .toolchain_hint = "x86_64-linux-gnu",
+          .audit_logger = observability.audit_logger,
+          .metrics_provider = observability.metrics_provider,
+          .tracer_provider = observability.tracer_provider,
+          .health_probe_enabled = true,
+          .critical_actions = {},
+          .high_risk_actions = {"agent.terminal"},
+      });
   if (!live_services.ok()) {
     return make_error(std::string("services live composition failed for ") +
                       std::string(composition_owner) + ": " + live_services.error);
   }
 
+  if (live_services.health_probe == nullptr) {
+    return make_error(std::string("services health probe composition failed for ") +
+                      std::string(composition_owner));
+  }
+  if (const auto register_error = register_health_probe(
+          dependency_set->health_monitor,
+      std::string("services.capability"),
+      std::string("readiness"),
+          live_services.health_probe.get());
+      !register_error.empty()) {
+    return make_error(std::string("services health probe registration failed for ") +
+                      std::string(composition_owner) + ": " + register_error);
+  }
+  dependency_set->health_probes.push_back(live_services.health_probe);
+
   dependency_set->tool_manager = compose_runtime_tool_manager(
       live_services.execution_service,
-      live_services.data_service);
+      live_services.data_service,
+      observability);
   if (dependency_set->tool_manager == nullptr) {
     return make_error(std::string("tool manager composition failed for ") +
                       std::string(composition_owner));
@@ -211,6 +437,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       ":required-live-baseline",
       std::string("runtime:") + std::string(composition_owner) +
       ":tool-services-production-bridge",
+      std::string("runtime:") + std::string(composition_owner) +
+      ":production-observability-health",
       std::string("runtime:") + std::string(composition_owner) +
       (policy_snapshot->multi_agent_enabled() ? ":multi-agent-enabled"
                                               : ":multi-agent-disabled"),

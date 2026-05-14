@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #647
+
+- 日期：2026-05-14
+- 阶段：runtime_support/组件专项 TODO 阶段 B
+- 任务：RTSUP-TODO-006 接入 production observability 与 health sinks
+- 状态：已完成
+
+### 改动
+
+1. 新增 `infra/include/ObservabilityLiveComposition.h`、`infra/src/ObservabilityLiveComposition.cpp` 并更新 `infra/CMakeLists.txt`：提供 infra public observability composition seam，统一组合 `AuditService`、`MetricsFacade`、`TracerProviderImpl` 与 `HealthMonitorFacade`，避免 `apps/runtime_support` 直接 include `infra/src` internal provider 头。
+2. 调整 `services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp` 与 `runtime/include/RuntimeDependencySet.h`：`ServiceLiveComposition` 现在可消费 shared audit/metrics/trace providers，并在启用 observability 时创建 service bridges 与 `ServiceHealthProbe`；`RuntimeDependencySet` 新增 audit/metrics/tracer/health monitor/probe 的 owner retention 面。
+3. 调整 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：helper 现在先组合 shared observability bundle，再把 concrete sinks 注入 `ToolAuditBridge` / `ToolMetricsBridge` / `ToolTraceBridge` 和 `ServiceLiveComposition`；同时注册 tool/services probes 到 `health_monitor`，并回写 `:production-observability-health` evidence marker。
+4. 新增 `tests/integration/tools/ToolProductionObservabilityIntegrationTest.cpp`、`tests/integration/access/RuntimeProductionHealthCompositionTest.cpp`，并扩展 daemon/gateway composition tests：分别覆盖 direct tools+services shared sinks、runtime helper health aggregate，以及 app composition 对 health monitor / marker 的 retention。
+
+### 验证
+
+1. `cmake -S /home/gangan/DASALL -B /home/gangan/DASALL/build-rtsup005 -G "Unix Makefiles" && cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall_tool_production_observability_integration_test dasall_access_runtime_production_health_composition_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir /home/gangan/DASALL/build-rtsup005 -R '^(ToolProductionObservabilityIntegrationTest|RuntimeProductionHealthCompositionTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure`
+   - 结果：通过，4/4 passed。
+
+### 结果
+
+1. `RTSUP-TODO-006` 已完成：shared helper 现在能组合 concrete audit / metrics / trace sinks，并把 tools/services probes 注册进 health monitor，形成 production observability 与 health 的 focused evidence。
+2. `RTSUP-BLK-002` 已解阻，但结论边界仍停留在 build-tree focused evidence；installed / qemu / release 层级验证继续留给 008/009。
+3. 当前实现继续守住分层：`apps/runtime_support` 只消费 `infra/include` 与 `services/include` public seams，不直接穿透 `infra/src` 或 `services/src` internal 组合细节。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `RTSUP-TODO-006` 相关文件。
+2. 按仓库规范提交并推送 `RTSUP-TODO-006` 的 scoped commit。
+
 ## 记录 #646
 
 - 日期：2026-05-14

@@ -13,6 +13,30 @@ class RuntimePolicySnapshot;
 
 }  // namespace dasall::profiles
 
+namespace dasall::infra {
+
+class IHealthProbe;
+
+namespace audit {
+
+class IAuditLogger;
+
+}  // namespace audit
+
+namespace metrics {
+
+class IMetricsProvider;
+
+}  // namespace metrics
+
+namespace tracing {
+
+class ITracerProvider;
+
+}  // namespace tracing
+
+}  // namespace dasall::infra
+
 namespace dasall::services {
 
 struct ServiceLiveCompositionOptions {
@@ -26,6 +50,10 @@ struct ServiceLiveCompositionOptions {
   bool observability_enabled = false;
   std::string observability_level = "minimal";
   std::string toolchain_hint = "x86_64-linux-gnu";
+  std::shared_ptr<infra::audit::IAuditLogger> audit_logger;
+  std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
+  std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;
+  bool health_probe_enabled = false;
   std::vector<std::string> critical_actions;
   std::vector<std::string> high_risk_actions = {"agent.terminal"};
 };
@@ -33,6 +61,7 @@ struct ServiceLiveCompositionOptions {
 struct ServiceLiveCompositionResult {
   std::shared_ptr<IExecutionService> execution_service;
   std::shared_ptr<IDataService> data_service;
+  std::shared_ptr<infra::IHealthProbe> health_probe;
   std::string error;
 
   [[nodiscard]] bool ok() const {

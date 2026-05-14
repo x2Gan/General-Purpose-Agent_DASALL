@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -16,11 +17,15 @@
 #include "adapters/AdapterRouter.h"
 #include "adapters/LocalServiceAdapter.h"
 #include "adapters/RemoteServiceAdapter.h"
+#include "bridges/ServiceAuditBridge.h"
+#include "bridges/ServiceMetricsBridge.h"
+#include "bridges/ServiceTraceBridge.h"
 #include "data/DataProjectionCache.h"
 #include "data/DataQueryLane.h"
 #include "execution/ExecutionCommandLane.h"
 #include "mapping/ResultMapper.h"
 #include "ops/ServiceConfigAdapter.h"
+#include "ops/ServiceHealthProbe.h"
 
 namespace dasall::services {
 namespace {
@@ -47,10 +52,15 @@ using internal::LocalServiceAdapterOptions;
 using internal::RemoteServiceAdapter;
 using internal::RemoteServiceAdapterOptions;
 using internal::ResultMapper;
+using internal::ServiceAuditBridge;
 using internal::ServiceConfigAdapter;
 using internal::ServiceFacade;
 using internal::ServiceFacadeDependencies;
+using internal::ServiceHealthProbe;
+using internal::ServiceHealthSample;
 using internal::ServicePolicyView;
+using internal::ServiceMetricsBridge;
+using internal::ServiceTraceBridge;
 
 [[nodiscard]] std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -263,7 +273,11 @@ using internal::ServicePolicyView;
   };
 }
 
-class LiveServiceCompositionRoot final : public IExecutionService, public IDataService {
+class LiveServiceCompositionRoot final : public IExecutionService,
+                     public IDataService,
+                     public internal::IServiceHealthSignalProvider,
+                     public std::enable_shared_from_this<
+                       LiveServiceCompositionRoot> {
  public:
   static ServiceLiveCompositionResult create(
       const profiles::RuntimePolicySnapshot& runtime_policy,
@@ -274,6 +288,7 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
       return ServiceLiveCompositionResult{
           .execution_service = nullptr,
           .data_service = nullptr,
+          .health_probe = nullptr,
           .error = error,
       };
     }
@@ -281,6 +296,7 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
     return ServiceLiveCompositionResult{
         .execution_service = root,
         .data_service = root,
+        .health_probe = root->health_probe_,
         .error = {},
     };
   }
@@ -313,12 +329,35 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
     return facade_->list_capabilities(request);
   }
 
+  ServiceHealthSample sample(std::int64_t) override {
+    ServiceHealthSample sample;
+    sample.circuit_state = internal::ServiceCircuitState::closed;
+    sample.adapter_readiness =
+        (options_.local_service_available || options_.remote_service_available)
+        ? AdapterAvailabilityState::available
+        : AdapterAvailabilityState::unavailable;
+    sample.audit_bridge_degraded = options_.observability_enabled &&
+        (audit_logger_owner_ == nullptr || audit_bridge_ == nullptr ||
+         audit_bridge_->get_status().degraded);
+    sample.metrics_bridge_degraded = options_.observability_enabled &&
+        (metrics_provider_owner_ == nullptr || metrics_bridge_ == nullptr ||
+         metrics_bridge_->is_degraded());
+    sample.trace_bridge_degraded = options_.observability_enabled &&
+        (tracer_provider_owner_ == nullptr || trace_bridge_ == nullptr ||
+         trace_bridge_->is_degraded());
+    sample.latency_ms = 0;
+    sample.sampled_at_unix_ms = current_time_ms();
+    sample.detail_ref = "status://services/health/live-composition";
+    return sample;
+  }
+
  private:
   LiveServiceCompositionRoot() = default;
 
   [[nodiscard]] std::string initialize(
       const profiles::RuntimePolicySnapshot& runtime_policy,
       const ServiceLiveCompositionOptions& options) {
+    options_ = options;
     const ServiceConfigAdapter config_adapter;
     const auto policy_result = config_adapter.derive_policy_view(
         runtime_policy,
@@ -330,6 +369,35 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
     const ServicePolicyView policy_view = *policy_result.policy_view;
     const auto route_order = build_route_order(policy_view, options);
     const auto registered_candidates = build_candidates(options);
+
+    if (options.observability_enabled) {
+      if (options.audit_logger == nullptr || options.metrics_provider == nullptr ||
+          options.tracer_provider == nullptr) {
+        return "services observability composition requires audit, metrics, and trace providers";
+      }
+
+      audit_logger_owner_ = options.audit_logger;
+      metrics_provider_owner_ = options.metrics_provider;
+      tracer_provider_owner_ = options.tracer_provider;
+      audit_bridge_ = std::make_unique<ServiceAuditBridge>(audit_logger_owner_.get());
+      metrics_bridge_ = std::make_unique<ServiceMetricsBridge>(
+          metrics_provider_owner_,
+          internal::ServiceMetricsBridgeOptions{
+              .enabled = true,
+              .profile_id = runtime_policy.effective_profile_id(),
+              .metrics_granularity = runtime_policy.ops_policy().metrics_granularity,
+              .now_ms = []() {
+                return current_time_ms();
+              },
+          });
+      trace_bridge_ = std::make_unique<ServiceTraceBridge>(
+          tracer_provider_owner_,
+          internal::ServiceTraceBridgeOptions{
+              .enabled = true,
+              .profile_id = runtime_policy.effective_profile_id(),
+              .trace_sample_ratio = runtime_policy.ops_policy().trace_sample_ratio,
+          });
+    }
 
     local_service_adapter_ = std::make_unique<LocalServiceAdapter>(
         LocalServiceAdapterOptions{
@@ -354,7 +422,7 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
 
     bridge_ = std::make_unique<AdapterBridge>(AdapterBridgeDependencies{
         .invokers = build_invokers(),
-        .trace_bridge = nullptr,
+      .trace_bridge = trace_bridge_.get(),
     });
 
     projection_cache_ = std::make_unique<DataProjectionCache>(
@@ -391,9 +459,9 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
         .make_execution_id = {},
         .make_compensation_execution_id = {},
         .on_serialization_acquired = {},
-        .audit_bridge = nullptr,
-        .metrics_bridge = nullptr,
-        .trace_bridge = nullptr,
+        .audit_bridge = audit_bridge_.get(),
+        .metrics_bridge = metrics_bridge_.get(),
+        .trace_bridge = trace_bridge_.get(),
     });
 
     data_query_lane_ = std::make_unique<DataQueryLane>(DataQueryLaneDependencies{
@@ -408,8 +476,8 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
             route_order,
             options.allow_route_degrade),
         .registered_candidates = registered_candidates,
-        .metrics_bridge = nullptr,
-        .trace_bridge = nullptr,
+        .metrics_bridge = metrics_bridge_.get(),
+        .trace_bridge = trace_bridge_.get(),
     });
 
     facade_ = std::make_unique<ServiceFacade>(ServiceFacadeDependencies{
@@ -433,8 +501,19 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
                                          const DataCatalogRequest& request) {
           return data_query_lane_->list_capabilities(context, request);
         },
-        .trace_bridge = nullptr,
+        .trace_bridge = trace_bridge_.get(),
     });
+
+    if (options.health_probe_enabled) {
+      health_probe_ = std::make_shared<ServiceHealthProbe>(
+          std::static_pointer_cast<internal::IServiceHealthSignalProvider>(
+              shared_from_this()),
+          internal::ServiceHealthProbeOptions{
+              .now_ms = []() {
+                return current_time_ms();
+              },
+          });
+    }
 
     return {};
   }
@@ -451,6 +530,13 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
   internal::AdapterRouter router_;
   ResultMapper result_mapper_;
   internal::ServiceContextBuilder context_builder_;
+  ServiceLiveCompositionOptions options_{};
+  std::shared_ptr<infra::audit::IAuditLogger> audit_logger_owner_;
+  std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_owner_;
+  std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider_owner_;
+  std::unique_ptr<ServiceAuditBridge> audit_bridge_;
+  std::unique_ptr<ServiceMetricsBridge> metrics_bridge_;
+  std::unique_ptr<ServiceTraceBridge> trace_bridge_;
   std::unique_ptr<LocalServiceAdapter> local_service_adapter_;
   std::unique_ptr<RemoteServiceAdapter> remote_service_adapter_;
   std::unique_ptr<AdapterBridge> bridge_;
@@ -458,6 +544,7 @@ class LiveServiceCompositionRoot final : public IExecutionService, public IDataS
   std::unique_ptr<ExecutionCommandLane> command_lane_;
   std::unique_ptr<DataQueryLane> data_query_lane_;
   std::unique_ptr<ServiceFacade> facade_;
+  std::shared_ptr<ServiceHealthProbe> health_probe_;
 };
 
 }  // namespace

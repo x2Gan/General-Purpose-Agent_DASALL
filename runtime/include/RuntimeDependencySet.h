@@ -40,6 +40,31 @@ class IToolManager;
 
 }  // namespace dasall::tools
 
+namespace dasall::infra {
+
+class IHealthMonitor;
+class IHealthProbe;
+
+namespace audit {
+
+class IAuditLogger;
+
+}  // namespace audit
+
+namespace metrics {
+
+class IMetricsProvider;
+
+}  // namespace metrics
+
+namespace tracing {
+
+class ITracerProvider;
+
+}  // namespace tracing
+
+}  // namespace dasall::infra
+
 namespace dasall::multi_agent {
 
 class IMultiAgentCoordinator;
@@ -125,6 +150,11 @@ class RuntimeDependencySet final {
   std::shared_ptr<multi_agent::IMultiAgentCoordinator> multi_agent_coordinator;
   std::shared_ptr<knowledge::IKnowledgeService> knowledge_service;
   std::shared_ptr<llm::ILLMManager> llm_manager;
+  std::shared_ptr<infra::audit::IAuditLogger> audit_logger;
+  std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
+  std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;
+  std::shared_ptr<infra::IHealthMonitor> health_monitor;
+  std::vector<std::shared_ptr<infra::IHealthProbe>> health_probes;
   std::vector<std::string> visible_tools;
   std::vector<std::string> external_evidence;
 

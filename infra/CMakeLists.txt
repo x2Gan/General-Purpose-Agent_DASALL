@@ -39,6 +39,7 @@ function(dasall_assert_declared_files_match_glob label declared_list_var glob_pa
 endfunction()
 
 set(DASALL_INFRA_CORE_SOURCES
+  src/ObservabilityLiveComposition.cpp
   src/InfraErrorCode.cpp
   src/InfraServiceFacade.cpp
   src/config/ConfigCenterFacade.cpp
@@ -327,6 +328,7 @@ set(DASALL_INFRA_PLUGIN_PUBLIC_HEADERS
 )
 
 set(DASALL_INFRA_PUBLIC_HEADERS
+  include/ObservabilityLiveComposition.h
   include/health/HealthConfigTypes.h
   include/health/HealthErrors.h
   include/health/HealthStateTypes.h

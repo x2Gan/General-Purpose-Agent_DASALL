@@ -100,9 +100,14 @@ void assert_gateway_tool_services_backend(
           tool_envelope.tool_result->payload->find("\"capability_id\":\"agent.dataset\"") != std::string::npos &&
           tool_envelope.tool_result->payload->find("\"projection\":\"default\"") != std::string::npos,
         "gateway runtime live dependency composition should route agent.dataset through the live services backend payload");
+    assert_true(dependency_set->health_monitor != nullptr,
+          "gateway runtime live dependency composition should retain a concrete health monitor for production observability");
   assert_true(contains_port(dependency_set->external_evidence,
           "runtime:gateway.http-unary:tool-services-production-bridge"),
         "gateway runtime live dependency composition should record the production services bridge evidence marker");
+    assert_true(contains_port(dependency_set->external_evidence,
+            "runtime:gateway.http-unary:production-observability-health"),
+          "gateway runtime live dependency composition should record the production observability and health evidence marker");
 }
 
 void gateway_runtime_live_dependency_composition_establishes_default_ready_baseline() {
