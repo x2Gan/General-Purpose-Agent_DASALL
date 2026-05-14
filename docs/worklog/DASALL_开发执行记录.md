@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #645
+
+- 日期：2026-05-14
+- 阶段：memory/vector-concrete-backend-coverage
+- 任务：MEM-TODO-035 补充 sqlite-vss concrete backend 测试覆盖
+- 状态：已完成
+
+### 改动
+
+1. 新增 `memory/src/vector/SqliteVssVectorBackend.h/.cpp`：引入仅限 `memory/src` 可见的 sqlite-vss concrete backend 与可注入 driver seam，在当前 SQLite 构建禁用 loadable extension 的前提下，先把 upsert/search/rebuild 的 concrete 语义、health bookkeeping 与 unavailable/failure 回退语义落为可单测实现。
+2. 新增 `tests/unit/memory/SqliteVssVectorBackendTest.cpp`，并扩展 `tests/unit/memory/VectorMemoryAdapterTest.cpp`：覆盖 sqlite-vss concrete backend 的 happy path、query embedding 缺失 guard、driver upsert failure、driver rebuild failure，以及“缺少 database/driver wiring 时保持 unavailable”的回归断言。
+3. 调整 `memory/CMakeLists.txt` 与 `tests/unit/memory/CMakeLists.txt`：把 `SqliteVssVectorBackend.cpp` 纳入 `dasall_memory`，注册 `dasall_memory_sqlite_vss_vector_backend_unit_test` 与 `SqliteVssVectorBackendTest`，确保 focused test 可发现、可构建。
+4. 回写 `docs/todos/memory/DASALL_memory子系统专项TODO.md`：将 `MEM-TODO-035` 标记为 Done，并把“真实 sqlite-vss third_party 接入尚未完成”的风险与本轮 internal seam 解阻方式分开记账。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory","dasall_vector_memory_adapter_unit_test","dasall_memory_sqlite_vss_vector_backend_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["SqliteVssVectorBackendTest","VectorMemoryAdapterTest"])`
+   - 结果：通过，2/2 passed。
+
+### 结果
+
+1. `MEM-TODO-035` 已完成：sqlite-vss concrete backend 现在具备 focused automated coverage，`upsert/search/rebuild_index` 的 happy/failure path 均可被自动化证明。
+2. 035 的任务级 blocker 已通过 internal driver seam 解除：本轮不把 `sqlite-vss` 的 third_party 打包、静态注册或 ABI 适配硬塞进测试覆盖任务；真实扩展接入仍保留为后续独立依赖任务。
+3. `VectorMemoryAdapterTest` 的 disabled/unavailable baseline 未回退，新增 concrete backend 不会反向破坏 022 已冻结的 no-op gate。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage 035 相关文件。
+2. 按仓库规范提交并推送 `MEM-TODO-035` 的 scoped commit。
+
 ## 记录 #644
 
 - 日期：2026-05-14

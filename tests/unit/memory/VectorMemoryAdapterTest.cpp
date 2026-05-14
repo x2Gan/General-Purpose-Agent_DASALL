@@ -6,6 +6,7 @@
 #include "config/MemoryConfig.h"
 #include "support/TestAssertions.h"
 #include "vector/IEmbeddingAdapter.h"
+#include "vector/SqliteVssVectorBackend.h"
 #include "vector/UnavailableVectorMemoryIndexAdapter.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 
@@ -116,12 +117,45 @@ void test_unavailable_vector_memory_adapter_preserves_requested_backend_for_avai
                "availability gating should prevent embedding calls while the vector backend is unavailable");
 }
 
+void test_sqlite_vss_vector_backend_stays_unavailable_without_driver_or_database() {
+  using dasall::memory::SqliteVssVectorBackend;
+  using dasall::memory::VectorConfig;
+  using dasall::memory::VectorDocument;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  VectorConfig config;
+  config.enabled = true;
+  config.backend_type = dasall::memory::VectorBackend::SqliteVss;
+
+  CountingEmbeddingAdapter embedding_adapter;
+  SqliteVssVectorBackend backend(config, nullptr, &embedding_adapter);
+
+  VectorDocument document;
+  document.doc_id = "fact-035-guard";
+  document.doc_type = "fact";
+  document.text = "sqlite-vss concrete backend guard";
+
+  const auto result = backend.upsert(document);
+  const auto health = backend.health();
+
+  assert_true(!backend.is_available(),
+              "sqlite-vss backend should stay unavailable when no database or driver is wired");
+  assert_true(!result.ok,
+              "sqlite-vss backend should surface storage unavailable when invoked without concrete wiring");
+  assert_equal("sqlite-vss", health.backend_type,
+               "sqlite-vss backend should still report the requested backend type in health output");
+  assert_equal(0, embedding_adapter.embed_call_count(),
+               "sqlite-vss unavailable guard should short-circuit before embedding generation");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_unavailable_vector_memory_adapter_reports_none_backend_when_vector_is_disabled();
     test_unavailable_vector_memory_adapter_preserves_requested_backend_for_availability_gate();
+    test_sqlite_vss_vector_backend_stays_unavailable_without_driver_or_database();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;
