@@ -11,6 +11,10 @@
 #include "AccessTypes.h"
 #include "IAccessGateway.h"
 
+namespace dasall::profiles {
+class RuntimePolicySnapshot;
+}
+
 namespace dasall::infra::diagnostics {
 class IDiagnosticsService;
 }
@@ -51,6 +55,8 @@ struct DaemonAccessPipelineOptions {
   AccessAuthView auth_view{};
   AccessAdmissionView admission_view{};
   AccessPublishView publish_view{};
+  bool derive_views_from_runtime_policy = false;
+  std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> runtime_policy_snapshot;
 
   bool policy_backend_available = true;
   bool allow_submit = true;
@@ -82,6 +88,8 @@ struct GatewayAccessPipelineOptions {
   AccessAuthView auth_view{};
   AccessAdmissionView admission_view{};
   AccessPublishView publish_view{};
+  bool derive_views_from_runtime_policy = false;
+  std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> runtime_policy_snapshot;
 
   bool policy_backend_available = true;
   bool allow_submit = true;

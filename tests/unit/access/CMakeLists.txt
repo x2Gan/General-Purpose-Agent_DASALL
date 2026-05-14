@@ -9,6 +9,7 @@ macro(dasall_add_access_unit_test target_name test_name source_file)
     PRIVATE
       ${CMAKE_SOURCE_DIR}/access/src
       ${CMAKE_SOURCE_DIR}/infra/include
+      ${CMAKE_SOURCE_DIR}/profiles/include
   )
 
   target_link_libraries(${target_name}
@@ -85,6 +86,18 @@ dasall_add_access_unit_test(
   dasall_access_config_projection_unit_test
   AccessConfigProjectionTest
   AccessConfigProjectionTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_config_adapter_projection_unit_test
+  AccessConfigAdapterProjectionTest
+  AccessConfigAdapterProjectionTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_config_adapter_invalid_schema_unit_test
+  AccessConfigAdapterInvalidSchemaTest
+  AccessConfigAdapterInvalidSchemaTest.cpp
 )
 
 dasall_add_access_unit_test(

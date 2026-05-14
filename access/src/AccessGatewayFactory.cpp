@@ -1,5 +1,7 @@
 #include "AccessGatewayFactory.h"
 
+#include "AccessConfigAdapter.h"
+
 #include <cctype>
 #include <chrono>
 #include <charconv>
@@ -33,6 +35,30 @@
 namespace dasall::access {
 
 namespace {
+
+template <typename PipelineOptions>
+[[nodiscard]] bool project_access_views_from_runtime_policy(
+    PipelineOptions& options) {
+  if (!options.derive_views_from_runtime_policy) {
+    return true;
+  }
+
+  if (!options.runtime_policy_snapshot) {
+    return false;
+  }
+
+  AccessConfigAdapter adapter;
+  const auto projection =
+      adapter.project(options.bootstrap_config, *options.runtime_policy_snapshot);
+  if (!projection.ok() || !projection.projection.has_value()) {
+    return false;
+  }
+
+  options.auth_view = projection.projection->auth_view;
+  options.admission_view = projection.projection->admission_view;
+  options.publish_view = projection.projection->publish_view;
+  return true;
+}
 
 [[nodiscard]] std::shared_ptr<AccessObservabilityBridge> make_observability_bridge(
     const AccessObservabilityEmitBackend& emit_backend) {
@@ -771,23 +797,30 @@ struct DaemonKnowledgePayload {
 build_daemon_submit_pipeline(
   const DaemonAccessPipelineOptions& options,
   std::shared_ptr<AccessObservabilityBridge> observability_bridge) {
+  auto resolved_options = options;
+  if (!resolved_options.runtime_dispatch_backend ||
+    !project_access_views_from_runtime_policy(resolved_options)) {
+  return nullptr;
+  }
+
   auto request_validator =
-      std::make_shared<RequestValidator>(options.publish_view,
-                                         options.bootstrap_config.allowed_protocols);
+    std::make_shared<RequestValidator>(resolved_options.publish_view,
+                     resolved_options.bootstrap_config.allowed_protocols);
   auto subject_resolver = std::make_shared<SubjectResolver>();
   auto authenticator_chain = std::make_shared<AuthenticatorChain>();
   auto policy_gate = std::make_shared<AccessPolicyGate>();
   auto admission_controller =
-      std::make_shared<AdmissionController>(options.admission_view);
+    std::make_shared<AdmissionController>(resolved_options.admission_view);
   auto request_normalizer =
-      std::make_shared<RequestNormalizer>(options.bootstrap_config,
-                                          options.publish_view);
+    std::make_shared<RequestNormalizer>(resolved_options.bootstrap_config,
+                      resolved_options.publish_view);
   auto runtime_bridge = std::make_shared<RuntimeBridge>(
-      options.runtime_dispatch_backend,
-      options.runtime_cancel_backend);
-  auto result_publisher = std::make_shared<ResultPublisher>(options.publish_backend);
-  auto async_task_registry = options.async_task_registry
-                                 ? options.async_task_registry
+    resolved_options.runtime_dispatch_backend,
+    resolved_options.runtime_cancel_backend);
+  auto result_publisher =
+    std::make_shared<ResultPublisher>(resolved_options.publish_backend);
+  auto async_task_registry = resolved_options.async_task_registry
+                 ? resolved_options.async_task_registry
                                  : std::make_shared<AsyncTaskRegistry>(
                                        "daemon-access-secret-v1");
   auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
@@ -795,13 +828,13 @@ build_daemon_submit_pipeline(
   auto task_query_handler = std::make_shared<daemon::DaemonTaskQueryHandler>(
       *async_task_registry);
   auto health_service = std::make_shared<daemon::DaemonHealthService>(
-      options.daemon_version,
+      resolved_options.daemon_version,
       std::string(daemon::kDaemonProtocolSchemaVersion),
-      options.daemon_profile_id);
+      resolved_options.daemon_profile_id);
   auto diagnostics_handler = std::make_shared<daemon::DaemonDiagnosticsHandler>(
-      options.diagnostics_service,
-      options.daemon_diagnostics_enabled,
-      options.daemon_diagnostics_enabled_state);
+      resolved_options.diagnostics_service,
+      resolved_options.daemon_diagnostics_enabled,
+      resolved_options.daemon_diagnostics_enabled_state);
 
   auto submit_pipeline =
       std::make_shared<AccessGateway::SubmitPipeline>(
@@ -818,11 +851,11 @@ build_daemon_submit_pipeline(
            task_query_handler,
            health_service,
            diagnostics_handler,
-           options](const InboundPacket& packet) -> RuntimeDispatchResult {
+           resolved_options](const InboundPacket& packet) -> RuntimeDispatchResult {
             const bool diagnostics_enabled =
-              options.daemon_diagnostics_enabled_state
-                ? options.daemon_diagnostics_enabled_state->load()
-                : options.daemon_diagnostics_enabled;
+              resolved_options.daemon_diagnostics_enabled_state
+                ? resolved_options.daemon_diagnostics_enabled_state->load()
+                : resolved_options.daemon_diagnostics_enabled;
 
             (void)observability_bridge->emit_daemon_request_fact(
                 packet,
@@ -835,14 +868,14 @@ build_daemon_submit_pipeline(
             if (packet.packet_id == "ping") {
               daemon::DaemonHealthInput input;
               input.lifecycle_ready = true;
-              input.listener_ready = options.daemon_listener_ready;
-              input.gateway_ready = options.daemon_gateway_ready;
+                input.listener_ready = resolved_options.daemon_listener_ready;
+                input.gateway_ready = resolved_options.daemon_gateway_ready;
               input.bridge_reachable =
-                  options.daemon_bridge_reachable &&
-                  static_cast<bool>(options.runtime_dispatch_backend);
+                  resolved_options.daemon_bridge_reachable &&
+                  static_cast<bool>(resolved_options.runtime_dispatch_backend);
               input.diagnostics_enabled = diagnostics_enabled;
               input.runtime_readiness_label =
-                  options.daemon_runtime_readiness_label;
+                  resolved_options.daemon_runtime_readiness_label;
               if (input.runtime_readiness_label == "stub-ready") {
                 input.bridge_reachable = false;
                 input.degraded_reasons.push_back("runtime_entrypoint_stub_ready");
@@ -859,14 +892,14 @@ build_daemon_submit_pipeline(
             if (packet.packet_id == "readiness") {
               daemon::DaemonHealthInput input;
               input.lifecycle_ready = true;
-              input.listener_ready = options.daemon_listener_ready;
-              input.gateway_ready = options.daemon_gateway_ready;
+                input.listener_ready = resolved_options.daemon_listener_ready;
+                input.gateway_ready = resolved_options.daemon_gateway_ready;
               input.bridge_reachable =
-                  options.daemon_bridge_reachable &&
-                  static_cast<bool>(options.runtime_dispatch_backend);
+                  resolved_options.daemon_bridge_reachable &&
+                  static_cast<bool>(resolved_options.runtime_dispatch_backend);
               input.diagnostics_enabled = diagnostics_enabled;
               input.runtime_readiness_label =
-                  options.daemon_runtime_readiness_label;
+                  resolved_options.daemon_runtime_readiness_label;
               if (input.runtime_readiness_label == "stub-ready") {
                 input.bridge_reachable = false;
                 input.degraded_reasons.push_back("runtime_entrypoint_stub_ready");
@@ -906,14 +939,17 @@ build_daemon_submit_pipeline(
             peer_metadata.local_peer = parse_local_peer_fact(packet);
 
             ResolverView resolver_view;
-            resolver_view.trusted_local_subjects = options.auth_view.trusted_local_subjects;
-            resolver_view.strict_auth_required = options.auth_view.strict_auth_required;
+            resolver_view.trusted_local_subjects =
+              resolved_options.auth_view.trusted_local_subjects;
+            resolver_view.strict_auth_required =
+              resolved_options.auth_view.strict_auth_required;
             resolver_view.allow_remote_challenge = false;
 
             const auto resolved_subject =
                 subject_resolver->resolve(packet, peer_metadata, resolver_view);
             const auto auth_outcome =
-                authenticator_chain->authenticate(resolved_subject, options.auth_view);
+              authenticator_chain->authenticate(resolved_subject,
+                               resolved_options.auth_view);
             if (!auth_outcome.authenticated) {
               if (auth_outcome.failure_reason.has_value() &&
                   *auth_outcome.failure_reason == "authentication_failed") {
@@ -937,8 +973,9 @@ build_daemon_submit_pipeline(
             policy_input.packet = packet;
 
             PolicyBackendSnapshot policy_backend;
-            policy_backend.backend_available = options.policy_backend_available;
-            policy_backend.allow_submit = options.allow_submit;
+            policy_backend.backend_available =
+              resolved_options.policy_backend_available;
+            policy_backend.allow_submit = resolved_options.allow_submit;
 
             const auto policy_result =
                 policy_gate->evaluate_submit(policy_input, policy_backend);
@@ -970,7 +1007,7 @@ build_daemon_submit_pipeline(
 
               return make_knowledge_dispatch_result(packet,
                                                     *knowledge_payload,
-                                                    options.knowledge_service);
+                                                    resolved_options.knowledge_service);
             }
 
             if (packet.packet_id == "diag" || packet.packet_id == "diagnostics") {
@@ -1159,24 +1196,27 @@ build_daemon_submit_pipeline(
 build_gateway_submit_pipeline(
     const GatewayAccessPipelineOptions& options,
     std::shared_ptr<AccessObservabilityBridge> observability_bridge) {
-  if (!options.runtime_dispatch_backend) {
+  auto resolved_options = options;
+  if (!resolved_options.runtime_dispatch_backend ||
+    !project_access_views_from_runtime_policy(resolved_options)) {
     return nullptr;
   }
 
   auto request_validator =
-      std::make_shared<RequestValidator>(options.publish_view,
-                                         options.bootstrap_config.allowed_protocols);
+    std::make_shared<RequestValidator>(resolved_options.publish_view,
+                     resolved_options.bootstrap_config.allowed_protocols);
   auto subject_resolver = std::make_shared<SubjectResolver>();
   auto authenticator_chain = std::make_shared<AuthenticatorChain>();
   auto policy_gate = std::make_shared<AccessPolicyGate>();
   auto admission_controller =
-      std::make_shared<AdmissionController>(options.admission_view);
+    std::make_shared<AdmissionController>(resolved_options.admission_view);
   auto request_normalizer =
-      std::make_shared<RequestNormalizer>(options.bootstrap_config,
-                                          options.publish_view);
+    std::make_shared<RequestNormalizer>(resolved_options.bootstrap_config,
+                      resolved_options.publish_view);
   auto runtime_bridge =
-      std::make_shared<RuntimeBridge>(options.runtime_dispatch_backend, nullptr);
-  auto result_publisher = std::make_shared<ResultPublisher>(options.publish_backend);
+    std::make_shared<RuntimeBridge>(resolved_options.runtime_dispatch_backend, nullptr);
+  auto result_publisher =
+    std::make_shared<ResultPublisher>(resolved_options.publish_backend);
 
   auto submit_pipeline = std::make_shared<AccessGateway::SubmitPipeline>(
       [request_validator,
@@ -1188,7 +1228,7 @@ build_gateway_submit_pipeline(
        runtime_bridge,
        result_publisher,
        observability_bridge,
-       options](const InboundPacket& packet) -> RuntimeDispatchResult {
+      resolved_options](const InboundPacket& packet) -> RuntimeDispatchResult {
         (void)observability_bridge->emit_request_received(
             packet,
             packet.packet_id,
@@ -1201,14 +1241,17 @@ build_gateway_submit_pipeline(
         PeerMetadata peer_metadata = parse_gateway_peer_metadata(packet);
 
         ResolverView resolver_view;
-        resolver_view.trusted_local_subjects = options.auth_view.trusted_local_subjects;
-        resolver_view.strict_auth_required = options.auth_view.strict_auth_required;
+        resolver_view.trusted_local_subjects =
+          resolved_options.auth_view.trusted_local_subjects;
+        resolver_view.strict_auth_required =
+          resolved_options.auth_view.strict_auth_required;
         resolver_view.allow_remote_challenge = true;
 
         const auto resolved_subject =
             subject_resolver->resolve(packet, peer_metadata, resolver_view);
         const auto auth_outcome =
-            authenticator_chain->authenticate(resolved_subject, options.auth_view);
+          authenticator_chain->authenticate(resolved_subject,
+                           resolved_options.auth_view);
         if (!auth_outcome.authenticated) {
           if (auth_outcome.failure_reason.has_value()) {
             (void)observability_bridge->emit_auth_failed(
@@ -1236,8 +1279,8 @@ build_gateway_submit_pipeline(
         policy_input.packet = packet;
 
         PolicyBackendSnapshot policy_backend;
-        policy_backend.backend_available = options.policy_backend_available;
-        policy_backend.allow_submit = options.allow_submit;
+        policy_backend.backend_available = resolved_options.policy_backend_available;
+        policy_backend.allow_submit = resolved_options.allow_submit;
 
         const auto policy_result =
             policy_gate->evaluate_submit(policy_input, policy_backend);

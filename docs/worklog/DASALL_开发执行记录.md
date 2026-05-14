@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #640
+
+- 日期：2026-05-14
+- 阶段：access/profile-config-projection
+- 任务：ACC-TODO-045 实现 AccessConfigAdapter 生产级 profile/config 投影
+- 状态：已完成
+
+### 改动
+
+1. 新增 `access/src/AccessConfigAdapter.h`，并调整 `access/src/AccessConfigAdapter.cpp`：实现 `AccessConfigProjection` / `AccessConfigProjectionResult`、`project()` / `project_uncached()`、`snapshot_fingerprint()`、`is_snapshot_current()` 与 cache / last-known-good 逻辑；bootstrap 或 runtime snapshot schema 不一致时返回 fail-closed 结果，不回退到放宽型默认值。
+2. 调整 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`：为 daemon/gateway submit pipeline 增加 `derive_views_from_runtime_policy` 与 `runtime_policy_snapshot` seam，并在投影失败时直接停止 pipeline 构建。
+3. 新增 `tests/unit/access/AccessConfigAdapterProjectionTest.cpp`、`tests/unit/access/AccessConfigAdapterInvalidSchemaTest.cpp`，并更新 `tests/unit/access/CMakeLists.txt`：覆盖 tightened projection、fingerprint/hot update invalidation、invalid schema 不污染 last-known-good，以及 `create_daemon_access_gateway()->init()` 的 fail-closed 行为。
+4. 回写 `docs/todos/access/DASALL_access子系统专项TODO.md` 与 `docs/todos/access/deliverables/ACC-TODO-045-AccessConfigAdapter-生产级profile-config投影.md`，把 045 的 Design->Build 映射、focused validation 与生产 caller 复核证据固化为交付物。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过。
+   - 说明：增量构建成功重编 `dasall_access_config_adapter_invalid_schema_unit_test` 与相关 access 目标。
+2. `RunCtest_CMakeTools(tests=["AccessConfigAdapterProjectionTest","AccessConfigAdapterInvalidSchemaTest","AccessProfileCompatibilityTest"])`
+   - 结果：通过，3/3 passed。
+3. 生产 caller 复核
+   - `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp` 已显式设置 `derive_views_from_runtime_policy = true` 并传入 `runtime_policy_snapshot`。
+   - `tests/integration/access/CMakeLists.txt` 把 `DaemonProfileCompatibilityTest` 以 `AccessProfileCompatibilityTest` 别名接入 `gate-int-08`；五档 baseline profile compatibility 当轮通过。
+
+### 结果
+
+1. `ACC-TODO-045` 已完成：Access 主链不再依赖分散的 bootstrap/profile 默认值拼装，daemon/gateway submit pipeline 都通过统一的 `AccessConfigAdapter` 投影入口消费治理视图。
+2. 本轮把 invalid bootstrap / invalid runtime snapshot 的失败语义收敛为 fail-closed init，而不是继续允许不一致 schema 进入 Ready。
+3. 本轮没有引入第二套 policy/config owner，也没有把 Access 内部治理视图抬升为 shared contracts；实现仍遵守 Access 内部投影边界。
+
+### 下一步
+
+1. 进入 `ACC-TODO-046`，先复核 `ACC-BLK-006` 是否需要单独 blocker round，再决定 async ownership token 的 HMAC/rotation 最小闭环。
+2. 若要补强 gateway profile 维度的生产验收，可在 046 之后单独新增 gateway profile compatibility matrix；该项不属于 045 当前完成阻断。
+
 ## 记录 #639
 
 - 日期：2026-05-13
