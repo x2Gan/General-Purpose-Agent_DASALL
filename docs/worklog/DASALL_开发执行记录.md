@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+## 记录 #649
+
+- 日期：2026-05-14
+- 阶段：runtime_support/组件专项 TODO 阶段 C
+- 任务：RTSUP-TODO-008 建立 owner / fail-closed / marker regression matrix
+- 状态：已完成
+
+### 改动
+
+1. 新增 `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp` 并更新 `tests/integration/access/CMakeLists.txt`：把 runtime_support helper 的 ready / degraded / fail-closed 三种 readines path 收敛为 focused matrix，覆盖 daemon/gateway owner symmetry、required port 缺失 fail-closed，以及 knowledge degraded marker stratification。
+2. 调整 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`：为 ready baseline 增加“不得混入 `knowledge-degraded:*` marker”的断言，并为 gateway 补齐 knowledge probe 失败时的 degraded regression，形成 daemon/gateway 对称的 negative baseline。
+3. 保持 `apps/runtime_support` 代码面不扩张：008 只补 regression matrix 与 test discoverability，不新增 runtime_support/helper 行为，避免把 009 的 installed / qemu gate 问题提前折叠到当前 round。
+
+### 验证
+
+1. `cmake -S /home/gangan/DASALL -B /home/gangan/DASALL/build-rtsup005 -G "Unix Makefiles" && cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test dasall_access_runtime_live_composition_failure_matrix_integration_test dasall_multi_agent_disabled_by_profile_integration_test -j2 && ctest --test-dir /home/gangan/DASALL/build-rtsup005 -R '^(DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest|RuntimeLiveCompositionFailureMatrixTest|MultiAgentDisabledByProfileIntegrationTest)$' --output-on-failure`
+   - 结果：通过，4/4 passed。
+2. `ctest --test-dir /home/gangan/DASALL/build-rtsup005 -N | rg 'RuntimeLiveCompositionFailureMatrixTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest'`
+   - 结果：通过，新旧 access focused tests 均可发现。
+
+### 结果
+
+1. `RTSUP-TODO-008` 已完成：runtime_support helper 的 downstream contract 现在具备稳定的 focused regression matrix，可同时证明 owner symmetry、required-missing fail-closed 和 knowledge degraded marker stratification。
+2. 本轮没有引入新的 blocker；`RTSUP-BLK-001` / `RTSUP-BLK-002` 继续保持已解阻状态，剩余正式 gate 问题已收敛到 009 的 installed / qemu / release-preflight 证据。
+3. 当前实现继续守住边界：008 只补 tests/CMake/discoverability，不回流修改 `apps/daemon`、`apps/gateway` 或 helper 组合根逻辑。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `RTSUP-TODO-008` 相关文件。
+2. 按仓库规范提交并推送 `RTSUP-TODO-008` 的 scoped commit。
+
 ## 记录 #648
 
 - 日期：2026-05-14

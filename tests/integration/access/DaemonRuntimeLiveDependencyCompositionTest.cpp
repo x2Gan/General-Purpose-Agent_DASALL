@@ -208,6 +208,9 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         assert_true(contains_port(composition.dependency_set->external_evidence,
           "runtime:daemon.local-control-plane:knowledge-installed-assets-ready"),
             "daemon runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");
+        assert_true(!contains_prefix(composition.dependency_set->external_evidence,
+            "runtime:daemon.local-control-plane:knowledge-degraded:"),
+          "daemon runtime live dependency composition should not mix degraded knowledge markers into the ready baseline");
       }
 
       void daemon_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails() {
@@ -241,6 +244,9 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         assert_true(contains_prefix(composition.dependency_set->external_evidence,
                 "runtime:daemon.local-control-plane:knowledge-degraded:"),
               "daemon runtime live dependency composition should record a degraded knowledge marker when the positive probe fails");
+        assert_true(!contains_port(composition.dependency_set->external_evidence,
+          "runtime:daemon.local-control-plane:knowledge-installed-assets-ready"),
+              "daemon runtime live dependency composition should not retain the ready knowledge marker when the positive probe fails");
 }
 
 }  // namespace

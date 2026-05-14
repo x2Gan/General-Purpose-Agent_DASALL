@@ -63,6 +63,14 @@ load_runtime_policy_snapshot() {
   return std::find(ports.begin(), ports.end(), expected_port) != ports.end();
 }
 
+[[nodiscard]] bool contains_prefix(const std::vector<std::string>& values,
+                                   const std::string& expected_prefix) {
+  return std::any_of(values.begin(), values.end(),
+                     [&expected_prefix](const std::string& value) {
+                       return value.rfind(expected_prefix, 0) == 0;
+                     });
+}
+
 void copy_memory_assets_only(const std::filesystem::path& assets_root) {
   std::filesystem::create_directories(assets_root / "sql");
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "sql" / "memory",
@@ -130,7 +138,46 @@ void assert_gateway_tool_services_backend(
     assert_true(contains_port(dependency_set->external_evidence,
                     "runtime:gateway.http-unary:knowledge-installed-assets-ready"),
                 "gateway runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");
+    assert_true(!contains_prefix(dependency_set->external_evidence,
+            "runtime:gateway.http-unary:knowledge-degraded:"),
+          "gateway runtime live dependency composition should not mix degraded knowledge markers into the ready baseline");
 }
+
+  void gateway_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails() {
+    const auto policy_snapshot = load_runtime_policy_snapshot();
+    const TempStateRoot assets_root("dasall-gateway-runtime-live-assets-minimal");
+    const TempStateRoot state_root("dasall-gateway-runtime-live-memory-degraded");
+    copy_memory_assets_only(assets_root.path());
+
+    const auto composition =
+      dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+        policy_snapshot,
+        "gateway.http-unary",
+        dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+          .readonly_assets_root_override = assets_root.path(),
+          .state_root_override = state_root.path(),
+        });
+    assert_true(composition.ok(),
+          "gateway runtime live dependency composition should keep required baseline available even when knowledge positive probe fails: " +
+            composition.error);
+
+    const auto readiness = composition.dependency_set->describe_readiness();
+    assert_true(readiness.has_required_ports,
+          "gateway runtime live dependency composition should keep required ports ready when only the knowledge probe fails: " +
+            readiness.summary());
+    assert_true(readiness.degraded &&
+            contains_port(readiness.missing_optional_ports, "knowledge"),
+          "gateway runtime live dependency composition should expose knowledge as a degraded optional port when the positive probe fails: " +
+            readiness.summary());
+    assert_true(composition.dependency_set->knowledge_service == nullptr,
+          "gateway runtime live dependency composition should not publish a knowledge service when the installed positive probe fails");
+    assert_true(contains_prefix(composition.dependency_set->external_evidence,
+            "runtime:gateway.http-unary:knowledge-degraded:"),
+          "gateway runtime live dependency composition should record a degraded knowledge marker when the positive probe fails");
+    assert_true(!contains_port(composition.dependency_set->external_evidence,
+            "runtime:gateway.http-unary:knowledge-installed-assets-ready"),
+          "gateway runtime live dependency composition should not retain the ready knowledge marker when the positive probe fails");
+  }
 
 void gateway_runtime_live_dependency_composition_establishes_default_ready_baseline() {
   const auto policy_snapshot = load_runtime_policy_snapshot();
@@ -200,6 +247,7 @@ void gateway_runtime_live_dependency_composition_establishes_default_ready_basel
 int main() {
   try {
     gateway_runtime_live_dependency_composition_establishes_default_ready_baseline();
+    gateway_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails();
   } catch (const std::exception& ex) {
     std::cerr << "[GatewayRuntimeLiveDependencyCompositionTest] FAILED: " << ex.what() << '\n';
     return 1;
