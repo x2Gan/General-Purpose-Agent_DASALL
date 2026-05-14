@@ -1819,6 +1819,27 @@ LLMManager 当前更接近编排组件，而不是复杂状态机 owner，因此
 7. cancel 必须显式通知 adapter transport，并转换到 `CancelRequested` / `Cancelled`；不允许通过 detach thread、析构副作用或 observer 丢失来表达取消。
 8. 首个自动化 guard 是 `StreamSessionLifecycleTest`：它验证 manager 仍 fail-closed，OpenAI-compatible / Ollama / Local adapter 仍只返回 placeholder `StreamSessionRef`。真实 SSE/delta merge/adapter streaming 仍留给后续独立 Build 任务。
 
+#### 7.2.2 LLM-TODO-037 shared supporting object admission 评审结论
+
+2026-05-14 的 LLM-TODO-037 完成了 shared `ModelRoute` / `PromptPolicyDecision` / `StreamHandle` 的 admission 评审。结论是 No-Go for shared：本轮不新增 `contracts/include/**` 头文件，不移动 llm module-local 头文件，不把三个候选对象复制进 shared contracts。
+
+消费者矩阵结论如下：
+
+| 候选 shared object | 当前 owner | 当前消费者 | 跨模块证据 | 评审结论 |
+|---|---|---|---|---|
+| shared ModelRoute / `ResolvedModelRoute` | `ModelRouter` | `LLMManager` route candidate 展开、ModelRouter unit tests、InterfaceSurfaceTest | 未发现 runtime/cognition/apps/tools/services 直接 include；跨模块仍通过 `LLMRequest.model_route` 字符串和 `LLMManagerResult.resolved_route` 摘要协作 | No-Go，继续 module-local |
+| shared PromptPolicyDecision | `PromptPolicy` | `PromptPipeline`、`LLMManagerResult`、PromptPolicy/Pipeline/Manager tests | runtime/cognition 只通过 `LLMManagerResult.governance_disposition` 看到最小 disposition 摘要，未消费完整治理对象 | No-Go，完整对象继续 module-local |
+| shared StreamHandle / `StreamSessionRef` | adapter skeleton / future `StreamSessionRegistry` | OpenAI-compatible / Ollama / Local adapter placeholder、MockLLMAdapter、StreamSessionLifecycleTest | `stream_generate()` 当前 fail-closed；未形成 runtime/cognition/apps 侧稳定 stream handle consumer | No-Go，继续 module-local 与后置实现 |
+
+未来迁移窗口冻结为四段：
+
+1. Phase 0：保持当前 module-local 状态，contract gate 只验证现有 `LLMRequest` / `LLMResponse` / `PromptComposeRequest` / `PromptComposeResult` 不回退。
+2. Phase 1：若至少两个非测试子系统直接需要同一对象，先提交 contracts 设计交付物、consumer matrix、字段表和 admission review，不移动现有 llm 头文件。
+3. Phase 2：新 shared object 获准后采用 side-by-side 适配窗口，llm 同时保留 module-local 对象并提供显式投影/转换，避免 C++ include source break。
+4. Phase 3：至少经过两个连续 Gate 轮次且真实消费者完成迁移后，才能 deprecate module-local 对象；删除、重命名或移动必须另起 breaking review。
+
+本结论解除 `LLM-BLK-006` 的“无评审结论” blocker，但不解除 shared admission 本身的 No-Go。后续若要重新打开任一 shared object，必须重新证明 source / wire / semantic compatibility、迁移窗口、contract tests 与真实消费者矩阵。
+
 ---
 
 ## 8. 实施计划与里程碑

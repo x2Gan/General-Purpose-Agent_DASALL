@@ -14702,6 +14702,51 @@
 1. 当前 lane enablement 来自 `BuildProfileManifest`，后续如果 runtime active profile 只暴露 snapshot 而不再同时提供 manifest，RouteSelector 需要明确其稳定投影来源，避免 route 与 config adapter 各自维护不同模块开关来源。
 2. `ToolTimeoutView` 暂时同时承载 timeout、max_tool_calls 与 capability cache freshness；如果后续 RouteSelector / CapabilityCache 的消费面继续扩大，可能需要在 tools 内部再拆分更细视图，但不应回退为新的 shared contract。
 
+## 记录 #311
+
+- 日期：2026-05-14
+- 阶段：llm/专项 TODO 阶段 J
+- 任务：LLM-TODO-037 评审 shared supporting object admission
+- 状态：已完成
+
+### 任务选择
+
+1. 036 已完成并推送，streaming lifecycle 的 cancel、ownership、backpressure 与 cleanup 语义已经冻结；因此本轮可以按串行顺序进入 037。
+2. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 中 037 的 blocker 是 `LLM-BLK-006`：shared ModelRoute / PromptPolicyDecision / StreamHandle admission 未冻结。
+3. 本轮 owner 收敛为 admission review：形成真实代码消费者矩阵、迁移窗口、contract gate 证据和 Go/No-Go 结论；不新增 shared 头文件，不移动 llm module-local 头文件。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-037-shared-supporting-object-admission评审设计收敛.md](../todos/llm/deliverables/LLM-TODO-037-shared-supporting-object-admission%E8%AF%84%E5%AE%A1%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，记录本地消费者证据、外部兼容性参考、消费者矩阵、No-Go 结论、Phase 0~3 迁移窗口与风险清单。
+2. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，新增 7.2.2，回链 037 的 shared supporting object admission 评审结论。
+3. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 037 标记为 Done，`LLM-BLK-006` 标记为已解阻，`LLM-GATE-10` 标记为 No-Go for shared / continue module-local，并新增 17.23 执行记录。
+
+### 消费者矩阵结论
+
+1. `ResolvedModelRoute`：真实 owner 是 `ModelRouter`，真实消费者是 `LLMManager` route candidate 展开和 llm tests；未发现 runtime/cognition/apps/tools/services 直接 include `route/ResolvedModelRoute.h`。
+2. `PromptPolicyDecision`：真实 owner 是 `PromptPolicy`，完整对象由 `PromptPipeline`、`LLMManagerResult` 与 tests 消费；runtime/cognition 只经 `LLMManagerResult.governance_disposition` 看到最小 disposition 摘要。
+3. `StreamSessionRef`：当前只被 adapter skeleton、mock、surface/lifecycle tests 和 streaming SPI 占位使用；`LLMManager::stream_generate()` 仍 fail-closed，未形成稳定 stream handle consumer。
+
+### 测试
+
+1. `Build_CMakeTools(buildTargets=["dasall_contract_tests"])`：通过，实际执行 `/usr/bin/ctest --output-on-failure -L contract`，157/157 contract tests 通过。
+2. `RunCtest_CMakeTools(tests=["LLMRequestResponseContractTest", "PromptComposeRequestContractTest", "PromptComposeRequestFieldContractTest", "PromptComposeResultContractTest", "PromptComposeResultFieldContractTest"])`：通过，5 个 shared handoff 锚点全部 `100% tests passed`。
+
+### 结果
+
+1. `LLM-BLK-006` 已在“无评审结论”层面解阻：消费者矩阵、迁移窗口、compatibility baseline 与 Go/No-Go 结论已经落盘。
+2. 三个候选对象的 admission 结论均为 No-Go for shared：不新增 `contracts/include/**`，不移动 [llm/include/route/ResolvedModelRoute.h](../../llm/include/route/ResolvedModelRoute.h)、[llm/include/prompt/PromptPolicyDecision.h](../../llm/include/prompt/PromptPolicyDecision.h)、[llm/include/stream/StreamSessionRef.h](../../llm/include/stream/StreamSessionRef.h)。
+3. 后续如果重新打开任一 shared admission，必须另起 contracts owner 任务，提交字段表、consumer matrix、source/wire/semantic compatibility 评估、side-by-side migration plan 与新增/更新 contract tests。
+
+### 下一步
+
+1. 037 提交并推送后，本轮用户请求的 LLM-TODO-036 ~ 037 串行推进完成。
+
+### 风险
+
+1. 若未来直接把 module-local 头文件复制进 `contracts/`，会绕过 037 评审中的 migration window 与 compatibility criteria。
+2. 若未来只看到 `LLM-BLK-006 已解阻`，但忽略 No-Go for shared，会误以为 admission 获准；正确解读是“评审已完成，当前不升格”。
+
 ## 记录 #310
 
 - 日期：2026-04-16
