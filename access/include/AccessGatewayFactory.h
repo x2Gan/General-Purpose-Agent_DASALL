@@ -15,6 +15,10 @@ namespace dasall::profiles {
 class RuntimePolicySnapshot;
 }
 
+namespace dasall::infra::secret {
+class ISecretManager;
+}
+
 namespace dasall::infra::diagnostics {
 class IDiagnosticsService;
 }
@@ -71,6 +75,7 @@ struct DaemonAccessPipelineOptions {
   std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
     std::shared_ptr<dasall::knowledge::IKnowledgeService> knowledge_service;
   std::shared_ptr<AsyncTaskRegistry> async_task_registry;
+  std::shared_ptr<dasall::infra::secret::ISecretManager> ownership_secret_manager;
   PublishBackend publish_backend{};
     AccessObservabilityEmitBackend observability_emit_backend{};
 
@@ -90,6 +95,8 @@ struct GatewayAccessPipelineOptions {
   AccessPublishView publish_view{};
   bool derive_views_from_runtime_policy = false;
   std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> runtime_policy_snapshot;
+  std::shared_ptr<AsyncTaskRegistry> async_task_registry;
+  std::shared_ptr<dasall::infra::secret::ISecretManager> ownership_secret_manager;
 
   bool policy_backend_available = true;
   bool allow_submit = true;

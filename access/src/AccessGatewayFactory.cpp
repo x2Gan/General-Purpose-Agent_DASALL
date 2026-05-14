@@ -31,6 +31,7 @@
 #include "daemon/DaemonProtocolTypes.h"
 #include "daemon/DaemonResponseBuilderWithReceipt.h"
 #include "daemon/DaemonTaskQueryHandler.h"
+#include "secret/ISecretManager.h"
 
 namespace dasall::access {
 
@@ -88,6 +89,102 @@ template <typename PipelineOptions>
   result.disposition = AccessDisposition::AcceptedAsync;
   result.receipt_ref = replay_receipt_ref.value_or("idempotency-replay");
   return result;
+}
+
+[[nodiscard]] std::string secure_buffer_to_string(
+    const dasall::infra::secret::SecureBuffer& buffer) {
+  std::string value;
+  value.reserve(buffer.size());
+  for (const std::byte byte : buffer.bytes()) {
+    value.push_back(static_cast<char>(byte));
+  }
+  return value;
+}
+
+[[nodiscard]] std::optional<std::string> normalize_secret_name(
+    std::string_view secret_ref) {
+  constexpr std::string_view kSecretRefPrefix = "secret://";
+  if (!secret_ref.starts_with(kSecretRefPrefix) ||
+      secret_ref.size() <= kSecretRefPrefix.size()) {
+    return std::nullopt;
+  }
+  return std::string(secret_ref.substr(kSecretRefPrefix.size()));
+}
+
+[[nodiscard]] std::optional<AsyncTaskRegistry::OwnershipTokenKey>
+materialize_async_ownership_key(
+    dasall::infra::secret::ISecretManager& secret_manager,
+    std::string_view ownership_secret_ref,
+    std::string_view entry_type) {
+  const auto secret_name = normalize_secret_name(ownership_secret_ref);
+  if (!secret_name.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto access_context = dasall::infra::secret::SecretAccessContext{
+      .request_id = std::string("access-startup:") + std::string(entry_type),
+      .session_id = std::nullopt,
+      .task_id = std::string("access-async-registry:") + std::string(entry_type),
+      .actor = std::string(entry_type),
+      .consumer_module = std::string("access.async_task_registry"),
+      .permission_domain = std::string("secret.read"),
+  };
+  const auto handle_result = secret_manager.get_secret(
+      dasall::infra::secret::SecretQuery{
+          .secret_name = *secret_name,
+          .version_hint = {},
+          .purpose = std::string("access_async_ownership"),
+          .access_mode = dasall::infra::secret::SecretAccessMode::Materialize,
+      },
+      access_context);
+  if (!handle_result.ok || !handle_result.handle.is_valid()) {
+    return std::nullopt;
+  }
+
+  const auto materialized_result =
+      secret_manager.materialize(handle_result.handle, access_context);
+  if (!materialized_result.ok || materialized_result.materialized_secret == nullptr ||
+      !materialized_result.materialized_secret->is_accessible()) {
+    return std::nullopt;
+  }
+
+  const auto secret_text =
+      secure_buffer_to_string(*materialized_result.materialized_secret);
+  (void)secret_manager.release(materialized_result.lease);
+  AsyncTaskRegistry::OwnershipTokenKey key{
+      .key_id = handle_result.handle.version,
+      .secret = secret_text,
+  };
+  if (!key.is_valid()) {
+    return std::nullopt;
+  }
+
+  return key;
+}
+
+template <typename PipelineOptions>
+[[nodiscard]] std::shared_ptr<AsyncTaskRegistry> resolve_async_task_registry(
+    const PipelineOptions& options) {
+  if (options.async_task_registry) {
+    return options.async_task_registry;
+  }
+
+  const auto ttl = std::chrono::milliseconds(options.bootstrap_config.result_replay_ttl_ms);
+  if (!options.bootstrap_config.ownership_token_hmac_secret_ref.has_value() ||
+      options.bootstrap_config.ownership_token_hmac_secret_ref->empty() ||
+      options.ownership_secret_manager == nullptr) {
+    return std::make_shared<AsyncTaskRegistry>(std::string{}, ttl);
+  }
+
+  const auto key = materialize_async_ownership_key(
+      *options.ownership_secret_manager,
+      *options.bootstrap_config.ownership_token_hmac_secret_ref,
+      options.bootstrap_config.entry_type);
+  if (!key.has_value()) {
+    return std::make_shared<AsyncTaskRegistry>(std::string{}, ttl);
+  }
+
+  return std::make_shared<AsyncTaskRegistry>(*key, std::nullopt, ttl);
 }
 
 [[nodiscard]] std::string request_context_or_default(
@@ -199,6 +296,54 @@ void project_packet_headers_to_request_context(const InboundPacket& packet,
   }
 
   return metadata;
+}
+
+[[nodiscard]] bool attach_async_receipt(
+    RuntimeDispatchResult& dispatch_result,
+    const RuntimeDispatchRequest& request,
+    AsyncTaskRegistry& async_task_registry,
+    AccessObservabilityBridge& observability_bridge) {
+  if (dispatch_result.disposition != AccessDisposition::AcceptedAsync) {
+    return true;
+  }
+
+  if (!async_task_registry.enabled()) {
+    return false;
+  }
+
+  const auto receipt = async_task_registry.register_async_accept(request, dispatch_result);
+  if (!receipt.has_value()) {
+    return false;
+  }
+
+  const std::string request_id = request_context_or_default(
+      request, "request_id", request.packet.packet_id);
+  const std::string session_id = request_context_or_default(
+      request, "session_id", "session:" + request_id);
+  const std::string trace_id = request_context_or_default(
+      request, "trace_id", "trace:" + request_id);
+
+  dispatch_result.receipt_ref = receipt->receipt_id;
+  if (!dispatch_result.publish_envelope.has_value()) {
+    dispatch_result.publish_envelope = PublishEnvelope{};
+  }
+  dispatch_result.publish_envelope->request_id = request_id;
+  dispatch_result.publish_envelope->result_id = receipt->receipt_id;
+  dispatch_result.publish_envelope->session_id = session_id;
+  dispatch_result.publish_envelope->trace_id = trace_id;
+  dispatch_result.publish_envelope->channel_ref =
+      request.packet.entry_type + "://" + request.packet.protocol_kind;
+  dispatch_result.publish_envelope->protocol_kind = request.packet.protocol_kind;
+  dispatch_result.publish_envelope->protocol_status_hint = "202";
+  dispatch_result.publish_envelope->payload = "accepted_async";
+  dispatch_result.publish_envelope->receipt = *receipt;
+  (void)observability_bridge.emit_receipt_event(
+      request_id,
+      session_id,
+      trace_id,
+      "READY",
+      receipt->receipt_id);
+  return true;
 }
 
 struct DaemonStatusQueryPayload {
@@ -819,12 +964,7 @@ build_daemon_submit_pipeline(
     resolved_options.runtime_cancel_backend);
   auto result_publisher =
     std::make_shared<ResultPublisher>(resolved_options.publish_backend);
-  auto async_task_registry = resolved_options.async_task_registry
-                 ? resolved_options.async_task_registry
-                                 : std::make_shared<AsyncTaskRegistry>(
-                                       "daemon-access-secret-v1");
-  auto receipt_builder = std::make_shared<daemon::DaemonResponseBuilderWithReceipt>(
-      async_task_registry);
+  auto async_task_registry = resolve_async_task_registry(resolved_options);
   auto task_query_handler = std::make_shared<daemon::DaemonTaskQueryHandler>(
       *async_task_registry);
   auto health_service = std::make_shared<daemon::DaemonHealthService>(
@@ -847,7 +987,7 @@ build_daemon_submit_pipeline(
            runtime_bridge,
            result_publisher,
            observability_bridge,
-           receipt_builder,
+           async_task_registry,
            task_query_handler,
            health_service,
            diagnostics_handler,
@@ -1127,46 +1267,12 @@ build_daemon_submit_pipeline(
               dispatch_result,
               dispatch_latency_ms);
 
-            if (dispatch_result.disposition == AccessDisposition::AcceptedAsync) {
-              const auto receipt = receipt_builder->register_and_build_receipt(
-                  normalized.runtime_request,
-                  dispatch_result);
-              if (receipt != nullptr) {
-              const std::string request_id = request_context_or_default(
-                normalized.runtime_request,
-                "request_id",
-                normalized.runtime_request.packet.packet_id);
-              const std::string session_id = request_context_or_default(
-                normalized.runtime_request,
-                "session_id",
-                "session:" + request_id);
-              const std::string trace_id = request_context_or_default(
-                normalized.runtime_request,
-                "trace_id",
-                "trace:" + request_id);
-                dispatch_result.receipt_ref = receipt->receipt_id;
-                if (!dispatch_result.publish_envelope.has_value()) {
-                  dispatch_result.publish_envelope = PublishEnvelope{};
-                }
-              dispatch_result.publish_envelope->request_id = request_id;
-                dispatch_result.publish_envelope->result_id = receipt->receipt_id;
-              dispatch_result.publish_envelope->session_id = session_id;
-              dispatch_result.publish_envelope->trace_id = trace_id;
-              dispatch_result.publish_envelope->channel_ref =
-                normalized.runtime_request.packet.entry_type + "://" +
-                normalized.runtime_request.packet.protocol_kind;
-                dispatch_result.publish_envelope->protocol_kind =
-                    normalized.runtime_request.packet.protocol_kind;
-                dispatch_result.publish_envelope->protocol_status_hint = "202";
-                dispatch_result.publish_envelope->payload = "accepted_async";
-                dispatch_result.publish_envelope->receipt = *receipt;
-                (void)observability_bridge->emit_receipt_event(
-                request_id,
-                session_id,
-                trace_id,
-                    "READY",
-                    receipt->receipt_id);
-              }
+            if (!attach_async_receipt(dispatch_result,
+                                      normalized.runtime_request,
+                                      *async_task_registry,
+                                      *observability_bridge)) {
+              return make_rejected_result(AccessErrorCode::InternalError,
+                                          "ownership_secret_unavailable");
             }
 
             if (dispatch_result.disposition == AccessDisposition::Rejected &&
@@ -1217,6 +1323,7 @@ build_gateway_submit_pipeline(
     std::make_shared<RuntimeBridge>(resolved_options.runtime_dispatch_backend, nullptr);
   auto result_publisher =
     std::make_shared<ResultPublisher>(resolved_options.publish_backend);
+  auto async_task_registry = resolve_async_task_registry(resolved_options);
 
   auto submit_pipeline = std::make_shared<AccessGateway::SubmitPipeline>(
       [request_validator,
@@ -1228,6 +1335,7 @@ build_gateway_submit_pipeline(
        runtime_bridge,
        result_publisher,
        observability_bridge,
+      async_task_registry,
       resolved_options](const InboundPacket& packet) -> RuntimeDispatchResult {
         (void)observability_bridge->emit_request_received(
             packet,
@@ -1371,6 +1479,14 @@ build_gateway_submit_pipeline(
             normalized.runtime_request,
             dispatch_result,
             dispatch_latency_ms);
+
+        if (!attach_async_receipt(dispatch_result,
+                      normalized.runtime_request,
+                      *async_task_registry,
+                      *observability_bridge)) {
+          return make_rejected_result(AccessErrorCode::InternalError,
+                        "ownership_secret_unavailable");
+        }
 
         if (dispatch_result.disposition == AccessDisposition::Rejected &&
             dispatch_result.publish_envelope.has_value() &&

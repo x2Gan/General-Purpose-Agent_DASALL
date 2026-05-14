@@ -13,6 +13,15 @@ namespace dasall::access {
 
 class AsyncTaskRegistry final {
  public:
+    struct OwnershipTokenKey {
+        std::string key_id;
+        std::string secret;
+
+        [[nodiscard]] bool is_valid() const {
+            return !key_id.empty() && !secret.empty();
+        }
+    };
+
   enum class QueryStatus {
     Found = 0,
     NotFound = 1,
@@ -26,6 +35,11 @@ class AsyncTaskRegistry final {
 
   explicit AsyncTaskRegistry(
       std::string ownership_secret,
+      std::chrono::milliseconds receipt_ttl = std::chrono::minutes(10));
+
+  explicit AsyncTaskRegistry(
+      OwnershipTokenKey current_key,
+      std::optional<OwnershipTokenKey> previous_key = std::nullopt,
       std::chrono::milliseconds receipt_ttl = std::chrono::minutes(10));
 
   [[nodiscard]] std::optional<AsyncTaskReceipt> register_async_accept(
@@ -47,6 +61,12 @@ class AsyncTaskRegistry final {
 
   [[nodiscard]] std::size_t size() const;
 
+    [[nodiscard]] bool enabled() const;
+
+    void rotate_ownership_keys(
+            OwnershipTokenKey current_key,
+            std::optional<OwnershipTokenKey> previous_key = std::nullopt);
+
  private:
   struct StoredReceipt {
     AsyncTaskReceipt receipt;
@@ -60,7 +80,9 @@ class AsyncTaskRegistry final {
   [[nodiscard]] std::string build_ownership_token(
       std::string_view receipt_id,
       std::string_view actor_ref,
-      std::string_view request_id) const;
+      std::string_view request_id,
+      std::int64_t issued_at_unix_ms,
+      std::int64_t expires_at_unix_ms) const;
 
   [[nodiscard]] static bool constant_time_equals(
       std::string_view lhs,
@@ -71,10 +93,11 @@ class AsyncTaskRegistry final {
 
   void erase_expired_locked(const std::string& receipt_id);
 
-  std::string ownership_secret_;
   std::chrono::milliseconds receipt_ttl_;
   mutable std::mutex mutex_;
   std::unordered_map<std::string, StoredReceipt> receipts_;
+    OwnershipTokenKey current_key_;
+    std::optional<OwnershipTokenKey> previous_key_;
 };
 
 }  // namespace dasall::access

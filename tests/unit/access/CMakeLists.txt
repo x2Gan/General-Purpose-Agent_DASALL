@@ -314,10 +314,43 @@ add_test(NAME AsyncTaskRegistryHmacOwnershipTest
   COMMAND dasall_access_async_task_registry_ownership_unit_test)
 set_tests_properties(AsyncTaskRegistryHmacOwnershipTest PROPERTIES LABELS "unit;access")
 
+add_test(NAME AsyncTaskRegistrySecretRotationTest
+  COMMAND dasall_access_async_task_registry_ownership_unit_test)
+set_tests_properties(AsyncTaskRegistrySecretRotationTest PROPERTIES LABELS "unit;access")
+
 dasall_add_access_unit_test(
   dasall_access_async_task_registry_expiry_unit_test
   AsyncTaskRegistryExpiryTest
   AsyncTaskRegistryExpiryTest.cpp
+)
+
+add_executable(dasall_access_async_task_registry_missing_secret_fail_closed_unit_test
+  AsyncTaskRegistryMissingSecretFailClosedTest.cpp
+)
+
+target_include_directories(dasall_access_async_task_registry_missing_secret_fail_closed_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/src
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/profiles/include
+)
+
+target_link_libraries(dasall_access_async_task_registry_missing_secret_fail_closed_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall_access_async_task_registry_missing_secret_fail_closed_unit_test)
+
+add_test(NAME AsyncTaskRegistryMissingSecretFailClosedTest
+  COMMAND dasall_access_async_task_registry_missing_secret_fail_closed_unit_test)
+set_tests_properties(AsyncTaskRegistryMissingSecretFailClosedTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_async_task_registry_missing_secret_fail_closed_unit_test
 )
 
 dasall_add_access_unit_test(

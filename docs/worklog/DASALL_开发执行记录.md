@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #641
+
+- 日期：2026-05-14
+- 阶段：access/async-ownership-hardening
+- 任务：ACC-TODO-046 将 async ownership token 改为正式 HMAC 与 secret rotation
+- 状态：已完成
+
+### 改动
+
+1. 调整 `access/src/AsyncTaskRegistry.h/.cpp`：新增 `OwnershipTokenKey`、`enabled()` 与 `rotate_ownership_keys()`；ownership token 从 `std::hash` 升级为 `HMAC-SHA256 + base64url`，token claims 固定包含 `key_id/issued_at/expires_at/receipt_id/actor_ref/request_id`，并继续通过 constant-time compare 做最终签名比对。
+2. 调整 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`：为 daemon/gateway accepted-async 分支新增 `ownership_secret_manager` seam 和 disabled-registry fallback；当 deployment secret 无法 materialize 时，不再透传半成品 `AcceptedAsync`，而是 fail-closed 为 `ownership_secret_unavailable`。
+3. 调整 `tests/unit/access/AsyncTaskRegistryOwnershipTest.cpp`、`tests/unit/access/CMakeLists.txt`，并新增 `tests/unit/access/AsyncTaskRegistryMissingSecretFailClosedTest.cpp`：覆盖 HMAC ownership 校验、current/previous key rotation window、secret manager 正向 materialization，以及 missing-secret fail-closed。
+4. 回写 `docs/todos/access/DASALL_access子系统专项TODO.md` 与 `docs/todos/access/deliverables/ACC-TODO-046-Async-ownership-token正式HMAC与secret-rotation.md`，同步 `ACC-BLK-006` 与相关已完成任务的 blocker 状态，避免 TODO 口径继续停留在旧的 `std::hash/static secret` 基线。
+
+### 验证
+
+1. `Build_CMakeTools()`
+   - 结果：通过。
+   - 说明：增量构建成功重编 `dasall_access`、`dasall_access_async_task_registry_ownership_unit_test`、`dasall_access_async_task_registry_missing_secret_fail_closed_unit_test` 及受影响的 daemon/gateway access 目标。
+2. `RunCtest_CMakeTools(tests=["AsyncTaskRegistryTest","AsyncTaskRegistryOwnershipTest","AsyncTaskRegistrySecretRotationTest","AsyncTaskRegistryExpiryTest"])`
+   - 结果：通过，4/4 passed。
+3. `RunCtest_CMakeTools(tests=["AsyncTaskRegistryMissingSecretFailClosedTest","AccessTaskQueryHandlerTest","DaemonAcceptedAsyncReceiptTest","DaemonTaskQueryHandlerTest"])`
+   - 结果：通过，4/4 passed。
+
+### 结果
+
+1. `ACC-TODO-046` 已完成：ownership token 不再依赖 `std::hash` 或默认静态 secret，current/previous key rotation window 与 missing-secret fail-closed 已进入 focused tests。
+2. `ACC-BLK-006` 已对 v1 focused receipt/query/cancel 路径解阻：deployment secret 读链、rotation window 与 constant-time compare 已具可执行证据；多实例 authoritative sync 继续保留为 051 的风险面，不外推为规模化 ready。
+3. 本轮没有扩写 `ISecretManager` 公共 ABI，也没有新增 bootstrap secret 写入面；Access 仍只通过既有 secret consumer seam 读取 deployment secret。
+
+### 下一步
+
+1. 进入 `ACC-TODO-047`，把 `AccessPolicyGate` 从本地 snapshot stub 切到 `IAccessPolicyEvaluator + infra/policy` 生产适配。
+2. `ACC-TODO-048` 的 observability main-chain sink 与更广安全治理矩阵仍依赖 047；046 的 multi-instance authoritative 结论不要提前写成 release-ready。
+
 ## 记录 #640
 
 - 日期：2026-05-14
