@@ -52,6 +52,8 @@ constexpr char kDefaultGatewayProfileId[] = "desktop_full";
 constexpr int kDefaultGatewayListenPort = 8080;
 constexpr char kGatewayStartupDiagnosticsForceStageEnv[] =
   "DASALL_GATEWAY_STARTUP_DIAGNOSTICS_FORCE_STAGE";
+constexpr char kRuntimeStateRootOverrideEnv[] =
+  "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
 
 struct AgentInitRequestBuildResult {
   dasall::runtime::AgentInitRequest request;
@@ -100,6 +102,16 @@ void emit_gateway_startup_failure(const GatewayStartupFailureContext& context,
 [[nodiscard]] bool gateway_startup_stage_forced(std::string_view stage) {
   const char* forced_stage = std::getenv(kGatewayStartupDiagnosticsForceStageEnv);
   return forced_stage != nullptr && stage == forced_stage;
+}
+
+[[nodiscard]] std::optional<std::filesystem::path>
+runtime_state_root_override_from_env() {
+  const char* raw_value = std::getenv(kRuntimeStateRootOverrideEnv);
+  if (raw_value == nullptr || *raw_value == '\0') {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(raw_value);
 }
 
 [[nodiscard]] ParsedGatewayArgs parse_gateway_args(int argc, char* argv[]) {
@@ -267,10 +279,18 @@ void emit_gateway_startup_failure(const GatewayStartupFailureContext& context,
 
 [[nodiscard]] AgentInitRequestBuildResult build_gateway_agent_init_request(
     std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> policy_snapshot) {
+  dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions
+      composition_options;
+  if (const auto state_root_override = runtime_state_root_override_from_env();
+      state_root_override.has_value()) {
+    composition_options.state_root_override = *state_root_override;
+  }
+
   const auto runtime_composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           policy_snapshot,
-          "gateway.http-unary");
+          "gateway.http-unary",
+          composition_options);
   if (!runtime_composition.ok()) {
     return AgentInitRequestBuildResult{
         .request = {},

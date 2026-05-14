@@ -1,5 +1,6 @@
 #include <cerrno>
 #include <csignal>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -32,6 +33,9 @@
 namespace {
 
 namespace fs = std::filesystem;
+
+constexpr char kRuntimeStateRootOverrideEnv[] =
+  "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
 
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -91,11 +95,13 @@ class ScopedGatewayProcess {
  public:
   ScopedGatewayProcess(std::string binary_path,
                        fs::path working_directory,
+                       fs::path state_root,
                        int port,
                        fs::path log_path)
       : log_path_(std::move(log_path)) {
     pid_ = start(std::move(binary_path),
                  std::move(working_directory),
+                 std::move(state_root),
                  port,
                  log_path_);
   }
@@ -141,6 +147,7 @@ class ScopedGatewayProcess {
  private:
   [[nodiscard]] static pid_t start(std::string binary_path,
                                    fs::path working_directory,
+                                   fs::path state_root,
                                    int port,
                                    const fs::path& log_path) {
     const pid_t pid = ::fork();
@@ -161,6 +168,12 @@ class ScopedGatewayProcess {
 
       if (::chdir(working_directory.c_str()) != 0) {
         std::perror("chdir");
+        std::_Exit(127);
+      }
+
+      const std::string state_root_env = state_root.string();
+      if (::setenv(kRuntimeStateRootOverrideEnv, state_root_env.c_str(), 1) != 0) {
+        std::perror("setenv");
         std::_Exit(127);
       }
 
@@ -212,12 +225,15 @@ class ScopedGatewayProcess {
 
 void gateway_binary_unary_smoke_completes_with_real_main_init() {
   ScopedTempDirectory temp_root("dasall-gateway-binary-unary");
+  const auto state_root = temp_root.path() / "state";
   const int port = reserve_loopback_port();
   const auto log_path = temp_root.path() / "gateway.log";
+  fs::create_directories(state_root);
 
   ScopedGatewayProcess gateway(
       DASALL_GATEWAY_BINARY_PATH,
       temp_root.path(),
+      state_root,
       port,
       log_path);
 
@@ -241,11 +257,11 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
                     gateway.read_log() + " artifact_path=" + log_path.string());
     assert_equal(200,
                  readiness->status,
-                 "gateway binary smoke should keep degraded runtime path health-ready but explicitly labeled; body=" +
+           "gateway binary smoke should keep the real runtime path health-ready and explicitly labeled; body=" +
                      readiness->body + " gateway_log=" + gateway.read_log() +
                      " artifact_path=" + log_path.string());
-    assert_true(readiness->body.find("runtime_readiness=degraded-ready") != std::string::npos,
-                "gateway readiness body should expose degraded runtime readiness; body=" +
+    assert_true(readiness->body.find("runtime_readiness=default-ready") != std::string::npos,
+          "gateway readiness body should expose default-ready runtime readiness after helper composition succeeds; body=" +
                     readiness->body + " gateway_log=" + gateway.read_log() +
                     " artifact_path=" + log_path.string());
     assert_true(readiness->body.find("stub-ready") == std::string::npos,
@@ -294,9 +310,9 @@ void gateway_binary_unary_smoke_completes_with_real_main_init() {
               "gateway binary smoke should pass through the real gateway main init path; gateway_exit_code=" +
                   std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
                   " gateway_log=" + gateway_log);
-  assert_true(gateway_log.find("[dasall_gateway] runtime readiness=degraded-ready") !=
+    assert_true(gateway_log.find("[dasall_gateway] runtime readiness=default-ready") !=
                   std::string::npos,
-              "gateway binary smoke should log degraded-ready instead of accepted-only readiness; gateway_exit_code=" +
+          "gateway binary smoke should log default-ready instead of accepted-only readiness; gateway_exit_code=" +
                   std::to_string(gateway_exit_code) + " artifact_path=" + log_path.string() +
                   " gateway_log=" + gateway_log);
   assert_true(gateway_log.find("runtime readiness=stub-ready") == std::string::npos,

@@ -1,6 +1,7 @@
 #include <array>
 #include <cerrno>
 #include <csignal>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -34,6 +35,9 @@
 namespace {
 
 namespace fs = std::filesystem;
+
+constexpr char kRuntimeStateRootOverrideEnv[] =
+  "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
 
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -71,11 +75,13 @@ class ScopedDaemonProcess {
  public:
   ScopedDaemonProcess(std::string binary_path,
                       fs::path working_directory,
+                      fs::path state_root,
                       fs::path socket_path,
                       fs::path log_path)
       : log_path_(std::move(log_path)) {
     pid_ = start(std::move(binary_path),
                  std::move(working_directory),
+                 std::move(state_root),
                  std::move(socket_path),
                  log_path_);
   }
@@ -121,6 +127,7 @@ class ScopedDaemonProcess {
  private:
   [[nodiscard]] static pid_t start(std::string binary_path,
                                    fs::path working_directory,
+                                   fs::path state_root,
                                    fs::path socket_path,
                                    const fs::path& log_path) {
     const pid_t pid = ::fork();
@@ -141,6 +148,12 @@ class ScopedDaemonProcess {
 
       if (::chdir(working_directory.c_str()) != 0) {
         std::perror("chdir");
+        std::_Exit(127);
+      }
+
+      const std::string state_root_env = state_root.string();
+      if (::setenv(kRuntimeStateRootOverrideEnv, state_root_env.c_str(), 1) != 0) {
+        std::perror("setenv");
         std::_Exit(127);
       }
 
@@ -191,13 +204,16 @@ class ScopedDaemonProcess {
 
 void daemon_binary_unary_smoke_completes_with_real_main_init() {
   ScopedTempDirectory temp_root("dasall-daemon-binary-unary");
+  const auto state_root = temp_root.path() / "state";
   const auto socket_path = temp_root.path() / "control.sock";
   const auto log_path = temp_root.path() / "daemon.log";
   const auto root = repository_root();
+  fs::create_directories(state_root);
 
   ScopedDaemonProcess daemon(
       DASALL_DAEMON_BINARY_PATH,
       temp_root.path(),
+      state_root,
       socket_path,
       log_path);
 
@@ -225,15 +241,15 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
           root);
   assert_equal(0,
                readiness.exit_code,
-               "binary unary smoke should keep daemon readiness query successful while exposing degraded state; stdout=" +
+               "binary unary smoke should keep daemon readiness query successful while exposing the real helper readiness state; stdout=" +
                    readiness.stdout_text + " stderr=" + readiness.stderr_text);
-    assert_true(readiness.stdout_text.find("\\\"state\\\":\\\"DEGRADED\\\"") !=
+    assert_true(readiness.stdout_text.find("\\\"state\\\":\\\"READY\\\"") !=
             std::string::npos,
-              "binary unary smoke should surface daemon degraded readiness in JSON payload; stdout=" +
+              "binary unary smoke should surface daemon ready state in JSON payload after helper composition succeeds; stdout=" +
                   readiness.stdout_text);
-    assert_true(readiness.stdout_text.find("\\\"runtime_readiness\\\":\\\"degraded-ready\\\"") !=
+    assert_true(readiness.stdout_text.find("\\\"runtime_readiness\\\":\\\"default-ready\\\"") !=
             std::string::npos,
-              "binary unary smoke should surface runtime degraded-ready label; stdout=" +
+              "binary unary smoke should surface runtime default-ready label after helper composition succeeds; stdout=" +
                   readiness.stdout_text);
   assert_true(readiness.stdout_text.find("stub-ready") == std::string::npos,
               "binary unary smoke should reject stub-ready readiness projection; stdout=" +
@@ -326,9 +342,9 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
   assert_true(daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
               "binary unary smoke should pass through the real daemon main init path; daemon_log=" +
                   daemon_log);
-  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=degraded-ready") !=
+  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=default-ready") !=
           std::string::npos,
-        "binary unary smoke should log degraded-ready instead of accepted-only readiness; daemon_log=" +
+        "binary unary smoke should log default-ready instead of accepted-only readiness; daemon_log=" +
           daemon_log);
   assert_true(daemon_log.find("runtime readiness=stub-ready") == std::string::npos,
         "binary unary smoke should fail if daemon main falls back to stub-ready; daemon_log=" +

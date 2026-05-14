@@ -47,6 +47,8 @@ namespace {
 
 constexpr char kDaemonStartupDiagnosticsForceStageEnv[] =
   "DASALL_DAEMON_STARTUP_DIAGNOSTICS_FORCE_STAGE";
+constexpr char kRuntimeStateRootOverrideEnv[] =
+  "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
 
 struct AgentInitRequestBuildResult {
   dasall::runtime::AgentInitRequest request;
@@ -104,6 +106,16 @@ void emit_daemon_startup_failure(const DaemonStartupFailureContext& context,
 [[nodiscard]] bool daemon_startup_stage_forced(std::string_view stage) {
   const char* forced_stage = std::getenv(kDaemonStartupDiagnosticsForceStageEnv);
   return forced_stage != nullptr && stage == forced_stage;
+}
+
+[[nodiscard]] std::optional<std::filesystem::path>
+runtime_state_root_override_from_env() {
+  const char* raw_value = std::getenv(kRuntimeStateRootOverrideEnv);
+  if (raw_value == nullptr || *raw_value == '\0') {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(raw_value);
 }
 
 [[nodiscard]] dasall::apps::daemon::DaemonSocketPolicy
@@ -303,10 +315,18 @@ map_agent_result_to_dispatch_result(
 
 [[nodiscard]] AgentInitRequestBuildResult build_daemon_agent_init_request(
     const dasall::apps::daemon::DaemonEntryConfig& entry) {
+  dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions
+      composition_options;
+  if (const auto state_root_override = runtime_state_root_override_from_env();
+      state_root_override.has_value()) {
+    composition_options.state_root_override = *state_root_override;
+  }
+
   const auto runtime_composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           entry.runtime_policy_snapshot,
-          "daemon.local-control-plane");
+          "daemon.local-control-plane",
+          composition_options);
   if (!runtime_composition.ok()) {
     return AgentInitRequestBuildResult{
         .request = {},

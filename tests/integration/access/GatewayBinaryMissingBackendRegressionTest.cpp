@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+#include <cstdlib>
+
 #include <unistd.h>
 
 #include "CliBinaryTestSupport.h"
@@ -17,10 +19,37 @@ namespace {
 
 namespace fs = std::filesystem;
 
+constexpr char kRuntimeStateRootOverrideEnv[] =
+    "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
+
 using dasall::tests::integration::access_support::ProcessResult;
 using dasall::tests::integration::access_support::run_process_capture_split;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
+
+class ScopedEnvironmentOverride {
+ public:
+  ScopedEnvironmentOverride(std::string name, std::string value)
+      : name_(std::move(name)) {
+    if (const char* previous = ::getenv(name_.c_str()); previous != nullptr) {
+      previous_value_ = previous;
+    }
+    ::setenv(name_.c_str(), value.c_str(), 1);
+  }
+
+  ~ScopedEnvironmentOverride() {
+    if (previous_value_.has_value()) {
+      ::setenv(name_.c_str(), previous_value_->c_str(), 1);
+      return;
+    }
+
+    ::unsetenv(name_.c_str());
+  }
+
+ private:
+  std::string name_;
+  std::optional<std::string> previous_value_;
+};
 
 class ScopedTempDirectory {
  public:
@@ -46,6 +75,11 @@ class ScopedTempDirectory {
 
 void gateway_binary_missing_backend_fails_closed_at_process_boundary() {
   ScopedTempDirectory temp_root("dasall-gateway-binary-missing-backend");
+  const auto state_root = temp_root.path() / "state";
+  fs::create_directories(state_root);
+  ScopedEnvironmentOverride state_root_override(
+      kRuntimeStateRootOverrideEnv,
+      state_root.string());
 
   const ProcessResult result = run_process_capture_split(
       {DASALL_GATEWAY_MISSING_BACKEND_BINARY_PATH},

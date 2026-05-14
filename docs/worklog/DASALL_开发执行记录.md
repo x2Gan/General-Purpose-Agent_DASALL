@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #650
+
+- 日期：2026-05-14
+- 阶段：runtime_support/组件专项 TODO 阶段 D
+- 任务：RTSUP-TODO-009 建立 installed / qemu / release-preflight composition gate
+- 状态：Blocked
+
+### 改动
+
+1. 调整 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp`：app binary 现在支持通过 `DASALL_RUNTIME_STATE_ROOT_OVERRIDE` 覆盖 runtime_support helper 的 `state_root`，使 build-tree binary smoke / preflight gate 不再被安装态 `/var/lib/dasall` 写权限阻塞。
+2. 调整 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`、`tests/integration/access/GatewayBinaryUnarySmokeTest.cpp` 与 `tests/integration/access/GatewayBinaryMissingBackendRegressionTest.cpp`：binary smoke / fixture 在拉起 daemon/gateway 进程前显式设置可写的临时 state root，并把 readiness 预期收敛到当前 helper 实际返回的 `default-ready`，从而让 release-preflight / `gate-int-10` gate 对准真实 app main 路径。
+3. 本轮未扩张 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh` 行为：脚本入口已存在且 build-tree gate wrapper 可用，剩余问题收敛为当前环境缺少可执行的 qemu image / virt-server。
+
+### 验证
+
+1. `cmake -S /home/gangan/DASALL -B /home/gangan/DASALL/build-rtsup005 -G "Unix Makefiles" && cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall-cli_json_output_contract_test dasall-cli_exit_code_contract_test dasall_access_daemon_ping_integration_test dasall_access_cli_daemon_socket_path_integration_test dasall_access_daemon_binary_unary_smoke_integration_test dasall_access_gateway_binary_unary_smoke_integration_test_bin dasall_access_gateway_binary_missing_backend_regression_test -j2 && ctest --test-dir /home/gangan/DASALL/build-rtsup005 -R '^(CliJsonOutputContractTest|CliExitCodeContractTest|DaemonPingIntegrationTest|CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest|GatewayBinaryUnarySmokeTest|GatewayBinaryMissingBackendRegressionTest)$' --output-on-failure`
+   - 结果：通过，7/7 passed。
+2. `ctest --test-dir /home/gangan/DASALL/build-rtsup005 -N | rg 'CliJsonOutputContractTest|CliExitCodeContractTest|DaemonPingIntegrationTest|CliDaemonSocketPathIntegrationTest|DaemonBinaryUnarySmokeTest|GatewayBinaryUnarySmokeTest|GatewayBinaryMissingBackendRegressionTest'`
+   - 结果：通过，release-preflight / `gate-int-10` 测试 discoverability 已恢复。
+3. `cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall_packaging_preflight_tests dasall_gate_int_10 -j2`
+   - 结果：通过，两个自定义 gate target 均已转绿。
+4. `autopkgtest-buildvm-ubuntu-cloud -r noble -a $(dpkg --print-architecture) -o /tmp/dasall-gate-int-10-qemu`
+   - 结果：Blocked，当前环境报错 `ERROR: no permission to write /dev/kvm`；额外检查未发现现成 `.img/.qcow2` 可复用镜像。
+5. `autopkgtest-build-qemu noble /tmp/dasall-gate-int-10.qcow2`
+   - 结果：Blocked，当前环境同时报错 `ERROR: command fakemachine not found`、`ERROR: command vmdb2 not found`、`ERROR: command zerofree not found`、`ERROR: no permission to write /dev/kvm`。
+
+### 结果
+
+1. `RTSUP-TODO-009` 的 build-tree release-preflight / `gate-int-10` gate blocker 已解：真实 daemon/gateway app binary smoke 现在能在可写 state root 下通过，custom gate targets 也已转绿。
+2. 当前 round 仍是 `Blocked`：authoritative installed-package qemu autopkgtest 无法在本机继续，因为缺少可用 qemu image；`autopkgtest-buildvm-ubuntu-cloud` 被 `/dev/kvm` 权限拦截，`autopkgtest-build-qemu` 还额外缺少 `fakemachine`、`vmdb2`、`zerofree`。
+3. 因此本轮不能把 009 标记 Done，也不能宣称 installed / qemu authoritative pass；当前只把证据层级稳定推进到了 build-tree release-preflight / gate-int-10 baseline。
+
+### 下一步
+
+1. 在具备可用 qemu image 或外部 virt-server 的环境中执行 `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh --disable-kvm -- /usr/bin/autopkgtest-virt-qemu --timeout-reboot=180 <image>`。
+2. 获得 authoritative installed-package qemu 结果后，再回写 `RTSUP-TODO-009` 为 Done 并提交正式 closeout。
+
 ## 记录 #649
 
 - 日期：2026-05-14
