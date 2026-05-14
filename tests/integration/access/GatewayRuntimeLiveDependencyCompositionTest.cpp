@@ -8,6 +8,7 @@
 #include <system_error>
 
 #include "AgentFacade.h"
+#include "IToolManager.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
 #include "ProfileCatalog.h"
@@ -60,6 +61,48 @@ load_runtime_policy_snapshot() {
 [[nodiscard]] bool contains_port(const std::vector<std::string>& ports,
                                  const std::string& expected_port) {
   return std::find(ports.begin(), ports.end(), expected_port) != ports.end();
+}
+
+void assert_gateway_tool_services_backend(
+  const std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>& policy_snapshot,
+  const std::shared_ptr<dasall::runtime::RuntimeDependencySet>& dependency_set) {
+  const auto tool_envelope = dependency_set->tool_manager->invoke(
+    dasall::contracts::ToolRequest{
+      .request_id = std::string("req-gateway-live-tool"),
+      .tool_call_id = std::string("call-gateway-live-tool"),
+      .tool_name = std::string("agent.dataset"),
+      .invocation_kind = dasall::contracts::ToolInvocationKind::InformationQuery,
+      .arguments_payload = std::string("{\"scope\":\"gateway\"}"),
+      .created_at = 1710000000100,
+      .goal_id = std::string("goal-gateway-live-tool"),
+      .worker_task_id = std::string("worker-gateway-live-tool"),
+      .runtime_budget = std::nullopt,
+      .timeout_ms = 2500U,
+      .idempotency_key = std::string("idem-gateway-live-tool"),
+      .tags = std::vector<std::string>{"integration", "runtime", "tool"},
+    },
+    dasall::tools::ToolInvocationContext{
+      .caller_domain = std::string("runtime.gateway"),
+      .session_id = std::string("session-gateway-live-tool"),
+      .profile_snapshot = policy_snapshot.get(),
+      .trace = {
+        .trace_id = std::string("trace-gateway-live-tool"),
+        .span_id = std::nullopt,
+        .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::nullopt,
+    });
+
+  assert_true(tool_envelope.tool_result.has_value() &&
+          tool_envelope.tool_result->success.value_or(false),
+        "gateway runtime live dependency composition should keep agent.dataset on the successful tools->services path");
+  assert_true(tool_envelope.tool_result->payload.has_value() &&
+          tool_envelope.tool_result->payload->find("\"capability_id\":\"agent.dataset\"") != std::string::npos &&
+          tool_envelope.tool_result->payload->find("\"projection\":\"default\"") != std::string::npos,
+        "gateway runtime live dependency composition should route agent.dataset through the live services backend payload");
+  assert_true(contains_port(dependency_set->external_evidence,
+          "runtime:gateway.http-unary:tool-services-production-bridge"),
+        "gateway runtime live dependency composition should record the production services bridge evidence marker");
 }
 
 void gateway_runtime_live_dependency_composition_establishes_default_ready_baseline() {
@@ -120,6 +163,7 @@ void gateway_runtime_live_dependency_composition_establishes_default_ready_basel
     assert_true(!init_result.degraded_ready(),
       "gateway runtime live dependency composition should not remain degraded-ready after knowledge is composed: " +
                   init_result.diagnostics);
+    assert_gateway_tool_services_backend(policy_snapshot, composition.dependency_set);
 }
 
 }  // namespace

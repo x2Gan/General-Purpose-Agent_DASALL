@@ -77,6 +77,19 @@ dasall_add_tools_integration_test(
 )
 
 dasall_add_tools_integration_test(
+  dasall_tool_services_production_bridge_integration_test
+  ToolServicesProductionBridgeIntegrationTest
+  ToolServicesProductionBridgeIntegrationTest.cpp
+  "integration;tools"
+)
+
+target_link_libraries(dasall_tool_services_production_bridge_integration_test
+  PRIVATE
+    dasall_profiles
+    dasall_services
+)
+
+dasall_add_tools_integration_test(
   dasall_tool_workflow_failure_integration_test
   ToolWorkflowFailureIntegrationTest
   ToolWorkflowFailureIntegrationTest.cpp

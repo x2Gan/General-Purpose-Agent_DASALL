@@ -2,6 +2,7 @@ add_library(dasall_services STATIC)
 
 target_sources(dasall_services
   PRIVATE
+    src/ServiceLiveComposition.cpp
     src/ServiceFacade.cpp
     src/ServiceContextBuilder.cpp
     src/ops/ServiceConfigAdapter.cpp
@@ -30,6 +31,7 @@ target_sources(dasall_services
       ${CMAKE_CURRENT_SOURCE_DIR}/include
     FILES
       include/ServiceTypes.h
+      include/ServiceLiveComposition.h
       include/IExecutionService.h
       include/IDataService.h
 )

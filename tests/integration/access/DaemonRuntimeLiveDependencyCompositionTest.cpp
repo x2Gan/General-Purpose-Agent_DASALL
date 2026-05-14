@@ -163,10 +163,14 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
     assert_true(tool_envelope.observation.has_value() && tool_envelope.observation_digest.has_value(),
           "daemon runtime live dependency composition should project runtime builtin calls into observation and digest together");
     assert_true(tool_envelope.tool_result->payload.has_value() &&
-            tool_envelope.tool_result->payload->find("\"dataset\":\"agent.dataset\"") != std::string::npos,
-          "daemon runtime live dependency composition should preserve the builtin data-service payload through ToolResult projection");
+        tool_envelope.tool_result->payload->find("\"capability_id\":\"agent.dataset\"") != std::string::npos &&
+        tool_envelope.tool_result->payload->find("\"projection\":\"default\"") != std::string::npos,
+          "daemon runtime live dependency composition should route agent.dataset through the live services backend payload");
     assert_true(!tool_envelope.failure_reason_code.has_value(),
           "daemon runtime live dependency composition should not surface a failure reason on the successful builtin query path");
+        assert_true(contains_port(composition.dependency_set->external_evidence,
+        "runtime:daemon.local-control-plane:tool-services-production-bridge"),
+          "daemon runtime live dependency composition should record the production services bridge evidence marker");
 }
 
 }  // namespace

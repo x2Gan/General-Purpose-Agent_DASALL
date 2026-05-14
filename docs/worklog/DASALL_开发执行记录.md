@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #646
+
+- 日期：2026-05-14
+- 阶段：runtime_support/组件专项 TODO 阶段 B
+- 任务：RTSUP-TODO-005 接入 runtime production services backend
+- 状态：已完成
+
+### 改动
+
+1. 新增 `services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp` 并更新 `services/CMakeLists.txt`：为 app-level composition 提供 public live-composition seam，复用 services 既有 facade / command lane / data lane / local/remote adapter 组合出 concrete `IExecutionService` / `IDataService`，避免 `apps/runtime_support` 直接穿透 `services/src` internal 头。
+2. 调整 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：`compose_minimal_live_dependency_set()` 现在先执行 `services::compose_live_services(*policy_snapshot)`，失败时 fail-closed 返回错误；成功后把 concrete execution/data service 注入 `compose_runtime_tool_manager()`，并将 evidence marker 从 caller-ready 收口为 `:tool-services-production-bridge`。
+3. 调整 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/CMakeLists.txt`：把 daemon/gateway focused assertion 从 default data-service stub payload 切到 live services backend payload，并让 gateway test 显式链接 `dasall_tools` 后覆盖相同的 tool path。
+4. 新增 `tests/integration/tools/ToolServicesProductionBridgeIntegrationTest.cpp` 并更新 `tests/integration/tools/CMakeLists.txt`：补一条 direct tools->services focused integration test，直接证明 `agent.terminal` / `agent.dataset` 经 `ToolServiceBridge + BuiltinExecutorLane` 后命中 live services backend，而不是回落 builtin default service。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`
+   - 结果：CMake Tools 在当前仓库返回通用“生成失败”，按 repo fallback 记录为工具链 blocker，不作为代码失败。
+2. `cmake -S /home/gangan/DASALL -B /home/gangan/DASALL/build-rtsup005 -G "Unix Makefiles" && cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall_tool_services_production_bridge_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir /home/gangan/DASALL/build-rtsup005 -R '^(ToolServicesProductionBridgeIntegrationTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure`
+   - 结果：通过，3/3 passed。
+
+### 结果
+
+1. `RTSUP-TODO-005` 已完成：runtime_support 的 tool path 现在通过 services public live-composition seam 获得 concrete execution/data backend，不再依赖 tools default service。
+2. `RTSUP-BLK-001` 已解阻，但结论边界仍停留在 build-tree focused evidence；installed / qemu / release 层级验证继续留给后续 008/009。
+3. 当前实现保持了分层边界：`apps/runtime_support` 只消费 `services/include` public seam，不直接依赖 `services/src` internal 组合细节。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `RTSUP-TODO-005` 相关文件。
+2. 按仓库规范提交并推送 `RTSUP-TODO-005` 的 scoped commit。
+
 ## 记录 #645
 
 - 日期：2026-05-14

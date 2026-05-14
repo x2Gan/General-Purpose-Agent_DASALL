@@ -13,6 +13,7 @@
 #include "KnowledgeServiceFactory.h"
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
+#include "ServiceLiveComposition.h"
 #include "ToolManager.h"
 #include "tool/ToolDescriptor.h"
 #include "config/InstallLayout.h"
@@ -79,7 +80,13 @@ namespace fs = std::filesystem;
   };
 }
 
-[[nodiscard]] std::shared_ptr<tools::ToolManager> compose_runtime_tool_manager() {
+[[nodiscard]] std::shared_ptr<tools::ToolManager> compose_runtime_tool_manager(
+    std::shared_ptr<services::IExecutionService> execution_service,
+    std::shared_ptr<services::IDataService> data_service) {
+  if (execution_service == nullptr || data_service == nullptr) {
+    return nullptr;
+  }
+
   auto registry = std::make_shared<tools::registry::ToolRegistry>();
   if (!registry->register_builtin(make_runtime_dataset_descriptor())) {
     return nullptr;
@@ -89,8 +96,8 @@ namespace fs = std::filesystem;
       tools::execution::BuiltinExecutorLaneDependencies{
           .registry = registry,
           .service_bridge = std::make_shared<tools::bridge::ToolServiceBridge>(),
-          .execution_service = nullptr,
-          .data_service = nullptr,
+          .execution_service = std::move(execution_service),
+          .data_service = std::move(data_service),
           .now_ms = {},
       });
 
@@ -179,7 +186,15 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
 
-  dependency_set->tool_manager = compose_runtime_tool_manager();
+  const auto live_services = services::compose_live_services(*policy_snapshot);
+  if (!live_services.ok()) {
+    return make_error(std::string("services live composition failed for ") +
+                      std::string(composition_owner) + ": " + live_services.error);
+  }
+
+  dependency_set->tool_manager = compose_runtime_tool_manager(
+      live_services.execution_service,
+      live_services.data_service);
   if (dependency_set->tool_manager == nullptr) {
     return make_error(std::string("tool manager composition failed for ") +
                       std::string(composition_owner));
@@ -195,7 +210,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       std::string("runtime:") + std::string(composition_owner) +
       ":required-live-baseline",
       std::string("runtime:") + std::string(composition_owner) +
-      ":tool-services-caller-ready",
+      ":tool-services-production-bridge",
       std::string("runtime:") + std::string(composition_owner) +
       (policy_snapshot->multi_agent_enabled() ? ":multi-agent-enabled"
                                               : ":multi-agent-disabled"),
