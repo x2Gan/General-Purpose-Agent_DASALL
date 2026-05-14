@@ -47,8 +47,20 @@ void baseline_profiles_keep_diag_disabled_without_forking_unary_flow() {
 
     int runtime_calls = 0;
     DaemonAccessPipelineOptions options;
+    options.bootstrap_config.bootstrap_revision = projected.entry_config->config_revision.value_or(
+      "daemon-entry:" + projected.entry_config->effective_profile_id);
+    options.bootstrap_config.entry_type = "daemon";
+    options.bootstrap_config.listen_ref = projected.entry_config->bootstrap_config.socket_path;
     options.bootstrap_config.allowed_protocols = {"ipc_uds"};
-    options.auth_view.trusted_local_subjects = {"local://uid/1000"};
+    options.bootstrap_config.dispatch_deadline_ms =
+      static_cast<int>(projected.entry_config->bootstrap_config.dispatch_timeout_ms);
+    options.bootstrap_config.result_replay_ttl_ms =
+      static_cast<int>(projected.entry_config->bootstrap_config.receipt_ttl_sec) * 1000;
+    options.bootstrap_config.max_payload_bytes =
+      static_cast<int>(projected.entry_config->bootstrap_config.max_payload_bytes);
+    options.bootstrap_config.trusted_local_subjects = {"local://uid/1000"};
+    options.derive_views_from_runtime_policy = true;
+    options.runtime_policy_snapshot = projected.entry_config->runtime_policy_snapshot;
     options.daemon_profile_id = projected.entry_config->effective_profile_id;
     options.daemon_diagnostics_enabled = projected.entry_config->bootstrap_config.diag_enabled;
     options.runtime_dispatch_backend =

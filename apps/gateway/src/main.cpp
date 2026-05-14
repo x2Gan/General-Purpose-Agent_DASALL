@@ -385,9 +385,13 @@ int main(int argc, char* argv[]) {
   dasall::access::gateway::SecurityConfig sec_cfg;
 
   dasall::access::GatewayAccessPipelineOptions gateway_options;
+  gateway_options.bootstrap_config.bootstrap_revision =
+      "gateway-bootstrap:" + runtime_snapshot.snapshot->effective_profile_id();
   gateway_options.bootstrap_config.entry_type = "gateway";
   gateway_options.bootstrap_config.allowed_protocols = {"http_unary"};
-  gateway_options.publish_view.cors_allowed_origins = sec_cfg.cors_allowed_origins;
+  gateway_options.bootstrap_config.cors_allowed_origins = sec_cfg.cors_allowed_origins;
+  gateway_options.derive_views_from_runtime_policy = true;
+  gateway_options.runtime_policy_snapshot = runtime_snapshot.snapshot;
     const std::size_t max_http_request_body_bytes =
       static_cast<std::size_t>(gateway_options.bootstrap_config.max_payload_bytes);
   gateway_options.runtime_dispatch_backend =

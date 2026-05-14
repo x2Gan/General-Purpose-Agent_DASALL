@@ -471,12 +471,22 @@ int main(int argc, char* argv[]) {
   }
 
   dasall::access::DaemonAccessPipelineOptions pipeline_options;
-  pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
-  pipeline_options.publish_view.max_payload_bytes =
+    pipeline_options.bootstrap_config.bootstrap_revision =
+      entry.config_revision.value_or("daemon-entry:" + daemon_profile_id);
+    pipeline_options.bootstrap_config.entry_type = "daemon";
+    pipeline_options.bootstrap_config.listen_ref = entry.bootstrap_config.socket_path;
+    pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
+    pipeline_options.bootstrap_config.dispatch_deadline_ms =
+      static_cast<int>(entry.bootstrap_config.dispatch_timeout_ms);
+    pipeline_options.bootstrap_config.result_replay_ttl_ms =
+      static_cast<int>(entry.bootstrap_config.receipt_ttl_sec) * 1000;
+    pipeline_options.bootstrap_config.max_payload_bytes =
       static_cast<int>(entry.bootstrap_config.max_payload_bytes);
-  pipeline_options.auth_view.trusted_local_subjects = {
+    pipeline_options.bootstrap_config.trusted_local_subjects = {
       "local://uid/" + std::to_string(static_cast<unsigned int>(::getuid())),
       "local://uid/0"};
+    pipeline_options.derive_views_from_runtime_policy = true;
+    pipeline_options.runtime_policy_snapshot = entry.runtime_policy_snapshot;
   pipeline_options.daemon_diagnostics_enabled = diagnostics_enabled_state->load();
   pipeline_options.daemon_diagnostics_enabled_state = diagnostics_enabled_state;
   pipeline_options.diagnostics_service = diagnostics_service;
