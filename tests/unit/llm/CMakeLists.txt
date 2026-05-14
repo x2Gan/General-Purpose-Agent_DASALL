@@ -126,6 +126,10 @@ add_executable(dasall_llm_manager_concurrency_guard_unit_test
 	LLMManagerConcurrencyGuardTest.cpp
 )
 
+add_executable(dasall_stream_session_lifecycle_unit_test
+	StreamSessionLifecycleTest.cpp
+)
+
 add_executable(dasall_response_normalizer_semantic_mapping_unit_test
 	ResponseNormalizerSemanticMappingTest.cpp
 )
@@ -339,6 +343,12 @@ target_link_libraries(dasall_llm_manager_concurrency_guard_unit_test
 		dasall_llm
 )
 
+target_link_libraries(dasall_stream_session_lifecycle_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
 target_link_libraries(dasall_response_normalizer_semantic_mapping_unit_test
 	PRIVATE
 		dasall_test_support
@@ -418,6 +428,7 @@ dasall_apply_common_options(dasall_llm_manager_failure_mapping_unit_test)
 dasall_apply_common_options(dasall_llm_manager_timeout_policy_unit_test)
 dasall_apply_common_options(dasall_llm_manager_retry_budget_unit_test)
 dasall_apply_common_options(dasall_llm_manager_concurrency_guard_unit_test)
+dasall_apply_common_options(dasall_stream_session_lifecycle_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_semantic_mapping_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_reasoning_content_strip_unit_test)
 dasall_apply_common_options(dasall_response_normalizer_usage_unit_test)
@@ -519,6 +530,9 @@ set_tests_properties(LLMManagerRetryBudgetTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME LLMManagerConcurrencyGuardTest COMMAND dasall_llm_manager_concurrency_guard_unit_test)
 set_tests_properties(LLMManagerConcurrencyGuardTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME StreamSessionLifecycleTest COMMAND dasall_stream_session_lifecycle_unit_test)
+set_tests_properties(StreamSessionLifecycleTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME ResponseNormalizerSemanticMappingTest COMMAND dasall_response_normalizer_semantic_mapping_unit_test)
 set_tests_properties(ResponseNormalizerSemanticMappingTest PROPERTIES LABELS "unit;llm")

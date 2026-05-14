@@ -1806,6 +1806,19 @@ LLMManager 当前更接近编排组件，而不是复杂状态机 owner，因此
 | shared StreamHandle | 生命周期、取消、背压语义未冻结 | unary 优先，streaming 后置 |
 | ILLMManager / IPrompt* shared admission | supporting contracts 与调用语义尚未收口 | 先做 module-local 公共接口，后续按 T011/T012 流程评审 |
 
+#### 7.2.1 LLM-TODO-036 streaming 生命周期评审结论
+
+2026-05-14 的 LLM-TODO-036 只冻结 streaming 生命周期设计与后置实现边界，不把 llm 标记为 stream-ready。结论如下：
+
+1. 当前继续不新增 shared `StreamHandle`，不修改 `contracts/`，不扩 `LLMRequest` / `LLMResponse`；`StreamSessionRef` 仍是 llm module-local 的 opaque session id。
+2. `LLMManager::stream_generate()` 在真实 lifecycle owner 落地前必须 fail-closed，不进入 route execution，不创建 provider session，不触发 Runtime recompose 信号。
+3. 未来 `StreamSessionRegistry` 是 llm 内部生命周期 owner，负责 session id 分配、bounded capacity、cancel mark、terminal cleanup 与 TTL reap；Runtime 仍拥有调用时机和恢复裁定，adapter 只拥有 provider transport cursor。
+4. lifecycle 状态机冻结为 `Accepted -> Active -> Completing -> Completed`，以及 `Accepted/Active -> CancelRequested -> Cancelled`、`Accepted/Active -> Failed`、`Accepted/Active -> Expired` 三类异常终态。所有 terminal state 的 cleanup/cancel 都必须幂等。
+5. ownership 冻结为三段：Runtime owns request intent 与 observer lifetime；llm owns session registry entry 与 terminal state；adapter owns provider stream cursor。`IStreamObserver*` 不得被 registry 持久拥有，只能在 active callback 窗口内使用。
+6. backpressure 冻结为 fail-closed：全局 active stream session 有上限，超过上限拒绝新 session；每个 session 的 pending delta buffer 有上限，超过上限关闭该 session 并上报 overflow，不允许无界缓存。
+7. cancel 必须显式通知 adapter transport，并转换到 `CancelRequested` / `Cancelled`；不允许通过 detach thread、析构副作用或 observer 丢失来表达取消。
+8. 首个自动化 guard 是 `StreamSessionLifecycleTest`：它验证 manager 仍 fail-closed，OpenAI-compatible / Ollama / Local adapter 仍只返回 placeholder `StreamSessionRef`。真实 SSE/delta merge/adapter streaming 仍留给后续独立 Build 任务。
+
 ---
 
 ## 8. 实施计划与里程碑

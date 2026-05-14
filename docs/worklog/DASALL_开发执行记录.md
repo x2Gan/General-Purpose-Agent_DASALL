@@ -14754,6 +14754,50 @@
 1. 当前 DryRun / ValidateOnly 仍是 module-local tag 约定；后续若 runtime caller fixture 冻结了更正式的控制面，需要迁移而不是双轨并存。
 2. route hint 目前只做最小分类，不能替代 014 的最终路由裁定；后续如果有 MCP 优先、stale snapshot fallback 等策略，必须在 RouteSelector 中实现。
 
+## 记录 #310
+
+- 日期：2026-05-14
+- 阶段：llm/专项 TODO 阶段 J
+- 任务：LLM-TODO-036 补齐 streaming 生命周期设计并后置实现
+- 状态：已完成
+
+### 任务选择
+
+1. [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 中 036 仍标记为 `Blocked`，阻塞项为 `LLM-BLK-005`：`StreamHandle` / streaming 生命周期未冻结。
+2. 用户本轮要求串行推进 036~037，并明确若存在前置 BLOCK 任务需先完成 BLOCK 解组；因此本轮把 036 的 owner 收敛为“先冻结 cancel / ownership / bounded session / backpressure / cleanup 语义，再用 guard test 证明当前实现继续后置”。
+3. [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 的 7.2、10.1、12.1 已禁止在 shared `StreamHandle` 未成熟前把 streaming 误推进为首轮验收；本轮因此不新增 shared 头文件、不修改 contracts、不声明 stream-ready。
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-TODO-036-streaming生命周期设计并后置实现设计收敛.md](../todos/llm/deliverables/LLM-TODO-036-streaming%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E8%AE%BE%E8%AE%A1%E5%B9%B6%E5%90%8E%E7%BD%AE%E5%AE%9E%E7%8E%B0%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)，固定本地证据、外部参考、Design 结论、Design->Build 映射、Build 三件套与风险回退。
+2. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)，新增 7.2.1，冻结 `Accepted/Active/CancelRequested/Cancelled/Completed/Failed/Expired` 等生命周期语义，以及 Runtime / llm / adapter 三段 ownership。
+3. 新增 [tests/unit/llm/StreamSessionLifecycleTest.cpp](../../tests/unit/llm/StreamSessionLifecycleTest.cpp)，覆盖 manager `stream_generate()` fail-closed 负例，以及 OpenAI-compatible / Ollama / Local adapter placeholder `StreamSessionRef` 正例。
+4. 更新 [tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt) 与 [tests/unit/CMakeLists.txt](../../tests/unit/CMakeLists.txt)，注册 `dasall_stream_session_lifecycle_unit_test` / `StreamSessionLifecycleTest`，并加入 `unit;llm` 标签与 `dasall_unit_tests` 聚合列表。
+5. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)，将 036 标记为 Done，并把 `LLM-BLK-005` 回写为“设计评审已解阻，真实 streaming 实现仍后置”。
+
+### 测试
+
+1. `ListBuildTargets_CMakeTools`：成功返回 CMake build target 列表，供后续定向构建使用。
+2. `Build_CMakeTools(buildTargets=["dasall_stream_session_lifecycle_unit_test"])`：成功，输出 `ninja: no work to do.`。
+3. `ListTests_CMakeTools`：已列出 `StreamSessionLifecycleTest`，说明发现性闭合。
+4. `RunCtest_CMakeTools(tests=["StreamSessionLifecycleTest"])`：通过，1/1 passed。
+5. 追加 `Build_CMakeTools(buildTargets=["dasall_stream_session_lifecycle_unit_test", "dasall_unit_tests"])` 时，新增测试已编译并在 llm 段作为第 92 项通过；聚合目标后续被非 llm 的 `DaemonReadinessCommandTest`、`DaemonCancelCommandTest`、`AccessCancelForwardingTest` 三项既有失败挡住，记为无关 validation blocker，不影响 036 focused gate。
+
+### 结果
+
+1. LLM-TODO-036 已完成：streaming lifecycle 的 cancel、ownership、bounded session、backpressure、cleanup 和 terminal state 语义已经冻结。
+2. 当前实现仍保持后置边界：`LLMManager::stream_generate()` fail-closed，不打开 route execution；adapter skeleton 只返回 placeholder `StreamSessionRef`。
+3. 本轮未新增 shared `StreamHandle`，未修改 `contracts/`，未扩 `LLMRequest` / `LLMResponse`；这为 037 的 shared admission 评审保留了清晰前提。
+
+### 下一步
+
+1. 提交并推送 036 后，继续串行推进 LLM-TODO-037，评审 shared ModelRoute / PromptPolicyDecision / StreamHandle admission。
+
+### 风险
+
+1. 若后续把 036 的 `StreamSessionLifecycleTest` 当成 streaming-ready 证据，会误读本轮结论；它只是后置实现 guard，真实 streaming 仍需要独立 registry、adapter delta transport、observer terminal callback 与 integration smoke。
+2. shared `StreamHandle` 是否进入 contracts 仍未给 Go，本轮只解 `LLM-BLK-005`，不替代 037 的 shared supporting object admission 评审。
+
 ## 记录 #309
 
 - 日期：2026-04-16
