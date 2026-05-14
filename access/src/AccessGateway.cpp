@@ -5,6 +5,30 @@
 
 namespace dasall::access {
 
+namespace {
+
+[[nodiscard]] RuntimeDispatchResult enrich_response_trace_anchors(
+    RuntimeDispatchResult result,
+    const InboundPacket& packet) {
+  if (!result.response_context.contains("request_id") && !packet.packet_id.empty()) {
+    result.response_context["request_id"] = packet.packet_id;
+  }
+
+  if (!result.response_context.contains("session_id") && packet.session_hint.has_value() &&
+      !packet.session_hint->empty()) {
+    result.response_context["session_id"] = *packet.session_hint;
+  }
+
+  if (!result.response_context.contains("trace_id") && packet.trace_id.has_value() &&
+      !packet.trace_id->empty()) {
+    result.response_context["trace_id"] = *packet.trace_id;
+  }
+
+  return result;
+}
+
+}  // namespace
+
 AccessGateway::AccessGateway(SubmitPipeline submit_pipeline,
                              PublishBackend publish_backend,
                              ShutdownObserver shutdown_observer)
@@ -30,11 +54,11 @@ bool AccessGateway::init() {
 RuntimeDispatchResult AccessGateway::submit(const InboundPacket& packet) {
   const auto current = state();
   if (current != AccessGatewayState::Ready) {
-    return make_shutting_down_result();
+    return enrich_response_trace_anchors(make_shutting_down_result(), packet);
   }
 
   InflightGuard guard(this);
-  return run_submit_pipeline(packet);
+  return enrich_response_trace_anchors(run_submit_pipeline(packet), packet);
 }
 
 bool AccessGateway::publish_result(const PublishEnvelope& envelope) {

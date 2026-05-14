@@ -124,6 +124,12 @@ void successful_submit_emits_request_received_and_dispatch_events() {
   assert_equal(std::string("req-028-observability-ok"),
                captured_events[0].fields.at("request_id"),
                "request_received should preserve request_id");
+  assert_equal(std::string("sess-028-observability"),
+               captured_events[0].fields.at("session_id"),
+               "request_received should preserve session_id");
+  assert_equal(std::string("trace-028-observability"),
+               captured_events[0].fields.at("trace_id"),
+               "request_received should preserve trace_id");
   assert_equal(std::string("access.runtime.dispatched"),
                captured_events[1].name,
                "observability integration should emit runtime dispatch second");
@@ -160,6 +166,12 @@ void policy_backend_unavailable_emits_denied_event_and_skips_runtime() {
   assert_equal(std::string("policy_backend_unavailable"),
                *result.error_ref,
                "policy unavailable integration should preserve backend unavailable reason");
+  assert_equal(std::string("req-028-policy-unavailable"),
+               result.response_context.at("request_id"),
+               "policy unavailable integration should preserve request_id on rejected result");
+  assert_equal(std::string("trace-028-observability"),
+               result.response_context.at("trace_id"),
+               "policy unavailable integration should preserve trace_id on rejected result");
   assert_equal(0,
                runtime_call_count,
                "policy unavailable integration should not reach runtime dispatch");
@@ -172,6 +184,60 @@ void policy_backend_unavailable_emits_denied_event_and_skips_runtime() {
   assert_equal(std::string("policy_backend_unavailable"),
                captured_events[1].fields.at("reason_code"),
                "policy denied event should preserve backend unavailable reason");
+  assert_equal(std::string("trace-028-observability"),
+               captured_events[1].fields.at("trace_id"),
+               "policy denied event should preserve trace_id");
+}
+
+void admission_rejection_emits_denied_event_and_skips_runtime() {
+  std::vector<CapturedEvent> captured_events;
+  int runtime_call_count = 0;
+
+  auto options = make_base_options(&captured_events);
+  options.admission_view.max_inflight_requests = 0;
+  options.runtime_dispatch_backend = [&runtime_call_count](const RuntimeDispatchRequest&) {
+    ++runtime_call_count;
+    RuntimeDispatchResult result;
+    result.disposition = AccessDisposition::Completed;
+    return result;
+  };
+
+  auto gateway = dasall::access::create_gateway_access_gateway(std::move(options));
+  assert_true(gateway != nullptr,
+              "admission reject integration should build a concrete gateway");
+  assert_true(gateway->init(),
+              "admission reject integration should initialize the gateway");
+
+  const auto result = gateway->submit(make_packet("req-028-admission-rejected"));
+  assert_equal(static_cast<int>(AccessDisposition::Rejected),
+               static_cast<int>(result.disposition),
+               "admission reject integration should reject before runtime dispatch");
+  assert_true(result.error_ref.has_value(),
+              "admission reject integration should preserve reject reason");
+  assert_equal(std::string("concurrency_limit_exceeded"),
+               *result.error_ref,
+               "admission reject integration should preserve admission reason");
+  assert_equal(std::string("req-028-admission-rejected"),
+               result.response_context.at("request_id"),
+               "admission reject integration should preserve request_id on rejected result");
+  assert_equal(std::string("trace-028-observability"),
+               result.response_context.at("trace_id"),
+               "admission reject integration should preserve trace_id on rejected result");
+  assert_equal(0,
+               runtime_call_count,
+               "admission reject integration should not reach runtime dispatch");
+  assert_equal(2,
+               static_cast<int>(captured_events.size()),
+               "admission reject integration should emit request and admission events");
+  assert_equal(std::string("access.admission.rejected"),
+               captured_events[1].name,
+               "admission reject integration should emit admission event second");
+  assert_equal(std::string("concurrency_limit_exceeded"),
+               captured_events[1].fields.at("reason_code"),
+               "admission event should preserve reject reason");
+  assert_equal(std::string("trace-028-observability"),
+               captured_events[1].fields.at("trace_id"),
+               "admission event should preserve trace_id");
 }
 
 }  // namespace
@@ -180,6 +246,7 @@ int main() {
   try {
     successful_submit_emits_request_received_and_dispatch_events();
     policy_backend_unavailable_emits_denied_event_and_skips_runtime();
+    admission_rejection_emits_denied_event_and_skips_runtime();
   } catch (const std::exception& ex) {
     std::cerr << "[AccessObservabilityMainChainIntegrationTest] FAILED: "
               << ex.what() << '\n';

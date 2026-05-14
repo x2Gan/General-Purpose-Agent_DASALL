@@ -600,7 +600,9 @@ dasall_apply_common_options(dasall_access_observability_main_chain_integration_t
 
 add_test(NAME AccessObservabilityMainChainIntegrationTest
   COMMAND dasall_access_observability_main_chain_integration_test)
-set_tests_properties(AccessObservabilityMainChainIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(AccessObservabilityMainChainIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
 
 add_test(NAME AccessPolicyBackendUnavailableIntegrationTest
   COMMAND dasall_access_observability_main_chain_integration_test)
@@ -610,6 +612,28 @@ set_tests_properties(AccessPolicyBackendUnavailableIntegrationTest PROPERTIES
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_observability_main_chain_integration_test
+)
+
+add_executable(dasall_access_reject_trace_anchor_integration_test
+  AccessRejectTraceAnchorTest.cpp
+)
+
+target_link_libraries(dasall_access_reject_trace_anchor_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_reject_trace_anchor_integration_test)
+
+add_test(NAME AccessRejectTraceAnchorTest
+  COMMAND dasall_access_reject_trace_anchor_integration_test)
+set_tests_properties(AccessRejectTraceAnchorTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_reject_trace_anchor_integration_test
 )
 
 add_executable(dasall_access_publish_failure_audit_integration_test

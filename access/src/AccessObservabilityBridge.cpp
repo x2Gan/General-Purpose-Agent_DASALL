@@ -79,6 +79,21 @@ bool AccessObservabilityBridge::emit_policy_denied(
   return emit_event(std::move(event));
 }
 
+bool AccessObservabilityBridge::emit_admission_rejected(
+    const RuntimeDispatchRequest& request,
+    const std::string_view reason_code) const {
+  AccessObservabilityEvent event;
+  event.name = "access.admission.rejected";
+  event.fields["request_id"] = context_or_default(request, "request_id", request.packet.packet_id);
+  event.fields["session_id"] = context_or_default(request, "session_id", "");
+  event.fields["trace_id"] = context_or_default(request, "trace_id", "");
+  event.fields["entry_type"] = request.packet.entry_type;
+  event.fields["protocol_kind"] = request.packet.protocol_kind;
+  event.fields["actor_ref"] = request.subject_identity.actor_ref;
+  event.fields["reason_code"] = std::string(reason_code);
+  return emit_event(std::move(event));
+}
+
 bool AccessObservabilityBridge::emit_dispatch_result(
     const RuntimeDispatchRequest& request,
     const RuntimeDispatchResult& result,

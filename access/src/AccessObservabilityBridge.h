@@ -41,6 +41,10 @@ class AccessObservabilityBridge final {
       const RuntimeDispatchRequest& request,
       std::string_view reason_code) const;
 
+  [[nodiscard]] bool emit_admission_rejected(
+      const RuntimeDispatchRequest& request,
+      std::string_view reason_code) const;
+
   [[nodiscard]] bool emit_dispatch_result(
       const RuntimeDispatchRequest& request,
       const RuntimeDispatchResult& result,

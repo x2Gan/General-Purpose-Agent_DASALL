@@ -103,6 +103,12 @@ void publish_failure_emits_audit_event_without_masking_main_result() {
   assert_equal(std::string("runtime_rejected_for_publish_audit"),
                *result.error_ref,
                "publish failure audit integration should not mask the runtime reject reason");
+  assert_equal(std::string("req-028-publish-failure"),
+               result.response_context.at("request_id"),
+               "publish failure audit integration should preserve request_id on rejected result");
+  assert_equal(std::string("trace-028-publish-failure"),
+               result.response_context.at("trace_id"),
+               "publish failure audit integration should preserve trace_id on rejected result");
   assert_equal(3,
                static_cast<int>(captured_events.size()),
                "publish failure audit integration should emit request, dispatch, and publish_failed events");

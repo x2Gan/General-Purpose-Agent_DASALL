@@ -84,6 +84,22 @@ template <typename PipelineOptions>
   return result;
 }
 
+[[nodiscard]] std::string_view packet_session_hint_or_empty(const InboundPacket& packet) {
+  if (!packet.session_hint.has_value() || packet.session_hint->empty()) {
+    return {};
+  }
+
+  return *packet.session_hint;
+}
+
+[[nodiscard]] std::string_view packet_trace_id_or_empty(const InboundPacket& packet) {
+  if (!packet.trace_id.has_value() || packet.trace_id->empty()) {
+    return {};
+  }
+
+  return *packet.trace_id;
+}
+
 [[nodiscard]] RuntimeDispatchResult make_replay_result(
     const std::optional<std::string>& replay_receipt_ref) {
   RuntimeDispatchResult result;
@@ -1033,8 +1049,8 @@ build_daemon_submit_pipeline(
             (void)observability_bridge->emit_daemon_request_fact(
                 packet,
                 packet.packet_id,
-                std::string_view{},
-                std::string_view{},
+              packet_session_hint_or_empty(packet),
+              packet_trace_id_or_empty(packet),
                 "READY",
                 packet.peer_ref);
 
@@ -1128,7 +1144,7 @@ build_daemon_submit_pipeline(
                   *auth_outcome.failure_reason == "authentication_failed") {
                 (void)observability_bridge->emit_peer_identity_denied(
                     packet.packet_id,
-                    std::string_view{},
+                  packet_trace_id_or_empty(packet),
                     "NOT_READY",
                     packet.peer_ref);
               }
@@ -1391,8 +1407,8 @@ build_gateway_submit_pipeline(
         (void)observability_bridge->emit_request_received(
             packet,
             packet.packet_id,
-            std::string_view{},
-            std::string_view{},
+          packet_session_hint_or_empty(packet),
+          packet_trace_id_or_empty(packet),
             packet.peer_ref.empty()
                 ? std::nullopt
                 : std::optional<std::string_view>(packet.peer_ref));
@@ -1416,7 +1432,7 @@ build_gateway_submit_pipeline(
             (void)observability_bridge->emit_auth_failed(
                 packet,
                 packet.packet_id,
-                std::string_view{},
+              packet_trace_id_or_empty(packet),
                 *auth_outcome.failure_reason,
                 packet.peer_ref.empty()
                     ? std::nullopt
@@ -1503,6 +1519,10 @@ build_gateway_submit_pipeline(
               admission_result.conflict_hit
                   ? AccessErrorCode::IdempotencyConflict
                   : AccessErrorCode::AdmissionRejected;
+            (void)observability_bridge->emit_admission_rejected(
+              runtime_request,
+              admission_result.reject_reason.value_or(
+                std::string("admission_rejected")));
           return make_rejected_result(
               admission_error_code,
               admission_result.reject_reason.value_or(
@@ -1605,6 +1625,13 @@ std::shared_ptr<IAccessGateway> create_gateway_access_gateway(
   if (pipeline != nullptr) {
     gateway_options.submit_pipeline = *pipeline;
   }
+  gateway_options.shutdown_observer =
+      [observability_bridge](std::size_t abandoned_requests) {
+        (void)observability_bridge->emit_shutdown_abandoned(
+            "DRAINING",
+            "gateway-access-gateway",
+            static_cast<std::uint32_t>(abandoned_requests));
+      };
   return create_access_gateway(std::move(gateway_options));
 }
 

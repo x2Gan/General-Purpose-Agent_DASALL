@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #643
+
+- 日期：2026-05-14
+- 阶段：access/observability-main-chain-wiring
+- 任务：ACC-TODO-048 将 AccessObservabilityBridge 接入主链与基础设施 sink
+- 状态：已完成
+
+### 改动
+
+1. 调整 `access/src/AccessGateway.cpp`：在 `submit()` 返回前统一补齐 reject/result 的 `request_id/session_id/trace_id` anchors，避免 auth/policy/admission/runtime/shutdown 拒绝路径变成不可追踪黑洞。
+2. 调整 `access/src/AccessObservabilityBridge.h/.cpp` 与 `access/src/AccessGatewayFactory.cpp`：新增 `emit_admission_rejected(...)`，并让 gateway/daemon request/auth 路径使用真实 session/trace 字段；gateway 组合根补上 `shutdown_observer`，与 daemon 一样发出 `shutdown_abandoned` 事件。
+3. 调整 `tests/integration/access/AccessObservabilityMainChainIntegrationTest.cpp`、`AccessPublishFailureAuditTest.cpp`，并新增 `AccessRejectTraceAnchorTest.cpp`：覆盖 success/policy/admission 主链事件、sink failure non-blocking、reject result anchors，以及 runtime rejected + publish failed 审计锚点。
+4. 调整 `tests/integration/access/CMakeLists.txt` 与 `tests/CMakeLists.txt`：把 `AccessObservabilityMainChainIntegrationTest`、`AccessRejectTraceAnchorTest` 纳入 `gate-int-08 / access-v1-production-gate`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_observability_main_chain_integration_test","dasall_access_reject_trace_anchor_integration_test","dasall_access_publish_failure_audit_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["AccessObservabilityMainChainIntegrationTest","AccessRejectTraceAnchorTest","AccessPublishFailureAuditTest"])`
+   - 结果：通过，3/3 passed。
+3. `RunCtest_CMakeTools(tests=["AccessPolicyBackendUnavailableIntegrationTest"])`
+   - 结果：通过，1/1 passed。
+
+### 结果
+
+1. `ACC-TODO-048` 已完成：request/auth/policy/admission/runtime/publish/shutdown 的 focused observability 证据已从对象单测推进到真实主链路径。
+2. reject result 现在统一携带 `request_id/trace_id` anchors，observability backend 返回 `false` 也不会改变业务裁定。
+3. `ACC-BLK-010` 已进一步收紧到 051 的 release polish / multi-instance authoritative sync 风险，不再把 048 写成未完成 blocker。
+
+### 下一步
+
+1. 进入 `ACC-TODO-051`，收敛 P2 工程硬化项、gateway registry decode/encode 路径、shutdown audit release polish 与 multi-instance sync 风险口径。
+2. 048 的 focused gate 结论不要外推为全部 release-ready；更广 shutdown audit、ID generator 与 include boundary 仍由 051 收口。
+
 ## 记录 #642
 
 - 日期：2026-05-14

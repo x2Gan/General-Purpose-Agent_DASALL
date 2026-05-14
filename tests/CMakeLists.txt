@@ -68,7 +68,9 @@ set(DASALL_GATE_INT_08_TEST_NAMES
   HttpGatewaySubmitIntegrationTest
   AccessGatewayPipelineIntegrationTest
   AccessAsyncReceiptQueryCancelIntegrationTest
+  AccessObservabilityMainChainIntegrationTest
   AccessPolicyBackendUnavailableIntegrationTest
+  AccessRejectTraceAnchorTest
   AccessPublishFailureAuditTest
   AccessHealthReadinessIntegrationTest
   AccessProfileCompatibilityTest
