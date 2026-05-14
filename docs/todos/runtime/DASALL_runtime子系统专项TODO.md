@@ -1,6 +1,6 @@
 # DASALL runtime 子系统专项 TODO
 
-最近更新时间：2026-04-22
+最近更新时间：2026-05-14
 阶段：Detailed Design -> Special TODO
 适用范围：runtime/
 当前结论：runtime 详设已具备执行基线，但原专项 TODO 在 gate 分层、checkpoint replay、health/maintenance、smoke 证据语义上仍存在执行硬度缺口。本轮补强后将计划收敛为 31 项任务、12 道质量门，并显式区分 runtime-local fixture gate 与 true cross-module integration gate。
@@ -37,6 +37,12 @@
 26. docs/todos/tools/DASALL_tools子系统专项TODO.md
 27. docs/todos/services/DASALL_capability_services子系统专项TODO.md
 28. docs/worklog/DASALL_开发执行记录.md
+29. apps/runtime_support/include/RuntimeLiveDependencyComposition.h
+30. apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp
+31. apps/daemon/src/main.cpp
+32. apps/gateway/src/main.cpp
+33. tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp
+34. tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp
 
 行业补强参照：
 
@@ -117,13 +123,20 @@
 | runtime/CMakeLists.txt | 编译 `src/AgentFacade.cpp`，并将 `dasall_profiles` 作为 PUBLIC 依赖 | runtime 已退出 placeholder-only，且 public 头可继承 profile usage requirements |
 | runtime/src/placeholder.cpp | 仍保留历史占位文件，但已退出 `dasall_runtime` 构建图 | placeholder 不再作为 runtime 有效实现证据 |
 | runtime/include | 已存在 `IAgent.h`、`AgentTypes.h`、`AgentFacade.h` | 公共 ABI 和 AgentFacade supporting types 已有稳定挂载点 |
-| tests/unit/runtime/CMakeLists.txt | 只注册 `dasall_runtime_smoke_test` | runtime unit 拓扑尚未组件化 |
+| tests/unit/runtime/CMakeLists.txt | 已注册 component unit tests 与 smoke | runtime unit 拓扑已组件化；旧 smoke 不再代表主链 ready |
 | tests/unit/runtime/RuntimeSmokeTest.cpp | 只串联 mock，不经过真实 control-plane | 不能作为 runtime 主控闭环证据 |
-| tests/integration/CMakeLists.txt | 未接入 runtime / agent_loop | runtime integration discoverability 为空 |
+| tests/integration/CMakeLists.txt | 已接入 runtime / agent_loop，以及 access 侧 live composition focused tests | runtime integration discoverability 已存在；当前问题转为 gate 分层与证据边界 |
 | tests/CMakeLists.txt | 已有 unit/contract/integration 聚合目标 | runtime 可以直接复用现有测试聚合 |
 | RuntimePolicySnapshot.h | 已有 runtime_budget、timeout、degrade、execution、ops 等策略域 | runtime 可直接消费现有 profile projection |
 | ILLMManager.h | 已有 `init/generate/stream_generate/health_check` | llm 依赖面明确 |
 | Checkpoint.h + contracts deliverables | `Checkpoint`、`RuntimeBudget`、`ReflectionDecision`、`RecoveryRequest`、`RecoveryOutcome` 等字段已冻结 | checkpoint/recovery/budget 相关任务有可靠真值 |
+
+### 3.3 app-level live composition 补充评估
+
+1. `apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 已把 daemon / gateway 的 runtime production composition 收敛为共享 helper；调用点固定在 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp`，owner ambiguity 已消除。
+2. 该 helper 的职责是消费 `RuntimePolicySnapshot`、installed layout 与测试 override，装配 `RuntimeDependencySet` 所需的 memory、llm、cognition、response、tools、multi_agent required baseline，并以 knowledge 作为 optional degrade-ready 端口；它不是第二个 orchestrator、scheduler 或 recovery owner。
+3. `DaemonRuntimeLiveDependencyCompositionTest`、`GatewayRuntimeLiveDependencyCompositionTest` 与 multi-agent focused tests 已证明该 helper 是共享的 app-level composition root；这些结果只能证明 live baseline 已落盘，不能外推为 services backend、observability sinks、installed knowledge assets、durable session/checkpoint 全部 production-ready。
+4. 因此 runtime 当前与 `apps/runtime_support` 相关的主要风险已从“谁来装配 `RuntimeDependencySet`”转为“装配后的 downstream completeness 与证据分层是否闭合”，后续任务应继续聚焦 services、observability、durable state 与 installed/qemu/release evidence。
 
 ## 4. 粒度可行性评估
 
@@ -133,6 +146,7 @@
 2. 可安全做到 L2 的对象：`ICheckpointManager`、`IRecoveryManager`、`ISessionManager`、`IScheduler`、`AgentFacade`、`AgentOrchestrator`、`SessionManager`、`Scheduler`、`SafeModeController`、`RuntimeHealthProbe`、`RuntimeProfileCompatibilityTest` 对应的 fixture 组合层。
 3. 只能停在 L1 的对象：`RuntimeTelemetryBridge`、`RuntimeEventBus`、`BackgroundMaintenanceHooks`、`RuntimeDependencySet` 私有 helper 细节。
 4. 仍需单独跟踪的对象：更宽范围的 true-port session persist round-trip 与 dependency unavailable live route；但 unary true integration 已由 027 的最小 public seam + live wiring 路径解阻，不再属于当前 blocked 项。
+5. `apps/runtime_support::compose_minimal_live_dependency_set()` 当前可按 L2 app-level composition root 处理：owner 与职责已经稳定，剩余缺口在 downstream production completeness，而不是 helper 本身是否应该存在。
 
 ### 4.2 评估表
 
@@ -146,6 +160,7 @@
 | `ISessionManager` / `AgentFacade` / `AgentOrchestrator` | 6.24.3、6.24.4、6.24.5 | L2 | 先补 supporting types 和 seam，再推进 |
 | `IScheduler` / `SchedulerTicket` | 6.14.4、6.24.10 | L2 | 接口与策略明确，可先公共面后实现 |
 | `RuntimeTelemetryBridge` / `RuntimeEventBus` / `RuntimeHealthProbe` / `BackgroundMaintenanceHooks` / `RuntimeDependencySet` | 6.12、6.18、6.23、6.24.12 | L1/L2 | Telemetry、EventBus、maintenance 保持轻量，health probe 可独立收敛并测试 |
+| `apps/runtime_support::compose_minimal_live_dependency_set` | 6.24.12.3、8.3 | L2 | app-level composition owner 已固定，适合用 focused composition tests 维持 owner / fail-closed / evidence 边界 |
 | `RuntimeUnaryFixtureIntegration` | 7、8.3、9.4 | L2 | 先做 topology/fixture/stub，作为 runtime-local gate |
 | `RuntimeUnaryIntegration` | 7、8.3、9.4 | L2 | 027 已以最小 cognition seam + runtime live wiring 通过 true unary integration gate |
 
@@ -154,6 +169,7 @@
 | Design 项 | 设计锚点 | 对应任务 | 说明 |
 |---|---|---|---|
 | supporting types、port seam、runtime-local fixture matrix、测试拓扑缺口 | 6.24.3、6.24.5、6.24.12、8.3 | RT-TODO-001 ~ 004 | 先消除证据缺口，再允许 Build-ready 任务进入执行 |
+| app-level live composition owner 与受控 wiring | 6.24.12.3、8.3 | RT-TODO-026、027、031 | 用 daemon / gateway shared helper 与 focused composition tests 固定 owner、fail-closed 语义和证据边界 |
 | runtime include 根、`IAgent`、control-plane surface smoke | 7、8.1、8.2 J0 | RT-TODO-005、025 | 先把 runtime 从 placeholder-only 变成可承载公共 ABI 且具备正确 smoke 语义的模块 |
 | error/cancel、fsm、budget、checkpoint/recovery、session、scheduler 接口面 | 6.6、6.10、6.15、6.16、6.20、6.24 | RT-TODO-006 ~ 011 | 把显式接口和 supporting types 落到 runtime/include |
 | CheckpointStateMapper、TransitionGuardTable | 6.5.1、6.7.4 | RT-TODO-012、013 | 规则表单独可测 |

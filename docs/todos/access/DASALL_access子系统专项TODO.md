@@ -1,6 +1,6 @@
 # DASALL Access 子系统专项 TODO
 
-最近更新时间：2026-05-06
+最近更新时间：2026-05-14
 阶段：Detailed Design -> Special TODO
 适用范围：access/、apps/cli、apps/daemon、apps/gateway、apps/simulator、tests/unit/access、tests/integration/access
 当前结论：Access 子系统的架构方向与 `access/ + apps/*` 双层工程落点正确；2026-04-24 交付评审给出的 Design Direction Ready / Implementation Not Ready / Release Gate Not Closed 仍保留为历史基线。自 2026-05-06 起，Access v1 unary focused ingress 已通过 `Gate-INT-08` 固化为当前 build 可执行证据，覆盖 CLI->daemon、HTTP->gateway、async receipt、policy backend unavailable、health readiness、profile/contracts guard；后续不得再把 mock pipeline、ping liveness 或局部 envelope 字段写成 release 证据，且更广 release 结论仍需继续受 051 等残余风险约束。
@@ -23,7 +23,7 @@
 12. `docs/todos/contracts/deliverables/WP03-T002-AgentRequest语义说明.md`
 13. `docs/todos/contracts/deliverables/WP03-T014-AgentResult语义说明.md`
 14. 现有专项 TODO 基线：`docs/todos/runtime/DASALL_runtime子系统专项TODO.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/llm/DASALL_llm子系统专项TODO.md`、`docs/todos/services/DASALL_capability_services子系统专项TODO.md`
-15. 当前代码与构建现状：`access/CMakeLists.txt`、`access/include/AccessTypes.h`、`access/include/IAccessGateway.h`、`access/include/IAccessRuntimeBridge.h`、`access/include/IProtocolAdapter.h`、`access/src/placeholder.cpp`、`apps/cli/CMakeLists.txt`、`apps/cli/src/main.cpp`、`apps/gateway/CMakeLists.txt`、`apps/gateway/src/main.cpp`、`tests/CMakeLists.txt`、`tests/unit/CMakeLists.txt`、`tests/integration/CMakeLists.txt`
+15. 当前代码与构建现状：`access/CMakeLists.txt`、`access/include/AccessTypes.h`、`access/include/IAccessGateway.h`、`access/include/IAccessRuntimeBridge.h`、`access/include/IProtocolAdapter.h`、`apps/runtime_support/include/RuntimeLiveDependencyComposition.h`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、`apps/cli/CMakeLists.txt`、`apps/cli/src/main.cpp`、`apps/daemon/CMakeLists.txt`、`apps/daemon/src/main.cpp`、`apps/gateway/CMakeLists.txt`、`apps/gateway/src/main.cpp`、`tests/CMakeLists.txt`、`tests/unit/CMakeLists.txt`、`tests/integration/CMakeLists.txt`
 16. 交付评审输入：`docs/todos/access/DASALL_Access子系统交付评审报告.md`，评审结论为 P0/P1/P2 分级整改，重点是“类已存在，主链未装配”。
 
 行业补强参照采用 Access 详设已内化的参考基线，不额外改写边界：
@@ -93,22 +93,29 @@
 | ACC-TC015 | Access 详设 6.11、6.20 | Must | `AccessBootstrapConfig` 只表达启动事实，运行治理优先复用既有 runtime/profile/infra 快照视图 | AccessConfigAdapter 需单列，禁止新增第二套策略体系 |
 | ACC-TC016 | Access 详设 6.14.9、10.3、11 | Must | 在 shared streaming lifecycle 未冻结前，stream/WS/MQTT 只能做边界占位和 feature-flag gate，不得宣称首版 ready | StreamGateway、WS/MQTT 只允许 Blocked/延后任务 |
 | ACC-TC017 | Access 详设 6.14.8、8.3；CLI/daemon 本地控制面详设 1.2、5.1 | Should | 首版应先交付 CLI 独立进程 + daemon 常驻服务的 unary + accepted_async 本地控制面主链；HTTP/gateway 在 transport 冻结后并行推进 | 执行顺序应优先 CLI/daemon 本地链路，再推进 HTTP/gateway 与 simulator |
-| ACC-TC018 | 当前代码现状 + Access 详设 3.1 | Must | 当前 `access/include` 仅有最小 surface，`access/src` 仍是 `placeholder.cpp`，`apps/cli` / `apps/gateway` 仍是 placeholder main，`tests/unit/access` 和 `tests/integration/access` 不存在 | 必须显式承认 implementation not ready，先补骨架、测试拓扑和 surface 再进入主链实现 |
+| ACC-TC018 | 当前代码现状 + Access 详设 3.1 | Must | 当前 Access focused unary/async/health baseline 已落盘，daemon / gateway 的 runtime live composition 已收敛到 `apps/runtime_support` 共享 helper | 后续任务不得再以 placeholder main、空 runtime composition 或缺 tests 作为现状假设，重点转向 production completeness、evidence 分层与 streaming deferral |
 
 ### 3.2 当前代码与测试现状证据
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| `access/CMakeLists.txt` | 已定义 `dasall_access`，但只编译 `src/placeholder.cpp`；PUBLIC 仅导出 `include/`，依赖 `dasall_contracts` 和 `dasall_infra` | Access 已有独立模块根，但实现仍停留在占位库 |
+| `access/CMakeLists.txt` | 已定义 `dasall_access` 并承载当前 Access 主实现路径；placeholder 不再代表现行基线 | Access 已有独立模块根，当前剩余问题转为 production completeness、installed/release 证据与 streaming deferral |
 | `access/include/AccessTypes.h` | 当前仅定义 `AccessDisposition`、`InboundPacket`、最小 `RuntimeDispatchRequest`、最小 `PublishEnvelope`、最小 `RuntimeDispatchResult` | 支撑类型与详设 6.7 存在明显缺口，尚未收敛到 detail design surface |
 | `access/include/IAccessGateway.h` | 当前只有 `init()`、`submit()`、`publish_result()` | 缺少 `shutdown()`、`state()`、`is_ready()`，尚不满足 lifecycle gate |
 | `access/include/IAccessRuntimeBridge.h` | 当前只有 `dispatch()` | 缺少 `cancel()` 和 async disposition surface |
 | `access/include/IProtocolAdapter.h` | 已有 `can_handle()/decode()/encode()` | 协议 adapter 公共形状存在，可直接延展到 CLI/HTTP/daemon/simulator |
-| `apps/cli/CMakeLists.txt`、`apps/gateway/CMakeLists.txt` | `dasall-cli`、`dasall_gateway` 已链接 `dasall_access`、`dasall_runtime`、`dasall_contracts`、`dasall_infra` | entry executable 壳层目标存在，适合接入组合根 |
-| `apps/cli/src/main.cpp`、`apps/gateway/src/main.cpp` | 仅输出 placeholder 文本 | 入口壳层尚未接 access 主链 |
-| `tests/unit/CMakeLists.txt` | 已接入 runtime / cognition / llm / tools / memory / knowledge / infra / platform / profiles / services，没有 `access` | Access unit discoverability 缺失 |
-| `tests/integration/CMakeLists.txt` | 已接入 runtime / infra / profiles / platform / services / tools / memory / knowledge / llm，没有 `access` | Access integration discoverability 缺失 |
-| `tests/unit/`、`tests/integration/` 目录 | 当前均无 `access/` 子目录 | 不能宣称 Access 拥有模块级质量门 |
+| `apps/cli/CMakeLists.txt`、`apps/daemon/CMakeLists.txt`、`apps/gateway/CMakeLists.txt` | `dasall-cli`、`dasall-daemon`、`dasall_gateway` 已作为 entry executable 壳层目标接入 access/runtime 相关依赖 | entry executable 壳层目标已落盘，当前问题转为主链 completeness 与证据边界 |
+| `apps/cli/src/main.cpp`、`apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp` | 已分别承载 CLI 本地控制面客户端、daemon entry bootstrap、gateway HTTP entry；daemon/gateway 会调用 `apps/runtime_support` | 入口壳层已不再是 placeholder，Access entry 不承担 runtime DI owner |
+| `apps/runtime_support/include/RuntimeLiveDependencyComposition.h`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` | 已存在共享 app-level runtime 组合根 | daemon/gateway 共用同一 `RuntimeDependencySet` 组合 helper，避免在 access entry 重复拼接 runtime internals |
+| `tests/unit/CMakeLists.txt` | 已接入 access | Access unit discoverability 已落盘 |
+| `tests/integration/CMakeLists.txt` | 已接入 access | Access integration discoverability 已落盘 |
+| `tests/unit/access/`、`tests/integration/access/` 目录 | 已存在 focused tests 与 Gate 目标 | Access 已具模块级质量门，但 focused build-tree 证据不得自动外推 installed/qemu/release ready |
+
+### 3.3 daemon/gateway 与 runtime_support 边界补充评估
+
+1. `apps/runtime_support::compose_minimal_live_dependency_set()` 是 runtime/app 层的共享 helper，不是 Access core；daemon / gateway 可以复用它装配 `RuntimeDependencySet`，但 Access 仍只负责协议适配、Admission、归一化、dispatch 与 publish。
+2. 该 helper 解决的是 app binary 的 runtime dependency owner 问题，而不是 Access pipeline 问题；因此 Access 的质量判断不能仅凭 helper 存在与否，而必须继续看 `AccessGateway` production pipeline、`RuntimeBridge` handoff、observability 与 receipt safety gates。
+3. 反过来，Access 也不应在 `apps/daemon` / `apps/gateway` 内重新拼装 cognition、llm、memory、tools、services 等 runtime internals；一旦这类 wiring 回流到 Access entry，应视为越权依赖回归。
 
 ## 4. 粒度可行性评估
 
@@ -119,8 +126,11 @@
 3. 可安全落到 L2 的对象：`ProtocolAdapterRegistry`、`SubjectResolver`、`AuthenticatorChain`、`AccessPolicyGate`、`AdmissionController`、`RequestValidator`、`RequestNormalizer`、`RuntimeBridge`、`ResultPublisher`、`AsyncTaskRegistry`、`ResultReplayCache`、`AccessConfigAdapter`、`AccessObservabilityBridge`、CLI/HTTP/daemon/simulator adapters。
 4. 只能停在 L1 或 Blocked 的对象：`StreamGateway`、WebSocket/MQTT adapters、`diagnostics.pull` artifact transport、`runtime_override` 受控 patch schema。
 5. 结论：本专项 TODO 可以直接进入执行，但必须先完成 001/002/004/006~012 这一组解阻与接口骨架任务；003/005 属于外部协同阻塞，不得被伪装成 Build-ready 完成项。
+6. `apps/runtime_support` 的存在把 daemon / gateway 的 runtime DI owner 固定在 app/runtime 边界，有利于保持 Access -> Runtime 单向 handoff；后续风险不再是“谁来装 runtime”，而是 Access production pipeline 与 runtime downstream completeness 各自是否被正确验证。
 
-### 4.2 可落盘对象提取表
+### 4.2 可落盘对象提取表（保留初始拆解基线）
+
+下表保留专项 TODO 初次编排时的对象盘点和拆解粒度，不作为 2026-05-14 当前完成度声明；当前 focused baseline 以 §3.2、§3.3、§6、§7 的 Gate 与任务状态为准。
 
 | 类别 | 可落盘对象 | 设计锚点 | 建议落位 | 当前状态 |
 |---|---|---|---|---|

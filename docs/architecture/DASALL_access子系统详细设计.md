@@ -42,6 +42,7 @@ Access 子系统不是：
 | 上游入口 | CLI、daemon、gateway、simulator、上位机、远程客户端、诊断入口、定时触发 | Access 统一承接入口协议事实，不要求上游理解 Runtime 或 contracts 对象 |
 | 直接下游消费者 | runtime | Runtime 只接收归一化请求与 access sidecar 上下文，不承担入口协议解析、认证鉴权和发布协议 |
 | 同层工程单元 | `access/include`、`access/src`、`apps/cli`、`apps/daemon`、`apps/gateway`、`apps/simulator` | `access/` 承载共享 core；`apps/*` 继续是可执行入口壳层，避免在四个入口重复实现 Admission 与 Publish 主链 |
+| app-level runtime 组合根 | `apps/runtime_support` | daemon / gateway 可复用共享 helper 装配 `RuntimeDependencySet`；该 helper 归 runtime/app composition 边界，不属于 access core，也不改变 Access 只向 Runtime 交付归一化请求的责任 |
 | 下游基础依赖 | contracts、infra、platform、profiles | contracts 提供 `AgentRequest`/`AgentResult`/`ErrorInfo` 等稳定语义；infra 提供 secret/policy/logging/audit/config；platform 提供网络/IPC/串口等传输事实；profiles 提供运行治理快照 |
 | 同层禁止依赖 | cognition、llm、tools、memory、knowledge、services 实现细节 | Access 只把请求交给 Runtime，不直接感知推理、工具、记忆、知识、服务执行内部机制 |
 | 通道 owner 边界 | Access Channel 归 access；Service Channel 归 services/platform；Field Channel 归 platform/HAL；LLM Channel 归 llm | Access 不承接内部 RPC/IPC、现场总线或模型 provider 协议 |
@@ -70,16 +71,17 @@ Access 子系统不是：
 当前仓库已经给出以下真实信号：
 
 1. `apps/CMakeLists.txt` 已存在 `cli/`、`daemon/`、`gateway/`、`simulator/` 四个入口子目录，且仍保持“入口可执行壳层”定位。
-2. `apps/cli/src/main.cpp`、`apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp`、`apps/simulator/src/main.cpp` 均仅输出 placeholder 文本，说明入口可执行骨架存在，但 access 主链尚未落地。
-3. 仓库已建立独立 `access/` 顶层目录、`access/include`、`access/src` 与 `dasall_access` 静态库骨架，说明方案3的工程根已经落盘；但当前仍只有最小占位实现，核心 Admission、Runtime bridge、Publish/Replay 与测试门尚未落地。
+2. `apps/cli/src/main.cpp` 已作为本地控制面客户端入口；`apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp` 已承载 access entry bootstrap，并通过 `apps/runtime_support` 共享 helper 组装 runtime live dependency set；`apps/simulator/src/main.cpp` 维持确定性刺激入口。
+3. 仓库中的 `access/` 顶层目录、`access/include`、`access/src` 与 `dasall_access` 静态库已不再只是最小占位骨架；Admission、Runtime bridge、Publish/Replay/Observability 与 focused unary/async/health tests 已落盘，但更广 installed/qemu/release 证据仍需独立门禁。
 4. `contracts/include/agent/AgentRequest.h` 与 `contracts/include/agent/AgentResult.h` 已冻结请求/结果边界，且 `tests/contract/agent/AgentRequestContractTest.cpp` 等 contract 测试已建立自动化门禁。
 5. 仓库存在 `contracts/include/boundary/IdentityMetadata.h`，但其冻结的是 `request_id/session_id/trace_id/task_id/lease_id` 横切标识，不是 access 入口主体身份契约。
-6. `tests/unit/access/`、`tests/integration/access/`、`tests/contract/access/` 当前均不存在，说明 access 子系统尚未建立模块级质量门。
+6. `tests/unit/access/` 与 `tests/integration/access/` 已建立模块级质量门，能够给出 CLI/daemon、HTTP/gateway、async/health/observability 的 focused build-tree 证据；这些证据不能自动外推 installed-package / qemu / release ready。
 
 基于这些信号，当前结论必须明确写成：
 
 1. architecture ready：Access Channel owner、入口职责、与 Runtime 的边界、AgentRequest/AgentResult 主链位置已经明确。
-2. implementation not ready：虽然 `access/` 顶层骨架已建立，但 access core 的核心组件、协议适配器、认证授权链、Runtime bridge、发布链和测试门禁均未落地。
+2. app/runtime composition baseline ready：daemon / gateway 不再依赖 placeholder main 或空 runtime composition，`apps/runtime_support` 已把 app-level runtime dependency owner 收敛为共享 helper。
+3. release gate not closed：Access readiness 仍需以 Admission、RuntimeBridge、Publish/Receipt、observability 与独立 installed 证据为准，不能因 `apps/runtime_support` 已落盘就外推整条 access 主链完全就绪。
 
 ---
 
@@ -145,7 +147,8 @@ Must-Not：
 |---|---|---|---|
 | apps 构建入口 | 已存在 | `apps/CMakeLists.txt` | 入口目录已接入总工程，但仅负责 add_subdirectory |
 | 四个入口可执行 | 已存在 | `apps/*/CMakeLists.txt` | `dasall-cli`、`dasall-daemon`、`dasall_gateway`、`dasall_simulator` 目标已存在 |
-| 入口源码 | 占位 | `apps/*/src/main.cpp` | 当前 main 仅输出 placeholder，没有任何 access 主链逻辑 |
+| 入口源码 | 已落盘 | `apps/*/src/main.cpp` | CLI / daemon / gateway / simulator 均已有非 placeholder entry bootstrap；daemon/gateway 会在 app 层调用 `apps/runtime_support` 共享 helper |
+| app-level runtime composition helper | 已存在 | `apps/runtime_support/include/RuntimeLiveDependencyComposition.h`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` | daemon/gateway 共用 runtime dependency composition root，Access entry 不承担 runtime DI owner |
 | 共享 access core | 骨架已建立 | 仓库已有 `access/include`、`access/src` 与 `dasall_access` 静态库目标 | Access 已形成独立子系统工程根，但核心接口与实现仍未收敛 |
 | 协议适配器 | 缺失 | 仓库无 `ProtocolAdapter`、`InboundPacket` 相关头/源文件 | 入口协议事实尚未统一 |
 | 主体识别与认证 | 缺失 | 仓库无 access auth/policy 代码 | 认证鉴权仅存在于架构文档概念层 |
@@ -154,10 +157,12 @@ Must-Not：
 | 异步回执/结果轮询 | 缺失 | 无 receipt/query task 代码或测试 | 架构要求的同步/异步双路径未落地 |
 | shared 请求/结果契约 | 已冻结 | `contracts/include/agent/AgentRequest.h`、`AgentResult.h` | Access 主链输入输出稳定面具备 |
 | shared 身份元数据 | 部分具备 | `contracts/include/boundary/IdentityMetadata.h` | 只有横切标识，没有入口主体身份对象 |
-| Access 单元测试 | 缺失 | 无 `tests/unit/access` | 无模块级单测 |
-| Access 集成测试 | 缺失 | 无 `tests/integration/access` | 无核心链路 smoke |
+| Access 单元测试 | 已建立 focused 质量门 | `tests/unit/access` | Access 模块级单测已存在，但结果只证明 build-tree focused path |
+| Access 集成测试 | 已建立 focused Gate | `tests/integration/access` | CLI/daemon、HTTP/gateway、async/health/observability 已可自动发现，但不等于 installed/qemu ready |
 
-### 3.2 现状-目标差距表
+### 3.2 现状-目标差距表（保留设计冻结时的初始 gap taxonomy）
+
+以下表述保留方案形成阶段识别的目标差距分类，不直接等同于 2026-05-14 的当前完成度；daemon / gateway 的 `apps/runtime_support` 基线、focused tests 与当前 Gate 口径以 §1.4、§3.1 以及专项 TODO 最新状态为准。
 
 | 目标能力 | 当前状态 | 关键差距 | 风险等级 | 优先级 |
 |---|---|---|---|---|

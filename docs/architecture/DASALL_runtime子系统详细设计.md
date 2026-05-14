@@ -1244,11 +1244,13 @@ RuntimeDependencySet 的组合根职责进一步固定为：
 
 ##### 6.24.12.3 RuntimeAppCompositionV1 回链
 
-1. daemon / gateway app binary 的 runtime production composition 以 [../ssot/RuntimeAppCompositionV1.md](../ssot/RuntimeAppCompositionV1.md) 为唯一 SSOT；`RuntimeDependencySet` 的 production composition owner 固定为各自 `main.cpp` 或 app-local helper，而不是 `AgentFacade` 的隐藏 fallback。
-2. `SingleAgentRuntimePortMatrix` 只定义 required / optional / degraded 的端口口径；`RuntimeAppCompositionV1` 进一步规定 app binary 必须把这些端口装配成受控的 `RuntimeDependencySet`，不能用空 dependency set 冒充 `default unary` production composition。
-3. stub runtime path 只允许用于 runtime-local 开发烟测、受控 binary smoke 或 blocker 复现；只要 diagnostics 出现 `stub_runtime_path` 或等价标签，该 binary 就不得外推为 `default unary` ready、`Gate-INT-10` ready 或 release-preflight ready。
-4. daemon 当前空 `RuntimeDependencySet` 只能继续被解释为 stub runtime path 基线；gateway 在缺 runtime init request 与 `RuntimeDependencySet` owner 时必须保持 fail-closed，而不是以 access health surface 暗示 runtime production composition 已闭合。
-5. 该回链直接解阻 INTFIX-TODO-004；后续 INTFIX-TODO-007、INTFIX-TODO-008 分别承担 readiness surface 拆分与 live dependency composition baseline 落地。
+1. daemon / gateway app binary 的 runtime production composition 以 [../ssot/RuntimeAppCompositionV1.md](../ssot/RuntimeAppCompositionV1.md) 为唯一 SSOT；当前具体共享 helper 已收敛为 `apps/runtime_support::compose_minimal_live_dependency_set()`，由 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp` 调用，`main.cpp` 仍是 owner，helper 只是受控的 app-level composition root。
+2. `SingleAgentRuntimePortMatrix` 只定义 required / optional / degraded 的端口口径；`apps/runtime_support` 负责把这些端口折叠成可执行的 `RuntimeDependencySet`，避免 daemon / gateway 各自复制一套 live wiring，也避免 Access entry 直接拼装 runtime internals。
+3. `RuntimeLiveDependencyComposition` 只负责依赖装配与 seam 选择：按 `RuntimePolicySnapshot`、installed layout 与测试 override 组装 memory、llm、cognition、response、tools、multi_agent 等 required baseline，并以 knowledge 作为 optional degrade-ready 端口；它不是第二个 orchestrator、scheduler、recovery owner 或 access pipeline。
+4. production helper 必须对 required live baseline fail-closed；测试可以通过 options 覆盖 readonly assets root 与 state root，但生产默认必须走 install layout owner 语义，而不是让 app binary 自行拼接临时路径或空 fallback。
+5. `visible_tools`、`external_evidence`、multi-agent enablement 等只代表 app-level composition facts，不得被解释为 runtime 主链全部下游 production backend 已闭合；services facade、observability sink、installed knowledge asset、durable session/checkpoint 等仍需独立证据闭环。
+6. daemon / gateway 不再允许以空 `RuntimeDependencySet`、隐藏 fallback 或 access health surface 冒充 production composition；若 `apps/runtime_support` 组合失败，app main 必须 fail-closed 并输出明确错误。
+7. 该回链已经把问题从“owner 不明确 / 空 dependency set 基线”推进到“shared live composition helper 已固定”；后续任务重点转为 services backend、observability、durable state 与 installed/qemu/release 证据，而不是继续争论 composition owner。
 
 #### 6.24.13 组件级设计到任务拆分的最小映射规则
 
@@ -1267,6 +1269,7 @@ RuntimeDependencySet 的组合根职责进一步固定为：
 | 设计结论 | 代码目标 | 测试目标 | 验收命令 | 备注 |
 |---|---|---|---|---|
 | 建立 runtime 公共入口与组合根 | runtime/include/IAgent.h、runtime/src/AgentFacade.cpp、runtime/src/AgentOrchestrator.cpp | tests/unit/runtime/AgentFacadeTest.cpp | cmake -S . -B build-ci -G Ninja && cmake --build build-ci --target dasall_runtime dasall_runtime_smoke_test | 先替换 placeholder，保持单入口 |
+| 收敛 app-level live composition root | apps/runtime_support/include/RuntimeLiveDependencyComposition.h、apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp、apps/daemon/src/main.cpp、apps/gateway/src/main.cpp | tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp、tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "(DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)" --output-on-failure | 固定 daemon/gateway 的 runtime dependency owner，避免空 dependency set 或重复 DI |
 | 落地显式 FSM | runtime/include/fsm/IAgentFsm.h、runtime/src/fsm/AgentFsm.cpp | tests/unit/runtime/AgentFsmTest.cpp | cmake --build build-ci --target dasall_runtime_agent_fsm_unit_test && ctest --test-dir build-ci -R AgentFsmTest --output-on-failure | 覆盖 WaitingClarify/WaitingConfirm/FailedSafe |
 | 落地 BudgetController | runtime/include/budget/IBudgetController.h、runtime/src/budget/BudgetController.cpp | tests/unit/runtime/BudgetControllerTest.cpp | cmake --build build-ci --target dasall_runtime_budget_unit_test && ctest --test-dir build-ci -R BudgetControllerTest --output-on-failure | 必测 max_turns/max_tool_calls/max_latency/max_replan |
 | 落地 CheckpointManager | runtime/include/checkpoint/ICheckpointManager.h、runtime/src/checkpoint/CheckpointManager.cpp | tests/unit/runtime/CheckpointManagerTest.cpp | cmake --build build-ci --target dasall_runtime_checkpoint_unit_test && ctest --test-dir build-ci -R CheckpointManagerTest --output-on-failure | 对齐 Checkpoint guards 与 pending_action 规则 |
