@@ -1,9 +1,9 @@
 #pragma once
 
-#include <atomic>
 #include <optional>
 #include <string>
 
+#include "AccessIdGenerator.h"
 #include "AccessErrors.h"
 #include "AccessTypes.h"
 #include "agent/AgentRequest.h"
@@ -62,7 +62,7 @@ class RequestNormalizer final {
 
   AccessBootstrapConfig bootstrap_config_;
   AccessPublishView publish_view_;
-  mutable std::atomic<std::size_t> id_counter_{0};
+    AccessIdGenerator id_generator_{};
 };
 
 }  // namespace dasall::access

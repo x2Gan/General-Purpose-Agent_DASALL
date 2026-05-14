@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #644
+
+- 日期：2026-05-14
+- 阶段：access/p2-polish-and-release-hardening
+- 任务：ACC-TODO-051 收敛 P2 工程硬化项与 release polish
+- 状态：已完成
+
+### 改动
+
+1. 调整 `access/CMakeLists.txt` 并新增 `access/src/AccessIdGenerator.h/.cpp`：删除不再需要的 `src/placeholder.cpp`，将 request / session / trace ID 生成收口到统一内部 generator，避免 `RequestNormalizer` 继续依赖进程内计数器。
+2. 新增 `access/src/AccessSemanticKinds.h`，并调整 `access/src/RequestNormalizer.h/.cpp` 与 `apps/gateway/src/HttpProtocolAdapter.cpp`：将 entry / protocol 强语义字符串收敛到 enum parse / `to_string(...)` helper，gateway route 改为 registry-backed decoder / encoder round-trip，并把 success fallback 与 error fallback envelope 分离。
+3. 调整 `tests/unit/access/CMakeLists.txt`：为单独编译 `HttpProtocolAdapter.cpp` 的 unit targets 补齐 `access/src` include path，明确 internal headers 仅在 app-private 编译边界内可见。
+4. 新增 `tests/unit/access/AccessGatewayShutdownAuditTest.cpp`、`AccessStrongEnumContractTest.cpp`、`AccessIdGeneratorStabilityTest.cpp`、`ProtocolAdapterRegistryGatewayIntegrationTest.cpp`，并修正 shutdown audit test 的事件计数 / 顺序假设：覆盖 abandoned audit、强语义 round-trip、stable ID 以及 registry-backed gateway route。
+5. 回写 `docs/todos/access/DASALL_access子系统专项TODO.md` 与 `docs/todos/access/deliverables/ACC-TODO-051-Access-P2工程硬化与release-polish收口.md`：将 `ACC-TODO-051` 标记为 Done，并把 `ACC-BLK-010` 收紧为“不得外推为 installed-package / qemu / release-ready”的结论边界。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_gateway_shutdown_audit_unit_test","dasall_access_strong_enum_contract_unit_test","dasall_access_id_generator_stability_unit_test","dasall_access_protocol_adapter_registry_gateway_integration_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["AccessGatewayShutdownAuditTest","AccessStrongEnumContractTest","AccessIdGeneratorStabilityTest","ProtocolAdapterRegistryGatewayIntegrationTest"])`
+   - 结果：通过，4/4 passed。
+3. `Build_CMakeTools(buildTargets=["dasall_access_http_protocol_adapter_unit_test","dasall_access_http_protocol_adapter_structured_decode_unit_test","dasall_access_http_protocol_adapter_security_input_unit_test","dasall_access_gateway_submit_route_contract_unit_test","dasall_access_http_protocol_adapter_error_mapping_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["HttpProtocolAdapterTest","HttpProtocolAdapterStructuredDecodeTest","HttpProtocolAdapterSecurityInputTest","GatewaySubmitRouteContractTest","HttpProtocolAdapterErrorMappingTest"])`
+   - 结果：通过，5/5 passed。
+
+### 结果
+
+1. `ACC-TODO-051` 已完成：placeholder 已清除，强语义 entry/protocol、稳定 ID generator、gateway registry-backed route、shutdown abandoned audit 与相邻 Http adapter 回归面都已收口到 focused tests。
+2. `ACC-BLK-010` 不再是当前 Access 专项 TODO 的执行 blocker；其剩余意义仅是限制结论边界，防止把 build-tree focused evidence 写成 installed-package / qemu / release-ready。
+3. 至此 `ACC-TODO-045 ~ 048`、`ACC-TODO-051` 全部完成并完成证据回写；Access 当前专项 TODO 已无剩余原子任务。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离用户无关脏改，只 stage 051 相关文件。
+2. 按仓库规范提交并推送 `ACC-TODO-051` 的最终收口 commit。
+
 ## 记录 #643
 
 - 日期：2026-05-14

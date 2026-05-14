@@ -1,5 +1,7 @@
 #include "RequestNormalizer.h"
 
+#include "AccessSemanticKinds.h"
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -161,20 +163,17 @@ std::optional<std::string> RequestNormalizer::context_value(
 
 dasall::contracts::RequestChannel RequestNormalizer::map_request_channel(
     const std::string& entry_type) {
-  if (entry_type == "cli") {
-    return dasall::contracts::RequestChannel::Cli;
-  }
-
-  if (entry_type == "gateway") {
-    return dasall::contracts::RequestChannel::Gateway;
-  }
-
-  if (entry_type == "daemon") {
-    return dasall::contracts::RequestChannel::Daemon;
-  }
-
-  if (entry_type == "simulator") {
-    return dasall::contracts::RequestChannel::Simulator;
+  switch (semantic::parse_access_entry_kind(entry_type)) {
+    case semantic::AccessEntryKind::Cli:
+      return dasall::contracts::RequestChannel::Cli;
+    case semantic::AccessEntryKind::Gateway:
+      return dasall::contracts::RequestChannel::Gateway;
+    case semantic::AccessEntryKind::Daemon:
+      return dasall::contracts::RequestChannel::Daemon;
+    case semantic::AccessEntryKind::Simulator:
+      return dasall::contracts::RequestChannel::Simulator;
+    case semantic::AccessEntryKind::Unknown:
+      break;
   }
 
   return dasall::contracts::RequestChannel::Unspecified;
@@ -191,9 +190,7 @@ std::string RequestNormalizer::generate_stable_id(
     const std::string& prefix,
     const RuntimeDispatchRequest& request,
     const std::size_t ordinal) const {
-  const std::size_t counter = id_counter_.fetch_add(1, std::memory_order_relaxed) + 1;
-  return prefix + ":" + request.packet.packet_id + ":" + std::to_string(ordinal) + ":" +
-         std::to_string(counter);
+  return id_generator_.generate(prefix, request, ordinal);
 }
 
 }  // namespace dasall::access

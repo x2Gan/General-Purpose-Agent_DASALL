@@ -284,7 +284,7 @@
 | ACC-TODO-048 | Done | P1 | 将 AccessObservabilityBridge 接入主链与基础设施 sink | P1-4、R3 | `access/src/AccessGateway.*`、`AccessObservabilityBridge.*`、infra logging/metrics/tracing/audit bridge | 在 request received、auth failed、policy denied、admission rejected、runtime rejected、publish failed、shutdown abandoned 路径发事件；reject result 携带 request_id/trace_id；sink 失败不得改变业务裁定 | 新增 `AccessObservabilityMainChainIntegrationTest`、`AccessRejectTraceAnchorTest`、`AccessPublishFailureAuditTest` | `cmake --build build/vscode-linux-ninja --target dasall_access_observability_main_chain_integration_test dasall_access_reject_trace_anchor_integration_test dasall_access_publish_failure_audit_integration_test && ctest --test-dir build/vscode-linux-ninja -R "AccessObservabilityMainChainIntegrationTest|AccessPolicyBackendUnavailableIntegrationTest|AccessRejectTraceAnchorTest|AccessPublishFailureAuditTest" --output-on-failure` | 023、041、047 | request/auth/policy/admission/runtime/publish/shutdown observability 已接入 focused 主链；reject result 的 request_id/trace_id anchor 已具 executable evidence；交付物：[ACC-TODO-048-AccessObservabilityBridge-主链与基础设施sink接线.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-048-AccessObservabilityBridge-主链与基础设施sink接线.md) |
 | ACC-TODO-049 | Done | P0 | 扩展 Access v1 端到端集成 Gate 矩阵 | P0-2、R4、R5 | `tests/integration/access`、contract gate 汇聚 | 以 formal alias + gate label 的方式把当前 focused evidence 收敛为 `Gate-INT-08`；覆盖 CLI->daemon submit、HTTP->gateway submit、async receipt query/cancel、policy backend unavailable、health readiness、profile/contracts guard | `AccessGatewayPipelineIntegrationTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`、`gate-int-08`、`access-v1-production-gate`、`dasall_gate_int_08` | `Build_CMakeTools(target=dasall_gate_int_08)` | 039~048 | Access v1 unary focused gate 已以端到端主链证据为准，不再以 interface abstract、publish envelope 字段或 ping liveness 作为交付证据 |
 | ACC-TODO-050 | Done | P1 | 校准 deliverables 状态、旧报告结论与复验证据 | P1-7、R5 | `docs/todos/access/*`、`docs/worklog/DASALL_开发执行记录.md` | 保留 2026-04-24 评审结论作为历史基线，同时把当前 focused gate 入口校准到 `Gate-INT-08`；034/035/036 不再被写成 mock pipeline / ping 证据；TODO、worklog 与系统 Gate 口径一致 | 文档一致性复验，`rg` 检查 Gate、任务状态、测试名与证据路径 | `rg -n "Gate-INT-08|ACC-TODO-049|ACC-TODO-050|AccessGatewayPipelineIntegrationTest|AccessAsyncReceiptQueryCancelIntegrationTest|AccessHealthReadinessIntegrationTest" docs/todos/access docs/todos/integration docs/worklog/DASALL_开发执行记录.md` | 039、049 | TODO、deliverables、worklog 与交付评审结论一致；不再出现把 mock pipeline、ping liveness 或局部字段写成 release evidence 的表述 |
-| ACC-TODO-051 | Pending | P2 | 收敛 P2 工程硬化项与 release polish | P2、R5 | `access/*`、`apps/gateway/*`、tests | 删除不再需要的 `src/placeholder.cpp`；为强语义字符串引入 enum class 或集中常量；shutdown 写 abandoned audit 并关闭 registry/cache；success mapping 与 error mapping 分离；ID 生成接统一 generator；AccessGateway 使用 registry decode/encode；明确 app-private internal include 边界 | 新增或补强 `AccessGatewayShutdownAuditTest`、`AccessStrongEnumContractTest`、`AccessIdGeneratorStabilityTest`、`ProtocolAdapterRegistryGatewayIntegrationTest` | `cmake --build build-ci --target dasall_access_tests && ctest --test-dir build-ci -R "AccessGatewayShutdownAuditTest|AccessStrongEnumContractTest|AccessIdGeneratorStabilityTest|ProtocolAdapterRegistryGatewayIntegrationTest" --output-on-failure` | 039、041、048 | P2 不阻断 P0 主链，但必须在 Access v1 release candidate 前完成或形成显式残余风险记录 |
+| ACC-TODO-051 | Done | P2 | 收敛 P2 工程硬化项与 release polish | P2、R5 | `access/*`、`apps/gateway/*`、tests | 删除不再需要的 `src/placeholder.cpp`；为强语义字符串引入 enum class 或集中常量；shutdown 写 abandoned audit 并关闭 registry/cache；success mapping 与 error mapping 分离；ID 生成接统一 generator；AccessGateway 使用 registry decode/encode；明确 app-private internal include 边界 | 新增或补强 `AccessGatewayShutdownAuditTest`、`AccessStrongEnumContractTest`、`AccessIdGeneratorStabilityTest`、`ProtocolAdapterRegistryGatewayIntegrationTest` | `cmake --build build/vscode-linux-ninja --target dasall_access_gateway_shutdown_audit_unit_test dasall_access_strong_enum_contract_unit_test dasall_access_id_generator_stability_unit_test dasall_access_protocol_adapter_registry_gateway_integration_unit_test dasall_access_http_protocol_adapter_unit_test dasall_access_http_protocol_adapter_structured_decode_unit_test dasall_access_http_protocol_adapter_security_input_unit_test dasall_access_gateway_submit_route_contract_unit_test dasall_access_http_protocol_adapter_error_mapping_unit_test && ctest --test-dir build/vscode-linux-ninja -R "AccessGatewayShutdownAuditTest|AccessStrongEnumContractTest|AccessIdGeneratorStabilityTest|ProtocolAdapterRegistryGatewayIntegrationTest|HttpProtocolAdapterTest|HttpProtocolAdapterStructuredDecodeTest|HttpProtocolAdapterSecurityInputTest|GatewaySubmitRouteContractTest|HttpProtocolAdapterErrorMappingTest" --output-on-failure` | 039、041、048 | placeholder translation unit 已删除，Access ID 生成与 gateway route 都已收口到稳定内部 seams；交付物：`docs/todos/access/deliverables/ACC-TODO-051-Access-P2工程硬化与release-polish收口.md` |
 
 ## 7. 执行顺序建议
 
@@ -297,7 +297,7 @@
 | C R1/R2 P0 主链修复 | 040 → 041 → 042 → 043 已完成；044 仍待推进 | `RuntimeBridge` handoff、AccessGateway production pipeline、daemon/gateway 组合根与 query/cancel 已闭合；HTTP structured decode / input security 仍保留在 044 | Access v1 的最短阻断链已通过 focused tests 收口；后续不再把默认空 pipeline 写成 ready |
 | D R3 P1 安全治理 | 045 → 046 → 047 → 048 | config 投影、HMAC ownership、policy evaluator 与 observability 主链接线已闭合 | 当前 `Gate-INT-08` 只证明最小 focused 安全边界已可执行，不外推为全部安全治理已闭合 |
 | E R4 集成矩阵 | 049 | 049 已通过 `dasall_gate_int_08` focused target 固化 CLI/daemon、HTTP/gateway、async query/cancel、policy backend unavailable、health、profile、contracts | 034/035 的 formal test-name 已成为当前 build 可执行 Gate，不再用 ping 或抽象接口 smoke 代替主链 |
-| F R5 文档与 P2 硬化 | 050 已完成；051 待推进 | 050 已完成 TODO、worklog 与 focused gate 口径校准；051 在 release candidate 前完成或记录残余风险 | Access v1 unary focused gate 已闭合，但更广 release polish 仍受 P2 残余风险约束 |
+| F R5 文档与 P2 硬化 | 050、051 已完成 | TODO、worklog、deliverables、P2 polish 与 focused acceptance 已统一回写 | Access v1 unary focused gate 与当前 release polish 原子任务已闭合；后续仅在出现新评审项或回归时再开增量任务 |
 
 ### 7.2 必过门禁表
 
@@ -332,7 +332,7 @@
 | ACC-BLK-007 | 已解阻（2026-04-23）：platform 已冻结并实现 `IIPC::describe_peer()`，access 已落盘 `LocalPeerUidFact` 与 `DaemonProtocolAdapter` 输入接缝 | 029、033、037 | 无；后续仅需在 029/033 中基于该输入补齐 daemon local trusted 行为测试与入口接线 | 证据回链到 `platform/include/IIPC.h`、`platform/src/linux/UnixIpcProvider.cpp`、`access/src/daemon/DaemonProtocolAdapter.cpp` 与 [docs/todos/access/deliverables/ACC-TODO-037-IIPC-peer-identity接缝与LocalPeerUidFact输入收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-037-IIPC-peer-identity接缝与LocalPeerUidFact输入收敛.md) | 若后续实现绕过 `describe_peer()` 输入或在 peer identity 缺失时默认放行 local trusted，则重新转为 Blocked |
 | ACC-BLK-008 | 已解阻（2026-05-06 校准）：`docs/ssot/AccessUnaryProductionPathV1.md` 已冻结 production/test profile 边界，040/041/042 已闭合 handoff、production pipeline 与真实 readiness，focused gate 已用 `CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest` 与 contracts guard 固化最小 production ingress 证据 | 051、后续 release polish tasks | 无；后续若扩张更广 release 结论，再基于 focused matrix 新开任务 | focused gate 之外，仍禁止把 mock pipeline 或 ping liveness 外推为更广 release 结论 |
 | ACC-BLK-009 | 已解阻（2026-04-24，2026-05-06 校准）：Access clean rebuild 与聚合测试门已由 ACC-TODO-039 闭合，当前 unary focused gate 进一步由 `Build_CMakeTools(target=dasall_gate_int_08)` 承接 | 034、035、036、039 | 无；后续 Gate 变更必须同步更新 focused target、Access TODO 与 worklog 证据 | 证据回链到 `tests/CMakeLists.txt`、`tests/unit/access/CMakeLists.txt`、`tests/integration/access/CMakeLists.txt` 与 [docs/todos/access/deliverables/ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-TODO-039-Access-clean-rebuild与聚合测试门收敛.md) | 旧二进制证据不再采信；当前 focused release evidence 以 `Gate-INT-08` 为准 |
-| ACC-BLK-010 | 交付评审 P1-3/P1-4 | ownership 多实例 authoritative sync 与 release polish 的更广安全治理矩阵仍未完全闭合；当前 `Gate-INT-08` 只把 focused ingress、policy fail-closed、observability main-chain 与 ownership fail-closed 证据收敛为最小可执行边界 | 051 | ACC-TODO-051 完成，并形成更广安全治理矩阵 | focused ingress / observability / ownership 证据不得外推为全部安全可交付 |
+| ACC-BLK-010 | 已解阻（2026-05-14）：051 已删除 placeholder、收口稳定 ID generator、gateway registry-backed route 与 shutdown audit focused evidence；多实例 authoritative sync 继续保持为“不得外推为 installed-package / qemu / release-ready”的结论边界，而非当前 Access 专项 TODO 的执行 blocker | 无 | 无；后续仅需维持 focused evidence 不被外推 | 证据回链到 `access/CMakeLists.txt`、`access/src/AccessIdGenerator.*`、`apps/gateway/src/HttpProtocolAdapter.cpp` 与 `docs/todos/access/deliverables/ACC-TODO-051-Access-P2工程硬化与release-polish收口.md` | focused ingress / observability / ownership 证据仍不得外推为全部安全可交付 |
 
 ### 8.1 Blocker 校准记录
 
@@ -347,7 +347,7 @@
 | ACC-BLK-007 | 已解阻 | 否；已从设计阻塞转为实现接线事项 | peer identity seam 已冻结，后续关注 029/033 的行为覆盖完整性 |
 | ACC-BLK-008 | 已解阻 | 否；`Gate-INT-08` 已闭合最小 production ingress focused gate | 这是 2026-05-06 校准后转出的历史 production pipeline blocker；后续风险转入 051 与更广 release polish |
 | ACC-BLK-009 | 已解阻 | 否；clean rebuild 与 Access 聚合测试门已闭合 | 当前 focused release evidence 已收敛到 `Gate-INT-08`；后续风险转入 ACC-TODO-051 与系统侧 `INT-TODO-024` 文档闭环 |
-| ACC-BLK-010 | 中风险 | 否，但阻断安全可交付结论 | P0 unary focused gate、production policy seam 与 observability main-chain 已闭合，最终更广安全可交付仍需 051 继续收口 |
+| ACC-BLK-010 | 已解阻 | 否；当前 Access 专项 TODO 原子任务已闭合 | focused ingress / observability / ownership 证据继续保持 build-tree 边界，不外推 installed-package / qemu / release-ready |
 
 ## 9. 验收与质量门
 
@@ -422,7 +422,7 @@
 
 可以，但不是无条件全量执行。
 
-当前可直接进入执行的范围是：ACC-TODO-051 承接剩余 P2 工程硬化、release polish 与 multi-instance sync 风险校准。ACC-TODO-034~050 已完成当前 focused integration gate、最小 production ingress、安全治理与证据回写收口。001~038 保留为历史基础和前置依赖，不再作为 Access v1 可交付的最终证据。stream / WS / MQTT 继续沿用 005 已冻结的延后 Gate 口径，不能被写成 Done-ready Build 结论。
+当前专项 TODO 已无剩余原子任务：ACC-TODO-034~051 均已完成 focused integration gate、最小 production ingress、安全治理、P2 polish 与证据回写收口。001~038 保留为历史基础和前置依赖，不再作为 Access v1 可交付的最终证据。stream / WS / MQTT 继续沿用 005 已冻结的延后 Gate 口径，不能被写成 Done-ready Build 结论；若后续出现新评审项、回归或 packaging / qemu 级别问题，应新开增量任务而不是回滚当前 Done 口径。
 
 ### 11.2 当前可落到的最细粒度
 
@@ -432,7 +432,7 @@
 
 ### 11.3 后续建议
 
-1. 继续按 `release polish / multi-instance sync risk calibration` 的顺序推进 ACC-TODO-051。
+1. 当前专项 TODO 已无后续原子任务；若 Gate-INT-08、installed-package、app-binary 或 qemu 证据面出现新回归，再新开增量任务承接。
 2. `ACC-TODO-040~043` 已以 focused unit/integration tests 落盘；后续只在出现 handoff、pipeline、composition 或 query/cancel 回退时再回开增量任务。
 3. ACC-TODO-049/050 已把 focused integration gate 与证据口径收敛到 `Gate-INT-08`；后续若 Gate 名称或矩阵变更，必须同步更新 TODO / worklog / system integration 记录。
 4. 最后用 ACC-TODO-051 收口 P2 工程硬化；stream / WS / MQTT 保持延后 Gate + feature flag default-off，直到外部边界冻结。

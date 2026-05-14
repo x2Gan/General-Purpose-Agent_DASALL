@@ -29,8 +29,8 @@ endforeach()
 
 target_sources(dasall_access
   PRIVATE
-    src/placeholder.cpp
     src/AccessConfigAdapter.cpp
+    src/AccessIdGenerator.cpp
     src/AccessGateway.cpp
     src/AccessGatewayFactory.cpp
     src/AccessObservabilityBridge.cpp

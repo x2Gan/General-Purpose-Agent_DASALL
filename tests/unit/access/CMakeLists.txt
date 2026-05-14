@@ -402,6 +402,24 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_gateway_shutdown_audit_unit_test
+  AccessGatewayShutdownAuditTest
+  AccessGatewayShutdownAuditTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_strong_enum_contract_unit_test
+  AccessStrongEnumContractTest
+  AccessStrongEnumContractTest.cpp
+)
+
+dasall_add_access_unit_test(
+  dasall_access_id_generator_stability_unit_test
+  AccessIdGeneratorStabilityTest
+  AccessIdGeneratorStabilityTest.cpp
+)
+
+dasall_add_access_unit_test(
   dasall_access_gateway_facade_unit_test
   AccessGatewayFacadeTest
   AccessGatewayFacadeTest.cpp
@@ -528,6 +546,7 @@ add_executable(dasall_access_http_protocol_adapter_unit_test
 target_include_directories(dasall_access_http_protocol_adapter_unit_test
   PRIVATE
     ../../../apps/gateway/src
+    ${CMAKE_SOURCE_DIR}/access/src
 )
 
 target_link_libraries(dasall_access_http_protocol_adapter_unit_test
@@ -555,6 +574,7 @@ add_executable(dasall_access_http_protocol_adapter_structured_decode_unit_test
 target_include_directories(dasall_access_http_protocol_adapter_structured_decode_unit_test
   PRIVATE
     ../../../apps/gateway/src
+    ${CMAKE_SOURCE_DIR}/access/src
 )
 
 target_link_libraries(dasall_access_http_protocol_adapter_structured_decode_unit_test
@@ -582,6 +602,7 @@ add_executable(dasall_access_http_protocol_adapter_security_input_unit_test
 target_include_directories(dasall_access_http_protocol_adapter_security_input_unit_test
   PRIVATE
     ../../../apps/gateway/src
+    ${CMAKE_SOURCE_DIR}/access/src
 )
 
 target_link_libraries(dasall_access_http_protocol_adapter_security_input_unit_test
@@ -609,6 +630,7 @@ add_executable(dasall_access_gateway_submit_route_contract_unit_test
 target_include_directories(dasall_access_gateway_submit_route_contract_unit_test
   PRIVATE
     ../../../apps/gateway/src
+    ${CMAKE_SOURCE_DIR}/access/src
 )
 
 target_link_libraries(dasall_access_gateway_submit_route_contract_unit_test
@@ -627,6 +649,33 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_gateway_submit_route_contract_unit_test
 )
 
+add_executable(dasall_access_protocol_adapter_registry_gateway_integration_unit_test
+  ProtocolAdapterRegistryGatewayIntegrationTest.cpp
+  ../../../apps/gateway/src/HttpProtocolAdapter.cpp
+)
+
+target_include_directories(dasall_access_protocol_adapter_registry_gateway_integration_unit_test
+  PRIVATE
+    ../../../apps/gateway/src
+    ${CMAKE_SOURCE_DIR}/access/src
+)
+
+target_link_libraries(dasall_access_protocol_adapter_registry_gateway_integration_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_protocol_adapter_registry_gateway_integration_unit_test)
+
+add_test(NAME ProtocolAdapterRegistryGatewayIntegrationTest
+  COMMAND dasall_access_protocol_adapter_registry_gateway_integration_unit_test)
+set_tests_properties(ProtocolAdapterRegistryGatewayIntegrationTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_access_protocol_adapter_registry_gateway_integration_unit_test
+)
+
 # ACC-TODO-026: HttpProtocolAdapterErrorMappingTest
 add_executable(dasall_access_http_protocol_adapter_error_mapping_unit_test
   HttpProtocolAdapterErrorMappingTest.cpp
@@ -636,6 +685,7 @@ add_executable(dasall_access_http_protocol_adapter_error_mapping_unit_test
 target_include_directories(dasall_access_http_protocol_adapter_error_mapping_unit_test
   PRIVATE
     ../../../apps/gateway/src
+    ${CMAKE_SOURCE_DIR}/access/src
 )
 
 target_link_libraries(dasall_access_http_protocol_adapter_error_mapping_unit_test

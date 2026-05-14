@@ -1,5 +1,10 @@
 #include "HttpProtocolAdapter.h"
 
+#include <memory>
+
+#include "AccessSemanticKinds.h"
+#include "ProtocolAdapterRegistry.h"
+
 #include <cctype>
 #include <charconv>
 #include <cstdint>
@@ -11,6 +16,40 @@
 namespace dasall::access::gateway {
 
 namespace {
+
+[[nodiscard]] dasall::access::PublishEnvelope make_success_fallback_envelope(
+    const dasall::access::RuntimeDispatchResult& result) {
+  dasall::access::PublishEnvelope fallback;
+  fallback.protocol_status_hint = "202";
+  fallback.result_id = result.receipt_ref.value_or("");
+  fallback.payload = result.error_ref.value_or("");
+  if (const auto request_id = result.response_context.find("request_id");
+      request_id != result.response_context.end()) {
+    fallback.request_id = request_id->second;
+  }
+  if (const auto trace_id = result.response_context.find("trace_id");
+      trace_id != result.response_context.end()) {
+    fallback.trace_id = trace_id->second;
+  }
+  return fallback;
+}
+
+[[nodiscard]] dasall::access::PublishEnvelope make_error_fallback_envelope(
+    const dasall::access::RuntimeDispatchResult& result) {
+  dasall::access::PublishEnvelope fallback;
+  fallback.protocol_status_hint = "400";
+  fallback.result_id = result.receipt_ref.value_or("");
+  fallback.payload = result.error_ref.value_or("");
+  if (const auto request_id = result.response_context.find("request_id");
+      request_id != result.response_context.end()) {
+    fallback.request_id = request_id->second;
+  }
+  if (const auto trace_id = result.response_context.find("trace_id");
+      trace_id != result.response_context.end()) {
+    fallback.trace_id = trace_id->second;
+  }
+  return fallback;
+}
 
 enum class JsonValueKind {
   String,
@@ -413,7 +452,10 @@ std::string envelope_to_json(const dasall::access::PublishEnvelope& env) {
 
 bool HttpProtocolAdapter::can_handle(std::string_view adapter_id,
                                      std::string_view transport_hint) const {
-  return adapter_id == "gateway" && transport_hint == "http_unary";
+  return semantic::parse_access_entry_kind(adapter_id) ==
+             semantic::AccessEntryKind::Gateway &&
+         semantic::parse_access_protocol_kind(transport_hint) ==
+             semantic::AccessProtocolKind::HttpUnary;
 }
 
 dasall::access::InboundPacket HttpProtocolAdapter::decode() {
@@ -460,8 +502,9 @@ dasall::access::InboundPacket HttpProtocolAdapter::decode() {
   }
 
   packet.packet_id = decoded_body->packet_id;
-  packet.entry_type = "gateway";
-  packet.protocol_kind = "http_unary";
+  packet.entry_type = std::string(semantic::to_string(semantic::AccessEntryKind::Gateway));
+  packet.protocol_kind =
+      std::string(semantic::to_string(semantic::AccessProtocolKind::HttpUnary));
   packet.peer_ref = decoded_body->peer_ref.empty()
                         ? std::string("http_remote")
                         : decoded_body->peer_ref;
@@ -543,29 +586,55 @@ int HttpProtocolAdapter::hint_to_status_code(std::string_view hint) {
 HttpResponseContext handle_submit_request(const HttpRequestContext& request,
                                           dasall::access::IAccessGateway& gateway,
                                           std::size_t max_request_body_bytes) {
-  HttpProtocolAdapter adapter;
-  adapter.set_max_request_body_bytes(max_request_body_bytes);
-  adapter.set_active_request(request);
+  auto adapter = std::make_shared<HttpProtocolAdapter>();
+  adapter->set_max_request_body_bytes(max_request_body_bytes);
+  adapter->set_active_request(request);
 
-  const auto packet = adapter.decode();
-  if (adapter.last_decode_error().has_value()) {
-    return make_error_response(*adapter.last_decode_error());
+  dasall::access::ProtocolAdapterRegistry registry;
+  (void)registry.register_adapter(
+      "gateway.submit.route",
+      semantic::to_string(semantic::AccessEntryKind::Gateway),
+      semantic::to_string(semantic::AccessProtocolKind::HttpUnary),
+      adapter);
+
+  const auto decoder = registry.resolve_decoder(
+      semantic::to_string(semantic::AccessEntryKind::Gateway),
+      semantic::to_string(semantic::AccessProtocolKind::HttpUnary));
+  if (!decoder) {
+    HttpResponseContext response;
+    response.status_code = 500;
+    response.body = R"({"error":"protocol_adapter_decoder_unavailable"})";
+    response.headers["Content-Type"] = "application/json";
+    return response;
+  }
+
+  const auto packet = decoder->decode();
+  if (adapter->last_decode_error().has_value()) {
+    return make_error_response(*adapter->last_decode_error());
   }
 
   const auto result = gateway.submit(packet);
-  if (result.publish_envelope.has_value()) {
-    (void)adapter.encode(*result.publish_envelope);
-    return adapter.active_response();
+  const auto encoder = registry.resolve_encoder(
+      {.entry_type = std::string(semantic::to_string(semantic::AccessEntryKind::Gateway)),
+       .protocol_kind = std::string(semantic::to_string(semantic::AccessProtocolKind::HttpUnary))});
+  if (!encoder) {
+    HttpResponseContext response;
+    response.status_code = 500;
+    response.body = R"({"error":"protocol_adapter_encoder_unavailable"})";
+    response.headers["Content-Type"] = "application/json";
+    return response;
   }
 
-  dasall::access::PublishEnvelope fallback;
-  fallback.protocol_status_hint =
-      result.disposition == dasall::access::AccessDisposition::AcceptedAsync ? "202"
-                                                                             : "400";
-  fallback.result_id = result.receipt_ref.value_or("");
-  fallback.payload = result.error_ref.value_or("");
-  (void)adapter.encode(fallback);
-  return adapter.active_response();
+  if (result.publish_envelope.has_value()) {
+    (void)encoder->encode(*result.publish_envelope);
+    return adapter->active_response();
+  }
+
+  const auto fallback = result.disposition == dasall::access::AccessDisposition::AcceptedAsync
+                            ? make_success_fallback_envelope(result)
+                            : make_error_fallback_envelope(result);
+  (void)encoder->encode(fallback);
+  return adapter->active_response();
 }
 
 }  // namespace dasall::access::gateway
