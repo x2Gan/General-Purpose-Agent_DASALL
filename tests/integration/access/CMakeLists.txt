@@ -564,6 +564,28 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_health_readiness_integration_test
 )
 
+add_executable(dasall_access_policy_evaluator_integration_test
+  AccessPolicyEvaluatorIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_access_policy_evaluator_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_access_policy_evaluator_integration_test)
+
+add_test(NAME AccessPolicyEvaluatorIntegrationTest
+  COMMAND dasall_access_policy_evaluator_integration_test)
+set_tests_properties(AccessPolicyEvaluatorIntegrationTest PROPERTIES
+  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+)
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_policy_evaluator_integration_test
+)
+
 add_executable(dasall_access_observability_main_chain_integration_test
   AccessObservabilityMainChainIntegrationTest.cpp
 )

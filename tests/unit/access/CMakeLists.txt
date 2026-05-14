@@ -173,6 +173,12 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_policy_input_attribute_unit_test
+  AccessPolicyInputAttributeTest
+  AccessPolicyInputAttributeTest.cpp
+)
+
+dasall_add_access_unit_test(
   dasall_access_admission_controller_core_unit_test
   AdmissionControllerTest
   AdmissionControllerTest.cpp

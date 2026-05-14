@@ -1,6 +1,7 @@
 #include "AccessGatewayFactory.h"
 
 #include "AccessConfigAdapter.h"
+#include "RuntimePolicySnapshot.h"
 
 #include <cctype>
 #include <chrono>
@@ -185,6 +186,32 @@ template <typename PipelineOptions>
   }
 
   return std::make_shared<AsyncTaskRegistry>(*key, std::nullopt, ttl);
+}
+
+template <typename PipelineOptions>
+[[nodiscard]] std::optional<SnapshotVersionFingerprint> build_policy_snapshot_fingerprint(
+    const PipelineOptions& options) {
+  SnapshotVersionFingerprint fingerprint;
+  bool has_value = false;
+
+  if (!options.bootstrap_config.bootstrap_revision.empty()) {
+    fingerprint.bootstrap_revision = options.bootstrap_config.bootstrap_revision;
+    has_value = true;
+  }
+
+  if (options.runtime_policy_snapshot) {
+    fingerprint.effective_profile_id =
+        options.runtime_policy_snapshot->effective_profile_id();
+    fingerprint.runtime_policy_generation = static_cast<std::int64_t>(
+        options.runtime_policy_snapshot->generation());
+    has_value = true;
+  }
+
+  if (!has_value) {
+    return std::nullopt;
+  }
+
+  return fingerprint;
 }
 
 [[nodiscard]] std::string request_context_or_default(
@@ -953,7 +980,12 @@ build_daemon_submit_pipeline(
                      resolved_options.bootstrap_config.allowed_protocols);
   auto subject_resolver = std::make_shared<SubjectResolver>();
   auto authenticator_chain = std::make_shared<AuthenticatorChain>();
-  auto policy_gate = std::make_shared<AccessPolicyGate>();
+  const auto policy_evaluator =
+      make_infra_policy_evaluator(resolved_options.security_policy_manager);
+  const bool use_production_policy = static_cast<bool>(policy_evaluator);
+  auto policy_gate = policy_evaluator
+                         ? std::make_shared<AccessPolicyGate>(policy_evaluator)
+                         : std::make_shared<AccessPolicyGate>();
   auto admission_controller =
     std::make_shared<AdmissionController>(resolved_options.admission_view);
   auto request_normalizer =
@@ -991,6 +1023,7 @@ build_daemon_submit_pipeline(
            task_query_handler,
            health_service,
            diagnostics_handler,
+           use_production_policy,
            resolved_options](const InboundPacket& packet) -> RuntimeDispatchResult {
             const bool diagnostics_enabled =
               resolved_options.daemon_diagnostics_enabled_state
@@ -1111,14 +1144,19 @@ build_daemon_submit_pipeline(
             AccessPolicyEvaluationInput policy_input;
             policy_input.authentication = auth_outcome;
             policy_input.packet = packet;
+            policy_input.snapshot_fingerprint =
+                build_policy_snapshot_fingerprint(resolved_options);
 
+            AccessPolicyEvaluationResult policy_result;
             PolicyBackendSnapshot policy_backend;
-            policy_backend.backend_available =
-              resolved_options.policy_backend_available;
-            policy_backend.allow_submit = resolved_options.allow_submit;
-
-            const auto policy_result =
-                policy_gate->evaluate_submit(policy_input, policy_backend);
+            if (use_production_policy) {
+              policy_result = policy_gate->evaluate_submit(policy_input);
+            } else {
+              policy_backend.backend_available =
+                resolved_options.policy_backend_available;
+              policy_backend.allow_submit = resolved_options.allow_submit;
+              policy_result = policy_gate->evaluate_submit(policy_input, policy_backend);
+            }
             if (policy_result.requires_confirmation) {
               return make_rejected_result(AccessErrorCode::ConfirmationRequired,
                                           policy_result.decision_proof.reason_code);
@@ -1157,13 +1195,20 @@ build_daemon_submit_pipeline(
                                             "diag_command_invalid");
               }
 
-              PolicyBackendSnapshot diag_backend = policy_backend;
-              diag_backend.allow_submit = false;
+              AccessPolicyEvaluationResult diag_policy_result;
+              if (use_production_policy) {
+                diag_policy_result = policy_gate->evaluate_diagnostics_request(
+                    policy_input,
+                    diag_payload->command_name);
+              } else {
+                PolicyBackendSnapshot diag_backend = policy_backend;
+                diag_backend.allow_submit = false;
                 diag_backend.allow_diagnostics = true;
-              const auto diag_policy_result = policy_gate->evaluate_diagnostics_request(
-                  policy_input,
-                  diag_payload->command_name,
-                  diag_backend);
+                diag_policy_result = policy_gate->evaluate_diagnostics_request(
+                    policy_input,
+                    diag_payload->command_name,
+                    diag_backend);
+              }
               if (!diag_policy_result.allowed) {
                 return make_rejected_result(
                     AccessErrorCode::AuthorizationDenied,
@@ -1313,7 +1358,12 @@ build_gateway_submit_pipeline(
                      resolved_options.bootstrap_config.allowed_protocols);
   auto subject_resolver = std::make_shared<SubjectResolver>();
   auto authenticator_chain = std::make_shared<AuthenticatorChain>();
-  auto policy_gate = std::make_shared<AccessPolicyGate>();
+  const auto policy_evaluator =
+      make_infra_policy_evaluator(resolved_options.security_policy_manager);
+  const bool use_production_policy = static_cast<bool>(policy_evaluator);
+  auto policy_gate = policy_evaluator
+                         ? std::make_shared<AccessPolicyGate>(policy_evaluator)
+                         : std::make_shared<AccessPolicyGate>();
   auto admission_controller =
     std::make_shared<AdmissionController>(resolved_options.admission_view);
   auto request_normalizer =
@@ -1336,6 +1386,7 @@ build_gateway_submit_pipeline(
        result_publisher,
        observability_bridge,
       async_task_registry,
+      use_production_policy,
       resolved_options](const InboundPacket& packet) -> RuntimeDispatchResult {
         (void)observability_bridge->emit_request_received(
             packet,
@@ -1385,13 +1436,18 @@ build_gateway_submit_pipeline(
         AccessPolicyEvaluationInput policy_input;
         policy_input.authentication = auth_outcome;
         policy_input.packet = packet;
+        policy_input.snapshot_fingerprint =
+            build_policy_snapshot_fingerprint(resolved_options);
 
-        PolicyBackendSnapshot policy_backend;
-        policy_backend.backend_available = resolved_options.policy_backend_available;
-        policy_backend.allow_submit = resolved_options.allow_submit;
-
-        const auto policy_result =
-            policy_gate->evaluate_submit(policy_input, policy_backend);
+        AccessPolicyEvaluationResult policy_result;
+        if (use_production_policy) {
+          policy_result = policy_gate->evaluate_submit(policy_input);
+        } else {
+          PolicyBackendSnapshot policy_backend;
+          policy_backend.backend_available = resolved_options.policy_backend_available;
+          policy_backend.allow_submit = resolved_options.allow_submit;
+          policy_result = policy_gate->evaluate_submit(policy_input, policy_backend);
+        }
         if (policy_result.requires_confirmation) {
           return make_rejected_result(AccessErrorCode::ConfirmationRequired,
                                       policy_result.decision_proof.reason_code);

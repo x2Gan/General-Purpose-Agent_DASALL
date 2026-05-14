@@ -10,7 +10,7 @@ namespace {
 [[nodiscard]] dasall::access::AccessPolicyEvaluationInput make_authenticated_override_input() {
   dasall::access::AccessPolicyEvaluationInput input;
   input.authentication.authenticated = true;
-  input.authentication.subject_identity.actor_ref = "operator://ops/local";
+  input.authentication.subject_identity.actor_ref = "local://uid/1000";
   input.authentication.subject_identity.auth_method = "local_trusted";
   input.packet.packet_id = "pkt-override-001";
   input.packet.entry_type = "daemon";

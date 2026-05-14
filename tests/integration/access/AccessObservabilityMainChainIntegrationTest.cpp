@@ -1,12 +1,14 @@
 #include <exception>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "AccessGatewayFactory.h"
 #include "IAccessGateway.h"
+#include "policy/ISecurityPolicyManager.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -22,6 +24,47 @@ using dasall::tests::support::assert_true;
 struct CapturedEvent {
   std::string name;
   std::map<std::string, std::string> fields;
+};
+
+class UnavailablePolicyManager final : public dasall::infra::policy::ISecurityPolicyManager {
+ public:
+  [[nodiscard]] dasall::infra::policy::PolicyOpResult load_policy(
+      const dasall::infra::policy::PolicyBundle&) override {
+    return dasall::infra::policy::PolicyOpResult::failure(
+        dasall::contracts::ResultCode::RuntimeRetryExhausted,
+        "policy backend unavailable",
+        "policy.load",
+        "UnavailablePolicyManager");
+  }
+
+  [[nodiscard]] dasall::infra::policy::PolicyOpResult apply_patch(
+      const dasall::infra::policy::PolicyPatch&) override {
+    return load_policy(dasall::infra::policy::PolicyBundle{});
+  }
+
+  [[nodiscard]] dasall::infra::policy::ValidationReport dry_run_patch(
+      const dasall::infra::policy::PolicyPatch&) override {
+    return dasall::infra::policy::ValidationReport{
+        .blocking_errors = {"policy backend unavailable"},
+        .warnings = {},
+        .invalid_rule_ids = {},
+        .field_paths = {},
+    };
+  }
+
+  [[nodiscard]] dasall::infra::policy::PolicySnapshot snapshot() const override {
+    return {};
+  }
+
+  [[nodiscard]] dasall::infra::policy::PolicyOpResult rollback(
+      const std::string&) override {
+    return load_policy(dasall::infra::policy::PolicyBundle{});
+  }
+
+  [[nodiscard]] dasall::infra::policy::PolicyDecisionRef evaluate(
+      const dasall::infra::policy::PolicyQueryContext&) const override {
+    return {};
+  }
 };
 
 [[nodiscard]] GatewayAccessPipelineOptions make_base_options(
@@ -94,7 +137,7 @@ void policy_backend_unavailable_emits_denied_event_and_skips_runtime() {
   int runtime_call_count = 0;
 
   auto options = make_base_options(&captured_events);
-  options.policy_backend_available = false;
+  options.security_policy_manager = std::make_shared<UnavailablePolicyManager>();
   options.runtime_dispatch_backend = [&runtime_call_count](const RuntimeDispatchRequest&) {
     ++runtime_call_count;
     RuntimeDispatchResult result;

@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #642
+
+- 日期：2026-05-14
+- 阶段：access/policy-evaluator-production-adapter
+- 任务：ACC-TODO-047 将 AccessPolicyGate 切到 IAccessPolicyEvaluator + infra/policy 生产适配
+- 状态：已完成
+
+### 改动
+
+1. 调整 `access/src/AccessPolicyGate.h/.cpp`：新增 `AccessPolicyQuery`、`IAccessPolicyEvaluator`、`make_infra_policy_evaluator(...)` 与 `InfraPolicyEvaluator`，把 Access policy 判定从本地 `PolicyBackendSnapshot` 布尔 stub 收敛为可接 `infra/policy::ISecurityPolicyManager` 的 production seam，同时保留 snapshot backend 仅作 unit fake。
+2. 调整 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`：为 daemon/gateway options 新增 `security_policy_manager`；submit 与 daemon diagnostics path 在 manager 存在时优先走 production evaluator，并补齐 `snapshot_fingerprint` 投影。
+3. 新增 `tests/integration/access/AccessPolicyEvaluatorIntegrationTest.cpp`，并更新 `tests/integration/access/AccessObservabilityMainChainIntegrationTest.cpp` 与 `tests/integration/access/CMakeLists.txt`：验证 production policy manager seam 的属性投影，以及 backend unavailable 场景仍会 fail-closed 并保留 observability denied 证据。
+4. 回写 `docs/todos/access/DASALL_access子系统专项TODO.md` 与本交付物文档：将 `ACC-TODO-047` 标记为 Done，并把 `ACC-BLK-010` 收紧为 048/051 的更广安全治理残余风险。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_policy_evaluator_integration_test","dasall_access_observability_main_chain_integration_test","dasall_access_policy_input_attribute_unit_test","dasall_access_policy_gate_unit_test","dasall_access_policy_backend_failure_unit_test","dasall_access_policy_override_gate_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["AccessPolicyInputAttributeTest","AccessPolicyGateTest","AccessPolicyBackendFailureTest","AccessPolicyOverrideGateTest","AccessPolicyEvaluatorIntegrationTest","AccessPolicyBackendUnavailableIntegrationTest","AccessObservabilityMainChainIntegrationTest"])`
+   - 结果：通过，7/7 passed。
+
+### 结果
+
+1. `ACC-TODO-047` 已完成：production factory 不再依赖本地 snapshot 布尔 stub 执行授权判定，而是可通过 `infra/policy` manager 做 per-request authorization。
+2. `policy backend unavailable` 现在通过真实 unavailable manager 走 fail-closed integration 证据，而不是继续依赖 `policy_backend_available=false` 的本地测试开关。
+3. 本轮没有扩写 app composition root 或 `RuntimeDependencySet`；Access 仍遵守 policy owner 在 `infra/policy` 的边界。
+
+### 下一步
+
+1. 进入 `ACC-TODO-048`，把 `AccessObservabilityBridge` 的 request received / policy denied / publish failed 等事件接到更广主链与基础设施 sink。
+2. `ACC-BLK-010` 现已收紧为 observability / release polish 残余风险；047 的 focused gate 结论不要外推为全部安全可交付。
+
 ## 记录 #641
 
 - 日期：2026-05-14

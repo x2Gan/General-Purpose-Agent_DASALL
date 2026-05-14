@@ -1,11 +1,16 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include "AccessTypes.h"
 #include "AuthenticatorChain.h"
+
+namespace dasall::infra::policy {
+class ISecurityPolicyManager;
+}
 
 namespace dasall::access {
 
@@ -47,6 +52,7 @@ struct PolicyBackendSnapshot {
 struct AccessPolicyEvaluationInput {
   AuthenticationOutcome authentication;
   InboundPacket packet;
+  std::optional<SnapshotVersionFingerprint> snapshot_fingerprint;
 };
 
 // AccessPolicyEvaluationResult 是策略门唯一输出。
@@ -60,21 +66,67 @@ struct AccessPolicyEvaluationResult {
   [[nodiscard]] bool denied() const;
 };
 
+// AccessPolicyQuery 是 access -> policy seam 的最小查询载体。
+// 它保留 subject/channel/environment/operation/target/fingerprint，
+// 由后续 evaluator 决定如何投影到具体 backend。
+struct AccessPolicyQuery {
+  SubjectIdentity subject_identity;
+  OperationTargetView operation_target;
+  std::string entry_type;
+  std::string protocol_kind;
+  std::string request_id = "unknown";
+  std::string session_id = "unknown";
+  std::string trace_id = "unknown";
+  std::optional<SnapshotVersionFingerprint> snapshot_fingerprint;
+  bool sensitive_request = false;
+
+  [[nodiscard]] bool has_consistent_values() const;
+};
+
+class IAccessPolicyEvaluator {
+ public:
+  virtual ~IAccessPolicyEvaluator() = default;
+
+  [[nodiscard]] virtual AccessPolicyEvaluationResult evaluate(
+    const AccessPolicyQuery& query) const = 0;
+};
+
+[[nodiscard]] std::shared_ptr<const IAccessPolicyEvaluator> make_infra_policy_evaluator(
+    std::shared_ptr<dasall::infra::policy::ISecurityPolicyManager> policy_manager);
+
 class AccessPolicyGate {
  public:
+  AccessPolicyGate() = default;
+  explicit AccessPolicyGate(std::shared_ptr<const IAccessPolicyEvaluator> policy_evaluator);
+
+  [[nodiscard]] AccessPolicyEvaluationResult evaluate_submit(
+    const AccessPolicyEvaluationInput& input) const;
+
   [[nodiscard]] AccessPolicyEvaluationResult evaluate_submit(
       const AccessPolicyEvaluationInput& input,
       const PolicyBackendSnapshot& backend) const;
+
+  [[nodiscard]] AccessPolicyEvaluationResult evaluate_task_query(
+    const AccessPolicyEvaluationInput& input,
+    std::string_view task_ref) const;
 
   [[nodiscard]] AccessPolicyEvaluationResult evaluate_task_query(
       const AccessPolicyEvaluationInput& input,
       std::string_view task_ref,
       const PolicyBackendSnapshot& backend) const;
 
-    [[nodiscard]] AccessPolicyEvaluationResult evaluate_diagnostics_request(
+  [[nodiscard]] AccessPolicyEvaluationResult evaluate_diagnostics_request(
+    const AccessPolicyEvaluationInput& input,
+    std::string_view command_name) const;
+
+  [[nodiscard]] AccessPolicyEvaluationResult evaluate_diagnostics_request(
       const AccessPolicyEvaluationInput& input,
       std::string_view command_name,
       const PolicyBackendSnapshot& backend) const;
+
+  [[nodiscard]] AccessPolicyEvaluationResult evaluate_override_request(
+    const AccessPolicyEvaluationInput& input,
+    const OverrideSourceFact& source_fact) const;
 
   [[nodiscard]] AccessPolicyEvaluationResult evaluate_override_request(
       const AccessPolicyEvaluationInput& input,
@@ -82,16 +134,24 @@ class AccessPolicyGate {
       const PolicyBackendSnapshot& backend) const;
 
  private:
-  [[nodiscard]] std::optional<OperationTargetView> build_query_context(
+  [[nodiscard]] std::optional<AccessPolicyQuery> build_query_context(
       const AccessPolicyEvaluationInput& input,
       std::string_view operation,
       std::string_view target_type,
-      std::string_view target_ref) const;
+    std::string_view target_ref,
+    bool sensitive_request) const;
 
-  [[nodiscard]] AccessPolicyEvaluationResult map_policy_result(
-      const OperationTargetView& query_context,
-      const PolicyBackendSnapshot& backend,
-      bool sensitive_request) const;
+  [[nodiscard]] AccessPolicyEvaluationResult evaluate_with_evaluator(
+    const AccessPolicyEvaluationInput& input,
+    std::string_view operation,
+    std::string_view target_type,
+    std::string_view target_ref,
+    bool sensitive_request,
+    bool require_local_trusted,
+    const OverrideSourceFact* source_fact,
+    const IAccessPolicyEvaluator& evaluator) const;
+
+  std::shared_ptr<const IAccessPolicyEvaluator> policy_evaluator_;
 };
 
 }  // namespace dasall::access
