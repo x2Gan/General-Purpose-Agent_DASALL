@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -22,6 +23,7 @@ namespace {
 using dasall::tests::support::assert_true;
 
 constexpr char kDefaultProfileId[] = "desktop_full";
+constexpr char kRuntimeCognitionFirstEnv[] = "DASALL_RUNTIME_COGNITION_FIRST";
 
 class TempStateRoot {
  public:
@@ -43,6 +45,31 @@ class TempStateRoot {
 
  private:
   std::filesystem::path path_;
+};
+
+class ScopedEnvVar {
+ public:
+  ScopedEnvVar(const char* name, const std::string& value) : name_(name) {
+    if (const char* current = std::getenv(name); current != nullptr) {
+      had_previous_ = true;
+      previous_value_ = current;
+    }
+    ::setenv(name, value.c_str(), 1);
+  }
+
+  ~ScopedEnvVar() {
+    if (had_previous_) {
+      ::setenv(name_, previous_value_.c_str(), 1);
+      return;
+    }
+
+    ::unsetenv(name_);
+  }
+
+ private:
+  const char* name_;
+  bool had_previous_ = false;
+  std::string previous_value_;
 };
 
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
@@ -213,6 +240,32 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
           "daemon runtime live dependency composition should not mix degraded knowledge markers into the ready baseline");
       }
 
+  void daemon_runtime_live_dependency_composition_supports_cognition_first_gate() {
+    const auto policy_snapshot = load_runtime_policy_snapshot();
+    const TempStateRoot assets_root("dasall-daemon-runtime-live-assets-cognition-first");
+    const TempStateRoot state_root("dasall-daemon-runtime-live-memory-cognition-first");
+    copy_installed_runtime_assets(assets_root.path());
+
+    const ScopedEnvVar cognition_first_override(kRuntimeCognitionFirstEnv, "1");
+    const auto composition =
+        dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+            policy_snapshot,
+            "daemon.local-control-plane",
+            dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+                .readonly_assets_root_override = assets_root.path(),
+                .state_root_override = state_root.path(),
+            });
+    assert_true(composition.ok(),
+                "daemon runtime live dependency composition should keep required ports available when cognition-first is forced: " +
+                    composition.error);
+    assert_true(!contains_port(composition.dependency_set->external_evidence,
+                               "runtime:daemon.local-control-plane:required-live-baseline"),
+                "daemon runtime live dependency composition should drop the required-live-baseline marker when cognition-first is forced");
+    assert_true(contains_port(composition.dependency_set->external_evidence,
+                              "runtime:daemon.local-control-plane:cognition-first-forced"),
+                "daemon runtime live dependency composition should record an explicit cognition-first marker when the evidence gate is enabled");
+  }
+
       void daemon_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails() {
         const auto policy_snapshot = load_runtime_policy_snapshot();
         const TempStateRoot assets_root("dasall-daemon-runtime-live-assets-minimal");
@@ -254,6 +307,7 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
 int main() {
   try {
     daemon_runtime_live_dependency_composition_establishes_default_ready_baseline();
+    daemon_runtime_live_dependency_composition_supports_cognition_first_gate();
     daemon_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonRuntimeLiveDependencyCompositionTest] FAILED: " << ex.what() << '\n';

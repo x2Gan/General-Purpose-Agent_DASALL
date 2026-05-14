@@ -1,6 +1,7 @@
 #include "RuntimeLiveDependencyComposition.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -40,6 +41,21 @@ namespace fs = std::filesystem;
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+[[nodiscard]] bool environment_flag_enabled(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) {
+    return false;
+  }
+
+  const std::string text(value);
+  return text == "1" || text == "true" || text == "TRUE" ||
+         text == "on" || text == "yes";
+}
+
+[[nodiscard]] bool runtime_cognition_first_requested() {
+  return environment_flag_enabled("DASALL_RUNTIME_COGNITION_FIRST");
 }
 
 struct RuntimeObservabilityBundle {
@@ -506,9 +522,11 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                       std::string(composition_owner));
   }
   dependency_set->visible_tools = {"agent.dataset"};
+  const bool cognition_first_requested = runtime_cognition_first_requested();
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
-      ":required-live-baseline",
+      (cognition_first_requested ? ":cognition-first-forced"
+                                 : ":required-live-baseline"),
       std::string("runtime:") + std::string(composition_owner) +
       ":tool-services-production-bridge",
       std::string("runtime:") + std::string(composition_owner) +

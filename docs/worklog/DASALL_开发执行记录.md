@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+## 记录 #652
+
+- 日期：2026-05-14
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-002 建立 cognition-positive app-binary 证据
+- 状态：已完成
+
+### 改动
+
+1. 调整 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：新增 `DASALL_RUNTIME_COGNITION_FIRST=1` 受控 gate；启用后 live composition 记录 `:cognition-first-forced` marker，并停止注入 `:required-live-baseline`，把 direct LLM path 与 cognition-first evidence 分层固定下来。
+2. 调整 `runtime/src/AgentOrchestrator.cpp`：live cognition path 现在复用 `live_context_degradation_is_fatal()`，与 direct path 对齐 tolerated context warning 语义，避免 app-binary 首轮请求因允许的 context fallback 被误判为 fatal。
+3. 调整 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`：前者新增 cognition-first marker 断言，后者在真实 daemon/cli binary smoke 中开启 cognition-first gate，并收紧为“不得出现 `llm.origin=`、必须返回 `runtime unary integration completed:`”的 L3 cognition-positive 断言；同时回写总账 `docs/todos/DASALL_子系统查漏补缺专项记录.md`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test","dasall_cognition_runtime_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","DaemonBinaryUnarySmokeTest","CognitionRuntimeIntegrationTest"])`
+   - 结果：通过，3/3 passed。
+
+### 结果
+
+1. `COG-FIX-002` 已完成：仓库现已具备 L3 app-binary cognition-positive 证据，不再只能用 source-level wiring 说明 cognition 存在。
+2. `RuntimeLiveDependencyComposition` 默认 direct LLM path 与受控 `cognition-first` path 现在拥有可区分的 evidence marker；`DaemonBinaryUnarySmokeTest` 证明真实 app-binary run 能在受控 gate 下执行 cognition / response builder 路径。
+3. 本轮没有把 installed L4 直接改写为 cognition 必经；installed 仍保持 direct-path 口径，从而避免把 L3 证据误外推为 L4 installed full-path 已闭合。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-002` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-002` 的 scoped commit。
+
 ## 记录 #651
 
 - 日期：2026-05-14

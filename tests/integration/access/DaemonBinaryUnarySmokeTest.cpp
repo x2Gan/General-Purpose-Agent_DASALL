@@ -38,6 +38,8 @@ namespace fs = std::filesystem;
 
 constexpr char kRuntimeStateRootOverrideEnv[] =
   "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
+constexpr char kRuntimeCognitionFirstEnv[] =
+  "DASALL_RUNTIME_COGNITION_FIRST";
 
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -65,6 +67,30 @@ class ScopedTempDirectory {
 
  private:
   fs::path path_;
+};
+
+class ScopedEnvVar {
+ public:
+  ScopedEnvVar(const char* name, const std::string& value) : name_(name) {
+    if (const char* current = std::getenv(name); current != nullptr) {
+      had_previous_ = true;
+      previous_value_ = current;
+    }
+    ::setenv(name, value.c_str(), 1);
+  }
+
+  ~ScopedEnvVar() {
+    if (had_previous_) {
+      ::setenv(name_, previous_value_.c_str(), 1);
+    } else {
+      ::unsetenv(name_);
+    }
+  }
+
+ private:
+  const char* name_;
+  bool had_previous_ = false;
+  std::string previous_value_;
 };
 
 [[nodiscard]] fs::path repository_root() {
@@ -209,6 +235,7 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
   const auto log_path = temp_root.path() / "daemon.log";
   const auto root = repository_root();
   fs::create_directories(state_root);
+  ScopedEnvVar cognition_first_override(kRuntimeCognitionFirstEnv, "1");
 
   ScopedDaemonProcess daemon(
       DASALL_DAEMON_BINARY_PATH,
@@ -266,29 +293,28 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
       root);
 
   const std::string run_output = run.stdout_text + run.stderr_text;
-  assert_true(run.exit_code == 0 || run.exit_code == 5,
-              "binary unary smoke should reach daemon runtime path and either complete or fail closed on unavailable LLM secret; output=" +
-                  run_output + " artifact_path=" + log_path.string() +
-                  " daemon_log=" + daemon.read_log());
+      assert_equal(0,
+             run.exit_code,
+             "binary unary smoke should complete through the cognition-first daemon path; output=" +
+               run_output + " artifact_path=" + log_path.string() +
+               " daemon_log=" + daemon.read_log());
   assert_true(run_output.find("[dasall-cli] run: completed") != std::string::npos,
               "binary unary smoke should surface completed daemon envelope; output=" +
                   run_output);
   assert_true(run_output.find("response=") != std::string::npos,
               "binary unary smoke should surface a non-empty runtime response; output=" +
                   run_output);
+      assert_true(run_output.find("runtime unary integration completed:") != std::string::npos,
+            "binary unary smoke should surface response-builder completion text when cognition-first is forced; output=" +
+              run_output);
   assert_true(run_output.find("stub-ready") == std::string::npos &&
-                  run_output.find("stub_runtime_path") == std::string::npos,
+              run_output.find("stub_runtime_path") == std::string::npos &&
+              run_output.find("llm.origin=") == std::string::npos,
               "binary unary smoke should not fall back to stub runtime path; output=" +
                   run_output);
-  if (run.exit_code == 5) {
-    assert_true(run_output.find("runtime llm request failed") != std::string::npos,
-                "binary unary smoke should fail closed on LLM secret/runtime unavailability; output=" +
-                    run_output);
-  } else {
-    assert_true(run.stderr_text.empty(),
-                "binary unary smoke should keep successful human output off stderr; stderr=" +
-                    run.stderr_text);
-  }
+      assert_true(run.stderr_text.empty(),
+            "binary unary smoke should keep successful human output off stderr; stderr=" +
+              run.stderr_text);
 
   const auto json_run =
     dasall::tests::integration::access_support::run_process_capture_split(
@@ -306,9 +332,10 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
       },
       root);
 
-  assert_true(json_run.exit_code == 0 || json_run.exit_code == 5,
-              "binary unary smoke should keep JSON run on success or fail-closed business exit; stdout=" +
-                  json_run.stdout_text + " stderr=" + json_run.stderr_text);
+  assert_equal(0,
+               json_run.exit_code,
+               "binary unary smoke should keep JSON cognition-first run completed; stdout=" +
+                   json_run.stdout_text + " stderr=" + json_run.stderr_text);
   assert_true(json_run.stderr_text.empty(),
         "binary unary smoke should keep JSON output off stderr; stderr=" +
           json_run.stderr_text);
@@ -324,15 +351,15 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
           std::string::npos,
         "binary unary smoke should preserve explicit trace_id in JSON output; stdout=" +
           json_run.stdout_text);
+  assert_true(json_run.stdout_text.find("runtime unary integration completed:") !=
+                  std::string::npos,
+              "binary unary smoke JSON should retain the cognition response-builder text; stdout=" +
+                  json_run.stdout_text);
   assert_true(json_run.stdout_text.find("stub-ready") == std::string::npos &&
-                  json_run.stdout_text.find("stub_runtime_path") == std::string::npos,
+                  json_run.stdout_text.find("stub_runtime_path") == std::string::npos &&
+                  json_run.stdout_text.find("llm.origin=") == std::string::npos,
               "binary unary smoke JSON should not expose stub runtime path; stdout=" +
                   json_run.stdout_text);
-  if (json_run.exit_code == 5) {
-    assert_true(json_run.stdout_text.find("task_not_completed") != std::string::npos,
-          "binary unary smoke JSON should fail closed with task_not_completed when LLM secret is unavailable; stdout=" +
-                    json_run.stdout_text);
-  }
 
   const auto daemon_exit_code = daemon.stop();
   const auto daemon_log = daemon.read_log();

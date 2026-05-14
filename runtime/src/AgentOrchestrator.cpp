@@ -2013,7 +2013,8 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
   if (has_live_unary_ports(composition_)) {
     auto context_result = composition_.dependency_set->memory_manager->prepare_context(
         make_memory_context_request(normalized_request, goal_id, composition_, runtime_budget));
-    if (context_result.result_code.has_value() || context_result.degraded) {
+    if (context_result.result_code.has_value() ||
+        live_context_degradation_is_fatal(context_result)) {
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::MainLoop,
                  fsm->current_state(),
