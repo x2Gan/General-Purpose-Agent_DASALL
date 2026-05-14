@@ -64,15 +64,44 @@ load_runtime_policy_snapshot() {
   return std::find(ports.begin(), ports.end(), expected_port) != ports.end();
 }
 
+[[nodiscard]] bool contains_prefix(const std::vector<std::string>& values,
+                                   const std::string& expected_prefix) {
+  return std::any_of(values.begin(), values.end(),
+                     [&expected_prefix](const std::string& value) {
+                       return value.rfind(expected_prefix, 0) == 0;
+                     });
+}
+
+void copy_memory_assets_only(const std::filesystem::path& assets_root) {
+  std::filesystem::create_directories(assets_root / "sql");
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "sql" / "memory",
+                        assets_root / "sql" / "memory",
+                        std::filesystem::copy_options::recursive);
+}
+
+void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
+  copy_memory_assets_only(assets_root);
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "profiles",
+                        assets_root / "profiles",
+                        std::filesystem::copy_options::recursive);
+  std::filesystem::create_directories(assets_root / "llm");
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "llm" / "assets" /
+                            "providers",
+                        assets_root / "llm" / "providers",
+                        std::filesystem::copy_options::recursive);
+}
+
 void daemon_runtime_live_dependency_composition_establishes_default_ready_baseline() {
   const auto policy_snapshot = load_runtime_policy_snapshot();
+  const TempStateRoot assets_root("dasall-daemon-runtime-live-assets");
   const TempStateRoot state_root("dasall-daemon-runtime-live-memory");
+  copy_installed_runtime_assets(assets_root.path());
   const auto composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           policy_snapshot,
       "daemon.local-control-plane",
       dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
-        .readonly_assets_root_override = std::filesystem::path(DASALL_SOURCE_ROOT),
+        .readonly_assets_root_override = assets_root.path(),
         .state_root_override = state_root.path(),
       });
   assert_true(composition.ok(),
@@ -176,6 +205,42 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         assert_true(contains_port(composition.dependency_set->external_evidence,
         "runtime:daemon.local-control-plane:production-observability-health"),
           "daemon runtime live dependency composition should record the production observability and health evidence marker");
+        assert_true(contains_port(composition.dependency_set->external_evidence,
+          "runtime:daemon.local-control-plane:knowledge-installed-assets-ready"),
+            "daemon runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");
+      }
+
+      void daemon_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails() {
+        const auto policy_snapshot = load_runtime_policy_snapshot();
+        const TempStateRoot assets_root("dasall-daemon-runtime-live-assets-minimal");
+        const TempStateRoot state_root("dasall-daemon-runtime-live-memory-degraded");
+        copy_memory_assets_only(assets_root.path());
+
+        const auto composition =
+          dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+            policy_snapshot,
+            "daemon.local-control-plane",
+            dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+              .readonly_assets_root_override = assets_root.path(),
+              .state_root_override = state_root.path(),
+            });
+        assert_true(composition.ok(),
+              "daemon runtime live dependency composition should keep required baseline available even when knowledge positive probe fails: " +
+                composition.error);
+
+        const auto readiness = composition.dependency_set->describe_readiness();
+        assert_true(readiness.has_required_ports,
+              "daemon runtime live dependency composition should keep required ports ready when only the knowledge probe fails: " +
+                readiness.summary());
+        assert_true(readiness.degraded &&
+                contains_port(readiness.missing_optional_ports, "knowledge"),
+              "daemon runtime live dependency composition should expose knowledge as a degraded optional port when the positive probe fails: " +
+                readiness.summary());
+        assert_true(composition.dependency_set->knowledge_service == nullptr,
+              "daemon runtime live dependency composition should not publish a knowledge service when the installed positive probe fails");
+        assert_true(contains_prefix(composition.dependency_set->external_evidence,
+                "runtime:daemon.local-control-plane:knowledge-degraded:"),
+              "daemon runtime live dependency composition should record a degraded knowledge marker when the positive probe fails");
 }
 
 }  // namespace
@@ -183,6 +248,7 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
 int main() {
   try {
     daemon_runtime_live_dependency_composition_establishes_default_ready_baseline();
+    daemon_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonRuntimeLiveDependencyCompositionTest] FAILED: " << ex.what() << '\n';
     return 1;

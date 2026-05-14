@@ -63,6 +63,25 @@ load_runtime_policy_snapshot() {
   return std::find(ports.begin(), ports.end(), expected_port) != ports.end();
 }
 
+void copy_memory_assets_only(const std::filesystem::path& assets_root) {
+  std::filesystem::create_directories(assets_root / "sql");
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "sql" / "memory",
+                        assets_root / "sql" / "memory",
+                        std::filesystem::copy_options::recursive);
+}
+
+void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
+  copy_memory_assets_only(assets_root);
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "profiles",
+                        assets_root / "profiles",
+                        std::filesystem::copy_options::recursive);
+  std::filesystem::create_directories(assets_root / "llm");
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "llm" / "assets" /
+                            "providers",
+                        assets_root / "llm" / "providers",
+                        std::filesystem::copy_options::recursive);
+}
+
 void assert_gateway_tool_services_backend(
   const std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>& policy_snapshot,
   const std::shared_ptr<dasall::runtime::RuntimeDependencySet>& dependency_set) {
@@ -108,17 +127,22 @@ void assert_gateway_tool_services_backend(
     assert_true(contains_port(dependency_set->external_evidence,
             "runtime:gateway.http-unary:production-observability-health"),
           "gateway runtime live dependency composition should record the production observability and health evidence marker");
+    assert_true(contains_port(dependency_set->external_evidence,
+                    "runtime:gateway.http-unary:knowledge-installed-assets-ready"),
+                "gateway runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");
 }
 
 void gateway_runtime_live_dependency_composition_establishes_default_ready_baseline() {
   const auto policy_snapshot = load_runtime_policy_snapshot();
+  const TempStateRoot assets_root("dasall-gateway-runtime-live-assets");
   const TempStateRoot state_root("dasall-gateway-runtime-live-memory");
+  copy_installed_runtime_assets(assets_root.path());
   const auto composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           policy_snapshot,
           "gateway.http-unary",
           dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
-              .readonly_assets_root_override = std::filesystem::path(DASALL_SOURCE_ROOT),
+              .readonly_assets_root_override = assets_root.path(),
               .state_root_override = state_root.path(),
           });
   assert_true(composition.ok(),

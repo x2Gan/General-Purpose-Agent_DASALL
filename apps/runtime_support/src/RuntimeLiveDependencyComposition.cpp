@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -14,6 +15,7 @@
 #include "IMemoryManager.h"
 #include "IMultiAgentCoordinator.h"
 #include "KnowledgeServiceFactory.h"
+#include "KnowledgeTypes.h"
 #include "IResponseBuilder.h"
 #include "RuntimeDependencySet.h"
 #include "ServiceLiveComposition.h"
@@ -235,6 +237,78 @@ class RuntimeToolHealthSignalProvider final
   return memory_config;
 }
 
+[[nodiscard]] std::string format_knowledge_error(
+    const std::optional<contracts::ErrorInfo>& error) {
+  if (!error.has_value()) {
+    return "none";
+  }
+
+  return !error->details.message.empty() ? error->details.message
+                                         : std::string("knowledge.error");
+}
+
+[[nodiscard]] std::string join_reason_codes(
+    const std::vector<std::string>& reason_codes) {
+  std::ostringstream builder;
+  for (std::size_t index = 0; index < reason_codes.size(); ++index) {
+    if (index != 0U) {
+      builder << ',';
+    }
+    builder << reason_codes[index];
+  }
+  return builder.str();
+}
+
+[[nodiscard]] knowledge::KnowledgeQuery make_installed_knowledge_probe_query() {
+  knowledge::KnowledgeQuery query;
+  query.request_id = "runtime-support-installed-knowledge-probe";
+  query.query_text = "DeepSeek Chat";
+  query.query_kind = knowledge::KnowledgeQueryKind::FactLookup;
+  query.top_k = 3U;
+  query.max_context_projection_items = 3U;
+  return query;
+}
+
+[[nodiscard]] std::string validate_installed_knowledge_positive_probe(
+    const std::shared_ptr<knowledge::IKnowledgeService>& knowledge_service) {
+  if (knowledge_service == nullptr) {
+    return "knowledge-service-null";
+  }
+
+  const auto refresh_result = knowledge_service->request_refresh(knowledge::CorpusChangeSet{});
+  if (refresh_result.status != knowledge::RefreshStatus::Accepted) {
+    return refresh_result.status == knowledge::RefreshStatus::Busy
+        ? std::string("refresh-busy")
+        : std::string("refresh-failed:") + format_knowledge_error(refresh_result.error);
+  }
+
+  const auto health_snapshot = knowledge_service->health_snapshot();
+  if (health_snapshot.freshness_state != knowledge::FreshnessState::Fresh ||
+      health_snapshot.active_snapshot_id.empty()) {
+    return std::string("health:") + join_reason_codes(health_snapshot.reason_codes);
+  }
+
+  const auto retrieve_result = knowledge_service->retrieve(
+      make_installed_knowledge_probe_query());
+  if (!retrieve_result.ok || !retrieve_result.evidence.has_value() ||
+      retrieve_result.evidence->slices.empty()) {
+    return std::string("retrieve:") + format_knowledge_error(retrieve_result.error);
+  }
+
+  const auto matching_slice = std::find_if(
+      retrieve_result.evidence->slices.begin(),
+      retrieve_result.evidence->slices.end(),
+      [](const knowledge::EvidenceSlice& slice) {
+        return slice.snippet.find("DeepSeek Chat") != std::string::npos ||
+               slice.citation_ref.find("deepseek") != std::string::npos;
+      });
+  if (matching_slice == retrieve_result.evidence->slices.end()) {
+    return "retrieve-missing-installed-evidence";
+  }
+
+  return {};
+}
+
 [[nodiscard]] contracts::ToolDescriptor make_runtime_dataset_descriptor() {
   return contracts::ToolDescriptor{
       .tool_name = std::string{"agent.dataset"},
@@ -451,10 +525,18 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .service_instance_id = std::string(composition_owner) + ":knowledge",
       });
   if (knowledge_result.ok()) {
-    dependency_set->knowledge_service = knowledge_result.service;
-    dependency_set->external_evidence.push_back(
+    const auto positive_probe_error =
+      validate_installed_knowledge_positive_probe(knowledge_result.service);
+    if (positive_probe_error.empty()) {
+      dependency_set->knowledge_service = knowledge_result.service;
+      dependency_set->external_evidence.push_back(
         std::string("runtime:") + std::string(composition_owner) +
-        ":knowledge-installed-assets");
+        ":knowledge-installed-assets-ready");
+    } else {
+      dependency_set->external_evidence.push_back(
+        std::string("runtime:") + std::string(composition_owner) +
+        ":knowledge-degraded:" + positive_probe_error);
+    }
   } else {
     dependency_set->external_evidence.push_back(
         std::string("runtime:") + std::string(composition_owner) +

@@ -182,6 +182,7 @@ void installed_asset_service_retrieves_deepseek_chat() {
       InstalledAssetKnowledgeServiceOptions{
           .readonly_assets_root = assets_root,
           .state_root = state_root,
+        .service_instance_id = "knowledge-installed-asset-probe",
       });
   assert_true(factory_result.service != nullptr,
               "installed asset knowledge factory failed: " + factory_result.error);

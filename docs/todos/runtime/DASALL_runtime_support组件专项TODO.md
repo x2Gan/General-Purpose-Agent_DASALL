@@ -3,7 +3,7 @@
 最近更新时间：2026-05-14
 阶段：Detailed Design -> Special TODO
 适用范围：`apps/runtime_support/` 共享 app-level runtime live composition helper、`apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp`、相关 focused composition tests，以及与 runtime/tools/services/knowledge/infra 的组合根边界
-当前结论：`apps/runtime_support::compose_minimal_live_dependency_set()` 已把 daemon / gateway 的 runtime dependency owner 收敛为共享 helper，并已完成 install layout + SQLite memory baseline、production LLM manager、cognition/response ports、minimal ToolManager、typed multi-agent seam、runtime production services backend 注入、production observability/health sinks 和 optional knowledge seam 的最小 live baseline。当前剩余缺口集中在 knowledge optional degraded semantics 证据，以及 installed / qemu / release 层级验证。
+当前结论：`apps/runtime_support::compose_minimal_live_dependency_set()` 已把 daemon / gateway 的 runtime dependency owner 收敛为共享 helper，并已完成 install layout + SQLite memory baseline、production LLM manager、cognition/response ports、minimal ToolManager、typed multi-agent seam、runtime production services backend 注入、production observability/health sinks，以及 knowledge ready / degraded / unavailable 语义与 installed positive probe 的最小 live baseline。当前剩余缺口集中在 owner / fail-closed / marker regression matrix，以及 installed / qemu / release 层级验证。
 
 ## 1. 文档头
 
@@ -98,7 +98,7 @@
 | `MultiAgent*IntegrationTest` | 已通过 shared helper 消费 typed `multi_agent_enabled()` | helper 已进入 multi-agent enabled / disabled seam |
 | tool path | 已通过 `services::compose_live_services()` 与 `ServiceLiveComposition` public seam 向 `BuiltinExecutorLane` 注入 concrete `IExecutionService` / `IDataService` | `agent.dataset` / `agent.terminal` 已不再回落 tools default service，并有 direct + app composition focused evidence |
 | observability / health | helper 已通过 `infra::compose_live_observability()` 统一提供 audit / metrics / trace sinks，并注册 tools/services probes 到 health monitor | production observability / health hot path 已有 direct tools focused evidence 与 app composition health aggregate evidence |
-| knowledge seam | 已调用 installed asset knowledge service factory，但 probe 仍有 red 边界 | current helper 仍只能证明 optional seam 已接，而非 installed positive ready |
+| knowledge seam | helper 现在以 installed positive probe 决定 ready/degraded，并在 daemon/gateway composition 中记录 `knowledge-installed-assets-ready` 或 `knowledge-degraded:*` marker | build-tree focused evidence 已固定 knowledge ready / degraded / unavailable 语义与 installed positive path |
 
 ## 4. Design Track 映射
 
@@ -106,7 +106,7 @@
 |---|---|---|---|
 | owner 固定在 app binary，helper 为共享组合根 | runtime 详设 6.24.12.3、`RuntimeAppCompositionV1` | 已完成并回写 | RTSUP-TODO-001、003 |
 | install layout / state owner / test override 语义固定 | FULLINT-TODO-015、runtime_support public options | 已完成 | RTSUP-TODO-002 |
-| minimal live baseline 包含 memory/llm/cognition/response/tools/multi-agent，knowledge 为 optional | runtime / access / Gate-INT-06 | 已完成基线，后续需补证据 | RTSUP-TODO-002、004、007 |
+| minimal live baseline 包含 memory/llm/cognition/response/tools/multi-agent，knowledge 为 optional | runtime / access / Gate-INT-06 | 已完成并补齐 installed positive probe 与 degraded marker 语义 | RTSUP-TODO-002、004、007 |
 | tool path 需要真实 services backend，而非 default service | tools / capability services 专项 TODO | 已完成，helper 通过 services public live composition seam 注入 production backend | RTSUP-TODO-005 |
 | production observability / health sinks 需要 shared helper 注入 | infra / runtime / tools / services 专项 TODO | 已完成，shared helper 已注入 concrete sinks 并保活 health monitor/probes | RTSUP-TODO-006 |
 | evidence marker 与 owner / fail-closed regression 需要单独 gate | SystemIntegrationGateMatrix、BusinessChainIntegrationMatrix | 未完成 | RTSUP-TODO-008 |
@@ -121,7 +121,7 @@
 | minimal tool surface + multi-agent seam | `RuntimeLiveDependencyComposition.cpp` | daemon/gateway + multi-agent focused tests | 当前只证明 baseline，不证明 production services backend |
 | production services backend | `RuntimeLiveDependencyComposition.cpp`、`services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp` | `ToolServicesProductionBridgeIntegrationTest`、daemon/gateway composition tests | 已完成，tool path 已通过 live services backend 收口 |
 | production observability / health sinks | helper + infra public observability composition helper | `ToolProductionObservabilityIntegrationTest`、`RuntimeProductionHealthCompositionTest`、扩展 daemon/gateway composition tests | 已完成，shared sinks 与 health aggregate 已进入 focused regression 面 |
-| knowledge optional degraded semantics | helper + knowledge installed seam | installed asset probe / composition tests | 避免 optional/fatal/ready 混写 |
+| knowledge optional degraded semantics | helper + knowledge installed seam | `KnowledgeInstalledAssetProbeIntegrationTest`、扩展 daemon/gateway composition tests | 已完成，knowledge ready / degraded / unavailable 语义与 installed positive path 已固定 |
 | installed / qemu / release-preflight matrix | packaging scripts、package smoke、system gate docs | Gate-INT-10 / qemu probes | 负责把 L2/L3 partial 提升到 L4/L5 候选 |
 
 ## 6. 原子任务清单
@@ -146,7 +146,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | RTSUP-TODO-005 | Done | 接入 runtime production services backend | tools / capability services 专项 TODO；`TOOL-GAP-001`、`CAPSRV-GAP-001` | `BuiltinExecutorLaneDependencies` 不再为空服务；tool path 走 concrete services backend | L2 | `services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp`、`services/CMakeLists.txt`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、`tests/integration/tools/ToolServicesProductionBridgeIntegrationTest.cpp`、`tests/integration/tools/CMakeLists.txt`、`tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/CMakeLists.txt` | `compose_live_services()`、`compose_runtime_tool_manager()`、`IExecutionService`、`IDataService`、`ServiceFacade` | `ToolServicesProductionBridgeIntegrationTest`、扩展 daemon/gateway composition tests | `RunCtest_CMakeTools(tests=["ToolServicesProductionBridgeIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`；回退：`cmake -S . -B build-rtsup005 -G "Unix Makefiles" && cmake --build build-rtsup005 --target dasall_tool_services_production_bridge_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir build-rtsup005 -R '^(ToolServicesProductionBridgeIntegrationTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure` | RTSUP-TODO-004 | RTSUP-BLK-001 | 已通过 services public live composition seam 解阻 | 更新后的 services factory、helper source 与 focused tests | app live composition 的 tool path 不再回落 tools default service，且 direct tools->services 与 daemon/gateway composition focused tests 全部通过 |
 | RTSUP-TODO-006 | Done | 接入 production observability 与 health sinks | infra / runtime / tools / capability services 专项 TODO；`TOOL-GAP-007`、`CAPSRV-GAP-006`、`INF-GAP-001` | logger / audit / metrics / trace / health provider 注入 shared helper | L2 | `infra/include/ObservabilityLiveComposition.h`、`infra/src/ObservabilityLiveComposition.cpp`、`infra/CMakeLists.txt`、`services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp`、`runtime/include/RuntimeDependencySet.h`、`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、`tests/integration/tools/ToolProductionObservabilityIntegrationTest.cpp`、`tests/integration/tools/CMakeLists.txt`、`tests/integration/access/RuntimeProductionHealthCompositionTest.cpp`、`tests/integration/access/CMakeLists.txt`、扩展 daemon/gateway composition tests | `compose_live_observability()`、runtime_support observability bundle、service observability bridge injection、tool/services probe registration | `ToolProductionObservabilityIntegrationTest`、`RuntimeProductionHealthCompositionTest`、扩展 daemon/gateway composition tests | `RunCtest_CMakeTools(tests=["ToolProductionObservabilityIntegrationTest","RuntimeProductionHealthCompositionTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`；回退：`cmake -S . -B build-rtsup005 -G "Unix Makefiles" && cmake --build build-rtsup005 --target dasall_tool_production_observability_integration_test dasall_access_runtime_production_health_composition_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir build-rtsup005 -R '^(ToolProductionObservabilityIntegrationTest|RuntimeProductionHealthCompositionTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure` | RTSUP-TODO-005 | RTSUP-BLK-002 | 已通过 infra public observability composition seam 与 health monitor/probe registration 解阻 | 更新后的 infra/services/helper source 与 observability/health focused tests | shared helper 组合出的 live path 能发出真实 sink event，并把 health hot path 纳入 app composition，且 direct tools 与 daemon/gateway/runtime health tests 全部通过 |
-| RTSUP-TODO-007 | NotStarted | 收口 knowledge optional degraded semantics 与 installed positive probe | knowledge 专项 TODO；`KnowledgeInstalledAssetProbeIntegrationTest` 当前 red 边界 | helper 的 knowledge ready / degraded / unavailable marker、installed positive evidence | L2 | `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、必要时 daemon/gateway installed composition plumbing | knowledge unavailable marker、positive probe、readiness semantics | 扩展 `KnowledgeInstalledAssetProbeIntegrationTest` 或新增 daemon/gateway knowledge composition positive test | `RunCtest_CMakeTools(tests=["KnowledgeInstalledAssetProbeIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])` | RTSUP-TODO-004 | RTSUP-BLK-003 | installed asset probe 与 package asset path 可复验，knowledge ready/degraded/fatal 规则固定 | 更新后的 helper source、knowledge probe tests | knowledge optional port 的语义稳定，不再在 fatal / ready / degraded 之间漂移 |
+| RTSUP-TODO-007 | Done | 收口 knowledge optional degraded semantics 与 installed positive probe | knowledge 专项 TODO；`KnowledgeInstalledAssetProbeIntegrationTest` 当前 red 边界 | helper 的 knowledge ready / degraded / unavailable marker、installed positive evidence | L2 | `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`、`tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp`、`tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp` | installed positive probe、knowledge degraded marker、ready/degraded readiness semantics | `KnowledgeInstalledAssetProbeIntegrationTest`、扩展 daemon/gateway composition tests | `RunCtest_CMakeTools(tests=["KnowledgeInstalledAssetProbeIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`；回退：`cmake -S . -B build-rtsup005 -G "Unix Makefiles" && cmake --build build-rtsup005 --target dasall_knowledge_installed_asset_probe_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir build-rtsup005 -R '^(KnowledgeInstalledAssetProbeIntegrationTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure` | RTSUP-TODO-004 | RTSUP-BLK-003 | 已通过 installed positive probe 与 daemon/gateway degraded marker 回归收缩到 package / qemu gate | 更新后的 helper source、knowledge probe tests | knowledge optional port 的语义稳定，不再在 fatal / ready / degraded 之间漂移，且 installed positive probe 与 daemon/gateway composition focused tests 全部通过 |
 
 ### 6.4 测试支撑 / 集成 / 门禁任务
 
@@ -164,7 +164,7 @@
 |---|---|---|---|
 | A 边界与基线冻结 | 001 ~ 004、010 | 已完成 | owner、install layout、shared helper、minimal baseline 与总记录回写已经到位 |
 | B production backend 收口 | 005、006 | 005 先，006 可并行准备 | 先解决 tool path default service，再补 observability / health sinks |
-| C optional knowledge 与 regression | 007、008 | 007 先，008 在 005/006/007 之后 | 先稳定 knowledge degraded 语义，再建立完整 regression matrix |
+| C optional knowledge 与 regression | 007、008 | 007 已完成，008 下一步 | knowledge degraded 语义已稳定，下一步建立完整 regression matrix |
 | D installed / qemu / release 证据 | 009 | 最后串行 | 只有在 build-tree production completeness 稳定后，installed / qemu gate 才有意义 |
 
 ### 7.2 必过门禁表
@@ -184,7 +184,7 @@
 |---|---|---|---|---|
 | RTSUP-BLK-001 | 已解阻：runtime_support 已通过 `ServiceLiveComposition` public seam 获得真实 services composition root，tool path 不再回落 default service | 008、009 | services facade / lanes / adapters 在 helper 侧具备最小 production composition 口径 | 保持 direct tools->services 与 daemon/gateway composition focused tests 作为后续 regression baseline |
 | RTSUP-BLK-002 | 已解阻：infra provider / tracer / audit logger / health provider 已通过 `infra::compose_live_observability()` 收口，并在 helper 中统一注册 tools/services probes | 008、009 | runtime/tools/services/infra 就 helper 注入口径达成一致，或在 helper 中收口最小 provider seam | 保持 direct tools observability test、runtime health composition test 与 daemon/gateway composition tests 作为后续 regression baseline |
-| RTSUP-BLK-003 | installed knowledge positive probe 与 package / qemu 环境尚未形成正式 gate | 007、009 | knowledge installed probe 正向可复验，Gate-INT-10 / qemu harness 可运行 | 继续把 knowledge 写成 optional seam 已接，但 installed positive 未证明 |
+| RTSUP-BLK-003 | 已部分解阻：installed knowledge positive probe 已可复验，但 package / qemu 环境尚未形成正式 gate | 009 | knowledge installed probe 正向可复验，Gate-INT-10 / qemu harness 可运行 | 保持 knowledge focused tests 作为 build-tree baseline，并在 009 单列 package / qemu 证据 |
 
 ## 9. 测试矩阵与统一验收命令
 
@@ -221,7 +221,7 @@
 
 可以，但不应把范围再放大。
 
-当前最小可执行闭环是：先完成 `RTSUP-TODO-005` / `RTSUP-TODO-006` 两项 production completeness 任务，再推进 `RTSUP-TODO-007` / `RTSUP-TODO-008` 的 semantic / regression 收口，最后通过 `RTSUP-TODO-009` 把证据提升到 installed / qemu 层。
+当前最小可执行闭环是：在 `RTSUP-TODO-005` / `RTSUP-TODO-006` / `RTSUP-TODO-007` 已完成的前提下，先推进 `RTSUP-TODO-008` 的 regression 收口，再通过 `RTSUP-TODO-009` 把证据提升到 installed / qemu 层。
 
 ### 11.2 当前最细可安全落盘粒度
 

@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #648
+
+- 日期：2026-05-14
+- 阶段：runtime_support/组件专项 TODO 阶段 C
+- 任务：RTSUP-TODO-007 收口 knowledge optional degraded semantics 与 installed positive probe
+- 状态：已完成
+
+### 改动
+
+1. 调整 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：helper 现在在 knowledge factory 成功后继续执行 installed positive probe，包括 refresh、fresh snapshot 校验和固定 query 检索；只有 probe 成功时才发布 `knowledge_service` 并写入 `:knowledge-installed-assets-ready` marker，否则保留 optional degraded 语义并写入 `:knowledge-degraded:*` marker。
+2. 调整 `tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp`：补齐 `service_instance_id`，保持 direct installed asset probe 能稳定证明 profiles/provider assets 的正向检索路径。
+3. 调整 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`：正向用例改为显式构造 installed-style readonly assets root，并断言 `knowledge-installed-assets-ready` marker；daemon 侧额外新增 degraded 用例，只保留 `sql/memory` 资产以证明 knowledge probe 失败时 helper 仍保持 required baseline、但 knowledge 退化为 missing optional port。
+
+### 验证
+
+1. `cmake -S /home/gangan/DASALL -B /home/gangan/DASALL/build-rtsup005 -G "Unix Makefiles" && cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall_knowledge_installed_asset_probe_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir /home/gangan/DASALL/build-rtsup005 -R '^(KnowledgeInstalledAssetProbeIntegrationTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure`
+   - 结果：通过，3/3 passed。
+
+### 结果
+
+1. `RTSUP-TODO-007` 已完成：runtime_support 不再把 knowledge factory 成功直接视为 ready，而是以 installed positive probe 决定 ready/degraded，并把 marker 与 readiness 语义一起固化到 helper surface。
+2. `RTSUP-BLK-003` 已部分解阻：installed knowledge positive probe 已有 build-tree focused evidence；剩余阻塞收缩到 package / qemu 正式 gate，由 009 继续承担。
+3. 当前实现继续守住边界：helper 只消费 knowledge public factory/interface，不把 knowledge internals 或 package gate 逻辑回流到 daemon/gateway entry。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `RTSUP-TODO-007` 相关文件。
+2. 按仓库规范提交并推送 `RTSUP-TODO-007` 的 scoped commit。
+
 ## 记录 #647
 
 - 日期：2026-05-14
