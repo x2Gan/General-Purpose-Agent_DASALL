@@ -1,10 +1,16 @@
 #include "ICognitionEngine.h"
 
 #include <algorithm>
+#include <chrono>
+#include <exception>
+#include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,6 +39,79 @@ using observability::StageTelemetryContext;
 using observability::TelemetryEmitResult;
 using policy::StageExecutionPlan;
 using validation::InputBoundaryValidationResult;
+
+template <typename T>
+struct TimedStageResult {
+  bool timed_out = false;
+  std::uint32_t elapsed_ms = 0;
+  std::optional<T> value;
+};
+
+template <typename Fn>
+[[nodiscard]] auto run_stage_with_deadline(std::uint32_t deadline_ms, Fn&& fn)
+    -> TimedStageResult<std::invoke_result_t<Fn>> {
+  using ReturnType = std::invoke_result_t<Fn>;
+  const auto started_at = std::chrono::steady_clock::now();
+
+  if (deadline_ms == 0U) {
+    return TimedStageResult<ReturnType>{
+        .timed_out = false,
+        .elapsed_ms = static_cast<std::uint32_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started_at)
+                .count()),
+        .value = std::invoke(std::forward<Fn>(fn)),
+    };
+  }
+
+  std::promise<ReturnType> promise;
+  auto future = promise.get_future();
+  std::thread worker([promise = std::move(promise), fn = std::forward<Fn>(fn)]() mutable {
+    try {
+      promise.set_value(std::invoke(std::move(fn)));
+    } catch (...) {
+      try {
+        promise.set_exception(std::current_exception());
+      } catch (...) {
+      }
+    }
+  });
+
+  if (future.wait_for(std::chrono::milliseconds(deadline_ms)) == std::future_status::ready) {
+    try {
+      auto value = future.get();
+      if (worker.joinable()) {
+        worker.join();
+      }
+      return TimedStageResult<ReturnType>{
+          .timed_out = false,
+          .elapsed_ms = static_cast<std::uint32_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - started_at)
+                  .count()),
+          .value = std::move(value),
+      };
+    } catch (...) {
+      if (worker.joinable()) {
+        worker.join();
+      }
+      throw;
+    }
+  }
+
+  if (worker.joinable()) {
+    worker.detach();
+  }
+
+  return TimedStageResult<ReturnType>{
+      .timed_out = true,
+      .elapsed_ms = static_cast<std::uint32_t>(
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - started_at)
+              .count()),
+      .value = std::nullopt,
+  };
+}
 
 [[nodiscard]] std::string default_response_summary(const CognitionStepRequest& request) {
   if (request.context_packet.current_goal_summary.has_value() &&
@@ -139,6 +218,20 @@ void ignore_emit_result(TelemetryEmitResult) {}
   error_info.source_ref.ref_type = "component";
   error_info.source_ref.ref_id = std::move(source_component);
   return error_info;
+}
+
+[[nodiscard]] contracts::ErrorInfo make_stage_timeout_error_info(
+    std::string stage,
+    const std::string& request_id,
+    const std::string& trace_id,
+    std::uint32_t elapsed_ms,
+    std::string source_component) {
+  return make_error_info(
+      contracts::ResultCode::RuntimeRetryExhausted,
+      std::move(stage),
+      std::string{"cognition.stage_timeout request_id="} + request_id +
+          " trace_id=" + trace_id + " elapsed_ms=" + std::to_string(elapsed_ms),
+      std::move(source_component));
 }
 
 [[nodiscard]] bool should_recommend_context_reload(float context_confidence) {
@@ -483,12 +576,31 @@ class CognitionFacade final : public ICognitionEngine {
         decision_plan.has_value() ? decision_plan->max_plan_nodes : config_.max_plan_nodes;
     const auto max_plan_depth =
         decision_plan.has_value() ? decision_plan->max_plan_depth : config_.max_plan_depth;
+    const auto stage_deadline_ms =
+      decision_plan.has_value() ? decision_plan->deadline_ms : 0U;
     const auto rule_fallback_enabled =
         request.execution_hints.degraded_path_allowed &&
         (!decision_plan.has_value() || decision_plan->rule_fallback_enabled);
 
-    const auto perception_result = perception_engine_.perceive(request);
-    if (!perception_result.has_value()) {
+    const auto perception_result = run_stage_with_deadline(
+      stage_deadline_ms,
+      [perception_engine = perception_engine_, request]() mutable {
+        return perception_engine.perceive(request);
+      });
+    if (perception_result.timed_out) {
+      apply_decision_failure(
+        result,
+        contracts::ResultCode::RuntimeRetryExhausted,
+        make_stage_timeout_error_info("perception",
+                      request.request_id,
+                      request.trace_id,
+                      perception_result.elapsed_ms,
+                      "cognition::perception::PerceptionEngine"),
+        "decision_pipeline.stage_timeout:perception");
+      return result;
+    }
+
+    if (!perception_result.value->has_value()) {
       if (rule_fallback_enabled) {
         result.action_decision = make_clarification_fallback(
             request,
@@ -519,13 +631,16 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
-    result.context_sufficiency.context_sufficient = !perception_result->requires_clarification;
-    result.context_sufficiency.context_confidence = perception_result->confidence;
-    result.context_sufficiency.missing_evidence_hints = collect_missing_evidence(*perception_result);
+      const auto& perception = perception_result.value->value();
+
+      result.context_sufficiency.context_sufficient = !perception.requires_clarification;
+      result.context_sufficiency.context_confidence = perception.confidence;
+      result.context_sufficiency.missing_evidence_hints =
+        collect_missing_evidence(perception);
     result.context_sufficiency.recommend_context_reload =
-        perception_result->requires_clarification ||
-        should_recommend_context_reload(perception_result->confidence);
-    append_unique(result.diagnostics, perception_result->diagnostics);
+        perception.requires_clarification ||
+        should_recommend_context_reload(perception.confidence);
+      append_unique(result.diagnostics, perception.diagnostics);
 
     consume_decision_bridge_stage(request,
                                   "planning",
@@ -547,13 +662,29 @@ class CognitionFacade final : public ICognitionEngine {
     planning_request.goal_contract = request.goal_contract;
     planning_request.context_packet = request.context_packet;
     planning_request.belief_state = request.belief_state;
-    planning_request.perception_result = *perception_result;
+    planning_request.perception_result = perception;
     planning_request.budget_context = request.budget_context;
     planning_request.execution_hints = request.execution_hints;
-    const auto plan_graph = planner_.build_plan(planning_request);
+    const auto plan_graph = run_stage_with_deadline(
+        stage_deadline_ms,
+        [planner = planner_, planning_request]() mutable {
+          return planner.build_plan(planning_request);
+        });
+    if (plan_graph.timed_out) {
+      apply_decision_failure(
+          result,
+          contracts::ResultCode::RuntimeRetryExhausted,
+          make_stage_timeout_error_info("planning",
+                                        request.request_id,
+                                        request.trace_id,
+                                        plan_graph.elapsed_ms,
+                                        "cognition::planning::Planner"),
+          "decision_pipeline.stage_timeout:planning");
+      return result;
+    }
 
     const auto plan_validation = validator_.validate_plan_graph_invariants(
-        plan_graph, max_plan_nodes, max_plan_depth);
+        *plan_graph.value, max_plan_nodes, max_plan_depth);
     if (!plan_validation.ok) {
       if (rule_fallback_enabled) {
         result.action_decision = make_clarification_fallback(
@@ -584,8 +715,8 @@ class CognitionFacade final : public ICognitionEngine {
     reasoning_request.goal_contract = request.goal_contract;
     reasoning_request.context_packet = request.context_packet;
     reasoning_request.belief_state = request.belief_state;
-    reasoning_request.perception_result = *perception_result;
-    reasoning_request.active_plan = plan_graph;
+    reasoning_request.perception_result = perception;
+    reasoning_request.active_plan = *plan_graph.value;
     reasoning_request.latest_observation = request.latest_observation;
     reasoning_request.budget_context = request.budget_context;
     reasoning_request.execution_hints = request.execution_hints;
@@ -602,10 +733,26 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
-    const auto action_decision = reasoner_.decide(reasoning_request);
+    const auto action_decision = run_stage_with_deadline(
+        stage_deadline_ms,
+        [reasoner = reasoner_, reasoning_request]() mutable {
+          return reasoner.decide(reasoning_request);
+        });
+    if (action_decision.timed_out) {
+      apply_decision_failure(
+          result,
+          contracts::ResultCode::RuntimeRetryExhausted,
+          make_stage_timeout_error_info("execution",
+                                        request.request_id,
+                                        request.trace_id,
+                                        action_decision.elapsed_ms,
+                                        "cognition::reasoning::Reasoner"),
+          "decision_pipeline.stage_timeout:execution");
+      return result;
+    }
 
     const auto decision_validation =
-        validator_.validate_action_decision_invariants(action_decision);
+        validator_.validate_action_decision_invariants(*action_decision.value);
     if (!decision_validation.ok) {
       if (request.execution_hints.degraded_path_allowed) {
         result.action_decision = make_converge_safe_fallback(
@@ -621,11 +768,11 @@ class CognitionFacade final : public ICognitionEngine {
         return result;
       }
     } else {
-      result.action_decision = action_decision;
+      result.action_decision = *action_decision.value;
     }
 
     result.belief_update_hint = belief_update_synthesizer_.synthesize_from_decide(
-        *perception_result, *result.action_decision, request.latest_observation);
+      perception, *result.action_decision, request.latest_observation);
     append_unique(result.diagnostics, "decision_pipeline.completed");
     return result;
   }
@@ -654,6 +801,8 @@ class CognitionFacade final : public ICognitionEngine {
                                       ? find_stage_model_hint(
                                             *reflection_plan, "reflection", "failure_analysis")
                                       : nullptr;
+    const auto stage_deadline_ms =
+      reflection_plan.has_value() ? reflection_plan->deadline_ms : 0U;
     if (reflection_plan.has_value() && reflection_hint == nullptr) {
       apply_reflection_failure(
           result,
@@ -683,10 +832,27 @@ class CognitionFacade final : public ICognitionEngine {
     analysis_request.active_plan = std::nullopt;
     analysis_request.execution_hints = request.execution_hints;
 
-    const auto reflection_decision = reflection_engine_.analyze(analysis_request);
-    result.reflection_decision = reflection_decision;
+    const auto reflection_decision = run_stage_with_deadline(
+        stage_deadline_ms,
+        [reflection_engine = reflection_engine_, analysis_request]() mutable {
+          return reflection_engine.analyze(analysis_request);
+        });
+    if (reflection_decision.timed_out) {
+      apply_reflection_failure(
+          result,
+          contracts::ResultCode::RuntimeRetryExhausted,
+          make_stage_timeout_error_info("reflection",
+                                        request.request_id,
+                                        request.trace_id,
+                                        reflection_decision.elapsed_ms,
+                                        "cognition::reflection::ReflectionEngine"),
+          "reflection_pipeline.stage_timeout:reflection");
+      return result;
+    }
+
+    result.reflection_decision = *reflection_decision.value;
     result.belief_update_hint = belief_update_synthesizer_.synthesize_from_reflection(
-        reflection_decision, request.belief_state, request.latest_observation);
+        *reflection_decision.value, request.belief_state, request.latest_observation);
     append_unique(result.diagnostics, "reflection_pipeline.completed");
     return result;
   }
@@ -731,9 +897,25 @@ class CognitionFacade final : public ICognitionEngine {
         .allow_plain_text_fallback = !requires_structured_output,
     };
 
-    const auto bridge_result = llm_bridge_->invoke_stage(bridge_request);
-    append_bridge_diagnostics(result.diagnostics, bridge_result, stage);
-    if (!bridge_result.error_info.has_value()) {
+    const auto bridge_result = run_stage_with_deadline(
+        bridge_request.model_hint.deadline_ms,
+        [llm_bridge = llm_bridge_, bridge_request]() mutable {
+          return llm_bridge->invoke_stage(bridge_request);
+        });
+    if (bridge_result.timed_out) {
+      apply_decision_failure(result,
+                             contracts::ResultCode::RuntimeRetryExhausted,
+                             make_stage_timeout_error_info(stage,
+                                                           request.request_id,
+                                                           request.trace_id,
+                                                           bridge_result.elapsed_ms,
+                                                           "cognition::llm_bridge::CognitionLlmBridge"),
+                             std::string{"decision_pipeline.stage_timeout:"} + stage);
+      return;
+    }
+
+    append_bridge_diagnostics(result.diagnostics, *bridge_result.value, stage);
+    if (!bridge_result.value->error_info.has_value()) {
       return;
     }
 
@@ -743,9 +925,9 @@ class CognitionFacade final : public ICognitionEngine {
     }
 
     apply_decision_failure(result,
-                           bridge_result.result_code.value_or(
+                           bridge_result.value->result_code.value_or(
                                contracts::ResultCode::RuntimeRetryExhausted),
-                           *bridge_result.error_info,
+                           *bridge_result.value->error_info,
                            std::string{"decision_pipeline.llm_bridge_failed:"} + stage);
   }
 
@@ -780,9 +962,26 @@ class CognitionFacade final : public ICognitionEngine {
         .allow_plain_text_fallback = false,
     };
 
-    const auto bridge_result = llm_bridge_->invoke_stage(bridge_request);
-    append_bridge_diagnostics(result.diagnostics, bridge_result, "reflection");
-    if (!bridge_result.error_info.has_value()) {
+    const auto bridge_result = run_stage_with_deadline(
+        bridge_request.model_hint.deadline_ms,
+        [llm_bridge = llm_bridge_, bridge_request]() mutable {
+          return llm_bridge->invoke_stage(bridge_request);
+        });
+    if (bridge_result.timed_out) {
+      apply_reflection_failure(
+          result,
+          contracts::ResultCode::RuntimeRetryExhausted,
+          make_stage_timeout_error_info("reflection",
+                                        request.request_id,
+                                        request.trace_id,
+                                        bridge_result.elapsed_ms,
+                                        "cognition::llm_bridge::CognitionLlmBridge"),
+          "reflection_pipeline.stage_timeout:reflection");
+      return;
+    }
+
+    append_bridge_diagnostics(result.diagnostics, *bridge_result.value, "reflection");
+    if (!bridge_result.value->error_info.has_value()) {
       return;
     }
 
@@ -792,9 +991,9 @@ class CognitionFacade final : public ICognitionEngine {
     }
 
     apply_reflection_failure(result,
-                             bridge_result.result_code.value_or(
+                 bridge_result.value->result_code.value_or(
                                  contracts::ResultCode::RuntimeRetryExhausted),
-                             *bridge_result.error_info,
+                 *bridge_result.value->error_info,
                              "reflection_pipeline.llm_bridge_failed:reflection");
   }
 

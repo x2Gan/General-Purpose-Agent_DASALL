@@ -72,6 +72,12 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_cognition_facade_stage_timeout_unit_test
+	CognitionFacadeStageTimeoutTest.cpp
+	CognitionFacadeStageTimeoutTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_cognition_facade_degraded_mode_unit_test
 	CognitionFacadeDegradedModeTest.cpp
 	CognitionFacadeDegradedModeTest

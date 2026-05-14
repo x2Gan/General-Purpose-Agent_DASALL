@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+## 记录 #653
+
+- 日期：2026-05-14
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-003 实现 Facade 阶段超时隔离
+- 状态：已完成
+
+### 改动
+
+1. 调整 `cognition/src/CognitionFacade.cpp`：新增阶段 deadline runner，对 Perception / Planner / Reasoner / Reflection 与 bridge 调用按 `StageExecutionPlan.deadline_ms` / `StageModelHint.deadline_ms` 做超时裁定；超时时统一返回带 `cognition.stage_timeout` message、stage、request_id、trace_id 的 `ErrorInfo`，并在门面层停止等待，从而对齐详设 6.15.3 的 timeout isolation 口径。
+2. 新增 `tests/unit/cognition/CognitionFacadeStageTimeoutTest.cpp` 并更新 `tests/unit/cognition/CMakeLists.txt`：模拟 planning/reflection 慢 bridge，断言 Facade fail-fast 返回超时结果，且首轮 late result 不会污染下一次请求。
+3. 调整 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-GAP-003` 标记为已闭合、`COG-FIX-003` 标记为 Done，并补充本轮 focused validation 证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cognition_facade_stage_timeout_unit_test && ctest --test-dir build-ci -R "CognitionFacadeStageTimeoutTest" --output-on-failure`
+   - 结果：通过，1/1 passed。
+2. `cmake --build build-ci --target dasall_cognition_facade_flow_unit_test dasall_cognition_facade_degraded_mode_unit_test dasall_cognition_facade_stage_timeout_unit_test && ctest --test-dir build-ci -R "CognitionFacade(Flow|DegradedMode|StageTimeout)Test" --output-on-failure`
+   - 结果：通过，3/3 passed。
+
+### 结果
+
+1. `COG-FIX-003` 已完成：Facade 不再只是投影 `deadline_ms`，而是实际对关键阶段和 bridge 执行 timeout isolation，单阶段慢调用不会继续拖住整条 cognition 链。
+2. `CognitionFacadeStageTimeoutTest` 已证明 planning/reflection 慢 bridge 会返回超时结果，且超时后的 late result 不会污染同一 engine 的后续请求。
+3. 这轮实现保持了 ADR 边界：cognition 只报告超时事实，不自建 retry、cancel adjudication 或恢复决策；更细的恢复与重试仍留给 runtime / RecoveryManager。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-003` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-003` 的 scoped commit。
+
 ## 记录 #652
 
 - 日期：2026-05-14
