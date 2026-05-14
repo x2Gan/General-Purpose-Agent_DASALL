@@ -13,6 +13,7 @@
 #include "CognitionRuntimeIntegrationFixture.h"
 #include "CognitionTypes.h"
 #include "ICognitionEngine.h"
+#include "IResponseBuilder.h"
 #include "IMemoryManager.h"
 #include "RuntimeUnaryFixture.h"
 #include "support/TestAssertions.h"
@@ -28,8 +29,11 @@ using dasall::tests::runtime_fixture::make_true_integration_init_request;
 using dasall::tests::support::assert_true;
 
 enum class ContractDecisionMode : std::uint8_t {
-  Executable = 0,
-  NonExecutable,
+  ExecuteAction = 0,
+  DirectResponse,
+  ConvergeSafe,
+  AskClarification,
+  NoDecision,
 };
 
 enum class ContractReflectionMode : std::uint8_t {
@@ -123,7 +127,7 @@ class ContractProbeCognitionEngine final : public dasall::cognition::ICognitionE
       const dasall::cognition::CognitionStepRequest&) override {
     dasall::cognition::CognitionDecisionResult result;
 
-    if (decision_mode_ == ContractDecisionMode::Executable) {
+    if (decision_mode_ == ContractDecisionMode::ExecuteAction) {
       dasall::cognition::decision::ActionDecision decision;
       decision.decision_kind =
           dasall::cognition::decision::ActionDecisionKind::ExecuteAction;
@@ -160,22 +164,80 @@ class ContractProbeCognitionEngine final : public dasall::cognition::ICognitionE
       return result;
     }
 
-    dasall::cognition::decision::ActionDecision non_executable;
-    non_executable.decision_kind =
-        dasall::cognition::decision::ActionDecisionKind::AskClarification;
-    non_executable.rationale = std::string{"contract probe asks clarification"};
-    non_executable.confidence = 0.42F;
-    non_executable.clarification_needed = true;
-    non_executable.clarification_question =
-        std::string{"missing evidence for executable action"};
-    result.action_decision = std::move(non_executable);
+      if (decision_mode_ == ContractDecisionMode::DirectResponse ||
+        decision_mode_ == ContractDecisionMode::ConvergeSafe) {
+        dasall::cognition::decision::ActionDecision terminal_decision;
+        terminal_decision.decision_kind =
+          decision_mode_ == ContractDecisionMode::DirectResponse
+            ? dasall::cognition::decision::ActionDecisionKind::DirectResponse
+            : dasall::cognition::decision::ActionDecisionKind::ConvergeSafe;
+        terminal_decision.rationale =
+          decision_mode_ == ContractDecisionMode::DirectResponse
+            ? std::string{"contract probe emits a direct terminal response"}
+            : std::string{"contract probe emits a safe convergence response"};
+        terminal_decision.confidence = 0.83F;
+        terminal_decision.response_outline = dasall::cognition::decision::ResponseOutline{
+          .summary = decision_mode_ == ContractDecisionMode::DirectResponse
+                 ? std::string{"direct response contract summary"}
+                 : std::string{"safe convergence contract summary"},
+          .key_points = {std::string{"runtime responding mapped"},
+                 std::string{"response builder invoked"}},
+        };
+        result.action_decision = std::move(terminal_decision);
+        result.belief_update_hint = dasall::cognition::belief::BeliefUpdateHint{
+          .confirmed_facts_delta = {
+            dasall::cognition::belief::FactDelta{
+              .fact = std::string{"runtime consumed terminal cognition decision"},
+            },
+          },
+          .hypotheses_delta = {},
+          .assumptions_delta = {},
+          .evidence_refs_delta = {},
+          .missing_evidence_refs = {},
+          .confidence_hint = 0.75F,
+          .merge_mode = dasall::cognition::belief::BeliefMergeMode::Merge,
+        };
+        result.context_sufficiency = dasall::cognition::ContextSufficiencySignal{
+          .context_sufficient = true,
+          .context_confidence = 0.76F,
+          .missing_evidence_hints = {},
+          .recommend_context_reload = false,
+        };
+        return result;
+      }
 
-    result.context_sufficiency = dasall::cognition::ContextSufficiencySignal{
-        .context_sufficient = false,
-        .context_confidence = 0.3F,
-        .missing_evidence_hints = {std::string{"belief_state.confirmed_facts"}},
-        .recommend_context_reload = true,
-    };
+      if (decision_mode_ == ContractDecisionMode::AskClarification) {
+        dasall::cognition::decision::ActionDecision non_executable;
+        non_executable.decision_kind =
+          dasall::cognition::decision::ActionDecisionKind::AskClarification;
+        non_executable.rationale = std::string{"contract probe asks clarification"};
+        non_executable.confidence = 0.42F;
+        non_executable.clarification_needed = true;
+        non_executable.clarification_question =
+          std::string{"missing evidence for executable action"};
+        result.action_decision = std::move(non_executable);
+
+        result.context_sufficiency = dasall::cognition::ContextSufficiencySignal{
+          .context_sufficient = false,
+          .context_confidence = 0.3F,
+          .missing_evidence_hints = {std::string{"belief_state.confirmed_facts"}},
+          .recommend_context_reload = true,
+        };
+        return result;
+      }
+
+      dasall::cognition::decision::ActionDecision no_decision;
+      no_decision.decision_kind =
+        dasall::cognition::decision::ActionDecisionKind::NoDecision;
+      no_decision.rationale = std::string{"contract probe produced no executable or terminal decision"};
+      no_decision.confidence = 0.12F;
+      result.action_decision = std::move(no_decision);
+      result.context_sufficiency = dasall::cognition::ContextSufficiencySignal{
+        .context_sufficient = true,
+        .context_confidence = 0.60F,
+        .missing_evidence_hints = {},
+        .recommend_context_reload = false,
+      };
     return result;
   }
 
@@ -227,6 +289,36 @@ class ContractProbeCognitionEngine final : public dasall::cognition::ICognitionE
   ContractReflectionMode reflection_mode_;
 };
 
+class ContractProbeResponseBuilder final : public dasall::cognition::IResponseBuilder {
+ public:
+  [[nodiscard]] dasall::cognition::ResponseBuildResult build(
+      const dasall::cognition::ResponseBuildRequest& request) override {
+    ++build_calls;
+    last_request = request;
+
+    dasall::contracts::AgentResult agent_result;
+    agent_result.result_id = std::string{"agent-result-contract-"} + request.request_id;
+    agent_result.status = dasall::contracts::AgentResultStatus::Completed;
+    agent_result.result_code = 0;
+    agent_result.response_text =
+        std::string{"contract probe response: "} +
+        request.terminal_decision->response_outline->summary;
+    agent_result.task_completed = true;
+    agent_result.created_at = 1700000400;
+    agent_result.request_id = request.request_id;
+    agent_result.trace_id = request.trace_id;
+    agent_result.goal_id = request.goal_contract.goal_id;
+
+    dasall::cognition::ResponseBuildResult result;
+    result.agent_result = std::move(agent_result);
+    result.diagnostics.push_back("contract_probe_response_builder");
+    return result;
+  }
+
+  int build_calls = 0;
+  std::optional<dasall::cognition::ResponseBuildRequest> last_request;
+};
+
 void test_action_decision_execute_action_maps_to_runtime_progress() {
   const auto database_path = make_temp_database_path("dasall-cognition-runtime-contract-ok");
   cleanup_database_artifacts(database_path);
@@ -237,7 +329,7 @@ void test_action_decision_execute_action_maps_to_runtime_progress() {
     auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
     dependency_set->memory_manager = contract_memory_manager;
   dependency_set->cognition_engine =
-      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::Executable);
+        std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::ExecuteAction);
 
   dasall::runtime::AgentFacade facade;
   const auto init_result = facade.init(make_true_integration_init_request(
@@ -278,7 +370,7 @@ void test_non_executable_decision_is_rejected_by_runtime_contract() {
     auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
     dependency_set->memory_manager = contract_memory_manager;
   dependency_set->cognition_engine =
-      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::NonExecutable);
+        std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::AskClarification);
 
   dasall::runtime::AgentFacade facade;
   const auto init_result = facade.init(make_true_integration_init_request(
@@ -327,7 +419,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
   auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>(true);
   dependency_set->memory_manager = contract_memory_manager;
   dependency_set->cognition_engine =
-      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::Executable);
+      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::ExecuteAction);
 
     dasall::runtime::AgentFacade facade;
     const auto init_result = facade.init(make_true_integration_init_request(
@@ -378,7 +470,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
       "query interaction contract " + test_case.case_id);
     dependency_set->memory_manager = std::make_shared<ContractProbeMemoryManager>();
     dependency_set->cognition_engine = std::make_shared<ContractProbeCognitionEngine>(
-      ContractDecisionMode::Executable,
+      ContractDecisionMode::ExecuteAction,
       test_case.mode);
 
     dasall::runtime::AgentFacade facade;
@@ -433,7 +525,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
       "query interaction contract reflection abort");
     dependency_set->memory_manager = std::make_shared<ContractProbeMemoryManager>();
     dependency_set->cognition_engine = std::make_shared<ContractProbeCognitionEngine>(
-      ContractDecisionMode::Executable,
+      ContractDecisionMode::ExecuteAction,
       ContractReflectionMode::AbortSafe);
 
   dasall::runtime::AgentFacade facade;
@@ -468,12 +560,150 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
   cleanup_database_artifacts(database_path);
 }
 
+  void test_terminal_decisions_map_to_runtime_responding() {
+    const struct TerminalDecisionCase {
+    ContractDecisionMode mode;
+    std::string case_id;
+    dasall::cognition::decision::ActionDecisionKind expected_kind;
+    std::string expected_summary;
+    } cases[] = {
+      {ContractDecisionMode::DirectResponse,
+       "direct_response",
+       dasall::cognition::decision::ActionDecisionKind::DirectResponse,
+       "direct response contract summary"},
+      {ContractDecisionMode::ConvergeSafe,
+       "converge_safe",
+       dasall::cognition::decision::ActionDecisionKind::ConvergeSafe,
+       "safe convergence contract summary"},
+    };
+
+    for (const auto& test_case : cases) {
+    const auto database_path = make_temp_database_path(
+      "dasall-cognition-runtime-contract-" + test_case.case_id);
+    cleanup_database_artifacts(database_path);
+
+    const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+    auto dependency_set = make_true_integration_dependency_set(
+      config,
+      "session-027-" + test_case.case_id,
+      "turn-027-" + test_case.case_id + "-001",
+      "query interaction contract " + test_case.case_id);
+    auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
+    auto contract_response_builder = std::make_shared<ContractProbeResponseBuilder>();
+    dependency_set->memory_manager = contract_memory_manager;
+    dependency_set->response_builder = contract_response_builder;
+    dependency_set->cognition_engine =
+      std::make_shared<ContractProbeCognitionEngine>(test_case.mode);
+
+    dasall::runtime::AgentFacade facade;
+    const auto init_result = facade.init(make_true_integration_init_request(
+      dependency_set,
+      "rt-027-" + test_case.case_id,
+      "desktop_full",
+      "cognition-runtime-contract-" + test_case.case_id));
+    assert_true(init_result.accepted,
+          "terminal decision contract case should initialize AgentFacade");
+
+    const auto result = facade.handle(make_agent_request(
+      "req-027-" + test_case.case_id,
+      "session-027-" + test_case.case_id,
+      "trace-027-" + test_case.case_id,
+      "query interaction contract " + test_case.case_id));
+
+    assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+          std::string{"terminal cognition decision should complete runtime: "} +
+            test_case.case_id);
+    assert_true(result.task_completed.value_or(false),
+          std::string{"terminal cognition decision should keep task_completed=true: "} +
+            test_case.case_id);
+    assert_true(result.checkpoint_ref.has_value() && !result.checkpoint_ref->empty(),
+          std::string{"terminal cognition decision should persist a terminal checkpoint: "} +
+            test_case.case_id);
+    assert_true(contract_response_builder->build_calls == 1,
+          std::string{"terminal cognition decision should call response builder exactly once: "} +
+            test_case.case_id);
+    assert_true(contract_response_builder->last_request.has_value() &&
+            contract_response_builder->last_request->terminal_decision.has_value(),
+          std::string{"terminal cognition decision should reach response builder with a terminal_decision: "} +
+            test_case.case_id);
+    assert_true(!contract_response_builder->last_request->latest_observation.has_value(),
+          std::string{"terminal cognition decision should build without a tool observation: "} +
+            test_case.case_id);
+    assert_true(contract_response_builder->last_request->terminal_decision->decision_kind ==
+            test_case.expected_kind,
+          std::string{"runtime should preserve the terminal decision kind for response builder: "} +
+            test_case.case_id);
+    assert_true(result.response_text.has_value() &&
+            result.response_text->find(test_case.expected_summary) != std::string::npos,
+          std::string{"response builder output should surface the terminal summary: "} +
+            test_case.case_id);
+    assert_true(contract_memory_manager->write_back_calls == 1,
+          std::string{"terminal cognition decision should still project belief writeback once: "} +
+            test_case.case_id);
+
+    if (dependency_set->memory_manager != nullptr) {
+      dependency_set->memory_manager->shutdown();
+    }
+    cleanup_database_artifacts(database_path);
+    }
+  }
+
+  void test_no_decision_fails_fast_before_response_builder() {
+    const auto database_path = make_temp_database_path("dasall-cognition-runtime-contract-no-decision");
+    cleanup_database_artifacts(database_path);
+
+    const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+    auto dependency_set = make_true_integration_dependency_set(
+      config,
+      "session-027-no-decision",
+      "turn-027-no-decision-001",
+      "query interaction contract no decision");
+    auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
+    auto contract_response_builder = std::make_shared<ContractProbeResponseBuilder>();
+    dependency_set->memory_manager = contract_memory_manager;
+    dependency_set->response_builder = contract_response_builder;
+    dependency_set->cognition_engine =
+      std::make_shared<ContractProbeCognitionEngine>(ContractDecisionMode::NoDecision);
+
+    dasall::runtime::AgentFacade facade;
+    const auto init_result = facade.init(make_true_integration_init_request(
+      dependency_set,
+      "rt-027-no-decision",
+      "desktop_full",
+      "cognition-runtime-contract-no-decision"));
+    assert_true(init_result.accepted,
+          "no-decision contract case should initialize AgentFacade");
+
+    const auto result = facade.handle(make_agent_request(
+      "req-027-no-decision",
+      "session-027-no-decision",
+      "trace-027-no-decision",
+      "query interaction contract no decision"));
+
+    assert_true(result.status == dasall::contracts::AgentResultStatus::Failed,
+          "no-decision should fail fast on the live runtime contract path");
+    assert_true(contract_response_builder->build_calls == 0,
+          "no-decision should fail before response builder is invoked");
+    assert_true(result.error_info.has_value() &&
+            result.error_info->details.stage == "main_loop",
+          "no-decision should surface main_loop diagnostics");
+    assert_true(contract_memory_manager->write_back_calls == 0,
+          "no-decision should not emit belief writeback traffic");
+
+    if (dependency_set->memory_manager != nullptr) {
+    dependency_set->memory_manager->shutdown();
+    }
+    cleanup_database_artifacts(database_path);
+  }
+
 }  // namespace
 
 int main() {
   try {
     test_action_decision_execute_action_maps_to_runtime_progress();
     test_non_executable_decision_is_rejected_by_runtime_contract();
+    test_terminal_decisions_map_to_runtime_responding();
+    test_no_decision_fails_fast_before_response_builder();
     test_belief_writeback_failure_does_not_override_completed_result();
     test_reflection_continue_retry_and_replan_reenter_runtime_paths();
     test_reflection_abort_safe_stops_mainline();

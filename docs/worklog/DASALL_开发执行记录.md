@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #651
+
+- 日期：2026-05-14
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-001 补齐 terminal ActionDecision 到 Runtime Responding 映射
+- 状态：已完成
+
+### 改动
+
+1. 调整 `runtime/src/AgentOrchestrator.cpp`：live cognition path 现在会把 `DirectResponse` / `ConvergeSafe` 从 `Reasoning` 第一跳路由到 `RuntimeState::Responding`，在无 tool observation 时调用 `IResponseBuilder.build()`，并保留 `NoDecision` fail-fast 语义。
+2. 调整 `tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp`：新增 DirectResponse、ConvergeSafe、NoDecision 三类 fixture，并引入 response builder probe，显式断言 terminal decision 会原样传入 `IResponseBuilder`。
+3. 调整 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-001` 标记为 Done，补充验收证据，并将 `COG-GAP-001` 更新为已闭合。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cognition_runtime_interaction_contract_integration_test && ctest --test-dir build-ci -R "CognitionRuntimeInteractionContractTest" --output-on-failure`
+   - 结果：通过。
+
+### 结果
+
+1. `COG-FIX-001` 已完成：详设 6.14.1 中 `DirectResponse` / `ConvergeSafe -> Responding + IResponseBuilder.build()` 的 Runtime 第一跳已在 live cognition path 闭合。
+2. `CognitionRuntimeInteractionContractTest` 现在同时覆盖 `ExecuteAction`、`AskClarification`、`DirectResponse`、`ConvergeSafe`、`NoDecision`，ActionDecision 五类第一跳口径具备 focused integration 自动化断言。
+3. cognition 当前的首要残余缺口已收缩到 `COG-FIX-002` 所属的 installed cognition-positive 证据，而不再是 terminal decision 映射缺失。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-001` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-001` 的 scoped commit。
+
 ## 记录 #650
 
 - 日期：2026-05-14

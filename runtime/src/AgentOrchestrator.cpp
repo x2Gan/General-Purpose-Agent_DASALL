@@ -649,9 +649,22 @@ void append_retrieval_evidence_ref(
              cognition::decision::ActionDecisionKind::ExecuteAction;
 }
 
+[[nodiscard]] bool has_terminal_response_action(
+    const std::optional<cognition::decision::ActionDecision>& action_decision) {
+  if (!action_decision.has_value()) {
+    return false;
+  }
+
+  return action_decision->decision_kind ==
+             cognition::decision::ActionDecisionKind::DirectResponse ||
+         action_decision->decision_kind ==
+             cognition::decision::ActionDecisionKind::ConvergeSafe;
+}
+
 [[nodiscard]] bool has_decision_error_action_conflict(
     const cognition::CognitionDecisionResult& decision_result) {
-  return has_executable_action(decision_result.action_decision) &&
+  return (has_executable_action(decision_result.action_decision) ||
+          has_terminal_response_action(decision_result.action_decision)) &&
          (decision_result.error_info.has_value() || decision_result.result_code.has_value());
 }
 
@@ -890,9 +903,32 @@ void append_retrieval_evidence_ref(
     const std::string& goal_id,
     const OrchestratorComposition& composition,
     const contracts::ContextPacket& context_packet,
-    const contracts::Observation& latest_observation,
+    const std::optional<contracts::Observation>& latest_observation,
     const cognition::decision::ActionDecision& action_decision) {
   cognition::ResponseBuildRequest response_request;
+  std::vector<std::string> confirmed_facts;
+  std::vector<std::string> hypotheses;
+  std::vector<std::string> assumptions;
+  std::vector<std::string> evidence_refs;
+
+  if (latest_observation.has_value()) {
+    confirmed_facts.push_back("tool projection produced an observation");
+    hypotheses.push_back("response builder can finalize the turn");
+    assumptions.push_back("observation payload is user-safe");
+    if (latest_observation->observation_id.has_value() &&
+        !latest_observation->observation_id->empty()) {
+      evidence_refs.push_back(*latest_observation->observation_id);
+    }
+  } else {
+    confirmed_facts.push_back(
+        "cognition selected a terminal response decision without a tool round");
+    hypotheses.push_back("response builder can finalize the cognition terminal decision");
+    assumptions.push_back("terminal decision outline is user-safe");
+    evidence_refs.push_back(
+        request.request_id.value_or(std::string{"req-live-unary"}) +
+        ":cognition-terminal-decision");
+  }
+
   response_request.caller_domain = "runtime.agent_orchestrator";
   response_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
   response_request.trace_id = request.trace_id.value_or(std::string{"trace-live-unary"});
@@ -901,10 +937,10 @@ void append_retrieval_evidence_ref(
   response_request.context_packet = context_packet;
   response_request.belief_state = contracts::BeliefState{
       .request_id = request.request_id,
-      .confirmed_facts = std::vector<std::string>{"tool projection produced an observation"},
-      .hypotheses = std::vector<std::string>{"response builder can finalize the turn"},
-      .assumptions = std::vector<std::string>{"observation payload is user-safe"},
-      .evidence_refs = std::vector<std::string>{latest_observation.observation_id.value_or(std::string{"obs-live-unary"})},
+      .confirmed_facts = std::move(confirmed_facts),
+      .hypotheses = std::move(hypotheses),
+      .assumptions = std::move(assumptions),
+      .evidence_refs = std::move(evidence_refs),
       .confidence = 0.85F,
       .goal_id = goal_id,
       .created_at = current_time_ms(),
@@ -2147,6 +2183,211 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       }
     }
 
+    const auto complete_live_response =
+        [&](const cognition::ResponseBuildResult& response_build_result) -> bool {
+      const RuntimeState terminalize_before = fsm->current_state();
+      StateTransitionOutcome completed_outcome;
+      if (const auto failure = apply_steps(
+              *fsm,
+              orchestrator_stage_name(OrchestratorStage::Terminalize),
+              {{.to_state = RuntimeState::Auditing,
+                .reason = "response materialized",
+                .guards = {TransitionGuardFact::ResponseMaterialized}},
+               {.to_state = RuntimeState::Persisting,
+                .reason = "audit committed",
+                .guards = {TransitionGuardFact::AuditCommitted}},
+               {.to_state = RuntimeState::Completed,
+                .reason = "persistence confirmed",
+                .guards = {TransitionGuardFact::PersistenceConfirmed}}},
+              &completed_outcome);
+          failure.has_value()) {
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::Terminalize,
+                   terminalize_before,
+                   failure->state_before,
+                   true,
+                   failure->detail);
+        run_result.agent_result = make_result(
+            normalized_request,
+            RuntimeState::Failed,
+            contracts::AgentResultStatus::Failed,
+            kRuntimeOrchestratorSkeletonInternalErrorCode,
+            "runtime live unary path failed during terminalize",
+            make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                               failure->detail,
+                               failure->stage,
+                               RuntimeState::Failed),
+            std::nullopt,
+            goal_id);
+        run_result.final_state = RuntimeState::Failed;
+        return false;
+      }
+
+      const auto final_checkpoint = build_and_save_checkpoint(
+          checkpoint_manager_,
+          CheckpointBuildRequest{
+              .transition_outcome = completed_outcome,
+              .checkpoint_id = std::string("chk-live-complete-") +
+                               *normalized_request.request_id,
+              .step_id = std::string("live-complete-") + *normalized_request.request_id,
+              .working_memory_snapshot = std::string("wm:live-complete:") +
+                                         *normalized_request.request_id,
+              .pending_action = std::string(),
+              .request_id = normalized_request.request_id,
+              .goal_id = goal_id,
+              .belief_state_ref = composition_.default_belief_state_ref,
+              .retry_count = 0,
+              .created_at_ms = normalized_request.created_at,
+              .runtime_budget_snapshot = budget_controller_.snapshot(),
+              .tags = {"path=live-success"},
+          });
+      if (!final_checkpoint.saved()) {
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::Terminalize,
+                   terminalize_before,
+                   fsm->current_state(),
+                   true,
+                   final_checkpoint.detail);
+        run_result.agent_result = make_result(
+            normalized_request,
+            RuntimeState::Failed,
+            contracts::AgentResultStatus::Failed,
+            kRuntimeOrchestratorSkeletonInternalErrorCode,
+            "runtime live unary path failed to save the completion checkpoint",
+            make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                               final_checkpoint.detail,
+                               orchestrator_stage_name(OrchestratorStage::Terminalize),
+                               RuntimeState::Failed),
+            std::nullopt,
+            goal_id);
+        run_result.final_state = RuntimeState::Failed;
+        return false;
+      }
+
+      const auto persisted_session = persist_terminal_session(
+          session_manager_,
+          session_snapshot,
+          RuntimeState::Completed,
+          final_checkpoint.checkpoint->checkpoint_id,
+          composition_.default_audit_summary + " live unary integration");
+      if (persisted_session.updated()) {
+        run_result.effective_session = persisted_session.snapshot;
+      }
+      run_result.checkpoint = final_checkpoint.checkpoint;
+      run_result.final_state = fsm->current_state();
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::Terminalize,
+                 terminalize_before,
+                 fsm->current_state(),
+                 true,
+                 "live unary response audited, checkpointed, and persisted");
+      run_result.agent_result = *response_build_result.agent_result;
+      finalize_live_agent_result(&run_result.agent_result,
+                                 normalized_request,
+                                 goal_id,
+                                 final_checkpoint.checkpoint->checkpoint_id);
+      return true;
+    };
+
+    if (has_terminal_response_action(cognition_result.action_decision)) {
+      const auto response_build_result = composition_.dependency_set->response_builder->build(
+          make_response_build_request(normalized_request,
+                                      goal_id,
+                                      composition_,
+                                      context_result.context_packet,
+                                      std::nullopt,
+                                      *cognition_result.action_decision));
+
+      if (!response_build_result.agent_result.has_value()) {
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::MainLoop,
+                   main_loop_before,
+                   fsm->current_state(),
+                   true,
+                   "response builder did not materialize an AgentResult for the terminal cognition decision");
+        run_result.agent_result = make_result(
+            normalized_request,
+            RuntimeState::Failed,
+            contracts::AgentResultStatus::Failed,
+            kRuntimeOrchestratorLiveUnaryFailedCode,
+            "runtime live unary path could not materialize a terminal cognition response",
+            response_build_result.error_info.value_or(
+                make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                                   "response builder returned no AgentResult for the terminal cognition decision",
+                                   orchestrator_stage_name(OrchestratorStage::MainLoop),
+                                   RuntimeState::Failed)),
+            std::nullopt,
+            goal_id);
+        run_result.final_state = RuntimeState::Failed;
+        return run_result;
+      }
+
+      StateTransitionOutcome response_outcome;
+      if (const auto failure = apply_step(
+              *fsm,
+              orchestrator_stage_name(OrchestratorStage::MainLoop),
+              TransitionStep{.to_state = RuntimeState::Responding,
+                             .reason = "cognition selected a terminal response decision",
+                             .guards = {TransitionGuardFact::DirectResponseReady}},
+              &response_outcome);
+          failure.has_value()) {
+        push_trace(&run_result.stage_trace,
+                   OrchestratorStage::MainLoop,
+                   main_loop_before,
+                   failure->state_before,
+                   true,
+                   failure->detail);
+        run_result.agent_result = make_result(
+            normalized_request,
+            RuntimeState::Failed,
+            contracts::AgentResultStatus::Failed,
+            kRuntimeOrchestratorSkeletonInternalErrorCode,
+            "runtime live unary path could not enter responding for the terminal cognition decision",
+            make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                               failure->detail,
+                               failure->stage,
+                               RuntimeState::Failed),
+            std::nullopt,
+            goal_id);
+        run_result.final_state = RuntimeState::Failed;
+        return run_result;
+      }
+
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 [&context_reload_detail, &belief_writeback_detail, context_reload_attempted]() {
+                   std::string detail =
+                       context_reload_attempted && !context_reload_detail.empty()
+                           ? context_reload_detail
+                           : "cognition selected a terminal response decision on the live unary path";
+                   if (!belief_writeback_detail.empty()) {
+                     detail += "; ";
+                     detail += belief_writeback_detail;
+                   }
+                   return detail;
+                 }());
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 fsm->current_state(),
+                 fsm->current_state(),
+                 false,
+                 "skipped because terminal cognition decision did not require scheduler or tool execution");
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::RecoveryRound,
+                 fsm->current_state(),
+                 fsm->current_state(),
+                 false,
+                 "skipped because terminal cognition decision did not require recovery");
+
+      if (!complete_live_response(response_build_result)) {
+        return run_result;
+      }
+      return run_result;
+    }
+
     if (!cognition_result.action_decision.has_value() ||
         cognition_result.action_decision->decision_kind !=
         cognition::decision::ActionDecisionKind::ExecuteAction) {
@@ -3071,105 +3312,9 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                false,
                "skipped because the live unary success path did not require recovery");
 
-    const RuntimeState terminalize_before = fsm->current_state();
-    StateTransitionOutcome completed_outcome;
-    if (const auto failure = apply_steps(
-            *fsm,
-            orchestrator_stage_name(OrchestratorStage::Terminalize),
-            {{.to_state = RuntimeState::Auditing,
-              .reason = "response materialized",
-              .guards = {TransitionGuardFact::ResponseMaterialized}},
-             {.to_state = RuntimeState::Persisting,
-              .reason = "audit committed",
-              .guards = {TransitionGuardFact::AuditCommitted}},
-             {.to_state = RuntimeState::Completed,
-              .reason = "persistence confirmed",
-              .guards = {TransitionGuardFact::PersistenceConfirmed}}},
-            &completed_outcome);
-        failure.has_value()) {
-      push_trace(&run_result.stage_trace,
-                 OrchestratorStage::Terminalize,
-                 terminalize_before,
-                 failure->state_before,
-                 true,
-                 failure->detail);
-      run_result.agent_result = make_result(
-          normalized_request,
-          RuntimeState::Failed,
-          contracts::AgentResultStatus::Failed,
-          kRuntimeOrchestratorSkeletonInternalErrorCode,
-          "runtime live unary path failed during terminalize",
-          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
-                             failure->detail,
-                             failure->stage,
-                             RuntimeState::Failed),
-          waiting_checkpoint.checkpoint->checkpoint_id,
-          goal_id);
-      run_result.final_state = RuntimeState::Failed;
+    if (!complete_live_response(response_build_result)) {
       return run_result;
     }
-
-    const auto final_checkpoint = build_and_save_checkpoint(
-        checkpoint_manager_,
-        CheckpointBuildRequest{
-            .transition_outcome = completed_outcome,
-            .checkpoint_id = std::string("chk-live-complete-") + *normalized_request.request_id,
-            .step_id = std::string("live-complete-") + *normalized_request.request_id,
-            .working_memory_snapshot = std::string("wm:live-complete:") + *normalized_request.request_id,
-            .pending_action = std::string(),
-            .request_id = normalized_request.request_id,
-            .goal_id = goal_id,
-            .belief_state_ref = composition_.default_belief_state_ref,
-            .retry_count = 0,
-            .created_at_ms = normalized_request.created_at,
-            .runtime_budget_snapshot = budget_controller_.snapshot(),
-            .tags = {"path=live-success"},
-        });
-    if (!final_checkpoint.saved()) {
-      push_trace(&run_result.stage_trace,
-                 OrchestratorStage::Terminalize,
-                 terminalize_before,
-                 fsm->current_state(),
-                 true,
-                 final_checkpoint.detail);
-      run_result.agent_result = make_result(
-          normalized_request,
-          RuntimeState::Failed,
-          contracts::AgentResultStatus::Failed,
-          kRuntimeOrchestratorSkeletonInternalErrorCode,
-          "runtime live unary path failed to save the completion checkpoint",
-          make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
-                             final_checkpoint.detail,
-                             orchestrator_stage_name(OrchestratorStage::Terminalize),
-                             RuntimeState::Failed),
-          std::nullopt,
-          goal_id);
-      run_result.final_state = RuntimeState::Failed;
-      return run_result;
-    }
-
-    const auto persisted_session = persist_terminal_session(
-        session_manager_,
-        session_snapshot,
-        RuntimeState::Completed,
-        final_checkpoint.checkpoint->checkpoint_id,
-        composition_.default_audit_summary + " live unary integration");
-    if (persisted_session.updated()) {
-      run_result.effective_session = persisted_session.snapshot;
-    }
-    run_result.checkpoint = final_checkpoint.checkpoint;
-    run_result.final_state = fsm->current_state();
-    push_trace(&run_result.stage_trace,
-               OrchestratorStage::Terminalize,
-               terminalize_before,
-               fsm->current_state(),
-               true,
-               "live unary response audited, checkpointed, and persisted");
-    run_result.agent_result = *response_build_result.agent_result;
-    finalize_live_agent_result(&run_result.agent_result,
-                               normalized_request,
-                               goal_id,
-                               final_checkpoint.checkpoint->checkpoint_id);
     return run_result;
   }
 
