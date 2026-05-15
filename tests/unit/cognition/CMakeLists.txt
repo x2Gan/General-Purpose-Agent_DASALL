@@ -240,6 +240,12 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_action_decision_structured_projection_unit_test
+	ActionDecisionStructuredProjectionTest.cpp
+	ActionDecisionStructuredProjectionTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_cognition_telemetry_fields_unit_test
 	CognitionTelemetryFieldsTest.cpp
 	CognitionTelemetryFieldsTest
@@ -358,6 +364,11 @@ target_include_directories(dasall_stage_output_validator_response_envelope_unit_
 )
 
 target_include_directories(dasall_plan_graph_structured_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_action_decision_structured_projection_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #657
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-004 落地 ActionDecisionStructuredProjector
+- 状态：已完成
+
+### 改动
+
+1. 新增 `cognition/src/projection/ActionDecisionStructuredProjector.h` 与 `cognition/src/projection/ActionDecisionStructuredProjector.cpp`：引入 execution payload 的 typed projection owner，实现 `project_action_decision()`，把 `StructuredPayloadView` 投影为 `decision::ActionDecision`，并把 invalid enum、nested object 类型错配与 invalid candidate score shape 收口为 projection failure。
+2. 调整 `cognition/CMakeLists.txt` 与 `tests/unit/cognition/CMakeLists.txt`：将 `ActionDecisionStructuredProjector.cpp` 接入 `dasall_cognition`，并新增 `dasall_action_decision_structured_projection_unit_test` 与对应私有 include 接线。
+3. 调整 `cognition/src/validation/StageOutputValidator.cpp`：在既有 `validate_action_decision_invariants()` 上补齐 response 上携带 tool intent 与 clarification conflict 的 fail-closed 断言，保持 projector 与 object invariant 的 owner 边界清晰。
+4. 新增 `tests/unit/cognition/ActionDecisionStructuredProjectionTest.cpp`：覆盖 valid execution payload 正例，以及 invalid enum、missing selected node、tool intent on response、clarification conflict 等负例；其中 projection 级错误由 projector 直接失败，decision-level 互斥关系继续通过既有 invariant validator 断言。
+5. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-004A-BLD-004` 标记为 Done，并回写本轮 focused validation 证据与 `Gate-COG-FIX004A-02` 的 Pass 状态。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_action_decision_structured_projection_unit_test`
+   - 结果：通过，target 完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "ActionDecisionStructuredProjectionTest"`
+   - 结果：通过，1/1 passed。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-004` 已完成：execution payload -> `ActionDecision` 的 typed projection owner 已独立落盘，后续 BLD-006 不再需要在 Facade 内直接解析 execution bridge payload 字段。
+2. 本轮把 failure surface 保持为两层：invalid enum 与 nested object / candidate score 类型错配由 projector fail-closed；missing selected node、tool intent on response、clarification conflict 等 decision-level 互斥关系继续由既有 invariant validator 拦截。
+3. `Gate-COG-FIX004A-02` 已转为 Pass：PlanGraph / ActionDecision projector focused 正负例均已全绿，object invariant validator 继续通过。
+4. 当前实现继续守住边界：只落 execution payload projection 与 focused invariant gate，不提前切换 Facade execution 主链，也不引入 Runtime interaction 或 telemetry structured fields 变更。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-004` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-004` 的 scoped commit。
+
 ## 记录 #656
 
 - 日期：2026-05-15

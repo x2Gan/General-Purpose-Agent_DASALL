@@ -328,36 +328,62 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
   ValidationIssueSet issue_set;
   std::vector<std::string> diagnostics;
 
+  const auto has_selected_node = action_decision.selected_node_id.has_value() &&
+                                 !action_decision.selected_node_id->empty();
+  const auto has_clarification_question = action_decision.clarification_question.has_value() &&
+                                          !action_decision.clarification_question->empty();
+  const auto has_tool_intent = action_decision.tool_intent_hint.has_value() &&
+                               !action_decision.tool_intent_hint->tool_name.empty();
+  const auto has_response_outline = action_decision.response_outline.has_value() &&
+                                    !action_decision.response_outline->summary.empty();
+
   switch (action_decision.decision_kind) {
     case decision::ActionDecisionKind::ExecuteAction:
-      if (!action_decision.selected_node_id.has_value() || action_decision.selected_node_id->empty()) {
+      if (!has_selected_node) {
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
                       "selected_node_id",
                       "execute_action decisions require a selected plan node");
       }
-      if (!action_decision.tool_intent_hint.has_value() ||
-          action_decision.tool_intent_hint->tool_name.empty()) {
+      if (!has_tool_intent) {
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
                       "tool_intent_hint.tool_name",
                       "execute_action decisions require a tool intent hint");
       }
+      if (action_decision.clarification_needed || has_clarification_question) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "clarification_question",
+                      "execute_action decisions must not simultaneously request clarification");
+      }
       break;
     case decision::ActionDecisionKind::DirectResponse:
     case decision::ActionDecisionKind::ConvergeSafe:
-      if (!action_decision.response_outline.has_value() ||
-          action_decision.response_outline->summary.empty()) {
+      if (!has_response_outline) {
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
                       "response_outline.summary",
                       "response decisions require a non-empty response outline summary");
       }
+      if (has_tool_intent) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "tool_intent_hint.tool_name",
+                      "response decisions must not carry executable tool intent");
+      }
+      if (action_decision.clarification_needed || has_clarification_question) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "clarification_question",
+                      "response decisions must not simultaneously request clarification");
+      }
       break;
     case decision::ActionDecisionKind::AskClarification:
       if (!action_decision.clarification_needed ||
-          !action_decision.clarification_question.has_value() ||
-          action_decision.clarification_question->empty()) {
+          !has_clarification_question) {
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
                       "clarification_question",
                       "clarification decisions require a clarification question");
+      }
+      if (has_tool_intent) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "tool_intent_hint.tool_name",
+                      "clarification decisions must not carry a tool intent hint");
       }
       break;
     case decision::ActionDecisionKind::NoDecision:
