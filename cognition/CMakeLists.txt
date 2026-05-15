@@ -9,6 +9,7 @@ target_sources(dasall_cognition
     src/response/ResponseBuilder.cpp
     src/planning/Planner.cpp
     src/planning/PlanGraphBuilder.cpp
+    src/projection/PlanGraphStructuredProjector.cpp
     src/reasoning/Reasoner.cpp
     src/reasoning/DecisionProjector.cpp
     src/reflection/ReflectionEngine.cpp

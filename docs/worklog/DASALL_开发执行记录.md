@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+## 记录 #656
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-003 落地 PlanGraphStructuredProjector
+- 状态：已完成
+
+### 改动
+
+1. 新增 `cognition/src/projection/PlanGraphStructuredProjector.h` 与 `cognition/src/projection/PlanGraphStructuredProjector.cpp`：引入 planning payload 的 typed projection owner，实现 `project_plan_graph()`，把 `StructuredPayloadView` 投影为 `plan::PlanGraph`，并把 projection 级别的字段类型/缺失错误 fail-closed 收口为 `PlanGraphProjectionResult`。
+2. 调整 `cognition/CMakeLists.txt` 与 `tests/unit/cognition/CMakeLists.txt`：将 `PlanGraphStructuredProjector.cpp` 接入 `dasall_cognition`，并新增 `dasall_plan_graph_structured_projection_unit_test`。
+3. 新增 `tests/unit/cognition/PlanGraphStructuredProjectionTest.cpp`：覆盖 valid planning payload 正例，以及 missing success signal、duplicate node、unknown edge、cycle、over cap 等负例；负例中 projection 级错误由 projector 直接失败，graph 级错误继续通过既有 `StageOutputValidator::validate_plan_graph_invariants()` 断言。
+4. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-004A-BLD-003` 标记为 Done，并回写本轮 focused validation 证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_plan_graph_structured_projection_unit_test`
+   - 结果：通过，target 完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "PlanGraphStructuredProjectionTest"`
+   - 结果：通过，1/1 passed。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-003` 已完成：planning payload -> `PlanGraph` 的 typed projection owner 已独立落盘，后续 BLD-005 不再需要在 Facade 内直接解析 payload 字段。
+2. 本轮把 failure surface 明确分成两层：missing success signal 等 projection 级错误由 projector fail-closed；duplicate node、unknown edge、cycle、over cap 等 graph 级错误继续由既有 invariant validator 拦截，避免 typed projection 与 graph invariant 责任混淆。
+3. 当前实现继续守住边界：只落 planning payload projection，不提前切换 Facade planning 主链，也不引入 execution/action projection 或 Runtime structured interaction 改动。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-003` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-003` 的 scoped commit。
+
 ## 记录 #655
 
 - 日期：2026-05-15
