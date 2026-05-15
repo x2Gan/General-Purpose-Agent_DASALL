@@ -11,34 +11,9 @@
 #include "llm/CognitionLlmBridge.h"
 #include "plan/PlanGraph.h"
 #include "response/ResponseBuildResult.h"
+#include "validation/StageSchemaRegistry.h"
 
 namespace dasall::cognition::validation {
-
-struct EnumConstraint {
-  std::string field_path;
-  std::vector<std::string> allowed_values;
-};
-
-struct NumericConstraint {
-  std::string field_path;
-  std::optional<double> min_value;
-  std::optional<double> max_value;
-};
-
-struct ListConstraint {
-  std::string field_path;
-  std::size_t min_items = 0U;
-  std::optional<std::size_t> max_items;
-};
-
-struct StageSchemaSpec {
-  std::string stage_name;
-  std::vector<std::string> required_fields;
-  std::vector<EnumConstraint> enum_constraints;
-  std::vector<NumericConstraint> numeric_bounds;
-  std::vector<ListConstraint> list_constraints;
-  std::vector<std::string> stage_specific_invariants;
-};
 
 enum class ValidationIssueCode : std::uint8_t {
   MissingRequiredField = 0,

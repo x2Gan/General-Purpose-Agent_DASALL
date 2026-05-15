@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 
+#include "validation/StageSchemaRegistry.h"
 #include "validation/StageOutputValidator.h"
 #include "support/TestAssertions.h"
 
@@ -12,12 +13,9 @@ using dasall::cognition::decision::ActionDecisionKind;
 using dasall::cognition::decision::ToolIntentHint;
 using dasall::cognition::llm_bridge::StageBudgetHint;
 using dasall::cognition::llm_bridge::StageLlmCallResult;
-using dasall::cognition::validation::EnumConstraint;
-using dasall::cognition::validation::ListConstraint;
-using dasall::cognition::validation::NumericConstraint;
 using dasall::cognition::validation::StageOutputValidator;
-using dasall::cognition::validation::StageSchemaSpec;
 using dasall::cognition::validation::ValidationIssueCode;
+using dasall::cognition::validation::schema_for_execution_action_decision;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -38,22 +36,8 @@ using dasall::tests::support::assert_true;
   };
 }
 
-[[nodiscard]] StageSchemaSpec make_schema_spec() {
-  return StageSchemaSpec{
-      .stage_name = "execution",
-      .required_fields = {"decision_kind", "confidence", "candidate_scores"},
-      .enum_constraints = {
-          EnumConstraint{.field_path = "decision_kind",
-                         .allowed_values = {"ExecuteAction", "DirectResponse"}},
-      },
-      .numeric_bounds = {
-          NumericConstraint{.field_path = "confidence", .min_value = 0.0, .max_value = 1.0},
-      },
-      .list_constraints = {
-          ListConstraint{.field_path = "candidate_scores", .min_items = 1U, .max_items = 4U},
-      },
-      .stage_specific_invariants = {},
-  };
+[[nodiscard]] std::string make_valid_execution_payload() {
+  return R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"use tool","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"]})";
 }
 
 [[nodiscard]] bool has_issue_code(const dasall::cognition::validation::ValidationResult& result,
@@ -70,9 +54,8 @@ using dasall::tests::support::assert_true;
 void test_validate_stage_output_accepts_well_formed_payload() {
   StageOutputValidator validator;
   const auto result = validator.validate_stage_output(
-      make_stage_result(
-          R"({"decision_kind":"ExecuteAction","confidence":0.82,"candidate_scores":["execute_action"]})"),
-      make_schema_spec());
+    make_stage_result(make_valid_execution_payload()),
+      schema_for_execution_action_decision());
 
   assert_true(result.ok, "well-formed stage output should pass schema validation");
   assert_true(result.issue_set.empty(),
@@ -84,11 +67,18 @@ void test_validate_stage_output_accepts_whitespace_and_reordered_fields() {
   const auto result = validator.validate_stage_output(
       make_stage_result(
           "{\n"
+        "  \"schema_version\" : \"cognition.reasoning.v1\",\n"
           "  \"candidate_scores\" : [ \"execute_action\", \"fallback\" ],\n"
           "  \"confidence\" : 0.82,\n"
-          "  \"decision_kind\" : \"ExecuteAction\"\n"
+        "  \"clarification_needed\" : false,\n"
+        "  \"rationale\" : \"use tool\",\n"
+        "  \"response_outline\" : null,\n"
+        "  \"selected_node_id\" : \"node-1\",\n"
+        "  \"tool_intent_hint\" : null,\n"
+        "  \"clarification_question\" : null,\n"
+        "  \"decision_kind\" : \"ExecuteAction\"\n"
           "}"),
-      make_schema_spec());
+        schema_for_execution_action_decision());
 
   assert_true(result.ok, "whitespace and field order variation should remain valid JSON");
   assert_true(result.issue_set.empty(),
@@ -99,8 +89,8 @@ void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations
   StageOutputValidator validator;
   const auto result = validator.validate_stage_output(
       make_stage_result(
-          R"({"decision_kind":"LaunchAction","confidence":1.40,"candidate_scores":[]})"),
-      make_schema_spec());
+        R"({"schema_version":"cognition.reasoning.v1","decision_kind":"LaunchAction","confidence":1.40,"rationale":"invalid","selected_node_id":null,"tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":[]})"),
+        schema_for_execution_action_decision());
 
   assert_true(!result.ok, "invalid stage output should fail schema validation");
   assert_equal(3, static_cast<int>(result.issue_set.issues.size()),
@@ -115,8 +105,8 @@ void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations
     StageOutputValidator validator;
     const auto result = validator.validate_stage_output(
       make_stage_result(
-        R"({"confidence":0.82,"candidate_scores":["execute_action"],"note":"\"decision_kind\":\"ExecuteAction\""})"),
-      make_schema_spec());
+        R"({"schema_version":"cognition.reasoning.v1","confidence":0.82,"rationale":"missing decision kind","selected_node_id":null,"tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"],"note":"\"decision_kind\":\"ExecuteAction\""})"),
+      schema_for_execution_action_decision());
 
     assert_true(!result.ok, "escaped pseudo-fields inside strings must not satisfy required fields");
     assert_true(has_issue_code(result,
@@ -129,8 +119,8 @@ void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations
     StageOutputValidator validator;
     const auto result = validator.validate_stage_output(
       make_stage_result(
-        R"({"decision_kind":"ExecuteAction","confidence":0.82,"candidate_scores":[[1,2],[3,4]]})"),
-      make_schema_spec());
+        R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"nested arrays ok","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":[[1,2],[3,4]]})"),
+      schema_for_execution_action_decision());
 
     assert_true(result.ok, "nested array members should count as two top-level list items, not four");
     assert_true(result.issue_set.empty(),
@@ -141,8 +131,8 @@ void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations
     StageOutputValidator validator;
     const auto result = validator.validate_stage_output(
       make_stage_result(
-        R"({"decision_kind":"ExecuteAction","confidence":0.82,"candidate_scores":["execute_action"] )"),
-      make_schema_spec());
+        R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"broken json","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"] )"),
+      schema_for_execution_action_decision());
 
     assert_true(!result.ok, "malformed JSON must fail closed");
     assert_equal(1, static_cast<int>(result.issue_set.issues.size()),
@@ -155,8 +145,8 @@ void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations
     StageOutputValidator validator;
     const auto result = validator.validate_stage_output(
       make_stage_result(
-        R"({"decision_kind":"ExecuteAction","confidence":"0.82","candidate_scores":{"primary":"execute_action"}})"),
-      make_schema_spec());
+        R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":"0.82","rationale":"bad types","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":{"primary":"execute_action"}})"),
+      schema_for_execution_action_decision());
 
     assert_true(!result.ok, "schema type mismatches must fail validation");
     assert_true(has_issue_code(result,

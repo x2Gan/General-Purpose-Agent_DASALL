@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #654
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-001 增加 StageSchemaRegistry 与 structured schema specs
+- 状态：已完成
+
+### 改动
+
+1. 新增 `cognition/src/validation/StageSchemaRegistry.h` 与 `cognition/src/validation/StageSchemaRegistry.cpp`：冻结 `cognition.plan.v1` 与 `cognition.reasoning.v1` 的 `StageSchemaSpec` owner，补入 schema version、required fields、enum、numeric、list 与 unknown field 策略，避免 planning / execution schema 继续散落在 validator 或 tests 中。
+2. 调整 `cognition/src/validation/StageOutputValidator.h`、`cognition/CMakeLists.txt`、`tests/unit/cognition/CMakeLists.txt`：`StageOutputValidator` 现直接消费 registry 定义，cognition 静态库与 unit test 拓扑新增 `StageSchemaRegistry` 源和 `dasall_stage_schema_registry_unit_test`。
+3. 调整 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp` 并新增 `tests/unit/cognition/StageSchemaRegistryTest.cpp`：schema validator test 不再本地手写 `make_schema_spec()`，而是直接消费 `schema_for_execution_action_decision()`；首轮 focused ctest 暴露最小正例 payload 缺少 registry 新冻结的 required fields，本轮已同步补齐样例并复跑通过。
+4. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-004A-BLD-001` 标记为 Done，并回写本轮 focused validation 证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_stage_schema_registry_unit_test dasall_stage_output_validator_schema_unit_test`
+   - 结果：通过，两个目标均完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest"`
+   - 结果：通过，1/1 passed。
+3. `ctest --test-dir build-ci --output-on-failure -R "StageOutputValidatorSchemaTest"`
+   - 结果：通过，1/1 passed。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-001` 已完成：方案 A 的 schema owner 已从 validator/test 分散定义收敛到 `StageSchemaRegistry`，后续 `BLD-002` ~ `006` 可在同一 baseline 上继续推进 token view、typed projector 和 Facade authoritative consumption。
+2. `StageOutputValidatorSchemaTest` 现在验证的是 registry 冻结后的 execution schema，而非历史最小手写 spec；这保证后续 structured projection 任务不会在 test 中隐含第二套 schema baseline。
+3. 本轮仍严格守住边界：只收敛 schema owner 与 focused tests，不提前引入 token view、projector、Facade 主链切换或 runtime structured interaction 改动。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-001` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-001` 的 scoped commit。
+
 ## 记录 #653
 
 - 日期：2026-05-14

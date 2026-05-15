@@ -15,6 +15,7 @@ target_sources(dasall_cognition
     src/belief/BeliefUpdateSynthesizer.cpp
     src/perception/PerceptionEngine.cpp
     src/validation/InputBoundaryValidator.cpp
+    src/validation/StageSchemaRegistry.cpp
     src/validation/StageOutputValidator.cpp
     src/config/CognitionConfigProjector.cpp
   PUBLIC

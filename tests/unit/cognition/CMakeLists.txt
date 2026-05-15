@@ -210,6 +210,12 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_stage_schema_registry_unit_test
+	StageSchemaRegistryTest.cpp
+	StageSchemaRegistryTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_stage_output_validator_schema_unit_test
 	StageOutputValidatorSchemaTest.cpp
 	StageOutputValidatorSchemaTest
@@ -321,6 +327,11 @@ target_include_directories(dasall_cognition_llm_bridge_error_mapping_unit_test
 )
 
 target_include_directories(dasall_stage_model_hint_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_stage_schema_registry_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )
