@@ -1,5 +1,38 @@
 # DASALL 开发执行记录
 
+## 记录 #661
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-012 统一回写 COG-FIX-004 最终证据与 Gate-05
+- 状态：已完成
+
+### 改动
+
+1. 调整 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-004` 总任务从 Todo 改为 Done，将附录 A 中 `COG-FIX-004A-BLD-012` 标记为 Done，并把 `Gate-COG-FIX004A-05` 由 Pending 回写为 Pass，同时补入 A.13 完成判定已满足的最终证据说明。
+2. 调整 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`：将 `COG-FIX-004A-BLD-012` 标记为 Done，补充本轮最终收口记录，并把当前 Gate 状态中的 `Gate-COG-FIX004A-05` 回写为 Pass。
+3. 更新本记录：新增一条只面向证据统一与不可外推范围声明的执行记录，避免子任务全部完成后总账、专项 TODO 与 worklog 口径继续漂移。
+
+### 验证
+
+1. `rg -n "COG-FIX-004" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过，三处文档的 `COG-FIX-004` 总状态与 BLD-012 状态已一致。
+2. `rg -n "Gate-COG-FIX004A" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过，`Gate-COG-FIX004A-01` ~ `05` 当前状态与最终口径已一致，`Gate-05` 已统一为 Pass。
+3. `ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest|StageOutputValidatorSchemaTest|PlanGraphStructuredProjectionTest|ActionDecisionStructuredProjectionTest|CognitionFacadeStructuredPlanOutputTest|CognitionFacadeStructuredActionOutputTest|CognitionStructuredOutputIntegrationTest|CognitionRuntimeInteractionContractTest|CognitionTelemetryFieldsTest"`
+   - 结果：通过，structured projection 主链的 final focused evidence 全部通过。
+
+### 结果
+
+1. `COG-FIX-004` 已完成：总账、专项 TODO、worklog、统一验收命令与 Gate 状态现已跨文档一致，`Gate-COG-FIX004A-05` 已闭合。
+2. A.13 的完成判定 1 ~ 8 已具统一证据：schema baseline、typed projector、Facade authoritative consumption、negative matrix、Runtime interaction、telemetry fields、统一 focused ctest 与回写记录都已完成。
+3. 本轮继续守住边界：只回写 cognition L1 / L2 structured projection 主链完成证据，不把 installed / qemu / soak 证据或 production telemetry sink 外推为已完成。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-012` 相关文档与 worklog 文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-012` 的 scoped commit。
+
 ## 记录 #660
 
 - 日期：2026-05-15
