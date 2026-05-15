@@ -182,6 +182,7 @@ void test_response_builder_falls_back_when_bridge_returns_failure() {
       CognitionConfig{},
       CognitionRuntimeDependencies{
           .llm_manager = llm_manager,
+          .policy_snapshot = nullptr,
       });
   auto request = make_request(true);
   request.latest_observation = make_observation();

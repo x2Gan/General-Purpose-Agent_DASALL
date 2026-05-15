@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #665
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-TODO-044 清理 cognition 测试初始化 warning 并固化 warning hygiene
+- 状态：已完成
+
+### 改动
+
+1. 调整 `tests/mocks/include/MockCognitionFixture.h`：为 `MockCognitionFixture::make_engine()` 与 `make_response_builder()` 的 `CognitionRuntimeDependencies` 聚合初始化显式补入 `.policy_snapshot = nullptr`。
+2. 调整 `tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp`：为 response bridge failure fallback 场景的 `CognitionRuntimeDependencies` 显式补入 `.policy_snapshot = nullptr`。
+3. 调整 `tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp` 与 `tests/integration/cognition/CognitionStructuredOutputIntegrationTest.cpp`：snapshot-backed helper 现显式透传 `.policy_snapshot = snapshot`，避免同类 missing-field initializer warning 继续残留在 cognition integration 责任域。
+4. 新增 `docs/todos/cognition/deliverables/COG-TODO-044-cognition测试初始化warning收敛.md`，并在专项 TODO 中将 `COG-TODO-044` 标记为 Done、将 `COG-R23` 关闭、把 `Gate-COG-12` 口径更新为“cognition scope 已收口，统一 gate 仍受非 cognition blocker 阻断”。
+
+### 验证
+
+1. `cmake -S . -B build-ci-cog044 -G "Unix Makefiles"`
+   - 结果：配置成功。
+2. `cmake --build build-ci-cog044 --target dasall_cognition_facade_flow_unit_test dasall_response_builder_template_fallback_unit_test dasall_mock_cognition_fixture_surface_unit_test`
+   - 结果：三个目标构建成功；未再出现 `CognitionRuntimeDependencies::policy_snapshot` 或 `missing initializer` 相关 warning。
+3. `ctest --test-dir build-ci-cog044 --output-on-failure -R "CognitionFacadeFlowTest|ResponseBuilderTemplateFallbackTest|MockCognitionFixtureSurfaceTest"`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. cognition 责任域内与 `policy_snapshot` 聚合初始化遗漏相关的 warning 已按 044 范围收口，且不需要改动生产逻辑。
+2. `COG-R23` 已关闭；Gate-COG-12 当前继续 Pending 的原因只剩 repo-wide non-cognition blocker，而不是 cognition 自身 docs / warning hygiene 残余。
+3. COG-TODO-039 ~ 044 已全部完成并各自落盘 deliverable；cognition scope 当前剩余工作不再是本专项 TODO 内的自有回归，而是统一 gate 的跨子系统解阻。
+
+### 下一步
+
+1. 仅 stage 044 本轮相关的 code / deliverable / TODO / worklog 变更，不混入 widened-acceptance 等未提交脏改动。
+2. 本轮提交后，COG-TODO-039 ~ 044 串行推进闭环完成；后续若继续推进 cognition gate，只能转向 repo-wide non-cognition blocker owner 的解阻链路。
+
 ## 记录 #664
 
 - 日期：2026-05-15

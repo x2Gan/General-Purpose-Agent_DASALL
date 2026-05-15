@@ -451,6 +451,7 @@ make_structured_contract_engine(const std::string& profile_id,
       *snapshot,
       dasall::cognition::CognitionRuntimeDependencies{
           .llm_manager = fixture.llm_manager(),
+          .policy_snapshot = snapshot,
       });
   assert_true(delegate != nullptr,
               "structured runtime interaction contract requires a snapshot-backed cognition engine");

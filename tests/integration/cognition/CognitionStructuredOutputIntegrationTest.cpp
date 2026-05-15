@@ -54,6 +54,7 @@ using dasall::tests::support::assert_true;
       *snapshot,
       dasall::cognition::CognitionRuntimeDependencies{
           .llm_manager = fixture.llm_manager(),
+          .policy_snapshot = snapshot,
       });
   assert_true(engine != nullptr,
               "structured output integration requires a snapshot-backed cognition engine");
