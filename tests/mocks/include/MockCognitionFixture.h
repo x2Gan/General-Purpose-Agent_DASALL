@@ -54,6 +54,22 @@ struct FailureProfileScenario {
   bool template_fallback_expected = false;
 };
 
+enum class StructuredPlanningPayloadScenario {
+    Valid,
+    MalformedJson,
+    SchemaInvalidActionKindHint,
+    ProjectionInvalidDuplicateNode,
+};
+
+enum class StructuredExecutionPayloadScenario {
+    ValidDirectResponse,
+    ValidExecuteAction,
+    MalformedJson,
+    SchemaInvalidDecisionKind,
+    ProjectionInvalidToolIntentOnDirectResponse,
+    ProjectionInvalidMissingSelectedNode,
+};
+
 class MockCognitionFixture {
  public:
   explicit MockCognitionFixture(MockCognitionFixtureOptions options = {})
@@ -276,6 +292,220 @@ class MockCognitionFixture {
     result.diagnostics.push_back("mock_fixture_decision");
     return result;
   }
+
+    [[nodiscard]] std::string make_structured_planning_payload(
+            StructuredPlanningPayloadScenario scenario =
+                    StructuredPlanningPayloadScenario::Valid) const {
+        switch (scenario) {
+            case StructuredPlanningPayloadScenario::Valid:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.plan.v1\","
+                        + "\"plan_id\":\"plan-structured-bridge\","
+                        + "\"revision\":1,"
+                        + "\"nodes\":[{"
+                        + "\"node_id\":\"" + options_.selected_node_id + "\","
+                        + "\"objective\":\"collect governed evidence from the dataset tool\","
+                        + "\"success_signal\":\"evidence_collected\","
+                        + "\"action_kind_hint\":\"tool_action\","
+                        + "\"depends_on\":[],"
+                        + "\"evidence_refs\":[\"belief:evidence:structured-plan\"]}],"
+                        + "\"edges\":[],"
+                        + "\"open_questions\":[],"
+                        + "\"plan_rationale\":\"bridge payload should become the active plan graph\","
+                        + "\"estimated_complexity\":1}"
+                        ;
+            case StructuredPlanningPayloadScenario::MalformedJson:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.plan.v1\","
+                        + "\"plan_id\":\"plan-structured-bridge\","
+                        + "\"revision\":1,"
+                        + "\"nodes\":[{"
+                        + "\"node_id\":\"" + options_.selected_node_id + "\","
+                        + "\"objective\":\"malformed planning payload should fail parsing\"";
+            case StructuredPlanningPayloadScenario::SchemaInvalidActionKindHint:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.plan.v1\","
+                        + "\"plan_id\":\"plan-structured-bridge\","
+                        + "\"revision\":1,"
+                        + "\"nodes\":[{"
+                        + "\"node_id\":\"" + options_.selected_node_id + "\","
+                        + "\"objective\":\"collect governed evidence from the dataset tool\","
+                        + "\"success_signal\":\"evidence_collected\","
+                        + "\"action_kind_hint\":\"respond_now\","
+                        + "\"depends_on\":[],"
+                        + "\"evidence_refs\":[\"belief:evidence:structured-plan\"]}],"
+                        + "\"edges\":[],"
+                        + "\"open_questions\":[],"
+                        + "\"plan_rationale\":\"invalid nested enum should fail schema validation\","
+                        + "\"estimated_complexity\":1}"
+                        ;
+            case StructuredPlanningPayloadScenario::ProjectionInvalidDuplicateNode:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.plan.v1\","
+                        + "\"plan_id\":\"plan-structured-bridge\","
+                        + "\"revision\":1,"
+                        + "\"nodes\":[{"
+                        + "\"node_id\":\"" + options_.selected_node_id + "\","
+                        + "\"objective\":\"collect governed evidence from the dataset tool\","
+                        + "\"success_signal\":\"evidence_collected\","
+                        + "\"action_kind_hint\":\"tool_action\","
+                        + "\"depends_on\":[],"
+                        + "\"evidence_refs\":[\"belief:evidence:structured-plan\"]},{"
+                        + "\"node_id\":\"" + options_.selected_node_id + "\","
+                        + "\"objective\":\"duplicate node should fail projection\","
+                        + "\"success_signal\":\"duplicate_detected\","
+                        + "\"action_kind_hint\":\"validation\","
+                        + "\"depends_on\":[],"
+                        + "\"evidence_refs\":[\"belief:evidence:duplicate\"]}],"
+                        + "\"edges\":[],"
+                        + "\"open_questions\":[],"
+                        + "\"plan_rationale\":\"duplicate node ids should fail projection\","
+                        + "\"estimated_complexity\":1}"
+                        ;
+        }
+
+        return {};
+    }
+
+    [[nodiscard]] std::string make_structured_execution_payload(
+            StructuredExecutionPayloadScenario scenario =
+                    StructuredExecutionPayloadScenario::ValidDirectResponse) const {
+        switch (scenario) {
+            case StructuredExecutionPayloadScenario::ValidDirectResponse:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"DirectResponse\","
+                        + "\"confidence\":0.79,"
+                        + "\"rationale\":\"bridge execution payload should become the authoritative decision\","
+                        + "\"selected_node_id\":null,"
+                        + "\"tool_intent_hint\":null,"
+                        + "\"clarification_needed\":false,"
+                        + "\"clarification_question\":null,"
+                        + "\"response_outline\":{"
+                        + "\"summary\":\"" + options_.response_text + "\","
+                        + "\"key_points\":[\"respond from the bridge payload\",\"skip local execute_action routing\"]},"
+                        + "\"candidate_scores\":[{"
+                        + "\"candidate_name\":\"direct_response\","
+                        + "\"score\":0.79,"
+                        + "\"rationale\":\"bridge payload selected direct response\"},{"
+                        + "\"candidate_name\":\"execute_action\","
+                        + "\"score\":0.21,"
+                        + "\"rationale\":\"local execution should not win once projection succeeds\"}]}"
+                        ;
+            case StructuredExecutionPayloadScenario::ValidExecuteAction:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"ExecuteAction\","
+                        + "\"confidence\":0.82,"
+                        + "\"rationale\":\"bridge execution payload should preserve governed tool intent\","
+                        + "\"selected_node_id\":\"" + options_.selected_node_id + "\","
+                        + "\"tool_intent_hint\":{"
+                        + "\"tool_name\":\"" + options_.tool_name + "\","
+                        + "\"intent_summary\":\"query runtime-visible data through tool governance\","
+                        + "\"argument_hints\":[\"query=current_state\"],"
+                        + "\"evidence_refs\":[\"tests:mock-cognition-fixture\"]},"
+                        + "\"clarification_needed\":false,"
+                        + "\"clarification_question\":null,"
+                        + "\"response_outline\":null,"
+                        + "\"candidate_scores\":[{"
+                        + "\"candidate_name\":\"execute_action\","
+                        + "\"score\":0.82,"
+                        + "\"rationale\":\"bridge payload selected execute action\"}]}"
+                        ;
+            case StructuredExecutionPayloadScenario::MalformedJson:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"DirectResponse\","
+                        + "\"confidence\":0.79,"
+                        + "\"rationale\":\"malformed execution payload should fail parsing\"";
+            case StructuredExecutionPayloadScenario::SchemaInvalidDecisionKind:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"LaunchAction\","
+                        + "\"confidence\":0.79,"
+                        + "\"rationale\":\"invalid enum should fail schema validation\","
+                        + "\"selected_node_id\":null,"
+                        + "\"tool_intent_hint\":null,"
+                        + "\"clarification_needed\":false,"
+                        + "\"clarification_question\":null,"
+                        + "\"response_outline\":null,"
+                        + "\"candidate_scores\":[{"
+                        + "\"candidate_name\":\"direct_response\","
+                        + "\"score\":0.79,"
+                        + "\"rationale\":\"invalid enum should fail before projection\"}]}"
+                        ;
+            case StructuredExecutionPayloadScenario::ProjectionInvalidToolIntentOnDirectResponse:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"DirectResponse\","
+                        + "\"confidence\":0.79,"
+                        + "\"rationale\":\"response decisions must not carry executable tool intent\","
+                        + "\"selected_node_id\":null,"
+                        + "\"tool_intent_hint\":{"
+                        + "\"tool_name\":\"" + options_.tool_name + "\","
+                        + "\"intent_summary\":\"this should trigger invariant failure\","
+                        + "\"argument_hints\":[],"
+                        + "\"evidence_refs\":[]},"
+                        + "\"clarification_needed\":false,"
+                        + "\"clarification_question\":null,"
+                        + "\"response_outline\":{"
+                        + "\"summary\":\"" + options_.response_text + "\","
+                        + "\"key_points\":[\"this payload should fail closed\"]},"
+                        + "\"candidate_scores\":[{"
+                        + "\"candidate_name\":\"direct_response\","
+                        + "\"score\":0.79,"
+                        + "\"rationale\":\"invalid because tool_intent_hint is present\"}]}"
+                        ;
+            case StructuredExecutionPayloadScenario::ProjectionInvalidMissingSelectedNode:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"ExecuteAction\","
+                        + "\"confidence\":0.82,"
+                        + "\"rationale\":\"execute_action requires a selected node id\","
+                        + "\"selected_node_id\":null,"
+                        + "\"tool_intent_hint\":{"
+                        + "\"tool_name\":\"" + options_.tool_name + "\","
+                        + "\"intent_summary\":\"missing selected node should fail invariants\","
+                        + "\"argument_hints\":[],"
+                        + "\"evidence_refs\":[]},"
+                        + "\"clarification_needed\":false,"
+                        + "\"clarification_question\":null,"
+                        + "\"response_outline\":null,"
+                        + "\"candidate_scores\":[{"
+                        + "\"candidate_name\":\"execute_action\","
+                        + "\"score\":0.82,"
+                        + "\"rationale\":\"invalid because selected_node_id is missing\"}]}"
+                        ;
+        }
+
+        return {};
+    }
+
+    [[nodiscard]] dasall::llm::LLMManagerResult make_structured_planning_stage_result(
+            StructuredPlanningPayloadScenario scenario =
+                    StructuredPlanningPayloadScenario::Valid) const {
+        return MockLLMManager::make_structured_stage_result(
+                "planning", make_structured_planning_payload(scenario), options_.request_id);
+    }
+
+    [[nodiscard]] dasall::llm::LLMManagerResult make_structured_execution_stage_result(
+            StructuredExecutionPayloadScenario scenario =
+                    StructuredExecutionPayloadScenario::ValidDirectResponse) const {
+        return MockLLMManager::make_structured_stage_result(
+                "execution", make_structured_execution_payload(scenario), options_.request_id);
+    }
+
+    void stage_structured_planning_result(
+            StructuredPlanningPayloadScenario scenario =
+                    StructuredPlanningPayloadScenario::Valid) const {
+        llm_manager_->set_stage_result("planning", make_structured_planning_stage_result(scenario));
+    }
+
+    void stage_structured_execution_result(
+            StructuredExecutionPayloadScenario scenario =
+                    StructuredExecutionPayloadScenario::ValidDirectResponse) const {
+        llm_manager_->set_stage_result("execution", make_structured_execution_stage_result(scenario));
+    }
 
   [[nodiscard]] dasall::cognition::ResponseBuildResult make_response_result(
       bool fallback_used = false) const {

@@ -15,7 +15,9 @@ using dasall::cognition::CognitionConfig;
 using dasall::cognition::decision::ActionDecisionKind;
 using dasall::llm::LLMFailureCategory;
 using dasall::tests::mocks::MockCognitionFixture;
+using dasall::tests::mocks::MockCognitionFixtureOptions;
 using dasall::tests::mocks::MockLLMManager;
+using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -30,34 +32,11 @@ using dasall::tests::support::assert_true;
   return false;
 }
 
-[[nodiscard]] std::string make_structured_planning_payload(std::string node_id,
-                                                           std::string action_kind_hint) {
-  return std::string{"{"}
-      + "\"schema_version\":\"cognition.plan.v1\","
-      + "\"plan_id\":\"plan-structured-bridge\","
-      + "\"revision\":1,"
-      + "\"nodes\":[{"
-      + "\"node_id\":\"" + std::move(node_id) + "\","
-      + "\"objective\":\"collect governed evidence from the dataset tool\","
-      + "\"success_signal\":\"evidence_collected\","
-      + "\"action_kind_hint\":\"" + std::move(action_kind_hint) + "\","
-      + "\"depends_on\":[],"
-      + "\"evidence_refs\":[\"belief:evidence:structured-plan\"]}],"
-      + "\"edges\":[],"
-      + "\"open_questions\":[],"
-      + "\"plan_rationale\":\"bridge payload should become the active plan graph\","
-      + "\"estimated_complexity\":1}"
-      ;
-}
-
 void test_decide_uses_projected_plan_graph_as_reasoner_input() {
-  MockCognitionFixture fixture;
-  fixture.llm_manager()->set_stage_result(
-      "planning",
-      MockLLMManager::make_success_result(
-          make_structured_planning_payload("bridge-plan-node", "tool_action"),
-          "mock.route.planning",
-          fixture.options().request_id));
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "bridge-plan-node",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.llm_manager()->set_stage_result(
       "execution",
       MockLLMManager::make_failure_result(
@@ -90,13 +69,11 @@ void test_decide_uses_projected_plan_graph_as_reasoner_input() {
 }
 
 void test_decide_falls_back_to_local_planner_only_on_explicit_planning_projection_failure() {
-  MockCognitionFixture fixture;
-  fixture.llm_manager()->set_stage_result(
-      "planning",
-      MockLLMManager::make_success_result(
-          make_structured_planning_payload("invalid-bridge-node", "respond_now"),
-          "mock.route.planning",
-          fixture.options().request_id));
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+    .selected_node_id = "invalid-bridge-node",
+  });
+  fixture.stage_structured_planning_result(
+    StructuredPlanningPayloadScenario::SchemaInvalidActionKindHint);
   fixture.llm_manager()->set_stage_result(
       "execution",
       MockLLMManager::make_failure_result(

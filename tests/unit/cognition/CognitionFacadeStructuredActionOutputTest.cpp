@@ -14,7 +14,9 @@ namespace {
 using dasall::cognition::CognitionConfig;
 using dasall::cognition::decision::ActionDecisionKind;
 using dasall::tests::mocks::MockCognitionFixture;
-using dasall::tests::mocks::MockLLMManager;
+using dasall::tests::mocks::MockCognitionFixtureOptions;
+using dasall::tests::mocks::StructuredExecutionPayloadScenario;
+using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -29,32 +31,14 @@ using dasall::tests::support::assert_true;
   return false;
 }
 
-[[nodiscard]] std::string make_structured_planning_payload() {
-  return R"({"schema_version":"cognition.plan.v1","plan_id":"plan-structured-bridge","revision":1,"nodes":[{"node_id":"bridge-plan-node","objective":"collect governed evidence from the dataset tool","success_signal":"evidence_collected","action_kind_hint":"tool_action","depends_on":[],"evidence_refs":["belief:evidence:structured-plan"]}],"edges":[],"open_questions":[],"plan_rationale":"bridge payload should become the active plan graph","estimated_complexity":1})";
-}
-
-[[nodiscard]] std::string make_structured_execution_payload() {
-  return R"({"schema_version":"cognition.reasoning.v1","decision_kind":"DirectResponse","confidence":0.79,"rationale":"bridge execution payload should become the authoritative decision","selected_node_id":null,"tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":{"summary":"bridge-authored direct response summary","key_points":["respond from the bridge payload","skip local execute_action routing"]},"candidate_scores":[{"candidate_name":"direct_response","score":0.79,"rationale":"bridge payload selected direct response"},{"candidate_name":"execute_action","score":0.21,"rationale":"local execution should not win once projection succeeds"}]})";
-}
-
-[[nodiscard]] std::string make_invalid_execution_payload() {
-  return R"({"schema_version":"cognition.reasoning.v1","decision_kind":"DirectResponse","confidence":0.79,"rationale":"response decisions must not carry executable tool intent","selected_node_id":null,"tool_intent_hint":{"tool_name":"agent.dataset","intent_summary":"this should trigger invariant failure","argument_hints":[],"evidence_refs":[]},"clarification_needed":false,"clarification_question":null,"response_outline":{"summary":"bridge-authored direct response summary","key_points":["this payload should fail closed"]},"candidate_scores":[{"candidate_name":"direct_response","score":0.79,"rationale":"invalid because tool_intent_hint is present"}]})";
-}
-
 void test_decide_uses_projected_action_decision_as_authoritative_result() {
-  MockCognitionFixture fixture;
-  fixture.llm_manager()->set_stage_result(
-      "planning",
-      MockLLMManager::make_success_result(
-          make_structured_planning_payload(),
-          "mock.route.planning",
-          fixture.options().request_id));
-  fixture.llm_manager()->set_stage_result(
-      "execution",
-      MockLLMManager::make_success_result(
-          make_structured_execution_payload(),
-          "mock.route.execution",
-          fixture.options().request_id));
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "bridge-plan-node",
+      .response_text = "bridge-authored direct response summary",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+  fixture.stage_structured_execution_result(
+      StructuredExecutionPayloadScenario::ValidDirectResponse);
 
   auto engine = fixture.make_engine(CognitionConfig{});
 
@@ -78,19 +62,13 @@ void test_decide_uses_projected_action_decision_as_authoritative_result() {
 }
 
 void test_decide_fails_closed_when_invalid_execution_projection_has_no_fallback() {
-  MockCognitionFixture fixture;
-  fixture.llm_manager()->set_stage_result(
-      "planning",
-      MockLLMManager::make_success_result(
-          make_structured_planning_payload(),
-          "mock.route.planning",
-          fixture.options().request_id));
-  fixture.llm_manager()->set_stage_result(
-      "execution",
-      MockLLMManager::make_success_result(
-          make_invalid_execution_payload(),
-          "mock.route.execution",
-          fixture.options().request_id));
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+    .selected_node_id = "bridge-plan-node",
+    .response_text = "bridge-authored direct response summary",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+  fixture.stage_structured_execution_result(
+    StructuredExecutionPayloadScenario::ProjectionInvalidToolIntentOnDirectResponse);
 
   auto engine = fixture.make_engine(CognitionConfig{});
   auto request = fixture.make_decide_request(true);

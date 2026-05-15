@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -55,6 +56,15 @@ class MockLLMManager : public dasall::llm::ILLMManager {
     result.resolved_route = std::move(resolved_route);
     result.attempted_routes = std::vector<std::string>{result.resolved_route};
     return result;
+  }
+
+  static dasall::llm::LLMManagerResult make_structured_stage_result(
+      std::string_view stage,
+      std::string payload,
+      std::optional<std::string> request_id = std::nullopt) {
+    return make_success_result(std::move(payload),
+                               default_route_for_stage(stage),
+                               std::move(request_id));
   }
 
   static dasall::llm::LLMManagerResult make_failure_result(
@@ -177,6 +187,14 @@ class MockLLMManager : public dasall::llm::ILLMManager {
     generate_result_.reset();
   }
 
+  void set_structured_stage_payload(
+      std::string stage,
+      std::string payload,
+      std::optional<std::string> request_id = std::nullopt) {
+    auto result = make_structured_stage_result(stage, std::move(payload), std::move(request_id));
+    set_stage_result(std::move(stage), std::move(result));
+  }
+
   void clear_stage_results() { stage_results_.clear(); }
 
   void clear_recorded_requests() {
@@ -231,16 +249,24 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   }
 
  private:
+  static std::string default_route_for_stage(std::string_view stage) {
+    if (!stage.empty()) {
+      return std::string{"mock.route."} + std::string{stage};
+    }
+
+    return std::string{"mock.route.default"};
+  }
+
   static std::string resolve_route(const dasall::llm::LLMGenerateRequest& request) {
     if (request.request.model_route.has_value() && !request.request.model_route->empty()) {
       return *request.request.model_route;
     }
 
     if (!request.stage.empty()) {
-      return std::string{"mock.route."} + request.stage;
+      return default_route_for_stage(request.stage);
     }
 
-    return std::string{"mock.route.default"};
+    return default_route_for_stage(std::string_view{});
   }
 
   std::string resolve_default_content(
