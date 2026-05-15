@@ -33,6 +33,7 @@ enum class UnknownFieldPolicy : std::uint8_t {
 struct StageSchemaSpec {
   std::string stage_name;
   std::string schema_version;
+  std::vector<std::string> known_top_level_fields;
   std::vector<std::string> required_fields;
   std::vector<EnumConstraint> enum_constraints;
   std::vector<NumericConstraint> numeric_bounds;

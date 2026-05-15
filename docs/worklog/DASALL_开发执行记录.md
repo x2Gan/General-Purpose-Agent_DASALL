@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #655
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-002 提取可复用 structured payload token view
+- 状态：已完成
+
+### 改动
+
+1. 新增 `cognition/src/validation/StructuredPayloadView.h`：把 `StageOutputValidator` 内部的 JSON parser 提炼为 validation 私有 token view，提供 `parse_structured_payload()`、field token accessor 以及 type-safe string / number / bool / list / object readers，供后续 projector 直接复用而不再二次手写字符串扫描。
+2. 调整 `cognition/src/validation/StageOutputValidator.cpp` / `.h` 与 `cognition/src/validation/StageSchemaRegistry.h` / `.cpp`：validator 现改为直接消费 token view；schema baseline 新增 `known_top_level_fields`，并结合 `allowed_extension_prefixes` 对 unknown top-level field 执行 fail-closed。
+3. 调整 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp` 与 `tests/unit/cognition/StageSchemaRegistryTest.cpp`：新增 registered `x_` extension 正例、unknown top-level field 负例，以及 `known_top_level_fields` baseline 断言，保证 unknown-field 策略不再散落在 validator 私有实现。
+4. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-004A-BLD-002` 标记为 Done，并回写本轮 focused validation 证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_stage_schema_registry_unit_test dasall_stage_output_validator_schema_unit_test`
+   - 结果：通过，两个目标均完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest"`
+   - 结果：通过，1/1 passed。
+3. `ctest --test-dir build-ci --output-on-failure -R "StageOutputValidatorSchemaTest"`
+   - 结果：通过，1/1 passed。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-002` 已完成：validator private parser 已收敛为后续 projector 可直接消费的 token view，BLD-003 / BLD-004 不再需要再造第二套 payload 扫描逻辑。
+2. unknown top-level field 现在由 registry baseline 明确约束并具 focused test 证据；registered `x_` extension 继续允许通过，从而符合附录 A 中的首版 unknown field 策略。
+3. 本轮仍严格守住边界：只抽取 token view 与补齐 schema drift 的最小 unknown-field gate，不提前落地 typed projection、Facade authoritative consumption 或 deeper nested negative matrix。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-002` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-002` 的 scoped commit。
+
 ## 记录 #654
 
 - 日期：2026-05-15

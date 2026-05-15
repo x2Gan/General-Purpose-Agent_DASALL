@@ -6,6 +6,16 @@ namespace {
 const StageSchemaSpec kPlanningPlanSchema = {
     .stage_name = "planning",
     .schema_version = "cognition.plan.v1",
+    .known_top_level_fields = {
+        "schema_version",
+        "plan_id",
+        "revision",
+        "nodes",
+        "edges",
+        "open_questions",
+        "plan_rationale",
+        "estimated_complexity",
+    },
     .required_fields = {
         "schema_version",
         "plan_id",
@@ -52,6 +62,18 @@ const StageSchemaSpec kPlanningPlanSchema = {
 const StageSchemaSpec kExecutionActionDecisionSchema = {
     .stage_name = "execution",
     .schema_version = "cognition.reasoning.v1",
+    .known_top_level_fields = {
+        "schema_version",
+        "decision_kind",
+        "confidence",
+        "rationale",
+        "selected_node_id",
+        "tool_intent_hint",
+        "clarification_needed",
+        "clarification_question",
+        "response_outline",
+        "candidate_scores",
+    },
     .required_fields = {
         "schema_version",
         "decision_kind",

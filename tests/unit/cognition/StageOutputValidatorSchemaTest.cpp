@@ -85,6 +85,32 @@ void test_validate_stage_output_accepts_whitespace_and_reordered_fields() {
               "whitespace and field order variation should not emit validation issues");
 }
 
+void test_validate_stage_output_accepts_registered_extension_prefixes() {
+  StageOutputValidator validator;
+  const auto result = validator.validate_stage_output(
+      make_stage_result(
+          R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"use tool","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"],"x_trace_id":"trace-001"})"),
+      schema_for_execution_action_decision());
+
+  assert_true(result.ok, "registered x_ extension fields should remain schema-valid");
+  assert_true(result.issue_set.empty(),
+              "registered x_ extension fields should not emit validation issues");
+}
+
+void test_validate_stage_output_rejects_unknown_top_level_fields() {
+  StageOutputValidator validator;
+  const auto result = validator.validate_stage_output(
+      make_stage_result(
+          R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"use tool","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"],"provider_trace":"hidden"})"),
+      schema_for_execution_action_decision());
+
+  assert_true(!result.ok, "unknown top-level fields must fail closed");
+  assert_true(has_issue_code(result,
+               ValidationIssueCode::UnknownField,
+               "provider_trace"),
+      "unknown top-level fields should surface an unknown-field validation issue");
+}
+
 void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations() {
   StageOutputValidator validator;
   const auto result = validator.validate_stage_output(
@@ -181,6 +207,8 @@ int main() {
   try {
     test_validate_stage_output_accepts_well_formed_payload();
     test_validate_stage_output_accepts_whitespace_and_reordered_fields();
+    test_validate_stage_output_accepts_registered_extension_prefixes();
+    test_validate_stage_output_rejects_unknown_top_level_fields();
     test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations();
     test_validate_stage_output_rejects_escaped_pseudo_fields();
     test_validate_stage_output_counts_only_top_level_array_items();

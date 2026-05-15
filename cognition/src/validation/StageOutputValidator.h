@@ -24,6 +24,7 @@ enum class ValidationIssueCode : std::uint8_t {
   ActionDecisionInvariant = 5,
   ResponseEnvelopeInvariant = 6,
   MalformedJson = 7,
+  UnknownField = 8,
 };
 
 struct ValidationIssue {

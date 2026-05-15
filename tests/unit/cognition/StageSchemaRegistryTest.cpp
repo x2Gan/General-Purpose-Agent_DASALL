@@ -42,6 +42,8 @@ void test_planning_schema_registry_freezes_plan_baseline() {
                "planning schema should freeze cognition.plan.v1");
   assert_true(contains_string(schema.required_fields, "plan_id"),
               "planning schema should require plan_id");
+  assert_true(contains_string(schema.known_top_level_fields, "open_questions"),
+              "planning schema should freeze optional top-level fields for unknown-field checks");
   assert_true(contains_string(schema.required_fields, "nodes"),
               "planning schema should require nodes");
   assert_true(has_enum_constraint(schema, "nodes.action_kind_hint", "tool_action"),
@@ -61,6 +63,8 @@ void test_execution_schema_registry_freezes_action_baseline() {
                "execution schema should freeze cognition.reasoning.v1");
   assert_true(contains_string(schema.required_fields, "decision_kind"),
               "execution schema should require decision_kind");
+  assert_true(contains_string(schema.known_top_level_fields, "tool_intent_hint"),
+              "execution schema should freeze known top-level fields for unknown-field checks");
   assert_true(contains_string(schema.required_fields, "candidate_scores"),
               "execution schema should require candidate_scores");
   assert_true(has_enum_constraint(schema, "decision_kind", "ExecuteAction"),
