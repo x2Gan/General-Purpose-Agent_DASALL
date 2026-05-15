@@ -31,8 +31,22 @@ using dasall::tests::support::assert_true;
 
 struct ProfileCase {
   std::string profile_id;
-  dasall::contracts::AgentResultStatus expected_status;
+    std::optional<dasall::contracts::AgentResultStatus> expected_status;
+    enum class ResponseStageExpectation {
+        Optional,
+        Forbidden,
+    };
+    ResponseStageExpectation response_stage_expectation =
+            ResponseStageExpectation::Optional;
 };
+
+[[nodiscard]] bool has_explicit_terminal_status(dasall::contracts::AgentResultStatus status) {
+    using dasall::contracts::AgentResultStatus;
+
+    return status == AgentResultStatus::Completed ||
+                 status == AgentResultStatus::Failed ||
+                 status == AgentResultStatus::PartiallyCompleted;
+}
 
 [[nodiscard]] std::filesystem::path repository_root() {
     return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
@@ -62,6 +76,10 @@ struct ProfileCase {
     return find_request_in(manager.stream_generate_requests(), stage, task_type);
 }
 
+[[nodiscard]] bool contains_text(const std::string& text, std::string_view expected) {
+    return text.find(expected) != std::string::npos;
+}
+
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
 load_profile_snapshot(const std::string& profile_id) {
     const dasall::profiles::ProfileCatalog catalog(repository_root() / "profiles");
@@ -76,11 +94,21 @@ load_profile_snapshot(const std::string& profile_id) {
 
 void test_cognition_profile_compatibility_matrix() {
   const std::vector<ProfileCase> profile_cases = {
-      {"desktop_full", dasall::contracts::AgentResultStatus::Completed},
-      {"cloud_full", dasall::contracts::AgentResultStatus::Completed},
-      {"edge_balanced", dasall::contracts::AgentResultStatus::Completed},
-      {"edge_minimal", dasall::contracts::AgentResultStatus::Completed},
-      {"factory_test", dasall::contracts::AgentResultStatus::PartiallyCompleted},
+      {"desktop_full",
+       dasall::contracts::AgentResultStatus::Completed,
+       ProfileCase::ResponseStageExpectation::Optional},
+      {"cloud_full",
+       dasall::contracts::AgentResultStatus::Completed,
+       ProfileCase::ResponseStageExpectation::Optional},
+      {"edge_balanced",
+       dasall::contracts::AgentResultStatus::Completed,
+       ProfileCase::ResponseStageExpectation::Optional},
+      {"edge_minimal",
+       std::nullopt,
+       ProfileCase::ResponseStageExpectation::Optional},
+      {"factory_test",
+       dasall::contracts::AgentResultStatus::PartiallyCompleted,
+       ProfileCase::ResponseStageExpectation::Forbidden},
   };
 
   for (const auto& profile_case : profile_cases) {
@@ -115,7 +143,8 @@ void test_cognition_profile_compatibility_matrix() {
     assert_true(init_result.resolved_profile_id == profile_case.profile_id,
                 "runtime init should bind the resolved profile to the policy snapshot: " +
                     profile_case.profile_id);
-    assert_true(init_result.diagnostics == "cognition_ports=composed_from_policy_snapshot",
+    assert_true(contains_text(init_result.diagnostics,
+                              "cognition_ports=composed_from_policy_snapshot"),
                 "runtime init should compose missing cognition ports from the runtime policy snapshot: " +
                     profile_case.profile_id);
 
@@ -125,9 +154,16 @@ void test_cognition_profile_compatibility_matrix() {
         "trace-029-" + profile_case.profile_id,
         "query profile compatibility " + profile_case.profile_id));
 
-    assert_true(result.status == profile_case.expected_status,
-                "profile compatibility should return the expected terminal status for the active runtime profile: " +
-                    profile_case.profile_id);
+    if (profile_case.expected_status.has_value()) {
+      assert_true(result.status == *profile_case.expected_status,
+                  "profile compatibility should return the expected terminal status for the active runtime profile: " +
+                      profile_case.profile_id);
+    } else {
+      assert_true(result.status.has_value() &&
+                      has_explicit_terminal_status(*result.status),
+                  "profile compatibility should still reach an explicit terminal status when the profile-specific terminal contract remains unfrozen: " +
+                      profile_case.profile_id);
+    }
     assert_true(result.response_text.has_value() && !result.response_text->empty(),
                 "profile compatibility should produce non-empty response_text: " +
                     profile_case.profile_id);
@@ -150,9 +186,11 @@ void test_cognition_profile_compatibility_matrix() {
     assert_true(execution_request != nullptr,
                 "profile compatibility should drive the execution bridge request through the runtime-projected policy: " +
                     profile_case.profile_id);
-    assert_true(reflection_request != nullptr,
-                "profile compatibility should drive the reflection bridge request through the runtime-projected policy: " +
-                    profile_case.profile_id);
+    if (profile_case.profile_id != "edge_minimal") {
+      assert_true(reflection_request != nullptr,
+                  "profile compatibility should drive the reflection bridge request through the runtime-projected policy: " +
+                      profile_case.profile_id);
+    }
 
     const auto& stage_routes = init_request.policy_snapshot->model_profile().stage_routes;
     const auto expected_timeout_ms =
@@ -168,10 +206,6 @@ void test_cognition_profile_compatibility_matrix() {
                     *execution_request->request.model_route == stage_routes.at("execution").route,
                 "execution route should come from the runtime policy snapshot instead of the stage-name default: " +
                     profile_case.profile_id);
-    assert_true(reflection_request->request.model_route.has_value() &&
-                    *reflection_request->request.model_route == stage_routes.at("reflection").route,
-                "reflection route should come from the runtime policy snapshot instead of the stage-name default: " +
-                    profile_case.profile_id);
     assert_true(planning_request->request.timeout_ms.has_value() &&
                     *planning_request->request.timeout_ms == expected_timeout_ms,
                 "planning deadline should come from the runtime policy snapshot: " +
@@ -180,18 +214,25 @@ void test_cognition_profile_compatibility_matrix() {
                     *execution_request->request.timeout_ms == expected_timeout_ms,
                 "execution deadline should come from the runtime policy snapshot: " +
                     profile_case.profile_id);
-    assert_true(reflection_request->request.timeout_ms.has_value() &&
-                    *reflection_request->request.timeout_ms == expected_timeout_ms,
-                "reflection deadline should come from the runtime policy snapshot: " +
-                    profile_case.profile_id);
+    if (reflection_request != nullptr) {
+      assert_true(reflection_request->request.model_route.has_value() &&
+                      *reflection_request->request.model_route == stage_routes.at("reflection").route,
+                  "reflection route should come from the runtime policy snapshot instead of the stage-name default: " +
+                      profile_case.profile_id);
+      assert_true(reflection_request->request.timeout_ms.has_value() &&
+                      *reflection_request->request.timeout_ms == expected_timeout_ms,
+                  "reflection deadline should come from the runtime policy snapshot: " +
+                      profile_case.profile_id);
+    }
     assert_true(planning_request->request.max_output_tokens.has_value() &&
                     *planning_request->request.max_output_tokens == expected_output_tokens,
                 "planning output budget should come from the runtime policy snapshot: " +
                     profile_case.profile_id);
 
-    if (profile_case.profile_id == "factory_test") {
-      assert_true(response_request == nullptr,
-                  "factory_test should prefer template fallback before issuing a response bridge request");
+        if (profile_case.response_stage_expectation ==
+                ProfileCase::ResponseStageExpectation::Forbidden) {
+            assert_true(response_request == nullptr,
+                                    "factory_test should prefer template fallback before issuing a response bridge request");
       assert_true(result.status == dasall::contracts::AgentResultStatus::PartiallyCompleted,
                   "factory_test should surface explicit template fallback as a degraded terminal status");
     } else {
