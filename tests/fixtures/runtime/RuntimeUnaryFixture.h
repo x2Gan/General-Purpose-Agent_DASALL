@@ -14,11 +14,18 @@ namespace dasall::tests::runtime_fixture {
 inline std::shared_ptr<const profiles::RuntimePolicySnapshot> make_policy_snapshot(
     std::string profile_id = "desktop_full") {
   profiles::ModelProfile model_profile;
-  model_profile.stage_routes.emplace("main", profiles::ModelRoutePolicy{
-                                                 .route = "mock-primary",
-                                                 .fallback_route = std::string{"mock-fallback"},
-                                                 .streaming_enabled = false,
-                                             });
+    const auto emplace_stage_route = [&model_profile](const std::string& stage_key) {
+        model_profile.stage_routes.emplace(stage_key, profiles::ModelRoutePolicy{
+                                                                                                            .route = "mock-primary",
+                                                                                                            .fallback_route = std::string{"mock-fallback"},
+                                                                                                            .streaming_enabled = false,
+                                                                                                    });
+    };
+    emplace_stage_route("main");
+    emplace_stage_route("planning");
+    emplace_stage_route("execution");
+    emplace_stage_route("reflection");
+    emplace_stage_route("response");
 
   return std::make_shared<profiles::RuntimePolicySnapshot>(
       1U,
