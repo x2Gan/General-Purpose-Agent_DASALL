@@ -116,6 +116,65 @@ void test_project_plan_graph_rejects_missing_success_signal() {
   assert_true(result.error_info.has_value(), "failed projection must return an ErrorInfo payload");
 }
 
+void test_project_plan_graph_rejects_schema_version_mismatch() {
+  PlanGraphStructuredProjector projector;
+  const auto payload = R"({
+    "schema_version":"cognition.plan.v2",
+    "plan_id":"plan-structured-schema-drift",
+    "revision":1,
+    "nodes":[
+      {
+        "node_id":"n1",
+        "objective":"collect quarterly sales data",
+        "success_signal":"sales_data_collected",
+        "action_kind_hint":"tool_action",
+        "depends_on":[],
+        "evidence_refs":["dataset:quarterly-sales"]
+      }
+    ],
+    "edges":[],
+    "open_questions":[],
+    "plan_rationale":"schema drift must fail closed",
+    "estimated_complexity":1
+  })";
+
+  const auto result = projector.project_plan_graph(parse_payload_or_throw(payload));
+
+  assert_true(!result.ok, "schema version mismatch must fail projection");
+  assert_true(!result.plan_graph.has_value(), "schema drift must not return a partial PlanGraph");
+  assert_true(result.error_info.has_value(), "schema drift must return an ErrorInfo payload");
+}
+
+void test_project_plan_graph_rejects_nested_provider_payload_leakage() {
+  PlanGraphStructuredProjector projector;
+  const auto payload = R"({
+    "schema_version":"cognition.plan.v1",
+    "plan_id":"plan-structured-provider-leakage",
+    "revision":1,
+    "nodes":[
+      {
+        "node_id":"n1",
+        "objective":"collect quarterly sales data",
+        "success_signal":"sales_data_collected",
+        "action_kind_hint":"tool_action",
+        "depends_on":[],
+        "evidence_refs":["dataset:quarterly-sales"],
+        "provider_payload":"raw provider trace must never leak into plan nodes"
+      }
+    ],
+    "edges":[],
+    "open_questions":[],
+    "plan_rationale":"provider-private leakage must fail closed",
+    "estimated_complexity":1
+  })";
+
+  const auto result = projector.project_plan_graph(parse_payload_or_throw(payload));
+
+  assert_true(!result.ok, "nested provider payload leakage must fail projection");
+  assert_true(!result.plan_graph.has_value(),
+              "nested provider payload leakage must not return a partial PlanGraph");
+}
+
 void test_project_plan_graph_rejects_duplicate_node_ids() {
   PlanGraphStructuredProjector projector;
   StageOutputValidator validator;
@@ -265,6 +324,8 @@ int main() {
   try {
     test_project_plan_graph_accepts_valid_structured_payload();
     test_project_plan_graph_rejects_missing_success_signal();
+    test_project_plan_graph_rejects_schema_version_mismatch();
+    test_project_plan_graph_rejects_nested_provider_payload_leakage();
     test_project_plan_graph_rejects_duplicate_node_ids();
     test_project_plan_graph_rejects_unknown_edge_references();
     test_project_plan_graph_rejects_cycles();

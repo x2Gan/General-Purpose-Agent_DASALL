@@ -114,6 +114,35 @@ void test_project_action_decision_rejects_invalid_enum_literal() {
   assert_true(result.error_info.has_value(), "failed projection must return an ErrorInfo payload");
 }
 
+void test_project_action_decision_rejects_schema_version_mismatch() {
+  ActionDecisionStructuredProjector projector;
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v2",
+    "decision_kind":"ExecuteAction",
+    "confidence":0.84,
+    "rationale":"schema drift must fail closed",
+    "selected_node_id":"node-execute-1",
+    "tool_intent_hint":null,
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":null,
+    "candidate_scores":[
+      {
+        "candidate_name":"execute_action",
+        "score":0.84,
+        "rationale":"schema mismatch"
+      }
+    ]
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+
+  assert_true(!result.ok, "schema version mismatch must fail projection");
+  assert_true(!result.action_decision.has_value(),
+              "schema version mismatch must not return a partial ActionDecision");
+  assert_true(result.error_info.has_value(), "schema version mismatch must return an ErrorInfo payload");
+}
+
 void test_project_action_decision_rejects_missing_selected_node() {
   ActionDecisionStructuredProjector projector;
   StageOutputValidator validator;
@@ -189,6 +218,76 @@ void test_project_action_decision_rejects_tool_intent_on_response() {
   assert_true(!invariant_result.ok, "response decisions must fail when tool intent is present");
 }
 
+void test_project_action_decision_rejects_tool_argument_payload_overreach() {
+  ActionDecisionStructuredProjector projector;
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v1",
+    "decision_kind":"ExecuteAction",
+    "confidence":0.84,
+    "rationale":"tool arguments must remain hints only",
+    "selected_node_id":"node-execute-1",
+    "tool_intent_hint":{
+      "tool_name":"agent.dataset",
+      "intent_summary":"gather the quarterly sales dataset for Berlin",
+      "argument_hints":["Berlin quarterly sales"],
+      "arguments_payload":"{\"scope\":\"all\"}",
+      "evidence_refs":["belief:evidence:001"]
+    },
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":null,
+    "candidate_scores":[
+      {
+        "candidate_name":"execute_action",
+        "score":0.84,
+        "rationale":"nested overreach should fail closed"
+      }
+    ]
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+
+  assert_true(!result.ok, "tool argument payload overreach must fail projection");
+  assert_true(!result.action_decision.has_value(),
+              "tool argument payload overreach must not return a partial ActionDecision");
+}
+
+void test_project_action_decision_rejects_delegate_hint_when_disabled() {
+  ActionDecisionStructuredProjector projector;
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v1",
+    "decision_kind":"DirectResponse",
+    "confidence":0.73,
+    "rationale":"delegate hints are disabled in structured projection v1",
+    "selected_node_id":null,
+    "tool_intent_hint":null,
+    "delegate_hint":{
+      "delegate_target":"multi-agent.worker",
+      "rationale":"provider requested delegation",
+      "confidence":0.81
+    },
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":{
+      "summary":"respond with the current evidence snapshot",
+      "key_points":["delegation must remain disabled"]
+    },
+    "candidate_scores":[
+      {
+        "candidate_name":"direct_response",
+        "score":0.73,
+        "rationale":"delegate_hint drift should fail closed"
+      }
+    ]
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+
+  assert_true(!result.ok, "delegate_hint must fail projection while disabled");
+  assert_true(!result.action_decision.has_value(),
+              "delegate_hint drift must not return a partial ActionDecision");
+}
+
 void test_project_action_decision_rejects_clarification_conflict() {
   ActionDecisionStructuredProjector projector;
   StageOutputValidator validator;
@@ -232,8 +331,11 @@ int main() {
   try {
     test_project_action_decision_accepts_valid_structured_payload();
     test_project_action_decision_rejects_invalid_enum_literal();
+    test_project_action_decision_rejects_schema_version_mismatch();
     test_project_action_decision_rejects_missing_selected_node();
     test_project_action_decision_rejects_tool_intent_on_response();
+    test_project_action_decision_rejects_tool_argument_payload_overreach();
+    test_project_action_decision_rejects_delegate_hint_when_disabled();
     test_project_action_decision_rejects_clarification_conflict();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';

@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #660
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-011 落地 schema drift / safety negative matrix
+- 状态：已完成
+
+### 改动
+
+1. 调整 `cognition/src/projection/PlanGraphStructuredProjector.cpp` 与 `cognition/src/projection/ActionDecisionStructuredProjector.cpp`：为 planning / execution structured projector 增加 `schema_version` 校验，以及 top-level / nested unexpected-field fail-closed guard，阻止 `provider_payload`、`delegate_hint`、`tool_intent_hint.arguments_payload` 等 schema drift / safety overreach 被 projector 静默接受。
+2. 调整 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp`、`tests/unit/cognition/PlanGraphStructuredProjectionTest.cpp` 与 `tests/unit/cognition/ActionDecisionStructuredProjectionTest.cpp`：分别补齐 execution / planning schema version mismatch、provider payload leakage、tool arg overreach、delegate hint disabled 等 focused negative cases，把 StageOutputValidator 与 typed projector 两层 failure surface 都钉成可二值断言。
+3. 调整 `tests/integration/cognition/CognitionStructuredOutputIntegrationTest.cpp`：新增 planning provider payload leakage -> explicit fallback 与 execution tool-argument overreach -> fail-fast 两条 snapshot-backed integration regression，证明 structured decide 主链不会静默接受安全负例。
+4. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录：将 `COG-FIX-004A-BLD-011` 标记为 Done，并把 `Gate-COG-FIX004A-04` 回写为 Pass。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_action_decision_structured_projection_unit_test`
+   - 结果：通过，execution projector focused target 完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "^ActionDecisionStructuredProjectionTest$"`
+   - 结果：通过，execution projector focused negative cases 全部通过。
+3. `cmake --build build-ci --target dasall_stage_output_validator_schema_unit_test dasall_plan_graph_structured_projection_unit_test`
+   - 结果：通过，schema validator 与 planning projector focused target 完成编译与链接。
+4. `ctest --test-dir build-ci --output-on-failure -R "^(StageOutputValidatorSchemaTest|PlanGraphStructuredProjectionTest)$"`
+   - 结果：通过，schema drift 与 nested provider leakage focused negative cases 全部通过。
+5. `cmake --build build-ci --target dasall_cognition_structured_output_integration_test`
+   - 结果：通过，snapshot-backed integration regression target 完成编译与链接。
+6. `ctest --test-dir build-ci --output-on-failure -R "^CognitionStructuredOutputIntegrationTest$"`
+   - 结果：通过，planning fallback 与 execution fail-fast integration regression 全部通过。
+7. `cmake --build build-ci --target dasall_stage_output_validator_schema_unit_test dasall_plan_graph_structured_projection_unit_test dasall_action_decision_structured_projection_unit_test dasall_cognition_structured_output_integration_test`
+   - 结果：通过，BLD-011 完整验收集合完成编译与链接。
+8. `ctest --test-dir build-ci --output-on-failure -R "^StageOutputValidatorSchemaTest$"`
+   - 结果：通过，schema validator focused 验收通过。
+9. `ctest --test-dir build-ci --output-on-failure -R "StructuredProjectionTest"`
+   - 结果：通过，`PlanGraphStructuredProjectionTest` 与 `ActionDecisionStructuredProjectionTest` 全部通过。
+10. `ctest --test-dir build-ci --output-on-failure -R "^CognitionStructuredOutputIntegrationTest$"`
+    - 结果：通过，integration regression focused 验收通过。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-011` 已完成：schema drift、unknown field、provider-private leakage、tool argument overreach 与 delegate drift 现在都具备 focused negative regression 证据，并且 projector / integration path 都会 fail-closed 或显式 fallback。
+2. `Gate-COG-FIX004A-04` 已转为 Pass：runtime interaction、structured integration、telemetry fields 与 safety negative matrix 证据已经闭合。
+3. 本轮继续守住边界：只补 structured projection 的 negative matrix 与 fail-closed guard，不提前把 `COG-FIX-004` 总完成证据、Gate-05 或 production sink 回写混入同轮。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-011` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-011` 的 scoped commit；若继续同一专项，再进入 `COG-FIX-004A-BLD-012` 统一收口证据。
+
 ## 记录 #659
 
 - 日期：2026-05-15

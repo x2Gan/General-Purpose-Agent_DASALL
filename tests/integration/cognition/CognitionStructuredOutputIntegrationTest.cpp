@@ -134,6 +134,55 @@ void test_decide_explicitly_falls_back_when_planning_payload_is_malformed() {
       "execution stage should still project an authoritative action decision after planning fallback");
 }
 
+  void test_decide_explicitly_falls_back_when_planning_payload_leaks_provider_payload() {
+    MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "structured-provider-leak-node",
+      .response_text = "execution payload remains authoritative after planning provider leakage",
+    });
+    fixture.llm_manager()->set_structured_stage_payload(
+      "planning",
+      std::string{"{"}
+        + "\"schema_version\":\"cognition.plan.v1\"," 
+        + "\"plan_id\":\"plan-structured-provider-leakage\"," 
+        + "\"revision\":1,"
+        + "\"nodes\":[{"
+        + "\"node_id\":\"structured-provider-leak-node\"," 
+        + "\"objective\":\"collect governed evidence from the dataset tool\"," 
+        + "\"success_signal\":\"evidence_collected\"," 
+        + "\"action_kind_hint\":\"tool_action\"," 
+        + "\"depends_on\":[],"
+        + "\"evidence_refs\":[\"belief:evidence:structured-plan\"],"
+        + "\"provider_payload\":\"raw provider trace must never enter plan nodes\"}],"
+        + "\"edges\":[],"
+        + "\"open_questions\":[],"
+        + "\"plan_rationale\":\"provider-private leakage must fail closed\"," 
+        + "\"estimated_complexity\":1}"
+    );
+    fixture.stage_structured_execution_result(
+      StructuredExecutionPayloadScenario::ValidDirectResponse);
+
+    auto engine = make_snapshot_backed_engine("edge_balanced", fixture);
+    auto request = fixture.make_decide_request(true);
+
+    const auto result = engine->decide(request);
+
+    assert_true(!result.result_code.has_value(),
+          "planning provider payload leakage should degrade to explicit fallback when allowed");
+    assert_true(result.action_decision.has_value(),
+          "planning fallback should still yield an authoritative action decision");
+    assert_true(result.action_decision->decision_kind == ActionDecisionKind::DirectResponse,
+          "execution structured payload should remain authoritative after planning fallback");
+    assert_true(contains_value(result.diagnostics,
+                 "structured_projection.projection_failed:planning"),
+          "nested planning provider leakage should surface projection failure diagnostics");
+    assert_true(contains_value(result.diagnostics,
+                 "structured_projection.local_fallback:planning"),
+          "nested planning provider leakage should record explicit planning fallback");
+    assert_true(
+      contains_value(result.diagnostics, "structured_projection.projected_action_decision"),
+      "execution stage should still project an authoritative action decision after planning fallback");
+  }
+
 void test_decide_fails_closed_when_execution_projection_is_invalid_without_fallback() {
   MockCognitionFixture fixture(MockCognitionFixtureOptions{
       .selected_node_id = "structured-failfast-node",
@@ -168,13 +217,69 @@ void test_decide_fails_closed_when_execution_projection_is_invalid_without_fallb
               "execution fail-fast path must not silently fall back when disabled");
 }
 
+void test_decide_fails_closed_when_execution_payload_overreaches_tool_arguments() {
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "structured-overreach-node",
+      .response_text = "this response should never be emitted",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+  fixture.llm_manager()->set_structured_stage_payload(
+      "execution",
+      std::string{"{"}
+          + "\"schema_version\":\"cognition.reasoning.v1\"," 
+          + "\"decision_kind\":\"ExecuteAction\"," 
+          + "\"confidence\":0.82,"
+          + "\"rationale\":\"tool arguments must remain hints only\"," 
+          + "\"selected_node_id\":\"structured-overreach-node\"," 
+          + "\"tool_intent_hint\":{"
+          + "\"tool_name\":\"agent.dataset\"," 
+          + "\"intent_summary\":\"query runtime-visible data through tool governance\"," 
+          + "\"argument_hints\":[\"query=current_state\"],"
+          + "\"arguments_payload\":\"{\\\"scope\\\":\\\"all\\\"}\","
+          + "\"evidence_refs\":[\"tests:mock-cognition-fixture\"]},"
+          + "\"clarification_needed\":false,"
+          + "\"clarification_question\":null,"
+          + "\"response_outline\":null,"
+          + "\"candidate_scores\":[{"
+          + "\"candidate_name\":\"execute_action\"," 
+          + "\"score\":0.82,"
+          + "\"rationale\":\"nested arguments payload must fail closed\"}]}"
+  );
+
+  auto engine = make_snapshot_backed_engine("desktop_full", fixture);
+  auto request = fixture.make_decide_request(true);
+  request.execution_hints.degraded_path_allowed = false;
+
+  const auto result = engine->decide(request);
+
+  assert_true(result.result_code.has_value(),
+              "tool argument overreach should fail closed when fallback is disabled");
+  assert_equal(static_cast<int>(ResultCode::ValidationFieldMissing),
+               static_cast<int>(*result.result_code),
+               "tool argument overreach should surface the canonical validation code");
+  assert_true(result.error_info.has_value(),
+              "tool argument overreach should return structured error info");
+  assert_true(!result.action_decision.has_value(),
+              "tool argument overreach must not leak a partial action decision");
+  assert_true(contains_value(result.diagnostics, "structured_projection.projected_plan_graph"),
+              "planning stage should remain projected before execution fail-fast");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.projection_failed:execution"),
+              "tool argument overreach should surface execution projection failure diagnostics");
+  assert_true(!contains_value(result.diagnostics,
+                              "structured_projection.local_fallback:execution"),
+              "execution overreach must not silently fall back when disabled");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_decide_projects_structured_plan_and_action_on_snapshot_backed_path();
     test_decide_explicitly_falls_back_when_planning_payload_is_malformed();
+    test_decide_explicitly_falls_back_when_planning_payload_leaks_provider_payload();
     test_decide_fails_closed_when_execution_projection_is_invalid_without_fallback();
+    test_decide_fails_closed_when_execution_payload_overreaches_tool_arguments();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

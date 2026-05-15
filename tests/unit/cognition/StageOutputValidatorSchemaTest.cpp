@@ -143,6 +143,59 @@ void test_validate_stage_output_rejects_unknown_top_level_fields() {
       "unknown top-level fields should surface an unknown-field validation issue");
 }
 
+  void test_validate_stage_output_rejects_schema_version_mismatch() {
+    StageOutputValidator validator;
+    const auto execution_result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"schema_version":"cognition.reasoning.v2","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"schema drift","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"]})"),
+      schema_for_execution_action_decision());
+
+    assert_true(!execution_result.ok, "execution schema version mismatch must fail closed");
+    assert_true(has_issue_code(execution_result,
+           ValidationIssueCode::InvalidEnumLiteral,
+           "schema_version"),
+      "execution schema drift should surface a schema_version enum validation issue");
+
+    const auto planning_result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"schema_version":"cognition.plan.v2","plan_id":"plan-001","revision":1,"nodes":[{"node_id":"n1","objective":"collect evidence","success_signal":"evidence_collected","action_kind_hint":"tool_action","depends_on":[],"evidence_refs":[]}],"edges":[],"open_questions":[],"plan_rationale":"schema drift","estimated_complexity":1})"),
+      schema_for_planning_plan());
+
+    assert_true(!planning_result.ok, "planning schema version mismatch must fail closed");
+    assert_true(has_issue_code(planning_result,
+           ValidationIssueCode::InvalidEnumLiteral,
+           "schema_version"),
+      "planning schema drift should surface a schema_version enum validation issue");
+  }
+
+  void test_validate_stage_output_rejects_provider_payload_leakage() {
+    StageOutputValidator validator;
+    const auto result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"provider payload leakage must fail","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"],"provider_payload":"raw provider trace"})"),
+      schema_for_execution_action_decision());
+
+    assert_true(!result.ok, "provider payload leakage must fail closed");
+    assert_true(has_issue_code(result,
+           ValidationIssueCode::UnknownField,
+           "provider_payload"),
+      "provider payload leakage should surface an unknown-field validation issue");
+  }
+
+  void test_validate_stage_output_rejects_delegate_hint_when_disabled() {
+    StageOutputValidator validator;
+    const auto result = validator.validate_stage_output(
+      make_stage_result(
+        R"({"schema_version":"cognition.reasoning.v1","decision_kind":"DirectResponse","confidence":0.73,"rationale":"delegate hint must remain disabled","selected_node_id":null,"tool_intent_hint":null,"delegate_hint":{"delegate_target":"multi-agent.worker","rationale":"provider requested delegation","confidence":0.81},"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["direct_response"]})"),
+      schema_for_execution_action_decision());
+
+    assert_true(!result.ok, "delegate_hint must fail closed while disabled");
+    assert_true(has_issue_code(result,
+           ValidationIssueCode::UnknownField,
+           "delegate_hint"),
+      "disabled delegate_hint should surface an unknown-field validation issue");
+  }
+
 void test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations() {
   StageOutputValidator validator;
   const auto result = validator.validate_stage_output(
@@ -243,6 +296,9 @@ int main() {
     test_validate_stage_output_accepts_planning_array_field_requirements();
     test_validate_stage_output_rejects_invalid_nested_planning_enum_literals();
     test_validate_stage_output_rejects_unknown_top_level_fields();
+    test_validate_stage_output_rejects_schema_version_mismatch();
+    test_validate_stage_output_rejects_provider_payload_leakage();
+    test_validate_stage_output_rejects_delegate_hint_when_disabled();
     test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations();
     test_validate_stage_output_rejects_escaped_pseudo_fields();
     test_validate_stage_output_counts_only_top_level_array_items();

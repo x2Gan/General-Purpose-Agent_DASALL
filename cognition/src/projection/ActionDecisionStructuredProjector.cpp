@@ -1,5 +1,7 @@
 #include "projection/ActionDecisionStructuredProjector.h"
 
+#include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -111,8 +113,33 @@ using dasall::cognition::validation::StructuredPayloadView;
   return std::nullopt;
 }
 
+template <std::size_t N>
+[[nodiscard]] std::optional<std::string> find_unexpected_field(
+    const StructuredPayloadView& object_view,
+    const std::array<std::string_view, N>& allowed_fields) {
+  for (const auto& field_name : object_view.field_names()) {
+    if (std::find(allowed_fields.begin(), allowed_fields.end(), field_name) ==
+        allowed_fields.end()) {
+      return field_name;
+    }
+  }
+
+  return std::nullopt;
+}
+
 [[nodiscard]] std::optional<decision::ToolIntentHint> project_tool_intent_hint(
     const StructuredPayloadView& object_view) {
+  static constexpr std::array<std::string_view, 4> kAllowedFields = {
+      "tool_name",
+      "intent_summary",
+      "argument_hints",
+      "evidence_refs",
+  };
+
+  if (find_unexpected_field(object_view, kAllowedFields).has_value()) {
+    return std::nullopt;
+  }
+
   const auto tool_name = read_required_string(object_view, "tool_name");
   const auto intent_summary = read_required_string(object_view, "intent_summary");
   if (!tool_name.has_value() || !intent_summary.has_value()) {
@@ -139,6 +166,15 @@ using dasall::cognition::validation::StructuredPayloadView;
 
 [[nodiscard]] std::optional<decision::ResponseOutline> project_response_outline(
     const StructuredPayloadView& object_view) {
+  static constexpr std::array<std::string_view, 2> kAllowedFields = {
+      "summary",
+      "key_points",
+  };
+
+  if (find_unexpected_field(object_view, kAllowedFields).has_value()) {
+    return std::nullopt;
+  }
+
   const auto summary = read_required_string(object_view, "summary");
   if (!summary.has_value()) {
     return std::nullopt;
@@ -157,6 +193,16 @@ using dasall::cognition::validation::StructuredPayloadView;
 
 [[nodiscard]] std::optional<decision::CandidateDecisionScore> project_candidate_score(
     const StructuredPayloadView& object_view) {
+  static constexpr std::array<std::string_view, 3> kAllowedFields = {
+      "candidate_name",
+      "score",
+      "rationale",
+  };
+
+  if (find_unexpected_field(object_view, kAllowedFields).has_value()) {
+    return std::nullopt;
+  }
+
   const auto candidate_name = read_required_string(object_view, "candidate_name");
   if (!candidate_name.has_value()) {
     return std::nullopt;
@@ -235,6 +281,36 @@ template <typename T, typename ProjectFn>
 
 ActionDecisionProjectionResult ActionDecisionStructuredProjector::project_action_decision(
     const StructuredPayloadView& payload_view) const {
+  static constexpr std::array<std::string_view, 10> kAllowedTopLevelFields = {
+      "schema_version",
+      "decision_kind",
+      "confidence",
+      "rationale",
+      "selected_node_id",
+      "tool_intent_hint",
+      "clarification_needed",
+      "clarification_question",
+      "response_outline",
+      "candidate_scores",
+  };
+
+  if (const auto unexpected_field =
+          find_unexpected_field(payload_view, kAllowedTopLevelFields);
+      unexpected_field.has_value()) {
+    return make_projection_failure(
+        *unexpected_field,
+        "execution payload contains an unsupported top-level field",
+        "structured_output.projection_failed:execution:unknown_field");
+  }
+
+  const auto schema_version = read_required_string(payload_view, "schema_version");
+  if (!schema_version.has_value() || *schema_version != "cognition.reasoning.v1") {
+    return make_projection_failure(
+        "schema_version",
+        "execution payload must use schema_version cognition.reasoning.v1",
+        "structured_output.projection_failed:execution:schema_version");
+  }
+
   const auto decision_kind_literal = read_required_string(payload_view, "decision_kind");
   if (!decision_kind_literal.has_value()) {
     return make_projection_failure(

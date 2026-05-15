@@ -1,5 +1,7 @@
 #include "projection/PlanGraphStructuredProjector.h"
 
+#include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -99,7 +101,34 @@ using dasall::cognition::validation::StructuredPayloadView;
   return value;
 }
 
+template <std::size_t N>
+[[nodiscard]] std::optional<std::string> find_unexpected_field(
+    const StructuredPayloadView& object_view,
+    const std::array<std::string_view, N>& allowed_fields) {
+  for (const auto& field_name : object_view.field_names()) {
+    if (std::find(allowed_fields.begin(), allowed_fields.end(), field_name) ==
+        allowed_fields.end()) {
+      return field_name;
+    }
+  }
+
+  return std::nullopt;
+}
+
 [[nodiscard]] std::optional<plan::PlanNode> project_plan_node(const StructuredPayloadView& node_view) {
+  static constexpr std::array<std::string_view, 6> kAllowedFields = {
+      "node_id",
+      "objective",
+      "success_signal",
+      "action_kind_hint",
+      "depends_on",
+      "evidence_refs",
+  };
+
+  if (find_unexpected_field(node_view, kAllowedFields).has_value()) {
+    return std::nullopt;
+  }
+
   const auto node_id = read_required_string(node_view, "node_id");
   const auto objective = read_required_string(node_view, "objective");
   const auto success_signal = read_required_string(node_view, "success_signal");
@@ -129,6 +158,17 @@ using dasall::cognition::validation::StructuredPayloadView;
 }
 
 [[nodiscard]] std::optional<plan::PlanEdge> project_plan_edge(const StructuredPayloadView& edge_view) {
+  static constexpr std::array<std::string_view, 4> kAllowedFields = {
+      "from_node_id",
+      "to_node_id",
+      "condition",
+      "evidence_refs",
+  };
+
+  if (find_unexpected_field(edge_view, kAllowedFields).has_value()) {
+    return std::nullopt;
+  }
+
   const auto from_node_id = read_required_string(edge_view, "from_node_id");
   const auto to_node_id = read_required_string(edge_view, "to_node_id");
   if (!from_node_id.has_value() || !to_node_id.has_value()) {
@@ -154,6 +194,18 @@ using dasall::cognition::validation::StructuredPayloadView;
 
 [[nodiscard]] std::optional<plan::PlanOpenQuestion> project_open_question(
     const StructuredPayloadView& question_view) {
+  static constexpr std::array<std::string_view, 5> kAllowedFields = {
+      "question_id",
+      "question",
+      "reason",
+      "blocks_plan",
+      "evidence_refs",
+  };
+
+  if (find_unexpected_field(question_view, kAllowedFields).has_value()) {
+    return std::nullopt;
+  }
+
   const auto question_id = read_required_string(question_view, "question_id");
   const auto question = read_required_string(question_view, "question");
   const auto reason = read_required_string(question_view, "reason");
@@ -210,6 +262,34 @@ template <typename Item, typename ProjectFn>
 
 PlanGraphProjectionResult PlanGraphStructuredProjector::project_plan_graph(
     const StructuredPayloadView& payload_view) const {
+  static constexpr std::array<std::string_view, 8> kAllowedTopLevelFields = {
+      "schema_version",
+      "plan_id",
+      "revision",
+      "nodes",
+      "edges",
+      "open_questions",
+      "plan_rationale",
+      "estimated_complexity",
+  };
+
+  if (const auto unexpected_field =
+          find_unexpected_field(payload_view, kAllowedTopLevelFields);
+      unexpected_field.has_value()) {
+    return make_projection_failure(
+        *unexpected_field,
+        "planning payload contains an unsupported top-level field",
+        "structured_output.projection_failed:planning:unknown_field");
+  }
+
+  const auto schema_version = read_required_string(payload_view, "schema_version");
+  if (!schema_version.has_value() || *schema_version != "cognition.plan.v1") {
+    return make_projection_failure(
+        "schema_version",
+        "planning payload must use schema_version cognition.plan.v1",
+        "structured_output.projection_failed:planning:schema_version");
+  }
+
   const auto plan_id = read_required_string(payload_view, "plan_id");
   if (!plan_id.has_value()) {
     return make_projection_failure("plan_id",
