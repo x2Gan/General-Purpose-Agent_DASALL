@@ -929,6 +929,29 @@ sequenceDiagram
 6. 失败与降级语义：校验失败统一收敛为 cognition.schema_violation，并附带 stage name、field path、reason code；除显式允许的标准化步骤外，不允许静默补默认值或自动修正图结构；若阶段策略允许降级，则由上层阶段或门面根据 validation result 选择模板或规则路径，校验器本身不裁定降级。
 7. 测试与验收出口：建议单测为 tests/unit/cognition/StageOutputValidatorSchemaTest.cpp、tests/unit/cognition/StageOutputValidatorPlanGraphInvariantTest.cpp、tests/unit/cognition/StageOutputValidatorResponseEnvelopeTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "StageOutputValidator(Schema|PlanGraphInvariant|ResponseEnvelope)Test" --output-on-failure。
 
+##### Structured Projection Authoritative Consumption（COG-FIX-004A）
+
+1. 目标：把 LLM structured payload 从“bridge 成功后的辅助 diagnostics 证据”升级为 planning / execution typed object 的权威来源；当 structured projection 启用且 bridge 返回 schema-valid payload 时，`PlanGraph` / `ActionDecision` 的 source of truth 只能来自投影结果，本地 Planner / Reasoner 只保留显式 fallback 或 comparison diagnostics 角色。
+2. 组件编排：`CognitionLlmBridge` 继续只负责 stage / task / schema / budget 投影与 provider-private redaction；`StageOutputValidator` 负责 raw payload schema 与投影后 object invariant 校验；新增的 `StageSchemaRegistry`、`PlanGraphStructuredProjector`、`ActionDecisionStructuredProjector` 分别冻结 schema baseline 与 typed projection；`CognitionFacade` 只编排 bridge -> validator -> projector -> invariant validator -> diagnostics / telemetry，不直接解析 JSON 字段。
+3. schema baseline 冻结如下：
+
+| schema / stage | typed target | 必填字段基线 | unknown field 策略 |
+|---|---|---|---|
+| `cognition.plan.v1` / `planning` | `plan::PlanGraph` | `schema_version`、`plan_id`、`revision`、`nodes`、`edges`、`plan_rationale`、`estimated_complexity`；其中 `nodes[].node_id`、`nodes[].objective`、`nodes[].success_signal`、`nodes[].action_kind_hint` 必填 | 首版 fail-closed；仅当字段名以 `x_` 开头且 `StageSchemaRegistry` 明确允许时放行 |
+| `cognition.reasoning.v1` / `execution` | `decision::ActionDecision` | `schema_version`、`decision_kind`、`confidence`、`rationale`、`selected_node_id`、`tool_intent_hint`、`clarification_needed`、`clarification_question`、`response_outline`、`candidate_scores` | 首版 fail-closed；版本漂移、未知字段与类型错配统一进入 schema / projection failure |
+
+4. fallback policy 必须由 `CognitionConfig` / `StageExecutionPlan` 驱动，不允许测试私有开关重写主链语义：
+
+| profile | policy |
+|---|---|
+| `desktop_full`、`cloud_full` | structured projection required；schema / projection / invariant failure fail-fast 或进入 Runtime recovery，不允许静默本地覆盖 |
+| `edge_balanced` | structured projection preferred；provider failure 可 local fallback；一旦投影成功即成为 authoritative source |
+| `edge_minimal`、`factory_test` | 保留 local fallback / template preferred，但 focused tests 必须能显式开启 required mode 验证方案 A 主链 |
+
+5. diagnostics / telemetry 必须显式区分 bridge、schema、projection 与 invariant 失败，至少保留 `structured_projection.required:<stage>`、`structured_projection.bridge_payload_valid:<stage>`、`structured_projection.projected_plan_graph`、`structured_projection.projected_action_decision`、`structured_projection.local_fallback:<stage>`、`structured_projection.schema_violation:<stage>`、`structured_projection.projection_failed:<stage>`、`structured_projection.invariant_failed:<stage>`，并补齐 `structured_projection_enabled`、`structured_projection_required`、`structured_schema_version`、`structured_projection_source`、`structured_projection_failure_code`、`projected_node_count`、`projected_candidate_count` 等字段。
+6. 边界与安全要求：projector 不得重新暴露 redaction 前 payload；`evidence_refs` 不得携带 raw prompt、provider payload、reasoning trace 或 secret；`tool_intent_hint.argument_hints` 只能表达意图，不能成为工具参数 authority；`ReflectionEngine` 不因 structured output 获得恢复执行权；`CognitionFacade` 不得并行触发本地 Reasoner 与 LLM action projection 后择优。
+7. 本设计冻结对应 `COG-FIX-004A-D01` ~ `COG-FIX-004A-D04`，Build 任务与 Gate 映射见 cognition 专项 TODO 的 structured projection 任务簇；未完成 Gate-COG-FIX004A-01 前，不进入 projector / Facade authoritative consumption 实施。
+
 ##### CognitionTelemetry
 
 1. 职责：作为 cognition 的统一观测桥，收敛阶段级日志、指标、trace 与审计事件，保证 decide / reflect / build_response 三条路径上的事件字段、标签口径和 redaction 规则一致。
@@ -1508,6 +1531,10 @@ fixture 作用域约束：
 | Anthropic Tool Use output schema | CognitionLlmBridge 投影阶段 schema 到 llm 请求；llm 子系统负责实际 schema 约束 | cognition 不直接操作 provider schema，只声明需求 |
 | Guidance / Outlines constrained decoding | StageOutputValidator 标记 retryable_schema_violation；由门面层或 Runtime 决定是否重投 | cognition 不做自动重试 |
 | gRPC proto evolution (optional + default) | PlanGraph、ActionDecision 等模块内类型新增字段用 optional + 默认值；保持向后兼容 | 避免支撑类型升级导致旧测试全毁 |
+| Schema evolution / OpenAPI / gRPC | `StageSchemaRegistry` 冻结 `cognition.plan.v1`、`cognition.reasoning.v1` 的 version、required / optional 与 unknown field 策略 | schema drift 必须由 registry 与 focused tests 显式拦截，不能散落在 Facade 或 tests 私有常量 |
+| Guardrails / authoritative typed projection | bridge valid payload 经 validator + projector 后成为 `PlanGraph` / `ActionDecision` 主链事实来源 | local Planner / Reasoner 只保留显式 fallback 或 comparison diagnostics，不允许与投影对象并行择优 |
+
+补充冻结结论：structured projection 方案 A 已在 6.13.4 固定 owner、schema baseline、fallback policy、diagnostics 与安全边界；专项 TODO 中的 `COG-FIX-004A-DOC-001` 负责把该设计映射为 `COG-FIX-004A-BLD-001` ~ `012` 与 `Gate-COG-FIX004A-*` 执行任务。
 
 ### 13.3 容错与降级工程对齐
 
