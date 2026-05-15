@@ -96,6 +96,144 @@ namespace {
   return result;
 }
 
+[[nodiscard]] std::optional<StructuredPayloadArrayView> parse_array_token(
+    const StructuredPayloadToken& token) {
+  if (token.kind != JsonTokenKind::Array) {
+    return std::nullopt;
+  }
+
+  const auto items = detail::parse_json_array_items(token.raw);
+  if (!items.has_value()) {
+    return std::nullopt;
+  }
+  return StructuredPayloadArrayView(*items);
+}
+
+[[nodiscard]] std::optional<std::vector<StructuredPayloadToken>> collect_matching_tokens(
+    const StructuredPayloadToken& token,
+    std::string_view remaining_path);
+
+[[nodiscard]] std::optional<std::vector<StructuredPayloadToken>> collect_matching_tokens(
+    const StructuredPayloadView& payload_view,
+    std::string_view field_path) {
+  if (field_path.empty()) {
+    return std::nullopt;
+  }
+
+  const auto separator = field_path.find('.');
+  const auto segment = separator == std::string_view::npos ? field_path
+                                                           : field_path.substr(0U, separator);
+  const auto token = payload_view.field_token(segment);
+  if (!token.has_value()) {
+    return std::nullopt;
+  }
+
+  if (separator == std::string_view::npos) {
+    return std::vector<StructuredPayloadToken>{*token};
+  }
+
+  return collect_matching_tokens(*token, field_path.substr(separator + 1U));
+}
+
+[[nodiscard]] std::optional<std::vector<StructuredPayloadToken>> collect_matching_tokens(
+    const StructuredPayloadToken& token,
+    std::string_view remaining_path) {
+  if (remaining_path.empty()) {
+    return std::vector<StructuredPayloadToken>{token};
+  }
+
+  if (token.kind == JsonTokenKind::Object) {
+    const auto nested_view = StructuredPayloadView::parse_structured_payload(token.raw);
+    if (!nested_view.has_value()) {
+      return std::nullopt;
+    }
+    return collect_matching_tokens(*nested_view, remaining_path);
+  }
+
+  if (token.kind != JsonTokenKind::Array) {
+    return std::nullopt;
+  }
+
+  const auto array_view = parse_array_token(token);
+  if (!array_view.has_value()) {
+    return std::nullopt;
+  }
+
+  std::vector<StructuredPayloadToken> tokens;
+  for (std::size_t index = 0; index < array_view->size(); ++index) {
+    const auto* item_token = array_view->token_at(index);
+    if (item_token == nullptr) {
+      return std::nullopt;
+    }
+
+    const auto nested_tokens = collect_matching_tokens(*item_token, remaining_path);
+    if (!nested_tokens.has_value()) {
+      return std::nullopt;
+    }
+    tokens.insert(tokens.end(), nested_tokens->begin(), nested_tokens->end());
+  }
+
+  return tokens;
+}
+
+[[nodiscard]] bool all_string_tokens_match(const std::vector<StructuredPayloadToken>& tokens,
+                                           const std::vector<std::string>& allowed_values) {
+  if (tokens.empty()) {
+    return false;
+  }
+
+  return std::all_of(tokens.begin(), tokens.end(), [&](const auto& token) {
+    if (token.kind != JsonTokenKind::String) {
+      return false;
+    }
+
+    const auto value = detail::parse_json_string(token.raw);
+    return value.has_value() &&
+           std::find(allowed_values.begin(), allowed_values.end(), *value) !=
+               allowed_values.end();
+  });
+}
+
+[[nodiscard]] bool all_numeric_tokens_within_bounds(
+    const std::vector<StructuredPayloadToken>& tokens,
+    const NumericConstraint& numeric_constraint) {
+  if (tokens.empty()) {
+    return false;
+  }
+
+  return std::all_of(tokens.begin(), tokens.end(), [&](const auto& token) {
+    if (token.kind != JsonTokenKind::Number) {
+      return false;
+    }
+
+    const auto value = detail::parse_json_number(token.raw);
+    if (!value.has_value()) {
+      return false;
+    }
+
+    return (!numeric_constraint.min_value.has_value() || *value >= *numeric_constraint.min_value) &&
+           (!numeric_constraint.max_value.has_value() || *value <= *numeric_constraint.max_value);
+  });
+}
+
+[[nodiscard]] bool all_list_tokens_within_bounds(const std::vector<StructuredPayloadToken>& tokens,
+                                                 const ListConstraint& list_constraint) {
+  if (tokens.empty()) {
+    return false;
+  }
+
+  return std::all_of(tokens.begin(), tokens.end(), [&](const auto& token) {
+    const auto array_view = parse_array_token(token);
+    if (!array_view.has_value()) {
+      return false;
+    }
+
+    return array_view->size() >= list_constraint.min_items &&
+           (!list_constraint.max_items.has_value() ||
+            array_view->size() <= *list_constraint.max_items);
+  });
+}
+
 [[nodiscard]] std::uint32_t compute_plan_depth(
     const std::unordered_map<std::string, std::vector<std::string>>& outgoing_edges,
     const std::string& node_id,
@@ -163,7 +301,8 @@ ValidationResult StageOutputValidator::validate_stage_output(
   }
 
   for (const auto& field_path : schema_spec.required_fields) {
-    if (!payload_view->has_field(field_path)) {
+    const auto tokens = collect_matching_tokens(*payload_view, field_path);
+    if (!tokens.has_value() || tokens->empty()) {
       issue_set.add(ValidationIssueCode::MissingRequiredField,
                     field_path,
                     std::string("missing required field: ") + field_path);
@@ -171,11 +310,9 @@ ValidationResult StageOutputValidator::validate_stage_output(
   }
 
   for (const auto& enum_constraint : schema_spec.enum_constraints) {
-    const auto value = payload_view->read_string(enum_constraint.field_path);
-    if (!value.has_value() ||
-        std::find(enum_constraint.allowed_values.begin(),
-                  enum_constraint.allowed_values.end(),
-                  *value) == enum_constraint.allowed_values.end()) {
+    const auto tokens = collect_matching_tokens(*payload_view, enum_constraint.field_path);
+    if (!tokens.has_value() ||
+        !all_string_tokens_match(*tokens, enum_constraint.allowed_values)) {
       issue_set.add(ValidationIssueCode::InvalidEnumLiteral,
                     enum_constraint.field_path,
                     std::string("enum literal is not allowed for field: ") +
@@ -184,38 +321,22 @@ ValidationResult StageOutputValidator::validate_stage_output(
   }
 
   for (const auto& numeric_constraint : schema_spec.numeric_bounds) {
-    const auto value = payload_view->read_number(numeric_constraint.field_path);
-    if (!value.has_value()) {
+    const auto tokens = collect_matching_tokens(*payload_view, numeric_constraint.field_path);
+    if (!tokens.has_value() ||
+        !all_numeric_tokens_within_bounds(*tokens, numeric_constraint)) {
       issue_set.add(ValidationIssueCode::NumericOutOfRange,
                     numeric_constraint.field_path,
                     std::string("numeric field missing or invalid: ") +
-                        numeric_constraint.field_path);
-      continue;
-    }
-    if ((numeric_constraint.min_value.has_value() && *value < *numeric_constraint.min_value) ||
-        (numeric_constraint.max_value.has_value() && *value > *numeric_constraint.max_value)) {
-      issue_set.add(ValidationIssueCode::NumericOutOfRange,
-                    numeric_constraint.field_path,
-                    std::string("numeric field is out of range: ") +
                         numeric_constraint.field_path);
     }
   }
 
   for (const auto& list_constraint : schema_spec.list_constraints) {
-    const auto list_view = payload_view->read_list(list_constraint.field_path);
-    if (!list_view.has_value()) {
+    const auto tokens = collect_matching_tokens(*payload_view, list_constraint.field_path);
+    if (!tokens.has_value() || !all_list_tokens_within_bounds(*tokens, list_constraint)) {
       issue_set.add(ValidationIssueCode::ListSizeOutOfRange,
                     list_constraint.field_path,
                     std::string("list field missing or invalid: ") +
-                        list_constraint.field_path);
-      continue;
-    }
-    if (list_view->size() < list_constraint.min_items ||
-        (list_constraint.max_items.has_value() &&
-         list_view->size() > *list_constraint.max_items)) {
-      issue_set.add(ValidationIssueCode::ListSizeOutOfRange,
-                    list_constraint.field_path,
-                    std::string("list field violates size constraints: ") +
                         list_constraint.field_path);
     }
   }

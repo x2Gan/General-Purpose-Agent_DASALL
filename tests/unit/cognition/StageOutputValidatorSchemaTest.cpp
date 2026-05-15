@@ -16,6 +16,7 @@ using dasall::cognition::llm_bridge::StageLlmCallResult;
 using dasall::cognition::validation::StageOutputValidator;
 using dasall::cognition::validation::ValidationIssueCode;
 using dasall::cognition::validation::schema_for_execution_action_decision;
+using dasall::cognition::validation::schema_for_planning_plan;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -38,6 +39,10 @@ using dasall::tests::support::assert_true;
 
 [[nodiscard]] std::string make_valid_execution_payload() {
   return R"({"schema_version":"cognition.reasoning.v1","decision_kind":"ExecuteAction","confidence":0.82,"rationale":"use tool","selected_node_id":"node-1","tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":null,"candidate_scores":["execute_action"]})";
+}
+
+[[nodiscard]] std::string make_valid_planning_payload() {
+  return R"({"schema_version":"cognition.plan.v1","plan_id":"plan-001","revision":1,"nodes":[{"node_id":"n1","objective":"collect evidence","success_signal":"evidence_collected","action_kind_hint":"tool_action","depends_on":[],"evidence_refs":["belief:evidence:001"]},{"node_id":"n2","objective":"validate evidence","success_signal":"evidence_validated","action_kind_hint":"validation","depends_on":["n1"],"evidence_refs":["belief:evidence:002"]}],"edges":[{"from_node_id":"n1","to_node_id":"n2","condition":"evidence_collected","evidence_refs":[]}],"open_questions":[],"plan_rationale":"collect then validate","estimated_complexity":2})";
 }
 
 [[nodiscard]] bool has_issue_code(const dasall::cognition::validation::ValidationResult& result,
@@ -95,6 +100,33 @@ void test_validate_stage_output_accepts_registered_extension_prefixes() {
   assert_true(result.ok, "registered x_ extension fields should remain schema-valid");
   assert_true(result.issue_set.empty(),
               "registered x_ extension fields should not emit validation issues");
+}
+
+void test_validate_stage_output_accepts_planning_array_field_requirements() {
+  StageOutputValidator validator;
+  const auto result = validator.validate_stage_output(
+      make_stage_result(make_valid_planning_payload()),
+      schema_for_planning_plan());
+
+  assert_true(result.ok,
+              "valid planning payloads should satisfy required fields nested under nodes[]");
+  assert_true(result.issue_set.empty(),
+              "valid planning payloads should not emit schema validation issues");
+}
+
+void test_validate_stage_output_rejects_invalid_nested_planning_enum_literals() {
+  StageOutputValidator validator;
+  const auto result = validator.validate_stage_output(
+      make_stage_result(
+          R"({"schema_version":"cognition.plan.v1","plan_id":"plan-002","revision":1,"nodes":[{"node_id":"n1","objective":"collect evidence","success_signal":"evidence_collected","action_kind_hint":"tool_action","depends_on":[],"evidence_refs":[]},{"node_id":"n2","objective":"respond immediately","success_signal":"response_ready","action_kind_hint":"respond_now","depends_on":["n1"],"evidence_refs":[]}],"edges":[],"open_questions":[],"plan_rationale":"invalid nested enum should fail","estimated_complexity":1})"),
+      schema_for_planning_plan());
+
+  assert_true(!result.ok,
+              "invalid nested action_kind_hint literals must fail schema validation");
+  assert_true(has_issue_code(result,
+               ValidationIssueCode::InvalidEnumLiteral,
+               "nodes.action_kind_hint"),
+      "invalid nested enum literals should surface the nodes.action_kind_hint validation issue");
 }
 
 void test_validate_stage_output_rejects_unknown_top_level_fields() {
@@ -208,6 +240,8 @@ int main() {
     test_validate_stage_output_accepts_well_formed_payload();
     test_validate_stage_output_accepts_whitespace_and_reordered_fields();
     test_validate_stage_output_accepts_registered_extension_prefixes();
+    test_validate_stage_output_accepts_planning_array_field_requirements();
+    test_validate_stage_output_rejects_invalid_nested_planning_enum_literals();
     test_validate_stage_output_rejects_unknown_top_level_fields();
     test_validate_stage_output_rejects_missing_enum_numeric_and_list_violations();
     test_validate_stage_output_rejects_escaped_pseudo_fields();

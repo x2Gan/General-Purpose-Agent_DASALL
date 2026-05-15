@@ -22,10 +22,14 @@
 #include "observability/CognitionTelemetry.h"
 #include "perception/PerceptionEngine.h"
 #include "planning/Planner.h"
+#include "projection/ActionDecisionStructuredProjector.h"
+#include "projection/PlanGraphStructuredProjector.h"
 #include "reasoning/Reasoner.h"
 #include "reflection/ReflectionEngine.h"
 #include "validation/InputBoundaryValidator.h"
+#include "validation/StageSchemaRegistry.h"
 #include "validation/StageOutputValidator.h"
+#include "validation/StructuredPayloadView.h"
 
 namespace dasall::cognition {
 namespace {
@@ -322,6 +326,34 @@ void apply_decision_failure(
   result.context_sufficiency.context_confidence = 0.0F;
   result.context_sufficiency.recommend_context_reload = true;
   append_unique(result.diagnostics, std::move(diagnostic));
+}
+
+[[nodiscard]] std::optional<validation::StructuredPayloadView> parse_bridge_payload_view(
+    const StageLlmCallResult& bridge_result) {
+  if (!bridge_result.response.has_value() || !bridge_result.response->content_payload.has_value()) {
+    return std::nullopt;
+  }
+
+  return validation::StructuredPayloadView::parse_structured_payload(
+      *bridge_result.response->content_payload);
+}
+
+[[nodiscard]] bool fallback_or_fail_structured_stage(
+    CognitionDecisionResult& result,
+    bool fallback_allowed,
+    contracts::ResultCode result_code,
+    const contracts::ErrorInfo& error_info,
+    const std::string& stage,
+    std::string diagnostic) {
+  if (fallback_allowed) {
+    append_unique(result.diagnostics, std::move(diagnostic));
+    append_unique(result.diagnostics, "decision_pipeline.degraded");
+    append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
+    return true;
+  }
+
+  apply_decision_failure(result, result_code, error_info, std::move(diagnostic));
+  return false;
 }
 
 void apply_reflection_failure(
@@ -642,69 +674,145 @@ class CognitionFacade final : public ICognitionEngine {
         should_recommend_context_reload(perception.confidence);
       append_unique(result.diagnostics, perception.diagnostics);
 
-    consume_decision_bridge_stage(request,
-                                  "planning",
-                                  "plan",
-                                  ModelCapabilityTier::Standard,
-                                  true,
-                                  512U,
-                                  result,
-                                  planning_hint);
+    std::optional<plan::PlanGraph> active_plan_graph;
+    const auto planning_bridge_result = consume_decision_bridge_stage(request,
+                                                                      "planning",
+                                                                      "plan",
+                                                                      ModelCapabilityTier::Standard,
+                                                                      true,
+                                                                      512U,
+                                                                      result,
+                                                                      planning_hint);
     if (result.error_info.has_value()) {
       return result;
     }
 
-    PlanningRequest planning_request;
-    planning_request.caller_domain = request.caller_domain;
-    planning_request.request_id = request.request_id;
-    planning_request.trace_id = request.trace_id;
-    planning_request.profile_id = request.profile_id;
-    planning_request.goal_contract = request.goal_contract;
-    planning_request.context_packet = request.context_packet;
-    planning_request.belief_state = request.belief_state;
-    planning_request.perception_result = perception;
-    planning_request.budget_context = request.budget_context;
-    planning_request.execution_hints = request.execution_hints;
-    const auto plan_graph = run_stage_with_deadline(
-        stage_deadline_ms,
-        [planner = planner_, planning_request]() mutable {
-          return planner.build_plan(planning_request);
-        });
-    if (plan_graph.timed_out) {
-      apply_decision_failure(
-          result,
-          contracts::ResultCode::RuntimeRetryExhausted,
-          make_stage_timeout_error_info("planning",
-                                        request.request_id,
-                                        request.trace_id,
-                                        plan_graph.elapsed_ms,
-                                        "cognition::planning::Planner"),
-          "decision_pipeline.stage_timeout:planning");
-      return result;
+    if (planning_bridge_result.has_value()) {
+      append_unique(result.diagnostics, "structured_projection.required:planning");
+      const auto schema_validation = validator_.validate_stage_output(
+          *planning_bridge_result,
+          validation::schema_for_planning_plan());
+      append_unique(result.diagnostics, schema_validation.diagnostics);
+      if (!schema_validation.ok) {
+        if (!fallback_or_fail_structured_stage(result,
+                                               rule_fallback_enabled,
+                                               contracts::ResultCode::ValidationFieldMissing,
+                                               *schema_validation.error_info,
+                                               "planning",
+                                               "structured_projection.schema_violation:planning")) {
+          return result;
+        }
+      } else {
+        append_unique(result.diagnostics, "structured_projection.bridge_payload_valid:planning");
+        const auto payload_view = parse_bridge_payload_view(*planning_bridge_result);
+        if (!payload_view.has_value()) {
+          if (!fallback_or_fail_structured_stage(
+                  result,
+                  rule_fallback_enabled,
+                  contracts::ResultCode::ValidationFieldMissing,
+                  make_error_info(contracts::ResultCode::ValidationFieldMissing,
+                                  "planning",
+                                  "planning bridge payload could not be reparsed for projection",
+                                  "cognition::projection::PlanGraphStructuredProjector"),
+                  "planning",
+                  "structured_projection.projection_failed:planning")) {
+            return result;
+          }
+        } else {
+          projection::PlanGraphStructuredProjector plan_graph_projector;
+          const auto projected_plan = plan_graph_projector.project_plan_graph(*payload_view);
+          append_unique(result.diagnostics, projected_plan.diagnostics);
+          if (!projected_plan.ok || !projected_plan.plan_graph.has_value()) {
+            if (!fallback_or_fail_structured_stage(
+                    result,
+                    rule_fallback_enabled,
+                    contracts::ResultCode::ValidationFieldMissing,
+                    projected_plan.error_info.value_or(
+                        make_error_info(contracts::ResultCode::ValidationFieldMissing,
+                                        "planning",
+                                        "planning projector could not produce a plan graph",
+                                        "cognition::projection::PlanGraphStructuredProjector")),
+                    "planning",
+                    "structured_projection.projection_failed:planning")) {
+              return result;
+            }
+          } else {
+            const auto plan_validation = validator_.validate_plan_graph_invariants(
+                *projected_plan.plan_graph, max_plan_nodes, max_plan_depth);
+            append_unique(result.diagnostics, plan_validation.diagnostics);
+            if (!plan_validation.ok) {
+              if (!fallback_or_fail_structured_stage(result,
+                                                     rule_fallback_enabled,
+                                                     contracts::ResultCode::ValidationFieldMissing,
+                                                     *plan_validation.error_info,
+                                                     "planning",
+                                                     "structured_projection.invariant_failed:planning")) {
+                return result;
+              }
+            } else {
+              active_plan_graph = *projected_plan.plan_graph;
+              append_unique(result.diagnostics, "structured_projection.projected_plan_graph");
+            }
+          }
+        }
+      }
     }
 
-    const auto plan_validation = validator_.validate_plan_graph_invariants(
-        *plan_graph.value, max_plan_nodes, max_plan_depth);
-    if (!plan_validation.ok) {
-      if (rule_fallback_enabled) {
-        result.action_decision = make_clarification_fallback(
-            request,
-            "decision pipeline degraded to clarification because plan invariants failed validation");
-        result.context_sufficiency.context_sufficient = false;
-        result.context_sufficiency.context_confidence =
-            std::min(result.context_sufficiency.context_confidence, 0.35F);
-        result.context_sufficiency.recommend_context_reload = true;
-        append_unique(result.context_sufficiency.missing_evidence_hints, "active_plan");
-        append_unique(result.diagnostics, "decision_pipeline.degraded");
-        append_unique(result.diagnostics, "decision_pipeline.plan_validation_failed");
+    if (!active_plan_graph.has_value()) {
+      PlanningRequest planning_request;
+      planning_request.caller_domain = request.caller_domain;
+      planning_request.request_id = request.request_id;
+      planning_request.trace_id = request.trace_id;
+      planning_request.profile_id = request.profile_id;
+      planning_request.goal_contract = request.goal_contract;
+      planning_request.context_packet = request.context_packet;
+      planning_request.belief_state = request.belief_state;
+      planning_request.perception_result = perception;
+      planning_request.budget_context = request.budget_context;
+      planning_request.execution_hints = request.execution_hints;
+      const auto local_plan_graph = run_stage_with_deadline(
+          stage_deadline_ms,
+          [planner = planner_, planning_request]() mutable {
+            return planner.build_plan(planning_request);
+          });
+      if (local_plan_graph.timed_out) {
+        apply_decision_failure(
+            result,
+            contracts::ResultCode::RuntimeRetryExhausted,
+            make_stage_timeout_error_info("planning",
+                                          request.request_id,
+                                          request.trace_id,
+                                          local_plan_graph.elapsed_ms,
+                                          "cognition::planning::Planner"),
+            "decision_pipeline.stage_timeout:planning");
         return result;
       }
 
-      apply_decision_failure(result,
-                             contracts::ResultCode::ValidationFieldMissing,
-                             *plan_validation.error_info,
-                             "decision_pipeline.plan_validation_failed");
-      return result;
+      const auto plan_validation = validator_.validate_plan_graph_invariants(
+          *local_plan_graph.value, max_plan_nodes, max_plan_depth);
+      if (!plan_validation.ok) {
+        if (rule_fallback_enabled) {
+          result.action_decision = make_clarification_fallback(
+              request,
+              "decision pipeline degraded to clarification because plan invariants failed validation");
+          result.context_sufficiency.context_sufficient = false;
+          result.context_sufficiency.context_confidence =
+              std::min(result.context_sufficiency.context_confidence, 0.35F);
+          result.context_sufficiency.recommend_context_reload = true;
+          append_unique(result.context_sufficiency.missing_evidence_hints, "active_plan");
+          append_unique(result.diagnostics, "decision_pipeline.degraded");
+          append_unique(result.diagnostics, "decision_pipeline.plan_validation_failed");
+          return result;
+        }
+
+        apply_decision_failure(result,
+                               contracts::ResultCode::ValidationFieldMissing,
+                               *plan_validation.error_info,
+                               "decision_pipeline.plan_validation_failed");
+        return result;
+      }
+
+      active_plan_graph = *local_plan_graph.value;
     }
 
     ReasoningRequest reasoning_request;
@@ -716,61 +824,137 @@ class CognitionFacade final : public ICognitionEngine {
     reasoning_request.context_packet = request.context_packet;
     reasoning_request.belief_state = request.belief_state;
     reasoning_request.perception_result = perception;
-    reasoning_request.active_plan = *plan_graph.value;
+    reasoning_request.active_plan = *active_plan_graph;
     reasoning_request.latest_observation = request.latest_observation;
     reasoning_request.budget_context = request.budget_context;
     reasoning_request.execution_hints = request.execution_hints;
 
-    consume_decision_bridge_stage(request,
-                                  "execution",
-                                  "action_decision",
-                                  ModelCapabilityTier::Standard,
-                                  true,
-                                  256U,
-                                  result,
-                                  execution_hint);
+    std::optional<ActionDecision> resolved_action_decision;
+    const auto execution_bridge_result = consume_decision_bridge_stage(request,
+                                                                       "execution",
+                                                                       "action_decision",
+                                                                       ModelCapabilityTier::Standard,
+                                                                       true,
+                                                                       256U,
+                                                                       result,
+                                                                       execution_hint);
     if (result.error_info.has_value()) {
       return result;
     }
 
-    const auto action_decision = run_stage_with_deadline(
-        stage_deadline_ms,
-        [reasoner = reasoner_, reasoning_request]() mutable {
-          return reasoner.decide(reasoning_request);
-        });
-    if (action_decision.timed_out) {
-      apply_decision_failure(
-          result,
-          contracts::ResultCode::RuntimeRetryExhausted,
-          make_stage_timeout_error_info("execution",
-                                        request.request_id,
-                                        request.trace_id,
-                                        action_decision.elapsed_ms,
-                                        "cognition::reasoning::Reasoner"),
-          "decision_pipeline.stage_timeout:execution");
-      return result;
+    if (execution_bridge_result.has_value()) {
+      append_unique(result.diagnostics, "structured_projection.required:execution");
+      const auto schema_validation = validator_.validate_stage_output(
+          *execution_bridge_result,
+          validation::schema_for_execution_action_decision());
+      append_unique(result.diagnostics, schema_validation.diagnostics);
+      if (!schema_validation.ok) {
+        if (!fallback_or_fail_structured_stage(result,
+                                               rule_fallback_enabled,
+                                               contracts::ResultCode::ValidationFieldMissing,
+                                               *schema_validation.error_info,
+                                               "execution",
+                                               "structured_projection.schema_violation:execution")) {
+          return result;
+        }
+      } else {
+        append_unique(result.diagnostics, "structured_projection.bridge_payload_valid:execution");
+        const auto payload_view = parse_bridge_payload_view(*execution_bridge_result);
+        if (!payload_view.has_value()) {
+          if (!fallback_or_fail_structured_stage(
+                  result,
+                  rule_fallback_enabled,
+                  contracts::ResultCode::ValidationFieldMissing,
+                  make_error_info(contracts::ResultCode::ValidationFieldMissing,
+                                  "execution",
+                                  "execution bridge payload could not be reparsed for projection",
+                                  "cognition::projection::ActionDecisionStructuredProjector"),
+                  "execution",
+                  "structured_projection.projection_failed:execution")) {
+            return result;
+          }
+        } else {
+          projection::ActionDecisionStructuredProjector action_decision_projector;
+          const auto projected_action =
+              action_decision_projector.project_action_decision(*payload_view);
+          append_unique(result.diagnostics, projected_action.diagnostics);
+          if (!projected_action.ok || !projected_action.action_decision.has_value()) {
+            if (!fallback_or_fail_structured_stage(
+                    result,
+                    rule_fallback_enabled,
+                    contracts::ResultCode::ValidationFieldMissing,
+                    projected_action.error_info.value_or(
+                        make_error_info(contracts::ResultCode::ValidationFieldMissing,
+                                        "execution",
+                                        "execution projector could not produce an action decision",
+                                        "cognition::projection::ActionDecisionStructuredProjector")),
+                    "execution",
+                    "structured_projection.projection_failed:execution")) {
+              return result;
+            }
+          } else {
+            const auto decision_validation = validator_.validate_action_decision_invariants(
+                *projected_action.action_decision);
+            append_unique(result.diagnostics, decision_validation.diagnostics);
+            if (!decision_validation.ok) {
+              if (!fallback_or_fail_structured_stage(result,
+                                                     rule_fallback_enabled,
+                                                     contracts::ResultCode::ValidationFieldMissing,
+                                                     *decision_validation.error_info,
+                                                     "execution",
+                                                     "structured_projection.invariant_failed:execution")) {
+                return result;
+              }
+            } else {
+              resolved_action_decision = *projected_action.action_decision;
+              append_unique(result.diagnostics, "structured_projection.projected_action_decision");
+            }
+          }
+        }
+      }
     }
 
-    const auto decision_validation =
-        validator_.validate_action_decision_invariants(*action_decision.value);
-    if (!decision_validation.ok) {
-      if (request.execution_hints.degraded_path_allowed) {
-        result.action_decision = make_converge_safe_fallback(
-            request,
-            "decision pipeline converged safe because decision invariants failed validation");
-        append_unique(result.diagnostics, "decision_pipeline.degraded");
-        append_unique(result.diagnostics, "decision_pipeline.action_validation_failed");
-      } else {
-        apply_decision_failure(result,
-                               contracts::ResultCode::ValidationFieldMissing,
-                               *decision_validation.error_info,
-                               "decision_pipeline.action_validation_failed");
+    if (!resolved_action_decision.has_value()) {
+      const auto local_action_decision = run_stage_with_deadline(
+          stage_deadline_ms,
+          [reasoner = reasoner_, reasoning_request]() mutable {
+            return reasoner.decide(reasoning_request);
+          });
+      if (local_action_decision.timed_out) {
+        apply_decision_failure(
+            result,
+            contracts::ResultCode::RuntimeRetryExhausted,
+            make_stage_timeout_error_info("execution",
+                                          request.request_id,
+                                          request.trace_id,
+                                          local_action_decision.elapsed_ms,
+                                          "cognition::reasoning::Reasoner"),
+            "decision_pipeline.stage_timeout:execution");
         return result;
       }
-    } else {
-      result.action_decision = *action_decision.value;
+
+      const auto decision_validation =
+          validator_.validate_action_decision_invariants(*local_action_decision.value);
+      if (!decision_validation.ok) {
+        if (request.execution_hints.degraded_path_allowed) {
+          resolved_action_decision = make_converge_safe_fallback(
+              request,
+              "decision pipeline converged safe because decision invariants failed validation");
+          append_unique(result.diagnostics, "decision_pipeline.degraded");
+          append_unique(result.diagnostics, "decision_pipeline.action_validation_failed");
+        } else {
+          apply_decision_failure(result,
+                                 contracts::ResultCode::ValidationFieldMissing,
+                                 *decision_validation.error_info,
+                                 "decision_pipeline.action_validation_failed");
+          return result;
+        }
+      } else {
+        resolved_action_decision = *local_action_decision.value;
+      }
     }
 
+    result.action_decision = *resolved_action_decision;
     result.belief_update_hint = belief_update_synthesizer_.synthesize_from_decide(
       perception, *result.action_decision, request.latest_observation);
     append_unique(result.diagnostics, "decision_pipeline.completed");
@@ -857,17 +1041,18 @@ class CognitionFacade final : public ICognitionEngine {
     return result;
   }
 
-  void consume_decision_bridge_stage(const CognitionStepRequest& request,
-                                     const std::string& stage,
-                                     const std::string& task_type,
-                                     ModelCapabilityTier capability_tier,
-                                     bool requires_structured_output,
-                                     std::uint32_t max_output_tokens,
-                                     CognitionDecisionResult& result,
-                                     const StageModelHint* stage_model_hint) const {
+  [[nodiscard]] std::optional<StageLlmCallResult> consume_decision_bridge_stage(
+      const CognitionStepRequest& request,
+      const std::string& stage,
+      const std::string& task_type,
+      ModelCapabilityTier capability_tier,
+      bool requires_structured_output,
+      std::uint32_t max_output_tokens,
+      CognitionDecisionResult& result,
+      const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, std::string{"llm_bridge.unavailable:"} + stage);
-      return;
+      return std::nullopt;
     }
 
     llm_bridge::StageLlmCallRequest bridge_request;
@@ -911,17 +1096,17 @@ class CognitionFacade final : public ICognitionEngine {
                                                            bridge_result.elapsed_ms,
                                                            "cognition::llm_bridge::CognitionLlmBridge"),
                              std::string{"decision_pipeline.stage_timeout:"} + stage);
-      return;
+      return std::nullopt;
     }
 
     append_bridge_diagnostics(result.diagnostics, *bridge_result.value, stage);
     if (!bridge_result.value->error_info.has_value()) {
-      return;
+      return std::move(*bridge_result.value);
     }
 
     if (request.execution_hints.degraded_path_allowed) {
       append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
-      return;
+      return std::nullopt;
     }
 
     apply_decision_failure(result,
@@ -929,6 +1114,7 @@ class CognitionFacade final : public ICognitionEngine {
                                contracts::ResultCode::RuntimeRetryExhausted),
                            *bridge_result.value->error_info,
                            std::string{"decision_pipeline.llm_bridge_failed:"} + stage);
+    return std::nullopt;
   }
 
   void consume_reflection_bridge_stage(const ReflectionRequest& request,

@@ -72,6 +72,18 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_cognition_facade_structured_plan_output_unit_test
+	CognitionFacadeStructuredPlanOutputTest.cpp
+	CognitionFacadeStructuredPlanOutputTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_cognition_facade_structured_action_output_unit_test
+	CognitionFacadeStructuredActionOutputTest.cpp
+	CognitionFacadeStructuredActionOutputTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_cognition_facade_stage_timeout_unit_test
 	CognitionFacadeStageTimeoutTest.cpp
 	CognitionFacadeStageTimeoutTest

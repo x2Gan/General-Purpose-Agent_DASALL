@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #658
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-005 / COG-FIX-004A-BLD-006 落地 Facade structured projection authoritative consumption
+- 状态：已完成
+
+### 改动
+
+1. 调整 `cognition/src/CognitionFacade.cpp`：把 `run_decision_pipeline()` 的 planning / execution 两段桥接主链切到 structured authoritative consumption。planning bridge payload 现在先过 `schema_for_planning_plan()`、`PlanGraphStructuredProjector` 与 `validate_plan_graph_invariants()`，成功后成为 reasoning 输入的 active `PlanGraph`；execution bridge payload 现在先过 `schema_for_execution_action_decision()`、`ActionDecisionStructuredProjector` 与 `validate_action_decision_invariants()`，成功后直接成为 `CognitionDecisionResult.action_decision`。
+2. 调整 `cognition/src/validation/StageOutputValidator.cpp` 与 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp`：补齐 `nodes.node_id`、`nodes.action_kind_hint` 等 array-in-path schema gate，修复 planning structured payload 在进入 projector 前被 dotted-path 误判为缺字段的问题，并新增 planning nested-field 正负例。
+3. 新增 `tests/unit/cognition/CognitionFacadeStructuredPlanOutputTest.cpp` 与 `tests/unit/cognition/CognitionFacadeStructuredActionOutputTest.cpp`，并更新 `tests/unit/cognition/CMakeLists.txt`：分别覆盖 projected `PlanGraph` 成为 reasoning 输入、projected `ActionDecision` 成为 authoritative result，以及 invalid payload 的 explicit fallback / fail-closed 负例。
+4. 复跑 `CognitionFacadeFlowTest` 与 `CognitionFacadeDegradedModeTest`：确认这次 authoritative consumption 未破坏既有 bridge invocation、local degraded path 与 bounded fallback 语义。
+5. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `COG-FIX-004A-BLD-005`、`COG-FIX-004A-BLD-006` 标记为 Done，并把 `Gate-COG-FIX004A-03` 回写为 Pass。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_stage_output_validator_schema_unit_test`
+   - 结果：通过，array-path schema gate 变更完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "StageOutputValidatorSchemaTest"`
+   - 结果：通过，planning nested-field schema 正负例通过。
+3. `cmake --build build-ci --target dasall_cognition_facade_structured_plan_output_unit_test dasall_cognition_facade_structured_action_output_unit_test`
+   - 结果：通过，两个 façade structured target 完成编译与链接。
+4. `ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeStructuredPlanOutputTest"`
+   - 结果：通过，projected `PlanGraph` authoritative consumption 与 explicit local planner fallback 路径通过。
+5. `ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeStructuredActionOutputTest"`
+   - 结果：通过，projected `ActionDecision` authoritative consumption 与 invalid execution payload fail-closed 路径通过。
+6. `ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeFlowTest"`
+   - 结果：通过，既有 façade flow 未回退。
+7. `ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeDegradedModeTest"`
+   - 结果：通过，既有 degraded semantics 未回退。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-005` 已完成：schema-valid planning bridge payload 已成为 active `PlanGraph`，本地 Planner 只在 bridge/schema/projection/invariant 失败且 degraded path 明确允许时使用。
+2. `COG-FIX-004A-BLD-006` 已完成：schema-valid execution bridge payload 已成为 authoritative `ActionDecision`，invalid execution payload 在 degraded path 禁用时 fail-closed，在允许时才回到 local reasoner / bounded fallback。
+3. `Gate-COG-FIX004A-03` 已转为 Pass：Facade planning / execution authoritative consumption 已具 focused evidence，且旧的 flow / degraded tests 继续通过。
+4. 当前实现继续守住边界：本轮只收 Facade authoritative consumption 与其最小 schema gate 修正，不提前接入 Runtime interaction contract、structured integration regression 或 telemetry structured fields。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-005` / `006` 相关文件。
+2. 按仓库规范提交并推送这两项原子任务的 scoped commit。
+
 ## 记录 #657
 
 - 日期：2026-05-15
