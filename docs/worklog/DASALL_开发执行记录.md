@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+## 记录 #664
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-TODO-043 同步 cognition 详设当前状态与追溯证据
+- 状态：已完成
+
+### 改动
+
+1. 调整 `docs/architecture/DASALL_cognition子系统详细设计.md`：更新元数据修订时间与主要依据，把 COG-TODO-039 ~ 042 deliverables 纳入证据链入口，并将 1.2、3.1、3.2 中把 placeholder-only / 空测试目录 / runtime smoke 绕过 cognition 当成“当前事实”的表述改写为当前状态或历史 baseline 说明。
+2. 调整 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`：将 `COG-TODO-043` 标记为 Done，并把 `COG-R23` 的残余说明收口为“详设状态已对齐，剩余待 044 warning hygiene”。
+3. 新增 `docs/todos/cognition/deliverables/COG-TODO-043-cognition详设当前状态追溯收敛.md`：单独记录本轮文档同步边界、修正点与验证证据，避免后续继续引用过时 placeholder baseline。
+
+### 验证
+
+1. `rg -n "placeholder.cpp|空测试目录|绕过 cognition|Gate-COG-12|COG-TODO-04[0-3]" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：详设中的 placeholder / 空测试目录 / runtime smoke 旧表述已转入历史 baseline 或证据引用语境，`Gate-COG-12` 与 `COG-TODO-040 ~ 043` 已可跨文档追溯。
+
+### 结果
+
+1. 认知详设不再把早期 bootstrap baseline 写成当前工程现实；`cognition/include`、五段组件、unit / integration 拓扑与 Gate-COG-12 当前结论已同步到文档主表。
+2. `COG-R23` 的开放范围已经缩小到 `COG-TODO-044` 的 warning hygiene，不再混杂“详设当前状态失真”这一类文档偏差。
+3. 039 ~ 042 的证据链现已能从详设直接追溯到专项 TODO / deliverables，后续 reader 不必在历史 worklog 与旧 baseline 之间反复交叉比对。
+
+### 下一步
+
+1. 隔离本轮 043 的 architecture / deliverable / TODO / worklog 变更，只 stage 当前任务相关内容后提交推送。
+2. 继续推进 `COG-TODO-044`，清理 cognition 测试初始化 warning 并收口 `COG-R23`。
+
 ## 记录 #663
 
 - 日期：2026-05-15

@@ -5,8 +5,8 @@
 | 版本 | v1.1 |
 | 状态 | 评审优化版 |
 | 初版日期 | 2026-04-14 |
-| 最近修订 | 2026-04-15 |
-| 修订说明 | v1.0→v1.1：补充行业实践对齐、跨子系统交互契约精化、并发模型、上下文与预算感知、被否决方案归纳；扩充约束与风险 |
+| 最近修订 | 2026-05-15 |
+| 修订说明 | v1.0→v1.1：补充行业实践对齐、跨子系统交互契约精化、并发模型、上下文与预算感知、被否决方案归纳；扩充约束与风险。2026-05-15 追补 COG-TODO-039 ~ 042 后的当前工程状态与证据链入口 |
 
 本文档面向 DASALL 认知子系统的子系统级详细设计，目标是在不改写既有 ADR、SSOT 与共享契约冻结结论的前提下，为 cognition 模块提供可直接映射到 Build 的工程方案。
 
@@ -32,6 +32,10 @@
 17. cognition/CMakeLists.txt
 18. cognition/src/placeholder.cpp
 19. tests/unit/cognition/CMakeLists.txt
+20. docs/todos/cognition/deliverables/COG-TODO-039-统一验收构建聚合与runtime-fixture收敛.md
+21. docs/todos/cognition/deliverables/COG-TODO-040-response-bridge与fallback契约收敛.md
+22. docs/todos/cognition/deliverables/COG-TODO-041-ReflectionActivePlan生产路径收敛.md
+23. docs/todos/cognition/deliverables/COG-TODO-042-Gate-COG-12复验证据回写.md
 
 ## 1. 模块概览
 
@@ -55,7 +59,9 @@
 | 下游直接依赖 | llm 公共接口；infra 观测抽象 | DASALL_Engineering_Blueprint.md 3.4、3.5；DASALL_llm子系统详细设计.md 2.1 |
 | 间接受益方 | tools、knowledge、memory、multi_agent 通过 Runtime 间接消费认知结论 | DASALL_Agent_architecture.md 3.3.1、6.2；DASALL_tools子系统详细设计.md 2.1 |
 | 直接禁止依赖 | tools 实现、memory 实现、knowledge 实现、services 实现、platform 实现 | DASALL_Agent_architecture.md 5.8.3；DASALL_Engineering_Blueprint.md 4.2；platform_linux_detailed_design.md PLAT-LNX-C017 |
-| 当前实现状态 | 仅有静态库占位和空测试目录，尚无公共头文件、阶段实现和测试拓扑 | cognition/CMakeLists.txt；cognition/src/placeholder.cpp；tests/unit/cognition/CMakeLists.txt |
+| 当前实现状态 | `cognition/include` 已形成 Runtime-facing 公共接口面，Facade、五段组件、LLM bridge、validator 与 telemetry 已落盘；`tests/unit/cognition` 与 `tests/integration/cognition` 已形成回归拓扑。`placeholder.cpp` 仅保留为早期 bootstrap 痕迹，不再代表当前状态 | cognition/include；cognition/src/CognitionFacade.cpp；tests/unit/cognition/CMakeLists.txt；tests/integration/cognition/CMakeLists.txt；COG-TODO-039 ~ 042 deliverables |
+
+注：本文中凡提到 `placeholder.cpp`、空测试目录或 runtime smoke 早期绕行路径，均应理解为 2026-04-14 建模时的历史 baseline；截至 COG-TODO-042，当前工程事实以本仓库代码树与 039 ~ 042 交付物为准。
 
 ### 1.3 运行视图
 
@@ -158,23 +164,23 @@ flowchart LR
 
 | 设计面 | 当前状态 | 目标状态 | 缺口判断 | 主要风险 | 来源依据 |
 |---|---|---|---|---|---|
-| 模块代码骨架 | cognition/ 仅有 placeholder.cpp | 至少具备公共头文件、核心组件和门面 | 高 | 无法进入任何真实主链路 | cognition/CMakeLists.txt；cognition/src/placeholder.cpp |
-| 公共接口面 | CMake 暴露 include 目录，但目录实际未落盘 | 形成面向 Runtime 的公共接口面与模块内支撑类型 | 高 | 运行时无法稳定依赖 cognition 抽象 | cognition/CMakeLists.txt；DASALL_Engineering_Blueprint.md 980 行附近 |
-| 阶段组件 | 无 Perception/Planner/Reasoner/Reflection/ResponseBuilder 代码 | 五段各有独立可测组件 | 高 | 只能继续停留在概念层 | DASALL_Agent_architecture.md 4.3、5.8 |
+| 模块代码骨架 | `CognitionFacade`、`StagePolicyResolver`、Perception / Planner / Reasoner / Reflection / ResponseBuilder、LLM bridge、validator、telemetry 均已落盘；`placeholder.cpp` 只剩历史 bootstrap 痕迹 | 保持门面 + 五段组件 + 支撑桥接的稳定分层，并继续守住 ADR-006/007/008 边界 | 低 | 当前主要风险已转为 gate 收口与文档/warning hygiene，而非模块骨架缺失 | cognition/src；cognition/src/placeholder.cpp；COG-TODO-039 ~ 042 deliverables |
+| 公共接口面 | `cognition/include` 已具备 `ICognitionEngine`、`IPlanner`、`IReasoner`、`IReflectionEngine`、`IResponseBuilder`、`CognitionTypes.h` 等 Runtime-facing 面；041 已把 `ReflectionRequest.active_plan` 以 additive 方式接入 façade 路径 | 保持面向 Runtime 的稳定公共接口面，并继续把未冻结支撑类型留在 module-local 范围 | 低 | 后续扩展仍需避免把 `PlanGraph`、`ActionDecision` 等支撑对象过早推入 shared contracts | cognition/include；COG-TODO-041 deliverable |
+| 阶段组件 | 五段组件与门面主链已具备真实实现，且已有 schema、budget、degraded path、telemetry、structured output 等 focused 回归 | 保持五段组件可独立验证，并让 clean gate 继续覆盖 facade / runtime 交接 | 低 | 当前剩余缺口不在“有没有组件”，而在 repo-wide gate 仍被非 cognition owner 阻断 | cognition/src；tests/unit/cognition；COG-TODO-040 ~ 042 deliverables |
 | 共享契约适配 | GoalContract、BeliefState、ContextPacket、Observation、ReflectionDecision、AgentResult 已冻结；ActionDecision 只有 tag | 认知内部正确复用已冻结对象，并以模块内类型承接未冻结字段 | 中 | 误把支撑对象写入 contracts | contracts/include/agent/GoalContract.h；BeliefState.h；ContextPacket.h；Observation.h；ReflectionDecision.h；AgentResult.h；ActionDecisionTag.h |
 | 规划接口准入 | InterfaceCatalog 里 IPlanner 仍是 AwaitingSupportingContracts | 先落模块公共接口，再等待下一轮准入评审 | 中 | 过早共享化导致支撑契约返工 | InterfaceCatalog.h；WP05-T011；WP05-T012 |
 | Response 路径 | 当前无 ResponseBuilder 落点 | 形成终态结果构造路径并映射 AgentResult | 高 | runtime 无法闭环用户输出 | DASALL_Agent_architecture.md 4.3、5.8；AgentResult.h |
-| 单元测试 | tests/unit/cognition/CMakeLists.txt 仅占位 | 建立单元测试拓扑和模块级回归 | 高 | 无法证明边界、schema、降级正确性 | tests/unit/cognition/CMakeLists.txt |
-| 集成测试 | 当前 runtime smoke test 只使用 MockMemoryStore、MockLLMAdapter、MockTool，未经过 cognition | 建立 runtime + cognition + llm + memory + tools 的集成路径 | 高 | 无法验证真正的主循环交接 | tests/unit/runtime/RuntimeSmokeTest.cpp |
-| 测试 mocks | 现有 mocks 仅覆盖 LLMAdapter、MemoryStore、Tool、ExecutionService | 增补 MockLLMManager、MockCognitionFixture 等 cognition-specific fixture | 中 | 集成与故障注入难以独立推进 | tests/mocks/include |
+| 单元测试 | `tests/unit/cognition/` 已覆盖 public surface、五段组件、schema validator、structured projection、telemetry、LLM bridge 与 degraded path；042 clean regex 中 cognition unit slice 继续通过 | 保持模块级回归稳定，并在后续 warning gate 提升时继续保持无语义回退 | 低 | 044 前仍有 cognition test init warning hygiene 待清理 | tests/unit/cognition/CMakeLists.txt；COG-TODO-042 deliverable |
+| 集成测试 | `tests/integration/cognition/` 已具备 runtime interaction、profile compatibility、review regression、failure injection、structured output 等回归；`RuntimeCognitionLoopSmokeTest` 已通过 cognition 主链，不再绕过 cognition。042 复验显示 clean gate 的 contract / integration executable 仍被 repo-wide 非 cognition blocker 卡住 | 建立可在 clean gate 目录中完整执行的 runtime + cognition + contracts + integrations 路径 | 中 | 当前统一验收仍受 non-cognition executable 缺口与 access/daemon failures 阻断 | tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp；tests/integration/cognition；COG-TODO-039 ~ 042 deliverables |
+| 测试 mocks | `MockLLMManager`、`MockCognitionFixture` 与 runtime integration fixture 已落盘，可支撑 facade / integration / failure-injection 回归 | 继续维持 cognition-specific fixture 的最小合法初始化，并避免测试夹具漂移出真实 runtime policy 投影 | 低 | 044 之前仍有少量 `policy_snapshot` 初始化 warning 待收口 | tests/mocks/include；tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h；COG-TODO-040、044 |
 | 观测面 | cognition 无日志、指标、trace、审计约定 | 形成语义级观测字段集 | 中 | 后续调试只能看 llm/tools，认知决策不可解释 | DASALL_infrastructure子系统详细设计.md 24、136 |
 | Profile 投影 | profiles 文档要求 cognition 全档位必开，但 cognition 自身没有配置投影面 | 建立 CognitionConfigProjector，把 profile 运行策略投影到 cognition | 中 | 运行时差异被写死在代码里 | DASALL_profiles模块详细设计.md 571、605 |
 
 ### 3.2 关键差距结论
 
-1. 当前核心缺口不在算法能力，而在公共接口面与支撑类型缺失，导致 Runtime 无法稳定依赖 cognition。
-2. 当前首要风险不在能力数量不足，而在于若直接编码，极易让 cognition 越界侵入 Prompt、Recovery、Tool execution 三条已冻结边界。
-3. 当前应优先避免的是为追求实现速度，把 PlanGraph、ActionDecision、ResponseBuilder 内部细节提前写入共享契约。
+1. 截至 COG-TODO-042，当前核心缺口已不再是模块骨架或公共接口面缺失，而是 Gate-COG-12 仍被 repo-wide non-cognition blocker 与 043 / 044 的文档、warning hygiene 收口项卡住。
+2. 当前首要风险不在“认知链路是否存在”，而在于跨文档仍沿用早期 placeholder baseline 作为当前事实，进而误导后续任务判断 gate 与代码现状。
+3. 当前仍应继续避免的是：在补 gate 或补文档时，为追求速度把 `PlanGraph`、`ActionDecision`、ResponseBuilder 内部细节提前写入 shared contracts，或让 cognition 越界侵入 Prompt、Recovery、Tool execution 三条已冻结边界。
 
 ## 4. 候选方案对比
 
