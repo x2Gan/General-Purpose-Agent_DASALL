@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #ifndef DASALL_SQL_MEMORY_DIR
 #error DASALL_SQL_MEMORY_DIR must be defined for cognition runtime interaction contract coverage
@@ -15,6 +16,8 @@
 #include "ICognitionEngine.h"
 #include "IResponseBuilder.h"
 #include "IMemoryManager.h"
+#include "IToolManager.h"
+#include "MockCognitionFixture.h"
 #include "RuntimeUnaryFixture.h"
 #include "support/TestAssertions.h"
 
@@ -26,6 +29,12 @@ using dasall::tests::runtime_fixture::make_sqlite_config;
 using dasall::tests::runtime_fixture::make_temp_database_path;
 using dasall::tests::runtime_fixture::make_true_integration_dependency_set;
 using dasall::tests::runtime_fixture::make_true_integration_init_request;
+using dasall::tests::runtime_fixture::make_true_integration_policy_snapshot;
+using dasall::tests::mocks::MockCognitionFixture;
+using dasall::tests::mocks::MockCognitionFixtureOptions;
+using dasall::tests::mocks::StructuredExecutionPayloadScenario;
+using dasall::tests::mocks::StructuredPlanningPayloadScenario;
+using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
 enum class ContractDecisionMode : std::uint8_t {
@@ -300,9 +309,13 @@ class ContractProbeResponseBuilder final : public dasall::cognition::IResponseBu
     agent_result.result_id = std::string{"agent-result-contract-"} + request.request_id;
     agent_result.status = dasall::contracts::AgentResultStatus::Completed;
     agent_result.result_code = 0;
-    agent_result.response_text =
-        std::string{"contract probe response: "} +
-        request.terminal_decision->response_outline->summary;
+    const auto response_summary =
+      request.terminal_decision->response_outline.has_value()
+        ? request.terminal_decision->response_outline->summary
+        : request.latest_observation.has_value() && request.latest_observation->payload.has_value()
+            ? *request.latest_observation->payload
+            : std::string{"contract probe response"};
+    agent_result.response_text = std::string{"contract probe response: "} + response_summary;
     agent_result.task_completed = true;
     agent_result.created_at = 1700000400;
     agent_result.request_id = request.request_id;
@@ -318,6 +331,131 @@ class ContractProbeResponseBuilder final : public dasall::cognition::IResponseBu
   int build_calls = 0;
   std::optional<dasall::cognition::ResponseBuildRequest> last_request;
 };
+
+class StructuredDecisionDelegatingCognitionEngine final
+    : public dasall::cognition::ICognitionEngine {
+ public:
+  explicit StructuredDecisionDelegatingCognitionEngine(
+      std::unique_ptr<dasall::cognition::ICognitionEngine> delegate)
+      : delegate_(std::move(delegate)) {}
+
+  [[nodiscard]] dasall::cognition::CognitionDecisionResult decide(
+      const dasall::cognition::CognitionStepRequest& request) override {
+    ++decide_calls;
+    last_decide_request = request;
+    return delegate_->decide(request);
+  }
+
+  [[nodiscard]] dasall::cognition::CognitionReflectionResult reflect(
+      const dasall::cognition::ReflectionRequest& request) override {
+    ++reflect_calls;
+    last_reflection_request = request;
+    return {};
+  }
+
+  int decide_calls = 0;
+  int reflect_calls = 0;
+  std::optional<dasall::cognition::CognitionStepRequest> last_decide_request;
+  std::optional<dasall::cognition::ReflectionRequest> last_reflection_request;
+
+ private:
+  std::unique_ptr<dasall::cognition::ICognitionEngine> delegate_;
+};
+
+class ContractProbeToolManager final : public dasall::tools::IToolManager {
+ public:
+  [[nodiscard]] dasall::tools::ToolInvocationEnvelope invoke(
+      const dasall::contracts::ToolRequest& request,
+      const dasall::tools::ToolInvocationContext& context) override {
+    ++invoke_calls;
+    last_request = request;
+    last_context = context;
+
+    const auto observation_id = std::string{"obs-"} +
+                                request.tool_call_id.value_or(std::string{"tool-call-missing"});
+
+    dasall::contracts::ToolResult tool_result;
+    tool_result.request_id = request.request_id;
+    tool_result.tool_call_id = request.tool_call_id;
+    tool_result.tool_name = request.tool_name;
+    tool_result.success = true;
+    tool_result.payload = response_payload;
+    tool_result.completed_at = 1700000310;
+    tool_result.duration_ms = 12;
+    tool_result.goal_id = request.goal_id;
+    tool_result.worker_task_id = request.worker_task_id;
+    tool_result.tags = std::vector<std::string>{"tests", "runtime-contract", "structured"};
+
+    dasall::contracts::Observation observation;
+    observation.observation_id = observation_id;
+    observation.source = dasall::contracts::ObservationSource::ToolExecution;
+    observation.success = true;
+    observation.payload = response_payload;
+    observation.created_at = 1700000311;
+    observation.tool_call_id = request.tool_call_id;
+    observation.request_id = request.request_id;
+    observation.goal_id = request.goal_id;
+    observation.duration_ms = 12;
+    observation.tags = std::vector<std::string>{"tests", "runtime-contract", "structured"};
+
+    dasall::contracts::ObservationDigest observation_digest;
+    observation_digest.observation_id = observation_id;
+    observation_digest.summary = response_summary;
+    observation_digest.key_facts = std::vector<std::string>{
+        "structured execute action reached the runtime tool handoff", response_payload};
+    observation_digest.citations = std::vector<std::string>{
+        std::string{"tool_call:"} +
+        request.tool_call_id.value_or(std::string{"tool-call-missing"})};
+    observation_digest.confidence = 0.88F;
+    observation_digest.omitted_details = std::vector<std::string>{};
+    observation_digest.source = dasall::contracts::ObservationSource::ToolExecution;
+    observation_digest.created_at = 1700000312;
+    observation_digest.tags = std::vector<std::string>{"tests", "runtime-contract", "structured"};
+
+    dasall::tools::ToolInvocationEnvelope envelope;
+    envelope.tool_result = std::move(tool_result);
+    envelope.observation = std::move(observation);
+    envelope.observation_digest = std::move(observation_digest);
+    return envelope;
+  }
+
+  [[nodiscard]] std::vector<dasall::tools::ToolInvocationEnvelope> invoke_batch(
+      std::span<const dasall::contracts::ToolRequest> requests,
+      const dasall::tools::ToolInvocationContext& context) override {
+    std::vector<dasall::tools::ToolInvocationEnvelope> envelopes;
+    envelopes.reserve(requests.size());
+    for (const auto& request : requests) {
+      envelopes.push_back(invoke(request, context));
+    }
+    return envelopes;
+  }
+
+  [[nodiscard]] dasall::tools::ToolInvocationEnvelope compensate(
+      const dasall::tools::CompensationRequest&,
+      const dasall::tools::ToolInvocationContext&) override {
+    return {};
+  }
+
+  int invoke_calls = 0;
+  std::optional<dasall::contracts::ToolRequest> last_request;
+  std::optional<dasall::tools::ToolInvocationContext> last_context;
+  std::string response_payload = R"({"status":"ok","source":"structured-contract-probe"})";
+  std::string response_summary = "structured execute action observation";
+};
+
+[[nodiscard]] std::shared_ptr<StructuredDecisionDelegatingCognitionEngine>
+make_structured_contract_engine(const std::string& profile_id,
+                                const MockCognitionFixture& fixture) {
+  const auto snapshot = make_true_integration_policy_snapshot(profile_id);
+  auto delegate = dasall::cognition::create_cognition_engine(
+      *snapshot,
+      dasall::cognition::CognitionRuntimeDependencies{
+          .llm_manager = fixture.llm_manager(),
+      });
+  assert_true(delegate != nullptr,
+              "structured runtime interaction contract requires a snapshot-backed cognition engine");
+  return std::make_shared<StructuredDecisionDelegatingCognitionEngine>(std::move(delegate));
+}
 
 void test_action_decision_execute_action_maps_to_runtime_progress() {
   const auto database_path = make_temp_database_path("dasall-cognition-runtime-contract-ok");
@@ -696,6 +834,204 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
     cleanup_database_artifacts(database_path);
   }
 
+    void test_structured_execute_action_is_consumed_by_runtime_tool_handoff() {
+      const auto database_path = make_temp_database_path(
+        "dasall-cognition-runtime-contract-structured-execute");
+      cleanup_database_artifacts(database_path);
+
+      const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+      auto dependency_set = make_true_integration_dependency_set(
+        config,
+        "session-027-structured-execute",
+        "turn-027-structured-execute-001",
+        "query structured interaction contract execute action");
+      auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
+      auto contract_response_builder = std::make_shared<ContractProbeResponseBuilder>();
+      auto contract_tool_manager = std::make_shared<ContractProbeToolManager>();
+      MockCognitionFixture fixture(MockCognitionFixtureOptions{
+        .selected_node_id = "structured-contract-node",
+        .tool_name = "agent.dataset",
+        .response_text = "structured execute action should be post-processed by runtime",
+      });
+      fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+      fixture.stage_structured_execution_result(StructuredExecutionPayloadScenario::ValidExecuteAction);
+
+      dependency_set->memory_manager = contract_memory_manager;
+      dependency_set->llm_manager = fixture.llm_manager();
+      dependency_set->response_builder = contract_response_builder;
+      dependency_set->tool_manager = contract_tool_manager;
+      auto structured_engine = make_structured_contract_engine("desktop_full", fixture);
+      dependency_set->cognition_engine = structured_engine;
+
+      dasall::runtime::AgentFacade facade;
+      auto init_request = make_true_integration_init_request(
+        dependency_set,
+        "rt-027-structured-execute",
+        "desktop_full",
+        "cognition-runtime-contract-structured-execute");
+      init_request.policy_snapshot = make_true_integration_policy_snapshot("desktop_full");
+      const auto init_result = facade.init(init_request);
+      assert_true(init_result.accepted,
+            "structured execute action contract case should initialize AgentFacade");
+
+      const auto result = facade.handle(make_agent_request(
+        "req-027-structured-execute",
+        "session-027-structured-execute",
+        "trace-027-structured-execute",
+        "query structured interaction contract execute action"));
+
+      assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+            "projected execute action should let runtime complete through the tool round");
+      assert_true(result.task_completed.value_or(false),
+            "structured execute action should keep task_completed=true");
+      assert_true(structured_engine->decide_calls == 1,
+            "runtime should consume the projected ActionDecision through the real decide path");
+      assert_true(structured_engine->reflect_calls == 1,
+            "execute action path should re-enter reflection exactly once after the tool hop");
+      assert_true(contract_tool_manager->invoke_calls == 1,
+            "projected execute action should hand off exactly one ToolRequest to runtime tools");
+      assert_true(contract_tool_manager->last_request.has_value(),
+            "tool handoff probe should retain the last ToolRequest");
+      assert_equal(std::string{"agent.dataset"},
+             contract_tool_manager->last_request->tool_name.value_or(std::string{}),
+             "runtime should map projected tool_intent_hint.tool_name into ToolRequest.tool_name");
+      assert_equal(std::string{"{\"query\":\"query=current_state\"}"},
+             contract_tool_manager->last_request->arguments_payload.value_or(std::string{}),
+             "runtime should map projected tool_intent_hint.argument_hints into ToolRequest.arguments_payload");
+      assert_true(contract_response_builder->build_calls == 1,
+            "execute action path should materialize one response build after tool projection");
+      assert_true(contract_response_builder->last_request.has_value() &&
+              contract_response_builder->last_request->terminal_decision.has_value(),
+            "execute action path should reach response builder with the projected ActionDecision");
+      assert_true(contract_response_builder->last_request->terminal_decision->decision_kind ==
+              dasall::cognition::decision::ActionDecisionKind::ExecuteAction,
+            "runtime response build should keep the projected execute_action decision kind");
+      assert_equal(std::string{"structured-contract-node"},
+             contract_response_builder->last_request->terminal_decision->selected_node_id.value_or(
+               std::string{}),
+             "runtime response build should preserve the projected selected_node_id");
+      assert_true(contract_response_builder->last_request->latest_observation.has_value() &&
+              contract_response_builder->last_request->latest_observation->payload.has_value(),
+            "execute action path should pass the projected latest observation into response builder");
+      assert_true(contract_response_builder->last_request->latest_observation->payload->find(
+              "structured-contract-probe") != std::string::npos,
+            "response builder should observe the tool projection produced by the runtime first hop");
+
+      if (dependency_set->memory_manager != nullptr) {
+      dependency_set->memory_manager->shutdown();
+      }
+      cleanup_database_artifacts(database_path);
+    }
+
+    void test_structured_terminal_decisions_are_consumed_by_runtime_response_builder() {
+      const struct StructuredTerminalCase {
+      StructuredExecutionPayloadScenario scenario;
+      std::string case_id;
+      dasall::cognition::decision::ActionDecisionKind expected_kind;
+      std::string expected_summary;
+      } cases[] = {
+        {StructuredExecutionPayloadScenario::ValidDirectResponse,
+         "structured-direct-response",
+         dasall::cognition::decision::ActionDecisionKind::DirectResponse,
+         "structured direct response contract summary"},
+        {StructuredExecutionPayloadScenario::ValidConvergeSafe,
+         "structured-converge-safe",
+         dasall::cognition::decision::ActionDecisionKind::ConvergeSafe,
+         "structured converge safe contract summary"},
+      };
+
+      for (const auto& test_case : cases) {
+      const auto database_path = make_temp_database_path(
+        "dasall-cognition-runtime-contract-" + test_case.case_id);
+      cleanup_database_artifacts(database_path);
+
+      const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+      auto dependency_set = make_true_integration_dependency_set(
+        config,
+        "session-027-" + test_case.case_id,
+        "turn-027-" + test_case.case_id + "-001",
+        "query " + test_case.case_id);
+      auto contract_memory_manager = std::make_shared<ContractProbeMemoryManager>();
+      auto contract_response_builder = std::make_shared<ContractProbeResponseBuilder>();
+      auto contract_tool_manager = std::make_shared<ContractProbeToolManager>();
+      MockCognitionFixture fixture(MockCognitionFixtureOptions{
+        .selected_node_id = "structured-terminal-node",
+        .response_text = test_case.expected_summary,
+      });
+      fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+      fixture.stage_structured_execution_result(test_case.scenario);
+
+      dependency_set->memory_manager = contract_memory_manager;
+      dependency_set->llm_manager = fixture.llm_manager();
+      dependency_set->response_builder = contract_response_builder;
+      dependency_set->tool_manager = contract_tool_manager;
+      auto structured_engine = make_structured_contract_engine("desktop_full", fixture);
+      dependency_set->cognition_engine = structured_engine;
+
+      dasall::runtime::AgentFacade facade;
+      auto init_request = make_true_integration_init_request(
+        dependency_set,
+        "rt-027-" + test_case.case_id,
+        "desktop_full",
+        "cognition-runtime-contract-" + test_case.case_id);
+      init_request.policy_snapshot = make_true_integration_policy_snapshot("desktop_full");
+      const auto init_result = facade.init(init_request);
+      assert_true(init_result.accepted,
+            std::string{"structured terminal contract case should initialize AgentFacade: "} +
+              test_case.case_id);
+
+      const auto result = facade.handle(make_agent_request(
+        "req-027-" + test_case.case_id,
+        "session-027-" + test_case.case_id,
+        "trace-027-" + test_case.case_id,
+        "query " + test_case.case_id));
+
+      assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+            std::string{"structured terminal decision should complete runtime: "} +
+              test_case.case_id);
+      assert_true(result.task_completed.value_or(false),
+            std::string{"structured terminal decision should keep task_completed=true: "} +
+              test_case.case_id);
+      assert_true(structured_engine->decide_calls == 1,
+            std::string{"runtime should consume one projected terminal ActionDecision: "} +
+              test_case.case_id);
+      assert_true(structured_engine->reflect_calls == 0,
+            std::string{"terminal decisions should skip reflection re-entry: "} +
+              test_case.case_id);
+      assert_true(contract_tool_manager->invoke_calls == 0,
+            std::string{"terminal structured decisions must not dispatch tools: "} +
+              test_case.case_id);
+      assert_true(contract_response_builder->build_calls == 1,
+            std::string{"structured terminal decision should invoke response builder once: "} +
+              test_case.case_id);
+      assert_true(contract_response_builder->last_request.has_value() &&
+              contract_response_builder->last_request->terminal_decision.has_value(),
+            std::string{"structured terminal decision should reach response builder with a terminal_decision: "} +
+              test_case.case_id);
+      assert_true(!contract_response_builder->last_request->latest_observation.has_value(),
+            std::string{"structured terminal decision should build without a tool observation: "} +
+              test_case.case_id);
+      assert_true(contract_response_builder->last_request->terminal_decision->decision_kind ==
+              test_case.expected_kind,
+            std::string{"runtime should preserve projected terminal decision kind: "} +
+              test_case.case_id);
+      assert_true(contract_response_builder->last_request->terminal_decision->response_outline.has_value() &&
+              contract_response_builder->last_request->terminal_decision->response_outline->summary ==
+                test_case.expected_summary,
+            std::string{"runtime should forward the projected response outline summary: "} +
+              test_case.case_id);
+      assert_true(result.response_text.has_value() &&
+              result.response_text->find(test_case.expected_summary) != std::string::npos,
+            std::string{"response builder output should surface the projected terminal summary: "} +
+              test_case.case_id);
+
+      if (dependency_set->memory_manager != nullptr) {
+        dependency_set->memory_manager->shutdown();
+      }
+      cleanup_database_artifacts(database_path);
+      }
+    }
+
 }  // namespace
 
 int main() {
@@ -707,6 +1043,8 @@ int main() {
     test_belief_writeback_failure_does_not_override_completed_result();
     test_reflection_continue_retry_and_replan_reenter_runtime_paths();
     test_reflection_abort_safe_stops_mainline();
+    test_structured_execute_action_is_consumed_by_runtime_tool_handoff();
+    test_structured_terminal_decisions_are_consumed_by_runtime_response_builder();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

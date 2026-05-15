@@ -64,6 +64,7 @@ enum class StructuredPlanningPayloadScenario {
 enum class StructuredExecutionPayloadScenario {
     ValidDirectResponse,
     ValidExecuteAction,
+    ValidConvergeSafe,
     MalformedJson,
     SchemaInvalidDecisionKind,
     ProjectionInvalidToolIntentOnDirectResponse,
@@ -411,6 +412,27 @@ class MockCognitionFixture {
                         + "\"candidate_name\":\"execute_action\","
                         + "\"score\":0.82,"
                         + "\"rationale\":\"bridge payload selected execute action\"}]}"
+                        ;
+            case StructuredExecutionPayloadScenario::ValidConvergeSafe:
+                return std::string{"{"}
+                        + "\"schema_version\":\"cognition.reasoning.v1\","
+                        + "\"decision_kind\":\"ConvergeSafe\","
+                        + "\"confidence\":0.74,"
+                        + "\"rationale\":\"bridge execution payload requested a safe terminal convergence\","
+                        + "\"selected_node_id\":null,"
+                        + "\"tool_intent_hint\":null,"
+                        + "\"clarification_needed\":false,"
+                        + "\"clarification_question\":null,"
+                        + "\"response_outline\":{"
+                        + "\"summary\":\"" + options_.response_text + "\","
+                        + "\"key_points\":[\"safe terminal convergence selected\",\"skip further tool dispatch\"]},"
+                        + "\"candidate_scores\":[{"
+                        + "\"candidate_name\":\"converge_safe\","
+                        + "\"score\":0.74,"
+                        + "\"rationale\":\"bridge payload selected converge_safe\"},{"
+                        + "\"candidate_name\":\"direct_response\","
+                        + "\"score\":0.26,"
+                        + "\"rationale\":\"direct response lost to safe convergence\"}]}"
                         ;
             case StructuredExecutionPayloadScenario::MalformedJson:
                 return std::string{"{"}
