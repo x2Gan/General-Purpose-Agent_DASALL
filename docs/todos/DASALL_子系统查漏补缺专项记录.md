@@ -1,6 +1,6 @@
 # DASALL 子系统查漏补缺专项记录
 
-最近更新时间：2026-05-14  
+最近更新时间：2026-05-15  
 阶段：System Review -> Subsystem Gap Closure  
 适用范围：按子系统逐项检查详细设计、当前代码、测试证据、跨模块链路与 installed / production 证据边界  
 记录口径：本文件用于集中记录“设计已要求但实现、测试、证据或生产链路仍未完全闭合”的缺口；不替代各子系统专项 TODO、worklog 或 SSOT 矩阵。
@@ -115,7 +115,7 @@
 | COG-GAP-001 | 已闭合 | Runtime live cognition path 现已闭合 `DirectResponse` / `ConvergeSafe -> Responding + IResponseBuilder.build()` 第一跳 | 2026-05-14 已更新 `AgentOrchestrator` live path：`DirectResponse` / `ConvergeSafe` 进入 `Responding` 并调用 `IResponseBuilder.build()`，`NoDecision` 保持 fail-fast；`CognitionRuntimeInteractionContractTest` 已补齐三类 fixture | 详设 6.14.1 的 terminal ActionDecision→FSM 第一跳不再缺失 | 2026-05-14 由 `COG-FIX-001` 完成；后续只保留 installed cognition-positive 证据与其他非本缺口项 |
 | COG-GAP-002 | 已闭合 | app-binary cognition-positive evidence 已建立，installed 仍保持 direct path 分层 | 2026-05-14 已在 `RuntimeLiveDependencyComposition` 增加 `DASALL_RUNTIME_COGNITION_FIRST=1` gate；`DaemonRuntimeLiveDependencyCompositionTest` 断言 `cognition-first-forced` marker，`DaemonBinaryUnarySmokeTest` 断言无 `llm.origin=` 且返回 `runtime unary integration completed:` | app-binary 不再只能证明 direct LLM path；installed 与 cognition-first 证据口径可分层陈述 | 2026-05-14 由 `COG-FIX-002` 完成；installed L4 仍保持 direct-path 口径，后续仅在需要时追加 qemu/package 证据 |
 | COG-GAP-003 | 已闭合 | Facade stage timeout isolation 已落地 | 2026-05-14 已在 `CognitionFacade` 引入阶段 deadline runner：Perception / Planner / Reasoner / Reflection 与 bridge 均按 `StageExecutionPlan.deadline_ms` / `StageModelHint.deadline_ms` fail-fast；`CognitionFacadeStageTimeoutTest` 证明 planning/reflection 慢 bridge 返回 `cognition.stage_timeout` 且 late result 不污染下一次请求 | 单阶段卡死不再拖垮整条 cognition 链，详设 6.15.3 具备 focused unit evidence | 2026-05-14 由 `COG-FIX-003` 完成；后续只保留 structured output / telemetry 等非超时缺口 |
-| COG-GAP-004 | Medium | LLM structured output validator 未成为主链对象生成裁决入口 | `StageOutputValidator` 独立可用；Facade bridge result 成功后主要记录 diagnostics，本地 Planner / Reasoner 仍生成语义对象 | schema validation 能力存在，但不能证明 LLM JSON 输出真正驱动 PlanGraph / ActionDecision | 增加 structured output parse -> validate -> project pipeline，或明确 v1 只用 bridge as advisory |
+| COG-GAP-004 | Medium | LLM structured output validator 未成为主链对象生成裁决入口 | `StageOutputValidator` 独立可用；Facade bridge result 成功后主要记录 diagnostics，本地 Planner / Reasoner 仍生成语义对象 | schema validation 能力存在，但不能证明 LLM JSON 输出真正驱动 PlanGraph / ActionDecision | 选定方案 A：按附录 A 推进 bridge JSON payload -> `StageOutputValidator` -> typed projection -> PlanGraph / ActionDecision 主链闭环 |
 | COG-GAP-005 | Medium | CognitionTelemetry production sink 接入不足 | `CognitionRuntimeDependencies` 仅含 `llm_manager` 和 `policy_snapshot`；默认 no-op sink | 语义观测能力在模块内可测，但 production trace / metric / audit 链路未证明 | 扩展窄依赖面或在 runtime composition 注入 infra sink |
 | COG-GAP-006 | Medium | ResponseBuilder degraded telemetry 未与 production response path 明确打通 | Telemetry 有 `emit_response_degraded()`，但 ResponseBuilder 未明显持有 telemetry | response fallback / degraded path 生产观测可能缺字段 | 给 ResponseBuilder 注入 telemetry 或在 Runtime terminalize 层统一 emit |
 | COG-GAP-007 | Low | 详设 / TODO 历史状态容易与当前代码状态混淆 | cognition 专项 TODO 中有历史 Done 与后续 Todo 混合，详设仍有历史 baseline 段落 | 后续评审容易把历史 Gate 当当前可合并状态 | 用本文件和后续 Gate-COG-12 复验结果统一当前口径 |
@@ -127,7 +127,7 @@
 | COG-FIX-001 | Done | 补齐 terminal ActionDecision 到 Runtime Responding 映射 | 已更新 `runtime/src/AgentOrchestrator.cpp`，在 live cognition path 中处理 `DirectResponse` / `ConvergeSafe`，进入 `RuntimeState::Responding` 并调用 `IResponseBuilder.build()`；保留 `NoDecision` fail-fast | 已扩展 `tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp`，新增 DirectResponse、ConvergeSafe、NoDecision 三类 fixture 与 response builder probe | `cmake --build build-ci --target dasall_cognition_runtime_interaction_contract_integration_test && ctest --test-dir build-ci -R "CognitionRuntimeInteractionContractTest" --output-on-failure` | 2026-05-14 已验收通过：详设 6.14.1 五类 decision kind 第一跳均有自动化断言 |
 | COG-FIX-002 | Done | 建立 cognition-positive installed / app-binary 证据 | 已更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，增加 `DASALL_RUNTIME_COGNITION_FIRST=1` 受控 gate：证据模式下写入 `:cognition-first-forced` marker，而不再注入 `:required-live-baseline`；同时更新 `runtime/src/AgentOrchestrator.cpp`，让 live cognition path 复用 direct path 的 tolerated context warning 口径 | 已扩展 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`，断言 marker 分层、app-binary human/JSON run 无 `llm.origin=` 且返回 `runtime unary integration completed:`；`CognitionRuntimeIntegrationTest` 回归通过 | `Build_CMakeTools(buildTargets=["dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_access_daemon_binary_unary_smoke_integration_test","dasall_cognition_runtime_integration_test"])`；`RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","DaemonBinaryUnarySmokeTest","CognitionRuntimeIntegrationTest"])` | 2026-05-14 已验收通过：L3 app-binary cognition-positive evidence 已建立，direct path 与 cognition-first path 不再混写 |
 | COG-FIX-003 | Done | 实现 Facade 阶段超时隔离 | 已更新 `cognition/src/CognitionFacade.cpp`：新增阶段 deadline runner，对 Perception / Planner / Reasoner / Reflection 与 bridge 调用按 `StageExecutionPlan.deadline_ms` / `StageModelHint.deadline_ms` 做超时裁定；超时统一返回带 `cognition.stage_timeout` message 的 `ErrorInfo`，并包含 stage、request_id、trace_id | 已新增 `tests/unit/cognition/CognitionFacadeStageTimeoutTest.cpp` 并更新 `tests/unit/cognition/CMakeLists.txt`：模拟 planning/reflection 慢 bridge，断言 fail-fast、late result 不污染后续请求；`CognitionFacadeFlowTest` / `CognitionFacadeDegradedModeTest` 回归通过 | `cmake --build build-ci --target dasall_cognition_facade_stage_timeout_unit_test && ctest --test-dir build-ci -R "CognitionFacadeStageTimeoutTest" --output-on-failure` | 2026-05-14 已验收通过：超时阶段 fail-fast，错误包含 stage、request_id / trace_id，且不自建 retry |
-| COG-FIX-004 | Todo | 明确 LLM structured output 在主链中的角色 | 二选一：A. 实现 bridge JSON payload -> `StageOutputValidator` -> PlanGraph / ActionDecision projection；B. 在详设与代码 diagnostics 中明确 v1 bridge 只作为 advisory，不驱动主链对象 | 若选 A，新增 schema valid / invalid projection tests；若选 B，新增 regression test 证明 malformed bridge payload 不会被误当主链对象 | A: `ctest --test-dir build-ci -R "StageOutputValidatorSchemaTest|CognitionFacadeStructuredOutputTest" --output-on-failure`；B: `ctest --test-dir build-ci -R "CognitionFacadeFlowTest|CognitionLlmBridgeErrorMappingTest" --output-on-failure` | 文档、代码和 tests 对 bridge output 角色一致，不再半明半暗 |
+| COG-FIX-004 | Todo | 落地 LLM structured output 主链投影方案 A | 已选定方案 A；完整设计、风险控制、执行门禁与专项 TODO 见附录 A：bridge JSON payload 经 `StageOutputValidator` 校验后投影为 `PlanGraph` / `ActionDecision`，并由 Facade 主链消费 | 新增 schema valid / invalid、typed projection、facade structured-output、runtime interaction 与负例回归测试，证明 malformed / invalid / drifted payload fail-closed，valid payload 可驱动主链对象 | `ctest --test-dir build-ci --output-on-failure -R "CognitionStructured"`；详见附录 A.11 统一验收命令 | COG-FIX-004 完成后，文档、代码、tests 与 diagnostics 均能证明 bridge output 从 advisory 证据升级为受治理的主链对象来源 |
 | COG-FIX-005 | Todo | 接入 production CognitionTelemetry sink | 扩展 `CognitionRuntimeDependencies` 或 Runtime composition，使 cognition 能获得 infra telemetry sink；ResponseBuilder degraded path 也要有明确 emit 口径 | 新增 telemetry integration / mock sink test，断言 stage completed / failed / response degraded 被 emit 且 redaction 生效 | `cmake --build build-ci --target dasall_cognition_telemetry_fields_unit_test dasall_cognition_telemetry_redaction_unit_test && ctest --test-dir build-ci -R "CognitionTelemetry" --output-on-failure` | production composition 不再只能使用 no-op sink；degraded response 有可观测证据 |
 | COG-FIX-006 | Todo | 回写 Gate-COG-12 后的当前状态 | 更新 `docs/architecture/DASALL_cognition子系统详细设计.md`、`docs/todos/cognition/DASALL_cognition子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md` 和本文档 cognition 章节 | 文档检索能区分历史 baseline、当前 L2 完成、L4 未证明和后续 Todo | `rg -n "COG-GAP|COG-FIX|Gate-COG-12|cognition L4 未证明|DirectResponse|ConvergeSafe" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition docs/worklog/DASALL_开发执行记录.md docs/todos/DASALL_子系统查漏补缺专项记录.md` | cognition 当前状态跨文档一致，后续不再误读为 placeholder-only 或 production-ready |
 
@@ -1372,3 +1372,278 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 ### 16.3 总账冻结结论
 
 本文件当前总账口径为：DASALL 多数核心子系统已经脱离 placeholder，L1/L2 证据覆盖面较宽，且已有 installed local L4 主功能证据；但 runtime full path、Access installed positive ingress、multi_agent enabled package path、infra production sinks、profiles consumer consistency、platform qemu、contracts supporting object admission 与 packaging L5/L6 仍需按任务表逐项闭合。后续任何“production-ready / release-ready / package-ready”结论，都必须同时标明对应 L 层级、命令、worklog/SSOT 回写位置和不可外推范围。
+
+## 附录 A：COG-FIX-004 方案 A 完整设计与专项 TODO
+
+本附录用于承接 `COG-GAP-004` / `COG-FIX-004`：将 LLM structured output 从“bridge 成功后主要记录 diagnostics”的半明状态，推进为“bridge JSON payload 经 schema 校验、typed projection 和对象不变量校验后，成为 `PlanGraph` / `ActionDecision` 主链对象来源”的完整方案 A。
+
+本附录是 COG-FIX-004 的执行依据。后续若同步拆入 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`，应保持本附录中的边界、任务 ID、验收命令与完成判定一致。
+
+### A.1 决策结论
+
+结论：COG-FIX-004 选定方案 A，并按“schema-first、validator-owned、typed projection、Facade authoritative consumption、Runtime boundary preserved”的方式实施。
+
+目标状态：
+
+1. `planning` bridge 返回的 JSON payload 经 `StageOutputValidator::validate_stage_output()` 校验后，投影为 `plan::PlanGraph`。
+2. `execution` bridge 返回的 JSON payload 经 `StageOutputValidator::validate_stage_output()` 校验后，投影为 `decision::ActionDecision`。
+3. 投影后的对象必须继续通过 `validate_plan_graph_invariants()` / `validate_action_decision_invariants()`，才能进入后续主链。
+4. schema 违例、malformed JSON、字段类型漂移、非法 enum、非法边引用、非法 action decision 组合均 fail-closed，并在允许降级时走显式 fallback，而不是静默回退。
+5. Runtime 仍只消费 cognition 输出的 module-public `ActionDecision`，不直接消费 provider JSON；真实 `ToolRequest`、工具执行、Recovery 准入仍归 Runtime / ToolManager / RecoveryManager。
+
+非目标状态：
+
+1. 不把 `PlanGraph`、`ActionDecision`、projection draft 或 schema registry 推入 shared contracts。
+2. 不在 cognition 中实现 PromptComposer、PromptRegistry、provider adapter 或 retry manager。
+3. 不允许 LLM JSON 直接生成 `ToolRequest`、`RecoveryRequest`、checkpoint 或 Runtime FSM transition。
+4. 不以“JSON mode 能返回合法 JSON”替代应用侧 schema、typed projection 和对象不变量校验。
+5. 不把 provider-private fields、reasoning trace、raw prompt 或 raw provider payload 暴露给 cognition public result、Runtime diagnostics 或长期历史。
+
+### A.2 行业实践归纳
+
+| 行业实践 | 可采纳结论 | 在方案 A 中的落点 |
+|---|---|---|
+| OpenAI Structured Outputs / JSON Schema | Structured Outputs 比 JSON mode 更可靠；JSON mode 只保证合法 JSON，不保证 schema adherence；应用仍要处理 refusal、incomplete、schema drift 和不相关输入导致的幻觉填充 | `CognitionLlmBridge` 继续声明 `response_format=json_schema/json_object` 与 `output_schema_ref`；`StageOutputValidator` 做二次 schema 校验；投影失败不能进入主链 |
+| LangChain structured response | structured output 应作为 agent state 中的 typed / validated value 暴露，而不是让业务代码解析自然语言；validation error 可触发 retry 或上抛 | DASALL 不在 cognition 内自建 retry，但把 validation result 显式交给 Facade / Runtime policy；typed projection 只产 module-public object |
+| Tool use / function calling schema | 当输出要驱动系统能力、工具或数据访问时，必须通过受控函数参数 schema、工具权限和执行治理分层 | `ActionDecision` 只携带 `tool_intent_hint`；Runtime 后续仍经 ToolRoute / Validator / PolicyGate / Executor / Audit |
+| Schema evolution / OpenAPI / gRPC | 结构化输出 schema 需要版本、兼容策略和类型漂移检测；新增字段应兼容，删除字段要走 deprecation | 引入 `cognition.plan.v1`、`cognition.reasoning.v1` projection baseline；required / optional / unknown field 策略固定到 registry 和测试 |
+| Guardrails / constrained decoding | 模型输出可被约束，但不能省略 fail-closed、edge case handling、observability 和回退策略 | schema 校验、typed projection、不变量校验、diagnostics、telemetry 与 fallback policy 全链路闭环 |
+
+### A.3 设计原则
+
+1. 单一入口：所有 LLM structured payload 进入主链前必须先经过 `StageOutputValidator`，不能由 `Planner`、`Reasoner`、`CognitionFacade` 或测试 fixture 私自解析。
+2. 双层校验：先校验 raw JSON payload schema，再校验投影后的 module-public object invariant。
+3. Typed projection owner 独立：新增 projection 组件负责 `JSON token -> draft -> PlanGraph / ActionDecision`，避免把投影逻辑散落到 Facade 或 validator。
+4. 主链事实唯一：当 structured projection 模式启用且 bridge 返回 valid payload 时，`PlanGraph` / `ActionDecision` 的 source of truth 是投影对象；本地 `PlanGraphBuilder` / `Reasoner` 只能作为显式 fallback 或 comparison diagnostics。
+5. 降级显式：provider failure、schema violation、projection violation、invariant violation、timeout、empty payload 必须有不同 diagnostic 和 `ErrorInfo` stage，不得混成普通 `llm_bridge.failed`。
+6. Runtime 边界不变：Runtime 接收的是 cognition module-public result；Runtime 不感知 provider schema，也不绕过 cognition validator。
+7. Profile 可治理：是否要求 structured projection、是否允许 local fallback、fallback 后是否可继续执行，必须来自 `CognitionConfig` / `StageExecutionPlan`，不能靠测试私有开关。
+8. 证据分层：focused projection test 只证明投影；Facade structured-output test 证明 cognition 主链；Runtime interaction test 证明 Runtime 消费；installed / production 证据另行分层，不用 L1/L2 外推 L4。
+
+### A.4 目标架构
+
+目标数据流：
+
+```text
+CognitionFacade.decide()
+  -> PerceptionEngine.perceive()
+  -> CognitionLlmBridge.invoke_stage(planning/plan)
+  -> StageOutputValidator.validate_stage_output(raw planning payload, plan schema)
+  -> PlanGraphStructuredProjector.project(payload)
+  -> StageOutputValidator.validate_plan_graph_invariants(projected_plan)
+  -> CognitionLlmBridge.invoke_stage(execution/action_decision)
+  -> StageOutputValidator.validate_stage_output(raw execution payload, action schema)
+  -> ActionDecisionStructuredProjector.project(payload, projected_plan)
+  -> StageOutputValidator.validate_action_decision_invariants(projected_action)
+  -> BeliefUpdateSynthesizer.synthesize_from_decide()
+  -> CognitionDecisionResult(action_decision, belief_update_hint, diagnostics)
+```
+
+组件职责：
+
+| 组件 | 新职责 | 明确非职责 |
+|---|---|---|
+| `CognitionLlmBridge` | 继续投影 stage / task / schema / budget 到 LLM 公共接口；归一化 response / error；redact provider-private fields | 不解析 `PlanGraph` / `ActionDecision`；不做 retry；不做 prompt/provider 私有逻辑 |
+| `StageOutputValidator` | 校验 raw payload schema；校验投影后的 object invariants；生成 `ValidationResult` / `ErrorInfo` / diagnostics | 不做 typed object construction；不静默补默认值；不直接裁定 Runtime 恢复 |
+| `StageSchemaRegistry`（新增） | 维护 `planning/plan` 与 `execution/action_decision` 的 required fields、enum、numeric、list、unknown field 策略、schema version | 不持有 provider schema 私有格式；不替代 llm schema asset owner |
+| `PlanGraphStructuredProjector`（新增） | 将 schema-valid planning payload 投影为 `plan::PlanGraph`，并标记 source/version/diagnostics | 不调用 Planner；不修复图结构；不把 graph 写入 contracts |
+| `ActionDecisionStructuredProjector`（新增） | 将 schema-valid execution payload 投影为 `decision::ActionDecision`，并校验与 active plan 的引用关系 | 不生成 ToolRequest；不执行工具；不改变 Runtime FSM |
+| `CognitionFacade` | 编排 bridge -> validator -> projector -> invariant validator；处理 fallback policy；发射 diagnostics / telemetry | 不直接解析 JSON 字段；不自建 retry/circuit breaker |
+| `Planner` / `Reasoner` | 保留 deterministic fallback 和 comparison baseline | 不再在 structured projection success path 上覆盖投影对象 |
+
+### A.5 Schema baseline
+
+首版只覆盖 `planning/plan` 与 `execution/action_decision`，不把 `perception`、`reflection`、`response` 一次性纳入同一变更，降低主链 blast radius。
+
+#### A.5.1 `cognition.plan.v1`
+
+必填字段：
+
+| 字段 | 类型 | 约束 | 投影目标 |
+|---|---|---|---|
+| `schema_version` | string | 固定 `cognition.plan.v1` | projection version guard |
+| `plan_id` | string | 非空，建议以 request/goal 派生 | `PlanGraph.plan_id` |
+| `revision` | number/integer | `>= 0` | `PlanGraph.revision` |
+| `nodes` | array<object> | `1..max_plan_nodes` | `PlanGraph.nodes` |
+| `nodes[].node_id` | string | 非空，唯一 | `PlanNode.node_id` |
+| `nodes[].objective` | string | 非空 | `PlanNode.objective` |
+| `nodes[].success_signal` | string | 非空 | `PlanNode.success_signal` |
+| `nodes[].action_kind_hint` | string | enum: `tool_action` / `direct_response` / `validation` / `clarification` | `PlanNode.action_kind_hint` |
+| `nodes[].depends_on` | array<string> | 只能引用已知 node id | `PlanNode.depends_on` 与 edges cross-check |
+| `nodes[].evidence_refs` | array<string> | 可空；不得包含 raw provider payload | `PlanNode.evidence_refs` |
+| `edges` | array<object> | edge endpoints 必须引用 known nodes；不得成环 | `PlanGraph.edges` |
+| `open_questions` | array<object> | 可空；blocking 问题需携带 reason | `PlanGraph.open_questions` |
+| `plan_rationale` | string | 可空但字段必须存在 | `PlanGraph.plan_rationale` |
+| `estimated_complexity` | number/integer | `0..max_plan_nodes` 或 profile cap | `PlanGraph.estimated_complexity` |
+
+Unknown field 策略：首版 fail-closed，除非字段名以 `x_` 开头且 registry 明确允许。该规则避免模型幻觉字段被误认为系统语义。
+
+#### A.5.2 `cognition.reasoning.v1`
+
+必填字段：
+
+| 字段 | 类型 | 约束 | 投影目标 |
+|---|---|---|---|
+| `schema_version` | string | 固定 `cognition.reasoning.v1` | projection version guard |
+| `decision_kind` | string | enum: `ExecuteAction` / `DirectResponse` / `AskClarification` / `ConvergeSafe` / `NoDecision` | `ActionDecision.decision_kind` |
+| `confidence` | number | `0.0..1.0` | `ActionDecision.confidence` |
+| `rationale` | string | 可空但字段必须存在 | `ActionDecision.rationale` |
+| `selected_node_id` | string/null | `ExecuteAction` 时必须引用 active plan node；其他 kind 必须 null 或空 | `ActionDecision.selected_node_id` |
+| `tool_intent_hint` | object/null | `ExecuteAction` 时必须存在且 `tool_name` 非空 | `ActionDecision.tool_intent_hint` |
+| `clarification_needed` | boolean | `AskClarification` 时必须 true | `ActionDecision.clarification_needed` |
+| `clarification_question` | string/null | `AskClarification` 时非空 | `ActionDecision.clarification_question` |
+| `response_outline` | object/null | `DirectResponse` / `ConvergeSafe` 时 summary 非空 | `ActionDecision.response_outline` |
+| `candidate_scores` | array<object> | `1..4`；每项 score `0.0..1.0` | `ActionDecision.candidate_scores` |
+
+互斥规则：
+
+1. `ExecuteAction` 必须有 `selected_node_id` 与 `tool_intent_hint.tool_name`，不得同时要求 clarification。
+2. `AskClarification` 必须有 `clarification_question`，不得有 `tool_intent_hint`。
+3. `DirectResponse` / `ConvergeSafe` 必须有 `response_outline.summary`，不得有 executable tool intent。
+4. `NoDecision` 只能在 fail-fast / explicit uncertainty 场景出现；Facade 不得把 `NoDecision` 当 successful action。
+
+### A.6 Error model 与 fallback 语义
+
+| 失败点 | Result / diagnostic | 是否允许 fallback | 处理规则 |
+|---|---|---:|---|
+| bridge unavailable / provider failure | `decision_pipeline.llm_bridge_failed:<stage>` | 取决于 `rule_fallback_enabled` | 允许时走本地 Planner / Reasoner；不允许时 fail-fast |
+| timeout | `decision_pipeline.stage_timeout:<stage>` | 否，除非 StageExecutionPlan 明确允许 timeout fallback | 保持 COG-FIX-003 fail-fast 语义，避免 late result 污染 |
+| empty payload | `structured_output.empty_payload:<stage>` | 取决于 `structured_projection_required` | required 时 fail-fast；非 required 且 degraded allowed 时 fallback |
+| malformed JSON | `structured_output.malformed_json:<stage>` | 取决于 policy | 不能进入 projector；测试必须证明不被误当主链对象 |
+| schema violation | `structured_output.schema_violation:<stage>` | 取决于 policy | `StageOutputValidator` 返回 field path / issue code |
+| projection violation | `structured_output.projection_failed:<stage>` | 取决于 policy | typed projector 返回 detail，不静默补字段 |
+| object invariant violation | `structured_output.invariant_failed:<stage>` | 取决于 policy | 继续使用 existing object invariant validator |
+| projected action 与 Runtime policy 冲突 | Runtime existing policy diagnostic | 不由 cognition 裁定 | Runtime / ToolManager 后续 gate 保持 owner |
+
+Policy 默认建议：
+
+1. `desktop_full`、`cloud_full`：structured projection required；schema / projection / invariant failure fail-fast 或进入 Runtime recovery，不静默本地覆盖。
+2. `edge_balanced`：structured projection preferred；provider failure 可 local fallback；schema-valid projection 一旦成功即为 source of truth。
+3. `edge_minimal`、`factory_test`：可保留 local fallback / template preferred，但 tests 必须能显式开启 required mode 验证方案 A 主链。
+
+### A.7 Diagnostics 与 telemetry
+
+新增 diagnostics 建议：
+
+| Diagnostic | 触发条件 |
+|---|---|
+| `structured_projection.required:<stage>` | 当前 stage policy 要求 structured projection 成为主链来源 |
+| `structured_projection.bridge_payload_valid:<stage>` | raw payload 通过 `validate_stage_output()` |
+| `structured_projection.projected_plan_graph` | planning payload 成功投影为 `PlanGraph` |
+| `structured_projection.projected_action_decision` | execution payload 成功投影为 `ActionDecision` |
+| `structured_projection.local_fallback:<stage>` | policy 允许且已走本地 fallback |
+| `structured_projection.schema_violation:<stage>` | raw payload schema 校验失败 |
+| `structured_projection.projection_failed:<stage>` | typed projection 失败 |
+| `structured_projection.invariant_failed:<stage>` | typed object invariant 校验失败 |
+
+Telemetry 字段建议：
+
+1. `structured_projection_enabled`：当前 stage 是否启用 structured projection。
+2. `structured_projection_required`：失败是否允许 fallback。
+3. `structured_schema_version`：`cognition.plan.v1` / `cognition.reasoning.v1`。
+4. `structured_projection_source`：`llm_bridge` / `local_fallback`。
+5. `structured_projection_failure_code`：schema / projection / invariant / timeout / provider。
+6. `projected_node_count`、`projected_candidate_count`：只记录计数，不记录 raw payload。
+
+### A.8 安全与边界要求
+
+1. Redaction 在 bridge 层保留；projector 不能重新暴露 redacted 前 payload。
+2. `evidence_refs` 可携带引用 ID，但不得携带 raw prompt、provider payload、secret、authorization、reasoning trace。
+3. `tool_intent_hint.argument_hints` 只能是意图级 hint，不能成为工具参数 authority；Runtime 后续仍需 ToolRequest validator。
+4. `delegate_hint` 首版不作为 structured projection required 字段；后续启用 multi-agent 时单独走交互契约扩展。
+5. `ReflectionEngine` 不因方案 A 获得恢复执行权；structured `ActionDecision` 不改变 ADR-007。
+6. `CognitionFacade` 不得并行触发本地 Reasoner 与 LLM action projection 后择优；如需 comparison，只能记录 shadow diagnostics，不能绕过 source-of-truth policy。
+
+### A.9 设计阶段拆分
+
+| Design ID | 产物 | 内容 | 通过条件 |
+|---|---|---|---|
+| COG-FIX-004A-D01 | schema baseline | 冻结 `cognition.plan.v1`、`cognition.reasoning.v1` 字段表、unknown field 策略、version 策略 | 附录 A 与 cognition 详设 / cognition 专项 TODO 引用一致 |
+| COG-FIX-004A-D02 | projection contract | 冻结 projector 输入输出、error model、fallback policy、diagnostics | 所有 Build 任务可指向明确 owner / target / test |
+| COG-FIX-004A-D03 | runtime boundary review | 复核 Runtime / ToolManager / RecoveryManager 边界未被 structured output 越权 | ADR-006 / ADR-007 / ADR-008 guardrail 可检索且无新增 shared contracts admission |
+| COG-FIX-004A-D04 | gate plan | 冻结 Gate-COG-FIX004A-01 ~ 04 与统一验收命令 | 后续执行不再临时改成功判定 |
+
+### A.10 Build 阶段专项 TODO
+
+| Task ID | Status | 任务标题 | 设计依据 | 精确范围 | 粒度 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置任务 | 关联阻塞项 | 解阻条件 | 交付物 | 完成判定 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| COG-FIX-004A-DOC-001 | Todo | 回写方案 A 设计到 cognition 详设与专项 TODO | 附录 A；认知详设 6.13.4 / 13.2；COG-GAP-004 | 文档设计冻结 | L2 | `docs/architecture/DASALL_cognition子系统详细设计.md`、`docs/todos/cognition/DASALL_cognition子系统专项TODO.md`、本文档 | `COG-FIX-004`、`Gate-COG-FIX004A-*`、schema baseline | docs consistency | `rg -n "COG-FIX-004A" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/todos/DASALL_子系统查漏补缺专项记录.md && rg -n "cognition.plan.v1" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/todos/DASALL_子系统查漏补缺专项记录.md && rg -n "cognition.reasoning.v1" docs/architecture/DASALL_cognition子系统详细设计.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/todos/DASALL_子系统查漏补缺专项记录.md` | 本附录 | 无 | 无 | 更新后的详设 / TODO / 本文档 | 方案 A 不再只存在于总账附录；设计锚点、任务 ID、Gate 和命令跨文档一致 |
+| COG-FIX-004A-BLD-001 | Todo | 增加 StageSchemaRegistry 与 structured schema specs | 附录 A.5；COG-TODO-021 / 035 | `planning/plan`、`execution/action_decision` schema owner | L2 | 新增 `cognition/src/validation/StageSchemaRegistry.h`、`cognition/src/validation/StageSchemaRegistry.cpp`，更新 `cognition/CMakeLists.txt` | `schema_for_planning_plan()`、`schema_for_execution_action_decision()`、`StageSchemaSpec` | `StageOutputValidatorSchemaTest`、新增 `StageSchemaRegistryTest` | `cmake --build build-ci --target dasall_stage_schema_registry_unit_test dasall_stage_output_validator_schema_unit_test && ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest" && ctest --test-dir build-ci --output-on-failure -R "StageOutputValidatorSchemaTest"` | COG-FIX-004A-DOC-001 | 无 | 无 | schema registry 源码、unit tests、CMake 接线 | planning / execution schema 不再散落在 Facade 或 tests；schema version、required fields、enum、numeric、list、unknown field 策略可二值断言 |
+| COG-FIX-004A-BLD-002 | Todo | 提取可复用 structured payload token view | 附录 A.3；COG-TODO-035 | validator private parser -> projector 可消费 token view | L2 | 更新 `cognition/src/validation/StageOutputValidator.cpp` / `.h`，必要时新增 `cognition/src/validation/StructuredPayloadView.h` | `parse_structured_payload()`、field token accessor、type-safe string/number/bool/list/object readers | `StageOutputValidatorSchemaTest`、新增 malformed / unknown field cases | `cmake --build build-ci --target dasall_stage_output_validator_schema_unit_test && ctest --test-dir build-ci --output-on-failure -R "StageOutputValidatorSchemaTest"` | COG-FIX-004A-BLD-001 | 无 | parser 不扩成 shared utility；只对 cognition private projection 暴露 | validator parser / token view 更新 | projector 不再二次手写字符串扫描；malformed、escaped pseudo-field、nested array、type mismatch 均 fail-closed |
+| COG-FIX-004A-BLD-003 | Todo | 实现 PlanGraphStructuredProjector | 附录 A.4 / A.5.1；COG-TODO-008 / 015 / 021 | planning payload -> `PlanGraph` | L2 | 新增 `cognition/src/projection/PlanGraphStructuredProjector.h`、`cognition/src/projection/PlanGraphStructuredProjector.cpp`，更新 CMake | `project_plan_graph()`、`PlanGraphProjectionResult` | 新增 `PlanGraphStructuredProjectionTest` | `cmake --build build-ci --target dasall_plan_graph_structured_projection_unit_test && ctest --test-dir build-ci --output-on-failure -R "PlanGraphStructuredProjectionTest"` | COG-FIX-004A-BLD-002 | 无 | 无 | projector 源码、unit tests、deliverable | valid `cognition.plan.v1` payload 可投影为合法 `PlanGraph`；duplicate node、unknown edge、cycle、over cap、missing success signal 均失败且不静默修复 |
+| COG-FIX-004A-BLD-004 | Todo | 实现 ActionDecisionStructuredProjector | 附录 A.4 / A.5.2；COG-TODO-009 / 016 / 021 | execution payload -> `ActionDecision` | L2 | 新增 `cognition/src/projection/ActionDecisionStructuredProjector.h`、`cognition/src/projection/ActionDecisionStructuredProjector.cpp`，更新 CMake | `project_action_decision()`、`ActionDecisionProjectionResult` | 新增 `ActionDecisionStructuredProjectionTest` | `cmake --build build-ci --target dasall_action_decision_structured_projection_unit_test && ctest --test-dir build-ci --output-on-failure -R "ActionDecisionStructuredProjectionTest"` | COG-FIX-004A-BLD-003 | 无 | 无 | projector 源码、unit tests、deliverable | valid `cognition.reasoning.v1` payload 可投影为合法 `ActionDecision`；invalid enum、missing selected node、tool intent on response、clarification conflict 均 fail-closed |
+| COG-FIX-004A-BLD-005 | Todo | 将 Facade planning path 切到 structured projection authoritative consumption | 附录 A.4 / A.6；COG-TODO-023 / 031 / 032 / COG-FIX-003 | `CognitionFacade::run_decision_pipeline()` planning segment | L2 | 更新 `cognition/src/CognitionFacade.cpp`、必要时更新 `CognitionConfig.h` / `StagePolicyResolver.h` | `consume_decision_bridge_stage()`、planning projection flow、fallback policy | 新增 `CognitionFacadeStructuredPlanOutputTest` | `cmake --build build-ci --target dasall_cognition_facade_structured_plan_output_unit_test && ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeStructuredPlanOutputTest"` | COG-FIX-004A-BLD-003 | 无 | stage policy 未冻结则回到 DOC-001 | Facade 变更、unit tests | schema-valid planning bridge payload 成为 active `PlanGraph`；本地 Planner 只在显式 fallback 条件下使用；invalid payload 不会悄悄进入 plan graph |
+| COG-FIX-004A-BLD-006 | Todo | 将 Facade execution path 切到 structured projection authoritative consumption | 附录 A.4 / A.6；COG-TODO-023 / 031 / 033 / 034 | `CognitionFacade::run_decision_pipeline()` execution segment | L2 | 更新 `cognition/src/CognitionFacade.cpp`、`cognition/src/observability/CognitionTelemetry.*` 如需新增字段 | execution projection flow、action invariant validation、belief synthesis handoff | 新增 `CognitionFacadeStructuredActionOutputTest` | `cmake --build build-ci --target dasall_cognition_facade_structured_action_output_unit_test && ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeStructuredActionOutputTest"` | COG-FIX-004A-BLD-004、COG-FIX-004A-BLD-005 | 无 | 无 | Facade 变更、unit tests | schema-valid execution bridge payload 成为 `ActionDecision`；Runtime-facing result 保持 existing shape；invalid action payload fail-closed 或显式 fallback |
+| COG-FIX-004A-BLD-007 | Todo | 扩展 MockLLMManager / MockCognitionFixture 支持 structured payload scenarios | 附录 A.9；COG-TODO-004 / 024 / 037 | tests support | L3 | 更新 `tests/mocks/include/MockLLMManager.h`、`tests/mocks/include/MockCognitionFixture.h` | planning/action JSON fixture builders、malformed / schema-invalid / projection-invalid staged results | `MockCognitionFixtureSurfaceTest`、projection/facade tests | `cmake --build build-ci --target dasall_mock_cognition_fixture_surface_unit_test && ctest --test-dir build-ci --output-on-failure -R "MockCognitionFixtureSurfaceTest"` | COG-FIX-004A-BLD-001 | 无 | 无 | mock fixture 更新 | tests 可稳定注入 valid / invalid structured payload，不维护第二套 stage mapping 或 provider-private payload |
+| COG-FIX-004A-BLD-008 | Todo | 增加 cognition structured-output integration regression | 附录 A.3 / A.6 / A.8；COG-TODO-027 / 037 | cognition integration | L2 | 新增 `tests/integration/cognition/CognitionStructuredOutputIntegrationTest.cpp`，更新 `tests/integration/cognition/CMakeLists.txt` | end-to-end `decide()` through bridge projection | `CognitionStructuredOutputIntegrationTest` | `cmake --build build-ci --target dasall_cognition_structured_output_integration_test && ctest --test-dir build-ci --output-on-failure -R "CognitionStructuredOutputIntegrationTest"` | COG-FIX-004A-BLD-006、COG-FIX-004A-BLD-007 | 无 | 无 | integration test、CMake 接线 | bridge valid JSON 驱动 `PlanGraph` 与 `ActionDecision` 的主链路径可复验；malformed / invalid payload regression 明确失败或 fallback |
+| COG-FIX-004A-BLD-009 | Todo | 补齐 Runtime interaction contract 证明 projected ActionDecision 被消费 | 附录 A.4 / A.8；COG-TODO-027 / COG-FIX-001 | Runtime -> Cognition -> Runtime interaction | L2 | 扩展 `tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp` 或新增 structured fixture | projected `ActionDecision` -> Runtime first hop / response builder / tool intent handoff | `CognitionRuntimeInteractionContractTest` structured cases | `cmake --build build-ci --target dasall_cognition_runtime_interaction_contract_integration_test && ctest --test-dir build-ci --output-on-failure -R "CognitionRuntimeInteractionContractTest"` | COG-FIX-004A-BLD-008 | 无 | Runtime 不得消费 provider JSON；只消费 projected `ActionDecision` | runtime interaction tests | Runtime 证明消费的是 projection 后的 module-public `ActionDecision`，不是 raw bridge payload；`ExecuteAction` / `DirectResponse` / `ConvergeSafe` 至少各有一条 structured case |
+| COG-FIX-004A-BLD-010 | Todo | 接入 diagnostics / telemetry structured projection fields | 附录 A.7；COG-TODO-022 / COG-FIX-005 | telemetry / diagnostics | L2 | 更新 `cognition/src/observability/CognitionTelemetry.*`、`cognition/src/CognitionFacade.cpp`、相关 tests | projection source、schema version、failure code、projected counts | `CognitionTelemetryFieldsTest`、Facade structured tests | `cmake --build build-ci --target dasall_cognition_telemetry_fields_unit_test && ctest --test-dir build-ci --output-on-failure -R "CognitionTelemetryFieldsTest"` | COG-FIX-004A-BLD-006 | COG-FIX-005 production sink 未完成不阻断 focused fields | production sink 另由 COG-FIX-005 收口；本任务只冻结字段与 redaction | telemetry code/tests | structured projection success/failure 均有可观测字段；不记录 raw payload 或 provider-private fields |
+| COG-FIX-004A-BLD-011 | Todo | 建立 schema drift / safety negative matrix | 附录 A.5 / A.8；COG-TODO-035 / 037 | negative regression | L2 | 扩展 `tests/unit/cognition/StageOutputValidatorSchemaTest.cpp`、projection tests、integration regression | schema version mismatch、unknown field、raw provider payload leakage、tool arg overreach、delegate_hint disabled | `StageOutputValidatorSchemaTest`、`PlanGraphStructuredProjectionTest`、`ActionDecisionStructuredProjectionTest`、`CognitionStructuredOutputIntegrationTest` | `ctest --test-dir build-ci --output-on-failure -R "StageOutputValidatorSchemaTest" && ctest --test-dir build-ci --output-on-failure -R "StructuredProjectionTest" && ctest --test-dir build-ci --output-on-failure -R "CognitionStructuredOutputIntegrationTest"` | COG-FIX-004A-BLD-008 | 无 | 无 | negative tests | schema drift、unknown fields、redaction bypass、tool execution overreach 均可被自动化拦截 |
+| COG-FIX-004A-BLD-012 | Todo | 回写 COG-FIX-004 完成证据与 Gate 结果 | 附录 A.11 / A.12；DASALL 开发执行规范 | docs / worklog / SSOT evidence | L2 | 更新本文档、`docs/todos/cognition/DASALL_cognition子系统专项TODO.md`、`docs/worklog/DASALL_开发执行记录.md`、必要时更新 cognition deliverable | COG-FIX-004 status、Gate-COG-FIX004A-*、validation commands | docs consistency + final focused ctest | `rg -n "COG-FIX-004" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md && rg -n "Gate-COG-FIX004A" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md` | COG-FIX-004A-BLD-001 ~ 011 | 任一 Build task 未通过不得 Done | 全部 Build tasks 通过后回写 | docs/worklog/deliverable | COG-FIX-004 可从 Todo 改为 Done；证据包含命令、结果、风险和不可外推范围 |
+
+### A.11 Gate 与统一验收命令
+
+| Gate ID | 名称 | 触发时机 | 通过条件 | 回退动作 |
+|---|---|---|---|---|
+| Gate-COG-FIX004A-01 | Schema / projection design gate | BLD-001 前 | schema baseline、projection contract、fallback policy、diagnostics 均冻结并跨文档一致 | 回到 DOC-001，不进入 Build |
+| Gate-COG-FIX004A-02 | Projector unit gate | BLD-003 / BLD-004 后 | PlanGraph / ActionDecision projector 正负例全绿；不变量 validator 继续通过 | 回退 projector，不改 Facade |
+| Gate-COG-FIX004A-03 | Facade authoritative consumption gate | BLD-005 / BLD-006 后 | structured payload 成为 Facade 主链对象来源；invalid payload fail-closed 或显式 fallback | 回退 Facade 接线，保留 projector focused tests |
+| Gate-COG-FIX004A-04 | Runtime interaction and negative matrix gate | BLD-008 ~ BLD-011 后 | runtime interaction、structured integration、schema drift、安全负例、telemetry fields 全绿 | 回退对应 owner，不回写 Done |
+| Gate-COG-FIX004A-05 | Evidence writeback gate | BLD-012 后 | TODO、worklog、deliverable 与命令结果一致；不可外推范围明确 | COG-FIX-004 保持 Todo / Blocked |
+
+阶段性聚焦命令：
+
+```bash
+ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest|StageOutputValidatorSchemaTest"
+```
+
+```bash
+ctest --test-dir build-ci --output-on-failure -R "PlanGraphStructuredProjectionTest|ActionDecisionStructuredProjectionTest"
+```
+
+```bash
+ctest --test-dir build-ci --output-on-failure -R "CognitionFacadeStructuredPlanOutputTest|CognitionFacadeStructuredActionOutputTest"
+```
+
+```bash
+ctest --test-dir build-ci --output-on-failure -R "CognitionStructuredOutputIntegrationTest|CognitionRuntimeInteractionContractTest|CognitionTelemetryFieldsTest"
+```
+
+统一验收命令：
+
+```bash
+cmake --build build-ci --target dasall_cognition dasall_unit_tests dasall_integration_tests && \
+ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest|StageOutputValidatorSchemaTest|PlanGraphStructuredProjectionTest|ActionDecisionStructuredProjectionTest|CognitionFacadeStructuredPlanOutputTest|CognitionFacadeStructuredActionOutputTest|CognitionStructuredOutputIntegrationTest|CognitionRuntimeInteractionContractTest|CognitionTelemetryFieldsTest"
+```
+
+### A.12 风险与回退策略
+
+| Risk ID | 风险 | 影响 | 缓解 / 回退 |
+|---|---|---|---|
+| COG-FIX004A-R01 | schema 与 C++ 类型漂移 | 投影成功但对象语义错位 | registry + projector unit + invariant validator 三层 gate；字段改动必须同步测试 |
+| COG-FIX004A-R02 | LLM payload 幻觉出可执行工具意图 | 可能推动错误 Tool route | `ActionDecision` 仍只给 `tool_intent_hint`；Runtime ToolManager / policy gate 继续裁定 |
+| COG-FIX004A-R03 | invalid payload 被 local fallback 掩盖 | 测试误以为 structured 主链成立 | diagnostics 必须标记 `local_fallback`；required mode tests 禁止 fallback |
+| COG-FIX004A-R04 | Facade 复杂度膨胀 | cognition 主链难以维护 | projection owner 独立；Facade 只编排结果，不直接解析字段 |
+| COG-FIX004A-R05 | profile 策略不一致 | edge / factory tests 与 production path 语义冲突 | structured projection policy 必须来自 `StageExecutionPlan`，并在 profile compatibility 中断言 |
+| COG-FIX004A-R06 | provider-private 字段泄漏 | 安全与合规风险 | bridge redaction + projector denylist + negative tests；telemetry 只记 schema version/count/source |
+
+回退原则：
+
+1. BLD-001 / BLD-002 失败：只回退 schema registry / parser，不影响现有 Facade 主链。
+2. BLD-003 / BLD-004 失败：保留 raw schema validator，projector 不接入 Facade。
+3. BLD-005 / BLD-006 失败：Facade 回退到当前 local Planner / Reasoner 主链，structured projection 保持 focused-only，不宣称 COG-FIX-004 完成。
+4. BLD-008 / BLD-009 失败：不升级证据层级，不把 unit projector 通过外推为 Runtime interaction 成立。
+5. 任何安全负例失败：停止回写 Done，优先修 negative matrix。
+
+### A.13 完成判定
+
+COG-FIX-004 仅当以下条件全部满足时可标记 Done：
+
+1. `planning/plan` 与 `execution/action_decision` 的 schema baseline 已冻结并跨文档一致。
+2. `PlanGraphStructuredProjector` 与 `ActionDecisionStructuredProjector` 有独立正负例单测。
+3. `CognitionFacade` 在 structured projection required mode 下，使用 bridge valid payload 生成主链 `PlanGraph` / `ActionDecision`。
+4. malformed JSON、schema violation、projection violation、object invariant violation 均 fail-closed 或按 policy 显式 fallback，且 diagnostics 可区分。
+5. Runtime interaction contract 证明 projected `ActionDecision` 被 Runtime 作为 module-public cognition result 消费，而不是消费 raw JSON。
+6. Telemetry / diagnostics 记录 projection source、schema version、failure code，且不泄漏 raw provider payload。
+7. 统一验收命令通过，worklog / TODO / deliverable 完成证据回写。
+8. COG-FIX-004 的完成结论只提升 cognition L1/L2 主链证据；installed / qemu / soak 证据仍按总账 L 层级另行声明，不外推。
