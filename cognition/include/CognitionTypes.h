@@ -15,6 +15,7 @@
 
 #include "belief/BeliefUpdateHint.h"
 #include "decision/ActionDecision.h"
+#include "plan/PlanGraph.h"
 #include "response/ResponseBuildRequest.h"
 #include "response/ResponseBuildResult.h"
 
@@ -93,6 +94,7 @@ struct ReflectionRequest {
   contracts::ContextPacket context_packet;
   contracts::BeliefState belief_state;
   contracts::Observation latest_observation;
+  std::optional<plan::PlanGraph> active_plan;
   std::optional<std::string> active_plan_ref;
   StageExecutionHints execution_hints;
 };

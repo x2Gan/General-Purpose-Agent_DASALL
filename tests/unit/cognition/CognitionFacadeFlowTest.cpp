@@ -44,6 +44,25 @@ using dasall::tests::support::assert_true;
   return false;
 }
 
+[[nodiscard]] dasall::cognition::plan::PlanGraph make_reflection_active_plan() {
+  dasall::cognition::plan::PlanGraph active_plan;
+  active_plan.plan_id = "plan-cognition-fixture";
+  active_plan.revision = 1U;
+  active_plan.nodes = {
+      dasall::cognition::plan::PlanNode{
+          .node_id = "plan-node:fixture",
+          .objective = "query runtime-visible data through tool governance",
+          .success_signal = "tool projection should satisfy the current step",
+          .action_kind_hint = "tool_execution",
+          .depends_on = {},
+          .evidence_refs = {"tests:mock-cognition-fixture"},
+      },
+  };
+  active_plan.plan_rationale = "fixture reflection path should preserve active plan";
+  active_plan.estimated_complexity = 1U;
+  return active_plan;
+}
+
 void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
   MockCognitionFixture fixture;
   fixture.llm_manager()->set_stage_result(
@@ -120,11 +139,47 @@ void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
               "response builder should consume the bridge content instead of observation projection");
 }
 
+void test_cognition_facade_reflection_consumes_active_plan() {
+  MockCognitionFixture fixture;
+  auto engine = fixture.make_engine();
+
+  auto failed_observation = fixture.make_observation(
+      false, "dataset request timed out while collecting the governed evidence");
+  failed_observation.error = dasall::contracts::ErrorInfo{
+      .failure_type = dasall::contracts::ResultCodeCategory::Tool,
+      .retryable = true,
+      .safe_to_replan = true,
+      .details = {.code = 408,
+                  .message = "dataset request timed out while collecting the governed evidence",
+                  .stage = "tool_execution"},
+      .source_ref = {.ref_type = "observation", .ref_id = "obs-cognition-fixture"},
+  };
+
+  auto request = fixture.make_reflection_request(failed_observation);
+  request.active_plan = make_reflection_active_plan();
+
+  const auto reflection_result = engine->reflect(request);
+
+  assert_true(!reflection_result.result_code.has_value(),
+              "reflection with an active plan should stay on the happy owner path");
+  assert_true(reflection_result.reflection_decision.has_value(),
+              "reflection with an active plan should still produce a reflection decision");
+  assert_true(reflection_result.reflection_decision->decision_kind.has_value() &&
+                  *reflection_result.reflection_decision->decision_kind ==
+                      ReflectionDecisionKind::RetryStep,
+              "retryable local failures with an active plan should keep the retry_step decision");
+  assert_true(reflection_result.reflection_decision->rationale.has_value() &&
+                  reflection_result.reflection_decision->rationale->find(
+                      "active_node=plan-node:fixture") != std::string::npos,
+              "reflection rationale should retain the active plan node id once the public request carries the active plan");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_cognition_facade_orchestrates_decide_reflect_and_response_flow();
+    test_cognition_facade_reflection_consumes_active_plan();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

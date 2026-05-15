@@ -391,6 +391,8 @@ void test_decide_and_reflect_request_result_family_freezes_fields() {
   static_assert(std::is_same_v<decltype(ReflectionRequest{}.context_packet), ContextPacket>);
   static_assert(std::is_same_v<decltype(ReflectionRequest{}.belief_state), BeliefState>);
   static_assert(std::is_same_v<decltype(ReflectionRequest{}.latest_observation), Observation>);
+  static_assert(std::is_same_v<decltype(ReflectionRequest{}.active_plan),
+                               std::optional<dasall::cognition::plan::PlanGraph>>);
   static_assert(std::is_same_v<decltype(ReflectionRequest{}.active_plan_ref),
                                std::optional<std::string>>);
   static_assert(!has_recovery_request_member<ReflectionRequest>::value);

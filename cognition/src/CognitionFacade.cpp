@@ -1162,7 +1162,7 @@ class CognitionFacade final : public ICognitionEngine {
     analysis_request.goal_contract = request.goal_contract;
     analysis_request.belief_state = request.belief_state;
     analysis_request.error_info = request.latest_observation.error;
-    analysis_request.active_plan = std::nullopt;
+    analysis_request.active_plan = request.active_plan;
     analysis_request.execution_hints = request.execution_hints;
 
     const auto reflection_decision = run_stage_with_deadline(
