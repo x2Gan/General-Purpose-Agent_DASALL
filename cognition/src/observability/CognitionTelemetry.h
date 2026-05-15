@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,6 +17,16 @@ struct TelemetryField {
   std::string value;
 };
 
+struct StructuredProjectionTelemetry {
+  bool enabled = false;
+  bool required = false;
+  std::optional<std::string> schema_version;
+  std::optional<std::string> source;
+  std::optional<std::string> failure_code;
+  std::optional<std::uint32_t> projected_node_count;
+  std::optional<std::uint32_t> projected_candidate_count;
+};
+
 struct StageTelemetryContext {
   std::string request_id;
   std::string goal_id;
@@ -25,6 +36,7 @@ struct StageTelemetryContext {
   std::string model_hint_tier;
   bool fallback_used = false;
   std::optional<int> result_code;
+  StructuredProjectionTelemetry structured_projection;
 };
 
 struct AuditReferenceSet {

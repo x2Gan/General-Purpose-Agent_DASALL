@@ -17,7 +17,12 @@ using dasall::cognition::decision::ActionDecisionKind;
 using dasall::cognition::decision::CandidateDecisionScore;
 using dasall::cognition::observability::CognitionTelemetry;
 using dasall::cognition::observability::StageTelemetryContext;
+using dasall::cognition::observability::StructuredProjectionTelemetry;
 using dasall::cognition::observability::TelemetryField;
+using dasall::contracts::ErrorDetails;
+using dasall::contracts::ErrorInfo;
+using dasall::contracts::ErrorSourceRefMinimal;
+using dasall::contracts::ResultCode;
 using dasall::tests::mocks::MockCognitionTelemetrySink;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -43,8 +48,34 @@ using dasall::tests::support::assert_true;
       .model_hint_tier = "standard",
       .fallback_used = false,
       .result_code = 0,
+        .structured_projection = StructuredProjectionTelemetry{
+          .enabled = true,
+          .required = true,
+          .schema_version = std::string{"cognition.reasoning.v1"},
+          .source = std::string{"llm_bridge"},
+          .failure_code = std::string{"projection"},
+          .projected_node_count = 3U,
+          .projected_candidate_count = 2U,
+        },
   };
 }
+
+    [[nodiscard]] ErrorInfo make_error_info() {
+      return ErrorInfo{
+        .failure_type = dasall::contracts::classify_result_code(ResultCode::ValidationFieldMissing),
+        .retryable = false,
+        .safe_to_replan = false,
+        .details = ErrorDetails{
+          .code = static_cast<int>(ResultCode::ValidationFieldMissing),
+          .message = "projection failed",
+          .stage = "execution",
+        },
+        .source_ref = ErrorSourceRefMinimal{
+          .ref_type = "cognition.projector",
+          .ref_id = "action_decision",
+        },
+      };
+    }
 
 [[nodiscard]] ActionDecision make_action_decision() {
   ActionDecision action_decision;
@@ -102,6 +133,51 @@ void test_emit_stage_started_and_completed_propagates_required_fields() {
               "completed event should carry decision kind");
   assert_true(has_field(completed_event.fields, "selected_node_id", "plan-node-022"),
               "completed event should carry selected node id");
+  assert_true(has_field(completed_event.fields, "structured_projection_enabled", "true"),
+              "completed event should carry structured projection enabled flag");
+  assert_true(has_field(completed_event.fields, "structured_projection_required", "true"),
+              "completed event should carry structured projection required flag");
+  assert_true(has_field(completed_event.fields,
+                        "structured_schema_version",
+                        "cognition.reasoning.v1"),
+              "completed event should carry the structured schema version");
+  assert_true(has_field(completed_event.fields,
+                        "structured_projection_source",
+                        "llm_bridge"),
+              "completed event should carry the structured projection source");
+  assert_true(has_field(completed_event.fields,
+                        "projected_node_count",
+                        "3"),
+              "completed event should carry the projected node count");
+  assert_true(has_field(completed_event.fields,
+                        "projected_candidate_count",
+                        "2"),
+              "completed event should carry the projected candidate count");
+}
+
+void test_emit_stage_failed_propagates_structured_projection_failure_fields() {
+  auto sink = std::make_shared<MockCognitionTelemetrySink>();
+  CognitionTelemetry telemetry(dasall::cognition::CognitionConfig{}, sink);
+
+  auto context = make_context();
+  context.structured_projection.failure_code = std::string{"invariant"};
+  context.structured_projection.source = std::string{"local_fallback"};
+
+  const auto failed = telemetry.emit_stage_failed(context, make_error_info());
+
+  assert_true(failed.emitted,
+              "stage failed should emit telemetry across available sinks");
+  assert_equal(1, static_cast<int>(sink->log_events.size()),
+               "one failed log event should be recorded");
+  const auto& failed_event = sink->log_events.back();
+  assert_true(has_field(failed_event.fields,
+                        "structured_projection_failure_code",
+                        "invariant"),
+              "failed event should carry the structured projection failure code");
+  assert_true(has_field(failed_event.fields,
+                        "structured_projection_source",
+                        "local_fallback"),
+              "failed event should carry the fallback projection source");
 }
 
 }  // namespace
@@ -109,6 +185,7 @@ void test_emit_stage_started_and_completed_propagates_required_fields() {
 int main() {
   try {
     test_emit_stage_started_and_completed_propagates_required_fields();
+    test_emit_stage_failed_propagates_structured_projection_failure_fields();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

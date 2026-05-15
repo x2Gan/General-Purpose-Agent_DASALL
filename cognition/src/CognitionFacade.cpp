@@ -40,6 +40,7 @@ using llm_bridge::CognitionLlmBridge;
 using llm_bridge::StageLlmCallResult;
 using observability::DecisionTelemetryRecord;
 using observability::StageTelemetryContext;
+using observability::StructuredProjectionTelemetry;
 using observability::TelemetryEmitResult;
 using policy::StageExecutionPlan;
 using validation::InputBoundaryValidationResult;
@@ -155,7 +156,8 @@ template <typename Fn>
     const CognitionStepRequest& request,
     std::string stage,
     bool fallback_used,
-    std::optional<contracts::ResultCode> result_code = std::nullopt) {
+  std::optional<contracts::ResultCode> result_code = std::nullopt,
+  StructuredProjectionTelemetry structured_projection = {}) {
   return StageTelemetryContext{
       .request_id = request.request_id,
       .goal_id = require_goal_id(request.goal_contract),
@@ -167,6 +169,7 @@ template <typename Fn>
       .result_code = result_code.has_value()
                          ? std::optional<int>(static_cast<int>(*result_code))
                          : std::nullopt,
+      .structured_projection = std::move(structured_projection),
   };
 }
 
@@ -174,7 +177,8 @@ template <typename Fn>
     const ReflectionRequest& request,
     std::string stage,
     bool fallback_used,
-    std::optional<contracts::ResultCode> result_code = std::nullopt) {
+    std::optional<contracts::ResultCode> result_code = std::nullopt,
+    StructuredProjectionTelemetry structured_projection = {}) {
   return StageTelemetryContext{
       .request_id = request.request_id,
       .goal_id = require_goal_id(request.goal_contract),
@@ -186,6 +190,7 @@ template <typename Fn>
       .result_code = result_code.has_value()
                          ? std::optional<int>(static_cast<int>(*result_code))
                          : std::nullopt,
+      .structured_projection = std::move(structured_projection),
   };
 }
 
@@ -203,6 +208,112 @@ void append_unique(std::vector<std::string>& target, const std::vector<std::stri
   for (const auto& value : values) {
     append_unique(target, value);
   }
+}
+
+[[nodiscard]] std::string structured_projection_flag_diagnostic(
+    const std::string_view field,
+    const std::string_view stage) {
+  return std::string{"structured_projection."} + std::string(field) + ":" +
+         std::string(stage);
+}
+
+[[nodiscard]] std::string structured_projection_value_diagnostic(
+    const std::string_view field,
+    const std::string_view stage,
+    const std::string_view value) {
+  return structured_projection_flag_diagnostic(field, stage) + ":" + std::string(value);
+}
+
+void append_structured_projection_flag(std::vector<std::string>& diagnostics,
+                                      const std::string_view field,
+                                      const std::string_view stage) {
+  append_unique(diagnostics, structured_projection_flag_diagnostic(field, stage));
+}
+
+void append_structured_projection_value(std::vector<std::string>& diagnostics,
+                                       const std::string_view field,
+                                       const std::string_view stage,
+                                       const std::string& value) {
+  if (value.empty()) {
+    return;
+  }
+
+  append_unique(diagnostics,
+                structured_projection_value_diagnostic(field, stage, value));
+}
+
+[[nodiscard]] bool has_structured_projection_flag(
+    const std::vector<std::string>& diagnostics,
+    const std::string_view field,
+    const std::string_view stage) {
+  const auto needle = structured_projection_flag_diagnostic(field, stage);
+  return std::find(diagnostics.begin(), diagnostics.end(), needle) != diagnostics.end();
+}
+
+[[nodiscard]] std::optional<std::string> find_structured_projection_value(
+    const std::vector<std::string>& diagnostics,
+    const std::string_view field,
+    const std::string_view stage) {
+  const auto prefix = structured_projection_flag_diagnostic(field, stage) + ":";
+  for (auto it = diagnostics.rbegin(); it != diagnostics.rend(); ++it) {
+    if (it->rfind(prefix, 0) == 0) {
+      return it->substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::uint32_t> find_structured_projection_count(
+    const std::vector<std::string>& diagnostics,
+    const std::string_view field,
+    const std::string_view stage) {
+  const auto value = find_structured_projection_value(diagnostics, field, stage);
+  if (!value.has_value()) {
+    return std::nullopt;
+  }
+
+  try {
+    return static_cast<std::uint32_t>(std::stoul(*value));
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+[[nodiscard]] StructuredProjectionTelemetry summarize_structured_projection_telemetry(
+    const std::vector<std::string>& diagnostics) {
+  StructuredProjectionTelemetry structured_projection;
+  structured_projection.enabled =
+      has_structured_projection_flag(diagnostics, "enabled", "planning") ||
+      has_structured_projection_flag(diagnostics, "enabled", "execution");
+  structured_projection.required =
+      has_structured_projection_flag(diagnostics, "required", "planning") ||
+      has_structured_projection_flag(diagnostics, "required", "execution");
+  structured_projection.schema_version =
+      find_structured_projection_value(diagnostics, "schema_version", "execution");
+  if (!structured_projection.schema_version.has_value()) {
+    structured_projection.schema_version =
+        find_structured_projection_value(diagnostics, "schema_version", "planning");
+  }
+  structured_projection.source =
+      find_structured_projection_value(diagnostics, "source", "execution");
+  if (!structured_projection.source.has_value()) {
+    structured_projection.source =
+        find_structured_projection_value(diagnostics, "source", "planning");
+  }
+  structured_projection.failure_code =
+      find_structured_projection_value(diagnostics, "failure_code", "execution");
+  if (!structured_projection.failure_code.has_value()) {
+    structured_projection.failure_code =
+        find_structured_projection_value(diagnostics, "failure_code", "planning");
+  }
+  structured_projection.projected_node_count =
+      find_structured_projection_count(diagnostics, "projected_node_count", "planning");
+  structured_projection.projected_candidate_count =
+      find_structured_projection_count(diagnostics,
+                                       "projected_candidate_count",
+                                       "execution");
+  return structured_projection;
 }
 
 void ignore_emit_result(TelemetryEmitResult) {}
@@ -344,11 +455,17 @@ void apply_decision_failure(
     contracts::ResultCode result_code,
     const contracts::ErrorInfo& error_info,
     const std::string& stage,
-    std::string diagnostic) {
+    std::string diagnostic,
+    const std::string_view failure_code) {
+  append_structured_projection_value(result.diagnostics,
+                                     "failure_code",
+                                     stage,
+                                     std::string(failure_code));
   if (fallback_allowed) {
     append_unique(result.diagnostics, std::move(diagnostic));
     append_unique(result.diagnostics, "decision_pipeline.degraded");
     append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
+    append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
     return true;
   }
 
@@ -513,7 +630,12 @@ class CognitionFacade final : public ICognitionEngine {
     const auto fallback_used = std::find(result.diagnostics.begin(), result.diagnostics.end(),
                                          "decision_pipeline.degraded") !=
                                result.diagnostics.end();
-    telemetry_context = make_stage_context(request, "execution", fallback_used, result.result_code);
+    telemetry_context = make_stage_context(request,
+                         "execution",
+                         fallback_used,
+                         result.result_code,
+                         summarize_structured_projection_telemetry(
+                           result.diagnostics));
 
     if (result.error_info.has_value()) {
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
@@ -675,6 +797,10 @@ class CognitionFacade final : public ICognitionEngine {
       append_unique(result.diagnostics, perception.diagnostics);
 
     std::optional<plan::PlanGraph> active_plan_graph;
+    append_structured_projection_flag(result.diagnostics, "enabled", "planning");
+    append_structured_projection_flag(result.diagnostics, "required", "planning");
+    append_structured_projection_value(
+      result.diagnostics, "schema_version", "planning", "cognition.plan.v1");
     const auto planning_bridge_result = consume_decision_bridge_stage(request,
                                                                       "planning",
                                                                       "plan",
@@ -687,8 +813,7 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
-    if (planning_bridge_result.has_value()) {
-      append_unique(result.diagnostics, "structured_projection.required:planning");
+  if (planning_bridge_result.has_value()) {
       const auto schema_validation = validator_.validate_stage_output(
           *planning_bridge_result,
           validation::schema_for_planning_plan());
@@ -699,7 +824,8 @@ class CognitionFacade final : public ICognitionEngine {
                                                contracts::ResultCode::ValidationFieldMissing,
                                                *schema_validation.error_info,
                                                "planning",
-                                               "structured_projection.schema_violation:planning")) {
+                                               "structured_projection.schema_violation:planning",
+                                               "schema")) {
           return result;
         }
       } else {
@@ -715,7 +841,8 @@ class CognitionFacade final : public ICognitionEngine {
                                   "planning bridge payload could not be reparsed for projection",
                                   "cognition::projection::PlanGraphStructuredProjector"),
                   "planning",
-                  "structured_projection.projection_failed:planning")) {
+                  "structured_projection.projection_failed:planning",
+                  "projection")) {
             return result;
           }
         } else {
@@ -733,7 +860,8 @@ class CognitionFacade final : public ICognitionEngine {
                                         "planning projector could not produce a plan graph",
                                         "cognition::projection::PlanGraphStructuredProjector")),
                     "planning",
-                    "structured_projection.projection_failed:planning")) {
+                    "structured_projection.projection_failed:planning",
+                    "projection")) {
               return result;
             }
           } else {
@@ -746,12 +874,19 @@ class CognitionFacade final : public ICognitionEngine {
                                                      contracts::ResultCode::ValidationFieldMissing,
                                                      *plan_validation.error_info,
                                                      "planning",
-                                                     "structured_projection.invariant_failed:planning")) {
+                                                     "structured_projection.invariant_failed:planning",
+                                                     "invariant")) {
                 return result;
               }
             } else {
               active_plan_graph = *projected_plan.plan_graph;
               append_unique(result.diagnostics, "structured_projection.projected_plan_graph");
+              append_structured_projection_value(
+                  result.diagnostics, "source", "planning", "llm_bridge");
+              append_structured_projection_value(result.diagnostics,
+                                                "projected_node_count",
+                                                "planning",
+                                                std::to_string(active_plan_graph->nodes.size()));
             }
           }
         }
@@ -830,6 +965,10 @@ class CognitionFacade final : public ICognitionEngine {
     reasoning_request.execution_hints = request.execution_hints;
 
     std::optional<ActionDecision> resolved_action_decision;
+    append_structured_projection_flag(result.diagnostics, "enabled", "execution");
+    append_structured_projection_flag(result.diagnostics, "required", "execution");
+    append_structured_projection_value(
+      result.diagnostics, "schema_version", "execution", "cognition.reasoning.v1");
     const auto execution_bridge_result = consume_decision_bridge_stage(request,
                                                                        "execution",
                                                                        "action_decision",
@@ -842,8 +981,7 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
-    if (execution_bridge_result.has_value()) {
-      append_unique(result.diagnostics, "structured_projection.required:execution");
+  if (execution_bridge_result.has_value()) {
       const auto schema_validation = validator_.validate_stage_output(
           *execution_bridge_result,
           validation::schema_for_execution_action_decision());
@@ -854,7 +992,8 @@ class CognitionFacade final : public ICognitionEngine {
                                                contracts::ResultCode::ValidationFieldMissing,
                                                *schema_validation.error_info,
                                                "execution",
-                                               "structured_projection.schema_violation:execution")) {
+                                               "structured_projection.schema_violation:execution",
+                                               "schema")) {
           return result;
         }
       } else {
@@ -870,7 +1009,8 @@ class CognitionFacade final : public ICognitionEngine {
                                   "execution bridge payload could not be reparsed for projection",
                                   "cognition::projection::ActionDecisionStructuredProjector"),
                   "execution",
-                  "structured_projection.projection_failed:execution")) {
+                  "structured_projection.projection_failed:execution",
+                  "projection")) {
             return result;
           }
         } else {
@@ -889,7 +1029,8 @@ class CognitionFacade final : public ICognitionEngine {
                                         "execution projector could not produce an action decision",
                                         "cognition::projection::ActionDecisionStructuredProjector")),
                     "execution",
-                    "structured_projection.projection_failed:execution")) {
+                    "structured_projection.projection_failed:execution",
+                    "projection")) {
               return result;
             }
           } else {
@@ -902,12 +1043,20 @@ class CognitionFacade final : public ICognitionEngine {
                                                      contracts::ResultCode::ValidationFieldMissing,
                                                      *decision_validation.error_info,
                                                      "execution",
-                                                     "structured_projection.invariant_failed:execution")) {
+                                                     "structured_projection.invariant_failed:execution",
+                                                     "invariant")) {
                 return result;
               }
             } else {
               resolved_action_decision = *projected_action.action_decision;
               append_unique(result.diagnostics, "structured_projection.projected_action_decision");
+              append_structured_projection_value(
+                  result.diagnostics, "source", "execution", "llm_bridge");
+              append_structured_projection_value(
+                  result.diagnostics,
+                  "projected_candidate_count",
+                  "execution",
+                  std::to_string(resolved_action_decision->candidate_scores.size()));
             }
           }
         }
@@ -1052,6 +1201,8 @@ class CognitionFacade final : public ICognitionEngine {
       const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, std::string{"llm_bridge.unavailable:"} + stage);
+      append_structured_projection_value(result.diagnostics, "failure_code", stage, "provider");
+      append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
       return std::nullopt;
     }
 
@@ -1088,6 +1239,7 @@ class CognitionFacade final : public ICognitionEngine {
           return llm_bridge->invoke_stage(bridge_request);
         });
     if (bridge_result.timed_out) {
+      append_structured_projection_value(result.diagnostics, "failure_code", stage, "timeout");
       apply_decision_failure(result,
                              contracts::ResultCode::RuntimeRetryExhausted,
                              make_stage_timeout_error_info(stage,
@@ -1104,7 +1256,10 @@ class CognitionFacade final : public ICognitionEngine {
       return std::move(*bridge_result.value);
     }
 
+    append_structured_projection_value(result.diagnostics, "failure_code", stage, "provider");
+
     if (request.execution_hints.degraded_path_allowed) {
+      append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
       append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
       return std::nullopt;
     }

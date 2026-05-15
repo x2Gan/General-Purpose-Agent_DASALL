@@ -55,8 +55,19 @@ void test_decide_uses_projected_action_decision_as_authoritative_result() {
   assert_equal(std::string("bridge-authored direct response summary"),
                result.action_decision->response_outline->summary,
                "execution bridge payload should become the authoritative response summary");
+  assert_true(contains_value(result.diagnostics, "structured_projection.enabled:execution"),
+              "execution bridge path should stamp structured projection enabled diagnostics");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.schema_version:execution:cognition.reasoning.v1"),
+              "execution bridge path should expose the structured schema version");
   assert_true(contains_value(result.diagnostics, "structured_projection.projected_action_decision"),
               "execution bridge success should mark projected_action_decision diagnostics");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.source:execution:llm_bridge"),
+              "execution projection success should record the authoritative bridge source");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.projected_candidate_count:execution:2"),
+              "execution projection success should record the projected candidate count");
   assert_true(!contains_value(result.diagnostics, "structured_projection.local_fallback:execution"),
               "successful execution projection must not fall back to the local reasoner");
 }
@@ -87,6 +98,9 @@ void test_decide_fails_closed_when_invalid_execution_projection_has_no_fallback(
               "fail-closed execution projection must not return a partial action decision");
   assert_true(contains_value(result.diagnostics, "structured_projection.invariant_failed:execution"),
               "invalid execution payloads should surface the invariant_failed diagnostic");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.failure_code:execution:invariant"),
+              "invalid execution payloads should expose the invariant failure code");
 }
 
 }  // namespace

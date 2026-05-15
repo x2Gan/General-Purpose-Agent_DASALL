@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #659
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-004A-BLD-010 落地 structured telemetry / diagnostics fields
+- 状态：已完成
+
+### 改动
+
+1. 调整 `cognition/src/observability/CognitionTelemetry.h` 与 `cognition/src/observability/CognitionTelemetry.cpp`：新增 `StructuredProjectionTelemetry`，并把 `structured_projection_enabled`、`structured_projection_required`、`structured_schema_version`、`structured_projection_source`、`structured_projection_failure_code`、`projected_node_count`、`projected_candidate_count` 接到 stage telemetry 字段投影，确保 log / metric / trace / audit 事件统一携带 structured projection metadata。
+2. 调整 `cognition/src/CognitionFacade.cpp`：为 planning / execution structured bridge path补齐 `structured_projection.enabled|required|schema_version|source|failure_code|projected_*_count` diagnostics，并在 `decide()` 出口汇总这些 diagnostics 形成 telemetry context，保证 owner telemetry 与 façade diagnostics 的字段口径同源。
+3. 调整 `tests/unit/cognition/CognitionTelemetryFieldsTest.cpp`、`tests/unit/cognition/CognitionFacadeStructuredPlanOutputTest.cpp` 与 `tests/unit/cognition/CognitionFacadeStructuredActionOutputTest.cpp`：分别覆盖 telemetry completed / failed event 的 structured fields、planning success / schema fallback diagnostics，以及 execution success / invariant fail-closed diagnostics。
+4. 更新 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录：将 `COG-FIX-004A-BLD-010` 标记为 Done，并把 `Gate-COG-FIX004A-04` 的 pending 说明收窄为仅剩 `COG-FIX-004A-BLD-011`。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cognition_telemetry_fields_unit_test dasall_cognition_facade_structured_plan_output_unit_test dasall_cognition_facade_structured_action_output_unit_test`
+   - 结果：通过，三个 focused target 均完成编译与链接。
+2. `ctest --test-dir build-ci --output-on-failure -R "^CognitionTelemetryFieldsTest$"`
+   - 结果：通过，structured telemetry fields 正负例通过。
+3. `ctest --test-dir build-ci --output-on-failure -R "^(CognitionTelemetryFieldsTest|CognitionFacadeStructuredPlanOutputTest|CognitionFacadeStructuredActionOutputTest)$"`
+   - 结果：通过，telemetry fields、planning structured diagnostics、execution structured diagnostics 三条 focused 证据全部通过。
+
+### 结果
+
+1. `COG-FIX-004A-BLD-010` 已完成：structured projection success / failure 的 schema version、authoritative source、failure code 与 projected counts 现在能同时从 telemetry owner 与 façade diagnostics 观测到。
+2. 本轮继续守住边界：只冻结 structured telemetry / diagnostics 字段与 redaction 边界，不提前绑定 production telemetry sink，也不提前把 schema drift / safety negative matrix 混入同轮。
+3. `Gate-COG-FIX004A-04` 仍保持 Pending：runtime interaction、structured integration 与 telemetry fields 已具 focused evidence，但 safety negative matrix 仍待 `COG-FIX-004A-BLD-011` 补齐。
+
+### 下一步
+
+1. 清点本轮变更文件，隔离无关修改，只 stage `COG-FIX-004A-BLD-010` 相关文件。
+2. 按仓库规范提交并推送 `COG-FIX-004A-BLD-010` 的 scoped commit。
+
 ## 记录 #658
 
 - 日期：2026-05-15

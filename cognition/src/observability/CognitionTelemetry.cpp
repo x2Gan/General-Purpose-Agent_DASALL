@@ -99,6 +99,31 @@ void append_field(std::vector<TelemetryField>& fields,
   if (context.result_code.has_value()) {
     append_field(fields, "result_code", std::to_string(*context.result_code));
   }
+  append_field(fields,
+               "structured_projection_enabled",
+               bool_to_string(context.structured_projection.enabled));
+  append_field(fields,
+               "structured_projection_required",
+               bool_to_string(context.structured_projection.required));
+  append_field(fields,
+               "structured_schema_version",
+               context.structured_projection.schema_version);
+  append_field(fields,
+               "structured_projection_source",
+               context.structured_projection.source);
+  append_field(fields,
+               "structured_projection_failure_code",
+               context.structured_projection.failure_code);
+  if (context.structured_projection.projected_node_count.has_value()) {
+    append_field(fields,
+                 "projected_node_count",
+                 std::to_string(*context.structured_projection.projected_node_count));
+  }
+  if (context.structured_projection.projected_candidate_count.has_value()) {
+    append_field(fields,
+                 "projected_candidate_count",
+                 std::to_string(*context.structured_projection.projected_candidate_count));
+  }
   return fields;
 }
 

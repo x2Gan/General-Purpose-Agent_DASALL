@@ -60,8 +60,19 @@ void test_decide_uses_projected_plan_graph_as_reasoner_input() {
               "local reasoner should consume the projected plan node id");
   assert_equal(std::string("bridge-plan-node"), *result.action_decision->selected_node_id,
                "structured planning payload must become the active plan graph for reasoning");
+  assert_true(contains_value(result.diagnostics, "structured_projection.enabled:planning"),
+              "planning bridge path should stamp structured projection enabled diagnostics");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.schema_version:planning:cognition.plan.v1"),
+              "planning bridge path should expose the structured schema version");
   assert_true(contains_value(result.diagnostics, "structured_projection.projected_plan_graph"),
               "planning bridge success should mark projected_plan_graph diagnostics");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.source:planning:llm_bridge"),
+              "planning projection success should record the authoritative bridge source");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.projected_node_count:planning:1"),
+              "planning projection success should record the projected node count");
   assert_true(!contains_value(result.diagnostics, "structured_projection.local_fallback:planning"),
               "successful planning projection must not fall back to the local planner");
   assert_true(contains_value(result.diagnostics, "decision_pipeline.llm_bridge_degraded:execution"),
@@ -93,6 +104,12 @@ void test_decide_falls_back_to_local_planner_only_on_explicit_planning_projectio
               "explicit planning fallback should still yield a bounded action decision");
   assert_true(contains_value(result.diagnostics, "structured_projection.schema_violation:planning"),
               "invalid planning bridge payloads should surface the schema_violation diagnostic");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.failure_code:planning:schema"),
+              "invalid planning bridge payloads should expose the schema failure code");
+  assert_true(contains_value(result.diagnostics,
+                             "structured_projection.source:planning:local_fallback"),
+              "planning fallback should record the local fallback source");
   assert_true(contains_value(result.diagnostics, "structured_projection.local_fallback:planning"),
               "local planner usage must be explicit when planning projection fails");
   assert_true(contains_value(result.diagnostics, "decision_pipeline.degraded"),
