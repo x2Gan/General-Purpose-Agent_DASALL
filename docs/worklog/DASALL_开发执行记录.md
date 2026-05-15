@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #663
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-TODO-042 复验 Gate-COG-12 并回写统一验收证据
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/cognition/deliverables/COG-TODO-042-Gate-COG-12复验证据回写.md`：把 clean `build-ci-cog042` 统一验收命令的 configure / aggregate / discoverability / focused regex 结果按 gate 复验口径分层记录，并明确 repo-wide non-cognition blocker、owner 归因与最小解阻条件。
+2. 调整 `docs/todos/cognition/DASALL_cognition子系统专项TODO.md`：将 `COG-TODO-042` 标记为 Done，保持 `Gate-COG-12` 为 `Changes Requested / Pending`，同时把 `COG-R19 ~ R22` 回写为 Closed、`COG-R23` 保持 Open，明确当前 gate 阻断已转移到非 cognition owner。
+3. 更新本记录：补入本轮统一验收复验的真实命令结果，避免后续继续沿用历史 `Gate-COG-11 Pass` 作为当前可合并结论。
+
+### 验证
+
+1. `cmake -S . -B build-ci-cog042 -G "Unix Makefiles"`
+   - 结果：通过，clean `build-ci-cog042` 成功生成。
+2. `cmake --build build-ci-cog042 --target dasall_cognition dasall_unit_tests dasall_contract_tests dasall_integration_tests`
+   - 结果：在 `dasall_unit_tests` 阶段进入 586 条 unit tests 执行，但被 runtime / llm / tools / infra / platform / profiles / apps-daemon 的 missing executable，以及 `DaemonReadinessCommandTest`、`DaemonCancelCommandTest`、`AccessCancelForwardingTest` 失败阻断；`dasall_contract_tests` / `dasall_integration_tests` 未继续构建。
+3. `ctest --test-dir build-ci-cog042 -N`
+   - 结果：`Total Tests: 885`；discoverability 数量门槛满足，但由于上一步统一构建提前失败，仍可见 contract / integration executable 缺失。
+4. `ctest --test-dir build-ci-cog042 --output-on-failure -R "Cognition|RuntimeCognitionLoopSmoke|GoalContractFieldContractTest|BeliefStateContractTest|ContextPacketFieldContractTest|ObservationContractTest|ReflectionDecisionContractTest|AgentResultContractTest|MainFlowContractE2ETest"`
+   - 结果：30 条命中测试中，15 条 runtime smoke / cognition unit tests 通过，15 条 contracts / cognition integrations 因 executable 未产出而 `Not Run`。
+
+### 结果
+
+1. `Gate-COG-12` 现已具新的 clean-directory 复验证据，不再只依赖 `Gate-COG-11` 的历史 Pass。
+2. 039 ~ 041 的 cognition owner 修复没有在统一复验中回退；当前可执行证据为 `RuntimeCognitionLoopSmokeTest` 与 15 条 cognition unit tests 全绿。
+3. `Gate-COG-12` 仍不能转为 Pass：首要 blocker 已明确为 repo-wide non-cognition 聚合依赖缺口与 access/daemon 失败，而非 cognition 责任域回归。
+4. `COG-R19 ~ R22` 已关闭；`COG-R23` 继续保留给 `COG-TODO-043 / 044` 的文档一致性与 warning hygiene 收口。
+
+### 下一步
+
+1. 隔离本轮 042 的 deliverable / TODO / worklog 变更，只 stage 当前任务相关 hunk 后提交推送。
+2. 继续串行推进 `COG-TODO-043`，同步 cognition 详设当前状态与 Gate-COG-12 追溯证据。
+
 ## 记录 #661
 
 - 日期：2026-05-15
