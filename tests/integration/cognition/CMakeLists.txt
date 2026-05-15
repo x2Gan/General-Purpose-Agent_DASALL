@@ -83,6 +83,13 @@ dasall_add_cognition_integration_test(
   "integration;cognition;review"
 )
 
+dasall_add_cognition_integration_test(
+  dasall_cognition_structured_output_integration_test
+  CognitionStructuredOutputIntegrationTest
+  CognitionStructuredOutputIntegrationTest.cpp
+  "integration;cognition;structured-output"
+)
+
 target_compile_definitions(dasall_cognition_review_regression_integration_test
   PRIVATE
     DASALL_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
