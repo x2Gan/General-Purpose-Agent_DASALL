@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "CognitionConfig.h"
+#include "CognitionDependencies.h"
 #include "decision/ActionDecision.h"
 #include "error/ErrorInfo.h"
 
@@ -125,5 +126,8 @@ class CognitionTelemetry {
   CognitionConfig config_;
   std::shared_ptr<ICognitionTelemetrySink> sink_;
 };
+
+[[nodiscard]] std::shared_ptr<ICognitionTelemetrySink> make_live_telemetry_sink(
+    const CognitionRuntimeDependencies& dependencies);
 
 }  // namespace dasall::cognition::observability

@@ -1,43 +1,49 @@
 #include <exception>
 #include <iostream>
-#include <string>
+#include <memory>
 
-#include "MockLLMAdapter.h"
-#include "MockMemoryStore.h"
-#include "MockTool.h"
+#include "AgentFacade.h"
+#include "IAgent.h"
+#include "agent/AgentResult.h"
+#include "RuntimeUnaryFixture.h"
 #include "support/TestAssertions.h"
 
+namespace {
+
+using dasall::contracts::AgentResultStatus;
+using dasall::runtime::AgentFacade;
+using dasall::runtime::IAgent;
+using dasall::tests::runtime_fixture::make_agent_request;
+using dasall::tests::runtime_fixture::make_init_request;
+using dasall::tests::support::assert_true;
+
+void test_runtime_build_liveness_smoke() {
+  std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
+
+  const auto init_result = agent->init(
+      make_init_request("rt-build-smoke", "desktop_full", "build-liveness-smoke"));
+  assert_true(init_result.is_ready(),
+              "runtime build liveness smoke should initialize the facade successfully");
+
+  const auto handle_result = agent->handle(make_agent_request(
+      "req-build-smoke", "session-build-smoke", "trace-build-smoke", "ping"));
+  assert_true(handle_result.status.has_value() &&
+                  *handle_result.status == AgentResultStatus::Completed,
+              "runtime build liveness smoke should complete a unary request");
+  assert_true(handle_result.response_text.has_value() && !handle_result.response_text->empty(),
+              "runtime build liveness smoke should emit a non-empty response");
+
+  assert_true(agent->stop(100U),
+              "runtime build liveness smoke should stop a live facade successfully");
+}
+
+}  // namespace
+
 int main() {
-  using dasall::tests::mocks::MockLLMAdapter;
-  using dasall::tests::mocks::MockMemoryStore;
-  using dasall::tests::mocks::MockTool;
-  using dasall::tests::support::assert_equal;
-  using dasall::tests::support::assert_true;
-
   try {
-    MockMemoryStore memory_store;
-    memory_store.write("goal", "stage-a-runtime-smoke");
-
-    MockLLMAdapter llm;
-    llm.set_handler([&memory_store](const std::string& prompt) {
-      return memory_store.read("goal") + ":" + prompt;
-    });
-
-    MockTool tool("diagnostic");
-    tool.set_handler([](const std::string& input) {
-      return "tool:" + input;
-    });
-
-    const std::string llm_result = llm.invoke("ping");
-    const std::string tool_result = tool.execute(llm_result);
-
-    assert_true(memory_store.contains("goal"), "memory store should contain goal key");
-    assert_equal(1, llm.call_count(), "llm should be called once");
-    assert_equal(1, tool.call_count(), "tool should be called once");
-    assert_equal("stage-a-runtime-smoke:ping", llm_result, "llm result mismatch");
-    assert_equal("tool:stage-a-runtime-smoke:ping", tool_result, "tool result mismatch");
+    test_runtime_build_liveness_smoke();
   } catch (const std::exception& ex) {
-    std::cerr << ex.what() << std::endl;
+    std::cerr << ex.what() << '\n';
     return 1;
   }
 

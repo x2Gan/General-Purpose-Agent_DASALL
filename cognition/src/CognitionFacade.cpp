@@ -615,7 +615,7 @@ class CognitionFacade final : public ICognitionEngine {
         planner_(config),
         reasoner_(config),
         reflection_engine_(config),
-        telemetry_(config),
+  telemetry_(config, observability::make_live_telemetry_sink(dependencies)),
         llm_bridge_(dependencies.llm_manager != nullptr
                         ? std::make_shared<CognitionLlmBridge>(
                               std::move(dependencies.llm_manager))

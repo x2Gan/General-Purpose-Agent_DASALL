@@ -430,11 +430,25 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
   dependency_set->llm_manager = std::move(llm_result.manager);
 
+  const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
+  if (!observability.ok()) {
+    return make_error(std::string("runtime observability composition failed for ") +
+                      std::string(composition_owner) + ": " + observability.error);
+  }
+  dependency_set->audit_logger = observability.audit_logger;
+  dependency_set->metrics_provider = observability.metrics_provider;
+  dependency_set->tracer_provider = observability.tracer_provider;
+  dependency_set->health_monitor = observability.health_monitor;
+  dependency_set->health_probes = observability.health_probes;
+
   auto cognition_engine = cognition::create_cognition_engine(
       *policy_snapshot,
       cognition::CognitionRuntimeDependencies{
           .llm_manager = dependency_set->llm_manager,
           .policy_snapshot = policy_snapshot,
+          .audit_logger = dependency_set->audit_logger,
+          .metrics_provider = dependency_set->metrics_provider,
+          .tracer_provider = dependency_set->tracer_provider,
       });
   if (!cognition_engine) {
     return make_error(std::string("cognition engine composition failed for ") +
@@ -448,6 +462,9 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       cognition::CognitionRuntimeDependencies{
           .llm_manager = dependency_set->llm_manager,
           .policy_snapshot = policy_snapshot,
+        .audit_logger = dependency_set->audit_logger,
+        .metrics_provider = dependency_set->metrics_provider,
+        .tracer_provider = dependency_set->tracer_provider,
       });
   if (!response_builder) {
     return make_error(std::string("response builder composition failed for ") +
@@ -455,17 +472,6 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
-
-  const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
-  if (!observability.ok()) {
-    return make_error(std::string("runtime observability composition failed for ") +
-                      std::string(composition_owner) + ": " + observability.error);
-  }
-  dependency_set->audit_logger = observability.audit_logger;
-  dependency_set->metrics_provider = observability.metrics_provider;
-  dependency_set->tracer_provider = observability.tracer_provider;
-  dependency_set->health_monitor = observability.health_monitor;
-  dependency_set->health_probes = observability.health_probes;
 
   const auto live_services = services::compose_live_services(
       *policy_snapshot,

@@ -1,3 +1,5 @@
+enable_testing()
+
 add_executable(dasall_runtime_smoke_test
   RuntimeSmokeTest.cpp
 )
@@ -100,6 +102,11 @@ target_link_libraries(dasall_runtime_control_plane_surface_unit_test
   PRIVATE
     dasall_test_support
     dasall_runtime
+)
+
+target_include_directories(dasall_runtime_smoke_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/runtime
 )
 
 target_link_libraries(dasall_runtime_dependency_set_readiness_unit_test

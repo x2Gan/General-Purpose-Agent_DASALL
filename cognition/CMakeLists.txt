@@ -56,6 +56,7 @@ target_link_libraries(dasall_cognition
   PUBLIC
     dasall_contracts
   PRIVATE
+    dasall_infra
     dasall_llm
     dasall_profiles
 )

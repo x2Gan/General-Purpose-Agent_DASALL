@@ -15,6 +15,7 @@
 #include "RuntimePolicySnapshot.h"
 #include "config/CognitionConfigProjector.h"
 #include "llm/CognitionLlmBridge.h"
+#include "observability/CognitionTelemetry.h"
 #include "validation/InputBoundaryValidator.h"
 
 namespace dasall::cognition {
@@ -43,6 +44,10 @@ struct ResponseEnvelope {
 
 using llm_bridge::CognitionLlmBridge;
 using llm_bridge::StageLlmCallResult;
+using observability::CognitionTelemetry;
+using observability::DegradeTelemetryRecord;
+using observability::StageTelemetryContext;
+using observability::TelemetryEmitResult;
 
 [[nodiscard]] const StageModelHint* find_stage_model_hint(
     const policy::StageExecutionPlan& plan,
@@ -60,6 +65,69 @@ using llm_bridge::StageLlmCallResult;
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+}
+
+void ignore_emit_result(const TelemetryEmitResult&) {}
+
+[[nodiscard]] std::string require_goal_id(const contracts::GoalContract& goal_contract) {
+  return goal_contract.goal_id.value_or(std::string{});
+}
+
+[[nodiscard]] std::string derive_model_hint_tier(const ResponseBuildRequest& request) {
+  if (request.build_hints.prefer_template) {
+    return "economy";
+  }
+  if (request.build_hints.prefer_observation_projection) {
+    return "balanced";
+  }
+  return "standard";
+}
+
+[[nodiscard]] StageTelemetryContext make_response_stage_context(
+    const ResponseBuildRequest& request,
+    bool fallback_used,
+    std::optional<contracts::ResultCode> result_code = std::nullopt) {
+  return StageTelemetryContext{
+      .request_id = request.request_id,
+      .goal_id = require_goal_id(request.goal_contract),
+      .profile_id = request.profile_id,
+      .stage = "response",
+      .trace_id = request.trace_id,
+      .model_hint_tier = derive_model_hint_tier(request),
+      .fallback_used = fallback_used,
+      .result_code = result_code.has_value()
+                         ? std::optional<int>(static_cast<int>(*result_code))
+                         : std::nullopt,
+      .structured_projection = {},
+  };
+}
+
+[[nodiscard]] std::string derive_degrade_reason(
+    const std::vector<std::string>& diagnostics) {
+  if (std::find(diagnostics.begin(), diagnostics.end(), "response_llm_bridge_failed") !=
+      diagnostics.end()) {
+    return "llm_bridge_failed";
+  }
+  if (std::find(diagnostics.begin(), diagnostics.end(), "response_llm_bridge_empty_payload") !=
+      diagnostics.end()) {
+    return "llm_bridge_empty_payload";
+  }
+  return "template_fallback";
+}
+
+[[nodiscard]] DegradeTelemetryRecord make_degrade_record(
+    const ResponseBuildResult& result) {
+  DegradeTelemetryRecord record{
+      .fallback_mode = "template_fallback",
+      .reason = derive_degrade_reason(result.diagnostics),
+      .payload_excerpt = std::nullopt,
+      .omitted_details = result.diagnostics,
+      .audit_refs = {},
+  };
+  if (result.agent_result.has_value() && result.agent_result->response_text.has_value()) {
+    record.payload_excerpt = *result.agent_result->response_text;
+  }
+  return record;
 }
 
 [[nodiscard]] bool has_non_empty_value(const std::optional<std::string>& value) {
@@ -633,6 +701,7 @@ class ResponseBuilder final : public IResponseBuilder {
   explicit ResponseBuilder(CognitionConfig config,
                            CognitionRuntimeDependencies dependencies = {})
       : config_(std::move(config)),
+  telemetry_(config_, observability::make_live_telemetry_sink(dependencies)),
         llm_bridge_(dependencies.llm_manager != nullptr
                         ? std::make_shared<CognitionLlmBridge>(
                               std::move(dependencies.llm_manager))
@@ -641,11 +710,15 @@ class ResponseBuilder final : public IResponseBuilder {
 
   [[nodiscard]] ResponseBuildResult build(
       const ResponseBuildRequest& request) override {
+    auto telemetry_context = make_response_stage_context(request, false);
     ResponseBuildResult result;
     const auto validation_result =
         validation::InputBoundaryValidator::validate_response_request(request);
     if (!validation_result.ok()) {
       apply_invalid_response_result(result, validation_result);
+      telemetry_context.result_code =
+          static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
 
@@ -654,10 +727,13 @@ class ResponseBuilder final : public IResponseBuilder {
                                          *policy_snapshot_, request)
                                    : std::optional<policy::StageExecutionPlan>{};
     if (policy_snapshot_ != nullptr && !response_plan.has_value()) {
-      return build_error_result(contracts::ResultCode::PolicyDenied,
-                                "cognition.response.policy",
-                                "runtime policy snapshot could not produce a response stage plan",
-                                "response_policy_projection_failed");
+      result = build_error_result(contracts::ResultCode::PolicyDenied,
+                                  "cognition.response.policy",
+                                  "runtime policy snapshot could not produce a response stage plan",
+                                  "response_policy_projection_failed");
+      telemetry_context = make_response_stage_context(request, false, result.result_code);
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
+      return result;
     }
 
     switch (select_response_mode(config_,
@@ -665,30 +741,43 @@ class ResponseBuilder final : public IResponseBuilder {
                                  llm_bridge_ != nullptr,
                                  response_plan.has_value() ? &(*response_plan) : nullptr)) {
       case ResponseMode::LlmBridge:
-        return build_with_llm_bridge(
+        result = build_with_llm_bridge(
             config_,
             request,
             *llm_bridge_,
             response_plan.has_value() ? &(*response_plan) : nullptr);
+        break;
       case ResponseMode::ObservationProjection:
-        return build_with_observation_projection(config_, request);
+        result = build_with_observation_projection(config_, request);
+        break;
       case ResponseMode::TemplateFallback:
-        return build_with_template(config_, request);
+        result = build_with_template(config_, request);
+        break;
       case ResponseMode::Unavailable:
-        return build_error_result(contracts::ResultCode::PolicyDenied,
-                                  "cognition.response.mode_selection",
-                                  "response builder has no observation payload and template fallback is disabled",
-                                  "response_mode_unavailable");
+        result = build_error_result(contracts::ResultCode::PolicyDenied,
+                                    "cognition.response.mode_selection",
+                                    "response builder has no observation payload and template fallback is disabled",
+                                    "response_mode_unavailable");
+        break;
     }
 
-    return build_error_result(contracts::ResultCode::RuntimeRetryExhausted,
-                              "cognition.response.mode_selection",
-                              "response builder failed to resolve a terminal output mode",
-                              "response_mode_resolution_failed");
+    telemetry_context = make_response_stage_context(request, result.fallback_used, result.result_code);
+    if (result.error_info.has_value()) {
+      ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
+      return result;
+    }
+
+    if (result.fallback_used && result.agent_result.has_value()) {
+      ignore_emit_result(telemetry_.emit_response_degraded(
+          telemetry_context, make_degrade_record(result)));
+    }
+
+    return result;
   }
 
  private:
   CognitionConfig config_;
+  CognitionTelemetry telemetry_;
   std::shared_ptr<CognitionLlmBridge> llm_bridge_;
   std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot_;
 };

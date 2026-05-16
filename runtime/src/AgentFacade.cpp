@@ -184,6 +184,9 @@ void apply_runtime_readiness_tags(const RuntimeDependencyReadiness& readiness,
         cognition::CognitionRuntimeDependencies{
             .llm_manager = request.dependency_set->llm_manager,
             .policy_snapshot = request.policy_snapshot,
+        .audit_logger = request.dependency_set->audit_logger,
+        .metrics_provider = request.dependency_set->metrics_provider,
+        .tracer_provider = request.dependency_set->tracer_provider,
         });
     if (!cognition_engine) {
       result.health_summary =
@@ -203,6 +206,9 @@ void apply_runtime_readiness_tags(const RuntimeDependencyReadiness& readiness,
         cognition::CognitionRuntimeDependencies{
             .llm_manager = request.dependency_set->llm_manager,
             .policy_snapshot = request.policy_snapshot,
+        .audit_logger = request.dependency_set->audit_logger,
+        .metrics_provider = request.dependency_set->metrics_provider,
+        .tracer_provider = request.dependency_set->tracer_provider,
         });
     if (!response_builder) {
       result.health_summary =

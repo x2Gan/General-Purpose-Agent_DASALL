@@ -1,7 +1,9 @@
 #include "observability/CognitionTelemetry.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iomanip>
+#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -9,6 +11,15 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "audit/IAuditLogger.h"
+#include "audit/AuditTypes.h"
+#include "metrics/IMeter.h"
+#include "metrics/MetricTypes.h"
+#include "tracing/ISpan.h"
+#include "tracing/ITracer.h"
+#include "tracing/ITracerProvider.h"
+#include "tracing/TraceTypes.h"
 
 namespace dasall::cognition::observability {
 namespace {
@@ -19,6 +30,270 @@ class NoopTelemetrySink final : public ICognitionTelemetrySink {
   void emit_metric(const TelemetryMetric&) override {}
   void emit_trace(const TelemetryEvent&) override {}
   void emit_audit(const TelemetryEvent&) override {}
+};
+
+class InfraTelemetrySink final : public ICognitionTelemetrySink {
+ public:
+  InfraTelemetrySink(std::shared_ptr<infra::audit::IAuditLogger> audit_logger,
+                     std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider,
+                     std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider)
+      : audit_logger_(std::move(audit_logger)),
+        metrics_provider_(std::move(metrics_provider)),
+        tracer_provider_(std::move(tracer_provider)) {}
+
+  void emit_log(const TelemetryEvent&) override {
+    // Cognition production composition currently exposes audit/metrics/trace providers.
+  }
+
+  void emit_metric(const TelemetryMetric& metric) override {
+    if (metrics_provider_ == nullptr) {
+      return;
+    }
+
+    ensure_meter();
+    if (meter_ == nullptr) {
+      return;
+    }
+
+    ensure_counter(metric.name);
+
+    infra::metrics::MetricSample sample{
+        .identity_ref = infra::metrics::MetricIdentity{
+            .name = metric.name,
+            .type = infra::metrics::MetricType::Counter,
+            .unit = "1",
+            .description = "cognition telemetry event count",
+        },
+        .value = metric.value,
+        .ts_unix_ms = current_time_ms(),
+        .labels = make_metric_labels(metric),
+    };
+    if (!sample.is_valid()) {
+      return;
+    }
+
+    (void)meter_->record(sample);
+  }
+
+  void emit_trace(const TelemetryEvent& event) override {
+    if (tracer_provider_ == nullptr) {
+      return;
+    }
+
+    ensure_tracer();
+    if (tracer_ == nullptr) {
+      return;
+    }
+
+    infra::tracing::SpanDescriptor descriptor{
+        .name = std::string{"cognition."} + event.name,
+        .kind = infra::tracing::SpanKind::Internal,
+        .start_ts_unix_ms = current_time_ms(),
+        .attrs = make_trace_attributes(event),
+        .links = {},
+    };
+    if (!descriptor.is_valid()) {
+      return;
+    }
+
+    auto span = tracer_->start_span(descriptor, nullptr);
+    if (span == nullptr) {
+      return;
+    }
+
+    span->add_event(descriptor.name, descriptor.attrs);
+    const auto status = make_trace_status(event.name);
+    span->set_status(status.first, status.second);
+    (void)span->end(current_time_ms());
+  }
+
+  void emit_audit(const TelemetryEvent& event) override {
+    if (audit_logger_ == nullptr) {
+      return;
+    }
+
+    (void)audit_logger_->write_audit(make_audit_event(event), make_audit_context(event));
+  }
+
+ private:
+  [[nodiscard]] static std::int64_t current_time_ms() {
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+  }
+
+  [[nodiscard]] static std::string fallback_unknown(const std::string& value,
+                                                    const std::string_view fallback) {
+    return value.empty() ? std::string(fallback) : value;
+  }
+
+  [[nodiscard]] static std::string build_detail_ref(const TelemetryEvent& event) {
+    const std::string request_id = event.context.request_id.empty()
+                                       ? std::string("unknown")
+                                       : event.context.request_id;
+    const std::string stage = event.context.stage.empty()
+                                  ? std::string("unknown")
+                                  : event.context.stage;
+    return std::string{"telemetry://cognition/"} + event.name + "/" + request_id + "/" +
+           stage;
+  }
+
+  [[nodiscard]] static infra::AuditOutcome make_audit_outcome(const std::string& event_name) {
+    if (event_name == "stage.failed") {
+      return infra::AuditOutcome::Failed;
+    }
+    if (event_name == "response.degraded") {
+      return infra::AuditOutcome::Escalated;
+    }
+    return infra::AuditOutcome::Succeeded;
+  }
+
+  [[nodiscard]] static std::string make_metric_outcome(const std::string& metric_name) {
+    if (metric_name.find("stage_failed") != std::string::npos) {
+      return "failure";
+    }
+    if (metric_name.find("response_degraded") != std::string::npos) {
+      return "degraded";
+    }
+    return "success";
+  }
+
+  [[nodiscard]] static std::pair<infra::tracing::SpanStatusCode, std::string>
+  make_trace_status(const std::string& event_name) {
+    if (event_name == "stage.failed") {
+      return {infra::tracing::SpanStatusCode::Error, "cognition stage failed"};
+    }
+    if (event_name == "response.degraded") {
+      return {infra::tracing::SpanStatusCode::Error, "cognition response degraded"};
+    }
+    return {infra::tracing::SpanStatusCode::Ok, std::string{}};
+  }
+
+  [[nodiscard]] static std::vector<std::string> make_audit_side_effects(
+      const TelemetryEvent& event) {
+    std::vector<std::string> side_effects;
+    side_effects.reserve(event.fields.size() + 1U);
+    side_effects.push_back(std::string{"telemetry:"} + event.name);
+    for (const auto& field : event.fields) {
+      const std::string side_effect = std::string{"field:"} + field.key + "=" + field.value;
+      if (std::find(side_effects.begin(), side_effects.end(), side_effect) == side_effects.end()) {
+        side_effects.push_back(side_effect);
+      }
+    }
+    return side_effects;
+  }
+
+  [[nodiscard]] static infra::AuditEvent make_audit_event(const TelemetryEvent& event) {
+    return infra::AuditEvent{
+        .event_id = build_detail_ref(event),
+        .action = std::string{"cognition."} + event.name,
+        .actor = "cognition",
+        .target = event.context.stage.empty() ? std::string("cognition")
+                                              : std::string{"cognition."} + event.context.stage,
+        .outcome = make_audit_outcome(event.name),
+        .evidence_ref = infra::AuditEvidenceRef{
+            .kind = infra::AuditEvidenceKind::WorkerTask,
+            .ref = build_detail_ref(event),
+        },
+        .side_effects = make_audit_side_effects(event),
+        .timestamp = current_time_ms(),
+    };
+  }
+
+  [[nodiscard]] static infra::AuditContext make_audit_context(const TelemetryEvent& event) {
+    return infra::AuditContext{
+        .request_id = fallback_unknown(event.context.request_id, infra::kAuditContextUnknown),
+        .session_id = std::string(infra::kAuditContextUnknown),
+        .trace_id = fallback_unknown(event.context.trace_id, infra::kAuditContextUnknown),
+        .task_id = fallback_unknown(event.context.stage, infra::kAuditContextUnknown),
+        .parent_task_id = std::string(infra::kAuditContextUnknown),
+        .lease_id = std::string(infra::kAuditContextUnknown),
+        .worker_type = "cognition.telemetry",
+    };
+  }
+
+  [[nodiscard]] static infra::metrics::MetricLabels make_metric_labels(
+      const TelemetryMetric& metric) {
+    std::string stage = "unknown";
+    std::string profile = "unknown";
+    std::string error_code;
+    for (const auto& label : metric.labels) {
+      if (label.key == "stage" && !label.value.empty()) {
+        stage = label.value;
+      } else if (label.key == "profile_id" && !label.value.empty()) {
+        profile = label.value;
+      } else if (label.key == "error_code") {
+        error_code = label.value;
+      }
+    }
+
+    return infra::metrics::MetricLabels{
+        .module = "cognition",
+        .stage = std::move(stage),
+        .profile = std::move(profile),
+        .outcome = make_metric_outcome(metric.name),
+        .error_code = std::move(error_code),
+    };
+  }
+
+  [[nodiscard]] static infra::tracing::TraceAttributeMap make_trace_attributes(
+      const TelemetryEvent& event) {
+    infra::tracing::TraceAttributeMap attrs;
+    for (const auto& field : event.fields) {
+      if (infra::tracing::is_valid_trace_attr_key(field.key) &&
+          infra::tracing::is_printable_ascii(field.value)) {
+        attrs.emplace(field.key, field.value);
+      }
+    }
+    attrs.emplace("event_name", std::string{"cognition."} + event.name);
+    return attrs;
+  }
+
+  void ensure_meter() {
+    if (meter_ != nullptr || metrics_provider_ == nullptr) {
+      return;
+    }
+
+    meter_ = metrics_provider_->get_meter(infra::metrics::MeterScope{
+        .name = "cognition",
+        .version = "v1",
+        .schema_url = {},
+    });
+  }
+
+  void ensure_counter(const std::string& metric_name) {
+    if (meter_ == nullptr || counters_.find(metric_name) != counters_.end()) {
+      return;
+    }
+
+    const auto handle = meter_->create_counter(infra::metrics::MetricIdentity{
+        .name = metric_name,
+        .type = infra::metrics::MetricType::Counter,
+        .unit = "1",
+        .description = "cognition telemetry event count",
+    });
+    if (handle.has_value()) {
+      counters_.emplace(metric_name, *handle);
+    }
+  }
+
+  void ensure_tracer() {
+    if (tracer_ != nullptr || tracer_provider_ == nullptr) {
+      return;
+    }
+
+    tracer_ = tracer_provider_->get_tracer(infra::tracing::TracerScope{
+        .name = "cognition",
+        .version = "v1",
+        .schema_url = {},
+    });
+  }
+
+  std::shared_ptr<infra::audit::IAuditLogger> audit_logger_;
+  std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_;
+  std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider_;
+  std::shared_ptr<infra::metrics::IMeter> meter_;
+  std::shared_ptr<infra::tracing::ITracer> tracer_;
+  std::map<std::string, infra::metrics::InstrumentHandle> counters_;
 };
 
 [[nodiscard]] std::string bool_to_string(const bool value) {
@@ -448,6 +723,18 @@ TelemetryEmitResult CognitionTelemetry::emit_event(TelemetryEvent event,
   }
 
   return result;
+}
+
+std::shared_ptr<ICognitionTelemetrySink> make_live_telemetry_sink(
+    const CognitionRuntimeDependencies& dependencies) {
+  if (dependencies.audit_logger == nullptr && dependencies.metrics_provider == nullptr &&
+      dependencies.tracer_provider == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_shared<InfraTelemetrySink>(dependencies.audit_logger,
+                                              dependencies.metrics_provider,
+                                              dependencies.tracer_provider);
 }
 
 }  // namespace dasall::cognition::observability

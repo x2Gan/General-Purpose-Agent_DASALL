@@ -90,6 +90,27 @@ dasall_add_cognition_integration_test(
   "integration;cognition;structured-output"
 )
 
+dasall_add_cognition_integration_test(
+  dasall_cognition_production_telemetry_integration_test
+  CognitionProductionTelemetryIntegrationTest
+  CognitionProductionTelemetryIntegrationTest.cpp
+  "integration;cognition;observability"
+)
+
+target_include_directories(dasall_cognition_production_telemetry_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/profiles/include
+)
+
+target_link_libraries(dasall_cognition_production_telemetry_integration_test
+  PRIVATE
+    dasall_cognition
+    dasall_infra
+    dasall_profiles
+)
+
 target_compile_definitions(dasall_cognition_review_regression_integration_test
   PRIVATE
     DASALL_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
