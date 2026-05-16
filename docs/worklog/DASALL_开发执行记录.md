@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #672
+
+- 日期：2026-05-17
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-006 回写 LLM 当前状态与历史 baseline 差异
+- 状态：已完成
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-FIX-006-llm详设当前状态追溯收敛.md](../todos/llm/deliverables/LLM-FIX-006-llm%E8%AF%A6%E8%AE%BE%E5%BD%93%E5%89%8D%E7%8A%B6%E6%80%81%E8%BF%BD%E6%BA%AF%E6%94%B6%E6%95%9B.md)：单独记录本轮的任务边界、收敛内容与验证证据，明确“回写当前状态与历史 baseline 差异”在总账中对应 `LLM-FIX-006`，而不是 `LLM-FIX-005` 的边界回归防线。
+2. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)：将 1.4、3.1、3.2、3.3、3.4 从 placeholder-only / 无测试 / 无 loader 的启动期快照改写为当前真实状态，并显式保留 shared admission No-Go、historical L5 / current rerun / L6 soak 的边界分层。
+3. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md)：把 `LLM-FIX-006` 标记为 Done，并把当前剩余 owner 重新收敛为 `LLM-FIX-005` 的边界回归防线。
+
+### 验证
+
+1. `rg -n '当前只编译 src/placeholder.cpp|tests/unit/llm/CMakeLists.txt 仍为占位|tests/integration/llm 目录尚不存在|当前没有 LLMManager、ModelRouter、Prompt 三段或 adapter 实现' docs/architecture/DASALL_llm子系统详细设计.md; test $? -eq 1`
+   - 结果：通过；无命中，详设当前状态段落里最直接的 placeholder baseline 表述已清理。
+2. `rg -n 'LLM-FIX-006|历史 baseline|shared admission No-Go|历史 authoritative qemu L5|current rerun|边界回归防线' docs/architecture/DASALL_llm子系统详细设计.md docs/todos/llm/DASALL_llm子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；`LLM-FIX-006`、historical baseline、shared admission No-Go、historical L5 / current rerun 分层与“剩余 owner 是 005”已形成跨文档追溯链。
+
+### 结果
+
+1. `LLM-FIX-006` 已完成：新读者不会再从详设误判 llm 仍停留在 placeholder-only、空测试目录或“无 Prompt/Provider loader / route / adapter”的启动期状态。
+2. llm 当前态与历史 baseline 已显式拆开：D1-D9 当前闭合、D10 已在 llm owner 内部完成 module-local streaming lifecycle 收口、shared admission 继续保持 No-Go。
+3. 本轮没有把 historical authoritative qemu L5、当前 local rerun 或 focused tests 外推成 current release rerun 完成或 L6 soak；release evidence 仍按 `LLM-FIX-004` / `FULLINT-TODO-019` 的边界分层保留。
+
+### 下一步
+
+1. 返回 `LLM-FIX-005`，为 llm/source boundary 建立自动化回归防线，持续守住 ADR-006/007/008。
+
 ## 记录 #671
 
 - 日期：2026-05-16

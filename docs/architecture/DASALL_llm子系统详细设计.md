@@ -1,7 +1,7 @@
 # DASALL LLM 子系统详细设计（Detailed Design）
 
 版本：v1.1
-日期：2026-04-10
+日期：2026-05-17
 阶段：Detailed Design
 适用模块：llm/
 
@@ -30,6 +30,10 @@ LLM 子系统不是：
 4. ADR-006-context-orchestrator-vs-prompt-composer.md。
 5. WP05-T005、WP05-T010、WP05-T012 交付物。
 6. DASALL_infrastructure子系统详细设计.md 中 ConfigCenter 四层来源与 override 契约（v1）。
+7. docs/todos/llm/deliverables/LLM-TODO-038-llm专项Gate与阶段G-H证据回写设计收敛.md。
+8. docs/todos/llm/deliverables/LLM-TODO-043-manager边界与治理回流语义修复设计收敛.md。
+9. docs/todos/llm/deliverables/LLM-FIX-004-L5-release-runner-provider长稳态证据收口.md。
+10. docs/ssot/BusinessChainIntegrationMatrix.md。
 
 ### 1.2 边界定义
 
@@ -62,17 +66,18 @@ LLM 子系统不是：
 
 当前仓库已经给出以下真实信号：
 
-1. llm/CMakeLists.txt 已存在独立静态库目标 dasall_llm，但当前只编译 src/placeholder.cpp，说明工程入口已预留、实现仍为空骨架。
-2. contracts/include/llm/LLMRequest.h 与 LLMResponse.h 已冻结 provider-neutral 请求/响应面，且 tests/contract/llm/LLMRequestResponseContractTest.cpp 已建立边界测试基线。
-3. contracts/include/prompt/PromptSpec.h、PromptRelease.h、PromptComposeRequest.h、PromptComposeResult.h 已冻结 Prompt 资产与装配对象。
-4. profiles/include/RuntimePolicySnapshot.h 已存在 ModelProfile、PromptPolicy、DegradePolicy、TimeoutPolicy，说明 llm 的运行治理输入面已有现成上游。
-5. tests/unit/llm/CMakeLists.txt 仍为占位，tests/integration/llm 目录尚不存在，说明 llm 目前没有模块级单测和集成门禁。
-6. MockLLMAdapter 仍是基于字符串的脚手架 mock，而不是生产接口继承 mock，说明接口面尚未进入 Build 收口阶段。
+1. llm/CMakeLists.txt 现已构建真实 dasall_llm 静态库；llm/src/placeholder.cpp 只剩早期 bootstrap 痕迹，不再代表当前实现状态。
+2. llm/include 与 llm/src 现已落地 module-local 公共接口、Prompt 三段、ModelRouter、LLMManager、AdapterRegistry、ResponseNormalizer、TokenEstimator、UsageAggregator、observability bridges 与流式生命周期 owner，对应 focused unit/integration tests 已长期可发现。
+3. contracts/include/llm/LLMRequest.h、LLMResponse.h 与 contracts/include/prompt/* 继续作为 llm 的 shared hard boundary；`ResolvedModelRoute`、`PromptPolicyDecision` 与 `StreamSessionRef` 则维持 module-local，shared admission 仍是 No-Go。
+4. PromptAssetRepository、ProviderCatalogRepository、PromptRegistry、PromptComposer、PromptPolicy、PromptPipeline、LLMProductionFactory 与 runtime live composition 已落地，Prompt / Provider baseline、deployment overlay、profile projection、Cloud/LAN/Local family 注册与 production observability / audit sink 已进入真实组合路径。
+5. tests/unit/llm 与 tests/integration/llm 现已形成完整矩阵：interface surface、profile projection、Prompt/Provider parsing、ModelRouter、timeout/retry/concurrency、fallback、profile diff、asset-only onboarding、streaming、observability 与 governance failure 均有 focused coverage。
+6. installed / release evidence 也已分层：BC-07/BC-16 当前可表述为“历史 authoritative qemu L5 证据存在，当前 local rerun 未回退，release-runner contract 已固定”；但 current release candidate rerun 与 L6 soak 仍不能外推为已完成。
 
 基于这些信号，当前结论必须明确写成：
 
-1. architecture ready：总体职责、Prompt 三段治理、路由原则与输出语义已明确。
-2. implementation not ready：模块公共头、核心实现、单元测试、集成测试、流式句柄与健康探针均未落地。
+1. architecture compatible / module-local implementation ready：总体职责、Prompt 三段治理、路由原则、输出语义、provider family、production composition 与 focused tests 已闭合。
+2. shared admission not ready：`ResolvedModelRoute`、`PromptPolicyDecision`、`StreamHandle`/`StreamSessionRef` 仍未进入 shared contracts，不应把当前能力误写成跨模块 shared-ready。
+3. 当前 llm owner 剩余缺口已收敛为边界回归防线和文档/证据分层守护，而不是 placeholder 实现或测试拓扑缺失。
 
 ---
 
@@ -148,72 +153,51 @@ Must-Not：
 
 | 观察项 | 当前状态 | 证据 | 结论 |
 |---|---|---|---|
-| llm 模块构建入口 | 已存在 | llm/CMakeLists.txt | 已有独立静态库目标，但尚未形成真实实现 |
-| llm 源码实现 | 占位 | llm/src/placeholder.cpp | 当前没有 LLMManager、ModelRouter、Prompt 三段或 adapter 实现 |
-| llm 公共头文件 | 已存在，仍待实现闭环 | llm/include/ILLMManager.h、ILLMAdapter.h、LLMSubsystemConfig.h 等 | 模块公共接口与 supporting type 落点已建立，但多数接口仍未由真实实现支撑 |
+| llm 模块构建入口 | 真实实现已落地 | llm/CMakeLists.txt；llm/src/LLMManager.cpp；llm/src/route/ModelRouter.cpp；llm/src/prompt/PromptPipeline.cpp | dasall_llm 已不再是 placeholder-only 静态库；`placeholder.cpp` 仅是历史 bootstrap 痕迹 |
+| llm 公共头文件与 supporting types | 已落地 | llm/include/ILLMManager.h、ILLMAdapter.h、LLMSubsystemConfig.h、llm/include/prompt/*、llm/include/route/ResolvedModelRoute.h | llm module-local public surface 已闭合；当前剩余问题不是“没有接口”，而是继续守住 shared admission 边界 |
 | shared request/response contracts | 已冻结 | contracts/include/llm/LLMRequest.h、LLMResponse.h | provider-neutral 请求/响应基线已具备 |
 | Prompt 资产与装配 contracts | 已冻结 | contracts/include/prompt/* | PromptSpec、PromptRelease、PromptComposeRequest、PromptComposeResult 已具备 |
-| 独立 ModelRoute 共享对象 | 缺失 | DASALL_blueprint对当前contracts差异矩阵-2026-03-23.md | 当前只有 LLMRequest.model_route 字符串，没有独立共享对象 |
-| PromptPolicyDecision 共享对象 | 缺失 | 同上差异矩阵 | 发送前治理决策仍未形成 shared object |
-| StreamHandle 共享对象 | 缺失 | 同上差异矩阵 | streaming 生命周期对象未冻结 |
-| shared interface admission | 部分具备 | WP05-T012、worklog 记录 #039 | 仅 ILLMAdapter 达到 Admit 基线，其他接口应留在 module-local |
+| shared supporting object admission | No-Go 仍有效 | DASALL_blueprint对当前contracts差异矩阵-2026-03-23.md；详设 7.2.1 / 7.2.2 | 当前仍只有 `LLMRequest.model_route` 字符串与最小结果摘要进入 shared handoff；`ResolvedModelRoute`、`PromptPolicyDecision`、`StreamSessionRef` 继续保持 module-local |
+| shared interface admission | 部分具备且保持收敛 | WP05-T012；详设 7.2.2 | 仅 ILLMAdapter 具备 Admit 基线，其余 llm 接口继续留在 module-local |
 | llm contract tests | 已存在 | tests/contract/llm/LLMRequestResponseContractTest.cpp | request/response 语义边界已有自动化基线 |
 | prompt contract tests | 已存在 | tests/contract/prompt/* | Prompt 链路边界已有自动化基线 |
-| Prompt 资产目录 | 已存在，仍待装载链路落地 | llm/assets/prompts/planner/default/manifest.yaml | baseline Prompt 包已入仓，但 PromptAssetRepository 与运行时装载闭环尚未实现 |
-| Prompt 包文件规范 | 已有基线 | llm/assets/prompts/planner/default/manifest.yaml | manifest 规范已存在，但多场景/多版本资产治理仍待扩展 |
-| Prompt 动态切换路径 | 上游基础具备、llm 侧部分缺失 | profiles/*/runtime_policy.yaml 已冻结 prompt_policy；llm/assets/prompts 已存在；llm 尚无 PromptAssetRepository 实现 | 资产切换资产面已具备，运行时装载与切换闭环尚未形成 |
-| Provider 资产目录 | 已存在，仍待装载链路落地 | llm/assets/providers/deepseek/manifest.yaml、models.yaml | baseline Provider Catalog 已入仓，但加载器与治理闭环尚未实现 |
-| Provider Catalog 规范 | 已有基线 | llm/assets/providers/deepseek/manifest.yaml、models.yaml | provider manifest 与 models yaml 已形成基础规范，可继续在同一形态上扩展 |
-| Provider 凭据分层 | 部分具备 | llm/assets/providers/deepseek/manifest.yaml 中 `auth_ref`；infra secret/config 已存在 | provider 资产与 secret ref 边界已建立，但运行时投影与校验链尚未落地 |
-| 模型元数据治理 | 已有基线，仍待消费链落地 | llm/assets/providers/deepseek/models.yaml | pricing/source/effective_at/verification_state 已入模型目录，但预算检查与漂移治理尚未形成端到端闭环 |
-| thinking / non-thinking 选择策略 | 缺失 | 当前没有 deepseek-chat / deepseek-reasoner 的场景切换规则和观测字段 | 无法按复杂度、时延和预算智能切换双模式 |
-| 通用模型挡位抽象 | 缺失 | 当前设计重点仍偏 DeepSeek 双模式，尚未把 fast/quality、mini/pro、thinking/non-thinking 统一抽象为 tier traits | 后续接入其它多挡位 Provider 时易重复建模 |
-| 场景/角色选择维度 | 缺失 | 当前 PromptQuery 仅覆盖 stage/task_type/language/model_family/trusted_sources | 无法优雅支撑 scene/persona 定制 |
-| llm unit tests | 缺失 | tests/unit/llm/CMakeLists.txt | 目前仅占位，无真实单测 |
-| llm integration tests | 缺失 | tests/integration/ 目录无 llm 子目录 | 目前无核心链路 smoke / failure / profile 测试 |
-| llm mocks | 脚手架级 | tests/mocks/include/MockLLMAdapter.h | 当前 mock 仅支持字符串调用，不反映真实接口面 |
+| Prompt / Provider 资产与加载闭环 | 已落地 | llm/assets/prompts/*；llm/assets/providers/*；llm/src/prompt/PromptAssetRepository.cpp；llm/src/provider/ProviderCatalogRepository.cpp；llm/src/prompt/PromptRegistry.cpp | baseline assets 不再只是“入仓待用”；Prompt / Provider 装载、overlay、trusted-source 与运行时选择闭环已形成 |
+| Prompt 动态切换与场景/角色维度 | 已落地 module-local 选择链 | PromptQuery；PromptRegistry；LLMPromptSourceSwitchIntegrationTest；LLMPersonaSelectionIntegrationTest | scene/persona/profile/default 四段选择已进入真实 manager hot path；对应维度仍保持 module-local，不反向扩 shared contracts |
+| Provider 凭据分层与模型元数据治理 | 已落地并受治理 | provider manifests 中 `auth_ref`；ProviderCatalogRepository；LLMSubsystemConfig projection；LLMProviderAssetOnboardingIntegrationTest；LLMProductionFactoryTest | provider asset、secret ref、family registration、context/pricing/source/effective_at/verification_state 已进入生产装配链 |
+| thinking / non-thinking 与多挡位路由 | 已落地 | ModelRouter；DeepSeekDualModeSelectionIntegrationTest；LLMProfileIntegrationTest；ModelRouter* unit tests | deepseek chat/reasoner 与 cloud/LAN/local route 已纳入统一 deterministic routing，不再停留在手写分支 |
+| llm unit / integration tests | 已形成 focused matrix | tests/unit/llm/CMakeLists.txt；tests/integration/llm/CMakeLists.txt | llm 不再缺模块级验证；当前风险已从“没有测试”转为“避免用旧 baseline 文案误导当前态” |
+| llm mocks | 已升级为面向真实接口的测试支持层 | tests/mocks/include/MockLLMAdapter.h；相关 llm/cognition fixtures | mock 仍是测试支撑，不代表 production interface admission；但已不再只是字符串脚手架 |
 | profiles 运行策略供给 | 已存在 | profiles/include/RuntimePolicySnapshot.h | model_profile、prompt_policy、degrade_policy、timeout_policy 已可复用 |
+| installed / release evidence | 已分层收口 | BC-07 / BC-16；PKG-TODO-018；FULLINT-TODO-013 / 015；LLM-FIX-004 | llm 当前应表述为“历史 authoritative qemu L5 + 当前 local rerun L4 + fixed release-runner contract”；不得外推为 current rerun 已完成或 L6 soak ready |
+| 剩余开放项 | 已收敛 | LLM-FIX-005；FULLINT-TODO-019 | llm owner 当前剩余缺口是边界回归防线；release runner 当前候选版本复跑与 L6 soak 属后续证据任务 |
 
 ### 3.2 现状-目标差距表
 
 | 目标能力 | 当前状态 | 关键差距 | 风险等级 | 优先级 |
 |---|---|---|---|---|
-| 统一 llm 公共接口层 | 缺失 | 没有 llm/include、没有 ILLMManager / IPrompt* 等模块接口 | High | P0 |
-| Prompt 三段治理实现 | 缺失 | PromptRegistry / PromptComposer / PromptPolicy 尚无代码落点 | High | P0 |
-| Prompt 资产包形态与加载器 | 缺失 | 没有 manifest + Markdown 包规范，也没有 PromptAssetRepository 解析器 | High | P0 |
-| Provider 资产包形态与加载器 | 缺失 | 没有 Provider Catalog 规范，也没有 ProviderCatalogRepository 或等价加载器 | High | P0 |
-| 配置式 provider 实例接入 | 缺失 | 对已支持协议族，尚不能只通过 provider asset + secret ref 新增 provider 实例 | High | P0 |
-| 模型元数据治理 | 缺失 | 无统一 context/pricing/source/effective_at/verification_state 元数据结构 | High | P0 |
-| reasoning mode 智能切换 | 缺失 | 没有面向复杂度/时延/成本的 model selection hint 与策略 | High | P0 |
-| 场景动态切换 | 缺失 | 没有 scene-aware Prompt 选择输入，也没有受管切换闭环 | High | P0 |
-| 角色与人格化定制 | 缺失 | 没有 persona-aware Prompt 选择输入与资产组织约定 | Medium | P1 |
-| 模型路由与回退闭环 | 缺失 | 没有 ModelRouter、没有 adapter 选择和 fallback 执行器 | High | P0 |
-| provider 适配层 | 缺失 | Cloud/LAN/Local adapter 全部不存在 | High | P0 |
-| 发送前治理与 over-budget 回流 | 缺失 | 没有治理决策对象、没有回流路径实现 | High | P0 |
-| 健康检查与可观测性 | 缺失 | health、metrics、trace、audit 未接线 | Medium | P1 |
-| 模块级单元测试 | 缺失 | tests/unit/llm 仅占位 | High | P0 |
-| 模块级集成测试 | 缺失 | tests/integration/llm 不存在 | High | P0 |
-| 流式能力 | 阻塞 | StreamHandle 未冻结，stream_generate 无稳定生命周期设计 | Medium | P1 |
-| 共享 supporting contracts 完整性 | 部分阻塞 | ModelRoute、PromptPolicyDecision、StreamHandle 缺失 | Medium | P1 |
+| module-local llm 实现闭环 | 已完成 | 当前不再缺 Prompt 三段、ModelRouter、LLMManager、adapter、observability 或 focused tests | Closed | P0 |
+| shared supporting contracts 完整性 | 明确 No-Go | `ResolvedModelRoute`、`PromptPolicyDecision`、`StreamSessionRef` 仍缺真实跨模块消费者矩阵、迁移窗口与 contract tests | Medium | P1 |
+| llm/source boundary regression guard | 缺失自动化守护 | 仍缺 `LLMBoundaryGuardComplianceTest` 或等价脚本，无法自动防止 llm include/link memory、tools、apps、runtime 私有实现 | High | P0 |
+| current release candidate rerun | 待执行 | 历史 authoritative qemu L5 已存在，但当前 release candidate 仍需 FULLINT-TODO-019 在真实 runner 上复跑并归档 | Medium | P1 |
+| L6 soak / chaos / provider confidence | 未完成 | timeout/retry/fallback/route stability/observability 只证明 failure-handling basis，不等于长稳态或生产置信度 | Medium | P1 |
 
 ### 3.3 风险冲突识别
 
 | 冲突类型 | 描述 | 若不处理的后果 |
 |---|---|---|
-| 边界冲突 | PromptComposer 若主动拉取 memory / knowledge，会直接违反 ADR-006 | llm 与 memory 职责混层，后续 contracts 回退成本高 |
-| 语义重复 | 若把 PromptPolicyDecision、ResolvedModelRoute 直接塞回 contracts，会提前冻结未成熟 supporting object | shared contracts 污染，后续兼容成本高 |
-| 依赖反转 | 若 runtime 直接调用具体 Cloud/LAN/Local adapter | llm 子系统失去存在意义，profile 与降级策略散落 |
-| 测试错位 | 只有 contracts 测试，没有 llm unit / integration | 设计正确但实现期无法验证真正行为闭环 |
-| 流式误推进 | 在 StreamHandle 未冻结前强行落 streaming | 生命周期、取消、背压无法稳定，易形成隐藏线程问题 |
-| 观测缺口 | 调用成功率、fallback、policy deny 不可观测 | 降级路径无法审计与调优 |
+| 边界冲突 | PromptPipeline / PromptComposer 若主动拉取 memory / knowledge，或 llm 直接调用 tools / runtime 私有实现，会直接违反 ADR-006/007/008 | llm 与 memory/runtime/tools 职责混层，后续 shared admission 与恢复裁定边界都会被污染 |
+| 语义重复 | 若把 PromptPolicyDecision、ResolvedModelRoute、StreamSessionRef 直接塞回 contracts，会提前冻结未成熟 supporting object | shared contracts 污染，后续 source/wire 兼容成本高 |
+| 历史 baseline 误用 | 若继续把 placeholder-only、无测试、无 loader 的旧表述写成“当前状态” | 新读者会误判 llm 仍处于 bootstrap 阶段，影响后续任务拆分与验收 |
+| release evidence 外推 | 若把历史 qemu PASS、当前 local rerun 或 fixed runner contract 任何一项单独写成“production release-ready” | BC-07 / BC-16 证据层级被高估，current release candidate 风险被掩盖 |
+| L6 误判 | 若把 timeout/retry/fallback/route stability focused tests 当作 soak / chaos | provider 生产置信度会被错误放大，掩盖真实外部抖动与长稳态缺口 |
 
 ### 3.4 现状结论
 
 当前 llm 子系统最合适的设计策略不是继续扩张 shared contracts，而是：
 
-1. 以已冻结 contracts 为硬边界。
-2. 在 llm/include 与 llm/src 内补齐 module-local supporting type、公共接口和实现。
-3. 通过 Build 阶段逐步把“路由、治理、调用、观测、测试”闭环建立起来。
+1. 把早期 placeholder / 无测试 / 无 loader 的表述固定为“历史 baseline”，不再与当前态混写。
+2. 继续以已冻结 contracts 为硬边界，维持 `ResolvedModelRoute`、`PromptPolicyDecision`、`StreamSessionRef` 的 shared admission No-Go。
+3. 把 llm 当前剩余 owner 收敛为 `LLM-FIX-005` 的边界回归防线，并对 release evidence 继续严格区分 historical L5、current rerun 与 L6 soak。
 
 ---
 
