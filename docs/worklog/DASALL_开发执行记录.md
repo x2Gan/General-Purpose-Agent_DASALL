@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+## 记录 #671
+
+- 日期：2026-05-16
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-004 收口 L5 / release runner / provider 长稳态证据
+- 状态：已完成
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-FIX-004-L5-release-runner-provider长稳态证据收口.md](../todos/llm/deliverables/LLM-FIX-004-L5-release-runner-provider%E9%95%BF%E7%A8%B3%E6%80%81%E8%AF%81%E6%8D%AE%E6%94%B6%E5%8F%A3.md)：统一收口 authoritative qemu 历史证据、当前 installed local rerun、release-runner contract 与 provider failure-handling basis，并显式把“L5 历史 evidence”与“L6 soak / current release rerun”拆开描述。
+2. 更新 [docs/ssot/BusinessChainIntegrationMatrix.md](../ssot/BusinessChainIntegrationMatrix.md) 与 [docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md](../todos/integration/DASALL_%E5%85%A8%E9%87%8F%E4%B8%9A%E5%8A%A1%E9%93%BE%E9%9B%86%E6%88%90%E9%AA%8C%E8%AF%81%E4%B8%93%E9%A1%B9TODO-2026-05-11.md)：BC-07/BC-16 现已统一回写为“历史 authoritative qemu L5 + 当前 local rerun + release-runner contract fixed”；`FULLINT-TODO-019` 也从 blocker 语义收窄为当前 release candidate 的 rerun / artifact archive owner。
+3. 更新 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md) 与 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)：把 `LLM-FIX-004` 标记为 Done，并把 llm 当前剩余 owner 收缩到 `LLM-FIX-005` 的边界回归防线。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_model_router_stability_unit_test dasall_llm_manager_timeout_policy_unit_test dasall_llm_manager_retry_budget_unit_test dasall_llm_manager_concurrency_guard_unit_test dasall_deepseek_dual_mode_selection_integration_test dasall_llm_fallback_integration_test dasall_llm_profile_integration_test dasall_llm_production_observability_integration_test -j4`
+   - 结果：通过；8 个 focused llm unit/integration 目标均成功构建。
+2. `ctest --test-dir build-ci --output-on-failure -R "(LLMFallbackIntegration|LLMProfileIntegration|DeepSeekDualModeSelectionIntegration|LLMProductionObservabilityIntegration|LLMManager(TimeoutPolicy|RetryBudget|ConcurrencyGuard)|ModelRouterStability)Test"`
+   - 结果：通过；`ModelRouterStabilityTest`、`LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest`、`LLMManagerConcurrencyGuardTest`、`DeepSeekDualModeSelectionIntegrationTest`、`LLMFallbackIntegrationTest`、`LLMProfileIntegrationTest` 与 `LLMProductionObservabilityIntegrationTest` 共 `8/8` 通过。
+3. `rg -n 'LLM-FIX-004|BC-07|BC-16|FULLINT-BLK-001|DASALL-Release-Package-Gate|llm.origin=deepseek-prod' docs/todos docs/ssot docs/worklog scripts/packaging .github/workflows`
+   - 结果：通过；当前态 SSOT/TODO/worklog/workflow 锚点均已命中。少量旧 deliverable 仍保留当时的 blocker 文案，继续作为历史快照保留，不代表当前态冲突。
+
+### 结果
+
+1. `LLM-FIX-004` 已完成：llm owner 现在不再缺“L5 / release runner / provider 长稳态证据”的统一说法。BC-07 与 BC-16 已可表述为“历史 authoritative qemu L5 证据存在，当前 local rerun 未回退，release-runner contract 已固定”。
+2. `FULLINT-TODO-019` 仍保留，但职责已经缩小为“对当前 release candidate 在真实 runner 上复跑并归档 artifact”，不再作为 llm owner 当前 release evidence 的 blocker。
+3. 本轮没有把 timeout / retry / fallback / route stability / observability focused tests 误写成 L6 soak；provider 长稳态当前只收口为 failure-handling basis，而不是 production confidence。
+
+### 下一步
+
+1. 串行进入 `LLM-FIX-005`，为 llm/source boundary 增加自动化回归防线，持续守住 ADR-006/007/008。
+
+### 风险
+
+1. PKG-TODO-018 的 qemu PASS 是 authoritative 历史 evidence，但不是当前 release candidate 的当轮 rerun；若要发布当前候选版本，仍需按 `FULLINT-TODO-019` 在真实 runner 上重新归档 qemu / lintian / LLM smoke 日志。
+2. 本轮 focused tests 证明的是 timeout、retry budget、fallback、route stability 与 observability 的 failure-handling basis，不是长时 soak / chaos / network-loss 统计；后续若要宣称 provider production confidence，应另起 owner 扩展 L6 证据。
+
 ## 记录 #670
 
 - 日期：2026-05-16

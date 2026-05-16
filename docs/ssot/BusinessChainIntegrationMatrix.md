@@ -1,7 +1,7 @@
 # BusinessChainIntegrationMatrix (Full Business Chain SSOT)
 
 关联任务：FULLINT-TODO-001  
-最近更新时间：2026-05-12  
+最近更新时间：2026-05-16
 适用阶段：System Integration -> Full Business Chain Verification
 
 ## 1. 目标
@@ -30,6 +30,7 @@
 6. `multi_agent/include/IMultiAgentCoordinator.h`、`multi_agent/include/MultiAgentTypes.h`、`multi_agent/src/MultiAgentCoordinator.cpp` 与 `multi_agent/src/MultiAgentRuntimeFold.cpp` 当前已提供 Null/Real coordinator、Runtime fold helper 和最小 sidecar 协同实现。
 7. `runtime/include/RuntimeDependencySet.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 当前已为 Runtime live composition 注入 `multi_agent_coordinator` 槽位；`profiles/include/RuntimePolicySnapshot.h` 与 `profiles/src/RuntimePolicyProvider.cpp` 已提供 typed `multi_agent_enabled()` 投影。
 8. `tests/integration/multi_agent/CMakeLists.txt` 当前已注册 `MultiAgentDisabledByProfileIntegrationTest`、`MultiAgentCoordinatorPipelineTest`、`MultiAgentRecoveryFoldIntegrationTest` 与 `dasall_multi_agent_focus_integration_tests`；`tests/CMakeLists.txt` 当前已把 BC-17 接入 `dasall_full_business_chain_discoverability`。
+9. `.github/workflows/release-package-gate.yml` 当前已提供 self-hosted `workflow_dispatch` release-runner contract：显式接收 `qemu_image`、`deepseek_key_file`、`provider_probe_url`、`timeout_reboot` 与 `disable_kvm`，并归档 qemu / lintian 日志。
 
 ### 2.2 installed-package 运行证据
 
@@ -46,6 +47,7 @@
 9. `sudo -n dasall status receipt:missing token local://uid/0 --json` 与 `sudo -n dasall cancel receipt:missing token local://uid/0 --json` 均按 expected reject 返回 exit `5`，分别为 `status_missing` / `cancel_missing`。
 10. `sudo -n dasall diag health --json` 按 default gate 返回 exit `4` / `diag_disabled`。
 11. `rg -n '^\s*multi_agent:' /usr/share/dasall/profiles/desktop_full/runtime_policy.yaml /usr/share/dasall/profiles/cloud_full/runtime_policy.yaml` 当前返回两处 `multi_agent: false`；`dasall --help` 未暴露 multi-agent 独立 surface；`sudo -n dasall run '{tool prompt}' --json --timeout-ms 120000` 当前返回 `disposition=completed`、`error.reason=task_not_completed`、无 `receipt_ref`。
+12. [docs/todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate与交付证据收口.md](../todos/packaging/deliverables/PKG-TODO-018-Ubuntu-DPKG-Gate%E4%B8%8E%E4%BA%A4%E4%BB%98%E8%AF%81%E6%8D%AE%E6%94%B6%E5%8F%A3.md) 当前记录 authoritative qemu `autopkgtest` PASS、`pkg-smoke-local-control-plane PASS`、`pkg-smoke-common-assets PASS`、`RC=0` 与 `lintian RC=0`；结合 `debian/tests/pkg-smoke-local-control-plane` 中的 `llm.origin=deepseek-prod/` / reject `agent.dataset` 断言，这已构成 BC-07 与 BC-16 的历史 L5 锚点。
 
 ### 2.3 外部参考
 
@@ -74,7 +76,7 @@
 | BC-04 | Async receipt / query / cancel / replay | L3/L4 partial | 新增 `FullIntAsyncRecoveryCausalityTest` 覆盖 `AsyncTaskRegistry` ownership、`ResultReplayCache` trace/ref、owner-matched `RuntimeBridge::cancel()` forwarding；`AccessAsyncReceiptQueryCancelIntegrationTest` 同轮通过；installed package missing receipt `status_missing` / `cancel_missing` 在 `FULLINT-TODO-013` 复跑通过 | build-tree async causality 已有独立 cross-chain 证据；installed package 当前未产真实 receipt，不能宣称 package async ready | FULLINT-TODO-015 或后续 async package 正向入口 |
 | BC-05 | Runtime single-agent unary 主链 | L2/L4 partial | `AgentOrchestrator` 当前有 live unary、production LLM direct path、knowledge query、memory writeback 调用点；`FULLINT-TODO-013` installed `run` 返回 completed、`task_completed=true` 与 DeepSeek `llm.origin` | 单 Agent installed LLM 主功能可用；cognition/knowledge/tool 正向 installed 子链仍不由该 run 外推 | FULLINT-TODO-003、007、013、014、016 |
 | BC-06 | Cognition decision / reflection / response | L2 | cognition/runtime integration fixtures 与 `AgentOrchestrator` cognition 调用点存在；本轮未执行 cognition focused tests | cognition 是主链组成段，但 belief/update/failure 回流仍需主链证据包断言 | FULLINT-TODO-003、012 |
-| BC-07 | LLM production generation | L4 | `LLMProductionFactory`、runtime response-stage LLM request 与 `llm.origin=` 输出点存在；`FULLINT-TODO-013` installed `run` 返回 `llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop` 且无 `agent.dataset` | LLM production path 有 installed local 证据；外部 provider 长稳态与 qemu secret/network 仍归 release gate | FULLINT-TODO-019 |
+| BC-07 | LLM production generation | L5 | `LLMProductionFactory`、runtime response-stage LLM request 与 `llm.origin=` 输出点存在；`FULLINT-TODO-013` installed `run` 返回 `llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop` 且无 `agent.dataset`；PKG-TODO-018 的 qemu `pkg-smoke-local-control-plane` authoritative PASS 复用了同一 installed LLM 正向断言；repo 现已固定 release-runner workflow/script contract | BC-07 现有“历史 authoritative qemu L5 + 当前 local rerun L4”双证据；release runner contract 已固定 | 不外推为 L6 soak / provider SLA；当前 release candidate 仍需 FULLINT-TODO-019 在真实 runner 上重跑归档 |
 | BC-08 | Knowledge retrieve / evidence projection | L2 partial | `make_knowledge_query()` 与 knowledge focused gates存在；`FULLINT-TODO-013` installed help surface 未显示 knowledge retrieve/refresh/health 子命令 | build-tree evidence projection 可追溯；installed-package 缺独立正向入口，不能宣称 package-ready | FULLINT-TODO-014 |
 | BC-09 | Memory context assembly | L2 | `IMemoryManager::prepare_context()` 与 memory integration tests 存在；runtime live path通过 dependency set 调用 memory | memory 上下文组装有 runtime-facing 代码落点；installed state 持久化仍需独立验证 | FULLINT-TODO-003、012、015 |
 | BC-10 | Memory writeback / compression / maintenance | L3/L4 partial | `FullIntAsyncRecoveryCausalityTest` 使用 SQLite memory manager 写回同一 `session_id/turn_id` 并 reopen 查询 persisted turn；`MemoryWritebackIntegrationTest`、`MemoryFailureInjectionTest` 同轮通过；`FULLINT-TODO-015` 已补 installed `/var/lib/dasall/memory/memory.db` row proof；`FULLINT-TODO-018` 已证明 multi_agent observation/recovery fold 可回到 runtime owner | build-tree recovery 后写回连续性与 multi_agent sidecar fold 已证明；installed package 多 Agent 正向入口仍不存在，因此不把当前 fold 结果外推为 package writeback path | FULLINT-TODO-015、018 |
@@ -83,7 +85,7 @@
 | BC-13 | Infra config / policy / secret / plugin / diagnostics / health | L3/L4 partial | daemon explicit start 后 active/enabled；当前 readiness payload 为 `READY/default-ready` 且 `bridge_reachable=true`；default `diag health` 返回 `diag_disabled`；startup diagnostics tests 注册到 release-preflight | health/readiness 与 diagnostics default gate 都有安装态信号；release hardening 负路径已补齐 build-tree owner，但 release runner 仍需独立复核 | FULLINT-TODO-009、017 |
 | BC-14 | Profiles build/runtime policy activation | L2/L4 asset partial | `RuntimePolicySnapshot::multi_agent_enabled()` 与 provider typed projection 已落地；source 与 fresh installed full profiles 均已禁用 `multi_agent`；`MultiAgentDisabledByProfileIntegrationTest` 已证明 disabled snapshot -> Null coordinator | profile 策略激活与禁用态 Gate 现已可追溯；启用态只在 build-tree synthetic snapshot 证明，不外推为 installed profile enablement | FULLINT-TODO-004、018、019 |
 | BC-15 | Recovery / safe-mode / resume | L3/L4 partial | `FullIntAsyncRecoveryCausalityTest` 覆盖 `RecoveryManager::evaluate/execute/apply()`、resume binding token、checkpoint ref、budget exhausted degrade；`RuntimeResumeIntegrationTest` fixture 漂移已修复并同轮通过；`MultiAgentRecoveryFoldIntegrationTest` 已证明 multi_agent recovery sidecar 仍经 `RecoveryManager::evaluate/execute/apply()` 完成 `abort_safe` 裁定；installed package 未暴露 checkpoint/resume 正向入口 | Runtime 仍是 recovery owner；build-tree retry/checkpoint/writeback continuity 与 multi_agent recovery fold 已验证，installed checkpoint/resume 仍保持 partial | FULLINT-TODO-011、018 |
-| BC-16 | Packaging / installed-package / release handoff | L4 | `FULLINT-TODO-013` 重新构包、fresh reinstall、explicit start、package smoke 与人工 LLM/control-plane 矩阵均通过；串联 qemu 脚本存在但本轮未传入 image/virt-server | local installed-package L4 主功能门通过；qemu / lintian / release runner 仍需按 L5 复跑，不能由 L4 覆盖 | FULLINT-TODO-019 |
+| BC-16 | Packaging / installed-package / release handoff | L5 | `FULLINT-TODO-013` 重新构包、fresh reinstall、explicit start、package smoke 与人工 LLM/control-plane 矩阵均通过；PKG-TODO-018 已记录 qemu `autopkgtest` authoritative PASS 与 `lintian RC=0`；repo 当前另有 qemu 串联脚本与 self-hosted release workflow | BC-16 已具 package handoff 历史 L5 证据，且仓库级 release-runner contract 已固定 | 当前 release candidate 仍需 FULLINT-TODO-019 复跑并归档当轮 artifact；不外推为 L6 soak / production confidence |
 | BC-17 | Multi-agent coordination | L2/L4 asset partial | `IMultiAgentCoordinator`、`MultiAgentExecutionReport`、Null/Real coordinator、typed `multi_agent_enabled()`、Runtime live composition 注入与 Runtime fold helper 已落地；`MultiAgentDisabledByProfileIntegrationTest`、`MultiAgentCoordinatorPipelineTest`、`MultiAgentRecoveryFoldIntegrationTest` 与 `dasall_multi_agent_focus_integration_tests` 当轮通过；top-level discoverability 已纳入 BC-17；source desktop/cloud profile 与 fresh installed profile 均为禁用态，installed CLI 无 multi-agent 独立 surface，当前工具提示 `run` 仅返回 `disposition=completed` + `error.reason=task_not_completed` | build-tree sidecar 协同路径已有 true-integration 证据，且 Runtime/RecoveryManager owner 边界保留；installed-package 仍只证明 disabled asset/control-plane 边界，不宣称 package-ready 或 profile-enabled runtime-ready | FULLINT-TODO-018、019 |
 
 ## 5. Gate 映射
@@ -104,7 +106,7 @@
 | Design 决策 | Build / 验证落点 | 后继任务 |
 |---|---|---|
 | BC-01~BC-17 编号唯一，且每条链路只能记录当前最高实证层 | 本文件 §4；TODO §3 回链 | FULLINT-TODO-005、021、022 |
-| installed-package 证据必须分 local、LLM origin、qemu、lintian | `pkg_smoke_install.sh`、`sudo dasall run`、`validate_gate_int_10_installed_package_qemu.sh` | FULLINT-TODO-002、013、019 |
+| installed-package 证据必须分 local、LLM origin、qemu、lintian | `pkg_smoke_install.sh`、`sudo dasall run`、`validate_gate_int_10_installed_package_qemu.sh`、`.github/workflows/release-package-gate.yml` | FULLINT-TODO-002、013、019 |
 | runtime/cognition/memory/llm 主链不能用 `agent.dataset` 代替 LLM 主功能 | `AgentOrchestrator` production LLM path 与 installed `dasall run` | FULLINT-TODO-003 |
 | multi_agent profile enablement 必须与实现装配一致 | `profiles/*/runtime_policy.yaml`、`RuntimePolicySnapshot`、`multi_agent/`、`AgentOrchestrator` | FULLINT-TODO-004、018 |
 
