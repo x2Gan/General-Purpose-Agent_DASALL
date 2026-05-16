@@ -1795,7 +1795,7 @@ LLMManager 当前更接近编排组件，而不是复杂状态机 owner，因此
 | LLM-D7 | 落地 LLMManager（含 call execution）、AdapterRegistry（含 health aggregation）与 unary 主链路（v1.1 P2-1 合并） | llm/src/LLMManager.cpp；llm/src/route/AdapterRegistry.cpp；llm/src/execution/ResponseNormalizer.cpp；**llm/src/TokenEstimator.cpp**（v1.1 GAP-1）；**llm/src/UsageAggregator.cpp**（v1.1 GAP-2）；**llm/src/prompt/PromptPipeline.cpp**（v1.1 P0-1） | tests/unit/llm/LLMManagerSuccessPathTest.cpp；tests/unit/llm/LLMManagerFallbackTest.cpp；tests/unit/llm/LLMManagerFailureMappingTest.cpp；tests/unit/llm/ResponseNormalizerReasoningContentStripTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "(LLMManager(SuccessPath|Fallback|FailureMapping)Test|ResponseNormalizerReasoningContentStripTest)" --output-on-failure | 首轮只验 unary，并验证 thinking mode 私有字段不会泄露到 shared contracts；详见 6.15.4 与 6.15.6 |
 | LLM-D8 | 落地 Cloud / LAN / Local adapter skeleton | llm/src/adapters/OpenAICompatibleAdapter.cpp；llm/src/adapters/OllamaAdapter.cpp；llm/src/adapters/LocalLLMAdapter.cpp | tests/unit/llm/AdapterHealthProbeTest.cpp；tests/unit/llm/AdapterProtocolMappingTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R "Adapter(HealthProbe|ProtocolMapping)Test" --output-on-failure | provider-specific 细节只留在 llm 内部 |
 | LLM-D9 | 接线 observability 与 integration smoke | llm/src/observability/*；tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp；tests/integration/llm/DeepSeekDualModeSelectionIntegrationTest.cpp；tests/integration/llm/LLMFallbackIntegrationTest.cpp；tests/integration/llm/LLMPromptSourceSwitchIntegrationTest.cpp；tests/integration/llm/LLMPersonaSelectionIntegrationTest.cpp | integration smoke + failure + profile + prompt switch + dual mode selection | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R "(LLM(Smoke|Fallback|PromptSourceSwitch|PersonaSelection)IntegrationTest|DeepSeekDualModeSelectionIntegrationTest)" --output-on-failure | 需遵守 InfraIntegrationTopology 标签规范，并验证场景/角色切换 |
-| LLM-D10 | streaming 生命周期与 StreamSessionRef 占位 | llm/include/stream/StreamSessionRef.h；llm/src/stream/StreamSessionRegistry.cpp | tests/unit/llm/StreamSessionLifecycleTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R StreamSessionLifecycleTest --output-on-failure | 建议延期到 unary 稳定后 |
+| LLM-D10 | module-local streaming 生命周期收口 | llm/include/stream/StreamSessionRef.h；llm/src/stream/StreamSessionRegistry.cpp；llm/src/LLMManager.cpp；llm/src/adapters/OpenAICompatibleAdapter.cpp | tests/unit/llm/StreamSessionLifecycleTest.cpp；tests/integration/llm/LLMStreamingIntegrationTest.cpp；tests/unit/cognition/CognitionLlmBridgeErrorMappingTest.cpp | `RunCtest_CMakeTools(tests=["StreamSessionLifecycleTest","LLMStreamingIntegrationTest","CognitionLlmBridgeErrorMappingTest"])` | 已在不引入 shared `StreamHandle` 的前提下完成 llm internal streaming lifecycle；shared admission 仍后置 |
 
 ### 7.2 暂不可直接映射项
 
@@ -1803,21 +1803,22 @@ LLMManager 当前更接近编排组件，而不是复杂状态机 owner，因此
 |---|---|---|
 | shared ModelRoute | shared contracts 尚未冻结独立对象 | 先用 ResolvedModelRoute module-local 实现，后续若确有跨模块复用需求再评审 |
 | shared PromptPolicyDecision | 当前差异矩阵明确缺失 | 先用 llm/include/prompt/PromptPolicyDecision.h 作为 module-local 类型 |
-| shared StreamHandle | 生命周期、取消、背压语义未冻结 | unary 优先，streaming 后置 |
+| shared StreamHandle | shared contracts admission 仍未冻结 | 保持 module-local real streaming，实现不外推为 shared supporting object |
 | ILLMManager / IPrompt* shared admission | supporting contracts 与调用语义尚未收口 | 先做 module-local 公共接口，后续按 T011/T012 流程评审 |
 
 #### 7.2.1 LLM-TODO-036 streaming 生命周期评审结论
 
-2026-05-14 的 LLM-TODO-036 只冻结 streaming 生命周期设计与后置实现边界，不把 llm 标记为 stream-ready。结论如下：
+2026-05-14 的 LLM-TODO-036 先冻结了 streaming 生命周期设计边界；2026-05-16 的 LLM-FIX-001 又在不新增 shared `StreamHandle`、不修改 `contracts/` 的前提下，把该设计落为 llm internal implementation。当前结论如下：
 
 1. 当前继续不新增 shared `StreamHandle`，不修改 `contracts/`，不扩 `LLMRequest` / `LLMResponse`；`StreamSessionRef` 仍是 llm module-local 的 opaque session id。
-2. `LLMManager::stream_generate()` 在真实 lifecycle owner 落地前必须 fail-closed，不进入 route execution，不创建 provider session，不触发 Runtime recompose 信号。
-3. 未来 `StreamSessionRegistry` 是 llm 内部生命周期 owner，负责 session id 分配、bounded capacity、cancel mark、terminal cleanup 与 TTL reap；Runtime 仍拥有调用时机和恢复裁定，adapter 只拥有 provider transport cursor。
+2. `LLMManager::stream_generate()` 当前已经进入真实 route execution，但只在 llm internal 生命周期 owner 与 focused tests 的约束下工作；若 registry/observer/adapter terminal result 不一致，必须 fail-closed，不触发 Runtime recompose 信号。
+3. `StreamSessionRegistry` 已成为 llm 内部生命周期 owner，负责 session 接纳、bounded capacity、cancel mark、terminal cleanup 与 TTL reap；Runtime 仍拥有调用时机和恢复裁定，adapter 只拥有 provider stream cursor。
 4. lifecycle 状态机冻结为 `Accepted -> Active -> Completing -> Completed`，以及 `Accepted/Active -> CancelRequested -> Cancelled`、`Accepted/Active -> Failed`、`Accepted/Active -> Expired` 三类异常终态。所有 terminal state 的 cleanup/cancel 都必须幂等。
 5. ownership 冻结为三段：Runtime owns request intent 与 observer lifetime；llm owns session registry entry 与 terminal state；adapter owns provider stream cursor。`IStreamObserver*` 不得被 registry 持久拥有，只能在 active callback 窗口内使用。
 6. backpressure 冻结为 fail-closed：全局 active stream session 有上限，超过上限拒绝新 session；每个 session 的 pending delta buffer 有上限，超过上限关闭该 session 并上报 overflow，不允许无界缓存。
 7. cancel 必须显式通知 adapter transport，并转换到 `CancelRequested` / `Cancelled`；不允许通过 detach thread、析构副作用或 observer 丢失来表达取消。
-8. 首个自动化 guard 是 `StreamSessionLifecycleTest`：它验证 manager 仍 fail-closed，OpenAI-compatible / Ollama / Local adapter 仍只返回 placeholder `StreamSessionRef`。真实 SSE/delta merge/adapter streaming 仍留给后续独立 Build 任务。
+8. 当前自动化 guard 由三部分组成：`StreamSessionLifecycleTest` 覆盖 registry cancel/overflow fail-closed 与 OpenAI-compatible SSE/observer 生命周期；`LLMStreamingIntegrationTest` 覆盖 manager -> route -> adapter stream -> normalize/usage 收口；`CognitionLlmBridgeErrorMappingTest` 覆盖 streaming preference 的失败投影。
+9. 实现成熟度更新为“architecture compatible / module-local implementation ready / shared admission not ready”：llm 内部已具备 controlled streaming，但 shared `StreamHandle` 仍未 admission，不应把当前能力误表述为跨模块 shared stream-ready。
 
 #### 7.2.2 LLM-TODO-037 shared supporting object admission 评审结论
 
@@ -1829,7 +1830,7 @@ LLMManager 当前更接近编排组件，而不是复杂状态机 owner，因此
 |---|---|---|---|---|
 | shared ModelRoute / `ResolvedModelRoute` | `ModelRouter` | `LLMManager` route candidate 展开、ModelRouter unit tests、InterfaceSurfaceTest | 未发现 runtime/cognition/apps/tools/services 直接 include；跨模块仍通过 `LLMRequest.model_route` 字符串和 `LLMManagerResult.resolved_route` 摘要协作 | No-Go，继续 module-local |
 | shared PromptPolicyDecision | `PromptPolicy` | `PromptPipeline`、`LLMManagerResult`、PromptPolicy/Pipeline/Manager tests | runtime/cognition 只通过 `LLMManagerResult.governance_disposition` 看到最小 disposition 摘要，未消费完整治理对象 | No-Go，完整对象继续 module-local |
-| shared StreamHandle / `StreamSessionRef` | adapter skeleton / future `StreamSessionRegistry` | OpenAI-compatible / Ollama / Local adapter placeholder、MockLLMAdapter、StreamSessionLifecycleTest | `stream_generate()` 当前 fail-closed；未形成 runtime/cognition/apps 侧稳定 stream handle consumer | No-Go，继续 module-local 与后置实现 |
+| shared StreamHandle / `StreamSessionRef` | OpenAI-compatible adapter / llm internal `StreamSessionRegistry` | `LLMManager::stream_generate()`、OpenAI-compatible adapter、`StreamSessionLifecycleTest`、`LLMStreamingIntegrationTest` | llm owner 内部 streaming 已闭合，但未形成 runtime/cognition/apps 侧稳定 shared stream handle consumer | No-Go，继续 module-local，不推进 shared admission |
 
 未来迁移窗口冻结为四段：
 

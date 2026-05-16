@@ -42,6 +42,7 @@ target_sources(dasall_llm
     src/prompt/TemplateRenderer.cpp
     src/provider/ProviderCatalogRepository.cpp
     src/route/AdapterRegistry.cpp
+    src/stream/StreamSessionRegistry.cpp
     src/route/ModelRouter.cpp
     src/transport/CurlCommandLLMTransport.cpp
     src/placeholder.cpp

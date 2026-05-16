@@ -50,6 +50,13 @@ dasall_add_llm_integration_test(
 )
 
 dasall_add_llm_integration_test(
+  dasall_llm_streaming_integration_test
+  LLMStreamingIntegrationTest
+  LLMStreamingIntegrationTest.cpp
+  "integration;llm;streaming"
+)
+
+dasall_add_llm_integration_test(
   dasall_llm_prompt_source_switch_integration_test
   LLMPromptSourceSwitchIntegrationTest
   LLMPromptSourceSwitchIntegrationTest.cpp

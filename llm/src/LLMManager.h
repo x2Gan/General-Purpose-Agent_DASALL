@@ -38,6 +38,10 @@ namespace route {
 class ModelRouter;
 }
 
+namespace stream {
+class StreamSessionRegistry;
+}
+
 enum class LLMCallExecutionFailureReason {
   NotInitialized = 0,
   RouteUnavailable = 1,
@@ -66,6 +70,12 @@ class LLMCallExecutor {
   [[nodiscard]] LLMCallExecutionResult execute_unary(std::string_view route_key,
                                                      const contracts::LLMRequest& request,
                                                      route::AdapterRegistry& registry);
+  [[nodiscard]] LLMCallExecutionResult execute_stream(
+      std::string_view route_key,
+      const contracts::LLMRequest& request,
+      route::AdapterRegistry& registry,
+      stream::StreamSessionRegistry& session_registry,
+      IStreamObserver* observer);
 
   [[nodiscard]] std::uint32_t active_call_count() const;
   [[nodiscard]] bool is_initialized() const;
@@ -86,6 +96,7 @@ class LLMManager final : public ILLMManager {
              std::shared_ptr<execution::ResponseNormalizer> response_normalizer,
              std::shared_ptr<UsageAggregator> usage_aggregator,
              std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot = nullptr,
+             std::shared_ptr<stream::StreamSessionRegistry> stream_session_registry = nullptr,
              std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge = nullptr,
              std::shared_ptr<observability::LLMTraceBridge> trace_bridge = nullptr);
 
@@ -107,6 +118,7 @@ class LLMManager final : public ILLMManager {
   std::shared_ptr<LLMCallExecutor> call_executor_;
   std::shared_ptr<execution::ResponseNormalizer> response_normalizer_;
   std::shared_ptr<UsageAggregator> usage_aggregator_;
+  std::shared_ptr<stream::StreamSessionRegistry> stream_session_registry_;
   std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge_;
   std::shared_ptr<observability::LLMTraceBridge> trace_bridge_;
   bool initialized_ = false;

@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #667
+
+- 日期：2026-05-16
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-001 实现 streaming 生命周期 fail-closed -> 可控可测
+- 状态：已完成
+
+### 改动
+
+1. 调整 [llm/src/LLMManager.h](../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../llm/src/LLMManager.cpp)：为 `LLMCallExecutor` 新增 streaming 执行路径，引入 `CapturingStreamObserver` 与 route-level `execute_stream()`，让 `LLMManager::stream_generate()` 复用既有 PromptPipeline、ModelRouter、ResponseNormalizer、UsageAggregator 与 fallback/timeout 治理主链，同时把 `streaming_enabled`、observer failure、terminal result 一致性纳入 fail-closed 判定。
+2. 新增 [llm/src/stream/IStreamObserver.h](../llm/src/stream/IStreamObserver.h)、[llm/src/stream/StreamSessionRegistry.h](../llm/src/stream/StreamSessionRegistry.h) 与 [llm/src/stream/StreamSessionRegistry.cpp](../llm/src/stream/StreamSessionRegistry.cpp)，在不修改 `contracts/` 与不引入 shared `StreamHandle` 的前提下，把 llm internal lifecycle owner 固化为 `Accepted -> Active -> Completing -> Completed`、`CancelRequested -> Cancelled`、`Failed`、`Expired` 四类终态，并显式约束 capacity / overflow / cleanup / TTL reap。
+3. 调整 [llm/src/adapters/OpenAICompatibleAdapter.h](../llm/src/adapters/OpenAICompatibleAdapter.h) 与 [llm/src/adapters/OpenAICompatibleAdapter.cpp](../llm/src/adapters/OpenAICompatibleAdapter.cpp)：OpenAI-compatible adapter 的 `stream_generate()` 不再返回 placeholder，而是发出 `text/event-stream` 请求、同步解析 SSE `data:` 事件、逐段回调 observer、合并 terminal content/usage/provider trace，并在 observer rejection 或协议不完整时 fail-closed。
+4. 重写 [tests/unit/llm/StreamSessionLifecycleTest.cpp](../tests/unit/llm/StreamSessionLifecycleTest.cpp)，新增 registry cancel/overflow 与 OpenAI-compatible SSE/observer 生命周期断言；扩展 [tests/unit/cognition/CognitionLlmBridgeErrorMappingTest.cpp](../tests/unit/cognition/CognitionLlmBridgeErrorMappingTest.cpp) 覆盖 `prefer_streaming` 投影；新增 [tests/integration/llm/LLMStreamingIntegrationTest.cpp](../tests/integration/llm/LLMStreamingIntegrationTest.cpp) 并更新 [tests/integration/llm/CMakeLists.txt](../tests/integration/llm/CMakeLists.txt) 注册 manager-level streaming integration。
+5. 调整 [tests/integration/llm/LLMFallbackIntegrationTest.cpp](../tests/integration/llm/LLMFallbackIntegrationTest.cpp)、[tests/integration/llm/DeepSeekDualModeSelectionIntegrationTest.cpp](../tests/integration/llm/DeepSeekDualModeSelectionIntegrationTest.cpp) 与 [tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp](../tests/integration/llm/LLMSubsystemSmokeIntegrationTest.cpp)，对齐 `LLMManager` 新增 `stream_session_registry` 构造参数，避免 observability integration 因签名漂移失配。
+6. 回写 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)、[docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 与总账 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md)，把 streaming 当前态从“设计已冻结、实现后置”更新为“module-local 已实现、shared admission 仍后置”。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_stream_session_lifecycle_unit_test","dasall_cognition_llm_bridge_error_mapping_unit_test","dasall_llm_streaming_integration_test"])`
+   - 结果：三项目标均构建成功。
+2. `RunCtest_CMakeTools(tests=["StreamSessionLifecycleTest","LLMStreamingIntegrationTest","CognitionLlmBridgeErrorMappingTest"])`
+   - 结果：3/3 通过。
+3. `Build_CMakeTools(buildTargets=["dasall_llm_fallback_integration_test","dasall_deepseek_dual_mode_selection_integration_test","dasall_llm_smoke_integration_test"])`
+   - 结果：`ninja: no work to do`，确认为构造签名兼容修正，未引入额外编译回归。
+
+### 结果
+
+1. `LLM-FIX-001` 已完成：`LLMManager::stream_generate()`、`OpenAICompatibleAdapter::stream_generate()` 与 llm internal `StreamSessionRegistry` 现在形成受控的 module-local streaming 执行闭环，不再停留在 placeholder / hardcoded fail-closed 状态。
+2. `StreamSessionLifecycleTest`、`LLMStreamingIntegrationTest` 与 `CognitionLlmBridgeErrorMappingTest` 现在分别覆盖 registry fail-closed、manager/adaptor 正向路径与 cognition streaming preference 失败映射，streaming 生命周期已达到“可控可测”的 focused gate 要求。
+3. 本轮没有把 `StreamSessionRef`、observer 或 stream handle 语义推进 `contracts/`；shared `StreamHandle` admission 的 No-Go 结论继续有效，当前成熟度应表述为“llm internal streaming ready / shared admission not ready”。
+
+### 下一步
+
+1. 串行进入 LLM-FIX-002，补齐 `LLMProductionFactory` 的 production provider family 注册，把 OpenAI-compatible、Ollama、Local family 的 route 注册从 fixture 手工接线推进到 production composition。
+2. 在 LLM-FIX-002 完成并提交后，再推进 LLM-FIX-003，把 production metrics / trace / audit sink 接入 `LLMManager` 组合路径。
+
+### 风险
+
+1. 当前 OpenAI-compatible streaming 依旧建立在同步 transport + SSE body 解析之上；若未来需要真正长连接/增量 transport，必须保持 `StreamSessionRegistry`、observer callback 与 terminal result owner 不变，避免把 transport 细节回灌到 `contracts/`。
+2. Ollama / Local family 仍保持 streaming placeholder；在 LLM-FIX-002 完成前，不应把当前实现误判为“所有 production provider family 的 streaming 都已闭合”。
+
 ## 记录 #666
 
 - 日期：2026-05-16

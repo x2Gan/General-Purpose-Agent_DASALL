@@ -81,11 +81,52 @@ void test_invoke_stage_projects_llm_failure_to_cognition_error_surface() {
               "bridge diagnostics should preserve the llm failure category");
 }
 
+void test_invoke_stage_prefers_streaming_and_projects_stream_failure() {
+  auto llm_manager = std::make_shared<MockLLMManager>();
+  llm_manager->set_stream_handler(
+      [](const dasall::llm::LLMGenerateRequest&, dasall::llm::IStreamObserver*) {
+        return MockLLMManager::make_failure_result(
+            dasall::contracts::ResultCode::ProviderTimeout,
+            "streaming provider transport failed",
+            dasall::llm::LLMFailureCategory::AdapterTransport,
+            std::string{"deepseek-prod/deepseek-chat"},
+            std::string{"req-020-error"});
+      });
+
+  auto request = make_call_request();
+  request.prefer_streaming = true;
+
+  CognitionLlmBridge bridge(llm_manager);
+  const auto result = bridge.invoke_stage(request);
+
+  assert_equal(0, llm_manager->generate_call_count(),
+               "streaming-preferred cognition bridge calls should not fall back to unary generate()");
+  assert_equal(1, llm_manager->stream_generate_call_count(),
+               "streaming-preferred cognition bridge calls should invoke stream_generate() exactly once");
+  assert_true(llm_manager->last_stream_request().has_value() &&
+                  llm_manager->last_stream_request()->request.request_mode.has_value() &&
+                  *llm_manager->last_stream_request()->request.request_mode ==
+                      dasall::contracts::LLMRequestMode::Streaming,
+              "streaming-preferred cognition bridge calls should project Streaming request_mode into ILLMManager");
+  assert_true(!result.response.has_value(),
+              "failed streaming llm calls must not materialize a normalized response payload");
+  assert_true(result.result_code.has_value() &&
+                  *result.result_code == dasall::contracts::ResultCode::ProviderTimeout,
+              "streaming adapter transport failures should surface the provider timeout result code");
+  assert_true(result.error_info.has_value(),
+              "failed streaming llm calls must expose an ErrorInfo payload");
+  assert_equal(std::string("execution"), result.error_info->details.stage,
+               "streaming failures should still be rewritten onto the canonical cognition stage");
+  assert_true(contains_token(result.diagnostics, "llm_failure:adapter_transport"),
+              "streaming bridge diagnostics should preserve the llm failure category");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_invoke_stage_projects_llm_failure_to_cognition_error_surface();
+    test_invoke_stage_prefers_streaming_and_projects_stream_failure();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

@@ -4,6 +4,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -22,6 +23,8 @@
 #include "prompt/PromptPipeline.h"
 #include "provider/ProviderCatalogRepository.h"
 #include "route/ModelRouter.h"
+#include "stream/IStreamObserver.h"
+#include "stream/StreamSessionRegistry.h"
 
 namespace {
 
@@ -44,13 +47,19 @@ using LLMMetricsBridge = dasall::llm::observability::LLMMetricsBridge;
 using LLMTraceBridge = dasall::llm::observability::LLMTraceBridge;
 using LLMTraceSpanKind = dasall::llm::observability::LLMTraceSpanKind;
 using LLMTraceSpanSignal = dasall::llm::observability::LLMTraceSpanSignal;
+using StreamObserverFeedback = dasall::llm::StreamObserverFeedback;
 using ProviderCatalogSnapshot = dasall::llm::provider::ProviderCatalogSnapshot;
 using ProviderModelMetadata = dasall::llm::provider::ProviderModelMetadata;
 using ResponseNormalizationResult = dasall::llm::execution::ResponseNormalizationResult;
 using ResponseNormalizerContext = dasall::llm::execution::ResponseNormalizerContext;
 using ResultCode = dasall::contracts::ResultCode;
+using StreamSessionRef = dasall::llm::StreamSessionRef;
+using StreamSessionRegistry = dasall::llm::stream::StreamSessionRegistry;
+using StreamSessionRegistryConfig = dasall::llm::stream::StreamSessionRegistryConfig;
+using StreamSessionMutationStatus = dasall::llm::stream::StreamSessionMutationStatus;
 
 constexpr std::string_view kExecutionStage = "llm.manager.execute_unary";
+constexpr std::string_view kStreamExecutionStage = "llm.manager.execute_stream";
 constexpr std::string_view kManagerStage = "llm.manager.generate";
 constexpr std::string_view kManagerStreamStage = "llm.manager.stream_generate";
 
@@ -561,13 +570,14 @@ ResponseNormalizerContext make_normalizer_context(
 
 std::optional<LLMManagerResult> validate_generate_request(
     const LLMGenerateRequest& request,
-    const std::optional<dasall::llm::LLMStageRouteConfig>& stage_route) {
+    const std::optional<dasall::llm::LLMStageRouteConfig>& stage_route,
+    std::string_view manager_stage) {
   if (request.stage.empty()) {
     return make_manager_failure(ResultCode::ValidationFieldMissing,
                                 "llm generate request missing stage",
                                 false,
                                 LLMFailureCategory::Routing,
-                                std::string(kManagerStage),
+                                std::string(manager_stage),
                                 "stage",
                                 "missing");
   }
@@ -577,7 +587,7 @@ std::optional<LLMManagerResult> validate_generate_request(
                                 "llm generate request missing request_id",
                                 false,
                                 LLMFailureCategory::PromptAsset,
-                                std::string(kManagerStage),
+                                std::string(manager_stage),
                                 "request",
                                 "request_id");
   }
@@ -587,7 +597,7 @@ std::optional<LLMManagerResult> validate_generate_request(
                                 "llm generate request missing llm_call_id",
                                 false,
                                 LLMFailureCategory::PromptAsset,
-                                std::string(kManagerStage),
+                                std::string(manager_stage),
                                 "request",
                                 "llm_call_id");
   }
@@ -597,7 +607,7 @@ std::optional<LLMManagerResult> validate_generate_request(
                                 "llm generate request missing messages",
                                 false,
                                 LLMFailureCategory::PromptAsset,
-                                std::string(kManagerStage),
+                                std::string(manager_stage),
                                 "request",
                                 "messages");
   }
@@ -607,7 +617,7 @@ std::optional<LLMManagerResult> validate_generate_request(
                                 "llm generate request missing pre-route model_route hint",
                                 false,
                                 LLMFailureCategory::Routing,
-                                std::string(kManagerStage),
+                                std::string(manager_stage),
                                 "request",
                                 "model_route");
   }
@@ -617,7 +627,7 @@ std::optional<LLMManagerResult> validate_generate_request(
                                 "no stage route configured for llm stage: " + request.stage,
                                 false,
                                 LLMFailureCategory::Routing,
-                                std::string(kManagerStage),
+                                std::string(manager_stage),
                                 "stage",
                                 request.stage);
   }
@@ -626,6 +636,7 @@ std::optional<LLMManagerResult> validate_generate_request(
 }
 
 LLMManagerResult make_pipeline_failure(const PromptPipelineResult& pipeline_result,
+                                       std::string manager_stage,
                                        std::string stage) {
   const bool prompt_asset_failure = !pipeline_result.registry_result.has_value() ||
                                     !pipeline_result.registry_result->release.has_value();
@@ -637,7 +648,7 @@ LLMManagerResult make_pipeline_failure(const PromptPipelineResult& pipeline_resu
                                 message,
                                 false,
                                 LLMFailureCategory::PromptAsset,
-                                std::string(kManagerStage),
+                                std::move(manager_stage),
                                 "stage",
                                 std::move(stage));
   }
@@ -649,7 +660,7 @@ LLMManagerResult make_pipeline_failure(const PromptPipelineResult& pipeline_resu
                               message,
                               false,
                               LLMFailureCategory::PromptGovernance,
-                              std::string(kManagerStage),
+                              std::move(manager_stage),
                               "stage",
                               std::move(stage),
                               {},
@@ -678,10 +689,11 @@ std::uint32_t effective_timeout_ms(const LLMTimeoutConfig& timeout_policy,
 dasall::contracts::LLMRequest make_attempt_request(
     const dasall::contracts::LLMRequest& request,
     std::string_view route_key,
-    std::uint32_t timeout_ms) {
+    std::uint32_t timeout_ms,
+    dasall::contracts::LLMRequestMode request_mode) {
   auto attempt_request = request;
   attempt_request.model_route = std::string(route_key);
-  attempt_request.request_mode = dasall::contracts::LLMRequestMode::Unary;
+  attempt_request.request_mode = request_mode;
   attempt_request.timeout_ms = timeout_ms;
   return attempt_request;
 }
@@ -689,14 +701,15 @@ dasall::contracts::LLMRequest make_attempt_request(
 dasall::contracts::ErrorInfo make_error(ResultCode result_code,
                                         std::string message,
                                         bool retryable,
-                                        std::string route_key) {
+                                        std::string route_key,
+                                        std::string stage_name) {
   dasall::contracts::ErrorInfo error;
   error.failure_type = dasall::contracts::classify_result_code(result_code);
   error.retryable = retryable;
   error.safe_to_replan = false;
   error.details.code = static_cast<int>(result_code);
   error.details.message = std::move(message);
-  error.details.stage = std::string(kExecutionStage);
+  error.details.stage = std::move(stage_name);
   error.source_ref.ref_type = "route";
   error.source_ref.ref_id = std::move(route_key);
   return error;
@@ -790,25 +803,270 @@ LLMCallExecutionResult make_failure_result(
     ResultCode result_code,
     std::string message,
     bool retryable,
-    LLMCallExecutionFailureReason failure_reason) {
+    LLMCallExecutionFailureReason failure_reason,
+    std::string stage_name = std::string(kExecutionStage)) {
   return LLMCallExecutionResult{
       .route_key = std::move(route_key),
       .attempts_started = attempts_started,
       .adapter_result = std::move(adapter_result),
       .error = make_error(result_code, std::move(message), retryable,
-                          route_key),
+                          route_key, std::move(stage_name)),
       .result_code = result_code,
       .failure_reason = failure_reason,
   };
 }
 
-AdapterCallResult make_timeout_result(std::string route_key, std::string message) {
+AdapterCallResult make_timeout_result(std::string route_key,
+                                      std::string message,
+                                      std::string stage_name = std::string(kExecutionStage)) {
   AdapterCallResult result;
   result.error = make_error(ResultCode::ProviderTimeout, std::move(message), true,
-                            std::move(route_key));
+                            std::move(route_key), std::move(stage_name));
   result.result_code = ResultCode::ProviderTimeout;
   return result;
 }
+
+class CapturingStreamObserver final : public dasall::llm::IStreamObserver {
+ public:
+  CapturingStreamObserver(StreamSessionRegistry& session_registry,
+                         std::string route_key,
+                         dasall::llm::IStreamObserver* downstream)
+      : session_registry_(session_registry),
+        route_key_(std::move(route_key)),
+        downstream_(downstream) {}
+
+  ~CapturingStreamObserver() override {
+    if (session_id_.empty()) {
+      return;
+    }
+
+    const auto snapshot = session_registry_.find(session_id_);
+    if (snapshot.has_value() && !snapshot->is_terminal()) {
+      static_cast<void>(session_registry_.mark_expired(session_id_));
+    }
+    static_cast<void>(session_registry_.cleanup(session_id_));
+  }
+
+  [[nodiscard]] StreamObserverFeedback on_stream_session_started(
+      const StreamSessionRef& session_ref) override {
+    session_id_ = session_ref.session_id;
+    if (session_id_.empty()) {
+      return StreamObserverFeedback::reject(ResultCode::ValidationFieldMissing,
+                                            "stream adapter returned an empty session id");
+    }
+
+    const auto accepted = session_registry_.accept(session_ref, route_key_);
+    if (!accepted.ok) {
+      return StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          accepted.status == StreamSessionMutationStatus::CapacityExceeded
+              ? "stream session limit reached"
+              : "stream session registry rejected the session");
+    }
+
+    const auto activated = session_registry_.mark_active(session_id_);
+    if (!activated.ok) {
+      return StreamObserverFeedback::reject(ResultCode::RuntimeRetryExhausted,
+                                            "stream session registry failed to activate the session");
+    }
+
+    return forward_session_start(session_ref);
+  }
+
+  [[nodiscard]] StreamObserverFeedback on_stream_delta(std::string_view delta) override {
+    if (session_id_.empty()) {
+      return StreamObserverFeedback::reject(ResultCode::RuntimeRetryExhausted,
+                                            "stream delta arrived before session start");
+    }
+
+    const auto append_result = session_registry_.append_delta(
+        session_id_, static_cast<std::uint32_t>(delta.size()));
+    if (!append_result.ok) {
+      return StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          append_result.status == StreamSessionMutationStatus::Overflow
+              ? "stream delta buffer overflow"
+              : "stream session registry rejected the delta");
+    }
+
+    return forward_delta(delta);
+  }
+
+  void on_stream_completed(const AdapterCallResult& result) override {
+    if (final_error_.has_value()) {
+      return;
+    }
+
+    if (session_id_.empty()) {
+      finalize_failure(ResultCode::RuntimeRetryExhausted,
+                       "stream completed before session start callback",
+                       false,
+                       false);
+      return;
+    }
+
+    const auto completing = session_registry_.mark_completing(session_id_);
+    if (!completing.ok) {
+      finalize_failure(ResultCode::RuntimeRetryExhausted,
+                       "stream session registry rejected the completing transition",
+                       false,
+                       false);
+      return;
+    }
+
+    if (downstream_ != nullptr) {
+      try {
+        downstream_->on_stream_completed(result);
+      } catch (const std::exception& ex) {
+        finalize_failure(ResultCode::RuntimeRetryExhausted,
+                         std::string("downstream stream observer completion callback threw: ") +
+                             ex.what(),
+                         false,
+                         true);
+        return;
+      } catch (...) {
+        finalize_failure(ResultCode::RuntimeRetryExhausted,
+                         "downstream stream observer completion callback threw an unknown exception",
+                         false,
+                         true);
+        return;
+      }
+    }
+
+    const auto completed = session_registry_.mark_completed(session_id_);
+    if (!completed.ok) {
+      finalize_failure(ResultCode::RuntimeRetryExhausted,
+                       "stream session registry rejected the completed transition",
+                       false,
+                       false);
+      return;
+    }
+
+    final_result_ = result;
+    final_error_.reset();
+    final_result_code_.reset();
+  }
+
+  void on_stream_failed(const dasall::contracts::ErrorInfo& error,
+                        std::optional<ResultCode> result_code) override {
+    final_result_.reset();
+    final_error_ = error;
+    final_result_code_ = result_code;
+    if (!session_id_.empty()) {
+      static_cast<void>(session_registry_.mark_failed(session_id_));
+    }
+
+    if (downstream_ != nullptr) {
+      try {
+        downstream_->on_stream_failed(error, result_code);
+      } catch (...) {
+      }
+    }
+  }
+
+  [[nodiscard]] const std::optional<AdapterCallResult>& final_result() const {
+    return final_result_;
+  }
+
+  [[nodiscard]] const std::optional<dasall::contracts::ErrorInfo>& final_error() const {
+    return final_error_;
+  }
+
+  [[nodiscard]] const std::optional<ResultCode>& final_result_code() const {
+    return final_result_code_;
+  }
+
+ private:
+  [[nodiscard]] StreamObserverFeedback forward_session_start(
+      const StreamSessionRef& session_ref) {
+    if (downstream_ == nullptr) {
+      return StreamObserverFeedback::success();
+    }
+
+    try {
+      const auto feedback = downstream_->on_stream_session_started(session_ref);
+      if (!feedback.has_consistent_values()) {
+        return StreamObserverFeedback::reject(
+            ResultCode::RuntimeRetryExhausted,
+            "downstream stream observer returned inconsistent session-start feedback");
+      }
+
+      if (!feedback.proceed) {
+        static_cast<void>(session_registry_.request_cancel(session_id_));
+      }
+      return feedback;
+    } catch (const std::exception& ex) {
+      static_cast<void>(session_registry_.request_cancel(session_id_));
+      return StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          std::string("downstream stream observer session-start callback threw: ") + ex.what());
+    } catch (...) {
+      static_cast<void>(session_registry_.request_cancel(session_id_));
+      return StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          "downstream stream observer session-start callback threw an unknown exception");
+    }
+  }
+
+  [[nodiscard]] StreamObserverFeedback forward_delta(std::string_view delta) {
+    if (downstream_ == nullptr) {
+      return StreamObserverFeedback::success();
+    }
+
+    try {
+      const auto feedback = downstream_->on_stream_delta(delta);
+      if (!feedback.has_consistent_values()) {
+        static_cast<void>(session_registry_.request_cancel(session_id_));
+        return StreamObserverFeedback::reject(
+            ResultCode::RuntimeRetryExhausted,
+            "downstream stream observer returned inconsistent delta feedback");
+      }
+
+      if (!feedback.proceed) {
+        static_cast<void>(session_registry_.request_cancel(session_id_));
+      }
+      return feedback;
+    } catch (const std::exception& ex) {
+      static_cast<void>(session_registry_.request_cancel(session_id_));
+      return StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          std::string("downstream stream observer delta callback threw: ") + ex.what());
+    } catch (...) {
+      static_cast<void>(session_registry_.request_cancel(session_id_));
+      return StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          "downstream stream observer delta callback threw an unknown exception");
+    }
+  }
+
+  void finalize_failure(ResultCode result_code,
+                        std::string message,
+                        bool retryable,
+                        bool forward_downstream) {
+    final_result_.reset();
+    final_error_ = make_error(result_code, std::move(message), retryable, route_key_,
+                              std::string(kStreamExecutionStage));
+    final_result_code_ = result_code;
+    if (!session_id_.empty()) {
+      static_cast<void>(session_registry_.mark_failed(session_id_));
+    }
+
+    if (forward_downstream && downstream_ != nullptr) {
+      try {
+        downstream_->on_stream_failed(*final_error_, final_result_code_);
+      } catch (...) {
+      }
+    }
+  }
+
+  StreamSessionRegistry& session_registry_;
+  std::string route_key_;
+  dasall::llm::IStreamObserver* downstream_ = nullptr;
+  std::optional<AdapterCallResult> final_result_;
+  std::optional<dasall::contracts::ErrorInfo> final_error_;
+  std::optional<ResultCode> final_result_code_;
+  std::string session_id_;
+};
 
 }  // namespace
 
@@ -900,7 +1158,8 @@ LLMCallExecutionResult LLMCallExecutor::execute_unary(
     ActiveCallPermit active_call_permit(active_call_count_);
     const auto attempt_request = make_attempt_request(
         request, route_key,
-        effective_timeout_ms(config_.timeout_policy, request));
+      effective_timeout_ms(config_.timeout_policy, request),
+      dasall::contracts::LLMRequestMode::Unary);
 
     // The current adapter SPI is synchronous, so 040 enforces timeout by
     // propagating a deadline hint and rejecting responses that return after the
@@ -1003,6 +1262,205 @@ LLMCallExecutionResult LLMCallExecutor::execute_unary(
                              LLMCallExecutionFailureReason::AdapterFailure);
 }
 
+LLMCallExecutionResult LLMCallExecutor::execute_stream(
+    std::string_view route_key,
+    const contracts::LLMRequest& request,
+    route::AdapterRegistry& registry,
+    StreamSessionRegistry& session_registry,
+    IStreamObserver* observer) {
+  const std::string route_key_string(route_key);
+  if (!initialized_) {
+    return make_failure_result(route_key_string, 0U, std::nullopt,
+                               ResultCode::RuntimeRetryExhausted,
+                               "llm call executor is not initialized",
+                               false,
+                               LLMCallExecutionFailureReason::NotInitialized,
+                               std::string(kStreamExecutionStage));
+  }
+
+  std::uint32_t attempts_started = 0U;
+  for (std::uint32_t attempt = 0U;
+       attempt <= config_.timeout_policy.retry_budget;
+       ++attempt) {
+    const auto route_state = registry.resolve_route(route_key);
+    if (!route_state.has_value() || route_state->adapter == nullptr) {
+      return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                 ResultCode::RuntimeRetryExhausted,
+                                 "adapter route is not registered",
+                                 false,
+                                 LLMCallExecutionFailureReason::RouteUnavailable,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    if (!route_state->supports_streaming) {
+      return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                 ResultCode::RuntimeRetryExhausted,
+                                 "adapter route does not support streaming",
+                                 false,
+                                 LLMCallExecutionFailureReason::RouteUnavailable,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    if (route_state->blocked) {
+      return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                 ResultCode::RuntimeRetryExhausted,
+                                 "adapter route is blocked by circuit threshold",
+                                 false,
+                                 LLMCallExecutionFailureReason::RouteBlocked,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    if (!try_acquire_active_call_slot(active_call_count_, config_.worker_threads)) {
+      return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                 ResultCode::RuntimeRetryExhausted,
+                                 "active llm calls limit reached",
+                                 false,
+                                 LLMCallExecutionFailureReason::ConcurrencyRejected,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    ActiveCallPermit active_call_permit(active_call_count_);
+    const auto attempt_request = make_attempt_request(
+        request, route_key,
+        effective_timeout_ms(config_.timeout_policy, request),
+        dasall::contracts::LLMRequestMode::Streaming);
+
+    CapturingStreamObserver capturing_observer(session_registry, route_key_string, observer);
+    const auto started_at = std::chrono::steady_clock::now();
+    const auto session_ref = route_state->adapter->stream_generate(attempt_request,
+                                                                   &capturing_observer);
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - started_at)
+                                .count();
+    ++attempts_started;
+
+    if (elapsed_ms > static_cast<std::int64_t>(*attempt_request.timeout_ms)) {
+      auto timeout_result = make_timeout_result(
+          route_key_string,
+          "adapter streaming invocation exceeded timeout_policy after " +
+              std::to_string(elapsed_ms) + "ms",
+          std::string(kStreamExecutionStage));
+      registry.record_call_failure(route_key, timeout_result.error->details.message);
+      if (const auto updated_route = registry.resolve_route(route_key);
+          updated_route.has_value() && updated_route->blocked) {
+        return make_failure_result(route_key_string, attempts_started,
+                                   std::move(timeout_result),
+                                   ResultCode::RuntimeRetryExhausted,
+                                   "adapter route blocked after consecutive timeout failures",
+                                   false,
+                                   LLMCallExecutionFailureReason::RouteBlocked,
+                                   std::string(kStreamExecutionStage));
+      }
+
+      if (attempt < config_.timeout_policy.retry_budget) {
+        continue;
+      }
+
+      return make_failure_result(route_key_string, attempts_started,
+                                 std::move(timeout_result),
+                                 ResultCode::ProviderTimeout,
+                                 "adapter streaming invocation exceeded timeout_policy",
+                                 true,
+                                 LLMCallExecutionFailureReason::Timeout,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    if (capturing_observer.final_result().has_value()) {
+      registry.record_call_success(route_key, "llm streaming execution succeeded");
+      return make_success_result(route_key_string, attempts_started,
+                                 *capturing_observer.final_result());
+    }
+
+    if (capturing_observer.final_error().has_value() ||
+        capturing_observer.final_result_code().has_value()) {
+      AdapterCallResult adapter_result;
+      if (capturing_observer.final_error().has_value()) {
+        adapter_result.error = *capturing_observer.final_error();
+      }
+      if (capturing_observer.final_result_code().has_value()) {
+        adapter_result.result_code = *capturing_observer.final_result_code();
+      }
+
+      const auto result_code = adapter_result.result_code.value_or(
+          ResultCode::RuntimeRetryExhausted);
+      const auto retryable = adapter_result.error.has_value() &&
+                             adapter_result.error->retryable.value_or(false);
+      const auto failure_message = adapter_failure_message(
+          adapter_result, "adapter streaming execution failed");
+      registry.record_call_failure(route_key, failure_message);
+      if (const auto updated_route = registry.resolve_route(route_key);
+          updated_route.has_value() && updated_route->blocked) {
+        return make_failure_result(route_key_string, attempts_started,
+                                   std::move(adapter_result),
+                                   ResultCode::RuntimeRetryExhausted,
+                                   "adapter route blocked after consecutive streaming failures",
+                                   false,
+                                   LLMCallExecutionFailureReason::RouteBlocked,
+                                   std::string(kStreamExecutionStage));
+      }
+
+      if (retryable && attempt < config_.timeout_policy.retry_budget) {
+        continue;
+      }
+
+      return make_failure_result(route_key_string, attempts_started,
+                                 std::move(adapter_result),
+                                 result_code,
+                                 failure_message,
+                                 retryable,
+                                 LLMCallExecutionFailureReason::AdapterFailure,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    if (session_ref.session_id.empty()) {
+      registry.record_call_failure(route_key,
+                                   "adapter returned an empty stream session id");
+      if (const auto updated_route = registry.resolve_route(route_key);
+          updated_route.has_value() && updated_route->blocked) {
+        return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                   ResultCode::RuntimeRetryExhausted,
+                                   "adapter route blocked after empty streaming session ids",
+                                   false,
+                                   LLMCallExecutionFailureReason::RouteBlocked,
+                                   std::string(kStreamExecutionStage));
+      }
+
+      return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                 ResultCode::RuntimeRetryExhausted,
+                                 "adapter returned an empty stream session id",
+                                 false,
+                                 LLMCallExecutionFailureReason::AdapterFailure,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    registry.record_call_failure(route_key,
+                                 "adapter returned no terminal streaming result");
+    if (const auto updated_route = registry.resolve_route(route_key);
+        updated_route.has_value() && updated_route->blocked) {
+      return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                                 ResultCode::RuntimeRetryExhausted,
+                                 "adapter route blocked after missing streaming terminal result",
+                                 false,
+                                 LLMCallExecutionFailureReason::RouteBlocked,
+                                 std::string(kStreamExecutionStage));
+    }
+
+    return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                               ResultCode::RuntimeRetryExhausted,
+                               "adapter returned no terminal streaming result",
+                               false,
+                               LLMCallExecutionFailureReason::AdapterFailure,
+                               std::string(kStreamExecutionStage));
+  }
+
+  return make_failure_result(route_key_string, attempts_started, std::nullopt,
+                             ResultCode::RuntimeRetryExhausted,
+                             "llm streaming execution exhausted retry budget",
+                             false,
+                             LLMCallExecutionFailureReason::AdapterFailure,
+                             std::string(kStreamExecutionStage));
+}
+
 std::uint32_t LLMCallExecutor::active_call_count() const {
   return active_call_count_.load(std::memory_order_acquire);
 }
@@ -1017,7 +1475,9 @@ LLMManager::LLMManager()
                  std::make_shared<route::AdapterRegistry>(),
                  std::make_shared<LLMCallExecutor>(),
                  std::make_shared<execution::ResponseNormalizer>(),
-                 std::make_shared<UsageAggregator>()) {}
+         std::make_shared<UsageAggregator>(),
+         nullptr,
+         std::make_shared<stream::StreamSessionRegistry>()) {}
 
 LLMManager::LLMManager(
     std::shared_ptr<prompt::IPromptPipeline> prompt_pipeline,
@@ -1027,6 +1487,7 @@ LLMManager::LLMManager(
     std::shared_ptr<execution::ResponseNormalizer> response_normalizer,
     std::shared_ptr<UsageAggregator> usage_aggregator,
     std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot,
+    std::shared_ptr<stream::StreamSessionRegistry> stream_session_registry,
     std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge,
     std::shared_ptr<observability::LLMTraceBridge> trace_bridge)
     : provider_catalog_snapshot_(std::move(provider_catalog_snapshot)),
@@ -1036,6 +1497,7 @@ LLMManager::LLMManager(
       call_executor_(std::move(call_executor)),
       response_normalizer_(std::move(response_normalizer)),
       usage_aggregator_(std::move(usage_aggregator)),
+      stream_session_registry_(std::move(stream_session_registry)),
       metrics_bridge_(std::move(metrics_bridge)),
       trace_bridge_(std::move(trace_bridge)) {}
 
@@ -1047,6 +1509,10 @@ bool LLMManager::init(const LLMSubsystemConfig& config) {
       call_executor_ == nullptr || response_normalizer_ == nullptr ||
       usage_aggregator_ == nullptr) {
     return false;
+  }
+
+  if (stream_session_registry_ == nullptr) {
+    stream_session_registry_ = std::make_shared<stream::StreamSessionRegistry>();
   }
 
   if (!prompt_pipeline_->init(make_prompt_pipeline_config(config))) {
@@ -1082,6 +1548,19 @@ bool LLMManager::init(const LLMSubsystemConfig& config) {
     return false;
   }
 
+  if (!stream_session_registry_->init(StreamSessionRegistryConfig{
+          .max_active_sessions = std::max<std::uint32_t>(1U, config.worker_threads),
+          .max_buffered_chars = std::max<std::uint32_t>(4096U,
+                                                        config.worker_threads * 8192U),
+          .session_ttl_ms = std::max<std::uint32_t>(
+              1000U,
+              clamp_timeout_ms(static_cast<std::uint64_t>(std::max<std::int64_t>(
+                  config.timeout_policy.timeout_ms * 2,
+                  1000))))
+      })) {
+    return false;
+  }
+
   config_ = config;
   initialized_ = true;
   return true;
@@ -1100,7 +1579,9 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
   }
 
   const auto stage_route = config_.stage_route_for(request.stage);
-  if (const auto invalid_request = validate_generate_request(request, stage_route);
+  if (const auto invalid_request = validate_generate_request(request,
+                                                             stage_route,
+                                                             kManagerStage);
       invalid_request.has_value()) {
     return *invalid_request;
   }
@@ -1140,7 +1621,9 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       !pipeline_result.compose_result.has_value() ||
       !pipeline_result.policy_decision.has_value() ||
       pipeline_result.policy_decision->governed_messages.empty()) {
-    return make_pipeline_failure(pipeline_result, request.stage);
+    return make_pipeline_failure(pipeline_result,
+                                 std::string(kManagerStage),
+                                 request.stage);
   }
 
   auto call_request = base_request;
@@ -1394,15 +1877,313 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
 
 LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
                                              IStreamObserver* observer) {
-  static_cast<void>(request);
-  static_cast<void>(observer);
+  const auto request_started_at = std::chrono::steady_clock::now();
+  if (!initialized_) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "llm manager is not initialized",
+                                false,
+                                LLMFailureCategory::AdapterTransport,
+                                std::string(kManagerStreamStage),
+                                "manager",
+                                "uninitialized");
+  }
+
+  const auto stage_route = config_.stage_route_for(request.stage);
+  if (const auto invalid_request = validate_generate_request(request,
+                                                             stage_route,
+                                                             kManagerStreamStage);
+      invalid_request.has_value()) {
+    return *invalid_request;
+  }
+
+  auto base_request = request.request;
+  if (!base_request.created_at.has_value()) {
+    base_request.created_at = current_time_ms();
+  }
+  base_request.request_mode = dasall::contracts::LLMRequestMode::Streaming;
+
+  const auto compose_request = make_prompt_compose_request(request, base_request);
+  const auto compose_validation =
+      contracts::validate_prompt_compose_request_field_rules(compose_request);
+  if (!compose_validation.ok) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                std::string("invalid prompt compose request: ") +
+                                    std::string(compose_validation.reason),
+                                false,
+                                LLMFailureCategory::PromptAsset,
+                                std::string(kManagerStreamStage),
+                                "stage",
+                                request.stage);
+  }
+
+  auto policy_input = config_.make_prompt_policy_input(
+      base_request.runtime_budget.has_value()
+          ? base_request.runtime_budget->max_tokens.value_or(0U)
+          : 0U);
+  const auto pipeline_started_at = std::chrono::steady_clock::now();
+  const auto pipeline_result =
+      prompt_pipeline_->run(make_prompt_query(request, config_), compose_request, policy_input);
+  static_cast<void>(elapsed_ms_since(pipeline_started_at));
+  if (pipeline_result.disposition != PromptPolicyDisposition::Allow ||
+      !pipeline_result.compose_result.has_value() ||
+      !pipeline_result.policy_decision.has_value() ||
+      pipeline_result.policy_decision->governed_messages.empty()) {
+    return make_pipeline_failure(pipeline_result,
+                                 std::string(kManagerStreamStage),
+                                 request.stage);
+  }
+
+  auto call_request = base_request;
+  call_request.messages = pipeline_result.policy_decision->governed_messages;
+  call_request.prompt_id = pipeline_result.compose_result->selected_prompt_id;
+  call_request.prompt_version = pipeline_result.compose_result->selected_version;
+  call_request.request_mode = dasall::contracts::LLMRequestMode::Streaming;
+
+  const auto call_request_validation = contracts::validate_llm_request_field_rules(call_request);
+  if (!call_request_validation.ok) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                std::string("invalid llm call request: ") +
+                                    std::string(call_request_validation.reason),
+                                false,
+                                LLMFailureCategory::PromptGovernance,
+                                std::string(kManagerStreamStage),
+                                "stage",
+                                request.stage);
+  }
+
+  const auto catalog_snapshot = provider_catalog_snapshot_;
+  if (catalog_snapshot == nullptr || !catalog_snapshot->has_consistent_values()) {
+    return make_manager_failure(ResultCode::ValidationFieldMissing,
+                                "provider catalog snapshot is unavailable",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStreamStage),
+                                "catalog",
+                                "provider_catalog");
+  }
+
+  const auto router_started_at = std::chrono::steady_clock::now();
+  const auto router_result = model_router_->resolve(
+      make_selection_hint(request), *catalog_snapshot, adapter_registry_->health_snapshot());
+  const auto route_latency_ms = elapsed_ms_since(router_started_at);
+  if (!router_result.has_route()) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "model router did not resolve a route",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStreamStage),
+                                "stage",
+                                request.stage);
+  }
+
+  const auto selection_hint = make_selection_hint(request);
+  const auto selection_reason_codes =
+      normalized_selection_reasons(router_result.selection_reason_codes);
+  const auto route_candidates = build_route_candidates(*router_result.resolved_route);
+  if (route_candidates.empty()) {
+    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                "resolved route chain is empty",
+                                false,
+                                LLMFailureCategory::Routing,
+                                std::string(kManagerStreamStage),
+                                "stage",
+                                request.stage);
+  }
+
+  std::vector<std::string> attempted_routes;
+  std::optional<LLMManagerResult> last_failure;
+  for (const auto& route_key : route_candidates) {
+    const auto adapter_started_at = std::chrono::steady_clock::now();
+    const auto execution_result = call_executor_->execute_stream(route_key,
+                                                                 call_request,
+                                                                 *adapter_registry_,
+                                                                 *stream_session_registry_,
+                                                                 observer);
+    const auto adapter_latency_ms = elapsed_ms_since(adapter_started_at);
+    attempted_routes.push_back(route_key);
+
+    if (!execution_result.has_consistent_values()) {
+      last_failure = make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                          "llm call executor returned inconsistent streaming result",
+                                          false,
+                                          LLMFailureCategory::AdapterTransport,
+                                          std::string(kManagerStreamStage),
+                                          "route",
+                                          route_key,
+                                          attempted_routes,
+                                          route_key);
+      continue;
+    }
+
+    if (!execution_result.succeeded()) {
+      last_failure = make_manager_failure_from_error(
+          execution_result.error.value_or(make_manager_error(
+              execution_result.result_code.value_or(ResultCode::RuntimeRetryExhausted),
+              "llm streaming executor failed without error payload",
+              false,
+              false,
+              std::string(kStreamExecutionStage),
+              "route",
+              route_key)),
+          execution_result.result_code.value_or(ResultCode::RuntimeRetryExhausted),
+          LLMFailureCategory::AdapterTransport,
+          attempted_routes,
+          route_key);
+      continue;
+    }
+
+    const auto route_state = adapter_registry_->resolve_route(route_key);
+    if (!route_state.has_value()) {
+      last_failure = make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                          "adapter registry lost resolved route state",
+                                          false,
+                                          LLMFailureCategory::Routing,
+                                          std::string(kManagerStreamStage),
+                                          "route",
+                                          route_key,
+                                          attempted_routes,
+                                          route_key);
+      continue;
+    }
+
+    const ProviderModelMetadata* model_metadata =
+        catalog_snapshot->find_model(route_state->provider_id, route_state->model_id);
+    if (model_metadata == nullptr) {
+      last_failure = make_manager_failure(ResultCode::ValidationFieldMissing,
+                                          "provider catalog metadata missing for resolved route",
+                                          false,
+                                          LLMFailureCategory::Routing,
+                                          std::string(kManagerStreamStage),
+                                          "route",
+                                          route_key,
+                                          attempted_routes,
+                                          route_key);
+      continue;
+    }
+
+    const auto normalization_started_at = std::chrono::steady_clock::now();
+    const auto normalization_result = response_normalizer_->normalize(
+        *execution_result.adapter_result,
+        make_normalizer_context(call_request, *route_state, model_metadata));
+    const auto normalize_latency_ms = elapsed_ms_since(normalization_started_at);
+    if (!normalization_result.has_consistent_values() ||
+        !normalization_result.succeeded()) {
+      last_failure = make_manager_failure_from_error(
+          normalization_result.error.value_or(make_manager_error(
+              normalization_result.result_code.value_or(ResultCode::ValidationFieldMissing),
+              "response normalizer failed without error payload",
+              false,
+              false,
+              std::string(kManagerStreamStage),
+              "route",
+              route_key)),
+          normalization_result.result_code.value_or(ResultCode::ValidationFieldMissing),
+          LLMFailureCategory::ProviderProtocol,
+          attempted_routes,
+          route_key);
+      continue;
+    }
+
+    auto response = *normalization_result.response;
+    append_response_tag(response, "route=" + route_key);
+    for (const auto& reason_code : router_result.selection_reason_codes) {
+      append_response_tag(response, "selection_reason=" + reason_code);
+    }
+    if (!normalization_result.provider_trace_id.empty()) {
+      append_response_tag(response,
+                          "provider_trace_id=" + normalization_result.provider_trace_id);
+    }
+    for (const auto& audit_event : normalization_result.audit_events) {
+      append_response_tag(response, "audit=" + audit_event);
+    }
+    if (normalization_result.reasoning_content_stripped) {
+      append_response_tag(response, "reasoning_content_stripped=true");
+    }
+
+    std::optional<NormalizedUsageRecord> usage_record;
+    if (normalization_result.usage_fragment.has_value()) {
+      usage_record = usage_aggregator_->aggregate(*normalization_result.usage_fragment,
+                                                  *model_metadata);
+      append_usage_tags(response, *usage_record);
+    }
+
+    LLMManagerResult result{
+        .code = std::nullopt,
+        .response = std::move(response),
+        .error = std::nullopt,
+        .resolved_route = route_key,
+        .attempted_routes = attempted_routes,
+        .failure_category = std::nullopt,
+        .governance_disposition = std::nullopt,
+        .fallback_used = attempted_routes.size() > 1U,
+    };
+    if (!result.has_consistent_values()) {
+      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                  "llm manager produced inconsistent streaming success result",
+                                  false,
+                                  LLMFailureCategory::AdapterTransport,
+                                  std::string(kManagerStreamStage),
+                                  "route",
+                                  route_key,
+                                  attempted_routes,
+                                  route_key);
+    }
+
+    record_success_observability(metrics_bridge_.get(),
+                                 trace_bridge_.get(),
+                                 *result.response,
+                                 selection_hint,
+                                 *model_metadata,
+                                 request.stage,
+                                 route_key,
+                                 route_state->provider_id,
+                                 config_.profile_id,
+                                 attempted_routes,
+                                 selection_reason_codes,
+                                 usage_record,
+                                 elapsed_ms_since(request_started_at),
+                                 route_latency_ms,
+                                 adapter_latency_ms,
+                                 normalize_latency_ms,
+                                 result.fallback_used);
+
+    return result;
+  }
+
+  if (last_failure.has_value()) {
+    auto failure = *last_failure;
+    if (attempted_routes.size() >= 2U) {
+      failure = elevate_to_fallback_exhausted(std::move(failure));
+    }
+
+    if (!failure.has_consistent_values()) {
+      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                  "llm manager produced inconsistent streaming failure result",
+                                  false,
+                                  attempted_routes.size() >= 2U
+                                      ? LLMFailureCategory::FallbackExhausted
+                                      : LLMFailureCategory::AdapterTransport,
+                                  std::string(kManagerStreamStage),
+                                  "stage",
+                                  request.stage,
+                                  attempted_routes,
+                                  attempted_routes.empty() ? std::string{} : attempted_routes.back());
+    }
+
+    return failure;
+  }
+
   return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                              "llm manager stream_generate is not implemented in unary phase",
+                              "llm manager exhausted streaming route chain without result",
                               false,
-                              LLMFailureCategory::AdapterTransport,
+                              attempted_routes.size() >= 2U
+                                  ? LLMFailureCategory::FallbackExhausted
+                                  : LLMFailureCategory::Routing,
                               std::string(kManagerStreamStage),
-                              "manager",
-                              "stream_unavailable");
+                              "stage",
+                              request.stage,
+                              attempted_routes,
+                              attempted_routes.empty() ? std::string{} : attempted_routes.back());
 }
 
 HealthStatus LLMManager::health_check() const {

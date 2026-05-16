@@ -503,6 +503,7 @@ void test_llm_smoke_integration_closes_prompt_manager_mock_loop_and_emits_observ
                      normalizer,
                      aggregator,
                      catalog_snapshot,
+                     nullptr,
                      metrics_bridge,
                      trace_bridge);
   assert_true(manager.init(make_config()),

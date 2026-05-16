@@ -257,6 +257,7 @@ DualModeRunArtifacts run_dual_mode_case(const LLMGenerateRequest& request) {
                      normalizer,
                      aggregator,
                      catalog_snapshot,
+                     nullptr,
                      metrics_bridge,
                      trace_bridge);
   assert_true(manager.init(make_config()),

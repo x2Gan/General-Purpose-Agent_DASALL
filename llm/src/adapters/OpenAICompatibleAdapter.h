@@ -27,7 +27,8 @@ class OpenAICompatibleAdapter final : public ILLMAdapter {
   [[nodiscard]] bool is_ready() const;
   [[nodiscard]] std::string resolve_model_id(std::string_view route_key) const;
   [[nodiscard]] LLMTransportRequest make_chat_request(
-      const contracts::LLMRequest& request) const;
+      const contracts::LLMRequest& request,
+      bool streaming) const;
   [[nodiscard]] LLMTransportRequest make_health_request() const;
   [[nodiscard]] AdapterCallResult map_chat_response(
       const contracts::LLMRequest& request,

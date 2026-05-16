@@ -10,6 +10,7 @@
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "llm/LLMBoundaryGuards.h"
+#include "stream/IStreamObserver.h"
 
 namespace {
 
@@ -27,6 +28,7 @@ using ResultCode = dasall::contracts::ResultCode;
 
 constexpr std::string_view kOpenAICompatibleFamily = "openai_compatible";
 constexpr std::string_view kGenerateStage = "llm.openai_compatible.generate";
+constexpr std::string_view kStreamGenerateStage = "llm.openai_compatible.stream_generate";
 constexpr std::string_view kHealthStage = "llm.openai_compatible.health_check";
 constexpr std::string_view kChatCompletionsPath = "/chat/completions";
 constexpr std::string_view kModelsPath = "/models";
@@ -341,6 +343,57 @@ constexpr std::string_view kModelsPath = "/models";
          response.status_code >= 500U;
 }
 
+[[nodiscard]] std::vector<std::string> parse_sse_events(std::string_view payload) {
+  std::vector<std::string> events;
+  std::string current_data;
+  std::size_t cursor = 0U;
+  while (cursor <= payload.size()) {
+    const auto line_end = payload.find('\n', cursor);
+    auto line = line_end == std::string_view::npos
+                    ? payload.substr(cursor)
+                    : payload.substr(cursor, line_end - cursor);
+    if (!line.empty() && line.back() == '\r') {
+      line.remove_suffix(1);
+    }
+
+    if (line.empty()) {
+      if (!current_data.empty()) {
+        events.push_back(current_data);
+        current_data.clear();
+      }
+    } else if (line.rfind("data:", 0U) == 0U) {
+      std::string data = trim_copy(line.substr(5U));
+      if (!current_data.empty() && !data.empty()) {
+        current_data.push_back('\n');
+      }
+      current_data += data;
+    }
+
+    if (line_end == std::string_view::npos) {
+      break;
+    }
+    cursor = line_end + 1U;
+  }
+
+  if (!current_data.empty()) {
+    events.push_back(current_data);
+  }
+  return events;
+}
+
+[[nodiscard]] std::string make_stream_session_id(const LLMAdapterConfig& config,
+                                                 const dasall::contracts::LLMRequest& request) {
+  if (request.llm_call_id.has_value() && !request.llm_call_id->empty()) {
+    return config.adapter_id + ":" + *request.llm_call_id;
+  }
+
+  if (request.request_id.has_value() && !request.request_id->empty()) {
+    return config.adapter_id + ":" + *request.request_id;
+  }
+
+  return config.adapter_id + ":stream";
+}
+
 }  // namespace
 
 namespace dasall::llm {
@@ -378,7 +431,7 @@ AdapterCallResult OpenAICompatibleAdapter::generate(
                                std::string(kGenerateStage));
   }
 
-  const auto transport_request = make_chat_request(request);
+  const auto transport_request = make_chat_request(request, false);
   if (!transport_request.has_consistent_values()) {
     return make_failure_result(ResultCode::ValidationFieldMissing,
                                "openai-compatible adapter failed to materialize a valid transport request",
@@ -399,9 +452,232 @@ AdapterCallResult OpenAICompatibleAdapter::generate(
 }
 
 StreamSessionRef OpenAICompatibleAdapter::stream_generate(
-    const contracts::LLMRequest&,
-    IStreamObserver*) {
-  return StreamSessionRef{.session_id = "openai-compatible-streaming-not-implemented"};
+    const contracts::LLMRequest& request,
+    IStreamObserver* observer) {
+  StreamSessionRef session_ref;
+  if (config_.has_value()) {
+    session_ref.session_id = make_stream_session_id(*config_, request);
+  }
+
+  const auto fail_stream = [&](ResultCode result_code,
+                               std::string message,
+                               bool retryable,
+                               std::string provider_code) {
+    if (!provider_code.empty()) {
+      message += " (" + provider_code + ")";
+    }
+    const auto failure = make_failure_result(result_code,
+                                             std::move(message),
+                                             retryable,
+                                             std::string(kStreamGenerateStage));
+    if (observer != nullptr && failure.error.has_value()) {
+      observer->on_stream_failed(*failure.error, failure.result_code);
+    }
+    return session_ref;
+  };
+
+  if (!is_ready()) {
+    return fail_stream(ResultCode::RuntimeRetryExhausted,
+                       "openai-compatible adapter is not initialized",
+                       false,
+                       "adapter_uninitialized");
+  }
+
+  const auto validation = contracts::validate_llm_request_field_rules(request);
+  if (!validation.ok || !request.request_mode.has_value() ||
+      *request.request_mode != contracts::LLMRequestMode::Streaming) {
+    return fail_stream(ResultCode::ValidationFieldMissing,
+                       validation.ok
+                           ? "openai-compatible adapter requires streaming request_mode"
+                           : std::string(validation.reason),
+                       false,
+                       "request_invalid");
+  }
+
+  if (observer != nullptr) {
+    auto feedback = observer->on_stream_session_started(session_ref);
+    if (!feedback.has_consistent_values()) {
+      feedback = StreamObserverFeedback::reject(
+          ResultCode::RuntimeRetryExhausted,
+          "stream observer returned inconsistent start feedback");
+    }
+    if (!feedback.proceed) {
+      return fail_stream(feedback.result_code.value_or(ResultCode::RuntimeRetryExhausted),
+                         feedback.message,
+                         feedback.retryable,
+                         "observer_rejected_session_start");
+    }
+  }
+
+  const auto transport_request = make_chat_request(request, true);
+  if (!transport_request.has_consistent_values()) {
+    return fail_stream(ResultCode::ValidationFieldMissing,
+                       "openai-compatible adapter failed to materialize a valid streaming transport request",
+                       false,
+                       "transport_request_invalid");
+  }
+
+  const auto transport_response = transport_->send(transport_request);
+  if (!transport_response.has_consistent_values() || !transport_response.ok()) {
+    return fail_stream(ResultCode::ProviderTimeout,
+                       "openai-compatible streaming transport failure: " +
+                           resolve_transport_error_message(transport_response),
+                       is_retryable_status(transport_response),
+                       "transport_failure");
+  }
+
+  const auto events = parse_sse_events(transport_response.body);
+  if (events.empty()) {
+    return fail_stream(ResultCode::ValidationFieldMissing,
+                       "openai-compatible streaming response did not contain any SSE events",
+                       false,
+                       "stream_events_missing");
+  }
+
+  AdapterCallResult result;
+  contracts::LLMResponse normalized_response;
+  normalized_response.request_id = request.request_id;
+  normalized_response.llm_call_id = request.llm_call_id;
+  normalized_response.response_kind = contracts::LLMResponseKind::DirectResponse;
+  normalized_response.completed_at = request.created_at;
+  normalized_response.model_name = request.model_route.has_value()
+                                       ? std::optional<std::string>(
+                                             resolve_model_id(*request.model_route))
+                                       : std::nullopt;
+  normalized_response.prompt_id = request.prompt_id;
+  normalized_response.prompt_version = request.prompt_version;
+
+  std::string aggregated_content;
+  std::string reasoning_content;
+  std::vector<std::string> audit_tags;
+  bool saw_done = false;
+  auto push_audit_tag = [&](std::string tag) {
+    if (std::find(audit_tags.begin(), audit_tags.end(), tag) == audit_tags.end()) {
+      audit_tags.push_back(std::move(tag));
+    }
+  };
+
+  for (const auto& event : events) {
+    if (event == "[DONE]") {
+      saw_done = true;
+      continue;
+    }
+
+    if (result.provider_diagnostics.provider_trace_id.empty()) {
+      result.provider_diagnostics.provider_trace_id =
+          extract_json_string_field(event, "id").value_or("");
+    }
+
+    if (const auto model_name = extract_json_string_field(event, "model");
+        model_name.has_value() && !model_name->empty()) {
+      normalized_response.model_name = *model_name;
+    }
+
+    if (const auto finish_reason = extract_json_string_field(event, "finish_reason");
+        finish_reason.has_value() && !finish_reason->empty()) {
+      normalized_response.finish_reason = *finish_reason;
+    }
+
+    if (const auto reasoning = extract_json_string_field(event, "reasoning_content");
+        reasoning.has_value() && !reasoning->empty()) {
+      reasoning_content += *reasoning;
+    }
+
+    if (const auto tool_calls_json = extract_json_array_field(event, "tool_calls");
+        tool_calls_json.has_value()) {
+      normalized_response.response_kind = contracts::LLMResponseKind::ToolCallIntent;
+      normalized_response.content_payload = build_tool_call_payload(*tool_calls_json);
+      push_audit_tag("tool_calls_present");
+    }
+
+    if (const auto refusal = extract_json_string_field(event, "refusal");
+        refusal.has_value() && !refusal->empty()) {
+      normalized_response.response_kind = contracts::LLMResponseKind::Refusal;
+      normalized_response.refusal_reason = *refusal;
+      normalized_response.content_payload = *refusal;
+      push_audit_tag("refusal_present");
+    }
+
+    if (const auto delta = extract_json_string_field(event, "content");
+        delta.has_value() && !delta->empty()) {
+      aggregated_content += *delta;
+      if (observer != nullptr) {
+        auto feedback = observer->on_stream_delta(*delta);
+        if (!feedback.has_consistent_values()) {
+          feedback = StreamObserverFeedback::reject(
+              ResultCode::RuntimeRetryExhausted,
+              "stream observer returned inconsistent delta feedback");
+        }
+        if (!feedback.proceed) {
+          return fail_stream(
+              feedback.result_code.value_or(ResultCode::RuntimeRetryExhausted),
+              feedback.message,
+              feedback.retryable,
+              "observer_rejected_delta");
+        }
+      }
+    }
+
+    const auto prompt_tokens = extract_json_uint_field(event, "prompt_tokens");
+    const auto completion_tokens = extract_json_uint_field(event, "completion_tokens");
+    const auto total_tokens = extract_json_uint_field(event, "total_tokens");
+    const auto prompt_cache_hit_tokens =
+        extract_json_uint_field(event, "prompt_cache_hit_tokens");
+    const auto prompt_cache_miss_tokens =
+        extract_json_uint_field(event, "prompt_cache_miss_tokens");
+    if (prompt_tokens.has_value() && completion_tokens.has_value() && total_tokens.has_value()) {
+      normalized_response.input_tokens = prompt_tokens;
+      normalized_response.output_tokens = completion_tokens;
+      normalized_response.total_tokens = total_tokens;
+      result.usage = AdapterUsageFragment{
+          .prompt_tokens = prompt_tokens,
+          .completion_tokens = completion_tokens,
+          .total_tokens = total_tokens,
+          .prompt_cache_hit_tokens = prompt_cache_hit_tokens,
+          .prompt_cache_miss_tokens = prompt_cache_miss_tokens,
+      };
+    }
+  }
+
+  if (!reasoning_content.empty()) {
+    result.provider_diagnostics.reasoning_content = reasoning_content;
+    push_audit_tag("reasoning_content_present");
+  }
+  result.provider_diagnostics.audit_tags = audit_tags;
+
+  if (!saw_done && !normalized_response.finish_reason.has_value()) {
+    return fail_stream(ResultCode::ValidationFieldMissing,
+                       "openai-compatible streaming response terminated without completion marker",
+                       false,
+                       "stream_incomplete");
+  }
+
+  if (saw_done && !normalized_response.finish_reason.has_value()) {
+    normalized_response.finish_reason = "stop";
+  }
+
+  if (normalized_response.response_kind == contracts::LLMResponseKind::DirectResponse) {
+    if (aggregated_content.empty()) {
+      return fail_stream(ResultCode::ValidationFieldMissing,
+                         "openai-compatible streaming response completed without content",
+                         false,
+                         "stream_content_missing");
+    }
+    normalized_response.content_payload = aggregated_content;
+  }
+
+  result.response = std::move(normalized_response);
+  if (!result.has_consistent_values()) {
+    return fail_stream(ResultCode::ValidationFieldMissing,
+                       "openai-compatible adapter produced an inconsistent streaming result",
+                       false,
+                       "stream_result_inconsistent");
+  }
+
+  if (observer != nullptr) {
+    observer->on_stream_completed(result);
+  }
+  return session_ref;
 }
 
 HealthStatus OpenAICompatibleAdapter::health_check() {
@@ -474,20 +750,25 @@ std::string OpenAICompatibleAdapter::resolve_model_id(std::string_view route_key
 }
 
 LLMTransportRequest OpenAICompatibleAdapter::make_chat_request(
-    const contracts::LLMRequest& request) const {
+    const contracts::LLMRequest& request,
+    bool streaming) const {
   if (!is_ready() || !request.messages.has_value() || !request.model_route.has_value()) {
     return {};
   }
 
   std::string body = "{\"model\":\"" + escape_json(resolve_model_id(*request.model_route)) +
                      "\",\"messages\":" + build_messages_json(*request.messages) +
-                     ",\"stream\":false";
+                     ",\"stream\":" + std::string(streaming ? "true" : "false");
   if (request.max_output_tokens.has_value()) {
     body += ",\"max_tokens\":" + std::to_string(*request.max_output_tokens);
   }
 
   if (request.response_format.has_value() && *request.response_format == "json_object") {
     body += ",\"response_format\":{\"type\":\"json_object\"}";
+  }
+
+  if (streaming) {
+    body += ",\"stream_options\":{\"include_usage\":true}";
   }
 
   body += "}";
@@ -501,7 +782,9 @@ LLMTransportRequest OpenAICompatibleAdapter::make_chat_request(
       .snapshot_version = config_->snapshot_version,
       .headers = {
           LLMTransportHeader{.name = "Content-Type", .value = "application/json"},
-          LLMTransportHeader{.name = "Accept", .value = "application/json"},
+          LLMTransportHeader{.name = "Accept",
+                   .value = streaming ? "text/event-stream"
+                            : "application/json"},
       },
       .body = std::move(body),
       .timeout_ms = config_->timeout_ms,
