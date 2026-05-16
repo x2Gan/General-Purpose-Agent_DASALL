@@ -155,6 +155,10 @@ void test_profile_diff_changes_planning_cap_and_model_tier() {
               "edge_minimal should keep the lighter planning tier");
   assert_true(cloud_plan->preferred_model_tier == ModelCapabilityTier::Advanced,
               "cloud_full should preserve the advanced planning tier");
+  assert_true(edge_plan->rule_fallback_enabled,
+              "edge_minimal should preserve explicit local fallback as an allowed degraded path");
+  assert_true(!cloud_plan->rule_fallback_enabled,
+              "cloud_full should keep structured planning/execution on the fail-fast path");
 }
 
 void test_factory_test_prefers_template_mode_while_cloud_full_only_allows_it() {

@@ -141,9 +141,19 @@ void test_decide_returns_stage_timeout_and_discards_late_planning_bridge_results
   MockCognitionFixture fixture;
   std::atomic<int> planning_calls{0};
   fixture.llm_manager()->set_generate_handler(
-      [&planning_calls, slow_stage_delay](const dasall::llm::LLMGenerateRequest& request) {
+      [&fixture, &planning_calls, slow_stage_delay](
+          const dasall::llm::LLMGenerateRequest& request) {
         if (request.stage == "planning" && planning_calls.fetch_add(1) == 0) {
           std::this_thread::sleep_for(slow_stage_delay);
+        }
+
+        if (request.stage == "planning") {
+          return fixture.make_structured_planning_stage_result();
+        }
+
+        if (request.stage == "execution") {
+          return fixture.make_structured_execution_stage_result(
+              dasall::tests::mocks::StructuredExecutionPayloadScenario::ValidExecuteAction);
         }
 
         return MockLLMManager::make_success_result(

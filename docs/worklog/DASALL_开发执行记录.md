@@ -99,6 +99,40 @@
 1. 隔离本轮 042 的 deliverable / TODO / worklog 变更，只 stage 当前任务相关 hunk 后提交推送。
 2. 继续串行推进 `COG-TODO-043`，同步 cognition 详设当前状态与 Gate-COG-12 追溯证据。
 
+## 记录 #662
+
+- 日期：2026-05-15
+- 阶段：cognition/子系统查漏补缺
+- 任务：authority/fallback widened acceptance 补证并回写 Gate-05 宽验收证据
+- 状态：已完成
+
+### 改动
+
+1. 调整 `cognition/src/StagePolicyResolver.cpp` 与 `tests/unit/cognition/StagePolicyResolverTest.cpp`、`tests/unit/cognition/StagePolicyResolverProfileDiffTest.cpp`：把 decision `rule_fallback_enabled` 收口为 profile-aware matrix，`desktop_full` / `cloud_full` 保持 structured planning / execution fail-fast，`edge_balanced` / `edge_minimal` / `factory_test` 仅在 degraded path 显式允许时开放 local fallback。
+2. 调整 `cognition/src/CognitionFacade.cpp` 与 `tests/unit/cognition/CognitionFacadeDegradedModeTest.cpp`、`tests/unit/cognition/CognitionFacadeStageTimeoutTest.cpp`：snapshot-backed path 继续只消费 `StageExecutionPlan` 的 fallback authority；config-only path 保留 `request.execution_hints.degraded_path_allowed` 控制的 fail-open clarification 语义。与此同时，timeout test 的 planning / execution bridge fixture 改为返回 structured payload，避免 authoritative structured path 下继续把纯文本“成功”误当有效 bridge 结果。
+3. 调整 `tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h`、`tests/integration/cognition/CognitionRuntimePolicyProjectionIntegrationTest.cpp` 与 `tests/integration/cognition/CognitionProfileCompatibilityTest.cpp`：runtime true integration fixture 默认提供 structured planning / execution stage result，profile/runtime-init diagnostics 断言不再硬绑全字符串相等；`edge_minimal` 的 terminal status 与 reflection emission 只要求“到达显式终态 / 若发出则必须符合 snapshot 投影”，不再越过 `COG-TODO-040` 冻结未决宽语义。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与本记录：补入本轮 widened acceptance 证据，明确 `build/vscode-linux-ninja` 上当前 49 个 cognition tests 全绿，并把 `edge_minimal` 的宽语义边界与不可外推范围同步回写。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_profile_compatibility_integration_test"])`
+   - 结果：通过；`CognitionProfileCompatibilityTest` 的 profile-aware 断言修正后可在当前 `vscode-linux-ninja` 目录成功重编。
+2. `RunCtest_CMakeTools(tests=["CognitionFacadeStageTimeoutTest","CognitionFacadeDegradedModeTest","CognitionProfileCompatibilityTest","CognitionRuntimePolicyProjectionIntegrationTest","StagePolicyResolverTest","StagePolicyResolverProfileDiffTest"])`
+   - 结果：通过；6 个本轮 blocker / owner tests 全部转绿。
+3. `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest","CognitionConfigProjectionTest","StagePolicyResolverTest","StagePolicyResolverProfileDiffTest","BudgetAwareDecisionTest","PerceptionBoundaryValidationTest","CognitionFacadeInvalidInputTest","CognitionFacadeFlowTest","CognitionFacadeStructuredPlanOutputTest","CognitionFacadeStructuredActionOutputTest","CognitionFacadeStageTimeoutTest","CognitionFacadeDegradedModeTest","PerceptionEngineTest","PerceptionClarificationRuleTest","PlannerPlanGraphTest","PlannerReplanTest","PlannerNodeBudgetTest","ReasonerActionDecisionTest","ReasonerClarificationThresholdTest","ReasonerConflictResolutionTest","ReflectionEngineDecisionTest","ReflectionEngineBeliefInvalidationTest","ReflectionEngineConservativeAbortTest","BeliefUpdateSynthesizerTest","BeliefUpdateMergeModeTest","BeliefUpdateEvidenceDedupTest","ResponseBuilderAgentResultMappingTest","ResponseBuilderTemplateFallbackTest","ResponseBuilderRedactionTest","MockCognitionFixtureSurfaceTest","CognitionLlmBridgeProjectionTest","CognitionLlmBridgeErrorMappingTest","StageModelHintProjectionTest","StageSchemaRegistryTest","StageOutputValidatorSchemaTest","StageOutputValidatorPlanGraphInvariantTest","StageOutputValidatorResponseEnvelopeTest","PlanGraphStructuredProjectionTest","ActionDecisionStructuredProjectionTest","CognitionTelemetryFieldsTest","CognitionTelemetryRedactionTest","CognitionTelemetryFailureIsolationTest","CognitionRuntimeIntegrationTest","CognitionRuntimeInteractionContractTest","CognitionFailureInjectionIntegrationTest","CognitionProfileCompatibilityTest","CognitionRuntimePolicyProjectionIntegrationTest","CognitionReviewRegressionTest","CognitionStructuredOutputIntegrationTest"])`
+   - 结果：通过；当前 49 个 cognition unit / integration tests 在 `build/vscode-linux-ninja` 上全部通过。
+
+### 结果
+
+1. authority/fallback 收口现已具 widened acceptance 证据：`selected_node_id` membership、ActionDecision 互斥、`depends_on` semantic integrity、profile-aware fallback matrix 与 top-level `x_` contract 在更宽 cognition 面上没有再出现回归。
+2. `build/vscode-linux-ninja` 上当前 cognition test registry 可给出新的 Gate-05 补证信号：49 个 cognition tests 全绿，不再停留在 #661 的 focused-only 口径。
+3. 本轮同时守住未冻结边界：`edge_minimal` 的 terminal status 与 reflection emission 仍属于 `COG-TODO-040` 宽语义，当前只冻结“显式终态必须存在；若发出 reflection bridge，则 route / timeout 必须来自真实 snapshot 投影”，不把该 profile 的 wider response semantics 冒进宣称为已冻结。
+
+### 下一步
+
+1. 清点本轮 widened acceptance 相关变更，隔离无关修改，只 stage authority/fallback 收口与文档回写文件。
+2. 若继续推进 cognition 宽语义冻结，下一跳进入 `COG-TODO-040`，单独处理 non-factory response bridge 是否强制以及 `edge_minimal` terminal / reflection contract 的正式冻结。
+
 ## 记录 #661
 
 - 日期：2026-05-15

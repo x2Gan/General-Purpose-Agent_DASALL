@@ -12,6 +12,11 @@ namespace {
 constexpr std::uint32_t kMinimumDeadlineMs = 300U;
 constexpr std::uint32_t kDefaultReflectionRoundLimit = 2U;
 
+[[nodiscard]] bool structured_local_fallback_allowed(std::string_view profile_id) {
+  return profile_id == "edge_balanced" || profile_id == "edge_minimal" ||
+         profile_id == "factory_test";
+}
+
 [[nodiscard]] bool append_stage_hint(StageExecutionPlan& plan,
                                      const profiles::RuntimePolicySnapshot& snapshot,
                                      std::string_view stage_name,
@@ -97,7 +102,8 @@ std::optional<StageExecutionPlan> StagePolicyResolver::resolve_decide_plan(
                                         request.execution_hints);
   plan.clarification_threshold = config->thresholds.ask_clarification;
   plan.rule_fallback_enabled =
-      request.execution_hints.degraded_path_allowed && config->perception.rule_fallback_enabled;
+      request.execution_hints.degraded_path_allowed && config->perception.rule_fallback_enabled &&
+      structured_local_fallback_allowed(snapshot.effective_profile_id());
   plan.template_fallback_enabled = false;
   plan.reflection_round_limit = kDefaultReflectionRoundLimit;
 

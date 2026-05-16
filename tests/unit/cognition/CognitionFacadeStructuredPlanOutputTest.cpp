@@ -77,6 +77,8 @@ void test_decide_uses_projected_plan_graph_as_reasoner_input() {
               "successful planning projection must not fall back to the local planner");
   assert_true(contains_value(result.diagnostics, "decision_pipeline.llm_bridge_degraded:execution"),
               "execution bridge failure should remain visible when local reasoner fallback is used");
+  assert_true(contains_value(result.diagnostics, "structured_projection.local_fallback:execution"),
+              "execution bridge failure should record explicit local fallback ownership");
 }
 
 void test_decide_falls_back_to_local_planner_only_on_explicit_planning_projection_failure() {
@@ -116,12 +118,82 @@ void test_decide_falls_back_to_local_planner_only_on_explicit_planning_projectio
               "planning fallback should stamp the pipeline degradation diagnostic");
 }
 
+void test_decide_fails_closed_when_planning_depends_on_is_semantically_invalid() {
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "bridge-plan-node",
+  });
+  fixture.llm_manager()->set_structured_stage_payload(
+      "planning",
+      std::string{"{"}
+          + "\"schema_version\":\"cognition.plan.v1\","
+          + "\"plan_id\":\"plan-invalid-dependency\","
+          + "\"revision\":1,"
+          + "\"nodes\":[{"
+          + "\"node_id\":\"bridge-plan-node\","
+          + "\"objective\":\"collect governed evidence\","
+          + "\"success_signal\":\"evidence_collected\","
+          + "\"action_kind_hint\":\"tool_action\","
+          + "\"depends_on\":[\"missing-node\"],"
+          + "\"evidence_refs\":[]}],"
+          + "\"edges\":[],"
+          + "\"open_questions\":[],"
+          + "\"plan_rationale\":\"depends_on must reference a projected node\","
+          + "\"estimated_complexity\":1}" );
+
+  auto engine = fixture.make_engine(CognitionConfig{});
+  auto request = fixture.make_decide_request(true);
+  request.execution_hints.degraded_path_allowed = false;
+
+  const auto result = engine->decide(request);
+
+  assert_true(result.result_code.has_value(),
+              "invalid depends_on semantics should fail closed when degradation is disabled");
+  assert_true(!result.action_decision.has_value(),
+              "planning invariant failures must not leak a partial action decision");
+  assert_true(contains_value(result.diagnostics, "structured_projection.invariant_failed:planning"),
+              "invalid depends_on semantics should surface the planning invariant diagnostic");
+  assert_true(!contains_value(result.diagnostics, "structured_projection.local_fallback:planning"),
+              "planning invariant failures must not silently fall back when degradation is disabled");
+}
+
+void test_decide_fails_closed_when_execution_bridge_provider_failure_has_no_fallback() {
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "bridge-plan-node",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+  fixture.llm_manager()->set_stage_result(
+      "execution",
+      MockLLMManager::make_failure_result(
+          dasall::contracts::ResultCode::ProviderTimeout,
+          "execution bridge intentionally unavailable to verify fail-closed behavior",
+          LLMFailureCategory::ProviderProtocol,
+          "mock.route.execution",
+          fixture.options().request_id));
+
+  auto engine = fixture.make_engine(CognitionConfig{});
+  auto request = fixture.make_decide_request(true);
+  request.execution_hints.degraded_path_allowed = false;
+
+  const auto result = engine->decide(request);
+
+  assert_true(result.result_code.has_value(),
+              "execution bridge provider failures must fail closed when fallback is disabled");
+  assert_true(!result.action_decision.has_value(),
+              "provider failures without fallback must not leak a partial action decision");
+  assert_true(contains_value(result.diagnostics, "decision_pipeline.llm_bridge_failed:execution"),
+              "provider failures without fallback should surface an explicit bridge failure diagnostic");
+  assert_true(!contains_value(result.diagnostics, "structured_projection.local_fallback:execution"),
+              "provider failures without fallback must not claim a local fallback source");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_decide_uses_projected_plan_graph_as_reasoner_input();
     test_decide_falls_back_to_local_planner_only_on_explicit_planning_projection_failure();
+    test_decide_fails_closed_when_planning_depends_on_is_semantically_invalid();
+    test_decide_fails_closed_when_execution_bridge_provider_failure_has_no_fallback();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

@@ -59,12 +59,66 @@ void test_validate_plan_graph_invariants_rejects_depth_cap_violations() {
               "plan graph failures must use the plan-graph invariant code");
 }
 
+void test_validate_plan_graph_invariants_rejects_unknown_depends_on_references() {
+  StageOutputValidator validator;
+  auto plan_graph = make_valid_plan_graph();
+  plan_graph.nodes[1].depends_on = {"missing-node"};
+  plan_graph.edges.clear();
+
+  const auto result = validator.validate_plan_graph_invariants(plan_graph, 4U, 3U);
+
+  assert_true(!result.ok, "depends_on references to unknown nodes must fail invariants");
+  assert_true(result.issue_set.issues.front().code == ValidationIssueCode::PlanGraphInvariant,
+              "depends_on failures must use the plan-graph invariant code");
+}
+
+void test_validate_plan_graph_invariants_rejects_duplicate_and_self_dependencies() {
+  StageOutputValidator validator;
+  auto plan_graph = make_valid_plan_graph();
+  plan_graph.nodes[1].depends_on = {"n2", "n1", "n1"};
+  plan_graph.edges.clear();
+
+  const auto result = validator.validate_plan_graph_invariants(plan_graph, 4U, 3U);
+
+  assert_true(!result.ok, "duplicate and self dependencies must fail invariants");
+  assert_true(result.issue_set.issues.size() >= 2U,
+              "duplicate and self dependency violations should both be surfaced");
+}
+
+void test_validate_plan_graph_invariants_rejects_depends_on_cycles_without_edges() {
+  StageOutputValidator validator;
+  auto plan_graph = make_valid_plan_graph();
+  plan_graph.nodes[0].depends_on = {"n2"};
+  plan_graph.nodes[1].depends_on = {"n1"};
+  plan_graph.edges.clear();
+
+  const auto result = validator.validate_plan_graph_invariants(plan_graph, 4U, 3U);
+
+  assert_true(!result.ok, "depends_on cycles must fail invariants even when edges are absent");
+}
+
+void test_validate_plan_graph_invariants_rejects_depends_on_depth_cap_violations() {
+  StageOutputValidator validator;
+  auto plan_graph = make_valid_plan_graph();
+  plan_graph.nodes.push_back(
+      PlanNode{.node_id = "n3", .objective = "respond", .success_signal = "response", .action_kind_hint = "respond", .depends_on = {"n2"}, .evidence_refs = {}});
+  plan_graph.edges.clear();
+
+  const auto result = validator.validate_plan_graph_invariants(plan_graph, 4U, 2U);
+
+  assert_true(!result.ok, "depends_on chains must participate in the configured depth cap");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_validate_plan_graph_invariants_accepts_valid_dag();
     test_validate_plan_graph_invariants_rejects_depth_cap_violations();
+    test_validate_plan_graph_invariants_rejects_unknown_depends_on_references();
+    test_validate_plan_graph_invariants_rejects_duplicate_and_self_dependencies();
+    test_validate_plan_graph_invariants_rejects_depends_on_cycles_without_edges();
+    test_validate_plan_graph_invariants_rejects_depends_on_depth_cap_violations();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

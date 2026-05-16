@@ -57,7 +57,8 @@ class StageOutputValidator {
       std::uint32_t max_plan_nodes,
       std::uint32_t max_plan_depth) const;
   [[nodiscard]] ValidationResult validate_action_decision_invariants(
-      const decision::ActionDecision& action_decision) const;
+      const decision::ActionDecision& action_decision,
+      const plan::PlanGraph* active_plan = nullptr) const;
   [[nodiscard]] ValidationResult validate_response_envelope(
       const ResponseBuildResult& response_result) const;
 };

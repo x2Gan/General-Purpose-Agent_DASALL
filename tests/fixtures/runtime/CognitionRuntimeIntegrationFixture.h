@@ -25,6 +25,47 @@
 
 namespace dasall::tests::runtime_fixture {
 
+[[nodiscard]] inline std::string make_runtime_structured_planning_payload() {
+    return std::string{"{"}
+                 + "\"schema_version\":\"cognition.plan.v1\","
+                 + "\"plan_id\":\"plan-runtime-integration\","
+                 + "\"revision\":1,"
+                 + "\"nodes\":[{"
+                 + "\"node_id\":\"plan-node:runtime-integration\","
+                 + "\"objective\":\"collect governed evidence through the builtin dataset tool\","
+                 + "\"success_signal\":\"runtime_evidence_collected\","
+                 + "\"action_kind_hint\":\"tool_action\","
+                 + "\"depends_on\":[],"
+                 + "\"evidence_refs\":[\"runtime:cognition-integration\"]}],"
+                 + "\"edges\":[],"
+                 + "\"open_questions\":[],"
+                 + "\"plan_rationale\":\"runtime integration should project a governed plan graph\","
+                 + "\"estimated_complexity\":1}"
+                 ;
+}
+
+[[nodiscard]] inline std::string make_runtime_structured_execution_payload() {
+    return std::string{"{"}
+                 + "\"schema_version\":\"cognition.reasoning.v1\","
+                 + "\"decision_kind\":\"ExecuteAction\","
+                 + "\"confidence\":0.82,"
+                 + "\"rationale\":\"runtime integration should preserve governed tool intent\","
+                 + "\"selected_node_id\":\"plan-node:runtime-integration\","
+                 + "\"tool_intent_hint\":{"
+                 + "\"tool_name\":\"agent.dataset\","
+                 + "\"intent_summary\":\"query runtime-visible data through tool governance\","
+                 + "\"argument_hints\":[\"query=current_state\"],"
+                 + "\"evidence_refs\":[\"runtime:cognition-integration\"]},"
+                 + "\"clarification_needed\":false,"
+                 + "\"clarification_question\":null,"
+                 + "\"response_outline\":null,"
+                 + "\"candidate_scores\":[{"
+                 + "\"candidate_name\":\"execute_action\","
+                 + "\"score\":0.82,"
+                 + "\"rationale\":\"runtime integration should execute the builtin tool\"}]}"
+                 ;
+}
+
 inline std::filesystem::path make_temp_database_path(const std::string& stem) {
   const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
                              std::chrono::system_clock::now().time_since_epoch())
@@ -89,6 +130,14 @@ inline std::shared_ptr<runtime::RuntimeDependencySet> make_true_integration_depe
 
   auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
   llm_manager->set_default_content("runtime unary integration completed: " + seed_query);
+  llm_manager->set_stage_result(
+      "planning",
+      dasall::tests::mocks::MockLLMManager::make_structured_stage_result(
+          "planning", make_runtime_structured_planning_payload()));
+  llm_manager->set_stage_result(
+      "execution",
+      dasall::tests::mocks::MockLLMManager::make_structured_stage_result(
+          "execution", make_runtime_structured_execution_payload()));
 
   dependency_set->memory_manager = std::move(memory_manager);
   dependency_set->llm_manager = llm_manager;

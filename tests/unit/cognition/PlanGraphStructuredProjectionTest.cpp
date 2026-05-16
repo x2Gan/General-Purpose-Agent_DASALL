@@ -87,6 +87,54 @@ void test_project_plan_graph_accepts_valid_structured_payload() {
               "projected plan graphs should satisfy existing invariant validation on the happy path");
 }
 
+void test_project_plan_graph_accepts_registered_top_level_extensions() {
+  PlanGraphStructuredProjector projector;
+  StageOutputValidator validator;
+  const auto payload = R"({
+    "schema_version":"cognition.plan.v1",
+    "plan_id":"plan-structured-001x",
+    "revision":1,
+    "nodes":[
+      {
+        "node_id":"n1",
+        "objective":"collect quarterly sales data",
+        "success_signal":"sales_data_collected",
+        "action_kind_hint":"tool_action",
+        "depends_on":[],
+        "evidence_refs":["dataset:quarterly-sales"]
+      },
+      {
+        "node_id":"n2",
+        "objective":"validate Berlin-specific findings",
+        "success_signal":"berlin_findings_validated",
+        "action_kind_hint":"validation",
+        "depends_on":["n1"],
+        "evidence_refs":["analysis:berlin"]
+      }
+    ],
+    "edges":[
+      {
+        "from_node_id":"n1",
+        "to_node_id":"n2",
+        "condition":"sales_data_collected",
+        "evidence_refs":["edge:n1-n2"]
+      }
+    ],
+    "open_questions":[],
+    "plan_rationale":"registered x_ extensions should be ignored at the projection boundary",
+    "estimated_complexity":2,
+    "x_trace_id":"trace-001"
+  })";
+
+  const auto result = projector.project_plan_graph(parse_payload_or_throw(payload));
+
+  assert_true(result.ok && result.plan_graph.has_value(),
+              "registered top-level x_ extensions should not fail planning projection");
+  const auto invariant_result = validator.validate_plan_graph_invariants(*result.plan_graph, 4U, 3U);
+  assert_true(invariant_result.ok,
+              "registered top-level x_ extensions should preserve the happy-path planning invariants");
+}
+
 void test_project_plan_graph_rejects_missing_success_signal() {
   PlanGraphStructuredProjector projector;
   const auto payload = R"({
@@ -247,6 +295,76 @@ void test_project_plan_graph_rejects_unknown_edge_references() {
   assert_true(!invariant_result.ok, "unknown edge references must fail invariant validation");
 }
 
+void test_project_plan_graph_rejects_unknown_depends_on_references() {
+  PlanGraphStructuredProjector projector;
+  StageOutputValidator validator;
+  const auto payload = R"({
+    "schema_version":"cognition.plan.v1",
+    "plan_id":"plan-structured-004b",
+    "revision":1,
+    "nodes":[
+      {
+        "node_id":"n1",
+        "objective":"collect quarterly sales data",
+        "success_signal":"sales_data_collected",
+        "action_kind_hint":"tool_action",
+        "depends_on":["missing-node"],
+        "evidence_refs":[]
+      }
+    ],
+    "edges":[],
+    "open_questions":[],
+    "plan_rationale":"unknown dependency should fail invariants",
+    "estimated_complexity":1
+  })";
+
+  const auto result = projector.project_plan_graph(parse_payload_or_throw(payload));
+  assert_true(result.ok && result.plan_graph.has_value(),
+              "unknown depends_on references are a typed projection success but invariant failure");
+
+  const auto invariant_result = validator.validate_plan_graph_invariants(*result.plan_graph, 4U, 3U);
+  assert_true(!invariant_result.ok, "unknown depends_on references must fail invariant validation");
+}
+
+void test_project_plan_graph_rejects_depends_on_only_cycles() {
+  PlanGraphStructuredProjector projector;
+  StageOutputValidator validator;
+  const auto payload = R"({
+    "schema_version":"cognition.plan.v1",
+    "plan_id":"plan-structured-005b",
+    "revision":1,
+    "nodes":[
+      {
+        "node_id":"n1",
+        "objective":"collect quarterly sales data",
+        "success_signal":"sales_data_collected",
+        "action_kind_hint":"tool_action",
+        "depends_on":["n2"],
+        "evidence_refs":[]
+      },
+      {
+        "node_id":"n2",
+        "objective":"validate Berlin-specific findings",
+        "success_signal":"berlin_findings_validated",
+        "action_kind_hint":"validation",
+        "depends_on":["n1"],
+        "evidence_refs":[]
+      }
+    ],
+    "edges":[],
+    "open_questions":[],
+    "plan_rationale":"depends_on-only cycles should fail invariants",
+    "estimated_complexity":2
+  })";
+
+  const auto result = projector.project_plan_graph(parse_payload_or_throw(payload));
+  assert_true(result.ok && result.plan_graph.has_value(),
+              "depends_on-only cycles are a typed projection success but invariant failure");
+
+  const auto invariant_result = validator.validate_plan_graph_invariants(*result.plan_graph, 4U, 3U);
+  assert_true(!invariant_result.ok, "depends_on-only cycles must fail invariant validation");
+}
+
 void test_project_plan_graph_rejects_cycles() {
   PlanGraphStructuredProjector projector;
   StageOutputValidator validator;
@@ -323,12 +441,15 @@ void test_project_plan_graph_rejects_node_cap_violations() {
 int main() {
   try {
     test_project_plan_graph_accepts_valid_structured_payload();
+    test_project_plan_graph_accepts_registered_top_level_extensions();
     test_project_plan_graph_rejects_missing_success_signal();
     test_project_plan_graph_rejects_schema_version_mismatch();
     test_project_plan_graph_rejects_nested_provider_payload_leakage();
     test_project_plan_graph_rejects_duplicate_node_ids();
     test_project_plan_graph_rejects_unknown_edge_references();
+    test_project_plan_graph_rejects_unknown_depends_on_references();
     test_project_plan_graph_rejects_cycles();
+    test_project_plan_graph_rejects_depends_on_only_cycles();
     test_project_plan_graph_rejects_node_cap_violations();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';

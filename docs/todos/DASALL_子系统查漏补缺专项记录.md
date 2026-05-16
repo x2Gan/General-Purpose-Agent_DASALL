@@ -1607,6 +1607,8 @@ Telemetry 字段建议：
 
 2026-05-15 BLD-012 回写结果：本文档中的 `COG-FIX-004` 总任务已改为 Done，附录 A 中 `COG-FIX-004A-BLD-012` 已改为 Done，`Gate-COG-FIX004A-05` 已由 Pending 转为 Pass；`docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与 `docs/worklog/DASALL_开发执行记录.md` 已同步回写最终状态、统一验收命令与不可外推范围。docs consistency 命令 `rg -n "COG-FIX-004" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md && rg -n "Gate-COG-FIX004A" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/cognition/DASALL_cognition子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md` 与 final focused ctest 命令 `ctest --test-dir build-ci --output-on-failure -R "StageSchemaRegistryTest|StageOutputValidatorSchemaTest|PlanGraphStructuredProjectionTest|ActionDecisionStructuredProjectionTest|CognitionFacadeStructuredPlanOutputTest|CognitionFacadeStructuredActionOutputTest|CognitionStructuredOutputIntegrationTest|CognitionRuntimeInteractionContractTest|CognitionTelemetryFieldsTest"` 通过，因此 `COG-FIX-004` 的 A.13 完成判定 1 ~ 8 已全部满足；本次完成结论仍只提升 cognition 的 L1 / L2 主链证据，不把 installed / qemu / soak 或 production telemetry sink 外推为已完成。
 
+2026-05-15 Gate-05 widened acceptance 补证：`cognition/src/StagePolicyResolver.cpp` 已把 decision fallback 收口为 profile-aware matrix，`cognition/src/CognitionFacade.cpp` 保留 config-only degraded path 的 request-owned fail-open 语义，`tests/unit/cognition/CognitionFacadeStageTimeoutTest.cpp` 与 `tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h` 已改用 structured planning / execution payload，避免 authoritative structured path 下继续使用纯文本 bridge success fixture。`tests/integration/cognition/CognitionProfileCompatibilityTest.cpp` 与 `CognitionRuntimePolicyProjectionIntegrationTest.cpp` 则补齐 runtime-init diagnostics 与 `edge_minimal` boundary 对齐：`edge_minimal` 目前只冻结“显式终态必须存在；若发出 reflection bridge，则 route / timeout 必须来自真实 snapshot 投影”，不提前冻结其 terminal status / reflection emission 宽语义。随后通过 `RunCtest_CMakeTools` 复核 `CognitionFacadeStageTimeoutTest`、`CognitionFacadeDegradedModeTest`、`CognitionProfileCompatibilityTest`、`CognitionRuntimePolicyProjectionIntegrationTest`、`StagePolicyResolverTest`、`StagePolicyResolverProfileDiffTest` 六个 blocker / owner tests，并把当前 49 个 cognition unit / integration tests 在 `build/vscode-linux-ninja` 上全量复跑为绿；因此 `Gate-COG-FIX004A-05` 现已具 focused + wider acceptance 双层证据，但 widening 结论仍只提升 cognition L1 / L2 主链可信度，不外推到 installed / qemu / soak 或 production telemetry sink。
+
 ### A.11 Gate 与统一验收命令
 
 | Gate ID | 名称 | 触发时机 | 通过条件 | 回退动作 |
@@ -1617,7 +1619,7 @@ Telemetry 字段建议：
 | Gate-COG-FIX004A-04 | Runtime interaction and negative matrix gate | BLD-008 ~ BLD-011 后 | runtime interaction、structured integration、schema drift、安全负例、telemetry fields 全绿 | 回退对应 owner，不回写 Done |
 | Gate-COG-FIX004A-05 | Evidence writeback gate | BLD-012 后 | TODO、worklog、deliverable 与命令结果一致；不可外推范围明确 | COG-FIX-004 保持 Todo / Blocked |
 
-当前状态（2026-05-15）：`Gate-COG-FIX004A-01` = Pass（DOC-001 已完成并跨文档一致）；`Gate-COG-FIX004A-02` = Pass（BLD-003 / BLD-004 projector focused tests 已全绿）；`Gate-COG-FIX004A-03` = Pass（Facade planning / execution authoritative consumption 已具 focused evidence）；`Gate-COG-FIX004A-04` = Pass（BLD-008 ~ 011 已具 focused evidence，schema drift 与 safety negative matrix 已补齐）；`Gate-COG-FIX004A-05` = Pass（最终证据、统一验收命令与不可外推范围已跨文档一致回写）。
+当前状态（2026-05-15）：`Gate-COG-FIX004A-01` = Pass（DOC-001 已完成并跨文档一致）；`Gate-COG-FIX004A-02` = Pass（BLD-003 / BLD-004 projector focused tests 已全绿）；`Gate-COG-FIX004A-03` = Pass（Facade planning / execution authoritative consumption 已具 focused evidence）；`Gate-COG-FIX004A-04` = Pass（BLD-008 ~ 011 已具 focused evidence，schema drift 与 safety negative matrix 已补齐）；`Gate-COG-FIX004A-05` = Pass（最终证据、统一验收命令与不可外推范围已跨文档一致回写，且 `build/vscode-linux-ninja` 上当前 49 个 cognition tests widened acceptance 全绿）。
 
 阶段性聚焦命令：
 
@@ -1673,5 +1675,5 @@ COG-FIX-004 仅当以下条件全部满足时可标记 Done：
 4. malformed JSON、schema violation、projection violation、object invariant violation 均 fail-closed 或按 policy 显式 fallback，且 diagnostics 可区分。
 5. Runtime interaction contract 证明 projected `ActionDecision` 被 Runtime 作为 module-public cognition result 消费，而不是消费 raw JSON。
 6. Telemetry / diagnostics 记录 projection source、schema version、failure code，且不泄漏 raw provider payload。
-7. 统一验收命令通过，worklog / TODO / deliverable 完成证据回写。
+7. 统一 focused 验收命令通过，worklog / TODO / deliverable 完成证据回写，且当前 49 个 cognition unit / integration tests 的 widened acceptance 不再暴露 authority/fallback 回归。
 8. COG-FIX-004 的完成结论只提升 cognition L1/L2 主链证据；installed / qemu / soak 证据仍按总账 L 层级另行声明，不外推。

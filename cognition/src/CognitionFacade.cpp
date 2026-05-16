@@ -473,6 +473,18 @@ void apply_decision_failure(
   return false;
 }
 
+[[nodiscard]] bool resolve_decision_fallback_allowed(
+    const std::optional<StageExecutionPlan>& decision_plan,
+    const CognitionConfig& config,
+    const CognitionStepRequest& request) {
+  if (decision_plan.has_value()) {
+    return decision_plan->rule_fallback_enabled;
+  }
+
+  (void)config;
+  return request.execution_hints.degraded_path_allowed;
+}
+
 void apply_reflection_failure(
     CognitionReflectionResult& result,
     contracts::ResultCode result_code,
@@ -733,8 +745,7 @@ class CognitionFacade final : public ICognitionEngine {
     const auto stage_deadline_ms =
       decision_plan.has_value() ? decision_plan->deadline_ms : 0U;
     const auto rule_fallback_enabled =
-        request.execution_hints.degraded_path_allowed &&
-        (!decision_plan.has_value() || decision_plan->rule_fallback_enabled);
+      resolve_decision_fallback_allowed(decision_plan, config_, request);
 
     const auto perception_result = run_stage_with_deadline(
       stage_deadline_ms,
@@ -807,6 +818,7 @@ class CognitionFacade final : public ICognitionEngine {
                                                                       ModelCapabilityTier::Standard,
                                                                       true,
                                                                       512U,
+                                                                      rule_fallback_enabled,
                                                                       result,
                                                                       planning_hint);
     if (result.error_info.has_value()) {
@@ -975,6 +987,7 @@ class CognitionFacade final : public ICognitionEngine {
                                                                        ModelCapabilityTier::Standard,
                                                                        true,
                                                                        256U,
+                                                                       rule_fallback_enabled,
                                                                        result,
                                                                        execution_hint);
     if (result.error_info.has_value()) {
@@ -1035,7 +1048,8 @@ class CognitionFacade final : public ICognitionEngine {
             }
           } else {
             const auto decision_validation = validator_.validate_action_decision_invariants(
-                *projected_action.action_decision);
+              *projected_action.action_decision,
+              &reasoning_request.active_plan);
             append_unique(result.diagnostics, decision_validation.diagnostics);
             if (!decision_validation.ok) {
               if (!fallback_or_fail_structured_stage(result,
@@ -1083,9 +1097,10 @@ class CognitionFacade final : public ICognitionEngine {
       }
 
       const auto decision_validation =
-          validator_.validate_action_decision_invariants(*local_action_decision.value);
+          validator_.validate_action_decision_invariants(*local_action_decision.value,
+                                &reasoning_request.active_plan);
       if (!decision_validation.ok) {
-        if (request.execution_hints.degraded_path_allowed) {
+        if (rule_fallback_enabled) {
           resolved_action_decision = make_converge_safe_fallback(
               request,
               "decision pipeline converged safe because decision invariants failed validation");
@@ -1197,12 +1212,26 @@ class CognitionFacade final : public ICognitionEngine {
       ModelCapabilityTier capability_tier,
       bool requires_structured_output,
       std::uint32_t max_output_tokens,
+      bool fallback_allowed,
       CognitionDecisionResult& result,
       const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, std::string{"llm_bridge.unavailable:"} + stage);
       append_structured_projection_value(result.diagnostics, "failure_code", stage, "provider");
-      append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
+      if (fallback_allowed) {
+        append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
+        append_unique(result.diagnostics, "decision_pipeline.degraded");
+        append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
+        append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
+      } else {
+        apply_decision_failure(result,
+                               contracts::ResultCode::RuntimeRetryExhausted,
+                               make_error_info(contracts::ResultCode::RuntimeRetryExhausted,
+                                               stage,
+                                               "structured stage requires llm_bridge but no bridge is available",
+                                               "cognition::llm_bridge::CognitionLlmBridge"),
+                               std::string{"decision_pipeline.llm_bridge_failed:"} + stage);
+      }
       return std::nullopt;
     }
 
@@ -1240,6 +1269,14 @@ class CognitionFacade final : public ICognitionEngine {
         });
     if (bridge_result.timed_out) {
       append_structured_projection_value(result.diagnostics, "failure_code", stage, "timeout");
+      if (fallback_allowed) {
+        append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
+        append_unique(result.diagnostics, "decision_pipeline.degraded");
+        append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
+        append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
+        return std::nullopt;
+      }
+
       apply_decision_failure(result,
                              contracts::ResultCode::RuntimeRetryExhausted,
                              make_stage_timeout_error_info(stage,
@@ -1258,7 +1295,9 @@ class CognitionFacade final : public ICognitionEngine {
 
     append_structured_projection_value(result.diagnostics, "failure_code", stage, "provider");
 
-    if (request.execution_hints.degraded_path_allowed) {
+    if (fallback_allowed) {
+      append_unique(result.diagnostics, "decision_pipeline.degraded");
+      append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
       append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
       append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
       return std::nullopt;

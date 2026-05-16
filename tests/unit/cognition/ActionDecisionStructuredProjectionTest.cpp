@@ -10,6 +10,9 @@
 namespace {
 
 using dasall::cognition::decision::ActionDecisionKind;
+using dasall::cognition::plan::PlanEdge;
+using dasall::cognition::plan::PlanGraph;
+using dasall::cognition::plan::PlanNode;
 using dasall::cognition::projection::ActionDecisionStructuredProjector;
 using dasall::cognition::validation::StageOutputValidator;
 using dasall::cognition::validation::StructuredPayloadView;
@@ -56,9 +59,40 @@ using dasall::tests::support::assert_true;
   })";
 }
 
+[[nodiscard]] PlanGraph make_active_plan() {
+  return PlanGraph{
+      .plan_id = "plan-execution-authority",
+      .revision = 3U,
+      .nodes = {
+          PlanNode{.node_id = "node-execute-1",
+                   .objective = "collect governed evidence",
+                   .success_signal = "evidence_collected",
+                   .action_kind_hint = "tool_action",
+                   .depends_on = {},
+                   .evidence_refs = {}},
+          PlanNode{.node_id = "node-respond-1",
+                   .objective = "draft operator response",
+                   .success_signal = "response_ready",
+                   .action_kind_hint = "direct_response",
+                   .depends_on = {"node-execute-1"},
+                   .evidence_refs = {}},
+      },
+      .edges = {
+          PlanEdge{.from_node_id = "node-execute-1",
+                   .to_node_id = "node-respond-1",
+                   .condition = "evidence_collected",
+                   .evidence_refs = {}},
+      },
+      .open_questions = {},
+      .plan_rationale = "execute then respond",
+      .estimated_complexity = 2U,
+  };
+}
+
 void test_project_action_decision_accepts_valid_structured_payload() {
   ActionDecisionStructuredProjector projector;
   StageOutputValidator validator;
+  const auto active_plan = make_active_plan();
 
   const auto result = projector.project_action_decision(
       parse_payload_or_throw(make_valid_execution_payload()));
@@ -80,9 +114,89 @@ void test_project_action_decision_accepts_valid_structured_payload() {
                "projector should preserve structured candidate scores");
 
   const auto invariant_result = validator.validate_action_decision_invariants(
-      *result.action_decision);
+      *result.action_decision,
+      &active_plan);
   assert_true(invariant_result.ok,
               "projected action decisions should satisfy existing invariant validation on the happy path");
+}
+
+void test_project_action_decision_accepts_registered_top_level_extensions() {
+  ActionDecisionStructuredProjector projector;
+  StageOutputValidator validator;
+  const auto active_plan = make_active_plan();
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v1",
+    "decision_kind":"ExecuteAction",
+    "confidence":0.84,
+    "rationale":"registered x_ extensions should be ignored at the projection boundary",
+    "selected_node_id":"node-execute-1",
+    "tool_intent_hint":{
+      "tool_name":"agent.dataset",
+      "intent_summary":"gather the quarterly sales dataset for Berlin",
+      "argument_hints":["Berlin quarterly sales","return evidence only"],
+      "evidence_refs":["belief:evidence:001"]
+    },
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":null,
+    "candidate_scores":[
+      {
+        "candidate_name":"execute_action",
+        "score":0.84,
+        "rationale":"active node and tool are available"
+      }
+    ],
+    "x_trace_id":"trace-001"
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+
+  assert_true(result.ok && result.action_decision.has_value(),
+              "registered top-level x_ extensions should not fail execution projection");
+  const auto invariant_result = validator.validate_action_decision_invariants(
+      *result.action_decision,
+      &active_plan);
+  assert_true(invariant_result.ok,
+              "registered top-level x_ extensions should preserve the happy-path execution invariants");
+}
+
+void test_project_action_decision_rejects_selected_node_outside_active_plan() {
+  ActionDecisionStructuredProjector projector;
+  StageOutputValidator validator;
+  auto active_plan = make_active_plan();
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v1",
+    "decision_kind":"ExecuteAction",
+    "confidence":0.84,
+    "rationale":"selected node must belong to the active plan",
+    "selected_node_id":"node-not-in-plan",
+    "tool_intent_hint":{
+      "tool_name":"agent.dataset",
+      "intent_summary":"query the governed dataset route",
+      "argument_hints":[],
+      "evidence_refs":[]
+    },
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":null,
+    "candidate_scores":[
+      {
+        "candidate_name":"execute_action",
+        "score":0.84,
+        "rationale":"membership mismatch"
+      }
+    ]
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+  assert_true(result.ok && result.action_decision.has_value(),
+              "membership mismatches should surface as invariant failures, not parse failures");
+
+  const auto invariant_result = validator.validate_action_decision_invariants(
+      *result.action_decision,
+      &active_plan);
+  assert_true(!invariant_result.ok,
+              "execute_action decisions must fail when selected_node_id is outside the active plan");
 }
 
 void test_project_action_decision_rejects_invalid_enum_literal() {
@@ -218,6 +332,73 @@ void test_project_action_decision_rejects_tool_intent_on_response() {
   assert_true(!invariant_result.ok, "response decisions must fail when tool intent is present");
 }
 
+void test_project_action_decision_rejects_selected_node_on_response() {
+  ActionDecisionStructuredProjector projector;
+  StageOutputValidator validator;
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v1",
+    "decision_kind":"DirectResponse",
+    "confidence":0.73,
+    "rationale":"response paths must not carry an execution node selection",
+    "selected_node_id":"node-execute-1",
+    "tool_intent_hint":null,
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":{
+      "summary":"respond with the current evidence snapshot",
+      "key_points":["do not execute tools"]
+    },
+    "candidate_scores":[
+      {
+        "candidate_name":"direct_response",
+        "score":0.73,
+        "rationale":"response wins"
+      }
+    ]
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+  assert_true(result.ok && result.action_decision.has_value(),
+              "selected_node_id on response remains a typed projection success but invariant failure");
+
+  const auto invariant_result = validator.validate_action_decision_invariants(
+      *result.action_decision);
+  assert_true(!invariant_result.ok,
+              "response decisions must fail when selected_node_id is present");
+}
+
+void test_project_action_decision_rejects_no_decision_authority() {
+  ActionDecisionStructuredProjector projector;
+  StageOutputValidator validator;
+  const auto payload = R"({
+    "schema_version":"cognition.reasoning.v1",
+    "decision_kind":"NoDecision",
+    "confidence":0.41,
+    "rationale":"authoritative path must not accept an undecided terminal result",
+    "selected_node_id":null,
+    "tool_intent_hint":null,
+    "clarification_needed":false,
+    "clarification_question":null,
+    "response_outline":null,
+    "candidate_scores":[
+      {
+        "candidate_name":"no_decision",
+        "score":0.41,
+        "rationale":"undecided should fail invariants"
+      }
+    ]
+  })";
+
+  const auto result = projector.project_action_decision(parse_payload_or_throw(payload));
+  assert_true(result.ok && result.action_decision.has_value(),
+              "no_decision remains a typed projection success but invariant failure");
+
+  const auto invariant_result = validator.validate_action_decision_invariants(
+      *result.action_decision);
+  assert_true(!invariant_result.ok,
+              "authoritative structured execution must reject NoDecision results");
+}
+
 void test_project_action_decision_rejects_tool_argument_payload_overreach() {
   ActionDecisionStructuredProjector projector;
   const auto payload = R"({
@@ -330,10 +511,14 @@ void test_project_action_decision_rejects_clarification_conflict() {
 int main() {
   try {
     test_project_action_decision_accepts_valid_structured_payload();
+    test_project_action_decision_accepts_registered_top_level_extensions();
+    test_project_action_decision_rejects_selected_node_outside_active_plan();
     test_project_action_decision_rejects_invalid_enum_literal();
     test_project_action_decision_rejects_schema_version_mismatch();
     test_project_action_decision_rejects_missing_selected_node();
     test_project_action_decision_rejects_tool_intent_on_response();
+    test_project_action_decision_rejects_selected_node_on_response();
+    test_project_action_decision_rejects_no_decision_authority();
     test_project_action_decision_rejects_tool_argument_payload_overreach();
     test_project_action_decision_rejects_delegate_hint_when_disabled();
     test_project_action_decision_rejects_clarification_conflict();

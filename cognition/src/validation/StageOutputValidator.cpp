@@ -372,6 +372,16 @@ ValidationResult StageOutputValidator::validate_plan_graph_invariants(
   std::unordered_set<std::string> known_node_ids;
   std::unordered_map<std::string, std::vector<std::string>> outgoing_edges;
   std::unordered_map<std::string, std::uint32_t> indegree;
+  const auto register_dependency_edge = [&outgoing_edges, &indegree](const std::string& from_node_id,
+                                                                     const std::string& to_node_id) {
+    auto& next_node_ids = outgoing_edges[from_node_id];
+    if (std::find(next_node_ids.begin(), next_node_ids.end(), to_node_id) != next_node_ids.end()) {
+      return;
+    }
+
+    next_node_ids.push_back(to_node_id);
+    ++indegree[to_node_id];
+  };
   for (const auto& node : plan_graph.nodes) {
     if (node.node_id.empty()) {
       issue_set.add(ValidationIssueCode::PlanGraphInvariant,
@@ -395,8 +405,46 @@ ValidationResult StageOutputValidator::validate_plan_graph_invariants(
       continue;
     }
 
-    outgoing_edges[edge.from_node_id].push_back(edge.to_node_id);
-    ++indegree[edge.to_node_id];
+    register_dependency_edge(edge.from_node_id, edge.to_node_id);
+  }
+
+  for (const auto& node : plan_graph.nodes) {
+    if (node.node_id.empty()) {
+      continue;
+    }
+
+    std::unordered_set<std::string> seen_dependencies;
+    for (const auto& dependency_node_id : node.depends_on) {
+      if (dependency_node_id.empty()) {
+        issue_set.add(ValidationIssueCode::PlanGraphInvariant,
+                      "nodes.depends_on",
+                      "plan node dependencies must reference non-empty node ids");
+        continue;
+      }
+
+      if (!seen_dependencies.insert(dependency_node_id).second) {
+        issue_set.add(ValidationIssueCode::PlanGraphInvariant,
+                      "nodes.depends_on",
+                      "plan node dependencies must not contain duplicates");
+        continue;
+      }
+
+      if (dependency_node_id == node.node_id) {
+        issue_set.add(ValidationIssueCode::PlanGraphInvariant,
+                      "nodes.depends_on",
+                      "plan nodes must not depend on themselves");
+        continue;
+      }
+
+      if (!known_node_ids.contains(dependency_node_id)) {
+        issue_set.add(ValidationIssueCode::PlanGraphInvariant,
+                      "nodes.depends_on",
+                      "plan node dependencies must reference known node ids");
+        continue;
+      }
+
+      register_dependency_edge(dependency_node_id, node.node_id);
+    }
   }
 
   std::queue<std::string> zero_indegree_nodes;
@@ -445,7 +493,8 @@ ValidationResult StageOutputValidator::validate_plan_graph_invariants(
 }
 
 ValidationResult StageOutputValidator::validate_action_decision_invariants(
-    const decision::ActionDecision& action_decision) const {
+  const decision::ActionDecision& action_decision,
+  const plan::PlanGraph* active_plan) const {
   ValidationIssueSet issue_set;
   std::vector<std::string> diagnostics;
 
@@ -457,6 +506,15 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
                                !action_decision.tool_intent_hint->tool_name.empty();
   const auto has_response_outline = action_decision.response_outline.has_value() &&
                                     !action_decision.response_outline->summary.empty();
+  auto selected_node_belongs_to_active_plan = false;
+  if (has_selected_node && active_plan != nullptr) {
+    selected_node_belongs_to_active_plan = std::any_of(
+        active_plan->nodes.begin(),
+        active_plan->nodes.end(),
+        [&action_decision](const plan::PlanNode& node) {
+          return node.node_id == *action_decision.selected_node_id;
+        });
+  }
 
   switch (action_decision.decision_kind) {
     case decision::ActionDecisionKind::ExecuteAction:
@@ -464,6 +522,10 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
                       "selected_node_id",
                       "execute_action decisions require a selected plan node");
+      } else if (active_plan != nullptr && !selected_node_belongs_to_active_plan) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "selected_node_id",
+                      "execute_action decisions must reference a node from the active plan");
       }
       if (!has_tool_intent) {
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
@@ -488,6 +550,11 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
                       "tool_intent_hint.tool_name",
                       "response decisions must not carry executable tool intent");
       }
+      if (has_selected_node) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "selected_node_id",
+                      "response decisions must not carry a selected plan node");
+      }
       if (action_decision.clarification_needed || has_clarification_question) {
         issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
                       "clarification_question",
@@ -506,8 +573,21 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
                       "tool_intent_hint.tool_name",
                       "clarification decisions must not carry a tool intent hint");
       }
+      if (has_selected_node) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "selected_node_id",
+                      "clarification decisions must not carry a selected plan node");
+      }
+      if (has_response_outline) {
+        issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                      "response_outline.summary",
+                      "clarification decisions must not carry a terminal response outline");
+      }
       break;
     case decision::ActionDecisionKind::NoDecision:
+      issue_set.add(ValidationIssueCode::ActionDecisionInvariant,
+                    "decision_kind",
+                    "authoritative action decisions must not remain undecided");
       break;
   }
 

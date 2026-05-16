@@ -103,12 +103,94 @@ void test_decide_fails_closed_when_invalid_execution_projection_has_no_fallback(
               "invalid execution payloads should expose the invariant failure code");
 }
 
+void test_decide_fails_closed_when_execution_selects_node_outside_projected_plan() {
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "bridge-plan-node",
+      .response_text = "bridge-authored direct response summary",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+  fixture.llm_manager()->set_structured_stage_payload(
+      "execution",
+      std::string{"{"}
+          + "\"schema_version\":\"cognition.reasoning.v1\","
+          + "\"decision_kind\":\"ExecuteAction\","
+          + "\"confidence\":0.82,"
+          + "\"rationale\":\"selected node must stay grounded in the projected plan\","
+          + "\"selected_node_id\":\"missing-plan-node\","
+          + "\"tool_intent_hint\":{"
+          + "\"tool_name\":\"agent.dataset\","
+          + "\"intent_summary\":\"query runtime-visible data through tool governance\","
+          + "\"argument_hints\":[\"query=current_state\"],"
+          + "\"evidence_refs\":[\"tests:mock-cognition-fixture\"]},"
+          + "\"clarification_needed\":false,"
+          + "\"clarification_question\":null,"
+          + "\"response_outline\":null,"
+          + "\"candidate_scores\":[{"
+          + "\"candidate_name\":\"execute_action\","
+          + "\"score\":0.82,"
+          + "\"rationale\":\"membership mismatch must fail\"}]}" );
+
+  auto engine = fixture.make_engine(CognitionConfig{});
+  auto request = fixture.make_decide_request(true);
+  request.execution_hints.degraded_path_allowed = false;
+
+  const auto result = engine->decide(request);
+
+  assert_true(result.result_code.has_value(),
+              "selected_node_id outside the active plan should fail closed when degradation is disabled");
+  assert_true(!result.action_decision.has_value(),
+              "membership violations must not leak a partial action decision");
+  assert_true(contains_value(result.diagnostics, "structured_projection.invariant_failed:execution"),
+              "membership violations should surface the invariant_failed diagnostic");
+  assert_true(!contains_value(result.diagnostics, "structured_projection.local_fallback:execution"),
+              "membership violations must not silently fall back when degradation is disabled");
+}
+
+void test_decide_fails_closed_when_execution_projection_returns_no_decision() {
+  MockCognitionFixture fixture(MockCognitionFixtureOptions{
+      .selected_node_id = "bridge-plan-node",
+      .response_text = "bridge-authored direct response summary",
+  });
+  fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
+  fixture.llm_manager()->set_structured_stage_payload(
+      "execution",
+      std::string{"{"}
+          + "\"schema_version\":\"cognition.reasoning.v1\","
+          + "\"decision_kind\":\"NoDecision\","
+          + "\"confidence\":0.41,"
+          + "\"rationale\":\"authoritative execution cannot remain undecided\","
+          + "\"selected_node_id\":null,"
+          + "\"tool_intent_hint\":null,"
+          + "\"clarification_needed\":false,"
+          + "\"clarification_question\":null,"
+          + "\"response_outline\":null,"
+          + "\"candidate_scores\":[{"
+          + "\"candidate_name\":\"no_decision\","
+          + "\"score\":0.41,"
+          + "\"rationale\":\"undecided must fail authority\"}]}" );
+
+  auto engine = fixture.make_engine(CognitionConfig{});
+  auto request = fixture.make_decide_request(true);
+  request.execution_hints.degraded_path_allowed = false;
+
+  const auto result = engine->decide(request);
+
+  assert_true(result.result_code.has_value(),
+              "NoDecision execution payloads should fail closed when degradation is disabled");
+  assert_true(!result.action_decision.has_value(),
+              "NoDecision payloads must not leak a partial action decision");
+  assert_true(contains_value(result.diagnostics, "structured_projection.invariant_failed:execution"),
+              "NoDecision payloads should surface the invariant_failed diagnostic");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_decide_uses_projected_action_decision_as_authoritative_result();
     test_decide_fails_closed_when_invalid_execution_projection_has_no_fallback();
+    test_decide_fails_closed_when_execution_selects_node_outside_projected_plan();
+    test_decide_fails_closed_when_execution_projection_returns_no_decision();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

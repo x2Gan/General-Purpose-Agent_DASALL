@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "validation/StageSchemaRegistry.h"
+
 namespace dasall::cognition::projection {
 namespace {
 
@@ -110,6 +112,38 @@ template <std::size_t N>
         allowed_fields.end()) {
       return field_name;
     }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] bool is_allowed_top_level_extension(
+    std::string_view field_name,
+    const validation::StageSchemaSpec& schema_spec) {
+  if (schema_spec.unknown_field_policy != validation::UnknownFieldPolicy::AllowRegisteredExtensions) {
+    return false;
+  }
+
+  return std::any_of(schema_spec.allowed_extension_prefixes.begin(),
+                     schema_spec.allowed_extension_prefixes.end(),
+                     [field_name](const auto& prefix) {
+                       return !prefix.empty() && field_name.starts_with(prefix);
+                     });
+}
+
+template <std::size_t N>
+[[nodiscard]] std::optional<std::string> find_unexpected_top_level_field(
+    const StructuredPayloadView& object_view,
+    const std::array<std::string_view, N>& allowed_fields,
+    const validation::StageSchemaSpec& schema_spec) {
+  for (const auto& field_name : object_view.field_names()) {
+    if (std::find(allowed_fields.begin(), allowed_fields.end(), field_name) !=
+            allowed_fields.end() ||
+        is_allowed_top_level_extension(field_name, schema_spec)) {
+      continue;
+    }
+
+    return field_name;
   }
 
   return std::nullopt;
@@ -274,7 +308,9 @@ PlanGraphProjectionResult PlanGraphStructuredProjector::project_plan_graph(
   };
 
   if (const auto unexpected_field =
-          find_unexpected_field(payload_view, kAllowedTopLevelFields);
+          find_unexpected_top_level_field(payload_view,
+                                          kAllowedTopLevelFields,
+                                          validation::schema_for_planning_plan());
       unexpected_field.has_value()) {
     return make_projection_failure(
         *unexpected_field,

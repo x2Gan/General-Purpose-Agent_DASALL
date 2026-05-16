@@ -160,8 +160,8 @@ void test_resolve_decide_plan_uses_projected_defaults() {
               "clarification threshold should come from projected cognition defaults");
   assert_true(plan->fallback_mode == StageFallbackMode::None,
               "decision plan should not activate a fallback mode under healthy budget conditions");
-  assert_true(plan->rule_fallback_enabled,
-              "rule fallback should stay enabled as an available degraded path");
+  assert_true(!plan->rule_fallback_enabled,
+              "desktop_full should keep structured planning/execution on the fail-fast path");
 }
 
 void test_resolve_response_plan_honors_template_preference() {

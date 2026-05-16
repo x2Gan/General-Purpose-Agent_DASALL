@@ -60,6 +60,10 @@ struct ProjectionCase {
   return find_request_in(manager.stream_generate_requests(), stage, task_type);
 }
 
+[[nodiscard]] bool contains_text(const std::string& text, std::string_view expected) {
+  return text.find(expected) != std::string::npos;
+}
+
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
 load_profile_snapshot(const std::string& profile_id) {
   const dasall::profiles::ProfileCatalog catalog(repository_root() / "profiles");
@@ -139,7 +143,8 @@ void test_runtime_init_projects_real_profile_snapshot_into_live_stage_requests()
     assert_true(init_result.resolved_profile_id == profile_case.profile_id,
                 "runtime policy projection integration should bind the resolved profile id: " +
                     profile_case.profile_id);
-    assert_true(init_result.diagnostics == "cognition_ports=composed_from_policy_snapshot",
+    assert_true(contains_text(init_result.diagnostics,
+                  "cognition_ports=composed_from_policy_snapshot"),
                 "runtime policy projection integration should compose cognition ports from the real runtime policy snapshot: " +
                     profile_case.profile_id);
 
