@@ -19,8 +19,12 @@ class RuntimePolicySnapshot;
 
 namespace dasall::llm {
 
+class ILLMTransport;
+
 struct LLMProductionFactoryOptions {
   std::shared_ptr<infra::secret::ISecretBackend> secret_backend;
+  std::shared_ptr<ILLMTransport> transport;
+  std::string provider_catalog_baseline_root;
 };
 
 struct LLMProductionFactoryResult {

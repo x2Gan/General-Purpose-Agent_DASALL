@@ -1,0 +1,23 @@
+schema_version: "1"
+provider_id: local-runtime
+display_name: Local Runtime
+adapter_family: local_runtime
+api_family: local-runtime-generate
+base_url: local-runtime:///var/run/dasall/local-llm
+base_url_alias: local/runtime-main
+auth_mode: profile_passthrough
+auth_ref: profile://llm/providers/local-runtime/noauth
+header_refs:
+  - header://llm/providers/local-runtime-trace
+trusted_source: profiles
+source_version: 2026.05.16
+activation_flag: true
+tags:
+  - local
+  - internal
+  - edge_minimal
+mutable_overlay_fields:
+  - auth_ref
+  - header_refs
+  - base_url_alias
+  - activation_flag

@@ -165,7 +165,7 @@
 | streaming 生命周期 | 6.4.2、7.2、10.1 | L0 | module-local lifecycle owner、cancel/overflow、observer、timeout 边界已冻结并落地实现 | shared handle admission 仍未冻结 | 保持 shared admission 后置，streaming 实现继续停留在 llm owner 内部 |
 | shared supporting object admission | 7.2、10.1、12.1 | L0 | 升格风险和迁移路径已有结论 | 消费者矩阵、contract tests、兼容窗口未齐 | 只列 Review Gate，继续 module-local |
 
-当前状态更新（2026-05-16 / LLM-FIX-001）：4.3 的“缺失证据”字段用于解释专项 TODO 启动时为何按 001~042 排布，而不是描述当前实现缺口。阶段 J 中，streaming 生命周期已由 LLM-FIX-001 在 llm owner 内部完成实现与 focused tests；当前仍保持后置评审属性的只有 shared admission。本专项 TODO 当前剩余 owner 更偏向 production family 注册、production observability / audit sink 与 shared admission 边界维护。
+当前状态更新（2026-05-16 / LLM-FIX-002）：4.3 的“缺失证据”字段用于解释专项 TODO 启动时为何按 001~042 排布，而不是描述当前实现缺口。阶段 J 中，streaming 生命周期已由 LLM-FIX-001 在 llm owner 内部完成实现与 focused tests；production provider family 注册已由 LLM-FIX-002 在 production factory + provider baseline + focused tests 侧完成收口；当前仍保持后置评审属性的只有 shared admission。本专项 TODO 当前剩余 owner 更偏向 production observability / audit sink、installed / release evidence 与 shared admission 边界维护。
 
 ## 5. Design -> TODO 映射表
 
@@ -785,9 +785,9 @@ TemplateRenderer 安全规则、调用执行治理、Provider 注入闭环与 as
 2. 设计交付：[docs/todos/llm/deliverables/LLM-TODO-042-asset-only-provider-onboarding-integration设计收敛.md](deliverables/LLM-TODO-042-asset-only-provider-onboarding-integration%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)。
 3. 代码交付：[tests/integration/llm/LLMProviderAssetOnboardingIntegrationTest.cpp](../../../tests/integration/llm/LLMProviderAssetOnboardingIntegrationTest.cpp)、[tests/integration/llm/CMakeLists.txt](../../../tests/integration/llm/CMakeLists.txt)。
 4. 验证结果：`ListBuildTargets_CMakeTools` 已列出 `dasall_llm_provider_asset_onboarding_integration_test` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 已列出 `LLMProviderAssetOnboardingIntegrationTest`。`Build_CMakeTools` 定向构建 `dasall_llm_provider_asset_onboarding_integration_test` 成功，随后 `RunCtest_CMakeTools` 定向执行 `LLMProviderAssetOnboardingIntegrationTest` 结果为 `100% tests passed, 0 tests failed out of 1`。进一步构建 `dasall_integration_tests` 时，integration 聚合链路中的 43 条用例全部通过，其中 `LLMProviderAssetOnboardingIntegrationTest` 作为第 43 个 integration 用例通过。若 CTest 继续附带 `DartConfiguration.tcl` 缺失提示，仍按既有结论记为工具噪声而非 blocker。
-5. 边界结论：042 没有改写 `ProviderCatalogRepository`、`LLMSubsystemConfig` projector、`AdapterRegistry` 或 `LLMManager` 的生产 owner，而是把 “provider catalog snapshot -> registry route registration” 这条最小接缝收敛在 integration fixture。用例同时固定了两件事实：显式 `cloud.premium` route 会把 dispatch 切到 deployment overlay 新增的 `openclaw-prod/openclaw-chat`，而 `cloud.default` 不会隐式激活新 provider，仍继续命中 baseline `deepseek-prod/deepseek-chat`。
+5. 边界结论：042 没有改写 `ProviderCatalogRepository`、`LLMSubsystemConfig` projector、`AdapterRegistry` 或 `LLMManager` 的生产 owner，而是把 “provider catalog snapshot -> registry route registration” 这条最小接缝收敛在 integration fixture。用例同时固定了三件事实：显式 `cloud.premium` route 会把 dispatch 切到 deployment overlay 新增的 `openclaw-prod/openclaw-chat`，`cloud.default` 不会隐式激活新 provider，仍继续命中 baseline `deepseek-prod/deepseek-chat`，并且 repo baseline 的 `lan-ollama` / `local-runtime` family projection 也会继续被 admitted 到 registry。
 6. blocker 结论：042 已完成 `LLM-BLK-007` 在 llm 内部验证侧的 owner 收口，证明 041 的 ProviderConfig 投影与 025 的既有 family skeleton 足以支撑 asset-only onboarding；但这仍不等于 Cloud/LAN/Local 真实 endpoint、secret resolver 或 header 注入链已联调就绪，`LLM-BLK-007` 的外部残余约束仍需后续 owner 单独处理。
-7. 设计收敛：042 采用“repo baseline DeepSeek catalog + deployment overlay OpenClaw package + 动态 prompt package + 双 profile route 投影”的最小路径。正例用 `cloud.premium` 验证新 provider instance 能被选中并 dispatch；负例用 `cloud.default` 验证同一 provider asset 已接入但保持 dormant。两条路径都进一步断言 `adapter_family`、`provider_instance_id`、`base_url_alias`、`auth_ref` 与 `snapshot_version` 是从 Provider 资产/overlay 真实投影到 adapter init，而不是测试私写平行 config。
+7. 设计收敛：042 采用“repo baseline DeepSeek/LAN/Local catalog + deployment overlay OpenClaw package + 动态 prompt package + 双 profile route 投影”的最小路径。正例用 `cloud.premium` 验证新 provider instance 能被选中并 dispatch；负例用 `cloud.default` 验证同一 provider asset 已接入但保持 dormant。两条路径都进一步断言 `adapter_family`、`provider_instance_id`、`base_url_alias`、`auth_ref` 与 `snapshot_version` 是从 Provider 资产/overlay 真实投影到 adapter init，而不是测试私写平行 config；baseline `ollama_native` / `local_runtime` family 也保持 admitted projection 不回退。
 8. 后继任务：042 已闭环，下一步可继续推进 `LLM-TODO-038`，统一回写 llm 专项 Gate、阶段 G/H 证据链与残余 blocker 说明。
 
 ### 17.20 LLM-TODO-038
@@ -796,10 +796,10 @@ TemplateRenderer 安全规则、调用执行治理、Provider 注入闭环与 as
 2. 设计交付：[docs/todos/llm/deliverables/LLM-TODO-038-llm专项Gate与阶段G-H证据回写设计收敛.md](deliverables/LLM-TODO-038-llm%E4%B8%93%E9%A1%B9Gate%E4%B8%8E%E9%98%B6%E6%AE%B5G-H%E8%AF%81%E6%8D%AE%E5%9B%9E%E5%86%99%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)。
 3. 代码交付：[docs/todos/llm/DASALL_llm子系统专项TODO.md](../../../docs/todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)、[docs/worklog/DASALL_开发执行记录.md](../../../docs/worklog/DASALL_%E5%BC%80%E5%8F%91%E6%89%A7%E8%A1%8C%E8%AE%B0%E5%BD%95.md)、[docs/todos/llm/deliverables/LLM-TODO-038-llm专项Gate与阶段G-H证据回写设计收敛.md](deliverables/LLM-TODO-038-llm%E4%B8%93%E9%A1%B9Gate%E4%B8%8E%E9%98%B6%E6%AE%B5G-H%E8%AF%81%E6%8D%AE%E5%9B%9E%E5%86%99%E8%AE%BE%E8%AE%A1%E6%94%B6%E6%95%9B.md)。
 4. 验证结果：`ListBuildTargets_CMakeTools` 继续列出 `dasall_llm`、`dasall_unit_tests`、`dasall_contract_tests` 与 `dasall_integration_tests`；`ListTests_CMakeTools` 继续列出 llm unit/integration 用例，说明 discoverability 保持闭合。`Build_CMakeTools` 构建 `dasall_llm` 成功；进一步构建 `dasall_unit_tests`、`dasall_contract_tests` 与 `dasall_integration_tests` 时，聚合链路分别为 `249/249`、`152/152`、`43/43` 全部通过。若后续 CMake Tools 再次出现 target/test discoverability 异常，仍按既有结论回退显式 `cmake/ctest`，但本轮未触发该回退。
-5. gate 结论：`LLM-GATE-01` 到 `LLM-GATE-10` 已全部闭合。036 已完成 llm internal streaming implementation，037 已完成 shared admission No-Go 评审，因此当前不再把阶段 J 误判为“待解阻阶段”；真正剩余的是 production family / sink 补齐，而不是 shared admission 必做项。
+5. gate 结论：`LLM-GATE-01` 到 `LLM-GATE-10` 已全部闭合。036 已完成 llm internal streaming implementation，037 已完成 shared admission No-Go 评审，LLM-FIX-002 也已补齐 production provider family 注册，因此当前不再把阶段 J 误判为“待解阻阶段”；真正剩余的是 production observability / audit sink 与 release 证据补齐，而不是 shared admission 必做项。
 6. 036/037 评估：036 已不再等待 `StreamHandle` shared baseline 才能执行，因为 `StreamSessionRegistry`、manager streaming 主链、OpenAI-compatible SSE/delta merge 与 focused tests 已在 module-local 边界内完成。037 的结论继续是 No-Go for shared：`ModelRoute`、`PromptPolicyDecision`、`StreamHandle` 仍缺跨模块消费者矩阵与迁移窗口，因此后续不应把任何一个对象静默推进 `contracts/`。
-7. 子系统结论：当前 `runtime/`、`apps/`、`cognition/` 与 `tools/` 依旧没有共享 `StreamHandle` consumer 的准入证据，因此后续 owner 不是这些子系统去消费 shared stream handle，而是 llm 继续在 module-local 范围内推进 production family 注册与 production observability / audit sink。
-8. 后继任务：038 已闭环；036/037 继续保持 Blocked，等待 contracts 子系统完成对应 supporting-object / admission 收口后，再回 llm 阶段 J 进入评审与实现。
+7. 子系统结论：当前 `runtime/`、`apps/`、`cognition/` 与 `tools/` 依旧没有共享 `StreamHandle` consumer 的准入证据，因此后续 owner 不是这些子系统去消费 shared stream handle，而是 llm 继续在 module-local 范围内推进 production observability / audit sink，并保持 shared admission 边界不回退。
+8. 后继任务：038 已闭环；036/037 的 current-state 结论已固定为“module-local implemented / shared admission No-Go”，下一步直接串行进入 `LLM-FIX-003`，补齐 production observability / audit sink。
 
 ### 17.21 LLM-TODO-043
 
@@ -827,7 +827,7 @@ TemplateRenderer 安全规则、调用执行治理、Provider 注入闭环与 as
 5. 验收目标：`StreamSessionLifecycleTest` 覆盖 registry cancel/overflow fail-closed 与 OpenAI-compatible SSE/observer 生命周期，`LLMStreamingIntegrationTest` 覆盖 manager route -> adapter stream -> normalize/usage 收口，`CognitionLlmBridgeErrorMappingTest` 覆盖 streaming preference 失败投影。
 6. 验收结果：`Build_CMakeTools` 已构建 `dasall_stream_session_lifecycle_unit_test`、`dasall_cognition_llm_bridge_error_mapping_unit_test`、`dasall_llm_streaming_integration_test`；`RunCtest_CMakeTools` 定向执行 `StreamSessionLifecycleTest`、`LLMStreamingIntegrationTest`、`CognitionLlmBridgeErrorMappingTest` 结果均为 1/1 通过。追加构建 `dasall_llm_fallback_integration_test`、`dasall_deepseek_dual_mode_selection_integration_test`、`dasall_llm_smoke_integration_test` 时为 `ninja: no work to do`，确认构造签名兼容修正未引入新编译问题。
 7. 边界结论：036 仍不新增 shared `StreamHandle`、不修改 `contracts/`，但 `StreamSessionRegistry` 已作为 llm 内部生命周期 owner 落地；streaming 当前是“module-local implementation ready”，不是“shared object admitted”。
-8. 后继任务：LLM-TODO-037 的 shared ModelRoute / PromptPolicyDecision / StreamHandle admission 结论继续有效；后续只需在 llm owner 范围内推进 production provider family 注册和 production observability / audit sink，而不是重开 shared admission。
+8. 后继任务：LLM-TODO-037 的 shared ModelRoute / PromptPolicyDecision / StreamHandle admission 结论继续有效；在 LLM-FIX-002 已完成 production provider family 注册后，后续只需在 llm owner 范围内推进 production observability / audit sink，而不是重开 shared admission。
 
 ### 17.23 LLM-TODO-037
 

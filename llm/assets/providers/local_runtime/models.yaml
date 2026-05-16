@@ -1,0 +1,37 @@
+schema_version: "1"
+models:
+  local-small:
+    id: local-small
+    display_name: Local Runtime Small
+    model_version: Local-Small-2026.05
+    reasoning_mode: non_thinking
+    tier_family: economy
+    latency_tier: low
+    cost_tier: low
+    reasoning_depth_tier: standard
+    aliases:
+      - local/small
+    context_window: 16384
+    default_max_output_tokens: 1024
+    max_output_tokens_hard_limit: 2048
+    input_modalities:
+      - text
+    supports_tools: false
+    supports_streaming: false
+    supports_json_object: true
+    supports_json_schema: false
+    supports_reasoning: false
+    supports_visible_reasoning: false
+    supports_prompt_cache: false
+    supports_native_stream_usage: false
+    pricing:
+      pricing_ref: local-runtime-baseline-2026-05-16
+      input_cache_hit_usd_per_1m: 0.00
+      input_cache_miss_usd_per_1m: 0.00
+      output_usd_per_1m: 0.00
+    metadata_source_uri: https://example.invalid/local-runtime/local-small
+    metadata_effective_at: 2026-05-16
+    verification_state:
+      json_output: verified
+    feature_notes:
+      - production_local_fallback

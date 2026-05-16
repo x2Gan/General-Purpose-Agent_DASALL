@@ -2,3 +2,5 @@ schema_version: "1"
 default_source_version: 2026.04.10
 packages:
   - deepseek
+  - ollama_lan
+  - local_runtime

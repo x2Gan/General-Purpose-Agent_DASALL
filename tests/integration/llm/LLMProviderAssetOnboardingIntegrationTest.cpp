@@ -462,6 +462,8 @@ struct AssetOnboardingFixture {
       std::make_shared<dasall::llm::UsageAggregator>();
   std::shared_ptr<MockLLMAdapter> deepseek_adapter = std::make_shared<MockLLMAdapter>();
   std::shared_ptr<MockLLMAdapter> openclaw_adapter = std::make_shared<MockLLMAdapter>();
+    std::shared_ptr<MockLLMAdapter> lan_ollama_adapter = std::make_shared<MockLLMAdapter>();
+    std::shared_ptr<MockLLMAdapter> local_runtime_adapter = std::make_shared<MockLLMAdapter>();
   std::shared_ptr<const ProviderCatalogSnapshot> catalog_snapshot;
   LLMManager manager;
 
@@ -486,12 +488,20 @@ struct AssetOnboardingFixture {
     openclaw_adapter->set_generate_handler([](const LLMRequest& request) {
       return make_success_result(request, "openclaw-chat");
     });
+    lan_ollama_adapter->set_generate_handler([](const LLMRequest& request) {
+      return make_success_result(request, "lan-general");
+    });
+    local_runtime_adapter->set_generate_handler([](const LLMRequest& request) {
+      return make_success_result(request, "local-small");
+    });
   }
 
   std::unordered_map<std::string, std::shared_ptr<MockLLMAdapter>> adapters_by_provider() const {
     return {
         {"deepseek-prod", deepseek_adapter},
         {"openclaw-prod", openclaw_adapter},
+        {"lan-ollama", lan_ollama_adapter},
+        {"local-runtime", local_runtime_adapter},
     };
   }
 
@@ -536,6 +546,24 @@ void assert_openclaw_init_projection(const std::shared_ptr<MockLLMAdapter>& adap
   assert_equal(std::string("2026.04.14-openclaw"),
                adapter->last_init_config()->snapshot_version,
                std::string(message_prefix) + " should project snapshot_version from the provider asset package");
+}
+
+void assert_family_init_projection(const std::shared_ptr<MockLLMAdapter>& adapter,
+                                   std::string_view expected_family,
+                                   std::string_view expected_provider_id,
+                                   std::string_view expected_base_url_alias,
+                                   std::string_view message_prefix) {
+  assert_true(adapter->last_init_config().has_value(),
+              std::string(message_prefix) + " should initialize the admitted family adapter");
+  assert_equal(std::string(expected_family),
+               adapter->last_init_config()->adapter_family,
+               std::string(message_prefix) + " should preserve adapter_family from the provider catalog");
+  assert_equal(std::string(expected_provider_id),
+               adapter->last_init_config()->provider_instance_id,
+               std::string(message_prefix) + " should project provider_instance_id from the provider catalog");
+  assert_equal(std::string(expected_base_url_alias),
+               adapter->last_init_config()->base_url_alias,
+               std::string(message_prefix) + " should project base_url_alias from the provider catalog");
 }
 
 void test_asset_only_onboarding_selects_new_provider_instance_when_profile_declares_route() {
@@ -597,6 +625,17 @@ void test_asset_only_onboarding_selects_new_provider_instance_when_profile_decla
                                              provider_deployment_root.path());
   fixture.register_routes(config);
   fixture.init_manager(config);
+
+  assert_family_init_projection(fixture.lan_ollama_adapter,
+                                "ollama_native",
+                                "lan-ollama",
+                                "lan/ollama-primary",
+                                "asset-only onboarding baseline LAN provider");
+  assert_family_init_projection(fixture.local_runtime_adapter,
+                                "local_runtime",
+                                "local-runtime",
+                                "local/runtime-main",
+                                "asset-only onboarding baseline local provider");
 
   const auto result = fixture.manager.generate(
       make_request("req-042-onboard-openclaw", "call-042-onboard-openclaw"));
@@ -663,6 +702,17 @@ void test_asset_only_provider_instance_stays_dormant_without_profile_route_decla
                                              provider_deployment_root.path());
   fixture.register_routes(config);
   fixture.init_manager(config);
+
+  assert_family_init_projection(fixture.lan_ollama_adapter,
+                                "ollama_native",
+                                "lan-ollama",
+                                "lan/ollama-primary",
+                                "asset-only onboarding dormant baseline LAN provider");
+  assert_family_init_projection(fixture.local_runtime_adapter,
+                                "local_runtime",
+                                "local-runtime",
+                                "local/runtime-main",
+                                "asset-only onboarding dormant baseline local provider");
 
   const auto result = fixture.manager.generate(
       make_request("req-042-dormant-openclaw", "call-042-dormant-openclaw"));

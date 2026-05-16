@@ -1,0 +1,23 @@
+schema_version: "1"
+provider_id: lan-ollama
+display_name: Ollama LAN
+adapter_family: ollama_native
+api_family: ollama-chat
+base_url: http://lan-ollama.internal:11434
+base_url_alias: lan/ollama-primary
+auth_mode: profile_passthrough
+auth_ref: profile://llm/providers/lan-ollama/noauth
+header_refs:
+  - header://llm/providers/lan-ollama-trace
+trusted_source: profiles
+source_version: 2026.05.16
+activation_flag: true
+tags:
+  - lan
+  - internal
+  - ollama
+mutable_overlay_fields:
+  - auth_ref
+  - header_refs
+  - base_url_alias
+  - activation_flag

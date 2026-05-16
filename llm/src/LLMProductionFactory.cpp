@@ -8,6 +8,8 @@
 #include "LLMManager.h"
 #include "LLMSubsystemConfig.h"
 #include "UsageAggregator.h"
+#include "adapters/LocalLLMAdapter.h"
+#include "adapters/OllamaAdapter.h"
 #include "adapters/OpenAICompatibleAdapter.h"
 #include "config/InstallLayout.h"
 #include "execution/ResponseNormalizer.h"
@@ -22,6 +24,8 @@ namespace dasall::llm {
 namespace {
 
 constexpr std::string_view kOpenAICompatibleFamily = "openai_compatible";
+constexpr std::string_view kOllamaNativeFamily = "ollama_native";
+constexpr std::string_view kLocalRuntimeFamily = "local_runtime";
 
 [[nodiscard]] std::shared_ptr<infra::secret::ISecretBackend> make_default_secret_backend() {
   const auto layout = infra::config::resolve_install_layout();
@@ -42,12 +46,35 @@ constexpr std::string_view kOpenAICompatibleFamily = "openai_compatible";
   };
 }
 
+[[nodiscard]] std::shared_ptr<ILLMAdapter> make_adapter_for_family(
+    std::string_view adapter_family,
+    const std::shared_ptr<ILLMTransport>& transport) {
+  if (adapter_family == kOpenAICompatibleFamily) {
+    return std::make_shared<OpenAICompatibleAdapter>(transport);
+  }
+
+  if (adapter_family == kOllamaNativeFamily) {
+    return std::make_shared<OllamaAdapter>(transport);
+  }
+
+  if (adapter_family == kLocalRuntimeFamily) {
+    return std::make_shared<LocalLLMAdapter>(transport);
+  }
+
+  return nullptr;
+}
+
 }  // namespace
 
 LLMProductionFactoryResult create_production_llm_manager(
     const profiles::RuntimePolicySnapshot& policy_snapshot,
     LLMProductionFactoryOptions options) {
-  const auto config = project_llm_subsystem_config(policy_snapshot);
+  LLMSubsystemConfigOverlay overlay;
+  if (!options.provider_catalog_baseline_root.empty()) {
+    overlay.provider_catalog_sources.baseline_root = options.provider_catalog_baseline_root;
+  }
+
+  const auto config = project_llm_subsystem_config(policy_snapshot, overlay);
   if (!config.has_value()) {
     return make_failure("production llm config projection failed");
   }
@@ -72,21 +99,24 @@ LLMProductionFactoryResult create_production_llm_manager(
                         registry->last_error_message());
   }
 
-  if (options.secret_backend == nullptr) {
-    options.secret_backend = make_default_secret_backend();
-  }
+  if (options.transport == nullptr) {
+    if (options.secret_backend == nullptr) {
+      options.secret_backend = make_default_secret_backend();
+    }
 
-  auto transport = std::make_shared<transport::CurlCommandLLMTransport>(
-      transport::CurlCommandLLMTransportOptions{
-          .curl_path = "/usr/bin/curl",
-          .temp_dir = std::filesystem::temp_directory_path(),
-          .secret_backend = options.secret_backend,
-          .actor = "dasall-daemon",
-      });
+    options.transport = std::make_shared<transport::CurlCommandLLMTransport>(
+        transport::CurlCommandLLMTransportOptions{
+            .curl_path = "/usr/bin/curl",
+            .temp_dir = std::filesystem::temp_directory_path(),
+            .secret_backend = options.secret_backend,
+            .actor = "dasall-daemon",
+        });
+  }
 
   std::size_t registered_routes = 0U;
   for (const auto& provider : provider_snapshot->providers) {
-    if (provider.descriptor.adapter_family != kOpenAICompatibleFamily) {
+    auto adapter = make_adapter_for_family(provider.descriptor.adapter_family, options.transport);
+    if (adapter == nullptr) {
       continue;
     }
 
@@ -103,7 +133,6 @@ LLMProductionFactoryResult create_production_llm_manager(
         continue;
       }
 
-      auto adapter = std::make_shared<OpenAICompatibleAdapter>(transport);
       if (!registry->initialize_and_register_provider_route(provider.descriptor,
                                                            runtime_view,
                                                            model.summary.model_id,
@@ -118,7 +147,7 @@ LLMProductionFactoryResult create_production_llm_manager(
   }
 
   if (registered_routes == 0U) {
-    return make_failure("production adapter registry has no openai-compatible routes");
+    return make_failure("production adapter registry has no supported provider routes");
   }
 
   auto manager = std::make_shared<LLMManager>(

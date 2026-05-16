@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+## 记录 #668
+
+- 日期：2026-05-16
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-002 补齐 production provider family 注册
+- 状态：已完成
+
+### 改动
+
+1. 调整 [llm/include/LLMProductionFactory.h](../llm/include/LLMProductionFactory.h) 与 [llm/src/LLMProductionFactory.cpp](../llm/src/LLMProductionFactory.cpp)：`LLMProductionFactory` 现在按 provider `adapter_family` 注册 `openai_compatible`、`ollama_native` 与 `local_runtime` 三类 production adapter，并为 source-tree focused validation 增加 provider catalog baseline override seam，避免开发机优先误读已安装旧资产而掩盖 repo baseline 变更。
+2. 调整 [llm/assets/providers/catalog.yaml](../llm/assets/providers/catalog.yaml)，并新增 [llm/assets/providers/ollama_lan/manifest.yaml](../llm/assets/providers/ollama_lan/manifest.yaml)、[llm/assets/providers/ollama_lan/models.yaml](../llm/assets/providers/ollama_lan/models.yaml)、[llm/assets/providers/local_runtime/manifest.yaml](../llm/assets/providers/local_runtime/manifest.yaml) 与 [llm/assets/providers/local_runtime/models.yaml](../llm/assets/providers/local_runtime/models.yaml)：repo baseline provider catalog 现已补齐 LAN/Ollama 与 Local runtime package，使 `lan.general`、`local.small` 在 production catalog 中拥有可解析的 baseline route 候选。
+3. 新增 [tests/unit/llm/LLMProductionFactoryTest.cpp](../tests/unit/llm/LLMProductionFactoryTest.cpp) 并更新 [tests/unit/llm/CMakeLists.txt](../tests/unit/llm/CMakeLists.txt)：focused unit test 现在使用注入 transport + repo provider baseline，分别验证 cloud/LAN/local 三类 primary route 都能经 production factory 成功注册与 dispatch。
+4. 扩展 [tests/integration/llm/LLMProviderAssetOnboardingIntegrationTest.cpp](../tests/integration/llm/LLMProviderAssetOnboardingIntegrationTest.cpp)：asset-only onboarding fixture 不再只承认 OpenAI-compatible family，而是同步断言 baseline `lan-ollama` / `local-runtime` admitted family projection，确保 deployment overlay OpenAI provider onboarding 与 baseline multi-family projection 不相互回退。
+
+### 验证
+
+1. `ctest -R "LLMProductionFactoryTest"`
+   - 结果：通过；cloud/LAN/local 三类 production primary route 均可经 production factory 注册并 dispatch。
+2. `ctest -R "^LLMProviderAssetOnboardingIntegrationTest$"`
+   - 结果：通过；deployment overlay OpenAI provider onboarding 与 baseline LAN/Local admitted family projection 同时成立。
+3. `ctest -R "LLMProductionFactoryTest|LLMProviderAssetOnboardingIntegrationTest|LLMFallbackIntegrationTest"`
+   - 结果：3/3 通过；production factory focused unit、provider onboarding integration 与 fallback integration 无回退。
+
+### 结果
+
+1. `LLM-FIX-002` 已完成：production factory 不再只停留在 `openai_compatible` family，而是能按 provider catalog 自动注册 OpenAI-compatible / Ollama / Local routes，并把 Cloud -> LAN -> Local fallback evidence 从 fixture 手工接线推进到 production composition。
+2. source-tree focused validation 现在能明确读取 repo baseline provider assets；是否存在 `/usr/share/dasall` 安装包不再影响本轮多 family 注册结论。
+3. 本轮没有把 Ollama / Local family 的 streaming placeholder 误写成“全部 provider family stream-ready”；当前成熟度应表述为“production unary multi-family ready / production observability sink not ready / shared admission not ready”。
+
+### 下一步
+
+1. 串行进入 LLM-FIX-003，把 production metrics / trace / audit sink 接入 `LLMManager` 组合路径，并补齐对应 production-focused observability evidence。
+
+### 风险
+
+1. `provider_catalog_baseline_root` 仅作为 test/dev 验证 seam，默认 production install layout 解析顺序未改；后续若要改变 packaged-vs-source 优先级，应另起 owner 评审 runtime/install 行为，不应在本轮静默外推。
+2. Ollama / Local family 仍保持 streaming placeholder；002 收口的只是 production unary / fallback family 注册，不应被外推为“所有 production provider family 的 streaming 均已闭合”。
+
 ## 记录 #667
 
 - 日期：2026-05-16
