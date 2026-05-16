@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #669
+
+- 日期：2026-05-16
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-003 接入 production observability / audit sink
+- 状态：已完成
+
+### 改动
+
+1. 调整 [infra/include/ObservabilityLiveComposition.h](../infra/include/ObservabilityLiveComposition.h) 与 [infra/src/ObservabilityLiveComposition.cpp](../infra/src/ObservabilityLiveComposition.cpp)：`compose_live_observability()` 现在除 audit / metrics / trace 之外还会初始化并返回 live `ILogger`，使 app composition 不再需要为 llm 单独拼一套临时 logging sink。
+2. 调整 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp)、[llm/include/LLMProductionFactory.h](../llm/include/LLMProductionFactory.h) 与 [llm/src/LLMProductionFactory.cpp](../llm/src/LLMProductionFactory.cpp)：runtime composition 现在会先组合 observability bundle，再把 logger / metrics provider / tracer provider / audit logger 通过 `LLMProductionFactoryOptions` 注入 production-composed `LLMManager`；factory 负责据此构造 `LLMMetricsBridge`、`LLMTraceBridge` 与 `LLMAuditBridge`。
+3. 调整 [llm/src/LLMManager.h](../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../llm/src/LLMManager.cpp)：manager success hot path 现已持有 `LLMAuditBridge`，并在 response normalization 产生 `reasoning_content_stripped` 时自动写出 audit event；缺失的 infra correlation 字段当前以 `request_id` / `llm_call_id` + `unknown` fallback 构造有效 `InfraContext`，保持 fail-open 且不扩张 shared contracts。
+4. 新增 [tests/integration/llm/LLMProductionObservabilityIntegrationTest.cpp](../tests/integration/llm/LLMProductionObservabilityIntegrationTest.cpp) 并更新 [tests/integration/llm/CMakeLists.txt](../tests/integration/llm/CMakeLists.txt)：focused integration test 直接验证 production-composed manager 会自动发出 structured log、metrics、trace 和 reasoning strip audit event，同时把新用例接入 llm integration discoverability。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_llm_production_observability_integration_test dasall_apps_runtime_support -j4`
+   - 结果：通过；`LLMProductionObservabilityIntegrationTest` 与 `dasall_apps_runtime_support` 均成功构建，输出未显示 warning。
+2. `ctest --test-dir build-ci --output-on-failure -R '^LLMProductionObservabilityIntegrationTest$'`
+   - 结果：通过；1/1 通过，production-composed manager 自动产生日志、指标、trace 与 reasoning strip audit event。
+
+### 结果
+
+1. `LLM-FIX-003` 已完成：production-composed `LLMManager` 不再只在 fixture 中具备 observability bridge，而是能经 runtime_support live composition 自动拿到 logger / metrics / trace / audit sinks。
+2. reasoning strip audit event 不再需要由 test 手工调用 `LLMAuditBridge`；manager success hot path 会在 response normalization 标记 `reasoning_content_stripped` 时自动发出 audit。
+3. 本轮没有重开 shared `StreamHandle` admission，也没有扩张 shared `LLMRequest`；production observability 收口继续保持在 llm owner 与 runtime composition seam 内。
+
+### 下一步
+
+1. 串行进入 LLM-FIX-004 / LLM-FIX-005，补齐 L5 / release evidence 与 llm 边界回归防线。
+
+### 风险
+
+1. `LLMAuditContext` 当前仍缺来自 shared `LLMRequest` 的完整 session / task / lease 相关字段，因此 production hot path 采用 `request_id` / `llm_call_id` + `unknown` fallback 组装最小有效 infra correlation；若后续 runtime 提供更丰富上下文，应在不扩张 shared contracts 的前提下优先改用真实 correlation。
+2. 本轮只收口 production observability / audit sink 接线，不外推为 L5 qemu / release runner、external provider 长稳态或 soak 已完成。
+
 ## 记录 #668
 
 - 日期：2026-05-16

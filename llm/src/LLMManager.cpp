@@ -18,6 +18,7 @@
 
 #include "UsageAggregator.h"
 #include "execution/ResponseNormalizer.h"
+#include "observability/LLMAuditBridge.h"
 #include "observability/LLMMetricsBridge.h"
 #include "observability/LLMTraceBridge.h"
 #include "prompt/PromptPipeline.h"
@@ -42,6 +43,10 @@ using PromptPipelineConfig = dasall::llm::prompt::PromptPipelineConfig;
 using PromptPipelineResult = dasall::llm::prompt::PromptPipelineResult;
 using PromptPolicyDisposition = dasall::llm::prompt::PromptPolicyDisposition;
 using PromptQuery = dasall::llm::prompt::PromptQuery;
+using LLMAuditBridge = dasall::llm::observability::LLMAuditBridge;
+using LLMAuditContext = dasall::llm::observability::LLMAuditContext;
+using LLMAuditEvent = dasall::llm::observability::LLMAuditEvent;
+using LLMAuditEventKind = dasall::llm::observability::LLMAuditEventKind;
 using LLMCallSummary = dasall::llm::observability::LLMCallSummary;
 using LLMMetricsBridge = dasall::llm::observability::LLMMetricsBridge;
 using LLMTraceBridge = dasall::llm::observability::LLMTraceBridge;
@@ -62,6 +67,9 @@ constexpr std::string_view kExecutionStage = "llm.manager.execute_unary";
 constexpr std::string_view kStreamExecutionStage = "llm.manager.execute_stream";
 constexpr std::string_view kManagerStage = "llm.manager.generate";
 constexpr std::string_view kManagerStreamStage = "llm.manager.stream_generate";
+constexpr std::string_view kNormalizationAuditStage = "llm.response.normalize";
+constexpr std::string_view kReasoningContentAuditDetailRef =
+  "llm://audit/reasoning-content-strip";
 
 std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -82,6 +90,14 @@ std::string to_lower_copy(std::string value) {
     return static_cast<char>(std::tolower(character));
   });
   return value;
+}
+
+std::string normalized_identifier(const std::optional<std::string>& value) {
+  if (value.has_value() && !value->empty()) {
+    return *value;
+  }
+
+  return std::string(dasall::infra::InfraContext::kUnknownIdentifier);
 }
 
 void append_unique_string(std::vector<std::string>& values, std::string value) {
@@ -305,6 +321,84 @@ void record_success_observability(
       usage_record,
       fallback_used,
       outcome)));
+}
+
+std::optional<LLMAuditEvent> make_reasoning_content_stripped_event(
+    const dasall::contracts::LLMResponse& response,
+    const ModelSelectionHint& selection_hint,
+    const ProviderModelMetadata& model_metadata,
+    std::string_view resolved_route,
+    std::string_view profile_id) {
+  const std::string request_id = normalized_identifier(response.request_id);
+  const std::string llm_call_id = normalized_identifier(response.llm_call_id);
+
+  LLMAuditEvent event{
+      .kind = LLMAuditEventKind::ReasoningContentStripped,
+      .stage = std::string(kNormalizationAuditStage),
+      .reason = "reasoning_content removed before shared llm response handoff",
+      .context = LLMAuditContext{
+          .infra_context = dasall::infra::InfraContext{
+              .request_id = request_id,
+              .session_id = request_id,
+              .trace_id = llm_call_id,
+              .task_id = llm_call_id,
+              .parent_task_id =
+                  std::string(dasall::infra::InfraContext::kUnknownIdentifier),
+              .lease_id =
+                  std::string(dasall::infra::InfraContext::kUnknownIdentifier),
+          },
+          .worker_type =
+              std::string(dasall::llm::observability::kLLMAuditDefaultWorkerType),
+      },
+      .detail_ref = std::string(kReasoningContentAuditDetailRef),
+      .llm_call_id = llm_call_id,
+      .prompt_id = normalized_identifier(response.prompt_id),
+      .prompt_version = normalized_identifier(response.prompt_version),
+      .resolved_route = std::string(resolved_route),
+      .model_name = response.model_name.value_or(model_metadata.display_name),
+      .profile_id = profile_id.empty() ? std::string("unknown")
+                                       : std::string(profile_id),
+      .trusted_source = {},
+      .metadata_field = {},
+      .expected_value = {},
+      .observed_value = {},
+      .reasoning_mode_requested = requested_reasoning_mode(selection_hint),
+      .reasoning_mode_effective = effective_reasoning_mode(
+          model_metadata,
+          requested_reasoning_mode(selection_hint)),
+      .timestamp_ms = response.completed_at.value_or(current_time_ms()),
+  };
+
+  if (!event.has_consistent_values()) {
+    return std::nullopt;
+  }
+
+  return event;
+}
+
+void record_success_audit(
+    LLMAuditBridge* audit_bridge,
+    const dasall::contracts::LLMResponse& response,
+    const ModelSelectionHint& selection_hint,
+    const ProviderModelMetadata& model_metadata,
+    std::string_view resolved_route,
+    std::string_view profile_id,
+    bool reasoning_content_stripped) {
+  if (audit_bridge == nullptr || !reasoning_content_stripped) {
+    return;
+  }
+
+  const auto event = make_reasoning_content_stripped_event(
+      response,
+      selection_hint,
+      model_metadata,
+      resolved_route,
+      profile_id);
+  if (!event.has_value()) {
+    return;
+  }
+
+  static_cast<void>(audit_bridge->write_audit_event(*event));
 }
 
 void append_response_tag(dasall::contracts::LLMResponse& response, std::string tag) {
@@ -1489,7 +1583,8 @@ LLMManager::LLMManager(
     std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot,
     std::shared_ptr<stream::StreamSessionRegistry> stream_session_registry,
     std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge,
-    std::shared_ptr<observability::LLMTraceBridge> trace_bridge)
+    std::shared_ptr<observability::LLMTraceBridge> trace_bridge,
+    std::shared_ptr<observability::LLMAuditBridge> audit_bridge)
     : provider_catalog_snapshot_(std::move(provider_catalog_snapshot)),
       prompt_pipeline_(std::move(prompt_pipeline)),
       model_router_(std::move(model_router)),
@@ -1499,7 +1594,8 @@ LLMManager::LLMManager(
       usage_aggregator_(std::move(usage_aggregator)),
       stream_session_registry_(std::move(stream_session_registry)),
       metrics_bridge_(std::move(metrics_bridge)),
-      trace_bridge_(std::move(trace_bridge)) {}
+      trace_bridge_(std::move(trace_bridge)),
+      audit_bridge_(std::move(audit_bridge)) {}
 
 bool LLMManager::init(const LLMSubsystemConfig& config) {
   initialized_ = false;
@@ -1835,6 +1931,13 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
                                  adapter_latency_ms,
                                  normalize_latency_ms,
                                  result.fallback_used);
+    record_success_audit(audit_bridge_.get(),
+                         *result.response,
+                         selection_hint,
+                         *model_metadata,
+                         route_key,
+                         config_.profile_id,
+                         normalization_result.reasoning_content_stripped);
 
     return result;
   }
@@ -2146,6 +2249,13 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
                                  adapter_latency_ms,
                                  normalize_latency_ms,
                                  result.fallback_used);
+    record_success_audit(audit_bridge_.get(),
+                         *result.response,
+                         selection_hint,
+                         *model_metadata,
+                         route_key,
+                         config_.profile_id,
+                         normalization_result.reasoning_content_stripped);
 
     return result;
   }

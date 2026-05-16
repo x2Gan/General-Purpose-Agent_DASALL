@@ -7,6 +7,12 @@
 
 namespace dasall::infra {
 
+namespace logging {
+
+class ILogger;
+
+}  // namespace logging
+
 namespace audit {
 
 class IAuditLogger;
@@ -41,6 +47,7 @@ struct ObservabilityLiveCompositionOptions {
 };
 
 struct ObservabilityLiveCompositionResult {
+  std::shared_ptr<logging::ILogger> logger;
   std::shared_ptr<audit::IAuditLogger> audit_logger;
   std::shared_ptr<metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<tracing::ITracerProvider> tracer_provider;
@@ -48,7 +55,8 @@ struct ObservabilityLiveCompositionResult {
   std::string error;
 
   [[nodiscard]] bool ok() const {
-    return audit_logger != nullptr && metrics_provider != nullptr &&
+    return logger != nullptr && audit_logger != nullptr &&
+           metrics_provider != nullptr &&
            tracer_provider != nullptr && health_monitor != nullptr &&
            error.empty();
   }

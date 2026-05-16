@@ -1,6 +1,6 @@
 # DASALL 子系统查漏补缺专项记录
 
-最近更新时间：2026-05-15  
+最近更新时间：2026-05-16  
 阶段：System Review -> Subsystem Gap Closure  
 适用范围：按子系统逐项检查详细设计、当前代码、测试证据、跨模块链路与 installed / production 证据边界  
 记录口径：本文件用于集中记录“设计已要求但实现、测试、证据或生产链路仍未完全闭合”的缺口；不替代各子系统专项 TODO、worklog 或 SSOT 矩阵。
@@ -34,7 +34,7 @@
 | 子系统 | 当前章节状态 | 最高可信结论 | 主要残余缺口 |
 |---|---|---|---|
 | cognition | 已记录 | 主体实现 L2 基本闭合；installed cognition 必经链路未证明 | Runtime 对部分 `ActionDecision` 第一跳映射、production direct LLM bypass、stage timeout、LLM structured output 主链消费、production telemetry sink |
-| llm | 已记录 | D1-D9 主体实现 L2 基本闭合；production LLM generation 有 L4 local 证据 | streaming 生命周期、production adapter family 覆盖、production observability/audit sink 接入、L5 qemu / release runner / soak 证据、源码边界回归防线 |
+| llm | 已记录 | D1-D9 主体实现 L2 基本闭合；production LLM generation 有 L4 local 证据 | L5 qemu / release runner / soak 证据、external provider 长稳态、源码边界回归防线 |
 | memory | 已记录 | 主体实现 L2 基本闭合；Runtime / app 链路已接入；installed writeback 有 L4 local 证据；sqlite-vss internal driver seam 已有 focused 证据 | 真实 sqlite-vss third_party / loadable extension / packaging / production wiring、SQLite version gate、observability / audit / metrics / trace sink、L5 qemu / release runner / soak 证据、并发与边界回归防线 |
 | knowledge | 已记录 | 主体实现 L2 基本闭合；Runtime -> Memory evidence 读链路已打通；本轮 9 个聚焦测试通过、1 个 installed asset probe 失败 | refresh 异步/首启 build、concrete vector backend、lane timeout/parallel recall、首批 corpus baseline、持久化 ledger/catalog/migration、production telemetry sink、installed/qemu/soak 证据 |
 | tools | 已记录 | 主体治理链、MCP/Skill/Workflow/Projection 已达到 L2 fixture / integration 可信；Runtime/app 可调用 IToolManager | production live services 后端仍落默认实现、plugin 自动接入未闭合、MCP 仅 stdio concrete、compensate 入口未实现、production observability 与 installed/qemu/soak 证据不足 |
@@ -239,12 +239,12 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 
 但当前不能判定为“所有功能完全完成、所有关联模块链路全部打通”。更准确的状态是：
 
-1. LLM 模块内部主体实现达到 L1 / L2 可信度，本轮 46 个 focused / integration / contract 测试通过。
+1. LLM 模块内部主体实现达到 L1 / L2 可信度；既有 46 个 focused / integration / contract 测试与新增 `LLMProductionObservabilityIntegrationTest` focused evidence 已通过。
 2. Runtime production direct LLM path 已接入 `ILLMManager`，`RuntimeLiveDependencyComposition` 会创建 production LLM manager，`AgentOrchestrator` 已有 `llm.origin=` 输出和禁用 `agent.dataset` fallback 的生产直连路径。
 3. `docs/ssot/BusinessChainIntegrationMatrix.md` 记录 BC-07 LLM production generation 已有 installed-package local L4 证据：`sudo -n dasall run ...` 返回 DeepSeek `llm.origin` 且未出现 `agent.dataset`。
 4. D10 streaming 已由 `LLM-FIX-001` 在 llm owner 内部收口：`LLMManager::stream_generate()`、`OpenAICompatibleAdapter::stream_generate()` 与 `StreamSessionRegistry` 已形成 module-local streaming 闭环；shared `StreamHandle` admission 仍保持 deferred。
 5. `LLMProductionFactory` 已按 provider catalog 自动注册 `openai_compatible`、`ollama_native` 与 `local_runtime` provider family；Cloud / LAN / Local unary 与 fallback focused evidence 已闭合，但这不外推为所有 family 的 streaming 已完成。
-6. metrics / trace / audit bridge 能在 fixture 中工作，但 production factory 构造 `LLMManager` 时未注入 metrics / trace bridge，audit bridge 也未进入 manager hot path；不能宣称 production observability / audit sink 完整闭合。
+6. production factory + runtime composition 现已把 logger / metrics / trace / audit sink 接入 `LLMManager` hot path；`LLMProductionObservabilityIntegrationTest` 已证明 production-composed manager 会自动发出 structured log、metrics、trace 与 reasoning strip audit event。
 
 ### 5.3 设计覆盖矩阵
 
@@ -256,9 +256,9 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 | D4 Prompt / Provider asset | 已覆盖 | `PromptAssetRepository`、`ProviderCatalogRepository`、baseline / deployment / snapshot overlay、schema / version / content hash、`LLMProviderAssetOnboardingIntegrationTest` | asset-only onboarding 已证明 deployment overlay OpenAI-compatible provider instance，以及 baseline LAN / Local admitted family projection；真实 endpoint / secret / header 注入链仍未证明 |
 | D5 PromptComposer | 已覆盖 | template renderer、slot mapping、budget clamp、prompt identity stamping；`PromptComposerSlotMappingTest`、`PromptComposerOverBudgetTest`、smoke integration | 不负责 memory retrieve，符合 ADR-006 |
 | D6 PromptPolicy | 已覆盖 | trusted source、allowlist、tool visibility、redaction、render budget；`PromptPolicyAllowlistTest`、`PromptPolicyToolVisibilityTest`、`LLMGovernanceFailureIntegrationTest` | policy sink / audit 生产热路径仍需接线证明 |
-| D7 LLMManager 主链 | 已覆盖 | `LLMManager::generate()` 与 `LLMManager::stream_generate()` 已分别覆盖 unary 与 llm internal streaming 编排；manager success/failure/timeout/retry/concurrency 与 streaming integration tests 已落地 | production observability 注入不足；shared stream handle 仍未 admission |
-| D8 adapters / transport | 已覆盖 | `OpenAICompatibleAdapter`、`OllamaAdapter`、`LocalLLMAdapter` + `CurlCommandLLMTransport`；adapter health / protocol mapping tests；`LLMProductionFactoryTest`、`LLMFallbackIntegrationTest`、`LLMProviderAssetOnboardingIntegrationTest` | Ollama / Local family 的 streaming 仍保持 placeholder；production observability / audit sink 仍未接线 |
-| D9 observability / integration smoke | 部分覆盖 | `LLMMetricsBridge`、`LLMTraceBridge`、`LLMAuditBridge`、`LLMSubsystemSmokeIntegrationTest`、`LLMObservabilityFieldCompletenessTest`、`LLMAuditEventCoverageTest` | fixture 可观测不等于 production sink；audit bridge 未接入 manager/factory hot path |
+| D7 LLMManager 主链 | 已覆盖 | `LLMManager::generate()` 与 `LLMManager::stream_generate()` 已分别覆盖 unary 与 llm internal streaming 编排；manager success/failure/timeout/retry/concurrency 与 streaming integration tests 已落地 | shared stream handle 仍未 admission |
+| D8 adapters / transport | 已覆盖 | `OpenAICompatibleAdapter`、`OllamaAdapter`、`LocalLLMAdapter` + `CurlCommandLLMTransport`；adapter health / protocol mapping tests；`LLMProductionFactoryTest`、`LLMFallbackIntegrationTest`、`LLMProviderAssetOnboardingIntegrationTest` | Ollama / Local family 的 streaming 仍保持 placeholder；真实 endpoint / secret / release evidence 仍未证明 |
+| D9 observability / integration smoke | 已覆盖 | `LLMMetricsBridge`、`LLMTraceBridge`、`LLMAuditBridge`、`LLMSubsystemSmokeIntegrationTest`、`LLMObservabilityFieldCompletenessTest`、`LLMAuditEventCoverageTest`、`LLMProductionObservabilityIntegrationTest` | production-composed observability sink 已接线；installed / qemu / soak 证据仍需独立补齐 |
 | D10 streaming 生命周期 | 已由 LLM-FIX-001 收口 | `StreamSessionRegistry`、`LLMManager::stream_generate()`、`OpenAICompatibleAdapter::stream_generate()` 与三条 focused tests 已落地；cognition streaming preference 不再必然落入 unimplemented path | shared `StreamHandle` admission 仍 deferred；Ollama / Local streaming 仍 placeholder，production sink 仍待补齐 |
 | installed / production evidence | 部分覆盖 | `LLMProductionFactory`、runtime direct path、BC-07 L4 installed local `llm.origin` 证据 | L5 qemu / release runner、外部 provider 长稳态、soak / chaos 未证明 |
 
@@ -268,11 +268,11 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 |---|---|---:|---|
 | Profiles -> LLM config | 基本打通 | L2 | typed projection、route / allowlist / timeout / fallback 在 unit 与 profile integration 中验证 |
 | LLM assets -> PromptPipeline / ProviderCatalog | 基本打通 | L2 | baseline / deployment / snapshot source switch、persona selection、provider onboarding 均有 integration 证据 |
-| Runtime live composition -> LLM | 已打通但 production sink 部分 | L2 / L4 partial | production factory 创建 `ILLMManager` 并注入 runtime；当前自动注册 OpenAI / Ollama / Local routes，但 observability / audit sink 仍未接线 |
+| Runtime live composition -> LLM | 已打通 | L2 / L4 partial | production factory 创建 `ILLMManager` 并注入 runtime；runtime composition 现已先组合 observability bundle，再把 logger / metrics / tracer / audit sink 与 OpenAI / Ollama / Local routes 一并接入 production manager |
 | Runtime -> LLM production generate | 已打通 | L4 local | `AgentOrchestrator` direct path 调 `llm_manager->generate()`；BC-07 记录 installed local `llm.origin` 正向证据 |
 | Cognition -> LLM | 基本打通 | L1 / L2 | `CognitionLlmBridge` 可调用 `generate()` / `stream_generate()`；unary 可用，streaming 会落入未实现路径 |
 | LLM -> Infra secret | 部分打通 | L0 / L4 partial | production factory 使用 `FileSecretBackend` + curl transport；secret/qemu/network/release runner 证据仍归 L5 gate |
-| LLM -> Infra metrics / trace / audit | 部分打通 | L1 / L2 | bridge 类与 fixture smoke 已通过；production factory 未注入 metrics/trace，audit bridge 未进 manager hot path |
+| LLM -> Infra metrics / trace / audit | 基本打通 | L1 / L2 | bridge 类、fixture smoke 与 production observability integration 已通过；production factory / runtime composition 现已注入 logger、metrics provider、tracer provider 与 audit logger |
 | LLM -> Memory / Tools / Recovery | 边界正确 | L0 / L2 | 未发现 LLM 直接拥有 memory context、tools execution 或 recovery decision；符合 ADR-006/007/008 |
 | Access / apps -> Runtime -> LLM | 部分打通 | L3 / L4 partial | app runtime_support composition 和 installed `dasall run` 可证明 LLM direct generation；HTTP/gateway/qemu/soak 不由该证据外推 |
 
@@ -282,7 +282,7 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 |---|---|---|---|---|---|
 | LLM-GAP-001 | High | D10 streaming lifecycle 已由 LLM-FIX-001 收口 | `llm/src/stream/StreamSessionRegistry.*`、`LLMManager::stream_generate()`、`OpenAICompatibleAdapter::stream_generate()` 已落地 module-local 生命周期 owner、SSE/delta merge 与终态收口；`StreamSessionLifecycleTest` / `LLMStreamingIntegrationTest` / `CognitionLlmBridgeErrorMappingTest` 通过 | cognition streaming preference 不再必然 fail-closed；shared StreamHandle admission 仍保持 deferred，不外推为 shared stream-ready | 继续保持 shared `StreamHandle` / contracts admission 后置，仅在 llm 内部扩展 provider family 与 production sink |
 | LLM-GAP-002 | Medium | production factory 多 family 注册已由 LLM-FIX-002 收口 | `LLMProductionFactory` 已按 `adapter_family` 注册 OpenAI-compatible / Ollama / Local routes；baseline provider catalog 已补齐 `ollama_lan` / `local_runtime`；`LLMProductionFactoryTest`、`LLMProviderAssetOnboardingIntegrationTest`、`LLMFallbackIntegrationTest` 通过 | Cloud / LAN / Local production unary / fallback 不再停留在 fixture 手工注册 | 继续保持 provider assets 与 `adapter_family` 映射一致；下一步转向 production observability / audit sink |
-| LLM-GAP-003 | Medium | production metrics / trace / audit sink 接入不完整 | `LLMProductionFactory` 构造 `LLMManager` 时未传入 `LLMMetricsBridge` / `LLMTraceBridge`；`LLMAuditBridge` 主要由 tests 手动调用 | fixture observability 通过不能外推 production sink；production issue 排查缺可观测闭环 | 扩展 factory options 或 runtime composition 注入 infra logger / meter / tracer / audit logger，并增加 production factory tests |
+| LLM-GAP-003 | Medium | production metrics / trace / audit sink 已由 LLM-FIX-003 收口 | `LLMProductionFactoryOptions` 现已接入 infra logger / metrics provider / tracer provider / audit logger，`RuntimeLiveDependencyComposition` 也已先组合 observability bundle 再装配 production manager；`LLMProductionObservabilityIntegrationTest` 通过 | production-composed manager 不再只在 fixture 中可观测，reasoning strip audit 已进入 manager hot path | 后续转向 L5 release / qemu 证据与边界回归防线 |
 | LLM-GAP-004 | Medium | L5 qemu / release runner / external provider 长稳态未证明 | BC-07 只有 installed-package local L4；BC-16 明确 qemu / lintian / release runner 仍需复跑 | 不能把本机 installed DeepSeek 正向 run 外推为 release-ready 或 soak-ready | 用 packaging qemu gate、external provider secret/network gate、长稳态/chaos evidence 收口 |
 | LLM-GAP-005 | Low / Medium | LLM 源码边界缺少自动化回归防线 | 静态检查未发现越界，但当前缺少明确 test/script 防止 `llm/` 未来 include memory/tools/apps/runtime 私有实现 | 后续改动可能破坏 ADR-006/007/008 边界 | 增加 boundary compliance test 或脚本，锁定 LLM 不直拉 Memory ContextOrchestrator、不直调 Tools、不触碰 RecoveryManager |
 
@@ -292,7 +292,7 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 |---|---|---|---|---|---|---|
 | LLM-FIX-001 | Done | 实现 streaming 生命周期 fail-closed -> 可控可测 | 已更新 `llm/src/LLMManager.cpp`、`llm/src/adapters/OpenAICompatibleAdapter.cpp`、`llm/src/stream/IStreamObserver.h`、`llm/src/stream/StreamSessionRegistry.*`，落地 module-local lifecycle owner、observer 回调、SSE / delta merge、终态 usage 收口与 streaming route 执行 | 已重写 `StreamSessionLifecycleTest`、新增 `LLMStreamingIntegrationTest`，并扩展 `CognitionLlmBridgeErrorMappingTest` 覆盖 streaming preference | `Build_CMakeTools(buildTargets=["dasall_stream_session_lifecycle_unit_test","dasall_cognition_llm_bridge_error_mapping_unit_test","dasall_llm_streaming_integration_test"])`；`RunCtest_CMakeTools(tests=["StreamSessionLifecycleTest","LLMStreamingIntegrationTest","CognitionLlmBridgeErrorMappingTest"])` | manager/adapters 不再返回 placeholder；registry cancel/overflow、OpenAI-compatible SSE success/observer rejection、manager streaming success 与 cognition streaming failure projection 均有 focused tests |
 | LLM-FIX-002 | Done | 补齐 production provider family 注册 | 已更新 `LLMProductionFactory` / `LLMProductionFactoryOptions`，把 provider `adapter_family` 映射到 OpenAI-compatible / Ollama / Local adapter factory，并为 source-tree 验证补齐 provider catalog baseline override seam；baseline provider catalog 已补 `ollama_lan` / `local_runtime` | 已新增或扩展 `LLMProductionFactoryTest`、`LLMProviderAssetOnboardingIntegrationTest`、`LLMFallbackIntegrationTest`，覆盖 openai + ollama + local production registration 与 fallback | `RunCtest_CMakeTools(tests=["LLMProviderAssetOnboardingIntegrationTest","LLMFallbackIntegrationTest","LLMProductionFactoryTest"])` | production factory 已能按 provider catalog 注册多 family routes，并证明 fallback chain 不只停留在 fixture 手工注册 |
-| LLM-FIX-003 | Todo | 接入 production observability / audit sink | 扩展 `LLMProductionFactoryOptions` 或 runtime composition，将 infra logger / metrics provider / tracer / audit logger 注入 `LLMManager` 与 response normalization audit path | 扩展 `LLMSubsystemSmokeIntegrationTest` 或新增 `LLMProductionObservabilityIntegrationTest`，断言 production-composed manager 产生日志、指标、trace 和 reasoning strip audit event | `RunCtest_CMakeTools(tests=["LLMObservabilityFieldCompletenessTest","LLMAuditEventCoverageTest","LLMProductionObservabilityIntegrationTest"])` | fixture bridge 与 production factory 路径一致可观测；audit event 不再只能由 test 手动调用 |
+| LLM-FIX-003 | Done | 接入 production observability / audit sink | 已扩展 `LLMProductionFactoryOptions`、`RuntimeLiveDependencyComposition` 与 `LLMManager`：runtime composition 先组合 live observability bundle，再把 infra logger / metrics provider / tracer provider / audit logger 注入 production-composed manager；reasoning strip audit event 现由 manager hot path 自动发出 | 已新增 `LLMProductionObservabilityIntegrationTest` 并更新 llm integration 注册；focused validation 同时构建 `dasall_apps_runtime_support`，断言 production-composed manager 产生日志、指标、trace 和 reasoning strip audit event | `cmake --build build-ci --target dasall_llm_production_observability_integration_test dasall_apps_runtime_support -j4 && ctest --test-dir build-ci --output-on-failure -R '^LLMProductionObservabilityIntegrationTest$'` | production factory 与 runtime composition 路径现已具备一致的 observability / audit sink 接线，audit event 不再只能由 test 手动调用 |
 | LLM-FIX-004 | Todo | 收口 L5 / release runner / provider 长稳态证据 | 不一定改产品代码；更新 packaging scripts、secret/network preflight、docs evidence；必要时补 installed LLM smoke 脚本 | packaging qemu / autopkgtest / installed `dasall run` / external provider failure-injection evidence | `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>`；installed `sudo -n dasall run ... --json --timeout-ms 120000` | BC-07 从 L4 local 可升级到 L5 release runner / qemu；外部 provider 抖动和 secret/network failure 有记录 |
 | LLM-FIX-005 | Todo | 建立 LLM 边界回归防线 | 新增 test 或 script 检查 `llm/` 不 include / link memory、tools、apps、runtime 私有实现；PromptPipeline / PromptComposer 不做 memory retrieval | `LLMBoundaryGuardComplianceTest` 或 boundary script；保留 `LLMInterfaceSurfaceTest` / `LLMRequestResponseContractTest` | `RunCtest_CMakeTools(tests=["LLMBoundaryGuardComplianceTest","LLMInterfaceSurfaceTest","LLMRequestResponseContractTest"])` | ADR-006/007/008 边界有自动化守护，后续改动不能悄悄越界 |
 | LLM-FIX-006 | Todo | 回写 LLM 当前状态与历史 baseline 差异 | 更新 `docs/architecture/DASALL_llm子系统详细设计.md`、`docs/todos/llm/*`、`docs/worklog/DASALL_开发执行记录.md` 与本文档 | 文档一致性检索，区分 D1-D9 当前闭合、D10 已在 module-local 边界收口、shared admission / L4-L5 证据边界 | `rg -n "LLM-GAP|LLM-FIX|D10 streaming|shared admission|openai_compatible|BC-07|llm.origin" docs/architecture/DASALL_llm子系统详细设计.md docs/todos/llm docs/worklog/DASALL_开发执行记录.md docs/todos/DASALL_子系统查漏补缺专项记录.md` | 后续评审不再把旧 placeholder baseline 当当前结论，也不把 llm internal streaming closure 误写成 shared stream-ready，亦不把 L4 local 证据外推为 L5 / production soak |
@@ -345,15 +345,15 @@ rg -n "ContextOrchestrator|IMemoryManager|ToolManager|RecoveryManager|AgentOrche
 
 ### 5.9 当前章节结论
 
-LLM 子系统的实现覆盖度已经很高，当前主要问题不是“缺少 LLM 模块本体”，而是“streaming 后置能力、production family 覆盖、production observability/audit sink、release-runner 证据和边界回归防线”尚未全部闭合。
+LLM 子系统的实现覆盖度已经很高，当前主要问题不是“缺少 LLM 模块本体”，而是“release-runner / qemu 证据、external provider 长稳态和边界回归防线”尚未全部闭合。
 
 因此本章冻结口径为：
 
 1. LLM D1-D9 主体：基本完成，L1 / L2 证据充分，本轮 46 个聚焦测试通过。
 2. Runtime production LLM generation：有 L4 local installed evidence，但不外推为 L5 qemu / release runner 或 L6 soak。
 3. D10 streaming：已由 `LLM-FIX-001` 在 llm owner 内部完成 module-local 实现与 focused tests，但不能外推为 shared stream-ready。
-4. production completeness：OpenAI-compatible 路径可用；LAN / Local production family、metrics / trace / audit sink 与 external provider 长稳态仍需补证据。
-5. 查漏补缺优先级：`LLM-GAP-001`、`LLM-GAP-002` 已分别由 `LLM-FIX-001`、`LLM-FIX-002` 收口；下一步先修 `LLM-GAP-003`，最后用 `LLM-GAP-004` / `LLM-GAP-005` 提升 release 与边界可信度。
+4. production completeness：OpenAI-compatible、LAN / Local production family 与 metrics / trace / audit sink 已接入；external provider 长稳态与 L5 release 证据仍需补证据。
+5. 查漏补缺优先级：`LLM-GAP-001`、`LLM-GAP-002`、`LLM-GAP-003` 已分别由 `LLM-FIX-001`、`LLM-FIX-002`、`LLM-FIX-003` 收口；下一步用 `LLM-GAP-004` / `LLM-GAP-005` 提升 release 与边界可信度。
 
 ## 6. Memory 子系统查漏补缺
 

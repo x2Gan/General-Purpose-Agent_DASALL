@@ -7,6 +7,7 @@
 #include "InfraContext.h"
 #include "audit/AuditService.h"
 #include "health/HealthMonitorFacade.h"
+#include "logging/LoggingFacade.h"
 #include "metrics/MetricsFacade.h"
 #include "tracing/TraceConfig.h"
 #include "tracing/TracerProviderImpl.h"
@@ -57,6 +58,20 @@ namespace {
 
 ObservabilityLiveCompositionResult compose_live_observability(
     const ObservabilityLiveCompositionOptions& options) {
+  auto logger = std::make_shared<logging::LoggingFacade>();
+  const auto logger_init = logger->init(logging::LogContext{});
+  if (!logger_init.ok) {
+    return ObservabilityLiveCompositionResult{
+        .logger = nullptr,
+        .audit_logger = nullptr,
+        .metrics_provider = nullptr,
+        .tracer_provider = nullptr,
+        .health_monitor = nullptr,
+        .error = std::string("logging init failed: ") +
+                 error_message_for(logger_init, "infra.logging.init"),
+    };
+  }
+
   auto audit_logger = std::make_shared<audit::AuditService>();
   const auto audit_init = audit_logger->init(audit::AuditServiceConfig{
       .primary_capacity = options.audit_primary_capacity,
@@ -64,6 +79,7 @@ ObservabilityLiveCompositionResult compose_live_observability(
   });
   if (!audit_init.ok) {
     return ObservabilityLiveCompositionResult{
+        .logger = nullptr,
         .audit_logger = nullptr,
         .metrics_provider = nullptr,
         .tracer_provider = nullptr,
@@ -76,6 +92,7 @@ ObservabilityLiveCompositionResult compose_live_observability(
   const auto audit_start = audit_logger->start();
   if (!audit_start.ok) {
     return ObservabilityLiveCompositionResult{
+        .logger = nullptr,
         .audit_logger = nullptr,
         .metrics_provider = nullptr,
         .tracer_provider = nullptr,
@@ -89,6 +106,7 @@ ObservabilityLiveCompositionResult compose_live_observability(
   const auto metrics_init = metrics_provider->init(make_metrics_config(options));
   if (!metrics_init.ok) {
     return ObservabilityLiveCompositionResult{
+        .logger = nullptr,
         .audit_logger = nullptr,
         .metrics_provider = nullptr,
         .tracer_provider = nullptr,
@@ -103,6 +121,7 @@ ObservabilityLiveCompositionResult compose_live_observability(
   const auto trace_init = tracer_provider->init(make_trace_config(options));
   if (!trace_init.ok) {
     return ObservabilityLiveCompositionResult{
+        .logger = nullptr,
         .audit_logger = nullptr,
         .metrics_provider = nullptr,
         .tracer_provider = nullptr,
@@ -112,6 +131,7 @@ ObservabilityLiveCompositionResult compose_live_observability(
   }
 
   return ObservabilityLiveCompositionResult{
+      .logger = logger,
       .audit_logger = audit_logger,
       .metrics_provider = metrics_provider,
       .tracer_provider = tracer_provider,

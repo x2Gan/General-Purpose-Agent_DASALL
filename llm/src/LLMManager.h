@@ -21,6 +21,7 @@ class ResponseNormalizer;
 }
 
 namespace observability {
+class LLMAuditBridge;
 class LLMMetricsBridge;
 class LLMTraceBridge;
 }
@@ -98,7 +99,8 @@ class LLMManager final : public ILLMManager {
              std::shared_ptr<const provider::ProviderCatalogSnapshot> provider_catalog_snapshot = nullptr,
              std::shared_ptr<stream::StreamSessionRegistry> stream_session_registry = nullptr,
              std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge = nullptr,
-             std::shared_ptr<observability::LLMTraceBridge> trace_bridge = nullptr);
+             std::shared_ptr<observability::LLMTraceBridge> trace_bridge = nullptr,
+             std::shared_ptr<observability::LLMAuditBridge> audit_bridge = nullptr);
 
   bool init(const LLMSubsystemConfig& config) override;
   [[nodiscard]] LLMManagerResult generate(const LLMGenerateRequest& request) override;
@@ -121,6 +123,7 @@ class LLMManager final : public ILLMManager {
   std::shared_ptr<stream::StreamSessionRegistry> stream_session_registry_;
   std::shared_ptr<observability::LLMMetricsBridge> metrics_bridge_;
   std::shared_ptr<observability::LLMTraceBridge> trace_bridge_;
+  std::shared_ptr<observability::LLMAuditBridge> audit_bridge_;
   bool initialized_ = false;
 };
 

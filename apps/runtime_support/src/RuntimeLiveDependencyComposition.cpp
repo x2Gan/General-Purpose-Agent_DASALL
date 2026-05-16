@@ -59,6 +59,7 @@ namespace fs = std::filesystem;
 }
 
 struct RuntimeObservabilityBundle {
+  std::shared_ptr<infra::logging::ILogger> logger;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;
@@ -71,7 +72,8 @@ struct RuntimeObservabilityBundle {
   std::string error;
 
   [[nodiscard]] bool ok() const {
-    return audit_logger != nullptr && metrics_provider != nullptr &&
+      return logger != nullptr && audit_logger != nullptr &&
+        metrics_provider != nullptr &&
            tracer_provider != nullptr && health_monitor != nullptr &&
            tool_audit_bridge != nullptr && tool_metrics_bridge != nullptr &&
            tool_trace_bridge != nullptr && tool_health_probe != nullptr &&
@@ -154,6 +156,16 @@ class RuntimeToolHealthSignalProvider final
       });
   if (!live_observability.ok()) {
     return RuntimeObservabilityBundle{
+        .logger = nullptr,
+        .audit_logger = nullptr,
+        .metrics_provider = nullptr,
+        .tracer_provider = nullptr,
+        .health_monitor = nullptr,
+        .tool_audit_bridge = nullptr,
+        .tool_metrics_bridge = nullptr,
+        .tool_trace_bridge = nullptr,
+        .tool_health_probe = nullptr,
+        .health_probes = {},
         .error = live_observability.error,
     };
   }
@@ -198,11 +210,22 @@ class RuntimeToolHealthSignalProvider final
           tool_health_probe.get());
       !register_error.empty()) {
     return RuntimeObservabilityBundle{
+        .logger = nullptr,
+        .audit_logger = nullptr,
+        .metrics_provider = nullptr,
+        .tracer_provider = nullptr,
+        .health_monitor = nullptr,
+        .tool_audit_bridge = nullptr,
+        .tool_metrics_bridge = nullptr,
+        .tool_trace_bridge = nullptr,
+        .tool_health_probe = nullptr,
+        .health_probes = {},
         .error = register_error,
     };
   }
 
   return RuntimeObservabilityBundle{
+      .logger = live_observability.logger,
       .audit_logger = live_observability.audit_logger,
       .metrics_provider = live_observability.metrics_provider,
       .tracer_provider = live_observability.tracer_provider,
@@ -423,13 +446,6 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
   dependency_set->memory_manager = std::move(memory_manager);
 
-  auto llm_result = llm::create_production_llm_manager(*policy_snapshot);
-  if (!llm_result.ok()) {
-    return make_error(std::string("llm manager composition failed for ") +
-                      std::string(composition_owner) + ": " + llm_result.error);
-  }
-  dependency_set->llm_manager = std::move(llm_result.manager);
-
   const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
   if (!observability.ok()) {
     return make_error(std::string("runtime observability composition failed for ") +
@@ -440,6 +456,23 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->tracer_provider = observability.tracer_provider;
   dependency_set->health_monitor = observability.health_monitor;
   dependency_set->health_probes = observability.health_probes;
+
+  auto llm_result = llm::create_production_llm_manager(
+      *policy_snapshot,
+      llm::LLMProductionFactoryOptions{
+          .secret_backend = nullptr,
+          .transport = nullptr,
+          .provider_catalog_baseline_root = {},
+          .logger = observability.logger,
+          .metrics_provider = observability.metrics_provider,
+          .tracer_provider = observability.tracer_provider,
+          .audit_logger = observability.audit_logger,
+      });
+  if (!llm_result.ok()) {
+    return make_error(std::string("llm manager composition failed for ") +
+                      std::string(composition_owner) + ": " + llm_result.error);
+  }
+  dependency_set->llm_manager = std::move(llm_result.manager);
 
   auto cognition_engine = cognition::create_cognition_engine(
       *policy_snapshot,

@@ -13,12 +13,16 @@
 #include "adapters/OpenAICompatibleAdapter.h"
 #include "config/InstallLayout.h"
 #include "execution/ResponseNormalizer.h"
+#include "observability/LLMAuditBridge.h"
+#include "observability/LLMMetricsBridge.h"
+#include "observability/LLMTraceBridge.h"
 #include "prompt/PromptPipeline.h"
 #include "provider/ProviderCatalogRepository.h"
 #include "route/AdapterRegistry.h"
 #include "route/ModelRouter.h"
 #include "secret/backends/FileSecretBackend.h"
 #include "transport/CurlCommandLLMTransport.h"
+#include "tracing/ITracerProvider.h"
 
 namespace dasall::llm {
 namespace {
@@ -62,6 +66,44 @@ constexpr std::string_view kLocalRuntimeFamily = "local_runtime";
   }
 
   return nullptr;
+}
+
+[[nodiscard]] std::shared_ptr<observability::LLMMetricsBridge>
+make_metrics_bridge(const LLMProductionFactoryOptions& options) {
+  if (options.logger == nullptr && options.metrics_provider == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_shared<observability::LLMMetricsBridge>(
+      options.logger,
+      options.metrics_provider);
+}
+
+[[nodiscard]] std::shared_ptr<observability::LLMTraceBridge>
+make_trace_bridge(const LLMProductionFactoryOptions& options) {
+  if (options.tracer_provider == nullptr) {
+    return nullptr;
+  }
+
+  auto tracer = options.tracer_provider->get_tracer(infra::tracing::TracerScope{
+      .name = std::string(observability::kLLMMetricsMeterScopeName),
+      .version = std::string(observability::kLLMMetricsMeterScopeVersion),
+      .schema_url = {},
+  });
+  if (tracer == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_shared<observability::LLMTraceBridge>(std::move(tracer));
+}
+
+[[nodiscard]] std::shared_ptr<observability::LLMAuditBridge>
+make_audit_bridge(const LLMProductionFactoryOptions& options) {
+  if (options.audit_logger == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_shared<observability::LLMAuditBridge>(options.audit_logger);
 }
 
 }  // namespace
@@ -150,6 +192,10 @@ LLMProductionFactoryResult create_production_llm_manager(
     return make_failure("production adapter registry has no supported provider routes");
   }
 
+  auto metrics_bridge = make_metrics_bridge(options);
+  auto trace_bridge = make_trace_bridge(options);
+  auto audit_bridge = make_audit_bridge(options);
+
   auto manager = std::make_shared<LLMManager>(
       std::make_shared<prompt::PromptPipeline>(),
       std::make_shared<route::ModelRouter>(),
@@ -157,7 +203,11 @@ LLMProductionFactoryResult create_production_llm_manager(
       std::make_shared<LLMCallExecutor>(),
       std::make_shared<execution::ResponseNormalizer>(),
       std::make_shared<UsageAggregator>(),
-      provider_snapshot);
+      provider_snapshot,
+      nullptr,
+      std::move(metrics_bridge),
+      std::move(trace_bridge),
+      std::move(audit_bridge));
   if (!manager->init(*config)) {
     return make_failure("production llm manager init failed");
   }

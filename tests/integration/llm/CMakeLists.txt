@@ -91,6 +91,17 @@ dasall_add_llm_integration_test(
   "integration;llm;profile"
 )
 
+dasall_add_llm_integration_test(
+  dasall_llm_production_observability_integration_test
+  LLMProductionObservabilityIntegrationTest
+  LLMProductionObservabilityIntegrationTest.cpp
+  "integration;llm;observability"
+)
+
+target_compile_definitions(dasall_llm_production_observability_integration_test
+  PRIVATE DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
+)
+
 if(NOT DASALL_LLM_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "llm integration registration requires at least one test target")
 endif()
