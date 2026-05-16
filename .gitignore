@@ -36,6 +36,10 @@
 *.swp
 *.swo
 
+# DASALL 临时diff与目标清单
+full_diff.txt
+targets.txt
+
 # IDE/editor
 .vscode/*
 !.vscode/
