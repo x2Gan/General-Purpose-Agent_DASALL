@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #670
+
+- 日期：2026-05-16
+- 阶段：llm/子系统查漏补缺
+- 任务：FULLINT-BLK-001 解阻，固定 release runner qemu / secret / preflight contract
+- 状态：已完成
+
+### 改动
+
+1. 调整 [scripts/packaging/validate_gate_int_10_installed_package_qemu.sh](../scripts/packaging/validate_gate_int_10_installed_package_qemu.sh)：qemu 串联脚本现已正式支持 `DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS` 与 `DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`，使 release runner 能在不改 `debian/tests/pkg-smoke-local-control-plane` 的前提下，把 host-side DeepSeek key file、testbed preflight 和 per-boot preflight 显式注入 `autopkgtest`。
+2. 新增 [.github/workflows/release-package-gate.yml](../.github/workflows/release-package-gate.yml)：提供 self-hosted `workflow_dispatch` 入口，显式接收 `qemu_image`、`deepseek_key_file`、`provider_probe_url`、`timeout_reboot` 与 `disable_kvm` 输入，统一执行 Gate-INT-10 -> package build -> qemu `autopkgtest` -> `lintian`，并上传 `gate-int-10-qemu.log`、`lintian.log` 与命令元数据。
+3. 更新 [scripts/packaging/README.md](../scripts/packaging/README.md) 与 [docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md](../todos/integration/DASALL_%E5%85%A8%E9%87%8F%E4%B8%9A%E5%8A%A1%E9%93%BE%E9%9B%86%E6%88%90%E9%AA%8C%E8%AF%81%E4%B8%93%E9%A1%B9TODO-2026-05-11.md)：把 release runner contract、workflow 输入面、日志归档口径与 `FULLINT-BLK-001` 已解阻状态回写到 packaging / integration SSOT。
+
+### 验证
+
+1. `sh -n scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`
+   - 结果：通过；脚本无语法错误。
+2. `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh --help | sed -n '1,120p'`
+   - 结果：通过；帮助文本已出现 `Environment` 段，并列出 DeepSeek key file、testbed secret path 与 setup-preflight 变量。
+3. `get_errors` 检查 [scripts/packaging/validate_gate_int_10_installed_package_qemu.sh](../scripts/packaging/validate_gate_int_10_installed_package_qemu.sh) 与 [.github/workflows/release-package-gate.yml](../.github/workflows/release-package-gate.yml)
+   - 结果：通过；workflow YAML 与 shell 脚本当前均无静态错误。
+
+### 结果
+
+1. `FULLINT-BLK-001` 已解阻：release runner 现有仓库内固定入口，不再依赖历史临时命令或未文档化的本机 secret/qemu 参数。
+2. 本轮只固定 release runner contract，不把历史 qemu PASS、本地 installed-package smoke 或新增 workflow 本身外推为 L5 已完成；真实 release evidence 仍需 `FULLINT-TODO-019` / `LLM-FIX-004` 在 runner 上复跑并归档。
+
+### 下一步
+
+1. 串行进入 `LLM-FIX-004` 主任务，新增 LLM release evidence deliverable，并同步 BC-07 / BC-16、专项 TODO 与 worklog 口径。
+
+### 风险
+
+1. `.github/workflows/release-package-gate.yml` 依赖 self-hosted runner 提供真实 qemu image 与 DeepSeek key file；若 runner 资产路径变化，需更新 workflow_dispatch 输入，而不是回退到仓库内写死路径。
+2. provider preflight 当前只做 reachability 探测，不等于外部 provider 长稳态、抖动吸收或 soak 已完成；这些结论仍必须来自后续 release evidence 与 failure record。
+
 ## 记录 #669
 
 - 日期：2026-05-16

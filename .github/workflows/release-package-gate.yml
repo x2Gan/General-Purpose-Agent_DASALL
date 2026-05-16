@@ -1,0 +1,139 @@
+name: DASALL-Release-Package-Gate
+
+"on":
+  workflow_dispatch:
+    inputs:
+      qemu_image:
+        description: Absolute path to the autopkgtest qemu image on the self-hosted runner
+        required: true
+        type: string
+      deepseek_key_file:
+        description: Absolute path to the host-side DeepSeek key file on the self-hosted runner
+        required: true
+        type: string
+      build_dir:
+        description: CMake build directory passed to the qemu gate wrapper
+        required: true
+        default: build/vscode-linux-ninja
+        type: string
+      provider_probe_url:
+        description: HTTPS endpoint used for provider reachability preflight inside the testbed
+        required: true
+        default: https://api.deepseek.com
+        type: string
+      timeout_reboot:
+        description: autopkgtest-virt-qemu reboot timeout in seconds
+        required: true
+        default: "180"
+        type: string
+      disable_kvm:
+        description: Export AUTOPKGTEST_QEMU_DISABLE_KVM=1 for runners without KVM
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  release-package-gate:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packaging prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ dpkg-dev lintian autopkgtest qemu-system-x86 python3 curl
+
+      - name: Prepare release inputs
+        env:
+          DEEPSEEK_KEY_FILE: ${{ inputs.deepseek_key_file }}
+          PROVIDER_PROBE_URL: ${{ inputs.provider_probe_url }}
+          BUILD_DIR: ${{ inputs.build_dir }}
+        run: |
+          set -eu
+          [ -f "${DEEPSEEK_KEY_FILE}" ] || {
+            printf 'missing DeepSeek key file: %s\n' "${DEEPSEEK_KEY_FILE}" >&2
+            exit 1
+          }
+
+          setup_dir="${RUNNER_TEMP}/dasall-release-gate"
+          artifact_dir="${setup_dir}/artifacts"
+          setup_file="${setup_dir}/autopkgtest-setup.sh"
+
+          mkdir -p "${artifact_dir}"
+
+          {
+            printf '%s\n' '#!/bin/sh'
+            printf '%s\n' 'set -eu'
+            printf '%s\n' 'command -v curl >/dev/null 2>&1'
+            printf "curl -fsSIL --connect-timeout 15 '%s' >/dev/null\n" "${PROVIDER_PROBE_URL}"
+          } > "${setup_file}"
+          chmod 755 "${setup_file}"
+
+          {
+            printf 'DASALL_BUILD_DIR=%s\n' "${BUILD_DIR}"
+            printf 'DASALL_DEEPSEEK_API_KEY_FILE=%s\n' "${DEEPSEEK_KEY_FILE}"
+            printf 'DASALL_AUTOPKGTEST_SETUP_COMMANDS=%s\n' "${setup_file}"
+            printf 'DASALL_RELEASE_GATE_ARTIFACT_DIR=%s\n' "${artifact_dir}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Run qemu release gate
+        env:
+          QEMU_IMAGE: ${{ inputs.qemu_image }}
+          TIMEOUT_REBOOT: ${{ inputs.timeout_reboot }}
+          DISABLE_KVM: ${{ inputs.disable_kvm }}
+        run: |
+          set -eu
+          [ -f "${QEMU_IMAGE}" ] || {
+            printf 'missing qemu image: %s\n' "${QEMU_IMAGE}" >&2
+            exit 1
+          }
+
+          artifact_dir="${DASALL_RELEASE_GATE_ARTIFACT_DIR}"
+          gate_log="${artifact_dir}/gate-int-10-qemu.log"
+          lintian_log="${artifact_dir}/lintian.log"
+          command_log="${artifact_dir}/release-gate-command.txt"
+          version="$(dpkg-parsechangelog -SVersion)"
+          arch="$(dpkg --print-architecture)"
+          changes_file="../dasall_${version}_${arch}.changes"
+
+          if [ "${DISABLE_KVM}" = 'true' ]; then
+            disable_flag='--disable-kvm'
+          else
+            disable_flag=''
+          fi
+
+          {
+            printf 'build_dir=%s\n' "${DASALL_BUILD_DIR}"
+            printf 'changes_file=%s\n' "${changes_file}"
+            printf 'qemu_image=%s\n' "${QEMU_IMAGE}"
+            printf 'timeout_reboot=%s\n' "${TIMEOUT_REBOOT}"
+            printf 'disable_kvm=%s\n' "${DISABLE_KVM}"
+            printf 'deepseek_key_file=provided\n'
+            printf 'provider_probe_url=%s\n' '${{ inputs.provider_probe_url }}'
+          } > "${command_log}"
+
+          if [ -n "${disable_flag}" ]; then
+            sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
+              "${disable_flag}" \
+              -- /usr/bin/autopkgtest-virt-qemu --timeout-reboot="${TIMEOUT_REBOOT}" "${QEMU_IMAGE}" \
+              > "${gate_log}" 2>&1
+          else
+            sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
+              -- /usr/bin/autopkgtest-virt-qemu --timeout-reboot="${TIMEOUT_REBOOT}" "${QEMU_IMAGE}" \
+              > "${gate_log}" 2>&1
+          fi
+
+          lintian "${changes_file}" > "${lintian_log}" 2>&1
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dasall-release-package-gate
+          path: ${{ runner.temp }}/dasall-release-gate/artifacts

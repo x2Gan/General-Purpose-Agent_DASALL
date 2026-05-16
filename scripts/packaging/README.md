@@ -17,6 +17,7 @@
 | autopkgtest metadata validate | 校验 `debian/tests/control` 语法与元数据 | `python3 scripts/packaging/validate_autopkgtest_metadata.py` | PKG-TODO-016 |
 | autopkgtest installed-package run | 在 testbed 中验证安装后的包行为 | `autopkgtest ../dasall_*.changes -- qemu <image-or-config>` | PKG-TODO-016 |
 | Gate-INT-10 -> qemu autopkgtest 串联 | 先验证 build-tree `release-preflight`，再重新构包并执行 qemu installed-package run | `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>` | INTFIX backlog / PKG-GATE-07 |
+| release runner workflow | 在 self-hosted runner 固化 qemu image、DeepSeek key file、provider preflight 与日志归档 | GitHub Actions `DASALL-Release-Package-Gate` workflow_dispatch | FULLINT-BLK-001 blocker-fix |
 
 补充约束：`dasall_gate_int_10` 只承载 build-tree app-binary smoke（daemon/gateway 真实 binary + socket path discoverability），`dasall_packaging_preflight_tests` 继续承载 package 相关 contract / daemon preflight 切片；两者都通过 `release-preflight-gate` label 接入 discoverability verifier，但彼此不互相替代。
 
@@ -71,6 +72,13 @@
 2. 若 CI 输出 package-ready 结论，则必须额外执行 qemu testbed 上的 `autopkgtest` installed-package run。
 3. local rootful lifecycle smoke 与 qemu `autopkgtest` 共同组成 installed-package gate；缺一不可。
 4. 若 CI 需要证明 `Gate-INT-10` 与 installed-package qemu gate 的顺序关系，应使用 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`，并显式传入 qemu image 或 virt-server 配置。
+
+### 4.4 release runner contract
+
+1. `.github/workflows/release-package-gate.yml` 是当前仓库内固定的 release runner 入口：只接受 self-hosted runner 提供的 `qemu_image` 与 `deepseek_key_file`，不在仓库脚本里下载 image 或写死 secret。
+2. workflow 会生成 testbed preflight 脚本，并通过 `DASALL_AUTOPKGTEST_SETUP_COMMANDS` 传给 `validate_gate_int_10_installed_package_qemu.sh`；默认 preflight 只做 provider reachability 探测，不在日志中记录 secret 值。
+3. `validate_gate_int_10_installed_package_qemu.sh` 现已正式支持以下 release-runner 环境变量：`DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`。
+4. workflow 会归档 `gate-int-10-qemu.log`、`lintian.log` 与命令元数据；`FULLINT-TODO-019` / `LLM-FIX-004` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。
 
 ## 5. 已落盘文件
 

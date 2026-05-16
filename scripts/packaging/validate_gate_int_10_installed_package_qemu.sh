@@ -10,6 +10,9 @@ VERSION=$(cd "${REPO_ROOT}" && dpkg-parsechangelog -SVersion)
 BUILD_DIR=${DASALL_BUILD_DIR:-build/vscode-linux-ninja}
 CHANGES_FILE=${DASALL_CHANGES_FILE:-${ARTIFACT_DIR}/dasall_${VERSION}_${ARCH}.changes}
 DISABLE_KVM=0
+AUTOPKGTEST_SETUP_COMMANDS=${DASALL_AUTOPKGTEST_SETUP_COMMANDS:-}
+AUTOPKGTEST_SETUP_COMMANDS_BOOT=${DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT:-}
+AUTOPKGTEST_TESTBED_SECRET_PATH=${DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH:-/tmp/dasall-release/deepseek.key}
 
 log() {
   printf '[gate-int-10-installed-package-qemu] %s\n' "$*"
@@ -35,6 +38,20 @@ Options:
                         Defaults to ../dasall_<version>_<arch>.changes.
   --disable-kvm         Export AUTOPKGTEST_QEMU_DISABLE_KVM=1 for non-KVM hosts.
   -h, --help            Show this help text.
+
+Environment:
+  DASALL_DEEPSEEK_API_KEY_FILE       Optional host-side DeepSeek key file.
+                                     When set, the script copies it into the
+                                     testbed and exposes the same variable to
+                                     installed-package smoke.
+  DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH
+                                     Testbed path for the copied DeepSeek key.
+                                     Defaults to /tmp/dasall-release/deepseek.key.
+  DASALL_AUTOPKGTEST_SETUP_COMMANDS  Optional autopkgtest --setup-commands
+                                     value for release-runner preflight.
+  DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT
+                                     Optional autopkgtest --setup-commands-boot
+                                     value for per-boot preflight.
 
 Examples:
   sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
@@ -98,6 +115,11 @@ require_command autopkgtest
 
 [ -d "${BUILD_DIR}" ] || fail "missing CMake build directory: ${BUILD_DIR}"
 
+if [ -n "${DASALL_DEEPSEEK_API_KEY_FILE:-}" ]; then
+  [ -f "${DASALL_DEEPSEEK_API_KEY_FILE}" ] ||
+    fail "missing DeepSeek key file: ${DASALL_DEEPSEEK_API_KEY_FILE}"
+fi
+
 cd "${REPO_ROOT}"
 
 log 'running build-tree Gate-INT-10 release/app-binary preflight'
@@ -112,11 +134,31 @@ dpkg-buildpackage -us -uc -b
 log 'validating autopkgtest metadata'
 python3 "${SCRIPT_DIR}/validate_autopkgtest_metadata.py"
 
+set -- "${CHANGES_FILE}" -- "$@"
+
+if [ -n "${AUTOPKGTEST_SETUP_COMMANDS_BOOT}" ]; then
+  log 'forwarding autopkgtest setup-commands-boot preflight'
+  set -- --setup-commands-boot "${AUTOPKGTEST_SETUP_COMMANDS_BOOT}" "$@"
+fi
+
+if [ -n "${AUTOPKGTEST_SETUP_COMMANDS}" ]; then
+  log 'forwarding autopkgtest setup-commands preflight'
+  set -- --setup-commands "${AUTOPKGTEST_SETUP_COMMANDS}" "$@"
+fi
+
+if [ -n "${DASALL_DEEPSEEK_API_KEY_FILE:-}" ]; then
+  log "injecting DeepSeek key into testbed: ${AUTOPKGTEST_TESTBED_SECRET_PATH}"
+  set -- \
+    --env "DASALL_DEEPSEEK_API_KEY_FILE=${AUTOPKGTEST_TESTBED_SECRET_PATH}" \
+    --copy "${DASALL_DEEPSEEK_API_KEY_FILE}:${AUTOPKGTEST_TESTBED_SECRET_PATH}" \
+    "$@"
+fi
+
 log "running authoritative installed-package autopkgtest: ${CHANGES_FILE}"
 if [ "${DISABLE_KVM}" -eq 1 ]; then
-  AUTOPKGTEST_QEMU_DISABLE_KVM=1 autopkgtest "${CHANGES_FILE}" -- "$@"
+  AUTOPKGTEST_QEMU_DISABLE_KVM=1 autopkgtest "$@"
 else
-  autopkgtest "${CHANGES_FILE}" -- "$@"
+  autopkgtest "$@"
 fi
 
 log 'Gate-INT-10 handoff and installed-package qemu autopkgtest gate passed'
