@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #666
+
+- 日期：2026-05-16
+- 阶段：cognition/子系统查漏补缺
+- 任务：COG-FIX-005 接入 production CognitionTelemetry sink；COG-FIX-006 回写 Gate-COG-12 后的当前状态
+- 状态：已完成
+
+### 改动
+
+1. 调整 `cognition/include/CognitionDependencies.h`、`cognition/src/observability/CognitionTelemetry.h` 与 `cognition/src/observability/CognitionTelemetry.cpp`：为 cognition composition root 新增 live audit/metrics/tracing provider 依赖，并在 telemetry owner 内部落地 infra adapter，把 `stage.started` / `stage.completed` / `stage.failed` / `response.degraded` 接入 concrete audit、metrics 与 trace provider，同时保持 redaction 与 sink fail-open 边界。
+2. 调整 `cognition/src/CognitionFacade.cpp` 与 `cognition/src/response/ResponseBuilder.cpp`：Facade 现在在 live provider 存在时不再退回 no-op sink；ResponseBuilder 也持有同一 telemetry owner，并在 invalid / failure / template fallback 路径显式发射 response stage failure 与 degraded telemetry。
+3. 调整 `runtime/src/AgentFacade.cpp` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：runtime 侧在按 policy snapshot 组合 cognition ports 时会透传 shared observability providers，runtime_support 也把 live observability bundle 提前到 cognition/response_builder 组合之前，避免 production composition 仍只创建 no-op telemetry sink。
+4. 调整 `tests/unit/runtime/RuntimeSmokeTest.cpp`、`tests/unit/runtime/CMakeLists.txt`，并新增 `tests/integration/cognition/CognitionProductionTelemetryIntegrationTest.cpp`：修复 runtime build-liveness smoke 的错误 cognition 头依赖与 fixture include path，同时补一条 production telemetry integration，用 live audit/metrics/trace provider 验证 `cognition.stage.completed`、`cognition.stage.failed`、`cognition.response.degraded` 已可观测且不泄露 `raw_prompt` / `api_token`。
+5. 回写 `docs/architecture/DASALL_cognition子系统详细设计.md`、`docs/todos/cognition/DASALL_cognition子系统专项TODO.md` 与总账 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：同步 `COG-FIX-005` 已完成、`COG-FIX-006` 已完成，以及 Gate-COG-12 当前仍受 repo-wide non-cognition blocker 阻断的口径。
+
+### 验证
+
+1. `cmake -S . -B build`
+   - 结果：配置成功。
+2. `cmake --build build --target dasall_apps_runtime_support dasall_runtime_smoke_test dasall_runtime_cognition_loop_smoke_unit_test dasall_cognition_telemetry_fields_unit_test dasall_cognition_telemetry_redaction_unit_test dasall_cognition_telemetry_failure_isolation_unit_test dasall_cognition_production_telemetry_integration_test`
+   - 结果：全部目标构建成功。
+3. `ctest --test-dir build --output-on-failure -R '^RuntimeBuildLivenessSmokeTest$'`
+   - 结果：通过。
+4. `ctest --test-dir build --output-on-failure -R '^RuntimeCognitionLoopSmokeTest$'`
+   - 结果：通过。
+5. `ctest --test-dir build --output-on-failure -R '^(CognitionTelemetryFieldsTest|CognitionTelemetryRedactionTest|CognitionTelemetryFailureIsolationTest|CognitionProductionTelemetryIntegrationTest)$'`
+   - 结果：4/4 通过。
+
+### 结果
+
+1. `COG-FIX-005` 已完成：cognition 语义观测不再只能停留在 module-local no-op sink，live audit/metrics/trace provider 已可接住 stage completed / failed 与 degraded response 事件，且 degraded payload 仍保持 redaction。
+2. `RuntimeBuildLivenessSmokeTest` 与 `RuntimeCognitionLoopSmokeTest` 当前在 `build` 目录均可直接构建和运行，先前“CTest 可发现但找不到可执行文件”的阻断已被消除。
+3. `COG-FIX-006` 已完成：总账、详设、专项 TODO 与 worklog 现在对 Gate-COG-12 的当前状态、cognition L2 完成范围、production telemetry sink 已完成，以及 L4 installed/qemu 仍未证明的边界口径一致。
+
+### 下一步
+
+1. 若继续推进 cognition 相关总账，下一跳应离开 cognition owner 范围，转向 Gate-COG-12 当前列出的 runtime / llm / tools / infra / platform / profiles / apps-daemon 非 cognition blocker。
+2. 若需要对外提交本轮结果，应按仓库提交规范把 runtime smoke unblock 与 cognition production telemetry/docs 回写作为同一原子任务提交，避免再次把总账状态和可执行证据拆开。
+
 ## 记录 #665
 
 - 日期：2026-05-15
