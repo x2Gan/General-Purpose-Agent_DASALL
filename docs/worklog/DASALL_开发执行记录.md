@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #676
+
+- 日期：2026-05-17
+- 阶段：llm/子系统查漏补缺
+- 任务：执行 LLM-FIX-007 external provider soak slices（SOAK-01 ~ SOAK-05）并回写真实 artifact
+- 状态：已执行（SOAK-00 / 04 / 05 focused 子集通过；provider / qemu 子 slice 因环境资产缺失阻塞）
+
+### 执行前提
+
+1. 本机已具备 `cmake`、`ctest`、`autopkgtest`、`dpkg-buildpackage`、`dasall`、`journalctl` 与 `sudo -n`，`build-ci` 目录存在，`dasall-daemon` 处于 active。
+2. 本机缺少 external provider soak 所需资产：`deepseek-primary.key`、`deepseek-secondary.key` 与 runner-local `qemu_image`；因此本轮只能真实执行 build-tree / focused 子集，并为 blocked slice 留下真实 preflight artifact，不能伪造 provider soak 通过结论。
+
+### Artifact 根路径
+
+1. 本轮统一 artifact 根目录：/tmp/dasall-llm-fix-007/1779012434-run
+2. 各 slice 目录：
+   - SOAK-00：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-00
+   - SOAK-01：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01
+   - SOAK-02：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02
+   - SOAK-03：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-03
+   - SOAK-04：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04
+   - SOAK-05：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05
+
+### 执行与结果
+
+1. SOAK-00 focused baseline：`cmake -S . -B build-ci`、指定 targets 的 `cmake --build` 与完整 focused `ctest -R` 已实际执行。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-00/configure.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-00/build.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-00/ctest.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-00/status.txt。
+   - 结果：`SUCCESS (ctest 9/9 passed)`；`ctest.log` 显示 `ModelRouterStabilityTest`、`LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest`、`LLMObservabilityFieldCompletenessTest`、`LlmSecretPageTest`、`ConfigApplyWorkflowTest`、`DeepSeekDualModeSelectionIntegrationTest`、`LLMFallbackIntegrationTest` 与 `LLMProductionObservabilityIntegrationTest` 共 `9/9` 通过。
+   - 追溯说明：初次 `ctest` 输出已保留为 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-00/ctest-initial.log；为避免把歧义 artifact 当成最终结果，本轮已复跑并以 `ctest.log` / `status.txt` 作为正式记录。
+2. SOAK-01 provider jitter：未执行正向 `pkg_smoke_install` / 连续 `dasall run`，因为缺 external provider key。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/blocked-preflight.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/status.txt。
+   - 结果：`BLOCKED`；`blocked-preflight.txt` 明确记录 `deepseek_key_file=missing`。
+3. SOAK-02 network loss：未执行 qemu negative slice，因为同时缺 external provider key 与 runner-local image。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/blocked-preflight.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/status.txt。
+   - 结果：`BLOCKED`；`blocked-preflight.txt` 明确记录 `deepseek_key_file=missing` 与 `qemu_image=missing`。
+4. SOAK-03 secret rotate：未执行双轮 `config apply` / post-rotate run，因为 primary / secondary key 均缺失。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-03/blocked-preflight.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-03/status.txt。
+   - 结果：`BLOCKED`；`blocked-preflight.txt` 明确记录 `deepseek_key_file=missing`。
+5. SOAK-04 retry budget exhaustion：build-tree focused 子集已执行，qemu negative 子 slice 未执行。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/ctest.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/status.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/blocked-preflight.txt。
+   - 结果：`PARTIAL (ctest 4/4 passed; qemu sub-slice BLOCKED)`；`ctest.log` 显示 `ModelRouterStabilityTest`、`LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest` 与 `LLMFallbackIntegrationTest` 共 `4/4` 通过；`blocked-preflight.txt` 明确记录 `qemu sub-slice BLOCKED: deepseek_key_file=missing, qemu_image=missing`。
+   - 追溯说明：初次空结果已保留为 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/ctest-initial.log，正式结果以 `ctest.log` / `status.txt` 为准。
+6. SOAK-05 observability trend：observability focused 子集已执行，installed-host trend 子 slice 未执行。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/ctest.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/status.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/blocked-preflight.txt。
+   - 结果：`PARTIAL-BLOCKED (ctest 3/3 passed; installed-host trend BLOCKED)`；`ctest.log` 显示 `LLMObservabilityFieldCompletenessTest`、`DeepSeekDualModeSelectionIntegrationTest` 与 `LLMProductionObservabilityIntegrationTest` 共 `3/3` 通过；`blocked-preflight.txt` 明确记录 `deepseek_key_file=missing`。
+   - 追溯说明：初次空结果已保留为 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/ctest-initial.log，正式结果以 `ctest.log` / `status.txt` 为准。
+
+### 验证
+
+1. `ctest --test-dir build-ci --output-on-failure -R '^(LLMManagerTimeoutPolicyTest|LLMManagerRetryBudgetTest|ModelRouterStabilityTest|LLMObservabilityFieldCompletenessTest|LLMProductionObservabilityIntegrationTest|DeepSeekDualModeSelectionIntegrationTest|LLMFallbackIntegrationTest|LlmSecretPageTest|ConfigApplyWorkflowTest)$'`
+   - 结果：通过；SOAK-00 focused baseline 共 `9/9` 通过。
+2. `ctest --test-dir build-ci --output-on-failure -R '^(LLMManagerRetryBudgetTest|LLMManagerTimeoutPolicyTest|LLMFallbackIntegrationTest|ModelRouterStabilityTest)$'`
+   - 结果：通过；SOAK-04 build-tree 子集共 `4/4` 通过。
+3. `ctest --test-dir build-ci --output-on-failure -R '^(LLMProductionObservabilityIntegrationTest|LLMObservabilityFieldCompletenessTest|DeepSeekDualModeSelectionIntegrationTest)$'`
+   - 结果：通过；SOAK-05 build-tree 子集共 `3/3` 通过。
+4. external provider / qemu preflight
+   - 结果：SOAK-01、SOAK-02、SOAK-03 以及 SOAK-04/05 的 live 子 slice 均留下真实 blocked artifact；阻塞原因固定为缺 `deepseek_key_file` 与/或 `qemu_image`，未伪造 provider soak 执行结果。
+
+### 结果
+
+1. `LLM-FIX-007` 的 SOAK-01 ~ 05 已按交付件顺序逐条执行到“当前环境能力上限”：build-tree / focused gate 已真实落地，external-provider 与 qemu 子 slice 的阻塞也已形成可审计 artifact。
+2. 当前环境仍不能声称拿到 provider jitter、network loss、secret rotate 或 observability trend 的 live evidence，因为缺 key / image；本轮拿到的是“focused gate 通过 + live slice 阻塞证据”。
+3. 后续一旦 runner / host 补齐 key 与 image，应直接复用本次 artifact 根目录结构与命令模板继续执行 live slices，而不需要重新设计验收面。
+
 ## 记录 #675
 
 - 日期：2026-05-17
