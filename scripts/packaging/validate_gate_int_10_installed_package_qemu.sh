@@ -13,6 +13,7 @@ DISABLE_KVM=0
 AUTOPKGTEST_SETUP_COMMANDS=${DASALL_AUTOPKGTEST_SETUP_COMMANDS:-}
 AUTOPKGTEST_SETUP_COMMANDS_BOOT=${DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT:-}
 AUTOPKGTEST_TESTBED_SECRET_PATH=${DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH:-/tmp/dasall-release/deepseek.key}
+AUTOPKGTEST_OUTPUT_DIR=${DASALL_AUTOPKGTEST_OUTPUT_DIR:-}
 
 log() {
   printf '[gate-int-10-installed-package-qemu] %s\n' "$*"
@@ -52,6 +53,9 @@ Environment:
   DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT
                                      Optional autopkgtest --setup-commands-boot
                                      value for per-boot preflight.
+  DASALL_AUTOPKGTEST_OUTPUT_DIR       Optional autopkgtest --output-dir value.
+                                     When set, autopkgtest artifacts are written
+                                     to this directory for later archive/upload.
 
 Examples:
   sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
@@ -108,6 +112,12 @@ case "${CHANGES_FILE}" in
   *) CHANGES_FILE="${REPO_ROOT}/${CHANGES_FILE}" ;;
 esac
 
+case "${AUTOPKGTEST_OUTPUT_DIR}" in
+  '') ;;
+  /*) ;;
+  *) AUTOPKGTEST_OUTPUT_DIR="${REPO_ROOT}/${AUTOPKGTEST_OUTPUT_DIR}" ;;
+esac
+
 require_command cmake
 require_command dpkg-buildpackage
 require_command python3
@@ -135,6 +145,12 @@ log 'validating autopkgtest metadata'
 python3 "${SCRIPT_DIR}/validate_autopkgtest_metadata.py"
 
 set -- "${CHANGES_FILE}" -- "$@"
+
+if [ -n "${AUTOPKGTEST_OUTPUT_DIR}" ]; then
+  mkdir -p "${AUTOPKGTEST_OUTPUT_DIR}"
+  log "forwarding autopkgtest output-dir archive: ${AUTOPKGTEST_OUTPUT_DIR}"
+  set -- --output-dir "${AUTOPKGTEST_OUTPUT_DIR}" "$@"
+fi
 
 if [ -n "${AUTOPKGTEST_SETUP_COMMANDS_BOOT}" ]; then
   log 'forwarding autopkgtest setup-commands-boot preflight'

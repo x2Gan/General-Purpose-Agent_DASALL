@@ -1,5 +1,69 @@
 # DASALL 开发执行记录
 
+## 记录 #675
+
+- 日期：2026-05-17
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-007 固化 external provider 长稳态与 L6 soak 执行计划
+- 状态：已完成
+
+### 改动
+
+1. 新增 [docs/todos/llm/deliverables/LLM-FIX-007-external-provider长稳态与L6-soak执行计划.md](../todos/llm/deliverables/LLM-FIX-007-external-provider%E9%95%BF%E7%A8%B3%E6%80%81%E4%B8%8EL6-soak%E6%89%A7%E8%A1%8C%E8%AE%A1%E5%88%92.md)：把 provider jitter、network loss、secret rotate、retry budget exhaustion 与 observability trend 拆成 `SOAK-00~05` 的可执行验收项，并为每个 slice 固定命令模板、artifact 口径与通过判定。
+2. 更新 [docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)：把 `LLM-FIX-007` 从占位 Todo 收口为“执行计划已冻结，但不宣称 L6 evidence 已执行”；同时把 llm 剩余开放项改写为 `FULLINT-TODO-019` 当前候选版 rerun 与按 007 deliverable 执行的 soak slices。
+3. 本轮没有改动 llm 产品代码，也没有新增 release-runner 脚本；所有 007 命令都回链到现有入口，包括 `DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`、`DASALL_DEEPSEEK_API_KEY_FILE`、installed `dasall config apply --from-file --no-input`、`LlmSecretPageTest`、`LLMManagerRetryBudgetTest` 与 `LLMProductionObservabilityIntegrationTest`。
+
+### 验证
+
+1. `rg -n 'LLM-FIX-007|provider jitter|network loss|secret rotate|retry budget exhaustion|observability trend|SOAK-0' docs/todos/llm/DASALL_llm子系统专项TODO.md docs/todos/llm/deliverables/LLM-FIX-007-external-provider长稳态与L6-soak执行计划.md docs/todos/DASALL_子系统查漏补缺专项记录.md docs/architecture/DASALL_llm子系统详细设计.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；007 的 deliverable、专项 TODO、总账、详设与 worklog 之间已形成一致追溯链。
+2. `rg -n 'DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT|DASALL_DEEPSEEK_API_KEY_FILE|config apply --from-file|LlmSecretPageTest|LLMManagerRetryBudgetTest|LLMProductionObservabilityIntegrationTest' docs/todos/llm/deliverables/LLM-FIX-007-external-provider长稳态与L6-soak执行计划.md scripts/packaging/validate_gate_int_10_installed_package_qemu.sh scripts/packaging/pkg_smoke_install.sh tests/unit/apps/cli/LlmSecretPageTest.cpp tests/unit/llm/LLMManagerRetryBudgetTest.cpp tests/integration/llm/LLMProductionObservabilityIntegrationTest.cpp .github/workflows/release-package-gate.yml`
+   - 结果：通过；007 计划中的命令均锚定到现有仓库入口，没有引入虚构脚本或不存在的 test target。
+
+### 结果
+
+1. `LLM-FIX-007` 已完成：external provider 长稳态 / L6 soak 不再是模糊 residual phrase，而是可执行的 `SOAK-00~05` slice 矩阵。
+2. 本轮没有伪造任何 soak 已执行完成的结论；007 完成的是“执行计划冻结”，不是“L6 production confidence 已获得”。
+3. llm 当前剩余执行项继续保持分层：`FULLINT-TODO-019` owner 当前候选版 rerun / artifact archive，007 deliverable owner 后续 provider jitter / network loss / secret rotate / retry budget exhaustion / observability trend 的执行入口。
+
+### 下一步
+
+1. 在具备 runner-local `qemu_image`、`deepseek_key_file` 与 rootful installed host 条件后，先执行 `FULLINT-TODO-019` 的 current release candidate rerun。
+2. 随后按 `LLM-FIX-007` deliverable 的 `SOAK-01~05` 顺序逐条执行 external provider soak slices，并把 artifact 路径回写到后续 worklog / deliverable。
+
+## 记录 #674
+
+- 日期：2026-05-17
+- 阶段：integration / llm 交叉证据收口
+- 任务：补 FULLINT-TODO-019 的 rerun / artifact archive contract，并单列 LLM-FIX-007
+- 状态：已完成（FULLINT-TODO-019 当前环境仍 Blocked）
+
+### 改动
+
+1. 更新 [scripts/packaging/validate_gate_int_10_installed_package_qemu.sh](../scripts/packaging/validate_gate_int_10_installed_package_qemu.sh) 与 [.github/workflows/release-package-gate.yml](../.github/workflows/release-package-gate.yml)：release gate 脚本新增 `DASALL_AUTOPKGTEST_OUTPUT_DIR` 支持，workflow 现会归档结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据，不再只上传 gate/lintian 单日志。
+2. 新增 [docs/todos/integration/deliverables/FULLINT-TODO-019-release-runner当前候选版rerun与artifact-archive执行准备.md](../todos/integration/deliverables/FULLINT-TODO-019-release-runner%E5%BD%93%E5%89%8D%E5%80%99%E9%80%89%E7%89%88rerun%E4%B8%8Eartifact-archive%E6%89%A7%E8%A1%8C%E5%87%86%E5%A4%87.md)，并更新 [docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md](../todos/integration/DASALL_%E5%85%A8%E9%87%8F%E4%B8%9A%E5%8A%A1%E9%93%BE%E9%9B%86%E6%88%90%E9%AA%8C%E8%AF%81%E4%B8%93%E9%A1%B9TODO-2026-05-11.md) 与 [scripts/packaging/README.md](../scripts/packaging/README.md)：把 `FULLINT-TODO-019` 明确回写为“仓库内 rerun / archive contract 已固定，但当前主机 preflight 仍缺 runner-local `qemu_image` 与 `DASALL_DEEPSEEK_API_KEY_FILE`，因此当前环境为 Blocked”。
+3. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)、[docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md)：把 llm 剩余开放项从“current rerun + external provider 长稳态 / L6 soak”拆成两个独立 owner：`FULLINT-TODO-019` 负责 current release candidate rerun / artifact archive，`LLM-FIX-007` 负责 external provider 长稳态 / L6 soak。
+
+### 验证
+
+1. `sh -n scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`
+   - 结果：通过；release gate shell 脚本语法正确。
+2. `get_errors` 检查 [scripts/packaging/validate_gate_int_10_installed_package_qemu.sh](../scripts/packaging/validate_gate_int_10_installed_package_qemu.sh) 与 [.github/workflows/release-package-gate.yml](../.github/workflows/release-package-gate.yml)
+   - 结果：通过；workflow YAML 与 shell 脚本当前均无静态错误。
+3. `rg -n 'FULLINT-TODO-019|LLM-FIX-007|artifact-archive|DASALL_AUTOPKGTEST_OUTPUT_DIR|secret injection record' docs/todos/integration docs/todos/llm docs/todos/DASALL_子系统查漏补缺专项记录.md docs/architecture/DASALL_llm子系统详细设计.md docs/worklog/DASALL_开发执行记录.md scripts/packaging/README.md scripts/packaging/validate_gate_int_10_installed_package_qemu.sh .github/workflows/release-package-gate.yml`
+   - 结果：通过；rerun / archive contract、019 当前阻塞态与 `LLM-FIX-007` 拆分已形成跨脚本 / workflow / TODO / worklog / architecture 的一致追溯链。
+
+### 结果
+
+1. `FULLINT-TODO-019` 当前不再缺仓库内 rerun / archive contract：release runner 一旦具备 `qemu_image` 与 `deepseek_key_file`，artifact bundle 将包含 package artifacts、结构化 `autopkgtest` 输出、`lintian.log` 与 secret injection record。
+2. 本轮没有伪造 current release candidate rerun 通过结论；当前环境仍因缺 runner-local image/key 而 Blocked，这一阻塞已独立记录到 integration deliverable 与 TODO 行。
+3. llm 剩余开放项已从单个模糊 residual phrase 拆成两个明确 owner：`FULLINT-TODO-019` 负责当前候选版 rerun / artifact archive，`LLM-FIX-007` 负责 external provider 长稳态与 L6 soak。
+
+### 下一步
+
+1. 在 self-hosted release runner 提供 `qemu_image`、`deepseek_key_file` 与外网 reachability 后，按 `FULLINT-TODO-019` 真实执行 qemu rerun 并回写 artifact 路径。
+2. 另起 `LLM-FIX-007` 的专属 deliverable / soak plan，把 provider jitter、network loss、secret rotate、retry budget exhaustion 与 observability trend 形成独立 L6 证据。
+
 ## 记录 #673
 
 - 日期：2026-05-17

@@ -63,9 +63,13 @@ jobs:
 
           setup_dir="${RUNNER_TEMP}/dasall-release-gate"
           artifact_dir="${setup_dir}/artifacts"
+          package_dir="${artifact_dir}/packages"
+          autopkgtest_dir="${artifact_dir}/autopkgtest"
           setup_file="${setup_dir}/autopkgtest-setup.sh"
+          secret_record="${artifact_dir}/secret-injection-record.txt"
+          testbed_secret_path='/tmp/dasall-release/deepseek.key'
 
-          mkdir -p "${artifact_dir}"
+          mkdir -p "${artifact_dir}" "${package_dir}" "${autopkgtest_dir}"
 
           {
             printf '%s\n' '#!/bin/sh'
@@ -78,8 +82,12 @@ jobs:
           {
             printf 'DASALL_BUILD_DIR=%s\n' "${BUILD_DIR}"
             printf 'DASALL_DEEPSEEK_API_KEY_FILE=%s\n' "${DEEPSEEK_KEY_FILE}"
+            printf 'DASALL_AUTOPKGTEST_OUTPUT_DIR=%s\n' "${autopkgtest_dir}"
             printf 'DASALL_AUTOPKGTEST_SETUP_COMMANDS=%s\n' "${setup_file}"
+            printf 'DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH=%s\n' "${testbed_secret_path}"
             printf 'DASALL_RELEASE_GATE_ARTIFACT_DIR=%s\n' "${artifact_dir}"
+            printf 'DASALL_RELEASE_GATE_PACKAGE_DIR=%s\n' "${package_dir}"
+            printf 'DASALL_RELEASE_GATE_SECRET_RECORD=%s\n' "${secret_record}"
           } >> "${GITHUB_ENV}"
 
       - name: Run qemu release gate
@@ -95,12 +103,16 @@ jobs:
           }
 
           artifact_dir="${DASALL_RELEASE_GATE_ARTIFACT_DIR}"
+          package_dir="${DASALL_RELEASE_GATE_PACKAGE_DIR}"
+          secret_record="${DASALL_RELEASE_GATE_SECRET_RECORD}"
           gate_log="${artifact_dir}/gate-int-10-qemu.log"
           lintian_log="${artifact_dir}/lintian.log"
           command_log="${artifact_dir}/release-gate-command.txt"
           version="$(dpkg-parsechangelog -SVersion)"
           arch="$(dpkg --print-architecture)"
           changes_file="../dasall_${version}_${arch}.changes"
+          gate_status=0
+          lintian_status=0
 
           if [ "${DISABLE_KVM}" = 'true' ]; then
             disable_flag='--disable-kvm'
@@ -115,21 +127,62 @@ jobs:
             printf 'timeout_reboot=%s\n' "${TIMEOUT_REBOOT}"
             printf 'disable_kvm=%s\n' "${DISABLE_KVM}"
             printf 'deepseek_key_file=provided\n'
+            printf 'autopkgtest_output_dir=%s\n' "${DASALL_AUTOPKGTEST_OUTPUT_DIR}"
+            printf 'package_artifact_dir=%s\n' "${package_dir}"
+            printf 'testbed_secret_path=%s\n' "${DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH}"
             printf 'provider_probe_url=%s\n' '${{ inputs.provider_probe_url }}'
           } > "${command_log}"
 
+          {
+            printf 'host_secret_file=provided\n'
+            printf 'testbed_secret_path=%s\n' "${DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH}"
+            printf 'autopkgtest_injection=--copy + --env\n'
+            printf 'provider_probe_url=%s\n' '${{ inputs.provider_probe_url }}'
+          } > "${secret_record}"
+
           if [ -n "${disable_flag}" ]; then
-            sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
+            if sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
               "${disable_flag}" \
               -- /usr/bin/autopkgtest-virt-qemu --timeout-reboot="${TIMEOUT_REBOOT}" "${QEMU_IMAGE}" \
-              > "${gate_log}" 2>&1
+              > "${gate_log}" 2>&1; then
+              :
+            else
+              gate_status=$?
+            fi
           else
-            sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
+            if sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh \
               -- /usr/bin/autopkgtest-virt-qemu --timeout-reboot="${TIMEOUT_REBOOT}" "${QEMU_IMAGE}" \
-              > "${gate_log}" 2>&1
+              > "${gate_log}" 2>&1; then
+              :
+            else
+              gate_status=$?
+            fi
           fi
 
-          lintian "${changes_file}" > "${lintian_log}" 2>&1
+          if [ -f "${changes_file}" ]; then
+            find .. -maxdepth 1 -type f \( \
+              -name "*_${version}_*.changes" -o \
+              -name "*_${version}_*.buildinfo" -o \
+              -name "*_${version}_*.deb" -o \
+              -name "*_${version}_*.ddeb" \
+            \) -exec cp {} "${package_dir}/" \;
+
+            if lintian "${changes_file}" > "${lintian_log}" 2>&1; then
+              :
+            else
+              lintian_status=$?
+            fi
+          else
+            printf 'missing changes file after release gate: %s\n' "${changes_file}" > "${lintian_log}"
+            lintian_status=1
+          fi
+
+          {
+            printf 'gate_status=%s\n' "${gate_status}"
+            printf 'lintian_status=%s\n' "${lintian_status}"
+          } >> "${command_log}"
+
+          [ "${gate_status}" -eq 0 ] && [ "${lintian_status}" -eq 0 ]
 
       - name: Upload release evidence
         if: always()

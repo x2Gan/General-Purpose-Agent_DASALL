@@ -77,8 +77,8 @@
 
 1. `.github/workflows/release-package-gate.yml` 是当前仓库内固定的 release runner 入口：只接受 self-hosted runner 提供的 `qemu_image` 与 `deepseek_key_file`，不在仓库脚本里下载 image 或写死 secret。
 2. workflow 会生成 testbed preflight 脚本，并通过 `DASALL_AUTOPKGTEST_SETUP_COMMANDS` 传给 `validate_gate_int_10_installed_package_qemu.sh`；默认 preflight 只做 provider reachability 探测，不在日志中记录 secret 值。
-3. `validate_gate_int_10_installed_package_qemu.sh` 现已正式支持以下 release-runner 环境变量：`DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`。
-4. workflow 会归档 `gate-int-10-qemu.log`、`lintian.log` 与命令元数据；`FULLINT-TODO-019` / `LLM-FIX-004` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。
+3. `validate_gate_int_10_installed_package_qemu.sh` 现已正式支持以下 release-runner 环境变量：`DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`、`DASALL_AUTOPKGTEST_OUTPUT_DIR`。
+4. workflow 当前会归档 `gate-int-10-qemu.log`、结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据；`FULLINT-TODO-019` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。
 
 ## 5. 已落盘文件
 
