@@ -6,9 +6,11 @@
 #include <optional>
 
 #include "IContextOrchestrator.h"
+#include "vector/IEmbeddingAdapter.h"
 #include "IMemoryManager.h"
 #include "IMemoryStore.h"
 #include "maintenance/MemoryMaintenanceWorker.h"
+#include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "writeback/WritebackCoordinator.h"
 
@@ -18,6 +20,8 @@ struct MemoryManagerDependencies {
   std::unique_ptr<IContextOrchestrator> context_orchestrator;
   std::unique_ptr<IMemoryStore> store;
   std::unique_ptr<IWorkingMemoryBoard> working_memory_board;
+  std::unique_ptr<IEmbeddingAdapter> embedding_adapter;
+  std::unique_ptr<VectorMemoryIndexAdapter> vector_index;
   std::shared_ptr<std::mutex> store_writer_mutex;
   std::unique_ptr<WritebackCoordinator> writeback_coordinator;
   std::unique_ptr<MemoryMaintenanceWorker> maintenance_worker;

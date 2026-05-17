@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #678
+
+- 日期：2026-05-17
+- 阶段：memory/子系统查漏补缺
+- 任务：推进 MEM-FIX-001 sqlite-vss production 接线与证据收口
+- 状态：已执行（source-tree / local-staging 证据通过；installed package qemu gate 仍待独立 testbed）
+
+### 执行前提
+
+1. 当前主机为 Linux x86_64；`sudo -n apt-get install -y libblas3 liblapack3` 已补齐 `vss0.so` 所需 BLAS / LAPACK 运行时依赖。
+2. 本轮开始前，`RuntimeLiveDependencyComposition` 已改为从 build profile + runtime policy 投影 `MemoryConfig`，不再手写 `vector.enabled=false`；SQLite 构建也已切换到 `SQLITE_ENABLE_LOAD_EXTENSION=1`。
+3. 本轮唯一未闭合的局部问题收敛为 `SqliteVssVectorBackendTest` 的 real-extension positive path：真实扩展可加载，但 search 没有回到预期 `doc_id`。
+
+### Artifact 根路径
+
+1. 本轮 staging install 证据目录：/tmp/dasall-mem-fix-001-stage
+
+### 执行与结果
+
+1. 收口了 sqlite-vss 的 production code path，而不再停留在 internal seam。
+   - `MemoryManagerFactory` 现会持有 `SimpleLocalEmbeddingAdapter` 与 vector backend 生命周期；当 SQLite writer 连接与 sqlite-vss 资产同时可用时，优先创建 `SqliteVssVectorBackend`，否则 fail-closed 到 unavailable / none。
+   - `RuntimeLiveDependencyComposition` 现按 `BuildProfileManifest` + `RuntimePolicySnapshot` 投影 memory vector 配置，并用 `InstallLayout.runtime_library_root` 派生 sqlite-vss 资产路径；若资产缺失，会显式回写 `memory-vector-fail-closed:sqlite-vss-assets-missing` external evidence。
+   - `memory/CMakeLists.txt`、Debian packaging 与 package smoke 已补齐 sqlite-vss 资产下载 / 安装 / 依赖检查；`V002__vector_sidecar.sql` 负责 `memory_vector_documents` sidecar schema。
+2. 修正了 real-extension positive path 的 search 语义。
+   - `SqliteVssVectorBackend` 的 search 从“直接 join sidecar + `vss_search()`”调整为“先从 `memory_vector_index` 取 `rowid,distance`，再回查 `memory_vector_documents`”，与 sqlite-vss README 的推荐查询形式一致。
+   - 修正后，`SqliteVssVectorBackendTest` 中的 real-extension positive case 已能返回先前写入的 `doc_id`，不再出现“load 成功但 search 无 hit”的假阴性。
+3. local-staging 安装证据已补齐。
+   - `cmake --install build-ci --prefix /tmp/dasall-mem-fix-001-stage` 真实产出了 `/tmp/dasall-mem-fix-001-stage/lib/dasall/sqlite-vss/vector0.so`、`/tmp/dasall-mem-fix-001-stage/lib/dasall/sqlite-vss/vss0.so` 与 `/tmp/dasall-mem-fix-001-stage/share/dasall/sql/memory/V002__vector_sidecar.sql`。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_memory_sqlite_vss_vector_backend_unit_test -- -j4 && ctest --test-dir build-ci --output-on-failure -R '^SqliteVssVectorBackendTest$'`
+   - 结果：通过；real-extension positive / missing 与 fake-driver 路径均通过。
+2. `cmake --build build-ci --target dasall_memory_simple_local_embedding_adapter_unit_test --target dasall_vector_memory_adapter_unit_test --target dasall_memory_sqlite_vss_vector_backend_unit_test --target dasall_memory_schema_migration_unit_test --target dasall_memory_writeback_integration_test --target dasall_memory_profile_compatibility_integration_test --target dasall_access_gateway_runtime_live_dependency_composition_integration_test --target dasall_access_runtime_production_health_composition_integration_test -- -j4 && ctest --test-dir build-ci --output-on-failure -R '^(SimpleLocalEmbeddingAdapterTest|VectorMemoryAdapterTest|SqliteVssVectorBackendTest|SchemaMigrationTest|MemoryWritebackIntegrationTest|MemoryProfileCompatibilityTest|GatewayRuntimeLiveDependencyCompositionTest|RuntimeProductionHealthCompositionTest)$'`
+   - 结果：8 条聚焦测试全部通过。
+3. `cmake --install build-ci --prefix /tmp/dasall-mem-fix-001-stage`
+   - 结果：通过；sqlite-vss 资产与 `V002__vector_sidecar.sql` 均已安装到预期 staging 路径。
+
+### 结果
+
+1. `sqlite-vss` 已经从“只有 focused internal seam”提升为“source-tree / local-staging production 接线闭合”：真实 loadable extensions、factory lifecycle、runtime profile owner、packaging asset、migration 与 fail-closed 语义现已一致。
+2. `MEM-FIX-001` 还不能标记为 Done，因为 installed package qemu authoritative gate 尚未在当前会话中真实执行；当前最准确的状态是“代码与 local/staging 证据闭合，release / qemu 证据待补”。
+3. 后续若继续推进，应直接执行 `validate_gate_int_10_installed_package_qemu.sh` 并把 sqlite-vss asset、migration、profile fail-closed 与 real search hit 的 guest-side artifact 回写到 SSOT / worklog，而不是回头重做 source-tree 改动。
+
 ## 记录 #677
 
 - 日期：2026-05-17

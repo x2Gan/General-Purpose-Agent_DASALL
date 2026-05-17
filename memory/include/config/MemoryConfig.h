@@ -97,6 +97,8 @@ struct VectorConfig {
   bool enabled = false;
   VectorBackend backend_type = VectorBackend::SqliteVss;
   int search_top_k = 5;
+  std::string sqlite_vss_vector0_path;
+  std::string sqlite_vss_vss0_path;
 };
 
 struct MaintenanceConfig {

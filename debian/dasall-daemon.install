@@ -1,3 +1,4 @@
 usr/sbin/dasall-daemon
+usr/lib/dasall/sqlite-vss/
 debian/package-assets/dasall-daemon/etc/default/dasall-daemon etc/default/
 debian/package-assets/dasall-daemon/etc/dasall/daemon.json etc/dasall/

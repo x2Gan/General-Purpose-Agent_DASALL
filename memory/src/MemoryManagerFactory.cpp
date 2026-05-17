@@ -12,6 +12,9 @@
 #include "context/ContextOrchestrator.h"
 #include "maintenance/MemoryMaintenanceWorker.h"
 #include "store/sqlite/SqliteMemoryStore.h"
+#include "vector/SimpleLocalEmbeddingAdapter.h"
+#include "vector/SqliteVssVectorBackend.h"
+#include "vector/UnavailableVectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "writeback/CompressionCoordinator.h"
 #include "writeback/WritebackCoordinator.h"
@@ -70,6 +73,46 @@ class BootstrapContextOrchestrator final : public IContextOrchestrator {
   }
 };
 
+[[nodiscard]] std::unique_ptr<IEmbeddingAdapter> create_embedding_adapter(
+    const MemoryConfig& config) {
+  if (!config.vector.enabled ||
+      config.vector.backend_type == VectorBackend::None) {
+    return nullptr;
+  }
+
+  return std::make_unique<SimpleLocalEmbeddingAdapter>();
+}
+
+[[nodiscard]] sqlite3* resolve_sqlite_writer_connection(IMemoryStore& store) {
+  auto* sqlite_store =
+      dynamic_cast<store::sqlite::SqliteMemoryStore*>(&store);
+  if (sqlite_store == nullptr) {
+    return nullptr;
+  }
+
+  return sqlite_store->writer_connection_for_maintenance();
+}
+
+[[nodiscard]] std::unique_ptr<VectorMemoryIndexAdapter> create_vector_index(
+    const MemoryConfig& config,
+    IMemoryStore& store,
+    IEmbeddingAdapter* embedding_adapter) {
+  if (!config.vector.enabled ||
+      config.vector.backend_type == VectorBackend::None) {
+    return nullptr;
+  }
+
+  if (config.vector.backend_type == VectorBackend::SqliteVss) {
+    if (sqlite3* db = resolve_sqlite_writer_connection(store); db != nullptr) {
+      return std::make_unique<SqliteVssVectorBackend>(
+          config.vector, db, embedding_adapter);
+    }
+  }
+
+  return std::make_unique<UnavailableVectorMemoryIndexAdapter>(
+      config.vector, embedding_adapter);
+}
+
 }  // namespace
 
 std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config) {
@@ -80,10 +123,14 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
   }
 
   if (dependencies.store && dependencies.working_memory_board) {
+    dependencies.embedding_adapter = create_embedding_adapter(config);
+    dependencies.vector_index = create_vector_index(
+        config, *dependencies.store, dependencies.embedding_adapter.get());
     dependencies.store_writer_mutex = std::make_shared<std::mutex>();
     auto collector = std::make_unique<CandidateCollector>(
         *dependencies.working_memory_board, *dependencies.store, *dependencies.store,
-        *dependencies.store, *dependencies.store, config);
+        *dependencies.store, *dependencies.store, config,
+        dependencies.vector_index.get());
     auto allocator = std::make_unique<BudgetAllocator>(config);
     auto compressor = std::make_unique<CompressionCoordinator>(*dependencies.store);
     auto conflict_resolver =
@@ -93,10 +140,11 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, *dependencies.store, *dependencies.store,
       *dependencies.store, *dependencies.store, std::move(conflict_resolver),
-      *dependencies.working_memory_board, nullptr,
+      *dependencies.working_memory_board, dependencies.vector_index.get(),
       dependencies.store_writer_mutex);
     dependencies.maintenance_worker = std::make_unique<MemoryMaintenanceWorker>(
-        *dependencies.store, config, nullptr, dependencies.store_writer_mutex);
+        *dependencies.store, config, dependencies.vector_index.get(),
+        dependencies.store_writer_mutex);
   } else {
     dependencies.context_orchestrator = std::make_unique<BootstrapContextOrchestrator>();
   }

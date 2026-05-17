@@ -14,6 +14,10 @@ add_executable(dasall_memory_sqlite_vss_vector_backend_unit_test
 	SqliteVssVectorBackendTest.cpp
 )
 
+add_executable(dasall_memory_simple_local_embedding_adapter_unit_test
+	SimpleLocalEmbeddingAdapterTest.cpp
+)
+
 add_executable(dasall_memory_manager_lifecycle_unit_test
 	MemoryManagerLifecycleTest.cpp
 )
@@ -132,6 +136,12 @@ target_link_libraries(dasall_memory_sqlite_vss_vector_backend_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_sqlite3
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_simple_local_embedding_adapter_unit_test
+	PRIVATE
+		dasall_memory
 		dasall_test_support
 )
 
@@ -300,6 +310,16 @@ target_include_directories(dasall_memory_sqlite_vss_vector_backend_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_compile_definitions(dasall_memory_sqlite_vss_vector_backend_unit_test
+	PRIVATE
+		DASALL_REPO_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_include_directories(dasall_memory_simple_local_embedding_adapter_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_sqlite_transaction_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -440,6 +460,7 @@ dasall_apply_common_options(dasall_memory_interface_compile_unit_test)
 dasall_apply_common_options(dasall_memory_evidence_projection_compile_unit_test)
 dasall_apply_common_options(dasall_vector_memory_adapter_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_vss_vector_backend_unit_test)
+dasall_apply_common_options(dasall_memory_simple_local_embedding_adapter_unit_test)
 dasall_apply_common_options(dasall_memory_manager_lifecycle_unit_test)
 dasall_apply_common_options(dasall_memory_manager_smoke_unit_test)
 dasall_apply_common_options(dasall_memory_working_memory_board_unit_test)
@@ -476,6 +497,9 @@ set_tests_properties(VectorMemoryAdapterTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME SqliteVssVectorBackendTest COMMAND dasall_memory_sqlite_vss_vector_backend_unit_test)
 set_tests_properties(SqliteVssVectorBackendTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME SimpleLocalEmbeddingAdapterTest COMMAND dasall_memory_simple_local_embedding_adapter_unit_test)
+set_tests_properties(SimpleLocalEmbeddingAdapterTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME MemoryManagerLifecycleTest COMMAND dasall_memory_manager_lifecycle_unit_test)
 set_tests_properties(MemoryManagerLifecycleTest PROPERTIES LABELS "unit;memory")
@@ -554,6 +578,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_evidence_projection_compile_unit_test
 	dasall_vector_memory_adapter_unit_test
 	dasall_memory_sqlite_vss_vector_backend_unit_test
+	dasall_memory_simple_local_embedding_adapter_unit_test
 	dasall_memory_manager_lifecycle_unit_test
 	dasall_memory_manager_smoke_unit_test
 	dasall_memory_working_memory_board_unit_test

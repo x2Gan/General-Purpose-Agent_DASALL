@@ -219,6 +219,8 @@ verify_installed_files() {
   run_root test -f /usr/share/doc/dasall-daemon/README.Debian
   run_root test -f /etc/default/dasall-daemon
   run_root test -f /etc/dasall/daemon.json
+  run_root test -f /usr/lib/dasall/sqlite-vss/vector0.so
+  run_root test -f /usr/lib/dasall/sqlite-vss/vss0.so
 }
 
 verify_validate_only() {
@@ -256,6 +258,8 @@ verify_explicit_start() {
   [ "$JOURNAL_MODE" = "wal" ] || fail "memory sqlite journal mode should be wal, got ${JOURNAL_MODE}"
   MEMORY_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('sessions','turns','summaries','facts','experiences');")
   [ "$MEMORY_TABLE_COUNT" -eq 5 ] || fail "memory sqlite schema should expose five core tables, got ${MEMORY_TABLE_COUNT}"
+  MEMORY_VECTOR_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'memory_vector_documents';")
+  [ "$MEMORY_VECTOR_TABLE_COUNT" -eq 1 ] || fail "memory sqlite schema should expose the vector sidecar table, got ${MEMORY_VECTOR_TABLE_COUNT}"
   MEMORY_TURN_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM turns WHERE user_input LIKE '%package smoke%' AND agent_response LIKE 'llm.origin=deepseek-prod/%';")
   assert_positive_integer "$MEMORY_TURN_COUNT" 'memory sqlite llm turn writeback'
   MEMORY_SUMMARY_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM summaries WHERE summary_text LIKE 'llm.origin=deepseek-prod/%';")

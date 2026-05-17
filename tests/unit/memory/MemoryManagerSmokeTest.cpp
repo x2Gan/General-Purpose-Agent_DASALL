@@ -89,6 +89,8 @@ void test_memory_manager_smoke_surface_covers_sqlite_writeback_export_and_mainte
   config.storage.backend = dasall::memory::StorageBackend::Sqlite;
   config.storage.db_path = database_path.string();
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
+  config.vector.enabled = true;
+  config.vector.backend_type = dasall::memory::VectorBackend::SqliteVss;
 
   auto manager = dasall::memory::create_memory_manager(config);
   assert_equal(0, static_cast<int>(manager->init(config)),
@@ -128,6 +130,18 @@ void test_memory_manager_smoke_surface_covers_sqlite_writeback_export_and_mainte
   assert_true(std::find(export_result.warnings.begin(), export_result.warnings.end(),
                         "session_not_found") == export_result.warnings.end(),
               "working-memory export should no longer surface a missing-session warning once writeback has updated the board");
+
+    const auto context_result = manager->prepare_context(
+      dasall::memory::MemoryContextRequest{
+        .request_id = "req-026-smoke-vector",
+        .session_id = "session-026-smoke",
+        .stage = "reasoning",
+        .goal_summary = "验证 vector fail-closed 不阻塞主链",
+        .token_budget_hint = 128,
+      });
+    assert_true(std::find(context_result.warnings.begin(), context_result.warnings.end(),
+              "vector_unavailable") != context_result.warnings.end(),
+          "vector-enabled smoke path should fail closed with vector_unavailable when sqlite-vss is not yet available");
 
   dasall::memory::MaintenanceRequest request;
   request.run_checkpoint = false;

@@ -21,12 +21,15 @@
 #include "RuntimeDependencySet.h"
 #include "ServiceLiveComposition.h"
 #include "ToolManager.h"
+#include "BuildProfileResolver.h"
 #include "health/IHealthMonitor.h"
 #include "ops/ToolAuditBridge.h"
 #include "ops/ToolHealthProbe.h"
 #include "ops/ToolMetricsBridge.h"
 #include "ops/ToolTraceBridge.h"
+#include "ProfileCatalog.h"
 #include "tool/ToolDescriptor.h"
+#include "config/MemoryConfigProjector.h"
 #include "config/InstallLayout.h"
 #include "execution/BuiltinExecutorLane.h"
 #include "bridge/ToolServiceBridge.h"
@@ -264,15 +267,75 @@ class RuntimeToolHealthSignalProvider final
   return {};
 }
 
-[[nodiscard]] memory::MemoryConfig make_sqlite_memory_config(
+[[nodiscard]] std::optional<profiles::BuildProfileManifest> resolve_build_manifest(
+    const fs::path& profiles_root,
+    const profiles::RuntimePolicySnapshot& policy_snapshot,
+    std::string& error) {
+  const profiles::ProfileCatalog catalog(profiles_root);
+  const profiles::BuildProfileResolver resolver(catalog);
+  const auto manifest_result = resolver.resolve_build_manifest(
+      profiles::BuildProfileResolveRequest{
+          .profile_id = policy_snapshot.effective_profile_id(),
+      });
+  if (!manifest_result.ok()) {
+    error = std::string("build manifest unavailable for profile ") +
+            policy_snapshot.effective_profile_id();
+    return std::nullopt;
+  }
+
+  return manifest_result.manifest;
+}
+
+[[nodiscard]] std::optional<memory::MemoryConfig> make_sqlite_memory_config(
+    const profiles::RuntimePolicySnapshot& policy_snapshot,
+    const fs::path& profiles_root,
+  const fs::path& runtime_library_root,
     const fs::path& readonly_assets_root,
-    const fs::path& state_root) {
-  memory::MemoryConfig memory_config;
-  memory_config.storage.backend = memory::StorageBackend::Sqlite;
-  memory_config.storage.db_path = (state_root / "memory" / "memory.db").string();
-  memory_config.storage.migrations_dir =
+    const fs::path& state_root,
+  std::string& error,
+  bool& vector_fail_closed) {
+  const auto build_manifest =
+      resolve_build_manifest(profiles_root, policy_snapshot, error);
+  if (!build_manifest.has_value()) {
+    return std::nullopt;
+  }
+
+  auto memory_config =
+      memory::config::project_memory_config(policy_snapshot, *build_manifest);
+  if (!memory_config.has_value()) {
+    error = std::string("memory config projection failed for profile ") +
+            policy_snapshot.effective_profile_id();
+    return std::nullopt;
+  }
+
+  memory_config->storage.db_path = (state_root / "memory" / "memory.db").string();
+  memory_config->storage.migrations_dir =
       (readonly_assets_root / "sql" / "memory").string();
-  memory_config.vector.enabled = false;
+
+#if defined(__APPLE__)
+  constexpr const char* kSqliteExtensionSuffix = ".dylib";
+#else
+  constexpr const char* kSqliteExtensionSuffix = ".so";
+#endif
+
+  memory_config->vector.sqlite_vss_vector0_path =
+      (runtime_library_root / "sqlite-vss" /
+       (std::string("vector0") + kSqliteExtensionSuffix))
+          .string();
+  memory_config->vector.sqlite_vss_vss0_path =
+      (runtime_library_root / "sqlite-vss" /
+       (std::string("vss0") + kSqliteExtensionSuffix))
+          .string();
+
+  if (memory_config->vector.enabled &&
+      (!fs::exists(memory_config->vector.sqlite_vss_vector0_path) ||
+       !fs::exists(memory_config->vector.sqlite_vss_vss0_path))) {
+    memory_config->vector.enabled = false;
+    memory_config->vector.backend_type = memory::VectorBackend::None;
+    memory_config->vector.search_top_k = 0;
+    vector_fail_closed = true;
+  }
+
   return memory_config;
 }
 
@@ -420,6 +483,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   const auto install_layout = infra::config::resolve_install_layout();
   const fs::path readonly_assets_root = selected_root(
       install_layout.readonly_assets_root, options.readonly_assets_root_override);
+    const fs::path runtime_library_root = selected_root(
+      install_layout.runtime_library_root, options.runtime_library_root_override);
   const fs::path state_root = selected_root(
       install_layout.state_root, options.state_root_override);
   if (const auto state_error = create_memory_state_dir(state_root, composition_owner);
@@ -429,17 +494,29 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
 
   auto dependency_set = std::make_shared<runtime::RuntimeDependencySet>();
 
-  memory::MemoryConfig memory_config = make_sqlite_memory_config(
-      readonly_assets_root, state_root);
+  std::string memory_config_error;
+  bool memory_vector_fail_closed = false;
+  auto memory_config = make_sqlite_memory_config(
+      *policy_snapshot,
+      install_layout.profiles_root,
+      runtime_library_root,
+      readonly_assets_root,
+      state_root,
+      memory_config_error,
+      memory_vector_fail_closed);
+  if (!memory_config.has_value()) {
+    return make_error(std::string("memory config composition failed for ") +
+              std::string(composition_owner) + ": " + memory_config_error);
+  }
 
-  auto memory_manager =
-      std::shared_ptr<memory::IMemoryManager>(memory::create_memory_manager(memory_config));
+  auto memory_manager = std::shared_ptr<memory::IMemoryManager>(
+      memory::create_memory_manager(*memory_config));
   if (memory_manager == nullptr) {
     return make_error(std::string("memory manager factory returned null for ") +
                       std::string(composition_owner));
   }
 
-  const auto init_code = memory_manager->init(memory_config);
+  const auto init_code = memory_manager->init(*memory_config);
   if (static_cast<int>(init_code) != 0) {
     return make_error(std::string("memory manager init failed for ") +
                       std::string(composition_owner));
@@ -574,6 +651,11 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       (policy_snapshot->multi_agent_enabled() ? ":multi-agent-enabled"
                                               : ":multi-agent-disabled"),
   };
+  if (memory_vector_fail_closed) {
+    dependency_set->external_evidence.push_back(
+        std::string("runtime:") + std::string(composition_owner) +
+        ":memory-vector-fail-closed:sqlite-vss-assets-missing");
+  }
 
   const auto knowledge_result = knowledge::create_installed_asset_knowledge_service(
       knowledge::InstalledAssetKnowledgeServiceOptions{

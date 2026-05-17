@@ -29,6 +29,11 @@ namespace fs = std::filesystem;
 }
 
 [[nodiscard]] InstallLayout apply_env_overrides(InstallLayout layout) {
+  if (const auto runtime_library_root = absolute_path_from_env("DASALL_RUNTIME_LIBRARY_ROOT");
+      runtime_library_root.has_value()) {
+    layout.runtime_library_root = *runtime_library_root;
+  }
+
   if (const auto state_root = absolute_path_from_env("DASALL_STATE_ROOT");
       state_root.has_value()) {
     layout.state_root = *state_root;
@@ -53,6 +58,7 @@ namespace fs = std::filesystem;
   layout.profiles_root = profiles_root;
   layout.llm_prompts_root = prompts_root;
   layout.llm_providers_root = providers_root;
+  layout.runtime_library_root = source_root / ".runtime-lib";
   return layout;
 #else
   return std::nullopt;
@@ -70,6 +76,7 @@ namespace fs = std::filesystem;
 bool InstallLayout::has_consistent_values() const {
   return readonly_assets_root.is_absolute() && profiles_root.is_absolute() &&
          llm_prompts_root.is_absolute() && llm_providers_root.is_absolute() &&
+         runtime_library_root.is_absolute() &&
          daemon_config_path.is_absolute() && daemon_socket_path.is_absolute() &&
          state_root.is_absolute();
 }
@@ -80,6 +87,7 @@ InstallLayout packaged_install_layout() {
       .profiles_root = "/usr/share/dasall/profiles",
       .llm_prompts_root = "/usr/share/dasall/llm/prompts",
       .llm_providers_root = "/usr/share/dasall/llm/providers",
+      .runtime_library_root = "/usr/lib/dasall",
       .daemon_config_path = "/etc/dasall/daemon.json",
       .daemon_socket_path = "/run/dasall/daemon.sock",
       .state_root = "/var/lib/dasall",

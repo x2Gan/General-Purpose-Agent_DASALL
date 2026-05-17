@@ -2,6 +2,67 @@ enable_language(C)
 
 find_package(Threads REQUIRED)
 
+option(DASALL_PACKAGE_SQLITE_VSS "Install sqlite-vss loadable extension assets when supported" ON)
+
+if(DASALL_PACKAGE_SQLITE_VSS)
+  set(DASALL_SQLITE_VSS_VERSION "0.1.2")
+  set(DASALL_SQLITE_VSS_INSTALL_DIR "lib/dasall/sqlite-vss")
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+    set(DASALL_SQLITE_VSS_CACHE_DIR
+      "${DASALL_THIRD_PARTY_CACHE_DIR}/sqlite-vss/v${DASALL_SQLITE_VSS_VERSION}/linux-x86_64"
+    )
+    set(DASALL_SQLITE_VSS_VECTOR0_ASSET
+      "${DASALL_SQLITE_VSS_CACHE_DIR}/vector0.so"
+    )
+    set(DASALL_SQLITE_VSS_VSS0_ASSET
+      "${DASALL_SQLITE_VSS_CACHE_DIR}/vss0.so"
+    )
+
+    file(MAKE_DIRECTORY "${DASALL_SQLITE_VSS_CACHE_DIR}")
+
+    if(NOT EXISTS "${DASALL_SQLITE_VSS_VECTOR0_ASSET}")
+      file(DOWNLOAD
+        "https://github.com/asg017/sqlite-vss/releases/download/v${DASALL_SQLITE_VSS_VERSION}/sqlite-vss-v${DASALL_SQLITE_VSS_VERSION}-deno-linux-x86_64.vector0.so"
+        "${DASALL_SQLITE_VSS_VECTOR0_ASSET}"
+        STATUS DASALL_SQLITE_VSS_VECTOR0_STATUS
+        SHOW_PROGRESS
+      )
+      list(GET DASALL_SQLITE_VSS_VECTOR0_STATUS 0 DASALL_SQLITE_VSS_VECTOR0_STATUS_CODE)
+      if(NOT DASALL_SQLITE_VSS_VECTOR0_STATUS_CODE EQUAL 0)
+        list(GET DASALL_SQLITE_VSS_VECTOR0_STATUS 1 DASALL_SQLITE_VSS_VECTOR0_STATUS_TEXT)
+        message(FATAL_ERROR
+          "Failed to download sqlite-vss vector0 asset: ${DASALL_SQLITE_VSS_VECTOR0_STATUS_TEXT}"
+        )
+      endif()
+    endif()
+
+    if(NOT EXISTS "${DASALL_SQLITE_VSS_VSS0_ASSET}")
+      file(DOWNLOAD
+        "https://github.com/asg017/sqlite-vss/releases/download/v${DASALL_SQLITE_VSS_VERSION}/sqlite-vss-v${DASALL_SQLITE_VSS_VERSION}-deno-linux-x86_64.vss0.so"
+        "${DASALL_SQLITE_VSS_VSS0_ASSET}"
+        STATUS DASALL_SQLITE_VSS_VSS0_STATUS
+        SHOW_PROGRESS
+      )
+      list(GET DASALL_SQLITE_VSS_VSS0_STATUS 0 DASALL_SQLITE_VSS_VSS0_STATUS_CODE)
+      if(NOT DASALL_SQLITE_VSS_VSS0_STATUS_CODE EQUAL 0)
+        list(GET DASALL_SQLITE_VSS_VSS0_STATUS 1 DASALL_SQLITE_VSS_VSS0_STATUS_TEXT)
+        message(FATAL_ERROR
+          "Failed to download sqlite-vss vss0 asset: ${DASALL_SQLITE_VSS_VSS0_STATUS_TEXT}"
+        )
+      endif()
+    endif()
+
+    install(FILES
+      "${DASALL_SQLITE_VSS_VECTOR0_ASSET}"
+      "${DASALL_SQLITE_VSS_VSS0_ASSET}"
+      DESTINATION "${DASALL_SQLITE_VSS_INSTALL_DIR}"
+    )
+  else()
+    message(STATUS "sqlite-vss package assets are unsupported on this platform; runtime will fail closed")
+  endif()
+endif()
+
 if(NOT TARGET dasall_sqlite3)
   set(DASALL_SQLITE_AUTOCONF_VERSION 3460100)
   set(DASALL_SQLITE_AMALGAMATION_WRAPPER
@@ -37,7 +98,7 @@ if(NOT TARGET dasall_sqlite3)
     PUBLIC
       SQLITE_THREADSAFE=1
       SQLITE_ENABLE_FTS5=1
-      SQLITE_OMIT_LOAD_EXTENSION=1
+      SQLITE_ENABLE_LOAD_EXTENSION=1
   )
 
   target_link_libraries(dasall_sqlite3
@@ -78,6 +139,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/working/WorkingMemoryBoard.cpp
   src/writeback/CompressionCoordinator.cpp
   src/writeback/WritebackCoordinator.cpp
+  src/vector/SimpleLocalEmbeddingAdapter.cpp
   src/vector/SqliteVssVectorBackend.cpp
   src/vector/UnavailableVectorMemoryIndexAdapter.cpp
 )

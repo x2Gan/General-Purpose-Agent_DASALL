@@ -30,6 +30,7 @@ struct RuntimeDependencyCompositionResult {
 
 struct RuntimeLiveDependencyCompositionOptions {
   std::filesystem::path readonly_assets_root_override;
+  std::filesystem::path runtime_library_root_override;
   std::filesystem::path state_root_override;
 };
 

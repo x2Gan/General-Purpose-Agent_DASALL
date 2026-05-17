@@ -9,6 +9,7 @@ struct InstallLayout {
   std::filesystem::path profiles_root;
   std::filesystem::path llm_prompts_root;
   std::filesystem::path llm_providers_root;
+  std::filesystem::path runtime_library_root;
   std::filesystem::path daemon_config_path;
   std::filesystem::path daemon_socket_path;
   std::filesystem::path state_root;

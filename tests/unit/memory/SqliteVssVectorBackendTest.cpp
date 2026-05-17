@@ -1,4 +1,5 @@
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -321,6 +322,75 @@ void test_sqlite_vss_vector_backend_propagates_rebuild_failure() {
               "sqlite-vss backend should initialize before invoking driver rebuild");
 }
 
+void test_sqlite_vss_vector_backend_fail_closes_when_extension_path_is_missing() {
+  using dasall::tests::support::assert_true;
+
+  auto db = open_in_memory_database();
+
+  dasall::memory::VectorConfig config;
+  config.enabled = true;
+  config.backend_type = dasall::memory::VectorBackend::SqliteVss;
+  config.sqlite_vss_vector0_path = "/tmp/dasall-missing-vector0.so";
+  config.sqlite_vss_vss0_path = "/tmp/dasall-missing-vss0.so";
+
+  CountingEmbeddingAdapter embedding_adapter;
+  dasall::memory::SqliteVssVectorBackend backend(config, db.get(), &embedding_adapter);
+
+  dasall::memory::VectorDocument document;
+  document.doc_id = "fact-035-missing-extension";
+  document.doc_type = "fact";
+  document.text = "extension path should fail closed";
+
+  const auto result = backend.upsert(document);
+
+  assert_true(!result.ok,
+              "sqlite-vss backend should reject upsert when configured extension paths are missing");
+  assert_true(result.result_code.has_value() &&
+                  *result.result_code == dasall::contracts::ResultCode::RuntimeRetryExhausted,
+              "missing sqlite-vss extension paths should surface as storage unavailable runtime failures");
+  assert_true(!backend.is_available(),
+              "sqlite-vss backend should mark itself unavailable after extension loading fails");
+}
+
+void test_sqlite_vss_vector_backend_loads_real_extensions_when_assets_are_available() {
+  using dasall::tests::support::assert_true;
+
+  auto db = open_in_memory_database();
+
+  const auto asset_root = std::filesystem::path(DASALL_REPO_ROOT) /
+                          "third_party/.cache/sqlite-vss/v0.1.2/linux-x86_64";
+  const auto vector0_path = asset_root / "vector0.so";
+  const auto vss0_path = asset_root / "vss0.so";
+  if (!std::filesystem::exists(vector0_path) || !std::filesystem::exists(vss0_path)) {
+    throw std::runtime_error("sqlite-vss cached assets are missing for the positive-path test");
+  }
+
+  dasall::memory::VectorConfig config;
+  config.enabled = true;
+  config.backend_type = dasall::memory::VectorBackend::SqliteVss;
+  config.sqlite_vss_vector0_path = vector0_path.string();
+  config.sqlite_vss_vss0_path = vss0_path.string();
+
+  CountingEmbeddingAdapter embedding_adapter;
+  dasall::memory::SqliteVssVectorBackend backend(config, db.get(), &embedding_adapter);
+
+  dasall::memory::VectorDocument document;
+  document.doc_id = "fact-035-real-extension";
+  document.doc_type = "fact";
+  document.text = "remember sqlite vss real extension path";
+
+  const auto upsert_result = backend.upsert(document);
+  const auto hits = backend.search("remember sqlite vss real extension path", 3);
+  const auto health = backend.health();
+
+  assert_true(upsert_result.ok,
+              "sqlite-vss backend should persist vector documents when real extension assets are available");
+  assert_true(!hits.empty() && hits.front().doc_id == document.doc_id,
+              "sqlite-vss backend should return the stored document on the real extension positive path");
+  assert_true(health.available && health.indexed_doc_count >= 1,
+              "sqlite-vss backend health should report an available indexed state on the real extension path");
+}
+
 }  // namespace
 
 int main() {
@@ -329,6 +399,8 @@ int main() {
     test_sqlite_vss_vector_backend_returns_empty_hits_when_query_embedding_is_unavailable();
     test_sqlite_vss_vector_backend_propagates_upsert_failure();
     test_sqlite_vss_vector_backend_propagates_rebuild_failure();
+    test_sqlite_vss_vector_backend_fail_closes_when_extension_path_is_missing();
+    test_sqlite_vss_vector_backend_loads_real_extensions_when_assets_are_available();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

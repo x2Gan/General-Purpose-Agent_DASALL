@@ -59,7 +59,7 @@ class SqliteVssVectorBackend final : public VectorMemoryIndexAdapter {
   [[nodiscard]] bool accept_embedding_dimension(std::size_t embedding_dimension);
   void mark_unavailable();
   void refresh_indexed_doc_count();
-  [[nodiscard]] static std::int64_t current_time_millis();
+    [[nodiscard]] static std::int64_t current_time_millis();
 
   VectorConfig config_{};
   sqlite3* db_ = nullptr;

@@ -10,3 +10,5 @@ test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
 test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml
 test -f /usr/share/dasall/llm/providers/catalog.yaml
 test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
+test -f /usr/lib/dasall/sqlite-vss/vector0.so
+test -f /usr/lib/dasall/sqlite-vss/vss0.so
