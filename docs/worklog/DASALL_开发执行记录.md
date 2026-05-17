@@ -1,5 +1,67 @@
 # DASALL 开发执行记录
 
+## 记录 #677
+
+- 日期：2026-05-17
+- 阶段：llm/子系统查漏补缺
+- 任务：补 host/qemu 资产并续跑 LLM-FIX-007 live slices（SOAK-01 / 02 / 03 / 04 / 05）
+- 状态：已执行（SOAK-01 / SOAK-05 live artifact 已真实落地；qemu image 已成功产出；SOAK-02 / SOAK-04 被 Gate-INT-10 当前回退阻断；SOAK-03 因缺 second raw key 仅完成更精确的 live preflight）
+
+### 执行前提
+
+1. host installed secret 已确认存在：/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret；`sudo -n find /var/lib/dasall /etc/dasall -maxdepth 8 -type f \( -iname '*deepseek*' -o -iname '*.key' -o -iname '*.secret' \)` 的真实结果只命中这一条 installed secret，没有额外 raw `*.key` 或第二把 DeepSeek secret。
+2. `pkg_smoke_install.sh --explicit-start-check` 已真实执行并通过；artifact 为 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkg_smoke_install.log 与 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkg_smoke_install.exit（`0`）。
+3. qemu 资产已在本机真实补齐：/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-build-qemu.exit 为 `0`，并实际生成 /tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-noble-amd64.img（`file` 识别为 `QEMU QCOW Image (v3)`）。
+
+### Artifact 根路径
+
+1. 本轮统一 artifact 根目录：/tmp/dasall-llm-fix-007/1779012434-run
+2. host installed live 相关目录：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01 与 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live
+3. qemu image 与 qemu negative slice 相关目录：/tmp/dasall-llm-fix-007/1779012434-run/qemu、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04
+
+### 执行与结果
+
+1. host installed live 归一化已真实落地。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkg_smoke_install.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkg_smoke_install.exit、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/systemctl-enable-now.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/systemctl-active-after.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/ping.json、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/readiness.json、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/systemctl-journal.txt。
+   - 结果：`pkg_smoke_install.exit=0`；daemon 在脚本 cleanup 后一度变成不可用，/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/manual-probe.json 记录到 `daemon_unavailable` / `exit_code=3`；重新 `enable --now` 后，/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/systemctl-active-after.txt 为 `active`，/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/ping.json 与 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/readiness.json 分别记录 `READY` / `default-ready`。
+2. SOAK-01 provider jitter live 已真实执行，但当前安装态语义发生漂移。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/jitter/run-01.initial.json ~ /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/jitter/run-30.initial.json、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/jitter/sample-status.json、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/jitter-summary.txt、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/manual-probe-live.json、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkgsmoke-live.json。
+   - 结果：30 轮 initial JSON 都记录为 `accepted_async` 且 `receipt_ref=receipt-for-ticket-1`；样本 receipt 查询 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/jitter/sample-status.json 落到 `status_missing` / `access_error_domain=receipt` / `exit_code=5`；汇总 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/jitter-summary.txt 记录 `total_runs: 30`、`completed_with_llm_origin: 0`、`accepted_async_then_llm_origin: 0`、`task_not_completed_count: 30`。重新拉起 daemon 后的手工 root probe 与 package-smoke prompt 也都没有拿到 `llm.origin`：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/manual-probe-live.json 与 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkgsmoke-live.json 均为 `task_not_completed` / `exit_code=5`。
+3. SOAK-05 observability trend live 已真实执行，但当前安装态同样没有产出 `llm.origin`。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/pre.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/post.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/obs-01.initial.json ~ /tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/obs-10.initial.json、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/summary.txt。
+   - 结果：样本 initial JSON（例如 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/obs-01.initial.json）仍为 `accepted_async`；汇总 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-05/observability-live/summary.txt 记录 `total_runs: 10`、`completed_with_llm_origin: 0`、`accepted_async_then_llm_origin: 0`、`task_not_completed_count: 10`。因此本轮拿到了 `pre.log` / `post.log` / 连续 run JSON 的 trend artifact，但没有拿到正向 `llm.origin=deepseek-prod/` 结果。
+4. qemu image 已成功产出，原来的 mirror blocker 已解除。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-build-qemu.log、/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-build-qemu.exit、/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-noble-amd64.img。
+   - 结果：`autopkgtest-build-qemu.log` 记录 `mirror=http://archive.ubuntu.com/ubuntu` 的 Ubuntu 路径；/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-build-qemu.exit 为 `0`，/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-noble-amd64.img 已真实存在，可供后续 qemu slice 复用。
+5. SOAK-02 network loss live 已真实推进到“qemu 资产可用 + secret staging 可用”阶段，但被当前 Gate-INT-10 回退挡在 autopkgtest 之前。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/deepseek-prod.secret、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/network-loss-boot.sh、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/network-loss-gate.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/network-loss-gate.exit、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/build-ci-preflight.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/build-ci-preflight.exit。
+   - 结果：host side 已把 installed secret 临时复制为 owner-only staging 文件 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/deepseek-prod.secret，`network-loss-boot.sh` 也会在 guest 中预放 `/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret` 并把 `api.deepseek.com` 指向 `127.0.0.1`。但真实 gate 运行 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/network-loss-gate.log 没有进入 autopkgtest：默认 `build/vscode-linux-ninja` 路径下的 `dasall_gate_int_10` 在 `DaemonBinaryUnarySmokeTest` 失败，exit 为 `1`。为排除 build-dir 偶发差异，又额外执行了 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-02/build-ci-preflight.log；`build-ci-preflight.exit` 为 `2`，并同样记录 `DaemonBinaryUnarySmokeTest` 失败，错误正文为 `runtime live unary path requires cognition to select an executable action`。因此本轮 SOAK-02 的真实 blocker 已从“缺 key / image”切换为“当前仓库态 Gate-INT-10 preflight 回退”；对应 `network-loss-autopkgtest` output-dir 未生成，因为脚本在进入 autopkgtest 之前就退出。
+6. SOAK-03 secret rotate live 没有伪造执行；本轮只把 blocker 从“泛化 key missing”升级为“strict rotate 缺 second raw key”。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-03/live-preflight.txt。
+   - 结果：host 上已确认存在 installed secret blob，但 `/var/lib/dasall` / `/etc/dasall` 范围内没有额外 raw `*.key` 或第二把 DeepSeek secret；/tmp/dasall-llm-fix-007/1779012434-run/SOAK-03/live-preflight.txt 记录 `installed_secret_state=present`、`raw_key_paths=none_found`、`secondary_key_paths=none_found`。因此本轮没有生成 rotate apply JSON，也没有伪造“secondary rotate 已通过”的结论。
+7. SOAK-04 retry budget exhaustion live negative 已做专属实跑，但同样被 Gate-INT-10 当前回退挡住。
+   - 真实 artifact：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/deepseek-prod.secret、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/retry-exhaust-boot.sh、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/retry-exhaust-gate.log、/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/retry-exhaust-gate.exit。
+   - 结果：在 `DASALL_BUILD_DIR=build-ci`、qemu image 可用、staged secret 可用的前提下，retry-exhaust live gate 仍然停在 build-tree Gate-INT-10 preflight；/tmp/dasall-llm-fix-007/1779012434-run/SOAK-04/retry-exhaust-gate.log 明确记录 `DaemonBinaryUnarySmokeTest` 失败，`retry-exhaust-gate.exit=2`。因此本轮同样没有生成 `retry-exhaust-autopkgtest` output-dir，说明 qemu negative slice 尚未真正进入 guest-side retry exhaustion 验证。
+
+### 验证
+
+1. `sudo -n find /var/lib/dasall /etc/dasall -maxdepth 8 -type f \( -iname '*deepseek*' -o -iname '*.key' -o -iname '*.secret' \)`
+   - 结果：只命中 `/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret`；没有第二把 raw key。
+2. `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；对应 artifact 为 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/pkg_smoke_install.log 与 `/pkg_smoke_install.exit=0`。
+3. host daemon readiness
+   - 结果：/tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/ping.json 与 /tmp/dasall-llm-fix-007/1779012434-run/SOAK-01/readiness.json 均为 `exit_code=0`，其中 readiness 结果为 `state=READY`、`runtime_readiness=default-ready`。
+4. qemu image build
+   - 结果：/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-build-qemu.exit 为 `0`，/tmp/dasall-llm-fix-007/1779012434-run/qemu/autopkgtest-noble-amd64.img 真实存在且 `file` 识别为 qcow2。
+5. SOAK-02 / SOAK-04 qemu negative preflight
+   - 结果：两条 live gate 都没有进入 autopkgtest；阻塞点统一收敛为 Gate-INT-10 当前回退 `DaemonBinaryUnarySmokeTest`，而不再是缺 key / image。
+
+### 结果
+
+1. 本轮已经真实补齐 qemu image 资产，并把 external provider soak 的 live 证据向前推进了一层：SOAK-01 与 SOAK-05 拿到了新的 installed-host run JSON / journal snapshot / summary，SOAK-02 与 SOAK-04 则把 blocker 从环境缺件推进为可复现的 Gate-INT-10 回退。
+2. 当前安装态的真实行为不能再表述为“正向 external provider 已稳定返回 `llm.origin`”；新的证据应如实表述为：initial run 常落到 `accepted_async`，样本 receipt 查询为 `status_missing`，而 root / package-smoke prompt 的直接 run 又落到 `task_not_completed`。
+3. SOAK-03 目前仍不能声称做过“真正 secret rotate”：host 只有 installed secret blob，没有 second raw key。后续若要完成 strict rotate live slice，必须先提供第二把可审计的 owner-only raw key，再复用本轮 artifact 根目录结构续跑。
+
 ## 记录 #676
 
 - 日期：2026-05-17
