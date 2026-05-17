@@ -77,7 +77,7 @@ LLM 子系统不是：
 
 1. architecture compatible / module-local implementation ready：总体职责、Prompt 三段治理、路由原则、输出语义、provider family、production composition 与 focused tests 已闭合。
 2. shared admission not ready：`ResolvedModelRoute`、`PromptPolicyDecision`、`StreamHandle`/`StreamSessionRef` 仍未进入 shared contracts，不应把当前能力误写成跨模块 shared-ready。
-3. 当前 llm owner 剩余缺口已收敛为边界回归防线和文档/证据分层守护，而不是 placeholder 实现或测试拓扑缺失。
+3. 当前 llm owner 代码/文档侧缺口已不再是 placeholder 实现、边界回归防线或当前态回写；剩余开放项主要收敛为 current release candidate rerun、external provider 长稳态与 L6 soak 证据。
 
 ---
 
@@ -169,7 +169,7 @@ Must-Not：
 | llm mocks | 已升级为面向真实接口的测试支持层 | tests/mocks/include/MockLLMAdapter.h；相关 llm/cognition fixtures | mock 仍是测试支撑，不代表 production interface admission；但已不再只是字符串脚手架 |
 | profiles 运行策略供给 | 已存在 | profiles/include/RuntimePolicySnapshot.h | model_profile、prompt_policy、degrade_policy、timeout_policy 已可复用 |
 | installed / release evidence | 已分层收口 | BC-07 / BC-16；PKG-TODO-018；FULLINT-TODO-013 / 015；LLM-FIX-004 | llm 当前应表述为“历史 authoritative qemu L5 + 当前 local rerun L4 + fixed release-runner contract”；不得外推为 current rerun 已完成或 L6 soak ready |
-| 剩余开放项 | 已收敛 | LLM-FIX-005；FULLINT-TODO-019 | llm owner 当前剩余缺口是边界回归防线；release runner 当前候选版本复跑与 L6 soak 属后续证据任务 |
+| 剩余开放项 | 已收敛 | FULLINT-TODO-019；L6 soak / provider confidence evidence | `LLMBoundaryGuardComplianceTest` 已自动守住 llm/source boundary；release runner 当前候选版本复跑、external provider 长稳态与 L6 soak 属后续证据任务 |
 
 ### 3.2 现状-目标差距表
 
@@ -177,7 +177,7 @@ Must-Not：
 |---|---|---|---|---|
 | module-local llm 实现闭环 | 已完成 | 当前不再缺 Prompt 三段、ModelRouter、LLMManager、adapter、observability 或 focused tests | Closed | P0 |
 | shared supporting contracts 完整性 | 明确 No-Go | `ResolvedModelRoute`、`PromptPolicyDecision`、`StreamSessionRef` 仍缺真实跨模块消费者矩阵、迁移窗口与 contract tests | Medium | P1 |
-| llm/source boundary regression guard | 缺失自动化守护 | 仍缺 `LLMBoundaryGuardComplianceTest` 或等价脚本，无法自动防止 llm include/link memory、tools、apps、runtime 私有实现 | High | P0 |
+| llm/source boundary regression guard | 已完成 | `LLMBoundaryGuardComplianceTest` 已扫描 llm include/src、`llm/CMakeLists.txt` 与 `PromptPipeline` / `PromptComposer` retrieval tokens，自动防止 llm include/link memory、tools、apps、runtime 私有实现 | Closed | P0 |
 | current release candidate rerun | 待执行 | 历史 authoritative qemu L5 已存在，但当前 release candidate 仍需 FULLINT-TODO-019 在真实 runner 上复跑并归档 | Medium | P1 |
 | L6 soak / chaos / provider confidence | 未完成 | timeout/retry/fallback/route stability/observability 只证明 failure-handling basis，不等于长稳态或生产置信度 | Medium | P1 |
 
@@ -197,7 +197,7 @@ Must-Not：
 
 1. 把早期 placeholder / 无测试 / 无 loader 的表述固定为“历史 baseline”，不再与当前态混写。
 2. 继续以已冻结 contracts 为硬边界，维持 `ResolvedModelRoute`、`PromptPolicyDecision`、`StreamSessionRef` 的 shared admission No-Go。
-3. 把 llm 当前剩余 owner 收敛为 `LLM-FIX-005` 的边界回归防线，并对 release evidence 继续严格区分 historical L5、current rerun 与 L6 soak。
+3. 继续以 `LLMBoundaryGuardComplianceTest` 守住 llm/source boundary，并对 release evidence 继续严格区分 historical L5、current rerun 与 L6 soak。
 
 ---
 

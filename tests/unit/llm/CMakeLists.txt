@@ -154,6 +154,10 @@ add_executable(dasall_llm_audit_event_coverage_unit_test
 	LLMAuditEventCoverageTest.cpp
 )
 
+add_executable(dasall_llm_boundary_guard_compliance_unit_test
+	LLMBoundaryGuardComplianceTest.cpp
+)
+
 target_link_libraries(dasall_llm_interface_surface_unit_test
 	PRIVATE
 		dasall_test_support
@@ -392,6 +396,11 @@ target_link_libraries(dasall_llm_audit_event_coverage_unit_test
 		dasall_infra
 )
 
+target_link_libraries(dasall_llm_boundary_guard_compliance_unit_test
+	PRIVATE
+		dasall_test_support
+)
+
 target_compile_definitions(dasall_prompt_asset_package_parse_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
@@ -408,6 +417,11 @@ target_compile_definitions(dasall_provider_model_metadata_parse_unit_test
 )
 
 target_compile_definitions(dasall_llm_production_factory_unit_test
+	PRIVATE
+		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
+)
+
+target_compile_definitions(dasall_llm_boundary_guard_compliance_unit_test
 	PRIVATE
 		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
 )
@@ -451,6 +465,7 @@ dasall_apply_common_options(dasall_response_normalizer_reasoning_content_strip_u
 dasall_apply_common_options(dasall_response_normalizer_usage_unit_test)
 dasall_apply_common_options(dasall_llm_observability_field_completeness_unit_test)
 dasall_apply_common_options(dasall_llm_audit_event_coverage_unit_test)
+dasall_apply_common_options(dasall_llm_boundary_guard_compliance_unit_test)
 
 add_test(NAME LLMInterfaceSurfaceTest COMMAND dasall_llm_interface_surface_unit_test)
 set_tests_properties(LLMInterfaceSurfaceTest PROPERTIES LABELS "unit;llm")
@@ -568,3 +583,6 @@ set_tests_properties(LLMObservabilityFieldCompletenessTest PROPERTIES LABELS "un
 
 add_test(NAME LLMAuditEventCoverageTest COMMAND dasall_llm_audit_event_coverage_unit_test)
 set_tests_properties(LLMAuditEventCoverageTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME LLMBoundaryGuardComplianceTest COMMAND dasall_llm_boundary_guard_compliance_unit_test)
+set_tests_properties(LLMBoundaryGuardComplianceTest PROPERTIES LABELS "unit;llm")

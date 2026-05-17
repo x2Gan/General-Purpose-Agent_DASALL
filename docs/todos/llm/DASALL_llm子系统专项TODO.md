@@ -165,7 +165,7 @@
 | streaming 生命周期 | 6.4.2、7.2、10.1 | L0 | module-local lifecycle owner、cancel/overflow、observer、timeout 边界已冻结并落地实现 | shared handle admission 仍未冻结 | 保持 shared admission 后置，streaming 实现继续停留在 llm owner 内部 |
 | shared supporting object admission | 7.2、10.1、12.1 | L0 | 升格风险和迁移路径已有结论 | 消费者矩阵、contract tests、兼容窗口未齐 | 只列 Review Gate，继续 module-local |
 
-当前状态更新（2026-05-17 / LLM-FIX-006）：4.3 的“缺失证据”字段仍只用于解释专项 TODO 启动期为何按 001~042 排布，不代表当前实现缺口。本轮已把 [docs/architecture/DASALL_llm子系统详细设计.md](../../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md) 中 placeholder-only、空测试目录、无 loader / adapter / route 的旧表述显式降级为历史 baseline，并把当前态统一回写为“module-local implementation ready / shared admission No-Go / historical L5 与 current rerun 分层保留”。因此 llm owner 当前剩余开放项只剩 `LLM-FIX-005` 的边界回归防线；`LLM-FIX-006` 不新增生产代码，只负责消除详设与当前状态的时间点漂移。
+当前状态更新（2026-05-17 / LLM-FIX-005）：4.3 的“缺失证据”字段仍只用于解释专项 TODO 启动期为何按 001~042 排布，不代表当前实现缺口。本轮已新增 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 与对应 CMake 接线，自动扫描 llm source/include、[llm/CMakeLists.txt](../../../llm/CMakeLists.txt) 以及 `PromptPipeline` / `PromptComposer` 的 retrieval token，显式守住 ADR-006/007/008 的 source boundary。因此 llm owner 当前不再剩余 source boundary 自动化守护缺口；当前跨链剩余项继续保留为 historical L5 与 current rerun 分层、current release candidate rerun，以及 external provider 长稳态 / L6 soak 证据。
 
 ## 5. Design -> TODO 映射表
 
@@ -858,3 +858,12 @@ TemplateRenderer 安全规则、调用执行治理、Provider 注入闭环与 as
 4. 验证结果：`rg -n '当前只编译 src/placeholder.cpp|tests/unit/llm/CMakeLists.txt 仍为占位|tests/integration/llm 目录尚不存在|当前没有 LLMManager、ModelRouter、Prompt 三段或 adapter 实现' docs/architecture/DASALL_llm子系统详细设计.md; test $? -eq 1` 无命中；`rg -n 'LLM-FIX-006|历史 baseline|shared admission No-Go|历史 authoritative qemu L5|current rerun|边界回归防线' docs/architecture/DASALL_llm子系统详细设计.md docs/todos/llm/DASALL_llm子系统专项TODO.md docs/worklog/DASALL_开发执行记录.md docs/todos/DASALL_子系统查漏补缺专项记录.md` 命中详设 / TODO / worklog / 总账，说明当前态回写链已闭合。
 5. 设计结论：006 不改变 llm 当前技术结论，只修正“时间点漂移”。D1-D9 当前已按 module-local owner 口径闭合，D10 已在 llm owner 内部完成 streaming lifecycle 收口；shared `StreamHandle` / `ResolvedModelRoute` / `PromptPolicyDecision` 继续保持 No-Go for shared。BC-07 / BC-16 也继续严格表述为“历史 authoritative qemu L5 + 当前 local rerun + fixed release-runner contract”，不外推为 current rerun 完成或 L6 soak。
 6. 边界结论：006 实际完成的是“文档与当前状态对齐”，不替代 `LLM-FIX-005` 的 source boundary 自动化守护；后续若要继续推进 llm owner，仍应回到边界回归防线任务。
+
+### 17.26 LLM-FIX-005
+
+1. 状态：Done；005 已为 llm/source boundary 建立自动化回归防线，不再只靠 review 约定来阻止 `llm/` include / link memory、runtime、tools、apps 私有实现，也显式守住 `PromptPipeline` / `PromptComposer` 不承担 memory / knowledge retrieval。
+2. 设计交付：[docs/todos/llm/deliverables/LLM-FIX-005-llm-source-boundary-regression-guard.md](deliverables/LLM-FIX-005-llm-source-boundary-regression-guard.md)。
+3. 代码交付：[tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp)、[tests/unit/llm/CMakeLists.txt](../../../tests/unit/llm/CMakeLists.txt)、[docs/architecture/DASALL_llm子系统详细设计.md](../../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md) 与 [docs/worklog/DASALL_开发执行记录.md](../../worklog/DASALL_%E5%BC%80%E5%8F%91%E6%89%A7%E8%A1%8C%E8%AE%B0%E5%BD%95.md)。
+4. 验证结果：执行 `cmake -S . -B build-ci && cmake --build build-ci --target dasall_llm_boundary_guard_compliance_unit_test dasall_llm_interface_surface_unit_test dasall_contract_tests -j4 && ctest --test-dir build-ci --output-on-failure -R '(LLMBoundaryGuardCompliance|LLMInterfaceSurface|LLMRequestResponseContract)Test'`，结果为 `3/3 passed`；`LLMBoundaryGuardComplianceTest`、`LLMInterfaceSurfaceTest` 与 `LLMRequestResponseContractTest` 全部通过。
+5. 设计结论：005 采用 repo-text scan 而不是 runtime behavior 改造来守边界，原因是本轮目标不是改变 llm 行为，而是 fail-closed 地阻断 source/cmake 层的越界 include、link 与 prompt retrieval 职责漂移。该 guard 当前覆盖 llm source/include、`llm/CMakeLists.txt`，以及 `PromptPipeline` / `PromptComposer` 的关键 retrieval token。
+6. 边界结论：005 完成后，llm/source boundary 已有自动化守护；后续 llm 当前剩余开放项不再是 source boundary，而是 current release candidate rerun、external provider 长稳态与 L6 soak 证据。

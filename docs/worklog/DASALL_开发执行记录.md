@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+## 记录 #673
+
+- 日期：2026-05-17
+- 阶段：llm/子系统查漏补缺
+- 任务：LLM-FIX-005 建立 llm/source boundary 自动化回归防线
+- 状态：已完成
+
+### 改动
+
+1. 新增 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp)：以 repo-text scan 的方式同时守住三类边界回归风险：`llm/include` / `llm/src` 不得 include `memory/`、`runtime/`、`tools/`、`apps/` 私有实现；[llm/CMakeLists.txt](../llm/CMakeLists.txt) 不得把 `dasall_llm` 链接到 `dasall_memory` / `dasall_runtime` / `dasall_tools` / `dasall_apps` 或引入相应私有源码根；`PromptPipeline` / `PromptComposer` 不得出现 memory / knowledge retrieval 相关 token。
+2. 更新 [tests/unit/llm/CMakeLists.txt](../tests/unit/llm/CMakeLists.txt)：新增 `dasall_llm_boundary_guard_compliance_unit_test`、`LLMBoundaryGuardComplianceTest` 与 `DASALL_REPO_ROOT` 编译定义，使 build-ci 能把 boundary guard 作为 llm focused unit test 独立执行。
+3. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)、[docs/todos/llm/DASALL_llm子系统专项TODO.md](../todos/llm/DASALL_llm%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md) 与新增 deliverable [docs/todos/llm/deliverables/LLM-FIX-005-llm-source-boundary-regression-guard.md](../todos/llm/deliverables/LLM-FIX-005-llm-source-boundary-regression-guard.md)：把 `LLM-FIX-005` 标记为 Done，并把 llm 当前剩余开放项从“source boundary guard”收敛为 current release candidate rerun、external provider 长稳态与 L6 soak 证据。
+
+### 验证
+
+1. `cmake -S . -B build-ci && cmake --build build-ci --target dasall_llm_boundary_guard_compliance_unit_test dasall_llm_interface_surface_unit_test dasall_contract_tests -j4 && ctest --test-dir build-ci --output-on-failure -R '(LLMBoundaryGuardCompliance|LLMInterfaceSurface|LLMRequestResponseContract)Test'`
+   - 结果：通过；`LLMBoundaryGuardComplianceTest`、`LLMInterfaceSurfaceTest` 与 `LLMRequestResponseContractTest` 共 `3/3` 通过。首次构建前需要重配 `build-ci` 才能发现新 target，因此本轮把重配显式纳入验收命令。
+
+### 结果
+
+1. `LLM-FIX-005` 已完成：llm/source boundary 现在有自动化回归守护，不再只靠代码评审阻止跨子系统私有实现耦合回流。
+2. `PromptPipeline` / `PromptComposer` 的 owner 已被 focused guard 固化为“llm 内部选择、装配与治理”，不会静默扩张为 memory / knowledge retrieval owner。
+3. 本轮没有改变 llm 产品行为，也没有把任何 module-local supporting object 推进 shared contracts；完成后 llm 当前剩余开放项继续保留为 release-runner / qemu current rerun、external provider 长稳态与 L6 soak 证据。
+
+### 下一步
+
+1. 若继续推进 llm 当前开放项，转向 `FULLINT-TODO-019` 的 current release candidate rerun / artifact archive，以及后续 external provider 长稳态与 L6 soak 证据。
+
 ## 记录 #672
 
 - 日期：2026-05-17
