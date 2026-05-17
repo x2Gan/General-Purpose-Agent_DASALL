@@ -80,6 +80,15 @@
 3. `validate_gate_int_10_installed_package_qemu.sh` 现已正式支持以下 release-runner 环境变量：`DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`、`DASALL_AUTOPKGTEST_OUTPUT_DIR`。
 4. workflow 当前会归档 `gate-int-10-qemu.log`、结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据；`FULLINT-TODO-019` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。
 
+### 4.5 local host bootstrap
+
+1. 本仓库现提供一套面向开发机的一次性 qemu/KVM bootstrap 入口：`scripts/packaging/setup_local_qemu_gate_env.sh` 负责把已有 qemu image 与 host-side DeepSeek key/secret 固定到稳定本地路径，并生成 qemu gate 所需的 env/setup 脚本；`scripts/packaging/run_local_qemu_gate.sh` 负责消费这些稳定路径并执行正式串联 gate。
+2. 建议先安装本机依赖：`sudo apt-get install -y debhelper cmake ninja-build g++ pkgconf dpkg-dev lintian autopkgtest qemu-system-x86 python3 curl fakemachine vmdb2 zerofree`。
+3. 若当前用户尚未具备 `/dev/kvm` 写权限，可执行 `sudo usermod -aG kvm "$USER"` 后重新登录；`run_local_qemu_gate.sh` 也会在用户已加入 `kvm` 组、但当前会话尚未刷新时自动尝试 `sg kvm`，否则回退到 `--disable-kvm` 慢速路径。
+4. 一次性 setup 示例：`sh scripts/packaging/setup_local_qemu_gate_env.sh --image /path/to/autopkgtest.img`。若不显式传 `--deepseek-key-file`，脚本默认复用 `/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret`；若稳定目标文件已存在，则会直接复用，不会重复覆盖。
+5. setup 完成后的快速检查：`sh scripts/packaging/run_local_qemu_gate.sh --print-config`。正式执行命令：`sh scripts/packaging/run_local_qemu_gate.sh`。
+6. 本地 bootstrap 只负责把已有 image 和 secret 固化为稳定 host-side 输入，不会在仓库脚本里下载 qemu image，也不会把 secret 值写进仓库文件或日志。
+
 ## 5. 已落盘文件
 
 当前目录已经落盘以下 packaging validator / smoke harness：
@@ -90,10 +99,12 @@
 4. `scripts/packaging/pkg_smoke_remove_purge.sh`
 5. `scripts/packaging/validate_autopkgtest_metadata.py`
 6. `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`
+7. `scripts/packaging/setup_local_qemu_gate_env.sh`
+8. `scripts/packaging/run_local_qemu_gate.sh`
 
 仍按需待定的只有：
 
-7. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
+9. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
 
 ## 6. 不做什么
 

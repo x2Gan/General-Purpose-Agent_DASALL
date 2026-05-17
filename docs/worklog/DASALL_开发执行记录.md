@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+## 记录 #679
+
+- 日期：2026-05-17
+- 阶段：packaging / integration / release gate
+- 任务：把本机 qemu/KVM once bootstrap 收口为 repo 内脚本与文档入口
+- 状态：已执行（local bootstrap helper 已落盘并通过；环境阻塞已解，当前 blocker 上移到 `Gate-INT-10`）
+
+### 执行前提
+
+1. 当前主机已具备 qemu / autopkgtest / packaging 依赖，并已有可复用 qemu image 与 installed DeepSeek secret。
+2. 先前本机 qemu gate 的主要环境阻塞来自三类事实：runner-local `qemu_image` 未固化、host-side `DASALL_DEEPSEEK_API_KEY_FILE` 未固定、当前 shell 对 `/dev/kvm` 无直接写权限。
+
+### 执行与结果
+
+1. 新增 repo 内 once bootstrap 入口。
+   - 新增 `scripts/packaging/setup_local_qemu_gate_env.sh`：把已有 qemu image 与 host-side DeepSeek key/secret 固化到稳定本地路径，并生成 env/setup 脚本。
+   - 新增 `scripts/packaging/run_local_qemu_gate.sh`：消费稳定本地路径，自动处理 KVM / `--disable-kvm` 回退，并执行正式的 `Gate-INT-10 -> package build -> qemu autopkgtest` 串联脚本。
+   - 更新 `scripts/packaging/README.md`：补充 local host bootstrap 章节，明确 apt 依赖、KVM 组、once setup 与正式执行命令。
+2. 本机稳定路径已被验证可复用。
+   - 稳定 qemu image 路径：`$HOME/.cache/dasall/qemu/autopkgtest-noble-amd64.img`
+   - 稳定 DeepSeek key/secret 路径：`$HOME/.local/share/dasall/secrets/deepseek-prod.secret`
+   - 生成的 env/setup 脚本路径：`$HOME/.local/share/dasall/qemu/env.sh`、`$HOME/.local/share/dasall/qemu/setup-commands.sh`
+3. 当前会话无需重新登录也能启用 KVM。
+   - `run_local_qemu_gate.sh --print-config` 已证明：当用户已加入 `kvm` 组但当前 shell 尚未刷新时，脚本会自动通过 `sg kvm` 重进并显示 `kvm=enabled`。
+4. 环境阻塞已经解除，但 qemu gate 仍未完成。
+   - 真实执行 `sh scripts/packaging/run_local_qemu_gate.sh` 时，qemu image、DeepSeek key/secret 与 KVM 均 accepted；但流程停在 build-tree `dasall_gate_int_10`，失败点是 `DaemonBinaryUnarySmokeTest`。
+   - 因此当前 blocker 已从“缺本机 qemu/key 资产”上移为“仓库态 preflight 回退”，尚未进入 `dpkg-buildpackage` / `autopkgtest` / `lintian` 阶段。
+
+### 验证
+
+1. `sh -n scripts/packaging/setup_local_qemu_gate_env.sh && sh -n scripts/packaging/run_local_qemu_gate.sh`
+   - 结果：通过。
+2. `sh scripts/packaging/setup_local_qemu_gate_env.sh --image "$HOME/.cache/dasall/qemu/autopkgtest-noble-amd64.img" --deepseek-key-file "$HOME/.local/share/dasall/secrets/deepseek-prod.secret" --force`
+   - 结果：通过；稳定本地路径与 env/setup 脚本均已生成。
+3. `sh scripts/packaging/run_local_qemu_gate.sh --print-config`
+   - 结果：通过；解析到稳定 image/key 路径，且显示 `kvm=enabled`。
+4. `sh scripts/packaging/run_local_qemu_gate.sh`
+   - 结果：qemu image / key / KVM accepted，但 `dasall_gate_int_10` 失败于 `DaemonBinaryUnarySmokeTest`；当前环境不再是 blocker。
+
 ## 记录 #678
 
 - 日期：2026-05-17

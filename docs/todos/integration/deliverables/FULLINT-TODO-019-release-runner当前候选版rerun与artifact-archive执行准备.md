@@ -8,11 +8,11 @@
 
 本轮只推进 `FULLINT-TODO-019`。
 
-可执行性判定：Blocked by runner-local assets；同轮已完成 archive contract 补位。
+可执行性判定：Partially unblocked at local-host bootstrap；当前 blocker 已上移到 build-tree `Gate-INT-10` preflight。
 
 1. `FULLINT-BLK-001` 已解决，说明仓库内的 release-runner contract、workflow 输入面、DeepSeek key file 注入方式与 qemu harness 都已经固定，不再缺 repo-level blocker。
 2. 本轮本机 preflight 已证实基础命令与 package 产物存在：`cmake`、`dpkg-buildpackage`、`autopkgtest`、`lintian`、`qemu-system-x86_64`、`autopkgtest-virt-qemu` 均可发现，且 `../dasall_0.1.0-1_amd64.changes` 已存在。
-3. 当前环境仍缺两项 runner-local 资产：可直接传给 workflow/script 的 `qemu_image`，以及 host-side `DASALL_DEEPSEEK_API_KEY_FILE`。在缺少这两项时，不能诚实地声称 current release candidate 已完成 qemu rerun。
+3. 当前仓库已新增 `scripts/packaging/setup_local_qemu_gate_env.sh` 与 `scripts/packaging/run_local_qemu_gate.sh`，可把 runner-local `qemu_image` 与 host-side `DASALL_DEEPSEEK_API_KEY_FILE` 固化到稳定本地路径，并自动处理 KVM / `--disable-kvm` 回退。当前主机已不再缺这两项资产，但仍不能诚实地声称 current release candidate 已完成 qemu rerun，因为串联实跑现停在 build-tree `dasall_gate_int_10` 的 `DaemonBinaryUnarySmokeTest` 失败。
 4. 本轮同轮最小闭环不是伪造 rerun，而是把 rerun / artifact archive contract 补完整：release workflow 现在会归档结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据。
 5. 本交付物只记录当前执行准备、preflight 结果、阻塞项与解阻条件，不把 `FULLINT-TODO-019` 写成通过。
 
@@ -24,7 +24,7 @@
 | [scripts/packaging/validate_gate_int_10_installed_package_qemu.sh](../../../../scripts/packaging/validate_gate_int_10_installed_package_qemu.sh) | 确认 qemu 串联入口的真实 owner；本轮为其补 `DASALL_AUTOPKGTEST_OUTPUT_DIR`，把结构化 autopkgtest 产物暴露给 archive bundle。 |
 | [.github/workflows/release-package-gate.yml](../../../../.github/workflows/release-package-gate.yml) | 确认 self-hosted runner 输入面；本轮补 package artifacts copy、secret injection record 与 `autopkgtest` 输出目录归档。 |
 | [scripts/packaging/README.md](../../../../scripts/packaging/README.md) | 回写 release runner contract，不再把 archive 误写成“只有 gate/lintian 单日志”。 |
-| 本机 preflight | 记录 commands / `.changes` 已就绪，以及当前主机缺 `qemu_image` 与 `DASALL_DEEPSEEK_API_KEY_FILE` 的事实。 |
+| 本机 preflight | 记录 commands / `.changes` 已就绪，并通过 local bootstrap helper 固化 `qemu_image`、`DASALL_DEEPSEEK_API_KEY_FILE` 与 KVM 回退策略。 |
 
 ## 3. Design 原子项
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|
 | D1 | 为 qemu rerun 输出结构化 `autopkgtest` 证据目录 | `validate_gate_int_10_installed_package_qemu.sh`、019 artifact 需求 | 脚本支持 `DASALL_AUTOPKGTEST_OUTPUT_DIR`，workflow 可直接上传目录 | 若只保留 stdout gate log，则 autopkgtest case 级材料仍难以归档与追溯 |
 | D2 | 把 package artifacts 与 secret injection 记录纳入 release bundle | workflow 现有 artifact_dir、019 目标字段 | artifact bundle 至少包含 `.changes/.buildinfo/.deb/.ddeb`、`lintian.log`、secret injection record、command log | 若 gate 失败后不复制 package artifacts，则失败轮次缺核心复盘材料 |
-| D3 | 如实记录当前主机 preflight 与阻塞 | 本机命令可用性与环境变量检查 | deliverable / TODO 行明确写出 commands / `.changes` 已就绪，`qemu_image` 与 key file 缺失 | 若把 repo-level contract fixed 误写成 rerun 已完成，会抬高 release confidence |
+| D3 | 如实记录当前主机 preflight 与阻塞 | 本机命令可用性、local bootstrap helper 与 qemu gate 实跑检查 | deliverable / TODO 行明确写出 commands / `.changes` 已就绪，本机资产可固化，但 `Gate-INT-10` 仍失败 | 若把 local bootstrap helper 或 qemu image accepted 误写成 rerun 已完成，会抬高 release confidence |
 
 ## 4. Design -> Build 映射
 
@@ -49,7 +49,7 @@
 | 范围单一 | PASS | 只处理 `FULLINT-TODO-019` 的 rerun / archive contract 与当前主机 blocker 回写，不扩散到新的产品行为修改。 |
 | 前置依赖 | PASS | `FULLINT-TODO-013` 已完成，`FULLINT-BLK-001` 已解阻，仓库级 workflow / qemu contract 已存在。 |
 | Build 三件套 | PASS | 代码目标、测试目标、验收命令与解阻条件都在 019 行和本交付物内明确。 |
-| 不伪造 rerun | PASS | 本轮只补 archive contract 与 preflight 证据；在缺 `qemu_image` / key file 时不宣称 qemu rerun 已通过。 |
+| 不伪造 rerun | PASS | 本轮补 archive contract 与 local bootstrap helper；即使本机已具备稳定 image/key 与 KVM 回退入口，只要 `Gate-INT-10` 未过，仍不宣称 qemu rerun 已通过。 |
 
 ## 6. B 阶段执行结果
 
@@ -68,10 +68,12 @@
 |---|---|---|
 | `cmake` / `dpkg-buildpackage` / `autopkgtest` / `lintian` / `qemu-system-x86_64` / `autopkgtest-virt-qemu` | 均可发现 | 命令层已就绪 |
 | `../dasall_0.1.0-1_amd64.changes` | 已存在 | package build 产物层已就绪 |
-| runner-local `qemu_image` | 当前 workspace / 常见本机目录未发现可直接使用候选 | Blocked |
-| `DASALL_DEEPSEEK_API_KEY_FILE` | 当前未设置 | Blocked |
+| runner-local `qemu_image` | 已通过 `setup_local_qemu_gate_env.sh` 固化到 `$HOME/.cache/dasall/qemu/autopkgtest-noble-amd64.img` | Ready |
+| `DASALL_DEEPSEEK_API_KEY_FILE` | 已通过 `setup_local_qemu_gate_env.sh` 固化到 `$HOME/.local/share/dasall/secrets/deepseek-prod.secret` | Ready |
+| `sh scripts/packaging/run_local_qemu_gate.sh --print-config` | 通过；能解析稳定 image/key 路径，且在当前会话自动经 `sg kvm` 进入 `kvm=enabled` | Ready |
+| `sh scripts/packaging/run_local_qemu_gate.sh` | qemu image / key / KVM 均 accepted，但 `dasall_gate_int_10` 中 `DaemonBinaryUnarySmokeTest` 失败，未进入 `dpkg-buildpackage` / `autopkgtest` / `lintian` | Blocked by repo preflight |
 
-结论：当前主机只差 runner-local image 与 host-side key file；在这两项缺失前，不能执行诚实的 current release candidate qemu rerun。
+结论：当前主机已不再缺 runner-local image 与 host-side key file；当前 blocker 已从环境资产缺失上移为仓库态 `Gate-INT-10` preflight 回退，因此仍不能执行完成态的 current release candidate qemu rerun。
 
 ### 6.3 当前 artifact bundle contract
 
@@ -86,13 +88,13 @@
 
 ### 6.4 解阻条件
 
-1. 在 self-hosted release runner 提供可直接传给 workflow 的 `qemu_image`。
-2. 在 runner host 提供 `deepseek_key_file`，并使 workflow 可将其映射为 `DASALL_DEEPSEEK_API_KEY_FILE`。
+1. 先修复当前仓库态 `dasall_gate_int_10` / `DaemonBinaryUnarySmokeTest` 回退，使 qemu 串联不再停在 build-tree preflight。
+2. 继续保留 `setup_local_qemu_gate_env.sh` 作为本机 / self-hosted runner 的 once bootstrap 入口，使 `qemu_image` 与 `DASALL_DEEPSEEK_API_KEY_FILE` 能固定到稳定路径。
 3. 保证 provider probe 与 guest 内实际外呼具备外网 reachability。
-4. 满足以上三项后，执行 `DASALL-Release-Package-Gate` workflow 或等价命令 `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>`，再回写 artifact bundle 路径。
+4. 在 `Gate-INT-10` 恢复后，执行 `sh scripts/packaging/run_local_qemu_gate.sh` 或等价 workflow / `validate_gate_int_10_installed_package_qemu.sh`，再回写 artifact bundle 路径。
 
 ## 7. 当前结论
 
 1. `FULLINT-TODO-019` 本轮已补齐仓库内的 rerun / artifact archive contract，但当前环境仍未完成真实 qemu rerun。
-2. 当前主机阻塞点不是 repo 代码缺口，而是 runner-local `qemu_image` 与 `DASALL_DEEPSEEK_API_KEY_FILE` 缺失。
+2. 当前主机阻塞点已不再是 runner-local `qemu_image` 与 `DASALL_DEEPSEEK_API_KEY_FILE` 缺失，而是仓库态 `dasall_gate_int_10` / `DaemonBinaryUnarySmokeTest` 回退。
 3. 只有在真实 runner 上拿到当轮 artifact bundle 后，当前版本才有资格升级为 current release candidate 的 production installed-package release-ready 证据。
