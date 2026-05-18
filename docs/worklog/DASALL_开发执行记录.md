@@ -1,5 +1,150 @@
 # DASALL 开发执行记录
 
+## 记录 #682
+
+- 日期：2026-05-18
+- 阶段：memory / packaging / installed evidence
+- 任务：按本机 installed-package authoritative gate 收敛 MEM-FIX-001
+- 状态：已完成（源侧回归、Debian 构包、本机安装态 smoke、DB / sqlite-vss 搜索证据均通过）
+
+### 执行前提
+
+1. `MEM-FIX-001` 的 qemu guest-side evidence 已从能力闭合条件移出，后续归 `MEM-FIX-006` / release-runner gate；本轮验收口径为本机实际 installed-package gate。
+2. 安装态主链必须证明 `dasall run` 通过 production `ILLMManager` / DeepSeek，不回落到 `agent.dataset` 工具 payload；Memory 必须证明 WAL、V002 sidecar、turn / summary writeback 与 sqlite-vss real search hit。
+
+### 执行与结果
+
+1. 修复 Memory/sqlite-vss lifecycle 与首轮 context 降级。
+   - `MemoryManagerFactory` 在创建 sqlite-vss backend 前预打开 sqlite store writer connection，并由 `MemoryManager` 避免重复 open / 正确传播 pre-open failure。
+   - `SqliteVssVectorBackend::search()` 对 fresh empty real index 直接返回空命中，避免首轮安装态 context 因空索引搜索抛出 `vector_query_unavailable`。
+   - `MemoryContextAssembleIntegrationTest` 新增安装态首轮 context 回归，断言 fresh live warnings 只允许 Runtime 已容忍的 fallback，不允许 `vector_unavailable` / `vector_query_unavailable`。
+2. 修正 package smoke 对 `agent.dataset` 的误判。
+   - 安装态 smoke 已先验证 `task_completed=true` 与 `llm.origin=deepseek-prod/`；失败原因是 DeepSeek 文本中出现“不要使用 agent.dataset”字样，被原先的任意字符串 grep 误判。
+   - `scripts/packaging/pkg_smoke_install.sh` 与 `debian/tests/pkg-smoke-local-control-plane` 现只拒绝真实工具 payload 标记：`"tool_name":"agent.dataset"` 或 `"capability_id":"agent.dataset"`。
+3. 当前树重新构包并安装验证。
+   - `dpkg-buildpackage -us -uc -b` 通过，日志：`/tmp/dasall-mem-fix-001-dpkg-build.log`。
+   - 生成 2026-05-18 12:20 Debian artifacts：`/home/gangan/dasall-common_0.1.0-1_all.deb`、`/home/gangan/dasall-cli_0.1.0-1_amd64.deb`、`/home/gangan/dasall-daemon_0.1.0-1_amd64.deb`、`/home/gangan/dasall_0.1.0-1_all.deb`。
+   - `DASALL_DEEPSEEK_API_KEY_FILE="$HOME/.local/share/dasall/secrets/deepseek-prod.secret" bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check` 通过，日志：`/tmp/dasall-mem-fix-001-pkg-smoke.log`，尾部为 `[pkg-smoke-install] install smoke passed`。
+4. 本机安装态 DB / asset evidence 已补齐。
+   - assets：`/usr/lib/dasall/sqlite-vss/vector0.so`、`/usr/lib/dasall/sqlite-vss/vss0.so`、`/usr/share/dasall/sql/memory/V002__vector_sidecar.sql`、`/usr/share/dasall/llm/providers/deepseek/manifest.yaml` 均存在。
+   - `/var/lib/dasall/memory/memory.db`：`PRAGMA journal_mode=wal`；表包含 `sessions`、`turns`、`summaries`、`facts`、`experiences`、`memory_vector_documents`、`memory_vector_index`。
+   - writeback：`turns` 中 `package smoke` + `llm.origin=deepseek-prod/` 计数为 1；`summaries` 中 `llm.origin=deepseek-prod/` 计数为 1；`memory_vector_documents` 计数为 1。
+   - sqlite-vss real search：load `/usr/lib/dasall/sqlite-vss/{vector0.so,vss0.so}` 后，`SELECT rowid, distance FROM memory_vector_index WHERE vss_search(embedding, ?) LIMIT ?` 返回 1 条命中，doc 为 `cli-run-llm-response`，distance 为 0。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["SqliteVssVectorBackendTest","MemoryContextAssembleIntegrationTest"])`
+   - 结果：通过，覆盖 fresh empty real index 与首轮 live context warnings。
+2. `RunCtest_CMakeTools(tests=["SimpleLocalEmbeddingAdapterTest","VectorMemoryAdapterTest","SqliteVssVectorBackendTest","SchemaMigrationTest","MemoryWritebackIntegrationTest","MemoryProfileCompatibilityTest","MemoryContextAssembleIntegrationTest","GatewayRuntimeLiveDependencyCompositionTest","RuntimeProductionHealthCompositionTest"])`
+   - 结果：9 项均通过。
+3. `sh -n scripts/packaging/pkg_smoke_install.sh && sh -n debian/tests/pkg-smoke-local-control-plane`
+   - 结果：通过。
+4. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；见 `/tmp/dasall-mem-fix-001-dpkg-build.log`。
+5. `DASALL_DEEPSEEK_API_KEY_FILE="$HOME/.local/share/dasall/secrets/deepseek-prod.secret" bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；见 `/tmp/dasall-mem-fix-001-pkg-smoke.log`。
+6. Python sqlite3 安装态查询
+   - 结果：assets、WAL、V002 sidecar、turn / summary writeback、`memory_vector_documents` 与 sqlite-vss search hit 均通过。
+
+### 结果
+
+1. `MEM-FIX-001` 可升级为本机 installed-package authoritative Done。
+2. qemu guest-side / release-runner / soak 证据仍未完成，但不再阻塞 `MEM-FIX-001`；后续归 `MEM-FIX-006`。
+3. 当前 remaining risk 是安装态多轮 context reuse、maintenance / retention 与 release-runner 隔离环境证据，已在后续任务中保留，不混入本任务闭合判定。
+
+## 记录 #681
+
+- 日期：2026-05-18
+- 阶段：memory / packaging / qemu evidence
+- 任务：最后尝试 MEM-FIX-001 installed-package qemu gate 并收敛 blocker
+- 状态：已执行（package build 与 autopkgtest 启动证据已取得；qemu final attempt 长阻塞于 WSL2 host loopback 端口探测，未进入 guest）
+
+### 执行前提
+
+1. 本轮按用户约束执行最后一次 qemu attempt；若继续长时间 block，则不再追加 qemu workaround，转向评估本机实际 installed-package evidence 路径。
+2. qemu gate 使用稳定 image `$HOME/.cache/dasall/qemu/autopkgtest-noble-amd64.img`、稳定 DeepSeek secret `$HOME/.local/share/dasall/secrets/deepseek-prod.secret` 与 no-KVM wrapper `$HOME/.cache/dasall/qemu/qemu-system-x86_64-no-kvm`。
+3. 本轮同时重新生成 guest setup script，补强 `/etc/resolv.conf`、`/run/systemd/resolve/resolv.conf`、`/run/systemd/resolve/stub-resolv.conf` 与 `archive.ubuntu.com` DNS probe；该修复尚未得到 guest 侧验证，因为 final run 未进入 guest。
+
+### 执行与结果
+
+1. final run 入口与 artifact 已固定。
+   - run log：`/tmp/dasall-mem-fix-001-final-20260518-105155.log`
+   - autopkgtest output dir：`$HOME/.cache/dasall/qemu/autopkgtest-output/mem-fix-001-final-20260518-105155`
+   - run config 显示 `kvm=disabled`，`qemu-command=$HOME/.cache/dasall/qemu/qemu-system-x86_64-no-kvm`，KVM probe 失败原因为 `Could not access KVM kernel module: No such device`。
+2. package gate 已完成到 qemu 之前的正式阶段。
+   - `dasall_gate_int_10` 通过。
+   - `dasall_packaging_preflight_tests` 通过。
+   - `dpkg-buildpackage` 完成，生成 `dasall_0.1.0-1_amd64.changes` 以及 `dasall`、`dasall-cli`、`dasall-daemon`、`dasall-common` binary packages。
+   - 构包安装阶段真实安装 `usr/lib/dasall/sqlite-vss/vector0.so`、`usr/lib/dasall/sqlite-vss/vss0.so` 与 `usr/share/dasall/sql/memory/V002__vector_sidecar.sql`。
+3. autopkgtest 已进入正式启动点。
+   - `debian/tests/control` validated，识别 `pkg-smoke-local-control-plane` 与 `pkg-smoke-common-assets` 两个 tests。
+   - 命令行包含 setup-commands、output-dir、DeepSeek secret copy / env 注入、no-KVM qemu wrapper 与 qemu image。
+4. final qemu attempt 的实际 blocker 是 host 端口探测长阻塞。
+   - autopkgtest output log 只有启动头三行，summary 为空。
+   - `/proc` 观察到 `autopkgtest-virt-qemu` 仍为 `autopkgtest` 子进程，但没有派生 `qemu-system-x86_64`。
+   - `autopkgtest-virt-qemu` 的 fd inode 对应 `/proc/net/tcp` 中 `127.0.0.1 -> 127.0.0.1:10026` 的 `SYN-SENT`，与 #680 记录的 WSL2 loopback route trap 一致。
+   - 该 attempt 已按长阻塞终止进程组，未取得 guest-side setup DNS probe、apt install、package smoke PASS / FAIL。
+
+### 验证
+
+1. `/tmp/dasall-mem-fix-001-final-20260518-105155.log`
+   - 结果：记录 `dasall_gate_int_10`、`dasall_packaging_preflight_tests`、`dpkg-buildpackage`、metadata validation 与 autopkgtest 启动命令。
+2. `$HOME/.cache/dasall/qemu/autopkgtest-output/mem-fix-001-final-20260518-105155/log`
+   - 结果：仅包含 autopkgtest 启动头与完整命令行，无 guest setup / test output。
+3. `$HOME/.cache/dasall/qemu/autopkgtest-output/mem-fix-001-final-20260518-105155/summary`
+   - 结果：空文件，证明未产生 guest-side test verdict。
+4. `/proc` 进程与 tcp 观察
+   - 结果：`autopkgtest-virt-qemu` 无 `qemu-system-x86_64` 子进程，fd 命中 loopback `SYN-SENT`，与 host-side `find_free_port()` block 匹配。
+
+### 结果
+
+1. `MEM-FIX-001` 不能升级为 qemu / L5 Done；缺失的是 qemu guest-side authoritative evidence，不是 memory/sqlite-vss production code path 的新失败。
+2. 当前可保留的新增证据是：Debian package build 已带出 sqlite-vss assets 与 vector sidecar migration，正式 autopkgtest metadata / secret injection / no-KVM wrapper 命令已形成，但 guest 未启动。
+3. 本任务内不再继续 qemu workaround。若保留 qemu 要求，应先在 host 层固化 loopback route rule 并重开独立 qemu 环境任务；若采用本机实际环境收敛，应把 `MEM-FIX-001` 完成判定降级 / 改写为 installed-package L4，并清理 qemu 专属要求。
+
+## 记录 #680
+
+- 日期：2026-05-17
+- 阶段：packaging / host qemu startup chain
+- 任务：单独定位 host 上 `autopkgtest-virt-qemu` 只停在启动头的问题，并固化 workaround 文档
+- 状态：已执行（host 启动链根因已定位；最小 no-KVM qemu probe 通过；正式 DASALL package gate 仍未通过）
+
+### 执行前提
+
+1. 当前主机已有稳定 qemu image：`$HOME/.cache/dasall/qemu/autopkgtest-noble-amd64.img`。
+2. 当前主机为 WSL2：`Linux DevBox 5.15.167.4-microsoft-standard-WSL2`。
+3. 本轮只调 host `autopkgtest -> autopkgtest-virt-qemu -> qemu -> testbed` 启动链，不把最小 probe 当成 DASALL installed package gate。
+
+### 执行与结果
+
+1. 解释了“只停在 autopkgtest 启动头”的真实原因。
+   - 若日志只有 `autopkgtest [..]: version` / `host ... command line`，但没有 `find_free_port`、`qemu-img info`、`full qemu command-line`、guest boot 或 testbed capabilities，则 qemu/testbed 尚未进入稳定可观测阶段。
+   - 本轮最初的最小 probe 停在 `find_free_port: trying 10022`；进程表中只有 `autopkgtest-virt-qemu`，没有 `qemu-system-x86_64`，说明还没创建 qemu 进程。
+2. 定位 WSL2 loopback route trap。
+   - `ip route get 127.0.0.1` 返回 `via ... dev loopback0 table 127`。
+   - `socket.create_connection(("127.0.0.1", 10022))` 对空端口不会快速 `ECONNREFUSED`，而是停在 `SYN-SENT`，触发 Ubuntu 24.04 `autopkgtest-virt-qemu` 5.47 的无 timeout `find_free_port()` 卡住。
+   - 临时执行 `sudo ip rule add pref 0 to 127.0.0.0/8 lookup local` 后，同一空端口探测变为快速 `ConnectionRefusedError 111`；该规则已写入 `scripts/packaging/README.md`，可通过 systemd oneshot 固化。
+3. 定位 KVM 假阳性。
+   - `/dev/kvm` 对当前用户可读写，但 qemu `-enable-kvm` 实际失败：`Could not access KVM kernel module: No such device`。
+   - `AUTOPKGTEST_QEMU_DISABLE_KVM=1` / `--disable-kvm` 不能阻止当前 `autopkgtest-virt-qemu` 自动追加 `-enable-kvm`。
+   - 通过临时 qemu-command wrapper 过滤 `-enable-kvm` 后，qemu 成功进入 guest boot。
+4. 最小 no-KVM qemu probe 已通过。
+   - 真实 artifact：`/tmp/dasall-adt-qemu-probe.ugCIL1/autopkgtest-nokvm-nonsuperficial.log`、`/tmp/dasall-adt-qemu-probe.ugCIL1/out-nokvm-nonsuperficial/summary`、`/tmp/dasall-adt-qemu-probe.ugCIL1/out-nokvm-nonsuperficial/smoke-stdout`。
+   - 结果：summary 为 `smoke PASS`；guest stdout 包含 `DASALL_AUTOPKGTEST_QEMU_PROBE_OK` 与 guest kernel `Linux host 6.8.0-31-generic ...`。
+
+### 文档回写
+
+1. 更新 `scripts/packaging/README.md`，新增 host-side qemu startup traps：`autopkgtest` 启动头判读、WSL2 loopback route rule、KVM real probe / no-KVM qemu wrapper、最小 probe 示例。
+2. 更新 `docs/todos/integration/deliverables/FULLINT-TODO-019-release-runner当前候选版rerun与artifact-archive执行准备.md`，把 FULLINT-019 的 blocker 从模糊 host/qemu 状态拆成 loopback route、KVM 假阳性、仓库态 Gate-INT-10 三层。
+3. 更新 `docs/todos/integration/DASALL_全量业务链集成验证专项TODO-2026-05-11.md` 的 FULLINT-TODO-019 行，补入 host 启动链 probe 与固化条件。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 的 MEM-FIX-001 补记，明确最小 qemu probe 只证明 host 启动链，不把 sqlite-vss installed/qemu evidence 写成 Done。
+
+### 结果
+
+1. 后续若再次只看到 `autopkgtest` 启动头，应先按 README §4.6 检查 `127.0.0.1` 空端口是否快速拒绝，以及 QEMU `-enable-kvm` 是否真实可用。
+2. 对当前 WSL2 host，建议固化 `sudo ip rule add pref 0 to 127.0.0.0/8 lookup local`，并使用 no-KVM qemu wrapper 或在脚本中增加真实 KVM probe 后自动选择 wrapper。
+3. `MEM-FIX-001` / `FULLINT-TODO-019` 仍需正式 installed package qemu gate；最小 smoke 不能替代 package artifact、secret injection、provider preflight、sqlite-vss asset/migration/real-search guest 证据。
+
 ## 记录 #679
 
 - 日期：2026-05-17

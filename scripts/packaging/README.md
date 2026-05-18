@@ -33,7 +33,7 @@
 
 ## 3. installed-package 功能矩阵
 
-`pkg_smoke_install.sh --explicit-start-check` 与 `debian/tests/pkg-smoke-local-control-plane` 不再只验安装生命周期；二者必须把安装后的本地控制面和主功能语义一起纳入 gate。
+`pkg_smoke_install.sh --explicit-start-check` 与 `debian/tests/pkg-smoke-local-control-plane` 不再只验安装生命周期；二者必须把安装后的本地控制面和主功能语义一起纳入 gate。子系统能力收敛可使用本机实际 installed-package smoke 作为 authoritative local evidence；qemu / machine isolation 继续用于 release-runner 环境和隔离可重复性，不作为所有子系统能力闭合的强制前置。
 
 | 功能面 | local lifecycle smoke | `pkg-smoke-local-control-plane` | 验收语义 |
 |---|---|---|---|
@@ -86,8 +86,90 @@
 2. 建议先安装本机依赖：`sudo apt-get install -y debhelper cmake ninja-build g++ pkgconf dpkg-dev lintian autopkgtest qemu-system-x86 python3 curl fakemachine vmdb2 zerofree`。
 3. 若当前用户尚未具备 `/dev/kvm` 写权限，可执行 `sudo usermod -aG kvm "$USER"` 后重新登录；`run_local_qemu_gate.sh` 也会在用户已加入 `kvm` 组、但当前会话尚未刷新时自动尝试 `sg kvm`，否则回退到 `--disable-kvm` 慢速路径。
 4. 一次性 setup 示例：`sh scripts/packaging/setup_local_qemu_gate_env.sh --image /path/to/autopkgtest.img`。若不显式传 `--deepseek-key-file`，脚本默认复用 `/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret`；若稳定目标文件已存在，则会直接复用，不会重复覆盖。
-5. setup 完成后的快速检查：`sh scripts/packaging/run_local_qemu_gate.sh --print-config`。正式执行命令：`sh scripts/packaging/run_local_qemu_gate.sh`。
-6. 本地 bootstrap 只负责把已有 image 和 secret 固化为稳定 host-side 输入，不会在仓库脚本里下载 qemu image，也不会把 secret 值写进仓库文件或日志。
+5. 生成的 guest setup 脚本会在 `autopkgtest` 安装依赖前修复 resolver，默认使用 QEMU slirp DNS `10.0.2.3` 并带 `1.1.1.1` 兜底；脚本会把 `/etc/resolv.conf` 固化为 regular file，并同步写入 `/run/systemd/resolve/resolv.conf` 与 `/run/systemd/resolve/stub-resolv.conf`，随后对 `archive.ubuntu.com` 做解析探针。如需覆盖 resolver 或探针 host，可在执行 once setup 时设置 `DASALL_LOCAL_QEMU_DNS_SERVERS="10.0.2.3 1.1.1.1"` / `DASALL_LOCAL_QEMU_DNS_PROBE_HOST=archive.ubuntu.com`。
+6. setup 完成后的快速检查：`sh scripts/packaging/run_local_qemu_gate.sh --print-config`。正式执行命令：`sh scripts/packaging/run_local_qemu_gate.sh`。
+7. 本地 bootstrap 只负责把已有 image 和 secret 固化为稳定 host-side 输入，不会在仓库脚本里下载 qemu image，也不会把 secret 值写进仓库文件或日志。
+
+### 4.6 host-side qemu startup traps
+
+1. 如果日志只停在如下 `autopkgtest` 启动头，不代表 qemu/testbed 已经启动：
+
+   ```text
+   autopkgtest [..]: version ...
+   autopkgtest [..]: host ... command line ...
+   ```
+
+   真正进入 `autopkgtest-virt-qemu` 后，至少应继续看到 `find_free_port`、`qemu-img info`、`full qemu command-line`、guest boot 或 testbed capability 日志。没有这些行时，优先排查 host-side virt server 启动链。
+
+2. WSL2 / mirrored-network 场景下，`127.0.0.1` 的空端口可能不会立即返回 `ECONNREFUSED`，而是停在 `SYN-SENT`。Ubuntu 24.04 `autopkgtest-virt-qemu` 5.47 的 `find_free_port()` 对 `127.0.0.1:10022` 探测没有显式 timeout，会因此卡在 `find_free_port: trying 10022`，qemu 进程尚未创建。快速诊断：
+
+   ```bash
+   ip route get 127.0.0.1
+   timeout 5s python3 - <<'PY'
+   import socket, time
+   start = time.time()
+   try:
+       socket.create_connection(("127.0.0.1", 10022))
+       print("connected", time.time() - start)
+   except Exception as exc:
+       print(type(exc).__name__, getattr(exc, "errno", None), exc, time.time() - start)
+   PY
+   ```
+
+   若 `ip route get 127.0.0.1` 显示 `via ... dev loopback0 table 127` 且 Python 命令超时，先固化本机规则，使 loopback 目标优先走 local table：
+
+   ```bash
+   sudo ip rule add pref 0 to 127.0.0.0/8 lookup local
+   ```
+
+   若需要持久化，可用 systemd oneshot 管理该规则：
+
+   ```ini
+   [Unit]
+   Description=DASALL autopkgtest loopback routing rule
+   After=network-online.target
+
+   [Service]
+   Type=oneshot
+   RemainAfterExit=yes
+   ExecStart=/bin/sh -c '/usr/sbin/ip rule show | /usr/bin/grep -q "to 127.0.0.0/8 lookup local" || /usr/sbin/ip rule add pref 0 to 127.0.0.0/8 lookup local'
+   ExecStop=/bin/sh -c '/usr/sbin/ip rule del pref 0 to 127.0.0.0/8 lookup local || true'
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+3. `/dev/kvm` 可写不等于 QEMU KVM 可用。当前 WSL2 host 上曾出现 `/dev/kvm` `rw-ok`、但 `qemu-system-x86_64 -enable-kvm` 报 `Could not access KVM kernel module: No such device` 的假阳性。不要只凭 `run_local_qemu_gate.sh --print-config` 的 `kvm=enabled` 判断可用；应额外用最小 qemu 或最小 autopkgtest probe 验证真实 `-enable-kvm`。
+
+4. Ubuntu 24.04 `autopkgtest-virt-qemu` 5.47 会在发现 `/dev/kvm` 时自动追加 `-enable-kvm`；本仓库脚本里的 `--disable-kvm` / `AUTOPKGTEST_QEMU_DISABLE_KVM=1` 不足以保证该版本去掉 `-enable-kvm`。在 host 不支持 KVM 时，可临时或本地固化一个 qemu wrapper，并通过 `--qemu-command` 传给 virt server：
+
+   ```bash
+   sudo install -d /usr/local/lib/dasall
+   sudo tee /usr/local/lib/dasall/qemu-system-x86_64-no-kvm >/dev/null <<'EOF'
+   #!/usr/bin/env bash
+   set -euo pipefail
+   filtered=()
+   for arg in "$@"; do
+     [[ "$arg" == "-enable-kvm" ]] && continue
+     filtered+=("$arg")
+   done
+   exec /usr/bin/qemu-system-x86_64 "${filtered[@]}"
+   EOF
+   sudo chmod +x /usr/local/lib/dasall/qemu-system-x86_64-no-kvm
+   ```
+
+   最小 host 启动链 probe 示例：
+
+   ```bash
+   autopkgtest -d -B --output-dir /tmp/dasall-adt-qemu-probe/out /tmp/dasall-adt-qemu-probe/src \
+     -- /usr/bin/autopkgtest-virt-qemu --debug --show-boot --timeout-reboot=300 \
+     --qemu-command=/usr/local/lib/dasall/qemu-system-x86_64-no-kvm \
+     "$HOME/.cache/dasall/qemu/autopkgtest-noble-amd64.img"
+   ```
+
+   该 probe 只证明 host `autopkgtest -> autopkgtest-virt-qemu -> qemu -> testbed` 启动链可用；不能替代 `validate_gate_int_10_installed_package_qemu.sh` 的 installed package release gate。
+
+5. 若 qemu 已进入 guest、但 `autopkgtest` 在 preparing testbed 阶段出现 `Temporary failure resolving 'archive.ubuntu.com'` / `apt failed to download packages`，先区分 host DNS 与 guest resolver。host 侧可用但 guest 侧失败时，重新执行 `setup_local_qemu_gate_env.sh` 生成带 resolver 修复的 setup 脚本；正式 gate 应继续通过 `run_local_qemu_gate.sh` 或 `validate_gate_int_10_installed_package_qemu.sh` 产生新的 `autopkgtest` artifact，而不要把 package build 日志当作 installed-package PASS。
 
 ## 5. 已落盘文件
 

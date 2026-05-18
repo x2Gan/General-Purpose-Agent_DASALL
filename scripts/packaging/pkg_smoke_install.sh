@@ -126,6 +126,27 @@ cleanup() {
   fi
 }
 
+wait_for_daemon_ready() {
+  attempt=0
+  while [ "${attempt}" -lt 30 ]; do
+    if run_root_sh 'systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
+       systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1 &&
+       [ -S /run/dasall/daemon.sock ] &&
+       [ "$(stat -c "%U:%G" /run/dasall/daemon.sock 2>/dev/null)" = "dasall:dasall" ] &&
+       [ "$(stat -c "%a" /run/dasall/daemon.sock 2>/dev/null)" = "600" ]' &&
+       run_dasall_cli dasall ping --json >/dev/null 2>&1 &&
+       run_dasall_cli dasall readiness --json >/dev/null 2>&1; then
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  run_root systemctl status --no-pager dasall-daemon.service >&2 || true
+  return 1
+}
+
 trap cleanup EXIT
 
 preserve_existing_llm_secret() {
@@ -236,6 +257,7 @@ verify_explicit_start() {
   restore_preserved_llm_secret
 
   run_root systemctl enable --now dasall-daemon.service
+  wait_for_daemon_ready
 
   run_root systemctl is-active --quiet dasall-daemon.service
   run_root systemctl is-enabled --quiet dasall-daemon.service
@@ -248,8 +270,8 @@ verify_explicit_start() {
   assert_json_contains "$RUN_JSON" '"disposition":"completed"' 'run smoke'
   assert_json_contains "$RUN_JSON" '"task_completed":true' 'run smoke'
   assert_json_contains "$RUN_JSON" 'llm.origin=deepseek-prod/' 'llm response payload'
-  printf '%s\n' "$RUN_JSON" | grep -Fq 'agent.dataset' && \
-    fail 'run smoke unexpectedly returned agent.dataset payload instead of LLM response'
+  printf '%s\n' "$RUN_JSON" | grep -Eq '"(tool_name|capability_id)":"agent\.dataset"' && \
+    fail 'run smoke unexpectedly returned an agent.dataset tool payload instead of an LLM response'
 
   require_command python3
   run_root test -f /usr/share/dasall/sql/memory/V001__initial_schema.sql

@@ -1,5 +1,5 @@
 Tests: pkg-smoke-local-control-plane
-Depends: @, systemd
+Depends: @, systemd, python3
 Restrictions: needs-root, isolation-machine
 
 Tests: pkg-smoke-common-assets

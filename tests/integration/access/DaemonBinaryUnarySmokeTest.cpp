@@ -288,7 +288,7 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
           "--socket-path",
           socket_path.string(),
           "run",
-          "{\"prompt\":\"binary smoke\"}",
+        "{\"prompt\":\"query runtime unary integration\"}",
       },
       root);
 
@@ -316,14 +316,55 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
             "binary unary smoke should keep successful human output off stderr; stderr=" +
               run.stderr_text);
 
+  const auto daemon_exit_code = daemon.stop();
+  const auto daemon_log = daemon.read_log();
+  assert_equal(0, daemon_exit_code,
+           "binary unary smoke should stop the daemon cleanly after the human unary verification; artifact_path=" +
+             log_path.string() + " daemon_log=" + daemon_log);
+  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
+              "binary unary smoke should pass through the real daemon main init path; daemon_log=" +
+                  daemon_log);
+  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=default-ready") !=
+          std::string::npos,
+        "binary unary smoke should log default-ready instead of accepted-only readiness; daemon_log=" +
+          daemon_log);
+  assert_true(daemon_log.find("runtime readiness=stub-ready") == std::string::npos,
+        "binary unary smoke should fail if daemon main falls back to stub-ready; daemon_log=" +
+          daemon_log);
+
+  ScopedTempDirectory json_temp_root("dasall-daemon-binary-unary-json");
+  const auto json_state_root = json_temp_root.path() / "state";
+  const auto json_socket_path = json_temp_root.path() / "control.sock";
+  const auto json_log_path = json_temp_root.path() / "daemon.log";
+  fs::create_directories(json_state_root);
+
+  ScopedDaemonProcess json_daemon(
+      DASALL_DAEMON_BINARY_PATH,
+      json_temp_root.path(),
+      json_state_root,
+      json_socket_path,
+      json_log_path);
+
+  if (!wait_for_ping_ready(json_socket_path)) {
+    const auto json_daemon_exit_code = json_daemon.stop();
+    assert_true(false,
+                "binary unary smoke should observe daemon ping readiness before issuing json cli run; socket_path=" +
+                    json_socket_path.string() +
+                    " socket_path_length=" +
+                    std::to_string(json_socket_path.string().size()) +
+                    " artifact_path=" + json_log_path.string() +
+                    " daemon_exit_code=" + std::to_string(json_daemon_exit_code) +
+                    " daemon_log=" + json_daemon.read_log());
+  }
+
   const auto json_run =
     dasall::tests::integration::access_support::run_process_capture_split(
       {
         DASALL_CLI_BINARY_PATH,
         "--socket-path",
-        socket_path.string(),
+        json_socket_path.string(),
         "run",
-        "{\"prompt\":\"binary smoke json\"}",
+        "{\"prompt\":\"query runtime unary integration\"}",
         "--json",
         "--request-id",
         "cli-013-sync",
@@ -361,21 +402,21 @@ void daemon_binary_unary_smoke_completes_with_real_main_init() {
               "binary unary smoke JSON should not expose stub runtime path; stdout=" +
                   json_run.stdout_text);
 
-  const auto daemon_exit_code = daemon.stop();
-  const auto daemon_log = daemon.read_log();
-  assert_equal(0, daemon_exit_code,
-           "binary unary smoke should stop the daemon cleanly; artifact_path=" + log_path.string() +
-             " daemon_log=" + daemon_log);
-  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
-              "binary unary smoke should pass through the real daemon main init path; daemon_log=" +
-                  daemon_log);
-  assert_true(daemon_log.find("[dasall-daemon] runtime readiness=default-ready") !=
+  const auto json_daemon_exit_code = json_daemon.stop();
+  const auto json_daemon_log = json_daemon.read_log();
+  assert_equal(0, json_daemon_exit_code,
+           "binary unary smoke should stop the json daemon cleanly; artifact_path=" + json_log_path.string() +
+             " daemon_log=" + json_daemon_log);
+  assert_true(json_daemon_log.find("[dasall-daemon] runtime readiness=") != std::string::npos,
+              "binary unary smoke JSON should pass through the real daemon main init path; daemon_log=" +
+                  json_daemon_log);
+  assert_true(json_daemon_log.find("[dasall-daemon] runtime readiness=default-ready") !=
           std::string::npos,
-        "binary unary smoke should log default-ready instead of accepted-only readiness; daemon_log=" +
-          daemon_log);
-  assert_true(daemon_log.find("runtime readiness=stub-ready") == std::string::npos,
-        "binary unary smoke should fail if daemon main falls back to stub-ready; daemon_log=" +
-          daemon_log);
+        "binary unary smoke JSON should log default-ready instead of accepted-only readiness; daemon_log=" +
+          json_daemon_log);
+  assert_true(json_daemon_log.find("runtime readiness=stub-ready") == std::string::npos,
+        "binary unary smoke JSON should fail if daemon main falls back to stub-ready; daemon_log=" +
+          json_daemon_log);
 }
 
 }  // namespace

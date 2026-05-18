@@ -22,6 +22,8 @@ struct MemoryManagerDependencies {
   std::unique_ptr<IWorkingMemoryBoard> working_memory_board;
   std::unique_ptr<IEmbeddingAdapter> embedding_adapter;
   std::unique_ptr<VectorMemoryIndexAdapter> vector_index;
+  bool store_preopened = false;
+  std::optional<contracts::ResultCode> store_open_result;
   std::shared_ptr<std::mutex> store_writer_mutex;
   std::unique_ptr<WritebackCoordinator> writeback_coordinator;
   std::unique_ptr<MemoryMaintenanceWorker> maintenance_worker;

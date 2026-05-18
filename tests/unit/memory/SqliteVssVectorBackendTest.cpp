@@ -391,6 +391,36 @@ void test_sqlite_vss_vector_backend_loads_real_extensions_when_assets_are_availa
               "sqlite-vss backend health should report an available indexed state on the real extension path");
 }
 
+void test_sqlite_vss_vector_backend_returns_empty_hits_for_fresh_real_index() {
+  using dasall::tests::support::assert_true;
+
+  auto db = open_in_memory_database();
+
+  const auto asset_root = std::filesystem::path(DASALL_REPO_ROOT) /
+                          "third_party/.cache/sqlite-vss/v0.1.2/linux-x86_64";
+  const auto vector0_path = asset_root / "vector0.so";
+  const auto vss0_path = asset_root / "vss0.so";
+  if (!std::filesystem::exists(vector0_path) || !std::filesystem::exists(vss0_path)) {
+    throw std::runtime_error("sqlite-vss cached assets are missing for the fresh-index test");
+  }
+
+  dasall::memory::VectorConfig config;
+  config.enabled = true;
+  config.backend_type = dasall::memory::VectorBackend::SqliteVss;
+  config.sqlite_vss_vector0_path = vector0_path.string();
+  config.sqlite_vss_vss0_path = vss0_path.string();
+
+  CountingEmbeddingAdapter embedding_adapter;
+  dasall::memory::SqliteVssVectorBackend backend(config, db.get(), &embedding_adapter);
+
+  const auto hits = backend.search("first package smoke query", 3);
+
+  assert_true(hits.empty(),
+              "sqlite-vss backend should return empty hits for a fresh real index before first writeback");
+  assert_true(backend.is_available(),
+              "sqlite-vss backend should stay available after a fresh empty-index search");
+}
+
 }  // namespace
 
 int main() {
@@ -401,6 +431,7 @@ int main() {
     test_sqlite_vss_vector_backend_propagates_rebuild_failure();
     test_sqlite_vss_vector_backend_fail_closes_when_extension_path_is_missing();
     test_sqlite_vss_vector_backend_loads_real_extensions_when_assets_are_available();
+    test_sqlite_vss_vector_backend_returns_empty_hits_for_fresh_real_index();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

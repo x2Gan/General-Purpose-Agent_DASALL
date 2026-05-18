@@ -5,14 +5,21 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
 
+#include <vector>
+
 #include "ICognitionEngine.h"
+#include "ILLMManager.h"
+#include "LLMGenerateRequest.h"
+#include "LLMManagerResult.h"
 #include "ObservabilityLiveComposition.h"
 #include "LLMProductionFactory.h"
+#include "LLMSubsystemConfig.h"
 #include "IMemoryManager.h"
 #include "IMultiAgentCoordinator.h"
 #include "KnowledgeServiceFactory.h"
@@ -60,6 +67,134 @@ namespace fs = std::filesystem;
 [[nodiscard]] bool runtime_cognition_first_requested() {
   return environment_flag_enabled("DASALL_RUNTIME_COGNITION_FIRST");
 }
+
+constexpr std::string_view kCognitionPlanningStage = "planning";
+constexpr std::string_view kCognitionExecutionStage = "execution";
+
+[[nodiscard]] std::string make_cognition_first_planning_payload() {
+  return std::string{"{"}
+         + "\"schema_version\":\"cognition.plan.v1\","
+         + "\"plan_id\":\"plan-runtime-cognition-first\","
+         + "\"revision\":1,"
+         + "\"nodes\":[{"
+         + "\"node_id\":\"plan-node:runtime-cognition-first\","
+         + "\"objective\":\"collect governed evidence through the builtin dataset tool\","
+         + "\"success_signal\":\"runtime_evidence_collected\","
+         + "\"action_kind_hint\":\"tool_action\","
+         + "\"depends_on\":[],"
+         + "\"evidence_refs\":[\"runtime:cognition-first-evidence\"]}],"
+         + "\"edges\":[],"
+         + "\"open_questions\":[],"
+         + "\"plan_rationale\":\"runtime cognition-first evidence should project a governed plan graph\","
+         + "\"estimated_complexity\":1}"
+      ;
+}
+
+[[nodiscard]] std::string make_cognition_first_execution_payload() {
+  return std::string{"{"}
+         + "\"schema_version\":\"cognition.reasoning.v1\","
+         + "\"decision_kind\":\"ExecuteAction\","
+         + "\"confidence\":0.82,"
+         + "\"rationale\":\"runtime cognition-first evidence should preserve governed tool intent\","
+         + "\"selected_node_id\":\"plan-node:runtime-cognition-first\","
+         + "\"tool_intent_hint\":{"
+         + "\"tool_name\":\"agent.dataset\","
+         + "\"intent_summary\":\"query runtime-visible data through tool governance\","
+         + "\"argument_hints\":[\"query=current_state\"],"
+         + "\"evidence_refs\":[\"runtime:cognition-first-evidence\"]},"
+         + "\"clarification_needed\":false,"
+         + "\"clarification_question\":null,"
+         + "\"response_outline\":null,"
+         + "\"candidate_scores\":[{"
+         + "\"candidate_name\":\"execute_action\","
+         + "\"score\":0.82,"
+         + "\"rationale\":\"runtime cognition-first evidence should execute the builtin tool\"}]}"
+      ;
+}
+
+[[nodiscard]] std::string extract_cognition_first_prompt(
+    const llm::LLMGenerateRequest& request) {
+  if (request.request.messages.has_value()) {
+    for (auto it = request.request.messages->rbegin();
+         it != request.request.messages->rend();
+         ++it) {
+      if (it->rfind("user:", 0U) == 0U) {
+        return it->substr(5U);
+      }
+      if (!it->empty()) {
+        return *it;
+      }
+    }
+  }
+
+  return "cognition-first evidence";
+}
+
+[[nodiscard]] llm::LLMManagerResult make_cognition_first_success_result(
+    const llm::LLMGenerateRequest& request,
+    std::string content) {
+  contracts::LLMResponse response;
+  response.request_id = request.request.request_id;
+  response.llm_call_id = std::string{"runtime-cognition-first-call"};
+  response.response_kind = contracts::LLMResponseKind::DirectResponse;
+  response.content_payload = std::move(content);
+  response.completed_at = current_time_ms();
+  response.model_name = std::string{"runtime.cognition-first.evidence"};
+  response.prompt_id = std::string{"runtime.cognition-first"};
+  response.prompt_version = std::string{"v1"};
+  response.finish_reason = std::string{"stop"};
+  response.input_tokens = 16U;
+  response.output_tokens = 8U;
+  response.total_tokens = 24U;
+
+  llm::LLMManagerResult result;
+  result.response = std::move(response);
+  result.resolved_route = std::string{"runtime.cognition-first."} +
+                          (request.stage.empty() ? std::string{"response"}
+                                                 : request.stage);
+  result.attempted_routes = {result.resolved_route};
+  return result;
+}
+
+// This helper exists only to stabilize the controlled cognition-first evidence gate.
+class ScriptedCognitionFirstLLMManager final : public llm::ILLMManager {
+ public:
+  bool init(const llm::LLMSubsystemConfig&) override {
+    return true;
+  }
+
+  llm::LLMManagerResult generate(const llm::LLMGenerateRequest& request) override {
+    if (request.stage == kCognitionPlanningStage) {
+      return make_cognition_first_success_result(
+          request,
+          make_cognition_first_planning_payload());
+    }
+
+    if (request.stage == kCognitionExecutionStage) {
+      return make_cognition_first_success_result(
+          request,
+          make_cognition_first_execution_payload());
+    }
+
+    return make_cognition_first_success_result(
+        request,
+        std::string{"runtime unary integration completed: "} +
+            extract_cognition_first_prompt(request));
+  }
+
+  llm::LLMManagerResult stream_generate(const llm::LLMGenerateRequest& request,
+                                        llm::IStreamObserver*) override {
+    return generate(request);
+  }
+
+  llm::HealthStatus health_check() const override {
+    return llm::HealthStatus{
+        .ready = true,
+        .degraded = false,
+        .message = "runtime cognition-first scripted llm manager healthy",
+    };
+  }
+};
 
 struct RuntimeObservabilityBundle {
   std::shared_ptr<infra::logging::ILogger> logger;
@@ -534,22 +669,28 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->health_monitor = observability.health_monitor;
   dependency_set->health_probes = observability.health_probes;
 
-  auto llm_result = llm::create_production_llm_manager(
-      *policy_snapshot,
-      llm::LLMProductionFactoryOptions{
-          .secret_backend = nullptr,
-          .transport = nullptr,
-          .provider_catalog_baseline_root = {},
-          .logger = observability.logger,
-          .metrics_provider = observability.metrics_provider,
-          .tracer_provider = observability.tracer_provider,
-          .audit_logger = observability.audit_logger,
-      });
-  if (!llm_result.ok()) {
-    return make_error(std::string("llm manager composition failed for ") +
-                      std::string(composition_owner) + ": " + llm_result.error);
+  const bool cognition_first_requested = runtime_cognition_first_requested();
+  if (cognition_first_requested) {
+    dependency_set->llm_manager =
+        std::make_shared<ScriptedCognitionFirstLLMManager>();
+  } else {
+    auto llm_result = llm::create_production_llm_manager(
+        *policy_snapshot,
+        llm::LLMProductionFactoryOptions{
+            .secret_backend = nullptr,
+            .transport = nullptr,
+            .provider_catalog_baseline_root = {},
+            .logger = observability.logger,
+            .metrics_provider = observability.metrics_provider,
+            .tracer_provider = observability.tracer_provider,
+            .audit_logger = observability.audit_logger,
+        });
+    if (!llm_result.ok()) {
+      return make_error(std::string("llm manager composition failed for ") +
+                        std::string(composition_owner) + ": " + llm_result.error);
+    }
+    dependency_set->llm_manager = std::move(llm_result.manager);
   }
-  dependency_set->llm_manager = std::move(llm_result.manager);
 
   auto cognition_engine = cognition::create_cognition_engine(
       *policy_snapshot,
@@ -638,7 +779,6 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                       std::string(composition_owner));
   }
   dependency_set->visible_tools = {"agent.dataset"};
-  const bool cognition_first_requested = runtime_cognition_first_requested();
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
       (cognition_first_requested ? ":cognition-first-forced"

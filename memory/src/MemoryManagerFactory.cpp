@@ -120,6 +120,10 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
   dependencies.working_memory_board = create_working_memory_board();
   if (config.storage.backend == StorageBackend::Sqlite) {
     dependencies.store = store::sqlite::create_sqlite_memory_store();
+    if (dependencies.store) {
+      dependencies.store_open_result = dependencies.store->open(config);
+      dependencies.store_preopened = !dependencies.store_open_result.has_value();
+    }
   }
 
   if (dependencies.store && dependencies.working_memory_board) {

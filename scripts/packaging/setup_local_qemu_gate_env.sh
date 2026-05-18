@@ -14,6 +14,8 @@ BUILD_DIR=${DASALL_LOCAL_QEMU_BUILD_DIR:-build-ci}
 TIMEOUT_REBOOT=${DASALL_LOCAL_QEMU_TIMEOUT_REBOOT:-180}
 PROVIDER_PROBE_URL=${DASALL_LOCAL_PROVIDER_PROBE_URL:-https://api.deepseek.com}
 TESTBED_SECRET_PATH=${DASALL_LOCAL_TESTBED_SECRET_PATH:-/tmp/dasall-release/deepseek.key}
+DNS_SERVERS=${DASALL_LOCAL_QEMU_DNS_SERVERS:-10.0.2.3 1.1.1.1}
+DNS_PROBE_HOST=${DASALL_LOCAL_QEMU_DNS_PROBE_HOST:-archive.ubuntu.com}
 
 IMAGE_SOURCE=
 KEY_SOURCE=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
@@ -44,6 +46,12 @@ Options:
                             https://api.deepseek.com.
   --testbed-secret-path P   Guest-side path used by autopkgtest --copy.
                             Defaults to /tmp/dasall-release/deepseek.key.
+  DASALL_LOCAL_QEMU_DNS_SERVERS
+                            Space-separated guest resolver list written by the
+                            generated setup script. Defaults to "10.0.2.3 1.1.1.1".
+  DASALL_LOCAL_QEMU_DNS_PROBE_HOST
+                            Optional guest-side DNS probe host checked after
+                            resolver repair. Defaults to archive.ubuntu.com.
   --force                   Overwrite the stable image/key even if they already
                             exist.
   -h, --help                Show this help text.
@@ -168,6 +176,34 @@ chmod 600 "$ENV_FILE"
 cat > "$SETUP_SCRIPT" <<EOF
 #!/bin/sh
 set -eu
+
+dns_servers="$DNS_SERVERS"
+dns_probe_host="$DNS_PROBE_HOST"
+if [ -n "\$dns_servers" ]; then
+  tmp_resolv=\$(mktemp /tmp/dasall-resolv.XXXXXX)
+  for dns_server in \$dns_servers; do
+    printf 'nameserver %s\n' "\$dns_server"
+  done >"\$tmp_resolv"
+  printf 'options timeout:2 attempts:3\n' >>"\$tmp_resolv"
+
+  rm -f /etc/resolv.conf
+  install -m 644 "\$tmp_resolv" /etc/resolv.conf
+  if [ -d /run/systemd/resolve ]; then
+    install -m 644 "\$tmp_resolv" /run/systemd/resolve/resolv.conf || true
+    install -m 644 "\$tmp_resolv" /run/systemd/resolve/stub-resolv.conf || true
+  fi
+  rm -f "\$tmp_resolv"
+
+  if [ -n "\$dns_probe_host" ] && command -v getent >/dev/null 2>&1; then
+    if getent ahosts "\$dns_probe_host" >/dev/null 2>&1; then
+      printf '[dasall-qemu-setup] DNS probe passed: %s\n' "\$dns_probe_host"
+    else
+      printf '[dasall-qemu-setup] DNS probe failed: %s\n' "\$dns_probe_host" >&2
+      sed 's/^/[dasall-qemu-setup] resolv.conf: /' /etc/resolv.conf >&2 || true
+      exit 1
+    fi
+  fi
+fi
 
 secret_src=\${DASALL_DEEPSEEK_API_KEY_FILE:-$TESTBED_SECRET_PATH}
 secret_dst=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret

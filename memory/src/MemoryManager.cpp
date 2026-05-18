@@ -106,7 +106,11 @@ contracts::ResultCode MemoryManager::init(const MemoryConfig& config) {
     return storage_unavailable_code();
   }
 
-  if (dependencies_.store) {
+  if (dependencies_.store_open_result.has_value()) {
+    return *dependencies_.store_open_result;
+  }
+
+  if (dependencies_.store && !dependencies_.store_preopened) {
     const auto open_result = dependencies_.store->open(config);
     if (open_result.has_value()) {
       return *open_result;

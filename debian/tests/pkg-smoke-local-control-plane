@@ -13,6 +13,11 @@ PLAN_JSON="${CONFIG_SMOKE_DIR}/plan.json"
 APPLY_JSON="${CONFIG_SMOKE_DIR}/apply.json"
 SHOW_AFTER_JSON="${CONFIG_SMOKE_DIR}/show-after.json"
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
+SQLITE_VSS_DIR=/usr/lib/dasall/sqlite-vss
+VECTOR0_PATH="${SQLITE_VSS_DIR}/vector0.so"
+VSS0_PATH="${SQLITE_VSS_DIR}/vss0.so"
+VECTOR_ASSET_BACKUP_DIR="${CONFIG_SMOKE_DIR}/sqlite-vss-backup"
 
 assert_json_contains() {
   json_payload=$1
@@ -23,6 +28,41 @@ assert_json_contains() {
     printf '%s: expected JSON fragment not found: %s\n' "${label}" "${expected}" >&2
     exit 1
   }
+}
+
+assert_positive_integer() {
+  value=$1
+  label=$2
+
+  case "${value}" in
+    ''|*[!0-9]*)
+      printf '%s: expected a non-negative integer, got %s\n' "${label}" "${value}" >&2
+      exit 1
+      ;;
+  esac
+
+  [ "${value}" -ge 1 ] || {
+    printf '%s: expected at least one row, got %s\n' "${label}" "${value}" >&2
+    exit 1
+  }
+}
+
+query_sqlite_scalar() {
+  db_path=$1
+  sql_query=$2
+
+  python3 - "${db_path}" "${sql_query}" <<'PY'
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+sql_query = sys.argv[2]
+with sqlite3.connect(db_path) as connection:
+    row = connection.execute(sql_query).fetchone()
+    if row is None:
+        sys.exit(2)
+    print(row[0])
+PY
 }
 
 cleanup() {
@@ -135,10 +175,65 @@ RUN_JSON=$(dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
 assert_json_contains "${RUN_JSON}" '"disposition":"completed"' 'run smoke'
 assert_json_contains "${RUN_JSON}" '"task_completed":true' 'run smoke'
 assert_json_contains "${RUN_JSON}" 'llm.origin=deepseek-prod/' 'llm response payload'
-printf '%s\n' "${RUN_JSON}" | grep -Fq 'agent.dataset' && {
-  printf 'run smoke unexpectedly returned agent.dataset payload instead of LLM response\n' >&2
+printf '%s\n' "${RUN_JSON}" | grep -Eq '"(tool_name|capability_id)":"agent\.dataset"' && {
+  printf 'run smoke unexpectedly returned an agent.dataset tool payload instead of LLM response\n' >&2
   exit 1
 }
+
+test -f /usr/share/dasall/sql/memory/V001__initial_schema.sql
+test -f /usr/share/dasall/sql/memory/V002__vector_sidecar.sql
+test -f "${VECTOR0_PATH}"
+test -f "${VSS0_PATH}"
+test -f "${MEMORY_DB_PATH}"
+JOURNAL_MODE=$(query_sqlite_scalar "${MEMORY_DB_PATH}" 'PRAGMA journal_mode;')
+[ "${JOURNAL_MODE}" = "wal" ] || {
+  printf 'memory sqlite journal mode should be wal, got %s\n' "${JOURNAL_MODE}" >&2
+  exit 1
+}
+CORE_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('sessions','turns','summaries','facts','experiences');")
+[ "${CORE_TABLE_COUNT}" -eq 5 ] || {
+  printf 'memory sqlite schema should expose five core tables, got %s\n' "${CORE_TABLE_COUNT}" >&2
+  exit 1
+}
+VECTOR_DOC_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'memory_vector_documents';")
+[ "${VECTOR_DOC_TABLE_COUNT}" -eq 1 ] || {
+  printf 'memory sqlite schema should expose the vector sidecar table, got %s\n' "${VECTOR_DOC_TABLE_COUNT}" >&2
+  exit 1
+}
+VECTOR_INDEX_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'memory_vector_index';")
+[ "${VECTOR_INDEX_TABLE_COUNT}" -eq 1 ] || {
+  printf 'memory sqlite schema should expose the sqlite-vss virtual table, got %s\n' "${VECTOR_INDEX_TABLE_COUNT}" >&2
+  exit 1
+}
+VECTOR_DOC_ROW_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM memory_vector_documents;')
+assert_positive_integer "${VECTOR_DOC_ROW_COUNT}" 'memory vector sidecar rows'
+VECTOR_INDEX_ROW_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM memory_vector_index;')
+assert_positive_integer "${VECTOR_INDEX_ROW_COUNT}" 'memory sqlite-vss index rows'
+
+systemctl stop dasall-daemon.service
+mkdir -p "${VECTOR_ASSET_BACKUP_DIR}"
+mv "${VECTOR0_PATH}" "${VECTOR_ASSET_BACKUP_DIR}/vector0.so"
+mv "${VSS0_PATH}" "${VECTOR_ASSET_BACKUP_DIR}/vss0.so"
+set +e
+VALIDATE_STDERR=$(/usr/sbin/dasall-daemon \
+  --validate-only \
+  --profile-id="${DASALL_DAEMON_PROFILE_ID}" \
+  --config-file /etc/dasall/daemon.json 2>&1)
+VALIDATE_CODE=$?
+set -e
+mv "${VECTOR_ASSET_BACKUP_DIR}/vector0.so" "${VECTOR0_PATH}"
+mv "${VECTOR_ASSET_BACKUP_DIR}/vss0.so" "${VSS0_PATH}"
+rmdir "${VECTOR_ASSET_BACKUP_DIR}"
+[ "${VALIDATE_CODE}" -ne 0 ] || {
+  printf 'validate-only should fail closed when sqlite-vss assets are missing\n' >&2
+  exit 1
+}
+printf '%s\n' "${VALIDATE_STDERR}" | grep -Eq 'sqlite-vss-assets-missing|memory-vector-fail-closed' || {
+  printf 'validate-only should surface sqlite-vss fail-closed detail, got: %s\n' "${VALIDATE_STDERR}" >&2
+  exit 1
+}
+systemctl start dasall-daemon.service
+wait_for_daemon_ready
 
 set +e
 STATUS_JSON=$(dasall status receipt:missing token local://uid/0 --json 2>&1)

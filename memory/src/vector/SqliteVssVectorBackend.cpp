@@ -527,6 +527,10 @@ std::vector<VectorHit> SqliteVssVectorBackend::search(
     return {};
   }
 
+  if (health_.indexed_doc_count <= 0) {
+    return {};
+  }
+
   return driver_->search(db_, *query_embedding, top_k);
 }
 
