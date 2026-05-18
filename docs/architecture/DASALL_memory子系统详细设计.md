@@ -2192,8 +2192,8 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 
 2. Slice 2：ContextOrchestrator + 压缩。
 代码目标：CandidateCollector、BudgetAllocator、CompressionCoordinator、ContextOrchestrator。
-测试目标：ContextOrchestratorBudgetTest、MemoryContextAssembleIntegrationTest、ContextPacketFieldContractTest。
-验收命令：ctest --test-dir build-ci -R "ContextOrchestratorBudgetTest|MemoryContextAssembleIntegrationTest|ContextPacketFieldContractTest" --output-on-failure。
+测试目标：ContextOrchestratorBudgetTest、MemoryContextAssembleIntegrationTest、ContextPacketFieldContractTest、MemoryBoundaryGuardComplianceTest。
+验收命令：ctest --test-dir build-ci -R "ContextOrchestratorBudgetTest|MemoryContextAssembleIntegrationTest|ContextPacketFieldContractTest|MemoryBoundaryGuardComplianceTest" --output-on-failure。
 
 3. Slice 3：Fact/Experience 写回与冲突处理。
 代码目标：FactRepository、ExperienceRepository、MemoryConflictResolver、WritebackCoordinator。
@@ -2214,7 +2214,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 | 测试层 | 覆盖对象 | 关键用例 | 通过标准 |
 |---|---|---|---|
 | Unit | WorkingMemoryBoard、BudgetAllocator、CompressionCoordinator、ConflictResolver、SqliteMemoryStore | TTL 过期、stage 预算分配、summary 压缩、事实冲突、SQLite row mapping | 断言全通过，错误分类稳定 |
-| Contract | Turn/Session/SummaryMemory、MemoryFact/ExperienceMemory、ContextPacket | 现有 contract test 持续全绿；无越权字段回归 | contracts tests 全绿 |
+| Contract | Turn/Session/SummaryMemory、MemoryFact/ExperienceMemory、ContextPacket、Memory 边界守卫 | 现有 contract test 持续全绿；`MemoryBoundaryGuardComplianceTest` 锁定 ADR-006/007/008 owner 边界，无越权字段或跨模块依赖回归 | contracts tests 与 boundary guard 全绿 |
 | Integration | MemoryManager、ContextOrchestrator、WritebackCoordinator 与 SQLite backend | context assemble 主路径、writeback 主路径、degraded path | 能按固定夹具稳定执行 |
 | Failure Injection | SQLite BUSY、disk full、corrupt summary、vector off、schema mismatch | bounded retry、quarantine、degrade、fatal error mapping | 每类故障有明确可观测结果 |
 | Compatibility | desktop_full、edge_balanced、edge_minimal | Vector 开关、checkpoint 策略、压缩阈值差异 | profile 行为与配置一致 |
@@ -2225,7 +2225,8 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 1. 必须持续复用 TurnSessionSummaryMemoryContractTest。
 2. 必须持续复用 MemoryFactExperienceContractTest。
 3. ContextPacket 装配变化不得破坏 ContextPacketFieldContractTest。
-4. 若 writeback 或 compression 引入新 supporting types，不允许绕过现有 shared contract guards。
+4. `memory/include`、`memory/src` 与 `memory/CMakeLists.txt` 必须持续通过 MemoryBoundaryGuardComplianceTest，不得越界引入 llm prompt owner、runtime recovery / agent owner 或 tools executor 私有实现。
+5. 若 writeback 或 compression 引入新 supporting types，不允许绕过现有 shared contract guards。
 
 ### 9.3 集成测试路径
 

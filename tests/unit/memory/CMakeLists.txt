@@ -122,6 +122,10 @@ add_executable(dasall_memory_maintenance_checkpoint_unit_test
 	${CMAKE_CURRENT_SOURCE_DIR}/MemoryMaintenanceCheckpointTest.cpp
 )
 
+add_executable(dasall_memory_boundary_guard_compliance_unit_test
+	MemoryBoundaryGuardComplianceTest.cpp
+)
+
 target_link_libraries(dasall_memory_interface_compile_unit_test
 	PRIVATE
 		dasall_memory
@@ -317,6 +321,11 @@ target_link_libraries(dasall_memory_maintenance_checkpoint_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_boundary_guard_compliance_unit_test
+	PRIVATE
+		dasall_test_support
+)
+
 target_include_directories(dasall_memory_schema_migration_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -498,6 +507,11 @@ target_compile_definitions(dasall_memory_maintenance_checkpoint_unit_test
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
 
+target_compile_definitions(dasall_memory_boundary_guard_compliance_unit_test
+	PRIVATE
+		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
+)
+
 dasall_apply_common_options(dasall_memory_interface_compile_unit_test)
 dasall_apply_common_options(dasall_memory_evidence_projection_compile_unit_test)
 dasall_apply_common_options(dasall_vector_memory_adapter_unit_test)
@@ -529,6 +543,7 @@ dasall_apply_common_options(dasall_memory_writeback_core_unit_test)
 dasall_apply_common_options(dasall_memory_writeback_partial_unit_test)
 dasall_apply_common_options(dasall_memory_maintenance_retention_unit_test)
 dasall_apply_common_options(dasall_memory_maintenance_checkpoint_unit_test)
+dasall_apply_common_options(dasall_memory_boundary_guard_compliance_unit_test)
 
 add_test(NAME MemoryInterfaceCompileTest COMMAND dasall_memory_interface_compile_unit_test)
 set_tests_properties(MemoryInterfaceCompileTest PROPERTIES LABELS "unit;memory")
@@ -622,6 +637,9 @@ set_tests_properties(MemoryMaintenanceRetentionTest PROPERTIES LABELS "unit;memo
 
 add_test(NAME MemoryMaintenanceCheckpointTest COMMAND dasall_memory_maintenance_checkpoint_unit_test)
 set_tests_properties(MemoryMaintenanceCheckpointTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME MemoryBoundaryGuardComplianceTest COMMAND dasall_memory_boundary_guard_compliance_unit_test)
+set_tests_properties(MemoryBoundaryGuardComplianceTest PROPERTIES LABELS "unit;memory")
 
 set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_interface_compile_unit_test

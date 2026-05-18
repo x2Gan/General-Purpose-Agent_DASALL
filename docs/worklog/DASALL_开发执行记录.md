@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #686
+
+- 日期：2026-05-18
+- 阶段：memory / boundary guard regression
+- 任务：推进 MEM-FIX-005 增加 Memory 边界回归防线
+- 状态：已完成（边界守卫测试、CMake 注册、详设 / TODO / worklog 回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `MEM-FIX-005`，若存在前置 BLOCK 任务需先解组；检查 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 后确认 `MEM-FIX-001` 至 `MEM-FIX-004` 已完成，`MEM-FIX-005` 是当前最小可执行原子任务。
+2. 近端代码检查表明 `memory/include`、`memory/src` 与 `memory/CMakeLists.txt` 当前未出现 `PromptComposer`、`RecoveryManager`、`AgentOrchestrator` 等越界引用；真实缺口不是产品实现已越界，而是缺少能持续锁定 ADR-006/007/008 owner 边界的自动化回归门。
+3. 本轮明确禁止使用 qemu / kvm 收敛证据；验证仅使用本机 build-tree 与已生成测试可执行文件。
+
+### 执行与结果
+
+1. 新增 Memory 边界守卫单测。
+   - 新增 `tests/unit/memory/MemoryBoundaryGuardComplianceTest.cpp`，复用 llm 边界守卫测试的扫描模式，对 `memory/include` / `memory/src` 的 `#include` 行、`memory/CMakeLists.txt` 的 link/include 片段，以及 Memory public headers 的 owner 符号暴露面做静态合规检查。
+   - 守卫明确锁定 `llm/`、`runtime/`、`tools/`、`apps/` 私有实现路径，以及 `PromptComposer`、`PromptRegistry`、`RecoveryManager`、`AgentOrchestrator`、`ToolExecutor` 等边界 owner 符号，防止 future change 把 prompt 装配权、恢复准入权或全局主控权悄悄拉进 Memory。
+2. 接入 memory 单测入口。
+   - `tests/unit/memory/CMakeLists.txt` 已新增 `dasall_memory_boundary_guard_compliance_unit_test` 目标、`MemoryBoundaryGuardComplianceTest` CTest 注册，以及 `DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"` compile definition。
+   - 新守卫目标只依赖 `dasall_test_support`，不引入新的产品模块依赖，保持验证面聚焦在 boundary regression 上。
+3. 回写设计与 TODO 口径。
+   - `docs/architecture/DASALL_memory子系统详细设计.md` 已把 `MemoryBoundaryGuardComplianceTest` 纳入 Slice 2 验收口径与契约测试影响点，明确 `memory/include` / `memory/src` / `memory/CMakeLists.txt` 必须持续通过该测试。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `MEM-GAP-006` 标记为已闭合、`MEM-FIX-005` 标记为 Done，并补齐本轮验证与边界复验命令。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_boundary_guard_compliance_unit_test"])`
+   - 结果：通过；新守卫目标在当前 VS Code CMake build-tree 上成功完成编译和链接。
+2. `RunCtest_CMakeTools(tests=["MemoryBoundaryGuardComplianceTest","ContextPacketFieldContractTest"])`
+   - 结果：失败；工具层返回仓库已知的泛化 `生成失败`，不足以判定测试本身失败。
+3. `RunCtest_CMakeTools(tests=["MemoryBoundaryGuardComplianceTest"])`
+   - 结果：同样失败，仍为泛化 `生成失败`；据此可排除“组合测试名导致失败”，归类为 CMake Tools test-generation blocker。
+4. 直接执行 build-tree 测试可执行文件
+   - `/home/gangan/DASALL/build/vscode-linux-ninja/tests/unit/memory/dasall_memory_boundary_guard_compliance_unit_test`：退出码 0，标准输出为空。
+   - `/home/gangan/DASALL/build/vscode-linux-ninja/tests/contract/dasall_contract_context_packet_field_test`：退出码 0，输出 `ContextPacketFieldContractTest: 20 passed, 0 failed`。
+5. `get_errors([tests/unit/memory/MemoryBoundaryGuardComplianceTest.cpp])`
+   - 结果：无错误；确认新测试文件本身不存在语法或语言服务层报错。
+
+### 结果
+
+1. `MEM-FIX-005` 已完成，`MEM-GAP-006` 可判定为已闭合。
+2. Memory 当前不再只依赖人工 grep 审查来守住 ADR-006/007/008；一旦 `memory/` 越界 include / link LLM prompt owner、Runtime recovery / agent owner 或 Tools executor 私有实现，新的边界守卫测试会在 build-tree 直接失败。
+3. 本轮未使用 qemu / kvm。Memory 章节的后续优先级已转向 `MEM-GAP-004` / `MEM-GAP-007`，即 release-runner 与 installed 多轮正向证据。
+
 ## 记录 #685
 
 - 日期：2026-05-18
