@@ -7,8 +7,13 @@
 #include <utility>
 #include <vector>
 
+#include "observability/MemoryObservability.h"
+
 namespace dasall::memory {
 namespace {
+
+using observability::MemoryTelemetryContext;
+using observability::MemoryTelemetryField;
 
 [[nodiscard]] std::int64_t current_time_millis() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -39,17 +44,62 @@ void run_vector_rebuild(VectorMemoryIndexAdapter* vector_adapter,
   report.vector_rebuild_executed = true;
 }
 
+[[nodiscard]] MemoryTelemetryContext make_observability_context() {
+  return MemoryTelemetryContext{
+      .request_id = "maintenance",
+      .session_id = {},
+      .stage = "maintenance",
+      .trace_id = {},
+      .profile_id = {},
+  };
+}
+
+[[nodiscard]] std::vector<MemoryTelemetryField> make_maintenance_fields(
+    const MaintenanceRequest& request,
+    const MaintenanceReport& report) {
+  std::vector<MemoryTelemetryField> fields;
+  fields.push_back(MemoryTelemetryField{.key = "checkpoint_requested",
+                                        .value = request.run_checkpoint ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "retention_requested",
+                                        .value = request.run_retention ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "quarantine_requested",
+                                        .value = request.run_quarantine_cleanup ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "vector_rebuild_requested",
+                                        .value = request.run_vector_rebuild ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "checkpoint_executed",
+                                        .value = report.checkpoint_executed ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "turns_purged",
+                                        .value = std::to_string(report.turns_purged)});
+  fields.push_back(MemoryTelemetryField{.key = "facts_purged",
+                                        .value = std::to_string(report.facts_purged)});
+  fields.push_back(MemoryTelemetryField{.key = "experiences_purged",
+                                        .value = std::to_string(report.experiences_purged)});
+  fields.push_back(MemoryTelemetryField{.key = "quarantine_cleaned",
+                                        .value = std::to_string(report.quarantine_cleaned)});
+  fields.push_back(MemoryTelemetryField{.key = "warning_count",
+                                        .value = std::to_string(report.warnings.size())});
+  if (!report.warnings.empty()) {
+    fields.push_back(MemoryTelemetryField{.key = "warning",
+                                          .value = report.warnings.front()});
+  }
+  fields.push_back(MemoryTelemetryField{.key = "duration_ms",
+                                        .value = std::to_string(report.duration_ms)});
+  return fields;
+}
+
 }  // namespace
 
 MemoryMaintenanceWorker::MemoryMaintenanceWorker(
     IMaintenanceStore& store,
     MemoryConfig config,
     VectorMemoryIndexAdapter* vector_adapter,
-    std::shared_ptr<std::mutex> writer_mutex)
+    std::shared_ptr<std::mutex> writer_mutex,
+    std::shared_ptr<observability::MemoryObservability> observability)
     : store_(store),
       config_(std::move(config)),
       vector_adapter_(vector_adapter),
-      writer_mutex_(std::move(writer_mutex)) {}
+      writer_mutex_(std::move(writer_mutex)),
+      observability_(std::move(observability)) {}
 
 MemoryMaintenanceWorker::~MemoryMaintenanceWorker() {
   stop();
@@ -110,6 +160,12 @@ MaintenanceReport MemoryMaintenanceWorker::execute(
   }
 
   report.duration_ms = current_time_millis() - started_at;
+  if (observability_) {
+    observability_->emit(report.warnings.empty() ? "maintenance.completed"
+                                                 : "maintenance.degraded",
+                         make_observability_context(),
+                         make_maintenance_fields(request, report));
+  }
   return report;
 }
 

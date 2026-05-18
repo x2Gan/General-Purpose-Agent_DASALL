@@ -14,9 +14,13 @@
 #include "memory/Session.h"
 #include "memory/SummaryMemory.h"
 #include "memory/Turn.h"
+#include "observability/MemoryObservability.h"
 
 namespace dasall::memory {
 namespace {
+
+using observability::MemoryTelemetryContext;
+using observability::MemoryTelemetryField;
 
 constexpr int kMaxCoreTransactionAttempts = 3;
 
@@ -199,6 +203,78 @@ void append_warning_once(std::vector<std::string>& warnings,
   return text;
 }
 
+[[nodiscard]] MemoryTelemetryContext make_observability_context(
+    const MemoryWritebackRequest& request) {
+  return MemoryTelemetryContext{
+      .request_id = request.turn.turn_id.value_or("writeback"),
+      .session_id = request.session_id,
+      .stage = "writeback",
+      .trace_id = {},
+      .profile_id = {},
+  };
+}
+
+[[nodiscard]] std::vector<MemoryTelemetryField> make_writeback_fields(
+    const WritebackResult& result) {
+  std::vector<MemoryTelemetryField> fields;
+  fields.push_back(MemoryTelemetryField{.key = "warning_count",
+                                        .value = std::to_string(result.warnings.size())});
+  if (!result.warnings.empty()) {
+    fields.push_back(MemoryTelemetryField{.key = "warning",
+                                          .value = result.warnings.front()});
+  }
+  fields.push_back(MemoryTelemetryField{.key = "fact_count",
+                                        .value = std::to_string(result.fact_ids.size())});
+  fields.push_back(MemoryTelemetryField{.key = "experience_count",
+                                        .value = std::to_string(result.experience_ids.size())});
+  fields.push_back(MemoryTelemetryField{.key = "conflict_count",
+                                        .value = std::to_string(result.conflicts.size())});
+  fields.push_back(MemoryTelemetryField{.key = "partial",
+                                        .value = result.partial ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "degraded",
+                                        .value = result.degraded ? "true" : "false"});
+  fields.push_back(MemoryTelemetryField{.key = "retryable",
+                                        .value = result.retryable_storage_failure ? "true" : "false"});
+  if (result.result_code.has_value()) {
+    fields.push_back(MemoryTelemetryField{.key = "result_code",
+                                          .value = std::to_string(static_cast<int>(*result.result_code))});
+  }
+  if (result.persisted_turn_id.has_value()) {
+    fields.push_back(MemoryTelemetryField{.key = "turn_id",
+                                          .value = *result.persisted_turn_id});
+  }
+  if (result.summary_id.has_value()) {
+    fields.push_back(MemoryTelemetryField{.key = "summary_id",
+                                          .value = *result.summary_id});
+  }
+  return fields;
+}
+
+[[nodiscard]] std::string conflict_event_name(const ConflictAction action) {
+  switch (action) {
+    case ConflictAction::Supersede:
+      return "conflict.superseded";
+    case ConflictAction::Reject:
+      return "conflict.rejected";
+    case ConflictAction::Coexist:
+      return "conflict.coexisted";
+    case ConflictAction::Accept:
+    default:
+      return "conflict.accepted";
+  }
+}
+
+[[nodiscard]] std::vector<MemoryTelemetryField> make_conflict_fields(
+    const ConflictRecord& record) {
+  return {
+      MemoryTelemetryField{.key = "new_fact_id", .value = record.new_fact_id},
+      MemoryTelemetryField{.key = "existing_fact_id", .value = record.existing_fact_id},
+      MemoryTelemetryField{.key = "reason", .value = record.reason},
+      MemoryTelemetryField{.key = "confidence_delta",
+                           .value = std::to_string(record.confidence_delta)},
+  };
+}
+
 }  // namespace
 
 WritebackCoordinator::WritebackCoordinator(
@@ -210,7 +286,8 @@ WritebackCoordinator::WritebackCoordinator(
     std::unique_ptr<MemoryConflictResolver> conflict_resolver,
     IWorkingMemoryBoard& working_memory_board,
     VectorMemoryIndexAdapter* vector_index,
-    std::shared_ptr<std::mutex> writer_mutex)
+    std::shared_ptr<std::mutex> writer_mutex,
+    std::shared_ptr<observability::MemoryObservability> observability)
     : transaction_store_(transaction_store),
       session_store_(session_store),
       summary_store_(summary_store),
@@ -219,7 +296,8 @@ WritebackCoordinator::WritebackCoordinator(
       conflict_resolver_(std::move(conflict_resolver)),
       working_memory_board_(working_memory_board),
       vector_index_(vector_index),
-      writer_mutex_(std::move(writer_mutex)) {}
+      writer_mutex_(std::move(writer_mutex)),
+      observability_(std::move(observability)) {}
 
 WritebackResult WritebackCoordinator::persist(
     const MemoryWritebackRequest& request) {
@@ -229,7 +307,13 @@ WritebackResult WritebackCoordinator::persist(
   }
 
   if (request.session_id.empty()) {
-    return make_invalid_result("writeback_session_id_missing");
+    const auto result = make_invalid_result("writeback_session_id_missing");
+    if (observability_) {
+      observability_->emit("writeback.failed",
+                           make_observability_context(request),
+                           make_writeback_fields(result));
+    }
+    return result;
   }
 
   MemoryWritebackRequest normalized_request = request;
@@ -285,12 +369,30 @@ WritebackResult WritebackCoordinator::persist(
   }
 
   if (result.result_code.has_value()) {
+    if (observability_) {
+      observability_->emit("writeback.failed",
+                           make_observability_context(normalized_request),
+                           make_writeback_fields(result));
+    }
     return result;
   }
 
   persist_derived_data(normalized_request, result);
   persist_vector_sidecar(normalized_request, result);
   update_working_board(normalized_request, result);
+  if (observability_) {
+    observability_->emit(
+        (result.partial || result.degraded || !result.warnings.empty())
+            ? "writeback.degraded"
+            : "writeback.completed",
+        make_observability_context(normalized_request),
+        make_writeback_fields(result));
+    for (const auto& record : result.conflicts) {
+      observability_->emit(conflict_event_name(record.action),
+                           make_observability_context(normalized_request),
+                           make_conflict_fields(record));
+    }
+  }
   return result;
 }
 

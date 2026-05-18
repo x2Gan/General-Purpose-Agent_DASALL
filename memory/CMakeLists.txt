@@ -134,6 +134,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/context/CandidateCollector.cpp
   src/context/ContextOrchestrator.cpp
   src/maintenance/MemoryMaintenanceWorker.cpp
+  src/observability/MemoryObservability.cpp
   src/store/sqlite/RowMappers.cpp
   src/store/sqlite/SqliteMemoryStore.cpp
   src/store/sqlite/SqliteSchemaMigrator.cpp
@@ -183,6 +184,7 @@ target_link_libraries(dasall_memory
   PUBLIC
     dasall_contracts
   PRIVATE
+    dasall_infra
     dasall_sqlite3
 )
 

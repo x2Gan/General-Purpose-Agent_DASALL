@@ -69,6 +69,13 @@ dasall_add_memory_integration_test(
 )
 
 dasall_add_memory_integration_test(
+  dasall_memory_observability_bridge_integration_test
+  MemoryObservabilityBridgeTest
+  MemoryObservabilityBridgeTest.cpp
+  "integration;memory"
+)
+
+dasall_add_memory_integration_test(
   dasall_memory_checkpoint_busy_integration_test
   MemoryCheckpointBusyTest
   MemoryCheckpointBusyTest.cpp
@@ -100,6 +107,12 @@ target_link_libraries(dasall_memory_maintenance_integration_test
     dasall_sqlite3
 )
 
+target_link_libraries(dasall_memory_observability_bridge_integration_test
+  PRIVATE
+    dasall_infra
+    dasall_sqlite3
+)
+
 target_link_libraries(dasall_memory_checkpoint_busy_integration_test
   PRIVATE
     dasall_sqlite3
@@ -125,6 +138,13 @@ target_include_directories(dasall_memory_maintenance_integration_test
     ${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_observability_bridge_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_checkpoint_busy_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
@@ -146,6 +166,11 @@ target_compile_definitions(dasall_memory_failure_injection_integration_test
 )
 
 target_compile_definitions(dasall_memory_maintenance_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_memory_observability_bridge_integration_test
   PRIVATE
     DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )

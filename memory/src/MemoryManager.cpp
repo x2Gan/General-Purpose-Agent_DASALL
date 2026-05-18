@@ -3,9 +3,13 @@
 #include <utility>
 
 #include "error/MemoryError.h"
+#include "observability/MemoryObservability.h"
 
 namespace dasall::memory {
 namespace {
+
+using observability::MemoryTelemetryContext;
+using observability::MemoryTelemetryField;
 
 constexpr contracts::ResultCode kMemoryManagerInitSuccess =
     static_cast<contracts::ResultCode>(0);
@@ -87,6 +91,42 @@ constexpr contracts::ResultCode kMemoryManagerInitSuccess =
   return report;
 }
 
+[[nodiscard]] MemoryTelemetryContext make_manager_context(
+    std::string request_id,
+    std::string session_id,
+    std::string stage) {
+  return MemoryTelemetryContext{
+      .request_id = request_id.empty() ? stage : std::move(request_id),
+      .session_id = std::move(session_id),
+      .stage = std::move(stage),
+      .trace_id = {},
+      .profile_id = {},
+  };
+}
+
+[[nodiscard]] std::vector<MemoryTelemetryField> make_warning_fields(
+    const std::vector<std::string>& warnings,
+    const std::optional<contracts::ResultCode>& result_code = std::nullopt) {
+  std::vector<MemoryTelemetryField> fields;
+  fields.push_back(MemoryTelemetryField{
+      .key = "warning_count",
+      .value = std::to_string(warnings.size()),
+  });
+  if (!warnings.empty()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "warning",
+        .value = warnings.front(),
+    });
+  }
+  if (result_code.has_value()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "result_code",
+        .value = std::to_string(static_cast<int>(*result_code)),
+    });
+  }
+  return fields;
+}
+
 }  // namespace
 
 MemoryManager::MemoryManager(MemoryManagerDependencies dependencies)
@@ -142,11 +182,25 @@ void MemoryManager::shutdown() noexcept {
 ContextAssemblyResult MemoryManager::prepare_context(
     const MemoryContextRequest& request) {
   if (state_ != LifecycleState::Running) {
-    return make_context_failure_result(request, "memory_manager_not_running");
+    auto result = make_context_failure_result(request, "memory_manager_not_running");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "context.failed",
+          make_manager_context(request.request_id, request.session_id, "context"),
+          make_warning_fields(result.warnings, result.result_code));
+    }
+    return result;
   }
 
   if (!dependencies_.context_orchestrator) {
-    return make_context_failure_result(request, "context_orchestrator_unwired");
+    auto result = make_context_failure_result(request, "context_orchestrator_unwired");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "context.failed",
+          make_manager_context(request.request_id, request.session_id, "context"),
+          make_warning_fields(result.warnings, result.result_code));
+    }
+    return result;
   }
 
   return dependencies_.context_orchestrator->assemble(request);
@@ -154,7 +208,16 @@ ContextAssemblyResult MemoryManager::prepare_context(
 
 WritebackResult MemoryManager::write_back(const MemoryWritebackRequest& request) {
   if (state_ != LifecycleState::Running) {
-    return make_writeback_failure_result("memory_manager_not_running");
+    auto result = make_writeback_failure_result("memory_manager_not_running");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "writeback.failed",
+          make_manager_context(request.turn.turn_id.value_or("writeback"),
+                               request.session_id,
+                               "writeback"),
+          make_warning_fields(result.warnings, result.result_code));
+    }
+    return result;
   }
 
   if (request.session_id.empty()) {
@@ -162,11 +225,28 @@ WritebackResult MemoryManager::write_back(const MemoryWritebackRequest& request)
     result.result_code = config_invalid_code();
     result.warnings.push_back("writeback_session_id_missing");
     result.degraded = true;
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "writeback.failed",
+          make_manager_context(request.turn.turn_id.value_or("writeback"),
+                               request.session_id,
+                               "writeback"),
+          make_warning_fields(result.warnings, result.result_code));
+    }
     return result;
   }
 
   if (!dependencies_.writeback_coordinator) {
-    return make_writeback_failure_result("writeback_pipeline_unwired");
+    auto result = make_writeback_failure_result("writeback_pipeline_unwired");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "writeback.failed",
+          make_manager_context(request.turn.turn_id.value_or("writeback"),
+                               request.session_id,
+                               "writeback"),
+          make_warning_fields(result.warnings, result.result_code));
+    }
+    return result;
   }
 
   return dependencies_.writeback_coordinator->persist(request);
@@ -204,16 +284,37 @@ WorkingMemoryExportResult MemoryManager::export_working_memory_snapshot(
 MaintenanceReport MemoryManager::run_maintenance(
     const MaintenanceRequest& request) {
   if (state_ != LifecycleState::Running) {
-    return make_maintenance_report("memory_manager_not_running");
+    auto report = make_maintenance_report("memory_manager_not_running");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "maintenance.failed",
+          make_manager_context("maintenance", {}, "maintenance"),
+          make_warning_fields(report.warnings));
+    }
+    return report;
   }
 
   if (!request.run_checkpoint && !request.run_retention &&
       !request.run_quarantine_cleanup && !request.run_vector_rebuild) {
-    return make_maintenance_report("maintenance_noop_requested");
+    auto report = make_maintenance_report("maintenance_noop_requested");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "maintenance.degraded",
+          make_manager_context("maintenance", {}, "maintenance"),
+          make_warning_fields(report.warnings));
+    }
+    return report;
   }
 
   if (!dependencies_.maintenance_worker) {
-    return make_maintenance_report("maintenance_worker_unwired");
+    auto report = make_maintenance_report("maintenance_worker_unwired");
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "maintenance.failed",
+          make_manager_context("maintenance", {}, "maintenance"),
+          make_warning_fields(report.warnings));
+    }
+    return report;
   }
 
   return dependencies_.maintenance_worker->execute(request);

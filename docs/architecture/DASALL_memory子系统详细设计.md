@@ -1,7 +1,7 @@
 # DASALL Memory 子系统详细设计（Detailed Design）
 
 版本：v1.0
-日期：2026-04-14
+日期：2026-05-18
 阶段：Detailed Design
 适用模块：memory/
 
@@ -154,6 +154,8 @@ Must-Not：
 | ContextAssemble supporting objects | 缺失于 contracts | contracts/include/context 仅有 ContextPacket | 装配请求/结果必须先 module-local |
 
 ### 3.2 现状-目标差距表
+
+说明：本表保留 2026-04-14 detailed design 的初始差距基线，用于解释 Design -> Build 拆解顺序；当前实现状态以 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 的 memory 章节和 `docs/worklog/DASALL_开发执行记录.md` 中 2026-05-18 的 `MEM-FIX-003` 回写为准。
 
 | 目标能力 | 当前状态 | 关键差距 | 风险等级 | 优先级 |
 |---|---|---|---|---|
@@ -1211,6 +1213,13 @@ struct MemoryConfig {
 - 补齐 §6.11.2 清单中剩余 7 个指标。
 - 补齐所有审计事件类型（summary persisted、experience recorded、schema migration、manual purge、vector rebuild）。
 - 引入 Trace span 对齐 `request_id` / `trace_id`。
+
+当前状态补记（2026-05-18）：
+
+- `memory/include/MemoryDependencies.h` 已新增 `MemoryRuntimeDependencies`，作为 runtime-facing 窄注入面接收 logger / audit logger / metrics provider / tracer provider 与 `profile_id`。
+- `memory/src/observability/MemoryObservability.*` 已落地 module-local observability bridge，`MemoryManager`、`ContextOrchestrator`、`WritebackCoordinator`、`MemoryMaintenanceWorker` 现会发出 context / writeback / conflict / compression / maintenance 相关 success、degraded、failure 事件。
+- `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 现会先组合 live observability bundle，再调用 `create_memory_manager()` 透传 shared providers，避免 production composition 仍落到 no-op sink。
+- focused validation 已由 `tests/integration/memory/MemoryObservabilityBridgeTest.cpp` 与 `tests/integration/access/RuntimeProductionHealthCompositionTest.cpp` 覆盖，且本轮未使用 qemu / kvm 证据。
 
 ### 6.12 组件级详细设计
 

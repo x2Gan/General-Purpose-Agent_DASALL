@@ -11,6 +11,7 @@
 #include "context/CandidateCollector.h"
 #include "context/ContextOrchestrator.h"
 #include "maintenance/MemoryMaintenanceWorker.h"
+#include "observability/MemoryObservability.h"
 #include "store/sqlite/SqliteMemoryStore.h"
 #include "vector/SimpleLocalEmbeddingAdapter.h"
 #include "vector/SqliteVssVectorBackend.h"
@@ -115,8 +116,14 @@ class BootstrapContextOrchestrator final : public IContextOrchestrator {
 
 }  // namespace
 
-std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config) {
+std::unique_ptr<IMemoryManager> create_memory_manager(
+    const MemoryConfig& config,
+    const MemoryRuntimeDependencies& runtime_dependencies) {
   MemoryManagerDependencies dependencies;
+  dependencies.runtime_dependencies = runtime_dependencies;
+  dependencies.observability = std::make_shared<observability::MemoryObservability>(
+      observability::make_live_telemetry_sink(runtime_dependencies),
+      runtime_dependencies.profile_id);
   dependencies.working_memory_board = create_working_memory_board();
   if (config.storage.backend == StorageBackend::Sqlite) {
     dependencies.store = store::sqlite::create_sqlite_memory_store();
@@ -140,15 +147,16 @@ std::unique_ptr<IMemoryManager> create_memory_manager(const MemoryConfig& config
     auto conflict_resolver =
       std::make_unique<MemoryConflictResolver>(*dependencies.store);
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(
-        std::move(collector), std::move(allocator), std::move(compressor), config);
+        std::move(collector), std::move(allocator), std::move(compressor),
+        config, dependencies.observability);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, *dependencies.store, *dependencies.store,
       *dependencies.store, *dependencies.store, std::move(conflict_resolver),
       *dependencies.working_memory_board, dependencies.vector_index.get(),
-      dependencies.store_writer_mutex);
+      dependencies.store_writer_mutex, dependencies.observability);
     dependencies.maintenance_worker = std::make_unique<MemoryMaintenanceWorker>(
         *dependencies.store, config, dependencies.vector_index.get(),
-        dependencies.store_writer_mutex);
+        dependencies.store_writer_mutex, dependencies.observability);
   } else {
     dependencies.context_orchestrator = std::make_unique<BootstrapContextOrchestrator>();
   }

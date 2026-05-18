@@ -5,6 +5,7 @@
 #include <mutex>
 #include <optional>
 
+#include "MemoryDependencies.h"
 #include "IContextOrchestrator.h"
 #include "vector/IEmbeddingAdapter.h"
 #include "IMemoryManager.h"
@@ -15,6 +16,12 @@
 #include "writeback/WritebackCoordinator.h"
 
 namespace dasall::memory {
+
+namespace observability {
+
+class MemoryObservability;
+
+}  // namespace observability
 
 struct MemoryManagerDependencies {
   std::unique_ptr<IContextOrchestrator> context_orchestrator;
@@ -27,6 +34,8 @@ struct MemoryManagerDependencies {
   std::shared_ptr<std::mutex> store_writer_mutex;
   std::unique_ptr<WritebackCoordinator> writeback_coordinator;
   std::unique_ptr<MemoryMaintenanceWorker> maintenance_worker;
+  MemoryRuntimeDependencies runtime_dependencies;
+  std::shared_ptr<observability::MemoryObservability> observability;
 };
 
 class MemoryManager final : public IMemoryManager {

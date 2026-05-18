@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "MemoryDependencies.h"
 #include "MaintenanceReport.h"
 #include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
@@ -47,6 +48,7 @@ class IMemoryManager {
 };
 
 [[nodiscard]] std::unique_ptr<IMemoryManager> create_memory_manager(
-        const MemoryConfig& config);
+    const MemoryConfig& config,
+    const MemoryRuntimeDependencies& runtime_dependencies = {});
 
 }  // namespace dasall::memory

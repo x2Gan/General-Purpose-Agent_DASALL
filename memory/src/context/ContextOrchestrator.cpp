@@ -8,6 +8,7 @@
 #include <string_view>
 #include <utility>
 
+#include "observability/MemoryObservability.h"
 #include "context/ContextPacketGuards.h"
 #include "util/TokenEstimator.h"
 
@@ -15,6 +16,8 @@ namespace dasall::memory {
 namespace {
 
 using util::estimate_text_tokens;
+using observability::MemoryTelemetryContext;
+using observability::MemoryTelemetryField;
 
 struct SlotProjection {
   std::string current_goal_summary;
@@ -386,6 +389,55 @@ contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request
   return packet;
 }
 
+[[nodiscard]] MemoryTelemetryContext make_observability_context(
+    const MemoryContextRequest& request) {
+  return MemoryTelemetryContext{
+      .request_id = request.request_id.empty() ? "context-request" : request.request_id,
+      .session_id = request.session_id,
+      .stage = request.stage.empty() ? "context" : request.stage,
+      .trace_id = {},
+      .profile_id = {},
+  };
+}
+
+[[nodiscard]] std::vector<MemoryTelemetryField> make_context_fields(
+    const ContextAssemblyResult& result) {
+  std::vector<MemoryTelemetryField> fields;
+  fields.push_back(MemoryTelemetryField{
+      .key = "warning_count",
+      .value = std::to_string(result.warnings.size()),
+  });
+  if (!result.warnings.empty()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "warning",
+        .value = result.warnings.front(),
+    });
+  }
+  if (!result.dropped_sections.empty()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "dropped_section_count",
+        .value = std::to_string(result.dropped_sections.size()),
+    });
+  }
+  if (!result.compression_notes.empty()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "compression_note_count",
+        .value = std::to_string(result.compression_notes.size()),
+    });
+  }
+  fields.push_back(MemoryTelemetryField{
+      .key = "degraded",
+      .value = result.degraded ? "true" : "false",
+  });
+  if (result.result_code.has_value()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "result_code",
+        .value = std::to_string(static_cast<int>(*result.result_code)),
+    });
+  }
+  return fields;
+}
+
 SlotProjection project_slots(const CandidateSet& candidates,
                              const MemoryContextRequest& request) {
   SlotProjection projection;
@@ -520,11 +572,13 @@ ContextOrchestrator::ContextOrchestrator(
     std::unique_ptr<CandidateCollector> collector,
     std::unique_ptr<BudgetAllocator> allocator,
     std::unique_ptr<CompressionCoordinator> compressor,
-    const MemoryConfig& config)
+    const MemoryConfig& config,
+    std::shared_ptr<observability::MemoryObservability> observability)
     : collector_(std::move(collector)),
       allocator_(std::move(allocator)),
       compressor_(std::move(compressor)),
-      context_config_(config.context) {}
+      context_config_(config.context),
+      observability_(std::move(observability)) {}
 
 ContextAssemblyResult ContextOrchestrator::assemble(
     const MemoryContextRequest& request) {
@@ -534,6 +588,11 @@ ContextAssemblyResult ContextOrchestrator::assemble(
     result.context_packet = make_minimal_packet(request);
     result.warnings.push_back("candidate_collection_missing");
     result.degraded = true;
+    if (observability_) {
+      observability_->emit("context.degraded",
+                           make_observability_context(request),
+                           make_context_fields(result));
+    }
     return result;
   }
 
@@ -551,6 +610,11 @@ ContextAssemblyResult ContextOrchestrator::assemble(
     result.context_packet = make_minimal_packet(request);
     result.warnings.push_back("candidate_collection_failed");
     result.degraded = true;
+    if (observability_) {
+      observability_->emit("context.degraded",
+                           make_observability_context(request),
+                           make_context_fields(result));
+    }
     return result;
   }
 
@@ -635,6 +699,17 @@ ContextAssemblyResult ContextOrchestrator::assemble(
                                 [](const std::string& warning) {
                                   return warning_implies_degraded(warning);
                                 });
+  if (observability_ && !result.compression_notes.empty()) {
+    observability_->emit("compression.applied",
+                         make_observability_context(request),
+                         make_context_fields(result));
+  }
+  if (observability_) {
+    observability_->emit(result.degraded ? "context.degraded"
+                                         : "context.assembled",
+                         make_observability_context(request),
+                         make_context_fields(result));
+  }
   return result;
 }
 

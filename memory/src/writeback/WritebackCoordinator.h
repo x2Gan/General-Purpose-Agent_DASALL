@@ -16,6 +16,12 @@
 
 namespace dasall::memory {
 
+namespace observability {
+
+class MemoryObservability;
+
+}  // namespace observability
+
 class WritebackCoordinator {
  public:
   WritebackCoordinator(ITransactionalStore& transaction_store,
@@ -26,7 +32,8 @@ class WritebackCoordinator {
                        std::unique_ptr<MemoryConflictResolver> conflict_resolver,
                        IWorkingMemoryBoard& working_memory_board,
                        VectorMemoryIndexAdapter* vector_index = nullptr,
-                       std::shared_ptr<std::mutex> writer_mutex = nullptr);
+                       std::shared_ptr<std::mutex> writer_mutex = nullptr,
+                       std::shared_ptr<observability::MemoryObservability> observability = nullptr);
 
   [[nodiscard]] WritebackResult persist(const MemoryWritebackRequest& request);
 
@@ -52,6 +59,7 @@ class WritebackCoordinator {
   IWorkingMemoryBoard& working_memory_board_;
   VectorMemoryIndexAdapter* vector_index_ = nullptr;
   std::shared_ptr<std::mutex> writer_mutex_;
+  std::shared_ptr<observability::MemoryObservability> observability_;
 };
 
 }  // namespace dasall::memory

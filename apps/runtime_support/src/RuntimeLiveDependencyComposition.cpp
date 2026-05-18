@@ -629,6 +629,17 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
 
   auto dependency_set = std::make_shared<runtime::RuntimeDependencySet>();
 
+  const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
+  if (!observability.ok()) {
+    return make_error(std::string("runtime observability composition failed for ") +
+                      std::string(composition_owner) + ": " + observability.error);
+  }
+  dependency_set->audit_logger = observability.audit_logger;
+  dependency_set->metrics_provider = observability.metrics_provider;
+  dependency_set->tracer_provider = observability.tracer_provider;
+  dependency_set->health_monitor = observability.health_monitor;
+  dependency_set->health_probes = observability.health_probes;
+
   std::string memory_config_error;
   bool memory_vector_fail_closed = false;
   auto memory_config = make_sqlite_memory_config(
@@ -645,7 +656,15 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
 
   auto memory_manager = std::shared_ptr<memory::IMemoryManager>(
-      memory::create_memory_manager(*memory_config));
+      memory::create_memory_manager(
+        *memory_config,
+        memory::MemoryRuntimeDependencies{
+          .logger = observability.logger,
+          .audit_logger = observability.audit_logger,
+          .metrics_provider = observability.metrics_provider,
+          .tracer_provider = observability.tracer_provider,
+          .profile_id = policy_snapshot->effective_profile_id(),
+        }));
   if (memory_manager == nullptr) {
     return make_error(std::string("memory manager factory returned null for ") +
                       std::string(composition_owner));
@@ -657,17 +676,6 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                       std::string(composition_owner));
   }
   dependency_set->memory_manager = std::move(memory_manager);
-
-  const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
-  if (!observability.ok()) {
-    return make_error(std::string("runtime observability composition failed for ") +
-                      std::string(composition_owner) + ": " + observability.error);
-  }
-  dependency_set->audit_logger = observability.audit_logger;
-  dependency_set->metrics_provider = observability.metrics_provider;
-  dependency_set->tracer_provider = observability.tracer_provider;
-  dependency_set->health_monitor = observability.health_monitor;
-  dependency_set->health_probes = observability.health_probes;
 
   const bool cognition_first_requested = runtime_cognition_first_requested();
   if (cognition_first_requested) {

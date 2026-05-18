@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #684
+
+- 日期：2026-05-18
+- 阶段：memory / production observability
+- 任务：推进 MEM-FIX-003 接入 Memory production observability sinks
+- 状态：已完成（代码、测试、runtime_support wiring 与文档回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `MEM-FIX-003`，并明确禁止使用 qemu / kvm 收敛本任务证据；本轮验证仅使用本机 `build-ci`。
+2. 本轮真实缺口不是 Memory 内部缺少 warnings/report 字段，而是 production live composition 没有把 logger / audit / metrics / tracing provider 透传给 `create_memory_manager()`，因此即使模块内部有事件也会落到 no-op sink。
+
+### 执行与结果
+
+1. 建立 Memory 窄注入面与 module-local observability bridge。
+   - `memory/include/MemoryDependencies.h` 新增 `MemoryRuntimeDependencies`，把 logger / audit logger / metrics provider / tracer provider 与 `profile_id` 收口为 runtime-facing 窄注入面。
+   - `memory/include/IMemoryManager.h` 的 `create_memory_manager()` 现接受 `MemoryRuntimeDependencies` 默认参数；`memory/src/MemoryManagerInternal.h` 与 `memory/src/MemoryManagerFactory.cpp` 同步持有 observability owner。
+   - 新增 `memory/src/observability/MemoryObservability.h/.cpp`，在 module-local bridge 中统一把 Memory 事件适配为 live structured log、metric、trace 与 audit emit，同时保留 no-op fallback。
+2. 在 Memory owners 落地 production-style emit。
+   - `memory/src/MemoryManager.cpp` 现覆盖前门 `prepare_context()` / `write_back()` / `run_maintenance()` failure emit。
+   - `memory/src/context/ContextOrchestrator.cpp` 现覆盖 context assembled / degraded 与 compression applied emit。
+   - `memory/src/writeback/WritebackCoordinator.cpp` 现覆盖 writeback completed / degraded / failed 与 conflict accepted / superseded / rejected / coexisted emit。
+   - `memory/src/maintenance/MemoryMaintenanceWorker.cpp` 现覆盖 maintenance completed / degraded emit。
+3. 收口 runtime_support production wiring。
+   - `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 现先执行 `compose_runtime_observability_bundle()`，再创建 memory manager。
+   - live composition 现在通过 `MemoryRuntimeDependencies` 把 shared logger / audit / metrics / tracing provider 传给 Memory，移除了 production path 仍落 no-op sink 的结构性缺口。
+4. 增加 focused integration gate 并修复测试接线。
+   - 新增 `tests/integration/memory/MemoryObservabilityBridgeTest.cpp`，覆盖 context failed、writeback completed / degraded、conflict superseded、compression applied、context assembled、maintenance completed 等事件会落到 concrete provider。
+   - `tests/integration/memory/CMakeLists.txt` 新增 observability bridge test target，并补齐 `infra/include` / `infra/src` include path 以消费 concrete test hook headers。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_memory_observability_bridge_integration_test dasall_memory_writeback_integration_test dasall_memory_maintenance_integration_test -j4`
+   - 结果：通过；三条 Memory focused targets 均构建成功。
+2. `ctest --test-dir build-ci --output-on-failure -R '^(MemoryObservabilityBridgeTest|MemoryWritebackIntegrationTest|MemoryMaintenanceIntegrationTest)$'`
+   - 结果：`100% tests passed, 0 tests failed out of 3`。
+3. `cmake --build build-ci --target dasall_access_runtime_production_health_composition_integration_test -j4`
+   - 结果：通过；证明 runtime_support wiring 修改后 app-level composition target 可正常构建。
+4. `ctest --test-dir build-ci --output-on-failure -R '^RuntimeProductionHealthCompositionTest$'`
+   - 结果：通过；证明 live dependency composition 仍能 materialize observability / health baseline。
+
+### 结果
+
+1. `MEM-FIX-003` 已完成，`MEM-GAP-003` 可判定为已闭合。
+2. Memory 现在不仅在模块内部有 telemetry 字段，而且 production-composed path 也会把 context / writeback / conflict / compression / maintenance 事件落到真实 logger / audit / metrics / trace provider。
+3. 本轮未使用 qemu / kvm；剩余边界回到 `MEM-GAP-004` / `MEM-GAP-005` / `MEM-GAP-006` / `MEM-GAP-007`，不再把 observability sink 缺口误记为当前阻塞项。
+
 ## 记录 #683
 
 - 日期：2026-05-18
