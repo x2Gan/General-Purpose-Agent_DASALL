@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #688
+
+- 日期：2026-05-18
+- 阶段：memory / installed maintenance evidence
+- 任务：推进 MEM-FIX-007 增加 installed maintenance 正向证据
+- 状态：已完成（daemon helper、package smoke artifact、实机 installed 验收与文档回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `MEM-FIX-007`，若存在前置 BLOCK 任务需先解组；同时明确禁止使用 qemu / kvm 收敛证据，要求一切从真实目标出发，优先本机 installed authoritative evidence。
+2. 近端检查表明 Memory maintenance 实现本体已经存在，真实缺口不是“再补一版 maintenance 逻辑”，而是安装态缺少一个可重复、可落盘、可被 package smoke 调用的 evidence owner；现有 `pkg_smoke_install.sh` 只能证明 same-session context writeback，不能证明 checkpoint / retention / quarantine cleanup。
+3. 本轮也不能把解决方案扩写成新的 access / daemon 协议面。最小根因解法应是 package-private helper：它复用真实 daemon profile/config 与 install layout，在真实 DB 上制造 proof 数据并调用 `run_maintenance()`，最后把结果固化为 JSON artifact。
+
+### 执行与结果
+
+1. 新增 installed maintenance proof helper。
+   - `apps/daemon/src/MemoryMaintenanceProofRunner.h/.cpp` 新增 `collect_memory_maintenance_proof()`，通过 `DaemonEntryConfigLoader`、`ProfileCatalog`、`BuildProfileResolver`、`MemoryConfigProjector` 与 `InstallLayout` 解析真实安装态 memory 配置。
+   - helper 在真实 SQLite DB 上 seed 一条 session、`retention_turns + 1` 条 turns、一条保护最旧 turn 的 summary 与一条过期 quarantine 记录，随后执行 `IMemoryManager::run_maintenance()` 并回查 retention / checkpoint / quarantine cleanup 结果。
+   - `apps/daemon/src/MemoryMaintenanceProofMain.cpp` 新增 `--json` CLI entrypoint，用于 build-tree 与 installed 两侧统一输出 proof JSON。
+2. 补齐 focused validation 与打包接线。
+   - `tests/unit/apps/daemon/MemoryMaintenanceProofRunnerTest.cpp` 已新增 build-tree focused validation，锁定 `turns_before = retention_turns + 1`、`turns_after = retention_turns`、`checkpoint_executed=true`、`checkpoint_wal_pages_remaining=0`、`quarantine_rows_after=0` 等断言。
+   - `apps/daemon/CMakeLists.txt` 新增 `dasall_memory_maintenance_proof_tool`；首轮 `dpkg-buildpackage -us -uc -b` 暴露 helper 误装到 Debian multiarch libdir，导致 `dh_install` 找不到 `/usr/lib/dasall/dasall-memory-maintenance-proof`。已将 helper 安装目录修正为 `lib/dasall`，并把 `debian/dasall-daemon.install` 收回固定路径口径。
+3. 收口 installed smoke artifact。
+   - `scripts/packaging/pkg_smoke_install.sh` 现在会在 `memory-proof.json` 之后调用 `/usr/lib/dasall/dasall-memory-maintenance-proof --json`，并新增 `memory-maintenance-proof.json` artifact。
+   - 首轮 smoke 暴露脚本直接读取当前 shell 的 `DASALL_DAEMON_PROFILE_ID`，而该变量原本只在子 shell source `/etc/default/dasall-daemon`。现已改为 helper 调用前显式从安装态默认文件读取 profile id，再执行 helper。
+4. 完成文档回写。
+   - 新增 deliverable `docs/todos/memory/deliverables/MEM-FIX-007-installed-maintenance-proof.md`，固定本轮任务重定义、Design -> Build 映射、验证命令与 authoritative artifact。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `MEM-GAP-007` 标记为已闭合、`MEM-FIX-007` 标记为 Done，并补充 `MEM-FIX-007 完成证据`。
+   - `docs/architecture/DASALL_memory子系统详细设计.md` 已在 6.12.6 的 maintenance 验收口径中回链 installed helper 与 `memory-maintenance-proof.json`。
+
+### 验证
+
+1. build-tree focused validation
+   - `Build_CMakeTools(buildTargets=["dasall-daemon_memory_maintenance_proof_runner_unit_test"])`：通过。
+   - `RunCtest_CMakeTools(tests=["MemoryMaintenanceProofRunnerTest"])`：失败；工具层仍返回仓库已知的泛化 `生成失败`，不足以判定测试本身失败。
+   - 直接执行 `./build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_memory_maintenance_proof_runner_unit_test`：退出码 `0`。
+   - `Build_CMakeTools(buildTargets=["dasall_memory_maintenance_proof_tool"])`：通过。
+   - 直接执行 `./build/vscode-linux-ninja/apps/daemon/dasall-memory-maintenance-proof --profile-id edge_minimal --state-root <temp> --json`：退出码 `0`；JSON 关键字段 `ok=true`、`checkpoint_executed=true`、`turns_before=121`、`turns_after=120`、`quarantine_rows_after=0`。
+   - `sh -n scripts/packaging/pkg_smoke_install.sh`：通过。
+2. Debian package rebuild
+   - 首轮 `dpkg-buildpackage -us -uc -b` 暴露 `dh_install` missing files：helper 落在 multiarch libdir，和 `/usr/lib/dasall` 口径不一致。
+   - 修正 helper 安装目录后再次执行 `dpkg-buildpackage -us -uc -b`：通过；helper 已被安装到 `debian/tmp/usr/lib/dasall/dasall-memory-maintenance-proof`，并进入 `dasall-daemon` 包的 `/usr/lib/dasall/dasall-memory-maintenance-proof`。
+3. authoritative installed smoke
+   - `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-mem-fix-007-proof.lp9BEK sh scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过；本次运行复用了当前 shell 已设置的 `DASALL_DEEPSEEK_API_KEY_FILE`。
+   - `/tmp/dasall-mem-fix-007-proof.lp9BEK/memory-maintenance-proof.json` 当前记录：`ok=true`、`checkpoint_executed=true`、`checkpoint_wal_pages_remaining=0`、`turns_before=481`、`turns_after=480`、`retention_turns=480`、`quarantine_rows_after=0`、`protected_turn_retained=true`、`purged_turn_removed=true`、`newest_turn_retained=true`、`wal_bytes_before=510912`。
+
+### 结果
+
+1. `MEM-FIX-007` 已按“本机 installed-package maintenance authoritative evidence”口径完成，`MEM-GAP-007` 可判定为已闭合。
+2. Memory maintenance 现在不再只存在于 build-tree / 单测语义里；checkpoint、turn retention 与 quarantine cleanup 已可在真实安装态 DB 上被 helper 与 package smoke 直接观测，并稳定落盘为 `memory-maintenance-proof.json`。
+3. 本轮未使用 qemu / kvm，也不把结果外推为 qemu / soak gate；残余缺口仅保留 `MEM-GAP-004` 的 packaging / release 环境隔离复核。
+
 ## 记录 #687
 
 - 日期：2026-05-18

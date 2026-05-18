@@ -13,6 +13,7 @@ DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
+MEMORY_MAINTENANCE_PROOF_TOOL=/usr/lib/dasall/dasall-memory-maintenance-proof
 PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
 PRESERVED_SECRET_ROOT=
 
@@ -443,6 +444,23 @@ with open(path, 'w', encoding='ascii') as handle:
     handle.write('\n')
 PY
   fi
+
+  run_root test -x "${MEMORY_MAINTENANCE_PROOF_TOOL}"
+  MAINTENANCE_PROFILE_ID=$(run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && printf "%s" "${DASALL_DAEMON_PROFILE_ID}"')
+  MAINTENANCE_PROOF_JSON=$(run_root "${MEMORY_MAINTENANCE_PROOF_TOOL}" \
+    --profile-id "${MAINTENANCE_PROFILE_ID}" \
+    --config-file /etc/dasall/daemon.json \
+    --json)
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"ok": true' 'memory maintenance proof'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"checkpoint_executed": true' 'memory maintenance checkpoint'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"checkpoint_wal_pages_remaining": 0' 'memory maintenance checkpoint wal drain'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"protected_turn_retained": true' 'memory maintenance protected turn retention'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"purged_turn_removed": true' 'memory maintenance purged turn removal'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"newest_turn_retained": true' 'memory maintenance newest turn retention'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"quarantine_rows_after": 0' 'memory maintenance quarantine cleanup'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"turns_before": [0-9]+' 'memory maintenance seeded turn count'
+  assert_json_matches "$MAINTENANCE_PROOF_JSON" '"turns_after": [0-9]+' 'memory maintenance retained turn count'
+  write_artifact_file 'memory-maintenance-proof.json' "$MAINTENANCE_PROOF_JSON"
 
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)
