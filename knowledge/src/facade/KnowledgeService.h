@@ -54,6 +54,7 @@ struct KnowledgeServiceDeps {
   std::unique_ptr<ingest::IngestionCoordinator> ingestion_coordinator;
   std::unique_ptr<index::IndexWriter> index_writer;
   std::unique_ptr<KnowledgeHealthProbe> health_probe;
+  bool startup_prewarm_on_init = false;
   std::function<std::int64_t()> now_ms;
   std::function<query::NormalizeResult(const KnowledgeQuery& query)> normalize_query;
   std::function<index::CorpusCatalogSnapshot()> catalog_snapshot;

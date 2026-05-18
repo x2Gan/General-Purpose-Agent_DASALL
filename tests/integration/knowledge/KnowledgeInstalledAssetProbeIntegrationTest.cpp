@@ -206,11 +206,14 @@ void installed_asset_service_retrieves_deepseek_chat() {
   assert_true(factory_result.service != nullptr,
               "installed asset knowledge factory failed: " + factory_result.error);
 
-  const auto refresh_result = factory_result.service->request_refresh(CorpusChangeSet{});
-  assert_true(refresh_result.status == RefreshStatus::Accepted,
-              "installed asset refresh failed: " + format_error(refresh_result.error));
-    wait_for_refresh_completion(factory_result.service,
-                  "installed asset first refresh");
+  const auto initial_health = factory_result.service->health_snapshot();
+  assert_true(!initial_health.refresh_in_flight,
+              "installed asset init prewarm should settle before the factory returns");
+  assert_true(initial_health.last_refresh_status.has_value() &&
+                  *initial_health.last_refresh_status == RefreshStatus::Completed,
+              "installed asset init prewarm should publish a completed terminal status");
+  assert_true(!initial_health.active_snapshot_id.empty(),
+              "installed asset init prewarm should publish an active snapshot before the first retrieve");
 
   const auto repeated_refresh_result = factory_result.service->request_refresh(CorpusChangeSet{});
   assert_true(repeated_refresh_result.status == RefreshStatus::Accepted,

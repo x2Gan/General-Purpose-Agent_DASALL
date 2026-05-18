@@ -238,6 +238,34 @@ bool KnowledgeServiceFacade::init(const KnowledgeConfigSnapshot& config) {
   }
 
   config_ = config;
+
+  if (!config_.knowledge_enabled) {
+    lifecycle_state_ = LifecycleState::Running;
+    return true;
+  }
+
+  if (deps_.current_manifest) {
+    const auto manifest = deps_.current_manifest();
+    if (manifest.has_value()) {
+      lifecycle_state_ = LifecycleState::Running;
+      return true;
+    }
+  }
+
+  if (deps_.startup_prewarm_on_init) {
+    if (!deps_.current_manifest || !deps_.ingestion_coordinator || !deps_.index_writer) {
+      return false;
+    }
+
+    refresh_in_flight_.store(true);
+    const auto prewarm_result = run_real_refresh(CorpusChangeSet{});
+    refresh_in_flight_.store(false);
+    last_refresh_status_code_.store(static_cast<int>(prewarm_result.status));
+    if (prewarm_result.status != RefreshStatus::Completed) {
+      return false;
+    }
+  }
+
   lifecycle_state_ = LifecycleState::Running;
   return true;
 }

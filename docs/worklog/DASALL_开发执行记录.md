@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #690
+
+- 日期：2026-05-18
+- 阶段：knowledge / subsystem gap closure
+- 任务：推进 KNO-FIX-002 收口首启 index build 与 prewarm 策略
+- 状态：已完成（startup prewarm/fail-closed、installed factory 首启路径与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-002`，若存在前置 BLOCK 任务则先解阻；同时继续禁止使用 qemu / kvm 收敛证据，本轮只允许本地构建与直接二进制验证链。
+2. 近端代码检查表明当前根因不是 retrieval 本体缺失，而是 `KnowledgeServiceFacade::init()` 仅校验配置并进入 Running：当没有 active snapshot 时，factory 返回后的 service 仍可能在第一次 retrieve 时命中 unavailable，installed asset probe 也只能通过手工 `request_refresh({})` 才能变绿。
+3. 详设要求 Knowledge 启动时在缺失 active snapshot 的情况下完成首建策略收口；为了不破坏 seam-only unit harness，本轮采用 module-internal 开关 `startup_prewarm_on_init`，只在真实 startup composition 启用同步 prewarm，并在无法激活 snapshot 时 fail-closed。
+
+### 执行与结果
+
+1. 收口 init-time prewarm 策略。
+   - `knowledge/src/facade/KnowledgeService.h/.cpp` 已新增 `startup_prewarm_on_init` 依赖开关；`KnowledgeServiceFacade::init()` 在 Knowledge 启用、无 active snapshot 且 startup path 显式开启该开关时，会同步执行一次 `run_real_refresh(CorpusChangeSet{})`。
+   - prewarm 期间会复用现有 refresh terminal status 口径：成功写入 `Completed`，失败写入 `Failed` 并直接返回 `false`，避免在没有 active snapshot 的情况下误报 Running/ready。
+2. 只在真实 startup composition 启用首建。
+   - `knowledge/src/KnowledgeServiceFactory.cpp` 现在为 installed asset factory 显式设置 `startup_prewarm_on_init = true`，把首启建索引收敛到真实 factory 路径，而不改变默认 seam-only facade 测试口径。
+3. 补齐首启 focused tests，并修正一个局部生命周期缺陷。
+   - 新增 `tests/unit/knowledge/KnowledgeInitPrewarmTest.cpp`，覆盖“缺失 active snapshot 时同步 prewarm 成功”和“snapshot 激活失败时 init fail-closed”两条路径。
+   - 首轮运行该新单测时发生堆破坏；根因是 test harness 里 `IndexWriter` 通过引用依赖 `VersionLedger`，但 `VersionLedger` 被创建为局部 `unique_ptr` 并在返回前销毁。现已改为对齐生产 factory 的 `shared_ptr` 保活模式，问题消失。
+4. 收口 installed asset probe 与总账。
+   - `tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp` 已去掉首次手工 refresh，改为直接断言 factory 返回后 `active_snapshot_id` 已存在、`refresh_in_flight=false` 且 `last_refresh_status=Completed`，随后保留 repeated refresh 作为回归覆盖。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `KNO-GAP-002` 标记为已闭合、`KNO-FIX-002` 标记为 Done，并同步改写覆盖矩阵中关于“init 不自动首建”的过时描述。
+
+### 验证
+
+1. 聚焦构建。
+   - `Build_CMakeTools(buildTargets=["dasall_knowledge_init_prewarm_unit_test"])`：通过。
+   - `Build_CMakeTools(buildTargets=["dasall_knowledge_service_facade_real_refresh_unit_test","dasall_knowledge_retrieval_smoke_integration_test","dasall_knowledge_installed_asset_probe_integration_test"])`：通过。
+2. 聚焦测试。
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_init_prewarm_unit_test`：退出码 `0`。
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_service_facade_real_refresh_unit_test`：退出码 `0`。
+   - `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_retrieval_smoke_integration_test`：退出码 `0`。
+   - `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_probe_integration_test`：退出码 `0`。
+
+### 结果
+
+1. `KNO-FIX-002` 已按“startup opt-in synchronous prewarm + fail-closed when activation fails”口径完成，`KNO-GAP-002` 可判定为已闭合。
+2. installed factory 现在在缺失 active snapshot 时即可完成首建；factory 返回后的 health 与 retrieve 行为一致，不再依赖测试代码手工触发第一次 refresh。
+3. 本轮仍未外推为 runtime write-side refresh trigger、installed package、qemu 或 release 证据；后续优先级转向 `KNO-GAP-009`、`KNO-GAP-003` 与 `KNO-GAP-004`。
+
 ## 记录 #689
 
 - 日期：2026-05-18

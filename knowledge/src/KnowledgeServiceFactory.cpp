@@ -231,6 +231,7 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     deps.corpus_router = std::make_unique<query::CorpusRouter>();
     deps.reranker = std::make_unique<rerank::Reranker>();
     deps.evidence_assembler = std::make_unique<evidence::EvidenceAssembler>();
+    deps.startup_prewarm_on_init = true;
     deps.now_ms = now_ms;
 
     auto* catalog = deps.corpus_catalog.get();
