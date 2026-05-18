@@ -929,7 +929,7 @@ Knowledge v1 的并发策略需显式回链 `InfraConcurrencyPolicy.md`：
 | 组件 | 并发对象 | 锁层级 / overflow_policy | 设计说明 |
 |---|---|---|---|
 | `KnowledgeServiceFacade` | 查询主路径 | 无内部请求队列；同步调用 | 避免一开始引入第二调度面 |
-| `RecallCoordinator` | sparse/dense 双 lane | 无锁；v1 串行执行双 lane | 若 `max_parallel_recall ≥ 2` 可升级为 `std::async` + deadline 超时取消；v1 先串行保守 |
+| `RecallCoordinator` | sparse/dense 双 lane | 无锁；按 `max_parallel_recall` 执行 hybrid 并行/串行 fallback，并在 lane timeout 后丢弃 late result | `max_parallel_recall ≥ 2` 时并行启动两条 lane；否则保留串行 fallback，但两种路径都保持独立 lane timeout |
 | `IngestWorker` | 后台刷新线程 | L0 独占 ingest task slot | 同一时刻只允许一个 refresh；`request_refresh()` 重复调用返回 busy |
 | `CorpusCatalog` | catalog cache / manifest map | L1 | 只保护元数据，不在持锁期间做磁盘或向量 I/O |
 | `HotResultCache`（可选） | 最近查询结果缓存 | L2，若未来启用建议 `reject` | v1 可不实现；若实现，不允许阻塞主链路 |

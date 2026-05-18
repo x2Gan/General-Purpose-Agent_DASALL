@@ -120,22 +120,28 @@ void test_recall_coordinator_prefers_real_dense_bridge_over_fallback_seam() {
       std::move(vector_store));
   bool fallback_dense_called = false;
 
-  RecallCoordinator coordinator(RecallCoordinatorDeps{
-      .sparse_lane = [](const SparseRetrieveRequest&) {
-        SparseRetrieveResult result;
-        result.ok = true;
-        result.hits = {make_sparse_hit()};
-        return result;
+  RecallCoordinator coordinator(
+      RecallCoordinatorDeps{
+          .sparse_lane = [](const SparseRetrieveRequest&) {
+            SparseRetrieveResult result;
+            result.ok = true;
+            result.hits = {make_sparse_hit()};
+            return result;
+          },
+          .dense_bridge = dense_bridge,
+          .dense_lane = [&fallback_dense_called](const DenseRecallRequest&) {
+            fallback_dense_called = true;
+            DenseRecallResult result;
+            result.ok = false;
+            result.failure_reason_codes = {"unexpected_fallback_dense_lane"};
+            return result;
+          },
       },
-      .dense_bridge = dense_bridge,
-      .dense_lane = [&fallback_dense_called](const DenseRecallRequest&) {
-        fallback_dense_called = true;
-        DenseRecallResult result;
-        result.ok = false;
-        result.failure_reason_codes = {"unexpected_fallback_dense_lane"};
-        return result;
-      },
-  });
+      dasall::knowledge::retrieve::RecallCoordinatorPolicy{
+          .max_parallel_recall = 2U,
+          .sparse_lane_timeout_ms = 100,
+          .dense_lane_timeout_ms = 100,
+      });
 
   const auto result = coordinator.recall(make_request());
   assert_true(result.ok,

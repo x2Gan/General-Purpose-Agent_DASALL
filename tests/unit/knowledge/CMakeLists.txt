@@ -218,6 +218,12 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_recall_coordinator_timeout_unit_test
+	RecallCoordinatorTimeoutTest.cpp
+	RecallCoordinatorTimeoutTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_knowledge_service_facade_smoke_unit_test
 	KnowledgeServiceFacadeSmokeTest.cpp
 	KnowledgeServiceFacadeSmokeTest

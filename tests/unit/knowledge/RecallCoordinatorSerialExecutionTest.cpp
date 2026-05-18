@@ -87,20 +87,20 @@ void test_recall_coordinator_keeps_v1_hybrid_execution_serial() {
           },
       },
       RecallCoordinatorPolicy{
-          .max_parallel_recall = 4U,
+          .max_parallel_recall = 1U,
           .sparse_lane_timeout_ms = 100,
           .dense_lane_timeout_ms = 100,
       });
 
   const auto result = coordinator.recall(make_request());
   assert_true(result.ok,
-              "serial v1 recall should still succeed when both lanes succeed");
+              "serial fallback recall should still succeed when both lanes succeed");
   assert_equal(2, static_cast<int>(call_order.size()),
-               "hybrid recall should execute exactly two lanes in v1");
+               "serial fallback recall should execute exactly two lanes");
   assert_equal("sparse", call_order.front(),
-               "v1 hybrid recall should always execute sparse lane first");
+               "serial fallback recall should always execute sparse lane first");
   assert_equal("dense", call_order.back(),
-               "v1 hybrid recall should execute dense lane second even when parallel budget is available");
+               "serial fallback recall should execute dense lane second when parallel budget is exhausted");
 }
 
 }  // namespace

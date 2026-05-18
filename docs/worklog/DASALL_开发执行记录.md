@@ -1,5 +1,55 @@
 # DASALL 开发执行记录
 
+## 记录 #693
+
+- 日期：2026-05-18
+- 阶段：knowledge / recall deadline convergence
+- 任务：推进 KNO-FIX-004 实现 recall lane timeout 与 parallel policy
+- 状态：已完成（RecallCoordinator parallel/timeout、timeout-focused tests、quality gate 与文档回写已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-004`；若存在前置 BLOCK 任务则先解阻，并在每个原子任务完成后独立提交推送。
+2. 近端代码检查表明当前根因就在 `knowledge/src/retrieve/RecallCoordinator.cpp`：`RecallCoordinatorPolicy` 已有 `max_parallel_recall` 与 lane timeout 字段，但 `RecallCoordinator::recall()` 仍同步串行直调 sparse/dense lane，导致慢 lane 会拖住请求且晚到结果无法丢弃。
+3. 本轮仍需遵守“禁止 qemu / kvm 收敛证据”的约束，因此验证只使用 build-tree unit / integration / ctest 证据，不把结果外推到 installed package、release runner 或 soak。
+4. `git status --short --branch` 显示 `access/src/AccessGatewayFactory.cpp` 存在用户本地未提交修改；本轮提交必须将其排除在外，避免混入无关变更。
+
+### 执行与结果
+
+1. 收口 RecallCoordinator lane policy。
+   - `knowledge/src/retrieve/RecallCoordinator.cpp` 已新增 lane async wrapper：hybrid 且 `max_parallel_recall >= 2` 时并发启动 sparse/dense lane；当并行预算不足时保留串行 fallback，但两种路径都走同一套独立 lane timeout 语义。
+   - sparse/dense lane 现分别按 `sparse_lane_timeout_ms` / `dense_lane_timeout_ms` 等待；超时或异常时返回 lane-level failure，晚到结果直接丢弃，不再阻塞当前请求。
+2. 补齐 timeout / parallel-focused tests。
+   - 新增 `tests/unit/knowledge/RecallCoordinatorTimeoutTest.cpp`，覆盖 dense late-result discard 与 dual-timeout fail-fast 两条路径。
+   - `tests/unit/knowledge/RecallCoordinatorSerialExecutionTest.cpp` 现改为验证 `max_parallel_recall=1` 时的 serial fallback。
+   - `tests/unit/knowledge/RecallCoordinatorDenseBridgeTest.cpp` 现把 real dense bridge precedence 回归提升到 parallel budget path。
+   - `tests/unit/knowledge/CMakeLists.txt` 已注册 `RecallCoordinatorTimeoutTest`。
+3. 回写总账与详细设计。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `KNO-GAP-004` 标记为已闭合、`KNO-FIX-004` 标记为 Done，并补充本轮完成证据与 ctest 复验口径。
+   - `docs/architecture/DASALL_knowledge子系统详细设计.md` 的 6.12 并发表现已对齐为“parallel budget + lane timeout 已实现”，不再保留“v1 串行占位”的当前口径。
+
+### 验证
+
+1. 聚焦构建与 RecallCoordinator 单测。
+   - `cmake --build build/vscode-linux-ninja --target dasall_recall_coordinator_unit_test dasall_recall_coordinator_degraded_unit_test dasall_recall_coordinator_serial_execution_unit_test dasall_recall_coordinator_dense_bridge_unit_test dasall_recall_coordinator_timeout_unit_test -j2`
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_degraded_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_serial_execution_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_dense_bridge_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_timeout_unit_test`
+   - 结果：上述命令全部退出码 `0`。
+2. 聚焦集成与 discoverability。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge_retrieval_quality_regression_integration_test -j2`
+   - `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_retrieval_quality_regression_integration_test`
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R "RecallCoordinatorTimeoutTest|RecallCoordinatorDenseBridgeTest|RetrievalQualityRegressionTest"`
+   - 结果：integration 二进制退出码 `0`；ctest 共发现并执行 3 条测试，3/3 Passed。
+
+### 结果
+
+1. `KNO-FIX-004` 已按“parallel budget + lane timeout + late-result discard”口径完成，`KNO-GAP-004` 可判定为已闭合。
+2. RecallCoordinator 现在不会再因为单条慢 lane 拖垮整个 hybrid recall；partial result 与 dual-timeout failure 都有稳定 reason code 和自动化覆盖。
+3. 本轮未使用 qemu / kvm，也不把结果外推为 installed package / release-ready 证据；后续优先级转向 `KNO-GAP-005` 与 `KNO-GAP-007`。
+
 ## 记录 #692
 
 - 日期：2026-05-18

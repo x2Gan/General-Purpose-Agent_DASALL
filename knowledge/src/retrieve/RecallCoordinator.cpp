@@ -1,6 +1,9 @@
 #include "retrieve/RecallCoordinator.h"
 
+#include <chrono>
 #include <algorithm>
+#include <future>
+#include <thread>
 #include <utility>
 
 #include "KnowledgeErrors.h"
@@ -68,6 +71,63 @@ void clear_candidates_for_failure(RecallCandidateSet& candidates) {
   candidates.degraded = false;
 }
 
+[[nodiscard]] SparseRetrieveResult make_sparse_timeout_failure() {
+  return make_sparse_failure(KnowledgeErrorCode::RecallTimeout,
+                             "sparse lane exceeded recall timeout",
+                             "recall_timeout");
+}
+
+[[nodiscard]] SparseRetrieveResult make_sparse_internal_failure() {
+  return make_sparse_failure(KnowledgeErrorCode::InternalError,
+                             "sparse lane execution raised an unexpected exception",
+                             "internal_error");
+}
+
+[[nodiscard]] DenseRecallResult make_dense_timeout_failure() {
+  return make_dense_failure({"recall_timeout"});
+}
+
+[[nodiscard]] DenseRecallResult make_dense_internal_failure() {
+  return make_dense_failure({"internal_error"});
+}
+
+template <typename Result, typename Invocation>
+[[nodiscard]] std::future<Result> launch_lane_task(Invocation&& invocation) {
+  auto promise = std::make_shared<std::promise<Result>>();
+  auto future = promise->get_future();
+  std::thread([promise, invocation = std::forward<Invocation>(invocation)]() mutable {
+    try {
+      promise->set_value(invocation());
+    } catch (...) {
+      try {
+        promise->set_exception(std::current_exception());
+      } catch (...) {
+      }
+    }
+  }).detach();
+  return future;
+}
+
+template <typename Result, typename TimeoutFactory, typename ExceptionFactory>
+[[nodiscard]] Result await_lane_until(std::future<Result>& future,
+                                      std::chrono::steady_clock::time_point deadline,
+                                      TimeoutFactory&& make_timeout_result,
+                                      ExceptionFactory&& make_exception_result) {
+  if (!future.valid()) {
+    return make_exception_result();
+  }
+
+  if (future.wait_until(deadline) != std::future_status::ready) {
+    return make_timeout_result();
+  }
+
+  try {
+    return future.get();
+  } catch (...) {
+    return make_exception_result();
+  }
+}
+
 }  // namespace
 
 bool RecallRequest::has_consistent_values() const {
@@ -113,35 +173,87 @@ RecallCoordinatorResult RecallCoordinator::recall(const RecallRequest& request) 
 
   const bool request_sparse_lane = request.plan.mode != RetrievalMode::DenseOnly;
   const bool request_dense_lane = request.plan.mode != RetrievalMode::LexicalOnly;
+  const bool use_parallel_hybrid = request_sparse_lane && request_dense_lane &&
+                                   policy_.max_parallel_recall >= 2U;
 
-  if (request_sparse_lane) {
-    const auto sparse_result = run_sparse_lane(request);
+  const auto apply_sparse_result = [&result](const SparseRetrieveResult& sparse_result) {
     append_warnings(result.candidates.warnings, sparse_result.warnings);
 
     if (sparse_result.ok) {
       result.candidates.sparse_hits = sparse_result.hits;
       result.candidates.sparse_succeeded = true;
-    } else {
-      const auto reason_code = decorate_lane_reason(
-          "sparse", sparse_failure_reason_code(sparse_result.error));
-      append_unique(result.failure_reason_codes, reason_code);
-      append_unique(result.candidates.warnings, reason_code);
+      return;
     }
-  }
 
-  if (request_dense_lane) {
-    const auto dense_result = run_dense_lane(request);
+    const auto reason_code = decorate_lane_reason(
+        "sparse", sparse_failure_reason_code(sparse_result.error));
+    append_unique(result.failure_reason_codes, reason_code);
+    append_unique(result.candidates.warnings, reason_code);
+  };
+
+  const auto apply_dense_result = [&result](const DenseRecallResult& dense_result) {
     append_warnings(result.candidates.warnings, dense_result.warnings);
 
     if (dense_result.ok) {
       result.candidates.dense_hits = dense_result.hits;
       result.candidates.dense_succeeded = true;
-    } else {
-      for (const auto& reason_code : dense_result.failure_reason_codes) {
-        const auto decorated_reason = decorate_lane_reason("dense", reason_code);
-        append_unique(result.failure_reason_codes, decorated_reason);
-        append_unique(result.candidates.warnings, decorated_reason);
-      }
+      return;
+    }
+
+    for (const auto& reason_code : dense_result.failure_reason_codes) {
+      const auto decorated_reason = decorate_lane_reason("dense", reason_code);
+      append_unique(result.failure_reason_codes, decorated_reason);
+      append_unique(result.candidates.warnings, decorated_reason);
+    }
+  };
+
+  if (use_parallel_hybrid) {
+    auto sparse_future = launch_lane_task<SparseRetrieveResult>([this, request]() {
+      return run_sparse_lane(request);
+    });
+    auto dense_future = launch_lane_task<DenseRecallResult>([this, request]() {
+      return run_dense_lane(request);
+    });
+
+    const auto started_at = std::chrono::steady_clock::now();
+    const auto sparse_deadline = started_at +
+        std::chrono::milliseconds(policy_.sparse_lane_timeout_ms);
+    const auto dense_deadline = started_at +
+        std::chrono::milliseconds(policy_.dense_lane_timeout_ms);
+
+    apply_sparse_result(await_lane_until(
+        sparse_future,
+        sparse_deadline,
+        []() { return make_sparse_timeout_failure(); },
+        []() { return make_sparse_internal_failure(); }));
+    apply_dense_result(await_lane_until(
+        dense_future,
+        dense_deadline,
+        []() { return make_dense_timeout_failure(); },
+        []() { return make_dense_internal_failure(); }));
+  } else {
+    if (request_sparse_lane) {
+      auto sparse_future = launch_lane_task<SparseRetrieveResult>([this, request]() {
+        return run_sparse_lane(request);
+      });
+      apply_sparse_result(await_lane_until(
+          sparse_future,
+          std::chrono::steady_clock::now() +
+              std::chrono::milliseconds(policy_.sparse_lane_timeout_ms),
+          []() { return make_sparse_timeout_failure(); },
+          []() { return make_sparse_internal_failure(); }));
+    }
+
+    if (request_dense_lane) {
+      auto dense_future = launch_lane_task<DenseRecallResult>([this, request]() {
+        return run_dense_lane(request);
+      });
+      apply_dense_result(await_lane_until(
+          dense_future,
+          std::chrono::steady_clock::now() +
+              std::chrono::milliseconds(policy_.dense_lane_timeout_ms),
+          []() { return make_dense_timeout_failure(); },
+          []() { return make_dense_internal_failure(); }));
     }
   }
 
