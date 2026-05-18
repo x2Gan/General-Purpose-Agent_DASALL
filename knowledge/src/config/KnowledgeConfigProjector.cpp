@@ -131,9 +131,7 @@ std::optional<KnowledgeConfigSnapshot> KnowledgeConfigProjector::project(
   KnowledgeConfigSnapshot config;
   config.knowledge_enabled = manifest.enables_module("knowledge");
   config.vector_enabled = manifest.enables_module("memory_vector");
-  config.retrieval_mode_default =
-      (!config.knowledge_enabled || !config.vector_enabled) ? RetrievalMode::LexicalOnly
-                                                             : RetrievalMode::Hybrid;
+  config.retrieval_mode_default = RetrievalMode::LexicalOnly;
   config.evidence_budget_tokens = derive_evidence_budget_tokens(snapshot);
   config.max_context_projection_items = derive_max_context_projection_items(snapshot);
   config.catalog_refresh_interval_ms = snapshot.capability_cache_policy().refresh_interval_ms;

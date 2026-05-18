@@ -114,8 +114,8 @@ void test_projector_derives_default_knowledge_config_from_snapshot_and_manifest(
               "knowledge module enablement should come directly from the build manifest");
   assert_true(config->vector_enabled,
               "memory_vector capability should come directly from the build manifest");
-  assert_true(config->retrieval_mode_default == RetrievalMode::Hybrid,
-              "vector-capable profile should default to hybrid retrieval");
+  assert_true(config->retrieval_mode_default == RetrievalMode::LexicalOnly,
+              "vector-capable production profiles should still default to lexical-only retrieval");
   assert_equal(1024, static_cast<int>(config->evidence_budget_tokens),
                "evidence budget should derive from min(max_input_tokens/4, compression_threshold/2)");
   assert_equal(6, static_cast<int>(config->max_context_projection_items),

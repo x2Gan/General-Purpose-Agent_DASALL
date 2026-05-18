@@ -109,14 +109,14 @@ struct LoadedKnowledgeProfile {
   return downgraded;
 }
 
-void assert_hybrid_mode(const LoadedKnowledgeProfile& profile,
-                        const std::string& message_prefix) {
+void assert_vector_capable_lexical_default(const LoadedKnowledgeProfile& profile,
+                                           const std::string& message_prefix) {
   assert_true(profile.config.knowledge_enabled,
               message_prefix + " should keep knowledge enabled");
   assert_true(profile.config.vector_enabled,
               message_prefix + " should keep vector retrieval enabled");
-  assert_true(profile.config.retrieval_mode_default == RetrievalMode::Hybrid,
-              message_prefix + " should project hybrid as the default retrieval mode");
+  assert_true(profile.config.retrieval_mode_default == RetrievalMode::LexicalOnly,
+              message_prefix + " should keep lexical-only as the production default retrieval mode");
 }
 
 void assert_lexical_only_mode(const LoadedKnowledgeProfile& profile,
@@ -160,9 +160,9 @@ void test_knowledge_profile_projection_tracks_real_profile_matrix() {
   assert_true(!factory.manifest.enables_module("knowledge"),
               "factory_test build manifest should disable knowledge by default");
 
-  assert_hybrid_mode(desktop, "desktop_full");
-  assert_hybrid_mode(cloud, "cloud_full");
-  assert_hybrid_mode(edge_balanced, "edge_balanced");
+  assert_vector_capable_lexical_default(desktop, "desktop_full");
+  assert_vector_capable_lexical_default(cloud, "cloud_full");
+  assert_vector_capable_lexical_default(edge_balanced, "edge_balanced");
   assert_lexical_only_mode(edge_minimal, false, false, "edge_minimal");
   assert_lexical_only_mode(factory, false, false, "factory_test");
 

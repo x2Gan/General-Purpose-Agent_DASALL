@@ -155,7 +155,7 @@ Must-Not：
 |---|---|---|---|---|
 | Runtime-facing 检索接口 | 已落地 | 重点转为 facade 语义收敛、错误映射与边界回归测试 | Medium | P0 |
 | lexical 检索最小闭环 | 已落地 | 重点转为 retrieval regression gate、语言/过滤语义与快照稳定性 | Medium | P0 |
-| vector/hybrid 检索 | 已落地（可选能力） | 重点转为 backend availability、degrade 语义与 lane failure 观测 | Medium | P1 |
+| vector/hybrid 检索 | bridge/seam 已落地，production 默认 lexical-only | concrete vector backend、production evidence 与 dense rollout 未闭合；hybrid 当前只保留为 future seam / degrade 设计 | Medium | P1 |
 | 证据组装 | 已落地 | 重点转为 projection 预算、coverage notes 与跨模块投影一致性 | Medium | P1 |
 | 索引新鲜度治理 | 已落地 | 重点转为 refresh loop 稳定性、聚合单测健康与回滚语义守护 | Medium | P1 |
 | profile 兼容退化 | 已落地 | 需持续验证 lexical-only fallback 与 profile 投影一致性 | Medium | P1 |
@@ -180,8 +180,9 @@ Must-Not：
 当前最合理的推进方式不是把 Knowledge 继续描述为“待实现模块”，而是在既有落地基线上继续做收口：
 
 1. 以已落盘的 `knowledge/include` public surface 与 `knowledge/src/*` 主链为基础，持续收敛 facade 语义、错误映射与边界守卫。
-2. 以 lexical-only / hybrid 两条已落地链路为基线，继续稳定 retrieval quality gate、refresh loop 与 profile compatibility。
+2. 以 lexical-only production 基线 + hybrid seam tests 为基线，继续稳定 retrieval quality gate、refresh loop 与 profile compatibility。
 3. 以 Runtime 主调 + evidence projection handoff 为既定边界，优先修复质量门、文档同步与聚合测试健康，而不是重开一轮 from-scratch 设计。
+4. 2026-05-18 起，`memory_vector=true` 在 v1 production 中只表示 capability intent，不再自动推导为 `Hybrid` 默认模式；只有 concrete vector backend、package evidence 与 rollout 条件闭合后，production 口径才可升级。
 
 ## 4. 候选方案对比
 
@@ -799,8 +800,8 @@ Knowledge 不新增 profile schema v1 顶层域，而是通过 `KnowledgeConfigP
 | 模块配置项 | 来源 | 默认/派生规则 | 说明 |
 |---|---|---|---|
 | `knowledge_enabled` | `enabled_modules.knowledge` | 直接映射 | false 时 Runtime 不应调用 Knowledge 主路径 |
-| `vector_enabled` | `enabled_modules.memory_vector` | 直接映射 | false 时只能走 lexical-only |
-| `retrieval_mode_default` | `knowledge_enabled` + `vector_enabled` | `Hybrid` 或 `LexicalOnly` | 不新增独立 profile 键 |
+| `vector_enabled` | `enabled_modules.memory_vector` | 直接映射 | true 仅表示 capability intent / future seam；false 时只能走 lexical-only |
+| `retrieval_mode_default` | `knowledge_enabled` + `vector_enabled` | v1 production 默认固定 `LexicalOnly` | 不新增独立 profile 键；不得因 `vector_enabled=true` 自动宣称 `Hybrid` 默认已可用 |
 | `evidence_budget_tokens` | `token_budget_policy.max_input_tokens`、`compression_threshold` | 建议 `min(max_input_tokens / 4, compression_threshold / 2)` | 保证证据预算不吞噬上下文主预算 |
 | `max_context_projection_items` | 模块默认值 + `evidence_budget_tokens` | desktop/cloud 6-8，edge 4-6 | 由 projector 推导，不写回 profile |
 | `catalog_refresh_interval_ms` | `capability_cache_policy.refresh_interval_ms` | 直接映射 | 用于 corpus catalog / index manifest 缓存 |
@@ -838,7 +839,7 @@ deadline 传播规则：
 
 profile 期望行为：
 
-1. `desktop_full` / `cloud_full` / `edge_balanced`：默认开启 Knowledge；vector 可用时走 hybrid。
+1. `desktop_full` / `cloud_full` / `edge_balanced`：默认开启 Knowledge；即使 `memory_vector=true`，当前 v1 production 默认仍为 lexical-only，vector 只保留 future hybrid seam 的 capability intent。
 2. `edge_minimal` / `factory_test`：默认关闭 Knowledge；若后续按场景开启，也必须允许 lexical-only。
 3. 若 `knowledge=true` 但 `memory_vector=false`，这是合法组合，不视为配置错误。
 

@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #692
+
+- 日期：2026-05-18
+- 阶段：knowledge / production stance freeze
+- 任务：推进 KNO-FIX-003 收口 vector/hybrid production 口径
+- 状态：已完成（projector 默认 lexical-only、profile compatibility 与详设/总账口径已冻结）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-003`；若存在 blocker 必须先解组并独立提交。本轮前置 blocker `KNO-FIX-009` 已完成并推送。
+2. 近端代码检查表明当前真实问题不是“生产上已经接好了 concrete vector backend 却缺少测试”，而是 production factory 早已固定 lexical-only，但 `KnowledgeConfigProjector` 与 profile compatibility 文档/测试仍把 `memory_vector=true` 近似解释为 default hybrid，导致口径失真。
+3. 本轮仍需遵守“禁止 qemu / kvm 收敛证据”的约束，因此收口动作必须依赖本地 build-tree projector / profile compatibility 测试与文档回写，而不是伪造 installed / release 证据。
+
+### 执行与结果
+
+1. 冻结 projector 默认模式。
+   - `knowledge/src/config/KnowledgeConfigProjector.cpp` 现已把 `retrieval_mode_default` 默认固定为 `RetrievalMode::LexicalOnly`，不再因 `vector_enabled=true` 自动推导为 `Hybrid`。
+2. 同步 profile-compatible 测试口径。
+   - `tests/unit/knowledge/KnowledgeConfigProjectionTest.cpp` 现改为断言 vector-capable manifest 仍默认 lexical-only。
+   - `tests/integration/knowledge/KnowledgeProfileCompatibilityTest.cpp` 现把 `desktop_full`、`cloud_full`、`edge_balanced` 收口为“`vector_enabled=true` 但 `retrieval_mode_default=LexicalOnly`”。
+3. 回写总账与详细设计。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `KNO-GAP-003` 标记为已闭合、`KNO-FIX-003` 标记为 Done，并明确 `memory_vector=true` 只表示 capability intent，不等价于 production hybrid 已闭合。
+   - `docs/architecture/DASALL_knowledge子系统详细设计.md` 已同步冻结 v1 production 口径：hybrid / dense 保留为 future seam，当前 production 默认 lexical-only。
+
+### 验证
+
+1. 聚焦构建与测试。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge_config_projection_unit_test dasall_knowledge_profile_compatibility_integration_test -j2 && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_config_projection_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_profile_compatibility_integration_test`
+   - 结果：组合命令退出码 `0`。
+
+### 结果
+
+1. `KNO-FIX-003` 已按“v1 production lexical-only freeze”口径完成，`KNO-GAP-003` 可判定为已闭合。
+2. `memory_vector=true` 现在在代码、测试、总账与详细设计四处都只表示 capability intent / future seam，不再自动等价为 production hybrid 默认值。
+3. 本轮未实现 concrete vector backend，也未把结果外推为 installed package / qemu / release-ready 证据；后续真正的 dense production rollout 需要新的增量任务单独承接。
+
 ## 记录 #691
 
 - 日期：2026-05-18
