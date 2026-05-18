@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #include <sqlite3.h>
@@ -97,6 +98,24 @@ void copy_fixture_assets(const fs::path& repository_root,
     stream << reason_codes[index];
   }
   return stream.str();
+}
+
+void wait_for_refresh_completion(
+    const std::shared_ptr<dasall::knowledge::IKnowledgeService>& service,
+    std::string_view label) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto health = service->health_snapshot();
+    if (!health.refresh_in_flight && health.last_refresh_status.has_value()) {
+      assert_true(*health.last_refresh_status == RefreshStatus::Completed,
+                  std::string(label) + ": refresh should eventually complete successfully, actual reason_codes=" +
+                      join_reason_codes(health.reason_codes));
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+
+  throw std::runtime_error(std::string(label) + ": timed out waiting for async refresh completion");
 }
 
 [[nodiscard]] KnowledgeQuery make_probe_query() {
@@ -190,11 +209,15 @@ void installed_asset_service_retrieves_deepseek_chat() {
   const auto refresh_result = factory_result.service->request_refresh(CorpusChangeSet{});
   assert_true(refresh_result.status == RefreshStatus::Accepted,
               "installed asset refresh failed: " + format_error(refresh_result.error));
+    wait_for_refresh_completion(factory_result.service,
+                  "installed asset first refresh");
 
   const auto repeated_refresh_result = factory_result.service->request_refresh(CorpusChangeSet{});
   assert_true(repeated_refresh_result.status == RefreshStatus::Accepted,
               "installed asset repeated refresh failed: " +
                   format_error(repeated_refresh_result.error));
+    wait_for_refresh_completion(factory_result.service,
+                  "installed asset repeated refresh");
 
   const auto health = factory_result.service->health_snapshot();
   assert_true(!health.active_snapshot_id.empty(),
@@ -202,6 +225,11 @@ void installed_asset_service_retrieves_deepseek_chat() {
   assert_true(health.freshness_state == FreshnessState::Fresh,
               "installed asset health snapshot should be fresh, actual reason_codes=" +
                   join_reason_codes(health.reason_codes));
+    assert_true(!health.refresh_in_flight,
+          "installed asset health snapshot should be idle after the refresh settles");
+    assert_true(health.last_refresh_status.has_value() &&
+        *health.last_refresh_status == RefreshStatus::Completed,
+          "installed asset health snapshot should expose the completed refresh terminal status");
 
     const auto snapshot_database = state_root / "knowledge" / "snapshots" /
                    health.active_snapshot_id / "lexical.sqlite";

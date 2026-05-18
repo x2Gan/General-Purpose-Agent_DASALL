@@ -254,6 +254,12 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_knowledge_refresh_async_lifecycle_unit_test
+	KnowledgeRefreshAsyncLifecycleTest.cpp
+	KnowledgeRefreshAsyncLifecycleTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_knowledge_service_facade_full_health_snapshot_unit_test
 	KnowledgeServiceFacadeFullHealthSnapshotTest.cpp
 	KnowledgeServiceFacadeFullHealthSnapshotTest
@@ -425,6 +431,11 @@ target_include_directories(dasall_knowledge_service_facade_real_refresh_unit_tes
 		${CMAKE_SOURCE_DIR}/knowledge/src
 )
 
+target_include_directories(dasall_knowledge_refresh_async_lifecycle_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
 target_include_directories(dasall_knowledge_service_facade_full_health_snapshot_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/knowledge/src
@@ -451,6 +462,11 @@ target_link_libraries(dasall_index_writer_recovery_unit_test
 )
 
 target_link_libraries(dasall_knowledge_service_facade_real_refresh_unit_test
+	PRIVATE
+		dasall_sqlite3
+)
+
+target_link_libraries(dasall_knowledge_refresh_async_lifecycle_unit_test
 	PRIVATE
 		dasall_sqlite3
 )

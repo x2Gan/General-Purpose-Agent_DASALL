@@ -228,6 +228,10 @@ KnowledgeServiceFacade::KnowledgeServiceFacade(KnowledgeServiceDeps deps)
   bind_default_component_seams();
 }
 
+KnowledgeServiceFacade::~KnowledgeServiceFacade() {
+  join_previous_refresh_worker();
+}
+
 bool KnowledgeServiceFacade::init(const KnowledgeConfigSnapshot& config) {
   if (!config.has_consistent_values()) {
     return false;
@@ -432,13 +436,20 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
 }
 
 KnowledgeHealthSnapshot KnowledgeServiceFacade::health_snapshot() const {
+  KnowledgeHealthSnapshot snapshot;
   if (deps_.collect_health_snapshot) {
-    return deps_.collect_health_snapshot();
+    snapshot = deps_.collect_health_snapshot();
+  } else {
+    snapshot.state = HealthState::Unknown;
+    snapshot.reason_codes = {"health_probe_unavailable"};
   }
 
-  KnowledgeHealthSnapshot snapshot;
-  snapshot.state = HealthState::Unknown;
-  snapshot.reason_codes = {"health_probe_unavailable"};
+  snapshot.refresh_in_flight = refresh_in_flight_.load();
+  const auto last_refresh_status_code = last_refresh_status_code_.load();
+  if (last_refresh_status_code >= 0) {
+    snapshot.last_refresh_status =
+        static_cast<RefreshStatus>(last_refresh_status_code);
+  }
   return snapshot;
 }
 
@@ -447,28 +458,74 @@ RefreshResult KnowledgeServiceFacade::request_refresh(const CorpusChangeSet& cha
     return make_busy_refresh_result();
   }
 
-  if (!deps_.request_refresh && (!deps_.ingestion_coordinator || !deps_.index_writer)) {
+  if (deps_.request_refresh) {
+    auto refresh_result = run_refresh_delegate(changes, true);
+    refresh_in_flight_.store(false);
+    if (refresh_result.status != RefreshStatus::Busy) {
+      last_refresh_status_code_.store(static_cast<int>(refresh_result.status));
+    }
+    return refresh_result;
+  }
+
+  if (!deps_.ingestion_coordinator || !deps_.index_writer) {
     refresh_in_flight_.store(false);
     return make_busy_refresh_result();
   }
 
+  join_previous_refresh_worker();
+
+  const auto refresh_id = next_refresh_job_id();
+
+  try {
+    refresh_worker_ = std::thread([this, changes]() {
+      auto refresh_result = run_refresh_delegate(changes, false);
+      last_refresh_status_code_.store(static_cast<int>(refresh_result.status));
+      refresh_in_flight_.store(false);
+    });
+  } catch (const std::exception& exception) {
+    refresh_in_flight_.store(false);
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       exception.what(),
+                                       "refresh_worker_launch_failed");
+  }
+
+  RefreshResult refresh_result;
+  refresh_result.status = RefreshStatus::Accepted;
+  refresh_result.refresh_id = refresh_id;
+  return refresh_result;
+}
+
+RefreshResult KnowledgeServiceFacade::request_refresh_sync_for_tests(
+    const CorpusChangeSet& changes) {
+  if (refresh_in_flight_.exchange(true)) {
+    return make_busy_refresh_result();
+  }
+
+  join_previous_refresh_worker();
+
+  auto refresh_result = run_refresh_delegate(changes, true);
+  refresh_in_flight_.store(false);
+  if (refresh_result.status != RefreshStatus::Busy) {
+    last_refresh_status_code_.store(static_cast<int>(refresh_result.status));
+  }
+  return refresh_result;
+}
+
+RefreshResult KnowledgeServiceFacade::run_refresh_delegate(const CorpusChangeSet& changes,
+                                                           const bool allow_busy_result) {
   RefreshResult refresh_result;
   try {
     refresh_result = deps_.request_refresh ? deps_.request_refresh(changes)
                                            : run_real_refresh(changes);
   } catch (const std::exception& exception) {
-    refresh_in_flight_.store(false);
     return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
                                        exception.what(),
                                        "refresh_exception");
   } catch (...) {
-    refresh_in_flight_.store(false);
     return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
                                        "refresh raised an unknown exception",
                                        "refresh_exception");
   }
-
-  refresh_in_flight_.store(false);
 
   if (!refresh_result.has_consistent_values()) {
     return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
@@ -476,7 +533,24 @@ RefreshResult KnowledgeServiceFacade::request_refresh(const CorpusChangeSet& cha
                                        "refresh_result_inconsistent");
   }
 
+  if (!allow_busy_result && refresh_result.status == RefreshStatus::Busy) {
+    return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
+                                       "refresh worker returned busy",
+                                       "refresh_worker_busy");
+  }
+
   return refresh_result;
+}
+
+std::string KnowledgeServiceFacade::next_refresh_job_id() {
+  const auto sequence = refresh_job_sequence_.fetch_add(1U) + 1U;
+  return "refresh-job:" + std::to_string(now_ms()) + ":" + std::to_string(sequence);
+}
+
+void KnowledgeServiceFacade::join_previous_refresh_worker() {
+  if (refresh_worker_.joinable()) {
+    refresh_worker_.join();
+  }
 }
 
 StageBudget KnowledgeServiceFacade::compute_stage_budget(std::int64_t deadline_ms) const {
@@ -632,7 +706,7 @@ RefreshResult KnowledgeServiceFacade::run_real_refresh(const CorpusChangeSet& ch
   }
 
   RefreshResult result;
-  result.status = RefreshStatus::Accepted;
+  result.status = RefreshStatus::Completed;
   result.refresh_id = batch.batch_id;
   return result;
 }

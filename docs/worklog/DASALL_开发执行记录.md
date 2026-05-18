@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #689
+
+- 日期：2026-05-18
+- 阶段：knowledge / subsystem gap closure
+- 任务：推进 KNO-FIX-001 实现异步 refresh job runner
+- 状态：已完成（async refresh worker、四态 refresh status、focused tests 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-001`，若存在前置 BLOCK 任务则先解阻；同时明确禁止使用 qemu / kvm 收敛证据，本轮应优先使用本地构建与实机语义一致的窄验证链。
+2. 近端代码检查表明本轮根因不是缺少 busy guard，而是 `KnowledgeServiceFacade::request_refresh()` 仍同步执行 real refresh，导致 `Accepted` 与“已完成”混写，`health_snapshot()` 也无法暴露长 refresh 的 in-flight / terminal 语义。
+3. Knowledge 详设本来就要求 `request_refresh()` 异步执行、同一时刻只允许一个活跃 refresh，调用方通过 `health_snapshot()` 跟踪进度；因此本轮不需要重写详设，而是把实现收敛到既有设计口径，并保留 ADR-008 下“Knowledge 不拥有独立 watcher/timer 主控”的边界。
+
+### 执行与结果
+
+1. 收口 facade refresh 生命周期。
+   - `knowledge/src/facade/KnowledgeService.h/.cpp` 已新增单槽位 refresh worker：`request_refresh()` 只负责占用 slot、生成 job id、返回 `Accepted` 或 `Busy`；真实 refresh 在后台线程中执行，完成后回写 terminal status。
+   - `request_refresh_sync_for_tests()` 被保留为 focused unit helper，用于需要立即观察 terminal result 的单测路径；生产 `request_refresh()` 不再复用同步 real refresh。
+2. 补齐四态 refresh status。
+   - `knowledge/include/KnowledgeTypes.h` 已新增 `RefreshStatus::Completed`，把 admission `Accepted` 与 terminal success `Completed` 分离；`RefreshResult::has_consistent_values()` 和 `KnowledgeHealthSnapshot::has_consistent_values()` 也同步更新。
+   - `KnowledgeHealthSnapshot` 现在显式暴露 `refresh_in_flight` 与 `last_refresh_status`，使 Runtime / health / tests 能区分 in-flight、completed 与 failed，而不会把 terminal success 继续误记成 `Accepted`。
+3. 修正 refresh-focused tests 与一个局部生命周期缺陷。
+   - 新增 `tests/unit/knowledge/KnowledgeRefreshAsyncLifecycleTest.cpp`，覆盖 accepted/in-flight/busy/completed 与 failed terminal 两条路径。
+   - `tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp` 与 `tests/unit/knowledge/KnowledgeServiceFacadeRealRefreshTest.cpp` 已改为对齐 `Accepted` / `Completed` 语义。
+   - 首轮运行时 `KnowledgeRefreshAsyncLifecycleTest` 在 worker 线程内崩溃，根因是 test harness 把 `CorpusCatalog` 留成悬空裸指针；现已把 `CorpusCatalog` 所有权并入 `KnowledgeServiceDeps`，崩溃消失。
+4. 回写总账口径。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `KNO-GAP-001` 标记为已闭合，`KNO-FIX-001` 标记为 Done，并补充本轮实现与回退验证证据。
+
+### 验证
+
+1. 聚焦构建。
+   - `Build_CMakeTools(buildTargets=["dasall_knowledge_refresh_async_lifecycle_unit_test","dasall_knowledge_refresh_loop_integration_test","dasall_knowledge_service_facade_real_refresh_unit_test"])`：通过。
+   - 为确保直接 consumer 不因四态模型编译回退，还额外构建了 `dasall_knowledge_installed_asset_probe_integration_test`：通过。
+2. 聚焦测试。
+   - `RunCtest_CMakeTools(tests=["KnowledgeRefreshAsyncLifecycleTest","KnowledgeRefreshLoopTest","KnowledgeServiceFacadeRealRefreshTest"])`：仍返回仓库已知泛化 `生成失败`，不足以判定测试本身失败。
+   - 按仓库稳定回退链直接执行：
+     - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_refresh_async_lifecycle_unit_test`
+     - `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_refresh_loop_integration_test`
+     - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_service_facade_real_refresh_unit_test`
+     - 结果：3/3 退出码均为 `0`。
+### 结果
+
+1. `KNO-FIX-001` 已按“单槽位 async refresh worker + health terminal observability”口径完成，`KNO-GAP-001` 可判定为已闭合。
+2. Knowledge refresh 现在不再把 admission 与 terminal success 混写：调用面可稳定观测 `Accepted` / `Busy`，完成面可稳定观测 `Completed` / `Failed`，且长 refresh 的 in-flight 状态可通过 `health_snapshot()` 自动化验证。
+3. 本轮未使用 qemu / kvm，也不把结果外推为 installed package / qemu / release 证据；残余优先级转向 `KNO-GAP-002`（首启 build / prewarm）与 `KNO-GAP-009`（专项 installed asset probe 口径在总账中的独立收口）。
+
 ## 记录 #688
 
 - 日期：2026-05-18

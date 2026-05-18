@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "IKnowledgeService.h"
 #include "evidence/EvidenceAssembler.h"
@@ -83,12 +84,13 @@ struct KnowledgeServiceDeps {
 class KnowledgeServiceFacade final : public IKnowledgeService {
  public:
   explicit KnowledgeServiceFacade(KnowledgeServiceDeps deps);
-  ~KnowledgeServiceFacade() override = default;
+  ~KnowledgeServiceFacade() override;
 
   bool init(const KnowledgeConfigSnapshot& config) override;
   KnowledgeRetrieveResult retrieve(const KnowledgeQuery& query) override;
   KnowledgeHealthSnapshot health_snapshot() const override;
   RefreshResult request_refresh(const CorpusChangeSet& changes) override;
+  RefreshResult request_refresh_sync_for_tests(const CorpusChangeSet& changes);
 
   [[nodiscard]] StageBudget compute_stage_budget(std::int64_t deadline_ms) const;
 
@@ -99,12 +101,19 @@ class KnowledgeServiceFacade final : public IKnowledgeService {
                                                     std::string_view reason) const;
     void bind_default_component_seams();
   [[nodiscard]] std::int64_t now_ms() const;
+    [[nodiscard]] RefreshResult run_refresh_delegate(const CorpusChangeSet& changes,
+                                                     bool allow_busy_result);
     [[nodiscard]] RefreshResult run_real_refresh(const CorpusChangeSet& changes);
+    [[nodiscard]] std::string next_refresh_job_id();
+    void join_previous_refresh_worker();
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   KnowledgeConfigSnapshot config_{};
   KnowledgeServiceDeps deps_{};
   mutable std::atomic_bool refresh_in_flight_{false};
+  mutable std::atomic<int> last_refresh_status_code_{-1};
+  std::atomic<std::uint64_t> refresh_job_sequence_{0U};
+  std::thread refresh_worker_;
 };
 
 }  // namespace dasall::knowledge::facade

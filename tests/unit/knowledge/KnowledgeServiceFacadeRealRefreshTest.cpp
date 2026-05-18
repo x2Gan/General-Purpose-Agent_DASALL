@@ -188,14 +188,21 @@ void test_facade_runs_real_refresh_via_ingestion_and_index_writer_owners() {
   assert_true(facade.init(make_config()),
               "facade should initialize before running the real refresh path");
 
-  const auto refresh_result = facade.request_refresh(CorpusChangeSet{});
+  const auto refresh_result = facade.request_refresh_sync_for_tests(CorpusChangeSet{});
   assert_true(refresh_result.has_consistent_values(),
               "real refresh should return a consistent refresh result");
-  assert_equal(static_cast<int>(RefreshStatus::Accepted),
+  assert_equal(static_cast<int>(RefreshStatus::Completed),
                static_cast<int>(refresh_result.status),
-               "real refresh path should accept a full-scan refresh request");
+               "sync refresh helper should surface Completed once the real refresh finishes");
   assert_true(!refresh_result.refresh_id.empty(),
-              "accepted refresh should surface the deterministic batch id");
+              "completed refresh should surface the deterministic batch id when tests use the sync helper");
+
+  const auto health_snapshot = facade.health_snapshot();
+  assert_true(!health_snapshot.refresh_in_flight,
+              "sync test helper should leave the facade idle after refresh completion");
+  assert_true(health_snapshot.last_refresh_status.has_value() &&
+            *health_snapshot.last_refresh_status == RefreshStatus::Completed,
+              "sync test helper should record the completed refresh status in health snapshot");
 
   const auto manifest = index_reader_ptr->current_manifest();
   assert_true(manifest.has_value(),

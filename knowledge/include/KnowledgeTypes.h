@@ -83,7 +83,8 @@ enum class SourceFormat : std::uint8_t {
 enum class RefreshStatus : std::uint8_t {
 	Accepted = 0,
 	Busy = 1,
-	Failed = 2,
+	Completed = 2,
+	Failed = 3,
 };
 
 enum class HealthState : std::uint8_t {
@@ -263,6 +264,8 @@ struct RefreshResult {
 				return !refresh_id.empty() && !error.has_value();
 			case RefreshStatus::Busy:
 				return true;
+			case RefreshStatus::Completed:
+				return !refresh_id.empty() && !error.has_value();
 			case RefreshStatus::Failed:
 				return error.has_value();
 		}
@@ -278,10 +281,17 @@ struct KnowledgeHealthSnapshot {
 	bool vector_backend_available = false;
 	bool last_known_good_available = false;
 	std::uint64_t degraded_return_count = 0U;
+	bool refresh_in_flight = false;
+	std::optional<RefreshStatus> last_refresh_status;
 	std::vector<std::string> reason_codes;
 
 	[[nodiscard]] bool has_consistent_values() const {
 		if (!detail::has_unique_values(reason_codes)) {
+			return false;
+		}
+
+		if (last_refresh_status.has_value() &&
+				*last_refresh_status == RefreshStatus::Busy) {
 			return false;
 		}
 

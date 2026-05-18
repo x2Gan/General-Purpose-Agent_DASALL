@@ -351,6 +351,13 @@ class KnowledgeRefreshLoopHarness {
     return result;
   }
 
+  [[nodiscard]] dasall::knowledge::KnowledgeHealthSnapshot health_snapshot() const {
+    const auto snapshot = service_->health_snapshot();
+    assert_true(snapshot.has_consistent_values(),
+                "refresh loop health snapshot should preserve public invariants");
+    return snapshot;
+  }
+
   [[nodiscard]] std::string current_snapshot_id() const {
     const auto manifest = index_reader_ptr_->current_manifest();
     return manifest.has_value() ? manifest->snapshot_id : std::string();
@@ -458,12 +465,31 @@ void assert_refresh_accepted(const RefreshResult& result, std::string_view messa
               "accepted refresh should expose a non-empty refresh id");
 }
 
+void assert_refresh_reaches_terminal_status(KnowledgeRefreshLoopHarness& harness,
+                                            RefreshStatus expected_status,
+                                            std::string_view message) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto snapshot = harness.health_snapshot();
+    if (!snapshot.refresh_in_flight && snapshot.last_refresh_status.has_value() &&
+        *snapshot.last_refresh_status == expected_status) {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  throw std::runtime_error(std::string(message));
+}
+
 void test_refresh_loop_swaps_updated_snapshot_and_retrieve_observes_new_content() {
   KnowledgeRefreshLoopHarness harness;
   harness.write_document("# ADR Refresh\n\nrefreshstableanchor baseline evidence remains searchable before update.\n");
 
   assert_refresh_accepted(harness.refresh(CorpusChangeSet{}),
                           "initial refresh should accept the baseline corpus");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Completed,
+                                         "initial refresh should eventually complete through the async worker");
   const auto baseline_snapshot_id = harness.current_snapshot_id();
   assert_true(!baseline_snapshot_id.empty(),
               "baseline refresh should install an active snapshot");
@@ -479,6 +505,9 @@ void test_refresh_loop_swaps_updated_snapshot_and_retrieve_observes_new_content(
   changes.updated_sources = {std::string(kDocumentSourceUri)};
   assert_refresh_accepted(harness.refresh(changes),
                           "updated refresh should accept the changed source");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Completed,
+                                         "updated refresh should eventually complete through the async worker");
 
   const auto refreshed_snapshot_id = harness.current_snapshot_id();
   assert_true(refreshed_snapshot_id != baseline_snapshot_id,
@@ -507,13 +536,16 @@ void test_refresh_loop_rejects_busy_request_while_real_refresh_is_in_flight() {
   harness.write_document("# ADR Refresh\n\nrefreshstableanchor baseline evidence remains searchable before update.\n");
   harness.block_next_catalog_refresh();
 
-  std::optional<RefreshResult> first_refresh_result;
-  std::thread refresh_thread([&harness, &first_refresh_result] {
-    first_refresh_result = harness.refresh(CorpusChangeSet{});
-  });
+  const auto first_refresh_result = harness.refresh(CorpusChangeSet{});
+  assert_refresh_accepted(first_refresh_result,
+                          "first refresh should be accepted before the async worker finishes");
 
   assert_true(harness.wait_until_catalog_refresh_blocked(),
               "busy test should observe the first refresh blocked in catalog refresh");
+
+  const auto in_flight_snapshot = harness.health_snapshot();
+  assert_true(in_flight_snapshot.refresh_in_flight,
+              "busy test should expose the first refresh as in-flight while catalog refresh is blocked");
 
   const auto busy_result = harness.refresh(CorpusChangeSet{});
   assert_true(busy_result.has_consistent_values(),
@@ -523,12 +555,9 @@ void test_refresh_loop_rejects_busy_request_while_real_refresh_is_in_flight() {
                "second refresh should be rejected as busy while the first refresh is in flight");
 
   harness.release_catalog_refresh();
-  refresh_thread.join();
-
-  assert_true(first_refresh_result.has_value(),
-              "first refresh thread should publish a completion result");
-  assert_refresh_accepted(*first_refresh_result,
-                          "first refresh should still complete successfully after busy rejection");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Completed,
+                                         "first refresh should still complete successfully after busy rejection");
 }
 
 void test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails() {
@@ -536,6 +565,9 @@ void test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails(
   harness.write_document("# ADR Refresh\n\nrefreshstableanchor baseline evidence remains searchable before update.\n");
   assert_refresh_accepted(harness.refresh(CorpusChangeSet{}),
                           "initial refresh should accept the baseline corpus");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Completed,
+                                         "baseline refresh should complete before the failure-path update runs");
   const auto baseline_snapshot_id = harness.current_snapshot_id();
 
   harness.write_document("# ADR Refresh\n\nrefreshupdatedanchor refreshed evidence must be returned after swap.\n");
@@ -543,14 +575,12 @@ void test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails(
 
   CorpusChangeSet changes;
   changes.updated_sources = {std::string(kDocumentSourceUri)};
-  const auto failed_refresh = harness.refresh(changes);
-  assert_true(failed_refresh.has_consistent_values(),
-              "failed refresh should preserve result invariants");
-  assert_equal(static_cast<int>(RefreshStatus::Failed),
-               static_cast<int>(failed_refresh.status),
-               "activation failure should surface as a failed refresh result");
-  assert_true(failed_refresh.error.has_value(),
-              "failed refresh should expose error information");
+  const auto accepted_refresh = harness.refresh(changes);
+  assert_refresh_accepted(accepted_refresh,
+                          "activation-failure path should still accept the refresh job before the worker runs");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Failed,
+                                         "activation failure should surface as a failed terminal refresh status");
   assert_equal(baseline_snapshot_id,
                harness.current_snapshot_id(),
                "failed activation must leave the last-known-good snapshot active");
