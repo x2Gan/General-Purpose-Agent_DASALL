@@ -143,6 +143,26 @@ if isinstance(value, str):
 PY
 }
 
+wait_for_knowledge_refresh_ready() {
+  attempts=0
+  while [ "$attempts" -lt 30 ]; do
+    knowledge_health_json=$(run_root dasall knowledge health --json --timeout-ms 30000)
+    if printf '%s\n' "$knowledge_health_json" | grep -Fq '"refresh_in_flight":false' &&
+       printf '%s\n' "$knowledge_health_json" | grep -Fq '"last_refresh_status":"completed"' &&
+       printf '%s\n' "$knowledge_health_json" | grep -Fq '"active_snapshot_id":"snapshot:'; then
+      printf '%s\n' "$knowledge_health_json"
+      return 0
+    fi
+    if printf '%s\n' "$knowledge_health_json" | grep -Fq '"last_refresh_status":"failed"'; then
+      fail "knowledge refresh terminal failure: ${knowledge_health_json}"
+    fi
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  fail 'timed out waiting for async knowledge refresh completion'
+}
+
 query_sqlite_scalar() {
   db_path=$1
   sql_query=$2
@@ -487,6 +507,11 @@ PY
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '"disposition":"completed"' 'knowledge refresh smoke'
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"operation\":\"refresh\"' 'knowledge refresh payload'
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"status\":\"accepted\"' 'knowledge refresh status'
+
+  KNOWLEDGE_HEALTH_JSON=$(wait_for_knowledge_refresh_ready)
+  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '"disposition":"completed"' 'knowledge health readiness smoke'
+  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"operation\":\"health\"' 'knowledge health readiness payload'
+  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"last_refresh_status\":\"completed\"' 'knowledge health readiness terminal status'
 
   KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall knowledge retrieve 'DeepSeek Chat' --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '"disposition":"completed"' 'knowledge retrieve smoke'

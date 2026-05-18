@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "AgentFacade.h"
+#include "IKnowledgeService.h"
+#include "KnowledgeTypes.h"
 #include "ProfileCatalog.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
@@ -93,6 +95,39 @@ load_runtime_policy_snapshot() {
                      [&expected_prefix](const std::string& value) {
                        return value.rfind(expected_prefix, 0) == 0;
                      });
+}
+
+[[nodiscard]] dasall::knowledge::KnowledgeQuery make_installed_knowledge_query() {
+  dasall::knowledge::KnowledgeQuery query;
+  query.request_id = "req-runtime-live-composition-knowledge-mode";
+  query.query_text = "DeepSeek Chat";
+  query.query_kind = dasall::knowledge::KnowledgeQueryKind::FactLookup;
+  query.top_k = 3U;
+  query.max_context_projection_items = 3U;
+  return query;
+}
+
+void assert_installed_knowledge_service_stays_lexical_only(
+    const std::shared_ptr<dasall::runtime::RuntimeDependencySet>& dependency_set,
+    const CompositionOwnerSpec& spec) {
+  assert_true(dependency_set->knowledge_service != nullptr,
+              "runtime live composition matrix should expose a knowledge service for " +
+                  spec.composition_owner);
+
+  const auto retrieve_result = dependency_set->knowledge_service->retrieve(
+      make_installed_knowledge_query());
+  assert_true(retrieve_result.ok && retrieve_result.evidence.has_value() &&
+                  !retrieve_result.evidence->slices.empty(),
+              "runtime live composition matrix should keep installed knowledge retrieval available for " +
+                  spec.composition_owner);
+  assert_true(retrieve_result.mode == dasall::knowledge::RetrievalMode::LexicalOnly,
+              "runtime live composition matrix should keep installed knowledge on lexical-only production mode for " +
+                  spec.composition_owner);
+
+  const auto health_snapshot = dependency_set->knowledge_service->health_snapshot();
+  assert_true(!health_snapshot.vector_backend_available,
+              "runtime live composition matrix should not advertise a production vector backend for " +
+                  spec.composition_owner);
 }
 
 void copy_memory_assets_only(const std::filesystem::path& assets_root) {
@@ -185,6 +220,8 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
                 "runtime live composition matrix should keep " +
                     spec.composition_owner + " default-ready after helper composition: " +
                     init_result.diagnostics);
+
+    assert_installed_knowledge_service_stays_lexical_only(dependency_set, spec);
 
   }
 }

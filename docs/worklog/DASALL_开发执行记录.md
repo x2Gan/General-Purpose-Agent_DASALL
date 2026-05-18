@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+## 记录 #691
+
+- 日期：2026-05-18
+- 阶段：knowledge / installed probe unblock
+- 任务：推进 KNO-FIX-009 修复 installed asset probe 红灯
+- 状态：已完成（`service_instance_id`、`Completed` 终态口径与 runtime ready marker 已一并收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-003`；若存在前置 BLOCK 任务，必须先完成 BLOCK 解组原子任务，并在每个原子任务完成后独立提交推送。
+2. 近端代码与测试表明 direct installed probe 的首个红点虽然可由补齐 `service_instance_id` 修正，但 runtime live composition 与 package smoke 仍把 async refresh 的 admission 状态 `Accepted` 当成 terminal success；在 `request_refresh()` 已切到四态模型后，这会把已完成的正向路径误判成 `missing_optional=knowledge`。
+3. 本轮验证必须继续遵守“禁止 qemu / kvm 收敛证据”的约束，因此只能使用 build-tree 二进制、installed-style readonly assets 与 packaging script 语法检查形成最小 authoritative evidence。
+
+### 执行与结果
+
+1. 收口 installed probe fixture 与 runtime ready marker 的 vocabulary drift。
+   - `tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp` 已补齐 `InstalledAssetKnowledgeServiceOptions::service_instance_id`，direct installed probe 不再因 options 校验失败而红灯。
+   - `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 中 `validate_installed_knowledge_positive_probe()` 的等待条件已从 `RefreshStatus::Accepted` 改为 `RefreshStatus::Completed`，使 startup composition 只在真正 terminal success 后发布 `knowledge_service` 与 `knowledge-installed-assets-ready` marker。
+2. 对齐 package smoke 的 installed readiness 口径。
+   - `scripts/packaging/pkg_smoke_install.sh` 的 `wait_for_knowledge_refresh_ready()` 与 health JSON 断言已统一改为检查 `last_refresh_status=completed`，避免安装态 smoke 因旧 vocabulary 继续假红。
+3. 增加 runtime composition 侧的 production retrieval 回归断言。
+   - `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp` 新增对 composed knowledge service 的 `retrieve("DeepSeek Chat")` 断言，要求结果 `ok=true`、`mode=LexicalOnly`、`vector_backend_available=false` 且 evidence 非空。
+   - `tests/integration/access/CMakeLists.txt` 已补 `dasall_knowledge` 链接，保证该测试能直接消费 `IKnowledgeService` / `KnowledgeTypes`。
+
+### 验证
+
+1. 聚焦构建与测试。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge_installed_asset_probe_integration_test dasall_access_runtime_live_composition_failure_matrix_integration_test -j2 && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_probe_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：组合命令退出码 `0`。
+
+### 结果
+
+1. `KNO-FIX-009` 已按“probe options 补齐 + runtime/package terminal status 改为 `Completed` + runtime ready marker retrieval 回归”口径完成，`KNO-GAP-009` 可判定为已闭合。
+2. build-tree direct installed probe、daemon/gateway runtime live composition ready marker 与 package smoke readiness vocabulary 已保持一致，不再把 terminal success 误记成 admission `Accepted`。
+3. 本轮未使用 qemu / kvm，也不把结果外推为 installed package / release-ready 证据；下一优先级回到 `KNO-FIX-003`，收口 vector/hybrid production 的 lexical-only 冻结口径。
+
 ## 记录 #690
 
 - 日期：2026-05-18

@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 
 #include <vector>
@@ -519,7 +520,29 @@ class RuntimeToolHealthSignalProvider final
         : std::string("refresh-failed:") + format_knowledge_error(refresh_result.error);
   }
 
-  const auto health_snapshot = knowledge_service->health_snapshot();
+  const auto refresh_deadline_ms = current_time_ms() + 30000;
+  knowledge::KnowledgeHealthSnapshot health_snapshot;
+  while (true) {
+    health_snapshot = knowledge_service->health_snapshot();
+    if (!health_snapshot.refresh_in_flight &&
+        health_snapshot.last_refresh_status.has_value()) {
+      if (*health_snapshot.last_refresh_status == knowledge::RefreshStatus::Failed) {
+        return std::string("health:refresh_failed:") +
+               join_reason_codes(health_snapshot.reason_codes);
+      }
+      if (*health_snapshot.last_refresh_status == knowledge::RefreshStatus::Completed) {
+        break;
+      }
+    }
+
+    if (current_time_ms() >= refresh_deadline_ms) {
+      return std::string("health:refresh_timeout:") +
+             join_reason_codes(health_snapshot.reason_codes);
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
   if (health_snapshot.freshness_state != knowledge::FreshnessState::Fresh ||
       health_snapshot.active_snapshot_id.empty()) {
     return std::string("health:") + join_reason_codes(health_snapshot.reason_codes);
