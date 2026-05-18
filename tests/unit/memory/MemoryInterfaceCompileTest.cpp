@@ -349,6 +349,8 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
          "memory storage should default busy timeout to the bounded local retry window");
     assert_equal(2, config.storage.writer_retry_count,
          "memory storage should default writer retry count to the design baseline");
+    assert_equal(encode_sqlite_version_number(3, 51, 3), config.storage.sqlite_min_version,
+         "memory storage should default sqlite_min_version to the WAL-reset fixed baseline");
     assert_equal(std::string("PASSIVE"), std::string(to_string_view(config.storage.checkpoint_mode)),
          "memory storage should default checkpoint mode to PASSIVE");
     assert_equal(2, config.storage.reader_pool_size,

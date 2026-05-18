@@ -66,6 +66,12 @@ inline constexpr std::string_view to_string_view(VectorBackend value) {
   return "none";
 }
 
+inline constexpr int encode_sqlite_version_number(int major,
+                                                  int minor,
+                                                  int patch) {
+  return (major * 1000000) + (minor * 1000) + patch;
+}
+
 // --- Config structs ---
 
 struct StorageConfig {
@@ -76,6 +82,7 @@ struct StorageConfig {
   int wal_autocheckpoint_pages = 1000;
   int busy_timeout_ms = 50;
   int writer_retry_count = 2;
+  int sqlite_min_version = encode_sqlite_version_number(3, 51, 3);
   CheckpointMode checkpoint_mode = CheckpointMode::Passive;
   int reader_pool_size = 2;
   std::string migrations_dir = "sql/memory/";

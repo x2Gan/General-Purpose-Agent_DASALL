@@ -124,6 +124,30 @@ int query_scalar_int(sqlite3* connection, const std::string& sql) {
   return request;
 }
 
+void test_memory_manager_init_reports_config_invalid_when_sqlite_runtime_is_below_minimum() {
+  using dasall::tests::support::assert_true;
+
+  const auto database_path =
+      make_temp_database_path("dasall-memory-sqlite-version-gate-injection");
+  cleanup_database_artifacts(database_path);
+
+  auto config = make_sqlite_config(database_path);
+  config.storage.sqlite_min_version = sqlite3_libversion_number() + 1;
+
+  auto manager = dasall::memory::create_memory_manager(config);
+  const auto init_code = manager->init(config);
+  assert_true(init_code ==
+                  dasall::memory::map_memory_error(
+                      dasall::memory::MemoryError::ConfigInvalid)
+                      .result_code,
+              "sqlite version gate injection should surface ConfigInvalid during init");
+  assert_true(!std::filesystem::exists(database_path),
+              "sqlite version gate injection should fail before creating the database file");
+
+  manager->shutdown();
+  cleanup_database_artifacts(database_path);
+}
+
 void test_memory_manager_init_reports_schema_mismatch_after_checksum_tamper() {
   using dasall::tests::support::assert_true;
 
@@ -280,6 +304,7 @@ void test_memory_manager_writeback_stays_healthy_when_vector_is_disabled() {
 
 int main() {
   try {
+    test_memory_manager_init_reports_config_invalid_when_sqlite_runtime_is_below_minimum();
     test_memory_manager_init_reports_schema_mismatch_after_checksum_tamper();
     test_sqlite_store_reports_storage_unavailable_when_database_is_full();
     test_memory_manager_writeback_surfaces_summary_quarantine_as_partial_warning();

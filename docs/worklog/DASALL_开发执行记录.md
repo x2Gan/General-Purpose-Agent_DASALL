@@ -1,5 +1,59 @@
 # DASALL 开发执行记录
 
+## 记录 #683
+
+- 日期：2026-05-18
+- 阶段：memory / sqlite baseline gate
+- 任务：推进 MEM-FIX-002 对齐 SQLite 最低版本与运行时 gate
+- 状态：已完成（代码、测试、详设 / TODO / worklog 回写已收口）
+
+### 执行前提
+
+1. `docs/architecture/DASALL_memory子系统详细设计.md` 的 6.7.3 / 6.10.1 已要求 `sqlite_min_version = 3.51.3`；本轮禁止 qemu / kvm，验证仅使用本机 `build-ci`。
+2. `MemoryManagerFactory -> MemoryManager::init()` 已证明 `SqliteMemoryStore::open()` 是 SQLite 版本 gate 的单点传播路径；低版本应稳定映射为 `ConfigInvalid`，而不是 retryable storage failure。
+
+### 执行与结果
+
+1. 落地 SQLite 最低版本配置与 open-time gate。
+   - `memory/include/config/MemoryConfig.h` 新增 `encode_sqlite_version_number()` 与 `StorageConfig.sqlite_min_version`，默认值对齐详设 3.51.3。
+   - `memory/src/config/MemoryConfigProjector.cpp` 显式投影 `sqlite_min_version`，避免该默认值只隐含在结构体初始化里。
+   - `memory/src/store/sqlite/SqliteMemoryStore.cpp` 在 `open()` 入口增加 `sqlite3_libversion_number()` 校验；低于 `sqlite_min_version` 时按 `ConfigInvalid` fail-closed。
+2. 升级内置 SQLite pin，并修复版本变更下的增量构建复用问题。
+   - `memory/CMakeLists.txt` 已将内置 SQLite 升级到 `sqlite-autoconf-3510300`（SQLite 3.51.3）与 2026 下载路径。
+   - 首轮验证发现 `build-ci` 仍在复用旧 `dasall_sqlite3` 对象文件：GDB 读取 `sqlite3_libversion_number()` 仍为 `3046001`（3.46.1），导致所有 `open()` 相关测试被 gate 拦下。
+   - 为使 pin 变更必然触发重编译，本轮把 `DASALL_SQLITE_AUTOCONF_PIN=${DASALL_SQLITE_AUTOCONF_VERSION}` 注入 `dasall_sqlite3` 编译命令；随后 `SqliteAmalgamation.c.o` 重新编译，运行时版本更新为 `3051003`。
+3. 补齐聚焦测试矩阵。
+   - 新增 `tests/unit/memory/SqliteVersionGateTest.cpp`，覆盖默认基线、backport floor override 与 fail-closed。
+   - 扩展 `tests/unit/memory/SqliteMemoryStoreTest.cpp`，补 `open()` 负路径断言。
+   - 扩展 `tests/integration/memory/MemoryFailureInjectionTest.cpp`，证明 manager init 会稳定透传 `ConfigInvalid`。
+   - `tests/unit/memory/CMakeLists.txt` 已注册 `SqliteVersionGateTest` 目标与 CTest 条目。
+4. 同步文档口径。
+   - `docs/architecture/DASALL_memory子系统详细设计.md` 已补 `3.51.3 <-> sqlite3_libversion_number() = 3051003` 的运行时编码说明。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `MEM-GAP-002` 改为已闭合，并将 `MEM-FIX-002` 改为 Done。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_sqlite_version_gate_unit_test","dasall_memory_sqlite_store_unit_test","dasall_memory_failure_injection_integration_test"])`
+   - 结果：失败，返回泛化 `-1` 且无诊断输出；按仓库既有 fallback 退回显式 `cmake --build`。
+2. `RunCtest_CMakeTools(tests=["SqliteVersionGateTest","SqliteMemoryStoreTest","MemoryFailureInjectionTest"])`
+   - 结果：失败，返回泛化 `生成失败`；按仓库既有 fallback 退回显式 `ctest`。
+3. `curl -I -L --max-time 30 https://www.sqlite.org/2026/sqlite-autoconf-3510300.tar.gz`
+   - 结果：`HTTP/1.1 200 OK`，确认新 tarball URL 可达。
+4. `cmake -S . -B build-ci`
+   - 结果：通过；日志：`/tmp/dasall-mem-fix-002-config.log`。
+5. `cmake --build build-ci --target dasall_memory_sqlite_version_gate_unit_test dasall_memory_sqlite_store_unit_test dasall_memory_failure_injection_integration_test`
+   - 结果：通过；日志：`/tmp/dasall-mem-fix-002-build.log`。日志明确包含 `Building C object memory/CMakeFiles/dasall_sqlite3.dir/src/store/sqlite/SqliteAmalgamation.c.o`，证明 pin 变更已触发 SQLite 真正重编译。
+6. `gdb -batch -ex "break main" -ex "run" -ex "print (int)sqlite3_libversion_number()" -ex "quit" build-ci/tests/unit/memory/dasall_memory_sqlite_version_gate_unit_test`
+   - 结果：`3051003`，与详设 3.51.3 口径一致。
+7. `ctest --test-dir build-ci -R '^(SqliteVersionGateTest|SqliteMemoryStoreTest|MemoryFailureInjectionTest)$' --output-on-failure`
+   - 结果：`100% tests passed, 0 tests failed out of 3`；日志：`/tmp/dasall-mem-fix-002-ctest.log`。
+
+### 结果
+
+1. `MEM-FIX-002` 已完成，`MEM-GAP-002` 可判定为已闭合。
+2. Memory SQLite 运行时现在会按 `sqlite_min_version` fail-closed；详设中的 `3.51.3 / backport` 口径已与代码、测试、文档一致。
+3. 当前残余问题不是 SQLite 版本 gate，而是 `Build_CMakeTools` / `RunCtest_CMakeTools` 在该仓库上的工具层泛化失败；后续若继续使用 CMake Tools，应优先修复该工具状态，而不是回退本轮 gate 代码。
+
 ## 记录 #682
 
 - 日期：2026-05-18

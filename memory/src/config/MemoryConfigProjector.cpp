@@ -67,6 +67,7 @@ std::optional<MemoryConfig> project_memory_config(
   config.storage.wal_autocheckpoint_pages = wal_autocheckpoint_pages;
   config.storage.busy_timeout_ms = busy_timeout_ms;
   config.storage.writer_retry_count = snapshot.degrade_policy().allow_budget_degrade ? 2 : 1;
+    config.storage.sqlite_min_version = encode_sqlite_version_number(3, 51, 3);
   config.storage.checkpoint_mode = CheckpointMode::Passive;
   config.storage.reader_pool_size = reader_pool_size;
 

@@ -7,6 +7,7 @@
 
 #include <sqlite3.h>
 
+#include "error/MemoryError.h"
 #include "store/sqlite/SqliteMemoryStore.h"
 #include "support/TestAssertions.h"
 
@@ -18,6 +19,12 @@ std::filesystem::path make_temp_database_path() {
                              .count();
   return std::filesystem::temp_directory_path() /
          ("dasall-memory-store-" + std::to_string(timestamp) + ".db");
+}
+
+void cleanup_database_artifacts(const std::filesystem::path& database_path) {
+  (void)std::filesystem::remove(database_path);
+  (void)std::filesystem::remove(database_path.string() + "-wal");
+  (void)std::filesystem::remove(database_path.string() + "-shm");
 }
 
 std::int64_t current_time_millis() {
@@ -56,6 +63,28 @@ dasall::memory::MemoryConfig make_sqlite_config(const std::filesystem::path& dat
   config.storage.reader_pool_size = 2;
   config.storage.migrations_dir = DASALL_SQL_MEMORY_DIR;
   return config;
+}
+
+void test_sqlite_memory_store_rejects_runtime_below_configured_minimum_version() {
+  using dasall::tests::support::assert_true;
+
+  const auto database_path = make_temp_database_path();
+  cleanup_database_artifacts(database_path);
+
+  auto store = dasall::memory::store::sqlite::create_sqlite_memory_store();
+  auto config = make_sqlite_config(database_path);
+  config.storage.sqlite_min_version = sqlite3_libversion_number() + 1;
+
+  const auto open_result = store->open(config);
+  assert_true(open_result.has_value(),
+              "sqlite store should fail open when the runtime is below sqlite_min_version");
+  assert_true(*open_result ==
+                  dasall::memory::map_memory_error(
+                      dasall::memory::MemoryError::ConfigInvalid)
+                      .result_code,
+              "sqlite store should surface ConfigInvalid for a version gate failure");
+  assert_true(!std::filesystem::exists(database_path),
+              "sqlite store version gate should reject the runtime before creating the database file");
 }
 
 void test_sqlite_memory_store_persists_session_turn_and_summary_roundtrip() {
@@ -320,6 +349,7 @@ void test_sqlite_memory_store_persists_fact_experience_and_maintenance_paths() {
 
 int main() {
   try {
+    test_sqlite_memory_store_rejects_runtime_below_configured_minimum_version();
     test_sqlite_memory_store_persists_session_turn_and_summary_roundtrip();
     test_sqlite_memory_store_persists_fact_experience_and_maintenance_paths();
   } catch (const std::exception& exception) {

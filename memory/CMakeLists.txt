@@ -64,12 +64,12 @@ if(DASALL_PACKAGE_SQLITE_VSS)
 endif()
 
 if(NOT TARGET dasall_sqlite3)
-  set(DASALL_SQLITE_AUTOCONF_VERSION 3460100)
+  set(DASALL_SQLITE_AUTOCONF_VERSION 3510300)
   set(DASALL_SQLITE_AMALGAMATION_WRAPPER
     ${CMAKE_CURRENT_SOURCE_DIR}/src/store/sqlite/SqliteAmalgamation.c
   )
   set(DASALL_SQLITE_AUTOCONF_URL
-    "https://www.sqlite.org/2024/sqlite-autoconf-${DASALL_SQLITE_AUTOCONF_VERSION}.tar.gz"
+    "https://www.sqlite.org/2026/sqlite-autoconf-${DASALL_SQLITE_AUTOCONF_VERSION}.tar.gz"
   )
 
   FetchContent_Declare(dasall_sqlite_autoconf
@@ -96,6 +96,7 @@ if(NOT TARGET dasall_sqlite3)
 
   target_compile_definitions(dasall_sqlite3
     PUBLIC
+      DASALL_SQLITE_AUTOCONF_PIN=${DASALL_SQLITE_AUTOCONF_VERSION}
       SQLITE_THREADSAFE=1
       SQLITE_ENABLE_FTS5=1
       SQLITE_ENABLE_LOAD_EXTENSION=1

@@ -56,6 +56,19 @@ namespace {
   return map_sqlite_result(sqlite_status);
 }
 
+[[nodiscard]] std::optional<contracts::ResultCode> validate_sqlite_runtime_version(
+    const MemoryConfig& config) {
+  if (config.storage.sqlite_min_version <= 0) {
+    return map_memory_error(MemoryError::ConfigInvalid).result_code;
+  }
+
+  if (sqlite3_libversion_number() < config.storage.sqlite_min_version) {
+    return map_memory_error(MemoryError::ConfigInvalid).result_code;
+  }
+
+  return std::nullopt;
+}
+
 [[nodiscard]] std::int64_t query_turn_count(sqlite3* connection,
                                             const std::string& session_id) {
   if (connection == nullptr) {
@@ -583,6 +596,11 @@ std::optional<contracts::ResultCode> SqliteMemoryStore::open(
 
   if (config.storage.db_path.empty()) {
     return contracts::ResultCode::ValidationFieldMissing;
+  }
+
+  if (const auto version_result = validate_sqlite_runtime_version(config);
+      version_result.has_value()) {
+    return version_result;
   }
 
   if (sqlite3_open(config.storage.db_path.c_str(), &writer_connection_) != SQLITE_OK) {

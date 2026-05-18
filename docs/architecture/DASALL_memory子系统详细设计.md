@@ -860,7 +860,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 | busy_timeout_ms | 50 | 只覆盖极短暂本地争用 |
 | writer_retry_count | 2 | 仅本地仓储层幂等重试 |
 | checkpoint_mode | PASSIVE | 默认不强阻塞读者 |
-| sqlite_min_version | 3.51.3 | 避免已知 WAL-reset 修复缺失 |
+| sqlite_min_version | 3.51.3（运行时编码 3051003） | 避免已知 WAL-reset 修复缺失；若使用已批准 backport，可下调为对应 `sqlite3_libversion_number()` 编码 |
 
 ### 6.8 主流程时序
 
@@ -1081,7 +1081,7 @@ sequenceDiagram
 | storage | journal_mode | WAL | 默认同机长运行场景 |
 | storage | wal_autocheckpoint_pages | 1000 | 桌面默认 |
 | storage | busy_timeout_ms | 50 | 极短本地争用超时 |
-| storage | sqlite_min_version | 3.51.3 | WAL 修复基线 |
+| storage | sqlite_min_version | 3.51.3（运行时编码 3051003） | WAL 修复基线；backport 版本按 `sqlite3_libversion_number()` 编码配置 |
 | context | recent_turn_limit | 8 | 装配最近回合窗口 |
 | context | compression_trigger_turns | 12 | 超出则触发 SummaryCompression |
 | context | max_summary_candidates | 3 | 单轮最多取用摘要条数 |
