@@ -809,7 +809,7 @@ SQLite 连接不是线程安全的（即使启用 SQLITE_THREADSAFE=1 的 serial
 | 连接类型 | 数量 | 生命周期 | 管理方式 |
 |---|---|---|---|
 | Writer 连接 | 1 | 进程启动时由工厂函数创建，持续整个 MemoryManager 生命周期；shutdown 时关闭 | 全局单例，WritebackCoordinator 和 MaintenanceWorker 通过序列化调度共享 |
-| Reader 连接 | 1~N（默认 N=2） | 进程启动时创建，持续整个生命周期 | 小型 thread-local 池或 round-robin 池；CandidateCollector 的并发读取从池中借用 |
+| Reader 连接 | 1~N（默认 N=2） | 进程启动时创建，持续整个生命周期 | atomic round-robin 选择 reader slot；每个 slot 绑定独立 lease mutex，CandidateCollector / ContextOrchestrator 的并发读取按次借用并在查询结束后释放 |
 | Maintenance 连接 | 复用 Writer 或独立 1 | 同 Writer 生命周期 | MaintenanceWorker 的 checkpoint 操作需要在 writer 连接上执行（WAL checkpoint 语义要求） |
 
 所有连接在创建时统一执行以下 PRAGMA：
@@ -826,7 +826,7 @@ Reader 连接额外执行 `PRAGMA query_only = ON` 防止误写。
 连接与锁的协调规则：
 
 1. WorkingMemoryBoard 操作（纯内存）不持有任何 SQLite 连接。
-2. CandidateCollector 读操作只借用 reader 连接，不触碰 writer。
+2. CandidateCollector 读操作只借用 reader 连接，不触碰 writer；同一时刻一个 reader slot 只允许一个借用者持有，其余并发读请求等待该 slot 释放，而不是跨线程共享同一个 `sqlite3*`。
 3. WritebackCoordinator 独占 writer 连接完成事务后立即释放。
 4. 在 shutdown 时，先等待活跃事务完成，再依次关闭 reader pool → writer 连接。
 

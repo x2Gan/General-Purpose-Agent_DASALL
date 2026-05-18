@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -75,11 +77,17 @@ class SqliteMemoryStore final : public IMemoryStore {
   [[nodiscard]] sqlite3* writer_connection_for_maintenance();
 
  private:
-  [[nodiscard]] sqlite3* select_reader_connection() const;
+    struct ReaderConnectionLease {
+        sqlite3* connection = nullptr;
+        std::unique_lock<std::mutex> guard;
+    };
+
+    [[nodiscard]] ReaderConnectionLease select_reader_connection() const;
 
   sqlite3* writer_connection_ = nullptr;
   std::vector<sqlite3*> reader_connections_;
-  mutable std::size_t next_reader_index_ = 0;
+    std::vector<std::unique_ptr<std::mutex>> reader_connection_guards_;
+    mutable std::atomic<std::size_t> next_reader_index_{0};
   std::optional<MemoryConfig> config_;
   std::unique_ptr<SqliteSchemaMigrator> migrator_;
 };

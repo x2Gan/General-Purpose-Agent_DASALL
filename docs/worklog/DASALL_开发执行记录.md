@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #685
+
+- 日期：2026-05-18
+- 阶段：memory / sqlite reader pool concurrency
+- 任务：推进 MEM-FIX-004 补齐 SQLite reader pool 并发防护
+- 状态：已完成（代码、聚焦并发测试、详设 / TODO / worklog 回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `MEM-FIX-004`，并明确禁止使用 qemu / kvm 收敛本任务证据；本轮验证仅使用本机 `build-ci`。
+2. 近端代码检查表明 `SqliteMemoryStore::select_reader_connection() const` 仅返回裸 `sqlite3*` 并更新 mutable `next_reader_index_`；这不仅存在 index data race，还会让并发只读路径在 pool 复用时直接共享同一 SQLite 连接，和详设“按次借用 reader slot”口径不一致。
+
+### 执行与结果
+
+1. 收口 reader pool 借用语义。
+   - `memory/src/store/sqlite/SqliteMemoryStore.h` 新增 `ReaderConnectionLease`、reader guard 容器与 atomic `next_reader_index_`。
+   - `memory/src/store/sqlite/SqliteMemoryStore.cpp` 现按 atomic round-robin 选择 reader slot，并在返回前持有对应 per-slot lease mutex；`load_session_bundle`、`load_latest_summary`、`query_facts`、`query_experiences`、`count_turns` 全部改为在整个查询期内持有 lease。
+   - 打开 / 关闭路径现同步创建和释放 reader guard，避免 reader pool 生命周期与 guard 生命周期脱节。
+2. 增加 store 级并发压力测试。
+   - 新增 `tests/unit/memory/SqliteMemoryStoreConcurrencyTest.cpp`，显式覆盖“单 reader pool 下第二个借用者必须等待第一个 lease 释放”，并补齐 Session/Summary/Fact/Experience 公开只读 API 的并发稳定性验证。
+   - `tests/unit/memory/CMakeLists.txt` 已新增 `dasall_memory_sqlite_store_concurrency_unit_test` 目标与 `SqliteMemoryStoreConcurrencyTest` CTest 注册。
+3. 增加 manager 级 context 并发门。
+   - 新增 `tests/integration/memory/MemoryContextIntegrationTest.cpp`，在 `reader_pool_size=1` 的 sqlite-backed manager 上并发调用 `prepare_context()`，验证 `prepare_context()` 在 reader pool 复用时仍稳定返回 summary / belief / active_tools。
+   - `tests/integration/memory/CMakeLists.txt` 已新增 `dasall_memory_context_integration_test` 目标与 `MemoryContextIntegrationTest` CTest 注册。
+4. 回写设计与 TODO 口径。
+   - `docs/architecture/DASALL_memory子系统详细设计.md` 的 6.7.2a 现明确 reader pool 采用 atomic round-robin + per-slot lease mutex，而不是模糊的“thread-local 或 round-robin”。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `MEM-GAP-005` 标记为已闭合、`MEM-FIX-004` 标记为 Done，并同步更新 Memory 章节残余缺口与验证证据。
+
+### 验证
+
+1. `cmake -S . -B build-ci`
+   - 结果：通过；将新增 test targets 刷新进 `build-ci`。
+2. `cmake --build build-ci --target dasall_memory_sqlite_store_concurrency_unit_test -j4`
+   - 结果：通过；首轮编译暴露单测缺少 `<functional>` 头文件，修正后目标稳定构建。
+3. `ctest --test-dir build-ci --output-on-failure -R '^SqliteMemoryStoreConcurrencyTest$'`
+   - 结果：通过；证明 store 级 reader lease 与公开只读 API 并发查询切片成立。
+4. `cmake --build build-ci --target dasall_memory_sqlite_store_concurrency_unit_test dasall_memory_context_integration_test -j4`
+   - 结果：通过；store 与 manager 两个聚焦目标均构建成功。
+5. `ctest --test-dir build-ci --output-on-failure -R '^(SqliteMemoryStoreConcurrencyTest|MemoryContextIntegrationTest)$'`
+   - 结果：`100% tests passed, 0 tests failed out of 2`；验证 `prepare_context()` 与 store 并发读取在本机 `build-ci` 上稳定通过。
+
+### 结果
+
+1. `MEM-FIX-004` 已完成，`MEM-GAP-005` 可判定为已闭合。
+2. Memory reader pool 现在具备显式的“按次借用”保护，不再把同一个 `sqlite3*` 裸暴露给并发请求；详设、代码与聚焦测试口径已一致。
+3. 本轮未使用 qemu / kvm；Memory 章节的后续优先级已转向 `MEM-GAP-004` / `MEM-GAP-006` / `MEM-GAP-007`。
+
 ## 记录 #684
 
 - 日期：2026-05-18

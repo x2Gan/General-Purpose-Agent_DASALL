@@ -676,6 +676,7 @@ std::optional<contracts::ResultCode> SqliteMemoryStore::open(
     }
 
     reader_connections_.push_back(reader_connection);
+    reader_connection_guards_.push_back(std::make_unique<std::mutex>());
   }
 
   config_ = config;
@@ -690,6 +691,7 @@ void SqliteMemoryStore::close() noexcept {
     }
   }
   reader_connections_.clear();
+  reader_connection_guards_.clear();
 
   if (writer_connection_ != nullptr) {
     sqlite3_close(writer_connection_);
@@ -698,7 +700,7 @@ void SqliteMemoryStore::close() noexcept {
 
   migrator_.reset();
   config_.reset();
-  next_reader_index_ = 0;
+  next_reader_index_.store(0, std::memory_order_relaxed);
 }
 
 std::unique_ptr<IStoreTransaction> SqliteMemoryStore::begin_immediate() {
@@ -714,7 +716,8 @@ std::unique_ptr<IStoreTransaction> SqliteMemoryStore::begin_immediate() {
 SessionLoadBundle SqliteMemoryStore::load_session_bundle(
     const SessionLoadRequest& request) const {
   SessionLoadBundle bundle;
-  sqlite3* reader_connection = select_reader_connection();
+  const auto reader_lease = select_reader_connection();
+  sqlite3* reader_connection = reader_lease.connection;
   if (reader_connection == nullptr) {
     return bundle;
   }
@@ -970,7 +973,8 @@ StoreResult SqliteMemoryStore::upsert_summary(
 
 std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
     const std::string& session_id) const {
-  sqlite3* reader_connection = select_reader_connection();
+  const auto reader_lease = select_reader_connection();
+  sqlite3* reader_connection = reader_lease.connection;
   if (reader_connection == nullptr) {
     return std::nullopt;
   }
@@ -995,7 +999,8 @@ std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
 
 FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {
   FactQueryResult result;
-  sqlite3* reader_connection = select_reader_connection();
+  const auto reader_lease = select_reader_connection();
+  sqlite3* reader_connection = reader_lease.connection;
   if (reader_connection == nullptr) {
     return result;
   }
@@ -1141,7 +1146,8 @@ StoreResult SqliteMemoryStore::supersede_fact(const std::string& old_fact_id,
 ExperienceQueryResult SqliteMemoryStore::query_experiences(
     const ExperienceQuery& query) const {
   ExperienceQueryResult result;
-  sqlite3* reader_connection = select_reader_connection();
+  const auto reader_lease = select_reader_connection();
+  sqlite3* reader_connection = reader_lease.connection;
   if (reader_connection == nullptr) {
     return result;
   }
@@ -1262,7 +1268,8 @@ StoreResult SqliteMemoryStore::insert_experience(
 }
 
 std::int64_t SqliteMemoryStore::count_turns(const std::string& session_id) const {
-  return query_turn_count(select_reader_connection(), session_id);
+  const auto reader_lease = select_reader_connection();
+  return query_turn_count(reader_lease.connection, session_id);
 }
 
 StoreResult SqliteMemoryStore::quarantine_record(const std::string& object_type,
@@ -1462,14 +1469,21 @@ sqlite3* SqliteMemoryStore::writer_connection_for_maintenance() {
   return writer_connection_;
 }
 
-sqlite3* SqliteMemoryStore::select_reader_connection() const {
+SqliteMemoryStore::ReaderConnectionLease SqliteMemoryStore::select_reader_connection() const {
+  ReaderConnectionLease lease;
   if (!reader_connections_.empty()) {
-    sqlite3* connection = reader_connections_[next_reader_index_ % reader_connections_.size()];
-    ++next_reader_index_;
-    return connection;
+    const std::size_t reader_count = reader_connections_.size();
+    const std::size_t reader_index =
+        next_reader_index_.fetch_add(1, std::memory_order_relaxed) % reader_count;
+    if (reader_index < reader_connection_guards_.size()) {
+      lease.guard = std::unique_lock<std::mutex>(*reader_connection_guards_[reader_index]);
+    }
+    lease.connection = reader_connections_[reader_index];
+    return lease;
   }
 
-  return writer_connection_;
+  lease.connection = writer_connection_;
+  return lease;
 }
 
 std::unique_ptr<IMemoryStore> create_sqlite_memory_store() {
