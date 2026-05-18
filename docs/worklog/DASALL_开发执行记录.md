@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #687
+
+- 日期：2026-05-18
+- 阶段：memory / release-runner local installed evidence
+- 任务：推进 MEM-FIX-006 收口 release-runner / local installed memory evidence
+- 状态：已完成（packaging blocker、runtime summary bridge、installed smoke、workflow contract 与文档回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `MEM-FIX-006`，若存在前置 BLOCK 任务需先解组；同时明确禁止使用 qemu / kvm 作为本轮收敛证据，要求一切从真实目标出发，改走 release-runner / 本机 installed authoritative evidence。
+2. 近端代码检查表明本轮真正阻塞不是“缺一次 qemu 通过”本身，而是两处本机 installed 根因：其一，Debian packaging 仍可能复用无版本号 SQLite source override cache，导致包内 `dasall-daemon` 编入 stale SQLite 3.46.1 并在安装态 `sqlite_min_version` gate 前 fail-closed；其二，runtime production direct LLM path 虽调用 `prepare_context()`，但没有把返回的 `ContextPacket` 真正桥接到 prompt 组装路径，same-session 第二轮只能返回 `No marker`。
+3. smoke 口径也需要同步纠偏：当前 Memory summary 实现是一轮一条 summary row，不能把 `summary_reuse_count` 伪装成“同一条 summary 合并复用”的 installed 证明；本轮 authoritative 口径应改为 same-session marker recall + SQLite turn/summary row proof。
+
+### 执行与结果
+
+1. 先解组 packaging blocker。
+   - `debian/rules` 已把 SQLite source override cache 改为带版本号目录 `third_party/.cache/dasall_sqlite_autoconf-3510300-src`，避免继续静默复用旧 source tree。
+   - `memory/CMakeLists.txt` 已新增 `dasall_validate_sqlite_autoconf_source_dir()`，对 `sqlite3.h` 的 `SQLITE_VERSION_NUMBER` 做 configure-time fail-fast 校验；当前 pin `3510300` 对应期望 `3051003`。
+2. 修复 installed same-session recall 主链。
+   - `runtime/src/AgentOrchestrator.cpp` 现把 `prepare_context()` 产出的 `summary_memory` 桥接到 responder prompt 的 `constraints` 槽位，并剥离 `llm.origin=` 审计包装头，只保留 summary 正文 marker。
+   - `tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp` 已新增同 session 双轮回归，锁定第二轮 direct LLM request 必须包含 `session_summary=mem-fix-006-local-proof`，且不得回传 `llm.origin=` 头。
+3. 收口 installed smoke 与 release-runner contract。
+   - `scripts/packaging/pkg_smoke_install.sh` 现固定生成 `run-first.json`、`run-second.json`、`memory-proof.json`，并将 installed 证据改为 same-session 双轮 recall、WAL、core/vector tables、turn/summary rows 与 latest summary prefix 断言。
+   - 同脚本内已修复 `json_extract_string()` 的 stdin/heredoc 冲突，并把 Python sqlite3 helper 的 numbered placeholders 规范化为 qmark，消除未来 Python 3.14 `ProgrammingError` 风险。
+   - `.github/workflows/release-package-gate.yml` 已在 qemu gate 前固定 local installed memory evidence，并导出 package-smoke artifact 目录，确立 release-runner authoritative owner。
+4. 完成文档回写。
+   - 新增 deliverable `docs/todos/memory/deliverables/MEM-FIX-006-release-runner-local-installed-memory-evidence.md`，固定本轮任务重定义、Design -> Build 映射、authoritative artifact 与不外推边界。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `MEM-FIX-006` 标记为 Done，并把 `MEM-GAP-004` / `MEM-GAP-007` 分别收窄为 qemu/soak 与 maintenance 残余。
+   - `docs/ssot/BusinessChainIntegrationMatrix.md` 已把 BC-09 升级到 installed local、BC-10 维持 installed partial 并补 same-session proof、BC-16 补入 release-runner local installed memory evidence contract。
+
+### 验证
+
+1. stale SQLite source guard 最窄验证
+   - 旧 cache `/home/gangan/DASALL/third_party/.cache/dasall_sqlite_autoconf-src` 上执行最窄 configure，按预期报 `expected SQLITE_VERSION_NUMBER=3051003 ... got 3046001`；证明 stale source 不会再静默进包。
+2. runtime same-session bridge 回归
+   - `Build_CMakeTools(buildTargets=["dasall_runtime_cognition_loop_smoke_unit_test"])`：通过。
+   - `LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./build/vscode-linux-ninja ./build/vscode-linux-ninja/tests/unit/runtime/dasall_runtime_cognition_loop_smoke_unit_test`：退出码 `0`。
+3. Debian package rebuild
+   - `dpkg-buildpackage -us -uc -b`：通过；`/tmp/dasall-mem-fix-006-packbuild.exit` 记录为 `0`，`/tmp/dasall-mem-fix-006-packbuild.log` 尾部出现 `dpkg-buildpackage: info: binary-only upload (no source included)`。
+4. authoritative installed smoke
+   - `DASALL_DEEPSEEK_API_KEY_FILE="$HOME/.local/share/dasall/secrets/deepseek-prod.secret" DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-mem-fix-006-proof4.d5xayL bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过；`/tmp/dasall-mem-fix-006-proof4.log` 尾部为 `[pkg-smoke-install] install smoke passed`。
+   - `/tmp/dasall-mem-fix-006-proof4.d5xayL/memory-proof.json` 当前记录：`expected_marker=mem-fix-006-local-proof`、`journal_mode=wal`、`core_table_count=5`、`vector_table_count=1`、`session_turn_count_after_second=2`、`session_summary_count_after_second=2`、`latest_summary_text_prefix` 命中 marker。
+5. installed binary 快照
+   - `strings -a /usr/sbin/dasall-daemon | rg 'session_summary='` 命中 `; session_summary=`；`strings -a /usr/sbin/dasall-daemon | rg '3\.51\.3|3\.46\.1'` 仅命中 `3.51.3`，可反证 stale SQLite source 问题已被挡住。
+
+### 结果
+
+1. `MEM-FIX-006` 已按“release-runner contract + local installed authoritative memory evidence”口径完成，不再把 qemu / autopkgtest 作为本任务前置 blocker。
+2. Memory 当前已具备 installed same-session 正向证据：第二轮 prompt 能消费前一轮 summary 正文，且 SQLite `memory.db` 已独立记录 turn/summary rows 与 WAL / table 结构。
+3. 残余缺口已被收窄为两个独立方向：`MEM-GAP-004` 仅保留 qemu / soak 隔离复核，`MEM-GAP-007` 仅保留 installed maintenance 正向证据；两者都不应再回流为本轮功能性 blocker。
+
 ## 记录 #686
 
 - 日期：2026-05-18

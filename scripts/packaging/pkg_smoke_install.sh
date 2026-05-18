@@ -13,6 +13,7 @@ DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
+PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
 PRESERVED_SECRET_ROOT=
 
 log() {
@@ -93,6 +94,54 @@ assert_json_matches() {
     fail "${label}: expected JSON pattern not found: ${expected_regex}"
 }
 
+assert_non_empty() {
+  value=$1
+  label=$2
+
+  [ -n "$value" ] || fail "${label}: expected a non-empty value"
+}
+
+assert_min_integer() {
+  value=$1
+  minimum=$2
+  label=$3
+
+  case "$value" in
+    ''|*[!0-9]*) fail "${label}: expected a non-negative integer, got ${value}" ;;
+  esac
+  [ "$value" -ge "$minimum" ] || fail "${label}: expected at least ${minimum}, got ${value}"
+}
+
+ensure_artifact_dir() {
+  [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ] || return 0
+  mkdir -p "$PACKAGE_SMOKE_ARTIFACT_DIR"
+}
+
+write_artifact_file() {
+  file_name=$1
+  file_content=$2
+
+  [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ] || return 0
+  ensure_artifact_dir
+  printf '%s\n' "$file_content" > "$PACKAGE_SMOKE_ARTIFACT_DIR/$file_name"
+}
+
+json_extract_string() {
+  json_payload=$1
+  field_name=$2
+
+  python3 - "$field_name" "$json_payload" <<'PY'
+import json
+import sys
+
+field_name = sys.argv[1]
+payload = json.loads(sys.argv[2])
+value = payload.get(field_name)
+if isinstance(value, str):
+    print(value)
+PY
+}
+
 query_sqlite_scalar() {
   db_path=$1
   sql_query=$2
@@ -104,6 +153,27 @@ db_path = sys.argv[1]
 sql_query = sys.argv[2]
 with sqlite3.connect(db_path) as connection:
     row = connection.execute(sql_query).fetchone()
+    if row is None:
+        sys.exit(2)
+    print(row[0])
+PY
+}
+
+query_sqlite_scalar_with_params() {
+  db_path=$1
+  sql_query=$2
+  shift 2
+
+  run_root python3 - "$db_path" "$sql_query" "$@" <<'PY'
+import re
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+sql_query = re.sub(r"\?[0-9]+", "?", sys.argv[2])
+params = tuple(sys.argv[3:])
+with sqlite3.connect(db_path) as connection:
+    row = connection.execute(sql_query, params).fetchone()
     if row is None:
         sys.exit(2)
     print(row[0])
@@ -266,14 +336,29 @@ verify_explicit_start() {
   run_root_sh 'test "$(stat -c "%a" /run/dasall/daemon.sock)" = "600"'
   run_dasall_cli dasall ping --json >/dev/null
   run_dasall_cli dasall readiness --json >/dev/null
-  RUN_JSON=$(run_dasall_cli dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
-  assert_json_contains "$RUN_JSON" '"disposition":"completed"' 'run smoke'
-  assert_json_contains "$RUN_JSON" '"task_completed":true' 'run smoke'
-  assert_json_contains "$RUN_JSON" 'llm.origin=deepseek-prod/' 'llm response payload'
-  printf '%s\n' "$RUN_JSON" | grep -Eq '"(tool_name|capability_id)":"agent\.dataset"' && \
-    fail 'run smoke unexpectedly returned an agent.dataset tool payload instead of an LLM response'
-
   require_command python3
+  ensure_artifact_dir
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    log "writing package smoke artifacts to ${PACKAGE_SMOKE_ARTIFACT_DIR}"
+  fi
+
+  MEMORY_SESSION_HINT='pkg-smoke-memory-session'
+  MEMORY_EXPECTED_MARKER='mem-fix-006-local-proof'
+  MEMORY_FIRST_REQUEST='{"prompt":"Remember this exact marker for this session: mem-fix-006-local-proof. Reply with that marker once and do not use any tools."}'
+  MEMORY_SECOND_REQUEST='{"prompt":"In this same session, what exact marker did I ask you to remember? Reply with the exact marker once and do not use any tools."}'
+
+  FIRST_RUN_JSON=$(run_dasall_cli dasall run "$MEMORY_FIRST_REQUEST" --session "$MEMORY_SESSION_HINT" --request-id pkg-smoke-memory-turn-001 --json --timeout-ms 120000)
+  assert_json_contains "$FIRST_RUN_JSON" '"disposition":"completed"' 'first run smoke'
+  assert_json_contains "$FIRST_RUN_JSON" '"task_completed":true' 'first run smoke'
+  assert_json_contains "$FIRST_RUN_JSON" 'llm.origin=deepseek-prod/' 'first llm response payload'
+  assert_json_contains "$FIRST_RUN_JSON" "$MEMORY_EXPECTED_MARKER" 'first llm marker echo'
+  printf '%s\n' "$FIRST_RUN_JSON" | grep -Eq '"(tool_name|capability_id)":"agent\.dataset"' && \
+    fail 'run smoke unexpectedly returned an agent.dataset tool payload instead of an LLM response'
+  write_artifact_file 'run-first.json' "$FIRST_RUN_JSON"
+
+  MEMORY_SESSION_ID=$(json_extract_string "$FIRST_RUN_JSON" session_id)
+  assert_non_empty "$MEMORY_SESSION_ID" 'first run session_id'
+
   run_root test -f /usr/share/dasall/sql/memory/V001__initial_schema.sql
   run_root test -f "${MEMORY_DB_PATH}"
   JOURNAL_MODE=$(query_sqlite_scalar "${MEMORY_DB_PATH}" 'PRAGMA journal_mode;')
@@ -282,10 +367,82 @@ verify_explicit_start() {
   [ "$MEMORY_TABLE_COUNT" -eq 5 ] || fail "memory sqlite schema should expose five core tables, got ${MEMORY_TABLE_COUNT}"
   MEMORY_VECTOR_TABLE_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'memory_vector_documents';")
   [ "$MEMORY_VECTOR_TABLE_COUNT" -eq 1 ] || fail "memory sqlite schema should expose the vector sidecar table, got ${MEMORY_VECTOR_TABLE_COUNT}"
-  MEMORY_TURN_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM turns WHERE user_input LIKE '%package smoke%' AND agent_response LIKE 'llm.origin=deepseek-prod/%';")
+  MEMORY_TURN_COUNT=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM turns WHERE session_id = ?1 AND agent_response LIKE ?2;' "$MEMORY_SESSION_ID" 'llm.origin=deepseek-prod/%')
   assert_positive_integer "$MEMORY_TURN_COUNT" 'memory sqlite llm turn writeback'
-  MEMORY_SUMMARY_COUNT=$(query_sqlite_scalar "${MEMORY_DB_PATH}" "SELECT COUNT(*) FROM summaries WHERE summary_text LIKE 'llm.origin=deepseek-prod/%';")
+  MEMORY_SUMMARY_COUNT=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM summaries WHERE session_id = ?1 AND summary_text LIKE ?2;' "$MEMORY_SESSION_ID" 'llm.origin=deepseek-prod/%')
   assert_positive_integer "$MEMORY_SUMMARY_COUNT" 'memory sqlite llm summary writeback'
+  MEMORY_SESSION_SUMMARY_COUNT_AFTER_FIRST=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM summaries WHERE session_id = ?1;' "$MEMORY_SESSION_ID")
+  assert_positive_integer "$MEMORY_SESSION_SUMMARY_COUNT_AFTER_FIRST" 'first-run session summary rows'
+  MEMORY_FIRST_TURN_ID=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT turn_id FROM turns WHERE session_id = ?1 AND user_input = ?2 ORDER BY created_at ASC LIMIT 1;' "$MEMORY_SESSION_ID" "$MEMORY_FIRST_REQUEST")
+  assert_non_empty "$MEMORY_FIRST_TURN_ID" 'first-run turn_id'
+
+  SECOND_RUN_JSON=$(run_dasall_cli dasall run "$MEMORY_SECOND_REQUEST" --session "$MEMORY_SESSION_ID" --request-id pkg-smoke-memory-turn-002 --json --timeout-ms 120000)
+  assert_json_contains "$SECOND_RUN_JSON" '"disposition":"completed"' 'second run smoke'
+  assert_json_contains "$SECOND_RUN_JSON" '"task_completed":true' 'second run smoke'
+  assert_json_contains "$SECOND_RUN_JSON" 'llm.origin=deepseek-prod/' 'second llm response payload'
+  assert_json_contains "$SECOND_RUN_JSON" "$MEMORY_EXPECTED_MARKER" 'second llm same-session recall'
+  printf '%s\n' "$SECOND_RUN_JSON" | grep -Eq '"(tool_name|capability_id)":"agent\.dataset"' && \
+    fail 'second run smoke unexpectedly returned an agent.dataset tool payload instead of an LLM response'
+  write_artifact_file 'run-second.json' "$SECOND_RUN_JSON"
+
+  SECOND_SESSION_ID=$(json_extract_string "$SECOND_RUN_JSON" session_id)
+  assert_non_empty "$SECOND_SESSION_ID" 'second run session_id'
+  [ "$SECOND_SESSION_ID" = "$MEMORY_SESSION_ID" ] || fail "expected the second run to reuse session ${MEMORY_SESSION_ID}, got ${SECOND_SESSION_ID}"
+
+  MEMORY_SECOND_TURN_ID=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT turn_id FROM turns WHERE session_id = ?1 AND user_input = ?2 ORDER BY created_at ASC LIMIT 1;' "$MEMORY_SESSION_ID" "$MEMORY_SECOND_REQUEST")
+  assert_non_empty "$MEMORY_SECOND_TURN_ID" 'second-run turn_id'
+  MEMORY_SESSION_TURN_COUNT=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM turns WHERE session_id = ?1;' "$MEMORY_SESSION_ID")
+  assert_min_integer "$MEMORY_SESSION_TURN_COUNT" 2 'same-session turn count'
+  MEMORY_SESSION_SUMMARY_COUNT_AFTER_SECOND=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT COUNT(*) FROM summaries WHERE session_id = ?1;' "$MEMORY_SESSION_ID")
+  assert_min_integer "$MEMORY_SESSION_SUMMARY_COUNT_AFTER_SECOND" 2 'same-session summary row count'
+  MEMORY_LATEST_SUMMARY_SOURCE_TURN_IDS_JSON=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT source_turn_ids_json FROM summaries WHERE session_id = ?1 ORDER BY created_at DESC LIMIT 1;' "$MEMORY_SESSION_ID")
+  assert_non_empty "$MEMORY_LATEST_SUMMARY_SOURCE_TURN_IDS_JSON" 'latest summary source_turn_ids_json'
+  printf '%s\n' "$MEMORY_LATEST_SUMMARY_SOURCE_TURN_IDS_JSON" | grep -Fq "$MEMORY_SECOND_TURN_ID" || \
+    fail "latest summary source_turn_ids_json should reference ${MEMORY_SECOND_TURN_ID}, got ${MEMORY_LATEST_SUMMARY_SOURCE_TURN_IDS_JSON}"
+  MEMORY_LATEST_SUMMARY_TEXT=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT summary_text FROM summaries WHERE session_id = ?1 ORDER BY created_at DESC LIMIT 1;' "$MEMORY_SESSION_ID")
+  assert_non_empty "$MEMORY_LATEST_SUMMARY_TEXT" 'latest summary text'
+
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR/memory-proof.json" \
+      "$MEMORY_SESSION_ID" \
+      "$MEMORY_EXPECTED_MARKER" \
+      "$MEMORY_FIRST_TURN_ID" \
+      "$MEMORY_SECOND_TURN_ID" \
+      "$JOURNAL_MODE" \
+      "$MEMORY_TABLE_COUNT" \
+      "$MEMORY_VECTOR_TABLE_COUNT" \
+      "$MEMORY_TURN_COUNT" \
+      "$MEMORY_SUMMARY_COUNT" \
+      "$MEMORY_SESSION_SUMMARY_COUNT_AFTER_FIRST" \
+      "$MEMORY_SESSION_TURN_COUNT" \
+      "$MEMORY_SESSION_SUMMARY_COUNT_AFTER_SECOND" \
+      "$MEMORY_LATEST_SUMMARY_SOURCE_TURN_IDS_JSON" \
+      "$MEMORY_LATEST_SUMMARY_TEXT" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+data = {
+    "session_id": sys.argv[2],
+    "expected_marker": sys.argv[3],
+    "first_turn_id": sys.argv[4],
+    "second_turn_id": sys.argv[5],
+    "journal_mode": sys.argv[6],
+    "core_table_count": int(sys.argv[7]),
+    "vector_table_count": int(sys.argv[8]),
+    "llm_turn_writeback_count": int(sys.argv[9]),
+    "llm_summary_writeback_count": int(sys.argv[10]),
+    "session_summary_count_after_first": int(sys.argv[11]),
+    "session_turn_count_after_second": int(sys.argv[12]),
+    "session_summary_count_after_second": int(sys.argv[13]),
+    "latest_summary_source_turn_ids_json": sys.argv[14],
+    "latest_summary_text_prefix": sys.argv[15][:160],
+}
+with open(path, 'w', encoding='ascii') as handle:
+    json.dump(data, handle, indent=2)
+    handle.write('\n')
+PY
+  fi
 
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)

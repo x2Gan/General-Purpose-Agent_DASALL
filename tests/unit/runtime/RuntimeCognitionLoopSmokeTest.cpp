@@ -37,6 +37,23 @@ using dasall::tests::support::assert_true;
   return false;
 }
 
+[[nodiscard]] std::optional<std::string> find_tag_value(
+    const std::optional<std::vector<std::string>>& tags,
+    const std::string& key) {
+  if (!tags.has_value()) {
+    return std::nullopt;
+  }
+
+  const std::string prefix = key + "=";
+  for (const auto& tag : *tags) {
+    if (tag.rfind(prefix, 0U) == 0U) {
+      return tag.substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
 void test_runtime_cognition_loop_smoke() {
   const auto database_path = make_temp_database_path("dasall-runtime-cognition-loop-smoke");
   cleanup_database_artifacts(database_path);
@@ -156,12 +173,72 @@ void test_runtime_live_llm_first_turn_context_fallback_reaches_writeback() {
   cleanup_database_artifacts(database_path);
 }
 
+void test_runtime_live_llm_second_turn_bridges_summary_memory_into_constraints() {
+  const auto database_path = make_temp_database_path("dasall-runtime-live-llm-second-turn");
+  cleanup_database_artifacts(database_path);
+
+  const auto config = make_sqlite_config(database_path, DASALL_SQL_MEMORY_DIR);
+  auto dependency_set = make_true_integration_dependency_set(
+      config,
+      "session-live-second-turn-seed",
+      "turn-live-second-turn-seed",
+      "seed unrelated session");
+
+  auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
+  llm_manager->set_default_content("mem-fix-006-local-proof");
+
+  dependency_set->llm_manager = llm_manager;
+  dependency_set->external_evidence = {"required-live-baseline"};
+
+  dasall::runtime::AgentFacade facade;
+  const auto init_result = facade.init(make_true_integration_init_request(
+      dependency_set, "rt-live-second-turn", "desktop_full", "runtime-live-second-turn"));
+  assert_true(init_result.accepted,
+              "runtime live second-turn smoke should initialize AgentFacade successfully");
+
+  const auto first_result = facade.handle(make_agent_request(
+      "req-live-second-turn-001",
+      "session-live-second-turn",
+      "trace-live-second-turn-001",
+      "remember the session marker"));
+  assert_true(first_result.status == dasall::contracts::AgentResultStatus::Completed,
+              "runtime live second-turn smoke should complete the first llm round");
+
+  llm_manager->clear_recorded_requests();
+  llm_manager->set_default_content("second turn placeholder");
+
+  const auto second_result = facade.handle(make_agent_request(
+      "req-live-second-turn-002",
+      "session-live-second-turn",
+      "trace-live-second-turn-002",
+      "repeat the marker from the same session"));
+  assert_true(second_result.status == dasall::contracts::AgentResultStatus::Completed,
+              "runtime live second-turn smoke should complete the second llm round");
+  assert_true(llm_manager->last_request().has_value(),
+              "runtime live second-turn smoke should record the second llm request");
+
+  const auto constraints = find_tag_value(llm_manager->last_request()->request.tags,
+                                          "constraints");
+  assert_true(constraints.has_value() &&
+                  constraints->find("session_summary=mem-fix-006-local-proof") !=
+                      std::string::npos,
+              "runtime live second-turn smoke should bridge summary memory text into constraints");
+  assert_true(constraints->find("llm.origin=") == std::string::npos,
+              "runtime live second-turn smoke should strip llm.origin audit envelope from bridged summary memory");
+
+  if (dependency_set->memory_manager != nullptr) {
+    dependency_set->memory_manager->shutdown();
+  }
+  cleanup_database_artifacts(database_path);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_runtime_cognition_loop_smoke();
     test_runtime_live_llm_first_turn_context_fallback_reaches_writeback();
+    test_runtime_live_llm_second_turn_bridges_summary_memory_into_constraints();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

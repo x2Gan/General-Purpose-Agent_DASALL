@@ -5,7 +5,8 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export DH_DATAFILES ?= $(abspath $(dir $(shell command -v dh))/../share/debhelper)
 
 BUILD_DIR := obj-$(DEB_HOST_GNU_TYPE)
-SQLITE_CACHE_DIR := $(CURDIR)/third_party/.cache/dasall_sqlite_autoconf-src
+SQLITE_AUTOCONF_VERSION := 3510300
+SQLITE_CACHE_DIR := $(CURDIR)/third_party/.cache/dasall_sqlite_autoconf-$(SQLITE_AUTOCONF_VERSION)-src
 
 ifneq ($(wildcard $(SQLITE_CACHE_DIR)/sqlite3.c),)
 SQLITE_SOURCE_FLAG := -DFETCHCONTENT_SOURCE_DIR_DASALL_SQLITE_AUTOCONF=$(SQLITE_CACHE_DIR)

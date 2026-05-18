@@ -4,6 +4,31 @@ find_package(Threads REQUIRED)
 
 option(DASALL_PACKAGE_SQLITE_VSS "Install sqlite-vss loadable extension assets when supported" ON)
 
+function(dasall_validate_sqlite_autoconf_source_dir source_dir expected_version_number autoconf_pin)
+  set(sqlite_header_path "${source_dir}/sqlite3.h")
+  if(NOT EXISTS "${sqlite_header_path}")
+    message(FATAL_ERROR
+      "SQLite source dir ${source_dir} is missing sqlite3.h for autoconf ${autoconf_pin}"
+    )
+  endif()
+
+  file(READ "${sqlite_header_path}" sqlite_header_contents)
+  string(REGEX MATCH "#define[ 	]+SQLITE_VERSION_NUMBER[ 	]+([0-9]+)" _sqlite_version_match
+    "${sqlite_header_contents}"
+  )
+  if(NOT CMAKE_MATCH_1)
+    message(FATAL_ERROR
+      "SQLite source dir ${source_dir} does not expose SQLITE_VERSION_NUMBER in sqlite3.h"
+    )
+  endif()
+
+  if(NOT CMAKE_MATCH_1 STREQUAL "${expected_version_number}")
+    message(FATAL_ERROR
+      "SQLite source dir ${source_dir} is stale: expected SQLITE_VERSION_NUMBER=${expected_version_number} for autoconf ${autoconf_pin}, got ${CMAKE_MATCH_1}. Clear or update FETCHCONTENT_SOURCE_DIR_DASALL_SQLITE_AUTOCONF."
+    )
+  endif()
+endfunction()
+
 if(DASALL_PACKAGE_SQLITE_VSS)
   set(DASALL_SQLITE_VSS_VERSION "0.1.2")
   set(DASALL_SQLITE_VSS_INSTALL_DIR "lib/dasall/sqlite-vss")
@@ -65,6 +90,12 @@ endif()
 
 if(NOT TARGET dasall_sqlite3)
   set(DASALL_SQLITE_AUTOCONF_VERSION 3510300)
+  math(EXPR DASALL_SQLITE_VERSION_MAJOR "${DASALL_SQLITE_AUTOCONF_VERSION} / 1000000")
+  math(EXPR DASALL_SQLITE_VERSION_MINOR "(${DASALL_SQLITE_AUTOCONF_VERSION} / 10000) % 100")
+  math(EXPR DASALL_SQLITE_VERSION_PATCH "(${DASALL_SQLITE_AUTOCONF_VERSION} / 100) % 100")
+  math(EXPR DASALL_SQLITE_EXPECTED_VERSION_NUMBER
+    "${DASALL_SQLITE_VERSION_MAJOR} * 1000000 + ${DASALL_SQLITE_VERSION_MINOR} * 1000 + ${DASALL_SQLITE_VERSION_PATCH}"
+  )
   set(DASALL_SQLITE_AMALGAMATION_WRAPPER
     ${CMAKE_CURRENT_SOURCE_DIR}/src/store/sqlite/SqliteAmalgamation.c
   )
@@ -80,6 +111,12 @@ if(NOT TARGET dasall_sqlite3)
   if(NOT dasall_sqlite_autoconf_POPULATED)
     FetchContent_Populate(dasall_sqlite_autoconf)
   endif()
+
+  dasall_validate_sqlite_autoconf_source_dir(
+    "${dasall_sqlite_autoconf_SOURCE_DIR}"
+    "${DASALL_SQLITE_EXPECTED_VERSION_NUMBER}"
+    "${DASALL_SQLITE_AUTOCONF_VERSION}"
+  )
 
   add_library(dasall_sqlite3 STATIC
     ${DASALL_SQLITE_AMALGAMATION_WRAPPER}
