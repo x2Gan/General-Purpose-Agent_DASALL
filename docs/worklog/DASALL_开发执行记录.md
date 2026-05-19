@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+## 记录 #705
+
+- 日期：2026-05-19
+- 阶段：tools / production observability sink traceability closure
+- 任务：推进 TOOL-FIX-007，闭合 production tools observability sink
+- 状态：已完成（tools 顶层总账、deliverable、索引与 worklog 已和既有 runtime_support / tools focused evidence 对齐）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-007`，若存在前置 blocker 则先解阻，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端代码与测试检查确认：`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 已存在 `RuntimeObservabilityBundle`、`compose_runtime_observability_bundle()`、`compose_runtime_tool_manager()` 和 `:production-observability-health` marker；`tests/integration/tools/ToolProductionObservabilityIntegrationTest.cpp` 与 daemon/gateway composition tests 也已存在。
+3. `docs/todos/runtime/DASALL_runtime_support组件专项TODO.md` 与 `docs/worklog/DASALL_开发执行记录.md` 的 `RTSUP-TODO-006` 已把同一实现面记为 Done，说明本轮真实缺口不是“尚未接入”，而是 tools 顶层总账没有把既有 focused evidence 回写闭环。
+4. 因此 `TOOL-FIX-007` 本轮无前置 BLOCK；最小可执行动作是补齐 tools 侧 deliverable / 总账 / 索引 / worklog，而不是重复改写 observability 组合代码。
+
+### 改动
+
+1. 新增 `docs/todos/tools/deliverables/TOOL-FIX-007-production-tools-observability-sink收敛.md`：固定任务来源、代码证据、Design -> Build 映射、验收命令和“不外推到 installed / qemu / kvm / release / soak”的边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `TOOL-GAP-007` 标记为已闭合、`TOOL-FIX-007` 标记为 Done，并同步收口 tools 当前结论与优先级，使其与既有 runtime_support focused evidence 一致。
+3. 更新 `docs/todos/tools/deliverables/DELIVERABLES-INDEX.md`：增加 FIX-007 deliverable 索引项，避免后续评审只能绕行 runtime_support TODO / worklog。
+4. 本轮未改动产品代码：shared observability bundle、tool/services probes 和 app live composition retention 继续以 `RuntimeLiveDependencyComposition.cpp`、`ToolProductionObservabilityIntegrationTest.cpp` 与 daemon/gateway composition tests 为 authoritative source。
+
+### 验证
+
+1. 代码接线存在性检查。
+   - `rg -n "compose_runtime_observability_bundle\(|compose_runtime_tool_manager\(|:production-observability-health" apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`
+   - 结果：退出码 `0`；命中 shared observability bundle 定义/调用与 production observability marker。
+2. focused tests 注册检查。
+   - `rg -n "ToolObservabilityIntegrationTest|ToolProductionObservabilityIntegrationTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest" tests/CMakeLists.txt tests/integration/tools/CMakeLists.txt tests/integration/access/CMakeLists.txt`
+   - 结果：退出码 `0`；四个 focused tests 均已注册。
+3. tools 顶层文档闭环检查。
+   - `rg -n "TOOL-GAP-007|TOOL-FIX-007|production observability sink" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/tools/deliverables/TOOL-FIX-007-production-tools-observability-sink收敛.md docs/todos/tools/deliverables/DELIVERABLES-INDEX.md`
+   - 结果：退出码 `0`；总账状态、deliverable 与索引已对齐。
+4. 既有 authoritative focused evidence 回链。
+   - `docs/worklog/DASALL_开发执行记录.md` 记录 #647 已回写：`cmake -S /home/gangan/DASALL -B /home/gangan/DASALL/build-rtsup005 -G "Unix Makefiles" && cmake --build /home/gangan/DASALL/build-rtsup005 --target dasall_tool_production_observability_integration_test dasall_access_runtime_production_health_composition_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2 && ctest --test-dir /home/gangan/DASALL/build-rtsup005 -R '^(ToolProductionObservabilityIntegrationTest|RuntimeProductionHealthCompositionTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure`
+   - 结果：历史记录为 `4/4 passed`；本轮未使用 qemu / kvm。
+5. 本地复跑限制说明。
+   - 本轮尝试复用 `build-ci` focused build 时遇到 cache 不可用，复用 `build-rtsup005` 时未获得当前可直接复跑的目标测试列表；由于本轮未改动产品代码，故未把旧 build 目录状态误判为功能回归，而是回链既有 focused evidence 并完成 tools 侧 traceability 收口。
+
+### 结果
+
+1. `TOOL-GAP-007` 已闭合：tools production observability sink 不是未接入，而是此前只缺 tools 顶层总账回写；现在 tools 总账已与 runtime_support / tests 证据对齐。
+2. `TOOL-FIX-007` 已完成：tools live path 与 app live composition 的 shared audit / metrics / trace / health evidence 现在可从 tools deliverable、主总账、worklog 与现有 focused tests 四处一致追溯。
+3. 当前剩余重点前移到 `TOOL-FIX-008` / `TOOL-FIX-009` / `TOOL-FIX-010`，而不再是 production observability sink 接线本身。
+
 ## 记录 #704
 
 - 日期：2026-05-19
