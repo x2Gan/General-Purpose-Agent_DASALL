@@ -650,6 +650,8 @@ struct DaemonKnowledgePayload {
       return "accepted";
     case knowledge::RefreshStatus::Busy:
       return "busy";
+    case knowledge::RefreshStatus::Completed:
+      return "completed";
     case knowledge::RefreshStatus::Failed:
       return "failed";
   }
@@ -698,6 +700,13 @@ struct DaemonKnowledgePayload {
   payload += ",\"vector_backend_available\":" + bool_json(snapshot.vector_backend_available);
   payload += ",\"last_known_good_available\":" + bool_json(snapshot.last_known_good_available);
   payload += ",\"degraded_return_count\":" + std::to_string(snapshot.degraded_return_count);
+  payload += ",\"refresh_in_flight\":" + bool_json(snapshot.refresh_in_flight);
+  payload += ",\"last_refresh_status\":";
+  if (snapshot.last_refresh_status.has_value()) {
+    payload += json_string(refresh_status_name(*snapshot.last_refresh_status));
+  } else {
+    payload += "null";
+  }
   payload += ",\"reason_codes\":" + json_array(snapshot.reason_codes);
   payload += '}';
   return payload;

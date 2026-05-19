@@ -53,6 +53,8 @@ class FakeKnowledgeService final : public dasall::knowledge::IKnowledgeService {
     snapshot.active_snapshot_id = "snapshot:knowledge-test";
     snapshot.freshness_state = dasall::knowledge::FreshnessState::Fresh;
     snapshot.last_known_good_available = true;
+    snapshot.refresh_in_flight = false;
+    snapshot.last_refresh_status = dasall::knowledge::RefreshStatus::Completed;
     snapshot.reason_codes = {"vector_backend_disabled"};
     return snapshot;
   }
@@ -234,6 +236,38 @@ void knowledge_retrieve_completes_without_runtime_pipeline() {
               "knowledge retrieve should publish result count JSON payload");
 }
 
+        void knowledge_health_exposes_refresh_terminal_status_without_runtime_pipeline() {
+          int runtime_call_count = 0;
+          auto knowledge_service = std::make_shared<FakeKnowledgeService>();
+          auto gateway = build_gateway(&runtime_call_count, knowledge_service, 256);
+
+          InboundPacket packet;
+          packet.packet_id = "knowledge";
+          packet.entry_type = "daemon";
+          packet.protocol_kind = "ipc_uds";
+          packet.peer_ref = "local_trusted:1000";
+          packet.payload = "operation=health";
+
+          const auto result = gateway->submit(packet);
+          assert_equal(static_cast<int>(AccessDisposition::Completed),
+                 static_cast<int>(result.disposition),
+                 "knowledge health should complete through daemon access route");
+          assert_equal(0,
+                 runtime_call_count,
+                 "knowledge health should not be dispatched to runtime submit backend");
+          assert_equal(1,
+                 knowledge_service->health_call_count,
+                 "knowledge health should call IKnowledgeService health_snapshot once");
+          assert_true(result.publish_envelope.has_value() &&
+                  result.publish_envelope->agent_result.has_value() &&
+                  result.publish_envelope->agent_result->response_text.has_value() &&
+                  result.publish_envelope->agent_result->response_text->find(
+                    "\"refresh_in_flight\":false") != std::string::npos &&
+                  result.publish_envelope->agent_result->response_text->find(
+                    "\"last_refresh_status\":\"completed\"") != std::string::npos,
+                "knowledge health should publish refresh terminal status JSON payload");
+        }
+
 void knowledge_invalid_payload_is_rejected_before_runtime_pipeline() {
   int runtime_call_count = 0;
   auto knowledge_service = std::make_shared<FakeKnowledgeService>();
@@ -267,6 +301,7 @@ int main() {
     valid_submit_reaches_runtime_pipeline();
     knowledge_refresh_completes_without_runtime_pipeline();
     knowledge_retrieve_completes_without_runtime_pipeline();
+    knowledge_health_exposes_refresh_terminal_status_without_runtime_pipeline();
     knowledge_invalid_payload_is_rejected_before_runtime_pipeline();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonAccessPipelineFactoryTest] FAILED: " << ex.what() << '\n';

@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+## 记录 #694
+
+- 日期：2026-05-19
+- 阶段：knowledge / installed probe follow-up closure
+- 任务：补齐 KNO-FIX-009 的 Access health payload 终态映射遗漏
+- 状态：已完成（daemon health JSON `Completed` 映射、focused access test 与证据回写已收口）
+
+### 执行前提
+
+1. 用户要求推荐完成 `KNO-GAP/FIX-009` 并把当前修改同步到远端；当前工作树只剩 `access/src/AccessGatewayFactory.cpp` 一处未提交改动。
+2. 近端检查表明该本地改动确实属于 `KNO-FIX-009` 的 Access 侧补线：package smoke 与 runtime composition 已统一改为依赖 `refresh_in_flight` / `last_refresh_status=completed`，但 daemon health JSON owner `AccessGatewayFactory` 仍未处理 `RefreshStatus::Completed`。
+3. 本轮仍遵守“禁止 qemu / kvm 收敛证据”的约束，因此验证使用 build-tree focused unit test，不外推到 installed package / qemu / soak。
+
+### 执行与结果
+
+1. 收口 daemon knowledge health payload 的终态映射。
+   - `access/src/AccessGatewayFactory.cpp` 已为 `refresh_status_name()` 补齐 `RefreshStatus::Completed -> "completed"`，避免 Access health JSON 在 refresh terminal success 后错误退化为 `failed`。
+2. 补齐 Access focused regression。
+   - `tests/unit/apps/daemon/DaemonAccessPipelineFactoryTest.cpp` 的 fake knowledge health snapshot 现已显式带出 `refresh_in_flight=false` 与 `last_refresh_status=Completed`。
+   - 新增 `knowledge_health_exposes_refresh_terminal_status_without_runtime_pipeline()`，锁定 `knowledge health` daemon path 会输出 `"refresh_in_flight":false` 与 `"last_refresh_status":"completed"`。
+3. 回写总账证据。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已在 `KNO-FIX-009 完成证据` 下补记本次 Access health payload follow-up closure，保证代码与总账描述一致。
+
+### 验证
+
+1. focused 构建与测试。
+   - `cmake --build build/vscode-linux-ninja --target dasall-daemon_access_pipeline_factory_unit_test -j2`
+   - `./build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_access_pipeline_factory_unit_test`
+   - 结果：两条命令均成功；测试退出码 `0`。
+
+### 结果
+
+1. `KNO-FIX-009` 的 Access 侧 health payload 终态映射遗漏已补齐，daemon JSON 输出现在与 package smoke / runtime ready marker 的 `Completed` 口径一致。
+2. 当前工作树的本地修改已具备 focused 证据，可按 KNO-FIX-009 follow-up closure 提交并推送。
+
 ## 记录 #693
 
 - 日期：2026-05-18
