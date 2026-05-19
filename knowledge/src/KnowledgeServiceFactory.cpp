@@ -62,27 +62,35 @@ void append_unique(std::vector<std::string>& values, std::string value) {
   }
 }
 
-[[nodiscard]] CorpusDescriptor make_yaml_descriptor(std::string corpus_id,
-                                                    std::string display_name,
-                                                    const fs::path& source_root,
-                                                    std::vector<std::string> tags,
-                                                    AuthorityLevel authority_level) {
+  [[nodiscard]] CorpusDescriptor make_descriptor(
+    std::string corpus_id,
+    std::string display_name,
+    const fs::path& source_root,
+    std::vector<std::string> tags,
+    AuthorityLevel authority_level,
+    SourceKind source_kind,
+    std::vector<SourceFormat> allowed_formats,
+    std::vector<std::string> include_globs,
+    std::vector<std::string> exclude_globs,
+    std::vector<RetrievalMode> supported_modes,
+    std::string default_language) {
   CorpusDescriptor descriptor;
   descriptor.corpus_id = std::move(corpus_id);
   descriptor.display_name = std::move(display_name);
   descriptor.source_uri = normalized_path_string(source_root);
   descriptor.trust_level = TrustLevel::Trusted;
   descriptor.authority_level = authority_level;
-  descriptor.source_kind = SourceKind::File;
-  descriptor.allowed_formats = {SourceFormat::Yaml};
-  descriptor.include_globs = {"*.yaml", "*.yml"};
-  descriptor.supported_modes = {RetrievalMode::LexicalOnly};
+    descriptor.source_kind = source_kind;
+    descriptor.allowed_formats = std::move(allowed_formats);
+    descriptor.include_globs = std::move(include_globs);
+    descriptor.exclude_globs = std::move(exclude_globs);
+    descriptor.supported_modes = std::move(supported_modes);
   descriptor.tags = std::move(tags);
   descriptor.metadata = {
       {"baseline_class", "installed_package"},
       {"owner_module", "knowledge"},
       {"refresh_strategy", "full_scan"},
-      {"default_language", "en"},
+      {"default_language", std::move(default_language)},
   };
   return descriptor;
 }
@@ -90,18 +98,71 @@ void append_unique(std::vector<std::string>& values, std::string value) {
 [[nodiscard]] std::vector<CorpusDescriptor> make_installed_asset_descriptors(
     const fs::path& assets_root) {
   std::vector<CorpusDescriptor> descriptors;
-  descriptors.push_back(make_yaml_descriptor(
-      "dasall_profiles",
-      "DASALL runtime profiles",
+    descriptors.push_back(make_descriptor(
+      "architecture_reference",
+      "DASALL architecture reference",
+      assets_root / "docs" / "architecture",
+      {"installed", "architecture", "reference"},
+      AuthorityLevel::Reference,
+      SourceKind::File,
+      {SourceFormat::Markdown},
+      {"DASALL_Agent_architecture.md",
+       "DASALL_Engineering_Blueprint.md",
+       "DASALL_*详细设计*.md",
+       "platform_linux_detailed_design.md"},
+      {"*评审报告*.md",
+       "*迁移影响清单*.md",
+       "DASALL_boundary治理与优化说明.md"},
+      {RetrievalMode::LexicalOnly, RetrievalMode::Hybrid},
+      "zh-CN"));
+    descriptors.push_back(make_descriptor(
+      "adr_normative",
+      "DASALL ADR normative corpus",
+      assets_root / "docs" / "adr",
+      {"installed", "adr", "normative"},
+      AuthorityLevel::Normative,
+      SourceKind::File,
+      {SourceFormat::Markdown},
+      {"ADR-*.md"},
+      {},
+      {RetrievalMode::LexicalOnly, RetrievalMode::Hybrid},
+      "zh-CN"));
+    descriptors.push_back(make_descriptor(
+      "ssot_normative",
+      "DASALL SSOT normative corpus",
+      assets_root / "docs" / "ssot",
+      {"installed", "ssot", "normative"},
+      AuthorityLevel::Normative,
+      SourceKind::File,
+      {SourceFormat::Markdown},
+      {"*.md"},
+      {},
+      {RetrievalMode::LexicalOnly, RetrievalMode::Hybrid},
+      "zh-CN"));
+    descriptors.push_back(make_descriptor(
+      "profile_policy_normative",
+      "DASALL profile policy normative corpus",
       assets_root / "profiles",
-      {"installed", "profile", "runtime"},
-      AuthorityLevel::Reference));
-  descriptors.push_back(make_yaml_descriptor(
+      {"installed", "profile", "normative"},
+      AuthorityLevel::Normative,
+      SourceKind::ConfigSnapshot,
+      {SourceFormat::Yaml},
+      {"*/runtime_policy.yaml"},
+      {},
+      {RetrievalMode::LexicalOnly},
+      "en"));
+    descriptors.push_back(make_descriptor(
       "dasall_llm_providers",
       "DASALL LLM provider manifests",
       assets_root / "llm" / "providers",
       {"installed", "llm", "provider"},
-      AuthorityLevel::Reference));
+      AuthorityLevel::Reference,
+      SourceKind::File,
+      {SourceFormat::Yaml},
+      {"*.yaml", "*.yml"},
+      {},
+      {RetrievalMode::LexicalOnly},
+      "en"));
   return descriptors;
 }
 

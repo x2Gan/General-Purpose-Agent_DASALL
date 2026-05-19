@@ -91,6 +91,13 @@ dasall_add_knowledge_integration_test(
   "integration;knowledge"
 )
 
+dasall_add_knowledge_integration_test(
+  dasall_knowledge_installed_normative_corpus_integration_test
+  KnowledgeInstalledNormativeCorpusTest
+  KnowledgeInstalledNormativeCorpusTest.cpp
+  "integration;knowledge"
+)
+
 target_include_directories(dasall_knowledge_retrieval_smoke_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/knowledge/src
@@ -166,6 +173,12 @@ target_link_libraries(dasall_knowledge_refresh_loop_integration_test
 )
 
 target_link_libraries(dasall_knowledge_installed_asset_probe_integration_test
+  PRIVATE
+    dasall_profiles
+    dasall_sqlite3
+)
+
+target_link_libraries(dasall_knowledge_installed_normative_corpus_integration_test
   PRIVATE
     dasall_profiles
     dasall_sqlite3

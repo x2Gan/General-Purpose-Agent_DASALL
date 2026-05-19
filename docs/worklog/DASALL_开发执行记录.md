@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+## 记录 #695
+
+- 日期：2026-05-19
+- 阶段：knowledge / installed normative corpus baseline closure
+- 任务：推进 KNO-FIX-005 扩展 installed normative corpus baseline
+- 状态：已完成（factory descriptors、asset install layout、focused routing tests 与本机 installed smoke 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-005`，若存在前置 BLOCK 则先解阻，并在完成后提交推送。
+2. 本轮前置检查确认 `KNO-FIX-005` 无显式 BLOCK 依赖，当前工作树干净；详设已冻结首批 corpus baseline 为 `architecture_reference`、`adr_normative`、`ssot_normative`、`profile_policy_normative`，但 `knowledge/src/KnowledgeServiceFactory.cpp` 仍只注册旧的 installed descriptors。
+3. 用户明确要求禁止以 qemu / kvm 作为本轮收敛证据，因此本轮验证策略固定为 build-tree focused tests + 本机 real installed package smoke；若 packaging gate 需要更高层环境，只记录为后续任务，不阻断本轮。
+4. 联网补充参考采用 Azure Advanced RAG guidance：authoritative source curation、按 source type 组织 indexes / router、保持 ingestion determinism 与 golden dataset 回归，和本轮“补齐 authoritative corpora + 保持 installed routing 可回归”的设计方向一致。
+
+### 执行与结果
+
+1. 收口 installed corpus descriptors。
+   - `knowledge/src/KnowledgeServiceFactory.cpp` 已新增 `architecture_reference`、`adr_normative`、`ssot_normative`、`profile_policy_normative` 四类 descriptor，并将原泛化 `dasall_profiles` 收口为仅扫描 `profiles/*/runtime_policy.yaml` 的 profile policy normative corpus；`dasall_llm_providers` 保留为 installed provider evidence。
+2. 补齐 asset install layout 与 package smoke。
+   - `knowledge/CMakeLists.txt` 已安装 `docs/architecture`、`docs/adr`、`docs/ssot` 到 `/usr/share/dasall/docs`。
+   - `scripts/packaging/pkg_smoke_install.sh` 已新增 normative docs file checks 与 `BusinessChainIntegrationMatrix` installed retrieve smoke，使本机 package gate 会同时验证资产落位和至少一条 normative query。
+3. 补齐 focused regression。
+   - `tests/integration/knowledge/KnowledgeInstalledAssetProbeIntegrationTest.cpp` 现已复制 normative docs 到 fixture assets，并直接检查 snapshot DB 中四类 normative/reference corpus 均已入库。
+   - 新增 `tests/integration/knowledge/KnowledgeInstalledNormativeCorpusTest.cpp` 与其 CMake 注册；测试固定验证 architecture / ADR / SSOT / profile policy 四类查询分别路由到预期 corpus 与 citation path。
+4. 设计口径回链判断。
+   - `docs/architecture/DASALL_knowledge子系统详细设计.md` 当前已明确首批 corpus baseline 与 coverage 下限，本轮实现仅让代码/packaging/test 对齐既有详设，因此无需再改写详细设计正文；改动集中回写到总账与 worklog。
+
+### 验证
+
+1. focused build-tree integration gate。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge_installed_asset_probe_integration_test dasall_knowledge_installed_normative_corpus_integration_test dasall_knowledge_retrieval_quality_regression_integration_test -j2`
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R "KnowledgeInstalledAssetProbeIntegrationTest|KnowledgeInstalledNormativeCorpusTest|RetrievalQualityRegressionTest"`
+   - 结果：3/3 Passed。
+2. packaging 脚本语法检查。
+   - `sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：退出码 `0`。
+3. 本机 real installed-package smoke。
+   - `dpkg-buildpackage -us -uc -b`
+   - `sudo dpkg -i ../dasall-common_0.1.0-1_all.deb ../dasall-cli_0.1.0-1_amd64.deb ../dasall-daemon_0.1.0-1_amd64.deb ../dasall_0.1.0-1_all.deb`
+   - `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：三条命令均成功；installed smoke 已验证 normative docs file presence 与 `BusinessChainIntegrationMatrix` retrieve 正向路径。全程未使用 qemu / kvm。
+
+### 结果
+
+1. `KNO-GAP-005` 已闭合，installed knowledge baseline 现在与详设要求的 authoritative corpora 集合一致。
+2. `KNO-FIX-005` 已具备 L2 focused integration + L4 本机 installed-package 双层证据，可按本轮范围提交并推送。
+
 ## 记录 #694
 
 - 日期：2026-05-19

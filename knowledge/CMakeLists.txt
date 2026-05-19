@@ -89,4 +89,11 @@ target_link_libraries(dasall_knowledge
     dasall_sqlite3
 )
 
+install(DIRECTORY
+  ${CMAKE_SOURCE_DIR}/docs/architecture
+  ${CMAKE_SOURCE_DIR}/docs/adr
+  ${CMAKE_SOURCE_DIR}/docs/ssot
+  DESTINATION ${DASALL_INSTALL_DASALL_DATADIR}/docs
+)
+
 dasall_apply_common_options(dasall_knowledge)

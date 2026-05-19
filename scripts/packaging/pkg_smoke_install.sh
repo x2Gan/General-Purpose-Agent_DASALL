@@ -520,11 +520,21 @@ PY
   assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge retrieve slice count'
   assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' 'knowledge retrieve installed provider evidence'
 
+  KNOWLEDGE_NORMATIVE_JSON=$(run_root dasall knowledge retrieve 'BusinessChainIntegrationMatrix' --json --timeout-ms 30000)
+  assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '"disposition":"completed"' 'knowledge normative retrieve smoke'
+  assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '\"operation\":\"retrieve\"' 'knowledge normative retrieve payload'
+  assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '\"ok\":true' 'knowledge normative retrieve ok'
+  assert_json_matches "$KNOWLEDGE_NORMATIVE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge normative retrieve slice count'
+  assert_json_matches "$KNOWLEDGE_NORMATIVE_JSON" 'BusinessChainIntegrationMatrix|docs/ssot/BusinessChainIntegrationMatrix.md' 'knowledge normative retrieve installed ssot evidence'
+
   KNOWLEDGE_HEALTH_JSON=$(run_root dasall knowledge health --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '"disposition":"completed"' 'knowledge health smoke'
   assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"operation\":\"health\"' 'knowledge health payload'
   assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"active_snapshot_id\":\"snapshot:' 'knowledge health active snapshot'
 
+  run_root test -f /usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md
+  run_root test -f /usr/share/dasall/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
+  run_root test -f /usr/share/dasall/docs/ssot/BusinessChainIntegrationMatrix.md
   run_root test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
   run_root test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml
   run_root test -f /usr/share/dasall/llm/providers/catalog.yaml

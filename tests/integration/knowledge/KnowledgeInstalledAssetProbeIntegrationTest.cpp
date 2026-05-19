@@ -52,11 +52,20 @@ void copy_fixture_assets(const fs::path& repository_root,
                         const fs::path& assets_root) {
   const auto profiles_source = repository_root / "profiles";
   const auto providers_source = repository_root / "llm" / "assets" / "providers";
+  const auto architecture_source = repository_root / "docs" / "architecture";
+  const auto adr_source = repository_root / "docs" / "adr";
+  const auto ssot_source = repository_root / "docs" / "ssot";
 
   assert_true(fs::exists(profiles_source),
               "profiles asset root missing: " + profiles_source.string());
   assert_true(fs::exists(providers_source),
               "provider asset root missing: " + providers_source.string());
+  assert_true(fs::exists(architecture_source),
+              "architecture asset root missing: " + architecture_source.string());
+  assert_true(fs::exists(adr_source),
+              "adr asset root missing: " + adr_source.string());
+  assert_true(fs::exists(ssot_source),
+              "ssot asset root missing: " + ssot_source.string());
 
   fs::create_directories(assets_root);
   fs::copy(profiles_source,
@@ -65,6 +74,16 @@ void copy_fixture_assets(const fs::path& repository_root,
   fs::create_directories(assets_root / "llm");
   fs::copy(providers_source,
            assets_root / "llm" / "providers",
+           fs::copy_options::recursive);
+  fs::create_directories(assets_root / "docs");
+  fs::copy(architecture_source,
+           assets_root / "docs" / "architecture",
+           fs::copy_options::recursive);
+  fs::copy(adr_source,
+           assets_root / "docs" / "adr",
+           fs::copy_options::recursive);
+  fs::copy(ssot_source,
+           assets_root / "docs" / "ssot",
            fs::copy_options::recursive);
 }
 
@@ -134,6 +153,12 @@ struct ManualQueryResult {
   std::string error_message;
 };
 
+struct ManualCorpusCountResult {
+  bool ok = false;
+  std::size_t row_count = 0U;
+  std::string error_message;
+};
+
 [[nodiscard]] ManualQueryResult run_manual_sparse_query(
     const fs::path& database_path) {
   constexpr const char* kSql =
@@ -182,6 +207,53 @@ struct ManualQueryResult {
 
     result.error_message = sqlite3_errmsg(database);
     break;
+  }
+
+  sqlite3_finalize(statement);
+  sqlite3_close(database);
+  return result;
+}
+
+[[nodiscard]] ManualCorpusCountResult run_manual_corpus_count_query(
+    const fs::path& database_path,
+    std::string_view corpus_id) {
+  constexpr const char* kSql = "SELECT COUNT(*) FROM chunks WHERE corpus_id = ?1;";
+
+  sqlite3* database = nullptr;
+  if (sqlite3_open_v2(database_path.c_str(),
+                      &database,
+                      SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX,
+                      nullptr) != SQLITE_OK) {
+    ManualCorpusCountResult result;
+    result.error_message = database != nullptr ? sqlite3_errmsg(database)
+                                               : "sqlite_open_failed";
+    if (database != nullptr) {
+      sqlite3_close(database);
+    }
+    return result;
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  if (sqlite3_prepare_v2(database, kSql, -1, &statement, nullptr) != SQLITE_OK) {
+    ManualCorpusCountResult result;
+    result.error_message = sqlite3_errmsg(database);
+    sqlite3_close(database);
+    return result;
+  }
+
+  sqlite3_bind_text(statement,
+                    1,
+                    std::string(corpus_id).c_str(),
+                    -1,
+                    SQLITE_TRANSIENT);
+
+  ManualCorpusCountResult result;
+  const int step_status = sqlite3_step(statement);
+  if (step_status == SQLITE_ROW) {
+    result.ok = true;
+    result.row_count = static_cast<std::size_t>(sqlite3_column_int64(statement, 0));
+  } else {
+    result.error_message = sqlite3_errmsg(database);
   }
 
   sqlite3_finalize(statement);
@@ -246,6 +318,18 @@ void installed_asset_service_retrieves_deepseek_chat() {
             ", database=" + snapshot_database.string());
     assert_true(manual_query.row_count > 0U,
           "manual snapshot query should return DeepSeek rows");
+
+        for (const auto* corpus_id : {"architecture_reference",
+              "adr_normative",
+              "ssot_normative",
+              "profile_policy_normative"}) {
+          const auto corpus_count = run_manual_corpus_count_query(snapshot_database, corpus_id);
+          assert_true(corpus_count.ok,
+          std::string("manual corpus count query failed for ") + corpus_id + ": " +
+              corpus_count.error_message + ", database=" + snapshot_database.string());
+          assert_true(corpus_count.row_count > 0U,
+          std::string("installed asset snapshot should index corpus ") + corpus_id);
+        }
 
   const auto retrieve_result = factory_result.service->retrieve(make_probe_query());
   assert_true(retrieve_result.ok,
