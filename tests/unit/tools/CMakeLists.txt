@@ -232,6 +232,18 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_agent_dataset_tool_unit_test
+	AgentDatasetToolTest.cpp
+	AgentDatasetToolTest
+)
+
+dasall_add_tools_behavior_test(
+	dasall_agent_terminal_tool_policy_unit_test
+	AgentTerminalToolPolicyTest.cpp
+	AgentTerminalToolPolicyTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_builtin_executor_lane_unit_test
 	BuiltinExecutorLaneTest.cpp
 	BuiltinExecutorLaneTest

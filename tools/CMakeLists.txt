@@ -3,6 +3,8 @@ add_library(dasall_tools STATIC)
 target_sources(dasall_tools
   PRIVATE
     src/ToolManager.cpp
+    src/builtin/dataset/AgentDatasetTool.cpp
+    src/builtin/terminal/AgentTerminalTool.cpp
     src/bridge/PluginExtensionBridge.cpp
     src/bridge/ToolPluginExtensionConsumer.cpp
     src/bridge/ToolPluginLifecycleBridge.cpp

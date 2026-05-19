@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+## 记录 #706
+
+- 日期：2026-05-19
+- 阶段：tools / concrete builtin wrapper layout closure
+- 任务：推进 TOOL-FIX-008，建立 concrete builtin wrapper 布局
+- 状态：已完成（builtin wrapper 目录、focused unit tests、专项总账与交付物回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-008`，若存在前置 blocker 则先解阻，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端代码与设计检查确认：`docs/architecture/DASALL_tools子系统详细设计.md` 6.2.1 / 6.2.2 已冻结 builtin wrapper 放置约定，但产品代码仍只有 `tools/src/registry/BuiltinCatalog.cpp` 内联 descriptor 与 `tools/src/bridge/ToolServiceBridge.cpp` 的 generic request mapping。
+3. `TOOL-FIX-008` 本轮无前置 BLOCK；最小可执行动作是新增 `tools/src/builtin/terminal`、`tools/src/builtin/dataset` internal wrapper，并让 BuiltinCatalog / ToolServiceBridge 共同消费同一组 wrapper 定义，而不是扩张到 runtime production visibility。
+4. 用户明确要求本轮禁止使用 qemu / kvm；因此验证口径固定为 build-tree focused build/test，不外推到 installed / release 证据。
+
+### 改动
+
+1. 新增 `tools/src/builtin/terminal/AgentTerminalTool.h/.cpp` 与 `tools/src/builtin/dataset/AgentDatasetTool.h/.cpp`：把 `agent.terminal` / `agent.dataset` 的 descriptor、schema ref、read-only / compensation 语义与 services request mapping 固化到 per-tool wrapper。
+2. 更新 `tools/src/registry/BuiltinCatalog.cpp` 与 `tools/src/bridge/ToolServiceBridge.cpp`：BuiltinCatalog 现聚合 wrapper descriptor；ToolServiceBridge 继续保留通用 context / deadline / budget / freshness 组装，但 terminal action 与 dataset query 的 concrete request mapping 已委托给 wrapper。
+3. 更新 `tools/CMakeLists.txt`：将 builtin wrapper 源文件接入 `dasall_tools`。
+4. 新增 `tests/unit/tools/AgentDatasetToolTest.cpp`、`tests/unit/tools/AgentTerminalToolPolicyTest.cpp` 并更新 `tests/unit/tools/CMakeLists.txt`：分别验证 dataset read-only query / schema / argument mapping，以及 terminal 的 high-risk confirmation / schema / action mapping。
+5. 新增 `docs/todos/tools/deliverables/TOOL-FIX-008-concrete-builtin-wrapper布局收敛.md`，并更新 `docs/todos/tools/deliverables/DELIVERABLES-INDEX.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `TOOL-GAP-008` 标记为已闭合、`TOOL-FIX-008` 标记为 Done，并同步刷新 tools 当前优先级。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_agent_dataset_tool_unit_test","dasall_agent_terminal_tool_policy_unit_test","dasall_tool_service_bridge_unit_test","dasall_builtin_executor_lane_unit_test"])`
+   - 结果：构建成功。
+2. focused CTest 尝试。
+   - `RunCtest_CMakeTools(tests=["AgentDatasetToolTest","AgentTerminalToolPolicyTest","ToolServiceBridgeTest","BuiltinExecutorLaneTest"])`
+   - 结果：继续返回仓库已知泛化“生成失败”，因此不将该错误误判为 wrapper 回归。
+3. direct-binary fallback。
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_agent_dataset_tool_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_agent_terminal_tool_policy_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_service_bridge_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_builtin_executor_lane_unit_test`
+   - 结果：以上 4 条二进制退出码均为 `0`。
+4. 工具链边界说明。
+   - 本轮未使用 qemu / kvm，也没有把 build-tree focused 结果外推为 installed / release 证据。
+
+### 结果
+
+1. `TOOL-GAP-008` 已闭合：builtin tool 现在具备 concrete wrapper 目录和 per-tool mapping 落点，不再只靠 BuiltinCatalog descriptor 与 generic ToolServiceBridge 维护。
+2. `TOOL-FIX-008` 已完成：terminal / dataset wrapper、focused unit tests、deliverable、专项总账与 worklog 现已四处一致追溯。
+3. 当前剩余重点前移到 `TOOL-FIX-009` / `TOOL-FIX-010` / `TOOL-FIX-011` / `TOOL-FIX-012`，而不再是 builtin wrapper 布局本身。
+
 ## 记录 #705
 
 - 日期：2026-05-19

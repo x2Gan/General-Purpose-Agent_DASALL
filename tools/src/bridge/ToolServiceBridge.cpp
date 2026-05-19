@@ -5,6 +5,8 @@
 
 #include "RuntimePolicySnapshot.h"
 #include "ToolManager.h"
+#include "builtin/dataset/AgentDatasetTool.h"
+#include "builtin/terminal/AgentTerminalTool.h"
 
 namespace {
 
@@ -25,6 +27,35 @@ constexpr std::uint64_t kMinimumDeadlineMs = 1U;
 
 [[nodiscard]] std::string default_target_id_for(std::string_view capability_id) {
   return std::string("builtin:") + std::string(capability_id);
+}
+
+[[nodiscard]] dasall::services::ExecutionCommandRequest build_default_action_request(
+    const dasall::contracts::ToolIR& tool_ir,
+    const dasall::services::ServiceCallContext& context) {
+  const auto capability_id = copy_or_default(tool_ir.tool_name, std::string("unknown_tool"));
+  return dasall::services::ExecutionCommandRequest{
+      .context = context,
+      .target = dasall::services::CapabilityTargetRef{
+          .capability_id = capability_id,
+          .target_id = default_target_id_for(capability_id),
+      },
+      .action = capability_id,
+      .arguments_json = tool_ir.normalized_arguments.value_or(std::string("{}")),
+      .idempotency_key = tool_ir.idempotency_key,
+  };
+}
+
+[[nodiscard]] dasall::services::DataQueryRequest build_default_query_request(
+    const dasall::contracts::ToolIR& tool_ir,
+    const dasall::services::ServiceCallContext& context,
+    dasall::services::ServiceDataFreshness freshness) {
+  return dasall::services::DataQueryRequest{
+      .context = context,
+      .dataset = copy_or_default(tool_ir.tool_name, std::string("unknown_tool")),
+      .filters_json = tool_ir.normalized_arguments.value_or(std::string("{}")),
+      .projection = std::string("default"),
+      .freshness = freshness,
+  };
 }
 
 }  // namespace
@@ -125,25 +156,26 @@ services::ExecutionCompensationRequest ToolServiceBridge::build_compensation_req
 services::ExecutionCommandRequest ToolServiceBridge::build_action_request(
     const contracts::ToolIR& tool_ir,
     const ToolInvocationContext& invocation_context) const {
-  return services::ExecutionCommandRequest{
-      .context = build_context(tool_ir, invocation_context),
-      .target = build_target(tool_ir),
-      .action = resolve_tool_name(tool_ir),
-      .arguments_json = tool_ir.normalized_arguments.value_or(std::string("{}")),
-      .idempotency_key = tool_ir.idempotency_key,
-  };
+  const auto context = build_context(tool_ir, invocation_context);
+  const auto tool_name = resolve_tool_name(tool_ir);
+  if (builtin::terminal::matches(tool_name)) {
+    return builtin::terminal::build_action_request(tool_ir, context);
+  }
+
+  return build_default_action_request(tool_ir, context);
 }
 
 services::DataQueryRequest ToolServiceBridge::build_query_request(
     const contracts::ToolIR& tool_ir,
     const ToolInvocationContext& invocation_context) const {
-  return services::DataQueryRequest{
-      .context = build_context(tool_ir, invocation_context),
-      .dataset = resolve_tool_name(tool_ir),
-      .filters_json = tool_ir.normalized_arguments.value_or(std::string("{}")),
-      .projection = std::string("default"),
-      .freshness = resolve_query_freshness(invocation_context),
-  };
+  const auto context = build_context(tool_ir, invocation_context);
+  const auto freshness = resolve_query_freshness(invocation_context);
+  const auto tool_name = resolve_tool_name(tool_ir);
+  if (builtin::dataset::matches(tool_name)) {
+    return builtin::dataset::build_query_request(tool_ir, context, freshness);
+  }
+
+  return build_default_query_request(tool_ir, context, freshness);
 }
 
 services::ExecutionDiagnoseRequest ToolServiceBridge::build_diagnose_request(
