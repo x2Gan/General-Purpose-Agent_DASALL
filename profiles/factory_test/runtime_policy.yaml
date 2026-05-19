@@ -1,4 +1,6 @@
 schema_version: 1
+# MCP v1 transport 固定为 stdio-only。tools_mcp 只控制 MCP 治理通道启停，
+# 不充当 transport selector；timeout_policy.mcp.* 与 capability_cache_policy.* 也不表达 SSE / streamable-HTTP 选择。
 profile_meta:
 	profile_id: factory_test
 	target_platform: linux-arm64-factory

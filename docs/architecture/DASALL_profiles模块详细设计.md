@@ -346,7 +346,7 @@ profiles 模块非职责：
 |---|---|---|---|---|
 | runtime | 全量快照 | RuntimePolicySnapshot | 唯一持有完整快照并负责 generation、激活、原子替换、LKG 回退和下游分发 | 不把快照拆成多份可变局部状态后各自漂移 |
 | llm | `model_profile.*`；`prompt_policy.*`；`timeout_policy.llm.*`；`degrade_policy.*`；与 llm 相关的 `ops_policy.*` | `LLMSubsystemConfig` | 负责模型路由、prompt allowlist / trusted source、LLM timeout/retry/fallback 与 llm 侧 observability 配置 | 不直接读取 YAML；不解释 tools/knowledge/memory 专属键；不把部署细节写成新的 profile 语义 |
-| tools | `enabled_modules.tools_builtin/tools_mcp/multi_agent`；`runtime_budget.max_tool_calls`；`prompt_policy.tool_visibility_rules`；`capability_cache_policy.*`；`timeout_policy.tool.*` / `timeout_policy.mcp.*` / `timeout_policy.workflow.*`；`execution_policy.*`；`ops_policy.*` | `ToolConfigAdapter -> ToolPolicyView / ToolTimeoutView` | 负责 lane enable/disable、工具可见域、MCP 能力缓存、tool/workflow timeout 与高风险执行门禁 | 不自行扩写新的 tool policy schema；不从 `prompt_policy` 推导超出 tool visibility 的授权语义 |
+| tools | `enabled_modules.tools_builtin/tools_mcp/multi_agent`；`runtime_budget.max_tool_calls`；`prompt_policy.tool_visibility_rules`；`capability_cache_policy.*`；`timeout_policy.tool.*` / `timeout_policy.mcp.*` / `timeout_policy.workflow.*`；`execution_policy.*`；`ops_policy.*` | `ToolConfigAdapter -> ToolPolicyView / ToolTimeoutView` | 负责 lane enable/disable、工具可见域、MCP 能力缓存、tool/workflow timeout 与高风险执行门禁；其中 `tools_mcp` 只表示 MCP 治理通道启停，`schema_version: 1` 不提供 transport selector，v1 transport 固定为 stdio | 不自行扩写新的 tool policy schema；不从 `prompt_policy` 推导超出 tool visibility 的授权语义；不把 `tools_mcp`、`timeout_policy.mcp.*` 或 `capability_cache_policy.*` 重解释为 SSE / streamable-HTTP 选择器 |
 | knowledge | `enabled_modules.knowledge`；`enabled_modules.memory_vector`；`token_budget_policy.*`；`capability_cache_policy.*`；`runtime_budget.max_latency_ms / worker_threads`；`degrade_policy.allow_budget_degrade` | `KnowledgeConfigProjector -> KnowledgeConfigSnapshot` | 负责 knowledge on/off、lexical-only / hybrid 模式、证据预算、catalog freshness、召回 deadline 与退化开关 | 不新增 schema v1 顶层 knowledge 域；不把 `capability_cache_policy` 重新解释成 provider/MCP 专属策略 |
 | memory | `enabled_modules.memory_vector`；`token_budget_policy.*`；`runtime_budget.max_latency_ms`；`degrade_policy.allow_budget_degrade` | `MemoryConfig + BudgetPolicy + request-level token_budget_hint` | 负责 vector path 开关、ContextPacket 预算上限与 budget degrade 行为；storage/maintenance 默认值继续留在 memory 本地配置，直到 profile 单独冻结相应键 | 不擅自把 retention/checkpoint/WAL 等本地默认值升级为 profile 语义；不重解释 knowledge 证据字段 |
 | infra / observability | `ops_policy.*`；deployment/runtime override 来源约束 | infra module-local config views | 负责日志级别、metrics granularity、trace sample ratio 与 override 来源治理 | 不越权定义业务模块策略含义 |
@@ -600,8 +600,8 @@ load/save 语义冻结：
 3. `profile_meta` 必填键固定为 `profile_id`、`target_platform`、`support_level`；`enabled_modules` 中所有模块与 adapter 开关必须显式声明为布尔值，不允许用“缺省即关闭”表示可选能力。
 4. `runtime_budget` 必填键固定为 `worker_threads`、`max_memory_mb`、`max_tokens`、`max_turns`、`max_tool_calls`、`max_latency_ms`、`max_replan_count`；所有值必须为正整数，且档位越低越保守。
 5. `model_profile` 至少冻结 `planner` 与 `responder` 两个 stage，且每个 stage 必须显式给出 `route`、`fallback_route`、`streaming_enabled`；`timeout_policy` 必须同时覆盖 `llm`、`tool`、`mcp`、`workflow` 四类预算。
-6. `prompt_policy`、`capability_cache_policy`、`degrade_policy`、`execution_policy`、`ops_policy` 中的必填键不得依赖运行时推断；新增字段只允许追加，不允许在 `schema_version: 1` 内重解释既有字段语义。
-7. `multi_agent`、`tools_mcp`、`llm_cloud_adapter` 等蓝图中标注为“可选”的能力，在具体档位资产中也必须冻结为显式基线值；若后续需要放开，只能通过新增字段或更高版本 schema 处理。
+6. `prompt_policy`、`capability_cache_policy`、`degrade_policy`、`execution_policy`、`ops_policy` 中的必填键不得依赖运行时推断；新增字段只允许追加，不允许在 `schema_version: 1` 内重解释既有字段语义，尤其不得把 `tools_mcp`、`timeout_policy.mcp.*`、`capability_cache_policy.*` 改写成 transport selector 语义。
+7. `multi_agent`、`tools_mcp`、`llm_cloud_adapter` 等蓝图中标注为“可选”的能力，在具体档位资产中也必须冻结为显式基线值；若后续需要放开，只能通过新增字段或更高版本 schema 处理。对于 MCP，`schema_version: 1` 下的 v1 transport 固定为 stdio；若 future 需要显式表达 SSE / streamable-HTTP，只能新增字段或升级 schema。
 
 #### infra profile 键域与覆盖优先级冻结（2026-04-08）
 
@@ -645,7 +645,7 @@ load/save 语义冻结：
 | `llm/` (LAN adapter) | `llm_lan_adapter` | adapter | `enabled_modules` + `enabled_adapters` | 局域网模型适配器 |
 | `llm/` (local adapter) | `llm_local_adapter` | adapter | `enabled_modules` + `enabled_adapters` | 本地模型适配器 |
 | `tools/` (builtin) | `tools_builtin` | module | `enabled_modules` | 内建工具集，不视为 adapter |
-| `tools/` (MCP) | `tools_mcp` | module | `enabled_modules` | MCP 通道能力，保留模块键语义 |
+| `tools/` (MCP) | `tools_mcp` | module | `enabled_modules` | MCP 通道能力，保留模块键语义；v1 固定 stdio-only，不提供 transport selector |
 | `memory/` (vector) | `memory_vector` | module | `enabled_modules` | 向量检索链路 |
 | `memory/` (experience) | `memory_experience` | module | `enabled_modules` | 经验记忆链路 |
 | `knowledge/` | `knowledge` | module | `enabled_modules` | 知识检索能力 |
@@ -657,7 +657,7 @@ load/save 语义冻结：
 1. `BuildProfileResolver` 只从冻结键派生 `BuildProfileManifest.enabled_modules` 与 `enabled_adapters`，不得自行发明别名。
 2. `ProfileCompatibilityValidator` 的最小冻结子集以上表为准；未知键统一视为 `ModuleIncompatible`，避免静默放行。
 3. `runtime_policy.yaml` 五档位资产、单元测试夹具与 contract 检查脚本必须共享同一键集，禁止“文档一个名字、YAML 一个名字、测试另一个名字”。
-4. `tools_mcp` 维持模块键而非 adapter 键，是因为它表达的是工具治理通道是否启用，而非单一后端实例是否可用；具体 MCP 服务端可用性仍由运行时与 infra 做二次判定。
+4. `tools_mcp` 维持模块键而非 adapter 键，是因为它表达的是工具治理通道是否启用，而非单一后端实例是否可用；具体 MCP 服务端可用性仍由运行时与 infra 做二次判定。v1 下它不承担 transport 选择语义，transport 固定为 stdio；SSE / streamable-HTTP 若需进入 profile，必须通过新增字段或更高版本 schema 处理。
 5. `infra_observability` 维持聚合模块键，避免把 logging/metrics/tracing/audit 的内部实现细节上推为 profile 公共命名表。
 
 评审依据：

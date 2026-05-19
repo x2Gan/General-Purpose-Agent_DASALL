@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #704
+
+- 日期：2026-05-19
+- 阶段：tools / MCP v1 transport wording closure
+- 任务：推进 TOOL-FIX-006，明确 MCP v1 transport 支持范围
+- 状态：已完成（tools/profile owner 设计、五档 runtime policy 注释、stdio-only wording guard、专项总账与交付物回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-006`，优先走 B 路径，在设计与配置中明确 v1 仅支持 stdio，并保留“逐文件落盘、完成后按仓库规范提交推送、禁止使用 qemu / kvm 收敛证据”的全部约束。
+2. 近端代码检查确认当前 concrete transport 只有 stdio：`tools/include/mcp/IMCPTransport.h` 虽保留 `sse` / `streamable_http` 枚举，但 `tools/src/mcp/MCPAdapter.cpp` 的默认依赖与 transport 选择逻辑对非 stdio 路径 fail-closed。
+3. profiles owner 设计与五档 `runtime_policy.yaml` 均不存在 transport selector，说明本轮正确解法不是新增 schema 键，而是把 `tools_mcp` 的 owner 语义钉死为“治理通道启停，不承担 transport 选择”。
+4. 用户明确要求本轮禁止使用 qemu / kvm；因此验证口径固定为 owner 文档 / 配置资产静态检查与 guard 脚本，不外推为 installed / package / release 证据。
+
+### 执行与结果
+
+1. 收口 tools owner 详设。
+   - `docs/architecture/DASALL_tools子系统详细设计.md` 已明确：v1 只支持 stdio concrete transport，`sse` / `streamable_http` 仅为 post-v1 预留；`MCPAdapter` 命中非 stdio 时必须 fail-closed。
+   - 同文档的状态表、风险表、兼容性检查与行业对齐段落也已同步改写，不再把接口扩展位写成当前 rollout 范围。
+2. 收口 profiles owner 设计与配置资产。
+   - `docs/architecture/DASALL_profiles模块详细设计.md` 已明确：`tools_mcp` 只是模块键，不是 transport selector；`schema_version: 1` 下 v1 transport 固定为 stdio；`timeout_policy.mcp.*` 与 `capability_cache_policy.*` 不得重解释为 transport 选择语义。
+   - `profiles/desktop_full/runtime_policy.yaml`、`profiles/cloud_full/runtime_policy.yaml`、`profiles/edge_balanced/runtime_policy.yaml`、`profiles/edge_minimal/runtime_policy.yaml`、`profiles/factory_test/runtime_policy.yaml` 已新增统一注释，逐档写明 MCP v1 transport 固定为 stdio-only。
+3. 新增 deliverable 与 static wording guard。
+   - 已新增 deliverable `docs/todos/tools/deliverables/TOOL-FIX-006-MCP-v1-transport-stdio-only收敛.md`，固定任务重定义、Design -> Build 映射、rollout checklist 与“不扩 schema / 不用 qemu-kvm”的边界。
+   - 已新增 `scripts/ci/check_tool_mcp_v1_wording.sh`，对 tools/profile owner 详设与五档 runtime policy 资产执行 required wording + forbidden wording 检查；`scripts/ci/static_check.sh` 已接入该守卫。
+4. 回写专项总账。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `TOOL-GAP-006` 标为已闭合、`TOOL-FIX-006` 标为 Done，并同步更新 tools 当前结论与后续优先级：MCP 缺口已从“口径不一致”收敛为“future 非 stdio transport 尚未进入独立任务”。
+
+### 验证
+
+1. guard 语法检查。
+   - `bash -n scripts/ci/check_tool_mcp_v1_wording.sh`
+   - 结果：退出码 `0`。
+2. static_check 语法检查。
+   - `bash -n scripts/ci/static_check.sh`
+   - 结果：退出码 `0`。
+3. owner-scope wording guard。
+   - `bash scripts/ci/check_tool_mcp_v1_wording.sh`
+   - 结果：退出码 `0`，输出 `[tool-mcp-v1-wording] PASS`。
+4. 工具链边界说明。
+   - 本轮未运行任何 qemu / kvm、未新增 build/test target，也未把静态文档/脚本检查外推为 installed / release 证据。
+
+### 结果
+
+1. `TOOL-GAP-006` 已闭合：MCP v1 的支持范围已明确收口为 stdio-only，owner 文档与 profile 资产不再把 future transport 预留误写为当前已就绪范围。
+2. `TOOL-FIX-006` 已具备 focused design/config/guard evidence，可与 deliverable、工作日志和专项总账回写一起提交推送。
+3. tools 侧后续残余重点前移到 `TOOL-FIX-007` / `TOOL-FIX-008` / `TOOL-FIX-009`，而不再是 MCP v1 transport 口径本身。
+
 ## 记录 #703
 
 - 日期：2026-05-19

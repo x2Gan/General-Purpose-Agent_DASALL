@@ -203,7 +203,7 @@ Must-Not：
 | tool 集成测试 | 缺失 | tests/integration 下无 tools/ 目录 | 当前无 Tool -> Services / MCP / Workflow 集成路径 |
 | tool 契约测试 | 部分存在 | tests/contract/tool/* | 仅覆盖共享对象边界，不覆盖模块行为 |
 | Skill 运行时 | 已存在 | `tools/src/skills/SkillRegistry.cpp`、`tools/src/skills/SkillRuntime.cpp`、`tools/src/skills/ExternalSkillImporter.cpp`、`tools/src/skills/PluginSkillBundleImporter.cpp`，以及 `ToolSkillRuntimeIntegrationTest.cpp`、`ToolPluginSkillBundleIntegrationTest.cpp` 已形成闭环 | 当前已具备 normalized import -> register -> match -> instantiate -> source revoke 的自动化基线，external dialect 仍保持 feature flag 约束 |
-| MCP 运行时 | 已存在 | `tools/src/mcp/CapabilityCache.cpp`、`CapabilityDiscovery.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPServerLauncher.cpp`、`StdioMCPTransport.cpp` 以及 `ToolMCPFallbackIntegrationTest.cpp`、`ToolPluginStdioMCPIntegrationTest.cpp` 已形成闭环 | hybrid stdio MCP 运行闭环已具备，但 generic MCP 对外 rollout 仍需单独评审 |
+| MCP 运行时 | 已存在 | `tools/src/mcp/CapabilityCache.cpp`、`CapabilityDiscovery.cpp`、`MCPAdapter.cpp`、`MCPLane.cpp`、`StdioMCPServerLauncher.cpp`、`StdioMCPTransport.cpp` 以及 `ToolMCPFallbackIntegrationTest.cpp`、`ToolPluginStdioMCPIntegrationTest.cpp` 已形成闭环 | v1 仅 stdio MCP 运行闭环已具备；SSE / streamable-HTTP 仍属 post-v1 预留，不在当前 rollout 范围 |
 | plugin -> tools 扩展桥接 | 缺失 | 工作区无 PluginExtensionBridge、IToolPluginProvider 等生产代码 | 当前无法通过 infra/plugin 注入额外 builtin tool、stdio MCP、skill assets |
 | ToolRoute 实现 | 缺失 | 工作区无 ToolRoute/RouteSelector 生产代码 | builtin 与 MCP 的混合路由尚未闭环 |
 | PolicyGate 实现 | 缺失 | 工作区无 tools policy 生产代码 | 高风险确认、allowed_tool_domains、tool_visibility_rules 尚无执行面载体 |
@@ -232,7 +232,7 @@ Must-Not：
 | Unit / Integration Gate | 缺失 | tests/unit/tools 与 tests/integration/tools 为空 | High | P0 |
 | Build discoverability | 缺失 | 无可发现的 tool unit/integration target/test | Medium | P1 |
 | 批量调用（invoke_batch） | 缺失 | ToolManager 仅有单请求 invoke，缺少对 runtime 并行工具调用的批量入口 | Medium | P1 |
-| MCP 传输层抽象 | 部分存在 | `IMCPTransport` 与 `StdioMCPTransport` 已落地，SSE / streamable-HTTP 仍未实现 | Medium | P1 |
+| MCP 传输层抽象 | 部分存在 | `IMCPTransport` 与 `StdioMCPTransport` 已落地，v1 concrete transport 仅有 stdio，SSE / streamable-HTTP 仍未实现 | Medium | P1 |
 | 动态变更并发安全 | 缺失 | ToolRegistry/PluginExtensionBridge 无 snapshot-and-swap 或 RCU 机制 | High | P1 |
 | ToolConfigAdapter 热更新 | 缺失 | 无 snapshot version 指纹与 invoke-scoped 一致性保证 | Medium | P1 |
 
@@ -247,7 +247,7 @@ Must-Not：
 | 主控权漂移 | 若 AgentDelegation 在 tools 内部直接拉起多 Agent 协同 | 破坏 ADR-008，形成第二调度中心 |
 | 结果面污染 | 若把 raw payload 直接回灌给 llm/memory | ContextPacket 与 ObservationDigest 边界失守，token 预算与推理稳定性下降 |
 | 级联失败 | 若 builtin、workflow、MCP 共用单一线程池或会话池 | 单一路径阻塞可拖垮整个工具执行面 |
-| 错误宣称兼容 | 在无 discovery/cache/recovery 闭环前宣称 generic MCP ready | 形成产品承诺与实现事实不一致 |
+| 错误宣称兼容 | 把 v1 stdio-only MCP 误写成泛化兼容已就绪、远端 family 已就绪或多 transport 已就绪 | 形成产品承诺与实现事实不一致 |
 
 ### 3.4 现状结论
 
@@ -387,7 +387,7 @@ Tool 子系统的边界裁定如下：
 | BuiltinExecutorLane | 承接本地高频、稳定、低时延能力，优先调用 services facade | tools/src/execution/BuiltinExecutorLane.cpp |
 | WorkflowEngine | 负责 StepGraph 拓扑调度、批次执行和失败早停；不允许工具互调 | tools/src/execution/WorkflowEngine.cpp |
 | MCPLane / IMCPAdapter | 承接 handshake、capability negotiation、remote invoke、错误映射 | tools/src/mcp/MCPAdapter.cpp |
-| IMCPTransport | MCP 传输层抽象；隔离 stdio/SSE/streamable-HTTP 等协议细节，供 IMCPAdapter 选用 | tools/include/mcp/IMCPTransport.h; tools/src/mcp/StdioMCPTransport.cpp |
+| IMCPTransport | MCP 传输层抽象；隔离 stdio 与 future SSE/streamable-HTTP 协议细节，v1 只由 `StdioMCPTransport` 落地 | tools/include/mcp/IMCPTransport.h; tools/src/mcp/StdioMCPTransport.cpp |
 | CapabilityDiscovery | 周期性拉取 MCP tools/resources/prompts 并刷新快照 | tools/src/mcp/CapabilityDiscovery.cpp |
 | CapabilityCache | 保存 server capability snapshot、TTL、health、stale-read metadata | tools/src/mcp/CapabilityCache.cpp |
 | PluginExtensionBridge | 消费 infra/plugin 的 active plugin set，把插件导出的 builtin tool provider、stdio MCP launch spec、skill bundle 归一化为 source-scoped snapshot delta | tools/src/bridge/PluginExtensionBridge.cpp |
@@ -527,7 +527,7 @@ flowchart TD
 | ToolPluginExtensionCatalog / ToolPluginProviderRef | module-local public | tools/include/plugin | 已激活插件可导出的 builtin tool provider / stdio MCP server / skill bundle 目录视图 | 不进入 contracts |
 | MCPServerLaunchSpec | module-local internal | tools/src/mcp | plugin 提供的 stdio MCP server command/args/env/cwd/health launch spec | 不进入 contracts |
 | MCPToolBinding | module-local internal | tools/src/mcp | remote capability 到 internal tool 的映射 | 不进入 contracts |
-| IMCPTransport | module-local public | tools/include/mcp | MCP 传输层抽象接口（stdio/SSE/streamable-HTTP），供 IMCPAdapter 选用 | 不进入 contracts |
+| IMCPTransport | module-local public | tools/include/mcp | MCP 传输层抽象接口；v1 只允许 stdio concrete transport，SSE/streamable-HTTP 保留为后续扩展 | 不进入 contracts |
 | SkillSpecAsset / SkillInstance | module-local asset/runtime | tools/src + skills/ | Skill 资产与运行态实例 | 不进入 contracts |
 | WorkflowPlan / WorkflowReceipt | module-local internal | tools/src/execution | 工作流执行计划与批次回执 | 不进入 contracts |
 | CompensationRecord | module-local internal | tools/src/execution | side_effects 与补偿提示台账 | 不进入 contracts |
@@ -1232,7 +1232,7 @@ MCP 运行时核心对象建议保持如下分层：
 | `CapabilitySnapshot` | module-local internal | 保存某个 server 的 tools/resources/prompts 快照与 freshness 元数据 |
 | `MCPToolBinding` | module-local internal | 把 remote capability 映射到 internal tool name 与 schema expectation |
 | `MCPServerLaunchSpec` | module-local internal | 描述 plugin-delivered stdio server 的 command/args/env/cwd/health launch 细节 |
-| `IMCPTransport` | module-local public | 抽象 JSON-RPC 消息收发层，屏蔽 stdio/SSE/StreamableHTTP 等 transport 差异 |
+| `IMCPTransport` | module-local public | 抽象 JSON-RPC 消息收发层；v1 仅落地 stdio，SSE/StreamableHTTP 仅保留扩展位 |
 
 MCP Transport 抽象层设计：
 
@@ -1250,7 +1250,7 @@ public:
 };
 ```
 
-落点建议为 `tools/include/mcp/IMCPTransport.h`，首版提供 `StdioMCPTransport` 实现（`tools/src/mcp/StdioMCPTransport.cpp`）；当后续需要支持 SSE 或 StreamableHTTP 时，只需新增 transport 实现，不影响 IMCPAdapter 与上游。
+落点建议为 `tools/include/mcp/IMCPTransport.h`，v1 rollout 固定只提供 `StdioMCPTransport` 实现（`tools/src/mcp/StdioMCPTransport.cpp`）；当后续需要支持 SSE 或 StreamableHTTP 时，必须新增独立 transport 实现并补独立 rollout / gate 证据，不得把当前预留接口解释为已支持范围。
 
 transport 分层约束：
 
@@ -1259,6 +1259,7 @@ transport 分层约束：
 3. StdioMCPTransport 负责进程拉起（fork/exec）、stdin/stdout pipe 管理、进程健康监控；进程终止时必须关闭 transport 并输出 evidence。
 4. stdio MCP server 的进程 handle 由 StdioMCPTransport 持有，MCPLane 通过 IMCPAdapter 间接管理；进程 kill/restart 决策遵循 CapabilityDiscovery 的 refresh 逻辑和 plugin lifecycle 事件。
 5. JSON 序列化/反序列化选型建议统一使用项目已有的 JSON 库（如 nlohmann/json），不在 transport 层引入额外序列化依赖。
+6. v1 兼容声明固定为 stdio-only。虽然 `MCPTransportKind` / `MCPServerSpec` 预留了 `sse` 与 `streamable_http` 枚举，但当前 `MCPAdapter` 对非 stdio transport 必须 fail-closed，不得把“接口可扩展”写成“v1 已 ready”。
 
 ##### MCPLane
 
@@ -1276,7 +1277,7 @@ transport 分层约束：
 2. 非职责边界：不掌 registry；不掌 cache policy；不决定是否允许该能力暴露给 runtime；不进入 shared contracts；不直接管理 stdio 进程生命周期（委托给 IMCPTransport 实现）。
 3. 核心数据定义：围绕 `MCPServerSpec`、`MCPServerSession`、`CapabilitySnapshot`、`MCPToolBinding`、protocol error mapping、`IMCPTransport` 实例引用建模。
 4. 公共/内部接口：公共面延续 `ensure_session()`、`list_capabilities()`、`invoke()`；内部可细分为 `perform_handshake()`、`map_protocol_error()`、`select_transport()`。
-5. 关键执行流：根据 `MCPServerSpec` 选择合适的 `IMCPTransport` 实现（stdio/SSE/StreamableHTTP），通过 transport 建立连接，完成 MCP initialize 握手并建立 session，然后支持按需列能力和执行 invoke，最终输出 `CapabilitySnapshot` 或 `ToolResult`。
+5. 关键执行流：v1 先校验 `MCPServerSpec.transport_kind` 是否为 `stdio`；仅在 stdio 情况下选择 `StdioMCPTransport` 建立连接，完成 MCP initialize 握手并建立 session，然后支持按需列能力和执行 invoke，最终输出 `CapabilitySnapshot` 或 `ToolResult`。`sse` / `streamable_http` 当前仍只保留枚举与接口预留，命中时必须 fail-closed 并把 evidence 交回上游。
 6. 失败与回退语义：握手失败、broken pipe、auth 失败都必须映射为稳定 reason code；允许按 profile retry budget 做受控重试，但不允许无限 reconnect；若 transport 无法恢复，必须把 evidence 交回上游。
 7. 测试与验收出口：推荐单测为 `MCPAdapterTest.cpp`、`MCPAdapterHandshakeFailureTest.cpp`、`MCPAdapterTransportSwitchTest.cpp`；集成验收继续依赖 `ToolMCPFallbackIntegrationTest`。
 
@@ -1566,7 +1567,7 @@ ToolConfigAdapter 策略投影缓存与热更新约束：
 
 | 项目 | 当前原因 | 后续动作 |
 |---|---|---|
-| generic MCP ready 对外宣称 | TOOL-D9 与 Gate-TOOL-07 已落地，但 rollout / 兼容承诺仍未单独评审 | 继续维持 implementation available but rollout pending 的口径，待发布评审决定 |
+| MCP v1 非 stdio transport 对外宣称 | TOOL-D9 与 Gate-TOOL-07 只覆盖 loopback / plugin-stdio hybrid 闭环；concrete transport 仍只有 stdio | 继续维持 v1 stdio-only 口径；SSE / streamable-HTTP 待独立任务、独立 gate 与独立 rollout 评审 |
 | 外部 Skill 方言产品级兼容 | 当前没有 importer、normalized asset、评测链路 | 完成 TOOL-D10，并补 external dialect regression suite |
 | ToolAdmissionDecision / ToolRouteDecision 升格 shared contracts | supporting objects 尚未在 runtime/tools/services 间闭合 | 保持 module-local，待 admission review 再决定 |
 
@@ -1676,7 +1677,7 @@ plugins/
 | 契约测试 | shared tool contracts 稳定性 | ToolRequestContractTest、ToolResultContractTest、ToolDescriptorIRContractTest | 既有 contract tests 全绿，无字段语义回退 |
 | 集成测试 | Tool -> Services / MCP / Workflow / Plugin 联动 | ToolServicesSmokeIntegrationTest、ToolMCPFallbackIntegrationTest、ToolPluginStdioMCPIntegrationTest、ToolWorkflowFailureIntegrationTest、ToolObservabilityIntegrationTest、ToolSkillRuntimeIntegrationTest、ToolPluginSkillBundleIntegrationTest、ToolProfileIntegrationTest | 指定路径全部通过，关键字段可二值断言 |
 | 失败注入测试 | validation/policy/route/provider failure | InvalidRequest、PolicyDenied、RouteUnavailable、plugin unload invalidation、MCP handshake fail、stale cache fallback、PartialSideEffect、workflow timeout | 每种失败都能映射成确定的 ErrorInfo / audit / metrics 结果 |
-| 兼容性检查 | profile、discoverability、边界守卫 | desktop_full vs edge_minimal profile diff、ctest -N discoverability、services include boundary、generic MCP readiness guard | 配置差异与 discoverability 可被自动验证，且未错误宣称兼容 |
+| 兼容性检查 | profile、discoverability、边界守卫 | desktop_full vs edge_minimal profile diff、ctest -N discoverability、services include boundary、MCP v1 stdio-only wording guard | 配置差异与 discoverability 可被自动验证，且未错误宣称兼容 |
 
 ### 9.2 质量门建议清单
 
@@ -1710,7 +1711,7 @@ plugins/
 | tools <-> infra/plugin extension ABI | Medium | IToolPluginProvider 与 ToolPluginExtensionCatalog 是新增 module public ABI，需要先以最小面冻结 |
 | services include 布局 | Low | 本设计明确继续消费 services/include，不推动迁移 |
 | profile schema | Low | 只复用既有键，不追加 schema_version:1 的强制新键 |
-| generic MCP 对外兼容 | Medium | 若在闭环完成前误宣称 ready，风险高；只要保持“architecture ready / implementation not ready”表述即可受控 |
+| MCP v1 transport 兼容声明 | Medium | 若把 stdio-only 闭环误宣称为泛化兼容已就绪或多 transport 已 ready，风险高；只要保持“v1 stdio-only / non-stdio reserved”表述即可受控 |
 | 外部 Skill 方言兼容 | Medium | importer 引入后才会暴露新兼容面，当前仍维持内部资产优先 |
 
 整体判断：
@@ -1762,7 +1763,7 @@ plugins/
 | WorkflowEngine 范围膨胀为 orchestration center | High | 在 workflow 内部加入全局状态机、用户交互或 worker 调度 | 把 delegation 只收敛为 runtime recommendation | 遇到越权设计时回退到 builtin-only + minimal workflow |
 | Raw payload 未被 digest 就回灌 | High | 为追求调试方便直接把 payload 写入推理输入 | 强制 ResultProjector 统一产出 ObservationDigest | 若发现回灌漂移，先禁用该调用链写回，仅保留 audit |
 | builtin/workflow/MCP 共用单一资源池 | Medium | 以“快速打通路径”为由只建一套线程池/会话池 | RouteSelector + lane pool 明确隔离 | 回退到 builtin-only，禁用 MCP/workflow 并恢复单路稳定性 |
-| generic MCP 兼容被过早宣称 | Medium | 文档或发布材料把架构支持写成现状支持 | 在 Gate-TOOL-07 完成前统一标注 implementation not ready | 移除兼容声明，恢复到 architecture target 表述 |
+| MCP v1 stdio-only 边界被过早放宽 | Medium | 文档或发布材料把接口预留写成泛化兼容已就绪、远端 family 已就绪或多 transport 已支持 | 在 owner 文档与 profile 资产中统一标注 v1 stdio-only，非 stdio 命中时 fail-closed | 移除兼容声明，恢复到 stdio-only / post-v1 target 表述 |
 | PluginExtensionBridge / ToolRegistry 并发更新导致悬挂引用 | High | plugin 连续 load/unload 事件与正在执行的 tool invoke 交叉 | 采用 snapshot-and-swap 模型，invoke 绑定入口时刻快照，delta 写路径串行化 | 若并发模型实现复杂度过高，回退到全局 delta queue + 单线程 apply |
 | ResultProjector 规则化投影精度不足 | Medium | 纯规则截断导致 key facts 丢失关键信息 | 以充分的 unit test 覆盖主要 payload 模式，保留 confidence deduction 机制 | 在 v2 引入可选的 LLM-assisted projection（须经 ADR-006 重新评审） |
 | invoke_batch 并发度失控 | Medium | 大量并行请求压垮 services 层或 MCP server | 由 RuntimePolicySnapshot.tools_max_parallel_invocations 限制并发上限 | 若 policy 投影缺失，回退到串行执行全部请求 |
@@ -1806,7 +1807,7 @@ plugins/
 | 优化项 | 对齐的行业实践 | 对齐说明 |
 |---|---|---|
 | invoke_batch 批量调用 | OpenAI `parallel_tool_calls`（2024-10）；Anthropic batch tool use | runtime 可一次提交多个 ToolRequest，ToolManager 并发执行并整体返回，与 OpenAI 单轮多 tool_call 语义对齐。单请求 deny 不阻断同批次其他请求。 |
-| IMCPTransport 传输层抽象 | MCP 2025-03-26 三传输层（stdio / SSE / streamable-HTTP） | 提取 `IMCPTransport` 接口隔离协议细节，v1 落地 StdioMCPTransport，为后续 SSE/streamable-HTTP 预留扩展点。与 MCP 规范 "transport is pluggable" 原则一致。 |
+| IMCPTransport 传输层抽象 | MCP 2025-03-26 三传输层（stdio / SSE / streamable-HTTP） | 提取 `IMCPTransport` 接口隔离协议细节，v1 只落地 StdioMCPTransport；SSE/streamable-HTTP 继续保留为 post-v1 扩展点，不把规范中的“transport is pluggable”外推成当前交付范围。 |
 | WorkflowEngine DAG-only 约束 | LangGraph 图结构约束；Azure Durable Functions 编排限制 | 拒绝 cyclic / conditional / loop 结构，保持可预测的批次拓扑排序执行。与 LangGraph "graph must be acyclic for deterministic execution" 原则对齐。 |
 | ResultProjector 规则化投影 | Anthropic tool_result 结构化输出；OpenAI strict mode | 纯规则截断/提取，不引入 LLM-in-the-loop，保证投影延迟可控、结果可复现。与 Anthropic "tool results should be deterministic and inspectable" 理念一致。 |
 | ToolConfigAdapter 热更新 | Kubernetes ConfigMap rolling update；Azure App Configuration versioned snapshot | snapshot version 指纹 + invoke-scoped 绑定，保证执行期配置不变，下次调用生效新策略。与 K8s "config changes do not affect running pods until restart" 模型对齐。 |
