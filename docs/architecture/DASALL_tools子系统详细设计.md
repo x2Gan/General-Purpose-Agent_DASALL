@@ -1402,10 +1402,10 @@ flowchart LR
 1. 职责：消费 `ActivePluginSet`、`LoadResult.handle_ref` 和 plugin export table，把 plugin-delivered builtin/MCP/skill 扩展归一化为 tools 子域可消费的 delta。
 2. 非职责边界：不做 discover/validate/load/unload；不做签名和 ABI 校验；不决定 plugin safe mode；不把 plugin load success 等同于 capability visible。
 3. 核心数据定义：围绕 `ToolPluginExtensionCatalog`、`ToolPluginProviderRef`、`MCPServerLaunchSpec`、skill asset refs、source traceability key、revocation delta 建模。
-4. 公共/内部接口：内部建议具备 `rebuild_extension_catalog()`、`on_plugin_loaded()`、`on_plugin_unloaded()`、`emit_builtin_delta()`、`emit_mcp_delta()`、`emit_skill_delta()`；公共面继续通过 ToolRegistry / CapabilityDiscovery / SkillRegistry 间接消费。
-5. 关键执行流：读取 active plugin set，逐个解析 tools-specific export table；对 builtin 导出发送 registry delta，对 stdio MCP 导出发送 discovery delta，对 skill bundle 导出发送 importer / registry delta；插件卸载时对三个子域做 source-scoped revoke。
+4. 公共/内部接口：内部建议具备 `ToolPluginLifecycleBridge::synchronize_active_plugins()`、`ToolPluginLifecycleBridge::on_plugin_loaded()`、`ToolPluginLifecycleBridge::on_plugin_unloaded()` 作为 lifecycle 入口，再由 `PluginExtensionBridge::rebuild_extension_catalog()`、`PluginExtensionBridge::on_plugin_loaded()`、`PluginExtensionBridge::on_plugin_unloaded()`、`emit_builtin_delta()`、`emit_mcp_delta()`、`emit_skill_delta()` 维护 source-scoped snapshot；公共面继续通过 ToolRegistry / CapabilityDiscovery / SkillRegistry 间接消费。
+5. 关键执行流：读取 active plugin set，逐个解析 tools-specific export table；lifecycle adapter 对 `Loaded` / `Active` plugin 自动送入 `PluginExtensionBridge`，对 disabled / safe-mode / unload source 做 revoke；随后再对 builtin 导出发送 registry delta，对 stdio MCP 导出发送 discovery delta，对 skill bundle 导出发送 importer / registry delta。
 6. 失败与回退语义：单个 plugin 的导出不合法时只隔离该 plugin，不拖垮全局 bridge；plugin safe mode 或 unload 事件必须即时撤回 source-owned descriptor、launch spec、skill asset；不得留下悬挂引用。
-7. 测试与验收出口：推荐单测为 `PluginExtensionBridgeTest.cpp`、`PluginExtensionBridgeUnloadTest.cpp`、`PluginExtensionBridgeConcurrencyTest.cpp`；集成验收继续以 `ToolPluginStdioMCPIntegrationTest` 与 `ToolPluginSkillBundleIntegrationTest` 为主出口。
+7. 测试与验收出口：推荐单测为 `PluginExtensionBridgeTest.cpp`、`PluginExtensionBridgeUnloadTest.cpp`、`PluginExtensionBridgeConcurrencyTest.cpp`；lifecycle focused integration 新增 `ToolPluginLifecycleBridgeIntegrationTest.cpp`；snapshot 分发层的集成验收继续以 `ToolPluginStdioMCPIntegrationTest` 与 `ToolPluginSkillBundleIntegrationTest` 为主出口。
 
 PluginExtensionBridge 与动态变更组件并发安全策略：
 

@@ -1,5 +1,57 @@
 # DASALL 开发执行记录
 
+## 记录 #701
+
+- 日期：2026-05-19
+- 阶段：tools / plugin lifecycle adapter closure
+- 任务：推进 TOOL-FIX-003，打通 infra/plugin -> tools extension 自动接线
+- 状态：已完成（`IPluginManager` active set 与 load/unload boundary 已能自动驱动 tools `PluginExtensionBridge` snapshot，focused build-tree evidence 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-003`，若存在前置 BLOCK 则先解阻，并在任务完成后按仓库规范提交推送。
+2. 近端代码检查确认 `TOOL-FIX-003` 无显式 BLOCK 依赖；根因集中在 `tools/src/bridge/PluginExtensionBridge.*` 仍只能被调用方手工喂入 catalog，tools 生产源码尚未消费 `IPluginManager::list_active()`、`PluginLoadResult.handle_ref` 或 `PluginUnloadResult`。
+3. tools 详设 6.12.4 已冻结边界：tools 只允许消费 infra/plugin 的 active set、handle_ref 与 export table 公共结果，不能反向依赖 plugin runtime bridge、签名校验或 ABI 内部状态机；snapshot 到 `ToolRegistry` / `CapabilityDiscovery` / `SkillRegistry` 的二次分发继续留给 `TOOL-FIX-004`。
+4. 用户明确要求禁止使用 qemu / kvm 作为本轮收敛证据，因此本轮验证固定为 build-tree focused build/test；`RunCtest_CMakeTools` 若继续返回仓库已知泛化“生成失败”，则按既有仓库口径回退到直接执行对应 test binary。
+
+### 执行与结果
+
+1. 新增 lifecycle adapter。
+   - `tools/src/bridge/ToolPluginLifecycleBridge.h/.cpp` 已新增 `ToolPluginLifecycleBridge`，以 `IPluginManager`、`PluginExtensionBridge` 与 `ToolPluginExtensionCatalogResolver` 为最小输入，提供 `synchronize_active_plugins()`、`on_plugin_loaded()`、`on_plugin_unloaded()` 三个 lifecycle 入口。
+   - adapter 现在会自动消费 active set、load boundary 与 unload boundary，并把 `ToolPluginExtensionCatalog` 自动送入 `PluginExtensionBridge`，不再要求 tests / composition 手工直接调用 bridge。
+2. 收口 fail-closed 语义。
+   - active set 中仅 `Loaded` / `Active` plugin 会被视为可见 source；`Disabled` plugin 会被撤回而不是透传为 capability visible。
+   - invalid catalog 只隔离对应 plugin，不会污染已有 snapshot；safe mode sync 会即时撤回已追踪 source 与当前 active set 中的 plugin。
+3. 补齐 focused test coverage。
+   - `tests/unit/tools/PluginExtensionBridgeTest.cpp` 已扩展 multi-source revoke 场景，确认撤销 `plugin.alpha` 不会误删 `plugin.beta` 的 builtin / MCP / skill batch。
+   - `tests/integration/tools/ToolPluginLifecycleBridgeIntegrationTest.cpp` 已新增 fake plugin manager + fake catalog resolver 场景，覆盖 active set 同步、disabled ignore、load/unload publish-revoke、safe mode revoke 与 invalid catalog isolation。
+   - `tests/integration/tools/CMakeLists.txt` 已注册 `dasall_tool_plugin_lifecycle_bridge_integration_test`，确保 focused integration discoverability。
+4. 回链 deliverable 与总账。
+   - 已新增 deliverable `docs/todos/tools/deliverables/TOOL-FIX-003-infra-plugin到tools-extension自动接线收敛.md`，固定任务重定义、Design -> Build 映射、focused validation 与不外推边界。
+   - `docs/architecture/DASALL_tools子系统详细设计.md` 已补写 `ToolPluginLifecycleBridge` 生命周期接线 seam 与 focused 验收出口。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已把 `TOOL-GAP-003` / `INF-GAP-003` 标为已闭合、`TOOL-FIX-003` / `INF-FIX-003` 标为 Done，并同步收口当前结论中的 plugin lifecycle 口径。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_tools"])`
+   - `Build_CMakeTools(buildTargets=["dasall_plugin_extension_bridge_unit_test","dasall_plugin_extension_bridge_concurrency_unit_test","dasall_tool_plugin_lifecycle_bridge_integration_test"])`
+   - 结果：构建成功。
+2. focused binary fallback。
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_plugin_extension_bridge_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_plugin_extension_bridge_concurrency_unit_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_plugin_lifecycle_bridge_integration_test`
+   - 结果：以上 3 条二进制退出码均为 `0`。
+3. 工具链边界说明。
+   - `RunCtest_CMakeTools(tests=["PluginExtensionBridgeTest","PluginExtensionBridgeConcurrencyTest","ToolPluginLifecycleBridgeIntegrationTest"])` 仍返回仓库已知泛化“生成失败”，因此继续沿用 direct-binary fallback 作为 authoritative focused evidence。
+   - 本轮全程未使用 qemu / kvm，也没有把 build-tree L2 结果外推为 installed / qemu / release 证据。
+
+### 结果
+
+1. `TOOL-GAP-003` / `INF-GAP-003` 已闭合：infra/plugin lifecycle 不再停留在 `PluginExtensionBridge` 的手工调用层，active set 与 load/unload boundary 现在能自动驱动 tools bridge snapshot。
+2. `TOOL-FIX-003` / `INF-FIX-003` 已具备 focused unit / integration evidence，可与 deliverable、详设和专项总账回写一起提交推送。
+3. tools 侧后续残余重点已收敛为 `TOOL-FIX-004` 的 snapshot 二次分发，而不是 lifecycle adapter 本身。
+
 ## 记录 #700
 
 - 日期：2026-05-19

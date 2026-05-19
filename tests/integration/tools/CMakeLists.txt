@@ -82,6 +82,13 @@ dasall_add_tools_integration_test(
 )
 
 dasall_add_tools_integration_test(
+  dasall_tool_plugin_lifecycle_bridge_integration_test
+  ToolPluginLifecycleBridgeIntegrationTest
+  ToolPluginLifecycleBridgeIntegrationTest.cpp
+  "integration;tools"
+)
+
+dasall_add_tools_integration_test(
   dasall_tool_skill_runtime_integration_test
   ToolSkillRuntimeIntegrationTest
   ToolSkillRuntimeIntegrationTest.cpp

@@ -152,12 +152,59 @@ void test_invalid_plugin_catalog_fails_closed() {
               "payload kind mismatches must be rejected instead of silently inferred");
 }
 
+void test_source_scoped_revoke_keeps_other_plugin_exports_visible() {
+    using dasall::tools::bridge::PluginExtensionBridge;
+
+    PluginExtensionBridge bridge;
+    assert_true(bridge.on_plugin_loaded(make_catalog("plugin.alpha", "rev-a", "alpha")),
+                            "the first plugin should publish its source-owned export batch");
+    assert_true(bridge.on_plugin_loaded(make_catalog("plugin.beta", "rev-b", "beta")),
+                            "a second plugin should publish alongside the first source");
+
+    auto snapshot = bridge.snapshot();
+    const std::string alpha_source_key = "plugin:plugin.alpha";
+    const std::string beta_source_key = "plugin:plugin.beta";
+
+    assert_equal(2, static_cast<int>(snapshot->builtin_providers_by_source.size()),
+                             "two loaded plugins should keep distinct builtin source batches");
+    assert_true(snapshot->builtin_providers_by_source.find(alpha_source_key) !=
+                                    snapshot->builtin_providers_by_source.end(),
+                            "the first plugin should stay visible before revoke");
+    assert_true(snapshot->builtin_providers_by_source.find(beta_source_key) !=
+                                    snapshot->builtin_providers_by_source.end(),
+                            "the second plugin should stay visible before revoke");
+
+    assert_true(bridge.on_plugin_unloaded("plugin.alpha"),
+                            "source-scoped revoke should accept an existing plugin source");
+
+    snapshot = bridge.snapshot();
+    assert_true(snapshot->builtin_providers_by_source.find(alpha_source_key) ==
+                                    snapshot->builtin_providers_by_source.end(),
+                            "revoking one plugin should remove only that plugin's builtin batch");
+    assert_true(snapshot->mcp_launch_specs_by_source.find(alpha_source_key) ==
+                                    snapshot->mcp_launch_specs_by_source.end(),
+                            "revoking one plugin should remove only that plugin's mcp batch");
+    assert_true(snapshot->skill_assets_by_source.find(alpha_source_key) ==
+                                    snapshot->skill_assets_by_source.end(),
+                            "revoking one plugin should remove only that plugin's skill batch");
+    assert_true(snapshot->builtin_providers_by_source.find(beta_source_key) !=
+                                    snapshot->builtin_providers_by_source.end(),
+                            "revoking one plugin must not remove another plugin's builtin batch");
+    assert_true(snapshot->mcp_launch_specs_by_source.find(beta_source_key) !=
+                                    snapshot->mcp_launch_specs_by_source.end(),
+                            "revoking one plugin must not remove another plugin's mcp batch");
+    assert_true(snapshot->skill_assets_by_source.find(beta_source_key) !=
+                                    snapshot->skill_assets_by_source.end(),
+                            "revoking one plugin must not remove another plugin's skill batch");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_plugin_load_and_unload_publish_source_scoped_snapshot();
     test_invalid_plugin_catalog_fails_closed();
+        test_source_scoped_revoke_keeps_other_plugin_exports_visible();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
