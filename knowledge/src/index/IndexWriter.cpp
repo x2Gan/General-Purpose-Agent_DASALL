@@ -529,6 +529,69 @@ void insert_chunk_record(sqlite3* database, const ingest::ChunkRecord& record) {
   return static_cast<std::size_t>(sqlite3_column_int64(statement.handle, 0));
 }
 
+[[nodiscard]] std::optional<IndexManifest> read_manifest_sidecar(
+    const std::filesystem::path& path) {
+  std::ifstream input(path);
+  if (!input.is_open()) {
+    return std::nullopt;
+  }
+
+  std::map<std::string, std::string, std::less<>> fields;
+  for (std::string line; std::getline(input, line);) {
+    if (line.empty()) {
+      continue;
+    }
+
+    const auto separator = line.find('=');
+    if (separator == std::string::npos) {
+      return std::nullopt;
+    }
+
+    fields.emplace(line.substr(0, separator), line.substr(separator + 1U));
+  }
+
+  const auto format_version_it = fields.find("format_version");
+  const auto lexical_backend_it = fields.find("lexical_backend");
+  const auto tokenizer_profile_it = fields.find("tokenizer_profile");
+  const auto snapshot_id_it = fields.find("snapshot_id");
+  const auto built_at_it = fields.find("built_at");
+  const auto effective_at_it = fields.find("effective_at");
+  const auto document_count_it = fields.find("document_count");
+  const auto chunk_count_it = fields.find("chunk_count");
+  const auto vector_enabled_it = fields.find("vector_enabled");
+  if (format_version_it == fields.end() || lexical_backend_it == fields.end() ||
+      tokenizer_profile_it == fields.end() || snapshot_id_it == fields.end() ||
+      built_at_it == fields.end() || effective_at_it == fields.end() ||
+      document_count_it == fields.end() || chunk_count_it == fields.end() ||
+      vector_enabled_it == fields.end()) {
+    return std::nullopt;
+  }
+
+  try {
+    IndexManifest manifest;
+    manifest.format_version = static_cast<std::uint32_t>(std::stoul(format_version_it->second));
+    manifest.lexical_backend = lexical_backend_it->second;
+    manifest.tokenizer_profile = tokenizer_profile_it->second;
+    manifest.snapshot_id = snapshot_id_it->second;
+    manifest.built_at = std::stoll(built_at_it->second);
+    manifest.effective_at = std::stoll(effective_at_it->second);
+    manifest.document_count = static_cast<std::size_t>(std::stoull(document_count_it->second));
+    manifest.chunk_count = static_cast<std::size_t>(std::stoull(chunk_count_it->second));
+    if (vector_enabled_it->second == "1") {
+      manifest.vector_enabled = true;
+    } else if (vector_enabled_it->second == "0") {
+      manifest.vector_enabled = false;
+    } else {
+      return std::nullopt;
+    }
+
+    return manifest.has_consistent_values() ? std::optional<IndexManifest>(std::move(manifest))
+                                            : std::nullopt;
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
 void write_manifest_sidecar(const std::filesystem::path& path, const IndexManifest& manifest) {
   std::ofstream output(path, std::ios::trunc);
   if (!output.is_open()) {
@@ -748,6 +811,85 @@ IndexWriter::IndexWriter(IndexReader& reader,
   }
   if (!deps_.refresh_catalog) {
     deps_.refresh_catalog = [](const IndexManifest&) { return true; };
+  }
+}
+
+bool IndexWriter::restore_startup_state(std::string_view active_snapshot_id,
+                                        std::string_view last_known_good_snapshot_id) {
+  active_shadow_.reset();
+  last_known_good_shadow_.reset();
+
+  std::optional<ShadowIndex> recovered_last_known_good;
+  if (!last_known_good_snapshot_id.empty()) {
+    recovered_last_known_good = load_shadow_index(last_known_good_snapshot_id);
+  }
+
+  std::optional<ShadowIndex> recovered_active;
+  if (!active_snapshot_id.empty()) {
+    if (active_snapshot_id == last_known_good_snapshot_id &&
+        recovered_last_known_good.has_value()) {
+      recovered_active = recovered_last_known_good;
+    } else {
+      recovered_active = load_shadow_index(active_snapshot_id);
+    }
+  }
+
+  if (recovered_last_known_good.has_value()) {
+    last_known_good_shadow_ = recovered_last_known_good;
+  }
+
+  if (recovered_active.has_value()) {
+    if (!reader_.swap_active_snapshot(recovered_active->snapshot)) {
+      active_shadow_.reset();
+      last_known_good_shadow_.reset();
+      return false;
+    }
+
+    active_shadow_ = recovered_active;
+    if (!last_known_good_shadow_.has_value()) {
+      last_known_good_shadow_ = recovered_active;
+    }
+    return true;
+  }
+
+  if (recovered_last_known_good.has_value()) {
+    if (!reader_.swap_active_snapshot(recovered_last_known_good->snapshot)) {
+      last_known_good_shadow_.reset();
+      return false;
+    }
+
+    active_shadow_ = recovered_last_known_good;
+    last_known_good_shadow_ = recovered_last_known_good;
+    return true;
+  }
+
+  (void)reader_.swap_active_snapshot(nullptr);
+  return false;
+}
+
+std::optional<std::string> IndexWriter::read_persisted_snapshot_checksum(
+    const std::filesystem::path& snapshots_root,
+    std::string_view snapshot_id) {
+  if (snapshot_id.empty()) {
+    return std::nullopt;
+  }
+
+  const auto snapshot_dir = snapshots_root / std::string(snapshot_id);
+  const auto database_path = snapshot_dir / "lexical.sqlite";
+  const auto manifest_path = snapshot_dir / "manifest.txt";
+  if (!std::filesystem::exists(database_path) || !std::filesystem::exists(manifest_path)) {
+    return std::nullopt;
+  }
+
+  const auto manifest = read_manifest_sidecar(manifest_path);
+  if (!manifest.has_value() || manifest->snapshot_id != snapshot_id) {
+    return std::nullopt;
+  }
+
+  try {
+    return compute_snapshot_checksum(database_path, manifest_path);
+  } catch (const std::exception&) {
+    return std::nullopt;
   }
 }
 
@@ -1002,6 +1144,39 @@ IndexWriter::ShadowIndex IndexWriter::build_shadow_index(
   }
 
   return shadow;
+}
+
+std::optional<IndexWriter::ShadowIndex> IndexWriter::load_shadow_index(
+    std::string_view snapshot_id) const {
+  if (snapshot_id.empty()) {
+    return std::nullopt;
+  }
+
+  const auto snapshot_dir = deps_.snapshots_root() / std::string(snapshot_id);
+  const auto database_path = snapshot_dir / "lexical.sqlite";
+  const auto manifest_path = snapshot_dir / "manifest.txt";
+  if (!std::filesystem::exists(database_path) || !std::filesystem::exists(manifest_path)) {
+    return std::nullopt;
+  }
+
+  const auto manifest = read_manifest_sidecar(manifest_path);
+  if (!manifest.has_value() || manifest->snapshot_id != snapshot_id) {
+    return std::nullopt;
+  }
+
+  try {
+    auto shadow = ShadowIndex{};
+    shadow.snapshot_dir = snapshot_dir;
+    shadow.database_path = database_path;
+    shadow.manifest_path = manifest_path;
+    shadow.manifest = *manifest;
+    shadow.checksum = compute_snapshot_checksum(database_path, manifest_path);
+    shadow.snapshot = make_snapshot(database_path, shadow.manifest, shadow.checksum);
+    return shadow.has_consistent_values() ? std::optional<ShadowIndex>(std::move(shadow))
+                                          : std::nullopt;
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
 }
 
 bool IndexWriter::swap_active_snapshot(const ShadowIndex& shadow) {

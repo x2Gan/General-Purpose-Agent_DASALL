@@ -1,5 +1,70 @@
 # DASALL 开发执行记录
 
+## 记录 #696
+
+- 日期：2026-05-19
+- 阶段：knowledge / persistence and startup recovery closure
+- 任务：推进 KNO-FIX-006 持久化 ledger/catalog 与 startup recovery
+- 状态：已完成（ledger/catalog persistence、active/LKG startup recovery、focused persistence/integration tests 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-006`，若存在前置 BLOCK 任务则先解阻，并在任务完成后提交推送。
+2. 近端代码检查确认 `KNO-FIX-006` 无显式 BLOCK 依赖，根因集中在 `knowledge/src/index/VersionLedger.cpp`、`knowledge/src/index/CorpusCatalog.cpp`、`knowledge/src/index/IndexWriter.cpp` 与 `knowledge/src/KnowledgeServiceFactory.cpp`：ledger/catalog 仅保留进程内状态，startup path 无法从磁盘恢复 active/LKG snapshot。
+3. 详细设计 `docs/architecture/DASALL_knowledge子系统详细设计.md` 已冻结该任务口径：ledger/catalog 需带 format version 持久化，format mismatch 需 fail-closed 或 migrate，startup 需优先恢复 active/LKG；因此本轮目标是让实现与详设收敛，而不是重新讨论架构边界。
+4. 用户明确要求禁止以 qemu / kvm 作为本轮收敛证据，因此本轮验证固定为 build-tree focused unit/integration；若本机 installed-package smoke 因环境缺依赖而受阻，只作为阻塞证据记录，不伪造安装态通过结论。
+
+### 执行与结果
+
+1. 收口 ledger/catalog 持久化。
+   - `knowledge/include/index/VersionLedger.h`、`knowledge/src/index/VersionLedger.cpp` 已新增 `ledger_path`、`active()`、versioned JSONL 持久化、尾部 checksum 校验与原子临时文件替换；candidate/activate/supersede 在持久化失败时会回滚内存修改，避免写内存成功但丢失磁盘回退依据。
+   - `knowledge/include/index/CorpusCatalog.h`、`knowledge/src/index/CorpusCatalog.cpp` 已新增 `catalog_path`、versioned JSON sidecar 持久化与 fail-closed reload；`replace_all()` 现在会先构造下一版 snapshot，落盘成功后才执行原子 swap。
+2. 收口 startup recovery 主链。
+   - `knowledge/include/index/IndexWriter.h`、`knowledge/src/index/IndexWriter.cpp` 已新增按 snapshot id 读取 `manifest.txt` / `lexical.sqlite` 的 checksum seam 与 `restore_startup_state()`：启动时可恢复 active shadow、last-known-good shadow，并在 active 丢失时自动回退到 LKG。
+   - `knowledge/src/KnowledgeServiceFactory.cpp` 现已把 `VersionLedger` 的 checksum seam 从“只读当前 `IndexReader` active snapshot”改为“直接按 snapshot id 读磁盘”；factory 同时会把 persisted catalog runtime state 与当前 installed baseline 合并，在 `service->init()` 前恢复 active/LKG snapshot，并把 `corpus_catalog.json` 的 `active_snapshot_id` 对齐到实际恢复出的 manifest。
+   - 修复了一处 fresh-start 回归：只有在确实恢复出 active manifest 时才预填 `inventory_state`，避免 cold start prewarm 因“无增量 + 无 active shadow 可 seed”而生成空 snapshot。
+3. 补齐 focused regression。
+   - 新增 `tests/unit/knowledge/VersionLedgerPersistenceTest.cpp`，覆盖 persisted active 恢复、active checksum mismatch 回退到 superseded LKG 与 format version fail-closed。
+   - 新增 `tests/unit/knowledge/CorpusCatalogPersistenceTest.cpp`，覆盖 persisted descriptors reload 与 format version fail-closed。
+   - 新增 `tests/integration/knowledge/IndexStartupRecoveryTest.cpp`，覆盖“形成 active/LKG -> 破坏最新 active snapshot -> 重启恢复到 LKG -> catalog 持久化同步校正”的安装态主链。
+   - `tests/unit/knowledge/CMakeLists.txt` 与 `tests/integration/knowledge/CMakeLists.txt` 已同步注册新测试目标。
+4. 详细设计回链判断。
+   - 本轮实现已对齐详设 persistence / startup recovery 章节的既有要求；无需再改写详细设计正文，因此只回写 TODO/worklog 证据，不额外改动设计文档内容。
+
+### 验证
+
+1. ledger focused unit gate。
+   - `cmake --build build/vscode-linux-ninja --target dasall_version_ledger_unit_test dasall_version_ledger_activation_unit_test dasall_version_ledger_rollback_eligibility_unit_test -j1`
+   - `ctest --test-dir build/vscode-linux-ninja -R VersionLedgerTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R VersionLedgerActivationTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R VersionLedgerRollbackEligibilityTest --output-on-failure`
+   - 结果：全部 Passed。
+2. catalog focused unit gate。
+   - `cmake --build build/vscode-linux-ninja --target dasall_corpus_catalog_unit_test dasall_corpus_catalog_delta_apply_unit_test dasall_corpus_catalog_cold_start_unit_test -j1`
+   - `ctest --test-dir build/vscode-linux-ninja -R CorpusCatalogTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R CorpusCatalogDeltaApplyTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R CorpusCatalogColdStartTest --output-on-failure`
+   - 结果：全部 Passed。
+3. 新增 persistence/startup recovery focused tests。
+   - `cmake --build build/vscode-linux-ninja --target dasall_version_ledger_persistence_unit_test dasall_corpus_catalog_persistence_unit_test dasall_index_startup_recovery_integration_test -j1`
+   - `ctest --test-dir build/vscode-linux-ninja -R VersionLedgerPersistenceTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R CorpusCatalogPersistenceTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R IndexStartupRecoveryTest --output-on-failure`
+   - 结果：全部 Passed。
+4. 邻近 installed factory 回归。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge_installed_asset_probe_integration_test dasall_knowledge_installed_normative_corpus_integration_test -j1`
+   - `ctest --test-dir build/vscode-linux-ninja -R KnowledgeInstalledAssetProbeIntegrationTest --output-on-failure`
+   - `ctest --test-dir build/vscode-linux-ninja -R KnowledgeInstalledNormativeCorpusTest --output-on-failure`
+   - 结果：全部 Passed。
+5. 本机 installed-package smoke 尝试。
+   - `dpkg-buildpackage -us -uc -b`
+   - 结果：未进入打包阶段；`dpkg-checkbuilddeps` 报告缺少 `debhelper (>= 11)`、`qtbase5-dev`、`libpcap-dev`、`libgl1-mesa-dev`、`libxml2-utils`，因此 `sudo dpkg -i ...` 与 `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check` 未执行。全程未使用 qemu / kvm。
+
+### 结果
+
+1. `KNO-GAP-006` 已闭合，Knowledge 现在可在进程重启后恢复 active/LKG snapshot 与 corpus catalog，并在 active snapshot 损坏时 fail-closed 回退到 LKG。
+2. `KNO-FIX-006` 已具备 L2 focused unit/integration 证据，可按当前范围提交并推送；若后续要补更高层安装态证据，需要先在环境中补齐 `dpkg-buildpackage` 所需依赖。
+
 ## 记录 #695
 
 - 日期：2026-05-19

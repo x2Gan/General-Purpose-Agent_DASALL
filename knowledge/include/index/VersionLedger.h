@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <string>
@@ -33,6 +34,7 @@ struct VersionLedgerEntry {
 
 struct VersionLedgerDeps {
   std::function<std::optional<std::string>(std::string_view snapshot_id)> read_snapshot_checksum;
+  std::filesystem::path ledger_path;
 };
 
 class VersionLedger {
@@ -43,9 +45,11 @@ class VersionLedger {
   [[nodiscard]] bool record_candidate(const VersionLedgerEntry& entry);
   [[nodiscard]] bool mark_active(std::string_view snapshot_id, std::int64_t activated_at);
   [[nodiscard]] bool mark_superseded(std::string_view snapshot_id);
+  [[nodiscard]] std::optional<VersionLedgerEntry> active() const;
   [[nodiscard]] std::optional<VersionLedgerEntry> last_known_good() const;
 
  private:
+  [[nodiscard]] bool persist_entries() const;
   [[nodiscard]] bool checksum_matches(const VersionLedgerEntry& entry) const;
 
   std::vector<VersionLedgerEntry> entries_;

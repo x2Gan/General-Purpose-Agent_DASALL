@@ -61,6 +61,12 @@ class IndexWriter {
 
   [[nodiscard]] UpdateReport apply_update_batch(const ingest::IndexUpdateBatch& batch);
   [[nodiscard]] RebuildReport rebuild_all(const RebuildPlan& plan);
+  [[nodiscard]] bool restore_startup_state(std::string_view active_snapshot_id,
+                                           std::string_view last_known_good_snapshot_id);
+
+  [[nodiscard]] static std::optional<std::string> read_persisted_snapshot_checksum(
+      const std::filesystem::path& snapshots_root,
+      std::string_view snapshot_id);
 
  private:
   struct ShadowIndex {
@@ -79,6 +85,7 @@ class IndexWriter {
                                                std::string_view tokenizer_profile,
                                                bool vector_enabled,
                                                bool seed_from_active) const;
+  [[nodiscard]] std::optional<ShadowIndex> load_shadow_index(std::string_view snapshot_id) const;
   [[nodiscard]] bool swap_active_snapshot(const ShadowIndex& shadow);
 
   IndexReader& reader_;

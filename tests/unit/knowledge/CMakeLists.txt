@@ -56,6 +56,12 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_corpus_catalog_persistence_unit_test
+	CorpusCatalogPersistenceTest.cpp
+	CorpusCatalogPersistenceTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_corpus_catalog_delta_apply_unit_test
 	CorpusCatalogDeltaApplyTest.cpp
 	CorpusCatalogDeltaApplyTest
@@ -71,6 +77,12 @@ dasall_add_knowledge_unit_test(
 	dasall_version_ledger_unit_test
 	VersionLedgerTest.cpp
 	VersionLedgerTest
+)
+
+dasall_add_knowledge_unit_test(
+	dasall_version_ledger_persistence_unit_test
+	VersionLedgerPersistenceTest.cpp
+	VersionLedgerPersistenceTest
 )
 
 dasall_add_knowledge_unit_test(

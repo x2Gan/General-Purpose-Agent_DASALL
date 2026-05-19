@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,6 +17,10 @@ struct CorpusCatalogDelta {
   std::vector<std::string> removed_corpus_ids;
 
   [[nodiscard]] bool has_consistent_values() const;
+};
+
+struct CorpusCatalogDeps {
+  std::filesystem::path catalog_path;
 };
 
 class CorpusCatalogSnapshot {
@@ -44,6 +49,7 @@ class CorpusCatalogSnapshot {
 class CorpusCatalog {
  public:
   CorpusCatalog();
+  explicit CorpusCatalog(CorpusCatalogDeps deps);
   explicit CorpusCatalog(CorpusCatalogSnapshot initial_snapshot);
 
   [[nodiscard]] CorpusCatalogSnapshot snapshot() const;
@@ -51,7 +57,10 @@ class CorpusCatalog {
   [[nodiscard]] bool apply_delta(const CorpusCatalogDelta& delta);
 
  private:
+  [[nodiscard]] bool persist_snapshot(const CorpusCatalogSnapshot& snapshot) const;
+
   CorpusCatalogSnapshot active_snapshot_;
+  CorpusCatalogDeps deps_{};
 };
 
 }  // namespace dasall::knowledge::index

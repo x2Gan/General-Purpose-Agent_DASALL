@@ -252,6 +252,38 @@ void append_unique(std::vector<std::string>& values, std::string value) {
   return inventory;
 }
 
+[[nodiscard]] std::vector<CorpusDescriptor> merge_persisted_catalog_runtime_state(
+    std::vector<CorpusDescriptor> descriptors,
+    const index::CorpusCatalogSnapshot& persisted_snapshot) {
+  for (auto& descriptor : descriptors) {
+    const auto persisted_descriptor = persisted_snapshot.find_by_id(descriptor.corpus_id);
+    if (!persisted_descriptor.has_value() ||
+        persisted_descriptor->source_uri != descriptor.source_uri) {
+      descriptor.active_snapshot_id.clear();
+      continue;
+    }
+
+    descriptor.active_snapshot_id = persisted_descriptor->active_snapshot_id;
+    descriptor.last_updated_ms = persisted_descriptor->last_updated_ms;
+  }
+
+  return descriptors;
+}
+
+[[nodiscard]] bool align_catalog_to_restored_manifest(
+    index::CorpusCatalog& catalog,
+    const std::optional<IndexManifest>& manifest) {
+  auto descriptors = catalog.snapshot().list_all();
+  for (auto& descriptor : descriptors) {
+    descriptor.active_snapshot_id = manifest.has_value() ? manifest->snapshot_id : std::string{};
+    if (manifest.has_value()) {
+      descriptor.last_updated_ms = manifest->effective_at;
+    }
+  }
+
+  return catalog.replace_all(std::move(descriptors));
+}
+
 [[nodiscard]] KnowledgeServiceFactoryResult make_error(std::string error) {
   return KnowledgeServiceFactoryResult{.service = nullptr, .error = std::move(error)};
 }
@@ -266,15 +298,24 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
 
   try {
     const fs::path assets_root = options.readonly_assets_root.lexically_normal();
+    const fs::path knowledge_state_root =
+      (options.state_root / "knowledge").lexically_normal();
     const fs::path snapshots_root =
-        (options.state_root / "knowledge" / "snapshots").lexically_normal();
+      (knowledge_state_root / "snapshots").lexically_normal();
+    const fs::path catalog_path =
+      (knowledge_state_root / "corpus_catalog.json").lexically_normal();
+    const fs::path ledger_path =
+      (knowledge_state_root / "version_ledger.jsonl").lexically_normal();
     auto descriptors = make_installed_asset_descriptors(assets_root);
     const auto config = make_installed_asset_config();
     if (!config.has_consistent_values()) {
       return make_error("installed asset knowledge config is inconsistent");
     }
 
-    auto corpus_catalog = std::make_unique<index::CorpusCatalog>();
+    auto corpus_catalog =
+      std::make_unique<index::CorpusCatalog>(index::CorpusCatalogDeps{.catalog_path = catalog_path});
+    descriptors = merge_persisted_catalog_runtime_state(std::move(descriptors),
+                              corpus_catalog->snapshot());
     if (!corpus_catalog->replace_all(descriptors)) {
       return make_error("installed asset knowledge corpus catalog is inconsistent");
     }
@@ -299,9 +340,11 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     auto* reader = deps.index_reader.get();
     auto* freshness_controller = deps.freshness_controller.get();
     auto ledger = std::make_shared<index::VersionLedger>(index::VersionLedgerDeps{
-        .read_snapshot_checksum = [reader](std::string_view snapshot_id) {
-          return reader->read_snapshot_checksum(snapshot_id);
+        .read_snapshot_checksum = [snapshots_root](std::string_view snapshot_id) {
+          return index::IndexWriter::read_persisted_snapshot_checksum(snapshots_root,
+                                                                      snapshot_id);
         },
+        .ledger_path = ledger_path,
     });
 
     auto sparse_retriever = std::make_shared<retrieve::SparseRetriever>(
@@ -365,6 +408,21 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     };
     deps.index_writer =
         std::make_unique<index::IndexWriter>(*reader, *ledger, std::move(writer_deps));
+    const auto active_entry = ledger->active();
+    const auto last_known_good_entry = ledger->last_known_good();
+    (void)deps.index_writer->restore_startup_state(
+        active_entry.has_value() ? active_entry->snapshot_id : std::string_view{},
+        last_known_good_entry.has_value() ? last_known_good_entry->snapshot_id :
+                                            std::string_view{});
+    const auto restored_manifest = reader->current_manifest();
+    if (!align_catalog_to_restored_manifest(*catalog, restored_manifest)) {
+      return make_error("installed asset knowledge startup catalog restore failed");
+    }
+    if (restored_manifest.has_value()) {
+      *inventory_state = rebuild_installed_inventory(catalog->snapshot(), assets_root);
+    } else {
+      inventory_state->clear();
+    }
 
     deps.health_probe = std::make_unique<KnowledgeHealthProbe>(HealthProbeDeps{
         .knowledge_enabled = [config_state] {
