@@ -1,5 +1,60 @@
 # DASALL 开发执行记录
 
+## 记录 #699
+
+- 日期：2026-05-19
+- 阶段：knowledge / release-runner local installed proof and soak closure
+- 任务：推进 KNO-FIX-010 收口 release-runner local installed proof / soak 证据
+- 状态：已完成（local installed authoritative proof、10 轮 soak、workflow/README/总账/专项 deliverable 已收口；qemu residual 已转入 KNO-GAP-010）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-010`，并明确禁止使用 qemu / kvm 作为本轮收敛证据；若原子任务验收口径写了 qemu，就必须先改成真实 local installed authoritative 口径再执行。
+2. 前一轮 workflow / README / soak skeleton 已开始搭建，但真实执行暴露出三个 blocker：`pkg_smoke_install.sh` 里的 Knowledge wait 依赖旧 health payload 字段；Knowledge 证据被 `pkg_smoke_install.sh` 中无关的 Memory same-session recall 回归阻断；`dasall-common` 实际没有把 `/usr/share/dasall/docs/` 打进包，导致所谓 installed normative baseline 无法成立。
+3. 因此本轮把 owner 改成“独立 Knowledge proof script + 独立 soak script + release workflow 固定 artifact”，不再把 Knowledge 证据绑定在 package smoke 是否整轮通过上。
+
+### 执行与结果
+
+1. 新增独立 local installed proof owner。
+   - 已新增 `scripts/packaging/knowledge_local_installed_proof.sh`：fresh-install 当前 `.deb` 后，以 `dasall readiness --json` completed + inner `state=READY` 作为 daemon ready 判定，兼容当前 `knowledge health --json` 的 `freshness_state=fresh` / `active_snapshot_id` 口径，并固定生成 `knowledge-proof.json` 与 `installed-normative-assets.json`。
+2. 收口 soak harness 到当前真实 payload。
+   - `scripts/packaging/knowledge_refresh_retrieve_soak.sh` 已兼容当前 installed `knowledge health` payload，不再硬依赖旧的 `refresh_in_flight` / `last_refresh_status`；summary 改为记录 `iterations_completed`、`min_provider_slice_count`、`ready_signals`、`all_final_health_freshness_fresh` 等实机字段。
+   - 同时修复 shell helper 覆盖调用方 `label` 变量的问题，避免 artifact 文件名被串成整句导致 `File name too long`。
+3. 修复 packaging install layout 根因。
+   - `debian/dasall-common.install` 已新增 `usr/share/dasall/docs/`；`debian/tests/pkg-smoke-common-assets` 与 `debian/tests/pkg-smoke-local-control-plane` 也已同步补上 `DASALL_Engineering_Blueprint.md`、`ADR-006-context-orchestrator-vs-prompt-composer.md`、`BusinessChainIntegrationMatrix.md` 三条 installed docs 断言。
+   - 本轮真实 proof 直接证明此前 `.deb` 缺失 docs，故把 `KNO-FIX-005` 附近表述也收紧到“build-tree normative routing + installed docs files”而非继续伪称默认 CLI normative retrieve 已正向通过。
+4. 固定 release-runner contract 与文档。
+   - `.github/workflows/release-package-gate.yml` 现新增 `knowledge-proof` artifact 目录与 `knowledge-proof.log`，并在 qemu gate 前以 `always()` 固定执行 `knowledge_local_installed_proof.sh` 与 `knowledge_refresh_retrieve_soak.sh`。
+   - `scripts/packaging/README.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/todos/knowledge/deliverables/KNO-FIX-010-release-runner-local-installed-proof-and-soak-evidence.md` 已统一到新的 proof / soak owner 与真实 evidence 口径。
+5. 记录当前真实边界。
+   - 默认 CLI `dasall knowledge retrieve 'BusinessChainIntegrationMatrix' --json --timeout-ms 30000` 在当前安装态仍返回 `slice_count=0`；因此本轮 authoritative proof 明确采用 provider retrieve 正向路径 + installed docs file presence，而不是伪造“installed CLI normative retrieve 已完成”的结论。
+
+### 验证
+
+1. packaging / script 静态校验。
+   - `sh -n scripts/packaging/knowledge_local_installed_proof.sh`
+   - `sh -n scripts/packaging/knowledge_refresh_retrieve_soak.sh`
+   - `sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：全部通过。
+2. 构包与包内容复验。
+   - `dpkg-buildpackage -us -uc -b`
+   - `dpkg-deb -c ../dasall-common_0.1.0-1_all.deb | grep '/usr/share/dasall/docs/'`
+   - 结果：构包成功；最终 `.deb` 内容中可见 `usr/share/dasall/docs/architecture`、`/adr`、`/ssot`。
+3. authoritative local proof。
+   - `bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-fix-010-proof2`
+   - 结果：`rc=0`；`/tmp/dasall-kno-fix-010-proof2/knowledge-proof.json` 实际记录 `ready_state=READY`、`ready_runtime_readiness=default-ready`、`provider_slice_count=3`、`health_final_freshness_state=fresh`；`installed-normative-assets.json` 实际记录 `/usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md`、`/usr/share/dasall/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md`、`/usr/share/dasall/docs/ssot/BusinessChainIntegrationMatrix.md`。
+4. 10 轮 soak。
+   - `bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-fix-010-soak --iterations 10`
+   - 结果：`rc=0`；`/tmp/dasall-kno-fix-010-soak/knowledge-soak-summary.json` 实际记录 `iterations_completed=10`、`all_provider_iterations_have_evidence=true`、`all_final_health_have_active_snapshot=true`、`all_final_health_freshness_fresh=true`。
+5. 边界说明。
+   - 本轮全程未使用 qemu / kvm；也没有把 default CLI normative retrieve 的 `slice_count=0` 误报为已完成能力。
+
+### 结果
+
+1. `KNO-FIX-010` 已按“release-runner local installed authoritative proof + 10 轮 soak artifact”口径收口完成。
+2. `KNO-GAP-010` 现只剩 qemu / machine-isolation rerun 与 disk/corrupt snapshot failure injection；Knowledge local installed proof / soak 已不再是 blocker。
+
+
 ## 记录 #698
 
 - 日期：2026-05-19

@@ -262,4 +262,7 @@ assert_json_contains "${DIAG_JSON}" 'diagnostics redacted health snapshot' 'diag
 test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
 test -f /usr/share/dasall/llm/providers/catalog.yaml
 test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
+test -f /usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md
+test -f /usr/share/dasall/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
+test -f /usr/share/dasall/docs/ssot/BusinessChainIntegrationMatrix.md
 dasall version >/dev/null

@@ -66,12 +66,16 @@ jobs:
           package_dir="${artifact_dir}/packages"
           autopkgtest_dir="${artifact_dir}/autopkgtest"
           package_smoke_dir="${artifact_dir}/package-smoke"
+          knowledge_proof_dir="${artifact_dir}/knowledge-proof"
+          knowledge_soak_dir="${artifact_dir}/knowledge-soak"
           setup_file="${setup_dir}/autopkgtest-setup.sh"
           secret_record="${artifact_dir}/secret-injection-record.txt"
           package_smoke_log="${artifact_dir}/package-smoke-local.log"
+          knowledge_proof_log="${artifact_dir}/knowledge-proof.log"
+          knowledge_soak_log="${artifact_dir}/knowledge-soak.log"
           testbed_secret_path='/tmp/dasall-release/deepseek.key'
 
-          mkdir -p "${artifact_dir}" "${package_dir}" "${autopkgtest_dir}" "${package_smoke_dir}"
+          mkdir -p "${artifact_dir}" "${package_dir}" "${autopkgtest_dir}" "${package_smoke_dir}" "${knowledge_proof_dir}" "${knowledge_soak_dir}"
 
           {
             printf '%s\n' '#!/bin/sh'
@@ -92,9 +96,13 @@ jobs:
             printf 'DASALL_RELEASE_GATE_SECRET_RECORD=%s\n' "${secret_record}"
             printf 'DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=%s\n' "${package_smoke_dir}"
             printf 'DASALL_RELEASE_GATE_PACKAGE_SMOKE_LOG=%s\n' "${package_smoke_log}"
+            printf 'DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR=%s\n' "${knowledge_proof_dir}"
+            printf 'DASALL_RELEASE_GATE_KNOWLEDGE_PROOF_LOG=%s\n' "${knowledge_proof_log}"
+            printf 'DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR=%s\n' "${knowledge_soak_dir}"
+            printf 'DASALL_RELEASE_GATE_KNOWLEDGE_SOAK_LOG=%s\n' "${knowledge_soak_log}"
           } >> "${GITHUB_ENV}"
 
-      - name: Run local installed memory evidence
+      - name: Run local installed package evidence
         run: |
           set -eu
           smoke_log="${DASALL_RELEASE_GATE_PACKAGE_SMOKE_LOG}"
@@ -110,6 +118,32 @@ jobs:
           } >> "${smoke_log}"
 
           bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check >> "${smoke_log}" 2>&1
+
+      - name: Run local installed knowledge proof
+        if: ${{ always() }}
+        run: |
+          set -eu
+          proof_log="${DASALL_RELEASE_GATE_KNOWLEDGE_PROOF_LOG}"
+
+          {
+            printf '### bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir %s\n' "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}"
+          } > "${proof_log}"
+
+          bash scripts/packaging/knowledge_local_installed_proof.sh \
+            --artifact-dir "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}" >> "${proof_log}" 2>&1
+
+      - name: Run local installed knowledge soak
+        if: ${{ always() }}
+        run: |
+          set -eu
+          soak_log="${DASALL_RELEASE_GATE_KNOWLEDGE_SOAK_LOG}"
+
+          {
+            printf '### bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir %s\n' "${DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR}"
+          } > "${soak_log}"
+
+          bash scripts/packaging/knowledge_refresh_retrieve_soak.sh \
+            --artifact-dir "${DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR}" >> "${soak_log}" 2>&1
 
       - name: Run qemu release gate
         env:

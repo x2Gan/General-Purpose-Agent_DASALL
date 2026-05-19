@@ -10,6 +10,9 @@ test -f /usr/share/dasall/llm/prompts/planner/default/manifest.yaml
 test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml
 test -f /usr/share/dasall/llm/providers/catalog.yaml
 test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
+test -f /usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md
+test -f /usr/share/dasall/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
+test -f /usr/share/dasall/docs/ssot/BusinessChainIntegrationMatrix.md
 test -f /usr/share/dasall/sql/memory/V001__initial_schema.sql
 test -f /usr/share/dasall/sql/memory/V002__vector_sidecar.sql
 test -f /usr/lib/dasall/sqlite-vss/vector0.so

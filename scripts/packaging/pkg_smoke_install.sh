@@ -95,6 +95,36 @@ assert_json_matches() {
     fail "${label}: expected JSON pattern not found: ${expected_regex}"
 }
 
+json_contains_fragment() {
+  json_payload=$1
+  expected=$2
+
+  printf '%s\n' "$json_payload" | grep -Fq "$expected"
+}
+
+knowledge_health_is_ready() {
+  json_payload=$1
+
+  json_contains_fragment "$json_payload" '"disposition":"completed"' || return 1
+  json_contains_fragment "$json_payload" '\"operation\":\"health\"' || return 1
+  json_contains_fragment "$json_payload" '\"active_snapshot_id\":\"snapshot:' || return 1
+
+  if json_contains_fragment "$json_payload" '\"last_refresh_status\":'; then
+    json_contains_fragment "$json_payload" '\"last_refresh_status\":\"completed\"' || return 1
+    json_contains_fragment "$json_payload" '\"refresh_in_flight\":false' || return 1
+    return 0
+  fi
+
+  json_contains_fragment "$json_payload" '\"freshness_state\":\"fresh\"'
+}
+
+assert_knowledge_health_ready() {
+  json_payload=$1
+  label=$2
+
+  knowledge_health_is_ready "$json_payload" || fail "${label}: health payload did not reach a ready state: ${json_payload}"
+}
+
 assert_non_empty() {
   value=$1
   label=$2
@@ -147,13 +177,11 @@ wait_for_knowledge_refresh_ready() {
   attempts=0
   while [ "$attempts" -lt 30 ]; do
     knowledge_health_json=$(run_root dasall knowledge health --json --timeout-ms 30000)
-    if printf '%s\n' "$knowledge_health_json" | grep -Fq '"refresh_in_flight":false' &&
-       printf '%s\n' "$knowledge_health_json" | grep -Fq '"last_refresh_status":"completed"' &&
-       printf '%s\n' "$knowledge_health_json" | grep -Fq '"active_snapshot_id":"snapshot:'; then
+    if knowledge_health_is_ready "$knowledge_health_json"; then
       printf '%s\n' "$knowledge_health_json"
       return 0
     fi
-    if printf '%s\n' "$knowledge_health_json" | grep -Fq '"last_refresh_status":"failed"'; then
+    if json_contains_fragment "$knowledge_health_json" '"last_refresh_status":"failed"'; then
       fail "knowledge refresh terminal failure: ${knowledge_health_json}"
     fi
     attempts=$((attempts + 1))
@@ -507,11 +535,11 @@ PY
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '"disposition":"completed"' 'knowledge refresh smoke'
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"operation\":\"refresh\"' 'knowledge refresh payload'
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"status\":\"accepted\"' 'knowledge refresh status'
+  write_artifact_file 'knowledge-refresh.json' "$KNOWLEDGE_REFRESH_JSON"
 
-  KNOWLEDGE_HEALTH_JSON=$(wait_for_knowledge_refresh_ready)
-  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '"disposition":"completed"' 'knowledge health readiness smoke'
-  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"operation\":\"health\"' 'knowledge health readiness payload'
-  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"last_refresh_status\":\"completed\"' 'knowledge health readiness terminal status'
+  KNOWLEDGE_HEALTH_READY_JSON=$(wait_for_knowledge_refresh_ready)
+  assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_READY_JSON" 'knowledge health readiness smoke'
+  write_artifact_file 'knowledge-health-ready.json' "$KNOWLEDGE_HEALTH_READY_JSON"
 
   KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall knowledge retrieve 'DeepSeek Chat' --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '"disposition":"completed"' 'knowledge retrieve smoke'
@@ -519,6 +547,7 @@ PY
   assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"ok\":true' 'knowledge retrieve ok'
   assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge retrieve slice count'
   assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' 'knowledge retrieve installed provider evidence'
+  write_artifact_file 'knowledge-retrieve-provider.json' "$KNOWLEDGE_RETRIEVE_JSON"
 
   KNOWLEDGE_NORMATIVE_JSON=$(run_root dasall knowledge retrieve 'BusinessChainIntegrationMatrix' --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '"disposition":"completed"' 'knowledge normative retrieve smoke'
@@ -526,11 +555,72 @@ PY
   assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '\"ok\":true' 'knowledge normative retrieve ok'
   assert_json_matches "$KNOWLEDGE_NORMATIVE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge normative retrieve slice count'
   assert_json_matches "$KNOWLEDGE_NORMATIVE_JSON" 'BusinessChainIntegrationMatrix|docs/ssot/BusinessChainIntegrationMatrix.md' 'knowledge normative retrieve installed ssot evidence'
+  write_artifact_file 'knowledge-retrieve-normative.json' "$KNOWLEDGE_NORMATIVE_JSON"
 
-  KNOWLEDGE_HEALTH_JSON=$(run_root dasall knowledge health --json --timeout-ms 30000)
-  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '"disposition":"completed"' 'knowledge health smoke'
-  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"operation\":\"health\"' 'knowledge health payload'
-  assert_json_contains "$KNOWLEDGE_HEALTH_JSON" '\"active_snapshot_id\":\"snapshot:' 'knowledge health active snapshot'
+  KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall knowledge health --json --timeout-ms 30000)
+  assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_FINAL_JSON" 'knowledge health smoke'
+  write_artifact_file 'knowledge-health-final.json' "$KNOWLEDGE_HEALTH_FINAL_JSON"
+
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR" <<'PY'
+  import json
+  import pathlib
+  import re
+  import sys
+
+  artifact_dir = pathlib.Path(sys.argv[1])
+
+  def read_text(name: str) -> str:
+      return (artifact_dir / name).read_text(encoding='utf-8')
+
+  def extract(pattern: str, text: str, label: str) -> str:
+      match = re.search(pattern, text)
+      if not match:
+          raise SystemExit(f'missing {label} in knowledge package smoke artifact')
+      return match.group(1)
+
+    def optional_extract(pattern: str, text: str):
+      match = re.search(pattern, text)
+      if not match:
+        return None
+      return match.group(1)
+
+  refresh_text = read_text('knowledge-refresh.json')
+  health_ready_text = read_text('knowledge-health-ready.json')
+  provider_text = read_text('knowledge-retrieve-provider.json')
+  normative_text = read_text('knowledge-retrieve-normative.json')
+  health_final_text = read_text('knowledge-health-final.json')
+
+  data = {
+      'refresh_disposition': extract(r'"disposition":"([^"]+)"', refresh_text, 'refresh disposition'),
+      'refresh_status': extract(r'\\"status\\":\\"([^\\]+)\\"', refresh_text, 'refresh status'),
+      'health_ready_signal': 'async_terminal' if optional_extract(r'\\"last_refresh_status\\":\\"([^\\]+)\\"', health_ready_text) else 'snapshot_freshness',
+      'health_ready_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_ready_text, 'health ready state'),
+      'health_ready_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_ready_text, 'health ready freshness_state'),
+      'health_ready_last_refresh_status': optional_extract(r'\\"last_refresh_status\\":\\"([^\\]+)\\"', health_ready_text),
+      'health_ready_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_ready_text, 'health ready active_snapshot_id'),
+      'provider_query': 'DeepSeek Chat',
+      'provider_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', provider_text, 'provider slice_count')),
+      'provider_has_installed_deepseek_evidence': bool(re.search(r'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/', provider_text)),
+      'normative_query': 'BusinessChainIntegrationMatrix',
+      'normative_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', normative_text, 'normative slice count')),
+      'normative_has_ssot_evidence': bool(re.search(r'BusinessChainIntegrationMatrix|docs/ssot/BusinessChainIntegrationMatrix\.md', normative_text)),
+      'health_final_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_final_text, 'health final state'),
+      'health_final_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_final_text, 'health final freshness_state'),
+      'health_final_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_final_text, 'health final active_snapshot_id'),
+      'health_final_refresh_in_flight': (
+        optional_extract(r'\\"refresh_in_flight\\":(true|false)', health_final_text) == 'true'
+        if optional_extract(r'\\"refresh_in_flight\\":(true|false)', health_final_text) is not None
+        else None
+      ),
+  }
+
+  (artifact_dir / 'knowledge-proof.json').write_text(
+      json.dumps(data, indent=2) + '\n',
+      encoding='ascii',
+  )
+PY
+  fi
 
   run_root test -f /usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md
   run_root test -f /usr/share/dasall/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
