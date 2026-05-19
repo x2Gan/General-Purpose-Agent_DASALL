@@ -20,6 +20,15 @@
    - 不把 focused tests 或 plan 文档本身外推成 L6 已完成。
    - 不把 `FULLINT-TODO-019` 的 current release candidate rerun 与 L6 soak 混写成同一 owner。
 
+### 2.1 2026-05-19 执行口径覆盖
+
+本轮 `LLM-GAP-004` 明确禁止 qemu / kvm 采集收敛证据，因此本文件中早期写明 qemu / autopkgtest 的 slice 只保留为历史 release/machine-isolation 参考，不作为当前 LLM owner closeout 验收入口。当前可执行口径改为：
+
+1. SOAK-00 focused baseline 继续作为 LLM failure-handling / observability / secret bootstrap regression gate。
+2. SOAK-01 / SOAK-05 优先使用本机 installed host artifact；若结果为 `accepted_async`、`task_not_completed` 或无 `llm.origin`，只能记录 blocker。
+3. SOAK-02 / SOAK-04 的 machine-isolation negative slice 不在本轮执行；如后续 release owner 需要 machine-isolation evidence，应另开 packaging / integration 任务，并继续遵守“不记录 secret 明文”的 artifact 规则。
+4. 本轮新增 [LLM-GAP-004-local-installed-soak-blocker-closeout.md](LLM-GAP-004-local-installed-soak-blocker-closeout.md) 作为当前 authoritative closeout / blocker ledger。
+
 ## 3. Slice 矩阵
 
 | Slice ID | 场景 | 现有依据 | 执行环境 | 必留 artifact | 通过判定 |

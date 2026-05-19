@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+## 记录 #712
+
+- 日期：2026-05-19
+- 阶段：llm / gap closeout
+- 任务：推进 `LLM-GAP-004`，按禁用 qemu/kvm 约束收口 current rerun / L6 soak 证据边界
+- 状态：已完成（LLM owner blocker closeout 已落盘；不宣称 L6 positive evidence）
+
+### 执行前提
+
+1. 用户要求串行推进 `LLM-GAP-001 ~ 005`，并明确禁止使用 qemu / kvm 采集收敛证据；若验收口径写明 qemu，应改成本机安装态口径再执行。
+2. `LLM-FIX-007` 已把 provider jitter、network loss、secret rotate、retry budget exhaustion 与 observability trend 拆成可执行 slice；本轮目标不是重新设计 slice，而是记录当前本机 installed live blocker 并关闭 LLM owner 的模糊开放口径。
+3. 用户提供了 raw key 字符串；本轮没有把该 secret 明文写入仓库、命令记录或 artifact。后续 key 更新必须通过 owner-only 本机安全通道执行 `dasall config apply --from-file` 或等价 import。
+
+### 改动
+
+1. 新增 `docs/todos/llm/deliverables/LLM-GAP-004-local-installed-soak-blocker-closeout.md`：固定本轮本机 installed evidence、focused baseline、不可外推范围和解阻条件。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `LLM-GAP-004` 改为“已收口 / Blocked evidence”，把 qemu/kvm 验收入口改成本机安装态实跑口径，并更新 LLM 章节结论。
+3. 更新 `docs/todos/llm/DASALL_llm子系统专项TODO.md`：新增 2026-05-19 状态更新与 `17.28 LLM-GAP-004 local installed blocker closeout` 小节。
+4. 更新 `docs/todos/llm/deliverables/LLM-FIX-007-external-provider长稳态与L6-soak执行计划.md`：新增 2.1 执行口径覆盖，说明本轮 qemu / autopkgtest slice 仅保留为历史 release/machine-isolation 参考，不作为当前验收入口。
+
+### 验证
+
+1. 本机 installed continuous run artifact。
+   - artifact：`/tmp/dasall-llm-gap004-local-installed-1779204346`
+   - 结果：5 次 run 均 exit `0`，但均为 `accepted_async`；`summary.txt` 记录 `completed_count: 0`、`llm_origin_count: 0`、`task_not_completed_count: 5`。
+2. async receipt follow-up。
+   - 结果：run JSON 只有 `receipt_ref=receipt-for-ticket-1`，无 ownership token，`request_id` 为 null；`dasall status --receipt ...` 需要 ownership token，无法形成 owner-authoritative follow-up。
+3. 同步入参形态探针。
+   - artifact：`/tmp/dasall-llm-gap004-sync-shape-1779204782`
+   - 结果：JSON positional run 为 `disposition=completed` / `exit_code=5` / `error.reason=task_not_completed`，无 `llm.origin`；plain string / pseudo `--prompt` 形态进入 `accepted_async`。
+4. secret 元数据。
+   - 结果：`/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret` 存在，权限 `0640`，owner/group `root:dasall`，大小 `228` bytes，文件不是 raw `sk-...` key；不能直接作为 curl bearer token 使用。
+5. focused baseline。
+   - 结果：`LLMManagerTimeoutPolicyTest`、`LLMManagerRetryBudgetTest`、`ModelRouterStabilityTest`、`LLMObservabilityFieldCompletenessTest`、`LLMProductionObservabilityIntegrationTest`、`DeepSeekDualModeSelectionIntegrationTest`、`LLMFallbackIntegrationTest`、`LlmSecretPageTest`、`ConfigApplyWorkflowTest` 的 SOAK-00 focused baseline 已保持绿色。
+
+### 结果
+
+1. `LLM-GAP-004` 已从“release candidate rerun / L6 长稳态仍未证明”的开放口径，收口为明确的本机 installed blocker ledger；LLM owner 不再缺执行计划或证据边界。
+2. 当前不得宣称 external provider L6 soak 已通过，也不得把 `accepted_async` 或 focused failure-handling 误写成 installed positive generation evidence。
+3. 后续 positive live evidence 的解除条件是：安全导入可用 provider key、installed `dasall run` 返回 `llm.origin=deepseek-prod/`、async ownership/status 链可追踪 terminal state，并保留连续本机 installed runs 的 JSON / exit code / journal snapshot / summary。
+
 ## 记录 #711
 
 - 日期：2026-05-19

@@ -283,7 +283,7 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 | LLM-GAP-001 | 已闭合 / High | D10 streaming lifecycle 已由 LLM-FIX-001 收口；2026-05-19 已补独立 closeout 交付件 | `llm/src/stream/StreamSessionRegistry.*`、`LLMManager::stream_generate()`、`OpenAICompatibleAdapter::stream_generate()` 已落地 module-local 生命周期 owner、SSE/delta merge 与终态收口；`StreamSessionLifecycleTest` / `LLMStreamingIntegrationTest` / `CognitionLlmBridgeErrorMappingTest` 通过；本轮新增 `docs/todos/llm/deliverables/LLM-GAP-001-D10-streaming-lifecycle-closeout.md` 并复验 focused CTest fallback `3/3` 通过 | cognition streaming preference 不再必然 fail-closed；shared StreamHandle admission 仍保持 deferred，不外推为 shared stream-ready | 继续保持 shared `StreamHandle` / contracts admission 后置；`LLM-GAP-001` 不再作为开放缺口跟踪 |
 | LLM-GAP-002 | 已闭合 / Medium | production factory 多 family 注册已由 LLM-FIX-002 收口；2026-05-19 已补独立 closeout 交付件 | `LLMProductionFactory` 已按 `adapter_family` 注册 OpenAI-compatible / Ollama / Local routes；baseline provider catalog 已补齐 `ollama_lan` / `local_runtime`；`LLMProductionFactoryTest`、`LLMProviderAssetOnboardingIntegrationTest`、`LLMFallbackIntegrationTest` 通过；本轮新增 `docs/todos/llm/deliverables/LLM-GAP-002-production-provider-family-closeout.md` 并复验 focused CTest fallback `3/3` 通过 | Cloud / LAN / Local production unary / fallback 不再停留在 fixture 手工注册；本结论不外推为所有 family streaming 或 release / soak 已完成 | 继续保持 provider assets 与 `adapter_family` 映射一致；`LLM-GAP-002` 不再作为开放缺口跟踪 |
 | LLM-GAP-003 | 已闭合 / Medium | production metrics / trace / audit sink 已由 LLM-FIX-003 收口；2026-05-19 已补独立 closeout 交付件 | `LLMProductionFactoryOptions` 现已接入 infra logger / metrics provider / tracer provider / audit logger，`RuntimeLiveDependencyComposition` 也已先组合 observability bundle 再装配 production manager；`LLMProductionObservabilityIntegrationTest` 通过；本轮新增 `docs/todos/llm/deliverables/LLM-GAP-003-production-observability-closeout.md` 并复验 focused CTest fallback `4/4` 通过 | production-composed manager 不再只在 fixture 中可观测，reasoning strip audit 已进入 manager hot path；本结论不外推为 installed / release / L6 soak 已完成 | 后续转向 `LLM-GAP-004` 的本机安装态 / 长稳态证据；`LLM-GAP-003` 不再作为开放缺口跟踪 |
-| LLM-GAP-004 | Medium | 当前 release candidate rerun 与 L6 长稳态仍未证明 | `LLM-FIX-004` 已把 BC-07 / BC-16 收口为“历史 authoritative qemu L5 + 当前 local L4 rerun + release-runner contract fixed”；`LLM-FIX-007` 又已把 provider jitter、network loss、secret rotate、retry budget exhaustion 与 observability trend 冻结为可执行验收项；但 `FULLINT-TODO-019` 在当前主机仍缺 runner-local `qemu_image` 与 `DASALL_DEEPSEEK_API_KEY_FILE`，而 007 的 soak slices 也尚未真正执行 | 若误把现有 focused failure-handling、计划文档或历史 qemu PASS 当成当前 release confidence，会高估 production ready 程度 | 通过 `FULLINT-TODO-019` 复跑当前 release candidate；按 `LLM-FIX-007` deliverable 执行 provider soak / chaos / failure trend evidence |
+| LLM-GAP-004 | 已收口 / Blocked evidence | 当前 release candidate rerun 与 L6 长稳态不能由 LLM owner 单独证明；本轮已按禁用 qemu/kvm 约束改成本机安装态 blocker closeout | `LLM-FIX-007` 已冻结 provider jitter / network loss / secret rotate / retry budget exhaustion / observability trend 执行矩阵；2026-05-19 新增 `docs/todos/llm/deliverables/LLM-GAP-004-local-installed-soak-blocker-closeout.md`，记录本机 daemon active、SOAK-00 focused baseline 通过，但 installed run 仍落到 `accepted_async` 或 `task_not_completed`，未产出 `llm.origin`，且 async 响应无 ownership token / request_id follow-up | 不能宣称 L6 external provider soak 已通过；也不能把 accepted_async 或 focused failure-handling 误写成 production-ready | LLM owner 不再把该项作为开放设计/实现缺口；positive live evidence 的解阻条件转为安全 secret import + installed run `llm.origin` + async ownership/status 链，release/machine-isolation 另归 packaging / integration owner |
 | LLM-GAP-005 | Low / Medium | LLM 源码边界缺少自动化回归防线 | 静态检查未发现越界，但当前缺少明确 test/script 防止 `llm/` 未来 include memory/tools/apps/runtime 私有实现 | 后续改动可能破坏 ADR-006/007/008 边界 | 增加 boundary compliance test 或脚本，锁定 LLM 不直拉 Memory ContextOrchestrator、不直调 Tools、不触碰 RecoveryManager |
 
 ### 5.6 补缺任务建议
@@ -332,10 +332,11 @@ rg -n "create_production_llm_manager|openai_compatible|LLMMetricsBridge|LLMTrace
   docs/ssot/BusinessChainIntegrationMatrix.md
 ```
 
-release / qemu gate 口径：
+release / 本机安装态证据口径：
 
 ```bash
-sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>
+# 本轮 LLM-GAP-004 禁止 qemu/kvm 证据采集；使用本机安装态实跑与 focused baseline。
+sudo -n dasall run '{"prompt":"llm-gap004-positive-proof"}' --json --timeout-ms 120000
 ```
 
 边界回归口径：
@@ -346,15 +347,15 @@ rg -n "ContextOrchestrator|IMemoryManager|ToolManager|RecoveryManager|AgentOrche
 
 ### 5.9 当前章节结论
 
-LLM 子系统的实现覆盖度已经很高，当前主要问题不是“缺少 LLM 模块本体”或“源码边界无人守护”，而是“release-runner / qemu 证据与 external provider 长稳态”尚未全部闭合。
+LLM 子系统的实现覆盖度已经很高，当前主要问题不是“缺少 LLM 模块本体”或“源码边界无人守护”。`LLM-GAP-004` 现已按本机安装态 blocker evidence 收口：当前不能宣称 L6 external provider soak 已通过，但该 blocker 不再作为 LLM owner 的开放实现缺口跟踪。
 
 因此本章冻结口径为：
 
 1. LLM D1-D9 主体：基本完成，L1 / L2 证据充分，本轮 46 个聚焦测试通过。
 2. Runtime production LLM generation：有 L4 local installed evidence，但不外推为 L5 qemu / release runner 或 L6 soak。
 3. D10 streaming：已由 `LLM-FIX-001` 在 llm owner 内部完成 module-local 实现与 focused tests，但不能外推为 shared stream-ready。
-4. production completeness：OpenAI-compatible、LAN / Local production family 与 metrics / trace / audit sink 已接入；当前 release candidate rerun / artifact archive 仍由 `FULLINT-TODO-019` owner，external provider 长稳态 / L6 soak 的执行矩阵则已由 `LLM-FIX-007` deliverable 固化。
-5. 查漏补缺优先级：`LLM-GAP-001`、`LLM-GAP-002`、`LLM-GAP-003` 已分别由 `LLM-FIX-001`、`LLM-FIX-002`、`LLM-FIX-003` 收口；下一步继续通过 `FULLINT-TODO-019` 执行 current release candidate rerun，并按 `LLM-FIX-007` deliverable 逐条执行 external provider soak slices。
+4. production completeness：OpenAI-compatible、LAN / Local production family 与 metrics / trace / audit sink 已接入；current release candidate rerun / artifact archive 继续由 `FULLINT-TODO-019` owner 管理，本轮 LLM owner 只记录本机 installed blocker，不使用 qemu/kvm 收敛证据。
+5. 查漏补缺优先级：`LLM-GAP-001`、`LLM-GAP-002`、`LLM-GAP-003`、`LLM-GAP-004` 与 `LLM-GAP-005` 均已具备明确 closeout / owner 边界；后续 positive live evidence 只在安全 secret import、installed `llm.origin` 与 async status 链真正恢复后再升级。
 
 ## 6. Memory 子系统查漏补缺
 
