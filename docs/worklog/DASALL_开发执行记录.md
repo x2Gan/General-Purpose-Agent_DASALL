@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+## 记录 #710
+
+- 日期：2026-05-19
+- 阶段：llm / gap closeout
+- 任务：推进 `LLM-GAP-002`，收口 production factory 多 family 注册缺口
+- 状态：已完成（独立 closeout 交付件、专项总账与 focused validation 已回写；不外推 release / soak 证据）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `LLM-GAP-001 ~ 005`，每个原子任务完成后单独提交推送，并禁止使用 qemu / kvm 采集收敛证据。
+2. 本轮只处理 `LLM-GAP-002`。专项总账已记录 production factory 多 family 注册由 `LLM-FIX-002` 收口，但缺少面向 GAP 本身的独立 closeout 证据链。
+3. 本轮 authoritative 边界为：OpenAI-compatible / Ollama native / Local runtime family registration 已闭合；provider live endpoint、所有 family streaming、release runner 与 L6 soak 不作为本 gap 完成条件。
+
+### 改动
+
+1. 新增 `docs/todos/llm/deliverables/LLM-GAP-002-production-provider-family-closeout.md`：固定本地证据、LiteLLM provider 外部参考、Design -> Build 映射、Build 三件套、D Gate 与完成判定。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `LLM-GAP-002` 标记为“已闭合 / Medium”，补入 closeout 交付件与 focused validation 摘要。
+
+### 验证
+
+1. focused targets 构建。
+   - `Build_CMakeTools(buildTargets=["dasall_llm_production_factory_unit_test","dasall_llm_provider_asset_onboarding_integration_test","dasall_llm_fallback_integration_test"])`
+   - 结果：通过。
+2. CMake Tools focused CTest 尝试。
+   - `RunCtest_CMakeTools(tests=["LLMProductionFactoryTest","LLMProviderAssetOnboardingIntegrationTest","LLMFallbackIntegrationTest"])`
+   - 结果：工具在 generation 层失败，未进入测试执行；不作为测试失败结论。
+3. direct CTest fallback。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(LLMProductionFactoryTest|LLMProviderAssetOnboardingIntegrationTest|LLMFallbackIntegrationTest)$'`
+   - 结果：`100% tests passed, 0 tests failed out of 3`。
+4. 文档锚点检查。
+   - `rg -n 'LLM-GAP-002|状态：Done|100% tests passed, 0 tests failed out of 3|adapter_family' docs/todos/llm/deliverables/LLM-GAP-002-production-provider-family-closeout.md`
+   - 结果：命中任务 ID、Done 状态、provider family 映射与 focused validation 摘要。
+
+### 结果
+
+1. `LLM-GAP-002` 已关闭：production factory 已能按 provider catalog 的 `adapter_family` 注册 OpenAI-compatible、Ollama native 与 Local runtime routes。
+2. 本轮未使用 qemu / kvm，也不把多 family registration focused tests 外推为 provider live endpoint、release runner、installed package 或 L6 soak 证据。
+
 ## 记录 #709
 
 - 日期：2026-05-19
