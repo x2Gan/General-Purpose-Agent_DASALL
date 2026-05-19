@@ -172,6 +172,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_executor_lane_pool_concurrency_unit_test
+	ExecutorLanePoolConcurrencyTest.cpp
+	ExecutorLanePoolConcurrencyTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_capability_cache_unit_test
 	CapabilityCacheTest.cpp
 	CapabilityCacheTest

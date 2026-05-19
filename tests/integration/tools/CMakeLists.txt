@@ -151,6 +151,13 @@ dasall_add_tools_integration_test(
   "integration;tools"
 )
 
+dasall_add_tools_integration_test(
+  dasall_tool_lane_backpressure_integration_test
+  ToolLaneBackpressureIntegrationTest
+  ToolLaneBackpressureIntegrationTest.cpp
+  "integration;tools"
+)
+
 if(NOT DASALL_TOOLS_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "tools integration registration requires at least one test target")
 endif()

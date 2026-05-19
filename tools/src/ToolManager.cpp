@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <functional>
 #include <utility>
 
 #include "execution/WorkflowEngine.h"
@@ -56,6 +57,55 @@ using dasall::tools::manager::ToolExecutionRequest;
 [[nodiscard]] const dasall::tools::projection::ResultProjector& standard_projector() {
 	static const dasall::tools::projection::ResultProjector projector;
 	return projector;
+}
+
+class ScopeExit {
+ public:
+	explicit ScopeExit(std::function<void()> on_exit)
+			: on_exit_(std::move(on_exit)) {}
+
+	ScopeExit(const ScopeExit&) = delete;
+	ScopeExit& operator=(const ScopeExit&) = delete;
+
+	ScopeExit(ScopeExit&& other) noexcept
+			: on_exit_(std::move(other.on_exit_)) {
+		other.on_exit_ = {};
+	}
+	ScopeExit& operator=(ScopeExit&& other) noexcept {
+		if (this == &other) {
+			return *this;
+		}
+		on_exit_ = std::move(other.on_exit_);
+		other.on_exit_ = {};
+		return *this;
+	}
+
+	~ScopeExit() {
+		if (on_exit_) {
+			on_exit_();
+		}
+	}
+
+ private:
+	std::function<void()> on_exit_;
+};
+
+[[nodiscard]] dasall::tools::execution::LaneAcquireResult acquire_lane_for_route(
+		const dasall::tools::execution::ExecutorLanePool& lane_pool,
+		const dasall::tools::route::ToolRouteDecision& route_decision,
+		const dasall::tools::config::ToolTimeoutView& timeout_view) {
+	switch (route_decision.route) {
+		case ToolIRRoute::LocalTool:
+			return lane_pool.acquire_builtin(timeout_view);
+		case ToolIRRoute::WorkflowEngine:
+			return lane_pool.acquire_workflow(timeout_view);
+		case ToolIRRoute::MCPRemote:
+			return lane_pool.acquire_mcp(route_decision.server_id.value_or(std::string()), timeout_view);
+		case ToolIRRoute::Unspecified:
+			break;
+	}
+
+	return dasall::tools::execution::LaneAcquireResult{};
 }
 
 [[nodiscard]] ErrorInfo build_error(
@@ -464,8 +514,12 @@ ToolManager::ToolManager(manager::ToolManagerDependencies dependencies)
 	if (!dependencies_.policy_gate) {
 		dependencies_.policy_gate = defaults.policy_gate;
 	}
+	if (!dependencies_.lane_pool) {
+		dependencies_.lane_pool = defaults.lane_pool;
+	}
 	if (!dependencies_.route_selector) {
-		dependencies_.route_selector = defaults.route_selector;
+		dependencies_.route_selector = std::make_shared<route::ToolRouteSelector>(
+				*dependencies_.lane_pool);
 	}
 	if (!dependencies_.workflow_engine) {
 		dependencies_.workflow_engine = defaults.workflow_engine;
@@ -555,7 +609,7 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 	};
 	auto invoke_body = [&]() -> ToolInvocationEnvelope {
 		if (!dependencies_.registry || !dependencies_.validator || !dependencies_.config_adapter ||
-				!dependencies_.policy_gate || !dependencies_.route_selector ||
+				!dependencies_.policy_gate || !dependencies_.lane_pool || !dependencies_.route_selector ||
 				!dependencies_.executor || !dependencies_.projector) {
 			return emit_failure_with_metrics(build_failure_envelope(
 					request,
@@ -747,6 +801,31 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 					context));
 		}
 
+		std::optional<ScopeExit> lane_release_guard;
+		const bool requires_lane_permit =
+				*validation_result.tool_ir->operation != ToolIROperation::DryRun &&
+				*validation_result.tool_ir->operation != ToolIROperation::ValidateOnly;
+		if (requires_lane_permit) {
+			const auto lane_acquisition = acquire_lane_for_route(
+					*dependencies_.lane_pool,
+					route_decision,
+					timeout_view);
+			if (!lane_acquisition.acquired) {
+				return emit_failure_with_metrics(build_failure_envelope(
+						request,
+						ResultCode::ToolExecutionFailed,
+						lane_acquisition.reason_code,
+						"tools.manager.lane",
+						build_route_facts(route_decision)));
+			}
+
+			lane_release_guard.emplace(
+					[lane_pool = dependencies_.lane_pool,
+					 lane_key = lane_acquisition.reservation.lane_key]() {
+						lane_pool->release(lane_key);
+					});
+		}
+
 		ToolResult result;
 		std::optional<std::vector<ToolCompensationHint>> workflow_compensation_hints;
 		std::optional<std::vector<std::string>> workflow_evidence_refs;
@@ -902,7 +981,7 @@ ToolInvocationEnvelope ToolManager::run_compensation_pipeline(
 		const CompensationRequest& request,
 		const ToolInvocationContext& context) const {
 	if (!dependencies_.registry || !dependencies_.validator || !dependencies_.config_adapter ||
-				!dependencies_.policy_gate || !dependencies_.route_selector ||
+				!dependencies_.policy_gate || !dependencies_.lane_pool || !dependencies_.route_selector ||
 				!dependencies_.compensation_executor || !dependencies_.projector) {
 		return build_compensation_failure_envelope(
 				request,
@@ -1036,6 +1115,21 @@ ToolInvocationEnvelope ToolManager::run_compensation_pipeline(
 				build_route_facts(route_decision));
 	}
 
+	const auto lane_acquisition = dependencies_.lane_pool->acquire_builtin(timeout_view);
+	if (!lane_acquisition.acquired) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ToolExecutionFailed,
+				lane_acquisition.reason_code,
+				"tools.manager.lane",
+				build_route_facts(route_decision));
+	}
+	const ScopeExit lane_release_guard(
+			[lane_pool = dependencies_.lane_pool,
+			 lane_key = lane_acquisition.reservation.lane_key]() {
+				lane_pool->release(lane_key);
+			});
+
 	auto result = dependencies_.compensation_executor(
 			tool_ir,
 			request,
@@ -1079,7 +1173,8 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 	auto validator = std::make_shared<validation::ToolValidator>();
 	auto config_adapter = std::make_shared<config::ToolConfigAdapter>();
 	auto policy_gate = std::make_shared<policy::ToolPolicyGate>();
-	auto route_selector = std::make_shared<route::ToolRouteSelector>();
+	auto lane_pool = std::make_shared<execution::ExecutorLanePool>();
+	auto route_selector = std::make_shared<route::ToolRouteSelector>(*lane_pool);
 	auto builtin_lane = std::make_shared<execution::BuiltinExecutorLane>(
 			execution::BuiltinExecutorLaneDependencies{
 					.registry = registry,
@@ -1126,6 +1221,7 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 			.validator = std::move(validator),
 			.config_adapter = std::move(config_adapter),
 			.policy_gate = std::move(policy_gate),
+			.lane_pool = std::move(lane_pool),
 			.route_selector = std::move(route_selector),
 				.workflow_engine = std::move(workflow_engine),
 			.metrics_bridge = std::move(metrics_bridge),

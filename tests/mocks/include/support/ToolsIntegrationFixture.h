@@ -13,6 +13,7 @@ namespace dasall::tests::support {
 
 struct ToolsSnapshotOverrides {
   std::string profile_id = "desktop_full";
+    std::uint32_t max_tool_calls = 24U;
   std::vector<std::string> allowed_tool_domains = {"builtin"};
   std::vector<std::string> tool_visibility_rules = {"builtin:all"};
   bool safe_mode_enabled = true;
@@ -31,7 +32,7 @@ struct ToolsSnapshotOverrides {
       contracts::RuntimeBudget{
           .max_tokens = 4096U,
           .max_turns = 8U,
-          .max_tool_calls = 24U,
+          .max_tool_calls = overrides.max_tool_calls,
           .max_latency_ms = 8000U,
           .max_replan_count = 2U,
       },

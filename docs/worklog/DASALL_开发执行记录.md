@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #703
+
+- 日期：2026-05-19
+- 阶段：tools / lane bulkhead execution semantics closure
+- 任务：推进 TOOL-FIX-005，补齐 lane bulkhead 执行语义
+- 状态：已完成（`ExecutorLanePool` permit 语义、`ToolManager` acquire/release 主链、focused unit/integration evidence 与专项总账回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-005`，保留“若有 blocker 先解阻、逐文件落盘、完成后按仓库规范提交推送、禁止使用 qemu / kvm 收敛证据”的全部约束。
+2. 近端代码检查确认 `TOOL-FIX-005` 无额外前置 BLOCK；根因集中在 `ExecutorLanePool` 只输出 `lane_key + concurrency_budget` 的静态 reservation，而 `ToolManager` 只透传 `lane_key` 给 executor/tag，不持有真实 permit。
+3. tools 详设 `TOOL-C016` / `TOOL-C021` 与 `docs/ssot/InfraConcurrencyPolicy.md` 已冻结约束：lane pool 必须显式声明 overflow/backpressure/lock-order，且 builtin / workflow / MCP 至少要隔离 lane 级并发窗口，不能让 MCP 阻塞拖垮 builtin。
+4. 本轮 D 轨已新增 deliverable `docs/todos/tools/deliverables/TOOL-FIX-005-lane-bulkhead执行语义收敛.md`，固定 reject overflow_policy、稳定 backpressure reason code、L2-only lane-state 锁与“不得持锁执行 I/O”的 Design -> Build 映射。
+
+### 执行与结果
+
+1. 把 lane pool 从静态 reservation 收口为真实 permit。
+   - `tools/src/execution/ExecutorLanePool.h/.cpp` 已新增 `LaneAcquireResult` 与 `acquire_builtin()` / `acquire_workflow()` / `acquire_mcp()` / `release()`。
+   - pool 现在按 `builtin`、`workflow`、`mcp:<server_id>` 维护独立 inflight permit，固定 overflow_policy=`reject`，超限时返回 `lane.builtin.backpressure`、`lane.workflow.backpressure`、`lane.mcp.backpressure`。
+2. 把 permit 接回 `ToolManager` 执行主链。
+   - `tools/src/ToolManager.h/.cpp` 已新增共享 `ExecutorLanePool` 依赖。
+   - invoke / compensate 主链现在在 route 已确定、执行开始前获取 permit，并通过 scope-exit 在离开执行路径时释放；DryRun / ValidateOnly 不占用 lane permit。
+   - bulkhead 逻辑继续集中在 `ToolManager + ExecutorLanePool`，未把资源扣减散入 `BuiltinExecutorLane` / `WorkflowEngine` / `MCPLane`。
+3. 补齐 focused tests 与夹具。
+   - `tests/unit/tools/ExecutorLanePoolConcurrencyTest.cpp` 已新增，覆盖并发窗口扣减、release 恢复与 server-scoped MCP lane 隔离。
+   - `tests/integration/tools/ToolLaneBackpressureIntegrationTest.cpp` 已新增，覆盖 builtin lane 饱和时 `ToolManager` failure reason code 传播，以及 MCP lane 饱和不影响 builtin lane。
+   - `tests/mocks/include/support/ToolsIntegrationFixture.h` 已增加 `max_tool_calls` 覆写入口，`tests/unit/tools/CMakeLists.txt` 与 `tests/integration/tools/CMakeLists.txt` 已注册新 test targets。
+4. 回写专项总账。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已将 `TOOL-GAP-005` 标为已闭合、`TOOL-FIX-005` 标为 Done，并同步更新 tools 当前优先级与结论：lane bulkhead 不再属于未闭合重点，后续转到 generic MCP、production observability 与 production/installed 证据。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_executor_lane_pool_concurrency_unit_test","dasall_tool_route_selector_unit_test"])`
+   - `Build_CMakeTools(buildTargets=["dasall_tool_lane_backpressure_integration_test"])`
+   - 结果：构建成功。
+2. focused binary fallback。
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_route_selector_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_executor_lane_pool_concurrency_unit_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_lane_backpressure_integration_test`
+   - 结果：以上 3 条二进制退出码均为 `0`。
+3. 工具链边界说明。
+   - `RunCtest_CMakeTools(tests=["ToolRouteSelectorTest","ExecutorLanePoolConcurrencyTest","ToolLaneBackpressureIntegrationTest"])` 继续返回仓库已知泛化“生成失败”，因此本轮沿用 direct-binary fallback 作为 authoritative focused evidence。
+   - 本轮未使用 qemu / kvm，也没有把 build-tree L2 结果外推为 installed / release 证据。
+
+### 结果
+
+1. `TOOL-GAP-005` 已闭合：lane/bulkhead 不再只是 route metadata，执行期已经具备真实 permit、reject backpressure 与 server-scoped MCP 故障域隔离。
+2. `TOOL-FIX-005` 已具备 focused design / unit / integration evidence，可与 deliverable、工作日志和专项总账回写一起提交推送。
+3. tools 侧后续残余重点前移到 `TOOL-FIX-006` 及之后的 generic MCP、production observability 与 production/installed 证据，而不再是 lane bulkhead 本身。
+
 ## 记录 #702
 
 - 日期：2026-05-19
