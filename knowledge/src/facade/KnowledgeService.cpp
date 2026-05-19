@@ -11,6 +11,20 @@ namespace dasall::knowledge::facade {
 
 namespace {
 
+[[nodiscard]] std::string resolve_profile_id_for_telemetry(
+    const KnowledgeQuery& query,
+    const KnowledgeConfigSnapshot& config) {
+  if (query.profile_id.has_value() && !query.profile_id->empty()) {
+    return *query.profile_id;
+  }
+
+  if (!config.profile_id.empty()) {
+    return config.profile_id;
+  }
+
+  return "unknown";
+}
+
 [[nodiscard]] std::string error_category_name(const std::optional<dasall::contracts::ErrorInfo>& error) {
   if (!error.has_value() || !error->failure_type.has_value()) {
     return "none";
@@ -452,6 +466,7 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
         0, now_ms() - (stage_budget.absolute_deadline_ms - config_.request_deadline_ms));
     event.reason_codes = route_result.route_reason_codes;
     event.corpus_ids = route_result.plan->corpus_ids;
+    event.profile_id = resolve_profile_id_for_telemetry(query, config_);
     event.query_kind = query.query_kind;
     event.retrieval_mode = route_result.plan->mode;
     event.corpus_count = route_result.plan->corpus_ids.size();
@@ -612,6 +627,7 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::fail_closed(const KnowledgeQuery
     event.snapshot_id = "none";
     event.result = "failure";
     event.latency_ms = 0;
+    event.profile_id = resolve_profile_id_for_telemetry(query, config_);
     event.query_kind = query.query_kind;
     event.retrieval_mode = mode;
     event.error_category = error_category_name(result.error);

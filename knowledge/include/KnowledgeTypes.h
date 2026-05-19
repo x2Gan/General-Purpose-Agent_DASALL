@@ -96,6 +96,7 @@ enum class HealthState : std::uint8_t {
 
 struct KnowledgeQuery {
 	std::string request_id;
+	std::optional<std::string> profile_id;
 	std::optional<std::string> session_id;
 	std::optional<std::string> goal_id;
 	std::string query_text;
@@ -179,6 +180,7 @@ struct KnowledgeConfigSnapshot {
 	bool knowledge_enabled = false;
 	bool vector_enabled = false;
 	RetrievalMode retrieval_mode_default = RetrievalMode::LexicalOnly;
+	std::string profile_id;
 	std::size_t evidence_budget_tokens = 0U;
 	std::size_t max_context_projection_items = 0U;
 	std::int64_t catalog_refresh_interval_ms = 0;

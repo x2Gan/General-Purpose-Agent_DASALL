@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+## 记录 #697
+
+- 日期：2026-05-19
+- 阶段：knowledge / telemetry fields and production sinks closure
+- 任务：推进 KNO-FIX-007 补齐 retrieve telemetry fields 与 production sinks
+- 状态：已完成（profile_id 字段链、installed factory emit seam、runtime shared sinks 与 focused integration evidence 已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-007`，若存在前置 BLOCK 任务则必须先解阻，并在任务完成后按仓库规范提交推送。
+2. 前置检查确认 `KNO-FIX-007` 无显式 BLOCK 依赖；控制缺口集中在 `knowledge/include/KnowledgeTypes.h`、`knowledge/src/facade/KnowledgeService.cpp`、`knowledge/src/KnowledgeServiceFactory.cpp` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：retrieve telemetry 缺失 `profile_id`，installed factory 虽构造 `KnowledgeTelemetry` 却未绑定 `emit_retrieve_event`，production composition 也未注入 shared observability sinks。
+3. 详细设计与总账当前口径一致要求 Knowledge retrieve telemetry 至少带 `profile_id`，并通过 app/runtime live composition 接入 shared observability；本轮目标是闭合字段链与 sink 注入，不扩大到 refresh trigger、vector backend 或 installed/qemu 证据。
+4. 用户明确要求禁止使用 qemu / kvm 作为收敛证据，因此本轮验证固定为 build-tree focused unit / integration；更高层 installed-package observability 证据不在本轮结论范围内。
+
+### 执行与结果
+
+1. 收口 retrieve telemetry `profile_id` 字段链。
+   - `knowledge/include/KnowledgeTypes.h` 已补 `KnowledgeQuery.profile_id` 与 `KnowledgeConfigSnapshot.profile_id`；`knowledge/src/config/KnowledgeConfigProjector.cpp` 现会把 runtime policy 的 `effective_profile_id()` 投影进 Knowledge config。
+   - `runtime/src/AgentOrchestrator.cpp` 的 `make_knowledge_query(...)` 已把 policy snapshot 中的真实 profile 透传到 `KnowledgeQuery`；`knowledge/src/facade/KnowledgeService.cpp` 新增 `resolve_profile_id_for_telemetry(...)`，retrieve success / fail-closed event 现优先使用 query profile，缺失时回退 config profile，最终不再把 `profile_id` 留空。
+2. 收口 installed factory 与 runtime production sink 注入根因。
+   - `knowledge/include/KnowledgeServiceFactory.h` 现公开 `TelemetrySinks` 注入 seam，并把 `KnowledgeTelemetry.h` 纳入 knowledge public headers；`knowledge/src/KnowledgeServiceFactory.cpp` 不再默认构造空 `TelemetrySinks{}`，而是消费 options 传入的 sinks，并显式把 `deps.emit_retrieve_event` 绑定到 `KnowledgeTelemetry::emit_retrieve_event()`。
+   - `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 已新增 Knowledge telemetry sink adapter：runtime shared logger / audit / metrics / tracer provider 现统一被适配成 log / metrics / trace / audit / fallback logger sinks，并随 installed knowledge service 一起注入；同处还把 `policy_snapshot->effective_profile_id()` 透传给 factory options。
+3. 补齐 focused regression 与 runtime live composition gate。
+   - 已新增 `tests/unit/knowledge/KnowledgeRetrieveTelemetryFieldsTest.cpp`，覆盖“query profile 优先、config profile 回退”两条 retrieve telemetry 字段路径；`tests/integration/knowledge/RuntimeKnowledgeEvidenceIntegrationTest.cpp` 已补断言，证明 runtime 真实 profile 会进入 `KnowledgeQuery`。
+   - 已新增 `tests/integration/knowledge/KnowledgeProductionTelemetryIntegrationTest.cpp` 与其 CMake 注册，沿真实 `compose_minimal_live_dependency_set()` 路径触发 success / invalid retrieve，并断言 shared audit / metrics / trace provider 能看到 `knowledge.retrieve.completed`、`knowledge.retrieve.failed` 与 `profile_id=desktop_full` / `retrieval_mode=lexical_only` 等字段；相邻 `RuntimeLiveCompositionFailureMatrixTest` 继续验证 runtime_support 改动未破坏 lexical-only ready baseline。
+4. 详细设计回链判断。
+   - 本轮实现与既有 Knowledge 详设关于 callback-based telemetry sink seam、runtime live composition shared observability 与 lexical-only production stance 保持一致，因此无需改写详细设计正文；回写集中在总账与 worklog。
+
+### 验证
+
+1. retrieve telemetry 字段 focused gate。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R KnowledgeRetrieveTelemetryFieldsTest`
+   - 结果：Passed。
+2. runtime -> knowledge profile 透传 gate。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R RuntimeKnowledgeEvidenceIntegrationTest`
+   - 结果：Passed。
+3. production sink 与 runtime_support 回归 gate。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge_production_telemetry_integration_test dasall_access_runtime_live_composition_failure_matrix_integration_test`
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R KnowledgeProductionTelemetryIntegrationTest`
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R RuntimeLiveCompositionFailureMatrixTest`
+   - 结果：构建成功；两条集成测试均 Passed。`KnowledgeProductionTelemetryIntegrationTest` 与 `RuntimeLiveCompositionFailureMatrixTest` 在同轮窄范围验证中 2/2 通过。
+4. 证据边界说明。
+   - 本轮 authoritative evidence 以 shared audit / metrics / trace provider 为主；logger 与 fallback logger 已通过同一 runtime composition seam 接线，但未额外扩张为 installed-package log query gate。全程未使用 qemu / kvm。
+
+### 结果
+
+1. `KNO-GAP-007` 已闭合，Knowledge retrieve telemetry 不再因缺失 `profile_id` 被判 invalid payload，installed factory 也不再把 retrieve telemetry 静默留在未绑定状态。
+2. `KNO-FIX-007` 已具备 L2 focused unit / integration 证据，可与总账回写一起提交并推送；后续 Knowledge 优先级转向 `KNO-GAP-008` 的 refresh trigger，以及更高层 installed / qemu / soak observability 证据。
+
 ## 记录 #696
 
 - 日期：2026-05-19

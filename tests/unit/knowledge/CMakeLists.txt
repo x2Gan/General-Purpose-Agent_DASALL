@@ -242,6 +242,12 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_knowledge_retrieve_telemetry_fields_unit_test
+	KnowledgeRetrieveTelemetryFieldsTest.cpp
+	KnowledgeRetrieveTelemetryFieldsTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_knowledge_service_facade_failure_path_unit_test
 	KnowledgeServiceFacadeFailurePathTest.cpp
 	KnowledgeServiceFacadeFailurePathTest
@@ -426,6 +432,11 @@ target_include_directories(dasall_knowledge_config_projection_unit_test
 )
 
 target_include_directories(dasall_knowledge_service_facade_smoke_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_include_directories(dasall_knowledge_retrieve_telemetry_fields_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/knowledge/src
 )

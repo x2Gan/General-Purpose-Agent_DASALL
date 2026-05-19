@@ -166,11 +166,17 @@ void append_unique(std::vector<std::string>& values, std::string value) {
   return descriptors;
 }
 
-[[nodiscard]] KnowledgeConfigSnapshot make_installed_asset_config() {
+[[nodiscard]] std::string normalize_profile_id(std::string profile_id) {
+  return profile_id.empty() ? std::string("unknown") : std::move(profile_id);
+}
+
+[[nodiscard]] KnowledgeConfigSnapshot make_installed_asset_config(
+    const InstalledAssetKnowledgeServiceOptions& options) {
   KnowledgeConfigSnapshot config;
   config.knowledge_enabled = true;
   config.vector_enabled = false;
   config.retrieval_mode_default = RetrievalMode::LexicalOnly;
+  config.profile_id = normalize_profile_id(options.profile_id);
   config.evidence_budget_tokens = 512U;
   config.max_context_projection_items = 6U;
   config.catalog_refresh_interval_ms = kCatalogRefreshIntervalMs;
@@ -307,7 +313,7 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     const fs::path ledger_path =
       (knowledge_state_root / "version_ledger.jsonl").lexically_normal();
     auto descriptors = make_installed_asset_descriptors(assets_root);
-    const auto config = make_installed_asset_config();
+    const auto config = make_installed_asset_config(options);
     if (!config.has_consistent_values()) {
       return make_error("installed asset knowledge config is inconsistent");
     }
@@ -321,7 +327,7 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     }
 
     auto config_state = std::make_shared<KnowledgeConfigSnapshot>(config);
-    auto telemetry = std::make_shared<KnowledgeTelemetry>(TelemetrySinks{});
+    auto telemetry = std::make_shared<KnowledgeTelemetry>(options.telemetry_sinks);
     auto inventory_state = std::make_shared<InstalledInventory>();
 
     facade::KnowledgeServiceDeps deps;
@@ -335,6 +341,9 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     deps.evidence_assembler = std::make_unique<evidence::EvidenceAssembler>();
     deps.startup_prewarm_on_init = true;
     deps.now_ms = now_ms;
+    deps.emit_retrieve_event = [telemetry](const KnowledgeTelemetryEvent& event) {
+      telemetry->emit_retrieve_event(event);
+    };
 
     auto* catalog = deps.corpus_catalog.get();
     auto* reader = deps.index_reader.get();

@@ -149,6 +149,8 @@ void installed_asset_service_routes_normative_queries() {
           .readonly_assets_root = assets_root,
           .state_root = state_root,
           .service_instance_id = "knowledge-installed-normative-corpus",
+        .profile_id = "desktop_full",
+        .telemetry_sinks = {},
       });
   assert_true(factory_result.service != nullptr,
               "installed normative knowledge factory failed: " + factory_result.error);

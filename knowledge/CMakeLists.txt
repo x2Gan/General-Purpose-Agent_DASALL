@@ -13,6 +13,7 @@ set(DASALL_KNOWLEDGE_PUBLIC_HEADERS
   include/KnowledgeTypes.h
   include/health/FreshnessController.h
   include/health/KnowledgeHealthProbe.h
+  include/health/KnowledgeTelemetry.h
   include/index/CorpusCatalog.h
   include/index/IndexReader.h
   include/index/IndexWriter.h

@@ -14,6 +14,7 @@
 
 #include <vector>
 
+#include "LogEvent.h"
 #include "ICognitionEngine.h"
 #include "ILLMManager.h"
 #include "LLMGenerateRequest.h"
@@ -30,7 +31,12 @@
 #include "ServiceLiveComposition.h"
 #include "ToolManager.h"
 #include "BuildProfileResolver.h"
+#include "audit/AuditTypes.h"
+#include "audit/IAuditLogger.h"
 #include "health/IHealthMonitor.h"
+#include "logging/ILogger.h"
+#include "metrics/IMeter.h"
+#include "metrics/MetricTypes.h"
 #include "ops/ToolAuditBridge.h"
 #include "ops/ToolHealthProbe.h"
 #include "ops/ToolMetricsBridge.h"
@@ -42,6 +48,9 @@
 #include "execution/BuiltinExecutorLane.h"
 #include "bridge/ToolServiceBridge.h"
 #include "registry/ToolRegistry.h"
+#include "tracing/ISpan.h"
+#include "tracing/ITracer.h"
+#include "tracing/TraceTypes.h"
 
 namespace dasall::apps::runtime_support {
 namespace {
@@ -219,6 +228,410 @@ struct RuntimeObservabilityBundle {
            error.empty();
   }
 };
+
+[[nodiscard]] std::string telemetry_value_or(std::string_view value,
+                                             std::string_view fallback) {
+  return value.empty() ? std::string(fallback) : std::string(value);
+}
+
+[[nodiscard]] std::string join_values(const std::vector<std::string>& values) {
+  std::ostringstream stream;
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index > 0U) {
+      stream << ',';
+    }
+    stream << values[index];
+  }
+  return stream.str();
+}
+
+[[nodiscard]] std::string knowledge_query_kind_name(
+    const std::optional<knowledge::KnowledgeQueryKind>& query_kind) {
+  if (!query_kind.has_value()) {
+    return "unknown";
+  }
+
+  switch (*query_kind) {
+    case knowledge::KnowledgeQueryKind::FactLookup:
+      return "fact_lookup";
+    case knowledge::KnowledgeQueryKind::ProcedureLookup:
+      return "procedure_lookup";
+    case knowledge::KnowledgeQueryKind::DiagnosticContext:
+      return "diagnostic_context";
+    case knowledge::KnowledgeQueryKind::PolicyEvidence:
+      return "policy_evidence";
+    case knowledge::KnowledgeQueryKind::MultiHop:
+      return "multi_hop";
+  }
+
+  return "unknown";
+}
+
+[[nodiscard]] std::string knowledge_retrieval_mode_name(
+    const std::optional<knowledge::RetrievalMode>& retrieval_mode) {
+  if (!retrieval_mode.has_value()) {
+    return "unknown";
+  }
+
+  switch (*retrieval_mode) {
+    case knowledge::RetrievalMode::LexicalOnly:
+      return "lexical_only";
+    case knowledge::RetrievalMode::DenseOnly:
+      return "dense_only";
+    case knowledge::RetrievalMode::Hybrid:
+      return "hybrid";
+  }
+
+  return "unknown";
+}
+
+[[nodiscard]] bool knowledge_event_failed(const knowledge::KnowledgeTelemetryEvent& event) {
+  return event.result != "success";
+}
+
+[[nodiscard]] std::string knowledge_event_outcome(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  if (event.result == "success" && event.degraded) {
+    return "degraded";
+  }
+  if (event.result == "success") {
+    return "success";
+  }
+  return "failure";
+}
+
+[[nodiscard]] std::string knowledge_audit_action(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  if (event.result == "success" && event.degraded) {
+    return "knowledge.retrieve.degraded";
+  }
+  if (event.result == "success") {
+    return "knowledge.retrieve.completed";
+  }
+  if (event.result == "invalid_telemetry_payload") {
+    return "knowledge.retrieve.invalid_payload";
+  }
+  return "knowledge.retrieve.failed";
+}
+
+[[nodiscard]] infra::AuditOutcome knowledge_audit_outcome(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  if (event.result == "success" && event.degraded) {
+    return infra::AuditOutcome::Escalated;
+  }
+  if (event.result == "success") {
+    return infra::AuditOutcome::Succeeded;
+  }
+  return infra::AuditOutcome::Failed;
+}
+
+[[nodiscard]] std::int64_t knowledge_latency_ms(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  return event.latency_ms >= 0 ? event.latency_ms : 0;
+}
+
+[[nodiscard]] infra::metrics::MetricLabels make_knowledge_metric_labels(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  return infra::metrics::MetricLabels{
+      .module = "knowledge",
+      .stage = telemetry_value_or(event.event_name, "knowledge_retrieve"),
+      .profile = telemetry_value_or(event.profile_id, "unknown"),
+      .outcome = knowledge_event_outcome(event),
+      .error_code = knowledge_event_failed(event) ? event.error_category : std::string(),
+  };
+}
+
+[[nodiscard]] infra::tracing::TraceAttributeMap make_knowledge_trace_attributes(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  infra::tracing::TraceAttributeMap attrs;
+  attrs.emplace("knowledge.component", telemetry_value_or(event.component, "unknown"));
+  attrs.emplace("knowledge.snapshot_id", telemetry_value_or(event.snapshot_id, "unknown"));
+  attrs.emplace("knowledge.request_id", telemetry_value_or(event.request_id, "unknown"));
+  attrs.emplace("knowledge.profile_id", telemetry_value_or(event.profile_id, "unknown"));
+  attrs.emplace("knowledge.query_kind", knowledge_query_kind_name(event.query_kind));
+  attrs.emplace("knowledge.retrieval_mode",
+                knowledge_retrieval_mode_name(event.retrieval_mode));
+  attrs.emplace("knowledge.outcome", knowledge_event_outcome(event));
+  attrs.emplace("knowledge.corpus_count", static_cast<std::int64_t>(event.corpus_count));
+  attrs.emplace("knowledge.result_count", static_cast<std::int64_t>(event.result_count));
+  return attrs;
+}
+
+[[nodiscard]] std::vector<std::string> make_knowledge_audit_side_effects(
+    const knowledge::KnowledgeTelemetryEvent& event) {
+  std::vector<std::string> side_effects;
+  side_effects.reserve(9U);
+  side_effects.push_back("component=" + telemetry_value_or(event.component, "unknown"));
+  side_effects.push_back("snapshot_id=" + telemetry_value_or(event.snapshot_id, "unknown"));
+  side_effects.push_back("profile_id=" + telemetry_value_or(event.profile_id, "unknown"));
+  side_effects.push_back("query_kind=" + knowledge_query_kind_name(event.query_kind));
+  side_effects.push_back("retrieval_mode=" +
+                         knowledge_retrieval_mode_name(event.retrieval_mode));
+  side_effects.push_back("outcome=" + knowledge_event_outcome(event));
+  side_effects.push_back("corpus_count=" + std::to_string(event.corpus_count));
+  side_effects.push_back("result_count=" + std::to_string(event.result_count));
+  side_effects.push_back("error_category=" +
+                         telemetry_value_or(event.error_category, "none"));
+  if (!event.reason_codes.empty()) {
+    side_effects.push_back("reason_codes=" + join_values(event.reason_codes));
+  }
+  return side_effects;
+}
+
+[[nodiscard]] infra::LogLevel knowledge_log_level(
+    const knowledge::KnowledgeTelemetryEvent& event,
+    bool fallback) {
+  if (event.result == "success" && !event.degraded) {
+    return fallback ? infra::LogLevel::Warn : infra::LogLevel::Info;
+  }
+  if (event.result == "success") {
+    return infra::LogLevel::Warn;
+  }
+  return infra::LogLevel::Error;
+}
+
+[[nodiscard]] infra::LogEvent make_knowledge_log_event(
+    const knowledge::KnowledgeTelemetryEvent& event,
+    bool fallback) {
+  infra::LogEvent log_event;
+  log_event.level = knowledge_log_level(event, fallback);
+  log_event.module = "knowledge";
+  log_event.message = knowledge_audit_action(event);
+  log_event.attrs = {
+      {"request_id", telemetry_value_or(event.request_id, "unknown")},
+      {"component", telemetry_value_or(event.component, "unknown")},
+      {"snapshot_id", telemetry_value_or(event.snapshot_id, "unknown")},
+      {"profile_id", telemetry_value_or(event.profile_id, "unknown")},
+      {"query_kind", knowledge_query_kind_name(event.query_kind)},
+      {"retrieval_mode", knowledge_retrieval_mode_name(event.retrieval_mode)},
+      {"outcome", knowledge_event_outcome(event)},
+      {"error_category", telemetry_value_or(event.error_category, "none")},
+      {"telemetry_path", fallback ? "fallback" : "primary"},
+  };
+  log_event.ts = current_time_ms();
+  return log_event;
+}
+
+class KnowledgeMetricsSinkState {
+ public:
+  explicit KnowledgeMetricsSinkState(
+      std::shared_ptr<infra::metrics::IMetricsProvider> provider)
+      : provider_(std::move(provider)) {}
+
+  void emit(const knowledge::KnowledgeTelemetryEvent& event) {
+    auto meter = ensure_meter();
+    if (meter == nullptr) {
+      return;
+    }
+
+    ensure_instruments(*meter);
+
+    const auto timestamp = current_time_ms();
+    (void)meter->record(infra::metrics::MetricSample{
+        .identity_ref = event_total_identity(),
+        .value = 1.0,
+        .ts_unix_ms = timestamp,
+        .labels = make_knowledge_metric_labels(event),
+    });
+    (void)meter->record(infra::metrics::MetricSample{
+        .identity_ref = latency_identity(),
+        .value = static_cast<double>(knowledge_latency_ms(event)),
+        .ts_unix_ms = timestamp,
+        .labels = make_knowledge_metric_labels(event),
+    });
+  }
+
+ private:
+  [[nodiscard]] static infra::metrics::MetricIdentity event_total_identity() {
+    return infra::metrics::MetricIdentity{
+        .name = "knowledge.retrieve.event_total",
+        .type = infra::metrics::MetricType::Counter,
+        .unit = "1",
+        .description = "Knowledge retrieve telemetry events emitted to production sinks",
+    };
+  }
+
+  [[nodiscard]] static infra::metrics::MetricIdentity latency_identity() {
+    return infra::metrics::MetricIdentity{
+        .name = "knowledge.retrieve.latency_ms",
+        .type = infra::metrics::MetricType::Histogram,
+        .unit = "ms",
+        .description = "Knowledge retrieve telemetry latency in milliseconds",
+    };
+  }
+
+  [[nodiscard]] std::shared_ptr<infra::metrics::IMeter> ensure_meter() {
+    if (meter_ != nullptr) {
+      return meter_;
+    }
+    if (provider_ == nullptr) {
+      return nullptr;
+    }
+
+    meter_ = provider_->get_meter(infra::metrics::MeterScope{
+        .name = "dasall.knowledge.telemetry",
+        .version = "1.0.0",
+        .schema_url = "schema://knowledge/telemetry/v1",
+    });
+    return meter_;
+  }
+
+  void ensure_instruments(infra::metrics::IMeter& meter) {
+    if (instruments_ready_) {
+      return;
+    }
+
+    (void)meter.create_counter(event_total_identity());
+    (void)meter.create_histogram(latency_identity());
+    instruments_ready_ = true;
+  }
+
+  std::shared_ptr<infra::metrics::IMetricsProvider> provider_;
+  std::shared_ptr<infra::metrics::IMeter> meter_;
+  bool instruments_ready_ = false;
+};
+
+class KnowledgeTraceSinkState {
+ public:
+  explicit KnowledgeTraceSinkState(
+      std::shared_ptr<infra::tracing::ITracerProvider> provider)
+      : provider_(std::move(provider)) {}
+
+  void emit(const knowledge::KnowledgeTelemetryEvent& event) {
+    auto tracer = ensure_tracer();
+    if (tracer == nullptr) {
+      return;
+    }
+
+    const auto end_ts = current_time_ms();
+    const auto start_ts = end_ts - knowledge_latency_ms(event);
+    auto span = tracer->start_span(infra::tracing::SpanDescriptor{
+        .name = knowledge_audit_action(event),
+        .kind = infra::tracing::SpanKind::Internal,
+        .start_ts_unix_ms = start_ts,
+        .attrs = make_knowledge_trace_attributes(event),
+        .links = {},
+    },
+                                   nullptr);
+    if (span == nullptr) {
+      return;
+    }
+
+    span->add_event(telemetry_value_or(event.event_name, "knowledge_retrieve"),
+                    make_knowledge_trace_attributes(event));
+    const auto status_message = knowledge_event_failed(event)
+                                    ? telemetry_value_or(event.error_category, "failure")
+                                    : std::string("ok");
+    span->set_status(knowledge_event_failed(event) ? infra::tracing::SpanStatusCode::Error
+                                                   : infra::tracing::SpanStatusCode::Ok,
+                     status_message);
+    (void)span->end(end_ts);
+  }
+
+ private:
+  [[nodiscard]] std::shared_ptr<infra::tracing::ITracer> ensure_tracer() {
+    if (tracer_ != nullptr) {
+      return tracer_;
+    }
+    if (provider_ == nullptr) {
+      return nullptr;
+    }
+
+    tracer_ = provider_->get_tracer(infra::tracing::TracerScope{
+        .name = "dasall.knowledge.telemetry",
+        .version = "1.0.0",
+        .schema_url = "schema://knowledge/telemetry/v1",
+    });
+    return tracer_;
+  }
+
+  std::shared_ptr<infra::tracing::ITracerProvider> provider_;
+  std::shared_ptr<infra::tracing::ITracer> tracer_;
+};
+
+[[nodiscard]] knowledge::KnowledgeTelemetrySink make_knowledge_log_sink(
+    std::shared_ptr<infra::logging::ILogger> logger,
+    bool fallback) {
+  if (logger == nullptr) {
+    return {};
+  }
+
+  return [logger = std::move(logger), fallback](const knowledge::KnowledgeTelemetryEvent& event) {
+    (void)logger->log(make_knowledge_log_event(event, fallback));
+  };
+}
+
+[[nodiscard]] knowledge::KnowledgeTelemetrySink make_knowledge_metrics_sink(
+    std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider) {
+  if (metrics_provider == nullptr) {
+    return {};
+  }
+
+  auto state = std::make_shared<KnowledgeMetricsSinkState>(std::move(metrics_provider));
+  return [state](const knowledge::KnowledgeTelemetryEvent& event) {
+    state->emit(event);
+  };
+}
+
+[[nodiscard]] knowledge::KnowledgeTelemetrySink make_knowledge_trace_sink(
+    std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider) {
+  if (tracer_provider == nullptr) {
+    return {};
+  }
+
+  auto state = std::make_shared<KnowledgeTraceSinkState>(std::move(tracer_provider));
+  return [state](const knowledge::KnowledgeTelemetryEvent& event) {
+    state->emit(event);
+  };
+}
+
+[[nodiscard]] knowledge::KnowledgeTelemetrySink make_knowledge_audit_sink(
+    std::shared_ptr<infra::audit::IAuditLogger> audit_logger) {
+  if (audit_logger == nullptr) {
+    return {};
+  }
+
+  return [audit_logger = std::move(audit_logger)](
+             const knowledge::KnowledgeTelemetryEvent& event) {
+    const auto timestamp = current_time_ms();
+    infra::AuditEvent audit_event;
+    audit_event.event_id = telemetry_value_or(event.event_name, "knowledge_retrieve") + ":" +
+                           telemetry_value_or(event.request_id, "unknown") + ":" +
+                           knowledge_event_outcome(event);
+    audit_event.action = knowledge_audit_action(event);
+    audit_event.actor = "knowledge";
+    audit_event.target = "knowledge:" + telemetry_value_or(event.snapshot_id, "unknown");
+    audit_event.outcome = knowledge_audit_outcome(event);
+    audit_event.evidence_ref = infra::AuditEvidenceRef{
+        .kind = infra::AuditEvidenceKind::WorkerTask,
+        .ref = "knowledge://retrieve/" + telemetry_value_or(event.request_id, "unknown"),
+    };
+    audit_event.side_effects = make_knowledge_audit_side_effects(event);
+    audit_event.timestamp = timestamp;
+
+    infra::AuditContext audit_context;
+    audit_context.request_id = telemetry_value_or(event.request_id, infra::kAuditContextUnknown);
+    audit_context.session_id = std::string(infra::kAuditContextUnknown);
+    audit_context.trace_id = std::string(infra::kAuditContextUnknown);
+    audit_context.task_id = telemetry_value_or(event.request_id, infra::kAuditContextUnknown);
+    audit_context.parent_task_id = std::string(infra::kAuditContextUnknown);
+    audit_context.lease_id = std::string(infra::kAuditContextUnknown);
+    audit_context.worker_type = "knowledge";
+
+    (void)audit_logger->write_audit(audit_event, audit_context);
+  };
+}
+
+[[nodiscard]] knowledge::TelemetrySinks make_knowledge_production_telemetry_sinks(
+    const RuntimeObservabilityBundle& observability) {
+  knowledge::TelemetrySinks sinks;
+  sinks.log_sink = make_knowledge_log_sink(observability.logger, false);
+  sinks.metrics_sink = make_knowledge_metrics_sink(observability.metrics_provider);
+  sinks.trace_sink = make_knowledge_trace_sink(observability.tracer_provider);
+  sinks.audit_sink = make_knowledge_audit_sink(observability.audit_logger);
+  sinks.fallback_log_sink = make_knowledge_log_sink(observability.logger, true);
+  return sinks;
+}
 
 class RuntimeToolHealthSignalProvider final
     : public tools::ops::IToolHealthSignalProvider {
@@ -833,6 +1246,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .readonly_assets_root = readonly_assets_root,
           .state_root = state_root,
           .service_instance_id = std::string(composition_owner) + ":knowledge",
+        .profile_id = policy_snapshot->effective_profile_id(),
+        .telemetry_sinks = make_knowledge_production_telemetry_sinks(observability),
       });
   if (knowledge_result.ok()) {
     const auto positive_probe_error =

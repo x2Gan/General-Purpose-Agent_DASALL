@@ -5,6 +5,7 @@
 #include <string>
 
 #include "IKnowledgeService.h"
+#include "health/KnowledgeTelemetry.h"
 
 namespace dasall::knowledge {
 
@@ -12,6 +13,8 @@ struct InstalledAssetKnowledgeServiceOptions {
   std::filesystem::path readonly_assets_root;
   std::filesystem::path state_root;
   std::string service_instance_id;
+  std::string profile_id;
+  TelemetrySinks telemetry_sinks;
 
   [[nodiscard]] bool has_consistent_values() const {
     return readonly_assets_root.is_absolute() && state_root.is_absolute() &&

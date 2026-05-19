@@ -153,6 +153,8 @@ void startup_recovery_restores_last_known_good_snapshot_after_active_corruption(
             .readonly_assets_root = assets_root,
             .state_root = state_root,
             .service_instance_id = "knowledge-startup-recovery-fixture",
+        .profile_id = "desktop_full",
+        .telemetry_sinks = {},
         });
     assert_true(factory_result.service != nullptr,
                 "startup recovery fixture factory failed: " + factory_result.error);
@@ -196,6 +198,8 @@ void startup_recovery_restores_last_known_good_snapshot_after_active_corruption(
               .readonly_assets_root = assets_root,
               .state_root = state_root,
               .service_instance_id = "knowledge-startup-recovery-restore",
+          .profile_id = "desktop_full",
+          .telemetry_sinks = {},
           });
   assert_true(restarted_factory_result.service != nullptr,
               "startup recovery restore factory failed: " +

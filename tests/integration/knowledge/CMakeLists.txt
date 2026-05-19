@@ -105,6 +105,13 @@ dasall_add_knowledge_integration_test(
   "integration;knowledge"
 )
 
+dasall_add_knowledge_integration_test(
+  dasall_knowledge_production_telemetry_integration_test
+  KnowledgeProductionTelemetryIntegrationTest
+  KnowledgeProductionTelemetryIntegrationTest.cpp
+  "integration;knowledge;production-telemetry"
+)
+
 target_include_directories(dasall_knowledge_retrieval_smoke_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/knowledge/src
@@ -195,6 +202,24 @@ target_link_libraries(dasall_index_startup_recovery_integration_test
   PRIVATE
     dasall_profiles
     dasall_sqlite3
+)
+
+target_include_directories(dasall_knowledge_production_telemetry_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_compile_definitions(dasall_knowledge_production_telemetry_integration_test
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_knowledge_production_telemetry_integration_test
+  PRIVATE
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_profiles
+    dasall_runtime
 )
 
 target_include_directories(dasall_knowledge_profile_compatibility_integration_test

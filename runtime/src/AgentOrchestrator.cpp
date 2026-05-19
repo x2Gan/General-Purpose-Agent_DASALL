@@ -210,9 +210,13 @@ void append_retrieval_evidence_ref(
 
 [[nodiscard]] knowledge::KnowledgeQuery make_knowledge_query(
     const contracts::AgentRequest& request,
-    const std::string& goal_id) {
+    const std::string& goal_id,
+    const std::shared_ptr<const profiles::RuntimePolicySnapshot>& policy_snapshot) {
   knowledge::KnowledgeQuery query;
   query.request_id = request.request_id.value_or(std::string{"req-live-unary"});
+  if (policy_snapshot != nullptr && !policy_snapshot->effective_profile_id().empty()) {
+    query.profile_id = policy_snapshot->effective_profile_id();
+  }
   query.session_id = request.session_id;
   query.goal_id = goal_id;
   query.query_text = request.user_input.value_or(goal_id);
@@ -296,7 +300,7 @@ void append_retrieval_evidence_ref(
   context_request.external_evidence = composition.dependency_set->external_evidence;
   if (composition.dependency_set->knowledge_service != nullptr) {
     const auto knowledge_result = composition.dependency_set->knowledge_service->retrieve(
-        make_knowledge_query(request, goal_id));
+        make_knowledge_query(request, goal_id, composition.policy_snapshot));
     if (knowledge_result.ok && knowledge_result.evidence.has_value()) {
       for (const auto& projection_line : knowledge_result.evidence->context_projection) {
         append_unique_string(context_request.external_evidence, projection_line);

@@ -187,6 +187,11 @@ void test_runtime_knowledge_evidence_integration_preserves_structured_refs() {
   assert_equal(std::string{"req-runtime-knowledge-013"},
                knowledge_service->last_query->request_id,
                "runtime knowledge evidence integration should preserve request_id on knowledge query");
+  assert_true(knowledge_service->last_query->profile_id.has_value(),
+              "runtime knowledge evidence integration should propagate the runtime profile_id onto KnowledgeQuery");
+  assert_equal(std::string{"desktop_full"},
+               *knowledge_service->last_query->profile_id,
+               "runtime knowledge evidence integration should use the effective runtime profile_id for KnowledgeQuery");
   assert_true(cognition_engine->last_context_packet.has_value(),
               "runtime knowledge evidence integration should expose a context packet to cognition");
   assert_true(cognition_engine->last_context_packet->retrieval_evidence_refs.has_value(),
