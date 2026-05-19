@@ -755,6 +755,8 @@ Knowledge 自身不拥有定时器或独立调度循环（ADR-008），索引刷
 | 定时策略刷新 | Runtime timer / scheduler | `IKnowledgeService::request_refresh({})` | 按 `catalog_refresh_interval_ms` 周期 | 当无外部 watcher 时的保底策略；空 `CorpusChangeSet` 表示全量扫描 |
 | 首次启动 | `KnowledgeServiceFacade::init()` | 内部触发 `IngestionCoordinator` 初始化 build | 仅在 init 阶段 | 若本地无 active snapshot 则阻塞直到首批 build 完成或 timeout |
 
+v1 production 当前收口为 manual control-plane seam：`dasall-cli knowledge refresh [--changed-source <path>]...` 通过 CLI parser / request builder 编码 repeated `changed_source` payload，经 daemon access route 直接调用 `IKnowledgeService::request_refresh(changes)`；当调用方提供 `changed_source` 时，daemon/access 将其映射到 `CorpusChangeSet.updated_sources`，未提供时保持 `request_refresh({})` 的 full-scan manual refresh 语义。该 seam 的 owner 仍是 Runtime/apps/daemon，Knowledge 不自建 file watcher、timer 或独立调度主循环。
+
 `CorpusChangeSet` 构建规则：
 
 1. Runtime 负责将文件 delta / config 变更映射为 `CorpusChangeSet`；Knowledge 不主动监听文件系统。

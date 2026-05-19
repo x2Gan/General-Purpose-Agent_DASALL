@@ -27,6 +27,10 @@ struct ParsedConfigFlags {
   bool dry_run = false;
 };
 
+struct ParsedKnowledgeFlags {
+  std::vector<std::string> changed_sources;
+};
+
 [[nodiscard]] bool has_local_only_flags(const ParsedStableFlags& flags) {
   return flags.socket_path.has_value() || flags.timeout_ms.has_value() ||
          flags.async_preference == CliAsyncPreference::Async ||
@@ -130,6 +134,26 @@ struct ParsedConfigFlags {
   }
 
   timeout_ms = parsed_timeout;
+  return true;
+}
+
+[[nodiscard]] bool parse_repeated_string_flag(
+    std::string_view arg,
+    std::string_view flag_name,
+    std::size_t& index,
+    const std::vector<std::string>& raw_args,
+    std::vector<std::string>& output_values) {
+  std::optional<std::string> parsed_value;
+  if (!parse_long_flag_with_value(arg, flag_name, index, raw_args, parsed_value) ||
+      !parsed_value.has_value()) {
+    return false;
+  }
+
+  if (parsed_value->empty()) {
+    return false;
+  }
+
+  output_values.push_back(*parsed_value);
   return true;
 }
 
@@ -330,6 +354,7 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
   positional_args.reserve(cmd.raw_args.size());
   ParsedStableFlags flags;
   ParsedConfigFlags config_flags;
+  ParsedKnowledgeFlags knowledge_flags;
   bool help_requested = false;
 
   for (std::size_t index = 0; index < cmd.raw_args.size(); ++index) {
@@ -428,6 +453,15 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
       continue;
     }
 
+    if (arg.starts_with("--changed-source=") || arg == "--changed-source") {
+      if (!parse_repeated_string_flag(arg, "--changed-source", index,
+                                      cmd.raw_args,
+                                      knowledge_flags.changed_sources)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
     positional_args.push_back(cmd.raw_args[index]);
   }
 
@@ -437,7 +471,7 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
 
   if (help_requested) {
     const bool explicit_help_command = !positional_args.empty() && positional_args[0] == "help";
-    if (!validate_help_scope(flags)) {
+    if (!validate_help_scope(flags) || !knowledge_flags.changed_sources.empty()) {
       return std::nullopt;
     }
 
@@ -470,6 +504,10 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
   }
 
   apply_flags_to_command(flags, cmd);
+
+  if (cmd.name != "knowledge" && !knowledge_flags.changed_sources.empty()) {
+    return std::nullopt;
+  }
 
   if (cmd.name == "ping" || cmd.name == "readiness") {
     return cmd;
@@ -530,12 +568,24 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
     cmd.knowledge_command = parse_knowledge_command_kind(positional_args[1]);
     switch (cmd.knowledge_command) {
       case CliKnowledgeCommandKind::Health:
+        if (positional_args.size() != 2) {
+          return std::nullopt;
+        }
+        if (!knowledge_flags.changed_sources.empty()) {
+          return std::nullopt;
+        }
+        return cmd;
       case CliKnowledgeCommandKind::Refresh:
         if (positional_args.size() != 2) {
           return std::nullopt;
         }
+        cmd.knowledge_refresh_changed_sources =
+            std::move(knowledge_flags.changed_sources);
         return cmd;
       case CliKnowledgeCommandKind::Retrieve:
+        if (!knowledge_flags.changed_sources.empty()) {
+          return std::nullopt;
+        }
         cmd.knowledge_query_text = join_positional_tail(positional_args, 2U);
         if (!cmd.knowledge_query_text.has_value() || cmd.knowledge_query_text->empty()) {
           return std::nullopt;
@@ -634,8 +684,8 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
     }
 
     if (subcommand_name == "refresh") {
-      return "Usage: dasall-cli knowledge refresh [--json] [--timeout-ms <ms>] "
-             "[--socket-path <path>] [--quiet]\n";
+          return "Usage: dasall-cli knowledge refresh [--changed-source <path>]... [--json] "
+            "[--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
     }
 
     if (subcommand_name == "retrieve") {
@@ -657,7 +707,7 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
       "  dasall-cli config apply --from-file <path> --no-input [--json]\n"
          "  dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
          "  dasall-cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
-         "  dasall-cli knowledge <health|refresh|retrieve> [query_text] [--json] [--timeout-ms <ms>] "
+         "  dasall-cli knowledge <health|refresh|retrieve> [query_text] [--changed-source <path>]... [--json] [--timeout-ms <ms>] "
          "[--socket-path <path>] [--quiet]\n"
          "  dasall-cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "
          "[--trace-id <id>] [--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet] [--no-input]\n"

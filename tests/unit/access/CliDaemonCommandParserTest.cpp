@@ -147,6 +147,23 @@ void test_parse_knowledge_commands() {
   assert_true(refresh_cmd->knowledge_command == CliKnowledgeCommandKind::Refresh,
         "knowledge refresh should classify refresh operation");
 
+  const char* selective_refresh_argv[] = {
+    "dasall-cli",
+    "knowledge",
+    "refresh",
+    "--changed-source",
+    "profiles/desktop_full/runtime_policy.yaml",
+    "--changed-source=profiles/linux-arm64-embedded/runtime_policy.yaml"};
+  const auto selective_refresh_cmd = CliCommandParser::parse(6, selective_refresh_argv);
+  assert_true(selective_refresh_cmd.has_value(),
+        "knowledge refresh should parse repeated changed-source flags");
+  assert_equal(2,
+         static_cast<int>(selective_refresh_cmd->knowledge_refresh_changed_sources.size()),
+         "knowledge refresh should preserve all changed-source values");
+  assert_equal(std::string("profiles/desktop_full/runtime_policy.yaml"),
+         selective_refresh_cmd->knowledge_refresh_changed_sources.front(),
+         "knowledge refresh should preserve changed-source ordering");
+
   const char* retrieve_argv[] = {
     "dasall-cli", "knowledge", "retrieve", "DeepSeek", "Chat"};
   const auto retrieve_cmd = CliCommandParser::parse(5, retrieve_argv);
@@ -167,9 +184,19 @@ void test_parse_knowledge_commands() {
   assert_true(!invalid_health.has_value(),
         "knowledge health should reject extra positional args");
 
+    const char* invalid_health_changed_source_argv[] = {
+      "dasall-cli", "knowledge", "health", "--changed-source", "profiles/desktop_full/runtime_policy.yaml"};
+    const auto invalid_health_changed_source =
+    CliCommandParser::parse(5, invalid_health_changed_source_argv);
+    assert_true(!invalid_health_changed_source.has_value(),
+      "knowledge health should reject changed-source flags");
+
   const auto usage = CliCommandParser::usage_string("knowledge", "retrieve");
   assert_true(usage.find("knowledge retrieve <query_text>") != std::string::npos,
         "knowledge retrieve usage should expose query argument");
+    const auto refresh_usage = CliCommandParser::usage_string("knowledge", "refresh");
+    assert_true(refresh_usage.find("--changed-source <path>") != std::string::npos,
+      "knowledge refresh usage should expose changed-source flag");
 }
 
 void test_parse_help_and_version_commands() {

@@ -99,6 +99,9 @@ struct CliCommand {
   /// knowledge retrieve 的查询文本。
   std::optional<std::string> knowledge_query_text;
 
+  /// knowledge refresh 的显式 changed-source 列表；为空表示 full-scan manual refresh。
+  std::vector<std::string> knowledge_refresh_changed_sources;
+
   /// config 本地工作流子命令类型。
   CliConfigCommandKind config_command = CliConfigCommandKind::None;
 

@@ -1,5 +1,53 @@
 # DASALL 开发执行记录
 
+## 记录 #698
+
+- 日期：2026-05-19
+- 阶段：knowledge / refresh trigger seam closure
+- 任务：推进 KNO-FIX-008 定义并实现 refresh trigger seam
+- 状态：已完成（v1 manual control-plane seam、CLI/daemon/access 触发路径、focused integration evidence 与详设/总账回写已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-FIX-008`，若存在前置 BLOCK 任务则先解阻，并在任务完成后按仓库规范提交推送。
+2. 前置检查确认 `KNO-FIX-008` 无显式 BLOCK 依赖；近端代码表明 installed positive probe 与 daemon `knowledge refresh` 虽都能调用 `request_refresh()`，但 production control-plane 只支持空 `CorpusChangeSet{}`，无法把 corpus/source changed 语义从 CLI/daemon 透传到 Knowledge 写路径。
+3. Knowledge 详设与 ADR-008 的冻结边界已经明确：refresh trigger owner 在 Runtime/apps/daemon，Knowledge 不得引入自主管理 watcher/timer；因此本轮目标是收口 v1 manual-only refresh trigger seam，而不是在本轮扩张到自动 file watcher 或 scheduler rollout。
+4. 用户明确要求禁止使用 qemu / kvm 采集收敛证据，因此本轮验证固定为 build-tree focused unit / integration；`RunCtest_CMakeTools` 若继续返回仓库已知泛化 `生成失败`，则按仓库既有口径回退到直接执行对应测试二进制。
+
+### 执行与结果
+
+1. 收口 CLI refresh trigger 数据面。
+   - `apps/cli/src/CliCommandParser.h/.cpp` 已新增 `knowledge_refresh_changed_sources`，并把 repeated `--changed-source <path>` 冻结为仅允许出现在 `knowledge refresh` 的 CLI flag；health / retrieve 等相邻子命令携带该 flag 时会被拒绝，避免 overpromise 自动刷新语义。
+   - `apps/cli/src/CliRequestBuilder.h` 现会把 repeated `--changed-source` 编码为 repeated `changed_source` daemon payload；调用方未提供该 flag 时，payload 仍只携带 `operation=refresh`，保持 full-scan manual refresh 兼容行为。
+2. 收口 daemon/access -> Knowledge refresh trigger seam。
+   - `access/src/AccessGatewayFactory.cpp` 已扩展 `DaemonKnowledgePayload` 与 parser：repeated `changed_source` 会在 refresh 路径被映射到 `CorpusChangeSet.updated_sources` 后再调用 `IKnowledgeService::request_refresh(changes)`；非 refresh 操作携带 `changed_source` 会被拒绝，避免 payload 语义漂移。
+   - `tests/unit/apps/daemon/DaemonAccessPipelineFactoryTest.cpp` 现同时覆盖“无 changed-source 时保持 full scan”与“有 changed-source 时按顺序透传 updated sources”两条 daemon access 路径。
+3. 补齐 focused parser 与跨控制面集成证据。
+   - `tests/unit/access/CliDaemonCommandParserTest.cpp` 已新增 `knowledge refresh --changed-source` 正例与 health 子命令负例，并同步锁定 usage 文案。
+   - 已新增 `tests/integration/access/KnowledgeRuntimeRefreshTriggerIntegrationTest.cpp` 与 `tests/integration/access/CMakeLists.txt` 注册，沿 `CliCommandParser -> CliRequestBuilder -> DaemonProtocolAdapter -> AccessGatewayFactory` 真实路径验证 repeated `--changed-source` 不会漏回 runtime submit backend，且 `request_refresh()` 会收到两条 `updated_sources`。
+4. 详设与总账回写。
+   - `docs/architecture/DASALL_knowledge子系统详细设计.md` 已在 Ingest 触发模型中冻结 v1 manual control-plane seam：`dasall-cli knowledge refresh [--changed-source <path>]...` 属于 Runtime/apps/daemon owner，省略 `changed_source` 时保持 full-scan，Knowledge 不自建 watcher/timer。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已把 `KNO-GAP-008` / `KNO-FIX-008` 同步收口为 Done / 已闭合，并补齐本轮 focused validation 与 manual-only seam 说明。
+
+### 验证
+
+1. 窄范围构建。
+   - `Build_CMakeTools(buildTargets=["dasall-cli_command_parser_unit_test","dasall-daemon_access_pipeline_factory_unit_test","dasall_knowledge_runtime_refresh_trigger_integration_test","dasall_knowledge_refresh_loop_integration_test"])`
+   - 结果：构建成功。
+2. focused binary fallback gate。
+   - `build/vscode-linux-ninja/tests/unit/apps/cli/dasall-cli_command_parser_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_access_pipeline_factory_unit_test`
+   - `build/vscode-linux-ninja/tests/integration/access/dasall_knowledge_runtime_refresh_trigger_integration_test`
+   - `build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_refresh_loop_integration_test`
+   - 结果：以上四条二进制退出码均为 `0`。`RunCtest_CMakeTools` 对本组测试仍返回仓库已知泛化 `生成失败`，因此保留 direct-binary fallback 作为 authoritative focused evidence。
+3. 证据边界说明。
+   - 本轮只证明 v1 manual control-plane refresh trigger seam 已打通，并复验了既有 refresh loop 主链未回归；没有引入 qemu / kvm，也没有把自动 watcher/timer、installed-package lifecycle 或 soak 证据误报为已完成。
+
+### 结果
+
+1. `KNO-GAP-008` 已闭合：production control-plane 现在具备可复验的 manual refresh trigger seam，调用方可通过 `knowledge refresh --changed-source <path>` 把 source/corpus changed 语义透传到 `request_refresh(updated_sources)`。
+2. `KNO-FIX-008` 已具备 L2 focused unit / integration 证据，可与总账、详设和工作日志一起提交推送；后续若需要 automatic watcher/timer，应作为新的增量任务推进，并继续守住 ADR-008。
+
 ## 记录 #697
 
 - 日期：2026-05-19

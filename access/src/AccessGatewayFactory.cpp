@@ -465,6 +465,7 @@ struct DaemonDiagPayload {
 struct DaemonKnowledgePayload {
   std::string operation;
   std::string query_text;
+  std::vector<std::string> changed_sources;
 };
 
 [[nodiscard]] std::optional<unsigned char> decode_hex_digit(const char digit) {
@@ -532,6 +533,11 @@ struct DaemonKnowledgePayload {
         parsed.operation = *decoded_value;
       } else if (key == "query_text") {
         parsed.query_text = *decoded_value;
+      } else if (key == "changed_source") {
+        if (decoded_value->empty()) {
+          return std::nullopt;
+        }
+        parsed.changed_sources.push_back(*decoded_value);
       }
     }
 
@@ -549,6 +555,9 @@ struct DaemonKnowledgePayload {
     return std::nullopt;
   }
   if (parsed.operation != "retrieve" && !parsed.query_text.empty()) {
+    return std::nullopt;
+  }
+  if (parsed.operation != "refresh" && !parsed.changed_sources.empty()) {
     return std::nullopt;
   }
 
@@ -768,7 +777,9 @@ struct DaemonKnowledgePayload {
   }
 
   if (payload.operation == "refresh") {
-    const auto refresh_result = knowledge_service->request_refresh(knowledge::CorpusChangeSet{});
+    knowledge::CorpusChangeSet changes;
+    changes.updated_sources = payload.changed_sources;
+    const auto refresh_result = knowledge_service->request_refresh(changes);
     if (refresh_result.status == knowledge::RefreshStatus::Accepted) {
       return make_knowledge_response(packet,
                                      format_knowledge_refresh_payload(refresh_result));

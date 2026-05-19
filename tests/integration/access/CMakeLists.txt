@@ -199,6 +199,42 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_unary_integration_test
 )
 
+add_executable(dasall_knowledge_runtime_refresh_trigger_integration_test
+  KnowledgeRuntimeRefreshTriggerIntegrationTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliCommandParser.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSupervisorAdapter.cpp
+)
+
+target_include_directories(dasall_knowledge_runtime_refresh_trigger_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/cli/src
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+)
+
+target_link_libraries(dasall_knowledge_runtime_refresh_trigger_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_infra
+    dasall_knowledge
+    dasall_platform
+)
+
+dasall_apply_common_options(dasall_knowledge_runtime_refresh_trigger_integration_test)
+
+add_test(NAME KnowledgeRuntimeRefreshTriggerIntegrationTest
+  COMMAND dasall_knowledge_runtime_refresh_trigger_integration_test)
+set_tests_properties(KnowledgeRuntimeRefreshTriggerIntegrationTest PROPERTIES LABELS "integration;access;knowledge")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_knowledge_runtime_refresh_trigger_integration_test
+)
+
 add_executable(dasall_access_daemon_binary_unary_smoke_integration_test
   DaemonBinaryUnarySmokeTest.cpp
 )

@@ -173,6 +173,11 @@ class CliRequestBuilder {
       frame.args.emplace("query_text", *command.knowledge_query_text);
       frame.payload += ";query_text=" +
                        percent_encode_payload_value(*command.knowledge_query_text);
+    } else if (command.knowledge_command == CliKnowledgeCommandKind::Refresh) {
+      for (const auto& changed_source : command.knowledge_refresh_changed_sources) {
+        frame.payload += ";changed_source=" +
+                         percent_encode_payload_value(changed_source);
+      }
     }
     return frame;
   }

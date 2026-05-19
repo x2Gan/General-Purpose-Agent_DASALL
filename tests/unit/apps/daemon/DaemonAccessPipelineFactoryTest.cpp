@@ -60,8 +60,9 @@ class FakeKnowledgeService final : public dasall::knowledge::IKnowledgeService {
   }
 
   dasall::knowledge::RefreshResult request_refresh(
-      const dasall::knowledge::CorpusChangeSet&) override {
+      const dasall::knowledge::CorpusChangeSet& changes) override {
     ++refresh_call_count;
+    last_refresh_changes = changes;
     dasall::knowledge::RefreshResult result;
     result.status = dasall::knowledge::RefreshStatus::Accepted;
     result.refresh_id = "batch:knowledge-test";
@@ -71,6 +72,7 @@ class FakeKnowledgeService final : public dasall::knowledge::IKnowledgeService {
   int retrieve_call_count = 0;
   mutable int health_call_count = 0;
   int refresh_call_count = 0;
+  dasall::knowledge::CorpusChangeSet last_refresh_changes;
 };
 
 std::shared_ptr<dasall::access::IAccessGateway> build_gateway(
@@ -204,6 +206,42 @@ void knowledge_refresh_completes_without_runtime_pipeline() {
                   result.publish_envelope->agent_result->response_text->find(
                       "\"status\":\"accepted\"") != std::string::npos,
               "knowledge refresh should publish accepted JSON payload");
+  assert_true(knowledge_service->last_refresh_changes.updated_sources.empty(),
+              "knowledge refresh without changed sources should keep full-scan trigger semantics");
+}
+
+void knowledge_refresh_forwards_changed_sources_without_runtime_pipeline() {
+  int runtime_call_count = 0;
+  auto knowledge_service = std::make_shared<FakeKnowledgeService>();
+  auto gateway = build_gateway(&runtime_call_count, knowledge_service, 512);
+
+  InboundPacket packet;
+  packet.packet_id = "knowledge";
+  packet.entry_type = "daemon";
+  packet.protocol_kind = "ipc_uds";
+  packet.peer_ref = "local_trusted:1000";
+  packet.payload =
+      "operation=refresh;changed_source=profiles%2Fdesktop_full%2Fruntime_policy.yaml;changed_source=profiles%2Flinux-arm64-embedded%2Fruntime_policy.yaml";
+
+  const auto result = gateway->submit(packet);
+  assert_equal(static_cast<int>(AccessDisposition::Completed),
+               static_cast<int>(result.disposition),
+               "knowledge refresh with changed sources should complete through daemon access route");
+  assert_equal(0,
+               runtime_call_count,
+               "knowledge refresh with changed sources should not be dispatched to runtime submit backend");
+  assert_equal(1,
+               knowledge_service->refresh_call_count,
+               "knowledge refresh with changed sources should call IKnowledgeService request_refresh once");
+  assert_equal(2,
+               static_cast<int>(knowledge_service->last_refresh_changes.updated_sources.size()),
+               "knowledge refresh with changed sources should forward both changed sources");
+  assert_equal(std::string("profiles/desktop_full/runtime_policy.yaml"),
+               knowledge_service->last_refresh_changes.updated_sources.front(),
+               "knowledge refresh should decode percent-encoded changed source paths");
+  assert_equal(std::string("profiles/linux-arm64-embedded/runtime_policy.yaml"),
+               knowledge_service->last_refresh_changes.updated_sources.back(),
+               "knowledge refresh should preserve changed source ordering");
 }
 
 void knowledge_retrieve_completes_without_runtime_pipeline() {
@@ -300,6 +338,7 @@ int main() {
     payload_too_large_is_rejected_before_runtime();
     valid_submit_reaches_runtime_pipeline();
     knowledge_refresh_completes_without_runtime_pipeline();
+    knowledge_refresh_forwards_changed_sources_without_runtime_pipeline();
     knowledge_retrieve_completes_without_runtime_pipeline();
     knowledge_health_exposes_refresh_terminal_status_without_runtime_pipeline();
     knowledge_invalid_payload_is_rejected_before_runtime_pipeline();
