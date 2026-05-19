@@ -108,6 +108,7 @@
 | T-7 | 清除残余 placeholder.cpp | 10 文件删除 + `tools/CMakeLists.txt` |
 | F-1 | TOOL-FIX-007 production observability sink 收敛 | `docs/todos/tools/deliverables/TOOL-FIX-007-production-tools-observability-sink收敛.md` |
 | F-2 | TOOL-FIX-008 concrete builtin wrapper 布局收敛 | `docs/todos/tools/deliverables/TOOL-FIX-008-concrete-builtin-wrapper布局收敛.md` |
+| F-3 | TOOL-FIX-009 tools installed / release 本机证据收敛 | `docs/todos/tools/deliverables/TOOL-FIX-009-tools-installed-release本机证据收敛.md` |
 | UT-2 | CapabilityCache 并发测试 | `tests/unit/tools/CapabilityCacheConcurrencyTest.cpp` |
 | UT-3 | 集成测试共享 fixture | `tests/mocks/include/support/ToolsIntegrationFixture.h` |
 | UT-4 | ToolValidator 边界测试 | `tests/unit/tools/ToolValidatorBoundaryTest.cpp` |

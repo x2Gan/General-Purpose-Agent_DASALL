@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+## 记录 #707
+
+- 日期：2026-05-19
+- 阶段：tools / installed proof and release local evidence closure
+- 任务：推进 TOOL-FIX-009，建立 tools installed / release 证据
+- 状态：已完成（installed helper、package smoke artifact、local release-runner contract、专项总账与交付物回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-009`，若存在前置 blocker 则先解阻，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端代码与测试检查确认：`tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 已证明 daemon live composition 的 `agent.dataset` 可经 `IToolManager -> builtin -> services` 正向调用并回传 observation digest / external evidence markers；真正缺失的是 installed-package 正向 proof owner，而不是 tools live path 实现本身。
+3. `scripts/packaging/README.md` 与 `.github/workflows/release-package-gate.yml` 已把 package-smoke 目录定义为 release-runner local installed evidence owner；因此本轮正确解法是新增 tools installed helper 与 package smoke artifact，而不是把 tools-positive 断言塞回 `dasall run`。
+4. 用户明确要求本轮禁止使用 qemu / kvm；因此验收口径重定义为“本机 authoritative local evidence + release-runner package-smoke artifact contract”，qemu/autopkgtest 与 soak 不作为本轮前置。
+
+### 改动
+
+1. 新增 `apps/daemon/src/ToolsInstalledProofRunner.h/.cpp` 与 `apps/daemon/src/ToolsInstalledProofMain.cpp`：helper 通过 `DaemonEntryConfigLoader` 与 `compose_minimal_live_dependency_set()` 构造 daemon local-control-plane live dependency set，再调用 `IToolManager::invoke()` 对 `agent.dataset` 做 installed proof，并二值断言 builtin route、payload、observation digest 与 production bridge / observability evidence。
+2. 更新 `apps/daemon/CMakeLists.txt`、`tests/unit/apps/daemon/CMakeLists.txt` 与 `debian/dasall-daemon.install`：新增 `dasall-tools-installed-proof` 可执行目标、focused unit test 目标以及 Debian 安装布局，使 helper 随包安装到 `/usr/lib/dasall/dasall-tools-installed-proof`。
+3. 更新 `scripts/packaging/pkg_smoke_install.sh`：package smoke 现调用 installed helper、落盘 `tools-installed-proof.json`，并断言 `ok`、`agent_dataset_visible`、`tool_invocation_succeeded`、`projection_present`、`route_citation_present`、`production_bridge_evidence_present` 与 `production_observability_evidence_present`；同时修复 Knowledge artifact 生成段的嵌入式 Python heredoc 缩进，通过 `sed 's/^  //' <<'PY' | python3 - ...` 避免 smoke 在 artifact 阶段因 `IndentationError` 假失败。
+4. 更新 `scripts/packaging/README.md`、`docs/todos/tools/deliverables/TOOL-FIX-009-tools-installed-release本机证据收敛.md`、`docs/todos/tools/deliverables/DELIVERABLES-INDEX.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 tools installed / release 口径改写为 local authoritative evidence 已闭合、qemu/soak 仍独立保留。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall-daemon_tools_installed_proof_runner_unit_test","dasall_tools_installed_proof_tool"])`
+   - 结果：构建成功。
+2. focused CTest 尝试。
+   - `RunCtest_CMakeTools(tests=["ToolsInstalledProofRunnerTest"])`
+   - 结果：继续返回仓库已知泛化“生成失败”，因此不将该错误误判为 helper 回归。
+3. direct-binary fallback。
+   - `build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_tools_installed_proof_runner_unit_test`
+   - 结果：退出码为 `0`。
+4. package smoke shell 语法检查。
+   - `sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：退出码为 `0`。
+5. 本机安装态验证。
+   - `dpkg-buildpackage -us -uc -b`
+   - `bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 首次结果：真实 smoke 在 Knowledge artifact 生成段暴露 `IndentationError: unexpected indent`；修复 heredoc 输入后重跑通过。
+   - 最终结果：package build 退出码为 `0`；smoke 输出 `install smoke passed`，并确认 `/usr/lib/dasall/dasall-tools-installed-proof` 已安装落地，`build/tool-fix-009-package-smoke/tools-installed-proof.json` 已生成。
+6. tools-installed-proof artifact 关键字段。
+   - `tools-installed-proof.json` 已验证 `ok=true`、`effective_profile_id=desktop_full`、`route_kind=builtin`、`visible_tools=["agent.dataset"]`、`tool_invocation_succeeded=true`、`production_bridge_evidence_present=true`、`production_observability_evidence_present=true`。
+7. 证据边界说明。
+   - 本轮未使用 qemu / kvm，也没有把本机 local installed evidence 外推为 machine-isolated release-ready。
+
+### 结果
+
+1. `TOOL-FIX-009` 已完成：tools 现在具备 deterministic installed helper、Debian install layout、package smoke artifact 与 release-runner local artifact 合同，不再只有 build-tree L2 fixture 证据。
+2. `TOOL-GAP-012` 已收缩：local installed / release evidence 已闭合，但 qemu/autopkgtest 与 long-session soak 仍保持独立缺口，不能误写为 full production-ready。
+3. 当前剩余重点前移到 `TOOL-GAP-009` / `TOOL-GAP-010` / `TOOL-GAP-011` / `TOOL-GAP-012`，而不再是 tools installed positive proof owner 本身。
+
 ## 记录 #706
 
 - 日期：2026-05-19

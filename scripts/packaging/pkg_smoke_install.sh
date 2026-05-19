@@ -14,6 +14,7 @@ META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
 MEMORY_MAINTENANCE_PROOF_TOOL=/usr/lib/dasall/dasall-memory-maintenance-proof
+TOOLS_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-tools-installed-proof
 PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
 PRESERVED_SECRET_ROOT=
 
@@ -361,6 +362,7 @@ verify_installed_files() {
   run_root test -f /etc/dasall/daemon.json
   run_root test -f /usr/lib/dasall/sqlite-vss/vector0.so
   run_root test -f /usr/lib/dasall/sqlite-vss/vss0.so
+  run_root test -x "${TOOLS_INSTALLED_PROOF_TOOL}"
 }
 
 verify_validate_only() {
@@ -510,6 +512,23 @@ PY
   assert_json_matches "$MAINTENANCE_PROOF_JSON" '"turns_after": [0-9]+' 'memory maintenance retained turn count'
   write_artifact_file 'memory-maintenance-proof.json' "$MAINTENANCE_PROOF_JSON"
 
+  TOOLS_PROOF_JSON=$(run_dasall_cli "${TOOLS_INSTALLED_PROOF_TOOL}" \
+    --profile-id "${MAINTENANCE_PROFILE_ID}" \
+    --config-file /etc/dasall/daemon.json \
+    --json)
+  assert_json_matches "$TOOLS_PROOF_JSON" '"ok": true' 'tools installed proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"agent_dataset_visible": true' 'tools visible surface proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"tool_invocation_succeeded": true' 'tools invocation proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"projection_present": true' 'tools observation projection proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"route_kind": "builtin"' 'tools builtin route proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"route_citation_present": true' 'tools route citation proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"tool_call_citation_present": true' 'tools tool-call citation proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"production_bridge_evidence_present": true' 'tools production bridge evidence'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"production_observability_evidence_present": true' 'tools production observability evidence'
+  assert_json_contains "$TOOLS_PROOF_JSON" '\"capability_id\":\"agent.dataset\"' 'tools payload capability marker'
+  assert_json_contains "$TOOLS_PROOF_JSON" '\"projection\":\"default\"' 'tools payload projection marker'
+  write_artifact_file 'tools-installed-proof.json' "$TOOLS_PROOF_JSON"
+
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)
   STATUS_CODE=$?
@@ -562,7 +581,7 @@ PY
   write_artifact_file 'knowledge-health-final.json' "$KNOWLEDGE_HEALTH_FINAL_JSON"
 
   if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
-    python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR" <<'PY'
+    sed 's/^  //' <<'PY' | python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR"
   import json
   import pathlib
   import re
@@ -570,20 +589,24 @@ PY
 
   artifact_dir = pathlib.Path(sys.argv[1])
 
+
   def read_text(name: str) -> str:
-      return (artifact_dir / name).read_text(encoding='utf-8')
+    return (artifact_dir / name).read_text(encoding='utf-8')
+
 
   def extract(pattern: str, text: str, label: str) -> str:
-      match = re.search(pattern, text)
-      if not match:
-          raise SystemExit(f'missing {label} in knowledge package smoke artifact')
-      return match.group(1)
+    match = re.search(pattern, text)
+    if not match:
+      raise SystemExit(f'missing {label} in knowledge package smoke artifact')
+    return match.group(1)
 
-    def optional_extract(pattern: str, text: str):
-      match = re.search(pattern, text)
-      if not match:
-        return None
-      return match.group(1)
+
+  def optional_extract(pattern: str, text: str):
+    match = re.search(pattern, text)
+    if not match:
+      return None
+    return match.group(1)
+
 
   refresh_text = read_text('knowledge-refresh.json')
   health_ready_text = read_text('knowledge-health-ready.json')
@@ -592,32 +615,32 @@ PY
   health_final_text = read_text('knowledge-health-final.json')
 
   data = {
-      'refresh_disposition': extract(r'"disposition":"([^"]+)"', refresh_text, 'refresh disposition'),
-      'refresh_status': extract(r'\\"status\\":\\"([^\\]+)\\"', refresh_text, 'refresh status'),
-      'health_ready_signal': 'async_terminal' if optional_extract(r'\\"last_refresh_status\\":\\"([^\\]+)\\"', health_ready_text) else 'snapshot_freshness',
-      'health_ready_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_ready_text, 'health ready state'),
-      'health_ready_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_ready_text, 'health ready freshness_state'),
-      'health_ready_last_refresh_status': optional_extract(r'\\"last_refresh_status\\":\\"([^\\]+)\\"', health_ready_text),
-      'health_ready_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_ready_text, 'health ready active_snapshot_id'),
-      'provider_query': 'DeepSeek Chat',
-      'provider_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', provider_text, 'provider slice_count')),
-      'provider_has_installed_deepseek_evidence': bool(re.search(r'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/', provider_text)),
-      'normative_query': 'BusinessChainIntegrationMatrix',
-      'normative_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', normative_text, 'normative slice count')),
-      'normative_has_ssot_evidence': bool(re.search(r'BusinessChainIntegrationMatrix|docs/ssot/BusinessChainIntegrationMatrix\.md', normative_text)),
-      'health_final_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_final_text, 'health final state'),
-      'health_final_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_final_text, 'health final freshness_state'),
-      'health_final_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_final_text, 'health final active_snapshot_id'),
-      'health_final_refresh_in_flight': (
-        optional_extract(r'\\"refresh_in_flight\\":(true|false)', health_final_text) == 'true'
-        if optional_extract(r'\\"refresh_in_flight\\":(true|false)', health_final_text) is not None
-        else None
-      ),
+    'refresh_disposition': extract(r'"disposition":"([^"]+)"', refresh_text, 'refresh disposition'),
+    'refresh_status': extract(r'\\"status\\":\\"([^\\]+)\\"', refresh_text, 'refresh status'),
+    'health_ready_signal': 'async_terminal' if optional_extract(r'\\"last_refresh_status\\":\\"([^\\]+)\\"', health_ready_text) else 'snapshot_freshness',
+    'health_ready_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_ready_text, 'health ready state'),
+    'health_ready_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_ready_text, 'health ready freshness_state'),
+    'health_ready_last_refresh_status': optional_extract(r'\\"last_refresh_status\\":\\"([^\\]+)\\"', health_ready_text),
+    'health_ready_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_ready_text, 'health ready active_snapshot_id'),
+    'provider_query': 'DeepSeek Chat',
+    'provider_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', provider_text, 'provider slice_count')),
+    'provider_has_installed_deepseek_evidence': bool(re.search(r'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/', provider_text)),
+    'normative_query': 'BusinessChainIntegrationMatrix',
+    'normative_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', normative_text, 'normative slice count')),
+    'normative_has_ssot_evidence': bool(re.search(r'BusinessChainIntegrationMatrix|docs/ssot/BusinessChainIntegrationMatrix\.md', normative_text)),
+    'health_final_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_final_text, 'health final state'),
+    'health_final_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_final_text, 'health final freshness_state'),
+    'health_final_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_final_text, 'health final active_snapshot_id'),
+    'health_final_refresh_in_flight': (
+      optional_extract(r'\\"refresh_in_flight\\":(true|false)', health_final_text) == 'true'
+      if optional_extract(r'\\"refresh_in_flight\\":(true|false)', health_final_text) is not None
+      else None
+    ),
   }
 
   (artifact_dir / 'knowledge-proof.json').write_text(
-      json.dumps(data, indent=2) + '\n',
-      encoding='ascii',
+    json.dumps(data, indent=2) + '\n',
+    encoding='ascii',
   )
 PY
   fi

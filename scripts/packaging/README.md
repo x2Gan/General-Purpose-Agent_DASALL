@@ -38,7 +38,7 @@
 | 功能面 | local lifecycle smoke | `pkg-smoke-local-control-plane` | 验收语义 |
 |---|---|---|---|
 | `run` / LLM | `dasall run ... --json` 必须同时包含 `"disposition":"completed"`、`"task_completed":true`、`llm.origin=deepseek-prod/`，且不得包含 `agent.dataset` | 同左 | 证明 installed daemon 的主功能链路通过 production `ILLMManager` 调用 DeepSeek；仅有 completed transport 或 builtin dataset 投影不算通过。 |
-| tools | `agent.dataset` 保留为 builtin 工具资产/管理面能力，不再作为 installed `run` 的主功能通过条件 | 同左 | 工具链路后续应以独立 tools/diag/registry 正向入口补验，避免把工具投影误当 LLM 主链路。 |
+| tools | `/usr/lib/dasall/dasall-tools-installed-proof --json` 必须返回 `"ok": true`、`"route_kind": "builtin"`、`"agent_dataset_visible": true`，且 payload 保留 `capability_id=agent.dataset` / `projection=default` | `pkg_smoke_install.sh --explicit-start-check` 必须落盘 `tools-installed-proof.json`，release-runner package-smoke artifact 目录保留同名证据 | 证明 installed package 当前可见 tool surface 仍能经由 governed `IToolManager -> builtin -> services` 正向链路产出 payload 与 observation digest；同时避免把 builtin dataset 投影误当 LLM 主链路。 |
 | `status` | `status receipt:missing token local://uid/0 --json` 必须 exit 5 且 `status_missing` | 同左 | 缺失 receipt fail-closed，不误报成功。 |
 | `cancel` | `cancel receipt:missing token local://uid/0 --json` 必须 exit 5 且 `cancel_missing` | 同左 | 缺失 receipt fail-closed，不误报成功。 |
 | `diag` 默认门控 | 默认安装后 `diag health --json` 必须 exit 4 且 `diag_disabled` | 不适用，autopkgtest 会通过 config apply 启用 diag | 证明 diagnostics 不会绕过 daemon config gate。 |
@@ -76,7 +76,7 @@
 ### 4.4 release runner contract
 
 1. `.github/workflows/release-package-gate.yml` 是当前仓库内固定的 release runner 入口：只接受 self-hosted runner 提供的 `qemu_image` 与 `deepseek_key_file`，不在仓库脚本里下载 image 或写死 secret。
-2. workflow 在 qemu gate 前先固定三类 local installed artifact：`pkg_smoke_install.sh --explicit-start-check` 的 package-smoke 目录、`knowledge_local_installed_proof.sh` 的 proof 目录（含 `knowledge-proof.json` / `installed-normative-assets.json`）与 `knowledge_refresh_retrieve_soak.sh` 的 soak 目录（含 `knowledge-soak-summary.json`）；三者只证明 local authoritative evidence，不直接外推为 qemu PASS。
+2. workflow 在 qemu gate 前先固定三类 local installed artifact：`pkg_smoke_install.sh --explicit-start-check` 的 package-smoke 目录（现至少包含 `run-first.json`、`run-second.json`、`memory-proof.json`、`memory-maintenance-proof.json`、`tools-installed-proof.json`）、`knowledge_local_installed_proof.sh` 的 proof 目录（含 `knowledge-proof.json` / `installed-normative-assets.json`）与 `knowledge_refresh_retrieve_soak.sh` 的 soak 目录（含 `knowledge-soak-summary.json`）；三者只证明 local authoritative evidence，不直接外推为 qemu PASS。
 3. `validate_gate_int_10_installed_package_qemu.sh` 现已正式支持以下 release-runner 环境变量：`DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`、`DASALL_AUTOPKGTEST_OUTPUT_DIR`。
 4. workflow 会生成 testbed preflight 脚本，并通过 `DASALL_AUTOPKGTEST_SETUP_COMMANDS` 传给 `validate_gate_int_10_installed_package_qemu.sh`；默认 preflight 只做 provider reachability 探测，不在日志中记录 secret 值。
 5. workflow 当前会归档 `package-smoke-local.log`、`knowledge-proof.log`、`knowledge-soak.log`、`knowledge-proof/knowledge-proof.json`、`knowledge-proof/installed-normative-assets.json`、`knowledge-soak/knowledge-soak-summary.json`、`gate-int-10-qemu.log`、结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据；`FULLINT-TODO-019` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。

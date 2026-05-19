@@ -81,4 +81,40 @@ install(TARGETS dasall_memory_maintenance_proof_tool
 
 dasall_apply_common_options(dasall_memory_maintenance_proof_tool)
 
+add_executable(dasall_tools_installed_proof_tool
+  src/ToolsInstalledProofMain.cpp
+  src/ToolsInstalledProofRunner.cpp
+  src/DaemonEntryConfigLoader.cpp
+)
+
+target_compile_features(dasall_tools_installed_proof_tool PRIVATE cxx_std_20)
+
+target_link_libraries(dasall_tools_installed_proof_tool
+  PRIVATE
+    dasall_apps_runtime_support
+    dasall_runtime
+    dasall_tools
+    dasall_services
+    dasall_profiles
+    dasall_infra
+    dasall_contracts
+)
+
+target_include_directories(dasall_tools_installed_proof_tool
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/access/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+set_target_properties(dasall_tools_installed_proof_tool PROPERTIES
+  OUTPUT_NAME dasall-tools-installed-proof
+)
+
+install(TARGETS dasall_tools_installed_proof_tool
+  RUNTIME DESTINATION lib/dasall
+)
+
+dasall_apply_common_options(dasall_tools_installed_proof_tool)
+
 
