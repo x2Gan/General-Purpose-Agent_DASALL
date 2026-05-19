@@ -196,8 +196,13 @@ void test_pipeline_connects_registry_validation_policy_route_execution_and_proje
               "observation digest should include a non-empty summary");
   assert_true(envelope.evidence_refs.has_value() && !envelope.evidence_refs->empty(),
               "successful pipeline invocation should preserve evidence references");
-  assert_true(!envelope.compensation_hints.has_value(),
-              "non-compensatable builtin descriptor should not invent compensation hints");
+  assert_true(envelope.compensation_hints.has_value() &&
+                  envelope.compensation_hints->size() == 1U &&
+                  envelope.compensation_hints->front().compensation_action ==
+                      std::string("agent.terminal") &&
+                  envelope.compensation_hints->front().target_ref ==
+                      std::string("tool://agent.terminal/call-pipeline"),
+              "compensatable builtin descriptors should surface parseable compensation hints when side effects exist");
   assert_equal(1, requested_count,
                "audit hooks should see the request exactly once");
   assert_equal(1, completed_count,

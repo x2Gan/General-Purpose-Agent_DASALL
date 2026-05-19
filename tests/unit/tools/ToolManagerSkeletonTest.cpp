@@ -56,9 +56,9 @@ void test_tool_manager_is_instantiable_and_fails_closed_when_runtime_context_is_
       {});
   assert_true(compensate_envelope.failure_reason_code.has_value(),
               "compensate should also return a unified failure envelope");
-  assert_equal(std::string("tool.manager.compensation_unconfigured"),
+  assert_equal(std::string("tool.manager.profile_missing"),
                *compensate_envelope.failure_reason_code,
-               "skeleton compensate should stay fail-closed until compensation is wired");
+               "skeleton compensate should fail closed when caller context is incomplete");
 }
 
 }  // namespace

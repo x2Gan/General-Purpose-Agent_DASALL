@@ -102,7 +102,21 @@ dasall_add_tools_integration_test(
   "integration;tools"
 )
 
+dasall_add_tools_integration_test(
+  dasall_tool_compensation_services_integration_test
+  ToolCompensationServicesIntegrationTest
+  ToolCompensationServicesIntegrationTest.cpp
+  "integration;tools"
+)
+
 target_link_libraries(dasall_tool_services_production_bridge_integration_test
+  PRIVATE
+    dasall_infra
+    dasall_profiles
+    dasall_services
+)
+
+target_link_libraries(dasall_tool_compensation_services_integration_test
   PRIVATE
     dasall_infra
     dasall_profiles

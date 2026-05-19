@@ -17,12 +17,16 @@ using dasall::tests::support::assert_true;
 class FakeExecutionService final : public dasall::services::IExecutionService {
  public:
   dasall::services::ExecutionCommandRequest last_execute_request;
+  dasall::services::ExecutionCompensationRequest last_compensation_request;
   dasall::services::ExecutionDiagnoseRequest last_diagnose_request;
   int execute_calls = 0;
+  int compensate_calls = 0;
   int diagnose_calls = 0;
 
   std::function<dasall::services::ExecutionCommandResult(
       const dasall::services::ExecutionCommandRequest&)> execute_handler;
+  std::function<dasall::services::ExecutionCommandResult(
+      const dasall::services::ExecutionCompensationRequest&)> compensate_handler;
   std::function<dasall::services::ExecutionDiagnoseResult(
       const dasall::services::ExecutionDiagnoseRequest&)> diagnose_handler;
 
@@ -34,8 +38,11 @@ class FakeExecutionService final : public dasall::services::IExecutionService {
   }
 
   dasall::services::ExecutionCommandResult compensate(
-      const dasall::services::ExecutionCompensationRequest&) override {
-    return dasall::services::ExecutionCommandResult{};
+            const dasall::services::ExecutionCompensationRequest& request) override {
+        ++compensate_calls;
+        last_compensation_request = request;
+        return compensate_handler ? compensate_handler(request)
+                                                            : dasall::services::ExecutionCommandResult{};
   }
 
   dasall::services::ExecutionQueryResult query_state(
@@ -348,6 +355,64 @@ void test_builtin_executor_lane_dispatches_diagnose_through_execution_service() 
                "diagnose dispatch should preserve report_json as ToolResult payload");
 }
 
+void test_builtin_executor_lane_dispatches_compensation_through_execution_service() {
+  const auto snapshot = make_snapshot(false);
+  auto execution_service = std::make_shared<FakeExecutionService>();
+  auto data_service = std::make_shared<FakeDataService>();
+  execution_service->compensate_handler = [](const auto&) {
+    return dasall::services::ExecutionCommandResult{
+        .code = std::nullopt,
+        .execution_id = std::string("comp-builtin-action"),
+        .payload_json = std::string("{\"status\":\"compensated\"}"),
+        .side_effects = {"terminal.compensated"},
+        .compensation_hints = {},
+        .error = std::nullopt,
+    };
+  };
+
+  dasall::tools::execution::BuiltinExecutorLane lane(
+      dasall::tools::execution::BuiltinExecutorLaneDependencies{
+          .registry = std::make_shared<dasall::tools::registry::ToolRegistry>(
+              std::vector<dasall::contracts::ToolDescriptor>{
+                  make_descriptor("agent.terminal", dasall::contracts::ToolCategory::Action, false),
+              }),
+          .service_bridge = std::make_shared<dasall::tools::bridge::ToolServiceBridge>(),
+          .execution_service = execution_service,
+          .data_service = data_service,
+          .now_ms = [] { return 3500; },
+      });
+
+  const auto result = lane.dispatch_compensation(
+      make_tool_ir("agent.terminal", "{}"),
+      dasall::tools::CompensationRequest{
+          .tool_call_id = std::string("call-builtin"),
+          .compensation_action = std::string("safe_mode.exit"),
+          .target_ref = std::string("tool://agent.terminal/call-builtin"),
+          .reason_code = std::string("manual_recovery"),
+          .evidence_refs = std::vector<std::string>{"evidence://call-builtin"},
+      },
+      make_execution_context(snapshot));
+
+  assert_equal(1, execution_service->compensate_calls,
+               "compensation dispatch should hit IExecutionService::compensate exactly once");
+  assert_equal(std::string("agent.terminal"),
+               execution_service->last_compensation_request.target.capability_id,
+               "compensation dispatch should preserve capability_id parsed from target_ref");
+  assert_equal(std::string("call-builtin"),
+               execution_service->last_compensation_request.target.target_id,
+               "compensation dispatch should preserve target_id parsed from target_ref");
+  assert_equal(std::string("safe_mode.exit"),
+               execution_service->last_compensation_request.compensation_action,
+               "compensation dispatch should preserve compensation_action");
+  assert_equal(std::string("call-builtin"),
+               execution_service->last_compensation_request.source_execution_id,
+               "compensation dispatch should reuse tool_call_id as source_execution_id");
+  assert_true(result.success.value_or(false),
+              "compensation dispatch without service error should map to success");
+  assert_equal(std::string("{\"status\":\"compensated\"}"), result.payload.value_or(""),
+               "compensation dispatch should preserve service payload_json");
+}
+
 void test_builtin_executor_lane_preserves_partial_side_effects_on_error() {
   const auto snapshot = make_snapshot(false);
   auto execution_service = std::make_shared<FakeExecutionService>();
@@ -407,6 +472,7 @@ int main() {
     test_builtin_executor_lane_dispatches_action_and_preserves_side_effects();
     test_builtin_executor_lane_dispatches_query_and_marks_cache_hits();
     test_builtin_executor_lane_dispatches_diagnose_through_execution_service();
+        test_builtin_executor_lane_dispatches_compensation_through_execution_service();
     test_builtin_executor_lane_preserves_partial_side_effects_on_error();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

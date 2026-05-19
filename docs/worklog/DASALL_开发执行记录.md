@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+## 记录 #700
+
+- 日期：2026-05-19
+- 阶段：tools / controlled compensation entry closure
+- 任务：推进 TOOL-FIX-002，实现 `ToolManager::compensate()` 受控补偿入口
+- 状态：已完成（ToolManager -> BuiltinExecutorLane -> ToolServiceBridge -> services compensate 闭环、parseable compensation hint 口径、focused unit/integration evidence 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-002`，并明确要求若存在前置 BLOCK 则先解阻、完成后按仓库规范提交推送。
+2. 近端代码检查确认 `TOOL-FIX-002` 无显式 BLOCK 依赖，根因集中在 `tools/src/ToolManager.cpp`、`tools/src/execution/BuiltinExecutorLane.*` 与 `tools/src/bridge/ToolServiceBridge.*`：`ToolManager::run_compensation_pipeline()` 固定返回 `tool.manager.compensation_unconfigured`，lane/bridge 也没有真正的 compensation dispatch / request builder。
+3. tools 详设与 ADR-007 已冻结边界：Runtime 负责是否触发补偿，tools 只能提供受控 `compensate()` 入口并把请求送到 services facade，不能在失败主路径里偷偷回滚。
+4. 用户明确要求禁止使用 qemu / kvm 作为本轮收敛证据，因此本轮验证固定为 build-tree focused build/test；`RunCtest_CMakeTools` 若继续返回仓库已知泛化“生成失败”，则按既有仓库口径回退到直接执行对应 test binary。
+
+### 执行与结果
+
+1. 接通 `ToolManager::compensate()` 主链。
+   - `tools/src/ToolManager.cpp` 已新增 compensation pipeline：校验 `CompensationRequest`、解析 structured `target_ref`、复用 profile/policy/route、调用独立 `compensation_executor`，并保留 Runtime 的补偿准入权。
+   - `tools/src/ToolManager.h` 已为 compensation 路径增加独立 `compensation_executor` 依赖，避免把补偿偷偷塞回普通 invoke executor。
+2. 接通 builtin lane 与 services request 映射。
+   - `tools/src/execution/BuiltinExecutorLane.h/.cpp` 已新增 `dispatch_compensation()`；默认 builtin fallback 的 `IExecutionService::compensate()` 也已改为 synthetic success 闭环，便于默认 manager / observability 路径可测。
+   - `tools/src/bridge/ToolServiceBridge.h/.cpp` 已新增 `build_compensation_request()`，并引入 `tool://<capability>/<target>` structured `target_ref` 的解析/格式化 helper。
+3. 统一 compensation hint handoff 口径。
+   - `tools/src/execution/CompensationLedger.cpp` 与 `ToolManager` 的 direct side-effect hint 生成逻辑，现统一输出 parseable `tool://<capability>/<target>` `target_ref`，不再把裸 `tool_call_id` 直接交给 Runtime。
+   - `tools/src/registry/BuiltinCatalog.cpp` 已把默认 `agent.terminal` descriptor 的 `supports_compensation` 收口为 `true`，避免真实默认补偿路径被 descriptor 级别提前拒绝。
+4. 补齐 focused unit / integration coverage。
+   - 已新增 `tests/unit/tools/ToolManagerCompensationPipelineTest.cpp`，覆盖 compensation success、policy denied、unsupported descriptor。
+   - 已新增 `tests/integration/tools/ToolCompensationServicesIntegrationTest.cpp`，沿 `ToolManager -> BuiltinExecutorLane -> live services compensate()` 真实路径验证补偿闭环。
+   - 同时扩展 `ToolServiceBridgeTest.cpp`、`BuiltinExecutorLaneTest.cpp`、`ToolObservabilityIntegrationTest.cpp`、`CompensationLedgerTest.cpp`、`WorkflowEngineTest.cpp`、`ToolWorkflowFailureIntegrationTest.cpp`、`ToolManagerPipelineTest.cpp` 与 `ToolManagerSkeletonTest.cpp`，同步 compensation target_ref / fail-closed / observability 口径。
+5. 回写总账。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已把 `TOOL-GAP-002` 标为已闭合、`TOOL-FIX-002` 标为 Done，并补写本轮 focused validation 与 direct-binary fallback 证据。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_tool_service_bridge_unit_test","dasall_builtin_executor_lane_unit_test","dasall_tool_manager_skeleton_unit_test","dasall_tool_manager_pipeline_unit_test","dasall_tool_manager_compensation_pipeline_unit_test","dasall_compensation_ledger_unit_test","dasall_workflow_engine_unit_test","dasall_tool_observability_integration_test","dasall_tool_compensation_services_integration_test","dasall_tool_workflow_failure_integration_test"])`
+   - 结果：构建成功。
+2. focused binary fallback。
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_service_bridge_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_builtin_executor_lane_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_manager_skeleton_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_manager_pipeline_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_manager_compensation_pipeline_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_compensation_ledger_unit_test`
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_workflow_engine_unit_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_observability_integration_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_compensation_services_integration_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_workflow_failure_integration_test`
+   - 结果：以上 10 条二进制退出码均为 `0`。
+3. 工具链边界说明。
+   - `RunCtest_CMakeTools` 对本组 focused tests 仍返回仓库已知泛化“生成失败”，因此继续沿用 direct-binary fallback 作为 authoritative focused evidence。
+   - 本轮全程未使用 qemu / kvm，也没有把 build-tree L2 结果外推为 installed / qemu / release 证据。
+
+### 结果
+
+1. `TOOL-GAP-002` 已闭合：`IToolManager::compensate()` 不再固定返回 unconfigured failure，且 build-tree 下可经 policy/route/builtin lane 命中 services `compensate()`。
+2. `TOOL-FIX-002` 已具备 focused unit / integration evidence，可与总账回写一起提交推送；后续 tools 侧残余重点回到 installed / qemu / release 证据，而不是补偿入口本身。
+
 ## 记录 #699
 
 - 日期：2026-05-19

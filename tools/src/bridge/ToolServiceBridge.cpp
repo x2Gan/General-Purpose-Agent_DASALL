@@ -1,8 +1,10 @@
 #include "bridge/ToolServiceBridge.h"
 
+#include <stdexcept>
 #include <utility>
 
 #include "RuntimePolicySnapshot.h"
+#include "ToolManager.h"
 
 namespace {
 
@@ -17,9 +19,68 @@ constexpr std::uint64_t kMinimumDeadlineMs = 1U;
   return fallback;
 }
 
+[[nodiscard]] std::string normalize_capability_id(std::string_view value) {
+  return std::string(value);
+}
+
+[[nodiscard]] std::string default_target_id_for(std::string_view capability_id) {
+  return std::string("builtin:") + std::string(capability_id);
+}
+
 }  // namespace
 
 namespace dasall::tools::bridge {
+
+std::optional<CompensationTargetRef> resolve_compensation_target(
+    std::string_view target_ref) {
+  if (target_ref.empty()) {
+    return std::nullopt;
+  }
+
+  constexpr std::string_view kToolScheme = "tool://";
+  if (target_ref.substr(0, kToolScheme.size()) == kToolScheme) {
+    const auto remainder = target_ref.substr(kToolScheme.size());
+    const auto separator = remainder.find('/');
+    const auto capability_id = normalize_capability_id(
+        separator == std::string_view::npos ? remainder : remainder.substr(0, separator));
+    if (capability_id.empty()) {
+      return std::nullopt;
+    }
+
+    auto target_id = separator == std::string_view::npos
+                         ? default_target_id_for(capability_id)
+                         : std::string(remainder.substr(separator + 1U));
+    if (target_id.empty()) {
+      target_id = default_target_id_for(capability_id);
+    }
+
+    return CompensationTargetRef{
+        .capability_id = std::move(capability_id),
+        .target_id = std::move(target_id),
+    };
+  }
+
+  return CompensationTargetRef{
+      .capability_id = normalize_capability_id(target_ref),
+      .target_id = default_target_id_for(target_ref),
+  };
+}
+
+std::string format_compensation_target_ref(
+    std::string_view capability_id,
+    std::string_view target_id) {
+  if (capability_id.empty()) {
+    return std::string();
+  }
+
+  std::string formatted = std::string("tool://") + std::string(capability_id);
+  if (!target_id.empty()) {
+    formatted.push_back('/');
+    formatted += target_id;
+  }
+
+  return formatted;
+}
 
 services::ServiceCallContext ToolServiceBridge::build_context(
     const contracts::ToolIR& tool_ir,
@@ -35,6 +96,29 @@ services::ServiceCallContext ToolServiceBridge::build_context(
       .goal_id = resolve_goal_id(tool_ir, tool_call_id),
       .budget_guard = resolve_budget_guard(invocation_context),
       .deadline_ms = resolve_deadline_ms(tool_ir, invocation_context),
+  };
+}
+
+services::ExecutionCompensationRequest ToolServiceBridge::build_compensation_request(
+    const contracts::ToolIR& tool_ir,
+    const CompensationRequest& request,
+    const ToolInvocationContext& invocation_context) const {
+  const auto target = resolve_compensation_target(request.target_ref.value_or(std::string{}));
+  if (!target.has_value()) {
+    throw std::invalid_argument("builtin.executor.compensation_target_invalid");
+  }
+
+  return services::ExecutionCompensationRequest{
+      .context = build_context(tool_ir, invocation_context),
+      .target = services::CapabilityTargetRef{
+          .capability_id = target->capability_id,
+          .target_id = target->target_id,
+      },
+      .compensation_action = request.compensation_action.value_or(resolve_tool_name(tool_ir)),
+      .arguments_json = std::string("{}"),
+      .source_execution_id = request.tool_call_id.value_or(
+          tool_ir.tool_call_id.value_or(std::string("unknown_call"))),
+      .reason_code = request.reason_code.value_or(std::string("tool.manager.compensation_requested")),
   };
 }
 
@@ -145,7 +229,7 @@ services::CapabilityTargetRef ToolServiceBridge::build_target(
   const auto capability_id = resolve_tool_name(tool_ir);
   return services::CapabilityTargetRef{
       .capability_id = capability_id,
-      .target_id = std::string("builtin:") + capability_id,
+      .target_id = default_target_id_for(capability_id),
   };
 }
 

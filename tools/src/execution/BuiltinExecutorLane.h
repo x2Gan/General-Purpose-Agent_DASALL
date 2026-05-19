@@ -31,6 +31,10 @@ class BuiltinExecutorLane {
   [[nodiscard]] contracts::ToolResult dispatch_action(
       const contracts::ToolIR& tool_ir,
       const ToolExecutionContext& execution_context) const;
+  [[nodiscard]] contracts::ToolResult dispatch_compensation(
+      const contracts::ToolIR& tool_ir,
+      const CompensationRequest& request,
+      const ToolExecutionContext& execution_context) const;
   [[nodiscard]] contracts::ToolResult dispatch_query(
       const contracts::ToolIR& tool_ir,
       const ToolExecutionContext& execution_context) const;
@@ -42,7 +46,13 @@ class BuiltinExecutorLane {
   [[nodiscard]] contracts::ToolResult map_service_result(
       const contracts::ToolIR& tool_ir,
       const ToolExecutionContext& execution_context,
+      std::string dispatch_kind,
       const services::ExecutionCommandResult& result) const;
+  [[nodiscard]] contracts::ToolResult build_compensation_failure_result(
+      const contracts::ToolIR& tool_ir,
+      const ToolExecutionContext& execution_context,
+      std::string message,
+      std::string stage) const;
   [[nodiscard]] contracts::ToolResult map_service_result(
       const contracts::ToolIR& tool_ir,
       const ToolExecutionContext& execution_context,

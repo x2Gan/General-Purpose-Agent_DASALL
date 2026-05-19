@@ -319,7 +319,7 @@ void test_tool_workflow_failure_integration_surfaces_failure_digest_sidecar_and_
                   envelope.compensation_hints->size() == 1U,
               "workflow failure integration should surface workflow-scoped compensation_hints after failure");
   assert_true(envelope.compensation_hints->front().compensation_action == std::string("agent.prepare") &&
-                  envelope.compensation_hints->front().target_ref == std::string("call-prepare"),
+                  envelope.compensation_hints->front().target_ref == std::string("tool://agent.prepare/call-prepare"),
               "workflow failure integration should keep only reversible upstream effects in compensation hints");
   assert_true(envelope.compensation_hints->front().reason_code == std::string("workflow.compensation_available"),
               "workflow failure integration should expose compensation reason code for runtime recovery policy");

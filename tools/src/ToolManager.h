@@ -49,6 +49,10 @@ struct ToolExecutionRequest {
 
 using ToolExecutor =
     std::function<contracts::ToolResult(const ToolExecutionRequest& execution_request)>;
+using ToolCompensationExecutor = std::function<contracts::ToolResult(
+  const contracts::ToolIR& tool_ir,
+  const CompensationRequest& request,
+  const ToolExecutionContext& execution_context)>;
 using ToolProjector = std::function<ToolInvocationEnvelope(
     const contracts::ToolResult& result,
     const route::ToolRouteDecision& route_decision,
@@ -73,6 +77,7 @@ struct ToolManagerDependencies {
   std::shared_ptr<ops::ToolTraceBridge> trace_bridge;
   profiles::BuildProfileManifest build_manifest;
   ToolExecutor executor;
+  ToolCompensationExecutor compensation_executor;
   ToolProjector projector;
   ToolAuditHooks audit_hooks;
 };

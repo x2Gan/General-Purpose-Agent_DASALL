@@ -9,12 +9,33 @@
 #include "ToolInvocationContext.h"
 #include "tool/ToolIR.h"
 
+namespace dasall::tools {
+
+struct CompensationRequest;
+
+}  // namespace dasall::tools
+
 namespace dasall::tools::bridge {
+
+struct CompensationTargetRef {
+  std::string capability_id;
+  std::string target_id;
+};
+
+[[nodiscard]] std::optional<CompensationTargetRef> resolve_compensation_target(
+    std::string_view target_ref);
+[[nodiscard]] std::string format_compensation_target_ref(
+    std::string_view capability_id,
+    std::string_view target_id = {});
 
 class ToolServiceBridge {
  public:
   [[nodiscard]] services::ServiceCallContext build_context(
       const contracts::ToolIR& tool_ir,
+      const ToolInvocationContext& invocation_context) const;
+  [[nodiscard]] services::ExecutionCompensationRequest build_compensation_request(
+      const contracts::ToolIR& tool_ir,
+      const CompensationRequest& request,
       const ToolInvocationContext& invocation_context) const;
   [[nodiscard]] services::ExecutionCommandRequest build_action_request(
       const contracts::ToolIR& tool_ir,

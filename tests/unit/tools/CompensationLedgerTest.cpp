@@ -48,10 +48,10 @@ void test_compensation_ledger_builds_lifo_hints() {
   assert_equal(2, static_cast<int>(hints.size()),
                "compensation ledger should emit one hint per reversible side-effect record");
   assert_true(hints[0].compensation_action == std::string("agent.apply") &&
-                  hints[0].target_ref == std::string("call-apply"),
+            hints[0].target_ref == std::string("tool://agent.apply/call-apply"),
               "compensation ledger should emit later reversible effects first to preserve LIFO rollback order");
   assert_true(hints[1].compensation_action == std::string("agent.prepare") &&
-                  hints[1].target_ref == std::string("call-prepare"),
+            hints[1].target_ref == std::string("tool://agent.prepare/call-prepare"),
               "compensation ledger should retain earlier reversible effects after newer ones");
 }
 

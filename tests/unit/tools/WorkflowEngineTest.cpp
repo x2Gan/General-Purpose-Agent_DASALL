@@ -278,7 +278,7 @@ void test_workflow_engine_builds_batches_and_stops_after_failure() {
                             "workflow engine should aggregate reversible step side effects into workflow-scoped compensation hints");
     assert_true(outcome.compensation_hints.has_value() &&
                                     outcome.compensation_hints->size() == 1U &&
-                                    outcome.compensation_hints->front().target_ref == std::string("call-prepare"),
+                                outcome.compensation_hints->front().target_ref == std::string("tool://agent.prepare/call-prepare"),
                             "workflow engine should expose workflow compensation hints on the top-level execution outcome");
   assert_true(!outcome.tool_result.success.value_or(true),
               "workflow engine should project workflow failure into the top-level ToolResult");

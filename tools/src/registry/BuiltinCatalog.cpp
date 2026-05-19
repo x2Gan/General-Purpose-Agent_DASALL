@@ -10,7 +10,7 @@ std::vector<contracts::ToolDescriptor> build_builtin_catalog() {
           .category = contracts::ToolCategory::Action,
           .capability_tier = contracts::ToolCapabilityTier::Preview,
           .is_read_only = false,
-          .supports_compensation = false,
+          .supports_compensation = true,
           .default_timeout_ms = 30000U,
           .input_schema_ref = std::string("schema://tools/agent.terminal/input/v1"),
           .output_schema_ref = std::string("schema://tools/agent.terminal/output/v1"),

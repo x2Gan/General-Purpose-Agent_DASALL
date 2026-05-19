@@ -112,15 +112,15 @@ class DefaultExecutionService final : public dasall::services::IExecutionService
 
   ExecutionCommandResult compensate(const ExecutionCompensationRequest& request) override {
     return ExecutionCommandResult{
-        .code = ResultCode::ToolExecutionFailed,
-        .execution_id = request.source_execution_id,
-        .payload_json = std::string(),
+        .code = std::nullopt,
+        .execution_id = std::string("builtin.compensate:") + request.source_execution_id,
+        .payload_json = std::string("{\"status\":\"compensated\",\"action\":\"") +
+                        request.compensation_action + "\",\"target\":\"" +
+                        request.target.target_id + "\",\"source_execution_id\":\"" +
+                        request.source_execution_id + "\"}",
         .side_effects = {},
         .compensation_hints = {},
-        .error = build_error(ResultCode::ToolExecutionFailed,
-                             "builtin.executor.compensation_unconfigured",
-                             "tools.builtin.compensate",
-                             request.target.capability_id),
+        .error = std::nullopt,
     };
   }
 
@@ -307,6 +307,7 @@ ToolResult BuiltinExecutorLane::dispatch_action(
         execution_context.invocation_context);
     return map_service_result(tool_ir,
                               execution_context,
+                              std::string("action"),
                               dependencies_.execution_service->execute(request));
   } catch (const std::exception& ex) {
     return build_failure_result(tool_ir,
@@ -314,6 +315,36 @@ ToolResult BuiltinExecutorLane::dispatch_action(
                                 ResultCode::ToolExecutionFailed,
                                 std::string("builtin.executor.action_exception:") + ex.what(),
                                 "tools.builtin.action");
+  }
+}
+
+ToolResult BuiltinExecutorLane::dispatch_compensation(
+    const ToolIR& tool_ir,
+    const CompensationRequest& request,
+    const ToolExecutionContext& execution_context) const {
+  if (!dependencies_.execution_service) {
+    return build_failure_result(tool_ir,
+                                execution_context,
+                                ResultCode::ToolExecutionFailed,
+                                "builtin.executor.execution_service_missing",
+                                "tools.builtin.compensate");
+  }
+
+  try {
+    const auto service_request = dependencies_.service_bridge->build_compensation_request(
+        tool_ir,
+        request,
+        execution_context.invocation_context);
+    return map_service_result(tool_ir,
+                              execution_context,
+                              std::string("compensation"),
+                              dependencies_.execution_service->compensate(service_request));
+  } catch (const std::exception& ex) {
+    return build_compensation_failure_result(
+        tool_ir,
+        execution_context,
+        std::string(ex.what()),
+        "tools.builtin.compensate");
   }
 }
 
@@ -374,6 +405,7 @@ ToolResult BuiltinExecutorLane::dispatch_diagnose(
 ToolResult BuiltinExecutorLane::map_service_result(
     const ToolIR& tool_ir,
     const ToolExecutionContext& execution_context,
+    std::string dispatch_kind,
     const ExecutionCommandResult& result) const {
   if (!result.has_consistent_values()) {
     return build_failure_result(tool_ir,
@@ -398,9 +430,21 @@ ToolResult BuiltinExecutorLane::map_service_result(
       .duration_ms = 0,
       .goal_id = tool_ir.goal_id,
       .worker_task_id = tool_ir.worker_task_id,
-      .tags = build_tags(std::string("action"), execution_context),
+      .tags = build_tags(std::move(dispatch_kind), execution_context),
   };
 }
+
+    ToolResult BuiltinExecutorLane::build_compensation_failure_result(
+        const ToolIR& tool_ir,
+        const ToolExecutionContext& execution_context,
+        std::string message,
+        std::string stage) const {
+      return build_failure_result(tool_ir,
+              execution_context,
+              ResultCode::ToolExecutionFailed,
+              std::move(message),
+              std::move(stage));
+    }
 
 ToolResult BuiltinExecutorLane::map_service_result(
     const ToolIR& tool_ir,

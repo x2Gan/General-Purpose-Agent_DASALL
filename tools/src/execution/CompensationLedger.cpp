@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "bridge/ToolServiceBridge.h"
+
 namespace {
 
 using dasall::contracts::ToolResult;
@@ -109,9 +111,13 @@ std::vector<ToolCompensationHint> CompensationLedger::build_hints() const {
     if (!it->reversible || it->side_effects.empty()) {
       continue;
     }
+    const auto capability_id = it->tool_name.value_or(it->step_id);
+    const auto target_id = it->tool_call_id.value_or(it->step_id);
     hints.push_back(ToolCompensationHint{
-        .compensation_action = it->tool_name.value_or(it->step_id),
-        .target_ref = it->tool_call_id.value_or(it->step_id),
+        .compensation_action = capability_id,
+        .target_ref = dasall::tools::bridge::format_compensation_target_ref(
+            capability_id,
+            target_id),
         .reason_code = std::string("workflow.compensation_available"),
         .evidence_refs = it->evidence_refs,
     });

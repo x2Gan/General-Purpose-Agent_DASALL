@@ -140,8 +140,10 @@ using dasall::tools::manager::ToolExecutionRequest;
 
 [[nodiscard]] ToolInvocationEnvelope build_compensation_failure_envelope(
 		const CompensationRequest& request,
+		ResultCode result_code,
 		std::string reason_code,
-		std::string stage) {
+		std::string stage,
+		std::optional<ToolRouteFacts> route_facts = std::nullopt) {
 	ToolInvocationEnvelope envelope;
 	envelope.tool_result = ToolResult{
 			.request_id = std::nullopt,
@@ -150,7 +152,7 @@ using dasall::tools::manager::ToolExecutionRequest;
 			.success = false,
 			.payload = std::nullopt,
 			.error = build_error(
-					ResultCode::ToolExecutionFailed,
+					result_code,
 					reason_code,
 					std::move(stage),
 					request.tool_call_id.value_or(std::string("unknown_call"))),
@@ -161,7 +163,9 @@ using dasall::tools::manager::ToolExecutionRequest;
 			.worker_task_id = std::nullopt,
 			.tags = std::nullopt,
 	};
+	envelope.evidence_refs = request.evidence_refs;
 	envelope.failure_reason_code = std::move(reason_code);
+	envelope.route_facts = std::move(route_facts);
 	return envelope;
 }
 
@@ -359,12 +363,64 @@ void emit_terminal_audit(
 		return std::nullopt;
 	}
 
+	const auto capability_id = result.tool_name.value_or(std::string("unknown_tool"));
+	const auto target_id =
+			result.tool_call_id.value_or(std::string("builtin:") + capability_id);
+
 	return std::vector<ToolCompensationHint>{ToolCompensationHint{
-			.compensation_action = std::string("compensate.side_effects"),
-			.target_ref = result.tool_call_id,
+			.compensation_action = result.tool_name,
+			.target_ref = dasall::tools::bridge::format_compensation_target_ref(
+					capability_id,
+					target_id),
 			.reason_code = std::string("tool.manager.compensation_available"),
 			.evidence_refs = *result.side_effects,
 	}};
+}
+
+[[nodiscard]] dasall::contracts::ToolInvocationKind invocation_kind_for_category(
+		const ToolDescriptor& descriptor) {
+	if (!descriptor.category.has_value()) {
+		return dasall::contracts::ToolInvocationKind::Action;
+	}
+
+	switch (*descriptor.category) {
+		case dasall::contracts::ToolCategory::Information:
+			return dasall::contracts::ToolInvocationKind::InformationQuery;
+		case dasall::contracts::ToolCategory::Action:
+			return dasall::contracts::ToolInvocationKind::Action;
+		case dasall::contracts::ToolCategory::Workflow:
+			return dasall::contracts::ToolInvocationKind::Workflow;
+		case dasall::contracts::ToolCategory::AgentDelegation:
+			return dasall::contracts::ToolInvocationKind::AgentDelegation;
+		case dasall::contracts::ToolCategory::Diagnostic:
+			return dasall::contracts::ToolInvocationKind::Diagnostic;
+		case dasall::contracts::ToolCategory::Unspecified:
+			break;
+	}
+
+	return dasall::contracts::ToolInvocationKind::Action;
+}
+
+void append_unique_evidence_refs(
+		std::optional<std::vector<std::string>>* target,
+		const std::optional<std::vector<std::string>>& source) {
+	if (!source.has_value() || source->empty()) {
+		return;
+	}
+
+	if (!target->has_value()) {
+		target->emplace();
+	}
+
+	for (const auto& ref : *source) {
+		if (ref.empty()) {
+			continue;
+		}
+		auto& refs = target->value();
+		if (std::find(refs.begin(), refs.end(), ref) == refs.end()) {
+			refs.push_back(ref);
+		}
+	}
 }
 
 [[nodiscard]] ToolResult default_executor(const ToolExecutionRequest& execution_request) {
@@ -426,6 +482,9 @@ ToolManager::ToolManager(manager::ToolManagerDependencies dependencies)
 	if (!dependencies_.executor) {
 		dependencies_.executor = defaults.executor;
 	}
+	if (!dependencies_.compensation_executor) {
+		dependencies_.compensation_executor = defaults.compensation_executor;
+	}
 	if (!dependencies_.projector) {
 		dependencies_.projector = defaults.projector;
 	}
@@ -463,7 +522,6 @@ ToolInvocationEnvelope ToolManager::compensate(
 	if (dependencies_.audit_hooks.on_compensation) {
 		dependencies_.audit_hooks.on_compensation(request, envelope);
 	}
-	emit_terminal_audit(dependencies_.audit_hooks, envelope);
 	return envelope;
 }
 
@@ -843,11 +901,177 @@ ToolInvocationEnvelope ToolManager::run_invoke_pipeline(
 ToolInvocationEnvelope ToolManager::run_compensation_pipeline(
 		const CompensationRequest& request,
 		const ToolInvocationContext& context) const {
-	static_cast<void>(context);
-	return build_compensation_failure_envelope(
+	if (!dependencies_.registry || !dependencies_.validator || !dependencies_.config_adapter ||
+				!dependencies_.policy_gate || !dependencies_.route_selector ||
+				!dependencies_.compensation_executor || !dependencies_.projector) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::RuntimeRetryExhausted,
+				"tool.manager.dependencies_unavailable",
+				"tools.manager.compensate");
+	}
+
+	if (!context.has_profile_snapshot()) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ValidationFieldMissing,
+				"tool.manager.profile_missing",
+				"tools.manager.compensate");
+	}
+
+	if (!request.tool_call_id.has_value() || request.tool_call_id->empty() ||
+				!request.compensation_action.has_value() || request.compensation_action->empty() ||
+				!request.target_ref.has_value() || request.target_ref->empty() ||
+				!request.reason_code.has_value() || request.reason_code->empty()) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ValidationFieldMissing,
+				"InvalidRequest",
+				"tools.manager.compensate");
+	}
+
+	const auto target = bridge::resolve_compensation_target(*request.target_ref);
+	if (!target.has_value() || target->capability_id.empty()) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ValidationFieldMissing,
+				"tool.manager.compensation_target_invalid",
+				"tools.manager.compensate");
+	}
+
+	const auto descriptor = dependencies_.registry->resolve_descriptor(target->capability_id);
+	if (!descriptor.has_value()) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ToolExecutionFailed,
+				"tool.manager.descriptor_missing",
+				"tools.manager.resolve");
+	}
+	if (!descriptor->supports_compensation.value_or(false) ||
+				!descriptor->category.has_value() ||
+				*descriptor->category != contracts::ToolCategory::Action) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ToolExecutionFailed,
+				"tool.manager.compensation_unsupported",
+				"tools.manager.compensate");
+	}
+
+	const auto synthetic_request = ToolRequest{
+			.request_id = *request.tool_call_id + ".compensate",
+			.tool_call_id = request.tool_call_id,
+			.tool_name = target->capability_id,
+			.invocation_kind = invocation_kind_for_category(*descriptor),
+			.arguments_payload = std::string("{}"),
+			.created_at = current_time_ms(),
+			.goal_id = std::nullopt,
+			.worker_task_id = std::nullopt,
+			.runtime_budget = context.profile_snapshot->runtime_budget(),
+			.timeout_ms = descriptor->default_timeout_ms,
+			.idempotency_key = request.tool_call_id,
+			.tags = std::vector<std::string>{"tool.compensation"},
+	};
+	const auto tool_ir = dependencies_.validator->inject_defaults(
+			synthetic_request,
+			*descriptor,
+			ToolIROperation::Invoke,
+			std::string("{}"));
+	const auto tool_ir_guard = contracts::validate_tool_ir_field_rules(tool_ir);
+	if (!tool_ir_guard.ok) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ValidationFieldMissing,
+				"InvalidToolIR",
+				"tools.manager.compensate");
+	}
+
+	const auto& snapshot = *context.profile_snapshot;
+	const auto policy_view = dependencies_.config_adapter->build_policy_view(
+			snapshot,
+			dependencies_.build_manifest);
+	const auto timeout_view = dependencies_.config_adapter->build_timeout_view(
+			snapshot,
+			dependencies_.build_manifest);
+	const auto requested_domain = derive_requested_domain(tool_ir, *descriptor);
+	const auto admission_decision = dependencies_.policy_gate->evaluate(
+			ToolAdmissionRequest{
+					.tool_name = descriptor->tool_name.value_or(target->capability_id),
+					.required_scopes = descriptor->required_scopes.value_or(
+							std::vector<std::string>{}),
+					.caller_domain = requested_domain,
+					.high_risk = is_high_risk_descriptor(*descriptor),
+					.confirmation_present = has_confirmation_fact(context),
+					.route_proven = requested_domain.has_value(),
+			},
+			policy_view);
+	if (!admission_decision.allowed()) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::PolicyDenied,
+				admission_decision.reason_code,
+				"tools.manager.admit");
+	}
+
+	const auto route_decision = dependencies_.route_selector->select_route(
+			tool_ir,
+			*descriptor,
+			timeout_view,
+			dependencies_.registry->list_mcp_bindings(target->capability_id),
+			capability_snapshot_,
+			route_health_);
+	if (!route_decision.available) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ToolExecutionFailed,
+				route_decision.reason_code,
+				"tools.manager.route",
+				build_route_facts(route_decision));
+	}
+	if (route_decision.route != ToolIRRoute::LocalTool) {
+		return build_compensation_failure_envelope(
+				request,
+				ResultCode::ToolExecutionFailed,
+				"tool.manager.compensation_route_unsupported",
+				"tools.manager.route",
+				build_route_facts(route_decision));
+	}
+
+	auto result = dependencies_.compensation_executor(
+			tool_ir,
 			request,
-			"tool.manager.compensation_unconfigured",
-			"tools.manager.compensate");
+			ToolExecutionContext{
+					.invocation_context = context,
+					.lane_key = route_decision.lane_key,
+			});
+	auto normalized_result = normalize_result(
+			synthetic_request,
+			tool_ir,
+			std::move(result));
+	auto envelope = dependencies_.projector(normalized_result, route_decision, context);
+	envelope.tool_result = normalized_result;
+	const auto fallback_projection =
+				standard_projector().project(normalized_result, route_decision, context);
+	if (!envelope.route_facts.has_value()) {
+		envelope.route_facts = fallback_projection.route_facts;
+	}
+	if (!envelope.observation.has_value()) {
+		envelope.observation = fallback_projection.observation;
+	}
+	if (!envelope.observation_digest.has_value()) {
+		envelope.observation_digest = fallback_projection.observation_digest;
+	}
+	if (!envelope.evidence_refs.has_value()) {
+		envelope.evidence_refs = fallback_projection.evidence_refs;
+	}
+	append_unique_evidence_refs(&envelope.evidence_refs, request.evidence_refs);
+	if (!envelope.failure_reason_code.has_value() &&
+				!envelope.tool_result->success.value_or(false)) {
+		envelope.failure_reason_code = fallback_projection.failure_reason_code;
+	}
+	if (envelope.tool_result->success.value_or(false)) {
+		envelope.failure_reason_code = std::nullopt;
+	}
+	return envelope;
 }
 
 manager::ToolManagerDependencies ToolManager::default_dependencies() {
@@ -924,6 +1148,15 @@ manager::ToolManagerDependencies ToolManager::default_dependencies() {
 					}
 
 					return default_executor(execution_request);
+			},
+			.compensation_executor = [builtin_lane](
+						const ToolIR& tool_ir,
+						const CompensationRequest& request,
+						const ToolExecutionContext& execution_context) {
+					return builtin_lane->dispatch_compensation(
+							tool_ir,
+							request,
+							execution_context);
 			},
 			.projector = [result_projector](
 						const ToolResult& result,

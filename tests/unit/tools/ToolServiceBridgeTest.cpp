@@ -3,6 +3,7 @@
 #include <string>
 
 #include "RuntimePolicySnapshot.h"
+#include "ToolManager.h"
 #include "bridge/ToolServiceBridge.h"
 #include "support/TestAssertions.h"
 
@@ -248,6 +249,53 @@ void test_build_diagnose_request_keeps_budget_optional_and_guards_minimum_deadli
               "diagnose request should request last-error details by default");
 }
 
+void test_build_compensation_request_parses_structured_target_ref() {
+  const auto snapshot = make_snapshot(false, 1800);
+  const dasall::tools::ToolInvocationContext invocation_context{
+      .caller_domain = std::string("runtime.main"),
+      .session_id = std::string("session-compensate"),
+      .profile_snapshot = &snapshot,
+      .trace = {
+          .trace_id = std::string("trace-compensate"),
+          .span_id = std::string("span-compensate"),
+          .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::nullopt,
+  };
+  const auto tool_ir = make_tool_ir(
+      "req-compensate",
+      "call-compensate",
+      "agent.terminal",
+      "{}",
+      1700U,
+      std::string("goal-compensate"));
+
+  const dasall::tools::bridge::ToolServiceBridge bridge;
+  const auto request = bridge.build_compensation_request(
+      tool_ir,
+      dasall::tools::CompensationRequest{
+          .tool_call_id = std::string("call-compensate-source"),
+          .compensation_action = std::string("safe_mode.exit"),
+          .target_ref = std::string("tool://agent.terminal/call-compensate-source"),
+          .reason_code = std::string("manual_recovery"),
+          .evidence_refs = std::vector<std::string>{"evidence://compensate"},
+      },
+      invocation_context);
+
+  assert_equal(std::string("req-compensate"), request.context.request_id,
+               "compensation request should preserve request_id from ToolIR");
+  assert_equal(std::string("agent.terminal"), request.target.capability_id,
+               "compensation request should parse capability_id from tool:// target_ref");
+  assert_equal(std::string("call-compensate-source"), request.target.target_id,
+               "compensation request should parse target_id from tool:// target_ref");
+  assert_equal(std::string("safe_mode.exit"), request.compensation_action,
+               "compensation request should preserve compensation_action");
+  assert_equal(std::string("call-compensate-source"), request.source_execution_id,
+               "compensation request should reuse tool_call_id as source_execution_id handoff");
+  assert_equal(std::string("manual_recovery"), request.reason_code,
+               "compensation request should preserve reason_code");
+}
+
 }  // namespace
 
 int main() {
@@ -255,6 +303,7 @@ int main() {
     test_build_action_request_preserves_context_budget_and_payload();
     test_build_query_request_uses_profile_freshness_and_fallback_correlation_ids();
     test_build_diagnose_request_keeps_budget_optional_and_guards_minimum_deadline();
+        test_build_compensation_request_parses_structured_target_ref();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

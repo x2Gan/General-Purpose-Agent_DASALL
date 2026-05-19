@@ -208,6 +208,12 @@ dasall_add_tools_behavior_test(
 )
 
 dasall_add_tools_behavior_test(
+	dasall_tool_manager_compensation_pipeline_unit_test
+	ToolManagerCompensationPipelineTest.cpp
+	ToolManagerCompensationPipelineTest
+)
+
+dasall_add_tools_behavior_test(
 	dasall_tool_manager_failure_path_unit_test
 	ToolManagerFailurePathTest.cpp
 	ToolManagerFailurePathTest

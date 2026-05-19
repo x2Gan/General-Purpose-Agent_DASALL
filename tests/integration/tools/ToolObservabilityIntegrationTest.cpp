@@ -547,6 +547,27 @@ class StaticHealthSignalProvider final
   };
 }
 
+[[nodiscard]] std::shared_ptr<dasall::tools::registry::ToolRegistry> make_registry() {
+    auto registry = std::make_shared<dasall::tools::registry::ToolRegistry>();
+    const auto registered = registry->register_builtin(dasall::contracts::ToolDescriptor{
+            .tool_name = std::string("agent.terminal"),
+            .display_name = std::string("Agent Terminal"),
+            .category = dasall::contracts::ToolCategory::Action,
+            .capability_tier = dasall::contracts::ToolCapabilityTier::Stable,
+            .is_read_only = false,
+            .supports_compensation = true,
+            .default_timeout_ms = 2500U,
+            .input_schema_ref = std::string("schema://tools/agent.terminal/input/v1"),
+            .output_schema_ref = std::string("schema://tools/agent.terminal/output/v1"),
+            .required_scopes = std::vector<std::string>{"tools.execute"},
+            .tags = std::vector<std::string>{"builtin", "integration"},
+            .version = std::string("1.0.0"),
+    });
+    assert_true(registered,
+                            "tools observability integration should register a compensable builtin descriptor");
+    return registry;
+}
+
 [[nodiscard]] dasall::tools::ToolInvocationContext make_context() {
   const auto snapshot = make_snapshot();
   return dasall::tools::ToolInvocationContext{
@@ -610,6 +631,7 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
       });
 
   dasall::tools::manager::ToolManagerDependencies dependencies;
+    dependencies.registry = make_registry();
   dependencies.audit_hooks = dasall::tools::ops::ToolAuditBridge::bind_hooks(audit_bridge);
   dependencies.metrics_bridge = metrics_bridge;
   dependencies.trace_bridge = trace_bridge;
@@ -626,7 +648,7 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
       dasall::tools::CompensationRequest{
           .tool_call_id = std::string("call-audit-int-success"),
           .compensation_action = std::string("safe_mode.exit"),
-          .target_ref = std::string("goal://audit-int"),
+          .target_ref = std::string("tool://agent.terminal/call-audit-int-success"),
           .reason_code = std::string("manual_recovery"),
           .evidence_refs = std::vector<std::string>{"recovery://call-audit-int-success"},
       },
@@ -638,9 +660,11 @@ void test_tool_observability_integration_emits_audit_events_for_success_failure_
               "tools observability integration should keep the fail-closed execution result intact");
     assert_true(denied.tool_result.has_value() && !denied.tool_result->success.value_or(true),
                             "tools observability integration should preserve policy-denied results while emitting denied-path observability signals");
-  assert_true(compensation.tool_result.has_value() &&
-                  !compensation.tool_result->success.value_or(true),
-              "tools observability integration should expose the current unconfigured compensation result unchanged");
+    assert_true(compensation.tool_result.has_value() &&
+                                    compensation.tool_result->success.value_or(false),
+                            "tools observability integration should preserve successful compensation results while emitting compensation audit events");
+    assert_true(!compensation.failure_reason_code.has_value(),
+                            "tools observability integration should not synthesize a failure reason for successful compensation");
   assert_true(has_action(audit_logger.events, "tool.execution.requested") &&
                   has_action(audit_logger.events, "tool.execution.completed") &&
                   has_action(audit_logger.events, "tool.execution.failed") &&
