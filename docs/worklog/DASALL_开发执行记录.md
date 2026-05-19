@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+## 记录 #709
+
+- 日期：2026-05-19
+- 阶段：llm / gap closeout
+- 任务：推进 `LLM-GAP-001`，收口 D10 streaming lifecycle 缺口
+- 状态：已完成（独立 closeout 交付件、专项总账与 focused validation 已回写；不外推 shared stream admission）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `LLM-GAP-001 ~ 005`，每个原子任务完成后单独提交推送，并禁止使用 qemu / kvm 采集收敛证据。
+2. 本轮只处理 `LLM-GAP-001`。专项总账已记录 D10 streaming lifecycle 由 `LLM-FIX-001` 收口，但缺少面向 GAP 本身的独立 closeout 证据链。
+3. 本轮 authoritative 边界为：llm module-local streaming lifecycle 已闭合；shared `StreamHandle` / `StreamSessionRef` admission 继续 deferred，不作为本 gap 完成条件。
+
+### 改动
+
+1. 新增 `docs/todos/llm/deliverables/LLM-GAP-001-D10-streaming-lifecycle-closeout.md`：固定本地证据、MDN SSE 外部参考、Design -> Build 映射、Build 三件套、D Gate 与完成判定。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `LLM-GAP-001` 标记为“已闭合 / High”，补入 closeout 交付件与 focused validation 摘要。
+
+### 验证
+
+1. focused targets 构建。
+   - `Build_CMakeTools(buildTargets=["dasall_stream_session_lifecycle_unit_test","dasall_llm_streaming_integration_test","dasall_cognition_llm_bridge_error_mapping_unit_test"])`
+   - 结果：通过。
+2. CMake Tools focused CTest 尝试。
+   - `RunCtest_CMakeTools(tests=["StreamSessionLifecycleTest","LLMStreamingIntegrationTest","CognitionLlmBridgeErrorMappingTest"])`
+   - 结果：工具在 generation 层失败，未进入测试执行；不作为测试失败结论。
+3. direct CTest fallback。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(StreamSessionLifecycleTest|LLMStreamingIntegrationTest|CognitionLlmBridgeErrorMappingTest)$'`
+   - 结果：`100% tests passed (3/3)`。
+4. 文档锚点检查。
+   - `rg -n 'LLM-GAP-001.*已闭合|LLM-GAP-001-D10-streaming-lifecycle-closeout|focused CTest fallback `3/3`' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：命中 `LLM-GAP-001` 已闭合、交付件路径与 focused validation 摘要。
+
+### 结果
+
+1. `LLM-GAP-001` 已关闭：D10 streaming lifecycle 在 llm owner module-local 边界内具备生命周期 owner、manager streaming 编排、OpenAI-compatible SSE merge 与 cognition projection regression 证据。
+2. 本轮未使用 qemu / kvm，也不把 focused streaming tests 外推为 release runner、installed package、shared streaming 或 L6 soak 证据。
+
 ## 记录 #708
 
 - 日期：2026-05-19
