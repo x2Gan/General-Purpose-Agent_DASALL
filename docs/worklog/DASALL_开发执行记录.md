@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+## 记录 #711
+
+- 日期：2026-05-19
+- 阶段：llm / gap closeout
+- 任务：推进 `LLM-GAP-003`，收口 production metrics / trace / audit sink 缺口
+- 状态：已完成（独立 closeout 交付件、专项总账与 focused validation 已回写；不外推 installed / release / soak 证据）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `LLM-GAP-001 ~ 005`，每个原子任务完成后单独提交推送，并禁止使用 qemu / kvm 采集收敛证据。
+2. 本轮只处理 `LLM-GAP-003`。专项总账已记录 production metrics / trace / audit sink 由 `LLM-FIX-003` 收口，但缺少面向 GAP 本身的独立 closeout 证据链。
+3. 本轮 authoritative 边界为：production-composed manager 的 logger / metrics / trace / audit sink 接线已闭合；installed package、release candidate rerun、external provider 长稳态与 L6 soak 不作为本 gap 完成条件。
+
+### 改动
+
+1. 新增 `docs/todos/llm/deliverables/LLM-GAP-003-production-observability-closeout.md`：固定本地证据、OpenTelemetry signals 外部参考、Design -> Build 映射、Build 三件套、D Gate 与完成判定。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `LLM-GAP-003` 标记为“已闭合 / Medium”，补入 closeout 交付件与 focused validation 摘要。
+
+### 验证
+
+1. focused targets 构建。
+   - `Build_CMakeTools(buildTargets=["dasall_llm_production_observability_integration_test","dasall_llm_observability_field_completeness_unit_test","dasall_llm_audit_event_coverage_unit_test","dasall_llm_smoke_integration_test"])`
+   - 结果：通过。
+2. CMake Tools focused CTest 尝试。
+   - `RunCtest_CMakeTools(tests=["LLMProductionObservabilityIntegrationTest","LLMObservabilityFieldCompletenessTest","LLMAuditEventCoverageTest","LLMSubsystemSmokeIntegrationTest"])`
+   - 结果：工具在 generation 层失败，未进入测试执行；不作为测试失败结论。
+3. direct CTest fallback。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(LLMProductionObservabilityIntegrationTest|LLMObservabilityFieldCompletenessTest|LLMAuditEventCoverageTest|LLMSubsystemSmokeIntegrationTest)$'`
+   - 结果：`100% tests passed, 0 tests failed out of 4`。
+4. 文档锚点检查。
+   - `rg -n 'LLM-GAP-003|状态：Done|100% tests passed, 0 tests failed out of 4|audit logger|metrics provider|tracer provider' docs/todos/llm/deliverables/LLM-GAP-003-production-observability-closeout.md`
+   - 结果：命中任务 ID、Done 状态、sink 字段与 focused validation 摘要。
+
+### 结果
+
+1. `LLM-GAP-003` 已关闭：production factory 与 runtime live composition 已把 logger、metrics provider、tracer provider 和 audit logger 注入 production-composed manager，focused tests 证明 observability field completeness、audit event coverage、subsystem smoke 与 production observability integration 未回退。
+2. 本轮未使用 qemu / kvm，也不把 production observability focused tests 外推为 installed package、release runner、external provider 长稳态或 L6 soak 证据。
+
 ## 记录 #710
 
 - 日期：2026-05-19
