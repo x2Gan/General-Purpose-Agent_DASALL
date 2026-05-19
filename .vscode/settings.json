@@ -1,6 +1,9 @@
 {
   "cmake.useCMakePresets": "always",
   "cmake.configureOnOpen": true,
+  "cmake.buildBeforeRun": false,
+  "cmake.ctest.testExplorerIntegrationEnabled": false,
+  "cmake.revealLog": "onError",
   "cSpell.words": [
     "autocheckpoint",
     "autonumber",
