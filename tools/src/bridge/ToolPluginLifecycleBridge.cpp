@@ -1,5 +1,7 @@
 #include "ToolPluginLifecycleBridge.h"
 
+#include "ToolPluginExtensionConsumer.h"
+
 #include <utility>
 
 namespace dasall::tools::bridge {
@@ -7,10 +9,12 @@ namespace dasall::tools::bridge {
 ToolPluginLifecycleBridge::ToolPluginLifecycleBridge(
     std::shared_ptr<infra::plugin::IPluginManager> plugin_manager,
     std::shared_ptr<PluginExtensionBridge> extension_bridge,
-    ToolPluginExtensionCatalogResolver catalog_resolver)
+    ToolPluginExtensionCatalogResolver catalog_resolver,
+    std::shared_ptr<ToolPluginExtensionConsumer> extension_consumer)
     : plugin_manager_(std::move(plugin_manager)),
       extension_bridge_(std::move(extension_bridge)),
-      catalog_resolver_(std::move(catalog_resolver)) {}
+      catalog_resolver_(std::move(catalog_resolver)),
+      extension_consumer_(std::move(extension_consumer)) {}
 
 std::size_t ToolPluginLifecycleBridge::synchronize_active_plugins() {
   if (plugin_manager_ == nullptr || extension_bridge_ == nullptr || !catalog_resolver_) {
@@ -24,11 +28,17 @@ std::size_t ToolPluginLifecycleBridge::synchronize_active_plugins() {
     for (const auto& descriptor : active_set.active_plugins) {
       if (is_known_plugin_id(descriptor.plugin_id)) {
         static_cast<void>(extension_bridge_->on_plugin_unloaded(descriptor.plugin_id));
+        if (extension_consumer_ != nullptr) {
+          static_cast<void>(extension_consumer_->on_plugin_unloaded(descriptor.plugin_id));
+        }
       }
     }
 
     for (const auto& plugin_id : tracked_plugin_ids_) {
       static_cast<void>(extension_bridge_->on_plugin_unloaded(plugin_id));
+      if (extension_consumer_ != nullptr) {
+        static_cast<void>(extension_consumer_->on_plugin_unloaded(plugin_id));
+      }
     }
 
     tracked_plugin_ids_.clear();
@@ -45,14 +55,24 @@ std::size_t ToolPluginLifecycleBridge::synchronize_active_plugins() {
 
     if (!is_visible_plugin_status(descriptor.status)) {
       static_cast<void>(extension_bridge_->on_plugin_unloaded(descriptor.plugin_id));
+      if (extension_consumer_ != nullptr) {
+        static_cast<void>(extension_consumer_->on_plugin_unloaded(descriptor.plugin_id));
+      }
       tracked_plugin_ids_.erase(descriptor.plugin_id);
       continue;
     }
 
     next_visible_plugin_ids.insert(descriptor.plugin_id);
     const auto catalog = resolve_catalog(descriptor.plugin_id, {});
-    if (!catalog.has_value() || !extension_bridge_->on_plugin_loaded(*catalog)) {
+    const bool bridge_loaded = catalog.has_value() && extension_bridge_->on_plugin_loaded(*catalog);
+    const bool consumer_loaded =
+        catalog.has_value() &&
+        (extension_consumer_ == nullptr || extension_consumer_->on_plugin_loaded(*catalog));
+    if (!bridge_loaded || !consumer_loaded) {
       static_cast<void>(extension_bridge_->on_plugin_unloaded(descriptor.plugin_id));
+      if (extension_consumer_ != nullptr) {
+        static_cast<void>(extension_consumer_->on_plugin_unloaded(descriptor.plugin_id));
+      }
       tracked_plugin_ids_.erase(descriptor.plugin_id);
       continue;
     }
@@ -84,8 +104,15 @@ bool ToolPluginLifecycleBridge::on_plugin_loaded(
   std::lock_guard<std::mutex> guard(mutex_);
 
   const auto catalog = resolve_catalog(load_result.plugin_id, load_result.handle_ref);
-  if (!catalog.has_value() || !extension_bridge_->on_plugin_loaded(*catalog)) {
+  const bool bridge_loaded = catalog.has_value() && extension_bridge_->on_plugin_loaded(*catalog);
+  const bool consumer_loaded =
+      catalog.has_value() &&
+      (extension_consumer_ == nullptr || extension_consumer_->on_plugin_loaded(*catalog));
+  if (!bridge_loaded || !consumer_loaded) {
     static_cast<void>(extension_bridge_->on_plugin_unloaded(load_result.plugin_id));
+    if (extension_consumer_ != nullptr) {
+      static_cast<void>(extension_consumer_->on_plugin_unloaded(load_result.plugin_id));
+    }
     tracked_plugin_ids_.erase(load_result.plugin_id);
     return false;
   }
@@ -104,8 +131,10 @@ bool ToolPluginLifecycleBridge::on_plugin_unloaded(
   std::lock_guard<std::mutex> guard(mutex_);
 
   const bool bridge_changed = extension_bridge_->on_plugin_unloaded(unload_result.plugin_id);
+  const bool consumer_changed =
+      extension_consumer_ != nullptr && extension_consumer_->on_plugin_unloaded(unload_result.plugin_id);
   const auto erased = tracked_plugin_ids_.erase(unload_result.plugin_id);
-  return bridge_changed || erased > 0U;
+  return bridge_changed || consumer_changed || erased > 0U;
 }
 
 std::optional<plugin::ToolPluginExtensionCatalog> ToolPluginLifecycleBridge::resolve_catalog(

@@ -1,5 +1,65 @@
 # DASALL 开发执行记录
 
+## 记录 #702
+
+- 日期：2026-05-19
+- 阶段：tools / plugin snapshot downstream distribution closure
+- 任务：推进 TOOL-FIX-004，将 plugin snapshot 分发到 registry / discovery / skill 子域
+- 状态：已完成（plugin capability 从 active set 到 `ToolRegistry` / `CapabilityDiscovery` / `SkillRegistry` 的自动闭环、focused build-tree evidence 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-004`，并保留“先解 blocker、逐文件落盘、完成后按仓库规范提交推送、禁止使用 qemu / kvm 做证据”的全部约束。
+2. 近端代码检查确认 `TOOL-FIX-004` 无前置 BLOCK；根因集中在 `PluginExtensionBridge` 只维护 snapshot，`ToolPluginStdioMCPIntegrationTest` / `ToolPluginSkillBundleIntegrationTest` 仍手工读取 snapshot 再喂给 `CapabilityDiscovery` / `PluginSkillBundleImporter` / `SkillRegistry`。
+3. tools 详设 6.12.4 已冻结边界：plugin load success 不能直接等同于 capability visible；visible 必须经过 `ToolRegistry` / `CapabilityDiscovery` / `SkillRegistry` 的二次治理后才成立。
+4. 用户明确要求禁止使用 qemu / kvm 作为本轮收敛证据，因此本轮验证固定为 build-tree focused build/test；`RunCtest_CMakeTools` 若继续返回仓库已知泛化“生成失败”，则按既有仓库口径回退到直接执行对应 test binary。
+
+### 执行与结果
+
+1. 新增 plugin delta consumer。
+   - `tools/src/bridge/ToolPluginExtensionConsumer.h/.cpp` 已新增 `ToolPluginExtensionConsumer`，复用 `PluginExtensionBridge::rebuild_extension_catalog()` 生成的 `PluginExtensionDelta`，把 builtin provider 自动下沉到 `ToolRegistry`，把 stdio MCP launch spec 自动下沉到 `CapabilityDiscovery`，把 skill bundle 自动下沉到 `PluginSkillBundleImporter` / `SkillRegistry`。
+   - consumer 现在对任一子域应用失败执行 source-scoped revoke，防止出现 bridge snapshot 与下游子域的部分可见状态漂移。
+2. 收口 registry / discovery 的 source revoke 语义。
+   - `tools/src/registry/ToolRegistry.h/.cpp` 已新增 `apply_plugin_extension_delta()` 与 `revoke_mcp_bindings_for_source()`，把 plugin descriptor delta 和 MCP binding-only revoke 明确拆开。
+   - `tools/src/mcp/CapabilityDiscovery.cpp` 现在只撤销 source-owned MCP bindings，不再通过 full `revoke_source()` 误删同 source 的 plugin descriptors。
+   - `tests/unit/tools/ToolRegistryTest.cpp` 已新增 descriptor / binding revoke 隔离场景，证明 binding-only revoke 不会删除 plugin descriptors，而 full source revoke 仍能同时删除两者。
+3. lifecycle adapter 现可自动驱动 downstream consumer。
+   - `tools/src/bridge/ToolPluginLifecycleBridge.h/.cpp` 已接入可选 `ToolPluginExtensionConsumer`；active set sync、load、unload 现在会同时维护 `PluginExtensionBridge` snapshot 和下游三个子域。
+   - consumer 失败时，lifecycle adapter 会与 bridge 一起撤回 source，继续保持 fail-closed。
+4. focused integration gate 改为真实自动路径。
+   - `tests/integration/tools/ToolPluginStdioMCPIntegrationTest.cpp` 已改为直接走 `ToolPluginExtensionConsumer::on_plugin_loaded()` / `on_plugin_unloaded()`，不再手工读取 bridge snapshot 调 `CapabilityDiscovery`。
+   - `tests/integration/tools/ToolPluginSkillBundleIntegrationTest.cpp` 已改为直接走 consumer 自动分发；feature flag 关闭时 source 保持不可见，启用 importer 时自动注册并在 unload 时 source-scoped revoke。
+   - `tests/integration/tools/ToolPluginExtensionEndToEndIntegrationTest.cpp` 已新增，用 fake plugin manager + lifecycle bridge + consumer 一次性覆盖 builtin provider、stdio MCP、skill bundle 三类 payload 的 publish / revoke。
+   - `tests/integration/tools/CMakeLists.txt` 已注册 `dasall_tool_plugin_extension_end_to_end_integration_test` discoverability。
+5. 回链 deliverable、详设与总账。
+   - 已新增 deliverable `docs/todos/tools/deliverables/TOOL-FIX-004-plugin-snapshot分发到registry-discovery-skill收敛.md`，固定任务重定义、Design -> Build 映射、focused validation 与不外推边界。
+   - `docs/architecture/DASALL_tools子系统详细设计.md` 已补写 `ToolPluginExtensionConsumer`、`ToolRegistry` descriptor/binding revoke 解耦与新的 focused 验收出口。
+   - `docs/todos/DASALL_子系统查漏补缺专项记录.md` 已把 `TOOL-GAP-004` 标为已闭合、`TOOL-FIX-004` 标为 Done，并同步更新 tools -> infra/plugin 当前口径与后续优先级。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_tool_registry_unit_test"])`
+   - `Build_CMakeTools(buildTargets=["dasall_tools"])`
+   - `Build_CMakeTools(buildTargets=["dasall_tool_plugin_stdio_mcp_integration_test","dasall_tool_plugin_skill_bundle_integration_test","dasall_tool_plugin_extension_end_to_end_integration_test","dasall_tool_plugin_lifecycle_bridge_integration_test"])`
+   - 结果：构建成功。
+2. focused binary fallback。
+   - `build/vscode-linux-ninja/tests/unit/tools/dasall_tool_registry_unit_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_plugin_stdio_mcp_integration_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_plugin_skill_bundle_integration_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_plugin_extension_end_to_end_integration_test`
+   - `build/vscode-linux-ninja/tests/integration/tools/dasall_tool_plugin_lifecycle_bridge_integration_test`
+   - 结果：以上 5 条二进制退出码均为 `0`。
+3. 工具链边界说明。
+   - `RunCtest_CMakeTools(tests=["ToolPluginStdioMCPIntegrationTest","ToolPluginSkillBundleIntegrationTest","ToolPluginExtensionEndToEndIntegrationTest"])` 仍返回仓库已知泛化“生成失败”，因此继续沿用 direct-binary fallback 作为 authoritative focused evidence。
+   - 本轮全程未使用 qemu / kvm，也没有把 build-tree L2 结果外推为 installed / qemu / release 证据。
+
+### 结果
+
+1. `TOOL-GAP-004` 已闭合：plugin 导出的 builtin provider、stdio MCP launch spec、skill bundle 现在能自动进入 `ToolRegistry`、`CapabilityDiscovery` 与 `SkillRegistry`，不再依赖 tests 手工 wiring。
+2. `TOOL-FIX-004` 已具备 focused unit / integration evidence，可与 deliverable、详设和专项总账回写一起提交推送。
+3. tools 侧后续残余重点已收敛为 `TOOL-FIX-005` 及之后的 lane bulkhead、generic MCP、production / installed 证据，而不再是 plugin snapshot downstream distribution 本身。
+
 ## 记录 #701
 
 - 日期：2026-05-19

@@ -10,7 +10,7 @@
 #include "MCPLoopbackServerFixture.h"
 #include "RuntimePolicySnapshot.h"
 #include "ToolManager.h"
-#include "bridge/PluginExtensionBridge.h"
+#include "bridge/ToolPluginExtensionConsumer.h"
 #include "execution/BuiltinExecutorLane.h"
 #include "mcp/CapabilityCache.h"
 #include "mcp/CapabilityDiscovery.h"
@@ -263,10 +263,10 @@ struct Harness {
   std::shared_ptr<dasall::tools::execution::BuiltinExecutorLane> builtin_lane;
   std::shared_ptr<dasall::tools::mcp::CapabilityCache> cache;
   dasall::tests::mocks::MCPLoopbackServerFixture loopback;
-  dasall::tools::bridge::PluginExtensionBridge bridge;
   std::shared_ptr<dasall::tools::mcp::StdioMCPServerLauncher> launcher;
   std::shared_ptr<dasall::tools::mcp::MCPAdapter> adapter;
   std::shared_ptr<dasall::tools::mcp::CapabilityDiscovery> discovery;
+    dasall::tools::bridge::ToolPluginExtensionConsumer consumer;
   std::shared_ptr<dasall::tools::mcp::MCPLane> mcp_lane;
   std::unique_ptr<dasall::tools::ToolManager> manager;
 
@@ -306,7 +306,14 @@ struct Harness {
                 .now_ms = [this]() { return now_ms; },
                 .refresh_interval_ms = 1000,
                 .failure_backoff_ms = 250,
-            })) {
+            })),
+        consumer(dasall::tools::bridge::ToolPluginExtensionConsumerDependencies{
+            .registry = registry,
+            .discovery = discovery,
+            .skill_registry = nullptr,
+            .builtin_descriptor_resolver = {},
+            .skill_bundle_importer = {},
+        }) {
     assert_true(registry->register_builtin(make_descriptor()),
                 "plugin stdio integration harness should register the builtin descriptor before discovery publishes bindings");
 
@@ -323,21 +330,17 @@ struct Harness {
   }
 
   std::string publish_plugin_and_refresh() {
-    assert_true(bridge.on_plugin_loaded(make_plugin_catalog()),
-                "plugin stdio integration should accept the plugin extension catalog");
-    const auto bridge_snapshot = bridge.snapshot();
-    const auto found = bridge_snapshot->mcp_launch_specs_by_source.find(std::string(kSourceKey));
-    assert_true(found != bridge_snapshot->mcp_launch_specs_by_source.end(),
-                "plugin stdio integration should publish one MCP launch spec under the plugin source key");
-    assert_true(discovery->on_plugin_delta(found->first, found->second),
-                "plugin stdio integration should pass bridge launch specs into capability discovery");
+        assert_true(consumer.on_plugin_loaded(make_plugin_catalog()),
+                                "plugin stdio integration should accept the plugin extension catalog through the consumer path");
+        assert_true(discovery->resolve_server_spec(kServerId).has_value(),
+                                "plugin stdio integration should publish the resolved MCP server spec through capability discovery");
 
     const auto summary = discovery->refresh_once();
     assert_equal(1, static_cast<int>(summary.refreshed_server_ids.size()),
                  "plugin stdio integration should refresh the discovered MCP server before invocation");
 
     manager->set_capability_snapshot(cache->snapshot(kServerId));
-    return found->first;
+        return std::string(kSourceKey);
   }
 };
 
@@ -405,10 +408,8 @@ void test_plugin_unload_revokes_bindings_and_cache_entries() {
   assert_true(harness.cache->snapshot(kServerId).has_value(),
               "plugin unload integration should start from a populated capability cache entry");
 
-  assert_true(harness.bridge.on_plugin_unloaded(kPluginId),
-              "plugin unload integration should accept plugin unload for the active source");
-  assert_true(harness.discovery->on_plugin_delta(source_key, {}),
-              "plugin unload integration should propagate the empty bridge delta into capability discovery");
+    assert_true(harness.consumer.on_plugin_unloaded(kPluginId),
+                            "plugin unload integration should revoke the active source through the consumer path");
 
   assert_true(!harness.discovery->resolve_server_spec(kServerId).has_value(),
               "plugin unload integration should revoke the resolved server spec from discovery state");
@@ -416,8 +417,7 @@ void test_plugin_unload_revokes_bindings_and_cache_entries() {
                "plugin unload integration should revoke source-scoped MCP bindings from the registry");
   assert_true(!harness.cache->snapshot(kServerId).has_value(),
               "plugin unload integration should invalidate the capability cache entry for the revoked server");
-  assert_true(harness.bridge.snapshot()->mcp_launch_specs_by_source.empty(),
-              "plugin unload integration should remove the bridge launch spec catalog entry");
+    static_cast<void>(source_key);
 }
 
 }  // namespace

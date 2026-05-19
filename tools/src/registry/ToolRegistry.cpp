@@ -67,11 +67,43 @@ bool ToolRegistry::register_builtin(const contracts::ToolDescriptor& descriptor)
   return true;
 }
 
+bool ToolRegistry::apply_plugin_extension_delta(
+    std::string source_key,
+    const std::vector<contracts::ToolDescriptor>& descriptors) {
+  if (source_key.empty() || is_builtin_source(source_key)) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> guard(write_mutex_);
+
+  const auto current_snapshot = snapshot();
+  auto next_snapshot = *current_snapshot;
+  bool changed = revoke_descriptors_for_source(next_snapshot, source_key);
+  if (!descriptors.empty() && !validate_plugin_descriptor_batch(next_snapshot, descriptors)) {
+    return false;
+  }
+
+  for (const auto& descriptor : descriptors) {
+    if (!upsert_descriptor(next_snapshot, descriptor, source_key)) {
+      return false;
+    }
+    changed = true;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  next_snapshot.revision = current_snapshot->revision + 1U;
+  publish_snapshot(std::move(next_snapshot));
+  return true;
+}
+
 bool ToolRegistry::upsert_mcp_bindings(
     std::string source_key,
     const std::vector<mcp::MCPToolBinding>& bindings) {
   if (bindings.empty()) {
-    return revoke_source(source_key);
+    return revoke_mcp_bindings_for_source(source_key);
   }
 
   if (source_key.empty() || is_builtin_source(source_key)) {
@@ -87,6 +119,24 @@ bool ToolRegistry::upsert_mcp_bindings(
   }
 
   if (!next_snapshot.mcp_binding_registry.replace_source_bindings(std::move(source_key), bindings)) {
+    return false;
+  }
+
+  next_snapshot.revision = current_snapshot->revision + 1U;
+  publish_snapshot(std::move(next_snapshot));
+  return true;
+}
+
+bool ToolRegistry::revoke_mcp_bindings_for_source(std::string_view source_key) {
+  if (source_key.empty() || is_builtin_source(source_key)) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> guard(write_mutex_);
+
+  const auto current_snapshot = snapshot();
+  auto next_snapshot = *current_snapshot;
+  if (!next_snapshot.mcp_binding_registry.revoke_source(source_key)) {
     return false;
   }
 
@@ -133,6 +183,34 @@ bool ToolRegistry::validate_binding_batch(
         snapshot.descriptors_by_name.end()) {
       return false;
     }
+  }
+
+  return true;
+}
+
+bool ToolRegistry::validate_plugin_descriptor_batch(
+    const ToolRegistrySnapshot& snapshot,
+    const std::vector<contracts::ToolDescriptor>& descriptors) {
+  std::vector<std::string> seen_tool_names;
+  seen_tool_names.reserve(descriptors.size());
+
+  for (const auto& descriptor : descriptors) {
+    const auto descriptor_guard = contracts::validate_tool_descriptor_field_rules(descriptor);
+    if (!descriptor_guard.ok || !descriptor.tool_name.has_value()) {
+      return false;
+    }
+
+    const auto& tool_name = *descriptor.tool_name;
+    if (std::find(seen_tool_names.begin(), seen_tool_names.end(), tool_name) !=
+        seen_tool_names.end()) {
+      return false;
+    }
+
+    if (snapshot.descriptors_by_name.find(tool_name) != snapshot.descriptors_by_name.end()) {
+      return false;
+    }
+
+    seen_tool_names.push_back(tool_name);
   }
 
   return true;

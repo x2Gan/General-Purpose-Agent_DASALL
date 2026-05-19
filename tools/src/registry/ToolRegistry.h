@@ -40,9 +40,13 @@ class ToolRegistry {
       std::string_view internal_tool_name) const;
 
   [[nodiscard]] bool register_builtin(const contracts::ToolDescriptor& descriptor);
+  [[nodiscard]] bool apply_plugin_extension_delta(
+      std::string source_key,
+      const std::vector<contracts::ToolDescriptor>& descriptors);
   [[nodiscard]] bool upsert_mcp_bindings(
       std::string source_key,
       const std::vector<mcp::MCPToolBinding>& bindings);
+  [[nodiscard]] bool revoke_mcp_bindings_for_source(std::string_view source_key);
   [[nodiscard]] bool revoke_source(std::string_view source_key);
 
  private:
@@ -50,6 +54,9 @@ class ToolRegistry {
   [[nodiscard]] static bool validate_binding_batch(
       const ToolRegistrySnapshot& snapshot,
       const std::vector<mcp::MCPToolBinding>& bindings);
+  [[nodiscard]] static bool validate_plugin_descriptor_batch(
+      const ToolRegistrySnapshot& snapshot,
+      const std::vector<contracts::ToolDescriptor>& descriptors);
   [[nodiscard]] static bool upsert_descriptor(
       ToolRegistrySnapshot& snapshot,
       const contracts::ToolDescriptor& descriptor,

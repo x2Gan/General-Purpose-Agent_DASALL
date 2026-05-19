@@ -5,8 +5,7 @@
 #include <optional>
 #include <string>
 
-#include "bridge/PluginExtensionBridge.h"
-#include "plugin/IToolPluginProvider.h"
+#include "bridge/ToolPluginExtensionConsumer.h"
 #include "skills/PluginSkillBundleImporter.h"
 #include "skills/SkillRegistry.h"
 #include "support/TestAssertions.h"
@@ -26,15 +25,6 @@ constexpr std::string_view kSourceKey = "plugin:plugin.skill-bundle";
   }
 
   return root;
-}
-
-[[nodiscard]] bool has_reason_code(
-    const std::vector<dasall::tools::skills::SkillImportDiagnostic>& diagnostics,
-    const std::string& reason_code) {
-  return std::any_of(diagnostics.begin(), diagnostics.end(),
-                     [&reason_code](const auto& diagnostic) {
-                       return diagnostic.reason_code == reason_code;
-                     });
 }
 
 [[nodiscard]] dasall::tools::plugin::ToolPluginExtensionCatalog make_skill_bundle_catalog() {
@@ -58,58 +48,62 @@ constexpr std::string_view kSourceKey = "plugin:plugin.skill-bundle";
 }
 
 void test_plugin_skill_bundle_feature_flag_and_source_revoke() {
-  dasall::tools::bridge::PluginExtensionBridge bridge;
-  dasall::tools::skills::SkillRegistry registry;
+  const auto catalog = make_skill_bundle_catalog();
 
-  assert_true(bridge.on_plugin_loaded(make_skill_bundle_catalog()),
-              "plugin bridge should accept a valid skill bundle catalog");
-
-  const auto snapshot = bridge.snapshot();
-  const auto source_it = snapshot->skill_assets_by_source.find(std::string(kSourceKey));
-  assert_true(source_it != snapshot->skill_assets_by_source.end(),
-              "plugin bridge should publish skill asset refs under the plugin source key");
-  assert_equal(1, static_cast<int>(source_it->second.size()),
-               "plugin bridge should publish exactly one skill asset ref for the sample bundle");
-
-  const auto& skill_asset_ref = source_it->second.front();
-
+  auto disabled_registry = std::make_shared<dasall::tools::skills::SkillRegistry>();
   dasall::tools::skills::PluginSkillBundleImporter disabled_importer(
       dasall::tools::skills::SkillImporterOptions{
           .external_skill_import_enabled = false,
           .project_root = project_root(),
       });
-  const auto disabled_result = disabled_importer.import_bundle(skill_asset_ref);
-  assert_equal(0, static_cast<int>(disabled_result.imported_assets.size()),
-               "external dialect bundle should stay behind the module-local feature flag");
-  assert_true(has_reason_code(disabled_result.diagnostics, "skill.importer.feature_disabled"),
-              "disabled external dialect import should emit the feature_disabled diagnostic");
+  dasall::tools::bridge::ToolPluginExtensionConsumer disabled_consumer(
+    dasall::tools::bridge::ToolPluginExtensionConsumerDependencies{
+      .registry = nullptr,
+      .discovery = nullptr,
+      .skill_registry = disabled_registry,
+      .builtin_descriptor_resolver = {},
+      .skill_bundle_importer = [&disabled_importer](const auto& skill_asset_ref) {
+      return disabled_importer.import_bundle(skill_asset_ref);
+      },
+    });
+  assert_true(disabled_consumer.on_plugin_loaded(catalog),
+        "disabled external dialect import should stay fail-closed without rejecting the plugin source");
+  assert_true(disabled_registry->list_assets().empty(),
+        "external dialect bundle should stay behind the module-local feature flag");
 
+  auto enabled_registry = std::make_shared<dasall::tools::skills::SkillRegistry>();
   dasall::tools::skills::PluginSkillBundleImporter enabled_importer(
       dasall::tools::skills::SkillImporterOptions{
           .external_skill_import_enabled = true,
           .project_root = project_root(),
       });
-  const auto enabled_result = enabled_importer.import_bundle(skill_asset_ref);
-  assert_equal(2, static_cast<int>(enabled_result.imported_assets.size()),
-               "enabled external dialect bundle should normalize into two skill assets");
-  const auto reg_it = std::find_if(enabled_result.imported_assets.begin(),
-      enabled_result.imported_assets.end(),
-      [](const auto& a) { return a.name == "runtime-incident"; });
-  assert_true(reg_it != enabled_result.imported_assets.end(),
-              "enabled external dialect bundle should contain the runtime-incident skill asset");
-  assert_true(registry.register_asset(*reg_it),
-              "normalized plugin skill bundle should register into SkillRegistry");
-  assert_equal(1, static_cast<int>(registry.list_assets().size()),
-               "registered plugin skill bundle should appear in the registry list view");
-  assert_equal(std::string(kSourceKey), registry.list_assets().front().source_key,
-               "registered plugin skill asset should preserve the plugin source key");
+  dasall::tools::bridge::ToolPluginExtensionConsumer enabled_consumer(
+    dasall::tools::bridge::ToolPluginExtensionConsumerDependencies{
+      .registry = nullptr,
+      .discovery = nullptr,
+      .skill_registry = enabled_registry,
+      .builtin_descriptor_resolver = {},
+      .skill_bundle_importer = [&enabled_importer](const auto& skill_asset_ref) {
+      return enabled_importer.import_bundle(skill_asset_ref);
+      },
+    });
+  assert_true(enabled_consumer.on_plugin_loaded(catalog),
+        "enabled external dialect import should register normalized plugin skill assets through the consumer path");
+  assert_equal(2, static_cast<int>(enabled_registry->list_assets().size()),
+         "enabled external dialect bundle should normalize into two skill assets");
+  const auto reg_it = std::find_if(
+    enabled_registry->list_assets().begin(),
+    enabled_registry->list_assets().end(),
+    [](const auto& a) { return a.name == "runtime-incident"; });
+  assert_true(reg_it != enabled_registry->list_assets().end(),
+        "enabled external dialect bundle should contain the runtime-incident skill asset");
+  assert_equal(std::string(kSourceKey), enabled_registry->list_assets().front().source_key,
+         "registered plugin skill asset should preserve the plugin source key");
 
-  assert_true(bridge.on_plugin_unloaded(kPluginId),
-              "plugin unload should revoke the bridge-side skill asset refs");
-  assert_true(registry.revoke_source(kSourceKey),
-              "consumer-side registry should revoke all plugin-owned skill assets on unload");
-  assert_true(registry.list_assets().empty(),
-              "registry should be empty after source-scoped plugin skill revoke");
+  assert_true(enabled_consumer.on_plugin_unloaded(kPluginId),
+        "plugin unload should revoke all plugin-owned skill assets through the consumer path");
+  assert_true(enabled_registry->list_assets().empty(),
+        "registry should be empty after source-scoped plugin skill revoke");
 }
 
 }  // namespace

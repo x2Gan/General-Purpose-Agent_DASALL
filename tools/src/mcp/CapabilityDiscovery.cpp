@@ -132,7 +132,7 @@ bool CapabilityDiscovery::on_plugin_delta(
   }
 
   if (dependencies_.registry) {
-    static_cast<void>(dependencies_.registry->revoke_source(source_key));
+    static_cast<void>(dependencies_.registry->revoke_mcp_bindings_for_source(source_key));
   }
 
   if (dependencies_.capability_cache) {

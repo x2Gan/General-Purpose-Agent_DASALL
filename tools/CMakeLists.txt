@@ -4,6 +4,7 @@ target_sources(dasall_tools
   PRIVATE
     src/ToolManager.cpp
     src/bridge/PluginExtensionBridge.cpp
+    src/bridge/ToolPluginExtensionConsumer.cpp
     src/bridge/ToolPluginLifecycleBridge.cpp
     src/bridge/ToolServiceBridge.cpp
     src/config/ToolConfigAdapter.cpp
