@@ -42,7 +42,7 @@ Knowledge 子系统不是：
 |---|---|---|
 | 上游主消费者 | runtime | Runtime 决定何时发起检索、是否把结果送入 ContextOrchestrator、是否在失败后重试或降级；Knowledge 不自启轮次 |
 | 间接消费者 | memory、cognition | memory 只消费 Runtime 交接的 evidence projection；cognition 只通过 ContextPacket 或 Runtime 折叠结果消费知识证据 |
-| 同层协作 | memory、tools、multi_agent | 允许通过 Runtime 主链路协作；不允许 Knowledge 直接调用 tools 执行器、也不允许 memory 直接依赖 Knowledge 实现类 |
+| 同层协作 | memory、tools、multi_agent | 允许通过 Runtime 主链路协作；不允许 Knowledge 直接调用 tools 执行器、也不允许 memory 直接依赖 Knowledge 实现类；Knowledge retrieval 不会因为同层协作自动成为 tool 暴露面，如需 `knowledge.search` 必须由 tools owner 另行显式绑定 |
 | 下游依赖 | contracts、infra、可选 memory/vector backend、本地语料与索引库 | 共享错误与上下文投影复用 contracts；可观测与配置复用 infra；向量后端仅通过窄桥接接口复用 |
 | 禁止依赖 | llm 实现、cognition 实现、apps 入口、runtime 恢复执行细节 | 防止 Knowledge 内部引入 LLM 重写/重排、形成第二上下文中心或抢占恢复控制 |
 

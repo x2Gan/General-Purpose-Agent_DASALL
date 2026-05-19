@@ -27,6 +27,7 @@ Tool 子系统不是：
 3. 工具授权以外的全局策略中心；Prompt 可见性归 llm/PromptPolicy，恢复裁定归 runtime/RecoveryManager。
 4. 直连 platform 或业务后端的捷径层；高风险动作、数据查询和系统状态访问必须继续走 services 提供的稳定门面。
 5. 插件签名、ABI 兼容、装载/卸载与 safe mode 的治理平面；这些职责保留在 infra/plugin。
+6. Knowledge 检索子系统的替代实现目录；`knowledge/*` 继续由 Knowledge owner 持有，只有在显式新增 `knowledge.search` builtin、MCP 或 skill binding 时，Knowledge 能力才进入 Tools 可见面。
 
 来源依据：
 
@@ -47,7 +48,7 @@ Tool 子系统不是：
 | 主要下游依赖 | services、infra、MCP servers | builtin/query/action 路径优先走 IExecutionService/IDataService；MCP 通过 IMCPAdapter 与外部 server 通信；日志/指标/追踪/审计走 infra |
 | 扩展载体 | infra/plugin | 额外 builtin tool、stdio MCP server、skill bundle 等部署期扩展必须先通过 IPluginManager 完成 discover/validate/load，再由 tools 消费激活结果 |
 | 间接消费者 | memory、cognition、runtime | Tool 子系统输出 ToolResult、Observation、ObservationDigest，由 runtime 负责写回 memory 和驱动后续推理/恢复 |
-| 相邻协作模块 | profiles、multi_agent | profiles 提供运行时策略快照；multi_agent 只接受 runtime 主控下的协同请求，不接受 Tool 子系统直接夺权调度 |
+| 相邻协作模块 | profiles、knowledge、multi_agent | profiles 提供运行时策略快照；Knowledge 只通过 runtime 持有的 `IKnowledgeService`、profile 和 evidence projection 与 Tools 间接协作，不得把 `knowledge/*` 当作 tools 实现目录；multi_agent 只接受 runtime 主控下的协同请求，不接受 Tool 子系统直接夺权调度 |
 | 禁止依赖 | cognition 实现、llm 实现、platform 实现、恢复实现 | tools 不得读取 Cognition 内部状态，不得直接调用 LLM provider，不得直连 platform/driver，不得自行裁定 retry/replan/abort |
 
 术语约定：本文统一使用“路由”指代 route；“lane”保留英文，专指隔离的执行通道；MCP 作为协议缩写一律大写；“插件”用于通用概念，涉及模块路径、目录或类型名时保留 infra/plugin、PluginManifest、IPluginManager 等原始拼写。

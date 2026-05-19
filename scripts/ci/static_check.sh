@@ -8,6 +8,10 @@ run_tool_mcp_wording_guard() {
   bash "${ROOT_DIR}/scripts/ci/check_tool_mcp_v1_wording.sh"
 }
 
+run_tools_knowledge_boundary_guard() {
+  bash "${ROOT_DIR}/scripts/ci/check_tools_knowledge_boundary.sh"
+}
+
 run_cppcheck() {
   if ! command -v cppcheck >/dev/null 2>&1; then
     echo "[static-check] cppcheck not found, skip"
@@ -68,3 +72,4 @@ run_clang_tidy() {
 run_cppcheck
 run_clang_tidy
 run_tool_mcp_wording_guard
+run_tools_knowledge_boundary_guard

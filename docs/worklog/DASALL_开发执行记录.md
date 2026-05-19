@@ -1,5 +1,51 @@
 # DASALL 开发执行记录
 
+## 记录 #708
+
+- 日期：2026-05-19
+- 阶段：tools / knowledge-boundary closure
+- 任务：推进 TOOL-FIX-010，收口 `knowledge.search` / Knowledge 与 Tools 的关系
+- 状态：已完成（owner 详设、boundary guard、专项总账、交付物索引与工作日志已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `TOOL-FIX-010`，若存在前置 blocker 则先解阻，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端代码检查确认：`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 的 `compose_runtime_tool_manager()` 当前只注册 `agent.dataset`，`tools/src/registry/BuiltinCatalog.cpp` 也只聚合 terminal/dataset builtin；当前 production path 并不存在 `knowledge.search` 注册面。
+3. `docs/architecture/DASALL_knowledge子系统详细设计.md` 已把 Knowledge 与 tools 定义为“通过 Runtime 主链路协作”的同层模块，并明确禁止 Knowledge 反调 `tools/*`；因此本轮真实缺口不是缺少 tool 实现，而是 tools owner 文档与 CI guard 尚未收口同一结论。
+4. 用户明确要求本轮禁止使用 qemu / kvm；因此验收口径固定为 owner 文档 + docs/CI 静态守卫，不外推到 installed / release / soak 证据。
+
+### 改动
+
+1. 新增 `docs/todos/tools/deliverables/TOOL-FIX-010-knowledge-search关系收敛.md`：固定本地证据、MCP host/capability 外部参考、Design -> Build 映射、Build 三件套与“不直接新增 `knowledge.search` binding”的设计结论。
+2. 更新 `docs/architecture/DASALL_tools子系统详细设计.md` 与 `docs/architecture/DASALL_knowledge子系统详细设计.md`：在 tools/knowledge 两侧 owner 文档中同步写明 `knowledge/*` 非 tools 实现域，Knowledge retrieval 不会因同层协作自动成为 tool 暴露面；若未来需要 `knowledge.search`，必须通过独立 binding 任务显式落地。
+3. 新增 `scripts/ci/check_tools_knowledge_boundary.sh` 并接入 `scripts/ci/static_check.sh`：guard 同时检查 required wording、`knowledge/*` 不直连 `IToolManager` / `tools::`、`tools/*` 不直连 `IKnowledgeService` 系列类型，以及 production 源码未暴露 `knowledge.search`。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/todos/tools/deliverables/DELIVERABLES-INDEX.md`：将 `TOOL-FIX-010` 标记为 Done，并补齐 deliverable 索引。
+
+### 验证
+
+1. deliverable 关键口径检查。
+   - `rg -n "本轮不新增 `knowledge.search` builtin|check_tools_knowledge_boundary\.sh|D Gate = PASS" docs/todos/tools/deliverables/TOOL-FIX-010-knowledge-search关系收敛.md`
+   - 结果：命中本轮不新增 binding、guard 接线与 D Gate 结论。
+2. boundary guard 语法与执行。
+   - `bash -n scripts/ci/check_tools_knowledge_boundary.sh`
+   - `bash scripts/ci/check_tools_knowledge_boundary.sh`
+   - 首次结果：脚本中包含反引号的 required wording 参数使用双引号，触发 shell 命令替换误报；改为单引号后复跑通过，输出 `[tools-knowledge-boundary] PASS`。
+3. static_check 接线验证。
+   - `bash -n scripts/ci/static_check.sh`
+   - `bash scripts/ci/static_check.sh`
+   - 结果：脚本成功运行到新增 guard；`cppcheck` 与 `clang-tidy` 在当前环境缺失并按既有逻辑 skip，不影响 boundary guard 通过。
+4. 总账/索引回写检查。
+   - `rg -n "TOOL-FIX-010|check_tools_knowledge_boundary\.sh|TOOL-FIX-010-knowledge-search关系收敛" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/tools/deliverables/DELIVERABLES-INDEX.md`
+   - 结果：专项总账状态、deliverable 与索引均已对齐。
+5. 工具链边界说明。
+   - 本轮未使用 qemu / kvm，也未把文档/脚本守卫结果外推为新增 tool 功能已就绪。
+
+### 结果
+
+1. `TOOL-FIX-010` 已完成：Knowledge 与 Tools 的关系不再只停留在专项总账口径，而是已由 tools/knowledge owner 详设与 CI guard 共同固定。
+2. 当前 authoritative 结论为：`knowledge/*` 仍是 Knowledge 子系统实现域，不因与 Runtime/Tools 相邻协作就自动成为 tool 暴露面；未来若要落地 `knowledge.search`，必须单独完成 ToolRegistry / PolicyGate / RouteSelector / runtime-facing binding 与 focused tests。
+3. 本轮未引入新的产品功能面；因此后续剩余重点仍集中在 `TOOL-GAP-009` / `TOOL-GAP-010` / `TOOL-GAP-011` / `TOOL-GAP-012`，而不是继续争论 Knowledge 是否已经是 tool。
+
 ## 记录 #707
 
 - 日期：2026-05-19
