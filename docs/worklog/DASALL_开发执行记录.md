@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+# 记录 #723
+
+- 日期：2026-05-20
+- 阶段：knowledge / gap closeout
+- 任务：收口 `KNO-GAP-011` Knowledge owner boundary guard 自动化缺口
+- 状态：已完成（boundary guard test、focused validation 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-GAP-010 ~ 011`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 当前总账仍把 `KNO-GAP-011` 记为“边界回归自动化不足”：Knowledge 源码 / CMake 现状虽未见明显越界，但缺少像 Memory / LLM 那样的专门 include/link/symbol guard。
+3. 本轮 authoritative 边界是：为 Knowledge 增加 build-tree boundary guard，不新增产品语义，也不把 installed / qemu / soak 混入本轮。
+
+### 改动
+
+1. 新增 `tests/unit/knowledge/KnowledgeBoundaryGuardComplianceTest.cpp`，对 `knowledge/include`、`knowledge/src` 与 `knowledge/CMakeLists.txt` 扫描 forbidden include/link/symbol，重点锁定 `ContextPacket`、`RecoveryManager`、`AgentOrchestrator`、prompt/llm provider owner types 与 forbidden subsystem private roots。
+2. 更新 `tests/unit/knowledge/CMakeLists.txt`，注册 `dasall_knowledge_boundary_guard_compliance_unit_test` / `KnowledgeBoundaryGuardComplianceTest`，并补 `DASALL_REPO_ROOT` compile definition。
+3. 新增 `docs/todos/knowledge/deliverables/KNO-GAP-011-boundary-guard-closeout.md`，并回写总账 `KNO-GAP-011` 行与 Knowledge 章节冻结口径。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_knowledge_boundary_guard_compliance_unit_test"])`：通过。
+2. focused CTest。
+   - `RunCtest_CMakeTools(tests=["KnowledgeBoundaryGuardComplianceTest"])`：仍报仓库已知泛化错误 `生成失败`，未提供 test-level 失败诊断。
+3. direct binary fallback。
+   - `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_boundary_guard_compliance_unit_test && echo PASS`：输出 `PASS`。
+
+### 结果
+
+1. `KNO-GAP-011` 在当前树上已保持闭合：Knowledge owner 边界现已具备 include/link/symbol 三层 build-tree 自动化守卫。
+2. Knowledge 章节的残余缺口已不再包含 local installed failure-injection 或 boundary regression 自动化，当前只保留 concrete vector backend 与更高层 environment follow-up。
+3. 本轮未使用 qemu / kvm，且不把结论外推为 installed / qemu / release runner 全量通过。
+
 # 记录 #722
 
 - 日期：2026-05-20

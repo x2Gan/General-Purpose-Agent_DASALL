@@ -26,6 +26,12 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_knowledge_boundary_guard_compliance_unit_test
+	KnowledgeBoundaryGuardComplianceTest.cpp
+	KnowledgeBoundaryGuardComplianceTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_knowledge_config_projection_unit_test
 	KnowledgeConfigProjectionTest.cpp
 	KnowledgeConfigProjectionTest
@@ -479,6 +485,11 @@ target_include_directories(dasall_knowledge_init_prewarm_unit_test
 target_include_directories(dasall_knowledge_service_facade_full_health_snapshot_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/knowledge/src
+)
+
+target_compile_definitions(dasall_knowledge_boundary_guard_compliance_unit_test
+	PRIVATE
+		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
 )
 
 target_link_libraries(dasall_sparse_retriever_unit_test
