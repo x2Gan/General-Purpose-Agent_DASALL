@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+# 记录 #725
+
+- 日期：2026-05-20
+- 阶段：tools / gap closeout
+- 任务：收口 `TOOL-GAP-009` runtime production 可见工具面缺口
+- 状态：已完成（runtime live composition、installed authoritative evidence 与文档回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中 `TOOL-GAP-009 ~ 012`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 当前近端代码已先后完成 `TOOL-FIX-008` concrete builtin wrapper 与 `TOOL-FIX-009` installed / release local evidence owner，但 runtime live composition 仍把可见工具面收窄为 dataset-only，导致 builtin catalog、app composition tests 与 installed helper contract 口径不一致。
+3. 本轮 authoritative 边界是：把 runtime production visible tools surface 与 installed authoritative proof 对齐到 `agent.dataset` + `agent.terminal`，并显式覆盖 terminal confirmation gate；不把 skill runtime、payload golden regression 或 qemu/autopkgtest/soak 混入本轮。
+
+### 改动
+
+1. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：runtime live composition 现在同时注册 `agent.terminal` / `agent.dataset` descriptor，并把 `dependency_set->visible_tools` 固定为双工具面，不再停留在 dataset-only。
+2. 更新 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`：focused app composition 现同时断言 terminal visible surface、unconfirmed deny 返回 `policy.confirmation_required`、confirmed allow 经 builtin/services live path 成功执行。
+3. 更新 `apps/daemon/src/ToolsInstalledProofRunner.h/.cpp`、`apps/daemon/src/ToolsInstalledProofMain.cpp`、`tests/unit/apps/daemon/ToolsInstalledProofRunnerTest.cpp` 与 `scripts/packaging/pkg_smoke_install.sh`：installed helper / unit fallback / package smoke 现在都把 terminal visible、confirmation gate、confirmed invocation、terminal payload / route / projection 纳入 required proof contract。
+4. 新增 `docs/todos/tools/deliverables/TOOL-FIX-011-runtime-production-visible-tools-surface收敛.md`，并回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/todos/tools/deliverables/DELIVERABLES-INDEX.md` 与 `scripts/packaging/README.md`，使总账、deliverable、packaging owner 文档与本轮 installed evidence 保持一致。
+
+### 验证
+
+1. focused build。
+   - `cmake --build build/vscode-linux-ninja --target dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test dasall-daemon_tools_installed_proof_runner_unit_test -j4`：通过。
+2. focused direct-binary fallback。
+   - `build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`：通过。
+   - `build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test`：通过。
+   - `build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_tools_installed_proof_runner_unit_test`：通过。
+3. Debian package / installed authoritative evidence。
+   - `cmake --build obj-x86_64-linux-gnu --target dasall_tools_installed_proof_tool -j4`：通过。
+   - `dpkg-buildpackage -us -uc -b`：重建 package 后，解包出的 `dasall-tools-installed-proof` 已包含 terminal proof 字面量，并在模拟 installed 调用下返回 terminal route / payload / visible surface 字段。
+   - `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=build/tool-fix-009-package-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过，日志含 `[pkg-smoke-install] install smoke passed`。
+   - `sed -n '1,160p' build/tool-fix-009-package-smoke/tools-installed-proof.json`：已确认 `visible_tools=["agent.dataset", "agent.terminal"]`、`agent_terminal_visible=true`、`terminal_confirmation_denied=true`、`terminal_invocation_succeeded=true`、`terminal_projection_present=true`、`terminal_route_kind=builtin` 与 `terminal_failure_reason_code=policy.confirmation_required`。
+   - `sudo -u dasall /usr/lib/dasall/dasall-tools-installed-proof --profile-id "$PROFILE_ID" --config-file /etc/dasall/daemon.json --json | rg 'agent_terminal_visible|terminal_confirmation_denied|terminal_invocation_succeeded|terminal_projection_present|terminal_route_kind|visible_tools'`：已直接返回安装态 terminal proof 关键字段。
+
+### 结果
+
+1. `TOOL-GAP-009` 已在当前树收口：runtime production live composition、app composition focused tests 与 installed helper / package smoke authoritative evidence 现在对同一组 visible tools surface 给出一致结论。
+2. `agent.terminal` 在 runtime production path 上已具备明确的 fail-closed / confirmed-allow 双态证据；高风险 action 不再只停留在 builtin catalog 或 build-tree wrapper 层。
+3. 本轮未使用 qemu / kvm，且不把结论外推为 `TOOL-GAP-010` skill runtime 主链、`TOOL-GAP-011` payload golden regression 或 `TOOL-GAP-012` machine-isolated release / soak 已完成；当前剩余重点前移到 `TOOL-GAP-010` / `TOOL-GAP-011` / `TOOL-GAP-012`。
+
 # 记录 #724
 
 - 日期：2026-05-20

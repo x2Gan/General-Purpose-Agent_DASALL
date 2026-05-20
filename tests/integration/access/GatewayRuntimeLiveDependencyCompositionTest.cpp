@@ -93,6 +93,11 @@ void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
 void assert_gateway_tool_services_backend(
   const std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>& policy_snapshot,
   const std::shared_ptr<dasall::runtime::RuntimeDependencySet>& dependency_set) {
+  assert_true(contains_port(dependency_set->visible_tools, "agent.dataset"),
+        "gateway runtime live dependency composition should keep agent.dataset visible");
+  assert_true(contains_port(dependency_set->visible_tools, "agent.terminal"),
+        "gateway runtime live dependency composition should keep agent.terminal visible");
+
   const auto tool_envelope = dependency_set->tool_manager->invoke(
     dasall::contracts::ToolRequest{
       .request_id = std::string("req-gateway-live-tool"),
@@ -127,6 +132,83 @@ void assert_gateway_tool_services_backend(
           tool_envelope.tool_result->payload->find("\"capability_id\":\"agent.dataset\"") != std::string::npos &&
           tool_envelope.tool_result->payload->find("\"projection\":\"default\"") != std::string::npos,
         "gateway runtime live dependency composition should route agent.dataset through the live services backend payload");
+
+  const auto denied_terminal_envelope = dependency_set->tool_manager->invoke(
+    dasall::contracts::ToolRequest{
+      .request_id = std::string("req-gateway-live-terminal-deny"),
+      .tool_call_id = std::string("call-gateway-live-terminal-deny"),
+      .tool_name = std::string("agent.terminal"),
+      .invocation_kind = dasall::contracts::ToolInvocationKind::Action,
+      .arguments_payload = std::string("{\"command\":\"echo gateway terminal deny\"}"),
+      .created_at = 1710000000101,
+      .goal_id = std::string("goal-gateway-live-terminal-deny"),
+      .worker_task_id = std::string("worker-gateway-live-terminal-deny"),
+      .runtime_budget = std::nullopt,
+      .timeout_ms = 2500U,
+      .idempotency_key = std::string("idem-gateway-live-terminal-deny"),
+      .tags = std::vector<std::string>{"integration", "runtime", "tool", "terminal"},
+    },
+    dasall::tools::ToolInvocationContext{
+      .caller_domain = std::string("runtime.gateway"),
+      .session_id = std::string("session-gateway-live-terminal-deny"),
+      .profile_snapshot = policy_snapshot.get(),
+      .trace = {
+        .trace_id = std::string("trace-gateway-live-terminal-deny"),
+        .span_id = std::nullopt,
+        .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::nullopt,
+    });
+  assert_true(denied_terminal_envelope.failure_reason_code.has_value() &&
+          *denied_terminal_envelope.failure_reason_code == "policy.confirmation_required",
+        "gateway runtime live dependency composition should deny agent.terminal without confirmation");
+
+  const auto allowed_terminal_envelope = dependency_set->tool_manager->invoke(
+    dasall::contracts::ToolRequest{
+      .request_id = std::string("req-gateway-live-terminal-allow"),
+      .tool_call_id = std::string("call-gateway-live-terminal-allow"),
+      .tool_name = std::string("agent.terminal"),
+      .invocation_kind = dasall::contracts::ToolInvocationKind::Action,
+      .arguments_payload = std::string("{\"command\":\"echo gateway terminal allow\"}"),
+      .created_at = 1710000000102,
+      .goal_id = std::string("goal-gateway-live-terminal-allow"),
+      .worker_task_id = std::string("worker-gateway-live-terminal-allow"),
+      .runtime_budget = std::nullopt,
+      .timeout_ms = 2500U,
+      .idempotency_key = std::string("idem-gateway-live-terminal-allow"),
+      .tags = std::vector<std::string>{"integration", "runtime", "tool", "terminal"},
+    },
+    dasall::tools::ToolInvocationContext{
+      .caller_domain = std::string("runtime.gateway"),
+      .session_id = std::string("session-gateway-live-terminal-allow"),
+      .profile_snapshot = policy_snapshot.get(),
+      .trace = {
+        .trace_id = std::string("trace-gateway-live-terminal-allow"),
+        .span_id = std::nullopt,
+        .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::vector<dasall::tools::ToolConfirmationFact>{
+        dasall::tools::ToolConfirmationFact{
+          .confirmation_id = std::string("confirm-gateway-live-terminal"),
+          .subject_ref = std::string("goal://gateway-live-terminal"),
+          .proof_type = std::string("user.approved"),
+          .confirmed_at_ms = 1710000000100,
+        },
+      },
+    });
+  assert_true(allowed_terminal_envelope.tool_result.has_value() &&
+          allowed_terminal_envelope.tool_result->success.value_or(false),
+        "gateway runtime live dependency composition should keep agent.terminal on the successful tools->services path once confirmation is present");
+  assert_true(allowed_terminal_envelope.route_facts.has_value() &&
+          allowed_terminal_envelope.route_facts->route_kind.has_value() &&
+          *allowed_terminal_envelope.route_facts->route_kind == "builtin",
+        "gateway runtime live dependency composition should keep agent.terminal on the governed builtin route");
+  assert_true(allowed_terminal_envelope.observation.has_value() &&
+          allowed_terminal_envelope.observation_digest.has_value(),
+        "gateway runtime live dependency composition should project agent.terminal into observation and digest together");
+  assert_true(allowed_terminal_envelope.tool_result->payload.has_value() &&
+          allowed_terminal_envelope.tool_result->payload->find("\"operation\":\"agent.terminal\"") != std::string::npos,
+        "gateway runtime live dependency composition should route agent.terminal through the live execution service payload");
     assert_true(dependency_set->health_monitor != nullptr,
           "gateway runtime live dependency composition should retain a concrete health monitor for production observability");
   assert_true(contains_port(dependency_set->external_evidence,

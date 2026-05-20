@@ -79,16 +79,28 @@ void tools_installed_proof_runner_collects_live_dataset_evidence() {
   assert_true(result.ok(), "tools installed proof runner should succeed on copied assets");
   assert_true(result.agent_dataset_visible,
               "tools installed proof runner should keep agent.dataset visible");
+  assert_true(result.agent_terminal_visible,
+              "tools installed proof runner should keep agent.terminal visible");
   assert_true(result.tool_invocation_succeeded,
               "tools installed proof runner should keep the agent.dataset invocation successful");
+  assert_true(result.terminal_confirmation_denied,
+              "tools installed proof runner should keep the agent.terminal confirmation gate visible in installed proof");
+  assert_true(result.terminal_invocation_succeeded,
+              "tools installed proof runner should keep the confirmed agent.terminal invocation successful");
   assert_equal(std::string("builtin"),
                result.route_kind,
                "tools installed proof runner should stay on the builtin lane");
+  assert_equal(std::string("builtin"),
+               result.terminal_route_kind,
+               "tools installed proof runner should keep agent.terminal on the builtin lane");
   assert_true(result.payload.find("\"capability_id\":\"agent.dataset\"") !=
                   std::string::npos &&
                   result.payload.find("\"projection\":\"default\"") !=
                       std::string::npos,
               "tools installed proof runner should preserve live services payload markers");
+  assert_true(result.terminal_payload.find("\"operation\":\"agent.terminal\"") !=
+                  std::string::npos,
+              "tools installed proof runner should preserve the live execution payload markers for agent.terminal");
   assert_true(!result.observation_id.empty(),
               "tools installed proof runner should retain the observation id");
   assert_true(!result.observation_digest_summary.empty(),
@@ -97,6 +109,8 @@ void tools_installed_proof_runner_collects_live_dataset_evidence() {
               "tools installed proof runner should preserve route citations in the digest");
   assert_true(result.tool_call_citation_present,
               "tools installed proof runner should preserve tool-call citations in the digest");
+  assert_true(result.terminal_projection_present,
+              "tools installed proof runner should project agent.terminal into observation and digest together");
   assert_true(result.production_bridge_evidence_present,
               "tools installed proof runner should record the production bridge evidence marker");
   assert_true(result.production_observability_evidence_present,

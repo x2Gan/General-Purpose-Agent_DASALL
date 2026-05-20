@@ -22,7 +22,8 @@ namespace {
 
 namespace fs = std::filesystem;
 
-constexpr char kToolName[] = "agent.dataset";
+constexpr char kDatasetToolName[] = "agent.dataset";
+constexpr char kTerminalToolName[] = "agent.terminal";
 constexpr char kCompositionOwner[] = "daemon.local-control-plane";
 constexpr char kProductionBridgeEvidence[] =
     "runtime:daemon.local-control-plane:tool-services-production-bridge";
@@ -114,7 +115,8 @@ ToolsInstalledProofResult collect_tools_installed_proof(
 
   result.visible_tools = composition.dependency_set->visible_tools;
   result.external_evidence = composition.dependency_set->external_evidence;
-  result.agent_dataset_visible = contains_value(result.visible_tools, kToolName);
+    result.agent_dataset_visible = contains_value(result.visible_tools, kDatasetToolName);
+    result.agent_terminal_visible = contains_value(result.visible_tools, kTerminalToolName);
   result.production_bridge_evidence_present =
       contains_value(result.external_evidence, kProductionBridgeEvidence);
   result.production_observability_evidence_present =
@@ -127,13 +129,17 @@ ToolsInstalledProofResult collect_tools_installed_proof(
     result.error = "runtime visible tools missing agent.dataset";
     return result;
   }
+  if (!result.agent_terminal_visible) {
+    result.error = "runtime visible tools missing agent.terminal";
+    return result;
+  }
 
   const auto tool_manager = composition.dependency_set->tool_manager;
   const auto envelope = tool_manager->invoke(
       contracts::ToolRequest{
           .request_id = std::string("req-tools-installed-proof"),
           .tool_call_id = std::string("call-tools-installed-proof"),
-          .tool_name = std::string(kToolName),
+          .tool_name = std::string(kDatasetToolName),
           .invocation_kind = contracts::ToolInvocationKind::InformationQuery,
           .arguments_payload = std::string("{\"scope\":\"session\"}"),
           .created_at = current_time_millis(),
@@ -156,6 +162,67 @@ ToolsInstalledProofResult collect_tools_installed_proof(
           .confirmation_facts = std::nullopt,
       });
 
+        const auto denied_terminal_envelope = tool_manager->invoke(
+          contracts::ToolRequest{
+            .request_id = std::string("req-tools-installed-proof-terminal-deny"),
+            .tool_call_id = std::string("call-tools-installed-proof-terminal-deny"),
+            .tool_name = std::string(kTerminalToolName),
+            .invocation_kind = contracts::ToolInvocationKind::Action,
+            .arguments_payload = std::string("{\"command\":\"echo installed terminal deny\"}"),
+            .created_at = current_time_millis(),
+            .goal_id = std::string("goal-tools-installed-proof-terminal-deny"),
+            .worker_task_id = std::string("worker-tools-installed-proof-terminal-deny"),
+            .runtime_budget = std::nullopt,
+            .timeout_ms = 2500U,
+            .idempotency_key = std::string("idem-tools-installed-proof-terminal-deny"),
+            .tags = std::vector<std::string>{"installed", "packaging", "tool", "proof", "terminal"},
+          },
+          tools::ToolInvocationContext{
+            .caller_domain = std::string("runtime.agent_orchestrator"),
+            .session_id = std::string("session-tools-installed-proof-terminal-deny"),
+            .profile_snapshot = load_result.entry_config->runtime_policy_snapshot.get(),
+            .trace = {
+              .trace_id = std::string("trace-tools-installed-proof-terminal-deny"),
+              .span_id = std::nullopt,
+              .parent_span_id = std::nullopt,
+            },
+            .confirmation_facts = std::nullopt,
+          });
+
+        const auto allowed_terminal_envelope = tool_manager->invoke(
+          contracts::ToolRequest{
+            .request_id = std::string("req-tools-installed-proof-terminal-allow"),
+            .tool_call_id = std::string("call-tools-installed-proof-terminal-allow"),
+            .tool_name = std::string(kTerminalToolName),
+            .invocation_kind = contracts::ToolInvocationKind::Action,
+            .arguments_payload = std::string("{\"command\":\"echo installed terminal allow\"}"),
+            .created_at = current_time_millis(),
+            .goal_id = std::string("goal-tools-installed-proof-terminal-allow"),
+            .worker_task_id = std::string("worker-tools-installed-proof-terminal-allow"),
+            .runtime_budget = std::nullopt,
+            .timeout_ms = 2500U,
+            .idempotency_key = std::string("idem-tools-installed-proof-terminal-allow"),
+            .tags = std::vector<std::string>{"installed", "packaging", "tool", "proof", "terminal"},
+          },
+          tools::ToolInvocationContext{
+            .caller_domain = std::string("runtime.agent_orchestrator"),
+            .session_id = std::string("session-tools-installed-proof-terminal-allow"),
+            .profile_snapshot = load_result.entry_config->runtime_policy_snapshot.get(),
+            .trace = {
+              .trace_id = std::string("trace-tools-installed-proof-terminal-allow"),
+              .span_id = std::nullopt,
+              .parent_span_id = std::nullopt,
+            },
+            .confirmation_facts = std::vector<tools::ToolConfirmationFact>{
+              tools::ToolConfirmationFact{
+                .confirmation_id = std::string("confirm-tools-installed-proof-terminal"),
+                .subject_ref = std::string("goal://tools-installed-proof-terminal"),
+                .proof_type = std::string("user.approved"),
+                .confirmed_at_ms = current_time_millis(),
+              },
+            },
+          });
+
   result.failure_reason_code = envelope.failure_reason_code.value_or(std::string{});
   if (envelope.route_facts.has_value() && envelope.route_facts->route_kind.has_value()) {
     result.route_kind = *envelope.route_facts->route_kind;
@@ -170,11 +237,29 @@ ToolsInstalledProofResult collect_tools_installed_proof(
       envelope.observation_digest->summary.has_value()) {
     result.observation_digest_summary = *envelope.observation_digest->summary;
   }
+  result.terminal_failure_reason_code =
+      denied_terminal_envelope.failure_reason_code.value_or(std::string{});
+  result.terminal_confirmation_denied =
+      result.terminal_failure_reason_code == "policy.confirmation_required";
+  if (allowed_terminal_envelope.route_facts.has_value() &&
+      allowed_terminal_envelope.route_facts->route_kind.has_value()) {
+    result.terminal_route_kind = *allowed_terminal_envelope.route_facts->route_kind;
+  }
+  if (allowed_terminal_envelope.tool_result.has_value() &&
+      allowed_terminal_envelope.tool_result->payload.has_value()) {
+    result.terminal_payload = *allowed_terminal_envelope.tool_result->payload;
+  }
 
   result.tool_invocation_succeeded =
       envelope.tool_result.has_value() && envelope.tool_result->success.value_or(false);
   result.projection_present =
       envelope.observation.has_value() && envelope.observation_digest.has_value();
+  result.terminal_invocation_succeeded =
+      allowed_terminal_envelope.tool_result.has_value() &&
+      allowed_terminal_envelope.tool_result->success.value_or(false);
+  result.terminal_projection_present =
+      allowed_terminal_envelope.observation.has_value() &&
+      allowed_terminal_envelope.observation_digest.has_value();
   const std::optional<std::vector<std::string>> digest_citations =
     envelope.observation_digest.has_value()
       ? envelope.observation_digest->citations
@@ -191,12 +276,34 @@ ToolsInstalledProofResult collect_tools_installed_proof(
                              result.failure_reason_code;
     return result;
   }
+  if (!result.terminal_confirmation_denied) {
+    result.error = result.terminal_failure_reason_code.empty()
+                       ? std::string("agent.terminal confirmation gate did not deny the unconfirmed action")
+                       : std::string("agent.terminal confirmation gate returned unexpected reason: ") +
+                             result.terminal_failure_reason_code;
+    return result;
+  }
+  if (!result.terminal_invocation_succeeded) {
+    result.error = allowed_terminal_envelope.failure_reason_code.has_value()
+                       ? std::string("agent.terminal invocation failed: ") +
+                             *allowed_terminal_envelope.failure_reason_code
+                       : std::string("agent.terminal invocation failed");
+    return result;
+  }
   if (result.route_kind != "builtin") {
     result.error = "agent.dataset invocation escaped the builtin lane";
     return result;
   }
+  if (result.terminal_route_kind != "builtin") {
+    result.error = "agent.terminal invocation escaped the builtin lane";
+    return result;
+  }
   if (!result.projection_present) {
     result.error = "agent.dataset invocation did not produce observation and digest together";
+    return result;
+  }
+  if (!result.terminal_projection_present) {
+    result.error = "agent.terminal invocation did not produce observation and digest together";
     return result;
   }
   if (!result.route_citation_present || !result.tool_call_citation_present) {
@@ -208,6 +315,11 @@ ToolsInstalledProofResult collect_tools_installed_proof(
       result.payload.find("\"projection\":\"default\"") ==
           std::string::npos) {
     result.error = "agent.dataset payload did not preserve the live services markers";
+    return result;
+  }
+  if (result.terminal_payload.find("\"operation\":\"agent.terminal\"") ==
+      std::string::npos) {
+    result.error = "agent.terminal payload did not preserve the live services markers";
     return result;
   }
   if (!result.production_bridge_evidence_present ||

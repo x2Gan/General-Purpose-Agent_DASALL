@@ -154,6 +154,8 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         "daemon runtime live dependency composition should expose a concrete IToolManager");
       assert_true(contains_port(composition.dependency_set->visible_tools, "agent.dataset"),
         "daemon runtime live dependency composition should advertise the registered runtime builtin tool surface");
+      assert_true(contains_port(composition.dependency_set->visible_tools, "agent.terminal"),
+        "daemon runtime live dependency composition should advertise the high-risk runtime builtin tool surface");
     assert_true(composition.dependency_set->llm_manager != nullptr,
           "daemon runtime live dependency composition should expose a production ILLMManager");
       assert_true(composition.dependency_set->knowledge_service != nullptr,
@@ -224,6 +226,83 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
           "daemon runtime live dependency composition should route agent.dataset through the live services backend payload");
     assert_true(!tool_envelope.failure_reason_code.has_value(),
           "daemon runtime live dependency composition should not surface a failure reason on the successful builtin query path");
+
+    const auto denied_terminal_envelope = composition.dependency_set->tool_manager->invoke(
+      dasall::contracts::ToolRequest{
+        .request_id = std::string("req-daemon-live-terminal-deny"),
+        .tool_call_id = std::string("call-daemon-live-terminal-deny"),
+        .tool_name = std::string("agent.terminal"),
+        .invocation_kind = dasall::contracts::ToolInvocationKind::Action,
+        .arguments_payload = std::string("{\"command\":\"echo daemon terminal deny\"}"),
+        .created_at = 1710000000001,
+        .goal_id = std::string("goal-daemon-live-terminal-deny"),
+        .worker_task_id = std::string("worker-daemon-live-terminal-deny"),
+        .runtime_budget = std::nullopt,
+        .timeout_ms = 2500U,
+        .idempotency_key = std::string("idem-daemon-live-terminal-deny"),
+        .tags = std::vector<std::string>{"integration", "runtime", "tool", "terminal"},
+      },
+      dasall::tools::ToolInvocationContext{
+        .caller_domain = std::string("runtime.agent_orchestrator"),
+        .session_id = std::string("session-daemon-live-terminal-deny"),
+        .profile_snapshot = policy_snapshot.get(),
+        .trace = {
+          .trace_id = std::string("trace-daemon-live-terminal-deny"),
+          .span_id = std::nullopt,
+          .parent_span_id = std::nullopt,
+        },
+        .confirmation_facts = std::nullopt,
+      });
+    assert_true(denied_terminal_envelope.failure_reason_code.has_value() &&
+            *denied_terminal_envelope.failure_reason_code == "policy.confirmation_required",
+          "daemon runtime live dependency composition should deny agent.terminal without confirmation");
+
+    const auto allowed_terminal_envelope = composition.dependency_set->tool_manager->invoke(
+      dasall::contracts::ToolRequest{
+        .request_id = std::string("req-daemon-live-terminal-allow"),
+        .tool_call_id = std::string("call-daemon-live-terminal-allow"),
+        .tool_name = std::string("agent.terminal"),
+        .invocation_kind = dasall::contracts::ToolInvocationKind::Action,
+        .arguments_payload = std::string("{\"command\":\"echo daemon terminal allow\"}"),
+        .created_at = 1710000000002,
+        .goal_id = std::string("goal-daemon-live-terminal-allow"),
+        .worker_task_id = std::string("worker-daemon-live-terminal-allow"),
+        .runtime_budget = std::nullopt,
+        .timeout_ms = 2500U,
+        .idempotency_key = std::string("idem-daemon-live-terminal-allow"),
+        .tags = std::vector<std::string>{"integration", "runtime", "tool", "terminal"},
+      },
+      dasall::tools::ToolInvocationContext{
+        .caller_domain = std::string("runtime.agent_orchestrator"),
+        .session_id = std::string("session-daemon-live-terminal-allow"),
+        .profile_snapshot = policy_snapshot.get(),
+        .trace = {
+          .trace_id = std::string("trace-daemon-live-terminal-allow"),
+          .span_id = std::nullopt,
+          .parent_span_id = std::nullopt,
+        },
+        .confirmation_facts = std::vector<dasall::tools::ToolConfirmationFact>{
+          dasall::tools::ToolConfirmationFact{
+            .confirmation_id = std::string("confirm-daemon-live-terminal"),
+            .subject_ref = std::string("goal://daemon-live-terminal"),
+            .proof_type = std::string("user.approved"),
+            .confirmed_at_ms = 1710000000000,
+          },
+        },
+      });
+    assert_true(allowed_terminal_envelope.tool_result.has_value() &&
+            allowed_terminal_envelope.tool_result->success.value_or(false),
+          "daemon runtime live dependency composition should keep agent.terminal on the successful tools->services path once confirmation is present");
+    assert_true(allowed_terminal_envelope.route_facts.has_value() &&
+            allowed_terminal_envelope.route_facts->route_kind.has_value() &&
+            *allowed_terminal_envelope.route_facts->route_kind == "builtin",
+          "daemon runtime live dependency composition should keep agent.terminal on the governed builtin route");
+    assert_true(allowed_terminal_envelope.observation.has_value() &&
+            allowed_terminal_envelope.observation_digest.has_value(),
+          "daemon runtime live dependency composition should project agent.terminal into observation and digest together");
+    assert_true(allowed_terminal_envelope.tool_result->payload.has_value() &&
+            allowed_terminal_envelope.tool_result->payload->find("\"operation\":\"agent.terminal\"") != std::string::npos,
+          "daemon runtime live dependency composition should route agent.terminal through the live execution service payload");
         assert_true(composition.dependency_set->health_monitor != nullptr,
           "daemon runtime live dependency composition should retain a concrete health monitor for production observability");
         assert_true(contains_port(composition.dependency_set->external_evidence,

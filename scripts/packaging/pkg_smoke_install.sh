@@ -518,15 +518,21 @@ PY
     --json)
   assert_json_matches "$TOOLS_PROOF_JSON" '"ok": true' 'tools installed proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"agent_dataset_visible": true' 'tools visible surface proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"agent_terminal_visible": true' 'tools terminal visible surface proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"tool_invocation_succeeded": true' 'tools invocation proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"terminal_confirmation_denied": true' 'tools terminal confirmation gate proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"terminal_invocation_succeeded": true' 'tools terminal invocation proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"projection_present": true' 'tools observation projection proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"terminal_projection_present": true' 'tools terminal observation projection proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"route_kind": "builtin"' 'tools builtin route proof'
+  assert_json_matches "$TOOLS_PROOF_JSON" '"terminal_route_kind": "builtin"' 'tools terminal builtin route proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"route_citation_present": true' 'tools route citation proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"tool_call_citation_present": true' 'tools tool-call citation proof'
   assert_json_matches "$TOOLS_PROOF_JSON" '"production_bridge_evidence_present": true' 'tools production bridge evidence'
   assert_json_matches "$TOOLS_PROOF_JSON" '"production_observability_evidence_present": true' 'tools production observability evidence'
   assert_json_contains "$TOOLS_PROOF_JSON" '\"capability_id\":\"agent.dataset\"' 'tools payload capability marker'
   assert_json_contains "$TOOLS_PROOF_JSON" '\"projection\":\"default\"' 'tools payload projection marker'
+  assert_json_contains "$TOOLS_PROOF_JSON" '\"operation\":\"agent.terminal\"' 'tools terminal payload operation marker'
   write_artifact_file 'tools-installed-proof.json' "$TOOLS_PROOF_JSON"
 
   set +e

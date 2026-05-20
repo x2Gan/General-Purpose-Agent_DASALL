@@ -47,6 +47,8 @@
 #include "ops/ToolMetricsBridge.h"
 #include "ops/ToolTraceBridge.h"
 #include "ProfileCatalog.h"
+#include "builtin/dataset/AgentDatasetTool.h"
+#include "builtin/terminal/AgentTerminalTool.h"
 #include "tool/ToolDescriptor.h"
 #include "config/MemoryConfigProjector.h"
 #include "config/InstallLayout.h"
@@ -1274,20 +1276,23 @@ class RuntimeToolHealthSignalProvider final
 }
 
 [[nodiscard]] contracts::ToolDescriptor make_runtime_dataset_descriptor() {
-  return contracts::ToolDescriptor{
-      .tool_name = std::string{"agent.dataset"},
-      .display_name = std::string{"Agent Dataset"},
-      .category = contracts::ToolCategory::Information,
-      .capability_tier = contracts::ToolCapabilityTier::Preview,
-      .is_read_only = true,
-      .supports_compensation = false,
-      .default_timeout_ms = 30000U,
-      .input_schema_ref = std::string{"schema://tools/agent.dataset/input/v1"},
-      .output_schema_ref = std::string{"schema://tools/agent.dataset/output/v1"},
-      .required_scopes = std::vector<std::string>{"tools.read"},
-      .tags = std::vector<std::string>{"builtin", "query", "runtime"},
-      .version = std::string{"1.0.0"},
-  };
+  auto descriptor = tools::builtin::dataset::build_descriptor();
+  auto tags = descriptor.tags.value_or(std::vector<std::string>{});
+  if (!contains_string(tags, "runtime")) {
+    tags.push_back("runtime");
+  }
+  descriptor.tags = std::move(tags);
+  return descriptor;
+}
+
+[[nodiscard]] contracts::ToolDescriptor make_runtime_terminal_descriptor() {
+  auto descriptor = tools::builtin::terminal::build_descriptor();
+  auto tags = descriptor.tags.value_or(std::vector<std::string>{});
+  if (!contains_string(tags, "runtime")) {
+    tags.push_back("runtime");
+  }
+  descriptor.tags = std::move(tags);
+  return descriptor;
 }
 
 [[nodiscard]] std::shared_ptr<tools::ToolManager> compose_runtime_tool_manager(
@@ -1302,6 +1307,9 @@ class RuntimeToolHealthSignalProvider final
   }
 
   auto registry = std::make_shared<tools::registry::ToolRegistry>();
+  if (!registry->register_builtin(make_runtime_terminal_descriptor())) {
+    return nullptr;
+  }
   if (!registry->register_builtin(make_runtime_dataset_descriptor())) {
     return nullptr;
   }
@@ -1513,7 +1521,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
     return make_error(std::string("multi_agent coordinator composition failed for ") +
                       std::string(composition_owner));
   }
-  dependency_set->visible_tools = {"agent.dataset"};
+  dependency_set->visible_tools = {"agent.dataset", "agent.terminal"};
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
       (cognition_first_requested ? ":cognition-first-forced"
