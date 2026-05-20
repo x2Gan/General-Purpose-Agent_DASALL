@@ -1,18 +1,23 @@
 #include "RuntimeLiveDependencyComposition.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <set>
 #include <string>
 #include <system_error>
 #include <thread>
 #include <utility>
 
 #include <vector>
+
+#include <sqlite3.h>
 
 #include "LogEvent.h"
 #include "ICognitionEngine.h"
@@ -51,11 +56,14 @@
 #include "tracing/ISpan.h"
 #include "tracing/ITracer.h"
 #include "tracing/TraceTypes.h"
+#include "vector/DetachedVectorIndexFactory.h"
 
 namespace dasall::apps::runtime_support {
 namespace {
 
 namespace fs = std::filesystem;
+
+constexpr std::string_view kKnowledgeDenseSnapshotDatabaseName = "dense.sqlite";
 
 [[nodiscard]] std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -76,6 +84,289 @@ namespace fs = std::filesystem;
 
 [[nodiscard]] bool runtime_cognition_first_requested() {
   return environment_flag_enabled("DASALL_RUNTIME_COGNITION_FIRST");
+}
+
+[[nodiscard]] std::string lower_ascii_copy(std::string_view value) {
+  std::string lowered;
+  lowered.reserve(value.size());
+  for (const unsigned char character : value) {
+    lowered.push_back(static_cast<char>(std::tolower(character)));
+  }
+
+  return lowered;
+}
+
+[[nodiscard]] bool contains_string(const std::vector<std::string>& values,
+                                   std::string_view value) {
+  return std::find(values.begin(), values.end(), value) != values.end();
+}
+
+[[nodiscard]] bool contains_all_tags(const std::vector<std::string>& candidate_tags,
+                                     const std::vector<std::string>& required_tags) {
+  if (required_tags.empty()) {
+    return true;
+  }
+
+  std::vector<std::string> normalized_tags;
+  normalized_tags.reserve(candidate_tags.size());
+  for (const auto& tag : candidate_tags) {
+    normalized_tags.push_back(lower_ascii_copy(tag));
+  }
+
+  return std::all_of(required_tags.begin(), required_tags.end(), [&](const auto& required_tag) {
+    return contains_string(normalized_tags, lower_ascii_copy(required_tag));
+  });
+}
+
+[[nodiscard]] bool matches_language(const std::optional<std::string>& candidate_language,
+                                    const std::optional<std::string>& required_language) {
+  if (!required_language.has_value()) {
+    return true;
+  }
+
+  return candidate_language.has_value() &&
+         lower_ascii_copy(*candidate_language) == lower_ascii_copy(*required_language);
+}
+
+[[nodiscard]] std::vector<std::string> deserialize_tags(const std::string& serialized_tags) {
+  std::vector<std::string> tags;
+  std::istringstream buffer(serialized_tags);
+  std::string line;
+  while (std::getline(buffer, line)) {
+    if (!line.empty()) {
+      tags.push_back(std::move(line));
+    }
+  }
+
+  return tags;
+}
+
+[[nodiscard]] fs::path knowledge_dense_snapshot_database_path(
+    const fs::path& snapshot_dir) {
+  return snapshot_dir / std::string(kKnowledgeDenseSnapshotDatabaseName);
+}
+
+class RuntimeKnowledgeVectorRecallStore final : public knowledge::retrieve::IVectorRecallStore {
+ public:
+  RuntimeKnowledgeVectorRecallStore(memory::MemoryConfig memory_config,
+                                    knowledge::DenseStoreFactoryContext context)
+      : memory_config_(std::move(memory_config)),
+        context_(std::move(context)) {}
+
+  [[nodiscard]] bool available() const override {
+    const auto manifest = load_active_manifest();
+    if (!manifest.has_value() || !manifest->vector_enabled) {
+      return false;
+    }
+
+    const auto snapshot_dir = context_.snapshots_root / manifest->snapshot_id;
+    const auto dense_database_path = knowledge_dense_snapshot_database_path(snapshot_dir);
+    if (!fs::exists(dense_database_path)) {
+      return false;
+    }
+
+    auto adapter = memory::create_detached_vector_index_adapter(memory_config_,
+                                                                dense_database_path);
+    return adapter != nullptr && adapter->is_available();
+  }
+
+  [[nodiscard]] knowledge::retrieve::DenseQueryInputMode query_input_mode() const override {
+    return knowledge::retrieve::DenseQueryInputMode::TextOnly;
+  }
+
+  [[nodiscard]] std::vector<knowledge::retrieve::RecallHit> search(
+      const knowledge::retrieve::DenseQueryRequest& request) const override {
+    if (!request.has_consistent_values()) {
+      return {};
+    }
+
+    const auto manifest = load_active_manifest();
+    if (!manifest.has_value() || !manifest->vector_enabled) {
+      return {};
+    }
+
+    const auto snapshot_dir = context_.snapshots_root / manifest->snapshot_id;
+    const auto dense_database_path = knowledge_dense_snapshot_database_path(snapshot_dir);
+    const auto lexical_database_path = snapshot_dir / "lexical.sqlite";
+    if (!fs::exists(dense_database_path) || !fs::exists(lexical_database_path)) {
+      return {};
+    }
+
+    auto adapter = memory::create_detached_vector_index_adapter(memory_config_,
+                                                                dense_database_path);
+    if (adapter == nullptr || !adapter->is_available()) {
+      return {};
+    }
+
+    const auto search_limit = static_cast<int>(std::max<std::size_t>(request.top_k * 8U, 32U));
+    const auto vector_hits = adapter->search(request.query_text, search_limit);
+    if (vector_hits.empty()) {
+      return {};
+    }
+
+    sqlite3* database = nullptr;
+    if (sqlite3_open_v2(lexical_database_path.string().c_str(),
+                        &database,
+                        SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX,
+                        nullptr) != SQLITE_OK) {
+      if (database != nullptr) {
+        sqlite3_close(database);
+      }
+      return {};
+    }
+
+    struct DatabaseGuard {
+      sqlite3* handle = nullptr;
+      ~DatabaseGuard() {
+        if (handle != nullptr) {
+          sqlite3_close(handle);
+        }
+      }
+    } database_guard{database};
+
+    sqlite3_stmt* statement = nullptr;
+    constexpr const char* query_sql =
+        "SELECT corpus_id, document_id, chunk_text, citation_ref, updated_at, authority_level, tags, language "
+        "FROM chunks WHERE chunk_id = ?1";
+    if (sqlite3_prepare_v2(database, query_sql, -1, &statement, nullptr) != SQLITE_OK) {
+      return {};
+    }
+
+    struct StatementGuard {
+      sqlite3_stmt* handle = nullptr;
+      ~StatementGuard() {
+        if (handle != nullptr) {
+          sqlite3_finalize(handle);
+        }
+      }
+    } statement_guard{statement};
+
+    std::set<std::string, std::less<>> emitted_chunk_ids;
+    std::vector<knowledge::retrieve::RecallHit> hits;
+    hits.reserve(request.top_k);
+
+    for (const auto& vector_hit : vector_hits) {
+      if (vector_hit.doc_id.empty() || !emitted_chunk_ids.insert(vector_hit.doc_id).second) {
+        continue;
+      }
+
+      sqlite3_reset(statement);
+      sqlite3_clear_bindings(statement);
+      sqlite3_bind_text(statement, 1, vector_hit.doc_id.c_str(), -1, SQLITE_TRANSIENT);
+      if (sqlite3_step(statement) != SQLITE_ROW) {
+        continue;
+      }
+
+      knowledge::retrieve::RecallHit hit;
+      if (const auto* corpus_id = sqlite3_column_text(statement, 0); corpus_id != nullptr) {
+        hit.corpus_id = reinterpret_cast<const char*>(corpus_id);
+      }
+      if (const auto* document_id = sqlite3_column_text(statement, 1); document_id != nullptr) {
+        hit.document_id = reinterpret_cast<const char*>(document_id);
+      }
+      if (const auto* chunk_text = sqlite3_column_text(statement, 2); chunk_text != nullptr) {
+        hit.raw_snippet = reinterpret_cast<const char*>(chunk_text);
+      }
+      if (const auto* citation_ref = sqlite3_column_text(statement, 3); citation_ref != nullptr) {
+        hit.citation_ref = reinterpret_cast<const char*>(citation_ref);
+      }
+      hit.updated_at = sqlite3_column_int64(statement, 4);
+      hit.authority_level = static_cast<knowledge::AuthorityLevel>(
+          sqlite3_column_int(statement, 5));
+      if (const auto* tags = sqlite3_column_text(statement, 6); tags != nullptr) {
+        hit.tags = deserialize_tags(reinterpret_cast<const char*>(tags));
+      }
+      std::optional<std::string> language;
+      if (sqlite3_column_type(statement, 7) != SQLITE_NULL) {
+        language = std::string(reinterpret_cast<const char*>(sqlite3_column_text(statement, 7)));
+      }
+
+      if (!request.allowed_corpus_ids.empty() &&
+          !contains_string(request.allowed_corpus_ids, hit.corpus_id)) {
+        continue;
+      }
+      if (!matches_language(language, request.required_language) ||
+          !contains_all_tags(hit.tags, request.required_tags)) {
+        continue;
+      }
+
+      hit.chunk_id = vector_hit.doc_id;
+      hit.score = 1.0F /
+                  (1.0F + static_cast<float>(std::max(0.0, static_cast<double>(vector_hit.score))));
+      if (!hit.has_consistent_values()) {
+        continue;
+      }
+
+      hits.push_back(std::move(hit));
+      if (hits.size() >= request.top_k) {
+        break;
+      }
+    }
+
+    return hits;
+  }
+
+ private:
+  [[nodiscard]] std::optional<knowledge::IndexManifest> load_active_manifest() const {
+    if (!context_.active_manifest) {
+      return std::nullopt;
+    }
+
+    const auto manifest = context_.active_manifest();
+    if (!manifest.has_value() || !manifest->has_consistent_values() ||
+        manifest->snapshot_id.empty()) {
+      return std::nullopt;
+    }
+
+    return manifest;
+  }
+
+  memory::MemoryConfig memory_config_;
+  knowledge::DenseStoreFactoryContext context_;
+};
+
+[[nodiscard]] knowledge::index::DenseSnapshotBuildResult build_knowledge_dense_snapshot(
+    const memory::MemoryConfig& memory_config,
+    const knowledge::index::DenseSnapshotBuildRequest& request) {
+  knowledge::index::DenseSnapshotBuildResult result;
+  if (!request.has_consistent_values()) {
+    result.warnings.push_back("dense_snapshot_request_inconsistent");
+    return result;
+  }
+
+  const auto dense_database_path = knowledge_dense_snapshot_database_path(request.snapshot_dir);
+  std::error_code remove_error;
+  fs::remove(dense_database_path, remove_error);
+
+  auto adapter = memory::create_detached_vector_index_adapter(memory_config,
+                                                              dense_database_path);
+  if (adapter == nullptr || !adapter->is_available()) {
+    result.warnings.push_back("dense_snapshot_backend_unavailable");
+    return result;
+  }
+
+  for (const auto& chunk : request.chunk_records) {
+    const auto upsert = adapter->upsert(memory::VectorDocument{
+        .doc_id = chunk.chunk_id,
+        .doc_type = chunk.corpus_id,
+        .text = chunk.chunk_text,
+        .embedding = {},
+    });
+    if (!upsert.ok) {
+      std::error_code cleanup_error;
+      fs::remove(dense_database_path, cleanup_error);
+      result.warnings.push_back("dense_snapshot_upsert_failed");
+      return result;
+    }
+  }
+
+  if (!fs::exists(dense_database_path)) {
+    result.warnings.push_back("dense_snapshot_artifact_missing");
+    return result;
+  }
+
+  result.ok = true;
+  return result;
 }
 
 constexpr std::string_view kCognitionPlanningStage = "planning";
@@ -1241,13 +1532,38 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
         ":memory-vector-fail-closed:sqlite-vss-assets-missing");
   }
 
+  const bool knowledge_vector_runtime_available =
+      memory_config->vector.enabled &&
+      memory_config->vector.backend_type == memory::VectorBackend::SqliteVss;
+
+  std::function<knowledge::index::DenseSnapshotBuildResult(
+      const knowledge::index::DenseSnapshotBuildRequest& request)>
+      build_dense_snapshot;
+  std::function<std::unique_ptr<knowledge::retrieve::IVectorRecallStore>(
+      const knowledge::DenseStoreFactoryContext& context)>
+      create_vector_recall_store;
+  if (knowledge_vector_runtime_available) {
+    const auto vector_memory_config = *memory_config;
+    build_dense_snapshot = [vector_memory_config](
+                              const knowledge::index::DenseSnapshotBuildRequest& request) {
+      return build_knowledge_dense_snapshot(vector_memory_config, request);
+    };
+    create_vector_recall_store = [vector_memory_config](
+                                   const knowledge::DenseStoreFactoryContext& context) {
+      return std::make_unique<RuntimeKnowledgeVectorRecallStore>(vector_memory_config,
+                                                                 context);
+    };
+  }
+
   const auto knowledge_result = knowledge::create_installed_asset_knowledge_service(
       knowledge::InstalledAssetKnowledgeServiceOptions{
           .readonly_assets_root = readonly_assets_root,
           .state_root = state_root,
           .service_instance_id = std::string(composition_owner) + ":knowledge",
-        .profile_id = policy_snapshot->effective_profile_id(),
-        .telemetry_sinks = make_knowledge_production_telemetry_sinks(observability),
+          .profile_id = policy_snapshot->effective_profile_id(),
+          .telemetry_sinks = make_knowledge_production_telemetry_sinks(observability),
+          .build_dense_snapshot = build_dense_snapshot,
+          .create_vector_recall_store = create_vector_recall_store,
       });
   if (knowledge_result.ok()) {
     const auto positive_probe_error =

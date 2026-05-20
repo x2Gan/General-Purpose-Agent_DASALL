@@ -1,5 +1,40 @@
 # DASALL 开发执行记录
 
+# 记录 #724
+
+- 日期：2026-05-20
+- 阶段：knowledge / gap closeout
+- 任务：收口 `KNO-GAP-012` owner-safe concrete vector backend 缺口
+- 状态：已完成（Memory detached factory、Knowledge dense contract、runtime concrete artifact 与 focused validation 已收口）
+
+### 执行前提
+
+1. 用户要求结合行业实践完善 `concrete vector backend` 设计并继续收口 Knowledge owner 范围，随后落地实施该任务。
+2. 当前总账已只剩 concrete vector backend 作为 Knowledge owner blocker：Knowledge 侧虽有 `VectorRetrieverBridge` / `IVectorRecallStore` / degrade 语义，但只有 seam，没有 concrete dense artifact；同时 `KnowledgeBoundaryGuardComplianceTest` 已明确禁止 Knowledge 直接 include/link Memory private implementation。
+3. 本轮 authoritative 边界是：以 owner-safe composition root 注入的方式，把 Memory 的 sqlite-vss concrete 能力转成 Knowledge 可消费的 dense snapshot / recall artifact；不在本轮把 default retrieval mode 从 lexical-only 推到 hybrid/dense。
+
+### 改动
+
+1. 新增 `memory/include/vector/DetachedVectorIndexFactory.h` 与 `memory/src/vector/DetachedVectorIndexFactory.cpp`，把 sqlite-vss concrete backend 提升为 detached public factory，可附着任意 SQLite snapshot 文件。
+2. 更新 `knowledge/include/index/IndexWriter.h`、`knowledge/include/KnowledgeServiceFactory.h` 及对应实现：Knowledge 现只声明外部 dense snapshot builder / recall store contract，`IndexWriter` 仅在 dense artifact build 成功时把 `manifest.vector_enabled=true`，health 通过 dense bridge availability 暴露 backend 状态。
+3. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：runtime composition 现为 active snapshot materialize `dense.sqlite`，并提供一个通过 `chunk_id` 回查 `lexical.sqlite` 元数据的 `IVectorRecallStore` 实现；同时保持 ready baseline 的 retrieve mode 仍为 `LexicalOnly`。
+4. 更新 `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp` 与总账 / deliverable：ready baseline 现在断言 `vector_backend_available=true`、`dense.sqlite` 存在，但 default retrieval mode 不变。
+
+### 验证
+
+1. focused compile。
+   - `cmake --build build/vscode-linux-ninja --target dasall_memory -j2`：通过。
+   - `cmake --build build/vscode-linux-ninja --target dasall_knowledge -j2`：通过。
+   - `cmake --build build/vscode-linux-ninja --target dasall_apps_runtime_support -j2`：通过。
+2. focused integration。
+   - `ctest --test-dir build/vscode-linux-ninja -R RuntimeLiveCompositionFailureMatrixTest --output-on-failure`：通过。
+
+### 结果
+
+1. `KNO-GAP-012` 在当前树上已保持闭合：Knowledge concrete vector backend 现已从 bridge seam 提升为 runtime-composed concrete artifact，而不是仅有接口和 degrade 语义。
+2. Knowledge owner boundary 未回退：Knowledge 只持有 dense snapshot / recall contract，Memory 继续拥有 sqlite-vss concrete implementation，runtime_support 负责 composition root wiring。
+3. 本轮未使用 qemu / kvm，且不把结论外推为 dense default rollout 或更高层 installed / qemu / soak 全绿。
+
 # 记录 #723
 
 - 日期：2026-05-20

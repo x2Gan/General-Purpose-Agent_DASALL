@@ -781,6 +781,25 @@ bool RebuildReport::has_consistent_values() const {
          (!manifest.has_value() || manifest->has_consistent_values());
 }
 
+bool DenseSnapshotBuildRequest::has_consistent_values() const {
+  if (snapshot_dir.empty()) {
+    return false;
+  }
+
+  std::set<std::string, std::less<>> chunk_ids;
+  for (const auto& chunk : chunk_records) {
+    if (!chunk.has_consistent_values() || !chunk_ids.insert(chunk.chunk_id).second) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool DenseSnapshotBuildResult::has_consistent_values() const {
+  return warnings.empty() || has_unique_non_empty_values(warnings);
+}
+
 bool IndexWriter::ShadowIndex::has_consistent_values() const {
   return !snapshot_dir.empty() && !database_path.empty() && !manifest_path.empty() &&
          manifest.has_consistent_values() && !checksum.empty() && snapshot != nullptr &&
@@ -901,15 +920,27 @@ UpdateReport IndexWriter::apply_update_batch(const ingest::IndexUpdateBatch& bat
                                             "batch_invalid");
   }
 
+  std::vector<std::string> warnings = batch.warnings;
+  auto tokenizer_profile = std::string(kDefaultTokenizerProfile);
+  auto vector_enabled = false;
+  if (const auto manifest = reader_.current_manifest(); manifest.has_value()) {
+    tokenizer_profile = manifest->tokenizer_profile;
+    vector_enabled = manifest->vector_enabled;
+  }
+
   ShadowIndex shadow;
   try {
-    shadow = build_shadow_index(batch);
+    shadow = build_shadow_index(batch,
+                                warnings,
+                                tokenizer_profile,
+                                vector_enabled,
+                                true);
   } catch (const std::exception& exception) {
     return make_failed_report<UpdateReport>(KnowledgeErrorCode::RefreshFailed,
                                             std::string("shadow build failed: ") +
                                                 exception.what(),
                                             "index_writer.apply_update_batch",
-                                            "shadow_build_failed", batch.warnings);
+                                            "shadow_build_failed", warnings);
   }
 
   const auto current_manifest = reader_.current_manifest();
@@ -929,7 +960,7 @@ UpdateReport IndexWriter::apply_update_batch(const ingest::IndexUpdateBatch& bat
     return make_failed_report<UpdateReport>(KnowledgeErrorCode::RefreshFailed,
                                             "version ledger rejected candidate snapshot",
                                             "index_writer.apply_update_batch",
-                                            "record_candidate_failed", batch.warnings);
+                                            "record_candidate_failed", warnings);
   }
 
   const auto previous_active_shadow = active_shadow_;
@@ -938,7 +969,7 @@ UpdateReport IndexWriter::apply_update_batch(const ingest::IndexUpdateBatch& bat
     return make_failed_report<UpdateReport>(KnowledgeErrorCode::RefreshFailed,
                                             "active snapshot swap failed",
                                             "index_writer.apply_update_batch",
-                                            "snapshot_swap_failed", batch.warnings);
+                                            "snapshot_swap_failed", warnings);
   }
 
   if (!deps_.mark_active(shadow.manifest.snapshot_id, shadow.manifest.effective_at)) {
@@ -953,7 +984,7 @@ UpdateReport IndexWriter::apply_update_batch(const ingest::IndexUpdateBatch& bat
     return make_failed_report<UpdateReport>(KnowledgeErrorCode::RefreshFailed,
                                             "version ledger activation failed",
                                             "index_writer.apply_update_batch",
-                                            "mark_active_failed", batch.warnings);
+                                            "mark_active_failed", warnings);
   }
 
   active_shadow_ = shadow;
@@ -963,7 +994,7 @@ UpdateReport IndexWriter::apply_update_batch(const ingest::IndexUpdateBatch& bat
   report.ok = true;
   report.snapshot_id = shadow.manifest.snapshot_id;
   report.manifest = shadow.manifest;
-  report.warnings = batch.warnings;
+  report.warnings = warnings;
   try {
     if (!deps_.refresh_catalog(shadow.manifest)) {
       append_warning(report.warnings, "catalog_refresh_failed");
@@ -986,16 +1017,21 @@ RebuildReport IndexWriter::rebuild_all(const RebuildPlan& plan) {
   batch.batch_id = build_rebuild_batch_id(plan);
   batch.chunk_records = plan.chunk_records;
   batch.warnings = plan.warnings;
+  std::vector<std::string> warnings = plan.warnings;
 
   ShadowIndex shadow;
   try {
-    shadow = build_shadow_index(batch, plan.tokenizer_profile, plan.vector_enabled, false);
+    shadow = build_shadow_index(batch,
+                                warnings,
+                                plan.tokenizer_profile,
+                                plan.vector_enabled,
+                                false);
   } catch (const std::exception& exception) {
     return make_failed_report<RebuildReport>(KnowledgeErrorCode::RefreshFailed,
                                              std::string("shadow rebuild failed: ") +
                                                  exception.what(),
                                              "index_writer.rebuild_all",
-                                             "shadow_build_failed", plan.warnings);
+                                             "shadow_build_failed", warnings);
   }
 
   const auto current_manifest = reader_.current_manifest();
@@ -1015,7 +1051,7 @@ RebuildReport IndexWriter::rebuild_all(const RebuildPlan& plan) {
     return make_failed_report<RebuildReport>(KnowledgeErrorCode::RefreshFailed,
                                              "version ledger rejected rebuild candidate",
                                              "index_writer.rebuild_all",
-                                             "record_candidate_failed", plan.warnings);
+                                             "record_candidate_failed", warnings);
   }
 
   const auto previous_active_shadow = active_shadow_;
@@ -1024,7 +1060,7 @@ RebuildReport IndexWriter::rebuild_all(const RebuildPlan& plan) {
     return make_failed_report<RebuildReport>(KnowledgeErrorCode::RefreshFailed,
                                              "active snapshot swap failed",
                                              "index_writer.rebuild_all",
-                                             "snapshot_swap_failed", plan.warnings);
+                                             "snapshot_swap_failed", warnings);
   }
 
   if (!deps_.mark_active(shadow.manifest.snapshot_id, shadow.manifest.effective_at)) {
@@ -1039,7 +1075,7 @@ RebuildReport IndexWriter::rebuild_all(const RebuildPlan& plan) {
     return make_failed_report<RebuildReport>(KnowledgeErrorCode::RefreshFailed,
                                              "version ledger activation failed",
                                              "index_writer.rebuild_all",
-                                             "mark_active_failed", plan.warnings);
+                                             "mark_active_failed", warnings);
   }
 
   active_shadow_ = shadow;
@@ -1049,7 +1085,7 @@ RebuildReport IndexWriter::rebuild_all(const RebuildPlan& plan) {
   report.ok = true;
   report.snapshot_id = shadow.manifest.snapshot_id;
   report.manifest = shadow.manifest;
-  report.warnings = plan.warnings;
+  report.warnings = warnings;
   try {
     if (!deps_.refresh_catalog(shadow.manifest)) {
       append_warning(report.warnings, "catalog_refresh_failed");
@@ -1069,11 +1105,13 @@ IndexWriter::ShadowIndex IndexWriter::build_shadow_index(
     vector_enabled = manifest->vector_enabled;
   }
 
-  return build_shadow_index(batch, tokenizer_profile, vector_enabled, true);
+  std::vector<std::string> warnings = batch.warnings;
+  return build_shadow_index(batch, warnings, tokenizer_profile, vector_enabled, true);
 }
 
 IndexWriter::ShadowIndex IndexWriter::build_shadow_index(
     const ingest::IndexUpdateBatch& batch,
+    std::vector<std::string>& warnings,
     std::string_view tokenizer_profile,
     bool vector_enabled,
     bool seed_from_active) const {
@@ -1117,6 +1155,29 @@ IndexWriter::ShadowIndex IndexWriter::build_shadow_index(
     throw;
   }
 
+  bool dense_snapshot_ready = false;
+  if (vector_enabled) {
+    if (!deps_.build_dense_snapshot) {
+      append_warning(warnings, "dense_snapshot_builder_missing");
+    } else {
+      const auto dense_result = deps_.build_dense_snapshot(DenseSnapshotBuildRequest{
+          .snapshot_dir = snapshot_dir,
+          .chunk_records = batch.chunk_records,
+      });
+      if (!dense_result.has_consistent_values()) {
+        throw std::runtime_error("dense_snapshot_result_inconsistent");
+      }
+
+      dense_snapshot_ready = dense_result.ok;
+      for (const auto& warning : dense_result.warnings) {
+        append_warning(warnings, warning);
+      }
+      if (!dense_snapshot_ready) {
+        append_warning(warnings, "dense_snapshot_unavailable");
+      }
+    }
+  }
+
   IndexManifest manifest;
   manifest.tokenizer_profile = std::string(tokenizer_profile);
   manifest.snapshot_id = snapshot_id;
@@ -1125,7 +1186,7 @@ IndexWriter::ShadowIndex IndexWriter::build_shadow_index(
   manifest.document_count =
       query_count(database.handle, "SELECT COUNT(DISTINCT document_lineage_id) FROM chunks;");
   manifest.chunk_count = query_count(database.handle, "SELECT COUNT(*) FROM chunks;");
-  manifest.vector_enabled = vector_enabled;
+  manifest.vector_enabled = vector_enabled && dense_snapshot_ready;
 
   write_manifest_sidecar(manifest_path, manifest);
   auto checksum = compute_snapshot_checksum(database_path, manifest_path);

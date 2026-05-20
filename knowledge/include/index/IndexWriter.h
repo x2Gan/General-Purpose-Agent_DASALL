@@ -45,12 +45,28 @@ struct RebuildReport {
   [[nodiscard]] bool has_consistent_values() const;
 };
 
+struct DenseSnapshotBuildRequest {
+  std::filesystem::path snapshot_dir;
+  std::vector<ingest::ChunkRecord> chunk_records;
+
+  [[nodiscard]] bool has_consistent_values() const;
+};
+
+struct DenseSnapshotBuildResult {
+  bool ok = false;
+  std::vector<std::string> warnings;
+
+  [[nodiscard]] bool has_consistent_values() const;
+};
+
 struct IndexWriterDeps {
   std::function<std::filesystem::path()> snapshots_root;
   std::function<std::int64_t()> now_ms;
   std::function<bool(const VersionLedgerEntry& entry)> record_candidate;
   std::function<bool(std::string_view snapshot_id, std::int64_t activated_at)> mark_active;
   std::function<bool(const IndexManifest& manifest)> refresh_catalog;
+  std::function<DenseSnapshotBuildResult(const DenseSnapshotBuildRequest& request)>
+      build_dense_snapshot;
 };
 
 class IndexWriter {
@@ -82,6 +98,7 @@ class IndexWriter {
 
   [[nodiscard]] ShadowIndex build_shadow_index(const ingest::IndexUpdateBatch& batch) const;
   [[nodiscard]] ShadowIndex build_shadow_index(const ingest::IndexUpdateBatch& batch,
+                                               std::vector<std::string>& warnings,
                                                std::string_view tokenizer_profile,
                                                bool vector_enabled,
                                                bool seed_from_active) const;

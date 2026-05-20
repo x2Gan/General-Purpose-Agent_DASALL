@@ -178,6 +178,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/working/WorkingMemoryBoard.cpp
   src/writeback/CompressionCoordinator.cpp
   src/writeback/WritebackCoordinator.cpp
+  src/vector/DetachedVectorIndexFactory.cpp
   src/vector/SimpleLocalEmbeddingAdapter.cpp
   src/vector/SqliteVssVectorBackend.cpp
   src/vector/UnavailableVectorMemoryIndexAdapter.cpp

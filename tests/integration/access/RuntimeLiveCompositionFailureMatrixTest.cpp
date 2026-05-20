@@ -109,7 +109,8 @@ load_runtime_policy_snapshot() {
 
 void assert_installed_knowledge_service_stays_lexical_only(
     const std::shared_ptr<dasall::runtime::RuntimeDependencySet>& dependency_set,
-    const CompositionOwnerSpec& spec) {
+  const CompositionOwnerSpec& spec,
+  const std::filesystem::path& state_root) {
   assert_true(dependency_set->knowledge_service != nullptr,
               "runtime live composition matrix should expose a knowledge service for " +
                   spec.composition_owner);
@@ -125,9 +126,19 @@ void assert_installed_knowledge_service_stays_lexical_only(
                   spec.composition_owner);
 
   const auto health_snapshot = dependency_set->knowledge_service->health_snapshot();
-  assert_true(!health_snapshot.vector_backend_available,
-              "runtime live composition matrix should not advertise a production vector backend for " +
+    assert_true(health_snapshot.vector_backend_available,
+          "runtime live composition matrix should advertise the concrete installed vector backend for " +
                   spec.composition_owner);
+    assert_true(!health_snapshot.active_snapshot_id.empty(),
+          "runtime live composition matrix should expose the active knowledge snapshot id for " +
+            spec.composition_owner);
+
+    const auto dense_snapshot_database =
+      state_root / "knowledge" / "snapshots" / health_snapshot.active_snapshot_id /
+      "dense.sqlite";
+    assert_true(std::filesystem::exists(dense_snapshot_database),
+          "runtime live composition matrix should materialize a dense snapshot artifact for " +
+            spec.composition_owner + ": " + dense_snapshot_database.string());
 }
 
 void copy_memory_assets_only(const std::filesystem::path& assets_root) {
@@ -221,7 +232,9 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
                     spec.composition_owner + " default-ready after helper composition: " +
                     init_result.diagnostics);
 
-    assert_installed_knowledge_service_stays_lexical_only(dependency_set, spec);
+    assert_installed_knowledge_service_stays_lexical_only(dependency_set,
+                                                          spec,
+                                                          state_root.path());
 
   }
 }

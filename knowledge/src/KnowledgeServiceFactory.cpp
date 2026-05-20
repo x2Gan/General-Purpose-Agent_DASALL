@@ -172,9 +172,13 @@ void append_unique(std::vector<std::string>& values, std::string value) {
 
 [[nodiscard]] KnowledgeConfigSnapshot make_installed_asset_config(
     const InstalledAssetKnowledgeServiceOptions& options) {
+  const bool vector_runtime_available =
+      static_cast<bool>(options.build_dense_snapshot) &&
+      static_cast<bool>(options.create_vector_recall_store);
+
   KnowledgeConfigSnapshot config;
   config.knowledge_enabled = true;
-  config.vector_enabled = false;
+  config.vector_enabled = vector_runtime_available;
   config.retrieval_mode_default = RetrievalMode::LexicalOnly;
   config.profile_id = normalize_profile_id(options.profile_id);
   config.evidence_budget_tokens = 512U;
@@ -185,9 +189,9 @@ void append_unique(std::vector<std::string>& values, std::string value) {
   config.failure_backoff_ms = 1000;
   config.request_deadline_ms = 2000;
   config.allow_budget_degrade = true;
-  config.max_parallel_recall = 1U;
+  config.max_parallel_recall = vector_runtime_available ? 2U : 1U;
   config.sparse_recall_timeout_ms = 1000;
-  config.dense_recall_timeout_ms = 1;
+  config.dense_recall_timeout_ms = vector_runtime_available ? 1000 : 1;
   config.ingest_timeout_ms = 5000;
   return config;
 }
@@ -362,16 +366,32 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
               return reader->search_sparse(request);
             },
         });
+    std::shared_ptr<const retrieve::VectorRetrieverBridge> dense_bridge;
+    if (options.create_vector_recall_store) {
+      const DenseStoreFactoryContext dense_store_context{
+          .snapshots_root = snapshots_root,
+          .active_manifest = [reader] {
+            return reader->current_manifest();
+          },
+      };
+      auto vector_store = options.create_vector_recall_store(dense_store_context);
+      if (vector_store != nullptr) {
+        dense_bridge = std::make_shared<retrieve::VectorRetrieverBridge>(
+            nullptr,
+            std::move(vector_store));
+      }
+    }
     deps.recall_coordinator = std::make_unique<retrieve::RecallCoordinator>(
         retrieve::RecallCoordinatorDeps{
             .sparse_lane = [sparse_retriever](const retrieve::SparseRetrieveRequest& request) {
               return sparse_retriever->retrieve(request);
             },
+            .dense_bridge = dense_bridge,
         },
         retrieve::RecallCoordinatorPolicy{
-            .max_parallel_recall = 1U,
-            .sparse_lane_timeout_ms = 1000,
-            .dense_lane_timeout_ms = 1,
+            .max_parallel_recall = config.max_parallel_recall,
+            .sparse_lane_timeout_ms = config.sparse_recall_timeout_ms,
+            .dense_lane_timeout_ms = config.dense_recall_timeout_ms,
         });
 
     deps.ingestion_coordinator = std::make_unique<ingest::IngestionCoordinator>(
@@ -403,6 +423,7 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
                                        std::int64_t activated_at) {
       return ledger->mark_active(snapshot_id, activated_at);
     };
+    writer_deps.build_dense_snapshot = options.build_dense_snapshot;
     writer_deps.refresh_catalog = [catalog, inventory_state, assets_root](const IndexManifest& manifest) {
       auto active_descriptors = catalog->snapshot().list_all();
       for (auto& descriptor : active_descriptors) {
@@ -449,8 +470,8 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
                                                 now_ms(),
                                                 false);
         },
-        .vector_backend_available = [] {
-          return false;
+        .vector_backend_available = [dense_bridge] {
+          return dense_bridge != nullptr && dense_bridge->available();
         },
         .last_known_good_available = [ledger] {
           return ledger->last_known_good().has_value();
