@@ -1,5 +1,38 @@
 # DASALL 开发执行记录
 
+# 记录 #716
+
+- 日期：2026-05-20
+- 阶段：memory / gap closeout
+- 任务：复验 `MEM-GAP-002` 并固定 SQLite version gate closeout 口径
+- 状态：已完成（独立 closeout、focused validation 与 runtime version probe 已回写）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `MEM-GAP-001 ~ 007`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收口径仍写 qemu，应改成本机真实安装态口径。
+2. 当前总账与 `MEM-FIX-002` 已显示 `MEM-GAP-002` 于 2026-05-18 收口，但 memory deliverables 目录中缺少 gap-level 独立 closeout 交付件，不利于后续逐 gap 追溯。
+3. 本轮 authoritative 边界是：复验 SQLite 3.51.3 最低版本 pin、运行时 `sqlite3_libversion_number()` gate 与 fail-closed 行为未回退，并把 `MEM-GAP-002` 改写成独立 closeout 记录；不新增 memory 产品代码，不外推到 qemu / soak。
+
+### 改动
+
+1. 新增 `docs/todos/memory/deliverables/MEM-GAP-002-sqlite-version-gate-closeout.md`，固定 `MEM-GAP-002` 的本地证据、外部参考、Design -> Build 映射与 closeout 边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，为 `MEM-GAP-002` 补入独立 closeout 交付件回链。
+
+### 验证
+
+1. focused targets build。
+   - `cmake --build build/vscode-linux-ninja --target dasall_memory_sqlite_version_gate_unit_test dasall_memory_sqlite_store_unit_test dasall_memory_failure_injection_integration_test -j4`：通过。
+2. focused CTest。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(SqliteVersionGateTest|SqliteMemoryStoreTest|MemoryFailureInjectionTest)$'`：通过，`100% tests passed, 0 tests failed out of 3`。
+3. runtime version probe。
+   - `gdb -batch -ex "start" -ex "print (int)sqlite3_libversion_number()" build/vscode-linux-ninja/tests/unit/memory/dasall_memory_sqlite_version_gate_unit_test`：打印 `3051003`，与 Memory 详设 / 配置基线中的 SQLite `3.51.3` 一致。
+
+### 结果
+
+1. `MEM-GAP-002` 在当前树上复验仍保持闭合：SQLite pin、运行时 version gate 与 fail-closed 行为未回退。
+2. 本轮已为 `MEM-GAP-002` 补齐 gap-level 独立 closeout 交付件，后续不再只能通过 `MEM-FIX-002` worklog 反推该 gap 的完成状态。
+3. 本轮未使用 qemu / kvm，且不把结论外推到 `MEM-GAP-004` 的 qemu / soak 范围。
+
 # 记录 #715
 
 - 日期：2026-05-20
