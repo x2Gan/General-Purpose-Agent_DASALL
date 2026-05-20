@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+## 记录 #713
+
+- 日期：2026-05-20
+- 阶段：llm / gap closeout
+- 任务：复验 `LLM-GAP-004` 本机 installed positive evidence，解除 2026-05-19 live blocker
+- 状态：已完成（本机 installed positive evidence 已解阻；不宣称 L6 external provider soak）
+
+### 执行前提
+
+1. 用户已完成本地安装态 API KEY 的安全部署，并提供 `sudo dasall run ... --json` 正向输出：`disposition=completed`、`exit_code=0`、`task_completed=true`，且 `response_text` 含 `llm.origin=deepseek-prod/deepseek-reasoner model=deepseek-v4-flash finish_reason=stop`。
+2. 本轮只验证本机 installed 同步 generation blocker 是否解除；不使用 qemu / kvm，不记录 secret 明文，不把少量本机 run 外推为 L6 soak。
+
+### 改动
+
+1. 新增 `docs/todos/llm/deliverables/LLM-GAP-004-local-installed-positive-closeout.md`：固定用户 smoke、5 次本机 installed 复验 artifact、closeout 结论与不得外推范围。
+2. 更新 `docs/todos/llm/deliverables/LLM-GAP-004-local-installed-soak-blocker-closeout.md`：标记 2026-05-19 blocker ledger 已被 2026-05-20 positive closeout 取代为当前态。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/todos/llm/DASALL_llm子系统专项TODO.md`：将 `LLM-GAP-004` 从 Blocked evidence 升级为 Local installed positive evidence，同时保留 L6 / release / async 边界。
+
+### 验证
+
+1. 本机 installed continuous positive artifact。
+   - artifact：`/tmp/dasall-llm-gap004-positive-1779243811`
+   - 结果：5 次 run 均 exit `0`，均为 `disposition=completed`、`task_completed=true`、含 `llm.origin=deepseek-prod/`，且未出现 `agent.dataset`。
+   - summary：`total_runs: 5`、`exit0_count: 5`、`completed_count: 5`、`task_completed_count: 5`、`llm_origin_count: 5`、`agent_dataset_count: 0`、`accepted_async_count: 0`、`task_not_completed_count: 0`。
+2. SOAK-00 focused baseline。
+   - `ctest --test-dir build-ci --output-on-failure -R '^(LLMManagerTimeoutPolicyTest|LLMManagerRetryBudgetTest|ModelRouterStabilityTest|LLMObservabilityFieldCompletenessTest|LLMProductionObservabilityIntegrationTest|DeepSeekDualModeSelectionIntegrationTest|LLMFallbackIntegrationTest|LlmSecretPageTest|ConfigApplyWorkflowTest)$'`：4 个单测通过，5 个集成 / CLI 测试因 `build-ci` 缺少对应测试可执行文件而 `Not Run`。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(LLMManagerTimeoutPolicyTest|LLMManagerRetryBudgetTest|ModelRouterStabilityTest|LLMObservabilityFieldCompletenessTest|LLMProductionObservabilityIntegrationTest|DeepSeekDualModeSelectionIntegrationTest|LLMFallbackIntegrationTest|LlmSecretPageTest|ConfigApplyWorkflowTest)$'`：`100% tests passed, 0 tests failed out of 9`。
+
+### 结果
+
+1. 2026-05-19 的本机 installed no-origin blocker 已解除：同步 `dasall run` 当前可经 production LLM path 返回 completed 与 provider/model origin。
+2. SOAK-00 focused baseline 在当前可用 `build/vscode-linux-ninja` 构建目录中保持绿色；`build-ci` 的 `Not Run` 只记录为构建目录缺测试可执行文件，不作为产品测试失败。
+3. 当前仍不得宣称 external provider L6 soak、30 轮 SOAK-01 provider jitter、SOAK-02/04 qemu negative slice、async ownership/status follow-up 链或 release-runner artifact archive 已完成。
+
 ## 记录 #712
 
 - 日期：2026-05-19

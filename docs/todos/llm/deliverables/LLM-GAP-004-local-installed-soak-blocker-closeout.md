@@ -4,6 +4,8 @@
 任务：LLM-GAP-004  
 状态：Done（LLM owner 证据边界已收口；不宣称 L6 positive evidence）
 
+2026-05-20 更新：用户完成本地安装态 API KEY 安全部署后，本 blocker 的当前态已由 [LLM-GAP-004-local-installed-positive-closeout.md](LLM-GAP-004-local-installed-positive-closeout.md) 升级为本机 installed positive evidence。本文保留为 2026-05-19 的历史 blocker ledger，用于说明当 run 只返回 `accepted_async` / `task_not_completed` 且无 `llm.origin` 时不得外推为 production-ready。
+
 ## 1. 执行边界
 
 本轮按任务要求禁用 qemu / kvm 证据采集，不再把 `validate_gate_int_10_installed_package_qemu.sh -- qemu ...` 作为 LLM-GAP-004 的当前验收入口。当前验收口径改为：
