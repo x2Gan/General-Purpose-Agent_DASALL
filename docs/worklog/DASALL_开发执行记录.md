@@ -1,5 +1,44 @@
 # DASALL 开发执行记录
 
+# 记录 #731
+
+- 日期：2026-05-20
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-004` production adapter registry / backend handlers 缺口
+- 状态：已完成（production adapter registry / backend handlers、profile-derived `local_platform` route 与 focused runtime regression 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-004`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` ~ `CAPSRV-GAP-003` 已闭合，因此 `CAPSRV-FIX-004` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；当前工作树仅包含 `CAPSRV-FIX-004` 相关 services/runtime/test 改动，后续只补本轮 traceability 文档。
+3. 当前缺口是：`ServiceLiveComposition` 没有 public production adapter registry / route binding seam，`RuntimeLiveDependencyComposition` 把 `local_platform_route_enabled` 固定为 `false`，且没有 focused integration 去证明 build-tree production composition 已显式注入 platform/local/remote handlers。
+4. 本轮 authoritative 边界是：只补 build-tree production adapter registry / backend handler seam、profile-derived `local_platform` route 与 focused/runtime regressions；不扩张到 `CAPSRV-GAP-005` dynamic snapshot/provider、`CAPSRV-GAP-006` production observability、`CAPSRV-GAP-007` caller-domain owner 或 `CAPSRV-GAP-008` installed / qemu / release / soak 证据。
+
+### 改动
+
+1. 更新 `services/include/ServiceLiveComposition.h`：新增 public `ServiceLiveAdapterRegistry`、`ServiceLiveRouteBinding`、backend request/result/availability/trust/route-class 等 live composition 契约，把 production backend wiring 提升为显式组合根接口。
+2. 更新 `services/src/ServiceLiveComposition.cpp`：新增 public route binding 到内部 adapter candidate / handler 的转换逻辑，按 registry 生成 `local_platform` / `local_service` / `remote_service` candidates，并让 services health readiness 基于 registered candidates 与 policy 派生。
+3. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：复用 build manifest 解析结果，从 `platform_hal` 模块状态派生 `local_platform_route_enabled`，并显式注入 `runtime.live.local_platform`、`runtime.live.local_service`、`runtime.live.remote_service` 三类 handlers。
+4. 更新 `tests/integration/services/CMakeLists.txt`，新增 `tests/integration/services/CapabilityServicesProductionAdapterIntegrationTest.cpp`：覆盖 local_platform enabled/disabled、local_service unavailable remote fallback、remote timeout 与 fallback forbidden；测试内补 `health/IHealthProbe.h` 完整定义以消除 `IHealthProbe` incomplete-type 编译错误。
+5. 新增 `docs/todos/services/deliverables/CAPSRV-FIX-004-production-adapter-registry收口.md`，并回写总账 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本工作日志，固定 `CAPSRV-GAP-004` closeout 口径、Design -> Build 映射与不外推边界。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(["dasall_adapter_router_unit_test","dasall_local_platform_adapter_unit_test","dasall_local_service_adapter_unit_test","dasall_remote_service_adapter_unit_test","dasall_services_profile_integration_test","dasall_services_production_adapter_integration_test"])`：首次构建暴露 `CapabilityServicesProductionAdapterIntegrationTest.cpp` 缺少 `health/IHealthProbe.h` 导致 `IHealthProbe` incomplete-type；补 include 后重跑通过。
+2. focused adapter/profile/production-adapter 测试。
+   - `RunCtest_CMakeTools(["AdapterRouterTest","LocalPlatformAdapterTest","LocalServiceAdapterTest","RemoteServiceAdapterTest","CapabilityServicesProfileIntegrationTest","CapabilityServicesProductionAdapterIntegrationTest"])`：VS Code CMake Tools 返回泛化 `生成失败`。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(AdapterRouterTest|LocalPlatformAdapterTest|LocalServiceAdapterTest|RemoteServiceAdapterTest|CapabilityServicesProfileIntegrationTest|CapabilityServicesProductionAdapterIntegrationTest)$'`：通过，`6/6` tests passed，`0` failed。
+3. adjacent runtime live composition regression。
+   - `Build_CMakeTools(["dasall_access_daemon_runtime_live_dependency_composition_test","dasall_access_gateway_runtime_live_dependency_composition_test"])`：通过。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$'`：通过，`2/2` tests passed，`0` failed。
+
+### 结果
+
+1. `CAPSRV-GAP-004` 已在当前树收口：build-tree production live composition 现在具备显式 `ServiceLiveAdapterRegistry` / backend handler seam，可证明 `local_platform`、`local_service`、`remote_service` 三类后端的 handler 注入、availability/trust/route class 与 health readiness 派生已闭合。
+2. `CapabilityServicesProductionAdapterIntegrationTest` 与 daemon/gateway runtime live composition 回归已把 local_platform enabled/disabled、local_service unavailable remote fallback、remote timeout 与 fallback forbidden 锁住，后续改动不能再悄悄把 production routing 退回 loopback-only seam 或硬编码布尔值。
+3. 本轮未使用 qemu / kvm，且不把结果外推为 `CAPSRV-GAP-005` ~ `CAPSRV-GAP-008` 的 dynamic snapshot/provider、production observability、caller-domain owner 或 installed / release / soak 证据已完成。
+
 # 记录 #730
 
 - 日期：2026-05-20

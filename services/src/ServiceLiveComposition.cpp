@@ -3,7 +3,6 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -15,6 +14,7 @@
 #include "ServiceContextBuilder.h"
 #include "adapters/AdapterBridge.h"
 #include "adapters/AdapterRouter.h"
+#include "adapters/LocalPlatformAdapter.h"
 #include "adapters/LocalServiceAdapter.h"
 #include "adapters/RemoteServiceAdapter.h"
 #include "bridges/ServiceAuditBridge.h"
@@ -47,6 +47,8 @@ using internal::DataQueryLaneDependencies;
 using internal::ExecutionCommandLane;
 using internal::ExecutionCommandLaneDependencies;
 using internal::FallbackEnvelope;
+using internal::LocalPlatformAdapter;
+using internal::LocalPlatformAdapterOptions;
 using internal::LocalServiceAdapter;
 using internal::LocalServiceAdapterOptions;
 using internal::RemoteServiceAdapter;
@@ -68,7 +70,27 @@ using internal::ServiceTraceBridge;
       .count();
 }
 
+[[nodiscard]] bool has_explicit_adapter_registry(const ServiceLiveCompositionOptions& options) {
+  return options.adapter_registry.has_value();
+}
+
+[[nodiscard]] bool has_local_platform_binding(
+    const ServiceLiveCompositionOptions& options) {
+  return !has_explicit_adapter_registry(options) ||
+         options.adapter_registry->local_platform.has_value();
+}
+
+[[nodiscard]] bool has_local_service_binding(
+    const ServiceLiveCompositionOptions& options) {
+  return !has_explicit_adapter_registry(options) ||
+         options.adapter_registry->local_service.has_value();
+}
+
 [[nodiscard]] bool wants_remote_route(const ServiceLiveCompositionOptions& options) {
+  if (has_explicit_adapter_registry(options)) {
+    return options.adapter_registry->remote_service.has_value();
+  }
+
   return options.remote_service_available || options.remote_timeout;
 }
 
@@ -76,7 +98,7 @@ using internal::ServiceTraceBridge;
     const ServiceLiveCompositionOptions& options) {
   profiles::BuildProfileManifest build_manifest{
       .enabled_modules = {"runtime", "services", "tools_builtin"},
-      .enabled_adapters = {"local_service"},
+      .enabled_adapters = {},
       .observability_level = options.observability_level,
       .build_tags = {"services:live"},
       .toolchain_hint = options.toolchain_hint.empty()
@@ -84,7 +106,10 @@ using internal::ServiceTraceBridge;
           : std::optional<std::string>(options.toolchain_hint),
   };
 
-  if (options.local_platform_route_enabled) {
+  if (has_local_service_binding(options)) {
+    build_manifest.enabled_adapters.push_back("local_service");
+  }
+  if (options.local_platform_route_enabled && has_local_platform_binding(options)) {
     build_manifest.enabled_modules.push_back("platform_hal");
     build_manifest.enabled_adapters.push_back("local_platform");
   }
@@ -110,7 +135,9 @@ using internal::ServiceTraceBridge;
   if (options.local_platform_route_enabled) {
     route_order.push_back(AdapterRouteKind::local_platform);
   }
-  route_order.push_back(AdapterRouteKind::local_service);
+  if (has_local_service_binding(options)) {
+    route_order.push_back(AdapterRouteKind::local_service);
+  }
   if (wants_remote_route(options)) {
     route_order.push_back(AdapterRouteKind::remote_service);
   }
@@ -150,118 +177,311 @@ using internal::ServiceTraceBridge;
 [[nodiscard]] FallbackEnvelope build_fallback_envelope(
     std::string action_class,
     const std::vector<AdapterRouteKind>& route_order,
-    bool allow_route_degrade) {
+    bool allow_route_degrade,
+    std::string route_equivalence_class = "service.live") {
   return FallbackEnvelope{
       .requested_action_class = std::move(action_class),
       .ordered_candidates = route_order,
-      .route_equivalence_class = "service.live",
+      .route_equivalence_class = route_equivalence_class.empty()
+          ? std::string("service.live")
+          : std::move(route_equivalence_class),
       .allow_degrade = allow_route_degrade,
       .deny_reason_on_exhaustion = "fallback_blocked",
   };
 }
 
-[[nodiscard]] std::vector<AdapterCandidateView> build_candidates(
-    const ServiceLiveCompositionOptions& options) {
-  std::vector<AdapterCandidateView> candidates;
-  candidates.push_back(AdapterCandidateView{
-      .adapter_id = "live.local_service",
-      .route_kind = AdapterRouteKind::local_service,
-      .route_equivalence_class = "service.live",
-      .trust_class = internal::AdapterTrustClass::caller_verified,
-      .availability_state = options.local_service_available
-          ? AdapterAvailabilityState::available
-          : AdapterAvailabilityState::unavailable,
-      .supported_capabilities = {
-          options.execution_capability_id,
-          options.data_capability_id,
-      },
-  });
-
-  if (wants_remote_route(options)) {
-    candidates.push_back(AdapterCandidateView{
-        .adapter_id = "live.remote_service",
-        .route_kind = AdapterRouteKind::remote_service,
-        .route_equivalence_class = "service.live",
-        .trust_class = internal::AdapterTrustClass::caller_verified,
-        .availability_state = options.remote_service_available
-            ? AdapterAvailabilityState::available
-            : AdapterAvailabilityState::degraded,
-        .supported_capabilities = {
-            options.execution_capability_id,
-            options.data_capability_id,
-        },
-    });
+[[nodiscard]] int availability_rank(AdapterAvailabilityState availability_state) {
+  switch (availability_state) {
+    case AdapterAvailabilityState::available:
+      return 3;
+    case AdapterAvailabilityState::degraded:
+      return 2;
+    case AdapterAvailabilityState::unavailable:
+      return 1;
+    case AdapterAvailabilityState::unknown:
+      return 0;
   }
 
-  return candidates;
+  return 0;
 }
 
-[[nodiscard]] AdapterInvocationResult make_default_local_result(
+[[nodiscard]] std::string default_adapter_id(ServiceLiveRouteKind route_kind) {
+  switch (route_kind) {
+    case ServiceLiveRouteKind::local_platform:
+      return "live.local_platform";
+    case ServiceLiveRouteKind::local_service:
+      return "live.local_service";
+    case ServiceLiveRouteKind::remote_service:
+      return "live.remote_service";
+  }
+
+  return "live.unknown";
+}
+
+[[nodiscard]] std::vector<std::string> default_supported_capabilities(
+    ServiceLiveRouteKind route_kind,
+    const ServiceLiveCompositionOptions& options) {
+  if (route_kind == ServiceLiveRouteKind::local_platform) {
+    return {options.execution_capability_id};
+  }
+
+  return {
+      options.execution_capability_id,
+      options.data_capability_id,
+  };
+}
+
+[[nodiscard]] std::string route_equivalence_class_for(
+    const ServiceLiveAdapterRegistry& registry) {
+  return registry.route_equivalence_class.empty() ? "service.live"
+                                                  : registry.route_equivalence_class;
+}
+
+[[nodiscard]] std::string adapter_id_for(const ServiceLiveRouteBinding& binding,
+                                         ServiceLiveRouteKind route_kind) {
+  return binding.adapter_id.empty() ? default_adapter_id(route_kind)
+                                    : binding.adapter_id;
+}
+
+[[nodiscard]] std::vector<std::string> supported_capabilities_for(
+    const ServiceLiveRouteBinding& binding,
+    ServiceLiveRouteKind route_kind,
+    const ServiceLiveCompositionOptions& options) {
+  if (!binding.supported_capabilities.empty()) {
+    return binding.supported_capabilities;
+  }
+
+  return default_supported_capabilities(route_kind, options);
+}
+
+[[nodiscard]] bool endpoint_available_for(
+    ServiceLiveAvailabilityState availability_state) {
+  switch (availability_state) {
+    case ServiceLiveAvailabilityState::available:
+    case ServiceLiveAvailabilityState::degraded:
+      return true;
+    case ServiceLiveAvailabilityState::unavailable:
+    case ServiceLiveAvailabilityState::unknown:
+      return false;
+  }
+
+  return false;
+}
+
+[[nodiscard]] AdapterRouteKind to_internal_route_kind(
+    ServiceLiveRouteKind route_kind) {
+  switch (route_kind) {
+    case ServiceLiveRouteKind::local_platform:
+      return AdapterRouteKind::local_platform;
+    case ServiceLiveRouteKind::local_service:
+      return AdapterRouteKind::local_service;
+    case ServiceLiveRouteKind::remote_service:
+      return AdapterRouteKind::remote_service;
+  }
+
+  return AdapterRouteKind::local_service;
+}
+
+[[nodiscard]] internal::AdapterTrustClass to_internal_trust_class(
+    ServiceLiveTrustClass trust_class) {
+  switch (trust_class) {
+    case ServiceLiveTrustClass::untrusted:
+      return internal::AdapterTrustClass::untrusted;
+    case ServiceLiveTrustClass::caller_verified:
+      return internal::AdapterTrustClass::caller_verified;
+    case ServiceLiveTrustClass::trusted_local:
+      return internal::AdapterTrustClass::trusted_local;
+  }
+
+  return internal::AdapterTrustClass::untrusted;
+}
+
+[[nodiscard]] AdapterAvailabilityState to_internal_availability_state(
+    ServiceLiveAvailabilityState availability_state) {
+  switch (availability_state) {
+    case ServiceLiveAvailabilityState::available:
+      return AdapterAvailabilityState::available;
+    case ServiceLiveAvailabilityState::degraded:
+      return AdapterAvailabilityState::degraded;
+    case ServiceLiveAvailabilityState::unavailable:
+      return AdapterAvailabilityState::unavailable;
+    case ServiceLiveAvailabilityState::unknown:
+      return AdapterAvailabilityState::unknown;
+  }
+
+  return AdapterAvailabilityState::unknown;
+}
+
+[[nodiscard]] ServiceLiveRequestKind to_live_request_kind(
+    AdapterRouteRequestKind request_kind) {
+  return request_kind == AdapterRouteRequestKind::action
+      ? ServiceLiveRequestKind::action
+      : ServiceLiveRequestKind::query;
+}
+
+[[nodiscard]] AdapterTransportOutcome to_internal_transport_outcome(
+    ServiceLiveTransportOutcome transport_outcome) {
+  switch (transport_outcome) {
+    case ServiceLiveTransportOutcome::acknowledged:
+      return AdapterTransportOutcome::acknowledged;
+    case ServiceLiveTransportOutcome::timeout:
+      return AdapterTransportOutcome::timeout;
+    case ServiceLiveTransportOutcome::unreachable:
+      return AdapterTransportOutcome::unreachable;
+    case ServiceLiveTransportOutcome::rejected:
+      return AdapterTransportOutcome::rejected;
+    case ServiceLiveTransportOutcome::partial:
+      return AdapterTransportOutcome::partial;
+  }
+
+  return AdapterTransportOutcome::rejected;
+}
+
+[[nodiscard]] ServiceLiveBackendRequest to_live_backend_request(
     const AdapterInvocationRequest& request) {
-  if (request.request_kind == AdapterRouteRequestKind::action) {
-    return AdapterInvocationResult{
-        .transport_outcome = AdapterTransportOutcome::acknowledged,
+  return ServiceLiveBackendRequest{
+      .request_id = request.request_id,
+      .capability_id = request.capability_id,
+      .target_id = request.target_id,
+      .request_kind = to_live_request_kind(request.request_kind),
+      .operation_name = request.operation_name,
+      .payload_json = request.payload_json,
+  };
+}
+
+[[nodiscard]] AdapterInvocationResult to_adapter_invocation_result(
+    const ServiceLiveBackendResult& result) {
+  return AdapterInvocationResult{
+      .transport_outcome = to_internal_transport_outcome(result.transport_outcome),
+      .provider_status_code = result.provider_status_code,
+      .payload_json = result.payload_json,
+      .latency_ms = result.latency_ms,
+      .side_effects = result.side_effects,
+      .evidence_refs = result.evidence_refs,
+  };
+}
+
+[[nodiscard]] std::function<AdapterInvocationResult(const AdapterInvocationRequest& request)>
+make_backend_handler(const ServiceLiveBackendHandler& handler) {
+  if (!handler) {
+    return {};
+  }
+
+  return [handler](const AdapterInvocationRequest& request) {
+    return to_adapter_invocation_result(handler(to_live_backend_request(request)));
+  };
+}
+
+[[nodiscard]] AdapterAvailabilityState derive_adapter_readiness(
+    const ServicePolicyView& policy_view,
+    const std::vector<AdapterCandidateView>& registered_candidates) {
+  int best_rank = -1;
+  AdapterAvailabilityState best_state = AdapterAvailabilityState::unknown;
+
+  for (const auto& candidate : registered_candidates) {
+    if (candidate.route_kind == AdapterRouteKind::local_platform &&
+        !policy_view.local_platform_route_enabled) {
+      continue;
+    }
+
+    const auto rank = availability_rank(candidate.availability_state);
+    if (rank <= best_rank) {
+      continue;
+    }
+
+    best_rank = rank;
+    best_state = candidate.availability_state;
+  }
+
+  return best_rank >= 0 ? best_state : AdapterAvailabilityState::unknown;
+}
+
+[[nodiscard]] ServiceLiveBackendResult make_default_platform_backend_result(
+    const ServiceLiveBackendRequest& request) {
+  return ServiceLiveBackendResult{
+      .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
+      .provider_status_code = "ok",
+      .payload_json = std::string("{\"applied\":true,\"route\":\"local_platform\",\"operation\":\"") +
+                      request.operation_name + "\"}",
+      .latency_ms = 2U,
+      .side_effects = {request.operation_name + ".platform_applied"},
+      .evidence_refs = {std::string("live://platform/action/") +
+                        request.operation_name},
+  };
+}
+
+[[nodiscard]] ServiceLiveBackendResult make_default_local_backend_result(
+    const ServiceLiveBackendRequest& request) {
+  if (request.request_kind == ServiceLiveRequestKind::action) {
+    return ServiceLiveBackendResult{
+        .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
         .provider_status_code = "ok",
         .payload_json = std::string("{\"applied\":true,\"operation\":\"") +
                         request.operation_name + "\"}",
         .latency_ms = 5U,
         .side_effects = {request.operation_name + ".applied"},
-        .evidence_refs = {std::string("live://local/action/") + request.operation_name},
+        .evidence_refs = {std::string("live://local/action/") +
+                          request.operation_name},
     };
   }
 
   if (request.operation_name == "catalog.list") {
-    return AdapterInvocationResult{
-        .transport_outcome = AdapterTransportOutcome::acknowledged,
+    return ServiceLiveBackendResult{
+        .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
         .provider_status_code = "ok",
-        .payload_json = std::string("{\"target_class\":\"") + request.capability_id +
-                        "\",\"routes\":[\"local_service\"]}",
+        .payload_json = std::string("{\"target_class\":\"") +
+                        request.capability_id + "\",\"routes\":[\"local_service\"]}",
         .latency_ms = 3U,
         .side_effects = {},
-        .evidence_refs = {std::string("live://local/catalog/") + request.capability_id},
+        .evidence_refs = {std::string("live://local/catalog/") +
+                          request.capability_id},
     };
   }
 
-  return AdapterInvocationResult{
-      .transport_outcome = AdapterTransportOutcome::acknowledged,
+  return ServiceLiveBackendResult{
+      .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
       .provider_status_code = "ok",
       .payload_json = std::string("[{\"capability_id\":\"") + request.capability_id +
                       "\",\"target_id\":\"" + request.target_id +
                       "\",\"projection\":\"" + request.operation_name + "\"}]",
       .latency_ms = 4U,
       .side_effects = {},
-      .evidence_refs = {std::string("live://local/query/") + request.operation_name},
+      .evidence_refs = {std::string("live://local/query/") +
+                        request.operation_name},
   };
 }
 
-[[nodiscard]] AdapterInvocationResult make_default_remote_result(
-    const AdapterInvocationRequest& request) {
-  if (request.request_kind == AdapterRouteRequestKind::action) {
-    return AdapterInvocationResult{
-        .transport_outcome = AdapterTransportOutcome::acknowledged,
+[[nodiscard]] ServiceLiveBackendResult make_default_remote_backend_result(
+    const ServiceLiveBackendRequest& request) {
+  if (request.request_kind == ServiceLiveRequestKind::action) {
+    return ServiceLiveBackendResult{
+        .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
         .provider_status_code = "accepted",
-        .payload_json = std::string("{\"applied\":true,\"remote\":true,\"operation\":\"") +
+        .payload_json = std::string(
+                            "{\"applied\":true,\"remote\":true,\"operation\":\"") +
                         request.operation_name + "\"}",
         .latency_ms = 11U,
         .side_effects = {request.operation_name + ".remote_applied"},
-        .evidence_refs = {std::string("live://remote/action/") + request.operation_name},
+        .evidence_refs = {std::string("live://remote/action/") +
+                          request.operation_name},
     };
   }
 
   if (request.operation_name == "catalog.list") {
-    return AdapterInvocationResult{
-        .transport_outcome = AdapterTransportOutcome::acknowledged,
+    return ServiceLiveBackendResult{
+        .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
         .provider_status_code = "accepted",
-        .payload_json = std::string("{\"target_class\":\"") + request.capability_id +
-                        "\",\"routes\":[\"remote_service\"]}",
+        .payload_json = std::string("{\"target_class\":\"") +
+                        request.capability_id + "\",\"routes\":[\"remote_service\"]}",
         .latency_ms = 9U,
         .side_effects = {},
-        .evidence_refs = {std::string("live://remote/catalog/") + request.capability_id},
+        .evidence_refs = {std::string("live://remote/catalog/") +
+                          request.capability_id},
     };
   }
 
-  return AdapterInvocationResult{
-      .transport_outcome = AdapterTransportOutcome::acknowledged,
+  return ServiceLiveBackendResult{
+      .transport_outcome = ServiceLiveTransportOutcome::acknowledged,
       .provider_status_code = "accepted",
       .payload_json = std::string("[{\"capability_id\":\"") + request.capability_id +
                       "\",\"target_id\":\"" + request.target_id +
@@ -269,15 +489,115 @@ using internal::ServiceTraceBridge;
                       "\",\"remote\":true}]",
       .latency_ms = 8U,
       .side_effects = {},
-      .evidence_refs = {std::string("live://remote/query/") + request.operation_name},
+      .evidence_refs = {std::string("live://remote/query/") +
+                        request.operation_name},
   };
 }
 
+[[nodiscard]] ServiceLiveAdapterRegistry build_default_adapter_registry(
+    const ServiceLiveCompositionOptions& options) {
+  ServiceLiveAdapterRegistry registry;
+
+  if (options.local_platform_route_enabled) {
+    registry.local_platform = ServiceLiveRouteBinding{
+        .adapter_id = "live.local_platform",
+        .trust_class = ServiceLiveTrustClass::trusted_local,
+        .availability_state = ServiceLiveAvailabilityState::available,
+        .supported_capabilities = {options.execution_capability_id},
+        .handler = [](const ServiceLiveBackendRequest& request) {
+          return make_default_platform_backend_result(request);
+        },
+        .timeout_on_invoke = false,
+    };
+  }
+
+  registry.local_service = ServiceLiveRouteBinding{
+      .adapter_id = "live.local_service",
+      .trust_class = ServiceLiveTrustClass::caller_verified,
+      .availability_state = options.local_service_available
+          ? ServiceLiveAvailabilityState::available
+          : ServiceLiveAvailabilityState::unavailable,
+      .supported_capabilities = {
+          options.execution_capability_id,
+          options.data_capability_id,
+      },
+      .handler = [](const ServiceLiveBackendRequest& request) {
+        return make_default_local_backend_result(request);
+      },
+      .timeout_on_invoke = false,
+  };
+
+  if (wants_remote_route(options)) {
+    registry.remote_service = ServiceLiveRouteBinding{
+        .adapter_id = "live.remote_service",
+        .trust_class = ServiceLiveTrustClass::caller_verified,
+        .availability_state = options.remote_service_available
+            ? ServiceLiveAvailabilityState::available
+            : ServiceLiveAvailabilityState::degraded,
+        .supported_capabilities = {
+            options.execution_capability_id,
+            options.data_capability_id,
+        },
+        .handler = [](const ServiceLiveBackendRequest& request) {
+          return make_default_remote_backend_result(request);
+        },
+        .timeout_on_invoke = options.remote_timeout,
+    };
+  }
+
+  return registry;
+}
+
+[[nodiscard]] std::vector<AdapterCandidateView> build_candidates(
+    const ServiceLiveCompositionOptions& options,
+    const ServiceLiveAdapterRegistry& registry) {
+  std::vector<AdapterCandidateView> candidates;
+  const auto route_equivalence_class = route_equivalence_class_for(registry);
+
+  const auto append_candidate = [&](const std::optional<ServiceLiveRouteBinding>& binding,
+                                    ServiceLiveRouteKind route_kind) {
+    if (!binding.has_value()) {
+      return;
+    }
+
+    candidates.push_back(AdapterCandidateView{
+        .adapter_id = adapter_id_for(*binding, route_kind),
+        .route_kind = to_internal_route_kind(route_kind),
+        .route_equivalence_class = route_equivalence_class,
+        .trust_class = to_internal_trust_class(binding->trust_class),
+        .availability_state = to_internal_availability_state(binding->availability_state),
+        .supported_capabilities =
+            supported_capabilities_for(*binding, route_kind, options),
+    });
+  };
+
+  append_candidate(registry.local_platform, ServiceLiveRouteKind::local_platform);
+  append_candidate(registry.local_service, ServiceLiveRouteKind::local_service);
+  append_candidate(registry.remote_service, ServiceLiveRouteKind::remote_service);
+
+  return candidates;
+}
+
+[[nodiscard]] const ServiceLiveRouteBinding* find_binding_for(
+    const ServiceLiveAdapterRegistry& registry,
+    ServiceLiveRouteKind route_kind) {
+  switch (route_kind) {
+    case ServiceLiveRouteKind::local_platform:
+      return registry.local_platform ? &*registry.local_platform : nullptr;
+    case ServiceLiveRouteKind::local_service:
+      return registry.local_service ? &*registry.local_service : nullptr;
+    case ServiceLiveRouteKind::remote_service:
+      return registry.remote_service ? &*registry.remote_service : nullptr;
+  }
+
+  return nullptr;
+}
+
 class LiveServiceCompositionRoot final : public IExecutionService,
-                     public IDataService,
-                     public internal::IServiceHealthSignalProvider,
-                     public std::enable_shared_from_this<
-                       LiveServiceCompositionRoot> {
+                                         public IDataService,
+                                         public internal::IServiceHealthSignalProvider,
+                                         public std::enable_shared_from_this<
+                                             LiveServiceCompositionRoot> {
  public:
   static ServiceLiveCompositionResult create(
       const profiles::RuntimePolicySnapshot& runtime_policy,
@@ -332,10 +652,7 @@ class LiveServiceCompositionRoot final : public IExecutionService,
   ServiceHealthSample sample(std::int64_t) override {
     ServiceHealthSample sample;
     sample.circuit_state = internal::ServiceCircuitState::closed;
-    sample.adapter_readiness =
-        (options_.local_service_available || options_.remote_service_available)
-        ? AdapterAvailabilityState::available
-        : AdapterAvailabilityState::unavailable;
+    sample.adapter_readiness = derive_adapter_readiness(policy_view_, registered_candidates_);
     sample.audit_bridge_degraded = options_.observability_enabled &&
         (audit_logger_owner_ == nullptr || audit_bridge_ == nullptr ||
          audit_bridge_->get_status().degraded);
@@ -366,9 +683,14 @@ class LiveServiceCompositionRoot final : public IExecutionService,
       return std::string("services policy derivation failed: ") + policy_result.error;
     }
 
-    const ServicePolicyView policy_view = *policy_result.policy_view;
-    const auto route_order = build_route_order(policy_view, options);
-    const auto registered_candidates = build_candidates(options);
+    policy_view_ = *policy_result.policy_view;
+    const ServiceLiveAdapterRegistry effective_registry =
+      options.adapter_registry.has_value()
+        ? *options.adapter_registry
+        : build_default_adapter_registry(options);
+    registered_candidates_ = build_candidates(options, effective_registry);
+    const auto route_equivalence_class = route_equivalence_class_for(effective_registry);
+    const auto route_order = build_route_order(policy_view_, options);
 
     if (options.observability_enabled) {
       if (options.audit_logger == nullptr || options.metrics_provider == nullptr ||
@@ -399,24 +721,42 @@ class LiveServiceCompositionRoot final : public IExecutionService,
           });
     }
 
-    local_service_adapter_ = std::make_unique<LocalServiceAdapter>(
-        LocalServiceAdapterOptions{
-            .service_endpoint_available = options.local_service_available,
-            .adapter_id = "live.local_service",
-            .invoke_service = [](const AdapterInvocationRequest& request) {
-              return make_default_local_result(request);
-            },
+    if (const auto* local_platform_binding =
+        find_binding_for(effective_registry, ServiceLiveRouteKind::local_platform);
+      local_platform_binding != nullptr) {
+      local_platform_adapter_ = std::make_unique<LocalPlatformAdapter>(
+        LocalPlatformAdapterOptions{
+          .platform_hal_enabled = policy_view_.local_platform_route_enabled,
+          .adapter_id = adapter_id_for(*local_platform_binding,
+                         ServiceLiveRouteKind::local_platform),
+          .invoke_platform = make_backend_handler(local_platform_binding->handler),
         });
+    }
 
-    if (wants_remote_route(options)) {
+    if (const auto* local_service_binding =
+        find_binding_for(effective_registry, ServiceLiveRouteKind::local_service);
+      local_service_binding != nullptr) {
+      local_service_adapter_ = std::make_unique<LocalServiceAdapter>(
+        LocalServiceAdapterOptions{
+          .service_endpoint_available =
+            endpoint_available_for(local_service_binding->availability_state),
+          .adapter_id = adapter_id_for(*local_service_binding,
+                         ServiceLiveRouteKind::local_service),
+          .invoke_service = make_backend_handler(local_service_binding->handler),
+        });
+    }
+
+    if (const auto* remote_binding =
+        find_binding_for(effective_registry, ServiceLiveRouteKind::remote_service);
+      remote_binding != nullptr) {
       remote_service_adapter_ = std::make_unique<RemoteServiceAdapter>(
           RemoteServiceAdapterOptions{
-              .remote_endpoint_available = options.remote_service_available,
-              .timeout_on_invoke = options.remote_timeout,
-              .adapter_id = "live.remote_service",
-              .invoke_remote = [](const AdapterInvocationRequest& request) {
-                return make_default_remote_result(request);
-              },
+          .remote_endpoint_available =
+            endpoint_available_for(remote_binding->availability_state),
+          .timeout_on_invoke = remote_binding->timeout_on_invoke,
+          .adapter_id = adapter_id_for(*remote_binding,
+                         ServiceLiveRouteKind::remote_service),
+          .invoke_remote = make_backend_handler(remote_binding->handler),
           });
     }
 
@@ -427,8 +767,8 @@ class LiveServiceCompositionRoot final : public IExecutionService,
 
     projection_cache_ = std::make_unique<DataProjectionCache>(
         internal::DataProjectionCacheDependencies{
-            .ttl_ms = policy_view.data_cache_ttl_ms > 0
-                ? static_cast<std::uint64_t>(policy_view.data_cache_ttl_ms)
+            .ttl_ms = policy_view_.data_cache_ttl_ms > 0
+              ? static_cast<std::uint64_t>(policy_view_.data_cache_ttl_ms)
                 : 5000U,
             .now_ms = []() {
               return current_time_ms();
@@ -440,13 +780,14 @@ class LiveServiceCompositionRoot final : public IExecutionService,
         .bridge = bridge_.get(),
         .result_mapper = &result_mapper_,
         .compensation_catalog = nullptr,
-        .policy_view = policy_view,
+        .policy_view = policy_view_,
         .capability_snapshot = build_execution_snapshot(options, route_order),
         .fallback_envelope = build_fallback_envelope(
             "command.standard",
             route_order,
-            options.allow_route_degrade),
-        .registered_candidates = registered_candidates,
+          options.allow_route_degrade,
+          route_equivalence_class),
+        .registered_candidates = registered_candidates_,
         .critical_actions = options.critical_actions,
         .high_risk_actions = options.high_risk_actions,
         .allow_high_risk_actions = true,
@@ -469,13 +810,14 @@ class LiveServiceCompositionRoot final : public IExecutionService,
         .bridge = bridge_.get(),
         .result_mapper = &result_mapper_,
         .projection_cache = projection_cache_.get(),
-        .policy_view = policy_view,
+        .policy_view = policy_view_,
         .capability_snapshot = build_data_snapshot(options, route_order),
         .fallback_envelope = build_fallback_envelope(
             "query.read_only",
             route_order,
-            options.allow_route_degrade),
-        .registered_candidates = registered_candidates,
+          options.allow_route_degrade,
+          route_equivalence_class),
+        .registered_candidates = registered_candidates_,
         .metrics_bridge = metrics_bridge_.get(),
         .trace_bridge = trace_bridge_.get(),
     });
@@ -520,7 +862,12 @@ class LiveServiceCompositionRoot final : public IExecutionService,
 
   [[nodiscard]] std::vector<const internal::IAdapterInvoker*> build_invokers() const {
     std::vector<const internal::IAdapterInvoker*> invokers;
-    invokers.push_back(local_service_adapter_.get());
+    if (local_platform_adapter_ != nullptr) {
+      invokers.push_back(local_platform_adapter_.get());
+    }
+    if (local_service_adapter_ != nullptr) {
+      invokers.push_back(local_service_adapter_.get());
+    }
     if (remote_service_adapter_ != nullptr) {
       invokers.push_back(remote_service_adapter_.get());
     }
@@ -531,12 +878,15 @@ class LiveServiceCompositionRoot final : public IExecutionService,
   ResultMapper result_mapper_;
   internal::ServiceContextBuilder context_builder_;
   ServiceLiveCompositionOptions options_{};
+  ServicePolicyView policy_view_{};
+  std::vector<AdapterCandidateView> registered_candidates_;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger_owner_;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_owner_;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider_owner_;
   std::unique_ptr<ServiceAuditBridge> audit_bridge_;
   std::unique_ptr<ServiceMetricsBridge> metrics_bridge_;
   std::unique_ptr<ServiceTraceBridge> trace_bridge_;
+  std::unique_ptr<LocalPlatformAdapter> local_platform_adapter_;
   std::unique_ptr<LocalServiceAdapter> local_service_adapter_;
   std::unique_ptr<RemoteServiceAdapter> remote_service_adapter_;
   std::unique_ptr<AdapterBridge> bridge_;

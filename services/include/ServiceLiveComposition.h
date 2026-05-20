@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -39,6 +42,77 @@ class ITracerProvider;
 
 namespace dasall::services {
 
+enum class ServiceLiveRequestKind {
+  action,
+  query,
+};
+
+enum class ServiceLiveRouteKind {
+  local_platform,
+  local_service,
+  remote_service,
+};
+
+enum class ServiceLiveTrustClass {
+  untrusted,
+  caller_verified,
+  trusted_local,
+};
+
+enum class ServiceLiveAvailabilityState {
+  available,
+  degraded,
+  unavailable,
+  unknown,
+};
+
+enum class ServiceLiveTransportOutcome {
+  acknowledged,
+  timeout,
+  unreachable,
+  rejected,
+  partial,
+};
+
+struct ServiceLiveBackendRequest {
+  std::string request_id;
+  std::string capability_id;
+  std::string target_id;
+  ServiceLiveRequestKind request_kind = ServiceLiveRequestKind::action;
+  std::string operation_name;
+  std::string payload_json;
+};
+
+struct ServiceLiveBackendResult {
+  ServiceLiveTransportOutcome transport_outcome =
+      ServiceLiveTransportOutcome::rejected;
+  std::string provider_status_code;
+  std::string payload_json;
+  std::uint32_t latency_ms = 0U;
+  std::vector<std::string> side_effects;
+  std::vector<std::string> evidence_refs;
+};
+
+using ServiceLiveBackendHandler = std::function<ServiceLiveBackendResult(
+    const ServiceLiveBackendRequest& request)>;
+
+struct ServiceLiveRouteBinding {
+  std::string adapter_id;
+  ServiceLiveTrustClass trust_class = ServiceLiveTrustClass::caller_verified;
+  ServiceLiveAvailabilityState availability_state =
+      ServiceLiveAvailabilityState::available;
+  std::vector<std::string> supported_capabilities;
+  ServiceLiveBackendHandler handler;
+  bool timeout_on_invoke = false;
+};
+
+struct ServiceLiveAdapterRegistry {
+  std::string route_equivalence_class = "service.live";
+  std::optional<ServiceLiveRouteBinding> local_platform;
+  std::optional<ServiceLiveRouteBinding> local_service;
+  std::optional<ServiceLiveRouteBinding> remote_service;
+};
+
 struct ServiceLiveCompositionOptions {
   std::string execution_capability_id = "agent.terminal";
   std::string data_capability_id = "agent.dataset";
@@ -56,6 +130,7 @@ struct ServiceLiveCompositionOptions {
   bool health_probe_enabled = false;
   std::vector<std::string> critical_actions;
   std::vector<std::string> high_risk_actions = {"agent.terminal"};
+  std::optional<ServiceLiveAdapterRegistry> adapter_registry;
 };
 
 struct ServiceLiveCompositionResult {

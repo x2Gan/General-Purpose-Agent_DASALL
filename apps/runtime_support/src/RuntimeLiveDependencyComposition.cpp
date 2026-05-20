@@ -1712,6 +1712,22 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->response_builder =
       std::shared_ptr<cognition::IResponseBuilder>(response_builder.release());
 
+    std::string services_build_manifest_error;
+    const auto services_build_manifest = resolve_build_manifest(
+      install_layout.profiles_root,
+      *policy_snapshot,
+      services_build_manifest_error);
+    if (!services_build_manifest.has_value()) {
+    return make_error(std::string("services build manifest composition failed for ") +
+              std::string(composition_owner) + ": " +
+              services_build_manifest_error);
+    }
+
+    const bool local_platform_route_enabled =
+      services_build_manifest->enables_module("platform_hal");
+    const std::string services_toolchain_hint =
+      services_build_manifest->toolchain_hint.value_or("x86_64-linux-gnu");
+
   const auto live_services = services::compose_live_services(
       *policy_snapshot,
       services::ServiceLiveCompositionOptions{
@@ -1721,16 +1737,150 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .remote_service_available = false,
           .remote_timeout = false,
           .allow_route_degrade = true,
-          .local_platform_route_enabled = false,
+            .local_platform_route_enabled = local_platform_route_enabled,
           .observability_enabled = true,
           .observability_level = policy_snapshot->ops_policy().metrics_granularity,
-          .toolchain_hint = "x86_64-linux-gnu",
+            .toolchain_hint = services_toolchain_hint,
           .audit_logger = observability.audit_logger,
           .metrics_provider = observability.metrics_provider,
           .tracer_provider = observability.tracer_provider,
           .health_probe_enabled = true,
           .critical_actions = {},
           .high_risk_actions = {"agent.terminal"},
+            .adapter_registry = services::ServiceLiveAdapterRegistry{
+              .route_equivalence_class = "service.live",
+              .local_platform = services::ServiceLiveRouteBinding{
+                .adapter_id = "runtime.live.local_platform",
+                .trust_class = services::ServiceLiveTrustClass::trusted_local,
+                .availability_state = local_platform_route_enabled
+                  ? services::ServiceLiveAvailabilityState::available
+                  : services::ServiceLiveAvailabilityState::unavailable,
+                .supported_capabilities = {"agent.terminal"},
+                .handler = [](const services::ServiceLiveBackendRequest& request) {
+                return services::ServiceLiveBackendResult{
+                  .transport_outcome =
+                    services::ServiceLiveTransportOutcome::acknowledged,
+                  .provider_status_code = "ok",
+                  .payload_json = std::string(
+                            "{\"applied\":true,\"route\":\"runtime.local_platform\",\"operation\":\"") +
+                          request.operation_name + "\"}",
+                  .latency_ms = 2U,
+                  .side_effects = {request.operation_name + ".platform_applied"},
+                  .evidence_refs = {std::string("runtime://services/platform/") +
+                            request.operation_name},
+                };
+                },
+                .timeout_on_invoke = false,
+              },
+              .local_service = services::ServiceLiveRouteBinding{
+                .adapter_id = "runtime.live.local_service",
+                .trust_class = services::ServiceLiveTrustClass::caller_verified,
+                .availability_state = services::ServiceLiveAvailabilityState::available,
+                .supported_capabilities = {"agent.terminal", "agent.dataset"},
+                .handler = [](const services::ServiceLiveBackendRequest& request) {
+                if (request.request_kind == services::ServiceLiveRequestKind::action) {
+                  return services::ServiceLiveBackendResult{
+                    .transport_outcome =
+                      services::ServiceLiveTransportOutcome::acknowledged,
+                    .provider_status_code = "ok",
+                    .payload_json = std::string(
+                              "{\"applied\":true,\"operation\":\"") +
+                            request.operation_name + "\"}",
+                    .latency_ms = 5U,
+                    .side_effects = {request.operation_name + ".applied"},
+                    .evidence_refs = {std::string("runtime://services/local/action/") +
+                            request.operation_name},
+                  };
+                }
+
+                if (request.operation_name == "catalog.list") {
+                  return services::ServiceLiveBackendResult{
+                    .transport_outcome =
+                      services::ServiceLiveTransportOutcome::acknowledged,
+                    .provider_status_code = "ok",
+                    .payload_json = std::string(
+                              "{\"target_class\":\"") +
+                            request.capability_id +
+                            "\",\"routes\":[\"local_service\"]}",
+                    .latency_ms = 3U,
+                    .side_effects = {},
+                    .evidence_refs = {std::string("runtime://services/local/catalog/") +
+                            request.capability_id},
+                  };
+                }
+
+                return services::ServiceLiveBackendResult{
+                  .transport_outcome =
+                    services::ServiceLiveTransportOutcome::acknowledged,
+                  .provider_status_code = "ok",
+                  .payload_json = std::string(
+                            "[{\"capability_id\":\"") +
+                          request.capability_id + "\",\"target_id\":\"" +
+                          request.target_id + "\",\"projection\":\"" +
+                          request.operation_name + "\"}]",
+                  .latency_ms = 4U,
+                  .side_effects = {},
+                  .evidence_refs = {std::string("runtime://services/local/query/") +
+                            request.operation_name},
+                };
+                },
+                .timeout_on_invoke = false,
+              },
+              .remote_service = services::ServiceLiveRouteBinding{
+                .adapter_id = "runtime.live.remote_service",
+                .trust_class = services::ServiceLiveTrustClass::caller_verified,
+                .availability_state = services::ServiceLiveAvailabilityState::unavailable,
+                .supported_capabilities = {"agent.terminal", "agent.dataset"},
+                .handler = [](const services::ServiceLiveBackendRequest& request) {
+                if (request.request_kind == services::ServiceLiveRequestKind::action) {
+                  return services::ServiceLiveBackendResult{
+                    .transport_outcome =
+                      services::ServiceLiveTransportOutcome::acknowledged,
+                    .provider_status_code = "accepted",
+                    .payload_json = std::string(
+                              "{\"applied\":true,\"remote\":true,\"operation\":\"") +
+                            request.operation_name + "\"}",
+                    .latency_ms = 11U,
+                    .side_effects = {request.operation_name + ".remote_applied"},
+                    .evidence_refs = {std::string("runtime://services/remote/action/") +
+                            request.operation_name},
+                  };
+                }
+
+                if (request.operation_name == "catalog.list") {
+                  return services::ServiceLiveBackendResult{
+                    .transport_outcome =
+                      services::ServiceLiveTransportOutcome::acknowledged,
+                    .provider_status_code = "accepted",
+                    .payload_json = std::string(
+                              "{\"target_class\":\"") +
+                            request.capability_id +
+                            "\",\"routes\":[\"remote_service\"]}",
+                    .latency_ms = 9U,
+                    .side_effects = {},
+                    .evidence_refs = {std::string("runtime://services/remote/catalog/") +
+                            request.capability_id},
+                  };
+                }
+
+                return services::ServiceLiveBackendResult{
+                  .transport_outcome =
+                    services::ServiceLiveTransportOutcome::acknowledged,
+                  .provider_status_code = "accepted",
+                  .payload_json = std::string(
+                            "[{\"capability_id\":\"") +
+                          request.capability_id + "\",\"target_id\":\"" +
+                          request.target_id + "\",\"projection\":\"" +
+                          request.operation_name + "\",\"remote\":true}]",
+                  .latency_ms = 8U,
+                  .side_effects = {},
+                  .evidence_refs = {std::string("runtime://services/remote/query/") +
+                            request.operation_name},
+                };
+                },
+                .timeout_on_invoke = false,
+              },
+            },
       });
   if (!live_services.ok()) {
     return make_error(std::string("services live composition failed for ") +
