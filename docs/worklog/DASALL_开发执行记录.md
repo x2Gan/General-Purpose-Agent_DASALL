@@ -1,5 +1,35 @@
 # DASALL 开发执行记录
 
+## 记录 #714
+
+- 日期：2026-05-20
+- 阶段：llm / gap closeout
+- 任务：复验 `LLM-GAP-005` 边界回归防线并纠正专项总账状态漂移
+- 状态：已完成（总账已与既有 `LLM-FIX-005` 证据链对齐；不重开 qemu / release / soak 口径）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `LLM-GAP-005`，每个原子任务完成后单独提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收写明 qemu，应改为本地可执行口径。
+2. 本地代码与文档静态检查确认：`tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp`、`tests/unit/llm/CMakeLists.txt`、`docs/todos/llm/DASALL_llm子系统专项TODO.md` 与既有 worklog 已记录 `LLM-FIX-005` 完成；当前真实缺口不是实现未落地，而是 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中 `LLM-GAP-005` 仍保留旧的开放状态。
+3. 本轮 authoritative 边界为：复验现有 llm/source boundary 自动化守护并回写总账当前态，不新增 llm 产品代码，不把 focused boundary tests 外推为 qemu / release-runner / L6 soak 证据。
+
+### 改动
+
+1. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `LLM-GAP-005` 从开放缺口改为“已闭合 / Medium”，并直接回链 `LLMBoundaryGuardComplianceTest`、`tests/unit/llm/CMakeLists.txt` 与 `docs/todos/llm/deliverables/LLM-FIX-005-llm-source-boundary-regression-guard.md` 的既有证据链。
+2. 更新本文档：记录本轮的状态漂移纠偏、聚焦验收结果与不得外推范围，避免后续评审继续把 `LLM-GAP-005` 误读为当前开放项。
+
+### 验证
+
+1. 聚焦边界守卫验收。
+   - `cmake -S . -B build-ci && cmake --build build-ci --target dasall_llm_boundary_guard_compliance_unit_test dasall_llm_interface_surface_unit_test dasall_contract_tests -j4 && ctest --test-dir build-ci --output-on-failure -R '(LLMBoundaryGuardCompliance|LLMInterfaceSurface|LLMRequestResponseContract)Test'`
+   - 结果：通过；`LLMBoundaryGuardComplianceTest`、`LLMInterfaceSurfaceTest` 与 `LLMRequestResponseContractTest` 共 `3/3` 通过。
+
+### 结果
+
+1. `LLM-GAP-005` 当前态已与既有 `LLM-FIX-005` 实现、专项 TODO 和历史 worklog 对齐，不再作为开放缺口继续跟踪。
+2. `LLMBoundaryGuardComplianceTest` 在当前树复验保持绿色，说明 llm/source boundary 自动化回归防线未回退。
+3. 本轮未使用 qemu / kvm，也不把 focused boundary regression 结果外推为 release runner、installed package 或 L6 soak 证据。
+
 ## 记录 #713
 
 - 日期：2026-05-20
