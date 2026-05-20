@@ -1,5 +1,38 @@
 # DASALL 开发执行记录
 
+# 记录 #728
+
+- 日期：2026-05-20
+- 阶段：tools / gap closeout
+- 任务：收口 `TOOL-GAP-012` machine-isolated release / soak boundary 缺口
+- 状态：已完成（Tools owner authoritative evidence 已固定；qemu/autopkgtest 与 long-session soak 已转入 packaging / release 环境复核）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中 `TOOL-GAP-009 ~ 012`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 经过 `TOOL-FIX-009`、`TOOL-FIX-011`、`TOOL-FIX-012` 与 `TOOL-FIX-013` 后，tools 功能性缺口已收缩到 machine-isolated qemu/autopkgtest 与 long-session MCP/tool soak 证据；但 `scripts/packaging/README.md` 与 `.github/workflows/release-package-gate.yml` 已经把 tools authoritative owner 固定在 local installed proof 与 release-runner local artifact，而不是 qemu guest-side rerun。
+3. 本轮 authoritative 边界是：只纠正 `TOOL-GAP-012` 的 owner 口径，确认 tools owner 是否已经具备本机 installed-package / release-runner local installed authoritative evidence；不执行 qemu/kvm，也不把更高层 packaging / release 环境 gate 误写成 Tools 功能性 blocker。
+
+### 改动
+
+1. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：`TOOL-GAP-012` 现改为“已闭合 / Medium”，明确 Tools owner authoritative evidence 已闭合，qemu/autopkgtest 与 long-session MCP/tool soak 转入 packaging / release 环境复核；同时回写 tools 总览矩阵、8.6 补缺任务建议、8.8 release 复核入口与 8.9 当前章节结论。
+2. 新增 `docs/todos/tools/deliverables/TOOL-FIX-014-machine-isolated-release-soak-boundary收口.md`，固定 `TOOL-GAP-012` closeout 的 Design -> Build 映射、local authoritative evidence owner、release-runner artifact contract 与不外推边界。
+3. 更新 `docs/todos/tools/deliverables/DELIVERABLES-INDEX.md`，登记 `F-8` 交付物；更新本工作日志，固定本轮 closeout 口径。
+
+### 验证
+
+1. local installed authoritative proof。
+   - `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-tool-gap-012-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过，脚本输出 `install smoke passed`。
+   - `/tmp/dasall-tool-gap-012-smoke/tools-installed-proof.json`：确认包含 `ok=true`、`route_kind=builtin`、`terminal_route_kind=builtin`、`agent_dataset_visible=true`、`agent_terminal_visible=true`、`terminal_confirmation_denied=true` 与 `terminal_invocation_succeeded=true`。
+2. qemu gate discoverability。
+   - `python3 scripts/packaging/validate_autopkgtest_metadata.py`：通过，说明 `debian/tests/control` metadata 与 qemu/autopkgtest discoverability 未回退。
+
+### 结果
+
+1. `TOOL-GAP-012` 已按 owner boundary closeout 关闭：Tools owner 的 authoritative evidence 继续固定在 `dasall-tools-installed-proof --json`、`pkg_smoke_install.sh --explicit-start-check` 与 release-runner package-smoke artifact，不再把 qemu/autopkgtest 或 long-session soak 回流成 Tools 功能 blocker。
+2. 本轮没有新增 Tools 产品代码，也没有宣称当轮 qemu rerun / machine-isolated PASS / long-session soak PASS；更高层复核入口仍是 packaging / release owner 的 `validate_gate_int_10_installed_package_qemu.sh` 与后续 release-runner 实跑。
+3. 至此用户要求串行推进的 `TOOL-GAP-009 ~ 012` 已全部闭合，后续若要提升 machine-isolated release 与 soak 可信度，只能在对应环境中作为 packaging / release follow-up 继续执行。
+
 # 记录 #727
 
 - 日期：2026-05-20
