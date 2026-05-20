@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+# 记录 #715
+
+- 日期：2026-05-20
+- 阶段：memory / gap closeout
+- 任务：复验 `MEM-GAP-001` 并纠正 sqlite-vss installed authoritative 状态漂移
+- 状态：已完成（独立 closeout、focused validation 与本机 installed authoritative 复核已回写）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `MEM-GAP-001 ~ 007`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收口径仍写 qemu，应改成本机真实安装态口径。
+2. 当前近端文档证据显示：`MEM-FIX-001` 已以本机 installed-package authoritative evidence 完成，`MEM-FIX-006` 又补齐 release-runner local installed memory evidence，但总账 `MEM-GAP-001` 仍停留在开放 severity 写法，和 Memory 章节“当前仅剩 MEM-GAP-004”的结论不一致。
+3. 本轮 authoritative 边界是：复验 sqlite-vss production wiring 与本机 installed authoritative evidence 未回退，并把 `MEM-GAP-001` 改写成独立 closeout 记录；不新增 memory 产品代码，不把结论外推为 qemu / soak。
+
+### 改动
+
+1. 新增 `docs/todos/memory/deliverables/MEM-GAP-001-sqlite-vss-installed-closeout.md`，固定 `MEM-GAP-001` 的本地证据、外部参考、Design -> Build 映射、focused validation 与不外推边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 `MEM-GAP-001` 从开放 severity 写法改为 `已闭合 / High`，并回链新的 closeout 交付件。
+
+### 验证
+
+1. focused tests。
+   - `Build_CMakeTools(buildTargets=["dasall_memory_simple_local_embedding_adapter_unit_test","dasall_vector_memory_adapter_unit_test","dasall_memory_sqlite_vss_vector_backend_unit_test","dasall_memory_schema_migration_unit_test","dasall_memory_writeback_integration_test","dasall_memory_profile_compatibility_integration_test","dasall_memory_context_assemble_integration_test","dasall_access_gateway_runtime_live_dependency_composition_integration_test","dasall_access_runtime_production_health_composition_integration_test"])`：通过。
+   - `RunCtest_CMakeTools` 对 `SqliteVssVectorBackendTest`、`MemoryContextAssembleIntegrationTest` 及 9 项聚焦测试均返回仓库已知的泛化 `生成失败`，未进入测试执行；不作为产品失败结论。
+   - fallback：`ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(SimpleLocalEmbeddingAdapterTest|VectorMemoryAdapterTest|SqliteVssVectorBackendTest|SchemaMigrationTest|MemoryWritebackIntegrationTest|MemoryProfileCompatibilityTest|MemoryContextAssembleIntegrationTest|GatewayRuntimeLiveDependencyCompositionTest|RuntimeProductionHealthCompositionTest)$'`：通过，`100% tests passed, 0 tests failed out of 9`。
+2. 本机 installed authoritative smoke。
+   - `DASALL_DEEPSEEK_API_KEY_FILE="$HOME/.local/share/dasall/secrets/deepseek-prod.secret" bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过，退出码 `0`，日志含 `[pkg-smoke-install] install smoke passed`。
+3. installed DB / sqlite-vss 只读复核。
+   - 通过 `sudo` + `python3` 查询 `/var/lib/dasall/memory/memory.db`：`PRAGMA journal_mode=wal`、`memory_vector_documents=2`、`turns=482`、`summaries=3`。
+   - 成功加载 `/usr/lib/dasall/sqlite-vss/vector0.so` 与 `/usr/lib/dasall/sqlite-vss/vss0.so`，并在 `memory_vector_index` 上执行最小 `vss_search` 命中 `rowid=1`。
+
+### 结果
+
+1. `MEM-GAP-001` 当前态已与 `MEM-FIX-001`、`MEM-FIX-006` 和本轮 closeout 交付件对齐，不再作为 memory owner 的开放缺口保留在总账中。
+2. sqlite-vss production wiring、安装态 assets、same-session installed smoke 与只读 DB/search evidence 均已在本机真实目标上复验，未使用 qemu / kvm。
+3. 本轮只收口 local installed authoritative 范围，不把结论外推为 qemu / release runner guest-side rerun 或 L6 soak。
+
 ## 记录 #714
 
 - 日期：2026-05-20
