@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+# 记录 #721
+
+- 日期：2026-05-20
+- 阶段：memory / gap closeout
+- 任务：复验 `MEM-GAP-007` 并固定 installed maintenance closeout 口径
+- 状态：已完成（独立 closeout、installed authoritative validation 与 SQLite WAL 规范参考已回写）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `MEM-GAP-001 ~ 007`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 当前总账与 `MEM-FIX-007` 已显示 `MEM-GAP-007` 于 2026-05-18 收口，但 memory deliverables 目录中缺少 gap-level 独立 closeout 交付件，不利于后续逐 gap 追溯。
+3. 本轮 authoritative 边界是：复验 installed maintenance helper 与 `memory-maintenance-proof.json` 未回退，并把 `MEM-GAP-007` 固定成独立 closeout；不新增 memory 产品代码，不外推到 qemu / soak。
+
+### 改动
+
+1. 新增 `docs/todos/memory/deliverables/MEM-GAP-007-installed-maintenance-closeout.md`，固定 `MEM-GAP-007` 的本地证据、Design -> Build 映射与 closeout 边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，为 `MEM-GAP-007` 补入独立 closeout 交付件回链。
+
+### 验证
+
+1. installed authoritative smoke。
+   - `DASALL_DEEPSEEK_API_KEY_FILE="$HOME/.local/share/dasall/secrets/deepseek-prod.secret" DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-mem-gap-007-closeout bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过。
+2. installed artifact 复核。
+   - `/tmp/dasall-mem-gap-007-closeout/memory-maintenance-proof.json` 记录 `ok=true`、`checkpoint_executed=true`、`checkpoint_wal_pages_remaining=0`、`turns_before=481`、`turns_after=480`、`retention_turns=480`、`quarantine_rows_after=0`、`protected_turn_retained=true`、`purged_turn_removed=true`、`newest_turn_retained=true`。
+
+### 结果
+
+1. `MEM-GAP-007` 在当前真实安装态上复验仍保持闭合：maintenance helper 与 `memory-maintenance-proof.json` 未回退。
+2. 本轮已为 `MEM-GAP-007` 补齐 gap-level 独立 closeout 交付件，后续不再只能通过 `MEM-FIX-007` 的实现记录反推该 gap 的完成状态。
+3. 本轮未使用 qemu / kvm，且不把结论外推到 qemu / soak 环境复核范围。
+
 # 记录 #720
 
 - 日期：2026-05-20
