@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+# 记录 #722
+
+- 日期：2026-05-20
+- 阶段：knowledge / gap closeout
+- 任务：收口 `KNO-GAP-010` 本机 failure-injection 与 release boundary 口径
+- 状态：已完成（local installed failure-injection authoritative proof、gap-level closeout 与总账回写已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `KNO-GAP-010 ~ 011`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收口径仍写 qemu，应改成本机真实安装态口径。
+2. 当前总账仍把 `KNO-GAP-010` 记为“qemu / machine-isolation rerun 与故障注入证据仍缺”，但 `KNO-FIX-010` 已把 Knowledge local installed proof / soak owner 与 release workflow 合同固定，剩余真正 blocker 只剩 active snapshot 损坏后的本机恢复证据与口径纠偏。
+3. 本轮 authoritative 边界是：用真实 installed-package 环境复验 Knowledge startup recovery / catalog / ledger / provider retrieve，在不使用 qemu / kvm 的前提下把 qemu rerun 下放为 packaging / release follow-up。
+
+### 改动
+
+1. 新增 `scripts/packaging/knowledge_failure_injection_installed_proof.sh`，固定 fresh-install、active snapshot 旋转、损坏、重启恢复、catalog / ledger / provider retrieve artifact 采集；后续又将 refresh 等待条件收口为“health ready 且 active snapshot 相对前一轮发生旋转”，并把恢复判据从“active 必须等于初始 LKG”调整为更稳的 ledger lineage 证据。
+2. 更新 `.github/workflows/release-package-gate.yml` 与 `scripts/packaging/README.md`，把 `knowledge-failure` artifact owner 固定到 qemu gate 之前。
+3. 新增 `docs/todos/knowledge/deliverables/KNO-GAP-010-local-installed-failure-injection-closeout.md`，并更新总账 `KNO-GAP-010` 行与 Knowledge 章节残余结论。
+
+### 验证
+
+1. script syntax。
+   - `sh -n scripts/packaging/knowledge_failure_injection_installed_proof.sh`：通过。
+2. installed authoritative failure proof。
+   - `bash scripts/packaging/knowledge_failure_injection_installed_proof.sh --artifact-dir /tmp/dasall-kno-gap-010-failure`：通过；脚本输出 `[knowledge-failure-proof] knowledge local installed failure injection proof passed`。
+3. installed artifact 复核。
+   - `/tmp/dasall-kno-gap-010-failure/knowledge-failure-injection-proof.json` 记录 `recovery_mode=refreshed-from-last-known-good`、`recovered_parent_snapshot_id` 命中 `initial_active_snapshot_id`、`recovered_differs_from_corrupted=true`、`provider_slice_count_after_recovery=3`、`catalog_aligned_to_recovered_snapshot=true`、`corrupted_snapshot_removed_from_catalog=true`。
+   - `/tmp/dasall-kno-gap-010-failure/corpus-catalog-after-recovery.json` 已对齐恢复后的 active snapshot。
+   - `/tmp/dasall-kno-gap-010-failure/version-ledger-after-recovery.jsonl` 证明恢复后的 active snapshot lineage 重新挂回初始 LKG，而不是继续沿损坏 snapshot 漂移。
+
+### 结果
+
+1. `KNO-GAP-010` 在当前真实安装态上已保持闭合：Knowledge active snapshot 损坏后的恢复链、catalog 对齐与 provider retrieve 已具 authoritative local evidence。
+2. 本轮已把 qemu / machine-isolation rerun 明确改写为 packaging / release 环境 follow-up，不再继续占用 Knowledge owner gap 清单。
+3. 本轮未使用 qemu / kvm，且不把结论外推为 guest-side PASS 或更高层 production soak 通过。
+
 # 记录 #721
 
 - 日期：2026-05-20
