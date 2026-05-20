@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+# 记录 #718
+
+- 日期：2026-05-20
+- 阶段：memory / gap closeout
+- 任务：复验 `MEM-GAP-004` 并将 qemu / soak 残余改写为 release boundary follow-up
+- 状态：已完成（boundary closeout、installed authoritative validation 与 external reference 已回写）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `MEM-GAP-001 ~ 007`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收口径仍写 qemu，应改成本机真实安装态口径。
+2. 当前总账把 `MEM-GAP-004` 记为仅剩残余，但近端 `MEM-FIX-006` deliverable、worklog 与 repo memory 已明确：Memory authoritative owner 已经转到 release-runner local installed evidence，qemu / soak 只保留为 packaging / release 环境复核。
+3. 本轮 authoritative 边界是：复验 local installed memory smoke 未回退，并把 `MEM-GAP-004` 从 Memory 功能性 gap 改写成 boundary closeout；不新增 memory 产品代码，不执行 qemu / kvm。
+
+### 改动
+
+1. 新增 `docs/todos/memory/deliverables/MEM-GAP-004-release-boundary-closeout.md`，固定 `MEM-GAP-004` 的 owner boundary、Design -> Build 映射与 closeout 边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 `MEM-GAP-004` 改为已闭合 / Medium，并同步修正 Memory 章节结论，不再把 qemu / soak 记为 Memory owner 残余缺口。
+
+### 验证
+
+1. installed authoritative smoke。
+   - `DASALL_DEEPSEEK_API_KEY_FILE="$HOME/.local/share/dasall/secrets/deepseek-prod.secret" DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-smoke-test bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过，脚本输出 `[pkg-smoke-install] install smoke passed`。
+2. installed artifact 复核。
+   - `/tmp/dasall-smoke-test/memory-proof.json` 记录 `expected_marker=mem-fix-006-local-proof`、`journal_mode=wal`、`session_turn_count_after_second=2`、`session_summary_count_after_second=2`，且 `latest_summary_text_prefix` 命中 marker。
+
+### 结果
+
+1. `MEM-GAP-004` 已从 Memory 功能性 gap 改写为 release boundary closeout：local installed / release-runner local authoritative evidence 未回退，qemu / soak 不再计入 Memory owner 残余缺口。
+2. 本轮已为 `MEM-GAP-004` 补齐 gap-level 独立 closeout 交付件，并同步修正了 Memory 章节结论，当前不再保留“仅剩 MEM-GAP-004”这类状态漂移口径。
+3. 本轮未使用 qemu / kvm，且不把结论外推为 guest-side rerun 或 production soak 通过。
+
 # 记录 #717
 
 - 日期：2026-05-20
