@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+# 记录 #726
+
+- 日期：2026-05-20
+- 阶段：tools / gap closeout
+- 任务：收口 `TOOL-GAP-010` runtime production skill bridge 缺口
+- 状态：已完成（runtime skill hot path、profile/install contract 与 focused validation 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中 `TOOL-GAP-009 ~ 012`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 当前 tools 子域虽然已具备 `SkillRegistry`、`SkillRuntime`、`PluginSkillBundleImporter` 与 `ToolSkillRuntimeIntegrationTest`，但 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与 `ToolManager` production hot path 仍未把 skill asset 变成 runtime-visible workflow surface；desktop profile / install layout / access tests 也没有给 skill workflow 放开完整 contract。
+3. 本轮 authoritative 边界是：以最小 internal runtime skill 样本把 `SkillRuntime -> WorkflowEngine -> ToolManager` 接通到 runtime production live composition，并在不使用 qemu / kvm 的前提下，以 build-tree focused tests 固定 profile/install/runtime contract；不把 richer skill payload golden regression 或 qemu / soak 证据混入本轮。
+
+### 改动
+
+1. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：新增 runtime skill import/filter/descriptor helper、`RuntimeToolManagerComposition`，并为 `WorkflowEngine` 注入基于 `SkillRuntime::instantiate()` 的 `plan_loader`；runtime live composition 现可导入 internal skill bundle、公开 `skill.runtime-state-snapshot` visible surface，并在 skill 接通后记录 `:skill-runtime-production-bridge` evidence marker。
+2. 新增 `skills/specs/runtime-state-snapshot.skill.yaml`、`skills/workflows/runtime-state-snapshot.workflow.yaml` 与 `skills/evals/runtime-state-snapshot.eval.yaml`，把最小 runtime production skill 样本固定为 dataset-only workflow route，而不是沿用当前 runtime surface 尚未具备 concrete backend 的 canonical skill 样本。
+3. 更新 `profiles/desktop_full/runtime_policy.yaml`、`tests/unit/tools/ToolConfigAdapterTest.cpp`、`tests/integration/tools/ToolProfileIntegrationTest.cpp` 与 `tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp`：desktop profile 现明确允许 `workflow` domain，并只对 `skill.runtime-state-snapshot` 打开 workflow visible rule；相关 profile projection / compatibility tests 同步收口。
+4. 更新 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp` 与 `tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`：focused app composition tests 现复制 `skills/` 资产、断言 runtime skill visible surface / workflow invoke / evidence marker，并显式从本轮复制的 assets 根加载 profile，避免误读本机旧安装态 profile 而假性触发 `policy.domain_denied`。
+5. 更新 `tools/CMakeLists.txt` 与 `debian/dasall-common.install`：`skills/` 现进入安装布局，runtime production skill proof 不再只停留在源码树。
+6. 新增 `docs/todos/tools/deliverables/TOOL-FIX-012-runtime-production-skill-bridge收敛.md`，并回写总账、deliverable 索引与本工作日志，固定 `TOOL-GAP-010` closeout 口径。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_access_gateway_runtime_live_dependency_composition_integration_test","dasall_tool_config_adapter_unit_test","dasall_tool_profile_integration_test","dasall_runtime_profile_compatibility_integration_test"])`：通过。
+2. CMake Tools test runner。
+   - `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest","ToolConfigAdapterTest","ToolProfileIntegrationTest","RuntimeProfileCompatibilityTest"])`：仍报仓库已知泛化错误 `生成失败`，未提供 test-level 失败诊断。
+3. direct-binary fallback。
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_tool_config_adapter_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/tools/dasall_tool_profile_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/agent_loop/dasall_runtime_profile_compatibility_integration_test`：通过。
+
+### 结果
+
+1. `TOOL-GAP-010` 已在当前树收口：runtime production live composition 现可导入最小 internal skill bundle，并把 `skill.runtime-state-snapshot` 作为 governed workflow surface 暴露给 `IToolManager` 热路径。
+2. desktop profile、install layout 与 access/runtime tests 现已对同一条 skill bridge contract 给出一致结论；runtime skill proof 不再只停留在 tools module-local integration test。
+3. 本轮未使用 qemu / kvm，且不把结论外推为 `TOOL-GAP-011` payload golden regression、`TOOL-GAP-012` machine-isolated release / soak，或 richer skill catalog 全量 runtime-ready 已完成。
+
 # 记录 #725
 
 - 日期：2026-05-20

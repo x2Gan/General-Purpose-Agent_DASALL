@@ -45,9 +45,8 @@ class TempStateRoot {
 };
 
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
-load_runtime_policy_snapshot() {
-  const auto install_layout = dasall::infra::config::resolve_install_layout();
-  const dasall::profiles::ProfileCatalog catalog(install_layout.profiles_root);
+load_runtime_policy_snapshot(const std::filesystem::path& profiles_root) {
+  const dasall::profiles::ProfileCatalog catalog(profiles_root);
   const dasall::profiles::RuntimePolicyProvider provider(catalog);
   const auto snapshot_result = provider.load_snapshot(
       dasall::profiles::RuntimePolicyLoadRequest{
@@ -71,6 +70,19 @@ load_runtime_policy_snapshot() {
                      });
 }
 
+[[nodiscard]] std::string describe_tool_envelope(
+    const dasall::tools::ToolInvocationEnvelope& envelope) {
+  std::string description = "failure_reason=";
+  description += envelope.failure_reason_code.value_or("<none>");
+  description += ", payload=";
+  if (envelope.tool_result.has_value() && envelope.tool_result->payload.has_value()) {
+    description += *envelope.tool_result->payload;
+  } else {
+    description += "<none>";
+  }
+  return description;
+}
+
 void copy_memory_assets_only(const std::filesystem::path& assets_root) {
   std::filesystem::create_directories(assets_root / "sql");
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "sql" / "memory",
@@ -82,6 +94,9 @@ void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
   copy_memory_assets_only(assets_root);
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "profiles",
                         assets_root / "profiles",
+                        std::filesystem::copy_options::recursive);
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "skills",
+                        assets_root / "skills",
                         std::filesystem::copy_options::recursive);
   std::filesystem::create_directories(assets_root / "llm");
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "llm" / "assets" /
@@ -97,6 +112,8 @@ void assert_gateway_tool_services_backend(
         "gateway runtime live dependency composition should keep agent.dataset visible");
   assert_true(contains_port(dependency_set->visible_tools, "agent.terminal"),
         "gateway runtime live dependency composition should keep agent.terminal visible");
+    assert_true(contains_port(dependency_set->visible_tools, "skill.runtime-state-snapshot"),
+      "gateway runtime live dependency composition should keep the runtime skill workflow visible when readonly skill assets are present");
 
   const auto tool_envelope = dependency_set->tool_manager->invoke(
     dasall::contracts::ToolRequest{
@@ -132,6 +149,46 @@ void assert_gateway_tool_services_backend(
           tool_envelope.tool_result->payload->find("\"capability_id\":\"agent.dataset\"") != std::string::npos &&
           tool_envelope.tool_result->payload->find("\"projection\":\"default\"") != std::string::npos,
         "gateway runtime live dependency composition should route agent.dataset through the live services backend payload");
+
+  const auto skill_envelope = dependency_set->tool_manager->invoke(
+    dasall::contracts::ToolRequest{
+      .request_id = std::string("req-gateway-live-skill"),
+      .tool_call_id = std::string("call-gateway-live-skill"),
+      .tool_name = std::string("skill.runtime-state-snapshot"),
+      .invocation_kind = dasall::contracts::ToolInvocationKind::Workflow,
+      .arguments_payload = std::string("{}"),
+      .created_at = 1710000000103,
+      .goal_id = std::string("goal-gateway-live-skill"),
+      .worker_task_id = std::string("worker-gateway-live-skill"),
+      .runtime_budget = std::nullopt,
+      .timeout_ms = 2500U,
+      .idempotency_key = std::string("idem-gateway-live-skill"),
+      .tags = std::vector<std::string>{"integration", "runtime", "skill"},
+    },
+    dasall::tools::ToolInvocationContext{
+      .caller_domain = std::string("runtime.gateway"),
+      .session_id = std::string("session-gateway-live-skill"),
+      .profile_snapshot = policy_snapshot.get(),
+      .trace = {
+        .trace_id = std::string("trace-gateway-live-skill"),
+        .span_id = std::nullopt,
+        .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::nullopt,
+    });
+  assert_true(skill_envelope.tool_result.has_value() &&
+          skill_envelope.tool_result->success.value_or(false),
+    "gateway runtime live dependency composition should execute the runtime skill workflow on the successful path: " +
+        describe_tool_envelope(skill_envelope));
+  assert_true(skill_envelope.route_facts.has_value() &&
+          skill_envelope.route_facts->route_kind == std::string("workflow"),
+        "gateway runtime live dependency composition should preserve workflow route facts for runtime skill invocations");
+  assert_true(skill_envelope.tool_result->payload.has_value() &&
+          skill_envelope.tool_result->payload->find("\"workflow_id\":\"skill.runtime-state-snapshot\"") != std::string::npos &&
+          skill_envelope.tool_result->payload->find("\"status\":\"completed\"") != std::string::npos,
+        "gateway runtime live dependency composition should serialize the completed runtime skill workflow receipt into the payload");
+  assert_true(skill_envelope.observation.has_value() && skill_envelope.observation_digest.has_value(),
+        "gateway runtime live dependency composition should project the runtime skill workflow into observation and digest");
 
   const auto denied_terminal_envelope = dependency_set->tool_manager->invoke(
     dasall::contracts::ToolRequest{
@@ -220,13 +277,17 @@ void assert_gateway_tool_services_backend(
     assert_true(contains_port(dependency_set->external_evidence,
                     "runtime:gateway.http-unary:knowledge-installed-assets-ready"),
                 "gateway runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");
+    assert_true(contains_port(dependency_set->external_evidence,
+            "runtime:gateway.http-unary:skill-runtime-production-bridge"),
+          "gateway runtime live dependency composition should record the runtime skill bridge evidence marker once readonly skill assets are wired");
     assert_true(!contains_prefix(dependency_set->external_evidence,
             "runtime:gateway.http-unary:knowledge-degraded:"),
           "gateway runtime live dependency composition should not mix degraded knowledge markers into the ready baseline");
 }
 
   void gateway_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails() {
-    const auto policy_snapshot = load_runtime_policy_snapshot();
+    const auto policy_snapshot = load_runtime_policy_snapshot(
+        std::filesystem::path(DASALL_SOURCE_ROOT) / "profiles");
     const TempStateRoot assets_root("dasall-gateway-runtime-live-assets-minimal");
     const TempStateRoot state_root("dasall-gateway-runtime-live-memory-degraded");
     copy_memory_assets_only(assets_root.path());
@@ -262,10 +323,10 @@ void assert_gateway_tool_services_backend(
   }
 
 void gateway_runtime_live_dependency_composition_establishes_default_ready_baseline() {
-  const auto policy_snapshot = load_runtime_policy_snapshot();
   const TempStateRoot assets_root("dasall-gateway-runtime-live-assets");
   const TempStateRoot state_root("dasall-gateway-runtime-live-memory");
   copy_installed_runtime_assets(assets_root.path());
+  const auto policy_snapshot = load_runtime_policy_snapshot(assets_root.path() / "profiles");
   const auto composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           policy_snapshot,

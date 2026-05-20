@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <set>
@@ -55,6 +56,9 @@
 #include "execution/BuiltinExecutorLane.h"
 #include "bridge/ToolServiceBridge.h"
 #include "registry/ToolRegistry.h"
+#include "skills/PluginSkillBundleImporter.h"
+#include "skills/SkillRegistry.h"
+#include "skills/SkillRuntime.h"
 #include "tracing/ISpan.h"
 #include "tracing/ITracer.h"
 #include "tracing/TraceTypes.h"
@@ -1295,23 +1299,208 @@ class RuntimeToolHealthSignalProvider final
   return descriptor;
 }
 
-[[nodiscard]] std::shared_ptr<tools::ToolManager> compose_runtime_tool_manager(
+constexpr std::string_view kRuntimeSkillSourceKey = "runtime.skill.production";
+constexpr std::string_view kRuntimeSkillBundleId = "runtime.skill.production";
+constexpr std::string_view kRuntimeSkillAssetRoot = "skills/specs";
+constexpr std::string_view kRuntimeSkillDialect = "dasall.skill.v1";
+constexpr std::string_view kRuntimeSkillToolPrefix = "skill.";
+
+struct RuntimeToolManagerComposition {
+  std::shared_ptr<tools::ToolManager> tool_manager;
+  std::vector<std::string> visible_tools;
+  bool skill_runtime_active = false;
+};
+
+struct RuntimeSkillSurface {
+  std::shared_ptr<tools::skills::SkillRegistry> skill_registry;
+  std::shared_ptr<tools::skills::SkillRuntime> skill_runtime;
+  std::map<std::string, tools::skills::SkillSpecAsset> assets_by_tool_name;
+  std::vector<contracts::ToolDescriptor> descriptors;
+};
+
+[[nodiscard]] std::string tool_namespace(std::string_view tool_name) {
+  const auto delimiter = tool_name.find('.');
+  if (delimiter == std::string::npos) {
+    return std::string(tool_name);
+  }
+
+  return std::string(tool_name.substr(0U, delimiter));
+}
+
+[[nodiscard]] bool has_skill_import_errors(
+    const tools::skills::SkillImportResult& import_result) {
+  return std::any_of(import_result.diagnostics.begin(),
+                     import_result.diagnostics.end(),
+                     [](const auto& diagnostic) {
+                       return diagnostic.level ==
+                              tools::skills::SkillImportDiagnosticLevel::Error;
+                     });
+}
+
+[[nodiscard]] std::string make_runtime_skill_tool_name(
+    const tools::skills::SkillSpecAsset& asset) {
+  return std::string(kRuntimeSkillToolPrefix) + asset.name;
+}
+
+[[nodiscard]] contracts::ToolDescriptor make_runtime_skill_descriptor(
+    const tools::skills::SkillSpecAsset& asset) {
+  return contracts::ToolDescriptor{
+      .tool_name = make_runtime_skill_tool_name(asset),
+      .display_name = asset.name,
+      .category = contracts::ToolCategory::Workflow,
+      .capability_tier = contracts::ToolCapabilityTier::Internal,
+      .is_read_only = false,
+      .supports_compensation = false,
+      .default_timeout_ms = 30000U,
+      .input_schema_ref = std::string("schema://tools/") + asset.name + "/input/v1",
+      .output_schema_ref = std::string("schema://tools/") + asset.name + "/output/v1",
+      .required_scopes = std::vector<std::string>{"tools.read"},
+      .tags = std::vector<std::string>{"runtime", "skill", "workflow"},
+      .version = asset.version,
+  };
+}
+
+[[nodiscard]] tools::ToolPolicyView make_runtime_skill_policy_view(
+    const profiles::RuntimePolicySnapshot& policy_snapshot,
+    const std::set<std::string>& available_tool_names) {
+  std::set<std::string> capability_domains;
+  for (const auto& tool_name : available_tool_names) {
+    capability_domains.insert(tool_namespace(tool_name));
+  }
+
+  return tools::ToolPolicyView{
+      .effective_profile_id = policy_snapshot.effective_profile_id(),
+      .safe_mode_enabled = policy_snapshot.execution_policy().safe_mode_enabled,
+      .high_risk_confirmation_required =
+          policy_snapshot.execution_policy().requires_high_risk_confirmation,
+      .audit_level = policy_snapshot.execution_policy().audit_level,
+      .allowed_tool_domains = std::vector<std::string>(capability_domains.begin(),
+                                                       capability_domains.end()),
+      .tool_visibility_rules = policy_snapshot.prompt_policy().tool_visibility_rules,
+  };
+}
+
+[[nodiscard]] bool all_skill_tools_available(
+    const tools::skills::SkillSpecAsset& asset,
+    const std::set<std::string>& available_tool_names) {
+  return std::all_of(asset.allowed_tools.begin(),
+                     asset.allowed_tools.end(),
+                     [&](const auto& tool_name) {
+                       return available_tool_names.contains(tool_name);
+                     });
+}
+
+[[nodiscard]] RuntimeSkillSurface compose_runtime_skill_surface(
+    const fs::path& readonly_assets_root,
+    const profiles::RuntimePolicySnapshot& policy_snapshot,
+    const std::set<std::string>& available_tool_names) {
+  RuntimeSkillSurface surface{
+      .skill_registry = std::make_shared<tools::skills::SkillRegistry>(),
+      .skill_runtime = std::make_shared<tools::skills::SkillRuntime>(readonly_assets_root),
+      .assets_by_tool_name = {},
+      .descriptors = {},
+  };
+
+  tools::skills::PluginSkillBundleImporter importer(
+      tools::skills::SkillImporterOptions{
+          .external_skill_import_enabled = false,
+          .project_root = readonly_assets_root,
+      });
+  const auto import_result = importer.import_bundle(
+      tools::bridge::SkillAssetRef{
+          .provider_ref = tools::plugin::ToolPluginProviderRef{
+              .plugin_id = std::string("runtime.skill.production"),
+              .export_key = std::string("skills.internal.runtime"),
+              .source_revision = std::string("live"),
+          },
+          .source_key = std::string(kRuntimeSkillSourceKey),
+          .bundle_id = std::string(kRuntimeSkillBundleId),
+          .asset_root_ref = std::string(kRuntimeSkillAssetRoot),
+          .dialect_ref = std::string(kRuntimeSkillDialect),
+      });
+  if (has_skill_import_errors(import_result)) {
+    return surface;
+  }
+
+  const auto skill_policy_view = make_runtime_skill_policy_view(
+      policy_snapshot,
+      available_tool_names);
+  for (const auto& asset : import_result.imported_assets) {
+    if (!all_skill_tools_available(asset, available_tool_names)) {
+      continue;
+    }
+
+    const auto tool_allowlist = surface.skill_runtime->build_tool_allowlist(
+        asset,
+        skill_policy_view);
+    if (tool_allowlist.size() != asset.allowed_tools.size()) {
+      continue;
+    }
+
+    const auto descriptor = make_runtime_skill_descriptor(asset);
+    if (!descriptor.tool_name.has_value() || descriptor.tool_name->empty()) {
+      continue;
+    }
+    if (!surface.assets_by_tool_name.emplace(*descriptor.tool_name, asset).second) {
+      continue;
+    }
+    if (!surface.skill_registry->register_asset(asset)) {
+      surface.assets_by_tool_name.erase(*descriptor.tool_name);
+      continue;
+    }
+
+    surface.descriptors.push_back(descriptor);
+  }
+
+  return surface;
+}
+
+[[nodiscard]] RuntimeToolManagerComposition compose_runtime_tool_manager(
+    const profiles::RuntimePolicySnapshot& policy_snapshot,
     std::shared_ptr<services::IExecutionService> execution_service,
     std::shared_ptr<services::IDataService> data_service,
+    const fs::path& readonly_assets_root,
     const RuntimeObservabilityBundle& observability) {
+  RuntimeToolManagerComposition composition;
   if (execution_service == nullptr || data_service == nullptr ||
       observability.tool_audit_bridge == nullptr ||
       observability.tool_metrics_bridge == nullptr ||
       observability.tool_trace_bridge == nullptr) {
-    return nullptr;
+    return composition;
   }
 
   auto registry = std::make_shared<tools::registry::ToolRegistry>();
-  if (!registry->register_builtin(make_runtime_terminal_descriptor())) {
-    return nullptr;
+  const auto dataset_descriptor = make_runtime_dataset_descriptor();
+  const auto terminal_descriptor = make_runtime_terminal_descriptor();
+  if (!registry->register_builtin(terminal_descriptor)) {
+    return composition;
   }
-  if (!registry->register_builtin(make_runtime_dataset_descriptor())) {
-    return nullptr;
+  if (!registry->register_builtin(dataset_descriptor)) {
+    return composition;
+  }
+
+  composition.visible_tools = {
+      dataset_descriptor.tool_name.value_or(std::string("agent.dataset")),
+      terminal_descriptor.tool_name.value_or(std::string("agent.terminal")),
+  };
+
+  const std::set<std::string> available_tool_names = {
+      dataset_descriptor.tool_name.value_or(std::string("agent.dataset")),
+      terminal_descriptor.tool_name.value_or(std::string("agent.terminal")),
+  };
+  const auto skill_surface = compose_runtime_skill_surface(
+      readonly_assets_root,
+      policy_snapshot,
+      available_tool_names);
+  if (!skill_surface.descriptors.empty() &&
+      registry->apply_plugin_extension_delta(std::string(kRuntimeSkillSourceKey),
+                                             skill_surface.descriptors)) {
+    composition.skill_runtime_active = true;
+    for (const auto& descriptor : skill_surface.descriptors) {
+      if (descriptor.tool_name.has_value()) {
+        composition.visible_tools.push_back(*descriptor.tool_name);
+      }
+    }
   }
 
   auto builtin_lane = std::make_shared<tools::execution::BuiltinExecutorLane>(
@@ -1322,9 +1511,64 @@ class RuntimeToolHealthSignalProvider final
           .data_service = std::move(data_service),
           .now_ms = {},
       });
+  const auto skill_policy_view = make_runtime_skill_policy_view(
+      policy_snapshot,
+      available_tool_names);
+  auto workflow_engine = std::make_shared<tools::execution::WorkflowEngine>(
+      tools::execution::WorkflowEngineDependencies{
+          .plan_loader = [skill_assets_by_tool_name = skill_surface.assets_by_tool_name,
+                          skill_runtime = skill_surface.skill_runtime,
+                          skill_policy_view](const auto& workflow_ir,
+                                             auto& failure_reason_code,
+                                             auto& failure_message)
+                             -> std::optional<tools::execution::WorkflowPlan> {
+            if (!workflow_ir.tool_name.has_value() || workflow_ir.tool_name->empty()) {
+              failure_reason_code = "skill.runtime.tool_name_missing";
+              failure_message = failure_reason_code;
+              return std::nullopt;
+            }
+
+            const auto asset_it = skill_assets_by_tool_name.find(*workflow_ir.tool_name);
+            if (asset_it == skill_assets_by_tool_name.end() || skill_runtime == nullptr) {
+              failure_reason_code = "skill.runtime.unmapped_tool";
+              failure_message = "workflow tool is not mapped to a runtime skill asset";
+              return std::nullopt;
+            }
+
+            const auto instantiate_result = skill_runtime->instantiate(
+                tools::skills::SkillMatchResult{
+                    .matched = true,
+                    .asset = asset_it->second,
+                    .reason_code = "skill.match.selected",
+                    .matched_terms = {asset_it->second.name},
+                    .score = 1U,
+                },
+                skill_policy_view);
+            if (!instantiate_result.instantiated ||
+                !instantiate_result.instance.has_value() ||
+                !instantiate_result.workflow_plan.has_value()) {
+              failure_reason_code = instantiate_result.reason_code.empty()
+                                        ? std::string("skill.runtime.instantiate_failed")
+                                        : instantiate_result.reason_code;
+              failure_message = failure_reason_code;
+              return std::nullopt;
+            }
+
+            auto plan = *instantiate_result.workflow_plan;
+            static_cast<void>(skill_runtime->release_instance(
+                instantiate_result.instance->instance_id));
+            return plan;
+          },
+          .builtin_executor = [builtin_lane](const contracts::ToolIR& tool_ir,
+                                             const tools::ToolExecutionContext& execution_context) {
+            return builtin_lane->execute(tool_ir, execution_context);
+          },
+          .mcp_executor = {},
+      });
 
   tools::manager::ToolManagerDependencies dependencies;
   dependencies.registry = registry;
+  dependencies.workflow_engine = std::move(workflow_engine);
   dependencies.metrics_bridge = observability.tool_metrics_bridge;
   dependencies.trace_bridge = observability.tool_trace_bridge;
   dependencies.audit_hooks =
@@ -1337,7 +1581,8 @@ class RuntimeToolHealthSignalProvider final
             .lane_key = execution_request.route_decision.lane_key,
         });
   };
-  return std::make_shared<tools::ToolManager>(std::move(dependencies));
+  composition.tool_manager = std::make_shared<tools::ToolManager>(std::move(dependencies));
+  return composition;
 }
 
 }  // namespace
@@ -1507,10 +1752,13 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
   dependency_set->health_probes.push_back(live_services.health_probe);
 
-  dependency_set->tool_manager = compose_runtime_tool_manager(
+  const auto tool_composition = compose_runtime_tool_manager(
+      *policy_snapshot,
       live_services.execution_service,
       live_services.data_service,
+      readonly_assets_root,
       observability);
+  dependency_set->tool_manager = tool_composition.tool_manager;
   if (dependency_set->tool_manager == nullptr) {
     return make_error(std::string("tool manager composition failed for ") +
                       std::string(composition_owner));
@@ -1521,7 +1769,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
     return make_error(std::string("multi_agent coordinator composition failed for ") +
                       std::string(composition_owner));
   }
-  dependency_set->visible_tools = {"agent.dataset", "agent.terminal"};
+  dependency_set->visible_tools = tool_composition.visible_tools;
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
       (cognition_first_requested ? ":cognition-first-forced"
@@ -1534,6 +1782,11 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       (policy_snapshot->multi_agent_enabled() ? ":multi-agent-enabled"
                                               : ":multi-agent-disabled"),
   };
+  if (tool_composition.skill_runtime_active) {
+    dependency_set->external_evidence.push_back(
+        std::string("runtime:") + std::string(composition_owner) +
+        ":skill-runtime-production-bridge");
+  }
   if (memory_vector_fail_closed) {
     dependency_set->external_evidence.push_back(
         std::string("runtime:") + std::string(composition_owner) +

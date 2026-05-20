@@ -73,9 +73,8 @@ class ScopedEnvVar {
 };
 
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
-load_runtime_policy_snapshot() {
-  const auto install_layout = dasall::infra::config::resolve_install_layout();
-  const dasall::profiles::ProfileCatalog catalog(install_layout.profiles_root);
+load_runtime_policy_snapshot(const std::filesystem::path& profiles_root) {
+  const dasall::profiles::ProfileCatalog catalog(profiles_root);
   const dasall::profiles::RuntimePolicyProvider provider(catalog);
   const auto snapshot_result = provider.load_snapshot(
       dasall::profiles::RuntimePolicyLoadRequest{
@@ -99,6 +98,19 @@ load_runtime_policy_snapshot() {
                      });
 }
 
+[[nodiscard]] std::string describe_tool_envelope(
+    const dasall::tools::ToolInvocationEnvelope& envelope) {
+  std::string description = "failure_reason=";
+  description += envelope.failure_reason_code.value_or("<none>");
+  description += ", payload=";
+  if (envelope.tool_result.has_value() && envelope.tool_result->payload.has_value()) {
+    description += *envelope.tool_result->payload;
+  } else {
+    description += "<none>";
+  }
+  return description;
+}
+
 void copy_memory_assets_only(const std::filesystem::path& assets_root) {
   std::filesystem::create_directories(assets_root / "sql");
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "sql" / "memory",
@@ -111,6 +123,9 @@ void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "profiles",
                         assets_root / "profiles",
                         std::filesystem::copy_options::recursive);
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "skills",
+                        assets_root / "skills",
+                        std::filesystem::copy_options::recursive);
   std::filesystem::create_directories(assets_root / "llm");
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "llm" / "assets" /
                             "providers",
@@ -119,10 +134,10 @@ void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
 }
 
 void daemon_runtime_live_dependency_composition_establishes_default_ready_baseline() {
-  const auto policy_snapshot = load_runtime_policy_snapshot();
   const TempStateRoot assets_root("dasall-daemon-runtime-live-assets");
   const TempStateRoot state_root("dasall-daemon-runtime-live-memory");
   copy_installed_runtime_assets(assets_root.path());
+  const auto policy_snapshot = load_runtime_policy_snapshot(assets_root.path() / "profiles");
   const auto composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(
           policy_snapshot,
@@ -156,6 +171,8 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         "daemon runtime live dependency composition should advertise the registered runtime builtin tool surface");
       assert_true(contains_port(composition.dependency_set->visible_tools, "agent.terminal"),
         "daemon runtime live dependency composition should advertise the high-risk runtime builtin tool surface");
+      assert_true(contains_port(composition.dependency_set->visible_tools, "skill.runtime-state-snapshot"),
+        "daemon runtime live dependency composition should advertise the runtime skill workflow surface once readonly skill assets are present");
     assert_true(composition.dependency_set->llm_manager != nullptr,
           "daemon runtime live dependency composition should expose a production ILLMManager");
       assert_true(composition.dependency_set->knowledge_service != nullptr,
@@ -226,6 +243,48 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
           "daemon runtime live dependency composition should route agent.dataset through the live services backend payload");
     assert_true(!tool_envelope.failure_reason_code.has_value(),
           "daemon runtime live dependency composition should not surface a failure reason on the successful builtin query path");
+
+    const auto skill_envelope = composition.dependency_set->tool_manager->invoke(
+      dasall::contracts::ToolRequest{
+        .request_id = std::string("req-daemon-live-skill"),
+        .tool_call_id = std::string("call-daemon-live-skill"),
+        .tool_name = std::string("skill.runtime-state-snapshot"),
+        .invocation_kind = dasall::contracts::ToolInvocationKind::Workflow,
+        .arguments_payload = std::string("{}"),
+        .created_at = 1710000000003,
+        .goal_id = std::string("goal-daemon-live-skill"),
+        .worker_task_id = std::string("worker-daemon-live-skill"),
+        .runtime_budget = std::nullopt,
+        .timeout_ms = 2500U,
+        .idempotency_key = std::string("idem-daemon-live-skill"),
+        .tags = std::vector<std::string>{"integration", "runtime", "skill"},
+      },
+      dasall::tools::ToolInvocationContext{
+        .caller_domain = std::string("runtime.agent_orchestrator"),
+        .session_id = std::string("session-daemon-live-skill"),
+        .profile_snapshot = policy_snapshot.get(),
+        .trace = {
+          .trace_id = std::string("trace-daemon-live-skill"),
+          .span_id = std::nullopt,
+          .parent_span_id = std::nullopt,
+        },
+        .confirmation_facts = std::nullopt,
+      });
+    assert_true(skill_envelope.tool_result.has_value() &&
+            skill_envelope.tool_result->success.value_or(false),
+          "daemon runtime live dependency composition should execute the runtime skill workflow on the successful path: " +
+              describe_tool_envelope(skill_envelope));
+    assert_true(skill_envelope.route_facts.has_value() &&
+            skill_envelope.route_facts->route_kind == std::string("workflow"),
+          "daemon runtime live dependency composition should preserve workflow route facts for runtime skill invocations");
+    assert_true(skill_envelope.tool_result->payload.has_value() &&
+            skill_envelope.tool_result->payload->find("\"workflow_id\":\"skill.runtime-state-snapshot\"") != std::string::npos &&
+            skill_envelope.tool_result->payload->find("\"status\":\"completed\"") != std::string::npos,
+          "daemon runtime live dependency composition should serialize the completed runtime skill workflow receipt into the payload");
+    assert_true(skill_envelope.observation.has_value() && skill_envelope.observation_digest.has_value(),
+          "daemon runtime live dependency composition should project the runtime skill workflow into observation and digest");
+    assert_true(!skill_envelope.failure_reason_code.has_value(),
+          "daemon runtime live dependency composition should not surface failure_reason_code on the successful runtime skill path");
 
     const auto denied_terminal_envelope = composition.dependency_set->tool_manager->invoke(
       dasall::contracts::ToolRequest{
@@ -314,16 +373,19 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
         assert_true(contains_port(composition.dependency_set->external_evidence,
           "runtime:daemon.local-control-plane:knowledge-installed-assets-ready"),
             "daemon runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");
+        assert_true(contains_port(composition.dependency_set->external_evidence,
+                "runtime:daemon.local-control-plane:skill-runtime-production-bridge"),
+              "daemon runtime live dependency composition should record the runtime skill bridge evidence marker once readonly skill assets are wired");
         assert_true(!contains_prefix(composition.dependency_set->external_evidence,
             "runtime:daemon.local-control-plane:knowledge-degraded:"),
           "daemon runtime live dependency composition should not mix degraded knowledge markers into the ready baseline");
       }
 
   void daemon_runtime_live_dependency_composition_supports_cognition_first_gate() {
-    const auto policy_snapshot = load_runtime_policy_snapshot();
     const TempStateRoot assets_root("dasall-daemon-runtime-live-assets-cognition-first");
     const TempStateRoot state_root("dasall-daemon-runtime-live-memory-cognition-first");
     copy_installed_runtime_assets(assets_root.path());
+    const auto policy_snapshot = load_runtime_policy_snapshot(assets_root.path() / "profiles");
 
     const ScopedEnvVar cognition_first_override(kRuntimeCognitionFirstEnv, "1");
     const auto composition =
@@ -346,7 +408,8 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
   }
 
       void daemon_runtime_live_dependency_composition_degrades_when_knowledge_probe_fails() {
-        const auto policy_snapshot = load_runtime_policy_snapshot();
+        const auto policy_snapshot = load_runtime_policy_snapshot(
+            std::filesystem::path(DASALL_SOURCE_ROOT) / "profiles");
         const TempStateRoot assets_root("dasall-daemon-runtime-live-assets-minimal");
         const TempStateRoot state_root("dasall-daemon-runtime-live-memory-degraded");
         copy_memory_assets_only(assets_root.path());

@@ -1,0 +1,15 @@
+suite_id: eval.runtime-state-snapshot
+skill_id: internal.runtime-state-snapshot
+expected_workflow_id: skill.runtime-state-snapshot
+positive_prompts:
+  - capture runtime state snapshot after startup
+  - inspect current runtime evidence for this session
+negative_prompts:
+  - execute a terminal command immediately
+  - deploy a new plugin bundle
+assertions:
+  - matches_skill
+  - workflow_plan_bound
+  - allowlist_is_subset
+notes:
+  - runtime production skill proof stays on the current builtin-visible dataset path

@@ -1,0 +1,10 @@
+workflow_id: skill.runtime-state-snapshot
+entry_step_ids:
+  - snapshot_state
+steps:
+  - snapshot_state
+step.snapshot_state.tool_name: agent.dataset
+step.snapshot_state.route_kind: LocalTool
+step.snapshot_state.timeout_ms: 1500
+delegation_mode: Disabled
+max_delegate_steps: 0

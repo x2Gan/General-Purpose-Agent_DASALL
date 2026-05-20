@@ -1,0 +1,21 @@
+skill_id: internal.runtime-state-snapshot
+version: 1
+name: runtime-state-snapshot
+description: Collect a governed runtime state snapshot through the runtime-visible dataset builtin.
+intent_patterns:
+  - capture runtime state snapshot
+  - inspect runtime current state
+  - collect runtime evidence snapshot
+tags:
+  - runtime
+  - evidence
+  - snapshot
+allowed_tools:
+  - agent.dataset
+profile_constraints:
+  - desktop_full
+required_domains:
+  - agent
+workflow_template_ref: skills/workflows/runtime-state-snapshot.workflow.yaml
+eval_suite_ref: skills/evals/runtime-state-snapshot.eval.yaml
+fallback_mode: builtin-summary

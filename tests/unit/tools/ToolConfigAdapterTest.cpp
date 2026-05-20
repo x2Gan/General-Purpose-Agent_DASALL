@@ -132,8 +132,8 @@ void test_profile_projection_preserves_desktop_vs_edge_policy_differences() {
       5000,
       false,
       "full",
-      {"builtin", "mcp"},
-      {"builtin:all", "mcp:trusted"});
+      {"builtin", "mcp", "workflow"},
+      {"builtin:all", "mcp:trusted", "workflow:skill.runtime-state-snapshot"});
   const auto edge_snapshot = make_snapshot(
       "edge_minimal",
       2U,
@@ -163,8 +163,8 @@ void test_profile_projection_preserves_desktop_vs_edge_policy_differences() {
                "desktop policy should preserve the higher audit level");
   assert_equal(std::string("minimal"), edge_policy.audit_level,
                "edge policy should preserve the constrained audit level");
-  assert_equal(2, static_cast<int>(desktop_policy.allowed_tool_domains.size()),
-               "desktop policy should preserve builtin and mcp allowed domains");
+    assert_equal(3, static_cast<int>(desktop_policy.allowed_tool_domains.size()),
+                             "desktop policy should preserve builtin, mcp and workflow allowed domains");
   assert_equal(1, static_cast<int>(edge_policy.allowed_tool_domains.size()),
                "edge policy should collapse to builtin-only allowed domains");
   assert_equal(std::string("builtin:all"), desktop_policy.tool_visibility_rules.front(),

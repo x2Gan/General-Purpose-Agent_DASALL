@@ -133,8 +133,8 @@ using dasall::tests::support::assert_true;
       5000,
       false,
       "full",
-      {"builtin", "mcp"},
-      {"builtin:all", "mcp:trusted"});
+    {"builtin", "mcp", "workflow"},
+    {"builtin:all", "mcp:trusted", "workflow:skill.runtime-state-snapshot"});
 }
 
 [[nodiscard]] dasall::profiles::RuntimePolicySnapshot make_edge_snapshot() {
@@ -170,8 +170,8 @@ void test_profile_projection_preserves_timeout_budget_and_visibility_differences
                "profile integration should preserve the desktop profile id");
   assert_equal(std::string("edge_minimal"), edge_policy.effective_profile_id,
                "profile integration should preserve the edge profile id");
-  assert_equal(2, static_cast<int>(desktop_policy.allowed_tool_domains.size()),
-               "desktop profile should project builtin and mcp domains together");
+    assert_equal(3, static_cast<int>(desktop_policy.allowed_tool_domains.size()),
+                             "desktop profile should project builtin, mcp and workflow domains together");
   assert_equal(1, static_cast<int>(edge_policy.allowed_tool_domains.size()),
                "edge profile should project builtin-only domains");
   assert_equal(std::string("builtin:all"), desktop_policy.tool_visibility_rules.front(),

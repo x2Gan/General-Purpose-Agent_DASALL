@@ -70,4 +70,9 @@ target_link_libraries(dasall_tools
     dasall_contracts
 )
 
+install(DIRECTORY
+  ${CMAKE_SOURCE_DIR}/skills
+  DESTINATION ${DASALL_INSTALL_DASALL_DATADIR}
+)
+
 dasall_apply_common_options(dasall_tools)

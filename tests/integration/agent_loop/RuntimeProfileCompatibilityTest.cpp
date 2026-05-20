@@ -241,8 +241,8 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
                "edge_balanced should keep the mid-tier audit level");
   assert_equal(std::string("minimal"), edge_minimal.snapshot->execution_policy().audit_level,
                "edge_minimal should keep the constrained audit level");
-  assert_equal(std::size_t{2}, desktop.snapshot->execution_policy().allowed_tool_domains.size(),
-               "desktop_full should allow builtin and mcp tool domains");
+  assert_equal(std::size_t{3}, desktop.snapshot->execution_policy().allowed_tool_domains.size(),
+               "desktop_full should allow builtin, mcp and workflow tool domains");
   assert_equal(std::size_t{2}, edge_balanced.snapshot->execution_policy().allowed_tool_domains.size(),
                "edge_balanced should allow builtin and mcp tool domains");
   assert_equal(std::size_t{1}, edge_minimal.snapshot->execution_policy().allowed_tool_domains.size(),

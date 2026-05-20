@@ -59,6 +59,7 @@ prompt_policy:
 	tool_visibility_rules:
 		- builtin:all
 		- mcp:trusted
+		- workflow:skill.runtime-state-snapshot
 capability_cache_policy:
 	refresh_interval_ms: 30000
 	expire_after_ms: 180000
@@ -94,6 +95,7 @@ execution_policy:
 	allowed_tool_domains:
 		- builtin
 		- mcp
+		- workflow
 infra:
 	plugin:
 		enabled: true
