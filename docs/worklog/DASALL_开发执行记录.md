@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+# 记录 #719
+
+- 日期：2026-05-20
+- 阶段：memory / gap closeout
+- 任务：复验 `MEM-GAP-005` 并固定 reader pool concurrency closeout 口径
+- 状态：已完成（独立 closeout、focused validation 与 SQLite threading external reference 已回写）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `MEM-GAP-001 ~ 007`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收口径仍写 qemu，应改成本机真实安装态口径。
+2. 当前总账与 `MEM-FIX-004` 已显示 `MEM-GAP-005` 于 2026-05-18 收口，但 memory deliverables 目录中缺少 gap-level 独立 closeout 交付件，不利于后续逐 gap 追溯。
+3. 本轮 authoritative 边界是：复验 SQLite reader pool lease 与 `prepare_context()` 并发门未回退，并把 `MEM-GAP-005` 改写成独立 closeout 记录；不新增 memory 产品代码，不外推到 TSAN / soak。
+
+### 改动
+
+1. 新增 `docs/todos/memory/deliverables/MEM-GAP-005-reader-pool-concurrency-closeout.md`，固定 `MEM-GAP-005` 的本地证据、Design -> Build 映射与 closeout 边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，为 `MEM-GAP-005` 补入独立 closeout 交付件回链。
+
+### 验证
+
+1. focused targets build。
+   - `cmake --build build/vscode-linux-ninja --target dasall_memory_sqlite_store_concurrency_unit_test dasall_memory_context_integration_test -j4`：通过。
+2. focused CTest。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(SqliteMemoryStoreConcurrencyTest|MemoryContextIntegrationTest)$'`：通过，`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. `MEM-GAP-005` 在当前树上复验仍保持闭合：reader slot lease 与 `prepare_context()` 并发门未回退。
+2. 本轮已为 `MEM-GAP-005` 补齐 gap-level 独立 closeout 交付件，后续不再只能通过 `MEM-FIX-004` worklog 反推该 gap 的完成状态。
+3. 本轮未使用 qemu / kvm，且不把结论外推到 TSAN / soak 这类更高层或可选增强范围。
+
 # 记录 #718
 
 - 日期：2026-05-20
