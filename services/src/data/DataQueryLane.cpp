@@ -144,7 +144,7 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
   const auto cached = dependencies_.projection_cache->lookup(request, request.freshness);
   if (cached.snapshot.has_value() && cached.from_cache) {
     return emit_query_metrics(DataQueryResult{
-        .code = contracts::ResultCode::ToolExecutionFailed,
+        .code = std::nullopt,
         .rows_json = cached.snapshot->rows_json,
         .from_cache = true,
         .error = std::nullopt,

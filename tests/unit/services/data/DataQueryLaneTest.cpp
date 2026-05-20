@@ -177,9 +177,13 @@ void test_data_query_lane_populates_cache_on_miss_and_reuses_hit() {
   assert_equal(1,
                invoke_count,
                "cache hit should reuse stored snapshot without reinvoking adapter");
+  assert_true(first.has_consistent_values() && first.succeeded(),
+              "live data query should keep a successful result triad");
   assert_true(!first.error.has_value(), "cache miss live query should succeed");
   assert_true(!first.from_cache, "first query should come from live adapter path");
   assert_true(second.from_cache, "second query should be served from cache");
+  assert_true(second.has_consistent_values() && second.succeeded(),
+              "cache hit should keep a success triad instead of surfacing a synthetic failure code");
 }
 
 void test_data_query_lane_returns_data_stale_for_strict_stale_cache() {
@@ -265,6 +269,8 @@ void test_data_query_lane_allows_stale_cache_reads_when_requested() {
   assert_equal(0,
                invoke_count,
                "allow_stale cache should not invoke live adapter when snapshot exists");
+  assert_true(result.has_consistent_values() && result.succeeded(),
+              "allow_stale cache hit should preserve a successful result triad");
   assert_true(!result.error.has_value(), "allow_stale cache should still succeed");
   assert_true(result.from_cache, "allow_stale cache should mark from_cache=true");
   assert_equal(std::string("[{\"id\":2,\"cached\":true}]"),

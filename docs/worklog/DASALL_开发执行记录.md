@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+# 记录 #729
+
+- 日期：2026-05-20
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-002` DataQuery cache hit result triad 缺口
+- 状态：已完成（cache hit success triad、focused regression 与相邻 triad gate 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-002`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` 已闭合，因此 `CAPSRV-FIX-002` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；当前工作树 `git status --short` 为空，没有无关未提交改动。
+3. 当前缺口是：`services/src/data/DataQueryLane.cpp` 的 cache hit 分支把成功命中写成 `.code = ToolExecutionFailed` 且 `.error = std::nullopt`，与 `services/include/ServiceTypes.h` 的 success triad 约定冲突，会污染 `succeeded()` / `has_consistent_values()`、ToolResult 投影与 metrics outcome。
+4. 本轮 authoritative 边界是：只修 `DataQueryLane` cache hit triad 并补 focused regression，保留 `ServiceResultSemanticsContractTest` 与 `BuiltinExecutorLaneResultCodeTest` 作为相邻 triad guard；不扩张到 subscription trace、dynamic registry、installed package 或 qemu / release 证据。
+
+### 改动
+
+1. 更新 `services/src/data/DataQueryLane.cpp`：cache hit 分支现在返回 `.code = std::nullopt`、`.error = std::nullopt`，同时保持 `from_cache=true` 与 `rows_json` 原样透传。
+2. 更新 `tests/unit/services/data/DataQueryLaneTest.cpp`：为 fresh cache hit 与 allow_stale cache hit 新增 `has_consistent_values()` / `succeeded()` 断言，确保 cache 命中不会再被当成失败 triad。
+3. 新增 `docs/todos/services/deliverables/CAPSRV-FIX-002-DataQuery-cache-hit-result-triad收口.md`，并回写总账 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本工作日志，固定 `CAPSRV-GAP-002` closeout 口径、Design -> Build 映射与不外推边界。
+
+### 验证
+
+1. focused slice。
+   - `cmake --build build/vscode-linux-ninja --target dasall_data_query_lane_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/services/data/dasall_data_query_lane_unit_test`：通过。
+2. adjacent triad regression。
+   - `ninja -C build/vscode-linux-ninja dasall_data_query_lane_unit_test dasall_contract_service_result_semantics_test dasall_builtin_executor_lane_result_code_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/services/data/dasall_data_query_lane_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/contract/dasall_contract_service_result_semantics_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_builtin_executor_lane_result_code_unit_test`：通过。
+
+### 结果
+
+1. `CAPSRV-GAP-002` 已在当前树收口：`DataQueryLane` cache hit / allow_stale cache hit 现在都返回成功 triad，不再把成功读取误写成 failure code。
+2. `DataQueryLaneTest` 已显式锁住 cache hit triad；相邻 `ServiceResultSemanticsContractTest` 与 `BuiltinExecutorLaneResultCodeTest` 复跑通过，说明跨层 services -> tools triad gate 未回退。
+3. 本轮未使用 qemu / kvm，且不把结果外推为 `CAPSRV-GAP-003` subscription trace、`CAPSRV-GAP-004~008` production / installed / release 证据已完成。
+
 # 记录 #728
 
 - 日期：2026-05-20
