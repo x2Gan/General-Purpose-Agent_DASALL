@@ -371,6 +371,30 @@ struct ProjectionStats {
   return fields;
 }
 
+[[nodiscard]] std::vector<JsonField> parse_first_array_object(std::string_view payload,
+                                                              std::size_t* item_count) {
+  if (item_count != nullptr) {
+    *item_count = 0U;
+  }
+
+  auto trimmed = trim_view(payload);
+  if (!looks_like_json_array(trimmed)) {
+    return {};
+  }
+
+  trimmed.remove_prefix(1);
+  trimmed.remove_suffix(1);
+  const auto entries = split_top_level_entries(trimmed);
+  if (item_count != nullptr) {
+    *item_count = entries.size();
+  }
+  if (entries.empty() || !looks_like_json_object(entries.front())) {
+    return {};
+  }
+
+  return parse_top_level_object(entries.front());
+}
+
 [[nodiscard]] bool is_summary_source_key(std::string_view key) {
   return key == "summary" || key == "message" || key == "description" ||
          key == "result";
@@ -532,6 +556,23 @@ struct ProjectionStats {
   }
 
   if (looks_like_json_array(payload)) {
+    std::size_t item_count = 0U;
+    const auto first_item_fields = parse_first_array_object(payload, &item_count);
+    if (!first_item_fields.empty()) {
+      const auto fact_budget =
+          kMaxProjectedFacts > facts.size() ? kMaxProjectedFacts - facts.size() : 0U;
+      const auto projected_count = std::min(first_item_fields.size(), fact_budget);
+      stats.total_fields = first_item_fields.size();
+      stats.projected_fields = projected_count;
+      for (std::size_t index = 0; index < projected_count; ++index) {
+        facts.push_back(format_fact(first_item_fields[index], stats));
+      }
+      if (item_count > 1U) {
+        stats.total_fields += 1U;
+      }
+      return facts;
+    }
+
     stats.total_fields = 1U;
     stats.projected_fields = 1U;
     facts.push_back(format_fact(JsonField{

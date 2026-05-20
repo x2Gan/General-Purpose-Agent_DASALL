@@ -112,6 +112,7 @@
 | F-4 | TOOL-FIX-010 knowledge.search / Knowledge 与 Tools 关系收敛 | `docs/todos/tools/deliverables/TOOL-FIX-010-knowledge-search关系收敛.md` |
 | F-5 | TOOL-FIX-011 runtime production 可见工具面收敛 | `docs/todos/tools/deliverables/TOOL-FIX-011-runtime-production-visible-tools-surface收敛.md` |
 | F-6 | TOOL-FIX-012 runtime production skill bridge 收敛 | `docs/todos/tools/deliverables/TOOL-FIX-012-runtime-production-skill-bridge收敛.md` |
+| F-7 | TOOL-FIX-013 ResultProjector 生产 payload regression 收敛 | `docs/todos/tools/deliverables/TOOL-FIX-013-ResultProjector生产payload回归收敛.md` |
 | UT-2 | CapabilityCache 并发测试 | `tests/unit/tools/CapabilityCacheConcurrencyTest.cpp` |
 | UT-3 | 集成测试共享 fixture | `tests/mocks/include/support/ToolsIntegrationFixture.h` |
 | UT-4 | ToolValidator 边界测试 | `tests/unit/tools/ToolValidatorBoundaryTest.cpp` |

@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+# 记录 #727
+
+- 日期：2026-05-20
+- 阶段：tools / gap closeout
+- 任务：收口 `TOOL-GAP-011` ResultProjector 生产 payload golden regression 缺口
+- 状态：已完成（真实 payload golden set、array payload 关键字段保留与 focused regression 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中 `TOOL-GAP-009 ~ 012`，逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 当前 `ResultProjector` 已有 `ResultProjectorTest`、`ResultProjectorTruncationTest` 与 `ResultProjectorConfidenceTest`，但样本仍主要是 fixture object / plain text payload，未覆盖 runtime live `agent.dataset` query 返回的 object-array payload，也未冻结 workflow receipt payload 的关键字段保留语义。
+3. 本轮 authoritative 边界是：只为 `ResultProjector` 收集并固定真实 ToolResult payload golden set，确保关键字段在 deterministic projection 下可保留；不把 qemu / release / soak 证据或 broader response-layer 改动混入本轮。
+
+### 改动
+
+1. 更新 `tests/unit/tools/ResultProjectorTest.cpp`：新增 live `agent.dataset` query array payload golden case，以及 `skill.runtime-state-snapshot` workflow receipt payload golden case，分别锁定 `capability_id` / `projection` 与 `workflow_id` / `status` / `completed_step_ids` 的保留语义。
+2. 更新 `tools/src/projection/ResultProjector.cpp`：array payload 现在在首项为 object 时优先投影该对象的顶层字段，而不再统一折叠成 `items=[{...}]` 预览，从而修复 live query object-array payload 丢失关键字段的问题。
+3. 新增 `docs/todos/tools/deliverables/TOOL-FIX-013-ResultProjector生产payload回归收敛.md`，并回写总账、deliverable 索引与本工作日志，固定 `TOOL-GAP-011` closeout 口径。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_result_projector_unit_test"])`：通过。
+2. CMake Tools test runner。
+   - `RunCtest_CMakeTools(tests=["ResultProjectorTest"])`：仍报仓库已知泛化错误 `生成失败`，未提供 test-level 失败诊断。
+3. direct-binary discriminating check。
+   - 首次执行 `./build/vscode-linux-ninja/tests/unit/tools/dasall_result_projector_unit_test`：失败，错误信息为 `live query golden regression should preserve capability_id from array payloads`。
+   - 修复 `ResultProjector` array 分支后复跑同一二进制：通过。
+4. adjacent regression validation。
+   - `Build_CMakeTools(buildTargets=["dasall_result_projector_truncation_unit_test","dasall_result_projector_confidence_unit_test"])`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_result_projector_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_result_projector_truncation_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_result_projector_confidence_unit_test`：通过。
+
+### 结果
+
+1. `TOOL-GAP-011` 已在当前树收口：`ResultProjector` 现在对 live query object-array payload 保留 `capability_id` / `projection` 等顶层关键字段，同时继续保留 workflow receipt 的 `workflow_id` / `status` / `completed_step_ids`。
+2. 本轮没有扩大 `ResultProjector` 的职责边界：仍是 deterministic projection，只是在真实 payload 形状下补齐 golden regression 与最小 array-field retention。
+3. `ResultProjectorTruncationTest` 与 `ResultProjectorConfidenceTest` 复跑保持绿色，说明现有 truncation / confidence 语义未因本轮回归修复而回退。
+4. 本轮未使用 qemu / kvm，且不把结果外推为 `TOOL-GAP-012` machine-isolated release / soak 已完成。
+
 # 记录 #726
 
 - 日期：2026-05-20

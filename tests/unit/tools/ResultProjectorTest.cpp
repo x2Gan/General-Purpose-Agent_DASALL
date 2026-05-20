@@ -12,12 +12,28 @@ namespace {
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
+[[nodiscard]] bool contains_string(const std::vector<std::string>& values,
+                                   const std::string& expected) {
+  return std::find(values.begin(), values.end(), expected) != values.end();
+}
+
 [[nodiscard]] dasall::tools::route::ToolRouteDecision make_builtin_route() {
   return dasall::tools::route::ToolRouteDecision{
       .available = true,
       .route = dasall::contracts::ToolIRRoute::LocalTool,
       .lane_key = std::string("builtin"),
       .reason_code = std::string("route.builtin.selected"),
+      .uses_stale_snapshot = false,
+      .server_id = std::nullopt,
+  };
+}
+
+[[nodiscard]] dasall::tools::route::ToolRouteDecision make_workflow_route() {
+  return dasall::tools::route::ToolRouteDecision{
+      .available = true,
+      .route = dasall::contracts::ToolIRRoute::WorkflowEngine,
+      .lane_key = std::string("workflow"),
+      .reason_code = std::string("route.workflow.selected"),
       .uses_stale_snapshot = false,
       .server_id = std::nullopt,
   };
@@ -91,11 +107,93 @@ void test_result_projector_projects_structured_success_without_losing_observatio
                "complete structured projection should keep full confidence");
 }
 
+void test_result_projector_projects_live_query_array_payload_with_key_fields() {
+  const dasall::contracts::ToolResult result{
+      .request_id = std::string("req-projector-live-query"),
+      .tool_call_id = std::string("call-projector-live-query"),
+      .tool_name = std::string("agent.dataset"),
+      .success = true,
+      .payload = std::string(
+          "[{\"capability_id\":\"agent.dataset\","
+          "\"target_id\":\"builtin:agent.dataset\","
+          "\"projection\":\"default\"}]"),
+      .error = std::nullopt,
+      .side_effects = std::nullopt,
+      .completed_at = 2500,
+      .duration_ms = 7,
+      .goal_id = std::string("goal-projector-live-query"),
+      .worker_task_id = std::string("worker-projector-live-query"),
+      .tags = std::vector<std::string>{"builtin", "query"},
+  };
+
+  const dasall::tools::projection::ResultProjector projector;
+  const auto envelope = projector.project_success(result, make_builtin_route(), make_context());
+
+  assert_true(envelope.observation_digest.has_value(),
+              "live query payload projection should emit digest");
+  assert_equal(std::string("Tool agent.dataset completed via builtin"),
+               envelope.observation_digest->summary.value_or(std::string()),
+               "live query payload without summary keys should fall back to tool completion summary");
+  assert_true(envelope.observation_digest->key_facts.has_value() &&
+                  contains_string(*envelope.observation_digest->key_facts,
+                                  std::string("capability_id=agent.dataset")),
+              "live query golden regression should preserve capability_id from array payloads");
+  assert_true(envelope.observation_digest->key_facts.has_value() &&
+                  contains_string(*envelope.observation_digest->key_facts,
+                                  std::string("projection=default")),
+              "live query golden regression should preserve projection from array payloads");
+}
+
+void test_result_projector_projects_workflow_receipt_payload_with_receipt_fields() {
+  const dasall::contracts::ToolResult result{
+      .request_id = std::string("req-projector-workflow"),
+      .tool_call_id = std::string("call-projector-workflow"),
+      .tool_name = std::string("skill.runtime-state-snapshot"),
+      .success = true,
+      .payload = std::string(
+          "{\"workflow_id\":\"skill.runtime-state-snapshot\","
+          "\"status\":\"completed\","
+          "\"completed_step_ids\":[\"collect\"],"
+          "\"skipped_step_ids\":[],"
+          "\"compensation_hint_count\":0}"),
+      .error = std::nullopt,
+      .side_effects = std::nullopt,
+      .completed_at = 2600,
+      .duration_ms = 9,
+      .goal_id = std::string("goal-projector-workflow"),
+      .worker_task_id = std::string("worker-projector-workflow"),
+      .tags = std::vector<std::string>{"workflow"},
+  };
+
+  const dasall::tools::projection::ResultProjector projector;
+  const auto envelope = projector.project_success(result, make_workflow_route(), make_context());
+
+  assert_true(envelope.observation_digest.has_value(),
+              "workflow receipt projection should emit digest");
+  assert_equal(std::string("Tool skill.runtime-state-snapshot completed via workflow"),
+               envelope.observation_digest->summary.value_or(std::string()),
+               "workflow receipt without summary keys should fall back to tool completion summary");
+  assert_true(envelope.observation_digest->key_facts.has_value() &&
+                  contains_string(*envelope.observation_digest->key_facts,
+                                  std::string("workflow_id=skill.runtime-state-snapshot")),
+              "workflow receipt golden regression should preserve workflow_id");
+  assert_true(envelope.observation_digest->key_facts.has_value() &&
+                  contains_string(*envelope.observation_digest->key_facts,
+                                  std::string("status=completed")),
+              "workflow receipt golden regression should preserve status");
+  assert_true(envelope.observation_digest->key_facts.has_value() &&
+                  contains_string(*envelope.observation_digest->key_facts,
+                                  std::string("completed_step_ids=[collect]")),
+              "workflow receipt golden regression should preserve completed step ids");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_result_projector_projects_structured_success_without_losing_observation_payload();
+    test_result_projector_projects_live_query_array_payload_with_key_fields();
+    test_result_projector_projects_workflow_receipt_payload_with_receipt_fields();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
