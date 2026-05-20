@@ -346,6 +346,33 @@ void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
 }
 
 void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
+                                       const ExecutionSubscriptionResult& result) {
+  if (scope != nullptr && scope->is_valid()) {
+    scope->span->set_attribute(
+        "services.resync_required",
+        infra::tracing::TraceAttributeValue{result.resync_required});
+    scope->span->set_attribute(
+        "services.dropped_count",
+        infra::tracing::TraceAttributeValue{static_cast<std::int64_t>(result.dropped_count)});
+    if (result.next_cursor.has_value()) {
+      scope->span->set_attribute(
+          "services.next_cursor",
+          infra::tracing::TraceAttributeValue{*result.next_cursor});
+    }
+  }
+  if (result.error.has_value()) {
+    mark_error(scope,
+               effective_failure_code_for(result.code, result.error),
+               result.error->details.message,
+               result.error->details.stage.empty() ? std::string("execution_subscription_hub")
+                                                   : result.error->details.stage);
+    return;
+  }
+
+  mark_success(scope);
+}
+
+void ServiceTraceBridge::complete_span(ServiceTraceSpan* scope,
                                        const ExecutionDiagnoseResult& result) {
   if (result.error.has_value()) {
     mark_error(scope,

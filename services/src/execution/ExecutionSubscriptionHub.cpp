@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "bridges/ServiceMetricsBridge.h"
+#include "bridges/ServiceTraceBridge.h"
 
 namespace dasall::services::internal {
 
@@ -60,96 +61,116 @@ void ExecutionSubscriptionHub::publish(const CapabilityTargetRef& target,
   }
 }
 
-ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCallContext&,
+ExecutionSubscriptionResult ExecutionSubscriptionHub::subscribe(const ServiceCallContext& context,
                                                                 const ExecutionSubscriptionRequest& request) {
-  const auto emit_metrics = [&](ExecutionSubscriptionResult result)
-      -> ExecutionSubscriptionResult {
-    if (dependencies_.metrics_bridge != nullptr) {
-      (void)dependencies_.metrics_bridge->record_subscription_result(
-          request.target.capability_id,
-          request.stream_kind,
-          result);
+  auto invoke = [&]() {
+    const auto emit_metrics = [&](ExecutionSubscriptionResult result)
+        -> ExecutionSubscriptionResult {
+      if (dependencies_.metrics_bridge != nullptr) {
+        (void)dependencies_.metrics_bridge->record_subscription_result(
+            request.target.capability_id,
+            request.stream_kind,
+            result);
+      }
+
+      return result;
+    };
+
+    if (request.target.capability_id.empty() || request.target.target_id.empty() ||
+        request.stream_kind.empty() || request.max_events == 0U) {
+      return emit_metrics(make_validation_failure(
+          "capability_id, target_id, stream_kind, and max_events are required",
+          "execution_subscription_hub",
+          "subscription_request"));
     }
 
-    return result;
+    const auto cursor_sequence = parse_cursor(request.cursor);
+    if (!cursor_sequence.has_value()) {
+      return emit_metrics(make_validation_failure("cursor must be an unsigned integer string",
+                                                  "execution_subscription_hub",
+                                                  "subscription_cursor"));
+    }
+
+    const auto stream_key = make_stream_key(request.target, request.stream_kind);
+    std::vector<ExecutionSubscriptionEvent> selected_events;
+    std::optional<std::string> next_cursor = request.cursor;
+    std::uint32_t dropped_count = 0U;
+    bool resync_required = false;
+
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto stream_it = streams_.find(stream_key);
+      if (stream_it == streams_.end()) {
+        return emit_metrics(ExecutionSubscriptionResult{
+            .code = std::nullopt,
+            .events_json = "[]",
+            .next_cursor = request.cursor,
+            .resync_required = false,
+            .dropped_count = 0U,
+            .error = std::nullopt,
+        });
+      }
+
+      auto& stream = stream_it->second;
+      dropped_count = stream.dropped_count;
+      const auto oldest_available_sequence =
+          stream.buffer.empty() ? stream.next_sequence : stream.buffer.front().sequence;
+      if (*cursor_sequence + 1U < oldest_available_sequence) {
+        stream.resync_required = true;
+      }
+
+      resync_required = stream.resync_required;
+
+      for (const auto& event : stream.buffer) {
+        if (event.sequence <= *cursor_sequence) {
+          continue;
+        }
+
+        selected_events.push_back(event);
+        if (selected_events.size() == request.max_events) {
+          break;
+        }
+      }
+
+      if (!selected_events.empty()) {
+        next_cursor = std::to_string(selected_events.back().sequence);
+      }
+    }
+
+    if (resync_required) {
+      return emit_metrics(make_overflow_result(next_cursor,
+                                               build_events_json(selected_events),
+                                               dropped_count,
+                                               stream_key));
+    }
+
+    return emit_metrics(ExecutionSubscriptionResult{
+        .code = std::nullopt,
+        .events_json = build_events_json(selected_events),
+        .next_cursor = next_cursor,
+        .resync_required = false,
+        .dropped_count = dropped_count,
+        .error = std::nullopt,
+    });
   };
 
-  if (request.target.capability_id.empty() || request.target.target_id.empty() ||
-      request.stream_kind.empty() || request.max_events == 0U) {
-    return emit_metrics(make_validation_failure(
-        "capability_id, target_id, stream_kind, and max_events are required",
-        "execution_subscription_hub",
-        "subscription_request"));
+  if (dependencies_.trace_bridge == nullptr) {
+    return invoke();
   }
 
-  const auto cursor_sequence = parse_cursor(request.cursor);
-  if (!cursor_sequence.has_value()) {
-    return emit_metrics(make_validation_failure("cursor must be an unsigned integer string",
-                                                "execution_subscription_hub",
-                                                "subscription_cursor"));
+  auto span = dependencies_.trace_bridge->start_lane_span(
+      context,
+      "execution.subscription_hub",
+      "subscribe",
+      &request.target);
+  if (span.is_valid()) {
+    span.span->set_attribute(
+        "services.stream_kind",
+        infra::tracing::TraceAttributeValue{request.stream_kind});
   }
-
-  const auto stream_key = make_stream_key(request.target, request.stream_kind);
-  std::vector<ExecutionSubscriptionEvent> selected_events;
-  std::optional<std::string> next_cursor = request.cursor;
-  std::uint32_t dropped_count = 0U;
-  bool resync_required = false;
-
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto stream_it = streams_.find(stream_key);
-    if (stream_it == streams_.end()) {
-      return emit_metrics(ExecutionSubscriptionResult{
-          .code = std::nullopt,
-          .events_json = "[]",
-          .next_cursor = request.cursor,
-          .resync_required = false,
-          .dropped_count = 0U,
-          .error = std::nullopt,
-      });
-    }
-
-    auto& stream = stream_it->second;
-    dropped_count = stream.dropped_count;
-    const auto oldest_available_sequence =
-        stream.buffer.empty() ? stream.next_sequence : stream.buffer.front().sequence;
-    if (*cursor_sequence + 1U < oldest_available_sequence) {
-      stream.resync_required = true;
-    }
-
-    resync_required = stream.resync_required;
-
-    for (const auto& event : stream.buffer) {
-      if (event.sequence <= *cursor_sequence) {
-        continue;
-      }
-
-      selected_events.push_back(event);
-      if (selected_events.size() == request.max_events) {
-        break;
-      }
-    }
-
-    if (!selected_events.empty()) {
-      next_cursor = std::to_string(selected_events.back().sequence);
-    }
-  }
-
-  if (resync_required) {
-    return emit_metrics(make_overflow_result(next_cursor,
-                                             build_events_json(selected_events),
-                                             dropped_count,
-                                             stream_key));
-  }
-
-  return emit_metrics(ExecutionSubscriptionResult{
-      .code = std::nullopt,
-      .events_json = build_events_json(selected_events),
-      .next_cursor = next_cursor,
-      .resync_required = false,
-      .dropped_count = dropped_count,
-      .error = std::nullopt,
-  });
+  auto result = dependencies_.trace_bridge->with_span(span, invoke);
+  dependencies_.trace_bridge->complete_span(&span, result);
+  return result;
 }
 
 std::string ExecutionSubscriptionHub::make_stream_key(const CapabilityTargetRef& target,

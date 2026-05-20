@@ -113,6 +113,8 @@ class ServiceTraceBridge {
   void complete_span(ServiceTraceSpan* scope,
                      const ExecutionQueryResult& result);
   void complete_span(ServiceTraceSpan* scope,
+                     const ExecutionSubscriptionResult& result);
+  void complete_span(ServiceTraceSpan* scope,
                      const ExecutionDiagnoseResult& result);
   void complete_span(ServiceTraceSpan* scope,
                      const DataQueryResult& result);

@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+# 记录 #730
+
+- 日期：2026-05-20
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-003` subscription public ABI trace 缺口
+- 状态：已完成（subscribe facade/hub trace chain、overflow error span 与 focused regression 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-003`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` 与 `CAPSRV-GAP-002` 已闭合，因此 `CAPSRV-FIX-003` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；当前工作树在本轮开始前 `git status --short` 为空。
+3. 当前缺口是：`services/src/ServiceFacade.cpp` 的 `subscribe()` 没有像 execute/query/catalog 一样发出 facade span，`services/src/execution/ExecutionSubscriptionHub.*` 也没有 trace bridge，导致 subscription public ABI 在 trace integration 中没有同等可观测性。
+4. 本轮 authoritative 边界是：只补齐 subscription facade/hub trace chain、`ExecutionSubscriptionResult` complete 语义和 focused regression；不扩张到 adapter concrete backend、dynamic registry、production sinks、installed package 或 qemu / release 证据。
+
+### 改动
+
+1. 更新 `services/src/ServiceFacade.cpp`：`subscribe()` 现在与 execute/query/catalog 对齐，使用 `ServiceTraceBridge::start_facade_span()`、`with_span()` 与 `complete_span()` 包裹真正的 subscription handler。
+2. 更新 `services/src/execution/ExecutionSubscriptionHub.h/.cpp` 与 `tests/mocks/include/CapabilityServicesLoopbackFixture.h`：hub 现新增 `trace_bridge` 依赖，在 subscribe 入口发射 `services.lane.execution.subscription_hub.subscribe`，并记录 `services.stream_kind`；loopback fixture 同步透传 trace bridge。
+3. 更新 `services/src/bridges/ServiceTraceBridge.h/.cpp`：新增 `ExecutionSubscriptionResult` complete overload，把 `resync_required`、`dropped_count`、`next_cursor` 固定为 span attribute，并在 overflow 路径上发出 error status。
+4. 更新 `tests/unit/services/ServiceFacadeTest.cpp`、`tests/unit/services/bridges/ServiceTraceBridgeTest.cpp`、`tests/integration/services/CapabilityServicesTraceIntegrationTest.cpp` 与 `tests/integration/services/CapabilityServicesFailureIntegrationTest.cpp`：分别锁定 subscribe facade span、subscription result complete 语义、facade->hub parent-child trace chain 与 overflow error span。
+5. 新增 `docs/todos/services/deliverables/CAPSRV-FIX-003-subscription-trace-chain收口.md`，并回写总账 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本工作日志，固定 `CAPSRV-GAP-003` closeout 口径、Design -> Build 映射与不外推边界。
+
+### 验证
+
+1. focused compile。
+   - `cmake --build build/vscode-linux-ninja --target dasall_service_facade_unit_test dasall_service_trace_bridge_unit_test dasall_services_trace_integration_test dasall_services_failure_integration_test -j4`：通过。
+2. focused direct binary。
+   - `./build/vscode-linux-ninja/tests/unit/services/dasall_service_facade_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/services/bridges/dasall_service_trace_bridge_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_trace_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_failure_integration_test`：通过。
+3. discoverability / gate parity。
+   - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(ServiceFacadeTest|ServiceTraceBridgeTest|CapabilityServicesTraceIntegrationTest|CapabilityServicesFailureIntegrationTest)$'`：通过，`4/4` tests passed，`0` failed。
+
+### 结果
+
+1. `CAPSRV-GAP-003` 已在当前树收口：subscription public ABI 现在具备与 execute/query/catalog 一致的 facade/hub trace 证据，overflow 结果也会在 trace 中保留 `resync_required` / `dropped_count` / `next_cursor`。
+2. focused tests 已把 facade root span、hub lane span、parent-child trace chain 与 overflow error span 全部锁住，后续改动不能再悄悄把 subscription 路径退回 metrics-only。
+3. 本轮未使用 qemu / kvm，且不把结果外推为 `CAPSRV-GAP-004~008` 的 concrete backend、production observability、installed / release 或 soak 证据已完成。
+
 # 记录 #729
 
 - 日期：2026-05-20

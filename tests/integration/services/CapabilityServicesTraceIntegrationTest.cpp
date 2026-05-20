@@ -14,6 +14,7 @@
 #include "data/DataProjectionCache.h"
 #include "data/DataQueryLane.h"
 #include "execution/ExecutionCommandLane.h"
+#include "execution/ExecutionSubscriptionHub.h"
 #include "mapping/ResultMapper.h"
 #include "support/TestAssertions.h"
 
@@ -37,6 +38,7 @@ using dasall::infra::tracing::TracerScope;
 using dasall::services::CapabilityTargetRef;
 using dasall::services::DataQueryRequest;
 using dasall::services::ExecutionCommandRequest;
+using dasall::services::ExecutionSubscriptionRequest;
 using dasall::services::ServiceCallContext;
 using dasall::services::ServiceDataFreshness;
 using dasall::services::internal::AdapterAvailabilityState;
@@ -57,6 +59,8 @@ using dasall::services::internal::DataQueryLane;
 using dasall::services::internal::DataQueryLaneDependencies;
 using dasall::services::internal::ExecutionCommandLane;
 using dasall::services::internal::ExecutionCommandLaneDependencies;
+using dasall::services::internal::ExecutionSubscriptionHub;
+using dasall::services::internal::ExecutionSubscriptionHubDependencies;
 using dasall::services::internal::FallbackEnvelope;
 using dasall::services::internal::IAdapterInvoker;
 using dasall::services::internal::ResultMapper;
@@ -554,11 +558,107 @@ void test_capability_services_trace_integration_wires_facade_lane_adapter_and_ex
               "successful integration tracing should leave the bridge healthy while accounting for every started span");
 }
 
+  void test_capability_services_trace_integration_wires_subscription_facade_and_hub_chain() {
+    auto provider = std::make_shared<RecordingTracerProvider>();
+    ServiceTraceBridge trace_bridge(provider,
+                    ServiceTraceBridgeOptions{
+                      .enabled = true,
+                      .profile_id = "edge_balanced",
+                      .trace_sample_ratio = 1.0,
+                    });
+
+    ExecutionSubscriptionHub subscription_hub(ExecutionSubscriptionHubDependencies{
+      .max_buffered_events = 4U,
+      .metrics_bridge = nullptr,
+      .trace_bridge = &trace_bridge,
+    });
+    subscription_hub.publish(CapabilityTargetRef{
+                   .capability_id = "cap.exec",
+                   .target_id = "target-026-sub",
+                 },
+                 "status",
+                 {"{\"seq\":1}", "{\"seq\":2}"});
+
+    ServiceContextBuilder context_builder;
+    ServiceFacade facade(ServiceFacadeDependencies{
+      .context_builder = &context_builder,
+      .execute_command = {},
+      .compensate_command = {},
+      .query_execution_state = {},
+      .subscribe_execution_state = [&](const ServiceCallContext& context,
+                       const ExecutionSubscriptionRequest& request) {
+      return subscription_hub.subscribe(context, request);
+      },
+      .diagnose_execution_target = {},
+      .query_data = {},
+      .list_data_capabilities = {},
+      .trace_bridge = &trace_bridge,
+    });
+
+    const auto result = facade.subscribe(ExecutionSubscriptionRequest{
+      .context = make_context("req-026-sub", "trace-026-sub", "tool-call-026-sub"),
+      .target = CapabilityTargetRef{.capability_id = "cap.exec", .target_id = "target-026-sub"},
+      .stream_kind = "status",
+      .cursor = std::string("0"),
+      .max_events = 2U,
+    });
+
+    assert_true(!result.error.has_value() && result.next_cursor.has_value() &&
+            *result.next_cursor == "2" &&
+            result.events_json == "[{\"seq\":1},{\"seq\":2}]",
+          "subscription trace integration should preserve the public subscribe result while tracing is enabled");
+    assert_true(trace_bridge.has_active_tracer(),
+          "subscription tracing should acquire a shared services tracer instance");
+    assert_true(provider->tracer != nullptr &&
+            provider->tracer->started_spans.size() == 2U,
+          "subscription tracing should start exactly facade and hub lane spans");
+
+    const auto& root = provider->tracer->started_spans[0];
+    const auto& lane = provider->tracer->started_spans[1];
+    const auto* lane_stage = string_attr(lane.descriptor.attrs, "services.stage");
+    const auto* lane_capability = string_attr(lane.descriptor.attrs,
+                        "services.capability_id");
+    const auto* lane_target = string_attr(lane.descriptor.attrs, "services.target_id");
+    const auto* stream_kind = string_attr(lane.span->attributes, "services.stream_kind");
+
+    assert_equal(std::string("services.facade.subscribe"),
+           root.descriptor.name,
+           "subscription tracing should start the frozen facade subscribe span");
+    assert_equal(std::string("services.lane.execution.subscription_hub.subscribe"),
+           lane.descriptor.name,
+           "subscription tracing should start the frozen hub lane span");
+    assert_true(root.descriptor.kind == SpanKind::Server &&
+            lane.descriptor.kind == SpanKind::Internal,
+          "subscription tracing should preserve server/internal kinds across facade and hub spans");
+    assert_true(root.explicit_parent.has_value() && root.explicit_parent->is_remote,
+          "subscription facade spans should synthesize a remote tool parent context");
+    assert_true(lane.resolved_parent.has_value() &&
+            lane.resolved_parent->span_id == root.span->context.span_id &&
+            root.span->context.trace_id == lane.span->context.trace_id,
+          "subscription hub spans should nest directly under the facade span in the same trace");
+    assert_true(lane_stage != nullptr && *lane_stage == "lane" &&
+            lane_capability != nullptr && *lane_capability == "cap.exec" &&
+            lane_target != nullptr && *lane_target == "target-026-sub" &&
+            stream_kind != nullptr && *stream_kind == "status",
+          "subscription hub spans should retain frozen lane and stream_kind attributes");
+    assert_true(root.span->status_code == SpanStatusCode::Ok &&
+            lane.span->status_code == SpanStatusCode::Ok &&
+            root.span->end_call_total == 1 && lane.span->end_call_total == 1,
+          "successful subscription tracing should end facade and hub spans exactly once with Ok status");
+
+    const auto status = trace_bridge.get_status();
+    assert_true(status.has_consistent_state() && !status.degraded &&
+            status.started_span_total == 2U &&
+            status.span_failure_total == 0U,
+          "successful subscription tracing should keep the bridge healthy while accounting for both spans");
+  }
+
 }  // namespace
 
 int main() {
   try {
     test_capability_services_trace_integration_wires_facade_lane_adapter_and_external_chain();
+    test_capability_services_trace_integration_wires_subscription_facade_and_hub_chain();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

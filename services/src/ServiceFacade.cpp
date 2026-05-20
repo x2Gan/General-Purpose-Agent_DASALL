@@ -261,7 +261,17 @@ ExecutionSubscriptionResult ServiceFacade::subscribe(const ExecutionSubscription
 																		 "subscribe");
 	}
 
-	return dependencies_.subscribe_execution_state(*normalized.context, request);
+	auto invoke = [&]() {
+		return dependencies_.subscribe_execution_state(*normalized.context, request);
+	};
+	if (dependencies_.trace_bridge == nullptr) {
+		return invoke();
+	}
+	auto span = dependencies_.trace_bridge->start_facade_span(*normalized.context,
+																		 "subscribe");
+	auto result = dependencies_.trace_bridge->with_span(span, invoke);
+	dependencies_.trace_bridge->complete_span(&span, result);
+	return result;
 }
 
 ExecutionDiagnoseResult ServiceFacade::diagnose(const ExecutionDiagnoseRequest& request) {

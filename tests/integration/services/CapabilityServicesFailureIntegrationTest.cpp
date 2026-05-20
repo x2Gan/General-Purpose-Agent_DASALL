@@ -1,19 +1,37 @@
 #include <algorithm>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "CapabilityServicesLoopbackFixture.h"
 #include "audit/IAuditLogger.h"
 #include "bridges/ServiceAuditBridge.h"
 #include "bridges/ServiceMetricsBridge.h"
+#include "bridges/ServiceTraceBridge.h"
 #include "metrics/MetricTypes.h"
 #include "support/TestAssertions.h"
 
 namespace {
+
+using dasall::infra::tracing::ActiveSpanCallback;
+using dasall::infra::tracing::ISpan;
+using dasall::infra::tracing::ITracer;
+using dasall::infra::tracing::ITracerProvider;
+using dasall::infra::tracing::SpanDescriptor;
+using dasall::infra::tracing::SpanEndResult;
+using dasall::infra::tracing::SpanStatusCode;
+using dasall::infra::tracing::TraceAttributeMap;
+using dasall::infra::tracing::TraceAttributeValue;
+using dasall::infra::tracing::TraceConfig;
+using dasall::infra::tracing::TraceContext;
+using dasall::infra::tracing::TraceContextState;
+using dasall::infra::tracing::TraceOperationStatus;
+using dasall::infra::tracing::TracerScope;
 
 using dasall::services::internal::AdapterInvocationRequest;
 using dasall::services::internal::AdapterInvocationResult;
@@ -21,10 +39,172 @@ using dasall::services::internal::AdapterTransportOutcome;
 using dasall::services::internal::ServiceAuditBridge;
 using dasall::services::internal::ServiceMetricsBridge;
 using dasall::services::internal::ServiceMetricsBridgeOptions;
+using dasall::services::internal::ServiceTraceBridge;
+using dasall::services::internal::ServiceTraceBridgeOptions;
 using dasall::tests::mocks::CapabilityServicesLoopbackFixture;
 using dasall::tests::mocks::CapabilityServicesLoopbackFixtureOptions;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
+
+class RecordingSpan final : public ISpan {
+ public:
+  RecordingSpan(SpanDescriptor descriptor,
+                TraceContext context,
+                std::optional<TraceContext> parent_context)
+      : descriptor(std::move(descriptor)),
+        context(std::move(context)),
+        parent_context(std::move(parent_context)) {}
+
+  void set_attribute(std::string_view key,
+                     const TraceAttributeValue& value) override {
+    attributes[std::string(key)] = value;
+  }
+
+  void add_event(std::string_view,
+                 const TraceAttributeMap&) override {}
+
+  void set_status(SpanStatusCode code,
+                  std::string_view message) override {
+    status_code = code;
+    status_message = std::string(message);
+  }
+
+  [[nodiscard]] SpanEndResult end(
+      std::optional<std::int64_t> end_ts_unix_ms = std::nullopt) override {
+    ++end_call_total;
+    return SpanEndResult{
+        .end_ts_unix_ms = end_ts_unix_ms.has_value()
+                             ? end_ts_unix_ms
+                             : std::optional<std::int64_t>(1712750500000LL),
+        .status_code = status_code,
+        .status_message = status_message,
+        .dropped_attr_count = 0U,
+    };
+  }
+
+  [[nodiscard]] TraceContext get_context() const override {
+    return context;
+  }
+
+  SpanDescriptor descriptor;
+  TraceContext context;
+  std::optional<TraceContext> parent_context;
+  TraceAttributeMap attributes;
+  SpanStatusCode status_code = SpanStatusCode::Unset;
+  std::string status_message;
+  int end_call_total = 0;
+};
+
+struct StartedSpanRecord {
+  SpanDescriptor descriptor;
+  std::optional<TraceContext> explicit_parent;
+  std::optional<TraceContext> resolved_parent;
+  std::shared_ptr<RecordingSpan> span;
+};
+
+class RecordingTracer final : public ITracer {
+ public:
+  [[nodiscard]] std::shared_ptr<ISpan> start_span(
+      const SpanDescriptor& descriptor,
+      const TraceContext* parent) override {
+    std::optional<TraceContext> explicit_parent = std::nullopt;
+    if (parent != nullptr) {
+      explicit_parent = *parent;
+    }
+
+    std::optional<TraceContext> resolved_parent = std::nullopt;
+    if (parent != nullptr && parent->state == TraceContextState::Active) {
+      resolved_parent = *parent;
+    } else if (active_context_.state == TraceContextState::Active) {
+      resolved_parent = active_context_;
+    }
+
+    const auto suffix = static_cast<char>('1' + started_spans.size());
+    TraceContext context{
+        .trace_id = resolved_parent.has_value() ? resolved_parent->trace_id
+                                                : std::string(32, '1'),
+        .span_id = std::string(15, '0') + std::string(1, suffix),
+        .trace_flags = 0x01U,
+        .trace_state = {},
+        .parent_span_id = resolved_parent.has_value() ? resolved_parent->span_id
+                                                      : std::string{},
+        .state = TraceContextState::Active,
+        .is_remote = false,
+    };
+    auto span = std::make_shared<RecordingSpan>(descriptor, context, resolved_parent);
+    started_spans.push_back(StartedSpanRecord{
+        .descriptor = descriptor,
+        .explicit_parent = explicit_parent,
+        .resolved_parent = resolved_parent,
+        .span = span,
+    });
+    return span;
+  }
+
+  void with_active_span(const std::shared_ptr<ISpan>& span,
+                        const ActiveSpanCallback& fn) override {
+    const auto recording_span = std::dynamic_pointer_cast<RecordingSpan>(span);
+    const auto previous = active_context_;
+    active_context_ = recording_span != nullptr ? recording_span->context
+                                                : TraceContext::noop();
+    fn();
+    active_context_ = previous;
+  }
+
+  [[nodiscard]] TraceContext current_context() const override {
+    return active_context_;
+  }
+
+  std::vector<StartedSpanRecord> started_spans;
+
+ private:
+  TraceContext active_context_ = TraceContext::noop();
+};
+
+class RecordingTracerProvider final : public ITracerProvider {
+ public:
+  TraceOperationStatus init(const TraceConfig&) override {
+    return TraceOperationStatus::success("trace://services/failure-test/init");
+  }
+
+  [[nodiscard]] std::shared_ptr<ITracer> get_tracer(
+      const TracerScope& scope) override {
+    last_scope = scope;
+    if (tracer == nullptr) {
+      tracer = std::make_shared<RecordingTracer>();
+    }
+    return tracer;
+  }
+
+  TraceOperationStatus force_flush(std::uint32_t) override {
+    return TraceOperationStatus::success("trace://services/failure-test/flush");
+  }
+
+  TraceOperationStatus shutdown(std::uint32_t) override {
+    return TraceOperationStatus::success("trace://services/failure-test/shutdown");
+  }
+
+  std::shared_ptr<RecordingTracer> tracer;
+  TracerScope last_scope{};
+};
+
+[[nodiscard]] const std::string* string_attr(const TraceAttributeMap& attrs,
+                                             std::string_view key) {
+  const auto* attr = dasall::infra::tracing::find_trace_attribute(attrs, key);
+  return attr != nullptr ? std::get_if<std::string>(attr) : nullptr;
+}
+
+[[nodiscard]] const bool* bool_attr(const TraceAttributeMap& attrs,
+                                    std::string_view key) {
+  const auto* attr = dasall::infra::tracing::find_trace_attribute(attrs, key);
+  return attr != nullptr ? std::get_if<bool>(attr) : nullptr;
+}
+
+[[nodiscard]] const std::int64_t* int64_attr(const TraceAttributeMap& attrs,
+                                             std::string_view key) {
+  const auto* attr = dasall::infra::tracing::find_trace_attribute(attrs, key);
+  return attr != nullptr ? std::get_if<std::int64_t>(attr) : nullptr;
+}
 
 class RecordingAuditLogger final : public dasall::infra::audit::IAuditLogger {
  public:
@@ -354,6 +534,68 @@ void test_capability_services_failure_integration_reports_subscription_overflow_
               "subscription overflow should emit the frozen subscription overflow metric family");
 }
 
+  void test_capability_services_failure_integration_marks_subscription_overflow_trace_as_error() {
+    auto provider = std::make_shared<RecordingTracerProvider>();
+    ServiceTraceBridge trace_bridge(provider,
+                    ServiceTraceBridgeOptions{
+                      .enabled = true,
+                      .profile_id = "edge_balanced",
+                      .trace_sample_ratio = 1.0,
+                    });
+
+    CapabilityServicesLoopbackFixtureOptions options;
+    options.trace_bridge = &trace_bridge;
+    options.max_buffered_subscription_events = 1U;
+
+    CapabilityServicesLoopbackFixture fixture(std::move(options));
+    fixture.publish_subscription_events("target-failure-subscription-trace",
+                      "status",
+                      {"{\"seq\":1}", "{\"seq\":2}", "{\"seq\":3}"});
+    const auto result = fixture.execution_service().subscribe(
+      fixture.make_subscription_request("req-failure-subscription-trace",
+                      "target-failure-subscription-trace",
+                      "status",
+                      std::string("0"),
+                      2U));
+
+    assert_true(result.error.has_value() && result.resync_required &&
+            result.dropped_count == 2U,
+          "subscription overflow trace test should preserve the public overflow result");
+    assert_true(provider->tracer != nullptr &&
+            provider->tracer->started_spans.size() == 2U,
+          "overflow tracing should start exactly facade and hub spans");
+
+    const auto& root = provider->tracer->started_spans[0];
+    const auto& lane = provider->tracer->started_spans[1];
+    const auto* resync_required = bool_attr(lane.span->attributes,
+                        "services.resync_required");
+    const auto* dropped_count = int64_attr(lane.span->attributes,
+                       "services.dropped_count");
+    const auto* next_cursor = string_attr(lane.span->attributes,
+                      "services.next_cursor");
+
+    assert_equal(std::string("services.facade.subscribe"),
+           root.descriptor.name,
+           "overflow tracing should still start the frozen facade subscribe span");
+    assert_equal(std::string("services.lane.execution.subscription_hub.subscribe"),
+           lane.descriptor.name,
+           "overflow tracing should still start the frozen subscription hub span");
+    assert_true(lane.resolved_parent.has_value() &&
+            lane.resolved_parent->span_id == root.span->context.span_id &&
+            root.span->context.trace_id == lane.span->context.trace_id,
+          "overflow hub spans should remain nested under the facade span in the same trace");
+    assert_true(resync_required != nullptr && *resync_required &&
+            dropped_count != nullptr && *dropped_count == 2LL &&
+            next_cursor != nullptr && *next_cursor == "3",
+          "overflow hub spans should retain resync_required, dropped_count, and next_cursor facts");
+    assert_true(root.span->status_code == SpanStatusCode::Error &&
+            lane.span->status_code == SpanStatusCode::Error &&
+            root.span->status_message == "subscription overflow requires resync" &&
+            lane.span->status_message == "subscription overflow requires resync" &&
+            root.span->end_call_total == 1 && lane.span->end_call_total == 1,
+          "overflow tracing should terminate facade and hub spans exactly once with the frozen error message");
+  }
+
 void test_capability_services_failure_integration_surfaces_circuit_open_route_and_metrics() {
   RecordingMetricsHarness metrics;
 
@@ -407,6 +649,7 @@ int main() {
     test_capability_services_failure_integration_maps_remote_timeout_to_provider_failure();
     test_capability_services_failure_integration_preserves_partial_side_effect_audit_and_metrics();
     test_capability_services_failure_integration_reports_subscription_overflow_and_metrics();
+    test_capability_services_failure_integration_marks_subscription_overflow_trace_as_error();
     test_capability_services_failure_integration_surfaces_circuit_open_route_and_metrics();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

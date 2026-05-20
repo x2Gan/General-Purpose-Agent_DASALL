@@ -33,6 +33,7 @@ using dasall::infra::tracing::TraceOperationStatus;
 using dasall::infra::tracing::TracerScope;
 using dasall::services::CapabilityTargetRef;
 using dasall::services::DataQueryResult;
+using dasall::services::ExecutionSubscriptionResult;
 using dasall::services::ServiceCallContext;
 using dasall::services::internal::AdapterInvocationRequest;
 using dasall::services::internal::AdapterReceipt;
@@ -389,6 +390,63 @@ void test_service_trace_bridge_sets_from_cache_attribute_for_data_query_results(
               "successful business-path spans should not move the trace bridge into degraded mode");
 }
 
+  void test_service_trace_bridge_marks_subscription_overflow_facts_on_completion() {
+    auto provider = std::make_shared<RecordingTracerProvider>();
+    ServiceTraceBridge bridge(provider,
+                ServiceTraceBridgeOptions{
+                  .enabled = true,
+                  .profile_id = "edge_balanced",
+                  .trace_sample_ratio = 1.0,
+                });
+
+    const auto target = make_target();
+    auto span = bridge.start_lane_span(make_context(),
+                     "execution.subscription_hub",
+                     "subscribe",
+                     &target);
+    bridge.complete_span(&span,
+               ExecutionSubscriptionResult{
+                 .code = ResultCode::RuntimeRetryExhausted,
+                 .events_json = "[{\"seq\":3}]",
+                 .next_cursor = std::string("3"),
+                 .resync_required = true,
+                 .dropped_count = 2U,
+                 .error = dasall::contracts::ErrorInfo{
+                   .failure_type = dasall::contracts::ResultCodeCategory::Runtime,
+                   .retryable = true,
+                   .safe_to_replan = false,
+                   .details = {
+                     .code = static_cast<int>(ResultCode::RuntimeRetryExhausted),
+                     .message = "subscription overflow requires resync",
+                     .stage = "execution_subscription_hub",
+                   },
+                   .source_ref = {
+                     .ref_type = "subscription_stream",
+                     .ref_id = "cap.exec:target-026:status",
+                   },
+                 },
+               });
+
+    const auto& record = provider->tracer->started_spans.front();
+    const auto* resync_required = bool_attr(record.span->attributes,
+                        "services.resync_required");
+    const auto* dropped_count = int64_attr(record.span->attributes,
+                       "services.dropped_count");
+    const auto* next_cursor = string_attr(record.span->attributes,
+                      "services.next_cursor");
+
+    assert_true(resync_required != nullptr && *resync_required &&
+            dropped_count != nullptr && *dropped_count == 2LL &&
+            next_cursor != nullptr && *next_cursor == "3",
+          "subscription completion should retain resync_required, dropped_count, and next_cursor as span attributes");
+    assert_true(record.span->status_code == SpanStatusCode::Error &&
+            record.span->status_message == "subscription overflow requires resync" &&
+            record.span->end_call_total == 1,
+          "overflow subscription results should terminate the span with an Error status that preserves the hub message");
+    assert_true(!bridge.is_degraded(),
+          "subscription business errors should not be mistaken for trace bridge degradation");
+  }
+
 void test_service_trace_bridge_provider_failure_does_not_block_primary_result() {
   ServiceTraceBridge bridge(nullptr,
                             ServiceTraceBridgeOptions{
@@ -474,6 +532,7 @@ int main() {
   try {
     test_service_trace_bridge_starts_facade_span_with_remote_parent_context();
     test_service_trace_bridge_sets_from_cache_attribute_for_data_query_results();
+    test_service_trace_bridge_marks_subscription_overflow_facts_on_completion();
     test_service_trace_bridge_provider_failure_does_not_block_primary_result();
     test_service_trace_bridge_marks_adapter_transport_errors_without_degrading_bridge();
   } catch (const std::exception& ex) {

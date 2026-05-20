@@ -147,6 +147,7 @@ class CapabilityServicesLoopbackFixture {
           services::internal::ExecutionSubscriptionHubDependencies{
             .max_buffered_events = options_.max_buffered_subscription_events,
             .metrics_bridge = options_.metrics_bridge,
+            .trace_bridge = options_.trace_bridge,
           });
 
     facade_ = std::make_unique<services::internal::ServiceFacade>(
