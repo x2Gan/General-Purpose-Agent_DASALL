@@ -15,6 +15,7 @@ LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
 MEMORY_MAINTENANCE_PROOF_TOOL=/usr/lib/dasall/dasall-memory-maintenance-proof
 TOOLS_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-tools-installed-proof
+RUNTIME_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-runtime-installed-proof
 SERVICES_INSTALLED_PROOF_SCRIPT=${SCRIPT_DIR}/services_local_installed_proof.sh
 PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
 PRESERVED_SECRET_ROOT=
@@ -364,6 +365,7 @@ verify_installed_files() {
   run_root test -f /usr/lib/dasall/sqlite-vss/vector0.so
   run_root test -f /usr/lib/dasall/sqlite-vss/vss0.so
   run_root test -x "${TOOLS_INSTALLED_PROOF_TOOL}"
+  run_root test -x "${RUNTIME_INSTALLED_PROOF_TOOL}"
 }
 
 verify_validate_only() {
@@ -535,6 +537,56 @@ PY
   assert_json_contains "$TOOLS_PROOF_JSON" '\"projection\":\"default\"' 'tools payload projection marker'
   assert_json_contains "$TOOLS_PROOF_JSON" '\"operation\":\"agent.terminal\"' 'tools terminal payload operation marker'
   write_artifact_file 'tools-installed-proof.json' "$TOOLS_PROOF_JSON"
+
+  RUNTIME_PROOF_JSON=$(run_dasall_cli "${RUNTIME_INSTALLED_PROOF_TOOL}" \
+    --profile-id "${MAINTENANCE_PROFILE_ID}" \
+    --config-file /etc/dasall/daemon.json \
+    --json)
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"ok": true' 'runtime installed proof'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"tool_status": "Completed"' 'runtime tool-positive status'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"tool_task_completed": true' 'runtime tool-positive completion'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"tool_runtime_path": "runtime_path:tool_positive"' 'runtime tool-positive path'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"waiting_status": "PartiallyCompleted"' 'runtime waiting checkpoint proof'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"recovery_positive_status": "Completed"' 'runtime recovery-positive status'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"recovery_positive_task_completed": true' 'runtime recovery-positive completion'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"recovery_positive_runtime_path": "runtime_path:recovery_positive"' 'runtime recovery-positive path'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"recovery_negative_status": "Failed"' 'runtime recovery-negative status'
+  assert_json_matches "$RUNTIME_PROOF_JSON" '"recovery_negative_binding_rejected": true' 'runtime recovery-negative binding reject'
+  write_artifact_file 'runtime-installed-proof.json' "$RUNTIME_PROOF_JSON"
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    sed 's/^      //' <<'PY' | python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR"
+      import json
+      import pathlib
+      import sys
+
+      artifact_dir = pathlib.Path(sys.argv[1])
+      run_first = json.loads((artifact_dir / 'run-first.json').read_text(encoding='utf-8'))
+      runtime_installed = json.loads(
+          (artifact_dir / 'runtime-installed-proof.json').read_text(encoding='utf-8'))
+
+      runtime_summary = {
+          'effective_profile_id': runtime_installed.get('effective_profile_id'),
+          'direct_llm_disposition': run_first.get('disposition'),
+          'direct_llm_task_completed': run_first.get('task_completed'),
+          'direct_llm_llm_origin_present':
+              'llm.origin=deepseek-prod/' in json.dumps(run_first, ensure_ascii=True),
+          'tool_positive_runtime_path': runtime_installed.get('tool_runtime_path'),
+          'tool_positive_task_completed': runtime_installed.get('tool_task_completed'),
+          'waiting_status': runtime_installed.get('waiting_status'),
+          'recovery_positive_runtime_path':
+              runtime_installed.get('recovery_positive_runtime_path'),
+          'recovery_positive_task_completed':
+              runtime_installed.get('recovery_positive_task_completed'),
+          'recovery_negative_status': runtime_installed.get('recovery_negative_status'),
+          'recovery_negative_binding_rejected':
+              runtime_installed.get('recovery_negative_binding_rejected'),
+      }
+
+      (artifact_dir / 'runtime-proof.json').write_text(
+          json.dumps(runtime_summary, indent=2) + '\n',
+          encoding='ascii')
+PY
+  fi
   if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
     bash "$SERVICES_INSTALLED_PROOF_SCRIPT" \
       --artifact-dir "$PACKAGE_SMOKE_ARTIFACT_DIR" \

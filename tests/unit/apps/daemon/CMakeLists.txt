@@ -479,3 +479,40 @@ set_tests_properties(ToolsInstalledProofRunnerTest PROPERTIES LABELS "unit;daemo
 list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
   dasall-daemon_tools_installed_proof_runner_unit_test
 )
+
+add_executable(dasall-daemon_runtime_installed_proof_runner_unit_test
+  RuntimeInstalledProofRunnerTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/RuntimeInstalledProofRunner.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonEntryConfigLoader.cpp
+)
+
+target_include_directories(dasall-daemon_runtime_installed_proof_runner_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/include
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+    ${CMAKE_SOURCE_DIR}/cognition/include
+    ${CMAKE_SOURCE_DIR}/memory/include
+)
+
+target_link_libraries(dasall-daemon_runtime_installed_proof_runner_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_apps_runtime_support
+    dasall_cognition
+    dasall_runtime
+    dasall_tools
+    dasall_profiles
+    dasall_infra
+    dasall_contracts
+)
+
+dasall_apply_common_options(dasall-daemon_runtime_installed_proof_runner_unit_test)
+
+add_test(NAME RuntimeInstalledProofRunnerTest
+  COMMAND dasall-daemon_runtime_installed_proof_runner_unit_test
+)
+set_tests_properties(RuntimeInstalledProofRunnerTest PROPERTIES LABELS "unit;daemon")
+
+list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall-daemon_runtime_installed_proof_runner_unit_test
+)

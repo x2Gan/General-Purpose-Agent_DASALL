@@ -1,5 +1,45 @@
 # DASALL 开发执行记录
 
+# 记录 #740
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-006` runtime L3/L4/L5 full-path evidence
+- 状态：已完成（runtime installed proof helper、package-smoke artifact owner 与 `RT-GAP-008` 分层证据已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `RT-FIX-006`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 近端实现检查确认：`Gate-INT-10` / `DaemonBinaryUnarySmokeTest` 已有 L3 app-binary cognition-positive owner，installed `dasall run` 只证明 production direct LLM 主功能；当前真正缺口在 installed package 缺少 runtime 自己的 tool / waiting / recovery proof owner，导致 BC-05 / BC-06 / BC-11 / BC-15 仍会混写。
+3. authoritative 边界是：只收口 runtime full-path evidence owner，不修改 runtime control-plane owner 划分；本轮 L4 证据必须来自 fresh `.deb` + local installed smoke，L5 qemu / release 只保留 handoff contract，不在本轮重跑。
+4. clean-copy packaging validation 初次被本地 SQLite cache 目录名漂移阻塞：`debian/rules` 只认 versioned cache，而 workspace 仍存在 legacy cache；本轮把 packaging 规则改为同时接受 versioned / legacy 路径，并刷新 3510300 本地 cache 后，fresh `dpkg-buildpackage` 才回到 authoritative 可复验状态。
+
+### 改动
+
+1. 新增 `apps/daemon/src/RuntimeInstalledProofRunner.h/.cpp`、`apps/daemon/src/RuntimeInstalledProofMain.cpp`，并更新 `apps/daemon/CMakeLists.txt`、`apps/runtime_support/CMakeLists.txt`、`debian/dasall-daemon.install`：加入 installed helper `/usr/lib/dasall/dasall-runtime-installed-proof`，让 installed package 可以显式采集 `tool_positive`、waiting checkpoint、`recovery_positive` 与 recovery-negative probe。
+2. 新增 `tests/unit/apps/daemon/RuntimeInstalledProofRunnerTest.cpp` 并更新 `tests/unit/apps/daemon/CMakeLists.txt`：锁定 helper 在 live composition + runtime-local stub 组合下的结果字段与 checkpoint persistence 语义。
+3. 更新 `scripts/packaging/pkg_smoke_install.sh` 与 `scripts/packaging/README.md`：package-smoke 现验证 helper 落盘，并写出 `runtime-installed-proof.json` 与 `runtime-proof.json`，把 runtime direct/tool/recovery 证据固定为 installed authoritative owner。
+4. 更新 `debian/rules`：允许 SQLite local cache 同时接受 versioned 与 legacy 目录名，消除 clean-copy / offline `dpkg-buildpackage` 因 cache 目录名漂移触发的假阻塞。
+5. 新增 `docs/todos/runtime/deliverables/RT-FIX-006-runtime-full-path-evidence-closeout.md`，并回写总账与 BusinessChain 矩阵；本轮没有引入 qemu / kvm，也没有把 package-smoke 结果伪造成当轮 qemu PASS。
+
+### 验证
+
+1. `./build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_runtime_installed_proof_runner_unit_test`
+   - 结果：通过。
+2. clean-copy `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；fresh `.deb` 内确认存在 `/usr/lib/dasall/dasall-runtime-installed-proof`。
+3. `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-rt-fix-006-pkg-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；artifact 目录生成 `runtime-installed-proof.json` 与 `runtime-proof.json`。
+4. proof 关键字段。
+   - `runtime-installed-proof.json`：`tool_runtime_path=runtime_path:tool_positive`、`waiting_status=PartiallyCompleted`、`recovery_positive_runtime_path=runtime_path:recovery_positive`、`recovery_positive_checkpoint_persisted=true`、`recovery_negative_binding_rejected=true`。
+   - `runtime-proof.json`：`direct_llm_llm_origin_present=true`、`tool_positive_task_completed=true`、`recovery_positive_task_completed=true`。
+
+### 结果
+
+1. `RT-GAP-008` 已在当前树收口：runtime full-path evidence 现已按 owner 分层为 L3 app-binary cognition-positive、L4 installed direct/tool/recovery 与 L5 packaging / release handoff。
+2. BC-05 / BC-06 / BC-11 / BC-15 不再依赖同一条 installed `dasall run` 输出互相外推；package-smoke 已有独立 runtime artifact owner。
+3. runtime 章节的下一优先级收敛为 `RT-GAP-006` optional degraded semantics 与 `RT-GAP-007` scheduler / background worker 模型，再继续推进 release-runner / soak 级更高层 evidence；本轮未使用 qemu / kvm，也未把结论外推到这些层级。
+
 # 记录 #739
 
 - 日期：2026-05-21

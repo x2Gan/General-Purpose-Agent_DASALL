@@ -6,9 +6,18 @@ export DH_DATAFILES ?= $(abspath $(dir $(shell command -v dh))/../share/debhelpe
 
 BUILD_DIR := obj-$(DEB_HOST_GNU_TYPE)
 SQLITE_AUTOCONF_VERSION := 3510300
-SQLITE_CACHE_DIR := $(CURDIR)/third_party/.cache/dasall_sqlite_autoconf-$(SQLITE_AUTOCONF_VERSION)-src
+SQLITE_CACHE_DIR_VERSIONED := $(CURDIR)/third_party/.cache/dasall_sqlite_autoconf-$(SQLITE_AUTOCONF_VERSION)-src
+SQLITE_CACHE_DIR_LEGACY := $(CURDIR)/third_party/.cache/dasall_sqlite_autoconf-src
 
-ifneq ($(wildcard $(SQLITE_CACHE_DIR)/sqlite3.c),)
+ifneq ($(wildcard $(SQLITE_CACHE_DIR_VERSIONED)/sqlite3.c),)
+SQLITE_CACHE_DIR := $(SQLITE_CACHE_DIR_VERSIONED)
+else ifneq ($(wildcard $(SQLITE_CACHE_DIR_LEGACY)/sqlite3.c),)
+SQLITE_CACHE_DIR := $(SQLITE_CACHE_DIR_LEGACY)
+else
+SQLITE_CACHE_DIR :=
+endif
+
+ifneq ($(SQLITE_CACHE_DIR),)
 SQLITE_SOURCE_FLAG := -DFETCHCONTENT_SOURCE_DIR_DASALL_SQLITE_AUTOCONF=$(SQLITE_CACHE_DIR)
 else
 SQLITE_SOURCE_FLAG := -DDASALL_BOOTSTRAP_THIRD_PARTY=ON -DFETCHCONTENT_FULLY_DISCONNECTED=OFF
