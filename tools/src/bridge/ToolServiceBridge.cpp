@@ -1,5 +1,6 @@
 #include "bridge/ToolServiceBridge.h"
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -223,18 +224,23 @@ std::string ToolServiceBridge::resolve_goal_id(const contracts::ToolIR& tool_ir,
 std::uint64_t ToolServiceBridge::resolve_deadline_ms(
     const contracts::ToolIR& tool_ir,
     const ToolInvocationContext& invocation_context) {
+  std::uint64_t deadline_ms = kMinimumDeadlineMs;
   if (tool_ir.timeout_ms.has_value() && *tool_ir.timeout_ms > 0U) {
-    return *tool_ir.timeout_ms;
-  }
-
-  if (invocation_context.profile_snapshot != nullptr) {
+    deadline_ms = *tool_ir.timeout_ms;
+  } else if (invocation_context.profile_snapshot != nullptr) {
     const auto configured_timeout_ms = invocation_context.profile_snapshot->timeout_policy().tool.timeout_ms;
     if (configured_timeout_ms > 0) {
-      return static_cast<std::uint64_t>(configured_timeout_ms);
+      deadline_ms = static_cast<std::uint64_t>(configured_timeout_ms);
     }
   }
 
-  return kMinimumDeadlineMs;
+  if (invocation_context.request_timeout_budget_ms.has_value()) {
+    deadline_ms = std::min(
+        deadline_ms,
+        std::max(*invocation_context.request_timeout_budget_ms, kMinimumDeadlineMs));
+  }
+
+  return std::max(deadline_ms, kMinimumDeadlineMs);
 }
 
 std::optional<contracts::RuntimeBudget> ToolServiceBridge::resolve_budget_guard(

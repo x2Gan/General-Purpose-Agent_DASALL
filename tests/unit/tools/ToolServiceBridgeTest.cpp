@@ -129,6 +129,7 @@ void test_build_action_request_preserves_context_budget_and_payload() {
           .parent_span_id = std::nullopt,
       },
       .confirmation_facts = std::nullopt,
+      .request_timeout_budget_ms = std::nullopt,
   };
   const auto tool_ir = make_tool_ir(
       "req-action",
@@ -182,6 +183,7 @@ void test_build_query_request_uses_profile_freshness_and_fallback_correlation_id
           .parent_span_id = std::nullopt,
       },
       .confirmation_facts = std::nullopt,
+      .request_timeout_budget_ms = std::nullopt,
   };
   const auto tool_ir = make_tool_ir(
       "req-query",
@@ -224,6 +226,7 @@ void test_build_diagnose_request_keeps_budget_optional_and_guards_minimum_deadli
           .parent_span_id = std::nullopt,
       },
       .confirmation_facts = std::nullopt,
+      .request_timeout_budget_ms = std::nullopt,
   };
   auto tool_ir = make_tool_ir(
       "req-diagnose",
@@ -261,6 +264,7 @@ void test_build_compensation_request_parses_structured_target_ref() {
           .parent_span_id = std::nullopt,
       },
       .confirmation_facts = std::nullopt,
+      .request_timeout_budget_ms = std::nullopt,
   };
   const auto tool_ir = make_tool_ir(
       "req-compensate",
@@ -296,12 +300,42 @@ void test_build_compensation_request_parses_structured_target_ref() {
                "compensation request should preserve reason_code");
 }
 
+void test_build_query_request_clamps_deadline_to_runtime_request_budget() {
+  const auto snapshot = make_snapshot(false, 1400);
+  const dasall::tools::ToolInvocationContext invocation_context{
+      .caller_domain = std::string("runtime.main"),
+      .session_id = std::string("session-budget-clamp"),
+      .profile_snapshot = &snapshot,
+      .trace = {
+          .trace_id = std::string("trace-budget-clamp"),
+          .span_id = std::nullopt,
+          .parent_span_id = std::nullopt,
+      },
+      .confirmation_facts = std::nullopt,
+      .request_timeout_budget_ms = 90U,
+  };
+  const auto tool_ir = make_tool_ir(
+      "req-budget-clamp",
+      "call-budget-clamp",
+      "memory.search",
+      "{\"q\":\"status\"}",
+      std::nullopt,
+      std::string("goal-budget-clamp"));
+
+  const dasall::tools::bridge::ToolServiceBridge bridge;
+  const auto request = bridge.build_query_request(tool_ir, invocation_context);
+
+  assert_equal(90, static_cast<int>(request.context.deadline_ms),
+               "query request should clamp deadline_ms to the runtime request timeout budget when present");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_build_action_request_preserves_context_budget_and_payload();
     test_build_query_request_uses_profile_freshness_and_fallback_correlation_ids();
+        test_build_query_request_clamps_deadline_to_runtime_request_budget();
     test_build_diagnose_request_keeps_budget_optional_and_guards_minimum_deadline();
         test_build_compensation_request_parses_structured_target_ref();
   } catch (const std::exception& ex) {

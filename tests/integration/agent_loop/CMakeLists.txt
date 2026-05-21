@@ -45,6 +45,12 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeUnaryIntegrationTest.cpp
 )
 
+dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_cancellation_propagation_integration_test
+  RuntimeCancellationPropagationIntegrationTest
+  RuntimeCancellationPropagationIntegrationTest.cpp
+)
+
 set_tests_properties(RuntimeUnaryIntegrationTest PROPERTIES
   LABELS "integration;runtime;gate-int-03;default-unary-gate"
 )
@@ -111,6 +117,13 @@ target_link_libraries(dasall_runtime_unary_integration_test
     dasall_tools
 )
 
+target_link_libraries(dasall_runtime_cancellation_propagation_integration_test
+  PRIVATE
+    dasall_memory
+    dasall_sqlite3
+    dasall_tools
+)
+
 target_link_libraries(dasall_runtime_required_optional_ports_integration_test
   PRIVATE
     dasall_cognition
@@ -142,6 +155,16 @@ target_include_directories(dasall_runtime_unary_integration_test
     ${CMAKE_SOURCE_DIR}/tools/src
 )
 
+target_include_directories(dasall_runtime_cancellation_propagation_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/cognition/include
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/profiles/include
+    ${CMAKE_SOURCE_DIR}/services/include
+    ${CMAKE_SOURCE_DIR}/tools/src
+)
+
 target_include_directories(dasall_runtime_required_optional_ports_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/include
@@ -162,6 +185,11 @@ target_include_directories(dasall_runtime_evidence_projection_integration_test
 )
 
 target_compile_definitions(dasall_runtime_unary_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_runtime_cancellation_propagation_integration_test
   PRIVATE
     DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )

@@ -40,6 +40,8 @@ static_assert(std::is_same_v<decltype(ToolInvocationContext{}.profile_snapshot),
 static_assert(std::is_same_v<decltype(ToolInvocationContext{}.trace), ToolTraceContext>);
 static_assert(std::is_same_v<decltype(ToolInvocationContext{}.confirmation_facts),
                              std::optional<std::vector<ToolConfirmationFact>>>);
+static_assert(std::is_same_v<decltype(ToolInvocationContext{}.request_timeout_budget_ms),
+                             std::optional<std::uint64_t>>);
 
 void tool_invocation_context_surface_keeps_caller_profile_trace_and_confirmation_inputs() {
   const ToolInvocationContext context{
@@ -59,6 +61,7 @@ void tool_invocation_context_surface_keeps_caller_profile_trace_and_confirmation
         .confirmed_at_ms = static_cast<std::int64_t>(1713139200000),
       },
     },
+    .request_timeout_budget_ms = 90U,
   };
 
   static_cast<void>(context);

@@ -15,9 +15,11 @@
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
 #include "LLMGenerateRequest.h"
+#include "RuntimeErrorCode.h"
 #include "RuntimeDependencySet.h"
 #include "IToolManager.h"
 #include "agent/GoalContract.h"
+#include "boundary/CompatibilityGuards.h"
 #include "checkpoint/CheckpointBuildTypes.h"
 #include "checkpoint/RecoveryRequest.h"
 #include "checkpoint/ReflectionDecision.h"
@@ -81,6 +83,83 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   return 60000U;
 }
 
+[[nodiscard]] std::optional<std::int64_t> normalized_request_deadline_at_ms(
+    const contracts::AgentRequest& request) {
+  const auto normalization = contracts::normalize_timeout_fields(
+      contracts::TimeoutFieldSet{
+          .created_at_ms = request.created_at,
+          .deadline_at_ms = request.deadline_at,
+          .timeout_ms = request.timeout_ms,
+          .timeout_seconds = std::nullopt,
+      });
+  if (!normalization.ok) {
+    return std::nullopt;
+  }
+
+  return normalization.normalized_deadline_at_ms;
+}
+
+[[nodiscard]] std::optional<std::int64_t> runtime_budget_deadline_at_ms(
+    const contracts::AgentRequest& request,
+    const contracts::RuntimeBudget& runtime_budget) {
+  if (!request.created_at.has_value() || !runtime_budget.max_latency_ms.has_value()) {
+    return std::nullopt;
+  }
+
+  return *request.created_at + static_cast<std::int64_t>(*runtime_budget.max_latency_ms);
+}
+
+[[nodiscard]] std::optional<std::int64_t> effective_request_deadline_at_ms(
+    const contracts::AgentRequest& request,
+    const contracts::RuntimeBudget& runtime_budget) {
+  const auto request_deadline_at_ms = normalized_request_deadline_at_ms(request);
+  const auto budget_deadline_at_ms = runtime_budget_deadline_at_ms(request, runtime_budget);
+  if (request_deadline_at_ms.has_value() && budget_deadline_at_ms.has_value()) {
+    return std::min(*request_deadline_at_ms, *budget_deadline_at_ms);
+  }
+
+  return request_deadline_at_ms.has_value() ? request_deadline_at_ms
+                                            : budget_deadline_at_ms;
+}
+
+[[nodiscard]] std::optional<std::uint64_t> remaining_request_timeout_budget_ms(
+    const std::optional<std::int64_t>& deadline_at_ms) {
+  if (!deadline_at_ms.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto now_ms = current_time_ms();
+  if (*deadline_at_ms <= now_ms) {
+    return 1U;
+  }
+
+  return static_cast<std::uint64_t>(*deadline_at_ms - now_ms);
+}
+
+[[nodiscard]] std::uint32_t clamp_timeout_ms_to_request_deadline(
+    const std::uint32_t configured_timeout_ms,
+    const std::optional<std::int64_t>& deadline_at_ms) {
+  const auto effective_timeout_ms = std::max<std::uint32_t>(configured_timeout_ms, 1U);
+  const auto remaining_budget_ms = remaining_request_timeout_budget_ms(deadline_at_ms);
+  if (!remaining_budget_ms.has_value()) {
+    return effective_timeout_ms;
+  }
+
+  return static_cast<std::uint32_t>(
+      std::min<std::uint64_t>(*remaining_budget_ms, effective_timeout_ms));
+}
+
+void bind_deadline_if_present(
+    CancellationToken& cancellation_token,
+    const std::optional<std::int64_t>& deadline_at_ms) {
+  if (!deadline_at_ms.has_value()) {
+    return;
+  }
+
+  cancellation_token.bind_deadline(
+      std::chrono::system_clock::time_point{std::chrono::milliseconds{*deadline_at_ms}});
+}
+
 [[nodiscard]] bool has_production_llm_direct_path(
     const OrchestratorComposition& composition) {
   if (composition.dependency_set == nullptr ||
@@ -130,7 +209,8 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
     const contracts::AgentRequest& request,
     const OrchestratorComposition& composition,
     const contracts::ContextPacket& context_packet,
-    const contracts::RuntimeBudget& runtime_budget) {
+  const contracts::RuntimeBudget& runtime_budget,
+  const std::optional<std::int64_t>& request_deadline_at_ms) {
   contracts::LLMRequest llm_request;
   llm_request.request_id = request.request_id;
   llm_request.llm_call_id = std::string("llm-call-") +
@@ -144,10 +224,13 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
   llm_request.response_format = "text";
   llm_request.runtime_budget = runtime_budget;
   llm_request.max_output_tokens = budget_value(runtime_budget.max_tokens, 1024U);
-  llm_request.timeout_ms = composition.policy_snapshot != nullptr
-                               ? static_cast<std::uint32_t>(
-                                     composition.policy_snapshot->timeout_policy().llm.timeout_ms)
-                               : 30000U;
+    const auto configured_timeout_ms = composition.policy_snapshot != nullptr
+                       ? static_cast<std::uint32_t>(
+                           composition.policy_snapshot->timeout_policy()
+                             .llm.timeout_ms)
+                       : 30000U;
+    llm_request.timeout_ms =
+      clamp_timeout_ms_to_request_deadline(configured_timeout_ms, request_deadline_at_ms);
   llm_request.tags = std::vector<std::string>{
       "runtime",
       "production",
@@ -835,7 +918,8 @@ void append_retrieval_evidence_ref(
 
 [[nodiscard]] tools::ToolInvocationContext make_tool_invocation_context(
     const contracts::AgentRequest& request,
-    const OrchestratorComposition& composition) {
+  const OrchestratorComposition& composition,
+  const std::optional<std::uint64_t>& request_timeout_budget_ms) {
   return tools::ToolInvocationContext{
       .caller_domain = std::string{"runtime.agent_orchestrator"},
       .session_id = request.session_id,
@@ -846,6 +930,7 @@ void append_retrieval_evidence_ref(
           .parent_span_id = std::nullopt,
       },
       .confirmation_facts = std::nullopt,
+          .request_timeout_budget_ms = request_timeout_budget_ms,
   };
 }
 
@@ -854,7 +939,8 @@ void append_retrieval_evidence_ref(
     const contracts::RuntimeBudget& runtime_budget,
     const cognition::decision::ActionDecision& action_decision,
     const std::string& goal_id,
-    const OrchestratorComposition& composition) {
+  const OrchestratorComposition& composition,
+  const std::optional<std::int64_t>& request_deadline_at_ms) {
   contracts::ToolRequest tool_request;
   const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
   const auto tool_call_id = make_tool_call_id(request);
@@ -879,12 +965,13 @@ void append_retrieval_evidence_ref(
   tool_request.goal_id = goal_id;
   tool_request.worker_task_id = composition.default_worker_id;
   tool_request.runtime_budget = runtime_budget;
-  if (composition.policy_snapshot != nullptr) {
-    tool_request.timeout_ms = static_cast<std::uint32_t>(
-        composition.policy_snapshot->timeout_policy().tool.timeout_ms);
-  } else {
-    tool_request.timeout_ms = 1000U;
-  }
+  const auto configured_timeout_ms = composition.policy_snapshot != nullptr
+                                         ? static_cast<std::uint32_t>(
+                                               composition.policy_snapshot->timeout_policy()
+                                                   .tool.timeout_ms)
+                                         : 1000U;
+  tool_request.timeout_ms =
+      clamp_timeout_ms_to_request_deadline(configured_timeout_ms, request_deadline_at_ms);
   tool_request.idempotency_key = tool_call_id;
   tool_request.tags = std::vector<std::string>{"runtime", "integration", "true-port"};
   return tool_request;
@@ -1557,6 +1644,32 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
   const auto normalized_request = normalize_request(request, next_sequence_++);
   const auto goal_id = effective_goal_id(normalized_request, composition_);
   const auto runtime_budget = effective_runtime_budget(normalized_request, composition_);
+  const auto request_deadline_at_ms =
+      effective_request_deadline_at_ms(normalized_request, runtime_budget);
+  CancellationToken request_cancellation_token;
+  bind_deadline_if_present(request_cancellation_token, request_deadline_at_ms);
+  const auto request_started_at_ms = static_cast<std::uint64_t>(
+      normalized_request.created_at.value_or(current_time_ms()));
+
+  const auto apply_timeout_result =
+      [&](const OrchestratorStage stage,
+          const RuntimeErrorCode error_code,
+          const std::string& detail,
+          const RuntimeState final_state = RuntimeState::Failed) {
+        run_result.agent_result = make_result(
+            normalized_request,
+            final_state,
+            contracts::AgentResultStatus::Timeout,
+            kRuntimeOrchestratorLiveUnaryFailedCode,
+            detail,
+            make_runtime_error(static_cast<std::int32_t>(error_code),
+                               detail,
+                               orchestrator_stage_name(stage),
+                               final_state),
+            std::nullopt,
+            goal_id);
+        run_result.final_state = final_state;
+      };
 
   auto fsm = build_fsm(RuntimeState::Idle);
   if (!fsm) {
@@ -1687,7 +1800,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
   const auto budget_decision = budget_controller_.initialize(
       BudgetInitializeRequest{
         .runtime_budget = runtime_budget,
-          .started_at_ms = composition_.budget_started_at_ms,
+          .started_at_ms = request_started_at_ms,
       });
   if (budget_decision.rejected()) {
     push_trace(&run_result.stage_trace,
@@ -1817,9 +1930,38 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       return run_result;
     }
 
+    if (request_cancellation_token.is_cancelled()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 "runtime live unary path timed out before dispatching the LLM request");
+      apply_timeout_result(OrchestratorStage::MainLoop,
+                           RuntimeErrorCode::RT_E_600_LLM_TIMEOUT,
+                           "runtime live unary path timed out before dispatching the LLM request");
+      return run_result;
+    }
+
     const auto llm_result = composition_.dependency_set->llm_manager->generate(
-      make_runtime_response_llm_request(
-        normalized_request, composition_, context_result.context_packet, runtime_budget));
+      make_runtime_response_llm_request(normalized_request,
+                                        composition_,
+                                        context_result.context_packet,
+                                        runtime_budget,
+                                        request_deadline_at_ms));
+    if (request_cancellation_token.is_cancelled()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::MainLoop,
+                 main_loop_before,
+                 fsm->current_state(),
+                 true,
+                 "runtime live unary path exceeded the effective deadline after the LLM returned");
+      apply_timeout_result(
+          OrchestratorStage::MainLoop,
+          RuntimeErrorCode::RT_E_600_LLM_TIMEOUT,
+          "runtime live unary path exceeded the effective deadline after the LLM returned");
+      return run_result;
+    }
     if (!llm_result.response.has_value() || llm_result.resolved_route.empty()) {
       push_trace(&run_result.stage_trace,
                  OrchestratorStage::MainLoop,
@@ -2695,7 +2837,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
             .request_id = *normalized_request.request_id,
             .session_id = normalized_request.session_id,
             .priority_class = SchedulerPriorityClass::ForegroundInteractive,
-            .cancellation_token = CancellationToken{},
+        .cancellation_token = request_cancellation_token,
             .checkpoint_ref = std::nullopt,
             .queue_key = std::nullopt,
         });
@@ -2754,18 +2896,63 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
     (void)budget_controller_.consume(BudgetConsumeRequest{
         .budget_type = contracts::BudgetType::ToolCall,
         .amount = 1,
-        .observed_at_ms = composition_.budget_started_at_ms + 1,
+        .observed_at_ms = static_cast<std::uint64_t>(current_time_ms()),
         .detail = "tool call consumed through live integration path",
     });
+
+    auto release_tool_worker = [&](const bool worker_completed) {
+      const auto release_result = scheduler_.release_worker(
+          ReleaseWorkerRequest{
+              .ticket = *worker_result.ticket,
+              .worker_completed = worker_completed,
+          });
+      if (release_result.released) {
+        run_result.scheduler_backpressure = release_result.backpressure_state;
+      } else {
+        run_result.scheduler_backpressure = scheduler_.backpressure_state();
+      }
+    };
+
+    if (request_cancellation_token.is_cancelled()) {
+      release_tool_worker(false);
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 "runtime live unary path timed out before dispatching the tool call");
+      apply_timeout_result(OrchestratorStage::ToolRound,
+                           RuntimeErrorCode::RT_E_601_TOOL_TIMEOUT,
+                           "runtime live unary path timed out before dispatching the tool call");
+      return run_result;
+    }
 
     const auto tool_request = make_tool_request(normalized_request,
                           runtime_budget,
                           *cognition_result.action_decision,
                           goal_id,
-                          composition_);
+                          composition_,
+                          request_deadline_at_ms);
     const auto tool_envelope = composition_.dependency_set->tool_manager->invoke(
       tool_request,
-        make_tool_invocation_context(normalized_request, composition_));
+        make_tool_invocation_context(normalized_request,
+                                     composition_,
+                                     remaining_request_timeout_budget_ms(
+                                         request_deadline_at_ms)));
+    release_tool_worker(true);
+    if (request_cancellation_token.is_cancelled()) {
+      push_trace(&run_result.stage_trace,
+                 OrchestratorStage::ToolRound,
+                 tool_round_before,
+                 fsm->current_state(),
+                 true,
+                 "runtime live unary path exceeded the effective deadline after the tool returned");
+      apply_timeout_result(
+          OrchestratorStage::ToolRound,
+          RuntimeErrorCode::RT_E_601_TOOL_TIMEOUT,
+          "runtime live unary path exceeded the effective deadline after the tool returned");
+      return run_result;
+    }
     if (!tool_envelope.has_projection() || !tool_envelope.tool_result.has_value() ||
         !tool_envelope.tool_result->success.value_or(false)) {
       push_trace(&run_result.stage_trace,
@@ -2921,17 +3108,6 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
           goal_id);
       run_result.final_state = RuntimeState::Failed;
       return run_result;
-    }
-
-    const auto release_result = scheduler_.release_worker(
-        ReleaseWorkerRequest{
-            .ticket = *worker_result.ticket,
-            .worker_completed = true,
-        });
-    if (release_result.released) {
-      run_result.scheduler_backpressure = release_result.backpressure_state;
-    } else {
-      run_result.scheduler_backpressure = scheduler_.backpressure_state();
     }
 
     const auto latest_observation = *tool_envelope.observation;
@@ -3631,7 +3807,7 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
             .request_id = *normalized_request.request_id,
             .session_id = normalized_request.session_id,
             .priority_class = SchedulerPriorityClass::ForegroundInteractive,
-            .cancellation_token = CancellationToken{},
+        .cancellation_token = request_cancellation_token,
             .checkpoint_ref = std::nullopt,
             .queue_key = std::nullopt,
         });
@@ -3678,8 +3854,8 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
     (void)budget_controller_.consume(BudgetConsumeRequest{
         .budget_type = contracts::BudgetType::ToolCall,
         .amount = 1,
-        .observed_at_ms = composition_.budget_started_at_ms + 1,
-        .detail = "tool call consumed",
+      .observed_at_ms = static_cast<std::uint64_t>(current_time_ms()),
+      .detail = "tool call consumed",
     });
 
     const RuntimeState tool_round_before = fsm->current_state();

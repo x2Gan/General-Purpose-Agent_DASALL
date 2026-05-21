@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+# 记录 #738
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-004` deadline / cancellation 主链
+- 状态：已完成（effective deadline、shared cancellation token 与 late-result timeout fold 已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `RT-FIX-004`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 近端实现检查确认：当前真正缺口不在 `CancellationToken` 类型本身，而在 runtime 没有把 request timeout/deadline 与 `RuntimeBudget.max_latency_ms` 收口为统一 deadline，`make_runtime_response_llm_request()` / `make_tool_request()` / `ToolServiceBridge` 仍主要看 profile timeout，两个 `SchedulerTicketRequest` 也各自新建 token。
+3. authoritative 边界是：只收口 runtime owner 的 direct LLM / tool / scheduler hot path deadline-cancellation 传播与 focused regression，不扩张到 observability、installed package、release runner 或 qemu 证据。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.cpp`：新增 effective deadline helper，用 `normalize_timeout_fields()` 归一化 `AgentRequest.timeout_ms` / `deadline_at`，并与 `RuntimeBudget.max_latency_ms` 取最早 deadline；`BudgetController` 现在以 request `created_at` 为时间基线，direct LLM 与 tool round 共享同一个 `CancellationToken`。
+2. 更新 `runtime/src/AgentOrchestrator.cpp`：`make_runtime_response_llm_request()`、`make_tool_request()` 现按 effective deadline 收紧 timeout；direct LLM 与 live tool path 都在调用前后做 timeout 检查，tool invoke 返回后会先 release worker，再决定是否折叠为 timeout，晚到成功分别映射为 `RT_E_600_LLM_TIMEOUT` / `RT_E_601_TOOL_TIMEOUT`。
+3. 更新 `tools/include/ToolInvocationContext.h` 与 `tools/src/bridge/ToolServiceBridge.cpp`：新增 `request_timeout_budget_ms` surface，并把 `ServiceCallContext.deadline_ms` 收紧到 request live budget，而不是只看 ToolIR/profile timeout。
+4. 新增 `tests/integration/agent_loop/RuntimeCancellationPropagationIntegrationTest.cpp`，并更新 `tests/integration/agent_loop/CMakeLists.txt`：分别覆盖 direct LLM 慢返回与 tool round 慢返回，断言 timeout clamp、生效的 `ServiceCallContext.deadline_ms` 以及 late success fold。
+5. 更新 `tests/unit/tools/ToolInvocationContextSurfaceTest.cpp` 与 `tests/unit/tools/ToolServiceBridgeTest.cpp`，并新增 `docs/todos/runtime/deliverables/RT-FIX-004-deadline-cancellation-closeout.md`；同时回写总账与本工作日志。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_cancellation_propagation_integration_test","dasall_tool_invocation_context_surface_unit_test","dasall_tool_service_bridge_unit_test"])`：通过。
+2. `RunCtest_CMakeTools(...)`：仍返回仓库已知泛化 `生成失败`，因此继续以 direct binaries 作为权威 test evidence。
+3. `./build/vscode-linux-ninja/tests/unit/tools/dasall_tool_invocation_context_surface_unit_test`：通过。
+4. `./build/vscode-linux-ninja/tests/unit/tools/dasall_tool_service_bridge_unit_test`：通过。
+5. `./build/vscode-linux-ninja/tests/unit/runtime/dasall_runtime_cancellation_token_unit_test`：通过。
+6. `./build/vscode-linux-ninja/tests/integration/agent_loop/dasall_runtime_cancellation_propagation_integration_test`：通过。
+7. `./build/vscode-linux-ninja/tests/integration/agent_loop/dasall_runtime_required_optional_ports_integration_test`：通过。
+
+### 结果
+
+1. `RT-GAP-004` 已在当前树收口：runtime 现在把 request timeout/deadline、runtime latency budget、LLM/tool timeout 与 scheduler token 统一到同一个 effective deadline 语义下。
+2. `RuntimeCancellationPropagationIntegrationTest` 已证明 direct LLM 与 tool round 的晚到成功不会再被当作成功继续推进，而会折叠成 timeout，并保留 `RT_E_600` / `RT_E_601` 错误码。
+3. 本轮没有改动 runtime 之外的 owner 边界，也没有引入 qemu / kvm；runtime 章节的下一优先级收敛为 `RT-GAP-005` production observability / health，再继续推进更高层 evidence。
+
 # 记录 #737
 
 - 日期：2026-05-21

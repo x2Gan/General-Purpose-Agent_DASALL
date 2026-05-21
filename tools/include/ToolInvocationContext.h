@@ -46,6 +46,7 @@ struct ToolInvocationContext {
 	const profiles::RuntimePolicySnapshot* profile_snapshot = nullptr;
 	ToolTraceContext trace;
 	std::optional<std::vector<ToolConfirmationFact>> confirmation_facts;
+	std::optional<std::uint64_t> request_timeout_budget_ms;
 
 	[[nodiscard]] bool has_profile_snapshot() const {
 		return profile_snapshot != nullptr;
