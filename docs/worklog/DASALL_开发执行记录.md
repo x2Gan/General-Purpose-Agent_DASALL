@@ -1,5 +1,47 @@
 # DASALL 开发执行记录
 
+# 记录 #733
+
+- 日期：2026-05-21
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-006` production observability / health sinks 缺口
+- 状态：已完成（当前树实现已具 shared sink wiring 与 services probe registration，本轮完成 focused 复验与 traceability 回写）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-006`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` ~ `CAPSRV-GAP-005` 已闭合，因此 `CAPSRV-FIX-006` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；当前范围只覆盖 production observability / health closeout，不扩张到 caller-domain owner 或 installed / release 证据。
+3. 近端源码与既有 worklog #647 检查确认：`ServiceLiveComposition` 与 `RuntimeLiveDependencyComposition` 已具 shared audit / metrics / trace provider 注入和 `ServiceHealthProbe` registration；总账仍将 `CAPSRV-FIX-006` 标记为 Todo，services 侧缺少独立 closeout deliverable。
+4. authoritative 边界是：只用 build-tree focused build/test 证明 services production hot path 的 audit/metrics/trace/health wiring 已闭合，不宣称 installed package、release runner、qemu 或 soak 已完成。
+
+### 改动
+
+1. 新增 `docs/todos/services/deliverables/CAPSRV-FIX-006-production-observability-health-sinks收口.md`：回链 capability services 详细设计、runtime composition owner、既有 runtime_support 记录 #647 与 focused evidence，固定 `CAPSRV-FIX-006` 的 Design -> Build 映射和不外推边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `CAPSRV-GAP-006` / `CAPSRV-FIX-006` 标记为已闭合，并补入 shared sink wiring、services probe registration、focused validation 与章节下一优先级的变更。
+3. 更新本工作日志：记录本轮按“当前树已具实现、只补 traceability closeout”推进，没有重复修改产品代码。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(["dasall_services_audit_integration_test","dasall_services_metrics_integration_test","dasall_services_trace_integration_test","dasall_services_health_integration_test","dasall_tool_production_observability_integration_test","dasall_access_runtime_production_health_composition_integration_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_access_gateway_runtime_live_dependency_composition_integration_test"])`：通过。
+2. focused CMake Tools test attempt。
+   - `RunCtest_CMakeTools(["CapabilityServicesAuditIntegrationTest","CapabilityServicesMetricsIntegrationTest","CapabilityServicesTraceIntegrationTest","CapabilityServicesHealthIntegrationTest","ToolProductionObservabilityIntegrationTest","RuntimeProductionHealthCompositionTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`：仍返回仓库已知泛化 `生成失败`，未提供 test-level 失败诊断。
+3. authoritative direct binaries。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_audit_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_metrics_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_trace_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_health_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/tools/dasall_tool_production_observability_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_production_health_composition_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test`：通过。
+
+### 结果
+
+1. `CAPSRV-GAP-006` 已在当前树收口：services production composition 不再只在模块内具 observability bridge / health probe，runtime_support 现能把 shared audit / metrics / trace sinks 与 services probe 一并接入 production hot path。
+2. authoritative evidence 现同时覆盖 services module emit、tool/runtime shared sinks、runtime health aggregate 与 daemon/gateway app composition retention；`CAPSRV-FIX-006` 可以按 build-tree focused Done 收敛。
+3. 当前 services 章节剩余开放项收敛为 `CAPSRV-GAP-007` caller-domain owner 与 `CAPSRV-GAP-008` installed / release / soak 证据；本轮未使用 qemu / kvm，也未把结论外推到这些更高层级。
+
 # 记录 #732
 
 - 日期：2026-05-21
