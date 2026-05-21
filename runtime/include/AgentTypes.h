@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "RuntimePolicySnapshot.h"
 
@@ -52,6 +53,10 @@ struct AgentInitResult {
   std::string runtime_instance_id;
   std::string resolved_profile_id;
   bool degraded = false;
+  std::vector<std::string> missing_required_ports;
+  std::vector<std::string> missing_optional_ports;
+  std::vector<std::string> degraded_reasons;
+  std::optional<AgentInitReadinessLevel> projected_readiness;
   std::string health_summary;
   std::int32_t error_code = 0;
   std::string diagnostics;
@@ -59,6 +64,10 @@ struct AgentInitResult {
   [[nodiscard]] AgentInitReadinessLevel readiness_level() const {
     if (!accepted) {
       return AgentInitReadinessLevel::Rejected;
+    }
+
+    if (projected_readiness.has_value()) {
+      return *projected_readiness;
     }
 
     if (diagnostics.find("entrypoint_ready=stub-ready") != std::string::npos ||

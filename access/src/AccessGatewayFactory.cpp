@@ -1090,6 +1090,9 @@ build_daemon_submit_pipeline(
                 input.degraded_reasons.push_back("runtime_entrypoint_stub_ready");
               } else if (input.runtime_readiness_label == "degraded-ready") {
                 input.degraded_reasons.push_back("runtime_entrypoint_degraded_ready");
+                for (const auto& reason : resolved_options.daemon_runtime_degraded_reasons) {
+                  input.degraded_reasons.push_back(reason);
+                }
               }
               if (!input.bridge_reachable) {
                 input.degraded_reasons.push_back("runtime_bridge_unreachable");
@@ -1114,6 +1117,9 @@ build_daemon_submit_pipeline(
                 input.degraded_reasons.push_back("runtime_entrypoint_stub_ready");
               } else if (input.runtime_readiness_label == "degraded-ready") {
                 input.degraded_reasons.push_back("runtime_entrypoint_degraded_ready");
+                for (const auto& reason : resolved_options.daemon_runtime_degraded_reasons) {
+                  input.degraded_reasons.push_back(reason);
+                }
               }
               if (!input.bridge_reachable) {
                 input.degraded_reasons.push_back("runtime_bridge_unreachable");

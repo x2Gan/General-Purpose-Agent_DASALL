@@ -518,6 +518,8 @@ int main(int argc, char* argv[]) {
   pipeline_options.daemon_version = "v1";
   pipeline_options.daemon_runtime_readiness_label =
       runtime_init_result.readiness_label();
+    pipeline_options.daemon_runtime_degraded_reasons =
+      runtime_init_result.degraded_reasons;
   pipeline_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {

@@ -71,6 +71,11 @@ class OptionalPortGapCognitionEngine final : public dasall::cognition::ICognitio
              result.tags->end();
 }
 
+[[nodiscard]] bool contains_value(const std::vector<std::string>& values,
+                                  const std::string& expected_value) {
+  return std::find(values.begin(), values.end(), expected_value) != values.end();
+}
+
 void test_runtime_required_optional_ports_integration_marks_degraded_runtime() {
   const auto database_path =
       make_temp_database_path("dasall-runtime-required-optional-ports");
@@ -98,10 +103,20 @@ void test_runtime_required_optional_ports_integration_marks_degraded_runtime() {
               "runtime required/optional ports integration should still initialize when only optional ports are missing");
   assert_true(init_result.degraded,
               "runtime required/optional ports integration should mark optional port gaps as degraded");
+  assert_true(init_result.degraded_ready(),
+              "runtime required/optional ports integration should project degraded-ready through AgentInitResult");
   assert_true(init_result.diagnostics.find("readiness=degraded") != std::string::npos,
               "runtime required/optional ports integration should surface degraded readiness in diagnostics");
   assert_true(init_result.diagnostics.find("missing_optional=knowledge,llm") != std::string::npos,
               "runtime required/optional ports integration should name missing knowledge/llm ports in diagnostics");
+  assert_true(contains_value(init_result.degraded_reasons, "runtime_optional_port_gap"),
+              "runtime required/optional ports integration should report the generic optional-port degraded reason");
+  assert_true(contains_value(init_result.degraded_reasons,
+                             "runtime_missing_optional:knowledge"),
+              "runtime required/optional ports integration should report knowledge as a degraded reason");
+  assert_true(contains_value(init_result.degraded_reasons,
+                             "runtime_missing_optional:llm"),
+              "runtime required/optional ports integration should report llm as a degraded reason");
 
   const auto result = facade.handle(make_agent_request(
       "req-runtime-required-optional-014",
@@ -114,6 +129,8 @@ void test_runtime_required_optional_ports_integration_marks_degraded_runtime() {
               "runtime required/optional ports integration should keep degraded optional-port runs executable");
   assert_true(has_tag(result, "runtime_readiness:degraded"),
               "runtime required/optional ports integration should tag degraded readiness on AgentResult");
+  assert_true(has_tag(result, "runtime_degraded_reason:optional_port_gap"),
+              "runtime required/optional ports integration should tag the generic degraded reason on AgentResult");
   assert_true(has_tag(result, "knowledge_unavailable"),
               "runtime required/optional ports integration should audit knowledge gaps on AgentResult");
   assert_true(has_tag(result, "llm_unavailable"),

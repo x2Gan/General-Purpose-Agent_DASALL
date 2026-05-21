@@ -66,6 +66,28 @@ void append_unique_tag(std::vector<std::string>& tags,
   }
 }
 
+void append_unique_value(std::vector<std::string>& values,
+                         const std::string& value) {
+  if (value.empty()) {
+    return;
+  }
+
+  if (std::find(values.begin(), values.end(), value) == values.end()) {
+    values.push_back(value);
+  }
+}
+
+[[nodiscard]] std::string join_values(const std::vector<std::string>& values) {
+  std::string joined;
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index != 0U) {
+      joined += ",";
+    }
+    joined += values[index];
+  }
+  return joined;
+}
+
 [[nodiscard]] bool contains_evidence_fragment(
     const std::vector<std::string>& evidence,
     const std::string& fragment) {
@@ -139,6 +161,21 @@ void apply_runtime_path_tag(const RuntimeCompositionRoot& root,
   return degrade_policy.allow_model_failover || degrade_policy.allow_budget_degrade;
 }
 
+[[nodiscard]] std::vector<std::string> make_init_degraded_reasons(
+    const RuntimeDependencyReadiness& readiness) {
+  std::vector<std::string> reasons;
+  if (!readiness.degraded) {
+    return reasons;
+  }
+
+  append_unique_value(reasons, "runtime_optional_port_gap");
+  for (const auto& port : readiness.missing_optional_ports) {
+    append_unique_value(reasons, std::string{"runtime_missing_optional:"} + port);
+  }
+
+  return reasons;
+}
+
 [[nodiscard]] bool uses_runtime_local_stub_path(const std::string& diagnostics) {
   return diagnostics.find("cognition_ports=stub_runtime_path") != std::string::npos;
 }
@@ -154,6 +191,7 @@ void apply_runtime_readiness_tags(const RuntimeDependencyReadiness& readiness,
   }
 
   append_unique_tag(*result.tags, "runtime_readiness:degraded");
+  append_unique_tag(*result.tags, "runtime_degraded_reason:optional_port_gap");
   for (const auto& port : readiness.missing_optional_ports) {
     append_unique_tag(*result.tags, std::string{"runtime_missing_optional:"} + port);
     if (port == "knowledge") {
@@ -325,6 +363,9 @@ class AgentFacade::State {
     }
 
     auto readiness = request.dependency_set->describe_readiness();
+    result.missing_required_ports = readiness.missing_required_ports;
+    result.missing_optional_ports = readiness.missing_optional_ports;
+    result.degraded_reasons = make_init_degraded_reasons(readiness);
     const bool runtime_local_stub_path =
         uses_runtime_local_stub_path(result.diagnostics);
     if (runtime_local_stub_path) {
@@ -333,10 +374,18 @@ class AgentFacade::State {
       readiness.degraded = false;
       readiness.missing_required_ports.clear();
       readiness.missing_optional_ports.clear();
+      result.missing_required_ports.clear();
+      result.missing_optional_ports.clear();
+      result.degraded_reasons.clear();
       append_diagnostic_fragment(result.diagnostics, "readiness=stub_runtime_path");
     } else {
       append_diagnostic_fragment(result.diagnostics,
                                  std::string{"readiness="} + readiness.summary());
+      if (!result.degraded_reasons.empty()) {
+        append_diagnostic_fragment(
+            result.diagnostics,
+            std::string{"degraded_reasons="} + join_values(result.degraded_reasons));
+      }
     }
     if (!readiness.has_required_ports) {
       result.health_summary =
@@ -380,6 +429,11 @@ class AgentFacade::State {
 
     result.accepted = true;
     result.degraded = readiness.degraded;
+    result.projected_readiness = runtime_local_stub_path
+                                     ? AgentInitReadinessLevel::StubReady
+                                 : readiness.degraded
+                                     ? AgentInitReadinessLevel::DegradedReady
+                                     : AgentInitReadinessLevel::DefaultReady;
     append_diagnostic_fragment(
       result.diagnostics,
       std::string{"entrypoint_ready="} +
@@ -387,7 +441,10 @@ class AgentFacade::State {
            ? "stub-ready"
            : readiness.degraded ? "degraded-ready" : "default-ready"));
     result.health_summary = readiness.degraded
-                                ? "runtime facade initialized in degraded mode"
+                                ? result.degraded_reasons.empty()
+                                      ? "runtime facade initialized in degraded mode"
+                                      : std::string{"runtime facade initialized in degraded mode: "} +
+                                            join_values(result.degraded_reasons)
                 : runtime_local_stub_path
                   ? "runtime facade skeleton initialized"
                                 : result.diagnostics.empty()

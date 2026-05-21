@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "AccessTypes.h"
 #include "IAccessGateway.h"
@@ -75,6 +76,7 @@ struct DaemonAccessPipelineOptions {
   std::string daemon_version = "v1";
   std::string daemon_profile_id = "daemon.default";
   std::string daemon_runtime_readiness_label = "default-ready";
+  std::vector<std::string> daemon_runtime_degraded_reasons;
   std::shared_ptr<std::atomic_bool> daemon_diagnostics_enabled_state;
   std::shared_ptr<dasall::infra::diagnostics::IDiagnosticsService> diagnostics_service;
     std::shared_ptr<dasall::knowledge::IKnowledgeService> knowledge_service;

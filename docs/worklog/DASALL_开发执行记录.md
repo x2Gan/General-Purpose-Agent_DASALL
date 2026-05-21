@@ -1,5 +1,43 @@
 # DASALL 开发执行记录
 
+# 记录 #741
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-007` runtime optional degraded semantics
+- 状态：已完成（runtime degraded-ready 字段、AgentResult evidence 与 daemon readiness degraded reasons 已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续推进总账中 `RT-GAP-006` 对应的原子任务，并保持 `project-implementation-cycle` 的单任务串行执行方式；本轮仍需按仓库规范提交推送，且禁止使用 qemu / kvm。
+2. 近端实现检查确认：`RuntimeRequiredOptionalPortsIntegrationTest` 已证明 required ports 完整、knowledge/llm optional ports 缺失时 runtime 会以 degraded 模式继续执行；但 `AgentInitResult` 仍主要依赖 diagnostics 字符串推断 readiness，`AgentResult` 缺少 generic degraded reason tag，daemon ping/readiness 也只会上浮粗粒度 `runtime_entrypoint_degraded_ready`。
+3. authoritative 边界是：只收口 runtime owner 的 degraded reason / readiness / evidence surface 与 daemon 本地控制面透传，不扩张到 runtime_support 的 installed positive knowledge probe、scheduler / background worker 模型或更高层 release evidence。
+
+### 改动
+
+1. 更新 `runtime/include/AgentTypes.h` 与 `runtime/src/AgentFacade.cpp`：为 `AgentInitResult` 新增 `projected_readiness`、`missing_required_ports`、`missing_optional_ports`、`degraded_reasons`，并让 degraded run 统一输出 `runtime_degraded_reason:optional_port_gap`、`runtime_missing_optional:*`、`knowledge_unavailable`、`llm_unavailable`。
+2. 更新 `tests/unit/runtime/AgentInitResultReadinessTest.cpp` 与 `tests/integration/agent_loop/RuntimeRequiredOptionalPortsIntegrationTest.cpp`：锁定 explicit degraded-ready projection、per-port degraded reasons 与 generic degraded reason tag。
+3. 更新 `access/include/AccessGatewayFactory.h`、`access/src/AccessGatewayFactory.cpp` 与 `apps/daemon/src/main.cpp`：daemon access pipeline 现接收 runtime degraded reasons，并把它们写入 ping/readiness payload 的 `degraded_reasons`。
+4. 更新 `tests/unit/access/DaemonReadinessCommandTest.cpp`：断言 daemon readiness payload 会携带 `runtime_optional_port_gap`、`runtime_missing_optional:knowledge` 与 `runtime_missing_optional:llm`。
+5. 新增 `docs/todos/runtime/deliverables/RT-FIX-007-runtime-optional-degraded-semantics-closeout.md`，并回写总账；本轮没有引入 qemu / kvm，也没有把 runtime_support 的 installed positive knowledge probe 一并宣称完成。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_runtime_agent_init_result_readiness_unit_test dasall_runtime_required_optional_ports_integration_test`
+   - 结果：通过。
+2. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(AgentInitResultReadinessTest|RuntimeRequiredOptionalPortsIntegrationTest)$'`
+   - 结果：通过，2/2 通过。
+3. `cmake --build build/vscode-linux-ninja --target dasall_access_daemon_readiness_command_unit_test dasall-daemon`
+   - 结果：通过。
+4. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^DaemonReadinessCommandTest$'`
+   - 结果：通过，1/1 通过。
+
+### 结果
+
+1. `RT-GAP-006` 已在当前树收口：optional port gap 现在会稳定投影为 degraded-ready init surface、AgentResult degraded evidence 与 daemon readiness degraded reasons。
+2. runtime owner 不再把 knowledge/llm optional 缺失误判为 fatal，也不再在本地控制面上只给出 ready-only 或粗粒度 degraded 信号。
+3. runtime 章节的下一优先级收敛为 `RT-GAP-007` scheduler / background worker 模型，再继续推进 release-runner / soak 级更高层 evidence；本轮未使用 qemu / kvm，也未把结论外推到这些层级。
+
 # 记录 #740
 
 - 日期：2026-05-21

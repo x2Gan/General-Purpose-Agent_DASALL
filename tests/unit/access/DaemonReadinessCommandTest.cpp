@@ -18,7 +18,8 @@ using dasall::tests::support::assert_true;
 
 std::shared_ptr<dasall::access::IAccessGateway> build_gateway(
     bool bridge_reachable,
-    std::string runtime_readiness_label = "default-ready") {
+    std::string runtime_readiness_label = "default-ready",
+    std::vector<std::string> degraded_reasons = {}) {
   DaemonAccessPipelineOptions options;
   options.bootstrap_config.allowed_protocols = {"ipc_uds"};
   options.auth_view.trusted_local_subjects = {"local://uid/1000"};
@@ -26,11 +27,9 @@ std::shared_ptr<dasall::access::IAccessGateway> build_gateway(
   options.daemon_profile_id = "daemon.test";
   options.daemon_bridge_reachable = bridge_reachable;
   options.daemon_runtime_readiness_label = std::move(runtime_readiness_label);
-  options.runtime_dispatch_backend = bridge_reachable
-      ? DaemonAccessPipelineOptions::RuntimeDispatchBackend{[](const auto&) {
-          return dasall::access::RuntimeDispatchResult{};
-        }}
-      : DaemonAccessPipelineOptions::RuntimeDispatchBackend{};
+  options.daemon_runtime_degraded_reasons = std::move(degraded_reasons);
+  options.runtime_dispatch_backend = DaemonAccessPipelineOptions::RuntimeDispatchBackend{
+      [](const auto&) { return dasall::access::RuntimeDispatchResult{}; }};
 
   auto gateway = dasall::access::create_daemon_access_gateway(std::move(options));
   assert_true(gateway != nullptr, "gateway should be created for readiness command test");
@@ -58,7 +57,11 @@ void readiness_returns_not_ready_when_bridge_unavailable() {
 }
 
 void readiness_surfaces_degraded_runtime_readiness_without_failing_bridge() {
-  auto gateway = build_gateway(true, "degraded-ready");
+  auto gateway = build_gateway(
+      true,
+      "degraded-ready",
+      {"runtime_optional_port_gap", "runtime_missing_optional:knowledge",
+       "runtime_missing_optional:llm"});
 
   InboundPacket packet;
   packet.packet_id = "readiness";
@@ -78,6 +81,10 @@ void readiness_surfaces_degraded_runtime_readiness_without_failing_bridge() {
               "readiness payload should expose degraded runtime readiness label");
   assert_true(result.publish_envelope->payload.find("runtime_entrypoint_degraded_ready") != std::string::npos,
               "readiness payload should include runtime degraded reason");
+  assert_true(result.publish_envelope->payload.find("runtime_optional_port_gap") != std::string::npos,
+              "readiness payload should include runtime optional-port degraded reason");
+  assert_true(result.publish_envelope->payload.find("runtime_missing_optional:knowledge") != std::string::npos,
+              "readiness payload should include missing knowledge degraded reason");
 }
 
 }  // namespace
