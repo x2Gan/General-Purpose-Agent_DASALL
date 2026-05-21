@@ -14,6 +14,7 @@
 #include "ICognitionEngine.h"
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
+#include "MockLLMManager.h"
 #include "RuntimeUnaryFixture.h"
 #include "ToolManager.h"
 #include "bridge/ToolServiceBridge.h"
@@ -61,6 +62,13 @@ struct RuntimeUnaryIntegrationFixture {
   std::shared_ptr<dasall::runtime::RuntimeDependencySet> dependency_set;
   std::shared_ptr<CaptureDataService> data_service;
 };
+
+[[nodiscard]] bool has_tag(const dasall::contracts::AgentResult& result,
+                           const std::string& expected_tag) {
+  return result.tags.has_value() &&
+         std::find(result.tags->begin(), result.tags->end(), expected_tag) !=
+             result.tags->end();
+}
 
 [[nodiscard]] std::filesystem::path make_temp_database_path(const std::string& stem) {
   const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -177,6 +185,21 @@ void cleanup_database_artifacts(const std::filesystem::path& database_path) {
       .dependency_set = std::move(dependency_set),
       .data_service = std::move(data_service),
   };
+}
+
+[[nodiscard]] RuntimeUnaryIntegrationFixture make_direct_llm_dependency_set(
+    const dasall::memory::MemoryConfig& config) {
+  auto fixture = make_true_integration_dependency_set(config);
+  auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
+  llm_manager->set_generate_result(
+      dasall::tests::mocks::MockLLMManager::make_success_result(
+          "runtime unary direct llm response",
+          "mock-primary",
+          std::string{"req-028"}));
+  fixture.dependency_set->llm_manager = llm_manager;
+  fixture.dependency_set->external_evidence = {
+      "runtime:daemon.local-control-plane:required-live-baseline"};
+  return fixture;
 }
 
   [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
@@ -329,6 +352,14 @@ void test_runtime_unary_integration_traverses_live_ports() {
                   result.response_text->find("\"dataset\":\"agent.dataset\"") != std::string::npos,
           "runtime unary integration should return the projected builtin query payload in AgentResult: " +
             failure_detail);
+  assert_true(has_tag(result, "runtime_path:tool_positive"),
+              "runtime unary integration should classify the live tool round as runtime_path:tool_positive");
+  assert_true(!has_tag(result, "runtime_path:direct_llm"),
+              "runtime unary integration should not misclassify the live tool round as direct_llm");
+  assert_true(!has_tag(result, "runtime_path:cognition_first"),
+              "runtime unary integration should not mix cognition_first into the live tool-positive tag set");
+  assert_true(!has_tag(result, "runtime_path:recovery_positive"),
+              "runtime unary integration should not claim recovery_positive when the tool round completed without recovery");
   assert_true(fixture.data_service->query_calls == 1,
               "runtime unary integration should dispatch exactly one builtin query through IDataService");
   assert_true(fixture.data_service->last_query_request.has_value(),
@@ -354,10 +385,47 @@ void test_runtime_unary_integration_traverses_live_ports() {
   cleanup_database_artifacts(database_path);
 }
 
+void test_runtime_unary_integration_marks_direct_llm_path() {
+  const auto database_path = make_temp_database_path("dasall-runtime-unary-direct-llm");
+  cleanup_database_artifacts(database_path);
+
+  const auto config = make_sqlite_config(database_path);
+  auto fixture = make_direct_llm_dependency_set(config);
+  auto dependency_set = fixture.dependency_set;
+
+  dasall::runtime::AgentFacade facade;
+  const auto init_result = facade.init(make_true_integration_init_request(dependency_set));
+  assert_true(init_result.accepted,
+              "runtime unary direct llm integration should initialize AgentFacade with the required baseline evidence");
+
+  const auto result = facade.handle(
+      make_agent_request("req-028", "session-028", "trace-028", "query runtime direct llm integration"));
+
+  assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+              "runtime unary direct llm integration should complete successfully");
+  assert_true(result.response_text.has_value() &&
+                  result.response_text->find("llm.origin=mock-primary") != std::string::npos,
+              "runtime unary direct llm integration should preserve the direct llm audit prefix in the response text");
+  assert_true(has_tag(result, "runtime_path:direct_llm"),
+              "runtime unary direct llm integration should classify the required baseline run as runtime_path:direct_llm");
+  assert_true(!has_tag(result, "runtime_path:tool_positive"),
+              "runtime unary direct llm integration should not misclassify the direct path as tool_positive");
+  assert_true(!has_tag(result, "runtime_path:cognition_first"),
+              "runtime unary direct llm integration should not mix cognition_first into the direct llm tag set");
+  assert_true(!has_tag(result, "runtime_path:recovery_positive"),
+              "runtime unary direct llm integration should not claim recovery_positive on the happy direct path");
+  assert_true(fixture.data_service->query_calls == 0,
+              "runtime unary direct llm integration should bypass IDataService when the direct llm path is active");
+
+  dependency_set->memory_manager->shutdown();
+  cleanup_database_artifacts(database_path);
+}
+
 }  // namespace
 
 int main() {
   try {
+    test_runtime_unary_integration_marks_direct_llm_path();
     test_runtime_unary_integration_traverses_live_ports();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';

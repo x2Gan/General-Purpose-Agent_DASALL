@@ -49,6 +49,7 @@ target_link_libraries(dasall_fullint_012_knowledge_memory_llm_tools_services_cro
     dasall_knowledge
     dasall_memory
     dasall_llm
+    dasall_runtime
     dasall_tools
     dasall_services
     dasall_profiles
@@ -57,9 +58,11 @@ target_link_libraries(dasall_fullint_012_knowledge_memory_llm_tools_services_cro
 
 target_include_directories(dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/cognition/include
     ${CMAKE_SOURCE_DIR}/knowledge/src
     ${CMAKE_SOURCE_DIR}/llm/src
     ${CMAKE_SOURCE_DIR}/memory/src
+    ${CMAKE_SOURCE_DIR}/runtime/src
     ${CMAKE_SOURCE_DIR}/services/src
     ${CMAKE_SOURCE_DIR}/tools/src
 )

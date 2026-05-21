@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+# 记录 #736
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-001` runtime path evidence 分层
+- 状态：已完成（最终 `AgentResult` path tag owner 与 runtime/full-chain regression 已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `RT-FIX-001`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 近端实现检查确认：`RT-FIX-001` 的控制点不是再往 `AgentOrchestrator` 深处分叉，而是利用 `AgentFacade` 已掌握的 `RuntimeDependencySet.external_evidence` 与 `OrchestratorRunResult.used_tool_round` / `used_recovery_round`，在最终 `AgentResult` 出口做唯一分类。
+3. authoritative 边界是：只收口 result-level path evidence 分层与 regression coverage，不把当前结果外推为 durable recovery、installed package、release runner 或 qemu 证据。
+
+### 改动
+
+1. 更新 `runtime/src/AgentFacade.cpp`：新增 `runtime_path:` 分类常量与 helper，在 `handle()` / `resume()` 的最终结果出口统一归一化 `runtime_path:direct_llm`、`runtime_path:cognition_first`、`runtime_path:tool_positive`、`runtime_path:recovery_positive`，并保证同一结果最多保留一个 path tag。
+2. 更新 `tests/integration/agent_loop/RuntimeUnaryIntegrationTest.cpp`：补 direct LLM case，并对 true-port tool-positive case 增加互斥断言，锁定 `direct_llm` 与 `tool_positive` 不混写。
+3. 更新 `tests/integration/full_business_chain/FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest.cpp`、`tests/integration/full_business_chain/CMakeLists.txt` 与 `tests/mocks/include/CapabilityServicesLoopbackFixture.h`：新增 runtime full-chain query case，验证 `AgentFacade -> builtin agent.dataset -> services data lane` 命中 `runtime_path:tool_positive`；同时让 loopback data snapshot 接受 `default` query projection。
+4. 新增 `docs/todos/runtime/deliverables/RT-FIX-001-runtime-path-evidence-closeout.md`，并更新 `docs/ssot/RuntimeAppCompositionV1.md`、总账与本工作日志；本轮没有改动 runtime 之外的产品 owner 边界，也没有引入 qemu / kvm。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_runtime_unary_integration_test dasall_fullint_012_knowledge_memory_llm_tools_services_cross_chain`：通过。
+2. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(RuntimeUnaryIntegrationTest|FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest)$'`：通过。
+
+### 结果
+
+1. `RT-GAP-001` 已在当前树收口：direct LLM success 不再被文档或测试外推为 cognition / tools / recovery full path。
+2. runtime path evidence 现由 `AgentFacade` 在最终 `AgentResult` 出口统一归一化；同一结果最多保留一个 `runtime_path:*` 标签，避免 `direct_llm`、`tool_positive`、`recovery_positive` 等混写。
+3. `RuntimeUnaryIntegrationTest` 与 `FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest` 已形成最小回归锚点：前者锁定 direct/tool 互斥，后者锁定 runtime full chain 经 services data lane 收口为 `tool_positive`。
+
 # 记录 #735
 
 - 日期：2026-05-21

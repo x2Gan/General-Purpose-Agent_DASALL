@@ -18,13 +18,19 @@
 #endif
 
 #include "CapabilityServicesLoopbackFixture.h"
+#include "AgentFacade.h"
 #include "IKnowledgeService.h"
 #include "IMemoryManager.h"
+#include "ICognitionEngine.h"
+#include "IResponseBuilder.h"
 #include "KnowledgeErrors.h"
 #include "KnowledgeTypes.h"
 #include "MockLLMAdapter.h"
+#include "MockLLMManager.h"
+#include "RuntimeDependencySet.h"
 #include "RuntimePolicySnapshot.h"
 #include "ToolManager.h"
+#include "bridge/ToolServiceBridge.h"
 #include "context/ContextPacketGuards.h"
 #include "evidence/EvidenceAssembler.h"
 #include "execution/BuiltinExecutorLane.h"
@@ -119,6 +125,12 @@ void execute_sql(sqlite3* connection, const std::string& sql) {
     const std::optional<std::vector<std::string>>& values,
     const std::string& expected_fragment) {
   return values.has_value() && contains_fragment(*values, expected_fragment);
+}
+
+[[nodiscard]] bool agent_result_has_tag(
+    const dasall::contracts::AgentResult& result,
+    const std::string& expected_tag) {
+  return result.tags.has_value() && contains_string(*result.tags, expected_tag);
 }
 
 [[nodiscard]] std::string encode_tags(const std::vector<std::string>& tags) {
@@ -824,6 +836,155 @@ class MemoryDatabaseFixture {
       4U};
 }
 
+    [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
+    make_runtime_full_chain_policy_snapshot() {
+      return std::make_shared<const dasall::profiles::RuntimePolicySnapshot>(
+        1U,
+        "desktop_full",
+        dasall::contracts::RuntimeBudget{
+          .max_tokens = 4096U,
+          .max_turns = 8U,
+          .max_tool_calls = 24U,
+          .max_latency_ms = 8000U,
+          .max_replan_count = 2U,
+        },
+        dasall::profiles::ModelProfile{
+          .stage_routes = {
+              {"main",
+               dasall::profiles::ModelRoutePolicy{
+                 .route = "loopback.mock",
+                 .fallback_route = std::string("builtin_only"),
+                 .streaming_enabled = false,
+               }},
+            {"planning",
+             dasall::profiles::ModelRoutePolicy{
+               .route = "loopback.mock",
+               .fallback_route = std::string("builtin_only"),
+               .streaming_enabled = false,
+             }},
+            {"execution",
+             dasall::profiles::ModelRoutePolicy{
+               .route = "loopback.mock",
+               .fallback_route = std::string("builtin_only"),
+               .streaming_enabled = false,
+             }},
+            {"reflection",
+             dasall::profiles::ModelRoutePolicy{
+               .route = "loopback.mock",
+               .fallback_route = std::string("builtin_only"),
+               .streaming_enabled = false,
+             }},
+            {"response",
+             dasall::profiles::ModelRoutePolicy{
+               .route = "loopback.mock",
+               .fallback_route = std::string("builtin_only"),
+               .streaming_enabled = false,
+             }},
+          },
+        },
+        dasall::profiles::TokenBudgetPolicy{
+          .max_input_tokens = 1024U,
+          .max_output_tokens = 512U,
+          .max_history_turns = 4U,
+          .compression_threshold = 768U,
+        },
+        dasall::profiles::PromptPolicy{
+          .allowed_prompt_releases = {"stable"},
+          .trusted_sources = {"tests"},
+          .tool_visibility_rules = {"builtin:agent.dataset"},
+        },
+        dasall::profiles::CapabilityCachePolicy{
+          .refresh_interval_ms = 10000,
+          .expire_after_ms = 180000,
+          .stale_read_allowed = false,
+          .failure_backoff_ms = 5000,
+        },
+        dasall::profiles::DegradePolicy{
+          .fallback_chain = {"builtin_only"},
+          .allow_model_failover = false,
+          .allow_budget_degrade = true,
+        },
+        dasall::profiles::TimeoutPolicy{
+          .llm = dasall::profiles::TimeoutBudget{
+            .timeout_ms = 1800,
+            .retry_budget = 0U,
+            .circuit_breaker_threshold = 3U,
+          },
+          .tool = dasall::profiles::TimeoutBudget{
+            .timeout_ms = 2500,
+            .retry_budget = 1U,
+            .circuit_breaker_threshold = 4U,
+          },
+          .mcp = dasall::profiles::TimeoutBudget{
+            .timeout_ms = 2000,
+            .retry_budget = 1U,
+            .circuit_breaker_threshold = 3U,
+          },
+          .workflow = dasall::profiles::TimeoutBudget{
+            .timeout_ms = 5000,
+            .retry_budget = 1U,
+            .circuit_breaker_threshold = 3U,
+          },
+        },
+        dasall::profiles::ExecutionPolicy{
+          .requires_high_risk_confirmation = true,
+          .safe_mode_enabled = true,
+          .audit_level = "full",
+          .allowed_tool_domains = {"builtin"},
+        },
+        dasall::profiles::OpsPolicy{
+          .log_level = "info",
+          .metrics_granularity = "full",
+          .trace_sample_ratio = 0.5,
+          .remote_diagnostics_enabled = false,
+          .upgrade_strategy = "rolling",
+        },
+        4U);
+    }
+
+    [[nodiscard]] std::string make_runtime_query_planning_payload() {
+      return std::string{"{"}
+         + "\"schema_version\":\"cognition.plan.v1\"," 
+         + "\"plan_id\":\"plan-fullint-012-runtime\"," 
+         + "\"revision\":1,"
+         + "\"nodes\":[{"
+         + "\"node_id\":\"plan-node:fullint-012-runtime\"," 
+         + "\"objective\":\"collect cross-chain evidence through agent.dataset\"," 
+         + "\"success_signal\":\"fullint_runtime_query_complete\"," 
+         + "\"action_kind_hint\":\"tool_action\"," 
+         + "\"depends_on\":[],"
+         + "\"evidence_refs\":[\"" + std::string{kEvidenceCitation} + "\"]}],"
+         + "\"edges\":[],"
+         + "\"open_questions\":[],"
+         + "\"plan_rationale\":\"runtime full chain should keep knowledge evidence while routing through services data lane\"," 
+         + "\"estimated_complexity\":1}"
+         ;
+    }
+
+    [[nodiscard]] std::string make_runtime_query_execution_payload() {
+      return std::string{"{"}
+         + "\"schema_version\":\"cognition.reasoning.v1\"," 
+         + "\"decision_kind\":\"ExecuteAction\"," 
+         + "\"confidence\":0.82,"
+         + "\"rationale\":\"fullint runtime path should use agent.dataset instead of the direct llm marker\"," 
+         + "\"selected_node_id\":\"plan-node:fullint-012-runtime\"," 
+         + "\"tool_intent_hint\":{"
+         + "\"tool_name\":\"agent.dataset\"," 
+         + "\"intent_summary\":\"query services data lane for runtime path evidence\"," 
+         + "\"argument_hints\":[\"status\"],"
+         + "\"evidence_refs\":[\"" + std::string{kEvidenceCitation} + "\"]},"
+         + "\"clarification_needed\":false,"
+         + "\"clarification_question\":null,"
+         + "\"response_outline\":{"
+         + "\"summary\":\"runtime full chain response\"," 
+         + "\"key_points\":[\"preserve knowledge evidence identity\",\"avoid direct llm path marker drift\"]},"
+         + "\"candidate_scores\":[{"
+         + "\"candidate_name\":\"execute_action\"," 
+         + "\"score\":0.82,"
+         + "\"rationale\":\"runtime full chain should execute the builtin query tool\"}]}"
+         ;
+    }
+
 [[nodiscard]] dasall::contracts::ToolDescriptor make_toggle_descriptor() {
   return dasall::contracts::ToolDescriptor{
       .tool_name = std::string("toggle"),
@@ -859,6 +1020,54 @@ class MemoryDatabaseFixture {
           .execution_service = std::move(execution_service),
           .data_service = std::move(data_service),
           .now_ms = [] { return 1712746800150LL; },
+      });
+
+  dasall::tools::manager::ToolManagerDependencies dependencies;
+  dependencies.registry = registry;
+  dependencies.executor = [builtin_lane](const auto& execution_request) {
+    return builtin_lane->execute(
+        execution_request.tool_ir,
+        dasall::tools::ToolExecutionContext{
+            .invocation_context = execution_request.invocation_context,
+            .lane_key = execution_request.route_decision.lane_key,
+        });
+  };
+  return dasall::tools::ToolManager(std::move(dependencies));
+}
+
+[[nodiscard]] dasall::contracts::ToolDescriptor make_dataset_descriptor() {
+  return dasall::contracts::ToolDescriptor{
+      .tool_name = std::string("agent.dataset"),
+      .display_name = std::string("Agent Dataset"),
+      .category = dasall::contracts::ToolCategory::Information,
+      .capability_tier = dasall::contracts::ToolCapabilityTier::Preview,
+      .is_read_only = true,
+      .supports_compensation = false,
+      .default_timeout_ms = 2500U,
+      .input_schema_ref = std::string("schema://tools/agent.dataset/input/v1"),
+      .output_schema_ref = std::string("schema://tools/agent.dataset/output/v1"),
+      .required_scopes = std::vector<std::string>{"tools.read"},
+      .tags = std::vector<std::string>{"builtin", "fullint-012", "query"},
+      .version = std::string("1.0.0"),
+  };
+}
+
+[[nodiscard]] dasall::tools::ToolManager make_runtime_query_tool_manager(
+    dasall::tests::mocks::CapabilityServicesLoopbackFixture& services_fixture) {
+  auto registry = std::make_shared<dasall::tools::registry::ToolRegistry>();
+  assert_true(registry->register_builtin(make_dataset_descriptor()),
+              "FULLINT-012 runtime path should register a query builtin descriptor");
+
+  auto data_service = std::shared_ptr<dasall::services::IDataService>(
+      &services_fixture.data_service(), [](dasall::services::IDataService*) {});
+
+  auto builtin_lane = std::make_shared<dasall::tools::execution::BuiltinExecutorLane>(
+      dasall::tools::execution::BuiltinExecutorLaneDependencies{
+          .registry = registry,
+          .service_bridge = std::make_shared<dasall::tools::bridge::ToolServiceBridge>(),
+          .execution_service = nullptr,
+          .data_service = std::move(data_service),
+          .now_ms = [] { return 1712746800190LL; },
       });
 
   dasall::tools::manager::ToolManagerDependencies dependencies;
@@ -1019,6 +1228,141 @@ void test_cross_chain_preserves_evidence_through_provider_and_services() {
   memory_manager->shutdown();
 }
 
+  void test_cross_chain_runtime_path_stays_tool_positive() {
+    KnowledgeEvidenceHarness knowledge_harness;
+
+    MemoryDatabaseFixture memory_database("dasall-fullint-012-runtime-memory");
+    const auto memory_config = make_memory_config(memory_database.path());
+    std::shared_ptr<dasall::memory::IMemoryManager> memory_manager(
+      dasall::memory::create_memory_manager(memory_config));
+    assert_true(static_cast<int>(memory_manager->init(memory_config)) == 0,
+          "FULLINT-012 runtime path memory manager should initialize with sqlite backend");
+    const auto writeback_result = memory_manager->write_back(make_seed_writeback_request());
+    assert_true(!writeback_result.result_code.has_value(),
+          "FULLINT-012 runtime path memory seed writeback should succeed before runtime assembly");
+
+    auto llm_manager = std::make_shared<dasall::tests::mocks::MockLLMManager>();
+    llm_manager->set_stage_result(
+      "planning",
+      dasall::tests::mocks::MockLLMManager::make_structured_stage_result(
+        "planning",
+        make_runtime_query_planning_payload(),
+        std::string{kRequestId}));
+    llm_manager->set_stage_result(
+      "execution",
+      dasall::tests::mocks::MockLLMManager::make_structured_stage_result(
+        "execution",
+        make_runtime_query_execution_payload(),
+        std::string{kRequestId}));
+    llm_manager->set_stage_result(
+      "response",
+      dasall::tests::mocks::MockLLMManager::make_success_result(
+        std::string("FULLINT-012 runtime response ") + kEvidenceCitation,
+        "loopback.mock",
+        std::string{kRequestId}));
+
+    dasall::tests::mocks::CapabilityServicesLoopbackFixtureOptions service_options;
+    service_options.profile_id = "desktop_full";
+    service_options.execution_capability_id = "toggle";
+    service_options.data_capability_id = "agent.dataset";
+    service_options.now_ms = 1712746800200ULL;
+    dasall::tests::mocks::CapabilityServicesLoopbackFixture services_fixture(service_options);
+
+    auto dependency_set = std::make_shared<dasall::runtime::RuntimeDependencySet>();
+    dependency_set->memory_manager = memory_manager;
+      dependency_set->cognition_engine = std::shared_ptr<dasall::cognition::ICognitionEngine>(
+        dasall::cognition::create_cognition_engine());
+      dependency_set->response_builder = std::shared_ptr<dasall::cognition::IResponseBuilder>(
+        dasall::cognition::create_response_builder());
+    dependency_set->knowledge_service = std::shared_ptr<dasall::knowledge::IKnowledgeService>(
+      knowledge_harness.knowledge_service.get(),
+      [](dasall::knowledge::IKnowledgeService*) {});
+    dependency_set->llm_manager = llm_manager;
+    dependency_set->tool_manager = std::make_shared<dasall::tools::ToolManager>(
+      make_runtime_query_tool_manager(services_fixture));
+      dependency_set->local_stub_ports.main_loop_exit =
+        dasall::runtime::RuntimeStubMainLoopExit::ToolRound;
+    dependency_set->visible_tools = {"agent.dataset"};
+    dependency_set->external_evidence = {"runtime:fullint-012:tool-positive"};
+
+    dasall::runtime::AgentInitRequest init_request;
+    init_request.runtime_instance_id = "rt-fullint-012-runtime-path";
+    init_request.profile_id = "desktop_full";
+    init_request.policy_snapshot = make_runtime_full_chain_policy_snapshot();
+    init_request.dependency_set = dependency_set;
+    init_request.boot_reason = "fullint-012-runtime-path";
+    init_request.cold_start = true;
+
+    dasall::runtime::AgentFacade facade;
+    const auto init_result = facade.init(init_request);
+    assert_true(init_result.accepted,
+          "FULLINT-012 runtime path integration should initialize AgentFacade with full-chain ports");
+
+    dasall::contracts::AgentRequest request;
+    request.request_id = std::string{kRequestId};
+    request.session_id = std::string{kSessionId};
+    request.trace_id = std::string{kTraceId};
+    request.user_input = std::string("runtime fullint cross-chain query");
+    request.request_channel = dasall::contracts::RequestChannel::Cli;
+    request.created_at = 1712746800210LL;
+
+    const auto result = facade.handle(request);
+    const auto status_name = [&result]() {
+      if (!result.status.has_value()) {
+        return std::string{"<unset>"};
+      }
+
+      switch (*result.status) {
+        case dasall::contracts::AgentResultStatus::Unspecified:
+          return std::string{"Unspecified"};
+        case dasall::contracts::AgentResultStatus::Completed:
+          return std::string{"Completed"};
+        case dasall::contracts::AgentResultStatus::Failed:
+          return std::string{"Failed"};
+        case dasall::contracts::AgentResultStatus::PartiallyCompleted:
+          return std::string{"PartiallyCompleted"};
+        case dasall::contracts::AgentResultStatus::Cancelled:
+          return std::string{"Cancelled"};
+        case dasall::contracts::AgentResultStatus::Timeout:
+          return std::string{"Timeout"};
+      }
+
+      return std::string{"<unknown>"};
+    };
+    const auto error_message = [&result]() {
+      if (!result.error_info.has_value()) {
+        return std::string{"<none>"};
+      }
+
+      return result.error_info->details.message.empty()
+                 ? std::string{"<empty>"}
+                 : result.error_info->details.message;
+    };
+    assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
+                "FULLINT-012 runtime path integration should complete successfully; status=" +
+                    status_name() + " response=" +
+                    result.response_text.value_or(std::string{"<none>"}) + " error=" +
+                    error_message());
+    assert_true(agent_result_has_tag(result, "runtime_path:tool_positive"),
+          "FULLINT-012 runtime path integration should classify the full chain as tool_positive");
+    assert_true(!agent_result_has_tag(result, "runtime_path:direct_llm"),
+          "FULLINT-012 runtime path integration should not drift back to the direct_llm tag");
+    assert_true(!agent_result_has_tag(result, "runtime_path:cognition_first"),
+          "FULLINT-012 runtime path integration should not mix cognition_first into the tool-positive case");
+    assert_true(!agent_result_has_tag(result, "runtime_path:recovery_positive"),
+          "FULLINT-012 runtime path integration should not claim recovery_positive on the happy tool path");
+    assert_true(!services_fixture.local_requests().empty() &&
+            services_fixture.local_requests().front().capability_id == "agent.dataset",
+          "FULLINT-012 runtime path integration should route through the services data lane capability id");
+    assert_true(!services_fixture.local_requests().empty() &&
+              services_fixture.local_requests().front().operation_name == "default",
+          "FULLINT-012 runtime path integration should preserve the query projection on the loopback request");
+    assert_true(result.response_text.has_value() && !result.response_text->empty(),
+                "FULLINT-012 runtime path integration should still produce a final response");
+
+    memory_manager->shutdown();
+  }
+
 void test_cross_chain_fail_closed_without_evidence_or_descriptor() {
   KnowledgeEvidenceHarness stale_knowledge_harness;
   stale_knowledge_harness.now_ms = 70000;
@@ -1089,6 +1433,7 @@ void test_cross_chain_fail_closed_without_evidence_or_descriptor() {
 int main() {
   try {
     test_cross_chain_preserves_evidence_through_provider_and_services();
+    test_cross_chain_runtime_path_stays_tool_positive();
     test_cross_chain_fail_closed_without_evidence_or_descriptor();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';

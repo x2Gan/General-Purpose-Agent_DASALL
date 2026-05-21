@@ -24,6 +24,12 @@ struct RuntimeCompositionRoot {
   bool degraded = false;
 };
 
+constexpr char kRuntimePathTagPrefix[] = "runtime_path:";
+constexpr char kRuntimePathDirectLlmTag[] = "runtime_path:direct_llm";
+constexpr char kRuntimePathCognitionFirstTag[] = "runtime_path:cognition_first";
+constexpr char kRuntimePathToolPositiveTag[] = "runtime_path:tool_positive";
+constexpr char kRuntimePathRecoveryPositiveTag[] = "runtime_path:recovery_positive";
+
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
@@ -58,6 +64,73 @@ void append_unique_tag(std::vector<std::string>& tags,
   if (std::find(tags.begin(), tags.end(), tag) == tags.end()) {
     tags.push_back(tag);
   }
+}
+
+[[nodiscard]] bool contains_evidence_fragment(
+    const std::vector<std::string>& evidence,
+    const std::string& fragment) {
+  return std::any_of(evidence.begin(), evidence.end(),
+                     [&fragment](const std::string& value) {
+                       return value.find(fragment) != std::string::npos;
+                     });
+}
+
+void clear_runtime_path_tags(std::vector<std::string>& tags) {
+  tags.erase(std::remove_if(tags.begin(), tags.end(), [](const std::string& tag) {
+               return tag.rfind(kRuntimePathTagPrefix, 0) == 0;
+             }),
+             tags.end());
+}
+
+[[nodiscard]] bool result_is_path_tag_eligible(
+    const contracts::AgentResult& result) {
+  return result.status == contracts::AgentResultStatus::Completed ||
+         result.status == contracts::AgentResultStatus::PartiallyCompleted;
+}
+
+[[nodiscard]] std::optional<std::string> classify_runtime_path_tag(
+    const RuntimeCompositionRoot& root,
+    const OrchestratorRunResult& run_result) {
+  if (root.dependency_set == nullptr ||
+      !result_is_path_tag_eligible(run_result.agent_result)) {
+    return std::nullopt;
+  }
+
+  if (run_result.used_recovery_round) {
+    return std::string{kRuntimePathRecoveryPositiveTag};
+  }
+
+  if (run_result.used_tool_round) {
+    return std::string{kRuntimePathToolPositiveTag};
+  }
+
+  const auto& evidence = root.dependency_set->external_evidence;
+  if (contains_evidence_fragment(evidence, "required-live-baseline")) {
+    return std::string{kRuntimePathDirectLlmTag};
+  }
+
+  if (contains_evidence_fragment(evidence, "cognition-first-forced") ||
+      root.dependency_set->llm_manager != nullptr) {
+    return std::string{kRuntimePathCognitionFirstTag};
+  }
+
+  return std::nullopt;
+}
+
+void apply_runtime_path_tag(const RuntimeCompositionRoot& root,
+                            OrchestratorRunResult& run_result) {
+  const auto path_tag = classify_runtime_path_tag(root, run_result);
+  if (!path_tag.has_value()) {
+    return;
+  }
+
+  if (!run_result.agent_result.tags.has_value()) {
+    run_result.agent_result.tags = std::vector<std::string>{};
+  }
+
+  auto& tags = *run_result.agent_result.tags;
+  clear_runtime_path_tags(tags);
+  append_unique_tag(tags, *path_tag);
 }
 
 [[nodiscard]] bool degraded_ready_allowed(
@@ -336,6 +409,7 @@ class AgentFacade::State {
     }
 
     auto run_result = root_.orchestrator->run_once(request);
+    apply_runtime_path_tag(root_, run_result);
     apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);
     update_waiting_session(run_result);
     return run_result.agent_result;
@@ -388,6 +462,7 @@ class AgentFacade::State {
 
     auto run_result = root_.orchestrator->handle_waiting_state(*root_.waiting_session,
                                                                request);
+    apply_runtime_path_tag(root_, run_result);
     apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);
     update_waiting_session(run_result);
     return run_result.agent_result;

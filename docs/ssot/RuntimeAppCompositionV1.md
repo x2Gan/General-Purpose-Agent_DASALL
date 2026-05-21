@@ -84,6 +84,19 @@ Owner：runtime / apps
 2. 不得把该状态映射成 `default-ready` 或 production unary ready。
 3. app binary 对外输出必须能区分 stub、degraded 与 live。
 
+### 5.4 runtime path evidence tags
+
+1. app composition、runtime regression 与相邻 SSOT 在描述 unary 主链证据时，必须优先使用 `AgentResult.tags` 中的 `runtime_path:*` 分类，而不是只从 `llm.origin=`、`required-live-baseline`、`cognition-first-forced` 或 services 命中现象单独外推。
+2. `runtime_path:*` 的最终归一化 owner 固定为 `runtime::AgentFacade`，因为它同时持有 `RuntimeDependencySet.external_evidence` 与 `OrchestratorRunResult.used_tool_round` / `used_recovery_round`，且直接负责最终 `AgentResult` 出口。
+3. 当前允许的分类只有四个：
+  - `runtime_path:recovery_positive`：本轮 `OrchestratorRunResult.used_recovery_round=true`。
+  - `runtime_path:tool_positive`：未命中 recovery 且 `used_tool_round=true`。
+  - `runtime_path:direct_llm`：未命中 recovery / tool，且 `external_evidence` 包含 `required-live-baseline`。
+  - `runtime_path:cognition_first`：未命中更高优先级标签，且 `external_evidence` 包含 `cognition-first-forced`，或该轮通过 live `llm_manager` 进入 cognition-first 响应收口。
+4. 同一 `AgentResult` 最多保留一个 `runtime_path:*` 标签；写入新分类前必须清理旧的 `runtime_path:` 前缀标签，禁止 `direct_llm`、`tool_positive`、`recovery_positive` 或 `cognition_first` 混写。
+5. path 标签只允许出现在 `Completed` / `PartiallyCompleted` 结果上；失败、取消、超时结果不得伪造正向 path evidence。
+6. `RuntimeUnaryIntegrationTest` 与 `FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest` 是本规则的最小 regression 锚点：前者锁 direct_llm / tool_positive 互斥，后者锁 runtime full chain 的 services data lane 命中与 `tool_positive` 分类。
+
 ## 6. daemon / gateway 入口规则
 
 ### 6.1 daemon
@@ -114,12 +127,14 @@ Owner：runtime / apps
 ## 9. 验证锚点
 
 ```bash
-rg -n "RuntimeAppComposition|stub runtime|RuntimeDependencySet|production composition|default unary" \
+rg -n "RuntimeAppComposition|stub runtime|RuntimeDependencySet|production composition|default unary|runtime_path:" \
   docs/ssot/RuntimeAppCompositionV1.md \
   docs/architecture/DASALL_runtime子系统详细设计.md \
   apps/daemon/src/main.cpp \
   apps/gateway/src/main.cpp \
-  runtime/src/AgentFacade.cpp
+  runtime/src/AgentFacade.cpp \
+  tests/integration/agent_loop/RuntimeUnaryIntegrationTest.cpp \
+  tests/integration/full_business_chain/FullIntKnowledgeMemoryLlmToolsServicesCrossChainTest.cpp
 ```
 
 ## 10. 结论

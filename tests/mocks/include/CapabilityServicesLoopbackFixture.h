@@ -363,7 +363,7 @@ class CapabilityServicesLoopbackFixture {
         .capability_id = options_.data_capability_id,
         .capability_version = "v1",
         .supported_actions = {},
-        .supported_queries = {"status", "catalog.list"},
+        .supported_queries = {"default", "status", "catalog.list"},
         .route_classes = route_order,
         .preferred_locality = route_order.front(),
     };
