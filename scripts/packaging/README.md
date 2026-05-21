@@ -39,6 +39,7 @@
 |---|---|---|---|
 | `run` / LLM | `dasall run ... --json` 必须同时包含 `"disposition":"completed"`、`"task_completed":true`、`llm.origin=deepseek-prod/`，且不得包含 `agent.dataset` | 同左 | 证明 installed daemon 的主功能链路通过 production `ILLMManager` 调用 DeepSeek；仅有 completed transport 或 builtin dataset 投影不算通过。 |
 | tools | `/usr/lib/dasall/dasall-tools-installed-proof --json` 必须返回 `"ok": true`、`"route_kind": "builtin"`、`"terminal_route_kind": "builtin"`、`"agent_dataset_visible": true`、`"agent_terminal_visible": true`、`"terminal_confirmation_denied": true`、`"terminal_invocation_succeeded": true`，且 payload / terminal_payload 分别保留 `capability_id=agent.dataset` / `projection=default` 与 `operation=agent.terminal` | `pkg_smoke_install.sh --explicit-start-check` 必须落盘 `tools-installed-proof.json`，release-runner package-smoke artifact 目录保留同名证据 | 证明 installed package 当前可见 tool surface 已与 runtime production builtin catalog 对齐，且 `agent.dataset` query 与 `agent.terminal` high-risk action 都能经由 governed `IToolManager -> builtin -> services` 正向链路产出 payload、observation digest 与 confirmation gate 证据；同时避免把 builtin dataset 投影误当 LLM 主链路。 |
+| services | `services_local_installed_proof.sh` 必须消费 `tools-installed-proof.json` 或等价 source proof，并落盘 `services-installed-proof.json`，确认 `tool_to_services_adapter_backend_path_present=true`、payload 保留 `capability_id=agent.dataset` / `projection=default`、terminal payload 保留 `operation=agent.terminal`，且 bridge / observability evidence marker 仍存在 | release-runner local step 继续从 package-smoke artifact 目录归档 `services-installed-proof.json`，并执行 `services_subscription_adapter_soak.sh` 生成 `services-soak-summary.json` | 证明 installed local evidence 已把 `IToolManager -> builtin -> services -> adapter/backend` 正向链路单独收口为 services owner artifact；subscription overflow / remote timeout 的重复 direct-binary soak 继续作为 release-runner local hardening，不依赖 qemu / kvm。 |
 | `status` | `status receipt:missing token local://uid/0 --json` 必须 exit 5 且 `status_missing` | 同左 | 缺失 receipt fail-closed，不误报成功。 |
 | `cancel` | `cancel receipt:missing token local://uid/0 --json` 必须 exit 5 且 `cancel_missing` | 同左 | 缺失 receipt fail-closed，不误报成功。 |
 | `diag` 默认门控 | 默认安装后 `diag health --json` 必须 exit 4 且 `diag_disabled` | 不适用，autopkgtest 会通过 config apply 启用 diag | 证明 diagnostics 不会绕过 daemon config gate。 |
@@ -46,7 +47,7 @@
 | LLM assets/config | 校验 planner/responder prompt、provider catalog、DeepSeek provider manifest 已安装；重装 smoke 会保留既有 DeepSeek secret 并恢复 `dasall` 组只读权限 | 使用既有 secret，或通过 `DASALL_DEEPSEEK_API_KEY_FILE` 导入；验证 secret 落盘且不明文保存 | 证明 installed package 具备真实 LLM 外呼所需资产、secret 权限和 runtime composition。 |
 | knowledge | `dasall knowledge refresh/retrieve/health --json` 必须 completed；`knowledge_local_installed_proof.sh` 需生成 `knowledge-proof.json` 与 `installed-normative-assets.json`；`knowledge_failure_injection_installed_proof.sh` 需生成 `knowledge-failure-injection-proof.json` | release-runner local step 继续执行 `knowledge_refresh_retrieve_soak.sh` 并生成 `knowledge-soak-summary.json` | 证明 installed package 已具独立 Knowledge 正向入口与 active snapshot 损坏后的本机恢复能力；local authoritative evidence 由 refresh/provider-retrieve/health proof、installed normative asset files、failure-injection recovery proof 与 soak artifact 组成，qemu / machine isolation 继续留给 release hardening，不再作为 Knowledge 功能闭环的强制前置。 |
 
-矩阵中的 `knowledge` 行不再是“无独立正向入口”的显式缺口。当前 authoritative local owner 固定为 `knowledge_local_installed_proof.sh` 落盘的 `knowledge-proof.json` / `installed-normative-assets.json`、`knowledge_failure_injection_installed_proof.sh` 落盘的 `knowledge-failure-injection-proof.json`，以及 `knowledge_refresh_retrieve_soak.sh` 落盘的 `knowledge-soak-summary.json`；`pkg_smoke_install.sh` 仍可保留 package-smoke 侧原始 Knowledge JSON，但不再作为 Knowledge proof 的唯一 owner。更高层 qemu / machine isolation 继续属于 packaging / release hardening，不把本机 installed 证据外推为 package-ready。
+矩阵中的 `knowledge` 行不再是“无独立正向入口”的显式缺口。当前 authoritative local owner 固定为 `knowledge_local_installed_proof.sh` 落盘的 `knowledge-proof.json` / `installed-normative-assets.json`、`knowledge_failure_injection_installed_proof.sh` 落盘的 `knowledge-failure-injection-proof.json`，以及 `knowledge_refresh_retrieve_soak.sh` 落盘的 `knowledge-soak-summary.json`；`pkg_smoke_install.sh` 仍可保留 package-smoke 侧原始 Knowledge JSON，但不再作为 Knowledge proof 的唯一 owner。Capability Services 的 local owner 现固定为 package-smoke artifact 目录中的 `services-installed-proof.json` 与 release-runner local soak 目录中的 `services-soak-summary.json`；更高层 qemu / machine isolation 继续属于 packaging / release hardening，不把本机 installed 证据外推为 package-ready。
 
 ## 4. testbed 策略
 
@@ -76,10 +77,10 @@
 ### 4.4 release runner contract
 
 1. `.github/workflows/release-package-gate.yml` 是当前仓库内固定的 release runner 入口：只接受 self-hosted runner 提供的 `qemu_image` 与 `deepseek_key_file`，不在仓库脚本里下载 image 或写死 secret。
-2. workflow 在 qemu gate 前先固定四类 local installed artifact：`pkg_smoke_install.sh --explicit-start-check` 的 package-smoke 目录（现至少包含 `run-first.json`、`run-second.json`、`memory-proof.json`、`memory-maintenance-proof.json`、`tools-installed-proof.json`）、`knowledge_local_installed_proof.sh` 的 proof 目录（含 `knowledge-proof.json` / `installed-normative-assets.json`）、`knowledge_failure_injection_installed_proof.sh` 的 failure 目录（含 `knowledge-failure-injection-proof.json`）与 `knowledge_refresh_retrieve_soak.sh` 的 soak 目录（含 `knowledge-soak-summary.json`）；四者只证明 local authoritative evidence，不直接外推为 qemu PASS。
+2. workflow 在 qemu gate 前先固定五类 local installed artifact：`pkg_smoke_install.sh --explicit-start-check` 的 package-smoke 目录（现至少包含 `run-first.json`、`run-second.json`、`memory-proof.json`、`memory-maintenance-proof.json`、`tools-installed-proof.json`、`services-installed-proof.json`）、`services_subscription_adapter_soak.sh` 的 soak 目录（含 `services-soak-summary.json`）、`knowledge_local_installed_proof.sh` 的 proof 目录（含 `knowledge-proof.json` / `installed-normative-assets.json`）、`knowledge_failure_injection_installed_proof.sh` 的 failure 目录（含 `knowledge-failure-injection-proof.json`）与 `knowledge_refresh_retrieve_soak.sh` 的 soak 目录（含 `knowledge-soak-summary.json`）；五者只证明 local authoritative evidence，不直接外推为 qemu PASS。
 3. `validate_gate_int_10_installed_package_qemu.sh` 现已正式支持以下 release-runner 环境变量：`DASALL_DEEPSEEK_API_KEY_FILE`、`DASALL_AUTOPKGTEST_TESTBED_SECRET_PATH`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS`、`DASALL_AUTOPKGTEST_SETUP_COMMANDS_BOOT`、`DASALL_AUTOPKGTEST_OUTPUT_DIR`。
 4. workflow 会生成 testbed preflight 脚本，并通过 `DASALL_AUTOPKGTEST_SETUP_COMMANDS` 传给 `validate_gate_int_10_installed_package_qemu.sh`；默认 preflight 只做 provider reachability 探测，不在日志中记录 secret 值。
-5. workflow 当前会归档 `package-smoke-local.log`、`knowledge-proof.log`、`knowledge-failure-injection.log`、`knowledge-soak.log`、`knowledge-proof/knowledge-proof.json`、`knowledge-proof/installed-normative-assets.json`、`knowledge-failure/knowledge-failure-injection-proof.json`、`knowledge-soak/knowledge-soak-summary.json`、`gate-int-10-qemu.log`、结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据；`FULLINT-TODO-019` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。
+5. workflow 当前会归档 `package-smoke-local.log`、`services-soak.log`、`knowledge-proof.log`、`knowledge-failure-injection.log`、`knowledge-soak.log`、`package-smoke/services-installed-proof.json`、`services-soak/services-soak-summary.json`、`knowledge-proof/knowledge-proof.json`、`knowledge-proof/installed-normative-assets.json`、`knowledge-failure/knowledge-failure-injection-proof.json`、`knowledge-soak/knowledge-soak-summary.json`、`gate-int-10-qemu.log`、结构化 `autopkgtest` 输出目录、`.changes/.buildinfo/.deb/.ddeb` package artifacts、`lintian.log`、secret injection record 与命令元数据；`FULLINT-TODO-019` 后续只需要在真实 runner 上复跑并把归档路径回写 worklog / deliverable，不需要再发明第二套 release harness。
 
 ### 4.5 local host bootstrap
 
@@ -186,10 +187,12 @@
 8. `scripts/packaging/run_local_qemu_gate.sh`
 9. `scripts/packaging/knowledge_local_installed_proof.sh`
 10. `scripts/packaging/knowledge_refresh_retrieve_soak.sh`
+11. `scripts/packaging/services_local_installed_proof.sh`
+12. `scripts/packaging/services_subscription_adapter_soak.sh`
 
 仍按需待定的只有：
 
-11. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
+13. `scripts/packaging/autopkgtest-*.cfg`（仅当 qemu / CI 配置需要固化时新增）
 
 ## 6. 不做什么
 

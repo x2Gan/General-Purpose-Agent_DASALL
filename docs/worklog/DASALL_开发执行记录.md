@@ -1,5 +1,50 @@
 # DASALL 开发执行记录
 
+# 记录 #735
+
+- 日期：2026-05-21
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-008` installed / release services 证据缺口
+- 状态：已完成（services installed proof owner 与 release-runner local soak owner 已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-008`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` ~ `CAPSRV-GAP-007` 已闭合，因此 `CAPSRV-FIX-008` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；本轮范围只覆盖 installed / release-runner local / soak 证据，不扩张到 machine-isolated qemu gate。
+3. 近端实现检查确认：`ToolsInstalledProofRunner` 已能在 installed package 中走通 `IToolManager -> builtin -> services` 正向路径，但 services 没有 own 的 installed artifact owner；release-package-gate 也没有 services own 的 local soak owner。
+4. authoritative 边界是：不修改 runtime / services 生产语义与 owner 划分，只通过 packaging / release contract 固定 local evidence owner；qemu / machine isolation 继续留给 packaging / release hardening。
+
+### 改动
+
+1. 新增 `scripts/packaging/services_local_installed_proof.sh`，把 `tools-installed-proof.json` 重新校验并收口为 `services-installed-proof.json`；同时更新 `scripts/packaging/pkg_smoke_install.sh`，在 package-smoke artifact 目录中固定 services installed proof owner。
+2. 新增 `scripts/packaging/services_subscription_adapter_soak.sh`，复用 `tests/integration/services/dasall_services_failure_integration_test` 反复验证 `remote_timeout` / `subscription_overflow`；更新 `.github/workflows/release-package-gate.yml`，在 release local 阶段构建该 target、执行 soak 并归档 `services-soak` artifact。
+3. 更新 `scripts/packaging/README.md`，把 Capability Services 的 local authoritative owner 固定为 `package-smoke/services-installed-proof.json` 与 `services-soak/services-soak-summary.json`。
+4. 新增 `docs/todos/services/deliverables/CAPSRV-FIX-008-installed-release-services-evidence收口.md`，并回写总账与本工作日志；本轮没有改动 services 产品代码，只补 evidence owner、workflow wiring 与 traceability。
+
+### 验证
+
+1. 语法与静态检查。
+   - `sh -n scripts/packaging/services_local_installed_proof.sh`：通过。
+   - `sh -n scripts/packaging/services_subscription_adapter_soak.sh`：通过。
+   - `sh -n scripts/packaging/pkg_smoke_install.sh`：通过。
+   - `.github/workflows/release-package-gate.yml`：编辑后无错误。
+2. package build。
+   - `dpkg-buildpackage -us -uc -b`：通过，本机生成 `dasall-cli_0.1.0-1_amd64.deb`、`dasall-daemon_0.1.0-1_amd64.deb`、`dasall-common_0.1.0-1_all.deb`、`dasall_0.1.0-1_all.deb`、`.changes` 与 `.buildinfo`。
+3. release local soak。
+   - `cmake --build build/vscode-linux-ninja --target dasall_services_failure_integration_test`：通过。
+   - `bash scripts/packaging/services_subscription_adapter_soak.sh --artifact-dir /tmp/dasall-capsrv-fix-008-soak --build-dir build/vscode-linux-ninja --iterations 5`：通过，生成 `iteration-01.log` ~ `iteration-05.log`、`services-soak-summary.json`、`status.txt`。
+4. installed package smoke。
+   - `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-capsrv-fix-008-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`：通过，落盘 `tools-installed-proof.json`、`services-installed-proof.json`、`source-tools-installed-proof.json` 与 package-smoke 既有 artifact。
+5. proof 关键字段。
+   - `services-installed-proof.json` 关键布尔值均为正：`service_payload_evidence_present=true`、`service_confirmation_gate_present=true`、`service_projection_evidence_present=true`、`service_route_citation_present=true`、`service_tool_call_citation_present=true`、`service_bridge_evidence_present=true`、`service_observability_evidence_present=true`、`tool_to_services_adapter_backend_path_present=true`。
+   - `tools-installed-proof.json` 关键布尔值均为正：`ok=true`、`agent_dataset_visible=true`、`agent_terminal_visible=true`、`tool_invocation_succeeded=true`、`terminal_invocation_succeeded=true`、`terminal_confirmation_denied=true`、`projection_present=true`、`terminal_projection_present=true`、`production_bridge_evidence_present=true`、`production_observability_evidence_present=true`。
+
+### 结果
+
+1. `CAPSRV-GAP-008` 已在当前树收口：Capability Services 现拥有 installed proof owner 与 release-runner local soak owner，不再只依赖 build-tree focused tests 或从 tools proof 人工外推结论。
+2. package-smoke 现可独立证明 installed `tools -> services -> adapter/backend` 正向链路；release local 现可固定 `remote_timeout` / `subscription_overflow` soak artifact 并由 workflow 归档。
+3. Capability Services 章节本轮缺口已全部闭合；qemu / machine isolation 仍归 packaging / release gate，本轮未使用也未宣称通过。
+
 # 记录 #734
 
 - 日期：2026-05-21

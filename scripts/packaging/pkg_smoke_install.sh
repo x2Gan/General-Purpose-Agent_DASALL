@@ -15,6 +15,7 @@ LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
 MEMORY_MAINTENANCE_PROOF_TOOL=/usr/lib/dasall/dasall-memory-maintenance-proof
 TOOLS_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-tools-installed-proof
+SERVICES_INSTALLED_PROOF_SCRIPT=${SCRIPT_DIR}/services_local_installed_proof.sh
 PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
 PRESERVED_SECRET_ROOT=
 
@@ -534,6 +535,11 @@ PY
   assert_json_contains "$TOOLS_PROOF_JSON" '\"projection\":\"default\"' 'tools payload projection marker'
   assert_json_contains "$TOOLS_PROOF_JSON" '\"operation\":\"agent.terminal\"' 'tools terminal payload operation marker'
   write_artifact_file 'tools-installed-proof.json' "$TOOLS_PROOF_JSON"
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    bash "$SERVICES_INSTALLED_PROOF_SCRIPT" \
+      --artifact-dir "$PACKAGE_SMOKE_ARTIFACT_DIR" \
+      --tool-proof-json "$PACKAGE_SMOKE_ARTIFACT_DIR/tools-installed-proof.json"
+  fi
 
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)

@@ -66,18 +66,20 @@ jobs:
           package_dir="${artifact_dir}/packages"
           autopkgtest_dir="${artifact_dir}/autopkgtest"
           package_smoke_dir="${artifact_dir}/package-smoke"
+          services_soak_dir="${artifact_dir}/services-soak"
           knowledge_proof_dir="${artifact_dir}/knowledge-proof"
           knowledge_soak_dir="${artifact_dir}/knowledge-soak"
           knowledge_failure_dir="${artifact_dir}/knowledge-failure"
           setup_file="${setup_dir}/autopkgtest-setup.sh"
           secret_record="${artifact_dir}/secret-injection-record.txt"
           package_smoke_log="${artifact_dir}/package-smoke-local.log"
+          services_soak_log="${artifact_dir}/services-soak.log"
           knowledge_proof_log="${artifact_dir}/knowledge-proof.log"
           knowledge_soak_log="${artifact_dir}/knowledge-soak.log"
           knowledge_failure_log="${artifact_dir}/knowledge-failure-injection.log"
           testbed_secret_path='/tmp/dasall-release/deepseek.key'
 
-          mkdir -p "${artifact_dir}" "${package_dir}" "${autopkgtest_dir}" "${package_smoke_dir}" "${knowledge_proof_dir}" "${knowledge_soak_dir}" "${knowledge_failure_dir}"
+          mkdir -p "${artifact_dir}" "${package_dir}" "${autopkgtest_dir}" "${package_smoke_dir}" "${services_soak_dir}" "${knowledge_proof_dir}" "${knowledge_soak_dir}" "${knowledge_failure_dir}"
 
           {
             printf '%s\n' '#!/bin/sh'
@@ -98,6 +100,8 @@ jobs:
             printf 'DASALL_RELEASE_GATE_SECRET_RECORD=%s\n' "${secret_record}"
             printf 'DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=%s\n' "${package_smoke_dir}"
             printf 'DASALL_RELEASE_GATE_PACKAGE_SMOKE_LOG=%s\n' "${package_smoke_log}"
+            printf 'DASALL_CAPABILITY_SERVICES_SOAK_ARTIFACT_DIR=%s\n' "${services_soak_dir}"
+            printf 'DASALL_RELEASE_GATE_SERVICES_SOAK_LOG=%s\n' "${services_soak_log}"
             printf 'DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR=%s\n' "${knowledge_proof_dir}"
             printf 'DASALL_RELEASE_GATE_KNOWLEDGE_PROOF_LOG=%s\n' "${knowledge_proof_log}"
             printf 'DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR=%s\n' "${knowledge_soak_dir}"
@@ -135,6 +139,26 @@ jobs:
 
           bash scripts/packaging/knowledge_local_installed_proof.sh \
             --artifact-dir "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}" >> "${proof_log}" 2>&1
+
+      - name: Run local capability services soak
+        if: ${{ always() }}
+        run: |
+          set -eu
+          soak_log="${DASALL_RELEASE_GATE_SERVICES_SOAK_LOG}"
+
+          {
+            printf '### cmake --build %s --target dasall_services_failure_integration_test\n' "${DASALL_BUILD_DIR}"
+          } > "${soak_log}"
+
+          cmake --build "${DASALL_BUILD_DIR}" --target dasall_services_failure_integration_test >> "${soak_log}" 2>&1
+
+          {
+            printf '\n### bash scripts/packaging/services_subscription_adapter_soak.sh --artifact-dir %s --build-dir %s\n' "${DASALL_CAPABILITY_SERVICES_SOAK_ARTIFACT_DIR}" "${DASALL_BUILD_DIR}"
+          } >> "${soak_log}"
+
+          bash scripts/packaging/services_subscription_adapter_soak.sh \
+            --artifact-dir "${DASALL_CAPABILITY_SERVICES_SOAK_ARTIFACT_DIR}" \
+            --build-dir "${DASALL_BUILD_DIR}" >> "${soak_log}" 2>&1
 
       - name: Run local installed knowledge soak
         if: ${{ always() }}
