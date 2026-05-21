@@ -100,6 +100,11 @@ struct AdapterCandidateView {
   std::vector<std::string> supported_capabilities;
 };
 
+struct CapabilityRouteView {
+  CapabilitySnapshotView capability_snapshot;
+  std::vector<AdapterCandidateView> registered_candidates;
+};
+
 struct AdapterSelection {
   AdapterRouteKind route_kind = AdapterRouteKind::local_service;
   std::string adapter_id;

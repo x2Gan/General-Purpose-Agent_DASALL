@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,9 @@ struct DataQueryLaneDependencies {
   CapabilitySnapshotView capability_snapshot;
   FallbackEnvelope fallback_envelope;
   std::vector<AdapterCandidateView> registered_candidates;
+  std::function<CapabilityRouteView(const std::string& capability_id,
+                                    AdapterRouteRequestKind request_kind)>
+      resolve_route_view = {};
   ServiceMetricsBridge* metrics_bridge = nullptr;
   ServiceTraceBridge* trace_bridge = nullptr;
 };

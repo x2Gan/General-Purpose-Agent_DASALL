@@ -67,6 +67,19 @@ namespace {
   return "comp:" + request.source_execution_id + ":" + request.compensation_action;
 }
 
+[[nodiscard]] CapabilityRouteView resolve_route_view(
+    const ExecutionCommandLaneDependencies& dependencies,
+    const std::string& capability_id) {
+  if (dependencies.resolve_route_view) {
+    return dependencies.resolve_route_view(capability_id, AdapterRouteRequestKind::action);
+  }
+
+  return CapabilityRouteView{
+      .capability_snapshot = dependencies.capability_snapshot,
+      .registered_candidates = dependencies.registered_candidates,
+  };
+}
+
 [[nodiscard]] AdapterReceipt make_receipt(std::string receipt_ref,
                                           std::string target_id,
                                           std::string provider_status_code,
@@ -363,10 +376,11 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
     dependencies_.on_serialization_acquired(serialization_key);
   }
 
+  const auto route_view = resolve_route_view(dependencies_, target.capability_id);
   const auto route_request = build_route_request(dependencies_.policy_view,
-                                                 dependencies_.capability_snapshot,
+                                                 route_view.capability_snapshot,
                                                  dependencies_.fallback_envelope,
-                                                 dependencies_.registered_candidates,
+                                                 route_view.registered_candidates,
                                                  target,
                                                  action,
                                                  high_risk_action);
@@ -427,14 +441,14 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
                 ? dependencies_.lookup_compensation_hints(
                   target.capability_id,
                   action,
-                  dependencies_.capability_snapshot.capability_version,
+                  route_view.capability_snapshot.capability_version,
                   receipt)
                 : (dependencies_.compensation_catalog != nullptr
                    ? dependencies_.compensation_catalog->flatten_hints(
                      dependencies_.compensation_catalog->lookup(
                      target.capability_id,
                      action,
-                     dependencies_.capability_snapshot
+                     route_view.capability_snapshot
                          .capability_version))
                    : std::vector<std::string>{});
   auto result = dependencies_.result_mapper->to_execution_command_result(

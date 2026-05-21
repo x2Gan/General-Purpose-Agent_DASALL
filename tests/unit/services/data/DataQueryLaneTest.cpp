@@ -70,10 +70,11 @@ class DataInvoker final : public IAdapterInvoker {
 
 [[nodiscard]] DataQueryRequest make_query_request(
     ServiceDataFreshness freshness = ServiceDataFreshness::strict,
-    std::string projection = "status") {
+    std::string projection = "status",
+    std::string dataset = "devices") {
   return DataQueryRequest{
       .context = make_context(),
-      .dataset = "devices",
+      .dataset = std::move(dataset),
       .filters_json = "{\"region\":\"lab\"}",
       .projection = std::move(projection),
       .freshness = freshness,
@@ -87,12 +88,14 @@ class DataInvoker final : public IAdapterInvoker {
   };
 }
 
-[[nodiscard]] CapabilitySnapshotView make_snapshot() {
+[[nodiscard]] CapabilitySnapshotView make_snapshot(
+    std::string capability_id = "devices",
+    std::vector<std::string> supported_queries = {"status", "catalog.list"}) {
   return CapabilitySnapshotView{
-      .capability_id = "devices",
+      .capability_id = std::move(capability_id),
       .capability_version = "v1",
       .supported_actions = {},
-      .supported_queries = {"status", "catalog.list"},
+      .supported_queries = std::move(supported_queries),
       .route_classes = {AdapterRouteKind::local_service},
       .preferred_locality = AdapterRouteKind::local_service,
   };
@@ -115,14 +118,15 @@ class DataInvoker final : public IAdapterInvoker {
   };
 }
 
-[[nodiscard]] AdapterCandidateView make_candidate() {
+[[nodiscard]] AdapterCandidateView make_candidate(
+    std::vector<std::string> supported_capabilities = {"devices"}) {
   return AdapterCandidateView{
       .adapter_id = "data-primary",
       .route_kind = AdapterRouteKind::local_service,
       .route_equivalence_class = "query.read_only",
       .trust_class = AdapterTrustClass::caller_verified,
       .availability_state = AdapterAvailabilityState::available,
-      .supported_capabilities = {"devices"},
+      .supported_capabilities = std::move(supported_capabilities),
   };
 }
 
@@ -369,6 +373,88 @@ void test_data_query_lane_lists_capabilities_without_using_cache() {
                "catalog listing should return adapter catalog payload");
 }
 
+void test_data_query_lane_resolves_hot_updated_route_views_without_rebuilding_lane() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  std::uint64_t now_ms = 1000U;
+  int invoke_count = 0;
+  std::string last_dataset;
+  const DataInvoker invoker([&](const AdapterInvocationRequest& request) {
+    ++invoke_count;
+    last_dataset = request.capability_id;
+    return AdapterInvocationResult{
+        .transport_outcome = AdapterTransportOutcome::acknowledged,
+        .provider_status_code = "ok",
+        .payload_json = std::string("[{\"dataset\":\"") + request.capability_id +
+                        "\",\"projection\":\"" + request.operation_name + "\"}]",
+        .latency_ms = 4U,
+        .side_effects = {},
+        .evidence_refs = {std::string("cache://") + request.capability_id + "/" +
+                          request.operation_name},
+    };
+  });
+  const AdapterBridge bridge(AdapterBridgeDependencies{.invokers = {&invoker}});
+  const AdapterRouter router;
+  const ResultMapper mapper;
+  DataProjectionCache cache(DataProjectionCacheDependencies{
+      .ttl_ms = 500U,
+      .now_ms = [&]() { return now_ms; },
+  });
+
+  CapabilitySnapshotView current_snapshot = make_snapshot("devices", {"status", "catalog.list"});
+  std::vector<AdapterCandidateView> current_candidates = {make_candidate({"devices"})};
+
+  DataQueryLane lane(DataQueryLaneDependencies{
+      .router = &router,
+      .bridge = &bridge,
+      .result_mapper = &mapper,
+      .projection_cache = &cache,
+      .policy_view = make_policy_view(),
+      .capability_snapshot = make_snapshot("stale.static", {"default", "catalog.list"}),
+      .fallback_envelope = make_fallback_envelope(),
+      .registered_candidates = {},
+      .resolve_route_view = [&](const std::string& capability_id,
+                                AdapterRouteRequestKind request_kind) {
+        assert_equal(static_cast<int>(AdapterRouteRequestKind::query),
+                     static_cast<int>(request_kind),
+                     "data lane should resolve a query route view for each request");
+        assert_equal(current_snapshot.capability_id,
+                     capability_id,
+                     "route-view provider should receive the requested dataset");
+        return dasall::services::internal::CapabilityRouteView{
+            .capability_snapshot = current_snapshot,
+            .registered_candidates = current_candidates,
+        };
+      },
+  });
+
+  const auto devices_result = lane.query(
+      make_context(),
+      make_query_request(ServiceDataFreshness::strict, "status", "devices"));
+
+  current_snapshot = make_snapshot("alerts", {"summary", "catalog.list"});
+  current_candidates = {make_candidate({"alerts"})};
+  now_ms = 1200U;
+
+  const auto alerts_result = lane.query(
+      make_context(),
+      make_query_request(ServiceDataFreshness::strict, "summary", "alerts"));
+
+  assert_equal(2,
+               invoke_count,
+               "dynamic route views should allow new datasets without reconstructing the lane");
+  assert_equal(std::string("alerts"),
+               last_dataset,
+               "hot-updated dataset should reach the adapter through the resolved route view");
+  assert_true(devices_result.succeeded() && !devices_result.error.has_value(),
+              "first request should succeed through the provider-backed dataset route view");
+  assert_true(alerts_result.succeeded() && !alerts_result.error.has_value(),
+              "second request should succeed after the provider updates snapshot and candidates");
+  assert_true(alerts_result.rows_json.find("\"dataset\":\"alerts\"") != std::string::npos,
+              "hot-updated request should return the payload from the new dataset route");
+}
+
 }  // namespace
 
 int main() {
@@ -378,6 +464,7 @@ int main() {
     test_data_query_lane_allows_stale_cache_reads_when_requested();
     test_data_query_lane_rejects_query_receipts_with_side_effects();
     test_data_query_lane_lists_capabilities_without_using_cache();
+    test_data_query_lane_resolves_hot_updated_route_views_without_rebuilding_lane();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

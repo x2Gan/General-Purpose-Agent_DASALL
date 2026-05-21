@@ -233,6 +233,51 @@ void test_adapter_router_rejects_candidate_with_insufficient_trust() {
                "router should report route_not_permitted for trust mismatches");
 }
 
+void test_adapter_router_rejects_snapshot_mismatch_before_candidate_scan() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  AdapterRouter router;
+  auto request = make_request();
+  request.capability_id = "cap.exec.beta";
+  request.registered_candidates = {
+      make_candidate("service-primary",
+                     AdapterRouteKind::local_service,
+                     "safe-mode-control",
+                     AdapterTrustClass::caller_verified,
+                     AdapterAvailabilityState::available),
+  };
+
+  const auto decision = router.select_adapter(request);
+
+  assert_true(!decision.ok(), "router should fail closed when snapshot capability_id mismatches");
+  assert_equal(static_cast<int>(AdapterRouteFailure::capability_unsupported),
+               static_cast<int>(decision.failure),
+               "snapshot mismatch should surface capability_unsupported");
+}
+
+void test_adapter_router_fail_closes_unknown_availability_candidates() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  AdapterRouter router;
+  auto request = make_request();
+  request.registered_candidates = {
+      make_candidate("service-unknown",
+                     AdapterRouteKind::local_service,
+                     "safe-mode-control",
+                     AdapterTrustClass::caller_verified,
+                     AdapterAvailabilityState::unknown),
+  };
+
+  const auto decision = router.select_adapter(request);
+
+  assert_true(!decision.ok(), "router should fail closed when candidate availability is unknown");
+  assert_equal(static_cast<int>(AdapterRouteFailure::route_unavailable),
+               static_cast<int>(decision.failure),
+               "unknown availability should be treated as no selectable route");
+}
+
 }  // namespace
 
 int main() {
@@ -242,6 +287,8 @@ int main() {
     test_adapter_router_uses_equivalent_fallback_when_primary_is_unavailable();
     test_adapter_router_blocks_semantically_different_fallbacks();
     test_adapter_router_rejects_candidate_with_insufficient_trust();
+    test_adapter_router_rejects_snapshot_mismatch_before_candidate_scan();
+    test_adapter_router_fail_closes_unknown_availability_candidates();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

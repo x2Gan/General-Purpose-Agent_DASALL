@@ -22,6 +22,7 @@ using dasall::services::internal::AdapterRouteRequestKind;
 using dasall::services::internal::AdapterRouter;
 using dasall::services::internal::AdapterTransportOutcome;
 using dasall::services::internal::AdapterTrustClass;
+using dasall::services::internal::CapabilityRouteView;
 using dasall::services::internal::CapabilitySnapshotView;
 using dasall::services::internal::ExecutionCommandLane;
 using dasall::services::internal::ExecutionCommandLaneDependencies;
@@ -66,12 +67,14 @@ class FakeInvoker final : public IAdapterInvoker {
 
 [[nodiscard]] ExecutionCommandRequest make_request(std::string action = "toggle",
                                                    std::optional<std::string> idempotency_key =
-                                                       std::string("idem-015")) {
+                             std::string("idem-015"),
+                           std::string capability_id = "cap.exec",
+                           std::string target_id = "target-015") {
   return ExecutionCommandRequest{
       .context = make_context(),
       .target = CapabilityTargetRef{
-          .capability_id = "cap.exec",
-          .target_id = "target-015",
+      .capability_id = std::move(capability_id),
+      .target_id = std::move(target_id),
       },
       .action = std::move(action),
       .arguments_json = "{\"desired_state\":\"on\"}",
@@ -79,11 +82,13 @@ class FakeInvoker final : public IAdapterInvoker {
   };
 }
 
-[[nodiscard]] CapabilitySnapshotView make_snapshot() {
+[[nodiscard]] CapabilitySnapshotView make_snapshot(
+  std::string capability_id = "cap.exec",
+  std::vector<std::string> supported_actions = {"toggle", "safe_mode.enter"}) {
   return CapabilitySnapshotView{
-      .capability_id = "cap.exec",
+    .capability_id = std::move(capability_id),
       .capability_version = "v1",
-      .supported_actions = {"toggle", "safe_mode.enter"},
+    .supported_actions = std::move(supported_actions),
       .supported_queries = {},
       .route_classes = {AdapterRouteKind::local_service},
       .preferred_locality = AdapterRouteKind::local_service,
@@ -107,14 +112,15 @@ class FakeInvoker final : public IAdapterInvoker {
   };
 }
 
-[[nodiscard]] AdapterCandidateView make_candidate() {
+[[nodiscard]] AdapterCandidateView make_candidate(
+    std::vector<std::string> supported_capabilities = {"cap.exec"}) {
   return AdapterCandidateView{
       .adapter_id = "service-primary",
       .route_kind = AdapterRouteKind::local_service,
       .route_equivalence_class = "command.standard",
       .trust_class = AdapterTrustClass::caller_verified,
       .availability_state = AdapterAvailabilityState::available,
-      .supported_capabilities = {"cap.exec"},
+      .supported_capabilities = std::move(supported_capabilities),
   };
 }
 
@@ -396,6 +402,90 @@ void test_execution_command_lane_fail_closes_high_risk_actions_before_gate_08() 
                "high-risk gate should preserve the CAP-GATE-08 reason");
 }
 
+  void test_execution_command_lane_resolves_hot_updated_route_views_without_rebuilding_lane() {
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    int invoke_count = 0;
+    std::string last_capability;
+    const FakeInvoker invoker([&](const AdapterInvocationRequest& request) {
+    ++invoke_count;
+    last_capability = request.capability_id;
+    return AdapterInvocationResult{
+      .transport_outcome = AdapterTransportOutcome::acknowledged,
+      .provider_status_code = "ok",
+      .payload_json = std::string("{\"capability_id\":\"") + request.capability_id +
+              "\",\"operation\":\"" + request.operation_name + "\"}",
+      .latency_ms = 5U,
+      .side_effects = {request.operation_name + ".applied"},
+      .evidence_refs = {std::string("audit://execution/") + request.capability_id},
+    };
+    });
+    const AdapterBridge bridge(AdapterBridgeDependencies{.invokers = {&invoker}});
+    const AdapterRouter router;
+    const ResultMapper mapper;
+
+    CapabilitySnapshotView current_snapshot =
+      make_snapshot("cap.exec.alpha", {"cap.exec.alpha"});
+    std::vector<AdapterCandidateView> current_candidates = {
+      make_candidate({"cap.exec.alpha"})};
+
+    ExecutionCommandLane lane(ExecutionCommandLaneDependencies{
+      .router = &router,
+      .bridge = &bridge,
+      .result_mapper = &mapper,
+      .policy_view = make_policy_view(),
+      .capability_snapshot = make_snapshot("stale.static", {"stale.static"}),
+      .fallback_envelope = make_fallback_envelope(),
+      .registered_candidates = {},
+      .resolve_route_view = [&](const std::string& capability_id,
+                  AdapterRouteRequestKind request_kind) {
+      assert_equal(static_cast<int>(AdapterRouteRequestKind::action),
+             static_cast<int>(request_kind),
+             "execution lane should resolve an action route view for each request");
+      assert_equal(current_snapshot.capability_id,
+             capability_id,
+             "route-view provider should receive the requested capability id");
+      return CapabilityRouteView{
+        .capability_snapshot = current_snapshot,
+        .registered_candidates = current_candidates,
+      };
+      },
+      .critical_actions = {},
+      .high_risk_actions = {},
+      .allow_high_risk_actions = false,
+      .lookup_compensation_hints = {},
+      .make_execution_id = {},
+      .make_compensation_execution_id = {},
+      .on_serialization_acquired = {},
+    });
+
+    const auto alpha_result = lane.execute(
+      make_context(),
+      make_request("cap.exec.alpha", std::nullopt, "cap.exec.alpha", "target-alpha"));
+
+    current_snapshot = make_snapshot("cap.exec.beta", {"cap.exec.beta"});
+    current_candidates = {make_candidate({"cap.exec.beta"})};
+
+    const auto beta_result = lane.execute(
+      make_context(),
+      make_request("cap.exec.beta", std::nullopt, "cap.exec.beta", "target-beta"));
+
+    assert_equal(2,
+           invoke_count,
+           "dynamic route views should allow new capabilities without reconstructing the lane");
+    assert_equal(std::string("cap.exec.beta"),
+           last_capability,
+           "hot-updated capability should reach the adapter through the resolved route view");
+    assert_true(alpha_result.succeeded() && !alpha_result.error.has_value(),
+          "first capability should succeed through the provider-backed route view");
+    assert_true(beta_result.succeeded() && !beta_result.error.has_value(),
+          "second capability should succeed after the provider updates snapshot and candidates");
+    assert_true(beta_result.payload_json.find("\"capability_id\":\"cap.exec.beta\"") !=
+            std::string::npos,
+          "hot-updated capability should return the new capability payload");
+  }
+
 }  // namespace
 
 int main() {
@@ -405,6 +495,7 @@ int main() {
     test_execution_command_lane_surfaces_partial_side_effect_with_compensation_hints();
     test_execution_command_lane_serializes_critical_actions();
     test_execution_command_lane_fail_closes_high_risk_actions_before_gate_08();
+    test_execution_command_lane_resolves_hot_updated_route_views_without_rebuilding_lane();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

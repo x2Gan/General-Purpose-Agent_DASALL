@@ -129,11 +129,20 @@ constexpr char kDataCapabilityId[] = "agent.dataset";
 [[nodiscard]] DataQueryRequest make_query_request(const std::string& request_id) {
   return DataQueryRequest{
       .context = make_context(request_id),
-      .dataset = kDataCapabilityId,
+            .dataset = kDataCapabilityId,
       .filters_json = "{}",
       .projection = "default",
       .freshness = ServiceDataFreshness::strict,
   };
+}
+
+[[nodiscard]] DataQueryRequest make_query_request(const std::string& request_id,
+                                                                                                    std::string dataset,
+                                                                                                    std::string projection) {
+    auto request = make_query_request(request_id);
+    request.dataset = std::move(dataset);
+    request.projection = std::move(projection);
+    return request;
 }
 
 [[nodiscard]] dasall::services::ServiceLiveBackendResult make_backend_result(
@@ -253,6 +262,36 @@ constexpr char kDataCapabilityId[] = "agent.dataset";
   return dasall::services::compose_live_services(snapshot, options);
 }
 
+[[nodiscard]] dasall::services::ServiceLiveCompositionResult compose_with_multi_dataset_registry() {
+    auto snapshot = make_snapshot();
+    dasall::services::ServiceLiveCompositionOptions options;
+    options.execution_capability_id = kExecutionCapabilityId;
+    options.data_capability_id = kDataCapabilityId;
+    options.local_service_available = true;
+    options.remote_service_available = false;
+    options.allow_route_degrade = true;
+    options.local_platform_route_enabled = false;
+    options.high_risk_actions = {};
+    options.adapter_registry = dasall::services::ServiceLiveAdapterRegistry{
+            .route_equivalence_class = "service.live",
+          .local_platform = std::nullopt,
+            .local_service = dasall::services::ServiceLiveRouteBinding{
+                    .adapter_id = "test.local_service",
+                    .trust_class = dasall::services::ServiceLiveTrustClass::caller_verified,
+                    .availability_state = dasall::services::ServiceLiveAvailabilityState::available,
+                    .supported_capabilities = {kExecutionCapabilityId,
+                                                                         "inventory.devices",
+                                                                         "inventory.alerts"},
+                    .handler = [](const dasall::services::ServiceLiveBackendRequest& request) {
+                        return make_backend_result("local_service", request, "ok", 5U);
+                    },
+                    .timeout_on_invoke = false,
+            },
+            .remote_service = std::nullopt,
+    };
+    return dasall::services::compose_live_services(snapshot, options);
+}
+
 void test_production_adapter_registry_prefers_local_platform_when_profile_enables_it() {
   const auto live_services = compose_with_registry(
       true,
@@ -359,6 +398,31 @@ void test_production_adapter_registry_blocks_fallback_when_degrade_is_forbidden(
               "production adapter integration should fail closed when fallback is forbidden by the runtime envelope");
 }
 
+void test_production_adapter_registry_resolves_multiple_datasets_from_current_registry() {
+    const auto live_services = compose_with_multi_dataset_registry();
+    assert_true(live_services.ok(),
+                            std::string("production adapter integration should resolve multiple datasets from the current registry: ") +
+                                    live_services.error);
+
+    const auto devices_result = live_services.data_service->query(
+            make_query_request("req-prod-adapter-multi-dataset-devices",
+                                                 "inventory.devices",
+                                                 "default"));
+    const auto alerts_result = live_services.data_service->query(
+            make_query_request("req-prod-adapter-multi-dataset-alerts",
+                                                 "inventory.alerts",
+                                                 "default"));
+
+    assert_true(devices_result.succeeded() &&
+                                    devices_result.rows_json.find("\"capability_id\":\"inventory.devices\"") !=
+                                            std::string::npos,
+                            "production adapter integration should resolve inventory.devices without rebuilding the lane");
+    assert_true(alerts_result.succeeded() &&
+                                    alerts_result.rows_json.find("\"capability_id\":\"inventory.alerts\"") !=
+                                            std::string::npos,
+                            "production adapter integration should resolve inventory.alerts from the same live registry");
+}
+
 }  // namespace
 
 int main() {
@@ -368,6 +432,7 @@ int main() {
     test_production_adapter_registry_falls_back_to_remote_when_local_service_is_unavailable();
     test_production_adapter_registry_surfaces_remote_timeout();
     test_production_adapter_registry_blocks_fallback_when_degrade_is_forbidden();
+        test_production_adapter_registry_resolves_multiple_datasets_from_current_registry();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

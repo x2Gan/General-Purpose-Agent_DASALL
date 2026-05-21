@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+# 记录 #732
+
+- 日期：2026-05-21
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-005` dynamic capability snapshot / candidate provider 缺口
+- 状态：已完成（provider-backed route view、hot update regression 与 production multi-dataset route resolution 已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-005`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` ~ `CAPSRV-GAP-004` 已闭合，因此 `CAPSRV-FIX-005` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；本轮范围只覆盖 dynamic snapshot / provider，不扩张到 observability、caller-domain owner 或 installed / release 证据。
+3. 当前缺口是：`ExecutionCommandLaneDependencies` / `DataQueryLaneDependencies` 仍把 `CapabilitySnapshotView` 与 candidate 列表按值固化；`ServiceLiveComposition` 虽有 registry seam，但 lane 初始化时仍一次性生成 execution/data snapshot，导致多 capability / 多 dataset / adapter hot update 无法传到 router。
+4. authoritative 边界是：只补 execution/data lane provider、router fail-closed 回归与 build-tree production multi-dataset route resolution；不宣称 qemu、installed package、release runner 或 soak 已完成。
+
+### 改动
+
+1. 更新 `services/src/adapters/AdapterRouter.h`、`services/src/execution/ExecutionCommandLane.h/.cpp` 与 `services/src/data/DataQueryLane.h/.cpp`：新增 internal `CapabilityRouteView` 与可选 `resolve_route_view` provider，让 execution/data lanes 在每次请求时按 capability 解析当前 snapshot / candidates，并保留静态回退兼容。
+2. 更新 `services/src/ServiceLiveComposition.cpp`：live composition 现在根据当前 `registered_candidates_` 动态生成 per-capability `CapabilityRouteView`，而不是把 execution/data snapshot 固化在构造时；production registry 因此可以在同一 composition 下解析多个 dataset。
+3. 更新 `tests/unit/services/adapters/AdapterRouterTest.cpp`：新增 snapshot mismatch 与 availability unknown fail-closed 断言。
+4. 更新 `tests/unit/services/data/DataQueryLaneTest.cpp` 与 `tests/unit/services/execution/ExecutionCommandLaneTest.cpp`：分别新增 multi-dataset / multi-capability hot update regression，证明不重建 lane 也能切换 route view。
+5. 更新 `tests/integration/services/CapabilityServicesProductionAdapterIntegrationTest.cpp`：新增同一 live registry 解析 `inventory.devices` / `inventory.alerts` 的 multi-dataset integration；新增 `docs/todos/services/deliverables/CAPSRV-FIX-005-dynamic-capability-snapshot-provider收口.md`，并回写总账与本工作日志。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(["dasall_adapter_router_unit_test","dasall_data_query_lane_unit_test","dasall_execution_command_lane_unit_test","dasall_services_profile_integration_test","dasall_services_production_adapter_integration_test"])`：通过。
+2. focused CMake Tools test attempt。
+   - `RunCtest_CMakeTools(["AdapterRouterTest","DataQueryLaneTest","ExecutionCommandLaneTest","CapabilityServicesProfileIntegrationTest"])`：VS Code CMake Tools 返回泛化 `生成失败`，与本仓库此前 services closeout 轮次中的工具态现象一致。
+3. authoritative direct binaries。
+   - `./build/vscode-linux-ninja/tests/unit/services/adapters/dasall_adapter_router_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/services/data/dasall_data_query_lane_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/services/execution/dasall_execution_command_lane_unit_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_profile_integration_test`：通过。
+   - `./build/vscode-linux-ninja/tests/integration/services/dasall_services_production_adapter_integration_test`：通过。
+
+### 结果
+
+1. `CAPSRV-GAP-005` 已在当前树收口：execution/data lanes 不再依赖单个静态 snapshot/candidate 列表，router 每次请求都能看到 provider-backed 的当前 capability route view。
+2. `AdapterRouterTest`、`DataQueryLaneTest`、`ExecutionCommandLaneTest` 与 `CapabilityServicesProductionAdapterIntegrationTest` 已把 snapshot mismatch、availability unknown fail-closed、hot update 和 production multi-dataset route resolution 锁住，后续改动不能再悄悄回到单 fixture snapshot。
+3. 本轮未使用 qemu / kvm，且不把结果外推为 `CAPSRV-GAP-006` 的 observability/health sinks、`CAPSRV-GAP-007` 的 caller-domain owner 或 `CAPSRV-GAP-008` 的 installed / release / soak 证据已完成。
+
 # 记录 #731
 
 - 日期：2026-05-20

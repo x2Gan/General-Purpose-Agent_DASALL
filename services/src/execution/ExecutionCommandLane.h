@@ -29,6 +29,9 @@ struct ExecutionCommandLaneDependencies {
   CapabilitySnapshotView capability_snapshot;
   FallbackEnvelope fallback_envelope;
   std::vector<AdapterCandidateView> registered_candidates;
+  std::function<CapabilityRouteView(const std::string& capability_id,
+                                    AdapterRouteRequestKind request_kind)>
+      resolve_route_view = {};
 
   std::vector<std::string> critical_actions;
   std::vector<std::string> high_risk_actions;

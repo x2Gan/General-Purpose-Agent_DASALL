@@ -40,6 +40,7 @@ using internal::AdapterRouteKind;
 using internal::AdapterRouteRequestKind;
 using internal::AdapterSelection;
 using internal::AdapterTransportOutcome;
+using internal::CapabilityRouteView;
 using internal::CapabilitySnapshotView;
 using internal::DataProjectionCache;
 using internal::DataQueryLane;
@@ -578,6 +579,95 @@ make_backend_handler(const ServiceLiveBackendHandler& handler) {
   return candidates;
 }
 
+[[nodiscard]] bool candidate_supports_capability(const AdapterCandidateView& candidate,
+                                                 const std::string& capability_id) {
+  for (const auto& supported_capability : candidate.supported_capabilities) {
+    if (supported_capability == capability_id) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void append_route_kind_if_missing(std::vector<AdapterRouteKind>* route_classes,
+                                  AdapterRouteKind route_kind) {
+  for (const auto existing_route_kind : *route_classes) {
+    if (existing_route_kind == route_kind) {
+      return;
+    }
+  }
+
+  route_classes->push_back(route_kind);
+}
+
+[[nodiscard]] std::vector<AdapterCandidateView> filter_candidates_for_capability(
+    const std::vector<AdapterCandidateView>& registered_candidates,
+    const std::string& capability_id) {
+  std::vector<AdapterCandidateView> capability_candidates;
+  for (const auto& candidate : registered_candidates) {
+    if (candidate_supports_capability(candidate, capability_id)) {
+      capability_candidates.push_back(candidate);
+    }
+  }
+
+  return capability_candidates;
+}
+
+[[nodiscard]] std::optional<AdapterRouteKind> preferred_locality_for_capability(
+    const ServicePolicyView& policy_view,
+    const std::vector<AdapterRouteKind>& route_classes) {
+  for (const auto preferred_route_kind : policy_view.adapter_preference_order) {
+    for (const auto supported_route_kind : route_classes) {
+      if (supported_route_kind == preferred_route_kind) {
+        return preferred_route_kind;
+      }
+    }
+  }
+
+  if (!route_classes.empty()) {
+    return route_classes.front();
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] CapabilityRouteView build_live_route_view(
+    const ServiceLiveCompositionOptions& options,
+    const ServicePolicyView& policy_view,
+    const std::vector<AdapterCandidateView>& registered_candidates,
+    const std::string& capability_id,
+    AdapterRouteRequestKind request_kind) {
+  auto capability_candidates =
+      filter_candidates_for_capability(registered_candidates, capability_id);
+  std::vector<AdapterRouteKind> route_classes;
+  for (const auto& candidate : capability_candidates) {
+    append_route_kind_if_missing(&route_classes, candidate.route_kind);
+  }
+
+  std::vector<std::string> supported_actions;
+  std::vector<std::string> supported_queries;
+  if (request_kind == AdapterRouteRequestKind::action) {
+    supported_actions.push_back(capability_id);
+  } else if (capability_id != options.execution_capability_id ||
+             capability_id == options.data_capability_id) {
+    supported_queries = {"default", "catalog.list"};
+  }
+
+  return CapabilityRouteView{
+      .capability_snapshot = CapabilitySnapshotView{
+          .capability_id = capability_id,
+          .capability_version = "v1",
+          .supported_actions = std::move(supported_actions),
+          .supported_queries = std::move(supported_queries),
+          .route_classes = route_classes,
+          .preferred_locality = preferred_locality_for_capability(policy_view,
+                                                                  route_classes),
+      },
+      .registered_candidates = std::move(capability_candidates),
+  };
+}
+
 [[nodiscard]] const ServiceLiveRouteBinding* find_binding_for(
     const ServiceLiveAdapterRegistry& registry,
     ServiceLiveRouteKind route_kind) {
@@ -788,6 +878,14 @@ class LiveServiceCompositionRoot final : public IExecutionService,
           options.allow_route_degrade,
           route_equivalence_class),
         .registered_candidates = registered_candidates_,
+        .resolve_route_view = [this](const std::string& capability_id,
+                                     AdapterRouteRequestKind request_kind) {
+          return build_live_route_view(options_,
+                                       policy_view_,
+                                       registered_candidates_,
+                                       capability_id,
+                                       request_kind);
+        },
         .critical_actions = options.critical_actions,
         .high_risk_actions = options.high_risk_actions,
         .allow_high_risk_actions = true,
@@ -818,6 +916,14 @@ class LiveServiceCompositionRoot final : public IExecutionService,
           options.allow_route_degrade,
           route_equivalence_class),
         .registered_candidates = registered_candidates_,
+        .resolve_route_view = [this](const std::string& capability_id,
+                                     AdapterRouteRequestKind request_kind) {
+          return build_live_route_view(options_,
+                                       policy_view_,
+                                       registered_candidates_,
+                                       capability_id,
+                                       request_kind);
+        },
         .metrics_bridge = metrics_bridge_.get(),
         .trace_bridge = trace_bridge_.get(),
     });

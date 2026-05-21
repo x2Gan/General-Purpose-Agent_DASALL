@@ -62,6 +62,18 @@ void apply_error_override(std::optional<contracts::ErrorInfo>* error,
   (*error)->details.stage = std::move(stage);
 }
 
+[[nodiscard]] CapabilityRouteView resolve_route_view(const DataQueryLaneDependencies& dependencies,
+                                                     const std::string& capability_id) {
+  if (dependencies.resolve_route_view) {
+    return dependencies.resolve_route_view(capability_id, AdapterRouteRequestKind::query);
+  }
+
+  return CapabilityRouteView{
+      .capability_snapshot = dependencies.capability_snapshot,
+      .registered_candidates = dependencies.registered_candidates,
+  };
+}
+
 [[nodiscard]] AdapterRouteRequest build_query_route_request(const ServicePolicyView& policy_view,
                                                             const CapabilitySnapshotView& snapshot,
                                                             const FallbackEnvelope& fallback_envelope,
@@ -163,11 +175,12 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
                               std::nullopt);
   }
 
+  const auto route_view = resolve_route_view(dependencies_, request.dataset);
   const auto route_decision = dependencies_.router->select_adapter(build_query_route_request(
       dependencies_.policy_view,
-      dependencies_.capability_snapshot,
+      route_view.capability_snapshot,
       dependencies_.fallback_envelope,
-      dependencies_.registered_candidates,
+      route_view.registered_candidates,
       request));
   if (!route_decision.ok()) {
     return emit_query_metrics(make_query_error_result(
@@ -273,11 +286,12 @@ DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& con
                                 std::nullopt);
   }
 
+    const auto route_view = resolve_route_view(dependencies_, request.target_class);
   const auto route_decision = dependencies_.router->select_adapter(build_catalog_route_request(
       dependencies_.policy_view,
-      dependencies_.capability_snapshot,
+      route_view.capability_snapshot,
       dependencies_.fallback_envelope,
-      dependencies_.registered_candidates,
+      route_view.registered_candidates,
       request));
   if (!route_decision.ok()) {
     return emit_catalog_metrics(make_catalog_error_result(
