@@ -135,8 +135,8 @@
 
 1. `apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 已把 daemon / gateway 的 runtime production composition 收敛为共享 helper；调用点固定在 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp`，owner ambiguity 已消除。
 2. 该 helper 的职责是消费 `RuntimePolicySnapshot`、installed layout 与测试 override，装配 `RuntimeDependencySet` 所需的 memory、llm、cognition、response、tools、multi_agent required baseline，并以 knowledge 作为 optional degrade-ready 端口；它不是第二个 orchestrator、scheduler 或 recovery owner。
-3. `DaemonRuntimeLiveDependencyCompositionTest`、`GatewayRuntimeLiveDependencyCompositionTest` 与 multi-agent focused tests 已证明该 helper 是共享的 app-level composition root；这些结果只能证明 live baseline 已落盘，不能外推为 services backend、observability sinks、installed knowledge assets、durable session/checkpoint 全部 production-ready。
-4. 因此 runtime 当前与 `apps/runtime_support` 相关的主要风险已从“谁来装配 `RuntimeDependencySet`”转为“装配后的 downstream completeness 与证据分层是否闭合”，后续任务应继续聚焦 services、observability、durable state 与 installed/qemu/release evidence。
+3. `DaemonRuntimeLiveDependencyCompositionTest`、`GatewayRuntimeLiveDependencyCompositionTest`、`RuntimeProductionHealthCompositionTest` 与 multi-agent focused tests 已证明该 helper 是共享的 app-level composition root，并且 runtime control-plane observability / health sinks 已进入 live dependency set；这些结果仍不能外推为 services backend、installed knowledge assets、durable session/checkpoint、installed package 或 release 级证据全部 production-ready。
+4. 因此 runtime 当前与 `apps/runtime_support` 相关的主要风险已从“谁来装配 `RuntimeDependencySet`”与“runtime observability hot path 是否接线”转为“装配后的 remaining downstream completeness 与证据分层是否闭合”，后续任务应继续聚焦 services、durable state、degraded semantics 与 installed/qemu/release evidence。
 
 ## 4. 粒度可行性评估
 
@@ -429,4 +429,4 @@ ctest --test-dir build-ci -R "(RuntimeControlPlaneSurfaceTest|RuntimeErrorCodeTe
 | RT-OQ-03 | 详设 §12 OQ-3 | checkpoint schema 版本升级策略未最终确定 | 本专项 partial 覆盖 | RT-TODO-016、024、028 | version tag 写入、compatibility contract 与 replay regression 已纳入；跨大版本迁移留后续 |
 | RT-OQ-04 | 详设 §12 OQ-4 | 相邻模块 runtime-facing public interface 落位时间不确定 | 本专项 mitigate | RT-TODO-003、026、027、031 | fail-closed stub + seam 唯一原则仍成立；RT-BLK-01 已对 unary gate 解阻；fixture gate 与 true integration gate 继续分开记录 |
 | RT-OQ-05 | 详设 §12 OQ-5 | recovery retry 超限后的人工干预接口未定义 | 本专项 partial 覆盖 | RT-TODO-017 | retry admission 含 max_retry 上限；超限后进入 FailedSafe -> audit；人工干预 API 留后续 |
-| RT-OQ-06 | 详设 6.23 / 8.2 J4 | health probe 与 background maintenance 的默认 cadence 尚未冻结 | 已由 INT-TODO-026 / `HealthCadenceAndEventBoundary` 完成设计冻结 | RT-TODO-023、030 | 当前只剩 runtime consume points 与 Gate 落地；default cadence、non-blocking 行为与 event publish fallback 已由 system SSOT 收口 |
+| RT-OQ-06 | 详设 6.23 / 8.2 J4 | health probe 与 background maintenance 的默认 cadence 尚未冻结 | 已由 INT-TODO-026 / `HealthCadenceAndEventBoundary` 完成设计冻结 | RT-TODO-023、030、RT-FIX-005 | runtime consume points 与 focused Gate 已由 `RT-FIX-005` 闭合；default cadence、non-blocking 行为与 event publish fallback 已由 system SSOT 收口 |

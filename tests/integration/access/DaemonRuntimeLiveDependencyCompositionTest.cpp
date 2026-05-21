@@ -364,12 +364,22 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
           "daemon runtime live dependency composition should route agent.terminal through the live execution service payload");
         assert_true(composition.dependency_set->health_monitor != nullptr,
           "daemon runtime live dependency composition should retain a concrete health monitor for production observability");
+        assert_true(composition.dependency_set->runtime_event_bus != nullptr &&
+            composition.dependency_set->runtime_telemetry_bridge != nullptr &&
+            composition.dependency_set->runtime_health_probe != nullptr &&
+            composition.dependency_set->background_maintenance_hooks != nullptr,
+          "daemon runtime live dependency composition should wire runtime control-plane observability sinks into the live dependency set");
+        assert_true(composition.dependency_set->health_probes.size() == 3U,
+          "daemon runtime live dependency composition should retain tool, services, and runtime control-plane health probes");
         assert_true(contains_port(composition.dependency_set->external_evidence,
         "runtime:daemon.local-control-plane:tool-services-production-bridge"),
           "daemon runtime live dependency composition should record the production services bridge evidence marker");
         assert_true(contains_port(composition.dependency_set->external_evidence,
         "runtime:daemon.local-control-plane:production-observability-health"),
           "daemon runtime live dependency composition should record the production observability and health evidence marker");
+        assert_true(contains_port(composition.dependency_set->external_evidence,
+        "runtime:daemon.local-control-plane:runtime-control-plane-observability-wired"),
+          "daemon runtime live dependency composition should record the runtime control-plane observability evidence marker once the sinks are wired");
         assert_true(contains_port(composition.dependency_set->external_evidence,
           "runtime:daemon.local-control-plane:knowledge-installed-assets-ready"),
             "daemon runtime live dependency composition should record the installed knowledge positive marker after the probe succeeds");

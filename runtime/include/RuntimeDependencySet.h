@@ -73,6 +73,11 @@ class IMultiAgentCoordinator;
 
 namespace dasall::runtime {
 
+class BackgroundMaintenanceHooks;
+class RuntimeEventBus;
+class RuntimeHealthProbe;
+class RuntimeTelemetryBridge;
+
 enum class RuntimeStubMainLoopExit : std::uint8_t {
   DirectResponse = 0,
   ToolRound,
@@ -155,6 +160,10 @@ class RuntimeDependencySet final {
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;
   std::shared_ptr<infra::IHealthMonitor> health_monitor;
+  std::shared_ptr<RuntimeEventBus> runtime_event_bus;
+  std::shared_ptr<RuntimeTelemetryBridge> runtime_telemetry_bridge;
+  std::shared_ptr<RuntimeHealthProbe> runtime_health_probe;
+  std::shared_ptr<BackgroundMaintenanceHooks> background_maintenance_hooks;
   std::vector<std::shared_ptr<infra::IHealthProbe>> health_probes;
   std::vector<std::string> visible_tools;
   std::vector<std::string> external_evidence;

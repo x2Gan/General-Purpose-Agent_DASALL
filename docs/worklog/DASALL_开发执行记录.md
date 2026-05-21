@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+# 记录 #739
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-005` runtime production observability / health
+- 状态：已完成（runtime control-plane observability sinks、shared health aggregate 与 orchestrator telemetry hot path 已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `RT-FIX-005`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 近端实现检查确认：`apps/runtime_support` 的 shared observability / health sink 注入已经由 `RTSUP-TODO-006` 闭合，当前真正缺口不在 shared helper 是否存在，而在 runtime 自己的 `RuntimeEventBus`、`RuntimeTelemetryBridge`、`RuntimeHealthProbe`、`BackgroundMaintenanceHooks` 没有进入 live `RuntimeDependencySet` 与 `AgentOrchestrator` hot path。
+3. authoritative 边界是：只收口 runtime owner 的 production observability / health wiring 与 focused regression，不把本轮 build-tree 结果外推为 installed package、release runner 或 qemu 级证据。
+
+### 改动
+
+1. 更新 `runtime/include/RuntimeDependencySet.h`：新增 `runtime_event_bus`、`runtime_telemetry_bridge`、`runtime_health_probe`、`background_maintenance_hooks` 四个 runtime control-plane observability 字段，让 live dependency set 能显式承载 runtime 自己的 telemetry / health 组件。
+2. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：新增 `RuntimeControlPlaneHealthSignalProvider`，实例化 runtime event bus / telemetry bridge / maintenance hooks / health probe，并把 `runtime.control_plane` probe 注册到 shared health monitor；同时新增 `runtime-control-plane-observability-wired` evidence marker。
+3. 更新 `runtime/src/AgentOrchestrator.cpp`：新增 telemetry context / backfill helper 与 scoped transition emitter，让 `run_once()`、`continue_from_checkpoint()`、`handle_waiting_state()` 自动发 transition 事件，并在 budget reject、recovery reject、safe-mode 路径显式调用 `RuntimeTelemetryBridge`。
+4. 更新 `tests/integration/access/RuntimeProductionHealthCompositionTest.cpp` 与 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`：锁定 runtime control-plane sinks 已进入 live composition，health probe 总数从 tools/services 两个扩展为 tools/services/runtime 三个。
+5. 新增 `docs/todos/runtime/deliverables/RT-FIX-005-runtime-production-observability-health-closeout.md`，并回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/todos/runtime/DASALL_runtime子系统专项TODO.md` 与本工作日志；本轮没有改动 runtime owner 边界之外的控制权，也没有引入 qemu / kvm。
+
+### 验证
+
+1. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(DaemonRuntimeLiveDependencyCompositionTest|RuntimeProductionHealthCompositionTest)$'`
+   - 结果：通过，2/2 通过。
+2. `cmake --build build/vscode-linux-ninja --target dasall_runtime_telemetry_bridge_unit_test dasall_runtime_health_maintenance_integration_test dasall_runtime_agent_orchestrator_skeleton_unit_test dasall_runtime_agent_orchestrator_controller_assembly_unit_test`
+   - 结果：通过。
+3. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(AgentOrchestratorSkeletonTest|AgentOrchestratorControllerAssemblyTest|RuntimeTelemetryBridgeTest|RuntimeHealthMaintenanceIntegrationTest)$'`
+   - 结果：通过，4/4 通过。
+
+### 结果
+
+1. `RT-GAP-005` 已在当前树收口：runtime production composition 现已显式持有 runtime 自己的 telemetry / event / health / maintenance sinks，并把 runtime control-plane probe 纳入 shared health aggregate。
+2. `AgentOrchestrator` 现在会在 run、continue 与 waiting 路径发 transition、budget reject、recovery reject、safe-mode 事件，runtime production path 不再只依赖 readiness 字符串。
+3. runtime 章节的下一优先级已收敛为 `RT-GAP-006` optional degraded semantics 与 `RT-GAP-007` / `RT-GAP-008` 更高层证据；本轮未使用 qemu / kvm，也未把结论外推到这些更高层级。
+
 # 记录 #738
 
 - 日期：2026-05-21

@@ -80,11 +80,19 @@ void runtime_production_health_composition_registers_ready_probes() {
               "runtime production health composition should retain shared audit, metrics, and trace providers");
   assert_true(composition.dependency_set->health_monitor != nullptr,
               "runtime production health composition should expose a concrete health monitor");
-  assert_true(composition.dependency_set->health_probes.size() == 2U,
-              "runtime production health composition should retain both tool and services probes");
+    assert_true(composition.dependency_set->runtime_event_bus != nullptr &&
+            composition.dependency_set->runtime_telemetry_bridge != nullptr &&
+            composition.dependency_set->runtime_health_probe != nullptr &&
+            composition.dependency_set->background_maintenance_hooks != nullptr,
+          "runtime production health composition should wire the runtime control-plane observability sinks");
+    assert_true(composition.dependency_set->health_probes.size() == 3U,
+          "runtime production health composition should retain tool, services, and runtime control-plane probes");
   assert_true(contains_port(composition.dependency_set->external_evidence,
                   "runtime:daemon.local-control-plane:production-observability-health"),
               "runtime production health composition should record the observability and health evidence marker");
+    assert_true(contains_port(composition.dependency_set->external_evidence,
+            "runtime:daemon.local-control-plane:runtime-control-plane-observability-wired"),
+          "runtime production health composition should record the runtime control-plane observability evidence marker");
 
   const auto health_result = composition.dependency_set->health_monitor->evaluate_now();
   assert_true(health_result.ok && health_result.snapshot.readiness &&

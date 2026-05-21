@@ -27,6 +27,7 @@
 #include "error/ResultCode.h"
 #include "fsm/AgentFsm.h"
 #include "observation/Observation.h"
+#include "telemetry/RuntimeTelemetryBridge.h"
 
 namespace dasall::runtime {
 namespace {
@@ -58,6 +59,181 @@ constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
 [[nodiscard]] bool has_live_unary_ports(const OrchestratorComposition& composition) {
   return composition.dependency_set != nullptr &&
          composition.dependency_set->has_live_unary_ports();
+}
+
+[[nodiscard]] std::shared_ptr<RuntimeTelemetryBridge> runtime_telemetry_bridge(
+    const OrchestratorComposition& composition) {
+  return composition.dependency_set != nullptr
+             ? composition.dependency_set->runtime_telemetry_bridge
+             : nullptr;
+}
+
+[[nodiscard]] std::optional<std::string> runtime_turn_id(
+    const std::optional<SessionSnapshot>& session_snapshot) {
+  if (!session_snapshot.has_value()) {
+    return std::nullopt;
+  }
+
+  return std::string("turn-") + std::to_string(session_snapshot->turn_index);
+}
+
+[[nodiscard]] RuntimeTelemetryContext make_runtime_telemetry_context(
+    const contracts::AgentRequest& request,
+    const std::optional<SessionSnapshot>& session_snapshot = std::nullopt,
+    const std::optional<std::string>& checkpoint_id = std::nullopt) {
+  RuntimeTelemetryContext context;
+  context.request_id = request.request_id;
+  if (request.session_id.has_value() && !request.session_id->empty()) {
+    context.session_id = request.session_id;
+  } else if (session_snapshot.has_value() && !session_snapshot->session_id.empty()) {
+    context.session_id = session_snapshot->session_id;
+  }
+  if (request.trace_id.has_value() && !request.trace_id->empty()) {
+    context.trace_id = request.trace_id;
+  }
+  context.turn_id = runtime_turn_id(session_snapshot);
+  if (checkpoint_id.has_value() && !checkpoint_id->empty()) {
+    context.checkpoint_id = checkpoint_id;
+  } else if (session_snapshot.has_value() &&
+             session_snapshot->active_checkpoint_ref.has_value()) {
+    context.checkpoint_id = session_snapshot->active_checkpoint_ref;
+  }
+  return context;
+}
+
+[[nodiscard]] RuntimeTelemetryContext make_runtime_telemetry_context(
+    const ResumeHandleRequest& request,
+    const std::optional<SessionSnapshot>& session_snapshot = std::nullopt) {
+  RuntimeTelemetryContext context;
+  if (!request.request_id.empty()) {
+    context.request_id = request.request_id;
+  }
+  if (!request.session_id.empty()) {
+    context.session_id = request.session_id;
+  } else if (session_snapshot.has_value() && !session_snapshot->session_id.empty()) {
+    context.session_id = session_snapshot->session_id;
+  }
+  if (!request.trace_context.empty()) {
+    context.trace_id = request.trace_context;
+  }
+  context.turn_id = runtime_turn_id(session_snapshot);
+  if (!request.checkpoint_ref.empty()) {
+    context.checkpoint_id = request.checkpoint_ref;
+  } else if (session_snapshot.has_value() &&
+             session_snapshot->active_checkpoint_ref.has_value()) {
+    context.checkpoint_id = session_snapshot->active_checkpoint_ref;
+  }
+  return context;
+}
+
+void backfill_runtime_telemetry_context(RuntimeTelemetryContext* context,
+                                        const OrchestratorRunResult& run_result) {
+  if (context == nullptr) {
+    return;
+  }
+
+  if ((!context->session_id.has_value() || context->session_id->empty()) &&
+      run_result.effective_session.has_value() &&
+      !run_result.effective_session->session_id.empty()) {
+    context->session_id = run_result.effective_session->session_id;
+  }
+
+  if (!context->turn_id.has_value()) {
+    context->turn_id = runtime_turn_id(run_result.effective_session);
+  }
+
+  if (!context->checkpoint_id.has_value()) {
+    if (run_result.checkpoint.has_value() &&
+        run_result.checkpoint->checkpoint_id.has_value()) {
+      context->checkpoint_id = run_result.checkpoint->checkpoint_id;
+    } else if (run_result.effective_session.has_value() &&
+               run_result.effective_session->active_checkpoint_ref.has_value()) {
+      context->checkpoint_id = run_result.effective_session->active_checkpoint_ref;
+    }
+  }
+}
+
+[[nodiscard]] RuntimeTelemetryContext effective_runtime_telemetry_context(
+    RuntimeTelemetryContext context,
+    const OrchestratorRunResult& run_result) {
+  backfill_runtime_telemetry_context(&context, run_result);
+  return context;
+}
+
+class ScopedRuntimeTransitionEmitter final {
+ public:
+  ScopedRuntimeTransitionEmitter(
+      std::shared_ptr<RuntimeTelemetryBridge> telemetry_bridge,
+      RuntimeTelemetryContext base_context,
+      OrchestratorRunResult* run_result)
+      : telemetry_bridge_(std::move(telemetry_bridge)),
+        base_context_(std::move(base_context)),
+        run_result_(run_result) {}
+
+  ~ScopedRuntimeTransitionEmitter() {
+    if (telemetry_bridge_ == nullptr || run_result_ == nullptr) {
+      return;
+    }
+
+    const auto context = effective_runtime_telemetry_context(base_context_, *run_result_);
+    for (const auto& trace : run_result_->stage_trace) {
+      if (!trace.entered || trace.state_before == trace.state_after) {
+        continue;
+      }
+
+      telemetry_bridge_->emit_transition(trace.state_before,
+                                         trace.state_after,
+                                         context,
+                                         trace.detail);
+    }
+  }
+
+ private:
+  std::shared_ptr<RuntimeTelemetryBridge> telemetry_bridge_;
+  RuntimeTelemetryContext base_context_;
+  OrchestratorRunResult* run_result_ = nullptr;
+};
+
+void emit_budget_reject_if_available(
+    const std::shared_ptr<RuntimeTelemetryBridge>& telemetry_bridge,
+    const BudgetDecision& decision,
+    RuntimeTelemetryContext context,
+    const OrchestratorRunResult& run_result) {
+  if (telemetry_bridge == nullptr) {
+    return;
+  }
+
+  telemetry_bridge->emit_budget_reject(
+      decision,
+      effective_runtime_telemetry_context(std::move(context), run_result));
+}
+
+void emit_recovery_reject_if_available(
+    const std::shared_ptr<RuntimeTelemetryBridge>& telemetry_bridge,
+    const contracts::RecoveryOutcome& outcome,
+    RuntimeTelemetryContext context,
+    const OrchestratorRunResult& run_result) {
+  if (telemetry_bridge == nullptr) {
+    return;
+  }
+
+  telemetry_bridge->emit_recovery_reject(
+      outcome,
+      effective_runtime_telemetry_context(std::move(context), run_result));
+}
+
+void emit_safe_mode_if_available(
+    const std::shared_ptr<RuntimeTelemetryBridge>& telemetry_bridge,
+    const SafeModeDecision& decision,
+    RuntimeTelemetryContext context,
+    const OrchestratorRunResult& run_result) {
+  if (telemetry_bridge == nullptr) {
+    return;
+  }
+
+  telemetry_bridge->emit_safe_mode(
+      decision,
+      effective_runtime_telemetry_context(std::move(context), run_result));
 }
 
 [[nodiscard]] std::string make_tool_call_id(const contracts::AgentRequest& request) {
@@ -1642,6 +1818,13 @@ std::unique_ptr<IAgentFsm> AgentOrchestrator::build_fsm(const RuntimeState initi
 OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest& request) {
   OrchestratorRunResult run_result;
   const auto normalized_request = normalize_request(request, next_sequence_++);
+  const auto telemetry_bridge = runtime_telemetry_bridge(composition_);
+  const auto base_telemetry_context =
+      make_runtime_telemetry_context(normalized_request);
+  ScopedRuntimeTransitionEmitter transition_emitter(
+      telemetry_bridge,
+      base_telemetry_context,
+      &run_result);
   const auto goal_id = effective_goal_id(normalized_request, composition_);
   const auto runtime_budget = effective_runtime_budget(normalized_request, composition_);
   const auto request_deadline_at_ms =
@@ -1809,6 +1992,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                initial_state,
                true,
                budget_decision.detail);
+    emit_budget_reject_if_available(
+      telemetry_bridge,
+      budget_decision,
+      base_telemetry_context,
+      run_result);
     run_result.agent_result = make_result(
         normalized_request,
         RuntimeState::Failed,
@@ -2251,6 +2439,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                  fsm->current_state(),
                  true,
                  continue_budget.detail);
+      emit_budget_reject_if_available(
+          telemetry_bridge,
+          continue_budget,
+          base_telemetry_context,
+          run_result);
       run_result.agent_result = make_result(
           normalized_request,
           RuntimeState::Failed,
@@ -2783,6 +2976,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                  fsm->current_state(),
                  true,
                  tool_budget_decision.detail);
+      emit_budget_reject_if_available(
+          telemetry_bridge,
+          tool_budget_decision,
+          base_telemetry_context,
+          run_result);
       run_result.agent_result = make_result(
           normalized_request,
           RuntimeState::Failed,
@@ -3234,10 +3432,20 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       }
 
       if (executed_action == "abort_safe" || executed_action == "degrade") {
+        emit_recovery_reject_if_available(
+          telemetry_bridge,
+          *run_result.recovery_outcome,
+          base_telemetry_context,
+          run_result);
         const auto safe_mode_decision = evaluate_safe_mode_for_recovery(
             safe_mode_controller_,
             *run_result.recovery_outcome,
             recovery_request.runtime_budget_snapshot);
+        emit_safe_mode_if_available(
+          telemetry_bridge,
+          safe_mode_decision,
+          base_telemetry_context,
+          run_result);
         const auto target_runtime_state =
             safe_mode_decision.target_runtime_state.value_or(RuntimeState::FailedSafe);
 
@@ -3395,6 +3603,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
 
       const auto recovery_detail = run_result.recovery_outcome->rejection_reason.value_or(
           run_result.recovery_outcome->escalation_reason.value_or(recovery_apply_result.detail));
+        emit_recovery_reject_if_available(
+          telemetry_bridge,
+          *run_result.recovery_outcome,
+          base_telemetry_context,
+          run_result);
       run_result.agent_result = make_result(
           normalized_request,
           RuntimeState::Failed,
@@ -3565,6 +3778,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                fsm->current_state(),
                true,
                continue_budget.detail);
+    emit_budget_reject_if_available(
+      telemetry_bridge,
+      continue_budget,
+      base_telemetry_context,
+      run_result);
     run_result.agent_result = make_result(
         normalized_request,
         RuntimeState::Failed,
@@ -3785,6 +4003,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
 
     const auto tool_budget_decision = budget_controller_.can_call_tool();
     if (tool_budget_decision.rejected()) {
+      emit_budget_reject_if_available(
+          telemetry_bridge,
+          tool_budget_decision,
+          base_telemetry_context,
+          run_result);
       run_result.agent_result = make_result(
           normalized_request,
           RuntimeState::Failed,
@@ -4028,10 +4251,20 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       const auto execution_plan = recovery_manager_.evaluate(recovery_request);
       run_result.recovery_outcome = recovery_manager_.execute(execution_plan);
       const auto apply_result = recovery_manager_.apply(*run_result.recovery_outcome);
+        emit_recovery_reject_if_available(
+          telemetry_bridge,
+          *run_result.recovery_outcome,
+          base_telemetry_context,
+          run_result);
       const auto safe_mode_decision = evaluate_safe_mode_for_recovery(
           safe_mode_controller_,
           *run_result.recovery_outcome,
           recovery_request.runtime_budget_snapshot);
+        emit_safe_mode_if_available(
+          telemetry_bridge,
+          safe_mode_decision,
+          base_telemetry_context,
+          run_result);
       const auto target_runtime_state = safe_mode_decision.target_runtime_state.value_or(
           RuntimeState::FailedSafe);
 
@@ -4429,6 +4662,15 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
                                      : plan.resume_reason;
   synthetic_request.request_channel = contracts::RequestChannel::Cli;
   synthetic_request.created_at = current_time_ms();
+    const auto telemetry_bridge = runtime_telemetry_bridge(composition_);
+    const auto base_telemetry_context = make_runtime_telemetry_context(
+      synthetic_request,
+      session_snapshot,
+      std::optional<std::string>(plan.checkpoint_ref));
+    ScopedRuntimeTransitionEmitter transition_emitter(
+      telemetry_bridge,
+      base_telemetry_context,
+      &run_result);
   const auto goal_id = composition_.default_goal_id;
 
   const auto load_result = checkpoint_manager_.load(plan.checkpoint_ref);
@@ -4478,6 +4720,11 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
                          .started_at_ms = composition_.budget_started_at_ms,
                        });
   if (budget_decision.rejected()) {
+    emit_budget_reject_if_available(
+      telemetry_bridge,
+      budget_decision,
+      base_telemetry_context,
+      run_result);
     run_result.agent_result = make_result(
         synthetic_request,
         RuntimeState::Failed,
@@ -4799,6 +5046,13 @@ OrchestratorRunResult AgentOrchestrator::handle_waiting_state(
     const SessionSnapshot& session_snapshot,
     const ResumeHandleRequest& request) {
   OrchestratorRunResult run_result;
+  const auto telemetry_bridge = runtime_telemetry_bridge(composition_);
+  const auto base_telemetry_context =
+    make_runtime_telemetry_context(request, session_snapshot);
+  ScopedRuntimeTransitionEmitter transition_emitter(
+    telemetry_bridge,
+    base_telemetry_context,
+    &run_result);
   const auto load_result = session_manager_.load_session(
       SessionLoadRequest{
       .session_id = session_snapshot.session_id.empty() ? request.session_id

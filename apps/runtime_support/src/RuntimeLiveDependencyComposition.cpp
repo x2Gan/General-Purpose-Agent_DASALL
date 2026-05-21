@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <set>
@@ -54,11 +55,15 @@
 #include "config/MemoryConfigProjector.h"
 #include "config/InstallLayout.h"
 #include "execution/BuiltinExecutorLane.h"
+#include "health/RuntimeHealthProbe.h"
+#include "maintenance/BackgroundMaintenanceHooks.h"
 #include "bridge/ToolServiceBridge.h"
 #include "registry/ToolRegistry.h"
 #include "skills/PluginSkillBundleImporter.h"
 #include "skills/SkillRegistry.h"
 #include "skills/SkillRuntime.h"
+#include "telemetry/RuntimeEventBus.h"
+#include "telemetry/RuntimeTelemetryBridge.h"
 #include "tracing/ISpan.h"
 #include "tracing/ITracer.h"
 #include "tracing/TraceTypes.h"
@@ -974,6 +979,150 @@ class RuntimeToolHealthSignalProvider final
   std::function<std::int64_t()> now_ms_;
 };
 
+class RuntimeControlPlaneHealthSignalProvider final
+    : public runtime::IRuntimeHealthSignalProvider {
+ public:
+  RuntimeControlPlaneHealthSignalProvider(
+      std::shared_ptr<runtime::RuntimeEventBus> event_bus,
+      std::shared_ptr<runtime::RuntimeTelemetryBridge> telemetry_bridge,
+      const bool maintenance_hooks_ready,
+      std::function<std::int64_t()> now_ms)
+      : event_bus_(std::move(event_bus)),
+        telemetry_bridge_(std::move(telemetry_bridge)),
+        maintenance_hooks_ready_(maintenance_hooks_ready),
+        now_ms_(std::move(now_ms)) {
+    if (event_bus_ != nullptr) {
+      safe_mode_subscription_ = event_bus_->subscribe(
+          "runtime.safe_mode",
+          [this](const runtime::RuntimeEventEnvelope& event) {
+            record_safe_mode_event(event);
+          },
+          true);
+    }
+  }
+
+  ~RuntimeControlPlaneHealthSignalProvider() override {
+    if (event_bus_ != nullptr && safe_mode_subscription_.is_valid()) {
+      static_cast<void>(event_bus_->unsubscribe(
+          safe_mode_subscription_.subscription_id));
+    }
+  }
+
+  [[nodiscard]] runtime::RuntimeHealthSample sample(std::int64_t) override {
+    runtime::RuntimeHealthSample sample;
+    sample.dependencies_ready = event_bus_ != nullptr &&
+                                telemetry_bridge_ != nullptr &&
+                                maintenance_hooks_ready_;
+    sample.watchdog_healthy = true;
+    sample.telemetry_degraded = telemetry_bridge_ == nullptr;
+    sample.event_bus_overflow = event_bus_ != nullptr && event_bus_->drop_count() > 0U;
+    sample.maintenance_backlog = pending_maintenance_backlog();
+    sample.safe_mode_active = safe_mode_active();
+    sample.latency_ms = 0;
+    sample.sampled_at_unix_ms = now_ms_ != nullptr ? now_ms_() : current_time_ms();
+    sample.detail_ref = detail_ref_for(sample);
+    return sample;
+  }
+
+ private:
+  [[nodiscard]] static std::optional<std::string> attribute_value(
+      const runtime::RuntimeEventEnvelope& event,
+      const std::string& key) {
+    const auto attribute_it = std::find_if(
+        event.attributes.begin(),
+        event.attributes.end(),
+        [&key](const auto& attribute) { return attribute.key == key; });
+    if (attribute_it == event.attributes.end()) {
+      return std::nullopt;
+    }
+
+    return attribute_it->value;
+  }
+
+  void record_safe_mode_event(const runtime::RuntimeEventEnvelope& event) {
+    const auto target_mode = attribute_value(event, "target_mode");
+    if (!target_mode.has_value()) {
+      return;
+    }
+
+    const std::lock_guard<std::mutex> lock(safe_mode_mutex_);
+    safe_mode_active_ = *target_mode != "Normal";
+  }
+
+  [[nodiscard]] bool pending_maintenance_backlog() const {
+    if (event_bus_ == nullptr) {
+      return false;
+    }
+
+    const auto pending_events = event_bus_->pending_snapshot();
+    return std::any_of(pending_events.begin(),
+                       pending_events.end(),
+                       [](const auto& event) {
+                         return event.category ==
+                                runtime::RuntimeEventCategory::Maintenance;
+                       });
+  }
+
+  [[nodiscard]] std::optional<bool> pending_safe_mode_state() const {
+    if (event_bus_ == nullptr) {
+      return std::nullopt;
+    }
+
+    const auto pending_events = event_bus_->pending_snapshot();
+    for (auto it = pending_events.rbegin(); it != pending_events.rend(); ++it) {
+      if (it->category != runtime::RuntimeEventCategory::SafeMode) {
+        continue;
+      }
+
+      if (const auto target_mode = attribute_value(*it, "target_mode");
+          target_mode.has_value()) {
+        return *target_mode != "Normal";
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  [[nodiscard]] bool safe_mode_active() const {
+    if (const auto pending_state = pending_safe_mode_state();
+        pending_state.has_value()) {
+      return *pending_state;
+    }
+
+    const std::lock_guard<std::mutex> lock(safe_mode_mutex_);
+    return safe_mode_active_;
+  }
+
+  [[nodiscard]] std::string detail_ref_for(
+      const runtime::RuntimeHealthSample& sample) const {
+    if (!sample.dependencies_ready) {
+      return "status://runtime/health/degraded/dependencies";
+    }
+    if (sample.event_bus_overflow) {
+      return "status://runtime/health/degraded/event_bus";
+    }
+    if (sample.telemetry_degraded) {
+      return "status://runtime/health/degraded/telemetry";
+    }
+    if (sample.maintenance_backlog) {
+      return "status://runtime/health/degraded/maintenance";
+    }
+    if (sample.safe_mode_active) {
+      return "status://runtime/health/degraded/safe_mode";
+    }
+
+    return "status://runtime/health/healthy";
+  }
+
+  std::shared_ptr<runtime::RuntimeEventBus> event_bus_;
+  std::shared_ptr<runtime::RuntimeTelemetryBridge> telemetry_bridge_;
+  bool maintenance_hooks_ready_ = false;
+  std::function<std::int64_t()> now_ms_;
+  mutable std::mutex safe_mode_mutex_;
+  bool safe_mode_active_ = false;
+  runtime::RuntimeEventSubscription safe_mode_subscription_;
+};
+
 [[nodiscard]] std::string register_health_probe(
     const std::shared_ptr<infra::IHealthMonitor>& health_monitor,
     const std::string& probe_name,
@@ -1619,6 +1768,55 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   dependency_set->tracer_provider = observability.tracer_provider;
   dependency_set->health_monitor = observability.health_monitor;
   dependency_set->health_probes = observability.health_probes;
+  dependency_set->runtime_event_bus = std::make_shared<runtime::RuntimeEventBus>(
+      runtime::RuntimeEventBusOptions{
+          .max_non_audit_queue_depth = 64U,
+          .now_ms = []() {
+            return current_time_ms();
+          },
+      });
+  dependency_set->runtime_telemetry_bridge =
+      std::make_shared<runtime::RuntimeTelemetryBridge>(
+          dependency_set->runtime_event_bus,
+          runtime::RuntimeTelemetryBridgeOptions{
+              .runtime_instance_id = std::string(composition_owner),
+              .now_ms = []() {
+                return current_time_ms();
+              },
+          });
+  dependency_set->background_maintenance_hooks =
+      std::make_shared<runtime::BackgroundMaintenanceHooks>(
+          dependency_set->runtime_event_bus,
+          runtime::BackgroundMaintenanceHookOptions{
+              .now_ms = []() {
+                return current_time_ms();
+              },
+              .event_name_prefix = "runtime.maintenance",
+              .fallback_sink = nullptr,
+          });
+  dependency_set->runtime_health_probe = std::make_shared<runtime::RuntimeHealthProbe>(
+      std::make_shared<RuntimeControlPlaneHealthSignalProvider>(
+          dependency_set->runtime_event_bus,
+          dependency_set->runtime_telemetry_bridge,
+          dependency_set->background_maintenance_hooks != nullptr,
+          []() {
+            return current_time_ms();
+          }),
+      runtime::RuntimeHealthProbeOptions{
+          .now_ms = []() {
+            return current_time_ms();
+          },
+      });
+  if (const auto register_error = register_health_probe(
+          dependency_set->health_monitor,
+          std::string(runtime::kRuntimeHealthProbeName),
+          std::string(runtime::kRuntimeHealthProbeGroup),
+          dependency_set->runtime_health_probe.get());
+      !register_error.empty()) {
+    return make_error(std::string("runtime health probe registration failed for ") +
+                      std::string(composition_owner) + ": " + register_error);
+  }
+  dependency_set->health_probes.push_back(dependency_set->runtime_health_probe);
 
   std::string memory_config_error;
   bool memory_vector_fail_closed = false;
@@ -1928,6 +2126,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       ":tool-services-production-bridge",
       std::string("runtime:") + std::string(composition_owner) +
       ":production-observability-health",
+      std::string("runtime:") + std::string(composition_owner) +
+      ":runtime-control-plane-observability-wired",
       std::string("runtime:") + std::string(composition_owner) +
       (policy_snapshot->multi_agent_enabled() ? ":multi-agent-enabled"
                                               : ":multi-agent-disabled"),
