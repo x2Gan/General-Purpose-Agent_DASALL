@@ -335,7 +335,7 @@ flowchart LR
 | 控制点 | Validator | Policy Gate | Service | Adapter | RecoveryManager | 唯一决策者 | 说明 |
 |---|---|---|---|---|---|---|---|
 | 参数结构合法性、默认值注入、字段归一化 | Owner | Recheck | Recheck | No | No | Validator | Service 只能拒绝不满足 ServiceTypes 合同的不变量 |
-| 权限、风险等级与确认门控 | Recheck | Owner | Recheck | No | No | Policy Gate | Service 只允许 recheck confirmation proof、caller domain 与 action class 是否一致 |
+| 权限、风险等级与确认门控 | Recheck | Owner | Recheck | No | No | Policy Gate | Service 只允许 recheck 本层 action / route invariant，不消费 caller-domain 字段 |
 | 语义路由与等价后端选择 | No | Recheck | Owner | Recheck | No | Service | Policy Gate 只能约束允许的 target / route class，不直接选具体 adapter |
 | 传输可达性与协议执行 | No | No | Recheck | Owner | No | Adapter | Service 只 recheck deadline、idempotency 与 route contract；不能替 Adapter 伪造 transport 成功 |
 | 取消、停止与失败收敛 | No | No | Recheck | Recheck | Owner | RecoveryManager | Service/Adapter 只消费 cancel token 并回报当前执行状态 |
@@ -485,7 +485,7 @@ V1 设计收敛：
 |---|---|---|---|---|
 | `CapabilityTargetRef` | `Execution*Request` / `Data*Request` 中的 target 或 dataset 语义 | Tool Executor -> ServiceFacade | AdapterRouter | Tool 只能表达 capability/target 语义，不能附带具体 `adapter_id` |
 | `CapabilitySnapshotView` | BuildProfileManifest、adapter registration、runtime probe | ServiceConfigAdapter | AdapterRouter、Execution/Data/System lanes | 不允许从 `target_id` 字符串推断隐藏 capability 或绕过 snapshot 校验 |
-| `trust_class` | adapter registration 信任级别 + `caller_domain_allowlist` + action class 约束 | ServiceConfigAdapter + Tool Policy Gate | AdapterRouter | 不允许由 Tool 请求直接覆盖 trust tier，也不允许把 remote route 提升为 trusted-local |
+| `trust_class` | adapter registration 信任级别 + action class 约束；caller-domain admission 已由 Tools / Access 上游裁定 | ServiceConfigAdapter + Tool Policy Gate | AdapterRouter | 不允许由 Tool 请求直接覆盖 trust tier，也不允许把 remote route 提升为 trusted-local |
 | `availability_state` | ServiceHealthProbe、adapter probe、circuit state、timeout budget | ServiceHealthProbe | AdapterRouter | 缺失或低置信度 availability 只能 fail-closed，不能假定后端可达 |
 | `FallbackEnvelope` | Runtime `degrade_policy.fallback_chain` + policy decision | Runtime | AdapterRouter | Service 只能消费 envelope，不能在本地追加 hop、跨出 `route_equivalence_class` 或放宽 `allow_degrade` |
 | `local_platform_route_enabled` | `enabled_modules.platform_hal` -> `ServicePolicyView` | RuntimePolicySnapshot / ServiceConfigAdapter | AdapterRouter | 当 profile 禁用 platform HAL 时，不得回退到 LocalPlatformAdapter |
@@ -737,23 +737,22 @@ V1 设计收敛：
 1. Tool Policy Gate 继续是 `allow` / `deny` / `require_confirmation` 的唯一 owner；services 只消费 internal-only 的执行准入事实，不在 ServiceTypes.h 中新增 confirmation proof 公共字段。
 2. `require_confirmation` 动作集合固定为：`safe_mode.enter`、`safe_mode.exit`，以及 capability snapshot 明确标记 `requires_confirmation=true` 或 `risk_tier=high` 的副作用动作。
 3. `safe_mode.enter` 与 `safe_mode.exit` 不允许被拆成新的顶层接口，也不允许通过语义不等价 fallback 绕开原始 action class。
+4. 2026-05-21 `CAPSRV-FIX-007` 收口后，caller-domain admission owner 固定在 Tools / Access PolicyGate；Capability Services 不扩展 `ServiceCallContext` / `AdapterRouter` caller-domain 输入，也不在 `ServicePolicyView` 中保留未消费的 caller-domain allowlist 投影。
 
 | action class / family | 代表动作或判定来源 | require_confirmation | caller_domain 约束 | fallback / audit 约束 |
 |---|---|---|---|---|
-| `command.standard` | capability snapshot 标记为副作用动作，且 `risk_tier=normal` | 否 | 只允许来自 `execution_policy.allowed_tool_domains` 的 caller domain；Service 仅 recheck 透传值与上游决策一致 | 允许语义等价 route；执行前后写普通日志与 trace，是否写 audit 由 `audit_level` 与 capability policy 决定 |
-| `command.high_risk` | capability snapshot 标记 `requires_confirmation=true` 或 `risk_tier=high` 的副作用动作 | 是 | caller domain 必须仍在 `execution_policy.allowed_tool_domains` 中，且与 Tool Policy Gate 评估时使用的 domain 完全一致 | 不允许无 `decision_ref` 的隐式放行；高风险动作前后必须写 audit |
-| `safe_mode.enter` | 固定高风险 action；进入安全模式 | 是 | 仅允许被 Tool Policy Gate 放行后的受信 caller domain 调用；Service 不放宽 allowlist | 禁止语义不等价 fallback；必须记录 before/after audit，并保留 `decision_ref` |
+| `command.standard` | capability snapshot 标记为副作用动作，且 `risk_tier=normal` | 否 | 由 Tools / Access PolicyGate 在进入 services 前基于 `execution_policy.allowed_tool_domains` 判定；Service 不消费 caller-domain 字段 | 允许语义等价 route；执行前后写普通日志与 trace，是否写 audit 由 `audit_level` 与 capability policy 决定 |
+| `command.high_risk` | capability snapshot 标记 `requires_confirmation=true` 或 `risk_tier=high` 的副作用动作 | 是 | caller-domain admission 仍由 Tools / Access PolicyGate owner 判定；Service 不新增 decision/proof 公共字段 | 禁止把高风险 action 降级为普通 fallback；高风险动作前后必须写 audit |
+| `safe_mode.enter` | 固定高风险 action；进入安全模式 | 是 | 仅允许经 Tool PolicyGate 放行后的受控 Tools 路径进入 services；Service 不放宽 route trust / fallback envelope | 禁止语义不等价 fallback；必须记录 before/after audit |
 | `safe_mode.exit` | 固定高风险 action；退出安全模式 | 是 | 同 `safe_mode.enter` | 同 `safe_mode.enter` |
-| `compensate.*` | `IExecutionService.compensate` 下的补偿动作族 | 否；是否进入补偿由 Runtime/RecoveryManager 裁定 | caller domain 必须与原始执行记录或补偿授权记录一致；Service 只 recheck source execution 与 authorization ref | 必须携带 source execution / idempotency 事实；补偿请求和结果均写 audit |
+| `compensate.*` | `IExecutionService.compensate` 下的补偿动作族 | 否；是否进入补偿由 Runtime/RecoveryManager 裁定 | caller-domain admission 不由 services 解释；补偿授权仍由 Runtime / Access 上游 owner 裁定 | 必须携带 source execution / idempotency 事实；补偿请求和结果均写 audit |
 
-| recheck 项 | 上游 owner / 来源 | Service 侧强制规则 | 失败结果 |
+| 边界项 | 上游 owner / 来源 | Service 侧强制规则 | 失败结果 |
 |---|---|---|---|
-| action class 一致性 | Tool Policy Gate + capability snapshot | Service 必须验证请求 action 与上游判定出的 action class 一致，禁止把 `safe_mode.*` 或高风险动作降格为普通命令 | `PolicyDenied` |
-| caller_domain allowlist | `execution_policy.allowed_tool_domains` | Service 只接受 allowlist 内 domain；若请求透传 domain 与上游决策记录不一致，必须拒绝 | `PolicyDenied` |
-| require_confirmation 决策引用 | Tool Policy Gate `PolicyDecision` | 对 require_confirmation 动作，必须存在 `decision_ref`，且状态为已确认通过；缺失或状态不匹配时拒绝 | `PolicyDenied` |
-| confirmation proof 绑定关系 | internal-only confirmation proof sideband | Service 只 recheck proof 是否绑定同一 action class、同一 `CapabilityTargetRef` 和同一 caller domain；proof 结构保持 internal-only，不进入公共 ABI | `PolicyDenied` |
-| proof 新鲜度 | confirmation proof issue / expiry metadata | proof 必须在 request `deadline_ms` 约束内仍然有效；过期 proof 不得被复用到新的高风险动作请求 | `PolicyDenied` |
-| 审计可追溯性 | ServiceAuditBridge + `audit_level` | 所有 require_confirmation 动作都必须能把 request/result 关联到 `decision_ref` 与 action class；缺失 audit 关联视为 Gate 不通过 | `PolicyDenied` 或 Ops Gate FAIL |
+| caller-domain admission | Tools / Access PolicyGate + `execution_policy.allowed_tool_domains` | Service 不读取 caller-domain，也不保留 services-owned allowlist；非 Tools / Access caller 不属于当前 supported path | 上游 `PolicyDenied` |
+| action / route invariant | Tool Policy Gate + capability snapshot + fallback envelope | Service 继续验证 action、capability snapshot、route trust、availability 与 fallback envelope，不允许通过路由降级绕开高风险动作族 | `PolicyDenied` 或 route failure |
+| request identity / budget | ServiceContextBuilder + `ServiceCallContext` | Service 只验证 request/session/trace/tool/goal/budget/deadline 等服务调用事实；不把 caller-domain 加入 public ABI | validation failure |
+| 审计可追溯性 | ServiceAuditBridge + `audit_level` | 高风险动作仍必须产生 request/result audit 证据，但 audit 关联不要求 services public context 承载 caller-domain 或 decision proof | `PolicyDenied` 或 Ops Gate FAIL |
 
 ### 6.7 主流程时序
 
@@ -824,7 +823,7 @@ flowchart LR
 |---|---|---|---|---|---|
 | InvalidRequest | capability/action/argument 缺失或类型不合法 | validation | false | true | 错误详情、字段位置、拒绝原因 |
 | CapabilityUnsupported | action/query 与 target capability snapshot 不匹配 | validation | false | true | capability snapshot、支持动作列表 |
-| PolicyDenied | Tool Policy Gate 已给出 deny / require_confirmation 未满足，或 Service recheck 发现 confirmation proof、caller domain 与 action class 不一致 | policy | false | true | policy decision ref、proof mismatch、拒绝原因 |
+| PolicyDenied | Tool / Access PolicyGate 已给出 deny / require_confirmation 未满足，或 services 本地 action / route invariant 拒绝 | policy | false | true | policy source、route/action denial reason |
 | RouteUnavailable | 请求合法但当前无可用 adapter 路径 | runtime | true | true | route candidates、last health、fallback blocked reason |
 | AdapterUnavailable | 后端不可达、连接池耗尽、超时 | provider | true | true | adapter id、timeout、last health |
 | TargetBusy | 执行目标正在忙、存在租约冲突或串行门限 | provider | true | false | 当前占用信息、建议重试窗口 |
@@ -838,7 +837,7 @@ ServiceErrorClass -> ErrorInfo 映射收敛：
 |---|---|---|---|
 | InvalidRequest | `validation` | `source_ref` 指向 request validator 或字段路径；`details` 必须列出 invalid fields / reject reason | `side_effects` / `compensation_hints` 为空 |
 | CapabilityUnsupported | `validation` | `source_ref` 指向 capability snapshot 或 capability_id；`details` 列出支持动作 / 查询 | `side_effects` / `compensation_hints` 为空 |
-| PolicyDenied | `policy` | `source_ref` 指向 `decision_ref`；`details` 列出 caller domain / proof mismatch | `side_effects` / `compensation_hints` 为空 |
+| PolicyDenied | `policy` | `source_ref` 指向上游 policy decision 或 services 本地 invariant；`details` 列出 denial reason | `side_effects` / `compensation_hints` 为空 |
 | RouteUnavailable | `runtime` | `source_ref` 指向 route evaluation ref 或 `receipt_ref`；`details` 列出 route candidates、last health、fallback blocked reason | `side_effects` / `compensation_hints` 为空 |
 | AdapterUnavailable | `provider` | `source_ref` 指向 `receipt_ref` 或 `adapter_id`；`details` 列出 timeout / provider status / last health | `side_effects` / `compensation_hints` 为空 |
 | TargetBusy | `provider` | `source_ref` 指向 `receipt_ref` 或 target lease ref；`details` 列出 busy owner / retry window | `side_effects` / `compensation_hints` 为空 |
@@ -908,10 +907,10 @@ schema 对齐结论：
 | capability_cache_policy.failure_backoff_ms | 5000 / 3000 | resync_backoff_ms | stale/overflow 后的回读退避 | 仅内部派生 |
 | degrade_policy.fallback_chain | lan.general -> local.small / local.small -> builtin_only | adapter_preference_order | route fallback 顺序 | 取代原 `services.adapter.preference_order` |
 | degrade_policy.allow_budget_degrade | true / true | read_path_degrade_allowed | 查询降级与 stale read 候选 | 只影响只读路径 |
-| execution_policy.requires_high_risk_confirmation | true / true | high_risk_confirmation_required | 供 Tool Policy Gate 生成确认门控；Service 只 recheck proof 与 action class 一致性 | services 只能收紧，不可放宽 |
+| execution_policy.requires_high_risk_confirmation | true / true | high_risk_confirmation_required | 供 Tool Policy Gate 生成确认门控；Service 仅保留高风险 action / route invariant | services 只能收紧，不可放宽 |
 | execution_policy.safe_mode_enabled | true / true | safe_mode_enabled | 供 Runtime/Tool 控制面约束高风险 route 与 safe mode action；Service 只做 invariant recheck | 不得由 services 覆写 |
 | execution_policy.audit_level | full / standard | audit_level | ServiceAuditBridge 审计粒度 | 复用既有 execution_policy |
-| execution_policy.allowed_tool_domains | builtin,mcp / builtin,mcp | caller_domain_allowlist | 供 Tool Registry/Policy Gate 判定 caller domain；Service 只 recheck 透传一致性 | 复用既有 execution_policy |
+| execution_policy.allowed_tool_domains | builtin,mcp / builtin,mcp | 不派生到 ServicePolicyView | 供 Tools / Access PolicyGate 判定 caller-domain admission；Service 不命名或重解释该字段 | 复用既有 execution_policy，owner 固定在上游 |
 | enabled_modules.platform_hal | false / true | local_platform_route_enabled | 本地平台适配路径可用性 | 由 profile 显式控制 |
 | enabled_modules.infra_observability | true / true | observability_bridge_enabled | metrics/trace/export 接线开关 | audit 仍受 execution_policy 约束 |
 | infra.health.* / infra.metrics.* | 见各 profile 资产 | health_export_policy / metrics_export_policy | 与 infra health/metrics 组件对齐 | 通过 infra 子域消费，不在 services 重命名 |
@@ -941,7 +940,7 @@ schema 对齐结论：
 | 日志 | 命令开始/结束、适配器选择、超时、熔断、缓存命中、订阅溢出 | request_id、session_id、trace_id、tool_call_id、goal_id、capability_id、target_id、adapter_id | 结构化日志；错误不得吞没 |
 | 指标 | 请求量、成功率、P95/P99、熔断次数、缓存命中率、订阅 overflow、补偿提示次数 | action、query_kind、adapter、result、profile | 供 infra/metrics 导出 |
 | 追踪 | ServiceFacade span、lane span、adapter span、external target span | trace_id、span_id、parent_span_id | 用于串联 Tool -> Services -> Adapter -> External |
-| 审计 | 高风险动作前后、补偿入口、模式降级、强制 fallback 拒绝 | actor/tool_call、capability、target、side_effects、decision_ref、result | 普通日志与审计分离存储 |
+| 审计 | 高风险动作前后、补偿入口、模式降级、强制 fallback 拒绝 | actor/tool_call、capability、target、side_effects、policy_source、result | 普通日志与审计分离存储 |
 
 建议指标：
 1. `services_execution_requests_total{action,target,result}`
@@ -1080,7 +1079,7 @@ schema 对齐结论：
 | Gate | 规则 | 二值判定 |
 |---|---|---|
 | D Gate | 文档已覆盖 12 章、边界/流程/Build/Test/兼容性完整 | 覆盖则 PASS，否则 FAIL |
-| Policy Alignment Gate | `require_confirmation` 动作集合、`caller_domain_allowlist` 与 proof recheck 规则已冻结，且与 `execution_policy.requires_high_risk_confirmation` / `allowed_tool_domains` 对齐 | 对齐则 PASS，否则 FAIL |
+| Policy Alignment Gate | `require_confirmation` 动作集合、Tools / Access caller-domain owner 与 services no-caller-domain-owner 边界已冻结，且与 `execution_policy.requires_high_risk_confirmation` / `allowed_tool_domains` 对齐 | 对齐则 PASS，否则 FAIL |
 | Route Contract Gate | `AdapterSelection` 字段、capability snapshot source、trust / availability owner 与 fallback envelope 已冻结，且未新增 `services.*` 顶层 schema | 对齐则 PASS，否则 FAIL |
 | Receipt Mapping Gate | `AdapterReceipt` 字段、`ServiceErrorClass -> ErrorInfo.failure_type` 映射、`evidence_refs` 与 `side_effects` / `compensation_hints` 约束已冻结，且未重定义 `ErrorInfo` 语义 | 对齐则 PASS，否则 FAIL |
 | B Gate-1 | `dasall_services` 编译通过且不引入对 cognition/llm 的实现依赖 | 通过则 PASS，否则 FAIL |

@@ -4,6 +4,8 @@
 任务：CAP-TODO-013  
 状态：D Gate PASS
 
+> 2026-05-21 注：`CAPSRV-FIX-007` 已删除 services 内未消费的 `caller_domain_allowlist` 派生；本文中若提及 caller-domain 参与 services route 输入，应以“上游 PolicyGate 已完成 caller-domain admission、services 仅消费 route trust / availability / fallback invariant”为当前 authoritative 口径。
+
 ## 1. 本地证据
 
 1. docs/architecture/DASALL_capability_services子系统详细设计.md 6.3 已明确 `AdapterRouter` 的职责是基于 policy、capability、target、trust 与 availability 选择后端适配器，但在本轮之前缺少 supporting objects 与 source owner 的成表定义。

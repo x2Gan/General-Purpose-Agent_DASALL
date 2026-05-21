@@ -4,6 +4,8 @@
 任务：CAP-TODO-012  
 状态：D Gate PASS
 
+> 2026-05-21 注：`CAPSRV-FIX-007` 已把 caller-domain admission owner 固定回 Tools / Access PolicyGate；本文中涉及 services caller-domain / proof recheck 的历史设计说明仅保留演进轨迹，不再代表当前 authoritative 实现口径。
+
 ## 1. 本地证据
 
 1. docs/architecture/DASALL_capability_services子系统详细设计.md 6.1.4、6.1.5 已明确 Tool Policy Gate 是权限、风险等级与确认门控的唯一 owner，services 只能做 action class、caller domain 与 proof 的 recheck，不能放宽上游治理结论。

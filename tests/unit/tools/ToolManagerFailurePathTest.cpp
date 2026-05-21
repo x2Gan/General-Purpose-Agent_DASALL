@@ -226,12 +226,53 @@ void test_route_unavailable_is_exposed_as_fail_closed_reason() {
                "route-unavailable requests must fail before hitting the executor");
 }
 
+void test_caller_domain_denial_stops_before_executor_or_services_bridge() {
+    int execution_count = 0;
+    dasall::tools::manager::ToolManagerDependencies dependencies;
+    dependencies.registry = std::make_shared<dasall::tools::registry::ToolRegistry>(
+            std::vector<dasall::contracts::ToolDescriptor>{
+                    make_descriptor("tool.inspect", dasall::contracts::ToolCategory::Information, true),
+            });
+    dependencies.executor = [&execution_count](const auto&) {
+        ++execution_count;
+        return dasall::contracts::ToolResult{};
+    };
+
+    dasall::tools::ToolManager manager(std::move(dependencies));
+    const auto snapshot = make_snapshot({"mcp"}, false);
+    const dasall::tools::ToolInvocationContext context{
+            .caller_domain = std::string("runtime.main"),
+            .session_id = std::string("session-domain-denied"),
+            .profile_snapshot = &snapshot,
+            .trace = {
+                    .trace_id = std::string("trace-domain-denied"),
+                    .span_id = std::string("span-domain-denied"),
+                    .parent_span_id = std::nullopt,
+            },
+            .confirmation_facts = std::nullopt,
+    };
+
+    const auto domain_denied = manager.invoke(
+            make_request("tool.inspect", dasall::contracts::ToolInvocationKind::InformationQuery),
+            context);
+    assert_true(domain_denied.tool_result.has_value(),
+                            "caller-domain policy denial should still produce a unified envelope");
+    assert_equal(std::string("policy.domain_denied"),
+                             *domain_denied.failure_reason_code,
+                             "ToolManager should surface ToolPolicyGate caller-domain denial directly");
+    assert_true(!domain_denied.has_projection(),
+                            "caller-domain policy denial should not fabricate a projection");
+    assert_equal(0, execution_count,
+                             "caller-domain policy denial must stop before executor or services bridge dispatch");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_missing_descriptor_and_policy_denial_fail_closed();
     test_route_unavailable_is_exposed_as_fail_closed_reason();
+        test_caller_domain_denial_stops_before_executor_or_services_bridge();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

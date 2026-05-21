@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+# 记录 #734
+
+- 日期：2026-05-21
+- 阶段：services / gap closeout
+- 任务：收口 `CAPSRV-GAP-007` caller-domain owner 缺口
+- 状态：已完成（caller-domain owner 已固定在 Tools / Access PolicyGate，services dangling field 与设计漂移已收口）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `CAPSRV-FIX-007`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. `CAPSRV-GAP-001` ~ `CAPSRV-GAP-006` 已闭合，因此 `CAPSRV-FIX-007` 是 capability services 章节当前排位最早、依赖已满足的可执行原子任务；本轮范围只覆盖 caller-domain owner 收口，不扩张到 installed / release / soak 证据。
+3. 近端代码与设计检查确认：`ServiceCallContext` 没有 caller-domain 字段，`ToolServiceBridge` 也不向 services 透传 caller-domain；但 `ServicePolicyView` 仍保留未消费的 `caller_domain_allowlist`，`ServiceConfigAdapter` 仍从 `execution_policy.allowed_tool_domains` 派生该字段，形成 dangling owner。
+4. authoritative 边界是：选择 B 方案，把 caller-domain admission owner 固定在 Tools / Access PolicyGate；services 继续只负责 action / route invariant、trust / availability、fallback envelope、budget / deadline 等本地约束，不引入第二套 caller-domain owner。
+
+### 改动
+
+1. 更新 `services/src/adapters/AdapterRouter.h` 与 `services/src/ops/ServiceConfigAdapter.cpp`：删除 `ServicePolicyView::caller_domain_allowlist` 及其从 `execution_policy.allowed_tool_domains` 的 services 派生，不扩展 `ServiceCallContext` / `AdapterRouter` 输入。
+2. 新增 `tests/unit/services/ServiceCallerDomainBoundaryGuardComplianceTest.cpp` 并更新 `tests/unit/services/CMakeLists.txt`：以 boundary compliance 方式扫描 services public/context/router/ops，锁住 services 不定义 caller-domain admission owner，同时验证 Tools / Access 仍保留上游 owner 标记。
+3. 更新 `tests/unit/tools/ToolPolicyGateTest.cpp` 与 `tests/unit/tools/ToolManagerFailurePathTest.cpp`：补 caller-domain allow 正例、domain missing 负例，以及 domain denied 在 executor / services bridge 前 fail-closed 的负例。
+4. 更新 `docs/architecture/DASALL_capability_services子系统详细设计.md`、`docs/todos/services/DASALL_capability_services子系统专项TODO.md` 与两份早期 deliverable 注记：把 caller-domain / proof recheck 口径收敛为“Tools / Access PolicyGate owner，services 不消费 caller-domain 字段”。
+5. 新增 `docs/todos/services/deliverables/CAPSRV-FIX-007-caller-domain-owner收口.md`，并回写总账与本工作日志；同时把 services 章节中残留的 qemu 验收建议改为本机 installed-package smoke / local artifact 口径。
+
+### 验证
+
+1. focused build。
+   - `cmake --build build/vscode-linux-ninja --target dasall_service_config_adapter_unit_test`：通过。
+   - `cmake --build build/vscode-linux-ninja --target dasall_service_caller_domain_boundary_guard_compliance_unit_test`：通过。
+   - `cmake --build build/vscode-linux-ninja --target dasall_tool_policy_gate_unit_test dasall_tool_manager_failure_path_unit_test`：通过。
+2. authoritative direct binaries。
+   - `./build/vscode-linux-ninja/tests/unit/services/ops/dasall_service_config_adapter_unit_test && echo PASS`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/services/dasall_service_caller_domain_boundary_guard_compliance_unit_test && echo PASS`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_tool_policy_gate_unit_test && echo ToolPolicyGate-PASS`：通过。
+   - `./build/vscode-linux-ninja/tests/unit/tools/dasall_tool_manager_failure_path_unit_test && echo ToolManagerFailurePath-PASS`：通过。
+3. static boundary checks。
+   - `rg -n "caller_domain_allowlist" services/src services/include`：无命中。
+   - `rg -n "allowed_tool_domains" services/src services/include`：无命中。
+   - `rg -n "caller_domain" services/include/ServiceTypes.h services/src/adapters services/src/ops`：无命中。
+
+### 结果
+
+1. `CAPSRV-GAP-007` 已在当前树收口：caller-domain admission owner 不再停留在 services dangling field，而是明确固定在 Tools / Access PolicyGate。
+2. Capability Services 继续保持最小边界：`ServiceCallContext` 不扩张 caller-domain，`AdapterRouter` 不解释 caller-domain allowlist，services 只保留 route / trust / availability / fallback / budget invariant。
+3. 当前 services 章节剩余开放项收敛为 `CAPSRV-GAP-008` 的本机 installed / release-runner local / soak 证据；本轮未使用 qemu / kvm，也未把结论外推到这些更高层级。
+
 # 记录 #733
 
 - 日期：2026-05-21

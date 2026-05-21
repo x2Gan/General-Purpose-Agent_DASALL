@@ -76,6 +76,44 @@ void test_safe_mode_rejects_unproven_route() {
                "safe mode denial should emit the route-unproven reason");
 }
 
+void test_allowed_caller_domain_and_visibility_are_admitted() {
+  dasall::tools::policy::ToolPolicyGate gate;
+  const auto decision = gate.evaluate(
+      dasall::tools::ToolAdmissionRequest{
+          .tool_name = "echo",
+          .required_scopes = {},
+          .caller_domain = std::string("builtin"),
+          .high_risk = false,
+          .confirmation_present = false,
+          .route_proven = true,
+      },
+      make_policy_view());
+
+  assert_true(decision.allowed(),
+              "caller domains admitted by the Tools policy view should pass the upstream owner gate");
+  assert_equal(std::string("policy.allowed"), decision.reason_code,
+               "allowed caller-domain requests should preserve the allow reason");
+}
+
+void test_missing_caller_domain_is_denied_by_tools_policy_gate() {
+  dasall::tools::policy::ToolPolicyGate gate;
+  const auto decision = gate.evaluate(
+      dasall::tools::ToolAdmissionRequest{
+          .tool_name = "echo",
+          .required_scopes = {},
+          .caller_domain = std::nullopt,
+          .high_risk = false,
+          .confirmation_present = false,
+          .route_proven = true,
+      },
+      make_policy_view());
+
+  assert_true(!decision.allowed(),
+              "missing caller domains should fail closed before any services request can be built");
+  assert_equal(std::string("policy.domain_missing"), decision.reason_code,
+               "missing caller-domain denial should emit the domain-missing reason");
+}
+
 void test_visibility_or_domain_denial_is_binary() {
   dasall::tools::policy::ToolPolicyGate gate;
   const auto domain_denied = gate.evaluate(
@@ -121,6 +159,8 @@ int main() {
     test_missing_profile_view_fails_closed();
     test_missing_confirmation_is_denied_for_high_risk_tool();
     test_safe_mode_rejects_unproven_route();
+    test_allowed_caller_domain_and_visibility_are_admitted();
+    test_missing_caller_domain_is_denied_by_tools_policy_gate();
     test_visibility_or_domain_denial_is_binary();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

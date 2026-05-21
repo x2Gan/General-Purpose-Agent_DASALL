@@ -65,7 +65,6 @@ struct ServicePolicyView {
   bool high_risk_confirmation_required = true;
   bool safe_mode_enabled = true;
   std::string audit_level;
-  std::vector<std::string> caller_domain_allowlist;
   bool local_platform_route_enabled = false;
   bool observability_bridge_enabled = false;
   std::string metrics_granularity;

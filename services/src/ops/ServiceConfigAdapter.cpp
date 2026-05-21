@@ -88,7 +88,6 @@ ServicePolicyDerivationResult ServiceConfigAdapter::derive_policy_view(
               runtime_policy.execution_policy().requires_high_risk_confirmation,
           .safe_mode_enabled = runtime_policy.execution_policy().safe_mode_enabled,
           .audit_level = runtime_policy.execution_policy().audit_level,
-          .caller_domain_allowlist = runtime_policy.execution_policy().allowed_tool_domains,
           .local_platform_route_enabled = build_manifest.enables_module("platform_hal"),
           .observability_bridge_enabled =
               build_manifest.enables_module("infra_observability") &&
