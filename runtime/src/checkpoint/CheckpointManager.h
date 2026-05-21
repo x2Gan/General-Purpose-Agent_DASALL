@@ -1,9 +1,9 @@
 #pragma once
 
-#include <unordered_map>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 #include "checkpoint/ICheckpointManager.h"
 #include "session/SessionTypes.h"
@@ -13,6 +13,8 @@ namespace dasall::runtime {
 class CheckpointManager final : public ICheckpointManager {
  public:
   CheckpointManager() = default;
+
+    void set_durable_state_root(const std::optional<std::string>& state_root);
 
   [[nodiscard]] CheckpointBuildResult build_checkpoint(
       const CheckpointBuildRequest& request) const override;
@@ -42,7 +44,8 @@ class CheckpointManager final : public ICheckpointManager {
   mutable std::mutex ckpt_mutex_;
     mutable std::unordered_map<std::string, std::optional<contracts::BudgetSnapshot>>
             pending_runtime_budget_snapshots_;
-  std::unordered_map<std::string, StoredCheckpointRecord> stored_checkpoints_;
+    mutable std::unordered_map<std::string, StoredCheckpointRecord> stored_checkpoints_;
+    std::optional<std::string> durable_state_root_;
 };
 
 }  // namespace dasall::runtime

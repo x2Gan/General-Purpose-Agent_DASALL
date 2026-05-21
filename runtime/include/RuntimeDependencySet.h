@@ -141,6 +141,7 @@ struct RuntimeLocalStubPorts {
 class RuntimeDependencySet final {
  public:
   RuntimeLocalStubPorts local_stub_ports;
+  std::optional<std::string> durable_state_root;
   std::optional<SessionSnapshot> seeded_waiting_session;
   std::vector<contracts::Checkpoint> seeded_checkpoints;
   std::shared_ptr<memory::IMemoryManager> memory_manager;

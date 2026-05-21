@@ -434,23 +434,33 @@ class AgentFacade::State {
                                 "runtime facade is missing orchestrator composition");
     }
 
-    if (!root_.waiting_session.has_value() ||
-        !is_active_waiting_session(*root_.waiting_session)) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "runtime facade has no active waiting session for resume request");
-    }
+    SessionSnapshot resume_session;
+    if (root_.waiting_session.has_value() &&
+        is_active_waiting_session(*root_.waiting_session)) {
+      if (root_.waiting_session->session_id != request.session_id) {
+        return make_failed_result(optional_string(request.request_id),
+                                  optional_string(request.trace_context),
+                                  "runtime resume request session does not match active waiting session");
+      }
 
-    if (root_.waiting_session->session_id != request.session_id) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "runtime resume request session does not match active waiting session");
-    }
+      if (root_.waiting_session->active_checkpoint_ref != request.checkpoint_ref) {
+        return make_failed_result(optional_string(request.request_id),
+                                  optional_string(request.trace_context),
+                                  "runtime resume request checkpoint does not match active waiting anchor");
+      }
 
-    if (root_.waiting_session->active_checkpoint_ref != request.checkpoint_ref) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "runtime resume request checkpoint does not match active waiting anchor");
+      resume_session = *root_.waiting_session;
+    } else {
+      resume_session = SessionSnapshot{
+          .session_id = request.session_id,
+          .request_id = request.request_id,
+          .turn_index = 0,
+          .active_checkpoint_ref = request.checkpoint_ref,
+          .fsm_state = RuntimeState::WaitingClarify,
+          .budget_snapshot_ref = std::nullopt,
+          .pending_interaction = std::nullopt,
+          .last_result_summary = std::nullopt,
+      };
     }
 
     if (request.resume_token !=
@@ -460,7 +470,7 @@ class AgentFacade::State {
                                 "runtime resume request token does not match waiting checkpoint binding");
     }
 
-    auto run_result = root_.orchestrator->handle_waiting_state(*root_.waiting_session,
+    auto run_result = root_.orchestrator->handle_waiting_state(resume_session,
                                                                request);
     apply_runtime_path_tag(root_, run_result);
     apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);

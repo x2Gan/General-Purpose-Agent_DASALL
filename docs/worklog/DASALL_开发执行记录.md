@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+# 记录 #737
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-003` durable checkpoint / resume gate
+- 状态：已完成（runtime durable checkpoint/session owner 与跨实例 waiting resume / replay gate 已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `RT-FIX-003`，若存在前置 blocker 先解组，再逐任务提交推送，并明确禁止使用 qemu / kvm 采集收敛证据。
+2. 近端实现检查确认：`RT-TODO-024` 与 `RT-TODO-028` 已经证明了 checkpoint replay compatibility、waiting resume 与 schema reject 的局部语义；当前真正缺口不在 replay 规则本身，而在 `CheckpointManager` / `SessionManager` 仍只掌握进程内 store，以及 `AgentFacade::resume()` / `AgentOrchestrator::handle_waiting_state()` 仍把进程内 `waiting_session` 当作硬前置。
+3. authoritative 边界是：只收口 runtime owner 内的 durable checkpoint / resume gate 与 focused regression，不把本轮 build-tree 结果外推为 app-binary、installed package、release runner 或 qemu 级别证据。
+
+### 改动
+
+1. 更新 `runtime/src/checkpoint/CheckpointManager.h/.cpp`：新增 `durable_state_root`、module-local key=value durable checkpoint 持久化与 budget sidecar 写回；`load()` / `seed_for_test()` 现可在同一 durable root 下完成跨实例 reload。同步更新 `tests/unit/runtime/CheckpointManagerTest.cpp`，新增第二个 manager 实例重载同一 checkpoint 的 focused case。
+2. 更新 `runtime/src/session/SessionManager.h/.cpp`：新增 `durable_state_root`、按 `session_id` 索引的 snapshot store，以及 waiting session / pending interaction 的 durable writeback/readback。同步更新 `tests/unit/runtime/SessionManagerTest.cpp`，新增第二个 manager 实例恢复 waiting session 的 focused case。
+3. 更新 `runtime/include/RuntimeDependencySet.h`、`runtime/src/AgentOrchestrator.cpp` 与 `runtime/src/AgentFacade.cpp`：runtime composition 现可下发 durable root；`resume()` 在无进程内 `waiting_session` 时会回退到 durable reload，`handle_waiting_state()` 则先重载 canonical session，再验证 waiting invariant。
+4. 更新 `tests/integration/agent_loop/CMakeLists.txt`、`tests/integration/agent_loop/RuntimeCheckpointReplayRegressionTest.cpp` 并新增 `tests/integration/agent_loop/RuntimeDurableResumeIntegrationTest.cpp`：前者补 durable restart 下的 waiting-tool replay，后者验证 clarify waiting checkpoint 可在新 `AgentFacade` 实例中恢复并完成。
+5. 新增 `docs/todos/runtime/deliverables/RT-FIX-003-durable-checkpoint-resume-gate-closeout.md`，并回写总账与本工作日志；本轮没有修改 runtime 之外的 owner 边界，也没有引入 qemu / kvm。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_runtime_resume_integration_test dasall_runtime_checkpoint_replay_regression_test dasall_runtime_durable_resume_integration_test`：通过。
+2. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(CheckpointManagerTest|SessionManagerTest|RuntimeResumeIntegrationTest|RuntimeCheckpointReplayRegressionTest|RuntimeDurableResumeIntegrationTest)$'`：通过。
+
+### 结果
+
+1. `RT-GAP-003` 已在当前树收口：runtime 现已拥有 durable checkpoint/session owner，waiting checkpoint 不再只依赖 in-memory synthetic resume。
+2. `RuntimeDurableResumeIntegrationTest` 与扩展后的 `RuntimeCheckpointReplayRegressionTest` 已分别锁定 clarify waiting checkpoint 与 waiting external/tool observation 的跨实例 durable replay；schema/version mismatch fixture 继续 fail-closed。
+3. Runtime 章节的下一个开放优先级已收敛为 `RT-GAP-004` deadline / cancellation，其后再推进 observability / degraded semantics / scheduler model / higher-level runtime evidence；本轮未使用 qemu / kvm，也未把结论外推到这些更高层级。
+
 # 记录 #736
 
 - 日期：2026-05-21

@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <exception>
 #include <iostream>
 #include <optional>
@@ -154,6 +155,30 @@ int main() {
           "load should preserve runtime budget snapshot sidecar");
     assert_true(load_result.runtime_budget_snapshot->entries.size() == 5,
           "runtime budget snapshot should preserve all budget dimensions");
+
+        const auto durable_root = std::filesystem::temp_directory_path() /
+              "dasall-runtime-checkpoint-durable-test";
+        (void)std::filesystem::remove_all(durable_root);
+
+        dasall::runtime::CheckpointManager durable_writer;
+        durable_writer.set_durable_state_root(durable_root.string());
+        const auto durable_persist_result = durable_writer.save(
+        *build_result.checkpoint,
+        build_result.runtime_budget_snapshot);
+        assert_true(durable_persist_result.persisted,
+            "checkpoint should persist through durable store when a state root is configured");
+
+        dasall::runtime::CheckpointManager durable_reader;
+        durable_reader.set_durable_state_root(durable_root.string());
+        const auto durable_load_result = durable_reader.load("chk-001");
+        assert_true(durable_load_result.loaded(),
+            "a second manager instance should reload checkpoint state from the durable store");
+        assert_true(durable_load_result.runtime_budget_snapshot.has_value(),
+            "durable reload should preserve runtime budget snapshot sidecar");
+        assert_true(durable_load_result.detail.find("durable store") != std::string::npos,
+            "durable reload should report the durable store source");
+
+        (void)std::filesystem::remove_all(durable_root);
 
     const auto resume_plan = manager.make_resume_plan(*load_result.checkpoint);
     assert_true(resume_plan.resumable, "paused waiting checkpoint should yield a resume plan");

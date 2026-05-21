@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <exception>
 #include <iostream>
 #include <optional>
@@ -56,6 +57,46 @@ int main() {
     assert_true(bind_result.persisted, "bind_checkpoint_ref should persist active checkpoint anchor");
     assert_equal("chk-018", bind_result.active_checkpoint_ref.value_or(std::string()),
                  "bind_checkpoint_ref should expose active checkpoint ref");
+
+    const auto durable_root = std::filesystem::temp_directory_path() /
+                              "dasall-runtime-session-durable-test";
+    (void)std::filesystem::remove_all(durable_root);
+
+    dasall::runtime::SessionManager durable_writer;
+    durable_writer.set_durable_state_root(durable_root.string());
+    const auto durable_bind_result = durable_writer.bind_checkpoint_ref(
+        dasall::runtime::BindCheckpointRefRequest{
+            .session_id = "session-018",
+            .request_id = "req-018",
+            .checkpoint_ref = "chk-018",
+            .fsm_state = RuntimeState::WaitingClarify,
+            .pending_interaction = dasall::runtime::PendingInteractionState{
+                .interaction_kind = PendingInteractionKind::Clarify,
+                .prompt_token = "prompt-clarify-018",
+                .deadline_ms = 1700001818,
+                .blocking_reason = "await clarification",
+                .resume_channel = "user_reply",
+                .input_schema_hint = "text/plain",
+            },
+        });
+    assert_true(durable_bind_result.persisted,
+                "bind_checkpoint_ref should persist session anchor through durable store");
+
+    dasall::runtime::SessionManager durable_reader;
+    durable_reader.set_durable_state_root(durable_root.string());
+    const auto durable_load_result = durable_reader.load_session(
+        dasall::runtime::SessionLoadRequest{
+            .session_id = "session-018",
+            .request_id = "resume-018",
+            .checkpoint_ref = std::string("chk-018"),
+            .allow_session_create = false,
+        });
+    assert_true(durable_load_result.has_snapshot(),
+                "a second manager instance should reload waiting session state from the durable store");
+    assert_true(durable_load_result.snapshot->pending_interaction.has_value(),
+                "durable reload should preserve pending interaction state");
+
+    (void)std::filesystem::remove_all(durable_root);
 
     const auto mismatched_load = manager.load_session(
         dasall::runtime::SessionLoadRequest{

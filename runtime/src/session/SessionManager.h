@@ -2,6 +2,8 @@
 
 #include <mutex>
 #include <optional>
+#include <string>
+#include <unordered_map>
 
 #include "session/ISessionManager.h"
 
@@ -11,6 +13,7 @@ class SessionManager final : public ISessionManager {
  public:
   SessionManager() = default;
 
+    void set_durable_state_root(const std::optional<std::string>& state_root);
     void seed_for_test(const SessionSnapshot& session_snapshot);
 
   [[nodiscard]] SessionLoadResult load_session(
@@ -26,7 +29,8 @@ class SessionManager final : public ISessionManager {
 
  private:
   mutable std::mutex session_mutex_;
-  std::optional<SessionSnapshot> stored_snapshot_;
+    mutable std::unordered_map<std::string, SessionSnapshot> stored_snapshots_;
+    std::optional<std::string> durable_state_root_;
 };
 
 }  // namespace dasall::runtime

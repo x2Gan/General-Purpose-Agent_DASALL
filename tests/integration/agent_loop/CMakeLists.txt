@@ -76,6 +76,12 @@ dasall_add_runtime_agent_loop_integration_test(
 )
 
 dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_durable_resume_integration_test
+  RuntimeDurableResumeIntegrationTest
+  RuntimeDurableResumeIntegrationTest.cpp
+)
+
+dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_policy_consumer_integration_test
   RuntimePolicyConsumerIntegrationTest
   RuntimePolicyConsumerIntegrationTest.cpp
@@ -88,6 +94,11 @@ dasall_add_runtime_agent_loop_integration_test(
 )
 
 target_link_libraries(dasall_runtime_resume_integration_test
+  PRIVATE
+    dasall_memory
+)
+
+target_link_libraries(dasall_runtime_durable_resume_integration_test
   PRIVATE
     dasall_memory
 )

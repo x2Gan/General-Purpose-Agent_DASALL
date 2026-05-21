@@ -1515,7 +1515,16 @@ const char* orchestrator_stage_name(const OrchestratorStage stage) {
 AgentOrchestrator::AgentOrchestrator(OrchestratorComposition composition)
     : composition_(std::move(composition)),
       scheduler_(2, 16),
-      safe_mode_controller_(composition_.policy_snapshot) {}
+      safe_mode_controller_(composition_.policy_snapshot) {
+  if (composition_.dependency_set != nullptr &&
+      composition_.dependency_set->durable_state_root.has_value() &&
+      !composition_.dependency_set->durable_state_root->empty()) {
+    checkpoint_manager_.set_durable_state_root(
+        composition_.dependency_set->durable_state_root);
+    session_manager_.set_durable_state_root(
+        composition_.dependency_set->durable_state_root);
+  }
+}
 
 void AgentOrchestrator::seed_for_test(
     const std::optional<SessionSnapshot>& session_snapshot,
@@ -4614,36 +4623,12 @@ OrchestratorRunResult AgentOrchestrator::handle_waiting_state(
     const SessionSnapshot& session_snapshot,
     const ResumeHandleRequest& request) {
   OrchestratorRunResult run_result;
-  if (!session_snapshot.pending_interaction.has_value() ||
-      !session_snapshot.pending_interaction->active() ||
-      !session_snapshot.active_checkpoint_ref.has_value()) {
-    contracts::AgentRequest synthetic_request;
-    synthetic_request.request_id = session_snapshot.request_id;
-    synthetic_request.session_id = session_snapshot.session_id;
-    synthetic_request.trace_id = request.trace_context;
-    synthetic_request.user_input = std::string("waiting-state-dispatch");
-    synthetic_request.request_channel = contracts::RequestChannel::Cli;
-    synthetic_request.created_at = current_time_ms();
-    run_result.agent_result = make_result(
-        synthetic_request,
-        RuntimeState::Failed,
-        contracts::AgentResultStatus::Failed,
-        kRuntimeOrchestratorSkeletonInternalErrorCode,
-        "handle_waiting_state requires an active waiting session snapshot",
-        make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
-                           "waiting session snapshot is incomplete",
-                           orchestrator_stage_name(OrchestratorStage::Preflight),
-                           RuntimeState::Failed),
-        std::nullopt,
-        composition_.default_goal_id);
-    run_result.final_state = RuntimeState::Failed;
-    return run_result;
-  }
-
   const auto load_result = session_manager_.load_session(
       SessionLoadRequest{
-          .session_id = session_snapshot.session_id,
-          .request_id = request.request_id,
+      .session_id = session_snapshot.session_id.empty() ? request.session_id
+                              : session_snapshot.session_id,
+      .request_id = session_snapshot.request_id.empty() ? request.request_id
+                              : session_snapshot.request_id,
           .checkpoint_ref = request.checkpoint_ref,
           .allow_session_create = false,
       });
@@ -4663,6 +4648,32 @@ OrchestratorRunResult AgentOrchestrator::handle_waiting_state(
         "handle_waiting_state failed to reload waiting session",
         make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
                            load_result.detail,
+                           orchestrator_stage_name(OrchestratorStage::Preflight),
+                           RuntimeState::Failed),
+        std::nullopt,
+        composition_.default_goal_id);
+    run_result.final_state = RuntimeState::Failed;
+    return run_result;
+  }
+
+  if (!load_result.snapshot->pending_interaction.has_value() ||
+      !load_result.snapshot->pending_interaction->active() ||
+      !load_result.snapshot->active_checkpoint_ref.has_value()) {
+    contracts::AgentRequest synthetic_request;
+    synthetic_request.request_id = request.request_id;
+    synthetic_request.session_id = request.session_id;
+    synthetic_request.trace_id = request.trace_context;
+    synthetic_request.user_input = std::string("waiting-state-dispatch");
+    synthetic_request.request_channel = contracts::RequestChannel::Cli;
+    synthetic_request.created_at = current_time_ms();
+    run_result.agent_result = make_result(
+        synthetic_request,
+        RuntimeState::Failed,
+        contracts::AgentResultStatus::Failed,
+        kRuntimeOrchestratorSkeletonInternalErrorCode,
+        "handle_waiting_state requires an active waiting session snapshot",
+        make_runtime_error(kRuntimeOrchestratorSkeletonInternalErrorCode,
+                           "waiting session snapshot is incomplete",
                            orchestrator_stage_name(OrchestratorStage::Preflight),
                            RuntimeState::Failed),
         std::nullopt,

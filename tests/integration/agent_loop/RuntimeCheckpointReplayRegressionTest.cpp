@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -178,7 +179,6 @@ void test_valid_waiting_tool_fixture_replays_through_runtime_resume_path() {
       "application/json");
 
       auto dependency_set = make_seeded_resume_dependency_set(session_snapshot, checkpoint);
-      dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
 
   std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
   const auto init_result = agent->init(make_init_request(
@@ -187,6 +187,8 @@ void test_valid_waiting_tool_fixture_replays_through_runtime_resume_path() {
       "runtime-replay-fixture",
         dependency_set));
   assert_true(init_result.is_ready(), "replay regression requires a ready facade");
+
+      dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
 
   const auto result = agent->resume(make_resume_request(
       session_snapshot.session_id,
@@ -232,7 +234,6 @@ void test_schema_mismatch_fixture_is_rejected_through_runtime_resume_path() {
       "application/json");
 
       auto dependency_set = make_seeded_resume_dependency_set(session_snapshot, checkpoint);
-      dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
 
   std::unique_ptr<IAgent> agent = std::make_unique<AgentFacade>();
   const auto init_result = agent->init(make_init_request(
@@ -241,6 +242,8 @@ void test_schema_mismatch_fixture_is_rejected_through_runtime_resume_path() {
       "runtime-replay-fixture",
         dependency_set));
   assert_true(init_result.is_ready(), "schema reject regression requires a ready facade");
+
+      dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
 
   const auto result = agent->resume(make_resume_request(
       session_snapshot.session_id,
@@ -263,12 +266,90 @@ void test_schema_mismatch_fixture_is_rejected_through_runtime_resume_path() {
               "schema-v2 rejection should preserve the unsupported-version detail");
 }
 
+void test_waiting_tool_fixture_replays_after_durable_restart() {
+  using dasall::contracts::AgentResultStatus;
+  using dasall::runtime::AgentFacade;
+  using dasall::runtime::IAgent;
+  using dasall::runtime::PendingInteractionKind;
+  using dasall::runtime::RuntimeState;
+  using dasall::tests::runtime_fixture::make_init_request;
+  using dasall::tests::runtime_fixture::make_resume_request;
+  using dasall::tests::runtime_fixture::make_seeded_resume_dependency_set;
+  using dasall::tests::runtime_fixture::make_waiting_dependency_set;
+  using dasall::tests::runtime_fixture::make_waiting_session_snapshot;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const auto checkpoint = load_checkpoint_fixture("replay_waiting_tool_v1.fixture");
+  const auto session_snapshot = make_waiting_session_snapshot(
+      "session-028-replay-durable",
+      checkpoint.request_id.value_or(std::string("req-024-durable")),
+      checkpoint.checkpoint_id.value_or(std::string()),
+      RuntimeState::WaitingExternal,
+      PendingInteractionKind::WaitExternal,
+      checkpoint.pending_action.value_or(std::string("await tool callback")),
+      "tool_callback",
+      "application/json");
+  const auto durable_root = std::filesystem::temp_directory_path() /
+                            "dasall-runtime-replay-durable-test";
+  (void)std::filesystem::remove_all(durable_root);
+
+  {
+    auto writer_dependency_set = make_seeded_resume_dependency_set(session_snapshot, checkpoint);
+    writer_dependency_set->durable_state_root = durable_root.string();
+
+    std::unique_ptr<IAgent> writer_agent = std::make_unique<AgentFacade>();
+    const auto init_result = writer_agent->init(make_init_request(
+        "rt-028-replay-durable-writer",
+        "desktop_full",
+        "runtime-replay-durable-writer",
+        writer_dependency_set));
+    assert_true(init_result.is_ready(),
+                "durable replay setup requires a ready facade for state seeding");
+  }
+
+  auto reader_dependency_set = make_waiting_dependency_set();
+  reader_dependency_set->durable_state_root = durable_root.string();
+
+  std::unique_ptr<IAgent> reader_agent = std::make_unique<AgentFacade>();
+  const auto reader_init_result = reader_agent->init(make_init_request(
+      "rt-028-replay-durable-reader",
+      "desktop_full",
+      "runtime-replay-durable-reader",
+      reader_dependency_set));
+  assert_true(reader_init_result.is_ready(),
+              "durable replay restart requires a ready facade");
+
+  reader_dependency_set->memory_manager = std::make_shared<ReadyReplayMemoryManager>();
+  const auto result = reader_agent->resume(make_resume_request(
+      session_snapshot.session_id,
+      checkpoint.checkpoint_id.value_or(std::string()),
+      "resume-028-replay-durable",
+      "external tool result received",
+      std::string(),
+      "trace-028-replay-durable"));
+
+  assert_true(result.status.has_value() && *result.status == AgentResultStatus::Completed,
+              "durable replay should restore waiting-tool checkpoint to a completed result");
+  assert_true(result.task_completed == true,
+              "durable replay should complete the replayed turn after restart");
+  assert_true(result.checkpoint_ref.has_value() &&
+                  result.checkpoint_ref != checkpoint.checkpoint_id,
+              "durable replay should emit a fresh completion checkpoint");
+  assert_equal("runtime orchestrator skeleton completed",
+               result.response_text.value_or(std::string()),
+               "durable replay should return the direct-success response");
+
+  (void)std::filesystem::remove_all(durable_root);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_valid_waiting_tool_fixture_replays_through_runtime_resume_path();
     test_schema_mismatch_fixture_is_rejected_through_runtime_resume_path();
+    test_waiting_tool_fixture_replays_after_durable_restart();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
