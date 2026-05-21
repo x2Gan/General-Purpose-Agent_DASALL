@@ -40,6 +40,13 @@ constexpr std::int32_t kRuntimeOrchestratorWaitingCode = 5006;
 constexpr std::int32_t kRuntimeOrchestratorLiveUnaryFailedCode = 5007;
 constexpr std::int32_t kRuntimeOrchestratorDegradedCode = 5008;
 constexpr std::int32_t kRuntimeOrchestratorSafeModeCode = 5009;
+constexpr char kRuntimeExecutionModelTag[] = "runtime_execution_model:v1_sync_inline";
+constexpr char kRuntimeSchedulerEffectiveMaxWorkersTag[] =
+  "runtime_scheduler_effective_max_workers:1";
+constexpr char kRuntimeCheckpointExecutionModelTag[] =
+  "runtime_execution_model=v1_sync_inline";
+constexpr char kRuntimeCheckpointEffectiveMaxWorkersTag[] =
+  "runtime_scheduler_effective_max_workers=1";
 
 [[nodiscard]] std::int64_t current_time_ms() {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -449,6 +456,24 @@ void append_unique_string(std::vector<std::string>& destination,
   if (std::find(destination.begin(), destination.end(), value) == destination.end()) {
     destination.push_back(value);
   }
+}
+
+void append_runtime_execution_model_tags(std::vector<std::string>& tags) {
+  append_unique_string(tags, kRuntimeExecutionModelTag);
+  append_unique_string(tags, kRuntimeSchedulerEffectiveMaxWorkersTag);
+}
+
+void apply_runtime_execution_model_tags(contracts::AgentResult& result) {
+  if (!result.tags.has_value()) {
+    result.tags = std::vector<std::string>{};
+  }
+
+  append_runtime_execution_model_tags(*result.tags);
+}
+
+void append_runtime_checkpoint_execution_model_tags(std::vector<std::string>& tags) {
+  append_unique_string(tags, kRuntimeCheckpointExecutionModelTag);
+  append_unique_string(tags, kRuntimeCheckpointEffectiveMaxWorkersTag);
 }
 
 void append_retrieval_evidence_ref(
@@ -1308,6 +1333,7 @@ void finalize_live_agent_result(contracts::AgentResult* agent_result,
   result.error_info = error_info;
   result.checkpoint_ref = checkpoint_ref;
   result.goal_id = goal_id;
+  apply_runtime_execution_model_tags(result);
   return result;
 }
 
@@ -1419,7 +1445,10 @@ struct SavedCheckpointResult {
 [[nodiscard]] SavedCheckpointResult build_and_save_checkpoint(
     CheckpointManager& checkpoint_manager,
     const CheckpointBuildRequest& request) {
-  const auto build_result = checkpoint_manager.build_checkpoint(request);
+  auto effective_request = request;
+  append_runtime_checkpoint_execution_model_tags(effective_request.tags);
+
+  const auto build_result = checkpoint_manager.build_checkpoint(effective_request);
   if (!build_result.built()) {
     return SavedCheckpointResult{
         .checkpoint = std::nullopt,

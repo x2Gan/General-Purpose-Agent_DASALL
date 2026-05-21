@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+# 记录 #742
+
+- 日期：2026-05-21
+- 阶段：runtime / gap closeout
+- 任务：收口 `RT-FIX-008` runtime v1 synchronous scheduler semantics
+- 状态：已完成（`AgentResult` / checkpoint 的 v1 同步执行模型标签已固定，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续推进总账中 `RT-GAP-007` 对应的原子任务，并保持 `project-implementation-cycle` 的单任务串行执行方式；本轮仍需按仓库规范提交推送，且禁止使用 qemu / kvm。
+2. 近端实现检查确认：`Scheduler` 与 backpressure surface 早已存在，但 `AgentOrchestrator` 主链仍把 direct LLM / tool round 以内联方式执行，且实际 worker budget 固定为 `max_workers=1`；缺口不在“完全没有 scheduler”，而在没有把这个 v1 同步 runtime 语义做成可审计事实。
+3. authoritative 边界是：只明确 runtime 当前的同步执行模型，不扩张到真正后台 worker pool、maintenance worker、recovery thread 或更高层 release evidence。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.cpp`：在统一 `make_result(...)` 出口追加 `runtime_execution_model:v1_sync_inline` 与 `runtime_scheduler_effective_max_workers:1`，使 direct path / tool round / recovery 相关结果都带有相同的 runtime 执行模型事实。
+2. 更新 `runtime/src/AgentOrchestrator.cpp`：在 `build_and_save_checkpoint(...)` 统一追加 `runtime_execution_model=v1_sync_inline` 与 `runtime_scheduler_effective_max_workers=1`，避免 checkpoint / resume 证据把 queue surface 误写成后台 worker 已就位。
+3. 更新 `tests/unit/runtime/AgentOrchestratorControllerAssemblyTest.cpp`：锁定 direct path 与 tool round fail-safe path 都会输出同步执行模型标签与对应 checkpoint tags。
+4. 更新 `tests/integration/agent_loop/RuntimeUnaryFixtureIntegrationTest.cpp`：锁定 `AgentFacade.handle()` 会把同步执行模型标签透传到最终 `AgentResult`；同时仅保留 `RuntimeUnaryIntegrationTest.cpp` 的编译一致性，不把本轮 closeout 绑定到它的更宽 direct-llm 分支。
+5. 新增 `docs/todos/runtime/deliverables/RT-FIX-008-runtime-v1-synchronous-scheduler-semantics-closeout.md`，并回写总账；本轮没有引入真正后台 worker，也没有把结果外推为 maintenance / recovery thread 已完成。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_runtime_agent_orchestrator_controller_assembly_unit_test dasall_runtime_unary_fixture_integration_test dasall_runtime_unary_integration_test`
+   - 结果：通过。
+2. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(AgentOrchestratorControllerAssemblyTest|RuntimeUnaryFixtureIntegrationTest)$'`
+   - 结果：通过，2/2 通过。
+
+### 结果
+
+1. `RT-GAP-007` 已在当前树收口：runtime v1 执行模型现被明确固定为单 worker inline runtime，而不是隐式后台 worker pool。
+2. `AgentResult` 与 checkpoint 现在都会显式带出 `v1_sync_inline + effective_max_workers=1`，scheduler 类型不再被外推为 maintenance worker、recovery thread 或更高阶 bulkhead 已就位。
+3. runtime 章节的下一优先级收敛为 runtime_support 的 installed positive knowledge probe，再继续推进 release-runner / soak 级更高层 evidence；本轮未使用 qemu / kvm，也未把结论外推到这些层级。
+
 # 记录 #741
 
 - 日期：2026-05-21

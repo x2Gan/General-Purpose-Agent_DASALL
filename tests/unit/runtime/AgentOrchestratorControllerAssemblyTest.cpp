@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <filesystem>
 #include <exception>
 #include <iostream>
@@ -42,6 +43,13 @@ dasall::runtime::ResumeHandleRequest make_resume_request(
 
 [[nodiscard]] std::filesystem::path repository_root() {
     return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+}
+
+[[nodiscard]] bool has_result_tag(const dasall::contracts::AgentResult& result,
+                                  const std::string& expected_tag) {
+  return result.tags.has_value() &&
+         std::find(result.tags->begin(), result.tags->end(), expected_tag) !=
+             result.tags->end();
 }
 
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> load_snapshot(
@@ -270,6 +278,23 @@ int main() {
     assert_true(direct_result.agent_result.checkpoint_ref ==
                     direct_result.checkpoint->checkpoint_id,
                 "direct path AgentResult should reference final checkpoint");
+    assert_true(has_result_tag(direct_result.agent_result,
+                               "runtime_execution_model:v1_sync_inline"),
+                "direct path should stamp the explicit v1 synchronous execution model");
+    assert_true(has_result_tag(direct_result.agent_result,
+                               "runtime_scheduler_effective_max_workers:1"),
+                "direct path should stamp the effective single-worker scheduler budget");
+    assert_equal(
+        std::string("v1_sync_inline"),
+        find_checkpoint_tag_value(*direct_result.checkpoint, "runtime_execution_model")
+            .value_or(std::string()),
+        "direct path checkpoint should persist the v1 synchronous execution model");
+    assert_equal(
+        std::string("1"),
+        find_checkpoint_tag_value(*direct_result.checkpoint,
+                                  "runtime_scheduler_effective_max_workers")
+            .value_or(std::string()),
+        "direct path checkpoint should persist the effective single-worker scheduler budget");
     assert_true(!direct_result.used_tool_round && !direct_result.used_recovery_round,
                 "direct path should not consume tool or recovery rounds");
 
@@ -298,6 +323,12 @@ int main() {
                 "abort-safe path should return failed AgentResult");
     assert_true(fail_safe_result.agent_result.error_info.has_value(),
                 "abort-safe path should surface runtime error info");
+    assert_true(has_result_tag(fail_safe_result.agent_result,
+                               "runtime_execution_model:v1_sync_inline"),
+                "abort-safe tool path should still report the explicit v1 synchronous execution model");
+    assert_true(has_result_tag(fail_safe_result.agent_result,
+                               "runtime_scheduler_effective_max_workers:1"),
+                "abort-safe tool path should still report the effective single-worker scheduler budget");
 
     OrchestratorComposition degraded_composition;
     degraded_composition.policy_snapshot = load_snapshot("desktop_full");

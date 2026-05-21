@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -7,6 +8,17 @@
 #include "RuntimeUnaryFixture.h"
 #include "agent/AgentResult.h"
 #include "support/TestAssertions.h"
+
+namespace {
+
+[[nodiscard]] bool has_tag(const dasall::contracts::AgentResult& result,
+               const std::string& expected_tag) {
+  return result.tags.has_value() &&
+     std::find(result.tags->begin(), result.tags->end(), expected_tag) !=
+       result.tags->end();
+}
+
+}  // namespace
 
 int main() {
   using dasall::contracts::AgentResultStatus;
@@ -40,6 +52,10 @@ int main() {
     assert_equal("runtime orchestrator skeleton completed",
                  result.response_text.value_or(std::string()),
                  "runtime unary fixture chain should return the default direct-success response");
+    assert_true(has_tag(result, "runtime_execution_model:v1_sync_inline"),
+          "runtime unary fixture chain should expose the explicit v1 synchronous execution model");
+    assert_true(has_tag(result, "runtime_scheduler_effective_max_workers:1"),
+          "runtime unary fixture chain should expose the effective single-worker scheduler budget");
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;
