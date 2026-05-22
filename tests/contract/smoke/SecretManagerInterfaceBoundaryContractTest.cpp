@@ -33,6 +33,46 @@ concept HasSampleSecretHealthMethod = requires {
   &T::sample_secret_health;
 };
 
+template <typename T>
+concept HasCreateMethod = requires {
+  &T::create;
+};
+
+template <typename T>
+concept HasSetMethod = requires {
+  &T::set;
+};
+
+template <typename T>
+concept HasCreateSecretMethod = requires {
+  &T::create_secret;
+};
+
+template <typename T>
+concept HasSetSecretMethod = requires {
+  &T::set_secret;
+};
+
+template <typename T>
+concept HasProvisionMethod = requires {
+  &T::provision;
+};
+
+template <typename T>
+concept HasProvisionSecretMethod = requires {
+  &T::provision_secret;
+};
+
+template <typename T>
+concept HasImportMethod = requires {
+  &T::import_secret;
+};
+
+template <typename T>
+concept HasBootstrapMethod = requires {
+  &T::bootstrap_secret;
+};
+
 void test_secret_manager_interface_keeps_consumer_boundary_without_backend_leakage() {
   using dasall::infra::secret::ISecretManager;
   using dasall::infra::secret::RotationRequest;
@@ -79,8 +119,16 @@ void test_secret_manager_interface_keeps_consumer_boundary_without_backend_leaka
                   !HasMaterializeRecordMethod<ISecretManager> &&
                   !HasPromoteVersionMethod<ISecretManager> &&
                   !HasRevokeVersionMethod<ISecretManager> &&
-                  !HasSampleSecretHealthMethod<ISecretManager>,
-              "ISecretManager should not absorb backend or health-probe protocols across the consumer boundary");
+            !HasSampleSecretHealthMethod<ISecretManager> &&
+            !HasCreateMethod<ISecretManager> &&
+            !HasSetMethod<ISecretManager> &&
+            !HasCreateSecretMethod<ISecretManager> &&
+            !HasSetSecretMethod<ISecretManager> &&
+            !HasProvisionMethod<ISecretManager> &&
+            !HasProvisionSecretMethod<ISecretManager> &&
+            !HasImportMethod<ISecretManager> &&
+            !HasBootstrapMethod<ISecretManager>,
+          "ISecretManager should not absorb backend, health-probe, or bootstrap write protocols across the consumer boundary");
 }
 
 }  // namespace

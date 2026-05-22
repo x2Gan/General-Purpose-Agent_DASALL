@@ -12,13 +12,17 @@ CLI_DEB="${ARTIFACT_DIR}/dasall-cli_${VERSION}_${ARCH}.deb"
 DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
+LLM_PROVIDER_MANIFEST_PATH=/usr/share/dasall/llm/providers/deepseek/manifest.yaml
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
 MEMORY_MAINTENANCE_PROOF_TOOL=/usr/lib/dasall/dasall-memory-maintenance-proof
 TOOLS_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-tools-installed-proof
 RUNTIME_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-runtime-installed-proof
 SERVICES_INSTALLED_PROOF_SCRIPT=${SCRIPT_DIR}/services_local_installed_proof.sh
 PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
+SECRET_CONSUMER_MATRIX_PATH=/usr/share/dasall/docs/ssot/SecretConsumerMatrix.md
 PRESERVED_SECRET_ROOT=
+SECRET_PROVISIONING_MODE=uninitialized
+SECRET_IMPORT_APPLY_JSON=
 
 log() {
   printf '[pkg-smoke-install] %s\n' "$*"
@@ -176,6 +180,71 @@ if isinstance(value, str):
 PY
 }
 
+write_secret_consumer_package_proof() {
+  [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ] || return 0
+
+  run_root test -f "$SECRET_CONSUMER_MATRIX_PATH"
+  run_root test -f "$LLM_PROVIDER_MANIFEST_PATH"
+  run_root_sh "grep -Fqx 'auth_ref: secret://llm/providers/deepseek-prod' '$LLM_PROVIDER_MANIFEST_PATH'"
+
+  secret_record_owner=$(run_root_sh "stat -c '%U' '$LLM_SECRET_PATH'")
+  secret_record_group=$(run_root_sh "stat -c '%G' '$LLM_SECRET_PATH'")
+  secret_record_mode=$(run_root_sh "stat -c '%a' '$LLM_SECRET_PATH'")
+  secret_root_mode=$(run_root_sh "stat -c '%a' /var/lib/dasall/secrets")
+  provider_manifest_auth_ref=$(run_root_sh "grep -F 'auth_ref:' '$LLM_PROVIDER_MANIFEST_PATH' | head -n 1")
+
+  written_secret_ref_observed=false
+  if [ -n "$SECRET_IMPORT_APPLY_JSON" ] &&
+   json_contains_fragment "$SECRET_IMPORT_APPLY_JSON" '"written_secret_refs":["secret://llm/providers/deepseek-prod"]'; then
+  written_secret_ref_observed=true
+  fi
+
+  python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR/secret-consumer-package-proof.json" \
+  "$SECRET_CONSUMER_MATRIX_PATH" \
+  "$LLM_PROVIDER_MANIFEST_PATH" \
+  "$provider_manifest_auth_ref" \
+  "$SECRET_PROVISIONING_MODE" \
+  "$written_secret_ref_observed" \
+  "$LLM_SECRET_PATH" \
+  "$secret_record_owner" \
+  "$secret_record_group" \
+  "$secret_record_mode" \
+  "$secret_root_mode" <<'PY'
+import json
+import sys
+
+def parse_bool(text: str) -> bool:
+  return text.lower() == "true"
+
+path = sys.argv[1]
+data = {
+  "scope": "local-installed-package",
+  "matrix_doc_path": sys.argv[2],
+  "matrix_doc_present": True,
+  "provider_manifest_path": sys.argv[3],
+  "provider_manifest_present": True,
+  "provider_manifest_auth_ref_line": sys.argv[4],
+  "bootstrap_provisioning_mode": sys.argv[5],
+  "config_apply_written_secret_ref_observed": parse_bool(sys.argv[6]),
+  "secret_record_path": sys.argv[7],
+  "secret_record_present": True,
+  "secret_record_owner": sys.argv[8],
+  "secret_record_group": sys.argv[9],
+  "secret_record_mode": sys.argv[10],
+  "secret_root_mode": sys.argv[11],
+  "non_extrapolation": [
+    "Access ownership HMAC still requires explicit ownership_token_hmac_secret_ref and is not package-enabled by default.",
+    "OTA and Plugin trust anchor readers do not gain local installed verify proof from this artifact.",
+    "Bootstrap import and local DeepSeek smoke do not imply broader provider runtime, qemu, or production key-management readiness.",
+  ],
+}
+
+with open(path, "w", encoding="ascii") as handle:
+  json.dump(data, handle, indent=2)
+  handle.write("\n")
+PY
+}
+
 wait_for_knowledge_refresh_ready() {
   attempts=0
   while [ "$attempts" -lt 30 ]; do
@@ -294,9 +363,10 @@ restore_preserved_llm_secret() {
   if run_root test -f "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret"; then
     run_root mkdir -p /var/lib/dasall/secrets/llm/providers
     run_root cp -p "${PRESERVED_SECRET_ROOT}/deepseek-prod.secret" "${LLM_SECRET_PATH}"
+    SECRET_PROVISIONING_MODE=preserved_secret_record_copy
   else
     run_root test -f "${PRESERVED_SECRET_ROOT}/deepseek-prod.key"
-    run_root_sh "
+    SECRET_IMPORT_APPLY_JSON=$(run_root_sh "
       . /etc/default/dasall-daemon
       : \"\${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}\"
       cat > '${PRESERVED_SECRET_ROOT}/desired.yaml' <<EOF
@@ -320,8 +390,10 @@ secrets:
       auth_profile_name: primary
 EOF
       chmod 600 '${PRESERVED_SECRET_ROOT}/desired.yaml'
-      dasall config apply --from-file '${PRESERVED_SECRET_ROOT}/desired.yaml' --no-input --json >/dev/null
-    "
+      dasall config apply --from-file '${PRESERVED_SECRET_ROOT}/desired.yaml' --no-input --json
+    ")
+    SECRET_PROVISIONING_MODE=config_apply_import
+    assert_json_contains "$SECRET_IMPORT_APPLY_JSON" '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' 'package smoke secret import apply'
     log 'imported DeepSeek secret for reinstall smoke from DASALL_DEEPSEEK_API_KEY_FILE'
   fi
 
@@ -364,6 +436,9 @@ verify_installed_files() {
   run_root test -f /etc/dasall/daemon.json
   run_root test -f /usr/lib/dasall/sqlite-vss/vector0.so
   run_root test -f /usr/lib/dasall/sqlite-vss/vss0.so
+  run_root test -f "$LLM_PROVIDER_MANIFEST_PATH"
+  run_root test -f "$SECRET_CONSUMER_MATRIX_PATH"
+  run_root_sh "grep -Fqx 'auth_ref: secret://llm/providers/deepseek-prod' '$LLM_PROVIDER_MANIFEST_PATH'"
   run_root test -x "${TOOLS_INSTALLED_PROOF_TOOL}"
   run_root test -x "${RUNTIME_INSTALLED_PROOF_TOOL}"
 }
@@ -592,6 +667,7 @@ PY
       --artifact-dir "$PACKAGE_SMOKE_ARTIFACT_DIR" \
       --tool-proof-json "$PACKAGE_SMOKE_ARTIFACT_DIR/tools-installed-proof.json"
   fi
+  write_secret_consumer_package_proof
 
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)

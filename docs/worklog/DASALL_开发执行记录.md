@@ -1,5 +1,63 @@
 # DASALL 开发执行记录
 
+# 记录 #750
+
+- 日期：2026-05-22
+- 阶段：infrastructure / secret consumer matrix and local installed evidence closeout
+- 任务：推进 `INF-FIX-009`，建立 secret consumer matrix 与 package 证据
+- 状态：已完成（secret consumer SSOT、`ISecretManager` bootstrap boundary guard 与 local installed redacted package proof 已闭合；本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-009`，并明确要求“逐文件落盘、若验收口径写了 qemu/kvm 就改成本机真实安装态、每轮完成后提交推送、不要把更高层 qemu/autopkgtest 证据混回本轮完成判定”。
+2. 近端核验确认：`INF-FIX-007` 与 `INF-FIX-008` 已分别完成 live `ISecretManager` seam retention 与 daemon/gateway Access ownership seam 注入；当前缺口不是 consumer 读链缺实现，而是缺一份统一的 secret consumer matrix、缺显式 ABI guard、防止 bootstrap write 倒灌 `ISecretManager`，以及缺本机 installed-package 的 redacted package proof。
+3. 前置 blocker 复核：`INF-FIX-009` 没有上游 BLOCK。Access ownership HMAC、LLM `auth_ref`、OTA trust anchor、Plugin trust anchor 与 Config bootstrap writer 的局部 owner 都已存在，因此本轮直接进入 matrix/proof 收口，不需要先拆独立 blocker 任务。
+4. 外部基准复核：OWASP Secrets Management Cheat Sheet 与 Vault bootstrap/init 实践都支持“runtime read seam 与 bootstrap write seam 分离”的方向；因此本轮坚持 `ISecretManager` 继续只做 consumer-facing read/materialize/release/rotate/revoke/inspect，bootstrap 写入仍停留在 `SecretBootstrapWriter` internal seam。
+
+### 改动
+
+1. 新增 `docs/ssot/SecretConsumerMatrix.md`：把 Access ownership HMAC、LLM provider `auth_ref`、OTA trust anchor、Plugin trust anchor 与 Config bootstrap writer 统一收口到同一张 owner/read/write/package asset/non-extrapolation 矩阵，明确 local installed 证据只覆盖文档资产、DeepSeek provider asset、secret record 权限与本机 DeepSeek smoke，不外推为所有 consumer package-ready。
+2. 更新 `tests/contract/smoke/SecretManagerInterfaceBoundaryContractTest.cpp`：在既有 backend/health-probe boundary guard 之外，新增对 `create/set/create_secret/set_secret/provision/provision_secret/import_secret/bootstrap_secret` 八类写入方法的否定断言，显式防止 bootstrap seam 被并入 `ISecretManager` 公共 ABI。
+3. 更新 `scripts/packaging/pkg_smoke_install.sh`：
+   - 新增安装态 asset probe，要求 `/usr/share/dasall/docs/ssot/SecretConsumerMatrix.md` 与 `/usr/share/dasall/llm/providers/deepseek/manifest.yaml` 存在，且 manifest 中仍是 `auth_ref: secret://llm/providers/deepseek-prod`。
+   - 新增 redacted `secret-consumer-package-proof.json` artifact，记录 matrix doc path、provider manifest auth_ref line、bootstrap provisioning mode、secret record owner/group/mode 与 explicit non-extrapolation。
+   - 当 package smoke 通过 preserved existing secret record 继续验证时，artifact 会显式标记 `bootstrap_provisioning_mode=preserved_secret_record_copy`，不把“已有 record 复用”伪写成“本轮执行了 bootstrap import”。
+4. 新增 `docs/todos/infrastructure/deliverables/INF-FIX-009-secret-consumer-matrix与package证据.md`，并回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：关闭 `INF-FIX-009`，把 infrastructure secret 方向的剩余事项收缩回 packaging/release 或具体 consumer 的更高层复核，不再把 local installed matrix/proof 缺口继续挂在 infra owner 账上。
+
+### 验证
+
+1. CMake Tools discoverability。
+   - `ListBuildTargets_CMakeTools()` 与 `ListTests_CMakeTools()`
+   - 结果：`dasall_contract_secret_manager_interface_boundary_test`、`dasall_access_async_task_registry_missing_secret_fail_closed_unit_test` 与 `SecretManagerInterfaceBoundaryContractTest`、`AsyncTaskRegistryMissingSecretFailClosedTest` 均已可发现。
+2. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_contract_secret_manager_interface_boundary_test","dasall_access_async_task_registry_missing_secret_fail_closed_unit_test"])`
+   - 结果：通过。
+3. focused test tool 状态。
+   - `RunCtest_CMakeTools(tests=["SecretManagerInterfaceBoundaryContractTest","AsyncTaskRegistryMissingSecretFailClosedTest"])`
+   - 结果：仍返回仓库已知泛化 `生成失败`；因此本轮继续沿用 direct binary fallback 获取 authoritative focused evidence。
+4. focused direct binaries。
+   - `./build/vscode-linux-ninja/tests/contract/dasall_contract_secret_manager_interface_boundary_test`
+   - `./build/vscode-linux-ninja/tests/unit/access/dasall_access_async_task_registry_missing_secret_fail_closed_unit_test`
+   - 结果：2 个 binary 均退出 `0`。
+5. script syntax。
+   - `sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：通过。
+6. rebuild-deb + local installed package smoke。
+   - `run_task(workspaceFolder="/home/gangan/DASALL", id="shell: copilot-rt-fix-006-rebuild-deb")`
+   - 结果：新 `.deb` 已生成；后续核验 `dasall-common_0.1.0-1_all.deb` 已包含 `usr/share/dasall/docs/ssot/SecretConsumerMatrix.md`。
+   - `run_task(workspaceFolder="/home/gangan/DASALL", id="shell: copilot-rt-fix-006-package-smoke")`
+   - 结果：通过；artifact 目录新增 `secret-consumer-package-proof.json`。
+7. local installed redacted secret artifact。
+   - `/tmp/dasall-rt-fix-006-pkg-smoke/secret-consumer-package-proof.json`
+   - 结果：`matrix_doc_present=true`、`provider_manifest_auth_ref_line="auth_ref: secret://llm/providers/deepseek-prod"`、`bootstrap_provisioning_mode="preserved_secret_record_copy"`、`secret_record_owner=root`、`secret_record_group=dasall`、`secret_record_mode=640`、`secret_root_mode=750`，同时 artifact 已明确写入 Access ownership HMAC / OTA / Plugin / qemu/production 的 non-extrapolation。
+
+### 结果
+
+1. `INF-FIX-009` 已闭合：secret 方向现在不再只有局部实现与散落 deliverable，而有一份单点 SSOT 可以区分 Access、LLM、OTA、Plugin 与 Config bootstrap 的 owner、读写路径、package asset 与不可外推边界。
+2. `ISecretManager` 公共 ABI 的 consumer boundary 更难被后续误扩：bootstrap create/set/provision/import 路径一旦试图进入接口层，会被现有 boundary contract 直接拦下，而不是靠人工 review 才发现。
+3. infrastructure 终于拥有 local installed secret package proof：安装包现在不仅能证明 DeepSeek local run 与 secret record 权限，还能把“矩阵文档已进包”“provider manifest 仍只存 redacted auth_ref”“本轮并未声称 OTA/Plugin trust anchor installed-ready”一起落成 artifact。
+4. infra 在 secret 方向上的 owner gap 已闭合；更高层 qemu/autopkgtest 与 trust anchor verify-time 复核继续属于 packaging / release 或具体 consumer 自身任务，不再回流为 infra 本轮 blocker。
+
 # 记录 #749
 
 - 日期：2026-05-22
