@@ -1,5 +1,42 @@
 # DASALL 开发执行记录
 
+# 记录 #743
+
+- 日期：2026-05-22
+- 阶段：infrastructure / production observability composition closeout
+- 任务：推进 `INF-FIX-001`，闭合 `INF-GAP-001` production observability composition
+- 状态：已完成（infra deliverable、总账与 worklog 已和既有 shared composition / focused evidence 对齐，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-001`，若存在前置 blocker 则先解阻，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端实现检查确认：`infra/include/ObservabilityLiveComposition.h` 与 `infra/src/ObservabilityLiveComposition.cpp` 已存在 `compose_live_observability()`；`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 已存在 `RuntimeObservabilityBundle`、`compose_runtime_observability_bundle()`，并将 shared observability providers 注入 memory / llm / cognition / services / knowledge，同时在 `RuntimeDependencySet` 中保留 `health_monitor` 与 production evidence marker。
+3. focused tests 现状也已完整覆盖目标子系统：`ToolProductionObservabilityIntegrationTest`、`CapabilityServicesTraceIntegrationTest`、`LLMProductionObservabilityIntegrationTest`、`MemoryObservabilityBridgeTest`、`KnowledgeTelemetryTest`、`CognitionProductionTelemetryIntegrationTest`、`RuntimeProductionHealthCompositionTest`、`DaemonRuntimeLiveDependencyCompositionTest`、`GatewayRuntimeLiveDependencyCompositionTest` 当前树均已存在并可发现。
+4. `docs/todos/runtime/DASALL_runtime_support组件专项TODO.md` 的 `RTSUP-TODO-006` 已把 `INF-GAP-001` 对应实现面记为 Done，因此本轮真实缺口不是“尚未接线”，而是 infrastructure 顶层总账仍保留旧状态、旧验收名和未闭合的 traceability。
+5. 因此 `INF-FIX-001` 本轮无前置 BLOCK；最小可执行动作是新增 infra closeout deliverable，并同步回写总账 / worklog，而不是重复改写 production observability 组合代码。
+
+### 改动
+
+1. 新增 `docs/todos/infrastructure/deliverables/INF-FIX-001-production-observability-composition收口.md`：固定任务来源、本地证据、Composition Root / OpenTelemetry 外部参考、Design -> Build 映射、focused 验收矩阵和“不外推到 installed / qemu / kvm / release / soak”的边界。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `INF-GAP-001` 标记为已闭合、`INF-FIX-001` 标记为 Done，并把旧的 `ToolObservabilityIntegrationTest` / `LLMObservabilityBridgeTest` 口径收紧到当前真实可执行的 production matrix；同时同步修正 13.2 / 13.5 章节结论和 16.1 优先级，避免“表格已 Done、正文仍写成缺口”的跨段漂移。
+3. 本轮未改动产品代码：shared observability builder、runtime_support composition root 与各子系统桥接继续以当前源码树为 authoritative source。
+
+### 验证
+
+1. focused build。
+   - `cmake --build build-ci --target dasall_tool_production_observability_integration_test dasall_services_trace_integration_test dasall_llm_production_observability_integration_test dasall_memory_observability_bridge_integration_test dasall_knowledge_telemetry_unit_test dasall_cognition_production_telemetry_integration_test dasall_access_runtime_production_health_composition_integration_test dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test -j2`
+   - 结果：通过；九个 focused targets 全部构建成功，只有既有 `-Wmissing-field-initializers` / `-Wunused-result` 级 warning，无新的编译失败。
+2. focused ctest matrix。
+   - `ctest --test-dir build-ci -R '^(ToolProductionObservabilityIntegrationTest|CapabilityServicesTraceIntegrationTest|LLMProductionObservabilityIntegrationTest|MemoryObservabilityBridgeTest|KnowledgeTelemetryTest|CognitionProductionTelemetryIntegrationTest|RuntimeProductionHealthCompositionTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest)$' --output-on-failure`
+   - 结果：`9/9` 通过，`0` 失败；shared observability composition 对 tools / services / llm / memory / knowledge / cognition / runtime-access owner 的 focused evidence 全绿。
+3. 本轮未使用 qemu / kvm，也未把 build-tree focused 结果外推为 installed package、release runner 或 soak 证据。
+
+### 结果
+
+1. `INF-GAP-001` 已闭合：production observability sinks 不再是 infrastructure 章节的开放缺口，shared composition / app-level owner / focused tests 现已在 infra deliverable、总账与 worklog 三处一致追溯。
+2. `INF-FIX-001` 已完成：infrastructure 顶层总账现已明确 shared observability builder、runtime_support composition root 与跨子系统 production evidence 的对应关系，不再停留在旧的占位验收名称上。
+3. infrastructure 当前优先级前移到 `INF-FIX-002` diagnostics retained snapshot、`INF-FIX-007` / `INF-FIX-008` SecretManager live composition，而不再是 production observability composition 本身。
+
 # 记录 #742
 
 - 日期：2026-05-21
