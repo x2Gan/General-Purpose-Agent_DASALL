@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+# 记录 #744
+
+- 日期：2026-05-22
+- 阶段：infrastructure / diagnostics retained snapshot gate closeout
+- 任务：推进 `INF-FIX-002`，固化 diagnostics retained snapshot gate 与 default-disabled admin boundary 分层
+- 状态：已完成（deliverable、SSOT、总账、worklog 与 diagnostics admin boundary discoverability 已闭合，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-002`，若存在前置 blocker 则先解组，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端实现检查确认：`docs/ssot/DiagnosticsRetainedSnapshotContract.md`、`docs/architecture/DASALL_infra_diagnostics模块详细设计.md`、`infra/src/diagnostics/DiagnosticsServiceFacade.cpp`、`tests/integration/infra/InfraDiagnosticsSmokeTest.cpp`、`tests/integration/infra/InfraDiagnosticsIntegrationTest.cpp` 与 `tests/integration/access/DaemonDiagDenyIntegrationTest.cpp` 已经把 retained snapshot round-trip 与 daemon `diag_disabled` reject 行为实现并落盘。
+3. focused 验证进一步确认：当前真正缺口不是 diagnostics 行为缺失，而是 `Gate-INT-05` retained snapshot gate 与 installed / daemon `diag_disabled` admin boundary 没有在 infra 顶层 deliverable / SSOT / discoverability 上被明确拆开。
+4. 本轮无前置 BLOCK；最小可执行动作是补统一 discoverability label 与文档 traceability，而不是重写 `DiagnosticsServiceFacade` 产品逻辑。
+
+### 改动
+
+1. 更新 `tests/integration/access/CMakeLists.txt`：为 `DaemonProfileCompatibilityTest`、`DaemonDiagDenyIntegrationTest`、`DaemonHotReloadIntegrationTest` 增加统一 `diagnostics-admin-boundary` label，固化 diagnostics admin boundary discoverability。
+2. 新增 `docs/todos/infrastructure/deliverables/INF-FIX-002-diagnostics-retained-snapshot-gate收口.md`：固定任务来源、本地证据、OWASP logging 外部参考、Design -> Build 映射、focused 验收矩阵，以及 `Gate-INT-05` 与 installed / daemon `diag_disabled` 不得混写的边界。
+3. 更新 `docs/ssot/DiagnosticsRetainedSnapshotContract.md`、`docs/ssot/SystemIntegrationGateMatrix.md`、`docs/ssot/BusinessChainIntegrationMatrix.md`：明确 retained snapshot contract / `Gate-INT-05` 只负责 `execute -> store -> get_snapshot -> export` round-trip；installed / daemon `diag_disabled` 仅属 admin boundary。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：关闭 `INF-GAP-002` / `INF-FIX-002`，同步修正 13.2、13.5 与 16.1 章节结论，避免 diagnostics retained snapshot 已收口后仍被列为 P1 开放项。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_infra_diagnostics_smoke_integration_test","dasall_infra_diagnostics_integration_test","dasall_access_daemon_diag_deny_integration_test"])`
+   - 结果：通过。
+2. focused test tool 状态。
+   - `RunCtest_CMakeTools(tests=["InfraDiagnosticsSmokeTest","InfraDiagnosticsIntegrationTest","DaemonDiagDenyIntegrationTest"])`
+   - 结果：仍返回仓库已知泛化 `生成失败`；因此本轮继续按仓库 fallback 走 direct binary evidence。
+3. focused direct binaries。
+   - `./build/vscode-linux-ninja/tests/integration/infra/dasall_infra_diagnostics_smoke_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/dasall_infra_diagnostics_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_diag_deny_integration_test`
+   - 结果：三项均退出 `0`。
+4. discoverability。
+   - `Build_CMakeTools(buildTargets=["dasall_access_daemon_profile_compatibility_integration_test","dasall_access_daemon_hot_reload_integration_test"])`
+   - `ctest --test-dir build/vscode-linux-ninja -N -L diagnostics-admin-boundary`
+   - 结果：通过，稳定列出 `DaemonProfileCompatibilityTest`、`DaemonDiagDenyIntegrationTest`、`DaemonHotReloadIntegrationTest` 三项 diagnostics admin boundary 测试。
+5. 本机 installed direct verify 尝试。
+   - `sudo -n dasall diag health --json`
+   - `sudo -n systemctl start dasall-daemon.service && sudo -n dasall diag health --json`
+   - 结果：当前工作机命中 `daemon_unavailable` / missing socket 环境状态，未形成新的当轮 installed 证据，因此本轮完成判定继续以 build-tree focused evidence + 既有 BC-13 installed 口径分层为准，不把该环境噪音误记成 task regression。
+
+### 结果
+
+1. `INF-GAP-002` 已闭合：`Gate-INT-05` retained snapshot round-trip 与 installed / daemon `diag_disabled` admin boundary 现已在 deliverable、SSOT、总账与 worklog 四处统一分层。
+2. `INF-FIX-002` 已完成：`diag_disabled` 不再被误写成 retained snapshot failure 或 diagnostics ready，diagnostics admin boundary 相关测试也已有统一 discoverability label。
+3. infrastructure 章节的下一优先级已前移到 `INF-FIX-004` health/watchdog event publish、`INF-FIX-007` / `INF-FIX-008` SecretManager live composition，以及更高层 release-runner / soak 证据；本轮未使用 qemu / kvm，也未把结论外推到这些层级。
+
 # 记录 #743
 
 - 日期：2026-05-22

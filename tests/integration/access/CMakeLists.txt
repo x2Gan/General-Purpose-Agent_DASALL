@@ -874,7 +874,7 @@ target_link_libraries(dasall_access_daemon_profile_compatibility_integration_tes
 dasall_apply_common_options(dasall_access_daemon_profile_compatibility_integration_test)
 
 add_test(NAME DaemonProfileCompatibilityTest COMMAND dasall_access_daemon_profile_compatibility_integration_test)
-set_tests_properties(DaemonProfileCompatibilityTest PROPERTIES LABELS "integration;access")
+set_tests_properties(DaemonProfileCompatibilityTest PROPERTIES LABELS "integration;access;diagnostics-admin-boundary")
 
 add_test(NAME AccessProfileCompatibilityTest
   COMMAND dasall_access_daemon_profile_compatibility_integration_test)
@@ -1042,7 +1042,7 @@ dasall_apply_common_options(dasall_access_daemon_diag_deny_integration_test)
 
 add_test(NAME DaemonDiagDenyIntegrationTest COMMAND dasall_access_daemon_diag_deny_integration_test)
 set_tests_properties(DaemonDiagDenyIntegrationTest PROPERTIES
-  LABELS "integration;access;gate-int-08;access-v1-production-gate"
+  LABELS "integration;access;gate-int-08;access-v1-production-gate;diagnostics-admin-boundary"
 )
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
@@ -1072,7 +1072,7 @@ target_link_libraries(dasall_access_daemon_hot_reload_integration_test
 dasall_apply_common_options(dasall_access_daemon_hot_reload_integration_test)
 
 add_test(NAME DaemonHotReloadIntegrationTest COMMAND dasall_access_daemon_hot_reload_integration_test)
-set_tests_properties(DaemonHotReloadIntegrationTest PROPERTIES LABELS "integration;access")
+set_tests_properties(DaemonHotReloadIntegrationTest PROPERTIES LABELS "integration;access;diagnostics-admin-boundary")
 
 list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_hot_reload_integration_test

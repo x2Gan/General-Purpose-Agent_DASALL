@@ -18,6 +18,11 @@ Owner：infra diagnostics
 2. `DiagnosticsSnapshot` 的 retained 语义、`snapshot_id` 稳定性、retention 窗口和 redaction 后回读约束。
 3. `InfraDiagnosticsSmokeTest`、`DiagnosticsSnapshotStoreContractTest`、`DiagnosticsFixtureSurfaceTest`、`InfraDiagnosticsIntegrationTest` 的分层职责。
 
+明确不在范围内：
+
+1. daemon / installed `diag_disabled` default gate；它属于 diagnostics admin boundary，而不是 retained snapshot round-trip contract。
+2. daemon config reload 是否允许开启 diagnostics；它由 access / daemon config owner 管理，而不是由 retained snapshot contract 决定。
+
 术语约定：
 
 1. `retained snapshot`：经过 RedactionEngine、SnapshotAssembler、SnapshotStore 落盘后的 diagnostics snapshot；不是 executor 原始输出。
@@ -49,6 +54,8 @@ Owner：infra diagnostics
 | integration | `InfraDiagnosticsIntegrationTest` | 验证 retained snapshot 与 export/audit bridge 的协同行为 | 不替代 smoke 的最小 round-trip 断言 |
 | failure injection | `DiagnosticsSnapshotStoreTest` 等 failure cases | 验证 timeout、store_fail、export_fail、redaction_fail 的结构化错误与观测证据 | 不重写 success contract |
 
+补充说明：`diag_disabled` 或 daemon diagnostics gate 默认关闭只能证明 admin boundary 仍为 fail-closed；它既不能替代 `Gate-INT-05` 通过，也不能被解读为 retained snapshot service failure。
+
 ## 6. 当前 true integration 基线
 
 `InfraDiagnosticsSmokeTest` 当前冻结以下最小成功断言：
@@ -57,6 +64,7 @@ Owner：infra diagnostics
 2. 回读后的 `summary` 必须保持 `diagnostics redacted health snapshot`，`command.actor_ref` 必须保持 `actor://redacted`。
 3. `export_snapshot(LocalFile, Json)` 必须返回 `sha256:` 前缀 checksum。
 4. `export_snapshot(RemoteUpload, Json)` 在默认配置下必须失败，并映射到 remote-disabled diagnostics 错误。
+5. daemon / installed `diag_disabled` 不属于本节 success contract；它应由 `DaemonDiagDenyIntegrationTest`、`DaemonProfileCompatibilityTest`、`DaemonHotReloadIntegrationTest` 与 installed package smoke 另行证明。
 
 ## 7. Design -> Build 映射
 
