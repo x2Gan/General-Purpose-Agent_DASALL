@@ -1,3 +1,35 @@
+# 记录 #770
+
+- 日期：2026-05-23
+- 阶段：tui/status panel baseline
+- 任务：TUI-TODO-017 实现 status panel fake 展示
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-017-status-panel-fake展示基线.md`，冻结 status panel 的任务边界、本地证据、WCAG 颜色辅助约束、decision summary 派生规则、unknown/degraded fail-closed 语义，以及 Design->Build 映射。
+2. 新增 `apps/tui/src/view/TuiStatusPanel.h` 与 `apps/tui/src/view/TuiStatusPanel.cpp`，实现纯 view-local status panel helper：维护 `TuiStatusProjection`、支持 `render_status_panel()` / `format_stage_badge()` / `format_health_summary()`，并在不扩 DTO 的前提下派生 decision summary、窄屏标签与 unknown/degraded 文本兜底。
+3. 新增 `tests/unit/tui/TuiStatusPanelTest.cpp`，focused 覆盖健康 fake status 的文本 badge、等待交互与恢复摘要 reason、空 projection 的 unknown/degraded fail-closed 路径，以及 status panel 文件的 no-private-include / no-renderer-dependency 边界。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_status_panel_unit_test` 与 `TuiStatusPanelTest`，并把 status panel target 纳入 `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS`。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-017 完成状态、当前 status panel 基线、`TUI-GAP-017` 收口结果，以及下一步执行策略前移到 `TUI-TODO-018`。
+
+### 验证
+
+1. `ListBuildTargets_CMakeTools()` + `ListTests_CMakeTools()`
+   - 结果：通过；`dasall_tui_status_panel_unit_test` 与 `TuiStatusPanelTest` 已进入 VS Code CMake 发现图。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_status_panel_unit_test"])`
+   - 结果：通过；status panel 生产代码与 focused 单测在 `build/vscode-linux-ninja` 成功编译并链接。
+3. `RunCtest_CMakeTools(tests=["TuiStatusPanelTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiStatusPanelTest$'`
+   - 结果：通过；`TuiStatusPanelTest` 1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-017` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖的 status panel fake 展示基线。
+2. status panel 当前只处理 fake projection 文本 badge、decision summary 派生和 unknown/degraded 兜底，不接 daemon producer、renderer/snapshot 或 `TuiApp` status wiring；这些继续后置到 `TUI-TODO-018~020` 与 `TUI-TODO-025`。
+3. 下一步推荐转入 `TUI-TODO-018`，沿着已完成的 fake replay、slash parser、composer、selector、transcript 与 status panel 基线实现 terminal capability probe。
+
 # 记录 #769
 
 - 日期：2026-05-22
