@@ -1,3 +1,35 @@
+# 记录 #768
+
+- 日期：2026-05-22
+- 阶段：tui/model selector fake baseline
+- 任务：TUI-TODO-015 实现 model selector fake 交互
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-015-model-selector-fake交互基线.md`，冻结 fake selector 的任务边界、本地证据、外部参考、Auto / PreferDepth / PinModel 三模式语义、disabled reason fail-closed 口径与 Design->Build 映射。
+2. 新增 `apps/tui/src/view/TuiModelSelector.h` 与 `apps/tui/src/view/TuiModelSelector.cpp`，实现纯 view-local selector helper：维护 committed/pending `NextTurnPreference`、支持 `open_selector()` / `choose_depth_tier()` / `choose_model()` / `apply_preference()` / `cancel_preference()` / `render_disabled_reason()`，并在 fake route catalog 下完成 depth tier 聚合与 disabled reason 归一化。
+3. 新增 `tests/unit/tui/TuiModelSelectorTest.cpp` 与 `tests/unit/tui/TuiRouteCatalogFilterTest.cpp`，focused 覆盖 fake draft 初始化、PreferDepth/PinModel 本地提交、cancel rollback、disabled depth/model fail-closed、selected option 刷新，以及 selector 文件的 no-private-include / no-renderer-dependency 边界。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_model_selector_unit_test`、`dasall_tui_route_catalog_filter_unit_test`、`TuiModelSelectorTest` 与 `TuiRouteCatalogFilterTest`，并把 selector targets 纳入 `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS`。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-015 完成状态、当前 selector 基线、Build-ready subset 前移到 `TUI-TODO-016~018`，以及 `TUI-GAP-015` 收口结果。
+
+### 验证
+
+1. `ListBuildTargets_CMakeTools()` + `ListTests_CMakeTools()`
+   - 结果：通过；`dasall_tui_model_selector_unit_test`、`dasall_tui_route_catalog_filter_unit_test`、`TuiModelSelectorTest` 与 `TuiRouteCatalogFilterTest` 已进入 VS Code CMake 发现图。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_model_selector_unit_test","dasall_tui_route_catalog_filter_unit_test"])`
+   - 结果：通过；selector 生产代码与两个 focused tests 在 `build/vscode-linux-ninja` 成功编译并链接。
+3. `RunCtest_CMakeTools(tests=["TuiModelSelectorTest","TuiRouteCatalogFilterTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --preset vscode-linux-ninja --output-on-failure -R '^(TuiModelSelectorTest|TuiRouteCatalogFilterTest)$'`
+   - 结果：通过；`TuiModelSelectorTest`、`TuiRouteCatalogFilterTest` 2/2 通过。
+
+### 结果
+
+1. `TUI-TODO-015` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖的 fake model selector 基线。
+2. selector 目前只表达 fake next-turn draft，不接 real carrier、daemon route catalog、submit echo 或 effective route projection；这些继续后置到 `TUI-TODO-027~029`。
+3. 下一步推荐转入 `TUI-TODO-016`，沿着已完成的 fake replay、slash parser、composer 与 selector 基线实现 transcript view。
+
 # 记录 #767
 
 - 日期：2026-05-22
