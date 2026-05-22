@@ -6,9 +6,13 @@ set(DASALL_THIRD_PARTY_CACHE_DIR "${DASALL_THIRD_PARTY_ROOT}/.cache" CACHE PATH 
 option(DASALL_USE_SUBMODULES "Enable submodule-based third-party resolution" ON)
 option(DASALL_USE_LOCAL_CACHE "Enable local cache third-party resolution" ON)
 option(DASALL_ALLOW_FETCHCONTENT "Enable FetchContent fallback for third-party dependencies" ON)
+option(DASALL_ENABLE_TUI_FTXUI "Resolve FTXUI for apps/tui when the TUI target is enabled" OFF)
 
 # Off by default to keep configure reproducible in offline environments.
 option(DASALL_BOOTSTRAP_THIRD_PARTY "Try to resolve third-party dependencies during configure" OFF)
+
+set(DASALL_FTXUI_GIT_REPOSITORY "https://github.com/ArthurSonzogni/FTXUI.git" CACHE STRING "FTXUI upstream repository")
+set(DASALL_FTXUI_GIT_TAG "5cfed50702f52d51c1b189b5f97f8beaf5eaa2a6" CACHE STRING "Pinned FTXUI commit (v6.1.9)")
 
 file(MAKE_DIRECTORY "${DASALL_THIRD_PARTY_CACHE_DIR}")
 
@@ -93,4 +97,13 @@ dasall_resolve_dependency(
   FETCH_GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
   FETCH_GIT_TAG v0.15.3
 )
+
+# FTXUI: terminal UI framework reserved for apps/tui only (TUI-TODO-005).
+if(DASALL_ENABLE_TUI_FTXUI)
+  dasall_resolve_dependency(
+    NAME ftxui
+    FETCH_GIT_REPOSITORY ${DASALL_FTXUI_GIT_REPOSITORY}
+    FETCH_GIT_TAG ${DASALL_FTXUI_GIT_TAG}
+  )
+endif()
 

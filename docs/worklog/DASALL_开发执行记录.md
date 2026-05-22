@@ -1,5 +1,41 @@
 # DASALL 开发执行记录
 
+# 记录 #758
+
+- 日期：2026-05-22
+- 阶段：tui/ftxui dependency strategy
+- 任务：TUI-TODO-005 校验 FTXUI third-party 接入策略
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md`，冻结 FTXUI 的来源优先级、`v6.1.9` / `5cfed50702f52d51c1b189b5f97f8beaf5eaa2a6` pin、default-off resolver、`apps/tui` private dependency 规则，以及 Debian packaging review 风险口径。
+2. 更新 `cmake/DASALLThirdParty.cmake`，新增 `DASALL_ENABLE_TUI_FTXUI` 开关、FTXUI upstream URL 与精确 commit pin，并把 `dasall_resolve_dependency(ftxui)` 作为受控入口接入统一 third-party resolver，而不是散落新的 ad-hoc FetchContent。
+3. 新增 `apps/tui/CMakeLists.txt`，只落 `dasall_tui_apply_ftxui_private_dependency(target)` helper，把 `ftxui::component` / `ftxui::dom` / `ftxui::screen` 固定为 `apps/tui` 局部 `PRIVATE` 链接规则，不提前声明 prototype 或安装态 target。
+4. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-005` 标记为 Done、将 `BLK-TUI-005` 标记为 Closed，并把 `TUI-TODO-019` 的 blocker 收紧为 `BLK-TUI-006`，同步刷新执行策略与阶段状态口径。
+5. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，把 FTXUI 从“尚未接入/待评审”收敛为当前冻结的 resolver/pin/private-link 结论，并在总账新增 `TUI-GAP-005` 收口记录。
+
+### 验证
+
+1. `git ls-remote https://github.com/ArthurSonzogni/FTXUI.git refs/tags/v6.1.9 refs/tags/v6.1.9^{}`
+   - 结果：通过；命中 `5cfed50702f52d51c1b189b5f97f8beaf5eaa2a6`，用于锁定本轮 FTXUI version/commit 锚点。
+2. `rg -n 'FTXUI|ftxui|private dependency|submodule|local cache|FetchContent' docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md cmake/DASALLThirdParty.cmake`
+   - 结果：通过；交付物与统一 third-party resolver 已形成单一口径。
+3. `rg -n 'TUI-TODO-005|BLK-TUI-005|v6.1.9|private link helper|DASALL_ENABLE_TUI_FTXUI|BLK-TUI-006' docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；专项 TODO 已将 `TUI-TODO-005` 置为 Done、`BLK-TUI-005` 置为 Closed，并把 `TUI-TODO-019` 的阻塞口径切到 `BLK-TUI-006`。
+4. `rg -n '5cfed507|v6.1.9|default-off|private dependency|TuiFtxuiDependencyBoundaryTest|尚未接入 FTXUI' docs/architecture/DASALL_TUI客户端设计方案.md`
+   - 结果：通过；详设已写入 FTXUI pin、default-off resolver、private-link 规则与边界测试出口，未再残留“尚未接入 FTXUI”的旧口径。
+5. `rg -n 'TUI-TODO-005|TUI-GAP-005|v6.1.9|5cfed507|CJK/IME/resize manual gate|FTXUI third-party' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账索引与第 17 节已同步纳入 `TUI-TODO-005` 收口记录，并将残余缺口收紧为 manual gate 与 packaging review。
+6. `get_errors([cmake/DASALLThirdParty.cmake, apps/tui/CMakeLists.txt, docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md, docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md, docs/architecture/DASALL_TUI客户端设计方案.md, docs/todos/DASALL_子系统查漏补缺专项记录.md])`
+   - 结果：通过；本轮新增或修改文件均无新的诊断错误。
+
+### 结果
+
+1. `BLK-TUI-005` 已由文档评审和最小 CMake 锚点解阻；`TUI-TODO-019~020` 不再因第三方接入策略未冻结而保持 Blocked。
+2. TUI 现在拥有唯一的 FTXUI 接入基线：仓库统一 resolver、default-off 开关、精确 commit pin、`apps/tui` 局部 private link helper，以及“prototype 可用、installed path 需单独 packaging review”的分层结论。
+3. `BLK-TUI-006`、`BLK-TUI-007` 与 `BLK-TUI-008` 仍然有效；本轮没有把 third-party 评审误写成 renderer ready、terminal ready 或 bare `dasall` release ready。
+
 # 记录 #757
 
 - 日期：2026-05-22
