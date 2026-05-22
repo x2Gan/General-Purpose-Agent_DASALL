@@ -1,5 +1,39 @@
 # DASALL 开发执行记录
 
+# 记录 #759
+
+- 日期：2026-05-22
+- 阶段：tui/test topology registration
+- 任务：TUI-TODO-006 注册 TUI 测试拓扑
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-006-测试拓扑设计与发现性基线.md`，冻结 `tests/unit/tui`、`tests/integration/tui`、`tests/fixtures/tui/golden` 的目录落位、`DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS` / `DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS` 聚合变量、`unit` / `integration` / `snapshot` 标签，以及 `TuiTestTopologyDiscoverability` 的 discoverability 口径。
+2. 新增 `tests/unit/tui/TuiUnitTopologySmokeTest.cpp`、`tests/unit/tui/CMakeLists.txt`、`tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`、`tests/integration/tui/CMakeLists.txt` 和 `tests/fixtures/tui/golden/README.md`，用最小 topology smoke executable 物化 TUI unit/integration/snapshot skeleton，并让 `TuiScreenModelTest`、`TuiReducerTransitionTest`、`TuiComposerTest`、`TuiMainLayoutSnapshotTest`、`TuiAppStartupTest`、`TuiPrototypeSmokeTest` 进入 CTest discoverability。
+3. 更新 `tests/unit/CMakeLists.txt` 与 `tests/integration/CMakeLists.txt`，分别注册 `add_subdirectory(tui)` 并把 `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS` / `DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS` 接入现有顶层聚合。
+4. 在第一次 discoverability 验证中发现 `TuiTestTopologyDiscoverability` 被 unit 和 integration 重复注册，于是收敛为仅保留 integration 侧同名测试，unit 侧只保留 focused skeleton 测试名，避免 CTest 名称冲突。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-006 完成状态、当前实现基线和 `TUI-GAP-006` 收口记录。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_unit_topology_smoke_unit_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过；两个新 topology smoke target 在 `build/vscode-linux-ninja` 成功编译并链接。
+2. `ListTests_CMakeTools`
+   - 结果：通过；可发现 `TuiScreenModelTest`、`TuiReducerTransitionTest`、`TuiComposerTest`、`TuiMainLayoutSnapshotTest`、`TuiTestTopologyDiscoverability`、`TuiAppStartupTest`、`TuiPrototypeSmokeTest`，且重复测试名问题已清零。
+3. `ctest --preset vscode-linux-ninja -N | rg 'Tui(ScreenModel|Reducer|Composer|PrototypeSmoke)'`
+   - 结果：通过；discoverability 命中 `TuiScreenModelTest`、`TuiReducerTransitionTest`、`TuiComposerTest`、`TuiPrototypeSmokeTest`。
+4. `ctest --preset vscode-linux-ninja --output-on-failure -R '^(TuiTestTopologyDiscoverability|TuiScreenModelTest|TuiReducerTransitionTest|TuiComposerTest|TuiMainLayoutSnapshotTest|TuiAppStartupTest|TuiPrototypeSmokeTest)$'`
+   - 结果：通过；7/7 测试通过，标签汇总显示 `unit=4`、`integration=3`、`snapshot=1`、`tui=7`。
+5. `RunCtest_CMakeTools(tests=["TuiScreenModelTest"])`
+   - 结果：失败；工具返回泛化错误 `生成失败`。本轮按仓库 `build-validation.md` 记录的 fallback 改用显式 `ctest` 验证，并在此处保留工具失败证据，避免误判为测试本身失败。
+
+### 结果
+
+1. `TUI-TODO-006` 已闭合：TUI 现在拥有可复用的 unit/integration/snapshot discoverability 基线，后续 `TUI-TODO-007~020` 不必边写功能边补测试注册。
+2. 顶层 CMake 已稳定聚合 TUI test family，`ctest -N` 可以发现关键 focused test 名，且标签已明确区分 `unit` / `integration` / `snapshot`。
+3. 本轮没有越权实现 `TuiScreenModel`、`TuiReducer`、`TuiComposer`、`TuiApp` 或 FTXUI renderer；当前只是把测试拓扑和 fixtures 落盘为下一阶段的稳定入口。
+
 # 记录 #758
 
 - 日期：2026-05-22
