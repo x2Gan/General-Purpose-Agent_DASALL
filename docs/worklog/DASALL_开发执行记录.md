@@ -1,3 +1,33 @@
+# 记录 #764
+
+- 日期：2026-05-22
+- 阶段：tui/data source interface baseline
+- 任务：TUI-TODO-011 定义 `ITuiDataSource` 接口
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-011-ITuiDataSource接口基线.md`，冻结 `ITuiDataSource` 的五个 operation、显式 request/result supporting object、`TuiDataSourceIssue` 的 machine-readable 失败语义，以及 fake/daemon 共用 seam 的 no-private-include 边界。
+2. 新增 `apps/tui/src/data/ITuiDataSource.h`，定义 `open_session()`、`submit_turn()`、`poll_events()`、`route_catalog()`、`close_session()` 五个纯虚 operation，并为每个 operation 补齐独立 request/result object，避免 future fake/daemon source 依赖隐式全局状态或 raw owner DTO。
+3. 新增 `tests/unit/tui/TuiDataSourceContractTest.cpp`，通过 test-local `StubTuiDataSource` 守住五个 operation 的签名、request 事实透传、payload/issue 不歧义、message-only failure 非法，以及头文件不引入 access/runtime/llm/profiles/FTXUI/TuiIpcController 等私有依赖。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_data_source_contract_unit_test`、`ITuiDataSourceContractTest` 与 `DASALL_TUI_DATA_SOURCE_HEADER` compile definition，使 focused build/test/discoverability 可直接复用。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-011 完成状态、当前接口基线、Build-ready subset 推进与 `TUI-GAP-011` 收口结果。
+
+### 验证
+
+1. `rg -n 'ITuiDataSource|TuiDataSourceIssue|open_session|submit_turn|poll_events|route_catalog|close_session|D Gate = PASS' docs/todos/tui/deliverables/TUI-TODO-011-ITuiDataSource接口基线.md`
+   - 结果：通过；011 deliverable 已同时冻结接口 surface、issue contract、Design->Build 映射与完成结果。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_data_source_contract_unit_test"])`
+   - 结果：通过；`ITuiDataSource.h`、`TuiDataSourceContractTest.cpp` 与 `tests/unit/tui/CMakeLists.txt` 的 focused 接线可成功编译并链接。
+3. `RunCtest_CMakeTools(tests=["ITuiDataSourceContractTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按回退口径继续执行显式 `ctest --preset vscode-linux-ninja -N | rg 'ITuiDataSourceContractTest' && ctest --preset vscode-linux-ninja --output-on-failure -R '^ITuiDataSourceContractTest$'`，1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-011` 已闭合：TUI 现在拥有可编译、可发现、仅依赖 TUI DTO 与标准库的 data source seam 基线。
+2. 后续 `TUI-TODO-012` 可以直接在该接口上落 deterministic fake source，而不需要再重新发明 request/result shape 或错误 supporting object。
+3. 本轮没有引入 daemon IPC、session lifecycle、route catalog mapping、FTXUI 或 runtime/access owner 依赖；这些能力继续以后续任务和既有 gate 收口。
+
 # 记录 #763
 
 - 日期：2026-05-22
