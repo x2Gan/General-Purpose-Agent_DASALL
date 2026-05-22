@@ -38,6 +38,7 @@
 #include "IAccessGateway.h"
 #include "HealthProbeHandler.h"
 #include "AgentFacade.h"
+#include "AccessOwnershipSecretWiring.h"
 #include "ProfileError.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
@@ -414,6 +415,9 @@ int main(int argc, char* argv[]) {
   gateway_options.runtime_policy_snapshot = runtime_snapshot.snapshot;
     const std::size_t max_http_request_body_bytes =
       static_cast<std::size_t>(gateway_options.bootstrap_config.max_payload_bytes);
+  dasall::apps::runtime_support::wire_runtime_secret_manager_into_access_ownership_seam(
+      runtime_init_request.request.dependency_set,
+      gateway_options);
   gateway_options.runtime_dispatch_backend =
       [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {

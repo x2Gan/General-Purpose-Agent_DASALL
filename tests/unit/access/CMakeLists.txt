@@ -359,6 +359,58 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_async_task_registry_missing_secret_fail_closed_unit_test
 )
 
+add_executable(dasall_daemon_access_secret_composition_unit_test
+  DaemonAccessSecretCompositionTest.cpp
+)
+
+target_include_directories(dasall_daemon_access_secret_composition_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/runtime_support/include
+    ${CMAKE_SOURCE_DIR}/runtime/include
+)
+
+target_link_libraries(dasall_daemon_access_secret_composition_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_daemon_access_secret_composition_unit_test)
+
+add_test(NAME DaemonAccessSecretCompositionTest
+  COMMAND dasall_daemon_access_secret_composition_unit_test)
+set_tests_properties(DaemonAccessSecretCompositionTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_daemon_access_secret_composition_unit_test
+)
+
+add_executable(dasall_gateway_access_secret_composition_unit_test
+  GatewayAccessSecretCompositionTest.cpp
+)
+
+target_include_directories(dasall_gateway_access_secret_composition_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/runtime_support/include
+    ${CMAKE_SOURCE_DIR}/runtime/include
+)
+
+target_link_libraries(dasall_gateway_access_secret_composition_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+)
+
+dasall_apply_common_options(dasall_gateway_access_secret_composition_unit_test)
+
+add_test(NAME GatewayAccessSecretCompositionTest
+  COMMAND dasall_gateway_access_secret_composition_unit_test)
+set_tests_properties(GatewayAccessSecretCompositionTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_gateway_access_secret_composition_unit_test
+)
+
 dasall_add_access_unit_test(
   dasall_access_daemon_accepted_async_receipt_unit_test
   DaemonAcceptedAsyncReceiptTest

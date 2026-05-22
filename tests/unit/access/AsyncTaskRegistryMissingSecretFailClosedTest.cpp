@@ -94,6 +94,31 @@ void accepted_async_is_rejected_when_secret_is_missing() {
                "missing secret fail-closed should map to InternalError");
 }
 
+void accepted_async_is_rejected_when_secret_manager_cannot_materialize_secret() {
+  using dasall::infra::secret::MockSecretBackend;
+  using dasall::infra::secret::SecretManagerFacade;
+
+  auto backend = std::make_shared<MockSecretBackend>();
+
+  auto options = make_base_options();
+  options.bootstrap_config.ownership_token_hmac_secret_ref =
+      std::string("secret://access/receipt-hmac");
+  options.ownership_secret_manager = std::make_shared<SecretManagerFacade>(backend);
+
+  auto gateway = dasall::access::create_daemon_access_gateway(std::move(options));
+  assert_true(gateway != nullptr,
+              "missing materialized secret test should still create a gateway");
+  assert_true(gateway->init(),
+              "missing materialized secret test should initialize the daemon gateway");
+
+  const auto result = gateway->submit(make_packet());
+  assert_equal(static_cast<int>(AccessDisposition::Rejected),
+               static_cast<int>(result.disposition),
+               "missing secret record should fail closed even when a secret manager seam is injected");
+  assert_true(result.error_ref.has_value() && *result.error_ref == "ownership_secret_unavailable",
+              "missing secret record should surface ownership_secret_unavailable");
+}
+
 void accepted_async_registers_receipt_when_secret_manager_is_available() {
   using dasall::infra::secret::MockSecretBackend;
   using dasall::infra::secret::SecretManagerFacade;
@@ -131,6 +156,7 @@ void accepted_async_registers_receipt_when_secret_manager_is_available() {
 int main() {
   try {
     accepted_async_is_rejected_when_secret_is_missing();
+    accepted_async_is_rejected_when_secret_manager_cannot_materialize_secret();
     accepted_async_registers_receipt_when_secret_manager_is_available();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';

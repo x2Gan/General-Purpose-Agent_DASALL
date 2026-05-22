@@ -1,5 +1,54 @@
 # DASALL 开发执行记录
 
+# 记录 #749
+
+- 日期：2026-05-22
+- 阶段：infrastructure / access ownership secret seam closeout
+- 任务：推进 `INF-FIX-008`，将 `ISecretManager` 注入 daemon / gateway Access ownership seam
+- 状态：已完成（app owner wiring、missing-secret fail-closed 与 daemon/gateway focused composition regression 已闭合，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-008`，并明确要求“逐文件落盘、如验收口径写明 qemu 就改成真实本机 build-tree / local 口径、完成后提交推送、不要把 009 的 consumer matrix 提前混入本轮”。
+2. 近端核验确认：`access/src/AccessGatewayFactory.cpp` 已通过 `ownership_token_hmac_secret_ref + ownership_secret_manager` 固定 accepted_async ownership HMAC 的 gating 与 fail-closed 语义；真正缺口不是 Access factory 缺逻辑，而是 daemon / gateway app owner 没把 `RuntimeDependencySet::secret_manager` 投影到 Access options。
+3. 前置 blocker 复核：`INF-FIX-007` 已完成 shared runtime composition seam 收口，因此 008 无需先解独立 BLOCK；本轮只做 owner-level wiring，不触碰 `SecretBootstrapWriter`、consumer matrix 或 package/qemu 证据。
+4. 外部基准复核：OWASP Secrets Management Cheat Sheet 继续支持“由 consumer 在运行期通过统一 secret seam 读取 secret、遵循 least privilege 与 auditing，而不是在代码/CI 中扩散 secret”；这与本轮 app owner 注入方向一致。
+
+### 改动
+
+1. 新增 `apps/runtime_support/include/AccessOwnershipSecretWiring.h`：以 header-only helper 固定 app-level wiring 规则，把 `RuntimeDependencySet::secret_manager` 投影到 Access ownership seam，而不把 access 依赖反灌进 shared runtime composition 实现。
+2. 更新 `apps/daemon/src/main.cpp` 与 `apps/gateway/src/main.cpp`：daemon / gateway `main.cpp` 现在都会在构造 `DaemonAccessPipelineOptions` / `GatewayAccessPipelineOptions` 时消费 shared runtime dependency set，并显式注入 `ownership_secret_manager`。
+3. 扩展 `tests/unit/access/AsyncTaskRegistryMissingSecretFailClosedTest.cpp`：新增“secret manager seam 已注入但 secret record 缺失”负例，证明 owner-level wiring 到位后仍保持 `ownership_secret_unavailable` fail-closed，而不是把“有 manager”误写成“有 secret”。
+4. 新增 `tests/unit/access/DaemonAccessSecretCompositionTest.cpp`、`tests/unit/access/GatewayAccessSecretCompositionTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`：focused unit tests 直接断言 daemon / gateway options 都会消费 runtime-composed secret seam，且在 dependency set 缺失时不会伪造 manager。
+5. 新增 `docs/todos/infrastructure/deliverables/INF-FIX-008-daemon-gateway-access-ownership-secret-seam注入.md`，并回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：关闭 `INF-FIX-008`，把 infrastructure secret 剩余缺口明确前移到 `INF-FIX-009`。
+
+### 验证
+
+1. CMake Tools discoverability。
+   - `ListBuildTargets_CMakeTools()` 与 `ListTests_CMakeTools()`
+   - 结果：本轮新增 `dasall_daemon_access_secret_composition_unit_test`、`dasall_gateway_access_secret_composition_unit_test` 与 `DaemonAccessSecretCompositionTest`、`GatewayAccessSecretCompositionTest` 均已可发现。
+2. 全量默认 build 观察。
+   - `Build_CMakeTools()`
+   - 结果：命中仓库无关的 memory 已知失败（`MemoryInterfaceCompileTest.cpp`），不属于本轮切片；authoritative 结果改以下述 focused build 为准。
+3. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_access_async_task_registry_missing_secret_fail_closed_unit_test","dasall_daemon_access_secret_composition_unit_test","dasall_gateway_access_secret_composition_unit_test"])`
+   - 结果：通过。
+4. focused test tool 状态。
+   - `RunCtest_CMakeTools(tests=["AsyncTaskRegistryMissingSecretFailClosedTest","DaemonAccessSecretCompositionTest","GatewayAccessSecretCompositionTest"])`
+   - 结果：仍返回仓库已知泛化 `生成失败`；因此继续沿用 direct binary fallback 获取 authoritative focused evidence。
+5. focused direct binaries。
+   - `./build/vscode-linux-ninja/tests/unit/access/dasall_access_async_task_registry_missing_secret_fail_closed_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/access/dasall_daemon_access_secret_composition_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/access/dasall_gateway_access_secret_composition_unit_test`
+   - 结果：3 个 binary 均退出 `0`。
+
+### 结果
+
+1. `INF-FIX-008` 已闭合：daemon / gateway app owner 现在会显式把 shared runtime `ISecretManager` seam 注入 Access ownership seam，accepted_async ownership HMAC 不再只能靠测试手动注入宣称 production-wired。
+2. Access factory 既有 fail-closed 语义未回退：缺 manager、缺 secret record 都会保持 `ownership_secret_unavailable`，不会因为 owner wiring 到位而误放行 accepted async receipt。
+3. daemon / gateway focused composition regression 已落盘并可独立发现，后续若 main 再次漏接 `ownership_secret_manager`，会在 unit slice 直接暴露，而不必等到更重的 integration 或 package smoke。
+4. infrastructure secret 方向的下一优先级前移到 `INF-FIX-009` secret consumer matrix 与 package evidence；本轮未使用 qemu / kvm，也未把 build-tree focused evidence 外推为 installed/package ready。
+
 # 记录 #748
 
 - 日期：2026-05-22

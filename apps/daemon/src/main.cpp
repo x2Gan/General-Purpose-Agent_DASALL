@@ -36,6 +36,7 @@
 #include "AccessGatewayFactory.h"
 #include "IAccessGateway.h"
 #include "AgentFacade.h"
+#include "AccessOwnershipSecretWiring.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
 #include "agent/AgentResult.h"
@@ -514,6 +515,9 @@ int main(int argc, char* argv[]) {
     pipeline_options.knowledge_service =
         runtime_init_request.request.dependency_set->knowledge_service;
   }
+  dasall::apps::runtime_support::wire_runtime_secret_manager_into_access_ownership_seam(
+      runtime_init_request.request.dependency_set,
+      pipeline_options);
   pipeline_options.daemon_profile_id = daemon_profile_id;
   pipeline_options.daemon_version = "v1";
   pipeline_options.daemon_runtime_readiness_label =
