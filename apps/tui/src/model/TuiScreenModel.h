@@ -1,0 +1,40 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "model/TuiAction.h"
+
+namespace dasall::tui::model {
+
+struct TuiMessageView {
+  std::string role;
+  std::string content;
+  std::string timestamp;
+  std::vector<std::string> badges;
+  bool collapsible = false;
+  bool collapsed = false;
+};
+
+struct TuiComposerState {
+  std::string text;
+  std::string mode = "ready";
+  std::optional<std::string> history_query;
+  bool can_submit = true;
+  bool dirty = false;
+};
+
+struct TuiScreenModel {
+  data::TuiSessionView session;
+  std::vector<TuiMessageView> transcript;
+  data::TuiStatusProjection status;
+  data::TuiModelRouteProjection route;
+  TuiComposerState composer;
+  TuiFocusState focus = TuiFocusState::Composer;
+  std::vector<TuiBanner> banners;
+  TuiModalState modal;
+  std::string debug_reason;
+};
+
+}  // namespace dasall::tui::model

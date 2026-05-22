@@ -148,7 +148,7 @@ flowchart LR
 
 | 范畴 | 当前事实 | 对 TUI 的含义 |
 |---|---|---|
-| `apps/tui` | 当前已接入 non-installed `dasall_tui_prototype` target；`apps/tui/src/main.cpp` 默认保持 fake-only no-daemon placeholder，并在 FTXUI target 已解析时仅追加 private link helper；`apps/tui/src/data/TuiProjectionTypes.h` 已落 module-local projection DTO 基线 | `TUI-TODO-009~020` 可复用 prototype substrate 与 DTO 基线继续演进，但正式 `dasall-tui` / bare `dasall` 迁移仍待后续 gate |
+| `apps/tui` | 当前已接入 non-installed `dasall_tui_prototype` target；`apps/tui/src/main.cpp` 默认保持 fake-only no-daemon placeholder，并在 FTXUI target 已解析时仅追加 private link helper；`apps/tui/src/data/TuiProjectionTypes.h` 已落 module-local projection DTO 基线，`apps/tui/src/model/TuiAction.h` / `apps/tui/src/model/TuiScreenModel.h` 已落 typed MVU model/action 基线 | `TUI-TODO-010~020` 可复用 prototype substrate、DTO 与 model/action 基线继续演进，但正式 `dasall-tui` / bare `dasall` 迁移仍待后续 gate |
 | `apps/cli` | target 名为 `dasall-cli`，但安装产物通过 `OUTPUT_NAME dasall` 占用 bare 命令 | 命令释放是后置迁移任务，不是 UI 小样前置条件 |
 | Debian 命令面 | `debian/dasall-cli.install`、manpage、README.Debian、postinst、autopkgtest 当前均围绕 installed `dasall` 结构化 CLI | `/usr/bin/dasall` 改 TUI 会影响 operator 文档、脚本、smoke 和升级路径 |
 | 本地 daemon/access | daemon、UDS/IIPC、AccessGateway、readiness、run/status/cancel/diag/knowledge 等本地控制面已可复用 | 正式 TUI 可复用 daemon 主链，但必须通过 access/daemon owner 的 `TuiIpcRequestEnvelope` / `TuiIpcResponseEnvelope` 新增 TUI projection seam |
@@ -548,10 +548,48 @@ struct TuiModelRouteProjection {
 
 struct TuiComposerState {
   std::string text;
-  std::string mode;
+  std::string mode = "ready";
   std::optional<std::string> history_query;
   bool can_submit = true;
   bool dirty = false;
+};
+
+enum class TuiFocusState {
+  Transcript,
+  Composer,
+  Selector,
+  StatusPanel,
+  Modal,
+};
+
+enum class TuiBannerLevel {
+  Info,
+  Warning,
+  Error,
+};
+
+struct TuiBanner {
+  TuiBannerLevel level = TuiBannerLevel::Info;
+  std::string title;
+  std::string message;
+  std::optional<std::string> reason_code;
+  bool sticky = false;
+};
+
+enum class TuiModalKind {
+  None,
+  Selector,
+  Confirm,
+  Help,
+  Session,
+};
+
+struct TuiModalState {
+  TuiModalKind kind = TuiModalKind::None;
+  std::string title;
+  std::string body;
+  std::vector<std::string> actions;
+  std::optional<std::size_t> selected_action_index;
 };
 
 struct TuiScreenModel {
@@ -560,8 +598,10 @@ struct TuiScreenModel {
   TuiStatusProjection status;
   TuiModelRouteProjection route;
   TuiComposerState composer;
-  std::string focused_region;
-  std::vector<std::string> banners;
+  TuiFocusState focus = TuiFocusState::Composer;
+  std::vector<TuiBanner> banners;
+  TuiModalState modal;
+  std::string debug_reason;
 };
 
 class ITuiDataSource {

@@ -1,3 +1,35 @@
+# 记录 #762
+
+- 日期：2026-05-22
+- 阶段：tui/screen model action baseline
+- 任务：TUI-TODO-009 定义 screen model 与 action
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-009-screen-model-action基线.md`，冻结 `apps/tui/src/model/TuiAction.h`、`apps/tui/src/model/TuiScreenModel.h` 的 typed focus/banner/modal、action taxonomy、默认值策略、禁止依赖与 `TuiScreenModelTest` 验收口径。
+2. 新增 `apps/tui/src/model/TuiAction.h`，以纯数据头文件形式定义 `TuiFocusState`、`TuiBanner`、`TuiModalState`、`TuiActionType` 与 `TuiAction`，为后续 reducer 提供最小 typed action envelope。
+3. 新增 `apps/tui/src/model/TuiScreenModel.h`，定义 `TuiMessageView`、`TuiComposerState` 与 `TuiScreenModel`，将 session/status/route DTO、composer state、typed focus、banner、modal 汇总为统一的 module-local view model。
+4. 新增 `tests/unit/tui/TuiScreenModelTest.cpp`，守住 action/model 默认 shape、typed focus/banner/modal 默认值，以及两份头文件不引入 FTXUI、I/O、system-time 和 owner 私有依赖的边界。
+5. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_screen_model_unit_test` 并将 `TuiScreenModelTest` 从 topology smoke 切换到真实 focused unit target；同步回写 TUI 主 TODO、TUI 详设与子系统总账。
+
+### 验证
+
+1. `rg -n 'TuiAction|TuiScreenModel|TuiFocusState|TuiBanner|TuiModalState|TuiScreenModelTest|D Gate = PASS' docs/todos/tui/deliverables/TUI-TODO-009-screen-model-action基线.md`
+   - 结果：通过；009 deliverable 已同时冻结 action/model 字段族、测试目标与 D Gate 结果。
+2. `cmake --build --preset vscode-linux-ninja --target dasall_tui_screen_model_unit_test`
+   - 结果：通过；`TuiAction.h`、`TuiScreenModel.h` 与 `tests/unit/tui/CMakeLists.txt` 的 focused 接线可成功编译并链接。
+3. `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiScreenModelTest$'`
+   - 结果：通过；1/1 测试通过，证明 screen model/action 默认 shape 与 no-FTXUI/no-I/O/no-system-time boundary 已被 focused unit test 守住。
+4. `ctest --preset vscode-linux-ninja -N | rg 'TuiScreenModelTest'`
+   - 结果：通过；`TuiScreenModelTest` 已进入顶层 discoverability，后续 `TUI-TODO-010` 可以直接复用该入口做 reducer transition gate。
+
+### 结果
+
+1. `TUI-TODO-009` 已闭合：TUI 现在拥有可编译、可发现、无 FTXUI/I/O 依赖的 typed MVU screen model 与 action 基线。
+2. 后续 `TUI-TODO-010` 可以直接基于 `TuiAction` 和 `TuiScreenModel` 实现纯 reducer，而不必再在 reducer/view/app loop 各自发明 focus/banner/modal 状态表面。
+3. 本轮没有引入 reducer、renderer、daemon source、terminal handle 或系统时间读取，因此 010 之后的状态流转、视图与运行时接线仍能在既有 owner boundary 内分阶段推进。
+
 # 记录 #761
 
 - 日期：2026-05-22
