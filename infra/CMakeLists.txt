@@ -129,6 +129,7 @@ set(DASALL_INFRA_SECRET_SOURCES
   src/secret/SecretAuditBridge.cpp
   src/secret/SecretHealthProbe.cpp
   src/secret/SecretBootstrapWriter.cpp
+  src/secret/SecretManagerLiveComposition.cpp
   src/secret/SecretManagerFacade.cpp
   src/secret/SecretLeaseRegistry.cpp
   src/secret/SecretRotationCoordinator.cpp
@@ -142,6 +143,7 @@ set(DASALL_INFRA_SECRET_PUBLIC_HEADERS
   include/secret/ISecretHealthSource.h
   include/secret/SecureBuffer.h
   include/secret/SecretErrors.h
+  include/secret/SecretManagerLiveComposition.h
   include/secret/SecretTypes.h
 )
 

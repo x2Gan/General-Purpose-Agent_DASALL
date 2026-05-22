@@ -178,6 +178,11 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
           "daemon runtime live dependency composition should expose a production ILLMManager");
       assert_true(composition.dependency_set->knowledge_service != nullptr,
       "daemon runtime live dependency composition should expose an installed-asset IKnowledgeService");
+        assert_true(composition.dependency_set->secret_manager != nullptr,
+          "daemon runtime live dependency composition should retain a live ISecretManager seam for app-level consumers");
+        assert_true(contains_port(composition.dependency_set->external_evidence,
+              "runtime:daemon.local-control-plane:secret-manager-live-seam"),
+          "daemon runtime live dependency composition should retain an owner-level secret manager seam evidence marker");
 
   dasall::runtime::AgentInitRequest init_request;
   init_request.runtime_instance_id =

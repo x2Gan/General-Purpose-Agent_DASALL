@@ -59,6 +59,7 @@
 #include "maintenance/BackgroundMaintenanceHooks.h"
 #include "bridge/ToolServiceBridge.h"
 #include "registry/ToolRegistry.h"
+#include "secret/SecretManagerLiveComposition.h"
 #include "skills/PluginSkillBundleImporter.h"
 #include "skills/SkillRegistry.h"
 #include "skills/SkillRuntime.h"
@@ -1761,6 +1762,20 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   }
 
   auto dependency_set = std::make_shared<runtime::RuntimeDependencySet>();
+  const auto secret_manager_result = infra::secret::compose_live_secret_manager(
+      policy_snapshot->ops_policy().optional_backends.secret_backend_type,
+      infra::secret::SecretManagerLiveCompositionOptions{
+          .state_root_override = state_root,
+      });
+  if (!secret_manager_result.ok()) {
+    return make_error(std::string("runtime secret manager composition failed for ") +
+                      std::string(composition_owner) + ": " +
+                      secret_manager_result.error);
+  }
+  dependency_set->secret_manager = secret_manager_result.secret_manager;
+  dependency_set->external_evidence.push_back(
+      std::string("runtime:") + std::string(composition_owner) +
+      ":secret-manager-live-seam");
 
   const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
   if (!observability.ok()) {
@@ -2126,6 +2141,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       std::string("runtime:") + std::string(composition_owner) +
       (cognition_first_requested ? ":cognition-first-forced"
                                  : ":required-live-baseline"),
+      std::string("runtime:") + std::string(composition_owner) +
+      ":secret-manager-live-seam",
       std::string("runtime:") + std::string(composition_owner) +
       ":tool-services-production-bridge",
       std::string("runtime:") + std::string(composition_owner) +

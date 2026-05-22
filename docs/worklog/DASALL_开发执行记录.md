@@ -1,5 +1,52 @@
 # DASALL 开发执行记录
 
+# 记录 #748
+
+- 日期：2026-05-22
+- 阶段：infrastructure / secret live composition seam closeout
+- 任务：推进 `INF-FIX-007`，冻结 SecretManager live composition seam
+- 状态：已完成（infra public builder、runtime dependency retention 与 daemon/gateway shared owner-level focused evidence 已闭合，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-007`，并明确要求“如有必要可回链详细设计；如果验收口径写明 qemu 就改成真实本机 build-tree / local 口径；逐个文件落盘；完成后提交推送；本轮不要提前扩到 `INF-FIX-008` 的 daemon/gateway Access ownership seam 注入”。
+2. 近端核验确认：`ISecretManager`、`SecretManagerFacade`、`FileSecretBackend` 与 `SecretBootstrapWriter` 边界在 infra 内已经存在；真正缺口不是 secret 读链没有实现，而是 daemon / gateway shared runtime composition 缺少 authoritative public live builder seam。
+3. install layout 与 secret unavailable 语义核验确认：packaged `state_root` 固定 `/var/lib/dasall`，dev/source 模式可用 `DASALL_STATE_ROOT` override；`FileSecretBackend` 在 root 缺失时报告 unavailable，`SecretManagerFacade` 会把该状态映射成标准 `ProviderTimeout`，因此 builder 不能靠返回空指针掩盖缺根路径。
+4. 前置 blocker 复核：`INF-FIX-008` 的 Access ownership seam 注入继续单独持有，本轮只冻结 live composition seam，不混做 consumer wiring。
+
+### 改动
+
+1. 新增 `infra/include/secret/SecretManagerLiveComposition.h`、`infra/src/secret/SecretManagerLiveComposition.cpp` 并更新 `infra/CMakeLists.txt`：由 infra public seam 暴露最小 production builder，按 profile-selected `secret_backend_type` 与 install layout / `state_root_override` 组合 `FileSecretBackend + SecretManagerFacade`，返回 `std::shared_ptr<ISecretManager>`。
+2. 更新 `runtime/include/RuntimeDependencySet.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：shared runtime dependency set 新增 `secret_manager` retention 面；`compose_minimal_live_dependency_set()` 现在会消费 infra public builder，并保留 owner-level `secret-manager-live-seam` evidence，而不是在 runtime_support 里 include infra internal concrete headers。
+3. 修复同一切片中的证据保留缺陷：首次 direct binary 验证暴露 daemon composition test 的 `secret-manager-live-seam` evidence marker 丢失；近端核验发现 `external_evidence` 在后续被整段重置，本轮将 marker 纳入最终 evidence 列表后复验通过。
+4. 新增 `tests/unit/infra/secret/SecretManagerLiveCompositionTest.cpp`，并更新 `tests/unit/infra/CMakeLists.txt`、`tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`：覆盖 positive file-backed manager、missing root unavailable/provider-timeout，以及 daemon/gateway shared runtime composition 对 secret seam retention 与 owner-level evidence 的断言。
+5. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 并新增 `docs/todos/infrastructure/deliverables/INF-FIX-007-secret-manager-live-composition-seam收口.md`：关闭 `INF-GAP-007` / `INF-FIX-007`，把剩余缺口明确收窄到 `INF-FIX-008` / `INF-FIX-009`。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_secret_manager_live_composition_unit_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_access_gateway_runtime_live_dependency_composition_integration_test"])`
+   - 结果：通过；仅出现仓库既有 warnings，无新的 build blocker。
+2. focused test tool 状态。
+   - `RunCtest_CMakeTools(tests=["SecretManagerLiveCompositionTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`
+   - 结果：仍返回仓库已知泛化 `生成失败`；因此本轮继续沿用 direct binary fallback 获取 authoritative focused evidence。
+3. focused direct binaries 首轮验证。
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_secret_manager_live_composition_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test`
+   - 结果：daemon binary 首轮失败于 `secret-manager-live-seam` evidence marker 缺失；定位到同一函数内 `external_evidence` 被后续赋值覆盖，因此立即在同一切片修复，不扩 scope。
+4. focused build + binaries 修复后复验。
+   - 同上 `Build_CMakeTools(...)` 重跑。
+   - 同上 3 个 binary 重跑。
+   - 结果：build 再次通过，3 个 binary 均退出 `0`。
+
+### 结果
+
+1. `INF-GAP-007` 已闭合：SecretManager / `ISecretManager` 已进入 daemon / gateway shared app live composition seam，不再只能靠 explicit wiring 或 focused fixture 证明。
+2. `INF-FIX-007` 已完成：infra public builder、`RuntimeDependencySet::secret_manager` retention 与 daemon/gateway owner-level evidence 现在同口径落盘，且 `ISecretManager` ABI 未被 bootstrap create/set 污染。
+3. secret root 缺失语义已固定为标准 unavailable/provider-timeout 路径，而不是 builder 直接返回空指针或 ready fallback。
+4. infrastructure 章节的下一优先级继续前移到 `INF-FIX-008` Access ownership seam 注入与 `INF-FIX-009` secret consumer matrix；本轮未使用 qemu / kvm，也未把 build-tree focused evidence 外推为 installed/package ready。
+
 # 记录 #747
 
 - 日期：2026-05-22
