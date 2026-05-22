@@ -1,5 +1,56 @@
 # DASALL 开发执行记录
 
+# 记录 #746
+
+- 日期：2026-05-22
+- 阶段：infrastructure / optional backend profile-gated closeout
+- 任务：推进 `INF-FIX-005`，收口 optional backend profile-gated 接入
+- 状态：已完成（profile-gated optional backend、package asset、unavailable semantics 与 runtime observability projection 已闭合，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-005`，并保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端代码核验确认：`infra/src/metrics/MetricsExporterAdapter.cpp`、`infra/src/tracing/SpanExporterAdapter.cpp`、`profiles/src/RuntimePolicyProvider.cpp` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 是 optional backend 语义真正落点；缺口不是 interface 不存在，而是 profile/schema/snapshot/live composition 没有 authoritative 投影。
+3. 设计边界确认：`docs/architecture/DASALL_profiles模块详细设计.md` 要求 runtime 只消费 `RuntimePolicySnapshot`；`docs/architecture/DASALL_infrastructure子系统详细设计.md` 已把 `infra.tracing.*`、`infra.metrics.*` 与 `infra.secret.backend` 列为 profile/deployment 受管配置域，因此本轮必须通过 profile-gated policy 收口，而不是新增旁路配置体系。
+4. 前置 blocker 复核：本轮无需先解独立 BLOCK；但 `SecretManager` live composition 与 daemon/gateway secret 注入继续由 `INF-FIX-007` / `INF-FIX-008` 持有，不与 005 混写。
+
+### 改动
+
+1. 更新 `infra/src/metrics/MetricsExporterAdapter.cpp`、`infra/src/tracing/SpanExporterAdapter.cpp` 与对应 unit tests：unsupported exporter 现在保留请求 backend type、标记 degraded，并返回 unavailable error，不再 silent fallback 成 noop/file ready。
+2. 更新 `profiles/include/RuntimePolicySnapshot.h` 与 `profiles/src/RuntimePolicyProvider.cpp`：新增 `OpsPolicy.optional_backends` 视图，冻结 metrics/trace/secret backend type 与 package asset；provider 现在对这些字段缺键 fail-closed，不再用默认值掩盖 schema 漂移。
+3. 更新 5 个 `profiles/*/runtime_policy.yaml` 与 `tests/contract/smoke/ProfileRuntimePolicySchemaContractTest.cpp`：补齐 `infra.metrics.exporter.package_asset`、`infra.tracing.exporter.*`、`infra.secret.backend.*`，把 optional backend 真正变成 profile 资产的一部分。
+4. 更新 `infra/include/ObservabilityLiveComposition.h`、`infra/src/ObservabilityLiveComposition.cpp` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`：runtime_support 现在把 profile 选定的 metrics/trace exporter type 与 OTLP endpoint 投影进 shared observability composition，而不是硬编码走默认 noop。
+5. 更新 `tests/integration/profiles/ProfilesBuildRuntimeIntegrationTest.cpp` 与 `tests/unit/profiles/RuntimePolicyProviderTest.cpp`：新增 desktop_full / edge_minimal optional backend 投影断言，验证 profile asset -> runtime snapshot 的正向与 constrained baseline 两条路径。
+6. 新增 `docs/todos/infrastructure/deliverables/INF-FIX-005-optional-backend-profile-gated接入收口.md`，并同步关闭顶层总账中的 `INF-GAP-005` / `INF-FIX-005`。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_profiles_build_runtime_integration_test","dasall_runtime_policy_provider_unit_test","dasall_contract_profile_runtime_policy_schema_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test"])`
+   - 结果：通过。
+2. focused test tool 状态。
+   - `RunCtest_CMakeTools(tests=["ProfilesBuildRuntimeIntegrationTest","RuntimePolicyProviderTest","ProfileRuntimePolicySchemaContractTest","DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：仍返回仓库已知泛化 `生成失败`；因此本轮继续沿用 direct binary fallback 作为 authoritative focused evidence。
+3. focused direct binaries。
+   - `./build/vscode-linux-ninja/tests/integration/profiles/dasall_profiles_build_runtime_integration_test`
+   - `./build/vscode-linux-ninja/tests/unit/profiles/dasall_runtime_policy_provider_unit_test`
+   - `./build/vscode-linux-ninja/tests/contract/dasall_contract_profile_runtime_policy_schema_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`
+   - 结果：四项均退出 `0`。
+4. adjacent regression。
+   - `Build_CMakeTools(buildTargets=["dasall_service_metrics_bridge_unit_test","dasall_service_trace_bridge_unit_test","dasall_secret_types_unit_test"])`
+   - `./build/vscode-linux-ninja/tests/unit/services/bridges/dasall_service_metrics_bridge_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/services/bridges/dasall_service_trace_bridge_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_secret_types_unit_test`
+   - 结果：三项均退出 `0`。
+
+### 结果
+
+1. `INF-GAP-005` 已闭合：optional backend 现在以 profile asset + runtime snapshot + runtime_support observability projection 的形式存在，不再停留在 interface/local fallback 幻觉。
+2. `INF-FIX-005` 已完成：metrics/trace unsupported backend 会显式 unavailable；profile schema 现冻结 package asset 与 backend type；runtime_support 已消费 profile 选定的 metrics/trace exporter type。
+3. secret backend 本轮只完成 profile/schema/snapshot/package asset freeze，不外推为 `ISecretManager` live composition ready；对应 app-level wiring 继续由 `INF-FIX-007` / `INF-FIX-008` 持有。
+4. infrastructure 章节的下一优先级继续前移到 `INF-FIX-007` / `INF-FIX-008` SecretManager live composition，以及 `INF-FIX-006` release runner / soak；本轮未使用 qemu / kvm，也未把结果外推到 external backend positive proof。
+
 # 记录 #745
 
 - 日期：2026-05-22

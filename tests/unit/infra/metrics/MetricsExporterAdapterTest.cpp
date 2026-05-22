@@ -86,8 +86,8 @@ void test_metrics_exporter_adapter_falls_back_to_noop_on_unsupported_exporter() 
                       map_metrics_error_code(MetricsErrorCode::ExportFailure).result_code &&
                   adapter.export_failure_total() == 2U &&
                   adapter.module_snapshot().degraded &&
-                  adapter.module_snapshot().exporter_state == "noop",
-              "MetricsExporterAdapter should fall back to noop and surface export failures observably when an unsupported exporter is requested");
+            adapter.module_snapshot().exporter_state == "otlp",
+          "MetricsExporterAdapter should preserve the requested optional exporter type and surface an unavailable/degraded failure when otlp is requested before the backend is wired");
 }
 
 void test_metrics_exporter_adapter_reports_timeout_observably() {

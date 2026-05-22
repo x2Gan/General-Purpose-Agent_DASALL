@@ -173,10 +173,12 @@ TraceOperationStatus SpanExporterAdapter::export_unsupported(const SpanBatch& ba
       .failure_count = static_cast<std::uint32_t>(batch.size()),
       .latency_ms = 0U,
   };
-  (void)fallback_to_noop("unsupported-exporter");
+  module_snapshot_.degraded = true;
+  last_rendered_output_.clear();
   return invalid_request(
       TraceErrorCode::ExportFailure,
-      "trace exporter adapter only supports noop/file during the first export skeleton round",
+    "trace exporter backend '" + module_snapshot_.exporter_state +
+      "' is unavailable in the current profile-gated build",
       "tracing.exporter.export_batch");
 }
 

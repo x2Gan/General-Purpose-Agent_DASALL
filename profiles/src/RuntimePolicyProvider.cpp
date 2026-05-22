@@ -181,6 +181,21 @@ template <typename T>
   const auto ops_remote_diagnostics_enabled =
       get_bool(parsed_yaml.scalar_values, "ops_policy.remote_diagnostics_enabled");
   const auto ops_upgrade_strategy = get_string(parsed_yaml.scalar_values, "ops_policy.upgrade_strategy");
+  const auto metrics_exporter_type =
+      get_string(parsed_yaml.scalar_values, "infra.metrics.exporter.type");
+  const auto metrics_exporter_package_asset =
+      get_string(parsed_yaml.scalar_values, "infra.metrics.exporter.package_asset");
+  const auto trace_exporter_type =
+      get_string(parsed_yaml.scalar_values, "infra.tracing.exporter.type");
+  const auto trace_exporter_otlp_endpoint =
+      get_string(parsed_yaml.scalar_values, "infra.tracing.exporter.otlp_endpoint")
+          .value_or(std::string());
+  const auto trace_exporter_package_asset =
+      get_string(parsed_yaml.scalar_values, "infra.tracing.exporter.package_asset");
+  const auto secret_backend_type =
+      get_string(parsed_yaml.scalar_values, "infra.secret.backend.type");
+  const auto secret_backend_package_asset =
+      get_string(parsed_yaml.scalar_values, "infra.secret.backend.package_asset");
 
     if (!worker_threads.has_value() || !max_tokens.has_value() || !max_turns.has_value() ||
       !max_latency_ms.has_value() || !max_replan_count.has_value() ||
@@ -193,7 +208,10 @@ template <typename T>
       !execution_requires_confirmation.has_value() || !execution_safe_mode.has_value() ||
       !execution_audit_level.has_value() || !ops_log_level.has_value() ||
       !ops_metrics_granularity.has_value() || !ops_trace_sample_ratio.has_value() ||
-            !ops_remote_diagnostics_enabled.has_value() || !ops_upgrade_strategy.has_value()) {
+                        !ops_remote_diagnostics_enabled.has_value() || !ops_upgrade_strategy.has_value() ||
+            !metrics_exporter_type.has_value() || !metrics_exporter_package_asset.has_value() ||
+            !trace_exporter_type.has_value() || !trace_exporter_package_asset.has_value() ||
+            !secret_backend_type.has_value() || !secret_backend_package_asset.has_value()) {
     return std::nullopt;
   }
 
@@ -300,6 +318,15 @@ template <typename T>
           .trace_sample_ratio = *ops_trace_sample_ratio,
           .remote_diagnostics_enabled = *ops_remote_diagnostics_enabled,
           .upgrade_strategy = *ops_upgrade_strategy,
+          .optional_backends = OpsPolicy::OptionalBackendPolicy{
+              .metrics_exporter_type = *metrics_exporter_type,
+              .metrics_exporter_package_asset = *metrics_exporter_package_asset,
+              .trace_exporter_type = *trace_exporter_type,
+              .trace_exporter_otlp_endpoint = trace_exporter_otlp_endpoint,
+              .trace_exporter_package_asset = *trace_exporter_package_asset,
+              .secret_backend_type = *secret_backend_type,
+              .secret_backend_package_asset = *secret_backend_package_asset,
+          },
       },
       *worker_threads,
       *multi_agent_enabled,

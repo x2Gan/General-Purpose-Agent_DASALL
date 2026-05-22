@@ -43,6 +43,7 @@ namespace {
   config.exporter.type = options.trace_exporter_type.empty()
       ? std::string(tracing::kTraceExporterTypeNoop)
       : options.trace_exporter_type;
+  config.exporter.otlp_endpoint = options.trace_exporter_otlp_endpoint;
   config.sampler.type = std::string(tracing::kTraceSamplerTypeRatio);
   config.sampler.ratio = std::clamp(options.trace_sample_ratio, 0.0, 1.0);
   config.batch.enabled = false;

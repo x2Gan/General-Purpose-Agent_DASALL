@@ -48,6 +48,18 @@ void test_runtime_policy_provider_loads_snapshot_for_valid_profile() {
               "loaded runtime policy snapshot should preserve frozen policy constraints");
   assert_equal(std::string("desktop_full"), load_result.snapshot->effective_profile_id(),
                "loaded snapshot should preserve profile id");
+  assert_equal(std::string("prom_text"),
+               load_result.snapshot->ops_policy().optional_backends.metrics_exporter_type,
+               "loaded snapshot should preserve the metrics exporter selected by the runtime policy asset");
+  assert_equal(std::string("builtin:metrics-prom_text"),
+               load_result.snapshot->ops_policy().optional_backends.metrics_exporter_package_asset,
+               "loaded snapshot should preserve the metrics exporter package asset binding");
+  assert_equal(std::string("file"),
+               load_result.snapshot->ops_policy().optional_backends.trace_exporter_type,
+               "loaded snapshot should preserve the trace exporter selected by the runtime policy asset");
+  assert_equal(std::string("file"),
+               load_result.snapshot->ops_policy().optional_backends.secret_backend_type,
+               "loaded snapshot should preserve the secret backend selected by the runtime policy asset");
 }
 
 void test_runtime_policy_provider_rejects_unknown_profile_requests() {

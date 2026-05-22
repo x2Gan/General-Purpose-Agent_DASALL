@@ -148,6 +148,7 @@ infra:
 			interval_ms: 5000
 		exporter:
 			type: prom_text
+			package_asset: builtin:metrics-prom_text
 			timeout_ms: 2000
 		aggregation:
 			temporality: cumulative
@@ -177,6 +178,16 @@ infra:
 				- 5
 		audit:
 			on_policy_change: true
+	tracing:
+		enabled: true
+		exporter:
+			type: file
+			otlp_endpoint: ""
+			package_asset: builtin:trace-file
+	secret:
+		backend:
+			type: file
+			package_asset: builtin:secret-file
 	watchdog:
 		enabled: true
 		scan:

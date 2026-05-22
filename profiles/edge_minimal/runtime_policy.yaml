@@ -139,6 +139,7 @@ infra:
 			interval_ms: 10000
 		exporter:
 			type: noop
+			package_asset: builtin:metrics-noop
 			timeout_ms: 1000
 		aggregation:
 			temporality: cumulative
@@ -168,6 +169,16 @@ infra:
 				- 5
 		audit:
 			on_policy_change: true
+	tracing:
+		enabled: false
+		exporter:
+			type: noop
+			otlp_endpoint: ""
+			package_asset: builtin:trace-noop
+	secret:
+		backend:
+			type: file
+			package_asset: builtin:secret-file
 	watchdog:
 		enabled: true
 		scan:

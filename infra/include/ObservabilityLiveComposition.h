@@ -43,6 +43,7 @@ struct ObservabilityLiveCompositionOptions {
   std::uint32_t metrics_reader_interval_ms = 1000U;
   std::uint32_t metrics_exporter_timeout_ms = 10000U;
   std::string trace_exporter_type = "noop";
+  std::string trace_exporter_otlp_endpoint;
   std::uint32_t trace_export_timeout_ms = 100U;
 };
 

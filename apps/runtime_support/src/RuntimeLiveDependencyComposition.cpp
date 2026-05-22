@@ -1146,11 +1146,15 @@ class RuntimeControlPlaneHealthSignalProvider final
 
 [[nodiscard]] RuntimeObservabilityBundle compose_runtime_observability_bundle(
     const profiles::RuntimePolicySnapshot& policy_snapshot) {
+  const auto& optional_backends = policy_snapshot.ops_policy().optional_backends;
   const auto live_observability = infra::compose_live_observability(
       infra::ObservabilityLiveCompositionOptions{
           .profile_id = policy_snapshot.effective_profile_id(),
           .metrics_granularity = policy_snapshot.ops_policy().metrics_granularity,
           .trace_sample_ratio = policy_snapshot.ops_policy().trace_sample_ratio,
+          .metrics_exporter_type = optional_backends.metrics_exporter_type,
+          .trace_exporter_type = optional_backends.trace_exporter_type,
+          .trace_exporter_otlp_endpoint = optional_backends.trace_exporter_otlp_endpoint,
       });
   if (!live_observability.ok()) {
     return RuntimeObservabilityBundle{

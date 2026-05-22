@@ -253,6 +253,7 @@ ValidationResult validate_required_paths(const std::string& document) {
       "infra.metrics.reader.interval_ms",
       "infra.metrics.exporter",
       "infra.metrics.exporter.type",
+      "infra.metrics.exporter.package_asset",
       "infra.metrics.exporter.timeout_ms",
       "infra.metrics.aggregation",
       "infra.metrics.aggregation.temporality",
@@ -266,6 +267,16 @@ ValidationResult validate_required_paths(const std::string& document) {
       "infra.metrics.histogram.default_buckets_seconds",
       "infra.metrics.audit",
       "infra.metrics.audit.on_policy_change",
+      "infra.tracing",
+      "infra.tracing.enabled",
+      "infra.tracing.exporter",
+      "infra.tracing.exporter.type",
+      "infra.tracing.exporter.otlp_endpoint",
+      "infra.tracing.exporter.package_asset",
+      "infra.secret",
+      "infra.secret.backend",
+      "infra.secret.backend.type",
+      "infra.secret.backend.package_asset",
       "infra.watchdog",
       "infra.watchdog.enabled",
       "infra.watchdog.scan",
@@ -370,16 +381,20 @@ void test_profile_matrix_freeze_matches_blueprint_baselines() {
               "cloud_full must keep the higher watchdog entity ceiling for server deployments");
   assert_true(contains_text(desktop_full, "max_cardinality_per_metric: 300"),
               "desktop_full must keep the desktop metrics cardinality ceiling baseline");
-  assert_true(contains_text(edge_balanced, "type: prom_text"),
+  assert_true(contains_text(edge_balanced, "package_asset: builtin:metrics-prom_text"),
               "edge_balanced must keep prom_text exporter enabled in the balanced observability baseline");
+  assert_true(contains_text(desktop_full, "package_asset: builtin:trace-file"),
+              "desktop_full must keep the local file trace exporter baseline until otlp packaging is selected explicitly");
   assert_true(contains_text(edge_minimal, "llm_cloud_adapter: false"),
               "edge_minimal must keep cloud adapter disabled");
   assert_true(contains_text(edge_minimal, "tools_mcp: false"),
               "edge_minimal must keep MCP tools disabled");
   assert_true(contains_text(edge_minimal, "plugin.echo"),
               "edge_minimal must keep a single minimal plugin allowlist baseline");
-  assert_true(contains_text(edge_minimal, "type: noop"),
+  assert_true(contains_text(edge_minimal, "package_asset: builtin:metrics-noop"),
               "edge_minimal must keep the noop metrics exporter to avoid external export cost");
+  assert_true(contains_text(edge_minimal, "package_asset: builtin:trace-noop"),
+              "edge_minimal must keep tracing disabled through the noop exporter baseline");
   assert_true(contains_text(edge_minimal, "window_size: 12"),
               "edge_minimal must keep a smaller health history window for constrained memory baselines");
   assert_true(contains_text(edge_minimal, "policy: critical_only"),
@@ -388,6 +403,8 @@ void test_profile_matrix_freeze_matches_blueprint_baselines() {
               "factory_test must keep HAL enabled");
   assert_true(contains_text(factory_test, "remote_diagnostics_enabled: true"),
               "factory_test must keep remote diagnostics enabled");
+  assert_true(contains_text(factory_test, "package_asset: builtin:secret-file"),
+              "factory_test must keep the local file secret backend baseline until KMS wiring is explicitly enabled");
   assert_true(contains_text(factory_test, "consecutive_failures: 2"),
               "factory_test must keep a tighter health unhealthy threshold for diagnostic loops");
   assert_true(contains_text(factory_test, "consecutive_miss_threshold: 2"),

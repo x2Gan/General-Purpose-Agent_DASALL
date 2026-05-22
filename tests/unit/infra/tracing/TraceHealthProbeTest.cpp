@@ -160,7 +160,7 @@ void test_tracer_provider_exposes_private_trace_health_snapshot() {
   assert_true(snapshot.is_valid() && !snapshot.degraded_mode &&
                   snapshot.consecutive_failure_total == 1U &&
                   snapshot.module_snapshot.degraded &&
-                  snapshot.module_snapshot.exporter_state == "noop" &&
+            snapshot.module_snapshot.exporter_state == "otlp" &&
                   snapshot.last_error_code.has_value(),
               "TracerProviderImpl should expose the tracing private health snapshot after the pipeline records a degraded exporter observation");
 }

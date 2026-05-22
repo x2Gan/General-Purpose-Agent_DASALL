@@ -301,9 +301,9 @@ void test_tracer_provider_surfaces_unsupported_exporter_failure() {
                       map_trace_error_code(TraceErrorCode::ExportFailure).result_code &&
                   report.batch_size == 1U && report.success_count == 0U &&
                   report.failure_count == 1U && provider.export_failure_total() == 1U &&
-                  snapshot.queue_depth == 0U && snapshot.exporter_state == "noop" &&
+            snapshot.queue_depth == 0U && snapshot.exporter_state == "otlp" &&
                   snapshot.degraded,
-              "SpanProcessorPipeline should surface unsupported exporter failures and fall back to noop during the first exporter round");
+          "SpanProcessorPipeline should preserve the requested optional exporter type and surface an unavailable/degraded failure when otlp is requested before the backend is wired");
 }
 
 void test_tracer_provider_wires_export_metrics_into_trace_metrics_bridge() {

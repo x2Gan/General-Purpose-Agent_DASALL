@@ -34,13 +34,36 @@ void test_profiles_build_and_runtime_paths_resolve_same_profile() {
   const auto runtime_result = provider.load_snapshot(RuntimePolicyLoadRequest{
       .profile_id = "desktop_full",
   });
+    const auto minimal_runtime_result = provider.load_snapshot(RuntimePolicyLoadRequest{
+      .profile_id = "edge_minimal",
+    });
 
   assert_true(manifest_result.ok(), "build resolver should succeed for baseline desktop_full profile");
   assert_true(runtime_result.ok(), "runtime provider should succeed for baseline desktop_full profile");
+    assert_true(minimal_runtime_result.ok(),
+          "runtime provider should succeed for constrained edge_minimal profile");
   assert_equal(std::string("desktop_full"), runtime_result.snapshot->effective_profile_id(),
                "runtime snapshot should preserve the same profile id used by the build manifest");
   assert_true(manifest_result.manifest->enables_module("runtime"),
               "build manifest should keep runtime module enabled for the shared profile smoke path");
+  assert_equal(std::string("prom_text"),
+               runtime_result.snapshot->ops_policy().optional_backends.metrics_exporter_type,
+               "runtime snapshot should project the profile-gated metrics exporter type instead of silently collapsing to noop");
+    assert_equal(std::string("file"),
+           runtime_result.snapshot->ops_policy().optional_backends.trace_exporter_type,
+           "desktop_full should keep the profile-selected trace exporter type in the runtime snapshot");
+    assert_equal(std::string("builtin:trace-file"),
+           runtime_result.snapshot->ops_policy().optional_backends.trace_exporter_package_asset,
+           "desktop_full should keep the trace package asset binding alongside exporter type");
+    assert_equal(std::string("file"),
+           runtime_result.snapshot->ops_policy().optional_backends.secret_backend_type,
+           "desktop_full should surface the selected secret backend type in the runtime snapshot");
+    assert_equal(std::string("noop"),
+           minimal_runtime_result.snapshot->ops_policy().optional_backends.metrics_exporter_type,
+           "edge_minimal should keep metrics exporter gated to noop in the constrained baseline");
+    assert_equal(std::string("noop"),
+           minimal_runtime_result.snapshot->ops_policy().optional_backends.trace_exporter_type,
+           "edge_minimal should keep tracing exporter gated to noop in the constrained baseline");
 }
 
 void test_profiles_build_and_runtime_paths_reject_unknown_profile() {

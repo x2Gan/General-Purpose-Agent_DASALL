@@ -122,15 +122,34 @@ struct ExecutionPolicy {
 };
 
 struct OpsPolicy {
+  struct OptionalBackendPolicy {
+    std::string metrics_exporter_type = "noop";
+    std::string metrics_exporter_package_asset = "builtin:metrics-noop";
+    std::string trace_exporter_type = "noop";
+    std::string trace_exporter_otlp_endpoint;
+    std::string trace_exporter_package_asset = "builtin:trace-noop";
+    std::string secret_backend_type = "file";
+    std::string secret_backend_package_asset = "builtin:secret-file";
+
+    [[nodiscard]] bool has_consistent_values() const {
+      return !metrics_exporter_type.empty() && !metrics_exporter_package_asset.empty() &&
+             !trace_exporter_type.empty() && !trace_exporter_package_asset.empty() &&
+             !secret_backend_type.empty() && !secret_backend_package_asset.empty() &&
+             (trace_exporter_type != "otlp" || !trace_exporter_otlp_endpoint.empty());
+    }
+  };
+
   std::string log_level;
   std::string metrics_granularity;
   double trace_sample_ratio = 0.0;
   bool remote_diagnostics_enabled = false;
   std::string upgrade_strategy;
+  OptionalBackendPolicy optional_backends{};
 
   [[nodiscard]] bool has_consistent_values() const {
     return !log_level.empty() && !metrics_granularity.empty() && !upgrade_strategy.empty() &&
-           trace_sample_ratio >= 0.0 && trace_sample_ratio <= 1.0;
+           trace_sample_ratio >= 0.0 && trace_sample_ratio <= 1.0 &&
+           optional_backends.has_consistent_values();
   }
 };
 

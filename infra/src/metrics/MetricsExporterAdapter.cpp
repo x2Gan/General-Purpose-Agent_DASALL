@@ -156,9 +156,11 @@ MetricsOperationStatus MetricsExporterAdapter::export_unsupported(const MetricEx
       .latency_ms = 0.0,
       .dropped_count = 0U,
   };
-  (void)fallback_to_noop("unsupported-exporter");
+  module_snapshot_.degraded = true;
+  last_rendered_text_.clear();
   return invalid_request(MetricsErrorCode::ExportFailure,
-                         "metrics exporter adapter only supports noop/prom_text during the first export skeleton round",
+                         "metrics exporter backend '" + module_snapshot_.exporter_state +
+                             "' is unavailable in the current profile-gated build",
                          "metrics.exporter.export_batch");
 }
 
