@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+# 记录 #747
+
+- 日期：2026-05-22
+- 阶段：infrastructure / local release-soak gate closeout
+- 任务：推进 `INF-FIX-006`，建立 infra release / soak gate
+- 状态：已完成（infra owner local release / soak gate、release-runner artifact contract 与总账边界已闭合，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-006`，并明确要求“如果验收口径写明 qemu 就改成真实本机 installed/local 口径再执行”，同时保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端核验确认：`.github/workflows/release-package-gate.yml` 已有 package smoke、services soak、knowledge proof / soak / failure 的 local artifact contract；真正缺口不是 infra 没测试，而是 release-runner local evidence 缺少 infrastructure owner 自己的 harness 与 summary。
+3. `tests/integration/infra/*`、`tests/integration/infra/health/*`、`tests/integration/infra/metrics/*`、`tests/integration/infra/secret/*` 与 `tests/unit/infra/plugin/*` 已经提供 diagnostics、health/readiness、secret unavailable、plugin safe unload 与 observability sink failure 的 focused binaries；最小可执行动作是把这些 slices 编排成 real local installed gate，而不是扩写 qemu harness。
+4. 边界复核：qemu/autopkgtest machine isolation 继续属于 packaging / release 环境复核，不作为本轮 infra owner blocker；`SecretManager` / `ISecretManager` live composition 仍由 `INF-FIX-007` / `INF-FIX-008` 持有。
+
+### 改动
+
+1. 新增 `scripts/packaging/infra_release_soak_gate.sh`：脚本会在 real local installed daemon 上执行 `diag_enabled` config apply、等待 `READY`、连续 10 轮运行 `dasall readiness --json` 与 `dasall diag health --json`，然后顺序执行 `InfraDiagnosticsSmokeTest`、`InfraDiagnosticsIntegrationTest`、`HealthWiringIntegrationTest`、`InfraHealthCadenceIntegrationTest`、`SecretFailureInjectionTest`、`PluginLifecycleStateTest` 与 `MetricsFailureInjectionTest`，最后落盘 `infra-release-soak-summary.json`。
+2. 修复同一脚本中的 POSIX `sh` 全局变量串改：首次验证虽已通过行为路径，但暴露出 helper 参数名覆盖迭代标签，导致 artifact 文件名与 summary 漂移；本轮把 helper 变量改成独立命名后重新验证通过。
+3. 更新 `.github/workflows/release-package-gate.yml`：新增 `infra-soak` artifact 目录与 `infra-soak.log`，在 qemu gate 前先构建 7 个 infra focused targets 并运行 `infra_release_soak_gate.sh`。
+4. 更新 `scripts/packaging/README.md`：把 infra local release / soak gate 写入 gate 入口表、installed-package 功能矩阵、release-runner contract 与已落盘文件清单。
+5. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 并新增 `docs/todos/infrastructure/deliverables/INF-FIX-006-infra-release-soak-gate收口.md`：关闭 `INF-GAP-006` / `INF-FIX-006`，把 infrastructure owner 口径固定为“local gate 已闭合，qemu/autopkgtest 继续归 packaging / release 环境复核”。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_infra_diagnostics_smoke_integration_test","dasall_infra_diagnostics_integration_test","dasall_health_wiring_integration_test","dasall_infra_health_cadence_integration_test","dasall_secret_failure_injection_integration_test","dasall_plugin_lifecycle_state_unit_test","dasall_metrics_failure_injection_integration_test"])`
+   - 结果：通过；仅出现仓库既有 warnings，无新的 infra build blocker。
+2. installed baseline。
+   - `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-inf-fix-006-package-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；生成 `runtime-installed-proof.json`、`runtime-proof.json`、`services-installed-proof.json` 等 package smoke artifacts。
+3. infra local gate 首轮验证。
+   - `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-inf-fix-006-package-smoke bash scripts/packaging/infra_release_soak_gate.sh --artifact-dir /tmp/dasall-inf-fix-006-soak --build-dir build/vscode-linux-ninja`
+   - 结果：行为路径通过，但发现 artifact 文件名被 helper 全局变量覆盖，未与 summary 保持一致；因此立即在同一脚本内修复，不扩 scope。
+4. infra local gate 修复后复验。
+   - 同上命令重跑。
+   - 结果：通过；成功生成 `config-apply.json`、`ready.json`、`iteration-01..10-readiness.json`、`iteration-01..10-diag-health.json`、7 份 focused binary logs 与 `infra-release-soak-summary.json`，summary 中 `qemu_required_for_this_gate=false`。
+
+### 结果
+
+1. `INF-GAP-006` 已闭合：infrastructure owner 现已拥有 real local installed release / soak harness，不再因为缺少 owner-level artifact 被误记为 release runner / soak 功能缺口。
+2. `INF-FIX-006` 已完成：release workflow 现在会在 qemu gate 前固定 infra focused build、infra local gate 与 `infra-soak` artifacts，README 与总账也已同步到相同边界。
+3. qemu/autopkgtest machine isolation 继续保留在 packaging / release 环境复核，不由本轮 local evidence 外推；本轮未使用 qemu / kvm。
+4. infrastructure 章节的下一优先级继续前移到 `INF-FIX-007` / `INF-FIX-008` SecretManager live composition；`INF-FIX-006` 不再占用后续 P3 soak 跟踪位。
+
 # 记录 #746
 
 - 日期：2026-05-22
