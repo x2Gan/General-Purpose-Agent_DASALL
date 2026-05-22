@@ -1,3 +1,40 @@
+# 记录 #772
+
+- 日期：2026-05-23
+- 阶段：tui/renderer adapter baseline
+- 任务：TUI-TODO-019 实现 FTXUI renderer adapter
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-019-ftxui-renderer-adapter基线.md`，冻结 renderer adapter 的任务边界、本地证据、tokens/layout breakpoints、canonical frame、default-off deterministic snapshot backend、optional private FTXUI backend 开关，以及 Design->Build 映射。
+2. 新增 `apps/tui/src/view/TuiDesignTokens.h` 与 `apps/tui/src/view/TuiLayoutMetrics.h`，实现 renderer-local RGB palette、spacing、badge/focus token、40x12 / 80x24 / 120x36 断点，以及 `FullScreen` / `Narrow` / `Line` 三种 layout metrics。
+3. 新增 `apps/tui/src/terminal/FtxuiRendererAdapter.h` 与 `apps/tui/src/terminal/FtxuiRendererAdapter.cpp`，实现不泄漏 FTXUI 类型的 renderer seam：`render_root()` 先生成 canonical `TuiRenderFrame`，`render_to_screen()` 在 default-off resolver 下输出 deterministic ASCII snapshot，并在 private dependency 可解析时保留 FTXUI backend 路径。
+4. 新增 `tests/unit/tui/TuiDesignTokensTest.cpp` 与 `tests/unit/tui/TuiMainLayoutSnapshotTest.cpp`，focused 覆盖 design tokens/layout metrics、120x36 ready shell、80x24 narrow CJK stacked layout、selector modal overlay、busy draft banner，以及 renderer 文件的 no-owner-private-include / no-header-leak 边界。
+5. 更新 `tests/unit/tui/CMakeLists.txt` 与 `tests/unit/tui/TuiUnitTopologySmokeTest.cpp`，注册 `dasall_tui_design_tokens_unit_test`、`dasall_tui_main_layout_snapshot_unit_test`、`TuiDesignTokensTest`、`TuiMainLayoutSnapshotTest`、`TuiUnitTopologySmokeTest`，并让 snapshot target 在 FTXUI targets 可见时才切到 private link backend。
+6. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-019 完成状态、当前 renderer baseline、`TUI-GAP-019` 收口结果，以及下一步执行策略前移到 `TUI-TODO-020`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_design_tokens_unit_test"])`
+   - 结果：通过；design tokens 与 layout metrics focused unit target 成功编译并链接。
+2. `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiDesignTokensTest$'`
+   - 结果：通过；`TuiDesignTokensTest` 1/1 通过。
+3. `Build_CMakeTools(buildTargets=["dasall_tui_main_layout_snapshot_unit_test"])`
+   - 结果：通过；renderer adapter 与 snapshot target 成功编译并链接。
+4. `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiMainLayoutSnapshotTest$'`
+   - 结果：通过；`TuiMainLayoutSnapshotTest` 1/1 通过。第一次验证暴露 80x24 窄屏 status panel 抢占预算行的问题，已在同轮通过 narrow priority sampling 修复后重跑通过。
+5. `Build_CMakeTools(buildTargets=["dasall_tui_design_tokens_unit_test","dasall_tui_main_layout_snapshot_unit_test","dasall_tui_unit_topology_smoke_unit_test"])`
+   - 结果：通过；本轮涉及的三个 focused targets 可共同编译。
+6. `ctest --preset vscode-linux-ninja --output-on-failure -R '^(TuiDesignTokensTest|TuiMainLayoutSnapshotTest|TuiUnitTopologySmokeTest)$'`
+   - 结果：通过；3/3 通过，证明 design tokens、main layout snapshot 与 topology smoke/discoverability 一致。
+
+### 结果
+
+1. `TUI-TODO-019` 已闭合：TUI 现在拥有可编译、可发现、无 model/reducer/data-source FTXUI 泄漏的 renderer adapter、design tokens、layout metrics 与 main-layout snapshot baseline。
+2. 当前 baseline 只闭合 renderer/layout/snapshot 语义，不宣称 real interactive FTXUI loop、CJK/IME/resize manual evidence、fake-only `TuiApp` 或 bare `dasall` 命令迁移已完成；这些继续后置到 `TUI-TODO-020`、`BLK-TUI-006` 与后续 gate。
+3. 下一步推荐转入 `TUI-TODO-020`，在已落盘的 terminal probe、renderer snapshot baseline、fake replay、slash parser、composer、selector、transcript 与 status panel 基线上接出 fake-only `TuiApp` loop。
+
 # 记录 #771
 
 - 日期：2026-05-23

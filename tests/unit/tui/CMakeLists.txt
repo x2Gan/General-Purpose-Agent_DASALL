@@ -4,7 +4,19 @@ add_executable(dasall_tui_unit_topology_smoke_unit_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiUnitTopologySmokeTest.cpp
 )
 
+add_executable(dasall_tui_main_layout_snapshot_unit_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiMainLayoutSnapshotTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/FtxuiRendererAdapter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiTranscriptView.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiStatusPanel.cpp
+)
+
 target_link_libraries(dasall_tui_unit_topology_smoke_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+target_link_libraries(dasall_tui_main_layout_snapshot_unit_test
   PRIVATE
     dasall_test_support
 )
@@ -17,7 +29,27 @@ target_compile_definitions(dasall_tui_unit_topology_smoke_unit_test
     DASALL_TUI_GOLDEN_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/tui/golden"
 )
 
+target_compile_definitions(dasall_tui_main_layout_snapshot_unit_test
+  PRIVATE
+    DASALL_TUI_RENDERER_ADAPTER_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/FtxuiRendererAdapter.h"
+    DASALL_TUI_RENDERER_ADAPTER_IMPL="${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/FtxuiRendererAdapter.cpp"
+)
+
+if(COMMAND dasall_tui_apply_ftxui_private_dependency AND TARGET ftxui::component AND TARGET ftxui::dom AND TARGET ftxui::screen)
+  target_compile_definitions(dasall_tui_main_layout_snapshot_unit_test
+    PRIVATE
+      DASALL_TUI_RENDERER_USE_FTXUI=1
+  )
+  dasall_tui_apply_ftxui_private_dependency(dasall_tui_main_layout_snapshot_unit_test)
+else()
+  target_compile_definitions(dasall_tui_main_layout_snapshot_unit_test
+    PRIVATE
+      DASALL_TUI_RENDERER_USE_FTXUI=0
+  )
+endif()
+
 dasall_apply_common_options(dasall_tui_unit_topology_smoke_unit_test)
+dasall_apply_common_options(dasall_tui_main_layout_snapshot_unit_test)
 
 add_executable(dasall_tui_projection_types_unit_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiProjectionTypesTest.cpp
@@ -75,6 +107,10 @@ add_executable(dasall_tui_status_panel_unit_test
   ${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiStatusPanel.cpp
 )
 
+add_executable(dasall_tui_design_tokens_unit_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiDesignTokensTest.cpp
+)
+
 add_executable(dasall_tui_terminal_capability_probe_unit_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiTerminalCapabilityProbeTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/TuiTerminalCapabilityProbe.cpp
@@ -86,6 +122,11 @@ add_executable(dasall_tui_route_catalog_filter_unit_test
 )
 
 target_include_directories(dasall_tui_projection_types_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/tui/src
+)
+
+target_include_directories(dasall_tui_main_layout_snapshot_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/tui/src
 )
@@ -141,6 +182,11 @@ target_include_directories(dasall_tui_transcript_view_unit_test
 )
 
 target_include_directories(dasall_tui_status_panel_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/tui/src
+)
+
+target_include_directories(dasall_tui_design_tokens_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/tui/src
 )
@@ -211,6 +257,11 @@ target_link_libraries(dasall_tui_transcript_view_unit_test
 )
 
 target_link_libraries(dasall_tui_status_panel_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+target_link_libraries(dasall_tui_design_tokens_unit_test
   PRIVATE
     dasall_test_support
 )
@@ -294,6 +345,12 @@ target_compile_definitions(dasall_tui_status_panel_unit_test
     DASALL_TUI_STATUS_PANEL_IMPL="${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiStatusPanel.cpp"
 )
 
+target_compile_definitions(dasall_tui_design_tokens_unit_test
+  PRIVATE
+    DASALL_TUI_DESIGN_TOKENS_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiDesignTokens.h"
+    DASALL_TUI_LAYOUT_METRICS_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiLayoutMetrics.h"
+)
+
 target_compile_definitions(dasall_tui_terminal_capability_probe_unit_test
   PRIVATE
     DASALL_TUI_TERMINAL_CAPABILITY_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/TuiTerminalCapabilityProbe.h"
@@ -312,6 +369,7 @@ dasall_apply_common_options(dasall_tui_composer_history_unit_test)
 dasall_apply_common_options(dasall_tui_model_selector_unit_test)
 dasall_apply_common_options(dasall_tui_transcript_view_unit_test)
 dasall_apply_common_options(dasall_tui_status_panel_unit_test)
+dasall_apply_common_options(dasall_tui_design_tokens_unit_test)
 dasall_apply_common_options(dasall_tui_terminal_capability_probe_unit_test)
 dasall_apply_common_options(dasall_tui_route_catalog_filter_unit_test)
 
@@ -351,16 +409,23 @@ set_tests_properties(TuiTranscriptViewTest PROPERTIES LABELS "unit;tui")
 add_test(NAME TuiStatusPanelTest COMMAND dasall_tui_status_panel_unit_test)
 set_tests_properties(TuiStatusPanelTest PROPERTIES LABELS "unit;tui")
 
+add_test(NAME TuiDesignTokensTest COMMAND dasall_tui_design_tokens_unit_test)
+set_tests_properties(TuiDesignTokensTest PROPERTIES LABELS "unit;tui")
+
 add_test(NAME TuiTerminalCapabilityProbeTest COMMAND dasall_tui_terminal_capability_probe_unit_test)
 set_tests_properties(TuiTerminalCapabilityProbeTest PROPERTIES LABELS "unit;tui")
 
 add_test(NAME TuiRouteCatalogFilterTest COMMAND dasall_tui_route_catalog_filter_unit_test)
 set_tests_properties(TuiRouteCatalogFilterTest PROPERTIES LABELS "unit;tui")
 
-add_test(NAME TuiMainLayoutSnapshotTest COMMAND dasall_tui_unit_topology_smoke_unit_test)
+add_test(NAME TuiUnitTopologySmokeTest COMMAND dasall_tui_unit_topology_smoke_unit_test)
+set_tests_properties(TuiUnitTopologySmokeTest PROPERTIES LABELS "unit;tui")
+
+add_test(NAME TuiMainLayoutSnapshotTest COMMAND dasall_tui_main_layout_snapshot_unit_test)
 set_tests_properties(TuiMainLayoutSnapshotTest PROPERTIES LABELS "unit;snapshot;tui")
 
 list(APPEND DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_tui_main_layout_snapshot_unit_test
   dasall_tui_data_source_contract_unit_test
   dasall_tui_fake_data_source_unit_test
   dasall_tui_fake_scenario_catalog_unit_test
@@ -373,6 +438,7 @@ list(APPEND DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_tui_model_selector_unit_test
   dasall_tui_transcript_view_unit_test
   dasall_tui_status_panel_unit_test
+  dasall_tui_design_tokens_unit_test
   dasall_tui_terminal_capability_probe_unit_test
   dasall_tui_route_catalog_filter_unit_test
   dasall_tui_unit_topology_smoke_unit_test
