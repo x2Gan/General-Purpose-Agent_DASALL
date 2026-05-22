@@ -16,6 +16,7 @@
 #include "ProfileCatalog.h"
 #include "RuntimePolicyProvider.h"
 #include "config/InstallLayout.h"
+#include "health/IHealthMonitor.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -371,6 +372,10 @@ void daemon_runtime_live_dependency_composition_establishes_default_ready_baseli
           "daemon runtime live dependency composition should wire runtime control-plane observability sinks into the live dependency set");
         assert_true(composition.dependency_set->health_probes.size() == 3U,
           "daemon runtime live dependency composition should retain tool, services, and runtime control-plane health probes");
+        const auto health_result = composition.dependency_set->health_monitor->evaluate_now();
+        assert_true(health_result.ok && health_result.snapshot.is_ready() &&
+            health_result.snapshot.failed_components.empty(),
+          "daemon runtime live dependency composition should evaluate the registered tool/services/runtime probes into a ready aggregate snapshot");
         assert_true(contains_port(composition.dependency_set->external_evidence,
         "runtime:daemon.local-control-plane:tool-services-production-bridge"),
           "daemon runtime live dependency composition should record the production services bridge evidence marker");

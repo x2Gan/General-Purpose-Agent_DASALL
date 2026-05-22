@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+# 记录 #745
+
+- 日期：2026-05-22
+- 阶段：infrastructure / health-watchdog event publish closeout
+- 任务：推进 `INF-FIX-004`，收口 health/watchdog event publish，并先核验 `INF-FIX-003` 非 blocker
+- 状态：已完成（health aggregate owner、transition event 等价接口、runtime/access focused evidence 与 watchdog policy-only boundary 已闭合，本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-FIX-004`，并额外要求“先检查 `INF-FIX-003` 的代码实际，再继续推进 004”，同时保持“逐文件落盘、完成后提交推送、禁止使用 qemu / kvm 采集证据”的约束。
+2. 近端核验确认：`tools/src/bridge/ToolPluginLifecycleBridge.h/.cpp` 与 `tests/integration/tools/ToolPluginLifecycleBridgeIntegrationTest.cpp` 仍在树上，`INF-FIX-003` 的 lifecycle bridge 是真实代码，不构成 004 的前置 blocker。
+3. watchdog 近端核验确认：`infra/src/watchdog/TimeoutEventPublisher.h/.cpp` 与 `infra/src/watchdog/RecoveryRequestEmitter.h/.cpp` 已实现 publish / advisory 边界，且继续满足“watchdog 只做 policy-defined actions，不直接执行 recovery”的 owner 约束。
+4. 当前真正缺口位于 `infra/src/health/HealthMonitorFacade.cpp`：变更前它只登记 probes，却在 `evaluate_now()` 里直接返回 placeholder ready snapshot，因此 Access/Runtime/Services health probes 虽已注册，也不会驱动 aggregate state 或 transition event。
+
+### 改动
+
+1. 更新 `infra/src/health/HealthMonitorFacade.h/.cpp`：新增 `ProbeExecutor + HealthEvaluator` 驱动的真实 aggregate evaluate 路径，`evaluate_now()` 现在会执行已注册 `liveness/readiness` probes、生成 monotonic snapshot version，并在状态变化时通过现有 `IHealthStateListener` 发出 `HealthTransition`。
+2. 更新 `tests/unit/infra/health/HealthMonitorFacadeTest.cpp`：新增 mutable probe + listener 场景，证明 monitor 不再返回 placeholder snapshot，而是会在 probe 从 healthy 切到 degraded 时发出结构化 transition。
+3. 更新 `tests/integration/agent_loop/RuntimeHealthMaintenanceIntegrationTest.cpp` 与 `tests/integration/agent_loop/CMakeLists.txt`：在 runtime event-bus overflow / maintenance backlog 条件下，把 `RuntimeHealthProbe` 注册进 `HealthMonitorFacade`，验证 runtime control-plane health probe 会驱动 aggregate degraded transition event；同时为该测试目标补齐 `infra/src` include path。
+4. 更新 `tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`：新增 `health_monitor->evaluate_now()` 回归，验证 daemon live composition 现在真正执行 tool / services / runtime probes，并得到 ready aggregate snapshot。
+5. 新增 `docs/todos/infrastructure/deliverables/INF-FIX-004-health-watchdog-event-publish收口.md`，并同步关闭顶层总账中的 `INF-FIX-004`。
+
+### 验证
+
+1. focused build。
+   - `Build_CMakeTools(buildTargets=["dasall_health_monitor_facade_unit_test","dasall_runtime_health_maintenance_integration_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_health_snapshot_unit_test"])`
+   - 结果：通过；中途 `Build_CMakeTools` 曾短暂返回空白 `-1`，重试后恢复正常，无新的持续性 build blocker。
+2. focused test tool 状态。
+   - `RunCtest_CMakeTools(tests=["RuntimeHealthMaintenanceIntegrationTest","HealthSnapshotUnitTest","DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：仍返回仓库已知泛化 `生成失败`；因此本轮继续沿用 direct binary fallback 作为 authoritative focused evidence。
+3. focused direct binaries。
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_health_monitor_facade_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/agent_loop/dasall_runtime_health_maintenance_integration_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_health_snapshot_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`
+   - 结果：四项均退出 `0`。
+
+### 结果
+
+1. `INF-FIX-004` 已完成：health owner 不再停留在 placeholder snapshot，Access/Runtime/Services probes 现在能真正驱动 aggregate snapshot 与 `HealthTransition` 事件。
+2. 本轮采用 `IHealthMonitor::subscribe(IHealthStateListener&)` 作为 `HealthEventPublisher` 的最小等价接口，符合 `HealthCadenceAndEventBoundary` 的 fallback rule，但没有越权宣称 external bus ready。
+3. watchdog 仍保持 `TimeoutEventPublisher` publish / buffer fallback 与 `RecoveryRequestEmitter` advisory-only 的边界，没有越过 ADR-007 的 recovery execute owner。
+4. infrastructure 章节的下一优先级继续前移到 `INF-FIX-005` optional backend profile-gated 接入，以及 `INF-FIX-007` / `INF-FIX-008` SecretManager live composition；本轮未使用 qemu / kvm，也未把结论外推到 installed / release / soak。
+
 # 记录 #744
 
 - 日期：2026-05-22

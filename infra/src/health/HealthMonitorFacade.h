@@ -4,15 +4,18 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "health/HealthEvaluator.h"
 #include "health/IHealthMonitor.h"
+#include "health/ProbeExecutor.h"
 #include "health/ProbeRegistry.h"
 
 namespace dasall::infra {
 
 class HealthMonitorFacade final : public IHealthMonitor {
  public:
-  HealthMonitorFacade() = default;
+  HealthMonitorFacade();
 
   HealthMonitorRegistrationResult register_probe(
       const HealthProbeRegistration& registration) override;
@@ -35,11 +38,17 @@ class HealthMonitorFacade final : public IHealthMonitor {
     SafeObserveMode,
   };
 
-  [[nodiscard]] HealthSnapshot build_placeholder_snapshot();
+  [[nodiscard]] std::vector<ProbeResult> execute_registered_probes();
+  [[nodiscard]] HealthSnapshot finalize_snapshot(HealthSnapshot snapshot);
+  void notify_transition_if_needed(
+      const std::optional<HealthSnapshot>& previous_snapshot,
+      const HealthSnapshot& current_snapshot);
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   std::uint64_t next_snapshot_version_ = 1;
   ProbeRegistry registry_;
+  HealthEvaluator evaluator_;
+  ProbeExecutor executor_;
   std::vector<IHealthStateListener*> listeners_;
   std::optional<HealthSnapshot> latest_snapshot_;
   std::optional<std::string> safe_observe_reason_;

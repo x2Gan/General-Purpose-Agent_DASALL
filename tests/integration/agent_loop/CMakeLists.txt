@@ -237,6 +237,11 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeHealthMaintenanceIntegrationTest.cpp
 )
 
+target_include_directories(dasall_runtime_health_maintenance_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 dasall_add_runtime_agent_loop_integration_test(
   dasall_runtime_checkpoint_replay_compatibility_integration_test
   RuntimeCheckpointReplayCompatibilityTest

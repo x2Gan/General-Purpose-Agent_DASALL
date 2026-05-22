@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "health/HealthMonitorFacade.h"
@@ -22,20 +23,64 @@ class StaticHealthProbe final : public dasall::infra::IHealthProbe {
   }
 };
 
+class MutableHealthProbe final : public dasall::infra::IHealthProbe {
+ public:
+  explicit MutableHealthProbe(dasall::infra::ProbeResult result)
+      : result_(std::move(result)) {}
+
+  [[nodiscard]] dasall::infra::ProbeResult probe() override {
+    return result_;
+  }
+
+  void set_result(dasall::infra::ProbeResult result) {
+    result_ = std::move(result);
+  }
+
+ private:
+  dasall::infra::ProbeResult result_;
+};
+
 class RecordingHealthStateListener final : public dasall::infra::IHealthStateListener {
  public:
-  void on_health_transition(const dasall::infra::HealthTransition&,
-                            const dasall::infra::HealthSnapshot&) override {
+  void on_health_transition(const dasall::infra::HealthTransition& transition,
+                            const dasall::infra::HealthSnapshot& snapshot) override {
     ++notification_count_;
+    last_transition_ = transition;
+    last_snapshot_ = snapshot;
   }
 
   [[nodiscard]] int notification_count() const {
     return notification_count_;
   }
 
+  [[nodiscard]] const std::optional<dasall::infra::HealthTransition>& last_transition() const {
+    return last_transition_;
+  }
+
+  [[nodiscard]] const std::optional<dasall::infra::HealthSnapshot>& last_snapshot() const {
+    return last_snapshot_;
+  }
+
  private:
   int notification_count_ = 0;
+  std::optional<dasall::infra::HealthTransition> last_transition_;
+  std::optional<dasall::infra::HealthSnapshot> last_snapshot_;
 };
+
+[[nodiscard]] dasall::infra::ProbeResult make_probe_result(
+    std::string probe_name,
+    dasall::infra::ProbeStatus status,
+    std::optional<dasall::contracts::ResultCode> error_code = std::nullopt,
+    std::string detail_ref = std::string()) {
+  return dasall::infra::ProbeResult{
+      .probe_name = std::move(probe_name),
+      .status = status,
+      .latency_ms = 3,
+      .error_code = error_code,
+      .detail_ref = std::move(detail_ref),
+      .timestamp = 1712361600000,
+  };
+}
 
 void test_health_monitor_facade_rejects_uninitialized_paths() {
   using dasall::contracts::ResultCode;
@@ -133,6 +178,58 @@ void test_health_monitor_facade_preserves_last_snapshot_in_safe_observe_mode() {
               "HealthMonitorFacade should preserve the last successful snapshot while safe_observe_mode is active");
 }
 
+void test_health_monitor_facade_evaluates_registered_probe_results_and_notifies_transition() {
+  using dasall::contracts::ResultCode;
+  using dasall::infra::HealthMonitorFacade;
+  using dasall::infra::HealthProbeRegistration;
+  using dasall::infra::ProbeStatus;
+  using dasall::tests::support::assert_true;
+
+  HealthMonitorFacade facade;
+  RecordingHealthStateListener listener;
+  MutableHealthProbe probe(make_probe_result("logging_sink", ProbeStatus::Healthy));
+
+  const auto subscribe_result = facade.subscribe(listener);
+  assert_true(subscribe_result.ok,
+              "HealthMonitorFacade should accept transition listeners before evaluation begins");
+
+  const auto registration_result = facade.register_probe(HealthProbeRegistration{
+      .probe_name = std::string("logging_sink"),
+      .probe_group = std::string("readiness"),
+      .probe = &probe,
+  });
+  assert_true(registration_result.ok,
+              "HealthMonitorFacade should accept a mutable readiness probe for transition testing");
+
+  const auto first_snapshot = facade.evaluate_now();
+  assert_true(first_snapshot.ok && first_snapshot.snapshot.is_ready() &&
+                  listener.notification_count() == 0,
+              "HealthMonitorFacade should not emit a transition on the first healthy baseline snapshot");
+
+  probe.set_result(make_probe_result("logging_sink",
+                                     ProbeStatus::Degraded,
+                                     ResultCode::ProviderTimeout,
+                                     "health://probe/failure/logging_sink"));
+  const auto second_snapshot = facade.evaluate_now();
+
+  assert_true(second_snapshot.ok && second_snapshot.snapshot.is_degraded_state() &&
+                  second_snapshot.snapshot.failed_components.size() == 1U &&
+                  second_snapshot.snapshot.failed_components.front() == "logging_sink",
+              "HealthMonitorFacade should aggregate the current probe result instead of returning a placeholder snapshot");
+  assert_true(second_snapshot.snapshot.version > first_snapshot.snapshot.version,
+              "HealthMonitorFacade should advance snapshot version metadata across evaluations");
+  assert_true(listener.notification_count() == 1 && listener.last_transition().has_value() &&
+                  listener.last_snapshot().has_value(),
+              "HealthMonitorFacade should notify listeners when a registered probe drives a state transition");
+  assert_true(listener.last_transition()->from_state == dasall::infra::HealthState::Healthy &&
+                  listener.last_transition()->to_state == dasall::infra::HealthState::Degraded &&
+                  listener.last_transition()->trigger_probe == "logging_sink",
+              "HealthMonitorFacade should propagate structured transition metadata to listeners");
+  assert_true(listener.last_snapshot()->is_degraded_state() &&
+                  listener.last_snapshot()->failed_components.front() == "logging_sink",
+              "HealthMonitorFacade should publish the current aggregate snapshot alongside the transition event");
+}
+
 }  // namespace
 
 int main() {
@@ -140,6 +237,7 @@ int main() {
     test_health_monitor_facade_rejects_uninitialized_paths();
     test_health_monitor_facade_registers_probe_and_evaluates_snapshot();
     test_health_monitor_facade_preserves_last_snapshot_in_safe_observe_mode();
+    test_health_monitor_facade_evaluates_registered_probe_results_and_notifies_transition();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

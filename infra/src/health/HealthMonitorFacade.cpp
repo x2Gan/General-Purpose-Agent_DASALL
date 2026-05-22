@@ -37,6 +37,10 @@ constexpr std::string_view kHealthMonitorFacadeSourceRef = "HealthMonitorFacade"
 
 }  // namespace
 
+HealthMonitorFacade::HealthMonitorFacade()
+    : evaluator_(),
+      executor_(registry_) {}
+
 HealthMonitorRegistrationResult HealthMonitorFacade::register_probe(
     const HealthProbeRegistration& registration) {
   if (!registration.is_valid()) {
@@ -78,8 +82,22 @@ HealthSnapshotResult HealthMonitorFacade::evaluate_now() {
         "health.evaluate_now");
   }
 
-  latest_snapshot_ = build_placeholder_snapshot();
+  auto probe_results = execute_registered_probes();
+  const auto evaluation = evaluator_.evaluate(
+      ProbeResultView{.data = probe_results.data(), .size = probe_results.size()});
+  if (!evaluation.ok) {
+    return HealthSnapshotResult{
+        .ok = false,
+        .result_code = evaluation.result_code,
+        .error = evaluation.error,
+        .snapshot = {},
+    };
+  }
+
+  const auto previous_snapshot = latest_snapshot_;
+  latest_snapshot_ = finalize_snapshot(evaluation.snapshot);
   lifecycle_state_ = LifecycleState::Ready;
+  notify_transition_if_needed(previous_snapshot, *latest_snapshot_);
   return HealthSnapshotResult::success(*latest_snapshot_);
 }
 
@@ -137,15 +155,44 @@ void HealthMonitorFacade::enter_safe_observe_mode_for_test(std::string reason) {
                                         : std::optional<std::string>(std::move(reason));
 }
 
-HealthSnapshot HealthMonitorFacade::build_placeholder_snapshot() {
-  return HealthSnapshot{
-      .liveness = true,
-      .readiness = true,
-      .degraded = false,
-      .failed_components = {},
-      .version = next_snapshot_version_++,
-      .timestamp = current_time_unix_ms(),
-  };
+std::vector<ProbeResult> HealthMonitorFacade::execute_registered_probes() {
+  auto liveness_results = executor_.execute_batch("liveness");
+  auto readiness_results = executor_.execute_batch("readiness");
+
+  liveness_results.insert(liveness_results.end(),
+                          std::make_move_iterator(readiness_results.begin()),
+                          std::make_move_iterator(readiness_results.end()));
+  return liveness_results;
+}
+
+HealthSnapshot HealthMonitorFacade::finalize_snapshot(HealthSnapshot snapshot) {
+  snapshot.version = next_snapshot_version_++;
+  if (snapshot.timestamp <= 0) {
+    snapshot.timestamp = current_time_unix_ms();
+  }
+
+  return snapshot;
+}
+
+void HealthMonitorFacade::notify_transition_if_needed(
+    const std::optional<HealthSnapshot>& previous_snapshot,
+    const HealthSnapshot& current_snapshot) {
+  if (!previous_snapshot.has_value()) {
+    return;
+  }
+
+  const auto transition = evaluator_.evaluate_transition(*previous_snapshot, current_snapshot);
+  if (!transition.has_required_fields()) {
+    return;
+  }
+
+  for (auto* listener : listeners_) {
+    if (listener == nullptr) {
+      continue;
+    }
+
+    listener->on_health_transition(transition, current_snapshot);
+  }
 }
 
 }  // namespace dasall::infra
