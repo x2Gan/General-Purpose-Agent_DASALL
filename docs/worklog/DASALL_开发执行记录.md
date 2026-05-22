@@ -1,3 +1,35 @@
+# 记录 #769
+
+- 日期：2026-05-22
+- 阶段：tui/transcript view baseline
+- 任务：TUI-TODO-016 实现 transcript view
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-016-transcript-view基线.md`，冻结 transcript view 的任务边界、本地证据、外部参考、受控摘要/折叠/滚动/unsafe marker redaction 语义，以及 Design->Build 映射。
+2. 新增 `apps/tui/src/view/TuiTranscriptView.h` 与 `apps/tui/src/view/TuiTranscriptView.cpp`，实现纯 view-local transcript helper：维护 `TuiMessageView` 列表与局部 `scroll_offset_`，支持 `render_transcript()` / `toggle_collapse()` / `scroll_to_bottom()`、word-wrap、viewport 裁剪，以及 raw CoT / provider-private reasoning / secret / raw tool output 的 fail-closed redaction。
+3. 新增 `tests/unit/tui/TuiTranscriptViewTest.cpp`，focused 覆盖受控摘要渲染、collapsible row expand/collapse、bottom-anchor scroll 与 transcript 文件的 no-private-include / no-renderer-dependency 边界。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_transcript_view_unit_test` 与 `TuiTranscriptViewTest`，并把 transcript target 纳入 `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS`。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-016 完成状态、当前 transcript 基线、`TUI-GAP-016` 收口结果，以及 Build-ready subset 前移到 `TUI-TODO-017~018`。
+
+### 验证
+
+1. `ListBuildTargets_CMakeTools()` + `ListTests_CMakeTools()`
+   - 结果：通过；`dasall_tui_transcript_view_unit_test` 与 `TuiTranscriptViewTest` 已进入 VS Code CMake 发现图。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_transcript_view_unit_test"])`
+   - 结果：通过；transcript view 生产代码与 focused 单测在 `build/vscode-linux-ninja` 成功编译并链接。
+3. `RunCtest_CMakeTools(tests=["TuiTranscriptViewTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --preset vscode-linux-ninja -N | rg 'TuiTranscriptViewTest' && ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiTranscriptViewTest$'`
+   - 结果：通过；`TuiTranscriptViewTest` discoverability 命中，anchored single-test 1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-016` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖的 transcript view 基线。
+2. transcript view 目前只处理受控摘要 render、collapse 与 scroll-to-bottom，不接 FTXUI snapshot、fake-only `TuiApp` 或 daemon attach；这些继续后置到 `TUI-TODO-019~020` 与后续 gate。
+3. 下一步推荐转入 `TUI-TODO-017`，沿着已完成的 fake replay、slash parser、composer、selector 与 transcript 基线实现 status panel fake 展示。
+
 # 记录 #768
 
 - 日期：2026-05-22
