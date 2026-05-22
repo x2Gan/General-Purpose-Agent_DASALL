@@ -1,5 +1,33 @@
 # DASALL 开发执行记录
 
+# 记录 #751
+
+- 日期：2026-05-22
+- 阶段：infrastructure / INF-GAP-004 ledger consistency closeout
+- 任务：推进 `INF-GAP-004`，同步总账状态与既有 `INF-FIX-004` 证据
+- 状态：已完成（总账、deliverable 与 worklog 已重新对齐；本轮未新增代码实现，也未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按上一轮相同规则继续推进闭合 `INF-GAP-004`，保持逐文件落盘、完成后提交推送、且不使用 qemu / kvm 采集证据。
+2. 近端核验确认：`docs/todos/infrastructure/deliverables/INF-FIX-004-health-watchdog-event-publish收口.md` 与既有 worklog 已明确 `INF-FIX-004` 完成；当前残留问题不是代码缺口，而是顶层总账 `INF-GAP-004` 行仍保留收口前文案，导致 gap table 与 task table、章节结论不一致。
+3. 前置 blocker 复核：无代码 blocker；本轮只做 ledger consistency closeout，不回退到 health/watchdog 实现扩面，也不把更高层 qemu/release 证据混入本轮完成判定。
+
+### 改动
+
+1. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `INF-GAP-004` 从“Medium / 未完全收口”改为“已闭合”，并补齐 `HealthMonitorFacade::evaluate_now()` aggregate snapshot、`IHealthMonitor::subscribe(IHealthStateListener&)` transition publish、`HealthMonitorFacadeTest` / `RuntimeHealthMaintenanceIntegrationTest` / `HealthSnapshotUnitTest` / `DaemonRuntimeLiveDependencyCompositionTest` 的 focused evidence，明确 watchdog 仍只停留在 policy-defined publish / advisory boundary。
+2. 更新 `docs/worklog/DASALL_开发执行记录.md`：新增本轮记录，显式说明这是对已完成 `INF-FIX-004` 的总账一致性收口，而不是新增实现任务。
+
+### 验证
+
+1. `rg -n "INF-GAP-004|INF-FIX-004|HealthMonitorFacade|HealthTransition" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/infrastructure/deliverables/INF-FIX-004-health-watchdog-event-publish收口.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；`INF-GAP-004`、deliverable 与 worklog 均已对齐到同一套 “2026-05-22 已由 `INF-FIX-004` 收口” 口径。
+
+### 结果
+
+1. 顶层总账不再同时出现“`INF-FIX-004` 已 Done，但 `INF-GAP-004` 仍未完全收口”的冲突表述。
+2. Infrastructure 章节现在对 health/watchdog event publish 的状态、证据与后续回归边界保持一致，可继续把注意力留给真正未闭合的跨子系统或 release 级任务。
+
 # 记录 #750
 
 - 日期：2026-05-22
