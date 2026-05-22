@@ -15,6 +15,9 @@ target_compile_definitions(dasall_tui_integration_topology_smoke_integration_tes
     DASALL_TUI_INTEGRATION_TOP_LEVEL_CMAKE="${CMAKE_SOURCE_DIR}/tests/integration/CMakeLists.txt"
     DASALL_TUI_INTEGRATION_LOCAL_CMAKE="${CMAKE_SOURCE_DIR}/tests/integration/tui/CMakeLists.txt"
     DASALL_TUI_GOLDEN_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/tui/golden"
+    DASALL_APPS_TOP_LEVEL_CMAKE="${CMAKE_SOURCE_DIR}/apps/CMakeLists.txt"
+    DASALL_APPS_TUI_CMAKE="${CMAKE_SOURCE_DIR}/apps/tui/CMakeLists.txt"
+    DASALL_APPS_TUI_MAIN="${CMAKE_SOURCE_DIR}/apps/tui/src/main.cpp"
 )
 
 dasall_apply_common_options(dasall_tui_integration_topology_smoke_integration_test)
@@ -27,6 +30,11 @@ set_tests_properties(TuiAppStartupTest PROPERTIES LABELS "integration;tui")
 
 add_test(NAME TuiPrototypeSmokeTest COMMAND dasall_tui_integration_topology_smoke_integration_test)
 set_tests_properties(TuiPrototypeSmokeTest PROPERTIES LABELS "integration;tui")
+
+add_test(NAME TuiPrototypeBuildSmokeTest
+  COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target dasall_tui_prototype
+)
+set_tests_properties(TuiPrototypeBuildSmokeTest PROPERTIES LABELS "integration;tui")
 
 list(APPEND DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_tui_integration_topology_smoke_integration_test

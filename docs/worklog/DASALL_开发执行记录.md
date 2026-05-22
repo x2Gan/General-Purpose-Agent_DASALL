@@ -1,3 +1,33 @@
+# 记录 #760
+
+- 日期：2026-05-22
+- 阶段：tui/no-daemon prototype target
+- 任务：TUI-TODO-007 新增 apps/tui no-daemon prototype target
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-007-no-daemon-prototype-target基线.md`，冻结 `dasall_tui_prototype` 的 target 名称、`apps/CMakeLists.txt` 接线、不安装、fake-only、FTXUI optional private-link 与 `TuiPrototypeBuildSmokeTest` 验收口径。
+2. 更新 `apps/CMakeLists.txt` 与 `apps/tui/CMakeLists.txt`，把 `apps/tui` 接入 apps 层构建图，并新增 non-installed `dasall_tui_prototype` target；当 FTXUI target 已解析时仅追加 private link，否则保持 no-renderer 构建路径。
+3. 新增 `apps/tui/src/main.cpp`，提供最小 fake-only/no-daemon placeholder main，输出当前 prototype 启动模式而不接 daemon/runtime/provider 实现。
+4. 更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，新增 `TuiPrototypeBuildSmokeTest` 并让既有 topology smoke 同时守住 `apps/CMakeLists.txt`、`apps/tui/CMakeLists.txt`、`apps/tui/src/main.cpp` 的接线与 non-install/no-runtime-link 边界。
+5. 回写 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步更新当前实现基线、Build-ready subset 与 `TUI-GAP-007` 收口结果。
+
+### 验证
+
+1. `rg -n 'dasall_tui_prototype|TuiPrototypeBuildSmokeTest|不安装|install\(TARGETS' docs/todos/tui/deliverables/TUI-TODO-007-no-daemon-prototype-target基线.md`
+   - 结果：通过；007 deliverable 已同时包含 prototype target 名、focused build smoke 测试名和 non-install 边界。
+2. `cmake --build --preset vscode-linux-ninja --target dasall_tui_prototype`
+   - 结果：通过；`apps/tui/dasall_tui_prototype` 在 `build/vscode-linux-ninja` 下成功链接，说明 `apps/CMakeLists.txt` 与 `apps/tui/CMakeLists.txt` 的最小接线成立。
+3. `ctest --preset vscode-linux-ninja --output-on-failure -R '^(TuiTestTopologyDiscoverability|TuiPrototypeBuildSmokeTest)$'`
+   - 结果：通过；2/2 测试通过，证明 integration discoverability 与 prototype build smoke 都已闭环。
+
+### 结果
+
+1. `TUI-TODO-007` 已闭合：仓库现在拥有可显式构建的 non-installed `dasall_tui_prototype`，并且该 target 仍保持 fake-only/no-daemon 边界。
+2. `apps/tui` 不再只是目录和 helper 空壳；后续 `TUI-TODO-008~020` 可以在不触碰 bare `dasall` 的前提下继续叠加 DTO、model/reducer、fake source、terminal probe 与 renderer。
+3. 本轮没有引入 daemon/access/runtime/provider 真实依赖，也没有新增 install rule、改写 `dasall-cli` 的 `OUTPUT_NAME dasall`，因此命令迁移 gate 仍然保持 Blocked。
+
 # DASALL 开发执行记录
 
 # 记录 #759
