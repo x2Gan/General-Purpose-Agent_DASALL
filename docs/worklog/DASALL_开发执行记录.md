@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+# 记录 #756
+
+- 日期：2026-05-22
+- 阶段：tui/daemon projection seam
+- 任务：TUI-TODO-003 补齐 daemon projection seam 设计
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-003-daemon-projection-seam.md`，冻结 daemon-backed TUI 的 `TuiIpcRequestEnvelope` / `TuiIpcResponseEnvelope`、`open_session` / `submit_turn` / `poll_events` / `route_catalog` / `close_session` 五个 operation、`TuiSessionView` / `TuiTurnReceipt` / `TuiStatusProjection` / `TuiModelRouteProjection` / `TuiEventProjection` 的字段家族，以及 `permission_denied` / `daemon_unavailable` / `timeout` / `schema_mismatch` / `malformed_response` 等 stable reason code。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-003` 标记为 Done、将 `BLK-TUI-003` 标记为 Closed，并同步把 `TUI-TODO-021~025` 从“被 projection blocker 卡住”改为“按前置依赖排队或仅剩 session seam 阻塞”。
+3. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md`，把 7.4、9.5.4、9.6 和决策建议中的 projection seam 从“建议/待评估”收紧为当前冻结口径，并显式写入 `TuiIpcRequestEnvelope` / `TuiIpcResponseEnvelope`、五个 operation 与 stable reason code。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 TUI 索引结论扩展为“L1 设计可信 + 一项 L2 daemon projection seam 基线已闭合”，并新增 `TUI-GAP-003` 收口记录。
+
+### 验证
+
+1. `rg -n 'TuiSessionView|TuiTurnReceipt|TuiStatusProjection|TuiModelRouteProjection|TuiEventProjection|open_session|submit_turn|poll_events|route_catalog|close_session|permission_denied|timeout|malformed_response' docs/todos/tui/deliverables/TUI-TODO-003-daemon-projection-seam.md`
+   - 结果：通过；交付物已覆盖五个 operation、核心 DTO 家族以及 stable reason code 基线。
+2. `rg -n 'TUI-TODO-003|BLK-TUI-003|TUI-TODO-021|TUI-TODO-024|permission_denied|schema_mismatch|malformed_response' docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；专项 TODO 已将 `TUI-TODO-003` 置为 Done、`BLK-TUI-003` 置为 Closed，并把 021/022/024 的后续实现约束对齐到新的 seam。
+3. `rg -n 'TuiIpcRequestEnvelope|TuiIpcResponseEnvelope|open_session|poll_events|permission_denied|schema_mismatch|待评估|当前冻结的投影边界' docs/architecture/DASALL_TUI客户端设计方案.md`
+   - 结果：通过；详设 7.4、9.5.4、9.6 和决策建议已从开放建议改为当前冻结口径。
+4. `rg -n 'TUI client|TUI-GAP-003|TUI-TODO-003|daemon projection seam|TuiIpcRequestEnvelope|TuiIpcResponseEnvelope' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账索引、第 17 节和建议复验命令已同步纳入 `TUI-TODO-003`。
+
+### 结果
+
+1. `BLK-TUI-003` 已被文档化解阻；`TUI-TODO-021`、`022`、`024`、`025` 不再因 daemon projection seam 未冻结而保持 Blocked。
+2. TUI 现在拥有可执行的 L2 daemon projection seam 基线：后续实现只能围绕 `TuiIpcRequestEnvelope` / `TuiIpcResponseEnvelope`、五个固定 operation 和 stable reason code 落盘，不能复用 CLI projection 或 raw daemon carrier。
+3. `BLK-TUI-007`、`BLK-TUI-004`、`BLK-TUI-005`、`BLK-TUI-006`、`BLK-TUI-008` 仍然有效；本轮没有把 projection seam 收口误写成 session ready、route ready 或 command release ready。
+
 # 记录 #755
 
 - 日期：2026-05-22
