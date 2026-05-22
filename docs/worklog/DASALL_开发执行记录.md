@@ -1,5 +1,37 @@
 # DASALL 开发执行记录
 
+# 记录 #757
+
+- 日期：2026-05-22
+- 阶段：tui/next-turn preference carrier
+- 任务：TUI-TODO-004 补齐 NextTurnPreference 真链路承载决策
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-004-next-turn-preference承载决策.md`，冻结 `NextTurnPreference` 的真实承载位置：TUI draft 经 access/runtime owner 的 typed request-scope carrier 进入主链，再映射到 llm-local route input；同时明确拒绝 `request_context` 唯一承载、`client_capabilities` 复用和 profile override 三条错误路径。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-004` 标记为 Done、将 `BLK-TUI-004` 标记为 Closed，并把 `TUI-TODO-015`、`027`、`028`、`029` 从“外部 blocker 未解”口径改为“按前置依赖继续排队或分阶段落盘”。
+3. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md`，把 4.x 基线、6.4、6.6、9.5.6、Phase 6、风险表和决策建议中的 `NextTurnPreference` carrier 从开放建议收紧为当前冻结口径，并显式写入 access/runtime typed carrier、`request_context` 审计 crumbs 限制、`client_capabilities` / profile override 拒绝规则，以及 `PreferDepth` advisory / `PinModel` fail-closed 语义。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 TUI 索引结论扩展为“L1 设计可信 + 两项 L2 基线已闭合”，并新增 `TUI-GAP-004` 收口记录，明确 route catalog projection / submit echo 仍为后续残余缺口。
+
+### 验证
+
+1. `rg -n 'NextTurnPreference|ModelSelectionHint|request context|profile override|ModelRouter|fail-closed' docs/todos/tui/deliverables/TUI-TODO-004-next-turn-preference承载决策.md`
+   - 结果：通过；交付物已覆盖 `NextTurnPreference`、`ModelSelectionHint`、`request_context` 拒绝口径、profile override 拒绝口径、`ModelRouter` owner 和 fail-closed 语义。
+2. `rg -n 'TUI-TODO-004|BLK-TUI-004|typed request-scope carrier|client_capabilities|profile override|TUI-TODO-027|TUI-TODO-029' docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；专项 TODO 已将 `TUI-TODO-004` 置为 Done、`BLK-TUI-004` 置为 Closed，并把 015/027/028/029 的后续实现约束对齐到新的 carrier 冻结口径。
+3. `rg -n 'typed request-scope carrier|request_context|client_capabilities|profile override|PinModel|PreferDepth' docs/architecture/DASALL_TUI客户端设计方案.md`
+   - 结果：通过；详设 6.4、6.6、9.5.6、风险表和决策建议已统一到 access/runtime typed carrier、审计 crumbs 限制和 `PreferDepth` / `PinModel` 新语义。
+4. `rg -n 'TUI-GAP-004|typed request-scope carrier|client_capabilities|profile override|TUI-TODO-004|route catalog projection / submit echo' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账索引、第 17 节和复验命令已同步纳入 `TUI-TODO-004` 与 `TUI-GAP-004`。
+
+### 结果
+
+1. `BLK-TUI-004` 已被文档化解阻；`TUI-TODO-015`、`027`、`028`、`029` 不再因 carrier 未冻结而保持外部 Blocked。
+2. TUI 现在拥有可执行的 route preference 设计基线：真实链路必须走 access/runtime owner 的 typed request-scope carrier，再映射到 llm-local route input；不得把 `NextTurnPreference` 偷塞进 `request_context`、`client_capabilities` 或 profile override。
+3. `PreferDepth` 与 `PinModel` 的语义边界已冻结：前者保持 advisory 并按 profile 策略回退，后者在 disallowed/unavailable/not-supported 时 fail-closed，不允许静默回落到其他 provider/model。
+4. `BLK-TUI-007`、`BLK-TUI-005`、`BLK-TUI-006`、`BLK-TUI-008` 仍然有效；本轮没有把 carrier 设计收口误写成 route catalog ready、daemon selector ready、submit echo ready 或 command release ready。
+
 # 记录 #756
 
 - 日期：2026-05-22
