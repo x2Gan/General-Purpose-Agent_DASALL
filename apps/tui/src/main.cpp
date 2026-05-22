@@ -1,14 +1,16 @@
 #include <iostream>
 
-int main() {
-#if defined(DASALL_TUI_PROTOTYPE_HAS_FTXUI) && DASALL_TUI_PROTOTYPE_HAS_FTXUI
-  constexpr const char* renderer_mode = "ftxui-private-link-ready";
-#else
-  constexpr const char* renderer_mode = "mock-no-renderer";
-#endif
+#include "app/TuiApp.h"
 
-  std::cout << "dasall_tui_prototype: fake-only no-daemon prototype ("
-            << renderer_mode
-            << ")\n";
-  return 0;
+int main() {
+  dasall::tui::app::TuiApp app;
+  dasall::tui::app::TuiAppOptions options;
+  options.scenario_id = "planning_tools";
+  options.bootstrap_tick_count = 2;
+  options.initial_draft =
+      "Hold the current draft while tool.search is running.";
+  options.selector_preview_mode =
+      dasall::tui::data::TuiRoutePreferenceMode::PinModel;
+  options.output_stream = &std::cout;
+  return app.run(std::move(options));
 }

@@ -1,0 +1,583 @@
+#include "app/TuiApp.h"
+
+#include <algorithm>
+#include <sstream>
+#include <utility>
+
+#include "data/FakeTuiDataSource.h"
+#include "model/TuiReducer.h"
+
+namespace dasall::tui::app {
+namespace {
+
+using dasall::tui::model::TuiAction;
+using dasall::tui::model::TuiActionType;
+using dasall::tui::model::TuiBanner;
+using dasall::tui::model::TuiBannerLevel;
+using dasall::tui::model::TuiModalKind;
+using dasall::tui::model::TuiModalState;
+
+void apply_reduced_action(model::TuiScreenModel& screen_model,
+                          const model::TuiAction& action) {
+  screen_model = model::reduce(std::move(screen_model), action);
+}
+
+[[nodiscard]] std::string trim_copy(std::string_view text) {
+  std::size_t start = 0;
+  while (start < text.size() &&
+         std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+    ++start;
+  }
+
+  std::size_t end = text.size();
+  while (end > start &&
+         std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+    --end;
+  }
+
+  return std::string(text.substr(start, end - start));
+}
+
+[[nodiscard]] std::string session_modal_body(
+    const data::TuiSessionView& session,
+    const data::TuiModelRouteProjection& route) {
+  std::ostringstream body;
+  body << "session_id: " << session.session_id << '\n'
+       << "profile_id: " << session.profile_id << '\n'
+       << "startup_mode: " << session.startup_mode << '\n'
+       << "readiness: " << session.daemon_readiness << '\n'
+       << "route: " << route.current_provider_id << "/" << route.current_model_id;
+  return body.str();
+}
+
+[[nodiscard]] std::string status_summary_message(
+    const data::TuiStatusProjection& status) {
+  std::ostringstream message;
+  message << "stage=" << (status.stage.empty() ? "unknown" : trim_copy(status.stage))
+          << ", tool="
+          << (status.current_tool.empty() ? "none" : trim_copy(status.current_tool))
+          << ", health="
+          << (status.health_summary.empty() ? "unknown" : trim_copy(status.health_summary));
+  return message.str();
+}
+
+[[nodiscard]] model::TuiAction make_banner_action(
+    const model::TuiBannerLevel level,
+    std::string title,
+    std::string message,
+    std::string reason_code,
+    std::string debug_reason,
+    const bool sticky = false) {
+  TuiAction action;
+  action.type = TuiActionType::BannerAdded;
+  action.debug_reason = std::move(debug_reason);
+
+  TuiBanner banner;
+  banner.level = level;
+  banner.title = std::move(title);
+  banner.message = std::move(message);
+  if (!reason_code.empty()) {
+    banner.reason_code = std::move(reason_code);
+  }
+  banner.sticky = sticky;
+  action.banner = std::move(banner);
+  return action;
+}
+
+[[nodiscard]] model::TuiAction make_modal_action(
+    model::TuiModalState modal,
+    std::string debug_reason) {
+  TuiAction action;
+  action.type = TuiActionType::ModalShown;
+  action.debug_reason = std::move(debug_reason);
+  action.modal = std::move(modal);
+  return action;
+}
+
+[[nodiscard]] model::TuiAction make_route_action(
+    data::TuiModelRouteProjection route,
+    std::string debug_reason) {
+  TuiAction action;
+  action.type = TuiActionType::RouteUpdated;
+  action.debug_reason = std::move(debug_reason);
+  action.route = std::move(route);
+  return action;
+}
+
+[[nodiscard]] data::TuiStatusProjection make_baseline_status(
+    std::string startup_mode) {
+  data::TuiStatusProjection status;
+  status.stage = "ready";
+  status.current_tool = "";
+  status.pending_interaction = "";
+  status.budget_summary = "Budget 100% remaining";
+  status.recovery_summary = "";
+  status.health_summary = "healthy";
+  status.safe_mode_summary = startup_mode == "line" ? "line" : "normal";
+  return status;
+}
+
+}  // namespace
+
+TuiApp::TuiApp() = default;
+
+TuiApp::TuiApp(terminal::TuiTerminalCapabilityProbe probe)
+    : probe_(std::move(probe)) {}
+
+int TuiApp::run(TuiAppOptions options) {
+  initialize_components(options);
+
+  terminal_capabilities_ = options.probe_environment.has_value()
+                               ? probe_.probe(*options.probe_environment)
+                               : probe_.probe();
+  startup_mode_ = probe_.select_startup_mode(terminal_capabilities_);
+  terminal_width_ = options.terminal_width;
+  terminal_height_ = options.terminal_height;
+
+  if (startup_mode_ == terminal::TuiStartupMode::FailClosed) {
+    last_error_ = probe_.format_startup_error(terminal_capabilities_);
+    if (output_stream_ != nullptr && !last_error_.empty()) {
+      *output_stream_ << last_error_ << '\n';
+    }
+    shutdown_clean_ = false;
+    return 1;
+  }
+
+  if (!open_fake_session()) {
+    const int exit_code = shutdown();
+    return exit_code == 0 ? 1 : exit_code;
+  }
+
+  if (!load_route_catalog()) {
+    const int exit_code = shutdown();
+    return exit_code == 0 ? 1 : exit_code;
+  }
+
+  sync_composer_state();
+  for (std::size_t tick_index = 0; tick_index < options.bootstrap_tick_count; ++tick_index) {
+    if (!tick()) {
+      break;
+    }
+  }
+
+  if (options.selector_preview_mode.has_value()) {
+    show_selector_preview(*options.selector_preview_mode);
+  }
+
+  render_current_screen(options.print_final_screen);
+  return shutdown();
+}
+
+void TuiApp::dispatch_action(const model::TuiAction& action) {
+  apply_reduced_action(screen_model_, action);
+
+  switch (action.type) {
+    case TuiActionType::StatusUpdated:
+    case TuiActionType::EventAppended:
+      sync_composer_busy_from_status();
+      break;
+
+    case TuiActionType::StatusQueryRequested:
+      apply_reduced_action(screen_model_,
+                           make_banner_action(model::TuiBannerLevel::Info,
+                                              "Status summary",
+                                              status_summary_message(screen_model_.status),
+                                              "status_query",
+                                              "status_query_requested"));
+      break;
+
+    case TuiActionType::SessionQueryRequested: {
+      TuiModalState modal;
+      modal.kind = TuiModalKind::Session;
+      modal.title = "Session summary";
+      modal.body = session_modal_body(screen_model_.session, screen_model_.route);
+      modal.actions = {"Close"};
+      modal.selected_action_index = 0;
+      apply_reduced_action(screen_model_,
+                           make_modal_action(std::move(modal),
+                                             "session_query_requested"));
+      break;
+    }
+
+    case TuiActionType::ForegroundSessionClearRequested:
+      apply_reduced_action(screen_model_,
+                           make_banner_action(model::TuiBannerLevel::Info,
+                                              "Foreground clear deferred",
+                                              "Fake-only preview keeps the current session until daemon session lifecycle lands.",
+                                              "foreground_session_clear_deferred",
+                                              "foreground_session_clear_requested"));
+      break;
+
+    case TuiActionType::ExitRequested:
+      exit_requested_ = true;
+      break;
+
+    case TuiActionType::RouteUpdated:
+    case TuiActionType::Noop:
+    case TuiActionType::FocusChanged:
+    case TuiActionType::BannerAdded:
+    case TuiActionType::BannerCleared:
+    case TuiActionType::ModalShown:
+    case TuiActionType::ModalHidden:
+    case TuiActionType::SessionHydrated:
+    case TuiActionType::ComposerTextChanged:
+    case TuiActionType::ComposerModeChanged:
+    case TuiActionType::ComposerSubmitAvailabilityChanged:
+      break;
+  }
+
+  render_current_screen(false);
+}
+
+bool TuiApp::tick() {
+  if (!session_open_ || session_id_.empty() || data_source_ == nullptr) {
+    return false;
+  }
+
+  const data::TuiPollEventsRequest request{
+      .session_id = session_id_,
+      .event_cursor = last_event_cursor_,
+      .request_id = next_request_id("poll_events"),
+      .trace_id = next_trace_id("poll_events"),
+  };
+  data::TuiPollEventsResult result = data_source_->poll_events(request);
+  if (!result.ok()) {
+    if (result.issue.has_value()) {
+      last_error_ = result.issue->message;
+      append_issue_banner(*result.issue, "Event poll failed");
+      render_current_screen(false);
+    }
+    return false;
+  }
+
+  last_event_cursor_ = result.next_cursor;
+  if (result.events.empty()) {
+    return false;
+  }
+
+  for (const auto& event : result.events) {
+    TuiAction action;
+    action.type = TuiActionType::EventAppended;
+    action.debug_reason = "tick:" + event.event_kind;
+    action.event = event;
+    dispatch_action(action);
+  }
+
+  return true;
+}
+
+int TuiApp::shutdown() {
+  if (!session_open_ || session_id_.empty() || data_source_ == nullptr) {
+    shutdown_clean_ = last_error_.empty();
+    return last_error_.empty() ? 0 : 1;
+  }
+
+  const data::TuiCloseSessionRequest request{
+      .session_id = session_id_,
+      .close_reason = exit_requested_ ? "exit_requested" : "prototype_round_complete",
+      .request_id = next_request_id("close_session"),
+      .trace_id = next_trace_id("close_session"),
+  };
+  data::TuiCloseSessionResult result = data_source_->close_session(request);
+  if (!result.ok()) {
+    if (result.issue.has_value()) {
+      last_error_ = result.issue->message;
+      append_issue_banner(*result.issue, "Session close failed");
+      render_current_screen(false);
+    }
+    shutdown_clean_ = false;
+    return 1;
+  }
+
+  session_open_ = false;
+  shutdown_clean_ = true;
+  return 0;
+}
+
+const model::TuiScreenModel& TuiApp::screen_model() const noexcept {
+  return screen_model_;
+}
+
+const std::vector<std::string>& TuiApp::rendered_frames() const noexcept {
+  return rendered_frames_;
+}
+
+const std::string& TuiApp::last_rendered_screen() const noexcept {
+  return last_rendered_screen_;
+}
+
+const terminal::TuiTerminalCapabilities& TuiApp::terminal_capabilities() const noexcept {
+  return terminal_capabilities_;
+}
+
+terminal::TuiStartupMode TuiApp::startup_mode() const noexcept {
+  return startup_mode_;
+}
+
+bool TuiApp::session_open() const noexcept {
+  return session_open_;
+}
+
+bool TuiApp::shutdown_clean() const noexcept {
+  return shutdown_clean_;
+}
+
+std::string_view TuiApp::last_error() const noexcept {
+  return last_error_;
+}
+
+void TuiApp::initialize_components(const TuiAppOptions& options) {
+  const bool has_initial_draft = options.initial_draft.has_value() &&
+                                 !options.initial_draft->empty();
+
+  output_stream_ = options.output_stream;
+  scenario_id_ = options.scenario_id.empty() ? "planning_tools" : options.scenario_id;
+  profile_id_ = options.profile_id;
+  composer_ = view::TuiComposer(model::TuiComposerState{
+      .text = options.initial_draft.value_or(std::string{}),
+      .mode = has_initial_draft ? "editing" : "ready",
+      .history_query = std::nullopt,
+      .can_submit = true,
+      .dirty = has_initial_draft,
+  });
+  selector_ = view::TuiModelSelector{};
+  screen_model_ = model::TuiScreenModel{};
+  screen_model_.composer = composer_.state();
+  screen_model_.focus = model::TuiFocusState::Composer;
+  screen_model_.debug_reason = "tui_app_initialized";
+  data_source_ = std::make_unique<data::FakeTuiDataSource>(scenario_id_);
+  terminal_capabilities_ = {};
+  startup_mode_ = terminal::TuiStartupMode::FailClosed;
+  last_event_cursor_.reset();
+  rendered_frames_.clear();
+  last_rendered_screen_.clear();
+  last_error_.clear();
+  session_id_.clear();
+  request_sequence_ = 0;
+  session_open_ = false;
+  shutdown_clean_ = false;
+  exit_requested_ = false;
+}
+
+bool TuiApp::open_fake_session() {
+  const data::TuiOpenSessionRequest request{
+      .profile_id = profile_id_,
+      .startup_mode_hint = startup_mode_to_string(startup_mode_),
+      .request_id = next_request_id("open_session"),
+      .trace_id = next_trace_id("open_session"),
+  };
+  data::TuiOpenSessionResult result = data_source_->open_session(request);
+  if (!result.ok()) {
+    if (result.issue.has_value()) {
+      last_error_ = result.issue->message;
+      append_issue_banner(*result.issue, "Session open failed");
+    }
+    return false;
+  }
+
+  session_id_ = result.session->session_id;
+  session_open_ = true;
+
+  TuiAction session_action;
+  session_action.type = TuiActionType::SessionHydrated;
+  session_action.debug_reason = "open_session";
+  session_action.session = result.session;
+  apply_reduced_action(screen_model_, session_action);
+
+  TuiAction status_action;
+  status_action.type = TuiActionType::StatusUpdated;
+  status_action.debug_reason = "baseline_status";
+  status_action.status = make_baseline_status(startup_mode_to_string(startup_mode_));
+  apply_reduced_action(screen_model_, status_action);
+  sync_composer_busy_from_status();
+  return true;
+}
+
+bool TuiApp::load_route_catalog() {
+  const data::TuiRouteCatalogRequest request{
+      .session_id = session_id_.empty() ? std::nullopt : std::optional<std::string>{session_id_},
+      .profile_id = profile_id_,
+      .selector_mode = std::nullopt,
+      .request_id = next_request_id("route_catalog"),
+      .trace_id = next_trace_id("route_catalog"),
+  };
+  data::TuiRouteCatalogResult result = data_source_->route_catalog(request);
+  if (!result.ok()) {
+    if (result.issue.has_value()) {
+      last_error_ = result.issue->message;
+      append_issue_banner(*result.issue, "Route catalog failed");
+    }
+    return false;
+  }
+
+  selector_.set_route_catalog(*result.route_catalog);
+  apply_reduced_action(screen_model_,
+                       make_route_action(result.route_catalog->current_route,
+                                         "route_catalog_loaded"));
+  return true;
+}
+
+void TuiApp::sync_composer_state() {
+  TuiAction text_action;
+  text_action.type = TuiActionType::ComposerTextChanged;
+  text_action.debug_reason = "composer_state_sync:text";
+  text_action.composer_text = composer_.state().text;
+  apply_reduced_action(screen_model_, text_action);
+
+  TuiAction mode_action;
+  mode_action.type = TuiActionType::ComposerModeChanged;
+  mode_action.debug_reason = "composer_state_sync:mode";
+  mode_action.composer_mode = composer_.state().mode;
+  apply_reduced_action(screen_model_, mode_action);
+
+  TuiAction submit_action;
+  submit_action.type = TuiActionType::ComposerSubmitAvailabilityChanged;
+  submit_action.debug_reason = "composer_state_sync:submit";
+  submit_action.composer_can_submit = composer_.state().can_submit;
+  apply_reduced_action(screen_model_, submit_action);
+}
+
+void TuiApp::sync_composer_busy_from_status() {
+  static_cast<void>(composer_.set_busy(status_requires_busy_composer(screen_model_.status)));
+  sync_composer_state();
+}
+
+void TuiApp::show_selector_preview(const data::TuiRoutePreferenceMode mode) {
+  const auto options = selector_.open_selector(mode);
+  const data::NextTurnPreference next_preference = selector_.apply_preference();
+
+  data::TuiModelRouteProjection route = screen_model_.route;
+  route.next_preference = next_preference;
+  apply_reduced_action(screen_model_,
+                       make_route_action(std::move(route),
+                                         "selector_preview_applied"));
+
+  TuiModalState modal;
+  modal.kind = TuiModalKind::Selector;
+  modal.title = "Next turn preference";
+  modal.body = selector_modal_body(options);
+  modal.actions = {"Apply", "Cancel"};
+  modal.selected_action_index = 0;
+  apply_reduced_action(screen_model_,
+                       make_modal_action(std::move(modal),
+                                         "selector_preview_modal"));
+}
+
+void TuiApp::render_current_screen(const bool flush_to_output) {
+  last_rendered_screen_ = renderer_.render_to_screen(
+      screen_model_,
+      effective_terminal_width(),
+      effective_terminal_height());
+  rendered_frames_.push_back(last_rendered_screen_);
+
+  if (flush_to_output && output_stream_ != nullptr) {
+    *output_stream_ << last_rendered_screen_ << '\n';
+  }
+}
+
+std::string TuiApp::selector_modal_body(
+    const std::vector<view::TuiModelSelectorOption>& options) const {
+  if (options.empty()) {
+    return "No selector options are required for auto mode.";
+  }
+
+  std::ostringstream body;
+  body << "Draft: " << screen_model_.route.next_preference.user_visible_summary << '\n';
+  for (const auto& option : options) {
+    body << (option.selected ? "* " : "- ") << option.display_label;
+    if (!option.selectable) {
+      body << " [disabled: "
+           << selector_.render_disabled_reason(option.disabled_reasons)
+           << ']';
+    }
+    body << '\n';
+  }
+  return body.str();
+}
+
+std::size_t TuiApp::effective_terminal_width() const noexcept {
+  if (terminal_width_ > 0) {
+    return terminal_width_;
+  }
+  if (terminal_capabilities_.columns > 0) {
+    return static_cast<std::size_t>(terminal_capabilities_.columns);
+  }
+
+  switch (startup_mode_) {
+    case terminal::TuiStartupMode::FullScreen:
+      return 120;
+    case terminal::TuiStartupMode::Narrow:
+      return 80;
+    case terminal::TuiStartupMode::Line:
+    case terminal::TuiStartupMode::FailClosed:
+      return 40;
+  }
+
+  return 40;
+}
+
+std::size_t TuiApp::effective_terminal_height() const noexcept {
+  if (terminal_height_ > 0) {
+    return terminal_height_;
+  }
+  if (terminal_capabilities_.rows > 0) {
+    return static_cast<std::size_t>(terminal_capabilities_.rows);
+  }
+
+  switch (startup_mode_) {
+    case terminal::TuiStartupMode::FullScreen:
+      return 36;
+    case terminal::TuiStartupMode::Narrow:
+      return 24;
+    case terminal::TuiStartupMode::Line:
+    case terminal::TuiStartupMode::FailClosed:
+      return 12;
+  }
+
+  return 12;
+}
+
+std::string TuiApp::startup_mode_to_string(
+    const terminal::TuiStartupMode startup_mode) {
+  switch (startup_mode) {
+    case terminal::TuiStartupMode::FullScreen:
+      return "full";
+    case terminal::TuiStartupMode::Narrow:
+      return "narrow";
+    case terminal::TuiStartupMode::Line:
+      return "line";
+    case terminal::TuiStartupMode::FailClosed:
+      return "fail_closed";
+  }
+
+  return "fail_closed";
+}
+
+bool TuiApp::status_requires_busy_composer(const data::TuiStatusProjection& status) {
+  return !trim_copy(status.pending_interaction).empty() ||
+         !trim_copy(status.current_tool).empty() ||
+         trim_copy(status.stage) == "tool_calling" ||
+         trim_copy(status.stage) == "waiting_interaction";
+}
+
+std::string TuiApp::next_request_id(std::string_view prefix) {
+  ++request_sequence_;
+  return std::string(prefix) + "-" + scenario_id_ + "-" +
+         std::to_string(request_sequence_);
+}
+
+std::string TuiApp::next_trace_id(std::string_view prefix) {
+  return "trace-" + next_request_id(prefix);
+}
+
+void TuiApp::append_issue_banner(const data::TuiDataSourceIssue& issue, std::string title) {
+  apply_reduced_action(screen_model_,
+                       make_banner_action(model::TuiBannerLevel::Error,
+                                          std::move(title),
+                                          issue.message,
+                                          issue.reason_code,
+                                          "data_source_issue:" + issue.reason_code,
+                                          true));
+}
+
+}  // namespace dasall::tui::app

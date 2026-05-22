@@ -1,3 +1,37 @@
+# 记录 #773
+
+- 日期：2026-05-23
+- 阶段：tui/fake-only app prototype baseline
+- 任务：TUI-TODO-020 接线 fake-only `TuiApp` 小样
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-020-fake-only-TuiApp小样基线.md`，冻结 fake-only `TuiApp` 的任务边界、本地证据、FTXUI main-loop vs layout layer 参考、Design->Build 映射，以及 startup/smoke 验证口径。
+2. 新增 `apps/tui/src/app/TuiApp.h` 与 `apps/tui/src/app/TuiApp.cpp`，实现 fake-only app orchestration：装配 `TuiTerminalCapabilityProbe`、`FakeTuiDataSource`、`TuiReducer`、`TuiComposer`、`TuiModelSelector` 与 `FtxuiRendererAdapter`，并闭合 `run()` / `dispatch_action()` / `tick()` / `shutdown()`。
+3. 更新 `apps/tui/CMakeLists.txt` 与 `apps/tui/src/main.cpp`，新增 `dasall_tui_prototype_core` 复用 target，把 prototype binary 从 placeholder 切到真实 `TuiApp` path，同时继续保持 non-install、no-daemon、optional private FTXUI backend 边界。
+4. 新增 `tests/integration/tui/TuiAppStartupTest.cpp` 与 `tests/integration/tui/TuiPrototypeSmokeTest.cpp`，并更新 `tests/integration/tui/CMakeLists.txt`，把 `TuiAppStartupTest` / `TuiPrototypeSmokeTest` 从 topology placeholder 切到真实 integration executable。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-020 完成状态、`TUI-GAP-020` 收口结果、当前 fake-only app baseline 与下一步前移到 `TUI-TODO-021`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_prototype"])`
+   - 结果：通过；prototype target 现在能编译并链接真实 `TuiApp` 路径。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_app_startup_integration_test","dasall_tui_prototype_smoke_integration_test"])`
+   - 结果：首次失败于两个新测试缺失 `#include <iostream>`；已在同轮最小修复后重跑通过。
+3. `ListTests_CMakeTools()`
+   - 结果：通过；`TuiAppStartupTest` 与 `TuiPrototypeSmokeTest` 已进入顶层 discoverability。
+4. `RunCtest_CMakeTools(tests=["TuiAppStartupTest","TuiPrototypeSmokeTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+5. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(TuiAppStartupTest|TuiPrototypeSmokeTest)$'`
+   - 结果：通过；2/2 通过。第一次 smoke 断言把 transcript/tool summary 强绑在最后一帧，已按捕获帧语义收紧后重跑通过。
+
+### 结果
+
+1. `TUI-TODO-020` 已闭合：TUI 现在拥有可编译、可发现、可退出的 fake-only `TuiApp` 小样，可展示 fake transcript/status/selector/composer，并保持 no-daemon、non-install、no-command-release 边界。
+2. 本轮没有推进 daemon projection、真实 session lifecycle、route catalog 真链路或 bare `dasall` 迁移；`BLK-TUI-006` 的 CJK/IME/resize manual gate 继续保持 Open。
+3. 下一步推荐转入 `TUI-TODO-021`，把本轮已稳定的 app 调用上下文沉淀为 daemon projection request/response mapping 与 header 草案。
+
 # 记录 #772
 
 - 日期：2026-05-23
