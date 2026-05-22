@@ -1,5 +1,36 @@
 # DASALL 开发执行记录
 
+# 记录 #755
+
+- 日期：2026-05-22
+- 阶段：tui/clear session semantics
+- 任务：TUI-TODO-002 补齐 `/clear` 会话行为决策
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-002-clear语义决策.md`，冻结 `/clear` 为“留在当前进程、重置当前前台 transcript/本地状态并切到新前台 session 语义”，并明确 input history 保留、composer draft 清空、即时 daemon close/open 后置。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-002` 标记为 Done、将 `BLK-TUI-002` 标记为 Closed，并同步把 parser / session lifecycle / 风险表对齐到新的 `/clear` 决策。
+3. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md`，把 5.2、5.6、13 中的 `/clear` 从待冻结改为已冻结语义，并在决策建议中区分 `/clear` 与 `/exit`。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 TUI 的全局结论扩展为“已闭合启动权限与 `/clear` 会话语义两项 L1 设计缺口”，并新增 `TUI-GAP-002` 收口记录。
+
+### 验证
+
+1. `rg -n '/clear|清空当前前台|新建当前进程内 session|session_id|input history|close_session|open_session' docs/todos/tui/deliverables/TUI-TODO-002-clear语义决策.md`
+   - 结果：通过；交付物已覆盖 `/clear`、新前台 session、`session_id`、input history 与 daemon close/open 后置边界。
+2. `rg -n 'TUI-TODO-002|BLK-TUI-002|TUI-RSK-009|/clear|input history|blocked/local pending action|行为待冻结|语义未冻结' docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；专项 TODO 已将 `TUI-TODO-002` 置为 Done、`BLK-TUI-002` 置为 Closed，且未残留 `/clear` 待冻结口径。
+3. `rg -n 'TUI-OQ-001|/clear|input history|daemon close/open|新前台 session|待冻结' docs/architecture/DASALL_TUI客户端设计方案.md`
+   - 结果：通过；详设 5.2、5.6、13 与决策建议对 `/clear` 的当前口径一致。
+4. `rg -n 'TUI client|TUI-GAP-002|TUI-TODO-002|/clear|input history|新前台 session' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账索引、第 17 节和复验命令已同步纳入 `TUI-TODO-002`。
+
+### 结果
+
+1. `BLK-TUI-002` 已被文档化解阻；后续 `TUI-TODO-013` 可以把 `/clear` 作为明确 local action 落盘，不再返回 blocked 占位。
+2. `/clear` 与 `/exit` 的边界已冻结：`/clear` 留在当前 TUI 进程并切到新前台 session 语义，`/exit` 继续负责 close 或可观测 close failure。
+3. `/clear` 的 backend close/open 细节仍未越权前推到本轮；`TUI-TODO-026` 仍需在 `BLK-TUI-007` 解阻后补真实 lifecycle integration。
+
 # 记录 #754
 
 - 日期：2026-05-22

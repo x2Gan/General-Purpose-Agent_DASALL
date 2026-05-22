@@ -42,7 +42,7 @@
 | runtime | 已记录 | 控制面主体已脱离 placeholder；AgentFacade / AgentOrchestrator / FSM / Budget / Checkpoint / Recovery / Session / Scheduler / SafeMode 均有真实落点；`Gate-INT-10` app-binary cognition-positive、installed `run` direct LLM、`runtime-installed-proof.json` / `runtime-proof.json` 的 tool/recovery local evidence，以及 `AgentInitResult` / daemon readiness 的 optional degraded reasons 已形成 L3/L4 分层 | scheduler/background worker 模型、release-runner / soak 级更高层证据 |
 | runtime_support / app live composition | 已记录 | daemon/gateway 共享 app-level runtime 组合根已落盘；required live baseline 有 L2 focused / L3 partial 证据 | services backend 注入、observability/health sinks、knowledge optional degraded semantics、owner/fail-closed regression matrix、installed/qemu/release 证据 |
 | access / apps ingress | 已记录 | Access v1 unary focused ingress 已通过 Gate-INT-08；CLI/daemon/gateway app-binary、installed local control-plane、installed async receipt 与 installed HTTP gateway unary local package evidence 已形成 L3/L4 分层 | streaming lifecycle、multi-instance receipt authority、release/qemu/security hardening 证据 |
-| TUI client | 已记录 | 当前只达到 L1 设计可信：TUI-TODO-001 已冻结 daemon-backed `root/sudo-only` operator backend、ordinary-user fail-closed 与 user-level daemon/socket future-only 口径；命令迁移仍未放行 | daemon/access projection seam、session open/close/query、`NextTurnPreference` 真链路、FTXUI/terminal gate、bare `dasall` release gate |
+| TUI client | 已记录 | 当前只达到 L1 设计可信：TUI-TODO-001 已冻结 daemon-backed `root/sudo-only` operator backend、ordinary-user fail-closed 与 user-level daemon/socket future-only 口径；TUI-TODO-002 已冻结 `/clear` 的新前台 session 语义与 input history 保留边界；命令迁移仍未放行 | daemon/access projection seam、session open/close/query backend 细节、`NextTurnPreference` 真链路、FTXUI/terminal gate、bare `dasall` release gate |
 | multi_agent | 已记录 | IMultiAgentCoordinator、Null/Real coordinator、Runtime fold helper 与 build-tree sidecar 协同已有 L2 证据；installed profiles 默认 disabled | profile-enabled installed 正向路径、CLI/API surface、role/capability/routing 生产策略、observability/audit、qemu/soak 证据 |
 | infrastructure | 已记录 | logging/audit/config/secret/policy/diagnostics/health/plugin 等主体接口与多数组件已落盘；production sinks、diagnostics retained snapshot 分层、plugin-to-tools 自动接线、health/watchdog event publish、optional backend profile gate、release-runner local infra gate 与 SecretManager live composition seam 已具 L3/L4 focused 证据 | daemon/gateway Access ownership seam 注入、secret consumer matrix、qemu/autopkgtest machine-isolated rerun 继续归 packaging / release 环境复核 |
 | profiles / platform | 已记录 | profiles Build/Runtime 双平面与 platform/linux provider 主体任务多为 Done；multi_agent disabled policy 和 linux bootstrap 已有 focused/integration 证据 | consumer matrix live enforcement、installed policy mutation validation、profile enablement 与 runtime wiring 一致性、platform qemu/autopkgtest bootstrap、ARM/HAL 真实驱动边界 |
@@ -1557,36 +1557,40 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 
 ### 17.1 检查范围与依据
 
-本轮仅收口 TUI 的启动身份与权限模型缺口，直接依据如下：
+本轮收口 TUI 的两类 L1 设计缺口：启动身份/权限模型，以及 `/clear` 会话行为。直接依据如下：
 
 1. `docs/architecture/DASALL_TUI客户端设计方案.md` 第 5.7 节与第 13 节的权限/风险语义。
-2. `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md` 中 `TUI-TODO-001` 与 `BLK-TUI-001`。
-3. `docs/todos/tui/deliverables/TUI-TODO-001-启动身份与权限模型决策.md` 的冻结结论。
-4. `docs/todos/cli/deliverables/CLCFG-TODO-002-socket与operator-model冻结.md`、`docs/ssot/BinaryEntrypointReadinessV1.md` 与 `docs/worklog/DASALL_开发执行记录.md` 中现有 operator/backend 事实。
+2. `docs/architecture/DASALL_TUI客户端设计方案.md` 第 5.2、5.4、5.6 节与第 13 节的 session/slash command 语义。
+3. `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md` 中 `TUI-TODO-001`、`TUI-TODO-002`、`BLK-TUI-001`、`BLK-TUI-002`。
+4. `docs/todos/tui/deliverables/TUI-TODO-001-启动身份与权限模型决策.md`、`docs/todos/tui/deliverables/TUI-TODO-002-clear语义决策.md` 的冻结结论。
+5. `docs/todos/cli/deliverables/CLCFG-TODO-002-socket与operator-model冻结.md`、`docs/ssot/BinaryEntrypointReadinessV1.md`、`docs/architecture/DASALL_access子系统详细设计.md` 与 `docs/worklog/DASALL_开发执行记录.md` 中现有 operator/backend/session_id 事实。
 
 ### 17.2 当前结论
 
 结论：TUI 目前只达到 L1 设计可信，不能外推为 app-binary ready，更不能外推为 installed end-user ready。
 
-本轮已闭合的唯一缺口是启动身份与权限模型决策：
+本轮已闭合的设计缺口有两项：启动身份与权限模型决策，以及 `/clear` 会话语义决策。
 
 1. daemon-backed TUI v1 继承当前 `/run/dasall/daemon.sock` + `0600 root/sudo-only` operator backend。
 2. 普通用户命中 socket 权限问题时，只允许 fail-closed `permission denied`/limited explanation，不允许在 TUI 内提权、改组或偷开 user-level daemon/socket。
 3. user-level daemon/socket 被明确降格为 future-only 设计流；若未来要支持普通用户无 sudo 的 full-function TUI，必须另起用户态 runtime/socket 设计与 gate。
-4. 上述结论只解除了 TUI 的 context blocker，不代表 bare `dasall` 命令迁移已可放行；TUI-TODO-024、030 及 031~034 仍需按后续 gate 单独验收。
+4. `/clear` 已冻结为“留在当前进程、重置当前前台 transcript/本地状态并切到新的前台 session 语义”；它不是单纯清屏，也不是 `/exit` 别名。
+5. `/clear` 保留 input history，清空当前 composer draft；下一次 submit 绑定新的 `session_id`，但即时 daemon close/open 继续后置到 session seam 设计，不在本轮越权承诺。
+6. 上述结论只解除了 TUI 的 context blocker，不代表 bare `dasall` 命令迁移已可放行；TUI-TODO-024、030 及 031~034 仍需按后续 gate 单独验收。
 
 ### 17.3 已闭合缺口
 
 | Gap ID | 严重级别 | 缺口 | 证据 | 影响 | 收口结果 |
 |---|---|---|---|---|---|
 | TUI-GAP-001 | L1 / gate blocker | TUI 默认启动身份与普通用户/root operator 口径未冻结 | `TUI-TODO-001` deliverable、TUI 详设 5.7/13、`CLCFG-TODO-002`、worklog 中普通用户 `Permission denied` 与 root/sudo 正向证据 | 未冻结前不能可靠定义 `permission denied` 文案，也不能进入 bare `dasall` release gate | 2026-05-22 已由 `TUI-TODO-001` 收口：冻结 daemon-backed root/sudo-only backend、ordinary-user fail-closed 与 user-level daemon future-only |
+| TUI-GAP-002 | L1 / gate blocker | `/clear` 是清空视图、仅清屏，还是新建当前进程内 session 未冻结 | `TUI-TODO-002` deliverable、TUI 详设 5.2/5.4/5.6/13、专项 TODO 中 `BLK-TUI-002` 与 `BLK-TUI-007`、access `session_id` 生成策略 | 未冻结前 parser 只能把 `/clear` 作为 blocked 占位，`/exit` / `/clear` 边界和 session lifecycle 测试都无法可靠展开 | 2026-05-22 已由 `TUI-TODO-002` 收口：冻结 `/clear` 为新前台 session 语义、保留 input history、即时 daemon close/open 后置 |
 
 ### 17.4 残余缺口与后续任务
 
 当前仍未闭合的 TUI owner 缺口如下：
 
 1. `TUI-TODO-024` 尚未把 `permission denied`、daemon unavailable、non-TTY、narrow 等启动失败路径做成稳定 `TuiStartupMode`/reason code。
-2. `TUI-TODO-003`、`021~026` 尚未冻结 daemon/access projection seam、session open/close/query 与 IPC 错误归一化。
+2. `TUI-TODO-003`、`021~026` 尚未冻结 daemon/access projection seam、session open/close/query 与 IPC 错误归一化；其中 `/clear` 的用户可见语义已闭合，但 backend close/open 细节仍后置。
 3. `TUI-TODO-004`、`027~029` 尚未冻结 `NextTurnPreference` 真链路承载与 route catalog projection。
 4. `TUI-TODO-005`、`019~020` 仍受 FTXUI third-party 与 CJK/IME/resize manual gate 约束。
 5. `TUI-TODO-030~034` 的 bare `dasall` 迁移仍保持 Blocked；本轮结论不能被误写成 command release ready。
@@ -1599,7 +1603,12 @@ rg -n "普通用户|root|sudo|permission denied|user-level daemon|operator" \
 ```
 
 ```bash
-rg -n "TUI-TODO-001|BLK-TUI-001|TUI-RISK-002|TUI-OQ-004|root/sudo-only|user-level daemon" \
+rg -n "/clear|新前台 session|input history|session_id|daemon close/open" \
+  docs/todos/tui/deliverables/TUI-TODO-002-clear语义决策.md
+```
+
+```bash
+rg -n "TUI-TODO-00[12]|BLK-TUI-00[12]|TUI-RISK-002|TUI-OQ-00[14]|root/sudo-only|user-level daemon|input history" \
   docs/architecture/DASALL_TUI客户端设计方案.md \
   docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md \
   docs/worklog/DASALL_开发执行记录.md
