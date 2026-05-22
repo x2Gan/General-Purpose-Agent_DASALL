@@ -1,3 +1,33 @@
+# 记录 #765
+
+- 日期：2026-05-22
+- 阶段：tui/fake data source replay baseline
+- 任务：TUI-TODO-012 实现 fake data source 场景回放
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-012-fake-data-source场景回放基线.md`，冻结 `FakeScenarioCatalog` 的六个 scenario id、`FakeScenarioLoadResult` 的 machine-readable 失败 contract、`FakeTuiDataSource` 的 session/cursor replay 语义，以及 focused build/test/discoverability 的验收口径。
+2. 新增 `apps/tui/src/data/FakeScenarioCatalog.h`，以 header-only catalog 形式落盘 `golden_ready`、`planning_tools`、`needs_confirm`、`recovering`、`route_switch`、`narrow_cjk` 六个 deterministic 场景，覆盖 session、route catalog、submit receipt 与按批次组织的 event timeline。
+3. 新增 `apps/tui/src/data/FakeTuiDataSource.h` 与 `apps/tui/src/data/FakeTuiDataSource.cpp`，实现纯内存 `ITuiDataSource` fake source：`open_session()` 重置 replay state，`submit_turn()` 回填 caller-visible request/trace id，`poll_events()` 以固定顺序回放 event batches 并对 session/cursor mismatch fail-closed，`route_catalog()` / `close_session()` 保持无 transport 副作用。
+4. 新增 `tests/unit/tui/TuiFakeScenarioCatalogTest.cpp` 与 `tests/unit/tui/FakeTuiDataSourceTest.cpp`，focused 覆盖六个场景完整性、重复 load 的 deterministic 输出、planning_tools 场景的 open/submit/poll 序列、machine-readable error 语义，以及 fake source/catalog 不引入 owner 私有依赖或 transport 调用的边界。
+5. 更新 `tests/unit/tui/CMakeLists.txt`、`docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，注册 `TuiFakeScenarioCatalogTest` / `TuiFakeDataSourceTest`，并同步回写 TUI-TODO-012 完成状态、当前 fake replay 基线与 `TUI-GAP-012` 收口结果。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_fake_scenario_catalog_unit_test","dasall_tui_fake_data_source_unit_test"])`
+   - 结果：通过；`FakeScenarioCatalog.h`、`FakeTuiDataSource.*` 与两个 focused tests 在 `build/vscode-linux-ninja` 成功编译并链接。
+2. `RunCtest_CMakeTools(tests=["TuiFakeScenarioCatalogTest","TuiFakeDataSourceTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按回退口径继续执行显式 discoverability + single-test 验证。
+3. `ctest --preset vscode-linux-ninja -N | rg 'TuiFakeScenarioCatalogTest|TuiFakeDataSourceTest' && ctest --preset vscode-linux-ninja --output-on-failure -R '^(TuiFakeScenarioCatalogTest|TuiFakeDataSourceTest)$'`
+   - 结果：通过；`TuiFakeScenarioCatalogTest`、`TuiFakeDataSourceTest` 均被发现并 2/2 通过。
+
+### 结果
+
+1. `TUI-TODO-012` 已闭合：TUI 现在拥有可编译、可发现、无 network/socket/daemon/runtime/provider 依赖的 deterministic fake replay 基线。
+2. 后续 `TUI-TODO-013~020` 可以直接复用 `FakeTuiDataSource` 作为 slash command、composer、selector、status panel、transcript view 与 app loop 的统一 fake 数据入口，而不必各自发明 scenario 数据。
+3. 本轮没有引入 `DaemonTuiDataSource`、`TuiIpcController`、`FakeScenarioClock`、renderer 或 app loop；真实 daemon attach、session seam、route projection 与命令迁移仍继续受既有 owner/gate 约束。
+
 # 记录 #764
 
 - 日期：2026-05-22
