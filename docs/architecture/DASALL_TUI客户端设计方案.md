@@ -148,7 +148,7 @@ flowchart LR
 
 | 范畴 | 当前事实 | 对 TUI 的含义 |
 |---|---|---|
-| `apps/tui` | 当前已接入 non-installed `dasall_tui_prototype` target；`apps/tui/src/main.cpp` 默认保持 fake-only no-daemon placeholder，并在 FTXUI target 已解析时仅追加 private link helper；`apps/tui/src/data/TuiProjectionTypes.h` 已落 module-local projection DTO 基线，`apps/tui/src/model/TuiAction.h` / `apps/tui/src/model/TuiScreenModel.h` 已落 typed MVU model/action 基线 | `TUI-TODO-010~020` 可复用 prototype substrate、DTO 与 model/action 基线继续演进，但正式 `dasall-tui` / bare `dasall` 迁移仍待后续 gate |
+| `apps/tui` | 当前已接入 non-installed `dasall_tui_prototype` target；`apps/tui/src/main.cpp` 默认保持 fake-only no-daemon placeholder，并在 FTXUI target 已解析时仅追加 private link helper；`apps/tui/src/data/TuiProjectionTypes.h` 已落 module-local projection DTO 基线，`apps/tui/src/model/TuiAction.h` / `apps/tui/src/model/TuiScreenModel.h` / `apps/tui/src/model/TuiReducer.h/.cpp` 已落 typed MVU model/action/reducer 基线，`tests/unit/tui/TuiReducerTransitionTest.cpp` 已守住 submit、append event、focus switch、banner、unknown action no-op/fail-closed focused 路径 | `TUI-TODO-011~020` 可复用 prototype substrate、DTO 与 model/action/reducer 基线继续演进，但正式 `dasall-tui` / bare `dasall` 迁移仍待后续 gate |
 | `apps/cli` | target 名为 `dasall-cli`，但安装产物通过 `OUTPUT_NAME dasall` 占用 bare 命令 | 命令释放是后置迁移任务，不是 UI 小样前置条件 |
 | Debian 命令面 | `debian/dasall-cli.install`、manpage、README.Debian、postinst、autopkgtest 当前均围绕 installed `dasall` 结构化 CLI | `/usr/bin/dasall` 改 TUI 会影响 operator 文档、脚本、smoke 和升级路径 |
 | 本地 daemon/access | daemon、UDS/IIPC、AccessGateway、readiness、run/status/cancel/diag/knowledge 等本地控制面已可复用 | 正式 TUI 可复用 daemon 主链，但必须通过 access/daemon owner 的 `TuiIpcRequestEnvelope` / `TuiIpcResponseEnvelope` 新增 TUI projection seam |
@@ -665,10 +665,10 @@ flowchart TB
 1. 职责：集中保存 UI 状态，并以纯 reducer 方式响应 `TuiAction`。
 2. 非职责：不包含 FTXUI 类型，不做 I/O，不调用 daemon，不读取系统时间。
 3. 核心数据：`TuiScreenModel`、`TuiAction`、`TuiFocusState`、`TuiBanner`、`TuiModalState`。
-4. 接口：`TuiScreenModel reduce(TuiScreenModel current, TuiAction action)`；内部按 action type 分发。
+4. 接口：`TuiScreenModel reduce(TuiScreenModel current, TuiAction action)`；内部按 action type 分发，当前基线使用既有 typed action family，并把 submit 路径收敛为 `ComposerModeChanged("submitting")` 的状态迁移。
 5. 执行流：用户/数据源事件 -> action -> reducer -> 新 model -> renderer 重绘。
-6. 失败语义：未知 action 保持 no-op 并记录 debug reason；非法状态转换 fail-closed 到 banner/modal。
-7. 测试出口：`TuiScreenModelTest`、`TuiReducerTransitionTest`；验收 `ctest --preset vscode-linux-ninja -R "Tui(ScreenModel|Reducer)" --output-on-failure`。
+6. 失败语义：未知 action 保持 no-op 并记录 debug reason；非法状态转换 fail-closed 到 banner/modal；当前最小实现已固定 `FocusChanged -> Modal` 且无 active modal 时走 error banner fail-closed。
+7. 测试出口：`TuiScreenModelTest`、`TuiReducerTransitionTest`；验收 `ctest --preset vscode-linux-ninja -R "Tui(ScreenModel|Reducer)" --output-on-failure`；当前 focused reducer baseline 已通过 compile、single-test 和 discoverability 验证。
 
 #### 9.5.3 `ITuiDataSource`、`FakeTuiDataSource`、`DaemonTuiDataSource`
 

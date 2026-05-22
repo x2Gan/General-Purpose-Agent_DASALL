@@ -1,3 +1,35 @@
+# 记录 #763
+
+- 日期：2026-05-22
+- 阶段：tui/reducer transition baseline
+- 任务：TUI-TODO-010 实现 reducer 状态迁移
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-010-reducer状态迁移基线.md`，冻结 `reduce(TuiScreenModel current, TuiAction action)` 的纯函数边界、现有 action family 的状态迁移规则、`ComposerModeChanged("submitting")` 作为 submit 路径的最小表达，以及 unknown action / illegal transition 的 no-op/fail-closed 语义。
+2. 新增 `apps/tui/src/model/TuiReducer.h` 与 `apps/tui/src/model/TuiReducer.cpp`，实现 typed MVU reducer：覆盖 focus、banner、modal、session/status/route hydrate、event append、composer text/mode/submit availability 更新，并把 `FocusChanged -> Modal` 且无 active modal 收口到 error banner fail-closed。
+3. 新增 `tests/unit/tui/TuiReducerTransitionTest.cpp`，focused 覆盖 submit、append event、focus switch、banner add/clear、unknown action no-op 与 fail-closed 路径，同时守住 reducer 头/实现不引入 FTXUI、I/O、system-time 或 owner 私有依赖。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_reducer_unit_test`，把 `TuiReducerTransitionTest` 从 topology smoke 切换到真实 reducer target，并将 `apps/tui/src/model/TuiReducer.cpp` 作为 test-local 实现源接入。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-010 完成状态、当前 reducer 基线、Build-ready subset 推进与 `TUI-GAP-010` 收口结果。
+
+### 验证
+
+1. `rg -n 'TuiReducer|TuiReducerTransitionTest|ComposerModeChanged\("submitting"\)|unknown action|fail-closed|D Gate = PASS' docs/todos/tui/deliverables/TUI-TODO-010-reducer状态迁移基线.md`
+   - 结果：通过；010 deliverable 已同时冻结 reducer 接口、submit 路径、fail-closed 语义与 D Gate 结果。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_reducer_unit_test"])`
+   - 结果：通过；`TuiReducer.cpp`、`TuiReducerTransitionTest.cpp` 与 `tests/unit/tui/CMakeLists.txt` 的 focused 接线可成功编译并链接。
+3. `RunCtest_CMakeTools(tests=["TuiReducerTransitionTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按仓库 fallback 继续执行显式 `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiReducerTransitionTest$'`，1/1 通过。
+4. `ctest --preset vscode-linux-ninja -N | rg 'TuiReducerTransitionTest'`
+   - 结果：通过；`TuiReducerTransitionTest` 已进入顶层 discoverability，可直接作为后续 `TUI-TODO-011~020` 的 reducer gate。
+
+### 结果
+
+1. `TUI-TODO-010` 已闭合：TUI 现在拥有可编译、可发现、无 FTXUI/I/O/owner 私有依赖的 typed reducer 状态迁移基线。
+2. 后续 `TUI-TODO-011~020` 可以直接复用 `TuiReducer` 作为 fake data source、slash command、composer、selector 与 app loop 的统一状态收敛入口，而不需要把 submit/focus/banner/event 迁移散落到各组件中。
+3. 本轮没有引入 daemon/data source、renderer、terminal handle 或系统时间读取；真实 session lifecycle、route submit echo、CJK/IME/resize 与命令迁移仍继续受既有 owner/gate 约束。
+
 # 记录 #762
 
 - 日期：2026-05-22
