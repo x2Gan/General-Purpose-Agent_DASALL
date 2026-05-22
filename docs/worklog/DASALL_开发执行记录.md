@@ -1,5 +1,34 @@
 # DASALL 开发执行记录
 
+# 记录 #754
+
+- 日期：2026-05-22
+- 阶段：tui/startup permission policy
+- 任务：TUI-TODO-001 补齐启动身份与权限模型决策
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-001-启动身份与权限模型决策.md`，把 TUI v1 的 daemon-backed 启动身份明确冻结为 `/run/dasall/daemon.sock` + `0600 root/sudo-only` operator backend，并把 ordinary-user fail-closed、禁止 TUI 内提权、user-level daemon/socket future-only 与命令迁移影响写成单一结论。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-001` 标记为 Done、将 `BLK-TUI-001` 标记为 Closed，并同步收口专项 TODO 内残留的“权限模型未冻结”表述。
+3. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md`，把 5.7 节的权限语义从产品待决改为当前冻结结论，并同步刷新 `TUI-RISK-002`、`TUI-OQ-004` 与决策建议。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，新增 TUI client 索引和 TUI 章节，把本轮结论固定在 L1 设计可信层级，并明确 bare `dasall` release gate 仍未放行。
+
+### 验证
+
+1. `rg -n "普通用户|root|sudo|permission denied|user-level daemon|operator" docs/todos/tui/deliverables/TUI-TODO-001-启动身份与权限模型决策.md`
+   - 结果：通过；命中普通用户、root/sudo-only、permission denied、user-level daemon future-only 与 operator 边界等关键字。
+2. `rg -n "TUI-TODO-001|BLK-TUI-001|TUI-RISK-002|TUI-OQ-004|root/sudo-only|user-level daemon" docs/architecture/DASALL_TUI客户端设计方案.md docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；详细设计、专项 TODO 与 worklog 对 TUI 启动权限模型的当前口径一致。
+3. `rg -n "TUI client|## 17\. TUI 客户端查漏补缺|TUI-GAP-001|root/sudo-only|user-level daemon future-only" docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账已新增 TUI 索引与章节，且仍明确本轮只到 L1 设计可信，不外推为 command release ready。
+
+### 结果
+
+1. TUI 范围内的 `BLK-TUI-001` 已被文档化解阻；后续 `TUI-TODO-024` 可以基于稳定的 `permission denied` / daemon unavailable 语义继续实现 startup failure path。
+2. TUI 本轮没有引入 user-level daemon/socket，也没有放开 bare `dasall` 命令迁移；普通用户 full-function TUI 继续保持 future-only 设计流。
+3. TUI 命令迁移、projection seam、session seam 与 route preference 真链路仍需按各自 gate 逐项验收，本轮只完成权限模型冻结，不把文档收口误写成更高层 release 结论。
+
 # 记录 #753
 
 - 日期：2026-05-22
@@ -1514,36 +1543,6 @@
 1. `MEM-GAP-001` 当前态已与 `MEM-FIX-001`、`MEM-FIX-006` 和本轮 closeout 交付件对齐，不再作为 memory owner 的开放缺口保留在总账中。
 2. sqlite-vss production wiring、安装态 assets、same-session installed smoke 与只读 DB/search evidence 均已在本机真实目标上复验，未使用 qemu / kvm。
 3. 本轮只收口 local installed authoritative 范围，不把结论外推为 qemu / release runner guest-side rerun 或 L6 soak。
-
-## 记录 #714
-
-- 日期：2026-05-20
-- 阶段：llm / gap closeout
-- 任务：复验 `LLM-GAP-005` 边界回归防线并纠正专项总账状态漂移
-- 状态：已完成（总账已与既有 `LLM-FIX-005` 证据链对齐；不重开 qemu / release / soak 口径）
-
-### 执行前提
-
-1. 用户要求按 `project-implementation-cycle` 串行推进 `LLM-GAP-005`，每个原子任务完成后单独提交推送，并明确禁止使用 qemu / kvm 采集收敛证据；若验收写明 qemu，应改为本地可执行口径。
-2. 本地代码与文档静态检查确认：`tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp`、`tests/unit/llm/CMakeLists.txt`、`docs/todos/llm/DASALL_llm子系统专项TODO.md` 与既有 worklog 已记录 `LLM-FIX-005` 完成；当前真实缺口不是实现未落地，而是 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中 `LLM-GAP-005` 仍保留旧的开放状态。
-3. 本轮 authoritative 边界为：复验现有 llm/source boundary 自动化守护并回写总账当前态，不新增 llm 产品代码，不把 focused boundary tests 外推为 qemu / release-runner / L6 soak 证据。
-
-### 改动
-
-1. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `LLM-GAP-005` 从开放缺口改为“已闭合 / Medium”，并直接回链 `LLMBoundaryGuardComplianceTest`、`tests/unit/llm/CMakeLists.txt` 与 `docs/todos/llm/deliverables/LLM-FIX-005-llm-source-boundary-regression-guard.md` 的既有证据链。
-2. 更新本文档：记录本轮的状态漂移纠偏、聚焦验收结果与不得外推范围，避免后续评审继续把 `LLM-GAP-005` 误读为当前开放项。
-
-### 验证
-
-1. 聚焦边界守卫验收。
-   - `cmake -S . -B build-ci && cmake --build build-ci --target dasall_llm_boundary_guard_compliance_unit_test dasall_llm_interface_surface_unit_test dasall_contract_tests -j4 && ctest --test-dir build-ci --output-on-failure -R '(LLMBoundaryGuardCompliance|LLMInterfaceSurface|LLMRequestResponseContract)Test'`
-   - 结果：通过；`LLMBoundaryGuardComplianceTest`、`LLMInterfaceSurfaceTest` 与 `LLMRequestResponseContractTest` 共 `3/3` 通过。
-
-### 结果
-
-1. `LLM-GAP-005` 当前态已与既有 `LLM-FIX-005` 实现、专项 TODO 和历史 worklog 对齐，不再作为开放缺口继续跟踪。
-2. `LLMBoundaryGuardComplianceTest` 在当前树复验保持绿色，说明 llm/source boundary 自动化回归防线未回退。
-3. 本轮未使用 qemu / kvm，也不把 focused boundary regression 结果外推为 release runner、installed package 或 L6 soak 证据。
 
 ## 记录 #713
 
