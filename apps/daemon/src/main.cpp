@@ -16,12 +16,15 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <mutex>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <unistd.h>
 #include <vector>
@@ -34,6 +37,7 @@
 #include "DaemonSignalHandler.h"
 #include "AccessErrors.h"
 #include "AccessGatewayFactory.h"
+#include "../../../access/src/AsyncTaskRegistry.h"
 #include "IAccessGateway.h"
 #include "AgentFacade.h"
 #include "AccessOwnershipSecretWiring.h"
@@ -50,6 +54,8 @@ constexpr char kDaemonStartupDiagnosticsForceStageEnv[] =
   "DASALL_DAEMON_STARTUP_DIAGNOSTICS_FORCE_STAGE";
 constexpr char kRuntimeStateRootOverrideEnv[] =
   "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
+constexpr char kAsyncReceiptProofArtifactDirEnv[] =
+  "DASALL_DAEMON_ASYNC_RECEIPT_PROOF_DIR";
 
 struct AgentInitRequestBuildResult {
   dasall::runtime::AgentInitRequest request;
@@ -112,6 +118,16 @@ void emit_daemon_startup_failure(const DaemonStartupFailureContext& context,
 [[nodiscard]] std::optional<std::filesystem::path>
 runtime_state_root_override_from_env() {
   const char* raw_value = std::getenv(kRuntimeStateRootOverrideEnv);
+  if (raw_value == nullptr || *raw_value == '\0') {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(raw_value);
+}
+
+[[nodiscard]] std::optional<std::filesystem::path>
+async_receipt_proof_artifact_dir_from_env() {
+  const char* raw_value = std::getenv(kAsyncReceiptProofArtifactDirEnv);
   if (raw_value == nullptr || *raw_value == '\0') {
     return std::nullopt;
   }
@@ -263,6 +279,127 @@ resolve_validate_only_socket_policy() {
   }
   return it->second;
 }
+
+[[nodiscard]] std::string escape_json_string(std::string_view input) {
+  std::string output;
+  output.reserve(input.size());
+  for (const unsigned char current : input) {
+    switch (current) {
+      case '\\':
+        output += "\\\\";
+        break;
+      case '"':
+        output += "\\\"";
+        break;
+      case '\n':
+        output += "\\n";
+        break;
+      case '\r':
+        output += "\\r";
+        break;
+      case '\t':
+        output += "\\t";
+        break;
+      default:
+        output.push_back(static_cast<char>(current));
+        break;
+    }
+  }
+  return output;
+}
+
+class InstalledAsyncReceiptProofState {
+ public:
+  static std::shared_ptr<InstalledAsyncReceiptProofState> create_from_env(
+      const std::chrono::milliseconds receipt_ttl,
+      std::string* error) {
+    const auto artifact_dir = async_receipt_proof_artifact_dir_from_env();
+    if (!artifact_dir.has_value()) {
+      return nullptr;
+    }
+
+    std::error_code create_error;
+    std::filesystem::create_directories(*artifact_dir, create_error);
+    if (create_error) {
+      if (error != nullptr) {
+        *error = "failed to create async receipt proof artifact dir: " +
+                 create_error.message();
+      }
+      return nullptr;
+    }
+
+    return std::shared_ptr<InstalledAsyncReceiptProofState>(
+        new InstalledAsyncReceiptProofState(*artifact_dir, receipt_ttl));
+  }
+
+  [[nodiscard]] std::shared_ptr<dasall::access::AsyncTaskRegistry>
+  async_task_registry() const {
+    return async_task_registry_;
+  }
+
+  [[nodiscard]] dasall::access::RuntimeDispatchResult dispatch(
+      const dasall::access::RuntimeDispatchRequest& request) {
+    const auto request_id = dispatch_context_value(request, "request_id")
+                                .value_or(request.packet.packet_id);
+
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      active_requests_[request_id] = request.subject_identity.actor_ref;
+    }
+
+    dasall::access::RuntimeDispatchResult result;
+    result.disposition = dasall::access::AccessDisposition::AcceptedAsync;
+    result.receipt_ref = std::string("receipt:") + request_id;
+    return result;
+  }
+
+  [[nodiscard]] bool cancel(std::string_view request_id,
+                            std::string_view actor_ref) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = active_requests_.find(std::string(request_id));
+    if (it == active_requests_.end() || it->second != actor_ref) {
+      return false;
+    }
+
+    active_requests_.erase(it);
+    return true;
+  }
+
+  void observe_receipt(const dasall::access::AsyncTaskReceipt& receipt) const {
+    std::ofstream stream(artifact_dir_ / (receipt.request_id + ".json"),
+                         std::ios::trunc);
+    if (!stream.is_open()) {
+      return;
+    }
+
+    stream << "{\n"
+           << "  \"request_id\": \""
+           << escape_json_string(receipt.request_id) << "\",\n"
+           << "  \"receipt_ref\": \""
+           << escape_json_string(receipt.receipt_id) << "\",\n"
+           << "  \"actor_ref\": \""
+           << escape_json_string(receipt.actor_ref) << "\",\n"
+           << "  \"ownership_token\": \""
+           << escape_json_string(receipt.ownership_token) << "\",\n"
+           << "  \"task_ref\": \""
+           << escape_json_string(receipt.task_ref) << "\"\n"
+           << "}\n";
+  }
+
+ private:
+    explicit InstalledAsyncReceiptProofState(std::filesystem::path artifact_dir,
+                                             std::chrono::milliseconds receipt_ttl)
+        : artifact_dir_(std::move(artifact_dir)),
+          async_task_registry_(
+              std::make_shared<dasall::access::AsyncTaskRegistry>(
+                  artifact_dir_.string() + ":ownership-proof",
+                  receipt_ttl)) {}
+
+  std::filesystem::path artifact_dir_;
+    std::shared_ptr<dasall::access::AsyncTaskRegistry> async_task_registry_;
+  mutable std::mutex mutex_;
+  std::unordered_map<std::string, std::string> active_requests_;
+};
 
 [[nodiscard]] dasall::access::RuntimeDispatchResult
 map_agent_result_to_dispatch_result(
@@ -491,6 +628,22 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  std::string async_receipt_proof_error;
+  const auto async_receipt_proof_state =
+      InstalledAsyncReceiptProofState::create_from_env(
+        std::chrono::milliseconds(
+          static_cast<std::int64_t>(entry.bootstrap_config.receipt_ttl_sec) *
+          1000),
+          &async_receipt_proof_error);
+  if (async_receipt_proof_artifact_dir_from_env().has_value() &&
+      async_receipt_proof_state == nullptr) {
+    emit_daemon_startup_failure(failure_context,
+                                "async-receipt-proof-mode",
+                                "DAEMON_E_ASYNC_RECEIPT_PROOF_INIT_FAILED",
+                                async_receipt_proof_error);
+    return 1;
+  }
+
   dasall::access::DaemonAccessPipelineOptions pipeline_options;
     pipeline_options.bootstrap_config.bootstrap_revision =
       entry.config_revision.value_or("daemon-entry:" + daemon_profile_id);
@@ -522,14 +675,31 @@ int main(int argc, char* argv[]) {
   pipeline_options.daemon_version = "v1";
   pipeline_options.daemon_runtime_readiness_label =
       runtime_init_result.readiness_label();
-    pipeline_options.daemon_runtime_degraded_reasons =
+  pipeline_options.daemon_runtime_degraded_reasons =
       runtime_init_result.degraded_reasons;
   pipeline_options.runtime_dispatch_backend =
-      [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
+      [runtime_facade, async_receipt_proof_state](
+          const dasall::access::RuntimeDispatchRequest& request)
           -> dasall::access::RuntimeDispatchResult {
+        if (async_receipt_proof_state != nullptr && request.async_allowed) {
+          return async_receipt_proof_state->dispatch(request);
+        }
         const auto agent_result = runtime_facade->handle(request.agent_request);
         return map_agent_result_to_dispatch_result(request, agent_result);
       };
+  if (async_receipt_proof_state != nullptr) {
+    pipeline_options.async_task_registry =
+        async_receipt_proof_state->async_task_registry();
+    pipeline_options.runtime_cancel_backend =
+        [async_receipt_proof_state](std::string_view request_id,
+                                    std::string_view actor_ref) {
+          return async_receipt_proof_state->cancel(request_id, actor_ref);
+        };
+    pipeline_options.async_receipt_observer =
+        [async_receipt_proof_state](const dasall::access::AsyncTaskReceipt& receipt) {
+          async_receipt_proof_state->observe_receipt(receipt);
+        };
+  }
   pipeline_options.daemon_listener_ready =
       entry.bootstrap_config.has_consistent_values();
   pipeline_options.daemon_gateway_ready = true;

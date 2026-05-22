@@ -23,6 +23,12 @@ SECRET_CONSUMER_MATRIX_PATH=/usr/share/dasall/docs/ssot/SecretConsumerMatrix.md
 PRESERVED_SECRET_ROOT=
 SECRET_PROVISIONING_MODE=uninitialized
 SECRET_IMPORT_APPLY_JSON=
+ASYNC_RECEIPT_PROOF_ROOT=
+ASYNC_RECEIPT_PROOF_PID=
+ASYNC_RECEIPT_PROOF_SOCKET=
+ASYNC_RECEIPT_PROOF_LOG=
+ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT=
+ASYNC_RECEIPT_PROOF_STATE_ROOT=
 
 log() {
   printf '[pkg-smoke-install] %s\n' "$*"
@@ -164,6 +170,20 @@ write_artifact_file() {
   printf '%s\n' "$file_content" > "$PACKAGE_SMOKE_ARTIFACT_DIR/$file_name"
 }
 
+wait_for_path() {
+  target_path=$1
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if run_root test -f "$target_path"; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  return 1
+}
+
 json_extract_string() {
   json_payload=$1
   field_name=$2
@@ -178,6 +198,166 @@ value = payload.get(field_name)
 if isinstance(value, str):
     print(value)
 PY
+}
+
+stop_async_receipt_proof_daemon() {
+  if [ -n "$ASYNC_RECEIPT_PROOF_PID" ]; then
+    run_root kill "$ASYNC_RECEIPT_PROOF_PID" >/dev/null 2>&1 || true
+    ASYNC_RECEIPT_PROOF_PID=
+  fi
+
+  if [ -n "$ASYNC_RECEIPT_PROOF_ROOT" ]; then
+    run_root rm -rf "$ASYNC_RECEIPT_PROOF_ROOT" >/dev/null 2>&1 || true
+    ASYNC_RECEIPT_PROOF_ROOT=
+    ASYNC_RECEIPT_PROOF_SOCKET=
+    ASYNC_RECEIPT_PROOF_LOG=
+    ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT=
+    ASYNC_RECEIPT_PROOF_STATE_ROOT=
+  fi
+}
+
+wait_for_async_receipt_proof_daemon_ready() {
+  socket_path=$1
+  log_path=$2
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if run_root test -S "$socket_path" &&
+       run_dasall_cli dasall --socket-path "$socket_path" ping --json >/dev/null 2>&1 &&
+       run_dasall_cli dasall --socket-path "$socket_path" readiness --json >/dev/null 2>&1; then
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  run_root cat "$log_path" >&2 || true
+  return 1
+}
+
+verify_installed_async_receipt_flow() {
+  stop_async_receipt_proof_daemon
+
+  proof_profile_id=$(run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && printf "%s" "${DASALL_DAEMON_PROFILE_ID}"')
+  proof_request_id='acc-fix-001-installed-async-proof'
+  proof_request='{"prompt":"installed async receipt positive proof"}'
+
+  ASYNC_RECEIPT_PROOF_ROOT=$(run_root mktemp -d /tmp/dasall-async-receipt-proof.XXXXXX)
+  ASYNC_RECEIPT_PROOF_SOCKET="${ASYNC_RECEIPT_PROOF_ROOT}/daemon.sock"
+  ASYNC_RECEIPT_PROOF_LOG="${ASYNC_RECEIPT_PROOF_ROOT}/daemon.log"
+  ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT="${ASYNC_RECEIPT_PROOF_ROOT}/artifacts"
+  ASYNC_RECEIPT_PROOF_STATE_ROOT="${ASYNC_RECEIPT_PROOF_ROOT}/state"
+  ASYNC_RECEIPT_PROOF_PID_FILE="${ASYNC_RECEIPT_PROOF_ROOT}/daemon.pid"
+  ASYNC_RECEIPT_PROOF_CONFIG_FILE="${ASYNC_RECEIPT_PROOF_ROOT}/daemon.json"
+
+  run_root install -d -o dasall -g dasall -m 700 \
+    "$ASYNC_RECEIPT_PROOF_ROOT" \
+    "$ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT" \
+    "$ASYNC_RECEIPT_PROOF_STATE_ROOT"
+
+  run_root python3 - /etc/dasall/daemon.json "$ASYNC_RECEIPT_PROOF_CONFIG_FILE" "$ASYNC_RECEIPT_PROOF_SOCKET" <<'PY'
+import json
+import sys
+
+source_path = sys.argv[1]
+target_path = sys.argv[2]
+socket_path = sys.argv[3]
+
+with open(source_path, encoding='utf-8') as handle:
+    payload = json.load(handle)
+
+daemon_config = payload.setdefault('daemon', {})
+daemon_config['socket_path'] = socket_path
+
+with open(target_path, 'w', encoding='utf-8') as handle:
+    json.dump(payload, handle, indent=2)
+    handle.write('\n')
+PY
+  run_root chown dasall:dasall "$ASYNC_RECEIPT_PROOF_CONFIG_FILE"
+  run_root chmod 600 "$ASYNC_RECEIPT_PROOF_CONFIG_FILE"
+
+  run_root_sh "runuser -u dasall -- env DASALL_DAEMON_ASYNC_RECEIPT_PROOF_DIR='$ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT' DASALL_RUNTIME_STATE_ROOT_OVERRIDE='$ASYNC_RECEIPT_PROOF_STATE_ROOT' /usr/sbin/dasall-daemon --profile-id '$proof_profile_id' --config-file '$ASYNC_RECEIPT_PROOF_CONFIG_FILE' >'$ASYNC_RECEIPT_PROOF_LOG' 2>&1 & echo \$! >'$ASYNC_RECEIPT_PROOF_PID_FILE'"
+  ASYNC_RECEIPT_PROOF_PID=$(run_root cat "$ASYNC_RECEIPT_PROOF_PID_FILE")
+  assert_non_empty "$ASYNC_RECEIPT_PROOF_PID" 'async receipt proof daemon pid'
+  wait_for_async_receipt_proof_daemon_ready "$ASYNC_RECEIPT_PROOF_SOCKET" "$ASYNC_RECEIPT_PROOF_LOG" || \
+    fail 'async receipt proof daemon did not become ready'
+
+  PROOF_SUBMIT_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
+  assert_json_contains "$PROOF_SUBMIT_JSON" '"disposition":"accepted_async"' 'installed async receipt submit'
+  PROOF_RECEIPT_REF=$(json_extract_string "$PROOF_SUBMIT_JSON" receipt_ref)
+  assert_non_empty "$PROOF_RECEIPT_REF" 'installed async receipt submit receipt_ref'
+
+  PROOF_RECEIPT_FILE="${ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT}/${proof_request_id}.json"
+  wait_for_path "$PROOF_RECEIPT_FILE" || fail 'async receipt proof metadata file was not written'
+  PROOF_RECEIPT_JSON=$(run_root cat "$PROOF_RECEIPT_FILE")
+  PROOF_OWNERSHIP_TOKEN=$(json_extract_string "$PROOF_RECEIPT_JSON" ownership_token)
+  PROOF_ACTOR_REF=$(json_extract_string "$PROOF_RECEIPT_JSON" actor_ref)
+  assert_non_empty "$PROOF_OWNERSHIP_TOKEN" 'installed async receipt ownership_token'
+  assert_non_empty "$PROOF_ACTOR_REF" 'installed async receipt actor_ref'
+
+  PROOF_STATUS_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
+  assert_json_contains "$PROOF_STATUS_JSON" '"disposition":"completed"' 'installed async receipt status'
+  assert_json_contains "$PROOF_STATUS_JSON" '"response_text":"active"' 'installed async receipt active status'
+
+  PROOF_REPLAY_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
+  assert_json_contains "$PROOF_REPLAY_JSON" '"disposition":"accepted_async"' 'installed async receipt replay submit'
+  assert_json_contains "$PROOF_REPLAY_JSON" "\"receipt_ref\":\"${PROOF_RECEIPT_REF}\"" 'installed async receipt replay receipt_ref'
+
+  set +e
+  PROOF_STATUS_MISMATCH_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" 'local://uid/0' --json --timeout-ms 30000 2>&1)
+  PROOF_STATUS_MISMATCH_CODE=$?
+  set -e
+  [ "$PROOF_STATUS_MISMATCH_CODE" -eq 4 ] || fail "installed async receipt status owner mismatch should exit 4, got ${PROOF_STATUS_MISMATCH_CODE}: ${PROOF_STATUS_MISMATCH_JSON}"
+  assert_json_contains "$PROOF_STATUS_MISMATCH_JSON" '"error_ref":"status_owner_mismatch"' 'installed async receipt status owner mismatch'
+
+  set +e
+  PROOF_CANCEL_MISMATCH_JSON=$(run_root dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" cancel "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" --json --timeout-ms 30000 2>&1)
+  PROOF_CANCEL_MISMATCH_CODE=$?
+  set -e
+  [ "$PROOF_CANCEL_MISMATCH_CODE" -eq 4 ] || fail "installed async receipt cancel owner mismatch should exit 4, got ${PROOF_CANCEL_MISMATCH_CODE}: ${PROOF_CANCEL_MISMATCH_JSON}"
+  assert_json_contains "$PROOF_CANCEL_MISMATCH_JSON" '"error_ref":"cancel_owner_mismatch"' 'installed async receipt cancel owner mismatch'
+
+  PROOF_CANCEL_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" cancel "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
+  assert_json_contains "$PROOF_CANCEL_JSON" '"disposition":"completed"' 'installed async receipt cancel'
+  assert_json_contains "$PROOF_CANCEL_JSON" '"response_text":"cancelled"' 'installed async receipt cancel status'
+
+  PROOF_CANCELLED_STATUS_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
+  assert_json_contains "$PROOF_CANCELLED_STATUS_JSON" '"disposition":"completed"' 'installed async receipt cancelled status'
+  assert_json_contains "$PROOF_CANCELLED_STATUS_JSON" '"response_text":"cancelled"' 'installed async receipt cancelled projection'
+
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR/access-installed-async-receipt-proof.json" \
+      "$PROOF_RECEIPT_REF" \
+      "$PROOF_ACTOR_REF" \
+      "$PROOF_SUBMIT_JSON" \
+      "$PROOF_STATUS_JSON" \
+      "$PROOF_REPLAY_JSON" \
+      "$PROOF_STATUS_MISMATCH_JSON" \
+      "$PROOF_CANCEL_MISMATCH_JSON" \
+      "$PROOF_CANCEL_JSON" \
+      "$PROOF_CANCELLED_STATUS_JSON" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+data = {
+  "receipt_ref": sys.argv[2],
+  "actor_ref": sys.argv[3],
+  "submit": json.loads(sys.argv[4]),
+  "status_active": json.loads(sys.argv[5]),
+  "replay": json.loads(sys.argv[6]),
+  "status_owner_mismatch": json.loads(sys.argv[7]),
+  "cancel_owner_mismatch": json.loads(sys.argv[8]),
+  "cancel": json.loads(sys.argv[9]),
+  "status_after_cancel": json.loads(sys.argv[10]),
+}
+with open(path, 'w', encoding='ascii') as handle:
+    json.dump(data, handle, indent=2)
+    handle.write('\n')
+PY
+  fi
+
+  stop_async_receipt_proof_daemon
 }
 
 write_secret_consumer_package_proof() {
@@ -311,6 +491,7 @@ assert_positive_integer() {
 }
 
 cleanup() {
+  stop_async_receipt_proof_daemon
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
   if [ -n "${PRESERVED_SECRET_ROOT}" ]; then
     run_root rm -rf "${PRESERVED_SECRET_ROOT}" >/dev/null 2>&1 || true
@@ -668,6 +849,7 @@ PY
       --tool-proof-json "$PACKAGE_SMOKE_ARTIFACT_DIR/tools-installed-proof.json"
   fi
   write_secret_consumer_package_proof
+  verify_installed_async_receipt_flow
 
   set +e
   STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)

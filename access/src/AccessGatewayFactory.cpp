@@ -345,7 +345,8 @@ void project_packet_headers_to_request_context(const InboundPacket& packet,
     RuntimeDispatchResult& dispatch_result,
     const RuntimeDispatchRequest& request,
     AsyncTaskRegistry& async_task_registry,
-    AccessObservabilityBridge& observability_bridge) {
+    AccessObservabilityBridge& observability_bridge,
+    const AsyncReceiptObserver& async_receipt_observer) {
   if (dispatch_result.disposition != AccessDisposition::AcceptedAsync) {
     return true;
   }
@@ -380,6 +381,9 @@ void project_packet_headers_to_request_context(const InboundPacket& packet,
   dispatch_result.publish_envelope->protocol_status_hint = "202";
   dispatch_result.publish_envelope->payload = "accepted_async";
   dispatch_result.publish_envelope->receipt = *receipt;
+  if (async_receipt_observer) {
+    async_receipt_observer(*receipt);
+  }
   (void)observability_bridge.emit_receipt_event(
       request_id,
       session_id,
@@ -1357,7 +1361,8 @@ build_daemon_submit_pipeline(
             if (!attach_async_receipt(dispatch_result,
                                       normalized.runtime_request,
                                       *async_task_registry,
-                                      *observability_bridge)) {
+                                      *observability_bridge,
+                                      resolved_options.async_receipt_observer)) {
               return make_rejected_result(AccessErrorCode::InternalError,
                                           "ownership_secret_unavailable");
             }
@@ -1585,7 +1590,8 @@ build_gateway_submit_pipeline(
         if (!attach_async_receipt(dispatch_result,
                       normalized.runtime_request,
                       *async_task_registry,
-                      *observability_bridge)) {
+                      *observability_bridge,
+                      {})) {
           return make_rejected_result(AccessErrorCode::InternalError,
                         "ownership_secret_unavailable");
         }

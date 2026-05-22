@@ -1,5 +1,46 @@
 # DASALL 开发执行记录
 
+# 记录 #752
+
+- 日期：2026-05-22
+- 阶段：access / packaging
+- 任务：推进 `ACC-FIX-001`，建立 installed async receipt 正向 gate
+- 状态：已完成（local installed async receipt positive evidence 已闭合；本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `ACC-FIX-001`，若验收口径涉及 qemu/kvm 必须改为本机真实安装态；同时要求逐文件落盘，并在任务完成后按仓库规范提交推送。
+2. 近端核验确认：`ACC-GAP-001` 与 `BC-04` 的核心缺口不是 build-tree async causality，而是 installed package 只有 `status_missing` / `cancel_missing` negative path，无法宣称 package async ready。
+3. 前置 blocker 复核：`ACC-FIX-001` 无独立 BLOCK；`DaemonReceiptFlowIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest` 与 `FullIntAsyncRecoveryCausalityTest` 已存在，可直接作为回归门。
+
+### 改动
+
+1. 更新 `access/include/AccessGatewayFactory.h` 与 `access/src/AccessGatewayFactory.cpp`：新增 daemon internal `AsyncReceiptObserver` seam，让组合根可旁路观察完整 `AsyncTaskReceipt`，同时不扩 public CLI / daemon schema。
+2. 更新 `apps/daemon/src/main.cpp`：新增 `DASALL_DAEMON_ASYNC_RECEIPT_PROOF_DIR` env-gated proof mode；proof mode 下为 async 请求注入 proof-only `AsyncTaskRegistry`、dispatch backend、cancel backend 与 receipt observer，使 installed package smoke 能在不改默认主链的前提下生成真实 HMAC receipt。
+3. 更新 `scripts/packaging/pkg_smoke_install.sh`：
+   - 生成临时 daemon config 覆盖 `socket_path`，避免 installed config file 与 `--socket-path` flag 冲突。
+   - 拉起临时 proof daemon，固定 `submit -> receipt -> status(active) -> replay -> cancel -> status(cancelled)` 正向链路，并落盘 `access-installed-async-receipt-proof.json`。
+   - `status_owner_mismatch` 继续通过显式 `actor_ref` 失配验证；`cancel_owner_mismatch` 改为 root CLI 真实 peer identity 触发，因为 cancel 路径以认证后的 subject actor 为准，不消费伪造 payload actor。
+4. 新增 `docs/todos/access/deliverables/ACC-FIX-001-installed-async-receipt-positive-gate收口.md`，并回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/ssot/BusinessChainIntegrationMatrix.md`，把 `ACC-GAP-001` / `ACC-FIX-001` / `BC-04` 的口径统一升级为 local installed positive evidence。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_access_integration_tests","dasall_fullint_011_async_recovery_causality"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["DaemonReceiptFlowIntegrationTest","AccessAsyncReceiptQueryCancelIntegrationTest","FullIntAsyncRecoveryCausalityTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+   - fallback：`ctest --test-dir build/vscode-linux-ninja -R '^(DaemonReceiptFlowIntegrationTest|AccessAsyncReceiptQueryCancelIntegrationTest|FullIntAsyncRecoveryCausalityTest)$' --output-on-failure`
+   - 结果：3/3 通过。
+3. `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-rt-fix-006-pkg-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；artifact 目录新增 `access-installed-async-receipt-proof.json`。
+   - 关键字段：`submit.disposition=accepted_async`、`replay.receipt_ref=receipt:acc-fix-001-installed-async-proof`、`status_owner_mismatch.exit_code=4`、`cancel_owner_mismatch.exit_code=4`、`cancel.result.response_text=cancelled`、`status_after_cancel.result.response_text=cancelled`。
+
+### 结果
+
+1. `ACC-GAP-001` 已闭合，`ACC-FIX-001` 已完成，`BC-04` 从 missing-reject partial 升级为 local installed package positive evidence。
+2. 默认 daemon 行为与 public CLI / daemon surface 未被 proof-mode 扩面；proof registry 只在 package smoke 拉起的 env-gated 临时 daemon 中启用。
+3. Access 剩余缺口继续收敛到 installed HTTP gateway、multi-instance receipt authority、streaming lifecycle 与 release/qemu/security hardening，不再把“installed 只有 missing receipt reject”继续记成当前 owner blocker。
+
 # 记录 #751
 
 - 日期：2026-05-22

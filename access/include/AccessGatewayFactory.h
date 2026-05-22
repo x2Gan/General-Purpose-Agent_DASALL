@@ -39,6 +39,8 @@ class AsyncTaskRegistry;
 using AccessObservabilityEmitBackend =
     std::function<bool(std::string_view event_name,
                        const std::map<std::string, std::string>& fields)>;
+using AsyncReceiptObserver =
+  std::function<void(const AsyncTaskReceipt& receipt)>;
 
 struct AccessGatewayFactoryOptions {
   using SubmitPipeline =
@@ -84,7 +86,8 @@ struct DaemonAccessPipelineOptions {
   std::shared_ptr<dasall::infra::secret::ISecretManager> ownership_secret_manager;
   std::shared_ptr<dasall::infra::policy::ISecurityPolicyManager> security_policy_manager;
   PublishBackend publish_backend{};
-    AccessObservabilityEmitBackend observability_emit_backend{};
+  AccessObservabilityEmitBackend observability_emit_backend{};
+  AsyncReceiptObserver async_receipt_observer{};
 
   RuntimeDispatchBackend runtime_dispatch_backend{};
   RuntimeCancelBackend runtime_cancel_backend{};
