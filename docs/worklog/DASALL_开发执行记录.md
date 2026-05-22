@@ -1,3 +1,31 @@
+# 记录 #767
+
+- 日期：2026-05-22
+- 阶段：tui/composer state machine baseline
+- 任务：TUI-TODO-014 实现 composer 状态机
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-014-composer状态机基线.md`，冻结 `TuiComposerKey` / `TuiComposerAction` / `TuiComposerUpdate` / `TuiInputHistory` 的最小数据形状、multiline/submit/history/reverse-search/external-editor/busy draft 的局部状态迁移，以及 focused build/test 的验收口径。
+2. 新增 `apps/tui/src/view/TuiComposer.h`、`apps/tui/src/view/TuiComposer.cpp` 与 `apps/tui/src/view/TuiInputHistory.h`，实现 `TextChanged`、`Enter`、`Alt+Enter`、`Ctrl+J`、`Up`、`Down`、`Ctrl+R` 的本地 composer 状态机，覆盖提交清空草稿、busy draft 禁止重提、history recall seed 恢复、reverse-search 循环与 external-editor cancel/success 语义。
+3. 新增 `tests/unit/tui/TuiComposerTest.cpp` 与 `tests/unit/tui/TuiComposerHistoryTest.cpp`，focused 覆盖 multiline/submit/busy/external-editor、history recall/reverse-search、`TuiInputHistory` 的 non-blank record 与 composer/input-history 文件的 no-private-include boundary。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_composer_unit_test`、`dasall_tui_composer_history_unit_test`、`TuiComposerTest` 与 `TuiComposerHistoryTest`，并把原来的 `TuiComposerTest` topology placeholder 替换为真实 unit target。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-014 完成状态、当前 composer 基线、`TUI-GAP-014` 收口结果与下一步执行策略。
+
+### 验证
+
+1. `cmake --build --preset vscode-linux-ninja --target dasall_tui_composer_unit_test dasall_tui_composer_history_unit_test`
+   - 结果：通过；`TuiComposer.*`、`TuiInputHistory.h`、两个 focused tests 与 `tests/unit/tui/CMakeLists.txt` 的接线均成功编译并链接。
+2. `ctest --preset vscode-linux-ninja --output-on-failure -R '^(TuiComposerTest|TuiComposerHistoryTest)$'`
+   - 结果：通过；`TuiComposerTest`、`TuiComposerHistoryTest` 2/2 通过。
+
+### 结果
+
+1. `TUI-TODO-014` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖或 renderer 依赖的 composer 状态机基线。
+2. `BLK-TUI-006` 继续保留在 IME/CJK/resize 的人工 gate，但已不再阻断先把 multiline/submit/history/reverse-search/external-editor/busy draft 的自动化状态机落盘。
+3. 本轮没有实现 selector、transcript、status panel、terminal probe、renderer 或 `TuiApp`；这些能力继续后置到 `TUI-TODO-015~020` 与既有 gate。
+
 # 记录 #766
 
 - 日期：2026-05-22
