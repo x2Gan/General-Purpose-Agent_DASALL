@@ -53,6 +53,8 @@ constexpr char kDefaultGatewayProfileId[] = "desktop_full";
 constexpr int kDefaultGatewayListenPort = 8080;
 constexpr char kGatewayStartupDiagnosticsForceStageEnv[] =
   "DASALL_GATEWAY_STARTUP_DIAGNOSTICS_FORCE_STAGE";
+constexpr char kGatewayForceMissingRuntimeDispatchBackendEnv[] =
+  "DASALL_GATEWAY_FORCE_MISSING_RUNTIME_DISPATCH_BACKEND";
 constexpr char kRuntimeStateRootOverrideEnv[] =
   "DASALL_RUNTIME_STATE_ROOT_OVERRIDE";
 
@@ -103,6 +105,17 @@ void emit_gateway_startup_failure(const GatewayStartupFailureContext& context,
 [[nodiscard]] bool gateway_startup_stage_forced(std::string_view stage) {
   const char* forced_stage = std::getenv(kGatewayStartupDiagnosticsForceStageEnv);
   return forced_stage != nullptr && stage == forced_stage;
+}
+
+[[nodiscard]] bool gateway_force_missing_runtime_dispatch_backend() {
+  const char* raw_value =
+      std::getenv(kGatewayForceMissingRuntimeDispatchBackendEnv);
+  if (raw_value == nullptr || *raw_value == '\0') {
+    return false;
+  }
+
+  const std::string_view flag(raw_value);
+  return flag != "0" && flag != "false" && flag != "FALSE";
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
@@ -418,12 +431,14 @@ int main(int argc, char* argv[]) {
   dasall::apps::runtime_support::wire_runtime_secret_manager_into_access_ownership_seam(
       runtime_init_request.request.dependency_set,
       gateway_options);
-  gateway_options.runtime_dispatch_backend =
-      [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
-          -> dasall::access::RuntimeDispatchResult {
-        const auto agent_result = runtime_facade->handle(request.agent_request);
-        return map_agent_result_to_dispatch_result(request, agent_result);
-      };
+  if (!gateway_force_missing_runtime_dispatch_backend()) {
+    gateway_options.runtime_dispatch_backend =
+        [runtime_facade](const dasall::access::RuntimeDispatchRequest& request)
+            -> dasall::access::RuntimeDispatchResult {
+          const auto agent_result = runtime_facade->handle(request.agent_request);
+          return map_agent_result_to_dispatch_result(request, agent_result);
+        };
+  }
 
   auto gateway = dasall::access::create_gateway_access_gateway(
       std::move(gateway_options));

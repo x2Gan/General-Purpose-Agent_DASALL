@@ -1,5 +1,49 @@
 # DASALL 开发执行记录
 
+# 记录 #753
+
+- 日期：2026-05-22
+- 阶段：access / packaging
+- 任务：推进 `ACC-FIX-002`，补齐 installed HTTP gateway unary evidence
+- 状态：已完成（local installed HTTP gateway unary positive evidence 已闭合；本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `ACC-FIX-002`，若验收口径涉及 qemu/kvm 必须改为本机真实安装态，并在任务完成后按仓库规范提交推送。
+2. 近端核验确认：`ACC-GAP-002` 的根因不是 package smoke 漏写一个 curl，而是当前 installed package 根本没有 gateway binary；`dpkg -L dasall-cli/dasall-daemon/dasall-common` 均无 gateway 相关文件，因此 `BC-02` 只能停留在 build-tree L3。
+3. 前置 blocker 复核：`ACC-FIX-001` 已完成，`ACC-FIX-002` 无独立 BLOCK；`dasall_gate_int_10`、`GatewayBinaryUnarySmokeTest`、`GatewayBinaryMissingBackendRegressionTest` 与 `HttpGatewaySubmitIntegrationTest` 已存在，可直接作为 build-tree 回归门。
+
+### 改动
+
+1. 更新 `apps/gateway/CMakeLists.txt`：为 `dasall_gateway` 增加 `OUTPUT_NAME dasall-gateway` 与 install rule，使 gateway 生成正式 installed binary `/usr/sbin/dasall-gateway`。
+2. 更新 `debian/dasall-daemon.install`：将 `usr/sbin/dasall-gateway` 纳入 `dasall-daemon` 包内容，打通 rebuilt `.deb` 的安装布局。
+3. 更新 `apps/gateway/src/main.cpp`：新增 env-gated `DASALL_GATEWAY_FORCE_MISSING_RUNTIME_DISPATCH_BACKEND` seam，仅在 package smoke 负向证明时故意不注入 `runtime_dispatch_backend`，从而在真实 installed binary 上固定 `production submit pipeline unavailable` fail-closed；默认 public HTTP route 不变。
+4. 更新 `scripts/packaging/pkg_smoke_install.sh`：
+   - 新增 installed gateway smoke，拉起 `/usr/sbin/dasall-gateway --profile-id desktop_full --port <ephemeral>`，校验 `/health/ready` 返回 `READY runtime_readiness=default-ready`，并对 `POST /v1/submit` 固定 `status=200`、非空 `result_id` 与非空 `payload`。
+   - 同轮新增 missing-backend negative，固定 `stage=access-gateway-init`、`detail=production submit pipeline unavailable` 与 `negative_listener_exposed=false`。
+   - 落盘 `access-installed-gateway-http-proof.json`。
+5. 新增 `docs/todos/access/deliverables/ACC-FIX-002-installed-http-gateway-unary-evidence收口.md`，并回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/ssot/BusinessChainIntegrationMatrix.md`，把 `ACC-GAP-002` / `ACC-FIX-002` / `BC-02` 的口径统一升级为 local installed positive evidence。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_gate_int_10"])`
+   - 结果：通过；`Gate-INT-10` discoverability 与 acceptance 保持绿色。
+2. `RunCtest_CMakeTools(tests=["HttpGatewaySubmitIntegrationTest","GatewayBinaryUnarySmokeTest","GatewayBinaryMissingBackendRegressionTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+   - fallback：`Build_CMakeTools(buildTargets=["dasall_access_gateway_submit_composition_test","dasall_access_gateway_binary_unary_smoke_integration_test"])`
+   - 结果：通过；custom target 实际执行了 submit composition、happy-path smoke 与 missing-backend regression。
+3. rebuilt package 检查
+   - 结果：新的 `dasall-daemon_0.1.0-1_amd64.deb` 已包含 `/usr/sbin/dasall-gateway`。
+4. `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-rt-fix-006-pkg-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过；artifact 目录新增 `access-installed-gateway-http-proof.json`。
+   - 关键字段：`gateway_binary_path=/usr/sbin/dasall-gateway`、`ready_body=READY runtime_readiness=default-ready`、`submit.status=200`、`negative_listener_exposed=false`、`negative_log` 含 `detail=production submit pipeline unavailable`。
+
+### 结果
+
+1. `ACC-GAP-002` 已闭合，`ACC-FIX-002` 已完成，`BC-02` 从 build-tree L3 升级为 local installed package positive evidence。
+2. installed gateway binary 现已进入正式 Debian 安装布局；package smoke 可以在本机真实安装态上证明 ready / submit 正向与 missing-backend fail-closed negative，而不是继续停留在 build-tree app-binary。
+3. Access 剩余缺口继续收敛到 multi-instance receipt authority、streaming lifecycle 与 release/qemu/security hardening；本轮不把 policy deny release matrix、streaming 或 qemu/release-runner 混写为已完成。
+
 # 记录 #752
 
 - 日期：2026-05-22

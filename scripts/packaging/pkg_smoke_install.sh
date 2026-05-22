@@ -11,6 +11,8 @@ COMMON_DEB="${ARTIFACT_DIR}/dasall-common_${VERSION}_all.deb"
 CLI_DEB="${ARTIFACT_DIR}/dasall-cli_${VERSION}_${ARCH}.deb"
 DAEMON_DEB="${ARTIFACT_DIR}/dasall-daemon_${VERSION}_${ARCH}.deb"
 META_DEB="${ARTIFACT_DIR}/dasall_${VERSION}_all.deb"
+GATEWAY_BINARY_PATH=/usr/sbin/dasall-gateway
+GATEWAY_HTTP_PROOF_PROFILE_ID=desktop_full
 LLM_SECRET_PATH=/var/lib/dasall/secrets/llm/providers/deepseek-prod.secret
 LLM_PROVIDER_MANIFEST_PATH=/usr/share/dasall/llm/providers/deepseek/manifest.yaml
 MEMORY_DB_PATH=/var/lib/dasall/memory/memory.db
@@ -29,6 +31,11 @@ ASYNC_RECEIPT_PROOF_SOCKET=
 ASYNC_RECEIPT_PROOF_LOG=
 ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT=
 ASYNC_RECEIPT_PROOF_STATE_ROOT=
+GATEWAY_HTTP_PROOF_ROOT=
+GATEWAY_HTTP_PROOF_PID=
+GATEWAY_HTTP_PROOF_PORT=
+GATEWAY_HTTP_PROOF_LOG=
+GATEWAY_HTTP_PROOF_STATE_ROOT=
 
 log() {
   printf '[pkg-smoke-install] %s\n' "$*"
@@ -106,6 +113,24 @@ assert_json_matches() {
 
   printf '%s\n' "$json_payload" | grep -Eq "$expected_regex" || \
     fail "${label}: expected JSON pattern not found: ${expected_regex}"
+}
+
+assert_text_contains() {
+  text_payload=$1
+  expected=$2
+  label=$3
+
+  printf '%s\n' "$text_payload" | grep -Fq "$expected" || \
+    fail "${label}: expected text fragment not found: ${expected}"
+}
+
+assert_text_matches() {
+  text_payload=$1
+  expected_regex=$2
+  label=$3
+
+  printf '%s\n' "$text_payload" | grep -Eq "$expected_regex" || \
+    fail "${label}: expected text pattern not found: ${expected_regex}"
 }
 
 json_contains_fragment() {
@@ -198,6 +223,191 @@ value = payload.get(field_name)
 if isinstance(value, str):
     print(value)
 PY
+}
+
+reserve_loopback_port() {
+  python3 <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+terminate_installed_gateway_http_proof() {
+  [ -n "$GATEWAY_HTTP_PROOF_PID" ] || return 0
+
+  run_root kill "$GATEWAY_HTTP_PROOF_PID" >/dev/null 2>&1 || true
+
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if ! run_root kill -0 "$GATEWAY_HTTP_PROOF_PID" >/dev/null 2>&1; then
+      GATEWAY_HTTP_PROOF_PID=
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  run_root kill -9 "$GATEWAY_HTTP_PROOF_PID" >/dev/null 2>&1 || true
+  GATEWAY_HTTP_PROOF_PID=
+}
+
+stop_installed_gateway_http_proof() {
+  terminate_installed_gateway_http_proof
+
+  if [ -n "$GATEWAY_HTTP_PROOF_ROOT" ]; then
+    run_root rm -rf "$GATEWAY_HTTP_PROOF_ROOT" >/dev/null 2>&1 || true
+  fi
+
+  GATEWAY_HTTP_PROOF_ROOT=
+  GATEWAY_HTTP_PROOF_PORT=
+  GATEWAY_HTTP_PROOF_LOG=
+  GATEWAY_HTTP_PROOF_STATE_ROOT=
+}
+
+start_installed_gateway_http_proof() {
+  proof_mode=$1
+
+  stop_installed_gateway_http_proof
+
+  GATEWAY_HTTP_PROOF_ROOT=$(run_root mktemp -d /tmp/dasall-gateway-http-proof.XXXXXX)
+  GATEWAY_HTTP_PROOF_PORT=$(reserve_loopback_port)
+  GATEWAY_HTTP_PROOF_LOG="${GATEWAY_HTTP_PROOF_ROOT}/gateway.log"
+  GATEWAY_HTTP_PROOF_STATE_ROOT="${GATEWAY_HTTP_PROOF_ROOT}/state"
+  GATEWAY_HTTP_PROOF_PID_FILE="${GATEWAY_HTTP_PROOF_ROOT}/gateway.pid"
+
+  run_root install -d -o dasall -g dasall -m 700 \
+    "$GATEWAY_HTTP_PROOF_ROOT" \
+    "$GATEWAY_HTTP_PROOF_STATE_ROOT"
+
+  gateway_extra_env=
+  if [ "$proof_mode" = 'missing-backend' ]; then
+    gateway_extra_env='DASALL_GATEWAY_FORCE_MISSING_RUNTIME_DISPATCH_BACKEND=1'
+  fi
+
+  run_root_sh "runuser -u dasall -- env DASALL_RUNTIME_STATE_ROOT_OVERRIDE='$GATEWAY_HTTP_PROOF_STATE_ROOT' ${gateway_extra_env} '$GATEWAY_BINARY_PATH' --profile-id '$GATEWAY_HTTP_PROOF_PROFILE_ID' --port '$GATEWAY_HTTP_PROOF_PORT' >'$GATEWAY_HTTP_PROOF_LOG' 2>&1 & echo \$! >'$GATEWAY_HTTP_PROOF_PID_FILE'"
+  GATEWAY_HTTP_PROOF_PID=$(run_root cat "$GATEWAY_HTTP_PROOF_PID_FILE")
+  assert_non_empty "$GATEWAY_HTTP_PROOF_PID" 'installed gateway http proof pid'
+}
+
+wait_for_installed_gateway_http_ready() {
+  proof_port=$1
+  log_path=$2
+
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    ready_body=$(curl -fsS --max-time 2 "http://127.0.0.1:${proof_port}/health/ready" 2>/dev/null || true)
+    if [ -n "$ready_body" ] && printf '%s\n' "$ready_body" | grep -Fq 'READY'; then
+      printf '%s\n' "$ready_body"
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  run_root cat "$log_path" >&2 || true
+  return 1
+}
+
+wait_for_installed_gateway_http_exit() {
+  proof_pid=$1
+  log_path=$2
+
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if ! run_root kill -0 "$proof_pid" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  run_root cat "$log_path" >&2 || true
+  return 1
+}
+
+verify_installed_gateway_http_flow() {
+  require_command curl
+
+  start_installed_gateway_http_proof positive
+
+  GATEWAY_READY_BODY=$(wait_for_installed_gateway_http_ready "$GATEWAY_HTTP_PROOF_PORT" "$GATEWAY_HTTP_PROOF_LOG") || \
+    fail 'installed gateway http proof did not become ready'
+  assert_text_contains "$GATEWAY_READY_BODY" 'runtime_readiness=default-ready' 'installed gateway readiness detail'
+  printf '%s\n' "$GATEWAY_READY_BODY" | grep -Fq 'stub-ready' && \
+    fail "installed gateway readiness should not expose stub-ready: ${GATEWAY_READY_BODY}"
+
+  GATEWAY_SUBMIT_JSON=$(curl -fsS --max-time 120 \
+    -H 'Content-Type: application/json' \
+    -X POST \
+    --data '{"packet_id":"acc-fix-002-installed-gateway","entry_type":"gateway","peer_ref":"jwt:user://tenant-a/alice","payload":"installed gateway smoke","trace_id":"acc-fix-002-installed-gateway-trace","session_hint":"acc-fix-002-installed-gateway-session"}' \
+    "http://127.0.0.1:${GATEWAY_HTTP_PROOF_PORT}/v1/submit")
+  assert_json_contains "$GATEWAY_SUBMIT_JSON" '"status":"200"' 'installed gateway unary submit'
+  assert_json_matches "$GATEWAY_SUBMIT_JSON" '"result_id":"[^"]+"' 'installed gateway unary result_id'
+  assert_json_matches "$GATEWAY_SUBMIT_JSON" '"payload":"[^"]+' 'installed gateway unary payload'
+
+  terminate_installed_gateway_http_proof
+  GATEWAY_POSITIVE_LOG=$(run_root cat "$GATEWAY_HTTP_PROOF_LOG")
+  assert_text_contains "$GATEWAY_POSITIVE_LOG" '[dasall_gateway] runtime readiness=default-ready' 'installed gateway runtime readiness log'
+  assert_text_contains "$GATEWAY_POSITIVE_LOG" "[dasall_gateway] listening on :${GATEWAY_HTTP_PROOF_PORT}" 'installed gateway listen log'
+  assert_text_contains "$GATEWAY_POSITIVE_LOG" '[dasall_gateway] stopped' 'installed gateway graceful stop log'
+  stop_installed_gateway_http_proof
+
+  start_installed_gateway_http_proof missing-backend
+  wait_for_installed_gateway_http_exit "$GATEWAY_HTTP_PROOF_PID" "$GATEWAY_HTTP_PROOF_LOG" || \
+    fail 'installed gateway missing-backend proof did not exit'
+  GATEWAY_HTTP_PROOF_PID=
+
+  set +e
+  GATEWAY_NEGATIVE_READY_OUTPUT=$(curl -fsS --max-time 2 "http://127.0.0.1:${GATEWAY_HTTP_PROOF_PORT}/health/ready" 2>&1)
+  GATEWAY_NEGATIVE_READY_CODE=$?
+  set -e
+  [ "$GATEWAY_NEGATIVE_READY_CODE" -ne 0 ] || \
+    fail "installed gateway missing-backend proof should not expose a ready listener: ${GATEWAY_NEGATIVE_READY_OUTPUT}"
+
+  GATEWAY_NEGATIVE_LOG=$(run_root cat "$GATEWAY_HTTP_PROOF_LOG")
+  assert_text_contains "$GATEWAY_NEGATIVE_LOG" 'stage=access-gateway-init' 'installed gateway missing-backend startup stage'
+  assert_text_contains "$GATEWAY_NEGATIVE_LOG" 'detail=production submit pipeline unavailable' 'installed gateway missing-backend fail-closed detail'
+  printf '%s\n' "$GATEWAY_NEGATIVE_LOG" | grep -Fq '[dasall_gateway] listening on :' && \
+    fail "installed gateway missing-backend proof should fail before listen: ${GATEWAY_NEGATIVE_LOG}"
+
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    python3 - "$PACKAGE_SMOKE_ARTIFACT_DIR/access-installed-gateway-http-proof.json" \
+      "$GATEWAY_BINARY_PATH" \
+      "$GATEWAY_HTTP_PROOF_PROFILE_ID" \
+      "$GATEWAY_READY_BODY" \
+      "$GATEWAY_SUBMIT_JSON" \
+      "$GATEWAY_POSITIVE_LOG" \
+      "$GATEWAY_NEGATIVE_LOG" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+data = {
+  'gateway_binary_path': sys.argv[2],
+  'effective_profile_id': sys.argv[3],
+  'ready_body': sys.argv[4],
+  'submit': json.loads(sys.argv[5]),
+  'positive_log': sys.argv[6],
+  'negative_log': sys.argv[7],
+  'negative_listener_exposed': False,
+  'non_extrapolation': [
+    'This artifact proves local installed HTTP gateway unary positive evidence only.',
+    'It does not imply multi-instance authority, streaming readiness, or qemu/release-runner closure.',
+    'The missing-backend negative is env-gated for package smoke and does not widen the public HTTP surface.',
+  ],
+}
+with open(path, 'w', encoding='ascii') as handle:
+  json.dump(data, handle, indent=2)
+  handle.write('\n')
+PY
+  fi
+
+  stop_installed_gateway_http_proof
 }
 
 stop_async_receipt_proof_daemon() {
@@ -491,6 +701,7 @@ assert_positive_integer() {
 }
 
 cleanup() {
+  stop_installed_gateway_http_proof
   stop_async_receipt_proof_daemon
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
   if [ -n "${PRESERVED_SECRET_ROOT}" ]; then
@@ -615,6 +826,7 @@ verify_installed_files() {
   run_root test -f /usr/share/doc/dasall-daemon/README.Debian
   run_root test -f /etc/default/dasall-daemon
   run_root test -f /etc/dasall/daemon.json
+  run_root test -x "$GATEWAY_BINARY_PATH"
   run_root test -f /usr/lib/dasall/sqlite-vss/vector0.so
   run_root test -f /usr/lib/dasall/sqlite-vss/vss0.so
   run_root test -f "$LLM_PROVIDER_MANIFEST_PATH"
@@ -651,6 +863,8 @@ verify_explicit_start() {
   if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
     log "writing package smoke artifacts to ${PACKAGE_SMOKE_ARTIFACT_DIR}"
   fi
+
+  verify_installed_gateway_http_flow
 
   MEMORY_SESSION_HINT='pkg-smoke-memory-session'
   MEMORY_EXPECTED_MARKER='mem-fix-006-local-proof'

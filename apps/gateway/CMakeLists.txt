@@ -30,4 +30,12 @@ target_include_directories(dasall_gateway
     ${CMAKE_SOURCE_DIR}/access/src
 )
 
+set_target_properties(dasall_gateway PROPERTIES
+  OUTPUT_NAME dasall-gateway
+)
+
+install(TARGETS dasall_gateway
+  RUNTIME DESTINATION ${DASALL_INSTALL_SBINDIR}
+)
+
 dasall_apply_common_options(dasall_gateway)
