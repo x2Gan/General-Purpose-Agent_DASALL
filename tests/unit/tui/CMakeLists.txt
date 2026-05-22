@@ -75,6 +75,11 @@ add_executable(dasall_tui_status_panel_unit_test
   ${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiStatusPanel.cpp
 )
 
+add_executable(dasall_tui_terminal_capability_probe_unit_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiTerminalCapabilityProbeTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/TuiTerminalCapabilityProbe.cpp
+)
+
 add_executable(dasall_tui_route_catalog_filter_unit_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiRouteCatalogFilterTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiModelSelector.cpp
@@ -140,6 +145,11 @@ target_include_directories(dasall_tui_status_panel_unit_test
     ${CMAKE_SOURCE_DIR}/apps/tui/src
 )
 
+target_include_directories(dasall_tui_terminal_capability_probe_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/tui/src
+)
+
 target_include_directories(dasall_tui_route_catalog_filter_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/tui/src
@@ -201,6 +211,11 @@ target_link_libraries(dasall_tui_transcript_view_unit_test
 )
 
 target_link_libraries(dasall_tui_status_panel_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+target_link_libraries(dasall_tui_terminal_capability_probe_unit_test
   PRIVATE
     dasall_test_support
 )
@@ -279,6 +294,12 @@ target_compile_definitions(dasall_tui_status_panel_unit_test
     DASALL_TUI_STATUS_PANEL_IMPL="${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiStatusPanel.cpp"
 )
 
+target_compile_definitions(dasall_tui_terminal_capability_probe_unit_test
+  PRIVATE
+    DASALL_TUI_TERMINAL_CAPABILITY_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/TuiTerminalCapabilityProbe.h"
+    DASALL_TUI_TERMINAL_CAPABILITY_IMPL="${CMAKE_SOURCE_DIR}/apps/tui/src/terminal/TuiTerminalCapabilityProbe.cpp"
+)
+
 dasall_apply_common_options(dasall_tui_projection_types_unit_test)
 dasall_apply_common_options(dasall_tui_data_source_contract_unit_test)
 dasall_apply_common_options(dasall_tui_fake_scenario_catalog_unit_test)
@@ -291,6 +312,7 @@ dasall_apply_common_options(dasall_tui_composer_history_unit_test)
 dasall_apply_common_options(dasall_tui_model_selector_unit_test)
 dasall_apply_common_options(dasall_tui_transcript_view_unit_test)
 dasall_apply_common_options(dasall_tui_status_panel_unit_test)
+dasall_apply_common_options(dasall_tui_terminal_capability_probe_unit_test)
 dasall_apply_common_options(dasall_tui_route_catalog_filter_unit_test)
 
 add_test(NAME TuiProjectionTypesTest COMMAND dasall_tui_projection_types_unit_test)
@@ -329,6 +351,9 @@ set_tests_properties(TuiTranscriptViewTest PROPERTIES LABELS "unit;tui")
 add_test(NAME TuiStatusPanelTest COMMAND dasall_tui_status_panel_unit_test)
 set_tests_properties(TuiStatusPanelTest PROPERTIES LABELS "unit;tui")
 
+add_test(NAME TuiTerminalCapabilityProbeTest COMMAND dasall_tui_terminal_capability_probe_unit_test)
+set_tests_properties(TuiTerminalCapabilityProbeTest PROPERTIES LABELS "unit;tui")
+
 add_test(NAME TuiRouteCatalogFilterTest COMMAND dasall_tui_route_catalog_filter_unit_test)
 set_tests_properties(TuiRouteCatalogFilterTest PROPERTIES LABELS "unit;tui")
 
@@ -348,6 +373,7 @@ list(APPEND DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_tui_model_selector_unit_test
   dasall_tui_transcript_view_unit_test
   dasall_tui_status_panel_unit_test
+  dasall_tui_terminal_capability_probe_unit_test
   dasall_tui_route_catalog_filter_unit_test
   dasall_tui_unit_topology_smoke_unit_test
 )

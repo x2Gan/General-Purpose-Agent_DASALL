@@ -1,3 +1,35 @@
+# 记录 #771
+
+- 日期：2026-05-23
+- 阶段：tui/terminal capability probe baseline
+- 任务：TUI-TODO-018 实现 terminal capability probe
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-018-terminal-capability-probe基线.md`，冻结 terminal probe 的任务边界、本地证据、POSIX `isatty()` 参考、startup mode/issue 语义、尺寸阈值与 Design->Build 映射。
+2. 新增 `apps/tui/src/terminal/TuiTerminalCapabilityProbe.h` 与 `apps/tui/src/terminal/TuiTerminalCapabilityProbe.cpp`，实现纯 terminal-local capability helper：支持真实环境读取、注入式 test environment、stable startup issue，以及 `FullScreen` / `Narrow` / `Line` / `FailClosed` 四态 `TuiStartupMode`。
+3. 新增 `tests/unit/tui/TuiTerminalCapabilityProbeTest.cpp`，focused 覆盖 large UTF-8 full-screen、80x24 narrow、UTF-8/paste/resize 缺失 line fallback、external editor 缺失 issue、non-TTY fail-closed、invalid TERM + tiny terminal fail-closed，以及 production 文件的 no-private-include / no-renderer-dependency 边界。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_terminal_capability_probe_unit_test` 与 `TuiTerminalCapabilityProbeTest`，并把 terminal probe target 纳入 `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS`。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 TUI-TODO-018 完成状态、当前 terminal probe 基线、`TUI-GAP-018` 收口结果，以及下一步执行策略前移到 `TUI-TODO-019`。
+
+### 验证
+
+1. `ListTests_CMakeTools()`
+   - 结果：通过；`TuiTerminalCapabilityProbeTest` 已进入 VS Code CMake 发现图。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_terminal_capability_probe_unit_test"])`
+   - 结果：通过；terminal probe 生产代码与 focused 单测在 `build/vscode-linux-ninja` 成功编译并链接。
+3. `RunCtest_CMakeTools(tests=["TuiTerminalCapabilityProbeTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiTerminalCapabilityProbeTest$'`
+   - 结果：通过；`TuiTerminalCapabilityProbeTest` 1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-018` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖的 terminal capability probe 基线。
+2. terminal probe 当前只处理 terminal-local capability 与 startup mode taxonomy，不接 `TuiApp`、daemon unavailable / permission denied / profile missing startup path；这些继续后置到 `TUI-TODO-024` 与 `TUI-TODO-023`。
+3. 下一步推荐转入 `TUI-TODO-019`，沿着已完成的 terminal probe、status/transcript、slash parser、composer、selector 与 fake replay 基线实现 FTXUI renderer adapter。
+
 # 记录 #770
 
 - 日期：2026-05-23
