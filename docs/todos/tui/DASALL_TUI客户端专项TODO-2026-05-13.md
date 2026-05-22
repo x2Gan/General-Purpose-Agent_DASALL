@@ -1,9 +1,9 @@
 # DASALL TUI 客户端专项 TODO
 
-最近更新时间：2026-05-13  
+最近更新时间：2026-05-22
 阶段：Detailed Design -> Special TODO  
 适用范围：`apps/tui/`、`tests/unit/tui/`、`tests/integration/tui/`、`tests/fixtures/tui/`、`cmake/`、`apps/CMakeLists.txt`、`debian/`、`scripts/packaging/`、`docs/todos/tui/`  
-当前结论：TUI 客户端架构方向成立，但只能分阶段进入执行。`apps/tui` fake-only 小样与 TUI module-local 对象可拆到 L2/L3；daemon projection、session open/close、真实 LLM route preference、命令迁移与 Debian 安装态切换仍受前置设计和门禁约束，不能伪装成可直接推进的 Build 任务。
+当前结论：TUI 客户端架构方向成立，但只能分阶段进入执行。本文是后续 TUI 专项的主执行账本；`docs/todos/tui/DASALL_TUI小样快速实现专项TODO-2026-05-12.md` 仅作为交互、布局、fake 场景和人工评审输入，不再作为并行推进账本。`apps/tui` no-daemon prototype、TUI module-local DTO、model/reducer、fake data source、composer、selector、terminal probe 可拆到 L2/L3；FTXUI renderer、snapshot 和 full-screen 小样依赖 third-party 与终端样品 gate；daemon projection、session open/close、真实 LLM route preference、命令迁移与 Debian 安装态切换仍受前置设计和门禁约束，不能伪装成可直接推进的 Build 任务。
 
 ## 1. 文档头
 
@@ -17,9 +17,9 @@
 | ADR | `docs/adr/ADR-005-architecture-review-baseline.md`、`docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md`、`docs/adr/ADR-007-reflection-engine-vs-recovery-manager.md`、`docs/adr/ADR-008-agent-orchestrator-vs-multi-agent-coordinator.md` |
 | SSOT | `docs/ssot/CrossModuleDataProjectionMatrix.md`、`docs/ssot/RuntimePolicyConsumerMatrix.md`、`docs/ssot/AccessUnaryProductionPathV1.md`、`docs/ssot/BinaryEntrypointReadinessV1.md`、`docs/ssot/RuntimeAppCompositionV1.md`、`docs/ssot/SystemIntegrationGateMatrix.md` |
 | 计划与规范 | `docs/plans/DASALL_工程落地实现步骤指引.md`、`docs/development/DASALL_工程协作与编码规范.md` |
-| 现有 TUI 交付输入 | `docs/todos/tui/DASALL_TUI小样快速实现专项TODO-2026-05-12.md` |
-| 代码现状 | `apps/CMakeLists.txt` 当前未接入 `apps/tui`；`apps/cli/CMakeLists.txt` 中 `dasall-cli` 仍 `OUTPUT_NAME dasall`；`cmake/DASALLThirdParty.cmake` 已有统一 third-party resolver；`tests/unit/tui/` 与 `tests/integration/tui/` 当前不存在 |
-| 行业参考 | 采用详细设计第 3 章已收敛的 Agent CLI/TUI、FTXUI、prompt_toolkit、Textual、Aider、Claude Code、Gemini CLI 等实践结论；本文不额外引入未落入设计文档的新边界 |
+| 现有 TUI 交付输入 | `docs/todos/tui/DASALL_TUI小样快速实现专项TODO-2026-05-12.md` 仅作为参考输入；其中 fake-only、deterministic scenario、CJK/IME/resize、snapshot、manual review 安排迁入本文对应任务和 gate |
+| 代码现状 | `apps/CMakeLists.txt` 当前未接入 `apps/tui`；`apps/cli/CMakeLists.txt` 中 `dasall-cli` 仍 `OUTPUT_NAME dasall`；`cmake/DASALLThirdParty.cmake` 已有统一 third-party resolver 但未接入 FTXUI；`tests/unit/tui/` 与 `tests/integration/tui/` 当前不存在；LLM internal streaming 已有实现基础但 TUI 端到端 streaming lifecycle 未闭环 |
+| 行业参考 | 采用详细设计第 3 章已收敛的 Agent CLI/TUI、FTXUI、prompt_toolkit、Textual、Aider、Claude Code、Gemini CLI 等实践结论；重点吸收 terminal-first、headless/script 分离、成熟 composer/history/search/editor、非交互 JSON/stream-json 路径分离等通用实践 |
 
 ### 1.2 编制原则
 
@@ -31,6 +31,7 @@
 | TUI-PP-04 | 原子任务最小化 | 一项任务只围绕一个接口、一个数据结构、一个初始化路径、一个错误路径或一个测试入口展开 |
 | TUI-PP-05 | 分层推进 | fake-only prototype 先行；正式 daemon attach、status projection、selector 真链路和命令迁移后置 |
 | TUI-PP-06 | 任务颗粒度适配 LLM 执行 | 每个任务限定在 1 个主目标和 1 组 focused tests，避免单次上下文过大导致实现降质 |
+| TUI-PP-07 | 主账本唯一 | 本文为状态推进、证据回写和阻塞解锁的唯一主 TODO；小样 TODO 的内容只作为设计输入或迁移来源，不重复维护状态 |
 
 ## 2. 子系统目标与范围
 
@@ -42,7 +43,7 @@
 | 命令目标态 | 最终安装态 `dasall` 进入 TUI，`dasall-cli` 保留结构化 CLI | TUI 详设 5.1、附件 B |
 | 小样策略 | 先交付 `dasall_tui_prototype`，fake-only，不接 daemon，不改变安装态命令 | TUI 详设 8.4、10、附件 A；现有小样 TODO |
 | 正式链路 | 正式 TUI 经 daemon/access projection 接入 Runtime 主链 | TUI 详设 4.2、9.5.3、9.5.4、10 |
-| 首版流式口径 | 首版不宣称 stream-ready，采用 unary + accepted_async + query/poll | TUI 详设 4.3、7.3 |
+| 首版流式口径 | LLM internal streaming 已有实现基础，但首版 TUI 不宣称端到端 stream-ready，采用 unary + accepted_async + query/poll | TUI 详设 4.3、7.3 |
 | 状态展示 | 只展示受控 projection、summary、reason-code、timestamp、correlation id | TUI 详设 7.1、7.2、7.4 |
 | 模型选择 | TUI 只维护 `NextTurnPreference` 草稿，最终由 profiles/llm/ModelRouter 裁定 | TUI 详设 6.1~6.6；ADR-006；RuntimePolicyConsumerMatrix |
 | 会话范围 | 首版短生命周期前台 session；不做跨启动恢复和多 session 管理 | TUI 详设 5.2 |
@@ -55,7 +56,7 @@
 |---|---|
 | `apps/tui` 独立工程 | `TuiApp`、screen model、reducer、data source、terminal probe、FTXUI adapter、views、command parser |
 | TUI module-local 对象 | `TuiScreenModel`、`TuiAction`、`NextTurnPreference`、`TuiSessionView`、`TuiStatusProjection`、`TuiModelRouteProjection`、`TuiComposerState` |
-| fake-only 小样 | 复用现有小样 TODO 的交互、布局、CJK、snapshot、manual review 任务成果 |
+| fake-only 小样 | 在本文内实现 no-daemon prototype；复用小样 TODO 的 deterministic scenarios、布局断点、CJK/IME/resize、snapshot、manual review 要求，但状态只在本文推进 |
 | daemon projection 接线 | `ITuiDataSource` seam、`DaemonTuiDataSource`、`TuiIpcController`、submit/poll/status/route/session projection |
 | 测试与门禁 | unit、contract-like projection tests、integration、snapshot/golden、manual CJK/IME/resize evidence、command routing gate |
 | 命令迁移准备 | 在正式 ready 后释放 `dasall` 命令并同步 `dasall-cli`、Debian、manpage、postinst、autopkgtest、packaging smoke |
@@ -79,7 +80,7 @@
 |---|---|---|---|---|
 | TUI-TC001 | TUI 详设 4.1；架构 3.4.1 | Must | TUI 只做入口壳层，不持有 runtime、context、recovery、reflection、model route、tool policy owner 权 | 所有任务限定在 `apps/tui`、projection seam、packaging；禁止下沉改 runtime 主控 |
 | TUI-TC002 | TUI 详设 4.2、9.3 | Must | TUI 经 daemon/access + platform IIPC 接主链，不直接调用 runtime implementation | `DaemonTuiDataSource` 必须依赖 `TuiIpcController` / public seam，不能直连 `AgentFacade` |
-| TUI-TC003 | TUI 详设 4.3、7.3 | Must | 首版不宣称端到端 streaming ready | 所有实时任务采用 poll/event projection；bounded event feed 单独延后 |
+| TUI-TC003 | TUI 详设 4.3、7.3 | Must | LLM internal streaming 不等于端到端 TUI streaming ready，首版不宣称 stream-ready | 所有实时任务采用 unary/accepted_async/query/poll；bounded event feed 单独延后，不复用 supporting shape 冒充 public streaming |
 | TUI-TC004 | TUI 详设 4.4、5.1、附件 B | Must | 当前 `dasall` 命令仍由 CLI `OUTPUT_NAME dasall` 占用，迁移后置 | 命令释放任务全部依赖 TUI ready 与 packaging matrix |
 | TUI-TC005 | TUI 详设 5.5、9.5.5 | Must | composer 状态和键盘行为是核心交互能力 | composer 必须独立状态机、独立测试、人工 IME 门禁 |
 | TUI-TC006 | TUI 详设 6.1~6.6 | Must | selector 只表达 next-turn preference，不拥有最终 route | `NextTurnPreference` 局部对象先行，真实承载位置 Blocked |
@@ -104,7 +105,12 @@
 | `apps/cli/CMakeLists.txt` | `dasall-cli` 目标仍 `OUTPUT_NAME dasall` | bare `dasall` 命令释放是后置迁移任务 |
 | `cmake/DASALLThirdParty.cmake` | 已有 `dasall_resolve_dependency()` 与 cpp-httplib 示例 | FTXUI 应走统一 third-party resolver，而不是散落 FetchContent |
 | `tests/unit/tui/`、`tests/integration/tui/` | 当前不存在 | TUI unit/integration discoverability 必须前置 |
-| `docs/todos/tui/DASALL_TUI小样快速实现专项TODO-2026-05-12.md` | 已有 fake-only 小样 TODO | 本文复用其 Phase 1 成果，但不覆盖该文档 |
+| `docs/todos/tui/DASALL_TUI小样快速实现专项TODO-2026-05-12.md` | 已有 fake-only 小样 TODO，覆盖 deterministic scenario、CJK/IME/resize、snapshot、样品评审 | 本文迁入其有效安排；小样 TODO 不再作为独立执行账本 |
+| LLM streaming | `LLMManager::stream_generate` 已有实现并具备集成测试 | 修正旧详设口径；TUI 仍只能按 unary/polling 首版交付 |
+| access streaming shape | `AccessDisposition::StreamAttached`、`stream_requested`、`subscription_ref` 等 supporting fields 存在 | 只能作为未来 streaming 设计输入，不能视为 attach/replay lifecycle 已 ready |
+| runtime LLM request | 当前 Runtime 主响应请求仍按 unary 组织，且未传 `selection_hint` | `NextTurnPreference` 真链路和端到端 streaming 均需后置评审 |
+| daemon socket policy | 默认 `/run/dasall/daemon.sock` 与 root/sudo-only operator path 对普通用户 TUI 有 permission denied 风险 | TUI-TODO-001 是命令迁移硬前置 |
+| Debian/scripts 命令面 | `debian/` 与 `scripts/packaging/` 中仍大量调用 installed `dasall` 结构化控制面 | TUI-TODO-030 必须先产出旧入口 inventory 和迁移矩阵 |
 | `docs/ssot/*` | 已冻结 projection、entrypoint readiness、runtime app composition、integration gate 分层 | TUI 正式接线和命令迁移必须回链这些 SSOT |
 
 ## 4. 粒度可行性评估
@@ -116,7 +122,7 @@
 | 是否足以支撑接口级拆分 | 是。`ITuiDataSource`、`TuiApp`、`TuiReducer`、`TuiComposer`、`TuiModelSelector`、`TuiTerminalCapabilityProbe` 等接口和方法语义已在详设 9.5 展开 |
 | 是否足以支撑数据结构级拆分 | 是。`NextTurnPreference`、`TuiSessionView`、`TuiMessageView`、`TuiStatusProjection`、`TuiModelRouteProjection`、`TuiComposerState`、`TuiScreenModel` 字段已给出 |
 | 是否足以支撑函数级拆分 | 局部可以。TUI module-local reducer、parser、composer、selector、probe、renderer adapter 可拆到 L3；daemon projection、route true chain 和 command migration 只能 L2/L1/Blocked |
-| 当前最细可落地粒度 | fake-only prototype 与 module-local UI：L3；daemon data source 与 route projection：L2；权限模型、`/clear`、命令迁移：L1/Blocked |
+| 当前最细可落地粒度 | no-daemon skeleton、module-local DTO/model/reducer/fake data source/composer/selector/probe：L3；FTXUI renderer、snapshot、daemon data source 与 route projection：L2；权限模型、`/clear`、命令迁移：L1/Blocked |
 | 是否可直接全量进入执行 | 否。只能分阶段执行，不能把正式 daemon attach、model pin 生效、bare `dasall` 迁移作为无阻塞 Build 任务 |
 
 ### 4.2 可落盘对象提取表
@@ -134,7 +140,7 @@
 | Status panel | `TuiStatusPanel`、`TuiStatusProjection`、`format_stage_badge()` | 7.1、7.4、9.5.8 | `apps/tui/src/view/` | 未落盘 |
 | Slash command | `TuiSlashCommandParser`、`parse()`、`to_action()`、`help_entries()` | 5.6、9.5.9 | `apps/tui/src/command/` | 未落盘；`/clear` 语义未冻结 |
 | Terminal probe | `TuiTerminalCapabilityProbe`、`TuiTerminalCapabilities`、`TuiStartupMode` | 5.7、9.5.10 | `apps/tui/src/terminal/` | 未落盘 |
-| FTXUI adapter | `FtxuiRendererAdapter`、`TuiDesignTokens`、`TuiLayoutMetrics`、`render_to_screen()` | 8.4、9.5.11 | `apps/tui/src/terminal/`、`apps/tui/src/view/` | 未落盘；FTXUI 未接入 |
+| FTXUI adapter | `FtxuiRendererAdapter`、`TuiDesignTokens`、`TuiLayoutMetrics`、`render_to_screen()` | 8.4、9.5.11 | `apps/tui/src/terminal/`、`apps/tui/src/view/` | 未落盘；FTXUI 未接入；no-daemon skeleton 可先使用 mock renderer |
 | CMake/注册点 | `apps/tui/CMakeLists.txt`、`apps/CMakeLists.txt`、`tests/unit/tui/CMakeLists.txt`、`tests/integration/tui/CMakeLists.txt` | 9.1、11、12 | CMake 拓扑 | 未落盘 |
 | Packaging | CLI `OUTPUT_NAME`、TUI target install、Debian install/manpage/postinst/autopkgtest | 5.1、附件 B | `apps/cli/`、`apps/tui/`、`debian/`、`scripts/packaging/` | 后置，Blocked |
 
@@ -143,7 +149,7 @@
 | 设计对象 | 设计锚点 | 当前粒度等级 | 已具备证据 | 缺失证据 | TODO 拆解策略 |
 |---|---|---|---|---|---|
 | TUI 产品边界与命令目标态 | 1、2.2、5.1、附件 B | L1 | final command owner、CLI/TUI 分离、迁移前置门禁明确 | 普通用户/root operator 口径未冻结 | 先补设计并标记命令迁移 Blocked |
-| `apps/tui` 工程拓扑 | 9.1、11 | L2 | 建议目录、target 分阶段、CMake 接线明确 | FTXUI 依赖来源未验证 | 先 prototype target，后正式 target |
+| `apps/tui` 工程拓扑 | 9.1、11 | L2 | 建议目录、target 分阶段、CMake 接线明确 | FTXUI 依赖来源未验证，但不阻塞 no-daemon skeleton | 先 no-FTXUI/mock-renderer prototype target，后 FTXUI renderer 与正式 target |
 | `TuiScreenModel` / `TuiReducer` | 9.2、9.5.2、11 | L3 | 字段、职责、接口、失败语义、测试出口明确 | 无实质缺口 | 直接拆 L3 实现任务 |
 | `NextTurnPreference` | 6.5、6.6、9.2 | L3/L2 | enum 与字段已给出，UI 草稿语义明确 | 真实 request/context/profile 承载位置未冻结 | UI 草稿可 L3；真实链路先补设计 |
 | `ITuiDataSource` | 9.2、9.5.3 | L3 | 方法集、fake/daemon 双实现、失败语义明确 | daemon projection DTO 与 access seam 未冻结 | 接口与 fake 可直接 Build；daemon source Blocked |
@@ -154,7 +160,7 @@
 | `TuiStatusPanel` | 7.1、7.4、9.5.8 | L3/L2 | status 字段、projection 规则、接口明确 | runtime/access status projection 字段未冻结为正式 seam | fake/status view L3；真实 projection contract L2 |
 | `TuiSlashCommandParser` | 5.6、9.5.9 | L3/L2 | 命令集合、解析规则、fail-closed 语义明确 | `/clear` 具体行为待冻结 | parser 可 L3；`/clear` integration Blocked |
 | `TuiTerminalCapabilityProbe` | 5.7、9.5.10 | L3 | probe 项、startup mode、failure 语义、测试出口明确 | 不同终端人工矩阵需补证据 | 直接拆实现 + manual gate |
-| `FtxuiRendererAdapter` | 8.1~8.4、9.5.11 | L2/L3 | adapter 边界、private dependency、snapshot harness 明确 | FTXUI CJK/IME/resize 技术验证未完成 | 先 third-party spike，再 renderer Build |
+| `FtxuiRendererAdapter` | 8.1~8.4、9.5.11 | L2/L3 | adapter 边界、private dependency、snapshot harness 明确 | FTXUI CJK/IME/resize 技术验证未完成 | no-FTXUI skeleton 先行；third-party spike 通过后再做 renderer Build |
 | `DaemonTuiDataSource` / session seam | 4.4、5.2、9.5.3、10 Phase 4 | L2/Blocked | open/submit/poll/close 方向明确 | runtime session open/close/query 公共 seam 不完整 | 标记 Blocked，先补 projection/session 设计 |
 | 命令与 Debian 迁移 | 5.1、附件 B | L1/Blocked | 当前占用、目标状态、迁移矩阵明确 | TUI ready、权限模型、packaging smoke 未过 | 后置评审门禁，不进入早期 Build |
 
@@ -166,7 +172,7 @@
 | 权限与启动身份待决 | 5.7、13 TUI-OQ-004 | 补设计 / 风险 | TUI-TODO-001、024、030 | 未冻结前不能迁移 bare `dasall` |
 | `/clear` 行为待冻结 | 5.2、5.6、13 TUI-OQ-001 | 补设计 / 流程 | TUI-TODO-002、026 | parser 可先识别命令，真实 session 行为后置 |
 | `apps/tui` 独立工程与 prototype target | 9.1、10 Phase 1、11 TUI-DES-001 | CMake / 骨架 | TUI-TODO-006、007、008、032 | 先 prototype，不安装；正式 target 后置 |
-| FTXUI private dependency 与 snapshot harness | 8.4、9.5.11、11 TUI-DES-004 | 依赖 / 测试 | TUI-TODO-005、019、020 | 先 resolver，再 renderer adapter 与 snapshot gate |
+| FTXUI private dependency 与 snapshot harness | 8.4、9.5.11、11 TUI-DES-004 | 依赖 / 测试 | TUI-TODO-005、019、020 | no-FTXUI skeleton 不被阻塞；先 resolver 评审，再 renderer adapter 与 snapshot gate |
 | MVU screen model 与 reducer | 3.3、9.5.2、11 TUI-DES-003 | 数据结构 / 流程 | TUI-TODO-009、010 | model 与 reducer 不依赖 FTXUI，适合 L3 |
 | Projection DTO 不进入 contracts | 7.4、9.2、9.6 | 数据结构 / 接口 | TUI-TODO-008、021、022 | TUI DTO 先 module-local，正式 projection seam 需评审 |
 | `ITuiDataSource` fake/daemon 双实现 | 9.5.3、10 Phase 3/4、11 TUI-DES-011 | 接口 / 适配器 | TUI-TODO-011、012、021、022、023 | fake 直接落地，daemon attach 依赖 projection seam |
@@ -190,15 +196,15 @@
 | TUI-TODO-002 | Not Started | 补齐 `/clear` 会话行为决策 | TUI 详设 5.2、5.6、13 TUI-OQ-001 | `/clear` 清空视图或新建当前进程内 session | L1 | 无生产代码；新增 `docs/todos/tui/deliverables/TUI-TODO-002-clear语义决策.md` | `TuiClearSemantics` 决策文档 | design consistency | `rg -n "/clear|清空当前前台|新建当前进程内 session|session_id" docs/todos/tui/deliverables/TUI-TODO-002-clear语义决策.md` | 无 | BLK-TUI-002 | Product + runtime/access session owner 冻结 `/clear` 行为 | 决策文档 | 文档二值说明 `/clear` 是否创建新 session、是否调用 daemon close/open、是否保留 input history |
 | TUI-TODO-003 | Not Started | 补齐 daemon projection seam 设计 | TUI 详设 7.4、9.5.3、9.5.4、10 Phase 3；CrossModuleDataProjectionMatrix | `TuiSessionView`、`TuiTurnReceipt`、`TuiStatusProjection`、`TuiModelRouteProjection`、`TuiEventProjection` | L2 | `apps/tui/src/data/TuiProjectionTypes.h`；新增 `docs/todos/tui/deliverables/TUI-TODO-003-daemon-projection-seam.md` | `TuiProjectionTypes` 字段表 | `TuiProjectionTypesCompileTest` / design consistency | `rg -n "TuiSessionView|TuiTurnReceipt|TuiStatusProjection|TuiModelRouteProjection|TuiEventProjection" docs/todos/tui/deliverables/TUI-TODO-003-daemon-projection-seam.md` | 无 | BLK-TUI-003 | access/daemon owner 确认 projection endpoint、字段、错误码与隐私边界 | 字段表 + seam 设计 | 字段表明确 owner、consumer、禁止字段和 fake/daemon 复用边界 |
 | TUI-TODO-004 | Not Started | 补齐 NextTurnPreference 真链路承载决策 | TUI 详设 6.4~6.6；RuntimePolicyConsumerMatrix；ADR-006 | UI draft -> Access request context -> Runtime -> Profile/ModelRouter -> route projection | L2 | 无生产代码；新增 `docs/todos/tui/deliverables/TUI-TODO-004-next-turn-preference承载决策.md` | `NextTurnPreferenceCarrier` 决策文档 | design consistency | `rg -n "NextTurnPreference|ModelSelectionHint|request context|profile override|ModelRouter|fail-closed" docs/todos/tui/deliverables/TUI-TODO-004-next-turn-preference承载决策.md` | 无 | BLK-TUI-004 | Access/Runtime/Profiles/LLM owner 共同冻结承载位置与失败语义 | 决策文档 | 文档明确 preference 是否进入 request context、client capabilities、profile override 或新 projection，且不改变 ModelRouter owner |
-| TUI-TODO-005 | Not Started | 校验 FTXUI third-party 接入策略 | TUI 详设 8.2~8.4；`cmake/DASALLThirdParty.cmake` | FTXUI submodule/local cache/FetchContent fallback、private dependency | L2 | `cmake/DASALLThirdParty.cmake`、`apps/tui/CMakeLists.txt`、`docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md` | `dasall_resolve_dependency(ftxui)` 接入方案 | `TuiFtxuiDependencyBoundaryTest` | `rg -n "FTXUI|ftxui|private dependency|submodule|local cache|FetchContent" docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md cmake/DASALLThirdParty.cmake` | 无 | BLK-TUI-005 | third-party 来源、版本/commit、Debian policy 风险和 offline fallback 通过评审 | 依赖评审文档 | 文档明确依赖来源与回退策略，且禁止 FTXUI 泄漏到非 `apps/tui` 模块 |
-| TUI-TODO-006 | Not Started | 注册 TUI 测试拓扑 | TUI 详设 9.1、12；工程规范 3.7 | `tests/unit/tui`、`tests/integration/tui`、fixtures/golden | L2 | `tests/unit/tui/CMakeLists.txt`、`tests/integration/tui/CMakeLists.txt`、`tests/fixtures/tui/`、`tests/unit/CMakeLists.txt`、`tests/integration/CMakeLists.txt` | TUI test CMake registration | `TuiTestTopologyDiscoverability` | `ctest --preset vscode-linux-ninja -N | rg "Tui(ScreenModel|Reducer|Composer|PrototypeSmoke)"` | 无 | 无 | CMake 可发现 focused TUI tests | CMake + fixtures 目录 | `ctest -N` 能发现 TUI 单元/集成测试入口，且 label 区分 unit/integration/snapshot |
+| TUI-TODO-005 | Not Started | 校验 FTXUI third-party 接入策略 | TUI 详设 8.2~8.4；`cmake/DASALLThirdParty.cmake` | FTXUI submodule/local cache/FetchContent fallback、private dependency | L2 | `cmake/DASALLThirdParty.cmake`、`apps/tui/CMakeLists.txt`、`docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md` | `dasall_resolve_dependency(ftxui)` 接入方案 | `TuiFtxuiDependencyBoundaryTest` | `rg -n "FTXUI|ftxui|private dependency|submodule|local cache|FetchContent" docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md cmake/DASALLThirdParty.cmake` | 无 | BLK-TUI-005 | third-party 来源、版本/commit、Debian policy 风险和 offline fallback 通过评审 | 依赖评审文档 | 文档明确依赖来源与回退策略，禁止 FTXUI 泄漏到非 `apps/tui` 模块；未通过时只阻塞 renderer/snapshot/full-screen 小样，不阻塞 no-daemon skeleton |
+| TUI-TODO-006 | Not Started | 注册 TUI 测试拓扑 | TUI 详设 9.1、12；工程规范 3.7 | `tests/unit/tui`、`tests/integration/tui`、fixtures/golden | L2 | `tests/unit/tui/CMakeLists.txt`、`tests/integration/tui/CMakeLists.txt`、`tests/fixtures/tui/`、`tests/unit/CMakeLists.txt`、`tests/integration/CMakeLists.txt` | `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS`、`DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS` | `TuiTestTopologyDiscoverability` | `ctest --preset vscode-linux-ninja -N | rg "Tui(ScreenModel|Reducer|Composer|PrototypeSmoke)"` | 无 | 无 | CMake 可发现 focused TUI tests | CMake + fixtures 目录 | `ctest -N` 能发现 TUI 单元/集成测试入口，目标集合接入现有 unit/integration 聚合，且 label 区分 unit/integration/snapshot |
 
 ### 6.2 骨架、接口与 fake-only 小样
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| TUI-TODO-007 | Not Started | 新增 `apps/tui` prototype target | TUI 详设 9.1、10 Phase 1、11 TUI-DES-001；小样 TODO TUI-PROTO-004 | `dasall_tui_prototype` fake-only、不安装 | L2 | `apps/tui/CMakeLists.txt`、`apps/tui/src/main.cpp`、`apps/CMakeLists.txt` | `main()`、`dasall_tui_prototype` | `TuiPrototypeBuildSmokeTest` | `cmake --build --preset vscode-linux-ninja --target dasall_tui_prototype` | TUI-TODO-005、006 | BLK-TUI-005 | FTXUI 或 mock renderer dependency 方案可解析 | CMake target + prototype main | target 可构建，且不新增 install rule、不改变 bare `dasall` |
-| TUI-TODO-008 | Not Started | 定义 TUI projection DTO | TUI 详设 7.4、9.2、9.6、11 | TUI module-local DTO，不上升 contracts | L3 | `apps/tui/src/data/TuiProjectionTypes.h` | `TuiSessionView`、`TuiTurnReceipt`、`TuiEventProjection`、`TuiRouteCatalogView`、`TuiToolSummaryView`、`TuiModelRouteProjection` | `TuiProjectionTypesTest` | `ctest --preset vscode-linux-ninja -R "TuiProjectionTypes" --output-on-failure` | TUI-TODO-003、007 | 无 | Projection 字段表完成 | DTO 头文件 + 单测 | DTO 字段与详设字段表一致，不 include runtime/access/llm/provider 私有头 |
+| TUI-TODO-007 | Not Started | 新增 `apps/tui` no-daemon prototype target | TUI 详设 9.1、10 Phase 1、11 TUI-DES-001；小样 TODO TUI-PROTO-004 | `dasall_tui_prototype` fake-only、不安装、可先 mock renderer | L2 | `apps/tui/CMakeLists.txt`、`apps/tui/src/main.cpp`、`apps/CMakeLists.txt` | `main()`、`dasall_tui_prototype` | `TuiPrototypeBuildSmokeTest` | `cmake --build --preset vscode-linux-ninja --target dasall_tui_prototype` | TUI-TODO-006 | 无 | 测试拓扑可发现；FTXUI 未解锁时允许最小 mock/no-renderer 启动路径 | CMake target + prototype main | target 可构建，且不新增 install rule、不改变 bare `dasall`、不 link daemon/runtime/provider implementation |
+| TUI-TODO-008 | Not Started | 定义 TUI projection DTO | TUI 详设 7.4、9.2、9.6、11 | TUI module-local DTO，不上升 contracts；daemon 字段映射后续可扩展 | L3 | `apps/tui/src/data/TuiProjectionTypes.h` | `TuiSessionView`、`TuiTurnReceipt`、`TuiEventProjection`、`TuiRouteCatalogView`、`TuiToolSummaryView`、`TuiModelRouteProjection` | `TuiProjectionTypesTest` | `ctest --preset vscode-linux-ninja -R "TuiProjectionTypes" --output-on-failure` | TUI-TODO-007 | 无 | 详设字段表足以形成 module-local baseline；daemon mapping 未冻结时只允许标注 provisional 字段 | DTO 头文件 + 单测 | DTO 字段与详设字段表一致，不 include runtime/access/llm/provider 私有头，且字段 owner/forbidden raw fields 可被单测断言 |
 | TUI-TODO-009 | Not Started | 定义 screen model 与 action | TUI 详设 9.2、9.5.2、11 TUI-DES-003；小样 TODO TUI-PROTO-005 | MVU model/action | L3 | `apps/tui/src/model/TuiAction.h`、`apps/tui/src/model/TuiScreenModel.h` | `TuiAction`、`TuiScreenModel`、`TuiFocusState`、`TuiBanner`、`TuiModalState` | `TuiScreenModelTest` | `ctest --preset vscode-linux-ninja -R "TuiScreenModel" --output-on-failure` | TUI-TODO-008 | 无 | DTO 可编译 | model 头文件 + 单测 | model 不包含 FTXUI 类型、不做 I/O、不读取系统时间 |
 | TUI-TODO-010 | Not Started | 实现 reducer 状态迁移 | TUI 详设 3.3、9.5.2、11 TUI-DES-003 | action -> reducer -> model | L3 | `apps/tui/src/model/TuiReducer.h`、`apps/tui/src/model/TuiReducer.cpp` | `reduce(TuiScreenModel, TuiAction)` | `TuiReducerTransitionTest` | `ctest --preset vscode-linux-ninja -R "TuiReducer" --output-on-failure` | TUI-TODO-009 | 无 | screen model/action 已定义 | reducer + tests | 已覆盖 submit、append event、focus switch、banner、unknown action no-op/fail-closed 路径 |
 | TUI-TODO-011 | Not Started | 定义 `ITuiDataSource` 接口 | TUI 详设 9.2、9.5.3、11 TUI-DES-011 | fake/daemon 双实现 seam | L3 | `apps/tui/src/data/ITuiDataSource.h` | `open_session()`、`submit_turn()`、`poll_events()`、`route_catalog()`、`close_session()` | `ITuiDataSourceContractTest` | `ctest --preset vscode-linux-ninja -R "ITuiDataSource" --output-on-failure` | TUI-TODO-008 | 无 | Projection DTO 已定义 | 接口头文件 + contract-like 单测 | 接口只依赖 TUI DTO 和 C++ 标准库，不依赖 FTXUI/daemon/runtime implementation |
@@ -230,10 +236,10 @@
 
 | ID | 状态 | 任务 | 来源依据 | 设计锚点 | 粒度等级 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置依赖 | 阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| TUI-TODO-030 | Blocked | 收敛 bare `dasall` 迁移门禁证据 | TUI 详设 5.1、附件 B.0、B.4.4；SystemIntegrationGateMatrix | TUI ready、权限模型、projection、selector、packaging matrix | L1 | 无生产代码；新增 `docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md` | `TuiCommandReleaseGateEvidence` | design consistency | `rg -n "B.0|权限模型|projection|selector|packaging smoke|dasall-cli|/usr/bin/dasall" docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md` | TUI-TODO-001、020、024、025、029 | BLK-TUI-008 | 小样评审、权限模型、daemon attach、status/route projection、packaging smoke matrix 均有证据 | gate evidence 文档 | 文档逐项证明 B.0 前置门禁已满足；未满足项保持 Blocked |
+| TUI-TODO-030 | Blocked | 收敛 bare `dasall` 迁移门禁证据 | TUI 详设 5.1、附件 B.0、B.4.4；SystemIntegrationGateMatrix | TUI ready、权限模型、projection、selector、旧入口 inventory、packaging matrix | L1 | 无生产代码；新增 `docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md` | `TuiCommandReleaseGateEvidence`、`DasallCommandMigrationInventory` | design consistency | `rg -n "B.0|权限模型|projection|selector|packaging smoke|dasall-cli|/usr/bin/dasall|debian|scripts/packaging|inventory" docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md` | TUI-TODO-001、020、024、025、029 | BLK-TUI-008 | 小样评审、权限模型、daemon attach、status/route projection、packaging smoke matrix、旧 `dasall` 控制面调用 inventory 均有证据 | gate evidence 文档 + inventory | 文档逐项证明 B.0 前置门禁已满足；列出 Debian、scripts、manpage、postinst、autopkgtest、package smoke 中旧入口的迁移/保留策略；未满足项保持 Blocked |
 | TUI-TODO-031 | Blocked | 释放 `dasall-cli` 产物名 | TUI 详设附件 B.4.1、B.5 CMD-REL-001 | CLI target 输出 `dasall-cli` | L2 | `apps/cli/CMakeLists.txt` | `dasall-cli` target `OUTPUT_NAME` | `CliControlPlaneCommandNameTest` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` | TUI-TODO-030 | BLK-TUI-008 | 命令迁移 gate evidence 通过 | CMake change + command name test | build tree 生成 `dasall-cli`，且旧结构化 CLI 不再产出 bare `dasall` |
 | TUI-TODO-032 | Blocked | 新增正式 TUI `dasall` target | TUI 详设 9.1、附件 B.4.1/B.4.2、B.5 CMD-REL-002 | `dasall-tui` target 输出 `dasall` 并安装 | L2 | `apps/tui/CMakeLists.txt`、`apps/tui/src/main.cpp`、`apps/CMakeLists.txt` | `dasall-tui` target、`OUTPUT_NAME dasall`、install rule | `DasallTuiEntrypointSmokeTest` | `cmake --build --preset vscode-linux-ninja --target dasall-tui` | TUI-TODO-023、024、030、031 | BLK-TUI-008 | 正式 daemon source 可用且 command release gate 通过 | formal target + smoke | `dasall-tui` 构建产物进入 TUI 主路径，安装规则指向 `/usr/bin/dasall` |
-| TUI-TODO-033 | Blocked | 更新 Debian 命令迁移文件 | TUI 详设附件 B.4.2~B.4.5 | install、manpage、README.Debian、postinst、autopkgtest、packaging scripts | L2 | `debian/dasall-cli.install`、`debian/dasall.1`、`debian/README.Debian`、`debian/postinst`、`debian/tests/*`、`scripts/packaging/*` | Debian install/manpage/smoke entries | `DasallCommandRoutingTest`、package smoke | `rg -n "dasall (config|ping|readiness|run|status|cancel|diag|knowledge)" debian scripts` | TUI-TODO-031、032 | BLK-TUI-008 | TUI formal target 和 CLI command name 均已落地 | Debian/script changes + tests | 控制面示例全部切到 `dasall-cli`，bare `dasall` 只描述 TUI，package smoke 覆盖双命令 |
+| TUI-TODO-033 | Blocked | 更新 Debian 命令迁移文件 | TUI 详设附件 B.4.2~B.4.5 | install、manpage、README.Debian、postinst、autopkgtest、packaging scripts | L2 | `debian/dasall-cli.install`、`debian/dasall.1`、`debian/README.Debian`、`debian/postinst`、`debian/tests/*`、`scripts/packaging/*` | Debian install/manpage/smoke entries | `DasallCommandRoutingTest`、package smoke | `rg -n "dasall (config|ping|readiness|run|status|cancel|diag|knowledge)" debian scripts` | TUI-TODO-030、031、032 | BLK-TUI-008 | TUI formal target、CLI command name、旧入口 inventory 均已落地 | Debian/script changes + tests | 控制面示例全部切到 `dasall-cli` 或在 inventory 中说明必须保留的 compatibility 路径；bare `dasall` 只描述 TUI，package smoke 覆盖双命令 |
 | TUI-TODO-034 | Blocked | 增加命令分流测试 | TUI 详设附件 B.6；SystemIntegrationGateMatrix | `dasall` vs `dasall-cli` role split | L2 | `tests/integration/apps/tui/DasallCommandRoutingTest.cpp`、`tests/integration/apps/CMakeLists.txt` | `DasallCommandRoutingTest` | command routing integration | `ctest --preset vscode-linux-ninja -R "DasallCommandRouting|CliControlPlane" --output-on-failure` | TUI-TODO-032、033 | BLK-TUI-008 | 双命令 build/install 规则完成 | integration test | 测试证明 `dasall` 进入 TUI，`dasall-cli` 保留结构化控制面，旧 `dasall <subcommand>` fail-closed |
 | TUI-TODO-035 | Not Started | 回写 TUI 交付证据 | TUI 详设 10 Phase 9；SystemIntegrationGateMatrix 5 | deliverables、worklog、manual review、gate status | L1 | `docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md`、`docs/worklog/DASALL_开发执行记录.md` | `TuiDeliveryEvidence` | evidence consistency | `rg -n "TUI-TODO-035|Gate-TUI|ctest|cmake --build|采纳|延后|回退" docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md docs/worklog/DASALL_开发执行记录.md` | TUI-TODO-020、030 或对应阶段任务 | 无 | 每阶段 focused command 结果可复验 | evidence + worklog | 证据文档记录任务号、命令、结果、残余风险、后继任务；未跑命令不得写通过 |
 
@@ -243,9 +249,9 @@
 
 | 阶段 | 执行任务 | 串并行建议 | 进入下一阶段条件 |
 |---|---|---|---|
-| Phase 0 补设计与测试拓扑 | TUI-TODO-001~006 | 001~005 可并行；006 可与 005 并行 | 权限、`/clear`、projection、preference、FTXUI 评审至少形成明确 Blocked/Ready 结论；TUI 测试可发现 |
-| Phase 1 fake-only 小样骨架 | TUI-TODO-007~012 | 007 后，008/009/011 可并行；012 依赖 011 | prototype target 可构建，model/data source 可单测 |
-| Phase 2 UI 组件和小样评审 | TUI-TODO-013~020 | 013/014/015/016/017/018 可在 010/012 后并行；019 汇总 view；020 汇总 app | 小样可运行，snapshot/IME/CJK/resize 证据明确，且 no-daemon 边界成立 |
+| Phase 0 补设计与测试拓扑 | TUI-TODO-001~006 | 001~005 可并行；006 可与 005 并行 | 权限、`/clear`、projection、preference、FTXUI 评审至少形成明确 Blocked/Ready 结论；即使 FTXUI 仍 Open，TUI 测试拓扑也必须可发现 |
+| Phase 1 no-daemon 小样骨架 | TUI-TODO-007~012 | 007 仅依赖 006；FTXUI 未解锁时使用 mock/no-renderer；007 后，008/009/011 可并行；012 依赖 011 | prototype target 可构建，model/data source 可单测，且不 link daemon/runtime/provider |
+| Phase 2 UI 组件和小样评审 | TUI-TODO-013~020 | 013/014/015/016/017/018 可在 010/012 后并行；019 依赖 FTXUI 评审；020 汇总 app | full-screen 小样可运行，snapshot/IME/CJK/resize 证据明确，且 no-daemon 边界成立 |
 | Phase 3 daemon projection 与 session | TUI-TODO-021~026 | 021 是串行前置；022/023 串行；024/025/026 在 023 后按场景并行 | daemon attach、startup failure、status projection、session lifecycle  focused tests 通过 |
 | Phase 4 route selector 真链路 | TUI-TODO-027~029 | 027 前置；028/029 串行 | next preference 提交和 effective route 回显可验证，或保持 Blocked 不迁移命令 |
 | Phase 5 命令与打包迁移 | TUI-TODO-030~034 | 030 是硬门禁；031 -> 032 -> 033/034 | build/install/package smoke 证明 `dasall` 与 `dasall-cli` 角色分离 |
@@ -256,7 +262,7 @@
 | Gate ID | 触发时机 | 通过条件 | 对应任务 | 验收命令 | 回退动作 |
 |---|---|---|---|---|---|
 | Gate-TUI-01 | Phase 0 后 | 权限模型、`/clear`、projection、preference 的 Ready/Blocked 状态均有证据 | 001~004 | `rg -n "TUI-TODO-00[1-4]" docs/todos/tui/deliverables` | 不进入 daemon/command 实现，保持 Blocked |
-| Gate-TUI-02 | prototype target 后 | `apps/tui` target 可构建且不安装、不改变 bare `dasall` | 005~007 | `cmake --build --preset vscode-linux-ninja --target dasall_tui_prototype` | 回退 CMake/third-party 接线 |
+| Gate-TUI-02 | prototype target 后 | `apps/tui` target 可构建且不安装、不改变 bare `dasall`；FTXUI 未解锁时允许 mock/no-renderer skeleton | 006~007 | `cmake --build --preset vscode-linux-ninja --target dasall_tui_prototype` | 回退 CMake 接线或 mock renderer 边界 |
 | Gate-TUI-03 | model/data source 后 | model/reducer/data source 不依赖 FTXUI/daemon/runtime/provider 私有头 | 008~012 | `ctest --preset vscode-linux-ninja -R "Tui(ScreenModel|Reducer|FakeDataSource|ProjectionTypes|ITuiDataSource)" --output-on-failure` | 阻断 UI 组件继续依赖私有实现 |
 | Gate-TUI-04 | renderer/snapshot 后 | 80x24、120x36、narrow CJK、selector modal、busy draft 无重叠 | 016~020 | `ctest --preset vscode-linux-ninja -R "Tui(DesignTokens|MainLayoutSnapshot|RenderSnapshot|PrototypeSmoke)" --output-on-failure` | 回退 layout metrics 或输入降级策略 |
 | Gate-TUI-05 | 小样评审后 | 样品采纳/延后/废弃清单回写，CJK/IME/resize 证据明确 | 020、035 | `rg -n "采纳|延后|废弃|CJK|IME|resize" docs/todos/tui/deliverables` | 不进入正式 daemon attach |
@@ -274,7 +280,7 @@
 | BLK-TUI-002 | Open | `/clear` 是清空视图还是新建当前进程内 session 未冻结 | 002、013、026 | TUI 详设 5.2、5.6、13 TUI-OQ-001 | Product + session owner 冻结 `/clear` 行为和 close/open 要求 | parser 只识别 `/clear`，返回本地 blocked 提示 |
 | BLK-TUI-003 | Open | daemon/access TUI projection endpoint、字段和错误码未冻结 | 003、021~025 | TUI 详设 7.4、9.5.3、9.5.4；AccessUnaryProductionPathV1 | 完成 projection mapping 文档并由 access/daemon owner 确认 | 正式 data source 保持 Blocked，fake-only 继续可用 |
 | BLK-TUI-004 | Open | `NextTurnPreference` 真链路承载位置未冻结 | 004、015、027~029 | TUI 详设 6.6；RuntimePolicyConsumerMatrix | Access/Runtime/Profiles/LLM 冻结 carrier 和 fail-closed 规则 | selector 只做 UI 草稿和 fake catalog，不宣称真实生效 |
-| BLK-TUI-005 | Open | FTXUI 来源、版本、offline cache、Debian policy 风险未验证 | 005、007、019 | TUI 详设 8.4；`cmake/DASALLThirdParty.cmake` | third-party 接入评审通过，private link/no-leak gate 可执行 | 使用 mock renderer 维持 model/composer/fake tests，延后 full-screen renderer |
+| BLK-TUI-005 | Open | FTXUI 来源、版本、offline cache、Debian policy 风险未验证 | 005、019、020 | TUI 详设 8.4；`cmake/DASALLThirdParty.cmake` | third-party 接入评审通过，private link/no-leak gate 可执行 | 使用 mock/no-renderer skeleton 维持 target、model、composer、fake tests，延后 full-screen renderer 与 snapshot |
 | BLK-TUI-006 | Open | CJK/IME/resize/composer 终端行为需人工样品证据 | 014、019、020 | TUI 详设 8.3、12、附件 A.7 | 完成 80x24/120x36/CJK/IME/resize/manual review 证据 | 降级为行输入 + `/editor`，不承诺复杂 composer |
 | BLK-TUI-007 | Open | runtime session open/close/query seam 不完整 | 023、026 | TUI 详设 4.4、5.2、10 Phase 4 | access/runtime 冻结前台 session projection/open/close/query 最小 seam | `/exit` 可本地退出并记录 close unavailable，`/clear` 保持本地视图行为 |
 | BLK-TUI-008 | Open | bare `dasall` 命令迁移前置门禁未满足 | 030~034 | TUI 详设附件 B.0~B.7；SystemIntegrationGateMatrix | TUI ready、权限模型、projection、selector、Debian smoke、compat matrix 均通过 | 不改 `apps/cli` OUTPUT_NAME，不安装 TUI 为 `dasall` |
@@ -339,7 +345,7 @@
 |---|---|---|---|---|---|
 | TUI-RSK-001 | 普通用户默认启动只看到 permission denied | `dasall` 作为人机入口体验不可用 | 详设 TUI-RISK-002/TUI-OQ-004 | TUI-TODO-001 未通过 | 不迁移 bare `dasall`；保留 `dasall_tui_prototype` 或 root operator 文档 |
 | TUI-RSK-002 | fake-only 小样被误写成 production ready | 误导 release / packaging gate | 详设 4.3、附件 A | 小样 smoke 通过但 daemon attach 未做 | 所有小样证据标注 prototype smoke，不进入 Gate-TUI-06/09 |
-| TUI-RSK-003 | FTXUI CJK/IME/resize 不达标 | composer 体验不可用 | 详设 TUI-RISK-006 | manual gate 失败 | 降级为行输入 + `/editor`；延后复杂 composer |
+| TUI-RSK-003 | FTXUI CJK/IME/resize 不达标 | full-screen 小样与复杂 composer 体验不可用 | 详设 TUI-RISK-006 | manual gate 失败 | 保留 no-daemon skeleton、model/reducer/fake tests；降级为行输入 + `/editor`；延后复杂 composer |
 | TUI-RSK-004 | FTXUI 依赖泄漏到核心模块 | 破坏架构边界 | 详设 TUI-RISK-008 | access/runtime/contracts include FTXUI | no-leak test 阻断；FTXUI 仅 private link `apps/tui` |
 | TUI-RSK-005 | TUI selector 越权成为第二 ModelRouter | 破坏 profiles/llm owner | 详设 TUI-RISK-004/TUI-RISK-005 | TUI 直接修改 profile 或 provider secret | selector 只保留 next-turn draft；真实承载未冻结则 Blocked |
 | TUI-RSK-006 | streaming supporting types 被误读为 ready | 错误承诺实时流式 | 详设 TUI-RISK-003 | 文档/CLI 帮助出现 stream-ready | 统一改回 unary/polling；bounded event feed 另立设计 |
@@ -352,11 +358,24 @@
 
 | 结论项 | 结论 |
 |---|---|
-| 是否可以进入执行 | 可以分阶段进入执行，但不能全量一次性推进。Phase 0~2 的 fake-only prototype 和 module-local UI 对象可直接执行；Phase 3~5 必须等待阻塞项解除 |
-| 当前可落到的最细粒度 | `TuiScreenModel`、`TuiReducer`、`ITuiDataSource`、`FakeTuiDataSource`、`TuiSlashCommandParser`、`TuiComposer`、`TuiModelSelector`、`TuiTerminalCapabilityProbe` 可落到 L3；renderer、daemon data source、route projection 可落到 L2；权限/命令迁移保持 L1/Blocked |
+| 是否可以进入执行 | 可以分阶段进入执行，但不能全量一次性推进。Phase 0~1 的 no-daemon skeleton、module-local DTO/model/reducer/fake data source 可直接执行；Phase 2 的 full-screen renderer/snapshot 依赖 FTXUI 与终端样品 gate；Phase 3~5 必须等待阻塞项解除 |
+| 当前可落到的最细粒度 | `TuiScreenModel`、`TuiReducer`、`ITuiDataSource`、`FakeTuiDataSource`、`TuiSlashCommandParser`、`TuiComposer`、`TuiModelSelector`、`TuiTerminalCapabilityProbe` 可落到 L3；FTXUI renderer、daemon data source、route projection 可落到 L2；权限/命令迁移保持 L1/Blocked |
 | 不能继续细化的证据缺口 | daemon projection endpoint 与错误码未冻结；runtime session open/close/query seam 不完整；`NextTurnPreference` 真链路承载位置未冻结；普通用户/root operator 启动身份未冻结；FTXUI CJK/IME/resize 与 Debian policy 需样品和打包证据 |
 | 是否存在 breaking change 风险 | 存在。bare `dasall` 从结构化 CLI 切到 TUI 是公开命令 breaking change，必须经过 Gate-TUI-08 和 Gate-TUI-09，不得在早期 TODO 中默认推进 |
-| 推荐执行策略 | 先执行 TUI-TODO-001~020，形成 fake-only 可评审小样；再以 TUI-TODO-021~029 补 daemon/status/route 真链路；最后在 TUI-TODO-030 证据通过后执行命令迁移 |
-| 当前专项 TODO 状态 | Build-ready subset：TUI-TODO-006~020；Design/Review-ready subset：TUI-TODO-001~005、021、027、030、035；Blocked subset：TUI-TODO-021~034 中依赖 external owner 的正式链路和命令迁移任务 |
+| 推荐执行策略 | 先执行 TUI-TODO-006~012，形成 no-daemon skeleton 与 module-local 数据/模型底座；并行推进 TUI-TODO-001~005 的设计解阻。随后在 FTXUI 与终端 gate 明确后执行 TUI-TODO-013~020；再以 TUI-TODO-021~029 补 daemon/status/route 真链路；最后在 TUI-TODO-030 证据通过后执行命令迁移 |
+| 当前专项 TODO 状态 | Build-ready subset：TUI-TODO-006~018，其中 TUI-TODO-007 仅要求 no-daemon/mock-renderer skeleton；Renderer-ready subset：TUI-TODO-019~020，依赖 TUI-TODO-005 与 BLK-TUI-006；Design/Review-ready subset：TUI-TODO-001~005、021、027、030、035；Blocked subset：TUI-TODO-021~034 中依赖 external owner 的正式链路和命令迁移任务 |
 
 最终判定：TUI 客户端专项 TODO 已具备工程实施计划和可执行任务表，但执行时必须遵守“fake-only 小样先行、projection seam 再行、命令迁移最后”的顺序。任何跳过权限模型、daemon projection、selector 真链路或 packaging smoke 的实现，都不得标记为 Done 或 release-ready。
+
+## 12. 未决问题处置表
+
+| 未决问题 | 当前处置 | Owner / 评审方 | 对应任务 | 完成条件 |
+|---|---|---|---|---|
+| TUI 默认启动身份与普通用户权限 | 保持 Open，作为命令迁移硬前置 | Product / Security / Access | TUI-TODO-001、024、030 | 决策文档明确普通用户、root/sudo-only、user-level daemon/socket 与 permission denied 文案 |
+| `/clear` 会话语义 | parser 可先识别，真实 session 行为保持 Blocked | Product / Runtime / Access | TUI-TODO-002、013、026 | 决策文档二值确认清空视图或新建当前进程内 session，以及是否 close/open daemon session |
+| daemon projection 与 session seam | 正式 data source 保持 Blocked，fake data source 先行 | Access / Daemon / Runtime | TUI-TODO-003、021~026 | endpoint、serialization、reason code、open/submit/poll/route/close 字段表冻结 |
+| `NextTurnPreference` 真链路 | fake selector 可做；真实 carrier 保持 Blocked | Access / Runtime / Profiles / LLM | TUI-TODO-004、015、027~029 | 冻结 preference 是否进入 request context、client capabilities、profile override 或新 projection，且不改变 ModelRouter owner |
+| FTXUI third-party 与终端行为 | no-daemon skeleton 不等待 FTXUI；renderer/snapshot/full-screen 小样等待 spike | Build / Packaging / TUI | TUI-TODO-005、019、020 | 来源、版本/commit、offline fallback、Debian policy、CJK/IME/resize/manual review 证据通过 |
+| LLM streaming 口径漂移 | 详设已修正为 LLM internal streaming 已有基础；TUI 首版仍不宣称 stream-ready | LLM / Access / Runtime / TUI | TUI-TC003、TUI-TODO-020、021 | 不再出现“LLMManager streaming 未实现”旧口径；也不把 supporting shape 当作端到端 stream-ready |
+| 小样 TODO 与主 TODO 双账并行 | 本文作为唯一执行账本，小样 TODO 降为参考输入 | TUI | TUI-PP-07、TUI-TODO-006~020、035 | 状态推进、证据回写和 Done 判定只更新本文；小样内容只迁入本文任务或 deliverable |
+| bare `dasall` 命令迁移影响面 | 保持 Blocked，先做旧入口 inventory 和 packaging matrix | TUI / CLI / Packaging | TUI-TODO-030~034 | Debian、scripts、manpage、postinst、autopkgtest、package smoke 的旧结构化控制面调用全部有迁移/保留策略 |

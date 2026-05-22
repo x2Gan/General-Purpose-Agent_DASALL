@@ -139,10 +139,10 @@ flowchart LR
 |---|---|---|
 | 架构兼容目标 | Ready | TUI 作为 Product & Access Layer 入口壳层，与 CLI + daemon + UDS + Access -> Runtime 主链方向一致 |
 | 当前实现成熟度 | Not Ready | 当前仓库没有 TUI substrate；session open/close、TUI 状态投影、模型偏好投影、event feed 均未形成闭环 |
-| 首版可交付路径 | Unary + accepted_async + query/poll | 当前不应宣称端到端 stream-ready |
+| 首版可交付路径 | Unary + accepted_async + query/poll | LLM internal streaming 已有实现基础，但 access/runtime/TUI 端到端 attach/replay 未闭环，当前不应宣称端到端 stream-ready |
 | 未来增强路径 | local-only bounded event feed | 只作为 TUI 私有实时通路，不承诺 reconnect/replay/public streaming |
 
-### 4.4 当前实现基线（2026-05-13）
+### 4.4 当前实现基线（2026-05-22）
 
 当前仓库具备部分可复用底座，但距离正式 TUI 仍有明确缺口。后续 TODO 拆分必须以该基线为准，避免把“可复用主链存在”误解为“TUI 已可直接接入”。
 
@@ -155,7 +155,7 @@ flowchart LR
 | 权限模型 | 当前 package/local control plane 主要是 root/sudo-only operator path，普通用户 socket 访问按 fail-closed 处理 | 默认人机 TUI 的启动身份、权限提示和降级路径必须先冻结 |
 | runtime session | 现有 session manager 支持 load/prepare/persist/bind/resume seed，不具备 TUI 需要的 open/close/list/query 公共 seam | `/exit`、`/clear`、前台 session 生命周期需要新增或投影化 |
 | LLM route | `ModelRouter` 已存在；`ModelSelectionHint` 未覆盖 provider/model pin 与显式 depth preference；runtime 当前未传 selection_hint | LLM selector 只能先做 UI 草稿和 fake 数据，真实链路需分阶段补齐 |
-| Streaming | `LLMManager::stream_generate` 和 OpenAI-compatible adapter streaming 仍是未实现/placeholder | 首版只能 unary + accepted_async + query/poll |
+| Streaming | `LLMManager::stream_generate` 已有实现并具备集成测试；access 仍主要停留在 `stream_requested`、`StreamAttached`、`subscription_ref` 等 supporting shape，runtime/TUI 尚未形成端到端 streaming lifecycle | 首版只能 unary + accepted_async + query/poll；TUI 不接 public streaming |
 | 第三方依赖 | `cmake/DASALLThirdParty.cmake` 尚未接入 FTXUI | 需先按仓库 third-party 治理做 FTXUI spike |
 
 现状结论：DASALL 对 TUI 的架构方向是 ready，但正式实现是 implementation not ready。最稳妥执行顺序是：先 fake-only 可交互小样，再补 projection/data-source seam，再接 daemon/session，再处理命令与打包迁移。
@@ -375,14 +375,13 @@ TUI 可展示以下受控投影：
 
 ### 7.3 Streaming 现状口径
 
-当前 DASALL 只在 contracts、access、llm supporting types 层保留 streaming 形状，不具备端到端流式主链。DeepSeek 协议层支持 OpenAI-compatible SSE 和 `stream=true`，未来可兼容，但当前缺口包括：
+当前 DASALL 的 LLM internal streaming 已有实现基础：`LLMManager::stream_generate` 与 adapter-level streaming integration test 已落地，contracts/access 也保留 `stream_requested`、`StreamAttached`、`subscription_ref` 等 supporting shape。需要保持的口径是：这些进展不等同于端到端 TUI/CLI streaming ready。DeepSeek 协议层支持 OpenAI-compatible SSE 和 `stream=true`，未来可兼容，但当前缺口包括：
 
-1. transport SSE 读取。
-2. adapter delta 归并。
-3. LLMManager stream_generate 实现。
-4. access attach/subscription 生命周期。
-5. TUI/CLI 事件消费。
-6. reconnect/replay contract。
+1. access attach/subscription 生命周期、错误码和权限语义。
+2. runtime 主链从 unary/polling 到可观测 event lifecycle 的投影方式。
+3. TUI/CLI 事件消费、bounded feed 和 UI backpressure 行为。
+4. reconnect/replay cursor contract。
+5. installed provider streaming smoke 与 release gate 证据。
 
 因此首版 TUI 不应宣称 stream-ready。推荐交付路径为：
 
