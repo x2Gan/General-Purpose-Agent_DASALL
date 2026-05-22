@@ -267,6 +267,14 @@ TuiScreenModel reduce(TuiScreenModel current, TuiAction action) {
       current.composer.can_submit = *action.composer_can_submit;
       clear_debug_reason_if_unspecified(current, action);
       return current;
+
+    case TuiActionType::StatusQueryRequested:
+    case TuiActionType::SessionQueryRequested:
+    case TuiActionType::ForegroundSessionClearRequested:
+    case TuiActionType::ExitRequested:
+      // Request actions are fulfilled by the app loop or data source.
+      clear_debug_reason_if_unspecified(current, action);
+      return current;
   }
 
   current.debug_reason = resolve_debug_reason(action, "unsupported_action");

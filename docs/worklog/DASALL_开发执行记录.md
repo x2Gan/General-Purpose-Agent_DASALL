@@ -1,3 +1,33 @@
+# 记录 #766
+
+- 日期：2026-05-22
+- 阶段：tui/slash command parser baseline
+- 任务：TUI-TODO-013 实现 slash command parser
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-013-slash-command-parser基线.md`，冻结 `TuiSlashCommandKind` / `TuiSlashCommand` / `TuiSlashCommandParseResult` / `TuiSlashCommandHelpEntry` 的最小数据形状、六个命令的 action 映射、unknown/arg-bearing fail-closed 语义，以及 focused build/test/discoverability 的验收口径。
+2. 新增 `apps/tui/src/command/TuiSlashCommandParser.h` 与 `apps/tui/src/command/TuiSlashCommandParser.cpp`，实现单行 slash gate、ASCII 小写规范化、`/help` / `/status` / `/session` / `/clear` / `/editor` / `/exit` 六个命令解析、help metadata、`to_action()` 映射与本地错误 banner。
+3. 更新 `apps/tui/src/model/TuiAction.h` 与 `apps/tui/src/model/TuiReducer.cpp`，补 `StatusQueryRequested`、`SessionQueryRequested`、`ForegroundSessionClearRequested`、`ExitRequested` 四个 request action 类型，并让 reducer 对这些 request action 做显式 no-op 保底，不在本轮偷渡 session lifecycle 语义。
+4. 新增 `tests/unit/tui/TuiSlashCommandParserTest.cpp`，focused 覆盖六个已知命令映射、`/help` modal/help entries、unknown/argument-bearing fail-closed、本地普通文本/多行输入不误判为 slash command，以及 parser 文件的 no-private-include boundary。
+5. 更新 `tests/unit/tui/CMakeLists.txt`、`docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，注册 `dasall_tui_slash_command_parser_unit_test` / `TuiSlashCommandParserTest`，并同步回写 TUI-TODO-013 完成状态、当前 slash parser 基线与 `TUI-GAP-013` 收口结果。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_slash_command_parser_unit_test"])`
+   - 结果：通过；`TuiSlashCommandParser.*`、`TuiSlashCommandParserTest.cpp` 与 `tests/unit/tui/CMakeLists.txt` 的 focused 接线可成功编译并链接。
+2. `RunCtest_CMakeTools(tests=["TuiSlashCommandParserTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按回退口径继续执行显式 discoverability + single-test 验证。
+3. `ctest --preset vscode-linux-ninja -N | rg 'TuiSlashCommandParserTest' && ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiSlashCommandParserTest$'`
+   - 结果：通过；`TuiSlashCommandParserTest` 已被发现并 1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-013` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖或 renderer 依赖的最小 slash command parser 基线。
+2. `/clear` 不再返回 blocked 占位，而是映射为显式 `ForegroundSessionClearRequested` local action；`/status` 与 `/session` 也已被分流为 projection query action，而不是普通消息提交。
+3. 本轮没有实现真实 session close/open/query、daemon projection 查询或 composer 状态机；这些行为继续后置到 `TUI-TODO-014`、`TUI-TODO-021~026` 与既有 gate。
+
 # 记录 #765
 
 - 日期：2026-05-22

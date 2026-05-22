@@ -61,6 +61,10 @@ enum class TuiActionType {
   ComposerTextChanged,
   ComposerModeChanged,
   ComposerSubmitAvailabilityChanged,
+  StatusQueryRequested,
+  SessionQueryRequested,
+  ForegroundSessionClearRequested,
+  ExitRequested,
 };
 
 struct TuiAction {
