@@ -1,3 +1,35 @@
+# 记录 #761
+
+- 日期：2026-05-22
+- 阶段：tui/projection dto baseline
+- 任务：TUI-TODO-008 定义 TUI projection DTO
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-008-TUI-projection-dto基线.md`，冻结 `apps/tui/src/data/TuiProjectionTypes.h` 的 DTO 家族、`NextTurnPreference` 最小字段集、no-private-include 规则，以及 `TuiProjectionTypesTest` / discoverability 的验收口径。
+2. 新增 `apps/tui/src/data/TuiProjectionTypes.h`，以纯标准库头文件形式定义 `NextTurnPreference`、`TuiSessionView`、`TuiTurnReceipt`、`TuiStatusProjection`、`TuiModelRouteProjection`、`TuiToolSummaryView`、`TuiRouteCatalogEntry`、`TuiRouteCatalogView`、`TuiEventProjection` 等 module-local projection DTO。
+3. 新增 `tests/unit/tui/TuiProjectionTypesTest.cpp`，守住 DTO 默认 shape、`NextTurnPreference` 的 next-turn-only 语义，以及头文件文本不引入 `access/`、`runtime/`、`llm/`、`profiles/`、FTXUI 或 owner request 类型的边界。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_projection_types_unit_test`、注入 `apps/tui/src` include path 与 `DASALL_TUI_PROJECTION_TYPES_HEADER` compile definition，并新增 `TuiProjectionTypesTest` 到 CTest discoverability。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/architecture/DASALL_TUI客户端设计方案.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步回写 `TUI-TODO-008` 完成状态、DTO 基线落位与 `TUI-GAP-008` 收口结果。
+
+### 验证
+
+1. `rg -n 'preferred_depth_tier|pinned_provider_id|pinned_model_id|user_visible_summary|source|applies_to_next_turn_only' docs/todos/tui/deliverables/TUI-TODO-008-TUI-projection-dto基线.md apps/tui/src/data/TuiProjectionTypes.h`
+   - 结果：通过；设计交付物与头文件对 `NextTurnPreference` 的冻结字段名保持一致。
+2. `cmake --build --preset vscode-linux-ninja --target dasall_tui_projection_types_unit_test`
+   - 结果：通过；新 DTO 头文件与 `tests/unit/tui` 的最小接线可成功编译并链接。
+3. `ctest --preset vscode-linux-ninja --output-on-failure -R '^TuiProjectionTypesTest$'`
+   - 结果：通过；1/1 测试通过，证明 DTO 默认 shape 与 no-private-include boundary 已被 focused unit test 守住。
+4. `ctest --preset vscode-linux-ninja -N | rg 'TuiProjectionTypesTest'`
+   - 结果：通过；`TuiProjectionTypesTest` 已进入顶层 discoverability，可作为后续 TUI data/model 任务的稳定 gate。
+
+### 结果
+
+1. `TUI-TODO-008` 已闭合：TUI 现在拥有可编译、可发现、无 owner 私有依赖的 module-local projection DTO 基线。
+2. 后续 `TUI-TODO-009~017` 可以直接复用 `TuiProjectionTypes.h` 作为 fake source、status/transcript、route selector 与 reducer/view model 的统一读模型表面，不需要各自重定义字段族。
+3. 本轮没有引入 `contracts` 提升、daemon/runtime/access/llm/provider 私有头依赖，也没有越权实现 `ITuiDataSource` 或 renderer，因此后续 producer/source 接线任务仍能在既有 owner boundary 内推进。
+
 # 记录 #760
 
 - 日期：2026-05-22
