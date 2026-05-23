@@ -1,3 +1,33 @@
+# 记录 #774
+
+- 日期：2026-05-23
+- 阶段：tui/ipc mapping header baseline
+- 任务：TUI-TODO-021 定义 daemon projection 请求响应映射
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-021-daemon-projection-mapping.md`，冻结 daemon projection 请求/响应映射的任务边界、本地证据、CQRS/AIP-193 参考、五个 operation 的 payload/outcome/timeout 结论，以及 Design->Build 映射。
+2. 新增 `apps/tui/src/ipc/TuiIpcController.h`，落盘 `TuiIpcOperation`、`TuiIpcOutcome`、`TuiIpcTimeoutPolicy`、`TuiIpcControllerOptions`、五个 request payload、五类 response payload、request builder helpers 与 `TuiIpcController` 的 header-only 方法面，继续保持不复用 CLI projection 或 raw daemon carrier。
+3. 新增 `tests/unit/tui/TuiDaemonProjectionMappingTest.cpp`，focused 覆盖 controller 方法签名、五个 operation 的 request payload 映射、response envelope 成功/失败分离、默认 socket path / timeout policy，以及 no-private-include / no-CLI-projection-reuse 边界。
+4. 更新 `tests/unit/tui/CMakeLists.txt`，注册 `dasall_tui_daemon_projection_mapping_unit_test` 与 `TuiDaemonProjectionMappingTest`，并把新 target 纳入 `DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS`。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/architecture/DASALL_TUI客户端设计方案.md`，同步回写 TUI-TODO-021 完成状态、`TUI-GAP-021` 收口结果、当前 IPC mapping/header baseline，以及下一步执行策略前移到 `TUI-TODO-022`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_daemon_projection_mapping_unit_test"])`
+   - 结果：通过；新增 IPC mapping header 与 focused 单测已成功编译并链接。
+2. `RunCtest_CMakeTools(tests=["TuiDaemonProjectionMappingTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+3. `ctest --test-dir build/vscode-linux-ninja -N | rg '^\s*Test\s+#.*TuiDaemonProjectionMappingTest$' && ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^TuiDaemonProjectionMappingTest$'`
+   - 结果：通过；discoverability 命中，`TuiDaemonProjectionMappingTest` 1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-021` 已闭合：TUI 现在拥有可编译、可发现、可追溯的 daemon projection mapping/header baseline，可为 022 的 transport/serialization/error normalization 直接复用。
+2. 本轮没有实现 `TuiIpcController.cpp`、daemon transport、`DaemonTuiDataSource`、startup failure path、session seam 或 route catalog 真消费；这些继续后置到 `TUI-TODO-022~029` 与既有 gate。
+3. 下一步推荐转入 `TUI-TODO-022`，在本轮已冻结的 payload/outcome/timeout 草案上实现本地 IPC 请求、序列化与稳定错误归一化。
+
 # 记录 #773
 
 - 日期：2026-05-23
