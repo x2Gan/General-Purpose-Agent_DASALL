@@ -56,7 +56,7 @@ void selector_filters_depths_and_pin_candidates_from_fake_route_catalog() {
                "the deep tier should stay visible even when all fake routes are disabled");
   assert_true(!depth_options[2].selectable && depth_options[2].selected,
               "the preselected deep fake draft should surface as disabled when the catalog disallows it");
-  assert_equal("credentials missing, verification pending, allowlist blocked",
+  assert_equal("credentials missing, not verified, profile disallows route",
                selector.render_disabled_reason(depth_options[2].disabled_reasons),
                "disabled depth tiers should expose merged fake disabled reasons");
 
@@ -77,7 +77,10 @@ void selector_filters_depths_and_pin_candidates_from_fake_route_catalog() {
       find_option(pin_options, "provider-local", "deep-reasoner");
   assert_true(local_option != nullptr && !local_option->selectable,
               "disabled local routes should still remain visible in the fake pin-model list");
-  assert_equal("verification pending, allowlist blocked",
+    assert_equal("provider-local/deep-reasoner [pending healthy depth=deep]",
+           local_option->display_label,
+           "disabled local fake routes should surface the route projection summary in the label");
+    assert_equal("not verified, profile disallows route",
                selector.render_disabled_reason(local_option->disabled_reasons),
                "disabled local fake routes should expose stable disabled reason text");
 
@@ -85,6 +88,9 @@ void selector_filters_depths_and_pin_candidates_from_fake_route_catalog() {
       find_option(pin_options, "provider-anthropic", "claude-sonnet");
   assert_true(anthropic_option != nullptr && !anthropic_option->selectable,
               "credential-blocked fake routes should remain visible but disabled");
+    assert_equal("provider-anthropic/claude-sonnet [verified healthy depth=deep]",
+           anthropic_option->display_label,
+           "credential-blocked fake routes should still surface verification and health summaries");
   assert_equal("credentials missing",
                selector.render_disabled_reason(anthropic_option->disabled_reasons),
                "credential-blocked fake routes should keep their disabled reason text");

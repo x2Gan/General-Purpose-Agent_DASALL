@@ -37,8 +37,63 @@ void append_unique_reason(std::vector<std::string>& reasons, const std::string& 
   return "pin model: " + *provider_id + "/" + *model_id;
 }
 
+[[nodiscard]] std::string join_summary_tokens(
+    const std::vector<std::string>& tokens,
+    const std::string& separator) {
+  std::string summary;
+  for (std::size_t index = 0; index < tokens.size(); ++index) {
+    if (index > 0) {
+      summary += separator;
+    }
+    summary += tokens[index];
+  }
+
+  return summary;
+}
+
+[[nodiscard]] std::string build_projection_summary(
+    const data::TuiRouteCatalogEntry& entry) {
+  std::vector<std::string> tokens;
+  if (!entry.verification_state.empty()) {
+    tokens.push_back(entry.verification_state);
+  }
+  if (!entry.health.empty()) {
+    tokens.push_back(entry.health);
+  }
+  if (!entry.depth_tier.empty()) {
+    tokens.push_back("depth=" + entry.depth_tier);
+  }
+
+  return join_summary_tokens(tokens, " ");
+}
+
 [[nodiscard]] std::string build_pin_label(const data::TuiRouteCatalogEntry& entry) {
-  return entry.provider_id + "/" + entry.model_id + " (" + entry.depth_tier + ")";
+  const std::string base_label = entry.provider_id + "/" + entry.model_id;
+  const std::string projection_summary = build_projection_summary(entry);
+  if (projection_summary.empty()) {
+    if (entry.depth_tier.empty()) {
+      return base_label;
+    }
+
+    return base_label + " (" + entry.depth_tier + ")";
+  }
+
+  return base_label + " [" + projection_summary + "]";
+}
+
+[[nodiscard]] std::string normalize_reason_label(std::string reason_code) {
+  if (reason_code == "verification_pending") {
+    return "not verified";
+  }
+  if (reason_code == "allowlist_blocked") {
+    return "profile disallows route";
+  }
+  if (reason_code == "provider_unhealthy") {
+    return "provider unhealthy";
+  }
+
+  std::replace(reason_code.begin(), reason_code.end(), '_', ' ');
+  return reason_code;
 }
 
 [[nodiscard]] data::TuiRouteCatalogEntry make_current_route_entry(
@@ -47,6 +102,9 @@ void append_unique_reason(std::vector<std::string>& reasons, const std::string& 
   entry.provider_id = route_catalog.current_route.current_provider_id;
   entry.model_id = route_catalog.current_route.current_model_id;
   entry.depth_tier = route_catalog.current_route.current_depth_tier;
+  entry.verification_state = route_catalog.current_route.verification_state;
+  entry.health = route_catalog.current_route.health;
+  entry.profile_allowlisted = route_catalog.current_route.profile_allowlisted;
   entry.disabled_reasons = route_catalog.current_route.disabled_reasons;
   entry.selectable = entry.disabled_reasons.empty();
   return entry;
@@ -158,20 +216,11 @@ std::string TuiModelSelector::render_disabled_reason(
   std::vector<std::string> normalized_reasons;
   normalized_reasons.reserve(reason_codes.size());
 
-  for (std::string reason_code : reason_codes) {
-    std::replace(reason_code.begin(), reason_code.end(), '_', ' ');
-    append_unique_reason(normalized_reasons, reason_code);
+  for (const std::string& reason_code : reason_codes) {
+    append_unique_reason(normalized_reasons, normalize_reason_label(reason_code));
   }
 
-  std::string summary;
-  for (std::size_t index = 0; index < normalized_reasons.size(); ++index) {
-    if (index > 0) {
-      summary += ", ";
-    }
-    summary += normalized_reasons[index];
-  }
-
-  return summary;
+  return join_summary_tokens(normalized_reasons, ", ");
 }
 
 data::NextTurnPreference TuiModelSelector::normalize_preference(

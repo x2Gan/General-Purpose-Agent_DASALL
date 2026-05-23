@@ -1,3 +1,37 @@
+# 记录 #781
+
+- 日期：2026-05-23
+- 阶段：tui/selector daemon consumption
+- 任务：TUI-TODO-028 接入 route catalog projection 消费
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-028-route-catalog-projection消费.md`，冻结 028 的任务边界、本地事实、Design->Build 映射、focused 验证口径，以及“只补 selector projection 消费，不扩大到 submit echo 或命令迁移”的实现约束。
+2. 更新 `apps/tui/src/view/TuiModelSelector.cpp`，让 `build_pin_label()` 在字段可用时输出 `verified healthy depth=...` 样式摘要，`make_current_route_entry()` 复制 current route 的 `verification_state` / `health` / `profile_allowlisted`，`render_disabled_reason()` 把 `verification_pending` / `allowlist_blocked` / `provider_unhealthy` 渲染为稳定用户文案，同时保留未知 reason code 的 additive fallback。
+3. 新增 `tests/unit/tui/TuiModelSelectorDaemonTest.cpp`，并更新 `tests/unit/tui/CMakeLists.txt`、`tests/unit/tui/TuiUnitTopologySmokeTest.cpp`，用真实 `DaemonTuiDataSource` + scripted IPC 驱动 daemon route catalog -> selector options 的 focused path，并把新测试接入 unit discoverability。
+4. 更新 `tests/unit/tui/TuiRouteCatalogFilterTest.cpp`，把 fake route catalog 既有断言对齐到新的 selector summary/reason mapping，确认 028 不会把 015/027 的本地 selector baseline 打坏。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，回写 TUI-TODO-028 完成状态、`TUI-GAP-028` 收口结果，以及下一步执行策略前移到 `TUI-TODO-029`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_model_selector_daemon_unit_test"])`
+   - 结果：通过；新增 daemon-backed selector focused target 成功编译并链接。
+2. `RunCtest_CMakeTools(tests=["TuiModelSelectorDaemonTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo 当前回退口径直接执行编译产物验证。
+3. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_model_selector_daemon_unit_test`
+   - 结果：通过；首次失败点为 `expected='deepseek-prod/deepseek-chat [verified healthy depth=standard]' actual='deepseek-prod/deepseek-chat (standard)'`，按最小 slice 修复 `TuiModelSelector.cpp` 后重跑通过。
+4. `Build_CMakeTools(buildTargets=["dasall_tui_route_catalog_filter_unit_test","dasall_tui_route_catalog_projection_unit_test","dasall_tui_unit_topology_smoke_unit_test"])`
+   - 结果：通过；selector 相邻 focused target 与 discoverability target 成功编译并链接。
+5. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_route_catalog_filter_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_route_catalog_projection_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_unit_topology_smoke_unit_test`
+   - 结果：通过；中途只暴露一个 fake scenario health 预期写错的本地测试文案，修正后同组验证全部通过。
+
+### 结果
+
+1. `TUI-TODO-028` 已闭合：daemon route catalog projection 现在会被 `TuiModelSelector` 真消费，而不是继续停留在 fake-only/disabled-reason-only 语义。
+2. 本轮没有扩大到 `TuiApp` 或 `DaemonTuiDataSource` 的生产逻辑；focused daemon-backed selector test 已证明 028 的主缺口只在 selector 本地 option/disabled reason 生成层，`selector_mode` refresh 与 submit echo 继续后置到 `TUI-TODO-029`。
+3. 下一步推荐优先转入 `TUI-TODO-029`，在本轮已闭合的 session lifecycle + route catalog projection + selector consumption 基线上验证 next preference submit echo 与 effective route 回显。
+
 # 记录 #780
 
 - 日期：2026-05-23
