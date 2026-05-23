@@ -117,6 +117,12 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
   return status;
 }
 
+[[nodiscard]] bool startup_issue_means_daemon_unavailable(
+    const data::TuiDataSourceIssue& issue) {
+  return issue.reason_code == "socket_missing" ||
+         issue.reason_code == "daemon_unavailable";
+}
+
 }  // namespace
 
 TuiApp::TuiApp() = default;
@@ -143,12 +149,14 @@ int TuiApp::run(TuiAppOptions options) {
     return 1;
   }
 
-  if (!open_fake_session()) {
+  if (!open_session()) {
+    emit_startup_error();
     const int exit_code = shutdown();
     return exit_code == 0 ? 1 : exit_code;
   }
 
   if (!load_route_catalog()) {
+    emit_startup_error();
     const int exit_code = shutdown();
     return exit_code == 0 ? 1 : exit_code;
   }
@@ -326,7 +334,7 @@ std::string_view TuiApp::last_error() const noexcept {
   return last_error_;
 }
 
-void TuiApp::initialize_components(const TuiAppOptions& options) {
+void TuiApp::initialize_components(TuiAppOptions& options) {
   const bool has_initial_draft = options.initial_draft.has_value() &&
                                  !options.initial_draft->empty();
 
@@ -345,7 +353,9 @@ void TuiApp::initialize_components(const TuiAppOptions& options) {
   screen_model_.composer = composer_.state();
   screen_model_.focus = model::TuiFocusState::Composer;
   screen_model_.debug_reason = "tui_app_initialized";
-  data_source_ = std::make_unique<data::FakeTuiDataSource>(scenario_id_);
+  data_source_ = options.data_source_override != nullptr
+                     ? std::move(options.data_source_override)
+                     : std::make_unique<data::FakeTuiDataSource>(scenario_id_);
   terminal_capabilities_ = {};
   startup_mode_ = terminal::TuiStartupMode::FailClosed;
   last_event_cursor_.reset();
@@ -359,7 +369,7 @@ void TuiApp::initialize_components(const TuiAppOptions& options) {
   exit_requested_ = false;
 }
 
-bool TuiApp::open_fake_session() {
+bool TuiApp::open_session() {
   const data::TuiOpenSessionRequest request{
       .profile_id = profile_id_,
       .startup_mode_hint = startup_mode_to_string(startup_mode_),
@@ -369,7 +379,7 @@ bool TuiApp::open_fake_session() {
   data::TuiOpenSessionResult result = data_source_->open_session(request);
   if (!result.ok()) {
     if (result.issue.has_value()) {
-      last_error_ = result.issue->message;
+      last_error_ = format_startup_issue_message(*result.issue);
       append_issue_banner(*result.issue, "Session open failed");
     }
     return false;
@@ -404,7 +414,7 @@ bool TuiApp::load_route_catalog() {
   data::TuiRouteCatalogResult result = data_source_->route_catalog(request);
   if (!result.ok()) {
     if (result.issue.has_value()) {
-      last_error_ = result.issue->message;
+      last_error_ = format_startup_issue_message(*result.issue);
       append_issue_banner(*result.issue, "Route catalog failed");
     }
     return false;
@@ -475,6 +485,12 @@ void TuiApp::render_current_screen(const bool flush_to_output) {
   }
 }
 
+void TuiApp::emit_startup_error() const {
+  if (output_stream_ != nullptr && !last_error_.empty()) {
+    *output_stream_ << last_error_ << '\n';
+  }
+}
+
 std::string TuiApp::selector_modal_body(
     const std::vector<view::TuiModelSelectorOption>& options) const {
   if (options.empty()) {
@@ -535,6 +551,51 @@ std::size_t TuiApp::effective_terminal_height() const noexcept {
   }
 
   return 12;
+}
+
+std::string TuiApp::format_startup_issue_message(
+    const data::TuiDataSourceIssue& issue) {
+  const std::string detail = trim_copy(issue.message);
+
+  if (issue.reason_code == "permission_denied") {
+    std::string message =
+        "TUI startup blocked: permission denied for the current root/sudo-only operator path.";
+    if (!detail.empty()) {
+      message += ' ';
+      message += detail;
+    }
+    return message;
+  }
+
+  if (startup_issue_means_daemon_unavailable(issue)) {
+    std::string message =
+        "TUI startup blocked: daemon unavailable for the local control-plane path.";
+    if (!detail.empty()) {
+      message += ' ';
+      message += detail;
+    }
+    return message;
+  }
+
+  if (issue.reason_code == "profile_missing") {
+    std::string message =
+        "TUI startup blocked: requested profile is missing or incomplete.";
+    if (!detail.empty()) {
+      message += ' ';
+      message += detail;
+    }
+    return message;
+  }
+
+  if (!detail.empty()) {
+    return "TUI startup blocked: " + detail;
+  }
+
+  if (issue.has_reason()) {
+    return "TUI startup blocked: " + issue.reason_domain + '/' + issue.reason_code;
+  }
+
+  return "TUI startup blocked: startup requirements are not satisfied.";
 }
 
 std::string TuiApp::startup_mode_to_string(

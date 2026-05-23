@@ -19,6 +19,7 @@ namespace dasall::tui::app {
 struct TuiAppOptions {
   std::string scenario_id = "planning_tools";
   std::optional<std::string> profile_id;
+  std::unique_ptr<data::ITuiDataSource> data_source_override;
   std::optional<terminal::TuiTerminalProbeEnvironment> probe_environment;
   std::size_t terminal_width = 0;
   std::size_t terminal_height = 0;
@@ -50,17 +51,20 @@ class TuiApp {
   [[nodiscard]] std::string_view last_error() const noexcept;
 
  private:
-  void initialize_components(const TuiAppOptions& options);
-  [[nodiscard]] bool open_fake_session();
+    void initialize_components(TuiAppOptions& options);
+    [[nodiscard]] bool open_session();
   [[nodiscard]] bool load_route_catalog();
   void sync_composer_state();
   void sync_composer_busy_from_status();
   void show_selector_preview(data::TuiRoutePreferenceMode mode);
   void render_current_screen(bool flush_to_output);
+    void emit_startup_error() const;
   [[nodiscard]] std::string selector_modal_body(
       const std::vector<view::TuiModelSelectorOption>& options) const;
   [[nodiscard]] std::size_t effective_terminal_width() const noexcept;
   [[nodiscard]] std::size_t effective_terminal_height() const noexcept;
+    [[nodiscard]] static std::string format_startup_issue_message(
+      const data::TuiDataSourceIssue& issue);
   static std::string startup_mode_to_string(terminal::TuiStartupMode startup_mode);
   static bool status_requires_busy_composer(const data::TuiStatusProjection& status);
   [[nodiscard]] std::string next_request_id(std::string_view prefix);

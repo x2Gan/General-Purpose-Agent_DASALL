@@ -83,6 +83,8 @@ void test_tui_integration_local_cmake_registers_future_app_tests() {
               "tui integration CMake should register TuiTestTopologyDiscoverability");
   assert_true(local_cmake.find("TuiAppStartupTest") != std::string::npos,
               "tui integration CMake should register TuiAppStartupTest for discoverability");
+  assert_true(local_cmake.find("TuiAppStartupFailureTest") != std::string::npos,
+              "tui integration CMake should register TuiAppStartupFailureTest for discoverability");
   assert_true(local_cmake.find("TuiPrototypeSmokeTest") != std::string::npos,
               "tui integration CMake should register TuiPrototypeSmokeTest for discoverability");
   assert_true(local_cmake.find("TuiPrototypeBuildSmokeTest") != std::string::npos,

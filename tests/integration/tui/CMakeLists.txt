@@ -8,6 +8,12 @@ add_executable(dasall_tui_app_startup_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiAppStartupTest.cpp
 )
 
+add_executable(dasall_tui_app_startup_failure_integration_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiAppStartupFailureTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/data/DaemonTuiDataSource.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.cpp
+)
+
 add_executable(dasall_tui_prototype_smoke_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiPrototypeSmokeTest.cpp
 )
@@ -21,6 +27,13 @@ target_link_libraries(dasall_tui_app_startup_integration_test
   PRIVATE
     dasall_test_support
     dasall_tui_prototype_core
+)
+
+target_link_libraries(dasall_tui_app_startup_failure_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_tui_prototype_core
+    dasall_platform
 )
 
 target_link_libraries(dasall_tui_prototype_smoke_integration_test
@@ -42,6 +55,7 @@ target_compile_definitions(dasall_tui_integration_topology_smoke_integration_tes
 
 dasall_apply_common_options(dasall_tui_integration_topology_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_app_startup_integration_test)
+dasall_apply_common_options(dasall_tui_app_startup_failure_integration_test)
 dasall_apply_common_options(dasall_tui_prototype_smoke_integration_test)
 
 add_test(NAME TuiTestTopologyDiscoverability COMMAND dasall_tui_integration_topology_smoke_integration_test)
@@ -49,6 +63,9 @@ set_tests_properties(TuiTestTopologyDiscoverability PROPERTIES LABELS "integrati
 
 add_test(NAME TuiAppStartupTest COMMAND dasall_tui_app_startup_integration_test)
 set_tests_properties(TuiAppStartupTest PROPERTIES LABELS "integration;tui")
+
+add_test(NAME TuiAppStartupFailureTest COMMAND dasall_tui_app_startup_failure_integration_test)
+set_tests_properties(TuiAppStartupFailureTest PROPERTIES LABELS "integration;tui")
 
 add_test(NAME TuiPrototypeSmokeTest COMMAND dasall_tui_prototype_smoke_integration_test)
 set_tests_properties(TuiPrototypeSmokeTest PROPERTIES LABELS "integration;tui")
@@ -61,6 +78,7 @@ set_tests_properties(TuiPrototypeBuildSmokeTest PROPERTIES LABELS "integration;t
 list(APPEND DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_tui_integration_topology_smoke_integration_test
   dasall_tui_app_startup_integration_test
+  dasall_tui_app_startup_failure_integration_test
   dasall_tui_prototype_smoke_integration_test
 )
 

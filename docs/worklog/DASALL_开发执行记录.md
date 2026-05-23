@@ -1,3 +1,39 @@
+# 记录 #777
+
+- 日期：2026-05-23
+- 阶段：tui/startup failure path baseline
+- 任务：TUI-TODO-024 验证启动降级与 daemon unavailable 路径
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-024-启动降级与daemon-unavailable路径.md`，冻结 024 的任务边界、本地事实、Design->Build 映射、focused 验证口径，以及“default prototype 仍 fake-only、不隐式提权、不自动启动 daemon”的实现约束。
+2. 更新 `apps/tui/src/app/TuiApp.h` 与 `apps/tui/src/app/TuiApp.cpp`，为 startup path 增加 `data_source_override` 注入 seam，把 `open_fake_session()` 统一提升为 `open_session()`，并新增 `emit_startup_error()` / `format_startup_issue_message()`，让 `permission_denied`、daemon unavailable 与 `profile_missing` 在 app 层有稳定 startup issue surface。
+3. 新增 `tests/integration/tui/TuiAppStartupFailureTest.cpp`，通过真实 `DaemonTuiDataSource` + `TuiIpcControllerTestHooks::ScopedIpcOverride` 覆盖 narrow degradation、non-TTY fail-closed、`socket_missing` 用户面 daemon unavailable、`permission_denied` 独立 startup issue 与 startup route catalog 上的 `profile_missing`。
+4. 更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，注册 `dasall_tui_app_startup_failure_integration_test` / `TuiAppStartupFailureTest`，并把 discoverability smoke 同步扩到新测试名。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，回写 TUI-TODO-024 完成状态、`TUI-GAP-024` 收口结果，以及下一步执行策略前移到 `TUI-TODO-025`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_app_startup_integration_test"])`
+   - 结果：通过；`TuiApp` 的 startup seam 改动没有破坏既有 fake-only startup integration target。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_app_startup_failure_integration_test"])`
+   - 结果：通过；首次构建只暴露一个自引入的未使用 helper warning，已在同轮最小删除后重跑通过。
+3. `Build_CMakeTools(buildTargets=["dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过；新的 discoverability smoke target 已成功编译并链接。
+4. `ListTests_CMakeTools()`
+   - 结果：通过；`TuiAppStartupFailureTest` 与 `TuiTestTopologyDiscoverability` 已进入 VS Code CMake 发现图。
+5. `RunCtest_CMakeTools(tests=["TuiAppStartupFailureTest"])` 与 `RunCtest_CMakeTools(tests=["TuiTestTopologyDiscoverability"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+6. `ctest --test-dir build/vscode-linux-ninja -N | rg '^\s*Test\s+#.*(TuiAppStartupFailureTest|TuiTestTopologyDiscoverability)$' && ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(TuiAppStartupFailureTest|TuiTestTopologyDiscoverability)$'`
+   - 结果：通过；discoverability 命中，`TuiAppStartupFailureTest` 与 `TuiTestTopologyDiscoverability` 2/2 通过。
+
+### 结果
+
+1. `TUI-TODO-024` 已闭合：TUI 现在拥有可执行的 startup degradation 与 daemon-backed startup failure baseline，`socket_missing` 可在用户面稳定表达为 daemon unavailable，而 `permission_denied` / `profile_missing` 仍保持独立 startup issue。
+2. `TuiApp` 仍默认运行在 fake-only prototype 模式；只有显式注入 `data_source_override` 时才消费 daemon-backed startup path。本轮没有引入隐式提权、自动 daemon bootstrap 或 bare `dasall` 命令迁移。
+3. 下一步推荐优先转入 `TUI-TODO-025`，在已闭合的 startup failure + daemon-backed attach 基线上接入 status/tool/recovery projection 刷新；`TUI-TODO-027` 也仍具备并行推进条件。
+
 # 记录 #776
 
 - 日期：2026-05-23
