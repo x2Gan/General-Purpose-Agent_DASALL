@@ -1,3 +1,34 @@
+# 记录 #775
+
+- 日期：2026-05-23
+- 阶段：tui/ipc controller error normalization
+- 任务：TUI-TODO-022 实现 `TuiIpcController` 错误归一化
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-022-tui-ipc-controller-error-normalization.md`，冻结 022 的任务边界、本地事实、Design->Build 映射、稳定错误归一化口径，以及“public header 不扩写 platform/CLI/raw daemon private surface”的实现约束。
+2. 新增 `apps/tui/src/ipc/TuiIpcController.cpp` 与 `apps/tui/src/ipc/TuiIpcControllerTestHooks.h`，实现 `TuiIpcController` 的 JSON request/response envelope codec、per-operation timeout、`platform::IIPC` roundtrip、local request validation、stable `TuiDataSourceIssue` 映射与 private test seam，同时保持 `apps/tui/src/ipc/TuiIpcController.h` 公共方法面不变。
+3. 新增 `tests/unit/tui/TuiIpcControllerTest.cpp` 与 `tests/unit/tui/TuiIpcPermissionDeniedTest.cpp`，focused 覆盖 success roundtrip、request envelope 保真、`socket_missing`、`permission_denied`、`timeout`、`schema_mismatch`、`malformed_response`，并更新 `tests/unit/tui/CMakeLists.txt` 注册对应 targets/tests。
+4. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/architecture/DASALL_TUI客户端设计方案.md`，同步回写 TUI-TODO-022 完成状态、`TUI-GAP-022` 收口结果、controller baseline 当前态，以及下一步执行策略转向未阻塞的 `TUI-TODO-027`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_ipc_controller_unit_test","dasall_tui_ipc_permission_denied_unit_test"])`
+   - 结果：通过；首次构建暴露两个新测试把 `TuiIpcController` 声明成 `const` 的局部错误，已在同轮最小修复后重跑通过。
+2. `ListTests_CMakeTools()`
+   - 结果：通过；`TuiIpcControllerTest` 与 `TuiIpcPermissionDeniedTest` 已进入 VS Code CMake 发现图。
+3. `RunCtest_CMakeTools(tests=["TuiIpcControllerTest","TuiIpcPermissionDeniedTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(TuiIpcControllerTest|TuiIpcPermissionDeniedTest)$'`
+   - 结果：通过；2/2 通过。
+
+### 结果
+
+1. `TUI-TODO-022` 已闭合：TUI 现在拥有可执行的 `TuiIpcController` baseline，可把 local IPC transport、serialization 与稳定 reason code 暴露为 `ITuiDataSource` 风格结果，而不回退到 CLI private projection 或 message 解析。
+2. 当前 baseline 只闭合 controller 本身，不代表 `DaemonTuiDataSource`、startup failure path、session open/close/query seam、route catalog 真消费或 bare `dasall` 命令迁移已完成；这些继续后置到 `TUI-TODO-023~030`。
+3. 下一步推荐优先转入未阻塞的 `TUI-TODO-027`，继续冻结 route catalog projection 字段；`TUI-TODO-023~026` 仍受 `BLK-TUI-007` 的 external owner session seam 约束。
+
 # 记录 #774
 
 - 日期：2026-05-23
