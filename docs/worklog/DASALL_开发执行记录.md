@@ -1,3 +1,41 @@
+# 记录 #778
+
+- 日期：2026-05-23
+- 阶段：tui/status projection refresh
+- 任务：TUI-TODO-025 接入 status/tool/recovery 投影刷新
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-025-status-tool-recovery投影刷新.md`，冻结 025 的任务边界、本地事实、Design->Build 映射、focused 验证口径，以及“status refresh 只消费已冻结 projection，不扩写 owner surface、不展示内部字段名 dump”的实现约束。
+2. 新增 `tests/unit/tui/TuiStatusProjectionContractTest.cpp`，通过 scripted IPC + real `DaemonTuiDataSource` focused 覆盖 `poll_events()` 的 status/tool/recovery projection 保真、空 batch 负例与 machine-readable result。
+3. 新增 `tests/integration/tui/TuiStatusPanelIntegrationTest.cpp`，通过 real `TuiApp` + `DaemonTuiDataSource` + scripted IPC 驱动 `open_session -> route_catalog -> poll_events -> close_session`，验证 refreshed status 会进入 `screen_model().status` 并反映到用户面 status panel，同时拒绝 `status_delta` / `tool_summary` / `current_tool` 一类内部字段名 dump。
+4. 更新 `tests/unit/tui/CMakeLists.txt`、`tests/integration/tui/CMakeLists.txt`、`tests/unit/tui/TuiUnitTopologySmokeTest.cpp` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，注册 `TuiStatusProjectionContractTest` / `TuiStatusPanelIntegrationTest` 并把 discoverability smoke 同步扩到新测试名。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，回写 TUI-TODO-025 完成状态、`TUI-GAP-025` 收口结果，以及下一步执行策略前移到 `TUI-TODO-027`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_status_projection_contract_unit_test","dasall_tui_status_panel_integration_test"])`
+   - 结果：通过；新增 focused unit/integration status refresh targets 成功编译并链接。
+2. `ListTests_CMakeTools()`
+   - 结果：通过；`TuiStatusProjectionContractTest` 与 `TuiStatusPanelIntegrationTest` 已进入 VS Code CMake 发现图。
+3. `RunCtest_CMakeTools(tests=["TuiStatusProjectionContractTest","TuiStatusPanelIntegrationTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --test-dir build/vscode-linux-ninja -N | rg 'TuiStatusProjectionContractTest|TuiStatusPanelIntegrationTest' && ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(TuiStatusProjectionContractTest|TuiStatusPanelIntegrationTest)$'`
+   - 结果：通过；discoverability 命中，`TuiStatusProjectionContractTest` 与 `TuiStatusPanelIntegrationTest` 2/2 通过。
+5. `Build_CMakeTools(buildTargets=["dasall_tui_unit_topology_smoke_unit_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过；更新后的 topology smoke targets 可重新编译并链接。
+6. `RunCtest_CMakeTools(tests=["TuiUnitTopologySmokeTest","TuiTestTopologyDiscoverability"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 discoverability 验证。
+7. `ctest --test-dir build/vscode-linux-ninja -N | rg 'TuiUnitTopologySmokeTest|TuiTestTopologyDiscoverability' && ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(TuiUnitTopologySmokeTest|TuiTestTopologyDiscoverability)$'`
+   - 结果：通过；discoverability 命中，`TuiUnitTopologySmokeTest` 与 `TuiTestTopologyDiscoverability` 2/2 通过。
+
+### 结果
+
+1. `TUI-TODO-025` 已闭合：daemon-backed `poll_events()` 的 stage/tool/pending/budget/recovery/safe-mode projection 现在有 focused contract/integration evidence，可证明它会刷新到 `screen_model().status` 与用户面 status panel。
+2. 本轮没有扩写 `DaemonTuiDataSource`、`TuiReducer` 或 `TuiStatusPanel` 的 owner 语义；任务闭合点是补齐了 task-specific evidence，证明既有 `status_delta -> reducer -> status panel` 路径成立且不展示内部字段名 dump。
+3. 下一步推荐优先转入 `TUI-TODO-027`，在本轮已闭合的 status/tool/recovery projection refresh 基线上继续冻结 route catalog projection 字段；`TUI-TODO-035` 也可并行回写阶段证据。
+
 # 记录 #777
 
 - 日期：2026-05-23
