@@ -866,6 +866,11 @@ void append_optional_payload_member(
   append_string_member(json, "provider_id", entry.provider_id, first);
   append_string_member(json, "model_id", entry.model_id, first);
   append_string_member(json, "depth_tier", entry.depth_tier, first);
+  append_string_member(
+    json, "verification_state", entry.verification_state, first);
+  append_string_member(json, "health", entry.health, first);
+  append_bool_member(
+    json, "profile_allowlisted", entry.profile_allowlisted, first);
   append_bool_member(json, "selectable", entry.selectable, first);
   append_raw_member(
       json,
@@ -885,6 +890,11 @@ void append_optional_payload_member(
   append_string_member(json, "current_model_id", route.current_model_id, first);
   append_string_member(
       json, "current_depth_tier", route.current_depth_tier, first);
+  append_string_member(
+    json, "verification_state", route.verification_state, first);
+  append_string_member(json, "health", route.health, first);
+  append_bool_member(
+    json, "profile_allowlisted", route.profile_allowlisted, first);
   append_raw_member(
       json,
       "disabled_reasons",
@@ -1218,6 +1228,11 @@ void append_optional_payload_member(
   if (!read_required_string(object, "provider_id", &entry->provider_id) ||
       !read_required_string(object, "model_id", &entry->model_id) ||
       !read_required_string(object, "depth_tier", &entry->depth_tier) ||
+      !read_required_string(
+          object, "verification_state", &entry->verification_state) ||
+      !read_required_string(object, "health", &entry->health) ||
+      !read_required_bool(
+          object, "profile_allowlisted", &entry->profile_allowlisted) ||
       !read_required_bool(object, "selectable", &entry->selectable)) {
     return false;
   }
@@ -1235,7 +1250,12 @@ void append_optional_payload_member(
       !read_required_string(
           object, "current_model_id", &route->current_model_id) ||
       !read_required_string(
-          object, "current_depth_tier", &route->current_depth_tier)) {
+      object, "current_depth_tier", &route->current_depth_tier) ||
+    !read_required_string(
+      object, "verification_state", &route->verification_state) ||
+    !read_required_string(object, "health", &route->health) ||
+    !read_required_bool(
+      object, "profile_allowlisted", &route->profile_allowlisted)) {
     return false;
   }
 

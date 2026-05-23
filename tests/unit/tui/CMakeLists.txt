@@ -121,6 +121,10 @@ add_executable(dasall_tui_route_catalog_filter_unit_test
   ${CMAKE_SOURCE_DIR}/apps/tui/src/view/TuiModelSelector.cpp
 )
 
+add_executable(dasall_tui_route_catalog_projection_unit_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiRouteCatalogProjectionTest.cpp
+)
+
 add_executable(dasall_tui_daemon_projection_mapping_unit_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiDaemonProjectionMappingTest.cpp
 )
@@ -227,6 +231,11 @@ target_include_directories(dasall_tui_route_catalog_filter_unit_test
     ${CMAKE_SOURCE_DIR}/apps/tui/src
 )
 
+target_include_directories(dasall_tui_route_catalog_projection_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/tui/src
+)
+
 target_include_directories(dasall_tui_daemon_projection_mapping_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/tui/src
@@ -327,6 +336,11 @@ target_link_libraries(dasall_tui_route_catalog_filter_unit_test
     dasall_test_support
 )
 
+target_link_libraries(dasall_tui_route_catalog_projection_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
 target_link_libraries(dasall_tui_daemon_projection_mapping_unit_test
   PRIVATE
     dasall_test_support
@@ -357,6 +371,11 @@ target_link_libraries(dasall_tui_status_projection_contract_unit_test
 )
 
 target_compile_definitions(dasall_tui_projection_types_unit_test
+  PRIVATE
+    DASALL_TUI_PROJECTION_TYPES_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/data/TuiProjectionTypes.h"
+)
+
+target_compile_definitions(dasall_tui_route_catalog_projection_unit_test
   PRIVATE
     DASALL_TUI_PROJECTION_TYPES_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/data/TuiProjectionTypes.h"
 )
@@ -473,6 +492,7 @@ dasall_apply_common_options(dasall_tui_status_panel_unit_test)
 dasall_apply_common_options(dasall_tui_design_tokens_unit_test)
 dasall_apply_common_options(dasall_tui_terminal_capability_probe_unit_test)
 dasall_apply_common_options(dasall_tui_route_catalog_filter_unit_test)
+dasall_apply_common_options(dasall_tui_route_catalog_projection_unit_test)
 dasall_apply_common_options(dasall_tui_daemon_projection_mapping_unit_test)
 dasall_apply_common_options(dasall_tui_ipc_controller_unit_test)
 dasall_apply_common_options(dasall_tui_ipc_permission_denied_unit_test)
@@ -524,6 +544,9 @@ set_tests_properties(TuiTerminalCapabilityProbeTest PROPERTIES LABELS "unit;tui"
 add_test(NAME TuiRouteCatalogFilterTest COMMAND dasall_tui_route_catalog_filter_unit_test)
 set_tests_properties(TuiRouteCatalogFilterTest PROPERTIES LABELS "unit;tui")
 
+add_test(NAME TuiRouteCatalogProjectionTest COMMAND dasall_tui_route_catalog_projection_unit_test)
+set_tests_properties(TuiRouteCatalogProjectionTest PROPERTIES LABELS "unit;tui")
+
 add_test(NAME TuiDaemonProjectionMappingTest COMMAND dasall_tui_daemon_projection_mapping_unit_test)
 set_tests_properties(TuiDaemonProjectionMappingTest PROPERTIES LABELS "unit;tui")
 
@@ -562,6 +585,7 @@ list(APPEND DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_tui_design_tokens_unit_test
   dasall_tui_terminal_capability_probe_unit_test
   dasall_tui_route_catalog_filter_unit_test
+  dasall_tui_route_catalog_projection_unit_test
   dasall_tui_daemon_projection_mapping_unit_test
   dasall_tui_ipc_controller_unit_test
   dasall_tui_ipc_permission_denied_unit_test

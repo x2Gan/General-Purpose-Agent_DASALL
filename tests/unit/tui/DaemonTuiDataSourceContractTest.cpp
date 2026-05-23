@@ -306,6 +306,9 @@ void daemon_data_source_preserves_projection_contracts_across_all_operations() {
   entry.provider_id = "deepseek-prod";
   entry.model_id = "deepseek-chat";
   entry.depth_tier = "deep";
+  entry.verification_state = "verified";
+  entry.health = "healthy";
+  entry.profile_allowlisted = true;
   entry.selectable = true;
 
   TuiRouteCatalogView route_catalog;
@@ -313,6 +316,9 @@ void daemon_data_source_preserves_projection_contracts_across_all_operations() {
       .current_provider_id = "deepseek-prod",
       .current_model_id = "deepseek-chat",
       .current_depth_tier = "deep",
+      .verification_state = "verified",
+      .health = "healthy",
+      .profile_allowlisted = true,
       .disabled_reasons = {},
       .next_preference = NextTurnPreference{
           .mode = TuiRoutePreferenceMode::Auto,
@@ -411,6 +417,14 @@ void daemon_data_source_preserves_projection_contracts_across_all_operations() {
   assert_equal(std::string("deepseek-chat"),
                route_result.route_catalog->current_route.current_model_id,
                "route_catalog should surface the daemon current route unchanged");
+  assert_equal(std::string("verified"),
+               route_result.route_catalog->current_route.verification_state,
+               "route_catalog should preserve current-route verification state through the daemon data source seam");
+  assert_equal(std::string("healthy"),
+               route_result.route_catalog->current_route.health,
+               "route_catalog should preserve current-route health through the daemon data source seam");
+  assert_true(route_result.route_catalog->current_route.profile_allowlisted,
+              "route_catalog should preserve current-route allowlist decisions through the daemon data source seam");
 
   assert_true(close_result.ok() && close_result.has_consistent_values(),
               "daemon data source should preserve close acknowledgements on success");

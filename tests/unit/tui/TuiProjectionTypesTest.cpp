@@ -68,6 +68,10 @@ void projection_types_expose_expected_default_shape() {
               "TuiToolSummaryView should keep badges and latency optional by default");
   assert_true(route.disabled_reasons.empty(),
               "TuiModelRouteProjection should keep disabled reasons additive");
+  assert_true(route.verification_state.empty() && route.health.empty(),
+              "TuiModelRouteProjection should default verification and health summaries to empty");
+  assert_true(route.profile_allowlisted,
+              "TuiModelRouteProjection should default profile allowlist to true until the route catalog says otherwise");
   assert_true(route.next_preference.applies_to_next_turn_only,
               "TuiModelRouteProjection should embed the same next-turn-only preference contract");
   assert_true(catalog.candidate_routes.empty() && catalog.disabled_reasons.empty(),

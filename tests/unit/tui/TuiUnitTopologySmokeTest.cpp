@@ -73,6 +73,8 @@ void test_tui_unit_local_cmake_registers_future_focused_tests() {
               "tui unit CMake should register TuiReducerTransitionTest for discoverability");
   assert_true(local_cmake.find("TuiStatusProjectionContractTest") != std::string::npos,
               "tui unit CMake should register TuiStatusProjectionContractTest for discoverability");
+  assert_true(local_cmake.find("TuiRouteCatalogProjectionTest") != std::string::npos,
+              "tui unit CMake should register TuiRouteCatalogProjectionTest for discoverability");
   assert_true(local_cmake.find("TuiComposerTest") != std::string::npos,
               "tui unit CMake should register TuiComposerTest for discoverability");
   assert_true(local_cmake.find("TuiDesignTokensTest") != std::string::npos,

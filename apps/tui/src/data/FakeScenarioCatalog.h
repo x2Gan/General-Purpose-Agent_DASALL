@@ -122,11 +122,17 @@ inline TuiRouteCatalogEntry make_route_entry(std::string provider_id,
                                              std::string model_id,
                                              std::string depth_tier,
                                              bool selectable = true,
-                                             std::vector<std::string> disabled_reasons = {}) {
+                                             std::vector<std::string> disabled_reasons = {},
+                                             std::string verification_state = "verified",
+                                             std::string health = "healthy",
+                                             bool profile_allowlisted = true) {
   TuiRouteCatalogEntry route_entry;
   route_entry.provider_id = std::move(provider_id);
   route_entry.model_id = std::move(model_id);
   route_entry.depth_tier = std::move(depth_tier);
+  route_entry.verification_state = std::move(verification_state);
+  route_entry.health = std::move(health);
+  route_entry.profile_allowlisted = profile_allowlisted;
   route_entry.selectable = selectable;
   route_entry.disabled_reasons = std::move(disabled_reasons);
   return route_entry;
@@ -136,11 +142,17 @@ inline TuiRouteCatalogView make_route_catalog(std::string provider_id,
                                               std::string model_id,
                                               std::string depth_tier,
                                               std::vector<TuiRouteCatalogEntry> candidate_routes,
-                                              std::vector<std::string> disabled_reasons = {}) {
+                                              std::vector<std::string> disabled_reasons = {},
+                                              std::string verification_state = "verified",
+                                              std::string health = "healthy",
+                                              bool profile_allowlisted = true) {
   TuiRouteCatalogView route_catalog;
   route_catalog.current_route.current_provider_id = std::move(provider_id);
   route_catalog.current_route.current_model_id = std::move(model_id);
   route_catalog.current_route.current_depth_tier = std::move(depth_tier);
+  route_catalog.current_route.verification_state = std::move(verification_state);
+  route_catalog.current_route.health = std::move(health);
+  route_catalog.current_route.profile_allowlisted = profile_allowlisted;
   route_catalog.current_route.next_preference.user_visible_summary = "auto";
   route_catalog.current_route.next_preference.source = "fake_scenario";
   route_catalog.candidate_routes = std::move(candidate_routes);
@@ -352,7 +364,10 @@ inline FakeScenario make_route_switch() {
                         "deep-reasoner",
                         "deep",
                         false,
-                        {"verification_pending", "allowlist_blocked"})});
+                        {"verification_pending", "allowlist_blocked"},
+                        "pending",
+                        "healthy",
+                        false)});
   scenario.route_catalog.current_route.next_preference.mode = TuiRoutePreferenceMode::PreferDepth;
   scenario.route_catalog.current_route.next_preference.preferred_depth_tier = std::string("deep");
   scenario.route_catalog.current_route.next_preference.user_visible_summary = "prefer depth";

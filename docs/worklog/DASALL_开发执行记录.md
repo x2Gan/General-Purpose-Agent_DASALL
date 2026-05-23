@@ -1,3 +1,41 @@
+# 记录 #780
+
+- 日期：2026-05-23
+- 阶段：tui/route catalog projection
+- 任务：TUI-TODO-027 冻结 route catalog projection 字段
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-027-route-catalog-projection.md`，冻结 027 的任务边界、本地事实、外部参考、summary-only 边界、Design->Build 映射与 focused 验证口径，明确本轮只做 route catalog projection 字段冻结，不实现 selector 真消费或 submit echo。
+2. 更新 `apps/tui/src/data/TuiProjectionTypes.h`、`apps/tui/src/data/FakeScenarioCatalog.h` 与 `tests/unit/tui/TuiProjectionTypesTest.cpp`，为 `TuiModelRouteProjection` / `TuiRouteCatalogEntry` 新增 `verification_state`、`health`、`profile_allowlisted` 字段，并把 fake route catalog fixture 与默认 DTO 形状一并补齐。
+3. 新增 `tests/unit/tui/TuiRouteCatalogProjectionTest.cpp`，并更新 `tests/unit/tui/CMakeLists.txt`、`tests/unit/tui/TuiUnitTopologySmokeTest.cpp`，用 focused unit + discoverability smoke 守住 current route / candidate fail-closed 摘要、no-secret/no-profile-dump 边界，以及新测试的 CMake discoverability。
+4. 更新 `apps/tui/src/ipc/TuiIpcController.cpp` 与 `tests/unit/tui/DaemonTuiDataSourceContractTest.cpp`，把 route catalog 的 encode/decode 与 daemon data source roundtrip 一并接齐新字段，并补 current-route verification/health/allowlist 断言，确保 027 不是“只改 header，不守 transport seam”。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，回写 TUI-TODO-027 完成状态、`TUI-GAP-027` 收口结果，以及下一步执行策略前移到 `TUI-TODO-028`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_projection_types_unit_test"])`
+   - 结果：通过；新增 route projection 字段没有破坏既有 DTO baseline。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_route_catalog_projection_unit_test","dasall_tui_unit_topology_smoke_unit_test"])`
+   - 结果：通过；027 的 focused behavior target 与 discoverability smoke target 均成功编译并链接。
+3. `ListBuildTargets_CMakeTools()`、`ListTests_CMakeTools()`
+   - 结果：通过；`dasall_tui_route_catalog_projection_unit_test` 与 `TuiRouteCatalogProjectionTest` 已进入 VS Code CMake 发现图。
+4. `RunCtest_CMakeTools(tests=["TuiRouteCatalogProjectionTest","TuiUnitTopologySmokeTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo 当前回退口径继续直接执行编译产物验证。
+5. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_route_catalog_projection_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_unit_topology_smoke_unit_test`
+   - 结果：通过；027 的 focused route projection 行为与 unit topology discoverability smoke 均通过。
+6. `Build_CMakeTools(buildTargets=["dasall_tui_fake_scenario_catalog_unit_test","dasall_tui_route_catalog_filter_unit_test","dasall_tui_ipc_controller_unit_test","dasall_tui_daemon_data_source_contract_unit_test"])`
+   - 结果：通过；027 的字段冻结没有破坏 fake fixture、selector filter、IPC controller 与 daemon data source contract 相邻切片。
+7. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_fake_scenario_catalog_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_route_catalog_filter_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_route_catalog_projection_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_ipc_controller_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_daemon_data_source_contract_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_unit_topology_smoke_unit_test`
+   - 结果：通过；route projection、新增 seam 字段与相邻 focused unit/contract/discoverability evidence 全部通过。
+
+### 结果
+
+1. `TUI-TODO-027` 已闭合：TUI route catalog projection 现在能显式表达 `verification_state`、`health` 与 `profile_allowlisted`，不再只能依赖 disabled reason 文案猜测 fail-closed 原因。
+2. route catalog projection 继续保持 summary-only owner boundary：当前 route / candidate route 摘要、machine-readable disabled reason 与 next-turn preference 草稿可以暴露，但 provider secret、完整 allowlist 文档、profile 文件路径与 profile 内容仍被禁止进入 TUI projection。
+3. 下一步推荐优先转入 `TUI-TODO-028`，在本轮已闭合的 session lifecycle + route catalog projection 基线上接入 daemon selector consumption；`TUI-TODO-029` 的 submit echo 继续后置到 028 完成之后。
+
 # 记录 #779
 
 - 日期：2026-05-23

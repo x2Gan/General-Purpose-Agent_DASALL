@@ -63,6 +63,9 @@ struct TuiModelRouteProjection {
   std::string current_provider_id;
   std::string current_model_id;
   std::string current_depth_tier;
+  std::string verification_state;
+  std::string health;
+  bool profile_allowlisted = true;
   std::vector<std::string> disabled_reasons;
   NextTurnPreference next_preference;
 };
@@ -71,6 +74,9 @@ struct TuiRouteCatalogEntry {
   std::string provider_id;
   std::string model_id;
   std::string depth_tier;
+  std::string verification_state;
+  std::string health;
+  bool profile_allowlisted = true;
   bool selectable = true;
   std::vector<std::string> disabled_reasons;
 };
