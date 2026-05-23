@@ -91,6 +91,8 @@ void test_tui_integration_local_cmake_registers_future_app_tests() {
               "tui integration CMake should register TuiStatusPanelIntegrationTest for discoverability");
   assert_true(local_cmake.find("TuiSessionLifecycleIntegrationTest") != std::string::npos,
               "tui integration CMake should register TuiSessionLifecycleIntegrationTest for discoverability");
+  assert_true(local_cmake.find("TuiNextPreferenceIntegrationTest") != std::string::npos,
+              "tui integration CMake should register TuiNextPreferenceIntegrationTest for discoverability");
   assert_true(local_cmake.find("TuiPrototypeBuildSmokeTest") != std::string::npos,
               "tui integration CMake should register TuiPrototypeBuildSmokeTest for focused build validation");
   assert_true(local_cmake.find("integration;tui") != std::string::npos,

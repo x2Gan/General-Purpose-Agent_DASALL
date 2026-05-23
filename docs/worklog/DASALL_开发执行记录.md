@@ -1,3 +1,32 @@
+# 记录 #782
+
+- 日期：2026-05-24
+- 阶段：tui/next preference submit echo
+- 任务：TUI-TODO-029 验证 next preference 提交与回显
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-029-next-preference提交回显.md`，冻结 029 的任务边界、本地事实、Design->Build 映射、focused 验证口径，以及“只补 selector draft -> submit payload -> owner echo 的 integration evidence，不扩写 app loop / command migration”的实现约束。
+2. 新增 `tests/integration/tui/TuiNextPreferenceIntegrationTest.cpp`，通过 real `DaemonTuiDataSource` + scripted IPC + `TuiModelSelector` 覆盖 `Auto` / `PreferDepth` / `PinModel` 三模式的 next preference 提交与回显路径：验证 selector draft 进入 `submit_turn` payload、`PreferDepth` 未命中时回显 effective route、`PinModel` 失败时回显稳定 `route_unavailable` 且不 silent fallback。
+3. 更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，注册 `dasall_tui_next_preference_integration_test` / `TuiNextPreferenceIntegrationTest`，并把新测试纳入 integration discoverability guard。
+4. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，回写 TUI-TODO-029 完成状态、Phase 4 / Gate-TUI-07 focused evidence、TUI-GAP-029 收口结果，以及下一步转入 `TUI-TODO-035` 的阶段证据收口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_next_preference_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过；新集成测试与 topology smoke target 成功编译并链接。
+2. `RunCtest_CMakeTools(tests=["TuiNextPreferenceIntegrationTest","TuiTestTopologyDiscoverability"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo 当前回退口径继续直接执行编译产物验证。
+3. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_next_preference_integration_test && ./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test`
+   - 结果：通过；`Auto` / `PreferDepth` / `PinModel` 三模式与 integration discoverability guard 均通过。
+
+### 结果
+
+1. `TUI-TODO-029` 已闭合：TUI 现在拥有 selector draft -> `submit_turn` payload -> owner route/receipt echo 的 focused integration evidence，不再只依赖分段 unit/contract 证据拼接推断。
+2. 本轮没有扩写 `TuiApp` interactive submit loop，也没有推动 bare `dasall` 命令迁移；闭合点是证明 `PreferDepth` 保持 advisory 且回显 effective route，`PinModel` 保持 fail-closed 且通过 `route.*` 语义回显原因，不绕过 `ModelRouter`。
+3. 下一步推荐优先转入 `TUI-TODO-035`，把本轮 029 与 Gate-TUI-07 的阶段证据滚动收口；`TUI-TODO-030~034` 继续保持 Blocked，等待命令迁移 gate。
+
 # 记录 #781
 
 - 日期：2026-05-23
