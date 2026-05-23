@@ -135,6 +135,12 @@ add_executable(dasall_tui_ipc_permission_denied_unit_test
   ${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.cpp
 )
 
+add_executable(dasall_tui_daemon_data_source_contract_unit_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/DaemonTuiDataSourceContractTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/data/DaemonTuiDataSource.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.cpp
+)
+
 target_include_directories(dasall_tui_projection_types_unit_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/tui/src
@@ -230,6 +236,11 @@ target_include_directories(dasall_tui_ipc_permission_denied_unit_test
     ${CMAKE_SOURCE_DIR}/apps/tui/src
 )
 
+target_include_directories(dasall_tui_daemon_data_source_contract_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/tui/src
+)
+
 target_link_libraries(dasall_tui_projection_types_unit_test
   PRIVATE
     dasall_test_support
@@ -317,6 +328,12 @@ target_link_libraries(dasall_tui_ipc_controller_unit_test
 )
 
 target_link_libraries(dasall_tui_ipc_permission_denied_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_platform
+)
+
+target_link_libraries(dasall_tui_daemon_data_source_contract_unit_test
   PRIVATE
     dasall_test_support
     dasall_platform
@@ -418,6 +435,12 @@ target_compile_definitions(dasall_tui_ipc_permission_denied_unit_test
     DASALL_TUI_IPC_CONTROLLER_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.h"
 )
 
+target_compile_definitions(dasall_tui_daemon_data_source_contract_unit_test
+  PRIVATE
+    DASALL_TUI_DAEMON_DATA_SOURCE_HEADER="${CMAKE_SOURCE_DIR}/apps/tui/src/data/DaemonTuiDataSource.h"
+    DASALL_TUI_DAEMON_DATA_SOURCE_IMPL="${CMAKE_SOURCE_DIR}/apps/tui/src/data/DaemonTuiDataSource.cpp"
+)
+
 dasall_apply_common_options(dasall_tui_projection_types_unit_test)
 dasall_apply_common_options(dasall_tui_data_source_contract_unit_test)
 dasall_apply_common_options(dasall_tui_fake_scenario_catalog_unit_test)
@@ -436,6 +459,7 @@ dasall_apply_common_options(dasall_tui_route_catalog_filter_unit_test)
 dasall_apply_common_options(dasall_tui_daemon_projection_mapping_unit_test)
 dasall_apply_common_options(dasall_tui_ipc_controller_unit_test)
 dasall_apply_common_options(dasall_tui_ipc_permission_denied_unit_test)
+dasall_apply_common_options(dasall_tui_daemon_data_source_contract_unit_test)
 
 add_test(NAME TuiProjectionTypesTest COMMAND dasall_tui_projection_types_unit_test)
 set_tests_properties(TuiProjectionTypesTest PROPERTIES LABELS "unit;tui")
@@ -491,6 +515,9 @@ set_tests_properties(TuiIpcControllerTest PROPERTIES LABELS "unit;tui")
 add_test(NAME TuiIpcPermissionDeniedTest COMMAND dasall_tui_ipc_permission_denied_unit_test)
 set_tests_properties(TuiIpcPermissionDeniedTest PROPERTIES LABELS "unit;tui")
 
+add_test(NAME DaemonTuiDataSourceContractTest COMMAND dasall_tui_daemon_data_source_contract_unit_test)
+set_tests_properties(DaemonTuiDataSourceContractTest PROPERTIES LABELS "unit;tui")
+
 add_test(NAME TuiUnitTopologySmokeTest COMMAND dasall_tui_unit_topology_smoke_unit_test)
 set_tests_properties(TuiUnitTopologySmokeTest PROPERTIES LABELS "unit;tui")
 
@@ -517,6 +544,7 @@ list(APPEND DASALL_TUI_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_tui_daemon_projection_mapping_unit_test
   dasall_tui_ipc_controller_unit_test
   dasall_tui_ipc_permission_denied_unit_test
+  dasall_tui_daemon_data_source_contract_unit_test
   dasall_tui_unit_topology_smoke_unit_test
 )
 

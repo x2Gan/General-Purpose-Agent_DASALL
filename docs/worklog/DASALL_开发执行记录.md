@@ -1,3 +1,34 @@
+# 记录 #776
+
+- 日期：2026-05-23
+- 阶段：tui/daemon data source attach baseline
+- 任务：TUI-TODO-023 实现 `DaemonTuiDataSource`
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-023-daemon-data-source-contract基线.md`，冻结 023 的任务边界、本地事实、Design->Build 映射、focused 验证口径，以及“只交付 controller-backed thin adapter，不越权宣称 session lifecycle ready”的实现约束。
+2. 新增 `apps/tui/src/data/DaemonTuiDataSource.h` 与 `apps/tui/src/data/DaemonTuiDataSource.cpp`，实现基于 `TuiIpcController` 的 formal daemon-backed data source，统一暴露 `open_session()`、`submit_turn()`、`poll_events()`、`route_catalog()` 与 `close_session()` 五个 operation，并保持不直连 raw daemon carrier / CLI projection / runtime/access private surface。
+3. 新增 `tests/unit/tui/DaemonTuiDataSourceContractTest.cpp`，通过 scripted IPC focused 覆盖 success roundtrip、request envelope 保真、`socket_missing`、`close_unavailable` 与 no-raw-carrier boundary；同时更新 `tests/unit/tui/CMakeLists.txt` 注册 `dasall_tui_daemon_data_source_contract_unit_test` 与 `DaemonTuiDataSourceContractTest`。
+4. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，回写 TUI-TODO-023 完成状态、`TUI-GAP-023` 收口结果，以及 `BLK-TUI-007` 现仅继续约束 `TUI-TODO-026` 的真实 foreground session lifecycle integration。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_daemon_data_source_contract_unit_test"])`
+   - 结果：通过；`DaemonTuiDataSource` 与 focused contract test 成功编译并链接。
+2. `ListTests_CMakeTools()`
+   - 结果：通过；`DaemonTuiDataSourceContractTest` 已进入 VS Code CMake 发现图。
+3. `RunCtest_CMakeTools(tests=["DaemonTuiDataSourceContractTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo fallback 口径继续执行显式 focused CTest 验证。
+4. `ctest --test-dir build/vscode-linux-ninja -N | rg '^\s*Test\s+#.*DaemonTuiDataSourceContractTest$' && ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^DaemonTuiDataSourceContractTest$'`
+   - 结果：通过；discoverability 命中，`DaemonTuiDataSourceContractTest` 1/1 通过。
+
+### 结果
+
+1. `TUI-TODO-023` 已闭合：TUI 现在拥有正式的 `DaemonTuiDataSource` attach baseline，可在不泄漏 raw carrier / CLI projection 的前提下，把 `TuiIpcController` 暴露为统一的 `ITuiDataSource` contract。
+2. `BLK-TUI-007` 不再阻塞 023；它当前只继续约束 `TUI-TODO-026` 的真实 foreground session lifecycle integration。`close_unavailable` 之类 owner failure 继续按 machine-readable fail-closed 透传，而不是被 data source 伪装成成功 close/open。
+3. 下一步推荐优先转入 `TUI-TODO-024`，在本轮已闭合的 `DaemonTuiDataSource` + `TuiIpcController` 基线上验证 startup failure / daemon unavailable；`TUI-TODO-025` 与 `TUI-TODO-027` 也已具备并行推进条件。
+
 # 记录 #775
 
 - 日期：2026-05-23
