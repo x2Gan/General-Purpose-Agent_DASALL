@@ -24,6 +24,7 @@ struct TuiAppOptions {
   std::size_t terminal_width = 0;
   std::size_t terminal_height = 0;
   std::size_t bootstrap_tick_count = 0;
+  std::vector<model::TuiAction> scripted_actions;
   std::optional<std::string> initial_draft;
   std::optional<data::TuiRoutePreferenceMode> selector_preview_mode;
   bool print_final_screen = true;
@@ -56,6 +57,8 @@ class TuiApp {
   [[nodiscard]] bool load_route_catalog();
   void sync_composer_state();
   void sync_composer_busy_from_status();
+    void clear_composer_draft_preserving_history();
+    void handle_foreground_session_clear();
   void show_selector_preview(data::TuiRoutePreferenceMode mode);
   void render_current_screen(bool flush_to_output);
     void emit_startup_error() const;
@@ -90,6 +93,7 @@ class TuiApp {
   std::size_t terminal_height_ = 0;
   std::size_t request_sequence_ = 0;
   std::ostream* output_stream_ = nullptr;
+  std::string shutdown_close_reason_ = "prototype_round_complete";
   bool session_open_ = false;
   bool shutdown_clean_ = false;
   bool exit_requested_ = false;

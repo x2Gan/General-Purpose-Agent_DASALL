@@ -268,6 +268,18 @@ TuiScreenModel reduce(TuiScreenModel current, TuiAction action) {
       clear_debug_reason_if_unspecified(current, action);
       return current;
 
+    case TuiActionType::ForegroundSessionResetApplied:
+      current.session = data::TuiSessionView{};
+      current.transcript.clear();
+      current.status = data::TuiStatusProjection{};
+      current.route = data::TuiModelRouteProjection{};
+      current.composer = TuiComposerState{};
+      current.focus = TuiFocusState::Composer;
+      current.banners.clear();
+      current.modal = TuiModalState{};
+      clear_debug_reason_if_unspecified(current, action);
+      return current;
+
     case TuiActionType::StatusQueryRequested:
     case TuiActionType::SessionQueryRequested:
     case TuiActionType::ForegroundSessionClearRequested:

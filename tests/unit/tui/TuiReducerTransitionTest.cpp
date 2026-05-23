@@ -142,6 +142,67 @@ void reducer_switches_focus_and_manages_banners() {
               "banner clear should remove all currently visible banners");
 }
 
+void reducer_resets_foreground_session_state_for_clear() {
+  TuiScreenModel model;
+  model.session.session_id = "session-clear-001";
+  model.session.profile_id = "desktop_full";
+  model.status.stage = "tool_calling";
+  model.route.current_provider_id = "provider-clear";
+  model.route.current_model_id = "model-clear";
+  model.transcript.push_back(dasall::tui::model::TuiMessageView{
+      .role = "assistant",
+      .content = "stale transcript",
+      .timestamp = "2026-05-23T18:26:00Z",
+  });
+  model.composer.text = "stale draft";
+  model.composer.mode = "editing";
+  model.composer.can_submit = true;
+  model.composer.dirty = true;
+  model.focus = TuiFocusState::Modal;
+
+  TuiBanner banner;
+  banner.level = TuiBannerLevel::Warning;
+  banner.title = "old banner";
+  banner.message = "clear me";
+  model.banners.push_back(banner);
+  model.modal.kind = dasall::tui::model::TuiModalKind::Help;
+  model.modal.title = "Open modal";
+
+  TuiAction action;
+  action.type = TuiActionType::ForegroundSessionResetApplied;
+  action.debug_reason = "foreground_session_reset_applied";
+
+  const TuiScreenModel result = reduce(model, action);
+
+  assert_true(result.session.session_id.empty(),
+              "foreground session reset should unbind the previous session projection");
+  assert_true(result.transcript.empty(),
+              "foreground session reset should clear the prior transcript view");
+  assert_true(result.status.stage.empty(),
+              "foreground session reset should clear the prior status projection");
+  assert_true(result.route.current_provider_id.empty() &&
+                  result.route.current_model_id.empty(),
+              "foreground session reset should clear the prior route projection");
+  assert_true(result.banners.empty(),
+              "foreground session reset should clear prior banners before the next session binds");
+  assert_equal(static_cast<int>(dasall::tui::model::TuiModalKind::None),
+               static_cast<int>(result.modal.kind),
+               "foreground session reset should hide any active modal");
+  assert_equal(std::string("ready"),
+               result.composer.mode,
+               "foreground session reset should restore the composer to ready mode");
+  assert_true(result.composer.text.empty() && !result.composer.dirty,
+              "foreground session reset should clear the in-flight composer draft");
+  assert_true(result.composer.can_submit,
+              "foreground session reset should make the composer submittable again");
+  assert_equal(static_cast<int>(TuiFocusState::Composer),
+               static_cast<int>(result.focus),
+               "foreground session reset should return focus to the composer");
+  assert_equal("foreground_session_reset_applied",
+               result.debug_reason,
+               "foreground session reset should preserve the reducer debug reason");
+}
+
 void reducer_unknown_action_is_noop_and_records_debug_reason() {
   TuiScreenModel model;
   model.focus = TuiFocusState::Selector;
@@ -230,6 +291,7 @@ int main() {
     reducer_handles_submit_transition_via_composer_mode();
     reducer_appends_event_projection_and_refreshes_status();
     reducer_switches_focus_and_manages_banners();
+    reducer_resets_foreground_session_state_for_clear();
     reducer_unknown_action_is_noop_and_records_debug_reason();
     reducer_invalid_modal_focus_fails_closed_to_error_banner();
     reducer_files_avoid_renderer_io_and_owner_private_includes();

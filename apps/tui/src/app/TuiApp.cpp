@@ -104,6 +104,14 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
   return action;
 }
 
+[[nodiscard]] model::TuiAction make_foreground_session_reset_action(
+    std::string debug_reason) {
+  TuiAction action;
+  action.type = TuiActionType::ForegroundSessionResetApplied;
+  action.debug_reason = std::move(debug_reason);
+  return action;
+}
+
 [[nodiscard]] data::TuiStatusProjection make_baseline_status(
     std::string startup_mode) {
   data::TuiStatusProjection status;
@@ -168,7 +176,14 @@ int TuiApp::run(TuiAppOptions options) {
     }
   }
 
-  if (options.selector_preview_mode.has_value()) {
+  for (const auto& action : options.scripted_actions) {
+    dispatch_action(action);
+    if (exit_requested_) {
+      break;
+    }
+  }
+
+  if (!exit_requested_ && options.selector_preview_mode.has_value()) {
     show_selector_preview(*options.selector_preview_mode);
   }
 
@@ -208,16 +223,12 @@ void TuiApp::dispatch_action(const model::TuiAction& action) {
     }
 
     case TuiActionType::ForegroundSessionClearRequested:
-      apply_reduced_action(screen_model_,
-                           make_banner_action(model::TuiBannerLevel::Info,
-                                              "Foreground clear deferred",
-                                              "Fake-only preview keeps the current session until daemon session lifecycle lands.",
-                                              "foreground_session_clear_deferred",
-                                              "foreground_session_clear_requested"));
+      handle_foreground_session_clear();
       break;
 
     case TuiActionType::ExitRequested:
       exit_requested_ = true;
+      shutdown_close_reason_ = "/exit";
       break;
 
     case TuiActionType::RouteUpdated:
@@ -231,6 +242,7 @@ void TuiApp::dispatch_action(const model::TuiAction& action) {
     case TuiActionType::ComposerTextChanged:
     case TuiActionType::ComposerModeChanged:
     case TuiActionType::ComposerSubmitAvailabilityChanged:
+    case TuiActionType::ForegroundSessionResetApplied:
       break;
   }
 
@@ -282,7 +294,7 @@ int TuiApp::shutdown() {
 
   const data::TuiCloseSessionRequest request{
       .session_id = session_id_,
-      .close_reason = exit_requested_ ? "exit_requested" : "prototype_round_complete",
+      .close_reason = shutdown_close_reason_,
       .request_id = next_request_id("close_session"),
       .trace_id = next_trace_id("close_session"),
   };
@@ -300,6 +312,60 @@ int TuiApp::shutdown() {
   session_open_ = false;
   shutdown_clean_ = true;
   return 0;
+}
+
+void TuiApp::clear_composer_draft_preserving_history() {
+  static_cast<void>(composer_.set_busy(false));
+  const view::TuiComposerKeyEvent event{
+      .key = view::TuiComposerKey::TextChanged,
+      .text = std::string{},
+  };
+  static_cast<void>(composer_.handle_key(event));
+}
+
+void TuiApp::handle_foreground_session_clear() {
+  std::optional<data::TuiDataSourceIssue> close_issue;
+  if (session_open_ && !session_id_.empty() && data_source_ != nullptr) {
+    const data::TuiCloseSessionRequest close_request{
+        .session_id = session_id_,
+        .close_reason = "/clear",
+        .request_id = next_request_id("close_session"),
+        .trace_id = next_trace_id("close_session"),
+    };
+    const data::TuiCloseSessionResult close_result =
+        data_source_->close_session(close_request);
+    if (!close_result.ok() && close_result.issue.has_value()) {
+      close_issue = close_result.issue;
+    }
+  }
+
+  session_open_ = false;
+  session_id_.clear();
+  last_event_cursor_.reset();
+  last_error_.clear();
+
+  clear_composer_draft_preserving_history();
+  apply_reduced_action(screen_model_,
+                       make_foreground_session_reset_action(
+                           "foreground_session_clear_reset"));
+  sync_composer_state();
+
+  const bool session_reopened = open_session();
+  const bool route_reloaded = session_reopened && load_route_catalog();
+
+  if (close_issue.has_value()) {
+    apply_reduced_action(screen_model_,
+                         make_banner_action(model::TuiBannerLevel::Warning,
+                                            "Previous session close not confirmed",
+                                            close_issue->message,
+                                            close_issue->reason_code,
+                                            "foreground_session_clear_close_issue",
+                                            true));
+  }
+
+  if (session_reopened && route_reloaded) {
+    sync_composer_busy_from_status();
+  }
 }
 
 const model::TuiScreenModel& TuiApp::screen_model() const noexcept {
@@ -366,6 +432,7 @@ void TuiApp::initialize_components(TuiAppOptions& options) {
   request_sequence_ = 0;
   session_open_ = false;
   shutdown_clean_ = false;
+  shutdown_close_reason_ = "prototype_round_complete";
   exit_requested_ = false;
 }
 

@@ -63,6 +63,7 @@ enum class TuiActionType {
   ComposerSubmitAvailabilityChanged,
   StatusQueryRequested,
   SessionQueryRequested,
+  ForegroundSessionResetApplied,
   ForegroundSessionClearRequested,
   ExitRequested,
 };

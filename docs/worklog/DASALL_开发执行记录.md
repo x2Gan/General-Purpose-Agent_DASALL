@@ -1,3 +1,41 @@
+# 记录 #779
+
+- 日期：2026-05-23
+- 阶段：tui/session lifecycle wiring
+- 任务：TUI-TODO-026 接线 `/exit` 与 `/clear` 会话动作
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-026-session-lifecycle接线.md`，冻结 026 的任务边界、本地事实、Design->Build 映射、focused 验证口径，以及“只复用现有五个 operation seam，不扩写 standalone query IPC、命令迁移或 release gate”的实现约束。
+2. 更新 `apps/tui/src/model/TuiAction.h`、`apps/tui/src/model/TuiReducer.cpp` 与 `tests/unit/tui/TuiReducerTransitionTest.cpp`，新增内部 action `ForegroundSessionResetApplied`，把 `/clear` 需要的 session/transcript/status/route/banner/modal/composer reset 固化为 focused reducer 语义，同时保持 `debug_reason` 不丢失。
+3. 更新 `apps/tui/src/app/TuiApp.h` 与 `apps/tui/src/app/TuiApp.cpp`，把 `ForegroundSessionClearRequested` 从 deferred banner 改成真实 lifecycle：旧 session 先以 `/clear` close reason 发起 best-effort `close_session()`，随后执行 local reset、清空当前 draft 但保留 input history，再走 `open_session()` / `route_catalog()` 绑定新的 foreground session；`ExitRequested` 也改为在 `shutdown()` 中发出显式 `/exit` close reason。为 focused integration replay，新加 `TuiAppOptions::scripted_actions` 但不开放新的用户面命令入口。
+4. 新增 `tests/integration/tui/TuiSessionLifecycleIntegrationTest.cpp`，并更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，通过 real `TuiApp` + `DaemonTuiDataSource` + scripted IPC 覆盖 `/clear` close failure 可观测 + 新 session rebind、`/exit` explicit close reason，以及新 integration test 的 discoverability。
+5. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，回写 TUI-TODO-026 完成状态、`BLK-TUI-007` 收口结果，以及下一步执行策略继续前移到 `TUI-TODO-027`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_app_startup_integration_test"])`
+   - 结果：通过；`TuiApp` lifecycle 改动没有破坏既有 startup integration target。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_session_lifecycle_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过；新增 lifecycle / topology discoverability integration targets 成功编译并链接。
+3. `ListTests_CMakeTools()`
+   - 结果：通过；`TuiSessionLifecycleIntegrationTest` 与 `TuiTestTopologyDiscoverability` 已进入 VS Code CMake 测试发现图。
+4. `RunCtest_CMakeTools(tests=["TuiSessionLifecycleIntegrationTest","TuiTestTopologyDiscoverability"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`；已按 repo 当前可执行回退口径继续直接执行编译产物验证。
+5. `Build_CMakeTools(buildTargets=["dasall_tui_reducer_unit_test"])`
+   - 结果：通过；foreground session reset reducer target 成功编译并链接。
+6. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_reducer_unit_test && echo PASS`
+   - 结果：通过；新增 reset action 的 reducer 状态迁移没有被后续 app-loop 改动带坏。
+7. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_session_lifecycle_integration_test && ./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test && echo PASS`
+   - 结果：通过；`/clear` close failure + rebind、`/exit` explicit close reason 与 discoverability smoke 均通过。
+
+### 结果
+
+1. `TUI-TODO-026` 已闭合：`/clear` 与 `/exit` 不再停留在 typed action/deferred banner 层，而是已经接到真实 foreground session close/rebind path，且 close failure 保持 machine-readable 可观测。
+2. `BLK-TUI-007` 已对 TUI scope 收口：026 现可直接消费既有 `open_session` / `route_catalog` / `close_session` seam 完成 lifecycle，不再需要额外 runtime/access unblock 原子任务；本轮也没有新增 standalone query IPC 或越权扩写 owner API。
+3. 下一步推荐优先转入 `TUI-TODO-027`，在本轮已闭合的 startup/status/session lifecycle 基线上继续冻结 route catalog projection 字段；`TUI-TODO-035` 仍可并行回写阶段证据。
+
 # 记录 #778
 
 - 日期：2026-05-23
