@@ -1,3 +1,36 @@
+# 记录 #793
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal history recall fix
+- 任务：修复 `BLK-TUI-006` 手工终端 Up/Down 历史召回异常
+- 状态：已完成（实现修复并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 修复 `apps/tui/src/manual_terminal_main.cpp` 的 escape sequence 解析：每次只消费一条完整 escape sequence，避免同一 read buffer 内连续 `Up` / `Down` 被拼成一个未知序列后整体吞掉。
+2. 修复方向键前后的 draft 同步：只有 draft 与 composer state 不一致时才触发 `TextChanged`，避免纯 `Up` / `Down` 导航时清空 `history_index_` 与 `recall_seed_`。
+3. 增加 `ESC O A/B` application cursor 模式与 `ESC[1;...A/B` modified CSI cursor 序列识别，覆盖更多真实终端发送形态。
+4. 扩展 `dasall_tui_manual_terminal --self-check`，覆盖连续 `ESC[A ESC[A`、application cursor Down、modified CSI Up/Down 的历史召回路径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_manual_terminal])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过；连续 Up/Down 与 application/modified cursor 序列均被覆盖。
+3. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_composer_history_unit_test`
+   - 结果：通过。
+4. `printf 'first prompt\rsecond prompt\r\033[A\033[A\r/exit\r' | timeout 5s script -q -c 'stty rows 50 cols 119; ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal' /tmp/dasall-tui-history-recall.typescript`
+   - 结果：通过；伪终端连续 Up 历史召回路径可正常启动、提交召回项并退出。
+5. `git diff --check`、编辑器诊断与 command migration 范围检查
+   - 结果：通过；未触碰 `apps/cli`、`debian/` 或 packaging scripts。
+
+### 结果
+
+1. 手工终端中连续按 `Up` 可向更旧历史移动，`Down` 可回到较新历史并恢复原 draft。
+2. 同类终端序列差异已纳入 self-check，降低 VS Code / xterm application cursor 模式下的回归风险。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实 CJK/IME/resize/composer 结果仍需人工验收文档填写与签署。
+
 # 记录 #792
 
 - 日期：2026-05-24

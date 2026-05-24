@@ -400,6 +400,17 @@ void set_composer_text(view::TuiComposer& composer,
   sync_composer(screen_model, composer, std::move(debug_reason));
 }
 
+void sync_pending_draft(view::TuiComposer& composer,
+                        model::TuiScreenModel& screen_model,
+                        const std::string& draft,
+                        std::string debug_reason) {
+  if (draft == composer.state().text) {
+    return;
+  }
+
+  set_composer_text(composer, screen_model, draft, std::move(debug_reason));
+}
+
 void erase_last_utf8_codepoint(std::string& text) {
   if (text.empty()) {
     return;
@@ -522,6 +533,30 @@ void show_help(model::TuiScreenModel& screen_model) {
              "EDITOR is configured. Press Esc or Enter to close this modal.");
 }
 
+[[nodiscard]] bool is_csi_cursor_sequence(std::string_view sequence,
+                                          const char final_byte) noexcept {
+  if (sequence.size() < 3U || sequence[0] != '\x1b' || sequence[1] != '[' ||
+      sequence.back() != final_byte) {
+    return false;
+  }
+
+  for (std::size_t index = 2U; index + 1U < sequence.size(); ++index) {
+    const char byte = sequence[index];
+    if ((byte < '0' || byte > '9') && byte != ';' && byte != '?') {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool is_cursor_up_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOA" || is_csi_cursor_sequence(sequence, 'A');
+}
+
+[[nodiscard]] bool is_cursor_down_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOB" || is_csi_cursor_sequence(sequence, 'B');
+}
+
 void handle_submit(view::TuiComposer& composer,
                    model::TuiScreenModel& screen_model,
                    TerminalSession& terminal_session,
@@ -611,18 +646,18 @@ void handle_submit(view::TuiComposer& composer,
 void handle_escape_sequence(std::string_view sequence,
                             view::TuiComposer& composer,
                             model::TuiScreenModel& screen_model) {
-  if (sequence == "\x1b[A") {
+  if (is_cursor_up_sequence(sequence)) {
     static_cast<void>(composer.handle_key(view::TuiComposerKeyEvent{
         .key = view::TuiComposerKey::Up,
-      .text = {},
+        .text = {},
         .cursor_at_boundary = true,
         .draft_unmodified = true}));
     sync_composer(screen_model, composer, "history_older");
     return;
   }
-  if (sequence == "\x1b[B") {
+  if (is_cursor_down_sequence(sequence)) {
     static_cast<void>(composer.handle_key(
-      view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Down, .text = {}}));
+        view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Down, .text = {}}));
     sync_composer(screen_model, composer, "history_newer");
     return;
   }
@@ -639,6 +674,64 @@ void handle_escape_sequence(std::string_view sequence,
   }
 }
 
+[[nodiscard]] bool is_escape_sequence_final_byte(const unsigned char byte) noexcept {
+  return byte >= 0x40U && byte <= 0x7EU;
+}
+
+[[nodiscard]] bool escape_sequence_complete(std::string_view sequence) noexcept {
+  if (sequence.empty() || sequence.front() != '\x1b') {
+    return true;
+  }
+  if (sequence.size() == 1U) {
+    return false;
+  }
+
+  const char prefix = sequence[1];
+  if (prefix == '[') {
+    for (std::size_t index = 2U; index < sequence.size(); ++index) {
+      if (is_escape_sequence_final_byte(static_cast<unsigned char>(sequence[index]))) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (prefix == 'O') {
+    return sequence.size() >= 3U;
+  }
+  if (prefix == '\r' || prefix == '\n') {
+    return true;
+  }
+
+  return true;
+}
+
+[[nodiscard]] std::size_t escape_sequence_length(std::string_view buffer) noexcept {
+  if (buffer.empty() || buffer.front() != '\x1b') {
+    return 0U;
+  }
+  if (buffer.size() == 1U) {
+    return 1U;
+  }
+
+  const char prefix = buffer[1];
+  if (prefix == '[') {
+    for (std::size_t index = 2U; index < buffer.size(); ++index) {
+      if (is_escape_sequence_final_byte(static_cast<unsigned char>(buffer[index]))) {
+        return index + 1U;
+      }
+    }
+    return buffer.size();
+  }
+  if (prefix == 'O') {
+    return std::min<std::size_t>(3U, buffer.size());
+  }
+  if (prefix == '\r' || prefix == '\n') {
+    return 2U;
+  }
+
+  return 1U;
+}
+
 void append_printable_text(std::string& draft, std::string_view bytes) {
   for (const unsigned char byte : bytes) {
     if (byte >= 0x20U && byte != 0x7FU) {
@@ -649,15 +742,18 @@ void append_printable_text(std::string& draft, std::string_view bytes) {
 
 [[nodiscard]] std::string read_pending_escape_bytes() {
   std::string sequence = "\x1b";
-  pollfd descriptor{.fd = STDIN_FILENO, .events = POLLIN, .revents = 0};
-  if (::poll(&descriptor, 1, 15) <= 0 || (descriptor.revents & POLLIN) == 0) {
-    return sequence;
-  }
+  while (!escape_sequence_complete(sequence) && sequence.size() < 16U) {
+    pollfd descriptor{.fd = STDIN_FILENO, .events = POLLIN, .revents = 0};
+    if (::poll(&descriptor, 1, 15) <= 0 || (descriptor.revents & POLLIN) == 0) {
+      break;
+    }
 
-  char buffer[8]{};
-  const ssize_t bytes_read = ::read(STDIN_FILENO, buffer, sizeof(buffer));
-  if (bytes_read > 0) {
-    sequence.append(buffer, static_cast<std::size_t>(bytes_read));
+    char byte{};
+    const ssize_t bytes_read = ::read(STDIN_FILENO, &byte, 1U);
+    if (bytes_read <= 0) {
+      break;
+    }
+    sequence.push_back(byte);
   }
   return sequence;
 }
@@ -678,11 +774,12 @@ void process_input_buffer(std::string_view buffer,
       return;
     }
     if (byte == 0x1BU) {
-      set_composer_text(composer, screen_model, draft, "text_before_escape");
+      sync_pending_draft(composer, screen_model, draft, "text_before_escape");
       std::string sequence = "\x1b";
       if (offset + 1U < buffer.size()) {
-        sequence.append(buffer.substr(offset + 1U));
-        offset = buffer.size();
+        const std::size_t sequence_length = escape_sequence_length(buffer.substr(offset));
+        sequence = std::string(buffer.substr(offset, sequence_length));
+        offset += sequence_length > 0U ? sequence_length - 1U : 0U;
       } else {
         sequence = read_pending_escape_bytes();
       }
@@ -691,7 +788,7 @@ void process_input_buffer(std::string_view buffer,
       continue;
     }
     if (byte == '\r') {
-      set_composer_text(composer, screen_model, draft, "text_before_submit");
+      sync_pending_draft(composer, screen_model, draft, "text_before_submit");
       if (screen_model.modal.kind != model::TuiModalKind::None) {
         hide_modal(screen_model);
       } else {
@@ -711,7 +808,10 @@ void process_input_buffer(std::string_view buffer,
       continue;
     }
     if (byte == 0x12U) {
-      set_composer_text(composer, screen_model, draft, "text_before_reverse_search");
+      sync_pending_draft(composer,
+                         screen_model,
+                         draft,
+                         "text_before_reverse_search");
       static_cast<void>(composer.handle_key(
           view::TuiComposerKeyEvent{.key = view::TuiComposerKey::CtrlR, .text = {}}));
       sync_composer(screen_model, composer, "reverse_search");
@@ -726,7 +826,7 @@ void process_input_buffer(std::string_view buffer,
     append_printable_text(draft, std::string_view(buffer.data() + offset, 1U));
   }
 
-  set_composer_text(composer, screen_model, draft, "text_changed");
+  sync_pending_draft(composer, screen_model, draft, "text_changed");
 }
 
 [[nodiscard]] terminal::TuiTerminalProbeEnvironment self_check_environment(
@@ -745,6 +845,70 @@ void process_input_buffer(std::string_view buffer,
   environment.resize_events_supported = true;
   environment.external_editor_available = true;
   return environment;
+}
+
+[[nodiscard]] bool manual_history_recall_self_check(
+    const terminal::TuiTerminalCapabilities& capabilities,
+    terminal::TuiStartupMode startup_mode,
+    const terminal::FtxuiRendererAdapter& renderer) {
+  view::TuiComposer composer;
+  model::TuiScreenModel screen_model = make_initial_model(
+      capabilities,
+      startup_mode,
+      composer);
+  TerminalSession terminal_session;
+  bool should_exit = false;
+  std::ostringstream error_stream;
+  const TerminalSize size{120U, 36U};
+
+  process_input_buffer("first prompt\rsecond prompt\r\x1b[A\x1b[A",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       should_exit,
+                       error_stream);
+  if (should_exit || composer.state().text != "first prompt" ||
+      composer.state().mode != "history-recall") {
+    return false;
+  }
+
+  process_input_buffer("\x1bOB",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       should_exit,
+                       error_stream);
+  if (should_exit || composer.state().text != "second prompt" ||
+      composer.state().mode != "history-recall") {
+    return false;
+  }
+
+  process_input_buffer("\x1b[1;2B",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       should_exit,
+                       error_stream);
+  if (should_exit || !composer.state().text.empty() || composer.state().mode != "ready") {
+    return false;
+  }
+
+  process_input_buffer("third prompt\r\x1b[1;2A",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       should_exit,
+                       error_stream);
+  return !should_exit && composer.state().text == "third prompt" &&
+      composer.state().mode == "history-recall";
 }
 
 [[nodiscard]] int run_self_check() {
@@ -790,7 +954,8 @@ void process_input_buffer(std::string_view buffer,
       has_expected_shape(full_screen, 120, 36) &&
       has_expected_shape(narrow_screen, 80, 24) &&
       has_expected_shape(line_screen, 40, 12) &&
-      terminal_full_screen.find("\r\n") != std::string::npos;
+      terminal_full_screen.find("\r\n") != std::string::npos &&
+      manual_history_recall_self_check(capabilities, startup_mode, renderer);
   if (!ok) {
     std::cerr << "dasall_tui_manual_terminal self-check FAILED\n";
     return 1;
