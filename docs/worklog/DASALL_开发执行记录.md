@@ -1,3 +1,32 @@
+# 记录 #785
+
+- 日期：2026-05-24
+- 阶段：tui/command release blocker recovery
+- 任务：补 TUI-PROTO-017 样品评审证据与 TUI-TODO-036 FTXUI installed-path packaging review，并复检 TUI-TODO-031
+- 状态：已完成（031 继续 Blocked）
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`，把 prototype 现有工程证据收敛为采纳 / 延后 / 废弃清单，并明确 formal product/engineering sign-off 与 `BLK-TUI-006` 真实终端 manual gate 仍需人工确认。
+2. 新增 `docs/todos/tui/deliverables/TUI-TODO-036-ftxui-installed-path-packaging-review.md`，冻结 FTXUI 正式 Debian release path 采用 package-managed `libftxui-dev`，拒绝长期 vendored installed path，且保持 `apps/tui` private dependency 边界。
+3. 更新 `TUI-TODO-030` 与 `TUI-TODO-035` deliverables，把过时的“017/FTXUI review 缺失”口径改成“017 清单与 036 review 已完成，但 formal sign-off 与 `BLK-TUI-006` 仍阻塞 Gate-TUI-08”。
+4. 更新 TUI 专项 TODO 与子系统总账，新增 `TUI-TODO-036` Done 行，并把 `TUI-TODO-031~034` 继续保持 Blocked；本轮未改动 `apps/cli/CMakeLists.txt`、`apps/tui/`、`debian/` 或 `scripts/packaging/` 生产实现。
+
+### 验证
+
+1. `rg -n "Gate-TUI-PROT-06|采纳|延后|废弃|formal|BLK-TUI-006" docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`
+   - 结果：通过；样品证据包包含 evidence-ready、formal sign-off 待确认、`BLK-TUI-006` 继续 Open 与采纳 / 延后 / 废弃清单。
+2. `rg -n "package-managed|vendored|Debian Policy 4.13|embedded code copies|Gate-TUI-08|BLK-TUI-006|libftxui-dev" docs/todos/tui/deliverables/TUI-TODO-036-ftxui-installed-path-packaging-review.md`
+   - 结果：通过；FTXUI installed-path review 已包含 Debian policy、package-managed 策略、vendored rejection 与 031 仍 blocked 的口径。
+3. `rg -n "TUI-PROTO-017|TUI-TODO-036|formal|sign-off|BLK-TUI-006|Gate-TUI-08|TUI-TODO-031|package-managed|vendored" docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；deliverables、专项 TODO 与总账均已显示 017/036 完成、Gate-TUI-08 仍 Blocked、031 不解锁。
+
+### 结果
+
+1. 两个 blocker recovery 动作已完成：`TUI-PROTO-017` 等价样品评审证据包已落盘，FTXUI installed-path Debian source/binary strategy review 已落盘。
+2. `TUI-TODO-031` 已复检但不能推进生产实现；Gate-TUI-08 仍因 formal product/engineering sign-off 与 `BLK-TUI-006` 的真实终端 CJK/IME/resize/composer manual evidence 未闭合而保持 Blocked。
+3. `apps/cli/CMakeLists.txt` 继续保留 `set_target_properties(dasall-cli PROPERTIES OUTPUT_NAME dasall)`，直到 Gate-TUI-08 明确转 Pass。
+
 # 记录 #784
 
 - 日期：2026-05-24

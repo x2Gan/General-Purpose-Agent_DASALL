@@ -1627,9 +1627,9 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 
 当前仍未闭合的 TUI owner 缺口如下：
 
-1. `TUI-TODO-035` 已完成 020/029/030 与 Gate-TUI-07/Gate-TUI-08 的阶段证据回写，但 `TUI-PROTO-017` / `Gate-TUI-PROT-06` 样品评审证据包仍缺；当前仓内仍没有正式“采纳 / 延后 / 废弃清单 + 截图/录制 + 产品/工程共同评审结论”的长期资产。
-2. `TUI-TODO-020` 已闭合 prototype app loop，但仍受 CJK/IME/resize manual gate 与 installed path packaging review 约束；本轮结果不等于 full-screen interactive promotion 或 release path 已 ready。
-3. `TUI-TODO-030/035` 已完成 bare `dasall` 迁移门禁证据、旧入口 inventory 与阶段 closeout，但 `TUI-TODO-031~034` 仍保持 Blocked；当前 Gate-TUI-08 继续受 `BLK-TUI-006` 与 FTXUI installed-path packaging review 约束，本轮结论不能被误写成 command release ready。
+1. `TUI-PROTO-017` 已补齐等价样品评审证据包，形成“采纳 / 延后 / 废弃清单”；但 formal product/engineering sign-off 与真实终端 CJK/IME/resize/composer manual gate 仍未闭合，不能据此宣称 full-screen interactive promotion ready。
+2. `TUI-TODO-036` 已完成 FTXUI installed-path Debian source/binary strategy review，正式 release path 采纳 package-managed FTXUI / `libftxui-dev` 并拒绝长期 vendored installed path；FTXUI packaging review 不再阻塞 031。
+3. `TUI-TODO-030/035/036` 已完成 bare `dasall` 迁移门禁证据、旧入口 inventory、阶段 closeout 与 FTXUI packaging review，但 `TUI-TODO-031~034` 仍保持 Blocked；当前 Gate-TUI-08 继续受 formal sign-off 与 `BLK-TUI-006` 约束，本轮结论不能被误写成 command release ready。
 
 ### 17.5 建议复验命令
 
