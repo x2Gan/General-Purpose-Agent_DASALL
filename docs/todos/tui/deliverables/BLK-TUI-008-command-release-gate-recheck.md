@@ -16,15 +16,15 @@ project-implementation-cycle 本轮从总账中的 TUI client 残余缺口进入
 | 项 | 结论 |
 |---|---|
 | blocker 类型 | Dependency blocker |
-| 根因 | Gate-TUI-08 仍缺 formal product/engineering sign-off 与 `BLK-TUI-006` 真实终端 manual evidence |
-| 可自动修复性 | 不可完全自动修复；自动化只能复检证据、固化出口条件，不能代签 formal review 或伪造人工终端验收 |
+| 根因 | formal product/engineering sign-off 已完成；Gate-TUI-08 仍缺 `BLK-TUI-006` 真实终端 manual evidence |
+| 可自动修复性 | 不可完全自动修复；自动化可以复检证据、固化出口条件并回写 formal sign-off 完成状态，但不能伪造人工终端验收 |
 | 原任务是否恢复可执行 | 否。`TUI-TODO-031~034` 继续 Blocked |
 | 本轮提交性质 | 文档化 blocker recovery closeout；不包含生产代码、CMake、Debian 或 packaging 脚本变更 |
 
 ## 3. 本地证据
 
 1. `docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md` 已证明 B.0 第 2、3、4 项具备可追溯证据：daemon-backed projection、root/sudo-only operator 模型、`dasall-cli` 兼容矩阵与旧入口 inventory 已收口。
-2. `docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md` 已补齐样品采纳 / 延后 / 废弃清单，但明确 formal product/engineering sign-off 仍不得由工程 evidence 代签。
+2. `docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md` 已补齐样品采纳 / 延后 / 废弃清单，`docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md` 已完成 Product / Engineering formal sign-off。
 3. `docs/todos/tui/deliverables/TUI-TODO-036-ftxui-installed-path-packaging-review.md` 已冻结正式 Debian release path 使用 package-managed FTXUI / `libftxui-dev`，拒绝长期 vendored installed path；但该 review 明确不提供 IME / resize / composer human gate。
 4. `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md` 当前把 `TUI-TODO-031~034` 均标记为 Blocked，阻塞项为 `BLK-TUI-008`。
 5. `docs/architecture/DASALL_TUI客户端设计方案.md` 8.3/8.4 要求 CJK、IME、resize、composer 与 snapshot gate 在正式命令迁移前完成；9.1 也要求 `dasall-cli` 与正式 `dasall-tui` 分阶段治理。
@@ -40,22 +40,22 @@ project-implementation-cycle 本轮从总账中的 TUI client 残余缺口进入
 
 | B.0 条件 | 当前状态 | 复检结论 |
 |---|---|---|
-| 样品评审通过并回写采纳 / 延后 / 废弃清单 | 清单已由 `TUI-PROTO-017` 回写；formal sign-off 未完成 | Evidence-ready / awaiting sign-off |
+| 样品评审通过并回写采纳 / 延后 / 废弃清单 | 清单已由 `TUI-PROTO-017` 回写；formal sign-off 已由 `TUI-PROTO-017-formal-sample-signoff.md` 完成 | Pass |
 | daemon-backed projection、status、route、session lifecycle 可验证 | `TUI-TODO-023~029` 已闭合 focused evidence | Pass |
 | root/sudo-only operator 模型与 ordinary-user fail-closed 已冻结 | `TUI-TODO-001`、`TUI-TODO-024` 已闭合 | Pass |
 | `dasall-cli` 兼容矩阵与旧入口 inventory 已收口 | `TUI-TODO-030` 已闭合 | Pass |
 | FTXUI 依赖来源、Debian 打包策略、snapshot/IME/CJK 质量门通过 | package-managed FTXUI review 已由 `TUI-TODO-036` 通过；`BLK-TUI-006` manual evidence 未完成 | Blocked |
 
-复检结论：Gate-TUI-08 当前仍为 Blocked。`TUI-TODO-031` 不得释放 `dasall-cli` 产物名，`apps/cli/CMakeLists.txt` 必须继续保留当前 `OUTPUT_NAME dasall`，直到 formal sign-off 与 `BLK-TUI-006` 同时闭合并重新复检 Gate-TUI-08。
+复检结论：Gate-TUI-08 当前仍为 Blocked。`TUI-TODO-031` 不得释放 `dasall-cli` 产物名，`apps/cli/CMakeLists.txt` 必须继续保留当前 `OUTPUT_NAME dasall`，直到 `BLK-TUI-006` 闭合并重新复检 Gate-TUI-08。
 
 ## 6. 最小解阻动作
 
-`BLK-TUI-008` 只剩两类解阻动作，二者都需要后续显式证据：
+`BLK-TUI-008` 当前只剩一类解阻动作，需要后续显式证据；2026-05-24 已准备对应可执行文档，但当前仍未完成真实终端结果填写与签署：
 
-1. Formal sample sign-off：由 Product + Engineering 在 `TUI-PROTO-017` 或新的 sign-off deliverable 中确认样品采纳结论，至少包含评审人 / 日期 / 采纳范围 / 延后范围 / 不允许进入安装态的残余限制。
-2. `BLK-TUI-006` manual terminal evidence：在真实终端记录 80x24、120x36、CJK 显示与输入、IME composition、live resize、composer multiline/history/external-editor 的人工验收结果；若失败，必须明确降级为行输入 + `/editor` 的 release 口径。
+1. 已完成项：Formal sample sign-off 已由 Product + Engineering 在 `TUI-PROTO-017-formal-sample-signoff.md` 中确认样品采纳结论，包含评审人、日期、采纳范围、延后范围与不允许进入安装态的残余限制。
+2. 待完成项：`BLK-TUI-006` manual terminal evidence 需要在 `BLK-TUI-006-manual-terminal-evidence.md` 中记录真实终端的 80x24、120x36、CJK 显示与输入、IME composition、live resize、composer multiline/history/external-editor 人工验收结果；若失败，必须明确降级为行输入 + `/editor` 的 release 口径。
 
-只有上述两项都完成后，才允许把 Gate-TUI-08 复检结果从 Blocked 改为 Pass，并进入 `TUI-TODO-031`。
+只有 `BLK-TUI-006` 也完成后，才允许把 Gate-TUI-08 复检结果从 Blocked 改为 Pass，并进入 `TUI-TODO-031`。
 
 ## 7. 禁止提前执行的动作
 
@@ -69,8 +69,8 @@ project-implementation-cycle 本轮从总账中的 TUI client 残余缺口进入
 
 | 后续任务 | 进入条件 | 代码 / 文档目标 | 测试目标 | 验收命令 |
 |---|---|---|---|---|
-| Formal sign-off recovery | Product + Engineering 可以确认样品采纳范围 | sign-off deliverable 或更新 `TUI-PROTO-017` | evidence consistency | `rg -n "formal|sign-off|采纳|延后|废弃|Gate-TUI-08" docs/todos/tui/deliverables` |
-| `BLK-TUI-006` manual gate | 可获取真实终端人工记录 | manual evidence deliverable | 80x24 / 120x36 / CJK / IME / resize / composer checklist | `rg -n "BLK-TUI-006|CJK|IME|resize|composer|manual|/editor" docs/todos/tui/deliverables docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md` |
+| Formal sign-off closeout | 已完成；Product + Engineering 已确认样品采纳范围 | `TUI-PROTO-017-formal-sample-signoff.md` 已从 Ready for signature 改为 Done | evidence consistency | `rg -n "状态：Done|Product reviewer|Engineering reviewer|同意|采纳|延后|废弃|Gate-TUI-08" docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md` |
+| `BLK-TUI-006` manual gate | 可获取真实终端人工记录 | `BLK-TUI-006-manual-terminal-evidence.md` 从 Ready for manual execution 改为 Done / Closed via degraded path | 80x24 / 120x36 / CJK / IME / resize / composer checklist | `rg -n "BLK-TUI-006|120x36|80x24|CJK|IME|resize|composer|Full pass|Degraded pass|/editor" docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md` |
 | `TUI-TODO-031` | Gate-TUI-08 转 Pass | `apps/cli/CMakeLists.txt` 释放 CLI 产物名 | `CliControlPlaneCommandNameTest` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` |
 | `TUI-TODO-032~034` | 031 已落地且 formal target / packaging matrix 可执行 | 正式 TUI target、Debian/script 双命令迁移、command routing tests | package smoke / command routing | `ctest --preset vscode-linux-ninja -R "DasallCommandRouting|CliControlPlane" --output-on-failure` |
 
@@ -86,4 +86,4 @@ project-implementation-cycle 本轮从总账中的 TUI client 残余缺口进入
 
 1. 本轮完成 `BLK-TUI-008` 的 blocker recovery 复检与出口固化。
 2. `BLK-TUI-008` 继续 Open；Gate-TUI-08 继续 Blocked；`TUI-TODO-031~034` 继续 Blocked。
-3. 下一步最小可执行动作不是释放 `dasall-cli` 产物名，而是完成 formal sample sign-off 与 `BLK-TUI-006` manual terminal evidence。
+3. 下一步最小可执行动作不是释放 `dasall-cli` 产物名，而是由人工填写并签署 `BLK-TUI-006-manual-terminal-evidence.md`，再复检 Gate-TUI-08。

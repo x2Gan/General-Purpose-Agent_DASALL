@@ -1567,12 +1567,13 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 6. `docs/todos/tui/deliverables/TUI-TODO-010-reducer状态迁移基线.md`、`docs/todos/tui/deliverables/TUI-TODO-012-fake-data-source场景回放基线.md`、`tests/unit/tui/TuiSlashCommandParserTest.cpp`、`tests/unit/tui/TuiComposerTest.cpp`、`tests/unit/tui/TuiComposerHistoryTest.cpp` 与 `tests/unit/tui/CMakeLists.txt` 中现有 action baseline、fake replay、parser/composer focused tests 与 discoverability 事实。
 7. `docs/todos/cli/deliverables/CLCFG-TODO-002-socket与operator-model冻结.md`、`docs/ssot/BinaryEntrypointReadinessV1.md`、`docs/ssot/CrossModuleDataProjectionMatrix.md`、`docs/ssot/AccessUnaryProductionPathV1.md`、`third_party/README.md` 与 `docs/worklog/DASALL_开发执行记录.md` 中现有 operator/backend/session_id/projection owner/third-party priority 事实。
 8. `docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`、`docs/todos/tui/deliverables/TUI-TODO-036-ftxui-installed-path-packaging-review.md` 与 `docs/todos/tui/deliverables/BLK-TUI-008-command-release-gate-recheck.md` 中关于 Gate-TUI-08、formal sign-off、`BLK-TUI-006` manual gate 与命令迁移禁止提前推进的复检结论。
+9. `docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md` 已完成 formal sample sign-off；`docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md` 仍承接真实终端 CJK/IME/resize/composer manual evidence、Full pass / Degraded pass / Fail 结论选择和签署栏的待人工填写口径。
 
 ### 17.2 当前结论
 
 结论：TUI 目前达到 L1 设计可信，并已补齐当前阶段所需的 L2 设计/Build 基线，但仍不能外推为 app-binary ready，更不能外推为 installed end-user ready。
 
-截至当前已闭合的 TUI owner 缺口见 17.3 表；权限/clear 语义、projection seam、fake-only prototype、daemon-backed startup/status/session lifecycle、route catalog projection 字段基线、selector daemon consumption、next preference submit echo 与 focused topology baseline 均已闭合，剩余缺口集中在 terminal manual gate、formal sign-off 与 bare `dasall` release gate。
+截至当前已闭合的 TUI owner 缺口见 17.3 表；权限/clear 语义、projection seam、fake-only prototype、daemon-backed startup/status/session lifecycle、route catalog projection 字段基线、selector daemon consumption、next preference submit echo 与 focused topology baseline 均已闭合，formal sign-off 已完成，terminal manual gate 的验收文档已准备但仍待人工填写/签署，剩余缺口集中在真实终端结果填写与 bare `dasall` release gate。
 
 1. daemon-backed TUI v1 继承当前 `/run/dasall/daemon.sock` + `0600 root/sudo-only` operator backend。
 2. 普通用户命中 socket 权限问题时，只允许 fail-closed `permission denied`/limited explanation，不允许在 TUI 内提权、改组或偷开 user-level daemon/socket。
@@ -1588,7 +1589,7 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 12. `TuiModelSelector` 现已从 fake-only selector helper 前移到 daemon-backed projection consumption 与 submit echo 基线：支持 Auto / PreferDepth / PinModel 三模式、depth tier 聚合、local draft/apply/cancel、disabled route/depth fail-closed，并已把 route catalog 的 `verification_state` / `health` / `depth_tier` 摘要接入 option label；`TUI-TODO-029` 进一步证明 selector draft 会进入 `submit_turn` payload，且 owner projection/receipt 会回显 effective route 或稳定 `route.*` fail-closed reason。
 13. `TuiTerminalCapabilityProbe` 已冻结为纯 terminal-local capability helper：支持真实环境读取与注入式 test environment、stable startup issue、`FullScreen/Narrow/Line/FailClosed` 四态 `TuiStartupMode`，并明确把 non-TTY、invalid TERM、tiny terminal 作为 fail-closed，把 UTF-8/paste/resize 缺失作为 line-mode 降级输入。
 14. `FtxuiRendererAdapter`、`TuiDesignTokens` 与 `TuiLayoutMetrics` 已冻结为 renderer-local baseline：header 不泄漏 FTXUI 类型，`FullScreen/Narrow/Line` 三种 layout metrics 已可稳定驱动 transcript/status/composer/modal 组合，`TuiDesignTokensTest` 与 `TuiMainLayoutSnapshotTest` 已覆盖 120x36 ready、80x24 narrow CJK、selector modal 与 busy draft。
-15. 上述结论只解除了 TUI 的设计 blocker、composer state-machine blocker、selector fake-interaction blocker、transcript-view baseline blocker、status-panel baseline blocker、terminal-probe baseline blocker、renderer-layout baseline blocker、fake-only app-loop blocker、IPC mapping/header blocker、IPC error-normalization blocker、daemon data source attach blocker、startup failure path blocker、status projection refresh blocker、session lifecycle 接线 blocker、route catalog projection blocker、selector daemon consumption blocker与 next preference submit-echo blocker，不代表 bare `dasall` 命令迁移已可放行；`TUI-TODO-030/035/036` 与 `BLK-TUI-008-command-release-gate-recheck.md` 已收敛 Gate-TUI-07/Gate-TUI-08 的阶段证据、FTXUI packaging review 与复检回写，但 `TUI-TODO-031~034` 仍需按后续 gate 单独验收。
+15. 上述结论只解除了 TUI 的设计 blocker、composer state-machine blocker、selector fake-interaction blocker、transcript-view baseline blocker、status-panel baseline blocker、terminal-probe baseline blocker、renderer-layout baseline blocker、fake-only app-loop blocker、IPC mapping/header blocker、IPC error-normalization blocker、daemon data source attach blocker、startup failure path blocker、status projection refresh blocker、session lifecycle 接线 blocker、route catalog projection blocker、selector daemon consumption blocker与 next preference submit-echo blocker，不代表 bare `dasall` 命令迁移已可放行；`TUI-TODO-030/035/036`、`BLK-TUI-008-command-release-gate-recheck.md`、`TUI-PROTO-017-formal-sample-signoff.md` 与 `BLK-TUI-006-manual-terminal-evidence.md` 已收敛 Gate-TUI-07/Gate-TUI-08 的阶段证据、FTXUI packaging review、formal sign-off、复检回写和 manual evidence 文档，但 `TUI-TODO-031~034` 仍需按后续 gate 单独验收。
 
 ### 17.3 已闭合缺口
 
@@ -1628,9 +1629,9 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 
 当前仍未闭合的 TUI owner 缺口如下：
 
-1. `TUI-PROTO-017` 已补齐等价样品评审证据包，形成“采纳 / 延后 / 废弃清单”；但 formal product/engineering sign-off 与真实终端 CJK/IME/resize/composer manual gate 仍未闭合，不能据此宣称 full-screen interactive promotion ready。
+1. `TUI-PROTO-017` 已补齐等价样品评审证据包，形成“采纳 / 延后 / 废弃清单”；`TUI-PROTO-017-formal-sample-signoff.md` 已完成 formal product/engineering sign-off，但 `BLK-TUI-006-manual-terminal-evidence.md` 仍待真实终端 CJK/IME/resize/composer manual gate，不能据此宣称 full-screen interactive promotion ready。
 2. `TUI-TODO-036` 已完成 FTXUI installed-path Debian source/binary strategy review，正式 release path 采纳 package-managed FTXUI / `libftxui-dev` 并拒绝长期 vendored installed path；FTXUI packaging review 不再阻塞 031。
-3. `TUI-TODO-030/035/036` 与 `BLK-TUI-008-command-release-gate-recheck.md` 已完成 bare `dasall` 迁移门禁证据、旧入口 inventory、阶段 closeout、FTXUI packaging review 与 Gate-TUI-08 复检，但 `TUI-TODO-031~034` 仍保持 Blocked；当前 Gate-TUI-08 继续受 formal sign-off 与 `BLK-TUI-006` 约束，本轮结论不能被误写成 command release ready。
+3. `TUI-TODO-030/035/036`、`BLK-TUI-008-command-release-gate-recheck.md`、`TUI-PROTO-017-formal-sample-signoff.md` 与 `BLK-TUI-006-manual-terminal-evidence.md` 已完成 bare `dasall` 迁移门禁证据、旧入口 inventory、阶段 closeout、FTXUI packaging review、Gate-TUI-08 复检、formal sign-off 与 manual evidence 文档准备，但 `TUI-TODO-031~034` 仍保持 Blocked；当前 Gate-TUI-08 继续受 `BLK-TUI-006` 真实终端结果填写约束，本轮结论不能被误写成 command release ready。
 
 ### 17.5 建议复验命令
 

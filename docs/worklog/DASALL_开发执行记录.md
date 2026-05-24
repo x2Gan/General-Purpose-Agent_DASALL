@@ -1,3 +1,63 @@
+# 记录 #788
+
+- 日期：2026-05-24
+- 阶段：tui/formal sign-off closeout
+- 任务：传播 `TUI-PROTO-017-formal-sample-signoff.md` 已签署状态
+- 状态：已完成（formal sign-off 已完成；`BLK-TUI-006` 与 Gate-TUI-08 继续 Open/Blocked）
+
+### 改动
+
+1. 规范化 `docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md` 的签署栏：Product / Engineering 均为 `同意`，签署人为 `x2Gan`，日期为 `2026-05-24`，备注保留 `single-maintainer dual-role sign-off`。
+2. 更新 `TUI-PROTO-017`、`TUI-TODO-030`、`TUI-TODO-035`、`TUI-TODO-036` 与 `BLK-TUI-008` 交付物，将 B.0 第 1 项从 awaiting sign-off 改为 Pass，并保留 `BLK-TUI-006` manual gate 为剩余阻塞。
+3. 更新 TUI 专项 TODO 与子系统总账，统一为“formal sign-off 已完成；`BLK-TUI-006` 真实终端结果仍待填写；`TUI-TODO-031~034` 继续 Blocked”的口径。
+4. 本轮没有改动 `apps/cli`、`apps/tui`、`debian/` 或 `scripts/packaging/` 生产实现，也没有关闭 `BLK-TUI-006` 或放行 Gate-TUI-08。
+
+### 验证
+
+1. `rg -n '状态：Done|Product reviewer|Engineering reviewer|同意|Formal sign-off 已由 x2Gan|single-maintainer' docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`
+   - 结果：通过；formal sign-off 文件已规范为 Done，双角色签署栏完整。
+2. `rg -n 'formal sign-off 未|formal sign-off 仍|formal product/engineering sign-off 仍|awaiting sign-off|待 formal sign-off|formal sign-off 未闭合|仍待人工签署|Gate-TUI-08 仍因人工签署' docs/todos/tui docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；TUI 文档与总账不再把 formal sign-off 写成待完成。
+
+### 结果
+
+1. Formal sample sign-off 已自动传播到 TUI 交付物、专项 TODO、总账与 worklog。
+2. Gate-TUI-08 当前阻塞已收敛为 `BLK-TUI-006` 真实终端 manual evidence。
+3. `TUI-TODO-031~034` 仍不得推进；`apps/cli/CMakeLists.txt` 的 `OUTPUT_NAME dasall` 继续保留。
+
+# 记录 #787
+
+- 日期：2026-05-24
+- 阶段：tui/acceptance document preparation
+- 任务：准备 formal sample sign-off 与 BLK-TUI-006 manual terminal evidence 验收文档
+- 状态：已完成（文档准备完成；待人工填写/签署；BLK-TUI-006 与 Gate-TUI-08 继续 Open/Blocked）
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`，提供 Product / Engineering 双角色签署栏、采纳 / 延后 / 废弃清单、限制条件与签署后回写要求。
+2. 新增 `docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md`，提供真实终端环境记录、自动化前置命令、120x36 / 80x24 / CJK / IME / resize / composer 人工测试矩阵、Full pass / Degraded pass / Fail 结论选择与签署栏。
+3. 更新 TUI 专项 TODO、`TUI-TODO-035`、`BLK-TUI-008` 复检文档与子系统总账 TUI 详章，统一为“验收文档已准备，但仍待人工填写/签署；命令迁移继续 Blocked”的口径。
+4. 本轮没有改动 `apps/cli`、`apps/tui`、`debian/` 或 `scripts/packaging/` 生产实现，也没有把签署/实测结果伪写成已通过。
+
+### 验证
+
+1. `rg -n 'Ready for signature|Product reviewer|Engineering reviewer|BLK-TUI-006' docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`
+   - 结果：通过；formal sign-off 文档包含待签署状态、双角色签署栏与 blocker 边界。
+2. `rg -n 'Ready for manual execution|Full pass|Degraded pass|Manual tester|single-maintainer' docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md`
+   - 结果：通过；manual evidence 文档包含待执行状态、结论选择与签署栏。
+3. `rg -n '120x36|80x24|CJK|IME|resize|composer' docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md`
+   - 结果：通过；manual evidence 文档覆盖真实终端验收矩阵。
+4. `rg -n 'TUI-PROTO-017-formal-sample-signoff|BLK-TUI-006-manual-terminal-evidence|Ready，待人工|人工填写并签署|Ready 改为 Done|Ready 改为 Done/Closed' docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；专项 TODO 已回写两份验收文档准备状态且保持 `TUI-TODO-031~034` Blocked。
+5. `rg -n 'TUI-PROTO-017-formal-sample-signoff|BLK-TUI-006-manual-terminal-evidence|待人工填写|人工签署|真实终端结果填写|验收文档准备' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账 TUI 详章已同步文档准备状态与剩余阻塞。
+
+### 结果
+
+1. formal sample sign-off 与 `BLK-TUI-006` manual terminal evidence 的可签署/可执行文档已准备完成。
+2. 当前状态仍是待人工填写/签署；不能据此关闭 `BLK-TUI-006`，也不能把 Gate-TUI-08 改为 Pass。
+3. 用户完成签署与真实终端结果填写后，下一步才是回写状态并复检 Gate-TUI-08；在此之前不得推进 `TUI-TODO-031~034`。
+
 # 记录 #786
 
 - 日期：2026-05-24

@@ -1,6 +1,6 @@
 # TUI-PROTO-017 样品评审证据
 
-状态：Done（样品评审清单已回写；formal sign-off 与 BLK-TUI-006 继续 Open）
+状态：Done（样品评审清单与 formal sign-off 已回写；BLK-TUI-006 继续 Open）
 日期：2026-05-24
 来源 TODO：docs/todos/tui/DASALL_TUI小样快速实现专项TODO-2026-05-12.md
 
@@ -8,7 +8,7 @@
 
 1. 本任务只把 `TUI-TODO-014`、`TUI-TODO-015`、`TUI-TODO-019`、`TUI-TODO-020`、`TUI-TODO-029` 与 `TUI-TODO-035` 已落盘的 fake-only prototype 证据收敛成 `TUI-PROTO-017` 等价样品评审资产，形成采纳 / 延后 / 废弃清单，并明确 `Gate-TUI-PROT-06` 的清单回写与 `BLK-TUI-006` 人工 gate 边界。
 2. 本任务不修改 `apps/tui`、`apps/cli`、`debian/` 或 `scripts/packaging/` 的生产实现，不把样品评审误写成 installed-path `dasall` ready，也不替代 FTXUI installed-path Debian source/binary strategy review。
-3. 本任务对命令迁移 gate 的作用仅限于闭合 B.0 第 1 项中的“采纳 / 延后 / 废弃清单已回写”证据缺口；产品/工程共同评审签字与 CJK/IME/resize 的真实终端人工 gate 继续单独归属后续人工动作。
+3. 本任务对命令迁移 gate 的作用限于闭合 B.0 第 1 项中的“采纳 / 延后 / 废弃清单已回写”证据缺口；formal product/engineering sign-off 已由 `TUI-PROTO-017-formal-sample-signoff.md` 完成，CJK/IME/resize 的真实终端人工 gate 继续单独归属 `BLK-TUI-006`。
 
 ## 2. 评审输入
 
@@ -60,10 +60,10 @@
 
 | Gate / Blocker | 当前状态 | 结论 |
 |---|---|---|
-| `Gate-TUI-PROT-06` | Evidence-ready | 本文件已形成长期样品评审资产，`采纳 / 延后 / 废弃` 清单不再只存在于零散 deliverable 与 TODO 口径里；formal product/engineering sign-off 仍待人工确认。 |
+| `Gate-TUI-PROT-06` | Pass | 本文件已形成长期样品评审资产，`采纳 / 延后 / 废弃` 清单不再只存在于零散 deliverable 与 TODO 口径里；formal product/engineering sign-off 已由 `TUI-PROTO-017-formal-sample-signoff.md` 完成。 |
 | `Gate-TUI-05` | Blocked | 样品评审清单与 CJK/IME/resize 当前证据状态现已明确回写，但真实终端 IME / live resize / composer 人工 gate 尚未通过。 |
 | `BLK-TUI-006` | Open | `BLK-TUI-006` 的真实含义现已收窄为 IME / live resize / composer interactive ergonomics 的人工终端验收缺口，而不再泛指“样品评审资产缺失”。 |
-| Gate-TUI-08 B.0 第 1 项 | Evidence-ready / awaiting sign-off | 命令迁移前置门禁中的“采纳 / 延后 / 废弃清单已回写”现在具备可追溯证据；“样品评审已通过”的 formal sign-off 仍不得由本任务伪造。 |
+| Gate-TUI-08 B.0 第 1 项 | Pass | 命令迁移前置门禁中的“采纳 / 延后 / 废弃清单已回写”与 formal sample sign-off 现在均具备可追溯证据；Gate-TUI-08 仍需等待 `BLK-TUI-006`。 |
 
 ## 6. Design -> Build 映射
 
@@ -76,6 +76,6 @@
 ## 7. 结果
 
 1. `TUI-PROTO-017` 现在已有长期样品评审资产；主布局、transcript、composer、selector、status panel 与场景基线的采纳 / 延后 / 废弃口径不再缺失。
-2. `Gate-TUI-PROT-06` 当前达到 evidence-ready：评审资产已回写，但 formal product/engineering sign-off 仍需人工确认；`Gate-TUI-05` 因 `BLK-TUI-006` 继续 Blocked。
+2. `Gate-TUI-PROT-06` 当前已 Pass：评审资产已回写，formal product/engineering sign-off 已完成；`Gate-TUI-05` 因 `BLK-TUI-006` 继续 Blocked。
 3. `BLK-TUI-006` 继续保持 Open，但语义已缩窄为真实终端 IME / resize / composer human gate，而不是泛化的“小样尚未评审”。
-4. 本文件不会把 installed-path `dasall` 命令迁移写成 Ready；`TUI-TODO-031~034` 仍需等待 formal sign-off 与 `BLK-TUI-006` 闭合后再复检。
+4. 本文件不会把 installed-path `dasall` 命令迁移写成 Ready；`TUI-TODO-031~034` 仍需等待 `BLK-TUI-006` 闭合后再复检。

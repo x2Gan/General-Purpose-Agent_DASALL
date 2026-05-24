@@ -49,7 +49,7 @@
 
 | 后续任务 | 新约束 | 验收入口 |
 |---|---|---|
-| `TUI-TODO-031` | 仅当 Gate-TUI-08 的 formal sign-off 与 `BLK-TUI-006` manual gate 都满足时，才允许释放 CLI 产物名；本 review 本身不改 `apps/cli` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` |
+| `TUI-TODO-031` | formal sign-off 已完成；仅当 Gate-TUI-08 的 `BLK-TUI-006` manual gate 也满足时，才允许释放 CLI 产物名；本 review 本身不改 `apps/cli` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` |
 | `TUI-TODO-032` | 新增正式 TUI target 时不得复用 prototype installed path；必须显式保持 FTXUI private link，且 Debian/release 构建走 package-managed dependency | `cmake --build --preset vscode-linux-ninja --target dasall-tui` |
 | `TUI-TODO-033` | 更新 `debian/control`、`debian/copyright`、install/manpage/README.Debian/postinst/autopkgtest/package smoke 时必须写入 package-managed FTXUI 结论；不得引入 vendored FTXUI install rule | `rg -n "ftxui|libftxui|Build-Depends|embedded code copies|vendored" debian docs/todos/tui/deliverables` |
 | `TUI-TODO-034` | command routing tests 只能证明 `dasall`/`dasall-cli` 分流，不得绕过 packaging dependency review | `ctest --preset vscode-linux-ninja -R "DasallCommandRouting|CliControlPlane" --output-on-failure` |
@@ -61,7 +61,7 @@
 | FTXUI installed-path packaging review | Pass | package-managed FTXUI 被采纳，vendored installed path 被拒绝；review 缺口已闭合。 |
 | Gate-TUI-08 B.0 第 5 项：FTXUI 依赖来源与 Debian 打包策略 | Pass for packaging strategy | FTXUI release-path 来源与 Debian 策略已有结论；仍需独立完成 snapshot/IME/CJK quality gate。 |
 | `BLK-TUI-006` | Open | 本任务不提供真实终端 IME / resize / composer human gate；该 blocker 继续作为 Gate-TUI-08 残余阻塞。 |
-| `BLK-TUI-008` | Open | 因 formal sign-off 与 `BLK-TUI-006` 未闭合，命令迁移任务 031~034 继续保持 Blocked。 |
+| `BLK-TUI-008` | Open | formal sign-off 已完成；因 `BLK-TUI-006` 未闭合，命令迁移任务 031~034 继续保持 Blocked。 |
 
 ## 8. 验证证据
 
@@ -76,5 +76,5 @@
 ## 9. 结果
 
 1. FTXUI installed-path Debian source/binary strategy review 已闭合：正式 release path 采纳 package-managed FTXUI，拒绝 vendored installed path。
-2. 本任务没有解锁 `TUI-TODO-031`；Gate-TUI-08 仍因 formal sign-off 与 `BLK-TUI-006` 的真实终端人工质量门保持 Blocked。
-3. 后续一旦 formal sign-off 与 `BLK-TUI-006` 都有正式人工证据，`TUI-TODO-031~034` 必须按本 review 结论同步处理 Debian dependency/copyright/install/smoke，而不能只改 CMake target 名。
+2. 本任务没有解锁 `TUI-TODO-031`；formal sign-off 已完成，但 Gate-TUI-08 仍因 `BLK-TUI-006` 的真实终端人工质量门保持 Blocked。
+3. 后续一旦 `BLK-TUI-006` 也有正式人工证据，`TUI-TODO-031~034` 必须按本 review 结论同步处理 Debian dependency/copyright/install/smoke，而不能只改 CMake target 名。
