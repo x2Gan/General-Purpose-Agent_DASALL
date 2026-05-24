@@ -2,7 +2,7 @@
 
 日期：2026-05-24
 状态：Ready for manual execution（待真实终端人工执行与签署；当前不关闭 BLK-TUI-006 / BLK-TUI-008）
-签署基线 commit：038c2d44 `docs(tui): recheck command release gate blocker`
+签署基线 commit：人工执行时填写 `git rev-parse HEAD`；本文件要求使用 `dasall_tui_manual_terminal` 非安装目标
 来源：`docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`、`docs/todos/tui/deliverables/BLK-TUI-008-command-release-gate-recheck.md`
 
 ## 1. 验收边界
@@ -45,7 +45,7 @@ mkdir -p "$ART"
 | Locale | 待填写 |
 | Font | 待填写 |
 | IME / input method | 待填写 |
-| Baseline commit | 038c2d44 |
+| Baseline commit | 待填写（`git rev-parse HEAD`） |
 | Artifact directory | `docs/todos/tui/deliverables/artifacts/BLK-TUI-006-2026-05-24/` |
 
 ## 3. 自动化前置检查
@@ -53,7 +53,10 @@ mkdir -p "$ART"
 签署前请复跑以下命令，并把 stdout / stderr 保存到 artifact 目录。
 
 ```bash
-cmake --build --preset vscode-linux-ninja --target dasall_tui_prototype | tee "$ART/build-dasall_tui_prototype.log"
+cmake --build --preset vscode-linux-ninja --target dasall_tui_manual_terminal | tee "$ART/build-dasall_tui_manual_terminal.log"
+
+./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check \
+  | tee "$ART/dasall_tui_manual_terminal-self-check.log"
 
 ctest --test-dir build/vscode-linux-ninja --output-on-failure \
   -R '^(TuiComposerTest|TuiComposerHistoryTest|TuiMainLayoutSnapshotTest|TuiAppStartupTest|TuiPrototypeSmokeTest)$' \
@@ -62,27 +65,34 @@ ctest --test-dir build/vscode-linux-ninja --output-on-failure \
 
 | 检查项 | 命令 / 证据 | 结果 |
 |---|---|---|
-| prototype build | `$ART/build-dasall_tui_prototype.log` | 待填写 |
+| manual terminal build | `$ART/build-dasall_tui_manual_terminal.log` | 待填写 |
+| manual terminal self-check | `$ART/dasall_tui_manual_terminal-self-check.log` | 待填写 |
 | composer + layout + app smoke tests | `$ART/ctest-tui-manual-preflight.log` | 待填写 |
-| active binary | `build/vscode-linux-ninja/apps/tui/dasall_tui_prototype` | 待填写 |
+| active binary | `build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal` | 待填写 |
 
 ## 4. 真实终端人工测试矩阵
 
-执行对象：`build/vscode-linux-ninja/apps/tui/dasall_tui_prototype`。
+执行对象：`build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal`。
 
-若当前 prototype 只能输出 scripted final screen、不能接收真实键盘事件，必须在对应 case 写 `Blocked by non-interactive prototype`，并选择 Degraded pass 或 Fail；不得把 snapshot / unit test 证据冒充真实 IME / resize / composer 人工验收。
+启动命令：
+
+```bash
+./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal
+```
+
+若该目标在真实终端中不能接收键盘事件、不能 live redraw 或异常退出，必须在对应 case 写 `Blocked by manual terminal runtime failure`，并选择 Degraded pass 或 Fail；不得把 snapshot / unit test / `--self-check` 证据冒充真实 IME / resize / composer 人工验收。
 
 | Case | 操作步骤 | Pass 标准 | 结果 | Artifact | 备注 |
 |---|---|---|---|---|---|
-| 120x36 full-screen | 将终端调整到 120x36，运行 prototype，记录截图或 asciinema | transcript、status、selector、composer 可见且无重叠 | 待填写 | 待填写 |  |
-| 80x24 narrow fallback | 将终端调整到 80x24，运行 prototype，记录截图或 asciinema | narrow fallback 生效，status 不挤压 transcript，composer 不被遮挡 | 待填写 | 待填写 |  |
-| CJK display | 使用包含中文 transcript / status / composer 的 `narrow_cjk` 或等价场景观察输出 | 中文宽字符不破坏边框、对齐、截断或 footer | 待填写 | 待填写 |  |
+| 120x36 full-screen | 将终端调整到 120x36，运行 manual terminal，记录截图或 asciinema | transcript、status、composer 可见且无重叠 | 待填写 | 待填写 |  |
+| 80x24 narrow fallback | 将终端调整到 80x24，运行 manual terminal，记录截图或 asciinema | narrow fallback 生效，status 不挤压 transcript，composer 不被遮挡 | 待填写 | 待填写 |  |
+| CJK display | 观察启动画面内置 `CJK sample` 行，并提交含中文 / kana / hangul 的文本 | 中文宽字符不乱码，不破坏边框、截断或 footer | 待填写 | 待填写 |  |
 | CJK input | 在 composer 输入中文短句并提交或保留 draft | 字符不乱码、不丢字、不破坏 cursor / draft 显示 | 待填写 | 待填写 |  |
 | IME composition | 使用真实 IME 输入候选词、选择候选、取消候选 | composition 不导致崩溃；提交文本与预期一致；候选态不污染 draft | 待填写 | 待填写 |  |
-| multiline composer | 验证 `Enter`、`Alt+Enter`、`Ctrl+J` | `Enter` 提交；`Alt+Enter` / `Ctrl+J` 换行；多行不遮挡 transcript | 待填写 | 待填写 |  |
+| multiline composer | 验证 `Enter`、`Ctrl+J`，并在终端支持时验证 `Alt+Enter` | `Enter` 提交；`Ctrl+J` / 可用的 `Alt+Enter` 换行；多行不遮挡 transcript | 待填写 | 待填写 |  |
 | history recall | 提交三条 prompt 后用 `Up` / `Down` 召回 | 只在边界召回；未提交 draft 可恢复；不会覆盖正在编辑文本 | 待填写 | 待填写 |  |
 | reverse search | 提交包含关键词的历史后按 `Ctrl+R` 搜索 | 能命中历史项；普通编辑退出 search；不会进入不可恢复状态 | 待填写 | 待填写 |  |
-| external editor | 触发 `/editor` 或等价外部编辑器入口，分别保存和取消 | 保存替换 draft；取消保留原 draft；失败有可理解降级 | 待填写 | 待填写 |  |
+| external editor | 设置 `VISUAL` 或 `EDITOR` 后触发 `/editor`，分别保存和取消；未设置时记录降级提示 | 保存替换 draft；取消保留原 draft；失败有可理解降级 | 待填写 | 待填写 |  |
 | live resize shrink | 运行中从 120x36 缩到 80x24 | 不崩溃、不丢 draft；布局切换到 narrow fallback | 待填写 | 待填写 |  |
 | live resize expand | 运行中从 80x24 放大到 120x36 | 不崩溃、不丢 draft；布局恢复 full-screen 信息密度 | 待填写 | 待填写 |  |
 | non-ideal terminal | 在不支持 resize / paste / UTF-8 完整能力的终端或降级环境中运行 | fail-closed 或降级为 line input + `/editor`，错误文案稳定 | 待填写 | 待填写 |  |

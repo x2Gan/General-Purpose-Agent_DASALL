@@ -1,3 +1,34 @@
+# 记录 #789
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal harness
+- 任务：为 `BLK-TUI-006` 提供可运行的真实终端手工验收入口
+- 状态：已完成（终端入口已提供；`BLK-TUI-006` 仍待人工执行/签署；Gate-TUI-08 继续 Blocked）
+
+### 改动
+
+1. 新增非安装目标 `dasall_tui_manual_terminal`，入口为 `apps/tui/src/manual_terminal_main.cpp`，复用 TUI local `TuiComposer`、`TuiScreenModel` 与 `FtxuiRendererAdapter`，不触碰 CLI `OUTPUT_NAME dasall`、Debian 文件或 packaging scripts。
+2. 交互终端支持真实 TTY raw input、alternate screen redraw、SIGWINCH live resize、CJK UTF-8 draft、`Enter` 提交、`Ctrl+J` 换行、`Up` / `Down` history recall、`Ctrl+R` reverse search、`/editor` 外部编辑器、`/status`、`/session`、`/clear` 与 `/exit`。
+3. 更新 `BLK-TUI-006-manual-terminal-evidence.md`，把自动化前置检查与人工矩阵执行对象从 scripted prototype 改为 `build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal`，并保留“不得用 self-check 冒充人工证据”的口径。
+4. 更新 TUI 专项 TODO 中 `BLK-TUI-006` 行：manual terminal 入口已具备，但 blocker 仍需真实终端填写/签署后才能关闭；`BLK-TUI-008` 与 `TUI-TODO-031~034` 继续 Blocked。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_manual_terminal])`
+   - 结果：通过；生成 `build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal`。
+2. `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过；120x36 与 80x24 基础渲染均生成有效画面。
+3. `Build_CMakeTools(buildTargets=[dasall_tui_composer_unit_test,dasall_tui_composer_history_unit_test,dasall_tui_main_layout_snapshot_unit_test,dasall_tui_app_startup_integration_test,dasall_tui_prototype_smoke_integration_test])`
+   - 结果：通过；相邻 TUI composer/layout/startup/smoke 测试可执行目标构建成功。
+4. `RunCtest_CMakeTools(tests=[TuiComposerTest,TuiComposerHistoryTest,TuiMainLayoutSnapshotTest,TuiAppStartupTest,TuiPrototypeSmokeTest])`
+   - 结果：工具返回仓库既有泛化 `生成失败`，未给出具体失败测试；本轮不把该项记为测试通过。
+
+### 结果
+
+1. `BLK-TUI-006` 现在具备真实终端人工验收的可运行对象与 `--self-check` 前置检查。
+2. 仍需人工在真实终端完成 CJK/IME/resize/composer 矩阵并签署后，才允许关闭 `BLK-TUI-006`。
+3. 在签署完成前，Gate-TUI-08 继续 Blocked，不能推进 bare `dasall` 命令迁移。
+
 # 记录 #788
 
 - 日期：2026-05-24

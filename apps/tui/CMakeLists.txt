@@ -36,12 +36,17 @@ add_executable(dasall_tui_prototype EXCLUDE_FROM_ALL
   src/main.cpp
 )
 
+add_executable(dasall_tui_manual_terminal EXCLUDE_FROM_ALL
+  src/manual_terminal_main.cpp
+)
+
 target_include_directories(dasall_tui_prototype_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_compile_features(dasall_tui_prototype PRIVATE cxx_std_20)
+target_compile_features(dasall_tui_manual_terminal PRIVATE cxx_std_20)
 target_compile_features(dasall_tui_prototype_core PRIVATE cxx_std_20)
 
 if(TARGET ftxui::component AND TARGET ftxui::dom AND TARGET ftxui::screen)
@@ -58,5 +63,11 @@ target_link_libraries(dasall_tui_prototype
     dasall_tui_prototype_core
 )
 
+target_link_libraries(dasall_tui_manual_terminal
+  PRIVATE
+    dasall_tui_prototype_core
+)
+
 dasall_apply_common_options(dasall_tui_prototype_core)
 dasall_apply_common_options(dasall_tui_prototype)
+dasall_apply_common_options(dasall_tui_manual_terminal)
