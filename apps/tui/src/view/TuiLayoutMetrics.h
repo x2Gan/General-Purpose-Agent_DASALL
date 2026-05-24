@@ -78,7 +78,11 @@ constexpr TuiLayoutMetrics TuiLayoutMetrics::for_terminal(
   metrics.show_selector_strip = true;
   metrics.show_status_panel = true;
 
-  if (metrics.terminal_width >= tokens.breakpoints.full_width &&
+  const std::size_t full_width_floor = detail::saturating_sub(
+      tokens.breakpoints.full_width,
+      1U);
+
+  if (metrics.terminal_width >= full_width_floor &&
       metrics.terminal_height >= tokens.breakpoints.full_height) {
     metrics.mode = TuiLayoutMode::FullScreen;
     metrics.composer_height =

@@ -1,3 +1,34 @@
+# 记录 #791
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal real display fix
+- 任务：修复 `BLK-TUI-006` 手工终端 raw mode 下画面右移与 119 列误退窄屏问题
+- 状态：已完成（实现修复并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 修复 `apps/tui/src/manual_terminal_main.cpp` 的 raw terminal frame 输出：renderer 仍保持 LF 分行，真实终端写入前统一编码为 CRLF，避免 `OPOST` 关闭后 LF 只下移不回列首导致画面逐行右移。
+2. 修复 resize 后 status summary：改为使用当前 `FtxuiRendererAdapter::apply_layout_metrics()` 计算出的实际 layout mode，避免尺寸变化后显示的 full/narrow 与真实布局不一致。
+3. 为 `TuiLayoutMetrics` 增加 1 列 full-screen 容差，使 VS Code 终端报告 `119x36+` 时仍进入 full 布局，避免接近 120 列的真实终端误退到窄屏堆叠。
+4. 增强 `TuiDesignTokensTest` 与 `dasall_tui_manual_terminal --self-check`，覆盖 119x36 full 容差与终端输出 CRLF 编码。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_manual_terminal,dasall_tui_design_tokens_unit_test,dasall_tui_main_layout_snapshot_unit_test])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_design_tokens_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test`
+   - 结果：通过。
+3. `printf '/exit\r' | timeout 5s script -q -c 'stty rows 50 cols 119; ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal' /tmp/dasall-tui-119x50.typescript`
+   - 结果：通过；伪终端输出显示 `[TRANSCRIPT]` 与 `[STATUS]` 并列，`stage: [ready | full 119x50]`。
+4. `git diff --check`、编辑器诊断与 command migration 范围检查
+   - 结果：通过；未触碰 `apps/cli`、`debian/` 或 packaging scripts。
+
+### 结果
+
+1. 真实终端 raw mode 下每行会回到列首，解决用户截图中的阶梯式右移/只见右侧画面问题。
+2. 119 列真实终端现在可按 full 布局渲染，便于完成 `BLK-TUI-006` resize/composer 手工验收。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实 CJK/IME/resize/composer 结果仍需人工验收文档填写与签署。
+
 # 记录 #790
 
 - 日期：2026-05-24

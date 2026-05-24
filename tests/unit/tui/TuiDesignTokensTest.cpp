@@ -70,6 +70,7 @@ void design_tokens_freeze_breakpoints_and_spacing_defaults() {
 
 void layout_metrics_switch_between_full_narrow_and_line_modes() {
   constexpr TuiLayoutMetrics full = TuiLayoutMetrics::for_terminal(120, 36);
+  constexpr TuiLayoutMetrics near_full = TuiLayoutMetrics::for_terminal(119, 36);
   constexpr TuiLayoutMetrics narrow = TuiLayoutMetrics::for_terminal(80, 24);
   constexpr TuiLayoutMetrics line = TuiLayoutMetrics::for_terminal(39, 11);
 
@@ -83,6 +84,8 @@ void layout_metrics_switch_between_full_narrow_and_line_modes() {
               "full-screen layout should align transcript and status column heights");
   assert_true(full.modal.visible && full.modal.width > 0 && full.modal.height > 0,
               "full-screen layout should reserve a stable modal overlay footprint");
+  assert_true(near_full.mode == TuiLayoutMode::FullScreen,
+              "119x36 should tolerate one terminal-reported column below the nominal full-screen width");
 
   assert_true(narrow.mode == TuiLayoutMode::Narrow,
               "80x24 should select the narrow snapshot layout mode");

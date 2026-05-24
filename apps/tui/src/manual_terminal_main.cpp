@@ -93,6 +93,19 @@ struct TerminalSize {
   return "fail_closed";
 }
 
+[[nodiscard]] std::string layout_mode_to_string(view::TuiLayoutMode layout_mode) {
+  switch (layout_mode) {
+    case view::TuiLayoutMode::FullScreen:
+      return "full";
+    case view::TuiLayoutMode::Narrow:
+      return "narrow";
+    case view::TuiLayoutMode::Line:
+      return "line";
+  }
+
+  return "line";
+}
+
 [[nodiscard]] TerminalSize read_terminal_size() {
   for (const int file_descriptor : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
     winsize size{};
@@ -123,6 +136,19 @@ void write_stdout(std::string_view text) {
     cursor += written;
     remaining -= static_cast<std::size_t>(written);
   }
+}
+
+[[nodiscard]] std::string encode_terminal_newlines(std::string_view text) {
+  std::string encoded;
+  encoded.reserve(text.size() + 16U);
+  for (const char character : text) {
+    if (character == '\n') {
+      encoded += "\r\n";
+    } else {
+      encoded.push_back(character);
+    }
+  }
+  return encoded;
 }
 
 [[nodiscard]] std::string shell_quote_path(std::string_view path) {
@@ -405,9 +431,13 @@ void hide_modal(model::TuiScreenModel& screen_model) {
 
 void update_size_status(model::TuiScreenModel& screen_model,
                         const TerminalSize& size,
-                        terminal::TuiStartupMode startup_mode) {
+                        const terminal::FtxuiRendererAdapter& renderer) {
+  const std::string layout_mode = layout_mode_to_string(
+      renderer.apply_layout_metrics(size.columns, size.rows).mode);
+  screen_model.session.startup_mode = layout_mode;
+
   std::ostringstream summary;
-  summary << startup_mode_to_string(startup_mode) << ' ' << size.columns << 'x'
+  summary << layout_mode << ' ' << size.columns << 'x'
           << size.rows;
   screen_model.status.safe_mode_summary = summary.str();
 }
@@ -418,7 +448,8 @@ void redraw(const terminal::FtxuiRendererAdapter& renderer,
   const std::string rendered = renderer.render_to_screen(
       screen_model, size.columns, size.rows);
   write_stdout("\x1b[?25l\x1b[H\x1b[2J");
-  write_stdout(rendered);
+  const std::string terminal_rendered = encode_terminal_newlines(rendered);
+  write_stdout(terminal_rendered);
   write_stdout("\x1b[H");
 }
 
@@ -726,6 +757,7 @@ void process_input_buffer(std::string_view buffer,
   const std::string full_screen = renderer.render_to_screen(screen_model, 120, 36);
   const std::string narrow_screen = renderer.render_to_screen(screen_model, 80, 24);
   const std::string line_screen = renderer.render_to_screen(screen_model, 40, 12);
+  const std::string terminal_full_screen = encode_terminal_newlines(full_screen);
 
   const auto has_expected_shape = [](std::string_view screen,
                                      const std::size_t expected_columns,
@@ -753,7 +785,8 @@ void process_input_buffer(std::string_view buffer,
       line_screen.find("composer") != std::string::npos &&
       has_expected_shape(full_screen, 120, 36) &&
       has_expected_shape(narrow_screen, 80, 24) &&
-      has_expected_shape(line_screen, 40, 12);
+      has_expected_shape(line_screen, 40, 12) &&
+      terminal_full_screen.find("\r\n") != std::string::npos;
   if (!ok) {
     std::cerr << "dasall_tui_manual_terminal self-check FAILED\n";
     return 1;
@@ -784,7 +817,7 @@ void process_input_buffer(std::string_view buffer,
       capabilities, startup_mode, composer);
   bool should_exit = false;
   TerminalSize size = read_terminal_size();
-  update_size_status(screen_model, size, startup_mode);
+  update_size_status(screen_model, size, renderer);
   redraw(renderer, screen_model, size);
 
   while (!should_exit) {
@@ -794,7 +827,7 @@ void process_input_buffer(std::string_view buffer,
     if (resize_requested != 0 || !same_size(observed_size, size)) {
       resize_requested = 0;
       size = observed_size;
-      update_size_status(screen_model, size, startup_mode);
+      update_size_status(screen_model, size, renderer);
       screen_model.debug_reason = "terminal_resized";
       redraw(renderer, screen_model, size);
     }
