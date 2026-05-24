@@ -1,3 +1,32 @@
+# 记录 #783
+
+- 日期：2026-05-24
+- 阶段：tui/command release gate evidence
+- 任务：TUI-TODO-030 收敛 bare `dasall` 迁移门禁证据
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md`，冻结 030 的任务边界、本地事实、外部参考、B.0 前置门禁逐项判定、旧入口 inventory、命令迁移兼容矩阵与 Design->Build 映射，并明确本轮只做 gate evidence/inventory 收口，不改 `apps/cli`、`apps/tui`、`debian/` 或 `scripts/packaging/` 生产实现。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-030` 标记为 Done，并把状态口径收紧为“030 已完成 gate evidence，但 Gate-TUI-08 仍 Blocked，`TUI-TODO-031~034` 不解锁，下一步优先 `TUI-TODO-035`”。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，把 TUI 章节中的 bare `dasall` 迁移结论改写为“030 已完成门禁证据与 inventory 收口，但 031~034 继续受 `BLK-TUI-006` 与 FTXUI Debian packaging review 约束”。
+4. 更新本记录，回写本轮只完成 gate evidence/inventory，不推进正式命令迁移、Debian install/manpage/postinst/autopkgtest 改写或命令分流测试。
+
+### 验证
+
+1. `rg -n "B.0|权限模型|projection|selector|packaging smoke|dasall-cli|/usr/bin/dasall|debian|scripts/packaging|inventory" docs/todos/tui/deliverables/TUI-TODO-030-command-release-gate-evidence.md`
+   - 结果：通过；deliverable 已包含 B.0 五项门禁、权限模型与 projection 依赖、Debian / `scripts/packaging` 旧入口 inventory，以及 `dasall-cli` / `/usr/bin/dasall` 的迁移矩阵。
+2. `rg -n "TUI-TODO-030 \| Done|Gate-evidence subset|Blocked subset：TUI-TODO-031~034|TUI-TODO-035|Gate-TUI-08|BLK-TUI-006" docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；专项 TODO 与总账都已回写 `TUI-TODO-030` Done、Gate-TUI-08 仍 Blocked、`TUI-TODO-031~034` 继续 Blocked、下一步优先 `TUI-TODO-035`。
+3. `rg -n "TUI-TODO-030|TUI-TODO-031~034|Gate-TUI-08|BLK-TUI-006|FTXUI Debian packaging review|command release ready" docs/todos/DASALL_子系统查漏补缺专项记录.md docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；文档现已明确 030 只是 gate evidence 收口，当前结论不得被误写成 command release ready。
+
+### 结果
+
+1. `TUI-TODO-030` 已闭合：bare `dasall` 命令迁移前的 B.0 门禁证据、旧入口 inventory 与兼容矩阵现在已有单独交付物，不再散落在 TUI 详设、专项 TODO、总账、Debian 文件与 packaging scripts 之间。
+2. 本轮没有改动任何生产代码，也没有提前推进 `TUI-TODO-031~034`；当前 Gate-TUI-08 仍因 `BLK-TUI-006` 与 FTXUI Debian packaging review 保持 Blocked。
+3. 下一步推荐优先转入 `TUI-TODO-035`，把 029/030 与 Gate-TUI-07/Gate-TUI-08 的阶段证据滚动收口；只有在 manual gate 与 packaging review 闭合后，bare `dasall` 命令迁移才允许继续推进。
+
 # 记录 #782
 
 - 日期：2026-05-24
