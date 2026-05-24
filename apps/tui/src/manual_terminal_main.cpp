@@ -24,6 +24,7 @@
 #include "terminal/FtxuiRendererAdapter.h"
 #include "terminal/TuiTerminalCapabilityProbe.h"
 #include "view/TuiComposer.h"
+#include "view/TuiTextWidth.h"
 
 namespace dasall::tui::manual_terminal {
 namespace {
@@ -762,20 +763,23 @@ void process_input_buffer(std::string_view buffer,
   const auto has_expected_shape = [](std::string_view screen,
                                      const std::size_t expected_columns,
                                      const std::size_t expected_rows) {
-    std::size_t rows = 1;
-    std::size_t current_columns = 0;
-    for (const char character : screen) {
-      if (character == '\n') {
-        if (current_columns != expected_columns) {
-          return false;
-        }
-        current_columns = 0;
-        ++rows;
-        continue;
+    std::size_t rows = 0;
+    std::size_t row_start = 0;
+    while (row_start <= screen.size()) {
+      const std::size_t row_end = screen.find('\n', row_start);
+      const std::string_view line = row_end == std::string_view::npos
+                                        ? screen.substr(row_start)
+                                        : screen.substr(row_start, row_end - row_start);
+      if (view::terminal_display_width(line) != expected_columns) {
+        return false;
       }
-      ++current_columns;
+      ++rows;
+      if (row_end == std::string_view::npos) {
+        break;
+      }
+      row_start = row_end + 1U;
     }
-    return rows == expected_rows && current_columns == expected_columns;
+    return rows == expected_rows;
   };
 
   const bool ok = !full_screen.empty() && !narrow_screen.empty() &&

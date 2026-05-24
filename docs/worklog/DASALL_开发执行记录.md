@@ -1,3 +1,36 @@
+# 记录 #792
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal cjk alignment fix
+- 任务：修复 `BLK-TUI-006` 手工终端 CJK/UTF-8 文本与 status panel 边框错位问题
+- 状态：已完成（实现修复并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 新增 `apps/tui/src/view/TuiTextWidth.h`，提供 TUI 局部 UTF-8 token 解析、终端显示列宽、显示列宽截断/填充与 wrapping helper。
+2. 将 ASCII fallback `FtxuiRendererAdapter` 从 byte-index canvas 改为 terminal-cell canvas，CJK/Kana/Hangul 宽字符占用 2 列，避免 transcript 文本挤歪右边框或相邻 status panel。
+3. 将 `TuiTranscriptView` 的正文 wrapping 与 collapsed preview 截断改为显示列宽语义，避免 CJK 文本按 byte count 提前或滞后换行。
+4. 更新 `dasall_tui_manual_terminal --self-check` 与 `TuiMainLayoutSnapshotTest`，按终端显示列宽断言 120x36、119x50、80x24 行宽，并覆盖手工终端 CJK sample 与 status side-by-side 对齐。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_main_layout_snapshot_unit_test,dasall_tui_manual_terminal,dasall_tui_transcript_view_unit_test,dasall_tui_design_tokens_unit_test])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=[TuiMainLayoutSnapshotTest])` 与 `RunCtest_CMakeTools(tests=[TuiTranscriptViewTest,TuiDesignTokensTest])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过。
+4. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_transcript_view_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_design_tokens_unit_test && printf '/exit\r' | timeout 5s script -q -c 'stty rows 50 cols 119; ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal' /tmp/dasall-tui-cjk-align.typescript`
+   - 结果：通过；伪终端输出中 `CJK sample: 中文输入、かな、한글...` 行与 `safe mode: full 119x50` status 行保持并排边框对齐。
+5. `git diff --check` 与编辑器诊断
+   - 结果：通过；相关 TUI 文件无诊断错误。
+
+### 结果
+
+1. 手工终端现在按显示列宽处理 CJK/UTF-8 文本，解决用户截图中 CJK sample 行与 status panel 的错位问题。
+2. 同类风险同步覆盖到 transcript wrapping、collapsed preview、renderer row shape self-check 与 snapshot test。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实 CJK/IME/resize/composer 结果仍需人工验收文档填写与签署。
+
 # 记录 #791
 
 - 日期：2026-05-24

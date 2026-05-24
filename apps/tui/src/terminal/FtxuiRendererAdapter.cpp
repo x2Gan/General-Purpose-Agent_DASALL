@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "view/TuiStatusPanel.h"
+#include "view/TuiTextWidth.h"
 #include "view/TuiTranscriptView.h"
 
 #if defined(DASALL_TUI_RENDERER_USE_FTXUI) && DASALL_TUI_RENDERER_USE_FTXUI
@@ -51,84 +52,10 @@ namespace {
   return std::string(text.substr(start, end - start));
 }
 
-[[nodiscard]] std::string truncate_utf8_preserving_boundary(std::string_view text,
-                                                            std::size_t width) {
-  if (text.size() <= width) {
-    return std::string(text);
-  }
-
-  std::size_t boundary = width;
-  while (boundary > 0 &&
-         (static_cast<unsigned char>(text[boundary]) & 0xC0U) == 0x80U) {
-    --boundary;
-  }
-
-  if (boundary == 0) {
-    boundary = width;
-  }
-
-  return std::string(text.substr(0, boundary));
-}
-
 [[nodiscard]] std::vector<std::string> wrap_text(std::string_view text,
                                                  const std::size_t width,
                                                  const std::size_t max_lines) {
-  std::vector<std::string> lines;
-  if (width == 0 || max_lines == 0) {
-    return lines;
-  }
-
-  std::size_t cursor = 0;
-  while (cursor <= text.size() && lines.size() < max_lines) {
-    const std::size_t newline = text.find('\n', cursor);
-    const std::string_view paragraph =
-        newline == std::string_view::npos ? text.substr(cursor)
-                                          : text.substr(cursor, newline - cursor);
-
-    if (paragraph.empty()) {
-      lines.emplace_back();
-    } else {
-      std::size_t paragraph_cursor = 0;
-      while (paragraph_cursor < paragraph.size() && lines.size() < max_lines) {
-        const std::size_t available = std::min(width, paragraph.size() - paragraph_cursor);
-        std::size_t candidate_end = paragraph_cursor + available;
-        if (candidate_end < paragraph.size()) {
-          const std::size_t last_space = paragraph.rfind(' ', candidate_end - 1);
-          if (last_space != std::string_view::npos && last_space > paragraph_cursor) {
-            candidate_end = last_space;
-          }
-        }
-
-        if (candidate_end == paragraph_cursor) {
-          candidate_end = paragraph_cursor + available;
-        }
-
-        std::string line = truncate_utf8_preserving_boundary(
-            paragraph.substr(paragraph_cursor, candidate_end - paragraph_cursor),
-            width);
-        line = trim_copy(line);
-        lines.push_back(std::move(line));
-        paragraph_cursor = candidate_end;
-        while (paragraph_cursor < paragraph.size() && paragraph[paragraph_cursor] == ' ') {
-          ++paragraph_cursor;
-        }
-      }
-    }
-
-    if (newline == std::string_view::npos) {
-      break;
-    }
-    cursor = newline + 1;
-  }
-
-  if (lines.empty()) {
-    lines.emplace_back();
-  }
-
-  if (lines.size() > max_lines) {
-    lines.resize(max_lines);
-  }
-  return lines;
+  return view::wrap_to_terminal_width(text, width, max_lines);
 }
 
 [[nodiscard]] std::string format_focus(const model::TuiFocusState focus) {
@@ -331,22 +258,52 @@ namespace {
   return selected;
 }
 
-void place_text(std::vector<std::string>& canvas,
+using Canvas = std::vector<std::vector<std::string>>;
+
+void place_text(Canvas& canvas,
                 const std::size_t row,
                 const std::size_t column,
                 const std::size_t width,
-                std::string_view text) {
+                std::string_view text,
+                const bool clear_region = true) {
   if (row >= canvas.size() || column >= canvas[row].size() || width == 0) {
     return;
   }
 
-  const std::string rendered = truncate_utf8_preserving_boundary(
-      text,
-      std::min(width, canvas[row].size() - column));
-  std::copy(rendered.begin(), rendered.end(), canvas[row].begin() + column);
+  const std::size_t end_column = std::min(canvas[row].size(), column + width);
+  if (clear_region) {
+    for (std::size_t cell = column; cell < end_column; ++cell) {
+      canvas[row][cell] = " ";
+    }
+  }
+
+  std::size_t cursor = 0;
+  std::size_t cell = column;
+  while (cursor < text.size() && cell < end_column) {
+    const view::TuiTerminalTextToken token =
+        view::next_terminal_text_token(text, cursor);
+    const std::size_t token_columns = token.columns;
+    if (token_columns == 0) {
+      if (cell > column) {
+        canvas[row][cell - 1U] += token.valid ? std::string(token.bytes) : std::string{"?"};
+      }
+      cursor += token.bytes.empty() ? 1U : token.bytes.size();
+      continue;
+    }
+    if (cell + token_columns > end_column) {
+      break;
+    }
+
+    canvas[row][cell] = token.valid ? std::string(token.bytes) : std::string{"?"};
+    for (std::size_t offset = 1U; offset < token_columns; ++offset) {
+      canvas[row][cell + offset].clear();
+    }
+    cell += token_columns;
+    cursor += token.bytes.empty() ? 1U : token.bytes.size();
+  }
 }
 
-void draw_box(std::vector<std::string>& canvas,
+void draw_box(Canvas& canvas,
               const std::size_t x,
               const std::size_t y,
               const std::size_t width,
@@ -364,21 +321,21 @@ void draw_box(std::vector<std::string>& canvas,
   }
 
   for (std::size_t column = 0; column < box_width; ++column) {
-    canvas[y][x + column] = '-';
-    canvas[y + box_height - 1][x + column] = '-';
+    canvas[y][x + column] = "-";
+    canvas[y + box_height - 1][x + column] = "-";
   }
   for (std::size_t row = 0; row < box_height; ++row) {
-    canvas[y + row][x] = '|';
-    canvas[y + row][x + box_width - 1] = '|';
+    canvas[y + row][x] = "|";
+    canvas[y + row][x + box_width - 1] = "|";
   }
-  canvas[y][x] = '+';
-  canvas[y][x + box_width - 1] = '+';
-  canvas[y + box_height - 1][x] = '+';
-  canvas[y + box_height - 1][x + box_width - 1] = '+';
+  canvas[y][x] = "+";
+  canvas[y][x + box_width - 1] = "+";
+  canvas[y + box_height - 1][x] = "+";
+  canvas[y + box_height - 1][x + box_width - 1] = "+";
 
   if (!title.empty() && box_width > 4) {
     const std::string rendered_title = "[" + uppercase_ascii(title) + "]";
-    place_text(canvas, y, x + 2, box_width - 4, rendered_title);
+    place_text(canvas, y, x + 2, box_width - 4, rendered_title, false);
   }
 
   const std::size_t content_height = box_height - 2;
@@ -392,7 +349,7 @@ void draw_box(std::vector<std::string>& canvas,
 [[nodiscard]] std::string render_ascii_screen(const TuiRenderFrame& frame) {
   const std::size_t width = clamp_nonzero(frame.metrics.terminal_width);
   const std::size_t height = clamp_nonzero(frame.metrics.terminal_height);
-  std::vector<std::string> canvas(height, std::string(width, ' '));
+  Canvas canvas(height, std::vector<std::string>(width, " "));
 
   const std::size_t body_x = frame.metrics.outer_padding;
   const std::size_t body_y = frame.metrics.outer_padding + frame.metrics.header_height +
@@ -495,7 +452,9 @@ void draw_box(std::vector<std::string>& canvas,
     if (index != 0) {
       rendered.push_back('\n');
     }
-    rendered += canvas[index];
+    for (const std::string& cell : canvas[index]) {
+      rendered += cell;
+    }
   }
   return rendered;
 }

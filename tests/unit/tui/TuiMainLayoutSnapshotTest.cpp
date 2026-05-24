@@ -11,6 +11,7 @@
 #include "data/FakeScenarioCatalog.h"
 #include "support/TestAssertions.h"
 #include "terminal/FtxuiRendererAdapter.h"
+#include "view/TuiTextWidth.h"
 
 #ifndef DASALL_TUI_RENDERER_ADAPTER_HEADER
 #define DASALL_TUI_RENDERER_ADAPTER_HEADER \
@@ -38,6 +39,7 @@ using dasall::tui::model::TuiModalKind;
 using dasall::tui::model::TuiModalState;
 using dasall::tui::model::TuiScreenModel;
 using dasall::tui::terminal::FtxuiRendererAdapter;
+using dasall::tui::view::terminal_display_width;
 
 [[nodiscard]] std::string read_text_file(const std::filesystem::path& path) {
   std::ifstream input(path);
@@ -137,8 +139,8 @@ void main_layout_snapshot_renders_full_screen_ready_shell() {
                "120x36 snapshot should render exactly 36 terminal rows");
   for (const auto& line : lines) {
     assert_equal(120,
-                 static_cast<int>(line.size()),
-                 "120x36 snapshot should keep every rendered row width-stable");
+                 static_cast<int>(terminal_display_width(line)),
+                 "120x36 snapshot should keep every rendered row terminal-width-stable");
   }
 
   assert_true(screen.find("SESSION fake-golden-ready-001") != std::string::npos,
@@ -184,8 +186,8 @@ void main_layout_snapshot_renders_narrow_cjk_without_side_overlap() {
                "80x24 snapshot should render exactly 24 terminal rows");
   for (const auto& line : lines) {
     assert_equal(80,
-                 static_cast<int>(line.size()),
-                 "80x24 snapshot should keep every rendered row width-stable");
+                 static_cast<int>(terminal_display_width(line)),
+                 "80x24 snapshot should keep every rendered row terminal-width-stable");
   }
 
   const std::size_t transcript_row = find_line_containing(lines, "[TRANSCRIPT]");
@@ -198,6 +200,67 @@ void main_layout_snapshot_renders_narrow_cjk_without_side_overlap() {
               "narrow snapshot should preserve the visible CJK assistant summary");
   assert_true(screen.find("预算剩余 66%") != std::string::npos,
               "narrow snapshot should keep the CJK budget summary visible in the stacked status panel");
+}
+
+void main_layout_snapshot_keeps_cjk_rows_aligned_with_status_panel() {
+  const auto loaded = FakeScenarioCatalog::load("golden_ready");
+  assert_true(loaded.ok(), "golden_ready should load for the manual-terminal CJK alignment baseline");
+
+  TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      {TuiMessageView{.role = "system",
+                      .content = "BLK-TUI-006 manual terminal ready. Enter submits, Ctrl-J inserts a newline, "
+                                 "Up/Down recall history, Ctrl-R reverse-searches history, /editor opens "
+                                 "VISUAL/EDITOR, /status and /session open checks, /exit quits.",
+                      .timestamp = "2026-05-24T21:09:55",
+                      .badges = {"manual", "composer"}},
+       TuiMessageView{.role = "system",
+                      .content = "CJK sample: 中文输入、かな、한글、emoji-less UTF-8 text should stay "
+                                 "readable during IME commit and live resize.",
+                      .timestamp = "2026-05-24T21:09:55",
+                      .badges = {"cjk", "ime", "resize"}}},
+      TuiComposerState{.text = "",
+                       .mode = "ready",
+                       .history_query = std::nullopt,
+                       .can_submit = true,
+                       .dirty = false},
+      TuiFocusState::Composer,
+      {TuiBanner{.level = TuiBannerLevel::Warning,
+                 .title = "Terminal degraded",
+                 .message = "VISUAL and EDITOR are unset; /editor will remain disabled.",
+                 .reason_code = "editor_unset",
+                 .sticky = true}});
+  model.session.session_id = "manual-terminal-blk-tui-006";
+  model.session.profile_id = "local-manual";
+  model.session.startup_mode = "full";
+  model.route.current_provider_id = "manual";
+  model.route.current_model_id = "tui-terminal";
+  model.route.current_depth_tier = "local";
+  model.status.stage = "ready";
+  model.status.budget_summary = "Manual evidence run";
+  model.status.health_summary = "degraded: terminal active";
+  model.status.safe_mode_summary = "full 119x50";
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 119, 50);
+  const auto lines = split_lines(screen);
+
+  assert_equal(50,
+               static_cast<int>(lines.size()),
+               "119x50 manual-terminal snapshot should render exactly 50 terminal rows");
+  for (const auto& line : lines) {
+    assert_equal(119,
+                 static_cast<int>(terminal_display_width(line)),
+                 "119x50 manual-terminal snapshot should keep every row terminal-width-stable");
+  }
+
+  const std::size_t cjk_row = find_line_containing(lines, "CJK sample:");
+  assert_true(cjk_row < lines.size(),
+              "manual-terminal snapshot should include the CJK sample row");
+  assert_true(find_line_containing(lines, "safe mode: full 119x50") < lines.size(),
+              "manual-terminal snapshot should keep the safe-mode row visible in the status panel");
+  assert_true(lines[cjk_row].size() > terminal_display_width(lines[cjk_row]),
+              "CJK alignment test should exercise multi-byte text rather than ASCII-only rows");
 }
 
 void main_layout_snapshot_renders_selector_modal_overlay() {
@@ -311,6 +374,7 @@ int main() {
   try {
     main_layout_snapshot_renders_full_screen_ready_shell();
     main_layout_snapshot_renders_narrow_cjk_without_side_overlap();
+    main_layout_snapshot_keeps_cjk_rows_aligned_with_status_panel();
     main_layout_snapshot_renders_selector_modal_overlay();
     main_layout_snapshot_renders_busy_draft_banner();
     renderer_files_avoid_owner_private_dependencies();

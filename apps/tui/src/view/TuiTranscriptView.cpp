@@ -6,6 +6,8 @@
 #include <string_view>
 #include <utility>
 
+#include "view/TuiTextWidth.h"
+
 namespace dasall::tui::view {
 namespace {
 
@@ -81,48 +83,7 @@ void trim_trailing_spaces(std::string& text) {
 
 [[nodiscard]] std::vector<std::string> wrap_paragraph(std::string_view paragraph,
                                                       std::size_t width) {
-  std::vector<std::string> lines;
-  const std::size_t safe_width = clamp_width(width);
-  std::size_t cursor = 0;
-
-  while (cursor < paragraph.size()) {
-    while (cursor < paragraph.size() && paragraph[cursor] == ' ') {
-      ++cursor;
-    }
-    if (cursor >= paragraph.size()) {
-      break;
-    }
-
-    const std::size_t limit = std::min(cursor + safe_width, paragraph.size());
-    std::size_t break_at = limit;
-    if (limit < paragraph.size()) {
-      const std::size_t last_space = paragraph.rfind(' ', limit - 1);
-      if (last_space != std::string_view::npos && last_space >= cursor) {
-        break_at = last_space;
-      }
-    }
-
-    if (break_at == cursor) {
-      break_at = limit;
-    }
-
-    std::string line(paragraph.substr(cursor, break_at - cursor));
-    trim_trailing_spaces(line);
-    if (!line.empty()) {
-      lines.push_back(std::move(line));
-    }
-
-    cursor = break_at;
-    while (cursor < paragraph.size() && paragraph[cursor] == ' ') {
-      ++cursor;
-    }
-  }
-
-  if (lines.empty()) {
-    lines.emplace_back();
-  }
-
-  return lines;
+  return wrap_to_terminal_width(paragraph, width);
 }
 
 [[nodiscard]] std::vector<std::string> wrap_text(std::string_view text,
@@ -173,7 +134,7 @@ void trim_trailing_spaces(std::string& text) {
 
   trim_trailing_spaces(preview);
   const std::size_t safe_width = clamp_width(width);
-  if (preview.size() <= safe_width) {
+  if (terminal_display_width(preview) <= safe_width) {
     return preview;
   }
 
@@ -181,7 +142,7 @@ void trim_trailing_spaces(std::string& text) {
     return std::string(safe_width, '.');
   }
 
-  return preview.substr(0, safe_width - 3) + "...";
+  return truncate_to_terminal_width(preview, safe_width - 3) + "...";
 }
 
 [[nodiscard]] std::string join_badges(const std::vector<std::string>& badges) {
