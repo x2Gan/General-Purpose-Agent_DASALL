@@ -169,12 +169,21 @@ namespace {
     return lines;
   }
 
-  const std::string draft = composer.text.empty() ? std::string{"[draft empty]"}
-                                                  : composer.text;
   const std::string cursor = composer.cursor_visible ? std::string{"|"}
                                                      : std::string{" "};
   const std::string activity = trim_copy(composer.activity_indicator);
-  const std::string input_line = activity.empty() ? draft + cursor : activity;
+  std::string input_line = activity;
+  if (input_line.empty()) {
+    if (composer.text.empty()) {
+      input_line = "[draft empty]" + cursor;
+    } else {
+      const std::size_t cursor_offset = view::clamp_to_terminal_text_offset(
+          composer.text,
+          composer.cursor_offset);
+      input_line = composer.text.substr(0, cursor_offset) + cursor +
+          composer.text.substr(cursor_offset);
+    }
+  }
   auto wrapped = wrap_text(input_line, width, height);
   lines.insert(lines.end(), wrapped.begin(), wrapped.end());
   if (lines.size() < height) {

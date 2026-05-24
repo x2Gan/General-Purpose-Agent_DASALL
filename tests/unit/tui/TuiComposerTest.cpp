@@ -59,6 +59,9 @@ void composer_handles_multiline_submit_busy_and_external_editor_transitions() {
   assert_equal("Draft line\n",
                multiline.state.text,
                "Alt+Enter should append a newline instead of submitting the draft");
+  assert_equal(static_cast<int>(multiline.state.text.size()),
+               static_cast<int>(multiline.state.cursor_offset),
+               "Alt+Enter should leave the cursor after the inserted newline");
 
     const auto multiline_again = composer.handle_key(
       TuiComposerKeyEvent{.key = TuiComposerKey::CtrlJ, .text = ""});
@@ -150,6 +153,80 @@ void composer_handles_multiline_submit_busy_and_external_editor_transitions() {
                "external editor result should replace the local composer draft");
 }
 
+void composer_supports_cursor_aware_simple_editing() {
+  TuiComposer composer;
+
+  static_cast<void>(composer.handle_key(TuiComposerKeyEvent{
+      .key = TuiComposerKey::TextChanged,
+      .text = "abcd"}));
+  static_cast<void>(composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Left, .text = {}}));
+  const auto moved = composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Left, .text = {}});
+  assert_equal(2,
+               static_cast<int>(moved.state.cursor_offset),
+               "Left should move the insertion point by one text token");
+
+  const auto inserted = composer.handle_key(TuiComposerKeyEvent{
+      .key = TuiComposerKey::InsertText,
+      .text = "X"});
+  assert_equal("abXcd",
+               inserted.state.text,
+               "InsertText should splice printable text at the cursor offset");
+  assert_equal(3,
+               static_cast<int>(inserted.state.cursor_offset),
+               "InsertText should move the cursor after the inserted bytes");
+
+  const auto backspaced = composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Backspace, .text = {}});
+  assert_equal("abcd",
+               backspaced.state.text,
+               "Backspace should delete the text token left of the cursor");
+  assert_equal(2,
+               static_cast<int>(backspaced.state.cursor_offset),
+               "Backspace should move the cursor to the deleted token boundary");
+
+  const auto deleted = composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Delete, .text = {}});
+  assert_equal("abd",
+               deleted.state.text,
+               "Delete should remove the text token under the cursor");
+  assert_equal(2,
+               static_cast<int>(deleted.state.cursor_offset),
+               "Delete should keep the cursor at the deletion point");
+}
+
+void composer_keeps_cjk_cursor_movement_on_utf8_boundaries() {
+  TuiComposer composer;
+
+  static_cast<void>(composer.handle_key(TuiComposerKeyEvent{
+      .key = TuiComposerKey::TextChanged,
+      .text = "a中b"}));
+  static_cast<void>(composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Left, .text = {}}));
+  const auto before_cjk = composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Left, .text = {}});
+  assert_equal(1,
+               static_cast<int>(before_cjk.state.cursor_offset),
+               "Left should step over a whole CJK UTF-8 token instead of one byte");
+
+  const auto inserted = composer.handle_key(TuiComposerKeyEvent{
+      .key = TuiComposerKey::InsertText,
+      .text = "X"});
+  assert_equal("aX中b",
+               inserted.state.text,
+               "InsertText should preserve CJK bytes around a local insertion");
+  assert_equal(2,
+               static_cast<int>(inserted.state.cursor_offset),
+               "ASCII insertion before CJK should leave the cursor on a token boundary");
+
+  const auto delete_cjk = composer.handle_key(
+      TuiComposerKeyEvent{.key = TuiComposerKey::Delete, .text = {}});
+  assert_equal("aXb",
+               delete_cjk.state.text,
+               "Delete should remove the full CJK token under the cursor");
+}
+
 void composer_files_avoid_owner_private_includes_and_renderer_io() {
   const std::string composer_header_text =
       read_text_file(std::filesystem::path{DASALL_TUI_COMPOSER_HEADER});
@@ -186,6 +263,8 @@ void composer_files_avoid_owner_private_includes_and_renderer_io() {
 int main() {
   try {
     composer_handles_multiline_submit_busy_and_external_editor_transitions();
+    composer_supports_cursor_aware_simple_editing();
+    composer_keeps_cjk_cursor_movement_on_utf8_boundaries();
     composer_files_avoid_owner_private_includes_and_renderer_io();
   } catch (const std::exception& exception) {
     std::cerr << "[TuiComposerTest] FAILED: " << exception.what() << '\n';

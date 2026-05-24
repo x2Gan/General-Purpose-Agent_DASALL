@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -19,6 +20,7 @@ struct TuiMessageView {
 
 struct TuiComposerState {
   std::string text;
+  std::size_t cursor_offset = 0;
   std::string mode = "ready";
   std::optional<std::string> history_query;
   bool can_submit = true;

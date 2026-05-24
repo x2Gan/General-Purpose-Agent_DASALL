@@ -1,3 +1,35 @@
+# 记录 #797
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal simple editing
+- 任务：为 `BLK-TUI-006` 手工终端输入栏实现左右移动、局部插入与局部删除
+- 状态：已完成（实现并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 扩展 `TuiComposerState` 与 `TuiComposer`，增加 `cursor_offset` 和最小行编辑语义：Left/Right/Home/End 移动光标，InsertText 在光标处插入，Backspace/Delete 按 UTF-8 token 边界删除。
+2. 复用 `TuiTextWidth.h` 的 UTF-8 token 解析，新增 cursor offset clamp/previous/next helper，避免 CJK/Kana/Hangul 输入在移动或删除时按 byte 切坏。
+3. 更新 `dasall_tui_manual_terminal` 输入处理：识别 ANSI/application/modified CSI 左右方向键、Delete、Ctrl-B/Ctrl-F，并将 printable 输入插入到当前 cursor offset。
+4. 更新 ASCII fallback renderer，使输入光标按 `cursor_offset` 渲染到 draft 内部，而不是始终追加到末尾；pending dots spinner 仍优先占用输入栏。
+5. 增加 `TuiComposerTest`、`TuiMainLayoutSnapshotTest`、`TuiScreenModelTest` 与 `dasall_tui_manual_terminal --self-check` 覆盖 ASCII/CJK 简单编辑、光标内部渲染与手工终端 escape 序列。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_composer_unit_test,dasall_tui_main_layout_snapshot_unit_test,dasall_tui_screen_model_unit_test,dasall_tui_manual_terminal])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=[TuiComposerTest,TuiMainLayoutSnapshotTest,TuiScreenModelTest])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_composer_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_screen_model_unit_test && ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过。
+4. `git diff --check`
+   - 结果：通过。
+
+### 结果
+
+1. 手工终端输入栏现在符合 readline/kilo 这类最小行编辑模型：输入位置由 cursor point 决定，用户可在中间插入、Backspace 删除左侧 token、Delete 删除当前 token。
+2. CJK/UTF-8 输入的移动与删除基于 token 边界，不会把多字节字符切成半个字符。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实终端人工验收与签署仍需继续完成。
+
 # 记录 #796
 
 - 日期：2026-05-24

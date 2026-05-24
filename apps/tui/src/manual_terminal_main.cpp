@@ -436,9 +436,11 @@ void apply_manual_visuals(model::TuiScreenModel& screen_model,
 void set_composer_text(view::TuiComposer& composer,
                        model::TuiScreenModel& screen_model,
                        std::string text,
-                       std::string debug_reason) {
+                       std::string debug_reason,
+                       std::optional<std::size_t> cursor_offset = std::nullopt) {
   const view::TuiComposerKeyEvent event{.key = view::TuiComposerKey::TextChanged,
-                                        .text = std::move(text)};
+                                        .text = std::move(text),
+                                        .cursor_offset = cursor_offset};
   static_cast<void>(composer.handle_key(event));
   sync_composer(screen_model, composer, std::move(debug_reason));
 }
@@ -446,25 +448,32 @@ void set_composer_text(view::TuiComposer& composer,
 void sync_pending_draft(view::TuiComposer& composer,
                         model::TuiScreenModel& screen_model,
                         const std::string& draft,
+                        const std::size_t cursor_offset,
                         std::string debug_reason) {
-  if (draft == composer.state().text) {
+  const std::size_t clamped_cursor = view::clamp_to_terminal_text_offset(
+      draft,
+      cursor_offset);
+  if (draft == composer.state().text &&
+      clamped_cursor == composer.state().cursor_offset) {
     return;
   }
 
-  set_composer_text(composer, screen_model, draft, std::move(debug_reason));
+  set_composer_text(composer,
+                    screen_model,
+                    draft,
+                    std::move(debug_reason),
+                    clamped_cursor);
 }
 
-void erase_last_utf8_codepoint(std::string& text) {
-  if (text.empty()) {
+void erase_previous_text_token(std::string& text, std::size_t& cursor_offset) {
+  cursor_offset = view::clamp_to_terminal_text_offset(text, cursor_offset);
+  if (cursor_offset == 0U) {
     return;
   }
 
-  std::size_t erase_offset = text.size() - 1U;
-  while (erase_offset > 0U &&
-         (static_cast<unsigned char>(text[erase_offset]) & 0xC0U) == 0x80U) {
-    --erase_offset;
-  }
-  text.erase(erase_offset);
+  const std::size_t previous = view::previous_terminal_text_offset(text, cursor_offset);
+  text.erase(previous, cursor_offset - previous);
+  cursor_offset = previous;
 }
 
 void show_modal(model::TuiScreenModel& screen_model,
@@ -600,6 +609,29 @@ void show_help(model::TuiScreenModel& screen_model) {
   return sequence == "\x1bOB" || is_csi_cursor_sequence(sequence, 'B');
 }
 
+[[nodiscard]] bool is_cursor_right_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOC" || is_csi_cursor_sequence(sequence, 'C');
+}
+
+[[nodiscard]] bool is_cursor_left_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOD" || is_csi_cursor_sequence(sequence, 'D');
+}
+
+[[nodiscard]] bool is_delete_sequence(std::string_view sequence) noexcept {
+  if (sequence.size() < 4U || sequence[0] != '\x1b' || sequence[1] != '[' ||
+      sequence.back() != '~' || sequence[2] != '3') {
+    return false;
+  }
+
+  for (std::size_t index = 3U; index + 1U < sequence.size(); ++index) {
+    const char byte = sequence[index];
+    if ((byte < '0' || byte > '9') && byte != ';') {
+      return false;
+    }
+  }
+  return true;
+}
+
 void handle_submit(view::TuiComposer& composer,
                    model::TuiScreenModel& screen_model,
                    TerminalSession& terminal_session,
@@ -724,6 +756,24 @@ void handle_escape_sequence(std::string_view sequence,
     sync_composer(screen_model, composer, "history_newer");
     return;
   }
+  if (is_cursor_left_sequence(sequence)) {
+    static_cast<void>(composer.handle_key(
+        view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Left, .text = {}}));
+    sync_composer(screen_model, composer, "cursor_left");
+    return;
+  }
+  if (is_cursor_right_sequence(sequence)) {
+    static_cast<void>(composer.handle_key(
+        view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Right, .text = {}}));
+    sync_composer(screen_model, composer, "cursor_right");
+    return;
+  }
+  if (is_delete_sequence(sequence)) {
+    static_cast<void>(composer.handle_key(
+        view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Delete, .text = {}}));
+    sync_composer(screen_model, composer, "delete_at_cursor");
+    return;
+  }
   if (sequence == "\x1b\r" || sequence == "\x1b\n") {
     static_cast<void>(composer.handle_key(
       view::TuiComposerKeyEvent{.key = view::TuiComposerKey::AltEnter, .text = {}}));
@@ -795,12 +845,23 @@ void handle_escape_sequence(std::string_view sequence,
   return 1U;
 }
 
-void append_printable_text(std::string& draft, std::string_view bytes) {
+void insert_printable_text(std::string& draft,
+                           std::size_t& cursor_offset,
+                           std::string_view bytes) {
+  std::string printable;
+  printable.reserve(bytes.size());
   for (const unsigned char byte : bytes) {
     if (byte >= 0x20U && byte != 0x7FU) {
-      draft.push_back(static_cast<char>(byte));
+      printable.push_back(static_cast<char>(byte));
     }
   }
+  if (printable.empty()) {
+    return;
+  }
+
+  cursor_offset = view::clamp_to_terminal_text_offset(draft, cursor_offset);
+  draft.insert(cursor_offset, printable);
+  cursor_offset += printable.size();
 }
 
 [[nodiscard]] std::string read_pending_escape_bytes() {
@@ -831,6 +892,7 @@ void process_input_buffer(std::string_view buffer,
                           bool& should_exit,
                           std::ostream& error_stream) {
   std::string draft = composer.state().text;
+  std::size_t cursor_offset = composer.state().cursor_offset;
   for (std::size_t offset = 0; offset < buffer.size(); ++offset) {
     const unsigned char byte = static_cast<unsigned char>(buffer[offset]);
     if (byte == 0x03U || byte == 0x04U) {
@@ -838,7 +900,11 @@ void process_input_buffer(std::string_view buffer,
       return;
     }
     if (byte == 0x1BU) {
-      sync_pending_draft(composer, screen_model, draft, "text_before_escape");
+      sync_pending_draft(composer,
+                         screen_model,
+                         draft,
+                         cursor_offset,
+                         "text_before_escape");
       std::string sequence = "\x1b";
       if (offset + 1U < buffer.size()) {
         const std::size_t sequence_length = escape_sequence_length(buffer.substr(offset));
@@ -849,10 +915,15 @@ void process_input_buffer(std::string_view buffer,
       }
       handle_escape_sequence(sequence, composer, screen_model);
       draft = composer.state().text;
+      cursor_offset = composer.state().cursor_offset;
       continue;
     }
     if (byte == '\r') {
-      sync_pending_draft(composer, screen_model, draft, "text_before_submit");
+      sync_pending_draft(composer,
+                         screen_model,
+                         draft,
+                         cursor_offset,
+                         "text_before_submit");
       if (screen_model.modal.kind != model::TuiModalKind::None) {
         hide_modal(screen_model);
       } else {
@@ -866,32 +937,56 @@ void process_input_buffer(std::string_view buffer,
                       error_stream);
       }
       draft = composer.state().text;
+      cursor_offset = composer.state().cursor_offset;
       continue;
     }
     if (byte == '\n') {
-      draft.push_back('\n');
+      cursor_offset = view::clamp_to_terminal_text_offset(draft, cursor_offset);
+      draft.insert(cursor_offset, "\n");
+      ++cursor_offset;
+      continue;
+    }
+    if (byte == 0x02U || byte == 0x06U) {
+      sync_pending_draft(composer,
+                         screen_model,
+                         draft,
+                         cursor_offset,
+                         byte == 0x02U ? "text_before_ctrl_b" : "text_before_ctrl_f");
+      static_cast<void>(composer.handle_key(view::TuiComposerKeyEvent{
+          .key = byte == 0x02U ? view::TuiComposerKey::Left
+                               : view::TuiComposerKey::Right,
+          .text = {}}));
+      sync_composer(screen_model,
+                    composer,
+                    byte == 0x02U ? "cursor_left" : "cursor_right");
+      draft = composer.state().text;
+      cursor_offset = composer.state().cursor_offset;
       continue;
     }
     if (byte == 0x12U) {
       sync_pending_draft(composer,
                          screen_model,
                          draft,
+                         cursor_offset,
                          "text_before_reverse_search");
       static_cast<void>(composer.handle_key(
           view::TuiComposerKeyEvent{.key = view::TuiComposerKey::CtrlR, .text = {}}));
       sync_composer(screen_model, composer, "reverse_search");
       draft = composer.state().text;
+      cursor_offset = composer.state().cursor_offset;
       continue;
     }
     if (byte == 0x7FU || byte == 0x08U) {
-      erase_last_utf8_codepoint(draft);
+      erase_previous_text_token(draft, cursor_offset);
       continue;
     }
 
-    append_printable_text(draft, std::string_view(buffer.data() + offset, 1U));
+    insert_printable_text(draft,
+                          cursor_offset,
+                          std::string_view(buffer.data() + offset, 1U));
   }
 
-  sync_pending_draft(composer, screen_model, draft, "text_changed");
+  sync_pending_draft(composer, screen_model, draft, cursor_offset, "text_changed");
 }
 
 [[nodiscard]] terminal::TuiTerminalProbeEnvironment self_check_environment(
@@ -1056,6 +1151,48 @@ void process_input_buffer(std::string_view buffer,
               .find("Manual receipt captured locally") != std::string::npos;
 }
 
+[[nodiscard]] bool manual_simple_editing_self_check(
+    const terminal::TuiTerminalCapabilities& capabilities,
+    terminal::TuiStartupMode startup_mode,
+    const terminal::FtxuiRendererAdapter& renderer) {
+  view::TuiComposer composer;
+  model::TuiScreenModel screen_model = make_initial_model(
+      capabilities,
+      startup_mode,
+      composer);
+  TerminalSession terminal_session;
+  PendingManualReceipt pending_receipt;
+  bool should_exit = false;
+  std::ostringstream error_stream;
+  const TerminalSize size{120U, 36U};
+
+  process_input_buffer("abcd\x1b[D\x1b[DZ\x7f\x1b[3~",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  if (should_exit || composer.state().text != "abd" ||
+      composer.state().cursor_offset != 2U) {
+    return false;
+  }
+
+  process_input_buffer("\x1b[D\x1b[D\x1b[D中",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  return !should_exit && composer.state().text == "中abd" &&
+      composer.state().cursor_offset == std::string{"中"}.size();
+}
+
 [[nodiscard]] int run_self_check() {
   view::TuiComposer composer;
   terminal::TuiTerminalCapabilityProbe probe;
@@ -1102,7 +1239,8 @@ void process_input_buffer(std::string_view buffer,
       terminal_full_screen.find("\r\n") != std::string::npos &&
       redraw_control_prefix().find("\x1b[2J") == std::string_view::npos &&
       manual_history_recall_self_check(capabilities, startup_mode, renderer) &&
-      manual_pending_indicator_self_check(capabilities, startup_mode, renderer);
+      manual_pending_indicator_self_check(capabilities, startup_mode, renderer) &&
+      manual_simple_editing_self_check(capabilities, startup_mode, renderer);
   if (!ok) {
     std::cerr << "dasall_tui_manual_terminal self-check FAILED\n";
     return 1;

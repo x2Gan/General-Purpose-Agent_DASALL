@@ -440,6 +440,30 @@ void main_layout_snapshot_renders_cursor_and_waiting_spinner() {
               "composer should keep pending state metadata separate from the input-line spinner");
 }
 
+void main_layout_snapshot_renders_cursor_inside_composer_text() {
+  const auto loaded = FakeScenarioCatalog::load("golden_ready");
+  assert_true(loaded.ok(), "golden_ready should load for the cursor placement snapshot");
+
+  const TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      {},
+      TuiComposerState{.text = "ab中cd",
+                       .cursor_offset = 5U,
+                       .mode = "editing",
+                       .history_query = std::nullopt,
+                       .can_submit = true,
+                       .dirty = true,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
+      TuiFocusState::Composer);
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 100, 28);
+
+  assert_true(screen.find("ab中|cd") != std::string::npos,
+              "composer should render the cursor at cursor_offset instead of appending it");
+}
+
 void renderer_files_avoid_owner_private_dependencies() {
   const std::string header_text =
       read_text_file(std::filesystem::path{DASALL_TUI_RENDERER_ADAPTER_HEADER});
@@ -476,6 +500,7 @@ int main() {
     main_layout_snapshot_modal_clears_underlying_history_rows();
     main_layout_snapshot_renders_busy_draft_banner();
     main_layout_snapshot_renders_cursor_and_waiting_spinner();
+    main_layout_snapshot_renders_cursor_inside_composer_text();
     renderer_files_avoid_owner_private_dependencies();
   } catch (const std::exception& exception) {
     std::cerr << "[TuiMainLayoutSnapshotTest] FAILED: " << exception.what() << '\n';

@@ -131,6 +131,55 @@ inline void trim_trailing_ascii_spaces(std::string& text) {
                               .valid = true};
 }
 
+[[nodiscard]] inline std::size_t clamp_to_terminal_text_offset(
+    std::string_view text,
+    const std::size_t offset) noexcept {
+  if (offset >= text.size()) {
+    return text.size();
+  }
+
+  std::size_t cursor = 0;
+  while (cursor < text.size()) {
+    const TuiTerminalTextToken token = next_terminal_text_token(text, cursor);
+    const std::size_t next = cursor + (token.bytes.empty() ? 1U : token.bytes.size());
+    if (next > offset) {
+      return cursor;
+    }
+    cursor = next;
+  }
+  return text.size();
+}
+
+[[nodiscard]] inline std::size_t next_terminal_text_offset(
+    std::string_view text,
+    const std::size_t offset) noexcept {
+  const std::size_t cursor = clamp_to_terminal_text_offset(text, offset);
+  if (cursor >= text.size()) {
+    return text.size();
+  }
+
+  const TuiTerminalTextToken token = next_terminal_text_token(text, cursor);
+  return cursor + (token.bytes.empty() ? 1U : token.bytes.size());
+}
+
+[[nodiscard]] inline std::size_t previous_terminal_text_offset(
+    std::string_view text,
+    const std::size_t offset) noexcept {
+  const std::size_t target = clamp_to_terminal_text_offset(text, offset);
+  if (target == 0U) {
+    return 0U;
+  }
+
+  std::size_t previous = 0;
+  std::size_t cursor = 0;
+  while (cursor < target) {
+    previous = cursor;
+    const TuiTerminalTextToken token = next_terminal_text_token(text, cursor);
+    cursor += token.bytes.empty() ? 1U : token.bytes.size();
+  }
+  return previous;
+}
+
 [[nodiscard]] inline std::size_t terminal_display_width(std::string_view text) noexcept {
   std::size_t width = 0;
   std::size_t cursor = 0;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
 
@@ -10,6 +11,13 @@ namespace dasall::tui::view {
 
 enum class TuiComposerKey {
   TextChanged,
+  InsertText,
+  Backspace,
+  Delete,
+  Left,
+  Right,
+  Home,
+  End,
   Enter,
   AltEnter,
   CtrlJ,
@@ -21,6 +29,7 @@ enum class TuiComposerKey {
 struct TuiComposerKeyEvent {
   TuiComposerKey key = TuiComposerKey::TextChanged;
   std::string text;
+  std::optional<std::size_t> cursor_offset = std::nullopt;
   bool cursor_at_boundary = false;
   bool draft_unmodified = true;
 };
@@ -62,7 +71,15 @@ class TuiComposer {
 
  private:
   void clear_navigation_state();
-  void apply_text_change(std::string text);
+  void apply_text_change(std::string text,
+                         std::optional<std::size_t> cursor_offset = std::nullopt);
+  void apply_insert_text(std::string_view text);
+  void apply_backspace();
+  void apply_delete();
+  void move_cursor_left();
+  void move_cursor_right();
+  void move_cursor_home();
+  void move_cursor_end();
   void apply_idle_mode();
 
   [[nodiscard]] bool can_recall_from_key(const TuiComposerKeyEvent& event) const;

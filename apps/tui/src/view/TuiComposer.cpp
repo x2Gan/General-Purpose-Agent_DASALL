@@ -3,6 +3,8 @@
 #include <string_view>
 #include <utility>
 
+#include "view/TuiTextWidth.h"
+
 namespace dasall::tui::view {
 namespace {
 
@@ -21,6 +23,7 @@ namespace {
 
 TuiComposer::TuiComposer(model::TuiComposerState state) : state_(std::move(state)) {
   busy_ = state_.mode == "pending-interaction";
+  state_.cursor_offset = clamp_to_terminal_text_offset(state_.text, state_.cursor_offset);
 }
 
 const model::TuiComposerState& TuiComposer::state() const noexcept { return state_; }
@@ -39,7 +42,66 @@ TuiComposerUpdate TuiComposer::handle_key(const TuiComposerKeyEvent& event) {
       }
 
       clear_navigation_state();
-      apply_text_change(event.text);
+      apply_text_change(event.text, event.cursor_offset);
+      return snapshot();
+
+    case TuiComposerKey::InsertText:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      clear_navigation_state();
+      apply_insert_text(event.text);
+      return snapshot();
+
+    case TuiComposerKey::Backspace:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      clear_navigation_state();
+      apply_backspace();
+      return snapshot();
+
+    case TuiComposerKey::Delete:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      clear_navigation_state();
+      apply_delete();
+      return snapshot();
+
+    case TuiComposerKey::Left:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      move_cursor_left();
+      return snapshot();
+
+    case TuiComposerKey::Right:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      move_cursor_right();
+      return snapshot();
+
+    case TuiComposerKey::Home:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      move_cursor_home();
+      return snapshot();
+
+    case TuiComposerKey::End:
+      if (state_.mode == "submitting") {
+        return snapshot();
+      }
+
+      move_cursor_end();
       return snapshot();
 
     case TuiComposerKey::Enter: {
@@ -55,6 +117,7 @@ TuiComposerUpdate TuiComposer::handle_key(const TuiComposerKeyEvent& event) {
       action.text = state_.text;
 
       state_.text.clear();
+  state_.cursor_offset = 0;
       state_.mode = "submitting";
       state_.can_submit = false;
       state_.dirty = false;
@@ -68,7 +131,7 @@ TuiComposerUpdate TuiComposer::handle_key(const TuiComposerKeyEvent& event) {
       }
 
       clear_navigation_state();
-      apply_text_change(state_.text + "\n");
+      apply_insert_text("\n");
       return snapshot();
 
     case TuiComposerKey::Up:
@@ -133,6 +196,7 @@ model::TuiComposerState TuiComposer::recall_history(int direction) {
     }
 
     state_.text = history_.at(*history_index_);
+    state_.cursor_offset = state_.text.size();
     state_.mode = "history-recall";
     state_.can_submit = !busy_;
     state_.dirty = false;
@@ -147,6 +211,7 @@ model::TuiComposerState TuiComposer::recall_history(int direction) {
   if (!newer_index.has_value()) {
     history_index_.reset();
     state_.text = recall_seed_.value_or(std::string{});
+    state_.cursor_offset = state_.text.size();
     recall_seed_.reset();
     state_.dirty = !state_.text.empty();
     apply_idle_mode();
@@ -155,6 +220,7 @@ model::TuiComposerState TuiComposer::recall_history(int direction) {
 
   history_index_ = newer_index;
   state_.text = history_.at(*history_index_);
+  state_.cursor_offset = state_.text.size();
   state_.mode = "history-recall";
   state_.can_submit = !busy_;
   state_.dirty = false;
@@ -206,11 +272,73 @@ void TuiComposer::clear_navigation_state() {
   state_.history_query.reset();
 }
 
-void TuiComposer::apply_text_change(std::string text) {
+void TuiComposer::apply_text_change(std::string text,
+                                    std::optional<std::size_t> cursor_offset) {
   state_.text = std::move(text);
+  state_.cursor_offset = cursor_offset.has_value()
+                             ? clamp_to_terminal_text_offset(state_.text, *cursor_offset)
+                             : state_.text.size();
   state_.dirty = !state_.text.empty();
   state_.can_submit = !busy_;
   apply_idle_mode();
+}
+
+void TuiComposer::apply_insert_text(std::string_view text) {
+  if (!text.empty()) {
+    state_.cursor_offset = clamp_to_terminal_text_offset(state_.text,
+                                                         state_.cursor_offset);
+    state_.text.insert(state_.cursor_offset, text);
+    state_.cursor_offset += text.size();
+  }
+
+  state_.dirty = !state_.text.empty();
+  state_.can_submit = !busy_;
+  apply_idle_mode();
+}
+
+void TuiComposer::apply_backspace() {
+  state_.cursor_offset = clamp_to_terminal_text_offset(state_.text, state_.cursor_offset);
+  if (state_.cursor_offset > 0U) {
+    const std::size_t previous = previous_terminal_text_offset(state_.text,
+                                                              state_.cursor_offset);
+    state_.text.erase(previous, state_.cursor_offset - previous);
+    state_.cursor_offset = previous;
+  }
+
+  state_.dirty = !state_.text.empty();
+  state_.can_submit = !busy_;
+  apply_idle_mode();
+}
+
+void TuiComposer::apply_delete() {
+  state_.cursor_offset = clamp_to_terminal_text_offset(state_.text, state_.cursor_offset);
+  if (state_.cursor_offset < state_.text.size()) {
+    const std::size_t next = next_terminal_text_offset(state_.text,
+                                                      state_.cursor_offset);
+    state_.text.erase(state_.cursor_offset, next - state_.cursor_offset);
+  }
+
+  state_.dirty = !state_.text.empty();
+  state_.can_submit = !busy_;
+  apply_idle_mode();
+}
+
+void TuiComposer::move_cursor_left() {
+  state_.cursor_offset = previous_terminal_text_offset(state_.text,
+                                                       state_.cursor_offset);
+}
+
+void TuiComposer::move_cursor_right() {
+  state_.cursor_offset = next_terminal_text_offset(state_.text,
+                                                  state_.cursor_offset);
+}
+
+void TuiComposer::move_cursor_home() {
+  state_.cursor_offset = 0;
+}
+
+void TuiComposer::move_cursor_end() {
+  state_.cursor_offset = state_.text.size();
 }
 
 void TuiComposer::apply_idle_mode() {
@@ -258,6 +386,7 @@ model::TuiComposerState TuiComposer::enter_reverse_search() {
 
   reverse_search_index_ = match;
   state_.text = history_.at(*match);
+  state_.cursor_offset = state_.text.size();
   state_.dirty = false;
   return state_;
 }
